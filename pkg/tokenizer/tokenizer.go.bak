@@ -1,0 +1,694 @@
+// Package tokenizer provides a high-performance SQL tokenizer with zero-copy operations
+package tokenizer
+
+import (
+	"fmt"
+	"strings"
+	"unicode/utf8"
+
+	"windsurf-project/pkg/keywords"
+	"windsurf-project/pkg/models"
+)
+
+// DebugLogger is a function type for debug logging
+type DebugLogger func(msg string)
+
+// Tokenizer provides high-performance SQL tokenization with zero-copy operations
+type Tokenizer struct {
+	input     []byte
+	pos       Position // Current scanning position
+	lineStart Position // Position where the current line begins
+	lineStarts []int   // Index of each line start
+	line      int      // Current line number (1-based)
+	keywords  *keywords.Keywords
+	debugLog  DebugLogger // Optional debug logger
+}
+
+// TokenizerError is a simple error wrapper
+type TokenizerError struct {
+	Message  string
+	Location models.Location
+}
+
+func (e TokenizerError) Error() string {
+	return e.Message
+}
+
+// SetDebugLogger sets a debug logger for verbose tracing
+func (t *Tokenizer) SetDebugLogger(logger DebugLogger) {
+	t.debugLog = logger
+}
+
+// New initializes a Tokenizer with the given string input
+func New(input string, kw *keywords.Keywords) (*Tokenizer, error) {
+	if input == "" {
+		return nil, fmt.Errorf("empty input")
+	}
+
+	// Default no-op debug logger
+	debugLog := func(msg string) {}
+
+	if kw == nil {
+		var err error
+		kw, err = keywords.NewKeywords()
+		if err != nil {
+			return nil, fmt.Errorf("error creating keyword processor: %w", err)
+		}
+	}
+
+	b := []byte(input)
+
+	// Find line starts
+	lineStarts := []int{0} // First line starts at index 0
+	for i := 0; i < len(b); i++ {
+		if b[i] == '\n' {
+			lineStarts = append(lineStarts, i+1)
+		}
+	}
+
+	// Create initial position
+	pos := NewPosition(1, 0)
+	lineStart := NewPosition(1, 0)
+
+	return &Tokenizer{
+		input:      b,
+		pos:        pos,
+		lineStart:  lineStart,
+		lineStarts: lineStarts,
+		line:       1, // Start at line 1
+		keywords:   kw,
+		debugLog:   debugLog,
+	}, nil
+}
+
+// Tokenize splits the input into a slice of TokenWithSpan
+func (t *Tokenizer) Tokenize() ([]models.TokenWithSpan, error) {
+	// Pre-allocate with a capacity based on average token length (including whitespace)
+	// Most SQL tokens are 4-8 bytes long including whitespace
+	tokens := make([]models.TokenWithSpan, 0, len(t.input)/6)
+
+	// Track start position for error reporting
+	startPos := t.getCurrentPosition()
+
+	defer func() {
+		if r := recover(); r != nil {
+			// Convert panics into TokenizerErrors with position information
+			if err, ok := r.(error); ok {
+				t.debugLog(fmt.Sprintf("Recovered from panic: %v at position %v", err, startPos))
+			}
+		}
+	}()
+
+	for {
+		// Skip whitespace first
+		t.skipWhitespace()
+
+		// If we are at the end, emit EOF
+		if t.pos.Index >= len(t.input) {
+			tokens = append(tokens, models.TokenWithSpan{
+				Token: models.Token{Type: models.TokenTypeEOF},
+				Start: t.getCurrentPosition(),
+				End:   t.getCurrentPosition(),
+			})
+			break
+		}
+
+		// Check char validity
+		_, size := utf8.DecodeRune(t.input[t.pos.Index:])
+		if size == 0 {
+			return nil, NewError(
+				"invalid UTF-8 sequence",
+				t.getLocation(t.pos.Index),
+			)
+		}
+
+		// Determine start of token
+		startPos := t.getCurrentPosition()
+		token, err := t.nextToken()
+		if err != nil {
+			return nil, err
+		}
+		endPos := t.getCurrentPosition()
+		endPos.Line = t.line
+
+		tokens = append(tokens, models.TokenWithSpan{
+			Token: token,
+			Start: startPos,
+			End:   endPos,
+		})
+
+		if token.Type == models.TokenTypeEOF {
+			break
+		}
+	}
+	return tokens, nil
+}
+
+// skipWhitespace advances past any whitespace
+func (t *Tokenizer) skipWhitespace() {
+	start := t.pos.Index
+	startCol := t.pos.Column
+	startLine := t.pos.Line
+
+	t.debugLog(fmt.Sprintf("skipWhitespace: starting at index=%d line=%d col=%d",
+		start, startLine, startCol))
+
+	for t.pos.Index < len(t.input) {
+		r, size := utf8.DecodeRune(t.input[t.pos.Index:])
+		if size == 0 || !isUnicodeWhitespace(r) {
+			break
+		}
+		t.debugLog(fmt.Sprintf("skipWhitespace: found whitespace '%c' at index=%d line=%d col=%d",
+			r, t.pos.Index, t.pos.Line, t.pos.Column))
+
+		t.pos.AdvanceRune(r, size)
+	}
+
+	t.debugLog(fmt.Sprintf("skipWhitespace: finished at index=%d line=%d col=%d (skipped %d chars)",
+		t.pos.Index, t.pos.Line, t.pos.Column, t.pos.Index-start))
+}
+
+// nextToken picks out the next token from the input
+// It implements a fast-path for common cases and falls back to slower
+// but more comprehensive parsing for complex tokens
+func (t *Tokenizer) nextToken() (models.Token, error) {
+	t.debugLog(fmt.Sprintf("nextToken: entering with pos=%d", t.pos.Index))
+	defer func() {
+		t.debugLog(fmt.Sprintf("nextToken: exiting with pos=%d", t.pos.Index))
+	}()
+
+	// Check for end of input
+	if t.pos.Index >= len(t.input) {
+		return models.Token{Type: models.TokenTypeEOF}, nil
+	}
+
+	// Get current character
+	ch := t.input[t.pos.Index]
+
+	// Check for operators first
+	if isOperatorStart(ch) {
+		// Try to match multi-character operators
+		if op, ok := matchMultiCharOperator(t.input[t.pos.Index:], t.pos.Index); ok {
+			t.pos.Index += len(op.Symbol)
+			t.pos.Column += len(op.Symbol)
+			return models.Token{Type: op.Type, Value: op.Symbol}, nil
+		}
+
+		// Single character operator
+		if tokenType, ok := SingleCharOperators[ch]; ok {
+			t.pos.Index++
+			t.pos.Column++
+			return models.Token{Type: tokenType, Value: string(ch)}, nil
+		}
+	}
+	t.debugLog(fmt.Sprintf("nextToken: entering with pos=%d", t.pos.Index))
+	defer func() {
+		t.debugLog(fmt.Sprintf("nextToken: exiting with pos=%d", t.pos.Index))
+	}()
+	defer func() {
+		t.debugLog(fmt.Sprintf("nextToken: pos=%d", t.pos.Index))
+	}()
+
+	if t.pos.Index >= len(t.input) {
+		return models.Token{Type: models.TokenTypeEOF}, nil
+	}
+
+handleRune:
+
+	// Get the current rune
+	r, size := utf8.DecodeRune(t.input[t.pos.Index:])
+	if size == 0 {
+		return models.Token{}, TokenizerError{
+			Message:  "invalid UTF-8 sequence",
+			Location: t.getLocation(t.pos.Index),
+		}
+	}
+
+	// Quoted identifier or string literal?
+	if r == '"' || r == '\'' {
+		// Don't advance position here, let readQuotedString handle it
+		return t.readQuotedString(r)
+	}
+
+	// Identifiers
+	if isUnicodeIdentifierStart(r) || r == '$' {
+		return t.readIdentifier()
+	}
+
+	// Numbers
+	if isDigit(r) {
+		return t.readNumber(nil)
+	}
+
+	// Operators/punctuation
+	if isPunctuation(r) || isOperator(r) {
+		return t.readPunctuation()
+	}
+
+	// Whitespace
+	if isUnicodeWhitespace(r) {
+		t.skipWhitespace()
+		// After skipping whitespace, we need to check if we're at EOF
+		if t.pos.Index >= len(t.input) {
+			return models.Token{Type: models.TokenTypeEOF}, nil
+		}
+		// If we're not at EOF, we need to check the next character
+		r, size = utf8.DecodeRune(t.input[t.pos.Index:])
+		if size == 0 {
+			return models.Token{}, NewError(
+				"invalid UTF-8 sequence",
+				t.getLocation(t.pos.Index),
+			)
+		}
+		// Continue from the start with the new rune
+		goto handleRune
+	}
+
+	// Otherwise, it's invalid
+	loc := t.getLocation(t.pos.Index)
+	t.debugLog(fmt.Sprintf("Invalid character at pos=%d char=%q loc=%+v", t.pos.Index, r, loc))
+	t.pos.Index += size
+	return models.Token{}, NewError(fmt.Sprintf("invalid character '%c'", r), loc)
+}
+
+// readIdentifier reads an identifier (e.g. foo or foo.bar)
+func (t *Tokenizer) readIdentifier() (models.Token, error) {
+	var buf []byte
+	var seenDot bool
+
+	// First character must be a valid identifier start
+	if t.pos.Index >= len(t.input) {
+		return models.Token{}, fmt.Errorf("unexpected end of input")
+	}
+	r, size := utf8.DecodeRune(t.input[t.pos.Index:])
+	if !isUnicodeIdentifierStart(r) && r != '$' {
+		return models.Token{}, fmt.Errorf("invalid identifier start character %q at %v", r, t.toSQLPosition(t.pos))
+	}
+	buf = append(buf, t.input[t.pos.Index:t.pos.Index+size]...)
+	t.pos.AdvanceRune(r, size)
+
+	// Gather remaining identifier chars
+	for t.pos.Index < len(t.input) {
+		r, size := utf8.DecodeRune(t.input[t.pos.Index:])
+		if size == 0 {
+			break
+		}
+		
+		// Handle dots in identifiers (e.g. schema.table)
+		if r == '.' {
+			if seenDot {
+				// Multiple dots not allowed
+				break
+			}
+			seenDot = true
+			buf = append(buf, '.')
+			t.pos.AdvanceRune(r, size)
+			
+			// After a dot, we must have a valid identifier start
+			if t.pos.Index >= len(t.input) {
+				break
+			}
+			r, size = utf8.DecodeRune(t.input[t.pos.Index:])
+			if !isUnicodeIdentifierStart(r) {
+				break
+			}
+		}
+		
+		// Regular identifier character
+		if !isUnicodeIdentifierPart(r) && r != '.' {
+			break
+		}
+		
+		// Append the raw bytes of the rune
+		buf = append(buf, t.input[t.pos.Index:t.pos.Index+size]...)
+		t.pos.AdvanceRune(r, size)
+	}
+
+	// Could be keyword
+	// Return the identifier token
+	return t.readIdentifierOrKeyword(buf)
+}
+
+// readIdentifierOrKeyword checks if the gathered identifier is a known keyword
+func (t *Tokenizer) readIdentifierOrKeyword(buf []byte) (models.Token, error) {
+	word := string(buf)
+	upper := strings.ToUpper(word)
+
+	if tokenType := t.keywords.GetTokenType(upper); tokenType != models.TokenTypeUnknown {
+		return models.Token{
+			Type:  tokenType,
+			Value: word, // preserve original casing
+		}, nil
+	}
+	// Not a keyword => treat as identifier
+	return models.Token{
+		Type:  models.TokenTypeIdentifier,
+		Value: word,
+	}, nil
+}
+
+// readQuotedIdentifier reads something like "MyColumn"
+func (t *Tokenizer) readQuotedIdentifier() (models.Token, error) {
+	start := t.pos.Clone()
+
+	var buf []byte
+	buf = append(buf, '"') // Keep raw text if desired
+
+	for t.pos.Index < len(t.input) {
+		r, size := utf8.DecodeRune(t.input[t.pos.Index:])
+		if size == 0 {
+			break
+		}
+
+		if r == '"' {
+			// Check for doubled ""
+			t.pos.AdvanceRune(r, size)
+			if t.pos.Index < len(t.input) {
+				nextR, nextSize := utf8.DecodeRune(t.input[t.pos.Index:])
+				if nextR == '"' {
+					// escaped double-quote
+					buf = append(buf, '"', '"')
+					t.pos.AdvanceRune(nextR, nextSize)
+					continue
+				}
+			}
+			// normal closing quote
+			buf = append(buf, '"')
+			return models.Token{
+				Type:  models.TokenTypeIdentifier,
+				Value: string(buf),
+			}, nil
+		}
+
+		// Add the rune to the buffer
+		buf = append(buf, t.input[t.pos.Index:t.pos.Index+size]...)
+		t.pos.AdvanceRune(r, size)
+	}
+
+	return models.Token{}, fmt.Errorf("unterminated quoted identifier at %v", t.toSQLPosition(start))
+}
+
+
+// readQuotedString handles the actual scanning of a single/double-quoted string
+func (t *Tokenizer) readQuotedString(quote rune) (models.Token, error) {
+	start := t.pos.Clone()
+
+	var buf []byte
+	// Skip opening quote
+	r, size := utf8.DecodeRune(t.input[t.pos.Index:])
+	if r != quote {
+		return models.Token{}, TokenizerError{
+			Message:  "expected quote",
+			Location: t.toSQLPosition(start),
+		}
+	}
+	t.pos.AdvanceRune(r, size)
+
+	for t.pos.Index < len(t.input) {
+		r, size := utf8.DecodeRune(t.input[t.pos.Index:])
+		if size == 0 {
+			break
+		}
+
+		// Handle quotes
+		if r == quote {
+			t.pos.AdvanceRune(r, size)
+			// Check for doubled quotes
+			if t.pos.Index < len(t.input) {
+				nextR, nextSize := utf8.DecodeRune(t.input[t.pos.Index:])
+				if nextR == quote {
+					// escaped quote
+					buf = append(buf, byte(quote))
+					t.pos.AdvanceRune(nextR, nextSize)
+					continue
+				}
+			}
+			// normal closing quote
+			return models.Token{
+				Type:  models.TokenTypeString,
+				Value: string(buf),
+			}, nil
+		}
+
+		// Handle newlines
+		if r == '\n' {
+			buf = append(buf, '\n')
+			t.pos.AdvanceRune(r, size)
+			t.line++
+			t.lineStart = t.pos.Clone()
+			continue
+		}
+
+		// Add the rune to buffer
+		buf = append(buf, t.input[t.pos.Index:t.pos.Index+size]...)
+		t.pos.AdvanceRune(r, size)
+	}
+
+	return models.Token{}, TokenizerError{
+		Message:  "unterminated string",
+		Location: t.toSQLPosition(start),
+	}
+}
+
+// readNumber reads an integer/float
+func (t *Tokenizer) readNumber(buf []byte) (models.Token, error) {
+	if buf == nil {
+		buf = make([]byte, 0, 32)
+	}
+	// integer part
+	for t.pos.Index < len(t.input) {
+		r, size := utf8.DecodeRune(t.input[t.pos.Index:])
+		if size == 0 || !isDigit(r) {
+			break
+		}
+		buf = append(buf, t.input[t.pos.Index:t.pos.Index+size]...)
+		t.pos.AdvanceRune(r, size)
+	}
+	// optional decimal
+	if t.pos.Index < len(t.input) {
+		r, size := utf8.DecodeRune(t.input[t.pos.Index:])
+		if r == '.' {
+			buf = append(buf, '.')
+			t.pos.AdvanceRune(r, size)
+			hasDigits := false
+			for t.pos.Index < len(t.input) {
+				r, size := utf8.DecodeRune(t.input[t.pos.Index:])
+				if size == 0 || !isDigit(r) {
+					break
+				}
+				buf = append(buf, t.input[t.pos.Index:t.pos.Index+size]...)
+				t.pos.AdvanceRune(r, size)
+				hasDigits = true
+			}
+			if !hasDigits {
+				return models.Token{}, fmt.Errorf("invalid number format at %v", t.toSQLPosition(t.pos))
+			}
+		}
+	}
+	// Handle exponent
+	if t.pos.Index < len(t.input) {
+		r, size := utf8.DecodeRune(t.input[t.pos.Index:])
+		if r == 'e' || r == 'E' {
+			buf = append(buf, t.input[t.pos.Index:t.pos.Index+size]...)
+			t.pos.AdvanceRune(r, size)
+
+			// Optional sign
+			if t.pos.Index < len(t.input) {
+				r, size = utf8.DecodeRune(t.input[t.pos.Index:])
+				if r == '+' || r == '-' {
+					buf = append(buf, t.input[t.pos.Index:t.pos.Index+size]...)
+					t.pos.AdvanceRune(r, size)
+				}
+			}
+
+			// Require at least one digit
+			if t.pos.Index >= len(t.input) {
+				return models.Token{}, fmt.Errorf("digit required after exponent at %v", t.toSQLPosition(t.pos))
+			}
+			r, size = utf8.DecodeRune(t.input[t.pos.Index:])
+			if !isDigit(r) {
+				return models.Token{}, fmt.Errorf("digit required after exponent at %v", t.toSQLPosition(t.pos))
+			}
+
+			// Read all digits
+			for t.pos.Index < len(t.input) {
+				r, size := utf8.DecodeRune(t.input[t.pos.Index:])
+				if size == 0 || !isDigit(r) {
+					break
+				}
+				buf = append(buf, t.input[t.pos.Index:t.pos.Index+size]...)
+				t.pos.AdvanceRune(r, size)
+			}
+		}
+	}
+
+	return models.Token{
+		Type:  models.TokenTypeNumber,
+		Value: string(buf),
+	}, nil
+}
+
+// readPunctuation picks out punctuation or operator tokens
+func (t *Tokenizer) readPunctuation() (models.Token, error) {
+	if t.pos.Index >= len(t.input) {
+		return models.Token{}, fmt.Errorf("unexpected end of input")
+	}
+	r, size := utf8.DecodeRune(t.input[t.pos.Index:])
+	switch r {
+	case '(':
+		t.pos.AdvanceRune(r, size)
+		return models.Token{Type: models.TokenTypeLeftParen, Value: "("}, nil
+	case ')':
+		t.pos.AdvanceRune(r, size)
+		return models.Token{Type: models.TokenTypeRightParen, Value: ")"}, nil
+	case ',':
+		t.pos.AdvanceRune(r, size)
+		return models.Token{Type: models.TokenTypeComma, Value: ","}, nil
+	case ';':
+		t.pos.AdvanceRune(r, size)
+		return models.Token{Type: models.TokenTypeSemicolon, Value: ";"}, nil
+	case '.':
+		t.pos.AdvanceRune(r, size)
+		return models.Token{Type: models.TokenTypeDot, Value: "."}, nil
+	case '+':
+		t.pos.AdvanceRune(r, size)
+		return models.Token{Type: models.TokenTypePlus, Value: "+"}, nil
+	case '-':
+		t.pos.AdvanceRune(r, size)
+		if t.pos.Index < len(t.input) {
+			nxtR, nxtSize := utf8.DecodeRune(t.input[t.pos.Index:])
+			if nxtR == '>' {
+				t.pos.AdvanceRune(nxtR, nxtSize)
+				if t.pos.Index < len(t.input) {
+					nxtR2, nxtSize2 := utf8.DecodeRune(t.input[t.pos.Index:])
+					if nxtR2 == '>' {
+						t.pos.AdvanceRune(nxtR2, nxtSize2)
+						return models.Token{Type: models.TokenTypeOperator, Value: "->>"}}, nil
+					}
+				}
+				return models.Token{Type: models.TokenTypeArrow, Value: "->"}, nil
+			}
+		}
+		return models.Token{Type: models.TokenTypeMinus, Value: "-"}, nil
+	case '*':
+		t.pos.AdvanceRune(r, size)
+		return models.Token{Type: models.TokenTypeAsterisk, Value: "*"}, nil
+	case '/':
+		t.pos.AdvanceRune(r, size)
+		return models.Token{Type: models.TokenTypeSlash, Value: "/"}, nil
+	case '=':
+		t.pos.AdvanceRune(r, size)
+		if t.pos.Index < len(t.input) {
+			nxtR, nxtSize := utf8.DecodeRune(t.input[t.pos.Index:])
+			if nxtR == '>' {
+				t.pos.AdvanceRune(nxtR, nxtSize)
+				if t.pos.Index < len(t.input) {
+					nxtR2, nxtSize2 := utf8.DecodeRune(t.input[t.pos.Index:])
+					if nxtR2 == '>' {
+						t.pos.AdvanceRune(nxtR2, nxtSize2)
+						t.pos.Index -= nxtSize2
+						t.pos.Column -= nxtSize2
+						return models.Token{Type: models.TokenTypeDoubleArrow, Value: "=>"}, nil
+					}
+				}
+				return models.Token{Type: models.TokenTypeDoubleArrow, Value: "=>"}, nil
+			}
+		}
+		return models.Token{Type: models.TokenTypeEquals, Value: "="}, nil
+	case '<':
+		t.pos.AdvanceRune(r, size)
+		if t.pos.Index < len(t.input) {
+			nxtR, nxtSize := utf8.DecodeRune(t.input[t.pos.Index:])
+			if nxtR == '=' {
+				t.pos.AdvanceRune(nxtR, nxtSize)
+				return models.Token{Type: models.TokenTypeLessThanEqual, Value: "<="}, nil
+			} else if nxtR == '>' {
+				t.pos.AdvanceRune(nxtR, nxtSize)
+				return models.Token{Type: models.TokenTypeNotEqual, Value: "<>"}, nil
+			}
+		}
+		return models.Token{Type: models.TokenTypeLessThan, Value: "<"}, nil
+	case '>':
+		t.pos.AdvanceRune(r, size)
+		if t.pos.Index < len(t.input) {
+			nxtR, nxtSize := utf8.DecodeRune(t.input[t.pos.Index:])
+			if nxtR == '=' {
+				t.pos.AdvanceRune(nxtR, nxtSize)
+				return models.Token{Type: models.TokenTypeGreaterThanEqual, Value: ">="}, nil
+			}
+		}
+		return models.Token{Type: models.TokenTypeGreaterThan, Value: ">"}, nil
+	case '!':
+		t.pos.AdvanceRune(r, size)
+		if t.pos.Index < len(t.input) {
+			nxtR, nxtSize := utf8.DecodeRune(t.input[t.pos.Index:])
+			if nxtR == '=' {
+				t.pos.AdvanceRune(nxtR, nxtSize)
+				return models.Token{Type: models.TokenTypeNotEqual, Value: "!="}, nil
+			}
+		}
+		return models.Token{Type: models.TokenTypeExclamation, Value: "!"}, nil
+	case ':':
+		t.pos.AdvanceRune(r, size)
+		if t.pos.Index < len(t.input) {
+			nxtR, nxtSize := utf8.DecodeRune(t.input[t.pos.Index:])
+			if nxtR == ':' {
+				t.pos.AdvanceRune(nxtR, nxtSize)
+				return models.Token{Type: models.TokenTypeCast, Value: "::"}, nil
+			}
+		}
+		return models.Token{Type: models.TokenTypeColon, Value: ":"}, nil
+	case '%':
+		t.pos.AdvanceRune(r, size)
+		return models.Token{Type: models.TokenTypePercent, Value: "%"}, nil
+	}
+	return models.Token{}, fmt.Errorf("unreachable: invalid punctuation %c", r)
+}
+
+// toSQLPosition converts an internal Position => a models.Location
+func (t *Tokenizer) toSQLPosition(pos Position) models.Location {
+	return t.getLocation(pos.Index)
+}
+
+// getCurrentPosition returns the Location of the tokenizer's current byte index
+func (t *Tokenizer) getCurrentPosition() models.Location {
+	return t.getLocation(t.pos.Index)
+}
+
+// getLocation produces 1-based {Line, Column} for a given byte offset
+func (t *Tokenizer) getLocation(pos int) models.Location {
+	if pos < 0 {
+		pos = 0
+	}
+	if pos >= len(t.input) {
+		pos = len(t.input) - 1
+	}
+
+	// Find the line containing pos
+	line := 1
+	column := 1
+	lineStart := 0
+
+	// Find the line number and start of the line
+	for i := 0; i < pos; i++ {
+		if t.input[i] == '\n' {
+			line++
+			lineStart = i + 1
+		}
+	}
+
+	// Calculate column as offset from line start
+	column = pos - lineStart + 1
+
+	// Adjust for escaped quotes
+	for i := lineStart; i < pos; i++ {
+		if t.input[i] == '\\' {
+			if i+1 < len(t.input) && t.input[i+1] == '\'' {
+				column--
+				i++
+			}
+		}
+	}
+
+	return models.Location{Line: line, Column: column}
+}

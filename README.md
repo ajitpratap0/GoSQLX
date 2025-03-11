@@ -21,44 +21,61 @@ go get github.com/ajitpratap0/GoSQLX
 
 ## Usage
 
+Below is an example of how to use GoSQLX in your Go application. This demonstrates the basic workflow of tokenizing SQL, parsing it into an AST, and properly managing resources with the object pools.
+
 ```go
+// Example usage of GoSQLX
 package main
 
 import (
+    "fmt"
+    
+    // Import the required GoSQLX packages
     "github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
     "github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
     "github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
+    "github.com/ajitpratap0/GoSQLX/pkg/sql/token"
+    "github.com/ajitpratap0/GoSQLX/pkg/sql/models"
 )
 
 func main() {
-    // Get a tokenizer from the pool
+    // 1. Get a tokenizer from the pool
     tkz := tokenizer.GetTokenizer()
     defer tokenizer.PutTokenizer(tkz) // Return to pool when done
     
-    // Tokenize the SQL query
+    // 2. Tokenize the SQL query
     sql := []byte("SELECT id, name FROM users WHERE age > 18")
     tokens, err := tkz.Tokenize(sql)
     if err != nil {
         panic(err)
     }
+    fmt.Printf("Tokenized SQL into %d tokens\n", len(tokens))
     
-    // Create a parser
+    // 3. Convert TokenWithSpan to token.Token for the parser
+    tokenSlice := make([]token.Token, len(tokens))
+    for i, t := range tokens {
+        tokenSlice[i] = t.Token
+    }
+    
+    // 4. Create a parser
     p := parser.NewParser()
     defer p.Release() // Clean up resources
     
-    // Parse tokens into an AST
-    ast, err := p.Parse(tokens)
+    // 5. Parse tokens into an AST
+    result, err := p.Parse(tokenSlice)
     if err != nil {
         panic(err)
     }
     
-    // Work with the AST
-    // ...
+    // 6. Work with the AST
+    fmt.Printf("Parsed %d statements\n", len(result.Statements))
     
-    // Return AST to the pool when done
-    ast.ReleaseAST(ast)
+    // 7. Return AST to the pool when done
+    ast.ReleaseAST(result)
 }
 ```
+
+For more detailed examples, see the [examples directory](examples/).
 
 ## Project Structure
 

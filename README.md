@@ -25,6 +25,7 @@ go get github.com/ajitpratap0/GoSQLX
 package main
 
 import (
+    "github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
     "github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
     "github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
@@ -42,7 +43,7 @@ func main() {
     }
     
     // Create a parser
-    p := parser.New()
+    p := parser.NewParser()
     defer p.Release() // Clean up resources
     
     // Parse tokens into an AST
@@ -78,27 +79,33 @@ pkg/
 ### Tokenizer Performance
 
 ```
-BenchmarkTokenizer/SimpleSQL-16         	  860258	      1233 ns/op
-BenchmarkTokenizer/ComplexSQL-16        	   98812	     12008 ns/op
-BenchmarkTokenizerAllocations/SimpleSQL-16	 1000000	      1228 ns/op	    1617 B/op	      24 allocs/op
+| Benchmark                                | Operations | Speed (ns/op) | Memory (B/op) | Allocations |
+|------------------------------------------|------------|---------------|---------------|-------------|
+| BenchmarkTokenizer/SimpleSQL-16         |    860,258 |         1,233 |           N/A |         N/A |
+| BenchmarkTokenizer/ComplexSQL-16        |     98,812 |        12,008 |           N/A |         N/A |
+| BenchmarkTokenizerAllocations/SimpleSQL |  1,000,000 |         1,228 |         1,617 |          24 |
 ```
 
 ### Parser Performance
 
 ```
-BenchmarkParserSimpleSelect-16          	 6419961	       169.9 ns/op	     536 B/op	       9 allocs/op
-BenchmarkParserComplexSelect-16         	 1639564	       721.4 ns/op	    1433 B/op	      36 allocs/op
-BenchmarkParserInsert-16                	 5387626	       221.3 ns/op	     536 B/op	      14 allocs/op
-BenchmarkParserUpdate-16                	 5944860	       199.4 ns/op	     584 B/op	      12 allocs/op
-BenchmarkParserDelete-16                	 8192491	       144.4 ns/op	     424 B/op	       8 allocs/op
+| Benchmark                        | Operations | Speed (ns/op) | Memory (B/op) | Allocations |
+|----------------------------------|------------|---------------|---------------|-------------|
+| BenchmarkParserSimpleSelect-16   |  6,419,961 |         169.9 |           536 |           9 |
+| BenchmarkParserComplexSelect-16  |  1,639,564 |         721.4 |         1,433 |          36 |
+| BenchmarkParserInsert-16         |  5,387,626 |         221.3 |           536 |          14 |
+| BenchmarkParserUpdate-16         |  5,944,860 |         199.4 |           584 |          12 |
+| BenchmarkParserDelete-16         |  8,192,491 |         144.4 |           424 |           8 |
 ```
 
 ### AST Pool Performance
 
 ```
-BenchmarkASTPool/GetReleaseAST-16      	169205184	         6.650 ns/op	       0 B/op	       0 allocs/op
-BenchmarkSelectStatementPool/GetPutSelectStatement-16	11730066	       100.2 ns/op	     274 B/op	       4 allocs/op
-BenchmarkIdentifierPool/GetPutIdentifier-16	170082399	         7.050 ns/op	       0 B/op	       0 allocs/op
+| Benchmark                                        | Operations  | Speed (ns/op) | Memory (B/op) | Allocations |
+|--------------------------------------------------|-------------|---------------|---------------|-------------|
+| BenchmarkASTPool/GetReleaseAST-16               | 169,205,184 |          6.65 |             0 |           0 |
+| BenchmarkSelectStatementPool/GetPutSelectStmt-16 |  11,730,066 |        100.2  |           274 |           4 |
+| BenchmarkIdentifierPool/GetPutIdentifier-16      | 170,082,399 |          7.05 |             0 |           0 |
 ```
 
 ## Examples

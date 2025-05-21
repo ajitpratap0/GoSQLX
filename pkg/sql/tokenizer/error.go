@@ -2,7 +2,8 @@ package tokenizer
 
 import (
 	"fmt"
-	"github.com/ajitpratapsingh/GoSQLX/pkg/models"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
 // Error represents a tokenization error with location information

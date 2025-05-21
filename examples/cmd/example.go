@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/ajitpratapsingh/GoSQLX/pkg/models"
-	"github.com/ajitpratapsingh/GoSQLX/pkg/sql/tokenizer"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
 // Example demonstrates the Unicode support in the SQL tokenizer

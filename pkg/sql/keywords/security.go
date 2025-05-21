@@ -1,6 +1,6 @@
 package keywords
 
-import "github.com/ajitpratapsingh/GoSQLX/pkg/models"
+import "github.com/ajitpratap0/GoSQLX/pkg/models"
 
 func (k *Keywords) getSecurityKeywords() []Keyword {
 	return []Keyword{

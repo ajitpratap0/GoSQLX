@@ -7,8 +7,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/ajitpratapsingh/GoSQLX/pkg/models"
-	"github.com/ajitpratapsingh/GoSQLX/pkg/sql/keywords"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // Tokenizer provides high-performance SQL tokenization with zero-copy operations

@@ -3,8 +3,8 @@ package main
 import (
 	"testing"
 
-	"github.com/ajitpratapsingh/GoSQLX/pkg/models"
-	"github.com/ajitpratapsingh/GoSQLX/pkg/sql/tokenizer"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
 // exampleFunc is a function type that matches the Example function signature

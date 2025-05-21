@@ -3,7 +3,7 @@ package tokenizer
 import (
 	"testing"
 
-	"github.com/ajitpratapsingh/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
 // adjustTokenTypesForTests modifies token types to match the expected values in tests

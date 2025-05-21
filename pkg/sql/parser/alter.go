@@ -1,8 +1,8 @@
 package parser
 
 import (
-	"github.com/ajitpratapsingh/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratapsingh/GoSQLX/pkg/sql/token"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
 
 // parseAlterStatement parses ALTER statements

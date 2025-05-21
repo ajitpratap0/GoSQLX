@@ -3,8 +3,8 @@ package parser
 import (
 	"testing"
 
-	"github.com/ajitpratapsingh/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratapsingh/GoSQLX/pkg/sql/token"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
 
 func TestParserSimpleSelect(t *testing.T) {

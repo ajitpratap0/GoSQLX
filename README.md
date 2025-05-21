@@ -129,6 +129,9 @@ pkg/
 
 For detailed examples, please check the [examples directory](examples/).
 
+[Introducing GoSQLX: A SQL Query Parser for Go (Not a Replacement for sqlx)](https://medium.com/@ajitpratapsingh/introducing-gosqlx-a-sql-query-parser-for-go-not-a-replacement-for-sqlx-1cfc2bf52d52)
+does a good job of introducing the project.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.

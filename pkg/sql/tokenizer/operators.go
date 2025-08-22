@@ -1,6 +1,6 @@
 package tokenizer
 
-import "github.com/ajitpratapsingh/GoSQLX/pkg/models"
+import "github.com/ajitpratap0/GoSQLX/pkg/models"
 
 // SQLOperator represents a SQL operator with its token type
 type SQLOperator struct {

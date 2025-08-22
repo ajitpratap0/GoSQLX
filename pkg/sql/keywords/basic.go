@@ -1,7 +1,7 @@
 package keywords
 
 import (
-	"github.com/ajitpratapsingh/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
 // Basic SQL clause keywords

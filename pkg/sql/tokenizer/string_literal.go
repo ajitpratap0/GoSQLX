@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"unicode/utf8"
 
-	"github.com/ajitpratapsingh/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
 // StringLiteralReader handles reading of string literals with proper escape sequence handling

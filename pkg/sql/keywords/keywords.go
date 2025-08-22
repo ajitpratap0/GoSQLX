@@ -3,7 +3,7 @@ package keywords
 import (
 	"strings"
 
-	"github.com/ajitpratapsingh/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
 // Reserved keywords that can't be used as table aliases

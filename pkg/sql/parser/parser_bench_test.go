@@ -3,7 +3,7 @@ package parser
 import (
 	"testing"
 
-	"github.com/ajitpratapsingh/GoSQLX/pkg/sql/token"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
 
 var (

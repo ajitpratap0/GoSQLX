@@ -1,7 +1,7 @@
 package tokenizer
 
 import (
-	"github.com/ajitpratapsingh/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
 // Position tracks our scanning cursor with optimized tracking

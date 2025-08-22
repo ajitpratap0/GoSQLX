@@ -3,7 +3,7 @@ package keywords
 import (
 	"testing"
 
-	"github.com/ajitpratapsingh/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
 func TestKeywords_IsKeyword(t *testing.T) {

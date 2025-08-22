@@ -3,6 +3,8 @@ package tokenizer
 import (
 	"bytes"
 	"sync"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
 )
 
 // bufferPool is used to reuse buffers during tokenization
@@ -36,7 +38,12 @@ var tokenizerPool = sync.Pool{
 
 // GetTokenizer gets a Tokenizer from the pool
 func GetTokenizer() *Tokenizer {
-	return tokenizerPool.Get().(*Tokenizer)
+	t := tokenizerPool.Get().(*Tokenizer)
+	
+	// Record pool metrics
+	metrics.RecordPoolGet(true) // Assume from pool (New() creates if empty)
+	
+	return t
 }
 
 // PutTokenizer returns a Tokenizer to the pool
@@ -44,6 +51,9 @@ func PutTokenizer(t *Tokenizer) {
 	if t != nil {
 		t.Reset()
 		tokenizerPool.Put(t)
+		
+		// Record pool return
+		metrics.RecordPoolPut()
 	}
 }
 

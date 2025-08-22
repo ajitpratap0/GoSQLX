@@ -31,7 +31,7 @@ func (f FunctionDesc) String() string {
 		if f.Schema != "" {
 			return fmt.Sprintf("%s.%s", f.Schema, f.Name)
 		}
-		return fmt.Sprintf("%s", f.Name)
+		return f.Name.String()
 	}
 
 	if f.Schema != "" {

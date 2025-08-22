@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
@@ -62,6 +64,9 @@ func NewWithKeywords(kw *keywords.Keywords) (*Tokenizer, error) {
 
 // Tokenize processes the input and returns tokens
 func (t *Tokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) {
+	// Record start time for metrics
+	startTime := time.Now()
+	
 	// Reset state
 	t.Reset()
 	t.input = input
@@ -130,6 +135,9 @@ func (t *Tokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) {
 	}()
 
 	if tokenErr != nil {
+		// Record metrics for failed tokenization
+		duration := time.Since(startTime)
+		metrics.RecordTokenization(duration, len(input), tokenErr)
 		return nil, tokenErr
 	}
 
@@ -139,6 +147,10 @@ func (t *Tokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) {
 		Start: t.getCurrentPosition(),
 		End:   t.getCurrentPosition(),
 	})
+
+	// Record metrics for successful tokenization
+	duration := time.Since(startTime)
+	metrics.RecordTokenization(duration, len(input), nil)
 
 	return tokens, nil
 }
@@ -767,6 +779,51 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		return models.Token{Type: models.TokenTypePipe, Value: "|"}, nil
 	case '\'':
 		return t.readQuotedString('\'')
+	case '&':
+		t.pos.AdvanceRune(r, size)
+		// Check for && (array overlap operator)
+		if t.pos.Index < len(t.input) {
+			nextR, nextSize := utf8.DecodeRune(t.input[t.pos.Index:])
+			if nextR == '&' {
+				t.pos.AdvanceRune(nextR, nextSize)
+				return models.Token{Type: models.TokenTypeOverlap, Value: "&&"}, nil
+			}
+		}
+		// Just a standalone & symbol
+		return models.Token{Type: models.TokenTypeAmpersand, Value: "&"}, nil
+	case '@':
+		t.pos.AdvanceRune(r, size)
+		// Check for PostgreSQL array operators and parameter syntax
+		if t.pos.Index < len(t.input) {
+			nextR, nextSize := utf8.DecodeRune(t.input[t.pos.Index:])
+			
+			// Check for @> (contains operator)
+			if nextR == '>' {
+				t.pos.AdvanceRune(nextR, nextSize)
+				return models.Token{Type: models.TokenTypeAtArrow, Value: "@>"}, nil
+			}
+			
+			// Check for @@ (full text search operator)
+			if nextR == '@' {
+				t.pos.AdvanceRune(nextR, nextSize)
+				return models.Token{Type: models.TokenTypeAtAt, Value: "@@"}, nil
+			}
+			
+			// Check for parameter syntax (@variable)
+			if isIdentifierStart(nextR) {
+				// This is a parameter like @variable, read the identifier part
+				identToken, err := t.readIdentifier()
+				if err != nil {
+					return models.Token{}, err
+				}
+				return models.Token{
+					Type:  models.TokenTypePlaceholder,
+					Value: "@" + identToken.Value,
+				}, nil
+			}
+		}
+		// Just a standalone @ symbol
+		return models.Token{Type: models.TokenTypeAtSign, Value: "@"}, nil
 	}
 
 	if isIdentifierStart(r) {

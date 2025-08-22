@@ -110,7 +110,7 @@ func TestParserComplexSelect(t *testing.T) {
 	if stmt.Where == nil {
 		t.Fatal("expected WHERE clause, got nil")
 	}
-	if stmt.OrderBy == nil || len(stmt.OrderBy) == 0 {
+	if len(stmt.OrderBy) == 0 {
 		t.Fatal("expected ORDER BY clause, got nil or empty")
 	}
 	if stmt.Limit == nil {

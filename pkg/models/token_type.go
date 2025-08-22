@@ -4,14 +4,13 @@ package models
 type TokenType int
 
 // These constants define the token types used in the SQL tokenizer
-// The values are specifically set to match the expected values in the tests
 const (
 	// Basic token types
-	TokenTypeEOF  TokenType = iota
-	TokenTypeWord           // 1
+	TokenTypeEOF TokenType = iota
+	TokenTypeWord
 	TokenTypeNumber
 	TokenTypeChar
-	TokenTypeSingleQuotedString = 124 // Specific value to match test expectations
+	TokenTypeSingleQuotedString
 	TokenTypeDoubleQuotedString
 	TokenTypeTripleSingleQuotedString
 	TokenTypeTripleDoubleQuotedString
@@ -33,18 +32,18 @@ const (
 	TokenTypeLtEq
 	TokenTypeGtEq
 	TokenTypeSpaceship
-	TokenTypePlus // 26
+	TokenTypePlus
 	TokenTypeMinus
-	TokenTypeMul // 28
+	TokenTypeMul
 	TokenTypeDiv
 	TokenTypeDuckIntDiv
-	TokenTypeMod          // 31
-	TokenTypeStringConcat // 32
+	TokenTypeMod
+	TokenTypeStringConcat
 	TokenTypeLParen
 	TokenTypeRParen
 	TokenTypePeriod
 	TokenTypeColon
-	TokenTypeDoubleColon // 38
+	TokenTypeDoubleColon
 	TokenTypeAssignment
 	TokenTypeSemicolon
 	TokenTypeBackslash
@@ -54,7 +53,7 @@ const (
 
 	// Keywords
 	TokenTypeKeyword
-	TokenTypeSelect = 43 // Specific value to match test expectations
+	TokenTypeSelect
 	TokenTypeJoin
 	TokenTypeInner
 	TokenTypeLeft
@@ -62,7 +61,7 @@ const (
 	TokenTypeOuter
 	TokenTypeGroup
 	TokenTypeHaving
-	TokenTypeWhere = 51 // Specific value to match test expectations
+	TokenTypeWhere
 	TokenTypeOrder
 	TokenTypeLimit
 	TokenTypeOffset
@@ -70,7 +69,7 @@ const (
 	TokenTypeAnd
 	TokenTypeLike
 	TokenTypeAsc
-	TokenTypeFrom = 59 // Specific value to match test expectations
+	TokenTypeFrom
 	TokenTypeBy
 	TokenTypeOr
 	TokenTypeNot
@@ -122,7 +121,7 @@ const (
 	TokenTypePGSquareRoot
 	TokenTypePGCubeRoot
 	TokenTypePlaceholder
-	TokenTypeArrow = 20 // Specific value to match test expectations
+	TokenTypeArrow
 	TokenTypeLongArrow
 	TokenTypeHashArrow
 	TokenTypeHashLongArrow
@@ -137,7 +136,7 @@ const (
 	TokenTypeCustomBinaryOperator
 
 	// Additional token types referenced in tests
-	TokenTypeString = 20 // Specific value to match test expectations
+	TokenTypeString
 	TokenTypeIdentifier
 	TokenTypeOperator
 	TokenTypeLeftParen

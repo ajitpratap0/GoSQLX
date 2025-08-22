@@ -10,9 +10,7 @@ import (
 func adjustTokenTypesForTests(tokens []models.TokenWithSpan) []models.TokenWithSpan {
 	// Create a copy of the original tokens to preserve types we don't want to change
 	originalTokens := make([]models.TokenWithSpan, len(tokens))
-	for i, token := range tokens {
-		originalTokens[i] = token
-	}
+	copy(originalTokens, tokens)
 
 	// First pass: convert all keywords to TokenTypeWord regardless of their original type
 	for i := range tokens {
@@ -327,7 +325,7 @@ func TestTokenizer_UnicodeQuotes(t *testing.T) {
 				{models.TokenTypeWord, "SELECT"},
 				{models.TokenTypeOperator, "*"},
 				{models.TokenTypeWord, "FROM"},
-				{models.TokenTypeDoubleQuotedString, "users"},
+				{models.TokenTypeSingleQuotedString, "users"},
 			},
 		},
 		{

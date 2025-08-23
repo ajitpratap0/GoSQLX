@@ -144,16 +144,16 @@ func GetMetrics() MetricsSnapshot {
 	defer globalMetrics.mu.RUnlock()
 
 	m := MetricsSnapshot{
-		TokenizerCalls:      globalMetrics.TokenizerCalls,
+		TokenizerCalls:      atomic.LoadInt64(&globalMetrics.TokenizerCalls),
 		TokenizerDuration:   globalMetrics.TokenizerDuration,
-		TokensProcessed:     globalMetrics.TokensProcessed,
-		TokenizerErrors:     globalMetrics.TokenizerErrors,
-		ParserCalls:         globalMetrics.ParserCalls,
+		TokensProcessed:     atomic.LoadInt64(&globalMetrics.TokensProcessed),
+		TokenizerErrors:     atomic.LoadInt64(&globalMetrics.TokenizerErrors),
+		ParserCalls:         atomic.LoadInt64(&globalMetrics.ParserCalls),
 		ParserDuration:      globalMetrics.ParserDuration,
-		StatementsProcessed: globalMetrics.StatementsProcessed,
-		ParserErrors:        globalMetrics.ParserErrors,
-		PoolHits:            globalMetrics.PoolHits,
-		PoolMisses:          globalMetrics.PoolMisses,
+		StatementsProcessed: atomic.LoadInt64(&globalMetrics.StatementsProcessed),
+		ParserErrors:        atomic.LoadInt64(&globalMetrics.ParserErrors),
+		PoolHits:            atomic.LoadInt64(&globalMetrics.PoolHits),
+		PoolMisses:          atomic.LoadInt64(&globalMetrics.PoolMisses),
 		AllocBytes:          globalMetrics.AllocBytes,
 		TotalAllocs:         globalMetrics.TotalAllocs,
 		LastGCPause:         globalMetrics.LastGCPause,
@@ -175,16 +175,17 @@ func Reset() {
 	defer globalMetrics.mu.Unlock()
 
 	// Reset individual fields without overwriting the mutex
-	globalMetrics.TokenizerCalls = 0
+	// Use atomic stores for fields that are accessed atomically elsewhere
+	atomic.StoreInt64(&globalMetrics.TokenizerCalls, 0)
 	globalMetrics.TokenizerDuration = 0
-	globalMetrics.TokensProcessed = 0
-	globalMetrics.TokenizerErrors = 0
-	globalMetrics.ParserCalls = 0
+	atomic.StoreInt64(&globalMetrics.TokensProcessed, 0)
+	atomic.StoreInt64(&globalMetrics.TokenizerErrors, 0)
+	atomic.StoreInt64(&globalMetrics.ParserCalls, 0)
 	globalMetrics.ParserDuration = 0
-	globalMetrics.StatementsProcessed = 0
-	globalMetrics.ParserErrors = 0
-	globalMetrics.PoolHits = 0
-	globalMetrics.PoolMisses = 0
+	atomic.StoreInt64(&globalMetrics.StatementsProcessed, 0)
+	atomic.StoreInt64(&globalMetrics.ParserErrors, 0)
+	atomic.StoreInt64(&globalMetrics.PoolHits, 0)
+	atomic.StoreInt64(&globalMetrics.PoolMisses, 0)
 	globalMetrics.PoolReuse = 0
 	globalMetrics.AllocBytes = 0
 	globalMetrics.TotalAllocs = 0

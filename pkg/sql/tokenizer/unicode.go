@@ -16,11 +16,6 @@ func isUnicodeIdentifierPart(r rune) bool {
 		unicode.Is(unicode.Pc, r) // Connector punctuation
 }
 
-// isUnicodeWhitespace checks if a rune is a Unicode whitespace character
-func isUnicodeWhitespace(r rune) bool {
-	return unicode.IsSpace(r)
-}
-
 // isUnicodeQuote checks if a rune is a Unicode quote character (for identifiers)
 func isUnicodeQuote(r rune) bool {
 	// Only double quotes and their Unicode equivalents are for identifiers

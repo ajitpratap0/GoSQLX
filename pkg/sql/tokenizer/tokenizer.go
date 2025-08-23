@@ -250,6 +250,7 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 	for t.pos.Index < len(t.input) {
 		r, size = utf8.DecodeRune(t.input[t.pos.Index:])
 		if !isIdentifierChar(r) {
+			_ = size // Mark as intentionally unused
 			break
 		}
 		t.pos.AdvanceRune(r, size)
@@ -286,6 +287,7 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 				for t.pos.Index < len(t.input) {
 					r, size = utf8.DecodeRune(t.input[t.pos.Index:])
 					if !isIdentifierChar(r) {
+						_ = size // Mark as intentionally unused
 						break
 					}
 					t.pos.AdvanceRune(r, size)

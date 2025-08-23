@@ -435,7 +435,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 		// Convert string to int
 		limitVal := 0
-		fmt.Sscanf(p.currentToken.Literal, "%d", &limitVal)
+		_, _ = fmt.Sscanf(p.currentToken.Literal, "%d", &limitVal)
 
 		// Add LIMIT to SELECT statement
 		selectStmt.Limit = &limitVal
@@ -453,7 +453,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 		// Convert string to int
 		offsetVal := 0
-		fmt.Sscanf(p.currentToken.Literal, "%d", &offsetVal)
+		_, _ = fmt.Sscanf(p.currentToken.Literal, "%d", &offsetVal)
 
 		// Add OFFSET to SELECT statement
 		selectStmt.Offset = &offsetVal

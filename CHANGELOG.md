@@ -7,7 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2024-12-23
+
 ### Added
+- Performance monitoring package (`pkg/sql/monitor`) for real-time metrics
+- Metrics collection for tokenizer, parser, and pool operations
+- Performance summary generation with throughput calculations
+- Thread-safe concurrent metrics recording
+- Configurable metrics enable/disable functionality
+
+### Improved
+- Enhanced performance tracking capabilities
+- Better observability for production deployments
+- Real-time performance monitoring support
+
+### Added (from previous unreleased)
 - GitHub issue templates for bug reports, feature requests, and performance issues
 - Pull request template with comprehensive checklist
 - Enhanced README with community badges and widgets
@@ -113,6 +127,7 @@ For questions about upgrading or changelog entries:
 - Open an issue: https://github.com/ajitpratap0/GoSQLX/issues
 - Join discussions: https://github.com/ajitpratap0/GoSQLX/discussions
 
-[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/ajitpratap0/GoSQLX/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/ajitpratap0/GoSQLX/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/ajitpratap0/GoSQLX/releases/tag/v0.9.0

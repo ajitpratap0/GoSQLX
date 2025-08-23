@@ -7,6 +7,33 @@ import (
 	"time"
 )
 
+// MetricsSnapshot represents a snapshot of metrics without internal locks
+type MetricsSnapshot struct {
+	// Tokenizer metrics
+	TokenizerCalls    int64
+	TokenizerDuration time.Duration
+	TokensProcessed   int64
+	TokenizerErrors   int64
+
+	// Parser metrics
+	ParserCalls         int64
+	ParserDuration      time.Duration
+	StatementsProcessed int64
+	ParserErrors        int64
+
+	// Pool metrics
+	PoolHits   int64
+	PoolMisses int64
+	PoolReuse  float64
+
+	// Memory metrics
+	AllocBytes  uint64
+	TotalAllocs uint64
+	LastGCPause time.Duration
+
+	StartTime time.Time
+}
+
 // Metrics holds performance metrics for the tokenizer and parser
 type Metrics struct {
 	mu sync.RWMutex
@@ -18,10 +45,10 @@ type Metrics struct {
 	TokenizerErrors   int64
 
 	// Parser metrics
-	ParserCalls    int64
-	ParserDuration time.Duration
+	ParserCalls         int64
+	ParserDuration      time.Duration
 	StatementsProcessed int64
-	ParserErrors   int64
+	ParserErrors        int64
 
 	// Pool metrics
 	PoolHits   int64
@@ -29,9 +56,9 @@ type Metrics struct {
 	PoolReuse  float64
 
 	// Memory metrics
-	AllocBytes   uint64
-	TotalAllocs  uint64
-	LastGCPause  time.Duration
+	AllocBytes  uint64
+	TotalAllocs uint64
+	LastGCPause time.Duration
 
 	startTime time.Time
 }
@@ -66,7 +93,7 @@ func RecordTokenizerCall(duration time.Duration, tokens int, err error) {
 
 	atomic.AddInt64(&globalMetrics.TokenizerCalls, 1)
 	atomic.AddInt64(&globalMetrics.TokensProcessed, int64(tokens))
-	
+
 	globalMetrics.mu.Lock()
 	globalMetrics.TokenizerDuration += duration
 	globalMetrics.mu.Unlock()
@@ -83,7 +110,7 @@ func RecordParserCall(duration time.Duration, err error) {
 	}
 
 	atomic.AddInt64(&globalMetrics.ParserCalls, 1)
-	
+
 	globalMetrics.mu.Lock()
 	globalMetrics.ParserDuration += duration
 	globalMetrics.mu.Unlock()
@@ -112,12 +139,27 @@ func RecordPoolMiss() {
 }
 
 // GetMetrics returns a copy of current metrics
-func GetMetrics() Metrics {
+func GetMetrics() MetricsSnapshot {
 	globalMetrics.mu.RLock()
 	defer globalMetrics.mu.RUnlock()
 
-	m := *globalMetrics
-	
+	m := MetricsSnapshot{
+		TokenizerCalls:      globalMetrics.TokenizerCalls,
+		TokenizerDuration:   globalMetrics.TokenizerDuration,
+		TokensProcessed:     globalMetrics.TokensProcessed,
+		TokenizerErrors:     globalMetrics.TokenizerErrors,
+		ParserCalls:         globalMetrics.ParserCalls,
+		ParserDuration:      globalMetrics.ParserDuration,
+		StatementsProcessed: globalMetrics.StatementsProcessed,
+		ParserErrors:        globalMetrics.ParserErrors,
+		PoolHits:            globalMetrics.PoolHits,
+		PoolMisses:          globalMetrics.PoolMisses,
+		AllocBytes:          globalMetrics.AllocBytes,
+		TotalAllocs:         globalMetrics.TotalAllocs,
+		LastGCPause:         globalMetrics.LastGCPause,
+		StartTime:           globalMetrics.startTime,
+	}
+
 	// Calculate pool reuse rate
 	total := m.PoolHits + m.PoolMisses
 	if total > 0 {
@@ -202,3 +244,4 @@ func GetSummary() Summary {
 
 	return s
 }
+

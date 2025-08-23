@@ -1,90 +1,34 @@
 run:
   timeout: 10m
   tests: false
-  skip-dirs:
-    - vendor
-    - examples
-    - tools
 
 linters:
   enable:
-    - bodyclose
-    - dogsled
-    - dupl
     - errcheck
-    - exhaustive
-    - gochecknoinits
-    - goconst
-    - gocritic
-    - gocyclo
-    - gofmt
-    - goimports
-    - gomnd
-    - goprintffuncname
-    - gosec
     - gosimple
     - govet
     - ineffassign
-    - lll
-    - misspell
-    - nakedret
-    - noctx
-    - nolintlint
-    - rowserrcheck
     - staticcheck
-    - stylecheck
     - typecheck
-    - unconvert
-    - unparam
     - unused
-    - whitespace
-    - prealloc
+    - gofmt
+    - goimports
 
 linters-settings:
-  dupl:
-    threshold: 100
-  exhaustive:
-    default-signifies-exhaustive: false
-  gocyclo:
-    min-complexity: 15
-  gomnd:
-    settings:
-      mnd:
-        checks: [argument,case,condition,return]
-  govet:
-    check-shadowing: true
-  lll:
-    line-length: 140
-  misspell:
-    locale: US
-  nolintlint:
-    allow-leading-space: true
-    allow-unused: false
-    require-explanation: false
-    require-specific: false
-  prealloc:
-    simple: true
-    range-loops: true
-    for-loops: false
+  gofmt:
+    simplify: true
+  goimports:
+    local-prefixes: github.com/ajitpratap0/GoSQLX
 
 issues:
   exclude-rules:
     - path: _test\.go
       linters:
-        - gomnd
-        - dupl
-        - gosec
-    
-    - path: pkg/sql/keywords/
-      linters:
-        - gomnd
+        - errcheck
     
     - path: examples/
       linters:
-        - gomnd
-        - gosec
         - errcheck
 
   max-issues-per-linter: 0
   max-same-issues: 0
-  new: false

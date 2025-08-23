@@ -463,7 +463,7 @@ func BenchmarkTokenizerThroughput(b *testing.B) {
 	b.Run("TokensPerSecond", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		start := time.Now()
 		totalTokens := 0
 		for i := 0; i < b.N; i++ {

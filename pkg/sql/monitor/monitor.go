@@ -132,9 +132,22 @@ func Reset() {
 	globalMetrics.mu.Lock()
 	defer globalMetrics.mu.Unlock()
 
-	*globalMetrics = Metrics{
-		startTime: time.Now(),
-	}
+	// Reset individual fields without overwriting the mutex
+	globalMetrics.TokenizerCalls = 0
+	globalMetrics.TokenizerDuration = 0
+	globalMetrics.TokensProcessed = 0
+	globalMetrics.TokenizerErrors = 0
+	globalMetrics.ParserCalls = 0
+	globalMetrics.ParserDuration = 0
+	globalMetrics.StatementsProcessed = 0
+	globalMetrics.ParserErrors = 0
+	globalMetrics.PoolHits = 0
+	globalMetrics.PoolMisses = 0
+	globalMetrics.PoolReuse = 0
+	globalMetrics.AllocBytes = 0
+	globalMetrics.TotalAllocs = 0
+	globalMetrics.LastGCPause = 0
+	globalMetrics.startTime = time.Now()
 }
 
 // Uptime returns the duration since metrics were started or reset

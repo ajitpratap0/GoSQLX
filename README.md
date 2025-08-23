@@ -12,15 +12,12 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge)](http://makeapullrequest.com)
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/ajitpratap0/GoSQLX/test.yml?branch=main&label=Tests&style=flat-square)](https://github.com/ajitpratap0/GoSQLX/actions)
-[![Coverage](https://img.shields.io/codecov/c/github/ajitpratap0/GoSQLX?style=flat-square&logo=codecov)](https://codecov.io/gh/ajitpratap0/GoSQLX)
 [![Go Report Card](https://goreportcard.com/badge/github.com/ajitpratap0/GoSQLX?style=flat-square)](https://goreportcard.com/report/github.com/ajitpratap0/GoSQLX)
 [![GoDoc](https://pkg.go.dev/badge/github.com/ajitpratap0/GoSQLX?style=flat-square)](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX)
-[![Mentioned in Awesome Go](https://awesome.re/mentioned-badge-flat.svg)](https://github.com/avelino/awesome-go)
 
 [![GitHub Stars](https://img.shields.io/github/stars/ajitpratap0/GoSQLX?style=social)](https://github.com/ajitpratap0/GoSQLX/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/ajitpratap0/GoSQLX?style=social)](https://github.com/ajitpratap0/GoSQLX/network/members)
 [![GitHub Watchers](https://img.shields.io/github/watchers/ajitpratap0/GoSQLX?style=social)](https://github.com/ajitpratap0/GoSQLX/watchers)
-[![Twitter Follow](https://img.shields.io/twitter/follow/gosqlx?style=social)](https://twitter.com/gosqlx)
 
 **Production-ready, high-performance SQL parsing SDK for Go**  
 *Zero-copy tokenization • Object pooling • Multi-dialect support • Unicode-first design*
@@ -402,19 +399,16 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ### Join Our Community
 
 <a href="https://github.com/ajitpratap0/GoSQLX/discussions"><img src="https://img.shields.io/badge/GitHub-Discussions-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Discussions"></a>
-<a href="https://discord.gg/gosqlx"><img src="https://img.shields.io/badge/Discord-Join_Server-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
-<a href="https://twitter.com/gosqlx"><img src="https://img.shields.io/badge/Twitter-Follow-1DA1F2?style=for-the-badge&logo=twitter&logoColor=white" alt="Twitter"></a>
-<a href="https://dev.to/gosqlx"><img src="https://img.shields.io/badge/dev.to-Follow-0A0A0A?style=for-the-badge&logo=devdotto&logoColor=white" alt="Dev.to"></a>
+<a href="https://github.com/ajitpratap0/GoSQLX/issues"><img src="https://img.shields.io/badge/GitHub-Issues-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Issues"></a>
 
 ### Get Help
 
 | Channel | Purpose | Response Time |
 |---------|---------|---------------|
-| [🐛 Bug Reports](https://github.com/ajitpratap0/GoSQLX/issues/new?template=bug_report.md) | Report issues | < 24 hours |
-| [💡 Feature Requests](https://github.com/ajitpratap0/GoSQLX/issues/new?template=feature_request.md) | Suggest improvements | < 48 hours |
+| [🐛 Bug Reports](https://github.com/ajitpratap0/GoSQLX/issues/new?template=bug_report.md) | Report issues | Community-driven |
+| [💡 Feature Requests](https://github.com/ajitpratap0/GoSQLX/issues/new?template=feature_request.md) | Suggest improvements | Community-driven |
 | [💬 Discussions](https://github.com/ajitpratap0/GoSQLX/discussions) | Q&A, ideas, showcase | Community-driven |
-| [📧 Email](mailto:support@gosqlx.dev) | Private inquiries | < 72 hours |
-| [🔒 Security](docs/SECURITY.md) | Report vulnerabilities | < 12 hours |
+| [🔒 Security](docs/SECURITY.md) | Report vulnerabilities | Best effort |
 
 </div>
 
@@ -461,45 +455,19 @@ We love your input! We want to make contributing as easy and transparent as poss
 
 </div>
 
-## 📊 Adoption & Success Stories
+## 📊 Who's Using GoSQLX
 
 <div align="center">
 
-### Who's Using GoSQLX
-
-<table>
-  <tr>
-    <td align="center"><img src="https://via.placeholder.com/100x50/007ACC/FFFFFF?text=Company1" alt="Company 1"/><br/><sub><b>TechCorp</b></sub></td>
-    <td align="center"><img src="https://via.placeholder.com/100x50/FF6B6B/FFFFFF?text=Company2" alt="Company 2"/><br/><sub><b>DataFlow</b></sub></td>
-    <td align="center"><img src="https://via.placeholder.com/100x50/4ECDC4/FFFFFF?text=Company3" alt="Company 3"/><br/><sub><b>CloudBase</b></sub></td>
-    <td align="center"><img src="https://via.placeholder.com/100x50/FFD93D/FFFFFF?text=Company4" alt="Company 4"/><br/><sub><b>SecureDB</b></sub></td>
-  </tr>
-</table>
-
-*Using GoSQLX in production? [Add your company](https://github.com/ajitpratap0/GoSQLX/issues/new?title=Add%20our%20company%20to%20users)*
+*Using GoSQLX in production? [Let us know!](https://github.com/ajitpratap0/GoSQLX/issues/new?title=Add%20our%20company%20to%20users)*
 
 </div>
 
-## 🏆 Awards & Recognition
-
-<div align="center">
-
-[![Mentioned in Awesome Go](https://awesome.re/mentioned-badge.svg)](https://github.com/avelino/awesome-go)
-[![Product Hunt](https://img.shields.io/badge/Product%20Hunt-Featured-DA552F?style=for-the-badge&logo=producthunt)](https://producthunt.com)
-[![Hacker News](https://img.shields.io/badge/Hacker%20News-Top%2010-FF6600?style=for-the-badge&logo=ycombinator)](https://news.ycombinator.com)
-
-</div>
 
 ## 📈 Project Metrics
 
 <div align="center">
 
-### Code Quality & Coverage
-
-![Code Coverage](https://img.shields.io/badge/Coverage-95%25-brightgreen?style=flat-square)
-![Code Quality](https://img.shields.io/badge/Code%20Quality-A+-brightgreen?style=flat-square)
-![Technical Debt](https://img.shields.io/badge/Tech%20Debt-Low-green?style=flat-square)
-![Maintainability](https://img.shields.io/badge/Maintainability-High-green?style=flat-square)
 
 ### Performance Benchmarks
 
@@ -535,11 +503,9 @@ graph LR
 
 <div align="center">
 
-If GoSQLX helps your project, please consider supporting us:
+If GoSQLX helps your project, please consider:
 
-<a href="https://github.com/sponsors/ajitpratap0"><img src="https://img.shields.io/badge/GitHub-Sponsor-EA4AAA?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="GitHub Sponsors"></a>
-<a href="https://www.buymeacoffee.com/gosqlx"><img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy Me A Coffee"></a>
-<a href="https://www.patreon.com/gosqlx"><img src="https://img.shields.io/badge/Patreon-Support-F96854?style=for-the-badge&logo=patreon&logoColor=white" alt="Patreon"></a>
+<a href="https://github.com/ajitpratap0/GoSQLX"><img src="https://img.shields.io/badge/⭐_Star_This_Repo-yellow?style=for-the-badge" alt="Star This Repo"></a>
 
 ### Other Ways to Support
 
@@ -559,21 +525,7 @@ If GoSQLX helps your project, please consider supporting us:
 
 This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
 
-[![FOSSA Status](https://app.fossa.com/api/projects/github%2Fajitpratap0%2FGoSQLX.svg?type=large)](https://app.fossa.com/projects/github%2Fajitpratap0%2FGoSQLX?ref=badge_large)
-
 </div>
-
----
-
-<div align="center">
-
-### 🌟 Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=ajitpratap0/GoSQLX&type=Date)](https://star-history.com/#ajitpratap0/GoSQLX&Date)
-
-### 📊 Activity
-
-![GitHub Activity Graph](https://github-readme-activity-graph.vercel.app/graph?username=ajitpratap0&repo=GoSQLX&theme=react-dark&hide_border=true)
 
 ---
 

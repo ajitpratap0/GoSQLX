@@ -19,8 +19,8 @@ We take the security of GoSQLX seriously. If you believe you have found a securi
 - Exploit the vulnerability in production systems
 
 ### Please DO:
-- Email us at: security@gosqlx.dev
-- Include the word "SECURITY" in the subject line
+- Open a security advisory: https://github.com/ajitpratap0/GoSQLX/security/advisories/new
+- Or create a private issue with "SECURITY:" prefix
 - Provide detailed steps to reproduce the issue
 - Allow us reasonable time to fix the issue before public disclosure
 
@@ -36,9 +36,9 @@ When reporting a vulnerability, please include:
 
 ## Response Timeline
 
-- **Initial Response**: Within 12 hours
-- **Confirmation**: Within 48 hours
-- **Fix Development**: Within 7 days (critical), 30 days (non-critical)
+- **Initial Response**: Best effort
+- **Confirmation**: Best effort
+- **Fix Development**: Based on severity and available resources
 - **Security Advisory**: After fix is released
 
 ## Security Best Practices
@@ -116,6 +116,5 @@ We appreciate responsible disclosure of security vulnerabilities. Security resea
 
 ## Contact
 
-- Security Email: security@gosqlx.dev
-- PGP Key: [Download Public Key](https://gosqlx.dev/pgp-key.asc)
 - Security Advisory Page: https://github.com/ajitpratap0/GoSQLX/security/advisories
+- GitHub Issues (private): Use "SECURITY:" prefix in title

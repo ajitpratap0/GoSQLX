@@ -1,3 +1,5 @@
+// Package parser provides a recursive descent SQL parser that converts tokens into an Abstract Syntax Tree (AST).
+// It supports standard SQL statements including SELECT, INSERT, UPDATE, DELETE, and various DDL operations.
 package parser
 
 import (

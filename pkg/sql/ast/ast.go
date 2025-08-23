@@ -1,3 +1,5 @@
+// Package ast provides Abstract Syntax Tree (AST) node definitions for SQL statements.
+// It includes support for DDL and DML operations with object pooling for performance optimization.
 package ast
 
 import "fmt"

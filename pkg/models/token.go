@@ -1,3 +1,5 @@
+// Package models provides core data structures for SQL tokenization and parsing,
+// including tokens, spans, locations, and error types.
 package models
 
 // Token represents a SQL token with its value and metadata

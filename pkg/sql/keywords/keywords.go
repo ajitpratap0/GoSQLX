@@ -1,3 +1,5 @@
+// Package keywords provides SQL keyword definitions and categorization for multiple SQL dialects.
+// It includes reserved words, DDL/DML keywords, and dialect-specific extensions.
 package keywords
 
 import (

@@ -13,7 +13,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        go: ['1.19', '1.20', '1.21']
+        go: ['1.21', '1.22', '1.23']
     
     steps:
     - uses: actions/checkout@v3
@@ -54,18 +54,10 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.21'
+        go-version: '1.23'
     
     - name: Run benchmarks
       run: |
         go test -bench=. -benchmem ./pkg/sql/tokenizer/
         go test -bench=. -benchmem ./pkg/sql/parser/
         go test -bench=. -benchmem ./pkg/sql/ast/
-    
-    - name: Store benchmark results
-      uses: benchmark-action/github-action-benchmark@v1
-      with:
-        tool: 'go'
-        output-file-path: benchmark.txt
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        auto-push: true

@@ -21,6 +21,9 @@ func TestMetricsBasicFunctionality(t *testing.T) {
 		t.Error("Metrics should be enabled after Enable()")
 	}
 
+	// Add a small sleep to ensure uptime is measurable on fast Windows systems
+	time.Sleep(10 * time.Millisecond)
+
 	// Record some operations
 	RecordTokenization(time.Millisecond*5, 100, nil)
 	RecordTokenization(time.Millisecond*3, 50, nil)

@@ -330,7 +330,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 	// Parse JOIN clauses if present
 	joins := []ast.JoinClause{}
-	if p.currentToken.Type == "JOIN" {
+	for p.currentToken.Type == "JOIN" {
 		p.advance() // Consume JOIN
 
 		// Parse joined table name

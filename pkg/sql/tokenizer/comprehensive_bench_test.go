@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 // SQL Test Cases with varying sizes and complexity
@@ -462,7 +463,8 @@ func BenchmarkTokenizerThroughput(b *testing.B) {
 	b.Run("TokensPerSecond", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
-
+		
+		start := time.Now()
 		totalTokens := 0
 		for i := 0; i < b.N; i++ {
 			tokens, err := tokenizer.Tokenize(smallSQL1KB)
@@ -473,7 +475,7 @@ func BenchmarkTokenizerThroughput(b *testing.B) {
 		}
 
 		// Calculate and report tokens per second
-		duration := b.Elapsed()
+		duration := time.Since(start)
 		tokensPerSecond := float64(totalTokens) / duration.Seconds()
 		b.ReportMetric(tokensPerSecond, "tokens/sec")
 	})

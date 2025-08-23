@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.1] - 2024-12-23
+## [1.0.1] - 2025-08-23
 
 ### Added
 - Performance monitoring package (`pkg/sql/monitor`) for real-time metrics
@@ -15,17 +15,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Performance summary generation with throughput calculations
 - Thread-safe concurrent metrics recording
 - Configurable metrics enable/disable functionality
+- GitHub issue templates for bug reports, feature requests, and performance issues
+- Pull request template with comprehensive checklist
+- Enhanced README with community badges and widgets
+- Project metrics and star history visualization
+
+### Fixed
+- Parser now correctly handles multiple JOIN clauses in complex queries
+- Resolved race conditions in monitor package with atomic operations
+- Fixed mutex copy issues in metrics collection
+- Added missing EOF tokens in benchmark tests
+- Fixed Windows test compatibility issues
+- Resolved all golangci-lint warnings and ineffectual assignments
+- Fixed staticcheck U1000 warnings for unused code
 
 ### Improved
 - Enhanced performance tracking capabilities
 - Better observability for production deployments
 - Real-time performance monitoring support
-
-### Added (from previous unreleased)
-- GitHub issue templates for bug reports, feature requests, and performance issues
-- Pull request template with comprehensive checklist
-- Enhanced README with community badges and widgets
-- Project metrics and star history visualization
+- CI/CD pipeline now fully green across all platforms (Linux, macOS, Windows)
+- Test coverage for monitor package at 98.6%
+- All workflows (Go, Lint, Tests) passing with Go 1.19, 1.20, and 1.21
 
 ## [1.0.0] - 2024-12-01
 

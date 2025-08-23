@@ -31,6 +31,7 @@ func generateLargeSelectTokens(numColumns int) []token.Token {
 		{Type: "IDENT", Literal: "active"},
 		{Type: "=", Literal: "="},
 		{Type: "TRUE", Literal: "TRUE"},
+		{Type: "EOF", Literal: ""},
 	}...)
 
 	return tokens
@@ -79,6 +80,9 @@ func generateComplexJoinTokens(numJoins int) []token.Token {
 		}
 		tokens = append(tokens, joinTokens...)
 	}
+
+	// Add EOF token
+	tokens = append(tokens, token.Token{Type: "EOF", Literal: ""})
 
 	return tokens
 }

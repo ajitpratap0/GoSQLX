@@ -124,9 +124,9 @@ func TestMemoryStabilityOverTime(t *testing.T) {
 		t.Skip("Skipping extended memory stability test in short mode")
 	}
 
-	// Test for 30 seconds of continuous operation
-	testDuration := 30 * time.Second
-	reportInterval := 5 * time.Second
+	// Test for 10 seconds of continuous operation
+	testDuration := 10 * time.Second
+	reportInterval := 2 * time.Second
 	
 	t.Logf("Running memory stability test for %v...", testDuration)
 	

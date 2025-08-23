@@ -6,111 +6,6 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
-// adjustTokenTypesForTests modifies token types to match the expected values in tests
-func adjustTokenTypesForTests(tokens []models.TokenWithSpan) []models.TokenWithSpan {
-	// Create a copy of the original tokens to preserve types we don't want to change
-	originalTokens := make([]models.TokenWithSpan, len(tokens))
-	copy(originalTokens, tokens)
-
-	// First pass: convert all keywords to TokenTypeWord regardless of their original type
-	for i := range tokens {
-		// Convert SQL keywords to TokenTypeWord (1) regardless of their original type
-		if tokens[i].Token.Value == "SELECT" || tokens[i].Token.Value == "FROM" ||
-			tokens[i].Token.Value == "WHERE" || tokens[i].Token.Value == "GROUP" ||
-			tokens[i].Token.Value == "ORDER" || tokens[i].Token.Value == "HAVING" ||
-			tokens[i].Token.Value == "JOIN" || tokens[i].Token.Value == "ON" ||
-			tokens[i].Token.Value == "AND" || tokens[i].Token.Value == "OR" ||
-			tokens[i].Token.Value == "AS" || tokens[i].Token.Value == "BY" ||
-			tokens[i].Token.Value == "COUNT" || tokens[i].Token.Value == "DESC" ||
-			tokens[i].Token.Value == "ORDER BY" || tokens[i].Token.Value == "LIKE" ||
-			tokens[i].Token.Value == "ASC" {
-			tokens[i].Token.Type = models.TokenTypeWord
-		}
-	}
-
-	// Second pass: handle operators and special cases
-	for i := range tokens {
-		// Convert operators
-		if tokens[i].Token.Value == "*" || tokens[i].Token.Value == "=" || tokens[i].Token.Value == ">" {
-			tokens[i].Token.Type = models.TokenTypeOperator
-		}
-
-		// Convert commas and semicolons
-		if tokens[i].Token.Value == "," {
-			tokens[i].Token.Type = models.TokenTypeComma
-		} else if tokens[i].Token.Value == ";" {
-			tokens[i].Token.Type = models.TokenTypeSemicolon
-		}
-
-		// Convert numbers
-		if tokens[i].Token.Type == 2 { // TokenTypeNumber
-			tokens[i].Token.Type = models.TokenTypeNumber
-		}
-
-		// Convert additional SQL keywords
-		if tokens[i].Token.Value == "LIKE" {
-			tokens[i].Token.Type = models.TokenTypeWord
-		}
-
-		// Handle special cases for quoted strings and identifiers
-		if tokens[i].Token.Quote == '"' || tokens[i].Token.Quote == '\u201c' || tokens[i].Token.Quote == '\u201d' {
-			tokens[i].Token.Type = models.TokenTypeDoubleQuotedString
-		} else if tokens[i].Token.Quote == '\'' ||
-			tokens[i].Token.Quote == '\u2018' || tokens[i].Token.Quote == '\u2019' ||
-			tokens[i].Token.Quote == '«' || tokens[i].Token.Quote == '»' {
-			tokens[i].Token.Type = models.TokenTypeSingleQuotedString
-		}
-
-		// Special cases for specific test expectations
-		if tokens[i].Token.Value == "café" {
-			// In TestTokenizer_UnicodeIdentifiers, "café" should be TokenTypeWord
-			// But in "SELECT * FROM "café"...", it should be TokenTypeDoubleQuotedString
-			if i > 0 && tokens[i-1].Token.Value == "FROM" {
-				tokens[i].Token.Type = models.TokenTypeDoubleQuotedString
-			} else {
-				tokens[i].Token.Type = models.TokenTypeWord
-			}
-		} else if tokens[i].Token.Value == "name" {
-			// In "SELECT 'name' FROM users", it should be TokenTypeSingleQuotedString
-			if i > 0 && tokens[i-1].Token.Value == "SELECT" {
-				tokens[i].Token.Type = models.TokenTypeSingleQuotedString
-			} else {
-				tokens[i].Token.Type = models.TokenTypeWord
-			}
-		} else if tokens[i].Token.Value == "users" {
-			// Special handling for "users" based on context
-			if i > 0 && tokens[i-1].Token.Value == "FROM" {
-				// Check if this is part of the first test in TestTokenizer_UnicodeQuotes
-				if i >= 3 && tokens[i-2].Token.Value == "*" && tokens[i-3].Token.Value == "SELECT" {
-					// For the first test case in TestTokenizer_UnicodeQuotes, preserve the original token type
-					// which should be TokenTypeDoubleQuotedString (124)
-					tokens[i].Token.Type = originalTokens[i].Token.Type
-				} else {
-					// For other cases, only set to TokenTypeDoubleQuotedString if it's quoted
-					if tokens[i].Token.Quote != 0 {
-						tokens[i].Token.Type = models.TokenTypeDoubleQuotedString
-					} else {
-						tokens[i].Token.Type = models.TokenTypeWord
-					}
-				}
-			} else {
-				tokens[i].Token.Type = models.TokenTypeWord
-			}
-		} else if tokens[i].Token.Value == "test" {
-			// In "SELECT * FROM "café" WHERE name = 'test'", it should be TokenTypeSingleQuotedString
-			if i > 0 && tokens[i-1].Token.Value == "=" {
-				tokens[i].Token.Type = models.TokenTypeSingleQuotedString
-			}
-		} else if tokens[i].Token.Value == "John" {
-			// In "SELECT * FROM users WHERE name = «John»", it should be TokenTypeSingleQuotedString
-			if i > 0 && tokens[i-1].Token.Value == "=" {
-				tokens[i].Token.Type = models.TokenTypeSingleQuotedString
-			}
-		}
-	}
-
-	return tokens
-}
 
 func TestTokenizer_ScientificNotation(t *testing.T) {
 	tests := []struct {
@@ -167,8 +62,6 @@ func TestTokenizer_ScientificNotation(t *testing.T) {
 			}
 		}
 
-		// Adjust token types for test compatibility
-		tokens = adjustTokenTypesForTests(tokens)
 		if len(tokens)-1 != len(test.expected) { // -1 for EOF
 			t.Fatalf("wrong number of tokens for %q, got %d, expected %d", test.input, len(tokens)-1, len(test.expected))
 		}
@@ -197,7 +90,7 @@ func TestTokenizer_UnicodeIdentifiers(t *testing.T) {
 				tokenType models.TokenType
 				value     string
 			}{
-				{models.TokenTypeWord, "über"},
+				{models.TokenTypeIdentifier, "über"},
 			},
 		},
 		{
@@ -206,7 +99,7 @@ func TestTokenizer_UnicodeIdentifiers(t *testing.T) {
 				tokenType models.TokenType
 				value     string
 			}{
-				{models.TokenTypeWord, "café"},
+				{models.TokenTypeIdentifier, "café"},
 			},
 		},
 		{
@@ -215,13 +108,13 @@ func TestTokenizer_UnicodeIdentifiers(t *testing.T) {
 				tokenType models.TokenType
 				value     string
 			}{
-				{models.TokenTypeWord, "SELECT"},
-				{models.TokenTypeOperator, "*"},
-				{models.TokenTypeWord, "FROM"},
+				{models.TokenTypeSelect, "SELECT"},
+				{models.TokenTypeMul, "*"},
+				{models.TokenTypeFrom, "FROM"},
 				{models.TokenTypeDoubleQuotedString, "café"},
-				{models.TokenTypeWord, "WHERE"},
-				{models.TokenTypeWord, "name"},
-				{models.TokenTypeOperator, "="},
+				{models.TokenTypeWhere, "WHERE"},
+				{models.TokenTypeIdentifier, "name"},
+				{models.TokenTypeEq, "="},
 				{models.TokenTypeSingleQuotedString, "test"},
 			},
 		},
@@ -245,8 +138,6 @@ func TestTokenizer_UnicodeIdentifiers(t *testing.T) {
 			}
 		}
 
-		// Adjust token types for test compatibility
-		tokens = adjustTokenTypesForTests(tokens)
 		if len(tokens)-1 != len(test.expected) { // -1 for EOF
 			t.Fatalf("wrong number of tokens for %q, got %d, expected %d", test.input, len(tokens)-1, len(test.expected))
 		}
@@ -273,16 +164,15 @@ func TestTokenizer_BasicSelect(t *testing.T) {
 	}
 
 	// Adjust token types for test compatibility
-	tokens = adjustTokenTypesForTests(tokens)
 
 	expected := []struct {
 		tokenType models.TokenType
 		value     string
 	}{
-		{models.TokenTypeWord, "SELECT"},
-		{models.TokenTypeWord, "id"},
-		{models.TokenTypeWord, "FROM"},
-		{models.TokenTypeWord, "users"},
+		{models.TokenTypeSelect, "SELECT"},
+		{models.TokenTypeIdentifier, "id"},
+		{models.TokenTypeFrom, "FROM"},
+		{models.TokenTypeIdentifier, "users"},
 		{models.TokenTypeSemicolon, ";"},
 	}
 
@@ -322,10 +212,10 @@ func TestTokenizer_UnicodeQuotes(t *testing.T) {
 				tokenType models.TokenType
 				value     string
 			}{
-				{models.TokenTypeWord, "SELECT"},
-				{models.TokenTypeOperator, "*"},
-				{models.TokenTypeWord, "FROM"},
-				{models.TokenTypeSingleQuotedString, "users"},
+				{models.TokenTypeSelect, "SELECT"},
+				{models.TokenTypeMul, "*"},
+				{models.TokenTypeFrom, "FROM"},
+				{models.TokenTypeDoubleQuotedString, "users"},
 			},
 		},
 		{
@@ -334,10 +224,10 @@ func TestTokenizer_UnicodeQuotes(t *testing.T) {
 				tokenType models.TokenType
 				value     string
 			}{
-				{models.TokenTypeWord, "SELECT"},
+				{models.TokenTypeSelect, "SELECT"},
 				{models.TokenTypeSingleQuotedString, "name"},
-				{models.TokenTypeWord, "FROM"},
-				{models.TokenTypeWord, "users"},
+				{models.TokenTypeFrom, "FROM"},
+				{models.TokenTypeIdentifier, "users"},
 			},
 		},
 		{
@@ -346,13 +236,13 @@ func TestTokenizer_UnicodeQuotes(t *testing.T) {
 				tokenType models.TokenType
 				value     string
 			}{
-				{models.TokenTypeWord, "SELECT"},
-				{models.TokenTypeOperator, "*"},
-				{models.TokenTypeWord, "FROM"},
-				{models.TokenTypeWord, "users"},
-				{models.TokenTypeWord, "WHERE"},
-				{models.TokenTypeWord, "name"},
-				{models.TokenTypeOperator, "="},
+				{models.TokenTypeSelect, "SELECT"},
+				{models.TokenTypeMul, "*"},
+				{models.TokenTypeFrom, "FROM"},
+				{models.TokenTypeIdentifier, "users"},
+				{models.TokenTypeWhere, "WHERE"},
+				{models.TokenTypeIdentifier, "name"},
+				{models.TokenTypeEq, "="},
 				{models.TokenTypeSingleQuotedString, "John"},
 			},
 		},
@@ -376,8 +266,6 @@ func TestTokenizer_UnicodeQuotes(t *testing.T) {
 			}
 		}
 
-		// Adjust token types for test compatibility
-		tokens = adjustTokenTypesForTests(tokens)
 		if len(tokens)-1 != len(test.expected) { // -1 for EOF
 			t.Fatalf("wrong number of tokens for %q, got %d, expected %d", test.input, len(tokens)-1, len(test.expected))
 		}
@@ -392,36 +280,6 @@ func TestTokenizer_UnicodeQuotes(t *testing.T) {
 	}
 }
 
-// adjustTokenTypesForMultiLineTest is a special function to adjust token types for the MultiLine test
-func adjustTokenTypesForMultiLineTest(tokens []models.TokenWithSpan) []models.TokenWithSpan {
-	adjusted := make([]models.TokenWithSpan, len(tokens))
-	copy(adjusted, tokens)
-
-	// Map specific token values to their expected types for the test
-	for i, token := range adjusted {
-		switch token.Token.Value {
-		case "SELECT", "FROM", "WHERE", "AND", "LIKE", "ORDER BY", "ASC":
-			adjusted[i].Token.Type = models.TokenTypeWord
-		case ",":
-			adjusted[i].Token.Type = models.TokenTypeComma
-		case ";":
-			adjusted[i].Token.Type = models.TokenTypeSemicolon
-		case ">":
-			adjusted[i].Token.Type = models.TokenTypeOperator
-		case "18":
-			adjusted[i].Token.Type = models.TokenTypeNumber
-		}
-
-		// Handle quoted strings
-		if token.Token.Quote == '\'' {
-			adjusted[i].Token.Type = models.TokenTypeSingleQuotedString
-		} else if token.Token.Quote == '"' {
-			adjusted[i].Token.Type = models.TokenTypeDoubleQuotedString
-		}
-	}
-
-	return adjusted
-}
 
 func TestTokenizer_MultiLine(t *testing.T) {
 	input := `
@@ -458,52 +316,50 @@ ORDER BY
 		tokenType models.TokenType
 		value     string
 	}{
-		{models.TokenTypeWord, "SELECT"},
-		{models.TokenTypeWord, "id"},
+		{models.TokenTypeSelect, "SELECT"},
+		{models.TokenTypeIdentifier, "id"},
 		{models.TokenTypeComma, ","},
-		{models.TokenTypeWord, "name"},
+		{models.TokenTypeIdentifier, "name"},
 		{models.TokenTypeComma, ","},
-		{models.TokenTypeWord, "age"},
-		{models.TokenTypeWord, "FROM"},
-		{models.TokenTypeWord, "users"},
-		{models.TokenTypeWord, "WHERE"},
-		{models.TokenTypeWord, "age"},
-		{models.TokenTypeOperator, ">"},
+		{models.TokenTypeIdentifier, "age"},
+		{models.TokenTypeFrom, "FROM"},
+		{models.TokenTypeIdentifier, "users"},
+		{models.TokenTypeWhere, "WHERE"},
+		{models.TokenTypeIdentifier, "age"},
+		{models.TokenTypeGt, ">"},
 		{models.TokenTypeNumber, "18"},
-		{models.TokenTypeWord, "AND"},
-		{models.TokenTypeWord, "name"},
-		{models.TokenTypeWord, "LIKE"},
+		{models.TokenTypeAnd, "AND"},
+		{models.TokenTypeIdentifier, "name"},
+		{models.TokenTypeLike, "LIKE"},
 		{models.TokenTypeSingleQuotedString, "J%"},
-		{models.TokenTypeWord, "ORDER BY"}, // Combined token for ORDER BY
-		{models.TokenTypeWord, "name"},
-		{models.TokenTypeWord, "ASC"},
+		{models.TokenTypeOrderBy, "ORDER BY"}, // Combined token for ORDER BY
+		{models.TokenTypeIdentifier, "name"},
+		{models.TokenTypeAsc, "ASC"},
 		{models.TokenTypeSemicolon, ";"},
 	}
 
-	// Apply special token type adjustments for this test
-	adjustedTokens := adjustTokenTypesForMultiLineTest(tokens)
 
-	if len(adjustedTokens)-1 != len(expected) { // -1 for EOF
-		t.Fatalf("wrong number of tokens, got %d, expected %d", len(adjustedTokens)-1, len(expected))
+	if len(tokens)-1 != len(expected) { // -1 for EOF
+		t.Fatalf("wrong number of tokens, got %d, expected %d", len(tokens)-1, len(expected))
 	}
 
-	// Debug: Print adjusted tokens
-	t.Logf("Adjusted tokens for comparison:")
-	for i, token := range adjustedTokens {
-		if i < len(adjustedTokens)-1 && i < len(expected) { // Skip EOF
+	// Debug: Print tokens
+	t.Logf("Tokens for comparison:")
+	for i, token := range tokens {
+		if i < len(tokens)-1 && i < len(expected) { // Skip EOF
 			t.Logf("  Token %d: Type=%d, Value=%q, Expected Type=%d",
 				i, token.Token.Type, token.Token.Value, expected[i].tokenType)
 		}
 	}
 
 	for i, exp := range expected {
-		if adjustedTokens[i].Token.Value != exp.value {
+		if tokens[i].Token.Value != exp.value {
 			t.Errorf("wrong value for token %d, got %q, expected %q",
-				i, adjustedTokens[i].Token.Value, exp.value)
+				i, tokens[i].Token.Value, exp.value)
 		}
-		if adjustedTokens[i].Token.Type != exp.tokenType {
+		if tokens[i].Token.Type != exp.tokenType {
 			t.Errorf("wrong type for token %d, got %v, expected %v",
-				i, adjustedTokens[i].Token.Type, exp.tokenType)
+				i, tokens[i].Token.Type, exp.tokenType)
 		}
 	}
 }
@@ -601,8 +457,6 @@ func TestTokenizer_StringLiteral(t *testing.T) {
 			}
 		}
 
-		// Adjust token types for test compatibility
-		tokens = adjustTokenTypesForTests(tokens)
 		if len(tokens)-1 != len(test.expected) { // -1 for EOF
 			t.Fatalf("wrong number of tokens for %q, got %d, expected %d", test.input, len(tokens)-1, len(test.expected))
 		}

@@ -13,6 +13,48 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
+// keywordTokenTypes maps SQL keywords to their token types for fast lookup
+var keywordTokenTypes = map[string]models.TokenType{
+	"SELECT":  models.TokenTypeSelect,
+	"FROM":    models.TokenTypeFrom,
+	"WHERE":   models.TokenTypeWhere,
+	"GROUP":   models.TokenTypeGroup,
+	"ORDER":   models.TokenTypeOrder,
+	"HAVING":  models.TokenTypeHaving,
+	"JOIN":    models.TokenTypeJoin,
+	"INNER":   models.TokenTypeInner,
+	"LEFT":    models.TokenTypeLeft,
+	"RIGHT":   models.TokenTypeRight,
+	"OUTER":   models.TokenTypeOuter,
+	"ON":      models.TokenTypeOn,
+	"AND":     models.TokenTypeAnd,
+	"OR":      models.TokenTypeOr,
+	"NOT":     models.TokenTypeNot,
+	"AS":      models.TokenTypeAs,
+	"BY":      models.TokenTypeBy,
+	"IN":      models.TokenTypeIn,
+	"LIKE":    models.TokenTypeLike,
+	"BETWEEN": models.TokenTypeBetween,
+	"IS":      models.TokenTypeIs,
+	"NULL":    models.TokenTypeNull,
+	"TRUE":    models.TokenTypeTrue,
+	"FALSE":   models.TokenTypeFalse,
+	"CASE":    models.TokenTypeCase,
+	"WHEN":    models.TokenTypeWhen,
+	"THEN":    models.TokenTypeThen,
+	"ELSE":    models.TokenTypeElse,
+	"END":     models.TokenTypeEnd,
+	"ASC":     models.TokenTypeAsc,
+	"DESC":    models.TokenTypeDesc,
+	"LIMIT":   models.TokenTypeLimit,
+	"OFFSET":  models.TokenTypeOffset,
+	"COUNT":   models.TokenTypeCount,
+	"SUM":     models.TokenTypeSum,
+	"AVG":     models.TokenTypeAvg,
+	"MIN":     models.TokenTypeMin,
+	"MAX":     models.TokenTypeMax,
+}
+
 // Tokenizer provides high-performance SQL tokenization with zero-copy operations
 type Tokenizer struct {
 	input      []byte
@@ -182,8 +224,11 @@ func (t *Tokenizer) nextToken() (models.Token, error) {
 		return t.readNumber(nil)
 	case r == '"' || isUnicodeQuote(r):
 		return t.readQuotedIdentifier()
-	case r == '\'':
-		return t.readQuotedString('\'')
+	case r == '`':
+		// MySQL-style backtick identifier
+		return t.readBacktickIdentifier()
+	case r == '\'' || r == '\u2018' || r == '\u2019' || r == '\u00AB' || r == '\u00BB':
+		return t.readQuotedString(r)
 	}
 
 	// Slower path for punctuation and operators
@@ -215,44 +260,15 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 		Value: ident,
 	}
 
-	// Map specific keywords to their expected token types for test compatibility
-	tokenType := models.TokenTypeWord
-	switch strings.ToUpper(ident) {
-	case "SELECT":
-		tokenType = models.TokenTypeSelect // 43
-	case "FROM":
-		tokenType = models.TokenTypeFrom // 59
-	case "WHERE":
-		tokenType = models.TokenTypeWhere // 51
-	case "GROUP":
-		tokenType = models.TokenTypeGroup // 50
-	case "ORDER":
-		tokenType = models.TokenTypeOrder // 52
-	case "HAVING":
-		tokenType = models.TokenTypeHaving // 51
-	case "JOIN":
-		tokenType = models.TokenTypeJoin // 44
-	case "ON":
-		tokenType = models.TokenTypeOn // 55
-	case "AND":
-		tokenType = models.TokenTypeAnd // 56
-	case "OR":
-		tokenType = models.TokenTypeOr // 61
-	case "AS":
-		tokenType = models.TokenTypeAs // 87
-	case "BY":
-		tokenType = models.TokenTypeBy // 60
-	case "COUNT":
-		tokenType = models.TokenTypeCount // 64
-	case "DESC":
-		tokenType = models.TokenTypeDesc // 75
-	default:
-		// For other identifiers, use TokenTypeWord (1) for test compatibility
-		tokenType = models.TokenTypeWord // 1
+	// Determine token type based on whether it's a keyword
+	upperIdent := strings.ToUpper(ident)
+	tokenType, isKeyword := keywordTokenTypes[upperIdent]
+	if !isKeyword {
+		tokenType = models.TokenTypeIdentifier
 	}
 
 	// Check if this could be the start of a compound keyword
-	if isCompoundKeywordStart(ident) {
+	if isCompoundKeywordStart(upperIdent) {
 		// Save current position
 		savePos := t.pos.Clone()
 
@@ -277,26 +293,10 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 
 				nextIdent := string(t.input[nextStart:t.pos.Index])
 				compoundKeyword := ident + " " + nextIdent
+				upperCompound := strings.ToUpper(compoundKeyword)
 
-				// Map compound keywords to their expected token types
-				var compoundType models.TokenType
-				switch strings.ToUpper(compoundKeyword) {
-				case "GROUP BY":
-					compoundType = models.TokenTypeGroupBy // 88
-					return models.Token{
-						Type:  compoundType,
-						Word:  word,
-						Value: compoundKeyword,
-					}, nil
-				case "ORDER BY":
-					compoundType = models.TokenTypeOrderBy // 89
-					return models.Token{
-						Type:  compoundType,
-						Word:  word,
-						Value: compoundKeyword,
-					}, nil
-				case "LEFT JOIN":
-					compoundType = models.TokenTypeLeftJoin // 90
+				// Check if it's a valid compound keyword
+				if compoundType, ok := compoundKeywordTypes[upperCompound]; ok {
 					return models.Token{
 						Type:  compoundType,
 						Word:  word,
@@ -317,12 +317,32 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 	}, nil
 }
 
+// compoundKeywordStarts is a set of keywords that can start compound keywords
+var compoundKeywordStarts = map[string]bool{
+	"GROUP":   true,
+	"ORDER":   true,
+	"LEFT":    true,
+	"RIGHT":   true,
+	"INNER":   true,
+	"OUTER":   true,
+	"CROSS":   true,
+	"NATURAL": true,
+	"FULL":    true,
+}
+
+// compoundKeywordTypes maps compound SQL keywords to their token types
+var compoundKeywordTypes = map[string]models.TokenType{
+	"GROUP BY":    models.TokenTypeGroupBy,
+	"ORDER BY":    models.TokenTypeOrderBy,
+	"LEFT JOIN":   models.TokenTypeLeftJoin,
+	"RIGHT JOIN":  models.TokenTypeRightJoin,
+	"INNER JOIN":  models.TokenTypeInnerJoin,
+	"OUTER JOIN":  models.TokenTypeOuterJoin,
+}
+
 // Helper function to check if a word can start a compound keyword
 func isCompoundKeywordStart(word string) bool {
-	word = strings.ToUpper(word)
-	return word == "GROUP" || word == "ORDER" || word == "LEFT" ||
-		word == "RIGHT" || word == "INNER" || word == "OUTER" ||
-		word == "CROSS" || word == "NATURAL" || word == "FULL"
+	return compoundKeywordStarts[word]
 }
 
 // readQuotedIdentifier reads something like "MyColumn" with support for Unicode quotes
@@ -363,17 +383,12 @@ func (t *Tokenizer) readQuotedIdentifier() (models.Token, error) {
 				QuoteStyle: quote,
 			}
 
-			// For test compatibility, use appropriate token types based on quote style
-			var tokenType models.TokenType
-			if quote == '"' {
-				tokenType = models.TokenTypeSingleQuotedString // 124
-			} else {
-				tokenType = models.TokenTypeString // 20
-			}
+			// Double-quoted strings are identifiers in SQL
 			return models.Token{
-				Type:  tokenType,
+				Type:  models.TokenTypeDoubleQuotedString,
 				Word:  word,
 				Value: buf.String(),
+				Quote: quote,
 			}, nil
 		}
 
@@ -392,6 +407,55 @@ func (t *Tokenizer) readQuotedIdentifier() (models.Token, error) {
 
 	return models.Token{}, TokenizerError{
 		Message:  fmt.Sprintf("unterminated quoted identifier starting at line %d, column %d", startPos.Line, startPos.Column),
+		Location: models.Location{Line: startPos.Line, Column: startPos.Column},
+	}
+}
+
+// readBacktickIdentifier reads MySQL-style backtick identifiers
+func (t *Tokenizer) readBacktickIdentifier() (models.Token, error) {
+	startPos := t.pos.Clone()
+	
+	// Skip opening backtick
+	t.pos.Index++
+	t.pos.Column++
+	
+	var buf bytes.Buffer
+	for t.pos.Index < len(t.input) {
+		ch := t.input[t.pos.Index]
+		
+		if ch == '`' {
+			// Check for escaped backtick
+			if t.pos.Index+1 < len(t.input) && t.input[t.pos.Index+1] == '`' {
+				// Include one backtick and skip the other
+				buf.WriteByte('`')
+				t.pos.Index += 2
+				t.pos.Column += 2
+				continue
+			}
+			
+			// End of backtick identifier
+			t.pos.Index++
+			t.pos.Column++
+			
+			return models.Token{
+				Type:  models.TokenTypeIdentifier, // Backtick identifiers are identifiers
+				Value: buf.String(),
+			}, nil
+		}
+		
+		if ch == '\n' {
+			t.pos.Line++
+			t.pos.Column = 1
+		} else {
+			t.pos.Column++
+		}
+		
+		buf.WriteByte(ch)
+		t.pos.Index++
+	}
+	
+	return models.Token{}, TokenizerError{
+		Message:  fmt.Sprintf("unterminated backtick identifier starting at line %d, column %d", startPos.Line, startPos.Column),
 		Location: models.Location{Line: startPos.Line, Column: startPos.Column},
 	}
 }
@@ -682,6 +746,12 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 	case ')':
 		t.pos.AdvanceRune(r, size)
 		return models.Token{Type: models.TokenTypeRightParen, Value: ")"}, nil
+	case '[':
+		t.pos.AdvanceRune(r, size)
+		return models.Token{Type: models.TokenTypeLBracket, Value: "["}, nil
+	case ']':
+		t.pos.AdvanceRune(r, size)
+		return models.Token{Type: models.TokenTypeRBracket, Value: "]"}, nil
 	case ',':
 		t.pos.AdvanceRune(r, size)
 		return models.Token{Type: models.TokenTypeComma, Value: ","}, nil
@@ -706,8 +776,7 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		return models.Token{Type: models.TokenTypeMinus, Value: "-"}, nil
 	case '*':
 		t.pos.AdvanceRune(r, size)
-		// Use TokenTypeOperator for compatibility with tests
-		return models.Token{Type: models.TokenTypeOperator, Value: "*"}, nil
+		return models.Token{Type: models.TokenTypeMul, Value: "*"}, nil
 	case '/':
 		t.pos.AdvanceRune(r, size)
 		return models.Token{Type: models.TokenTypeDiv, Value: "/"}, nil
@@ -720,30 +789,30 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 				return models.Token{Type: models.TokenTypeRArrow, Value: "=>"}, nil
 			}
 		}
-		return models.Token{Type: models.TokenTypeOperator, Value: "="}, nil
+		return models.Token{Type: models.TokenTypeEq, Value: "="}, nil
 	case '<':
 		t.pos.AdvanceRune(r, size)
 		if t.pos.Index < len(t.input) {
 			nxtR, nxtSize := utf8.DecodeRune(t.input[t.pos.Index:])
 			if nxtR == '=' {
 				t.pos.AdvanceRune(nxtR, nxtSize)
-				return models.Token{Type: models.TokenTypeOperator, Value: "<="}, nil
+				return models.Token{Type: models.TokenTypeLtEq, Value: "<="}, nil
 			} else if nxtR == '>' {
 				t.pos.AdvanceRune(nxtR, nxtSize)
-				return models.Token{Type: models.TokenTypeOperator, Value: "<>"}, nil
+				return models.Token{Type: models.TokenTypeNeq, Value: "<>"}, nil
 			}
 		}
-		return models.Token{Type: models.TokenTypeOperator, Value: "<"}, nil
+		return models.Token{Type: models.TokenTypeLt, Value: "<"}, nil
 	case '>':
 		t.pos.AdvanceRune(r, size)
 		if t.pos.Index < len(t.input) {
 			nxtR, nxtSize := utf8.DecodeRune(t.input[t.pos.Index:])
 			if nxtR == '=' {
 				t.pos.AdvanceRune(nxtR, nxtSize)
-				return models.Token{Type: models.TokenTypeOperator, Value: ">="}, nil
+				return models.Token{Type: models.TokenTypeGtEq, Value: ">="}, nil
 			}
 		}
-		return models.Token{Type: models.TokenTypeOperator, Value: ">"}, nil
+		return models.Token{Type: models.TokenTypeGt, Value: ">"}, nil
 	case '!':
 		t.pos.AdvanceRune(r, size)
 		if t.pos.Index < len(t.input) {

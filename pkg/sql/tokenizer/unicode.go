@@ -21,17 +21,18 @@ func isUnicodeWhitespace(r rune) bool {
 	return unicode.IsSpace(r)
 }
 
-// isUnicodeQuote checks if a rune is a Unicode quote character
+// isUnicodeQuote checks if a rune is a Unicode quote character (for identifiers)
 func isUnicodeQuote(r rune) bool {
-	return r == '"' || r == '\u2018' || r == '\u201C' || r == '\u2019' || r == '\u00AB' || r == '\u00BB'
+	// Only double quotes and their Unicode equivalents are for identifiers
+	return r == '\u201C' || r == '\u201D'
 }
 
 // normalizeQuote converts fancy Unicode quotes to standard ASCII quotes
 func normalizeQuote(r rune) rune {
 	switch r {
-	case '\u2018', '\u2019': // Left and right single quotes
+	case '\u2018', '\u2019', '\u00AB', '\u00BB': // Single quotes and guillemets
 		return '\''
-	case '\u201C', '\u201D', '\u00AB', '\u00BB': // Left and right double quotes, guillemets
+	case '\u201C', '\u201D': // Left and right double quotes
 		return '"'
 	default:
 		return r

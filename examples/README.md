@@ -1,89 +1,88 @@
 # GoSQLX Examples
 
-This directory contains example tests demonstrating the features of the GoSQLX SQL tokenizer, particularly its Unicode support capabilities.
+This directory contains various examples demonstrating how to use the GoSQLX SQL parsing SDK.
 
-## Test Files
+## Examples Structure
 
-### `tokenizer_test.go`
+### `/cmd` - Basic Command Line Example
+Simple command-line tool showing basic tokenization and parsing:
+```bash
+cd cmd/
+go run example.go
+go test -v example_test.go
+```
 
-This file contains two main test suites:
+### `/cli-linter` - SQL Linting Tools
+Command-line SQL validation and analysis tools:
+- `simple.go` - Basic SQL syntax validation
+- `advanced.go` - Advanced SQL analysis with detailed feedback
 
-1. **TestUnicodeIdentifiers**
-   - Tests basic Unicode identifier handling
-   - Demonstrates support for:
-     - Unicode table names (e.g., "café")
-     - Unicode column names (e.g., "名前")
-     - Unicode string literals (e.g., '🍕')
-     - Mixed ASCII and Unicode identifiers
+### `/web-services` - Web Service Integration
+Examples of integrating GoSQLX into web applications.
 
-2. **TestComplexQueries**
-   - Tests complex SQL queries with Unicode
-   - Demonstrates:
-     - JOINs with Unicode table names
-     - Aggregations with Unicode columns
-     - Subqueries with Unicode identifiers
-     - Complex WHERE clauses with Unicode
+### `/grpc-service` - gRPC Service
+Example gRPC service exposing SQL parsing capabilities over RPC.
 
-## Running the Tests
+### `/rest-api-server` - REST API Server
+REST API server for SQL parsing operations with JSON input/output.
 
-To run the tests:
+## Quick Start
+
+All examples follow the same pattern:
+
+```go
+package main
+
+import (
+    "github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
+    "github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
+    "github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+)
+
+func main() {
+    // 1. Get tokenizer from pool
+    tkz := tokenizer.GetTokenizer()
+    defer tokenizer.PutTokenizer(tkz)  // Always return to pool
+    
+    // 2. Get AST from pool
+    astObj := ast.NewAST()
+    defer ast.ReleaseAST(astObj)  // Always release AST
+    
+    // 3. Tokenize SQL
+    sql := []byte("SELECT * FROM users WHERE id = 1")
+    tokens, err := tkz.Tokenize(sql)
+    if err != nil {
+        // Handle error
+    }
+    
+    // 4. Parse tokens
+    result, err := parser.Parse(tokens)
+    if err != nil {
+        // Handle error
+    }
+    
+    // 5. Use the AST
+    // ... process result ...
+}
+```
+
+## Running Tests
 
 ```bash
-# Run all tests
-go test ./...
+# Run all example tests
+go test -v ./examples/...
 
-# Run only examples tests
-go test ./examples
+# Run with race detection (recommended)
+go test -race ./examples/...
 
-# Run with verbose output
-go test -v ./examples
+# Run benchmarks
+go test -bench=. ./examples/...
 ```
 
-## Example Queries
+## Key Features Demonstrated
 
-Here are some example queries that demonstrate the Unicode support:
-
-```sql
--- Basic Unicode identifier
-SELECT * FROM "café" WHERE price > 5
-
--- Multiple Unicode identifiers
-SELECT name FROM "über_rides" WHERE "straße" LIKE '%main%'
-
--- Complex JOIN with Unicode
-SELECT u."名前", o.order_id, p."説明"
-FROM "ユーザー" u
-JOIN orders o ON u.id = o.user_id
-JOIN "製品" p ON o.product_id = p.id
-WHERE u."年齢" > 20
-ORDER BY o.order_date DESC
-
--- Aggregation with Unicode columns
-SELECT 
-    c."地域",
-    COUNT(*) as total_orders,
-    AVG(o."価格") as avg_price
-FROM "顧客" c
-JOIN "注文" o ON c.id = o.customer_id
-GROUP BY c."地域"
-HAVING AVG(o."価格") > 1000
-```
-
-## Features Demonstrated
-
-1. **Unicode Identifiers**
-   - Support for quoted identifiers containing Unicode characters
-   - Proper handling of Unicode quotes (e.g., «, », ", ")
-   - Mixed ASCII and Unicode identifiers in the same query
-
-2. **String Literals**
-   - Unicode string literals
-   - Escaped quotes in strings
-   - Multi-line strings
-
-3. **Complex Query Support**
-   - JOINs with Unicode table aliases
-   - Subqueries with Unicode identifiers
-   - Aggregations with Unicode column names
-   - GROUP BY and HAVING clauses with Unicode
-   - ORDER BY with Unicode columns
+- **Object Pooling**: Efficient memory management with tokenizer and AST pools
+- **Unicode Support**: Full international SQL support (see cmd/example_test.go)
+- **Multi-dialect**: PostgreSQL, MySQL, SQL Server, Oracle, SQLite compatibility
+- **Error Handling**: Graceful error recovery and reporting
+- **Performance**: High-throughput parsing with minimal allocations

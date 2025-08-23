@@ -20,15 +20,15 @@ func TestTokenizer_Operators(t *testing.T) {
 				tokenType models.TokenType
 				value     string
 			}{
-				{models.TokenTypeWord, "a"},
+				{models.TokenTypeIdentifier, "a"},
 				{models.TokenTypePlus, "+"},
-				{models.TokenTypeWord, "b"},
-				{models.TokenTypeOperator, "*"},
-				{models.TokenTypeWord, "c"},
+				{models.TokenTypeIdentifier, "b"},
+				{models.TokenTypeMul, "*"},
+				{models.TokenTypeIdentifier, "c"},
 				{models.TokenTypeDiv, "/"},
-				{models.TokenTypeWord, "d"},
+				{models.TokenTypeIdentifier, "d"},
 				{models.TokenTypeMod, "%"},
-				{models.TokenTypeWord, "e"},
+				{models.TokenTypeIdentifier, "e"},
 			},
 		},
 		{
@@ -37,9 +37,9 @@ func TestTokenizer_Operators(t *testing.T) {
 				tokenType models.TokenType
 				value     string
 			}{
-				{models.TokenTypeWord, "x"},
+				{models.TokenTypeIdentifier, "x"},
 				{models.TokenTypeStringConcat, "||"},
-				{models.TokenTypeWord, "y"},
+				{models.TokenTypeIdentifier, "y"},
 			},
 		},
 		{
@@ -48,9 +48,9 @@ func TestTokenizer_Operators(t *testing.T) {
 				tokenType models.TokenType
 				value     string
 			}{
-				{models.TokenTypeWord, "data"},
+				{models.TokenTypeIdentifier, "data"},
 				{models.TokenTypeArrow, "->"},
-				{models.TokenTypeOperator, ">"},
+				{models.TokenTypeGt, ">"},
 				{models.TokenTypeSingleQuotedString, "field"},
 			},
 		},
@@ -99,9 +99,9 @@ func TestTokenizer_SpecialOperators(t *testing.T) {
 				tokenType models.TokenType
 				value     string
 			}{
-				{models.TokenTypeWord, "x"},
+				{models.TokenTypeIdentifier, "x"},
 				{models.TokenTypeDoubleColon, "::"},
-				{models.TokenTypeWord, "text"},
+				{models.TokenTypeIdentifier, "text"},
 			},
 		},
 		{
@@ -110,9 +110,9 @@ func TestTokenizer_SpecialOperators(t *testing.T) {
 				tokenType models.TokenType
 				value     string
 			}{
-				{models.TokenTypeWord, "data"},
+				{models.TokenTypeIdentifier, "data"},
 				{models.TokenTypeRArrow, "=>"},
-				{models.TokenTypeOperator, ">"},
+				{models.TokenTypeGt, ">"},
 				{models.TokenTypeSingleQuotedString, "field"},
 			},
 		},

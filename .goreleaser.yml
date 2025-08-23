@@ -1,0 +1,101 @@
+project_name: gosqlx
+
+before:
+  hooks:
+    - go mod tidy
+    - go test -race ./...
+
+builds:
+  - id: sql-validator
+    main: ./examples/sql-validator
+    binary: sql-validator
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+  - id: sql-formatter
+    main: ./examples/sql-formatter
+    binary: sql-formatter
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - id: gosqlx-tools
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: >-
+      {{ .ProjectName }}_tools_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+      - docs/*
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+  groups:
+    - title: 'New Features'
+      regexp: "^.*feat[(\\w)]*:+.*$"
+      order: 0
+    - title: 'Bug Fixes'
+      regexp: "^.*fix[(\\w)]*:+.*$"
+      order: 1
+    - title: 'Performance'
+      regexp: "^.*perf[(\\w)]*:+.*$"
+      order: 2
+    - title: 'Other'
+      order: 999
+
+release:
+  github:
+    owner: ajitpratap0
+    name: GoSQLX
+  
+  header: |
+    ## GoSQLX {{ .Tag }}
+    
+    High-performance SQL parsing SDK for Go with zero-copy tokenization and object pooling.
+  
+  footer: |
+    ## Documentation
+    
+    - [Getting Started](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/USAGE_GUIDE.md)
+    - [API Reference](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/API_REFERENCE.md)
+    - [Examples](https://github.com/ajitpratap0/GoSQLX/tree/main/examples)
+    
+    **Full Changelog**: https://github.com/ajitpratap0/GoSQLX/compare/{{ .PreviousTag }}...{{ .Tag }}

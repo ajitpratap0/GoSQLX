@@ -7,9 +7,6 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
-// exampleFunc is a function type that matches the Example function signature
-type exampleFunc func() ([]models.TokenWithSpan, error)
-
 func TestExample(t *testing.T) {
 	tokens, err := Example()
 	if err != nil {

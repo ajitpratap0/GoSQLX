@@ -69,17 +69,6 @@ func TestVisitor(t *testing.T) {
 	}
 }
 
-type nodeCollector struct {
-	nodes []Node
-}
-
-func (v *nodeCollector) Visit(node Node) (Visitor, error) {
-	if node != nil {
-		v.nodes = append(v.nodes, node)
-	}
-	return v, nil
-}
-
 func TestInspector(t *testing.T) {
 	// Create a simple AST
 	ast := &AST{

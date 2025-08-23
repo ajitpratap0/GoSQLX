@@ -83,32 +83,6 @@ func generateComplexJoinTokens(numJoins int) []token.Token {
 	return tokens
 }
 
-func generateLargeWhereTokens(numConditions int) []token.Token {
-	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
-		{Type: "IDENT", Literal: "id"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "users"},
-		{Type: "WHERE", Literal: "WHERE"},
-		{Type: "IDENT", Literal: "col1"},
-		{Type: "=", Literal: "="},
-		{Type: "INT", Literal: "1"},
-	}
-
-	// Add many AND conditions
-	for i := 1; i < numConditions; i++ {
-		conditionTokens := []token.Token{
-			{Type: "AND", Literal: "AND"},
-			{Type: "IDENT", Literal: fmt.Sprintf("col%d", i+1)},
-			{Type: "=", Literal: "="},
-			{Type: "INT", Literal: fmt.Sprintf("%d", i+1)},
-		}
-		tokens = append(tokens, conditionTokens...)
-	}
-
-	return tokens
-}
-
 // Comprehensive Parser Performance Benchmarks
 
 func BenchmarkParserComplexity(b *testing.B) {

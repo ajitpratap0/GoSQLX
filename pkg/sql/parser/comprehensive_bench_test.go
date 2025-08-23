@@ -130,6 +130,7 @@ func BenchmarkParserComplexity(b *testing.B) {
 			{Type: "IDENT", Literal: "o"},
 			{Type: ".", Literal: "."},
 			{Type: "IDENT", Literal: "user_id"},
+			{Type: "EOF", Literal: ""},
 		}
 		benchmarkParserWithTokens(b, tokens)
 	})
@@ -144,6 +145,7 @@ func BenchmarkParserComplexity(b *testing.B) {
 			{Type: "IDENT", Literal: "active"},
 			{Type: "=", Literal: "="},
 			{Type: "TRUE", Literal: "TRUE"},
+			{Type: "EOF", Literal: ""},
 		}
 		benchmarkParserWithTokens(b, tokens)
 	})
@@ -337,6 +339,7 @@ func BenchmarkParserStatementTypes(b *testing.B) {
 				{Type: "(", Literal: "("},
 				{Type: "STRING", Literal: "John"},
 				{Type: ")", Literal: ")"},
+				{Type: "EOF", Literal: ""},
 			},
 		},
 		{
@@ -352,6 +355,7 @@ func BenchmarkParserStatementTypes(b *testing.B) {
 				{Type: "IDENT", Literal: "id"},
 				{Type: "=", Literal: "="},
 				{Type: "INT", Literal: "1"},
+				{Type: "EOF", Literal: ""},
 			},
 		},
 		{
@@ -364,6 +368,7 @@ func BenchmarkParserStatementTypes(b *testing.B) {
 				{Type: "IDENT", Literal: "active"},
 				{Type: "=", Literal: "="},
 				{Type: "FALSE", Literal: "FALSE"},
+				{Type: "EOF", Literal: ""},
 			},
 		},
 		{
@@ -395,6 +400,7 @@ func BenchmarkParserMixedWorkload(b *testing.B) {
 			{Type: "(", Literal: "("},
 			{Type: "STRING", Literal: "Test"},
 			{Type: ")", Literal: ")"},
+			{Type: "EOF", Literal: ""},
 		},
 	}
 

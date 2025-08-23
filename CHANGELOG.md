@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2025-08-23
+
+### Added
+- Comprehensive Go package documentation for all major packages
+- Root-level doc.go file with module overview and usage examples
+- Package-level documentation comments for proper pkg.go.dev indexing
+- Performance metrics and feature highlights in documentation
+
+### Improved
+- Documentation quality for better developer experience
+- Module discoverability on pkg.go.dev
+
 ## [1.0.1] - 2025-08-23
 
 ### Added
@@ -137,7 +149,8 @@ For questions about upgrading or changelog entries:
 - Open an issue: https://github.com/ajitpratap0/GoSQLX/issues
 - Join discussions: https://github.com/ajitpratap0/GoSQLX/discussions
 
-[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/ajitpratap0/GoSQLX/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/ajitpratap0/GoSQLX/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/ajitpratap0/GoSQLX/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/ajitpratap0/GoSQLX/releases/tag/v0.9.0

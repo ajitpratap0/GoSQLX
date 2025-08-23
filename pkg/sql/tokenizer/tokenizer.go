@@ -679,7 +679,7 @@ func (t *Tokenizer) readNumber(buf []byte) (models.Token, error) {
 			return models.Token{}, fmt.Errorf("expected digit after decimal point")
 		}
 
-		r, size = utf8.DecodeRune(t.input[t.pos.Index:])
+		r, _ = utf8.DecodeRune(t.input[t.pos.Index:])
 		if r < '0' || r > '9' {
 			return models.Token{}, fmt.Errorf("expected digit after decimal point")
 		}
@@ -688,6 +688,7 @@ func (t *Tokenizer) readNumber(buf []byte) (models.Token, error) {
 		for t.pos.Index < len(t.input) {
 			r, size = utf8.DecodeRune(t.input[t.pos.Index:])
 			if r < '0' || r > '9' {
+				_ = size // Mark as intentionally unused
 				break
 			}
 			t.pos.AdvanceRune(r, size)
@@ -713,7 +714,7 @@ func (t *Tokenizer) readNumber(buf []byte) (models.Token, error) {
 				return models.Token{}, fmt.Errorf("expected digit in exponent")
 			}
 
-			r, size = utf8.DecodeRune(t.input[t.pos.Index:])
+			r, _ = utf8.DecodeRune(t.input[t.pos.Index:])
 			if r < '0' || r > '9' {
 				return models.Token{}, fmt.Errorf("expected digit in exponent")
 			}
@@ -722,6 +723,7 @@ func (t *Tokenizer) readNumber(buf []byte) (models.Token, error) {
 			for t.pos.Index < len(t.input) {
 				r, size = utf8.DecodeRune(t.input[t.pos.Index:])
 				if r < '0' || r > '9' {
+					_ = size // Mark as intentionally unused
 					break
 				}
 				t.pos.AdvanceRune(r, size)

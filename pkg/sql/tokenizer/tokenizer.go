@@ -108,7 +108,7 @@ func NewWithKeywords(kw *keywords.Keywords) (*Tokenizer, error) {
 func (t *Tokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) {
 	// Record start time for metrics
 	startTime := time.Now()
-	
+
 	// Reset state
 	t.Reset()
 	t.input = input
@@ -332,12 +332,12 @@ var compoundKeywordStarts = map[string]bool{
 
 // compoundKeywordTypes maps compound SQL keywords to their token types
 var compoundKeywordTypes = map[string]models.TokenType{
-	"GROUP BY":    models.TokenTypeGroupBy,
-	"ORDER BY":    models.TokenTypeOrderBy,
-	"LEFT JOIN":   models.TokenTypeLeftJoin,
-	"RIGHT JOIN":  models.TokenTypeRightJoin,
-	"INNER JOIN":  models.TokenTypeInnerJoin,
-	"OUTER JOIN":  models.TokenTypeOuterJoin,
+	"GROUP BY":   models.TokenTypeGroupBy,
+	"ORDER BY":   models.TokenTypeOrderBy,
+	"LEFT JOIN":  models.TokenTypeLeftJoin,
+	"RIGHT JOIN": models.TokenTypeRightJoin,
+	"INNER JOIN": models.TokenTypeInnerJoin,
+	"OUTER JOIN": models.TokenTypeOuterJoin,
 }
 
 // Helper function to check if a word can start a compound keyword
@@ -414,15 +414,15 @@ func (t *Tokenizer) readQuotedIdentifier() (models.Token, error) {
 // readBacktickIdentifier reads MySQL-style backtick identifiers
 func (t *Tokenizer) readBacktickIdentifier() (models.Token, error) {
 	startPos := t.pos.Clone()
-	
+
 	// Skip opening backtick
 	t.pos.Index++
 	t.pos.Column++
-	
+
 	var buf bytes.Buffer
 	for t.pos.Index < len(t.input) {
 		ch := t.input[t.pos.Index]
-		
+
 		if ch == '`' {
 			// Check for escaped backtick
 			if t.pos.Index+1 < len(t.input) && t.input[t.pos.Index+1] == '`' {
@@ -432,28 +432,28 @@ func (t *Tokenizer) readBacktickIdentifier() (models.Token, error) {
 				t.pos.Column += 2
 				continue
 			}
-			
+
 			// End of backtick identifier
 			t.pos.Index++
 			t.pos.Column++
-			
+
 			return models.Token{
 				Type:  models.TokenTypeIdentifier, // Backtick identifiers are identifiers
 				Value: buf.String(),
 			}, nil
 		}
-		
+
 		if ch == '\n' {
 			t.pos.Line++
 			t.pos.Column = 1
 		} else {
 			t.pos.Column++
 		}
-		
+
 		buf.WriteByte(ch)
 		t.pos.Index++
 	}
-	
+
 	return models.Token{}, TokenizerError{
 		Message:  fmt.Sprintf("unterminated backtick identifier starting at line %d, column %d", startPos.Line, startPos.Column),
 		Location: models.Location{Line: startPos.Line, Column: startPos.Column},
@@ -865,19 +865,19 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		// Check for PostgreSQL array operators and parameter syntax
 		if t.pos.Index < len(t.input) {
 			nextR, nextSize := utf8.DecodeRune(t.input[t.pos.Index:])
-			
+
 			// Check for @> (contains operator)
 			if nextR == '>' {
 				t.pos.AdvanceRune(nextR, nextSize)
 				return models.Token{Type: models.TokenTypeAtArrow, Value: "@>"}, nil
 			}
-			
+
 			// Check for @@ (full text search operator)
 			if nextR == '@' {
 				t.pos.AdvanceRune(nextR, nextSize)
 				return models.Token{Type: models.TokenTypeAtAt, Value: "@@"}, nil
 			}
-			
+
 			// Check for parameter syntax (@variable)
 			if isIdentifierStart(nextR) {
 				// This is a parameter like @variable, read the identifier part

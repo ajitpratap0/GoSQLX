@@ -6,7 +6,6 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
-
 func TestTokenizer_ScientificNotation(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -280,7 +279,6 @@ func TestTokenizer_UnicodeQuotes(t *testing.T) {
 	}
 }
 
-
 func TestTokenizer_MultiLine(t *testing.T) {
 	input := `
 SELECT 
@@ -337,7 +335,6 @@ ORDER BY
 		{models.TokenTypeAsc, "ASC"},
 		{models.TokenTypeSemicolon, ";"},
 	}
-
 
 	if len(tokens)-1 != len(expected) { // -1 for EOF
 		t.Fatalf("wrong number of tokens, got %d, expected %d", len(tokens)-1, len(expected))

@@ -39,10 +39,10 @@ var tokenizerPool = sync.Pool{
 // GetTokenizer gets a Tokenizer from the pool
 func GetTokenizer() *Tokenizer {
 	t := tokenizerPool.Get().(*Tokenizer)
-	
+
 	// Record pool metrics
 	metrics.RecordPoolGet(true) // Assume from pool (New() creates if empty)
-	
+
 	return t
 }
 
@@ -51,7 +51,7 @@ func PutTokenizer(t *Tokenizer) {
 	if t != nil {
 		t.Reset()
 		tokenizerPool.Put(t)
-		
+
 		// Record pool return
 		metrics.RecordPoolPut()
 	}

@@ -22,68 +22,68 @@ func TestExample(t *testing.T) {
 		tokenType models.TokenType
 		value     string
 	}{
-		{models.TokenTypeSelect, "SELECT"},                    // 201
-		{models.TokenTypeDoubleQuotedString, "名前"},          // 32 - Japanese "name"
-		{models.TokenTypeAs, "as"},                           // 210
-		{models.TokenTypeIdentifier, "name"},                 // 14
-		{models.TokenTypeComma, ","},                         // 51
-		{models.TokenTypeDoubleQuotedString, "年齢"},          // 32 - Japanese "age"
-		{models.TokenTypeAs, "as"},                           // 210
-		{models.TokenTypeIdentifier, "age"},                  // 14
-		{models.TokenTypeComma, ","},                         // 51
-		{models.TokenTypeCount, "COUNT"},                     // 250
-		{models.TokenTypeLParen, "("},                        // 67
-		{models.TokenTypeMul, "*"},                           // 62
-		{models.TokenTypeRParen, ")"},                        // 68
-		{models.TokenTypeAs, "as"},                           // 210
-		{models.TokenTypeIdentifier, "order_count"},          // 14
-		{models.TokenTypeFrom, "FROM"},                       // 202
-		{models.TokenTypeDoubleQuotedString, "ユーザー"},      // 32 - Japanese "users"
-		{models.TokenTypeIdentifier, "u"},                    // 14
-		{models.TokenTypeJoin, "JOIN"},                       // 204
-		{models.TokenTypeDoubleQuotedString, "注文"},          // 32 - Japanese "orders"
-		{models.TokenTypeIdentifier, "o"},                    // 14
-		{models.TokenTypeOn, "ON"},                           // 209
-		{models.TokenTypeIdentifier, "u"},                    // 14
-		{models.TokenTypePeriod, "."},                        // 69
-		{models.TokenTypeIdentifier, "id"},                   // 14
-		{models.TokenTypeEq, "="},                            // 52
-		{models.TokenTypeIdentifier, "o"},                    // 14
-		{models.TokenTypePeriod, "."},                        // 69
-		{models.TokenTypeIdentifier, "user_id"},              // 14
-		{models.TokenTypeWhere, "WHERE"},                     // 203
-		{models.TokenTypeIdentifier, "u"},                    // 14
-		{models.TokenTypePeriod, "."},                        // 69
-		{models.TokenTypeDoubleQuotedString, "国"},           // 32 - Japanese "country"
-		{models.TokenTypeEq, "="},                            // 52
-		{models.TokenTypeSingleQuotedString, "日本"},         // 31 - Japanese "Japan"
-		{models.TokenTypeAnd, "AND"},                         // 211
-		{models.TokenTypeIdentifier, "u"},                    // 14
-		{models.TokenTypePeriod, "."},                        // 69
-		{models.TokenTypeDoubleQuotedString, "都市"},         // 32 - Japanese "city"
-		{models.TokenTypeEq, "="},                            // 52
-		{models.TokenTypeSingleQuotedString, "東京"},         // 31 - Japanese "Tokyo"
-		{models.TokenTypeAnd, "AND"},                         // 211
-		{models.TokenTypeIdentifier, "o"},                    // 14
-		{models.TokenTypePeriod, "."},                        // 69
-		{models.TokenTypeDoubleQuotedString, "価格"},         // 32 - Japanese "price"
-		{models.TokenTypeGt, ">"},                            // 56
-		{models.TokenTypeNumber, "1000"},                     // 11
-		{models.TokenTypeGroupBy, "GROUP BY"},                // 270
-		{models.TokenTypeDoubleQuotedString, "名前"},         // 32
-		{models.TokenTypeComma, ","},                         // 51
-		{models.TokenTypeDoubleQuotedString, "年齢"},         // 32
-		{models.TokenTypeHaving, "HAVING"},                   // 228
-		{models.TokenTypeCount, "COUNT"},                     // 250
-		{models.TokenTypeLParen, "("},                        // 67
-		{models.TokenTypeMul, "*"},                           // 62
-		{models.TokenTypeRParen, ")"},                        // 68
-		{models.TokenTypeGt, ">"},                            // 56
-		{models.TokenTypeNumber, "5"},                        // 11
-		{models.TokenTypeOrderBy, "ORDER BY"},                // 271
-		{models.TokenTypeIdentifier, "order_count"},          // 14
-		{models.TokenTypeDesc, "DESC"},                       // 231
-		{models.TokenTypeSemicolon, ";"},                     // 73
+		{models.TokenTypeSelect, "SELECT"},           // 201
+		{models.TokenTypeDoubleQuotedString, "名前"},   // 32 - Japanese "name"
+		{models.TokenTypeAs, "as"},                   // 210
+		{models.TokenTypeIdentifier, "name"},         // 14
+		{models.TokenTypeComma, ","},                 // 51
+		{models.TokenTypeDoubleQuotedString, "年齢"},   // 32 - Japanese "age"
+		{models.TokenTypeAs, "as"},                   // 210
+		{models.TokenTypeIdentifier, "age"},          // 14
+		{models.TokenTypeComma, ","},                 // 51
+		{models.TokenTypeCount, "COUNT"},             // 250
+		{models.TokenTypeLParen, "("},                // 67
+		{models.TokenTypeMul, "*"},                   // 62
+		{models.TokenTypeRParen, ")"},                // 68
+		{models.TokenTypeAs, "as"},                   // 210
+		{models.TokenTypeIdentifier, "order_count"},  // 14
+		{models.TokenTypeFrom, "FROM"},               // 202
+		{models.TokenTypeDoubleQuotedString, "ユーザー"}, // 32 - Japanese "users"
+		{models.TokenTypeIdentifier, "u"},            // 14
+		{models.TokenTypeJoin, "JOIN"},               // 204
+		{models.TokenTypeDoubleQuotedString, "注文"},   // 32 - Japanese "orders"
+		{models.TokenTypeIdentifier, "o"},            // 14
+		{models.TokenTypeOn, "ON"},                   // 209
+		{models.TokenTypeIdentifier, "u"},            // 14
+		{models.TokenTypePeriod, "."},                // 69
+		{models.TokenTypeIdentifier, "id"},           // 14
+		{models.TokenTypeEq, "="},                    // 52
+		{models.TokenTypeIdentifier, "o"},            // 14
+		{models.TokenTypePeriod, "."},                // 69
+		{models.TokenTypeIdentifier, "user_id"},      // 14
+		{models.TokenTypeWhere, "WHERE"},             // 203
+		{models.TokenTypeIdentifier, "u"},            // 14
+		{models.TokenTypePeriod, "."},                // 69
+		{models.TokenTypeDoubleQuotedString, "国"},    // 32 - Japanese "country"
+		{models.TokenTypeEq, "="},                    // 52
+		{models.TokenTypeSingleQuotedString, "日本"},   // 31 - Japanese "Japan"
+		{models.TokenTypeAnd, "AND"},                 // 211
+		{models.TokenTypeIdentifier, "u"},            // 14
+		{models.TokenTypePeriod, "."},                // 69
+		{models.TokenTypeDoubleQuotedString, "都市"},   // 32 - Japanese "city"
+		{models.TokenTypeEq, "="},                    // 52
+		{models.TokenTypeSingleQuotedString, "東京"},   // 31 - Japanese "Tokyo"
+		{models.TokenTypeAnd, "AND"},                 // 211
+		{models.TokenTypeIdentifier, "o"},            // 14
+		{models.TokenTypePeriod, "."},                // 69
+		{models.TokenTypeDoubleQuotedString, "価格"},   // 32 - Japanese "price"
+		{models.TokenTypeGt, ">"},                    // 56
+		{models.TokenTypeNumber, "1000"},             // 11
+		{models.TokenTypeGroupBy, "GROUP BY"},        // 270
+		{models.TokenTypeDoubleQuotedString, "名前"},   // 32
+		{models.TokenTypeComma, ","},                 // 51
+		{models.TokenTypeDoubleQuotedString, "年齢"},   // 32
+		{models.TokenTypeHaving, "HAVING"},           // 228
+		{models.TokenTypeCount, "COUNT"},             // 250
+		{models.TokenTypeLParen, "("},                // 67
+		{models.TokenTypeMul, "*"},                   // 62
+		{models.TokenTypeRParen, ")"},                // 68
+		{models.TokenTypeGt, ">"},                    // 56
+		{models.TokenTypeNumber, "5"},                // 11
+		{models.TokenTypeOrderBy, "ORDER BY"},        // 271
+		{models.TokenTypeIdentifier, "order_count"},  // 14
+		{models.TokenTypeDesc, "DESC"},               // 231
+		{models.TokenTypeSemicolon, ";"},             // 73
 	}
 
 	// Check that we have enough tokens
@@ -95,7 +95,7 @@ func TestExample(t *testing.T) {
 	for i, want := range expectedTokens {
 		got := tokens[i]
 		if got.Token.Type != want.tokenType {
-			t.Errorf("token[%d].Type = %v(%d), want %v(%d) for value %q", 
+			t.Errorf("token[%d].Type = %v(%d), want %v(%d) for value %q",
 				i, got.Token.Type, got.Token.Type, want.tokenType, want.tokenType, want.value)
 		}
 		if got.Token.Value != want.value {
@@ -165,7 +165,7 @@ func TestResourceManagement(t *testing.T) {
 	for i, query := range queries {
 		// Get tokenizer from pool
 		tok := tokenizer.GetTokenizer()
-		
+
 		// Tokenize query
 		tokens, err := tok.Tokenize([]byte(query))
 		if err != nil {
@@ -173,12 +173,12 @@ func TestResourceManagement(t *testing.T) {
 			tokenizer.PutTokenizer(tok)
 			continue
 		}
-		
+
 		// Verify we got tokens
 		if len(tokens) == 0 {
 			t.Errorf("Query %d produced no tokens", i)
 		}
-		
+
 		// Return to pool
 		tokenizer.PutTokenizer(tok)
 	}
@@ -187,28 +187,28 @@ func TestResourceManagement(t *testing.T) {
 func TestUnicodeSupport(t *testing.T) {
 	// Test various Unicode characters in SQL
 	testCases := []struct {
-		name     string
-		query    string
+		name      string
+		query     string
 		minTokens int
 	}{
 		{
-			name:     "Japanese identifiers",
-			query:    `SELECT "名前" FROM "テーブル";`,
+			name:      "Japanese identifiers",
+			query:     `SELECT "名前" FROM "テーブル";`,
 			minTokens: 4, // SELECT, identifier, FROM, identifier, semicolon
 		},
 		{
-			name:     "Emoji in strings",
-			query:    `SELECT * FROM users WHERE status = '🚀';`,
+			name:      "Emoji in strings",
+			query:     `SELECT * FROM users WHERE status = '🚀';`,
 			minTokens: 8, // Multiple tokens for the WHERE clause
 		},
 		{
-			name:     "Mixed scripts",
-			query:    `SELECT "Имя", "名前", "Name" FROM интернационал;`,
+			name:      "Mixed scripts",
+			query:     `SELECT "Имя", "名前", "Name" FROM интернационал;`,
 			minTokens: 6, // SELECT and multiple identifiers
 		},
 		{
-			name:     "Unicode quotes",
-			query:    `SELECT 'test' FROM users;`, // Using Unicode quotes
+			name:      "Unicode quotes",
+			query:     `SELECT 'test' FROM users;`, // Using Unicode quotes
 			minTokens: 4,
 		},
 	}

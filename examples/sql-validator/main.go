@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
@@ -55,27 +56,27 @@ func main() {
 
 	// Split by semicolon for multiple queries
 	queries := splitQueries(input)
-	
-	fmt.Printf("Validating %d SQL %s using %s dialect...\n", 
-		len(queries), 
+
+	fmt.Printf("Validating %d SQL %s using %s dialect...\n",
+		len(queries),
 		pluralize("query", len(queries)),
 		*dialect)
-	
+
 	errors := 0
 	warnings := 0
-	
+
 	for i, query := range queries {
 		if strings.TrimSpace(query) == "" {
 			continue
 		}
-		
+
 		if *verbose {
 			fmt.Printf("\n--- Query %d ---\n", i+1)
 			fmt.Println(truncate(query, 100))
 		}
-		
+
 		result := validateSQL(query, *dialect, *verbose)
-		
+
 		if result.Error != nil {
 			errors++
 			fmt.Printf("❌ Query %d: INVALID\n", i+1)
@@ -93,7 +94,7 @@ func main() {
 				}
 			}
 		}
-		
+
 		if len(result.Warnings) > 0 {
 			warnings += len(result.Warnings)
 			for _, warning := range result.Warnings {
@@ -101,7 +102,7 @@ func main() {
 			}
 		}
 	}
-	
+
 	// Summary
 	fmt.Printf("\n=== Summary ===\n")
 	fmt.Printf("Total queries: %d\n", len(queries))
@@ -110,7 +111,7 @@ func main() {
 	if warnings > 0 {
 		fmt.Printf("Warnings: %d\n", warnings)
 	}
-	
+
 	if errors > 0 {
 		os.Exit(1)
 	}
@@ -129,11 +130,11 @@ type ValidationResult struct {
 
 func validateSQL(sql string, dialect string, verbose bool) ValidationResult {
 	result := ValidationResult{Valid: true}
-	
+
 	// Get tokenizer
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
-	
+
 	// Tokenize
 	tokens, err := tkz.Tokenize([]byte(sql))
 	if err != nil {
@@ -141,49 +142,49 @@ func validateSQL(sql string, dialect string, verbose bool) ValidationResult {
 		result.Error = err
 		// Try to extract position from error
 		if tokErr, ok := err.(*tokenizer.TokenizerError); ok {
-			result.Line = tokErr.Line
-			result.Column = tokErr.Column
+			result.Line = tokErr.Location.Line
+			result.Column = tokErr.Location.Column
 		}
 		return result
 	}
-	
+
 	result.TokenCount = len(tokens)
-	
+
 	// Parse
 	p := parser.NewParser()
 	defer p.Release()
-	
+
 	// Convert tokens for parser
-	parserTokens := make([]parser.Token, len(tokens))
+	parserTokens := make([]token.Token, len(tokens))
 	for i, t := range tokens {
-		parserTokens[i] = parser.Token{
-			Type:    parser.TokenType(t.Token.Type),
+		parserTokens[i] = token.Token{
+			Type:    token.Type(t.Token.Value), // Use the value as the type string
 			Literal: string(t.Token.Value),
 		}
 	}
-	
+
 	ast, err := p.Parse(parserTokens)
 	if err != nil {
 		result.Valid = false
 		result.Error = err
 		return result
 	}
-	
+
 	// Extract metadata
 	if ast != nil {
 		result.StatementType = detectStatementType(parserTokens)
 		result.Tables = extractTableNames(parserTokens)
 		result.Warnings = checkForWarnings(parserTokens, dialect)
 	}
-	
+
 	return result
 }
 
-func detectStatementType(tokens []parser.Token) string {
+func detectStatementType(tokens []token.Token) string {
 	if len(tokens) == 0 {
 		return "UNKNOWN"
 	}
-	
+
 	switch strings.ToUpper(tokens[0].Literal) {
 	case "SELECT":
 		return "SELECT"
@@ -207,11 +208,11 @@ func detectStatementType(tokens []parser.Token) string {
 	}
 }
 
-func extractTableNames(tokens []parser.Token) []string {
+func extractTableNames(tokens []token.Token) []string {
 	tables := []string{}
 	fromNext := false
 	joinNext := false
-	
+
 	for _, token := range tokens {
 		upper := strings.ToUpper(token.Literal)
 		if upper == "FROM" || upper == "INTO" || upper == "UPDATE" {
@@ -219,40 +220,40 @@ func extractTableNames(tokens []parser.Token) []string {
 		} else if upper == "JOIN" {
 			joinNext = true
 		} else if fromNext || joinNext {
-			if token.Type == parser.TokenType(0) { // Identifier
+			if token.Type != "" { // Identifier (non-empty type)
 				tables = append(tables, token.Literal)
 				fromNext = false
 				joinNext = false
 			}
 		}
 	}
-	
+
 	return tables
 }
 
-func checkForWarnings(tokens []parser.Token, dialect string) []string {
+func checkForWarnings(tokens []token.Token, dialect string) []string {
 	warnings := []string{}
-	
+
 	// Check for dialect-specific issues
 	for _, token := range tokens {
 		upper := strings.ToUpper(token.Literal)
-		
+
 		// MySQL-specific
 		if dialect != "mysql" && strings.Contains(token.Literal, "`") {
 			warnings = append(warnings, "Backtick identifiers are MySQL-specific")
 		}
-		
+
 		// PostgreSQL-specific
 		if dialect != "postgres" && (upper == "RETURNING" || upper == "ARRAY") {
 			warnings = append(warnings, fmt.Sprintf("%s is PostgreSQL-specific", upper))
 		}
-		
+
 		// SQL Server-specific
 		if dialect != "mssql" && strings.HasPrefix(token.Literal, "[") {
 			warnings = append(warnings, "Bracket identifiers are SQL Server-specific")
 		}
 	}
-	
+
 	return warnings
 }
 
@@ -260,14 +261,14 @@ func splitQueries(input string) []string {
 	// Simple split by semicolon (doesn't handle semicolons in strings)
 	queries := strings.Split(input, ";")
 	result := []string{}
-	
+
 	for _, q := range queries {
 		trimmed := strings.TrimSpace(q)
 		if trimmed != "" {
 			result = append(result, trimmed)
 		}
 	}
-	
+
 	return result
 }
 

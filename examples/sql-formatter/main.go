@@ -88,15 +88,15 @@ func formatSQL(sql string, opts FormatOptions) (string, error) {
 	var result strings.Builder
 	indentLevel := 0
 	newLine := true
-	lastWasKeyword := false
+	// lastWasKeyword := false  // Removed: unused variable
 
-	// Keywords that increase indent
-	indentKeywords := map[string]bool{
-		"SELECT": true, "FROM": true, "WHERE": true,
-		"GROUP": true, "HAVING": true, "ORDER": true,
-		"JOIN": true, "LEFT": true, "RIGHT": true,
-		"INNER": true, "OUTER": true, "ON": true,
-	}
+	// Keywords that increase indent - removed as unused
+	// indentKeywords := map[string]bool{
+	// 	"SELECT": true, "FROM": true, "WHERE": true,
+	// 	"GROUP": true, "HAVING": true, "ORDER": true,
+	// 	"JOIN": true, "LEFT": true, "RIGHT": true,
+	// 	"INNER": true, "OUTER": true, "ON": true,
+	// }
 
 	// Keywords that should be on new line
 	newLineKeywords := map[string]bool{
@@ -144,7 +144,7 @@ func formatSQL(sql string, opts FormatOptions) (string, error) {
 			}
 		}
 
-		lastWasKeyword = isKeyword
+		// lastWasKeyword = isKeyword  // Removed: unused variable
 	}
 
 	return result.String(), nil

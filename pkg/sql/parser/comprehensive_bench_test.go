@@ -15,7 +15,7 @@ func generateLargeSelectTokens(numColumns int) []token.Token {
 	tokens := []token.Token{
 		{Type: "SELECT", Literal: "SELECT"},
 	}
-	
+
 	// Add multiple columns
 	for i := 0; i < numColumns; i++ {
 		if i > 0 {
@@ -23,7 +23,7 @@ func generateLargeSelectTokens(numColumns int) []token.Token {
 		}
 		tokens = append(tokens, token.Token{Type: "IDENT", Literal: fmt.Sprintf("col%d", i)})
 	}
-	
+
 	tokens = append(tokens, []token.Token{
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "large_table"},
@@ -32,7 +32,7 @@ func generateLargeSelectTokens(numColumns int) []token.Token {
 		{Type: "=", Literal: "="},
 		{Type: "TRUE", Literal: "TRUE"},
 	}...)
-	
+
 	return tokens
 }
 
@@ -43,7 +43,7 @@ func generateComplexJoinTokens(numJoins int) []token.Token {
 		{Type: ".", Literal: "."},
 		{Type: "IDENT", Literal: "id"},
 	}
-	
+
 	// Add columns from joined tables
 	for i := 0; i < numJoins; i++ {
 		colTokens := []token.Token{
@@ -54,14 +54,14 @@ func generateComplexJoinTokens(numJoins int) []token.Token {
 		}
 		tokens = append(tokens, colTokens...)
 	}
-	
+
 	// Add FROM clause
 	tokens = append(tokens, []token.Token{
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "table1"},
 		{Type: "IDENT", Literal: "t1"},
 	}...)
-	
+
 	// Add multiple joins
 	for i := 0; i < numJoins; i++ {
 		joinTokens := []token.Token{
@@ -79,7 +79,7 @@ func generateComplexJoinTokens(numJoins int) []token.Token {
 		}
 		tokens = append(tokens, joinTokens...)
 	}
-	
+
 	return tokens
 }
 
@@ -94,7 +94,7 @@ func generateLargeWhereTokens(numConditions int) []token.Token {
 		{Type: "=", Literal: "="},
 		{Type: "INT", Literal: "1"},
 	}
-	
+
 	// Add many AND conditions
 	for i := 1; i < numConditions; i++ {
 		conditionTokens := []token.Token{
@@ -105,7 +105,7 @@ func generateLargeWhereTokens(numConditions int) []token.Token {
 		}
 		tokens = append(tokens, conditionTokens...)
 	}
-	
+
 	return tokens
 }
 
@@ -116,17 +116,17 @@ func BenchmarkParserComplexity(b *testing.B) {
 		tokens := generateLargeSelectTokens(10)
 		benchmarkParserWithTokens(b, tokens)
 	})
-	
+
 	b.Run("SimpleSelect_100_Columns", func(b *testing.B) {
 		tokens := generateLargeSelectTokens(100)
 		benchmarkParserWithTokens(b, tokens)
 	})
-	
+
 	b.Run("SimpleSelect_1000_Columns", func(b *testing.B) {
 		tokens := generateLargeSelectTokens(1000)
 		benchmarkParserWithTokens(b, tokens)
 	})
-	
+
 	b.Run("SingleJoin", func(b *testing.B) {
 		// Use existing complex SELECT tokens which include JOIN
 		tokens := []token.Token{
@@ -155,7 +155,7 @@ func BenchmarkParserComplexity(b *testing.B) {
 		}
 		benchmarkParserWithTokens(b, tokens)
 	})
-	
+
 	b.Run("SimpleWhere", func(b *testing.B) {
 		tokens := []token.Token{
 			{Type: "SELECT", Literal: "SELECT"},
@@ -174,7 +174,7 @@ func BenchmarkParserComplexity(b *testing.B) {
 func benchmarkParserWithTokens(b *testing.B, tokens []token.Token) {
 	parser := NewParser()
 	defer parser.Release()
-	
+
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -190,18 +190,18 @@ func benchmarkParserWithTokens(b *testing.B, tokens []token.Token) {
 
 func BenchmarkParserConcurrency(b *testing.B) {
 	tokens := generateLargeSelectTokens(50)
-	
+
 	concurrencyLevels := []int{1, 2, 4, 8, 16, 32, 64, 128}
-	
+
 	for _, concurrency := range concurrencyLevels {
 		b.Run(fmt.Sprintf("Concurrency_%d", concurrency), func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetParallelism(concurrency)
-			
+
 			b.RunParallel(func(pb *testing.PB) {
 				parser := NewParser()
 				defer parser.Release()
-				
+
 				for pb.Next() {
 					tree, err := parser.Parse(tokens)
 					if err != nil {
@@ -218,19 +218,19 @@ func BenchmarkParserConcurrency(b *testing.B) {
 
 func BenchmarkParserMemoryScaling(b *testing.B) {
 	complexTokens := generateComplexJoinTokens(50)
-	
+
 	b.Run("MemoryUsageUnderLoad", func(b *testing.B) {
 		var m1, m2 runtime.MemStats
 		runtime.GC()
 		runtime.ReadMemStats(&m1)
-		
+
 		b.ReportAllocs()
 		b.SetParallelism(50)
-		
+
 		b.RunParallel(func(pb *testing.PB) {
 			parser := NewParser()
 			defer parser.Release()
-			
+
 			for pb.Next() {
 				tree, err := parser.Parse(complexTokens)
 				if err != nil {
@@ -241,10 +241,10 @@ func BenchmarkParserMemoryScaling(b *testing.B) {
 				}
 			}
 		})
-		
+
 		runtime.GC()
 		runtime.ReadMemStats(&m2)
-		
+
 		// Report memory metrics
 		b.ReportMetric(float64(m2.Alloc-m1.Alloc), "bytes_allocated")
 		b.ReportMetric(float64(m2.TotalAlloc-m1.TotalAlloc), "total_bytes_allocated")
@@ -254,42 +254,42 @@ func BenchmarkParserMemoryScaling(b *testing.B) {
 
 func BenchmarkParserThroughput(b *testing.B) {
 	tokens := generateLargeSelectTokens(20)
-	
+
 	concurrencyLevels := []int{1, 10, 50, 100}
-	
+
 	for _, concurrency := range concurrencyLevels {
 		b.Run(fmt.Sprintf("Throughput_%d_goroutines", concurrency), func(b *testing.B) {
 			b.ReportAllocs()
-			
+
 			start := time.Now()
 			totalOps := int64(0)
-			
+
 			var wg sync.WaitGroup
 			opsPerGoroutine := b.N / concurrency
-			
+
 			for i := 0; i < concurrency; i++ {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
 					parser := NewParser()
 					defer parser.Release()
-					
+
 					for j := 0; j < opsPerGoroutine; j++ {
 						tree, err := parser.Parse(tokens)
 						if err != nil {
-							b.Fatal(err)
+							panic(err)
 						}
 						if tree == nil {
-							b.Fatal("expected non-nil AST")
+							panic("expected non-nil AST")
 						}
 						totalOps++
 					}
 				}()
 			}
-			
+
 			wg.Wait()
 			duration := time.Since(start)
-			
+
 			// Calculate throughput metrics
 			opsPerSecond := float64(totalOps) / duration.Seconds()
 			b.ReportMetric(opsPerSecond, "ops/sec")
@@ -299,40 +299,40 @@ func BenchmarkParserThroughput(b *testing.B) {
 
 func BenchmarkParserSustainedLoad(b *testing.B) {
 	tokens := generateLargeSelectTokens(30)
-	
+
 	b.Run("SustainedLoad_30sec", func(b *testing.B) {
 		b.ReportAllocs()
-		
+
 		start := time.Now()
 		endTime := start.Add(30 * time.Second)
 		totalOps := int64(0)
-		
+
 		var wg sync.WaitGroup
 		concurrency := 25
-		
+
 		for i := 0; i < concurrency; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				parser := NewParser()
 				defer parser.Release()
-				
+
 				for time.Now().Before(endTime) {
 					tree, err := parser.Parse(tokens)
 					if err != nil {
-						b.Fatal(err)
+						panic(err)
 					}
 					if tree == nil {
-						b.Fatal("expected non-nil AST")
+						panic("expected non-nil AST")
 					}
 					totalOps++
 				}
 			}()
 		}
-		
+
 		wg.Wait()
 		actualDuration := time.Since(start)
-		
+
 		// Report sustained load metrics
 		opsPerSecond := float64(totalOps) / actualDuration.Seconds()
 		b.ReportMetric(opsPerSecond, "sustained_ops/sec")
@@ -393,7 +393,7 @@ func BenchmarkParserStatementTypes(b *testing.B) {
 			tokens: generateComplexJoinTokens(10),
 		},
 	}
-	
+
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
 			benchmarkParserWithTokens(b, tc.tokens)
@@ -419,14 +419,14 @@ func BenchmarkParserMixedWorkload(b *testing.B) {
 			{Type: ")", Literal: ")"},
 		},
 	}
-	
+
 	b.Run("MixedWorkload_Sequential", func(b *testing.B) {
 		parser := NewParser()
 		defer parser.Release()
-		
+
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		for i := 0; i < b.N; i++ {
 			tokens := statements[i%len(statements)]
 			tree, err := parser.Parse(tokens)
@@ -438,15 +438,15 @@ func BenchmarkParserMixedWorkload(b *testing.B) {
 			}
 		}
 	})
-	
+
 	b.Run("MixedWorkload_Parallel", func(b *testing.B) {
 		b.ReportAllocs()
 		b.SetParallelism(20)
-		
+
 		b.RunParallel(func(pb *testing.PB) {
 			parser := NewParser()
 			defer parser.Release()
-			
+
 			i := 0
 			for pb.Next() {
 				tokens := statements[i%len(statements)]
@@ -465,15 +465,15 @@ func BenchmarkParserMixedWorkload(b *testing.B) {
 
 func BenchmarkParserGCPressure(b *testing.B) {
 	tokens := generateComplexJoinTokens(20)
-	
+
 	b.Run("GCPressure_Analysis", func(b *testing.B) {
 		var m1, m2 runtime.MemStats
 		runtime.GC()
 		runtime.ReadMemStats(&m1)
-		
+
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		for i := 0; i < b.N; i++ {
 			// Force allocation/deallocation cycles
 			for j := 0; j < 5; j++ {
@@ -488,15 +488,15 @@ func BenchmarkParserGCPressure(b *testing.B) {
 				parser.Release()
 			}
 		}
-		
+
 		runtime.GC()
 		runtime.ReadMemStats(&m2)
-		
+
 		// Calculate GC efficiency metrics
 		totalAllocs := m2.TotalAlloc - m1.TotalAlloc
 		gcCycles := m2.NumGC - m1.NumGC
 		avgAllocPerGC := float64(totalAllocs) / float64(gcCycles)
-		
+
 		b.ReportMetric(float64(gcCycles), "gc_cycles")
 		b.ReportMetric(avgAllocPerGC, "avg_alloc_per_gc")
 		b.ReportMetric(float64(m2.PauseTotalNs-m1.PauseTotalNs)/1e6, "total_gc_pause_ms")

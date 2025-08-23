@@ -44,7 +44,7 @@ func Example() ([]models.TokenWithSpan, error) {
 func main() {
 	fmt.Println("GoSQLX Tokenizer Example - Unicode SQL Tokenization")
 	fmt.Println("===================================================")
-	
+
 	// Demonstrate the main example
 	fmt.Println("\n1. Basic Unicode SQL Tokenization:")
 	fmt.Println("-----------------------------------")
@@ -55,38 +55,38 @@ func main() {
 	}
 
 	fmt.Printf("Successfully tokenized SQL query into %d tokens\n\n", len(tokens))
-	
+
 	// Show a sample of tokens (not all to keep output manageable)
 	fmt.Println("Sample Token Details (first 15 tokens):")
 	fmt.Println("Type                     | Value                    | Position")
 	fmt.Println("-------------------------|--------------------------|----------------")
-	
+
 	count := 0
 	for _, token := range tokens {
 		if token.Token.Type == models.TokenTypeEOF {
 			break
 		}
-		
+
 		position := fmt.Sprintf("Line %d, Col %d", token.Start.Line, token.Start.Column)
 		typeName := getTokenTypeName(token.Token.Type)
 		fmt.Printf("%-24s | %-24q | %s\n", typeName, token.Token.Value, position)
-		
+
 		count++
 		if count >= 15 {
 			fmt.Printf("\n... and %d more tokens\n", len(tokens)-count-1) // -1 for EOF
 			break
 		}
 	}
-	
+
 	// Demonstrate additional features
 	fmt.Println("\n2. Error Handling Example:")
 	fmt.Println("--------------------------")
 	demonstrateErrorHandling()
-	
+
 	fmt.Println("\n3. Resource Management Example:")
 	fmt.Println("--------------------------------")
 	demonstrateResourceManagement()
-	
+
 	// Educational summary
 	fmt.Println("\n4. Key Features Demonstrated:")
 	fmt.Println("------------------------------")
@@ -97,7 +97,7 @@ func main() {
 	fmt.Println("✓ Efficient resource management using object pools")
 	fmt.Println("✓ Position tracking for error reporting and debugging")
 	fmt.Println("✓ Comprehensive error handling for malformed SQL")
-	
+
 	fmt.Println("\n5. Performance Characteristics:")
 	fmt.Println("--------------------------------")
 	fmt.Println("• Up to 2.5M operations/second")
@@ -109,10 +109,10 @@ func main() {
 // demonstrateErrorHandling shows how the tokenizer handles malformed SQL
 func demonstrateErrorHandling() {
 	malformedSQL := `SELECT "unclosed_quote FROM table;`
-	
+
 	t := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(t)
-	
+
 	_, err := t.Tokenize([]byte(malformedSQL))
 	if err != nil {
 		fmt.Printf("✓ Properly caught error in malformed SQL: %v\n", err)
@@ -124,31 +124,31 @@ func demonstrateErrorHandling() {
 // demonstrateResourceManagement shows the importance of proper cleanup
 func demonstrateResourceManagement() {
 	fmt.Println("Processing multiple queries efficiently using pooled tokenizers:")
-	
+
 	queries := []string{
 		`SELECT * FROM users;`,
 		`INSERT INTO logs (message) VALUES ('test');`,
 		`UPDATE settings SET value = 42 WHERE key = 'count';`,
 		`DELETE FROM sessions WHERE expired = true;`,
 	}
-	
+
 	for i, query := range queries {
 		// Get tokenizer from pool
 		t := tokenizer.GetTokenizer()
-		
+
 		tokens, err := t.Tokenize([]byte(query))
 		if err != nil {
 			fmt.Printf("  Query %d error: %v\n", i+1, err)
 			tokenizer.PutTokenizer(t) // Still return to pool on error
 			continue
 		}
-		
+
 		fmt.Printf("  ✓ Query %d: Successfully tokenized into %d tokens\n", i+1, len(tokens))
-		
+
 		// Return to pool when done
 		tokenizer.PutTokenizer(t)
 	}
-	
+
 	fmt.Println("✓ All tokenizers returned to pool for reuse")
 }
 

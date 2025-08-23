@@ -10,20 +10,20 @@ import (
 var (
 	// Small SQL queries (< 1KB)
 	smallSQL1KB = []byte(`SELECT id, name, email FROM users WHERE active = true`)
-	
+
 	// Medium SQL queries (~10KB)
 	mediumSQL10KB = generateComplexSQL(10000)
-	
-	// Large SQL queries (~100KB)  
+
+	// Large SQL queries (~100KB)
 	largeSQL100KB = generateComplexSQL(100000)
-	
+
 	// Very Large SQL queries (~1MB)
 	veryLargeSQL1MB = generateComplexSQL(1000000)
-	
+
 	// Complex queries with different patterns
-	deeplyNestedSQL = generateDeeplyNestedSQL()
-	wideJoinSQL = generateWideJoinSQL()
-	largeInClauseSQL = generateLargeInClauseSQL()
+	deeplyNestedSQL     = generateDeeplyNestedSQL()
+	wideJoinSQL         = generateWideJoinSQL()
+	largeInClauseSQL    = generateLargeInClauseSQL()
 	complexAnalyticsSQL = generateComplexAnalyticsSQL()
 )
 
@@ -63,14 +63,14 @@ func generateComplexSQL(targetSize int) []byte {
 	LIMIT 1000
 	OFFSET 0;
 	`
-	
+
 	// Repeat and modify the query to reach target size
 	var builder strings.Builder
 	for builder.Len() < targetSize {
 		builder.WriteString(baseQuery)
 		builder.WriteString("\n\n")
 	}
-	
+
 	return []byte(builder.String()[:targetSize])
 }
 
@@ -171,7 +171,7 @@ func generateLargeInClauseSQL() []byte {
 	for i := 1; i <= 1000; i++ {
 		ids = append(ids, fmt.Sprintf("%d", i))
 	}
-	
+
 	query := fmt.Sprintf(`
 	SELECT 
 		u.id, u.name, u.email, u.created_at,
@@ -196,7 +196,7 @@ func generateLargeInClauseSQL() []byte {
 	ORDER BY total_spent DESC, order_count DESC
 	LIMIT 100;
 	`, strings.Join(ids, ", "))
-	
+
 	return []byte(query)
 }
 
@@ -290,7 +290,7 @@ func BenchmarkTokenizerVariedSizes(b *testing.B) {
 	b.Run("SmallSQL_1KB", func(b *testing.B) {
 		tokenizer := GetTokenizer()
 		defer PutTokenizer(tokenizer)
-		
+
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -303,11 +303,11 @@ func BenchmarkTokenizerVariedSizes(b *testing.B) {
 			}
 		}
 	})
-	
+
 	b.Run("MediumSQL_10KB", func(b *testing.B) {
 		tokenizer := GetTokenizer()
 		defer PutTokenizer(tokenizer)
-		
+
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -320,11 +320,11 @@ func BenchmarkTokenizerVariedSizes(b *testing.B) {
 			}
 		}
 	})
-	
+
 	b.Run("LargeSQL_100KB", func(b *testing.B) {
 		tokenizer := GetTokenizer()
 		defer PutTokenizer(tokenizer)
-		
+
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -337,11 +337,11 @@ func BenchmarkTokenizerVariedSizes(b *testing.B) {
 			}
 		}
 	})
-	
+
 	b.Run("VeryLargeSQL_1MB", func(b *testing.B) {
 		tokenizer := GetTokenizer()
 		defer PutTokenizer(tokenizer)
-		
+
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -360,7 +360,7 @@ func BenchmarkTokenizerComplexPatterns(b *testing.B) {
 	b.Run("DeeplyNested", func(b *testing.B) {
 		tokenizer := GetTokenizer()
 		defer PutTokenizer(tokenizer)
-		
+
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -373,11 +373,11 @@ func BenchmarkTokenizerComplexPatterns(b *testing.B) {
 			}
 		}
 	})
-	
+
 	b.Run("WideJoins", func(b *testing.B) {
 		tokenizer := GetTokenizer()
 		defer PutTokenizer(tokenizer)
-		
+
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -390,11 +390,11 @@ func BenchmarkTokenizerComplexPatterns(b *testing.B) {
 			}
 		}
 	})
-	
+
 	b.Run("LargeInClause", func(b *testing.B) {
 		tokenizer := GetTokenizer()
 		defer PutTokenizer(tokenizer)
-		
+
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -407,11 +407,11 @@ func BenchmarkTokenizerComplexPatterns(b *testing.B) {
 			}
 		}
 	})
-	
+
 	b.Run("ComplexAnalytics", func(b *testing.B) {
 		tokenizer := GetTokenizer()
 		defer PutTokenizer(tokenizer)
-		
+
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -436,12 +436,12 @@ func BenchmarkTokenizerMemoryEfficiency(b *testing.B) {
 		{"Medium_10KB", mediumSQL10KB},
 		{"Large_100KB", largeSQL100KB},
 	}
-	
+
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
-			
+
 			for i := 0; i < b.N; i++ {
 				tokenizer := GetTokenizer()
 				_, err := tokenizer.Tokenize(tc.sql)
@@ -458,11 +458,11 @@ func BenchmarkTokenizerMemoryEfficiency(b *testing.B) {
 func BenchmarkTokenizerThroughput(b *testing.B) {
 	tokenizer := GetTokenizer()
 	defer PutTokenizer(tokenizer)
-	
+
 	b.Run("TokensPerSecond", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		totalTokens := 0
 		for i := 0; i < b.N; i++ {
 			tokens, err := tokenizer.Tokenize(smallSQL1KB)
@@ -471,7 +471,7 @@ func BenchmarkTokenizerThroughput(b *testing.B) {
 			}
 			totalTokens += len(tokens)
 		}
-		
+
 		// Calculate and report tokens per second
 		duration := b.Elapsed()
 		tokensPerSecond := float64(totalTokens) / duration.Seconds()

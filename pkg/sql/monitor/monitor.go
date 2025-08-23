@@ -244,4 +244,3 @@ func GetSummary() Summary {
 
 	return s
 }
-

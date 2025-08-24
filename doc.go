@@ -5,7 +5,7 @@
 // Features:
 //
 // - Zero-copy tokenization for optimal performance
-// - Object pooling for 60-80% memory reduction  
+// - Object pooling for 60-80% memory reduction
 // - Multi-dialect SQL support (PostgreSQL, MySQL, SQL Server, Oracle, SQLite)
 // - Thread-safe implementation with linear scaling to 128+ cores
 // - Full Unicode/UTF-8 support for international SQL

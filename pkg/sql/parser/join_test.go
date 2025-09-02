@@ -13,7 +13,7 @@ import (
 // convertTokens converts models.TokenWithSpan to token.Token for parser
 func convertTokens(tokens []models.TokenWithSpan) []token.Token {
 	result := make([]token.Token, 0, len(tokens)*2) // Extra space for split tokens
-	
+
 	for _, t := range tokens {
 		// Handle compound JOIN tokens by splitting them
 		switch t.Token.Type {
@@ -34,7 +34,7 @@ func convertTokens(tokens []models.TokenWithSpan) []token.Token {
 			result = append(result, token.Token{Type: "JOIN", Literal: "JOIN"})
 			continue
 		}
-		
+
 		// Handle compound tokens that come as strings
 		if t.Token.Value == "INNER JOIN" {
 			result = append(result, token.Token{Type: "INNER", Literal: "INNER"})
@@ -80,10 +80,10 @@ func convertTokens(tokens []models.TokenWithSpan) []token.Token {
 			result = append(result, token.Token{Type: "BY", Literal: "BY"})
 			continue
 		}
-		
+
 		// Map token type to string for single tokens
 		tokenType := token.Type(fmt.Sprintf("%v", t.Token.Type))
-		
+
 		// Try to map to proper token type string
 		switch t.Token.Type {
 		case models.TokenTypeSelect:
@@ -147,7 +147,7 @@ func convertTokens(tokens []models.TokenWithSpan) []token.Token {
 				tokenType = token.Type(t.Token.Value)
 			}
 		}
-		
+
 		result = append(result, token.Token{
 			Type:    tokenType,
 			Literal: t.Token.Value,

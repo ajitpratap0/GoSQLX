@@ -343,7 +343,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	for p.isJoinKeyword() {
 		// Determine JOIN type
 		joinType := "INNER" // Default
-		
+
 		if p.currentToken.Type == "LEFT" {
 			joinType = "LEFT"
 			p.advance()
@@ -369,7 +369,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			joinType = "CROSS"
 			p.advance()
 		}
-		
+
 		// Expect JOIN keyword
 		if p.currentToken.Type != "JOIN" {
 			return nil, p.expectedError("JOIN")
@@ -404,12 +404,12 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 		// Parse join condition (ON or USING)
 		var joinCondition ast.Expression
-		
+
 		// CROSS JOIN doesn't require ON clause
 		if joinType != "CROSS" {
 			if p.currentToken.Type == "ON" {
 				p.advance() // Consume ON
-				
+
 				// Parse join condition
 				cond, err := p.parseExpression()
 				if err != nil {
@@ -418,13 +418,13 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 				joinCondition = cond
 			} else if p.currentToken.Type == "USING" {
 				p.advance() // Consume USING
-				
+
 				// Parse column list in parentheses
 				if p.currentToken.Type != "(" {
 					return nil, p.expectedError("( after USING")
 				}
 				p.advance()
-				
+
 				// For now, store USING columns as a simple identifier
 				// This could be enhanced to support multiple columns
 				if p.currentToken.Type != "IDENT" {
@@ -432,7 +432,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 				}
 				joinCondition = &ast.Identifier{Name: p.currentToken.Literal}
 				p.advance()
-				
+
 				if p.currentToken.Type != ")" {
 					return nil, p.expectedError(") after USING column")
 				}
@@ -452,7 +452,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 		// Add join clause to joins list
 		joins = append(joins, joinClause)
-		
+
 		// Update tableRef for next potential join
 		tableRef = joinedTableRef
 	}

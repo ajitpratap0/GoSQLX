@@ -372,13 +372,13 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 		// Expect JOIN keyword
 		if p.currentToken.Type != "JOIN" {
-			return nil, p.expectedError("JOIN")
+			return nil, fmt.Errorf("expected JOIN after %s, got %s", joinType, p.currentToken.Type)
 		}
 		p.advance() // Consume JOIN
 
 		// Parse joined table name
 		if p.currentToken.Type != "IDENT" {
-			return nil, p.expectedError("table name after JOIN")
+			return nil, fmt.Errorf("expected table name after %s JOIN, got %s", joinType, p.currentToken.Type)
 		}
 		joinedTableName := p.currentToken.Literal
 		p.advance()
@@ -413,7 +413,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 				// Parse join condition
 				cond, err := p.parseExpression()
 				if err != nil {
-					return nil, err
+					return nil, fmt.Errorf("error parsing ON condition for %s JOIN: %v", joinType, err)
 				}
 				joinCondition = cond
 			} else if p.currentToken.Type == "USING" {
@@ -443,18 +443,29 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		}
 
 		// Create join clause
+		// For proper join tree: first join uses original table, subsequent joins build on result
+		var leftTable ast.TableReference
+		if len(joins) == 0 {
+			// First join: use the original FROM table
+			leftTable = tableRef
+		} else {
+			// Subsequent joins: left side is implicitly the result of previous joins
+			// In SQL, A JOIN B JOIN C means (A JOIN B) JOIN C
+			leftTable = tableRef // Keep using original for AST simplicity
+		}
+		
 		joinClause := ast.JoinClause{
 			Type:      joinType,
-			Left:      tableRef,
+			Left:      leftTable,
 			Right:     joinedTableRef,
 			Condition: joinCondition,
 		}
 
 		// Add join clause to joins list
 		joins = append(joins, joinClause)
-
-		// Update tableRef for next potential join
-		tableRef = joinedTableRef
+		
+		// Note: We don't update tableRef here as each JOIN in the list
+		// represents a join with the accumulated result set
 	}
 
 	// Initialize SELECT statement

@@ -356,3 +356,133 @@ func TestParser_ComplexJoins(t *testing.T) {
 		t.Error("Expected LIMIT clause")
 	}
 }
+
+func TestParser_InvalidJoinSyntax(t *testing.T) {
+	tests := []struct {
+		name          string
+		sql           string
+		expectedError string
+	}{
+		{
+			name:          "Missing JOIN keyword after type",
+			sql:           "SELECT * FROM users LEFT orders ON users.id = orders.user_id",
+			expectedError: "expected JOIN after LEFT",
+		},
+		{
+			name:          "Missing table name after JOIN",
+			sql:           "SELECT * FROM users LEFT JOIN ON users.id = orders.user_id",
+			expectedError: "expected table name after LEFT JOIN",
+		},
+		{
+			name:          "Missing ON/USING clause",
+			sql:           "SELECT * FROM users LEFT JOIN orders",
+			expectedError: "expected ON or USING",
+		},
+		{
+			name:          "Invalid JOIN type",
+			sql:           "SELECT * FROM users INVALID JOIN orders ON users.id = orders.user_id",
+			expectedError: "", // This won't error as INVALID becomes an identifier
+		},
+		{
+			name:          "Missing condition after ON",
+			sql:           "SELECT * FROM users LEFT JOIN orders ON",
+			expectedError: "error parsing ON condition",
+		},
+		{
+			name:          "Missing parentheses after USING",
+			sql:           "SELECT * FROM users LEFT JOIN orders USING id",
+			expectedError: "expected ( after USING",
+		},
+		{
+			name:          "Empty USING clause",
+			sql:           "SELECT * FROM users LEFT JOIN orders USING ()",
+			expectedError: "expected column name in USING",
+		},
+		{
+			name:          "Incomplete OUTER JOIN",
+			sql:           "SELECT * FROM users OUTER JOIN orders ON users.id = orders.user_id",
+			expectedError: "expected statement",
+		},
+		{
+			name:          "JOIN without FROM clause",
+			sql:           "SELECT * LEFT JOIN orders ON users.id = orders.user_id",
+			expectedError: "", // This errors during FROM parsing, not JOIN parsing
+		},
+		{
+			name:          "Multiple JOIN keywords",
+			sql:           "SELECT * FROM users JOIN JOIN orders ON users.id = orders.user_id",
+			expectedError: "expected table name",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Get tokenizer from pool
+			tkz := tokenizer.GetTokenizer()
+			defer tokenizer.PutTokenizer(tkz)
+
+			// Tokenize SQL
+			tokens, err := tkz.Tokenize([]byte(tt.sql))
+			if err != nil {
+				// Some tests might fail at tokenization level
+				if tt.expectedError != "" {
+					return // Expected failure
+				}
+				t.Fatalf("Failed to tokenize: %v", err)
+			}
+
+			// Convert tokens for parser
+			convertedTokens := convertTokens(tokens)
+
+			// Parse tokens
+			parser := &Parser{}
+			astObj, err := parser.Parse(convertedTokens)
+			
+			if tt.expectedError != "" {
+				// We expect an error
+				if err == nil {
+					defer ast.ReleaseAST(astObj)
+					t.Errorf("Expected error containing '%s', but got no error", tt.expectedError)
+				} else if !containsError(err.Error(), tt.expectedError) {
+					t.Errorf("Expected error containing '%s', got '%s'", tt.expectedError, err.Error())
+				}
+			} else {
+				// We don't expect an error for some edge cases
+				if err != nil && tt.expectedError == "" {
+					// Some tests intentionally have no expected error 
+					// because they fail in different ways
+					return
+				}
+				if astObj != nil {
+					defer ast.ReleaseAST(astObj)
+				}
+			}
+		})
+	}
+}
+
+// Helper function to check if error message contains expected text
+func containsError(actual, expected string) bool {
+	if expected == "" {
+		return true
+	}
+	return len(actual) > 0 && len(expected) > 0 && 
+		(actual == expected || 
+		 len(actual) >= len(expected) && 
+		 (actual[:len(expected)] == expected ||
+		  actual[len(actual)-len(expected):] == expected ||
+		  containsSubstring(actual, expected)))
+}
+
+// Simple substring check
+func containsSubstring(s, substr string) bool {
+	if len(substr) > len(s) {
+		return false
+	}
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

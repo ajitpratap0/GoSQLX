@@ -24,7 +24,8 @@ type Expression interface {
 
 // WithClause represents a WITH clause in a SQL statement
 type WithClause struct {
-	CTEs []*CommonTableExpr
+	Recursive bool
+	CTEs      []*CommonTableExpr
 }
 
 func (w *WithClause) statementNode()      {}

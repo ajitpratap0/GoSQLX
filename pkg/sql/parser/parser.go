@@ -322,9 +322,17 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	// Check for table alias
-	if p.currentToken.Type == "IDENT" {
-		tableRef.Alias = p.currentToken.Literal
-		p.advance()
+	if p.currentToken.Type == "IDENT" || p.currentToken.Type == "AS" {
+		if p.currentToken.Type == "AS" {
+			p.advance() // Consume AS
+			if p.currentToken.Type != "IDENT" {
+				return nil, p.expectedError("alias after AS")
+			}
+		}
+		if p.currentToken.Type == "IDENT" {
+			tableRef.Alias = p.currentToken.Literal
+			p.advance()
+		}
 	}
 
 	// Create tables list for FROM clause
@@ -332,7 +340,40 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 	// Parse JOIN clauses if present
 	joins := []ast.JoinClause{}
-	for p.currentToken.Type == "JOIN" {
+	for p.isJoinKeyword() {
+		// Determine JOIN type
+		joinType := "INNER" // Default
+		
+		if p.currentToken.Type == "LEFT" {
+			joinType = "LEFT"
+			p.advance()
+			if p.currentToken.Type == "OUTER" {
+				p.advance() // Optional OUTER keyword
+			}
+		} else if p.currentToken.Type == "RIGHT" {
+			joinType = "RIGHT"
+			p.advance()
+			if p.currentToken.Type == "OUTER" {
+				p.advance() // Optional OUTER keyword
+			}
+		} else if p.currentToken.Type == "FULL" {
+			joinType = "FULL"
+			p.advance()
+			if p.currentToken.Type == "OUTER" {
+				p.advance() // Optional OUTER keyword
+			}
+		} else if p.currentToken.Type == "INNER" {
+			joinType = "INNER"
+			p.advance()
+		} else if p.currentToken.Type == "CROSS" {
+			joinType = "CROSS"
+			p.advance()
+		}
+		
+		// Expect JOIN keyword
+		if p.currentToken.Type != "JOIN" {
+			return nil, p.expectedError("JOIN")
+		}
 		p.advance() // Consume JOIN
 
 		// Parse joined table name
@@ -348,26 +389,62 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		}
 
 		// Check for table alias
-		if p.currentToken.Type == "IDENT" {
-			joinedTableRef.Alias = p.currentToken.Literal
-			p.advance()
+		if p.currentToken.Type == "IDENT" || p.currentToken.Type == "AS" {
+			if p.currentToken.Type == "AS" {
+				p.advance() // Consume AS
+				if p.currentToken.Type != "IDENT" {
+					return nil, p.expectedError("alias after AS")
+				}
+			}
+			if p.currentToken.Type == "IDENT" {
+				joinedTableRef.Alias = p.currentToken.Literal
+				p.advance()
+			}
 		}
 
-		// Parse ON clause
-		if p.currentToken.Type != "ON" {
-			return nil, p.expectedError("ON")
-		}
-		p.advance() // Consume ON
-
-		// Parse join condition
-		joinCondition, err := p.parseExpression()
-		if err != nil {
-			return nil, err
+		// Parse join condition (ON or USING)
+		var joinCondition ast.Expression
+		
+		// CROSS JOIN doesn't require ON clause
+		if joinType != "CROSS" {
+			if p.currentToken.Type == "ON" {
+				p.advance() // Consume ON
+				
+				// Parse join condition
+				cond, err := p.parseExpression()
+				if err != nil {
+					return nil, err
+				}
+				joinCondition = cond
+			} else if p.currentToken.Type == "USING" {
+				p.advance() // Consume USING
+				
+				// Parse column list in parentheses
+				if p.currentToken.Type != "(" {
+					return nil, p.expectedError("( after USING")
+				}
+				p.advance()
+				
+				// For now, store USING columns as a simple identifier
+				// This could be enhanced to support multiple columns
+				if p.currentToken.Type != "IDENT" {
+					return nil, p.expectedError("column name in USING")
+				}
+				joinCondition = &ast.Identifier{Name: p.currentToken.Literal}
+				p.advance()
+				
+				if p.currentToken.Type != ")" {
+					return nil, p.expectedError(") after USING column")
+				}
+				p.advance()
+			} else if joinType != "NATURAL" {
+				return nil, p.expectedError("ON or USING")
+			}
 		}
 
 		// Create join clause
 		joinClause := ast.JoinClause{
-			Type:      "INNER", // Default to INNER JOIN
+			Type:      joinType,
 			Left:      tableRef,
 			Right:     joinedTableRef,
 			Condition: joinCondition,
@@ -375,6 +452,9 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 		// Add join clause to joins list
 		joins = append(joins, joinClause)
+		
+		// Update tableRef for next potential join
+		tableRef = joinedTableRef
 	}
 
 	// Initialize SELECT statement
@@ -688,4 +768,14 @@ func (p *Parser) parseAlterTableStmt() (ast.Statement, error) {
 	// We've already consumed the ALTER token in matchToken
 	// This is just a placeholder that delegates to the main implementation
 	return p.parseAlterStatement()
+}
+
+// isJoinKeyword checks if current token is a JOIN-related keyword
+func (p *Parser) isJoinKeyword() bool {
+	switch p.currentToken.Type {
+	case "JOIN", "INNER", "LEFT", "RIGHT", "FULL", "CROSS":
+		return true
+	default:
+		return false
+	}
 }

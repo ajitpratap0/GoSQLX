@@ -49,6 +49,9 @@ var keywordTokenTypes = map[string]models.TokenType{
 	"LIMIT":   models.TokenTypeLimit,
 	"OFFSET":  models.TokenTypeOffset,
 	"COUNT":   models.TokenTypeCount,
+	"FULL":    models.TokenTypeKeyword,
+	"CROSS":   models.TokenTypeKeyword,
+	"USING":   models.TokenTypeKeyword,
 	"SUM":     models.TokenTypeSum,
 	"AVG":     models.TokenTypeAvg,
 	"MIN":     models.TokenTypeMin,
@@ -334,12 +337,17 @@ var compoundKeywordStarts = map[string]bool{
 
 // compoundKeywordTypes maps compound SQL keywords to their token types
 var compoundKeywordTypes = map[string]models.TokenType{
-	"GROUP BY":   models.TokenTypeGroupBy,
-	"ORDER BY":   models.TokenTypeOrderBy,
-	"LEFT JOIN":  models.TokenTypeLeftJoin,
-	"RIGHT JOIN": models.TokenTypeRightJoin,
-	"INNER JOIN": models.TokenTypeInnerJoin,
-	"OUTER JOIN": models.TokenTypeOuterJoin,
+	"GROUP BY":        models.TokenTypeGroupBy,
+	"ORDER BY":        models.TokenTypeOrderBy,
+	"LEFT JOIN":       models.TokenTypeLeftJoin,
+	"RIGHT JOIN":      models.TokenTypeRightJoin,
+	"INNER JOIN":      models.TokenTypeInnerJoin,
+	"OUTER JOIN":      models.TokenTypeOuterJoin,
+	"FULL JOIN":       models.TokenTypeKeyword,
+	"CROSS JOIN":      models.TokenTypeKeyword,
+	"LEFT OUTER JOIN": models.TokenTypeKeyword,
+	"RIGHT OUTER JOIN": models.TokenTypeKeyword,
+	"FULL OUTER JOIN": models.TokenTypeKeyword,
 }
 
 // Helper function to check if a word can start a compound keyword

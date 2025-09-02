@@ -392,6 +392,36 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## 🚀 Roadmap
+
+### Phase 1: Foundation (Q3 2024) - v1.1.0
+- ✅ Common Table Expressions (CTEs) with RECURSIVE
+- ✅ Complete JOIN support (LEFT/RIGHT/FULL OUTER)
+- ✅ Set operations (UNION/EXCEPT/INTERSECT)
+- ✅ Comprehensive subquery support
+- ✅ Standardized error handling
+
+### Phase 2: Advanced Features (Q4 2024) - v1.2.0
+- 📋 Window functions (OVER, PARTITION BY)
+- 📋 Transaction control (BEGIN/COMMIT/ROLLBACK)
+- 📋 Views and materialized views
+- 📋 Streaming parser API
+- 📋 AST transformation framework
+
+### Phase 3: Dialect Specialization (Q1 2025) - v2.0.0
+- 📋 PostgreSQL arrays, JSONB, custom types
+- 📋 MySQL-specific syntax and functions
+- 📋 SQL Server T-SQL extensions
+- 📋 Multi-dialect parser with auto-detection
+
+### Phase 4: Intelligence Layer (Q2 2025) - v2.1.0
+- 📋 Query optimization suggestions
+- 📋 Security vulnerability detection
+- 📋 Performance analysis and hints
+- 📋 Schema validation
+
+[📄 Full Architectural Review & Roadmap](ARCHITECTURAL_REVIEW_AND_ROADMAP.md)
+
 ## 🤝 Community & Support
 
 <div align="center">

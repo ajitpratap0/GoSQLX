@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - (Planned Q3 2024) - Phase 1: Foundation
+
+### Planned Features
+- Common Table Expressions (CTEs) with RECURSIVE support
+- Complete JOIN support (LEFT/RIGHT/FULL OUTER/CROSS/NATURAL)
+- Set operations (UNION/EXCEPT/INTERSECT)
+- Comprehensive subquery support in all contexts
+- Standardized error handling system
+- AST structure consolidation
+
+### Goals
+- Achieve 70% SQL-92 compliance
+- Unified AST structure
+- Consistent error system with context and hints
+
+## [1.2.0] - (Planned Q4 2024) - Phase 2: Advanced Features
+
+### Planned Features
+- Window functions (OVER, PARTITION BY, RANK, LAG/LEAD)
+- Transaction control statements (BEGIN/COMMIT/ROLLBACK)
+- Views and materialized views support
+- Stored procedure parsing (basic)
+- Streaming parser API for large files
+- AST transformation framework
+
+### Goals
+- Achieve 85% SQL-99 compliance
+- Streaming support for queries >10MB
+- Query transformation and optimization capabilities
+
+## [2.0.0] - (Planned Q1 2025) - Phase 3: Dialect Specialization
+
+### Planned Features
+- PostgreSQL-specific features (arrays, JSONB, custom types)
+- MySQL-specific syntax and functions
+- SQL Server T-SQL extensions
+- Oracle PL/SQL basics
+- SQLite pragmas and special syntax
+- Dialect auto-detection
+
+### Goals
+- Multi-dialect parser with configuration
+- 95% dialect-specific compliance
+- Auto-detection with 99% accuracy
+
 ## [1.0.2] - 2025-08-23
 
 ### Added

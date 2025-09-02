@@ -8,7 +8,7 @@ GoSQLX is a **production-ready**, **race-free**, high-performance SQL parsing SD
 
 ### **Production Status**: ✅ **VALIDATED FOR PRODUCTION DEPLOYMENT**
 - **Thread Safety**: Confirmed race-free through comprehensive concurrent testing
-- **Performance**: Up to 2.5M operations/second with memory-efficient object pooling  
+- **Performance**: 2.2M operations/second, 8M tokens/second with memory-efficient object pooling  
 - **International**: Full Unicode support for global SQL processing
 - **Reliability**: 95%+ success rate on real-world SQL queries
 - **Standards**: Multi-dialect SQL compatibility (PostgreSQL, MySQL, SQL Server, Oracle, SQLite)
@@ -43,22 +43,24 @@ The codebase heavily uses object pooling for performance:
 ```bash
 # Build the project
 make build
-# or
-go build -v ./...
 
 # Run all tests
 make test
-# or  
-go test -v ./...
+
+# Run a single test
+go test -v -run TestTokenizer_SimpleSelect ./pkg/sql/tokenizer/
+
+# Run tests for a specific package
+go test -v ./pkg/sql/parser/
 
 # Run tests with coverage
 make coverage
 
 # Run benchmarks
-go test -bench=. ./...
-go test -bench=BenchmarkTokenizer ./pkg/sql/tokenizer/
-go test -bench=BenchmarkParser ./pkg/sql/parser/
-go test -bench=BenchmarkAST ./pkg/sql/ast/
+go test -bench=. -benchmem ./...
+go test -bench=BenchmarkTokenizer -benchmem ./pkg/sql/tokenizer/
+go test -bench=BenchmarkParser -benchmem ./pkg/sql/parser/
+go test -bench=BenchmarkAST -benchmem ./pkg/sql/ast/
 ```
 
 ### Code Quality
@@ -82,8 +84,20 @@ go test -race -benchmem ./...
 
 ### Running Examples
 ```bash
+# Basic example
 cd examples/cmd/
 go run example.go
+
+# SQL validator
+cd examples/sql-validator/
+go run main.go
+
+# SQL formatter
+cd examples/sql-formatter/
+go run main.go
+
+# Example tests
+cd examples/cmd/
 go test -v example_test.go
 ```
 
@@ -126,11 +140,13 @@ result, err := parser.Parse(tokens)
 - Unicode support for international SQL queries
 - Proper token type distinction (no more collisions)
 
-### Recent Improvements (Fixed)
+### Recent Improvements (v1.0.2)
+- **Documentation Enhanced**: Added comprehensive Go package documentation for pkg.go.dev
+- **GitHub Actions Updated**: Fixed deprecated action versions (v3→v4, v4→v5, v6)
+- **Race Conditions Fixed**: Resolved all race conditions in monitor package
+- **Parser Enhanced**: Added support for multiple JOIN clauses in SELECT statements
 - **Token Type Collisions Fixed**: Removed hardcoded iota values that caused collisions
-- **Unused Code Removed**: Cleaned up 500+ lines of unused infrastructure
-- **Test Dependencies Fixed**: Updated hardcoded test expectations to match actual behavior
-- **Static Analysis Clean**: Fixed staticcheck warnings for better code quality
+- **Test Coverage Improved**: Added missing EOF tokens in benchmark tests
 
 ## Production Readiness Status
 
@@ -146,9 +162,10 @@ GoSQLX has passed comprehensive enterprise-grade testing including:
 
 ### **Quality Metrics**
 - **Thread Safety**: ⭐⭐⭐⭐⭐ Race-free codebase confirmed
-- **Performance**: ⭐⭐⭐⭐⭐ High throughput with linear scaling
+- **Performance**: ⭐⭐⭐⭐⭐ 2.2M ops/sec, 8M tokens/sec
 - **Reliability**: ⭐⭐⭐⭐⭐ 95%+ success rate on real-world SQL
 - **Memory Efficiency**: ⭐⭐⭐⭐⭐ 60-80% reduction with pooling
+- **Latency**: ⭐⭐⭐⭐⭐ <200ns for simple queries
 
 ## Testing Methodology
 
@@ -193,3 +210,45 @@ go test -race -timeout 60s ./...
 3. **Test with realistic SQL workloads** - validate against actual application queries
 4. **Validate Unicode handling** if using international data
 5. **Test concurrent access patterns** matching your application's usage
+
+## High-Level Architecture
+
+### Cross-Component Interactions
+
+The parser relies on a pipeline architecture where components interact through well-defined interfaces:
+
+1. **Input Processing Flow**:
+   - Raw SQL bytes → `tokenizer.Tokenize()` → `[]models.TokenWithSpan`
+   - Token conversion → `parser.convertTokens()` → `[]token.Token`
+   - Parser consumption → `parser.Parse()` → `*ast.AST`
+
+2. **Object Pooling Strategy**:
+   - **Tokenizer Pool**: `tokenizer.pool` manages reusable tokenizer instances
+   - **AST Pool**: `ast.astPool` manages AST container objects
+   - **Statement Pools**: Individual pools for each statement type (SELECT, INSERT, etc.)
+   - Pool interaction requires paired Get/Put or New/Release calls to prevent leaks
+
+3. **Error Propagation**:
+   - Tokenizer errors include position information (`models.Location`)
+   - Parser errors maintain token context for debugging
+   - All errors bubble up with context preservation
+
+4. **Performance Monitoring Integration**:
+   - `pkg/sql/monitor` package tracks metrics across components
+   - Atomic counters avoid lock contention
+   - MetricsSnapshot provides race-free metric reading
+
+### Critical Design Patterns
+
+1. **Zero-Copy Operations**: Tokenizer operates directly on byte slices without string allocation
+2. **Visitor Pattern**: AST nodes support traversal via `ast.Visitor` interface
+3. **Recursive Descent**: Parser uses predictive parsing with one-token lookahead
+4. **Token Categorization**: Keywords module provides dialect-specific categorization
+
+### Module Dependencies
+
+- `models` → Core types (no dependencies)
+- `keywords` → Depends on `models`
+- `tokenizer` → Depends on `models`, `keywords`
+- `parser` → Depends on `tokenizer`, `ast`, `token`
+- `ast` → Depends on `token` (minimal coupling)

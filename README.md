@@ -42,20 +42,21 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 - **🚀 Blazing Fast**: **2.2M ops/sec**, **8M tokens/sec** processing speed
 - **💾 Memory Efficient**: **60-80% reduction** through intelligent object pooling
 - **🔒 Thread-Safe**: **Race-free**, linear scaling to **128+ cores**
+- **🔗 Complete JOIN Support**: All JOIN types (INNER/LEFT/RIGHT/FULL OUTER/CROSS/NATURAL) with proper tree logic
 - **🌍 Unicode Support**: Complete UTF-8 support for international SQL
 - **🔧 Multi-Dialect**: PostgreSQL, MySQL, SQL Server, Oracle, SQLite
 - **📊 Zero-Copy**: Direct byte slice operations, **< 200ns latency**
 - **🏗️ Production Ready**: Battle-tested with **0 race conditions** detected
 
-### 🎯 Performance Highlights (v1.0.0)
+### 🎯 Performance Highlights (v1.1.0)
 
 <div align="center">
 
-| **2.2M** | **8M** | **184ns** | **60-80%** |
-|:--------:|:------:|:---------:|:----------:|
-| Ops/sec | Tokens/sec | Latency | Memory Saved |
+| **2.2M** | **8M** | **184ns** | **60-80%** | **15+** |
+|:--------:|:------:|:---------:|:----------:|:-------:|
+| Ops/sec | Tokens/sec | Latency | Memory Saved | JOIN Tests |
 
-**[+47% faster](#-v100-performance-improvements)** than previous version • **Linear scaling** to 128 cores • **Zero race conditions**
+**✅ Complete JOIN Support** • **Zero race conditions** • **Left-associative join trees** • **Production validated**
 
 </div>
 
@@ -184,6 +185,49 @@ func AnalyzeSQL(sql string) error {
 - [Performance Tuning](docs/PRODUCTION_GUIDE.md#performance-optimization)
 - [Error Handling](docs/TROUBLESHOOTING.md#error-messages)
 - [FAQ](docs/TROUBLESHOOTING.md#faq)
+
+### 🔗 JOIN Support (v1.1.0)
+
+GoSQLX now supports all JOIN types with proper left-associative tree logic:
+
+```go
+// Complex JOIN query with multiple table relationships
+sql := `
+    SELECT u.name, o.order_date, p.product_name, c.category_name
+    FROM users u
+    LEFT JOIN orders o ON u.id = o.user_id  
+    INNER JOIN products p ON o.product_id = p.id
+    RIGHT JOIN categories c ON p.category_id = c.id
+    WHERE u.active = true
+    ORDER BY o.order_date DESC
+`
+
+// Parse with automatic JOIN tree construction
+tkz := tokenizer.GetTokenizer()
+defer tokenizer.PutTokenizer(tkz)
+
+tokens, err := tkz.Tokenize([]byte(sql))
+parser := parser.NewParser()
+ast, err := parser.Parse(tokens)
+
+// Access JOIN information
+if selectStmt, ok := ast.Statements[0].(*ast.SelectStatement); ok {
+    fmt.Printf("Found %d JOINs:\n", len(selectStmt.Joins))
+    for i, join := range selectStmt.Joins {
+        fmt.Printf("JOIN %d: %s (left: %s, right: %s)\n", 
+            i+1, join.Type, join.Left.Name, join.Right.Name)
+    }
+}
+```
+
+**Supported JOIN Types:**
+- ✅ `INNER JOIN` - Standard inner joins
+- ✅ `LEFT JOIN` / `LEFT OUTER JOIN` - Left outer joins  
+- ✅ `RIGHT JOIN` / `RIGHT OUTER JOIN` - Right outer joins
+- ✅ `FULL JOIN` / `FULL OUTER JOIN` - Full outer joins
+- ✅ `CROSS JOIN` - Cartesian product joins
+- ✅ `NATURAL JOIN` - Natural joins (implicit ON clause)
+- ✅ `USING (column)` - Single-column using clause
 
 ## 💻 Examples
 
@@ -394,19 +438,20 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🚀 Roadmap
 
-### Phase 1: Foundation (Q3 2024) - v1.1.0
-- ✅ Common Table Expressions (CTEs) with RECURSIVE
-- ✅ Complete JOIN support (LEFT/RIGHT/FULL OUTER)
-- ✅ Set operations (UNION/EXCEPT/INTERSECT)
-- ✅ Comprehensive subquery support
-- ✅ Standardized error handling
+### Phase 1: Core SQL Enhancements (Q1 2025) - v1.1.0 ✅
+- ✅ **Complete JOIN support** (INNER/LEFT/RIGHT/FULL OUTER/CROSS/NATURAL)
+- ✅ **Proper join tree logic** with left-associative relationships  
+- ✅ **USING clause parsing** (single-column, multi-column planned for Phase 2)
+- ✅ **Enhanced error handling** with contextual JOIN error messages
+- ✅ **Comprehensive test coverage** (15+ JOIN scenarios including error cases)
+- 🏗️ **CTE foundation laid** (AST structures, tokens, parser integration points)
 
-### Phase 2: Advanced Features (Q4 2024) - v1.2.0
-- 📋 Window functions (OVER, PARTITION BY)
-- 📋 Transaction control (BEGIN/COMMIT/ROLLBACK)
-- 📋 Views and materialized views
-- 📋 Streaming parser API
-- 📋 AST transformation framework
+### Phase 2: CTE & Advanced Features (Q2 2025) - v1.2.0
+- 📋 **Common Table Expressions (CTEs)** with RECURSIVE support
+- 📋 **Set operations** (UNION/EXCEPT/INTERSECT with ALL modifier)
+- 📋 **Multi-column USING** clause support
+- 📋 **Window functions** (OVER, PARTITION BY)
+- 📋 **Advanced subqueries** in all contexts
 
 ### Phase 3: Dialect Specialization (Q1 2025) - v2.0.0
 - 📋 PostgreSQL arrays, JSONB, custom types
@@ -520,10 +565,10 @@ graph LR
 | Version | Status | Release Date | Features |
 |---------|--------|--------------|----------|
 | **v0.9.0** | ✅ Released | 2024-01-15 | Initial release |
-| **v1.0.0** | 🎉 Current | 2024-12-01 | Production ready, +47% performance |
-| **v1.1.0** | 🚧 In Progress | Q1 2025 | Streaming parser, plugins |
-| **v1.2.0** | 📝 Planned | Q2 2025 | Query optimizer, schema validation |
-| **v2.0.0** | 🔮 Future | Q4 2025 | Complete rewrite, AI integration |
+| **v1.0.0** | ✅ Released | 2024-12-01 | Production ready, +47% performance |
+| **v1.1.0** | 🎉 Current | 2025-01-03 | Complete JOIN support, error handling |
+| **v1.2.0** | 📝 Planned | Q2 2025 | CTEs, set operations, multi-column USING |
+| **v2.0.0** | 🔮 Future | Q4 2025 | Dialect specialization, advanced features |
 
 <a href="docs/ROADMAP.md"><img src="https://img.shields.io/badge/📋_Full_Roadmap-purple?style=for-the-badge" alt="Full Roadmap"></a>
 

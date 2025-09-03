@@ -23,6 +23,10 @@ type Expression interface {
 }
 
 // WithClause represents a WITH clause in a SQL statement
+// TODO: PHASE 2 - Complete CTE implementation
+// Current Status: AST structures defined, parser integration incomplete
+// Missing: parseWithClause, parseCommonTableExpr, parseStatementWithSetOps functions
+// Priority: High (Phase 2 core feature)
 type WithClause struct {
 	Recursive bool
 	CTEs      []*CommonTableExpr
@@ -39,11 +43,14 @@ func (w WithClause) Children() []Node {
 }
 
 // CommonTableExpr represents a single CTE in a WITH clause
+// TODO: PHASE 2 - Parser integration needed for CTE functionality
+// Current: AST structure complete, parser functions missing
+// Required: Integration with SELECT/INSERT/UPDATE/DELETE statement parsing
 type CommonTableExpr struct {
 	Name         string
 	Columns      []string
 	Statement    Statement
-	Materialized *bool
+	Materialized *bool // TODO: Add MATERIALIZED/NOT MATERIALIZED parsing support
 }
 
 func (c *CommonTableExpr) statementNode()      {}

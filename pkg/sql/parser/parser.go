@@ -58,6 +58,10 @@ func (p *Parser) Release() {
 
 // parseStatement parses a single SQL statement
 func (p *Parser) parseStatement() (ast.Statement, error) {
+	// TODO: PHASE 2 - Add WITH statement parsing for Common Table Expressions (CTEs)
+	// case "WITH":
+	//     p.advance() // Consume WITH
+	//     return p.parseWithStatement() // Needs implementation
 	switch p.currentToken.Type {
 	case "SELECT":
 		p.advance() // Consume SELECT
@@ -425,8 +429,10 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 				}
 				p.advance()
 
-				// For now, store USING columns as a simple identifier
-				// This could be enhanced to support multiple columns
+				// TODO: LIMITATION - Currently only supports single column in USING clause
+				// Future enhancement needed for multi-column support like USING (col1, col2, col3)
+				// This requires parsing comma-separated column list and storing as []Expression
+				// Priority: Medium (Phase 2 enhancement)
 				if p.currentToken.Type != "IDENT" {
 					return nil, p.expectedError("column name in USING")
 				}

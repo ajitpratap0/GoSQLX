@@ -252,3 +252,63 @@ The parser relies on a pipeline architecture where components interact through w
 - `tokenizer` → Depends on `models`, `keywords`
 - `parser` → Depends on `tokenizer`, `ast`, `token`
 - `ast` → Depends on `token` (minimal coupling)
+
+## Release Workflow (CRITICAL - Follow This Process)
+
+### **CORRECT Release Process**
+All release preparation must be done in the PR branch BEFORE merging:
+
+```bash
+# In PR branch before requesting merge:
+git checkout feature/branch-name
+
+# 1. Update all documentation in the PR branch
+# Update CHANGELOG.md with new version and features
+# Update README.md with new version highlights and features  
+# Update any version references in documentation
+git add CHANGELOG.md README.md
+git commit -m "docs: prepare vX.Y.Z release documentation"
+
+# 2. Create version tag in PR branch
+git tag vX.Y.Z -a -m "vX.Y.Z: Release Title
+
+Detailed release notes with:
+- Major features implemented
+- Performance improvements
+- Bug fixes
+- Breaking changes if any"
+
+# 3. Push PR branch with tag
+git push origin feature/branch-name
+git push origin vX.Y.Z
+
+# 4. Request PR merge (all docs and tag included)
+# 5. After merge, create GitHub release from the existing tag
+gh release create vX.Y.Z --title "vX.Y.Z: Release Title" --notes "..."
+```
+
+### **❌ WRONG Process (Don't Do This)**
+```bash
+# This is what happened with v1.1.0 - DON'T repeat this:
+# 1. Merge PR with just code changes
+# 2. Push separate commits directly to main for docs
+# 3. Create tag and release after the fact
+```
+
+### **Benefits of Correct Process**
+- ✅ All release changes reviewed together in PR
+- ✅ Clean git history with atomic releases  
+- ✅ Version tag points to complete release state
+- ✅ No direct commits to main branch
+- ✅ Reviewers can validate documentation accuracy
+
+### **Release Documentation Checklist**
+Before creating release PR:
+- [ ] Update CHANGELOG.md with new version section
+- [ ] Update README.md performance highlights
+- [ ] Update README.md key features if applicable  
+- [ ] Update README.md roadmap/version table
+- [ ] Add new feature examples if significant
+- [ ] Update version references in code if needed
+- [ ] Create comprehensive release tag message
+- [ ] Test that all documentation is accurate

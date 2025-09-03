@@ -7,15 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.1.0] - (Planned Q3 2024) - Phase 1: Foundation
+## [1.1.0] - 2025-01-03 - Phase 1: Core SQL Enhancements
 
-### Planned Features
-- Common Table Expressions (CTEs) with RECURSIVE support
-- Complete JOIN support (LEFT/RIGHT/FULL OUTER/CROSS/NATURAL)
-- Set operations (UNION/EXCEPT/INTERSECT)
-- Comprehensive subquery support in all contexts
-- Standardized error handling system
-- AST structure consolidation
+### ✅ Implemented Features  
+- **Complete JOIN support**: All JOIN types (INNER/LEFT/RIGHT/FULL OUTER/CROSS/NATURAL)
+- **Proper join tree logic**: Left-associative join relationships with synthetic table references
+- **USING clause support**: Single-column USING clause parsing (multi-column planned for Phase 2)
+- **Enhanced error handling**: Contextual error messages for JOIN parsing
+- **Comprehensive test coverage**: 15+ JOIN test scenarios including error cases
+- **Race-free implementation**: Zero race conditions detected in concurrent testing
+
+### 🏗️ Foundation Laid (Phase 2 Ready)
+- **CTE AST structures**: WithClause and CommonTableExpr defined with TODO integration points
+- **Token support**: Added WITH, RECURSIVE, UNION, EXCEPT, INTERSECT keywords
+- **Parser hooks**: Integration points documented for Phase 2 CTE completion
 
 ### Goals
 - Achieve 70% SQL-92 compliance

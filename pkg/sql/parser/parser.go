@@ -58,14 +58,12 @@ func (p *Parser) Release() {
 
 // parseStatement parses a single SQL statement
 func (p *Parser) parseStatement() (ast.Statement, error) {
-	// TODO: PHASE 2 - Add WITH statement parsing for Common Table Expressions (CTEs)
-	// case "WITH":
-	//     p.advance() // Consume WITH
-	//     return p.parseWithStatement() // Needs implementation
 	switch p.currentToken.Type {
+	case "WITH":
+		return p.parseWithStatement()
 	case "SELECT":
 		p.advance() // Consume SELECT
-		return p.parseSelectStatement()
+		return p.parseSelectWithSetOperations()
 	case "INSERT":
 		p.advance() // Consume INSERT
 		return p.parseInsertStatement()
@@ -566,6 +564,52 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	return selectStmt, nil
 }
 
+// parseSelectWithSetOperations parses SELECT statements that may have set operations
+func (p *Parser) parseSelectWithSetOperations() (ast.Statement, error) {
+	// Parse the first SELECT statement
+	leftStmt, err := p.parseSelectStatement()
+	if err != nil {
+		return nil, err
+	}
+
+	// Check for set operations (UNION, EXCEPT, INTERSECT)
+	for p.currentToken.Type == "UNION" || p.currentToken.Type == "EXCEPT" || p.currentToken.Type == "INTERSECT" {
+		// Parse the set operation type
+		operationType := p.currentToken.Type
+		p.advance()
+
+		// Check for ALL keyword
+		all := false
+		if p.currentToken.Type == "ALL" {
+			all = true
+			p.advance()
+		}
+
+		// Parse the right-hand SELECT statement
+		if p.currentToken.Type != "SELECT" {
+			return nil, p.expectedError("SELECT after set operation")
+		}
+		p.advance() // Consume SELECT
+
+		rightStmt, err := p.parseSelectStatement()
+		if err != nil {
+			return nil, fmt.Errorf("error parsing right SELECT in set operation: %v", err)
+		}
+
+		// Create the set operation with left as the accumulated result
+		setOp := &ast.SetOperation{
+			Left:     leftStmt,
+			Operator: string(operationType),
+			All:      all,
+			Right:    rightStmt,
+		}
+
+		leftStmt = setOp // The result becomes the left side for any subsequent operations
+	}
+
+	return leftStmt, nil
+}
+
 // parseInsertStatement parses an INSERT statement
 func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 	// We've already consumed the INSERT token in matchToken
@@ -798,5 +842,156 @@ func (p *Parser) isJoinKeyword() bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// parseWithStatement parses a WITH statement (CTE)
+func (p *Parser) parseWithStatement() (ast.Statement, error) {
+	// Consume WITH
+	p.advance()
+
+	// Check for RECURSIVE keyword
+	recursive := false
+	if p.currentToken.Type == "RECURSIVE" {
+		recursive = true
+		p.advance()
+	}
+
+	// Parse Common Table Expressions
+	ctes := []*ast.CommonTableExpr{}
+
+	for {
+		cte, err := p.parseCommonTableExpr()
+		if err != nil {
+			return nil, fmt.Errorf("error parsing CTE: %v", err)
+		}
+		ctes = append(ctes, cte)
+
+		// Check for more CTEs (comma-separated)
+		if p.currentToken.Type == "," {
+			p.advance() // Consume comma
+			continue
+		}
+		break
+	}
+
+	// Create WITH clause
+	withClause := &ast.WithClause{
+		Recursive: recursive,
+		CTEs:      ctes,
+	}
+
+	// Parse the main statement that follows the WITH clause
+	mainStmt, err := p.parseMainStatementAfterWith()
+	if err != nil {
+		return nil, fmt.Errorf("error parsing statement after WITH: %v", err)
+	}
+
+	// Attach WITH clause to the main statement
+	switch stmt := mainStmt.(type) {
+	case *ast.SelectStatement:
+		stmt.With = withClause
+		return stmt, nil
+	case *ast.SetOperation:
+		// For set operations, attach WITH to the left statement if it's a SELECT
+		if leftSelect, ok := stmt.Left.(*ast.SelectStatement); ok {
+			leftSelect.With = withClause
+		}
+		return stmt, nil
+	case *ast.InsertStatement:
+		stmt.With = withClause
+		return stmt, nil
+	case *ast.UpdateStatement:
+		stmt.With = withClause
+		return stmt, nil
+	case *ast.DeleteStatement:
+		stmt.With = withClause
+		return stmt, nil
+	default:
+		return nil, fmt.Errorf("WITH clause not supported with statement type: %T", stmt)
+	}
+}
+
+// parseCommonTableExpr parses a single Common Table Expression
+func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
+	// Parse CTE name
+	if p.currentToken.Type != "IDENT" {
+		return nil, p.expectedError("CTE name")
+	}
+	name := p.currentToken.Literal
+	p.advance()
+
+	// Parse optional column list
+	var columns []string
+	if p.currentToken.Type == "(" {
+		p.advance() // Consume (
+
+		for {
+			if p.currentToken.Type != "IDENT" {
+				return nil, p.expectedError("column name")
+			}
+			columns = append(columns, p.currentToken.Literal)
+			p.advance()
+
+			if p.currentToken.Type == "," {
+				p.advance() // Consume comma
+				continue
+			}
+			break
+		}
+
+		if p.currentToken.Type != ")" {
+			return nil, p.expectedError(")")
+		}
+		p.advance() // Consume )
+	}
+
+	// Parse AS keyword
+	if p.currentToken.Type != "AS" {
+		return nil, p.expectedError("AS")
+	}
+	p.advance()
+
+	// Parse the CTE query (must be in parentheses)
+	if p.currentToken.Type != "(" {
+		return nil, p.expectedError("( before CTE query")
+	}
+	p.advance() // Consume (
+
+	// Parse the inner statement
+	stmt, err := p.parseStatement()
+	if err != nil {
+		return nil, fmt.Errorf("error parsing CTE statement: %v", err)
+	}
+
+	if p.currentToken.Type != ")" {
+		return nil, p.expectedError(") after CTE query")
+	}
+	p.advance() // Consume )
+
+	return &ast.CommonTableExpr{
+		Name:      name,
+		Columns:   columns,
+		Statement: stmt,
+	}, nil
+}
+
+// parseMainStatementAfterWith parses the main statement after WITH clause
+func (p *Parser) parseMainStatementAfterWith() (ast.Statement, error) {
+	switch p.currentToken.Type {
+	case "SELECT":
+		p.advance() // Consume SELECT
+		return p.parseSelectWithSetOperations()
+	case "INSERT":
+		p.advance() // Consume INSERT
+		return p.parseInsertStatement()
+	case "UPDATE":
+		p.advance() // Consume UPDATE
+		return p.parseUpdateStatement()
+	case "DELETE":
+		p.advance() // Consume DELETE
+		return p.parseDeleteStatement()
+	default:
+		return nil, p.expectedError("SELECT, INSERT, UPDATE, or DELETE after WITH")
 	}
 }

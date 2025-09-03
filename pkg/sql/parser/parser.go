@@ -1,5 +1,14 @@
 // Package parser provides a recursive descent SQL parser that converts tokens into an Abstract Syntax Tree (AST).
-// It supports standard SQL statements including SELECT, INSERT, UPDATE, DELETE, and various DDL operations.
+// It supports comprehensive SQL features including SELECT, INSERT, UPDATE, DELETE, DDL operations,
+// Common Table Expressions (CTEs), and set operations (UNION, EXCEPT, INTERSECT).
+//
+// Phase 2 Features (v1.2.0+):
+//   - Common Table Expressions (WITH clause) with recursive support
+//   - Set operations: UNION, UNION ALL, EXCEPT, INTERSECT
+//   - Multiple CTE definitions in single query
+//   - CTE column specifications
+//   - Left-associative set operation parsing
+//   - Integration of CTEs with set operations
 package parser
 
 import (
@@ -564,7 +573,14 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	return selectStmt, nil
 }
 
-// parseSelectWithSetOperations parses SELECT statements that may have set operations
+// parseSelectWithSetOperations parses SELECT statements that may have set operations.
+// It supports UNION, UNION ALL, EXCEPT, and INTERSECT operations with proper left-associative parsing.
+// 
+// Examples:
+//   SELECT name FROM users UNION SELECT name FROM customers
+//   SELECT id FROM orders UNION ALL SELECT id FROM invoices  
+//   SELECT product FROM inventory EXCEPT SELECT product FROM discontinued
+//   SELECT a FROM t1 UNION SELECT b FROM t2 INTERSECT SELECT c FROM t3
 func (p *Parser) parseSelectWithSetOperations() (ast.Statement, error) {
 	// Parse the first SELECT statement
 	leftStmt, err := p.parseSelectStatement()
@@ -845,7 +861,14 @@ func (p *Parser) isJoinKeyword() bool {
 	}
 }
 
-// parseWithStatement parses a WITH statement (CTE)
+// parseWithStatement parses a WITH statement (Common Table Expression).
+// It supports both simple and recursive CTEs, multiple CTE definitions, and column specifications.
+//
+// Examples:
+//   WITH sales_summary AS (SELECT region, total FROM sales) SELECT * FROM sales_summary
+//   WITH RECURSIVE emp_tree AS (SELECT emp_id FROM employees) SELECT * FROM emp_tree  
+//   WITH first AS (SELECT * FROM t1), second AS (SELECT * FROM first) SELECT * FROM second
+//   WITH summary(region, total) AS (SELECT region, SUM(amount) FROM sales GROUP BY region) SELECT * FROM summary
 func (p *Parser) parseWithStatement() (ast.Statement, error) {
 	// Consume WITH
 	p.advance()
@@ -912,7 +935,10 @@ func (p *Parser) parseWithStatement() (ast.Statement, error) {
 	}
 }
 
-// parseCommonTableExpr parses a single Common Table Expression
+// parseCommonTableExpr parses a single Common Table Expression.
+// It handles CTE name, optional column list, AS keyword, and the CTE query in parentheses.
+//
+// Syntax: cte_name [(column_list)] AS (query)
 func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 	// Parse CTE name
 	if p.currentToken.Type != "IDENT" {
@@ -976,7 +1002,9 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 	}, nil
 }
 
-// parseMainStatementAfterWith parses the main statement after WITH clause
+// parseMainStatementAfterWith parses the main statement after WITH clause.
+// It supports SELECT, INSERT, UPDATE, and DELETE statements, routing them to the appropriate
+// parsers while preserving set operation support for SELECT statements.
 func (p *Parser) parseMainStatementAfterWith() (ast.Statement, error) {
 	switch p.currentToken.Type {
 	case "SELECT":

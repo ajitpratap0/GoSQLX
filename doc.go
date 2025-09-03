@@ -51,8 +51,8 @@
 //
 //	// Common Table Expression (CTE)
 //	cteSQL := `WITH sales_summary AS (
-//	    SELECT region, SUM(amount) as total 
-//	    FROM sales 
+//	    SELECT region, SUM(amount) as total
+//	    FROM sales
 //	    GROUP BY region
 //	) SELECT region FROM sales_summary WHERE total > 1000`
 //
@@ -60,7 +60,7 @@
 //	recursiveSQL := `WITH RECURSIVE employee_tree AS (
 //	    SELECT employee_id, manager_id, name FROM employees WHERE manager_id IS NULL
 //	    UNION ALL
-//	    SELECT e.employee_id, e.manager_id, e.name 
+//	    SELECT e.employee_id, e.manager_id, e.name
 //	    FROM employees e JOIN employee_tree et ON e.manager_id = et.employee_id
 //	) SELECT * FROM employee_tree`
 //

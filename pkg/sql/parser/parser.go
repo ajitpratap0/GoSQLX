@@ -575,12 +575,13 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 // parseSelectWithSetOperations parses SELECT statements that may have set operations.
 // It supports UNION, UNION ALL, EXCEPT, and INTERSECT operations with proper left-associative parsing.
-// 
+//
 // Examples:
-//   SELECT name FROM users UNION SELECT name FROM customers
-//   SELECT id FROM orders UNION ALL SELECT id FROM invoices  
-//   SELECT product FROM inventory EXCEPT SELECT product FROM discontinued
-//   SELECT a FROM t1 UNION SELECT b FROM t2 INTERSECT SELECT c FROM t3
+//
+//	SELECT name FROM users UNION SELECT name FROM customers
+//	SELECT id FROM orders UNION ALL SELECT id FROM invoices
+//	SELECT product FROM inventory EXCEPT SELECT product FROM discontinued
+//	SELECT a FROM t1 UNION SELECT b FROM t2 INTERSECT SELECT c FROM t3
 func (p *Parser) parseSelectWithSetOperations() (ast.Statement, error) {
 	// Parse the first SELECT statement
 	leftStmt, err := p.parseSelectStatement()
@@ -865,10 +866,11 @@ func (p *Parser) isJoinKeyword() bool {
 // It supports both simple and recursive CTEs, multiple CTE definitions, and column specifications.
 //
 // Examples:
-//   WITH sales_summary AS (SELECT region, total FROM sales) SELECT * FROM sales_summary
-//   WITH RECURSIVE emp_tree AS (SELECT emp_id FROM employees) SELECT * FROM emp_tree  
-//   WITH first AS (SELECT * FROM t1), second AS (SELECT * FROM first) SELECT * FROM second
-//   WITH summary(region, total) AS (SELECT region, SUM(amount) FROM sales GROUP BY region) SELECT * FROM summary
+//
+//	WITH sales_summary AS (SELECT region, total FROM sales) SELECT * FROM sales_summary
+//	WITH RECURSIVE emp_tree AS (SELECT emp_id FROM employees) SELECT * FROM emp_tree
+//	WITH first AS (SELECT * FROM t1), second AS (SELECT * FROM first) SELECT * FROM second
+//	WITH summary(region, total) AS (SELECT region, SUM(amount) FROM sales GROUP BY region) SELECT * FROM summary
 func (p *Parser) parseWithStatement() (ast.Statement, error) {
 	// Consume WITH
 	p.advance()

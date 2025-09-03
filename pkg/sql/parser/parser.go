@@ -58,6 +58,10 @@ func (p *Parser) Release() {
 
 // parseStatement parses a single SQL statement
 func (p *Parser) parseStatement() (ast.Statement, error) {
+	// TODO: PHASE 2 - Add WITH statement parsing for Common Table Expressions (CTEs)
+	// case "WITH":
+	//     p.advance() // Consume WITH
+	//     return p.parseWithStatement() // Needs implementation
 	switch p.currentToken.Type {
 	case "SELECT":
 		p.advance() // Consume SELECT
@@ -322,9 +326,17 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	// Check for table alias
-	if p.currentToken.Type == "IDENT" {
-		tableRef.Alias = p.currentToken.Literal
-		p.advance()
+	if p.currentToken.Type == "IDENT" || p.currentToken.Type == "AS" {
+		if p.currentToken.Type == "AS" {
+			p.advance() // Consume AS
+			if p.currentToken.Type != "IDENT" {
+				return nil, p.expectedError("alias after AS")
+			}
+		}
+		if p.currentToken.Type == "IDENT" {
+			tableRef.Alias = p.currentToken.Literal
+			p.advance()
+		}
 	}
 
 	// Create tables list for FROM clause
@@ -332,12 +344,45 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 	// Parse JOIN clauses if present
 	joins := []ast.JoinClause{}
-	for p.currentToken.Type == "JOIN" {
+	for p.isJoinKeyword() {
+		// Determine JOIN type
+		joinType := "INNER" // Default
+
+		if p.currentToken.Type == "LEFT" {
+			joinType = "LEFT"
+			p.advance()
+			if p.currentToken.Type == "OUTER" {
+				p.advance() // Optional OUTER keyword
+			}
+		} else if p.currentToken.Type == "RIGHT" {
+			joinType = "RIGHT"
+			p.advance()
+			if p.currentToken.Type == "OUTER" {
+				p.advance() // Optional OUTER keyword
+			}
+		} else if p.currentToken.Type == "FULL" {
+			joinType = "FULL"
+			p.advance()
+			if p.currentToken.Type == "OUTER" {
+				p.advance() // Optional OUTER keyword
+			}
+		} else if p.currentToken.Type == "INNER" {
+			joinType = "INNER"
+			p.advance()
+		} else if p.currentToken.Type == "CROSS" {
+			joinType = "CROSS"
+			p.advance()
+		}
+
+		// Expect JOIN keyword
+		if p.currentToken.Type != "JOIN" {
+			return nil, fmt.Errorf("expected JOIN after %s, got %s", joinType, p.currentToken.Type)
+		}
 		p.advance() // Consume JOIN
 
 		// Parse joined table name
 		if p.currentToken.Type != "IDENT" {
-			return nil, p.expectedError("table name after JOIN")
+			return nil, fmt.Errorf("expected table name after %s JOIN, got %s", joinType, p.currentToken.Type)
 		}
 		joinedTableName := p.currentToken.Literal
 		p.advance()
@@ -348,33 +393,89 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		}
 
 		// Check for table alias
-		if p.currentToken.Type == "IDENT" {
-			joinedTableRef.Alias = p.currentToken.Literal
-			p.advance()
+		if p.currentToken.Type == "IDENT" || p.currentToken.Type == "AS" {
+			if p.currentToken.Type == "AS" {
+				p.advance() // Consume AS
+				if p.currentToken.Type != "IDENT" {
+					return nil, p.expectedError("alias after AS")
+				}
+			}
+			if p.currentToken.Type == "IDENT" {
+				joinedTableRef.Alias = p.currentToken.Literal
+				p.advance()
+			}
 		}
 
-		// Parse ON clause
-		if p.currentToken.Type != "ON" {
-			return nil, p.expectedError("ON")
-		}
-		p.advance() // Consume ON
+		// Parse join condition (ON or USING)
+		var joinCondition ast.Expression
 
-		// Parse join condition
-		joinCondition, err := p.parseExpression()
-		if err != nil {
-			return nil, err
+		// CROSS JOIN doesn't require ON clause
+		if joinType != "CROSS" {
+			if p.currentToken.Type == "ON" {
+				p.advance() // Consume ON
+
+				// Parse join condition
+				cond, err := p.parseExpression()
+				if err != nil {
+					return nil, fmt.Errorf("error parsing ON condition for %s JOIN: %v", joinType, err)
+				}
+				joinCondition = cond
+			} else if p.currentToken.Type == "USING" {
+				p.advance() // Consume USING
+
+				// Parse column list in parentheses
+				if p.currentToken.Type != "(" {
+					return nil, p.expectedError("( after USING")
+				}
+				p.advance()
+
+				// TODO: LIMITATION - Currently only supports single column in USING clause
+				// Future enhancement needed for multi-column support like USING (col1, col2, col3)
+				// This requires parsing comma-separated column list and storing as []Expression
+				// Priority: Medium (Phase 2 enhancement)
+				if p.currentToken.Type != "IDENT" {
+					return nil, p.expectedError("column name in USING")
+				}
+				joinCondition = &ast.Identifier{Name: p.currentToken.Literal}
+				p.advance()
+
+				if p.currentToken.Type != ")" {
+					return nil, p.expectedError(") after USING column")
+				}
+				p.advance()
+			} else if joinType != "NATURAL" {
+				return nil, p.expectedError("ON or USING")
+			}
 		}
 
-		// Create join clause
+		// Create join clause with proper tree relationships
+		// For SQL: FROM A JOIN B JOIN C (equivalent to (A JOIN B) JOIN C)
+		var leftTable ast.TableReference
+		if len(joins) == 0 {
+			// First join: A JOIN B
+			leftTable = tableRef
+		} else {
+			// Subsequent joins: (previous result) JOIN C
+			// We represent this by using a synthetic table reference that indicates
+			// the left side is the result of previous joins
+			leftTable = ast.TableReference{
+				Name:  fmt.Sprintf("(%s_with_%d_joins)", tableRef.Name, len(joins)),
+				Alias: "",
+			}
+		}
+
 		joinClause := ast.JoinClause{
-			Type:      "INNER", // Default to INNER JOIN
-			Left:      tableRef,
+			Type:      joinType,
+			Left:      leftTable,
 			Right:     joinedTableRef,
 			Condition: joinCondition,
 		}
 
 		// Add join clause to joins list
 		joins = append(joins, joinClause)
+
+		// Note: We don't update tableRef here as each JOIN in the list
+		// represents a join with the accumulated result set
 	}
 
 	// Initialize SELECT statement
@@ -688,4 +789,14 @@ func (p *Parser) parseAlterTableStmt() (ast.Statement, error) {
 	// We've already consumed the ALTER token in matchToken
 	// This is just a placeholder that delegates to the main implementation
 	return p.parseAlterStatement()
+}
+
+// isJoinKeyword checks if current token is a JOIN-related keyword
+func (p *Parser) isJoinKeyword() bool {
+	switch p.currentToken.Type {
+	case "JOIN", "INNER", "LEFT", "RIGHT", "FULL", "CROSS":
+		return true
+	default:
+		return false
+	}
 }

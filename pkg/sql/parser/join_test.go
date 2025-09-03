@@ -437,7 +437,7 @@ func TestParser_InvalidJoinSyntax(t *testing.T) {
 			// Parse tokens
 			parser := &Parser{}
 			astObj, err := parser.Parse(convertedTokens)
-			
+
 			if tt.expectedError != "" {
 				// We expect an error
 				if err == nil {
@@ -449,7 +449,7 @@ func TestParser_InvalidJoinSyntax(t *testing.T) {
 			} else {
 				// We don't expect an error for some edge cases
 				if err != nil && tt.expectedError == "" {
-					// Some tests intentionally have no expected error 
+					// Some tests intentionally have no expected error
 					// because they fail in different ways
 					return
 				}
@@ -466,12 +466,12 @@ func containsError(actual, expected string) bool {
 	if expected == "" {
 		return true
 	}
-	return len(actual) > 0 && len(expected) > 0 && 
-		(actual == expected || 
-		 len(actual) >= len(expected) && 
-		 (actual[:len(expected)] == expected ||
-		  actual[len(actual)-len(expected):] == expected ||
-		  containsSubstring(actual, expected)))
+	return len(actual) > 0 && len(expected) > 0 &&
+		(actual == expected ||
+			len(actual) >= len(expected) &&
+				(actual[:len(expected)] == expected ||
+					actual[len(actual)-len(expected):] == expected ||
+					containsSubstring(actual, expected)))
 }
 
 // Simple substring check

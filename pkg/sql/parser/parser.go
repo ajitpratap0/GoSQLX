@@ -453,7 +453,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			// In SQL, A JOIN B JOIN C means (A JOIN B) JOIN C
 			leftTable = tableRef // Keep using original for AST simplicity
 		}
-		
+
 		joinClause := ast.JoinClause{
 			Type:      joinType,
 			Left:      leftTable,
@@ -463,7 +463,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 		// Add join clause to joins list
 		joins = append(joins, joinClause)
-		
+
 		// Note: We don't update tableRef here as each JOIN in the list
 		// represents a join with the accumulated result set
 	}

@@ -486,3 +486,72 @@ func containsSubstring(s, substr string) bool {
 	}
 	return false
 }
+
+func TestParser_JoinTreeLogic(t *testing.T) {
+	sql := "SELECT * FROM users u LEFT JOIN orders o ON u.id = o.user_id INNER JOIN products p ON o.product_id = p.id"
+
+	// Get tokenizer from pool
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+
+	// Tokenize SQL
+	tokens, err := tkz.Tokenize([]byte(sql))
+	if err != nil {
+		t.Fatalf("Failed to tokenize: %v", err)
+	}
+
+	// Convert tokens for parser
+	convertedTokens := convertTokens(tokens)
+
+	// Parse tokens
+	parser := &Parser{}
+	astObj, err := parser.Parse(convertedTokens)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+	defer ast.ReleaseAST(astObj)
+
+	// Verify we have a SELECT statement
+	if len(astObj.Statements) == 0 {
+		t.Fatal("No statements parsed")
+	}
+
+	selectStmt, ok := astObj.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatal("Expected SELECT statement")
+	}
+
+	// Verify join tree structure
+	if len(selectStmt.Joins) != 2 {
+		t.Errorf("Expected 2 joins, got %d", len(selectStmt.Joins))
+	}
+
+	// First join: users LEFT JOIN orders
+	if len(selectStmt.Joins) > 0 {
+		firstJoin := selectStmt.Joins[0]
+		if firstJoin.Type != "LEFT" {
+			t.Errorf("First join type: expected LEFT, got %s", firstJoin.Type)
+		}
+		if firstJoin.Left.Name != "users" {
+			t.Errorf("First join left table: expected users, got %s", firstJoin.Left.Name)
+		}
+		if firstJoin.Right.Name != "orders" {
+			t.Errorf("First join right table: expected orders, got %s", firstJoin.Right.Name)
+		}
+	}
+
+	// Second join: (users LEFT JOIN orders) INNER JOIN products
+	if len(selectStmt.Joins) > 1 {
+		secondJoin := selectStmt.Joins[1]
+		if secondJoin.Type != "INNER" {
+			t.Errorf("Second join type: expected INNER, got %s", secondJoin.Type)
+		}
+		// The left side should now represent the result of previous joins
+		if secondJoin.Left.Name != "(users_with_1_joins)" {
+			t.Errorf("Second join left table: expected (users_with_1_joins), got %s", secondJoin.Left.Name)
+		}
+		if secondJoin.Right.Name != "products" {
+			t.Errorf("Second join right table: expected products, got %s", secondJoin.Right.Name)
+		}
+	}
+}

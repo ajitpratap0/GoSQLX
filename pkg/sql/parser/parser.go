@@ -442,16 +442,20 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			}
 		}
 
-		// Create join clause
-		// For proper join tree: first join uses original table, subsequent joins build on result
+		// Create join clause with proper tree relationships
+		// For SQL: FROM A JOIN B JOIN C (equivalent to (A JOIN B) JOIN C)
 		var leftTable ast.TableReference
 		if len(joins) == 0 {
-			// First join: use the original FROM table
+			// First join: A JOIN B
 			leftTable = tableRef
 		} else {
-			// Subsequent joins: left side is implicitly the result of previous joins
-			// In SQL, A JOIN B JOIN C means (A JOIN B) JOIN C
-			leftTable = tableRef // Keep using original for AST simplicity
+			// Subsequent joins: (previous result) JOIN C
+			// We represent this by using a synthetic table reference that indicates
+			// the left side is the result of previous joins
+			leftTable = ast.TableReference{
+				Name:  fmt.Sprintf("(%s_with_%d_joins)", tableRef.Name, len(joins)),
+				Alias: "",
+			}
 		}
 
 		joinClause := ast.JoinClause{

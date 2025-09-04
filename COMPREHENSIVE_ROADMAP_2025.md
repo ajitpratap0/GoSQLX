@@ -1,6 +1,6 @@
 # GoSQLX Technical Roadmap 2026
 
-**Date**: December 2025  
+**Date**: September 2025  
 **Version**: 2.0  
 **Status**: Technical Review  
 **Focus**: CLI-First Platform Evolution
@@ -96,12 +96,28 @@ gosqlx convert --from mysql --to postgres query.sql  # Dialect conversion
 ```
 
 **Technical Requirements**:
-- [ ] **Security Analysis Engine**: SQL injection pattern detection
-- [ ] **Performance Analyzer**: Query optimization suggestions
-- [ ] **Dialect Converter**: Multi-dialect SQL translation
-- [ ] **Complexity Scoring**: AST-based complexity metrics  
-- [ ] **Schema Validation**: Schema-aware query analysis
-- [ ] **Rule Engine**: Customizable analysis rules
+- [ ] **Security Analysis Engine**: 
+  - Pattern matching for SQL injection vulnerabilities (UNION-based, Boolean-based, time-based)
+  - AST-based semantic analysis for malicious query patterns
+  - Integration with OWASP Top 10 and CWE database
+  - Real-time scanning with <5ms overhead per query
+- [ ] **Performance Analyzer**: 
+  - Query optimization suggestions based on AST structure analysis
+  - Index usage recommendations from table scan patterns
+  - JOIN order optimization hints using cost-based analysis
+  - Subquery-to-JOIN conversion suggestions
+- [ ] **Dialect Converter**: 
+  - Semantic AST transformation between SQL dialects
+  - Function mapping (MySQL CONCAT vs PostgreSQL ||)
+  - Data type conversion (MySQL TINYINT vs PostgreSQL SMALLINT)
+  - Syntax normalization with dialect-specific optimizations
+- [ ] **Complexity Scoring**: 
+  - McCabe complexity metrics adapted for SQL queries
+  - Nested query depth analysis and scoring
+  - JOIN complexity scoring based on table count and conditions
+  - Maintainability index calculation for query refactoring
+- [ ] **Schema Validation**: Schema-aware query analysis with table/column existence checking
+- [ ] **Rule Engine**: Plugin-based customizable analysis rules with YAML configuration
 
 **Innovation Features**:
 - AST-powered semantic analysis impossible with regex-based tools
@@ -364,6 +380,6 @@ The roadmap establishes a clear technical path for GoSQLX to become the dominant
 
 ---
 
-*Last Updated: December 2025*  
+*Last Updated: September 2025*  
 *Next Review: Ongoing*  
 *Status: Technical Roadmap Review*

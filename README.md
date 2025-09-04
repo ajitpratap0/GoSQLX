@@ -635,7 +635,8 @@ graph LR
 | **v0.9.0** | ✅ Released | 2024-01-15 | Initial release |
 | **v1.0.0** | ✅ Released | 2024-12-01 | Production ready, +47% performance |
 | **v1.1.0** | ✅ Released | 2025-01-03 | Complete JOIN support, error handling |
-| **v1.2.0** | 🎉 Current | 2025-09-04 | CTEs, set operations, ~70% SQL-92 compliance |
+| **v1.2.0** | ✅ Released | 2025-09-04 | CTEs, set operations, ~70% SQL-92 compliance |
+| **v1.3.0** | 🎉 Current | 2025-09-04 | Window functions, ~80-85% SQL-99 compliance |
 | **v2.0.0** | 🔮 Future | Q4 2025 | Dialect specialization, advanced features |
 
 <a href="docs/ROADMAP.md"><img src="https://img.shields.io/badge/📋_Full_Roadmap-purple?style=for-the-badge" alt="Full Roadmap"></a>

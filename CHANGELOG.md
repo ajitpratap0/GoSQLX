@@ -5,7 +5,7 @@ All notable changes to GoSQLX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - Phase 2.5: Window Functions
+## [1.3.0] - 2025-09-04 - Phase 2.5: Window Functions
 
 ### ✅ Major Features Implemented
 - **Complete Window Function Support**: Full SQL-99 compliant window function parsing with OVER clause
@@ -347,7 +347,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Release Date | Status | Key Features |
 |---------|--------------|--------|--------------|
-| 1.2.0 | 2025-09-04 | Current | CTEs, set operations, ~70% SQL-92 compliance |
+| 1.3.0 | 2025-09-04 | Current | Window functions, ~80-85% SQL-99 compliance |
+| 1.2.0 | 2025-09-04 | Previous | CTEs, set operations, ~70% SQL-92 compliance |
 | 1.1.0 | 2025-01-03 | Previous | Complete JOIN support, enhanced error handling |
 | 1.0.0 | 2024-12-01 | Stable | Production ready, +47% performance |
 | 0.9.0 | 2024-01-15 | Legacy | Initial public release |

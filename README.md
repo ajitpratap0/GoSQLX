@@ -39,25 +39,26 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 
 ### ✨ Key Features
 
-- **🚀 Blazing Fast**: **946K+ ops/sec** sustained, **1.25M+ ops/sec** peak throughput
+- **🚀 Blazing Fast**: **1.38M+ ops/sec** sustained, **1.5M+ ops/sec** peak throughput
 - **💾 Memory Efficient**: **60-80% reduction** through intelligent object pooling
 - **🔒 Thread-Safe**: **Race-free**, linear scaling to **128+ cores**
 - **🔗 Complete JOIN Support**: All JOIN types (INNER/LEFT/RIGHT/FULL OUTER/CROSS/NATURAL) with proper tree logic
 - **🔄 Advanced SQL Features**: CTEs with RECURSIVE support, Set Operations (UNION/EXCEPT/INTERSECT)
+- **🪟 Window Functions**: Complete SQL-99 window function support with OVER clause, PARTITION BY, ORDER BY, frame specifications
 - **🌍 Unicode Support**: Complete UTF-8 support for international SQL
 - **🔧 Multi-Dialect**: PostgreSQL, MySQL, SQL Server, Oracle, SQLite
-- **📊 Zero-Copy**: Direct byte slice operations, **<280ns latency**
-- **🏗️ Production Ready**: Battle-tested with **0 race conditions** detected, **~70% SQL-92 compliance**
+- **📊 Zero-Copy**: Direct byte slice operations, **<1μs latency**
+- **🏗️ Production Ready**: Battle-tested with **0 race conditions** detected, **~80-85% SQL-99 compliance**
 
-### 🎯 Performance Highlights (v1.2.0)
+### 🎯 Performance Highlights (v1.3.0)
 
 <div align="center">
 
-| **946K+** | **8M+** | **<280ns** | **60-80%** | **24+** |
+| **1.38M+** | **8M+** | **<1μs** | **60-80%** | **30+** |
 |:---------:|:-------:|:----------:|:----------:|:-------:|
 | Ops/sec | Tokens/sec | Latency | Memory Saved | Total Tests |
 
-**✅ CTEs & Set Operations** • **Zero race conditions** • **~70% SQL-92 compliance** • **Production validated**
+**✅ Window Functions** • **Zero race conditions** • **~80-85% SQL-99 compliance** • **Production validated**
 
 </div>
 

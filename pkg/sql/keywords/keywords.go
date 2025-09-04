@@ -1,5 +1,5 @@
 // Package keywords provides SQL keyword definitions and categorization for multiple SQL dialects.
-// It includes reserved words, DDL/DML keywords, and dialect-specific extensions.
+// It includes reserved words, DDL/DML keywords, dialect-specific extensions, and window function keywords.
 package keywords
 
 import (
@@ -77,6 +77,15 @@ var RESERVED_FOR_TABLE_ALIAS = []Keyword{
 	{Word: "AVG", Type: models.TokenTypeAvg, Reserved: true, ReservedForTableAlias: true},
 	{Word: "MIN", Type: models.TokenTypeMin, Reserved: true, ReservedForTableAlias: true},
 	{Word: "MAX", Type: models.TokenTypeMax, Reserved: true, ReservedForTableAlias: true},
+	// Window function keywords (Phase 2.5)
+	{Word: "OVER", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "ROWS", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "RANGE", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "CURRENT", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "ROW", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "UNBOUNDED", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "PRECEDING", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "FOLLOWING", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
 }
 
 var ADDITIONAL_KEYWORDS = []Keyword{
@@ -92,6 +101,15 @@ var ADDITIONAL_KEYWORDS = []Keyword{
 	{Word: "THEN", Type: models.TokenTypeThen, Reserved: true, ReservedForTableAlias: false},
 	{Word: "ELSE", Type: models.TokenTypeElse, Reserved: true, ReservedForTableAlias: false},
 	{Word: "END", Type: models.TokenTypeEnd, Reserved: true, ReservedForTableAlias: false},
+	// Window function names (Phase 2.5)
+	{Word: "ROW_NUMBER", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "RANK", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "DENSE_RANK", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "NTILE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "LAG", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "LEAD", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "FIRST_VALUE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "LAST_VALUE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 }
 
 // addKeywordsWithCategory is a helper method to add multiple keywords

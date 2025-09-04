@@ -1,6 +1,6 @@
 // Package parser provides a recursive descent SQL parser that converts tokens into an Abstract Syntax Tree (AST).
 // It supports comprehensive SQL features including SELECT, INSERT, UPDATE, DELETE, DDL operations,
-// Common Table Expressions (CTEs), and set operations (UNION, EXCEPT, INTERSECT).
+// Common Table Expressions (CTEs), set operations (UNION, EXCEPT, INTERSECT), and window functions.
 //
 // Phase 2 Features (v1.2.0+):
 //   - Common Table Expressions (WITH clause) with recursive support
@@ -9,6 +9,15 @@
 //   - CTE column specifications
 //   - Left-associative set operation parsing
 //   - Integration of CTEs with set operations
+//
+// Phase 2.5 Features (v1.3.0+):
+//   - Window functions with OVER clause support
+//   - PARTITION BY and ORDER BY in window specifications
+//   - Window frame clauses (ROWS/RANGE with bounds)
+//   - Ranking functions: ROW_NUMBER(), RANK(), DENSE_RANK(), NTILE()
+//   - Analytic functions: LAG(), LEAD(), FIRST_VALUE(), LAST_VALUE()
+//   - Function call parsing with parentheses and arguments
+//   - Integration with existing SELECT statement parsing
 package parser
 
 import (
@@ -165,25 +174,38 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 
 	switch p.currentToken.Type {
 	case "IDENT":
-		// Handle identifiers
-		ident := &ast.Identifier{Name: p.currentToken.Literal}
+		// Handle identifiers and function calls
+		identName := p.currentToken.Literal
 		p.advance()
 
-		// Check for qualified identifier (table.column)
-		if p.currentToken.Type == "." {
-			p.advance() // Consume .
-			if p.currentToken.Type != "IDENT" {
-				return nil, p.expectedError("identifier after .")
+		// Check for function call (identifier followed by parentheses)
+		if p.currentToken.Type == "(" {
+			// This is a function call
+			funcCall, err := p.parseFunctionCall(identName)
+			if err != nil {
+				return nil, err
 			}
-			// Create a qualified identifier
-			ident = &ast.Identifier{
-				Table: ident.Name,
-				Name:  p.currentToken.Literal,
-			}
-			p.advance()
-		}
+			left = funcCall
+		} else {
+			// Handle regular identifier or qualified identifier (table.column)
+			ident := &ast.Identifier{Name: identName}
 
-		left = ident
+			// Check for qualified identifier (table.column)
+			if p.currentToken.Type == "." {
+				p.advance() // Consume .
+				if p.currentToken.Type != "IDENT" {
+					return nil, p.expectedError("identifier after .")
+				}
+				// Create a qualified identifier
+				ident = &ast.Identifier{
+					Table: ident.Name,
+					Name:  p.currentToken.Literal,
+				}
+				p.advance()
+			}
+
+			left = ident
+		}
 
 	case "STRING":
 		// Handle string literals
@@ -233,6 +255,248 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 	return left, nil
 }
 
+// parseFunctionCall parses a function call with optional OVER clause for window functions.
+//
+// Examples:
+//
+//	COUNT(*) -> regular aggregate function
+//	ROW_NUMBER() OVER (ORDER BY id) -> window function with OVER clause
+//	SUM(salary) OVER (PARTITION BY dept ORDER BY date ROWS UNBOUNDED PRECEDING) -> window function with frame
+func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
+	// Expect opening parenthesis
+	if p.currentToken.Type != "(" {
+		return nil, p.expectedError("(")
+	}
+	p.advance() // Consume (
+
+	// Parse function arguments
+	var arguments []ast.Expression
+	var distinct bool
+
+	// Check for DISTINCT keyword
+	if p.currentToken.Type == "DISTINCT" {
+		distinct = true
+		p.advance()
+	}
+
+	// Parse arguments if not empty
+	if p.currentToken.Type != ")" {
+		for {
+			arg, err := p.parseExpression()
+			if err != nil {
+				return nil, err
+			}
+			arguments = append(arguments, arg)
+
+			// Check for comma or end of arguments
+			if p.currentToken.Type == "," {
+				p.advance() // Consume comma
+			} else if p.currentToken.Type == ")" {
+				break
+			} else {
+				return nil, p.expectedError(", or )")
+			}
+		}
+	}
+
+	// Expect closing parenthesis
+	if p.currentToken.Type != ")" {
+		return nil, p.expectedError(")")
+	}
+	p.advance() // Consume )
+
+	// Create function call
+	funcCall := &ast.FunctionCall{
+		Name:      funcName,
+		Arguments: arguments,
+		Distinct:  distinct,
+	}
+
+	// Check for OVER clause (window function)
+	if p.currentToken.Type == "OVER" {
+		p.advance() // Consume OVER
+
+		windowSpec, err := p.parseWindowSpec()
+		if err != nil {
+			return nil, err
+		}
+		funcCall.Over = windowSpec
+	}
+
+	return funcCall, nil
+}
+
+// parseWindowSpec parses a window specification (PARTITION BY, ORDER BY, frame clause)
+func (p *Parser) parseWindowSpec() (*ast.WindowSpec, error) {
+	// Expect opening parenthesis
+	if p.currentToken.Type != "(" {
+		return nil, p.expectedError("(")
+	}
+	p.advance() // Consume (
+
+	windowSpec := &ast.WindowSpec{}
+
+	// Parse PARTITION BY clause
+	if p.currentToken.Type == "PARTITION" {
+		p.advance() // Consume PARTITION
+		if p.currentToken.Type != "BY" {
+			return nil, p.expectedError("BY after PARTITION")
+		}
+		p.advance() // Consume BY
+
+		// Parse partition expressions
+		for {
+			expr, err := p.parseExpression()
+			if err != nil {
+				return nil, err
+			}
+			windowSpec.PartitionBy = append(windowSpec.PartitionBy, expr)
+
+			if p.currentToken.Type == "," {
+				p.advance() // Consume comma
+			} else {
+				break
+			}
+		}
+	}
+
+	// Parse ORDER BY clause
+	if p.currentToken.Type == "ORDER" {
+		p.advance() // Consume ORDER
+		if p.currentToken.Type != "BY" {
+			return nil, p.expectedError("BY after ORDER")
+		}
+		p.advance() // Consume BY
+
+		// Parse order expressions
+		for {
+			expr, err := p.parseExpression()
+			if err != nil {
+				return nil, err
+			}
+
+			// Check for ASC/DESC after the expression
+			if p.currentToken.Type == "ASC" || p.currentToken.Type == "DESC" {
+				p.advance() // Consume ASC/DESC (we don't store it in this simple implementation)
+			}
+
+			windowSpec.OrderBy = append(windowSpec.OrderBy, expr)
+
+			if p.currentToken.Type == "," {
+				p.advance() // Consume comma
+			} else {
+				break
+			}
+		}
+	}
+
+	// Parse frame clause (ROWS/RANGE with bounds)
+	if p.currentToken.Type == "ROWS" || p.currentToken.Type == "RANGE" {
+		frameType := p.currentToken.Literal
+		p.advance() // Consume ROWS/RANGE
+
+		frameClause, err := p.parseWindowFrame(frameType)
+		if err != nil {
+			return nil, err
+		}
+		windowSpec.FrameClause = frameClause
+	}
+
+	// Expect closing parenthesis
+	if p.currentToken.Type != ")" {
+		return nil, p.expectedError(")")
+	}
+	p.advance() // Consume )
+
+	return windowSpec, nil
+}
+
+// parseWindowFrame parses a window frame clause
+func (p *Parser) parseWindowFrame(frameType string) (*ast.WindowFrame, error) {
+	frame := &ast.WindowFrame{
+		Type: frameType,
+	}
+
+	// Parse frame bounds
+	if p.currentToken.Type == "BETWEEN" {
+		p.advance() // Consume BETWEEN
+
+		// Parse start bound
+		startBound, err := p.parseFrameBound()
+		if err != nil {
+			return nil, err
+		}
+		frame.Start = *startBound
+
+		// Expect AND
+		if p.currentToken.Type != "AND" {
+			return nil, p.expectedError("AND")
+		}
+		p.advance() // Consume AND
+
+		// Parse end bound
+		endBound, err := p.parseFrameBound()
+		if err != nil {
+			return nil, err
+		}
+		frame.End = endBound
+	} else {
+		// Single bound (implies CURRENT ROW as end)
+		startBound, err := p.parseFrameBound()
+		if err != nil {
+			return nil, err
+		}
+		frame.Start = *startBound
+		// End is nil for single bound
+	}
+
+	return frame, nil
+}
+
+// parseFrameBound parses a window frame bound
+func (p *Parser) parseFrameBound() (*ast.WindowFrameBound, error) {
+	bound := &ast.WindowFrameBound{}
+
+	if p.currentToken.Type == "UNBOUNDED" {
+		p.advance() // Consume UNBOUNDED
+		if p.currentToken.Type == "PRECEDING" {
+			bound.Type = "UNBOUNDED PRECEDING"
+			p.advance() // Consume PRECEDING
+		} else if p.currentToken.Type == "FOLLOWING" {
+			bound.Type = "UNBOUNDED FOLLOWING"
+			p.advance() // Consume FOLLOWING
+		} else {
+			return nil, p.expectedError("PRECEDING or FOLLOWING after UNBOUNDED")
+		}
+	} else if p.currentToken.Type == "CURRENT" {
+		p.advance() // Consume CURRENT
+		if p.currentToken.Type != "ROW" {
+			return nil, p.expectedError("ROW after CURRENT")
+		}
+		bound.Type = "CURRENT ROW"
+		p.advance() // Consume ROW
+	} else {
+		// Numeric bound
+		expr, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+		bound.Value = expr
+
+		if p.currentToken.Type == "PRECEDING" {
+			bound.Type = "PRECEDING"
+			p.advance() // Consume PRECEDING
+		} else if p.currentToken.Type == "FOLLOWING" {
+			bound.Type = "FOLLOWING"
+			p.advance() // Consume FOLLOWING
+		} else {
+			return nil, p.expectedError("PRECEDING or FOLLOWING after numeric value")
+		}
+	}
+
+	return bound, nil
+}
+
 // parseColumnDef parses a column definition
 func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 	name := p.parseIdent()
@@ -278,28 +542,8 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		if p.currentToken.Type == "*" {
 			columns = append(columns, &ast.Identifier{Name: "*"})
 			p.advance()
-		} else if p.currentToken.Type == "IDENT" {
-			// Parse column identifier
-			ident := &ast.Identifier{Name: p.currentToken.Literal}
-			p.advance()
-
-			// Check for qualified column (table.column)
-			if p.currentToken.Type == "." {
-				p.advance() // Consume .
-				if p.currentToken.Type != "IDENT" {
-					return nil, p.expectedError("identifier after .")
-				}
-				// Create a qualified identifier
-				ident = &ast.Identifier{
-					Table: ident.Name,
-					Name:  p.currentToken.Literal,
-				}
-				p.advance()
-			}
-
-			columns = append(columns, ident)
 		} else {
-			// Parse other expression types
+			// Use parseExpression to handle all types including function calls
 			expr, err := p.parseExpression()
 			if err != nil {
 				return nil, err

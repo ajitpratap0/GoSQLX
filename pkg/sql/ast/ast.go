@@ -1,12 +1,18 @@
 // Package ast provides Abstract Syntax Tree (AST) node definitions for SQL statements.
 // It includes comprehensive support for DDL and DML operations, Common Table Expressions (CTEs),
-// and set operations, with object pooling for performance optimization.
+// set operations, and window functions, with object pooling for performance optimization.
 //
 // Phase 2 Features (v1.2.0+):
 //   - WithClause and CommonTableExpr for CTE support
 //   - SetOperation for UNION, EXCEPT, INTERSECT operations
 //   - Recursive CTE support with proper AST representation
 //   - Integration with all statement types
+//
+// Phase 2.5 Features (v1.3.0+):
+//   - WindowSpec for window function specifications
+//   - WindowFrame and WindowFrameBound for frame clauses
+//   - Enhanced FunctionCall with Over field for window functions
+//   - Complete window function AST integration
 package ast
 
 import "fmt"

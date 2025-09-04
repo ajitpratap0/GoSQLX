@@ -1,5 +1,12 @@
 // Package ast provides Abstract Syntax Tree (AST) node definitions for SQL statements.
-// It includes support for DDL and DML operations with object pooling for performance optimization.
+// It includes comprehensive support for DDL and DML operations, Common Table Expressions (CTEs),
+// and set operations, with object pooling for performance optimization.
+//
+// Phase 2 Features (v1.2.0+):
+//   - WithClause and CommonTableExpr for CTE support
+//   - SetOperation for UNION, EXCEPT, INTERSECT operations
+//   - Recursive CTE support with proper AST representation
+//   - Integration with all statement types
 package ast
 
 import "fmt"
@@ -22,11 +29,9 @@ type Expression interface {
 	expressionNode()
 }
 
-// WithClause represents a WITH clause in a SQL statement
-// TODO: PHASE 2 - Complete CTE implementation
-// Current Status: AST structures defined, parser integration incomplete
-// Missing: parseWithClause, parseCommonTableExpr, parseStatementWithSetOps functions
-// Priority: High (Phase 2 core feature)
+// WithClause represents a WITH clause in a SQL statement.
+// It supports both simple and recursive Common Table Expressions (CTEs).
+// Phase 2 Complete: Full parser integration with all statement types.
 type WithClause struct {
 	Recursive bool
 	CTEs      []*CommonTableExpr
@@ -42,10 +47,9 @@ func (w WithClause) Children() []Node {
 	return children
 }
 
-// CommonTableExpr represents a single CTE in a WITH clause
-// TODO: PHASE 2 - Parser integration needed for CTE functionality
-// Current: AST structure complete, parser functions missing
-// Required: Integration with SELECT/INSERT/UPDATE/DELETE statement parsing
+// CommonTableExpr represents a single Common Table Expression in a WITH clause.
+// It supports optional column specifications and any statement type as the CTE query.
+// Phase 2 Complete: Full parser support with column specifications.
 type CommonTableExpr struct {
 	Name         string
 	Columns      []string
@@ -59,7 +63,9 @@ func (c CommonTableExpr) Children() []Node {
 	return []Node{c.Statement}
 }
 
-// SetOperation represents UNION, EXCEPT, INTERSECT operations
+// SetOperation represents set operations (UNION, EXCEPT, INTERSECT) between two statements.
+// It supports the ALL modifier (e.g., UNION ALL) and proper left-associative parsing.
+// Phase 2 Complete: Full parser support with left-associative precedence.
 type SetOperation struct {
 	Left     Statement
 	Operator string // UNION, EXCEPT, INTERSECT

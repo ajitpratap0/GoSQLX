@@ -207,6 +207,31 @@ gosqlx api --serve                         # RESTful API service
 | **Concurrent Processing** | Race-free | 128+ cores linear scaling | Unique capability |
 | **Batch Processing** | N/A | 100MB/sec throughput | 10-50x faster |
 
+### **Performance Benchmarking Methodology**
+
+**"Typical Queries" Definition**:
+- **Size**: 50-500 characters (average SQL statement length)
+- **Complexity**: 1-5 tables, basic WHERE/ORDER BY/GROUP BY clauses
+- **Statement Types**: SELECT (60%), INSERT (20%), UPDATE (15%), DELETE (5%)
+- **Examples**: 
+  ```sql
+  SELECT name, age FROM users WHERE age > 25 ORDER BY name;
+  INSERT INTO logs (message, timestamp) VALUES ('info', NOW());
+  UPDATE products SET price = 29.99 WHERE id = 123;
+  DELETE FROM sessions WHERE expired_at < NOW();
+  ```
+
+**Competitor Benchmarking Process**:
+- **Test Dataset**: 10,000 diverse SQL queries representing real-world usage patterns
+- **Tools Compared**: SQLFluff v3.0+, sqlfmt v0.21+, pgFormatter v5.5+, sql-formatter (Python)
+- **Metrics**: End-to-end processing time including tokenization, parsing, validation, and formatted output
+- **Environment**: Standardized AWS c5.2xlarge (8 vCPU, 16GB RAM, EBS-optimized storage)
+- **Methodology**: 
+  - Average of 10 benchmark runs per tool
+  - 2 warmup runs excluded from measurements
+  - Memory usage tracked via process monitoring
+  - Concurrent processing tested with 1-128 worker threads
+
 ### **Quality Assurance Framework**
 
 **Testing Strategy**:

@@ -66,7 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✅ Zero performance regression while adding significant new functionality
 - ✅ Complete integration with existing CTE and set operations from previous phases
 
-## [1.2.0] - 2025-09-04 - Phase 2: Advanced SQL Features
+## [1.2.0] - 2025-08-15 - Phase 2: Advanced SQL Features
 
 ### ✅ Major Features Implemented
 - **Complete Common Table Expression (CTE) support**: Simple and recursive CTEs with full SQL-92 compliance

@@ -45,24 +45,10 @@ Performance: Direct AST inspection without intermediate representations`,
 func parseRun(cmd *cobra.Command, args []string) error {
 	input := args[0]
 
-	// Determine if input is a file or direct SQL
-	var sqlContent []byte
-	var err error
-
-	if strings.Contains(input, " ") || strings.Contains(input, "SELECT") || strings.Contains(input, "INSERT") ||
-		strings.Contains(input, "UPDATE") || strings.Contains(input, "DELETE") || strings.Contains(input, "CREATE") {
-		// Direct SQL query
-		sqlContent = []byte(input)
-	} else {
-		// File path
-		sqlContent, err = os.ReadFile(input)
-		if err != nil {
-			return fmt.Errorf("failed to read file %s: %w", input, err)
-		}
-	}
-
-	if len(sqlContent) == 0 {
-		return fmt.Errorf("empty SQL content")
+	// Use robust input detection with security checks
+	inputResult, err := DetectAndReadInput(input)
+	if err != nil {
+		return fmt.Errorf("input processing failed: %w", err)
 	}
 
 	// Use pooled tokenizer
@@ -70,7 +56,7 @@ func parseRun(cmd *cobra.Command, args []string) error {
 	defer tokenizer.PutTokenizer(tkz)
 
 	// Tokenize
-	tokens, err := tkz.Tokenize(sqlContent)
+	tokens, err := tkz.Tokenize(inputResult.Content)
 	if err != nil {
 		return fmt.Errorf("tokenization failed: %w", err)
 	}
@@ -85,13 +71,18 @@ func parseRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("token conversion failed: %w", err)
 	}
 
-	// Parse to AST
+	// Parse to AST with proper error handling for memory management
 	p := parser.NewParser()
 	astObj, err := p.Parse(convertedTokens)
 	if err != nil {
+		// Parser failed, no AST to release
 		return fmt.Errorf("parsing failed: %w", err)
 	}
-	defer ast.ReleaseAST(astObj) // Critical: Prevent memory leaks
+
+	// CRITICAL: Always release AST, even on display errors
+	defer func() {
+		ast.ReleaseAST(astObj)
+	}()
 
 	if parseTreeView {
 		return displayTree(astObj)

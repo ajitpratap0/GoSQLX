@@ -51,29 +51,18 @@ This is a basic implementation for CLI foundation.`,
 func analyzeRun(cmd *cobra.Command, args []string) error {
 	input := args[0]
 
-	// Determine if input is a file or direct SQL using robust detection
-	var sqlContent []byte
-	var err error
-
-	// First check if input is a valid file path
-	if fileData, readErr := os.ReadFile(input); readErr == nil {
-		// Successfully read as file
-		sqlContent = fileData
-	} else {
-		// Treat as direct SQL query if file read fails
-		sqlContent = []byte(input)
-	}
-
-	if len(sqlContent) == 0 {
-		return fmt.Errorf("empty SQL content")
+	// Use robust input detection with security checks
+	inputResult, err := DetectAndReadInput(input)
+	if err != nil {
+		return fmt.Errorf("input processing failed: %w", err)
 	}
 
 	// Use pooled tokenizer
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 
-	// Tokenize and parse
-	tokens, err := tkz.Tokenize(sqlContent)
+	// Tokenize
+	tokens, err := tkz.Tokenize(inputResult.Content)
 	if err != nil {
 		return fmt.Errorf("tokenization failed: %w", err)
 	}
@@ -84,17 +73,24 @@ func analyzeRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("token conversion failed: %w", err)
 	}
 
+	// Parse with proper error handling for memory management
 	p := parser.NewParser()
 	astObj, err := p.Parse(convertedTokens)
 	if err != nil {
+		// Parser failed, no AST to release
 		return fmt.Errorf("parsing failed: %w", err)
 	}
-	defer ast.ReleaseAST(astObj) // Critical: Prevent memory leaks
+
+	// CRITICAL: Always release AST, even on analysis errors
+	defer func() {
+		ast.ReleaseAST(astObj)
+	}()
 
 	// Use AST-based analyzer for deep analysis
 	analyzer := NewSQLAnalyzer()
 	report, err := analyzer.Analyze(astObj)
 	if err != nil {
+		// AST will be released by defer above
 		return fmt.Errorf("analysis failed: %w", err)
 	}
 

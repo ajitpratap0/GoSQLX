@@ -105,6 +105,11 @@ func formatRun(cmd *cobra.Command, args []string) error {
 }
 
 func formatFile(filename string) (string, bool, error) {
+	// Use security validation first
+	if err := ValidateFileAccess(filename); err != nil {
+		return "", false, fmt.Errorf("file access validation failed: %w", err)
+	}
+
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		return "", false, fmt.Errorf("failed to read file: %w", err)
@@ -155,15 +160,18 @@ func formatSQL(sql string, opts FormatOptions) (string, error) {
 		return "", fmt.Errorf("token conversion failed: %w", err)
 	}
 
-	// Parse to AST using pooled AST object
-	astObj := ast.NewAST()
-	defer ast.ReleaseAST(astObj)
-
+	// Parse to AST with proper error handling for memory management
 	p := parser.NewParser()
 	parsedAST, err := p.Parse(convertedTokens)
 	if err != nil {
+		// Parser failed, no AST to release
 		return "", fmt.Errorf("parsing failed: %w", err)
 	}
+
+	// CRITICAL: Always release AST, even on formatting errors
+	defer func() {
+		ast.ReleaseAST(parsedAST)
+	}()
 
 	// Configure formatter options
 	indentStr := strings.Repeat(" ", opts.IndentSize)

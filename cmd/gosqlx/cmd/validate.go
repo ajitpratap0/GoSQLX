@@ -105,6 +105,11 @@ func validateRun(cmd *cobra.Command, args []string) error {
 }
 
 func validateFile(filename string) (bool, int64, error) {
+	// Use security validation first
+	if err := ValidateFileAccess(filename); err != nil {
+		return false, 0, fmt.Errorf("file access validation failed: %w", err)
+	}
+
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		return false, 0, fmt.Errorf("failed to read file: %w", err)
@@ -134,13 +139,18 @@ func validateFile(filename string) (bool, int64, error) {
 		return false, int64(len(data)), fmt.Errorf("token conversion failed: %w", err)
 	}
 
-	// Parse to validate syntax
+	// Parse to validate syntax with proper error handling for memory management
 	p := parser.NewParser()
 	astObj, err := p.Parse(convertedTokens)
 	if err != nil {
+		// Parser failed, no AST to release
 		return false, int64(len(data)), fmt.Errorf("parsing failed: %w", err)
 	}
-	defer ast.ReleaseAST(astObj) // Critical: Prevent memory leaks
+
+	// CRITICAL: Always release AST
+	defer func() {
+		ast.ReleaseAST(astObj)
+	}()
 
 	return true, int64(len(data)), nil
 }

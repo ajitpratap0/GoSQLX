@@ -153,56 +153,129 @@ const (
 	TokenTypeOuterJoin TokenType = 275
 )
 
+// tokenStringMap provides efficient O(1) lookup for token type to string conversion
+var tokenStringMap = map[TokenType]string{
+	// Special tokens
+	TokenTypeEOF:     "EOF",
+	TokenTypeUnknown: "UNKNOWN",
+
+	// Basic token types
+	TokenTypeWord:        "WORD",
+	TokenTypeNumber:      "NUMBER",
+	TokenTypeChar:        "CHAR",
+	TokenTypeWhitespace:  "WHITESPACE",
+	TokenTypeIdentifier:  "IDENTIFIER",
+	TokenTypePlaceholder: "PLACEHOLDER",
+
+	// String literals
+	TokenTypeString:                   "STRING",
+	TokenTypeSingleQuotedString:       "STRING",
+	TokenTypeDoubleQuotedString:       "DOUBLE_QUOTED_STRING",
+	TokenTypeTripleSingleQuotedString: "TRIPLE_SINGLE_QUOTED_STRING",
+	TokenTypeTripleDoubleQuotedString: "TRIPLE_DOUBLE_QUOTED_STRING",
+	TokenTypeDollarQuotedString:       "DOLLAR_QUOTED_STRING",
+	TokenTypeByteStringLiteral:        "BYTE_STRING_LITERAL",
+	TokenTypeNationalStringLiteral:    "NATIONAL_STRING_LITERAL",
+	TokenTypeEscapedStringLiteral:     "ESCAPED_STRING_LITERAL",
+	TokenTypeUnicodeStringLiteral:     "UNICODE_STRING_LITERAL",
+	TokenTypeHexStringLiteral:         "HEX_STRING_LITERAL",
+
+	// Operators and punctuation
+	TokenTypeOperator:        "OPERATOR",
+	TokenTypeComma:           "COMMA",
+	TokenTypeEq:              "EQ",
+	TokenTypeDoubleEq:        "DOUBLE_EQ",
+	TokenTypeNeq:             "NEQ",
+	TokenTypeLt:              "LT",
+	TokenTypeGt:              "GT",
+	TokenTypeLtEq:            "LT_EQ",
+	TokenTypeGtEq:            "GT_EQ",
+	TokenTypeSpaceship:       "SPACESHIP",
+	TokenTypePlus:            "PLUS",
+	TokenTypeMinus:           "MINUS",
+	TokenTypeMul:             "MUL",
+	TokenTypeDiv:             "DIV",
+	TokenTypeDuckIntDiv:      "DUCK_INT_DIV",
+	TokenTypeMod:             "MOD",
+	TokenTypeStringConcat:    "STRING_CONCAT",
+	TokenTypeLParen:          "LPAREN",
+	TokenTypeRParen:          "RPAREN",
+	TokenTypePeriod:          "PERIOD",
+	TokenTypeColon:           "COLON",
+	TokenTypeDoubleColon:     "DOUBLE_COLON",
+	TokenTypeAssignment:      "ASSIGNMENT",
+	TokenTypeSemicolon:       "SEMICOLON",
+	TokenTypeBackslash:       "BACKSLASH",
+	TokenTypeLBracket:        "LBRACKET",
+	TokenTypeRBracket:        "RBRACKET",
+	TokenTypeAmpersand:       "AMPERSAND",
+	TokenTypePipe:            "PIPE",
+	TokenTypeCaret:           "CARET",
+	TokenTypeLBrace:          "LBRACE",
+	TokenTypeRBrace:          "RBRACE",
+	TokenTypeRArrow:          "R_ARROW",
+	TokenTypeSharp:           "SHARP",
+	TokenTypeTilde:           "TILDE",
+	TokenTypeExclamationMark: "EXCLAMATION_MARK",
+	TokenTypeAtSign:          "AT_SIGN",
+	TokenTypeQuestion:        "QUESTION",
+
+	// SQL Keywords
+	TokenTypeKeyword: "KEYWORD",
+	TokenTypeSelect:  "SELECT",
+	TokenTypeFrom:    "FROM",
+	TokenTypeWhere:   "WHERE",
+	TokenTypeJoin:    "JOIN",
+	TokenTypeInner:   "INNER",
+	TokenTypeLeft:    "LEFT",
+	TokenTypeRight:   "RIGHT",
+	TokenTypeOuter:   "OUTER",
+	TokenTypeOn:      "ON",
+	TokenTypeAs:      "AS",
+	TokenTypeAnd:     "AND",
+	TokenTypeOr:      "OR",
+	TokenTypeNot:     "NOT",
+	TokenTypeIn:      "IN",
+	TokenTypeLike:    "LIKE",
+	TokenTypeBetween: "BETWEEN",
+	TokenTypeIs:      "IS",
+	TokenTypeNull:    "NULL",
+	TokenTypeTrue:    "TRUE",
+	TokenTypeFalse:   "FALSE",
+	TokenTypeCase:    "CASE",
+	TokenTypeWhen:    "WHEN",
+	TokenTypeThen:    "THEN",
+	TokenTypeElse:    "ELSE",
+	TokenTypeEnd:     "END",
+	TokenTypeGroup:   "GROUP",
+	TokenTypeBy:      "BY",
+	TokenTypeHaving:  "HAVING",
+	TokenTypeOrder:   "ORDER",
+	TokenTypeAsc:     "ASC",
+	TokenTypeDesc:    "DESC",
+	TokenTypeLimit:   "LIMIT",
+	TokenTypeOffset:  "OFFSET",
+
+	// Aggregate functions
+	TokenTypeCount: "COUNT",
+	TokenTypeSum:   "SUM",
+	TokenTypeAvg:   "AVG",
+	TokenTypeMin:   "MIN",
+	TokenTypeMax:   "MAX",
+
+	// Compound keywords
+	TokenTypeGroupBy:   "GROUP_BY",
+	TokenTypeOrderBy:   "ORDER_BY",
+	TokenTypeLeftJoin:  "LEFT_JOIN",
+	TokenTypeRightJoin: "RIGHT_JOIN",
+	TokenTypeInnerJoin: "INNER_JOIN",
+	TokenTypeOuterJoin: "OUTER_JOIN",
+}
+
 // String returns a string representation of the token type
 func (t TokenType) String() string {
-	switch t {
-	case TokenTypeEOF:
-		return "EOF"
-	case TokenTypeUnknown:
-		return "UNKNOWN"
-	case TokenTypeWord:
-		return "WORD"
-	case TokenTypeNumber:
-		return "NUMBER"
-	case TokenTypeChar:
-		return "CHAR"
-	case TokenTypeWhitespace:
-		return "WHITESPACE"
-	case TokenTypeIdentifier:
-		return "IDENTIFIER"
-	case TokenTypePlaceholder:
-		return "PLACEHOLDER"
-	case TokenTypeString, TokenTypeSingleQuotedString:
-		return "STRING"
-	case TokenTypeDoubleQuotedString:
-		return "DOUBLE_QUOTED_STRING"
-	case TokenTypeOperator:
-		return "OPERATOR"
-	case TokenTypeComma:
-		return "COMMA"
-	case TokenTypeEq:
-		return "EQ"
-	case TokenTypeLParen:
-		return "LPAREN"
-	case TokenTypeRParen:
-		return "RPAREN"
-	case TokenTypePeriod:
-		return "PERIOD"
-	case TokenTypeSemicolon:
-		return "SEMICOLON"
-	case TokenTypeKeyword:
-		return "KEYWORD"
-	case TokenTypeSelect:
-		return "SELECT"
-	case TokenTypeFrom:
-		return "FROM"
-	case TokenTypeWhere:
-		return "WHERE"
-	case TokenTypeAnd:
-		return "AND"
-	case TokenTypeOr:
-		return "OR"
-	default:
-		return "TOKEN"
+	if str, exists := tokenStringMap[t]; exists {
+		return str
 	}
+	return "TOKEN"
 }

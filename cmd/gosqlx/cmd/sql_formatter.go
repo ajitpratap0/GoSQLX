@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -560,7 +561,10 @@ func (f *SQLFormatter) formatExpressionList(exprs []ast.Expression, separator st
 		if i > 0 {
 			f.builder.WriteString(separator)
 		}
-		f.formatExpression(expr)
+		if err := f.formatExpression(expr); err != nil {
+			// Log error but continue formatting to avoid breaking output
+			fmt.Fprintf(os.Stderr, "Warning: failed to format expression: %v\n", err)
+		}
 	}
 }
 

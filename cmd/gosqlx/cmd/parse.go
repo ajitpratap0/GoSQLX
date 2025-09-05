@@ -130,7 +130,11 @@ func displayTokens(tokens []models.TokenWithSpan) error {
 		})
 	case "yaml":
 		encoder := yaml.NewEncoder(os.Stdout)
-		defer encoder.Close()
+		defer func() {
+			if err := encoder.Close(); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to close YAML encoder: %v\n", err)
+			}
+		}()
 		return encoder.Encode(map[string]interface{}{
 			"tokens": tokenList,
 			"count":  len(tokenList),
@@ -182,7 +186,11 @@ func displayAST(astObj *ast.AST) error {
 		return encoder.Encode(display)
 	case "yaml":
 		encoder := yaml.NewEncoder(os.Stdout)
-		defer encoder.Close()
+		defer func() {
+			if err := encoder.Close(); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to close YAML encoder: %v\n", err)
+			}
+		}()
 		return encoder.Encode(display)
 	default:
 		fmt.Printf("AST Structure:\n")
@@ -291,19 +299,19 @@ func displayTree(astObj *ast.AST) error {
 		// Add basic tree structure for different statement types
 		switch s := stmt.(type) {
 		case *ast.SelectStatement:
-			if s.Columns != nil && len(s.Columns) > 0 {
+			if len(s.Columns) > 0 {
 				fmt.Printf("%s├── Columns (%d items)\n", childPrefix, len(s.Columns))
 			}
-			if s.From != nil && len(s.From) > 0 {
+			if len(s.From) > 0 {
 				fmt.Printf("%s├── From (%d tables)\n", childPrefix, len(s.From))
 			}
 			if s.Where != nil {
 				fmt.Printf("%s├── Where\n", childPrefix)
 			}
-			if s.GroupBy != nil && len(s.GroupBy) > 0 {
+			if len(s.GroupBy) > 0 {
 				fmt.Printf("%s├── GroupBy\n", childPrefix)
 			}
-			if s.OrderBy != nil && len(s.OrderBy) > 0 {
+			if len(s.OrderBy) > 0 {
 				fmt.Printf("%s├── OrderBy\n", childPrefix)
 			}
 			if s.Limit != nil {

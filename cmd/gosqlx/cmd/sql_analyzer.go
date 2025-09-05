@@ -429,9 +429,10 @@ func (a *SQLAnalyzer) generateRecommendations() []string {
 	securityIssues := 0
 	performanceIssues := 0
 	for _, issue := range a.Issues {
-		if issue.Category == IssueCategorySecurity {
+		switch issue.Category {
+		case IssueCategorySecurity:
 			securityIssues++
-		} else if issue.Category == IssueCategoryPerformance {
+		case IssueCategoryPerformance:
 			performanceIssues++
 		}
 	}

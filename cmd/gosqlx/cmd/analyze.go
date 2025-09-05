@@ -123,7 +123,11 @@ func displayAnalysis(analysis *AnalysisReport) error {
 		return encoder.Encode(analysis)
 	case "yaml":
 		encoder := yaml.NewEncoder(os.Stdout)
-		defer encoder.Close()
+		defer func() {
+			if err := encoder.Close(); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to close YAML encoder: %v\n", err)
+			}
+		}()
 		return encoder.Encode(analysis)
 	default:
 		// Table format

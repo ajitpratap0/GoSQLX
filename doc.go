@@ -30,13 +30,15 @@
 // CLI Tool (v1.4.0):
 //
 // Install the CLI:
-//   go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest
+//
+//	go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest
 //
 // CLI Commands:
-//   gosqlx validate "SELECT * FROM users"     // Ultra-fast validation
-//   gosqlx format -i query.sql               // Intelligent formatting  
-//   gosqlx analyze complex_query.sql         // Advanced analysis
-//   gosqlx parse -f json query.sql           // AST generation
+//
+//	gosqlx validate "SELECT * FROM users"     // Ultra-fast validation
+//	gosqlx format -i query.sql               // Intelligent formatting
+//	gosqlx analyze complex_query.sql         // Advanced analysis
+//	gosqlx parse -f json query.sql           // AST generation
 //
 // Basic Usage:
 //

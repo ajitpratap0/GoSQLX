@@ -133,6 +133,7 @@ func BenchmarkTokenizerThroughputScaling(b *testing.B) {
 
 			var wg sync.WaitGroup
 			opsPerGoroutine := b.N / concurrency
+			errCh := make(chan error, concurrency)
 
 			for i := 0; i < concurrency; i++ {
 				wg.Add(1)
@@ -142,7 +143,8 @@ func BenchmarkTokenizerThroughputScaling(b *testing.B) {
 						tokenizer := GetTokenizer()
 						_, err := tokenizer.Tokenize(testSQL)
 						if err != nil {
-							panic(err)
+							errCh <- err
+							return
 						}
 						PutTokenizer(tokenizer)
 						totalOps++
@@ -151,6 +153,12 @@ func BenchmarkTokenizerThroughputScaling(b *testing.B) {
 			}
 
 			wg.Wait()
+			close(errCh)
+
+			// Check for errors after goroutines complete
+			if err := <-errCh; err != nil {
+				panic(err)
+			}
 			duration := time.Since(start)
 
 			// Calculate throughput metrics
@@ -214,7 +222,7 @@ func BenchmarkTokenizerPoolEfficiency(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			_, err := tokenizer.Tokenize(testSQL)
 			if err != nil {
-				b.Fatal(err)
+				panic(err)
 			}
 		}
 	})
@@ -227,7 +235,7 @@ func BenchmarkTokenizerPoolEfficiency(b *testing.B) {
 			tokenizer := GetTokenizer()
 			_, err := tokenizer.Tokenize(testSQL)
 			if err != nil {
-				b.Fatal(err)
+				panic(err)
 			}
 			PutTokenizer(tokenizer)
 		}

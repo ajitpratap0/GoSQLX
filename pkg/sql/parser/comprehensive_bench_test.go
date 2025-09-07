@@ -160,7 +160,7 @@ func benchmarkParserWithTokens(b *testing.B, tokens []token.Token) {
 	for i := 0; i < b.N; i++ {
 		tree, err := parser.Parse(tokens)
 		if err != nil {
-			b.Fatal(err)
+			panic(err)
 		}
 		if tree == nil {
 			b.Fatal("expected non-nil AST")
@@ -185,7 +185,7 @@ func BenchmarkParserConcurrency(b *testing.B) {
 				for pb.Next() {
 					tree, err := parser.Parse(tokens)
 					if err != nil {
-						b.Fatal(err)
+						panic(err)
 					}
 					if tree == nil {
 						b.Fatal("expected non-nil AST")
@@ -214,7 +214,7 @@ func BenchmarkParserMemoryScaling(b *testing.B) {
 			for pb.Next() {
 				tree, err := parser.Parse(complexTokens)
 				if err != nil {
-					b.Fatal(err)
+					panic(err)
 				}
 				if tree == nil {
 					b.Fatal("expected non-nil AST")
@@ -415,7 +415,7 @@ func BenchmarkParserMixedWorkload(b *testing.B) {
 			tokens := statements[i%len(statements)]
 			tree, err := parser.Parse(tokens)
 			if err != nil {
-				b.Fatal(err)
+				panic(err)
 			}
 			if tree == nil {
 				b.Fatal("expected non-nil AST")
@@ -436,7 +436,7 @@ func BenchmarkParserMixedWorkload(b *testing.B) {
 				tokens := statements[i%len(statements)]
 				tree, err := parser.Parse(tokens)
 				if err != nil {
-					b.Fatal(err)
+					panic(err)
 				}
 				if tree == nil {
 					b.Fatal("expected non-nil AST")
@@ -464,7 +464,7 @@ func BenchmarkParserGCPressure(b *testing.B) {
 				parser := NewParser()
 				tree, err := parser.Parse(tokens)
 				if err != nil {
-					b.Fatal(err)
+					panic(err)
 				}
 				if tree == nil {
 					b.Fatal("expected non-nil AST")

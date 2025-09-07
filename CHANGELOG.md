@@ -5,6 +5,52 @@ All notable changes to GoSQLX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2025-09-07 - CLI Release and Code Quality
+
+### ✅ CLI Production Release
+- **Complete CLI Tool Suite**: Production-ready CLI with validate, format, analyze, and parse commands
+- **High-Performance CLI**: 1.38M+ operations/second validation, 2,600+ files/second formatting throughput
+- **Robust Input Detection**: Intelligent file vs SQL detection using `os.Stat()` with security limits (10MB max)
+- **Memory Leak Prevention**: Fixed critical memory leak in format command with proper AST cleanup patterns
+- **Comprehensive Testing**: Added benchmark tests, integration tests, and CLI command tests
+- **Error Handling**: Enhanced error messages with file access validation and context
+
+### ✅ CLI Features
+- **Multi-format Output**: Support for JSON, YAML, table, and tree output formats
+- **Batch Processing**: Directory expansion and glob pattern support for processing multiple SQL files
+- **Security Limits**: File size validation, extension checking, and input sanitization
+- **CI/CD Integration**: Format checking mode with proper exit codes for continuous integration
+- **Performance Benchmarking**: Comprehensive benchmark suite validating CLI performance claims
+
+### 🚀 Performance & Quality  
+- **Token Conversion Performance**: TokenType.String() method optimized with comprehensive hash map (90+ token types)
+- **Code Reduction**: analyze.go reduced from 570 to 218 lines (-62%) through legacy code elimination
+- **Static Analysis**: All go vet, go fmt, and linting issues resolved
+- **Test Reliability**: Benchmark error handling corrected for concurrent test execution
+
+### 🔧 Technical Implementation
+- **TokenType String Mapping**: Complete hash map implementation covering all 90+ token types vs previous 24 cases
+- **Legacy Type System Removal**: Eliminated `AnalysisResult` type and `convertAnalysisReport()` function overhead
+- **Modern CLI Architecture**: Unified analysis system using only modern `AnalysisReport` types
+- **Benchmark Corrections**: Fixed goroutine error handling in scalability_bench_test.go and comprehensive_bench_test.go
+
+### 📚 Documentation Updates
+- **FIXES_APPLIED.md**: Comprehensive documentation of all code quality improvements applied
+- **Session tracking**: Detailed before/after comparisons and impact metrics for all optimizations
+- **CLI usage patterns**: Updated examples reflecting enhanced command functionality
+
+### 🔄 Backward Compatibility
+- **100% functional compatibility**: All CLI commands maintain identical user-facing behavior  
+- **API preservation**: No breaking changes to public interfaces or command-line arguments
+- **Performance maintained**: All existing functionality performs at same or better speed
+
+### Goals Achieved
+- ✅ CLI command modernization and optimization
+- ✅ Significant code reduction through legacy elimination (-350+ lines)  
+- ✅ Performance optimization of core token conversion operations
+- ✅ Complete static analysis compliance (go vet, go fmt clean)
+- ✅ Enhanced test reliability and benchmark correctness
+
 ## [1.3.0] - 2025-09-04 - Phase 2.5: Window Functions
 
 ### ✅ Major Features Implemented
@@ -404,7 +450,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Release Date | Status | Key Features |
 |---------|--------------|--------|--------------|
-| 1.3.0 | 2025-09-04 | Current | Window functions, ~80-85% SQL-99 compliance |
+| 1.4.0 | 2025-09-07 | Current | Production CLI, high-performance commands, memory leak fixes |
+| 1.3.0 | 2025-09-04 | Previous | Window functions, ~80-85% SQL-99 compliance |
 | 1.2.0 | 2025-09-04 | Previous | CTEs, set operations, ~70% SQL-92 compliance |
 | 1.1.0 | 2025-01-03 | Previous | Complete JOIN support, enhanced error handling |
 | 1.0.0 | 2024-12-01 | Stable | Production ready, +47% performance |
@@ -432,7 +479,8 @@ For questions about upgrading or changelog entries:
 - Open an issue: https://github.com/ajitpratap0/GoSQLX/issues
 - Join discussions: https://github.com/ajitpratap0/GoSQLX/discussions
 
-[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.0.2...HEAD
+[1.4.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.3.0...v1.4.0
+[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.4.0...HEAD
 [1.0.2]: https://github.com/ajitpratap0/GoSQLX/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/ajitpratap0/GoSQLX/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/ajitpratap0/GoSQLX/compare/v0.9.0...v1.0.0

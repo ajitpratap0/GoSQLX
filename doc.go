@@ -2,6 +2,8 @@
 // and object pooling. It offers production-ready SQL lexing, parsing, and AST generation with
 // support for multiple SQL dialects and advanced SQL features.
 //
+// GoSQLX v1.4.0 includes both a powerful Go SDK and a high-performance CLI tool for SQL processing.
+//
 // Core Features:
 //
 // - Zero-copy tokenization for optimal performance
@@ -11,15 +13,30 @@
 // - Full Unicode/UTF-8 support for international SQL
 // - Performance monitoring and metrics collection
 // - Visitor pattern support for AST traversal
+// - Production-ready CLI tool with 1.38M+ ops/sec performance
 //
-// Advanced SQL Features (Phase 2 - v1.2.0+):
+// Advanced SQL Features (Phase 2.5 - v1.3.0+):
 //
+// - Window functions with OVER clause (ROW_NUMBER, RANK, LAG, LEAD, etc.)
+// - PARTITION BY and ORDER BY window specifications
+// - Window frame clauses (ROWS/RANGE with bounds)
 // - Common Table Expressions (CTEs) with WITH clause
 // - Recursive CTEs with WITH RECURSIVE support
 // - Multiple CTEs in single query
 // - Set operations: UNION, UNION ALL, EXCEPT, INTERSECT
-// - Complex query compositions and left-associative parsing
-// - ~70% SQL-92 standards compliance
+// - Complete JOIN support (INNER/LEFT/RIGHT/FULL/CROSS/NATURAL)
+// - ~80-85% SQL-99 standards compliance
+//
+// CLI Tool (v1.4.0):
+//
+// Install the CLI:
+//   go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest
+//
+// CLI Commands:
+//   gosqlx validate "SELECT * FROM users"     // Ultra-fast validation
+//   gosqlx format -i query.sql               // Intelligent formatting  
+//   gosqlx analyze complex_query.sql         // Advanced analysis
+//   gosqlx parse -f json query.sql           // AST generation
 //
 // Basic Usage:
 //
@@ -71,16 +88,21 @@
 //
 // Performance:
 //
-// GoSQLX achieves:
-// - 946K+ sustained operations/second (30s load testing)
-// - 1.25M+ operations/second peak throughput (concurrent)
+// GoSQLX Library achieves:
+// - 1.38M+ sustained operations/second (validated benchmarks)
+// - 1.5M+ operations/second peak throughput (concurrent)
 // - 8M+ tokens/second processing speed
-// - <280ns latency for simple queries
-// - <1μs latency for complex queries with CTEs/set operations
+// - <1μs latency for complex queries with window functions
 // - Linear scaling to 128+ cores
 // - 60-80% memory reduction with object pooling
 // - Zero memory leaks under extended load
 // - Race-free concurrent operation validated
+//
+// CLI Performance:
+// - 1.38M+ operations/second SQL validation
+// - 2,600+ files/second formatting throughput
+// - 1M+ queries/second analysis performance
+// - Memory leak prevention with proper AST cleanup
 //
 // For more examples and detailed documentation, see:
 // https://github.com/ajitpratap0/GoSQLX

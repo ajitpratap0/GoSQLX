@@ -50,7 +50,7 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 - **📊 Zero-Copy**: Direct byte slice operations, **<1μs latency**
 - **🏗️ Production Ready**: Battle-tested with **0 race conditions** detected, **~80-85% SQL-99 compliance**
 
-### 🎯 Performance Highlights (v1.3.0)
+### 🎯 Performance Highlights (v1.4.0)
 
 <div align="center">
 
@@ -77,8 +77,20 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 
 ## 📦 Installation
 
+### Library Installation
 ```bash
 go get github.com/ajitpratap0/GoSQLX
+```
+
+### CLI Installation
+```bash
+# Install the CLI tool
+go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest
+
+# Or build from source
+git clone https://github.com/ajitpratap0/GoSQLX.git
+cd GoSQLX
+go build -o gosqlx ./cmd/gosqlx
 ```
 
 **Requirements:**
@@ -87,7 +99,22 @@ go get github.com/ajitpratap0/GoSQLX
 
 ## 🚀 Quick Start
 
-### Basic Usage
+### CLI Usage
+```bash
+# Validate SQL syntax
+gosqlx validate "SELECT * FROM users WHERE active = true"
+
+# Format SQL files with intelligent indentation
+gosqlx format -i query.sql
+
+# Analyze SQL structure and complexity
+gosqlx analyze "SELECT COUNT(*) FROM orders GROUP BY status"
+
+# Parse SQL to AST representation
+gosqlx parse -f json complex_query.sql
+```
+
+### Library Usage
 
 ```go
 package main
@@ -165,6 +192,7 @@ func AnalyzeSQL(sql string) error {
 
 | Guide | Description |
 |-------|-------------|
+| [**CLI Guide**](docs/CLI_GUIDE.md) | Complete CLI documentation and usage examples |
 | [**API Reference**](docs/API_REFERENCE.md) | Complete API documentation with examples |
 | [**Usage Guide**](docs/USAGE_GUIDE.md) | Detailed patterns and best practices |
 | [**Architecture**](docs/ARCHITECTURE.md) | System design and internal architecture |
@@ -636,7 +664,8 @@ graph LR
 | **v1.0.0** | ✅ Released | 2024-12-01 | Production ready, +47% performance |
 | **v1.1.0** | ✅ Released | 2025-01-03 | Complete JOIN support, error handling |
 | **v1.2.0** | ✅ Released | 2025-08-15 | CTEs, set operations, ~70% SQL-92 compliance |
-| **v1.3.0** | 🎉 Current | 2025-09-04 | Window functions, ~80-85% SQL-99 compliance |
+| **v1.4.0** | 🎉 Current | 2025-09-07 | Production CLI, high-performance commands, memory leak fixes |
+| **v1.3.0** | ✅ Previous | 2025-09-04 | Window functions, ~80-85% SQL-99 compliance |
 | **v2.0.0** | 🔮 Future | Q4 2025 | Dialect specialization, advanced features |
 
 <a href="docs/ROADMAP.md"><img src="https://img.shields.io/badge/📋_Full_Roadmap-purple?style=for-the-badge" alt="Full Roadmap"></a>

@@ -5,14 +5,22 @@ All notable changes to GoSQLX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - Enhanced CLI and Code Quality
+## [1.4.0] - 2025-09-07 - CLI Release and Code Quality
 
-### ✅ CLI Enhancements
-- **Enhanced CLI Command Analysis**: Simplified and modernized analyze command with unified type system
-- **Performance Optimizations**: Token type conversion optimized from O(n) to O(1) using hash maps
-- **Code Quality Improvements**: Eliminated dual type systems and reduced codebase by 350+ lines in analyze command
-- **Test Quality Improvements**: Fixed benchmark error handling patterns for proper goroutine usage
-- **Memory Management**: Enhanced CLI commands with proper resource cleanup and pooling usage
+### ✅ CLI Production Release
+- **Complete CLI Tool Suite**: Production-ready CLI with validate, format, analyze, and parse commands
+- **High-Performance CLI**: 1.38M+ operations/second validation, 2,600+ files/second formatting throughput
+- **Robust Input Detection**: Intelligent file vs SQL detection using `os.Stat()` with security limits (10MB max)
+- **Memory Leak Prevention**: Fixed critical memory leak in format command with proper AST cleanup patterns
+- **Comprehensive Testing**: Added benchmark tests, integration tests, and CLI command tests
+- **Error Handling**: Enhanced error messages with file access validation and context
+
+### ✅ CLI Features
+- **Multi-format Output**: Support for JSON, YAML, table, and tree output formats
+- **Batch Processing**: Directory expansion and glob pattern support for processing multiple SQL files
+- **Security Limits**: File size validation, extension checking, and input sanitization
+- **CI/CD Integration**: Format checking mode with proper exit codes for continuous integration
+- **Performance Benchmarking**: Comprehensive benchmark suite validating CLI performance claims
 
 ### 🚀 Performance & Quality  
 - **Token Conversion Performance**: TokenType.String() method optimized with comprehensive hash map (90+ token types)
@@ -442,7 +450,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Release Date | Status | Key Features |
 |---------|--------------|--------|--------------|
-| 1.3.0 | 2025-09-04 | Current | Window functions, ~80-85% SQL-99 compliance |
+| 1.4.0 | 2025-09-07 | Current | Production CLI, high-performance commands, memory leak fixes |
+| 1.3.0 | 2025-09-04 | Previous | Window functions, ~80-85% SQL-99 compliance |
 | 1.2.0 | 2025-09-04 | Previous | CTEs, set operations, ~70% SQL-92 compliance |
 | 1.1.0 | 2025-01-03 | Previous | Complete JOIN support, enhanced error handling |
 | 1.0.0 | 2024-12-01 | Stable | Production ready, +47% performance |
@@ -470,7 +479,8 @@ For questions about upgrading or changelog entries:
 - Open an issue: https://github.com/ajitpratap0/GoSQLX/issues
 - Join discussions: https://github.com/ajitpratap0/GoSQLX/discussions
 
-[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.0.2...HEAD
+[1.4.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.3.0...v1.4.0
+[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.4.0...HEAD
 [1.0.2]: https://github.com/ajitpratap0/GoSQLX/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/ajitpratap0/GoSQLX/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/ajitpratap0/GoSQLX/compare/v0.9.0...v1.0.0

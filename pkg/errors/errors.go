@@ -1,5 +1,7 @@
 // Package errors provides a structured error system for GoSQLX with error codes,
 // context extraction, and intelligent hints for debugging SQL parsing issues.
+//
+// This package is designed to provide clear, actionable error messages for SQL parsing failures.
 package errors
 
 import (

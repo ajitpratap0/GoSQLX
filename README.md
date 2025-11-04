@@ -22,8 +22,11 @@
 **Production-ready, high-performance SQL parsing SDK for Go**  
 *Zero-copy tokenization • Object pooling • Multi-dialect support • Unicode-first design*
 
-[🚀 Installation](#-installation) • [⚡ Quick Start](#-quick-start) • [📚 Documentation](#-documentation) • [💡 Examples](#-examples) • [📊 Benchmarks](#-performance)
+### 🚀 **New to GoSQLX? [Get Started in 5 Minutes →](docs/GETTING_STARTED.md)**
 
+[📖 Installation](#-installation) • [⚡ Quick Start](#-quick-start) • [📚 Documentation](#-documentation) • [💡 Examples](#-examples) • [📊 Benchmarks](#-performance)
+
+<a href="https://github.com/ajitpratap0/GoSQLX/blob/main/docs/GETTING_STARTED.md"><img src="https://img.shields.io/badge/🚀_Getting_Started-00ADD8?style=for-the-badge" alt="Getting Started"></a>
 <a href="https://github.com/ajitpratap0/GoSQLX/blob/main/docs/USAGE_GUIDE.md"><img src="https://img.shields.io/badge/📖_User_Guide-2ea44f?style=for-the-badge" alt="User Guide"></a>
 <a href="https://pkg.go.dev/github.com/ajitpratap0/GoSQLX"><img src="https://img.shields.io/badge/📄_API_Docs-blue?style=for-the-badge" alt="API Docs"></a>
 <a href="https://github.com/ajitpratap0/GoSQLX/discussions"><img src="https://img.shields.io/badge/💬_Discussions-purple?style=for-the-badge" alt="Discussions"></a>
@@ -48,6 +51,7 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 - **🌍 Unicode Support**: Complete UTF-8 support for international SQL
 - **🔧 Multi-Dialect**: PostgreSQL, MySQL, SQL Server, Oracle, SQLite
 - **📊 Zero-Copy**: Direct byte slice operations, **<1μs latency**
+- **🔍 Intelligent Errors**: Structured error codes with typo detection, context highlighting, and helpful hints
 - **🏗️ Production Ready**: Battle-tested with **0 race conditions** detected, **~80-85% SQL-99 compliance**
 
 ### 🎯 Performance Highlights (v1.4.0)
@@ -192,6 +196,9 @@ func AnalyzeSQL(sql string) error {
 
 | Guide | Description |
 |-------|-------------|
+| [**Getting Started**](docs/GETTING_STARTED.md) | ⚡ Get started in 5 minutes |
+| [**Comparison Guide**](docs/COMPARISON.md) | 🆚 GoSQLX vs SQLFluff, JSQLParser, pg_query |
+| [**Error Reference**](docs/ERROR_REFERENCE.md) | 🔍 Complete error code reference with solutions |
 | [**CLI Guide**](docs/CLI_GUIDE.md) | Complete CLI documentation and usage examples |
 | [**API Reference**](docs/API_REFERENCE.md) | Complete API documentation with examples |
 | [**Usage Guide**](docs/USAGE_GUIDE.md) | Detailed patterns and best practices |

@@ -385,7 +385,7 @@ func TestValueStringRawStringLiterals(t *testing.T) {
 		{
 			name: "TripleSingleQuotedRawStringLiteral",
 			value: Value{
-				Type:  TripleSingleQuotedRawStringLiteralValue,
+				Type: TripleSingleQuotedRawStringLiteralValue,
 				Value: `multiline
 raw`,
 			},
@@ -395,7 +395,7 @@ raw'''`,
 		{
 			name: "TripleDoubleQuotedRawStringLiteral",
 			value: Value{
-				Type:  TripleDoubleQuotedRawStringLiteralValue,
+				Type: TripleDoubleQuotedRawStringLiteralValue,
 				Value: `more
 raw
 data`,

@@ -25,26 +25,30 @@ func Example_basicError() {
 // Example_typoDetection demonstrates automatic typo detection
 func Example_typoDetection() {
 	// Common SQL keyword typos are automatically detected
-	typos := map[string]string{
-		"FORM":  "FROM",
-		"SELCT": "SELECT",
-		"WAHER": "WHERE",
-		"JION":  "JOIN",
-		"UPDTE": "UPDATE",
+	// Using a slice to maintain predictable order
+	typos := []struct {
+		typo    string
+		correct string
+	}{
+		{"FORM", "FROM"},
+		{"JION", "JOIN"},
+		{"SELCT", "SELECT"},
+		{"UPDTE", "UPDATE"},
+		{"WAHER", "WHERE"},
 	}
 
-	for typo, correct := range typos {
-		suggestion := errors.SuggestKeyword(typo)
-		if suggestion == correct {
-			fmt.Printf("%s → %s ✓\n", typo, suggestion)
+	for _, t := range typos {
+		suggestion := errors.SuggestKeyword(t.typo)
+		if suggestion == t.correct {
+			fmt.Printf("%s → %s ✓\n", t.typo, suggestion)
 		}
 	}
 	// Output:
 	// FORM → FROM ✓
-	// SELCT → SELECT ✓
-	// WAHER → WHERE ✓
 	// JION → JOIN ✓
+	// SELCT → SELECT ✓
 	// UPDTE → UPDATE ✓
+	// WAHER → WHERE ✓
 }
 
 // Example_errorCodes demonstrates programmatic error handling

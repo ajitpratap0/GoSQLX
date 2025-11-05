@@ -201,6 +201,7 @@ func TestParseMultiple(t *testing.T) {
 		for i, ast := range asts {
 			if ast == nil {
 				t.Errorf("ParseMultiple() AST %d is nil", i)
+				continue
 			}
 			if len(ast.Statements) == 0 {
 				t.Errorf("ParseMultiple() AST %d has no statements", i)

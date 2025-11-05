@@ -73,6 +73,7 @@ func TestParseContext_BasicSuccess(t *testing.T) {
 
 			if ast == nil {
 				t.Error("Expected AST but got nil")
+				return
 			}
 
 			if len(ast.Statements) == 0 {
@@ -316,6 +317,7 @@ func TestParseContext_BackwardCompatibility(t *testing.T) {
 	// Both should produce ASTs
 	if ast1 == nil || ast2 == nil {
 		t.Error("Expected ASTs from both methods")
+		return
 	}
 
 	// Both should have same number of statements

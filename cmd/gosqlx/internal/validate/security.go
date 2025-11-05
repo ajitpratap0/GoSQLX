@@ -38,7 +38,14 @@ func ValidateInputFile(path string) error {
 
 // Validate performs comprehensive security checks on a file path
 func (v *SecurityValidator) Validate(path string) error {
-	// 1. Resolve symlinks and get real path
+	// 1. Check for path traversal attempts BEFORE resolving symlinks
+	// This is critical - we must check the original path for ".." sequences
+	// before they get normalized away by EvalSymlinks
+	if err := v.checkPathTraversal(path); err != nil {
+		return err
+	}
+
+	// 2. Resolve symlinks and get real path
 	realPath, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		// Check if it's a symlink error vs file not found
@@ -49,7 +56,7 @@ func (v *SecurityValidator) Validate(path string) error {
 		return fmt.Errorf("invalid file path: %w", err)
 	}
 
-	// 2. Check if symlink points to different location (potential security issue)
+	// 3. Check if symlink points to different location (potential security issue)
 	if !v.AllowSymlinks {
 		// Use Lstat to detect symlinks without following them
 		linkInfo, err := os.Lstat(path)
@@ -60,11 +67,6 @@ func (v *SecurityValidator) Validate(path string) error {
 			// This is an actual symlink (not just path normalization)
 			return fmt.Errorf("symlinks are not allowed for security reasons: %s -> %s", path, realPath)
 		}
-	}
-
-	// 3. Check for path traversal attempts
-	if err := v.checkPathTraversal(realPath); err != nil {
-		return err
 	}
 
 	// 4. Get file info
@@ -109,7 +111,7 @@ func (v *SecurityValidator) checkPathTraversal(path string) error {
 		return fmt.Errorf("cannot resolve absolute path: %w", err)
 	}
 
-	// Check for suspicious patterns
+	// Check for suspicious patterns containing ".."
 	if strings.Contains(path, "..") {
 		// Verify the cleaned path doesn't escape intended boundaries
 		if v.WorkingDirectory != "" {
@@ -121,27 +123,34 @@ func (v *SecurityValidator) checkPathTraversal(path string) error {
 			if !strings.HasPrefix(absPath, workDir) {
 				return fmt.Errorf("path traversal detected: path escapes working directory")
 			}
-		}
-	}
+		} else {
+			// When no WorkingDirectory is set, count the number of ".." sequences
+			// Multiple ".." sequences are suspicious and potentially dangerous
+			dotDotCount := strings.Count(path, "..")
+			if dotDotCount > 1 {
+				return fmt.Errorf("path traversal detected: multiple '..' sequences in path")
+			}
 
-	// Additional checks for suspicious patterns in the original path
-	// Only flag if the pattern exists AND the cleaned path differs significantly
-	suspiciousPatterns := []string{
-		"/../",
-		"\\..\\",
-	}
+			// Even a single ".." can be dangerous - check if it leads to sensitive areas
+			// Additional checks for suspicious patterns in the original path
+			suspiciousPatterns := []string{
+				"/../",
+				"\\..\\",
+			}
 
-	originalPath := filepath.ToSlash(path)
-	cleanedSlash := filepath.ToSlash(cleanPath)
+			originalPath := filepath.ToSlash(path)
+			cleanedSlash := filepath.ToSlash(cleanPath)
 
-	for _, pattern := range suspiciousPatterns {
-		if strings.Contains(originalPath, pattern) {
-			// Check if cleaning the path significantly changed it
-			// This indicates a potential traversal attempt
-			if !strings.HasSuffix(cleanedSlash, filepath.Base(originalPath)) {
-				// The cleaned path doesn't end with the original filename
-				// This suggests path manipulation
-				return fmt.Errorf("suspicious path pattern detected: %s", pattern)
+			for _, pattern := range suspiciousPatterns {
+				if strings.Contains(originalPath, pattern) {
+					// Check if cleaning the path significantly changed it
+					// This indicates a potential traversal attempt
+					if !strings.HasSuffix(cleanedSlash, filepath.Base(originalPath)) {
+						// The cleaned path doesn't end with the original filename
+						// This suggests path manipulation
+						return fmt.Errorf("suspicious path pattern detected: %s", pattern)
+					}
+				}
 			}
 		}
 	}

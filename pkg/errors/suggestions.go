@@ -271,10 +271,6 @@ func GenerateDidYouMean(actual string, possibleValues []string) string {
 
 	for _, possible := range possibleValues {
 		distance := levenshteinDistance(strings.ToUpper(actual), strings.ToUpper(possible))
-		threshold := len(actual) / 2
-		if threshold < 2 {
-			threshold = 2
-		}
 
 		if distance < minDistance {
 			minDistance = distance

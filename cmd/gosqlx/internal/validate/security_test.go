@@ -435,8 +435,8 @@ func TestCheckPathTraversal(t *testing.T) {
 		workingDir string
 	}{
 		{"Clean path", "/home/user/query.sql", false, ""},
-		{"Path with ..", "/home/user/../user/query.sql", false, ""},              // Resolves to safe path
-		{"Suspicious pattern /../", "/home/user/../../../etc/passwd", false, ""}, // Cleaned path is different
+		{"Path with single ..", "/home/user/../user/query.sql", false, ""},       // Resolves to safe path (single .. is OK)
+		{"Multiple path traversals", "/home/user/../../../etc/passwd", true, ""}, // Multiple .. sequences are suspicious
 	}
 
 	for _, tt := range tests {

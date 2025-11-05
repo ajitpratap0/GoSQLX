@@ -187,6 +187,53 @@ func (tc *TokenConverter) handleCompoundToken(t models.TokenWithSpan) []token.To
 
 // convertSingleToken converts a single token using the type mapping
 func (tc *TokenConverter) convertSingleToken(t models.TokenWithSpan) (token.Token, error) {
+	// Handle NUMBER tokens - convert to INT or FLOAT based on value
+	if t.Token.Type == models.TokenTypeNumber {
+		// Check if it's a float (contains decimal point or exponent)
+		if containsDecimalOrExponent(t.Token.Value) {
+			return token.Token{
+				Type:    "FLOAT",
+				Literal: t.Token.Value,
+			}, nil
+		}
+		return token.Token{
+			Type:    "INT",
+			Literal: t.Token.Value,
+		}, nil
+	}
+
+	// Handle IDENTIFIER tokens that might be keywords
+	if t.Token.Type == models.TokenTypeIdentifier {
+		// Check if this identifier is actually a SQL keyword that the parser expects
+		if keywordType := getKeywordTokenType(t.Token.Value); keywordType != "" {
+			return token.Token{
+				Type:    keywordType,
+				Literal: t.Token.Value,
+			}, nil
+		}
+		// Regular identifier
+		return token.Token{
+			Type:    "IDENT",
+			Literal: t.Token.Value,
+		}, nil
+	}
+
+	// Handle generic KEYWORD tokens - convert based on value
+	if t.Token.Type == models.TokenTypeKeyword {
+		// Check if this keyword has a specific token type
+		if keywordType := getKeywordTokenType(t.Token.Value); keywordType != "" {
+			return token.Token{
+				Type:    keywordType,
+				Literal: t.Token.Value,
+			}, nil
+		}
+		// Use the keyword value as the type
+		return token.Token{
+			Type:    token.Type(t.Token.Value),
+			Literal: t.Token.Value,
+		}, nil
+	}
+
 	// Try mapped type first (most efficient)
 	if mappedType, exists := tc.typeMap[t.Token.Type]; exists {
 		return token.Token{
@@ -202,6 +249,142 @@ func (tc *TokenConverter) convertSingleToken(t models.TokenWithSpan) (token.Toke
 		Type:    tokenType,
 		Literal: t.Token.Value,
 	}, nil
+}
+
+// containsDecimalOrExponent checks if a number string is a float
+func containsDecimalOrExponent(s string) bool {
+	for _, ch := range s {
+		if ch == '.' || ch == 'e' || ch == 'E' {
+			return true
+		}
+	}
+	return false
+}
+
+// getKeywordTokenType returns the parser token type for SQL keywords that come as IDENTIFIER
+// This handles keywords that the tokenizer doesn't recognize as specific token types
+func getKeywordTokenType(value string) token.Type {
+	// Convert to uppercase for case-insensitive matching
+	upper := ""
+	for _, r := range value {
+		if r >= 'a' && r <= 'z' {
+			upper += string(r - 32) // Convert to uppercase
+		} else {
+			upper += string(r)
+		}
+	}
+
+	switch upper {
+	// DML statements
+	case "INSERT":
+		return "INSERT"
+	case "UPDATE":
+		return "UPDATE"
+	case "DELETE":
+		return "DELETE"
+	case "INTO":
+		return "INTO"
+	case "VALUES":
+		return "VALUES"
+	case "SET":
+		return "SET"
+
+	// DDL statements
+	case "CREATE":
+		return "CREATE"
+	case "ALTER":
+		return "ALTER"
+	case "DROP":
+		return "DROP"
+	case "TABLE":
+		return "TABLE"
+	case "INDEX":
+		return "INDEX"
+	case "VIEW":
+		return "VIEW"
+
+	// CTE and advanced features
+	case "WITH":
+		return "WITH"
+	case "RECURSIVE":
+		return "RECURSIVE"
+
+	// Set operations
+	case "UNION":
+		return "UNION"
+	case "EXCEPT":
+		return "EXCEPT"
+	case "INTERSECT":
+		return "INTERSECT"
+	case "ALL":
+		return "ALL"
+
+	// Data types and constraints
+	case "PRIMARY":
+		return "PRIMARY"
+	case "KEY":
+		return "KEY"
+	case "FOREIGN":
+		return "FOREIGN"
+	case "REFERENCES":
+		return "REFERENCES"
+	case "UNIQUE":
+		return "UNIQUE"
+	case "CHECK":
+		return "CHECK"
+	case "DEFAULT":
+		return "DEFAULT"
+	case "CONSTRAINT":
+		return "CONSTRAINT"
+
+	// Column attributes
+	case "AUTO_INCREMENT":
+		return "AUTO_INCREMENT"
+	case "AUTOINCREMENT":
+		return "AUTOINCREMENT"
+
+	// Window function keywords
+	case "OVER":
+		return "OVER"
+	case "PARTITION":
+		return "PARTITION"
+	case "ROWS":
+		return "ROWS"
+	case "RANGE":
+		return "RANGE"
+	case "UNBOUNDED":
+		return "UNBOUNDED"
+	case "PRECEDING":
+		return "PRECEDING"
+	case "FOLLOWING":
+		return "FOLLOWING"
+	case "CURRENT":
+		return "CURRENT"
+	case "ROW":
+		return "ROW"
+
+	// Join types (some might come as IDENTIFIER)
+	case "CROSS":
+		return "CROSS"
+	case "NATURAL":
+		return "NATURAL"
+	case "USING":
+		return "USING"
+
+	// Other common keywords
+	case "DISTINCT":
+		return "DISTINCT"
+	case "EXISTS":
+		return "EXISTS"
+	case "ANY":
+		return "ANY"
+	case "SOME":
+		return "SOME"
+
+	default:
+		// Not a recognized keyword, will be treated as identifier
+		return ""
+	}
 }
 
 // buildTypeMapping creates an optimized lookup table for token type conversion
@@ -243,12 +426,12 @@ func buildTypeMapping() map[models.TokenType]token.Type {
 		models.TokenTypeTrue:    "TRUE",
 		models.TokenTypeFalse:   "FALSE",
 
-		// Aggregate functions
-		models.TokenTypeCount: "COUNT",
-		models.TokenTypeSum:   "SUM",
-		models.TokenTypeAvg:   "AVG",
-		models.TokenTypeMin:   "MIN",
-		models.TokenTypeMax:   "MAX",
+		// Aggregate functions - map to IDENT so they can be used as function names
+		models.TokenTypeCount: "IDENT",
+		models.TokenTypeSum:   "IDENT",
+		models.TokenTypeAvg:   "IDENT",
+		models.TokenTypeMin:   "IDENT",
+		models.TokenTypeMax:   "IDENT",
 
 		// Compound keywords
 		models.TokenTypeGroupBy:   "GROUP BY",

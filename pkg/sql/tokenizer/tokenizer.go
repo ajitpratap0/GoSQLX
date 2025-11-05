@@ -13,6 +13,16 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
+const (
+	// MaxInputSize is the maximum allowed input size in bytes (10MB)
+	// This prevents DoS attacks via extremely large SQL queries
+	MaxInputSize = 10 * 1024 * 1024 // 10MB
+
+	// MaxTokens is the maximum number of tokens allowed in a single SQL query
+	// This prevents DoS attacks via token explosion
+	MaxTokens = 1000000 // 1M tokens
+)
+
 // keywordTokenTypes maps SQL keywords to their token types for fast lookup
 var keywordTokenTypes = map[string]models.TokenType{
 	"SELECT":    models.TokenTypeSelect,
@@ -118,6 +128,16 @@ func (t *Tokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) {
 	// Record start time for metrics
 	startTime := time.Now()
 
+	// Validate input size to prevent DoS attacks
+	if len(input) > MaxInputSize {
+		err := fmt.Errorf("input size exceeds maximum allowed: %d bytes (max: %d bytes)", len(input), MaxInputSize)
+		metrics.RecordTokenization(time.Since(startTime), len(input), err)
+		return nil, TokenizerError{
+			Message:  err.Error(),
+			Location: models.Location{Line: 1, Column: 0},
+		}
+	}
+
 	// Reset state
 	t.Reset()
 	t.input = input
@@ -164,6 +184,15 @@ func (t *Tokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) {
 
 			if t.pos.Index >= len(t.input) {
 				break
+			}
+
+			// Check token count limit to prevent DoS attacks
+			if len(tokens) >= MaxTokens {
+				tokenErr = TokenizerError{
+					Message:  fmt.Sprintf("token count exceeds maximum allowed: %d tokens (max: %d tokens)", len(tokens)+1, MaxTokens),
+					Location: t.getCurrentPosition(),
+				}
+				return
 			}
 
 			startPos := t.pos

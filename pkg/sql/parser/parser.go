@@ -27,11 +27,16 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
 
+// MaxRecursionDepth defines the maximum allowed recursion depth for parsing operations.
+// This prevents stack overflow from deeply nested expressions, CTEs, or other recursive structures.
+const MaxRecursionDepth = 100
+
 // Parser represents a SQL parser
 type Parser struct {
 	tokens       []token.Token
 	currentPos   int
 	currentToken token.Token
+	depth        int // Current recursion depth
 }
 
 // Parse parses the tokens into an AST
@@ -63,6 +68,12 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 		result.Statements = append(result.Statements, stmt)
 	}
 
+	// Check if we got any statements
+	if len(result.Statements) == 0 {
+		ast.ReleaseAST(result)
+		return nil, fmt.Errorf("no SQL statements found")
+	}
+
 	return result, nil
 }
 
@@ -72,6 +83,7 @@ func (p *Parser) Release() {
 	p.tokens = nil
 	p.currentPos = 0
 	p.currentToken = token.Token{}
+	p.depth = 0
 }
 
 // parseStatement parses a single SQL statement
@@ -169,6 +181,15 @@ func (p *Parser) parseStringLiteral() string {
 
 // parseExpression parses an expression
 func (p *Parser) parseExpression() (ast.Expression, error) {
+	// Check recursion depth to prevent stack overflow
+	// This is critical since parseExpression can call itself recursively through binary expressions
+	p.depth++
+	defer func() { p.depth-- }()
+
+	if p.depth > MaxRecursionDepth {
+		return nil, fmt.Errorf("maximum recursion depth exceeded (%d) - expression too deeply nested", MaxRecursionDepth)
+	}
+
 	// Parse the left side of the expression
 	var left ast.Expression
 
@@ -206,6 +227,11 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 
 			left = ident
 		}
+
+	case "*":
+		// Handle asterisk (e.g., in COUNT(*) or SELECT *)
+		left = &ast.Identifier{Name: "*"}
+		p.advance()
 
 	case "STRING":
 		// Handle string literals
@@ -548,6 +574,17 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			if err != nil {
 				return nil, err
 			}
+
+			// Check for optional column alias (AS alias_name)
+			if p.currentToken.Type == "AS" {
+				p.advance() // Consume AS
+				if p.currentToken.Type != "IDENT" {
+					return nil, p.expectedError("alias name after AS")
+				}
+				// Consume the alias name (for now we don't store it in AST)
+				p.advance()
+			}
+
 			columns = append(columns, expr)
 		}
 
@@ -558,43 +595,50 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		p.advance() // Consume comma
 	}
 
-	// Parse FROM clause
-	if p.currentToken.Type != "FROM" {
-		return nil, p.expectedError("FROM")
-	}
-	p.advance() // Consume FROM
-
-	// Parse table name
-	if p.currentToken.Type != "IDENT" {
-		return nil, p.expectedError("table name")
-	}
-	tableName := p.currentToken.Literal
-	p.advance()
-
-	// Create table reference
-	tableRef := ast.TableReference{
-		Name: tableName,
+	// Parse FROM clause (optional to support SELECT without FROM like "SELECT 1")
+	if p.currentToken.Type != "FROM" && p.currentToken.Type != "EOF" && p.currentToken.Type != ";" {
+		// If not FROM, EOF, or semicolon, it's likely an error
+		return nil, p.expectedError("FROM, semicolon, or end of statement")
 	}
 
-	// Check for table alias
-	if p.currentToken.Type == "IDENT" || p.currentToken.Type == "AS" {
-		if p.currentToken.Type == "AS" {
-			p.advance() // Consume AS
-			if p.currentToken.Type != "IDENT" {
-				return nil, p.expectedError("alias after AS")
+	var tableName string
+	var tables []ast.TableReference
+	var joins []ast.JoinClause
+
+	if p.currentToken.Type == "FROM" {
+		p.advance() // Consume FROM
+
+		// Parse table name
+		if p.currentToken.Type != "IDENT" {
+			return nil, p.expectedError("table name")
+		}
+		tableName = p.currentToken.Literal
+		p.advance()
+
+		// Create table reference
+		tableRef := ast.TableReference{
+			Name: tableName,
+		}
+
+		// Check for table alias
+		if p.currentToken.Type == "IDENT" || p.currentToken.Type == "AS" {
+			if p.currentToken.Type == "AS" {
+				p.advance() // Consume AS
+				if p.currentToken.Type != "IDENT" {
+					return nil, p.expectedError("alias after AS")
+				}
+			}
+			if p.currentToken.Type == "IDENT" {
+				tableRef.Alias = p.currentToken.Literal
+				p.advance()
 			}
 		}
-		if p.currentToken.Type == "IDENT" {
-			tableRef.Alias = p.currentToken.Literal
-			p.advance()
-		}
-	}
 
-	// Create tables list for FROM clause
-	tables := []ast.TableReference{tableRef}
+		// Create tables list for FROM clause
+		tables = []ast.TableReference{tableRef}
 
-	// Parse JOIN clauses if present
-	joins := []ast.JoinClause{}
+		// Parse JOIN clauses if present
+		joins = []ast.JoinClause{}
 	for p.isJoinKeyword() {
 		// Determine JOIN type
 		joinType := "INNER" // Default
@@ -728,6 +772,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		// Note: We don't update tableRef here as each JOIN in the list
 		// represents a join with the accumulated result set
 	}
+	} // End of FROM clause parsing
 
 	// Initialize SELECT statement
 	selectStmt := &ast.SelectStatement{
@@ -749,6 +794,44 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 		// Add WHERE clause to SELECT statement
 		selectStmt.Where = whereClause
+	}
+
+	// Parse GROUP BY clause if present
+	if p.currentToken.Type == "GROUP" {
+		p.advance() // Consume GROUP
+		if p.currentToken.Type != "BY" {
+			return nil, p.expectedError("BY after GROUP")
+		}
+		p.advance() // Consume BY
+
+		// Parse GROUP BY expressions (comma-separated list)
+		groupByExprs := make([]ast.Expression, 0)
+		for {
+			expr, err := p.parseExpression()
+			if err != nil {
+				return nil, err
+			}
+			groupByExprs = append(groupByExprs, expr)
+
+			// Check for comma (more expressions)
+			if p.currentToken.Type != "," {
+				break
+			}
+			p.advance() // Consume comma
+		}
+		selectStmt.GroupBy = groupByExprs
+	}
+
+	// Parse HAVING clause if present (must come after GROUP BY)
+	if p.currentToken.Type == "HAVING" {
+		p.advance() // Consume HAVING
+
+		// Parse HAVING condition
+		havingClause, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+		selectStmt.Having = havingClause
 	}
 
 	// Parse ORDER BY clause if present
@@ -1186,6 +1269,15 @@ func (p *Parser) parseWithStatement() (ast.Statement, error) {
 //
 // Syntax: cte_name [(column_list)] AS (query)
 func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
+	// Check recursion depth to prevent stack overflow in recursive CTEs
+	// This is critical since CTEs can call parseStatement which leads back to more CTEs
+	p.depth++
+	defer func() { p.depth-- }()
+
+	if p.depth > MaxRecursionDepth {
+		return nil, fmt.Errorf("maximum recursion depth exceeded (%d) - CTE too deeply nested", MaxRecursionDepth)
+	}
+
 	// Parse CTE name
 	if p.currentToken.Type != "IDENT" {
 		return nil, p.expectedError("CTE name")

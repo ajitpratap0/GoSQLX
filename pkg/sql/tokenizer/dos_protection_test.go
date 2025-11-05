@@ -14,9 +14,11 @@ func TestTokenizer_InputSizeLimit(t *testing.T) {
 	}
 
 	t.Run("ValidLargeInput", func(t *testing.T) {
-		// Test with a large but valid input (100KB - large enough to demonstrate protection works)
+		// Test with a moderately large but valid input (5KB - large enough to demonstrate
+		// protection works, but small enough to complete quickly with race detection)
+		// Note: 100KB test was too slow with -race (10+ minutes), reduced to 5KB for CI
 		pattern := []byte("SELECT * FROM users WHERE id = 1; ")
-		input := make([]byte, 100*1024) // 100KB
+		input := make([]byte, 5*1024) // 5KB
 		for i := 0; i < len(input); i++ {
 			input[i] = pattern[i%len(pattern)]
 		}
@@ -135,12 +137,12 @@ func TestTokenizer_DoSProtectionPerformance(t *testing.T) {
 	}
 
 	// Test with various input sizes to ensure validation is fast
-	// Note: 1MB test is excluded as it's too slow with race detection (10+ minutes)
+	// Note: Sizes reduced for CI compatibility with -race (100KB was 53s, max now 20KB)
 	sizes := []int{
-		100,        // 100 bytes
-		1024,       // 1KB
-		10 * 1024,  // 10KB
-		100 * 1024, // 100KB
+		100,       // 100 bytes
+		1024,      // 1KB
+		10 * 1024, // 10KB
+		20 * 1024, // 20KB (reduced from 100KB to avoid timeout with -race)
 	}
 
 	for _, size := range sizes {

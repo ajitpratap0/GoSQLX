@@ -1,0 +1,138 @@
+# GoSQLX Configuration File Example
+# Copy this file to .gosqlx.yml and customize for your needs
+#
+# Configuration file precedence:
+#   1. Current directory: .gosqlx.yml
+#   2. Home directory: ~/.gosqlx.yml
+#   3. System: /etc/gosqlx.yml
+#
+# CLI flags always override configuration file settings
+
+# Format Configuration
+# Controls SQL formatting behavior
+format:
+  # Indentation size in spaces (0-8)
+  # Default: 2
+  indent: 2
+
+  # Uppercase SQL keywords (SELECT, FROM, WHERE, etc.)
+  # Default: true
+  uppercase_keywords: true
+
+  # Maximum line length for formatting
+  # Default: 80
+  max_line_length: 80
+
+  # Compact format (minimal whitespace)
+  # Default: false
+  compact: false
+
+# Validate Configuration
+# Controls SQL validation behavior
+validate:
+  # SQL dialect: postgresql, mysql, sqlserver, oracle, sqlite, generic
+  # Default: postgresql
+  dialect: postgresql
+
+  # Enable strict validation mode (more rigorous checks)
+  # Default: false
+  strict_mode: false
+
+  # Recursively process directories
+  # Default: false
+  recursive: false
+
+  # File pattern for recursive processing
+  # Default: *.sql
+  pattern: "*.sql"
+
+# Output Configuration
+# Controls output formatting and verbosity
+output:
+  # Output format: json, yaml, table, tree, auto
+  # Default: auto
+  format: auto
+
+  # Enable verbose output
+  # Default: false
+  verbose: false
+
+# Analyze Configuration
+# Controls SQL analysis behavior
+analyze:
+  # Enable security vulnerability analysis
+  # Default: true
+  security: true
+
+  # Enable performance optimization analysis
+  # Default: true
+  performance: true
+
+  # Enable complexity metrics analysis
+  # Default: true
+  complexity: true
+
+  # Enable comprehensive analysis (all categories)
+  # Default: false
+  all: false
+
+# Example Configurations for Different Use Cases:
+
+# Development Configuration:
+# format:
+#   indent: 2
+#   uppercase_keywords: true
+#   max_line_length: 100
+# validate:
+#   dialect: postgresql
+#   strict_mode: false
+# output:
+#   format: table
+#   verbose: true
+# analyze:
+#   security: true
+#   performance: true
+#   complexity: true
+
+# CI/CD Configuration:
+# format:
+#   indent: 2
+#   uppercase_keywords: true
+#   max_line_length: 80
+# validate:
+#   dialect: postgresql
+#   strict_mode: true
+# output:
+#   format: json
+#   verbose: false
+# analyze:
+#   all: true
+
+# Compact Style Configuration:
+# format:
+#   indent: 0
+#   uppercase_keywords: false
+#   max_line_length: 120
+#   compact: true
+# validate:
+#   dialect: generic
+# output:
+#   format: auto
+
+# Enterprise Configuration (MySQL):
+# format:
+#   indent: 4
+#   uppercase_keywords: true
+#   max_line_length: 120
+# validate:
+#   dialect: mysql
+#   strict_mode: true
+#   recursive: true
+#   pattern: "*.mysql"
+# output:
+#   format: json
+#   verbose: false
+# analyze:
+#   security: true
+#   performance: true
+#   complexity: true

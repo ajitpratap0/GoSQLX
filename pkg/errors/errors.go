@@ -92,6 +92,7 @@ func (e *Error) Error() string {
 }
 
 // formatContext formats the SQL context with position indicator
+// Shows up to 3 lines: 1 line before, the error line, and 1 line after
 func (e *Error) formatContext() string {
 	if e.Context == nil || e.Context.SQL == "" {
 		return ""
@@ -100,24 +101,52 @@ func (e *Error) formatContext() string {
 	var sb strings.Builder
 	lines := strings.Split(e.Context.SQL, "\n")
 
-	// Show line with error
-	if e.Location.Line > 0 && e.Location.Line <= len(lines) {
-		lineNum := e.Location.Line
+	if e.Location.Line <= 0 || e.Location.Line > len(lines) {
+		return ""
+	}
+
+	errorLineNum := e.Location.Line
+
+	// Calculate line number width for alignment (minimum 2 digits)
+	maxLineNum := errorLineNum + 1
+	if maxLineNum > len(lines) {
+		maxLineNum = len(lines)
+	}
+	lineNumWidth := len(fmt.Sprintf("%d", maxLineNum))
+	if lineNumWidth < 2 {
+		lineNumWidth = 2
+	}
+
+	sb.WriteString("\n")
+
+	// Show line before (if exists)
+	if errorLineNum > 1 {
+		lineNum := errorLineNum - 1
 		line := lines[lineNum-1]
+		sb.WriteString(fmt.Sprintf("  %*d | %s\n", lineNumWidth, lineNum, line))
+	}
 
-		sb.WriteString(fmt.Sprintf("\n  %d | %s\n", lineNum, line))
+	// Show error line
+	line := lines[errorLineNum-1]
+	sb.WriteString(fmt.Sprintf("  %*d | %s\n", lineNumWidth, errorLineNum, line))
 
-		// Add position indicator (^)
-		if e.Location.Column > 0 {
-			// Account for line number prefix
-			prefix := fmt.Sprintf("  %d | ", lineNum)
-			spaces := strings.Repeat(" ", len(prefix)+e.Location.Column-1)
-			highlight := "^"
-			if e.Context.HighlightLen > 1 {
-				highlight = strings.Repeat("^", e.Context.HighlightLen)
-			}
-			sb.WriteString(spaces + highlight)
+	// Add position indicator (^)
+	if e.Location.Column > 0 {
+		// Account for line number prefix
+		prefix := fmt.Sprintf("  %*d | ", lineNumWidth, errorLineNum)
+		spaces := strings.Repeat(" ", len(prefix)+e.Location.Column-1)
+		highlight := "^"
+		if e.Context.HighlightLen > 1 {
+			highlight = strings.Repeat("^", e.Context.HighlightLen)
 		}
+		sb.WriteString(spaces + highlight + "\n")
+	}
+
+	// Show line after (if exists)
+	if errorLineNum < len(lines) {
+		lineNum := errorLineNum + 1
+		line := lines[lineNum-1]
+		sb.WriteString(fmt.Sprintf("  %*d | %s", lineNumWidth, lineNum, line))
 	}
 
 	return sb.String()

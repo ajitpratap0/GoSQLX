@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
@@ -43,6 +44,27 @@ Performance: Direct AST inspection without intermediate representations`,
 }
 
 func parseRun(cmd *cobra.Command, args []string) error {
+	// Load configuration with CLI flag overrides
+	cfg, err := config.LoadDefault()
+	if err != nil {
+		// If config load fails, use defaults
+		cfg = config.DefaultConfig()
+	}
+
+	// Override format from global flags if set
+	if cmd.Parent().PersistentFlags().Changed("format") {
+		cfg.Output.Format = format
+	} else {
+		format = cfg.Output.Format
+	}
+
+	// Use verbose from global flags if set
+	if cmd.Parent().PersistentFlags().Changed("verbose") {
+		cfg.Output.Verbose = verbose
+	} else {
+		verbose = cfg.Output.Verbose
+	}
+
 	input := args[0]
 
 	// Use robust input detection with security checks

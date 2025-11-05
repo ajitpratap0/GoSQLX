@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
@@ -19,6 +20,8 @@ var (
 	validatePattern   string
 	validateQuiet     bool
 	validateStats     bool
+	validateDialect   string
+	validateStrict    bool
 )
 
 // validateCmd represents the validate command
@@ -42,6 +45,40 @@ Throughput: 100+ files/second in batch mode`,
 }
 
 func validateRun(cmd *cobra.Command, args []string) error {
+	// Load configuration with CLI flag overrides
+	cfg, err := config.LoadDefault()
+	if err != nil {
+		// If config load fails, use defaults
+		cfg = config.DefaultConfig()
+	}
+
+	// Override config with CLI flags if they were explicitly set
+	if cmd.Flags().Changed("recursive") {
+		cfg.Validation.Recursive = validateRecursive
+	} else {
+		validateRecursive = cfg.Validation.Recursive
+	}
+	if cmd.Flags().Changed("pattern") {
+		cfg.Validation.Pattern = validatePattern
+	} else {
+		validatePattern = cfg.Validation.Pattern
+	}
+	if cmd.Flags().Changed("dialect") {
+		cfg.Validation.Dialect = validateDialect
+	} else {
+		validateDialect = cfg.Validation.Dialect
+	}
+	if cmd.Flags().Changed("strict") {
+		cfg.Validation.StrictMode = validateStrict
+	}
+
+	// Use verbose from global flags if set
+	if cmd.Parent().PersistentFlags().Changed("verbose") {
+		cfg.Output.Verbose = verbose
+	} else {
+		verbose = cfg.Output.Verbose
+	}
+
 	startTime := time.Now()
 
 	files, err := expandFileArgs(args)
@@ -224,8 +261,10 @@ func formatBytes(bytes int64) string {
 func init() {
 	rootCmd.AddCommand(validateCmd)
 
-	validateCmd.Flags().BoolVarP(&validateRecursive, "recursive", "r", false, "recursively process directories")
-	validateCmd.Flags().StringVarP(&validatePattern, "pattern", "p", "*.sql", "file pattern for recursive processing")
+	validateCmd.Flags().BoolVarP(&validateRecursive, "recursive", "r", false, "recursively process directories (config: validate.recursive)")
+	validateCmd.Flags().StringVarP(&validatePattern, "pattern", "p", "*.sql", "file pattern for recursive processing (config: validate.pattern)")
 	validateCmd.Flags().BoolVarP(&validateQuiet, "quiet", "q", false, "quiet mode (exit code only)")
 	validateCmd.Flags().BoolVarP(&validateStats, "stats", "s", false, "show performance statistics")
+	validateCmd.Flags().StringVar(&validateDialect, "dialect", "", "SQL dialect: postgresql, mysql, sqlserver, oracle, sqlite (config: validate.dialect)")
+	validateCmd.Flags().BoolVar(&validateStrict, "strict", false, "enable strict validation mode (config: validate.strict_mode)")
 }

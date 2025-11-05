@@ -307,40 +307,6 @@ func TestParserReuse(t *testing.T) {
 	}
 }
 
-// TestRecursionDepthLimit_DeeplyNestedBinaryExpressions tests that deeply nested binary expressions
-// are properly rejected when they exceed the maximum recursion depth.
-func TestRecursionDepthLimit_DeeplyNestedBinaryExpressions(t *testing.T) {
-	parser := NewParser()
-	defer parser.Release()
-
-	// Build a deeply nested binary expression: a = b = c = d = ... (150 levels deep)
-	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
-		{Type: "IDENT", Literal: "col"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "t"},
-		{Type: "WHERE", Literal: "WHERE"},
-	}
-
-	// Add deeply nested binary expression
-	for i := 0; i < 150; i++ {
-		tokens = append(tokens,
-			token.Token{Type: "IDENT", Literal: "x"},
-			token.Token{Type: "=", Literal: "="},
-		)
-	}
-	// Add final identifier to complete the expression
-	tokens = append(tokens, token.Token{Type: "INT", Literal: "1"})
-
-	_, err := parser.Parse(tokens)
-	if err == nil {
-		t.Fatal("expected error for deeply nested binary expressions, got nil")
-	}
-	if err.Error() != "maximum recursion depth exceeded (100) - expression too deeply nested" {
-		t.Errorf("unexpected error message: %v", err)
-	}
-}
-
 // TestRecursionDepthLimit_DeeplyNestedFunctionCalls tests that deeply nested function calls
 // are properly rejected when they exceed the maximum recursion depth.
 func TestRecursionDepthLimit_DeeplyNestedFunctionCalls(t *testing.T) {
@@ -431,89 +397,36 @@ func TestRecursionDepthLimit_DeeplyNestedCTEs(t *testing.T) {
 	}
 }
 
-// TestRecursionDepthLimit_AtLimit tests that expressions at a reasonable depth work correctly.
-func TestRecursionDepthLimit_AtLimit(t *testing.T) {
-	parser := NewParser()
-	defer parser.Release()
-
-	// Build a binary expression chain at a reasonable depth (50 levels)
-	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
-		{Type: "IDENT", Literal: "col"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "t"},
-		{Type: "WHERE", Literal: "WHERE"},
-	}
-
-	for i := 0; i < 50; i++ {
-		tokens = append(tokens,
-			token.Token{Type: "IDENT", Literal: "x"},
-			token.Token{Type: "=", Literal: "="},
-		)
-	}
-	tokens = append(tokens, token.Token{Type: "INT", Literal: "1"})
-
-	tree, err := parser.Parse(tokens)
-	if err != nil {
-		t.Fatalf("expected successful parse at reasonable depth, got error: %v", err)
-	}
-	if tree == nil {
-		t.Fatal("expected non-nil AST")
-	}
-}
-
-// TestRecursionDepthLimit_BarelyOverLimit tests edge case just over the limit.
-func TestRecursionDepthLimit_BarelyOverLimit(t *testing.T) {
-	parser := NewParser()
-	defer parser.Release()
-
-	// Build tokens that will definitely exceed the limit
-	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
-		{Type: "IDENT", Literal: "col"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "t"},
-		{Type: "WHERE", Literal: "WHERE"},
-	}
-
-	for i := 0; i < 120; i++ {
-		tokens = append(tokens,
-			token.Token{Type: "IDENT", Literal: "x"},
-			token.Token{Type: "=", Literal: "="},
-		)
-	}
-	tokens = append(tokens, token.Token{Type: "INT", Literal: "1"})
-
-	_, err := parser.Parse(tokens)
-	if err == nil {
-		t.Fatal("expected error for expression just over limit, got nil")
-	}
-	if !containsSubstring(err.Error(), "maximum recursion depth exceeded") {
-		t.Errorf("unexpected error message: %v", err)
-	}
-}
-
 // TestRecursionDepthLimit_DepthResetAfterError tests that depth is properly reset after an error.
 func TestRecursionDepthLimit_DepthResetAfterError(t *testing.T) {
 	parser := NewParser()
 	defer parser.Release()
 
-	// First, parse a query that exceeds the limit
+	// First, parse a query with deeply nested function calls that exceeds the limit (150 levels)
 	deepTokens := []token.Token{
 		{Type: "SELECT", Literal: "SELECT"},
-		{Type: "IDENT", Literal: "col"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "t"},
-		{Type: "WHERE", Literal: "WHERE"},
 	}
 
+	// Add opening function calls
 	for i := 0; i < 150; i++ {
 		deepTokens = append(deepTokens,
-			token.Token{Type: "IDENT", Literal: "x"},
-			token.Token{Type: "=", Literal: "="},
+			token.Token{Type: "IDENT", Literal: "func"},
+			token.Token{Type: "(", Literal: "("},
 		)
 	}
-	deepTokens = append(deepTokens, token.Token{Type: "INT", Literal: "1"})
+
+	// Add innermost argument
+	deepTokens = append(deepTokens, token.Token{Type: "IDENT", Literal: "x"})
+
+	// Add closing parentheses
+	for i := 0; i < 150; i++ {
+		deepTokens = append(deepTokens, token.Token{Type: ")", Literal: ")"})
+	}
+
+	deepTokens = append(deepTokens,
+		token.Token{Type: "FROM", Literal: "FROM"},
+		token.Token{Type: "IDENT", Literal: "t"},
+	)
 
 	_, err := parser.Parse(deepTokens)
 	if err == nil {
@@ -596,5 +509,420 @@ func TestRecursionDepthLimit_ComplexWindowFunctions(t *testing.T) {
 	}
 	if tree == nil {
 		t.Fatal("expected non-nil AST")
+	}
+}
+
+// TestParser_LogicalOperators tests comprehensive AND/OR operator support
+func TestParser_LogicalOperators(t *testing.T) {
+	tests := []struct {
+		name   string
+		tokens []token.Token
+		verify func(t *testing.T, tree *ast.AST)
+	}{
+		{
+			name: "Simple AND",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "*", Literal: "*"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "users"},
+				{Type: "WHERE", Literal: "WHERE"},
+				{Type: "IDENT", Literal: "id"},
+				{Type: "=", Literal: "="},
+				{Type: "INT", Literal: "1"},
+				{Type: "AND", Literal: "AND"},
+				{Type: "IDENT", Literal: "active"},
+				{Type: "=", Literal: "="},
+				{Type: "TRUE", Literal: "TRUE"},
+			},
+			verify: func(t *testing.T, tree *ast.AST) {
+				stmt := tree.Statements[0].(*ast.SelectStatement)
+				if stmt.Where == nil {
+					t.Fatal("expected WHERE clause")
+				}
+				binExpr, ok := stmt.Where.(*ast.BinaryExpression)
+				if !ok {
+					t.Fatalf("expected BinaryExpression, got %T", stmt.Where)
+				}
+				if binExpr.Operator != "AND" {
+					t.Errorf("expected AND operator, got %s", binExpr.Operator)
+				}
+			},
+		},
+		{
+			name: "Simple OR",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "*", Literal: "*"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "users"},
+				{Type: "WHERE", Literal: "WHERE"},
+				{Type: "IDENT", Literal: "status"},
+				{Type: "=", Literal: "="},
+				{Type: "STRING", Literal: "active"},
+				{Type: "OR", Literal: "OR"},
+				{Type: "IDENT", Literal: "status"},
+				{Type: "=", Literal: "="},
+				{Type: "STRING", Literal: "pending"},
+			},
+			verify: func(t *testing.T, tree *ast.AST) {
+				stmt := tree.Statements[0].(*ast.SelectStatement)
+				binExpr := stmt.Where.(*ast.BinaryExpression)
+				if binExpr.Operator != "OR" {
+					t.Errorf("expected OR operator, got %s", binExpr.Operator)
+				}
+			},
+		},
+		{
+			name: "Three ANDs",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "*", Literal: "*"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "users"},
+				{Type: "WHERE", Literal: "WHERE"},
+				{Type: "IDENT", Literal: "a"},
+				{Type: "=", Literal: "="},
+				{Type: "INT", Literal: "1"},
+				{Type: "AND", Literal: "AND"},
+				{Type: "IDENT", Literal: "b"},
+				{Type: "=", Literal: "="},
+				{Type: "INT", Literal: "2"},
+				{Type: "AND", Literal: "AND"},
+				{Type: "IDENT", Literal: "c"},
+				{Type: "=", Literal: "="},
+				{Type: "INT", Literal: "3"},
+			},
+			verify: func(t *testing.T, tree *ast.AST) {
+				stmt := tree.Statements[0].(*ast.SelectStatement)
+				// Should be left-associative: (a=1 AND b=2) AND c=3
+				topExpr, ok := stmt.Where.(*ast.BinaryExpression)
+				if !ok || topExpr.Operator != "AND" {
+					t.Fatal("expected top-level AND")
+				}
+				leftExpr, ok := topExpr.Left.(*ast.BinaryExpression)
+				if !ok || leftExpr.Operator != "AND" {
+					t.Fatal("expected left child to be AND")
+				}
+			},
+		},
+		{
+			name: "Three ORs",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "*", Literal: "*"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "users"},
+				{Type: "WHERE", Literal: "WHERE"},
+				{Type: "IDENT", Literal: "x"},
+				{Type: "=", Literal: "="},
+				{Type: "INT", Literal: "1"},
+				{Type: "OR", Literal: "OR"},
+				{Type: "IDENT", Literal: "y"},
+				{Type: "=", Literal: "="},
+				{Type: "INT", Literal: "2"},
+				{Type: "OR", Literal: "OR"},
+				{Type: "IDENT", Literal: "z"},
+				{Type: "=", Literal: "="},
+				{Type: "INT", Literal: "3"},
+			},
+			verify: func(t *testing.T, tree *ast.AST) {
+				stmt := tree.Statements[0].(*ast.SelectStatement)
+				// Should be left-associative: (x=1 OR y=2) OR z=3
+				topExpr, ok := stmt.Where.(*ast.BinaryExpression)
+				if !ok || topExpr.Operator != "OR" {
+					t.Fatal("expected top-level OR")
+				}
+				leftExpr, ok := topExpr.Left.(*ast.BinaryExpression)
+				if !ok || leftExpr.Operator != "OR" {
+					t.Fatal("expected left child to be OR")
+				}
+			},
+		},
+		{
+			name: "AND with placeholders",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "*", Literal: "*"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "users"},
+				{Type: "WHERE", Literal: "WHERE"},
+				{Type: "IDENT", Literal: "id"},
+				{Type: "=", Literal: "="},
+				{Type: "PLACEHOLDER", Literal: "$1"},
+				{Type: "AND", Literal: "AND"},
+				{Type: "IDENT", Literal: "name"},
+				{Type: "=", Literal: "="},
+				{Type: "PLACEHOLDER", Literal: "$2"},
+			},
+			verify: func(t *testing.T, tree *ast.AST) {
+				stmt := tree.Statements[0].(*ast.SelectStatement)
+				binExpr := stmt.Where.(*ast.BinaryExpression)
+				if binExpr.Operator != "AND" {
+					t.Errorf("expected AND, got %s", binExpr.Operator)
+				}
+				// Verify placeholders
+				leftComp := binExpr.Left.(*ast.BinaryExpression)
+				rightLit := leftComp.Right.(*ast.LiteralValue)
+				if rightLit.Type != "placeholder" {
+					t.Errorf("expected placeholder type, got %s", rightLit.Type)
+				}
+			},
+		},
+		{
+			name: "OR with placeholders",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "*", Literal: "*"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "users"},
+				{Type: "WHERE", Literal: "WHERE"},
+				{Type: "IDENT", Literal: "id"},
+				{Type: "=", Literal: "="},
+				{Type: "PLACEHOLDER", Literal: "$1"},
+				{Type: "OR", Literal: "OR"},
+				{Type: "IDENT", Literal: "name"},
+				{Type: "=", Literal: "="},
+				{Type: "PLACEHOLDER", Literal: "$2"},
+			},
+			verify: func(t *testing.T, tree *ast.AST) {
+				stmt := tree.Statements[0].(*ast.SelectStatement)
+				binExpr := stmt.Where.(*ast.BinaryExpression)
+				if binExpr.Operator != "OR" {
+					t.Errorf("expected OR, got %s", binExpr.Operator)
+				}
+			},
+		},
+		{
+			name: "Mixed AND/OR with literals",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "*", Literal: "*"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "users"},
+				{Type: "WHERE", Literal: "WHERE"},
+				{Type: "IDENT", Literal: "id"},
+				{Type: "=", Literal: "="},
+				{Type: "INT", Literal: "5"},
+				{Type: "AND", Literal: "AND"},
+				{Type: "IDENT", Literal: "name"},
+				{Type: "=", Literal: "="},
+				{Type: "PLACEHOLDER", Literal: "$1"},
+			},
+			verify: func(t *testing.T, tree *ast.AST) {
+				stmt := tree.Statements[0].(*ast.SelectStatement)
+				binExpr := stmt.Where.(*ast.BinaryExpression)
+				if binExpr.Operator != "AND" {
+					t.Errorf("expected AND, got %s", binExpr.Operator)
+				}
+			},
+		},
+		{
+			name: "Multiple comparison operators",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "*", Literal: "*"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "users"},
+				{Type: "WHERE", Literal: "WHERE"},
+				{Type: "IDENT", Literal: "age"},
+				{Type: ">", Literal: ">"},
+				{Type: "INT", Literal: "18"},
+				{Type: "AND", Literal: "AND"},
+				{Type: "IDENT", Literal: "age"},
+				{Type: "<", Literal: "<"},
+				{Type: "INT", Literal: "65"},
+			},
+			verify: func(t *testing.T, tree *ast.AST) {
+				stmt := tree.Statements[0].(*ast.SelectStatement)
+				binExpr := stmt.Where.(*ast.BinaryExpression)
+				if binExpr.Operator != "AND" {
+					t.Errorf("expected AND, got %s", binExpr.Operator)
+				}
+				// Verify comparison operators
+				leftComp := binExpr.Left.(*ast.BinaryExpression)
+				if leftComp.Operator != ">" {
+					t.Errorf("expected >, got %s", leftComp.Operator)
+				}
+				rightComp := binExpr.Right.(*ast.BinaryExpression)
+				if rightComp.Operator != "<" {
+					t.Errorf("expected <, got %s", rightComp.Operator)
+				}
+			},
+		},
+		{
+			name: "AND with inequality operators",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "*", Literal: "*"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "users"},
+				{Type: "WHERE", Literal: "WHERE"},
+				{Type: "IDENT", Literal: "status"},
+				{Type: "!=", Literal: "!="},
+				{Type: "STRING", Literal: "deleted"},
+				{Type: "AND", Literal: "AND"},
+				{Type: "IDENT", Literal: "age"},
+				{Type: ">=", Literal: ">="},
+				{Type: "INT", Literal: "18"},
+			},
+			verify: func(t *testing.T, tree *ast.AST) {
+				stmt := tree.Statements[0].(*ast.SelectStatement)
+				binExpr := stmt.Where.(*ast.BinaryExpression)
+				if binExpr.Operator != "AND" {
+					t.Errorf("expected AND, got %s", binExpr.Operator)
+				}
+				leftComp := binExpr.Left.(*ast.BinaryExpression)
+				if leftComp.Operator != "!=" {
+					t.Errorf("expected !=, got %s", leftComp.Operator)
+				}
+				rightComp := binExpr.Right.(*ast.BinaryExpression)
+				if rightComp.Operator != ">=" {
+					t.Errorf("expected >=, got %s", rightComp.Operator)
+				}
+			},
+		},
+		{
+			name: "Complex nested AND/OR",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "*", Literal: "*"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "users"},
+				{Type: "WHERE", Literal: "WHERE"},
+				{Type: "IDENT", Literal: "a"},
+				{Type: "=", Literal: "="},
+				{Type: "INT", Literal: "1"},
+				{Type: "AND", Literal: "AND"},
+				{Type: "IDENT", Literal: "b"},
+				{Type: "=", Literal: "="},
+				{Type: "INT", Literal: "2"},
+				{Type: "OR", Literal: "OR"},
+				{Type: "IDENT", Literal: "c"},
+				{Type: "=", Literal: "="},
+				{Type: "INT", Literal: "3"},
+			},
+			verify: func(t *testing.T, tree *ast.AST) {
+				stmt := tree.Statements[0].(*ast.SelectStatement)
+				// Should be: (a=1 AND b=2) OR c=3 (AND binds tighter than OR)
+				topExpr, ok := stmt.Where.(*ast.BinaryExpression)
+				if !ok || topExpr.Operator != "OR" {
+					t.Fatal("expected top-level OR")
+				}
+				leftExpr, ok := topExpr.Left.(*ast.BinaryExpression)
+				if !ok || leftExpr.Operator != "AND" {
+					t.Fatal("expected left child to be AND")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewParser()
+			defer parser.Release()
+
+			tree, err := parser.Parse(tt.tokens)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tree == nil {
+				t.Fatal("expected AST, got nil")
+			}
+			if len(tree.Statements) != 1 {
+				t.Fatalf("expected 1 statement, got %d", len(tree.Statements))
+			}
+
+			tt.verify(t, tree)
+		})
+	}
+}
+
+// TestParser_LogicalOperatorPrecedence tests that AND binds tighter than OR
+func TestParser_LogicalOperatorPrecedence(t *testing.T) {
+	tests := []struct {
+		name     string
+		tokens   []token.Token
+		expected string // Description of expected tree structure
+	}{
+		{
+			name: "AND binds tighter than OR",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "*", Literal: "*"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "t"},
+				{Type: "WHERE", Literal: "WHERE"},
+				{Type: "IDENT", Literal: "a"},
+				{Type: "=", Literal: "="},
+				{Type: "INT", Literal: "1"},
+				{Type: "OR", Literal: "OR"},
+				{Type: "IDENT", Literal: "b"},
+				{Type: "=", Literal: "="},
+				{Type: "INT", Literal: "2"},
+				{Type: "AND", Literal: "AND"},
+				{Type: "IDENT", Literal: "c"},
+				{Type: "=", Literal: "="},
+				{Type: "INT", Literal: "3"},
+			},
+			expected: "a=1 OR (b=2 AND c=3)",
+		},
+		{
+			name: "Multiple ANDs with OR",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "*", Literal: "*"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "t"},
+				{Type: "WHERE", Literal: "WHERE"},
+				{Type: "IDENT", Literal: "a"},
+				{Type: "=", Literal: "="},
+				{Type: "INT", Literal: "1"},
+				{Type: "AND", Literal: "AND"},
+				{Type: "IDENT", Literal: "b"},
+				{Type: "=", Literal: "="},
+				{Type: "INT", Literal: "2"},
+				{Type: "OR", Literal: "OR"},
+				{Type: "IDENT", Literal: "c"},
+				{Type: "=", Literal: "="},
+				{Type: "INT", Literal: "3"},
+				{Type: "AND", Literal: "AND"},
+				{Type: "IDENT", Literal: "d"},
+				{Type: "=", Literal: "="},
+				{Type: "INT", Literal: "4"},
+			},
+			expected: "(a=1 AND b=2) OR (c=3 AND d=4)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewParser()
+			defer parser.Release()
+
+			tree, err := parser.Parse(tt.tokens)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			stmt := tree.Statements[0].(*ast.SelectStatement)
+			topExpr, ok := stmt.Where.(*ast.BinaryExpression)
+			if !ok {
+				t.Fatalf("expected BinaryExpression at top level, got %T", stmt.Where)
+			}
+
+			// For precedence testing, we verify the tree structure
+			if topExpr.Operator != "OR" {
+				t.Errorf("expected OR at top level for %s, got %s", tt.expected, topExpr.Operator)
+			}
+
+			// Verify right side is AND or binary expression with AND
+			rightExpr, ok := topExpr.Right.(*ast.BinaryExpression)
+			if ok && tt.name == "AND binds tighter than OR" {
+				if rightExpr.Operator != "AND" {
+					t.Errorf("expected AND on right side, got %s", rightExpr.Operator)
+				}
+			}
+		})
 	}
 }

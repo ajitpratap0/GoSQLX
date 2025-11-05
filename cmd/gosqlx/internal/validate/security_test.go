@@ -124,10 +124,10 @@ func TestValidateInputFile_PathTraversal(t *testing.T) {
 	}
 
 	tests := []struct {
-		name        string
-		path        string
-		shouldFail  bool
-		skipOnError bool // Skip if path creation fails
+		name                   string
+		path                   string
+		shouldFail             bool
+		expectedErrorSubstring string // Expected error message substring
 	}{
 		{
 			name:       "Path traversal with ..",
@@ -135,10 +135,10 @@ func TestValidateInputFile_PathTraversal(t *testing.T) {
 			shouldFail: false, // This resolves to the valid file
 		},
 		{
-			name:        "Multiple path traversals",
-			path:        filepath.Join(tmpDir, "..", "..", "..", "etc", "passwd"),
-			shouldFail:  true,
-			skipOnError: true, // File might not exist
+			name:                   "Multiple path traversals",
+			path:                   tmpDir + "/../../../nonexistent/file.sql", // Raw string to preserve .. sequences
+			shouldFail:             true,
+			expectedErrorSubstring: "path traversal detected", // Should fail due to multiple .. sequences
 		},
 		{
 			name:       "Normalized valid path",
@@ -151,16 +151,16 @@ func TestValidateInputFile_PathTraversal(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateInputFile(tt.path)
 
-			if tt.skipOnError && err != nil {
-				// Expected to fail for various reasons (file doesn't exist, etc.)
-				return
-			}
-
-			if tt.shouldFail && err == nil {
-				t.Errorf("Expected validation to fail for %s", tt.name)
-			}
-			if !tt.shouldFail && err != nil {
-				t.Errorf("Expected validation to pass for %s, got error: %v", tt.name, err)
+			if tt.shouldFail {
+				if err == nil {
+					t.Errorf("Expected validation to fail for %s", tt.name)
+				} else if tt.expectedErrorSubstring != "" && !strings.Contains(err.Error(), tt.expectedErrorSubstring) {
+					t.Errorf("Expected error containing %q for %s, got: %v", tt.expectedErrorSubstring, tt.name, err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected validation to pass for %s, got error: %v", tt.name, err)
+				}
 			}
 		})
 	}

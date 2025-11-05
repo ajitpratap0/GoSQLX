@@ -1,4 +1,4 @@
-.PHONY: build test clean lint fmt vet coverage help
+.PHONY: build test clean lint fmt vet coverage install-hooks help
 
 # Default target
 all: build
@@ -48,6 +48,11 @@ lint:
 # Run all quality checks
 quality: fmt vet lint
 
+# Install Git hooks
+install-hooks:
+	@echo "Installing Git hooks..."
+	@./scripts/install-hooks.sh
+
 # Show help
 help:
 	@echo "Available targets:"
@@ -60,4 +65,5 @@ help:
 	@echo "  vet       - Run go vet"
 	@echo "  lint      - Run golint (if installed)"
 	@echo "  quality   - Run all quality checks (fmt, vet, lint)"
+	@echo "  install-hooks - Install Git pre-commit hooks"
 	@echo "  help      - Show this help message"

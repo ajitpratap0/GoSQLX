@@ -1,0 +1,83 @@
+# Pre-commit hooks configuration for GoSQLX
+# This file provides standardized hook configuration for the pre-commit framework
+# To use with the pre-commit tool (https://pre-commit.com/):
+#   pip install pre-commit
+#   pre-commit install
+#
+# For native Git hooks, use: ./scripts/install-hooks.sh
+
+repos:
+  # Go formatting check
+  - repo: local
+    hooks:
+      - id: go-fmt
+        name: go fmt
+        entry: gofmt
+        args: [-w, -l]
+        language: system
+        files: \.go$
+        description: Run go fmt to format Go code
+
+  # Go static analysis
+  - repo: local
+    hooks:
+      - id: go-vet
+        name: go vet
+        entry: go vet
+        args: [./...]
+        language: system
+        files: \.go$
+        pass_filenames: false
+        description: Run go vet for static analysis
+
+  # Go tests (short mode for pre-commit)
+  - repo: local
+    hooks:
+      - id: go-test-short
+        name: go test (short)
+        entry: go test
+        args: [-short, ./...]
+        language: system
+        files: \.go$
+        pass_filenames: false
+        description: Run Go tests in short mode
+
+  # Optional: Go imports formatting (requires goimports)
+  # Uncomment if you have goimports installed
+  # - repo: local
+  #   hooks:
+  #     - id: go-imports
+  #       name: goimports
+  #       entry: goimports
+  #       args: [-w, -local, github.com/ajitpratap0/GoSQLX]
+  #       language: system
+  #       files: \.go$
+  #       description: Run goimports to format imports
+
+  # Optional: Go linting (requires golangci-lint)
+  # Uncomment if you have golangci-lint installed
+  # - repo: local
+  #   hooks:
+  #     - id: golangci-lint
+  #       name: golangci-lint
+  #       entry: golangci-lint run
+  #       language: system
+  #       files: \.go$
+  #       pass_filenames: false
+  #       description: Run golangci-lint for comprehensive linting
+
+  # Trailing whitespace check
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      - id: check-merge-conflict
+
+# Configuration
+default_stages: [commit]
+fail_fast: false

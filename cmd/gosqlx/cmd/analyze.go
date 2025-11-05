@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
@@ -49,6 +50,49 @@ This is a basic implementation for CLI foundation.`,
 }
 
 func analyzeRun(cmd *cobra.Command, args []string) error {
+	// Load configuration with CLI flag overrides
+	cfg, err := config.LoadDefault()
+	if err != nil {
+		// If config load fails, use defaults
+		cfg = config.DefaultConfig()
+	}
+
+	// Override analyze flags if they were explicitly set
+	if cmd.Flags().Changed("security") {
+		cfg.Analyze.Security = analyzeSecurity
+	} else {
+		analyzeSecurity = cfg.Analyze.Security
+	}
+	if cmd.Flags().Changed("performance") {
+		cfg.Analyze.Performance = analyzePerformance
+	} else {
+		analyzePerformance = cfg.Analyze.Performance
+	}
+	if cmd.Flags().Changed("complexity") {
+		cfg.Analyze.Complexity = analyzeComplexity
+	} else {
+		analyzeComplexity = cfg.Analyze.Complexity
+	}
+	if cmd.Flags().Changed("all") {
+		cfg.Analyze.All = analyzeAll
+	} else {
+		analyzeAll = cfg.Analyze.All
+	}
+
+	// Override format from global flags if set
+	if cmd.Parent().PersistentFlags().Changed("format") {
+		cfg.Output.Format = format
+	} else {
+		format = cfg.Output.Format
+	}
+
+	// Use verbose from global flags if set
+	if cmd.Parent().PersistentFlags().Changed("verbose") {
+		cfg.Output.Verbose = verbose
+	} else {
+		verbose = cfg.Output.Verbose
+	}
+
 	input := args[0]
 
 	// Use robust input detection with security checks
@@ -210,8 +254,8 @@ func displayAnalysis(analysis *AnalysisReport) error {
 func init() {
 	rootCmd.AddCommand(analyzeCmd)
 
-	analyzeCmd.Flags().BoolVar(&analyzeSecurity, "security", false, "focus on security vulnerability analysis")
-	analyzeCmd.Flags().BoolVar(&analyzePerformance, "performance", false, "focus on performance optimization analysis")
-	analyzeCmd.Flags().BoolVar(&analyzeComplexity, "complexity", false, "focus on complexity metrics")
-	analyzeCmd.Flags().BoolVar(&analyzeAll, "all", false, "comprehensive analysis (all categories)")
+	analyzeCmd.Flags().BoolVar(&analyzeSecurity, "security", false, "focus on security vulnerability analysis (config: analyze.security)")
+	analyzeCmd.Flags().BoolVar(&analyzePerformance, "performance", false, "focus on performance optimization analysis (config: analyze.performance)")
+	analyzeCmd.Flags().BoolVar(&analyzeComplexity, "complexity", false, "focus on complexity metrics (config: analyze.complexity)")
+	analyzeCmd.Flags().BoolVar(&analyzeAll, "all", false, "comprehensive analysis (config: analyze.all)")
 }

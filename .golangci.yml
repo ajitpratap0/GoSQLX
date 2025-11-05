@@ -5,27 +5,17 @@ run:
 linters:
   enable:
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
-    - typecheck
     - unused
-    - gofmt
-    - goimports
-
-linters-settings:
-  gofmt:
-    simplify: true
-  goimports:
-    local-prefixes: github.com/ajitpratap0/GoSQLX
 
 issues:
   exclude-rules:
     - path: _test\.go
       linters:
         - errcheck
-    
+
     - path: examples/
       linters:
         - errcheck

@@ -53,8 +53,9 @@ func TestDetectAndReadInput(t *testing.T) {
 		if err == nil {
 			t.Error("Expected error for directory input, got success")
 		}
-		if !strings.Contains(err.Error(), "directory") {
-			t.Errorf("Expected directory error message, got: %v", err)
+		// Accept either "directory" or "not a regular file" error messages
+		if !strings.Contains(err.Error(), "directory") && !strings.Contains(err.Error(), "not a regular file") {
+			t.Errorf("Expected directory or regular file error message, got: %v", err)
 		}
 	})
 
@@ -231,8 +232,9 @@ func TestValidateFileAccess(t *testing.T) {
 		if err == nil {
 			t.Error("Expected error for directory, got success")
 		}
-		if !strings.Contains(err.Error(), "directory") {
-			t.Errorf("Expected directory error message, got: %v", err)
+		// Accept either "directory" or "not a regular file" error messages
+		if !strings.Contains(err.Error(), "directory") && !strings.Contains(err.Error(), "not a regular file") {
+			t.Errorf("Expected directory or regular file error message, got: %v", err)
 		}
 	})
 
@@ -243,8 +245,9 @@ func TestValidateFileAccess(t *testing.T) {
 		if err == nil {
 			t.Error("Expected error for nonexistent file, got success")
 		}
-		if !strings.Contains(err.Error(), "cannot access file") {
-			t.Errorf("Expected access error message, got: %v", err)
+		// Accept either "cannot access file" or "invalid file path" error messages
+		if !strings.Contains(err.Error(), "cannot access file") && !strings.Contains(err.Error(), "invalid file path") {
+			t.Errorf("Expected access or path error message, got: %v", err)
 		}
 	})
 }

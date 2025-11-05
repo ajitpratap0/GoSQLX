@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
@@ -19,6 +20,7 @@ var (
 	formatUppercase  bool
 	formatCompact    bool
 	formatCheck      bool
+	formatMaxLine    int
 )
 
 // formatCmd represents the format command
@@ -43,6 +45,42 @@ Performance: 100x faster than SQLFluff for equivalent operations`,
 }
 
 func formatRun(cmd *cobra.Command, args []string) error {
+	// Load configuration with CLI flag overrides
+	cfg, err := config.LoadDefault()
+	if err != nil {
+		// If config load fails, use defaults
+		cfg = config.DefaultConfig()
+	}
+
+	// Override config with CLI flags if they were explicitly set
+	if cmd.Flags().Changed("indent") {
+		cfg.Format.Indent = formatIndentSize
+	} else {
+		formatIndentSize = cfg.Format.Indent
+	}
+	if cmd.Flags().Changed("uppercase") || cmd.Flags().Changed("no-uppercase") {
+		cfg.Format.UppercaseKeywords = formatUppercase
+	} else {
+		formatUppercase = cfg.Format.UppercaseKeywords
+	}
+	if cmd.Flags().Changed("compact") {
+		cfg.Format.Compact = formatCompact
+	} else {
+		formatCompact = cfg.Format.Compact
+	}
+	if cmd.Flags().Changed("max-line") {
+		cfg.Format.MaxLineLength = formatMaxLine
+	} else {
+		formatMaxLine = cfg.Format.MaxLineLength
+	}
+
+	// Use verbose from global flags if set
+	if cmd.Parent().PersistentFlags().Changed("verbose") {
+		cfg.Output.Verbose = verbose
+	} else {
+		verbose = cfg.Output.Verbose
+	}
+
 	files, err := expandFileArgs(args)
 	if err != nil {
 		return fmt.Errorf("failed to expand file arguments: %w", err)
@@ -196,10 +234,11 @@ func init() {
 	rootCmd.AddCommand(formatCmd)
 
 	formatCmd.Flags().BoolVarP(&formatInPlace, "in-place", "i", false, "edit files in place")
-	formatCmd.Flags().IntVar(&formatIndentSize, "indent", 2, "indentation size in spaces")
-	formatCmd.Flags().BoolVar(&formatUppercase, "uppercase", true, "uppercase SQL keywords")
-	formatCmd.Flags().BoolVar(&formatCompact, "compact", false, "compact format (minimal whitespace)")
+	formatCmd.Flags().IntVar(&formatIndentSize, "indent", 2, "indentation size in spaces (config: format.indent)")
+	formatCmd.Flags().BoolVar(&formatUppercase, "uppercase", true, "uppercase SQL keywords (config: format.uppercase_keywords)")
+	formatCmd.Flags().BoolVar(&formatCompact, "compact", false, "compact format (config: format.compact)")
 	formatCmd.Flags().BoolVar(&formatCheck, "check", false, "check if files need formatting (CI mode)")
+	formatCmd.Flags().IntVar(&formatMaxLine, "max-line", 80, "maximum line length (config: format.max_line_length)")
 
 	// Add negation flags
 	formatCmd.Flags().BoolVar(&formatUppercase, "no-uppercase", false, "keep original keyword case")

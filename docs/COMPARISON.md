@@ -336,11 +336,11 @@ Be honest about limitations:
 
 ## 🔄 Migration Guides
 
-Detailed migration guides available:
+Comprehensive migration guides now available:
 
-- **[From SQLFluff →](migrations/FROM_SQLFLUFF.md)** (Coming soon)
-- **[From JSQLParser →](migrations/FROM_JSQLPARSER.md)** (Coming soon)
-- **[From pg_query →](migrations/FROM_PG_QUERY.md)** (Coming soon)
+- **[From SQLFluff →](migration/FROM_SQLFLUFF.md)** - Python SQL linter/formatter to GoSQLX
+- **[From JSQLParser →](migration/FROM_JSQLPARSER.md)** - Java SQL parser to GoSQLX
+- **[From pg_query →](migration/FROM_PG_QUERY.md)** - PostgreSQL parser wrapper to GoSQLX
 
 ### Quick Migration Examples
 

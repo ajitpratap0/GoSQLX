@@ -14,19 +14,19 @@ const (
 
 // SecurityValidator provides comprehensive file security validation
 type SecurityValidator struct {
-	MaxFileSize      int64
+	MaxFileSize       int64
 	AllowedExtensions []string
-	AllowSymlinks    bool
-	WorkingDirectory string // Optional: restrict to working directory
+	AllowSymlinks     bool
+	WorkingDirectory  string // Optional: restrict to working directory
 }
 
 // NewSecurityValidator creates a validator with default security settings
 func NewSecurityValidator() *SecurityValidator {
 	return &SecurityValidator{
-		MaxFileSize:      MaxFileSize,
+		MaxFileSize:       MaxFileSize,
 		AllowedExtensions: []string{".sql", ".txt", ""},
-		AllowSymlinks:    false,
-		WorkingDirectory: "",
+		AllowSymlinks:     false,
+		WorkingDirectory:  "",
 	}
 }
 

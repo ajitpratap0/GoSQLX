@@ -21,6 +21,7 @@
 package parser
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -36,7 +37,8 @@ type Parser struct {
 	tokens       []token.Token
 	currentPos   int
 	currentToken token.Token
-	depth        int // Current recursion depth
+	depth        int             // Current recursion depth
+	ctx          context.Context // Optional context for cancellation support
 }
 
 // Parse parses the tokens into an AST
@@ -77,6 +79,76 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 	return result, nil
 }
 
+// ParseContext parses the tokens into an AST with context support for cancellation.
+// It checks the context at strategic points (every statement and expression) to enable fast cancellation.
+// Returns context.Canceled or context.DeadlineExceeded when the context is cancelled.
+//
+// This method is useful for:
+//   - Long-running parsing operations that need to be cancellable
+//   - Implementing timeouts for parsing
+//   - Graceful shutdown scenarios
+//
+// Example:
+//
+//	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+//	defer cancel()
+//	astNode, err := parser.ParseContext(ctx, tokens)
+//	if err == context.DeadlineExceeded {
+//	    // Handle timeout
+//	}
+func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.AST, error) {
+	// Check context before starting
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	// Store context for use during parsing
+	p.ctx = ctx
+	defer func() { p.ctx = nil }() // Clear context when done
+
+	p.tokens = tokens
+	p.currentPos = 0
+	if len(tokens) > 0 {
+		p.currentToken = tokens[0]
+	}
+
+	// Get a pre-allocated AST from the pool
+	result := ast.NewAST()
+
+	// Pre-allocate statements slice based on a reasonable estimate
+	estimatedStmts := 1 // Most SQL queries have just one statement
+	if len(tokens) > 100 {
+		estimatedStmts = 2 // For larger inputs, allocate more
+	}
+	result.Statements = make([]ast.Statement, 0, estimatedStmts)
+
+	// Parse statements
+	for p.currentPos < len(tokens) && p.currentToken.Type != "EOF" {
+		// Check context before each statement
+		if err := ctx.Err(); err != nil {
+			// Clean up the AST on error
+			ast.ReleaseAST(result)
+			return nil, fmt.Errorf("parsing cancelled: %w", err)
+		}
+
+		stmt, err := p.parseStatement()
+		if err != nil {
+			// Clean up the AST on error
+			ast.ReleaseAST(result)
+			return nil, err
+		}
+		result.Statements = append(result.Statements, stmt)
+	}
+
+	// Check if we got any statements
+	if len(result.Statements) == 0 {
+		ast.ReleaseAST(result)
+		return nil, fmt.Errorf("no SQL statements found")
+	}
+
+	return result, nil
+}
+
 // Release releases any resources held by the parser
 func (p *Parser) Release() {
 	// Reset internal state to avoid memory leaks
@@ -84,10 +156,18 @@ func (p *Parser) Release() {
 	p.currentPos = 0
 	p.currentToken = token.Token{}
 	p.depth = 0
+	p.ctx = nil
 }
 
 // parseStatement parses a single SQL statement
 func (p *Parser) parseStatement() (ast.Statement, error) {
+	// Check context if available
+	if p.ctx != nil {
+		if err := p.ctx.Err(); err != nil {
+			return nil, fmt.Errorf("parsing cancelled: %w", err)
+		}
+	}
+
 	switch p.currentToken.Type {
 	case "WITH":
 		return p.parseWithStatement()
@@ -181,6 +261,13 @@ func (p *Parser) parseStringLiteral() string {
 
 // parseExpression parses an expression
 func (p *Parser) parseExpression() (ast.Expression, error) {
+	// Check context if available
+	if p.ctx != nil {
+		if err := p.ctx.Err(); err != nil {
+			return nil, fmt.Errorf("parsing cancelled: %w", err)
+		}
+	}
+
 	// Check recursion depth to prevent stack overflow
 	// This is critical since parseExpression can call itself recursively through binary expressions
 	p.depth++
@@ -639,139 +726,139 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 		// Parse JOIN clauses if present
 		joins = []ast.JoinClause{}
-	for p.isJoinKeyword() {
-		// Determine JOIN type
-		joinType := "INNER" // Default
+		for p.isJoinKeyword() {
+			// Determine JOIN type
+			joinType := "INNER" // Default
 
-		if p.currentToken.Type == "LEFT" {
-			joinType = "LEFT"
-			p.advance()
-			if p.currentToken.Type == "OUTER" {
-				p.advance() // Optional OUTER keyword
-			}
-		} else if p.currentToken.Type == "RIGHT" {
-			joinType = "RIGHT"
-			p.advance()
-			if p.currentToken.Type == "OUTER" {
-				p.advance() // Optional OUTER keyword
-			}
-		} else if p.currentToken.Type == "FULL" {
-			joinType = "FULL"
-			p.advance()
-			if p.currentToken.Type == "OUTER" {
-				p.advance() // Optional OUTER keyword
-			}
-		} else if p.currentToken.Type == "INNER" {
-			joinType = "INNER"
-			p.advance()
-		} else if p.currentToken.Type == "CROSS" {
-			joinType = "CROSS"
-			p.advance()
-		}
-
-		// Expect JOIN keyword
-		if p.currentToken.Type != "JOIN" {
-			return nil, fmt.Errorf("expected JOIN after %s, got %s", joinType, p.currentToken.Type)
-		}
-		p.advance() // Consume JOIN
-
-		// Parse joined table name
-		if p.currentToken.Type != "IDENT" {
-			return nil, fmt.Errorf("expected table name after %s JOIN, got %s", joinType, p.currentToken.Type)
-		}
-		joinedTableName := p.currentToken.Literal
-		p.advance()
-
-		// Create joined table reference
-		joinedTableRef := ast.TableReference{
-			Name: joinedTableName,
-		}
-
-		// Check for table alias
-		if p.currentToken.Type == "IDENT" || p.currentToken.Type == "AS" {
-			if p.currentToken.Type == "AS" {
-				p.advance() // Consume AS
-				if p.currentToken.Type != "IDENT" {
-					return nil, p.expectedError("alias after AS")
+			if p.currentToken.Type == "LEFT" {
+				joinType = "LEFT"
+				p.advance()
+				if p.currentToken.Type == "OUTER" {
+					p.advance() // Optional OUTER keyword
 				}
-			}
-			if p.currentToken.Type == "IDENT" {
-				joinedTableRef.Alias = p.currentToken.Literal
+			} else if p.currentToken.Type == "RIGHT" {
+				joinType = "RIGHT"
+				p.advance()
+				if p.currentToken.Type == "OUTER" {
+					p.advance() // Optional OUTER keyword
+				}
+			} else if p.currentToken.Type == "FULL" {
+				joinType = "FULL"
+				p.advance()
+				if p.currentToken.Type == "OUTER" {
+					p.advance() // Optional OUTER keyword
+				}
+			} else if p.currentToken.Type == "INNER" {
+				joinType = "INNER"
+				p.advance()
+			} else if p.currentToken.Type == "CROSS" {
+				joinType = "CROSS"
 				p.advance()
 			}
-		}
 
-		// Parse join condition (ON or USING)
-		var joinCondition ast.Expression
-
-		// CROSS JOIN doesn't require ON clause
-		if joinType != "CROSS" {
-			if p.currentToken.Type == "ON" {
-				p.advance() // Consume ON
-
-				// Parse join condition
-				cond, err := p.parseExpression()
-				if err != nil {
-					return nil, fmt.Errorf("error parsing ON condition for %s JOIN: %v", joinType, err)
-				}
-				joinCondition = cond
-			} else if p.currentToken.Type == "USING" {
-				p.advance() // Consume USING
-
-				// Parse column list in parentheses
-				if p.currentToken.Type != "(" {
-					return nil, p.expectedError("( after USING")
-				}
-				p.advance()
-
-				// TODO: LIMITATION - Currently only supports single column in USING clause
-				// Future enhancement needed for multi-column support like USING (col1, col2, col3)
-				// This requires parsing comma-separated column list and storing as []Expression
-				// Priority: Medium (Phase 2 enhancement)
-				if p.currentToken.Type != "IDENT" {
-					return nil, p.expectedError("column name in USING")
-				}
-				joinCondition = &ast.Identifier{Name: p.currentToken.Literal}
-				p.advance()
-
-				if p.currentToken.Type != ")" {
-					return nil, p.expectedError(") after USING column")
-				}
-				p.advance()
-			} else if joinType != "NATURAL" {
-				return nil, p.expectedError("ON or USING")
+			// Expect JOIN keyword
+			if p.currentToken.Type != "JOIN" {
+				return nil, fmt.Errorf("expected JOIN after %s, got %s", joinType, p.currentToken.Type)
 			}
-		}
+			p.advance() // Consume JOIN
 
-		// Create join clause with proper tree relationships
-		// For SQL: FROM A JOIN B JOIN C (equivalent to (A JOIN B) JOIN C)
-		var leftTable ast.TableReference
-		if len(joins) == 0 {
-			// First join: A JOIN B
-			leftTable = tableRef
-		} else {
-			// Subsequent joins: (previous result) JOIN C
-			// We represent this by using a synthetic table reference that indicates
-			// the left side is the result of previous joins
-			leftTable = ast.TableReference{
-				Name:  fmt.Sprintf("(%s_with_%d_joins)", tableRef.Name, len(joins)),
-				Alias: "",
+			// Parse joined table name
+			if p.currentToken.Type != "IDENT" {
+				return nil, fmt.Errorf("expected table name after %s JOIN, got %s", joinType, p.currentToken.Type)
 			}
+			joinedTableName := p.currentToken.Literal
+			p.advance()
+
+			// Create joined table reference
+			joinedTableRef := ast.TableReference{
+				Name: joinedTableName,
+			}
+
+			// Check for table alias
+			if p.currentToken.Type == "IDENT" || p.currentToken.Type == "AS" {
+				if p.currentToken.Type == "AS" {
+					p.advance() // Consume AS
+					if p.currentToken.Type != "IDENT" {
+						return nil, p.expectedError("alias after AS")
+					}
+				}
+				if p.currentToken.Type == "IDENT" {
+					joinedTableRef.Alias = p.currentToken.Literal
+					p.advance()
+				}
+			}
+
+			// Parse join condition (ON or USING)
+			var joinCondition ast.Expression
+
+			// CROSS JOIN doesn't require ON clause
+			if joinType != "CROSS" {
+				if p.currentToken.Type == "ON" {
+					p.advance() // Consume ON
+
+					// Parse join condition
+					cond, err := p.parseExpression()
+					if err != nil {
+						return nil, fmt.Errorf("error parsing ON condition for %s JOIN: %v", joinType, err)
+					}
+					joinCondition = cond
+				} else if p.currentToken.Type == "USING" {
+					p.advance() // Consume USING
+
+					// Parse column list in parentheses
+					if p.currentToken.Type != "(" {
+						return nil, p.expectedError("( after USING")
+					}
+					p.advance()
+
+					// TODO: LIMITATION - Currently only supports single column in USING clause
+					// Future enhancement needed for multi-column support like USING (col1, col2, col3)
+					// This requires parsing comma-separated column list and storing as []Expression
+					// Priority: Medium (Phase 2 enhancement)
+					if p.currentToken.Type != "IDENT" {
+						return nil, p.expectedError("column name in USING")
+					}
+					joinCondition = &ast.Identifier{Name: p.currentToken.Literal}
+					p.advance()
+
+					if p.currentToken.Type != ")" {
+						return nil, p.expectedError(") after USING column")
+					}
+					p.advance()
+				} else if joinType != "NATURAL" {
+					return nil, p.expectedError("ON or USING")
+				}
+			}
+
+			// Create join clause with proper tree relationships
+			// For SQL: FROM A JOIN B JOIN C (equivalent to (A JOIN B) JOIN C)
+			var leftTable ast.TableReference
+			if len(joins) == 0 {
+				// First join: A JOIN B
+				leftTable = tableRef
+			} else {
+				// Subsequent joins: (previous result) JOIN C
+				// We represent this by using a synthetic table reference that indicates
+				// the left side is the result of previous joins
+				leftTable = ast.TableReference{
+					Name:  fmt.Sprintf("(%s_with_%d_joins)", tableRef.Name, len(joins)),
+					Alias: "",
+				}
+			}
+
+			joinClause := ast.JoinClause{
+				Type:      joinType,
+				Left:      leftTable,
+				Right:     joinedTableRef,
+				Condition: joinCondition,
+			}
+
+			// Add join clause to joins list
+			joins = append(joins, joinClause)
+
+			// Note: We don't update tableRef here as each JOIN in the list
+			// represents a join with the accumulated result set
 		}
-
-		joinClause := ast.JoinClause{
-			Type:      joinType,
-			Left:      leftTable,
-			Right:     joinedTableRef,
-			Condition: joinCondition,
-		}
-
-		// Add join clause to joins list
-		joins = append(joins, joinClause)
-
-		// Note: We don't update tableRef here as each JOIN in the list
-		// represents a join with the accumulated result set
-	}
 	} // End of FROM clause parsing
 
 	// Initialize SELECT statement

@@ -9,8 +9,10 @@
 package gosqlx
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
@@ -61,6 +63,76 @@ func Parse(sql string) (*ast.AST, error) {
 	}
 
 	return astNode, nil
+}
+
+// ParseWithContext is a convenience function that tokenizes and parses SQL with context support.
+//
+// This function handles all object pool management internally and supports cancellation
+// via the provided context. It's ideal for long-running operations that need to be
+// cancellable or have timeouts.
+//
+// Returns context.Canceled if the context is cancelled during parsing, or
+// context.DeadlineExceeded if the timeout expires.
+//
+// Example:
+//
+//	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+//	defer cancel()
+//	astNode, err := gosqlx.ParseWithContext(ctx, sql)
+//	if err == context.DeadlineExceeded {
+//	    log.Println("Parsing timed out")
+//	}
+func ParseWithContext(ctx context.Context, sql string) (*ast.AST, error) {
+	// Check context before starting
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	// Step 1: Get tokenizer from pool
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+
+	// Step 2: Tokenize SQL with context support
+	tokens, err := tkz.TokenizeContext(ctx, []byte(sql))
+	if err != nil {
+		return nil, fmt.Errorf("tokenization failed: %w", err)
+	}
+
+	// Step 3: Convert to parser tokens using the proper converter
+	converter := parser.NewTokenConverter()
+	result, err := converter.Convert(tokens)
+	if err != nil {
+		return nil, fmt.Errorf("token conversion failed: %w", err)
+	}
+
+	// Step 4: Parse to AST with context support
+	p := parser.NewParser()
+	defer p.Release()
+
+	astNode, err := p.ParseContext(ctx, result.Tokens)
+	if err != nil {
+		return nil, fmt.Errorf("parsing failed: %w", err)
+	}
+
+	return astNode, nil
+}
+
+// ParseWithTimeout is a convenience function that parses SQL with a timeout.
+//
+// This is a wrapper around ParseWithContext that creates a timeout context
+// automatically. It's useful for quick timeout-based parsing without manual
+// context management.
+//
+// Example:
+//
+//	astNode, err := gosqlx.ParseWithTimeout(sql, 5*time.Second)
+//	if err == context.DeadlineExceeded {
+//	    log.Println("Parsing timed out after 5 seconds")
+//	}
+func ParseWithTimeout(sql string, timeout time.Duration) (*ast.AST, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return ParseWithContext(ctx, sql)
 }
 
 // Validate checks if the given SQL is syntactically valid.

@@ -43,8 +43,8 @@ func TestValidateInputFile_InvalidExtensions(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	tests := []struct {
-		name      string
-		filename  string
+		name       string
+		filename   string
 		shouldFail bool
 	}{
 		{"Executable", "malware.exe", true},
@@ -429,13 +429,13 @@ func TestCheckPathTraversal(t *testing.T) {
 	validator := NewSecurityValidator()
 
 	tests := []struct {
-		name        string
-		path        string
-		shouldFail  bool
-		workingDir  string
+		name       string
+		path       string
+		shouldFail bool
+		workingDir string
 	}{
 		{"Clean path", "/home/user/query.sql", false, ""},
-		{"Path with ..", "/home/user/../user/query.sql", false, ""}, // Resolves to safe path
+		{"Path with ..", "/home/user/../user/query.sql", false, ""},              // Resolves to safe path
 		{"Suspicious pattern /../", "/home/user/../../../etc/passwd", false, ""}, // Cleaned path is different
 	}
 

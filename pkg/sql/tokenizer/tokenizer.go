@@ -3,6 +3,7 @@ package tokenizer
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -180,6 +181,146 @@ func (t *Tokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) {
 		}()
 
 		for t.pos.Index < len(t.input) {
+			t.skipWhitespace()
+
+			if t.pos.Index >= len(t.input) {
+				break
+			}
+
+			// Check token count limit to prevent DoS attacks
+			if len(tokens) >= MaxTokens {
+				tokenErr = TokenizerError{
+					Message:  fmt.Sprintf("token count exceeds maximum allowed: %d tokens (max: %d tokens)", len(tokens)+1, MaxTokens),
+					Location: t.getCurrentPosition(),
+				}
+				return
+			}
+
+			startPos := t.pos
+
+			token, err := t.nextToken()
+			if err != nil {
+				tokenErr = TokenizerError{
+					Message:  err.Error(),
+					Location: t.toSQLPosition(startPos),
+				}
+				return
+			}
+
+			tokens = append(tokens, models.TokenWithSpan{
+				Token: token,
+				Start: t.toSQLPosition(startPos),
+				End:   t.getCurrentPosition(),
+			})
+		}
+	}()
+
+	if tokenErr != nil {
+		// Record metrics for failed tokenization
+		duration := time.Since(startTime)
+		metrics.RecordTokenization(duration, len(input), tokenErr)
+		return nil, tokenErr
+	}
+
+	// Add EOF token
+	tokens = append(tokens, models.TokenWithSpan{
+		Token: models.Token{Type: models.TokenTypeEOF},
+		Start: t.getCurrentPosition(),
+		End:   t.getCurrentPosition(),
+	})
+
+	// Record metrics for successful tokenization
+	duration := time.Since(startTime)
+	metrics.RecordTokenization(duration, len(input), nil)
+
+	return tokens, nil
+}
+
+// TokenizeContext processes the input and returns tokens with context support for cancellation.
+// It checks the context at regular intervals (every 100 tokens) to enable fast cancellation.
+// Returns context.Canceled or context.DeadlineExceeded when the context is cancelled.
+//
+// This method is useful for:
+//   - Long-running tokenization operations that need to be cancellable
+//   - Implementing timeouts for tokenization
+//   - Graceful shutdown scenarios
+//
+// Example:
+//
+//	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+//	defer cancel()
+//	tokens, err := tokenizer.TokenizeContext(ctx, []byte(sql))
+//	if err == context.DeadlineExceeded {
+//	    // Handle timeout
+//	}
+func (t *Tokenizer) TokenizeContext(ctx context.Context, input []byte) ([]models.TokenWithSpan, error) {
+	// Check context before starting
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	// Record start time for metrics
+	startTime := time.Now()
+
+	// Validate input size to prevent DoS attacks
+	if len(input) > MaxInputSize {
+		err := fmt.Errorf("input size exceeds maximum allowed: %d bytes (max: %d bytes)", len(input), MaxInputSize)
+		metrics.RecordTokenization(time.Since(startTime), len(input), err)
+		return nil, TokenizerError{
+			Message:  err.Error(),
+			Location: models.Location{Line: 1, Column: 0},
+		}
+	}
+
+	// Reset state
+	t.Reset()
+	t.input = input
+
+	// Pre-allocate line starts slice - reuse if possible
+	estimatedLines := len(input)/50 + 1 // Estimate 50 chars per line + 1 for initial 0
+	if cap(t.lineStarts) < estimatedLines {
+		t.lineStarts = make([]int, 0, estimatedLines)
+	} else {
+		t.lineStarts = t.lineStarts[:0]
+	}
+	t.lineStarts = append(t.lineStarts, 0)
+
+	// Pre-scan input to build line start indices
+	for i := 0; i < len(t.input); i++ {
+		if t.input[i] == '\n' {
+			t.lineStarts = append(t.lineStarts, i+1)
+		}
+	}
+
+	// Pre-allocate token slice with better capacity estimation
+	estimatedTokens := len(input) / 4
+	if estimatedTokens < 16 {
+		estimatedTokens = 16 // At least 16 tokens
+	}
+	tokens := make([]models.TokenWithSpan, 0, estimatedTokens)
+
+	// Get a buffer from the pool for string operations
+	buf := getBuffer()
+	defer putBuffer(buf)
+
+	var tokenErr error
+	func() {
+		// Ensure proper cleanup even if we panic
+		defer func() {
+			if r := recover(); r != nil {
+				tokenErr = fmt.Errorf("panic during tokenization: %v", r)
+			}
+		}()
+
+		for t.pos.Index < len(t.input) {
+			// Check context every 100 tokens for cancellation
+			if len(tokens)%100 == 0 {
+				if err := ctx.Err(); err != nil {
+					tokenErr = err
+					return
+				}
+			}
+
 			t.skipWhitespace()
 
 			if t.pos.Index >= len(t.input) {

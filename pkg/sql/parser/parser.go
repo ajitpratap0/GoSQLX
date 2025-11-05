@@ -259,7 +259,7 @@ func (p *Parser) parseStringLiteral() string {
 	return value
 }
 
-// parseExpression parses an expression
+// parseExpression parses an expression with OR operators (lowest precedence)
 func (p *Parser) parseExpression() (ast.Expression, error) {
 	// Check context if available
 	if p.ctx != nil {
@@ -269,7 +269,6 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 	}
 
 	// Check recursion depth to prevent stack overflow
-	// This is critical since parseExpression can call itself recursively through binary expressions
 	p.depth++
 	defer func() { p.depth-- }()
 
@@ -277,82 +276,78 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 		return nil, fmt.Errorf("maximum recursion depth exceeded (%d) - expression too deeply nested", MaxRecursionDepth)
 	}
 
-	// Parse the left side of the expression
-	var left ast.Expression
-
-	switch p.currentToken.Type {
-	case "IDENT":
-		// Handle identifiers and function calls
-		identName := p.currentToken.Literal
-		p.advance()
-
-		// Check for function call (identifier followed by parentheses)
-		if p.currentToken.Type == "(" {
-			// This is a function call
-			funcCall, err := p.parseFunctionCall(identName)
-			if err != nil {
-				return nil, err
-			}
-			left = funcCall
-		} else {
-			// Handle regular identifier or qualified identifier (table.column)
-			ident := &ast.Identifier{Name: identName}
-
-			// Check for qualified identifier (table.column)
-			if p.currentToken.Type == "." {
-				p.advance() // Consume .
-				if p.currentToken.Type != "IDENT" {
-					return nil, p.expectedError("identifier after .")
-				}
-				// Create a qualified identifier
-				ident = &ast.Identifier{
-					Table: ident.Name,
-					Name:  p.currentToken.Literal,
-				}
-				p.advance()
-			}
-
-			left = ident
-		}
-
-	case "*":
-		// Handle asterisk (e.g., in COUNT(*) or SELECT *)
-		left = &ast.Identifier{Name: "*"}
-		p.advance()
-
-	case "STRING":
-		// Handle string literals
-		left = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "string"}
-		p.advance()
-
-	case "INT":
-		// Handle integer literals
-		left = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "int"}
-		p.advance()
-
-	case "FLOAT":
-		// Handle float literals
-		left = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "float"}
-		p.advance()
-
-	case "TRUE", "FALSE":
-		// Handle boolean literals
-		left = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "bool"}
-		p.advance()
-
-	default:
-		return nil, fmt.Errorf("unexpected token: %s", p.currentToken.Type)
+	// Start by parsing AND expressions (higher precedence)
+	left, err := p.parseAndExpression()
+	if err != nil {
+		return nil, err
 	}
 
-	// Check if this is a binary expression
+	// Handle OR operators (lowest precedence, left-associative)
+	for p.currentToken.Type == "OR" {
+		operator := p.currentToken.Literal
+		p.advance() // Consume OR
+
+		right, err := p.parseAndExpression()
+		if err != nil {
+			return nil, err
+		}
+
+		left = &ast.BinaryExpression{
+			Left:     left,
+			Operator: operator,
+			Right:    right,
+		}
+	}
+
+	return left, nil
+}
+
+// parseAndExpression parses an expression with AND operators (middle precedence)
+func (p *Parser) parseAndExpression() (ast.Expression, error) {
+	// Parse comparison expressions (higher precedence)
+	left, err := p.parseComparisonExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	// Handle AND operators (middle precedence, left-associative)
+	for p.currentToken.Type == "AND" {
+		operator := p.currentToken.Literal
+		p.advance() // Consume AND
+
+		right, err := p.parseComparisonExpression()
+		if err != nil {
+			return nil, err
+		}
+
+		left = &ast.BinaryExpression{
+			Left:     left,
+			Operator: operator,
+			Right:    right,
+		}
+	}
+
+	return left, nil
+}
+
+// parseComparisonExpression parses an expression with comparison operators (highest precedence)
+func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
+	// Parse the left side (primary expression)
+	left, err := p.parsePrimaryExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if this is a comparison binary expression
 	if p.currentToken.Type == "=" || p.currentToken.Type == "<" ||
-		p.currentToken.Type == ">" || p.currentToken.Type == "!=" {
+		p.currentToken.Type == ">" || p.currentToken.Type == "!=" ||
+		p.currentToken.Type == "<=" || p.currentToken.Type == ">=" {
 		// Save the operator
 		operator := p.currentToken.Literal
 		p.advance()
 
 		// Parse the right side of the expression
-		right, err := p.parseExpression()
+		right, err := p.parsePrimaryExpression()
 		if err != nil {
 			return nil, err
 		}
@@ -366,6 +361,83 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 	}
 
 	return left, nil
+}
+
+// parsePrimaryExpression parses a primary expression (literals, identifiers, function calls)
+func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
+	switch p.currentToken.Type {
+	case "IDENT":
+		// Handle identifiers and function calls
+		identName := p.currentToken.Literal
+		p.advance()
+
+		// Check for function call (identifier followed by parentheses)
+		if p.currentToken.Type == "(" {
+			// This is a function call
+			funcCall, err := p.parseFunctionCall(identName)
+			if err != nil {
+				return nil, err
+			}
+			return funcCall, nil
+		}
+
+		// Handle regular identifier or qualified identifier (table.column)
+		ident := &ast.Identifier{Name: identName}
+
+		// Check for qualified identifier (table.column)
+		if p.currentToken.Type == "." {
+			p.advance() // Consume .
+			if p.currentToken.Type != "IDENT" {
+				return nil, p.expectedError("identifier after .")
+			}
+			// Create a qualified identifier
+			ident = &ast.Identifier{
+				Table: ident.Name,
+				Name:  p.currentToken.Literal,
+			}
+			p.advance()
+		}
+
+		return ident, nil
+
+	case "*":
+		// Handle asterisk (e.g., in COUNT(*) or SELECT *)
+		p.advance()
+		return &ast.Identifier{Name: "*"}, nil
+
+	case "STRING":
+		// Handle string literals
+		value := p.currentToken.Literal
+		p.advance()
+		return &ast.LiteralValue{Value: value, Type: "string"}, nil
+
+	case "INT":
+		// Handle integer literals
+		value := p.currentToken.Literal
+		p.advance()
+		return &ast.LiteralValue{Value: value, Type: "int"}, nil
+
+	case "FLOAT":
+		// Handle float literals
+		value := p.currentToken.Literal
+		p.advance()
+		return &ast.LiteralValue{Value: value, Type: "float"}, nil
+
+	case "TRUE", "FALSE":
+		// Handle boolean literals
+		value := p.currentToken.Literal
+		p.advance()
+		return &ast.LiteralValue{Value: value, Type: "bool"}, nil
+
+	case "PLACEHOLDER":
+		// Handle SQL placeholders (e.g., $1, $2 for PostgreSQL; @param for SQL Server)
+		value := p.currentToken.Literal
+		p.advance()
+		return &ast.LiteralValue{Value: value, Type: "placeholder"}, nil
+
+	default:
+		return nil, fmt.Errorf("unexpected token: %s", p.currentToken.Type)
+	}
 }
 
 // parseFunctionCall parses a function call with optional OVER clause for window functions.

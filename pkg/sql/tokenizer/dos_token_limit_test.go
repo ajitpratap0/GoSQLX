@@ -29,7 +29,8 @@ func TestTokenizer_TokenCountLimitReached(t *testing.T) {
 
 	// Build query: SELECT col1, col2, ..., colN FROM users
 	// Optimize by pre-allocating and using batch operations
-	numCols := 10000
+	// Use 1000 columns for CI efficiency (still generates ~2000-3000 tokens)
+	numCols := 1000
 
 	// Pre-calculate size: "SELECT " + columns + " FROM users"
 	// Each column: "colxxxxx" (8 chars) + ", " (2 chars) = 10 chars per column

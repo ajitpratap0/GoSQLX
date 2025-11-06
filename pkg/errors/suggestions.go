@@ -127,6 +127,66 @@ var commonMistakes = []MistakePattern{
 		Correct:     "SELECT AVG(cnt) FROM (SELECT COUNT(*) as cnt FROM users GROUP BY dept) t",
 		Explanation: "Use subquery to aggregate aggregates",
 	},
+	{
+		Name:        "window_function_without_over",
+		Example:     "SELECT name, ROW_NUMBER() FROM employees",
+		Correct:     "SELECT name, ROW_NUMBER() OVER (ORDER BY salary DESC) FROM employees",
+		Explanation: "Window functions require OVER clause with optional PARTITION BY and ORDER BY",
+	},
+	{
+		Name:        "partition_by_without_over",
+		Example:     "SELECT name, RANK() PARTITION BY dept FROM employees",
+		Correct:     "SELECT name, RANK() OVER (PARTITION BY dept ORDER BY salary DESC) FROM employees",
+		Explanation: "PARTITION BY must be inside OVER clause for window functions",
+	},
+	{
+		Name:        "cte_without_select",
+		Example:     "WITH cte AS (SELECT * FROM users)",
+		Correct:     "WITH cte AS (SELECT * FROM users) SELECT * FROM cte",
+		Explanation: "WITH (CTE) must be followed by a SELECT/INSERT/UPDATE/DELETE statement",
+	},
+	{
+		Name:        "recursive_cte_without_union",
+		Example:     "WITH RECURSIVE cte AS (SELECT id FROM employees)",
+		Correct:     "WITH RECURSIVE cte AS (SELECT id FROM employees WHERE manager_id IS NULL UNION ALL SELECT e.id FROM employees e JOIN cte ON e.manager_id = cte.id)",
+		Explanation: "Recursive CTEs require UNION/UNION ALL to combine base and recursive cases",
+	},
+	{
+		Name:        "window_frame_without_order",
+		Example:     "SELECT SUM(amount) OVER (ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM sales",
+		Correct:     "SELECT SUM(amount) OVER (ORDER BY date ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM sales",
+		Explanation: "Window frame clauses (ROWS/RANGE) require ORDER BY in OVER clause",
+	},
+	{
+		Name:        "set_operation_without_matching_columns",
+		Example:     "SELECT id, name FROM users UNION SELECT id FROM orders",
+		Correct:     "SELECT id, name FROM users UNION SELECT order_id, customer_name FROM orders",
+		Explanation: "UNION/INTERSECT/EXCEPT require same number of columns with compatible types",
+	},
+	{
+		Name:        "union_all_vs_union",
+		Example:     "SELECT * FROM users WHERE age > 18 UNION SELECT * FROM users WHERE age <= 18",
+		Correct:     "SELECT * FROM users WHERE age > 18 UNION ALL SELECT * FROM users WHERE age <= 18",
+		Explanation: "Use UNION ALL when you know there are no duplicates (faster than UNION)",
+	},
+	{
+		Name:        "order_by_in_union_subquery",
+		Example:     "(SELECT * FROM users ORDER BY name) UNION (SELECT * FROM admins ORDER BY name)",
+		Correct:     "SELECT * FROM users UNION SELECT * FROM admins ORDER BY name",
+		Explanation: "ORDER BY should be after the entire UNION, not in individual queries",
+	},
+	{
+		Name:        "missing_comma_in_cte_list",
+		Example:     "WITH cte1 AS (SELECT * FROM users) cte2 AS (SELECT * FROM orders) SELECT * FROM cte1",
+		Correct:     "WITH cte1 AS (SELECT * FROM users), cte2 AS (SELECT * FROM orders) SELECT * FROM cte1",
+		Explanation: "Separate multiple CTEs with commas",
+	},
+	{
+		Name:        "window_function_in_where",
+		Example:     "SELECT * FROM employees WHERE ROW_NUMBER() OVER (ORDER BY salary) = 1",
+		Correct:     "SELECT * FROM (SELECT *, ROW_NUMBER() OVER (ORDER BY salary) as rn FROM employees) t WHERE rn = 1",
+		Explanation: "Window functions cannot be used directly in WHERE clause; use subquery or CTE",
+	},
 }
 
 // SuggestFromPattern tries to match error message against known patterns
@@ -304,4 +364,109 @@ func FormatMistakeExample(mistake MistakePattern) string {
 	sb.WriteString(fmt.Sprintf("  ✓ Right: %s\n", mistake.Correct))
 	sb.WriteString(fmt.Sprintf("  Explanation: %s\n", mistake.Explanation))
 	return sb.String()
+}
+
+// SuggestForWindowFunction provides suggestions for window function errors
+func SuggestForWindowFunction(context, functionName string) string {
+	contextUpper := strings.ToUpper(context)
+
+	// Missing OVER clause
+	if !strings.Contains(contextUpper, "OVER") {
+		return fmt.Sprintf("Window function %s requires OVER clause: %s OVER (ORDER BY column)", functionName, functionName)
+	}
+
+	// PARTITION BY without OVER
+	if strings.Contains(contextUpper, "PARTITION") && !strings.Contains(contextUpper, "OVER") {
+		return "PARTITION BY must be inside OVER clause: OVER (PARTITION BY column ORDER BY ...)"
+	}
+
+	// Frame clause without ORDER BY
+	if (strings.Contains(contextUpper, "ROWS") || strings.Contains(contextUpper, "RANGE")) &&
+		!strings.Contains(contextUpper, "ORDER") {
+		return "Window frame clauses (ROWS/RANGE) require ORDER BY: OVER (ORDER BY column ROWS BETWEEN ...)"
+	}
+
+	return "Check window function syntax: function_name OVER ([PARTITION BY ...] [ORDER BY ...] [frame_clause])"
+}
+
+// SuggestForCTE provides suggestions for Common Table Expression errors
+func SuggestForCTE(context string) string {
+	contextUpper := strings.ToUpper(context)
+
+	// CTE without following statement
+	if strings.Contains(contextUpper, "WITH") && !strings.Contains(contextUpper, "SELECT") &&
+		!strings.Contains(contextUpper, "INSERT") && !strings.Contains(contextUpper, "UPDATE") {
+		return "WITH clause must be followed by SELECT, INSERT, UPDATE, or DELETE statement"
+	}
+
+	// Recursive CTE without UNION
+	if strings.Contains(contextUpper, "RECURSIVE") && !strings.Contains(contextUpper, "UNION") {
+		return "Recursive CTEs require UNION or UNION ALL: WITH RECURSIVE cte AS (base_query UNION ALL recursive_query) ..."
+	}
+
+	// Missing comma between CTEs
+	if strings.Count(contextUpper, " AS (") > 1 && strings.Count(contextUpper, ",") < strings.Count(contextUpper, " AS (")-1 {
+		return "Multiple CTEs must be separated by commas: WITH cte1 AS (...), cte2 AS (...) ..."
+	}
+
+	return "Check CTE syntax: WITH cte_name AS (query) SELECT ... or WITH RECURSIVE cte AS (base UNION ALL recursive) ..."
+}
+
+// SuggestForSetOperation provides suggestions for UNION/INTERSECT/EXCEPT errors
+func SuggestForSetOperation(operation, context string) string {
+	contextUpper := strings.ToUpper(context)
+
+	// Order by in subquery
+	if strings.Contains(contextUpper, "(SELECT") && strings.Contains(contextUpper, "ORDER BY") {
+		return fmt.Sprintf("ORDER BY should be after the entire %s, not in individual queries", operation)
+	}
+
+	// Mismatched columns
+	if strings.Contains(context, "column") || strings.Contains(context, "mismatch") {
+		return fmt.Sprintf("%s requires same number of columns with compatible types in both queries", operation)
+	}
+
+	return fmt.Sprintf("Check %s syntax: SELECT ... %s SELECT ... [ORDER BY ...]", operation, operation)
+}
+
+// SuggestForJoinError provides enhanced suggestions for JOIN-related errors
+func SuggestForJoinError(joinType, context string) string {
+	contextUpper := strings.ToUpper(context)
+
+	// Missing ON or USING
+	if !strings.Contains(contextUpper, "ON") && !strings.Contains(contextUpper, "USING") &&
+		!strings.Contains(contextUpper, "NATURAL") {
+		if joinType == "CROSS" {
+			return "CROSS JOIN doesn't require ON clause, but other JOINs do"
+		}
+		return fmt.Sprintf("%s JOIN requires ON condition or USING clause: %s JOIN table ON condition", joinType, joinType)
+	}
+
+	// Ambiguous column in JOIN
+	if strings.Contains(context, "ambiguous") {
+		return "Qualify column names with table name or alias: table1.column = table2.column"
+	}
+
+	return fmt.Sprintf("Check %s JOIN syntax: FROM table1 %s JOIN table2 ON condition", joinType, joinType)
+}
+
+// GetAdvancedFeatureHint returns hints for advanced SQL features
+func GetAdvancedFeatureHint(feature string) string {
+	hints := map[string]string{
+		"window_functions": "Window functions: ROW_NUMBER(), RANK(), DENSE_RANK(), LAG(), LEAD(), SUM() OVER (), etc.",
+		"cte":              "CTEs (Common Table Expressions): WITH cte_name AS (query) SELECT * FROM cte_name",
+		"recursive_cte":    "Recursive CTEs: WITH RECURSIVE cte AS (base_query UNION ALL recursive_query) ...",
+		"set_operations":   "Set operations: UNION [ALL], INTERSECT, EXCEPT",
+		"window_frames":    "Window frames: ROWS/RANGE BETWEEN start AND end (UNBOUNDED PRECEDING, CURRENT ROW, etc.)",
+		"partition_by":     "PARTITION BY: Divides result set into partitions for window functions",
+		"lateral_join":     "LATERAL joins: Allow subquery to reference columns from preceding tables",
+		"grouping_sets":    "GROUPING SETS: Multiple GROUP BY clauses in single query",
+	}
+
+	feature = strings.ToLower(strings.ReplaceAll(feature, " ", "_"))
+	if hint, ok := hints[feature]; ok {
+		return hint
+	}
+
+	return "Check GoSQLX documentation for supported SQL features and syntax"
 }

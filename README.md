@@ -118,7 +118,9 @@ gosqlx analyze "SELECT COUNT(*) FROM orders GROUP BY status"
 gosqlx parse -f json complex_query.sql
 ```
 
-### Library Usage
+### Library Usage - Simple API
+
+GoSQLX provides a simple, high-level API that handles all complexity for you:
 
 ```go
 package main
@@ -126,69 +128,92 @@ package main
 import (
     "fmt"
     "log"
-    
-    "github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
+
+    "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 )
 
 func main() {
-    // Get tokenizer from pool (always return it!)
-    tkz := tokenizer.GetTokenizer()
-    defer tokenizer.PutTokenizer(tkz)
-    
-    // Tokenize SQL
-    sql := "SELECT id, name FROM users WHERE age > 18"
-    tokens, err := tkz.Tokenize([]byte(sql))
+    // Parse SQL in one line - that's it!
+    ast, err := gosqlx.Parse("SELECT * FROM users WHERE active = true")
     if err != nil {
         log.Fatal(err)
     }
-    
-    // Process tokens
-    fmt.Printf("Generated %d tokens\n", len(tokens))
-    for _, token := range tokens {
-        fmt.Printf("  %s (line %d, col %d)\n", 
-            token.Token.Value,
-            token.Start.Line,
-            token.Start.Column)
-    }
+
+    fmt.Printf("Successfully parsed %d statement(s)\n", len(ast.Statements))
 }
 ```
 
-### Advanced Example with AST
+**That's it!** Just 3 lines of code. No pool management, no manual cleanup - everything is handled for you.
+
+### More Examples
+
+```go
+// Validate SQL without parsing
+if err := gosqlx.Validate("SELECT * FROM users"); err != nil {
+    fmt.Println("Invalid SQL:", err)
+}
+
+// Parse multiple queries efficiently
+queries := []string{
+    "SELECT * FROM users",
+    "SELECT * FROM orders",
+}
+asts, err := gosqlx.ParseMultiple(queries)
+
+// Parse with timeout for long queries
+ast, err := gosqlx.ParseWithTimeout(sql, 5*time.Second)
+
+// Parse from byte slice (zero-copy)
+ast, err := gosqlx.ParseBytes([]byte("SELECT * FROM users"))
+```
+
+### Advanced Usage - Low-Level API
+
+For performance-critical code that needs fine-grained control, use the low-level API:
 
 ```go
 package main
 
 import (
     "fmt"
-    
+
     "github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
     "github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 )
 
-func AnalyzeSQL(sql string) error {
-    // Tokenize
+func main() {
+    // Get tokenizer from pool (always return it!)
     tkz := tokenizer.GetTokenizer()
     defer tokenizer.PutTokenizer(tkz)
-    
+
+    // Tokenize SQL
+    sql := "SELECT id, name FROM users WHERE age > 18"
     tokens, err := tkz.Tokenize([]byte(sql))
     if err != nil {
-        return fmt.Errorf("tokenization failed: %w", err)
+        panic(err)
     }
-    
+
+    // Convert tokens
+    converter := parser.NewTokenConverter()
+    result, err := converter.Convert(tokens)
+    if err != nil {
+        panic(err)
+    }
+
     // Parse to AST
     p := parser.NewParser()
     defer p.Release()
-    
-    ast, err := p.Parse(convertTokens(tokens))
+
+    ast, err := p.Parse(result.Tokens)
     if err != nil {
-        return fmt.Errorf("parsing failed: %w", err)
+        panic(err)
     }
-    
-    // Analyze AST
+
     fmt.Printf("Statement type: %T\n", ast)
-    return nil
 }
 ```
+
+> **Note:** The simple API has < 1% performance overhead compared to low-level API. Use the simple API unless you need fine-grained control.
 
 ## 📚 Documentation
 

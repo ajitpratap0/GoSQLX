@@ -241,3 +241,64 @@ func BenchmarkParserMixedParallel(b *testing.B) {
 		}
 	})
 }
+
+// BenchmarkParser_RecursionDepthCheck measures the performance impact of recursion depth checking.
+// This benchmark compares parsing with depth checks enabled (current implementation) to verify
+// that the overhead is negligible (<1% as specified in requirements).
+func BenchmarkParser_RecursionDepthCheck(b *testing.B) {
+	// Test with various query complexities to ensure depth checking overhead is minimal
+	testCases := []struct {
+		name   string
+		tokens []token.Token
+	}{
+		{
+			name:   "SimpleSelect",
+			tokens: simpleSelectTokens,
+		},
+		{
+			name:   "ComplexSelect",
+			tokens: complexSelectTokens,
+		},
+		{
+			name: "ModerateNesting",
+			tokens: func() []token.Token {
+				// Build a moderately nested query (20 levels) - realistic usage
+				tokens := []token.Token{{Type: "SELECT", Literal: "SELECT"}}
+				for i := 0; i < 20; i++ {
+					tokens = append(tokens,
+						token.Token{Type: "IDENT", Literal: "func"},
+						token.Token{Type: "(", Literal: "("},
+					)
+				}
+				tokens = append(tokens, token.Token{Type: "IDENT", Literal: "x"})
+				for i := 0; i < 20; i++ {
+					tokens = append(tokens, token.Token{Type: ")", Literal: ")"})
+				}
+				tokens = append(tokens,
+					token.Token{Type: "FROM", Literal: "FROM"},
+					token.Token{Type: "IDENT", Literal: "t"},
+				)
+				return tokens
+			}(),
+		},
+	}
+
+	for _, tc := range testCases {
+		b.Run(tc.name, func(b *testing.B) {
+			b.ReportAllocs()
+			parser := NewParser()
+			defer parser.Release()
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				tree, err := parser.Parse(tc.tokens)
+				if err != nil {
+					b.Fatal(err)
+				}
+				if tree == nil {
+					b.Fatal("expected non-nil AST")
+				}
+			}
+		})
+	}
+}

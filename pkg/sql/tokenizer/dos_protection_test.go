@@ -119,8 +119,11 @@ func TestTokenizer_TokenCountLimit(t *testing.T) {
 		t.Logf("Large query produced %d tokens", len(tokens))
 	})
 
-	// Note: Testing the actual MaxTokens limit would require generating a massive input
-	// which is impractical for unit tests. The limit is tested in integration tests.
+	// Note: Testing the actual MaxTokens limit in practice would require generating
+	// a massive input (>1M tokens) which would take too long for unit tests.
+	// The token count check logic is tested by code inspection and by verifying
+	// the error path works with a modified limit in integration tests.
+	// The implementation at lines 190-197 in tokenizer.go provides the protection.
 }
 
 // TestTokenizer_DoSProtectionPerformance tests that DoS checks don't impact performance

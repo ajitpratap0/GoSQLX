@@ -30,6 +30,155 @@ gosqlx format query.sql
 gosqlx analyze "SELECT COUNT(*) FROM orders GROUP BY status"
 ```
 
+## Configuration
+
+GoSQLX supports configuration files for persistent settings across all commands. This enables team-wide consistency and reduces the need for command-line flags.
+
+### Configuration File Locations
+
+Configuration files are searched in the following order (highest priority first):
+
+1. **Current directory**: `.gosqlx.yml`
+2. **Home directory**: `~/.gosqlx.yml`
+3. **System-wide**: `/etc/gosqlx.yml`
+
+CLI flags always override configuration file settings.
+
+### Configuration Commands
+
+#### `gosqlx config init`
+Create a new configuration file with default settings:
+
+```bash
+# Create .gosqlx.yml in current directory
+gosqlx config init
+
+# Create config in home directory
+gosqlx config init --path ~/.gosqlx.yml
+
+# Create config in custom location
+gosqlx config init --path /path/to/config.yml
+```
+
+#### `gosqlx config validate`
+Validate configuration file syntax and values:
+
+```bash
+# Validate default config location
+gosqlx config validate
+
+# Validate specific config file
+gosqlx config validate --file /path/to/config.yml
+```
+
+#### `gosqlx config show`
+Display current configuration (merged from all sources):
+
+```bash
+# Show current configuration as YAML
+gosqlx config show
+
+# Show as JSON
+gosqlx config show --format json
+```
+
+### Configuration Schema
+
+```yaml
+# Format settings - controls SQL formatting behavior
+format:
+  indent: 2                    # Indentation size (0-8 spaces)
+  uppercase_keywords: true     # Convert keywords to uppercase
+  max_line_length: 80          # Maximum line length (0-500, 0=unlimited)
+  compact: false               # Minimal whitespace format
+
+# Validation settings - controls SQL validation behavior
+validate:
+  dialect: postgresql          # SQL dialect (postgresql, mysql, sqlserver, oracle, sqlite, generic)
+  strict_mode: false           # Enable strict validation
+  recursive: false             # Recursively process directories
+  pattern: "*.sql"             # File pattern for recursive processing
+
+# Output settings - controls result display
+output:
+  format: auto                 # Output format (json, yaml, table, tree, auto)
+  verbose: false               # Enable verbose output
+
+# Analyze settings - controls analysis features
+analyze:
+  security: true               # Enable security analysis
+  performance: true            # Enable performance analysis
+  complexity: true             # Enable complexity analysis
+  all: false                   # Enable all analysis features
+```
+
+### Configuration Examples
+
+**Team configuration for PostgreSQL projects** (`.gosqlx.yml`):
+```yaml
+format:
+  indent: 2
+  uppercase_keywords: true
+  max_line_length: 100
+
+validate:
+  dialect: postgresql
+  strict_mode: true
+
+output:
+  format: table
+```
+
+**Personal configuration for MySQL** (`~/.gosqlx.yml`):
+```yaml
+format:
+  indent: 4
+  uppercase_keywords: false
+  compact: true
+
+validate:
+  dialect: mysql
+  recursive: true
+
+analyze:
+  all: true
+```
+
+**CI/CD configuration** (`.gosqlx.yml`):
+```yaml
+format:
+  indent: 2
+  uppercase_keywords: true
+  max_line_length: 80
+
+validate:
+  dialect: postgresql
+  strict_mode: true
+
+output:
+  format: json
+  verbose: false
+```
+
+### Configuration Precedence
+
+When multiple configuration sources exist, settings are merged with this precedence:
+
+1. **CLI flags** (highest priority)
+2. **Current directory** `.gosqlx.yml`
+3. **Home directory** `~/.gosqlx.yml`
+4. **System-wide** `/etc/gosqlx.yml`
+5. **Built-in defaults** (lowest priority)
+
+Example:
+```bash
+# Config file has: indent: 2
+# CLI flag overrides: --indent 4
+# Result: Uses indent: 4
+
+gosqlx format --indent 4 query.sql
+```
+
 ## Commands
 
 ### `gosqlx validate`
@@ -147,9 +296,59 @@ gosqlx validate "queries/*.sql"
 - `.txt` - Text files containing SQL
 - Files without extension are also supported
 
-**Security limits:**
-- Maximum file size: 10MB
-- Maximum SQL query length: 10MB
+**Security limits and protections:**
+
+GoSQLX CLI implements comprehensive security validation to protect against malicious input:
+
+1. **File Size Limits**:
+   - Maximum file size: 10MB (10,485,760 bytes)
+   - Maximum direct SQL query length: 10MB
+   - Prevents DoS attacks via oversized files
+
+2. **Path Traversal Protection**:
+   - Blocks attempts to access files outside intended directories
+   - Detects and rejects paths with multiple `..` sequences
+   - Example blocked: `../../../../../../etc/passwd`
+
+3. **Symlink Protection**:
+   - Symlinks are blocked by default for security
+   - Prevents symlink-based attacks to system files
+   - All symlink chains are rejected
+
+4. **File Type Restrictions**:
+   - **Allowed**: `.sql`, `.txt`, files without extension
+   - **Blocked**: `.exe`, `.bat`, `.sh`, `.py`, `.js`, `.dll`, `.so`, `.jar`, and all other executable/binary formats
+   - Prevents execution of malicious code
+
+5. **Special File Protection**:
+   - Blocks device files (`/dev/null`, `/dev/random`, etc.)
+   - Rejects directories, pipes, and sockets
+   - Only regular files are accepted
+
+6. **Permission Validation**:
+   - Verifies read permissions before processing
+   - Fails gracefully with clear error messages
+
+**Security error examples:**
+```bash
+# Path traversal attempt
+$ gosqlx validate "../../etc/passwd"
+Error: security validation failed: path traversal detected
+
+# Executable file rejection
+$ gosqlx validate malware.exe
+Error: unsupported file extension: .exe (allowed: [.sql .txt ])
+
+# Oversized file rejection
+$ gosqlx validate huge.sql
+Error: file too large: 11534336 bytes (max 10485760 bytes)
+
+# Device file rejection
+$ gosqlx validate /dev/null
+Error: not a regular file: /dev/null
+```
+
+For more details, see the [Security Validation Package](../cmd/gosqlx/internal/validate/README.md).
 
 ## Advanced Features
 

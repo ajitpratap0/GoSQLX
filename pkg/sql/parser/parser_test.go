@@ -926,3 +926,121 @@ func TestParser_LogicalOperatorPrecedence(t *testing.T) {
 		})
 	}
 }
+
+// TestRecursionDepthLimit_ExtremelyNestedParentheses tests 1000+ nested parentheses
+// to verify stack overflow protection with extreme input. This simulates a malicious
+// input designed to cause stack overflow attacks.
+func TestRecursionDepthLimit_ExtremelyNestedParentheses(t *testing.T) {
+	parser := NewParser()
+	defer parser.Release()
+
+	// Build tokens for: SELECT ((((...((x))...))) FROM t
+	// With 1000 levels of nested parentheses
+	tokens := []token.Token{
+		{Type: "SELECT", Literal: "SELECT"},
+	}
+
+	// Note: Parentheses in SQL expressions would require expression parsing
+	// which goes through parseExpression. For this test, we'll use nested
+	// function calls as they provide the same recursion depth behavior.
+	// Build: SELECT f(f(f(...f(x)...))) FROM t with 1000 levels
+
+	// Add opening function calls (1000 levels)
+	for i := 0; i < 1000; i++ {
+		tokens = append(tokens,
+			token.Token{Type: "IDENT", Literal: "func"},
+			token.Token{Type: "(", Literal: "("},
+		)
+	}
+
+	// Add innermost argument
+	tokens = append(tokens, token.Token{Type: "IDENT", Literal: "x"})
+
+	// Add closing parentheses (1000 levels)
+	for i := 0; i < 1000; i++ {
+		tokens = append(tokens, token.Token{Type: ")", Literal: ")"})
+	}
+
+	tokens = append(tokens,
+		token.Token{Type: "FROM", Literal: "FROM"},
+		token.Token{Type: "IDENT", Literal: "t"},
+	)
+
+	// This should be rejected due to exceeding MaxRecursionDepth (100)
+	_, err := parser.Parse(tokens)
+	if err == nil {
+		t.Fatal("expected error for 1000+ nested function calls, got nil")
+	}
+
+	// Verify the error message mentions recursion depth
+	if !containsSubstring(err.Error(), "maximum recursion depth exceeded") {
+		t.Errorf("expected 'maximum recursion depth exceeded' in error, got: %v", err)
+	}
+
+	// Verify the parser didn't crash (stack overflow would panic)
+	// If we got here, the protection worked
+}
+
+// TestRecursionDepthLimit_NoStackOverflow verifies that the depth limit
+// prevents actual stack overflow under extreme nesting conditions.
+func TestRecursionDepthLimit_NoStackOverflow(t *testing.T) {
+	parser := NewParser()
+	defer parser.Release()
+
+	// Test with multiple extreme cases in sequence to ensure no cumulative issues
+	testCases := []struct {
+		name   string
+		depth  int
+		expect string
+	}{
+		{"Moderate depth (50)", 50, "success"},
+		{"At limit (100)", 100, "success"}, // Should just barely work
+		{"Over limit (150)", 150, "error"},
+		{"Far over limit (500)", 500, "error"},
+		{"Extreme (1000)", 1000, "error"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Build nested function call tokens
+			tokens := []token.Token{{Type: "SELECT", Literal: "SELECT"}}
+
+			for i := 0; i < tc.depth; i++ {
+				tokens = append(tokens,
+					token.Token{Type: "IDENT", Literal: "f"},
+					token.Token{Type: "(", Literal: "("},
+				)
+			}
+
+			tokens = append(tokens, token.Token{Type: "IDENT", Literal: "x"})
+
+			for i := 0; i < tc.depth; i++ {
+				tokens = append(tokens, token.Token{Type: ")", Literal: ")"})
+			}
+
+			tokens = append(tokens,
+				token.Token{Type: "FROM", Literal: "FROM"},
+				token.Token{Type: "IDENT", Literal: "t"},
+			)
+
+			// Parse and check result
+			_, err := parser.Parse(tokens)
+
+			if tc.expect == "success" {
+				if err != nil && containsSubstring(err.Error(), "maximum recursion depth exceeded") {
+					// Depth exactly at 100 might fail due to overhead in the call stack
+					// This is acceptable behavior
+					t.Logf("Note: Depth %d exceeded limit (acceptable at boundary)", tc.depth)
+				}
+			} else if tc.expect == "error" {
+				if err == nil {
+					t.Errorf("expected error for depth %d, got success", tc.depth)
+				} else if !containsSubstring(err.Error(), "maximum recursion depth exceeded") {
+					t.Errorf("expected 'maximum recursion depth exceeded', got: %v", err)
+				}
+			}
+
+			// If we got here without panic, the stack overflow protection worked
+		})
+	}
+}

@@ -1,6 +1,10 @@
 package ast
 
-import "testing"
+import (
+	"runtime"
+	"testing"
+	"time"
+)
 
 // Test InsertStatement pool
 func TestInsertStatementPool(t *testing.T) {
@@ -227,4 +231,474 @@ func TestPoolReuse(t *testing.T) {
 	})
 }
 
-// Test AST pool with NewAST and ReleaseAST
+// Memory leak detection tests for all pools
+func TestMemoryLeaks_ASTPool(t *testing.T) {
+	runtime.GC()
+	runtime.GC()
+	time.Sleep(10 * time.Millisecond)
+
+	var m1 runtime.MemStats
+	runtime.ReadMemStats(&m1)
+
+	const iterations = 10000
+
+	t.Logf("Running %d iterations of AST pool operations...", iterations)
+
+	for i := 0; i < iterations; i++ {
+		ast := NewAST()
+
+		// Add statements
+		ast.Statements = append(ast.Statements, &SelectStatement{
+			TableName: "test",
+			Columns:   []Expression{&Identifier{Name: "col1"}},
+		})
+
+		ReleaseAST(ast)
+
+		if i%1000 == 0 && i > 0 {
+			runtime.GC()
+		}
+	}
+
+	runtime.GC()
+	runtime.GC()
+	time.Sleep(10 * time.Millisecond)
+
+	var m2 runtime.MemStats
+	runtime.ReadMemStats(&m2)
+
+	allocDiff := int64(m2.Alloc) - int64(m1.Alloc)
+	totalAllocDiff := int64(m2.TotalAlloc) - int64(m1.TotalAlloc)
+	bytesPerOp := float64(totalAllocDiff) / float64(iterations)
+
+	t.Logf("AST pool memory stats:")
+	t.Logf("  Alloc diff: %d bytes", allocDiff)
+	t.Logf("  TotalAlloc diff: %d bytes", totalAllocDiff)
+	t.Logf("  Bytes per operation: %.2f", bytesPerOp)
+
+	const maxAllocIncrease = 1024 * 1024 // 1MB
+	const maxBytesPerOp = 5000           // 5KB
+
+	if allocDiff > maxAllocIncrease {
+		t.Errorf("Memory leak in AST pool: %d bytes (threshold: %d)", allocDiff, maxAllocIncrease)
+	}
+
+	if bytesPerOp > maxBytesPerOp {
+		t.Errorf("High memory usage in AST pool: %.2f bytes/op (threshold: %d)", bytesPerOp, maxBytesPerOp)
+	}
+
+	if allocDiff <= maxAllocIncrease && bytesPerOp <= maxBytesPerOp {
+		t.Logf("✅ AST pool memory leak test PASSED")
+	}
+}
+
+func TestMemoryLeaks_SelectStatementPool(t *testing.T) {
+	runtime.GC()
+	runtime.GC()
+	time.Sleep(10 * time.Millisecond)
+
+	var m1 runtime.MemStats
+	runtime.ReadMemStats(&m1)
+
+	const iterations = 10000
+
+	t.Logf("Running %d iterations of SelectStatement pool operations...", iterations)
+
+	for i := 0; i < iterations; i++ {
+		stmt := GetSelectStatement()
+
+		stmt.TableName = "users"
+		stmt.Columns = append(stmt.Columns, &Identifier{Name: "id"}, &Identifier{Name: "name"})
+		stmt.Where = &BinaryExpression{
+			Left:     &Identifier{Name: "active"},
+			Operator: "=",
+			Right:    &LiteralValue{Value: "true"},
+		}
+
+		PutSelectStatement(stmt)
+
+		if i%1000 == 0 && i > 0 {
+			runtime.GC()
+		}
+	}
+
+	runtime.GC()
+	runtime.GC()
+	time.Sleep(10 * time.Millisecond)
+
+	var m2 runtime.MemStats
+	runtime.ReadMemStats(&m2)
+
+	allocDiff := int64(m2.Alloc) - int64(m1.Alloc)
+	totalAllocDiff := int64(m2.TotalAlloc) - int64(m1.TotalAlloc)
+	bytesPerOp := float64(totalAllocDiff) / float64(iterations)
+
+	t.Logf("SelectStatement pool memory stats:")
+	t.Logf("  Alloc diff: %d bytes", allocDiff)
+	t.Logf("  TotalAlloc diff: %d bytes", totalAllocDiff)
+	t.Logf("  Bytes per operation: %.2f", bytesPerOp)
+
+	const maxAllocIncrease = 1024 * 1024 // 1MB
+	const maxBytesPerOp = 6000           // 6KB
+
+	if allocDiff > maxAllocIncrease {
+		t.Errorf("Memory leak in SelectStatement pool: %d bytes (threshold: %d)", allocDiff, maxAllocIncrease)
+	}
+
+	if bytesPerOp > maxBytesPerOp {
+		t.Errorf("High memory usage in SelectStatement pool: %.2f bytes/op (threshold: %d)", bytesPerOp, maxBytesPerOp)
+	}
+
+	if allocDiff <= maxAllocIncrease && bytesPerOp <= maxBytesPerOp {
+		t.Logf("✅ SelectStatement pool memory leak test PASSED")
+	}
+}
+
+func TestMemoryLeaks_InsertStatementPool(t *testing.T) {
+	runtime.GC()
+	runtime.GC()
+	time.Sleep(10 * time.Millisecond)
+
+	var m1 runtime.MemStats
+	runtime.ReadMemStats(&m1)
+
+	const iterations = 10000
+
+	t.Logf("Running %d iterations of InsertStatement pool operations...", iterations)
+
+	for i := 0; i < iterations; i++ {
+		stmt := GetInsertStatement()
+
+		stmt.TableName = "users"
+		stmt.Columns = append(stmt.Columns, &Identifier{Name: "name"}, &Identifier{Name: "email"})
+		stmt.Values = append(stmt.Values, &LiteralValue{Value: "John"}, &LiteralValue{Value: "john@test.com"})
+
+		PutInsertStatement(stmt)
+
+		if i%1000 == 0 && i > 0 {
+			runtime.GC()
+		}
+	}
+
+	runtime.GC()
+	runtime.GC()
+	time.Sleep(10 * time.Millisecond)
+
+	var m2 runtime.MemStats
+	runtime.ReadMemStats(&m2)
+
+	allocDiff := int64(m2.Alloc) - int64(m1.Alloc)
+	totalAllocDiff := int64(m2.TotalAlloc) - int64(m1.TotalAlloc)
+	bytesPerOp := float64(totalAllocDiff) / float64(iterations)
+
+	t.Logf("InsertStatement pool memory stats:")
+	t.Logf("  Alloc diff: %d bytes", allocDiff)
+	t.Logf("  TotalAlloc diff: %d bytes", totalAllocDiff)
+	t.Logf("  Bytes per operation: %.2f", bytesPerOp)
+
+	const maxAllocIncrease = 1024 * 1024 // 1MB
+	const maxBytesPerOp = 6000           // 6KB
+
+	if allocDiff > maxAllocIncrease {
+		t.Errorf("Memory leak in InsertStatement pool: %d bytes (threshold: %d)", allocDiff, maxAllocIncrease)
+	}
+
+	if bytesPerOp > maxBytesPerOp {
+		t.Errorf("High memory usage in InsertStatement pool: %.2f bytes/op (threshold: %d)", bytesPerOp, maxBytesPerOp)
+	}
+
+	if allocDiff <= maxAllocIncrease && bytesPerOp <= maxBytesPerOp {
+		t.Logf("✅ InsertStatement pool memory leak test PASSED")
+	}
+}
+
+func TestMemoryLeaks_UpdateStatementPool(t *testing.T) {
+	runtime.GC()
+	runtime.GC()
+	time.Sleep(10 * time.Millisecond)
+
+	var m1 runtime.MemStats
+	runtime.ReadMemStats(&m1)
+
+	const iterations = 10000
+
+	t.Logf("Running %d iterations of UpdateStatement pool operations...", iterations)
+
+	for i := 0; i < iterations; i++ {
+		stmt := GetUpdateStatement()
+
+		stmt.TableName = "users"
+		stmt.Updates = append(stmt.Updates, UpdateExpression{
+			Column: &Identifier{Name: "status"},
+			Value:  &LiteralValue{Value: "active"},
+		})
+		stmt.Where = &BinaryExpression{
+			Left:     &Identifier{Name: "id"},
+			Operator: "=",
+			Right:    &LiteralValue{Value: "123"},
+		}
+
+		PutUpdateStatement(stmt)
+
+		if i%1000 == 0 && i > 0 {
+			runtime.GC()
+		}
+	}
+
+	runtime.GC()
+	runtime.GC()
+	time.Sleep(10 * time.Millisecond)
+
+	var m2 runtime.MemStats
+	runtime.ReadMemStats(&m2)
+
+	allocDiff := int64(m2.Alloc) - int64(m1.Alloc)
+	totalAllocDiff := int64(m2.TotalAlloc) - int64(m1.TotalAlloc)
+	bytesPerOp := float64(totalAllocDiff) / float64(iterations)
+
+	t.Logf("UpdateStatement pool memory stats:")
+	t.Logf("  Alloc diff: %d bytes", allocDiff)
+	t.Logf("  TotalAlloc diff: %d bytes", totalAllocDiff)
+	t.Logf("  Bytes per operation: %.2f", bytesPerOp)
+
+	const maxAllocIncrease = 1024 * 1024 // 1MB
+	const maxBytesPerOp = 6000           // 6KB
+
+	if allocDiff > maxAllocIncrease {
+		t.Errorf("Memory leak in UpdateStatement pool: %d bytes (threshold: %d)", allocDiff, maxAllocIncrease)
+	}
+
+	if bytesPerOp > maxBytesPerOp {
+		t.Errorf("High memory usage in UpdateStatement pool: %.2f bytes/op (threshold: %d)", bytesPerOp, maxBytesPerOp)
+	}
+
+	if allocDiff <= maxAllocIncrease && bytesPerOp <= maxBytesPerOp {
+		t.Logf("✅ UpdateStatement pool memory leak test PASSED")
+	}
+}
+
+func TestMemoryLeaks_DeleteStatementPool(t *testing.T) {
+	runtime.GC()
+	runtime.GC()
+	time.Sleep(10 * time.Millisecond)
+
+	var m1 runtime.MemStats
+	runtime.ReadMemStats(&m1)
+
+	const iterations = 10000
+
+	t.Logf("Running %d iterations of DeleteStatement pool operations...", iterations)
+
+	for i := 0; i < iterations; i++ {
+		stmt := GetDeleteStatement()
+
+		stmt.TableName = "users"
+		stmt.Where = &BinaryExpression{
+			Left:     &Identifier{Name: "id"},
+			Operator: "=",
+			Right:    &LiteralValue{Value: "999"},
+		}
+
+		PutDeleteStatement(stmt)
+
+		if i%1000 == 0 && i > 0 {
+			runtime.GC()
+		}
+	}
+
+	runtime.GC()
+	runtime.GC()
+	time.Sleep(10 * time.Millisecond)
+
+	var m2 runtime.MemStats
+	runtime.ReadMemStats(&m2)
+
+	allocDiff := int64(m2.Alloc) - int64(m1.Alloc)
+	totalAllocDiff := int64(m2.TotalAlloc) - int64(m1.TotalAlloc)
+	bytesPerOp := float64(totalAllocDiff) / float64(iterations)
+
+	t.Logf("DeleteStatement pool memory stats:")
+	t.Logf("  Alloc diff: %d bytes", allocDiff)
+	t.Logf("  TotalAlloc diff: %d bytes", totalAllocDiff)
+	t.Logf("  Bytes per operation: %.2f", bytesPerOp)
+
+	const maxAllocIncrease = 1024 * 1024 // 1MB
+	const maxBytesPerOp = 5000           // 5KB
+
+	if allocDiff > maxAllocIncrease {
+		t.Errorf("Memory leak in DeleteStatement pool: %d bytes (threshold: %d)", allocDiff, maxAllocIncrease)
+	}
+
+	if bytesPerOp > maxBytesPerOp {
+		t.Errorf("High memory usage in DeleteStatement pool: %.2f bytes/op (threshold: %d)", bytesPerOp, maxBytesPerOp)
+	}
+
+	if allocDiff <= maxAllocIncrease && bytesPerOp <= maxBytesPerOp {
+		t.Logf("✅ DeleteStatement pool memory leak test PASSED")
+	}
+}
+
+func TestMemoryLeaks_IdentifierPool(t *testing.T) {
+	runtime.GC()
+	runtime.GC()
+	time.Sleep(10 * time.Millisecond)
+
+	var m1 runtime.MemStats
+	runtime.ReadMemStats(&m1)
+
+	const iterations = 10000
+
+	t.Logf("Running %d iterations of Identifier pool operations...", iterations)
+
+	for i := 0; i < iterations; i++ {
+		ident := GetIdentifier()
+		ident.Name = "test_column"
+		PutIdentifier(ident)
+
+		if i%1000 == 0 && i > 0 {
+			runtime.GC()
+		}
+	}
+
+	runtime.GC()
+	runtime.GC()
+	time.Sleep(10 * time.Millisecond)
+
+	var m2 runtime.MemStats
+	runtime.ReadMemStats(&m2)
+
+	allocDiff := int64(m2.Alloc) - int64(m1.Alloc)
+	totalAllocDiff := int64(m2.TotalAlloc) - int64(m1.TotalAlloc)
+	bytesPerOp := float64(totalAllocDiff) / float64(iterations)
+
+	t.Logf("Identifier pool memory stats:")
+	t.Logf("  Alloc diff: %d bytes", allocDiff)
+	t.Logf("  TotalAlloc diff: %d bytes", totalAllocDiff)
+	t.Logf("  Bytes per operation: %.2f", bytesPerOp)
+
+	const maxAllocIncrease = 512 * 1024 // 512KB
+	const maxBytesPerOp = 3000          // 3KB
+
+	if allocDiff > maxAllocIncrease {
+		t.Errorf("Memory leak in Identifier pool: %d bytes (threshold: %d)", allocDiff, maxAllocIncrease)
+	}
+
+	if bytesPerOp > maxBytesPerOp {
+		t.Errorf("High memory usage in Identifier pool: %.2f bytes/op (threshold: %d)", bytesPerOp, maxBytesPerOp)
+	}
+
+	if allocDiff <= maxAllocIncrease && bytesPerOp <= maxBytesPerOp {
+		t.Logf("✅ Identifier pool memory leak test PASSED")
+	}
+}
+
+func TestMemoryLeaks_BinaryExpressionPool(t *testing.T) {
+	runtime.GC()
+	runtime.GC()
+	time.Sleep(10 * time.Millisecond)
+
+	var m1 runtime.MemStats
+	runtime.ReadMemStats(&m1)
+
+	const iterations = 10000
+
+	t.Logf("Running %d iterations of BinaryExpression pool operations...", iterations)
+
+	for i := 0; i < iterations; i++ {
+		expr := GetBinaryExpression()
+		expr.Left = &Identifier{Name: "col"}
+		expr.Operator = "="
+		expr.Right = &LiteralValue{Value: "val"}
+		PutBinaryExpression(expr)
+
+		if i%1000 == 0 && i > 0 {
+			runtime.GC()
+		}
+	}
+
+	runtime.GC()
+	runtime.GC()
+	time.Sleep(10 * time.Millisecond)
+
+	var m2 runtime.MemStats
+	runtime.ReadMemStats(&m2)
+
+	allocDiff := int64(m2.Alloc) - int64(m1.Alloc)
+	totalAllocDiff := int64(m2.TotalAlloc) - int64(m1.TotalAlloc)
+	bytesPerOp := float64(totalAllocDiff) / float64(iterations)
+
+	t.Logf("BinaryExpression pool memory stats:")
+	t.Logf("  Alloc diff: %d bytes", allocDiff)
+	t.Logf("  TotalAlloc diff: %d bytes", totalAllocDiff)
+	t.Logf("  Bytes per operation: %.2f", bytesPerOp)
+
+	const maxAllocIncrease = 1024 * 1024 // 1MB
+	const maxBytesPerOp = 5000           // 5KB
+
+	if allocDiff > maxAllocIncrease {
+		t.Errorf("Memory leak in BinaryExpression pool: %d bytes (threshold: %d)", allocDiff, maxAllocIncrease)
+	}
+
+	if bytesPerOp > maxBytesPerOp {
+		t.Errorf("High memory usage in BinaryExpression pool: %.2f bytes/op (threshold: %d)", bytesPerOp, maxBytesPerOp)
+	}
+
+	if allocDiff <= maxAllocIncrease && bytesPerOp <= maxBytesPerOp {
+		t.Logf("✅ BinaryExpression pool memory leak test PASSED")
+	}
+}
+
+func TestMemoryLeaks_LiteralValuePool(t *testing.T) {
+	runtime.GC()
+	runtime.GC()
+	time.Sleep(10 * time.Millisecond)
+
+	var m1 runtime.MemStats
+	runtime.ReadMemStats(&m1)
+
+	const iterations = 10000
+
+	t.Logf("Running %d iterations of LiteralValue pool operations...", iterations)
+
+	for i := 0; i < iterations; i++ {
+		lit := GetLiteralValue()
+		lit.Value = "test_value"
+		lit.Type = "STRING"
+		PutLiteralValue(lit)
+
+		if i%1000 == 0 && i > 0 {
+			runtime.GC()
+		}
+	}
+
+	runtime.GC()
+	runtime.GC()
+	time.Sleep(10 * time.Millisecond)
+
+	var m2 runtime.MemStats
+	runtime.ReadMemStats(&m2)
+
+	allocDiff := int64(m2.Alloc) - int64(m1.Alloc)
+	totalAllocDiff := int64(m2.TotalAlloc) - int64(m1.TotalAlloc)
+	bytesPerOp := float64(totalAllocDiff) / float64(iterations)
+
+	t.Logf("LiteralValue pool memory stats:")
+	t.Logf("  Alloc diff: %d bytes", allocDiff)
+	t.Logf("  TotalAlloc diff: %d bytes", totalAllocDiff)
+	t.Logf("  Bytes per operation: %.2f", bytesPerOp)
+
+	const maxAllocIncrease = 512 * 1024 // 512KB
+	const maxBytesPerOp = 3000          // 3KB
+
+	if allocDiff > maxAllocIncrease {
+		t.Errorf("Memory leak in LiteralValue pool: %d bytes (threshold: %d)", allocDiff, maxAllocIncrease)
+	}
+
+	if bytesPerOp > maxBytesPerOp {
+		t.Errorf("High memory usage in LiteralValue pool: %.2f bytes/op (threshold: %d)", bytesPerOp, maxBytesPerOp)
+	}
+
+	if allocDiff <= maxAllocIncrease && bytesPerOp <= maxBytesPerOp {
+		t.Logf("✅ LiteralValue pool memory leak test PASSED")
+	}
+}

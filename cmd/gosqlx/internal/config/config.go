@@ -26,10 +26,16 @@ type FormatConfig struct {
 
 // ValidationConfig holds validation options
 type ValidationConfig struct {
-	Dialect    string `yaml:"dialect"`
-	StrictMode bool   `yaml:"strict_mode"`
-	Recursive  bool   `yaml:"recursive"`
-	Pattern    string `yaml:"pattern"`
+	Dialect    string         `yaml:"dialect"`
+	StrictMode bool           `yaml:"strict_mode"`
+	Recursive  bool           `yaml:"recursive"`
+	Pattern    string         `yaml:"pattern"`
+	Security   SecurityConfig `yaml:"security"`
+}
+
+// SecurityConfig holds security-related limits
+type SecurityConfig struct {
+	MaxFileSize int64 `yaml:"max_file_size"` // Maximum file size in bytes
 }
 
 // OutputConfig holds output formatting options
@@ -60,6 +66,9 @@ func DefaultConfig() *Config {
 			StrictMode: false,
 			Recursive:  false,
 			Pattern:    "*.sql",
+			Security: SecurityConfig{
+				MaxFileSize: 10 * 1024 * 1024, // 10MB default
+			},
 		},
 		Output: OutputConfig{
 			Format:  "auto",
@@ -93,6 +102,11 @@ func Load(path string) (*Config, error) {
 	config := DefaultConfig()
 	if err := yaml.Unmarshal(data, config); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	// Validate configuration values after unmarshaling
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
 	return config, nil

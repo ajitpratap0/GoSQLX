@@ -112,45 +112,61 @@ func (v *SecurityValidator) checkPathTraversal(path string) error {
 	}
 
 	// Check for suspicious patterns containing ".."
-	if strings.Contains(path, "..") {
-		// Verify the cleaned path doesn't escape intended boundaries
-		if v.WorkingDirectory != "" {
-			workDir, err := filepath.Abs(v.WorkingDirectory)
-			if err != nil {
-				return fmt.Errorf("cannot resolve working directory: %w", err)
-			}
+	if !strings.Contains(path, "..") {
+		return nil
+	}
 
-			if !strings.HasPrefix(absPath, workDir) {
-				return fmt.Errorf("path traversal detected: path escapes working directory")
-			}
-		} else {
-			// When no WorkingDirectory is set, count the number of ".." sequences
-			// Multiple ".." sequences are suspicious and potentially dangerous
-			dotDotCount := strings.Count(path, "..")
-			if dotDotCount > 1 {
-				return fmt.Errorf("path traversal detected: multiple '..' sequences in path")
-			}
+	// Use working directory validation if configured
+	if v.WorkingDirectory != "" {
+		return v.checkWorkingDirectoryTraversal(absPath)
+	}
 
-			// Even a single ".." can be dangerous - check if it leads to sensitive areas
-			// Additional checks for suspicious patterns in the original path
-			suspiciousPatterns := []string{
-				"/../",
-				"\\..\\",
-			}
+	// Otherwise use heuristic checks
+	return v.checkSuspiciousDotDotPatterns(path, cleanPath)
+}
 
-			originalPath := filepath.ToSlash(path)
-			cleanedSlash := filepath.ToSlash(cleanPath)
+// checkWorkingDirectoryTraversal validates path doesn't escape working directory
+func (v *SecurityValidator) checkWorkingDirectoryTraversal(absPath string) error {
+	workDir, err := filepath.Abs(v.WorkingDirectory)
+	if err != nil {
+		return fmt.Errorf("cannot resolve working directory: %w", err)
+	}
 
-			for _, pattern := range suspiciousPatterns {
-				if strings.Contains(originalPath, pattern) {
-					// Check if cleaning the path significantly changed it
-					// This indicates a potential traversal attempt
-					if !strings.HasSuffix(cleanedSlash, filepath.Base(originalPath)) {
-						// The cleaned path doesn't end with the original filename
-						// This suggests path manipulation
-						return fmt.Errorf("suspicious path pattern detected: %s", pattern)
-					}
-				}
+	if !strings.HasPrefix(absPath, workDir) {
+		return fmt.Errorf("path traversal detected: path escapes working directory")
+	}
+
+	return nil
+}
+
+// checkSuspiciousDotDotPatterns detects dangerous ".." usage patterns
+func (v *SecurityValidator) checkSuspiciousDotDotPatterns(originalPath, cleanedPath string) error {
+	// Multiple ".." sequences are suspicious and potentially dangerous
+	dotDotCount := strings.Count(originalPath, "..")
+	if dotDotCount > 1 {
+		return fmt.Errorf("path traversal detected: multiple '..' sequences in path")
+	}
+
+	// Check for suspicious path separator patterns
+	return v.hasSuspiciousPathPattern(originalPath, cleanedPath)
+}
+
+// hasSuspiciousPathPattern detects obfuscated traversal attempts
+func (v *SecurityValidator) hasSuspiciousPathPattern(originalPath, cleanedPath string) error {
+	suspiciousPatterns := []string{
+		"/../",
+		"\\..\\",
+	}
+
+	originalSlash := filepath.ToSlash(originalPath)
+	cleanedSlash := filepath.ToSlash(cleanedPath)
+
+	for _, pattern := range suspiciousPatterns {
+		if strings.Contains(originalSlash, pattern) {
+			// Check if cleaning the path significantly changed it
+			// This indicates a potential traversal attempt
+			if !strings.HasSuffix(cleanedSlash, filepath.Base(originalSlash)) {
+				return fmt.Errorf("suspicious path pattern detected: %s", pattern)
 			}
 		}
 	}

@@ -1,0 +1,100 @@
+# GoSQLX Configuration File
+# This file allows you to set default options for all GoSQLX CLI commands.
+# CLI flags always override these settings.
+
+# Format settings - controls SQL formatting behavior
+format:
+  # Number of spaces for indentation (0-8)
+  # Default: 2
+  indent: 2
+
+  # Convert SQL keywords to uppercase
+  # Default: true
+  uppercase_keywords: true
+
+  # Maximum line length for formatted SQL (0-500, 0 = unlimited)
+  # Default: 80
+  max_line_length: 80
+
+  # Use compact formatting with minimal whitespace
+  # Default: false
+  compact: false
+
+# Validation settings - controls SQL validation behavior
+validate:
+  # SQL dialect for validation
+  # Options: postgresql, mysql, sqlserver, oracle, sqlite, generic
+  # Default: postgresql
+  dialect: postgresql
+
+  # Enable strict validation mode (more rigorous checks)
+  # Default: false
+  strict_mode: false
+
+  # Recursively process directories
+  # Default: false
+  recursive: false
+
+  # File pattern for recursive processing
+  # Default: *.sql
+  pattern: "*.sql"
+
+  # Security settings - controls security limits
+  security:
+    # Maximum file size in bytes (10MB = 10485760 bytes)
+    # Default: 10485760 (10MB)
+    max_file_size: 10485760
+
+# Output settings - controls how results are displayed
+output:
+  # Output format for analysis results
+  # Options: json, yaml, table, tree, auto
+  # Default: auto
+  format: auto
+
+  # Enable verbose output
+  # Default: false
+  verbose: false
+
+# Analyze settings - controls analysis features
+analyze:
+  # Enable security analysis (SQL injection detection, etc.)
+  # Default: true
+  security: true
+
+  # Enable performance analysis (optimization suggestions)
+  # Default: true
+  performance: true
+
+  # Enable complexity analysis (metrics and scoring)
+  # Default: true
+  complexity: true
+
+  # Enable all analysis features
+  # Default: false
+  all: false
+
+# Configuration Precedence:
+# 1. CLI flags (highest priority)
+# 2. .gosqlx.yml in current directory
+# 3. ~/.gosqlx.yml in home directory
+# 4. /etc/gosqlx.yml system-wide
+# 5. Built-in defaults (lowest priority)
+
+# Examples:
+#
+# Format with 4-space indentation:
+#   format:
+#     indent: 4
+#
+# Validate MySQL dialect:
+#   validate:
+#     dialect: mysql
+#
+# Enable all analysis by default:
+#   analyze:
+#     all: true
+#
+# Use JSON output format:
+#   output:
+#     format: json

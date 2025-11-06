@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/errors"
 )
 
 // TestTokenizer_InputSizeLimit tests the DoS protection for maximum input size
@@ -43,14 +45,14 @@ func TestTokenizer_InputSizeLimit(t *testing.T) {
 			t.Fatal("Tokenize() should fail just over limit")
 		}
 
-		tokErr, ok := err.(TokenizerError)
-		if !ok {
-			t.Fatalf("expected TokenizerError, got %T", err)
+		// Check for structured error with correct code
+		if !errors.IsCode(err, errors.ErrCodeInputTooLarge) {
+			t.Fatalf("expected ErrCodeInputTooLarge, got %T with error: %v", err, err)
 		}
 
-		expectedMsg := fmt.Sprintf("input size exceeds maximum allowed: %d bytes (max: %d bytes)", MaxInputSize+1, MaxInputSize)
-		if tokErr.Message != expectedMsg {
-			t.Errorf("wrong error message, got %q, expected %q", tokErr.Message, expectedMsg)
+		// Verify error message contains expected information
+		if !strings.Contains(err.Error(), "input size") || !strings.Contains(err.Error(), "exceeds limit") {
+			t.Errorf("wrong error message, got %q", err.Error())
 		}
 		t.Logf("Correctly rejected oversized input: %d bytes", len(input))
 	})
@@ -65,14 +67,14 @@ func TestTokenizer_InputSizeLimit(t *testing.T) {
 			t.Fatal("Tokenize() should fail for very large input")
 		}
 
-		tokErr, ok := err.(TokenizerError)
-		if !ok {
-			t.Fatalf("expected TokenizerError, got %T", err)
+		// Check for structured error with correct code
+		if !errors.IsCode(err, errors.ErrCodeInputTooLarge) {
+			t.Fatalf("expected ErrCodeInputTooLarge, got %T with error: %v", err, err)
 		}
 
 		// Verify it contains the expected error message
-		if !strings.Contains(tokErr.Message, "input size exceeds maximum allowed") {
-			t.Errorf("error message should mention size limit, got %q", tokErr.Message)
+		if !strings.Contains(err.Error(), "exceeds limit") {
+			t.Errorf("error message should mention size limit, got %q", err.Error())
 		}
 		t.Logf("Correctly rejected %d bytes (%.1fMB) as oversized", len(input), float64(len(input))/(1024*1024))
 	})
@@ -119,8 +121,11 @@ func TestTokenizer_TokenCountLimit(t *testing.T) {
 		t.Logf("Large query produced %d tokens", len(tokens))
 	})
 
-	// Note: Testing the actual MaxTokens limit would require generating a massive input
-	// which is impractical for unit tests. The limit is tested in integration tests.
+	// Note: Testing the actual MaxTokens limit in practice would require generating
+	// a massive input (>1M tokens) which would take too long for unit tests.
+	// The token count check logic is tested by code inspection and by verifying
+	// the error path works with a modified limit in integration tests.
+	// The implementation at lines 190-197 in tokenizer.go provides the protection.
 }
 
 // TestTokenizer_DoSProtectionPerformance tests that DoS checks don't impact performance

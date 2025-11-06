@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 
@@ -9,6 +10,9 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
 )
+
+//go:embed config_template.yml
+var configTemplate string
 
 var (
 	configFile string
@@ -79,11 +83,8 @@ func configInitRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("configuration file already exists at %s (use --force to overwrite)", path)
 	}
 
-	// Create default config
-	cfg := config.DefaultConfig()
-
-	// Save to file
-	if err := cfg.Save(path); err != nil {
+	// Write the template file with comments
+	if err := os.WriteFile(path, []byte(configTemplate), 0644); err != nil {
 		return fmt.Errorf("failed to create config file: %w", err)
 	}
 

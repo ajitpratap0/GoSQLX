@@ -117,3 +117,88 @@ func IncompleteStatementError(location models.Location, sql string) *Error {
 func WrapError(code ErrorCode, message string, location models.Location, sql string, cause error) *Error {
 	return NewError(code, message, location).WithContext(sql, 1).WithCause(cause)
 }
+
+// Tokenizer DoS Protection Errors (E1006-E1008)
+
+// InputTooLargeError creates an error for input exceeding size limits
+func InputTooLargeError(size, maxSize int64, location models.Location) *Error {
+	return NewError(
+		ErrCodeInputTooLarge,
+		fmt.Sprintf("input size %d bytes exceeds limit of %d bytes", size, maxSize),
+		location,
+	).WithHint(fmt.Sprintf("Reduce input size to under %d bytes or adjust MaxInputSize configuration", maxSize))
+}
+
+// TokenLimitReachedError creates an error for token count exceeding limit
+func TokenLimitReachedError(count, maxTokens int, location models.Location, sql string) *Error {
+	return NewError(
+		ErrCodeTokenLimitReached,
+		fmt.Sprintf("token count %d exceeds limit of %d tokens", count, maxTokens),
+		location,
+	).WithContext(sql, 1).WithHint(fmt.Sprintf("Simplify query or adjust MaxTokens limit (currently %d)", maxTokens))
+}
+
+// TokenizerPanicError creates an error for recovered tokenizer panic
+func TokenizerPanicError(panicValue interface{}, location models.Location) *Error {
+	return NewError(
+		ErrCodeTokenizerPanic,
+		fmt.Sprintf("tokenizer panic recovered: %v", panicValue),
+		location,
+	).WithHint("This indicates a serious tokenizer bug. Please report this issue with the SQL input.")
+}
+
+// Parser Feature Errors (E2007-E2012)
+
+// RecursionDepthLimitError creates an error for recursion depth exceeded
+func RecursionDepthLimitError(depth, maxDepth int, location models.Location, sql string) *Error {
+	return NewError(
+		ErrCodeRecursionDepthLimit,
+		fmt.Sprintf("recursion depth %d exceeds limit of %d", depth, maxDepth),
+		location,
+	).WithContext(sql, 1).WithHint(fmt.Sprintf("Simplify nested expressions or subqueries (current limit: %d levels)", maxDepth))
+}
+
+// UnsupportedDataTypeError creates an error for unsupported data type
+func UnsupportedDataTypeError(dataType string, location models.Location, sql string) *Error {
+	return NewError(
+		ErrCodeUnsupportedDataType,
+		fmt.Sprintf("data type '%s' is not yet supported", dataType),
+		location,
+	).WithContext(sql, len(dataType)).WithHint("Use a supported data type (e.g., INTEGER, VARCHAR, TEXT, TIMESTAMP)")
+}
+
+// UnsupportedConstraintError creates an error for unsupported constraint
+func UnsupportedConstraintError(constraint string, location models.Location, sql string) *Error {
+	return NewError(
+		ErrCodeUnsupportedConstraint,
+		fmt.Sprintf("constraint '%s' is not yet supported", constraint),
+		location,
+	).WithContext(sql, len(constraint)).WithHint("Supported constraints: PRIMARY KEY, FOREIGN KEY, UNIQUE, NOT NULL, CHECK")
+}
+
+// UnsupportedJoinError creates an error for unsupported JOIN type
+func UnsupportedJoinError(joinType string, location models.Location, sql string) *Error {
+	return NewError(
+		ErrCodeUnsupportedJoin,
+		fmt.Sprintf("JOIN type '%s' is not yet supported", joinType),
+		location,
+	).WithContext(sql, len(joinType)).WithHint("Supported JOINs: INNER JOIN, LEFT JOIN, RIGHT JOIN, FULL JOIN, CROSS JOIN, NATURAL JOIN")
+}
+
+// InvalidCTEError creates an error for invalid CTE (WITH clause) syntax
+func InvalidCTEError(description string, location models.Location, sql string) *Error {
+	return NewError(
+		ErrCodeInvalidCTE,
+		fmt.Sprintf("invalid CTE syntax: %s", description),
+		location,
+	).WithContext(sql, 1).WithHint("Check WITH clause syntax: WITH cte_name AS (SELECT ...) SELECT * FROM cte_name")
+}
+
+// InvalidSetOperationError creates an error for invalid set operation
+func InvalidSetOperationError(operation, description string, location models.Location, sql string) *Error {
+	return NewError(
+		ErrCodeInvalidSetOperation,
+		fmt.Sprintf("invalid %s operation: %s", operation, description),
+		location,
+	).WithContext(sql, len(operation)).WithHint("Ensure both queries have the same number and compatible types of columns")
+}

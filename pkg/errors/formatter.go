@@ -22,11 +22,11 @@ func FormatErrorWithContext(err error, sql string) string {
 // FormatErrorWithContextAt formats an error at a specific location with SQL context
 func FormatErrorWithContextAt(code ErrorCode, message string, location models.Location, sql string, highlightLen int) string {
 	err := NewError(code, message, location)
-	err.WithContext(sql, highlightLen)
+	err = err.WithContext(sql, highlightLen)
 
 	// Auto-generate hints
 	if hint := GenerateHint(code, "", ""); hint != "" {
-		err.WithHint(hint)
+		err = err.WithHint(hint)
 	}
 
 	return err.Error()
@@ -109,14 +109,14 @@ func FormatErrorSummary(err error) string {
 // FormatErrorWithSuggestion formats an error with an intelligent suggestion
 func FormatErrorWithSuggestion(code ErrorCode, message string, location models.Location, sql string, highlightLen int, suggestion string) string {
 	err := NewError(code, message, location)
-	err.WithContext(sql, highlightLen)
+	err = err.WithContext(sql, highlightLen)
 
 	if suggestion != "" {
-		err.WithHint(suggestion)
+		err = err.WithHint(suggestion)
 	} else {
 		// Try to auto-generate suggestion
 		if autoHint := GenerateHint(code, "", ""); autoHint != "" {
-			err.WithHint(autoHint)
+			err = err.WithHint(autoHint)
 		}
 	}
 
@@ -144,11 +144,11 @@ func FormatErrorList(errors []*Error) string {
 // FormatErrorWithExample formats an error with a corrected example
 func FormatErrorWithExample(code ErrorCode, message string, location models.Location, sql string, highlightLen int, wrongExample, correctExample string) string {
 	err := NewError(code, message, location)
-	err.WithContext(sql, highlightLen)
+	err = err.WithContext(sql, highlightLen)
 
 	// Add hint with before/after example
 	hint := fmt.Sprintf("Wrong: %s\nCorrect: %s", wrongExample, correctExample)
-	err.WithHint(hint)
+	err = err.WithHint(hint)
 
 	return err.Error()
 }

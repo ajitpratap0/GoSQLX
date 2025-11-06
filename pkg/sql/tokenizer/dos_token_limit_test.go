@@ -28,19 +28,25 @@ func TestTokenizer_TokenCountLimitReached(t *testing.T) {
 	// by creating input that would generate slightly more than what the check allows
 
 	// Build query: SELECT col1, col2, ..., colN FROM users
+	// Optimize by pre-allocating and using batch operations
+	numCols := 10000
+
+	// Pre-calculate size: "SELECT " + columns + " FROM users"
+	// Each column: "colxxxxx" (8 chars) + ", " (2 chars) = 10 chars per column
+	// Minus last comma-space, plus prefix and suffix
+	estimatedSize := 7 + (numCols * 10) - 2 + 11 // "SELECT " + cols + " FROM users"
+
 	var builder strings.Builder
+	builder.Grow(estimatedSize) // Pre-allocate memory
 	builder.WriteString("SELECT ")
 
-	// Generate enough columns to demonstrate the limit check works
-	// We need to balance: enough tokens to hit limit, but fast enough for tests
-	// Using 10,000 columns generates ~30,000 tokens (identifier + comma + space logic)
-	numCols := 10000
+	// Generate column names more efficiently
+	colName := "colxxxxx" // Pre-computed column name
 	for i := 1; i <= numCols; i++ {
 		if i > 1 {
 			builder.WriteString(", ")
 		}
-		builder.WriteString("col")
-		builder.WriteString(strings.Repeat("x", 5)) // Make identifiers slightly longer
+		builder.WriteString(colName)
 	}
 	builder.WriteString(" FROM users")
 

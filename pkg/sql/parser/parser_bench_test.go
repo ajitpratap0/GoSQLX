@@ -281,6 +281,52 @@ func BenchmarkParser_RecursionDepthCheck(b *testing.B) {
 				return tokens
 			}(),
 		},
+		{
+			name: "DeepNesting80",
+			tokens: func() []token.Token {
+				// Build a deeply nested query (80 levels) - approaching limit
+				// Tests performance near MaxRecursionDepth (100 levels)
+				tokens := []token.Token{{Type: "SELECT", Literal: "SELECT"}}
+				for i := 0; i < 80; i++ {
+					tokens = append(tokens,
+						token.Token{Type: "IDENT", Literal: "func"},
+						token.Token{Type: "(", Literal: "("},
+					)
+				}
+				tokens = append(tokens, token.Token{Type: "IDENT", Literal: "x"})
+				for i := 0; i < 80; i++ {
+					tokens = append(tokens, token.Token{Type: ")", Literal: ")"})
+				}
+				tokens = append(tokens,
+					token.Token{Type: "FROM", Literal: "FROM"},
+					token.Token{Type: "IDENT", Literal: "t"},
+				)
+				return tokens
+			}(),
+		},
+		{
+			name: "DeepNesting90",
+			tokens: func() []token.Token {
+				// Build a very deeply nested query (90 levels) - near limit threshold
+				// Tests performance at 90% of MaxRecursionDepth (100 levels)
+				tokens := []token.Token{{Type: "SELECT", Literal: "SELECT"}}
+				for i := 0; i < 90; i++ {
+					tokens = append(tokens,
+						token.Token{Type: "IDENT", Literal: "func"},
+						token.Token{Type: "(", Literal: "("},
+					)
+				}
+				tokens = append(tokens, token.Token{Type: "IDENT", Literal: "x"})
+				for i := 0; i < 90; i++ {
+					tokens = append(tokens, token.Token{Type: ")", Literal: ")"})
+				}
+				tokens = append(tokens,
+					token.Token{Type: "FROM", Literal: "FROM"},
+					token.Token{Type: "IDENT", Literal: "t"},
+				)
+				return tokens
+			}(),
+		},
 	}
 
 	for _, tc := range testCases {

@@ -39,6 +39,12 @@ validate:
   # Default: *.sql
   pattern: "*.sql"
 
+  # Security settings - controls security limits
+  security:
+    # Maximum file size in bytes (10MB = 10485760 bytes)
+    # Default: 10485760 (10MB)
+    max_file_size: 10485760
+
 # Output settings - controls how results are displayed
 output:
   # Output format for analysis results

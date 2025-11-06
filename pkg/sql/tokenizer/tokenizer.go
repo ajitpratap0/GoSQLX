@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
@@ -131,12 +132,9 @@ func (t *Tokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) {
 
 	// Validate input size to prevent DoS attacks
 	if len(input) > MaxInputSize {
-		err := fmt.Errorf("input size exceeds maximum allowed: %d bytes (max: %d bytes)", len(input), MaxInputSize)
+		err := errors.InputTooLargeError(int64(len(input)), MaxInputSize, models.Location{Line: 1, Column: 0})
 		metrics.RecordTokenization(time.Since(startTime), len(input), err)
-		return nil, TokenizerError{
-			Message:  err.Error(),
-			Location: models.Location{Line: 1, Column: 0},
-		}
+		return nil, err
 	}
 
 	// Reset state
@@ -176,7 +174,7 @@ func (t *Tokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) {
 		// Ensure proper cleanup even if we panic
 		defer func() {
 			if r := recover(); r != nil {
-				tokenErr = fmt.Errorf("panic during tokenization: %v", r)
+				tokenErr = errors.TokenizerPanicError(r, t.getCurrentPosition())
 			}
 		}()
 
@@ -189,10 +187,7 @@ func (t *Tokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) {
 
 			// Check token count limit to prevent DoS attacks
 			if len(tokens) >= MaxTokens {
-				tokenErr = TokenizerError{
-					Message:  fmt.Sprintf("token count exceeds maximum allowed: %d tokens (max: %d tokens)", len(tokens)+1, MaxTokens),
-					Location: t.getCurrentPosition(),
-				}
+				tokenErr = errors.TokenLimitReachedError(len(tokens)+1, MaxTokens, t.getCurrentPosition(), string(t.input))
 				return
 			}
 
@@ -264,12 +259,9 @@ func (t *Tokenizer) TokenizeContext(ctx context.Context, input []byte) ([]models
 
 	// Validate input size to prevent DoS attacks
 	if len(input) > MaxInputSize {
-		err := fmt.Errorf("input size exceeds maximum allowed: %d bytes (max: %d bytes)", len(input), MaxInputSize)
+		err := errors.InputTooLargeError(int64(len(input)), MaxInputSize, models.Location{Line: 1, Column: 0})
 		metrics.RecordTokenization(time.Since(startTime), len(input), err)
-		return nil, TokenizerError{
-			Message:  err.Error(),
-			Location: models.Location{Line: 1, Column: 0},
-		}
+		return nil, err
 	}
 
 	// Reset state
@@ -308,7 +300,7 @@ func (t *Tokenizer) TokenizeContext(ctx context.Context, input []byte) ([]models
 		// Ensure proper cleanup even if we panic
 		defer func() {
 			if r := recover(); r != nil {
-				tokenErr = fmt.Errorf("panic during tokenization: %v", r)
+				tokenErr = errors.TokenizerPanicError(r, t.getCurrentPosition())
 			}
 		}()
 
@@ -329,10 +321,7 @@ func (t *Tokenizer) TokenizeContext(ctx context.Context, input []byte) ([]models
 
 			// Check token count limit to prevent DoS attacks
 			if len(tokens) >= MaxTokens {
-				tokenErr = TokenizerError{
-					Message:  fmt.Sprintf("token count exceeds maximum allowed: %d tokens (max: %d tokens)", len(tokens)+1, MaxTokens),
-					Location: t.getCurrentPosition(),
-				}
+				tokenErr = errors.TokenLimitReachedError(len(tokens)+1, MaxTokens, t.getCurrentPosition(), string(t.input))
 				return
 			}
 
@@ -860,12 +849,14 @@ func (t *Tokenizer) readNumber(buf []byte) (models.Token, error) {
 
 		// Must have at least one digit after decimal
 		if t.pos.Index >= len(t.input) {
-			return models.Token{}, fmt.Errorf("expected digit after decimal point")
+			value := string(t.input[start:t.pos.Index])
+			return models.Token{}, errors.InvalidNumberError(value+" (expected digit after decimal point)", t.getCurrentPosition(), string(t.input))
 		}
 
 		r, _ = utf8.DecodeRune(t.input[t.pos.Index:])
 		if r < '0' || r > '9' {
-			return models.Token{}, fmt.Errorf("expected digit after decimal point")
+			value := string(t.input[start:t.pos.Index])
+			return models.Token{}, errors.InvalidNumberError(value+" (expected digit after decimal point)", t.getCurrentPosition(), string(t.input))
 		}
 
 		// Read fractional part
@@ -895,12 +886,14 @@ func (t *Tokenizer) readNumber(buf []byte) (models.Token, error) {
 
 			// Must have at least one digit
 			if t.pos.Index >= len(t.input) {
-				return models.Token{}, fmt.Errorf("expected digit in exponent")
+				value := string(t.input[start:t.pos.Index])
+				return models.Token{}, errors.InvalidNumberError(value+" (expected digit in exponent)", t.getCurrentPosition(), string(t.input))
 			}
 
 			r, _ = utf8.DecodeRune(t.input[t.pos.Index:])
 			if r < '0' || r > '9' {
-				return models.Token{}, fmt.Errorf("expected digit in exponent")
+				value := string(t.input[start:t.pos.Index])
+				return models.Token{}, errors.InvalidNumberError(value+" (expected digit in exponent)", t.getCurrentPosition(), string(t.input))
 			}
 
 			// Read exponent part

@@ -22,14 +22,23 @@ const (
 	ErrCodeInvalidNumber      ErrorCode = "E1003" // Invalid numeric literal
 	ErrCodeInvalidOperator    ErrorCode = "E1004" // Invalid operator sequence
 	ErrCodeInvalidIdentifier  ErrorCode = "E1005" // Invalid identifier format
+	ErrCodeInputTooLarge      ErrorCode = "E1006" // Input exceeds size limits (DoS protection)
+	ErrCodeTokenLimitReached  ErrorCode = "E1007" // Token count exceeds limit (DoS protection)
+	ErrCodeTokenizerPanic     ErrorCode = "E1008" // Tokenizer panic recovered
 
 	// E2xxx: Parser syntax errors
-	ErrCodeUnexpectedToken     ErrorCode = "E2001" // Unexpected token encountered
-	ErrCodeExpectedToken       ErrorCode = "E2002" // Expected specific token not found
-	ErrCodeMissingClause       ErrorCode = "E2003" // Required SQL clause missing
-	ErrCodeInvalidSyntax       ErrorCode = "E2004" // General syntax error
-	ErrCodeIncompleteStatement ErrorCode = "E2005" // Statement incomplete
-	ErrCodeInvalidExpression   ErrorCode = "E2006" // Invalid expression syntax
+	ErrCodeUnexpectedToken       ErrorCode = "E2001" // Unexpected token encountered
+	ErrCodeExpectedToken         ErrorCode = "E2002" // Expected specific token not found
+	ErrCodeMissingClause         ErrorCode = "E2003" // Required SQL clause missing
+	ErrCodeInvalidSyntax         ErrorCode = "E2004" // General syntax error
+	ErrCodeIncompleteStatement   ErrorCode = "E2005" // Statement incomplete
+	ErrCodeInvalidExpression     ErrorCode = "E2006" // Invalid expression syntax
+	ErrCodeRecursionDepthLimit   ErrorCode = "E2007" // Recursion depth exceeded (DoS protection)
+	ErrCodeUnsupportedDataType   ErrorCode = "E2008" // Data type not supported
+	ErrCodeUnsupportedConstraint ErrorCode = "E2009" // Constraint type not supported
+	ErrCodeUnsupportedJoin       ErrorCode = "E2010" // JOIN type not supported
+	ErrCodeInvalidCTE            ErrorCode = "E2011" // Invalid CTE (WITH clause) syntax
+	ErrCodeInvalidSetOperation   ErrorCode = "E2012" // Invalid set operation (UNION/EXCEPT/INTERSECT)
 
 	// E3xxx: Semantic errors
 	ErrCodeUndefinedTable  ErrorCode = "E3001" // Table not defined

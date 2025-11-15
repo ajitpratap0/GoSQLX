@@ -175,3 +175,8 @@ func ValidateFileAccess(path string) error {
 	// Use the enhanced security validator from internal package
 	return validate.ValidateInputFile(path)
 }
+
+// expandFileArgs is a lowercase alias for ExpandFileArgs for backward compatibility
+func expandFileArgs(args []string) ([]string, error) {
+	return ExpandFileArgs(args)
+}

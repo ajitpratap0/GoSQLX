@@ -2,13 +2,9 @@ package cmd
 
 import (
 	_ "embed"
-	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
-
-	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
 )
 
 //go:embed config_template.yml
@@ -72,105 +68,55 @@ Examples:
 }
 
 func configInitRun(cmd *cobra.Command, args []string) error {
-	// Determine where to create the config
-	path := configPath
-	if path == "" {
-		path = ".gosqlx.yml"
+	// Create options from flags
+	opts := ConfigManagerOptions{
+		Force:   false, // Force flag not implemented yet
+		Verbose: verbose,
 	}
 
-	// Check if file already exists
-	if _, err := os.Stat(path); err == nil {
-		return fmt.Errorf("configuration file already exists at %s (use --force to overwrite)", path)
-	}
+	// Create config manager with injectable output
+	cm := NewConfigManager(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts, configTemplate)
 
-	// Write the template file with comments
-	if err := os.WriteFile(path, []byte(configTemplate), 0644); err != nil {
-		return fmt.Errorf("failed to create config file: %w", err)
-	}
-
-	fmt.Printf("✅ Created configuration file: %s\n", path)
-	fmt.Printf("\nYou can now customize this file to set your preferred defaults.\n")
-	fmt.Printf("Run 'gosqlx config validate' to check your configuration.\n")
-
-	return nil
+	// Run init
+	_, err := cm.Init(configPath)
+	return err
 }
 
 func configValidateRun(cmd *cobra.Command, args []string) error {
-	var cfg *config.Config
-	var err error
-	var source string
-
-	// Load from specified file or default location
-	if configFile != "" {
-		cfg, err = config.Load(configFile)
-		source = configFile
-	} else {
-		cfg, err = config.LoadDefault()
-		source = "default locations"
+	// Create options from flags
+	opts := ConfigManagerOptions{
+		Verbose: verbose,
 	}
 
+	// Create config manager with injectable output
+	cm := NewConfigManager(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts, configTemplate)
+
+	// Run validation
+	result, err := cm.Validate(configFile)
 	if err != nil {
-		return fmt.Errorf("failed to load configuration from %s: %w", source, err)
-	}
-
-	// Validate the configuration
-	if err := cfg.Validate(); err != nil {
-		fmt.Printf("❌ Configuration validation failed:\n")
-		fmt.Printf("   %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("✅ Configuration is valid\n")
-	if configFile != "" {
-		fmt.Printf("   Source: %s\n", configFile)
-	} else {
-		fmt.Printf("   Source: %s\n", source)
+		// Exit with error code if validation failed
+		if result != nil && !result.Valid {
+			os.Exit(1)
+		}
+		return err
 	}
 
 	return nil
 }
 
 func configShowRun(cmd *cobra.Command, args []string) error {
-	var cfg *config.Config
-	var err error
-	var source string
-
-	// Load from specified file or default location
-	if configFile != "" {
-		cfg, err = config.Load(configFile)
-		source = configFile
-	} else {
-		cfg, err = config.LoadDefault()
-		source = "default configuration"
+	// Create options from flags
+	opts := ConfigManagerOptions{
+		Format:  format,
+		Verbose: verbose,
 	}
 
-	if err != nil {
-		return fmt.Errorf("failed to load configuration: %w", err)
-	}
+	// Create config manager with injectable output
+	cm := NewConfigManager(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts, configTemplate)
 
-	// Display configuration based on format
-	switch format {
-	case "json":
-		// Use YAML encoder to convert to map, then encode as JSON
-		data, err := yaml.Marshal(cfg)
-		if err != nil {
-			return fmt.Errorf("failed to marshal config: %w", err)
-		}
-		// For now, just show YAML format
-		fmt.Printf("%s", data)
-	case "yaml", "auto", "":
-		data, err := yaml.Marshal(cfg)
-		if err != nil {
-			return fmt.Errorf("failed to marshal config: %w", err)
-		}
-		fmt.Printf("# GoSQLX Configuration\n")
-		fmt.Printf("# Source: %s\n\n", source)
-		fmt.Printf("%s", data)
-	default:
-		return fmt.Errorf("unsupported format: %s (use 'json' or 'yaml')", format)
-	}
-
-	return nil
+	// Run show
+	_, err := cm.Show(configFile)
+	return err
 }
 
 func init() {
@@ -187,20 +133,4 @@ func init() {
 	// Flags for validate and show subcommands
 	configValidateCmd.Flags().StringVar(&configFile, "file", "", "config file to validate (default: auto-detect)")
 	configShowCmd.Flags().StringVar(&configFile, "file", "", "config file to show (default: auto-detect)")
-}
-
-// LoadConfigWithOverrides loads config from default location and merges with CLI flags
-// This function is used by other commands to get the effective configuration
-func LoadConfigWithOverrides() (*config.Config, error) {
-	// Load default config
-	cfg, err := config.LoadDefault()
-	if err != nil {
-		// If we can't load config, use defaults
-		cfg = config.DefaultConfig()
-	}
-
-	// CLI flags would override config settings
-	// This is handled by individual commands that call this function
-
-	return cfg, nil
 }

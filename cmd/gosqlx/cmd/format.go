@@ -1,17 +1,12 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
-	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
 var (
@@ -52,182 +47,44 @@ func formatRun(cmd *cobra.Command, args []string) error {
 		cfg = config.DefaultConfig()
 	}
 
-	// Override config with CLI flags if they were explicitly set
-	if cmd.Flags().Changed("indent") {
-		cfg.Format.Indent = formatIndentSize
-	} else {
-		formatIndentSize = cfg.Format.Indent
-	}
-	if cmd.Flags().Changed("uppercase") || cmd.Flags().Changed("no-uppercase") {
-		cfg.Format.UppercaseKeywords = formatUppercase
-	} else {
-		formatUppercase = cfg.Format.UppercaseKeywords
-	}
-	if cmd.Flags().Changed("compact") {
-		cfg.Format.Compact = formatCompact
-	} else {
-		formatCompact = cfg.Format.Compact
-	}
-	if cmd.Flags().Changed("max-line") {
-		cfg.Format.MaxLineLength = formatMaxLine
-	} else {
-		formatMaxLine = cfg.Format.MaxLineLength
+	// Track which flags were explicitly set
+	flagsChanged := make(map[string]bool)
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		flagsChanged[f.Name] = true
+	})
+	if cmd.Parent() != nil && cmd.Parent().PersistentFlags() != nil {
+		cmd.Parent().PersistentFlags().Visit(func(f *pflag.Flag) {
+			flagsChanged[f.Name] = true
+		})
 	}
 
-	// Use verbose from global flags if set
-	if cmd.Parent().PersistentFlags().Changed("verbose") {
-		cfg.Output.Verbose = verbose
-	} else {
-		verbose = cfg.Output.Verbose
-	}
-
-	files, err := expandFileArgs(args)
-	if err != nil {
-		return fmt.Errorf("failed to expand file arguments: %w", err)
-	}
-
-	if len(files) == 0 {
-		return fmt.Errorf("no SQL files found matching the specified patterns")
-	}
-
-	var needsFormatting []string
-	startTime := time.Now()
-
-	for _, file := range files {
-		formatted, changed, err := formatFile(file)
-		if err != nil {
-			return fmt.Errorf("failed to format %s: %w", file, err)
-		}
-
-		if formatCheck {
-			if changed {
-				needsFormatting = append(needsFormatting, file)
-			}
-			continue
-		}
-
-		if formatInPlace {
-			if changed {
-				err = os.WriteFile(file, []byte(formatted), 0644)
-				if err != nil {
-					return fmt.Errorf("failed to write %s: %w", file, err)
-				}
-				if verbose {
-					fmt.Printf("Formatted: %s\n", file)
-				}
-			} else if verbose {
-				fmt.Printf("Already formatted: %s\n", file)
-			}
-		} else if output != "" {
-			err = os.WriteFile(output, []byte(formatted), 0644)
-			if err != nil {
-				return fmt.Errorf("failed to write output file: %w", err)
-			}
-		} else {
-			fmt.Print(formatted)
-		}
-	}
-
-	if formatCheck {
-		if len(needsFormatting) > 0 {
-			fmt.Fprintf(os.Stderr, "The following files need formatting:\n")
-			for _, file := range needsFormatting {
-				fmt.Fprintf(os.Stderr, "  %s\n", file)
-			}
-			os.Exit(1)
-		}
-		fmt.Printf("All %d files are properly formatted (%v)\n", len(files), time.Since(startTime))
-	}
-
-	return nil
-}
-
-func formatFile(filename string) (string, bool, error) {
-	// Use security validation first
-	if err := ValidateFileAccess(filename); err != nil {
-		return "", false, fmt.Errorf("file access validation failed: %w", err)
-	}
-
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		return "", false, fmt.Errorf("failed to read file: %w", err)
-	}
-
-	original := string(data)
-	if len(data) == 0 {
-		return original, false, nil
-	}
-
-	formatted, err := formatSQL(original, FormatOptions{
+	// Create formatter options from config and flags
+	opts := FormatterOptionsFromConfig(cfg, flagsChanged, FormatterFlags{
+		InPlace:    formatInPlace,
 		IndentSize: formatIndentSize,
 		Uppercase:  formatUppercase,
 		Compact:    formatCompact,
+		Check:      formatCheck,
+		MaxLine:    formatMaxLine,
+		Verbose:    verbose,
+		Output:     output,
 	})
+
+	// Create formatter with injectable output writers
+	formatter := NewFormatter(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
+
+	// Run formatting
+	result, err := formatter.Format(args)
 	if err != nil {
-		return "", false, err
+		return err
 	}
 
-	changed := original != formatted
-	return formatted, changed, nil
-}
-
-type FormatOptions struct {
-	IndentSize int
-	Uppercase  bool
-	Compact    bool
-}
-
-func formatSQL(sql string, opts FormatOptions) (string, error) {
-	// Use pooled tokenizer for performance
-	tkz := tokenizer.GetTokenizer()
-	defer tokenizer.PutTokenizer(tkz)
-
-	// Tokenize the SQL
-	tokens, err := tkz.Tokenize([]byte(sql))
-	if err != nil {
-		return "", fmt.Errorf("tokenization failed: %w", err)
+	// Exit with error code if files need formatting in check mode
+	if result.NeedsFormatting != nil && len(result.NeedsFormatting) > 0 {
+		os.Exit(1)
 	}
 
-	if len(tokens) == 0 {
-		return "", nil
-	}
-
-	// Convert tokens for parser using centralized converter
-	convertedTokens, err := parser.ConvertTokensForParser(tokens)
-	if err != nil {
-		return "", fmt.Errorf("token conversion failed: %w", err)
-	}
-
-	// Parse to AST with proper error handling for memory management
-	p := parser.NewParser()
-	parsedAST, err := p.Parse(convertedTokens)
-	if err != nil {
-		// Parser failed, no AST to release
-		return "", fmt.Errorf("parsing failed: %w", err)
-	}
-
-	// CRITICAL: Always release AST, even on formatting errors
-	defer func() {
-		ast.ReleaseAST(parsedAST)
-	}()
-
-	// Configure formatter options
-	indentStr := strings.Repeat(" ", opts.IndentSize)
-	formatterOpts := FormatterOptions{
-		Indent:       indentStr,
-		Compact:      opts.Compact,
-		UppercaseKw:  opts.Uppercase,
-		AlignColumns: !opts.Compact, // Align columns unless in compact mode
-	}
-
-	// Create formatter and format the AST
-	formatter := NewSQLFormatter(formatterOpts)
-	formatted, err := formatter.Format(parsedAST)
-	if err != nil {
-		return "", fmt.Errorf("formatting failed: %w", err)
-	}
-
-	return formatted, nil
+	return nil
 }
 
 func init() {

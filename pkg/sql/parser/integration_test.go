@@ -110,23 +110,23 @@ func TestIntegration_RealWorldQueries(t *testing.T) {
 
 	// Report results
 	t.Logf("\n" + strings.Repeat("=", 80))
-	t.Logf("REAL-WORLD SQL INTEGRATION TEST RESULTS")
-	t.Logf(strings.Repeat("=", 80))
+	t.Log("REAL-WORLD SQL INTEGRATION TEST RESULTS")
+	t.Log(strings.Repeat("=", 80))
 	t.Logf("Total Queries:      %d", totalQueries)
 	t.Logf("Successful:         %d", successfulQueries)
 	t.Logf("Failed:             %d", len(failedQueries))
 	t.Logf("Success Rate:       %.2f%%", successRate)
-	t.Logf(strings.Repeat("=", 80))
+	t.Log(strings.Repeat("=", 80))
 
 	// Log failed queries for analysis
 	if len(failedQueries) > 0 {
-		t.Logf("\nFailed Queries Details:")
-		t.Logf(strings.Repeat("-", 80))
+		t.Log("\nFailed Queries Details:")
+		t.Log(strings.Repeat("-", 80))
 		for _, failure := range failedQueries {
 			t.Logf("File: %s (Query #%d)", failure.File, failure.Index)
 			t.Logf("Query: %s", failure.Query)
 			t.Logf("Error: %s", failure.Error)
-			t.Logf(strings.Repeat("-", 80))
+			t.Log(strings.Repeat("-", 80))
 		}
 	}
 

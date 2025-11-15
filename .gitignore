@@ -43,3 +43,6 @@ build/
 
 # Log files
 *.log
+
+# Python version files (not needed for Go project)
+.python-version

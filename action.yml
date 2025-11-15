@@ -83,13 +83,13 @@ runs:
   using: 'composite'
   steps:
     - name: Setup Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491  # v5.0.0
       with:
-        go-version: '1.19'
+        go-version: '1.21'
 
     - name: Cache GoSQLX binary
       id: cache-gosqlx
-      uses: actions/cache@v4
+      uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9  # v4.0.2
       with:
         path: ~/go/bin/gosqlx
         key: gosqlx-${{ inputs.gosqlx-version }}-${{ runner.os }}-${{ runner.arch }}
@@ -98,12 +98,21 @@ runs:
       if: steps.cache-gosqlx.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        if [ "${{ inputs.gosqlx-version }}" = "latest" ]; then
+        # Validate gosqlx-version input (semver or 'latest')
+        VERSION="${{ inputs.gosqlx-version }}"
+        if [ "$VERSION" != "latest" ]; then
+          if ! echo "$VERSION" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$'; then
+            echo "::error::Invalid gosqlx-version format. Must be 'latest' or semver (e.g., v1.4.0)"
+            exit 1
+          fi
+        fi
+
+        if [ "$VERSION" = "latest" ]; then
           echo "Installing latest GoSQLX..."
           go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest
         else
-          echo "Installing GoSQLX ${{ inputs.gosqlx-version }}..."
-          go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@${{ inputs.gosqlx-version }}
+          echo "Installing GoSQLX $VERSION..."
+          go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@"$VERSION"
         fi
         echo "GoSQLX installed successfully"
         ~/go/bin/gosqlx --version
@@ -123,20 +132,41 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: |
-        echo "Finding SQL files matching pattern: ${{ inputs.files }}"
+        # Validate working-directory exists and is within repo
+        WORKDIR="${{ inputs.working-directory }}"
+        if [ ! -d "$WORKDIR" ]; then
+          echo "::error::Working directory does not exist: $WORKDIR"
+          exit 1
+        fi
+
+        # Ensure working directory is within the repository
+        REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "$GITHUB_WORKSPACE")
+        WORKDIR_ABS=$(cd "$WORKDIR" && pwd)
+        if [[ "$WORKDIR_ABS" != "$REPO_ROOT"* ]]; then
+          echo "::error::Working directory must be within repository: $WORKDIR_ABS"
+          exit 1
+        fi
+
+        # Sanitize file pattern to prevent command injection
+        PATTERN="${{ inputs.files }}"
+        # Remove dangerous characters that could lead to command injection
+        if echo "$PATTERN" | grep -qE '[;&|`$()]'; then
+          echo "::error::File pattern contains invalid characters: $PATTERN"
+          exit 1
+        fi
+
+        echo "Finding SQL files matching pattern: $PATTERN"
 
         # Use find to locate SQL files matching the pattern
         # Convert glob pattern to find-compatible pattern
-        PATTERN="${{ inputs.files }}"
-
         # Handle common glob patterns
         if [[ "$PATTERN" == "**/*.sql" ]]; then
           FILES=$(find . -type f -name "*.sql" | sort)
         elif [[ "$PATTERN" == "*.sql" ]]; then
           FILES=$(find . -maxdepth 1 -type f -name "*.sql" | sort)
         else
-          # Custom pattern - try direct find
-          FILES=$(find . -type f -path "$PATTERN" | sort)
+          # Custom pattern - try direct find with escaped pattern
+          FILES=$(find . -type f -path "./$PATTERN" | sort)
         fi
 
         if [ -z "$FILES" ]; then
@@ -177,9 +207,15 @@ runs:
           fi
         fi
 
-        # Add dialect if provided
-        if [ -n "${{ inputs.dialect }}" ]; then
-          CMD="$CMD --dialect ${{ inputs.dialect }}"
+        # Add dialect if provided (with validation)
+        DIALECT="${{ inputs.dialect }}"
+        if [ -n "$DIALECT" ]; then
+          # Validate dialect is one of the allowed values
+          if [[ "$DIALECT" =~ ^(postgresql|mysql|sqlserver|oracle|sqlite)$ ]]; then
+            CMD="$CMD --dialect $DIALECT"
+          else
+            echo "::warning::Invalid dialect '$DIALECT', skipping dialect flag"
+          fi
         fi
 
         # Add strict mode if enabled
@@ -201,14 +237,17 @@ runs:
         INVALID=0
 
         while IFS= read -r file; do
+          # Sanitize file path for display
+          SAFE_FILE="${file//[^a-zA-Z0-9\/._-]/}"
           echo "Validating: $file"
 
+          # Use quoted variable to prevent word splitting
           if $CMD "$file" 2>&1; then
             echo "✓ Valid: $file"
             VALIDATED=$((VALIDATED + 1))
           else
             echo "✗ Invalid: $file"
-            echo "::error file=$file::SQL validation failed"
+            echo "::error file=$SAFE_FILE::SQL validation failed"
             INVALID=$((INVALID + 1))
           fi
         done < /tmp/gosqlx-files.txt

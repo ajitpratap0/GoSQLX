@@ -7,9 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2025-11-15 - Phases 2-3 Test Coverage Completion
+
 ### 🎯 Phase 3 Complete: Token and Tokenizer Coverage Enhancement
 
-**In Progress - Awaiting PR Merge**
+**Released - PR #88**
 
 #### ✅ Test Coverage Enhancement - Phase 3 (Token, Tokenizer)
 - **Comprehensive Test Suite**: Added 2 new test files with 378 lines of test code
@@ -44,7 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🎯 Phase 2 Complete: Keywords, Errors, and AST Coverage Enhancement
 
-**In Progress - Awaiting PR #87 Merge**
+**Released - PR #87**
 
 #### ✅ Test Coverage Enhancement - Phase 2 (Keywords, Errors, AST)
 - **Comprehensive Test Suite**: Added 3 new test files with 1,351 lines of test code

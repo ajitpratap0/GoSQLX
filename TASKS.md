@@ -16,7 +16,7 @@ This document consolidates findings from comprehensive technical and product ana
 
 | Category | Count | Completed | Critical | High | Medium | Low |
 |----------|-------|-----------|----------|------|--------|-----|
-| Testing & Quality | 18 | **3** ✅ | 1 | 7 | 6 | 4 |
+| Testing & Quality | 18 | **3** ✅ **(v1.5.0)** | 1 | 7 | 6 | 4 |
 | User Experience | 15 | 0 | 8 | 5 | 2 |
 | Feature Development | 14 | 0 | 5 | 7 | 2 |
 | Documentation | 13 | 0 | 3 | 6 | 4 |

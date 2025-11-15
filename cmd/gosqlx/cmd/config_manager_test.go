@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
 )
 
 const testConfigTemplate = `# Test GoSQLX Configuration
@@ -742,37 +740,5 @@ func TestNewConfigManager(t *testing.T) {
 	}
 	if cm.Template != template {
 		t.Error("Template not set correctly")
-	}
-}
-
-// Helper function to create a valid config for testing
-func createValidTestConfig(t *testing.T) *config.Config {
-	t.Helper()
-	return &config.Config{
-		Format: config.FormatConfig{
-			Indent:            2,
-			UppercaseKeywords: true,
-			MaxLineLength:     80,
-			Compact:           false,
-		},
-		Validation: config.ValidationConfig{
-			Dialect:    "postgresql",
-			StrictMode: false,
-			Recursive:  false,
-			Pattern:    "*.sql",
-			Security: config.SecurityConfig{
-				MaxFileSize: 10 * 1024 * 1024,
-			},
-		},
-		Output: config.OutputConfig{
-			Format:  "auto",
-			Verbose: false,
-		},
-		Analyze: config.AnalyzeConfig{
-			Security:    true,
-			Performance: true,
-			Complexity:  true,
-			All:         false,
-		},
 	}
 }

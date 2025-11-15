@@ -80,7 +80,7 @@ func formatRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Exit with error code if files need formatting in check mode
-	if result.NeedsFormatting != nil && len(result.NeedsFormatting) > 0 {
+	if len(result.NeedsFormatting) > 0 {
 		os.Exit(1)
 	}
 

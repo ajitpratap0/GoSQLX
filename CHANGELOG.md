@@ -44,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🎯 Phase 2 Complete: Keywords, Errors, and AST Coverage Enhancement
 
-**Merged to Main - PR #87**
+**In Progress - Awaiting PR #87 Merge**
 
 #### ✅ Test Coverage Enhancement - Phase 2 (Keywords, Errors, AST)
 - **Comprehensive Test Suite**: Added 3 new test files with 1,351 lines of test code

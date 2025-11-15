@@ -318,8 +318,8 @@ func PutLiteralValue(lit *LiteralValue) {
 		return
 	}
 
-	// Reset fields
-	lit.Value = ""
+	// Reset fields (Value is interface{}, use nil as zero value)
+	lit.Value = nil
 	lit.Type = ""
 
 	// Return to pool

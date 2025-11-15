@@ -8,8 +8,8 @@
 # Test binary, built with `go test -c`
 *.test
 
-# Built binary executables
-gosqlx
+# Built binary executables (only in root directory)
+/gosqlx
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out

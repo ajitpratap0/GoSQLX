@@ -172,8 +172,8 @@ func TestLiteralValuePool(t *testing.T) {
 		// Return to pool
 		PutLiteralValue(lit)
 
-		// Verify it was cleaned
-		if lit.Value != "" {
+		// Verify it was cleaned (Value is interface{}, should be nil)
+		if lit.Value != nil {
 			t.Errorf("Value not cleared, got %v", lit.Value)
 		}
 	})
@@ -222,8 +222,8 @@ func TestPoolReuse(t *testing.T) {
 			t.Fatal("GetLiteralValue() returned nil on reuse")
 		}
 
-		// Should be clean
-		if lit2.Value != "" {
+		// Should be clean (Value is interface{}, so check for nil not empty string)
+		if lit2.Value != nil {
 			t.Errorf("Reused literal not clean, Value = %v", lit2.Value)
 		}
 

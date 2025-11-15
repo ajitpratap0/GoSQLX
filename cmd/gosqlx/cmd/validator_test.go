@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -442,6 +443,11 @@ func TestValidator_NonExistentFile(t *testing.T) {
 
 // TestValidator_PermissionDenied tests handling of permission-denied files
 func TestValidator_PermissionDenied(t *testing.T) {
+	// Skip on Windows as chmod doesn't work the same way
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping permission test on Windows - chmod behavior is different")
+	}
+
 	tmpDir := t.TempDir()
 	filename := filepath.Join(tmpDir, "noperm.sql")
 

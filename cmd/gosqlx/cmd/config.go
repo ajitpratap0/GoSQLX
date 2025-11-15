@@ -69,10 +69,11 @@ Examples:
 
 func configInitRun(cmd *cobra.Command, args []string) error {
 	// Create options from flags
-	opts := ConfigManagerOptions{
+	flags := ConfigManagerFlags{
 		Force:   false, // Force flag not implemented yet
 		Verbose: verbose,
 	}
+	opts := ConfigManagerOptionsFromFlags(flags)
 
 	// Create config manager with injectable output
 	cm := NewConfigManager(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts, configTemplate)
@@ -84,9 +85,10 @@ func configInitRun(cmd *cobra.Command, args []string) error {
 
 func configValidateRun(cmd *cobra.Command, args []string) error {
 	// Create options from flags
-	opts := ConfigManagerOptions{
+	flags := ConfigManagerFlags{
 		Verbose: verbose,
 	}
+	opts := ConfigManagerOptionsFromFlags(flags)
 
 	// Create config manager with injectable output
 	cm := NewConfigManager(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts, configTemplate)
@@ -106,10 +108,11 @@ func configValidateRun(cmd *cobra.Command, args []string) error {
 
 func configShowRun(cmd *cobra.Command, args []string) error {
 	// Create options from flags
-	opts := ConfigManagerOptions{
+	flags := ConfigManagerFlags{
 		Format:  format,
 		Verbose: verbose,
 	}
+	opts := ConfigManagerOptionsFromFlags(flags)
 
 	// Create config manager with injectable output
 	cm := NewConfigManager(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts, configTemplate)

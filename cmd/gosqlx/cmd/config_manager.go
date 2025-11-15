@@ -218,9 +218,6 @@ type ConfigManagerFlags struct {
 
 // ConfigManagerOptionsFromFlags creates ConfigManagerOptions from CLI flags
 func ConfigManagerOptionsFromFlags(flags ConfigManagerFlags) ConfigManagerOptions {
-	return ConfigManagerOptions{
-		Format:  flags.Format,
-		Verbose: flags.Verbose,
-		Force:   flags.Force,
-	}
+	// Direct type conversion is possible because both structs have identical fields
+	return ConfigManagerOptions(flags)
 }

@@ -70,7 +70,7 @@ func TestBufferPool(t *testing.T) {
 		pool := NewBufferPool()
 
 		// Create buffer with zero capacity
-		emptyBuf := make([]byte, 0, 0)
+		emptyBuf := make([]byte, 0)
 
 		// Putting empty buffer should not panic
 		defer func() {

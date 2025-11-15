@@ -327,7 +327,7 @@ All functions call `t.Helper()` to ensure test failures are reported at the call
 
 ## Coverage
 
-The testing package achieves **93.7% test coverage**, ensuring reliability for your test suites.
+The testing package achieves **95.0% test coverage**, ensuring reliability for your test suites.
 
 ## Contributing
 

@@ -44,7 +44,8 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 
 - **🚀 Blazing Fast**: **1.38M+ ops/sec** sustained, **1.5M+ ops/sec** peak throughput
 - **💾 Memory Efficient**: **60-80% reduction** through intelligent object pooling
-- **🔒 Thread-Safe**: **Race-free**, linear scaling to **128+ cores**
+- **🔒 Thread-Safe**: **Race-free**, linear scaling to **128+ cores**, **0 race conditions** detected
+- **✅ Production-Grade Testing**: **CLI 63.3%**, **Parser 75%**, **Tokenizer 76.5%** test coverage (Phase 1 complete)
 - **🔗 Complete JOIN Support**: All JOIN types (INNER/LEFT/RIGHT/FULL OUTER/CROSS/NATURAL) with proper tree logic
 - **🔄 Advanced SQL Features**: CTEs with RECURSIVE support, Set Operations (UNION/EXCEPT/INTERSECT)
 - **🪟 Window Functions**: Complete SQL-99 window function support with OVER clause, PARTITION BY, ORDER BY, frame specifications
@@ -54,15 +55,15 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 - **🔍 Intelligent Errors**: Structured error codes with typo detection, context highlighting, and helpful hints
 - **🏗️ Production Ready**: Battle-tested with **0 race conditions** detected, **~80-85% SQL-99 compliance**
 
-### 🎯 Performance Highlights (v1.4.0)
+### 🎯 Performance & Quality Highlights (v1.5.0)
 
 <div align="center">
 
-| **1.38M+** | **8M+** | **<1μs** | **60-80%** | **30+** |
-|:---------:|:-------:|:----------:|:----------:|:-------:|
-| Ops/sec | Tokens/sec | Latency | Memory Saved | Total Tests |
+| **1.38M+** | **8M+** | **<1μs** | **60-80%** | **75%** | **3,094** |
+|:---------:|:-------:|:----------:|:----------:|:-------:|:---------:|
+| Ops/sec | Tokens/sec | Latency | Memory Saved | Parser Coverage | Test Lines Added |
 
-**✅ Window Functions** • **Zero race conditions** • **~80-85% SQL-99 compliance** • **Production validated**
+**✅ Phase 1 Coverage Complete** • **Zero race conditions** • **~80-85% SQL-99 compliance** • **115+ real-world SQL queries validated**
 
 </div>
 
@@ -696,8 +697,9 @@ graph LR
 | **v1.0.0** | ✅ Released | 2024-12-01 | Production ready, +47% performance |
 | **v1.1.0** | ✅ Released | 2025-01-03 | Complete JOIN support, error handling |
 | **v1.2.0** | ✅ Released | 2025-08-15 | CTEs, set operations, ~70% SQL-92 compliance |
-| **v1.4.0** | 🎉 Current | 2025-09-07 | Production CLI, high-performance commands, memory leak fixes |
-| **v1.3.0** | ✅ Previous | 2025-09-04 | Window functions, ~80-85% SQL-99 compliance |
+| **v1.3.0** | ✅ Released | 2025-09-04 | Window functions, ~80-85% SQL-99 compliance |
+| **v1.4.0** | ✅ Released | 2025-09-07 | Production CLI, high-performance commands, memory leak fixes |
+| **v1.5.0** | 🎉 Current | 2025-11-15 | Phase 1 Test Coverage: CLI 63.3%, Parser 75%, Tokenizer 76.5% |
 | **v2.0.0** | 🔮 Future | Q4 2025 | Dialect specialization, advanced features |
 
 <a href="docs/ROADMAP.md"><img src="https://img.shields.io/badge/📋_Full_Roadmap-purple?style=for-the-badge" alt="Full Roadmap"></a>

@@ -1,4 +1,77 @@
 // Package gosqlx provides convenient high-level functions for SQL parsing and extraction.
+//
+// # Parser Limitations
+//
+// The extraction functions in this package are subject to the following parser limitations.
+// These limitations represent SQL features that are partially supported or not yet fully
+// implemented in the GoSQLX parser. As the parser evolves, these limitations may be
+// addressed in future releases.
+//
+// ## Known Limitations
+//
+//  1. CASE Expressions:
+//     CASE expressions (simple and searched CASE) are not fully supported in the parser.
+//     Column references within CASE WHEN conditions and result expressions may not be
+//     extracted correctly.
+//
+//     Example (not fully supported):
+//     SELECT CASE status WHEN 'active' THEN name ELSE 'N/A' END FROM users
+//
+//  2. CAST Expressions:
+//     CAST expressions for type conversion are not fully supported. Column references
+//     within CAST expressions may not be extracted.
+//
+//     Example (not fully supported):
+//     SELECT CAST(price AS DECIMAL(10,2)) FROM products
+//
+//  3. IN Expressions:
+//     IN expressions with subqueries or complex value lists in WHERE clauses are not
+//     fully supported. Column references in IN lists may not be extracted correctly.
+//
+//     Example (not fully supported):
+//     SELECT * FROM users WHERE status IN ('active', 'pending')
+//     SELECT * FROM orders WHERE user_id IN (SELECT id FROM users)
+//
+//  4. BETWEEN Expressions:
+//     BETWEEN expressions for range comparisons are not fully supported. Column references
+//     in BETWEEN bounds may not be extracted correctly.
+//
+//     Example (not fully supported):
+//     SELECT * FROM products WHERE price BETWEEN min_price AND max_price
+//
+//  5. Schema-Qualified Table Names:
+//     Schema-qualified table names (schema.table format) are not fully supported by the
+//     parser. Tables with explicit schema qualifiers may not be parsed correctly.
+//
+//     Example (not fully supported):
+//     SELECT * FROM public.users JOIN app.orders ON users.id = orders.user_id
+//
+//  6. Complex Recursive CTEs:
+//     Recursive Common Table Expressions (CTEs) with complex JOIN syntax are not fully
+//     supported. Simple recursive CTEs work, but complex variations may fail to parse.
+//
+//     Example (not fully supported):
+//     WITH RECURSIVE org_chart AS (
+//     SELECT id, name, manager_id, 1 as level FROM employees WHERE manager_id IS NULL
+//     UNION ALL
+//     SELECT e.id, e.name, e.manager_id, o.level + 1
+//     FROM employees e
+//     INNER JOIN org_chart o ON e.manager_id = o.id
+//     )
+//     SELECT * FROM org_chart
+//
+// ## Workarounds
+//
+// For queries using these unsupported features:
+//   - Simplify complex expressions where possible
+//   - Use alternative SQL syntax that is supported
+//   - Extract metadata manually from the original SQL string
+//   - Consider contributing parser enhancements to the GoSQLX project
+//
+// ## Reporting Issues
+//
+// If you encounter parsing issues with SQL queries that should be supported,
+// please report them at: https://github.com/ajitpratap0/GoSQLX/issues
 package gosqlx
 
 import (
@@ -31,14 +104,34 @@ func (q QualifiedName) String() string {
 	return strings.Join(parts, ".")
 }
 
-// FullName returns the full name without schema.
+// FullName returns the full name without schema qualifier.
+// This method strips the schema component and returns the meaningful identifier.
+//
+// Behavior:
+//   - For 3-part names (schema.table.column): Returns table.column (drops schema)
+//   - For 2-part names (table.column OR schema.table): Returns table.column
+//   - For single-part names: Returns the name
+//
+// Examples:
+//   - QualifiedName{Schema: "db", Table: "public", Name: "users"} → "public.users"
+//   - QualifiedName{Table: "users", Name: "id"} → "users.id"
+//   - QualifiedName{Name: "id"} → "id"
+//   - QualifiedName{Schema: "public", Name: "users"} → "users"
+//   - QualifiedName{Table: "users"} → "users"
 func (q QualifiedName) FullName() string {
+	// 3-part qualified name (schema.table.column): return table.column (drop schema)
+	if q.Schema != "" && q.Table != "" && q.Name != "" {
+		return q.Table + "." + q.Name
+	}
+	// 2-part qualified name: table.column OR schema.table
 	if q.Table != "" && q.Name != "" {
 		return q.Table + "." + q.Name
 	}
+	// Single part: just name (column or table)
 	if q.Name != "" {
 		return q.Name
 	}
+	// Fallback: just table name
 	return q.Table
 }
 
@@ -129,6 +222,42 @@ func ExtractColumns(astNode *ast.AST) []string {
 
 	collector := &columnCollector{
 		columns: make(map[string]bool),
+	}
+
+	for _, stmt := range astNode.Statements {
+		collector.collectFromNode(stmt)
+	}
+
+	return collector.toSlice()
+}
+
+// ExtractColumnsQualified extracts all column references with their table qualifiers.
+//
+// This function is similar to ExtractColumns but preserves table qualifier information
+// when present in the original query. It collects column references from:
+//   - SELECT lists
+//   - WHERE conditions
+//   - GROUP BY clauses
+//   - ORDER BY clauses
+//   - JOIN conditions
+//   - HAVING clauses
+//
+// Returns a deduplicated slice of QualifiedName objects representing columns.
+//
+// Example:
+//
+//	sql := "SELECT u.name, u.email FROM users u WHERE u.active = true"
+//	ast, _ := gosqlx.Parse(sql)
+//	columns := gosqlx.ExtractColumnsQualified(ast)
+//	// columns contains QualifiedName{Table: "u", Name: "name"},
+//	// QualifiedName{Table: "u", Name: "email"}, QualifiedName{Table: "u", Name: "active"}
+func ExtractColumnsQualified(astNode *ast.AST) []QualifiedName {
+	if astNode == nil {
+		return nil
+	}
+
+	collector := &qualifiedColumnCollector{
+		columns: make(map[string]QualifiedName),
 	}
 
 	for _, stmt := range astNode.Statements {
@@ -510,6 +639,171 @@ func (cc *columnCollector) toSlice() []string {
 	return result
 }
 
+// qualifiedColumnCollector collects qualified column names from AST nodes
+type qualifiedColumnCollector struct {
+	columns map[string]QualifiedName
+}
+
+func (qcc *qualifiedColumnCollector) collectFromNode(node ast.Node) {
+	if node == nil {
+		return
+	}
+
+	switch n := node.(type) {
+	case *ast.Identifier:
+		if n.Name != "" && n.Name != "*" {
+			qcc.addColumn(n.Table, n.Name)
+		}
+	case *ast.SelectStatement:
+		for _, col := range n.Columns {
+			qcc.collectFromExpression(col)
+		}
+		if n.Where != nil {
+			qcc.collectFromExpression(n.Where)
+		}
+		for _, gb := range n.GroupBy {
+			qcc.collectFromExpression(gb)
+		}
+		if n.Having != nil {
+			qcc.collectFromExpression(n.Having)
+		}
+		for _, ob := range n.OrderBy {
+			qcc.collectFromExpression(ob)
+		}
+		if n.With != nil {
+			qcc.collectFromNode(n.With)
+		}
+	case *ast.InsertStatement:
+		for _, col := range n.Columns {
+			qcc.collectFromExpression(col)
+		}
+		if n.Query != nil {
+			qcc.collectFromNode(n.Query)
+		}
+		if n.With != nil {
+			qcc.collectFromNode(n.With)
+		}
+	case *ast.UpdateStatement:
+		for _, update := range n.Updates {
+			qcc.collectFromNode(&update)
+		}
+		for _, assignment := range n.Assignments {
+			qcc.collectFromNode(&assignment)
+		}
+		if n.Where != nil {
+			qcc.collectFromExpression(n.Where)
+		}
+		if n.With != nil {
+			qcc.collectFromNode(n.With)
+		}
+	case *ast.DeleteStatement:
+		if n.Where != nil {
+			qcc.collectFromExpression(n.Where)
+		}
+		if n.With != nil {
+			qcc.collectFromNode(n.With)
+		}
+	case *ast.UpdateExpression:
+		qcc.collectFromExpression(n.Column)
+		qcc.collectFromExpression(n.Value)
+	case *ast.WithClause:
+		for _, cte := range n.CTEs {
+			qcc.collectFromNode(cte)
+		}
+	case *ast.CommonTableExpr:
+		qcc.collectFromNode(n.Statement)
+	case *ast.SetOperation:
+		qcc.collectFromNode(n.Left)
+		qcc.collectFromNode(n.Right)
+	}
+
+	// Recursively collect from children
+	for _, child := range node.Children() {
+		qcc.collectFromNode(child)
+	}
+}
+
+func (qcc *qualifiedColumnCollector) collectFromExpression(expr ast.Expression) {
+	if expr == nil {
+		return
+	}
+
+	switch e := expr.(type) {
+	case *ast.Identifier:
+		if e.Name != "" && e.Name != "*" {
+			qcc.addColumn(e.Table, e.Name)
+		}
+	case *ast.BinaryExpression:
+		qcc.collectFromExpression(e.Left)
+		qcc.collectFromExpression(e.Right)
+	case *ast.FunctionCall:
+		for _, arg := range e.Arguments {
+			qcc.collectFromExpression(arg)
+		}
+		if e.Filter != nil {
+			qcc.collectFromExpression(e.Filter)
+		}
+	case *ast.UnaryExpression:
+		qcc.collectFromExpression(e.Expr)
+	case *ast.InExpression:
+		qcc.collectFromExpression(e.Expr)
+		for _, item := range e.List {
+			qcc.collectFromExpression(item)
+		}
+	case *ast.BetweenExpression:
+		qcc.collectFromExpression(e.Expr)
+		qcc.collectFromExpression(e.Lower)
+		qcc.collectFromExpression(e.Upper)
+	case *ast.CaseExpression:
+		if e.Value != nil {
+			qcc.collectFromExpression(e.Value)
+		}
+		for _, when := range e.WhenClauses {
+			qcc.collectFromExpression(when.Condition)
+			qcc.collectFromExpression(when.Result)
+		}
+		if e.ElseClause != nil {
+			qcc.collectFromExpression(e.ElseClause)
+		}
+	case *ast.CastExpression:
+		qcc.collectFromExpression(e.Expr)
+	case *ast.SubstringExpression:
+		qcc.collectFromExpression(e.Str)
+		qcc.collectFromExpression(e.Start)
+		if e.Length != nil {
+			qcc.collectFromExpression(e.Length)
+		}
+	case *ast.ExtractExpression:
+		qcc.collectFromExpression(e.Source)
+	case *ast.PositionExpression:
+		qcc.collectFromExpression(e.Substr)
+		qcc.collectFromExpression(e.Str)
+	case *ast.ListExpression:
+		for _, v := range e.Values {
+			qcc.collectFromExpression(v)
+		}
+	}
+}
+
+func (qcc *qualifiedColumnCollector) addColumn(table, name string) {
+	// Parse qualified column name (table.column)
+	var qn QualifiedName
+	if table != "" {
+		qn = QualifiedName{Table: table, Name: name}
+	} else {
+		qn = QualifiedName{Name: name}
+	}
+	qcc.columns[qn.String()] = qn
+}
+
+func (qcc *qualifiedColumnCollector) toSlice() []QualifiedName {
+	result := make([]QualifiedName, 0, len(qcc.columns))
+	for _, column := range qcc.columns {
+		result = append(result, column)
+	}
+	return result
+}
+
 // functionCollector collects function names from AST nodes
 type functionCollector struct {
 	functions map[string]bool
@@ -672,19 +966,21 @@ func (fc *functionCollector) toSlice() []string {
 //	    metadata.Tables, metadata.Columns, metadata.Functions)
 func ExtractMetadata(astNode *ast.AST) *Metadata {
 	return &Metadata{
-		Tables:          ExtractTables(astNode),
-		TablesQualified: ExtractTablesQualified(astNode),
-		Columns:         ExtractColumns(astNode),
-		Functions:       ExtractFunctions(astNode),
+		Tables:           ExtractTables(astNode),
+		TablesQualified:  ExtractTablesQualified(astNode),
+		Columns:          ExtractColumns(astNode),
+		ColumnsQualified: ExtractColumnsQualified(astNode),
+		Functions:        ExtractFunctions(astNode),
 	}
 }
 
 // Metadata contains all extracted metadata from a SQL query.
 type Metadata struct {
-	Tables          []string        // Simple table names
-	TablesQualified []QualifiedName // Qualified table names
-	Columns         []string        // Column names
-	Functions       []string        // Function names
+	Tables           []string        // Simple table names
+	TablesQualified  []QualifiedName // Qualified table names
+	Columns          []string        // Column names
+	ColumnsQualified []QualifiedName // Qualified column names
+	Functions        []string        // Function names
 }
 
 // String returns a human-readable representation of the metadata.

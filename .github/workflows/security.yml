@@ -15,6 +15,10 @@ permissions:
   security-events: write
   actions: read
 
+env:
+  GOSEC_SEVERITY: medium
+  GOSEC_CONFIDENCE: medium
+
 jobs:
   gosec:
     name: GoSec Security Scanner
@@ -32,8 +36,8 @@ jobs:
       - name: Run GoSec Security Scanner
         uses: securego/gosec@v2.21.4
         with:
-          # Full recursive scan
-          args: '-fmt sarif -out gosec-results.sarif -severity medium -confidence medium ./...'
+          # Full recursive scan - severity and confidence levels configurable via env vars
+          args: '-fmt sarif -out gosec-results.sarif -severity ${{ env.GOSEC_SEVERITY }} -confidence ${{ env.GOSEC_CONFIDENCE }} ./...'
 
       - name: Upload GoSec SARIF file
         uses: github/codeql-action/upload-sarif@v3
@@ -45,7 +49,8 @@ jobs:
       - name: Check GoSec results
         run: |
           # Fail the build if high or critical vulnerabilities are found
-          if grep -q '"level": "error"' gosec-results.sarif; then
+          # Using robust jq query to properly parse SARIF format
+          if jq -e '.runs[].results[] | select(.level == "error")' gosec-results.sarif > /dev/null 2>&1; then
             echo "❌ High or critical security vulnerabilities found!"
             exit 1
           else
@@ -67,7 +72,7 @@ jobs:
           format: 'sarif'
           output: 'trivy-repo-results.sarif'
           severity: 'CRITICAL,HIGH,MEDIUM'
-          exit-code: '0' # Don't fail here, we'll check in next step
+          exit-code: '0' # Don't fail on SARIF generation to ensure upload completes
 
       - name: Upload Trivy SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
@@ -76,14 +81,16 @@ jobs:
           sarif_file: 'trivy-repo-results.sarif'
           category: trivy-repo
 
-      - name: Run Trivy with table output for PR comments
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'table'
-          severity: 'CRITICAL,HIGH'
-          exit-code: '1' # Fail on high/critical vulnerabilities
+      - name: Check Trivy results for critical vulnerabilities
+        run: |
+          # Fail the build if high or critical vulnerabilities are found
+          # Using robust jq query to properly parse SARIF format
+          if jq -e '.runs[].results[] | select(.level == "error" or .level == "warning")' trivy-repo-results.sarif > /dev/null 2>&1; then
+            echo "❌ High or critical vulnerabilities found in repository scan!"
+            exit 1
+          else
+            echo "✅ No high or critical vulnerabilities found"
+          fi
 
   trivy-config:
     name: Trivy Config Scan
@@ -100,7 +107,7 @@ jobs:
           format: 'sarif'
           output: 'trivy-config-results.sarif'
           severity: 'CRITICAL,HIGH,MEDIUM'
-          exit-code: '0'
+          exit-code: '0' # Don't fail on SARIF generation to ensure upload completes
 
       - name: Upload Trivy config SARIF
         uses: github/codeql-action/upload-sarif@v3
@@ -109,14 +116,16 @@ jobs:
           sarif_file: 'trivy-config-results.sarif'
           category: trivy-config
 
-      - name: Check for critical config issues
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          scan-type: 'config'
-          scan-ref: '.'
-          format: 'table'
-          severity: 'CRITICAL,HIGH'
-          exit-code: '1'
+      - name: Check Trivy config results for critical issues
+        run: |
+          # Fail the build if high or critical configuration issues are found
+          # Using robust jq query to properly parse SARIF format
+          if jq -e '.runs[].results[] | select(.level == "error" or .level == "warning")' trivy-config-results.sarif > /dev/null 2>&1; then
+            echo "❌ High or critical configuration issues found!"
+            exit 1
+          else
+            echo "✅ No high or critical configuration issues found"
+          fi
 
   dependency-review:
     name: Dependency Review

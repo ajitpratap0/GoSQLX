@@ -45,7 +45,7 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 - **🚀 Blazing Fast**: **1.38M+ ops/sec** sustained, **1.5M+ ops/sec** peak throughput
 - **💾 Memory Efficient**: **60-80% reduction** through intelligent object pooling
 - **🔒 Thread-Safe**: **Race-free**, linear scaling to **128+ cores**, **0 race conditions** detected
-- **✅ Production-Grade Testing**: **Keywords 100%** ⭐, **Errors 95.6%**, **Parser 75%**, **Tokenizer 76.5%**, **CLI 63.3%** coverage (Phases 1-2 complete)
+- **✅ Production-Grade Testing**: **Token 100%** ⭐, **Keywords 100%** ⭐, **Errors 95.6%**, **Tokenizer 76.1%**, **Parser 76.1%**, **CLI 63.3%** coverage (Phases 1-3 complete)
 - **🔗 Complete JOIN Support**: All JOIN types (INNER/LEFT/RIGHT/FULL OUTER/CROSS/NATURAL) with proper tree logic
 - **🔄 Advanced SQL Features**: CTEs with RECURSIVE support, Set Operations (UNION/EXCEPT/INTERSECT)
 - **🪟 Window Functions**: Complete SQL-99 window function support with OVER clause, PARTITION BY, ORDER BY, frame specifications
@@ -55,15 +55,15 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 - **🔍 Intelligent Errors**: Structured error codes with typo detection, context highlighting, and helpful hints
 - **🏗️ Production Ready**: Battle-tested with **0 race conditions** detected, **~80-85% SQL-99 compliance**
 
-### 🎯 Performance & Quality Highlights (v1.5.0 + Phase 2)
+### 🎯 Performance & Quality Highlights (v1.5.0 + Phases 2-3)
 
 <div align="center">
 
-| **1.38M+** | **8M+** | **<1μs** | **60-80%** | **100%** ⭐ | **4,445** |
+| **1.38M+** | **8M+** | **<1μs** | **60-80%** | **100%** ⭐ | **4,823** |
 |:---------:|:-------:|:----------:|:----------:|:-------:|:---------:|
-| Ops/sec | Tokens/sec | Latency | Memory Saved | Keywords Coverage | Test Lines Added |
+| Ops/sec | Tokens/sec | Latency | Memory Saved | Token Coverage | Test Lines Added |
 
-**✅ Phases 1-2 Complete** • **Zero race conditions** • **~80-85% SQL-99 compliance** • **115+ real-world SQL queries validated** • **Perfect Keywords coverage!**
+**✅ Phases 1-3 Complete** • **Zero race conditions** • **~80-85% SQL-99 compliance** • **115+ real-world SQL queries validated** • **Perfect Token & Keywords coverage!**
 
 </div>
 

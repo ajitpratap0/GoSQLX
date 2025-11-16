@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
+	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/output"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
@@ -32,24 +33,6 @@ type Validator struct {
 	Opts ValidatorOptions
 }
 
-// ValidationResult contains the results of a validation run
-type ValidationResult struct {
-	TotalFiles   int
-	ValidFiles   int
-	InvalidFiles int
-	TotalBytes   int64
-	Duration     time.Duration
-	Files        []FileValidationResult
-}
-
-// FileValidationResult contains the result for a single file
-type FileValidationResult struct {
-	Path  string
-	Valid bool
-	Size  int64
-	Error error
-}
-
 // NewValidator creates a new Validator with the given options
 func NewValidator(out, err io.Writer, opts ValidatorOptions) *Validator {
 	return &Validator{
@@ -60,7 +43,7 @@ func NewValidator(out, err io.Writer, opts ValidatorOptions) *Validator {
 }
 
 // Validate validates the given SQL files or patterns
-func (v *Validator) Validate(args []string) (*ValidationResult, error) {
+func (v *Validator) Validate(args []string) (*output.ValidationResult, error) {
 	startTime := time.Now()
 
 	// Expand file arguments (glob patterns, directories, etc.)
@@ -73,8 +56,8 @@ func (v *Validator) Validate(args []string) (*ValidationResult, error) {
 		return nil, fmt.Errorf("no SQL files found matching the specified patterns")
 	}
 
-	result := &ValidationResult{
-		Files: make([]FileValidationResult, 0, len(files)),
+	result := &output.ValidationResult{
+		Files: make([]output.FileValidationResult, 0, len(files)),
 	}
 
 	// Validate each file
@@ -116,8 +99,8 @@ func (v *Validator) Validate(args []string) (*ValidationResult, error) {
 }
 
 // validateFile validates a single SQL file
-func (v *Validator) validateFile(filename string) FileValidationResult {
-	result := FileValidationResult{
+func (v *Validator) validateFile(filename string) output.FileValidationResult {
+	result := output.FileValidationResult{
 		Path: filename,
 	}
 
@@ -235,7 +218,7 @@ func (v *Validator) isDirectory(path string) bool {
 }
 
 // displayStats displays validation statistics
-func (v *Validator) displayStats(result *ValidationResult) {
+func (v *Validator) displayStats(result *output.ValidationResult) {
 	fmt.Fprintf(v.Out, "\n📊 Validation Statistics:\n")
 	fmt.Fprintf(v.Out, "   Files processed: %d\n", result.TotalFiles)
 	fmt.Fprintf(v.Out, "   Valid files: %d\n", result.ValidFiles)
@@ -296,7 +279,8 @@ func ValidatorOptionsFromConfig(cfg *config.Config, flagsChanged map[string]bool
 	if flagsChanged["pattern"] {
 		opts.Pattern = flags.Pattern
 	}
-	if flagsChanged["quiet"] {
+	// Always use quiet flag value (may be set programmatically for SARIF output)
+	if flagsChanged["quiet"] || flags.Quiet {
 		opts.Quiet = flags.Quiet
 	}
 	if flagsChanged["stats"] {

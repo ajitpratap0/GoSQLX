@@ -67,7 +67,7 @@ func formatRun(cmd *cobra.Command, args []string) error {
 		Check:      formatCheck,
 		MaxLine:    formatMaxLine,
 		Verbose:    verbose,
-		Output:     output,
+		Output:     outputFile,
 	})
 
 	// Create formatter with injectable output writers

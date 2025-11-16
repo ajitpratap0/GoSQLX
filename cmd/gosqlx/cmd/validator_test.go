@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/output"
 )
 
 // TestValidator_ValidateFile tests single file validation
@@ -394,7 +396,7 @@ func TestValidator_DisplayStats(t *testing.T) {
 	var buf bytes.Buffer
 	validator := NewValidator(&buf, &buf, ValidatorOptions{})
 
-	result := &ValidationResult{
+	result := &output.ValidationResult{
 		TotalFiles:   10,
 		ValidFiles:   8,
 		InvalidFiles: 2,

@@ -4,11 +4,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Version is the current version of gosqlx CLI
+var Version = "1.4.0"
+
 var (
 	// Global flags
-	verbose bool
-	output  string
-	format  string
+	verbose    bool
+	outputFile string
+	format     string
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -42,6 +45,6 @@ func Execute() error {
 func init() {
 	// Global flags
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
-	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "", "output file (default: stdout)")
+	rootCmd.PersistentFlags().StringVarP(&outputFile, "output", "o", "", "output file (default: stdout)")
 	rootCmd.PersistentFlags().StringVarP(&format, "format", "f", "auto", "output format: json, yaml, table, tree, auto")
 }

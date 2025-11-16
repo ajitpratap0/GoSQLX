@@ -16,6 +16,13 @@
 coverage.html
 *.prof
 
+# Security scan results
+*.sarif
+gosec-*.json
+
+# Test directories
+test-action/
+
 # Dependency directories (remove the comment below to include it)
 vendor/
 

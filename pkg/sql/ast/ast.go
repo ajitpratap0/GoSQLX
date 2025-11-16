@@ -766,6 +766,7 @@ func (c CreateIndexStatement) TokenLiteral() string { return "CREATE INDEX" }
 func (c CreateIndexStatement) Children() []Node {
 	children := make([]Node, 0)
 	for _, col := range c.Columns {
+		col := col // G601: Create local copy to avoid memory aliasing
 		children = append(children, &col)
 	}
 	if c.Where != nil {

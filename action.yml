@@ -87,17 +87,41 @@ runs:
       with:
         go-version: '1.21'
 
+    - name: Determine GoSQLX cache key
+      id: cache-key
+      shell: bash
+      run: |
+        # Check if we're in the GoSQLX repository
+        if [ -f "$GITHUB_ACTION_PATH/../go.mod" ] && grep -q "github.com/ajitpratap0/GoSQLX" "$GITHUB_ACTION_PATH/../go.mod" 2>/dev/null; then
+          # Use git commit hash for local builds
+          COMMIT_HASH=$(cd "$GITHUB_ACTION_PATH/.." && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+          echo "cache-key=gosqlx-source-${COMMIT_HASH}-${{ runner.os }}-${{ runner.arch }}" >> $GITHUB_OUTPUT
+        else
+          # Use version for published releases
+          echo "cache-key=gosqlx-${{ inputs.gosqlx-version }}-${{ runner.os }}-${{ runner.arch }}" >> $GITHUB_OUTPUT
+        fi
+
     - name: Cache GoSQLX binary
       id: cache-gosqlx
       uses: actions/cache@v4
       with:
         path: ~/go/bin/gosqlx
-        key: gosqlx-${{ inputs.gosqlx-version }}-${{ runner.os }}-${{ runner.arch }}
+        key: ${{ steps.cache-key.outputs.cache-key }}
 
     - name: Install GoSQLX
       if: steps.cache-gosqlx.outputs.cache-hit != 'true'
       shell: bash
       run: |
+        # Check if we're running in the GoSQLX repository (for testing)
+        if [ -f "$GITHUB_ACTION_PATH/../go.mod" ] && grep -q "github.com/ajitpratap0/GoSQLX" "$GITHUB_ACTION_PATH/../go.mod" 2>/dev/null; then
+          echo "Building GoSQLX from local source (testing mode)..."
+          cd "$GITHUB_ACTION_PATH/.."
+          go build -o ~/go/bin/gosqlx ./cmd/gosqlx
+          echo "GoSQLX built from source successfully"
+          ~/go/bin/gosqlx --version
+          exit 0
+        fi
+
         # Validate gosqlx-version input (semver or 'latest')
         VERSION="${{ inputs.gosqlx-version }}"
         if [ "$VERSION" != "latest" ]; then

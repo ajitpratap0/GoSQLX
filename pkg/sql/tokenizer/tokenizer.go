@@ -369,10 +369,56 @@ func (t *Tokenizer) TokenizeContext(ctx context.Context, input []byte) ([]models
 func (t *Tokenizer) skipWhitespace() {
 	for t.pos.Index < len(t.input) {
 		r, size := utf8.DecodeRune(t.input[t.pos.Index:])
+
+		// Skip whitespace characters
 		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
 			t.pos.AdvanceRune(r, size)
 			continue
 		}
+
+		// Skip SQL single-line comments (-- to end of line)
+		if r == '-' && t.pos.Index+size < len(t.input) {
+			nextR, nextSize := utf8.DecodeRune(t.input[t.pos.Index+size:])
+			if nextR == '-' {
+				// Skip --
+				t.pos.AdvanceRune(r, size)
+				t.pos.AdvanceRune(nextR, nextSize)
+				// Skip until end of line or EOF
+				for t.pos.Index < len(t.input) {
+					commentR, commentSize := utf8.DecodeRune(t.input[t.pos.Index:])
+					if commentR == '\n' || commentR == '\r' {
+						break
+					}
+					t.pos.AdvanceRune(commentR, commentSize)
+				}
+				continue
+			}
+		}
+
+		// Skip multi-line comments (/* ... */)
+		if r == '/' && t.pos.Index+size < len(t.input) {
+			nextR, nextSize := utf8.DecodeRune(t.input[t.pos.Index+size:])
+			if nextR == '*' {
+				// Skip /*
+				t.pos.AdvanceRune(r, size)
+				t.pos.AdvanceRune(nextR, nextSize)
+				// Skip until we find */
+				for t.pos.Index < len(t.input) {
+					commentR, commentSize := utf8.DecodeRune(t.input[t.pos.Index:])
+					if commentR == '*' && t.pos.Index+commentSize < len(t.input) {
+						endR, endSize := utf8.DecodeRune(t.input[t.pos.Index+commentSize:])
+						if endR == '/' {
+							t.pos.AdvanceRune(commentR, commentSize)
+							t.pos.AdvanceRune(endR, endSize)
+							break
+						}
+					}
+					t.pos.AdvanceRune(commentR, commentSize)
+				}
+				continue
+			}
+		}
+
 		break
 	}
 }

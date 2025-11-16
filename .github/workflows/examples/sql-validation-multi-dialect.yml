@@ -1,0 +1,93 @@
+# Multi-Dialect SQL Validation Workflow
+# Validates SQL files for different database dialects in parallel
+
+name: Multi-Dialect SQL Validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'sql/**/*.sql'
+      - 'migrations/**/*.sql'
+
+jobs:
+  validate-matrix:
+    name: Validate ${{ matrix.dialect }} SQL
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        dialect:
+          - postgresql
+          - mysql
+          - sqlserver
+          - oracle
+          - sqlite
+        include:
+          - dialect: postgresql
+            path: 'sql/postgresql/**/*.sql'
+            strict: true
+          - dialect: mysql
+            path: 'sql/mysql/**/*.sql'
+            strict: true
+          - dialect: sqlserver
+            path: 'sql/sqlserver/**/*.sql'
+            strict: false
+          - dialect: oracle
+            path: 'sql/oracle/**/*.sql'
+            strict: false
+          - dialect: sqlite
+            path: 'sql/sqlite/**/*.sql'
+            strict: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate ${{ matrix.dialect }} queries
+        uses: ajitpratap0/GoSQLX@v1
+        with:
+          files: ${{ matrix.path }}
+          dialect: ${{ matrix.dialect }}
+          strict: ${{ matrix.strict }}
+          show-stats: true
+          fail-on-error: true
+
+  validate-migrations:
+    name: Validate Database Migrations
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate migration files
+        uses: ajitpratap0/GoSQLX@v1
+        with:
+          files: 'migrations/**/*.sql'
+          validate: true
+          strict: true
+          show-stats: true
+
+  summary:
+    name: Validation Summary
+    needs: [validate-matrix, validate-migrations]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Check validation results
+        run: |
+          echo "All SQL validation jobs completed"
+          echo "Matrix validation: ${{ needs.validate-matrix.result }}"
+          echo "Migration validation: ${{ needs.validate-migrations.result }}"
+
+          if [[ "${{ needs.validate-matrix.result }}" == "failure" ]] || \
+             [[ "${{ needs.validate-migrations.result }}" == "failure" ]]; then
+            echo "❌ Some SQL files failed validation"
+            exit 1
+          fi
+
+          echo "✅ All SQL files passed validation"

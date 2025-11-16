@@ -1,0 +1,46 @@
+# Example GoSQLX Configuration File
+# Copy this file to your repository root as .gosqlx.yml or .gosqlx.yaml
+# The GitHub Action will automatically use this configuration if present
+
+# Validation settings
+validate:
+  # SQL dialect to use (auto-detect if not specified)
+  # Options: postgresql, mysql, sqlserver, oracle, sqlite
+  dialect: postgresql
+
+  # Enable strict validation mode (more rigorous checks)
+  strict_mode: true
+
+  # Recursively process directories
+  recursive: true
+
+  # File pattern for recursive processing
+  pattern: "*.sql"
+
+# Formatting settings
+format:
+  # Number of spaces for indentation
+  indent: 2
+
+  # Uppercase SQL keywords
+  uppercase_keywords: true
+
+  # Maximum line length before wrapping
+  max_line_length: 100
+
+  # Compact format (minimal whitespace)
+  compact: false
+
+# Analysis settings (Phase 4 - Advanced features)
+analyze:
+  # Enable security vulnerability analysis
+  security: true
+
+  # Enable performance optimization analysis
+  performance: true
+
+  # Enable complexity metrics
+  complexity: true
+
+  # Run comprehensive analysis
+  all: false

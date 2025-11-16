@@ -1,0 +1,59 @@
+# Optimized SQL Validation - Only Changed Files
+# Validates only SQL files that were modified in the PR/commit
+
+name: SQL Validation (Changed Files Only)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '**.sql'
+
+jobs:
+  validate-changed:
+    name: Validate Changed SQL Files
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for changed files detection
+
+      - name: Get changed SQL files
+        id: changed-files
+        uses: tj-actions/changed-files@v40
+        with:
+          files: |
+            **/*.sql
+          separator: ' '
+
+      - name: Display changed files
+        if: steps.changed-files.outputs.any_changed == 'true'
+        run: |
+          echo "Changed SQL files:"
+          echo "${{ steps.changed-files.outputs.all_changed_files }}"
+
+      - name: Validate changed SQL files
+        if: steps.changed-files.outputs.any_changed == 'true'
+        uses: ajitpratap0/GoSQLX@v1
+        id: validate
+        with:
+          files: ${{ steps.changed-files.outputs.all_changed_files }}
+          validate: true
+          strict: true
+          show-stats: true
+
+      - name: Check formatting of changed files
+        if: steps.changed-files.outputs.any_changed == 'true'
+        uses: ajitpratap0/GoSQLX@v1
+        with:
+          files: ${{ steps.changed-files.outputs.all_changed_files }}
+          format-check: true
+          fail-on-error: false
+
+      - name: No SQL files changed
+        if: steps.changed-files.outputs.any_changed != 'true'
+        run: |
+          echo "No SQL files were changed in this PR"
+          echo "Skipping validation"

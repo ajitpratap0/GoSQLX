@@ -213,8 +213,8 @@ runs:
           echo "... and $((FILE_COUNT - 10)) more files"
         fi
 
-        # Save file list for later steps
-        echo "$FILES" > /tmp/gosqlx-files.txt
+        # Save file list for later steps (use RUNNER_TEMP for cross-platform compatibility)
+        echo "$FILES" > "$RUNNER_TEMP/gosqlx-files.txt"
         echo "file-count=$FILE_COUNT" >> $GITHUB_OUTPUT
 
     - name: Validate SQL files
@@ -281,7 +281,7 @@ runs:
             echo "::error file=$SAFE_FILE::SQL validation failed"
             INVALID=$((INVALID + 1))
           fi
-        done < /tmp/gosqlx-files.txt
+        done < "$RUNNER_TEMP/gosqlx-files.txt"
 
         END_TIME=$(date +%s%3N)
         DURATION=$((END_TIME - START_TIME))
@@ -342,7 +342,7 @@ runs:
         fi
 
         # Read files and run validation to generate SARIF
-        cat /tmp/gosqlx-files.txt | tr '\n' ' ' | xargs $CMD || true
+        cat "$RUNNER_TEMP/gosqlx-files.txt" | tr '\n' ' ' | xargs $CMD || true
 
         # Check if SARIF file was created
         if [ -f "gosqlx-results.sarif" ]; then
@@ -372,7 +372,7 @@ runs:
         echo "::group::Generate PR Comment"
 
         # Create a temporary Go program to format the validation results as a PR comment
-        cat > /tmp/format_comment.go << 'SCRIPT_EOF'
+        cat > "$RUNNER_TEMP/format_comment.go" << 'SCRIPT_EOF'
         package main
 
         import (
@@ -471,7 +471,7 @@ runs:
         SCRIPT_EOF
 
         # Create JSON from validation results
-        cat > /tmp/validation_results.json << JSON_EOF
+        cat > "$RUNNER_TEMP/validation_results.json" << JSON_EOF
         {
           "TotalFiles": ${{ steps.validate.outputs.validated-files || 0 }} + ${{ steps.validate.outputs.invalid-files || 0 }},
           "ValidFiles": ${{ steps.validate.outputs.validated-files || 0 }},
@@ -488,7 +488,7 @@ runs:
         fi
 
         # Generate comment using Go script
-        COMMENT_BODY=$(go run /tmp/format_comment.go $COMPACT_ARG < /tmp/validation_results.json)
+        COMMENT_BODY=$(go run "$RUNNER_TEMP/format_comment.go" $COMPACT_ARG < "$RUNNER_TEMP/validation_results.json")
 
         # Post comment to PR using gh CLI
         echo "$COMMENT_BODY" | gh pr comment ${{ github.event.pull_request.number }} --body-file -
@@ -516,7 +516,7 @@ runs:
           else
             echo "✓ Properly formatted: $file"
           fi
-        done < /tmp/gosqlx-files.txt
+        done < "$RUNNER_TEMP/gosqlx-files.txt"
 
         echo "::endgroup::"
 
@@ -556,7 +556,7 @@ runs:
             echo "⚠ Issues found: $file"
             LINT_ISSUES=$((LINT_ISSUES + 1))
           fi
-        done < /tmp/gosqlx-files.txt
+        done < "$RUNNER_TEMP/gosqlx-files.txt"
 
         echo "::endgroup::"
 
@@ -574,4 +574,4 @@ runs:
       if: always()
       shell: bash
       run: |
-        rm -f /tmp/gosqlx-files.txt
+        rm -f "$RUNNER_TEMP/gosqlx-files.txt" "$RUNNER_TEMP/format_comment.go" "$RUNNER_TEMP/validation_results.json"

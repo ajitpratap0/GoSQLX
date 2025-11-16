@@ -1,0 +1,29 @@
+name: Validate SQL Files
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Build SQL Validator
+      run: |
+        cd examples/tutorials/01-sql-validator
+        go build -o sql-validator
+
+    - name: Validate SQL Files
+      run: |
+        cd examples/tutorials/01-sql-validator
+        ./sql-validator testdata/valid.sql

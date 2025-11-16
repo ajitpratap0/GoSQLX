@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: format-sql
+        name: Format SQL Files
+        entry: sql-formatter format -i
+        language: system
+        files: \.sql$
+        pass_filenames: true

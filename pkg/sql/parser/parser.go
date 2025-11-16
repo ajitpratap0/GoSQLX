@@ -905,20 +905,40 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 					}
 					p.advance()
 
-					// TODO: LIMITATION - Currently only supports single column in USING clause
-					// Future enhancement needed for multi-column support like USING (col1, col2, col3)
-					// This requires parsing comma-separated column list and storing as []Expression
-					// Priority: Medium (Phase 2 enhancement)
-					if p.currentToken.Type != "IDENT" {
-						return nil, p.expectedError("column name in USING")
+					// Parse comma-separated column list for USING clause
+					// Supports both single column: USING (id)
+					// and multi-column: USING (id, name, category)
+					var usingColumns []ast.Expression
+
+					for {
+						// Parse column name
+						if p.currentToken.Type != "IDENT" {
+							return nil, p.expectedError("column name in USING")
+						}
+						usingColumns = append(usingColumns, &ast.Identifier{Name: p.currentToken.Literal})
+						p.advance()
+
+						// Check for comma (more columns)
+						if p.currentToken.Type == "," {
+							p.advance() // Consume comma
+							continue
+						}
+						break
 					}
-					joinCondition = &ast.Identifier{Name: p.currentToken.Literal}
+
+					// Check for closing parenthesis
+					if p.currentToken.Type != ")" {
+						return nil, p.expectedError(") after USING column list")
+					}
 					p.advance()
 
-					if p.currentToken.Type != ")" {
-						return nil, p.expectedError(") after USING column")
+					// Store as single identifier for single column (backward compatibility)
+					// or as ListExpression for multiple columns
+					if len(usingColumns) == 1 {
+						joinCondition = usingColumns[0]
+					} else {
+						joinCondition = &ast.ListExpression{Values: usingColumns}
 					}
-					p.advance()
 				} else if joinType != "NATURAL" {
 					return nil, p.expectedError("ON or USING")
 				}

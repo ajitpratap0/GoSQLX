@@ -158,25 +158,39 @@ runs:
         echo "Finding SQL files matching pattern: $PATTERN"
 
         # Use find to locate SQL files matching the pattern
-        # Convert glob pattern to find-compatible pattern
-        # Handle common glob patterns
-        if [[ "$PATTERN" == "**/*.sql" ]]; then
-          FILES=$(find . -type f -name "*.sql" | sort)
-        elif [[ "$PATTERN" == "*.sql" ]]; then
-          FILES=$(find . -maxdepth 1 -type f -name "*.sql" | sort)
+        # Handle glob patterns by extracting directory prefix and file pattern
+
+        # Extract directory prefix (everything before **)
+        DIR_PREFIX=$(echo "$PATTERN" | sed 's|\*\*.*||' | sed 's|/$||' | sed 's|^\./||')
+        if [ -z "$DIR_PREFIX" ] || [ "$DIR_PREFIX" = "$PATTERN" ]; then
+          DIR_PREFIX="."
+        fi
+
+        # Extract filename pattern (everything after last /)
+        FILE_PATTERN=$(echo "$PATTERN" | grep -o '[^/]*\.sql$' || echo "*.sql")
+
+        echo "Searching in: $DIR_PREFIX"
+        echo "File pattern: $FILE_PATTERN"
+
+        # Validate directory exists
+        if [ ! -d "$DIR_PREFIX" ]; then
+          echo "::warning::Directory not found: $DIR_PREFIX"
+          FILES=""
         else
-          # Custom pattern - try direct find with escaped pattern
-          FILES=$(find . -type f -path "./$PATTERN" | sort)
+          # Use find with recursive search
+          FILES=$(find "$DIR_PREFIX" -type f -name "$FILE_PATTERN" 2>/dev/null | sort)
         fi
 
         if [ -z "$FILES" ]; then
-          echo "WARNING: No SQL files found matching pattern: ${{ inputs.files }}"
+          echo "::warning::No SQL files found matching pattern: ${{ inputs.files }}"
+          echo "Searched in directory: $DIR_PREFIX"
+          echo "Looking for files matching: $FILE_PATTERN"
           echo "file-count=0" >> $GITHUB_OUTPUT
           exit 0
         fi
 
-        FILE_COUNT=$(echo "$FILES" | wc -l)
-        echo "Found $FILE_COUNT SQL file(s)"
+        FILE_COUNT=$(echo "$FILES" | wc -l | tr -d ' ')
+        echo "::notice::Found $FILE_COUNT SQL file(s) matching pattern: ${{ inputs.files }}"
         echo "$FILES" | head -10
         if [ $FILE_COUNT -gt 10 ]; then
           echo "... and $((FILE_COUNT - 10)) more files"

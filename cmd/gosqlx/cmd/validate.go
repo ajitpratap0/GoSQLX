@@ -210,10 +210,8 @@ func validateFromStdin(cmd *cobra.Command) error {
 	}
 
 	// Update result to show "stdin" instead of temp file path
-	if !opts.Quiet {
-		// Replace temp file path with "stdin" in output (already printed)
-		// The validation has already output results, so we just handle formats
-	}
+	// The validation has already output results with temp file path
+	// Different output formats are handled below
 
 	// Handle different output formats
 	if validateOutputFormat == "sarif" {

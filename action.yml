@@ -119,6 +119,7 @@ runs:
         if [ "${{ steps.cache-key.outputs.local-build }}" = "true" ]; then
           echo "Building GoSQLX from local source (testing mode)..."
           cd "${{ github.workspace }}"
+          mkdir -p ~/go/bin
           go build -o ~/go/bin/gosqlx ./cmd/gosqlx
           echo "GoSQLX built from source successfully"
           ~/go/bin/gosqlx --version

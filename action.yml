@@ -164,8 +164,13 @@ runs:
           FILES=$(find . -type f -name "*.sql" | sort)
         elif [[ "$PATTERN" == "*.sql" ]]; then
           FILES=$(find . -maxdepth 1 -type f -name "*.sql" | sort)
+        elif [[ "$PATTERN" =~ ^(.+)/\*\*/(.+)$ ]]; then
+          # Handle patterns like "dir/**/*.sql" - extract base dir and file pattern
+          BASE_DIR="${BASH_REMATCH[1]}"
+          FILE_PATTERN="${BASH_REMATCH[2]}"
+          FILES=$(find "./$BASE_DIR" -type f -name "$FILE_PATTERN" | sort)
         else
-          # Custom pattern - try direct find with escaped pattern
+          # Custom pattern without ** - try direct find with escaped pattern
           FILES=$(find . -type f -path "./$PATTERN" | sort)
         fi
 

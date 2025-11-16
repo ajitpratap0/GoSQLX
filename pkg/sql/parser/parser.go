@@ -1202,6 +1202,9 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 			case "FLOAT":
 				expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "float"}
 				p.advance()
+			case token.TRUE, token.FALSE:
+				expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "bool"}
+				p.advance()
 			default:
 				return nil, fmt.Errorf("unexpected token for value: %s", p.currentToken.Type)
 			}

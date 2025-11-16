@@ -58,6 +58,9 @@ func (p *Parser) parseAlterTableStatement(stmt *ast.AlterStatement) (*ast.AlterS
 			op.Type = ast.DropColumn
 			// Convert ast.Identifier to ast.Ident
 			ident := p.parseIdent()
+			if ident == nil {
+				return nil, p.expectedError("column name")
+			}
 			op.ColumnName = &ast.Ident{Name: ident.Name}
 			if p.matchToken(token.CASCADE) {
 				op.CascadeDrops = true
@@ -66,6 +69,9 @@ func (p *Parser) parseAlterTableStatement(stmt *ast.AlterStatement) (*ast.AlterS
 			op.Type = ast.DropConstraint
 			// Convert ast.Identifier to ast.Ident
 			ident := p.parseIdent()
+			if ident == nil {
+				return nil, p.expectedError("constraint name")
+			}
 			op.ConstraintName = &ast.Ident{Name: ident.Name}
 			if p.matchToken(token.CASCADE) {
 				op.CascadeDrops = true
@@ -100,6 +106,9 @@ func (p *Parser) parseAlterTableStatement(stmt *ast.AlterStatement) (*ast.AlterS
 		op.Type = ast.AlterColumn
 		// Convert ast.Identifier to ast.Ident
 		ident := p.parseIdent()
+		if ident == nil {
+			return nil, p.expectedError("column name")
+		}
 		op.ColumnName = &ast.Ident{Name: ident.Name}
 		colDef, err := p.parseColumnDef()
 		if err != nil {

@@ -166,10 +166,10 @@ func formatFromStdin(cmd *cobra.Command) error {
 		if string(content) != formattedSQL {
 			fmt.Fprintf(cmd.ErrOrStderr(), "stdin needs formatting\n")
 			os.Exit(1)
-		} else {
-			if verbose {
-				fmt.Fprintf(cmd.OutOrStdout(), "stdin is properly formatted\n")
-			}
+		}
+
+		if verbose {
+			fmt.Fprintf(cmd.OutOrStdout(), "stdin is properly formatted\n")
 		}
 		return nil
 	}

@@ -1,0 +1,28 @@
+# Basic SQL Validation Workflow
+# This is a simple example showing basic GoSQLX validation
+
+name: Basic SQL Validation
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.sql'
+
+jobs:
+  validate:
+    name: Validate SQL Files
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate SQL files
+        uses: ajitpratap0/GoSQLX@v1
+        with:
+          files: '**/*.sql'
+          validate: true
+          fail-on-error: true

@@ -1,0 +1,98 @@
+# Advanced SQL Validation Workflow
+# Demonstrates comprehensive validation with formatting, stats, and PR comments
+
+name: Advanced SQL Validation
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate:
+    name: SQL Validation & Quality Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate SQL syntax
+        id: validate
+        uses: ajitpratap0/GoSQLX@v1
+        with:
+          files: '**/*.sql'
+          validate: true
+          strict: true
+          show-stats: true
+          fail-on-error: true
+
+      - name: Check SQL formatting
+        id: format
+        uses: ajitpratap0/GoSQLX@v1
+        with:
+          files: '**/*.sql'
+          format-check: true
+          fail-on-error: false  # Warn but don't fail
+
+      - name: Run SQL linting
+        uses: ajitpratap0/GoSQLX@v1
+        with:
+          files: '**/*.sql'
+          lint: true
+          fail-on-error: false  # Advisory only
+
+      - name: Comment on PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const validatedFiles = '${{ steps.validate.outputs.validated-files }}';
+            const invalidFiles = '${{ steps.validate.outputs.invalid-files }}';
+            const validationTime = '${{ steps.validate.outputs.validation-time }}';
+            const formattedFiles = '${{ steps.format.outputs.formatted-files }}';
+
+            const throughput = (validatedFiles * 1000 / validationTime).toFixed(2);
+
+            const status = invalidFiles === '0' ? '✅' : '❌';
+            const formatStatus = formattedFiles === '0' ? '✅' : '⚠️';
+
+            const comment = `
+            ## SQL Validation Results ${status}
+
+            ### Validation Summary
+            - **Files Validated**: ${validatedFiles}
+            - **Invalid Files**: ${invalidFiles}
+            - **Validation Time**: ${validationTime}ms
+            - **Throughput**: ${throughput} files/sec
+
+            ### Formatting Check ${formatStatus}
+            - **Files Needing Formatting**: ${formattedFiles}
+
+            ### Performance
+            GoSQLX completed validation in ${validationTime}ms ⚡
+
+            ${invalidFiles > 0 ? '❌ **Action required**: Fix validation errors before merging' : '✅ **All SQL files passed validation!**'}
+            ${formattedFiles > 0 ? '\n⚠️ **Formatting**: Some files need formatting. Run `gosqlx format -i **/*.sql`' : ''}
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Upload validation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sql-validation-report
+          path: |
+            **/*.sql
+          retention-days: 7

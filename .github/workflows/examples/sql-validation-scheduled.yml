@@ -1,0 +1,119 @@
+# Scheduled SQL Audit Workflow
+# Runs comprehensive SQL validation on a schedule
+
+name: Scheduled SQL Audit
+
+on:
+  schedule:
+    # Run every Sunday at 00:00 UTC
+    - cron: '0 0 * * 0'
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  comprehensive-audit:
+    name: Comprehensive SQL Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate all SQL files
+        id: validate
+        uses: ajitpratap0/GoSQLX@v1
+        with:
+          files: '**/*.sql'
+          validate: true
+          strict: true
+          show-stats: true
+          fail-on-error: false
+
+      - name: Check formatting
+        id: format
+        uses: ajitpratap0/GoSQLX@v1
+        with:
+          files: '**/*.sql'
+          format-check: true
+          fail-on-error: false
+
+      - name: Run comprehensive linting
+        id: lint
+        uses: ajitpratap0/GoSQLX@v1
+        with:
+          files: '**/*.sql'
+          lint: true
+          fail-on-error: false
+
+      - name: Generate audit report
+        if: always()
+        run: |
+          cat > audit-report.md << 'EOF'
+          # SQL Audit Report
+
+          **Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          **Branch**: ${{ github.ref_name }}
+          **Commit**: ${{ github.sha }}
+
+          ## Validation Results
+          - **Files Validated**: ${{ steps.validate.outputs.validated-files }}
+          - **Invalid Files**: ${{ steps.validate.outputs.invalid-files }}
+          - **Validation Time**: ${{ steps.validate.outputs.validation-time }}ms
+
+          ## Formatting Check
+          - **Files Needing Formatting**: ${{ steps.format.outputs.formatted-files }}
+
+          ## Performance
+          - **Throughput**: $(awk "BEGIN {printf \"%.2f\", ${{ steps.validate.outputs.validated-files }} * 1000 / ${{ steps.validate.outputs.validation-time }}}" || echo "N/A") files/sec
+
+          ## Status
+          ${{ steps.validate.outputs.invalid-files == '0' && '✅ All files passed validation' || '❌ Some files have validation errors' }}
+          EOF
+
+          cat audit-report.md
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: sql-audit-report-${{ github.run_number }}
+          path: audit-report.md
+          retention-days: 90
+
+      - name: Create issue if problems found
+        if: steps.validate.outputs.invalid-files != '0' || steps.format.outputs.formatted-files != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const invalidFiles = '${{ steps.validate.outputs.invalid-files }}';
+            const formattedFiles = '${{ steps.format.outputs.formatted-files }}';
+
+            const body = `
+            ## Weekly SQL Audit Alert
+
+            The weekly SQL audit has detected issues that need attention:
+
+            ### Validation Errors
+            ${invalidFiles > 0 ? `❌ **${invalidFiles} file(s)** have validation errors` : '✅ No validation errors'}
+
+            ### Formatting Issues
+            ${formattedFiles > 0 ? `⚠️ **${formattedFiles} file(s)** need formatting` : '✅ All files properly formatted'}
+
+            ### Action Required
+            - Review the [audit report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - Fix validation errors in affected files
+            - Run \`gosqlx format -i **/*.sql\` to fix formatting
+
+            **Audit Run**: ${{ github.run_id }}
+            **Date**: ${new Date().toISOString()}
+            `;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[SQL Audit] Issues detected in weekly SQL audit`,
+              body: body,
+              labels: ['sql-quality', 'automated']
+            });

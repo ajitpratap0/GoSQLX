@@ -86,7 +86,8 @@ func (cm *ConfigManager) Init(path string) (*ConfigInitResult, error) {
 	}
 
 	// Write the template file
-	if err := os.WriteFile(path, []byte(cm.Template), 0644); err != nil {
+	// G306: Use 0600 for better security (owner read/write only)
+	if err := os.WriteFile(path, []byte(cm.Template), 0600); err != nil {
 		result.Error = fmt.Errorf("failed to create config file: %w", err)
 		return result, result.Error
 	}

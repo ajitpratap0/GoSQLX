@@ -127,7 +127,8 @@ func (v *Validator) validateFile(filename string) FileValidationResult {
 		return result
 	}
 
-	data, err := os.ReadFile(filename)
+	// G304: Path is validated by ValidateFileAccess above
+	data, err := os.ReadFile(filename) // #nosec G304
 	if err != nil {
 		result.Error = fmt.Errorf("failed to read file: %w", err)
 		return result

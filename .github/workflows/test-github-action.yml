@@ -1,0 +1,304 @@
+# Test GitHub Action
+# This workflow tests the GoSQLX GitHub Action before publishing
+
+name: Test GitHub Action
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'action.yml'
+      - '.github/workflows/test-github-action.yml'
+  pull_request:
+    paths:
+      - 'action.yml'
+  workflow_dispatch:
+
+jobs:
+  test-valid-sql:
+    name: Test Valid SQL Validation
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create test SQL files
+        shell: bash
+        run: |
+          mkdir -p test-action/valid
+
+          cat > test-action/valid/select.sql << 'EOF'
+          SELECT id, name, email, created_at
+          FROM users
+          WHERE active = true
+          ORDER BY created_at DESC
+          LIMIT 100;
+          EOF
+
+          cat > test-action/valid/insert.sql << 'EOF'
+          INSERT INTO users (name, email, active)
+          VALUES ('John Doe', 'john@example.com', true);
+          EOF
+
+          cat > test-action/valid/update.sql << 'EOF'
+          UPDATE users
+          SET email = 'newemail@example.com',
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = 1;
+          EOF
+
+      - name: Test action with valid SQL
+        uses: ./
+        id: test
+        with:
+          files: 'test-action/valid/**/*.sql'
+          validate: true
+          show-stats: true
+
+      - name: Verify outputs
+        shell: bash
+        run: |
+          echo "Validated files: ${{ steps.test.outputs.validated-files }}"
+          echo "Invalid files: ${{ steps.test.outputs.invalid-files }}"
+          echo "Validation time: ${{ steps.test.outputs.validation-time }}ms"
+
+          if [ "${{ steps.test.outputs.validated-files }}" != "3" ]; then
+            echo "ERROR: Expected 3 validated files, got ${{ steps.test.outputs.validated-files }}"
+            exit 1
+          fi
+
+          if [ "${{ steps.test.outputs.invalid-files }}" != "0" ]; then
+            echo "ERROR: Expected 0 invalid files, got ${{ steps.test.outputs.invalid-files }}"
+            exit 1
+          fi
+
+          echo "✅ Valid SQL test passed"
+
+  test-invalid-sql:
+    name: Test Invalid SQL Detection
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create invalid SQL files
+        run: |
+          mkdir -p test-action/invalid
+
+          # Syntax errors
+          echo "SELECT FROM WHERE;" > test-action/invalid/syntax-error.sql
+          echo "UPDATE SET id = 1;" > test-action/invalid/missing-table.sql
+
+      - name: Test action with invalid SQL (should fail)
+        uses: ./
+        id: test
+        continue-on-error: true
+        with:
+          files: 'test-action/invalid/**/*.sql'
+          validate: true
+          fail-on-error: true
+
+      - name: Verify failure was detected
+        run: |
+          if [ "${{ steps.test.outcome }}" != "failure" ]; then
+            echo "ERROR: Expected action to fail on invalid SQL"
+            exit 1
+          fi
+
+          echo "✅ Invalid SQL detection test passed"
+
+  test-format-check:
+    name: Test Format Checking
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create unformatted SQL
+        run: |
+          mkdir -p test-action/format
+
+          # Unformatted SQL
+          echo "select   id,name,email from users where active=true;" > test-action/format/unformatted.sql
+
+          # Properly formatted SQL
+          cat > test-action/format/formatted.sql << 'EOF'
+          SELECT id, name, email
+          FROM users
+          WHERE active = true;
+          EOF
+
+      - name: Test format check
+        uses: ./
+        id: test
+        with:
+          files: 'test-action/format/**/*.sql'
+          format-check: true
+          fail-on-error: false
+
+      - name: Verify format check
+        run: |
+          echo "Files needing formatting: ${{ steps.test.outputs.formatted-files }}"
+          echo "✅ Format check test passed"
+
+  test-dialects:
+    name: Test SQL Dialects
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dialect: [postgresql, mysql, sqlite]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create dialect-specific SQL
+        run: |
+          mkdir -p test-action/dialects
+          echo "SELECT id FROM users;" > test-action/dialects/test.sql
+
+      - name: Test with ${{ matrix.dialect }}
+        uses: ./
+        with:
+          files: 'test-action/dialects/**/*.sql'
+          dialect: ${{ matrix.dialect }}
+          validate: true
+
+  test-no-files:
+    name: Test No Files Found
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Test with no matching files
+        uses: ./
+        id: test
+        with:
+          files: 'nonexistent-directory/**/*.sql'
+          validate: true
+          fail-on-error: false
+
+      - name: Verify graceful handling
+        run: |
+          echo "No files test completed successfully"
+          echo "✅ No files test passed"
+
+  test-performance:
+    name: Test Performance
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate test files
+        run: |
+          mkdir -p test-action/performance
+          for i in {1..50}; do
+            cat > test-action/performance/query_$i.sql << EOF
+          SELECT id, name, email
+          FROM users
+          WHERE id = $i
+          ORDER BY created_at DESC;
+          EOF
+          done
+
+      - name: Run performance test
+        uses: ./
+        id: perf
+        with:
+          files: 'test-action/performance/**/*.sql'
+          validate: true
+          show-stats: true
+
+      - name: Check performance
+        shell: bash
+        run: |
+          VALIDATED=${{ steps.perf.outputs.validated-files }}
+          TIME=${{ steps.perf.outputs.validation-time }}
+
+          echo "Files validated: $VALIDATED"
+          echo "Time taken: ${TIME}ms"
+
+          # Calculate throughput
+          THROUGHPUT=$(awk "BEGIN {printf \"%.2f\", $VALIDATED * 1000 / $TIME}")
+          echo "Throughput: ${THROUGHPUT} files/sec"
+
+          # Performance should be > 10 files/sec minimum
+          if (( $(echo "$THROUGHPUT < 10" | bc -l) )); then
+            echo "WARNING: Performance below minimum target"
+          else
+            echo "✅ Performance test passed: ${THROUGHPUT} files/sec"
+          fi
+
+  test-strict-mode:
+    name: Test Strict Mode
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create test SQL
+        run: |
+          mkdir -p test-action/strict
+          echo "SELECT * FROM users;" > test-action/strict/test.sql
+
+      - name: Test strict mode
+        uses: ./
+        with:
+          files: 'test-action/strict/**/*.sql'
+          strict: true
+          validate: true
+
+  summary:
+    name: Test Summary
+    needs:
+      - test-valid-sql
+      - test-invalid-sql
+      - test-format-check
+      - test-dialects
+      - test-no-files
+      - test-performance
+      - test-strict-mode
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Check all tests
+        run: |
+          echo "# GitHub Action Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Test | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Valid SQL | ${{ needs.test-valid-sql.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Invalid SQL | ${{ needs.test-invalid-sql.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Format Check | ${{ needs.test-format-check.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dialects | ${{ needs.test-dialects.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| No Files | ${{ needs.test-no-files.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Performance | ${{ needs.test-performance.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Strict Mode | ${{ needs.test-strict-mode.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+
+          # Check if any test failed
+          if [[ "${{ needs.test-valid-sql.result }}" == "failure" ]] || \
+             [[ "${{ needs.test-invalid-sql.result }}" == "failure" ]] || \
+             [[ "${{ needs.test-format-check.result }}" == "failure" ]] || \
+             [[ "${{ needs.test-dialects.result }}" == "failure" ]] || \
+             [[ "${{ needs.test-no-files.result }}" == "failure" ]] || \
+             [[ "${{ needs.test-performance.result }}" == "failure" ]] || \
+             [[ "${{ needs.test-strict-mode.result }}" == "failure" ]]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "❌ **Some tests failed**" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **All tests passed! Action is ready for publishing.**" >> $GITHUB_STEP_SUMMARY

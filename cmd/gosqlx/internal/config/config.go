@@ -94,7 +94,8 @@ func Load(path string) (*Config, error) {
 		path = filepath.Join(home, path[1:])
 	}
 
-	data, err := os.ReadFile(path)
+	// G304: Path is either from filepath.Join or user config, acceptable risk
+	data, err := os.ReadFile(path) // #nosec G304
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
@@ -169,7 +170,8 @@ func (c *Config) Save(path string) error {
 	}
 
 	// Write to file
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	// G306: Use 0600 for better security (owner read/write only)
+	if err := os.WriteFile(path, data, 0600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 

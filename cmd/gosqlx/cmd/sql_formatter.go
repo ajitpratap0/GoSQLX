@@ -122,6 +122,7 @@ func (f *SQLFormatter) formatSelect(stmt *ast.SelectStatement) error {
 
 	// JOINs
 	for _, join := range stmt.Joins {
+		join := join // G601: Create local copy to avoid memory aliasing
 		f.writeNewline()
 		if err := f.formatJoin(&join); err != nil {
 			return err
@@ -228,6 +229,7 @@ func (f *SQLFormatter) formatUpdate(stmt *ast.UpdateStatement) error {
 		}
 
 		for i, update := range updates {
+			update := update // G601: Create local copy to avoid memory aliasing
 			if i > 0 {
 				f.builder.WriteString(", ")
 			}
@@ -293,6 +295,7 @@ func (f *SQLFormatter) formatCreateTable(stmt *ast.CreateTableStatement) error {
 	}
 
 	for i, col := range stmt.Columns {
+		col := col // G601: Create local copy to avoid memory aliasing
 		if i > 0 {
 			f.builder.WriteString(",")
 			if !f.compact {
@@ -356,6 +359,7 @@ func (f *SQLFormatter) formatAlterTable(stmt *ast.AlterTableStatement) error {
 	f.builder.WriteString(" " + stmt.Table)
 
 	for i, action := range stmt.Actions {
+		action := action // G601: Create local copy to avoid memory aliasing
 		if i > 0 {
 			f.builder.WriteString(",")
 		}
@@ -570,6 +574,7 @@ func (f *SQLFormatter) formatExpressionList(exprs []ast.Expression, separator st
 
 func (f *SQLFormatter) formatTableReferences(tables []ast.TableReference) {
 	for i, table := range tables {
+		table := table // G601: Create local copy to avoid memory aliasing
 		if i > 0 {
 			f.builder.WriteString(", ")
 		}

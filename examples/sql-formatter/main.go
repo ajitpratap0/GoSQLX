@@ -54,7 +54,8 @@ func main() {
 	}
 
 	if *output != "" {
-		err = os.WriteFile(*output, []byte(formatted), 0644)
+		// G306: Use 0600 for better security (owner read/write only)
+		err = os.WriteFile(*output, []byte(formatted), 0600)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
 			os.Exit(1)

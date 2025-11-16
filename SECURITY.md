@@ -4,10 +4,14 @@
 
 We release patches for security vulnerabilities. Currently supported versions:
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.0.x   | :white_check_mark: |
-| < 1.0   | :x:                |
+| Version | Supported          | Security Updates |
+| ------- | ------------------ | ---------------- |
+| 1.5.x   | :white_check_mark: | Active           |
+| 1.4.x   | :white_check_mark: | Active           |
+| 1.0-1.3 | :x:                | Upgrade Required |
+| < 1.0   | :x:                | Not Supported    |
+
+**Upgrade Policy**: We recommend always using the latest version for optimal security and performance.
 
 ## Reporting a Vulnerability
 
@@ -149,16 +153,41 @@ _, err := parser.Parse(tokens)
 - It does NOT protect against SQL injection
 - Always use parameterized queries when executing SQL
 
+## Automated Security Scanning
+
+GoSQLX implements comprehensive automated security scanning:
+
+### Continuous Monitoring
+- **GoSec**: Static security analyzer for Go code (runs on every push/PR)
+- **Trivy**: Comprehensive vulnerability scanner for dependencies and configurations
+- **GovulnCheck**: Official Go vulnerability database checker
+- **Dependabot**: Automated dependency updates with security patch monitoring
+- **Weekly Scans**: Full security audit every Sunday at midnight UTC
+
+### Security Thresholds
+- **Build Failure**: High or critical vulnerabilities block merges
+- **Medium Severity**: Reviewed but may not block deployment
+- **Low Severity**: Tracked and addressed in maintenance releases
+
+### Viewing Security Reports
+- Navigate to repository **Security** tab
+- Review **Code Scanning Alerts** for detailed findings
+- Check **Dependabot Alerts** for dependency vulnerabilities
+- View workflow runs in **Actions** tab for scan details
+
 ## Security Updates
 
 Security updates will be released as:
-- Patch versions for non-breaking fixes (1.0.x)
-- Minor versions if breaking changes are required (1.x.0)
+- **Patch versions** (1.x.Y) for non-breaking security fixes
+- **Minor versions** (1.X.0) if breaking changes are required for security
+- **Emergency releases** within 24-48 hours for critical vulnerabilities
 
+### Update Notifications
 Subscribe to security advisories:
-- Watch the repository for releases
-- Follow @gosqlx on Twitter
-- Join our security mailing list
+- **GitHub Security Advisories**: Watch the repository for security alerts
+- **GitHub Releases**: Enable notifications for new releases
+- **Dependabot**: Automatic PR creation for vulnerable dependencies
+- **Security Tab**: Review active security alerts
 
 ## Acknowledgments
 
@@ -169,5 +198,15 @@ We appreciate responsible disclosure of security vulnerabilities. Security resea
 
 ## Contact
 
-- Security Advisory Page: https://github.com/ajitpratap0/GoSQLX/security/advisories
-- GitHub Issues (private): Use "SECURITY:" prefix in title
+- **Security Advisory Page**: https://github.com/ajitpratap0/GoSQLX/security/advisories
+- **GitHub Issues (private)**: Use "SECURITY:" prefix in title
+- **Email**: For urgent security matters, contact the maintainers directly through GitHub
+- **Response Time**: Initial acknowledgment within 48 hours for critical issues
+
+## Security Compliance
+
+GoSQLX follows industry best practices:
+- **OWASP Guidelines**: Aligned with OWASP secure coding practices
+- **CWE Mitigation**: Addresses common weakness enumeration patterns
+- **CVE Tracking**: All dependencies monitored for known CVE entries
+- **SBOM**: Software Bill of Materials available on request

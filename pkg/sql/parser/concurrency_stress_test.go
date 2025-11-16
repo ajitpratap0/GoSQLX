@@ -3,83 +3,15 @@
 package parser
 
 import (
-	"fmt"
 	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
-
-// convertTokensForStressTest converts models.TokenWithSpan to token.Token for parser
-func convertTokensForStressTest(tokens []models.TokenWithSpan) []token.Token {
-	result := make([]token.Token, 0, len(tokens))
-
-	for _, t := range tokens {
-		// Map token type to string
-		tokenType := token.Type(fmt.Sprintf("%v", t.Token.Type))
-
-		// Map common token types
-		switch t.Token.Type {
-		case models.TokenTypeSelect:
-			tokenType = "SELECT"
-		case models.TokenTypeFrom:
-			tokenType = "FROM"
-		case models.TokenTypeWhere:
-			tokenType = "WHERE"
-		case models.TokenTypeIdentifier:
-			tokenType = "IDENT"
-		case models.TokenTypeMul:
-			tokenType = "ASTERISK"
-		case models.TokenTypeComma:
-			tokenType = "COMMA"
-		case models.TokenTypeDot:
-			tokenType = "DOT"
-		case models.TokenTypeEq:
-			tokenType = "EQUAL"
-		case models.TokenTypeSemicolon:
-			tokenType = "SEMICOLON"
-		case models.TokenTypeEOF:
-			tokenType = "EOF"
-		case models.TokenTypeTrue, models.TokenTypeFalse:
-			tokenType = "BOOLEAN"
-		case models.TokenTypeOrder:
-			tokenType = "ORDER"
-		case models.TokenTypeBy:
-			tokenType = "BY"
-		case models.TokenTypeAsc:
-			tokenType = "ASC"
-		case models.TokenTypeDesc:
-			tokenType = "DESC"
-		case models.TokenTypeGroup:
-			tokenType = "GROUP"
-		case models.TokenTypeJoin:
-			tokenType = "JOIN"
-		case models.TokenTypeLeft:
-			tokenType = "LEFT"
-		case models.TokenTypeOn:
-			tokenType = "ON"
-		case models.TokenTypeCount:
-			tokenType = "COUNT"
-		case models.TokenTypeLParen:
-			tokenType = "LPAREN"
-		case models.TokenTypeRParen:
-			tokenType = "RPAREN"
-		}
-
-		result = append(result, token.Token{
-			Type:    tokenType,
-			Literal: t.Token.Value,
-		})
-	}
-
-	return result
-}
 
 // TestConcurrencyPoolExhaustion_10K_Tokenizer_Goroutines tests tokenizer pool behavior
 // under extreme load with 10,000 concurrent goroutines requesting tokenizers simultaneously.

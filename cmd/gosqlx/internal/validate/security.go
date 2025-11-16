@@ -91,11 +91,15 @@ func (v *SecurityValidator) Validate(path string) error {
 	}
 
 	// 8. Test read permissions
-	file, err := os.Open(realPath)
+	// G304: realPath is fully validated above via EvalSymlinks and security checks
+	file, err := os.Open(realPath) // #nosec G304
 	if err != nil {
 		return fmt.Errorf("cannot open file: %w", err)
 	}
-	file.Close()
+	// G104: Check error on Close to ensure resources are properly released
+	if closeErr := file.Close(); closeErr != nil {
+		return fmt.Errorf("error closing file: %w", closeErr)
+	}
 
 	return nil
 }

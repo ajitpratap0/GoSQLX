@@ -46,6 +46,7 @@ func (tc *TokenConverter) Convert(tokens []models.TokenWithSpan) (*ConversionRes
 	positions := make([]TokenPosition, 0, len(tokens)*2) // Account for compound token expansion
 
 	for originalIndex, t := range tokens {
+		t := t // G601: Create local copy to avoid memory aliasing
 		// Handle compound tokens that need to be split
 		if expanded := tc.handleCompoundToken(t); len(expanded) > 0 {
 			tc.buffer = append(tc.buffer, expanded...)

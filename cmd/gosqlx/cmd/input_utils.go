@@ -47,7 +47,8 @@ func DetectAndReadInput(input string) (*InputResult, error) {
 		}
 
 		// Read the file
-		content, err := os.ReadFile(input)
+		// G304: Path is validated by ValidateInputFile above
+		content, err := os.ReadFile(input) // #nosec G304
 		if err != nil {
 			return nil, fmt.Errorf("failed to read file %s: %w", input, err)
 		}

@@ -19,6 +19,7 @@ func (s Select) Children() []Node {
 	children := make([]Node, 0)
 	children = append(children, nodifyExpressions(s.Columns)...)
 	for _, from := range s.From {
+		from := from // G601: Create local copy to avoid memory aliasing
 		children = append(children, &from)
 	}
 	if s.Where != nil {
@@ -86,6 +87,7 @@ func (u Update) Children() []Node {
 	children := make([]Node, 0)
 	children = append(children, &u.Table)
 	for _, update := range u.Updates {
+		update := update // G601: Create local copy to avoid memory aliasing
 		children = append(children, &update)
 	}
 	if u.Where != nil {

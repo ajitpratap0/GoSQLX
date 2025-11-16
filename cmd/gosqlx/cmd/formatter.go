@@ -97,7 +97,8 @@ func (f *Formatter) Format(args []string) (*FormatterResult, error) {
 
 		if f.Opts.InPlace {
 			if fileResult.Changed {
-				err = os.WriteFile(file, []byte(fileResult.Formatted), 0644)
+				// G306: Use 0600 for better security (owner read/write only)
+				err = os.WriteFile(file, []byte(fileResult.Formatted), 0600)
 				if err != nil {
 					fmt.Fprintf(f.Err, "❌ Failed to write %s: %v\n", file, err)
 					result.FailedFiles++
@@ -114,7 +115,8 @@ func (f *Formatter) Format(args []string) (*FormatterResult, error) {
 				result.AlreadyFormatted++
 			}
 		} else if f.Opts.Output != "" {
-			err = os.WriteFile(f.Opts.Output, []byte(fileResult.Formatted), 0644)
+			// G306: Use 0600 for better security (owner read/write only)
+			err = os.WriteFile(f.Opts.Output, []byte(fileResult.Formatted), 0600)
 			if err != nil {
 				fmt.Fprintf(f.Err, "❌ Failed to write output file: %v\n", err)
 				result.FailedFiles++
@@ -156,7 +158,8 @@ func (f *Formatter) formatFile(filename string) FileFormatterResult {
 		return result
 	}
 
-	data, err := os.ReadFile(filename)
+	// G304: Path is validated by ValidateFileAccess above
+	data, err := os.ReadFile(filename) // #nosec G304
 	if err != nil {
 		result.Error = fmt.Errorf("failed to read file: %w", err)
 		return result

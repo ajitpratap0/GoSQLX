@@ -1,11 +1,226 @@
 package gosqlx_test
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 )
+
+// ExampleParse demonstrates basic SQL parsing.
+func ExampleParse() {
+	sql := "SELECT * FROM users WHERE active = true"
+	ast, err := gosqlx.Parse(sql)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("Parsed %d statement(s)\n", len(ast.Statements))
+	// Output: Parsed 1 statement(s)
+}
+
+// ExampleValidate demonstrates SQL validation.
+func ExampleValidate() {
+	sql := "SELECT * FROM users"
+	if err := gosqlx.Validate(sql); err != nil {
+		fmt.Printf("Invalid SQL: %v\n", err)
+		return
+	}
+
+	fmt.Println("Valid SQL")
+	// Output: Valid SQL
+}
+
+// ExampleParseMultiple demonstrates parsing multiple SQL statements efficiently.
+func ExampleParseMultiple() {
+	queries := []string{
+		"SELECT * FROM users",
+		"SELECT * FROM orders",
+		"SELECT * FROM products",
+	}
+
+	asts, err := gosqlx.ParseMultiple(queries)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("Parsed %d queries\n", len(asts))
+	// Output: Parsed 3 queries
+}
+
+// ExampleFormat demonstrates SQL formatting with options.
+func ExampleFormat() {
+	sql := "SELECT * FROM users WHERE active = true"
+
+	opts := gosqlx.DefaultFormatOptions()
+	opts.AddSemicolon = true
+
+	formatted, err := gosqlx.Format(sql, opts)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("Formatted SQL ends with semicolon: %v\n", formatted[len(formatted)-1] == ';')
+	// Output: Formatted SQL ends with semicolon: true
+}
+
+// ExampleParseWithContext demonstrates parsing with context for cancellation.
+func ExampleParseWithContext() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	sql := "SELECT * FROM users"
+	ast, err := gosqlx.ParseWithContext(ctx, sql)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("Parsed with context: %d statement(s)\n", len(ast.Statements))
+	// Output: Parsed with context: 1 statement(s)
+}
+
+// ExampleParseWithTimeout demonstrates parsing with a timeout.
+func ExampleParseWithTimeout() {
+	sql := "SELECT * FROM users"
+	ast, err := gosqlx.ParseWithTimeout(sql, 5*time.Second)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("Parsed with timeout: %d statement(s)\n", len(ast.Statements))
+	// Output: Parsed with timeout: 1 statement(s)
+}
+
+// ExampleMustParse demonstrates MustParse for SQL literals.
+func ExampleMustParse() {
+	// Use MustParse only with SQL literals you control
+	ast := gosqlx.MustParse("SELECT 1")
+
+	fmt.Printf("Type: %T\n", ast)
+	// Output: Type: *ast.AST
+}
+
+// ExampleParseBytes demonstrates parsing from a byte slice.
+func ExampleParseBytes() {
+	sqlBytes := []byte("SELECT * FROM users")
+
+	ast, err := gosqlx.ParseBytes(sqlBytes)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("Parsed from bytes: %d statement(s)\n", len(ast.Statements))
+	// Output: Parsed from bytes: 1 statement(s)
+}
+
+// ExampleValidateMultiple demonstrates validating multiple SQL statements.
+func ExampleValidateMultiple() {
+	queries := []string{
+		"SELECT * FROM users",
+		"INSERT INTO users (name) VALUES ('test')",
+		"UPDATE users SET active = true WHERE id = 1",
+	}
+
+	if err := gosqlx.ValidateMultiple(queries); err != nil {
+		fmt.Printf("Validation failed: %v\n", err)
+		return
+	}
+
+	fmt.Println("All queries valid")
+	// Output: All queries valid
+}
+
+// ExampleExtractTables demonstrates extracting table names from a query.
+func ExampleExtractTables() {
+	sql := "SELECT * FROM users u JOIN orders o ON u.id = o.user_id"
+
+	ast, err := gosqlx.Parse(sql)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	tables := gosqlx.ExtractTables(ast)
+	fmt.Printf("Found %d tables\n", len(tables))
+	// Output: Found 2 tables
+}
+
+// ExampleExtractColumns demonstrates extracting column names from a query.
+func ExampleExtractColumns() {
+	sql := "SELECT u.name, u.email FROM users u WHERE u.active = true ORDER BY u.created_at"
+
+	ast, err := gosqlx.Parse(sql)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	columns := gosqlx.ExtractColumns(ast)
+	fmt.Printf("Found %d columns\n", len(columns))
+	// Output: Found 4 columns
+}
+
+// ExampleExtractFunctions demonstrates extracting function names from a query.
+func ExampleExtractFunctions() {
+	sql := "SELECT COUNT(*), AVG(salary), UPPER(name) FROM employees"
+
+	ast, err := gosqlx.Parse(sql)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	functions := gosqlx.ExtractFunctions(ast)
+	fmt.Printf("Found %d functions\n", len(functions))
+	// Output: Found 3 functions
+}
+
+// ExampleExtractMetadata demonstrates extracting comprehensive metadata from a query.
+func ExampleExtractMetadata() {
+	sql := `SELECT u.name, COUNT(o.id) as order_count
+		FROM users u
+		LEFT JOIN orders o ON u.id = o.user_id
+		WHERE u.active = true
+		GROUP BY u.name
+		HAVING COUNT(o.id) > 5`
+
+	ast, err := gosqlx.Parse(sql)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	metadata := gosqlx.ExtractMetadata(ast)
+	fmt.Printf("Tables: %d, Columns: %d, Functions: %d\n",
+		len(metadata.Tables), len(metadata.Columns), len(metadata.Functions))
+	// Output: Tables: 2, Columns: 4, Functions: 1
+}
+
+// ExampleExtractTablesQualified demonstrates extracting qualified table names.
+func ExampleExtractTablesQualified() {
+	sql := "SELECT * FROM users JOIN orders ON users.id = orders.user_id"
+
+	ast, err := gosqlx.Parse(sql)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	tables := gosqlx.ExtractTablesQualified(ast)
+	fmt.Printf("Found %d tables\n", len(tables))
+	// Output: Found 2 tables
+}
+
+// ExampleExtractColumnsQualified demonstrates extracting qualified column names.
+func ExampleExtractColumnsQualified() {
+	sql := "SELECT u.name, u.email FROM users u WHERE u.active = true"
+
+	ast, err := gosqlx.Parse(sql)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	columns := gosqlx.ExtractColumnsQualified(ast)
+	fmt.Printf("Found %d qualified columns\n", len(columns))
+	// Output: Found 3 qualified columns
+}
 
 // Example_simple demonstrates the simplest way to parse SQL.
 func Example_simple() {

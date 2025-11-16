@@ -2,6 +2,7 @@ package gosqlx
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -68,7 +69,7 @@ func TestParseWithContext_CancelledContext(t *testing.T) {
 
 	ast, err := ParseWithContext(ctx, sql)
 
-	if err != context.Canceled {
+	if !errors.Is(err, context.Canceled) {
 		t.Errorf("Expected context.Canceled error, got: %v", err)
 	}
 
@@ -90,7 +91,7 @@ func TestParseWithContext_Timeout(t *testing.T) {
 
 	ast, err := ParseWithContext(ctx, sql)
 
-	if err != context.DeadlineExceeded {
+	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("Expected context.DeadlineExceeded error, got: %v", err)
 	}
 
@@ -148,7 +149,7 @@ func TestParseWithTimeout_TimeoutExpires(t *testing.T) {
 	ast, err := ParseWithTimeout(sql, timeout)
 
 	// Should timeout or succeed quickly (race condition)
-	if err == context.DeadlineExceeded {
+	if errors.Is(err, context.DeadlineExceeded) {
 		if ast != nil {
 			t.Error("Expected nil AST when timeout expires")
 		}
@@ -338,7 +339,7 @@ func TestParseWithContext_ErrorHandling(t *testing.T) {
 				t.Error("Expected error but got none")
 			}
 
-			if err != nil && err == context.Canceled {
+			if err != nil && errors.Is(err, context.Canceled) {
 				t.Error("Should not return context.Canceled for SQL errors")
 			}
 
@@ -430,7 +431,7 @@ func TestParseWithTimeout_ZeroTimeout(t *testing.T) {
 	ast, err := ParseWithTimeout(sql, 0)
 
 	// With zero timeout, context will be cancelled immediately or succeed
-	if err == context.DeadlineExceeded {
+	if errors.Is(err, context.DeadlineExceeded) {
 		if ast != nil {
 			t.Error("Expected nil AST when timeout expires")
 		}

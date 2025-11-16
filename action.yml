@@ -65,19 +65,19 @@ inputs:
 outputs:
   validated-files:
     description: 'Number of files validated'
-    value: ${{ steps.validate.outputs.validated-files }}
+    value: ${{ steps.output-results.outputs.validated-files }}
 
   invalid-files:
     description: 'Number of files with validation errors'
-    value: ${{ steps.validate.outputs.invalid-files }}
+    value: ${{ steps.output-results.outputs.invalid-files }}
 
   formatted-files:
     description: 'Number of files needing formatting (if format-check enabled)'
-    value: ${{ steps.format-check.outputs.formatted-files }}
+    value: ${{ steps.output-results.outputs.formatted-files }}
 
   validation-time:
     description: 'Total validation time in milliseconds'
-    value: ${{ steps.validate.outputs.validation-time }}
+    value: ${{ steps.output-results.outputs.validation-time }}
 
 runs:
   using: 'composite'
@@ -354,6 +354,24 @@ runs:
         if [ $LINT_ISSUES -gt 0 ]; then
           echo "::warning::$LINT_ISSUES file(s) have linting suggestions"
         fi
+
+    - name: Consolidate outputs
+      id: output-results
+      if: always()
+      shell: bash
+      run: |
+        # Consolidate all outputs with proper defaults
+        # This ensures outputs are always available even if steps were skipped
+        VALIDATED="${{ steps.validate.outputs.validated-files }}"
+        INVALID="${{ steps.validate.outputs.invalid-files }}"
+        VALIDATION_TIME="${{ steps.validate.outputs.validation-time }}"
+        FORMATTED="${{ steps.format-check.outputs.formatted-files }}"
+
+        # Set defaults if values are empty
+        echo "validated-files=${VALIDATED:-0}" >> $GITHUB_OUTPUT
+        echo "invalid-files=${INVALID:-0}" >> $GITHUB_OUTPUT
+        echo "validation-time=${VALIDATION_TIME:-0}" >> $GITHUB_OUTPUT
+        echo "formatted-files=${FORMATTED:-0}" >> $GITHUB_OUTPUT
 
     - name: Cleanup
       if: always()

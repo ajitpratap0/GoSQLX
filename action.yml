@@ -91,15 +91,17 @@ runs:
       id: cache-key
       shell: bash
       run: |
-        # Check if we're in the GoSQLX repository
-        ACTION_PATH="${{ github.action_path }}"
-        if [ -f "${ACTION_PATH}/../go.mod" ] && grep -q "github.com/ajitpratap0/GoSQLX" "${ACTION_PATH}/../go.mod" 2>/dev/null; then
+        # Check if we're in the GoSQLX repository (testing locally)
+        # When using local action (uses: ./), go.mod is in the same directory
+        if [ -f "${{ github.workspace }}/go.mod" ] && grep -q "github.com/ajitpratap0/GoSQLX" "${{ github.workspace }}/go.mod" 2>/dev/null; then
           # Use git commit hash for local builds
-          COMMIT_HASH=$(cd "${ACTION_PATH}/.." && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+          COMMIT_HASH=$(cd "${{ github.workspace }}" && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
           echo "cache-key=gosqlx-source-${COMMIT_HASH}-${{ runner.os }}-${{ runner.arch }}" >> $GITHUB_OUTPUT
+          echo "local-build=true" >> $GITHUB_OUTPUT
         else
           # Use version for published releases
           echo "cache-key=gosqlx-${{ inputs.gosqlx-version }}-${{ runner.os }}-${{ runner.arch }}" >> $GITHUB_OUTPUT
+          echo "local-build=false" >> $GITHUB_OUTPUT
         fi
 
     - name: Cache GoSQLX binary
@@ -113,11 +115,10 @@ runs:
       if: steps.cache-gosqlx.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        # Check if we're running in the GoSQLX repository (for testing)
-        ACTION_PATH="${{ github.action_path }}"
-        if [ -f "${ACTION_PATH}/../go.mod" ] && grep -q "github.com/ajitpratap0/GoSQLX" "${ACTION_PATH}/../go.mod" 2>/dev/null; then
+        # Check if this is a local build (determined in cache-key step)
+        if [ "${{ steps.cache-key.outputs.local-build }}" = "true" ]; then
           echo "Building GoSQLX from local source (testing mode)..."
-          cd "${ACTION_PATH}/.."
+          cd "${{ github.workspace }}"
           go build -o ~/go/bin/gosqlx ./cmd/gosqlx
           echo "GoSQLX built from source successfully"
           ~/go/bin/gosqlx --version

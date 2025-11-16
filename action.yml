@@ -92,9 +92,10 @@ runs:
       shell: bash
       run: |
         # Check if we're in the GoSQLX repository
-        if [ -f "$GITHUB_ACTION_PATH/../go.mod" ] && grep -q "github.com/ajitpratap0/GoSQLX" "$GITHUB_ACTION_PATH/../go.mod" 2>/dev/null; then
+        ACTION_PATH="${{ github.action_path }}"
+        if [ -f "${ACTION_PATH}/../go.mod" ] && grep -q "github.com/ajitpratap0/GoSQLX" "${ACTION_PATH}/../go.mod" 2>/dev/null; then
           # Use git commit hash for local builds
-          COMMIT_HASH=$(cd "$GITHUB_ACTION_PATH/.." && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+          COMMIT_HASH=$(cd "${ACTION_PATH}/.." && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
           echo "cache-key=gosqlx-source-${COMMIT_HASH}-${{ runner.os }}-${{ runner.arch }}" >> $GITHUB_OUTPUT
         else
           # Use version for published releases
@@ -113,9 +114,10 @@ runs:
       shell: bash
       run: |
         # Check if we're running in the GoSQLX repository (for testing)
-        if [ -f "$GITHUB_ACTION_PATH/../go.mod" ] && grep -q "github.com/ajitpratap0/GoSQLX" "$GITHUB_ACTION_PATH/../go.mod" 2>/dev/null; then
+        ACTION_PATH="${{ github.action_path }}"
+        if [ -f "${ACTION_PATH}/../go.mod" ] && grep -q "github.com/ajitpratap0/GoSQLX" "${ACTION_PATH}/../go.mod" 2>/dev/null; then
           echo "Building GoSQLX from local source (testing mode)..."
-          cd "$GITHUB_ACTION_PATH/.."
+          cd "${ACTION_PATH}/.."
           go build -o ~/go/bin/gosqlx ./cmd/gosqlx
           echo "GoSQLX built from source successfully"
           ~/go/bin/gosqlx --version

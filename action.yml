@@ -57,6 +57,16 @@ inputs:
     required: false
     default: 'false'
 
+  pr-comment:
+    description: 'Post validation results as a PR comment (only works on pull_request events)'
+    required: false
+    default: 'false'
+
+  pr-comment-compact:
+    description: 'Use compact format for PR comments (limits to 5 errors max)'
+    required: false
+    default: 'false'
+
   gosqlx-version:
     description: 'GoSQLX version to use (default: latest)'
     required: false
@@ -350,6 +360,141 @@ runs:
       with:
         sarif_file: ${{ inputs.working-directory }}/gosqlx-results.sarif
         category: gosqlx-sql-validation
+
+    - name: Post PR Comment
+      id: pr-comment
+      if: inputs.pr-comment == 'true' && github.event_name == 'pull_request' && steps.validate.conclusion != 'skipped'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        echo "::group::Generate PR Comment"
+
+        # Create a temporary Go program to format the validation results as a PR comment
+        cat > /tmp/format_comment.go << 'SCRIPT_EOF'
+        package main
+
+        import (
+            "encoding/json"
+            "fmt"
+            "os"
+            "strings"
+            "time"
+        )
+
+        type FileValidationResult struct {
+            Path  string
+            Valid bool
+            Size  int64
+            Error *string
+        }
+
+        type ValidationResult struct {
+            TotalFiles   int
+            ValidFiles   int
+            InvalidFiles int
+            TotalBytes   int64
+            Duration     string
+            Files        []FileValidationResult
+        }
+
+        func formatPRComment(result *ValidationResult, compact bool) string {
+            var sb strings.Builder
+
+            duration, _ := time.ParseDuration(result.Duration)
+
+            if compact {
+                if result.InvalidFiles == 0 {
+                    sb.WriteString("## ✅ GoSQLX: All SQL files valid\n\n")
+                    sb.WriteString(fmt.Sprintf("Validated **%d** file(s) in **%v**\n", result.ValidFiles, duration))
+                } else {
+                    sb.WriteString(fmt.Sprintf("## ❌ GoSQLX: Found issues in %d/%d files\n\n", result.InvalidFiles, result.TotalFiles))
+                    errorCount := 0
+                    maxErrors := 5
+                    for _, file := range result.Files {
+                        if file.Error != nil && errorCount < maxErrors {
+                            sb.WriteString(fmt.Sprintf("- ❌ `%s`: %s\n", file.Path, *file.Error))
+                            errorCount++
+                        }
+                    }
+                    if result.InvalidFiles > maxErrors {
+                        sb.WriteString(fmt.Sprintf("\n*...and %d more error(s). Run locally for full details.*\n", result.InvalidFiles-maxErrors))
+                    }
+                }
+                sb.WriteString("\n---\n")
+                sb.WriteString(fmt.Sprintf("⏱️ %v", duration))
+                if result.TotalFiles > 0 && duration.Seconds() > 0 {
+                    throughput := float64(result.TotalFiles) / duration.Seconds()
+                    sb.WriteString(fmt.Sprintf(" | 🚀 %.1f files/sec", throughput))
+                }
+            } else {
+                sb.WriteString("## 🔍 GoSQLX SQL Validation Results\n\n")
+                if result.InvalidFiles == 0 {
+                    sb.WriteString("### ✅ All SQL files are valid!\n\n")
+                    sb.WriteString(fmt.Sprintf("**%d** file(s) validated successfully in **%v**\n\n", result.ValidFiles, duration))
+                } else {
+                    sb.WriteString(fmt.Sprintf("### ❌ Found issues in %d file(s)\n\n", result.InvalidFiles))
+                }
+                sb.WriteString("| Metric | Value |\n|--------|-------|\n")
+                sb.WriteString(fmt.Sprintf("| Total Files | %d |\n", result.TotalFiles))
+                sb.WriteString(fmt.Sprintf("| ✅ Valid | %d |\n", result.ValidFiles))
+                sb.WriteString(fmt.Sprintf("| ❌ Invalid | %d |\n", result.InvalidFiles))
+                sb.WriteString(fmt.Sprintf("| ⏱️ Duration | %v |\n", duration))
+                if result.TotalFiles > 0 && duration.Seconds() > 0 {
+                    throughput := float64(result.TotalFiles) / duration.Seconds()
+                    sb.WriteString(fmt.Sprintf("| 🚀 Throughput | %.1f files/sec |\n", throughput))
+                }
+                sb.WriteString("\n")
+                if result.InvalidFiles > 0 {
+                    sb.WriteString("### 📋 Validation Errors\n\n")
+                    for _, file := range result.Files {
+                        if file.Error != nil {
+                            sb.WriteString(fmt.Sprintf("#### ❌ `%s`\n\n```\n%s\n```\n\n", file.Path, *file.Error))
+                        }
+                    }
+                }
+                sb.WriteString("---\n*Powered by [GoSQLX](https://github.com/ajitpratap0/GoSQLX) - Ultra-fast SQL validation (100x faster than SQLFluff)*\n")
+            }
+            return sb.String()
+        }
+
+        func main() {
+            var result ValidationResult
+            if err := json.NewDecoder(os.Stdin).Decode(&result); err != nil {
+                fmt.Fprintf(os.Stderr, "Error decoding JSON: %v\n", err)
+                os.Exit(1)
+            }
+            compact := len(os.Args) > 1 && os.Args[1] == "compact"
+            fmt.Print(formatPRComment(&result, compact))
+        }
+        SCRIPT_EOF
+
+        # Create JSON from validation results
+        cat > /tmp/validation_results.json << JSON_EOF
+        {
+          "TotalFiles": ${{ steps.validate.outputs.validated-files || 0 }} + ${{ steps.validate.outputs.invalid-files || 0 }},
+          "ValidFiles": ${{ steps.validate.outputs.validated-files || 0 }},
+          "InvalidFiles": ${{ steps.validate.outputs.invalid-files || 0 }},
+          "Duration": "${{ steps.validate.outputs.validation-time || 0 }}ms",
+          "Files": []
+        }
+        JSON_EOF
+
+        # Format the compact argument
+        COMPACT_ARG=""
+        if [ "${{ inputs.pr-comment-compact }}" = "true" ]; then
+          COMPACT_ARG="compact"
+        fi
+
+        # Generate comment using Go script
+        COMMENT_BODY=$(go run /tmp/format_comment.go $COMPACT_ARG < /tmp/validation_results.json)
+
+        # Post comment to PR using gh CLI
+        echo "$COMMENT_BODY" | gh pr comment ${{ github.event.pull_request.number }} --body-file -
+
+        echo "✓ Posted validation results to PR #${{ github.event.pull_request.number }}"
+        echo "::endgroup::"
 
     - name: Check SQL formatting
       id: format-check

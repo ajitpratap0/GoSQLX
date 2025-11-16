@@ -108,7 +108,7 @@ runs:
       id: cache-gosqlx
       uses: actions/cache@v4
       with:
-        path: ~/go/bin/gosqlx
+        path: $HOME/go/bin/gosqlx
         key: ${{ steps.cache-key.outputs.cache-key }}
 
     - name: Install GoSQLX
@@ -120,9 +120,9 @@ runs:
           echo "Building GoSQLX from local source (testing mode)..."
           cd "${{ github.workspace }}"
           mkdir -p ~/go/bin
-          go build -o ~/go/bin/gosqlx ./cmd/gosqlx
+          go build -o $HOME/go/bin/gosqlx ./cmd/gosqlx
           echo "GoSQLX built from source successfully"
-          ~/go/bin/gosqlx --version
+          $HOME/go/bin/gosqlx --version
           exit 0
         fi
 
@@ -143,17 +143,17 @@ runs:
           go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@"$VERSION"
         fi
         echo "GoSQLX installed successfully"
-        ~/go/bin/gosqlx --version
+        $HOME/go/bin/gosqlx --version
 
     - name: Verify GoSQLX installation
       shell: bash
       run: |
-        if ! command -v ~/go/bin/gosqlx &> /dev/null; then
+        if ! command -v $HOME/go/bin/gosqlx &> /dev/null; then
           echo "ERROR: GoSQLX installation failed"
           exit 1
         fi
         echo "GoSQLX version:"
-        ~/go/bin/gosqlx --version
+        $HOME/go/bin/gosqlx --version
 
     - name: Find SQL files
       id: find-files
@@ -236,8 +236,8 @@ runs:
       run: |
         echo "::group::SQL Validation"
 
-        # Build validation command
-        CMD="~/go/bin/gosqlx validate"
+        # Build validation command (expand ~ to $HOME)
+        CMD="$HOME/go/bin/gosqlx validate"
 
         # Add config if provided
         if [ -n "${{ inputs.config }}" ]; then
@@ -336,7 +336,7 @@ runs:
         while IFS= read -r file; do
           echo "Checking format: $file"
 
-          if ! ~/go/bin/gosqlx format --check "$file" 2>&1; then
+          if ! $HOME/go/bin/gosqlx format --check "$file" 2>&1; then
             echo "✗ Needs formatting: $file"
             echo "::warning file=$file::File needs formatting"
             NEEDS_FORMATTING=$((NEEDS_FORMATTING + 1))
@@ -377,7 +377,7 @@ runs:
           echo "Analyzing: $file"
 
           # Use analyze command for basic linting
-          if ~/go/bin/gosqlx analyze --all "$file" 2>&1; then
+          if $HOME/go/bin/gosqlx analyze --all "$file" 2>&1; then
             echo "✓ No issues: $file"
           else
             echo "⚠ Issues found: $file"

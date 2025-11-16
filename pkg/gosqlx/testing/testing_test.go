@@ -441,6 +441,7 @@ func TestRequireParse_Valid(t *testing.T) {
 	}
 	if astNode == nil {
 		t.Error("RequireParse should return non-nil AST for valid SQL")
+		return
 	}
 	if len(astNode.Statements) == 0 {
 		t.Error("RequireParse should return AST with statements")

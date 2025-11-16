@@ -105,7 +105,7 @@ func validateRun(cmd *cobra.Command, args []string) error {
 
 		// Write SARIF output to file or stdout
 		if validateOutputFile != "" {
-			if err := os.WriteFile(validateOutputFile, sarifData, 0644); err != nil {
+			if err := os.WriteFile(validateOutputFile, sarifData, 0600); err != nil {
 				return fmt.Errorf("failed to write SARIF output: %w", err)
 			}
 			if !opts.Quiet {

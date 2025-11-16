@@ -263,9 +263,7 @@ func normalizeURI(path string) string {
 	normalized := strings.ReplaceAll(path, "\\", "/")
 
 	// Remove leading ./ if present
-	if strings.HasPrefix(normalized, "./") {
-		normalized = normalized[2:]
-	}
+	normalized = strings.TrimPrefix(normalized, "./")
 
 	return normalized
 }

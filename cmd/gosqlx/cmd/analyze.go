@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -28,20 +30,34 @@ Examples:
   gosqlx analyze --all query.sql                  # Comprehensive analysis
   gosqlx analyze "SELECT * FROM users"            # Analyze query directly
 
+Pipeline/Stdin Examples:
+  echo "SELECT * FROM users" | gosqlx analyze     # Analyze from stdin (auto-detect)
+  cat query.sql | gosqlx analyze                  # Pipe file contents
+  gosqlx analyze -                                # Explicit stdin marker
+  gosqlx analyze < query.sql                      # Input redirection
+
 Analysis capabilities:
 • SQL injection pattern detection
 • Performance optimization suggestions
-• Query complexity scoring  
+• Query complexity scoring
 • Best practices validation
 • Multi-dialect compatibility checks
 
 Note: Advanced analysis features are implemented in Phase 4 of the roadmap.
 This is a basic implementation for CLI foundation.`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MaximumNArgs(1), // Changed to allow stdin with no args
 	RunE: analyzeRun,
 }
 
 func analyzeRun(cmd *cobra.Command, args []string) error {
+	// Handle stdin input
+	if len(args) == 0 || (len(args) == 1 && args[0] == "-") {
+		if ShouldReadFromStdin(args) {
+			return analyzeFromStdin(cmd)
+		}
+		return fmt.Errorf("no input provided: specify file path, SQL query, or pipe via stdin")
+	}
+
 	// Load configuration with CLI flag overrides
 	cfg, err := config.LoadDefault()
 	if err != nil {
@@ -75,6 +91,59 @@ func analyzeRun(cmd *cobra.Command, args []string) error {
 
 	// Run analysis
 	result, err := analyzer.Analyze(args[0])
+	if err != nil {
+		return err
+	}
+
+	// Display the report
+	return analyzer.DisplayReport(result.Report)
+}
+
+// analyzeFromStdin handles analysis from stdin input
+func analyzeFromStdin(cmd *cobra.Command) error {
+	// Read from stdin
+	content, err := ReadFromStdin()
+	if err != nil {
+		return fmt.Errorf("failed to read from stdin: %w", err)
+	}
+
+	// Validate stdin content
+	if err := ValidateStdinInput(content); err != nil {
+		return fmt.Errorf("stdin validation failed: %w", err)
+	}
+
+	// Load configuration
+	cfg, err := config.LoadDefault()
+	if err != nil {
+		cfg = config.DefaultConfig()
+	}
+
+	// Track which flags were explicitly set
+	flagsChanged := make(map[string]bool)
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		flagsChanged[f.Name] = true
+	})
+	if cmd.Parent() != nil && cmd.Parent().PersistentFlags() != nil {
+		cmd.Parent().PersistentFlags().Visit(func(f *pflag.Flag) {
+			flagsChanged[f.Name] = true
+		})
+	}
+
+	// Create analyzer options
+	opts := AnalyzerOptionsFromConfig(cfg, flagsChanged, AnalyzerFlags{
+		Security:    analyzeSecurity,
+		Performance: analyzePerformance,
+		Complexity:  analyzeComplexity,
+		All:         analyzeAll,
+		Format:      format,
+		Verbose:     verbose,
+	})
+
+	// Create analyzer
+	analyzer := NewAnalyzer(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
+
+	// Analyze the stdin content (Analyze accepts string input directly)
+	result, err := analyzer.Analyze(string(content))
 	if err != nil {
 		return err
 	}

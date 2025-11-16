@@ -37,6 +37,12 @@ Examples:
   gosqlx validate --stats ./queries/     # Show performance statistics
   gosqlx validate --output-format sarif --output-file results.sarif queries/  # SARIF output for GitHub Code Scanning
 
+Pipeline/Stdin Examples:
+  echo "SELECT * FROM users" | gosqlx validate    # Validate from stdin (auto-detect)
+  cat query.sql | gosqlx validate                 # Pipe file contents
+  gosqlx validate -                               # Explicit stdin marker
+  gosqlx validate < query.sql                     # Input redirection
+
 Output Formats:
   text  - Human-readable output (default)
   json  - JSON format for programmatic consumption
@@ -44,11 +50,21 @@ Output Formats:
 
 Performance Target: <10ms for typical queries (50-500 characters)
 Throughput: 100+ files/second in batch mode`,
-	Args: cobra.MinimumNArgs(1),
+	Args: cobra.MinimumNArgs(0), // Changed to allow stdin with no args
 	RunE: validateRun,
 }
 
 func validateRun(cmd *cobra.Command, args []string) error {
+	// Handle stdin input
+	if ShouldReadFromStdin(args) {
+		return validateFromStdin(cmd)
+	}
+
+	// Validate that we have file arguments if not using stdin
+	if len(args) == 0 {
+		return fmt.Errorf("no input provided: specify file paths or pipe SQL via stdin")
+	}
+
 	// Load configuration with CLI flag overrides
 	cfg, err := config.LoadDefault()
 	if err != nil {
@@ -121,6 +137,103 @@ func validateRun(cmd *cobra.Command, args []string) error {
 	// Default text output is already handled by the validator
 
 	// Exit with error code if there were invalid files
+	if result.InvalidFiles > 0 {
+		os.Exit(1)
+	}
+
+	return nil
+}
+
+// validateFromStdin handles validation from stdin input
+func validateFromStdin(cmd *cobra.Command) error {
+	// Read from stdin
+	content, err := ReadFromStdin()
+	if err != nil {
+		return fmt.Errorf("failed to read from stdin: %w", err)
+	}
+
+	// Validate stdin content
+	if err := ValidateStdinInput(content); err != nil {
+		return fmt.Errorf("stdin validation failed: %w", err)
+	}
+
+	// Create a temporary file to leverage existing validation logic
+	tmpFile, err := os.CreateTemp("", "gosqlx-stdin-*.sql")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	// Write stdin content to temp file
+	if _, err := tmpFile.Write(content); err != nil {
+		return fmt.Errorf("failed to write to temporary file: %w", err)
+	}
+	tmpFile.Close()
+
+	// Load configuration
+	cfg, err := config.LoadDefault()
+	if err != nil {
+		cfg = config.DefaultConfig()
+	}
+
+	// Track which flags were explicitly set
+	flagsChanged := make(map[string]bool)
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		flagsChanged[f.Name] = true
+	})
+	if cmd.Parent() != nil && cmd.Parent().PersistentFlags() != nil {
+		cmd.Parent().PersistentFlags().Visit(func(f *pflag.Flag) {
+			flagsChanged[f.Name] = true
+		})
+	}
+
+	// Create validator options
+	quietMode := validateQuiet || validateOutputFormat == "sarif"
+	opts := ValidatorOptionsFromConfig(cfg, flagsChanged, ValidatorFlags{
+		Recursive:  false, // stdin is always single input
+		Pattern:    "",
+		Quiet:      quietMode,
+		ShowStats:  validateStats,
+		Dialect:    validateDialect,
+		StrictMode: validateStrict,
+		Verbose:    verbose,
+	})
+
+	// Create validator
+	validator := NewValidator(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
+
+	// Validate the temporary file
+	result, err := validator.Validate([]string{tmpFile.Name()})
+	if err != nil {
+		return err
+	}
+
+	// Update result to show "stdin" instead of temp file path
+	if !opts.Quiet {
+		// Replace temp file path with "stdin" in output (already printed)
+		// The validation has already output results, so we just handle formats
+	}
+
+	// Handle different output formats
+	if validateOutputFormat == "sarif" {
+		sarifData, err := output.FormatSARIF(result, Version)
+		if err != nil {
+			return fmt.Errorf("failed to generate SARIF output: %w", err)
+		}
+
+		if err := WriteOutput(sarifData, validateOutputFile, cmd.OutOrStdout()); err != nil {
+			return err
+		}
+
+		if validateOutputFile != "" && !opts.Quiet {
+			fmt.Fprintf(cmd.OutOrStdout(), "SARIF output written to %s\n", validateOutputFile)
+		}
+	} else if validateOutputFormat == "json" {
+		return fmt.Errorf("JSON output format not yet implemented")
+	}
+
+	// Exit with error code if validation failed
 	if result.InvalidFiles > 0 {
 		os.Exit(1)
 	}

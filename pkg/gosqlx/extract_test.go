@@ -545,6 +545,7 @@ func TestExtractMetadata_EmptyQuery(t *testing.T) {
 	metadata := ExtractMetadata(nil)
 	if metadata == nil {
 		t.Error("Expected non-nil Metadata for nil AST")
+		return
 	}
 	if len(metadata.Tables) > 0 || len(metadata.Columns) > 0 || len(metadata.Functions) > 0 {
 		t.Errorf("Expected empty metadata for nil AST, got: %+v", metadata)

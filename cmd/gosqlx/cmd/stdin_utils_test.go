@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"path/filepath"
 	"syscall"
 	"testing"
 )
@@ -172,6 +173,9 @@ func TestIsBrokenPipe(t *testing.T) {
 }
 
 func TestWriteOutput(t *testing.T) {
+	// Use platform-appropriate temp directory
+	tmpFile := filepath.Join(os.TempDir(), "test_output.sql")
+
 	tests := []struct {
 		name       string
 		content    []byte
@@ -188,10 +192,10 @@ func TestWriteOutput(t *testing.T) {
 		{
 			name:       "write to file",
 			content:    []byte("SELECT * FROM users"),
-			outputFile: "/tmp/test_output.sql",
+			outputFile: tmpFile,
 			wantErr:    false,
 			cleanup: func() {
-				os.Remove("/tmp/test_output.sql")
+				os.Remove(tmpFile)
 			},
 		},
 	}

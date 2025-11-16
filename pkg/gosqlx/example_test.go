@@ -292,3 +292,175 @@ func Example_advancedFeatures() {
 	fmt.Printf("Parsed window: %d, CTE: %d, JOIN: %d\n", len(ast1.Statements), len(ast2.Statements), len(ast3.Statements))
 	// Output: Parsed window: 1, CTE: 1, JOIN: 1
 }
+
+// Example_extractTables demonstrates extracting table names from a query.
+func Example_extractTables() {
+	sql := "SELECT * FROM users u JOIN orders o ON u.id = o.user_id"
+
+	ast, err := gosqlx.Parse(sql)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	tables := gosqlx.ExtractTables(ast)
+	fmt.Printf("Found %d tables\n", len(tables))
+	// Output: Found 2 tables
+}
+
+// Example_extractColumns demonstrates extracting column names from a query.
+func Example_extractColumns() {
+	sql := "SELECT u.name, u.email FROM users u WHERE u.active = true ORDER BY u.created_at"
+
+	ast, err := gosqlx.Parse(sql)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	columns := gosqlx.ExtractColumns(ast)
+	fmt.Printf("Found %d columns\n", len(columns))
+	// Output: Found 4 columns
+}
+
+// Example_extractFunctions demonstrates extracting function names from a query.
+func Example_extractFunctions() {
+	sql := "SELECT COUNT(*), AVG(salary), UPPER(name) FROM employees"
+
+	ast, err := gosqlx.Parse(sql)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	functions := gosqlx.ExtractFunctions(ast)
+	fmt.Printf("Found %d functions\n", len(functions))
+	// Output: Found 3 functions
+}
+
+// Example_extractMetadata demonstrates extracting comprehensive metadata from a query.
+func Example_extractMetadata() {
+	sql := `SELECT u.name, COUNT(o.id) as order_count
+		FROM users u
+		LEFT JOIN orders o ON u.id = o.user_id
+		WHERE u.active = true
+		GROUP BY u.name
+		HAVING COUNT(o.id) > 5`
+
+	ast, err := gosqlx.Parse(sql)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	metadata := gosqlx.ExtractMetadata(ast)
+	fmt.Printf("Tables: %d, Columns: %d, Functions: %d\n",
+		len(metadata.Tables), len(metadata.Columns), len(metadata.Functions))
+	// Output: Tables: 2, Columns: 4, Functions: 1
+}
+
+// Example_extractTablesQualified demonstrates extracting qualified table names.
+func Example_extractTablesQualified() {
+	sql := "SELECT * FROM users JOIN orders ON users.id = orders.user_id"
+
+	ast, err := gosqlx.Parse(sql)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	tables := gosqlx.ExtractTablesQualified(ast)
+	fmt.Printf("Found %d tables\n", len(tables))
+	// Output: Found 2 tables
+}
+
+// Example_analyzeQuery demonstrates using extraction for query analysis.
+func Example_analyzeQuery() {
+	sql := `SELECT
+		u.username,
+		COUNT(o.id) as total_orders,
+		SUM(o.amount) as total_spent,
+		UPPER(u.email) as email_upper
+	FROM users u
+	LEFT JOIN orders o ON u.id = o.user_id
+	WHERE u.active = true AND o.status = 'completed'
+	GROUP BY u.id, u.username, u.email
+	HAVING COUNT(o.id) > 10
+	ORDER BY total_spent DESC`
+
+	ast, err := gosqlx.Parse(sql)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	metadata := gosqlx.ExtractMetadata(ast)
+
+	fmt.Printf("Query Analysis:\n")
+	fmt.Printf("- Joins %d tables\n", len(metadata.Tables))
+	fmt.Printf("- References %d columns\n", len(metadata.Columns))
+	fmt.Printf("- Uses %d functions\n", len(metadata.Functions))
+	// Output:
+	// Query Analysis:
+	// - Joins 2 tables
+	// - References 8 columns
+	// - Uses 3 functions
+}
+
+// Example_extractFromCTE demonstrates extracting from queries with CTEs.
+func Example_extractFromCTE() {
+	sql := `WITH active_users AS (
+		SELECT id, name FROM users WHERE active = true
+	)
+	SELECT name, COUNT(*) FROM active_users GROUP BY name`
+
+	ast, err := gosqlx.Parse(sql)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	metadata := gosqlx.ExtractMetadata(ast)
+	fmt.Printf("Tables found: %d\n", len(metadata.Tables))
+	// Output: Tables found: 2
+}
+
+// Example_validationWithExtraction demonstrates combining validation with metadata extraction.
+func Example_validationWithExtraction() {
+	userSQL := "SELECT u.id, u.name FROM users u WHERE u.status = 'active'"
+
+	// First validate
+	if err := gosqlx.Validate(userSQL); err != nil {
+		fmt.Println("Invalid SQL")
+		return
+	}
+
+	// Parse and extract metadata
+	ast, err := gosqlx.Parse(userSQL)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	metadata := gosqlx.ExtractMetadata(ast)
+
+	// Check if accessing sensitive tables
+	sensitiveTable := "users"
+	for _, table := range metadata.Tables {
+		if table == sensitiveTable {
+			fmt.Printf("Query accesses sensitive table: %s\n", sensitiveTable)
+		}
+	}
+	// Output: Query accesses sensitive table: users
+}
+
+// Example_extractWindowFunctions demonstrates extracting window functions.
+func Example_extractWindowFunctions() {
+	sql := `SELECT
+		name,
+		salary,
+		ROW_NUMBER() OVER (PARTITION BY department ORDER BY salary DESC) as rank,
+		AVG(salary) OVER (PARTITION BY department) as dept_avg
+	FROM employees`
+
+	ast, err := gosqlx.Parse(sql)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	functions := gosqlx.ExtractFunctions(ast)
+	fmt.Printf("Window functions found: %d\n", len(functions))
+	// Output: Window functions found: 2
+}

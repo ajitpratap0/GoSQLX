@@ -92,7 +92,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: ~/go/bin/gosqlx
-        key: gosqlx-${{ inputs.gosqlx-version }}-${{ runner.os }}-${{ runner.arch }}
+        key: gosqlx-${{ inputs.gosqlx-version }}-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
 
     - name: Install GoSQLX
       if: steps.cache-gosqlx.outputs.cache-hit != 'true'

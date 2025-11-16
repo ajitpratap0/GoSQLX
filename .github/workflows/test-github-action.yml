@@ -41,7 +41,7 @@ jobs:
 
           cat > test-action/valid/insert.sql << 'EOF'
           INSERT INTO users (name, email, active)
-          VALUES ('John Doe', 'john@example.com', true);
+          VALUES ('John Doe', 'john@example.com', TRUE);
           EOF
 
           cat > test-action/valid/update.sql << 'EOF'

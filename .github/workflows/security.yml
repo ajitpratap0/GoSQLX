@@ -56,8 +56,9 @@ jobs:
           fi
 
           # Check if file has any error-level results using jq
-          # Exit code 0 means results found, 1 means no results (which is good), >1 means jq error
-          if jq -e '.runs[]?.results[]? | select(.level == "error")' gosec-results.sarif > /dev/null 2>&1; then
+          # We use jq to filter, then check if output is non-empty with grep -q .
+          # This handles the case where jq returns empty output (no vulnerabilities)
+          if jq -r '.runs[]?.results[]? | select(.level == "error")' gosec-results.sarif 2>/dev/null | grep -q .; then
             echo "❌ High or critical security vulnerabilities found!"
             jq -r '.runs[]?.results[]? | select(.level == "error") | "  - \(.ruleId): \(.message.text)"' gosec-results.sarif || true
             exit 1
@@ -97,8 +98,11 @@ jobs:
             exit 1
           fi
 
-          if jq -e '.runs[]?.results[]? | select(.level == "error" or .level == "warning")' trivy-repo-results.sarif > /dev/null 2>&1; then
+          # Check if file has any error or warning level results
+          # We use jq to filter, then check if output is non-empty with grep -q .
+          if jq -r '.runs[]?.results[]? | select(.level == "error" or .level == "warning")' trivy-repo-results.sarif 2>/dev/null | grep -q .; then
             echo "❌ High or critical vulnerabilities found in repository scan!"
+            jq -r '.runs[]?.results[]? | select(.level == "error" or .level == "warning") | "  - \(.ruleId): \(.message.text)"' trivy-repo-results.sarif || true
             exit 1
           else
             echo "✅ No high or critical vulnerabilities found"
@@ -136,8 +140,11 @@ jobs:
             exit 1
           fi
 
-          if jq -e '.runs[]?.results[]? | select(.level == "error" or .level == "warning")' trivy-config-results.sarif > /dev/null 2>&1; then
+          # Check if file has any error or warning level results
+          # We use jq to filter, then check if output is non-empty with grep -q .
+          if jq -r '.runs[]?.results[]? | select(.level == "error" or .level == "warning")' trivy-config-results.sarif 2>/dev/null | grep -q .; then
             echo "❌ High or critical configuration issues found!"
+            jq -r '.runs[]?.results[]? | select(.level == "error" or .level == "warning") | "  - \(.ruleId): \(.message.text)"' trivy-config-results.sarif || true
             exit 1
           else
             echo "✅ No high or critical configuration issues found"

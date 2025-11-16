@@ -98,23 +98,31 @@ runs:
       if: steps.cache-gosqlx.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        # Validate gosqlx-version input (semver or 'latest')
-        VERSION="${{ inputs.gosqlx-version }}"
-        if [ "$VERSION" != "latest" ]; then
-          if ! echo "$VERSION" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$'; then
-            echo "::error::Invalid gosqlx-version format. Must be 'latest' or semver (e.g., v1.4.0)"
-            exit 1
-          fi
-        fi
-
-        if [ "$VERSION" = "latest" ]; then
-          echo "Installing latest GoSQLX..."
-          go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest
+        # Check if we're in the GoSQLX repository (for testing)
+        if [ -f "$GITHUB_ACTION_PATH/../go.mod" ] && grep -q "module github.com/ajitpratap0/GoSQLX" "$GITHUB_ACTION_PATH/../go.mod" 2>/dev/null; then
+          echo "Building GoSQLX from source (local repository)..."
+          cd "$GITHUB_ACTION_PATH/.."
+          go build -o ~/go/bin/gosqlx ./cmd/gosqlx
+          echo "GoSQLX built from source successfully"
         else
-          echo "Installing GoSQLX $VERSION..."
-          go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@"$VERSION"
+          # Validate gosqlx-version input (semver or 'latest')
+          VERSION="${{ inputs.gosqlx-version }}"
+          if [ "$VERSION" != "latest" ]; then
+            if ! echo "$VERSION" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$'; then
+              echo "::error::Invalid gosqlx-version format. Must be 'latest' or semver (e.g., v1.4.0)"
+              exit 1
+            fi
+          fi
+
+          if [ "$VERSION" = "latest" ]; then
+            echo "Installing latest GoSQLX..."
+            go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest
+          else
+            echo "Installing GoSQLX $VERSION..."
+            go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@"$VERSION"
+          fi
+          echo "GoSQLX installed successfully"
         fi
-        echo "GoSQLX installed successfully"
         ~/go/bin/gosqlx --version
 
     - name: Verify GoSQLX installation

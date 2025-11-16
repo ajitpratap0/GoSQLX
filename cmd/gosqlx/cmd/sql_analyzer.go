@@ -65,8 +65,11 @@ func (a *SQLAnalyzer) Analyze(astObj *ast.AST) (*AnalysisReport, error) {
 	overallScore := a.calculateOverallScore()
 
 	return &AnalysisReport{
-		Timestamp:         time.Now(),
-		Version:           "2.0.0-unified",
+		Timestamp: time.Now(),
+		Version:   "2.0.0-unified",
+		Query: QueryInfo{
+			StatementCount: len(astObj.Statements),
+		},
 		Issues:            a.Issues,
 		ComplexityMetrics: a.ComplexityMetrics,
 		SecurityScore:     securityScore,

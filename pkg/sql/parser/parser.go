@@ -61,6 +61,12 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 
 	// Parse statements
 	for p.currentPos < len(tokens) && p.currentToken.Type != "EOF" {
+		// Skip semicolons between statements
+		if p.currentToken.Type == "SEMICOLON" || p.currentToken.Literal == ";" {
+			p.advance()
+			continue
+		}
+
 		stmt, err := p.parseStatement()
 		if err != nil {
 			// Clean up the AST on error
@@ -68,6 +74,11 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 			return nil, err
 		}
 		result.Statements = append(result.Statements, stmt)
+
+		// Optionally consume semicolon after statement
+		if p.currentToken.Type == "SEMICOLON" || p.currentToken.Literal == ";" {
+			p.advance()
+		}
 	}
 
 	// Check if we got any statements
@@ -131,6 +142,12 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 			return nil, fmt.Errorf("parsing cancelled: %w", err)
 		}
 
+		// Skip semicolons between statements
+		if p.currentToken.Type == "SEMICOLON" || p.currentToken.Literal == ";" {
+			p.advance()
+			continue
+		}
+
 		stmt, err := p.parseStatement()
 		if err != nil {
 			// Clean up the AST on error
@@ -138,6 +155,11 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 			return nil, err
 		}
 		result.Statements = append(result.Statements, stmt)
+
+		// Optionally consume semicolon after statement
+		if p.currentToken.Type == "SEMICOLON" || p.currentToken.Literal == ";" {
+			p.advance()
+		}
 	}
 
 	// Check if we got any statements

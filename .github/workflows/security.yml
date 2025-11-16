@@ -30,11 +30,12 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.23'  # Use latest stable Go for security scanning
           cache: true
 
       - name: Run GoSec Security Scanner
         uses: securego/gosec@v2.21.4
+        continue-on-error: true  # Don't fail immediately - let validation step decide
         with:
           # Full recursive scan - severity and confidence levels configurable via env vars
           args: '-fmt sarif -out gosec-results.sarif -severity ${{ env.GOSEC_SEVERITY }} -confidence ${{ env.GOSEC_CONFIDENCE }} ./...'
@@ -47,6 +48,7 @@ jobs:
           category: gosec
 
       - name: Check GoSec results
+        if: always()  # Always run validation even if scanner step failed
         run: |
           # Fail the build if high or critical vulnerabilities are found
           # Check if SARIF file exists and has results
@@ -174,7 +176,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.23'  # Use latest stable Go to avoid standard library vulnerabilities
           cache: true
 
       - name: Install govulncheck

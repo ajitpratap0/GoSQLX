@@ -236,6 +236,7 @@ func TestSQLAnalyzer_IssueDetails(t *testing.T) {
 			// Find the expected issue
 			var foundIssue *AnalysisIssue
 			for _, issue := range report.Issues {
+				issue := issue // G601: Create local copy to avoid memory aliasing
 				if issue.ID == tc.expectedIssueID {
 					foundIssue = &issue
 					break

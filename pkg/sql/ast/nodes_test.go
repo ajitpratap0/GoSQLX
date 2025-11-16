@@ -59,6 +59,7 @@ func TestWithClause(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.withClause.TokenLiteral(); got != tt.wantLiteral {
@@ -108,6 +109,7 @@ func TestCommonTableExpr(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.cte.TokenLiteral(); got != tt.wantLiteral {
@@ -182,6 +184,7 @@ func TestSetOperation(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.setOp.TokenLiteral(); got != tt.wantLiteral {
@@ -245,6 +248,7 @@ func TestJoinClause(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.join.TokenLiteral(); got != tt.wantLiteral {
@@ -289,6 +293,7 @@ func TestTableReference(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.tableRef.TokenLiteral(); got != tt.wantLiteral {
@@ -358,6 +363,7 @@ func TestWindowSpec(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.windowSpec.TokenLiteral(); got != tt.wantLiteral {
@@ -403,6 +409,7 @@ func TestWindowFrame(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.frame.TokenLiteral(); got != tt.wantLiteral {
@@ -447,6 +454,7 @@ func TestWindowFrameBound(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// WindowFrameBound doesn't have TokenLiteral/Children methods
 			// Just test that the struct is valid
@@ -498,6 +506,7 @@ func TestSelectStatement(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.stmt.TokenLiteral(); got != tt.wantLiteral {
@@ -548,6 +557,7 @@ func TestInsertStatement(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.stmt.TokenLiteral(); got != tt.wantLiteral {
@@ -601,6 +611,7 @@ func TestUpdateStatement(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.stmt.TokenLiteral(); got != tt.wantLiteral {
@@ -648,6 +659,7 @@ func TestDeleteStatement(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.stmt.TokenLiteral(); got != tt.wantLiteral {
@@ -692,6 +704,7 @@ func TestIdentifier(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.identifier.TokenLiteral(); got != tt.wantLiteral {
@@ -752,6 +765,7 @@ func TestBinaryExpression(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.expr.TokenLiteral(); got != tt.wantLiteral {
@@ -801,6 +815,7 @@ func TestLiteralValue(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.literal.TokenLiteral(); got != tt.wantLiteral {
@@ -871,6 +886,7 @@ func TestFunctionCall(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.funcCall.TokenLiteral(); got != tt.wantLiteral {
@@ -924,6 +940,7 @@ func TestCaseExpression(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.caseExpr.TokenLiteral(); got != tt.wantLiteral {
@@ -962,6 +979,7 @@ func TestExistsExpression(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.existsExpr.TokenLiteral(); got != tt.wantLiteral {
@@ -1019,6 +1037,7 @@ func TestInExpression(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.inExpr.TokenLiteral(); got != tt.wantLiteral {
@@ -1071,6 +1090,7 @@ func TestBetweenExpression(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.betweenExpr.TokenLiteral(); got != tt.wantLiteral {
@@ -1124,6 +1144,7 @@ func TestUnaryExpression(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test Children
 			children := tt.unaryExpr.Children()
@@ -1167,6 +1188,7 @@ func TestCastExpression(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.castExpr.TokenLiteral(); got != tt.wantLiteral {
@@ -1215,6 +1237,7 @@ func TestExtractExpression(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.extractExpr.TokenLiteral(); got != tt.wantLiteral {
@@ -1265,6 +1288,7 @@ func TestListExpression(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.listExpr.TokenLiteral(); got != tt.wantLiteral {
@@ -1324,6 +1348,7 @@ func TestCreateTableStatement(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.stmt.TokenLiteral(); got != tt.wantLiteral {
@@ -1386,6 +1411,7 @@ func TestCreateIndexStatement(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.stmt.TokenLiteral(); got != tt.wantLiteral {
@@ -1435,6 +1461,7 @@ func TestSubstringExpression(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.substringExpr.TokenLiteral(); got != tt.wantLiteral {
@@ -1474,6 +1501,7 @@ func TestPositionExpression(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.posExpr.TokenLiteral(); got != tt.wantLiteral {
@@ -1512,6 +1540,7 @@ func TestAlterStatement(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.stmt.TokenLiteral(); got != tt.wantLiteral {
@@ -1543,6 +1572,7 @@ func TestAlterTableStatement(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.stmt.TokenLiteral(); got != tt.wantLiteral {
@@ -1589,6 +1619,7 @@ func TestOnConflict(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.onConflict.TokenLiteral(); got != tt.wantLiteral {
@@ -1628,6 +1659,7 @@ func TestWhenClause(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.whenClause.TokenLiteral(); got != tt.wantLiteral {
@@ -1665,6 +1697,7 @@ func TestUpdateExpression(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test Children
 			children := tt.updateExpr.Children()
@@ -1704,6 +1737,7 @@ func TestIndexColumn(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test Column field
 			if tt.indexCol.Column != tt.wantName {
@@ -1742,6 +1776,7 @@ func TestColumnDef(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test Name field
 			if tt.columnDef.Name != tt.wantName {
@@ -1792,6 +1827,7 @@ func TestUpsertClause(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.upsert.TokenLiteral(); got != tt.wantLiteral {
@@ -1844,6 +1880,7 @@ func TestValues(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.values.TokenLiteral(); got != tt.wantLiteral {
@@ -1910,6 +1947,7 @@ func TestColumnConstraint(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.constraint.TokenLiteral(); got != tt.wantLiteral {
@@ -1981,6 +2019,7 @@ func TestTableConstraint(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.constraint.TokenLiteral(); got != tt.wantLiteral {
@@ -2045,6 +2084,7 @@ func TestReferenceDefinition(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.ref.TokenLiteral(); got != tt.wantLiteral {
@@ -2112,6 +2152,7 @@ func TestPartitionBy(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test TokenLiteral
 			if got := tt.partition.TokenLiteral(); got != tt.wantLiteral {
@@ -2166,6 +2207,7 @@ func TestTableOption(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt // G601: Create local copy to avoid memory aliasing
 		t.Run(tt.name, func(t *testing.T) {
 			// Test Name field
 			if tt.option.Name != tt.wantName {

@@ -1,0 +1,378 @@
+name: 'GoSQLX SQL Validator'
+description: 'Ultra-fast SQL validation, linting, and formatting with GoSQLX - 100x faster than SQLFluff'
+author: 'GoSQLX Team'
+
+branding:
+  icon: 'check-circle'
+  color: 'blue'
+
+inputs:
+  files:
+    description: 'Glob pattern for SQL files to process (e.g., "**/*.sql", "queries/*.sql")'
+    required: true
+    default: '**/*.sql'
+
+  validate:
+    description: 'Enable SQL validation (syntax checking)'
+    required: false
+    default: 'true'
+
+  lint:
+    description: 'Enable SQL linting (best practices checking) - Advanced feature'
+    required: false
+    default: 'false'
+
+  format-check:
+    description: 'Check if SQL files are properly formatted (CI mode)'
+    required: false
+    default: 'false'
+
+  fail-on-error:
+    description: 'Fail the build when validation errors are found'
+    required: false
+    default: 'true'
+
+  config:
+    description: 'Path to GoSQLX config file (.gosqlx.yml or .gosqlx.yaml)'
+    required: false
+    default: ''
+
+  dialect:
+    description: 'SQL dialect: postgresql, mysql, sqlserver, oracle, sqlite (default: auto-detect)'
+    required: false
+    default: ''
+
+  strict:
+    description: 'Enable strict validation mode (more rigorous checks)'
+    required: false
+    default: 'false'
+
+  show-stats:
+    description: 'Display performance statistics after validation'
+    required: false
+    default: 'false'
+
+  gosqlx-version:
+    description: 'GoSQLX version to use (default: latest)'
+    required: false
+    default: 'latest'
+
+  working-directory:
+    description: 'Working directory for SQL file operations'
+    required: false
+    default: '.'
+
+outputs:
+  validated-files:
+    description: 'Number of files validated'
+    value: ${{ steps.validate.outputs.validated-files }}
+
+  invalid-files:
+    description: 'Number of files with validation errors'
+    value: ${{ steps.validate.outputs.invalid-files }}
+
+  formatted-files:
+    description: 'Number of files needing formatting (if format-check enabled)'
+    value: ${{ steps.format-check.outputs.formatted-files }}
+
+  validation-time:
+    description: 'Total validation time in milliseconds'
+    value: ${{ steps.validate.outputs.validation-time }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Go
+      uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491  # v5.0.0
+      with:
+        go-version: '1.21'
+
+    # Disable cache when testing in repository to always build from latest source
+    # - name: Cache GoSQLX binary
+    #   id: cache-gosqlx
+    #   uses: actions/cache@v4
+    #   with:
+    #     path: ~/go/bin/gosqlx
+    #     key: gosqlx-${{ inputs.gosqlx-version }}-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+
+    - name: Install GoSQLX
+      # if: steps.cache-gosqlx.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        # Check if we're in the GoSQLX repository (for testing)
+        # When using "uses: ./", GITHUB_WORKSPACE contains the repo
+        if [ -f "$GITHUB_WORKSPACE/go.mod" ] && grep -q "module github.com/ajitpratap0/GoSQLX" "$GITHUB_WORKSPACE/go.mod" 2>/dev/null; then
+          echo "Building GoSQLX from source (local repository)..."
+          cd "$GITHUB_WORKSPACE"
+          mkdir -p "$HOME/go/bin"
+          go build -o "$HOME/go/bin/gosqlx" ./cmd/gosqlx
+          echo "GoSQLX built from source successfully"
+        else
+          # Validate gosqlx-version input (semver or 'latest')
+          VERSION="${{ inputs.gosqlx-version }}"
+          if [ "$VERSION" != "latest" ]; then
+            if ! echo "$VERSION" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$'; then
+              echo "::error::Invalid gosqlx-version format. Must be 'latest' or semver (e.g., v1.4.0)"
+              exit 1
+            fi
+          fi
+
+          if [ "$VERSION" = "latest" ]; then
+            echo "Installing latest GoSQLX..."
+            go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest
+          else
+            echo "Installing GoSQLX $VERSION..."
+            go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@"$VERSION"
+          fi
+          echo "GoSQLX installed successfully"
+        fi
+        "$HOME/go/bin/gosqlx" --version
+
+    - name: Verify GoSQLX installation
+      shell: bash
+      run: |
+        if ! command -v "$HOME/go/bin/gosqlx" &> /dev/null; then
+          echo "ERROR: GoSQLX installation failed"
+          exit 1
+        fi
+        echo "GoSQLX version:"
+        "$HOME/go/bin/gosqlx" --version
+
+    - name: Find SQL files
+      id: find-files
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        # Validate working-directory exists and is within repo
+        WORKDIR="${{ inputs.working-directory }}"
+        if [ ! -d "$WORKDIR" ]; then
+          echo "::error::Working directory does not exist: $WORKDIR"
+          exit 1
+        fi
+
+        # Ensure working directory is within the repository
+        REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "$GITHUB_WORKSPACE")
+        WORKDIR_ABS=$(cd "$WORKDIR" && pwd)
+        if [[ "$WORKDIR_ABS" != "$REPO_ROOT"* ]]; then
+          echo "::error::Working directory must be within repository: $WORKDIR_ABS"
+          exit 1
+        fi
+
+        # Sanitize file pattern to prevent command injection
+        PATTERN="${{ inputs.files }}"
+        # Remove dangerous characters that could lead to command injection
+        if echo "$PATTERN" | grep -qE '[;&|`$()]'; then
+          echo "::error::File pattern contains invalid characters: $PATTERN"
+          exit 1
+        fi
+
+        echo "Finding SQL files matching pattern: $PATTERN"
+
+        # Use find to locate SQL files matching the pattern
+        # Convert glob pattern to find-compatible pattern
+        # Handle common glob patterns
+        if [[ "$PATTERN" == "**/*.sql" ]]; then
+          FILES=$(find . -type f -name "*.sql" 2>/dev/null | sort || true)
+        elif [[ "$PATTERN" == "*.sql" ]]; then
+          FILES=$(find . -maxdepth 1 -type f -name "*.sql" 2>/dev/null | sort || true)
+        elif [[ "$PATTERN" =~ ^(.+)/\*\*/(.+)$ ]]; then
+          # Handle patterns like "dir/**/*.sql" - extract base dir and file pattern
+          BASE_DIR="${BASH_REMATCH[1]}"
+          FILE_PATTERN="${BASH_REMATCH[2]}"
+          FILES=$(find "./$BASE_DIR" -type f -name "$FILE_PATTERN" 2>/dev/null | sort || true)
+        else
+          # Custom pattern without ** - try direct find with escaped pattern
+          FILES=$(find . -type f -path "./$PATTERN" 2>/dev/null | sort || true)
+        fi
+
+        if [ -z "$FILES" ]; then
+          echo "WARNING: No SQL files found matching pattern: ${{ inputs.files }}"
+          echo "file-count=0" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        FILE_COUNT=$(echo "$FILES" | wc -l)
+        echo "Found $FILE_COUNT SQL file(s)"
+        echo "$FILES" | head -10
+        if [ $FILE_COUNT -gt 10 ]; then
+          echo "... and $((FILE_COUNT - 10)) more files"
+        fi
+
+        # Save file list for later steps
+        echo "$FILES" > /tmp/gosqlx-files.txt
+        echo "file-count=$FILE_COUNT" >> $GITHUB_OUTPUT
+
+    - name: Validate SQL files
+      id: validate
+      if: inputs.validate == 'true' && steps.find-files.outputs.file-count != '0'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        echo "::group::SQL Validation"
+
+        # Build validation command
+        CMD="$HOME/go/bin/gosqlx validate"
+
+        # Add config if provided
+        if [ -n "${{ inputs.config }}" ]; then
+          if [ -f "${{ inputs.config }}" ]; then
+            echo "Using config file: ${{ inputs.config }}"
+            export GOSQLX_CONFIG="${{ inputs.config }}"
+          else
+            echo "::warning::Config file not found: ${{ inputs.config }}"
+          fi
+        fi
+
+        # Add dialect if provided (with validation)
+        DIALECT="${{ inputs.dialect }}"
+        if [ -n "$DIALECT" ]; then
+          # Validate dialect is one of the allowed values
+          if [[ "$DIALECT" =~ ^(postgresql|mysql|sqlserver|oracle|sqlite)$ ]]; then
+            CMD="$CMD --dialect $DIALECT"
+          else
+            echo "::warning::Invalid dialect '$DIALECT', skipping dialect flag"
+          fi
+        fi
+
+        # Add strict mode if enabled
+        if [ "${{ inputs.strict }}" = "true" ]; then
+          CMD="$CMD --strict"
+        fi
+
+        # Add stats if enabled
+        if [ "${{ inputs.show-stats }}" = "true" ]; then
+          CMD="$CMD --stats"
+        fi
+
+        # Add verbose output for GitHub Actions
+        CMD="$CMD --verbose"
+
+        # Read files and validate
+        START_TIME=$(date +%s%3N)
+        VALIDATED=0
+        INVALID=0
+
+        while IFS= read -r file; do
+          # Sanitize file path for display
+          SAFE_FILE="${file//[^a-zA-Z0-9\/._-]/}"
+          echo "Validating: $file"
+
+          # Use quoted variable to prevent word splitting
+          if $CMD "$file" 2>&1; then
+            echo "✓ Valid: $file"
+            VALIDATED=$((VALIDATED + 1))
+          else
+            echo "✗ Invalid: $file"
+            echo "::error file=$SAFE_FILE::SQL validation failed"
+            INVALID=$((INVALID + 1))
+          fi
+        done < /tmp/gosqlx-files.txt
+
+        END_TIME=$(date +%s%3N)
+        DURATION=$((END_TIME - START_TIME))
+
+        echo "::endgroup::"
+
+        # Output summary
+        echo "::notice::Validation complete: $VALIDATED valid, $INVALID invalid files (${DURATION}ms)"
+
+        # Set outputs
+        echo "validated-files=$VALIDATED" >> $GITHUB_OUTPUT
+        echo "invalid-files=$INVALID" >> $GITHUB_OUTPUT
+        echo "validation-time=$DURATION" >> $GITHUB_OUTPUT
+
+        # Create job summary
+        echo "## SQL Validation Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+        echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Files Validated | $VALIDATED |" >> $GITHUB_STEP_SUMMARY
+        echo "| Validation Errors | $INVALID |" >> $GITHUB_STEP_SUMMARY
+        echo "| Duration | ${DURATION}ms |" >> $GITHUB_STEP_SUMMARY
+        echo "| Throughput | $(awk "BEGIN {printf \"%.2f\", $VALIDATED * 1000 / $DURATION}") files/sec |" >> $GITHUB_STEP_SUMMARY
+
+        # Fail if there are invalid files and fail-on-error is true
+        if [ $INVALID -gt 0 ] && [ "${{ inputs.fail-on-error }}" = "true" ]; then
+          echo "::error::Validation failed with $INVALID invalid file(s)"
+          exit 1
+        fi
+
+    - name: Check SQL formatting
+      id: format-check
+      if: inputs.format-check == 'true' && steps.find-files.outputs.file-count != '0'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        echo "::group::SQL Format Check"
+
+        NEEDS_FORMATTING=0
+
+        while IFS= read -r file; do
+          echo "Checking format: $file"
+
+          if ! "$HOME/go/bin/gosqlx" format --check "$file" 2>&1; then
+            echo "✗ Needs formatting: $file"
+            echo "::warning file=$file::File needs formatting"
+            NEEDS_FORMATTING=$((NEEDS_FORMATTING + 1))
+          else
+            echo "✓ Properly formatted: $file"
+          fi
+        done < /tmp/gosqlx-files.txt
+
+        echo "::endgroup::"
+
+        # Set output
+        echo "formatted-files=$NEEDS_FORMATTING" >> $GITHUB_OUTPUT
+
+        # Add to summary
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Format Check" >> $GITHUB_STEP_SUMMARY
+        echo "Files needing formatting: $NEEDS_FORMATTING" >> $GITHUB_STEP_SUMMARY
+
+        # Fail if files need formatting and fail-on-error is true
+        if [ $NEEDS_FORMATTING -gt 0 ] && [ "${{ inputs.fail-on-error }}" = "true" ]; then
+          echo "::error::$NEEDS_FORMATTING file(s) need formatting"
+          exit 1
+        fi
+
+    - name: Run SQL linting
+      id: lint
+      if: inputs.lint == 'true' && steps.find-files.outputs.file-count != '0'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        echo "::group::SQL Linting"
+        echo "::notice::Advanced linting features are in development (Phase 4)"
+        echo "::notice::Currently performing basic analysis..."
+
+        LINT_ISSUES=0
+
+        while IFS= read -r file; do
+          echo "Analyzing: $file"
+
+          # Use analyze command for basic linting
+          if "$HOME/go/bin/gosqlx" analyze --all "$file" 2>&1; then
+            echo "✓ No issues: $file"
+          else
+            echo "⚠ Issues found: $file"
+            LINT_ISSUES=$((LINT_ISSUES + 1))
+          fi
+        done < /tmp/gosqlx-files.txt
+
+        echo "::endgroup::"
+
+        # Add to summary
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Linting Results" >> $GITHUB_STEP_SUMMARY
+        echo "Files with lint issues: $LINT_ISSUES" >> $GITHUB_STEP_SUMMARY
+
+        # Note: Linting is advisory, doesn't fail build
+        if [ $LINT_ISSUES -gt 0 ]; then
+          echo "::warning::$LINT_ISSUES file(s) have linting suggestions"
+        fi
+
+    - name: Cleanup
+      if: always()
+      shell: bash
+      run: |
+        rm -f /tmp/gosqlx-files.txt

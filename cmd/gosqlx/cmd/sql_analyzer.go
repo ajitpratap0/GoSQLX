@@ -64,9 +64,13 @@ func (a *SQLAnalyzer) Analyze(astObj *ast.AST) (*AnalysisReport, error) {
 	securityScore := a.calculateSecurityScore()
 	overallScore := a.calculateOverallScore()
 
+	// Build query metadata
+	queryInfo := a.buildQueryInfo(astObj)
+
 	return &AnalysisReport{
 		Timestamp:         time.Now(),
 		Version:           "2.0.0-unified",
+		Query:             queryInfo,
 		Issues:            a.Issues,
 		ComplexityMetrics: a.ComplexityMetrics,
 		SecurityScore:     securityScore,
@@ -469,6 +473,37 @@ func (a *SQLAnalyzer) generateRecommendations() []string {
 	}
 
 	return recommendations
+}
+
+// buildQueryInfo constructs query metadata from the AST
+func (a *SQLAnalyzer) buildQueryInfo(astObj *ast.AST) QueryInfo {
+	stmtTypes := make([]string, 0, len(astObj.Statements))
+
+	for _, stmt := range astObj.Statements {
+		switch stmt.(type) {
+		case *ast.SelectStatement:
+			stmtTypes = append(stmtTypes, "SELECT")
+		case *ast.InsertStatement:
+			stmtTypes = append(stmtTypes, "INSERT")
+		case *ast.UpdateStatement:
+			stmtTypes = append(stmtTypes, "UPDATE")
+		case *ast.DeleteStatement:
+			stmtTypes = append(stmtTypes, "DELETE")
+		case *ast.CreateTableStatement:
+			stmtTypes = append(stmtTypes, "CREATE TABLE")
+		case *ast.CreateIndexStatement:
+			stmtTypes = append(stmtTypes, "CREATE INDEX")
+		case *ast.AlterTableStatement:
+			stmtTypes = append(stmtTypes, "ALTER TABLE")
+		default:
+			stmtTypes = append(stmtTypes, "OTHER")
+		}
+	}
+
+	return QueryInfo{
+		StatementCount: len(astObj.Statements),
+		StatementTypes: stmtTypes,
+	}
 }
 
 // reset resets analyzer state for new analysis

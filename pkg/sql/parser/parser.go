@@ -60,7 +60,13 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 	result.Statements = make([]ast.Statement, 0, estimatedStmts)
 
 	// Parse statements
-	for p.currentPos < len(tokens) && p.currentToken.Type != "EOF" {
+	for p.currentPos < len(tokens) && p.currentToken.Type != token.EOF {
+		// Skip semicolons between statements
+		if p.currentToken.Type == token.SEMICOLON {
+			p.advance()
+			continue
+		}
+
 		stmt, err := p.parseStatement()
 		if err != nil {
 			// Clean up the AST on error
@@ -68,6 +74,11 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 			return nil, err
 		}
 		result.Statements = append(result.Statements, stmt)
+
+		// Optionally consume semicolon after statement
+		if p.currentToken.Type == token.SEMICOLON {
+			p.advance()
+		}
 	}
 
 	// Check if we got any statements
@@ -123,12 +134,18 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 	result.Statements = make([]ast.Statement, 0, estimatedStmts)
 
 	// Parse statements
-	for p.currentPos < len(tokens) && p.currentToken.Type != "EOF" {
+	for p.currentPos < len(tokens) && p.currentToken.Type != token.EOF {
 		// Check context before each statement
 		if err := ctx.Err(); err != nil {
 			// Clean up the AST on error
 			ast.ReleaseAST(result)
 			return nil, fmt.Errorf("parsing cancelled: %w", err)
+		}
+
+		// Skip semicolons between statements
+		if p.currentToken.Type == token.SEMICOLON {
+			p.advance()
+			continue
 		}
 
 		stmt, err := p.parseStatement()
@@ -138,6 +155,11 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 			return nil, err
 		}
 		result.Statements = append(result.Statements, stmt)
+
+		// Optionally consume semicolon after statement
+		if p.currentToken.Type == token.SEMICOLON {
+			p.advance()
+		}
 	}
 
 	// Check if we got any statements
@@ -1179,6 +1201,9 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 				p.advance()
 			case "FLOAT":
 				expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "float"}
+				p.advance()
+			case token.TRUE, token.FALSE:
+				expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "bool"}
 				p.advance()
 			default:
 				return nil, fmt.Errorf("unexpected token for value: %s", p.currentToken.Type)

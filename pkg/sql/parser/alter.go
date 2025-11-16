@@ -88,12 +88,18 @@ func (p *Parser) parseAlterTableStatement(stmt *ast.AlterStatement) (*ast.AlterS
 			op.Type = ast.RenameColumn
 			// Convert ast.Identifier to ast.Ident
 			ident := p.parseIdent()
+			if ident == nil {
+				return nil, p.expectedError("column name")
+			}
 			op.ColumnName = &ast.Ident{Name: ident.Name}
 			if !p.matchToken(token.TO) {
 				return nil, p.expectedError("TO")
 			}
 			// Convert ast.Identifier to ast.Ident
 			newIdent := p.parseIdent()
+			if newIdent == nil {
+				return nil, p.expectedError("new column name")
+			}
 			op.NewColumnName = &ast.Ident{Name: newIdent.Name}
 		} else {
 			return nil, p.expectedError("TO or COLUMN")

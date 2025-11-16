@@ -105,6 +105,8 @@ go build -o gosqlx ./cmd/gosqlx
 ## 🚀 Quick Start
 
 ### CLI Usage
+
+**Standard Usage:**
 ```bash
 # Validate SQL syntax
 gosqlx validate "SELECT * FROM users WHERE active = true"
@@ -123,6 +125,46 @@ cat query.sql | gosqlx format                    # Format from stdin
 echo "SELECT * FROM users" | gosqlx validate     # Validate from pipe
 gosqlx format query.sql | gosqlx validate        # Chain commands
 cat *.sql | gosqlx format | tee formatted.sql    # Pipeline composition
+```
+
+**Pipeline/Stdin Support** (New in v1.6.0):
+```bash
+# Auto-detect piped input
+echo "SELECT * FROM users" | gosqlx validate
+cat query.sql | gosqlx format
+cat complex.sql | gosqlx analyze --security
+
+# Explicit stdin marker
+gosqlx validate -
+gosqlx format - < query.sql
+
+# Input redirection
+gosqlx validate < query.sql
+gosqlx parse < complex_query.sql
+
+# Full pipeline chains
+cat query.sql | gosqlx format | gosqlx validate
+echo "select * from users" | gosqlx format > formatted.sql
+find . -name "*.sql" -exec cat {} \; | gosqlx validate
+
+# Works on Windows PowerShell too!
+Get-Content query.sql | gosqlx format
+"SELECT * FROM users" | gosqlx validate
+```
+
+**Cross-Platform Pipeline Examples:**
+```bash
+# Unix/Linux/macOS
+cat query.sql | gosqlx format | tee formatted.sql | gosqlx validate
+echo "SELECT 1" | gosqlx validate && echo "Valid!"
+
+# Windows PowerShell
+Get-Content query.sql | gosqlx format | Set-Content formatted.sql
+"SELECT * FROM users" | gosqlx validate
+
+# Git hooks (pre-commit)
+git diff --cached --name-only --diff-filter=ACM "*.sql" | \
+  xargs cat | gosqlx validate --quiet
 ```
 
 ### Library Usage - Simple API

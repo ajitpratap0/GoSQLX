@@ -109,9 +109,9 @@ func TestIntegration_RealWorldQueries(t *testing.T) {
 	}
 
 	// Report results
-	t.Logf("\n" + strings.Repeat("=", 80))
+	t.Logf("\n%s", strings.Repeat("=", 80))
 	t.Log("REAL-WORLD SQL INTEGRATION TEST RESULTS")
-	t.Log(strings.Repeat("=", 80))
+	t.Logf("%s", strings.Repeat("=", 80))
 	t.Logf("Total Queries:      %d", totalQueries)
 	t.Logf("Successful:         %d", successfulQueries)
 	t.Logf("Failed:             %d", len(failedQueries))

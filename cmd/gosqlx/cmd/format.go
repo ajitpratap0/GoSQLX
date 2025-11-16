@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -34,12 +35,29 @@ Examples:
   gosqlx format "*.sql"                      # Format all SQL files
   gosqlx format -o formatted.sql query.sql   # Save to specific file
 
+Pipeline/Stdin Examples:
+  echo "SELECT * FROM users" | gosqlx format    # Format from stdin (auto-detect)
+  cat query.sql | gosqlx format                 # Pipe file contents
+  gosqlx format -                               # Explicit stdin marker
+  gosqlx format < query.sql                     # Input redirection
+  cat query.sql | gosqlx format > formatted.sql # Full pipeline
+
 Performance: 100x faster than SQLFluff for equivalent operations`,
-	Args: cobra.MinimumNArgs(1),
+	Args: cobra.MinimumNArgs(0), // Changed to allow stdin with no args
 	RunE: formatRun,
 }
 
 func formatRun(cmd *cobra.Command, args []string) error {
+	// Handle stdin input
+	if ShouldReadFromStdin(args) {
+		return formatFromStdin(cmd)
+	}
+
+	// Validate that we have file arguments if not using stdin
+	if len(args) == 0 {
+		return fmt.Errorf("no input provided: specify file paths or pipe SQL via stdin")
+	}
+
 	// Load configuration with CLI flag overrides
 	cfg, err := config.LoadDefault()
 	if err != nil {
@@ -82,6 +100,83 @@ func formatRun(cmd *cobra.Command, args []string) error {
 	// Exit with error code if files need formatting in check mode
 	if len(result.NeedsFormatting) > 0 {
 		os.Exit(1)
+	}
+
+	return nil
+}
+
+// formatFromStdin handles formatting from stdin input
+func formatFromStdin(cmd *cobra.Command) error {
+	// Read from stdin
+	content, err := ReadFromStdin()
+	if err != nil {
+		return fmt.Errorf("failed to read from stdin: %w", err)
+	}
+
+	// Validate stdin content
+	if err := ValidateStdinInput(content); err != nil {
+		return fmt.Errorf("stdin validation failed: %w", err)
+	}
+
+	// Note: in-place mode is not supported for stdin (would be no-op)
+	if formatInPlace {
+		return fmt.Errorf("in-place mode (-i) is not supported with stdin input")
+	}
+
+	// Load configuration
+	cfg, err := config.LoadDefault()
+	if err != nil {
+		cfg = config.DefaultConfig()
+	}
+
+	// Track which flags were explicitly set
+	flagsChanged := make(map[string]bool)
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		flagsChanged[f.Name] = true
+	})
+	if cmd.Parent() != nil && cmd.Parent().PersistentFlags() != nil {
+		cmd.Parent().PersistentFlags().Visit(func(f *pflag.Flag) {
+			flagsChanged[f.Name] = true
+		})
+	}
+
+	// Create formatter options
+	opts := FormatterOptionsFromConfig(cfg, flagsChanged, FormatterFlags{
+		InPlace:    false, // always false for stdin
+		IndentSize: formatIndentSize,
+		Uppercase:  formatUppercase,
+		Compact:    formatCompact,
+		Check:      formatCheck,
+		MaxLine:    formatMaxLine,
+		Verbose:    verbose,
+		Output:     outputFile,
+	})
+
+	// Create formatter
+	formatter := NewFormatter(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
+
+	// Format the SQL content using the internal formatSQL method
+	formattedSQL, err := formatter.formatSQL(string(content))
+	if err != nil {
+		return fmt.Errorf("formatting failed: %w", err)
+	}
+
+	// In check mode, compare original and formatted
+	if formatCheck {
+		if string(content) != formattedSQL {
+			fmt.Fprintf(cmd.ErrOrStderr(), "stdin needs formatting\n")
+			os.Exit(1)
+		}
+
+		if verbose {
+			fmt.Fprintf(cmd.OutOrStdout(), "stdin is properly formatted\n")
+		}
+		return nil
+	}
+
+	// Write formatted output
+	if err := WriteOutput([]byte(formattedSQL), outputFile, cmd.OutOrStdout()); err != nil {
+		return err
 	}
 
 	return nil

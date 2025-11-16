@@ -89,14 +89,14 @@ func validateRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create validator options from config and flags
-	// When outputting SARIF, automatically enable quiet mode to avoid mixing output
-	quietMode := validateQuiet || validateOutputFormat == "sarif"
+	// When outputting SARIF or JSON, automatically enable quiet mode to avoid mixing output
+	quietMode := validateQuiet || validateOutputFormat == "sarif" || validateOutputFormat == "json"
 
 	opts := ValidatorOptionsFromConfig(cfg, flagsChanged, ValidatorFlags{
 		Recursive:  validateRecursive,
 		Pattern:    validatePattern,
 		Quiet:      quietMode,
-		ShowStats:  validateStats,
+		ShowStats:  validateStats && validateOutputFormat == "text", // Only show text stats for text output
 		Dialect:    validateDialect,
 		StrictMode: validateStrict,
 		Verbose:    verbose,
@@ -131,8 +131,23 @@ func validateRun(cmd *cobra.Command, args []string) error {
 			fmt.Fprint(cmd.OutOrStdout(), string(sarifData))
 		}
 	} else if validateOutputFormat == "json" {
-		// JSON output format will be implemented later
-		return fmt.Errorf("JSON output format not yet implemented")
+		// Generate JSON output
+		jsonData, err := output.FormatValidationJSON(result, args, validateStats)
+		if err != nil {
+			return fmt.Errorf("failed to generate JSON output: %w", err)
+		}
+
+		// Write JSON output to file or stdout
+		if validateOutputFile != "" {
+			if err := os.WriteFile(validateOutputFile, jsonData, 0600); err != nil {
+				return fmt.Errorf("failed to write JSON output: %w", err)
+			}
+			if !opts.Quiet {
+				fmt.Fprintf(cmd.OutOrStdout(), "JSON output written to %s\n", validateOutputFile)
+			}
+		} else {
+			fmt.Fprint(cmd.OutOrStdout(), string(jsonData))
+		}
 	}
 	// Default text output is already handled by the validator
 
@@ -189,12 +204,12 @@ func validateFromStdin(cmd *cobra.Command) error {
 	}
 
 	// Create validator options
-	quietMode := validateQuiet || validateOutputFormat == "sarif"
+	quietMode := validateQuiet || validateOutputFormat == "sarif" || validateOutputFormat == "json"
 	opts := ValidatorOptionsFromConfig(cfg, flagsChanged, ValidatorFlags{
 		Recursive:  false, // stdin is always single input
 		Pattern:    "",
 		Quiet:      quietMode,
-		ShowStats:  validateStats,
+		ShowStats:  validateStats && validateOutputFormat == "text", // Only show text stats for text output
 		Dialect:    validateDialect,
 		StrictMode: validateStrict,
 		Verbose:    verbose,
@@ -228,7 +243,18 @@ func validateFromStdin(cmd *cobra.Command) error {
 			fmt.Fprintf(cmd.OutOrStdout(), "SARIF output written to %s\n", validateOutputFile)
 		}
 	} else if validateOutputFormat == "json" {
-		return fmt.Errorf("JSON output format not yet implemented")
+		jsonData, err := output.FormatValidationJSON(result, []string{"stdin"}, validateStats)
+		if err != nil {
+			return fmt.Errorf("failed to generate JSON output: %w", err)
+		}
+
+		if err := WriteOutput(jsonData, validateOutputFile, cmd.OutOrStdout()); err != nil {
+			return err
+		}
+
+		if validateOutputFile != "" && !opts.Quiet {
+			fmt.Fprintf(cmd.OutOrStdout(), "JSON output written to %s\n", validateOutputFile)
+		}
 	}
 
 	// Exit with error code if validation failed

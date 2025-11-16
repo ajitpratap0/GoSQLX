@@ -9,6 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
+	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/output"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
@@ -173,6 +174,11 @@ type StatementDisplay struct {
 
 // displayAST displays AST structure
 func (p *Parser) displayAST(astObj *ast.AST) error {
+	// Use the new JSON output format for consistency
+	if strings.ToLower(p.Opts.Format) == "json" {
+		return p.displayASTJSON(astObj)
+	}
+
 	type ASTDisplay struct {
 		Type       string                 `json:"type" yaml:"type"`
 		Statements []StatementDisplay     `json:"statements" yaml:"statements"`
@@ -197,10 +203,6 @@ func (p *Parser) displayAST(astObj *ast.AST) error {
 	}
 
 	switch strings.ToLower(p.Opts.Format) {
-	case "json":
-		encoder := json.NewEncoder(p.Out)
-		encoder.SetIndent("", "  ")
-		return encoder.Encode(display)
 	case "yaml":
 		encoder := yaml.NewEncoder(p.Out)
 		defer func() {
@@ -225,6 +227,18 @@ func (p *Parser) displayAST(astObj *ast.AST) error {
 		}
 		return nil
 	}
+}
+
+// displayASTJSON displays AST in JSON format using the standardized output format
+func (p *Parser) displayASTJSON(astObj *ast.AST) error {
+	// Use the standardized JSON output format
+	jsonData, err := output.FormatParseJSON(astObj, "input", false, nil)
+	if err != nil {
+		return fmt.Errorf("failed to format JSON output: %w", err)
+	}
+
+	fmt.Fprint(p.Out, string(jsonData))
+	return nil
 }
 
 // displayTree displays AST in tree format

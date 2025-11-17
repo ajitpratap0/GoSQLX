@@ -1,0 +1,162 @@
+[
+  {
+    "name": "simple_select",
+    "sql": "SELECT * FROM users",
+    "dialect": "generic",
+    "shouldPass": true,
+    "description": "Basic SELECT statement",
+    "addedVersion": "v1.0.0"
+  },
+  {
+    "name": "select_with_where",
+    "sql": "SELECT id, name FROM users WHERE active = true",
+    "dialect": "generic",
+    "shouldPass": true,
+    "description": "SELECT with WHERE clause",
+    "addedVersion": "v1.0.0"
+  },
+  {
+    "name": "inner_join",
+    "sql": "SELECT u.id, u.name, o.order_id FROM users u INNER JOIN orders o ON u.id = o.user_id",
+    "dialect": "generic",
+    "shouldPass": true,
+    "description": "INNER JOIN query",
+    "addedVersion": "v1.2.0"
+  },
+  {
+    "name": "left_join",
+    "sql": "SELECT u.id, u.name, COUNT(o.id) FROM users u LEFT JOIN orders o ON u.id = o.user_id GROUP BY u.id, u.name",
+    "dialect": "generic",
+    "shouldPass": true,
+    "description": "LEFT JOIN with GROUP BY",
+    "addedVersion": "v1.2.0"
+  },
+  {
+    "name": "window_function_row_number",
+    "sql": "SELECT name, salary, ROW_NUMBER() OVER (ORDER BY salary DESC) as rank FROM employees",
+    "dialect": "generic",
+    "shouldPass": true,
+    "description": "Window function ROW_NUMBER",
+    "addedVersion": "v1.4.0"
+  },
+  {
+    "name": "window_function_partition",
+    "sql": "SELECT dept, name, RANK() OVER (PARTITION BY dept ORDER BY salary DESC) as dept_rank FROM employees",
+    "dialect": "generic",
+    "shouldPass": true,
+    "description": "Window function with PARTITION BY",
+    "addedVersion": "v1.4.0"
+  },
+  {
+    "name": "cte_basic",
+    "sql": "WITH active_users AS (SELECT id, name FROM users WHERE active = true) SELECT * FROM active_users",
+    "dialect": "generic",
+    "shouldPass": true,
+    "description": "Basic CTE",
+    "addedVersion": "v1.4.0"
+  },
+  {
+    "name": "recursive_cte",
+    "sql": "WITH RECURSIVE employee_hierarchy AS (SELECT id, name, manager_id FROM employees WHERE manager_id IS NULL UNION ALL SELECT e.id, e.name, e.manager_id FROM employees e JOIN employee_hierarchy eh ON e.manager_id = eh.id) SELECT * FROM employee_hierarchy",
+    "dialect": "generic",
+    "shouldPass": false,
+    "description": "Recursive CTE - Parser limitation: RECURSIVE keyword not yet supported",
+    "addedVersion": "v1.4.0"
+  },
+  {
+    "name": "subquery_in_select",
+    "sql": "SELECT id, name, (SELECT COUNT(*) FROM orders WHERE user_id = users.id) as order_count FROM users",
+    "dialect": "generic",
+    "shouldPass": false,
+    "description": "Subquery in SELECT clause - Parser limitation: scalar subqueries in SELECT list not yet supported",
+    "addedVersion": "v1.0.0"
+  },
+  {
+    "name": "union_query",
+    "sql": "SELECT name FROM employees UNION SELECT name FROM contractors",
+    "dialect": "generic",
+    "shouldPass": true,
+    "description": "UNION query",
+    "addedVersion": "v1.4.0"
+  },
+  {
+    "name": "insert_basic",
+    "sql": "INSERT INTO users (id, name, email) VALUES (1, 'John Doe', 'john@example.com')",
+    "dialect": "generic",
+    "shouldPass": true,
+    "description": "Basic INSERT statement",
+    "addedVersion": "v1.0.0"
+  },
+  {
+    "name": "update_basic",
+    "sql": "UPDATE users SET name = 'Jane Doe' WHERE id = 1",
+    "dialect": "generic",
+    "shouldPass": true,
+    "description": "Basic UPDATE statement",
+    "addedVersion": "v1.0.0"
+  },
+  {
+    "name": "delete_basic",
+    "sql": "DELETE FROM users WHERE id = 1",
+    "dialect": "generic",
+    "shouldPass": true,
+    "description": "Basic DELETE statement",
+    "addedVersion": "v1.0.0"
+  },
+  {
+    "name": "case_expression",
+    "sql": "SELECT name, CASE WHEN salary > 100000 THEN 'High' WHEN salary > 50000 THEN 'Medium' ELSE 'Low' END as salary_band FROM employees",
+    "dialect": "generic",
+    "shouldPass": false,
+    "description": "CASE expression - Parser limitation: CASE expressions not yet supported",
+    "addedVersion": "v1.2.0"
+  },
+  {
+    "name": "multiple_joins",
+    "sql": "SELECT u.name, o.order_id, p.product_name FROM users u JOIN orders o ON u.id = o.user_id JOIN products p ON o.product_id = p.id",
+    "dialect": "generic",
+    "shouldPass": true,
+    "description": "Multiple JOINs",
+    "addedVersion": "v1.2.0"
+  },
+  {
+    "name": "aggregate_functions",
+    "sql": "SELECT COUNT(*), SUM(amount), AVG(amount), MIN(amount), MAX(amount) FROM transactions",
+    "dialect": "generic",
+    "shouldPass": true,
+    "description": "Aggregate functions",
+    "addedVersion": "v1.0.0"
+  },
+  {
+    "name": "having_clause",
+    "sql": "SELECT department, COUNT(*) as emp_count FROM employees GROUP BY department HAVING COUNT(*) > 10",
+    "dialect": "generic",
+    "shouldPass": true,
+    "description": "HAVING clause",
+    "addedVersion": "v1.2.0"
+  },
+  {
+    "name": "order_by_multiple",
+    "sql": "SELECT name, salary FROM employees ORDER BY department ASC, salary DESC",
+    "dialect": "generic",
+    "shouldPass": false,
+    "description": "ORDER BY multiple columns - Parser limitation: multiple ORDER BY columns not yet supported",
+    "addedVersion": "v1.0.0"
+  },
+  {
+    "name": "limit_offset",
+    "sql": "SELECT * FROM users LIMIT 10 OFFSET 20",
+    "dialect": "generic",
+    "shouldPass": true,
+    "description": "LIMIT with OFFSET",
+    "addedVersion": "v1.0.0"
+  },
+  {
+    "name": "in_clause",
+    "sql": "SELECT * FROM users WHERE status IN ('active', 'pending', 'verified')",
+    "dialect": "generic",
+    "shouldPass": false,
+    "description": "IN clause - Parser limitation: IN clause with value lists not yet supported",
+    "addedVersion": "v1.0.0"
+  }
+]

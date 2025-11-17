@@ -555,3 +555,310 @@ func TestParser_JoinTreeLogic(t *testing.T) {
 		}
 	}
 }
+
+// TestParser_MultiColumnUSING tests multi-column USING clause support (Issue #70)
+func TestParser_MultiColumnUSING(t *testing.T) {
+	tests := []struct {
+		name            string
+		sql             string
+		expectedColumns []string
+		wantErr         bool
+	}{
+		{
+			name:            "Single column USING (backward compatibility)",
+			sql:             "SELECT * FROM users JOIN orders USING (id)",
+			expectedColumns: []string{"id"},
+			wantErr:         false,
+		},
+		{
+			name:            "Two column USING",
+			sql:             "SELECT * FROM users JOIN orders USING (id, name)",
+			expectedColumns: []string{"id", "name"},
+			wantErr:         false,
+		},
+		{
+			name:            "Three column USING",
+			sql:             "SELECT * FROM users JOIN orders USING (id, name, category)",
+			expectedColumns: []string{"id", "name", "category"},
+			wantErr:         false,
+		},
+		{
+			name:            "Multiple columns with LEFT JOIN",
+			sql:             "SELECT * FROM users LEFT JOIN orders USING (user_id, account_id)",
+			expectedColumns: []string{"user_id", "account_id"},
+			wantErr:         false,
+		},
+		{
+			name:            "Multiple columns with INNER JOIN",
+			sql:             "SELECT * FROM products INNER JOIN categories USING (category_id, subcategory_id)",
+			expectedColumns: []string{"category_id", "subcategory_id"},
+			wantErr:         false,
+		},
+		{
+			name:            "Four columns USING",
+			sql:             "SELECT * FROM table1 JOIN table2 USING (col1, col2, col3, col4)",
+			expectedColumns: []string{"col1", "col2", "col3", "col4"},
+			wantErr:         false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Get tokenizer from pool
+			tkz := tokenizer.GetTokenizer()
+			defer tokenizer.PutTokenizer(tkz)
+
+			// Tokenize SQL
+			tokens, err := tkz.Tokenize([]byte(tt.sql))
+			if err != nil {
+				t.Fatalf("Failed to tokenize: %v", err)
+			}
+
+			// Convert tokens for parser
+			convertedTokens := convertTokens(tokens)
+
+			// Parse tokens
+			parser := &Parser{}
+			astObj, err := parser.Parse(convertedTokens)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !tt.wantErr && astObj != nil {
+				defer ast.ReleaseAST(astObj)
+
+				// Verify we have a SELECT statement
+				if len(astObj.Statements) == 0 {
+					t.Fatal("No statements parsed")
+				}
+
+				selectStmt, ok := astObj.Statements[0].(*ast.SelectStatement)
+				if !ok {
+					t.Fatal("Expected SELECT statement")
+				}
+
+				// Verify we have a JOIN
+				if len(selectStmt.Joins) == 0 {
+					t.Fatal("Expected at least one JOIN")
+				}
+
+				join := selectStmt.Joins[0]
+				if join.Condition == nil {
+					t.Fatal("Expected JOIN condition (USING clause)")
+				}
+
+				// Verify the columns
+				if len(tt.expectedColumns) == 1 {
+					// Single column - should be stored as Identifier
+					ident, ok := join.Condition.(*ast.Identifier)
+					if !ok {
+						t.Fatalf("Expected Identifier for single column USING, got %T", join.Condition)
+					}
+					if ident.Name != tt.expectedColumns[0] {
+						t.Errorf("Expected column %s, got %s", tt.expectedColumns[0], ident.Name)
+					}
+				} else {
+					// Multiple columns - should be stored as ListExpression
+					listExpr, ok := join.Condition.(*ast.ListExpression)
+					if !ok {
+						t.Fatalf("Expected ListExpression for multi-column USING, got %T", join.Condition)
+					}
+
+					if len(listExpr.Values) != len(tt.expectedColumns) {
+						t.Fatalf("Expected %d columns, got %d", len(tt.expectedColumns), len(listExpr.Values))
+					}
+
+					// Verify each column
+					for i, expectedCol := range tt.expectedColumns {
+						ident, ok := listExpr.Values[i].(*ast.Identifier)
+						if !ok {
+							t.Fatalf("Column %d: expected Identifier, got %T", i, listExpr.Values[i])
+						}
+						if ident.Name != expectedCol {
+							t.Errorf("Column %d: expected %s, got %s", i, expectedCol, ident.Name)
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestParser_MultiColumnUSINGEdgeCases tests edge cases for multi-column USING
+func TestParser_MultiColumnUSINGEdgeCases(t *testing.T) {
+	tests := []struct {
+		name          string
+		sql           string
+		expectedError string
+		wantErr       bool
+	}{
+		{
+			name:          "Empty USING clause",
+			sql:           "SELECT * FROM users JOIN orders USING ()",
+			expectedError: "expected column name in USING",
+			wantErr:       true,
+		},
+		{
+			name:          "USING with trailing comma",
+			sql:           "SELECT * FROM users JOIN orders USING (id, name,)",
+			expectedError: "expected column name in USING",
+			wantErr:       true,
+		},
+		{
+			name:          "USING without closing parenthesis",
+			sql:           "SELECT * FROM users JOIN orders USING (id, name",
+			expectedError: "expected ) after USING column list",
+			wantErr:       true,
+		},
+		{
+			name:          "USING without opening parenthesis",
+			sql:           "SELECT * FROM users JOIN orders USING id, name)",
+			expectedError: "expected ( after USING",
+			wantErr:       true,
+		},
+		{
+			name:          "USING with non-identifier",
+			sql:           "SELECT * FROM users JOIN orders USING (id, 123)",
+			expectedError: "expected column name in USING",
+			wantErr:       true,
+		},
+		{
+			name:          "Multiple commas in USING",
+			sql:           "SELECT * FROM users JOIN orders USING (id,, name)",
+			expectedError: "expected column name in USING",
+			wantErr:       true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Get tokenizer from pool
+			tkz := tokenizer.GetTokenizer()
+			defer tokenizer.PutTokenizer(tkz)
+
+			// Tokenize SQL
+			tokens, err := tkz.Tokenize([]byte(tt.sql))
+			if err != nil {
+				// Some tests might fail at tokenization level
+				if tt.wantErr {
+					return // Expected failure
+				}
+				t.Fatalf("Failed to tokenize: %v", err)
+			}
+
+			// Convert tokens for parser
+			convertedTokens := convertTokens(tokens)
+
+			// Parse tokens
+			parser := &Parser{}
+			astObj, err := parser.Parse(convertedTokens)
+
+			if tt.wantErr {
+				if err == nil {
+					if astObj != nil {
+						defer ast.ReleaseAST(astObj)
+					}
+					t.Errorf("Expected error containing '%s', but got no error", tt.expectedError)
+				} else if !containsError(err.Error(), tt.expectedError) {
+					t.Errorf("Expected error containing '%s', got '%s'", tt.expectedError, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+				if astObj != nil {
+					defer ast.ReleaseAST(astObj)
+				}
+			}
+		})
+	}
+}
+
+// TestParser_MultiColumnUSINGWithComplexQueries tests multi-column USING in complex scenarios
+func TestParser_MultiColumnUSINGWithComplexQueries(t *testing.T) {
+	tests := []struct {
+		name        string
+		sql         string
+		expectJoins int
+		wantErr     bool
+	}{
+		{
+			name: "Multiple JOINs with multi-column USING",
+			sql: `SELECT * FROM users
+				  JOIN orders USING (user_id, account_id)
+				  JOIN products USING (product_id, category_id)`,
+			expectJoins: 2,
+			wantErr:     false,
+		},
+		{
+			name: "Mixed ON and USING clauses",
+			sql: `SELECT * FROM users u
+				  JOIN orders o USING (user_id, tenant_id)
+				  LEFT JOIN products p ON o.product_id = p.id`,
+			expectJoins: 2,
+			wantErr:     false,
+		},
+		{
+			name: "Multi-column USING with WHERE clause",
+			sql: `SELECT * FROM users
+				  JOIN orders USING (user_id, account_id)
+				  WHERE users.active = true`,
+			expectJoins: 1,
+			wantErr:     false,
+		},
+		{
+			name: "Multi-column USING with ORDER BY and LIMIT",
+			sql: `SELECT * FROM users
+				  JOIN orders USING (user_id, tenant_id)
+				  ORDER BY users.created_at DESC
+				  LIMIT 100`,
+			expectJoins: 1,
+			wantErr:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Get tokenizer from pool
+			tkz := tokenizer.GetTokenizer()
+			defer tokenizer.PutTokenizer(tkz)
+
+			// Tokenize SQL
+			tokens, err := tkz.Tokenize([]byte(tt.sql))
+			if err != nil {
+				t.Fatalf("Failed to tokenize: %v", err)
+			}
+
+			// Convert tokens for parser
+			convertedTokens := convertTokens(tokens)
+
+			// Parse tokens
+			parser := &Parser{}
+			astObj, err := parser.Parse(convertedTokens)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !tt.wantErr && astObj != nil {
+				defer ast.ReleaseAST(astObj)
+
+				// Verify we have a SELECT statement
+				if len(astObj.Statements) == 0 {
+					t.Fatal("No statements parsed")
+				}
+
+				selectStmt, ok := astObj.Statements[0].(*ast.SelectStatement)
+				if !ok {
+					t.Fatal("Expected SELECT statement")
+				}
+
+				// Verify JOIN count
+				if len(selectStmt.Joins) != tt.expectJoins {
+					t.Errorf("Expected %d JOINs, got %d", tt.expectJoins, len(selectStmt.Joins))
+				}
+			}
+		})
+	}
+}

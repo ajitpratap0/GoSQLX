@@ -3,6 +3,7 @@ package output
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
@@ -290,12 +291,8 @@ func categorizeError(errorMsg string) string {
 // contains checks if a string contains any of the substrings
 func contains(s string, substrings ...string) bool {
 	for _, substr := range substrings {
-		if len(s) >= len(substr) {
-			for i := 0; i <= len(s)-len(substr); i++ {
-				if s[i:i+len(substr)] == substr {
-					return true
-				}
-			}
+		if strings.Contains(s, substr) {
+			return true
 		}
 	}
 	return false

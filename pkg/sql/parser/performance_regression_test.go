@@ -75,38 +75,6 @@ func loadBaselines(t *testing.T) BaselineConfig {
 	return config
 }
 
-// runParserBenchmark runs a parser benchmark and returns the result
-func runParserBenchmark(b *testing.B, name string, tokens []token.Token) PerformanceResult {
-	parser := NewParser()
-	defer parser.Release()
-
-	b.ResetTimer()
-	start := time.Now()
-
-	var totalAllocs, totalBytes int64
-	for i := 0; i < b.N; i++ {
-		tree, err := parser.Parse(tokens)
-		if err != nil {
-			b.Fatal(err)
-		}
-		if tree == nil {
-			b.Fatal("expected non-nil AST")
-		}
-	}
-
-	duration := time.Since(start)
-	nsPerOp := duration.Nanoseconds() / int64(b.N)
-
-	return PerformanceResult{
-		Name:        name,
-		NsPerOp:     nsPerOp,
-		Iterations:  b.N,
-		Duration:    duration,
-		AllocsPerOp: totalAllocs,
-		BytesPerOp:  totalBytes,
-	}
-}
-
 // calculateDegradation calculates the percentage degradation from baseline
 func calculateDegradation(actual, baseline int64) float64 {
 	if baseline == 0 {

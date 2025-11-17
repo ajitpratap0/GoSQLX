@@ -3,34 +3,39 @@
   "updated": "2025-01-17",
   "baselines": {
     "SimpleSelect": {
-      "ns_per_op": 280,
-      "tolerance_percent": 20,
+      "ns_per_op": 500,
+      "tolerance_percent": 30,
       "description": "Basic SELECT query: SELECT id, name FROM users",
-      "current_performance": "~265 ns/op (9 allocs, 536 B/op)"
+      "current_performance": "~450 ns/op in CI, ~265 ns/op local (9 allocs, 536 B/op)",
+      "note": "CI environments are slower than local machines; baselines set for CI"
     },
     "ComplexQuery": {
-      "ns_per_op": 1100,
-      "tolerance_percent": 20,
+      "ns_per_op": 2000,
+      "tolerance_percent": 30,
       "description": "Complex SELECT with JOIN, WHERE, ORDER BY, LIMIT",
-      "current_performance": "~1020 ns/op (36 allocs, 1433 B/op)"
+      "current_performance": "~1900 ns/op in CI, ~1020 ns/op local (36 allocs, 1433 B/op)",
+      "note": "CI environments are slower than local machines; baselines set for CI"
     },
     "WindowFunction": {
-      "ns_per_op": 450,
-      "tolerance_percent": 20,
+      "ns_per_op": 750,
+      "tolerance_percent": 30,
       "description": "Window function query: ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...)",
-      "current_performance": "~400 ns/op (14 allocs, 760 B/op)"
+      "current_performance": "~690 ns/op in CI, ~400 ns/op local (14 allocs, 760 B/op)",
+      "note": "CI environments are slower than local machines; baselines set for CI"
     },
     "CTE": {
-      "ns_per_op": 450,
-      "tolerance_percent": 20,
+      "ns_per_op": 750,
+      "tolerance_percent": 30,
       "description": "Common Table Expression with WITH clause",
-      "current_performance": "~395 ns/op (14 allocs, 880 B/op)"
+      "current_performance": "~680 ns/op in CI, ~395 ns/op local (14 allocs, 880 B/op)",
+      "note": "CI environments are slower than local machines; baselines set for CI"
     },
     "INSERT": {
-      "ns_per_op": 350,
-      "tolerance_percent": 20,
+      "ns_per_op": 600,
+      "tolerance_percent": 30,
       "description": "Simple INSERT statement",
-      "current_performance": "~310 ns/op (14 allocs, 536 B/op)"
+      "current_performance": "~535 ns/op in CI, ~310 ns/op local (14 allocs, 536 B/op)",
+      "note": "CI environments are slower than local machines; baselines set for CI"
     },
     "TokenizationThroughput": {
       "tokens_per_sec": 8000000,

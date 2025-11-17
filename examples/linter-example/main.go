@@ -21,7 +21,7 @@ ORDER BY name
 	fmt.Println("===================")
 	fmt.Println("Input SQL:")
 	fmt.Println(sql)
-	fmt.Println("\n" + string(make([]byte, 80, 80)) + "\n")
+	fmt.Println("\n" + string(make([]byte, 80)) + "\n")
 
 	// Create linter with rules
 	l := linter.New(

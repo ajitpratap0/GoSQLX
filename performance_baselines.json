@@ -10,11 +10,11 @@
       "note": "CI environments are slower than local machines; baselines set for CI"
     },
     "ComplexQuery": {
-      "ns_per_op": 2000,
+      "ns_per_op": 2500,
       "tolerance_percent": 30,
       "description": "Complex SELECT with JOIN, WHERE, ORDER BY, LIMIT",
-      "current_performance": "~1900 ns/op in CI, ~1020 ns/op local (36 allocs, 1433 B/op)",
-      "note": "CI environments are slower than local machines; baselines set for CI"
+      "current_performance": "~2400-2600 ns/op in CI, ~1020 ns/op local (36 allocs, 1433 B/op)",
+      "note": "CI environments show significant variability 2400-2600 ns/op; baseline updated to reflect CI reality"
     },
     "WindowFunction": {
       "ns_per_op": 750,

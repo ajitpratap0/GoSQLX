@@ -120,9 +120,16 @@ func lintRun(cmd *cobra.Command, args []string) error {
 				}
 			}
 
-			// Write back if modified
+			// Write back if modified, preserving original file permissions
 			if modified {
-				if err := os.WriteFile(fileResult.Filename, []byte(fixed), 0600); err != nil {
+				// Get original file permissions
+				fileInfo, statErr := os.Stat(fileResult.Filename)
+				perm := os.FileMode(0644) // Default fallback permission
+				if statErr == nil {
+					perm = fileInfo.Mode()
+				}
+
+				if err := os.WriteFile(fileResult.Filename, []byte(fixed), perm); err != nil {
 					fmt.Fprintf(cmd.ErrOrStderr(), "Error writing %s: %v\n", fileResult.Filename, err)
 					continue
 				}

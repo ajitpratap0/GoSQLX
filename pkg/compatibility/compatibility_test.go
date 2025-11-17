@@ -266,11 +266,3 @@ func extractQueries(content string) []string {
 
 	return queries
 }
-
-// Test helper to truncate long queries for display
-func truncateQuery(sql string, maxLen int) string {
-	if len(sql) <= maxLen {
-		return sql
-	}
-	return sql[:maxLen] + "... (truncated)"
-}

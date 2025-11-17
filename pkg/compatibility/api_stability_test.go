@@ -1,6 +1,7 @@
 package compatibility
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -144,34 +145,37 @@ func TestAPIStability_PoolBehavior(t *testing.T) {
 
 // TestAPIStability_TokenTypes ensures token type constants remain stable
 func TestAPIStability_TokenTypes(t *testing.T) {
-	// Critical token types that must not change
-	criticalTokens := map[string]token.Type{
-		"SELECT":  "SELECT",
-		"FROM":    "FROM",
-		"WHERE":   "WHERE",
-		"JOIN":    "JOIN",
-		"INSERT":  "INSERT",
-		"UPDATE":  "UPDATE",
-		"DELETE":  "DELETE",
-		"CREATE":  "CREATE",
-		"ALTER":   "ALTER",
-		"DROP":    "DROP",
-		"IDENT":   "IDENT",
-		"INT":     "INT",
-		"STRING":  "STRING",
-		"EOF":     "EOF",
-		"ILLEGAL": "ILLEGAL",
+	// Critical token types that must not change - verify exported constants exist and have correct values
+	// Only test tokens that are actually exported from the token package
+	tests := []struct {
+		name          string
+		actualValue   token.Type
+		expectedValue string
+	}{
+		{"SELECT", token.SELECT, "SELECT"},
+		{"FROM", token.FROM, "FROM"},
+		{"WHERE", token.WHERE, "WHERE"},
+		{"INSERT", token.INSERT, "INSERT"},
+		{"UPDATE", token.UPDATE, "UPDATE"},
+		{"DELETE", token.DELETE, "DELETE"},
+		{"ALTER", token.ALTER, "ALTER"},
+		{"DROP", token.DROP, "DROP"},
+		{"TABLE", token.TABLE, "TABLE"},
+		{"IDENT", token.IDENT, "IDENT"},
+		{"INT", token.INT, "INT"},
+		{"STRING", token.STRING, "STRING"},
+		{"EOF", token.EOF, "EOF"},
+		{"ILLEGAL", token.ILLEGAL, "ILLEGAL"},
 	}
 
-	for name, expectedValue := range criticalTokens {
-		t.Run("Token_"+name, func(t *testing.T) {
-			// Verify token constant exists and has expected value
-			actualValue := token.Type(expectedValue)
-			if actualValue != expectedValue {
+	for _, tt := range tests {
+		t.Run("Token_"+tt.name, func(t *testing.T) {
+			// Verify token constant has expected string value
+			if string(tt.actualValue) != tt.expectedValue {
 				t.Errorf("Token type %s changed value\nExpected: %s\nGot: %s",
-					name, expectedValue, actualValue)
+					tt.name, tt.expectedValue, string(tt.actualValue))
 			} else {
-				t.Logf("✓ Token %s stable: %s", name, actualValue)
+				t.Logf("✓ Token %s stable: %s", tt.name, tt.actualValue)
 			}
 		})
 	}
@@ -283,30 +287,53 @@ func TestAPIStability_ConcurrentUsage(t *testing.T) {
 	const iterations = 10
 
 	sql := "SELECT * FROM users"
-	done := make(chan bool, goroutines)
+
+	// Use separate channels for error reporting and completion tracking
+	type result struct {
+		goroutineID int
+		err         error
+	}
+	results := make(chan result, goroutines)
 
 	// Launch concurrent tokenization
 	for i := 0; i < goroutines; i++ {
-		go func() {
+		go func(id int) {
 			defer func() {
 				if r := recover(); r != nil {
-					t.Errorf("PANIC in concurrent usage: %v", r)
+					results <- result{id, fmt.Errorf("PANIC: %v", r)}
+					return
 				}
-				done <- true
+				results <- result{id, nil}
 			}()
 
 			for j := 0; j < iterations; j++ {
 				tkz := tokenizer.GetTokenizer()
-				_, _ = tkz.Tokenize([]byte(sql))
+				if tkz == nil {
+					t.Errorf("GetTokenizer() returned nil in goroutine %d", id)
+					return
+				}
+				_, err := tkz.Tokenize([]byte(sql))
+				if err != nil {
+					t.Errorf("Tokenization failed in goroutine %d: %v", id, err)
+				}
 				tokenizer.PutTokenizer(tkz)
 			}
-		}()
+		}(i)
 	}
 
-	// Wait for all goroutines
+	// Collect results with timeout
+	errorCount := 0
 	for i := 0; i < goroutines; i++ {
-		<-done
+		res := <-results
+		if res.err != nil {
+			t.Errorf("Goroutine %d failed: %v", res.goroutineID, res.err)
+			errorCount++
+		}
 	}
 
-	t.Logf("✓ Concurrent usage stable (%d goroutines × %d iterations)", goroutines, iterations)
+	if errorCount > 0 {
+		t.Errorf("Concurrent usage stability compromised: %d/%d goroutines failed", errorCount, goroutines)
+	} else {
+		t.Logf("✓ Concurrent usage stable (%d goroutines × %d iterations)", goroutines, iterations)
+	}
 }

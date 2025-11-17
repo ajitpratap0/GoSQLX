@@ -58,8 +58,16 @@ func testVersionCompatibility(t *testing.T, version string) {
 
 			if query.ShouldPass {
 				if !success {
-					t.Errorf("Query that worked in %s now fails: %s\nQuery: %s\nError: %s",
-						version, query.Name, query.SQL, errMsg)
+					// Enhanced error reporting for regressions
+					t.Errorf("REGRESSION DETECTED in %s\n"+
+						"Query Name: %s\n"+
+						"Description: %s\n"+
+						"Dialect: %s\n"+
+						"Added In: %s\n"+
+						"SQL: %s\n"+
+						"Error: %s",
+						version, query.Name, query.Description, query.Dialect,
+						query.AddedVersion, query.SQL, errMsg)
 					failCount++
 				} else {
 					passCount++
@@ -67,9 +75,11 @@ func testVersionCompatibility(t *testing.T, version string) {
 			} else {
 				// Document known failures - these are expected to fail but we track them
 				if !success {
-					t.Logf("Known failure (expected): %s - %s", query.Name, errMsg)
+					t.Logf("Known failure (expected): %s - %s\nReason: %s",
+						query.Name, errMsg, query.Description)
 				} else {
-					t.Logf("Previously failing query now passes: %s", query.Name)
+					t.Logf("Previously failing query now passes: %s\nDescription: %s",
+						query.Name, query.Description)
 				}
 			}
 		})

@@ -1,6 +1,7 @@
 package whitespace
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/linter"
@@ -51,17 +52,13 @@ func (r *LongLinesRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 
 		if lineLength > r.MaxLength {
 			violations = append(violations, linter.Violation{
-				Rule:     r.ID(),
-				RuleName: r.Name(),
-				Severity: r.Severity(),
-				Message:  "Line exceeds maximum length",
-				Location: models.Location{Line: lineNum + 1, Column: r.MaxLength + 1},
-				Line:     line,
-				Suggestion: func() string {
-					return "Split this line into multiple lines (current: " +
-						string(rune(lineLength)) + " chars, max: " +
-						string(rune(r.MaxLength)) + ")"
-				}(),
+				Rule:       r.ID(),
+				RuleName:   r.Name(),
+				Severity:   r.Severity(),
+				Message:    "Line exceeds maximum length",
+				Location:   models.Location{Line: lineNum + 1, Column: r.MaxLength + 1},
+				Line:       line,
+				Suggestion: fmt.Sprintf("Split this line into multiple lines (current: %d chars, max: %d)", lineLength, r.MaxLength),
 				CanAutoFix: false,
 			})
 		}

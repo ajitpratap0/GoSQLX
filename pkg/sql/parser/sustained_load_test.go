@@ -171,9 +171,10 @@ func TestSustainedLoad_Parsing10Seconds(t *testing.T) {
 	t.Logf("Avg latency: %v", elapsed/time.Duration(totalOps))
 
 	// Verify meets minimum performance target (parsing is more complex than tokenization)
-	// CI performance observed: ~5.3K ops/sec (sustained load throttling)
-	if opsPerSec < 4000 {
-		t.Errorf("Performance below target: %.0f ops/sec (minimum: 4K for CI sustained load)", opsPerSec)
+	// CI performance observed: ~3.8K-5.3K ops/sec (sustained load throttling, Windows slower)
+	// Lowered to 3500 to account for Windows runner performance variability
+	if opsPerSec < 3500 {
+		t.Errorf("Performance below target: %.0f ops/sec (minimum: 3.5K for CI sustained load)", opsPerSec)
 	} else if opsPerSec < 300000 {
 		t.Logf("⚠️ Below ideal rate (300K), got %.0f ops/sec (acceptable for CI)", opsPerSec)
 	} else {

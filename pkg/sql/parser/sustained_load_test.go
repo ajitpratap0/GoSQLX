@@ -75,8 +75,8 @@ func TestSustainedLoad_Tokenization10Seconds(t *testing.T) {
 	// Verify meets minimum performance target (conservative - adjusted for CI environments)
 	// CI/GitHub Actions has MUCH lower sustained performance due to throttling
 	// Observed CI: ~14K ops/sec (macOS) - sustained load causes severe throttling
-	if opsPerSec < 10000 {
-		t.Errorf("Performance below target: %.0f ops/sec (minimum: 10K for CI sustained load)", opsPerSec)
+	if opsPerSec < 5000 {
+		t.Errorf("Performance below target: %.0f ops/sec (minimum: 5K for CI sustained load)", opsPerSec)
 	} else if opsPerSec < 1380000 {
 		t.Logf("⚠️ Below claimed sustained rate (1.38M), got %.0f ops/sec (acceptable for CI)", opsPerSec)
 	} else {

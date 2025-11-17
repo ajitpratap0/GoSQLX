@@ -85,6 +85,18 @@ func calculateDegradation(actual, baseline int64) float64 {
 
 // TestPerformanceRegression tests for performance regressions against baselines
 func TestPerformanceRegression(t *testing.T) {
+	// Skip performance tests when race detector is enabled
+	// Race detector adds 3-5x overhead making performance measurements unreliable
+	// This is detected via the raceEnabled variable set in performance_regression_race.go
+	if raceEnabled {
+		t.Skip("Skipping performance regression tests with race detector (adds 3-5x overhead)")
+	}
+
+	// Also skip in short mode for faster test runs
+	if testing.Short() {
+		t.Skip("Skipping performance regression tests in short mode")
+	}
+
 	// Load baselines
 	config := loadBaselines(t)
 

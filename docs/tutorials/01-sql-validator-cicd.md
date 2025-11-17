@@ -52,10 +52,10 @@ if err != nil {
 }
 
 // 3. Parse the tokens into an AST
-astObj := ast.NewAST()
-defer ast.ReleaseAST(astObj)
+p := parser.NewParser(convertedTokens)
+defer p.Release()
 
-result, err := parser.Parse(tokens)
+result, err := p.Parse()
 if err != nil {
     // Parse error found
 }
@@ -112,12 +112,14 @@ func ValidateFile(filePath string) ValidationResult {
         }
     }
 
-    // Get AST from pool
-    astObj := ast.NewAST()
-    defer ast.ReleaseAST(astObj)
+    // Convert tokens for parser
+    convertedTokens := parser.ConvertTokensForParser(tokens)
 
-    // Parse the tokens
-    _, err = parser.Parse(tokens)
+    // Create parser and parse
+    p := parser.NewParser(convertedTokens)
+    defer p.Release()
+
+    _, err = p.Parse()
     if err != nil {
         return ValidationResult{
             FilePath: filePath,

@@ -4,5 +4,5 @@ SELECT
     , email
 FROM users
 WHERE
-    active = true AND role IN ('admin', 'user')
+    active = true
 ORDER BY created_at DESC

@@ -193,11 +193,14 @@ func (f *Formatter) Format(sql string) (string, error) {
         return "", fmt.Errorf("tokenization error: %w", err)
     }
 
-    // Parse
-    astObj := ast.NewAST()
-    defer ast.ReleaseAST(astObj)
+    // Convert tokens for parser
+    convertedTokens := parser.ConvertTokensForParser(tokens)
 
-    result, err := parser.Parse(tokens)
+    // Create parser and parse
+    p := parser.NewParser(convertedTokens)
+    defer p.Release()
+
+    result, err := p.Parse()
     if err != nil {
         return "", fmt.Errorf("parse error: %w", err)
     }

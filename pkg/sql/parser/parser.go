@@ -599,20 +599,11 @@ func (p *Parser) parseWindowSpec() (*ast.WindowSpec, error) {
 			}
 
 			// Check for NULLS FIRST/LAST
-			if p.currentToken.Type == "NULLS" {
-				p.advance() // Consume NULLS
-				if p.currentToken.Type == "FIRST" {
-					t := true
-					orderByExpr.NullsFirst = &t
-					p.advance() // Consume FIRST
-				} else if p.currentToken.Type == "LAST" {
-					f := false
-					orderByExpr.NullsFirst = &f
-					p.advance() // Consume LAST
-				} else {
-					return nil, p.expectedError("FIRST or LAST after NULLS")
-				}
+			nullsFirst, err := p.parseNullsClause()
+			if err != nil {
+				return nil, err
 			}
+			orderByExpr.NullsFirst = nullsFirst
 
 			windowSpec.OrderBy = append(windowSpec.OrderBy, orderByExpr)
 
@@ -729,6 +720,26 @@ func (p *Parser) parseFrameBound() (*ast.WindowFrameBound, error) {
 	}
 
 	return bound, nil
+}
+
+// parseNullsClause parses the optional NULLS FIRST/LAST clause in ORDER BY expressions.
+// Returns a pointer to bool indicating null ordering: true for NULLS FIRST, false for NULLS LAST, nil if not specified.
+func (p *Parser) parseNullsClause() (*bool, error) {
+	if p.currentToken.Type == "NULLS" {
+		p.advance() // Consume NULLS
+		if p.currentToken.Type == "FIRST" {
+			t := true
+			p.advance() // Consume FIRST
+			return &t, nil
+		} else if p.currentToken.Type == "LAST" {
+			f := false
+			p.advance() // Consume LAST
+			return &f, nil
+		} else {
+			return nil, p.expectedError("FIRST or LAST after NULLS")
+		}
+	}
+	return nil, nil
 }
 
 // parseColumnDef parses a column definition
@@ -1095,20 +1106,11 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			}
 
 			// Check for NULLS FIRST/LAST
-			if p.currentToken.Type == "NULLS" {
-				p.advance() // Consume NULLS
-				if p.currentToken.Type == "FIRST" {
-					t := true
-					orderByExpr.NullsFirst = &t
-					p.advance() // Consume FIRST
-				} else if p.currentToken.Type == "LAST" {
-					f := false
-					orderByExpr.NullsFirst = &f
-					p.advance() // Consume LAST
-				} else {
-					return nil, p.expectedError("FIRST or LAST after NULLS")
-				}
+			nullsFirst, err := p.parseNullsClause()
+			if err != nil {
+				return nil, err
 			}
+			orderByExpr.NullsFirst = nullsFirst
 
 			selectStmt.OrderBy = append(selectStmt.OrderBy, orderByExpr)
 

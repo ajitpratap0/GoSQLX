@@ -343,7 +343,7 @@ func TestWindowSpec(t *testing.T) {
 			windowSpec: &WindowSpec{
 				Name:        "w",
 				PartitionBy: []Expression{&Identifier{Name: "dept"}},
-				OrderBy:     []Expression{&Identifier{Name: "salary"}},
+				OrderBy:     []OrderByExpression{{Expression: &Identifier{Name: "salary"}, Ascending: true}},
 			},
 			wantLiteral:  "WINDOW",
 			wantChildren: 2,

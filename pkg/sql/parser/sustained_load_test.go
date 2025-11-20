@@ -434,10 +434,16 @@ func TestSustainedLoad_VaryingWorkers(t *testing.T) {
 		t.Skip("Skipping sustained load test in short mode")
 	}
 
-	const duration = 5 * time.Second
-	sql := []byte("SELECT id, name FROM users WHERE active = true")
-
+	// Reduce duration and worker counts when race detection is enabled
+	// to prevent test timeouts (race detection adds significant overhead)
+	duration := 5 * time.Second
 	workerCounts := []int{10, 50, 100, 200, 500}
+	if raceEnabled {
+		duration = 2 * time.Second        // Reduce from 5s to 2s
+		workerCounts = []int{10, 50, 100} // Reduce worker counts
+	}
+
+	sql := []byte("SELECT id, name FROM users WHERE active = true")
 
 	t.Logf("\n=== Varying Workers Performance Test ===")
 	t.Logf("%-10s | %-15s | %-15s | %-15s", "Workers", "Total Ops", "Ops/Sec", "Avg Latency")

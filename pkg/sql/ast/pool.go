@@ -19,7 +19,7 @@ var (
 		New: func() interface{} {
 			return &SelectStatement{
 				Columns: make([]Expression, 0, 4),
-				OrderBy: make([]Expression, 0, 1),
+				OrderBy: make([]OrderByExpression, 0, 1),
 			}
 		},
 	}
@@ -237,8 +237,10 @@ func PutSelectStatement(stmt *SelectStatement) {
 	for _, col := range stmt.Columns {
 		PutExpression(col)
 	}
-	for _, expr := range stmt.OrderBy {
-		PutExpression(expr)
+	for _, orderBy := range stmt.OrderBy {
+		if orderBy.Expression != nil {
+			PutExpression(orderBy.Expression)
+		}
 	}
 	if stmt.Where != nil {
 		PutExpression(stmt.Where)

@@ -8,7 +8,7 @@ type Select struct {
 	Where    Expression
 	GroupBy  []Expression
 	Having   Expression
-	OrderBy  []Expression
+	OrderBy  []OrderByExpression
 	Limit    *int64
 	Offset   *int64
 }
@@ -29,7 +29,10 @@ func (s Select) Children() []Node {
 	if s.Having != nil {
 		children = append(children, s.Having)
 	}
-	children = append(children, nodifyExpressions(s.OrderBy)...)
+	for _, orderBy := range s.OrderBy {
+		orderBy := orderBy // G601: Create local copy to avoid memory aliasing
+		children = append(children, &orderBy)
+	}
 	return children
 }
 

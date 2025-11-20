@@ -162,7 +162,28 @@ func (f *SQLFormatter) formatSelect(stmt *ast.SelectStatement) error {
 		f.writeNewline()
 		f.writeKeyword("ORDER BY")
 		f.builder.WriteString(" ")
-		f.formatExpressionList(stmt.OrderBy, ", ")
+		for i, orderBy := range stmt.OrderBy {
+			if i > 0 {
+				f.builder.WriteString(", ")
+			}
+			if orderBy.Expression != nil {
+				if err := f.formatExpression(orderBy.Expression); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to format ORDER BY expression: %v\n", err)
+				}
+			}
+			// Add ASC/DESC
+			if !orderBy.Ascending {
+				f.builder.WriteString(" DESC")
+			}
+			// Add NULLS FIRST/LAST if specified
+			if orderBy.NullsFirst != nil {
+				if *orderBy.NullsFirst {
+					f.builder.WriteString(" NULLS FIRST")
+				} else {
+					f.builder.WriteString(" NULLS LAST")
+				}
+			}
+		}
 	}
 
 	// LIMIT clause
@@ -537,7 +558,26 @@ func (f *SQLFormatter) formatWindowSpec(spec *ast.WindowSpec) error {
 		}
 		f.writeKeyword("ORDER BY")
 		f.builder.WriteString(" ")
-		f.formatExpressionList(spec.OrderBy, ", ")
+		for i, orderBy := range spec.OrderBy {
+			if i > 0 {
+				f.builder.WriteString(", ")
+			}
+			if orderBy.Expression != nil {
+				if err := f.formatExpression(orderBy.Expression); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to format window ORDER BY expression: %v\n", err)
+				}
+			}
+			if !orderBy.Ascending {
+				f.builder.WriteString(" DESC")
+			}
+			if orderBy.NullsFirst != nil {
+				if *orderBy.NullsFirst {
+					f.builder.WriteString(" NULLS FIRST")
+				} else {
+					f.builder.WriteString(" NULLS LAST")
+				}
+			}
+		}
 	}
 
 	if spec.FrameClause != nil {

@@ -514,7 +514,9 @@ func (cc *columnCollector) collectFromNode(node ast.Node) {
 			cc.collectFromExpression(n.Having)
 		}
 		for _, ob := range n.OrderBy {
-			cc.collectFromExpression(ob)
+			if ob.Expression != nil {
+				cc.collectFromExpression(ob.Expression)
+			}
 		}
 		if n.With != nil {
 			cc.collectFromNode(n.With)
@@ -670,7 +672,9 @@ func (qcc *qualifiedColumnCollector) collectFromNode(node ast.Node) {
 			qcc.collectFromExpression(n.Having)
 		}
 		for _, ob := range n.OrderBy {
-			qcc.collectFromExpression(ob)
+			if ob.Expression != nil {
+				qcc.collectFromExpression(ob.Expression)
+			}
 		}
 		if n.With != nil {
 			qcc.collectFromNode(n.With)
@@ -833,7 +837,9 @@ func (fc *functionCollector) collectFromNode(node ast.Node) {
 			fc.collectFromExpression(n.Having)
 		}
 		for _, ob := range n.OrderBy {
-			fc.collectFromExpression(ob)
+			if ob.Expression != nil {
+				fc.collectFromExpression(ob.Expression)
+			}
 		}
 		if n.With != nil {
 			fc.collectFromNode(n.With)

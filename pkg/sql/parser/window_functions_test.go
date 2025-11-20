@@ -37,7 +37,8 @@ func convertTokensForWindowFunctions(tokens []models.TokenWithSpan) []token.Toke
 				t.Token.Value == "PRECEDING" || t.Token.Value == "FOLLOWING" ||
 				t.Token.Value == "DESC" || t.Token.Value == "ASC" ||
 				t.Token.Value == "BETWEEN" || t.Token.Value == "AND" ||
-				t.Token.Value == "ROW" {
+				t.Token.Value == "ROW" || t.Token.Value == "NULLS" ||
+				t.Token.Value == "FIRST" || t.Token.Value == "LAST" {
 				tokenType = token.Type(t.Token.Value)
 			} else {
 				tokenType = "IDENT"

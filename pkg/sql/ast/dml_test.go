@@ -75,7 +75,7 @@ func TestSelect(t *testing.T) {
 				From: []TableReference{
 					{Name: "users"},
 				},
-				OrderBy: []Expression{&Identifier{Name: "created_at"}},
+				OrderBy: []OrderByExpression{{Expression: &Identifier{Name: "created_at"}, Ascending: true}},
 			},
 			wantLiteral: "SELECT",
 			minChildren: 3,

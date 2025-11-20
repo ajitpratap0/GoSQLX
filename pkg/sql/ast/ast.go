@@ -113,11 +113,27 @@ func (t *TableReference) statementNode()      {}
 func (t TableReference) TokenLiteral() string { return t.Name }
 func (t TableReference) Children() []Node     { return nil }
 
+// OrderByExpression represents an ORDER BY clause element with direction and NULL ordering
+type OrderByExpression struct {
+	Expression Expression // The expression to order by
+	Ascending  bool       // true for ASC (default), false for DESC
+	NullsFirst *bool      // nil = default behavior, true = NULLS FIRST, false = NULLS LAST
+}
+
+func (*OrderByExpression) expressionNode()        {}
+func (o *OrderByExpression) TokenLiteral() string { return "ORDER BY" }
+func (o *OrderByExpression) Children() []Node {
+	if o.Expression != nil {
+		return []Node{o.Expression}
+	}
+	return nil
+}
+
 // WindowSpec represents a window specification
 type WindowSpec struct {
 	Name        string
 	PartitionBy []Expression
-	OrderBy     []Expression
+	OrderBy     []OrderByExpression
 	FrameClause *WindowFrame
 }
 
@@ -126,7 +142,10 @@ func (w WindowSpec) TokenLiteral() string { return "WINDOW" }
 func (w WindowSpec) Children() []Node {
 	children := make([]Node, 0)
 	children = append(children, nodifyExpressions(w.PartitionBy)...)
-	children = append(children, nodifyExpressions(w.OrderBy)...)
+	for _, orderBy := range w.OrderBy {
+		orderBy := orderBy // G601: Create local copy to avoid memory aliasing
+		children = append(children, &orderBy)
+	}
 	if w.FrameClause != nil {
 		children = append(children, w.FrameClause)
 	}
@@ -162,7 +181,7 @@ type SelectStatement struct {
 	GroupBy   []Expression
 	Having    Expression
 	Windows   []WindowSpec
-	OrderBy   []Expression
+	OrderBy   []OrderByExpression
 	Limit     *int
 	Offset    *int
 }
@@ -195,7 +214,10 @@ func (s SelectStatement) Children() []Node {
 		window := window // G601: Create local copy to avoid memory aliasing
 		children = append(children, &window)
 	}
-	children = append(children, nodifyExpressions(s.OrderBy)...)
+	for _, orderBy := range s.OrderBy {
+		orderBy := orderBy // G601: Create local copy to avoid memory aliasing
+		children = append(children, &orderBy)
+	}
 	return children
 }
 

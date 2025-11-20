@@ -582,12 +582,39 @@ func (p *Parser) parseWindowSpec() (*ast.WindowSpec, error) {
 				return nil, err
 			}
 
-			// Check for ASC/DESC after the expression
-			if p.currentToken.Type == "ASC" || p.currentToken.Type == "DESC" {
-				p.advance() // Consume ASC/DESC (we don't store it in this simple implementation)
+			// Create OrderByExpression with defaults
+			orderByExpr := ast.OrderByExpression{
+				Expression: expr,
+				Ascending:  true, // Default to ASC
+				NullsFirst: nil,  // Default behavior (database-specific)
 			}
 
-			windowSpec.OrderBy = append(windowSpec.OrderBy, expr)
+			// Check for ASC/DESC after the expression
+			if p.currentToken.Type == "ASC" {
+				orderByExpr.Ascending = true
+				p.advance() // Consume ASC
+			} else if p.currentToken.Type == "DESC" {
+				orderByExpr.Ascending = false
+				p.advance() // Consume DESC
+			}
+
+			// Check for NULLS FIRST/LAST
+			if p.currentToken.Type == "NULLS" {
+				p.advance() // Consume NULLS
+				if p.currentToken.Type == "FIRST" {
+					t := true
+					orderByExpr.NullsFirst = &t
+					p.advance() // Consume FIRST
+				} else if p.currentToken.Type == "LAST" {
+					f := false
+					orderByExpr.NullsFirst = &f
+					p.advance() // Consume LAST
+				} else {
+					return nil, p.expectedError("FIRST or LAST after NULLS")
+				}
+			}
+
+			windowSpec.OrderBy = append(windowSpec.OrderBy, orderByExpr)
 
 			if p.currentToken.Type == "," {
 				p.advance() // Consume comma
@@ -1044,22 +1071,54 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		}
 		p.advance() // Consume BY
 
-		// Parse ORDER BY expression
-		orderByExpr, err := p.parseExpression()
-		if err != nil {
-			return nil, err
-		}
+		// Parse order expressions (comma-separated list)
+		for {
+			expr, err := p.parseExpression()
+			if err != nil {
+				return nil, err
+			}
 
-		// Check for direction (ASC/DESC)
-		// Note: Direction is handled separately in the actual implementation
-		if p.currentToken.Type == "DESC" {
-			p.advance() // Consume DESC
-		} else if p.currentToken.Type == "ASC" {
-			p.advance() // Consume ASC
-		}
+			// Create OrderByExpression with defaults
+			orderByExpr := ast.OrderByExpression{
+				Expression: expr,
+				Ascending:  true, // Default to ASC
+				NullsFirst: nil,  // Default behavior (database-specific)
+			}
 
-		// Add ORDER BY to SELECT statement
-		selectStmt.OrderBy = []ast.Expression{orderByExpr}
+			// Check for ASC/DESC after the expression
+			if p.currentToken.Type == "ASC" {
+				orderByExpr.Ascending = true
+				p.advance() // Consume ASC
+			} else if p.currentToken.Type == "DESC" {
+				orderByExpr.Ascending = false
+				p.advance() // Consume DESC
+			}
+
+			// Check for NULLS FIRST/LAST
+			if p.currentToken.Type == "NULLS" {
+				p.advance() // Consume NULLS
+				if p.currentToken.Type == "FIRST" {
+					t := true
+					orderByExpr.NullsFirst = &t
+					p.advance() // Consume FIRST
+				} else if p.currentToken.Type == "LAST" {
+					f := false
+					orderByExpr.NullsFirst = &f
+					p.advance() // Consume LAST
+				} else {
+					return nil, p.expectedError("FIRST or LAST after NULLS")
+				}
+			}
+
+			selectStmt.OrderBy = append(selectStmt.OrderBy, orderByExpr)
+
+			// Check for comma (more expressions)
+			if p.currentToken.Type == "," {
+				p.advance() // Consume comma
+			} else {
+				break
+			}
+		}
 	}
 
 	// Parse LIMIT clause if present

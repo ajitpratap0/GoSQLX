@@ -1539,3 +1539,667 @@ func QuoteIfNeeded(identifier string, dialect keywords.SQLDialect) string {
     return identifier
 }
 ```
+
+## Errors Package
+
+### Package: `github.com/ajitpratap0/GoSQLX/pkg/errors`
+
+The Errors package provides a structured error system with error codes, rich context, and intelligent hints for debugging SQL parsing issues.
+
+### Overview
+
+**Key Features:**
+- **Error Codes**: Unique codes (E1xxx, E2xxx, etc.) for programmatic error handling
+- **Rich Context**: SQL source context with line/column highlighting
+- **Intelligent Hints**: Actionable suggestions to fix errors
+- **Documentation Links**: Auto-generated help URLs for each error code
+- **Error Chaining**: Support for underlying cause errors (error wrapping)
+- **Formatted Output**: Pretty-printed errors with context visualization
+
+### Core Types
+
+#### Type: `ErrorCode`
+
+Unique identifier for each error type.
+
+```go
+type ErrorCode string
+```
+
+**Error Code Categories:**
+- **E1xxx**: Tokenizer errors (lexical analysis)
+- **E2xxx**: Parser syntax errors
+- **E3xxx**: Semantic errors
+- **E4xxx**: Unsupported features
+
+#### Type: `Error`
+
+Structured error with rich context and hints.
+
+```go
+type Error struct {
+    Code     ErrorCode       // Unique error code (e.g., "E2001")
+    Message  string          // Human-readable error message
+    Location models.Location // Line and column where error occurred
+    Context  *ErrorContext   // SQL context around the error
+    Hint     string          // Suggestion to fix the error
+    HelpURL  string          // Documentation link for this error
+    Cause    error           // Underlying error if any
+}
+```
+
+**Example:**
+```go
+err := &errors.Error{
+    Code:     errors.ErrCodeUnexpectedToken,
+    Message:  "expected FROM, got WHERE",
+    Location: models.Location{Line: 1, Column: 15},
+}
+```
+
+#### Type: `ErrorContext`
+
+SQL source context for error display.
+
+```go
+type ErrorContext struct {
+    SQL          string // Original SQL query
+    StartLine    int    // Starting line number (1-indexed)
+    EndLine      int    // Ending line number (1-indexed)
+    HighlightCol int    // Column to highlight (1-indexed)
+    HighlightLen int    // Length of highlight (characters)
+}
+```
+
+### Error Codes
+
+#### Tokenizer Errors (E1xxx)
+
+Lexical analysis errors during tokenization:
+
+| Code | Constant | Description |
+|------|----------|-------------|
+| E1001 | `ErrCodeUnexpectedChar` | Unexpected character in input |
+| E1002 | `ErrCodeUnterminatedString` | String literal not closed |
+| E1003 | `ErrCodeInvalidNumber` | Invalid numeric literal |
+| E1004 | `ErrCodeInvalidOperator` | Invalid operator sequence |
+| E1005 | `ErrCodeInvalidIdentifier` | Invalid identifier format |
+| E1006 | `ErrCodeInputTooLarge` | Input exceeds size limits (DoS protection) |
+| E1007 | `ErrCodeTokenLimitReached` | Token count exceeds limit (DoS protection) |
+| E1008 | `ErrCodeTokenizerPanic` | Tokenizer panic recovered |
+
+**Example:**
+```go
+// Unterminated string
+sql := `SELECT * FROM users WHERE name = 'John`
+// Error: E1002 - String literal not closed at line 1, column 37
+```
+
+#### Parser Syntax Errors (E2xxx)
+
+Syntax errors during parsing:
+
+| Code | Constant | Description |
+|------|----------|-------------|
+| E2001 | `ErrCodeUnexpectedToken` | Unexpected token encountered |
+| E2002 | `ErrCodeExpectedToken` | Expected specific token not found |
+| E2003 | `ErrCodeMissingClause` | Required SQL clause missing |
+| E2004 | `ErrCodeInvalidSyntax` | General syntax error |
+| E2005 | `ErrCodeIncompleteStatement` | Statement incomplete |
+| E2006 | `ErrCodeInvalidExpression` | Invalid expression syntax |
+| E2007 | `ErrCodeRecursionDepthLimit` | Recursion depth exceeded (DoS protection) |
+| E2008 | `ErrCodeUnsupportedDataType` | Data type not supported |
+| E2009 | `ErrCodeUnsupportedConstraint` | Constraint type not supported |
+| E2010 | `ErrCodeUnsupportedJoin` | JOIN type not supported |
+| E2011 | `ErrCodeInvalidCTE` | Invalid CTE (WITH clause) syntax |
+| E2012 | `ErrCodeInvalidSetOperation` | Invalid set operation (UNION/EXCEPT/INTERSECT) |
+
+**Example:**
+```go
+// Missing FROM clause
+sql := `SELECT * WHERE id = 1`
+// Error: E2003 - Required SQL clause missing: FROM
+```
+
+#### Semantic Errors (E3xxx)
+
+Semantic validation errors:
+
+| Code | Constant | Description |
+|------|----------|-------------|
+| E3001 | `ErrCodeUndefinedTable` | Table not defined |
+| E3002 | `ErrCodeUndefinedColumn` | Column not defined |
+| E3003 | `ErrCodeTypeMismatch` | Type mismatch in expression |
+| E3004 | `ErrCodeAmbiguousColumn` | Ambiguous column reference |
+
+**Example:**
+```go
+// Ambiguous column (multiple tables have 'id' column)
+sql := `SELECT id FROM users u JOIN orders o ON u.id = o.user_id`
+// Error: E3004 - Ambiguous column reference: 'id'
+```
+
+#### Unsupported Features (E4xxx)
+
+Features not yet implemented:
+
+| Code | Constant | Description |
+|------|----------|-------------|
+| E4001 | `ErrCodeUnsupportedFeature` | Feature not yet supported |
+| E4002 | `ErrCodeUnsupportedDialect` | SQL dialect not supported |
+
+### Error Builder Functions
+
+#### Function: `NewError`
+
+Creates a new structured error.
+
+```go
+func NewError(code ErrorCode, message string, location models.Location) *Error
+```
+
+**Parameters:**
+- `code`: Error code (e.g., `ErrCodeUnexpectedToken`)
+- `message`: Human-readable error message
+- `location`: Line and column where error occurred
+
+**Returns:**
+- `*Error`: New structured error with auto-generated help URL
+
+**Example:**
+```go
+err := errors.NewError(
+    errors.ErrCodeExpectedToken,
+    "expected FROM, got WHERE",
+    models.Location{Line: 1, Column: 15},
+)
+// Auto-generated HelpURL: https://docs.gosqlx.dev/errors/E2002
+```
+
+#### Method: `WithContext`
+
+Adds SQL context to the error (shows source code around error).
+
+```go
+func (e *Error) WithContext(sql string, highlightLen int) *Error
+```
+
+**Parameters:**
+- `sql`: Original SQL query
+- `highlightLen`: Number of characters to highlight
+
+**Returns:**
+- `*Error`: Error with context (chainable)
+
+**Example:**
+```go
+err := errors.NewError(
+    errors.ErrCodeUnexpectedToken,
+    "unexpected WHERE",
+    models.Location{Line: 1, Column: 9},
+).WithContext("SELECT * WHERE id = 1", 5)  // Highlight "WHERE"
+```
+
+#### Method: `WithHint`
+
+Adds a suggestion hint to fix the error.
+
+```go
+func (e *Error) WithHint(hint string) *Error
+```
+
+**Parameters:**
+- `hint`: Actionable suggestion to fix the error
+
+**Returns:**
+- `*Error`: Error with hint (chainable)
+
+**Example:**
+```go
+err := errors.NewError(
+    errors.ErrCodeMissingClause,
+    "missing FROM clause",
+    models.Location{Line: 1, Column: 9},
+).WithHint("Add 'FROM table_name' after SELECT columns")
+```
+
+#### Method: `WithCause`
+
+Adds an underlying cause error (error wrapping).
+
+```go
+func (e *Error) WithCause(cause error) *Error
+```
+
+**Parameters:**
+- `cause`: Underlying error that caused this error
+
+**Returns:**
+- `*Error`: Error with cause (chainable)
+
+**Example:**
+```go
+err := errors.NewError(
+    errors.ErrCodeTokenizerPanic,
+    "tokenizer panic",
+    models.Location{Line: 1, Column: 1},
+).WithCause(underlyingErr)
+```
+
+### Helper Functions
+
+#### Function: `IsCode`
+
+Checks if an error has a specific error code.
+
+```go
+func IsCode(err error, code ErrorCode) bool
+```
+
+**Parameters:**
+- `err`: Error to check
+- `code`: Error code to match
+
+**Returns:**
+- `bool`: true if error has the specified code
+
+**Example:**
+```go
+if errors.IsCode(err, errors.ErrCodeUnterminatedString) {
+    fmt.Println("String literal not closed")
+}
+```
+
+#### Function: `GetCode`
+
+Returns the error code from an error.
+
+```go
+func GetCode(err error) ErrorCode
+```
+
+**Parameters:**
+- `err`: Error to extract code from
+
+**Returns:**
+- `ErrorCode`: Error code, or empty string if not a structured error
+
+**Example:**
+```go
+code := errors.GetCode(err)
+if code == errors.ErrCodeMissingClause {
+    // Handle missing clause error
+}
+```
+
+### Usage Examples
+
+#### Basic Error Creation
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/ajitpratap0/GoSQLX/pkg/errors"
+    "github.com/ajitpratap0/GoSQLX/pkg/models"
+)
+
+func main() {
+    // Create simple error
+    err := errors.NewError(
+        errors.ErrCodeUnexpectedToken,
+        "expected FROM, got WHERE",
+        models.Location{Line: 1, Column: 15},
+    )
+
+    fmt.Println(err)
+    // Output:
+    // Error E2001 at line 1, column 15: expected FROM, got WHERE
+    // Help: https://docs.gosqlx.dev/errors/E2001
+}
+```
+
+#### Error with Full Context
+
+```go
+sql := `SELECT * WHERE id = 1`
+
+err := errors.NewError(
+    errors.ErrCodeMissingClause,
+    "missing FROM clause",
+    models.Location{Line: 1, Column: 10},
+).WithContext(sql, 5).WithHint("Add 'FROM table_name' after SELECT columns")
+
+fmt.Println(err)
+// Output:
+// Error E2003 at line 1, column 10: missing FROM clause
+//
+//    1 | SELECT * WHERE id = 1
+//              ^^^^^
+//
+// Hint: Add 'FROM table_name' after SELECT columns
+// Help: https://docs.gosqlx.dev/errors/E2003
+```
+
+#### Multi-Line SQL Context
+
+```go
+sql := `SELECT id, name
+FROM users
+WHERE
+GROUP BY id`
+
+err := errors.NewError(
+    errors.ErrCodeInvalidSyntax,
+    "WHERE clause requires a condition",
+    models.Location{Line: 3, Column: 1},
+).WithContext(sql, 5)
+
+fmt.Println(err)
+// Output:
+// Error E2004 at line 3, column 1: WHERE clause requires a condition
+//
+//    2 | FROM users
+//    3 | WHERE
+//        ^^^^^
+//    4 | GROUP BY id
+//
+// Help: https://docs.gosqlx.dev/errors/E2004
+```
+
+#### Error Code Checking
+
+```go
+_, err := parser.Parse(tokens)
+if err != nil {
+    // Check for specific error codes
+    if errors.IsCode(err, errors.ErrCodeUnterminatedString) {
+        fmt.Println("Found unterminated string - check your quotes")
+    } else if errors.IsCode(err, errors.ErrCodeMissingClause) {
+        fmt.Println("SQL statement is incomplete")
+    } else {
+        fmt.Printf("Parse error: %v\n", err)
+    }
+}
+```
+
+#### Error Code Extraction
+
+```go
+_, err := parser.Parse(tokens)
+if err != nil {
+    code := errors.GetCode(err)
+
+    switch code {
+    case errors.ErrCodeTokenLimitReached:
+        log.Error("Query too complex - DoS protection triggered")
+    case errors.ErrCodeRecursionDepthLimit:
+        log.Error("Query nesting too deep - DoS protection triggered")
+    default:
+        log.Errorf("Parse error %s: %v", code, err)
+    }
+}
+```
+
+#### Programmatic Error Handling
+
+```go
+func HandleParseError(err error) {
+    if err == nil {
+        return
+    }
+
+    // Extract structured error
+    sqlErr, ok := err.(*errors.Error)
+    if !ok {
+        fmt.Printf("Non-SQL error: %v\n", err)
+        return
+    }
+
+    // Log error details
+    fmt.Printf("Error Code: %s\n", sqlErr.Code)
+    fmt.Printf("Location: Line %d, Column %d\n", sqlErr.Location.Line, sqlErr.Location.Column)
+    fmt.Printf("Message: %s\n", sqlErr.Message)
+
+    if sqlErr.Hint != "" {
+        fmt.Printf("Suggestion: %s\n", sqlErr.Hint)
+    }
+
+    // Check if tokenizer error
+    if sqlErr.Code[0] == 'E' && sqlErr.Code[1] == '1' {
+        fmt.Println("This is a tokenization error")
+    }
+
+    // Check if parser error
+    if sqlErr.Code[0] == 'E' && sqlErr.Code[1] == '2' {
+        fmt.Println("This is a syntax error")
+    }
+}
+```
+
+#### Chaining Error Context
+
+```go
+func ParseSQL(sql string) (*ast.AST, error) {
+    tkz := tokenizer.GetTokenizer()
+    defer tokenizer.PutTokenizer(tkz)
+
+    tokens, err := tkz.Tokenize([]byte(sql))
+    if err != nil {
+        // Enhance tokenizer error with context
+        if sqlErr, ok := err.(*errors.Error); ok {
+            return nil, sqlErr.WithContext(sql, 1)
+        }
+        return nil, err
+    }
+
+    p := parser.NewParser()
+    defer p.Release()
+
+    ast, err := p.Parse(tokens)
+    if err != nil {
+        // Enhance parser error with context and hints
+        if sqlErr, ok := err.(*errors.Error); ok {
+            enhanced := sqlErr.WithContext(sql, 1)
+
+            // Add intelligent hints based on error code
+            switch sqlErr.Code {
+            case errors.ErrCodeMissingClause:
+                enhanced = enhanced.WithHint("Check if all required clauses are present")
+            case errors.ErrCodeUnexpectedToken:
+                enhanced = enhanced.WithHint("Review SQL syntax around highlighted token")
+            }
+
+            return nil, enhanced
+        }
+        return nil, err
+    }
+
+    return ast, nil
+}
+```
+
+### Error Formatting
+
+The `Error` type implements the `error` interface with rich formatting:
+
+```go
+err := errors.NewError(
+    errors.ErrCodeUnexpectedToken,
+    "expected FROM, got WHERE",
+    models.Location{Line: 2, Column: 1},
+).WithContext(`SELECT id, name
+WHERE id = 1`, 5).WithHint("Add 'FROM table_name' before WHERE clause")
+
+fmt.Println(err.Error())
+```
+
+**Output:**
+```
+Error E2001 at line 2, column 1: expected FROM, got WHERE
+
+   1 | SELECT id, name
+   2 | WHERE id = 1
+       ^^^^^
+
+Hint: Add 'FROM table_name' before WHERE clause
+Help: https://docs.gosqlx.dev/errors/E2001
+```
+
+### Error Context Visualization
+
+The error context shows:
+- **Line Before**: Provides context leading to the error
+- **Error Line**: The line containing the error
+- **Position Indicator**: `^` characters highlighting the error location
+- **Line After**: Provides context following the error
+
+**Example:**
+```go
+sql := `SELECT id, name, email
+FROM users
+WHERE
+ORDER BY id`
+
+err := errors.NewError(
+    errors.ErrCodeInvalidSyntax,
+    "WHERE clause requires a condition",
+    models.Location{Line: 3, Column: 1},
+).WithContext(sql, 5)
+```
+
+**Output:**
+```
+Error E2004 at line 3, column 1: WHERE clause requires a condition
+
+   2 | FROM users
+   3 | WHERE
+       ^^^^^
+   4 | ORDER BY id
+
+Help: https://docs.gosqlx.dev/errors/E2004
+```
+
+### Best Practices
+
+#### 1. Always Add Context for User Errors
+
+```go
+// GOOD: Rich error with context
+err := errors.NewError(
+    errors.ErrCodeMissingClause,
+    "missing FROM clause",
+    models.Location{Line: 1, Column: 10},
+).WithContext(sql, 1).WithHint("Add 'FROM table_name' after SELECT columns")
+
+// LESS HELPFUL: Plain error without context
+err := errors.NewError(
+    errors.ErrCodeMissingClause,
+    "missing FROM clause",
+    models.Location{Line: 1, Column: 10},
+)
+```
+
+#### 2. Use Error Codes for Programmatic Handling
+
+```go
+// GOOD: Check error code for specific handling
+if errors.IsCode(err, errors.ErrCodeTokenLimitReached) {
+    return errors.New("Query too complex - please simplify")
+}
+
+// BAD: String matching (fragile)
+if strings.Contains(err.Error(), "token limit") {
+    // Fragile - message might change
+}
+```
+
+#### 3. Provide Actionable Hints
+
+```go
+// GOOD: Specific, actionable hint
+.WithHint("Add 'FROM table_name' after SELECT columns")
+
+// LESS HELPFUL: Vague hint
+.WithHint("Fix the syntax error")
+```
+
+#### 4. Chain Error Context in Libraries
+
+```go
+// GOOD: Preserve and enhance errors from lower layers
+func ParseSQL(sql string) error {
+    ast, err := parser.Parse(tokens)
+    if err != nil {
+        if sqlErr, ok := err.(*errors.Error); ok {
+            return sqlErr.WithContext(sql, 1).WithHint("Check SQL syntax")
+        }
+        return err
+    }
+    return nil
+}
+```
+
+### Error Categories by Code Prefix
+
+**Quick Reference:**
+
+| Prefix | Category | Examples |
+|--------|----------|----------|
+| E1xxx | Tokenizer Errors | E1002 (unterminated string), E1006 (input too large) |
+| E2xxx | Parser Syntax Errors | E2001 (unexpected token), E2003 (missing clause) |
+| E3xxx | Semantic Errors | E3001 (undefined table), E3004 (ambiguous column) |
+| E4xxx | Unsupported Features | E4001 (unsupported feature), E4002 (unsupported dialect) |
+
+### Common Error Patterns
+
+#### Pattern 1: Tokenizer Error with Recovery
+
+```go
+tokens, err := tkz.Tokenize([]byte(sql))
+if err != nil {
+    if errors.IsCode(err, errors.ErrCodeUnterminatedString) {
+        // Attempt recovery by adding closing quote
+        sql = sql + "'"
+        tokens, err = tkz.Tokenize([]byte(sql))
+    }
+}
+```
+
+#### Pattern 2: Parser Error with User-Friendly Message
+
+```go
+_, err := parser.Parse(tokens)
+if err != nil {
+    code := errors.GetCode(err)
+
+    userMsg := map[errors.ErrorCode]string{
+        errors.ErrCodeMissingClause:   "Your SQL is missing a required clause",
+        errors.ErrCodeUnexpectedToken: "Unexpected word in your SQL query",
+        errors.ErrCodeInvalidSyntax:   "SQL syntax is incorrect",
+    }
+
+    if msg, ok := userMsg[code]; ok {
+        return fmt.Errorf("%s: %v", msg, err)
+    }
+
+    return err
+}
+```
+
+#### Pattern 3: Error Logging with Structured Fields
+
+```go
+_, err := parser.Parse(tokens)
+if err != nil {
+    if sqlErr, ok := err.(*errors.Error); ok {
+        log.WithFields(log.Fields{
+            "error_code": sqlErr.Code,
+            "line":       sqlErr.Location.Line,
+            "column":     sqlErr.Location.Column,
+            "hint":       sqlErr.Hint,
+        }).Error(sqlErr.Message)
+    }
+}
+```

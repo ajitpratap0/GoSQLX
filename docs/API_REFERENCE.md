@@ -2,11 +2,14 @@
 
 ## Table of Contents
 - [Package Overview](#package-overview)
+- [High-Level API (pkg/gosqlx)](#high-level-api)
 - [Tokenizer API](#tokenizer-api)
 - [Parser API](#parser-api)
 - [AST API](#ast-api)
+- [Keywords Package](#keywords-package)
 - [Models](#models)
 - [Error Handling](#error-handling)
+- [Metrics Package](#metrics-package)
 - [Performance Considerations](#performance-considerations)
 
 ## Package Overview
@@ -16,6 +19,7 @@ GoSQLX is organized into the following packages:
 ```
 github.com/ajitpratap0/GoSQLX/
 ├── pkg/
+│   ├── gosqlx/          # High-level convenience API
 │   ├── models/          # Core data structures
 │   ├── sql/
 │   │   ├── tokenizer/   # SQL lexical analysis
@@ -23,8 +27,348 @@ github.com/ajitpratap0/GoSQLX/
 │   │   ├── ast/         # Abstract syntax tree
 │   │   ├── keywords/    # SQL keyword definitions
 │   │   └── token/       # Token types and utilities
-│   └── metrics/         # Performance metrics
+│   ├── errors/          # Structured error handling
+│   ├── metrics/         # Performance monitoring
+│   └── linter/          # SQL linting rules engine
 ```
+
+## High-Level API
+
+### Package: `github.com/ajitpratap0/GoSQLX/pkg/gosqlx`
+
+The high-level API provides convenient functions for common SQL parsing operations with automatic object pool management. This is the recommended API for most use cases.
+
+### Parsing Functions
+
+#### `Parse(sql string) (*ast.AST, error)`
+
+Parse SQL in a single convenient call.
+
+```go
+sql := "SELECT * FROM users WHERE active = true"
+astNode, err := gosqlx.Parse(sql)
+if err != nil {
+    log.Fatal(err)
+}
+```
+
+**Returns:**
+- `*ast.AST`: Parsed abstract syntax tree
+- `error`: Parse error if any
+
+**Use Case:** Simple parsing without timeout requirements
+
+---
+
+#### `ParseWithContext(ctx context.Context, sql string) (*ast.AST, error)`
+
+Parse SQL with context support for cancellation and timeouts.
+
+```go
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+
+astNode, err := gosqlx.ParseWithContext(ctx, sql)
+if err == context.DeadlineExceeded {
+    log.Println("Parsing timed out")
+}
+```
+
+**Parameters:**
+- `ctx`: Context for cancellation/timeout
+- `sql`: SQL string to parse
+
+**Returns:**
+- `*ast.AST`: Parsed AST
+- `error`: `context.Canceled`, `context.DeadlineExceeded`, or parse error
+
+**Use Case:** Long-running parsing operations that need cancellation
+
+---
+
+#### `ParseWithTimeout(sql string, timeout time.Duration) (*ast.AST, error)`
+
+Convenience wrapper for parsing with automatic timeout.
+
+```go
+astNode, err := gosqlx.ParseWithTimeout(sql, 10*time.Second)
+if err == context.DeadlineExceeded {
+    log.Println("Timeout after 10 seconds")
+}
+```
+
+**Use Case:** Quick timeout-based parsing without manual context management
+
+---
+
+#### `ParseBytes(sql []byte) (*ast.AST, error)`
+
+Parse SQL from byte slice (zero-copy when already in bytes).
+
+```go
+sqlBytes, _ := os.ReadFile("query.sql")
+astNode, err := gosqlx.ParseBytes(sqlBytes)
+```
+
+**Use Case:** Parsing SQL from file I/O or byte sources
+
+---
+
+#### `MustParse(sql string) *ast.AST`
+
+Parse SQL, panicking on error (for tests and initialization).
+
+```go
+// In test or init()
+ast := gosqlx.MustParse("SELECT 1")
+```
+
+**Use Case:** Parsing SQL literals where errors indicate bugs
+
+---
+
+#### `ParseMultiple(queries []string) ([]*ast.AST, error)`
+
+Parse multiple SQL statements efficiently.
+
+```go
+queries := []string{
+    "SELECT * FROM users",
+    "SELECT * FROM orders",
+    "SELECT * FROM products",
+}
+asts, err := gosqlx.ParseMultiple(queries)
+```
+
+**Benefits:**
+- Reuses tokenizer and parser objects
+- 40-60% faster than individual Parse() calls
+- Lower memory allocation
+
+**Use Case:** Batch processing SQL queries
+
+---
+
+### Validation Functions
+
+#### `Validate(sql string) error`
+
+Check if SQL is syntactically valid.
+
+```go
+if err := gosqlx.Validate("SELECT * FROM users"); err != nil {
+    fmt.Printf("Invalid SQL: %v\n", err)
+}
+```
+
+**Returns:** `nil` if valid, error describing the problem
+
+**Use Case:** Syntax validation without building full AST
+
+---
+
+### Metadata Extraction
+
+#### `ExtractTables(astNode *ast.AST) []string`
+
+Extract all table names from parsed SQL.
+
+```go
+sql := "SELECT * FROM users u JOIN orders o ON u.id = o.user_id"
+astNode, _ := gosqlx.Parse(sql)
+tables := gosqlx.ExtractTables(astNode)
+// Returns: ["users", "orders"]
+```
+
+**Extracts from:**
+- FROM clauses
+- JOIN clauses
+- Subqueries and CTEs
+- INSERT/UPDATE/DELETE statements
+
+**Returns:** Deduplicated slice of table names
+
+---
+
+#### `ExtractTablesQualified(astNode *ast.AST) []QualifiedName`
+
+Extract table names with schema/alias information.
+
+```go
+sql := "SELECT * FROM public.users u"
+astNode, _ := gosqlx.Parse(sql)
+tables := gosqlx.ExtractTablesQualified(astNode)
+// Returns: [QualifiedName{Schema: "public", Name: "users"}]
+```
+
+**Use Case:** When schema information is needed
+
+---
+
+#### `ExtractColumns(astNode *ast.AST) []string`
+
+Extract all column references from SQL.
+
+```go
+sql := "SELECT id, name, email FROM users WHERE active = true"
+astNode, _ := gosqlx.Parse(sql)
+columns := gosqlx.ExtractColumns(astNode)
+// Returns: ["id", "name", "email", "active"]
+```
+
+**Extracts from:**
+- SELECT columns
+- WHERE conditions
+- JOIN conditions
+- GROUP BY, HAVING, ORDER BY clauses
+
+**Returns:** Deduplicated slice of column names
+
+---
+
+#### `ExtractColumnsQualified(astNode *ast.AST) []QualifiedName`
+
+Extract column references with table qualifiers.
+
+```go
+sql := "SELECT u.id, u.name, o.total FROM users u JOIN orders o ON u.id = o.user_id"
+astNode, _ := gosqlx.Parse(sql)
+columns := gosqlx.ExtractColumnsQualified(astNode)
+// Returns qualified names like "u.id", "u.name", "o.total", etc.
+```
+
+**Use Case:** Understanding column-to-table relationships
+
+---
+
+#### `ExtractFunctions(astNode *ast.AST) []string`
+
+Extract all function calls from SQL.
+
+```go
+sql := "SELECT COUNT(*), MAX(price), AVG(quantity) FROM products"
+astNode, _ := gosqlx.Parse(sql)
+functions := gosqlx.ExtractFunctions(astNode)
+// Returns: ["COUNT", "MAX", "AVG"]
+```
+
+**Includes:**
+- Aggregate functions (COUNT, SUM, AVG, MIN, MAX)
+- Scalar functions (UPPER, LOWER, SUBSTRING, etc.)
+- Window functions (ROW_NUMBER, RANK, etc.)
+
+---
+
+### Types
+
+#### `QualifiedName`
+
+Represents a schema.table.column qualified name.
+
+```go
+type QualifiedName struct {
+    Schema string // Optional schema name
+    Table  string // Table name
+    Name   string // Column or table name
+}
+```
+
+**Methods:**
+
+- `String() string` - Returns "schema.table.name" format
+- `FullName() string` - Returns meaningful name without schema
+
+**Examples:**
+
+```go
+// Column reference
+col := QualifiedName{Table: "users", Name: "id"}
+col.String()    // "users.id"
+col.FullName()  // "users.id"
+
+// Table reference with schema
+tbl := QualifiedName{Schema: "public", Name: "users"}
+tbl.String()    // "public.users"
+tbl.FullName()  // "users"
+
+// 3-part name
+full := QualifiedName{Schema: "db", Table: "public", Name: "users"}
+full.String()    // "db.public.users"
+full.FullName()  // "public.users"
+```
+
+---
+
+### Known Limitations
+
+The high-level API extraction functions have the following parser limitations:
+
+1. **CASE Expressions**: Column references within CASE may not extract correctly
+2. **CAST Expressions**: Type conversion expressions not fully supported
+3. **IN Expressions**: Complex IN clauses may not parse completely
+4. **BETWEEN Expressions**: Range comparisons partially supported
+5. **Schema-Qualified Names**: `schema.table` format not fully supported
+6. **Complex Recursive CTEs**: Advanced recursive queries may fail
+
+For queries using these features, consider manual extraction or contributing parser enhancements.
+
+---
+
+### Performance Comparison
+
+| Operation | Tokenizer+Parser API | High-Level API | Overhead |
+|-----------|---------------------|----------------|----------|
+| Single parse | 100% (baseline) | ~110% | +10% |
+| Batch parse (10 queries) | 100% (with reuse) | ~105% | +5% |
+
+**Recommendation:**
+- Use high-level API for simple cases (< 100 queries/sec)
+- Use tokenizer+parser API for performance-critical batch processing
+
+---
+
+### Complete Example
+
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+
+    "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+)
+
+func main() {
+    sql := `
+        SELECT u.id, u.name, COUNT(o.id) as order_count
+        FROM users u
+        LEFT JOIN orders o ON u.id = o.user_id
+        WHERE u.created_at >= '2024-01-01'
+        GROUP BY u.id, u.name
+        HAVING COUNT(o.id) > 5
+        ORDER BY order_count DESC
+        LIMIT 10
+    `
+
+    // Parse SQL
+    astNode, err := gosqlx.Parse(sql)
+    if err != nil {
+        log.Fatal("Parse error:", err)
+    }
+
+    // Extract metadata
+    tables := gosqlx.ExtractTables(astNode)
+    columns := gosqlx.ExtractColumns(astNode)
+    functions := gosqlx.ExtractFunctions(astNode)
+
+    fmt.Printf("Tables: %v\n", tables)       // ["users", "orders"]
+    fmt.Printf("Columns: %v\n", columns)     // ["id", "name", "created_at", "user_id"]
+    fmt.Printf("Functions: %v\n", functions) // ["COUNT"]
+}
+```
+
+---
 
 ## Tokenizer API
 

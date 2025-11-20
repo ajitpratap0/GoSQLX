@@ -906,3 +906,636 @@ func main() {
     }
 }
 ```
+
+## Keywords Package
+
+### Package: `github.com/ajitpratap0/GoSQLX/pkg/sql/keywords`
+
+The Keywords package provides SQL keyword recognition, categorization, and multi-dialect support for PostgreSQL, MySQL, SQL Server, Oracle, and SQLite.
+
+### Overview
+
+**Key Features:**
+- **Multi-Dialect Support**: PostgreSQL, MySQL, SQL Server, Oracle, SQLite
+- **Keyword Categorization**: Reserved, DML, DDL, functions, operators, data types
+- **Compound Keywords**: GROUP BY, ORDER BY, LEFT JOIN, NULLS FIRST, etc.
+- **Case-Insensitive**: Recognizes keywords in any case (SELECT, select, Select)
+- **Thread-Safe**: All operations safe for concurrent use
+- **Extensible**: Support for adding custom keywords
+
+### Core Types
+
+#### Type: `Keywords`
+
+Main keyword registry for a specific SQL dialect.
+
+```go
+type Keywords struct {
+    dialect SQLDialect
+    // Internal keyword maps
+}
+```
+
+**Usage:**
+```go
+kw := keywords.New(keywords.PostgreSQL)
+if kw.IsKeyword("SELECT") {
+    fmt.Println("SELECT is a keyword")
+}
+```
+
+#### Type: `SQLDialect`
+
+Supported SQL dialects.
+
+```go
+type SQLDialect int
+
+const (
+    PostgreSQL SQLDialect = iota  // PostgreSQL dialect
+    MySQL                         // MySQL dialect
+    SQLServer                     // SQL Server dialect
+    Oracle                        // Oracle dialect
+    SQLite                        // SQLite dialect
+    Generic                       // SQL-99 standard keywords
+)
+```
+
+**Example:**
+```go
+// Create keyword registry for specific dialect
+pgKw := keywords.New(keywords.PostgreSQL)
+myKw := keywords.New(keywords.MySQL)
+genericKw := keywords.New(keywords.Generic)
+```
+
+#### Type: `KeywordCategory`
+
+Keyword classification.
+
+```go
+type KeywordCategory int
+
+const (
+    CategoryReserved   KeywordCategory = iota  // Reserved keywords (SELECT, FROM, WHERE)
+    CategoryDML                                // Data manipulation (INSERT, UPDATE, DELETE)
+    CategoryDDL                                // Data definition (CREATE, ALTER, DROP)
+    CategoryFunction                           // Function names (COUNT, SUM, AVG)
+    CategoryOperator                           // Operators (AND, OR, NOT, LIKE)
+    CategoryDataType                           // Data types (INTEGER, VARCHAR, TIMESTAMP)
+)
+```
+
+### Core Functions
+
+#### Function: `New`
+
+Creates a keyword registry for a specific SQL dialect.
+
+```go
+func New(dialect SQLDialect) *Keywords
+```
+
+**Parameters:**
+- `dialect`: SQL dialect to use (PostgreSQL, MySQL, SQLite, etc.)
+
+**Returns:**
+- `*Keywords`: Keyword registry instance
+
+**Example:**
+```go
+kw := keywords.New(keywords.PostgreSQL)
+```
+
+#### Method: `IsKeyword`
+
+Checks if a word is a SQL keyword (case-insensitive).
+
+```go
+func (k *Keywords) IsKeyword(word string) bool
+```
+
+**Parameters:**
+- `word`: Word to check
+
+**Returns:**
+- `bool`: true if word is a keyword
+
+**Example:**
+```go
+kw := keywords.New(keywords.Generic)
+
+kw.IsKeyword("SELECT")  // true
+kw.IsKeyword("select")  // true
+kw.IsKeyword("SeLeCt")  // true
+kw.IsKeyword("foo")     // false
+```
+
+#### Method: `IsReserved`
+
+Checks if a keyword is reserved (cannot be used as identifier without quoting).
+
+```go
+func (k *Keywords) IsReserved(word string) bool
+```
+
+**Parameters:**
+- `word`: Word to check
+
+**Returns:**
+- `bool`: true if word is a reserved keyword
+
+**Example:**
+```go
+kw := keywords.New(keywords.PostgreSQL)
+
+if kw.IsReserved("TABLE") {
+    fmt.Println("TABLE is reserved - must quote if used as identifier")
+}
+```
+
+#### Method: `GetKeyword`
+
+Gets detailed keyword information.
+
+```go
+func (k *Keywords) GetKeyword(word string) *Keyword
+```
+
+**Parameters:**
+- `word`: Keyword to look up
+
+**Returns:**
+- `*Keyword`: Keyword details (TokenType, Category), or nil if not found
+
+**Example:**
+```go
+kw := keywords.New(keywords.Generic)
+keyword := kw.GetKeyword("SELECT")
+if keyword != nil {
+    fmt.Printf("Type: %s, Category: %d\n", keyword.TokenType, keyword.Category)
+}
+```
+
+#### Method: `GetTokenType`
+
+Gets the token type for a keyword.
+
+```go
+func (k *Keywords) GetTokenType(word string) string
+```
+
+**Parameters:**
+- `word`: Keyword to look up
+
+**Returns:**
+- `string`: Token type (e.g., "SELECT", "INSERT", "JOIN"), or empty string if not found
+
+**Example:**
+```go
+kw := keywords.New(keywords.Generic)
+tokenType := kw.GetTokenType("select")  // Returns "SELECT"
+```
+
+#### Method: `IsCompoundKeyword`
+
+Checks if two words form a compound keyword (e.g., GROUP BY, LEFT JOIN).
+
+```go
+func (k *Keywords) IsCompoundKeyword(word1, word2 string) bool
+```
+
+**Parameters:**
+- `word1`: First word
+- `word2`: Second word
+
+**Returns:**
+- `bool`: true if words form a compound keyword
+
+**Example:**
+```go
+kw := keywords.New(keywords.Generic)
+
+kw.IsCompoundKeyword("GROUP", "BY")     // true
+kw.IsCompoundKeyword("ORDER", "BY")     // true
+kw.IsCompoundKeyword("LEFT", "JOIN")    // true
+kw.IsCompoundKeyword("NULLS", "FIRST")  // true
+kw.IsCompoundKeyword("SELECT", "FROM")  // false (not compound)
+```
+
+#### Method: `GetCompoundKeywordType`
+
+Gets the token type for a compound keyword.
+
+```go
+func (k *Keywords) GetCompoundKeywordType(word1, word2 string) string
+```
+
+**Parameters:**
+- `word1`: First word
+- `word2`: Second word
+
+**Returns:**
+- `string`: Compound keyword token type, or empty string if not compound
+
+**Example:**
+```go
+kw := keywords.New(keywords.Generic)
+
+kw.GetCompoundKeywordType("GROUP", "BY")     // "GROUP BY"
+kw.GetCompoundKeywordType("ORDER", "BY")     // "ORDER BY"
+kw.GetCompoundKeywordType("LEFT", "JOIN")    // "LEFT JOIN"
+kw.GetCompoundKeywordType("NULLS", "FIRST")  // "NULLS FIRST"
+```
+
+#### Method: `AddKeyword`
+
+Adds a custom keyword (for extensions).
+
+```go
+func (k *Keywords) AddKeyword(word string, tokenType string, category KeywordCategory)
+```
+
+**Parameters:**
+- `word`: Keyword to add
+- `tokenType`: Token type for the keyword
+- `category`: Keyword category
+
+**Example:**
+```go
+kw := keywords.New(keywords.Generic)
+kw.AddKeyword("CUSTOM", "CUSTOM", keywords.CategoryReserved)
+```
+
+### Keyword Categories
+
+#### Reserved Keywords
+
+Core SQL statement keywords that cannot be used as identifiers without quoting:
+
+```
+SELECT, FROM, WHERE, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP,
+JOIN, INNER, LEFT, RIGHT, OUTER, FULL, CROSS, NATURAL,
+GROUP, ORDER, HAVING, UNION, EXCEPT, INTERSECT,
+WITH, RECURSIVE, AS, ON, USING,
+WINDOW, PARTITION, OVER, ROWS, RANGE
+```
+
+#### DML Keywords
+
+Data manipulation modifiers:
+
+```
+DISTINCT, ALL, FETCH, FIRST, NEXT, LAST, ONLY,
+WITH TIES, NULLS, LIMIT, OFFSET
+```
+
+#### Compound Keywords
+
+Multi-word keywords recognized as single tokens:
+
+```
+GROUP BY, ORDER BY,
+LEFT JOIN, RIGHT JOIN, FULL JOIN, CROSS JOIN, NATURAL JOIN,
+INNER JOIN, LEFT OUTER JOIN, RIGHT OUTER JOIN, FULL OUTER JOIN,
+UNION ALL, WITH TIES, NULLS FIRST, NULLS LAST
+```
+
+#### Window Function Keywords
+
+Window function names and frame specifications:
+
+```
+ROW_NUMBER, RANK, DENSE_RANK, NTILE, PERCENT_RANK, CUME_DIST,
+LAG, LEAD, FIRST_VALUE, LAST_VALUE, NTH_VALUE,
+ROWS BETWEEN, RANGE BETWEEN, UNBOUNDED PRECEDING, CURRENT ROW
+```
+
+### Dialect-Specific Keywords
+
+#### PostgreSQL-Specific
+
+```go
+pgKw := keywords.New(keywords.PostgreSQL)
+
+// PostgreSQL-specific keywords
+pgKw.IsKeyword("ILIKE")        // Case-insensitive LIKE
+pgKw.IsKeyword("SIMILAR")      // SIMILAR TO operator
+pgKw.IsKeyword("MATERIALIZED") // Materialized views
+pgKw.IsKeyword("CONCURRENTLY") // Concurrent operations
+pgKw.IsKeyword("RETURNING")    // RETURNING clause
+```
+
+**PostgreSQL Keywords:**
+```
+MATERIALIZED, ILIKE, SIMILAR, FREEZE, ANALYSE, ANALYZE,
+CONCURRENTLY, REINDEX, TOAST, NOWAIT, RETURNING
+```
+
+#### MySQL-Specific
+
+```go
+myKw := keywords.New(keywords.MySQL)
+
+// MySQL-specific keywords
+myKw.IsKeyword("UNSIGNED")     // Unsigned modifier
+myKw.IsKeyword("ZEROFILL")     // Zero-fill display
+myKw.IsKeyword("FORCE")        // Force index
+myKw.IsKeyword("IGNORE")       // Ignore errors
+```
+
+**MySQL Keywords:**
+```
+BINARY, CHAR, VARCHAR, DATETIME, DECIMAL, UNSIGNED, ZEROFILL,
+FORCE, IGNORE, INDEX, KEY, KILL, OPTION, PURGE, READ, WRITE,
+STATUS, VARIABLES
+```
+
+#### SQLite-Specific
+
+```go
+sqliteKw := keywords.New(keywords.SQLite)
+
+// SQLite-specific keywords
+sqliteKw.IsKeyword("AUTOINCREMENT")  // Auto-increment
+sqliteKw.IsKeyword("CONFLICT")       // Conflict resolution
+sqliteKw.IsKeyword("REPLACE")        // Replace operation
+```
+
+**SQLite Keywords:**
+```
+ABORT, ACTION, AFTER, ATTACH, AUTOINCREMENT, CONFLICT, DATABASE,
+DETACH, EXCLUSIVE, INDEXED, INSTEAD, PLAN, QUERY, RAISE, REPLACE,
+TEMP, TEMPORARY, VACUUM, VIRTUAL
+```
+
+### Usage Examples
+
+#### Basic Keyword Recognition
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
+)
+
+func main() {
+    kw := keywords.New(keywords.PostgreSQL)
+
+    // Check if word is a keyword
+    if kw.IsKeyword("SELECT") {
+        fmt.Println("SELECT is a keyword")
+    }
+
+    // Check if reserved
+    if kw.IsReserved("TABLE") {
+        fmt.Println("TABLE is reserved - quote if used as identifier")
+    }
+
+    // Get keyword info
+    keyword := kw.GetKeyword("JOIN")
+    if keyword != nil {
+        fmt.Printf("Type: %s, Category: %d\n", keyword.TokenType, keyword.Category)
+    }
+}
+```
+
+#### Compound Keyword Detection
+
+```go
+kw := keywords.New(keywords.Generic)
+
+// Check compound keywords
+if kw.IsCompoundKeyword("GROUP", "BY") {
+    fmt.Println("GROUP BY is a compound keyword")
+}
+
+if kw.IsCompoundKeyword("NULLS", "FIRST") {
+    fmt.Println("NULLS FIRST is a compound keyword")
+}
+
+// Get compound keyword type
+tokenType := kw.GetCompoundKeywordType("LEFT", "JOIN")
+fmt.Printf("Token type: %s\n", tokenType)  // "LEFT JOIN"
+```
+
+#### Identifier Validation
+
+```go
+func ValidateIdentifier(name string) error {
+    kw := keywords.New(keywords.PostgreSQL)
+
+    if kw.IsReserved(name) {
+        return fmt.Errorf("'%s' is a reserved keyword - must be quoted", name)
+    }
+
+    return nil
+}
+
+// Usage
+err := ValidateIdentifier("table")  // Error: 'table' is reserved
+err := ValidateIdentifier("users")  // OK
+```
+
+#### SQL Formatter
+
+```go
+func FormatKeyword(word string, style string) string {
+    kw := keywords.New(keywords.Generic)
+
+    if !kw.IsKeyword(word) {
+        return word  // Not a keyword, return as-is
+    }
+
+    switch style {
+    case "upper":
+        return strings.ToUpper(word)
+    case "lower":
+        return strings.ToLower(word)
+    case "title":
+        return strings.Title(strings.ToLower(word))
+    default:
+        return word
+    }
+}
+
+// Usage
+formatted := FormatKeyword("select", "upper")  // "SELECT"
+```
+
+#### Dialect Switching
+
+```go
+func AnalyzeKeywords(sql string, dialect keywords.SQLDialect) {
+    kw := keywords.New(dialect)
+    words := strings.Fields(sql)
+
+    for _, word := range words {
+        if kw.IsKeyword(word) {
+            category := kw.GetKeyword(word).Category
+            fmt.Printf("%s: category=%d\n", word, category)
+        }
+    }
+}
+
+// Usage for different dialects
+AnalyzeKeywords("SELECT * FROM users", keywords.PostgreSQL)
+AnalyzeKeywords("SELECT * FROM users", keywords.MySQL)
+```
+
+### Integration with Tokenizer
+
+The keywords package is used by the tokenizer to identify SQL keywords:
+
+```go
+// In tokenizer
+kw := keywords.New(keywords.PostgreSQL)
+
+// Check if identifier is actually a keyword
+if kw.IsKeyword(identifierText) {
+    tokenType = kw.GetTokenType(identifierText)
+} else {
+    tokenType = "IDENTIFIER"
+}
+
+// Check for compound keywords
+if kw.IsCompoundKeyword(currentWord, nextWord) {
+    tokenType = kw.GetCompoundKeywordType(currentWord, nextWord)
+    // Consume both words
+}
+```
+
+### Integration with Parser
+
+The parser uses keyword information for syntax validation:
+
+```go
+// Check if next token is a specific keyword
+if p.currentToken.Type == "GROUP" {
+    // Expecting "BY" for GROUP BY
+    if p.peekToken.Type == "BY" {
+        // Parse GROUP BY clause
+    }
+}
+
+// Compound keyword handling
+if p.currentToken.Type == "NULLS" {
+    if p.peekToken.Type == "FIRST" || p.peekToken.Type == "LAST" {
+        // Parse NULLS FIRST/LAST clause
+    }
+}
+```
+
+### Case Sensitivity
+
+All keyword matching is **case-insensitive**:
+
+```go
+kw := keywords.New(keywords.Generic)
+
+kw.IsKeyword("SELECT")  // true
+kw.IsKeyword("select")  // true
+kw.IsKeyword("Select")  // true
+kw.IsKeyword("SeLeCt")  // true
+```
+
+### Performance Characteristics
+
+- **Lookup Time**: O(1) hash map lookups
+- **Memory**: Pre-allocated keyword maps (~10KB per dialect)
+- **Thread-Safe**: No synchronization overhead for reads
+- **Cache-Friendly**: Keywords stored in contiguous memory
+
+### Best Practices
+
+#### 1. Create Once, Reuse
+
+```go
+// GOOD: Create once at package level
+var globalKeywords = keywords.New(keywords.PostgreSQL)
+
+func IsKeyword(word string) bool {
+    return globalKeywords.IsKeyword(word)
+}
+
+// BAD: Creating repeatedly (wasteful)
+func IsKeyword(word string) bool {
+    kw := keywords.New(keywords.PostgreSQL)  // Creates new instance every call
+    return kw.IsKeyword(word)
+}
+```
+
+#### 2. Use Appropriate Dialect
+
+```go
+// Match your database
+pgKeywords := keywords.New(keywords.PostgreSQL)   // For PostgreSQL
+myKeywords := keywords.New(keywords.MySQL)        // For MySQL
+genericKeywords := keywords.New(keywords.Generic) // For SQL-99 standard
+```
+
+#### 3. Check Reserved Keywords for Identifiers
+
+```go
+func ValidateTableName(name string) error {
+    kw := keywords.New(keywords.PostgreSQL)
+
+    if kw.IsReserved(name) {
+        return fmt.Errorf("'%s' is reserved - must be quoted", name)
+    }
+
+    return nil
+}
+```
+
+### Common Patterns
+
+#### Pattern 1: Syntax Highlighting
+
+```go
+func HighlightSQL(sql string) string {
+    kw := keywords.New(keywords.Generic)
+    words := strings.Fields(sql)
+
+    for i, word := range words {
+        if kw.IsKeyword(word) {
+            words[i] = fmt.Sprintf("<keyword>%s</keyword>", word)
+        }
+    }
+
+    return strings.Join(words, " ")
+}
+```
+
+#### Pattern 2: Keyword Case Normalization
+
+```go
+func NormalizeKeywords(sql string) string {
+    kw := keywords.New(keywords.Generic)
+    words := strings.Fields(sql)
+
+    for i, word := range words {
+        if kw.IsKeyword(word) {
+            words[i] = strings.ToUpper(word)  // Normalize to uppercase
+        }
+    }
+
+    return strings.Join(words, " ")
+}
+```
+
+#### Pattern 3: Identifier Quoting
+
+```go
+func QuoteIfNeeded(identifier string, dialect keywords.SQLDialect) string {
+    kw := keywords.New(dialect)
+
+    if kw.IsReserved(identifier) {
+        return fmt.Sprintf("\"%s\"", identifier)  // Quote reserved keywords
+    }
+
+    return identifier
+}
+```

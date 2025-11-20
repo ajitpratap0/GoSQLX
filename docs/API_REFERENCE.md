@@ -2203,3 +2203,721 @@ if err != nil {
     }
 }
 ```
+
+## Metrics Package
+
+### Package: `github.com/ajitpratap0/GoSQLX/pkg/metrics`
+
+The Metrics package provides production performance monitoring and observability for GoSQLX operations with thread-safe atomic operations.
+
+### Overview
+
+**Key Features:**
+- **Performance Monitoring**: Track tokenization operations, durations, and throughput
+- **Memory Tracking**: Monitor object pool efficiency and hit rates
+- **Error Analytics**: Categorize and count errors by type
+- **Query Size Metrics**: Min, max, and average query sizes processed
+- **Thread-Safe**: Lock-free atomic operations for counters
+- **Zero Overhead When Disabled**: No performance impact when metrics collection is off
+- **Production Ready**: Designed for high-throughput production environments
+
+### Core Types
+
+#### Type: `Metrics`
+
+Internal metrics collector (not exported).
+
+```go
+type Metrics struct {
+    // Tokenization metrics
+    tokenizeOperations int64 // Total tokenization operations
+    tokenizeErrors     int64 // Total tokenization errors
+    tokenizeDuration   int64 // Total tokenization time (nanoseconds)
+    lastTokenizeTime   int64 // Last tokenization timestamp
+
+    // Memory metrics
+    poolGets   int64 // Total pool retrievals
+    poolPuts   int64 // Total pool returns
+    poolMisses int64 // Pool misses (had to create new)
+
+    // Query size metrics
+    minQuerySize    int64 // Minimum query size processed
+    maxQuerySize    int64 // Maximum query size processed
+    totalQueryBytes int64 // Total bytes of SQL processed
+
+    // Error tracking
+    errorsByType map[string]int64
+    errorsMutex  sync.RWMutex
+
+    // Configuration
+    enabled   bool
+    startTime time.Time
+}
+```
+
+#### Type: `Stats`
+
+Performance statistics snapshot.
+
+```go
+type Stats struct {
+    // Basic counts
+    TokenizeOperations int64   `json:"tokenize_operations"`
+    TokenizeErrors     int64   `json:"tokenize_errors"`
+    ErrorRate          float64 `json:"error_rate"`
+
+    // Performance metrics
+    AverageDuration     time.Duration `json:"average_duration"`
+    OperationsPerSecond float64       `json:"operations_per_second"`
+
+    // Memory/Pool metrics
+    PoolGets     int64   `json:"pool_gets"`
+    PoolPuts     int64   `json:"pool_puts"`
+    PoolBalance  int64   `json:"pool_balance"`
+    PoolMissRate float64 `json:"pool_miss_rate"`
+
+    // Query size metrics
+    MinQuerySize        int64   `json:"min_query_size"`
+    MaxQuerySize        int64   `json:"max_query_size"`
+    AverageQuerySize    float64 `json:"average_query_size"`
+    TotalBytesProcessed int64   `json:"total_bytes_processed"`
+
+    // Timing
+    Uptime            time.Duration `json:"uptime"`
+    LastOperationTime time.Time     `json:"last_operation_time"`
+
+    // Error breakdown
+    ErrorsByType map[string]int64 `json:"errors_by_type"`
+}
+```
+
+**Stats Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `TokenizeOperations` | int64 | Total tokenization operations performed |
+| `TokenizeErrors` | int64 | Total tokenization errors encountered |
+| `ErrorRate` | float64 | Error rate (errors / operations) |
+| `AverageDuration` | time.Duration | Average tokenization duration |
+| `OperationsPerSecond` | float64 | Throughput (ops/sec) |
+| `PoolGets` | int64 | Total pool retrievals |
+| `PoolPuts` | int64 | Total pool returns |
+| `PoolBalance` | int64 | Pool balance (gets - puts) |
+| `PoolMissRate` | float64 | Pool miss rate (misses / gets) |
+| `MinQuerySize` | int64 | Minimum query size (bytes) |
+| `MaxQuerySize` | int64 | Maximum query size (bytes) |
+| `AverageQuerySize` | float64 | Average query size (bytes) |
+| `TotalBytesProcessed` | int64 | Total SQL bytes processed |
+| `Uptime` | time.Duration | Time since metrics enabled |
+| `LastOperationTime` | time.Time | Timestamp of last operation |
+| `ErrorsByType` | map[string]int64 | Error counts by error message |
+
+### Configuration Functions
+
+#### Function: `Enable`
+
+Activates metrics collection.
+
+```go
+func Enable()
+```
+
+**Example:**
+```go
+import "github.com/ajitpratap0/GoSQLX/pkg/metrics"
+
+func main() {
+    // Enable metrics at application startup
+    metrics.Enable()
+    defer metrics.Disable()
+
+    // Metrics will now be collected
+    // ...
+}
+```
+
+#### Function: `Disable`
+
+Deactivates metrics collection.
+
+```go
+func Disable()
+```
+
+**Example:**
+```go
+// Disable metrics (stops collection)
+metrics.Disable()
+```
+
+#### Function: `IsEnabled`
+
+Checks if metrics collection is active.
+
+```go
+func IsEnabled() bool
+```
+
+**Returns:**
+- `bool`: true if metrics collection is enabled
+
+**Example:**
+```go
+if metrics.IsEnabled() {
+    fmt.Println("Metrics collection is active")
+}
+```
+
+### Recording Functions
+
+#### Function: `RecordTokenization`
+
+Records a tokenization operation (automatically called by tokenizer).
+
+```go
+func RecordTokenization(duration time.Duration, querySize int, err error)
+```
+
+**Parameters:**
+- `duration`: Time taken for tokenization
+- `querySize`: Size of SQL query in bytes
+- `err`: Error if tokenization failed, nil otherwise
+
+**Example:**
+```go
+start := time.Now()
+tokens, err := tkz.Tokenize([]byte(sql))
+metrics.RecordTokenization(time.Since(start), len(sql), err)
+```
+
+#### Function: `RecordPoolGet`
+
+Records a pool retrieval (automatically called by object pools).
+
+```go
+func RecordPoolGet(fromPool bool)
+```
+
+**Parameters:**
+- `fromPool`: true if object came from pool, false if new object created
+
+**Example:**
+```go
+// When getting from pool
+tkz := tokenizerPool.Get()
+metrics.RecordPoolGet(tkz != nil)  // true if from pool, false if created new
+```
+
+#### Function: `RecordPoolPut`
+
+Records a pool return (automatically called by object pools).
+
+```go
+func RecordPoolPut()
+```
+
+**Example:**
+```go
+// When returning to pool
+tokenizerPool.Put(tkz)
+metrics.RecordPoolPut()
+```
+
+### Query Functions
+
+#### Function: `GetStats`
+
+Returns current performance statistics snapshot.
+
+```go
+func GetStats() Stats
+```
+
+**Returns:**
+- `Stats`: Current performance statistics
+
+**Example:**
+```go
+stats := metrics.GetStats()
+
+fmt.Printf("Operations: %d\n", stats.TokenizeOperations)
+fmt.Printf("Errors: %d (%.2f%%)\n", stats.TokenizeErrors, stats.ErrorRate*100)
+fmt.Printf("Avg Duration: %v\n", stats.AverageDuration)
+fmt.Printf("Throughput: %.2f ops/sec\n", stats.OperationsPerSecond)
+fmt.Printf("Pool Hit Rate: %.2f%%\n", (1-stats.PoolMissRate)*100)
+```
+
+#### Function: `LogStats`
+
+Returns current statistics (alias for GetStats, useful for logging).
+
+```go
+func LogStats() Stats
+```
+
+**Returns:**
+- `Stats`: Current performance statistics
+
+**Example:**
+```go
+stats := metrics.LogStats()
+log.Printf("Metrics: %+v", stats)
+```
+
+#### Function: `Reset`
+
+Clears all metrics (useful for testing).
+
+```go
+func Reset()
+```
+
+**Example:**
+```go
+// Reset metrics to zero
+metrics.Reset()
+```
+
+### Usage Examples
+
+#### Basic Metrics Collection
+
+```go
+package main
+
+import (
+    "fmt"
+    "time"
+
+    "github.com/ajitpratap0/GoSQLX/pkg/metrics"
+    "github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
+)
+
+func main() {
+    // Enable metrics collection
+    metrics.Enable()
+    defer metrics.Disable()
+
+    // Process SQL queries
+    tkz := tokenizer.GetTokenizer()
+    defer tokenizer.PutTokenizer(tkz)
+
+    sql := "SELECT * FROM users WHERE active = true"
+    tokens, err := tkz.Tokenize([]byte(sql))
+
+    // Metrics are automatically recorded by tokenizer
+    // Get current statistics
+    stats := metrics.GetStats()
+    fmt.Printf("Processed %d operations\n", stats.TokenizeOperations)
+    fmt.Printf("Average duration: %v\n", stats.AverageDuration)
+    fmt.Printf("Throughput: %.2f ops/sec\n", stats.OperationsPerSecond)
+}
+```
+
+#### Production Monitoring
+
+```go
+func MonitorPerformance() {
+    metrics.Enable()
+
+    // Start metrics reporter
+    ticker := time.NewTicker(1 * time.Minute)
+    defer ticker.Stop()
+
+    go func() {
+        for range ticker.C {
+            stats := metrics.GetStats()
+
+            log.WithFields(log.Fields{
+                "operations":      stats.TokenizeOperations,
+                "errors":          stats.TokenizeErrors,
+                "error_rate":      stats.ErrorRate,
+                "avg_duration_us": stats.AverageDuration.Microseconds(),
+                "ops_per_sec":     stats.OperationsPerSecond,
+                "pool_hit_rate":   1 - stats.PoolMissRate,
+                "avg_query_size":  stats.AverageQuerySize,
+                "uptime":          stats.Uptime,
+            }).Info("GoSQLX metrics")
+        }
+    }()
+}
+```
+
+#### Error Tracking
+
+```go
+func AnalyzeErrors() {
+    stats := metrics.GetStats()
+
+    fmt.Printf("Total Errors: %d (%.2f%%)\n",
+        stats.TokenizeErrors, stats.ErrorRate*100)
+
+    fmt.Println("\nError Breakdown:")
+    for errorType, count := range stats.ErrorsByType {
+        percentage := float64(count) / float64(stats.TokenizeOperations) * 100
+        fmt.Printf("  %s: %d (%.2f%%)\n", errorType, count, percentage)
+    }
+}
+```
+
+#### Pool Efficiency Monitoring
+
+```go
+func MonitorPoolEfficiency() {
+    stats := metrics.GetStats()
+
+    poolHitRate := (1 - stats.PoolMissRate) * 100
+    fmt.Printf("Pool Statistics:\n")
+    fmt.Printf("  Gets: %d\n", stats.PoolGets)
+    fmt.Printf("  Puts: %d\n", stats.PoolPuts)
+    fmt.Printf("  Balance: %d\n", stats.PoolBalance)
+    fmt.Printf("  Hit Rate: %.2f%%\n", poolHitRate)
+    fmt.Printf("  Miss Rate: %.2f%%\n", stats.PoolMissRate*100)
+
+    if poolHitRate < 90 {
+        log.Warn("Pool hit rate is below 90% - consider tuning pool size")
+    }
+}
+```
+
+#### Query Size Analysis
+
+```go
+func AnalyzeQuerySizes() {
+    stats := metrics.GetStats()
+
+    fmt.Printf("Query Size Statistics:\n")
+    fmt.Printf("  Min: %d bytes\n", stats.MinQuerySize)
+    fmt.Printf("  Max: %d bytes\n", stats.MaxQuerySize)
+    fmt.Printf("  Average: %.2f bytes\n", stats.AverageQuerySize)
+    fmt.Printf("  Total Processed: %d bytes (%.2f MB)\n",
+        stats.TotalBytesProcessed,
+        float64(stats.TotalBytesProcessed)/(1024*1024))
+
+    // Detect potential issues
+    if stats.MaxQuerySize > 1024*1024 {  // > 1MB
+        log.Warn("Large query detected - consider query optimization")
+    }
+}
+```
+
+#### JSON Export
+
+```go
+func ExportMetricsJSON() ([]byte, error) {
+    stats := metrics.GetStats()
+    return json.MarshalIndent(stats, "", "  ")
+}
+
+func main() {
+    metrics.Enable()
+    // ... process queries
+
+    // Export metrics as JSON
+    jsonData, err := ExportMetricsJSON()
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    fmt.Println(string(jsonData))
+    // Output:
+    // {
+    //   "tokenize_operations": 1000,
+    //   "tokenize_errors": 5,
+    //   "error_rate": 0.005,
+    //   "average_duration": "150µs",
+    //   "operations_per_second": 6666.67,
+    //   ...
+    // }
+}
+```
+
+#### HTTP Metrics Endpoint
+
+```go
+func SetupMetricsEndpoint() {
+    http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+        stats := metrics.GetStats()
+
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(stats)
+    })
+
+    http.ListenAndServe(":8080", nil)
+}
+```
+
+#### Prometheus Integration
+
+```go
+import (
+    "github.com/prometheus/client_golang/prometheus"
+    "github.com/prometheus/client_golang/prometheus/promauto"
+)
+
+var (
+    opsProcessed = promauto.NewCounter(prometheus.CounterOpts{
+        Name: "gosqlx_tokenize_operations_total",
+        Help: "Total number of tokenization operations",
+    })
+
+    opsErrors = promauto.NewCounter(prometheus.CounterOpts{
+        Name: "gosqlx_tokenize_errors_total",
+        Help: "Total number of tokenization errors",
+    })
+
+    avgDuration = promauto.NewGauge(prometheus.GaugeOpts{
+        Name: "gosqlx_tokenize_duration_microseconds",
+        Help: "Average tokenization duration in microseconds",
+    })
+)
+
+func UpdatePrometheusMetrics() {
+    ticker := time.NewTicker(10 * time.Second)
+    defer ticker.Stop()
+
+    for range ticker.C {
+        stats := metrics.GetStats()
+
+        opsProcessed.Add(float64(stats.TokenizeOperations))
+        opsErrors.Add(float64(stats.TokenizeErrors))
+        avgDuration.Set(float64(stats.AverageDuration.Microseconds()))
+    }
+}
+```
+
+#### Performance Alerting
+
+```go
+func MonitorWithAlerting() {
+    ticker := time.NewTicker(1 * time.Minute)
+    defer ticker.Stop()
+
+    for range ticker.C {
+        stats := metrics.GetStats()
+
+        // Alert on high error rate
+        if stats.ErrorRate > 0.01 {  // > 1%
+            alert("High error rate: %.2f%%", stats.ErrorRate*100)
+        }
+
+        // Alert on slow performance
+        if stats.AverageDuration > 1*time.Millisecond {
+            alert("Slow tokenization: %v", stats.AverageDuration)
+        }
+
+        // Alert on low pool efficiency
+        if stats.PoolMissRate > 0.1 {  // > 10%
+            alert("Low pool hit rate: %.2f%%", (1-stats.PoolMissRate)*100)
+        }
+
+        // Alert on low throughput
+        if stats.OperationsPerSecond < 1000 {
+            alert("Low throughput: %.2f ops/sec", stats.OperationsPerSecond)
+        }
+    }
+}
+
+func alert(format string, args ...interface{}) {
+    msg := fmt.Sprintf(format, args...)
+    log.Warn(msg)
+    // Send to alerting system (PagerDuty, Slack, etc.)
+}
+```
+
+### Integration Patterns
+
+#### Pattern 1: Application Startup
+
+```go
+func main() {
+    // Enable metrics at startup
+    metrics.Enable()
+    defer func() {
+        // Log final stats before shutdown
+        stats := metrics.GetStats()
+        log.Printf("Final metrics: %+v", stats)
+        metrics.Disable()
+    }()
+
+    // Run application
+    // ...
+}
+```
+
+#### Pattern 2: Periodic Reporting
+
+```go
+func StartMetricsReporter(interval time.Duration) {
+    ticker := time.NewTicker(interval)
+    defer ticker.Stop()
+
+    for range ticker.C {
+        stats := metrics.GetStats()
+        reportMetrics(stats)
+    }
+}
+
+func reportMetrics(stats metrics.Stats) {
+    log.Printf("Operations: %d, Errors: %d (%.2f%%), Throughput: %.2f ops/sec",
+        stats.TokenizeOperations,
+        stats.TokenizeErrors,
+        stats.ErrorRate*100,
+        stats.OperationsPerSecond)
+}
+```
+
+#### Pattern 3: Testing with Metrics
+
+```go
+func TestTokenizerPerformance(t *testing.T) {
+    // Reset metrics before test
+    metrics.Reset()
+    metrics.Enable()
+    defer metrics.Disable()
+
+    // Run test operations
+    for i := 0; i < 1000; i++ {
+        tkz := tokenizer.GetTokenizer()
+        tkz.Tokenize([]byte("SELECT * FROM users"))
+        tokenizer.PutTokenizer(tkz)
+    }
+
+    // Verify metrics
+    stats := metrics.GetStats()
+    assert.Equal(t, int64(1000), stats.TokenizeOperations)
+    assert.Equal(t, int64(0), stats.TokenizeErrors)
+    assert.Less(t, stats.AverageDuration, 100*time.Microsecond)
+    assert.Greater(t, stats.PoolMissRate, 0.0)
+}
+```
+
+### Performance Characteristics
+
+**Thread Safety:**
+- All counter operations use atomic operations (lock-free)
+- Error type tracking uses RWMutex for infrequent writes
+- Safe for concurrent access from multiple goroutines
+
+**Memory Overhead:**
+- Fixed memory footprint (~200 bytes + error map)
+- No allocations during metric recording
+- Error map grows with unique error types (bounded by error variety)
+
+**Performance Impact:**
+- **Enabled**: ~50ns per RecordTokenization call (negligible)
+- **Disabled**: ~1ns per call (just enabled check)
+- **GetStats**: O(n) where n = number of unique error types (typically < 10)
+
+### Best Practices
+
+#### 1. Enable Early, Disable Late
+
+```go
+// GOOD: Enable at application startup
+func main() {
+    metrics.Enable()
+    defer metrics.Disable()
+    // ... application logic
+}
+
+// BAD: Enabling/disabling frequently
+func processQuery(sql string) {
+    metrics.Enable()   // Don't do this repeatedly
+    // ...
+    metrics.Disable()
+}
+```
+
+#### 2. Use Periodic Reporting
+
+```go
+// GOOD: Periodic reporting (low overhead)
+func StartReporting() {
+    ticker := time.NewTicker(1 * time.Minute)
+    go func() {
+        for range ticker.C {
+            stats := metrics.GetStats()
+            reportToMonitoring(stats)
+        }
+    }()
+}
+
+// BAD: Report after every operation (high overhead)
+func processQuery(sql string) {
+    // ... process
+    stats := metrics.GetStats()  // Don't do this after every query
+    reportToMonitoring(stats)
+}
+```
+
+#### 3. Monitor Pool Efficiency
+
+```go
+// Pool hit rate should be > 95% in production
+stats := metrics.GetStats()
+if stats.PoolMissRate > 0.05 {  // > 5% miss rate
+    log.Warn("Pool efficiency is low - consider increasing pool size")
+}
+```
+
+#### 4. Set Performance SLOs
+
+```go
+// Define Service Level Objectives
+const (
+    MaxErrorRate         = 0.01   // 1%
+    MinOpsPerSecond     = 1000.0  // 1k ops/sec
+    MaxAvgDuration      = 1 * time.Millisecond
+    MinPoolHitRate      = 0.95    // 95%
+)
+
+func CheckSLOs() bool {
+    stats := metrics.GetStats()
+
+    if stats.ErrorRate > MaxErrorRate {
+        return false
+    }
+    if stats.OperationsPerSecond < MinOpsPerSecond {
+        return false
+    }
+    if stats.AverageDuration > MaxAvgDuration {
+        return false
+    }
+    if (1 - stats.PoolMissRate) < MinPoolHitRate {
+        return false
+    }
+
+    return true
+}
+```
+
+### Metrics Dashboard Example
+
+```go
+func PrintMetricsDashboard() {
+    stats := metrics.GetStats()
+
+    fmt.Println("╔════════════════════════════════════════════════════════╗")
+    fmt.Println("║          GoSQLX Performance Metrics                    ║")
+    fmt.Println("╠════════════════════════════════════════════════════════╣")
+    fmt.Printf("║ Operations:       %10d                          ║\n", stats.TokenizeOperations)
+    fmt.Printf("║ Errors:           %10d (%.2f%%)                  ║\n",
+        stats.TokenizeErrors, stats.ErrorRate*100)
+    fmt.Printf("║ Avg Duration:     %10v                         ║\n", stats.AverageDuration)
+    fmt.Printf("║ Throughput:       %10.2f ops/sec               ║\n", stats.OperationsPerSecond)
+    fmt.Println("╠════════════════════════════════════════════════════════╣")
+    fmt.Printf("║ Pool Gets:        %10d                          ║\n", stats.PoolGets)
+    fmt.Printf("║ Pool Puts:        %10d                          ║\n", stats.PoolPuts)
+    fmt.Printf("║ Pool Hit Rate:    %10.2f%%                      ║\n", (1-stats.PoolMissRate)*100)
+    fmt.Println("╠════════════════════════════════════════════════════════╣")
+    fmt.Printf("║ Avg Query Size:   %10.2f bytes                 ║\n", stats.AverageQuerySize)
+    fmt.Printf("║ Min Query Size:   %10d bytes                   ║\n", stats.MinQuerySize)
+    fmt.Printf("║ Max Query Size:   %10d bytes                   ║\n", stats.MaxQuerySize)
+    fmt.Printf("║ Total Processed:  %10.2f MB                    ║\n",
+        float64(stats.TotalBytesProcessed)/(1024*1024))
+    fmt.Println("╠════════════════════════════════════════════════════════╣")
+    fmt.Printf("║ Uptime:           %10v                         ║\n", stats.Uptime)
+    fmt.Println("╚════════════════════════════════════════════════════════╝")
+}
+```

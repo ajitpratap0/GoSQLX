@@ -309,20 +309,56 @@ func (e ExistsExpression) Children() []Node {
 	return []Node{e.Subquery}
 }
 
-// InExpression represents expr IN (values)
+// InExpression represents expr IN (values) or expr IN (subquery)
 type InExpression struct {
-	Expr Expression
-	List []Expression
-	Not  bool
+	Expr     Expression
+	List     []Expression // For value list: IN (1, 2, 3)
+	Subquery Statement    // For subquery: IN (SELECT ...)
+	Not      bool
 }
 
 func (i *InExpression) expressionNode()     {}
 func (i InExpression) TokenLiteral() string { return "IN" }
 func (i InExpression) Children() []Node {
 	children := []Node{i.Expr}
-	children = append(children, nodifyExpressions(i.List)...)
+	if i.Subquery != nil {
+		children = append(children, i.Subquery)
+	} else {
+		children = append(children, nodifyExpressions(i.List)...)
+	}
 	return children
 }
+
+// SubqueryExpression represents a scalar subquery (SELECT ...)
+type SubqueryExpression struct {
+	Subquery Statement
+}
+
+func (s *SubqueryExpression) expressionNode()     {}
+func (s SubqueryExpression) TokenLiteral() string { return "SUBQUERY" }
+func (s SubqueryExpression) Children() []Node     { return []Node{s.Subquery} }
+
+// AnyExpression represents expr op ANY (subquery)
+type AnyExpression struct {
+	Expr     Expression
+	Operator string
+	Subquery Statement
+}
+
+func (a *AnyExpression) expressionNode()     {}
+func (a AnyExpression) TokenLiteral() string { return "ANY" }
+func (a AnyExpression) Children() []Node     { return []Node{a.Expr, a.Subquery} }
+
+// AllExpression represents expr op ALL (subquery)
+type AllExpression struct {
+	Expr     Expression
+	Operator string
+	Subquery Statement
+}
+
+func (al *AllExpression) expressionNode()     {}
+func (al AllExpression) TokenLiteral() string { return "ALL" }
+func (al AllExpression) Children() []Node     { return []Node{al.Expr, al.Subquery} }
 
 // BetweenExpression represents expr BETWEEN lower AND upper
 type BetweenExpression struct {

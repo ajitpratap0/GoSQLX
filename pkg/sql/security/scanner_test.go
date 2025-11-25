@@ -17,9 +17,22 @@ func TestNewScanner(t *testing.T) {
 }
 
 func TestNewScannerWithSeverity(t *testing.T) {
-	scanner := NewScannerWithSeverity(SeverityHigh)
+	scanner, err := NewScannerWithSeverity(SeverityHigh)
+	if err != nil {
+		t.Fatalf("NewScannerWithSeverity returned error: %v", err)
+	}
 	if scanner.MinSeverity != SeverityHigh {
 		t.Errorf("expected MinSeverity to be SeverityHigh, got %v", scanner.MinSeverity)
+	}
+}
+
+func TestNewScannerWithSeverity_InvalidSeverity(t *testing.T) {
+	scanner, err := NewScannerWithSeverity(Severity("INVALID"))
+	if err == nil {
+		t.Error("expected error for invalid severity, got nil")
+	}
+	if scanner != nil {
+		t.Error("expected nil scanner for invalid severity")
 	}
 }
 
@@ -385,7 +398,10 @@ func TestScanSQL_OutOfBandPatterns(t *testing.T) {
 
 func TestSeverityFiltering(t *testing.T) {
 	// Create scanner that only includes HIGH and above
-	scanner := NewScannerWithSeverity(SeverityHigh)
+	scanner, err := NewScannerWithSeverity(SeverityHigh)
+	if err != nil {
+		t.Fatalf("NewScannerWithSeverity returned error: %v", err)
+	}
 
 	// SQL comment is typically MEDIUM severity
 	result := scanner.ScanSQL("SELECT * FROM users /* comment */")
@@ -571,5 +587,65 @@ func BenchmarkScanSQL(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		scanner.ScanSQL(sql)
+	}
+}
+
+func TestIsSystemTable(t *testing.T) {
+	scanner := NewScanner()
+
+	// Test cases for system table detection
+	tests := []struct {
+		tableName string
+		isSystem  bool
+		desc      string
+	}{
+		// Exact matches
+		{"information_schema", true, "exact information_schema"},
+		{"INFORMATION_SCHEMA", true, "case-insensitive information_schema"},
+		{"pg_catalog", true, "exact pg_catalog"},
+		{"sys", true, "exact sys"},
+
+		// Prefix matches
+		{"information_schema.tables", true, "information_schema prefix"},
+		{"mysql.user", true, "mysql prefix"},
+		{"pg_class", true, "pg_ prefix"},
+		{"sys.tables", true, "sys. prefix"},
+		{"sqlite_master", true, "sqlite_ prefix"},
+		{"master.dbo.sysobjects", true, "SQL Server master.dbo prefix"},
+
+		// False positives that should NOT match
+		{"users", false, "regular table"},
+		{"mysystem", false, "table starting with 'my' should not match mysql"},
+		{"system_logs", false, "table containing 'system' should not match"},
+		{"postgresql_data", false, "table containing 'postgresql' should not match"},
+		{"syslog", false, "table starting with 'sys' (no dot) should not match"},
+		{"customer_info", false, "table with 'info' should not match information_schema"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			result := scanner.isSystemTable(tc.tableName)
+			if result != tc.isSystem {
+				t.Errorf("isSystemTable(%q) = %v, want %v", tc.tableName, result, tc.isSystem)
+			}
+		})
+	}
+}
+
+func TestShouldInclude_UnknownSeverity(t *testing.T) {
+	scanner := NewScanner()
+
+	// Unknown severity should always be included (fail-safe)
+	if !scanner.shouldInclude(Severity("UNKNOWN")) {
+		t.Error("unknown severity should be included (fail-safe behavior)")
+	}
+
+	// Valid severities should still work correctly
+	scanner.MinSeverity = SeverityHigh
+	if scanner.shouldInclude(SeverityLow) {
+		t.Error("LOW should not be included when MinSeverity is HIGH")
+	}
+	if !scanner.shouldInclude(SeverityCritical) {
+		t.Error("CRITICAL should be included when MinSeverity is HIGH")
 	}
 }

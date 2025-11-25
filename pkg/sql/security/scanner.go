@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
@@ -40,6 +41,98 @@ const (
 	// SeverityLow indicates informational findings
 	SeverityLow Severity = "LOW"
 )
+
+// severityOrder maps severity levels to numeric values for comparison.
+// Unknown severities default to highest priority (included in all scans).
+var severityOrder = map[Severity]int{
+	SeverityLow:      0,
+	SeverityMedium:   1,
+	SeverityHigh:     2,
+	SeverityCritical: 3,
+}
+
+// Pre-compiled regex patterns for performance (compiled once at package init)
+var (
+	compiledPatterns     map[PatternType][]*regexp.Regexp
+	compiledPatternsOnce sync.Once
+
+	// Comment detection patterns (pre-compiled)
+	commentPatterns []struct {
+		re          *regexp.Regexp
+		description string
+		severity    Severity
+	}
+	commentPatternsOnce sync.Once
+)
+
+// initCompiledPatterns initializes all regex patterns once at package level.
+func initCompiledPatterns() {
+	compiledPatterns = make(map[PatternType][]*regexp.Regexp)
+
+	// Time-based blind injection functions
+	compiledPatterns[PatternTimeBased] = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)\bSLEEP\s*\(`),
+		regexp.MustCompile(`(?i)\bWAITFOR\s+DELAY\b`),
+		regexp.MustCompile(`(?i)\bpg_sleep\s*\(`),
+		regexp.MustCompile(`(?i)\bBENCHMARK\s*\(`),
+		regexp.MustCompile(`(?i)\bDBMS_LOCK\.SLEEP\s*\(`),
+	}
+
+	// Out-of-band / dangerous functions
+	compiledPatterns[PatternOutOfBand] = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)\bxp_cmdshell\b`),
+		regexp.MustCompile(`(?i)\bLOAD_FILE\s*\(`),
+		regexp.MustCompile(`(?i)\bINTO\s+OUTFILE\b`),
+		regexp.MustCompile(`(?i)\bINTO\s+DUMPFILE\b`),
+		regexp.MustCompile(`(?i)\bUTL_HTTP\b`),
+		regexp.MustCompile(`(?i)\bDBMS_LDAP\b`),
+		regexp.MustCompile(`(?i)\bEXEC\s+master\b`),
+		regexp.MustCompile(`(?i)\bsp_oacreate\b`),
+	}
+
+	// Dangerous functions that might indicate injection
+	compiledPatterns[PatternDangerousFunc] = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)\bEXEC\s*\(`),
+		regexp.MustCompile(`(?i)\bEXECUTE\s+IMMEDIATE\b`),
+		regexp.MustCompile(`(?i)\bsp_executesql\b`),
+		regexp.MustCompile(`(?i)\bPREPARE\s+\w+\s+FROM\b`),
+	}
+}
+
+// initCommentPatterns initializes comment detection patterns once.
+func initCommentPatterns() {
+	commentPatterns = []struct {
+		re          *regexp.Regexp
+		description string
+		severity    Severity
+	}{
+		{regexp.MustCompile(`--\s*$`), "Single-line comment at end of input", SeverityMedium},
+		{regexp.MustCompile(`--\s*['")\]]`), "Comment after quote/bracket (potential bypass)", SeverityHigh},
+		{regexp.MustCompile(`/\*.*\*/`), "Block comment (potential bypass)", SeverityLow},
+		{regexp.MustCompile(`/\*!.*\*/`), "MySQL conditional comment", SeverityMedium},
+		{regexp.MustCompile(`#\s*$`), "Hash comment at end (MySQL)", SeverityMedium},
+	}
+}
+
+// System table prefixes for precise matching (avoids false positives)
+var systemTablePrefixes = []string{
+	"information_schema.",
+	"sys.",
+	"mysql.",
+	"pg_catalog.",
+	"pg_",
+	"sqlite_",
+	"master.dbo.",
+	"msdb.",
+	"tempdb.",
+}
+
+// Exact system table names
+var systemTableNames = []string{
+	"information_schema",
+	"pg_catalog",
+	"sys",
+}
 
 // PatternType categorizes the type of injection pattern detected.
 type PatternType string
@@ -81,57 +174,36 @@ type ScanResult struct {
 type Scanner struct {
 	// MinSeverity filters findings below this severity level
 	MinSeverity Severity
-	// patterns holds compiled regex patterns
-	patterns map[PatternType][]*regexp.Regexp
 }
 
 // NewScanner creates a new security scanner with default settings.
 func NewScanner() *Scanner {
-	s := &Scanner{
+	// Initialize package-level patterns once
+	compiledPatternsOnce.Do(initCompiledPatterns)
+	commentPatternsOnce.Do(initCommentPatterns)
+
+	return &Scanner{
 		MinSeverity: SeverityLow,
-		patterns:    make(map[PatternType][]*regexp.Regexp),
 	}
-	s.initPatterns()
-	return s
 }
 
 // NewScannerWithSeverity creates a scanner filtering by minimum severity.
-func NewScannerWithSeverity(minSeverity Severity) *Scanner {
+// Returns an error if the severity is not valid.
+func NewScannerWithSeverity(minSeverity Severity) (*Scanner, error) {
+	// Validate severity
+	if !isValidSeverity(minSeverity) {
+		return nil, fmt.Errorf("invalid severity level: %s", minSeverity)
+	}
+
 	s := NewScanner()
 	s.MinSeverity = minSeverity
-	return s
+	return s, nil
 }
 
-// initPatterns compiles all regex patterns used for detection.
-func (s *Scanner) initPatterns() {
-	// Time-based blind injection functions
-	s.patterns[PatternTimeBased] = []*regexp.Regexp{
-		regexp.MustCompile(`(?i)\bSLEEP\s*\(`),
-		regexp.MustCompile(`(?i)\bWAITFOR\s+DELAY\b`),
-		regexp.MustCompile(`(?i)\bpg_sleep\s*\(`),
-		regexp.MustCompile(`(?i)\bBENCHMARK\s*\(`),
-		regexp.MustCompile(`(?i)\bDBMS_LOCK\.SLEEP\s*\(`),
-	}
-
-	// Out-of-band / dangerous functions
-	s.patterns[PatternOutOfBand] = []*regexp.Regexp{
-		regexp.MustCompile(`(?i)\bxp_cmdshell\b`),
-		regexp.MustCompile(`(?i)\bLOAD_FILE\s*\(`),
-		regexp.MustCompile(`(?i)\bINTO\s+OUTFILE\b`),
-		regexp.MustCompile(`(?i)\bINTO\s+DUMPFILE\b`),
-		regexp.MustCompile(`(?i)\bUTL_HTTP\b`),
-		regexp.MustCompile(`(?i)\bDBMS_LDAP\b`),
-		regexp.MustCompile(`(?i)\bEXEC\s+master\b`),
-		regexp.MustCompile(`(?i)\bsp_oacreate\b`),
-	}
-
-	// Dangerous functions that might indicate injection
-	s.patterns[PatternDangerousFunc] = []*regexp.Regexp{
-		regexp.MustCompile(`(?i)\bEXEC\s*\(`),
-		regexp.MustCompile(`(?i)\bEXECUTE\s+IMMEDIATE\b`),
-		regexp.MustCompile(`(?i)\bsp_executesql\b`),
-		regexp.MustCompile(`(?i)\bPREPARE\s+\w+\s+FROM\b`),
-	}
+// isValidSeverity checks if a severity level is recognized.
+func isValidSeverity(severity Severity) bool {
+	_, exists := severityOrder[severity]
+	return exists
 }
 
 // Scan analyzes an AST for SQL injection patterns.
@@ -412,13 +484,9 @@ func (s *Scanner) checkUnionInjection(stmt *ast.SetOperation, result *ScanResult
 			}
 		}
 
-		// Check for information_schema access
+		// Check for system table access using precise matching
 		if rightSelect.TableName != "" {
-			tableLower := strings.ToLower(rightSelect.TableName)
-			if strings.Contains(tableLower, "information_schema") ||
-				strings.Contains(tableLower, "sys.") ||
-				strings.Contains(tableLower, "mysql.") ||
-				strings.Contains(tableLower, "pg_catalog") {
+			if s.isSystemTable(rightSelect.TableName) {
 				finding := Finding{
 					Severity:    SeverityCritical,
 					Pattern:     PatternUnionBased,
@@ -432,6 +500,28 @@ func (s *Scanner) checkUnionInjection(stmt *ast.SetOperation, result *ScanResult
 			}
 		}
 	}
+}
+
+// isSystemTable checks if a table name refers to a system table using precise matching.
+// Uses prefix matching and exact name matching to avoid false positives.
+func (s *Scanner) isSystemTable(tableName string) bool {
+	tableLower := strings.ToLower(tableName)
+
+	// Check exact matches first
+	for _, name := range systemTableNames {
+		if tableLower == name {
+			return true
+		}
+	}
+
+	// Check prefix matches (e.g., "information_schema.tables", "pg_class")
+	for _, prefix := range systemTablePrefixes {
+		if strings.HasPrefix(tableLower, prefix) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // scanFunctionCall checks for dangerous function usage.
@@ -513,22 +603,11 @@ func (s *Scanner) scanExpressionForDangerousFunctions(expr ast.Expression, resul
 
 // detectCommentPatterns checks raw SQL for comment-based injection.
 func (s *Scanner) detectCommentPatterns(sql string, result *ScanResult) {
-	// SQL comment patterns that might indicate bypass attempts
-	patterns := []struct {
-		pattern     string
-		description string
-		severity    Severity
-	}{
-		{`--\s*$`, "Single-line comment at end of input", SeverityMedium},
-		{`--\s*['")\]]`, "Comment after quote/bracket (potential bypass)", SeverityHigh},
-		{`/\*.*\*/`, "Block comment (potential bypass)", SeverityLow},
-		{`/\*!.*\*/`, "MySQL conditional comment", SeverityMedium},
-		{`#\s*$`, "Hash comment at end (MySQL)", SeverityMedium},
-	}
+	// Ensure patterns are initialized
+	commentPatternsOnce.Do(initCommentPatterns)
 
-	for _, p := range patterns {
-		re := regexp.MustCompile(p.pattern)
-		if re.MatchString(sql) {
+	for _, p := range commentPatterns {
+		if p.re.MatchString(sql) {
 			finding := Finding{
 				Severity:    p.severity,
 				Pattern:     PatternComment,
@@ -545,7 +624,10 @@ func (s *Scanner) detectCommentPatterns(sql string, result *ScanResult) {
 
 // detectRegexPatterns checks SQL against compiled regex patterns.
 func (s *Scanner) detectRegexPatterns(sql string, patternType PatternType, result *ScanResult) {
-	patterns, ok := s.patterns[patternType]
+	// Ensure patterns are initialized
+	compiledPatternsOnce.Do(initCompiledPatterns)
+
+	patterns, ok := compiledPatterns[patternType]
 	if !ok {
 		return
 	}
@@ -582,15 +664,22 @@ func (s *Scanner) detectRegexPatterns(sql string, patternType PatternType, resul
 }
 
 // shouldInclude checks if a finding meets the minimum severity threshold.
+// Unknown severities are treated as highest priority (always included) for security.
 func (s *Scanner) shouldInclude(severity Severity) bool {
-	severityOrder := map[Severity]int{
-		SeverityLow:      0,
-		SeverityMedium:   1,
-		SeverityHigh:     2,
-		SeverityCritical: 3,
+	findingSeverity, findingExists := severityOrder[severity]
+	minSeverity, minExists := severityOrder[s.MinSeverity]
+
+	// Unknown severities are always included (fail-safe: don't hide potential issues)
+	if !findingExists {
+		return true
 	}
 
-	return severityOrder[severity] >= severityOrder[s.MinSeverity]
+	// If minimum severity is unknown, default to showing all
+	if !minExists {
+		return true
+	}
+
+	return findingSeverity >= minSeverity
 }
 
 // updateCounts updates the count fields in the result.

@@ -230,6 +230,49 @@ func nodifyExpressions(exprs []Expression) []Node {
 	return nodes
 }
 
+// RollupExpression represents ROLLUP(col1, col2, ...) in GROUP BY clause
+// ROLLUP generates hierarchical grouping sets from right to left
+// Example: ROLLUP(a, b, c) generates grouping sets:
+//
+//	(a, b, c), (a, b), (a), ()
+type RollupExpression struct {
+	Expressions []Expression
+}
+
+func (r *RollupExpression) expressionNode()     {}
+func (r RollupExpression) TokenLiteral() string { return "ROLLUP" }
+func (r RollupExpression) Children() []Node     { return nodifyExpressions(r.Expressions) }
+
+// CubeExpression represents CUBE(col1, col2, ...) in GROUP BY clause
+// CUBE generates all possible combinations of grouping sets
+// Example: CUBE(a, b) generates grouping sets:
+//
+//	(a, b), (a), (b), ()
+type CubeExpression struct {
+	Expressions []Expression
+}
+
+func (c *CubeExpression) expressionNode()     {}
+func (c CubeExpression) TokenLiteral() string { return "CUBE" }
+func (c CubeExpression) Children() []Node     { return nodifyExpressions(c.Expressions) }
+
+// GroupingSetsExpression represents GROUPING SETS(...) in GROUP BY clause
+// Allows explicit specification of grouping sets
+// Example: GROUPING SETS((a, b), (a), ())
+type GroupingSetsExpression struct {
+	Sets [][]Expression // Each inner slice is one grouping set
+}
+
+func (g *GroupingSetsExpression) expressionNode()     {}
+func (g GroupingSetsExpression) TokenLiteral() string { return "GROUPING SETS" }
+func (g GroupingSetsExpression) Children() []Node {
+	children := make([]Node, 0)
+	for _, set := range g.Sets {
+		children = append(children, nodifyExpressions(set)...)
+	}
+	return children
+}
+
 // Identifier represents a column or table name
 type Identifier struct {
 	Name  string

@@ -74,6 +74,11 @@ var keywordTokenTypes = map[string]models.TokenType{
 	"AVG":       models.TokenTypeAvg,
 	"MIN":       models.TokenTypeMin,
 	"MAX":       models.TokenTypeMax,
+	// SQL-99 grouping operations
+	"ROLLUP":   models.TokenTypeKeyword,
+	"CUBE":     models.TokenTypeKeyword,
+	"GROUPING": models.TokenTypeKeyword,
+	"SETS":     models.TokenTypeKeyword,
 }
 
 // Tokenizer provides high-performance SQL tokenization with zero-copy operations
@@ -489,15 +494,16 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 
 // compoundKeywordStarts is a set of keywords that can start compound keywords
 var compoundKeywordStarts = map[string]bool{
-	"GROUP":   true,
-	"ORDER":   true,
-	"LEFT":    true,
-	"RIGHT":   true,
-	"INNER":   true,
-	"OUTER":   true,
-	"CROSS":   true,
-	"NATURAL": true,
-	"FULL":    true,
+	"GROUP":    true,
+	"ORDER":    true,
+	"LEFT":     true,
+	"RIGHT":    true,
+	"INNER":    true,
+	"OUTER":    true,
+	"CROSS":    true,
+	"NATURAL":  true,
+	"FULL":     true,
+	"GROUPING": true, // For GROUPING SETS
 }
 
 // compoundKeywordTypes maps compound SQL keywords to their token types
@@ -513,6 +519,7 @@ var compoundKeywordTypes = map[string]models.TokenType{
 	"LEFT OUTER JOIN":  models.TokenTypeKeyword,
 	"RIGHT OUTER JOIN": models.TokenTypeKeyword,
 	"FULL OUTER JOIN":  models.TokenTypeKeyword,
+	"GROUPING SETS":    models.TokenTypeKeyword, // SQL-99 grouping operation
 }
 
 // Helper function to check if a word can start a compound keyword

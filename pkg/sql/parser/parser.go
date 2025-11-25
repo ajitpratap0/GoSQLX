@@ -1137,6 +1137,152 @@ func (p *Parser) parseNullsClause() (*bool, error) {
 	return nil, nil
 }
 
+// parseGroupingExpressionList parses a parenthesized, comma-separated list of expressions
+// used by ROLLUP and CUBE. Returns error if the list is empty.
+func (p *Parser) parseGroupingExpressionList(keyword string) ([]ast.Expression, error) {
+	if p.currentToken.Type != "(" {
+		return nil, p.expectedError("( after " + keyword)
+	}
+	p.advance() // Consume (
+
+	// Check for empty list - not allowed for ROLLUP/CUBE
+	if p.currentToken.Type == ")" {
+		return nil, fmt.Errorf("parsing failed: %s requires at least one expression", keyword)
+	}
+
+	// Parse comma-separated expressions
+	expressions := make([]ast.Expression, 0)
+	for {
+		expr, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+		expressions = append(expressions, expr)
+
+		// Check for comma (more expressions) or closing paren
+		if p.currentToken.Type == ")" {
+			break
+		}
+		if p.currentToken.Type != "," {
+			return nil, p.expectedError(", or ) in " + keyword)
+		}
+		p.advance() // Consume comma
+	}
+	p.advance() // Consume )
+
+	return expressions, nil
+}
+
+// parseRollup parses ROLLUP(col1, col2, ...) in GROUP BY clause
+// ROLLUP generates hierarchical grouping sets from right to left
+// Example: ROLLUP(a, b, c) generates: (a, b, c), (a, b), (a), ()
+func (p *Parser) parseRollup() (*ast.RollupExpression, error) {
+	p.advance() // Consume ROLLUP
+
+	expressions, err := p.parseGroupingExpressionList("ROLLUP")
+	if err != nil {
+		return nil, err
+	}
+
+	return &ast.RollupExpression{
+		Expressions: expressions,
+	}, nil
+}
+
+// parseCube parses CUBE(col1, col2, ...) in GROUP BY clause
+// CUBE generates all possible combinations of grouping sets
+// Example: CUBE(a, b) generates: (a, b), (a), (b), ()
+func (p *Parser) parseCube() (*ast.CubeExpression, error) {
+	p.advance() // Consume CUBE
+
+	expressions, err := p.parseGroupingExpressionList("CUBE")
+	if err != nil {
+		return nil, err
+	}
+
+	return &ast.CubeExpression{
+		Expressions: expressions,
+	}, nil
+}
+
+// parseGroupingSets parses GROUPING SETS(...) in GROUP BY clause
+// Allows explicit specification of grouping sets
+// Example: GROUPING SETS((a, b), (a), ()) generates exactly those three grouping sets
+func (p *Parser) parseGroupingSets() (*ast.GroupingSetsExpression, error) {
+	// Handle both "GROUPING SETS" as compound keyword or separate tokens
+	if p.currentToken.Literal == "GROUPING SETS" {
+		p.advance() // Consume "GROUPING SETS" compound token
+	} else if p.currentToken.Type == "GROUPING" {
+		p.advance() // Consume GROUPING
+		if p.currentToken.Type != "SETS" {
+			return nil, p.expectedError("SETS after GROUPING")
+		}
+		p.advance() // Consume SETS
+	}
+
+	if p.currentToken.Type != "(" {
+		return nil, p.expectedError("( after GROUPING SETS")
+	}
+	p.advance() // Consume (
+
+	// Parse comma-separated grouping sets
+	sets := make([][]ast.Expression, 0)
+	for {
+		// Each set is either:
+		// 1. A parenthesized list: (col1, col2)
+		// 2. An empty set: ()
+		// 3. A single column without parens: col1 (treated as (col1))
+
+		var set []ast.Expression
+		if p.currentToken.Type == "(" {
+			p.advance() // Consume (
+			// Parse expressions in this set
+			set = make([]ast.Expression, 0)
+			// Handle empty set: ()
+			if p.currentToken.Type != ")" {
+				for {
+					expr, err := p.parseExpression()
+					if err != nil {
+						return nil, err
+					}
+					set = append(set, expr)
+
+					if p.currentToken.Type == ")" {
+						break
+					}
+					if p.currentToken.Type != "," {
+						return nil, p.expectedError(", or ) in grouping set")
+					}
+					p.advance() // Consume comma
+				}
+			}
+			p.advance() // Consume )
+		} else {
+			// Single column without parens
+			expr, err := p.parseExpression()
+			if err != nil {
+				return nil, err
+			}
+			set = []ast.Expression{expr}
+		}
+		sets = append(sets, set)
+
+		// Check for comma (more sets) or closing paren
+		if p.currentToken.Type == ")" {
+			break
+		}
+		if p.currentToken.Type != "," {
+			return nil, p.expectedError(", or ) in GROUPING SETS")
+		}
+		p.advance() // Consume comma
+	}
+	p.advance() // Consume )
+
+	return &ast.GroupingSetsExpression{
+		Sets: sets,
+	}, nil
+}
+
 // parseColumnDef parses a column definition
 func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 	name := p.parseIdent()
@@ -1439,9 +1585,25 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		p.advance() // Consume BY
 
 		// Parse GROUP BY expressions (comma-separated list)
+		// Supports: regular expressions, ROLLUP, CUBE, GROUPING SETS
 		groupByExprs := make([]ast.Expression, 0)
 		for {
-			expr, err := p.parseExpression()
+			var expr ast.Expression
+			var err error
+
+			// Check for grouping operations: ROLLUP, CUBE, GROUPING SETS
+			// Note: GROUPING SETS may come as a compound keyword or separate tokens
+			if p.currentToken.Type == "ROLLUP" {
+				expr, err = p.parseRollup()
+			} else if p.currentToken.Type == "CUBE" {
+				expr, err = p.parseCube()
+			} else if p.currentToken.Literal == "GROUPING SETS" ||
+				(p.currentToken.Type == "GROUPING" && p.peekToken().Type == "SETS") {
+				expr, err = p.parseGroupingSets()
+			} else {
+				expr, err = p.parseExpression()
+			}
+
 			if err != nil {
 				return nil, err
 			}
@@ -1453,6 +1615,29 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			}
 			p.advance() // Consume comma
 		}
+
+		// MySQL syntax support: GROUP BY col1, col2 WITH ROLLUP / WITH CUBE
+		// This is different from SQL-99 GROUP BY ROLLUP(col1, col2)
+		if p.currentToken.Type == "WITH" {
+			nextTok := p.peekToken()
+			if nextTok.Type == "ROLLUP" {
+				p.advance() // Consume WITH
+				p.advance() // Consume ROLLUP
+				// Wrap all existing expressions in a RollupExpression
+				groupByExprs = []ast.Expression{
+					&ast.RollupExpression{Expressions: groupByExprs},
+				}
+			} else if nextTok.Type == "CUBE" {
+				p.advance() // Consume WITH
+				p.advance() // Consume CUBE
+				// Wrap all existing expressions in a CubeExpression
+				groupByExprs = []ast.Expression{
+					&ast.CubeExpression{Expressions: groupByExprs},
+				}
+			}
+			// Note: WITH not followed by ROLLUP/CUBE will be handled elsewhere (e.g., CTE)
+		}
+
 		selectStmt.GroupBy = groupByExprs
 	}
 

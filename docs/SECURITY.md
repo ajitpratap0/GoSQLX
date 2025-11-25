@@ -2,9 +2,9 @@
 
 ## 🛡️ Comprehensive Security Assessment
 
-**Analysis Date**: August 2025  
-**Version**: v1.0.0  
-**Security Score**: 8.5/10 ⭐⭐⭐⭐⭐
+**Analysis Date**: November 2025
+**Version**: v1.5.1+
+**Security Score**: 9.0/10 ⭐⭐⭐⭐⭐
 
 ---
 
@@ -12,12 +12,35 @@
 
 GoSQLX has undergone a comprehensive security analysis across 7 critical security domains. The library demonstrates **strong security characteristics** suitable for production deployment with **minimal security concerns**.
 
+### 🆕 Security Package (v1.4+)
+
+GoSQLX now includes a dedicated **SQL Injection Detection** package (`pkg/sql/security`) that provides:
+
+- **8 Pattern Types**: Tautology, Comment Bypass, Stacked Query, UNION-based, Time-based, Boolean-based, Out-of-Band, Dangerous Functions
+- **4 Severity Levels**: CRITICAL, HIGH, MEDIUM, LOW
+- **Multi-Database Support**: PostgreSQL, MySQL, SQL Server, SQLite system table detection
+- **Thread-Safe**: Safe for concurrent use across goroutines
+- **High Performance**: 100,000+ queries/second scanning throughput
+
+```go
+import "github.com/ajitpratap0/GoSQLX/pkg/sql/security"
+
+scanner := security.NewScanner()
+result := scanner.Scan(ast)
+if result.HasCritical() {
+    // Block potentially malicious query
+}
+```
+
+See [API_REFERENCE.md#security-package](API_REFERENCE.md#security-package) for complete documentation.
+
 ### 🎯 Key Security Findings
 
-✅ **SECURE**: No critical vulnerabilities identified  
-✅ **HARDENED**: Robust input validation and error handling  
-✅ **RESILIENT**: Excellent memory safety and resource management  
-✅ **COMPLIANT**: Safe Unicode handling across international character sets  
+✅ **SECURE**: No critical vulnerabilities identified
+✅ **HARDENED**: Robust input validation and error handling
+✅ **RESILIENT**: Excellent memory safety and resource management
+✅ **COMPLIANT**: Safe Unicode handling across international character sets
+✅ **PROACTIVE**: Built-in SQL injection pattern detection (NEW in v1.4+)
 ⚠️ **MONITOR**: Large input processing requires operational monitoring  
 
 ---

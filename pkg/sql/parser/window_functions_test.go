@@ -62,6 +62,16 @@ func convertTokensForWindowFunctions(tokens []models.TokenWithSpan) []token.Toke
 			tokenType = "AND"
 		case models.TokenTypeBetween:
 			tokenType = "BETWEEN"
+		case models.TokenTypeCase:
+			tokenType = "CASE"
+		case models.TokenTypeWhen:
+			tokenType = "WHEN"
+		case models.TokenTypeThen:
+			tokenType = "THEN"
+		case models.TokenTypeElse:
+			tokenType = "ELSE"
+		case models.TokenTypeEnd:
+			tokenType = "END"
 		case models.TokenTypeSum:
 			tokenType = "IDENT" // Treat SUM as identifier for function calls
 		case models.TokenTypeCount:

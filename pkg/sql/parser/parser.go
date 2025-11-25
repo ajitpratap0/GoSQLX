@@ -457,6 +457,10 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		p.advance()
 		return &ast.LiteralValue{Value: value, Type: "placeholder"}, nil
 
+	case "CASE":
+		// Handle CASE expressions (both simple and searched forms)
+		return p.parseCaseExpression()
+
 	default:
 		return nil, fmt.Errorf("unexpected token: %s", p.currentToken.Type)
 	}
@@ -531,6 +535,87 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 	}
 
 	return funcCall, nil
+}
+
+// parseCaseExpression parses a CASE expression (both simple and searched forms).
+//
+// Simple CASE:   CASE value WHEN match1 THEN result1 WHEN match2 THEN result2 ELSE default END
+// Searched CASE: CASE WHEN condition1 THEN result1 WHEN condition2 THEN result2 ELSE default END
+//
+// Examples:
+//
+//	CASE status WHEN 'active' THEN 1 WHEN 'inactive' THEN 0 ELSE -1 END
+//	CASE WHEN salary > 100000 THEN 'high' WHEN salary > 50000 THEN 'medium' ELSE 'low' END
+func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
+	// CASE token already consumed in parsePrimaryExpression
+	p.advance() // Consume CASE
+
+	caseExpr := &ast.CaseExpression{
+		WhenClauses: make([]ast.WhenClause, 0),
+	}
+
+	// Check if this is a simple CASE (has a value) or searched CASE (no value)
+	// If next token is not WHEN, it's a simple CASE with a value expression
+	if p.currentToken.Type != "WHEN" {
+		// Parse the value expression for simple CASE
+		value, err := p.parseExpression()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse CASE value: %w", err)
+		}
+		caseExpr.Value = value
+	}
+
+	// Parse WHEN clauses (at least one required)
+	if p.currentToken.Type != "WHEN" {
+		return nil, p.expectedError("WHEN in CASE expression")
+	}
+
+	for p.currentToken.Type == "WHEN" {
+		p.advance() // Consume WHEN
+
+		// Parse condition expression
+		condition, err := p.parseExpression()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse WHEN condition: %w", err)
+		}
+
+		// Expect THEN keyword
+		if p.currentToken.Type != "THEN" {
+			return nil, p.expectedError("THEN after WHEN condition")
+		}
+		p.advance() // Consume THEN
+
+		// Parse result expression
+		result, err := p.parseExpression()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse THEN result: %w", err)
+		}
+
+		// Add WHEN clause to the list
+		caseExpr.WhenClauses = append(caseExpr.WhenClauses, ast.WhenClause{
+			Condition: condition,
+			Result:    result,
+		})
+	}
+
+	// Parse optional ELSE clause
+	if p.currentToken.Type == "ELSE" {
+		p.advance() // Consume ELSE
+
+		elseExpr, err := p.parseExpression()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse ELSE expression: %w", err)
+		}
+		caseExpr.ElseClause = elseExpr
+	}
+
+	// Expect END keyword
+	if p.currentToken.Type != "END" {
+		return nil, p.expectedError("END to close CASE expression")
+	}
+	p.advance() // Consume END
+
+	return caseExpr, nil
 }
 
 // parseWindowSpec parses a window specification (PARTITION BY, ORDER BY, frame clause)

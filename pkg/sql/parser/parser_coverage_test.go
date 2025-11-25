@@ -797,7 +797,7 @@ func TestParser_TableDrivenComplexScenarios(t *testing.T) {
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
 			},
-			wantErr: true, // CASE expressions not yet supported
+			wantErr: false, // CASE expressions now supported
 		},
 		{
 			name: "DISTINCT with aggregate",

@@ -79,6 +79,20 @@ var keywordTokenTypes = map[string]models.TokenType{
 	"CUBE":     models.TokenTypeKeyword,
 	"GROUPING": models.TokenTypeKeyword,
 	"SETS":     models.TokenTypeKeyword,
+	// DML keywords
+	"INSERT":  models.TokenTypeKeyword,
+	"UPDATE":  models.TokenTypeKeyword,
+	"DELETE":  models.TokenTypeKeyword,
+	"INTO":    models.TokenTypeKeyword,
+	"VALUES":  models.TokenTypeKeyword,
+	"SET":     models.TokenTypeKeyword,
+	"DEFAULT": models.TokenTypeKeyword,
+	// MERGE statement keywords (SQL:2003 F312)
+	"MERGE":   models.TokenTypeKeyword,
+	"MATCHED": models.TokenTypeKeyword,
+	"SOURCE":  models.TokenTypeKeyword,
+	"TARGET":  models.TokenTypeKeyword,
+	// Note: USING is already defined above for JOIN USING
 }
 
 // Tokenizer provides high-performance SQL tokenization with zero-copy operations

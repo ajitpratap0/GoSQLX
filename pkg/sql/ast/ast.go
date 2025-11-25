@@ -888,6 +888,94 @@ func (i *IndexColumn) expressionNode()     {}
 func (i IndexColumn) TokenLiteral() string { return i.Column }
 func (i IndexColumn) Children() []Node     { return nil }
 
+// MergeStatement represents a MERGE statement (SQL:2003 F312)
+// Syntax: MERGE INTO target USING source ON condition
+//
+//	WHEN MATCHED THEN UPDATE/DELETE
+//	WHEN NOT MATCHED THEN INSERT
+//	WHEN NOT MATCHED BY SOURCE THEN UPDATE/DELETE
+type MergeStatement struct {
+	TargetTable TableReference     // The table being merged into
+	TargetAlias string             // Optional alias for target
+	SourceTable TableReference     // The source table or subquery
+	SourceAlias string             // Optional alias for source
+	OnCondition Expression         // The join/match condition
+	WhenClauses []*MergeWhenClause // List of WHEN clauses
+}
+
+func (m *MergeStatement) statementNode()      {}
+func (m MergeStatement) TokenLiteral() string { return "MERGE" }
+func (m MergeStatement) Children() []Node {
+	children := []Node{&m.TargetTable, &m.SourceTable}
+	if m.OnCondition != nil {
+		children = append(children, m.OnCondition)
+	}
+	for _, when := range m.WhenClauses {
+		children = append(children, when)
+	}
+	return children
+}
+
+// MergeWhenClause represents a WHEN clause in a MERGE statement
+// Types: MATCHED, NOT_MATCHED, NOT_MATCHED_BY_SOURCE
+type MergeWhenClause struct {
+	Type      string       // "MATCHED", "NOT_MATCHED", "NOT_MATCHED_BY_SOURCE"
+	Condition Expression   // Optional AND condition
+	Action    *MergeAction // The action to perform (UPDATE/INSERT/DELETE)
+}
+
+func (w *MergeWhenClause) expressionNode()     {}
+func (w MergeWhenClause) TokenLiteral() string { return "WHEN " + w.Type }
+func (w MergeWhenClause) Children() []Node {
+	children := make([]Node, 0)
+	if w.Condition != nil {
+		children = append(children, w.Condition)
+	}
+	if w.Action != nil {
+		children = append(children, w.Action)
+	}
+	return children
+}
+
+// MergeAction represents the action in a WHEN clause
+// ActionType: UPDATE, INSERT, DELETE
+type MergeAction struct {
+	ActionType    string       // "UPDATE", "INSERT", "DELETE"
+	SetClauses    []SetClause  // For UPDATE: SET column = value pairs
+	Columns       []string     // For INSERT: column list
+	Values        []Expression // For INSERT: value list
+	DefaultValues bool         // For INSERT: use DEFAULT VALUES
+}
+
+func (a *MergeAction) expressionNode()     {}
+func (a MergeAction) TokenLiteral() string { return a.ActionType }
+func (a MergeAction) Children() []Node {
+	children := make([]Node, 0)
+	for _, set := range a.SetClauses {
+		set := set // G601: Create local copy
+		children = append(children, &set)
+	}
+	for _, val := range a.Values {
+		children = append(children, val)
+	}
+	return children
+}
+
+// SetClause represents a SET clause in UPDATE (also used in MERGE UPDATE)
+type SetClause struct {
+	Column string
+	Value  Expression
+}
+
+func (s *SetClause) expressionNode()     {}
+func (s SetClause) TokenLiteral() string { return s.Column }
+func (s SetClause) Children() []Node {
+	if s.Value != nil {
+		return []Node{s.Value}
+	}
+	return nil
+}
+
 // AST represents the root of the Abstract Syntax Tree
 type AST struct {
 	Statements []Statement

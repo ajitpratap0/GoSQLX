@@ -115,6 +115,12 @@ var ADDITIONAL_KEYWORDS = []Keyword{
 	{Word: "CUBE", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
 	{Word: "GROUPING", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
 	{Word: "SETS", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
+	// MERGE statement keywords (SQL:2003 F312)
+	{Word: "MERGE", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "USING", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "MATCHED", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
+	{Word: "SOURCE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "TARGET", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 }
 
 // addKeywordsWithCategory is a helper method to add multiple keywords

@@ -238,6 +238,16 @@ func (p *Parser) advance() {
 	}
 }
 
+// peekToken returns the next token without advancing the parser position.
+// Returns an empty token if at the end of input.
+func (p *Parser) peekToken() token.Token {
+	nextPos := p.currentPos + 1
+	if nextPos < len(p.tokens) {
+		return p.tokens[nextPos]
+	}
+	return token.Token{}
+}
+
 // expectedError returns an error for unexpected token
 func (p *Parser) expectedError(expected string) error {
 	return fmt.Errorf("expected %s, got %s", expected, p.currentToken.Type)
@@ -361,10 +371,15 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	}
 
 	// Check for NOT prefix for BETWEEN, LIKE, IN operators
+	// Only consume NOT if followed by BETWEEN, LIKE, ILIKE, or IN
+	// This prevents breaking cases like: WHERE NOT active AND name LIKE '%'
 	notPrefix := false
 	if p.currentToken.Type == "NOT" {
-		notPrefix = true
-		p.advance() // Consume NOT
+		nextToken := p.peekToken()
+		if nextToken.Type == "BETWEEN" || nextToken.Type == "LIKE" || nextToken.Type == "ILIKE" || nextToken.Type == "IN" {
+			notPrefix = true
+			p.advance() // Consume NOT only if followed by valid operator
+		}
 	}
 
 	// Check for BETWEEN operator: expr [NOT] BETWEEN lower AND upper
@@ -453,11 +468,6 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			List: values,
 			Not:  notPrefix,
 		}, nil
-	}
-
-	// If we had NOT but no BETWEEN/LIKE/IN followed, it's an error or we need to handle it
-	if notPrefix {
-		return nil, p.expectedError("BETWEEN, LIKE, or IN after NOT")
 	}
 
 	// Check for IS NULL / IS NOT NULL: expr IS [NOT] NULL
@@ -579,6 +589,21 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		value := p.currentToken.Literal
 		p.advance()
 		return &ast.LiteralValue{Value: value, Type: "placeholder"}, nil
+
+	case "NOT":
+		// Handle NOT as unary operator for boolean negation
+		// e.g., WHERE NOT active, WHERE NOT (a AND b)
+		p.advance() // Consume NOT
+		// Parse the following expression at comparison level
+		// This handles: NOT active, NOT (a > b), NOT EXISTS (...)
+		expr, err := p.parseComparisonExpression()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.UnaryExpression{
+			Operator: ast.Not,
+			Expr:     expr,
+		}, nil
 
 	default:
 		return nil, fmt.Errorf("unexpected token: %s", p.currentToken.Type)

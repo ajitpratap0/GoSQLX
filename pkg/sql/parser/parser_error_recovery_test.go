@@ -298,7 +298,7 @@ func TestUpdateStatement_EdgeCases(t *testing.T) {
 		{
 			name:      "UPDATE with NULL",
 			sql:       "UPDATE users SET deleted_at = NULL WHERE id = 1",
-			shouldErr: true, // NULL not supported as value
+			shouldErr: false, // NULL now supported as value
 		},
 		{
 			name:      "UPDATE without WHERE (dangerous)",
@@ -565,7 +565,7 @@ func TestExpressions_BoundaryValues(t *testing.T) {
 		{
 			name:      "NULL comparison",
 			sql:       "SELECT * FROM users WHERE deleted_at = NULL",
-			shouldErr: true, // NULL not supported as value, should use IS NULL
+			shouldErr: false, // NULL now supported as value (though IS NULL is preferred)
 		},
 		{
 			name:      "true boolean",

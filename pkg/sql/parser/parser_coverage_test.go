@@ -303,7 +303,7 @@ func TestParser_ExpressionEdgeCases(t *testing.T) {
 				{Type: "TRUE", Literal: "TRUE"},
 				{Type: ")", Literal: ")"},
 			},
-			wantErr: true, // NOT with parentheses not yet supported
+			wantErr: false, // NOT with parentheses now supported
 		},
 		{
 			name: "BETWEEN expression",
@@ -623,7 +623,7 @@ func TestParser_CTEEdgeCases(t *testing.T) {
 				{Type: "IDENT", Literal: "active"},
 				{Type: ")", Literal: ")"},
 			},
-			wantErr: true, // Subqueries in WHERE not yet supported
+			wantErr: false, // Subqueries in WHERE now supported
 		},
 		{
 			name: "CTE with DELETE statement",
@@ -654,7 +654,7 @@ func TestParser_CTEEdgeCases(t *testing.T) {
 				{Type: "IDENT", Literal: "old_records"},
 				{Type: ")", Literal: ")"},
 			},
-			wantErr: true, // Subqueries in WHERE not yet supported
+			wantErr: false, // Subqueries in WHERE now supported
 		},
 	}
 
@@ -777,7 +777,7 @@ func TestParser_TableDrivenComplexScenarios(t *testing.T) {
 				{Type: "STRING", Literal: "USA"},
 				{Type: ")", Literal: ")"},
 			},
-			wantErr: true, // Subqueries in WHERE not yet supported
+			wantErr: false, // Subqueries in WHERE now supported
 		},
 		{
 			name: "CASE expression in SELECT",
@@ -797,7 +797,7 @@ func TestParser_TableDrivenComplexScenarios(t *testing.T) {
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
 			},
-			wantErr: true, // CASE expressions not yet supported
+			wantErr: false, // CASE expressions now supported
 		},
 		{
 			name: "DISTINCT with aggregate",

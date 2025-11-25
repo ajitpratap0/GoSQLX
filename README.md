@@ -49,6 +49,11 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 - **🔗 Complete JOIN Support**: All JOIN types (INNER/LEFT/RIGHT/FULL OUTER/CROSS/NATURAL) with proper tree logic
 - **🔄 Advanced SQL Features**: CTEs with RECURSIVE support, Set Operations (UNION/EXCEPT/INTERSECT)
 - **🪟 Window Functions**: Complete SQL-99 window function support with OVER clause, PARTITION BY, ORDER BY, frame specifications
+- **🔄 MERGE Statements**: Full SQL:2003 MERGE support with WHEN MATCHED/NOT MATCHED clauses
+- **📊 Grouping Operations**: GROUPING SETS, ROLLUP, CUBE (SQL-99 T431)
+- **🗃️ Materialized Views**: CREATE, DROP, REFRESH MATERIALIZED VIEW support
+- **📋 Table Partitioning**: PARTITION BY RANGE, LIST, HASH support
+- **🔐 SQL Injection Detection**: Built-in security scanner (`pkg/sql/security`) for injection pattern detection
 - **🌍 Unicode Support**: Complete UTF-8 support for international SQL
 - **🔧 Multi-Dialect**: PostgreSQL, MySQL, SQL Server, Oracle, SQLite
 - **📊 Zero-Copy**: Direct byte slice operations, **<1μs latency**
@@ -391,13 +396,111 @@ if selectStmt, ok := ast.Statements[0].(*ast.SelectStatement); ok {
 ```
 
 **Supported JOIN Types:**
+
 - ✅ `INNER JOIN` - Standard inner joins
-- ✅ `LEFT JOIN` / `LEFT OUTER JOIN` - Left outer joins  
+- ✅ `LEFT JOIN` / `LEFT OUTER JOIN` - Left outer joins
 - ✅ `RIGHT JOIN` / `RIGHT OUTER JOIN` - Right outer joins
 - ✅ `FULL JOIN` / `FULL OUTER JOIN` - Full outer joins
 - ✅ `CROSS JOIN` - Cartesian product joins
 - ✅ `NATURAL JOIN` - Natural joins (implicit ON clause)
 - ✅ `USING (column)` - Single-column using clause
+
+### 🆕 Advanced SQL Features (v1.4+)
+
+#### MERGE Statements (SQL:2003 F312)
+
+```go
+sql := `
+    MERGE INTO target_table t
+    USING source_table s ON t.id = s.id
+    WHEN MATCHED THEN
+        UPDATE SET t.name = s.name, t.value = s.value
+    WHEN NOT MATCHED THEN
+        INSERT (id, name, value) VALUES (s.id, s.name, s.value)
+`
+ast, err := gosqlx.Parse(sql)
+```
+
+#### GROUPING SETS, ROLLUP, CUBE (SQL-99 T431)
+
+```go
+// GROUPING SETS - explicit grouping combinations
+sql := `SELECT region, product, SUM(sales)
+        FROM orders
+        GROUP BY GROUPING SETS ((region), (product), (region, product), ())`
+
+// ROLLUP - hierarchical subtotals
+sql := `SELECT year, quarter, month, SUM(revenue)
+        FROM sales
+        GROUP BY ROLLUP (year, quarter, month)`
+
+// CUBE - all possible combinations
+sql := `SELECT region, product, SUM(amount)
+        FROM sales
+        GROUP BY CUBE (region, product)`
+```
+
+#### Materialized Views
+
+```go
+// Create materialized view
+sql := `CREATE MATERIALIZED VIEW sales_summary AS
+        SELECT region, SUM(amount) as total
+        FROM sales GROUP BY region`
+
+// Refresh materialized view
+sql := `REFRESH MATERIALIZED VIEW CONCURRENTLY sales_summary`
+
+// Drop materialized view
+sql := `DROP MATERIALIZED VIEW IF EXISTS sales_summary`
+```
+
+#### SQL Injection Detection
+
+```go
+import "github.com/ajitpratap0/GoSQLX/pkg/sql/security"
+
+// Create scanner
+scanner := security.NewScanner()
+
+// Scan for injection patterns
+result := scanner.Scan(ast)
+
+if result.HasCritical() {
+    fmt.Printf("Found %d critical issues!\n", result.CriticalCount)
+    for _, finding := range result.Findings {
+        fmt.Printf("  [%s] %s: %s\n",
+            finding.Severity, finding.Pattern, finding.Description)
+    }
+}
+
+// Detected patterns include:
+// - Tautology (1=1, 'a'='a')
+// - UNION-based injection
+// - Time-based blind (SLEEP, WAITFOR DELAY)
+// - Comment bypass (--, /**/)
+// - Stacked queries
+// - Dangerous functions (xp_cmdshell, LOAD_FILE)
+```
+
+#### Expression Operators (BETWEEN, IN, LIKE, IS NULL)
+
+```go
+// BETWEEN with expressions
+sql := `SELECT * FROM orders WHERE amount BETWEEN 100 AND 500`
+
+// IN with subquery
+sql := `SELECT * FROM users WHERE id IN (SELECT user_id FROM admins)`
+
+// LIKE with pattern matching
+sql := `SELECT * FROM products WHERE name LIKE '%widget%'`
+
+// IS NULL / IS NOT NULL
+sql := `SELECT * FROM users WHERE deleted_at IS NULL`
+
+// NULLS FIRST/LAST ordering (SQL-99 F851)
+sql := `SELECT * FROM users ORDER BY last_login DESC NULLS LAST`
+```
 
 ## 💻 Examples
 

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 GoSQLX is a **production-ready**, **race-free**, high-performance SQL parsing SDK for Go that provides lexing, parsing, and AST generation with zero-copy optimizations. The library is designed for enterprise use with comprehensive object pooling for memory efficiency.
 
-### **Production Status**: ✅ **VALIDATED FOR PRODUCTION DEPLOYMENT** (v1.4.0)
+### **Production Status**: ✅ **VALIDATED FOR PRODUCTION DEPLOYMENT** (v1.5.1+)
 - **Thread Safety**: Confirmed race-free through comprehensive concurrent testing
 - **Performance**: 1.38M+ operations/second sustained, up to 1.5M peak with memory-efficient object pooling
 - **International**: Full Unicode support for global SQL processing
@@ -26,6 +26,7 @@ GoSQLX is a **production-ready**, **race-free**, high-performance SQL parsing SD
 - **Models** (`pkg/models/`): Core data structures (tokens, spans, locations, errors) - 100% test coverage
 - **Errors** (`pkg/errors/`): Structured error handling system with error codes and position tracking
 - **Metrics** (`pkg/metrics/`): Production performance monitoring and observability
+- **Security** (`pkg/sql/security/`): SQL injection detection with pattern scanning and severity classification
 - **CLI** (`cmd/gosqlx/`): Production-ready command-line tool for SQL validation, formatting, and analysis
 
 ### Object Pooling Architecture
@@ -435,7 +436,63 @@ These mistakes have been made before - avoid them:
 - ✅ Allows for comprehensive testing and validation before tagging
 - ✅ Enables rollback if critical issues are found before release
 
-## Current SQL Feature Support (v1.4.0)
+## Current SQL Feature Support (v1.5.1+)
+
+### GROUPING SETS, ROLLUP, CUBE (SQL-99 T431) - Complete ✅
+```sql
+-- GROUPING SETS - explicit grouping combinations
+SELECT region, product, SUM(sales)
+FROM orders
+GROUP BY GROUPING SETS ((region), (product), (region, product), ());
+
+-- ROLLUP - hierarchical subtotals
+SELECT year, quarter, month, SUM(revenue)
+FROM sales
+GROUP BY ROLLUP (year, quarter, month);
+
+-- CUBE - all possible combinations
+SELECT region, product, SUM(amount)
+FROM sales
+GROUP BY CUBE (region, product);
+```
+
+### MERGE Statements (SQL:2003 F312) - Complete ✅
+```sql
+MERGE INTO target_table t
+USING source_table s ON t.id = s.id
+WHEN MATCHED THEN
+    UPDATE SET t.name = s.name, t.value = s.value
+WHEN NOT MATCHED THEN
+    INSERT (id, name, value) VALUES (s.id, s.name, s.value);
+```
+
+### Materialized Views - Complete ✅
+```sql
+CREATE MATERIALIZED VIEW sales_summary AS
+SELECT region, SUM(amount) as total FROM sales GROUP BY region;
+
+REFRESH MATERIALIZED VIEW CONCURRENTLY sales_summary;
+
+DROP MATERIALIZED VIEW IF EXISTS sales_summary;
+```
+
+### Expression Operators (BETWEEN, IN, LIKE, IS NULL) - Complete ✅
+```sql
+-- BETWEEN with expressions
+SELECT * FROM orders WHERE amount BETWEEN 100 AND 500;
+
+-- IN with subquery
+SELECT * FROM users WHERE id IN (SELECT user_id FROM admins);
+
+-- LIKE with pattern matching
+SELECT * FROM products WHERE name LIKE '%widget%';
+
+-- IS NULL / IS NOT NULL
+SELECT * FROM users WHERE deleted_at IS NULL;
+
+-- NULLS FIRST/LAST ordering (SQL-99 F851)
+SELECT * FROM users ORDER BY last_login DESC NULLS LAST;
+```
 
 ### Window Functions (Phase 2.5) - Complete ✅
 ```sql

@@ -1,8 +1,20 @@
 # GoSQLX SQL Feature Compatibility Matrix
 
+**Version**: v1.5.1+ | **Last Updated**: November 2025
+
 ## Overview
 
 This matrix documents the comprehensive SQL feature support in GoSQLX across different SQL dialects and standards. The testing was conducted using the comprehensive integration test suite with 500+ test cases covering real-world SQL patterns.
+
+### Recent Additions (v1.4+)
+- ✅ **MERGE Statements** (SQL:2003 F312)
+- ✅ **GROUPING SETS, ROLLUP, CUBE** (SQL-99 T431)
+- ✅ **Materialized Views** (CREATE, DROP, REFRESH)
+- ✅ **Table Partitioning** (RANGE, LIST, HASH)
+- ✅ **NULLS FIRST/LAST** (SQL-99 F851)
+- ✅ **Advanced Operators** (BETWEEN, IN, LIKE, IS NULL)
+- ✅ **Comprehensive Subqueries** (Scalar, Table, Correlated, EXISTS)
+- ✅ **SQL Injection Detection** (`pkg/sql/security` package)
 
 ## Legend
 
@@ -34,6 +46,9 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 | Multi-table UPDATE | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ Full | 80% |
 | **DELETE** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
 | DELETE with JOIN | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ Full | 90% |
+| **MERGE** | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ Full | 95% |
+| MERGE WHEN MATCHED | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ Full | 95% |
+| MERGE WHEN NOT MATCHED | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ Full | 95% |
 
 ### Data Definition Language (DDL)
 
@@ -54,6 +69,12 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 | Unique indexes | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
 | Partial indexes | ✅ | ❌ | ⚠️ | ❌ | ✅ | ✅ Full | 70% |
 | **CREATE VIEW** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
+| **CREATE MATERIALIZED VIEW** | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ Full | 95% |
+| REFRESH MATERIALIZED VIEW | ✅ | ❌ | ❌ | ✅ | ❌ | ✅ Full | 95% |
+| **TABLE PARTITIONING** | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ Full | 90% |
+| PARTITION BY RANGE | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ Full | 90% |
+| PARTITION BY LIST | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ Full | 90% |
+| PARTITION BY HASH | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ Full | 90% |
 
 ### JOIN Operations
 
@@ -127,6 +148,39 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 | **UNION ALL** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
 | **INTERSECT** | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ Full | 80% |
 | **EXCEPT/MINUS** | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ Full | 60% |
+
+### Grouping Operations (SQL-99 T431)
+
+| Feature | PostgreSQL | MySQL | SQL Server | Oracle | SQLite | GoSQLX Parser | Test Coverage |
+|---------|------------|-------|------------|--------|--------|---------------|---------------|
+| **GROUPING SETS** | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ Full | 95% |
+| **ROLLUP** | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ Full | 95% |
+| **CUBE** | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ Full | 95% |
+| Combined GROUPING SETS | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ Full | 90% |
+| GROUPING() function | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ Full | 90% |
+
+### ORDER BY Extensions (SQL-99 F851)
+
+| Feature | PostgreSQL | MySQL | SQL Server | Oracle | SQLite | GoSQLX Parser | Test Coverage |
+|---------|------------|-------|------------|--------|--------|---------------|---------------|
+| **NULLS FIRST** | ✅ | ❌ | ❌ | ✅ | ❌ | ✅ Full | 95% |
+| **NULLS LAST** | ✅ | ❌ | ❌ | ✅ | ❌ | ✅ Full | 95% |
+| Multiple columns with NULLS | ✅ | ❌ | ❌ | ✅ | ❌ | ✅ Full | 90% |
+
+### Expression Operators
+
+| Feature | PostgreSQL | MySQL | SQL Server | Oracle | SQLite | GoSQLX Parser | Test Coverage |
+|---------|------------|-------|------------|--------|--------|---------------|---------------|
+| **BETWEEN...AND** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
+| **NOT BETWEEN** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
+| **IN (list)** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
+| **IN (subquery)** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
+| **NOT IN** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
+| **LIKE** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
+| **NOT LIKE** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
+| **IS NULL** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
+| **IS NOT NULL** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
+| **IS TRUE/FALSE** | ✅ | ✅ | ❌ | ❌ | ✅ | ✅ Full | 90% |
 
 ## Dialect-Specific Features
 
@@ -365,7 +419,8 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 
 ---
 
-**Last Updated**: December 2024  
-**Test Suite Version**: 1.0  
-**Total Test Cases**: 500+  
-**Coverage Percentage**: 92%
+**Last Updated**: November 2025
+**Test Suite Version**: 1.5.1
+**Total Test Cases**: 600+
+**Coverage Percentage**: 95%
+**SQL-99 Compliance**: ~80-85%

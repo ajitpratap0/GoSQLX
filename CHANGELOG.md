@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **GROUPING SETS, ROLLUP, CUBE** (SQL-99 T431): Complete grouping operations support for advanced aggregations
+- **MERGE Statements** (SQL:2003 F312): Full MERGE support with WHEN MATCHED/NOT MATCHED clauses
+- **Materialized Views**: CREATE, DROP, REFRESH MATERIALIZED VIEW support
+- **Table Partitioning**: PARTITION BY RANGE, LIST, HASH support
+- **SQL Injection Detection**: Built-in security scanner (`pkg/sql/security`) for pattern detection
+- **Expression Operators**: BETWEEN, IN, LIKE, IS NULL with full expression support
+- **Subquery Support**: Scalar, table, correlated, EXISTS subqueries
+- **NULLS FIRST/LAST**: ORDER BY null ordering (SQL-99 F851)
+
 ## [1.5.1] - 2025-11-15 - Phases 2-3 Test Coverage Completion
 
 ### 🎯 Phase 3 Complete: Token and Tokenizer Coverage Enhancement
@@ -452,120 +462,6 @@ This substantial test coverage increase provides strong confidence in the AST pa
 - ✅ Comprehensive test coverage for all new features
 - ✅ Zero performance regression while adding major features
 
-## [1.2.0] - 2025-09-04 - Phase 2: Advanced SQL Features
-
-### ✅ Major Features Implemented
-- **Complete Common Table Expression (CTE) support**: Simple and recursive CTEs with full SQL-92 compliance
-- **Set operations**: UNION, UNION ALL, EXCEPT, INTERSECT with proper left-associative parsing
-- **Multiple CTE definitions**: Comma-separated CTEs in single query with column specifications
-- **CTE Integration**: Full compatibility with all statement types (SELECT, INSERT, UPDATE, DELETE)
-- **Enhanced parser architecture**: New parsing functions for WITH statements and set operations
-
-### 🚀 Performance & Quality
-- **946K+ sustained operations/second** (30s load testing) - production grade performance
-- **1.25M+ operations/second** peak throughput with concurrent processing
-- **<1μs latency** for complex queries with CTEs and set operations
-- **Zero performance regression** from Phase 1 - all existing functionality maintained
-- **Race-free implementation** - comprehensive concurrent testing validates thread safety
-- **Memory efficient** - object pooling preserved with 60-80% memory reduction
-
-### 🎯 SQL Standards Compliance
-- **~70% SQL-92 compliance** achieved (up from ~40% in Phase 1)
-- **Advanced SQL features**: WITH clause, RECURSIVE support, set operations
-- **Complex query compositions**: CTEs combined with set operations in single queries
-- **Proper operator precedence**: Left-associative parsing for chained set operations
-
-### 🔧 Technical Implementation
-- **parseWithStatement()** - Complete WITH clause parsing with recursive support
-- **parseSelectWithSetOperations()** - Set operations parsing with proper precedence  
-- **parseCommonTableExpr()** - Individual CTE parsing with column specifications
-- **parseMainStatementAfterWith()** - Post-CTE statement routing with full integration
-- **Enhanced AST structures** - Complete integration with existing AST framework
-
-### 📊 Comprehensive Testing
-- **24+ test functions** total (9 new Phase 2 tests added)
-- **4 comprehensive CTE tests**: Simple CTE, Recursive CTE, Multiple CTEs, Column specs
-- **5 comprehensive set operation tests**: All operations, chaining, CTE combinations
-- **100% test pass rate** with race detection enabled
-- **Extensive error case coverage** with contextual error messages
-
-### 📚 Documentation Updates
-- **Enhanced Go package documentation** with Phase 2 examples and API references
-- **Comprehensive README updates** with CTE and set operations examples
-- **Updated performance benchmarks** reflecting Phase 2 capabilities
-- **Complete API documentation** for all new parsing functions
-
-### 🔄 Backward Compatibility
-- **100% backward compatible** - all existing functionality preserved
-- **API stability** - no breaking changes to public interfaces
-- **Legacy test compatibility** - all Phase 1 and prior tests continue passing
-- **Performance maintained** - no degradation in existing query parsing performance
-
-### Goals Achieved
-- ✅ ~70% SQL-92 compliance milestone reached
-- ✅ Production-grade CTE implementation with recursive support
-- ✅ Complete set operations support with proper precedence
-- ✅ Enhanced error handling with contextual messages
-- ✅ Comprehensive test coverage for all new features
-- ✅ Zero performance regression while adding major features
-
-## [1.2.0] - 2025-09-04 - Phase 2: Advanced SQL Features
-
-### ✅ Major Features Implemented
-- **Complete Common Table Expression (CTE) support**: Simple and recursive CTEs with full SQL-92 compliance
-- **Set operations**: UNION, UNION ALL, EXCEPT, INTERSECT with proper left-associative parsing
-- **Multiple CTE definitions**: Comma-separated CTEs in single query with column specifications
-- **CTE Integration**: Full compatibility with all statement types (SELECT, INSERT, UPDATE, DELETE)
-- **Enhanced parser architecture**: New parsing functions for WITH statements and set operations
-
-### 🚀 Performance & Quality
-- **946K+ sustained operations/second** (30s load testing) - production grade performance
-- **1.25M+ operations/second** peak throughput with concurrent processing
-- **<1μs latency** for complex queries with CTEs and set operations
-- **Zero performance regression** from Phase 1 - all existing functionality maintained
-- **Race-free implementation** - comprehensive concurrent testing validates thread safety
-- **Memory efficient** - object pooling preserved with 60-80% memory reduction
-
-### 🎯 SQL Standards Compliance
-- **~70% SQL-92 compliance** achieved (up from ~40% in Phase 1)
-- **Advanced SQL features**: WITH clause, RECURSIVE support, set operations
-- **Complex query compositions**: CTEs combined with set operations in single queries
-- **Proper operator precedence**: Left-associative parsing for chained set operations
-
-### 🔧 Technical Implementation
-- **parseWithStatement()** - Complete WITH clause parsing with recursive support
-- **parseSelectWithSetOperations()** - Set operations parsing with proper precedence  
-- **parseCommonTableExpr()** - Individual CTE parsing with column specifications
-- **parseMainStatementAfterWith()** - Post-CTE statement routing with full integration
-- **Enhanced AST structures** - Complete integration with existing AST framework
-
-### 📊 Comprehensive Testing
-- **24+ test functions** total (9 new Phase 2 tests added)
-- **4 comprehensive CTE tests**: Simple CTE, Recursive CTE, Multiple CTEs, Column specs
-- **5 comprehensive set operation tests**: All operations, chaining, CTE combinations
-- **100% test pass rate** with race detection enabled
-- **Extensive error case coverage** with contextual error messages
-
-### 📚 Documentation Updates
-- **Enhanced Go package documentation** with Phase 2 examples and API references
-- **Comprehensive README updates** with CTE and set operations examples
-- **Updated performance benchmarks** reflecting Phase 2 capabilities
-- **Complete API documentation** for all new parsing functions
-
-### 🔄 Backward Compatibility
-- **100% backward compatible** - all existing functionality preserved
-- **API stability** - no breaking changes to public interfaces
-- **Legacy test compatibility** - all Phase 1 and prior tests continue passing
-- **Performance maintained** - no degradation in existing query parsing performance
-
-### Goals Achieved
-- ✅ ~70% SQL-92 compliance milestone reached
-- ✅ Production-grade CTE implementation with recursive support
-- ✅ Complete set operations support with proper precedence
-- ✅ Enhanced error handling with contextual messages
-- ✅ Comprehensive test coverage for all new features
-- ✅ Zero performance regression while adding major features
-
 ## [1.1.0] - 2025-01-03 - Phase 1: Core SQL Enhancements
 
 ### ✅ Implemented Features  
@@ -585,36 +481,6 @@ This substantial test coverage increase provides strong confidence in the AST pa
 - Achieve 70% SQL-92 compliance
 - Unified AST structure
 - Consistent error system with context and hints
-
-## [1.2.0] - (Planned Q4 2024) - Phase 2: Advanced Features
-
-### Planned Features
-- Window functions (OVER, PARTITION BY, RANK, LAG/LEAD)
-- Transaction control statements (BEGIN/COMMIT/ROLLBACK)
-- Views and materialized views support
-- Stored procedure parsing (basic)
-- Streaming parser API for large files
-- AST transformation framework
-
-### Goals
-- Achieve 85% SQL-99 compliance
-- Streaming support for queries >10MB
-- Query transformation and optimization capabilities
-
-## [2.0.0] - (Planned Q1 2025) - Phase 3: Dialect Specialization
-
-### Planned Features
-- PostgreSQL-specific features (arrays, JSONB, custom types)
-- MySQL-specific syntax and functions
-- SQL Server T-SQL extensions
-- Oracle PL/SQL basics
-- SQLite pragmas and special syntax
-- Dialect auto-detection
-
-### Goals
-- Multi-dialect parser with configuration
-- 95% dialect-specific compliance
-- Auto-detection with 99% accuracy
 
 ## [1.0.2] - 2025-08-23
 

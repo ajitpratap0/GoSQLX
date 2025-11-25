@@ -23,6 +23,7 @@ package parser
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
@@ -208,6 +209,9 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 	case "ALTER":
 		p.advance() // Consume ALTER
 		return p.parseAlterTableStmt()
+	case "MERGE":
+		p.advance() // Consume MERGE
+		return p.parseMergeStatement()
 	default:
 		return nil, p.expectedError("statement")
 	}
@@ -1137,6 +1141,152 @@ func (p *Parser) parseNullsClause() (*bool, error) {
 	return nil, nil
 }
 
+// parseGroupingExpressionList parses a parenthesized, comma-separated list of expressions
+// used by ROLLUP and CUBE. Returns error if the list is empty.
+func (p *Parser) parseGroupingExpressionList(keyword string) ([]ast.Expression, error) {
+	if p.currentToken.Type != "(" {
+		return nil, p.expectedError("( after " + keyword)
+	}
+	p.advance() // Consume (
+
+	// Check for empty list - not allowed for ROLLUP/CUBE
+	if p.currentToken.Type == ")" {
+		return nil, fmt.Errorf("parsing failed: %s requires at least one expression", keyword)
+	}
+
+	// Parse comma-separated expressions
+	expressions := make([]ast.Expression, 0)
+	for {
+		expr, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+		expressions = append(expressions, expr)
+
+		// Check for comma (more expressions) or closing paren
+		if p.currentToken.Type == ")" {
+			break
+		}
+		if p.currentToken.Type != "," {
+			return nil, p.expectedError(", or ) in " + keyword)
+		}
+		p.advance() // Consume comma
+	}
+	p.advance() // Consume )
+
+	return expressions, nil
+}
+
+// parseRollup parses ROLLUP(col1, col2, ...) in GROUP BY clause
+// ROLLUP generates hierarchical grouping sets from right to left
+// Example: ROLLUP(a, b, c) generates: (a, b, c), (a, b), (a), ()
+func (p *Parser) parseRollup() (*ast.RollupExpression, error) {
+	p.advance() // Consume ROLLUP
+
+	expressions, err := p.parseGroupingExpressionList("ROLLUP")
+	if err != nil {
+		return nil, err
+	}
+
+	return &ast.RollupExpression{
+		Expressions: expressions,
+	}, nil
+}
+
+// parseCube parses CUBE(col1, col2, ...) in GROUP BY clause
+// CUBE generates all possible combinations of grouping sets
+// Example: CUBE(a, b) generates: (a, b), (a), (b), ()
+func (p *Parser) parseCube() (*ast.CubeExpression, error) {
+	p.advance() // Consume CUBE
+
+	expressions, err := p.parseGroupingExpressionList("CUBE")
+	if err != nil {
+		return nil, err
+	}
+
+	return &ast.CubeExpression{
+		Expressions: expressions,
+	}, nil
+}
+
+// parseGroupingSets parses GROUPING SETS(...) in GROUP BY clause
+// Allows explicit specification of grouping sets
+// Example: GROUPING SETS((a, b), (a), ()) generates exactly those three grouping sets
+func (p *Parser) parseGroupingSets() (*ast.GroupingSetsExpression, error) {
+	// Handle both "GROUPING SETS" as compound keyword or separate tokens
+	if p.currentToken.Literal == "GROUPING SETS" {
+		p.advance() // Consume "GROUPING SETS" compound token
+	} else if p.currentToken.Type == "GROUPING" {
+		p.advance() // Consume GROUPING
+		if p.currentToken.Type != "SETS" {
+			return nil, p.expectedError("SETS after GROUPING")
+		}
+		p.advance() // Consume SETS
+	}
+
+	if p.currentToken.Type != "(" {
+		return nil, p.expectedError("( after GROUPING SETS")
+	}
+	p.advance() // Consume (
+
+	// Parse comma-separated grouping sets
+	sets := make([][]ast.Expression, 0)
+	for {
+		// Each set is either:
+		// 1. A parenthesized list: (col1, col2)
+		// 2. An empty set: ()
+		// 3. A single column without parens: col1 (treated as (col1))
+
+		var set []ast.Expression
+		if p.currentToken.Type == "(" {
+			p.advance() // Consume (
+			// Parse expressions in this set
+			set = make([]ast.Expression, 0)
+			// Handle empty set: ()
+			if p.currentToken.Type != ")" {
+				for {
+					expr, err := p.parseExpression()
+					if err != nil {
+						return nil, err
+					}
+					set = append(set, expr)
+
+					if p.currentToken.Type == ")" {
+						break
+					}
+					if p.currentToken.Type != "," {
+						return nil, p.expectedError(", or ) in grouping set")
+					}
+					p.advance() // Consume comma
+				}
+			}
+			p.advance() // Consume )
+		} else {
+			// Single column without parens
+			expr, err := p.parseExpression()
+			if err != nil {
+				return nil, err
+			}
+			set = []ast.Expression{expr}
+		}
+		sets = append(sets, set)
+
+		// Check for comma (more sets) or closing paren
+		if p.currentToken.Type == ")" {
+			break
+		}
+		if p.currentToken.Type != "," {
+			return nil, p.expectedError(", or ) in GROUPING SETS")
+		}
+		p.advance() // Consume comma
+	}
+	p.advance() // Consume )
+
+	return &ast.GroupingSetsExpression{
+		Sets: sets,
+	}, nil
+}
+
 // parseColumnDef parses a column definition
 func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 	name := p.parseIdent()
@@ -1439,9 +1589,25 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		p.advance() // Consume BY
 
 		// Parse GROUP BY expressions (comma-separated list)
+		// Supports: regular expressions, ROLLUP, CUBE, GROUPING SETS
 		groupByExprs := make([]ast.Expression, 0)
 		for {
-			expr, err := p.parseExpression()
+			var expr ast.Expression
+			var err error
+
+			// Check for grouping operations: ROLLUP, CUBE, GROUPING SETS
+			// Note: GROUPING SETS may come as a compound keyword or separate tokens
+			if p.currentToken.Type == "ROLLUP" {
+				expr, err = p.parseRollup()
+			} else if p.currentToken.Type == "CUBE" {
+				expr, err = p.parseCube()
+			} else if p.currentToken.Literal == "GROUPING SETS" ||
+				(p.currentToken.Type == "GROUPING" && p.peekToken().Type == "SETS") {
+				expr, err = p.parseGroupingSets()
+			} else {
+				expr, err = p.parseExpression()
+			}
+
 			if err != nil {
 				return nil, err
 			}
@@ -1453,6 +1619,29 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			}
 			p.advance() // Consume comma
 		}
+
+		// MySQL syntax support: GROUP BY col1, col2 WITH ROLLUP / WITH CUBE
+		// This is different from SQL-99 GROUP BY ROLLUP(col1, col2)
+		if p.currentToken.Type == "WITH" {
+			nextTok := p.peekToken()
+			if nextTok.Type == "ROLLUP" {
+				p.advance() // Consume WITH
+				p.advance() // Consume ROLLUP
+				// Wrap all existing expressions in a RollupExpression
+				groupByExprs = []ast.Expression{
+					&ast.RollupExpression{Expressions: groupByExprs},
+				}
+			} else if nextTok.Type == "CUBE" {
+				p.advance() // Consume WITH
+				p.advance() // Consume CUBE
+				// Wrap all existing expressions in a CubeExpression
+				groupByExprs = []ast.Expression{
+					&ast.CubeExpression{Expressions: groupByExprs},
+				}
+			}
+			// Note: WITH not followed by ROLLUP/CUBE will be handled elsewhere (e.g., CTE)
+		}
+
 		selectStmt.GroupBy = groupByExprs
 	}
 
@@ -1829,6 +2018,317 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 		TableName: tableName,
 		Where:     whereClause,
 	}, nil
+}
+
+// parseMergeStatement parses a MERGE statement (SQL:2003 F312)
+// Syntax: MERGE INTO target [AS alias] USING source [AS alias] ON condition
+//
+//	WHEN MATCHED [AND condition] THEN UPDATE/DELETE
+//	WHEN NOT MATCHED [AND condition] THEN INSERT
+//	WHEN NOT MATCHED BY SOURCE [AND condition] THEN UPDATE/DELETE
+func (p *Parser) parseMergeStatement() (ast.Statement, error) {
+	stmt := &ast.MergeStatement{}
+
+	// Parse INTO (optional)
+	if p.currentToken.Type == "INTO" {
+		p.advance() // Consume INTO
+	}
+
+	// Parse target table
+	tableRef, err := p.parseTableReference()
+	if err != nil {
+		return nil, fmt.Errorf("error parsing MERGE target table: %w", err)
+	}
+	stmt.TargetTable = *tableRef
+
+	// Parse optional target alias (AS alias or just alias)
+	if p.currentToken.Type == "AS" {
+		p.advance() // Consume AS
+		if p.currentToken.Type != "IDENT" && !p.isNonReservedKeyword() {
+			return nil, p.expectedError("target alias after AS")
+		}
+		stmt.TargetAlias = p.currentToken.Literal
+		p.advance()
+	} else if p.canBeAlias() && p.currentToken.Type != "USING" && p.currentToken.Literal != "USING" {
+		stmt.TargetAlias = p.currentToken.Literal
+		p.advance()
+	}
+
+	// Parse USING
+	if p.currentToken.Type != "USING" && p.currentToken.Literal != "USING" {
+		return nil, p.expectedError("USING")
+	}
+	p.advance() // Consume USING
+
+	// Parse source table (could be a table or subquery)
+	sourceRef, err := p.parseTableReference()
+	if err != nil {
+		return nil, fmt.Errorf("error parsing MERGE source: %w", err)
+	}
+	stmt.SourceTable = *sourceRef
+
+	// Parse optional source alias
+	if p.currentToken.Type == "AS" {
+		p.advance() // Consume AS
+		if p.currentToken.Type != "IDENT" && !p.isNonReservedKeyword() {
+			return nil, p.expectedError("source alias after AS")
+		}
+		stmt.SourceAlias = p.currentToken.Literal
+		p.advance()
+	} else if p.canBeAlias() && p.currentToken.Type != "ON" && p.currentToken.Literal != "ON" {
+		stmt.SourceAlias = p.currentToken.Literal
+		p.advance()
+	}
+
+	// Parse ON condition
+	if p.currentToken.Type != "ON" {
+		return nil, p.expectedError("ON")
+	}
+	p.advance() // Consume ON
+
+	onCondition, err := p.parseExpression()
+	if err != nil {
+		return nil, fmt.Errorf("error parsing MERGE ON condition: %w", err)
+	}
+	stmt.OnCondition = onCondition
+
+	// Parse WHEN clauses
+	for p.currentToken.Type == "WHEN" {
+		whenClause, err := p.parseMergeWhenClause()
+		if err != nil {
+			return nil, err
+		}
+		stmt.WhenClauses = append(stmt.WhenClauses, whenClause)
+	}
+
+	if len(stmt.WhenClauses) == 0 {
+		return nil, fmt.Errorf("MERGE statement requires at least one WHEN clause")
+	}
+
+	return stmt, nil
+}
+
+// parseMergeWhenClause parses a WHEN clause in a MERGE statement
+func (p *Parser) parseMergeWhenClause() (*ast.MergeWhenClause, error) {
+	clause := &ast.MergeWhenClause{}
+
+	p.advance() // Consume WHEN
+
+	// Determine clause type: MATCHED, NOT MATCHED, NOT MATCHED BY SOURCE
+	if p.currentToken.Type == "MATCHED" || p.currentToken.Literal == "MATCHED" {
+		clause.Type = "MATCHED"
+		p.advance() // Consume MATCHED
+	} else if p.currentToken.Type == "NOT" {
+		p.advance() // Consume NOT
+		if p.currentToken.Type != "MATCHED" && p.currentToken.Literal != "MATCHED" {
+			return nil, p.expectedError("MATCHED after NOT")
+		}
+		p.advance() // Consume MATCHED
+
+		// Check for BY SOURCE
+		if p.currentToken.Type == "BY" {
+			p.advance() // Consume BY
+			if p.currentToken.Type != "SOURCE" && p.currentToken.Literal != "SOURCE" {
+				return nil, p.expectedError("SOURCE after BY")
+			}
+			p.advance() // Consume SOURCE
+			clause.Type = "NOT_MATCHED_BY_SOURCE"
+		} else {
+			clause.Type = "NOT_MATCHED"
+		}
+	} else {
+		return nil, p.expectedError("MATCHED or NOT MATCHED")
+	}
+
+	// Parse optional AND condition
+	if p.currentToken.Type == "AND" {
+		p.advance() // Consume AND
+		condition, err := p.parseExpression()
+		if err != nil {
+			return nil, fmt.Errorf("error parsing WHEN condition: %w", err)
+		}
+		clause.Condition = condition
+	}
+
+	// Parse THEN
+	if p.currentToken.Type != "THEN" {
+		return nil, p.expectedError("THEN")
+	}
+	p.advance() // Consume THEN
+
+	// Parse action (UPDATE, INSERT, DELETE)
+	action, err := p.parseMergeAction(clause.Type)
+	if err != nil {
+		return nil, err
+	}
+	clause.Action = action
+
+	return clause, nil
+}
+
+// parseMergeAction parses the action in a WHEN clause
+func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
+	action := &ast.MergeAction{}
+
+	switch p.currentToken.Type {
+	case "UPDATE":
+		action.ActionType = "UPDATE"
+		p.advance() // Consume UPDATE
+
+		// Parse SET
+		if p.currentToken.Type != "SET" {
+			return nil, p.expectedError("SET after UPDATE")
+		}
+		p.advance() // Consume SET
+
+		// Parse SET clauses
+		for {
+			if p.currentToken.Type != "IDENT" && !p.canBeAlias() {
+				return nil, p.expectedError("column name")
+			}
+			// Handle qualified column names (e.g., t.name)
+			columnName := p.currentToken.Literal
+			p.advance()
+
+			// Check for qualified name (table.column)
+			if p.currentToken.Type == "." {
+				p.advance() // Consume .
+				if p.currentToken.Type != "IDENT" && !p.canBeAlias() {
+					return nil, p.expectedError("column name after .")
+				}
+				columnName = columnName + "." + p.currentToken.Literal
+				p.advance()
+			}
+
+			setClause := ast.SetClause{Column: columnName}
+
+			if p.currentToken.Type != "=" {
+				return nil, p.expectedError("=")
+			}
+			p.advance() // Consume =
+
+			value, err := p.parseExpression()
+			if err != nil {
+				return nil, fmt.Errorf("error parsing SET value: %w", err)
+			}
+			setClause.Value = value
+			action.SetClauses = append(action.SetClauses, setClause)
+
+			if p.currentToken.Type != "," {
+				break
+			}
+			p.advance() // Consume comma
+		}
+
+	case "INSERT":
+		if clauseType == "MATCHED" || clauseType == "NOT_MATCHED_BY_SOURCE" {
+			return nil, fmt.Errorf("INSERT not allowed in WHEN %s clause", clauseType)
+		}
+		action.ActionType = "INSERT"
+		p.advance() // Consume INSERT
+
+		// Parse optional column list
+		if p.currentToken.Type == "(" {
+			p.advance() // Consume (
+			for {
+				if p.currentToken.Type != "IDENT" {
+					return nil, p.expectedError("column name")
+				}
+				action.Columns = append(action.Columns, p.currentToken.Literal)
+				p.advance()
+
+				if p.currentToken.Type != "," {
+					break
+				}
+				p.advance() // Consume comma
+			}
+			if p.currentToken.Type != ")" {
+				return nil, p.expectedError(")")
+			}
+			p.advance() // Consume )
+		}
+
+		// Parse VALUES or DEFAULT VALUES
+		if p.currentToken.Type == "DEFAULT" {
+			p.advance() // Consume DEFAULT
+			if p.currentToken.Type != "VALUES" {
+				return nil, p.expectedError("VALUES after DEFAULT")
+			}
+			p.advance() // Consume VALUES
+			action.DefaultValues = true
+		} else if p.currentToken.Type == "VALUES" {
+			p.advance() // Consume VALUES
+			if p.currentToken.Type != "(" {
+				return nil, p.expectedError("(")
+			}
+			p.advance() // Consume (
+
+			for {
+				value, err := p.parseExpression()
+				if err != nil {
+					return nil, fmt.Errorf("error parsing INSERT value: %w", err)
+				}
+				action.Values = append(action.Values, value)
+
+				if p.currentToken.Type != "," {
+					break
+				}
+				p.advance() // Consume comma
+			}
+
+			if p.currentToken.Type != ")" {
+				return nil, p.expectedError(")")
+			}
+			p.advance() // Consume )
+		} else {
+			return nil, p.expectedError("VALUES or DEFAULT VALUES")
+		}
+
+	case "DELETE":
+		if clauseType == "NOT_MATCHED" {
+			return nil, fmt.Errorf("DELETE not allowed in WHEN NOT MATCHED clause")
+		}
+		action.ActionType = "DELETE"
+		p.advance() // Consume DELETE
+
+	default:
+		return nil, p.expectedError("UPDATE, INSERT, or DELETE")
+	}
+
+	return action, nil
+}
+
+// parseTableReference parses a simple table reference (table name)
+// Returns a TableReference with the Name field populated
+// Accepts IDENT or non-reserved keywords that can be used as table names
+func (p *Parser) parseTableReference() (*ast.TableReference, error) {
+	// Accept IDENT or keywords that can be used as table names
+	if p.currentToken.Type != "IDENT" && !p.isNonReservedKeyword() {
+		return nil, p.expectedError("table name")
+	}
+	tableName := p.currentToken.Literal
+	p.advance()
+	return &ast.TableReference{Name: tableName}, nil
+}
+
+// isNonReservedKeyword checks if current token is a non-reserved keyword
+// that can be used as a table or column name
+func (p *Parser) isNonReservedKeyword() bool {
+	// These keywords can be used as table/column names in most SQL dialects
+	// Check uppercase version of token type for case-insensitive matching
+	upperType := strings.ToUpper(string(p.currentToken.Type))
+	switch upperType {
+	case "TARGET", "SOURCE", "MATCHED", "VALUE", "NAME", "TYPE", "STATUS":
+		return true
+	default:
+		return false
+	}
+}
+
+// canBeAlias checks if current token can be used as an alias
+// Aliases can be IDENT or certain non-reserved keywords
+func (p *Parser) canBeAlias() bool {
+	return p.currentToken.Type == "IDENT" || p.isNonReservedKeyword()
 }
 
 // parseAlterTableStmt is a simplified version for the parser implementation

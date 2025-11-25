@@ -110,6 +110,17 @@ var ADDITIONAL_KEYWORDS = []Keyword{
 	{Word: "LEAD", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "FIRST_VALUE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "LAST_VALUE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	// SQL-99 grouping operations
+	{Word: "ROLLUP", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
+	{Word: "CUBE", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
+	{Word: "GROUPING", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
+	{Word: "SETS", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
+	// MERGE statement keywords (SQL:2003 F312)
+	{Word: "MERGE", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "USING", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "MATCHED", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
+	{Word: "SOURCE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "TARGET", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 }
 
 // addKeywordsWithCategory is a helper method to add multiple keywords
@@ -130,6 +141,7 @@ func New(dialect SQLDialect, ignoreCase bool) *Keywords {
 	k.CompoundKeywords["FULL JOIN"] = models.TokenTypeKeyword
 	k.CompoundKeywords["CROSS JOIN"] = models.TokenTypeKeyword
 	k.CompoundKeywords["NATURAL JOIN"] = models.TokenTypeKeyword
+	k.CompoundKeywords["GROUPING SETS"] = models.TokenTypeKeyword // SQL-99 grouping operation
 
 	// Add standard keywords
 	k.addKeywordsWithCategory(RESERVED_FOR_TABLE_ALIAS)

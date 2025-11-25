@@ -854,3 +854,169 @@ func TestParser_TableDrivenComplexScenarios(t *testing.T) {
 		})
 	}
 }
+
+// TestParser_GroupingOperations tests SQL-99 ROLLUP, CUBE, GROUPING SETS
+func TestParser_GroupingOperations(t *testing.T) {
+	tests := []struct {
+		name    string
+		desc    string
+		tokens  []token.Token
+		wantErr bool
+	}{
+		// ROLLUP tests
+		{
+			name: "ROLLUP with two columns",
+			desc: "GROUP BY ROLLUP(a, b)",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "IDENT", Literal: "a"},
+				{Type: ",", Literal: ","},
+				{Type: "IDENT", Literal: "b"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "t"},
+				{Type: "GROUP", Literal: "GROUP"},
+				{Type: "BY", Literal: "BY"},
+				{Type: "ROLLUP", Literal: "ROLLUP"},
+				{Type: "(", Literal: "("},
+				{Type: "IDENT", Literal: "a"},
+				{Type: ",", Literal: ","},
+				{Type: "IDENT", Literal: "b"},
+				{Type: ")", Literal: ")"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Empty ROLLUP fails",
+			desc: "GROUP BY ROLLUP() should fail",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "IDENT", Literal: "a"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "t"},
+				{Type: "GROUP", Literal: "GROUP"},
+				{Type: "BY", Literal: "BY"},
+				{Type: "ROLLUP", Literal: "ROLLUP"},
+				{Type: "(", Literal: "("},
+				{Type: ")", Literal: ")"},
+			},
+			wantErr: true,
+		},
+		// CUBE tests
+		{
+			name: "CUBE with two columns",
+			desc: "GROUP BY CUBE(a, b)",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "IDENT", Literal: "a"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "t"},
+				{Type: "GROUP", Literal: "GROUP"},
+				{Type: "BY", Literal: "BY"},
+				{Type: "CUBE", Literal: "CUBE"},
+				{Type: "(", Literal: "("},
+				{Type: "IDENT", Literal: "a"},
+				{Type: ",", Literal: ","},
+				{Type: "IDENT", Literal: "b"},
+				{Type: ")", Literal: ")"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Empty CUBE fails",
+			desc: "GROUP BY CUBE() should fail",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "IDENT", Literal: "a"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "t"},
+				{Type: "GROUP", Literal: "GROUP"},
+				{Type: "BY", Literal: "BY"},
+				{Type: "CUBE", Literal: "CUBE"},
+				{Type: "(", Literal: "("},
+				{Type: ")", Literal: ")"},
+			},
+			wantErr: true,
+		},
+		// GROUPING SETS tests
+		{
+			name: "GROUPING SETS with multiple sets",
+			desc: "GROUP BY GROUPING SETS((a, b), (a), ())",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "IDENT", Literal: "a"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "t"},
+				{Type: "GROUP", Literal: "GROUP"},
+				{Type: "BY", Literal: "BY"},
+				{Type: "GROUPING SETS", Literal: "GROUPING SETS"},
+				{Type: "(", Literal: "("},
+				{Type: "(", Literal: "("},
+				{Type: "IDENT", Literal: "a"},
+				{Type: ",", Literal: ","},
+				{Type: "IDENT", Literal: "b"},
+				{Type: ")", Literal: ")"},
+				{Type: ",", Literal: ","},
+				{Type: "(", Literal: "("},
+				{Type: "IDENT", Literal: "a"},
+				{Type: ")", Literal: ")"},
+				{Type: ",", Literal: ","},
+				{Type: "(", Literal: "("},
+				{Type: ")", Literal: ")"},
+				{Type: ")", Literal: ")"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "GROUPING SETS with only empty set",
+			desc: "GROUP BY GROUPING SETS(()) is valid for grand total",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "IDENT", Literal: "total"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "t"},
+				{Type: "GROUP", Literal: "GROUP"},
+				{Type: "BY", Literal: "BY"},
+				{Type: "GROUPING SETS", Literal: "GROUPING SETS"},
+				{Type: "(", Literal: "("},
+				{Type: "(", Literal: "("},
+				{Type: ")", Literal: ")"},
+				{Type: ")", Literal: ")"},
+			},
+			wantErr: false,
+		},
+		// Mixed tests
+		{
+			name: "Mixed regular column and ROLLUP",
+			desc: "GROUP BY a, ROLLUP(b, c)",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "IDENT", Literal: "a"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "t"},
+				{Type: "GROUP", Literal: "GROUP"},
+				{Type: "BY", Literal: "BY"},
+				{Type: "IDENT", Literal: "a"},
+				{Type: ",", Literal: ","},
+				{Type: "ROLLUP", Literal: "ROLLUP"},
+				{Type: "(", Literal: "("},
+				{Type: "IDENT", Literal: "b"},
+				{Type: ",", Literal: ","},
+				{Type: "IDENT", Literal: "c"},
+				{Type: ")", Literal: ")"},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewParser()
+			defer parser.Release()
+
+			_, err := parser.Parse(tt.tokens)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Parse() %s: error = %v, wantErr %v", tt.desc, err, tt.wantErr)
+			}
+		})
+	}
+}

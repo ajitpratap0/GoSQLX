@@ -50,16 +50,21 @@ func (k *Keywords) initialize() {
 		"NULLS":    models.TokenTypeKeyword,
 		"FIRST":    models.TokenTypeKeyword,
 		"LAST":     models.TokenTypeKeyword,
+		"ROLLUP":   models.TokenTypeKeyword, // SQL-99 grouping operation
+		"CUBE":     models.TokenTypeKeyword, // SQL-99 grouping operation
+		"GROUPING": models.TokenTypeKeyword, // SQL-99 GROUPING SETS
+		"SETS":     models.TokenTypeKeyword, // SQL-99 GROUPING SETS
 	}
 
 	// Initialize compound keywords
 	k.CompoundKeywords = map[string]models.TokenType{
-		"FULL JOIN":    models.TokenTypeKeyword,
-		"CROSS JOIN":   models.TokenTypeKeyword,
-		"NATURAL JOIN": models.TokenTypeKeyword,
-		"GROUP BY":     models.TokenTypeKeyword,
-		"ORDER BY":     models.TokenTypeKeyword,
-		"LEFT JOIN":    models.TokenTypeKeyword,
+		"FULL JOIN":     models.TokenTypeKeyword,
+		"CROSS JOIN":    models.TokenTypeKeyword,
+		"NATURAL JOIN":  models.TokenTypeKeyword,
+		"GROUP BY":      models.TokenTypeKeyword,
+		"ORDER BY":      models.TokenTypeKeyword,
+		"LEFT JOIN":     models.TokenTypeKeyword,
+		"GROUPING SETS": models.TokenTypeKeyword, // SQL-99 grouping operation
 	}
 
 	// Add all keywords to the main keyword map

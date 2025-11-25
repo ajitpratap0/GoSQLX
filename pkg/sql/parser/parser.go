@@ -360,6 +360,129 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 		return nil, err
 	}
 
+	// Check for NOT prefix for BETWEEN, LIKE, IN operators
+	notPrefix := false
+	if p.currentToken.Type == "NOT" {
+		notPrefix = true
+		p.advance() // Consume NOT
+	}
+
+	// Check for BETWEEN operator: expr [NOT] BETWEEN lower AND upper
+	if p.currentToken.Type == "BETWEEN" {
+		p.advance() // Consume BETWEEN
+
+		// Parse lower bound
+		lower, err := p.parsePrimaryExpression()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse BETWEEN lower bound: %w", err)
+		}
+
+		// Expect AND
+		if p.currentToken.Type != "AND" {
+			return nil, p.expectedError("AND in BETWEEN expression")
+		}
+		p.advance() // Consume AND
+
+		// Parse upper bound
+		upper, err := p.parsePrimaryExpression()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse BETWEEN upper bound: %w", err)
+		}
+
+		return &ast.BetweenExpression{
+			Expr:  left,
+			Lower: lower,
+			Upper: upper,
+			Not:   notPrefix,
+		}, nil
+	}
+
+	// Check for LIKE/ILIKE operator: expr [NOT] LIKE pattern [ESCAPE escape_char]
+	if p.currentToken.Type == "LIKE" || p.currentToken.Type == "ILIKE" {
+		operator := p.currentToken.Literal
+		p.advance() // Consume LIKE/ILIKE
+
+		// Parse pattern
+		pattern, err := p.parsePrimaryExpression()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse LIKE pattern: %w", err)
+		}
+
+		return &ast.BinaryExpression{
+			Left:     left,
+			Operator: operator,
+			Right:    pattern,
+			Not:      notPrefix,
+		}, nil
+	}
+
+	// Check for IN operator: expr [NOT] IN (values)
+	if p.currentToken.Type == "IN" {
+		p.advance() // Consume IN
+
+		// Expect opening parenthesis
+		if p.currentToken.Type != "(" {
+			return nil, p.expectedError("( after IN")
+		}
+		p.advance() // Consume (
+
+		// Parse value list
+		var values []ast.Expression
+		for {
+			val, err := p.parseExpression()
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse IN value: %w", err)
+			}
+			values = append(values, val)
+
+			if p.currentToken.Type == "," {
+				p.advance() // Consume comma
+			} else {
+				break
+			}
+		}
+
+		// Expect closing parenthesis
+		if p.currentToken.Type != ")" {
+			return nil, p.expectedError(") to close IN list")
+		}
+		p.advance() // Consume )
+
+		return &ast.InExpression{
+			Expr: left,
+			List: values,
+			Not:  notPrefix,
+		}, nil
+	}
+
+	// If we had NOT but no BETWEEN/LIKE/IN followed, it's an error or we need to handle it
+	if notPrefix {
+		return nil, p.expectedError("BETWEEN, LIKE, or IN after NOT")
+	}
+
+	// Check for IS NULL / IS NOT NULL: expr IS [NOT] NULL
+	if p.currentToken.Type == "IS" {
+		p.advance() // Consume IS
+
+		isNot := false
+		if p.currentToken.Type == "NOT" {
+			isNot = true
+			p.advance() // Consume NOT
+		}
+
+		if p.currentToken.Type == "NULL" {
+			p.advance() // Consume NULL
+			return &ast.BinaryExpression{
+				Left:     left,
+				Operator: "IS NULL",
+				Right:    &ast.LiteralValue{Value: nil, Type: "null"},
+				Not:      isNot,
+			}, nil
+		}
+
+		return nil, p.expectedError("NULL after IS")
+	}
+
 	// Check if this is a comparison binary expression
 	if p.currentToken.Type == "=" || p.currentToken.Type == "<" ||
 		p.currentToken.Type == ">" || p.currentToken.Type == "!=" ||

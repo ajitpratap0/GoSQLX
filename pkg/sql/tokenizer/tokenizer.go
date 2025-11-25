@@ -93,6 +93,39 @@ var keywordTokenTypes = map[string]models.TokenType{
 	"SOURCE":  models.TokenTypeKeyword,
 	"TARGET":  models.TokenTypeKeyword,
 	// Note: USING is already defined above for JOIN USING
+	// DDL keywords (Phase 4 - Materialized Views & Partitioning)
+	"CREATE":       models.TokenTypeKeyword,
+	"DROP":         models.TokenTypeKeyword,
+	"ALTER":        models.TokenTypeKeyword,
+	"TABLE":        models.TokenTypeKeyword,
+	"INDEX":        models.TokenTypeKeyword,
+	"VIEW":         models.TokenTypeKeyword,
+	"MATERIALIZED": models.TokenTypeKeyword,
+	"REFRESH":      models.TokenTypeKeyword,
+	"CONCURRENTLY": models.TokenTypeKeyword,
+	"CASCADE":      models.TokenTypeKeyword,
+	"RESTRICT":     models.TokenTypeKeyword,
+	"REPLACE":      models.TokenTypeKeyword,
+	"TEMPORARY":    models.TokenTypeKeyword,
+	// Note: TEMP is commonly used as identifier (e.g., CTE name "temp"), not added as keyword
+	"IF":         models.TokenTypeKeyword,
+	"EXISTS":     models.TokenTypeKeyword,
+	"UNIQUE":     models.TokenTypeKeyword,
+	"PRIMARY":    models.TokenTypeKeyword,
+	"KEY":        models.TokenTypeKeyword,
+	"REFERENCES": models.TokenTypeKeyword,
+	"FOREIGN":    models.TokenTypeKeyword,
+	"CHECK":      models.TokenTypeKeyword,
+	"CONSTRAINT": models.TokenTypeKeyword,
+	"TABLESPACE": models.TokenTypeKeyword,
+	// Partitioning keywords
+	"PARTITION": models.TokenTypeKeyword,
+	"RANGE":     models.TokenTypeKeyword,
+	"LIST":      models.TokenTypeKeyword,
+	"HASH":      models.TokenTypeKeyword,
+	"LESS":      models.TokenTypeKeyword,
+	"THAN":      models.TokenTypeKeyword,
+	"MAXVALUE":  models.TokenTypeKeyword,
 }
 
 // Tokenizer provides high-performance SQL tokenization with zero-copy operations

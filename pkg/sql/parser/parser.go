@@ -212,6 +212,15 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 	case "MERGE":
 		p.advance() // Consume MERGE
 		return p.parseMergeStatement()
+	case "CREATE":
+		p.advance() // Consume CREATE
+		return p.parseCreateStatement()
+	case "DROP":
+		p.advance() // Consume DROP
+		return p.parseDropStatement()
+	case "REFRESH":
+		p.advance() // Consume REFRESH
+		return p.parseRefreshStatement()
 	default:
 		return nil, p.expectedError("statement")
 	}

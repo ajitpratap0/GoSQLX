@@ -121,6 +121,35 @@ var ADDITIONAL_KEYWORDS = []Keyword{
 	{Word: "MATCHED", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
 	{Word: "SOURCE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "TARGET", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	// DDL statement keywords (Phase 4 - Materialized Views & Partitioning)
+	{Word: "CREATE", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "DROP", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "ALTER", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "TABLE", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "INDEX", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	// MATERIALIZED is PostgreSQL-specific, defined in dialect.go
+	{Word: "REFRESH", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "CONCURRENTLY", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
+	{Word: "CASCADE", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
+	{Word: "RESTRICT", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
+	// DATA is commonly used as table/column name, handled as identifier
+	{Word: "TEMPORARY", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
+	// TEMP is commonly used as identifier (e.g., CTE name "temp"), handled via isTokenMatch in parser
+	{Word: "REPLACE", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
+	{Word: "EXISTS", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
+	{Word: "IF", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
+	// Partitioning keywords
+	{Word: "HASH", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "LIST", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "VALUES", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
+	{Word: "LESS", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "THAN", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "MAXVALUE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "TABLESPACE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "CHECK", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
+	{Word: "OPTION", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "CASCADED", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "LOCAL", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 }
 
 // addKeywordsWithCategory is a helper method to add multiple keywords
@@ -142,6 +171,17 @@ func New(dialect SQLDialect, ignoreCase bool) *Keywords {
 	k.CompoundKeywords["CROSS JOIN"] = models.TokenTypeKeyword
 	k.CompoundKeywords["NATURAL JOIN"] = models.TokenTypeKeyword
 	k.CompoundKeywords["GROUPING SETS"] = models.TokenTypeKeyword // SQL-99 grouping operation
+	// Materialized views and DDL compound keywords
+	k.CompoundKeywords["MATERIALIZED VIEW"] = models.TokenTypeKeyword
+	k.CompoundKeywords["IF EXISTS"] = models.TokenTypeKeyword
+	k.CompoundKeywords["IF NOT EXISTS"] = models.TokenTypeKeyword
+	k.CompoundKeywords["OR REPLACE"] = models.TokenTypeKeyword
+	k.CompoundKeywords["WITH DATA"] = models.TokenTypeKeyword
+	k.CompoundKeywords["WITH NO DATA"] = models.TokenTypeKeyword
+	// Partitioning compound keywords
+	k.CompoundKeywords["PARTITION BY"] = models.TokenTypeKeyword
+	k.CompoundKeywords["LESS THAN"] = models.TokenTypeKeyword
+	k.CompoundKeywords["CHECK OPTION"] = models.TokenTypeKeyword
 
 	// Add standard keywords
 	k.addKeywordsWithCategory(RESERVED_FOR_TABLE_ALIAS)

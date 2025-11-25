@@ -113,6 +113,16 @@ func (tc *TokenConverter) handleCompoundToken(t models.TokenWithSpan) []token.To
 			{Type: "OUTER", Literal: "OUTER"},
 			{Type: "JOIN", Literal: "JOIN"},
 		}
+	case models.TokenTypeFullJoin:
+		return []token.Token{
+			{Type: "FULL", Literal: "FULL"},
+			{Type: "JOIN", Literal: "JOIN"},
+		}
+	case models.TokenTypeCrossJoin:
+		return []token.Token{
+			{Type: "CROSS", Literal: "CROSS"},
+			{Type: "JOIN", Literal: "JOIN"},
+		}
 	case models.TokenTypeOrderBy:
 		return []token.Token{
 			{Type: "ORDER", Literal: "ORDER"},
@@ -122,6 +132,11 @@ func (tc *TokenConverter) handleCompoundToken(t models.TokenWithSpan) []token.To
 		return []token.Token{
 			{Type: "GROUP", Literal: "GROUP"},
 			{Type: "BY", Literal: "BY"},
+		}
+	case models.TokenTypeGroupingSets:
+		return []token.Token{
+			{Type: "GROUPING", Literal: "GROUPING"},
+			{Type: "SETS", Literal: "SETS"},
 		}
 	}
 
@@ -389,10 +404,10 @@ func getKeywordTokenType(value string) token.Type {
 }
 
 // buildTypeMapping creates an optimized lookup table for token type conversion
-// Only includes token types that actually exist in models.TokenType
+// Includes all token types defined in models.TokenType for comprehensive coverage
 func buildTypeMapping() map[models.TokenType]token.Type {
 	return map[models.TokenType]token.Type{
-		// SQL Keywords (verified to exist in models)
+		// SQL Keywords (core)
 		models.TokenTypeSelect:  "SELECT",
 		models.TokenTypeFrom:    "FROM",
 		models.TokenTypeWhere:   "WHERE",
@@ -427,6 +442,143 @@ func buildTypeMapping() map[models.TokenType]token.Type {
 		models.TokenTypeTrue:    "TRUE",
 		models.TokenTypeFalse:   "FALSE",
 
+		// DML Keywords
+		models.TokenTypeInsert: "INSERT",
+		models.TokenTypeUpdate: "UPDATE",
+		models.TokenTypeDelete: "DELETE",
+		models.TokenTypeInto:   "INTO",
+		models.TokenTypeValues: "VALUES",
+		models.TokenTypeSet:    "SET",
+
+		// DDL Keywords
+		models.TokenTypeCreate:   "CREATE",
+		models.TokenTypeAlter:    "ALTER",
+		models.TokenTypeDrop:     "DROP",
+		models.TokenTypeTable:    "TABLE",
+		models.TokenTypeIndex:    "INDEX",
+		models.TokenTypeView:     "VIEW",
+		models.TokenTypeColumn:   "COLUMN",
+		models.TokenTypeDatabase: "DATABASE",
+		models.TokenTypeSchema:   "SCHEMA",
+		models.TokenTypeTrigger:  "TRIGGER",
+
+		// CTE and Set Operations
+		models.TokenTypeWith:      "WITH",
+		models.TokenTypeRecursive: "RECURSIVE",
+		models.TokenTypeUnion:     "UNION",
+		models.TokenTypeExcept:    "EXCEPT",
+		models.TokenTypeIntersect: "INTERSECT",
+		models.TokenTypeAll:       "ALL",
+
+		// Window Function Keywords
+		models.TokenTypeOver:      "OVER",
+		models.TokenTypePartition: "PARTITION",
+		models.TokenTypeRows:      "ROWS",
+		models.TokenTypeRange:     "RANGE",
+		models.TokenTypeUnbounded: "UNBOUNDED",
+		models.TokenTypePreceding: "PRECEDING",
+		models.TokenTypeFollowing: "FOLLOWING",
+		models.TokenTypeCurrent:   "CURRENT",
+		models.TokenTypeRow:       "ROW",
+		models.TokenTypeGroups:    "GROUPS",
+		models.TokenTypeFilter:    "FILTER",
+		models.TokenTypeExclude:   "EXCLUDE",
+
+		// Additional Join Keywords
+		models.TokenTypeCross:   "CROSS",
+		models.TokenTypeNatural: "NATURAL",
+		models.TokenTypeFull:    "FULL",
+		models.TokenTypeUsing:   "USING",
+
+		// Constraint Keywords
+		models.TokenTypePrimary:       "PRIMARY",
+		models.TokenTypeKey:           "KEY",
+		models.TokenTypeForeign:       "FOREIGN",
+		models.TokenTypeReferences:    "REFERENCES",
+		models.TokenTypeUnique:        "UNIQUE",
+		models.TokenTypeCheck:         "CHECK",
+		models.TokenTypeDefault:       "DEFAULT",
+		models.TokenTypeAutoIncrement: "AUTO_INCREMENT",
+		models.TokenTypeConstraint:    "CONSTRAINT",
+		models.TokenTypeNotNull:       "NOT_NULL",
+		models.TokenTypeNullable:      "NULLABLE",
+
+		// Additional SQL Keywords
+		models.TokenTypeDistinct: "DISTINCT",
+		models.TokenTypeExists:   "EXISTS",
+		models.TokenTypeAny:      "ANY",
+		models.TokenTypeSome:     "SOME",
+		models.TokenTypeCast:     "CAST",
+		models.TokenTypeConvert:  "CONVERT",
+		models.TokenTypeCollate:  "COLLATE",
+		models.TokenTypeCascade:  "CASCADE",
+		models.TokenTypeRestrict: "RESTRICT",
+		models.TokenTypeReplace:  "REPLACE",
+		models.TokenTypeRename:   "RENAME",
+		models.TokenTypeTo:       "TO",
+		models.TokenTypeIf:       "IF",
+		models.TokenTypeOnly:     "ONLY",
+		models.TokenTypeFor:      "FOR",
+		models.TokenTypeNulls:    "NULLS",
+		models.TokenTypeFirst:    "FIRST",
+		models.TokenTypeLast:     "LAST",
+
+		// MERGE Statement Keywords
+		models.TokenTypeMerge:   "MERGE",
+		models.TokenTypeMatched: "MATCHED",
+		models.TokenTypeTarget:  "TARGET",
+		models.TokenTypeSource:  "SOURCE",
+
+		// Materialized View Keywords
+		models.TokenTypeMaterialized: "MATERIALIZED",
+		models.TokenTypeRefresh:      "REFRESH",
+
+		// Grouping Set Keywords
+		models.TokenTypeGroupingSets: "GROUPING SETS",
+		models.TokenTypeRollup:       "ROLLUP",
+		models.TokenTypeCube:         "CUBE",
+		models.TokenTypeGrouping:     "GROUPING",
+
+		// Role/Permission Keywords
+		models.TokenTypeRole:       "ROLE",
+		models.TokenTypeUser:       "USER",
+		models.TokenTypeGrant:      "GRANT",
+		models.TokenTypeRevoke:     "REVOKE",
+		models.TokenTypePrivilege:  "PRIVILEGE",
+		models.TokenTypePassword:   "PASSWORD",
+		models.TokenTypeLogin:      "LOGIN",
+		models.TokenTypeSuperuser:  "SUPERUSER",
+		models.TokenTypeCreateDB:   "CREATEDB",
+		models.TokenTypeCreateRole: "CREATEROLE",
+
+		// Transaction Keywords
+		models.TokenTypeBegin:     "BEGIN",
+		models.TokenTypeCommit:    "COMMIT",
+		models.TokenTypeRollback:  "ROLLBACK",
+		models.TokenTypeSavepoint: "SAVEPOINT",
+
+		// Data Type Keywords
+		models.TokenTypeInt:       "INT",
+		models.TokenTypeInteger:   "INTEGER",
+		models.TokenTypeBigInt:    "BIGINT",
+		models.TokenTypeSmallInt:  "SMALLINT",
+		models.TokenTypeFloat:     "FLOAT",
+		models.TokenTypeDouble:    "DOUBLE",
+		models.TokenTypeDecimal:   "DECIMAL",
+		models.TokenTypeNumeric:   "NUMERIC",
+		models.TokenTypeVarchar:   "VARCHAR",
+		models.TokenTypeChar2:     "CHAR",
+		models.TokenTypeText:      "TEXT",
+		models.TokenTypeBoolean:   "BOOLEAN",
+		models.TokenTypeDate:      "DATE",
+		models.TokenTypeTime:      "TIME",
+		models.TokenTypeTimestamp: "TIMESTAMP",
+		models.TokenTypeInterval:  "INTERVAL",
+		models.TokenTypeBlob:      "BLOB",
+		models.TokenTypeClob:      "CLOB",
+		models.TokenTypeJson:      "JSON",
+		models.TokenTypeUuid:      "UUID",
+
 		// Aggregate functions - map to IDENT so they can be used as function names
 		models.TokenTypeCount: "IDENT",
 		models.TokenTypeSum:   "IDENT",
@@ -441,6 +593,8 @@ func buildTypeMapping() map[models.TokenType]token.Type {
 		models.TokenTypeRightJoin: "RIGHT JOIN",
 		models.TokenTypeInnerJoin: "INNER JOIN",
 		models.TokenTypeOuterJoin: "OUTER JOIN",
+		models.TokenTypeFullJoin:  "FULL JOIN",
+		models.TokenTypeCrossJoin: "CROSS JOIN",
 
 		// Identifiers and Literals
 		models.TokenTypeIdentifier: "IDENT",
@@ -481,6 +635,9 @@ func buildTypeMapping() map[models.TokenType]token.Type {
 		models.TokenTypeWhitespace: "WHITESPACE",
 		models.TokenTypeKeyword:    "KEYWORD",
 		models.TokenTypeOperator:   "OPERATOR",
+		models.TokenTypeIllegal:    "ILLEGAL",
+		models.TokenTypeAsterisk:   "*",
+		models.TokenTypeDoublePipe: "||",
 	}
 }
 

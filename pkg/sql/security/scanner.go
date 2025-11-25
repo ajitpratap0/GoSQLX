@@ -256,11 +256,12 @@ func (s *Scanner) scanSetOperation(stmt *ast.SetOperation, result *ScanResult) {
 	}
 
 	// Recursively scan left and right statements
-	if leftStmt, ok := stmt.Left.(ast.Statement); ok {
-		s.scanStatement(leftStmt, result)
+	// Note: SetOperation.Left and .Right are already ast.Statement type
+	if stmt.Left != nil {
+		s.scanStatement(stmt.Left, result)
 	}
-	if rightStmt, ok := stmt.Right.(ast.Statement); ok {
-		s.scanStatement(rightStmt, result)
+	if stmt.Right != nil {
+		s.scanStatement(stmt.Right, result)
 	}
 }
 

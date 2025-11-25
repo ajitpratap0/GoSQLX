@@ -654,6 +654,7 @@ type CreateTableStatement struct {
 	Constraints []TableConstraint
 	Inherits    []string
 	PartitionBy *PartitionBy
+	Partitions  []PartitionDefinition // Individual partition definitions
 	Options     []TableOption
 }
 
@@ -671,6 +672,10 @@ func (c CreateTableStatement) Children() []Node {
 	}
 	if c.PartitionBy != nil {
 		children = append(children, c.PartitionBy)
+	}
+	for _, p := range c.Partitions {
+		p := p // G601: Create local copy
+		children = append(children, &p)
 	}
 	return children
 }
@@ -974,6 +979,107 @@ func (s SetClause) Children() []Node {
 		return []Node{s.Value}
 	}
 	return nil
+}
+
+// CreateViewStatement represents a CREATE VIEW statement
+// Syntax: CREATE [OR REPLACE] [TEMP|TEMPORARY] VIEW [IF NOT EXISTS] name [(columns)] AS select
+type CreateViewStatement struct {
+	OrReplace   bool
+	Temporary   bool
+	IfNotExists bool
+	Name        string
+	Columns     []string  // Optional column list
+	Query       Statement // The SELECT statement
+	WithOption  string    // PostgreSQL: WITH (CHECK OPTION | CASCADED | LOCAL)
+}
+
+func (c *CreateViewStatement) statementNode()      {}
+func (c CreateViewStatement) TokenLiteral() string { return "CREATE VIEW" }
+func (c CreateViewStatement) Children() []Node {
+	if c.Query != nil {
+		return []Node{c.Query}
+	}
+	return nil
+}
+
+// CreateMaterializedViewStatement represents a CREATE MATERIALIZED VIEW statement
+// Syntax: CREATE MATERIALIZED VIEW [IF NOT EXISTS] name [(columns)] AS select [WITH [NO] DATA]
+type CreateMaterializedViewStatement struct {
+	IfNotExists bool
+	Name        string
+	Columns     []string  // Optional column list
+	Query       Statement // The SELECT statement
+	WithData    *bool     // nil = default, true = WITH DATA, false = WITH NO DATA
+	Tablespace  string    // Optional tablespace (PostgreSQL)
+}
+
+func (c *CreateMaterializedViewStatement) statementNode()      {}
+func (c CreateMaterializedViewStatement) TokenLiteral() string { return "CREATE MATERIALIZED VIEW" }
+func (c CreateMaterializedViewStatement) Children() []Node {
+	if c.Query != nil {
+		return []Node{c.Query}
+	}
+	return nil
+}
+
+// RefreshMaterializedViewStatement represents a REFRESH MATERIALIZED VIEW statement
+// Syntax: REFRESH MATERIALIZED VIEW [CONCURRENTLY] name [WITH [NO] DATA]
+type RefreshMaterializedViewStatement struct {
+	Concurrently bool
+	Name         string
+	WithData     *bool // nil = default, true = WITH DATA, false = WITH NO DATA
+}
+
+func (r *RefreshMaterializedViewStatement) statementNode()      {}
+func (r RefreshMaterializedViewStatement) TokenLiteral() string { return "REFRESH MATERIALIZED VIEW" }
+func (r RefreshMaterializedViewStatement) Children() []Node     { return nil }
+
+// DropStatement represents a DROP statement for tables, views, indexes, etc.
+// Syntax: DROP object_type [IF EXISTS] name [CASCADE|RESTRICT]
+type DropStatement struct {
+	ObjectType  string // TABLE, VIEW, MATERIALIZED VIEW, INDEX, etc.
+	IfExists    bool
+	Names       []string // Can drop multiple objects
+	CascadeType string   // CASCADE, RESTRICT, or empty
+}
+
+func (d *DropStatement) statementNode()      {}
+func (d DropStatement) TokenLiteral() string { return "DROP " + d.ObjectType }
+func (d DropStatement) Children() []Node     { return nil }
+
+// PartitionDefinition represents a partition definition in CREATE TABLE
+// Syntax: PARTITION name VALUES { LESS THAN (expr) | IN (list) | FROM (expr) TO (expr) }
+type PartitionDefinition struct {
+	Name       string
+	Type       string       // FOR VALUES, IN, LESS THAN
+	Values     []Expression // Partition values or bounds
+	LessThan   Expression   // For RANGE: LESS THAN (value)
+	From       Expression   // For RANGE: FROM (value)
+	To         Expression   // For RANGE: TO (value)
+	InValues   []Expression // For LIST: IN (values)
+	Tablespace string       // Optional tablespace
+}
+
+func (p *PartitionDefinition) expressionNode()     {}
+func (p PartitionDefinition) TokenLiteral() string { return "PARTITION " + p.Name }
+func (p PartitionDefinition) Children() []Node {
+	children := make([]Node, 0)
+	for _, v := range p.Values {
+		children = append(children, v)
+	}
+	if p.LessThan != nil {
+		children = append(children, p.LessThan)
+	}
+	if p.From != nil {
+		children = append(children, p.From)
+	}
+	if p.To != nil {
+		children = append(children, p.To)
+	}
+	for _, v := range p.InValues {
+		children = append(children, v)
+	}
+	return children
 }
 
 // AST represents the root of the Abstract Syntax Tree

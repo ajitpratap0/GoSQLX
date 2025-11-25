@@ -1,5 +1,7 @@
 # GoSQLX Security Analysis Report
 
+> **Note**: This document provides comprehensive security analysis and the SQL injection detection API. For security policies and vulnerability reporting, see [SECURITY.md](../SECURITY.md) in the project root.
+
 ## 🛡️ Comprehensive Security Assessment
 
 **Analysis Date**: November 2025

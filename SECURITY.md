@@ -1,5 +1,7 @@
 # Security Policy
 
+> **Note**: This file covers security policies and vulnerability reporting. For comprehensive security analysis, threat modeling, and the SQL injection detection API, see [docs/SECURITY.md](docs/SECURITY.md).
+
 ## Supported Versions
 
 We release patches for security vulnerabilities. Currently supported versions:

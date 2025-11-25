@@ -1,5 +1,7 @@
 # GoSQLX Production Deployment Guide
 
+**Version**: v1.5.1+ | **Last Updated**: November 2025
+
 Comprehensive guide for deploying GoSQLX in production environments.
 
 ## Executive Summary
@@ -317,19 +319,64 @@ func (p *SQLProcessor) ProcessWithSecurity(sql []byte) ([]interface{}, error) {
     // Acquire resource
     p.semaphore <- struct{}{}
     defer func() { <-p.semaphore }()
-    
+
     // Validate input
     if err := validateSQLInput(sql); err != nil {
         return nil, fmt.Errorf("input validation failed: %w", err)
     }
-    
+
     // Process with timeout
     ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
     defer cancel()
-    
+
     return p.processWithContext(ctx, sql)
 }
 ```
+
+### 4. SQL Injection Detection (v1.4+)
+
+GoSQLX includes a built-in security scanner for detecting SQL injection patterns:
+
+```go
+import "github.com/ajitpratap0/GoSQLX/pkg/sql/security"
+
+func (p *SQLProcessor) ScanForInjection(sql []byte) error {
+    // Parse SQL first
+    tkz := tokenizer.GetTokenizer()
+    defer tokenizer.PutTokenizer(tkz)
+
+    tokens, err := tkz.Tokenize(sql)
+    if err != nil {
+        return err
+    }
+
+    // Parse to AST
+    parser := parser.NewParser()
+    defer parser.Release()
+    ast, err := parser.Parse(tokens)
+    if err != nil {
+        return err
+    }
+
+    // Scan for injection patterns
+    scanner := security.NewScanner()
+    result := scanner.Scan(ast)
+
+    if result.HasCritical() || result.HasHigh() {
+        return fmt.Errorf("potential SQL injection detected: %d issues",
+            result.CriticalCount + result.HighCount)
+    }
+
+    return nil
+}
+```
+
+**Detected Patterns:**
+- Tautology attacks (`1=1`, `'a'='a'`)
+- UNION-based injection
+- Time-based blind injection (`SLEEP`, `WAITFOR DELAY`)
+- Comment bypass (`--`, `/**/`)
+- Dangerous functions (`xp_cmdshell`, `LOAD_FILE`)
 
 ## Monitoring & Observability
 

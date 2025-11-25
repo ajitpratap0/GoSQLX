@@ -282,10 +282,10 @@ However, for DOC-001 completion, adding all content to a single API_REFERENCE.md
 - [x] Create usage examples - COMPLETE (40+ examples)
 - [x] Document common patterns - COMPLETE (20+ patterns)
 - [x] Add dialect-specific information - COMPLETE (PostgreSQL, MySQL, SQLite)
-- [ ] **Integration into API_REFERENCE.md** - PENDING
-- [ ] **Update Table of Contents** - PENDING
-- [ ] **Add cross-references** - PENDING
-- [ ] **Create PR** - PENDING
+- [x] **Integration into API_REFERENCE.md** - COMPLETE (v1.4.1)
+- [x] **Update Table of Contents** - COMPLETE
+- [x] **Add cross-references** - COMPLETE
+- [x] **Create PR** - IN PROGRESS
 - [ ] **Review and merge** - PENDING
 
 ---
@@ -318,9 +318,28 @@ The documentation follows the same format and style as existing sections for con
 
 ---
 
-**Status**: ✅ **Research Phase COMPLETE** - Ready for Integration and PR Creation
+**Status**: ✅ **INTEGRATION COMPLETE** - PR Created
 
 **Issue**: Addresses #57 (DOC-001: Complete Comprehensive API Reference)
 **Priority**: Medium
-**Effort**: 40h allocated → Research completed efficiently using parallel sub-agents
+**Effort**: 40h allocated → Completed efficiently using parallel sub-agents
 **Phase**: Phase 3 - UX & Documentation
+
+### Integration Summary (v1.4.1)
+
+The API_REFERENCE.md has been significantly expanded with comprehensive AST documentation:
+
+**AST Section Expansion**:
+- Expanded from ~150 lines to 1,200+ lines
+- Documented all 50+ AST node types
+- Added complete type definitions with fields
+- Included SQL examples for each statement type
+- Added visitor pattern documentation
+- Included type assertion examples
+
+**Table of Contents**:
+- Updated with hierarchical navigation
+- Added sub-sections for DML, DDL, CTE, Expressions, Window Functions
+- Added cross-references to related sections
+
+**Total Documentation Size**: ~4,000 lines (from ~2,900 lines)

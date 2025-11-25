@@ -1,15 +1,39 @@
 # GoSQLX API Reference
 
 ## Table of Contents
+
 - [Package Overview](#package-overview)
 - [High-Level API (pkg/gosqlx)](#high-level-api)
+  - [Parsing Functions](#parsing-functions)
+  - [Validation Functions](#validation-functions)
+  - [Metadata Extraction](#metadata-extraction)
 - [Tokenizer API](#tokenizer-api)
+  - [Functions](#functions)
+  - [Supported Token Types](#supported-token-types)
 - [Parser API](#parser-api)
+  - [Type: Parser](#type-parser)
 - [AST API](#ast-api)
+  - [Core Interfaces](#core-interfaces)
+  - [DML Statement Types](#dml-statement-types) (SELECT, INSERT, UPDATE, DELETE, MERGE)
+  - [DDL Statement Types](#ddl-statement-types) (CREATE, ALTER, DROP)
+  - [CTE and Set Operation Types](#cte-and-set-operation-types)
+  - [Expression Types](#expression-types)
+  - [Grouping Set Types](#grouping-set-types) (ROLLUP, CUBE, GROUPING SETS)
+  - [Window Function Types](#window-function-types)
+  - [Supporting Types](#supporting-types)
+  - [Object Pool Functions](#object-pool-functions)
+  - [Visitor Pattern](#visitor-pattern)
 - [Keywords Package](#keywords-package)
+  - [Core Types](#core-types)
+  - [Dialect-Specific Keywords](#dialect-specific-keywords)
 - [Models](#models)
 - [Error Handling](#error-handling)
+  - [Error Codes](#error-codes)
+  - [Error Builder Functions](#error-builder-functions)
 - [Metrics Package](#metrics-package)
+  - [Configuration Functions](#configuration-functions)
+  - [Recording Functions](#recording-functions)
+  - [Query Functions](#query-functions)
 - [Performance Considerations](#performance-considerations)
 
 ## Package Overview
@@ -528,7 +552,16 @@ p.Release()
 
 ### Package: `github.com/ajitpratap0/GoSQLX/pkg/sql/ast`
 
-The AST package provides node types for SQL syntax trees.
+The AST package provides comprehensive node types for SQL syntax trees, supporting DDL, DML, CTEs, window functions, set operations, and advanced SQL features.
+
+### Overview
+
+**Key Features:**
+- **Complete SQL Support**: SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, MERGE
+- **Advanced Features**: CTEs, window functions, set operations, subqueries
+- **Visitor Pattern**: Tree traversal support via `ast.Visitor` interface
+- **Object Pooling**: Memory-efficient node management
+- **Type Safety**: Strongly typed nodes with interfaces
 
 ### Core Interfaces
 
@@ -537,131 +570,1100 @@ Base interface for all AST nodes.
 
 ```go
 type Node interface {
-    TokenLiteral() string  // Returns the literal token
-    Children() []Node      // Returns child nodes
+    TokenLiteral() string  // Returns the literal token representation
+    Children() []Node      // Returns child nodes for tree traversal
+}
+```
+
+**Example:**
+```go
+func PrintTree(node ast.Node, indent int) {
+    fmt.Printf("%s%s\n", strings.Repeat("  ", indent), node.TokenLiteral())
+    for _, child := range node.Children() {
+        PrintTree(child, indent+1)
+    }
 }
 ```
 
 #### Interface: `Statement`
-Represents SQL statements.
+Represents executable SQL statements.
 
 ```go
 type Statement interface {
     Node
-    statementNode()
+    statementNode()  // Marker method for type safety
 }
 ```
 
+**Implementing Types:**
+- `SelectStatement`, `InsertStatement`, `UpdateStatement`, `DeleteStatement`
+- `CreateTableStatement`, `CreateIndexStatement`, `CreateViewStatement`
+- `CreateMaterializedViewStatement`, `RefreshMaterializedViewStatement`
+- `AlterTableStatement`, `DropStatement`, `MergeStatement`
+- `WithClause`, `CommonTableExpr`, `SetOperation`
+
 #### Interface: `Expression`
-Represents SQL expressions.
+Represents SQL expressions (values, conditions, computations).
 
 ```go
 type Expression interface {
     Node
-    expressionNode()
+    expressionNode()  // Marker method for type safety
 }
 ```
 
-### Statement Types
+**Implementing Types:**
+- `Identifier`, `LiteralValue`, `BinaryExpression`, `UnaryExpression`
+- `FunctionCall`, `CaseExpression`, `CastExpression`
+- `InExpression`, `BetweenExpression`, `ExistsExpression`
+- `SubqueryExpression`, `AnyExpression`, `AllExpression`
+- `RollupExpression`, `CubeExpression`, `GroupingSetsExpression`
+
+---
+
+### DML Statement Types
 
 #### `SelectStatement`
-Represents a SELECT query.
+Represents a SELECT query with full SQL support.
 
 ```go
 type SelectStatement struct {
-    Columns     []Expression      // SELECT columns
-    From        []TableReference  // FROM tables
-    Joins       []JoinClause      // JOIN clauses
-    Where       Expression        // WHERE condition
-    GroupBy     []Expression      // GROUP BY columns
-    Having      Expression        // HAVING condition
-    OrderBy     []OrderByElement  // ORDER BY clauses
-    Limit       *int64           // LIMIT value
+    With      *WithClause         // Optional CTE (WITH clause)
+    Distinct  bool                // DISTINCT modifier
+    Columns   []Expression        // SELECT columns
+    From      []TableReference    // FROM tables
+    TableName string              // Primary table name
+    Joins     []JoinClause        // JOIN clauses
+    Where     Expression          // WHERE condition
+    GroupBy   []Expression        // GROUP BY columns (supports ROLLUP, CUBE, GROUPING SETS)
+    Having    Expression          // HAVING condition
+    Windows   []WindowSpec        // WINDOW definitions
+    OrderBy   []OrderByExpression // ORDER BY with NULLS FIRST/LAST support
+    Limit     *int                // LIMIT value
+    Offset    *int                // OFFSET value
 }
 ```
 
 **Example Usage:**
 ```go
 if stmt, ok := astNode.(*ast.SelectStatement); ok {
+    // Check for CTE
+    if stmt.With != nil {
+        fmt.Printf("Has %d CTEs\n", len(stmt.With.CTEs))
+    }
+
+    // Process columns
     for _, col := range stmt.Columns {
         fmt.Println("Column:", col.TokenLiteral())
+    }
+
+    // Check for window functions
+    if len(stmt.Windows) > 0 {
+        fmt.Println("Uses window functions")
     }
 }
 ```
 
+**Supported SQL:**
+```sql
+WITH cte AS (SELECT * FROM source)
+SELECT DISTINCT id, name, ROW_NUMBER() OVER (ORDER BY id) as rn
+FROM users u
+LEFT JOIN orders o ON u.id = o.user_id
+WHERE active = true
+GROUP BY ROLLUP(region, city)
+HAVING COUNT(*) > 5
+ORDER BY name NULLS LAST
+LIMIT 10 OFFSET 5
+```
+
+---
+
 #### `InsertStatement`
-Represents an INSERT statement.
+Represents an INSERT statement with conflict handling.
 
 ```go
 type InsertStatement struct {
-    Table   string       // Target table
-    Columns []string     // Column names
-    Values  [][]Expression // Value rows
+    With       *WithClause      // Optional CTE
+    TableName  string           // Target table
+    Columns    []Expression     // Column list
+    Values     []Expression     // Value expressions
+    Query      *SelectStatement // INSERT ... SELECT
+    Returning  []Expression     // RETURNING clause (PostgreSQL)
+    OnConflict *OnConflict      // ON CONFLICT clause (PostgreSQL)
 }
 ```
 
+**Example:**
+```go
+if stmt, ok := astNode.(*ast.InsertStatement); ok {
+    fmt.Printf("Insert into: %s\n", stmt.TableName)
+
+    if stmt.Query != nil {
+        fmt.Println("INSERT ... SELECT detected")
+    }
+
+    if stmt.OnConflict != nil {
+        fmt.Println("Has ON CONFLICT handling")
+    }
+}
+```
+
+**Supported SQL:**
+```sql
+INSERT INTO users (name, email)
+VALUES ('John', 'john@example.com')
+ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
+RETURNING id, created_at
+```
+
+---
+
 #### `UpdateStatement`
-Represents an UPDATE statement.
+Represents an UPDATE statement with multi-table support.
 
 ```go
 type UpdateStatement struct {
-    Table   string              // Target table
-    Set     []UpdateSetClause   // SET clauses
-    Where   Expression          // WHERE condition
+    With        *WithClause        // Optional CTE
+    TableName   string             // Target table
+    Alias       string             // Table alias
+    Updates     []UpdateExpression // SET column = value pairs
+    Assignments []UpdateExpression // Alternative field name
+    From        []TableReference   // FROM clause for multi-table updates
+    Where       Expression         // WHERE condition
+    Returning   []Expression       // RETURNING clause (PostgreSQL)
 }
 ```
 
+**Supported SQL:**
+```sql
+WITH updated AS (SELECT id FROM active_users)
+UPDATE users u
+SET status = 'active', updated_at = NOW()
+FROM updated
+WHERE u.id = updated.id
+RETURNING u.id, u.status
+```
+
+---
+
 #### `DeleteStatement`
-Represents a DELETE statement.
+Represents a DELETE statement with USING support.
 
 ```go
 type DeleteStatement struct {
-    Table string      // Target table
-    Where Expression  // WHERE condition
+    With      *WithClause      // Optional CTE
+    TableName string           // Target table
+    Alias     string           // Table alias
+    Using     []TableReference // USING clause for multi-table deletes
+    Where     Expression       // WHERE condition
+    Returning []Expression     // RETURNING clause (PostgreSQL)
 }
 ```
+
+**Supported SQL:**
+```sql
+DELETE FROM orders o
+USING users u
+WHERE o.user_id = u.id AND u.deleted = true
+RETURNING o.id
+```
+
+---
+
+#### `MergeStatement`
+Represents a MERGE statement (SQL:2003 F312).
+
+```go
+type MergeStatement struct {
+    TargetTable TableReference     // Target table being merged into
+    TargetAlias string             // Optional target alias
+    SourceTable TableReference     // Source table/subquery
+    SourceAlias string             // Optional source alias
+    OnCondition Expression         // Join/match condition
+    WhenClauses []*MergeWhenClause // WHEN MATCHED/NOT MATCHED clauses
+}
+```
+
+**Supporting Types:**
+```go
+type MergeWhenClause struct {
+    Type      string       // "MATCHED", "NOT_MATCHED", "NOT_MATCHED_BY_SOURCE"
+    Condition Expression   // Optional AND condition
+    Action    *MergeAction // UPDATE/INSERT/DELETE action
+}
+
+type MergeAction struct {
+    ActionType    string       // "UPDATE", "INSERT", "DELETE"
+    SetClauses    []SetClause  // For UPDATE
+    Columns       []string     // For INSERT
+    Values        []Expression // For INSERT
+    DefaultValues bool         // For INSERT DEFAULT VALUES
+}
+```
+
+**Supported SQL:**
+```sql
+MERGE INTO target t
+USING source s ON t.id = s.id
+WHEN MATCHED AND s.active = true THEN
+    UPDATE SET t.name = s.name, t.updated = NOW()
+WHEN MATCHED AND s.active = false THEN
+    DELETE
+WHEN NOT MATCHED THEN
+    INSERT (id, name) VALUES (s.id, s.name)
+```
+
+---
+
+### DDL Statement Types
+
+#### `CreateTableStatement`
+Represents a CREATE TABLE statement with partitioning support.
+
+```go
+type CreateTableStatement struct {
+    IfNotExists bool                  // IF NOT EXISTS
+    Temporary   bool                  // TEMP/TEMPORARY
+    Name        string                // Table name
+    Columns     []ColumnDef           // Column definitions
+    Constraints []TableConstraint     // Table-level constraints
+    Inherits    []string              // INHERITS clause (PostgreSQL)
+    PartitionBy *PartitionBy          // PARTITION BY clause
+    Partitions  []PartitionDefinition // Individual partition definitions
+    Options     []TableOption         // ENGINE, CHARSET, etc. (MySQL)
+}
+```
+
+**Supporting Types:**
+```go
+type ColumnDef struct {
+    Name        string             // Column name
+    Type        string             // Data type
+    Constraints []ColumnConstraint // Column constraints
+}
+
+type ColumnConstraint struct {
+    Type          string               // NOT NULL, UNIQUE, PRIMARY KEY, etc.
+    Default       Expression           // DEFAULT value
+    References    *ReferenceDefinition // FOREIGN KEY reference
+    Check         Expression           // CHECK constraint
+    AutoIncrement bool                 // AUTO_INCREMENT (MySQL)
+}
+
+type TableConstraint struct {
+    Name       string               // Constraint name
+    Type       string               // PRIMARY KEY, UNIQUE, FOREIGN KEY, CHECK
+    Columns    []string             // Affected columns
+    References *ReferenceDefinition // Foreign key details
+    Check      Expression           // Check expression
+}
+
+type ReferenceDefinition struct {
+    Table    string   // Referenced table
+    Columns  []string // Referenced columns
+    OnDelete string   // ON DELETE action
+    OnUpdate string   // ON UPDATE action
+    Match    string   // MATCH type
+}
+
+type PartitionBy struct {
+    Type     string       // RANGE, LIST, HASH
+    Columns  []string     // Partition columns
+    Boundary []Expression // Boundary expressions
+}
+
+type PartitionDefinition struct {
+    Name       string       // Partition name
+    Type       string       // FOR VALUES, IN, LESS THAN
+    Values     []Expression // Partition values
+    LessThan   Expression   // LESS THAN (value)
+    From       Expression   // FROM (value)
+    To         Expression   // TO (value)
+    InValues   []Expression // IN (values)
+    Tablespace string       // Tablespace
+}
+```
+
+**Supported SQL:**
+```sql
+CREATE TABLE IF NOT EXISTS orders (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    amount DECIMAL(10,2) CHECK (amount > 0),
+    status VARCHAR(20) DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_order UNIQUE (user_id, created_at)
+)
+PARTITION BY RANGE (created_at);
+
+CREATE TABLE orders_2024 PARTITION OF orders
+    FOR VALUES FROM ('2024-01-01') TO ('2025-01-01');
+```
+
+---
+
+#### `CreateIndexStatement`
+Represents a CREATE INDEX statement.
+
+```go
+type CreateIndexStatement struct {
+    Unique      bool          // UNIQUE index
+    IfNotExists bool          // IF NOT EXISTS
+    Name        string        // Index name
+    Table       string        // Table name
+    Columns     []IndexColumn // Index columns
+    Using       string        // Index method (BTREE, HASH, GIN, etc.)
+    Where       Expression    // Partial index condition
+}
+
+type IndexColumn struct {
+    Column    string // Column name
+    Collate   string // Collation
+    Direction string // ASC, DESC
+    NullsLast bool   // NULLS LAST
+}
+```
+
+**Supported SQL:**
+```sql
+CREATE UNIQUE INDEX CONCURRENTLY idx_users_email
+ON users (email)
+WHERE deleted_at IS NULL;
+```
+
+---
+
+#### `CreateViewStatement`
+Represents a CREATE VIEW statement.
+
+```go
+type CreateViewStatement struct {
+    OrReplace   bool      // OR REPLACE
+    Temporary   bool      // TEMP/TEMPORARY
+    IfNotExists bool      // IF NOT EXISTS
+    Name        string    // View name
+    Columns     []string  // Optional column list
+    Query       Statement // SELECT statement
+    WithOption  string    // WITH CHECK OPTION, etc.
+}
+```
+
+**Supported SQL:**
+```sql
+CREATE OR REPLACE VIEW active_users AS
+SELECT id, name, email
+FROM users
+WHERE active = true
+WITH CHECK OPTION;
+```
+
+---
+
+#### `CreateMaterializedViewStatement`
+Represents a CREATE MATERIALIZED VIEW statement.
+
+```go
+type CreateMaterializedViewStatement struct {
+    IfNotExists bool      // IF NOT EXISTS
+    Name        string    // View name
+    Columns     []string  // Optional column list
+    Query       Statement // SELECT statement
+    WithData    *bool     // WITH DATA / WITH NO DATA
+    Tablespace  string    // Tablespace (PostgreSQL)
+}
+```
+
+**Supported SQL:**
+```sql
+CREATE MATERIALIZED VIEW sales_summary AS
+SELECT region, SUM(amount) as total
+FROM sales
+GROUP BY region
+WITH DATA;
+```
+
+---
+
+#### `RefreshMaterializedViewStatement`
+Represents a REFRESH MATERIALIZED VIEW statement.
+
+```go
+type RefreshMaterializedViewStatement struct {
+    Concurrently bool   // CONCURRENTLY
+    Name         string // View name
+    WithData     *bool  // WITH DATA / WITH NO DATA
+}
+```
+
+**Supported SQL:**
+```sql
+REFRESH MATERIALIZED VIEW CONCURRENTLY sales_summary;
+```
+
+---
+
+#### `AlterTableStatement`
+Represents an ALTER TABLE statement.
+
+```go
+type AlterTableStatement struct {
+    Table   string             // Table name
+    Actions []AlterTableAction // Actions to perform
+}
+
+type AlterTableAction struct {
+    Type       string           // ADD COLUMN, DROP COLUMN, MODIFY COLUMN, etc.
+    ColumnName string           // Affected column
+    ColumnDef  *ColumnDef       // New column definition
+    Constraint *TableConstraint // Constraint modification
+}
+```
+
+**Supported SQL:**
+```sql
+ALTER TABLE users
+    ADD COLUMN phone VARCHAR(20),
+    DROP COLUMN legacy_field,
+    ADD CONSTRAINT fk_dept FOREIGN KEY (dept_id) REFERENCES departments(id);
+```
+
+---
+
+#### `DropStatement`
+Represents a DROP statement for various object types.
+
+```go
+type DropStatement struct {
+    ObjectType  string   // TABLE, VIEW, MATERIALIZED VIEW, INDEX, etc.
+    IfExists    bool     // IF EXISTS
+    Names       []string // Objects to drop (can be multiple)
+    CascadeType string   // CASCADE, RESTRICT, or empty
+}
+```
+
+**Supported SQL:**
+```sql
+DROP TABLE IF EXISTS temp_data, old_logs CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS sales_summary;
+DROP INDEX idx_users_email;
+```
+
+---
+
+### CTE and Set Operation Types
+
+#### `WithClause`
+Represents a WITH clause (Common Table Expressions).
+
+```go
+type WithClause struct {
+    Recursive bool               // RECURSIVE modifier
+    CTEs      []*CommonTableExpr // CTE definitions
+}
+```
+
+#### `CommonTableExpr`
+Represents a single CTE definition.
+
+```go
+type CommonTableExpr struct {
+    Name         string    // CTE name
+    Columns      []string  // Optional column list
+    Statement    Statement // CTE query
+    Materialized *bool     // MATERIALIZED/NOT MATERIALIZED (PostgreSQL)
+}
+```
+
+**Supported SQL:**
+```sql
+WITH RECURSIVE employee_tree (id, name, level) AS (
+    SELECT id, name, 1 FROM employees WHERE manager_id IS NULL
+    UNION ALL
+    SELECT e.id, e.name, t.level + 1
+    FROM employees e
+    JOIN employee_tree t ON e.manager_id = t.id
+)
+SELECT * FROM employee_tree;
+```
+
+---
+
+#### `SetOperation`
+Represents set operations (UNION, EXCEPT, INTERSECT).
+
+```go
+type SetOperation struct {
+    Left     Statement // Left query
+    Operator string    // UNION, EXCEPT, INTERSECT
+    Right    Statement // Right query
+    All      bool      // ALL modifier (e.g., UNION ALL)
+}
+```
+
+**Supported SQL:**
+```sql
+SELECT name FROM users
+UNION ALL
+SELECT name FROM customers
+EXCEPT
+SELECT name FROM blocked_users;
+```
+
+---
 
 ### Expression Types
 
 #### `Identifier`
-Represents a column or table name.
+Represents a column or table name with optional qualification.
 
 ```go
 type Identifier struct {
-    Name string
+    Name  string // Column/table name
+    Table string // Optional table qualifier
 }
 ```
 
-#### `Literal`
-Represents a literal value.
+**Example:**
+```go
+// For "users.id"
+id := &ast.Identifier{Name: "id", Table: "users"}
+```
+
+---
+
+#### `LiteralValue`
+Represents a literal value in SQL.
 
 ```go
-type Literal struct {
-    Type  LiteralType // STRING, NUMBER, BOOLEAN, NULL
-    Value interface{}
+type LiteralValue struct {
+    Value interface{} // Actual value
+    Type  string      // INTEGER, FLOAT, STRING, BOOLEAN, NULL, etc.
 }
 ```
 
+**Example:**
+```go
+// For '42'
+num := &ast.LiteralValue{Value: 42, Type: "INTEGER"}
+
+// For 'hello'
+str := &ast.LiteralValue{Value: "hello", Type: "STRING"}
+
+// For NULL
+null := &ast.LiteralValue{Value: nil, Type: "NULL"}
+```
+
+---
+
 #### `BinaryExpression`
-Represents binary operations.
+Represents binary operations (comparison, logical, arithmetic).
 
 ```go
 type BinaryExpression struct {
-    Left     Expression
-    Operator string // =, >, <, AND, OR, etc.
-    Right    Expression
+    Left     Expression           // Left operand
+    Operator string               // =, <>, >, <, AND, OR, +, -, *, /, etc.
+    Right    Expression           // Right operand
+    Not      bool                 // NOT modifier
+    CustomOp *CustomBinaryOperator // PostgreSQL custom operators
 }
 ```
 
+**Supported Operators:**
+- Comparison: `=`, `<>`, `!=`, `>`, `<`, `>=`, `<=`
+- Logical: `AND`, `OR`
+- Arithmetic: `+`, `-`, `*`, `/`, `%`
+- String: `||` (concatenation), `LIKE`, `ILIKE`
+- PostgreSQL: `@>`, `<@`, `&&`, `?`, `?|`, `?&`
+
+---
+
+#### `UnaryExpression`
+Represents unary operations.
+
+```go
+type UnaryExpression struct {
+    Operator UnaryOperator // NOT, -, +, etc.
+    Expr     Expression    // Operand
+}
+```
+
+---
+
 #### `FunctionCall`
-Represents function calls.
+Represents function calls including window functions.
 
 ```go
 type FunctionCall struct {
-    Name      string
-    Arguments []Expression
+    Name      string       // Function name
+    Arguments []Expression // Function arguments
+    Over      *WindowSpec  // Window specification (for window functions)
+    Distinct  bool         // DISTINCT modifier (for aggregates)
+    Filter    Expression   // FILTER clause (PostgreSQL)
 }
 ```
+
+**Example:**
+```go
+// COUNT(DISTINCT user_id) FILTER (WHERE active)
+countFunc := &ast.FunctionCall{
+    Name:     "COUNT",
+    Arguments: []ast.Expression{&ast.Identifier{Name: "user_id"}},
+    Distinct: true,
+    Filter:   &ast.BinaryExpression{...},
+}
+
+// ROW_NUMBER() OVER (PARTITION BY dept ORDER BY salary DESC)
+rowNumFunc := &ast.FunctionCall{
+    Name: "ROW_NUMBER",
+    Over: &ast.WindowSpec{
+        PartitionBy: []ast.Expression{...},
+        OrderBy:     []ast.OrderByExpression{...},
+    },
+}
+```
+
+---
+
+#### `CaseExpression`
+Represents CASE WHEN THEN ELSE expressions.
+
+```go
+type CaseExpression struct {
+    Value       Expression   // Optional CASE value (for simple CASE)
+    WhenClauses []WhenClause // WHEN ... THEN ... clauses
+    ElseClause  Expression   // ELSE clause
+}
+
+type WhenClause struct {
+    Condition Expression // WHEN condition
+    Result    Expression // THEN result
+}
+```
+
+**Supported SQL:**
+```sql
+-- Searched CASE
+CASE WHEN status = 'active' THEN 1
+     WHEN status = 'pending' THEN 0
+     ELSE -1 END
+
+-- Simple CASE
+CASE status
+    WHEN 'active' THEN 1
+    WHEN 'pending' THEN 0
+    ELSE -1 END
+```
+
+---
+
+#### `CastExpression`
+Represents CAST type conversion.
+
+```go
+type CastExpression struct {
+    Expr Expression // Expression to cast
+    Type string     // Target data type
+}
+```
+
+**Supported SQL:**
+```sql
+CAST(amount AS DECIMAL(10,2))
+CAST(created_at AS DATE)
+```
+
+---
+
+#### `InExpression`
+Represents IN expressions with value lists or subqueries.
+
+```go
+type InExpression struct {
+    Expr     Expression   // Expression to check
+    List     []Expression // Value list: IN (1, 2, 3)
+    Subquery Statement    // Subquery: IN (SELECT ...)
+    Not      bool         // NOT IN
+}
+```
+
+**Supported SQL:**
+```sql
+status IN ('active', 'pending')
+id NOT IN (SELECT blocked_id FROM blocked_users)
+```
+
+---
+
+#### `BetweenExpression`
+Represents BETWEEN range expressions.
+
+```go
+type BetweenExpression struct {
+    Expr  Expression // Expression to check
+    Lower Expression // Lower bound
+    Upper Expression // Upper bound
+    Not   bool       // NOT BETWEEN
+}
+```
+
+**Supported SQL:**
+```sql
+created_at BETWEEN '2024-01-01' AND '2024-12-31'
+price NOT BETWEEN 10 AND 100
+```
+
+---
+
+#### `ExistsExpression`
+Represents EXISTS subquery expressions.
+
+```go
+type ExistsExpression struct {
+    Subquery Statement // Subquery to check
+}
+```
+
+**Supported SQL:**
+```sql
+EXISTS (SELECT 1 FROM orders WHERE user_id = users.id)
+```
+
+---
+
+#### `SubqueryExpression`
+Represents scalar subquery expressions.
+
+```go
+type SubqueryExpression struct {
+    Subquery Statement // Scalar subquery
+}
+```
+
+**Supported SQL:**
+```sql
+(SELECT MAX(price) FROM products)
+```
+
+---
+
+#### `AnyExpression` and `AllExpression`
+Represents ANY/SOME and ALL subquery comparisons.
+
+```go
+type AnyExpression struct {
+    Expr     Expression // Left operand
+    Operator string     // Comparison operator
+    Subquery Statement  // Subquery
+}
+
+type AllExpression struct {
+    Expr     Expression // Left operand
+    Operator string     // Comparison operator
+    Subquery Statement  // Subquery
+}
+```
+
+**Supported SQL:**
+```sql
+price > ANY (SELECT avg_price FROM categories)
+score >= ALL (SELECT min_score FROM thresholds)
+```
+
+---
+
+#### `ExtractExpression`
+Represents EXTRACT function for date/time parts.
+
+```go
+type ExtractExpression struct {
+    Field  string     // YEAR, MONTH, DAY, HOUR, etc.
+    Source Expression // Date/time expression
+}
+```
+
+**Supported SQL:**
+```sql
+EXTRACT(YEAR FROM created_at)
+EXTRACT(MONTH FROM order_date)
+```
+
+---
+
+#### `SubstringExpression`
+Represents SUBSTRING function.
+
+```go
+type SubstringExpression struct {
+    Str    Expression // Source string
+    Start  Expression // Start position
+    Length Expression // Optional length
+}
+```
+
+**Supported SQL:**
+```sql
+SUBSTRING(name FROM 1 FOR 10)
+SUBSTRING(code FROM 5)
+```
+
+---
+
+#### `PositionExpression`
+Represents POSITION function.
+
+```go
+type PositionExpression struct {
+    Substr Expression // Substring to find
+    Str    Expression // String to search in
+}
+```
+
+**Supported SQL:**
+```sql
+POSITION('@' IN email)
+```
+
+---
+
+### Grouping Set Types
+
+#### `RollupExpression`
+Represents ROLLUP for hierarchical grouping sets.
+
+```go
+type RollupExpression struct {
+    Expressions []Expression // Columns for rollup
+}
+```
+
+**Supported SQL:**
+```sql
+-- ROLLUP(region, city, store) generates:
+-- (region, city, store), (region, city), (region), ()
+GROUP BY ROLLUP(region, city, store)
+```
+
+---
+
+#### `CubeExpression`
+Represents CUBE for all combinations of grouping sets.
+
+```go
+type CubeExpression struct {
+    Expressions []Expression // Columns for cube
+}
+```
+
+**Supported SQL:**
+```sql
+-- CUBE(a, b) generates: (a, b), (a), (b), ()
+GROUP BY CUBE(region, year)
+```
+
+---
+
+#### `GroupingSetsExpression`
+Represents explicit grouping sets.
+
+```go
+type GroupingSetsExpression struct {
+    Sets [][]Expression // Each inner slice is one grouping set
+}
+```
+
+**Supported SQL:**
+```sql
+GROUP BY GROUPING SETS ((region, city), (region), ())
+```
+
+---
+
+### Window Function Types
+
+#### `WindowSpec`
+Represents a window specification.
+
+```go
+type WindowSpec struct {
+    Name        string              // Named window reference
+    PartitionBy []Expression        // PARTITION BY columns
+    OrderBy     []OrderByExpression // ORDER BY within window
+    FrameClause *WindowFrame        // Frame specification
+}
+```
+
+---
+
+#### `WindowFrame`
+Represents window frame clause.
+
+```go
+type WindowFrame struct {
+    Type  string           // ROWS or RANGE
+    Start WindowFrameBound // Start bound
+    End   *WindowFrameBound // End bound (optional)
+}
+
+type WindowFrameBound struct {
+    Type  string     // CURRENT ROW, UNBOUNDED PRECEDING, etc.
+    Value Expression // For N PRECEDING/FOLLOWING
+}
+```
+
+**Supported SQL:**
+```sql
+-- ROWS frame
+SUM(amount) OVER (
+    PARTITION BY region
+    ORDER BY date
+    ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+)
+
+-- RANGE frame
+AVG(price) OVER (
+    ORDER BY date
+    RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+)
+```
+
+---
+
+#### `OrderByExpression`
+Represents ORDER BY element with direction and NULL ordering.
+
+```go
+type OrderByExpression struct {
+    Expression Expression // Column or expression
+    Ascending  bool       // ASC (true) or DESC (false)
+    NullsFirst *bool      // NULLS FIRST/LAST (nil = default)
+}
+```
+
+**Supported SQL:**
+```sql
+ORDER BY name ASC NULLS LAST, created_at DESC NULLS FIRST
+```
+
+---
+
+### Supporting Types
+
+#### `TableReference`
+Represents a table in FROM clause.
+
+```go
+type TableReference struct {
+    Name  string // Table name
+    Alias string // Optional alias
+}
+```
+
+---
+
+#### `JoinClause`
+Represents a JOIN operation.
+
+```go
+type JoinClause struct {
+    Type      string         // INNER, LEFT, RIGHT, FULL, CROSS
+    Left      TableReference // Left table
+    Right     TableReference // Right table
+    Condition Expression     // ON condition
+}
+```
+
+---
+
+#### `UpdateExpression`
+Represents SET clause in UPDATE.
+
+```go
+type UpdateExpression struct {
+    Column Expression // Column to update
+    Value  Expression // New value
+}
+```
+
+---
+
+#### `OnConflict`
+Represents PostgreSQL ON CONFLICT clause.
+
+```go
+type OnConflict struct {
+    Target     []Expression     // Target columns
+    Constraint string           // Constraint name
+    Action     OnConflictAction // DO UPDATE/NOTHING
+}
+
+type OnConflictAction struct {
+    DoNothing bool               // DO NOTHING
+    DoUpdate  []UpdateExpression // SET clauses
+    Where     Expression         // WHERE condition
+}
+```
+
+---
+
+#### `ListExpression`
+Represents a list of expressions.
+
+```go
+type ListExpression struct {
+    Values []Expression // List items
+}
+```
+
+---
+
+#### `Values`
+Represents VALUES clause.
+
+```go
+type Values struct {
+    Rows [][]Expression // Value rows
+}
+```
+
+---
+
+### Root AST Type
+
+#### `AST`
+Root container for parsed SQL statements.
+
+```go
+type AST struct {
+    Statements []Statement // Parsed statements
+}
+
+func (a AST) TokenLiteral() string
+func (a AST) Children() []Node
+```
+
+**Example:**
+```go
+astNode, err := parser.Parse(tokens)
+if err != nil {
+    log.Fatal(err)
+}
+
+for _, stmt := range astNode.Statements {
+    switch s := stmt.(type) {
+    case *ast.SelectStatement:
+        fmt.Println("SELECT statement")
+    case *ast.InsertStatement:
+        fmt.Println("INSERT into:", s.TableName)
+    case *ast.UpdateStatement:
+        fmt.Println("UPDATE:", s.TableName)
+    case *ast.DeleteStatement:
+        fmt.Println("DELETE from:", s.TableName)
+    }
+}
+```
+
+---
 
 ### Object Pool Functions
 
@@ -670,7 +1672,7 @@ Gets an AST instance from the pool.
 
 ```go
 astObj := ast.NewAST()
-defer ast.ReleaseAST(astObj)
+defer ast.ReleaseAST(astObj)  // ALWAYS defer the release
 ```
 
 #### `ReleaseAST(ast *AST)`
@@ -678,6 +1680,89 @@ Returns an AST instance to the pool.
 
 ```go
 ast.ReleaseAST(astObj)
+```
+
+**Best Practice:**
+```go
+func ParseSQL(sql string) (*ast.AST, error) {
+    tkz := tokenizer.GetTokenizer()
+    defer tokenizer.PutTokenizer(tkz)
+
+    tokens, err := tkz.Tokenize([]byte(sql))
+    if err != nil {
+        return nil, err
+    }
+
+    p := parser.NewParser()
+    defer p.Release()
+
+    // AST is returned to caller - caller responsible for release
+    return p.Parse(tokens)
+}
+```
+
+---
+
+### Visitor Pattern
+
+The AST supports tree traversal via the `Children()` method:
+
+```go
+func VisitAll(node ast.Node, visitor func(ast.Node)) {
+    visitor(node)
+    for _, child := range node.Children() {
+        VisitAll(child, visitor)
+    }
+}
+
+// Usage: Find all table references
+var tables []string
+VisitAll(astNode, func(node ast.Node) {
+    if tbl, ok := node.(*ast.TableReference); ok {
+        tables = append(tables, tbl.Name)
+    }
+})
+```
+
+---
+
+### Type Assertion Examples
+
+```go
+// Check statement type
+switch stmt := astNode.Statements[0].(type) {
+case *ast.SelectStatement:
+    processSelect(stmt)
+case *ast.InsertStatement:
+    processInsert(stmt)
+case *ast.UpdateStatement:
+    processUpdate(stmt)
+case *ast.DeleteStatement:
+    processDelete(stmt)
+case *ast.CreateTableStatement:
+    processCreateTable(stmt)
+case *ast.MergeStatement:
+    processMerge(stmt)
+}
+
+// Check expression type
+func processExpression(expr ast.Expression) {
+    switch e := expr.(type) {
+    case *ast.Identifier:
+        fmt.Printf("Column: %s.%s\n", e.Table, e.Name)
+    case *ast.LiteralValue:
+        fmt.Printf("Literal: %v (%s)\n", e.Value, e.Type)
+    case *ast.FunctionCall:
+        fmt.Printf("Function: %s with %d args\n", e.Name, len(e.Arguments))
+        if e.Over != nil {
+            fmt.Println("  (window function)")
+        }
+    case *ast.BinaryExpression:
+        fmt.Printf("Binary: %s\n", e.Operator)
+    case *ast.CaseExpression:
+        fmt.Printf("CASE with %d WHEN clauses\n", len(e.WhenClauses))
+    }
+}
 ```
 
 ## Models

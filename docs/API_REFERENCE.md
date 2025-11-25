@@ -34,6 +34,10 @@
   - [Configuration Functions](#configuration-functions)
   - [Recording Functions](#recording-functions)
   - [Query Functions](#query-functions)
+- [Security Package](#security-package)
+  - [Scanner Types](#scanner-types)
+  - [Pattern Detection](#pattern-detection)
+  - [Severity Levels](#severity-levels)
 - [Performance Considerations](#performance-considerations)
 
 ## Package Overview
@@ -50,7 +54,8 @@ github.com/ajitpratap0/GoSQLX/
 │   │   ├── parser/      # SQL syntax parsing
 │   │   ├── ast/         # Abstract syntax tree
 │   │   ├── keywords/    # SQL keyword definitions
-│   │   └── token/       # Token types and utilities
+│   │   ├── token/       # Token types and utilities
+│   │   └── security/    # SQL injection detection
 │   ├── errors/          # Structured error handling
 │   ├── metrics/         # Performance monitoring
 │   └── linter/          # SQL linting rules engine
@@ -4006,3 +4011,399 @@ func PrintMetricsDashboard() {
     fmt.Println("╚════════════════════════════════════════════════════════╝")
 }
 ```
+
+---
+
+## Security Package
+
+### Package: `github.com/ajitpratap0/GoSQLX/pkg/sql/security`
+
+The Security package provides SQL injection pattern detection and security scanning capabilities. It analyzes parsed SQL AST to identify common injection patterns and vulnerabilities.
+
+### Overview
+
+The scanner detects the following SQL injection patterns:
+
+| Pattern Type | Description | Severity |
+|-------------|-------------|----------|
+| **Tautology** | Always-true conditions (1=1, 'a'='a') | CRITICAL |
+| **Comment Bypass** | SQL comments used to bypass filters (--, /**/) | HIGH/MEDIUM |
+| **Stacked Query** | Multiple statements with dangerous operations | HIGH |
+| **UNION-Based** | Suspicious UNION SELECT patterns | HIGH |
+| **Time-Based Blind** | SLEEP(), WAITFOR DELAY, pg_sleep() | HIGH |
+| **Boolean-Based Blind** | Suspicious boolean logic patterns | MEDIUM |
+| **Out-of-Band** | xp_cmdshell, LOAD_FILE(), etc. | CRITICAL |
+| **Dangerous Functions** | Dynamic SQL execution functions | MEDIUM |
+
+---
+
+### Scanner Types
+
+#### `type Scanner struct`
+
+Scanner performs security analysis on SQL AST.
+
+```go
+type Scanner struct {
+    // MinSeverity filters findings below this severity level
+    MinSeverity Severity
+}
+```
+
+#### `type ScanResult struct`
+
+Contains all findings from a security scan.
+
+```go
+type ScanResult struct {
+    Findings      []Finding `json:"findings"`
+    TotalCount    int       `json:"total_count"`
+    CriticalCount int       `json:"critical_count"`
+    HighCount     int       `json:"high_count"`
+    MediumCount   int       `json:"medium_count"`
+    LowCount      int       `json:"low_count"`
+}
+```
+
+**Methods:**
+- `HasCritical() bool` - Returns true if any critical findings exist
+- `HasHighOrAbove() bool` - Returns true if any high or critical findings exist
+- `IsClean() bool` - Returns true if no findings exist
+
+#### `type Finding struct`
+
+Represents a single security finding.
+
+```go
+type Finding struct {
+    Severity    Severity    `json:"severity"`
+    Pattern     PatternType `json:"pattern"`
+    Description string      `json:"description"`
+    Risk        string      `json:"risk"`
+    Line        int         `json:"line,omitempty"`
+    Column      int         `json:"column,omitempty"`
+    SQL         string      `json:"sql,omitempty"`
+    Suggestion  string      `json:"suggestion,omitempty"`
+}
+```
+
+---
+
+### Severity Levels
+
+```go
+const (
+    SeverityCritical Severity = "CRITICAL"  // Definite injection (e.g., OR 1=1 --)
+    SeverityHigh     Severity = "HIGH"      // Likely injection (suspicious patterns)
+    SeverityMedium   Severity = "MEDIUM"    // Potentially unsafe (needs review)
+    SeverityLow      Severity = "LOW"       // Informational findings
+)
+```
+
+---
+
+### Pattern Detection
+
+#### Pattern Types
+
+```go
+const (
+    PatternTautology     PatternType = "TAUTOLOGY"
+    PatternComment       PatternType = "COMMENT_BYPASS"
+    PatternStackedQuery  PatternType = "STACKED_QUERY"
+    PatternUnionBased    PatternType = "UNION_BASED"
+    PatternTimeBased     PatternType = "TIME_BASED"
+    PatternBooleanBased  PatternType = "BOOLEAN_BASED"
+    PatternOutOfBand     PatternType = "OUT_OF_BAND"
+    PatternDangerousFunc PatternType = "DANGEROUS_FUNCTION"
+)
+```
+
+---
+
+### Functions
+
+#### `NewScanner() *Scanner`
+
+Creates a new security scanner with default settings.
+
+```go
+scanner := security.NewScanner()
+```
+
+---
+
+#### `NewScannerWithSeverity(minSeverity Severity) (*Scanner, error)`
+
+Creates a scanner filtering by minimum severity.
+
+```go
+scanner, err := security.NewScannerWithSeverity(security.SeverityHigh)
+if err != nil {
+    log.Fatal(err)
+}
+// Only reports HIGH and CRITICAL findings
+```
+
+---
+
+#### `(*Scanner) Scan(tree *ast.AST) *ScanResult`
+
+Analyzes an AST for SQL injection patterns.
+
+```go
+scanner := security.NewScanner()
+result := scanner.Scan(ast)
+
+for _, finding := range result.Findings {
+    fmt.Printf("%s: %s - %s\n",
+        finding.Severity,
+        finding.Pattern,
+        finding.Description)
+}
+```
+
+---
+
+#### `(*Scanner) ScanSQL(sql string) *ScanResult`
+
+Analyzes raw SQL string for injection patterns. Useful for detecting patterns that might not be in the AST.
+
+```go
+scanner := security.NewScanner()
+result := scanner.ScanSQL("SELECT * FROM users WHERE id = 1 OR 1=1 --")
+
+if result.HasCritical() {
+    fmt.Println("CRITICAL: SQL injection detected!")
+}
+```
+
+---
+
+### Usage Examples
+
+#### Example 1: Basic Security Scan
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
+    "github.com/ajitpratap0/GoSQLX/pkg/sql/security"
+)
+
+func main() {
+    sql := "SELECT * FROM users WHERE username = 'admin' OR 1=1"
+
+    // Parse SQL
+    ast, err := parser.Parse([]byte(sql))
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // Scan for injection patterns
+    scanner := security.NewScanner()
+    result := scanner.Scan(ast)
+
+    // Check results
+    if result.HasCritical() {
+        fmt.Printf("Found %d critical issues!\n", result.CriticalCount)
+        for _, finding := range result.Findings {
+            fmt.Printf("  - %s: %s\n", finding.Pattern, finding.Description)
+            fmt.Printf("    Risk: %s\n", finding.Risk)
+            fmt.Printf("    Suggestion: %s\n", finding.Suggestion)
+        }
+    }
+}
+```
+
+---
+
+#### Example 2: Integration with Query Validation
+
+```go
+func ValidateUserQuery(sql string) error {
+    // Parse SQL
+    ast, err := parser.Parse([]byte(sql))
+    if err != nil {
+        return fmt.Errorf("invalid SQL: %w", err)
+    }
+
+    // Security scan
+    scanner := security.NewScanner()
+    result := scanner.Scan(ast)
+
+    // Block queries with critical findings
+    if result.HasCritical() {
+        return fmt.Errorf("security violation: %d critical issues detected",
+            result.CriticalCount)
+    }
+
+    // Warn on high severity findings
+    if result.HighCount > 0 {
+        log.Printf("Warning: %d high-severity patterns detected", result.HighCount)
+    }
+
+    return nil
+}
+```
+
+---
+
+#### Example 3: Custom Severity Filtering
+
+```go
+// Only scan for HIGH and CRITICAL issues (skip MEDIUM and LOW)
+scanner, err := security.NewScannerWithSeverity(security.SeverityHigh)
+if err != nil {
+    log.Fatal(err)
+}
+
+result := scanner.Scan(ast)
+// result.Findings only contains HIGH and CRITICAL severity items
+```
+
+---
+
+#### Example 4: Raw SQL Pattern Detection
+
+```go
+// Detect patterns in raw SQL (without full parsing)
+scanner := security.NewScanner()
+
+// Check for time-based injection patterns
+result := scanner.ScanSQL("SELECT * FROM users; WAITFOR DELAY '0:0:5'")
+
+for _, finding := range result.Findings {
+    if finding.Pattern == security.PatternTimeBased {
+        fmt.Println("Time-based blind injection attempt detected!")
+    }
+}
+```
+
+---
+
+### Detected Patterns Detail
+
+#### Tautology Detection
+
+Detects always-true conditions commonly used for authentication bypass:
+
+```sql
+-- Detected as CRITICAL
+SELECT * FROM users WHERE id = 1 OR 1=1
+SELECT * FROM users WHERE name = 'x' OR 'a'='a'
+SELECT * FROM users WHERE col = col
+```
+
+#### UNION-Based Injection
+
+Detects suspicious UNION SELECT patterns for data extraction:
+
+```sql
+-- Detected as HIGH (multiple NULLs indicate column enumeration)
+SELECT id FROM users UNION SELECT NULL, NULL, NULL
+
+-- Detected as CRITICAL (system table access)
+SELECT id FROM users UNION SELECT table_name FROM information_schema.tables
+```
+
+#### Time-Based Functions
+
+Detects time-delay functions used in blind injection:
+
+```sql
+-- Detected as HIGH
+SELECT * FROM users WHERE SLEEP(5)
+SELECT * FROM users; WAITFOR DELAY '0:0:5'
+SELECT * FROM users WHERE pg_sleep(5)
+```
+
+#### Dangerous Functions
+
+Detects functions that can lead to system compromise:
+
+```sql
+-- Detected as CRITICAL (command execution)
+EXEC xp_cmdshell 'dir'
+SELECT LOAD_FILE('/etc/passwd')
+SELECT * INTO OUTFILE '/tmp/data.txt' FROM users
+```
+
+---
+
+### System Table Detection
+
+The scanner precisely identifies access to system tables across multiple databases:
+
+| Database | System Tables Detected |
+|----------|----------------------|
+| **PostgreSQL** | `pg_catalog.*`, `pg_*` |
+| **MySQL** | `mysql.*`, `information_schema.*` |
+| **SQL Server** | `sys.*`, `master.dbo.*`, `msdb.*`, `tempdb.*` |
+| **SQLite** | `sqlite_*` |
+| **Generic** | `information_schema.*` |
+
+---
+
+### Best Practices
+
+#### 1. Scan All User-Supplied Queries
+
+```go
+func HandleUserQuery(w http.ResponseWriter, r *http.Request) {
+    userSQL := r.FormValue("query")
+
+    // ALWAYS scan user input
+    ast, err := parser.Parse([]byte(userSQL))
+    if err != nil {
+        http.Error(w, "Invalid SQL", http.StatusBadRequest)
+        return
+    }
+
+    scanner := security.NewScanner()
+    result := scanner.Scan(ast)
+
+    if result.HasHighOrAbove() {
+        http.Error(w, "Potentially unsafe query", http.StatusForbidden)
+        logSecurityEvent(userSQL, result)
+        return
+    }
+
+    // Proceed with safe query
+}
+```
+
+#### 2. Log Security Findings
+
+```go
+func logSecurityEvent(sql string, result *security.ScanResult) {
+    for _, finding := range result.Findings {
+        log.Printf("[SECURITY] %s: %s - %s (Risk: %s)",
+            finding.Severity,
+            finding.Pattern,
+            finding.Description,
+            finding.Risk)
+    }
+}
+```
+
+#### 3. Use Appropriate Severity Filters
+
+```go
+// For production: Block CRITICAL and HIGH, warn on MEDIUM
+scanner, _ := security.NewScannerWithSeverity(security.SeverityMedium)
+
+// For strict security: Block all findings
+scanner := security.NewScanner() // Includes LOW severity
+```
+
+---
+
+### Performance Considerations
+
+- **Regex Compilation**: All regex patterns are pre-compiled at package initialization (sync.Once)
+- **Thread Safety**: Scanner is safe for concurrent use across goroutines
+- **Memory Efficiency**: No allocations during scanning beyond the result struct
+- **Throughput**: Can scan 100,000+ queries/second on modern hardware

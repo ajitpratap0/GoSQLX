@@ -319,7 +319,7 @@ func TestParser_ExpressionEdgeCases(t *testing.T) {
 				{Type: "AND", Literal: "AND"},
 				{Type: "INT", Literal: "100"},
 			},
-			wantErr: true, // BETWEEN not yet supported
+			wantErr: false, // BETWEEN now supported
 		},
 		{
 			name: "IN expression with list",
@@ -339,7 +339,7 @@ func TestParser_ExpressionEdgeCases(t *testing.T) {
 				{Type: "STRING", Literal: "shipped"},
 				{Type: ")", Literal: ")"},
 			},
-			wantErr: true, // IN not yet supported
+			wantErr: false, // IN now supported
 		},
 		{
 			name: "LIKE expression",
@@ -353,7 +353,7 @@ func TestParser_ExpressionEdgeCases(t *testing.T) {
 				{Type: "LIKE", Literal: "LIKE"},
 				{Type: "STRING", Literal: "%@example.com"},
 			},
-			wantErr: true, // LIKE not yet supported
+			wantErr: false, // LIKE now supported
 		},
 		{
 			name: "IS NULL expression",
@@ -367,7 +367,7 @@ func TestParser_ExpressionEdgeCases(t *testing.T) {
 				{Type: "IS", Literal: "IS"},
 				{Type: "NULL", Literal: "NULL"},
 			},
-			wantErr: true, // IS NULL not yet supported
+			wantErr: false, // IS NULL now supported
 		},
 		{
 			name: "IS NOT NULL expression",
@@ -382,7 +382,7 @@ func TestParser_ExpressionEdgeCases(t *testing.T) {
 				{Type: "NOT", Literal: "NOT"},
 				{Type: "NULL", Literal: "NULL"},
 			},
-			wantErr: true, // IS NOT NULL not yet supported
+			wantErr: false, // IS NOT NULL now supported
 		},
 		{
 			name: "arithmetic expression with multiple operators",

@@ -3,7 +3,6 @@ package lsp
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"strings"
@@ -30,36 +29,6 @@ func (m *mockReadWriter) Read(p []byte) (int, error) {
 
 func (m *mockReadWriter) Write(p []byte) (int, error) {
 	return m.output.Write(p)
-}
-
-// writeMessage writes an LSP message to the input buffer
-func (m *mockReadWriter) writeMessage(msg interface{}) error {
-	content, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-	header := fmt.Sprintf("Content-Length: %d\r\n\r\n", len(content))
-	m.input.WriteString(header)
-	m.input.Write(content)
-	return nil
-}
-
-// readResponse reads and parses the response from the output buffer
-func (m *mockReadWriter) readResponse() (*Response, error) {
-	output := m.output.String()
-
-	// Find Content-Length
-	idx := strings.Index(output, "\r\n\r\n")
-	if idx == -1 {
-		return nil, fmt.Errorf("no header separator found")
-	}
-
-	content := output[idx+4:]
-	var resp Response
-	if err := json.Unmarshal([]byte(content), &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
 }
 
 func TestNewServer(t *testing.T) {

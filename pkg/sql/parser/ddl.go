@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
@@ -33,14 +34,14 @@ func (p *Parser) parseCreateStatement() (ast.Statement, error) {
 	temporary := false
 
 	for {
-		if p.currentToken.Type == "OR" {
+		if p.isType(models.TokenTypeOr) {
 			p.advance() // Consume OR
-			if p.currentToken.Type != "REPLACE" {
+			if !p.isType(models.TokenTypeReplace) {
 				return nil, p.expectedError("REPLACE after OR")
 			}
 			p.advance() // Consume REPLACE
 			orReplace = true
-		} else if p.currentToken.Type == "TEMPORARY" || p.isTokenMatch("TEMP") {
+		} else if p.isTokenMatch("TEMPORARY") || p.isTokenMatch("TEMP") {
 			p.advance() // Consume TEMPORARY/TEMP
 			temporary = true
 		} else {
@@ -49,38 +50,31 @@ func (p *Parser) parseCreateStatement() (ast.Statement, error) {
 	}
 
 	// Determine object type
-	switch p.currentToken.Type {
-	case "MATERIALIZED":
+	if p.isType(models.TokenTypeMaterialized) {
 		p.advance() // Consume MATERIALIZED
-		if p.currentToken.Type != "VIEW" {
+		if !p.isType(models.TokenTypeView) {
 			return nil, p.expectedError("VIEW after MATERIALIZED")
 		}
 		p.advance() // Consume VIEW
 		return p.parseCreateMaterializedView()
-
-	case "VIEW":
+	} else if p.isType(models.TokenTypeView) {
 		p.advance() // Consume VIEW
 		return p.parseCreateView(orReplace, temporary)
-
-	case "TABLE":
+	} else if p.isType(models.TokenTypeTable) {
 		p.advance() // Consume TABLE
 		return p.parseCreateTable(temporary)
-
-	case "INDEX":
+	} else if p.isType(models.TokenTypeIndex) {
 		p.advance()                      // Consume INDEX
 		return p.parseCreateIndex(false) // Not unique
-
-	case "UNIQUE":
+	} else if p.isType(models.TokenTypeUnique) {
 		p.advance() // Consume UNIQUE
-		if p.currentToken.Type != "INDEX" {
+		if !p.isType(models.TokenTypeIndex) {
 			return nil, p.expectedError("INDEX after UNIQUE")
 		}
 		p.advance()                     // Consume INDEX
 		return p.parseCreateIndex(true) // Unique
-
-	default:
-		return nil, p.expectedError("TABLE, VIEW, MATERIALIZED VIEW, or INDEX after CREATE")
 	}
+	return nil, p.expectedError("TABLE, VIEW, MATERIALIZED VIEW, or INDEX after CREATE")
 }
 
 // parseCreateView parses CREATE [OR REPLACE] [TEMPORARY] VIEW statement
@@ -91,13 +85,13 @@ func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStat
 	}
 
 	// Check for IF NOT EXISTS
-	if p.currentToken.Type == "IF" {
+	if p.isType(models.TokenTypeIf) {
 		p.advance() // Consume IF
-		if p.currentToken.Type != "NOT" {
+		if !p.isType(models.TokenTypeNot) {
 			return nil, p.expectedError("NOT after IF")
 		}
 		p.advance() // Consume NOT
-		if p.currentToken.Type != "EXISTS" {
+		if !p.isType(models.TokenTypeExists) {
 			return nil, p.expectedError("EXISTS after NOT")
 		}
 		p.advance() // Consume EXISTS
@@ -105,42 +99,42 @@ func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStat
 	}
 
 	// Parse view name
-	if p.currentToken.Type != "IDENT" {
+	if !p.isType(models.TokenTypeIdentifier) {
 		return nil, p.expectedError("view name")
 	}
 	stmt.Name = p.currentToken.Literal
 	p.advance()
 
 	// Parse optional column list
-	if p.currentToken.Type == "(" {
+	if p.isType(models.TokenTypeLParen) {
 		p.advance() // Consume (
 		for {
-			if p.currentToken.Type != "IDENT" {
+			if !p.isType(models.TokenTypeIdentifier) {
 				return nil, p.expectedError("column name")
 			}
 			stmt.Columns = append(stmt.Columns, p.currentToken.Literal)
 			p.advance()
 
-			if p.currentToken.Type == "," {
+			if p.isType(models.TokenTypeComma) {
 				p.advance() // Consume comma
 				continue
 			}
 			break
 		}
-		if p.currentToken.Type != ")" {
+		if !p.isType(models.TokenTypeRParen) {
 			return nil, p.expectedError(")")
 		}
 		p.advance() // Consume )
 	}
 
 	// Expect AS
-	if p.currentToken.Type != "AS" {
+	if !p.isType(models.TokenTypeAs) {
 		return nil, p.expectedError("AS")
 	}
 	p.advance() // Consume AS
 
 	// Parse the SELECT statement
-	if p.currentToken.Type != "SELECT" {
+	if !p.isType(models.TokenTypeSelect) {
 		return nil, p.expectedError("SELECT")
 	}
 	p.advance() // Consume SELECT
@@ -152,28 +146,28 @@ func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStat
 	stmt.Query = query
 
 	// Parse optional WITH CHECK OPTION
-	if p.currentToken.Type == "WITH" {
+	if p.isType(models.TokenTypeWith) {
 		p.advance() // Consume WITH
-		if p.currentToken.Type == "CHECK" {
+		if p.isType(models.TokenTypeCheck) {
 			p.advance() // Consume CHECK
-			if p.currentToken.Type == "OPTION" {
+			if p.isTokenMatch("OPTION") {
 				p.advance() // Consume OPTION
 				stmt.WithOption = "CHECK OPTION"
 			}
-		} else if p.currentToken.Type == "CASCADED" {
+		} else if p.isTokenMatch("CASCADED") {
 			p.advance() // Consume CASCADED
-			if p.currentToken.Type == "CHECK" {
+			if p.isType(models.TokenTypeCheck) {
 				p.advance() // Consume CHECK
-				if p.currentToken.Type == "OPTION" {
+				if p.isTokenMatch("OPTION") {
 					p.advance() // Consume OPTION
 					stmt.WithOption = "CASCADED CHECK OPTION"
 				}
 			}
-		} else if p.currentToken.Type == "LOCAL" {
+		} else if p.isTokenMatch("LOCAL") {
 			p.advance() // Consume LOCAL
-			if p.currentToken.Type == "CHECK" {
+			if p.isType(models.TokenTypeCheck) {
 				p.advance() // Consume CHECK
-				if p.currentToken.Type == "OPTION" {
+				if p.isTokenMatch("OPTION") {
 					p.advance() // Consume OPTION
 					stmt.WithOption = "LOCAL CHECK OPTION"
 				}
@@ -189,13 +183,13 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 	stmt := &ast.CreateMaterializedViewStatement{}
 
 	// Check for IF NOT EXISTS
-	if p.currentToken.Type == "IF" {
+	if p.isType(models.TokenTypeIf) {
 		p.advance() // Consume IF
-		if p.currentToken.Type != "NOT" {
+		if !p.isType(models.TokenTypeNot) {
 			return nil, p.expectedError("NOT after IF")
 		}
 		p.advance() // Consume NOT
-		if p.currentToken.Type != "EXISTS" {
+		if !p.isType(models.TokenTypeExists) {
 			return nil, p.expectedError("EXISTS after NOT")
 		}
 		p.advance() // Consume EXISTS
@@ -203,38 +197,38 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 	}
 
 	// Parse view name
-	if p.currentToken.Type != "IDENT" {
+	if !p.isType(models.TokenTypeIdentifier) {
 		return nil, p.expectedError("materialized view name")
 	}
 	stmt.Name = p.currentToken.Literal
 	p.advance()
 
 	// Parse optional column list
-	if p.currentToken.Type == "(" {
+	if p.isType(models.TokenTypeLParen) {
 		p.advance() // Consume (
 		for {
-			if p.currentToken.Type != "IDENT" {
+			if !p.isType(models.TokenTypeIdentifier) {
 				return nil, p.expectedError("column name")
 			}
 			stmt.Columns = append(stmt.Columns, p.currentToken.Literal)
 			p.advance()
 
-			if p.currentToken.Type == "," {
+			if p.isType(models.TokenTypeComma) {
 				p.advance() // Consume comma
 				continue
 			}
 			break
 		}
-		if p.currentToken.Type != ")" {
+		if !p.isType(models.TokenTypeRParen) {
 			return nil, p.expectedError(")")
 		}
 		p.advance() // Consume )
 	}
 
 	// Parse optional TABLESPACE
-	if p.currentToken.Type == "TABLESPACE" {
+	if p.isTokenMatch("TABLESPACE") {
 		p.advance() // Consume TABLESPACE
-		if p.currentToken.Type != "IDENT" {
+		if !p.isType(models.TokenTypeIdentifier) {
 			return nil, p.expectedError("tablespace name")
 		}
 		stmt.Tablespace = p.currentToken.Literal
@@ -242,13 +236,13 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 	}
 
 	// Expect AS
-	if p.currentToken.Type != "AS" {
+	if !p.isType(models.TokenTypeAs) {
 		return nil, p.expectedError("AS")
 	}
 	p.advance() // Consume AS
 
 	// Parse the SELECT statement
-	if p.currentToken.Type != "SELECT" {
+	if !p.isType(models.TokenTypeSelect) {
 		return nil, p.expectedError("SELECT")
 	}
 	p.advance() // Consume SELECT
@@ -261,7 +255,7 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 
 	// Parse optional WITH [NO] DATA
 	// Note: DATA and NO may be tokenized as IDENT since they're common identifiers
-	if p.currentToken.Type == "WITH" {
+	if p.isType(models.TokenTypeWith) {
 		p.advance() // Consume WITH
 		if p.isTokenMatch("NO") {
 			p.advance() // Consume NO
@@ -288,13 +282,13 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 	}
 
 	// Check for IF NOT EXISTS
-	if p.currentToken.Type == "IF" {
+	if p.isType(models.TokenTypeIf) {
 		p.advance() // Consume IF
-		if p.currentToken.Type != "NOT" {
+		if !p.isType(models.TokenTypeNot) {
 			return nil, p.expectedError("NOT after IF")
 		}
 		p.advance() // Consume NOT
-		if p.currentToken.Type != "EXISTS" {
+		if !p.isType(models.TokenTypeExists) {
 			return nil, p.expectedError("EXISTS after NOT")
 		}
 		p.advance() // Consume EXISTS
@@ -302,14 +296,14 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 	}
 
 	// Parse table name
-	if p.currentToken.Type != "IDENT" {
+	if !p.isType(models.TokenTypeIdentifier) {
 		return nil, p.expectedError("table name")
 	}
 	stmt.Name = p.currentToken.Literal
 	p.advance()
 
 	// Expect opening parenthesis for column definitions
-	if p.currentToken.Type != "(" {
+	if !p.isType(models.TokenTypeLParen) {
 		return nil, p.expectedError("(")
 	}
 	p.advance() // Consume (
@@ -317,9 +311,8 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 	// Parse column definitions and constraints
 	for {
 		// Check for table-level constraints
-		if p.currentToken.Type == "PRIMARY" || p.currentToken.Type == "FOREIGN" ||
-			p.currentToken.Type == "UNIQUE" || p.currentToken.Type == "CHECK" ||
-			p.currentToken.Type == "CONSTRAINT" {
+		if p.isAnyType(models.TokenTypePrimary, models.TokenTypeForeign,
+			models.TokenTypeUnique, models.TokenTypeCheck, models.TokenTypeConstraint) {
 			constraint, err := p.parseTableConstraint()
 			if err != nil {
 				return nil, err
@@ -335,7 +328,7 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 		}
 
 		// Check for more definitions
-		if p.currentToken.Type == "," {
+		if p.isType(models.TokenTypeComma) {
 			p.advance() // Consume comma
 			continue
 		}
@@ -343,15 +336,15 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 	}
 
 	// Expect closing parenthesis
-	if p.currentToken.Type != ")" {
+	if !p.isType(models.TokenTypeRParen) {
 		return nil, p.expectedError(")")
 	}
 	p.advance() // Consume )
 
 	// Parse optional PARTITION BY clause
-	if p.currentToken.Type == "PARTITION" {
+	if p.isType(models.TokenTypePartition) {
 		p.advance() // Consume PARTITION
-		if p.currentToken.Type != "BY" {
+		if !p.isType(models.TokenTypeBy) {
 			return nil, p.expectedError("BY after PARTITION")
 		}
 		p.advance() // Consume BY
@@ -363,7 +356,7 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 		stmt.PartitionBy = partitionBy
 
 		// Parse partition definitions if present
-		if p.currentToken.Type == "(" {
+		if p.isType(models.TokenTypeLParen) {
 			p.advance() // Consume (
 			for {
 				partDef, err := p.parsePartitionDefinition()
@@ -372,13 +365,13 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 				}
 				stmt.Partitions = append(stmt.Partitions, *partDef)
 
-				if p.currentToken.Type == "," {
+				if p.isType(models.TokenTypeComma) {
 					p.advance() // Consume comma
 					continue
 				}
 				break
 			}
-			if p.currentToken.Type != ")" {
+			if !p.isType(models.TokenTypeRParen) {
 				return nil, p.expectedError(")")
 			}
 			p.advance() // Consume )
@@ -386,14 +379,14 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 	}
 
 	// Parse optional table options
-	for p.currentToken.Type == "ENGINE" || p.currentToken.Type == "CHARSET" ||
-		p.currentToken.Type == "COLLATE" || p.currentToken.Type == "COMMENT" {
+	for p.isTokenMatch("ENGINE") || p.isTokenMatch("CHARSET") ||
+		p.isType(models.TokenTypeCollate) || p.isTokenMatch("COMMENT") {
 		opt := ast.TableOption{Name: p.currentToken.Literal}
 		p.advance()
-		if p.currentToken.Type == "=" {
+		if p.isType(models.TokenTypeEq) {
 			p.advance() // Consume =
 		}
-		if p.currentToken.Type == "IDENT" || p.currentToken.Type == "STRING" {
+		if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeString) {
 			opt.Value = p.currentToken.Literal
 			p.advance()
 		}
@@ -408,35 +401,34 @@ func (p *Parser) parsePartitionByClause() (*ast.PartitionBy, error) {
 	partitionBy := &ast.PartitionBy{}
 
 	// Parse partition type
-	switch p.currentToken.Type {
-	case "RANGE":
+	if p.isType(models.TokenTypeRange) {
 		partitionBy.Type = "RANGE"
 		p.advance()
-	case "LIST":
+	} else if p.isTokenMatch("LIST") {
 		partitionBy.Type = "LIST"
 		p.advance()
-	case "HASH":
+	} else if p.isTokenMatch("HASH") {
 		partitionBy.Type = "HASH"
 		p.advance()
-	default:
+	} else {
 		return nil, p.expectedError("RANGE, LIST, or HASH")
 	}
 
 	// Expect opening parenthesis
-	if p.currentToken.Type != "(" {
+	if !p.isType(models.TokenTypeLParen) {
 		return nil, p.expectedError("(")
 	}
 	p.advance() // Consume (
 
 	// Parse column list
 	for {
-		if p.currentToken.Type != "IDENT" {
+		if !p.isType(models.TokenTypeIdentifier) {
 			return nil, p.expectedError("column name")
 		}
 		partitionBy.Columns = append(partitionBy.Columns, p.currentToken.Literal)
 		p.advance()
 
-		if p.currentToken.Type == "," {
+		if p.isType(models.TokenTypeComma) {
 			p.advance() // Consume comma
 			continue
 		}
@@ -444,7 +436,7 @@ func (p *Parser) parsePartitionByClause() (*ast.PartitionBy, error) {
 	}
 
 	// Expect closing parenthesis
-	if p.currentToken.Type != ")" {
+	if !p.isType(models.TokenTypeRParen) {
 		return nil, p.expectedError(")")
 	}
 	p.advance() // Consume )
@@ -457,37 +449,37 @@ func (p *Parser) parsePartitionDefinition() (*ast.PartitionDefinition, error) {
 	partDef := &ast.PartitionDefinition{}
 
 	// Expect PARTITION keyword
-	if p.currentToken.Type != "PARTITION" {
+	if !p.isType(models.TokenTypePartition) {
 		return nil, p.expectedError("PARTITION")
 	}
 	p.advance() // Consume PARTITION
 
 	// Parse partition name
-	if p.currentToken.Type != "IDENT" {
+	if !p.isType(models.TokenTypeIdentifier) {
 		return nil, p.expectedError("partition name")
 	}
 	partDef.Name = p.currentToken.Literal
 	p.advance()
 
 	// Parse VALUES clause
-	if p.currentToken.Type != "VALUES" {
+	if !p.isType(models.TokenTypeValues) {
 		return nil, p.expectedError("VALUES")
 	}
 	p.advance() // Consume VALUES
 
 	// Parse value specification
-	if p.currentToken.Type == "LESS" {
+	if p.isTokenMatch("LESS") {
 		p.advance() // Consume LESS
-		if p.currentToken.Type != "THAN" {
+		if !p.isTokenMatch("THAN") {
 			return nil, p.expectedError("THAN after LESS")
 		}
 		p.advance() // Consume THAN
 		partDef.Type = "LESS THAN"
 
 		// Parse value or MAXVALUE
-		if p.currentToken.Type == "(" {
+		if p.isType(models.TokenTypeLParen) {
 			p.advance() // Consume (
-			if p.currentToken.Type == "MAXVALUE" {
+			if p.isTokenMatch("MAXVALUE") {
 				partDef.LessThan = &ast.Identifier{Name: "MAXVALUE"}
 				p.advance()
 			} else {
@@ -497,20 +489,20 @@ func (p *Parser) parsePartitionDefinition() (*ast.PartitionDefinition, error) {
 				}
 				partDef.LessThan = expr
 			}
-			if p.currentToken.Type != ")" {
+			if !p.isType(models.TokenTypeRParen) {
 				return nil, p.expectedError(")")
 			}
 			p.advance() // Consume )
-		} else if p.currentToken.Type == "MAXVALUE" {
+		} else if p.isTokenMatch("MAXVALUE") {
 			partDef.LessThan = &ast.Identifier{Name: "MAXVALUE"}
 			p.advance()
 		}
-	} else if p.currentToken.Type == "IN" {
+	} else if p.isType(models.TokenTypeIn) {
 		p.advance() // Consume IN
 		partDef.Type = "IN"
 
 		// Parse value list
-		if p.currentToken.Type != "(" {
+		if !p.isType(models.TokenTypeLParen) {
 			return nil, p.expectedError("(")
 		}
 		p.advance() // Consume (
@@ -522,23 +514,23 @@ func (p *Parser) parsePartitionDefinition() (*ast.PartitionDefinition, error) {
 			}
 			partDef.InValues = append(partDef.InValues, expr)
 
-			if p.currentToken.Type == "," {
+			if p.isType(models.TokenTypeComma) {
 				p.advance() // Consume comma
 				continue
 			}
 			break
 		}
 
-		if p.currentToken.Type != ")" {
+		if !p.isType(models.TokenTypeRParen) {
 			return nil, p.expectedError(")")
 		}
 		p.advance() // Consume )
-	} else if p.currentToken.Type == "FROM" {
+	} else if p.isType(models.TokenTypeFrom) {
 		p.advance() // Consume FROM
 		partDef.Type = "FROM TO"
 
 		// Parse FROM value
-		if p.currentToken.Type != "(" {
+		if !p.isType(models.TokenTypeLParen) {
 			return nil, p.expectedError("(")
 		}
 		p.advance() // Consume (
@@ -547,19 +539,19 @@ func (p *Parser) parsePartitionDefinition() (*ast.PartitionDefinition, error) {
 			return nil, err
 		}
 		partDef.From = fromExpr
-		if p.currentToken.Type != ")" {
+		if !p.isType(models.TokenTypeRParen) {
 			return nil, p.expectedError(")")
 		}
 		p.advance() // Consume )
 
 		// Expect TO
-		if p.currentToken.Type != "TO" {
+		if !p.isType(models.TokenTypeTo) {
 			return nil, p.expectedError("TO")
 		}
 		p.advance() // Consume TO
 
 		// Parse TO value
-		if p.currentToken.Type != "(" {
+		if !p.isType(models.TokenTypeLParen) {
 			return nil, p.expectedError("(")
 		}
 		p.advance() // Consume (
@@ -568,16 +560,16 @@ func (p *Parser) parsePartitionDefinition() (*ast.PartitionDefinition, error) {
 			return nil, err
 		}
 		partDef.To = toExpr
-		if p.currentToken.Type != ")" {
+		if !p.isType(models.TokenTypeRParen) {
 			return nil, p.expectedError(")")
 		}
 		p.advance() // Consume )
 	}
 
 	// Parse optional TABLESPACE
-	if p.currentToken.Type == "TABLESPACE" {
+	if p.isTokenMatch("TABLESPACE") {
 		p.advance() // Consume TABLESPACE
-		if p.currentToken.Type != "IDENT" {
+		if !p.isType(models.TokenTypeIdentifier) {
 			return nil, p.expectedError("tablespace name")
 		}
 		partDef.Tablespace = p.currentToken.Literal
@@ -594,13 +586,13 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 	}
 
 	// Check for IF NOT EXISTS
-	if p.currentToken.Type == "IF" {
+	if p.isType(models.TokenTypeIf) {
 		p.advance() // Consume IF
-		if p.currentToken.Type != "NOT" {
+		if !p.isType(models.TokenTypeNot) {
 			return nil, p.expectedError("NOT after IF")
 		}
 		p.advance() // Consume NOT
-		if p.currentToken.Type != "EXISTS" {
+		if !p.isType(models.TokenTypeExists) {
 			return nil, p.expectedError("EXISTS after NOT")
 		}
 		p.advance() // Consume EXISTS
@@ -608,29 +600,29 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 	}
 
 	// Parse index name
-	if p.currentToken.Type != "IDENT" {
+	if !p.isType(models.TokenTypeIdentifier) {
 		return nil, p.expectedError("index name")
 	}
 	stmt.Name = p.currentToken.Literal
 	p.advance()
 
 	// Expect ON
-	if p.currentToken.Type != "ON" {
+	if !p.isType(models.TokenTypeOn) {
 		return nil, p.expectedError("ON")
 	}
 	p.advance() // Consume ON
 
 	// Parse table name
-	if p.currentToken.Type != "IDENT" {
+	if !p.isType(models.TokenTypeIdentifier) {
 		return nil, p.expectedError("table name")
 	}
 	stmt.Table = p.currentToken.Literal
 	p.advance()
 
 	// Parse optional USING
-	if p.currentToken.Type == "USING" {
+	if p.isType(models.TokenTypeUsing) {
 		p.advance() // Consume USING
-		if p.currentToken.Type != "IDENT" {
+		if !p.isType(models.TokenTypeIdentifier) {
 			return nil, p.expectedError("index method")
 		}
 		stmt.Using = p.currentToken.Literal
@@ -638,7 +630,7 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 	}
 
 	// Expect opening parenthesis
-	if p.currentToken.Type != "(" {
+	if !p.isType(models.TokenTypeLParen) {
 		return nil, p.expectedError("(")
 	}
 	p.advance() // Consume (
@@ -646,35 +638,35 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 	// Parse column list
 	for {
 		col := ast.IndexColumn{}
-		if p.currentToken.Type != "IDENT" {
+		if !p.isType(models.TokenTypeIdentifier) {
 			return nil, p.expectedError("column name")
 		}
 		col.Column = p.currentToken.Literal
 		p.advance()
 
 		// Parse optional direction
-		if p.currentToken.Type == "ASC" {
+		if p.isType(models.TokenTypeAsc) {
 			col.Direction = "ASC"
 			p.advance()
-		} else if p.currentToken.Type == "DESC" {
+		} else if p.isType(models.TokenTypeDesc) {
 			col.Direction = "DESC"
 			p.advance()
 		}
 
 		// Parse optional NULLS LAST
-		if p.currentToken.Type == "NULLS" {
+		if p.isType(models.TokenTypeNulls) {
 			p.advance() // Consume NULLS
-			if p.currentToken.Type == "LAST" {
+			if p.isType(models.TokenTypeLast) {
 				col.NullsLast = true
 				p.advance()
-			} else if p.currentToken.Type == "FIRST" {
+			} else if p.isType(models.TokenTypeFirst) {
 				p.advance()
 			}
 		}
 
 		stmt.Columns = append(stmt.Columns, col)
 
-		if p.currentToken.Type == "," {
+		if p.isType(models.TokenTypeComma) {
 			p.advance() // Consume comma
 			continue
 		}
@@ -682,13 +674,13 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 	}
 
 	// Expect closing parenthesis
-	if p.currentToken.Type != ")" {
+	if !p.isType(models.TokenTypeRParen) {
 		return nil, p.expectedError(")")
 	}
 	p.advance() // Consume )
 
 	// Parse optional WHERE clause (partial index)
-	if p.currentToken.Type == "WHERE" {
+	if p.isType(models.TokenTypeWhere) {
 		p.advance() // Consume WHERE
 		whereClause, err := p.parseExpression()
 		if err != nil {
@@ -705,35 +697,30 @@ func (p *Parser) parseDropStatement() (*ast.DropStatement, error) {
 	stmt := &ast.DropStatement{}
 
 	// Determine object type
-	switch p.currentToken.Type {
-	case "MATERIALIZED":
+	if p.isType(models.TokenTypeMaterialized) {
 		p.advance() // Consume MATERIALIZED
-		if p.currentToken.Type != "VIEW" {
+		if !p.isType(models.TokenTypeView) {
 			return nil, p.expectedError("VIEW after MATERIALIZED")
 		}
 		p.advance() // Consume VIEW
 		stmt.ObjectType = "MATERIALIZED VIEW"
-
-	case "VIEW":
+	} else if p.isType(models.TokenTypeView) {
 		p.advance() // Consume VIEW
 		stmt.ObjectType = "VIEW"
-
-	case "TABLE":
+	} else if p.isType(models.TokenTypeTable) {
 		p.advance() // Consume TABLE
 		stmt.ObjectType = "TABLE"
-
-	case "INDEX":
+	} else if p.isType(models.TokenTypeIndex) {
 		p.advance() // Consume INDEX
 		stmt.ObjectType = "INDEX"
-
-	default:
+	} else {
 		return nil, p.expectedError("TABLE, VIEW, MATERIALIZED VIEW, or INDEX after DROP")
 	}
 
 	// Check for IF EXISTS
-	if p.currentToken.Type == "IF" {
+	if p.isType(models.TokenTypeIf) {
 		p.advance() // Consume IF
-		if p.currentToken.Type != "EXISTS" {
+		if !p.isType(models.TokenTypeExists) {
 			return nil, p.expectedError("EXISTS after IF")
 		}
 		p.advance() // Consume EXISTS
@@ -742,13 +729,13 @@ func (p *Parser) parseDropStatement() (*ast.DropStatement, error) {
 
 	// Parse object names (can be comma-separated)
 	for {
-		if p.currentToken.Type != "IDENT" {
+		if !p.isType(models.TokenTypeIdentifier) {
 			return nil, p.expectedError("object name")
 		}
 		stmt.Names = append(stmt.Names, p.currentToken.Literal)
 		p.advance()
 
-		if p.currentToken.Type == "," {
+		if p.isType(models.TokenTypeComma) {
 			p.advance() // Consume comma
 			continue
 		}
@@ -756,10 +743,10 @@ func (p *Parser) parseDropStatement() (*ast.DropStatement, error) {
 	}
 
 	// Parse optional CASCADE/RESTRICT
-	if p.currentToken.Type == "CASCADE" {
+	if p.isType(models.TokenTypeCascade) {
 		stmt.CascadeType = "CASCADE"
 		p.advance()
-	} else if p.currentToken.Type == "RESTRICT" {
+	} else if p.isType(models.TokenTypeRestrict) {
 		stmt.CascadeType = "RESTRICT"
 		p.advance()
 	}
@@ -770,13 +757,13 @@ func (p *Parser) parseDropStatement() (*ast.DropStatement, error) {
 // parseRefreshStatement parses REFRESH MATERIALIZED VIEW statement
 func (p *Parser) parseRefreshStatement() (*ast.RefreshMaterializedViewStatement, error) {
 	// Expect MATERIALIZED
-	if p.currentToken.Type != "MATERIALIZED" {
+	if !p.isType(models.TokenTypeMaterialized) {
 		return nil, p.expectedError("MATERIALIZED after REFRESH")
 	}
 	p.advance() // Consume MATERIALIZED
 
 	// Expect VIEW
-	if p.currentToken.Type != "VIEW" {
+	if !p.isType(models.TokenTypeView) {
 		return nil, p.expectedError("VIEW after MATERIALIZED")
 	}
 	p.advance() // Consume VIEW
@@ -784,13 +771,13 @@ func (p *Parser) parseRefreshStatement() (*ast.RefreshMaterializedViewStatement,
 	stmt := &ast.RefreshMaterializedViewStatement{}
 
 	// Check for CONCURRENTLY
-	if p.currentToken.Type == "CONCURRENTLY" {
+	if p.isTokenMatch("CONCURRENTLY") {
 		stmt.Concurrently = true
 		p.advance()
 	}
 
 	// Parse view name
-	if p.currentToken.Type != "IDENT" {
+	if !p.isType(models.TokenTypeIdentifier) {
 		return nil, p.expectedError("materialized view name")
 	}
 	stmt.Name = p.currentToken.Literal
@@ -798,7 +785,7 @@ func (p *Parser) parseRefreshStatement() (*ast.RefreshMaterializedViewStatement,
 
 	// Parse optional WITH [NO] DATA
 	// Note: DATA and NO may be tokenized as IDENT since they're common identifiers
-	if p.currentToken.Type == "WITH" {
+	if p.isType(models.TokenTypeWith) {
 		p.advance() // Consume WITH
 		if p.isTokenMatch("NO") {
 			p.advance() // Consume NO

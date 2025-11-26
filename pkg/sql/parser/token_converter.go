@@ -205,6 +205,37 @@ func (tc *TokenConverter) handleCompoundToken(t models.TokenWithSpan) []token.To
 // convertSingleToken converts a single token using the type mapping
 // It populates both the string-based Type and int-based ModelType for unified type system
 func (tc *TokenConverter) convertSingleToken(t models.TokenWithSpan) (token.Token, error) {
+	// Handle asterisk/multiplication token - normalize to TokenTypeAsterisk for parser
+	// The tokenizer produces TokenTypeMul (62) but parser expects TokenTypeAsterisk (501)
+	if t.Token.Type == models.TokenTypeMul {
+		return token.Token{
+			Type:      "*",
+			ModelType: models.TokenTypeAsterisk, // Normalize to asterisk for parser compatibility
+			Literal:   t.Token.Value,
+		}, nil
+	}
+
+	// Handle aggregate function tokens - normalize to TokenTypeIdentifier for parser
+	// The parser expects these to be identifiers so it can parse them as function calls
+	switch t.Token.Type {
+	case models.TokenTypeCount, models.TokenTypeSum, models.TokenTypeAvg,
+		models.TokenTypeMin, models.TokenTypeMax:
+		return token.Token{
+			Type:      "IDENT",
+			ModelType: models.TokenTypeIdentifier, // Normalize to identifier for function parsing
+			Literal:   t.Token.Value,
+		}, nil
+	}
+
+	// Handle placeholder token - normalize to TokenTypePlaceholder
+	if t.Token.Type == models.TokenTypeQuestion {
+		return token.Token{
+			Type:      "?",
+			ModelType: models.TokenTypePlaceholder,
+			Literal:   t.Token.Value,
+		}, nil
+	}
+
 	// Handle NUMBER tokens - convert to INT or FLOAT based on value
 	if t.Token.Type == models.TokenTypeNumber {
 		// Check if it's a float (contains decimal point or exponent)

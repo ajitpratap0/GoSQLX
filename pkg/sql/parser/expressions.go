@@ -6,6 +6,7 @@ package parser
 import (
 	"fmt"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
@@ -33,7 +34,7 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 	}
 
 	// Handle OR operators (lowest precedence, left-associative)
-	for p.currentToken.Type == "OR" {
+	for p.isType(models.TokenTypeOr) {
 		operator := p.currentToken.Literal
 		p.advance() // Consume OR
 
@@ -61,7 +62,7 @@ func (p *Parser) parseAndExpression() (ast.Expression, error) {
 	}
 
 	// Handle AND operators (middle precedence, left-associative)
-	for p.currentToken.Type == "AND" {
+	for p.isType(models.TokenTypeAnd) {
 		operator := p.currentToken.Literal
 		p.advance() // Consume AND
 
@@ -92,7 +93,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	// Only consume NOT if followed by BETWEEN, LIKE, ILIKE, or IN
 	// This prevents breaking cases like: WHERE NOT active AND name LIKE '%'
 	notPrefix := false
-	if p.currentToken.Type == "NOT" {
+	if p.isType(models.TokenTypeNot) {
 		nextToken := p.peekToken()
 		if nextToken.Type == "BETWEEN" || nextToken.Type == "LIKE" || nextToken.Type == "ILIKE" || nextToken.Type == "IN" {
 			notPrefix = true
@@ -101,7 +102,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	}
 
 	// Check for BETWEEN operator
-	if p.currentToken.Type == "BETWEEN" {
+	if p.isType(models.TokenTypeBetween) {
 		p.advance() // Consume BETWEEN
 
 		// Parse lower bound
@@ -111,7 +112,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 		}
 
 		// Expect AND keyword
-		if p.currentToken.Type != "AND" {
+		if !p.isType(models.TokenTypeAnd) {
 			return nil, p.expectedError("AND")
 		}
 		p.advance() // Consume AND
@@ -131,7 +132,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	}
 
 	// Check for LIKE/ILIKE operator
-	if p.currentToken.Type == "LIKE" || p.currentToken.Type == "ILIKE" {
+	if p.isType(models.TokenTypeLike) || p.currentToken.Type == "ILIKE" {
 		operator := p.currentToken.Literal
 		p.advance() // Consume LIKE/ILIKE
 
@@ -150,17 +151,17 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	}
 
 	// Check for IN operator
-	if p.currentToken.Type == "IN" {
+	if p.isType(models.TokenTypeIn) {
 		p.advance() // Consume IN
 
 		// Expect opening parenthesis
-		if p.currentToken.Type != "(" {
+		if !p.isType(models.TokenTypeLParen) {
 			return nil, p.expectedError("(")
 		}
 		p.advance() // Consume (
 
 		// Check if this is a subquery (starts with SELECT or WITH)
-		if p.currentToken.Type == "SELECT" || p.currentToken.Type == "WITH" {
+		if p.isType(models.TokenTypeSelect) || p.isType(models.TokenTypeWith) {
 			// Parse subquery
 			subquery, err := p.parseSubquery()
 			if err != nil {
@@ -168,7 +169,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			}
 
 			// Expect closing parenthesis
-			if p.currentToken.Type != ")" {
+			if !p.isType(models.TokenTypeRParen) {
 				return nil, p.expectedError(")")
 			}
 			p.advance() // Consume )
@@ -189,9 +190,9 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			}
 			values = append(values, value)
 
-			if p.currentToken.Type == "," {
+			if p.isType(models.TokenTypeComma) {
 				p.advance() // Consume comma
-			} else if p.currentToken.Type == ")" {
+			} else if p.isType(models.TokenTypeRParen) {
 				break
 			} else {
 				return nil, p.expectedError(", or )")
@@ -213,16 +214,16 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	}
 
 	// Check for IS NULL / IS NOT NULL
-	if p.currentToken.Type == "IS" {
+	if p.isType(models.TokenTypeIs) {
 		p.advance() // Consume IS
 
 		isNot := false
-		if p.currentToken.Type == "NOT" {
+		if p.isType(models.TokenTypeNot) {
 			isNot = true
 			p.advance() // Consume NOT
 		}
 
-		if p.currentToken.Type == "NULL" {
+		if p.isType(models.TokenTypeNull) {
 			p.advance() // Consume NULL
 			return &ast.BinaryExpression{
 				Left:     left,
@@ -236,21 +237,19 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	}
 
 	// Check if this is a comparison binary expression
-	if p.currentToken.Type == "=" || p.currentToken.Type == "<" ||
-		p.currentToken.Type == ">" || p.currentToken.Type == "!=" ||
-		p.currentToken.Type == "<=" || p.currentToken.Type == ">=" ||
+	if p.isAnyType(models.TokenTypeEq, models.TokenTypeLt, models.TokenTypeGt, models.TokenTypeNeq, models.TokenTypeLtEq, models.TokenTypeGtEq) ||
 		p.currentToken.Type == "<>" {
 		// Save the operator
 		operator := p.currentToken.Literal
 		p.advance()
 
 		// Check for ANY/ALL subquery operators
-		if p.currentToken.Type == "ANY" || p.currentToken.Type == "ALL" {
+		if p.isAnyType(models.TokenTypeAny, models.TokenTypeAll) {
 			quantifier := p.currentToken.Type
 			p.advance() // Consume ANY/ALL
 
 			// Expect opening parenthesis
-			if p.currentToken.Type != "(" {
+			if !p.isType(models.TokenTypeLParen) {
 				return nil, p.expectedError("(")
 			}
 			p.advance() // Consume (
@@ -262,7 +261,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			}
 
 			// Expect closing parenthesis
-			if p.currentToken.Type != ")" {
+			if !p.isType(models.TokenTypeRParen) {
 				return nil, p.expectedError(")")
 			}
 			p.advance() // Consume )
@@ -300,18 +299,18 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 
 // parsePrimaryExpression parses a primary expression (literals, identifiers, function calls)
 func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
-	switch p.currentToken.Type {
-	case "CASE":
+	if p.isType(models.TokenTypeCase) {
 		// Handle CASE expressions (both simple and searched forms)
 		return p.parseCaseExpression()
+	}
 
-	case "IDENT":
+	if p.isType(models.TokenTypeIdentifier) {
 		// Handle identifiers and function calls
 		identName := p.currentToken.Literal
 		p.advance()
 
 		// Check for function call (identifier followed by parentheses)
-		if p.currentToken.Type == "(" {
+		if p.isType(models.TokenTypeLParen) {
 			// This is a function call
 			funcCall, err := p.parseFunctionCall(identName)
 			if err != nil {
@@ -324,9 +323,9 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		ident := &ast.Identifier{Name: identName}
 
 		// Check for qualified identifier (table.column)
-		if p.currentToken.Type == "." {
+		if p.isType(models.TokenTypePeriod) {
 			p.advance() // Consume .
-			if p.currentToken.Type != "IDENT" {
+			if !p.isType(models.TokenTypeIdentifier) {
 				return nil, p.expectedError("identifier after .")
 			}
 			// Create a qualified identifier
@@ -338,60 +337,68 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		}
 
 		return ident, nil
+	}
 
-	case "*":
+	if p.isType(models.TokenTypeAsterisk) {
 		// Handle asterisk (e.g., in COUNT(*) or SELECT *)
 		p.advance()
 		return &ast.Identifier{Name: "*"}, nil
+	}
 
-	case "STRING":
+	if p.currentToken.Type == "STRING" {
 		// Handle string literals
 		value := p.currentToken.Literal
 		p.advance()
 		return &ast.LiteralValue{Value: value, Type: "string"}, nil
+	}
 
-	case "INT":
+	if p.currentToken.Type == "INT" {
 		// Handle integer literals
 		value := p.currentToken.Literal
 		p.advance()
 		return &ast.LiteralValue{Value: value, Type: "int"}, nil
+	}
 
-	case "FLOAT":
+	if p.currentToken.Type == "FLOAT" {
 		// Handle float literals
 		value := p.currentToken.Literal
 		p.advance()
 		return &ast.LiteralValue{Value: value, Type: "float"}, nil
+	}
 
-	case "TRUE", "FALSE":
+	if p.isAnyType(models.TokenTypeTrue, models.TokenTypeFalse) {
 		// Handle boolean literals
 		value := p.currentToken.Literal
 		p.advance()
 		return &ast.LiteralValue{Value: value, Type: "bool"}, nil
+	}
 
-	case "PLACEHOLDER":
+	if p.isType(models.TokenTypePlaceholder) {
 		// Handle SQL placeholders (e.g., $1, $2 for PostgreSQL; @param for SQL Server)
 		value := p.currentToken.Literal
 		p.advance()
 		return &ast.LiteralValue{Value: value, Type: "placeholder"}, nil
+	}
 
-	case "NULL":
+	if p.isType(models.TokenTypeNull) {
 		// Handle NULL literal
 		p.advance()
 		return &ast.LiteralValue{Value: nil, Type: "null"}, nil
+	}
 
-	case "(":
+	if p.isType(models.TokenTypeLParen) {
 		// Handle parenthesized expression or subquery
 		p.advance() // Consume (
 
 		// Check if this is a subquery (starts with SELECT or WITH)
-		if p.currentToken.Type == "SELECT" || p.currentToken.Type == "WITH" {
+		if p.isType(models.TokenTypeSelect) || p.isType(models.TokenTypeWith) {
 			// Parse subquery
 			subquery, err := p.parseSubquery()
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse subquery: %w", err)
 			}
 			// Expect closing parenthesis
-			if p.currentToken.Type != ")" {
+			if !p.isType(models.TokenTypeRParen) {
 				return nil, p.expectedError(")")
 			}
 			p.advance() // Consume )
@@ -405,18 +412,19 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		}
 
 		// Expect closing parenthesis
-		if p.currentToken.Type != ")" {
+		if !p.isType(models.TokenTypeRParen) {
 			return nil, p.expectedError(")")
 		}
 		p.advance() // Consume )
 		return expr, nil
+	}
 
-	case "EXISTS":
+	if p.isType(models.TokenTypeExists) {
 		// Handle EXISTS (subquery)
 		p.advance() // Consume EXISTS
 
 		// Expect opening parenthesis
-		if p.currentToken.Type != "(" {
+		if !p.isType(models.TokenTypeLParen) {
 			return nil, p.expectedError("(")
 		}
 		p.advance() // Consume (
@@ -428,22 +436,23 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		}
 
 		// Expect closing parenthesis
-		if p.currentToken.Type != ")" {
+		if !p.isType(models.TokenTypeRParen) {
 			return nil, p.expectedError(")")
 		}
 		p.advance() // Consume )
 
 		return &ast.ExistsExpression{Subquery: subquery}, nil
+	}
 
-	case "NOT":
+	if p.isType(models.TokenTypeNot) {
 		// Handle NOT expression (NOT EXISTS, NOT boolean)
 		p.advance() // Consume NOT
 
-		if p.currentToken.Type == "EXISTS" {
+		if p.isType(models.TokenTypeExists) {
 			// NOT EXISTS (subquery)
 			p.advance() // Consume EXISTS
 
-			if p.currentToken.Type != "(" {
+			if !p.isType(models.TokenTypeLParen) {
 				return nil, p.expectedError("(")
 			}
 			p.advance() // Consume (
@@ -453,7 +462,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				return nil, fmt.Errorf("failed to parse NOT EXISTS subquery: %w", err)
 			}
 
-			if p.currentToken.Type != ")" {
+			if !p.isType(models.TokenTypeRParen) {
 				return nil, p.expectedError(")")
 			}
 			p.advance() // Consume )
@@ -477,10 +486,9 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			Operator: ast.Not,
 			Expr:     expr,
 		}, nil
-
-	default:
-		return nil, fmt.Errorf("unexpected token: %s", p.currentToken.Type)
 	}
+
+	return nil, fmt.Errorf("unexpected token: %s", p.currentToken.Type)
 }
 
 // parseCaseExpression parses a CASE expression (both simple and searched forms)
@@ -497,7 +505,7 @@ func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
 	// Check if this is a simple CASE (has a value expression) or searched CASE (no value)
 	// Simple CASE: CASE expr WHEN value THEN result
 	// Searched CASE: CASE WHEN condition THEN result
-	if p.currentToken.Type != "WHEN" {
+	if !p.isType(models.TokenTypeWhen) {
 		// This is a simple CASE - parse the value expression
 		value, err := p.parseExpression()
 		if err != nil {
@@ -507,7 +515,7 @@ func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
 	}
 
 	// Parse WHEN clauses (at least one required)
-	for p.currentToken.Type == "WHEN" {
+	for p.isType(models.TokenTypeWhen) {
 		p.advance() // Consume WHEN
 
 		// Parse the condition/value expression
@@ -517,7 +525,7 @@ func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
 		}
 
 		// Expect THEN keyword
-		if p.currentToken.Type != "THEN" {
+		if !p.isType(models.TokenTypeThen) {
 			return nil, p.expectedError("THEN")
 		}
 		p.advance() // Consume THEN
@@ -540,7 +548,7 @@ func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
 	}
 
 	// Parse optional ELSE clause
-	if p.currentToken.Type == "ELSE" {
+	if p.isType(models.TokenTypeElse) {
 		p.advance() // Consume ELSE
 
 		elseResult, err := p.parseExpression()
@@ -551,7 +559,7 @@ func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
 	}
 
 	// Expect END keyword
-	if p.currentToken.Type != "END" {
+	if !p.isType(models.TokenTypeEnd) {
 		return nil, p.expectedError("END")
 	}
 	p.advance() // Consume END
@@ -562,12 +570,12 @@ func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
 // parseSubquery parses a subquery (SELECT or WITH statement).
 // Expects current token to be SELECT or WITH.
 func (p *Parser) parseSubquery() (ast.Statement, error) {
-	if p.currentToken.Type == "WITH" {
+	if p.isType(models.TokenTypeWith) {
 		// WITH statement handles its own token consumption
 		return p.parseWithStatement()
 	}
 
-	if p.currentToken.Type == "SELECT" {
+	if p.isType(models.TokenTypeSelect) {
 		p.advance() // Consume SELECT
 		return p.parseSelectWithSetOperations()
 	}

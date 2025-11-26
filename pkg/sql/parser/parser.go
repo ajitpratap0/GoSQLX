@@ -281,20 +281,161 @@ func (p *Parser) peekToken() token.Token {
 // They include fallback to string-based Type comparison for backward compatibility
 // with tests that create tokens directly without setting ModelType.
 
-// modelTypeToString maps ModelType to expected string Type for fallback comparison
+// modelTypeToString maps ModelType to expected string Type for fallback comparison.
+// This comprehensive map enables isType() to work with tokens that don't have ModelType set
+// (e.g., tokens created in tests without using the tokenizer).
+// NOTE: Only TokenTypes that exist in models package are included here.
 var modelTypeToString = map[models.TokenType]token.Type{
-	models.TokenTypeEOF:       token.EOF,
-	models.TokenTypeSemicolon: token.SEMICOLON,
-	models.TokenTypeSelect:    token.SELECT,
-	models.TokenTypeInsert:    token.INSERT,
-	models.TokenTypeUpdate:    token.UPDATE,
-	models.TokenTypeDelete:    token.DELETE,
+	// Special tokens
+	models.TokenTypeEOF:        token.EOF,
+	models.TokenTypeSemicolon:  token.SEMICOLON,
+	models.TokenTypeIdentifier: "IDENT",
+
+	// Punctuation and operators
+	models.TokenTypeComma:    token.COMMA,
+	models.TokenTypeLParen:   "(",
+	models.TokenTypeRParen:   ")",
+	models.TokenTypeEq:       "=",
+	models.TokenTypeLt:       "<",
+	models.TokenTypeGt:       ">",
+	models.TokenTypeNeq:      "!=",
+	models.TokenTypeLtEq:     "<=",
+	models.TokenTypeGtEq:     ">=",
+	models.TokenTypeDot:      ".",
+	models.TokenTypeAsterisk: "*",
+
+	// Core SQL keywords
+	models.TokenTypeSelect: token.SELECT,
+	models.TokenTypeFrom:   token.FROM,
+	models.TokenTypeWhere:  token.WHERE,
+	models.TokenTypeInsert: token.INSERT,
+	models.TokenTypeUpdate: token.UPDATE,
+	models.TokenTypeDelete: token.DELETE,
+	models.TokenTypeInto:   "INTO",
+	models.TokenTypeValues: "VALUES",
+	models.TokenTypeSet:    "SET",
+	models.TokenTypeAs:     "AS",
+	models.TokenTypeOn:     "ON",
+
+	// DDL keywords
+	models.TokenTypeCreate:       "CREATE",
+	models.TokenTypeAlter:        token.ALTER,
+	models.TokenTypeDrop:         token.DROP,
+	models.TokenTypeTable:        "TABLE",
+	models.TokenTypeIndex:        "INDEX",
+	models.TokenTypeView:         "VIEW",
+	models.TokenTypePrimary:      "PRIMARY",
+	models.TokenTypeForeign:      "FOREIGN",
+	models.TokenTypeUnique:       "UNIQUE",
+	models.TokenTypeCheck:        "CHECK",
+	models.TokenTypeConstraint:   "CONSTRAINT",
+	models.TokenTypeDefault:      "DEFAULT",
+	models.TokenTypeReferences:   "REFERENCES",
+	models.TokenTypeCascade:      "CASCADE",
+	models.TokenTypeRestrict:     "RESTRICT",
+	models.TokenTypeMaterialized: "MATERIALIZED",
+	models.TokenTypeReplace:      "REPLACE",
+	models.TokenTypeCollate:      "COLLATE",
+
+	// Clause keywords
+	models.TokenTypeGroup:    "GROUP",
+	models.TokenTypeBy:       "BY",
+	models.TokenTypeHaving:   "HAVING",
+	models.TokenTypeOrder:    "ORDER",
+	models.TokenTypeAsc:      "ASC",
+	models.TokenTypeDesc:     "DESC",
+	models.TokenTypeLimit:    "LIMIT",
+	models.TokenTypeOffset:   "OFFSET",
+	models.TokenTypeDistinct: "DISTINCT",
+
+	// JOIN keywords
+	models.TokenTypeJoin:    "JOIN",
+	models.TokenTypeInner:   "INNER",
+	models.TokenTypeLeft:    "LEFT",
+	models.TokenTypeRight:   "RIGHT",
+	models.TokenTypeFull:    "FULL",
+	models.TokenTypeOuter:   "OUTER",
+	models.TokenTypeCross:   "CROSS",
+	models.TokenTypeNatural: "NATURAL",
+	models.TokenTypeUsing:   "USING",
+
+	// Set operations
+	models.TokenTypeUnion:     "UNION",
+	models.TokenTypeExcept:    "EXCEPT",
+	models.TokenTypeIntersect: "INTERSECT",
+	models.TokenTypeAll:       "ALL",
+
+	// Logical operators
+	models.TokenTypeAnd: "AND",
+	models.TokenTypeOr:  "OR",
+	models.TokenTypeNot: "NOT",
+
+	// Comparison operators
+	models.TokenTypeIs:      "IS",
+	models.TokenTypeIn:      "IN",
+	models.TokenTypeLike:    "LIKE",
+	models.TokenTypeBetween: "BETWEEN",
+	models.TokenTypeExists:  "EXISTS",
+	models.TokenTypeAny:     "ANY",
+
+	// NULL and boolean
+	models.TokenTypeNull:  "NULL",
+	models.TokenTypeTrue:  "TRUE",
+	models.TokenTypeFalse: "FALSE",
+
+	// Window function keywords
+	models.TokenTypeOver:      "OVER",
+	models.TokenTypePartition: "PARTITION",
+	models.TokenTypeRows:      "ROWS",
+	models.TokenTypeRange:     "RANGE",
+	models.TokenTypeUnbounded: "UNBOUNDED",
+	models.TokenTypePreceding: "PRECEDING",
+	models.TokenTypeFollowing: "FOLLOWING",
+	models.TokenTypeCurrent:   "CURRENT",
+	models.TokenTypeRow:       "ROW",
+	models.TokenTypeNulls:     "NULLS",
+	models.TokenTypeFirst:     "FIRST",
+	models.TokenTypeLast:      "LAST",
+	models.TokenTypeFilter:    "FILTER",
+
+	// Placeholder token - maps to "PLACEHOLDER" for tests that create tokens manually
+	models.TokenTypePlaceholder: "PLACEHOLDER",
+
+	// CTE keywords
 	models.TokenTypeWith:      token.WITH,
-	models.TokenTypeAlter:     token.ALTER,
-	models.TokenTypeDrop:      token.DROP,
-	models.TokenTypeCreate:    "CREATE",
-	models.TokenTypeMerge:     "MERGE",
-	models.TokenTypeRefresh:   "REFRESH",
+	models.TokenTypeRecursive: "RECURSIVE",
+
+	// CASE expression
+	models.TokenTypeCase: "CASE",
+	models.TokenTypeWhen: "WHEN",
+	models.TokenTypeThen: "THEN",
+	models.TokenTypeElse: "ELSE",
+	models.TokenTypeEnd:  "END",
+
+	// MERGE keywords
+	models.TokenTypeMerge:   "MERGE",
+	models.TokenTypeMatched: "MATCHED",
+	models.TokenTypeSource:  "SOURCE",
+	models.TokenTypeTarget:  "TARGET",
+
+	// Grouping keywords
+	models.TokenTypeRollup:       "ROLLUP",
+	models.TokenTypeCube:         "CUBE",
+	models.TokenTypeGrouping:     "GROUPING",
+	models.TokenTypeGroupingSets: "GROUPING SETS",
+	models.TokenTypeSets:         "SETS",
+
+	// Data types
+	models.TokenTypeInt:     "INT",
+	models.TokenTypeInteger: "INTEGER",
+	models.TokenTypeVarchar: "VARCHAR",
+	models.TokenTypeText:    "TEXT",
+	models.TokenTypeBoolean: "BOOLEAN",
+
+	// Other keywords
+	models.TokenTypeIf:      "IF",
+	models.TokenTypeRefresh: "REFRESH",
+	models.TokenTypeTo:      "TO",
 }
 
 // isType checks if the current token's ModelType matches the expected type.

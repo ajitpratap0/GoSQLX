@@ -6,6 +6,7 @@ package parser
 import (
 	"fmt"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
@@ -16,7 +17,7 @@ func (p *Parser) parseWithStatement() (ast.Statement, error) {
 
 	// Check for RECURSIVE keyword
 	recursive := false
-	if p.currentToken.Type == "RECURSIVE" {
+	if p.isType(models.TokenTypeRecursive) {
 		recursive = true
 		p.advance()
 	}
@@ -32,7 +33,7 @@ func (p *Parser) parseWithStatement() (ast.Statement, error) {
 		ctes = append(ctes, cte)
 
 		// Check for more CTEs (comma-separated)
-		if p.currentToken.Type == "," {
+		if p.isType(models.TokenTypeComma) {
 			p.advance() // Consume comma
 			continue
 		}
@@ -91,7 +92,7 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 	}
 
 	// Parse CTE name
-	if p.currentToken.Type != "IDENT" {
+	if !p.isType(models.TokenTypeIdentifier) {
 		return nil, p.expectedError("CTE name")
 	}
 	name := p.currentToken.Literal
@@ -99,37 +100,37 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 
 	// Parse optional column list
 	var columns []string
-	if p.currentToken.Type == "(" {
+	if p.isType(models.TokenTypeLParen) {
 		p.advance() // Consume (
 
 		for {
-			if p.currentToken.Type != "IDENT" {
+			if !p.isType(models.TokenTypeIdentifier) {
 				return nil, p.expectedError("column name")
 			}
 			columns = append(columns, p.currentToken.Literal)
 			p.advance()
 
-			if p.currentToken.Type == "," {
+			if p.isType(models.TokenTypeComma) {
 				p.advance() // Consume comma
 				continue
 			}
 			break
 		}
 
-		if p.currentToken.Type != ")" {
+		if !p.isType(models.TokenTypeRParen) {
 			return nil, p.expectedError(")")
 		}
 		p.advance() // Consume )
 	}
 
 	// Parse AS keyword
-	if p.currentToken.Type != "AS" {
+	if !p.isType(models.TokenTypeAs) {
 		return nil, p.expectedError("AS")
 	}
 	p.advance()
 
 	// Parse the CTE query (must be in parentheses)
-	if p.currentToken.Type != "(" {
+	if !p.isType(models.TokenTypeLParen) {
 		return nil, p.expectedError("( before CTE query")
 	}
 	p.advance() // Consume (
@@ -140,7 +141,7 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 		return nil, fmt.Errorf("error parsing CTE statement: %v", err)
 	}
 
-	if p.currentToken.Type != ")" {
+	if !p.isType(models.TokenTypeRParen) {
 		return nil, p.expectedError(") after CTE query")
 	}
 	p.advance() // Consume )
@@ -156,20 +157,18 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 // It supports SELECT, INSERT, UPDATE, and DELETE statements, routing them to the appropriate
 // parsers while preserving set operation support for SELECT statements.
 func (p *Parser) parseMainStatementAfterWith() (ast.Statement, error) {
-	switch p.currentToken.Type {
-	case "SELECT":
+	if p.isType(models.TokenTypeSelect) {
 		p.advance() // Consume SELECT
 		return p.parseSelectWithSetOperations()
-	case "INSERT":
+	} else if p.isType(models.TokenTypeInsert) {
 		p.advance() // Consume INSERT
 		return p.parseInsertStatement()
-	case "UPDATE":
+	} else if p.isType(models.TokenTypeUpdate) {
 		p.advance() // Consume UPDATE
 		return p.parseUpdateStatement()
-	case "DELETE":
+	} else if p.isType(models.TokenTypeDelete) {
 		p.advance() // Consume DELETE
 		return p.parseDeleteStatement()
-	default:
-		return nil, p.expectedError("SELECT, INSERT, UPDATE, or DELETE after WITH")
 	}
+	return nil, p.expectedError("SELECT, INSERT, UPDATE, or DELETE after WITH")
 }

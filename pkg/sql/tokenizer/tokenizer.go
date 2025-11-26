@@ -440,8 +440,27 @@ func (t *Tokenizer) TokenizeContext(ctx context.Context, input []byte) ([]models
 }
 
 // skipWhitespace advances past any whitespace
+// Optimized with ASCII fast-path since >99% of SQL whitespace is ASCII
 func (t *Tokenizer) skipWhitespace() {
 	for t.pos.Index < len(t.input) {
+		b := t.input[t.pos.Index]
+		// Fast path: ASCII whitespace (covers >99% of cases)
+		if b < 128 {
+			switch b {
+			case ' ', '\t', '\r':
+				t.pos.Index++
+				t.pos.Column++
+				continue
+			case '\n':
+				t.pos.Index++
+				t.pos.Line++
+				t.pos.Column = 0
+				continue
+			}
+			// Not whitespace, exit
+			break
+		}
+		// Slow path: UTF-8 encoded character (rare in SQL)
 		r, size := utf8.DecodeRune(t.input[t.pos.Index:])
 		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
 			t.pos.AdvanceRune(r, size)

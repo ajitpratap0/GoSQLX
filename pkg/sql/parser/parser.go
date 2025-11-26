@@ -194,15 +194,45 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		}
 	}
 
-	// Quick check: is this any kind of DML/DDL statement?
-	// Uses isAnyType for efficient multiple type checking
-	if !p.isAnyType(models.TokenTypeWith, models.TokenTypeSelect, models.TokenTypeInsert,
-		models.TokenTypeUpdate, models.TokenTypeDelete, models.TokenTypeAlter,
-		models.TokenTypeMerge, models.TokenTypeCreate, models.TokenTypeDrop, models.TokenTypeRefresh) {
-		return nil, p.expectedError("statement")
+	// Fast path: O(1) switch dispatch on ModelType (compiles to jump table)
+	// This replaces the previous O(n) isAnyType + O(n) matchType approach
+	if p.currentToken.ModelType != 0 {
+		switch p.currentToken.ModelType {
+		case models.TokenTypeWith:
+			return p.parseWithStatement()
+		case models.TokenTypeSelect:
+			p.advance()
+			return p.parseSelectWithSetOperations()
+		case models.TokenTypeInsert:
+			p.advance()
+			return p.parseInsertStatement()
+		case models.TokenTypeUpdate:
+			p.advance()
+			return p.parseUpdateStatement()
+		case models.TokenTypeDelete:
+			p.advance()
+			return p.parseDeleteStatement()
+		case models.TokenTypeAlter:
+			p.advance()
+			return p.parseAlterTableStmt()
+		case models.TokenTypeMerge:
+			p.advance()
+			return p.parseMergeStatement()
+		case models.TokenTypeCreate:
+			p.advance()
+			return p.parseCreateStatement()
+		case models.TokenTypeDrop:
+			p.advance()
+			return p.parseDropStatement()
+		case models.TokenTypeRefresh:
+			p.advance()
+			return p.parseRefreshStatement()
+		}
+		// ModelType set but not a statement keyword - fall through to fallback
 	}
 
-	// Use isType() helper for fast int comparison with fallback
+	// Fallback: string comparison for tokens without ModelType (e.g., tests)
+	// or tokens with ModelType that aren't statement starters (e.g., operators)
 	if p.isType(models.TokenTypeWith) {
 		return p.parseWithStatement()
 	}
@@ -234,7 +264,6 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 	if p.matchType(models.TokenTypeRefresh) {
 		return p.parseRefreshStatement()
 	}
-
 	return nil, p.expectedError("statement")
 }
 
@@ -475,6 +504,26 @@ func (p *Parser) isAnyType(types ...models.TokenType) bool {
 func (p *Parser) matchType(expected models.TokenType) bool {
 	if p.isType(expected) {
 		p.advance()
+		return true
+	}
+	return false
+}
+
+// isComparisonOperator checks if the current token is a comparison operator using O(1) switch.
+// This is a hot path optimization for expression parsing.
+func (p *Parser) isComparisonOperator() bool {
+	// Fast path: use ModelType switch for O(1) lookup
+	if p.currentToken.ModelType != 0 {
+		switch p.currentToken.ModelType {
+		case models.TokenTypeEq, models.TokenTypeLt, models.TokenTypeGt,
+			models.TokenTypeNeq, models.TokenTypeLtEq, models.TokenTypeGtEq:
+			return true
+		}
+		return false
+	}
+	// Fallback: string comparison for tokens without ModelType (e.g., tests)
+	switch p.currentToken.Type {
+	case "=", "<", ">", "!=", "<=", ">=", "<>":
 		return true
 	}
 	return false

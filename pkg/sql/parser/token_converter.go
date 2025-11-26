@@ -321,17 +321,18 @@ func containsDecimalOrExponent(s string) bool {
 // getKeywordTokenTypeWithModel returns both the parser token type (string) and models.TokenType (int)
 // for SQL keywords that come as IDENTIFIER. This enables unified type system support.
 func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) {
-	// Convert to uppercase for case-insensitive matching
-	upper := ""
-	for _, r := range value {
-		if r >= 'a' && r <= 'z' {
-			upper += string(r - 32) // Convert to uppercase
+	// Fast path: Convert to uppercase using byte array (avoids string allocations)
+	// SQL keywords are ASCII, so this is safe and much faster than string concatenation
+	upper := make([]byte, len(value))
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		if c >= 'a' && c <= 'z' {
+			upper[i] = c - 32 // Convert to uppercase
 		} else {
-			upper += string(r)
+			upper[i] = c
 		}
 	}
-
-	switch upper {
+	switch string(upper) {
 	// DML statements
 	case "INSERT":
 		return "INSERT", models.TokenTypeInsert

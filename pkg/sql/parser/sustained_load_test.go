@@ -94,10 +94,16 @@ func TestSustainedLoad_Parsing10Seconds(t *testing.T) {
 		t.Skip("Skipping sustained load test in short mode")
 	}
 
-	const (
-		duration = 10 * time.Second
-		workers  = 100
-	)
+	const duration = 10 * time.Second
+	// Scale workers to available CPUs to avoid contention on smaller CI runners
+	// GitHub Actions: Ubuntu=4 cores, macOS=3 cores, Windows=2 cores
+	workers := runtime.NumCPU() * 25
+	if workers > 100 {
+		workers = 100
+	}
+	if workers < 10 {
+		workers = 10
+	}
 
 	sql := []byte("SELECT id, name, email FROM users WHERE active = true ORDER BY created_at DESC LIMIT 100")
 
@@ -141,9 +147,10 @@ func TestSustainedLoad_Parsing10Seconds(t *testing.T) {
 						continue
 					}
 
-					// Parse
-					p := NewParser()
+					// Parse using pooled parser
+					p := GetParser()
 					_, err = p.Parse(convertedTokens)
+					PutParser(p)
 					if err != nil {
 						localErrs++
 					} else {
@@ -166,15 +173,18 @@ func TestSustainedLoad_Parsing10Seconds(t *testing.T) {
 	t.Logf("Duration: %.2fs", elapsed.Seconds())
 	t.Logf("Total operations: %d", totalOps)
 	t.Logf("Errors: %d (%.2f%%)", totalErrs, errorRate)
-	t.Logf("Workers: %d", workers)
+	t.Logf("Workers: %d (NumCPU=%d)", workers, runtime.NumCPU())
 	t.Logf("Throughput: %.0f ops/sec", opsPerSec)
 	t.Logf("Avg latency: %v", elapsed/time.Duration(totalOps))
 
 	// Verify meets minimum performance target (parsing is more complex than tokenization)
-	// CI performance observed: ~3.8K-5.3K ops/sec (sustained load throttling, Windows slower)
-	// Lowered to 3500 to account for Windows runner performance variability
-	if opsPerSec < 3500 {
-		t.Errorf("Performance below target: %.0f ops/sec (minimum: 3.5K for CI sustained load)", opsPerSec)
+	// Threshold scales with available CPUs: 1000 ops/sec per CPU core
+	minOpsPerSec := float64(runtime.NumCPU() * 1000)
+	if minOpsPerSec < 2000 {
+		minOpsPerSec = 2000 // Absolute minimum
+	}
+	if opsPerSec < minOpsPerSec {
+		t.Errorf("Performance below target: %.0f ops/sec (minimum: %.0f for %d CPUs)", opsPerSec, minOpsPerSec, runtime.NumCPU())
 	} else if opsPerSec < 300000 {
 		t.Logf("⚠️ Below ideal rate (300K), got %.0f ops/sec (acceptable for CI)", opsPerSec)
 	} else {
@@ -197,10 +207,15 @@ func TestSustainedLoad_EndToEnd10Seconds(t *testing.T) {
 		t.Skip("Skipping sustained load test in short mode")
 	}
 
-	const (
-		duration = 10 * time.Second
-		workers  = 100
-	)
+	const duration = 10 * time.Second
+	// Scale workers to available CPUs to avoid contention on smaller CI runners
+	workers := runtime.NumCPU() * 25
+	if workers > 100 {
+		workers = 100
+	}
+	if workers < 10 {
+		workers = 10
+	}
 
 	// Mix of query types to simulate real-world workload
 	queries := [][]byte{
@@ -262,9 +277,10 @@ func TestSustainedLoad_EndToEnd10Seconds(t *testing.T) {
 						continue
 					}
 
-					// Parse
-					p := NewParser()
+					// Parse using pooled parser
+					p := GetParser()
 					_, err = p.Parse(convertedTokens)
+					PutParser(p)
 					if err != nil {
 						localErrs++
 					} else {
@@ -293,16 +309,20 @@ func TestSustainedLoad_EndToEnd10Seconds(t *testing.T) {
 	t.Logf("Duration: %.2fs", elapsed.Seconds())
 	t.Logf("Total operations: %d", totalOps)
 	t.Logf("Errors: %d (%.2f%%)", totalErrs, errorRate)
-	t.Logf("Workers: %d", workers)
+	t.Logf("Workers: %d (NumCPU=%d)", workers, runtime.NumCPU())
 	t.Logf("Query types: %d", len(queries))
 	t.Logf("Throughput: %.0f ops/sec", opsPerSec)
 	t.Logf("Avg latency: %v", elapsed/time.Duration(totalOps))
 	t.Logf("Memory allocated: %+d MB", allocDiff/1024/1024)
 
 	// Verify meets minimum performance target (end-to-end with mixed queries)
-	// CI performance observed: ~4.4K ops/sec (sustained load throttling)
-	if opsPerSec < 3000 {
-		t.Errorf("Performance below target: %.0f ops/sec (minimum: 3K for CI sustained load)", opsPerSec)
+	// Threshold scales with available CPUs: 800 ops/sec per CPU core
+	minOpsPerSec := float64(runtime.NumCPU() * 800)
+	if minOpsPerSec < 1500 {
+		minOpsPerSec = 1500 // Absolute minimum
+	}
+	if opsPerSec < minOpsPerSec {
+		t.Errorf("Performance below target: %.0f ops/sec (minimum: %.0f for %d CPUs)", opsPerSec, minOpsPerSec, runtime.NumCPU())
 	} else if opsPerSec < 200000 {
 		t.Logf("⚠️ Below ideal rate (200K), got %.0f ops/sec", opsPerSec)
 	} else {
@@ -322,10 +342,15 @@ func TestSustainedLoad_MemoryStability(t *testing.T) {
 		t.Skip("Skipping sustained load test in short mode")
 	}
 
-	const (
-		duration = 10 * time.Second
-		workers  = 100
-	)
+	const duration = 10 * time.Second
+	// Scale workers to available CPUs to avoid contention on smaller CI runners
+	workers := runtime.NumCPU() * 25
+	if workers > 100 {
+		workers = 100
+	}
+	if workers < 10 {
+		workers = 10
+	}
 
 	sql := []byte("SELECT id, name FROM users WHERE active = true")
 
@@ -363,8 +388,9 @@ func TestSustainedLoad_MemoryStability(t *testing.T) {
 					if err == nil {
 						convertedTokens, convErr := ConvertTokensForParser(tokens)
 						if convErr == nil {
-							p := NewParser()
+							p := GetParser()
 							_, _ = p.Parse(convertedTokens)
+							PutParser(p)
 							localOps++
 						}
 					}
@@ -497,10 +523,15 @@ func TestSustainedLoad_ComplexQueries(t *testing.T) {
 		t.Skip("Skipping sustained load test in short mode")
 	}
 
-	const (
-		duration = 10 * time.Second
-		workers  = 100
-	)
+	const duration = 10 * time.Second
+	// Scale workers to available CPUs to avoid contention on smaller CI runners
+	workers := runtime.NumCPU() * 25
+	if workers > 100 {
+		workers = 100
+	}
+	if workers < 10 {
+		workers = 10
+	}
 
 	// Complex real-world queries
 	complexQueries := [][]byte{
@@ -574,8 +605,10 @@ func TestSustainedLoad_ComplexQueries(t *testing.T) {
 						continue
 					}
 
-					p := NewParser()
+					// Parse using pooled parser
+					p := GetParser()
 					_, err = p.Parse(convertedTokens)
+					PutParser(p)
 					if err != nil {
 						localErrs++
 					} else {
@@ -598,15 +631,18 @@ func TestSustainedLoad_ComplexQueries(t *testing.T) {
 	t.Logf("Duration: %.2fs", elapsed.Seconds())
 	t.Logf("Total operations: %d", totalOps)
 	t.Logf("Errors: %d (%.2f%%)", totalErrs, errorRate)
+	t.Logf("Workers: %d (NumCPU=%d)", workers, runtime.NumCPU())
 	t.Logf("Query types: %d complex queries", len(complexQueries))
 	t.Logf("Throughput: %.0f ops/sec", opsPerSec)
 	t.Logf("Avg latency: %v", elapsed/time.Duration(totalOps))
 
-	// For complex queries, lower threshold is acceptable (adjusted for CI)
-	// CI performance observed: 1.0K-23K ops/sec (highly variable, sustained load throttling)
-	// Lowered to 1000 to account for CI runner performance variability
-	if opsPerSec < 1000 {
-		t.Errorf("Performance below target: %.0f ops/sec (minimum: 1.0K for CI complex sustained load)", opsPerSec)
+	// For complex queries, threshold scales with available CPUs: 500 ops/sec per CPU core
+	minOpsPerSec := float64(runtime.NumCPU() * 500)
+	if minOpsPerSec < 1000 {
+		minOpsPerSec = 1000 // Absolute minimum
+	}
+	if opsPerSec < minOpsPerSec {
+		t.Errorf("Performance below target: %.0f ops/sec (minimum: %.0f for %d CPUs)", opsPerSec, minOpsPerSec, runtime.NumCPU())
 	} else {
 		t.Logf("✅ PERFORMANCE VALIDATED: %.0f ops/sec (complex queries)", opsPerSec)
 	}

@@ -24,11 +24,44 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
+
+// parserPool provides object pooling for Parser instances to reduce allocations.
+// This significantly improves performance in high-throughput scenarios.
+var parserPool = sync.Pool{
+	New: func() interface{} {
+		return &Parser{}
+	},
+}
+
+// GetParser returns a Parser instance from the pool.
+// The caller must call PutParser when done to return it to the pool.
+func GetParser() *Parser {
+	return parserPool.Get().(*Parser)
+}
+
+// PutParser returns a Parser instance to the pool after resetting it.
+// This should be called after parsing is complete to enable reuse.
+func PutParser(p *Parser) {
+	if p != nil {
+		p.Reset()
+		parserPool.Put(p)
+	}
+}
+
+// Reset clears the parser state for reuse from the pool.
+func (p *Parser) Reset() {
+	p.tokens = nil
+	p.currentPos = 0
+	p.currentToken = token.Token{}
+	p.depth = 0
+	p.ctx = nil
+}
 
 // MaxRecursionDepth defines the maximum allowed recursion depth for parsing operations.
 // This prevents stack overflow from deeply nested expressions, CTEs, or other recursive structures.

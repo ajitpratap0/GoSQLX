@@ -34,6 +34,10 @@ import (
 // This prevents stack overflow from deeply nested expressions, CTEs, or other recursive structures.
 const MaxRecursionDepth = 100
 
+// modelTypeUnset is the zero value for ModelType, indicating the type was not set.
+// Used for fast path checks: tokens with ModelType set use O(1) switch dispatch.
+const modelTypeUnset models.TokenType = 0
+
 // Parser represents a SQL parser
 type Parser struct {
 	tokens       []token.Token
@@ -196,7 +200,7 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 
 	// Fast path: O(1) switch dispatch on ModelType (compiles to jump table)
 	// This replaces the previous O(n) isAnyType + O(n) matchType approach
-	if p.currentToken.ModelType != 0 {
+	if p.currentToken.ModelType != modelTypeUnset {
 		switch p.currentToken.ModelType {
 		case models.TokenTypeWith:
 			return p.parseWithStatement()
@@ -478,7 +482,7 @@ var modelTypeToString = map[models.TokenType]token.Type{
 // Falls back to string comparison if ModelType is not set (for backward compatibility).
 func (p *Parser) isType(expected models.TokenType) bool {
 	// Fast path: use int comparison if ModelType is set
-	if p.currentToken.ModelType != 0 {
+	if p.currentToken.ModelType != modelTypeUnset {
 		return p.currentToken.ModelType == expected
 	}
 	// Fallback: string comparison for tokens without ModelType
@@ -513,7 +517,7 @@ func (p *Parser) matchType(expected models.TokenType) bool {
 // This is a hot path optimization for expression parsing.
 func (p *Parser) isComparisonOperator() bool {
 	// Fast path: use ModelType switch for O(1) lookup
-	if p.currentToken.ModelType != 0 {
+	if p.currentToken.ModelType != modelTypeUnset {
 		switch p.currentToken.ModelType {
 		case models.TokenTypeEq, models.TokenTypeLt, models.TokenTypeGt,
 			models.TokenTypeNeq, models.TokenTypeLtEq, models.TokenTypeGtEq:
@@ -527,6 +531,22 @@ func (p *Parser) isComparisonOperator() bool {
 		return true
 	}
 	return false
+}
+
+// isQuantifier checks if the current token is ANY or ALL using O(1) switch.
+// This is used for subquery quantifier operators like "= ANY (...)".
+func (p *Parser) isQuantifier() bool {
+	// Fast path: use ModelType switch for O(1) lookup
+	if p.currentToken.ModelType != modelTypeUnset {
+		switch p.currentToken.ModelType {
+		case models.TokenTypeAny, models.TokenTypeAll:
+			return true
+		}
+		return false
+	}
+	// Fallback: string comparison for tokens without ModelType
+	upper := strings.ToUpper(p.currentToken.Literal)
+	return upper == "ANY" || upper == "ALL"
 }
 
 // =============================================================================

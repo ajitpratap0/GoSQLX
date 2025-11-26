@@ -242,8 +242,8 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 		operator := p.currentToken.Literal
 		p.advance()
 
-		// Check for ANY/ALL subquery operators
-		if p.isAnyType(models.TokenTypeAny, models.TokenTypeAll) {
+		// Check for ANY/ALL subquery operators (uses O(1) switch instead of O(n) isAnyType)
+		if p.isQuantifier() {
 			quantifier := p.currentToken.Type
 			p.advance() // Consume ANY/ALL
 

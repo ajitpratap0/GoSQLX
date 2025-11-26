@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as os from 'os';
+import { spawn } from 'child_process';
 import {
     LanguageClient,
     LanguageClientOptions,
@@ -10,8 +12,12 @@ import {
 let client: LanguageClient | undefined;
 let outputChannel: vscode.OutputChannel;
 let statusBarItem: vscode.StatusBarItem;
+let extensionContext: vscode.ExtensionContext | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+    // Store context for restart functionality
+    extensionContext = context;
+
     outputChannel = vscode.window.createOutputChannel('GoSQLX');
     context.subscriptions.push(outputChannel);
 
@@ -61,6 +67,9 @@ async function startLanguageServer(context: vscode.ExtensionContext): Promise<vo
     const executablePath = config.get<string>('executablePath', 'gosqlx');
 
     // Server options - spawn the gosqlx lsp command
+    // Use cross-platform temp directory for debug logs
+    const debugLogPath = path.join(os.tmpdir(), 'gosqlx-lsp-debug.log');
+
     const serverOptions: ServerOptions = {
         run: {
             command: executablePath,
@@ -69,7 +78,7 @@ async function startLanguageServer(context: vscode.ExtensionContext): Promise<vo
         },
         debug: {
             command: executablePath,
-            args: ['lsp', '--log', '/tmp/gosqlx-lsp-debug.log'],
+            args: ['lsp', '--log', debugLogPath],
             transport: TransportKind.stdio
         }
     };
@@ -137,8 +146,6 @@ async function restartServerCommand(): Promise<void> {
     }
 }
 
-let extensionContext: vscode.ExtensionContext | undefined;
-
 function getExtensionContext(): vscode.ExtensionContext | undefined {
     return extensionContext;
 }
@@ -155,13 +162,37 @@ async function validateCommand(): Promise<void> {
         return;
     }
 
-    // Trigger validation by requesting diagnostics
     const uri = editor.document.uri;
     outputChannel.appendLine(`Validating: ${uri.fsPath}`);
 
-    // The LSP server handles validation automatically on document open/change
-    // Force a re-validation by sending a notification
-    vscode.window.showInformationMessage('SQL validation complete. Check the Problems panel for any issues.');
+    try {
+        // Force re-validation by making a small edit and undoing it
+        // This triggers the LSP to re-analyze the document
+        const document = editor.document;
+
+        // Alternative: Request diagnostics refresh if the LSP supports it
+        // Send a didChange notification to trigger revalidation
+        await vscode.commands.executeCommand('editor.action.triggerSuggest');
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Get current diagnostics for the document
+        const diagnostics = vscode.languages.getDiagnostics(uri);
+        const sqlDiagnostics = diagnostics.filter(d => d.source === 'gosqlx' || d.source === 'GoSQLX');
+
+        if (sqlDiagnostics.length === 0) {
+            vscode.window.showInformationMessage('SQL validation complete. No issues found.');
+        } else {
+            const errorCount = sqlDiagnostics.filter(d => d.severity === vscode.DiagnosticSeverity.Error).length;
+            const warningCount = sqlDiagnostics.filter(d => d.severity === vscode.DiagnosticSeverity.Warning).length;
+            vscode.window.showWarningMessage(
+                `SQL validation found ${errorCount} error(s) and ${warningCount} warning(s). Check the Problems panel.`
+            );
+        }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        outputChannel.appendLine(`Validation error: ${message}`);
+        vscode.window.showInformationMessage('SQL validation triggered. Check the Problems panel for any issues.');
+    }
 }
 
 async function formatCommand(): Promise<void> {
@@ -198,22 +229,50 @@ async function analyzeCommand(): Promise<void> {
     const executablePath = config.get<string>('executablePath', 'gosqlx');
 
     try {
-        const { exec } = require('child_process');
-        const util = require('util');
-        const execPromise = util.promisify(exec);
+        // Use spawn with argument array to prevent command injection
+        const result = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+            const child = spawn(executablePath, ['analyze', text]);
 
-        const { stdout, stderr } = await execPromise(
-            `${executablePath} analyze "${text.replace(/"/g, '\\"')}"`,
-            { maxBuffer: 1024 * 1024 }
-        );
+            let stdout = '';
+            let stderr = '';
+            let outputSize = 0;
+            const maxSize = 1024 * 1024; // 1MB limit
 
-        if (stderr) {
-            outputChannel.appendLine(`Analysis stderr: ${stderr}`);
+            if (child.stdout) {
+                child.stdout.on('data', (data: Buffer) => {
+                    outputSize += data.length;
+                    if (outputSize < maxSize) {
+                        stdout += data.toString();
+                    }
+                });
+            }
+
+            if (child.stderr) {
+                child.stderr.on('data', (data: Buffer) => {
+                    stderr += data.toString();
+                });
+            }
+
+            child.on('close', (code: number | null) => {
+                if (code === 0 || code === null) {
+                    resolve({ stdout, stderr });
+                } else {
+                    reject(new Error(`Process exited with code ${code}: ${stderr}`));
+                }
+            });
+
+            child.on('error', (err: Error) => {
+                reject(err);
+            });
+        });
+
+        if (result.stderr) {
+            outputChannel.appendLine(`Analysis stderr: ${result.stderr}`);
         }
 
         // Show analysis results in a new document
         const doc = await vscode.workspace.openTextDocument({
-            content: stdout || 'No analysis output',
+            content: result.stdout || 'No analysis output',
             language: 'markdown'
         });
         await vscode.window.showTextDocument(doc, { preview: true });

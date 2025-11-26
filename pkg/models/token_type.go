@@ -137,7 +137,7 @@ const (
 	TokenTypeLimit   TokenType = 232
 	TokenTypeOffset  TokenType = 233
 
-	// DML Keywords (234-244)
+	// DML Keywords (234-239)
 	TokenTypeInsert TokenType = 234
 	TokenTypeUpdate TokenType = 235
 	TokenTypeDelete TokenType = 236
@@ -271,26 +271,26 @@ const (
 	TokenTypeSavepoint TokenType = 423
 
 	// Data Type Keywords (430-449)
-	TokenTypeInt       TokenType = 430
-	TokenTypeInteger   TokenType = 431
-	TokenTypeBigInt    TokenType = 432
-	TokenTypeSmallInt  TokenType = 433
-	TokenTypeFloat     TokenType = 434
-	TokenTypeDouble    TokenType = 435
-	TokenTypeDecimal   TokenType = 436
-	TokenTypeNumeric   TokenType = 437
-	TokenTypeVarchar   TokenType = 438
-	TokenTypeChar2     TokenType = 439 // Char as data type (TokenTypeChar=12 is for single char token)
-	TokenTypeText      TokenType = 440
-	TokenTypeBoolean   TokenType = 441
-	TokenTypeDate      TokenType = 442
-	TokenTypeTime      TokenType = 443
-	TokenTypeTimestamp TokenType = 444
-	TokenTypeInterval  TokenType = 445
-	TokenTypeBlob      TokenType = 446
-	TokenTypeClob      TokenType = 447
-	TokenTypeJson      TokenType = 448
-	TokenTypeUuid      TokenType = 449
+	TokenTypeInt          TokenType = 430
+	TokenTypeInteger      TokenType = 431
+	TokenTypeBigInt       TokenType = 432
+	TokenTypeSmallInt     TokenType = 433
+	TokenTypeFloat        TokenType = 434
+	TokenTypeDouble       TokenType = 435
+	TokenTypeDecimal      TokenType = 436
+	TokenTypeNumeric      TokenType = 437
+	TokenTypeVarchar      TokenType = 438
+	TokenTypeCharDataType TokenType = 439 // Char as data type (TokenTypeChar=12 is for single char token)
+	TokenTypeText         TokenType = 440
+	TokenTypeBoolean      TokenType = 441
+	TokenTypeDate         TokenType = 442
+	TokenTypeTime         TokenType = 443
+	TokenTypeTimestamp    TokenType = 444
+	TokenTypeInterval     TokenType = 445
+	TokenTypeBlob         TokenType = 446
+	TokenTypeClob         TokenType = 447
+	TokenTypeJson         TokenType = 448
+	TokenTypeUuid         TokenType = 449
 
 	// Special Token Types (500-509)
 	TokenTypeIllegal    TokenType = 500 // For parser compatibility with token.ILLEGAL
@@ -535,26 +535,26 @@ var tokenStringMap = map[TokenType]string{
 	TokenTypeSavepoint: "SAVEPOINT",
 
 	// Data Type Keywords
-	TokenTypeInt:       "INT",
-	TokenTypeInteger:   "INTEGER",
-	TokenTypeBigInt:    "BIGINT",
-	TokenTypeSmallInt:  "SMALLINT",
-	TokenTypeFloat:     "FLOAT",
-	TokenTypeDouble:    "DOUBLE",
-	TokenTypeDecimal:   "DECIMAL",
-	TokenTypeNumeric:   "NUMERIC",
-	TokenTypeVarchar:   "VARCHAR",
-	TokenTypeChar2:     "CHAR",
-	TokenTypeText:      "TEXT",
-	TokenTypeBoolean:   "BOOLEAN",
-	TokenTypeDate:      "DATE",
-	TokenTypeTime:      "TIME",
-	TokenTypeTimestamp: "TIMESTAMP",
-	TokenTypeInterval:  "INTERVAL",
-	TokenTypeBlob:      "BLOB",
-	TokenTypeClob:      "CLOB",
-	TokenTypeJson:      "JSON",
-	TokenTypeUuid:      "UUID",
+	TokenTypeInt:          "INT",
+	TokenTypeInteger:      "INTEGER",
+	TokenTypeBigInt:       "BIGINT",
+	TokenTypeSmallInt:     "SMALLINT",
+	TokenTypeFloat:        "FLOAT",
+	TokenTypeDouble:       "DOUBLE",
+	TokenTypeDecimal:      "DECIMAL",
+	TokenTypeNumeric:      "NUMERIC",
+	TokenTypeVarchar:      "VARCHAR",
+	TokenTypeCharDataType: "CHAR",
+	TokenTypeText:         "TEXT",
+	TokenTypeBoolean:      "BOOLEAN",
+	TokenTypeDate:         "DATE",
+	TokenTypeTime:         "TIME",
+	TokenTypeTimestamp:    "TIMESTAMP",
+	TokenTypeInterval:     "INTERVAL",
+	TokenTypeBlob:         "BLOB",
+	TokenTypeClob:         "CLOB",
+	TokenTypeJson:         "JSON",
+	TokenTypeUuid:         "UUID",
 
 	// Special Token Types
 	TokenTypeIllegal:    "ILLEGAL",

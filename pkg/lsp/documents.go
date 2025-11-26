@@ -137,26 +137,6 @@ func positionToOffset(lines []string, pos Position) int {
 	return offset
 }
 
-// offsetToPosition converts a byte offset to a Position
-func offsetToPosition(content string, offset int) Position {
-	if offset < 0 {
-		return Position{Line: 0, Character: 0}
-	}
-	if offset > len(content) {
-		offset = len(content)
-	}
-
-	line := 0
-	lineStart := 0
-	for i := 0; i < offset; i++ {
-		if i < len(content) && content[i] == '\n' {
-			line++
-			lineStart = i + 1
-		}
-	}
-	return Position{Line: line, Character: offset - lineStart}
-}
-
 // GetWordAtPosition returns the word at the given position
 func (doc *Document) GetWordAtPosition(pos Position) string {
 	if pos.Line >= len(doc.Lines) {

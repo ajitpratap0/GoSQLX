@@ -398,28 +398,6 @@ func TestPositionToOffset(t *testing.T) {
 	}
 }
 
-func TestOffsetToPosition(t *testing.T) {
-	content := "SELECT *\nFROM users\nWHERE id = 1"
-
-	tests := []struct {
-		offset   int
-		expected Position
-	}{
-		{0, Position{Line: 0, Character: 0}},
-		{6, Position{Line: 0, Character: 6}},
-		{9, Position{Line: 1, Character: 0}},
-		{13, Position{Line: 1, Character: 4}},
-		{20, Position{Line: 2, Character: 0}},
-	}
-
-	for _, tt := range tests {
-		pos := offsetToPosition(content, tt.offset)
-		if pos != tt.expected {
-			t.Errorf("offsetToPosition(%d) = %v, want %v", tt.offset, pos, tt.expected)
-		}
-	}
-}
-
 func TestKeywordDocumentation(t *testing.T) {
 	// Test that we have documentation for common keywords
 	keywords := []string{

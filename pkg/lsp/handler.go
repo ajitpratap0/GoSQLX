@@ -135,6 +135,23 @@ func (h *Handler) handleDidOpen(params json.RawMessage) {
 
 	h.server.Logger().Printf("Document opened: %s", p.TextDocument.URI)
 
+	// Check document size limit
+	if len(p.TextDocument.Text) > h.server.MaxDocumentSizeBytes() {
+		h.server.Logger().Printf("Document too large: %d bytes (max: %d)", len(p.TextDocument.Text), h.server.MaxDocumentSizeBytes())
+		h.server.SendNotification("window/showMessage", ShowMessageParams{
+			Type:    MessageWarning,
+			Message: fmt.Sprintf("Document is too large for full analysis (%d bytes, max %d bytes)", len(p.TextDocument.Text), h.server.MaxDocumentSizeBytes()),
+		})
+		// Still open the document but skip validation
+		h.server.Documents().Open(
+			p.TextDocument.URI,
+			p.TextDocument.LanguageID,
+			p.TextDocument.Version,
+			p.TextDocument.Text,
+		)
+		return
+	}
+
 	h.server.Documents().Open(
 		p.TextDocument.URI,
 		p.TextDocument.LanguageID,
@@ -165,6 +182,17 @@ func (h *Handler) handleDidChange(params json.RawMessage) {
 
 	// Get updated content and validate
 	if content, ok := h.server.Documents().GetContent(p.TextDocument.URI); ok {
+		// Check document size limit after update
+		if len(content) > h.server.MaxDocumentSizeBytes() {
+			h.server.Logger().Printf("Document too large after change: %d bytes (max: %d)", len(content), h.server.MaxDocumentSizeBytes())
+			// Clear diagnostics but don't validate
+			h.server.SendNotification("textDocument/publishDiagnostics", PublishDiagnosticsParams{
+				URI:         p.TextDocument.URI,
+				Version:     p.TextDocument.Version,
+				Diagnostics: []Diagnostic{},
+			})
+			return
+		}
 		h.validateDocument(p.TextDocument.URI, content, p.TextDocument.Version)
 	}
 }

@@ -39,11 +39,20 @@ type Notification struct {
 
 // Error codes
 const (
+	// JSON-RPC standard error codes
 	ParseError     = -32700
 	InvalidRequest = -32600
 	MethodNotFound = -32601
 	InvalidParams  = -32602
 	InternalError  = -32603
+
+	// LSP-specific error codes
+	ServerNotInitialized = -32002
+	UnknownErrorCode     = -32001
+	RequestCancelled     = -32800
+	ContentModified      = -32801
+	ServerCancelled      = -32802
+	RequestFailed        = -32803
 )
 
 // LSP-specific types

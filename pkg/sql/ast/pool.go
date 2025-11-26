@@ -4,6 +4,14 @@ import (
 	"sync"
 )
 
+// Pool configuration constants
+const (
+	// MaxCleanupDepth limits recursion depth to prevent stack overflow
+	MaxCleanupDepth = 100
+	// MaxWorkQueueSize limits the work queue for iterative cleanup
+	MaxWorkQueueSize = 1000
+)
+
 var (
 	// AST node pools
 	astPool = sync.Pool{
@@ -113,6 +121,57 @@ var (
 	castExprPool = sync.Pool{
 		New: func() interface{} {
 			return &CastExpression{}
+		},
+	}
+
+	// Additional expression pools for complete coverage
+	existsExprPool = sync.Pool{
+		New: func() interface{} {
+			return &ExistsExpression{}
+		},
+	}
+
+	anyExprPool = sync.Pool{
+		New: func() interface{} {
+			return &AnyExpression{}
+		},
+	}
+
+	allExprPool = sync.Pool{
+		New: func() interface{} {
+			return &AllExpression{}
+		},
+	}
+
+	listExprPool = sync.Pool{
+		New: func() interface{} {
+			return &ListExpression{
+				Values: make([]Expression, 0, 4),
+			}
+		},
+	}
+
+	unaryExprPool = sync.Pool{
+		New: func() interface{} {
+			return &UnaryExpression{}
+		},
+	}
+
+	extractExprPool = sync.Pool{
+		New: func() interface{} {
+			return &ExtractExpression{}
+		},
+	}
+
+	positionExprPool = sync.Pool{
+		New: func() interface{} {
+			return &PositionExpression{}
+		},
+	}
+
+	substringExprPool = sync.Pool{
+		New: func() interface{} {
+			return &SubstringExpression{}
 		},
 	}
 
@@ -271,27 +330,52 @@ func GetSelectStatement() *SelectStatement {
 }
 
 // PutSelectStatement returns a SelectStatement to the pool
+// Uses iterative cleanup via PutExpression to handle deeply nested expressions
 func PutSelectStatement(stmt *SelectStatement) {
 	if stmt == nil {
 		return
 	}
 
-	// Clean up resources
+	// Collect all expressions to clean up
+	expressions := make([]Expression, 0, len(stmt.Columns)+len(stmt.OrderBy)+3)
+
+	// Collect column expressions
 	for _, col := range stmt.Columns {
-		PutExpression(col)
-	}
-	for _, orderBy := range stmt.OrderBy {
-		if orderBy.Expression != nil {
-			PutExpression(orderBy.Expression)
+		if col != nil {
+			expressions = append(expressions, col)
 		}
 	}
+
+	// Collect ORDER BY expressions
+	for _, orderBy := range stmt.OrderBy {
+		if orderBy.Expression != nil {
+			expressions = append(expressions, orderBy.Expression)
+		}
+	}
+
+	// Collect WHERE expression
 	if stmt.Where != nil {
-		PutExpression(stmt.Where)
+		expressions = append(expressions, stmt.Where)
+	}
+
+	// Note: Limit and Offset are *int, not Expression, so no cleanup needed
+
+	// Clean up all expressions using iterative approach
+	for _, expr := range expressions {
+		PutExpression(expr)
 	}
 
 	// Reset fields
+	for i := range stmt.Columns {
+		stmt.Columns[i] = nil
+	}
 	stmt.Columns = stmt.Columns[:0]
+
+	for i := range stmt.OrderBy {
+		stmt.OrderBy[i].Expression = nil
+	}
 	stmt.OrderBy = stmt.OrderBy[:0]
+
 	stmt.TableName = ""
 	stmt.Where = nil
 	stmt.Limit = nil
@@ -371,31 +455,207 @@ func PutLiteralValue(lit *LiteralValue) {
 	literalValuePool.Put(lit)
 }
 
-// PutExpression returns any Expression to the appropriate pool
+// PutExpression returns any Expression to the appropriate pool using iterative cleanup
+// to prevent stack overflow with deeply nested expressions
 func PutExpression(expr Expression) {
 	if expr == nil {
 		return
 	}
 
-	switch e := expr.(type) {
-	case *Identifier:
-		PutIdentifier(e)
-	case *BinaryExpression:
-		PutBinaryExpression(e)
-	case *LiteralValue:
-		PutLiteralValue(e)
-	case *FunctionCall:
-		PutFunctionCall(e)
-	case *CaseExpression:
-		PutCaseExpression(e)
-	case *BetweenExpression:
-		PutBetweenExpression(e)
-	case *InExpression:
-		PutInExpression(e)
-	case *SubqueryExpression:
-		PutSubqueryExpression(e)
-	case *CastExpression:
-		PutCastExpression(e)
+	// Use a work queue for iterative cleanup instead of recursion
+	workQueue := make([]Expression, 0, 32)
+	workQueue = append(workQueue, expr)
+
+	processed := 0
+	for len(workQueue) > 0 && processed < MaxWorkQueueSize {
+		// Pop from queue
+		current := workQueue[len(workQueue)-1]
+		workQueue = workQueue[:len(workQueue)-1]
+		processed++
+
+		if current == nil {
+			continue
+		}
+
+		// Process and collect child expressions
+		switch e := current.(type) {
+		case *Identifier:
+			e.Name = ""
+			identifierPool.Put(e)
+
+		case *BinaryExpression:
+			if e.Left != nil {
+				workQueue = append(workQueue, e.Left)
+			}
+			if e.Right != nil {
+				workQueue = append(workQueue, e.Right)
+			}
+			e.Left = nil
+			e.Right = nil
+			e.Operator = ""
+			binaryExprPool.Put(e)
+
+		case *LiteralValue:
+			e.Value = nil
+			e.Type = ""
+			literalValuePool.Put(e)
+
+		case *FunctionCall:
+			for i := range e.Arguments {
+				if e.Arguments[i] != nil {
+					workQueue = append(workQueue, e.Arguments[i])
+				}
+				e.Arguments[i] = nil
+			}
+			e.Arguments = e.Arguments[:0]
+			e.Name = ""
+			e.Over = nil
+			e.Distinct = false
+			e.Filter = nil
+			functionCallPool.Put(e)
+
+		case *CaseExpression:
+			if e.Value != nil {
+				workQueue = append(workQueue, e.Value)
+			}
+			for i := range e.WhenClauses {
+				if e.WhenClauses[i].Condition != nil {
+					workQueue = append(workQueue, e.WhenClauses[i].Condition)
+				}
+				if e.WhenClauses[i].Result != nil {
+					workQueue = append(workQueue, e.WhenClauses[i].Result)
+				}
+			}
+			if e.ElseClause != nil {
+				workQueue = append(workQueue, e.ElseClause)
+			}
+			e.Value = nil
+			e.WhenClauses = e.WhenClauses[:0]
+			e.ElseClause = nil
+			caseExprPool.Put(e)
+
+		case *BetweenExpression:
+			if e.Expr != nil {
+				workQueue = append(workQueue, e.Expr)
+			}
+			if e.Lower != nil {
+				workQueue = append(workQueue, e.Lower)
+			}
+			if e.Upper != nil {
+				workQueue = append(workQueue, e.Upper)
+			}
+			e.Expr = nil
+			e.Lower = nil
+			e.Upper = nil
+			e.Not = false
+			betweenExprPool.Put(e)
+
+		case *InExpression:
+			if e.Expr != nil {
+				workQueue = append(workQueue, e.Expr)
+			}
+			for i := range e.List {
+				if e.List[i] != nil {
+					workQueue = append(workQueue, e.List[i])
+				}
+				e.List[i] = nil
+			}
+			e.Expr = nil
+			e.List = e.List[:0]
+			e.Subquery = nil
+			e.Not = false
+			inExprPool.Put(e)
+
+		case *SubqueryExpression:
+			e.Subquery = nil
+			subqueryExprPool.Put(e)
+
+		case *CastExpression:
+			if e.Expr != nil {
+				workQueue = append(workQueue, e.Expr)
+			}
+			e.Expr = nil
+			e.Type = ""
+			castExprPool.Put(e)
+
+		case *ExistsExpression:
+			e.Subquery = nil
+			existsExprPool.Put(e)
+
+		case *AnyExpression:
+			if e.Expr != nil {
+				workQueue = append(workQueue, e.Expr)
+			}
+			e.Expr = nil
+			e.Subquery = nil
+			e.Operator = ""
+			anyExprPool.Put(e)
+
+		case *AllExpression:
+			if e.Expr != nil {
+				workQueue = append(workQueue, e.Expr)
+			}
+			e.Expr = nil
+			e.Subquery = nil
+			e.Operator = ""
+			allExprPool.Put(e)
+
+		case *ListExpression:
+			for i := range e.Values {
+				if e.Values[i] != nil {
+					workQueue = append(workQueue, e.Values[i])
+				}
+				e.Values[i] = nil
+			}
+			e.Values = e.Values[:0]
+			listExprPool.Put(e)
+
+		case *UnaryExpression:
+			if e.Expr != nil {
+				workQueue = append(workQueue, e.Expr)
+			}
+			e.Expr = nil
+			e.Operator = 0 // UnaryOperator is int type
+			unaryExprPool.Put(e)
+
+		case *ExtractExpression:
+			if e.Source != nil {
+				workQueue = append(workQueue, e.Source)
+			}
+			e.Field = ""
+			e.Source = nil
+			extractExprPool.Put(e)
+
+		case *PositionExpression:
+			if e.Substr != nil {
+				workQueue = append(workQueue, e.Substr)
+			}
+			if e.Str != nil {
+				workQueue = append(workQueue, e.Str)
+			}
+			e.Substr = nil
+			e.Str = nil
+			positionExprPool.Put(e)
+
+		case *SubstringExpression:
+			if e.Str != nil {
+				workQueue = append(workQueue, e.Str)
+			}
+			if e.Start != nil {
+				workQueue = append(workQueue, e.Start)
+			}
+			if e.Length != nil {
+				workQueue = append(workQueue, e.Length)
+			}
+			e.Str = nil
+			e.Start = nil
+			e.Length = nil
+			substringExprPool.Put(e)
+
+		// Default case - expression type not pooled, just ignore
+		default:
+			// Unknown expression type - no pool available
+		}
 	}
 }
 

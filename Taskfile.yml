@@ -155,7 +155,14 @@ tasks:
     desc: Run fuzz tests (duration configurable via FUZZ_TIME, default 30s)
     cmds:
       - echo "Running fuzz tests for {{.FUZZ_TIME}}..."
-      - ./scripts/run_fuzz_tests.sh
+      - |
+        if [ -f "./scripts/run_fuzz_tests.sh" ]; then
+          ./scripts/run_fuzz_tests.sh
+        else
+          echo "Error: scripts/run_fuzz_tests.sh not found"
+          echo "You can run fuzz tests directly with: go test -fuzz=FuzzTokenizer -fuzztime={{.FUZZ_TIME}} ./pkg/sql/tokenizer"
+          exit 1
+        fi
     vars:
       FUZZ_TIME: '{{default "30s" .FUZZ_TIME}}'
 
@@ -205,7 +212,13 @@ tasks:
     desc: Run golangci-lint with auto-fix
     cmds:
       - echo "Running golangci-lint with auto-fix..."
-      - golangci-lint run --fix
+      - |
+        if command -v golangci-lint > /dev/null; then
+          golangci-lint run --fix
+        else
+          echo "golangci-lint not installed. Run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"
+          exit 1
+        fi
 
   staticcheck:
     desc: Run staticcheck
@@ -249,7 +262,13 @@ tasks:
   security:validate:
     desc: Validate security setup
     cmds:
-      - ./scripts/validate-security-setup.sh
+      - |
+        if [ -f "./scripts/validate-security-setup.sh" ]; then
+          ./scripts/validate-security-setup.sh
+        else
+          echo "Error: scripts/validate-security-setup.sh not found"
+          exit 1
+        fi
 
   # =============================================================================
   # DOCUMENTATION
@@ -327,7 +346,12 @@ tasks:
       - go install golang.org/x/tools/cmd/godoc@latest
       - echo "Installing task runner..."
       - go install github.com/go-task/task/v3/cmd/task@latest
-      - echo "All tools installed!"
+      - echo ""
+      - echo "All Go tools installed!"
+      - echo ""
+      - echo "Optional - For task dev watch mode, install watchexec"
+      - echo "  via Homebrew - brew install watchexec"
+      - echo "  via Cargo    - cargo install watchexec-cli"
 
   # =============================================================================
   # GIT HOOKS
@@ -336,7 +360,13 @@ tasks:
     desc: Install Git pre-commit hooks
     cmds:
       - echo "Installing Git hooks..."
-      - ./scripts/install-hooks.sh
+      - |
+        if [ -f "./scripts/install-hooks.sh" ]; then
+          ./scripts/install-hooks.sh
+        else
+          echo "Error: scripts/install-hooks.sh not found"
+          exit 1
+        fi
 
   # =============================================================================
   # CLEAN
@@ -386,12 +416,24 @@ tasks:
     desc: Dry-run release with goreleaser
     cmds:
       - echo "Running goreleaser dry-run..."
-      - goreleaser release --snapshot --clean
+      - |
+        if command -v goreleaser > /dev/null; then
+          goreleaser release --snapshot --clean
+        else
+          echo "goreleaser not installed. Install from: https://goreleaser.com/install/"
+          exit 1
+        fi
 
   release:check:
     desc: Check goreleaser configuration
     cmds:
-      - goreleaser check
+      - |
+        if command -v goreleaser > /dev/null; then
+          goreleaser check
+        else
+          echo "goreleaser not installed. Install from: https://goreleaser.com/install/"
+          exit 1
+        fi
 
   # =============================================================================
   # DEVELOPMENT HELPERS

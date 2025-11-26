@@ -1,0 +1,233 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "SQL",
+  "scopeName": "source.sql",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#operators" },
+    { "include": "#keywords" },
+    { "include": "#functions" },
+    { "include": "#types" },
+    { "include": "#identifiers" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-dash.sql",
+          "match": "--.*$"
+        },
+        {
+          "name": "comment.block.sql",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "patterns": [
+            { "include": "#comments" }
+          ]
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.single.sql",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.sql",
+              "match": "''"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.double.sql",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.sql",
+              "match": "\\\\\""
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.dollar.sql",
+          "begin": "\\$\\$",
+          "end": "\\$\\$"
+        },
+        {
+          "name": "string.quoted.backtick.sql",
+          "begin": "`",
+          "end": "`"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.sql",
+          "match": "\\b\\d+\\.\\d+([eE][+-]?\\d+)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.sql",
+          "match": "\\b\\d+\\b"
+        },
+        {
+          "name": "constant.numeric.hex.sql",
+          "match": "\\b0[xX][0-9a-fA-F]+\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.comparison.sql",
+          "match": "<=|>=|<>|!=|<|>|="
+        },
+        {
+          "name": "keyword.operator.arithmetic.sql",
+          "match": "\\+|-|\\*|/|%"
+        },
+        {
+          "name": "keyword.operator.concatenation.sql",
+          "match": "\\|\\|"
+        },
+        {
+          "name": "keyword.operator.json.sql",
+          "match": "->|->>|#>|#>>|@>|<@|\\?|\\?\\||\\?&"
+        },
+        {
+          "name": "keyword.operator.assignment.sql",
+          "match": ":="
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.sql",
+          "match": "(?i)\\b(SELECT|FROM|WHERE|AND|OR|NOT|IN|EXISTS|BETWEEN|LIKE|ILIKE|IS|NULL|TRUE|FALSE|CASE|WHEN|THEN|ELSE|END|IF|LOOP|WHILE|FOR|RETURN|RETURNS)\\b"
+        },
+        {
+          "name": "keyword.other.DML.sql",
+          "match": "(?i)\\b(INSERT|INTO|VALUES|UPDATE|SET|DELETE|MERGE|USING|MATCHED|TRUNCATE|REPLACE|UPSERT)\\b"
+        },
+        {
+          "name": "keyword.other.DDL.sql",
+          "match": "(?i)\\b(CREATE|ALTER|DROP|TABLE|VIEW|INDEX|SEQUENCE|SCHEMA|DATABASE|TRIGGER|PROCEDURE|FUNCTION|TYPE|DOMAIN|CONSTRAINT|PRIMARY|FOREIGN|KEY|REFERENCES|UNIQUE|CHECK|DEFAULT|CASCADE|RESTRICT|TEMPORARY|TEMP|UNLOGGED|MATERIALIZED|REFRESH|CONCURRENTLY)\\b"
+        },
+        {
+          "name": "keyword.other.DML.II.sql",
+          "match": "(?i)\\b(GROUP|BY|HAVING|ORDER|ASC|DESC|NULLS|FIRST|LAST|LIMIT|OFFSET|FETCH|NEXT|ROWS|ONLY|PERCENT|WITH|TIES|DISTINCT|ALL|UNION|INTERSECT|EXCEPT|MINUS)\\b"
+        },
+        {
+          "name": "keyword.other.join.sql",
+          "match": "(?i)\\b(JOIN|INNER|LEFT|RIGHT|FULL|OUTER|CROSS|NATURAL|ON|USING|LATERAL)\\b"
+        },
+        {
+          "name": "keyword.other.alias.sql",
+          "match": "(?i)\\b(AS)\\b"
+        },
+        {
+          "name": "keyword.other.transaction.sql",
+          "match": "(?i)\\b(BEGIN|COMMIT|ROLLBACK|SAVEPOINT|TRANSACTION|START|WORK|ISOLATION|LEVEL|READ|WRITE|UNCOMMITTED|COMMITTED|REPEATABLE|SERIALIZABLE)\\b"
+        },
+        {
+          "name": "keyword.other.authorization.sql",
+          "match": "(?i)\\b(GRANT|REVOKE|PRIVILEGES|TO|PUBLIC|ROLE|USER|OWNER|USAGE|EXECUTE|REFERENCES)\\b"
+        },
+        {
+          "name": "keyword.other.CTE.sql",
+          "match": "(?i)\\b(WITH|RECURSIVE)\\b"
+        },
+        {
+          "name": "keyword.other.window.sql",
+          "match": "(?i)\\b(OVER|PARTITION|WINDOW|RANGE|ROWS|GROUPS|UNBOUNDED|PRECEDING|FOLLOWING|CURRENT|ROW|EXCLUDE|NO|OTHERS|FRAME)\\b"
+        },
+        {
+          "name": "keyword.other.grouping.sql",
+          "match": "(?i)\\b(GROUPING|SETS|ROLLUP|CUBE)\\b"
+        },
+        {
+          "name": "constant.language.sql",
+          "match": "(?i)\\b(NULL|TRUE|FALSE|UNKNOWN)\\b"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "support.function.aggregate.sql",
+          "match": "(?i)\\b(COUNT|SUM|AVG|MIN|MAX|ARRAY_AGG|STRING_AGG|JSON_AGG|JSONB_AGG|BOOL_AND|BOOL_OR|BIT_AND|BIT_OR|EVERY|STDDEV|VARIANCE|VAR_POP|VAR_SAMP|STDDEV_POP|STDDEV_SAMP|CORR|COVAR_POP|COVAR_SAMP|REGR_AVGX|REGR_AVGY|REGR_COUNT|REGR_INTERCEPT|REGR_R2|REGR_SLOPE|REGR_SXX|REGR_SXY|REGR_SYY)\\b"
+        },
+        {
+          "name": "support.function.window.sql",
+          "match": "(?i)\\b(ROW_NUMBER|RANK|DENSE_RANK|NTILE|LAG|LEAD|FIRST_VALUE|LAST_VALUE|NTH_VALUE|PERCENT_RANK|CUME_DIST)\\b"
+        },
+        {
+          "name": "support.function.string.sql",
+          "match": "(?i)\\b(CONCAT|CONCAT_WS|LENGTH|CHAR_LENGTH|CHARACTER_LENGTH|OCTET_LENGTH|BIT_LENGTH|LOWER|UPPER|INITCAP|TRIM|LTRIM|RTRIM|BTRIM|LPAD|RPAD|LEFT|RIGHT|SUBSTRING|SUBSTR|POSITION|STRPOS|REPLACE|TRANSLATE|REVERSE|REPEAT|SPLIT_PART|REGEXP_REPLACE|REGEXP_MATCH|REGEXP_MATCHES|REGEXP_SPLIT_TO_ARRAY|REGEXP_SPLIT_TO_TABLE|FORMAT|QUOTE_IDENT|QUOTE_LITERAL|QUOTE_NULLABLE|ASCII|CHR|MD5|SHA256|SHA512|ENCODE|DECODE)\\b"
+        },
+        {
+          "name": "support.function.datetime.sql",
+          "match": "(?i)\\b(NOW|CURRENT_DATE|CURRENT_TIME|CURRENT_TIMESTAMP|LOCALTIME|LOCALTIMESTAMP|DATE|TIME|TIMESTAMP|INTERVAL|EXTRACT|DATE_PART|DATE_TRUNC|AGE|CLOCK_TIMESTAMP|STATEMENT_TIMESTAMP|TRANSACTION_TIMESTAMP|TIMEOFDAY|TO_CHAR|TO_DATE|TO_TIMESTAMP|TO_NUMBER|MAKE_DATE|MAKE_TIME|MAKE_TIMESTAMP|MAKE_TIMESTAMPTZ|MAKE_INTERVAL)\\b"
+        },
+        {
+          "name": "support.function.math.sql",
+          "match": "(?i)\\b(ABS|CEIL|CEILING|FLOOR|ROUND|TRUNC|TRUNCATE|MOD|POWER|POW|SQRT|CBRT|EXP|LN|LOG|LOG10|SIGN|PI|DEGREES|RADIANS|SIN|COS|TAN|ASIN|ACOS|ATAN|ATAN2|COT|RANDOM|SETSEED|WIDTH_BUCKET|GREATEST|LEAST|COALESCE|NULLIF)\\b"
+        },
+        {
+          "name": "support.function.conversion.sql",
+          "match": "(?i)\\b(CAST|CONVERT|TRY_CAST|TRY_CONVERT)\\b"
+        },
+        {
+          "name": "support.function.conditional.sql",
+          "match": "(?i)\\b(COALESCE|NULLIF|GREATEST|LEAST|IIF|DECODE|NVL|NVL2|IFNULL)\\b"
+        },
+        {
+          "name": "support.function.json.sql",
+          "match": "(?i)\\b(JSON_OBJECT|JSON_ARRAY|JSON_BUILD_OBJECT|JSON_BUILD_ARRAY|JSON_AGG|JSONB_AGG|JSON_OBJECT_AGG|JSONB_OBJECT_AGG|TO_JSON|TO_JSONB|ARRAY_TO_JSON|ROW_TO_JSON|JSON_EXTRACT_PATH|JSON_EXTRACT_PATH_TEXT|JSONB_EXTRACT_PATH|JSONB_EXTRACT_PATH_TEXT|JSON_ARRAY_ELEMENTS|JSONB_ARRAY_ELEMENTS|JSON_ARRAY_ELEMENTS_TEXT|JSONB_ARRAY_ELEMENTS_TEXT|JSON_EACH|JSONB_EACH|JSON_EACH_TEXT|JSONB_EACH_TEXT|JSON_KEYS|JSONB_KEYS|JSON_POPULATE_RECORD|JSONB_POPULATE_RECORD|JSON_POPULATE_RECORDSET|JSONB_POPULATE_RECORDSET|JSON_TO_RECORD|JSONB_TO_RECORD|JSON_TO_RECORDSET|JSONB_TO_RECORDSET|JSON_STRIP_NULLS|JSONB_STRIP_NULLS|JSONB_SET|JSONB_INSERT|JSONB_PRETTY|JSON_TYPEOF|JSONB_TYPEOF)\\b"
+        },
+        {
+          "name": "support.function.array.sql",
+          "match": "(?i)\\b(ARRAY|ARRAY_AGG|ARRAY_APPEND|ARRAY_CAT|ARRAY_DIMS|ARRAY_FILL|ARRAY_LENGTH|ARRAY_LOWER|ARRAY_NDIMS|ARRAY_POSITION|ARRAY_POSITIONS|ARRAY_PREPEND|ARRAY_REMOVE|ARRAY_REPLACE|ARRAY_TO_STRING|ARRAY_UPPER|CARDINALITY|STRING_TO_ARRAY|UNNEST)\\b"
+        },
+        {
+          "name": "support.function.system.sql",
+          "match": "(?i)\\b(CURRENT_USER|SESSION_USER|CURRENT_SCHEMA|CURRENT_CATALOG|CURRENT_DATABASE|VERSION|PG_TYPEOF|PG_COLUMN_SIZE|PG_DATABASE_SIZE|PG_INDEXES_SIZE|PG_RELATION_SIZE|PG_SIZE_PRETTY|PG_TABLE_SIZE|PG_TABLESPACE_SIZE|PG_TOTAL_RELATION_SIZE|HAS_DATABASE_PRIVILEGE|HAS_SCHEMA_PRIVILEGE|HAS_TABLE_PRIVILEGE|HAS_COLUMN_PRIVILEGE|HAS_FUNCTION_PRIVILEGE|HAS_SEQUENCE_PRIVILEGE)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.sql",
+          "match": "(?i)\\b(SMALLINT|INTEGER|INT|INT2|INT4|INT8|BIGINT|DECIMAL|NUMERIC|REAL|FLOAT|FLOAT4|FLOAT8|DOUBLE|PRECISION|SMALLSERIAL|SERIAL|BIGSERIAL|MONEY|CHARACTER|CHAR|VARCHAR|TEXT|BYTEA|BIT|VARBIT|BOOLEAN|BOOL|DATE|TIME|TIMETZ|TIMESTAMP|TIMESTAMPTZ|INTERVAL|POINT|LINE|LSEG|BOX|PATH|POLYGON|CIRCLE|CIDR|INET|MACADDR|MACADDR8|UUID|XML|JSON|JSONB|ARRAY|INT4RANGE|INT8RANGE|NUMRANGE|TSRANGE|TSTZRANGE|DATERANGE|TSVECTOR|TSQUERY|OID|REGCLASS|REGTYPE|REGPROC|REGPROCEDURE|REGOPER|REGOPERATOR|REGNAMESPACE|REGROLE)\\b"
+        },
+        {
+          "name": "storage.type.sql",
+          "match": "(?i)\\b(VARYING|ZONE|WITHOUT|PRECISION)\\b"
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "variable.parameter.sql",
+          "match": "\\$\\d+"
+        },
+        {
+          "name": "variable.parameter.named.sql",
+          "match": ":[a-zA-Z_][a-zA-Z0-9_]*"
+        },
+        {
+          "name": "entity.name.sql",
+          "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b"
+        }
+      ]
+    }
+  }
+}

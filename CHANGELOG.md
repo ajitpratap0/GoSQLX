@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Language Server Protocol (LSP)** (CLI-009): Full LSP server implementation for IDE integration
+  - `textDocument/didOpen`, `textDocument/didChange` - Document synchronization
+  - `textDocument/publishDiagnostics` - Real-time SQL syntax error reporting
+  - `textDocument/hover` - Keyword/function documentation (60+ keywords)
+  - `textDocument/completion` - SQL autocomplete (100+ keywords, 20+ snippets)
+  - `textDocument/formatting` - SQL formatting support
+  - `textDocument/documentSymbol` - SQL statement outline
+  - `textDocument/signatureHelp` - Function signatures (20+ SQL functions)
+  - `textDocument/codeAction` - Quick fixes (add semicolon, uppercase keywords)
+  - Rate limiting (100 req/sec), content size limits, malformed request handling
+- **MATERIALIZED CTE Support** (Phase 2.6): PostgreSQL-compatible `AS MATERIALIZED` and `AS NOT MATERIALIZED` syntax
+- **Comprehensive Metrics System**: Thread-safe performance monitoring
+  - Parser operation metrics (duration, errors, statement counts)
+  - AST pool metrics (gets/puts/balance for AST, statement, expression pools)
+  - Tokenizer pool metrics with hit rate tracking
 - **GROUPING SETS, ROLLUP, CUBE** (SQL-99 T431): Complete grouping operations support for advanced aggregations
 - **MERGE Statements** (SQL:2003 F312): Full MERGE support with WHEN MATCHED/NOT MATCHED clauses
 - **Materialized Views**: CREATE, DROP, REFRESH MATERIALIZED VIEW support
@@ -16,6 +31,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Expression Operators**: BETWEEN, IN, LIKE, IS NULL with full expression support
 - **Subquery Support**: Scalar, table, correlated, EXISTS subqueries
 - **NULLS FIRST/LAST**: ORDER BY null ordering (SQL-99 F851)
+
+### Improved
+- **AST Pool Architecture**: Iterative cleanup with work queue pattern to prevent stack overflow
+  - Added 8 new expression pools (Exists, Any, All, List, Unary, Extract, Position, Substring)
+  - MaxCleanupDepth and MaxWorkQueueSize limits for deeply nested expressions
+- **Type Assertion Safety**: Added proper `ok` pattern checking in `alter.go` and `value.go`
+- **Race Condition Fixes**: Fixed data races in metrics, documents, and watch modules
+- **Tokenizer Column Calculation**: Consistent 1-based column numbers, never negative
+
+### Fixed
+- Critical type assertion panics in ALTER and VALUE parsing
+- Race conditions in concurrent document management
+- LSP hover returning nil instead of empty response
 
 ## [1.5.1] - 2025-11-15 - Phases 2-3 Test Coverage Completion
 

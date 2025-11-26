@@ -293,3 +293,89 @@ func TestParser_CTEWithColumns(t *testing.T) {
 		}
 	}
 }
+
+func TestParser_MaterializedCTE(t *testing.T) {
+	tests := []struct {
+		name         string
+		sql          string
+		materialized *bool // nil = not specified, true = MATERIALIZED, false = NOT MATERIALIZED
+	}{
+		{
+			name:         "MATERIALIZED CTE",
+			sql:          `WITH cached_data AS MATERIALIZED (SELECT name FROM users) SELECT name FROM cached_data`,
+			materialized: boolPtr(true),
+		},
+		{
+			name:         "NOT MATERIALIZED CTE",
+			sql:          `WITH inline_data AS NOT MATERIALIZED (SELECT name FROM users) SELECT name FROM inline_data`,
+			materialized: boolPtr(false),
+		},
+		{
+			name:         "Default CTE (no materialization hint)",
+			sql:          `WITH default_data AS (SELECT name FROM users) SELECT name FROM default_data`,
+			materialized: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Get tokenizer from pool
+			tkz := tokenizer.GetTokenizer()
+			defer tokenizer.PutTokenizer(tkz)
+
+			// Tokenize SQL
+			tokens, err := tkz.Tokenize([]byte(tt.sql))
+			if err != nil {
+				t.Fatalf("Failed to tokenize: %v", err)
+			}
+
+			// Convert tokens for parser
+			convertedTokens := convertTokensForCTE(tokens)
+
+			// Parse tokens
+			parser := &Parser{}
+			astObj, err := parser.Parse(convertedTokens)
+			if err != nil {
+				t.Fatalf("Failed to parse CTE: %v", err)
+			}
+			defer ast.ReleaseAST(astObj)
+
+			// Verify we have a SELECT statement
+			if len(astObj.Statements) == 0 {
+				t.Fatal("No statements parsed")
+			}
+
+			selectStmt, ok := astObj.Statements[0].(*ast.SelectStatement)
+			if !ok {
+				t.Fatal("Expected SELECT statement")
+			}
+
+			// Verify WITH clause exists
+			if selectStmt.With == nil {
+				t.Fatal("Expected WITH clause")
+			}
+
+			// Verify one CTE
+			if len(selectStmt.With.CTEs) != 1 {
+				t.Fatalf("Expected 1 CTE, got %d", len(selectStmt.With.CTEs))
+			}
+
+			cte := selectStmt.With.CTEs[0]
+
+			// Verify materialized flag
+			if tt.materialized == nil {
+				if cte.Materialized != nil {
+					t.Errorf("Expected nil Materialized, got %v", *cte.Materialized)
+				}
+			} else {
+				if cte.Materialized == nil {
+					t.Errorf("Expected Materialized=%v, got nil", *tt.materialized)
+				} else if *cte.Materialized != *tt.materialized {
+					t.Errorf("Expected Materialized=%v, got %v", *tt.materialized, *cte.Materialized)
+				}
+			}
+		})
+	}
+}
+
+// Note: boolPtr helper is defined in ddl_test.go

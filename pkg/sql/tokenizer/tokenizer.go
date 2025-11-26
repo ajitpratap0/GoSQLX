@@ -1195,26 +1195,24 @@ func (t *Tokenizer) toSQLPosition(pos Position) models.Location {
 	}
 
 	// Calculate column by counting characters from line start
-	column := 0
+	// Column is 1-based, so we start at 1
+	column := 1
 	for i := lineStart; i < pos.Index && i < len(t.input); i++ {
 		if t.input[i] == '\t' {
 			column += 4 // Treat tab as 4 spaces
-		} else if t.input[i] == ' ' {
-			column++
-		} else if t.input[i] == '\'' {
-			// For string literals, point to the opening quote
-			if i < pos.Index-1 {
-				column--
-			}
-			column++
 		} else {
 			column++
 		}
 	}
 
+	// Ensure column is never less than 1
+	if column < 1 {
+		column = 1
+	}
+
 	return models.Location{
 		Line:   line,
-		Column: column - 2, // Adjust for indentation
+		Column: column,
 	}
 }
 

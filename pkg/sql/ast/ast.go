@@ -56,11 +56,12 @@ func (w WithClause) Children() []Node {
 // CommonTableExpr represents a single Common Table Expression in a WITH clause.
 // It supports optional column specifications and any statement type as the CTE query.
 // Phase 2 Complete: Full parser support with column specifications.
+// Phase 2.6: Added MATERIALIZED/NOT MATERIALIZED support for query optimization hints.
 type CommonTableExpr struct {
 	Name         string
 	Columns      []string
 	Statement    Statement
-	Materialized *bool // TODO: Add MATERIALIZED/NOT MATERIALIZED parsing support
+	Materialized *bool // nil = default, true = MATERIALIZED, false = NOT MATERIALIZED
 }
 
 func (c *CommonTableExpr) statementNode()      {}

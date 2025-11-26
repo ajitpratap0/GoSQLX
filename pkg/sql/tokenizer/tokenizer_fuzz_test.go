@@ -160,10 +160,12 @@ func FuzzTokenizer(f *testing.F) {
 					t.Errorf("Token %d value exceeds reasonable size: %d bytes", i, len(tok.Token.Value))
 				}
 
-				// Token location should be reasonable (line should be >= 1)
-				// Note: Column numbers may be negative in some cases (known issue in tokenizer)
+				// Token location should be reasonable (line should be >= 1, column >= 1)
 				if tok.Start.Line < 1 {
 					t.Errorf("Token %d has invalid line number: %d", i, tok.Start.Line)
+				}
+				if tok.Start.Column < 1 {
+					t.Errorf("Token %d has invalid column number: %d", i, tok.Start.Column)
 				}
 			}
 		}

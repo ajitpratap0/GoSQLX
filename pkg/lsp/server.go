@@ -164,7 +164,11 @@ func (s *Server) SendNotification(method string, params interface{}) {
 		Method:  method,
 	}
 	if params != nil {
-		data, _ := json.Marshal(params)
+		data, err := json.Marshal(params)
+		if err != nil {
+			s.logger.Printf("Failed to marshal notification params for %s: %v", method, err)
+			return
+		}
 		notif.Params = json.RawMessage(data)
 	}
 	s.sendMessage(notif)

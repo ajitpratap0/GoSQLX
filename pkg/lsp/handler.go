@@ -112,7 +112,7 @@ func (h *Handler) handleExit() {
 func (h *Handler) handleDidOpen(params json.RawMessage) {
 	var p DidOpenTextDocumentParams
 	if err := json.Unmarshal(params, &p); err != nil {
-		h.server.Logger().Printf("Failed to parse didOpen params: %v", err)
+		h.server.Logger().Printf("textDocument/didOpen: failed to parse params: %v (raw: %s)", err, truncateForLog(params))
 		return
 	}
 
@@ -133,7 +133,7 @@ func (h *Handler) handleDidOpen(params json.RawMessage) {
 func (h *Handler) handleDidChange(params json.RawMessage) {
 	var p DidChangeTextDocumentParams
 	if err := json.Unmarshal(params, &p); err != nil {
-		h.server.Logger().Printf("Failed to parse didChange params: %v", err)
+		h.server.Logger().Printf("textDocument/didChange: failed to parse params: %v (raw: %s)", err, truncateForLog(params))
 		return
 	}
 
@@ -155,7 +155,7 @@ func (h *Handler) handleDidChange(params json.RawMessage) {
 func (h *Handler) handleDidClose(params json.RawMessage) {
 	var p DidCloseTextDocumentParams
 	if err := json.Unmarshal(params, &p); err != nil {
-		h.server.Logger().Printf("Failed to parse didClose params: %v", err)
+		h.server.Logger().Printf("textDocument/didClose: failed to parse params: %v (raw: %s)", err, truncateForLog(params))
 		return
 	}
 
@@ -173,7 +173,7 @@ func (h *Handler) handleDidClose(params json.RawMessage) {
 func (h *Handler) handleDidSave(params json.RawMessage) {
 	var p DidSaveTextDocumentParams
 	if err := json.Unmarshal(params, &p); err != nil {
-		h.server.Logger().Printf("Failed to parse didSave params: %v", err)
+		h.server.Logger().Printf("textDocument/didSave: failed to parse params: %v (raw: %s)", err, truncateForLog(params))
 		return
 	}
 
@@ -588,4 +588,14 @@ var sqlKeywords = []CompletionItem{
 	{Label: "CURRENT_DATE", Kind: FunctionCompletion, Detail: "Current date", InsertText: "CURRENT_DATE"},
 	{Label: "CURRENT_TIME", Kind: FunctionCompletion, Detail: "Current time", InsertText: "CURRENT_TIME"},
 	{Label: "CURRENT_TIMESTAMP", Kind: FunctionCompletion, Detail: "Current timestamp", InsertText: "CURRENT_TIMESTAMP"},
+}
+
+// truncateForLog truncates raw JSON for logging purposes to avoid overly verbose logs
+func truncateForLog(data json.RawMessage) string {
+	const maxLen = 200
+	s := string(data)
+	if len(s) > maxLen {
+		return s[:maxLen] + "..."
+	}
+	return s
 }

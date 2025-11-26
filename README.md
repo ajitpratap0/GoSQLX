@@ -172,6 +172,42 @@ git diff --cached --name-only --diff-filter=ACM "*.sql" | \
   xargs cat | gosqlx validate --quiet
 ```
 
+**Language Server Protocol (LSP)** (New):
+```bash
+# Start LSP server for IDE integration
+gosqlx lsp
+
+# With debug logging
+gosqlx lsp --log /tmp/gosqlx-lsp.log
+```
+
+The LSP server provides real-time SQL intelligence for IDEs:
+- **Diagnostics**: Real-time syntax error detection
+- **Hover**: Documentation for 40+ SQL keywords
+- **Completion**: 100+ SQL keywords and functions
+- **Formatting**: SQL code formatting
+
+**IDE Integration:**
+```jsonc
+// VSCode settings.json
+{
+  "gosqlx.lsp.enable": true,
+  "gosqlx.lsp.path": "gosqlx"
+}
+```
+
+```lua
+-- Neovim (nvim-lspconfig)
+require('lspconfig.configs').gosqlx = {
+  default_config = {
+    cmd = { 'gosqlx', 'lsp' },
+    filetypes = { 'sql' },
+    root_dir = function() return vim.fn.getcwd() end,
+  },
+}
+require('lspconfig').gosqlx.setup{}
+```
+
 ### Library Usage - Simple API
 
 GoSQLX provides a simple, high-level API that handles all complexity for you:

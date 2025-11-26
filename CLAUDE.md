@@ -28,6 +28,7 @@ GoSQLX is a **production-ready**, **race-free**, high-performance SQL parsing SD
 - **Metrics** (`pkg/metrics/`): Production performance monitoring and observability
 - **Security** (`pkg/sql/security/`): SQL injection detection with pattern scanning and severity classification
 - **CLI** (`cmd/gosqlx/`): Production-ready command-line tool for SQL validation, formatting, and analysis
+- **LSP** (`pkg/lsp/`): Language Server Protocol server for IDE integration (diagnostics, hover, completion, formatting)
 
 ### Object Pooling Architecture
 
@@ -141,6 +142,10 @@ go test -v example_test.go
 
 # Parse SQL to AST representation (JSON format)
 ./gosqlx parse -f json complex_query.sql
+
+# Start LSP server for IDE integration
+./gosqlx lsp
+./gosqlx lsp --log /tmp/lsp.log  # With debug logging
 
 # Install globally
 go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest

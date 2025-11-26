@@ -115,6 +115,9 @@ type ServerCapabilities struct {
 	CompletionProvider         *CompletionOptions       `json:"completionProvider,omitempty"`
 	HoverProvider              bool                     `json:"hoverProvider,omitempty"`
 	DocumentFormattingProvider bool                     `json:"documentFormattingProvider,omitempty"`
+	DocumentSymbolProvider     bool                     `json:"documentSymbolProvider,omitempty"`
+	SignatureHelpProvider      *SignatureHelpOptions    `json:"signatureHelpProvider,omitempty"`
+	CodeActionProvider         interface{}              `json:"codeActionProvider,omitempty"` // bool or CodeActionOptions
 }
 
 // TextDocumentSyncOptions describes how documents are synced
@@ -380,3 +383,141 @@ const (
 	// MessageLog is a log message
 	MessageLog MessageType = 4
 )
+
+// DocumentSymbol represents a symbol in a document (hierarchical)
+type DocumentSymbol struct {
+	Name           string           `json:"name"`
+	Detail         string           `json:"detail,omitempty"`
+	Kind           SymbolKind       `json:"kind"`
+	Range          Range            `json:"range"`
+	SelectionRange Range            `json:"selectionRange"`
+	Children       []DocumentSymbol `json:"children,omitempty"`
+}
+
+// SymbolInformation represents a symbol (flat list)
+type SymbolInformation struct {
+	Name          string     `json:"name"`
+	Kind          SymbolKind `json:"kind"`
+	Location      Location   `json:"location"`
+	ContainerName string     `json:"containerName,omitempty"`
+}
+
+// SymbolKind represents the kind of symbol
+type SymbolKind int
+
+const (
+	SymbolFile        SymbolKind = 1
+	SymbolModule      SymbolKind = 2
+	SymbolNamespace   SymbolKind = 3
+	SymbolPackage     SymbolKind = 4
+	SymbolClass       SymbolKind = 5
+	SymbolMethod      SymbolKind = 6
+	SymbolProperty    SymbolKind = 7
+	SymbolField       SymbolKind = 8
+	SymbolConstructor SymbolKind = 9
+	SymbolEnum        SymbolKind = 10
+	SymbolInterface   SymbolKind = 11
+	SymbolFunction    SymbolKind = 12
+	SymbolVariable    SymbolKind = 13
+	SymbolConstant    SymbolKind = 14
+	SymbolString      SymbolKind = 15
+	SymbolNumber      SymbolKind = 16
+	SymbolBoolean     SymbolKind = 17
+	SymbolArray       SymbolKind = 18
+	SymbolObject      SymbolKind = 19
+	SymbolKey         SymbolKind = 20
+	SymbolNull        SymbolKind = 21
+	SymbolEnumMember  SymbolKind = 22
+	SymbolStruct      SymbolKind = 23
+	SymbolEvent       SymbolKind = 24
+	SymbolOperator    SymbolKind = 25
+	SymbolTypeParam   SymbolKind = 26
+)
+
+// DocumentSymbolParams is the parameters for textDocument/documentSymbol
+type DocumentSymbolParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+// SignatureHelp represents signature help information
+type SignatureHelp struct {
+	Signatures      []SignatureInformation `json:"signatures"`
+	ActiveSignature int                    `json:"activeSignature,omitempty"`
+	ActiveParameter int                    `json:"activeParameter,omitempty"`
+}
+
+// SignatureInformation represents a function signature
+type SignatureInformation struct {
+	Label         string                 `json:"label"`
+	Documentation interface{}            `json:"documentation,omitempty"`
+	Parameters    []ParameterInformation `json:"parameters,omitempty"`
+}
+
+// ParameterInformation represents a parameter of a function signature
+type ParameterInformation struct {
+	Label         interface{} `json:"label"` // string or [int, int]
+	Documentation interface{} `json:"documentation,omitempty"`
+}
+
+// SignatureHelpOptions describes signature help options
+type SignatureHelpOptions struct {
+	TriggerCharacters   []string `json:"triggerCharacters,omitempty"`
+	RetriggerCharacters []string `json:"retriggerCharacters,omitempty"`
+}
+
+// CodeActionParams is the parameters for textDocument/codeAction
+type CodeActionParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Range        Range                  `json:"range"`
+	Context      CodeActionContext      `json:"context"`
+}
+
+// CodeActionContext contains additional diagnostic information
+type CodeActionContext struct {
+	Diagnostics []Diagnostic     `json:"diagnostics"`
+	Only        []CodeActionKind `json:"only,omitempty"`
+}
+
+// CodeActionKind represents the kind of code action
+type CodeActionKind string
+
+const (
+	CodeActionQuickFix       CodeActionKind = "quickfix"
+	CodeActionRefactor       CodeActionKind = "refactor"
+	CodeActionSource         CodeActionKind = "source"
+	CodeActionSourceOrganize CodeActionKind = "source.organizeImports"
+)
+
+// CodeAction represents a code action
+type CodeAction struct {
+	Title       string         `json:"title"`
+	Kind        CodeActionKind `json:"kind,omitempty"`
+	Diagnostics []Diagnostic   `json:"diagnostics,omitempty"`
+	IsPreferred bool           `json:"isPreferred,omitempty"`
+	Edit        *WorkspaceEdit `json:"edit,omitempty"`
+	Command     *Command       `json:"command,omitempty"`
+}
+
+// WorkspaceEdit represents changes to be applied to a workspace
+type WorkspaceEdit struct {
+	Changes         map[string][]TextEdit `json:"changes,omitempty"`
+	DocumentChanges []TextDocumentEdit    `json:"documentChanges,omitempty"`
+}
+
+// TextDocumentEdit represents an edit to a single document
+type TextDocumentEdit struct {
+	TextDocument VersionedTextDocumentIdentifier `json:"textDocument"`
+	Edits        []TextEdit                      `json:"edits"`
+}
+
+// Command represents a command to be executed
+type Command struct {
+	Title     string        `json:"title"`
+	Command   string        `json:"command"`
+	Arguments []interface{} `json:"arguments,omitempty"`
+}
+
+// CodeActionOptions describes code action options
+type CodeActionOptions struct {
+	CodeActionKinds []CodeActionKind `json:"codeActionKinds,omitempty"`
+}

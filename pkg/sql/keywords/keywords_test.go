@@ -208,12 +208,12 @@ func TestKeywords_GetKeywordType_Categories(t *testing.T) {
 		word     string
 		expected models.TokenType
 	}{
-		{"DISTINCT", models.TokenTypeKeyword},
-		{"ALL", models.TokenTypeKeyword},
-		{"FETCH", models.TokenTypeKeyword},
-		{"ROWS", models.TokenTypeKeyword},
-		{"distinct", models.TokenTypeKeyword}, // Case insensitive
-		{"all", models.TokenTypeKeyword},
+		{"DISTINCT", models.TokenTypeDistinct},
+		{"ALL", models.TokenTypeAll},
+		{"FETCH", models.TokenTypeFetch},
+		{"ROWS", models.TokenTypeRows},
+		{"distinct", models.TokenTypeDistinct}, // Case insensitive
+		{"all", models.TokenTypeAll},
 		{"NOTAKEYWORD", models.TokenTypeWord}, // Non-existent should return TokenTypeWord
 	}
 
@@ -316,12 +316,12 @@ func TestKeywords_GetDMLKeywordType(t *testing.T) {
 		expectFound  bool
 		expectedType models.TokenType
 	}{
-		{"DISTINCT", true, models.TokenTypeKeyword},
-		{"ALL", true, models.TokenTypeKeyword},
-		{"FETCH", true, models.TokenTypeKeyword},
-		{"NEXT", true, models.TokenTypeKeyword},
-		{"ROWS", true, models.TokenTypeKeyword},
-		{"ONLY", true, models.TokenTypeKeyword},
+		{"DISTINCT", true, models.TokenTypeDistinct},
+		{"ALL", true, models.TokenTypeAll},
+		{"FETCH", true, models.TokenTypeFetch},
+		{"NEXT", true, models.TokenTypeNext},
+		{"ROWS", true, models.TokenTypeRows},
+		{"ONLY", true, models.TokenTypeOnly},
 		{"SELECT", false, 0},
 		{"NOTDML", false, 0},
 	}

@@ -184,7 +184,31 @@ type SelectStatement struct {
 	OrderBy   []OrderByExpression
 	Limit     *int
 	Offset    *int
+	Fetch     *FetchClause // SQL-99 FETCH FIRST/NEXT clause (F861, F862)
 }
+
+// FetchClause represents the SQL-99 FETCH FIRST/NEXT clause (F861, F862)
+// Syntax: [OFFSET n {ROW | ROWS}] FETCH {FIRST | NEXT} n [{ROW | ROWS}] {ONLY | WITH TIES}
+// Examples:
+//   - OFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY
+//   - FETCH FIRST 5 ROWS ONLY
+//   - FETCH FIRST 10 PERCENT ROWS WITH TIES
+type FetchClause struct {
+	// OffsetValue is the number of rows to skip (OFFSET n ROWS)
+	OffsetValue *int64
+	// FetchValue is the number of rows to fetch (FETCH n ROWS)
+	FetchValue *int64
+	// FetchType is either "FIRST" or "NEXT"
+	FetchType string
+	// IsPercent indicates FETCH ... PERCENT ROWS
+	IsPercent bool
+	// WithTies indicates FETCH ... WITH TIES (includes tied rows)
+	WithTies bool
+}
+
+func (f *FetchClause) expressionNode()     {}
+func (f FetchClause) TokenLiteral() string { return "FETCH" }
+func (f FetchClause) Children() []Node     { return nil }
 
 func (s *SelectStatement) statementNode()      {}
 func (s SelectStatement) TokenLiteral() string { return "SELECT" }
@@ -217,6 +241,9 @@ func (s SelectStatement) Children() []Node {
 	for _, orderBy := range s.OrderBy {
 		orderBy := orderBy // G601: Create local copy to avoid memory aliasing
 		children = append(children, &orderBy)
+	}
+	if s.Fetch != nil {
+		children = append(children, s.Fetch)
 	}
 	return children
 }

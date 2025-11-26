@@ -222,7 +222,7 @@ func (p *Parser) Release() {
 }
 
 // parseStatement parses a single SQL statement
-// Uses fast int-based ModelType comparisons with fallback for hot path optimization
+// Uses O(1) switch dispatch on ModelType (compiles to jump table) for optimal performance
 func (p *Parser) parseStatement() (ast.Statement, error) {
 	// Check context if available
 	if p.ctx != nil {
@@ -276,7 +276,6 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 	if p.isType(models.TokenTypeWith) {
 		return p.parseWithStatement()
 	}
-	// Use matchType() for check-and-advance pattern
 	if p.matchType(models.TokenTypeSelect) {
 		return p.parseSelectWithSetOperations()
 	}

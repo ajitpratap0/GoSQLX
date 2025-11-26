@@ -72,21 +72,32 @@ func (v Value) String() string {
 		}
 		return fmt.Sprintf("%v", v.Value)
 	case SingleQuotedStringValue:
-		return fmt.Sprintf("'%s'", escapeSingleQuoteString(v.Value.(string)))
-	case DollarQuotedStringValue:
-		dq := v.Value.(DollarQuotedString)
-		if dq.Tag != "" {
-			return fmt.Sprintf("$%s$%s$%s$", dq.Tag, dq.Value, dq.Tag)
+		if s, ok := v.Value.(string); ok {
+			return fmt.Sprintf("'%s'", escapeSingleQuoteString(s))
 		}
-		return fmt.Sprintf("$$%s$$", dq.Value)
+		return fmt.Sprintf("'%v'", v.Value)
+	case DollarQuotedStringValue:
+		if dq, ok := v.Value.(DollarQuotedString); ok {
+			if dq.Tag != "" {
+				return fmt.Sprintf("$%s$%s$%s$", dq.Tag, dq.Value, dq.Tag)
+			}
+			return fmt.Sprintf("$$%s$$", dq.Value)
+		}
+		return fmt.Sprintf("$$%v$$", v.Value)
 	case TripleSingleQuotedStringValue:
 		return fmt.Sprintf("'''%s'''", v.Value)
 	case TripleDoubleQuotedStringValue:
 		return fmt.Sprintf(`"""%s"""`, v.Value)
 	case EscapedStringLiteralValue:
-		return fmt.Sprintf("E'%s'", escapeEscapedString(v.Value.(string)))
+		if s, ok := v.Value.(string); ok {
+			return fmt.Sprintf("E'%s'", escapeEscapedString(s))
+		}
+		return fmt.Sprintf("E'%v'", v.Value)
 	case UnicodeStringLiteralValue:
-		return fmt.Sprintf("U&'%s'", escapeUnicodeString(v.Value.(string)))
+		if s, ok := v.Value.(string); ok {
+			return fmt.Sprintf("U&'%s'", escapeUnicodeString(s))
+		}
+		return fmt.Sprintf("U&'%v'", v.Value)
 	case SingleQuotedByteStringLiteralValue:
 		return fmt.Sprintf("B'%s'", v.Value)
 	case DoubleQuotedByteStringLiteralValue:
@@ -108,13 +119,19 @@ func (v Value) String() string {
 	case HexStringLiteralValue:
 		return fmt.Sprintf("X'%s'", v.Value)
 	case DoubleQuotedStringValue:
-		return fmt.Sprintf(`"%s"`, escapeDoubleQuoteString(v.Value.(string)))
+		if s, ok := v.Value.(string); ok {
+			return fmt.Sprintf(`"%s"`, escapeDoubleQuoteString(s))
+		}
+		return fmt.Sprintf(`"%v"`, v.Value)
 	case BooleanValue:
 		return fmt.Sprintf("%v", v.Value)
 	case NullValue:
 		return "NULL"
 	case PlaceholderValue:
-		return v.Value.(string)
+		if s, ok := v.Value.(string); ok {
+			return s
+		}
+		return fmt.Sprintf("%v", v.Value)
 	default:
 		return fmt.Sprintf("%v", v.Value)
 	}

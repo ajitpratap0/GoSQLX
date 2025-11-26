@@ -72,12 +72,25 @@ func (dm *DocumentManager) Close(uri string) {
 	delete(dm.documents, uri)
 }
 
-// Get retrieves a document
+// Get retrieves a copy of a document to avoid race conditions
+// The returned document is a snapshot and modifications won't affect the original
 func (dm *DocumentManager) Get(uri string) (*Document, bool) {
 	dm.mu.RLock()
 	defer dm.mu.RUnlock()
 	doc, ok := dm.documents[uri]
-	return doc, ok
+	if !ok {
+		return nil, false
+	}
+	// Return a copy to prevent race conditions when accessing fields after lock release
+	docCopy := &Document{
+		URI:        doc.URI,
+		LanguageID: doc.LanguageID,
+		Version:    doc.Version,
+		Content:    doc.Content,
+		Lines:      make([]string, len(doc.Lines)),
+	}
+	copy(docCopy.Lines, doc.Lines)
+	return docCopy, true
 }
 
 // GetContent retrieves a document's content
@@ -138,27 +151,30 @@ func positionToOffset(lines []string, pos Position) int {
 }
 
 // GetWordAtPosition returns the word at the given position
+// Uses rune-based indexing for proper UTF-8 handling
 func (doc *Document) GetWordAtPosition(pos Position) string {
 	if pos.Line >= len(doc.Lines) {
 		return ""
 	}
 
 	line := doc.Lines[pos.Line]
-	if pos.Character >= len(line) {
+	runes := []rune(line)
+
+	if pos.Character >= len(runes) {
 		return ""
 	}
 
-	// Find word boundaries
+	// Find word boundaries using rune indexing for UTF-8 safety
 	start := pos.Character
 	end := pos.Character
 
 	// Move start backwards to find word start
-	for start > 0 && isWordChar(rune(line[start-1])) {
+	for start > 0 && isWordChar(runes[start-1]) {
 		start--
 	}
 
 	// Move end forwards to find word end
-	for end < len(line) && isWordChar(rune(line[end])) {
+	for end < len(runes) && isWordChar(runes[end]) {
 		end++
 	}
 
@@ -166,7 +182,7 @@ func (doc *Document) GetWordAtPosition(pos Position) string {
 		return ""
 	}
 
-	return line[start:end]
+	return string(runes[start:end])
 }
 
 // isWordChar returns true if c is a valid word character

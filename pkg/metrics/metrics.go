@@ -29,38 +29,41 @@ type Metrics struct {
 	errorsByType map[string]int64
 	errorsMutex  sync.RWMutex
 
-	// Configuration
-	enabled   bool
-	startTime time.Time
+	// Configuration - use atomic for thread safety
+	enabled   int32        // 0 = disabled, 1 = enabled (atomic)
+	startTime atomic.Value // time.Time stored atomically
 }
 
 // Global metrics instance
 var globalMetrics = &Metrics{
-	enabled:      false,
+	enabled:      0, // 0 = disabled
 	errorsByType: make(map[string]int64),
-	startTime:    time.Now(),
 	minQuerySize: -1, // -1 means not set yet
+}
+
+func init() {
+	globalMetrics.startTime.Store(time.Now())
 }
 
 // Enable activates metrics collection
 func Enable() {
-	globalMetrics.enabled = true
-	globalMetrics.startTime = time.Now()
+	atomic.StoreInt32(&globalMetrics.enabled, 1)
+	globalMetrics.startTime.Store(time.Now())
 }
 
 // Disable deactivates metrics collection
 func Disable() {
-	globalMetrics.enabled = false
+	atomic.StoreInt32(&globalMetrics.enabled, 0)
 }
 
 // IsEnabled returns whether metrics collection is active
 func IsEnabled() bool {
-	return globalMetrics.enabled
+	return atomic.LoadInt32(&globalMetrics.enabled) == 1
 }
 
 // RecordTokenization records a tokenization operation
 func RecordTokenization(duration time.Duration, querySize int, err error) {
-	if !globalMetrics.enabled {
+	if atomic.LoadInt32(&globalMetrics.enabled) == 0 {
 		return
 	}
 
@@ -97,7 +100,7 @@ func RecordTokenization(duration time.Duration, querySize int, err error) {
 
 // RecordPoolGet records a tokenizer pool retrieval
 func RecordPoolGet(fromPool bool) {
-	if !globalMetrics.enabled {
+	if atomic.LoadInt32(&globalMetrics.enabled) == 0 {
 		return
 	}
 
@@ -109,7 +112,7 @@ func RecordPoolGet(fromPool bool) {
 
 // RecordPoolPut records a tokenizer pool return
 func RecordPoolPut() {
-	if !globalMetrics.enabled {
+	if atomic.LoadInt32(&globalMetrics.enabled) == 0 {
 		return
 	}
 
@@ -149,7 +152,7 @@ type Stats struct {
 
 // GetStats returns current performance statistics
 func GetStats() Stats {
-	if !globalMetrics.enabled {
+	if atomic.LoadInt32(&globalMetrics.enabled) == 0 {
 		return Stats{}
 	}
 
@@ -164,6 +167,9 @@ func GetStats() Stats {
 	totalBytes := atomic.LoadInt64(&globalMetrics.totalQueryBytes)
 	lastOpTime := atomic.LoadInt64(&globalMetrics.lastTokenizeTime)
 
+	// Load start time atomically
+	startTime := globalMetrics.startTime.Load().(time.Time)
+
 	stats := Stats{
 		TokenizeOperations:  operations,
 		TokenizeErrors:      errors,
@@ -173,7 +179,7 @@ func GetStats() Stats {
 		MinQuerySize:        minSize,
 		MaxQuerySize:        maxSize,
 		TotalBytesProcessed: totalBytes,
-		Uptime:              time.Since(globalMetrics.startTime),
+		Uptime:              time.Since(startTime),
 	}
 
 	// Calculate rates and averages
@@ -183,7 +189,7 @@ func GetStats() Stats {
 		stats.AverageQuerySize = float64(totalBytes) / float64(operations)
 
 		// Operations per second
-		uptime := time.Since(globalMetrics.startTime).Seconds()
+		uptime := time.Since(startTime).Seconds()
 		if uptime > 0 {
 			stats.OperationsPerSecond = float64(operations) / uptime
 		}
@@ -225,7 +231,7 @@ func Reset() {
 	globalMetrics.errorsByType = make(map[string]int64)
 	globalMetrics.errorsMutex.Unlock()
 
-	globalMetrics.startTime = time.Now()
+	globalMetrics.startTime.Store(time.Now())
 }
 
 // LogStats logs current statistics (useful for debugging)

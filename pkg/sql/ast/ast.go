@@ -169,6 +169,20 @@ type WindowFrameBound struct {
 	Value Expression
 }
 
+func (w *WindowFrameBound) expressionNode() {}
+func (w WindowFrameBound) TokenLiteral() string {
+	if w.Type != "" {
+		return w.Type
+	}
+	return "BOUND"
+}
+func (w WindowFrameBound) Children() []Node {
+	if w.Value != nil {
+		return []Node{w.Value}
+	}
+	return nil
+}
+
 // SelectStatement represents a SELECT SQL statement
 type SelectStatement struct {
 	With      *WithClause

@@ -366,19 +366,20 @@ func (h *Handler) handleHover(params json.RawMessage) (*Hover, error) {
 
 	doc, ok := h.server.Documents().Get(p.TextDocument.URI)
 	if !ok {
-		return nil, nil
+		// Return empty hover response instead of nil for proper LSP compliance
+		return &Hover{}, nil
 	}
 
 	// Get word at position
 	word := doc.GetWordAtPosition(p.Position)
 	if word == "" {
-		return nil, nil
+		return &Hover{}, nil
 	}
 
 	// Look up keyword documentation
 	doc_text := getKeywordDocumentation(strings.ToUpper(word))
 	if doc_text == "" {
-		return nil, nil
+		return &Hover{}, nil
 	}
 
 	return &Hover{

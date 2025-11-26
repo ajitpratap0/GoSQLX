@@ -73,6 +73,49 @@ var (
 		},
 	}
 
+	// Additional expression pools for common expression types
+	functionCallPool = sync.Pool{
+		New: func() interface{} {
+			return &FunctionCall{
+				Arguments: make([]Expression, 0, 4),
+			}
+		},
+	}
+
+	caseExprPool = sync.Pool{
+		New: func() interface{} {
+			return &CaseExpression{
+				WhenClauses: make([]WhenClause, 0, 2),
+			}
+		},
+	}
+
+	betweenExprPool = sync.Pool{
+		New: func() interface{} {
+			return &BetweenExpression{}
+		},
+	}
+
+	inExprPool = sync.Pool{
+		New: func() interface{} {
+			return &InExpression{
+				List: make([]Expression, 0, 4),
+			}
+		},
+	}
+
+	subqueryExprPool = sync.Pool{
+		New: func() interface{} {
+			return &SubqueryExpression{}
+		},
+	}
+
+	castExprPool = sync.Pool{
+		New: func() interface{} {
+			return &CastExpression{}
+		},
+	}
+
 	// Slice pools
 	exprSlicePool = sync.Pool{
 		New: func() interface{} {
@@ -341,5 +384,139 @@ func PutExpression(expr Expression) {
 		PutBinaryExpression(e)
 	case *LiteralValue:
 		PutLiteralValue(e)
+	case *FunctionCall:
+		PutFunctionCall(e)
+	case *CaseExpression:
+		PutCaseExpression(e)
+	case *BetweenExpression:
+		PutBetweenExpression(e)
+	case *InExpression:
+		PutInExpression(e)
+	case *SubqueryExpression:
+		PutSubqueryExpression(e)
+	case *CastExpression:
+		PutCastExpression(e)
 	}
+}
+
+// GetFunctionCall gets a FunctionCall from the pool
+func GetFunctionCall() *FunctionCall {
+	fc := functionCallPool.Get().(*FunctionCall)
+	fc.Arguments = fc.Arguments[:0]
+	return fc
+}
+
+// PutFunctionCall returns a FunctionCall to the pool
+func PutFunctionCall(fc *FunctionCall) {
+	if fc == nil {
+		return
+	}
+	for i := range fc.Arguments {
+		PutExpression(fc.Arguments[i])
+		fc.Arguments[i] = nil
+	}
+	fc.Arguments = fc.Arguments[:0]
+	fc.Name = ""
+	fc.Over = nil
+	fc.Distinct = false
+	fc.Filter = nil
+	functionCallPool.Put(fc)
+}
+
+// GetCaseExpression gets a CaseExpression from the pool
+func GetCaseExpression() *CaseExpression {
+	ce := caseExprPool.Get().(*CaseExpression)
+	ce.WhenClauses = ce.WhenClauses[:0]
+	return ce
+}
+
+// PutCaseExpression returns a CaseExpression to the pool
+func PutCaseExpression(ce *CaseExpression) {
+	if ce == nil {
+		return
+	}
+	PutExpression(ce.Value)
+	ce.Value = nil
+	for i := range ce.WhenClauses {
+		PutExpression(ce.WhenClauses[i].Condition)
+		PutExpression(ce.WhenClauses[i].Result)
+	}
+	ce.WhenClauses = ce.WhenClauses[:0]
+	PutExpression(ce.ElseClause)
+	ce.ElseClause = nil
+	caseExprPool.Put(ce)
+}
+
+// GetBetweenExpression gets a BetweenExpression from the pool
+func GetBetweenExpression() *BetweenExpression {
+	return betweenExprPool.Get().(*BetweenExpression)
+}
+
+// PutBetweenExpression returns a BetweenExpression to the pool
+func PutBetweenExpression(be *BetweenExpression) {
+	if be == nil {
+		return
+	}
+	PutExpression(be.Expr)
+	PutExpression(be.Lower)
+	PutExpression(be.Upper)
+	be.Expr = nil
+	be.Lower = nil
+	be.Upper = nil
+	be.Not = false
+	betweenExprPool.Put(be)
+}
+
+// GetInExpression gets an InExpression from the pool
+func GetInExpression() *InExpression {
+	ie := inExprPool.Get().(*InExpression)
+	ie.List = ie.List[:0]
+	return ie
+}
+
+// PutInExpression returns an InExpression to the pool
+func PutInExpression(ie *InExpression) {
+	if ie == nil {
+		return
+	}
+	PutExpression(ie.Expr)
+	ie.Expr = nil
+	for i := range ie.List {
+		PutExpression(ie.List[i])
+		ie.List[i] = nil
+	}
+	ie.List = ie.List[:0]
+	ie.Subquery = nil
+	ie.Not = false
+	inExprPool.Put(ie)
+}
+
+// GetSubqueryExpression gets a SubqueryExpression from the pool
+func GetSubqueryExpression() *SubqueryExpression {
+	return subqueryExprPool.Get().(*SubqueryExpression)
+}
+
+// PutSubqueryExpression returns a SubqueryExpression to the pool
+func PutSubqueryExpression(se *SubqueryExpression) {
+	if se == nil {
+		return
+	}
+	se.Subquery = nil
+	subqueryExprPool.Put(se)
+}
+
+// GetCastExpression gets a CastExpression from the pool
+func GetCastExpression() *CastExpression {
+	return castExprPool.Get().(*CastExpression)
+}
+
+// PutCastExpression returns a CastExpression to the pool
+func PutCastExpression(ce *CastExpression) {
+	if ce == nil {
+		return
+	}
+	PutExpression(ce.Expr)
+	ce.Expr = nil
+	ce.Type = ""
+	castExprPool.Put(ce)
 }

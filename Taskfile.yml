@@ -1,0 +1,429 @@
+# https://taskfile.dev
+version: '3'
+
+vars:
+  BINARY_NAME: gosqlx
+  BUILD_DIR: build
+  COVERAGE_FILE: coverage.out
+  COVERAGE_HTML: coverage.html
+  GO_PACKAGES:
+    sh: go list ./...
+  GO_FILES:
+    sh: find . -type f -name '*.go' -not -path './vendor/*'
+
+env:
+  CGO_ENABLED: '0'
+
+tasks:
+  # =============================================================================
+  # DEFAULT
+  # =============================================================================
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list-all
+
+  # =============================================================================
+  # BUILD TASKS
+  # =============================================================================
+  build:
+    desc: Build all packages
+    cmds:
+      - echo "Building packages..."
+      - go build -v ./...
+
+  build:cli:
+    desc: Build the CLI binary
+    cmds:
+      - echo "Building CLI binary..."
+      - go build -v -o {{.BUILD_DIR}}/{{.BINARY_NAME}} ./cmd/gosqlx
+    generates:
+      - '{{.BUILD_DIR}}/{{.BINARY_NAME}}'
+
+  build:cli:all:
+    desc: Build CLI for all platforms (linux, darwin, windows)
+    cmds:
+      - echo "Building for Linux amd64..."
+      - GOOS=linux GOARCH=amd64 go build -o {{.BUILD_DIR}}/{{.BINARY_NAME}}-linux-amd64 ./cmd/gosqlx
+      - echo "Building for Linux arm64..."
+      - GOOS=linux GOARCH=arm64 go build -o {{.BUILD_DIR}}/{{.BINARY_NAME}}-linux-arm64 ./cmd/gosqlx
+      - echo "Building for macOS amd64..."
+      - GOOS=darwin GOARCH=amd64 go build -o {{.BUILD_DIR}}/{{.BINARY_NAME}}-darwin-amd64 ./cmd/gosqlx
+      - echo "Building for macOS arm64..."
+      - GOOS=darwin GOARCH=arm64 go build -o {{.BUILD_DIR}}/{{.BINARY_NAME}}-darwin-arm64 ./cmd/gosqlx
+      - echo "Building for Windows amd64..."
+      - GOOS=windows GOARCH=amd64 go build -o {{.BUILD_DIR}}/{{.BINARY_NAME}}-windows-amd64.exe ./cmd/gosqlx
+
+  install:
+    desc: Install the CLI globally
+    cmds:
+      - echo "Installing gosqlx CLI..."
+      - go install ./cmd/gosqlx
+
+  # =============================================================================
+  # TEST TASKS
+  # =============================================================================
+  test:
+    desc: Run all tests
+    cmds:
+      - echo "Running tests..."
+      - go test -v ./...
+
+  test:short:
+    desc: Run tests in short mode
+    cmds:
+      - echo "Running short tests..."
+      - go test -short ./...
+
+  test:race:
+    desc: Run tests with race detection (CRITICAL for production)
+    cmds:
+      - echo "Running tests with race detection..."
+      - go test -race -timeout 60s ./...
+
+  test:pkg:
+    desc: Run tests for a specific package (use PKG=./pkg/sql/parser)
+    cmds:
+      - echo "Running tests for {{.PKG}}..."
+      - go test -v -race {{.PKG}}
+    vars:
+      PKG: '{{default "./..." .PKG}}'
+
+  # =============================================================================
+  # COVERAGE TASKS
+  # =============================================================================
+  coverage:
+    desc: Generate test coverage report
+    cmds:
+      - echo "Running tests with coverage..."
+      - go test -cover -coverprofile={{.COVERAGE_FILE}} ./...
+      - go tool cover -html={{.COVERAGE_FILE}} -o {{.COVERAGE_HTML}}
+      - echo "Coverage report generated at {{.COVERAGE_HTML}}"
+    generates:
+      - '{{.COVERAGE_FILE}}'
+      - '{{.COVERAGE_HTML}}'
+
+  coverage:func:
+    desc: Show coverage by function
+    deps: [coverage]
+    cmds:
+      - go tool cover -func={{.COVERAGE_FILE}}
+
+  coverage:pkg:
+    desc: Generate coverage for specific package (use PKG=./pkg/models)
+    cmds:
+      - go test -coverprofile={{.COVERAGE_FILE}} {{.PKG}}
+      - go tool cover -func={{.COVERAGE_FILE}}
+    vars:
+      PKG: '{{default "./pkg/models" .PKG}}'
+
+  # =============================================================================
+  # BENCHMARK TASKS
+  # =============================================================================
+  bench:
+    desc: Run all benchmarks
+    cmds:
+      - echo "Running benchmarks..."
+      - go test -bench=. -benchmem ./...
+
+  bench:pkg:
+    desc: Run benchmarks for specific package (use PKG=./pkg/sql/parser)
+    cmds:
+      - echo "Running benchmarks for {{.PKG}}..."
+      - go test -bench=. -benchmem {{.PKG}}
+    vars:
+      PKG: '{{default "./pkg/sql/parser" .PKG}}'
+
+  bench:cpu:
+    desc: Run benchmarks with CPU profiling
+    cmds:
+      - echo "Running benchmarks with CPU profile..."
+      - go test -bench=. -benchmem -cpuprofile=cpu.prof ./pkg/sql/parser
+      - echo "CPU profile saved to cpu.prof - use 'go tool pprof cpu.prof'"
+
+  bench:mem:
+    desc: Run benchmarks with memory profiling
+    cmds:
+      - echo "Running benchmarks with memory profile..."
+      - go test -bench=. -benchmem -memprofile=mem.prof ./pkg/sql/parser
+      - echo "Memory profile saved to mem.prof - use 'go tool pprof mem.prof'"
+
+  # =============================================================================
+  # FUZZ TESTING
+  # =============================================================================
+  fuzz:
+    desc: Run fuzz tests (duration configurable via FUZZ_TIME, default 30s)
+    cmds:
+      - echo "Running fuzz tests for {{.FUZZ_TIME}}..."
+      - ./scripts/run_fuzz_tests.sh
+    vars:
+      FUZZ_TIME: '{{default "30s" .FUZZ_TIME}}'
+
+  fuzz:tokenizer:
+    desc: Run tokenizer fuzz tests
+    cmds:
+      - echo "Fuzzing tokenizer..."
+      - go test -fuzz=FuzzTokenizer -fuzztime={{.FUZZ_TIME}} ./pkg/sql/tokenizer
+    vars:
+      FUZZ_TIME: '{{default "30s" .FUZZ_TIME}}'
+
+  # =============================================================================
+  # CODE QUALITY TASKS
+  # =============================================================================
+  fmt:
+    desc: Format Go code
+    cmds:
+      - echo "Formatting code..."
+      - go fmt ./...
+
+  fmt:check:
+    desc: Check if code is formatted (fails if not)
+    cmds:
+      - echo "Checking code formatting..."
+      - test -z "$(gofmt -l .)"
+    silent: true
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - echo "Running go vet..."
+      - go vet ./...
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - echo "Running golangci-lint..."
+      - |
+        if command -v golangci-lint > /dev/null; then
+          golangci-lint run
+        else
+          echo "golangci-lint not installed. Run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"
+          exit 1
+        fi
+
+  lint:fix:
+    desc: Run golangci-lint with auto-fix
+    cmds:
+      - echo "Running golangci-lint with auto-fix..."
+      - golangci-lint run --fix
+
+  staticcheck:
+    desc: Run staticcheck
+    cmds:
+      - echo "Running staticcheck..."
+      - |
+        if command -v staticcheck > /dev/null; then
+          staticcheck ./...
+        else
+          echo "staticcheck not installed. Run: go install honnef.co/go/tools/cmd/staticcheck@latest"
+          exit 1
+        fi
+
+  quality:
+    desc: Run all quality checks (fmt, vet, lint)
+    deps: [fmt, vet, lint]
+
+  check:
+    desc: Run full check suite (format check, vet, lint, test with race)
+    cmds:
+      - task: fmt:check
+      - task: vet
+      - task: lint
+      - task: test:race
+
+  # =============================================================================
+  # SECURITY TASKS
+  # =============================================================================
+  security:scan:
+    desc: Run security vulnerability scan
+    cmds:
+      - echo "Running security scan..."
+      - |
+        if command -v govulncheck > /dev/null; then
+          govulncheck ./...
+        else
+          echo "govulncheck not installed. Run: go install golang.org/x/vuln/cmd/govulncheck@latest"
+          exit 1
+        fi
+
+  security:validate:
+    desc: Validate security setup
+    cmds:
+      - ./scripts/validate-security-setup.sh
+
+  # =============================================================================
+  # DOCUMENTATION
+  # =============================================================================
+  docs:
+    desc: Generate documentation
+    cmds:
+      - echo "Generating documentation..."
+      - |
+        if command -v godoc > /dev/null; then
+          echo "Starting godoc server at http://localhost:6060/pkg/github.com/ajitpratap0/GoSQLX/"
+          godoc -http=:6060
+        else
+          echo "godoc not installed. Run: go install golang.org/x/tools/cmd/godoc@latest"
+        fi
+
+  # =============================================================================
+  # LSP SERVER
+  # =============================================================================
+  lsp:
+    desc: Start the LSP server
+    cmds:
+      - go run ./cmd/gosqlx lsp
+
+  lsp:debug:
+    desc: Start LSP server with debug logging
+    cmds:
+      - go run ./cmd/gosqlx lsp --log /tmp/gosqlx-lsp.log
+
+  # =============================================================================
+  # EXAMPLES
+  # =============================================================================
+  examples:
+    desc: Run example programs
+    cmds:
+      - echo "Running basic example..."
+      - go run ./examples/cmd/example.go
+
+  examples:test:
+    desc: Run example tests
+    dir: examples/cmd
+    cmds:
+      - go test -v example_test.go
+
+  # =============================================================================
+  # DEPENDENCIES
+  # =============================================================================
+  deps:
+    desc: Download and verify dependencies
+    cmds:
+      - echo "Downloading dependencies..."
+      - go mod download
+      - go mod verify
+
+  deps:tidy:
+    desc: Tidy go.mod and go.sum
+    cmds:
+      - echo "Tidying dependencies..."
+      - go mod tidy
+
+  deps:update:
+    desc: Update all dependencies
+    cmds:
+      - echo "Updating dependencies..."
+      - go get -u ./...
+      - go mod tidy
+
+  deps:tools:
+    desc: Install development tools
+    cmds:
+      - echo "Installing development tools..."
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+      - go install honnef.co/go/tools/cmd/staticcheck@latest
+      - go install golang.org/x/vuln/cmd/govulncheck@latest
+      - go install golang.org/x/tools/cmd/godoc@latest
+      - echo "Installing task runner..."
+      - go install github.com/go-task/task/v3/cmd/task@latest
+      - echo "All tools installed!"
+
+  # =============================================================================
+  # GIT HOOKS
+  # =============================================================================
+  hooks:install:
+    desc: Install Git pre-commit hooks
+    cmds:
+      - echo "Installing Git hooks..."
+      - ./scripts/install-hooks.sh
+
+  # =============================================================================
+  # CLEAN
+  # =============================================================================
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - echo "Cleaning..."
+      - rm -rf {{.BUILD_DIR}}
+      - rm -f {{.COVERAGE_FILE}} {{.COVERAGE_HTML}}
+      - rm -f cpu.prof mem.prof
+      - go clean -cache -testcache
+
+  clean:all:
+    desc: Deep clean including module cache
+    cmds:
+      - task: clean
+      - go clean -modcache
+
+  # =============================================================================
+  # CI/CD
+  # =============================================================================
+  ci:
+    desc: Run full CI pipeline (used in GitHub Actions)
+    cmds:
+      - echo "=== CI Pipeline Starting ==="
+      - task: deps
+      - task: fmt:check
+      - task: vet
+      - task: lint
+      - task: test:race
+      - task: build
+      - echo "=== CI Pipeline Complete ==="
+
+  ci:quick:
+    desc: Quick CI check (no race detection)
+    cmds:
+      - task: deps
+      - task: vet
+      - task: test:short
+      - task: build
+
+  # =============================================================================
+  # RELEASE
+  # =============================================================================
+  release:dry:
+    desc: Dry-run release with goreleaser
+    cmds:
+      - echo "Running goreleaser dry-run..."
+      - goreleaser release --snapshot --clean
+
+  release:check:
+    desc: Check goreleaser configuration
+    cmds:
+      - goreleaser check
+
+  # =============================================================================
+  # DEVELOPMENT HELPERS
+  # =============================================================================
+  dev:
+    desc: Start development mode (watch for changes)
+    cmds:
+      - echo "Development mode - run tests on file changes"
+      - |
+        if command -v watchexec > /dev/null; then
+          watchexec -e go -- go test -short ./...
+        else
+          echo "watchexec not installed. Install via: brew install watchexec or cargo install watchexec-cli"
+        fi
+
+  validate:
+    desc: Validate SQL via CLI (use SQL="SELECT * FROM users")
+    cmds:
+      - go run ./cmd/gosqlx validate "{{.SQL}}"
+    vars:
+      SQL: '{{default "SELECT * FROM users" .SQL}}'
+
+  format:sql:
+    desc: Format SQL via CLI (use SQL="select * from users")
+    cmds:
+      - go run ./cmd/gosqlx format "{{.SQL}}"
+    vars:
+      SQL: '{{default "select * from users" .SQL}}'
+
+  analyze:
+    desc: Analyze SQL via CLI (use SQL="SELECT * FROM users")
+    cmds:
+      - go run ./cmd/gosqlx analyze "{{.SQL}}"
+    vars:
+      SQL: '{{default "SELECT * FROM users WHERE id = 1" .SQL}}'

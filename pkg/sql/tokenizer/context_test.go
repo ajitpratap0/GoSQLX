@@ -215,6 +215,11 @@ func TestTokenizeContext_ErrorHandling(t *testing.T) {
 
 // TestTokenizeContext_CancellationResponseTime verifies fast cancellation (< 100ms requirement)
 func TestTokenizeContext_CancellationResponseTime(t *testing.T) {
+	// Skip when race detector is enabled - adds 3-5x overhead making timing measurements unreliable
+	if raceEnabled {
+		t.Skip("Skipping timing-sensitive test with race detector (adds 3-5x overhead)")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	tkz := GetTokenizer()
 	defer PutTokenizer(tkz)

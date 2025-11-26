@@ -20,6 +20,10 @@ func TestSustainedLoad_Tokenization10Seconds(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping sustained load test in short mode")
 	}
+	// Skip when race detector is enabled - adds 3-5x overhead making performance measurements unreliable
+	if raceEnabled {
+		t.Skip("Skipping sustained load test with race detector (adds 3-5x overhead)")
+	}
 
 	const (
 		duration = 10 * time.Second
@@ -92,6 +96,10 @@ func TestSustainedLoad_Tokenization10Seconds(t *testing.T) {
 func TestSustainedLoad_Parsing10Seconds(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping sustained load test in short mode")
+	}
+	// Skip when race detector is enabled - adds 3-5x overhead making performance measurements unreliable
+	if raceEnabled {
+		t.Skip("Skipping sustained load test with race detector (adds 3-5x overhead)")
 	}
 
 	const duration = 10 * time.Second
@@ -206,6 +214,10 @@ func TestSustainedLoad_Parsing10Seconds(t *testing.T) {
 func TestSustainedLoad_EndToEnd10Seconds(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping sustained load test in short mode")
+	}
+	// Skip when race detector is enabled - adds 3-5x overhead making performance measurements unreliable
+	if raceEnabled {
+		t.Skip("Skipping sustained load test with race detector (adds 3-5x overhead)")
 	}
 
 	const duration = 10 * time.Second
@@ -342,6 +354,10 @@ func TestSustainedLoad_MemoryStability(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping sustained load test in short mode")
 	}
+	// Skip when race detector is enabled - adds 3-5x overhead making performance measurements unreliable
+	if raceEnabled {
+		t.Skip("Skipping sustained load test with race detector (adds 3-5x overhead)")
+	}
 
 	const duration = 10 * time.Second
 	// Scale workers to available CPUs to avoid contention on smaller CI runners
@@ -460,6 +476,10 @@ func TestSustainedLoad_VaryingWorkers(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping sustained load test in short mode")
 	}
+	// Skip when race detector is enabled - adds 3-5x overhead making performance measurements unreliable
+	if raceEnabled {
+		t.Skip("Skipping sustained load test with race detector (adds 3-5x overhead)")
+	}
 
 	// Reduce duration and worker counts when race detection is enabled
 	// to prevent test timeouts (race detection adds significant overhead)
@@ -522,6 +542,10 @@ func TestSustainedLoad_VaryingWorkers(t *testing.T) {
 func TestSustainedLoad_ComplexQueries(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping sustained load test in short mode")
+	}
+	// Skip when race detector is enabled - adds 3-5x overhead making performance measurements unreliable
+	if raceEnabled {
+		t.Skip("Skipping sustained load test with race detector (adds 3-5x overhead)")
 	}
 
 	const duration = 10 * time.Second

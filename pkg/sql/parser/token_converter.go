@@ -524,6 +524,7 @@ func buildTypeMapping() map[models.TokenType]token.Type {
 		models.TokenTypeCreate:   "CREATE",
 		models.TokenTypeAlter:    "ALTER",
 		models.TokenTypeDrop:     "DROP",
+		models.TokenTypeTruncate: "TRUNCATE",
 		models.TokenTypeTable:    "TABLE",
 		models.TokenTypeIndex:    "INDEX",
 		models.TokenTypeView:     "VIEW",

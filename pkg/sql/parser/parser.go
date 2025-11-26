@@ -264,6 +264,9 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		case models.TokenTypeRefresh:
 			p.advance()
 			return p.parseRefreshStatement()
+		case models.TokenTypeTruncate:
+			p.advance()
+			return p.parseTruncateStatement()
 		}
 		// ModelType set but not a statement keyword - fall through to fallback
 	}
@@ -300,6 +303,9 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 	}
 	if p.matchType(models.TokenTypeRefresh) {
 		return p.parseRefreshStatement()
+	}
+	if p.matchType(models.TokenTypeTruncate) {
+		return p.parseTruncateStatement()
 	}
 	return nil, p.expectedError("statement")
 }
@@ -387,6 +393,7 @@ var modelTypeToString = map[models.TokenType]token.Type{
 	models.TokenTypeCreate:       "CREATE",
 	models.TokenTypeAlter:        token.ALTER,
 	models.TokenTypeDrop:         token.DROP,
+	models.TokenTypeTruncate:     "TRUNCATE",
 	models.TokenTypeTable:        "TABLE",
 	models.TokenTypeIndex:        "INDEX",
 	models.TokenTypeView:         "VIEW",

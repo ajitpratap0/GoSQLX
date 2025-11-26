@@ -277,6 +277,7 @@ const (
 	TokenTypeRefresh      TokenType = 375
 	TokenTypeTies         TokenType = 376 // TIES keyword for WITH TIES in FETCH clause
 	TokenTypePercent      TokenType = 377 // PERCENT keyword for FETCH ... PERCENT ROWS
+	TokenTypeTruncate     TokenType = 378 // TRUNCATE keyword for TRUNCATE TABLE statement
 
 	// Grouping Set Keywords (390-399)
 	TokenTypeGroupingSets TokenType = 390
@@ -545,6 +546,7 @@ var tokenStringMap = map[TokenType]string{
 	TokenTypeRefresh:      "REFRESH",
 	TokenTypeTies:         "TIES",
 	TokenTypePercent:      "PERCENT",
+	TokenTypeTruncate:     "TRUNCATE",
 
 	// Grouping Set Keywords
 	TokenTypeGroupingSets: "GROUPING_SETS",
@@ -666,7 +668,7 @@ func (t TokenType) IsDMLKeyword() bool {
 // IsDDLKeyword returns true if the token type is a DDL keyword
 func (t TokenType) IsDDLKeyword() bool {
 	switch t {
-	case TokenTypeCreate, TokenTypeAlter, TokenTypeDrop, TokenTypeTable,
+	case TokenTypeCreate, TokenTypeAlter, TokenTypeDrop, TokenTypeTruncate, TokenTypeTable,
 		TokenTypeIndex, TokenTypeView, TokenTypeColumn, TokenTypeDatabase,
 		TokenTypeSchema, TokenTypeTrigger:
 		return true

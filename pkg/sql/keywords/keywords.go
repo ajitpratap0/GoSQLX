@@ -156,6 +156,11 @@ var ADDITIONAL_KEYWORDS = []Keyword{
 	{Word: "OPTION", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "CASCADED", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "LOCAL", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	// TRUNCATE TABLE statement (SQL:2008)
+	{Word: "TRUNCATE", Type: models.TokenTypeTruncate, Reserved: true, ReservedForTableAlias: true},
+	{Word: "RESTART", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "CONTINUE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "IDENTITY", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 }
 
 // addKeywordsWithCategory is a helper method to add multiple keywords

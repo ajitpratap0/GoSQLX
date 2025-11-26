@@ -100,6 +100,7 @@ var keywordTokenTypes = map[string]models.TokenType{
 	"CREATE":       models.TokenTypeCreate,
 	"DROP":         models.TokenTypeDrop,
 	"ALTER":        models.TokenTypeAlter,
+	"TRUNCATE":     models.TokenTypeTruncate,
 	"TABLE":        models.TokenTypeTable,
 	"INDEX":        models.TokenTypeIndex,
 	"VIEW":         models.TokenTypeView,

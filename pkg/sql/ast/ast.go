@@ -1074,6 +1074,19 @@ func (d *DropStatement) statementNode()      {}
 func (d DropStatement) TokenLiteral() string { return "DROP " + d.ObjectType }
 func (d DropStatement) Children() []Node     { return nil }
 
+// TruncateStatement represents a TRUNCATE TABLE statement
+// Syntax: TRUNCATE [TABLE] table_name [, table_name ...] [RESTART IDENTITY | CONTINUE IDENTITY] [CASCADE | RESTRICT]
+type TruncateStatement struct {
+	Tables           []string // Table names to truncate
+	RestartIdentity  bool     // RESTART IDENTITY - reset sequences
+	ContinueIdentity bool     // CONTINUE IDENTITY - keep sequences (default)
+	CascadeType      string   // CASCADE, RESTRICT, or empty
+}
+
+func (t *TruncateStatement) statementNode()      {}
+func (t TruncateStatement) TokenLiteral() string { return "TRUNCATE TABLE" }
+func (t TruncateStatement) Children() []Node     { return nil }
+
 // PartitionDefinition represents a partition definition in CREATE TABLE
 // Syntax: PARTITION name VALUES { LESS THAN (expr) | IN (list) | FROM (expr) TO (expr) }
 type PartitionDefinition struct {

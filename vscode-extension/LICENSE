@@ -1,21 +1,83 @@
-MIT License
+PROPRIETARY SOFTWARE LICENSE
+All Rights Reserved
 
-Copyright (c) 2025 GoSQLX
+Copyright (c) 2025 GoSQLX. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+NOTICE: This software and associated documentation files (the "Software") are
+the exclusive proprietary property of the copyright holder. This license
+expressly PROHIBITS and DENIES all rights not explicitly granted herein.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. NO GRANT OF RIGHTS
+   No rights are granted under this license. The following actions are
+   STRICTLY PROHIBITED without prior written authorization from the
+   copyright holder:
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+   a) USE - You may not use the Software for any purpose whatsoever,
+      including but not limited to personal, commercial, educational,
+      research, or evaluation purposes.
+
+   b) COPYING - You may not copy, reproduce, or duplicate the Software
+      in whole or in part, in any form or medium.
+
+   c) MODIFICATION - You may not modify, adapt, alter, translate,
+      reverse engineer, decompile, disassemble, or create derivative
+      works based on the Software.
+
+   d) DISTRIBUTION - You may not distribute, publish, transfer, sublicense,
+      rent, lease, lend, or otherwise make available the Software to any
+      third party.
+
+   e) DISPLAY - You may not publicly display, perform, or demonstrate
+      the Software.
+
+   f) COMMERCIAL EXPLOITATION - You may not sell, offer for sale, or
+      commercially exploit the Software in any manner.
+
+2. VIEWING ONLY
+   This source code is provided for viewing purposes only. Viewing does
+   not grant any license or right to use the Software.
+
+3. INTELLECTUAL PROPERTY
+   All intellectual property rights in and to the Software, including but
+   not limited to patents, copyrights, trademarks, and trade secrets, are
+   and shall remain the exclusive property of the copyright holder.
+
+4. NO IMPLIED LICENSES
+   Nothing in this license shall be construed as granting any license or
+   right by implication, estoppel, or otherwise, under any intellectual
+   property rights.
+
+5. RESERVATION OF RIGHTS
+   All rights not expressly granted herein are reserved by the copyright
+   holder. Any use of the Software not explicitly authorized constitutes
+   infringement and may result in civil and criminal penalties.
+
+6. TERMINATION
+   Any unauthorized use of the Software automatically terminates any
+   implied permission and subjects the violator to legal action.
+
+7. DISCLAIMER OF WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS
+   OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+
+8. LIMITATION OF LIABILITY
+   IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES,
+   OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE,
+   ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+   OTHER DEALINGS IN THE SOFTWARE.
+
+9. GOVERNING LAW
+   This license shall be governed by and construed in accordance with
+   applicable copyright and intellectual property laws.
+
+10. SEVERABILITY
+    If any provision of this license is held to be unenforceable, such
+    provision shall be reformed only to the extent necessary to make it
+    enforceable, and the remaining provisions shall continue in full
+    force and effect.
+
+For licensing inquiries, contact the copyright holder.
+
+UNAUTHORIZED USE, REPRODUCTION, OR DISTRIBUTION IS STRICTLY PROHIBITED
+AND MAY RESULT IN SEVERE CIVIL AND CRIMINAL PENALTIES.

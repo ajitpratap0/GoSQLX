@@ -4,7 +4,7 @@
   "description": "High-performance SQL parsing, validation, formatting, and analysis powered by GoSQLX",
   "version": "0.1.0",
   "publisher": "ajitpratap0",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "repository": {
     "type": "git",
     "url": "https://github.com/ajitpratap0/GoSQLX"

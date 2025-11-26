@@ -194,44 +194,44 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		}
 	}
 
+	// Quick check: is this any kind of DML/DDL statement?
+	// Uses isAnyType for efficient multiple type checking
+	if !p.isAnyType(models.TokenTypeWith, models.TokenTypeSelect, models.TokenTypeInsert,
+		models.TokenTypeUpdate, models.TokenTypeDelete, models.TokenTypeAlter,
+		models.TokenTypeMerge, models.TokenTypeCreate, models.TokenTypeDrop, models.TokenTypeRefresh) {
+		return nil, p.expectedError("statement")
+	}
+
 	// Use isType() helper for fast int comparison with fallback
 	if p.isType(models.TokenTypeWith) {
 		return p.parseWithStatement()
 	}
-	if p.isType(models.TokenTypeSelect) {
-		p.advance() // Consume SELECT
+	// Use matchType() for check-and-advance pattern
+	if p.matchType(models.TokenTypeSelect) {
 		return p.parseSelectWithSetOperations()
 	}
-	if p.isType(models.TokenTypeInsert) {
-		p.advance() // Consume INSERT
+	if p.matchType(models.TokenTypeInsert) {
 		return p.parseInsertStatement()
 	}
-	if p.isType(models.TokenTypeUpdate) {
-		p.advance() // Consume UPDATE
+	if p.matchType(models.TokenTypeUpdate) {
 		return p.parseUpdateStatement()
 	}
-	if p.isType(models.TokenTypeDelete) {
-		p.advance() // Consume DELETE
+	if p.matchType(models.TokenTypeDelete) {
 		return p.parseDeleteStatement()
 	}
-	if p.isType(models.TokenTypeAlter) {
-		p.advance() // Consume ALTER
+	if p.matchType(models.TokenTypeAlter) {
 		return p.parseAlterTableStmt()
 	}
-	if p.isType(models.TokenTypeMerge) {
-		p.advance() // Consume MERGE
+	if p.matchType(models.TokenTypeMerge) {
 		return p.parseMergeStatement()
 	}
-	if p.isType(models.TokenTypeCreate) {
-		p.advance() // Consume CREATE
+	if p.matchType(models.TokenTypeCreate) {
 		return p.parseCreateStatement()
 	}
-	if p.isType(models.TokenTypeDrop) {
-		p.advance() // Consume DROP
+	if p.matchType(models.TokenTypeDrop) {
 		return p.parseDropStatement()
 	}
-	if p.isType(models.TokenTypeRefresh) {
-		p.advance() // Consume REFRESH
+	if p.matchType(models.TokenTypeRefresh) {
 		return p.parseRefreshStatement()
 	}
 
@@ -295,6 +295,9 @@ var modelTypeToString = map[models.TokenType]token.Type{
 	models.TokenTypeCreate:    "CREATE",
 	models.TokenTypeMerge:     "MERGE",
 	models.TokenTypeRefresh:   "REFRESH",
+	models.TokenTypeFrom:      token.FROM,
+	models.TokenTypeWhere:     token.WHERE,
+	models.TokenTypeComma:     token.COMMA,
 }
 
 // isType checks if the current token's ModelType matches the expected type.
@@ -369,6 +372,38 @@ func (p *Parser) matchAnyType(types ...models.TokenType) bool {
 }
 
 // =============================================================================
+
+// isAtStatementEnd checks if we're at a statement boundary
+// Uses peekIsType and peekIsAnyType for efficient lookahead
+func (p *Parser) isAtStatementEnd() bool {
+	// Current token is semicolon or EOF
+	if p.isType(models.TokenTypeSemicolon) || p.isType(models.TokenTypeEOF) {
+		return true
+	}
+	// Peek ahead to see if next token starts a new statement
+	// Uses peekIsAnyType for multiple type check
+	if p.peekIsAnyType(models.TokenTypeSelect, models.TokenTypeInsert,
+		models.TokenTypeUpdate, models.TokenTypeDelete) {
+		return true
+	}
+	// Single type peek check
+	if p.peekIsType(models.TokenTypeEOF) {
+		return true
+	}
+	return false
+}
+
+// skipToStatementEnd advances until we reach a statement boundary
+// Uses matchAnyType for efficient skip-and-advance pattern
+func (p *Parser) skipToStatementEnd() {
+	for !p.isType(models.TokenTypeEOF) {
+		// Try to match and skip terminator tokens
+		if p.matchAnyType(models.TokenTypeSemicolon, models.TokenTypeEOF) {
+			return
+		}
+		p.advance()
+	}
+}
 
 // expectedError returns an error for unexpected token
 func (p *Parser) expectedError(expected string) error {

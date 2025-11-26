@@ -295,9 +295,6 @@ var modelTypeToString = map[models.TokenType]token.Type{
 	models.TokenTypeCreate:    "CREATE",
 	models.TokenTypeMerge:     "MERGE",
 	models.TokenTypeRefresh:   "REFRESH",
-	models.TokenTypeFrom:      token.FROM,
-	models.TokenTypeWhere:     token.WHERE,
-	models.TokenTypeComma:     token.COMMA,
 }
 
 // isType checks if the current token's ModelType matches the expected type.
@@ -325,30 +322,6 @@ func (p *Parser) isAnyType(types ...models.TokenType) bool {
 	return false
 }
 
-// peekIsType checks if the peek token's ModelType matches the expected type.
-func (p *Parser) peekIsType(expected models.TokenType) bool {
-	peek := p.peekToken()
-	// Fast path: use int comparison if ModelType is set
-	if peek.ModelType != 0 {
-		return peek.ModelType == expected
-	}
-	// Fallback: string comparison for tokens without ModelType
-	if str, ok := modelTypeToString[expected]; ok {
-		return peek.Type == str
-	}
-	return false
-}
-
-// peekIsAnyType checks if the peek token's ModelType matches any of the given types.
-func (p *Parser) peekIsAnyType(types ...models.TokenType) bool {
-	for _, t := range types {
-		if p.peekIsType(t) {
-			return true
-		}
-	}
-	return false
-}
-
 // matchType checks if the current token's ModelType matches and advances if true.
 // Returns true if matched (and advanced), false otherwise.
 func (p *Parser) matchType(expected models.TokenType) bool {
@@ -359,51 +332,7 @@ func (p *Parser) matchType(expected models.TokenType) bool {
 	return false
 }
 
-// matchAnyType checks if the current token's ModelType matches any given type and advances if true.
-// Returns true if matched (and advanced), false otherwise.
-func (p *Parser) matchAnyType(types ...models.TokenType) bool {
-	for _, t := range types {
-		if p.isType(t) {
-			p.advance()
-			return true
-		}
-	}
-	return false
-}
-
 // =============================================================================
-
-// isAtStatementEnd checks if we're at a statement boundary
-// Uses peekIsType and peekIsAnyType for efficient lookahead
-func (p *Parser) isAtStatementEnd() bool {
-	// Current token is semicolon or EOF
-	if p.isType(models.TokenTypeSemicolon) || p.isType(models.TokenTypeEOF) {
-		return true
-	}
-	// Peek ahead to see if next token starts a new statement
-	// Uses peekIsAnyType for multiple type check
-	if p.peekIsAnyType(models.TokenTypeSelect, models.TokenTypeInsert,
-		models.TokenTypeUpdate, models.TokenTypeDelete) {
-		return true
-	}
-	// Single type peek check
-	if p.peekIsType(models.TokenTypeEOF) {
-		return true
-	}
-	return false
-}
-
-// skipToStatementEnd advances until we reach a statement boundary
-// Uses matchAnyType for efficient skip-and-advance pattern
-func (p *Parser) skipToStatementEnd() {
-	for !p.isType(models.TokenTypeEOF) {
-		// Try to match and skip terminator tokens
-		if p.matchAnyType(models.TokenTypeSemicolon, models.TokenTypeEOF) {
-			return
-		}
-		p.advance()
-	}
-}
 
 // expectedError returns an error for unexpected token
 func (p *Parser) expectedError(expected string) error {

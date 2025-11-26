@@ -804,3 +804,57 @@ func (p *Parser) parseRefreshStatement() (*ast.RefreshMaterializedViewStatement,
 
 	return stmt, nil
 }
+
+// parseTruncateStatement parses TRUNCATE TABLE statement
+// Syntax: TRUNCATE [TABLE] table_name [, table_name ...] [RESTART IDENTITY | CONTINUE IDENTITY] [CASCADE | RESTRICT]
+func (p *Parser) parseTruncateStatement() (*ast.TruncateStatement, error) {
+	stmt := &ast.TruncateStatement{}
+
+	// Optional TABLE keyword
+	if p.isType(models.TokenTypeTable) {
+		p.advance() // Consume TABLE
+	}
+
+	// Parse table names (can be comma-separated)
+	for {
+		if !p.isType(models.TokenTypeIdentifier) {
+			return nil, p.expectedError("table name")
+		}
+		stmt.Tables = append(stmt.Tables, p.currentToken.Literal)
+		p.advance()
+
+		if p.isType(models.TokenTypeComma) {
+			p.advance() // Consume comma
+			continue
+		}
+		break
+	}
+
+	// Parse optional RESTART IDENTITY / CONTINUE IDENTITY
+	if p.isTokenMatch("RESTART") {
+		p.advance() // Consume RESTART
+		if !p.isTokenMatch("IDENTITY") {
+			return nil, p.expectedError("IDENTITY after RESTART")
+		}
+		p.advance() // Consume IDENTITY
+		stmt.RestartIdentity = true
+	} else if p.isTokenMatch("CONTINUE") {
+		p.advance() // Consume CONTINUE
+		if !p.isTokenMatch("IDENTITY") {
+			return nil, p.expectedError("IDENTITY after CONTINUE")
+		}
+		p.advance() // Consume IDENTITY
+		stmt.ContinueIdentity = true
+	}
+
+	// Parse optional CASCADE/RESTRICT
+	if p.isType(models.TokenTypeCascade) {
+		stmt.CascadeType = "CASCADE"
+		p.advance()
+	} else if p.isType(models.TokenTypeRestrict) {
+		stmt.CascadeType = "RESTRICT"
+		p.advance()
+	}
+
+	return stmt, nil
+}

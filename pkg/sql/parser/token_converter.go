@@ -90,53 +90,54 @@ func (tc *TokenConverter) Convert(tokens []models.TokenWithSpan) (*ConversionRes
 }
 
 // handleCompoundToken processes compound tokens that need to be split into multiple tokens
+// It populates both the string-based Type and int-based ModelType for unified type system
 func (tc *TokenConverter) handleCompoundToken(t models.TokenWithSpan) []token.Token {
 	// Handle typed compound tokens first (most specific)
 	switch t.Token.Type {
 	case models.TokenTypeInnerJoin:
 		return []token.Token{
-			{Type: "INNER", Literal: "INNER"},
-			{Type: "JOIN", Literal: "JOIN"},
+			{Type: "INNER", ModelType: models.TokenTypeInner, Literal: "INNER"},
+			{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"},
 		}
 	case models.TokenTypeLeftJoin:
 		return []token.Token{
-			{Type: "LEFT", Literal: "LEFT"},
-			{Type: "JOIN", Literal: "JOIN"},
+			{Type: "LEFT", ModelType: models.TokenTypeLeft, Literal: "LEFT"},
+			{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"},
 		}
 	case models.TokenTypeRightJoin:
 		return []token.Token{
-			{Type: "RIGHT", Literal: "RIGHT"},
-			{Type: "JOIN", Literal: "JOIN"},
+			{Type: "RIGHT", ModelType: models.TokenTypeRight, Literal: "RIGHT"},
+			{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"},
 		}
 	case models.TokenTypeOuterJoin:
 		return []token.Token{
-			{Type: "OUTER", Literal: "OUTER"},
-			{Type: "JOIN", Literal: "JOIN"},
+			{Type: "OUTER", ModelType: models.TokenTypeOuter, Literal: "OUTER"},
+			{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"},
 		}
 	case models.TokenTypeFullJoin:
 		return []token.Token{
-			{Type: "FULL", Literal: "FULL"},
-			{Type: "JOIN", Literal: "JOIN"},
+			{Type: "FULL", ModelType: models.TokenTypeFull, Literal: "FULL"},
+			{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"},
 		}
 	case models.TokenTypeCrossJoin:
 		return []token.Token{
-			{Type: "CROSS", Literal: "CROSS"},
-			{Type: "JOIN", Literal: "JOIN"},
+			{Type: "CROSS", ModelType: models.TokenTypeCross, Literal: "CROSS"},
+			{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"},
 		}
 	case models.TokenTypeOrderBy:
 		return []token.Token{
-			{Type: "ORDER", Literal: "ORDER"},
-			{Type: "BY", Literal: "BY"},
+			{Type: "ORDER", ModelType: models.TokenTypeOrder, Literal: "ORDER"},
+			{Type: "BY", ModelType: models.TokenTypeBy, Literal: "BY"},
 		}
 	case models.TokenTypeGroupBy:
 		return []token.Token{
-			{Type: "GROUP", Literal: "GROUP"},
-			{Type: "BY", Literal: "BY"},
+			{Type: "GROUP", ModelType: models.TokenTypeGroup, Literal: "GROUP"},
+			{Type: "BY", ModelType: models.TokenTypeBy, Literal: "BY"},
 		}
 	case models.TokenTypeGroupingSets:
 		return []token.Token{
-			{Type: "GROUPING", Literal: "GROUPING"},
-			{Type: "SETS", Literal: "SETS"},
+			{Type: "GROUPING", ModelType: models.TokenTypeGrouping, Literal: "GROUPING"},
+			{Type: "SETS", ModelType: models.TokenTypeSets, Literal: "SETS"},
 		}
 	}
 
@@ -144,56 +145,56 @@ func (tc *TokenConverter) handleCompoundToken(t models.TokenWithSpan) []token.To
 	switch t.Token.Value {
 	case "INNER JOIN":
 		return []token.Token{
-			{Type: "INNER", Literal: "INNER"},
-			{Type: "JOIN", Literal: "JOIN"},
+			{Type: "INNER", ModelType: models.TokenTypeInner, Literal: "INNER"},
+			{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"},
 		}
 	case "LEFT JOIN":
 		return []token.Token{
-			{Type: "LEFT", Literal: "LEFT"},
-			{Type: "JOIN", Literal: "JOIN"},
+			{Type: "LEFT", ModelType: models.TokenTypeLeft, Literal: "LEFT"},
+			{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"},
 		}
 	case "RIGHT JOIN":
 		return []token.Token{
-			{Type: "RIGHT", Literal: "RIGHT"},
-			{Type: "JOIN", Literal: "JOIN"},
+			{Type: "RIGHT", ModelType: models.TokenTypeRight, Literal: "RIGHT"},
+			{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"},
 		}
 	case "FULL JOIN":
 		return []token.Token{
-			{Type: "FULL", Literal: "FULL"},
-			{Type: "JOIN", Literal: "JOIN"},
+			{Type: "FULL", ModelType: models.TokenTypeFull, Literal: "FULL"},
+			{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"},
 		}
 	case "CROSS JOIN":
 		return []token.Token{
-			{Type: "CROSS", Literal: "CROSS"},
-			{Type: "JOIN", Literal: "JOIN"},
+			{Type: "CROSS", ModelType: models.TokenTypeCross, Literal: "CROSS"},
+			{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"},
 		}
 	case "LEFT OUTER JOIN":
 		return []token.Token{
-			{Type: "LEFT", Literal: "LEFT"},
-			{Type: "OUTER", Literal: "OUTER"},
-			{Type: "JOIN", Literal: "JOIN"},
+			{Type: "LEFT", ModelType: models.TokenTypeLeft, Literal: "LEFT"},
+			{Type: "OUTER", ModelType: models.TokenTypeOuter, Literal: "OUTER"},
+			{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"},
 		}
 	case "RIGHT OUTER JOIN":
 		return []token.Token{
-			{Type: "RIGHT", Literal: "RIGHT"},
-			{Type: "OUTER", Literal: "OUTER"},
-			{Type: "JOIN", Literal: "JOIN"},
+			{Type: "RIGHT", ModelType: models.TokenTypeRight, Literal: "RIGHT"},
+			{Type: "OUTER", ModelType: models.TokenTypeOuter, Literal: "OUTER"},
+			{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"},
 		}
 	case "FULL OUTER JOIN":
 		return []token.Token{
-			{Type: "FULL", Literal: "FULL"},
-			{Type: "OUTER", Literal: "OUTER"},
-			{Type: "JOIN", Literal: "JOIN"},
+			{Type: "FULL", ModelType: models.TokenTypeFull, Literal: "FULL"},
+			{Type: "OUTER", ModelType: models.TokenTypeOuter, Literal: "OUTER"},
+			{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"},
 		}
 	case "ORDER BY":
 		return []token.Token{
-			{Type: "ORDER", Literal: "ORDER"},
-			{Type: "BY", Literal: "BY"},
+			{Type: "ORDER", ModelType: models.TokenTypeOrder, Literal: "ORDER"},
+			{Type: "BY", ModelType: models.TokenTypeBy, Literal: "BY"},
 		}
 	case "GROUP BY":
 		return []token.Token{
-			{Type: "GROUP", Literal: "GROUP"},
-			{Type: "BY", Literal: "BY"},
+			{Type: "GROUP", ModelType: models.TokenTypeGroup, Literal: "GROUP"},
+			{Type: "BY", ModelType: models.TokenTypeBy, Literal: "BY"},
 		}
 	}
 
@@ -202,59 +203,67 @@ func (tc *TokenConverter) handleCompoundToken(t models.TokenWithSpan) []token.To
 }
 
 // convertSingleToken converts a single token using the type mapping
+// It populates both the string-based Type and int-based ModelType for unified type system
 func (tc *TokenConverter) convertSingleToken(t models.TokenWithSpan) (token.Token, error) {
 	// Handle NUMBER tokens - convert to INT or FLOAT based on value
 	if t.Token.Type == models.TokenTypeNumber {
 		// Check if it's a float (contains decimal point or exponent)
 		if containsDecimalOrExponent(t.Token.Value) {
 			return token.Token{
-				Type:    "FLOAT",
-				Literal: t.Token.Value,
+				Type:      "FLOAT",
+				ModelType: models.TokenTypeNumber, // Preserve original ModelType
+				Literal:   t.Token.Value,
 			}, nil
 		}
 		return token.Token{
-			Type:    "INT",
-			Literal: t.Token.Value,
+			Type:      "INT",
+			ModelType: models.TokenTypeNumber, // Preserve original ModelType
+			Literal:   t.Token.Value,
 		}, nil
 	}
 
 	// Handle IDENTIFIER tokens that might be keywords
 	if t.Token.Type == models.TokenTypeIdentifier {
 		// Check if this identifier is actually a SQL keyword that the parser expects
-		if keywordType := getKeywordTokenType(t.Token.Value); keywordType != "" {
+		if keywordType, modelType := getKeywordTokenTypeWithModel(t.Token.Value); keywordType != "" {
 			return token.Token{
-				Type:    keywordType,
-				Literal: t.Token.Value,
+				Type:      keywordType,
+				ModelType: modelType,
+				Literal:   t.Token.Value,
 			}, nil
 		}
 		// Regular identifier
 		return token.Token{
-			Type:    "IDENT",
-			Literal: t.Token.Value,
+			Type:      "IDENT",
+			ModelType: models.TokenTypeIdentifier,
+			Literal:   t.Token.Value,
 		}, nil
 	}
 
 	// Handle generic KEYWORD tokens - convert based on value
 	if t.Token.Type == models.TokenTypeKeyword {
 		// Check if this keyword has a specific token type
-		if keywordType := getKeywordTokenType(t.Token.Value); keywordType != "" {
+		if keywordType, modelType := getKeywordTokenTypeWithModel(t.Token.Value); keywordType != "" {
 			return token.Token{
-				Type:    keywordType,
-				Literal: t.Token.Value,
+				Type:      keywordType,
+				ModelType: modelType,
+				Literal:   t.Token.Value,
 			}, nil
 		}
 		// Use the keyword value as the type
 		return token.Token{
-			Type:    token.Type(t.Token.Value),
-			Literal: t.Token.Value,
+			Type:      token.Type(t.Token.Value),
+			ModelType: models.TokenTypeKeyword,
+			Literal:   t.Token.Value,
 		}, nil
 	}
 
 	// Try mapped type first (most efficient)
 	if mappedType, exists := tc.typeMap[t.Token.Type]; exists {
 		return token.Token{
-			Type:    mappedType,
-			Literal: t.Token.Value,
+			Type:      mappedType,
+			ModelType: t.Token.Type, // Preserve the original ModelType
+			Literal:   t.Token.Value,
 		}, nil
 	}
 
@@ -262,8 +271,9 @@ func (tc *TokenConverter) convertSingleToken(t models.TokenWithSpan) (token.Toke
 	tokenType := token.Type(fmt.Sprintf("%v", t.Token.Type))
 
 	return token.Token{
-		Type:    tokenType,
-		Literal: t.Token.Value,
+		Type:      tokenType,
+		ModelType: t.Token.Type, // Preserve the original ModelType
+		Literal:   t.Token.Value,
 	}, nil
 }
 
@@ -277,9 +287,9 @@ func containsDecimalOrExponent(s string) bool {
 	return false
 }
 
-// getKeywordTokenType returns the parser token type for SQL keywords that come as IDENTIFIER
-// This handles keywords that the tokenizer doesn't recognize as specific token types
-func getKeywordTokenType(value string) token.Type {
+// getKeywordTokenTypeWithModel returns both the parser token type (string) and models.TokenType (int)
+// for SQL keywords that come as IDENTIFIER. This enables unified type system support.
+func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) {
 	// Convert to uppercase for case-insensitive matching
 	upper := ""
 	for _, r := range value {
@@ -293,113 +303,121 @@ func getKeywordTokenType(value string) token.Type {
 	switch upper {
 	// DML statements
 	case "INSERT":
-		return "INSERT"
+		return "INSERT", models.TokenTypeInsert
 	case "UPDATE":
-		return "UPDATE"
+		return "UPDATE", models.TokenTypeUpdate
 	case "DELETE":
-		return "DELETE"
+		return "DELETE", models.TokenTypeDelete
 	case "INTO":
-		return "INTO"
+		return "INTO", models.TokenTypeInto
 	case "VALUES":
-		return "VALUES"
+		return "VALUES", models.TokenTypeValues
 	case "SET":
-		return "SET"
+		return "SET", models.TokenTypeSet
 
 	// DDL statements
 	case "CREATE":
-		return "CREATE"
+		return "CREATE", models.TokenTypeCreate
 	case "ALTER":
-		return "ALTER"
+		return "ALTER", models.TokenTypeAlter
 	case "DROP":
-		return "DROP"
+		return "DROP", models.TokenTypeDrop
 	case "TABLE":
-		return "TABLE"
+		return "TABLE", models.TokenTypeTable
 	case "INDEX":
-		return "INDEX"
+		return "INDEX", models.TokenTypeIndex
 	case "VIEW":
-		return "VIEW"
+		return "VIEW", models.TokenTypeView
 
 	// CTE and advanced features
 	case "WITH":
-		return "WITH"
+		return "WITH", models.TokenTypeWith
 	case "RECURSIVE":
-		return "RECURSIVE"
+		return "RECURSIVE", models.TokenTypeRecursive
 
 	// Set operations
 	case "UNION":
-		return "UNION"
+		return "UNION", models.TokenTypeUnion
 	case "EXCEPT":
-		return "EXCEPT"
+		return "EXCEPT", models.TokenTypeExcept
 	case "INTERSECT":
-		return "INTERSECT"
+		return "INTERSECT", models.TokenTypeIntersect
 	case "ALL":
-		return "ALL"
+		return "ALL", models.TokenTypeAll
 
 	// Data types and constraints
 	case "PRIMARY":
-		return "PRIMARY"
+		return "PRIMARY", models.TokenTypePrimary
 	case "KEY":
-		return "KEY"
+		return "KEY", models.TokenTypeKey
 	case "FOREIGN":
-		return "FOREIGN"
+		return "FOREIGN", models.TokenTypeForeign
 	case "REFERENCES":
-		return "REFERENCES"
+		return "REFERENCES", models.TokenTypeReferences
 	case "UNIQUE":
-		return "UNIQUE"
+		return "UNIQUE", models.TokenTypeUnique
 	case "CHECK":
-		return "CHECK"
+		return "CHECK", models.TokenTypeCheck
 	case "DEFAULT":
-		return "DEFAULT"
+		return "DEFAULT", models.TokenTypeDefault
 	case "CONSTRAINT":
-		return "CONSTRAINT"
+		return "CONSTRAINT", models.TokenTypeConstraint
 
 	// Column attributes
 	case "AUTO_INCREMENT":
-		return "AUTO_INCREMENT"
+		return "AUTO_INCREMENT", models.TokenTypeAutoIncrement
 	case "AUTOINCREMENT":
-		return "AUTOINCREMENT"
+		return "AUTOINCREMENT", models.TokenTypeAutoIncrement
 
 	// Window function keywords
 	case "OVER":
-		return "OVER"
+		return "OVER", models.TokenTypeOver
 	case "PARTITION":
-		return "PARTITION"
+		return "PARTITION", models.TokenTypePartition
 	case "ROWS":
-		return "ROWS"
+		return "ROWS", models.TokenTypeRows
 	case "RANGE":
-		return "RANGE"
+		return "RANGE", models.TokenTypeRange
 	case "UNBOUNDED":
-		return "UNBOUNDED"
+		return "UNBOUNDED", models.TokenTypeUnbounded
 	case "PRECEDING":
-		return "PRECEDING"
+		return "PRECEDING", models.TokenTypePreceding
 	case "FOLLOWING":
-		return "FOLLOWING"
+		return "FOLLOWING", models.TokenTypeFollowing
 	case "CURRENT":
-		return "CURRENT"
+		return "CURRENT", models.TokenTypeCurrent
 	case "ROW":
-		return "ROW"
+		return "ROW", models.TokenTypeRow
 
 	// Join types (some might come as IDENTIFIER)
 	case "CROSS":
-		return "CROSS"
+		return "CROSS", models.TokenTypeCross
 	case "NATURAL":
-		return "NATURAL"
+		return "NATURAL", models.TokenTypeNatural
 	case "USING":
-		return "USING"
+		return "USING", models.TokenTypeUsing
 
 	// Other common keywords
 	case "DISTINCT":
-		return "DISTINCT"
+		return "DISTINCT", models.TokenTypeDistinct
 	case "EXISTS":
-		return "EXISTS"
+		return "EXISTS", models.TokenTypeExists
 	case "ANY":
-		return "ANY"
+		return "ANY", models.TokenTypeAny
 	case "SOME":
-		return "SOME"
+		return "SOME", models.TokenTypeSome
+
+	// Grouping set keywords
+	case "ROLLUP":
+		return "ROLLUP", models.TokenTypeRollup
+	case "CUBE":
+		return "CUBE", models.TokenTypeCube
+	case "GROUPING":
+		return "GROUPING", models.TokenTypeGrouping
 
 	default:
 		// Not a recognized keyword, will be treated as identifier
-		return ""
+		return "", models.TokenTypeUnknown
 	}
 }
 

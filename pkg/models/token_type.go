@@ -250,6 +250,7 @@ const (
 	TokenTypeRollup       TokenType = 391
 	TokenTypeCube         TokenType = 392
 	TokenTypeGrouping     TokenType = 393
+	TokenTypeSets         TokenType = 394 // SETS keyword for GROUPING SETS
 
 	// Role/Permission Keywords (400-419)
 	TokenTypeRole       TokenType = 400
@@ -513,6 +514,7 @@ var tokenStringMap = map[TokenType]string{
 	TokenTypeRollup:       "ROLLUP",
 	TokenTypeCube:         "CUBE",
 	TokenTypeGrouping:     "GROUPING",
+	TokenTypeSets:         "SETS",
 
 	// Role/Permission Keywords
 	TokenTypeRole:       "ROLE",

@@ -1,12 +1,37 @@
 package token
 
-// Type represents a token type
+import "github.com/ajitpratap0/GoSQLX/pkg/models"
+
+// Type represents a token type (string-based, for backward compatibility)
 type Type string
 
 // Token represents a lexical token
+// The Token struct supports both string-based (Type) and int-based (ModelType) type systems.
+// ModelType is the primary system going forward, while Type is maintained for backward compatibility.
 type Token struct {
-	Type    Type
-	Literal string
+	Type      Type             // String-based type (backward compatibility)
+	ModelType models.TokenType // Int-based type (primary, for performance)
+	Literal   string           // The literal value of the token
+}
+
+// HasModelType returns true if the ModelType field is populated
+func (t Token) HasModelType() bool {
+	return t.ModelType != models.TokenTypeUnknown && t.ModelType != 0
+}
+
+// IsType checks if the token matches the given models.TokenType (fast int comparison)
+func (t Token) IsType(expected models.TokenType) bool {
+	return t.ModelType == expected
+}
+
+// IsAnyType checks if the token matches any of the given models.TokenType values
+func (t Token) IsAnyType(types ...models.TokenType) bool {
+	for _, typ := range types {
+		if t.ModelType == typ {
+			return true
+		}
+	}
+	return false
 }
 
 // Token types
@@ -131,5 +156,91 @@ func (t Type) IsLiteral() bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// stringToModelType maps string-based token types to models.TokenType for unified type system
+var stringToModelType = map[Type]models.TokenType{
+	// Special tokens
+	ILLEGAL:    models.TokenTypeIllegal,
+	EOF:        models.TokenTypeEOF,
+	WS:         models.TokenTypeWhitespace,
+	IDENT:      models.TokenTypeIdentifier,
+	INT:        models.TokenTypeNumber,
+	FLOAT:      models.TokenTypeNumber,
+	STRING:     models.TokenTypeString,
+	TRUE:       models.TokenTypeTrue,
+	FALSE:      models.TokenTypeFalse,
+	EQ:         models.TokenTypeEq,
+	NEQ:        models.TokenTypeNeq,
+	LT:         models.TokenTypeLt,
+	LTE:        models.TokenTypeLtEq,
+	GT:         models.TokenTypeGt,
+	GTE:        models.TokenTypeGtEq,
+	ASTERISK:   models.TokenTypeAsterisk,
+	COMMA:      models.TokenTypeComma,
+	SEMICOLON:  models.TokenTypeSemicolon,
+	LPAREN:     models.TokenTypeLParen,
+	RPAREN:     models.TokenTypeRParen,
+	DOT:        models.TokenTypePeriod,
+	SELECT:     models.TokenTypeSelect,
+	INSERT:     models.TokenTypeInsert,
+	UPDATE:     models.TokenTypeUpdate,
+	DELETE:     models.TokenTypeDelete,
+	FROM:       models.TokenTypeFrom,
+	WHERE:      models.TokenTypeWhere,
+	ORDER:      models.TokenTypeOrder,
+	BY:         models.TokenTypeBy,
+	GROUP:      models.TokenTypeGroup,
+	HAVING:     models.TokenTypeHaving,
+	LIMIT:      models.TokenTypeLimit,
+	OFFSET:     models.TokenTypeOffset,
+	AS:         models.TokenTypeAs,
+	AND:        models.TokenTypeAnd,
+	OR:         models.TokenTypeOr,
+	IN:         models.TokenTypeIn,
+	NOT:        models.TokenTypeNot,
+	NULL:       models.TokenTypeNull,
+	ALL:        models.TokenTypeAll,
+	ON:         models.TokenTypeOn,
+	INTO:       models.TokenTypeInto,
+	VALUES:     models.TokenTypeValues,
+	ALTER:      models.TokenTypeAlter,
+	TABLE:      models.TokenTypeTable,
+	ROLE:       models.TokenTypeRole,
+	ADD:        models.TokenTypeKeyword, // Generic keyword
+	DROP:       models.TokenTypeDrop,
+	COLUMN:     models.TokenTypeColumn,
+	CONSTRAINT: models.TokenTypeConstraint,
+	RENAME:     models.TokenTypeRename,
+	TO:         models.TokenTypeTo,
+	SET:        models.TokenTypeSet,
+	USER:       models.TokenTypeUser,
+	CASCADE:    models.TokenTypeCascade,
+	WITH:       models.TokenTypeWith,
+	CHECK:      models.TokenTypeCheck,
+	USING:      models.TokenTypeUsing,
+	PASSWORD:   models.TokenTypePassword,
+	LOGIN:      models.TokenTypeLogin,
+	SUPERUSER:  models.TokenTypeSuperuser,
+	CREATEDB:   models.TokenTypeCreateDB,
+	CREATEROLE: models.TokenTypeCreateRole,
+}
+
+// ToModelType converts a string-based Type to models.TokenType
+func (t Type) ToModelType() models.TokenType {
+	if mt, ok := stringToModelType[t]; ok {
+		return mt
+	}
+	// For unknown types, try to match by string value
+	return models.TokenTypeKeyword // Default to generic keyword
+}
+
+// NewTokenWithModelType creates a token with both string and int types populated
+func NewTokenWithModelType(typ Type, literal string) Token {
+	return Token{
+		Type:      typ,
+		ModelType: typ.ToModelType(),
+		Literal:   literal,
 	}
 }

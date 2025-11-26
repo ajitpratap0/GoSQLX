@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
@@ -43,6 +44,7 @@ type Parser struct {
 }
 
 // Parse parses the tokens into an AST
+// Uses fast ModelType (int) comparisons for hot path optimization
 func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 	p.tokens = tokens
 	p.currentPos = 0
@@ -60,10 +62,10 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 	}
 	result.Statements = make([]ast.Statement, 0, estimatedStmts)
 
-	// Parse statements
-	for p.currentPos < len(tokens) && p.currentToken.Type != token.EOF {
+	// Parse statements using ModelType (int) comparisons for speed
+	for p.currentPos < len(tokens) && !p.isType(models.TokenTypeEOF) {
 		// Skip semicolons between statements
-		if p.currentToken.Type == token.SEMICOLON {
+		if p.isType(models.TokenTypeSemicolon) {
 			p.advance()
 			continue
 		}
@@ -77,7 +79,7 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 		result.Statements = append(result.Statements, stmt)
 
 		// Optionally consume semicolon after statement
-		if p.currentToken.Type == token.SEMICOLON {
+		if p.isType(models.TokenTypeSemicolon) {
 			p.advance()
 		}
 	}
@@ -134,8 +136,8 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 	}
 	result.Statements = make([]ast.Statement, 0, estimatedStmts)
 
-	// Parse statements
-	for p.currentPos < len(tokens) && p.currentToken.Type != token.EOF {
+	// Parse statements using ModelType (int) comparisons for speed
+	for p.currentPos < len(tokens) && !p.isType(models.TokenTypeEOF) {
 		// Check context before each statement
 		if err := ctx.Err(); err != nil {
 			// Clean up the AST on error
@@ -144,7 +146,7 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 		}
 
 		// Skip semicolons between statements
-		if p.currentToken.Type == token.SEMICOLON {
+		if p.isType(models.TokenTypeSemicolon) {
 			p.advance()
 			continue
 		}
@@ -158,7 +160,7 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 		result.Statements = append(result.Statements, stmt)
 
 		// Optionally consume semicolon after statement
-		if p.currentToken.Type == token.SEMICOLON {
+		if p.isType(models.TokenTypeSemicolon) {
 			p.advance()
 		}
 	}
@@ -183,6 +185,7 @@ func (p *Parser) Release() {
 }
 
 // parseStatement parses a single SQL statement
+// Uses fast int-based ModelType comparisons with fallback for hot path optimization
 func (p *Parser) parseStatement() (ast.Statement, error) {
 	// Check context if available
 	if p.ctx != nil {
@@ -191,39 +194,48 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		}
 	}
 
-	switch p.currentToken.Type {
-	case "WITH":
+	// Use isType() helper for fast int comparison with fallback
+	if p.isType(models.TokenTypeWith) {
 		return p.parseWithStatement()
-	case "SELECT":
+	}
+	if p.isType(models.TokenTypeSelect) {
 		p.advance() // Consume SELECT
 		return p.parseSelectWithSetOperations()
-	case "INSERT":
+	}
+	if p.isType(models.TokenTypeInsert) {
 		p.advance() // Consume INSERT
 		return p.parseInsertStatement()
-	case "UPDATE":
+	}
+	if p.isType(models.TokenTypeUpdate) {
 		p.advance() // Consume UPDATE
 		return p.parseUpdateStatement()
-	case "DELETE":
+	}
+	if p.isType(models.TokenTypeDelete) {
 		p.advance() // Consume DELETE
 		return p.parseDeleteStatement()
-	case "ALTER":
+	}
+	if p.isType(models.TokenTypeAlter) {
 		p.advance() // Consume ALTER
 		return p.parseAlterTableStmt()
-	case "MERGE":
+	}
+	if p.isType(models.TokenTypeMerge) {
 		p.advance() // Consume MERGE
 		return p.parseMergeStatement()
-	case "CREATE":
+	}
+	if p.isType(models.TokenTypeCreate) {
 		p.advance() // Consume CREATE
 		return p.parseCreateStatement()
-	case "DROP":
+	}
+	if p.isType(models.TokenTypeDrop) {
 		p.advance() // Consume DROP
 		return p.parseDropStatement()
-	case "REFRESH":
+	}
+	if p.isType(models.TokenTypeRefresh) {
 		p.advance() // Consume REFRESH
 		return p.parseRefreshStatement()
-	default:
-		return nil, p.expectedError("statement")
 	}
+
+	return nil, p.expectedError("statement")
 }
 
 // NewParser creates a new parser
@@ -260,6 +272,103 @@ func (p *Parser) peekToken() token.Token {
 	}
 	return token.Token{}
 }
+
+// =============================================================================
+// ModelType-based Helper Methods (Phase 2 - Fast Int Comparisons)
+// =============================================================================
+// These methods use int-based ModelType comparisons which are significantly
+// faster than string comparisons (~0.24ns vs ~3.4ns). Use these for hot paths.
+// They include fallback to string-based Type comparison for backward compatibility
+// with tests that create tokens directly without setting ModelType.
+
+// modelTypeToString maps ModelType to expected string Type for fallback comparison
+var modelTypeToString = map[models.TokenType]token.Type{
+	models.TokenTypeEOF:       token.EOF,
+	models.TokenTypeSemicolon: token.SEMICOLON,
+	models.TokenTypeSelect:    token.SELECT,
+	models.TokenTypeInsert:    token.INSERT,
+	models.TokenTypeUpdate:    token.UPDATE,
+	models.TokenTypeDelete:    token.DELETE,
+	models.TokenTypeWith:      token.WITH,
+	models.TokenTypeAlter:     token.ALTER,
+	models.TokenTypeDrop:      token.DROP,
+	models.TokenTypeCreate:    "CREATE",
+	models.TokenTypeMerge:     "MERGE",
+	models.TokenTypeRefresh:   "REFRESH",
+}
+
+// isType checks if the current token's ModelType matches the expected type.
+// Falls back to string comparison if ModelType is not set (for backward compatibility).
+func (p *Parser) isType(expected models.TokenType) bool {
+	// Fast path: use int comparison if ModelType is set
+	if p.currentToken.ModelType != 0 {
+		return p.currentToken.ModelType == expected
+	}
+	// Fallback: string comparison for tokens without ModelType
+	if str, ok := modelTypeToString[expected]; ok {
+		return p.currentToken.Type == str
+	}
+	return false
+}
+
+// isAnyType checks if the current token's ModelType matches any of the given types.
+// More efficient than multiple isType calls when checking many alternatives.
+func (p *Parser) isAnyType(types ...models.TokenType) bool {
+	for _, t := range types {
+		if p.isType(t) {
+			return true
+		}
+	}
+	return false
+}
+
+// peekIsType checks if the peek token's ModelType matches the expected type.
+func (p *Parser) peekIsType(expected models.TokenType) bool {
+	peek := p.peekToken()
+	// Fast path: use int comparison if ModelType is set
+	if peek.ModelType != 0 {
+		return peek.ModelType == expected
+	}
+	// Fallback: string comparison for tokens without ModelType
+	if str, ok := modelTypeToString[expected]; ok {
+		return peek.Type == str
+	}
+	return false
+}
+
+// peekIsAnyType checks if the peek token's ModelType matches any of the given types.
+func (p *Parser) peekIsAnyType(types ...models.TokenType) bool {
+	for _, t := range types {
+		if p.peekIsType(t) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchType checks if the current token's ModelType matches and advances if true.
+// Returns true if matched (and advanced), false otherwise.
+func (p *Parser) matchType(expected models.TokenType) bool {
+	if p.isType(expected) {
+		p.advance()
+		return true
+	}
+	return false
+}
+
+// matchAnyType checks if the current token's ModelType matches any given type and advances if true.
+// Returns true if matched (and advanced), false otherwise.
+func (p *Parser) matchAnyType(types ...models.TokenType) bool {
+	for _, t := range types {
+		if p.isType(t) {
+			p.advance()
+			return true
+		}
+	}
+	return false
+}
+
+// =============================================================================
 
 // expectedError returns an error for unexpected token
 func (p *Parser) expectedError(expected string) error {

@@ -24,15 +24,52 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
 
+// parserPool provides object pooling for Parser instances to reduce allocations.
+// This significantly improves performance in high-throughput scenarios.
+var parserPool = sync.Pool{
+	New: func() interface{} {
+		return &Parser{}
+	},
+}
+
+// GetParser returns a Parser instance from the pool.
+// The caller must call PutParser when done to return it to the pool.
+func GetParser() *Parser {
+	return parserPool.Get().(*Parser)
+}
+
+// PutParser returns a Parser instance to the pool after resetting it.
+// This should be called after parsing is complete to enable reuse.
+func PutParser(p *Parser) {
+	if p != nil {
+		p.Reset()
+		parserPool.Put(p)
+	}
+}
+
+// Reset clears the parser state for reuse from the pool.
+func (p *Parser) Reset() {
+	p.tokens = nil
+	p.currentPos = 0
+	p.currentToken = token.Token{}
+	p.depth = 0
+	p.ctx = nil
+}
+
 // MaxRecursionDepth defines the maximum allowed recursion depth for parsing operations.
 // This prevents stack overflow from deeply nested expressions, CTEs, or other recursive structures.
 const MaxRecursionDepth = 100
+
+// modelTypeUnset is the zero value for ModelType, indicating the type was not set.
+// Used for fast path checks: tokens with ModelType set use O(1) switch dispatch.
+const modelTypeUnset models.TokenType = 0
 
 // Parser represents a SQL parser
 type Parser struct {
@@ -194,15 +231,45 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		}
 	}
 
-	// Quick check: is this any kind of DML/DDL statement?
-	// Uses isAnyType for efficient multiple type checking
-	if !p.isAnyType(models.TokenTypeWith, models.TokenTypeSelect, models.TokenTypeInsert,
-		models.TokenTypeUpdate, models.TokenTypeDelete, models.TokenTypeAlter,
-		models.TokenTypeMerge, models.TokenTypeCreate, models.TokenTypeDrop, models.TokenTypeRefresh) {
-		return nil, p.expectedError("statement")
+	// Fast path: O(1) switch dispatch on ModelType (compiles to jump table)
+	// This replaces the previous O(n) isAnyType + O(n) matchType approach
+	if p.currentToken.ModelType != modelTypeUnset {
+		switch p.currentToken.ModelType {
+		case models.TokenTypeWith:
+			return p.parseWithStatement()
+		case models.TokenTypeSelect:
+			p.advance()
+			return p.parseSelectWithSetOperations()
+		case models.TokenTypeInsert:
+			p.advance()
+			return p.parseInsertStatement()
+		case models.TokenTypeUpdate:
+			p.advance()
+			return p.parseUpdateStatement()
+		case models.TokenTypeDelete:
+			p.advance()
+			return p.parseDeleteStatement()
+		case models.TokenTypeAlter:
+			p.advance()
+			return p.parseAlterTableStmt()
+		case models.TokenTypeMerge:
+			p.advance()
+			return p.parseMergeStatement()
+		case models.TokenTypeCreate:
+			p.advance()
+			return p.parseCreateStatement()
+		case models.TokenTypeDrop:
+			p.advance()
+			return p.parseDropStatement()
+		case models.TokenTypeRefresh:
+			p.advance()
+			return p.parseRefreshStatement()
+		}
+		// ModelType set but not a statement keyword - fall through to fallback
 	}
 
-	// Use isType() helper for fast int comparison with fallback
+	// Fallback: string comparison for tokens without ModelType (e.g., tests)
+	// or tokens with ModelType that aren't statement starters (e.g., operators)
 	if p.isType(models.TokenTypeWith) {
 		return p.parseWithStatement()
 	}
@@ -234,7 +301,6 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 	if p.matchType(models.TokenTypeRefresh) {
 		return p.parseRefreshStatement()
 	}
-
 	return nil, p.expectedError("statement")
 }
 
@@ -449,7 +515,7 @@ var modelTypeToString = map[models.TokenType]token.Type{
 // Falls back to string comparison if ModelType is not set (for backward compatibility).
 func (p *Parser) isType(expected models.TokenType) bool {
 	// Fast path: use int comparison if ModelType is set
-	if p.currentToken.ModelType != 0 {
+	if p.currentToken.ModelType != modelTypeUnset {
 		return p.currentToken.ModelType == expected
 	}
 	// Fallback: string comparison for tokens without ModelType
@@ -478,6 +544,58 @@ func (p *Parser) matchType(expected models.TokenType) bool {
 		return true
 	}
 	return false
+}
+
+// isComparisonOperator checks if the current token is a comparison operator using O(1) switch.
+// This is a hot path optimization for expression parsing.
+func (p *Parser) isComparisonOperator() bool {
+	// Fast path: use ModelType switch for O(1) lookup
+	if p.currentToken.ModelType != modelTypeUnset {
+		switch p.currentToken.ModelType {
+		case models.TokenTypeEq, models.TokenTypeLt, models.TokenTypeGt,
+			models.TokenTypeNeq, models.TokenTypeLtEq, models.TokenTypeGtEq:
+			return true
+		}
+		return false
+	}
+	// Fallback: string comparison for tokens without ModelType (e.g., tests)
+	switch p.currentToken.Type {
+	case "=", "<", ">", "!=", "<=", ">=", "<>":
+		return true
+	}
+	return false
+}
+
+// isQuantifier checks if the current token is ANY or ALL using O(1) switch.
+// This is used for subquery quantifier operators like "= ANY (...)".
+func (p *Parser) isQuantifier() bool {
+	// Fast path: use ModelType switch for O(1) lookup
+	if p.currentToken.ModelType != modelTypeUnset {
+		switch p.currentToken.ModelType {
+		case models.TokenTypeAny, models.TokenTypeAll:
+			return true
+		}
+		return false
+	}
+	// Fallback: string comparison for tokens without ModelType
+	upper := strings.ToUpper(p.currentToken.Literal)
+	return upper == "ANY" || upper == "ALL"
+}
+
+// isBooleanLiteral checks if the current token is TRUE or FALSE using O(1) switch.
+// This is used for parsing boolean literal values in expressions.
+func (p *Parser) isBooleanLiteral() bool {
+	// Fast path: use ModelType switch for O(1) lookup
+	if p.currentToken.ModelType != modelTypeUnset {
+		switch p.currentToken.ModelType {
+		case models.TokenTypeTrue, models.TokenTypeFalse:
+			return true
+		}
+		return false
+	}
+	// Fallback: string comparison for tokens without ModelType
+	upper := strings.ToUpper(p.currentToken.Literal)
+	return upper == "TRUE" || upper == "FALSE"
 }
 
 // =============================================================================

@@ -236,15 +236,14 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 		return nil, p.expectedError("NULL")
 	}
 
-	// Check if this is a comparison binary expression
-	if p.isAnyType(models.TokenTypeEq, models.TokenTypeLt, models.TokenTypeGt, models.TokenTypeNeq, models.TokenTypeLtEq, models.TokenTypeGtEq) ||
-		p.currentToken.Type == "<>" {
+	// Check if this is a comparison binary expression (uses O(1) switch instead of O(n) isAnyType)
+	if p.isComparisonOperator() {
 		// Save the operator
 		operator := p.currentToken.Literal
 		p.advance()
 
-		// Check for ANY/ALL subquery operators
-		if p.isAnyType(models.TokenTypeAny, models.TokenTypeAll) {
+		// Check for ANY/ALL subquery operators (uses O(1) switch instead of O(n) isAnyType)
+		if p.isQuantifier() {
 			quantifier := p.currentToken.Type
 			p.advance() // Consume ANY/ALL
 
@@ -366,8 +365,8 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return &ast.LiteralValue{Value: value, Type: "float"}, nil
 	}
 
-	if p.isAnyType(models.TokenTypeTrue, models.TokenTypeFalse) {
-		// Handle boolean literals
+	if p.isBooleanLiteral() {
+		// Handle boolean literals (uses O(1) switch instead of O(n) isAnyType)
 		value := p.currentToken.Literal
 		p.advance()
 		return &ast.LiteralValue{Value: value, Type: "bool"}, nil

@@ -2,10 +2,20 @@ package parser
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
+
+// keywordBufferPool reuses byte buffers for keyword uppercase conversion.
+// Most SQL keywords are short (max ~20 chars), so a 32-byte buffer covers all cases.
+var keywordBufferPool = sync.Pool{
+	New: func() interface{} {
+		buf := make([]byte, 32)
+		return &buf
+	},
+}
 
 // TokenConverter provides centralized, optimized token conversion
 // from tokenizer output (models.TokenWithSpan) to parser input (token.Token)
@@ -321,17 +331,28 @@ func containsDecimalOrExponent(s string) bool {
 // getKeywordTokenTypeWithModel returns both the parser token type (string) and models.TokenType (int)
 // for SQL keywords that come as IDENTIFIER. This enables unified type system support.
 func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) {
-	// Convert to uppercase for case-insensitive matching
-	upper := ""
-	for _, r := range value {
-		if r >= 'a' && r <= 'z' {
-			upper += string(r - 32) // Convert to uppercase
+	// Fast path: Use pooled buffer for uppercase conversion (avoids allocation per call)
+	// SQL keywords are ASCII, so this is safe and much faster than string operations
+	var upper []byte
+	n := len(value)
+	if n <= 32 {
+		// Use pooled buffer for small strings (covers all SQL keywords)
+		bufPtr := keywordBufferPool.Get().(*[]byte)
+		upper = (*bufPtr)[:n]
+		defer keywordBufferPool.Put(bufPtr)
+	} else {
+		// Fallback for unusually long identifiers
+		upper = make([]byte, n)
+	}
+	for i := 0; i < n; i++ {
+		c := value[i]
+		if c >= 'a' && c <= 'z' {
+			upper[i] = c - 32 // Convert to uppercase
 		} else {
-			upper += string(r)
+			upper[i] = c
 		}
 	}
-
-	switch upper {
+	switch string(upper) {
 	// DML statements
 	case "INSERT":
 		return "INSERT", models.TokenTypeInsert

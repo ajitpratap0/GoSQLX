@@ -549,6 +549,22 @@ func (p *Parser) isQuantifier() bool {
 	return upper == "ANY" || upper == "ALL"
 }
 
+// isBooleanLiteral checks if the current token is TRUE or FALSE using O(1) switch.
+// This is used for parsing boolean literal values in expressions.
+func (p *Parser) isBooleanLiteral() bool {
+	// Fast path: use ModelType switch for O(1) lookup
+	if p.currentToken.ModelType != modelTypeUnset {
+		switch p.currentToken.ModelType {
+		case models.TokenTypeTrue, models.TokenTypeFalse:
+			return true
+		}
+		return false
+	}
+	// Fallback: string comparison for tokens without ModelType
+	upper := strings.ToUpper(p.currentToken.Literal)
+	return upper == "TRUE" || upper == "FALSE"
+}
+
 // =============================================================================
 
 // expectedError returns an error for unexpected token

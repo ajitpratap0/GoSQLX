@@ -365,8 +365,8 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return &ast.LiteralValue{Value: value, Type: "float"}, nil
 	}
 
-	if p.isAnyType(models.TokenTypeTrue, models.TokenTypeFalse) {
-		// Handle boolean literals
+	if p.isBooleanLiteral() {
+		// Handle boolean literals (uses O(1) switch instead of O(n) isAnyType)
 		value := p.currentToken.Literal
 		p.advance()
 		return &ast.LiteralValue{Value: value, Type: "bool"}, nil

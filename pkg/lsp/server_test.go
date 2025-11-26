@@ -381,3 +381,152 @@ func TestKeywordDocumentation(t *testing.T) {
 		}
 	}
 }
+
+func TestExtractPositionFromError(t *testing.T) {
+	content := "SELECT *\nFROM users\nWHERE id = 1"
+
+	tests := []struct {
+		name         string
+		errMsg       string
+		expectedLine int
+		expectedChar int
+	}{
+		{
+			name:         "line and column pattern",
+			errMsg:       "syntax error at line 2, column 5",
+			expectedLine: 1, // 0-based
+			expectedChar: 4, // 0-based
+		},
+		{
+			name:         "line only pattern",
+			errMsg:       "unexpected token at line 3",
+			expectedLine: 2, // 0-based
+			expectedChar: 0,
+		},
+		{
+			name:         "bracket pattern",
+			errMsg:       "parse error [2:10]",
+			expectedLine: 1,
+			expectedChar: 9,
+		},
+		{
+			name:         "position pattern",
+			errMsg:       "error at position 15",
+			expectedLine: 1, // "SELECT *\n" = 9 chars, so position 15 is line 1, col 6
+			expectedChar: 6,
+		},
+		{
+			name:         "no position info",
+			errMsg:       "some error without position",
+			expectedLine: 0,
+			expectedChar: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			line, char := extractPositionFromError(tt.errMsg, content, 0)
+			if line != tt.expectedLine {
+				t.Errorf("line = %d, want %d", line, tt.expectedLine)
+			}
+			if char != tt.expectedChar {
+				t.Errorf("char = %d, want %d", char, tt.expectedChar)
+			}
+		})
+	}
+}
+
+func TestOffsetToLineColumn(t *testing.T) {
+	content := "SELECT *\nFROM users\nWHERE id = 1"
+
+	tests := []struct {
+		offset       int
+		expectedLine int
+		expectedCol  int
+	}{
+		{0, 0, 0},    // Start of file
+		{6, 0, 6},    // "SELECT" -> 'T'
+		{9, 1, 0},    // After "SELECT *\n" -> start of line 1
+		{14, 1, 5},   // "FROM " -> space after FROM
+		{20, 2, 0},   // Start of line 2 (WHERE)
+		{100, 2, 11}, // Beyond end -> clamped to last char (content length is 32, so index 31 = col 11)
+	}
+
+	for _, tt := range tests {
+		line, col := offsetToLineColumn(content, tt.offset)
+		if line != tt.expectedLine || col != tt.expectedCol {
+			t.Errorf("offsetToLineColumn(%d) = (%d, %d), want (%d, %d)",
+				tt.offset, line, col, tt.expectedLine, tt.expectedCol)
+		}
+	}
+}
+
+func TestSnippetCompletions(t *testing.T) {
+	mock := newMockReadWriter()
+	logger := log.New(io.Discard, "", 0)
+	server := NewServer(mock.input, mock.output, logger)
+
+	// Open a document with cursor in the middle of "sel"
+	server.Documents().Open("file:///test.sql", "sql", 1, "sel")
+
+	completionParams := CompletionParams{
+		TextDocumentPositionParams: TextDocumentPositionParams{
+			TextDocument: TextDocumentIdentifier{URI: "file:///test.sql"},
+			Position:     Position{Line: 0, Character: 2}, // Position within "sel"
+		},
+	}
+
+	paramsJSON, _ := json.Marshal(completionParams)
+	result, err := server.handler.HandleRequest("textDocument/completion", paramsJSON)
+	if err != nil {
+		t.Fatalf("completion failed: %v", err)
+	}
+
+	completionList, ok := result.(*CompletionList)
+	if !ok {
+		t.Fatalf("expected CompletionList, got %T", result)
+	}
+
+	// Check that snippet completions are included (like "sel", "selall", etc.)
+	snippetFound := false
+	for _, item := range completionList.Items {
+		if item.Kind == SnippetCompletion && item.Label == "sel" {
+			snippetFound = true
+			if item.InsertTextFormat != SnippetFormat {
+				t.Error("expected snippet to have SnippetFormat")
+			}
+			break
+		}
+	}
+	if !snippetFound {
+		t.Error("expected 'sel' snippet in completion items")
+	}
+}
+
+func TestIncrementalSync(t *testing.T) {
+	mock := newMockReadWriter()
+	logger := log.New(io.Discard, "", 0)
+	server := NewServer(mock.input, mock.output, logger)
+
+	// Initialize and verify incremental sync is advertised
+	initParams := InitializeParams{
+		ProcessID:    1234,
+		RootURI:      "file:///workspace",
+		Capabilities: ClientCapabilities{},
+	}
+
+	paramsJSON, _ := json.Marshal(initParams)
+	result, err := server.handler.HandleRequest("initialize", paramsJSON)
+	if err != nil {
+		t.Fatalf("initialize failed: %v", err)
+	}
+
+	initResult, ok := result.(*InitializeResult)
+	if !ok {
+		t.Fatalf("expected InitializeResult, got %T", result)
+	}
+
+	if initResult.Capabilities.TextDocumentSync.Change != SyncIncremental {
+		t.Errorf("expected SyncIncremental, got %v", initResult.Capabilities.TextDocumentSync.Change)
+	}
+}

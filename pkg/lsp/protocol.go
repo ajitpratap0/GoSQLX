@@ -360,3 +360,23 @@ type TextEdit struct {
 
 // ShutdownResult is the result of a shutdown request
 type ShutdownResult struct{}
+
+// ShowMessageParams is used to show a message to the user
+type ShowMessageParams struct {
+	Type    MessageType `json:"type"`
+	Message string      `json:"message"`
+}
+
+// MessageType represents the type of message to show
+type MessageType int
+
+const (
+	// MessageError is an error message
+	MessageError MessageType = 1
+	// MessageWarning is a warning message
+	MessageWarning MessageType = 2
+	// MessageInfo is an info message
+	MessageInfo MessageType = 3
+	// MessageLog is a log message
+	MessageLog MessageType = 4
+)

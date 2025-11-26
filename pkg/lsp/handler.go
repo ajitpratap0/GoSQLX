@@ -3,6 +3,8 @@ package lsp
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
@@ -72,7 +74,7 @@ func (h *Handler) handleInitialize(params json.RawMessage) (*InitializeResult, e
 		Capabilities: ServerCapabilities{
 			TextDocumentSync: &TextDocumentSyncOptions{
 				OpenClose: true,
-				Change:    SyncFull,
+				Change:    SyncIncremental, // Support incremental updates for better performance
 				Save: &SaveOptions{
 					IncludeText: true,
 				},
@@ -113,6 +115,7 @@ func (h *Handler) handleDidOpen(params json.RawMessage) {
 	var p DidOpenTextDocumentParams
 	if err := json.Unmarshal(params, &p); err != nil {
 		h.server.Logger().Printf("textDocument/didOpen: failed to parse params: %v (raw: %s)", err, truncateForLog(params))
+		h.sendParseError("didOpen", err)
 		return
 	}
 
@@ -134,6 +137,7 @@ func (h *Handler) handleDidChange(params json.RawMessage) {
 	var p DidChangeTextDocumentParams
 	if err := json.Unmarshal(params, &p); err != nil {
 		h.server.Logger().Printf("textDocument/didChange: failed to parse params: %v (raw: %s)", err, truncateForLog(params))
+		h.sendParseError("didChange", err)
 		return
 	}
 
@@ -156,6 +160,7 @@ func (h *Handler) handleDidClose(params json.RawMessage) {
 	var p DidCloseTextDocumentParams
 	if err := json.Unmarshal(params, &p); err != nil {
 		h.server.Logger().Printf("textDocument/didClose: failed to parse params: %v (raw: %s)", err, truncateForLog(params))
+		h.sendParseError("didClose", err)
 		return
 	}
 
@@ -174,6 +179,7 @@ func (h *Handler) handleDidSave(params json.RawMessage) {
 	var p DidSaveTextDocumentParams
 	if err := json.Unmarshal(params, &p); err != nil {
 		h.server.Logger().Printf("textDocument/didSave: failed to parse params: %v (raw: %s)", err, truncateForLog(params))
+		h.sendParseError("didSave", err)
 		return
 	}
 
@@ -214,21 +220,48 @@ func (h *Handler) validateDocument(uri, content string, version int) {
 	h.server.Logger().Printf("Published %d diagnostics for %s", len(diagnostics), uri)
 }
 
+// sendParseError sends an error message to the client when notification parsing fails
+func (h *Handler) sendParseError(method string, err error) {
+	h.server.SendNotification("window/showMessage", ShowMessageParams{
+		Type:    MessageWarning,
+		Message: fmt.Sprintf("GoSQLX LSP: Failed to process %s notification: %v", method, err),
+	})
+}
+
+// Position extraction patterns for GoSQLX error messages
+var (
+	// Matches patterns like "at line 5, column 10" or "line 5 column 10"
+	lineColPattern = regexp.MustCompile(`(?i)(?:at\s+)?line\s+(\d+)(?:,?\s*column\s+(\d+))?`)
+	// Matches patterns like "position 42" or "at position 42"
+	positionPattern = regexp.MustCompile(`(?i)(?:at\s+)?position\s+(\d+)`)
+	// Matches patterns like "[1:5]" (line:column)
+	bracketPattern = regexp.MustCompile(`\[(\d+):(\d+)\]`)
+)
+
 // createDiagnosticFromError creates a diagnostic from an error message
 func (h *Handler) createDiagnosticFromError(content, errMsg string, defaultLine int) Diagnostic {
-	// Try to extract position from error message
-	// GoSQLX errors often include position info like "at line X, column Y"
-	line := defaultLine
-	char := 0
-
-	// Simple heuristic: show error at first line if no position info
-	// A more sophisticated implementation would parse the error message
+	line, char := extractPositionFromError(errMsg, content, defaultLine)
 
 	// Calculate end position (end of line or reasonable span)
 	lines := strings.Split(content, "\n")
-	endChar := 0
+	endChar := char + 1
 	if line < len(lines) {
-		endChar = len(lines[line])
+		// Extend to end of word or reasonable span
+		lineContent := lines[line]
+		if char < len(lineContent) {
+			// Find end of current word/token
+			end := char
+			for end < len(lineContent) && !isWhitespace(lineContent[end]) {
+				end++
+			}
+			if end > char {
+				endChar = end
+			} else {
+				endChar = len(lineContent)
+			}
+		} else {
+			endChar = len(lineContent)
+		}
 	}
 
 	return Diagnostic{
@@ -240,6 +273,88 @@ func (h *Handler) createDiagnosticFromError(content, errMsg string, defaultLine 
 		Source:   "gosqlx",
 		Message:  errMsg,
 	}
+}
+
+// extractPositionFromError attempts to extract line and column from error message
+func extractPositionFromError(errMsg, content string, defaultLine int) (line, char int) {
+	line = defaultLine
+	char = 0
+
+	// Try line:column pattern first (e.g., "at line 5, column 10")
+	if matches := lineColPattern.FindStringSubmatch(errMsg); len(matches) >= 2 {
+		if l, err := strconv.Atoi(matches[1]); err == nil {
+			line = l - 1 // Convert to 0-based
+			if line < 0 {
+				line = 0
+			}
+		}
+		if len(matches) >= 3 && matches[2] != "" {
+			if c, err := strconv.Atoi(matches[2]); err == nil {
+				char = c - 1 // Convert to 0-based
+				if char < 0 {
+					char = 0
+				}
+			}
+		}
+		return
+	}
+
+	// Try bracket pattern (e.g., "[1:5]")
+	if matches := bracketPattern.FindStringSubmatch(errMsg); len(matches) >= 3 {
+		if l, err := strconv.Atoi(matches[1]); err == nil {
+			line = l - 1
+			if line < 0 {
+				line = 0
+			}
+		}
+		if c, err := strconv.Atoi(matches[2]); err == nil {
+			char = c - 1
+			if char < 0 {
+				char = 0
+			}
+		}
+		return
+	}
+
+	// Try absolute position pattern (e.g., "position 42")
+	if matches := positionPattern.FindStringSubmatch(errMsg); len(matches) >= 2 {
+		if pos, err := strconv.Atoi(matches[1]); err == nil {
+			line, char = offsetToLineColumn(content, pos)
+		}
+		return
+	}
+
+	return
+}
+
+// offsetToLineColumn converts an absolute offset to line and column
+func offsetToLineColumn(content string, offset int) (line, col int) {
+	if offset < 0 {
+		return 0, 0
+	}
+	if offset >= len(content) {
+		offset = len(content) - 1
+		if offset < 0 {
+			return 0, 0
+		}
+	}
+
+	line = 0
+	col = 0
+	for i := 0; i < offset && i < len(content); i++ {
+		if content[i] == '\n' {
+			line++
+			col = 0
+		} else {
+			col++
+		}
+	}
+	return
+}
+
+// isWhitespace returns true if c is a whitespace character
+func isWhitespace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r'
 }
 
 // handleHover provides hover information for SQL keywords
@@ -289,8 +404,9 @@ func (h *Handler) handleCompletion(params json.RawMessage) (*CompletionList, err
 	// Get partial word at position for filtering
 	word := doc.GetWordAtPosition(p.Position)
 	prefix := strings.ToUpper(word)
+	lowerPrefix := strings.ToLower(word)
 
-	// Build completion items
+	// Build completion items - keywords first
 	items := []CompletionItem{}
 	for _, kw := range sqlKeywords {
 		if prefix == "" || strings.HasPrefix(strings.ToUpper(kw.Label), prefix) {
@@ -298,13 +414,20 @@ func (h *Handler) handleCompletion(params json.RawMessage) (*CompletionList, err
 		}
 	}
 
+	// Add snippets (match on lowercase prefix for snippet shortcuts)
+	for _, snippet := range sqlSnippets {
+		if lowerPrefix == "" || strings.HasPrefix(strings.ToLower(snippet.Label), lowerPrefix) {
+			items = append(items, snippet)
+		}
+	}
+
 	// Limit results
-	if len(items) > 50 {
-		items = items[:50]
+	if len(items) > 100 {
+		items = items[:100]
 	}
 
 	return &CompletionList{
-		IsIncomplete: len(items) >= 50,
+		IsIncomplete: len(items) >= 100,
 		Items:        items,
 	}, nil
 }
@@ -588,6 +711,178 @@ var sqlKeywords = []CompletionItem{
 	{Label: "CURRENT_DATE", Kind: FunctionCompletion, Detail: "Current date", InsertText: "CURRENT_DATE"},
 	{Label: "CURRENT_TIME", Kind: FunctionCompletion, Detail: "Current time", InsertText: "CURRENT_TIME"},
 	{Label: "CURRENT_TIMESTAMP", Kind: FunctionCompletion, Detail: "Current timestamp", InsertText: "CURRENT_TIMESTAMP"},
+}
+
+// sqlSnippets provides snippet completions for common SQL patterns
+var sqlSnippets = []CompletionItem{
+	{
+		Label:            "sel",
+		Kind:             SnippetCompletion,
+		Detail:           "SELECT statement",
+		InsertText:       "SELECT ${1:columns}\nFROM ${2:table}\nWHERE ${3:condition}",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "selall",
+		Kind:             SnippetCompletion,
+		Detail:           "SELECT * FROM table",
+		InsertText:       "SELECT *\nFROM ${1:table}",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "selcount",
+		Kind:             SnippetCompletion,
+		Detail:           "SELECT COUNT(*)",
+		InsertText:       "SELECT COUNT(*)\nFROM ${1:table}\nWHERE ${2:condition}",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "seljoin",
+		Kind:             SnippetCompletion,
+		Detail:           "SELECT with JOIN",
+		InsertText:       "SELECT ${1:columns}\nFROM ${2:table1} t1\nJOIN ${3:table2} t2 ON t1.${4:id} = t2.${5:foreign_id}\nWHERE ${6:condition}",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "selleft",
+		Kind:             SnippetCompletion,
+		Detail:           "SELECT with LEFT JOIN",
+		InsertText:       "SELECT ${1:columns}\nFROM ${2:table1} t1\nLEFT JOIN ${3:table2} t2 ON t1.${4:id} = t2.${5:foreign_id}\nWHERE ${6:condition}",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "selgroup",
+		Kind:             SnippetCompletion,
+		Detail:           "SELECT with GROUP BY",
+		InsertText:       "SELECT ${1:column}, COUNT(*) as count\nFROM ${2:table}\nGROUP BY ${1:column}\nHAVING COUNT(*) > ${3:1}",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "ins",
+		Kind:             SnippetCompletion,
+		Detail:           "INSERT statement",
+		InsertText:       "INSERT INTO ${1:table} (${2:columns})\nVALUES (${3:values})",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "inssel",
+		Kind:             SnippetCompletion,
+		Detail:           "INSERT SELECT statement",
+		InsertText:       "INSERT INTO ${1:target_table} (${2:columns})\nSELECT ${2:columns}\nFROM ${3:source_table}\nWHERE ${4:condition}",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "upd",
+		Kind:             SnippetCompletion,
+		Detail:           "UPDATE statement",
+		InsertText:       "UPDATE ${1:table}\nSET ${2:column} = ${3:value}\nWHERE ${4:condition}",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "del",
+		Kind:             SnippetCompletion,
+		Detail:           "DELETE statement",
+		InsertText:       "DELETE FROM ${1:table}\nWHERE ${2:condition}",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "cretbl",
+		Kind:             SnippetCompletion,
+		Detail:           "CREATE TABLE statement",
+		InsertText:       "CREATE TABLE ${1:table_name} (\n\t${2:id} INT PRIMARY KEY,\n\t${3:column} ${4:VARCHAR(255)}\n)",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "creidx",
+		Kind:             SnippetCompletion,
+		Detail:           "CREATE INDEX statement",
+		InsertText:       "CREATE INDEX ${1:idx_name} ON ${2:table} (${3:column})",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "cte",
+		Kind:             SnippetCompletion,
+		Detail:           "Common Table Expression (WITH)",
+		InsertText:       "WITH ${1:cte_name} AS (\n\tSELECT ${2:columns}\n\tFROM ${3:table}\n\tWHERE ${4:condition}\n)\nSELECT *\nFROM ${1:cte_name}",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "cterec",
+		Kind:             SnippetCompletion,
+		Detail:           "Recursive CTE",
+		InsertText:       "WITH RECURSIVE ${1:cte_name} AS (\n\t-- Base case\n\tSELECT ${2:columns}\n\tFROM ${3:table}\n\tWHERE ${4:base_condition}\n\t\n\tUNION ALL\n\t\n\t-- Recursive case\n\tSELECT ${2:columns}\n\tFROM ${3:table} t\n\tJOIN ${1:cte_name} c ON t.${5:parent_id} = c.${6:id}\n)\nSELECT * FROM ${1:cte_name}",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "case",
+		Kind:             SnippetCompletion,
+		Detail:           "CASE expression",
+		InsertText:       "CASE\n\tWHEN ${1:condition} THEN ${2:result}\n\tELSE ${3:default}\nEND",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "casecol",
+		Kind:             SnippetCompletion,
+		Detail:           "CASE on column value",
+		InsertText:       "CASE ${1:column}\n\tWHEN ${2:value1} THEN ${3:result1}\n\tWHEN ${4:value2} THEN ${5:result2}\n\tELSE ${6:default}\nEND",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "window",
+		Kind:             SnippetCompletion,
+		Detail:           "Window function",
+		InsertText:       "${1:ROW_NUMBER}() OVER (\n\tPARTITION BY ${2:partition_column}\n\tORDER BY ${3:order_column}\n)",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "merge",
+		Kind:             SnippetCompletion,
+		Detail:           "MERGE statement",
+		InsertText:       "MERGE INTO ${1:target_table} t\nUSING ${2:source_table} s ON t.${3:id} = s.${3:id}\nWHEN MATCHED THEN\n\tUPDATE SET t.${4:column} = s.${4:column}\nWHEN NOT MATCHED THEN\n\tINSERT (${5:columns}) VALUES (${6:values})",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "trunc",
+		Kind:             SnippetCompletion,
+		Detail:           "TRUNCATE TABLE",
+		InsertText:       "TRUNCATE TABLE ${1:table_name}",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "altertbl",
+		Kind:             SnippetCompletion,
+		Detail:           "ALTER TABLE ADD COLUMN",
+		InsertText:       "ALTER TABLE ${1:table_name}\nADD COLUMN ${2:column_name} ${3:data_type}",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "droptbl",
+		Kind:             SnippetCompletion,
+		Detail:           "DROP TABLE IF EXISTS",
+		InsertText:       "DROP TABLE IF EXISTS ${1:table_name}",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "union",
+		Kind:             SnippetCompletion,
+		Detail:           "UNION query",
+		InsertText:       "SELECT ${1:columns} FROM ${2:table1}\nUNION\nSELECT ${1:columns} FROM ${3:table2}",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "exists",
+		Kind:             SnippetCompletion,
+		Detail:           "EXISTS subquery",
+		InsertText:       "EXISTS (\n\tSELECT 1\n\tFROM ${1:table}\n\tWHERE ${2:condition}\n)",
+		InsertTextFormat: SnippetFormat,
+	},
+	{
+		Label:            "subq",
+		Kind:             SnippetCompletion,
+		Detail:           "Subquery",
+		InsertText:       "(\n\tSELECT ${1:column}\n\tFROM ${2:table}\n\tWHERE ${3:condition}\n)",
+		InsertTextFormat: SnippetFormat,
+	},
 }
 
 // truncateForLog truncates raw JSON for logging purposes to avoid overly verbose logs

@@ -432,6 +432,13 @@ var modelTypeToString = map[models.TokenType]token.Type{
 	models.TokenTypeText:    "TEXT",
 	models.TokenTypeBoolean: "BOOLEAN",
 
+	// FETCH clause keywords (SQL-99 F861, F862)
+	models.TokenTypeFetch:   "FETCH",
+	models.TokenTypeNext:    "NEXT",
+	models.TokenTypeTies:    "TIES",
+	models.TokenTypePercent: "PERCENT",
+	models.TokenTypeOnly:    "ONLY",
+
 	// Other keywords
 	models.TokenTypeIf:      "IF",
 	models.TokenTypeRefresh: "REFRESH",

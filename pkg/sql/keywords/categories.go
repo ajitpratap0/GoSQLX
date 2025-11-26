@@ -39,21 +39,22 @@ func NewKeywords() *Keywords {
 func (k *Keywords) initialize() {
 	// Initialize DML keywords
 	k.DMLKeywords = map[string]models.TokenType{
-		"DISTINCT": models.TokenTypeKeyword,
-		"ALL":      models.TokenTypeKeyword,
-		"FETCH":    models.TokenTypeKeyword,
-		"NEXT":     models.TokenTypeKeyword,
-		"ROWS":     models.TokenTypeKeyword,
-		"ONLY":     models.TokenTypeKeyword,
-		"WITH":     models.TokenTypeKeyword,
-		"TIES":     models.TokenTypeKeyword,
-		"NULLS":    models.TokenTypeKeyword,
-		"FIRST":    models.TokenTypeKeyword,
-		"LAST":     models.TokenTypeKeyword,
-		"ROLLUP":   models.TokenTypeKeyword, // SQL-99 grouping operation
-		"CUBE":     models.TokenTypeKeyword, // SQL-99 grouping operation
-		"GROUPING": models.TokenTypeKeyword, // SQL-99 GROUPING SETS
-		"SETS":     models.TokenTypeKeyword, // SQL-99 GROUPING SETS
+		"DISTINCT": models.TokenTypeDistinct,
+		"ALL":      models.TokenTypeAll,
+		"FETCH":    models.TokenTypeFetch,
+		"NEXT":     models.TokenTypeNext,
+		"ROWS":     models.TokenTypeRows,
+		"ONLY":     models.TokenTypeOnly,
+		"WITH":     models.TokenTypeWith,
+		"TIES":     models.TokenTypeTies,
+		"NULLS":    models.TokenTypeNulls,
+		"FIRST":    models.TokenTypeFirst,
+		"LAST":     models.TokenTypeLast,
+		"PERCENT":  models.TokenTypePercent,  // SQL-99 FETCH ... PERCENT ROWS
+		"ROLLUP":   models.TokenTypeRollup,   // SQL-99 grouping operation
+		"CUBE":     models.TokenTypeCube,     // SQL-99 grouping operation
+		"GROUPING": models.TokenTypeGrouping, // SQL-99 GROUPING SETS
+		"SETS":     models.TokenTypeSets,     // SQL-99 GROUPING SETS
 	}
 
 	// Initialize compound keywords

@@ -263,6 +263,8 @@ const (
 	TokenTypeNulls    TokenType = 365
 	TokenTypeFirst    TokenType = 366
 	TokenTypeLast     TokenType = 367
+	TokenTypeFetch    TokenType = 368 // FETCH keyword for FETCH FIRST/NEXT clause
+	TokenTypeNext     TokenType = 369 // NEXT keyword for FETCH NEXT clause
 
 	// MERGE Statement Keywords (370-379)
 	TokenTypeMerge   TokenType = 370
@@ -270,9 +272,11 @@ const (
 	TokenTypeTarget  TokenType = 372
 	TokenTypeSource  TokenType = 373
 
-	// Materialized View Keywords (380-389)
+	// Materialized View Keywords (374-379)
 	TokenTypeMaterialized TokenType = 374
 	TokenTypeRefresh      TokenType = 375
+	TokenTypeTies         TokenType = 376 // TIES keyword for WITH TIES in FETCH clause
+	TokenTypePercent      TokenType = 377 // PERCENT keyword for FETCH ... PERCENT ROWS
 
 	// Grouping Set Keywords (390-399)
 	TokenTypeGroupingSets TokenType = 390
@@ -527,6 +531,8 @@ var tokenStringMap = map[TokenType]string{
 	TokenTypeNulls:    "NULLS",
 	TokenTypeFirst:    "FIRST",
 	TokenTypeLast:     "LAST",
+	TokenTypeFetch:    "FETCH",
+	TokenTypeNext:     "NEXT",
 
 	// MERGE Statement Keywords
 	TokenTypeMerge:   "MERGE",
@@ -537,6 +543,8 @@ var tokenStringMap = map[TokenType]string{
 	// Materialized View Keywords
 	TokenTypeMaterialized: "MATERIALIZED",
 	TokenTypeRefresh:      "REFRESH",
+	TokenTypeTies:         "TIES",
+	TokenTypePercent:      "PERCENT",
 
 	// Grouping Set Keywords
 	TokenTypeGroupingSets: "GROUPING_SETS",

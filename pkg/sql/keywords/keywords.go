@@ -27,7 +27,7 @@ var RESERVED_FOR_TABLE_ALIAS = []Keyword{
 	{Word: "VIEW", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
 	{Word: "LIMIT", Type: models.TokenTypeLimit, Reserved: true, ReservedForTableAlias: true},
 	{Word: "OFFSET", Type: models.TokenTypeOffset, Reserved: true, ReservedForTableAlias: true},
-	{Word: "FETCH", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "FETCH", Type: models.TokenTypeFetch, Reserved: true, ReservedForTableAlias: true},
 	{Word: "UNION", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
 	{Word: "EXCEPT", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
 	{Word: "INTERSECT", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
@@ -78,14 +78,20 @@ var RESERVED_FOR_TABLE_ALIAS = []Keyword{
 	{Word: "MIN", Type: models.TokenTypeMin, Reserved: true, ReservedForTableAlias: true},
 	{Word: "MAX", Type: models.TokenTypeMax, Reserved: true, ReservedForTableAlias: true},
 	// Window function keywords (Phase 2.5)
-	{Word: "OVER", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
-	{Word: "ROWS", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
-	{Word: "RANGE", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
-	{Word: "CURRENT", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
-	{Word: "ROW", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
-	{Word: "UNBOUNDED", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
-	{Word: "PRECEDING", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
-	{Word: "FOLLOWING", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "OVER", Type: models.TokenTypeOver, Reserved: true, ReservedForTableAlias: true},
+	{Word: "ROWS", Type: models.TokenTypeRows, Reserved: true, ReservedForTableAlias: true},
+	{Word: "RANGE", Type: models.TokenTypeRange, Reserved: true, ReservedForTableAlias: true},
+	{Word: "CURRENT", Type: models.TokenTypeCurrent, Reserved: true, ReservedForTableAlias: true},
+	{Word: "ROW", Type: models.TokenTypeRow, Reserved: true, ReservedForTableAlias: true},
+	{Word: "UNBOUNDED", Type: models.TokenTypeUnbounded, Reserved: true, ReservedForTableAlias: true},
+	{Word: "PRECEDING", Type: models.TokenTypePreceding, Reserved: true, ReservedForTableAlias: true},
+	{Word: "FOLLOWING", Type: models.TokenTypeFollowing, Reserved: true, ReservedForTableAlias: true},
+	// FETCH clause keywords (SQL-99 F861, F862)
+	{Word: "NEXT", Type: models.TokenTypeNext, Reserved: true, ReservedForTableAlias: true},
+	{Word: "FIRST", Type: models.TokenTypeFirst, Reserved: true, ReservedForTableAlias: true},
+	{Word: "ONLY", Type: models.TokenTypeOnly, Reserved: true, ReservedForTableAlias: true},
+	{Word: "TIES", Type: models.TokenTypeTies, Reserved: true, ReservedForTableAlias: true},
+	{Word: "PERCENT", Type: models.TokenTypePercent, Reserved: true, ReservedForTableAlias: true},
 }
 
 var ADDITIONAL_KEYWORDS = []Keyword{

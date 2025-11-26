@@ -448,7 +448,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		p.advance()
 	}
 
-	// Parse OFFSET clause if present
+	// Parse OFFSET clause if present (MySQL-style OFFSET or SQL-99 OFFSET ... ROWS)
 	if p.isType(models.TokenTypeOffset) {
 		p.advance() // Consume OFFSET
 
@@ -464,6 +464,25 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		// Add OFFSET to SELECT statement
 		selectStmt.Offset = &offsetVal
 		p.advance()
+
+		// Check for ROW/ROWS (SQL-99 style: OFFSET n ROWS)
+		if p.isAnyType(models.TokenTypeRow, models.TokenTypeRows) {
+			p.advance() // Consume ROW/ROWS
+		}
+	}
+
+	// Parse FETCH clause if present (SQL-99 F861, F862)
+	// Syntax: FETCH {FIRST | NEXT} n [{ROW | ROWS}] [{PERCENT}] {ONLY | WITH TIES}
+	if p.isType(models.TokenTypeFetch) {
+		fetchClause, err := p.parseFetchClause()
+		if err != nil {
+			return nil, err
+		}
+
+		// If FETCH has an offset (from OFFSET ... ROWS before FETCH), it was already set above
+		// For standalone FETCH with OFFSET embedded (SQL-99), we need to handle it in parseFetchClause
+
+		selectStmt.Fetch = fetchClause
 	}
 
 	return selectStmt, nil
@@ -521,4 +540,71 @@ func (p *Parser) parseSelectWithSetOperations() (ast.Statement, error) {
 	}
 
 	return leftStmt, nil
+}
+
+// parseFetchClause parses the SQL-99 FETCH FIRST/NEXT clause (F861, F862).
+// Syntax: FETCH {FIRST | NEXT} n [{ROW | ROWS}] [{PERCENT}] {ONLY | WITH TIES}
+//
+// Examples:
+//
+//	FETCH FIRST 5 ROWS ONLY
+//	FETCH NEXT 10 ROWS ONLY
+//	FETCH FIRST 10 PERCENT ROWS WITH TIES
+//	FETCH NEXT 20 ROWS WITH TIES
+func (p *Parser) parseFetchClause() (*ast.FetchClause, error) {
+	fetchClause := &ast.FetchClause{}
+
+	// Consume FETCH keyword (already checked by caller)
+	p.advance()
+
+	// Parse FIRST or NEXT
+	if p.isType(models.TokenTypeFirst) {
+		fetchClause.FetchType = "FIRST"
+		p.advance()
+	} else if p.isType(models.TokenTypeNext) {
+		fetchClause.FetchType = "NEXT"
+		p.advance()
+	} else {
+		return nil, p.expectedError("FIRST or NEXT after FETCH")
+	}
+
+	// Parse the count value
+	if p.currentToken.Type != "INT" {
+		return nil, p.expectedError("integer for FETCH count")
+	}
+
+	// Convert string to int64
+	var fetchVal int64
+	_, _ = fmt.Sscanf(p.currentToken.Literal, "%d", &fetchVal)
+	fetchClause.FetchValue = &fetchVal
+	p.advance()
+
+	// Check for PERCENT (optional)
+	if p.isType(models.TokenTypePercent) {
+		fetchClause.IsPercent = true
+		p.advance()
+	}
+
+	// Check for ROW/ROWS (optional)
+	if p.isAnyType(models.TokenTypeRow, models.TokenTypeRows) {
+		p.advance() // Consume ROW/ROWS
+	}
+
+	// Parse ONLY or WITH TIES
+	if p.isType(models.TokenTypeOnly) {
+		fetchClause.WithTies = false
+		p.advance()
+	} else if p.isType(models.TokenTypeWith) {
+		p.advance() // Consume WITH
+		if !p.isType(models.TokenTypeTies) {
+			return nil, p.expectedError("TIES after WITH")
+		}
+		fetchClause.WithTies = true
+		p.advance() // Consume TIES
+	} else {
+		// If neither ONLY nor WITH TIES, default to ONLY behavior
+		fetchClause.WithTies = false
+	}
+
+	return fetchClause, nil
 }

@@ -394,9 +394,10 @@ ORDER BY
 		t.Errorf("wrong error line, got %d, expected %d", tokErr.Location.Line, 10)
 	}
 
-	// Column should point to the start of the string literal
-	if tokErr.Location.Column != 16 {
-		t.Errorf("wrong error column, got %d, expected %d", tokErr.Location.Column, 16)
+	// Column should point to the start of the string literal (the opening quote)
+	// Line is: "    AND name LIKE 'J%" (columns: 4 spaces + "AND name LIKE " = 18 chars, then ' at 19)
+	if tokErr.Location.Column != 19 {
+		t.Errorf("wrong error column, got %d, expected %d", tokErr.Location.Column, 19)
 	}
 }
 

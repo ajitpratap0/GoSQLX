@@ -202,3 +202,67 @@ func InvalidSetOperationError(operation, description string, location models.Loc
 		location,
 	).WithContext(sql, len(operation)).WithHint("Ensure both queries have the same number and compatible types of columns")
 }
+
+// Semantic Errors (E3001-E3004)
+
+// UndefinedTableError creates an error for referencing an undefined table
+func UndefinedTableError(tableName string, location models.Location, sql string) *Error {
+	return NewError(
+		ErrCodeUndefinedTable,
+		fmt.Sprintf("table '%s' does not exist", tableName),
+		location,
+	).WithContext(sql, len(tableName)).WithHint(fmt.Sprintf("Check the table name '%s' for typos or ensure it exists in the schema", tableName))
+}
+
+// UndefinedColumnError creates an error for referencing an undefined column
+func UndefinedColumnError(columnName, tableName string, location models.Location, sql string) *Error {
+	message := fmt.Sprintf("column '%s' does not exist", columnName)
+	hint := fmt.Sprintf("Check the column name '%s' for typos or ensure it exists in the table", columnName)
+	if tableName != "" {
+		message = fmt.Sprintf("column '%s' does not exist in table '%s'", columnName, tableName)
+		hint = fmt.Sprintf("Check that column '%s' exists in table '%s'", columnName, tableName)
+	}
+	return NewError(
+		ErrCodeUndefinedColumn,
+		message,
+		location,
+	).WithContext(sql, len(columnName)).WithHint(hint)
+}
+
+// TypeMismatchError creates an error for type mismatch in expressions
+func TypeMismatchError(leftType, rightType, context string, location models.Location, sql string) *Error {
+	message := fmt.Sprintf("type mismatch: cannot compare %s with %s", leftType, rightType)
+	if context != "" {
+		message = fmt.Sprintf("type mismatch in %s: cannot compare %s with %s", context, leftType, rightType)
+	}
+	return NewError(
+		ErrCodeTypeMismatch,
+		message,
+		location,
+	).WithContext(sql, 1).WithHint(fmt.Sprintf("Ensure compatible types or use explicit CAST to convert %s to %s", leftType, rightType))
+}
+
+// AmbiguousColumnError creates an error for ambiguous column reference
+func AmbiguousColumnError(columnName string, tables []string, location models.Location, sql string) *Error {
+	tableList := "multiple tables"
+	if len(tables) > 0 {
+		tableList = fmt.Sprintf("tables: %s", joinStrings(tables, ", "))
+	}
+	return NewError(
+		ErrCodeAmbiguousColumn,
+		fmt.Sprintf("column '%s' is ambiguous (appears in %s)", columnName, tableList),
+		location,
+	).WithContext(sql, len(columnName)).WithHint(fmt.Sprintf("Qualify the column with a table name or alias, e.g., 'table_name.%s'", columnName))
+}
+
+// joinStrings is a helper to join strings with a separator
+func joinStrings(strs []string, sep string) string {
+	if len(strs) == 0 {
+		return ""
+	}
+	result := strs[0]
+	for i := 1; i < len(strs); i++ {
+		result += sep + strs[i]
+	}
+	return result
+}

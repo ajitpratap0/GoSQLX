@@ -38,6 +38,12 @@ func (h *Handler) HandleRequest(method string, params json.RawMessage) (interfac
 		return h.handleCompletion(params)
 	case "textDocument/formatting":
 		return h.handleFormatting(params)
+	case "textDocument/documentSymbol":
+		return h.handleDocumentSymbol(params)
+	case "textDocument/signatureHelp":
+		return h.handleSignatureHelp(params)
+	case "textDocument/codeAction":
+		return h.handleCodeAction(params)
 	default:
 		return nil, fmt.Errorf("method not found: %s", method)
 	}
@@ -85,6 +91,14 @@ func (h *Handler) handleInitialize(params json.RawMessage) (*InitializeResult, e
 			},
 			HoverProvider:              true,
 			DocumentFormattingProvider: true,
+			DocumentSymbolProvider:     true,
+			SignatureHelpProvider: &SignatureHelpOptions{
+				TriggerCharacters:   []string{"(", ","},
+				RetriggerCharacters: []string{","},
+			},
+			CodeActionProvider: &CodeActionOptions{
+				CodeActionKinds: []CodeActionKind{CodeActionQuickFix},
+			},
 		},
 		ServerInfo: &ServerInfo{
 			Name:    "gosqlx-lsp",
@@ -121,6 +135,23 @@ func (h *Handler) handleDidOpen(params json.RawMessage) {
 
 	h.server.Logger().Printf("Document opened: %s", p.TextDocument.URI)
 
+	// Check document size limit
+	if len(p.TextDocument.Text) > h.server.MaxDocumentSizeBytes() {
+		h.server.Logger().Printf("Document too large: %d bytes (max: %d)", len(p.TextDocument.Text), h.server.MaxDocumentSizeBytes())
+		h.server.SendNotification("window/showMessage", ShowMessageParams{
+			Type:    MessageWarning,
+			Message: fmt.Sprintf("Document is too large for full analysis (%d bytes, max %d bytes)", len(p.TextDocument.Text), h.server.MaxDocumentSizeBytes()),
+		})
+		// Still open the document but skip validation
+		h.server.Documents().Open(
+			p.TextDocument.URI,
+			p.TextDocument.LanguageID,
+			p.TextDocument.Version,
+			p.TextDocument.Text,
+		)
+		return
+	}
+
 	h.server.Documents().Open(
 		p.TextDocument.URI,
 		p.TextDocument.LanguageID,
@@ -151,6 +182,17 @@ func (h *Handler) handleDidChange(params json.RawMessage) {
 
 	// Get updated content and validate
 	if content, ok := h.server.Documents().GetContent(p.TextDocument.URI); ok {
+		// Check document size limit after update
+		if len(content) > h.server.MaxDocumentSizeBytes() {
+			h.server.Logger().Printf("Document too large after change: %d bytes (max: %d)", len(content), h.server.MaxDocumentSizeBytes())
+			// Clear diagnostics but don't validate
+			h.server.SendNotification("textDocument/publishDiagnostics", PublishDiagnosticsParams{
+				URI:         p.TextDocument.URI,
+				Version:     p.TextDocument.Version,
+				Diagnostics: []Diagnostic{},
+			})
+			return
+		}
 		h.validateDocument(p.TextDocument.URI, content, p.TextDocument.Version)
 	}
 }
@@ -366,19 +408,20 @@ func (h *Handler) handleHover(params json.RawMessage) (*Hover, error) {
 
 	doc, ok := h.server.Documents().Get(p.TextDocument.URI)
 	if !ok {
-		return nil, nil
+		// Return empty hover response instead of nil for proper LSP compliance
+		return &Hover{}, nil
 	}
 
 	// Get word at position
 	word := doc.GetWordAtPosition(p.Position)
 	if word == "" {
-		return nil, nil
+		return &Hover{}, nil
 	}
 
 	// Look up keyword documentation
 	doc_text := getKeywordDocumentation(strings.ToUpper(word))
 	if doc_text == "" {
-		return nil, nil
+		return &Hover{}, nil
 	}
 
 	return &Hover{
@@ -883,6 +926,457 @@ var sqlSnippets = []CompletionItem{
 		InsertText:       "(\n\tSELECT ${1:column}\n\tFROM ${2:table}\n\tWHERE ${3:condition}\n)",
 		InsertTextFormat: SnippetFormat,
 	},
+}
+
+// handleDocumentSymbol returns symbols in the document (SQL statements, tables, columns)
+func (h *Handler) handleDocumentSymbol(params json.RawMessage) ([]DocumentSymbol, error) {
+	var p DocumentSymbolParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, err
+	}
+
+	content, ok := h.server.Documents().GetContent(p.TextDocument.URI)
+	if !ok {
+		return []DocumentSymbol{}, nil
+	}
+
+	// Parse the SQL to extract symbols
+	ast, err := gosqlx.Parse(content)
+	if err != nil {
+		// Return empty symbols on parse error
+		return []DocumentSymbol{}, nil
+	}
+
+	symbols := []DocumentSymbol{}
+	lines := strings.Split(content, "\n")
+
+	// Extract symbols from each statement
+	for i, stmt := range ast.Statements {
+		symbol := h.extractStatementSymbol(stmt, i, lines, content)
+		if symbol != nil {
+			symbols = append(symbols, *symbol)
+		}
+	}
+
+	return symbols, nil
+}
+
+// extractStatementSymbol extracts a document symbol from a SQL statement
+func (h *Handler) extractStatementSymbol(stmt interface{}, index int, lines []string, content string) *DocumentSymbol {
+	// Determine statement type and name
+	var name string
+	var detail string
+	var kind SymbolKind
+
+	// Use type switch to determine statement type
+	typeName := fmt.Sprintf("%T", stmt)
+	switch {
+	case strings.Contains(typeName, "SelectStatement"):
+		name = fmt.Sprintf("SELECT #%d", index+1)
+		detail = "SELECT statement"
+		kind = SymbolMethod
+	case strings.Contains(typeName, "InsertStatement"):
+		name = fmt.Sprintf("INSERT #%d", index+1)
+		detail = "INSERT statement"
+		kind = SymbolMethod
+	case strings.Contains(typeName, "UpdateStatement"):
+		name = fmt.Sprintf("UPDATE #%d", index+1)
+		detail = "UPDATE statement"
+		kind = SymbolMethod
+	case strings.Contains(typeName, "DeleteStatement"):
+		name = fmt.Sprintf("DELETE #%d", index+1)
+		detail = "DELETE statement"
+		kind = SymbolMethod
+	case strings.Contains(typeName, "CreateTableStatement"):
+		name = fmt.Sprintf("CREATE TABLE #%d", index+1)
+		detail = "DDL statement"
+		kind = SymbolStruct
+	case strings.Contains(typeName, "CreateIndexStatement"):
+		name = fmt.Sprintf("CREATE INDEX #%d", index+1)
+		detail = "DDL statement"
+		kind = SymbolStruct
+	case strings.Contains(typeName, "DropStatement"):
+		name = fmt.Sprintf("DROP #%d", index+1)
+		detail = "DDL statement"
+		kind = SymbolStruct
+	case strings.Contains(typeName, "AlterStatement"):
+		name = fmt.Sprintf("ALTER #%d", index+1)
+		detail = "DDL statement"
+		kind = SymbolStruct
+	case strings.Contains(typeName, "TruncateStatement"):
+		name = fmt.Sprintf("TRUNCATE #%d", index+1)
+		detail = "DDL statement"
+		kind = SymbolStruct
+	case strings.Contains(typeName, "MergeStatement"):
+		name = fmt.Sprintf("MERGE #%d", index+1)
+		detail = "DML statement"
+		kind = SymbolMethod
+	default:
+		name = fmt.Sprintf("Statement #%d", index+1)
+		detail = typeName
+		kind = SymbolVariable
+	}
+
+	// For now, use a simple range based on statement index
+	// A more sophisticated implementation would track actual positions
+	startLine := 0
+	endLine := len(lines) - 1
+	if endLine < 0 {
+		endLine = 0
+	}
+	endChar := 0
+	if endLine < len(lines) {
+		endChar = len(lines[endLine])
+	}
+
+	return &DocumentSymbol{
+		Name:   name,
+		Detail: detail,
+		Kind:   kind,
+		Range: Range{
+			Start: Position{Line: startLine, Character: 0},
+			End:   Position{Line: endLine, Character: endChar},
+		},
+		SelectionRange: Range{
+			Start: Position{Line: startLine, Character: 0},
+			End:   Position{Line: startLine, Character: len(name)},
+		},
+	}
+}
+
+// handleSignatureHelp provides signature help for SQL functions
+func (h *Handler) handleSignatureHelp(params json.RawMessage) (*SignatureHelp, error) {
+	var p TextDocumentPositionParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, err
+	}
+
+	doc, ok := h.server.Documents().Get(p.TextDocument.URI)
+	if !ok {
+		return &SignatureHelp{}, nil
+	}
+
+	// Get the function name at position
+	content := doc.Content
+	funcName, paramIndex := h.getFunctionAtPosition(content, p.Position)
+	if funcName == "" {
+		return &SignatureHelp{}, nil
+	}
+
+	// Look up function signature
+	sig := getSQLFunctionSignature(strings.ToUpper(funcName))
+	if sig == nil {
+		return &SignatureHelp{}, nil
+	}
+
+	return &SignatureHelp{
+		Signatures:      []SignatureInformation{*sig},
+		ActiveSignature: 0,
+		ActiveParameter: paramIndex,
+	}, nil
+}
+
+// getFunctionAtPosition finds the function name and parameter index at a position
+func (h *Handler) getFunctionAtPosition(content string, pos Position) (string, int) {
+	lines := strings.Split(content, "\n")
+	if pos.Line >= len(lines) {
+		return "", 0
+	}
+
+	line := lines[pos.Line]
+	if pos.Character > len(line) {
+		return "", 0
+	}
+
+	// Look backwards for opening parenthesis to find function name
+	parenCount := 0
+	paramIndex := 0
+	funcEnd := -1
+
+	for i := pos.Character - 1; i >= 0; i-- {
+		ch := line[i]
+		if ch == ')' {
+			parenCount++
+		} else if ch == '(' {
+			if parenCount == 0 {
+				funcEnd = i
+				break
+			}
+			parenCount--
+		} else if ch == ',' && parenCount == 0 {
+			paramIndex++
+		}
+	}
+
+	if funcEnd < 0 {
+		return "", 0
+	}
+
+	// Extract function name (word before the parenthesis)
+	funcStart := funcEnd - 1
+	for funcStart >= 0 && (isAlphanumeric(line[funcStart]) || line[funcStart] == '_') {
+		funcStart--
+	}
+	funcStart++
+
+	if funcStart >= funcEnd {
+		return "", 0
+	}
+
+	return line[funcStart:funcEnd], paramIndex
+}
+
+// isAlphanumeric checks if a byte is alphanumeric
+func isAlphanumeric(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+}
+
+// getSQLFunctionSignature returns the signature for a SQL function
+func getSQLFunctionSignature(funcName string) *SignatureInformation {
+	signatures := map[string]*SignatureInformation{
+		"COUNT": {
+			Label:         "COUNT(expression)",
+			Documentation: "Returns the number of rows that match a specified condition.",
+			Parameters: []ParameterInformation{
+				{Label: "expression", Documentation: "Column or expression to count. Use * for all rows."},
+			},
+		},
+		"SUM": {
+			Label:         "SUM(expression)",
+			Documentation: "Returns the sum of all values in the expression.",
+			Parameters: []ParameterInformation{
+				{Label: "expression", Documentation: "Numeric column or expression to sum."},
+			},
+		},
+		"AVG": {
+			Label:         "AVG(expression)",
+			Documentation: "Returns the average value of the expression.",
+			Parameters: []ParameterInformation{
+				{Label: "expression", Documentation: "Numeric column or expression to average."},
+			},
+		},
+		"MIN": {
+			Label:         "MIN(expression)",
+			Documentation: "Returns the minimum value in the expression.",
+			Parameters: []ParameterInformation{
+				{Label: "expression", Documentation: "Column or expression to find minimum value."},
+			},
+		},
+		"MAX": {
+			Label:         "MAX(expression)",
+			Documentation: "Returns the maximum value in the expression.",
+			Parameters: []ParameterInformation{
+				{Label: "expression", Documentation: "Column or expression to find maximum value."},
+			},
+		},
+		"COALESCE": {
+			Label:         "COALESCE(value1, value2, ...)",
+			Documentation: "Returns the first non-null value in the list.",
+			Parameters: []ParameterInformation{
+				{Label: "value1", Documentation: "First value to check."},
+				{Label: "value2, ...", Documentation: "Additional values to check."},
+			},
+		},
+		"NULLIF": {
+			Label:         "NULLIF(expression1, expression2)",
+			Documentation: "Returns NULL if expression1 equals expression2, otherwise returns expression1.",
+			Parameters: []ParameterInformation{
+				{Label: "expression1", Documentation: "Value to return if not equal."},
+				{Label: "expression2", Documentation: "Value to compare against."},
+			},
+		},
+		"CAST": {
+			Label:         "CAST(expression AS type)",
+			Documentation: "Converts an expression to a specified data type.",
+			Parameters: []ParameterInformation{
+				{Label: "expression", Documentation: "Value to convert."},
+				{Label: "type", Documentation: "Target data type."},
+			},
+		},
+		"SUBSTRING": {
+			Label:         "SUBSTRING(string, start, length)",
+			Documentation: "Extracts a substring from a string.",
+			Parameters: []ParameterInformation{
+				{Label: "string", Documentation: "Source string."},
+				{Label: "start", Documentation: "Starting position (1-based)."},
+				{Label: "length", Documentation: "Number of characters to extract."},
+			},
+		},
+		"TRIM": {
+			Label:         "TRIM([LEADING|TRAILING|BOTH] [characters] FROM string)",
+			Documentation: "Removes leading/trailing characters from a string.",
+			Parameters: []ParameterInformation{
+				{Label: "string", Documentation: "String to trim."},
+			},
+		},
+		"UPPER": {
+			Label:         "UPPER(string)",
+			Documentation: "Converts a string to uppercase.",
+			Parameters: []ParameterInformation{
+				{Label: "string", Documentation: "String to convert."},
+			},
+		},
+		"LOWER": {
+			Label:         "LOWER(string)",
+			Documentation: "Converts a string to lowercase.",
+			Parameters: []ParameterInformation{
+				{Label: "string", Documentation: "String to convert."},
+			},
+		},
+		"LENGTH": {
+			Label:         "LENGTH(string)",
+			Documentation: "Returns the length of a string.",
+			Parameters: []ParameterInformation{
+				{Label: "string", Documentation: "String to measure."},
+			},
+		},
+		"CONCAT": {
+			Label:         "CONCAT(string1, string2, ...)",
+			Documentation: "Concatenates two or more strings.",
+			Parameters: []ParameterInformation{
+				{Label: "string1", Documentation: "First string."},
+				{Label: "string2, ...", Documentation: "Additional strings to concatenate."},
+			},
+		},
+		"ROW_NUMBER": {
+			Label:         "ROW_NUMBER() OVER (ORDER BY column)",
+			Documentation: "Assigns unique sequential integers to rows within a partition.",
+			Parameters:    []ParameterInformation{},
+		},
+		"RANK": {
+			Label:         "RANK() OVER (ORDER BY column)",
+			Documentation: "Assigns a rank to each row with gaps for ties.",
+			Parameters:    []ParameterInformation{},
+		},
+		"DENSE_RANK": {
+			Label:         "DENSE_RANK() OVER (ORDER BY column)",
+			Documentation: "Assigns a rank to each row without gaps for ties.",
+			Parameters:    []ParameterInformation{},
+		},
+		"LAG": {
+			Label:         "LAG(expression, offset, default) OVER (...)",
+			Documentation: "Accesses data from a previous row in the same result set.",
+			Parameters: []ParameterInformation{
+				{Label: "expression", Documentation: "Column or expression to return."},
+				{Label: "offset", Documentation: "Number of rows back (default 1)."},
+				{Label: "default", Documentation: "Value to return if offset goes beyond partition."},
+			},
+		},
+		"LEAD": {
+			Label:         "LEAD(expression, offset, default) OVER (...)",
+			Documentation: "Accesses data from a following row in the same result set.",
+			Parameters: []ParameterInformation{
+				{Label: "expression", Documentation: "Column or expression to return."},
+				{Label: "offset", Documentation: "Number of rows forward (default 1)."},
+				{Label: "default", Documentation: "Value to return if offset goes beyond partition."},
+			},
+		},
+		"FIRST_VALUE": {
+			Label:         "FIRST_VALUE(expression) OVER (...)",
+			Documentation: "Returns the first value in an ordered set of values.",
+			Parameters: []ParameterInformation{
+				{Label: "expression", Documentation: "Column or expression to return."},
+			},
+		},
+		"LAST_VALUE": {
+			Label:         "LAST_VALUE(expression) OVER (...)",
+			Documentation: "Returns the last value in an ordered set of values.",
+			Parameters: []ParameterInformation{
+				{Label: "expression", Documentation: "Column or expression to return."},
+			},
+		},
+		"NTILE": {
+			Label:         "NTILE(num_buckets) OVER (...)",
+			Documentation: "Divides rows into a specified number of groups.",
+			Parameters: []ParameterInformation{
+				{Label: "num_buckets", Documentation: "Number of groups to create."},
+			},
+		},
+	}
+
+	return signatures[funcName]
+}
+
+// handleCodeAction provides code actions (quick fixes) for diagnostics
+func (h *Handler) handleCodeAction(params json.RawMessage) ([]CodeAction, error) {
+	var p CodeActionParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, err
+	}
+
+	actions := []CodeAction{}
+
+	// Generate quick fixes based on diagnostics
+	for _, diag := range p.Context.Diagnostics {
+		codeActions := h.getCodeActionsForDiagnostic(p.TextDocument.URI, diag)
+		actions = append(actions, codeActions...)
+	}
+
+	return actions, nil
+}
+
+// getCodeActionsForDiagnostic generates code actions for a specific diagnostic
+func (h *Handler) getCodeActionsForDiagnostic(uri string, diag Diagnostic) []CodeAction {
+	actions := []CodeAction{}
+	msg := strings.ToLower(diag.Message)
+
+	// Common SQL error fixes
+	if strings.Contains(msg, "unexpected") || strings.Contains(msg, "expected") {
+		// Suggest adding missing semicolon
+		if strings.Contains(msg, "semicolon") || strings.Contains(msg, ";") {
+			actions = append(actions, CodeAction{
+				Title:       "Add missing semicolon",
+				Kind:        CodeActionQuickFix,
+				Diagnostics: []Diagnostic{diag},
+				Edit: &WorkspaceEdit{
+					Changes: map[string][]TextEdit{
+						uri: {
+							{
+								Range:   Range{Start: diag.Range.End, End: diag.Range.End},
+								NewText: ";",
+							},
+						},
+					},
+				},
+			})
+		}
+	}
+
+	// Suggest uppercase for keywords
+	if strings.Contains(msg, "keyword") {
+		content, ok := h.server.Documents().GetContent(uri)
+		if ok {
+			lines := strings.Split(content, "\n")
+			if diag.Range.Start.Line < len(lines) {
+				line := lines[diag.Range.Start.Line]
+				start := diag.Range.Start.Character
+				end := diag.Range.End.Character
+				if start < len(line) && end <= len(line) && start < end {
+					word := line[start:end]
+					upper := strings.ToUpper(word)
+					if word != upper {
+						actions = append(actions, CodeAction{
+							Title:       fmt.Sprintf("Convert '%s' to uppercase", word),
+							Kind:        CodeActionQuickFix,
+							Diagnostics: []Diagnostic{diag},
+							Edit: &WorkspaceEdit{
+								Changes: map[string][]TextEdit{
+									uri: {
+										{
+											Range:   diag.Range,
+											NewText: upper,
+										},
+									},
+								},
+							},
+						})
+					}
+				}
+			}
+		}
+	}
+
+	return actions
 }
 
 // truncateForLog truncates raw JSON for logging purposes to avoid overly verbose logs

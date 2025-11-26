@@ -194,29 +194,29 @@ const (
 func (opt *RoleOption) String() string {
 	switch opt.Type {
 	case BypassRLS:
-		if opt.Value.(bool) {
+		if b, ok := opt.Value.(bool); ok && b {
 			return "BYPASSRLS"
 		}
 		return "NOBYPASSRLS"
 	case ConnectionLimit:
 		return fmt.Sprintf("CONNECTION LIMIT %v", opt.Value)
 	case CreateDB:
-		if opt.Value.(bool) {
+		if b, ok := opt.Value.(bool); ok && b {
 			return "CREATEDB"
 		}
 		return "NOCREATEDB"
 	case CreateRole:
-		if opt.Value.(bool) {
+		if b, ok := opt.Value.(bool); ok && b {
 			return "CREATEROLE"
 		}
 		return "NOCREATEROLE"
 	case Inherit:
-		if opt.Value.(bool) {
+		if b, ok := opt.Value.(bool); ok && b {
 			return "INHERIT"
 		}
 		return "NOINHERIT"
 	case Login:
-		if opt.Value.(bool) {
+		if b, ok := opt.Value.(bool); ok && b {
 			return "LOGIN"
 		}
 		return "NOLOGIN"
@@ -226,12 +226,12 @@ func (opt *RoleOption) String() string {
 		}
 		return fmt.Sprintf("PASSWORD %v", opt.Value)
 	case Replication:
-		if opt.Value.(bool) {
+		if b, ok := opt.Value.(bool); ok && b {
 			return "REPLICATION"
 		}
 		return "NOREPLICATION"
 	case SuperUser:
-		if opt.Value.(bool) {
+		if b, ok := opt.Value.(bool); ok && b {
 			return "SUPERUSER"
 		}
 		return "NOSUPERUSER"

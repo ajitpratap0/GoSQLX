@@ -43,6 +43,7 @@ type FileWatcher struct {
 	debounceMu   sync.Mutex
 	watchedFiles map[string]bool
 	watchedDirs  map[string]bool
+	watchedMu    sync.RWMutex // Protects watchedFiles and watchedDirs
 }
 
 // NewFileWatcher creates a new file watcher instance
@@ -75,7 +76,10 @@ func (fw *FileWatcher) Watch(args []string) error {
 		return err
 	}
 
-	if len(fw.watchedFiles) == 0 && len(fw.watchedDirs) == 0 {
+	fw.watchedMu.RLock()
+	noFiles := len(fw.watchedFiles) == 0 && len(fw.watchedDirs) == 0
+	fw.watchedMu.RUnlock()
+	if noFiles {
 		return fmt.Errorf("no files or directories to watch")
 	}
 
@@ -119,7 +123,9 @@ func (fw *FileWatcher) watchLoop(ctx context.Context) {
 			if event.Has(fsnotify.Create) {
 				info, err := os.Stat(event.Name)
 				if err == nil && !info.IsDir() && fw.shouldProcessFile(event.Name) {
+					fw.watchedMu.Lock()
 					fw.watchedFiles[event.Name] = true
+					fw.watchedMu.Unlock()
 				}
 			}
 
@@ -228,7 +234,15 @@ func (fw *FileWatcher) formatFile(filename string, timestamp string) {
 func (fw *FileWatcher) processAllFiles() error {
 	timestamp := time.Now().Format("15:04:05")
 
+	// Copy files under lock to avoid race conditions
+	fw.watchedMu.RLock()
+	files := make([]string, 0, len(fw.watchedFiles))
 	for file := range fw.watchedFiles {
+		files = append(files, file)
+	}
+	fw.watchedMu.RUnlock()
+
+	for _, file := range files {
 		switch fw.opts.Mode {
 		case WatchModeValidate:
 			fw.validateFile(file, timestamp)
@@ -291,6 +305,9 @@ func (fw *FileWatcher) addSinglePath(path string) error {
 		return fmt.Errorf("cannot get absolute path for '%s': %w", path, err)
 	}
 
+	fw.watchedMu.Lock()
+	defer fw.watchedMu.Unlock()
+
 	if info.IsDir() {
 		if !fw.watchedDirs[absPath] {
 			if err := fw.watcher.Add(absPath); err != nil {
@@ -328,6 +345,9 @@ func (fw *FileWatcher) addDirectoryRecursive(root string) error {
 			return err
 		}
 
+		fw.watchedMu.Lock()
+		defer fw.watchedMu.Unlock()
+
 		if info.IsDir() {
 			if !fw.watchedDirs[absPath] {
 				if err := fw.watcher.Add(absPath); err != nil {
@@ -358,15 +378,27 @@ func (fw *FileWatcher) printWatchStatus() {
 		modeStr = "formatting"
 	}
 
+	fw.watchedMu.RLock()
+	numFiles := len(fw.watchedFiles)
+	numDirs := len(fw.watchedDirs)
+	var files []string
+	if fw.opts.Verbose {
+		files = make([]string, 0, numFiles)
+		for file := range fw.watchedFiles {
+			files = append(files, file)
+		}
+	}
+	fw.watchedMu.RUnlock()
+
 	fmt.Fprintf(fw.opts.Out, "%s Watching %d file(s) in %d director(y/ies) for %s\n",
 		colorCyan("👁"),
-		len(fw.watchedFiles),
-		len(fw.watchedDirs),
+		numFiles,
+		numDirs,
 		modeStr)
 
 	if fw.opts.Verbose {
 		fmt.Fprintf(fw.opts.Out, "Watched files:\n")
-		for file := range fw.watchedFiles {
+		for _, file := range files {
 			fmt.Fprintf(fw.opts.Out, "  - %s\n", file)
 		}
 	}

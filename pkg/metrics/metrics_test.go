@@ -95,12 +95,12 @@ func TestMetricsBasicFunctionality(t *testing.T) {
 	}
 
 	// Verify timing
-	if stats.AverageDuration <= 0 {
-		t.Error("Average duration should be positive")
+	if stats.AverageTokenizeDuration <= 0 {
+		t.Error("Average tokenize duration should be positive")
 	}
 
-	if stats.OperationsPerSecond <= 0 {
-		t.Error("Operations per second should be positive")
+	if stats.TokenizeOperationsPerSecond <= 0 {
+		t.Error("Tokenize operations per second should be positive")
 	}
 
 	if stats.Uptime <= 0 {

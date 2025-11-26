@@ -129,6 +129,23 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 	}
 	p.advance()
 
+	// Parse optional MATERIALIZED / NOT MATERIALIZED
+	// Syntax: AS [NOT] MATERIALIZED (query)
+	var materialized *bool
+	if p.isType(models.TokenTypeNot) {
+		p.advance() // Consume NOT
+		if !p.isType(models.TokenTypeMaterialized) {
+			return nil, p.expectedError("MATERIALIZED after NOT")
+		}
+		p.advance() // Consume MATERIALIZED
+		notMaterialized := false
+		materialized = &notMaterialized
+	} else if p.isType(models.TokenTypeMaterialized) {
+		p.advance() // Consume MATERIALIZED
+		isMaterialized := true
+		materialized = &isMaterialized
+	}
+
 	// Parse the CTE query (must be in parentheses)
 	if !p.isType(models.TokenTypeLParen) {
 		return nil, p.expectedError("( before CTE query")
@@ -147,9 +164,10 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 	p.advance() // Consume )
 
 	return &ast.CommonTableExpr{
-		Name:      name,
-		Columns:   columns,
-		Statement: stmt,
+		Name:         name,
+		Columns:      columns,
+		Statement:    stmt,
+		Materialized: materialized,
 	}, nil
 }
 

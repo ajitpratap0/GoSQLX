@@ -10,6 +10,22 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
+)
+
+// Server configuration constants
+const (
+	// MaxContentLength limits the size of a single LSP message (10MB)
+	MaxContentLength = 10 * 1024 * 1024
+	// MaxDocumentSize limits the size of SQL documents (5MB)
+	MaxDocumentSize = 5 * 1024 * 1024
+	// RateLimitRequests is the max requests per rate limit window
+	RateLimitRequests = 100
+	// RateLimitWindow is the time window for rate limiting
+	RateLimitWindow = time.Second
+	// RequestTimeout limits how long a request can take
+	RequestTimeout = 30 * time.Second
 )
 
 // Server represents the LSP server
@@ -21,6 +37,11 @@ type Server struct {
 	handler   *Handler
 	logger    *log.Logger
 	shutdown  bool
+
+	// Rate limiting
+	requestCount int64
+	lastReset    time.Time
+	rateMu       sync.Mutex
 }
 
 // NewServer creates a new LSP server
@@ -33,6 +54,7 @@ func NewServer(reader io.Reader, writer io.Writer, logger *log.Logger) *Server {
 		writer:    writer,
 		documents: NewDocumentManager(),
 		logger:    logger,
+		lastReset: time.Now(),
 	}
 	s.handler = NewHandler(s)
 	return s
@@ -98,6 +120,11 @@ func (s *Server) readMessage() (json.RawMessage, error) {
 		return nil, fmt.Errorf("missing Content-Length header")
 	}
 
+	// Validate content length against maximum
+	if contentLength > MaxContentLength {
+		return nil, fmt.Errorf("content length %d exceeds maximum allowed %d", contentLength, MaxContentLength)
+	}
+
 	// Read content
 	content := make([]byte, contentLength)
 	_, err := io.ReadFull(s.reader, content)
@@ -110,10 +137,37 @@ func (s *Server) readMessage() (json.RawMessage, error) {
 
 // handleMessage processes a single message
 func (s *Server) handleMessage(msg json.RawMessage) {
+	// Enforce rate limiting
+	if !s.checkRateLimit() {
+		// For requests with IDs, send rate limit error response
+		var req Request
+		if err := json.Unmarshal(msg, &req); err == nil && req.ID != nil {
+			s.sendError(req.ID, RequestCancelled, "rate limit exceeded")
+		}
+		return
+	}
+
+	// Validate message is not empty or too small to be valid JSON-RPC
+	if len(msg) < 2 {
+		s.logger.Printf("Invalid message: too short (%d bytes)", len(msg))
+		return
+	}
+
 	// Try to parse as request
 	var req Request
 	if err := json.Unmarshal(msg, &req); err != nil {
 		s.logger.Printf("Failed to parse message: %v", err)
+		// Try to extract ID for error response even with malformed JSON
+		s.handleMalformedRequest(msg, err)
+		return
+	}
+
+	// Validate required JSON-RPC fields
+	if req.Method == "" {
+		s.logger.Printf("Invalid request: missing method")
+		if req.ID != nil {
+			s.sendError(req.ID, InvalidRequest, "missing method field")
+		}
 		return
 	}
 
@@ -131,6 +185,17 @@ func (s *Server) handleMessage(msg json.RawMessage) {
 	} else {
 		// It's a notification
 		s.handler.HandleNotification(req.Method, req.Params)
+	}
+}
+
+// handleMalformedRequest attempts to extract an ID from malformed JSON and send error
+func (s *Server) handleMalformedRequest(msg json.RawMessage, parseErr error) {
+	// Try to extract just the ID from the malformed request
+	var partial struct {
+		ID interface{} `json:"id"`
+	}
+	if err := json.Unmarshal(msg, &partial); err == nil && partial.ID != nil {
+		s.sendError(partial.ID, ParseError, fmt.Sprintf("parse error: %v", parseErr))
 	}
 }
 
@@ -214,4 +279,35 @@ func (s *Server) Logger() *log.Logger {
 // SetShutdown marks the server for shutdown
 func (s *Server) SetShutdown() {
 	s.shutdown = true
+}
+
+// checkRateLimit enforces rate limiting on incoming requests
+// Returns true if the request should be allowed, false if rate limited
+func (s *Server) checkRateLimit() bool {
+	s.rateMu.Lock()
+	defer s.rateMu.Unlock()
+
+	now := time.Now()
+	elapsed := now.Sub(s.lastReset)
+
+	// Reset counter if window has passed
+	if elapsed >= RateLimitWindow {
+		s.lastReset = now
+		atomic.StoreInt64(&s.requestCount, 1)
+		return true
+	}
+
+	// Increment and check count
+	count := atomic.AddInt64(&s.requestCount, 1)
+	if count > RateLimitRequests {
+		s.logger.Printf("Rate limit exceeded: %d requests in %v", count, elapsed)
+		return false
+	}
+
+	return true
+}
+
+// MaxDocumentSizeBytes returns the maximum allowed document size
+func (s *Server) MaxDocumentSizeBytes() int {
+	return MaxDocumentSize
 }

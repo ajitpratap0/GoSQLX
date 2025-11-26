@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4A90D9;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1E5FA8;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="64" cy="64" r="60" fill="url(#grad1)"/>
+
+  <!-- Database cylinder - top ellipse -->
+  <ellipse cx="64" cy="35" rx="30" ry="10" fill="#FFFFFF" opacity="0.9"/>
+
+  <!-- Database cylinder - body -->
+  <path d="M34 35 L34 85 Q34 95 64 95 Q94 95 94 85 L94 35 Q94 45 64 45 Q34 45 34 35" fill="#FFFFFF" opacity="0.85"/>
+
+  <!-- Database cylinder - middle line -->
+  <ellipse cx="64" cy="55" rx="30" ry="10" fill="none" stroke="#4A90D9" stroke-width="2" opacity="0.6"/>
+
+  <!-- Database cylinder - bottom line -->
+  <ellipse cx="64" cy="75" rx="30" ry="10" fill="none" stroke="#4A90D9" stroke-width="2" opacity="0.6"/>
+
+  <!-- SQL text -->
+  <text x="64" y="108" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">SQL</text>
+</svg>

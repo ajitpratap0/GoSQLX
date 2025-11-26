@@ -26,7 +26,7 @@ This guide helps you choose the right SQL parsing tool for your needs. We provid
 | **IDE Integration** | ⚠️ Planned | ✅ VSCode | ❌ No | ⚠️ Limited | ❌ No |
 | **Config Files** | ⚠️ Planned | ✅ .sqlfluff | ⚠️ Limited | ⚠️ Limited | ❌ No |
 | **Active Development** | ✅ Yes | ✅ Yes | ⚠️ Slow | ✅ Yes | ✅ Yes |
-| **License** | MIT | MIT | MIT | Apache 2.0 | BSD |
+| **License** | AGPL-3.0 | MIT | MIT | Apache 2.0 | BSD |
 
 *pg_query uses PostgreSQL's official parser, so PostgreSQL compliance is 100%
 

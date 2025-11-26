@@ -2,7 +2,7 @@
 
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-GoSQLX%20Validator-blue.svg?colorA=24292e&colorB=0366d6&style=flat&longCache=true&logo=github)](https://github.com/marketplace/actions/gosqlx-sql-validator)
 [![GitHub Release](https://img.shields.io/github/release/ajitpratap0/GoSQLX.svg?style=flat)](https://github.com/ajitpratap0/GoSQLX/releases)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
 Ultra-fast SQL validation, linting, and formatting for your CI/CD pipelines. **100-1000x faster** than traditional SQL linters like SQLFluff.
 
@@ -435,7 +435,7 @@ We welcome contributions! Please see:
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+GNU Affero General Public License v3.0 (AGPL-3.0) - see [LICENSE](LICENSE) file for details.
 
 ## Support
 

@@ -262,7 +262,7 @@ Add relevant badges to increase trust:
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-GoSQLX-blue.svg)](...)
 [![GitHub Release](https://img.shields.io/github/release/ajitpratap0/GoSQLX.svg)](...)
 [![GitHub Stars](https://img.shields.io/github/stars/ajitpratap0/GoSQLX.svg)](...)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Go Report Card](https://goreportcard.com/badge/github.com/ajitpratap0/GoSQLX)](...)
 ```
 

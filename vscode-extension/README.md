@@ -5,9 +5,7 @@ High-performance SQL parsing, validation, formatting, and analysis powered by [G
 ## Features
 
 ### Real-time SQL Validation
-Get instant feedback on SQL syntax errors as you type. Errors are highlighted directly in the editor with detailed messages.
-
-![Validation](images/validation.gif)
+Get instant feedback on SQL syntax errors as you type. Errors are highlighted directly in the editor with detailed messages in the Problems panel.
 
 ### SQL Formatting
 Format your SQL code with customizable indentation and keyword casing.
@@ -118,7 +116,7 @@ Contributions are welcome! Please see our [Contributing Guide](https://github.co
 
 ## License
 
-MIT License - see [LICENSE](https://github.com/ajitpratap0/GoSQLX/blob/main/LICENSE)
+GNU Affero General Public License v3.0 (AGPL-3.0) - see [LICENSE](https://github.com/ajitpratap0/GoSQLX/blob/main/LICENSE)
 
 ## Release Notes
 

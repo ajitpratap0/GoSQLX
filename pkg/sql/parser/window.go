@@ -5,13 +5,14 @@
 package parser
 
 import (
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
 // SUM(salary) OVER (PARTITION BY dept ORDER BY date ROWS UNBOUNDED PRECEDING) -> window function with frame
 func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 	// Expect opening parenthesis
-	if p.currentToken.Type != "(" {
+	if !p.isType(models.TokenTypeLParen) {
 		return nil, p.expectedError("(")
 	}
 	p.advance() // Consume (
@@ -21,13 +22,13 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 	var distinct bool
 
 	// Check for DISTINCT keyword
-	if p.currentToken.Type == "DISTINCT" {
+	if p.isType(models.TokenTypeDistinct) {
 		distinct = true
 		p.advance()
 	}
 
 	// Parse arguments if not empty
-	if p.currentToken.Type != ")" {
+	if !p.isType(models.TokenTypeRParen) {
 		for {
 			arg, err := p.parseExpression()
 			if err != nil {
@@ -36,9 +37,9 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 			arguments = append(arguments, arg)
 
 			// Check for comma or end of arguments
-			if p.currentToken.Type == "," {
+			if p.isType(models.TokenTypeComma) {
 				p.advance() // Consume comma
-			} else if p.currentToken.Type == ")" {
+			} else if p.isType(models.TokenTypeRParen) {
 				break
 			} else {
 				return nil, p.expectedError(", or )")
@@ -47,7 +48,7 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 	}
 
 	// Expect closing parenthesis
-	if p.currentToken.Type != ")" {
+	if !p.isType(models.TokenTypeRParen) {
 		return nil, p.expectedError(")")
 	}
 	p.advance() // Consume )
@@ -60,7 +61,7 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 	}
 
 	// Check for OVER clause (window function)
-	if p.currentToken.Type == "OVER" {
+	if p.isType(models.TokenTypeOver) {
 		p.advance() // Consume OVER
 
 		windowSpec, err := p.parseWindowSpec()
@@ -76,7 +77,7 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 // parseWindowSpec parses a window specification (PARTITION BY, ORDER BY, frame clause)
 func (p *Parser) parseWindowSpec() (*ast.WindowSpec, error) {
 	// Expect opening parenthesis
-	if p.currentToken.Type != "(" {
+	if !p.isType(models.TokenTypeLParen) {
 		return nil, p.expectedError("(")
 	}
 	p.advance() // Consume (
@@ -84,9 +85,9 @@ func (p *Parser) parseWindowSpec() (*ast.WindowSpec, error) {
 	windowSpec := &ast.WindowSpec{}
 
 	// Parse PARTITION BY clause
-	if p.currentToken.Type == "PARTITION" {
+	if p.isType(models.TokenTypePartition) {
 		p.advance() // Consume PARTITION
-		if p.currentToken.Type != "BY" {
+		if !p.isType(models.TokenTypeBy) {
 			return nil, p.expectedError("BY after PARTITION")
 		}
 		p.advance() // Consume BY
@@ -99,7 +100,7 @@ func (p *Parser) parseWindowSpec() (*ast.WindowSpec, error) {
 			}
 			windowSpec.PartitionBy = append(windowSpec.PartitionBy, expr)
 
-			if p.currentToken.Type == "," {
+			if p.isType(models.TokenTypeComma) {
 				p.advance() // Consume comma
 			} else {
 				break
@@ -108,9 +109,9 @@ func (p *Parser) parseWindowSpec() (*ast.WindowSpec, error) {
 	}
 
 	// Parse ORDER BY clause
-	if p.currentToken.Type == "ORDER" {
+	if p.isType(models.TokenTypeOrder) {
 		p.advance() // Consume ORDER
-		if p.currentToken.Type != "BY" {
+		if !p.isType(models.TokenTypeBy) {
 			return nil, p.expectedError("BY after ORDER")
 		}
 		p.advance() // Consume BY
@@ -130,10 +131,10 @@ func (p *Parser) parseWindowSpec() (*ast.WindowSpec, error) {
 			}
 
 			// Check for ASC/DESC after the expression
-			if p.currentToken.Type == "ASC" {
+			if p.isType(models.TokenTypeAsc) {
 				orderByExpr.Ascending = true
 				p.advance() // Consume ASC
-			} else if p.currentToken.Type == "DESC" {
+			} else if p.isType(models.TokenTypeDesc) {
 				orderByExpr.Ascending = false
 				p.advance() // Consume DESC
 			}
@@ -147,7 +148,7 @@ func (p *Parser) parseWindowSpec() (*ast.WindowSpec, error) {
 
 			windowSpec.OrderBy = append(windowSpec.OrderBy, orderByExpr)
 
-			if p.currentToken.Type == "," {
+			if p.isType(models.TokenTypeComma) {
 				p.advance() // Consume comma
 			} else {
 				break
@@ -156,7 +157,7 @@ func (p *Parser) parseWindowSpec() (*ast.WindowSpec, error) {
 	}
 
 	// Parse frame clause (ROWS/RANGE with bounds)
-	if p.currentToken.Type == "ROWS" || p.currentToken.Type == "RANGE" {
+	if p.isAnyType(models.TokenTypeRows, models.TokenTypeRange) {
 		frameType := p.currentToken.Literal
 		p.advance() // Consume ROWS/RANGE
 
@@ -168,7 +169,7 @@ func (p *Parser) parseWindowSpec() (*ast.WindowSpec, error) {
 	}
 
 	// Expect closing parenthesis
-	if p.currentToken.Type != ")" {
+	if !p.isType(models.TokenTypeRParen) {
 		return nil, p.expectedError(")")
 	}
 	p.advance() // Consume )
@@ -183,7 +184,7 @@ func (p *Parser) parseWindowFrame(frameType string) (*ast.WindowFrame, error) {
 	}
 
 	// Parse frame bounds
-	if p.currentToken.Type == "BETWEEN" {
+	if p.isType(models.TokenTypeBetween) {
 		p.advance() // Consume BETWEEN
 
 		// Parse start bound
@@ -194,7 +195,7 @@ func (p *Parser) parseWindowFrame(frameType string) (*ast.WindowFrame, error) {
 		frame.Start = *startBound
 
 		// Expect AND
-		if p.currentToken.Type != "AND" {
+		if !p.isType(models.TokenTypeAnd) {
 			return nil, p.expectedError("AND")
 		}
 		p.advance() // Consume AND
@@ -222,20 +223,20 @@ func (p *Parser) parseWindowFrame(frameType string) (*ast.WindowFrame, error) {
 func (p *Parser) parseFrameBound() (*ast.WindowFrameBound, error) {
 	bound := &ast.WindowFrameBound{}
 
-	if p.currentToken.Type == "UNBOUNDED" {
+	if p.isType(models.TokenTypeUnbounded) {
 		p.advance() // Consume UNBOUNDED
-		if p.currentToken.Type == "PRECEDING" {
+		if p.isType(models.TokenTypePreceding) {
 			bound.Type = "UNBOUNDED PRECEDING"
 			p.advance() // Consume PRECEDING
-		} else if p.currentToken.Type == "FOLLOWING" {
+		} else if p.isType(models.TokenTypeFollowing) {
 			bound.Type = "UNBOUNDED FOLLOWING"
 			p.advance() // Consume FOLLOWING
 		} else {
 			return nil, p.expectedError("PRECEDING or FOLLOWING after UNBOUNDED")
 		}
-	} else if p.currentToken.Type == "CURRENT" {
+	} else if p.isType(models.TokenTypeCurrent) {
 		p.advance() // Consume CURRENT
-		if p.currentToken.Type != "ROW" {
+		if !p.isType(models.TokenTypeRow) {
 			return nil, p.expectedError("ROW after CURRENT")
 		}
 		bound.Type = "CURRENT ROW"
@@ -248,10 +249,10 @@ func (p *Parser) parseFrameBound() (*ast.WindowFrameBound, error) {
 		}
 		bound.Value = expr
 
-		if p.currentToken.Type == "PRECEDING" {
+		if p.isType(models.TokenTypePreceding) {
 			bound.Type = "PRECEDING"
 			p.advance() // Consume PRECEDING
-		} else if p.currentToken.Type == "FOLLOWING" {
+		} else if p.isType(models.TokenTypeFollowing) {
 			bound.Type = "FOLLOWING"
 			p.advance() // Consume FOLLOWING
 		} else {
@@ -265,13 +266,13 @@ func (p *Parser) parseFrameBound() (*ast.WindowFrameBound, error) {
 // parseNullsClause parses the optional NULLS FIRST/LAST clause in ORDER BY expressions.
 // Returns a pointer to bool indicating null ordering: true for NULLS FIRST, false for NULLS LAST, nil if not specified.
 func (p *Parser) parseNullsClause() (*bool, error) {
-	if p.currentToken.Type == "NULLS" {
+	if p.isType(models.TokenTypeNulls) {
 		p.advance() // Consume NULLS
-		if p.currentToken.Type == "FIRST" {
+		if p.isType(models.TokenTypeFirst) {
 			t := true
 			p.advance() // Consume FIRST
 			return &t, nil
-		} else if p.currentToken.Type == "LAST" {
+		} else if p.isType(models.TokenTypeLast) {
 			f := false
 			p.advance() // Consume LAST
 			return &f, nil

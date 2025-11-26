@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
@@ -43,6 +44,7 @@ type Parser struct {
 }
 
 // Parse parses the tokens into an AST
+// Uses fast ModelType (int) comparisons for hot path optimization
 func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 	p.tokens = tokens
 	p.currentPos = 0
@@ -60,10 +62,10 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 	}
 	result.Statements = make([]ast.Statement, 0, estimatedStmts)
 
-	// Parse statements
-	for p.currentPos < len(tokens) && p.currentToken.Type != token.EOF {
+	// Parse statements using ModelType (int) comparisons for speed
+	for p.currentPos < len(tokens) && !p.isType(models.TokenTypeEOF) {
 		// Skip semicolons between statements
-		if p.currentToken.Type == token.SEMICOLON {
+		if p.isType(models.TokenTypeSemicolon) {
 			p.advance()
 			continue
 		}
@@ -77,7 +79,7 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 		result.Statements = append(result.Statements, stmt)
 
 		// Optionally consume semicolon after statement
-		if p.currentToken.Type == token.SEMICOLON {
+		if p.isType(models.TokenTypeSemicolon) {
 			p.advance()
 		}
 	}
@@ -134,8 +136,8 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 	}
 	result.Statements = make([]ast.Statement, 0, estimatedStmts)
 
-	// Parse statements
-	for p.currentPos < len(tokens) && p.currentToken.Type != token.EOF {
+	// Parse statements using ModelType (int) comparisons for speed
+	for p.currentPos < len(tokens) && !p.isType(models.TokenTypeEOF) {
 		// Check context before each statement
 		if err := ctx.Err(); err != nil {
 			// Clean up the AST on error
@@ -144,7 +146,7 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 		}
 
 		// Skip semicolons between statements
-		if p.currentToken.Type == token.SEMICOLON {
+		if p.isType(models.TokenTypeSemicolon) {
 			p.advance()
 			continue
 		}
@@ -158,7 +160,7 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 		result.Statements = append(result.Statements, stmt)
 
 		// Optionally consume semicolon after statement
-		if p.currentToken.Type == token.SEMICOLON {
+		if p.isType(models.TokenTypeSemicolon) {
 			p.advance()
 		}
 	}
@@ -183,6 +185,7 @@ func (p *Parser) Release() {
 }
 
 // parseStatement parses a single SQL statement
+// Uses fast int-based ModelType comparisons with fallback for hot path optimization
 func (p *Parser) parseStatement() (ast.Statement, error) {
 	// Check context if available
 	if p.ctx != nil {
@@ -191,39 +194,48 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		}
 	}
 
-	switch p.currentToken.Type {
-	case "WITH":
-		return p.parseWithStatement()
-	case "SELECT":
-		p.advance() // Consume SELECT
-		return p.parseSelectWithSetOperations()
-	case "INSERT":
-		p.advance() // Consume INSERT
-		return p.parseInsertStatement()
-	case "UPDATE":
-		p.advance() // Consume UPDATE
-		return p.parseUpdateStatement()
-	case "DELETE":
-		p.advance() // Consume DELETE
-		return p.parseDeleteStatement()
-	case "ALTER":
-		p.advance() // Consume ALTER
-		return p.parseAlterTableStmt()
-	case "MERGE":
-		p.advance() // Consume MERGE
-		return p.parseMergeStatement()
-	case "CREATE":
-		p.advance() // Consume CREATE
-		return p.parseCreateStatement()
-	case "DROP":
-		p.advance() // Consume DROP
-		return p.parseDropStatement()
-	case "REFRESH":
-		p.advance() // Consume REFRESH
-		return p.parseRefreshStatement()
-	default:
+	// Quick check: is this any kind of DML/DDL statement?
+	// Uses isAnyType for efficient multiple type checking
+	if !p.isAnyType(models.TokenTypeWith, models.TokenTypeSelect, models.TokenTypeInsert,
+		models.TokenTypeUpdate, models.TokenTypeDelete, models.TokenTypeAlter,
+		models.TokenTypeMerge, models.TokenTypeCreate, models.TokenTypeDrop, models.TokenTypeRefresh) {
 		return nil, p.expectedError("statement")
 	}
+
+	// Use isType() helper for fast int comparison with fallback
+	if p.isType(models.TokenTypeWith) {
+		return p.parseWithStatement()
+	}
+	// Use matchType() for check-and-advance pattern
+	if p.matchType(models.TokenTypeSelect) {
+		return p.parseSelectWithSetOperations()
+	}
+	if p.matchType(models.TokenTypeInsert) {
+		return p.parseInsertStatement()
+	}
+	if p.matchType(models.TokenTypeUpdate) {
+		return p.parseUpdateStatement()
+	}
+	if p.matchType(models.TokenTypeDelete) {
+		return p.parseDeleteStatement()
+	}
+	if p.matchType(models.TokenTypeAlter) {
+		return p.parseAlterTableStmt()
+	}
+	if p.matchType(models.TokenTypeMerge) {
+		return p.parseMergeStatement()
+	}
+	if p.matchType(models.TokenTypeCreate) {
+		return p.parseCreateStatement()
+	}
+	if p.matchType(models.TokenTypeDrop) {
+		return p.parseDropStatement()
+	}
+	if p.matchType(models.TokenTypeRefresh) {
+		return p.parseRefreshStatement()
+	}
+
+	return nil, p.expectedError("statement")
 }
 
 // NewParser creates a new parser
@@ -260,6 +272,208 @@ func (p *Parser) peekToken() token.Token {
 	}
 	return token.Token{}
 }
+
+// =============================================================================
+// ModelType-based Helper Methods (Phase 2 - Fast Int Comparisons)
+// =============================================================================
+// These methods use int-based ModelType comparisons which are significantly
+// faster than string comparisons (~0.24ns vs ~3.4ns). Use these for hot paths.
+// They include fallback to string-based Type comparison for backward compatibility
+// with tests that create tokens directly without setting ModelType.
+
+// modelTypeToString maps ModelType to expected string Type for fallback comparison.
+// This comprehensive map enables isType() to work with tokens that don't have ModelType set
+// (e.g., tokens created in tests without using the tokenizer).
+// NOTE: Only TokenTypes that exist in models package are included here.
+var modelTypeToString = map[models.TokenType]token.Type{
+	// Special tokens
+	models.TokenTypeEOF:        token.EOF,
+	models.TokenTypeSemicolon:  token.SEMICOLON,
+	models.TokenTypeIdentifier: "IDENT",
+
+	// Punctuation and operators
+	models.TokenTypeComma:    token.COMMA,
+	models.TokenTypeLParen:   "(",
+	models.TokenTypeRParen:   ")",
+	models.TokenTypeEq:       "=",
+	models.TokenTypeLt:       "<",
+	models.TokenTypeGt:       ">",
+	models.TokenTypeNeq:      "!=",
+	models.TokenTypeLtEq:     "<=",
+	models.TokenTypeGtEq:     ">=",
+	models.TokenTypeDot:      ".",
+	models.TokenTypeAsterisk: "*",
+
+	// Core SQL keywords
+	models.TokenTypeSelect: token.SELECT,
+	models.TokenTypeFrom:   token.FROM,
+	models.TokenTypeWhere:  token.WHERE,
+	models.TokenTypeInsert: token.INSERT,
+	models.TokenTypeUpdate: token.UPDATE,
+	models.TokenTypeDelete: token.DELETE,
+	models.TokenTypeInto:   "INTO",
+	models.TokenTypeValues: "VALUES",
+	models.TokenTypeSet:    "SET",
+	models.TokenTypeAs:     "AS",
+	models.TokenTypeOn:     "ON",
+
+	// DDL keywords
+	models.TokenTypeCreate:       "CREATE",
+	models.TokenTypeAlter:        token.ALTER,
+	models.TokenTypeDrop:         token.DROP,
+	models.TokenTypeTable:        "TABLE",
+	models.TokenTypeIndex:        "INDEX",
+	models.TokenTypeView:         "VIEW",
+	models.TokenTypePrimary:      "PRIMARY",
+	models.TokenTypeForeign:      "FOREIGN",
+	models.TokenTypeUnique:       "UNIQUE",
+	models.TokenTypeCheck:        "CHECK",
+	models.TokenTypeConstraint:   "CONSTRAINT",
+	models.TokenTypeDefault:      "DEFAULT",
+	models.TokenTypeReferences:   "REFERENCES",
+	models.TokenTypeCascade:      "CASCADE",
+	models.TokenTypeRestrict:     "RESTRICT",
+	models.TokenTypeMaterialized: "MATERIALIZED",
+	models.TokenTypeReplace:      "REPLACE",
+	models.TokenTypeCollate:      "COLLATE",
+
+	// Clause keywords
+	models.TokenTypeGroup:    "GROUP",
+	models.TokenTypeBy:       "BY",
+	models.TokenTypeHaving:   "HAVING",
+	models.TokenTypeOrder:    "ORDER",
+	models.TokenTypeAsc:      "ASC",
+	models.TokenTypeDesc:     "DESC",
+	models.TokenTypeLimit:    "LIMIT",
+	models.TokenTypeOffset:   "OFFSET",
+	models.TokenTypeDistinct: "DISTINCT",
+
+	// JOIN keywords
+	models.TokenTypeJoin:    "JOIN",
+	models.TokenTypeInner:   "INNER",
+	models.TokenTypeLeft:    "LEFT",
+	models.TokenTypeRight:   "RIGHT",
+	models.TokenTypeFull:    "FULL",
+	models.TokenTypeOuter:   "OUTER",
+	models.TokenTypeCross:   "CROSS",
+	models.TokenTypeNatural: "NATURAL",
+	models.TokenTypeUsing:   "USING",
+
+	// Set operations
+	models.TokenTypeUnion:     "UNION",
+	models.TokenTypeExcept:    "EXCEPT",
+	models.TokenTypeIntersect: "INTERSECT",
+	models.TokenTypeAll:       "ALL",
+
+	// Logical operators
+	models.TokenTypeAnd: "AND",
+	models.TokenTypeOr:  "OR",
+	models.TokenTypeNot: "NOT",
+
+	// Comparison operators
+	models.TokenTypeIs:      "IS",
+	models.TokenTypeIn:      "IN",
+	models.TokenTypeLike:    "LIKE",
+	models.TokenTypeBetween: "BETWEEN",
+	models.TokenTypeExists:  "EXISTS",
+	models.TokenTypeAny:     "ANY",
+
+	// NULL and boolean
+	models.TokenTypeNull:  "NULL",
+	models.TokenTypeTrue:  "TRUE",
+	models.TokenTypeFalse: "FALSE",
+
+	// Window function keywords
+	models.TokenTypeOver:      "OVER",
+	models.TokenTypePartition: "PARTITION",
+	models.TokenTypeRows:      "ROWS",
+	models.TokenTypeRange:     "RANGE",
+	models.TokenTypeUnbounded: "UNBOUNDED",
+	models.TokenTypePreceding: "PRECEDING",
+	models.TokenTypeFollowing: "FOLLOWING",
+	models.TokenTypeCurrent:   "CURRENT",
+	models.TokenTypeRow:       "ROW",
+	models.TokenTypeNulls:     "NULLS",
+	models.TokenTypeFirst:     "FIRST",
+	models.TokenTypeLast:      "LAST",
+	models.TokenTypeFilter:    "FILTER",
+
+	// Placeholder token - maps to "PLACEHOLDER" for tests that create tokens manually
+	models.TokenTypePlaceholder: "PLACEHOLDER",
+
+	// CTE keywords
+	models.TokenTypeWith:      token.WITH,
+	models.TokenTypeRecursive: "RECURSIVE",
+
+	// CASE expression
+	models.TokenTypeCase: "CASE",
+	models.TokenTypeWhen: "WHEN",
+	models.TokenTypeThen: "THEN",
+	models.TokenTypeElse: "ELSE",
+	models.TokenTypeEnd:  "END",
+
+	// MERGE keywords
+	models.TokenTypeMerge:   "MERGE",
+	models.TokenTypeMatched: "MATCHED",
+	models.TokenTypeSource:  "SOURCE",
+	models.TokenTypeTarget:  "TARGET",
+
+	// Grouping keywords
+	models.TokenTypeRollup:       "ROLLUP",
+	models.TokenTypeCube:         "CUBE",
+	models.TokenTypeGrouping:     "GROUPING",
+	models.TokenTypeGroupingSets: "GROUPING SETS",
+	models.TokenTypeSets:         "SETS",
+
+	// Data types
+	models.TokenTypeInt:     "INT",
+	models.TokenTypeInteger: "INTEGER",
+	models.TokenTypeVarchar: "VARCHAR",
+	models.TokenTypeText:    "TEXT",
+	models.TokenTypeBoolean: "BOOLEAN",
+
+	// Other keywords
+	models.TokenTypeIf:      "IF",
+	models.TokenTypeRefresh: "REFRESH",
+	models.TokenTypeTo:      "TO",
+}
+
+// isType checks if the current token's ModelType matches the expected type.
+// Falls back to string comparison if ModelType is not set (for backward compatibility).
+func (p *Parser) isType(expected models.TokenType) bool {
+	// Fast path: use int comparison if ModelType is set
+	if p.currentToken.ModelType != 0 {
+		return p.currentToken.ModelType == expected
+	}
+	// Fallback: string comparison for tokens without ModelType
+	if str, ok := modelTypeToString[expected]; ok {
+		return p.currentToken.Type == str
+	}
+	return false
+}
+
+// isAnyType checks if the current token's ModelType matches any of the given types.
+// More efficient than multiple isType calls when checking many alternatives.
+func (p *Parser) isAnyType(types ...models.TokenType) bool {
+	for _, t := range types {
+		if p.isType(t) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchType checks if the current token's ModelType matches and advances if true.
+// Returns true if matched (and advanced), false otherwise.
+func (p *Parser) matchType(expected models.TokenType) bool {
+	if p.isType(expected) {
+		p.advance()
+		return true
+	}
+	return false
+}
+
+// =============================================================================
 
 // expectedError returns an error for unexpected token
 func (p *Parser) expectedError(expected string) error {

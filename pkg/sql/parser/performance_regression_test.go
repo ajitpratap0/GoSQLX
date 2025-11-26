@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
 
@@ -172,23 +173,23 @@ func TestPerformanceRegression(t *testing.T) {
 
 		// Window function query: SELECT name, ROW_NUMBER() OVER (PARTITION BY dept ORDER BY salary) FROM employees
 		windowTokens := []token.Token{
-			{Type: "SELECT", Literal: "SELECT"},
-			{Type: "IDENT", Literal: "name"},
-			{Type: ",", Literal: ","},
-			{Type: "IDENT", Literal: "ROW_NUMBER"},
-			{Type: "(", Literal: "("},
-			{Type: ")", Literal: ")"},
-			{Type: "OVER", Literal: "OVER"},
-			{Type: "(", Literal: "("},
-			{Type: "PARTITION", Literal: "PARTITION"},
-			{Type: "BY", Literal: "BY"},
-			{Type: "IDENT", Literal: "dept"},
-			{Type: "ORDER", Literal: "ORDER"},
-			{Type: "BY", Literal: "BY"},
-			{Type: "IDENT", Literal: "salary"},
-			{Type: ")", Literal: ")"},
-			{Type: "FROM", Literal: "FROM"},
-			{Type: "IDENT", Literal: "employees"},
+			{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"},
+			{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "name"},
+			{Type: ",", ModelType: models.TokenTypeComma, Literal: ","},
+			{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "ROW_NUMBER"},
+			{Type: "(", ModelType: models.TokenTypeLeftParen, Literal: "("},
+			{Type: ")", ModelType: models.TokenTypeRightParen, Literal: ")"},
+			{Type: "OVER", ModelType: models.TokenTypeOver, Literal: "OVER"},
+			{Type: "(", ModelType: models.TokenTypeLeftParen, Literal: "("},
+			{Type: "PARTITION", ModelType: models.TokenTypePartition, Literal: "PARTITION"},
+			{Type: "BY", ModelType: models.TokenTypeBy, Literal: "BY"},
+			{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "dept"},
+			{Type: "ORDER", ModelType: models.TokenTypeOrder, Literal: "ORDER"},
+			{Type: "BY", ModelType: models.TokenTypeBy, Literal: "BY"},
+			{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "salary"},
+			{Type: ")", ModelType: models.TokenTypeRightParen, Literal: ")"},
+			{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
+			{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "employees"},
 		}
 
 		result := testing.Benchmark(func(b *testing.B) {
@@ -222,19 +223,19 @@ func TestPerformanceRegression(t *testing.T) {
 
 		// CTE query: WITH cte AS (SELECT id FROM users) SELECT * FROM cte
 		cteTokens := []token.Token{
-			{Type: "WITH", Literal: "WITH"},
-			{Type: "IDENT", Literal: "cte"},
-			{Type: "AS", Literal: "AS"},
-			{Type: "(", Literal: "("},
-			{Type: "SELECT", Literal: "SELECT"},
-			{Type: "IDENT", Literal: "id"},
-			{Type: "FROM", Literal: "FROM"},
-			{Type: "IDENT", Literal: "users"},
-			{Type: ")", Literal: ")"},
-			{Type: "SELECT", Literal: "SELECT"},
-			{Type: "*", Literal: "*"},
-			{Type: "FROM", Literal: "FROM"},
-			{Type: "IDENT", Literal: "cte"},
+			{Type: "WITH", ModelType: models.TokenTypeWith, Literal: "WITH"},
+			{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "cte"},
+			{Type: "AS", ModelType: models.TokenTypeAs, Literal: "AS"},
+			{Type: "(", ModelType: models.TokenTypeLeftParen, Literal: "("},
+			{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"},
+			{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "id"},
+			{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
+			{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "users"},
+			{Type: ")", ModelType: models.TokenTypeRightParen, Literal: ")"},
+			{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"},
+			{Type: "*", ModelType: models.TokenTypeAsterisk, Literal: "*"},
+			{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
+			{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "cte"},
 		}
 
 		result := testing.Benchmark(func(b *testing.B) {
@@ -353,23 +354,23 @@ func BenchmarkPerformanceBaseline(b *testing.B) {
 
 	b.Run("WindowFunction", func(b *testing.B) {
 		windowTokens := []token.Token{
-			{Type: "SELECT", Literal: "SELECT"},
-			{Type: "IDENT", Literal: "name"},
-			{Type: ",", Literal: ","},
-			{Type: "IDENT", Literal: "ROW_NUMBER"},
-			{Type: "(", Literal: "("},
-			{Type: ")", Literal: ")"},
-			{Type: "OVER", Literal: "OVER"},
-			{Type: "(", Literal: "("},
-			{Type: "PARTITION", Literal: "PARTITION"},
-			{Type: "BY", Literal: "BY"},
-			{Type: "IDENT", Literal: "dept"},
-			{Type: "ORDER", Literal: "ORDER"},
-			{Type: "BY", Literal: "BY"},
-			{Type: "IDENT", Literal: "salary"},
-			{Type: ")", Literal: ")"},
-			{Type: "FROM", Literal: "FROM"},
-			{Type: "IDENT", Literal: "employees"},
+			{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"},
+			{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "name"},
+			{Type: ",", ModelType: models.TokenTypeComma, Literal: ","},
+			{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "ROW_NUMBER"},
+			{Type: "(", ModelType: models.TokenTypeLeftParen, Literal: "("},
+			{Type: ")", ModelType: models.TokenTypeRightParen, Literal: ")"},
+			{Type: "OVER", ModelType: models.TokenTypeOver, Literal: "OVER"},
+			{Type: "(", ModelType: models.TokenTypeLeftParen, Literal: "("},
+			{Type: "PARTITION", ModelType: models.TokenTypePartition, Literal: "PARTITION"},
+			{Type: "BY", ModelType: models.TokenTypeBy, Literal: "BY"},
+			{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "dept"},
+			{Type: "ORDER", ModelType: models.TokenTypeOrder, Literal: "ORDER"},
+			{Type: "BY", ModelType: models.TokenTypeBy, Literal: "BY"},
+			{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "salary"},
+			{Type: ")", ModelType: models.TokenTypeRightParen, Literal: ")"},
+			{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
+			{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "employees"},
 		}
 		b.ReportAllocs()
 		benchmarkParser(b, windowTokens)
@@ -377,19 +378,19 @@ func BenchmarkPerformanceBaseline(b *testing.B) {
 
 	b.Run("CTE", func(b *testing.B) {
 		cteTokens := []token.Token{
-			{Type: "WITH", Literal: "WITH"},
-			{Type: "IDENT", Literal: "cte"},
-			{Type: "AS", Literal: "AS"},
-			{Type: "(", Literal: "("},
-			{Type: "SELECT", Literal: "SELECT"},
-			{Type: "IDENT", Literal: "id"},
-			{Type: "FROM", Literal: "FROM"},
-			{Type: "IDENT", Literal: "users"},
-			{Type: ")", Literal: ")"},
-			{Type: "SELECT", Literal: "SELECT"},
-			{Type: "*", Literal: "*"},
-			{Type: "FROM", Literal: "FROM"},
-			{Type: "IDENT", Literal: "cte"},
+			{Type: "WITH", ModelType: models.TokenTypeWith, Literal: "WITH"},
+			{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "cte"},
+			{Type: "AS", ModelType: models.TokenTypeAs, Literal: "AS"},
+			{Type: "(", ModelType: models.TokenTypeLeftParen, Literal: "("},
+			{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"},
+			{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "id"},
+			{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
+			{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "users"},
+			{Type: ")", ModelType: models.TokenTypeRightParen, Literal: ")"},
+			{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"},
+			{Type: "*", ModelType: models.TokenTypeAsterisk, Literal: "*"},
+			{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
+			{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "cte"},
 		}
 		b.ReportAllocs()
 		benchmarkParser(b, cteTokens)

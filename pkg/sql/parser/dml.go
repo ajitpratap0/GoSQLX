@@ -6,6 +6,7 @@ package parser
 import (
 	"fmt"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
@@ -15,13 +16,13 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 	// We've already consumed the INSERT token in matchToken
 
 	// Parse INTO
-	if p.currentToken.Type != "INTO" {
+	if !p.isType(models.TokenTypeInto) {
 		return nil, p.expectedError("INTO")
 	}
 	p.advance() // Consume INTO
 
 	// Parse table name
-	if p.currentToken.Type != "IDENT" {
+	if !p.isType(models.TokenTypeIdentifier) {
 		return nil, p.expectedError("table name")
 	}
 	tableName := p.currentToken.Literal
@@ -29,39 +30,39 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 
 	// Parse column list if present
 	columns := make([]ast.Expression, 0)
-	if p.currentToken.Type == "(" {
+	if p.isType(models.TokenTypeLParen) {
 		p.advance() // Consume (
 
 		for {
 			// Parse column name
-			if p.currentToken.Type != "IDENT" {
+			if !p.isType(models.TokenTypeIdentifier) {
 				return nil, p.expectedError("column name")
 			}
 			columns = append(columns, &ast.Identifier{Name: p.currentToken.Literal})
 			p.advance()
 
 			// Check if there are more columns
-			if p.currentToken.Type != "," {
+			if !p.isType(models.TokenTypeComma) {
 				break
 			}
 			p.advance() // Consume comma
 		}
 
-		if p.currentToken.Type != ")" {
+		if !p.isType(models.TokenTypeRParen) {
 			return nil, p.expectedError(")")
 		}
 		p.advance() // Consume )
 	}
 
 	// Parse VALUES
-	if p.currentToken.Type != "VALUES" {
+	if !p.isType(models.TokenTypeValues) {
 		return nil, p.expectedError("VALUES")
 	}
 	p.advance() // Consume VALUES
 
 	// Parse value list
 	values := make([]ast.Expression, 0)
-	if p.currentToken.Type == "(" {
+	if p.isType(models.TokenTypeLParen) {
 		p.advance() // Consume (
 
 		for {
@@ -86,13 +87,13 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 			values = append(values, expr)
 
 			// Check if there are more values
-			if p.currentToken.Type != "," {
+			if !p.isType(models.TokenTypeComma) {
 				break
 			}
 			p.advance() // Consume comma
 		}
 
-		if p.currentToken.Type != ")" {
+		if !p.isType(models.TokenTypeRParen) {
 			return nil, p.expectedError(")")
 		}
 		p.advance() // Consume )
@@ -111,14 +112,14 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 	// We've already consumed the UPDATE token in matchToken
 
 	// Parse table name
-	if p.currentToken.Type != "IDENT" {
+	if !p.isType(models.TokenTypeIdentifier) {
 		return nil, p.expectedError("table name")
 	}
 	tableName := p.currentToken.Literal
 	p.advance()
 
 	// Parse SET
-	if p.currentToken.Type != "SET" {
+	if !p.isType(models.TokenTypeSet) {
 		return nil, p.expectedError("SET")
 	}
 	p.advance() // Consume SET
@@ -127,13 +128,13 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 	updates := make([]ast.UpdateExpression, 0)
 	for {
 		// Parse column name
-		if p.currentToken.Type != "IDENT" {
+		if !p.isType(models.TokenTypeIdentifier) {
 			return nil, p.expectedError("column name")
 		}
 		columnName := p.currentToken.Literal
 		p.advance()
 
-		if p.currentToken.Type != "=" {
+		if !p.isType(models.TokenTypeEq) {
 			return nil, p.expectedError("=")
 		}
 		p.advance() // Consume =
@@ -170,7 +171,7 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 		updates = append(updates, updateExpr)
 
 		// Check if there are more assignments
-		if p.currentToken.Type != "," {
+		if !p.isType(models.TokenTypeComma) {
 			break
 		}
 		p.advance() // Consume comma
@@ -178,7 +179,7 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 
 	// Parse WHERE clause if present
 	var whereClause ast.Expression
-	if p.currentToken.Type == "WHERE" {
+	if p.isType(models.TokenTypeWhere) {
 		p.advance() // Consume WHERE
 		var err error
 		whereClause, err = p.parseExpression()
@@ -200,13 +201,13 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 	// We've already consumed the DELETE token in matchToken
 
 	// Parse FROM
-	if p.currentToken.Type != "FROM" {
+	if !p.isType(models.TokenTypeFrom) {
 		return nil, p.expectedError("FROM")
 	}
 	p.advance() // Consume FROM
 
 	// Parse table name
-	if p.currentToken.Type != "IDENT" {
+	if !p.isType(models.TokenTypeIdentifier) {
 		return nil, p.expectedError("table name")
 	}
 	tableName := p.currentToken.Literal
@@ -214,7 +215,7 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 
 	// Parse WHERE clause if present
 	var whereClause ast.Expression
-	if p.currentToken.Type == "WHERE" {
+	if p.isType(models.TokenTypeWhere) {
 		p.advance() // Consume WHERE
 		var err error
 		whereClause, err = p.parseExpression()
@@ -240,7 +241,7 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 	stmt := &ast.MergeStatement{}
 
 	// Parse INTO (optional)
-	if p.currentToken.Type == "INTO" {
+	if p.isType(models.TokenTypeInto) {
 		p.advance() // Consume INTO
 	}
 
@@ -252,20 +253,20 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 	stmt.TargetTable = *tableRef
 
 	// Parse optional target alias (AS alias or just alias)
-	if p.currentToken.Type == "AS" {
+	if p.isType(models.TokenTypeAs) {
 		p.advance() // Consume AS
-		if p.currentToken.Type != "IDENT" && !p.isNonReservedKeyword() {
+		if !p.isType(models.TokenTypeIdentifier) && !p.isNonReservedKeyword() {
 			return nil, p.expectedError("target alias after AS")
 		}
 		stmt.TargetAlias = p.currentToken.Literal
 		p.advance()
-	} else if p.canBeAlias() && p.currentToken.Type != "USING" && p.currentToken.Literal != "USING" {
+	} else if p.canBeAlias() && !p.isType(models.TokenTypeUsing) && p.currentToken.Literal != "USING" {
 		stmt.TargetAlias = p.currentToken.Literal
 		p.advance()
 	}
 
 	// Parse USING
-	if p.currentToken.Type != "USING" && p.currentToken.Literal != "USING" {
+	if !p.isType(models.TokenTypeUsing) && p.currentToken.Literal != "USING" {
 		return nil, p.expectedError("USING")
 	}
 	p.advance() // Consume USING
@@ -278,20 +279,20 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 	stmt.SourceTable = *sourceRef
 
 	// Parse optional source alias
-	if p.currentToken.Type == "AS" {
+	if p.isType(models.TokenTypeAs) {
 		p.advance() // Consume AS
-		if p.currentToken.Type != "IDENT" && !p.isNonReservedKeyword() {
+		if !p.isType(models.TokenTypeIdentifier) && !p.isNonReservedKeyword() {
 			return nil, p.expectedError("source alias after AS")
 		}
 		stmt.SourceAlias = p.currentToken.Literal
 		p.advance()
-	} else if p.canBeAlias() && p.currentToken.Type != "ON" && p.currentToken.Literal != "ON" {
+	} else if p.canBeAlias() && !p.isType(models.TokenTypeOn) && p.currentToken.Literal != "ON" {
 		stmt.SourceAlias = p.currentToken.Literal
 		p.advance()
 	}
 
 	// Parse ON condition
-	if p.currentToken.Type != "ON" {
+	if !p.isType(models.TokenTypeOn) {
 		return nil, p.expectedError("ON")
 	}
 	p.advance() // Consume ON
@@ -303,7 +304,7 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 	stmt.OnCondition = onCondition
 
 	// Parse WHEN clauses
-	for p.currentToken.Type == "WHEN" {
+	for p.isType(models.TokenTypeWhen) {
 		whenClause, err := p.parseMergeWhenClause()
 		if err != nil {
 			return nil, err
@@ -325,20 +326,20 @@ func (p *Parser) parseMergeWhenClause() (*ast.MergeWhenClause, error) {
 	p.advance() // Consume WHEN
 
 	// Determine clause type: MATCHED, NOT MATCHED, NOT MATCHED BY SOURCE
-	if p.currentToken.Type == "MATCHED" || p.currentToken.Literal == "MATCHED" {
+	if p.isType(models.TokenTypeMatched) || p.currentToken.Literal == "MATCHED" {
 		clause.Type = "MATCHED"
 		p.advance() // Consume MATCHED
-	} else if p.currentToken.Type == "NOT" {
+	} else if p.isType(models.TokenTypeNot) {
 		p.advance() // Consume NOT
-		if p.currentToken.Type != "MATCHED" && p.currentToken.Literal != "MATCHED" {
+		if !p.isType(models.TokenTypeMatched) && p.currentToken.Literal != "MATCHED" {
 			return nil, p.expectedError("MATCHED after NOT")
 		}
 		p.advance() // Consume MATCHED
 
 		// Check for BY SOURCE
-		if p.currentToken.Type == "BY" {
+		if p.isType(models.TokenTypeBy) {
 			p.advance() // Consume BY
-			if p.currentToken.Type != "SOURCE" && p.currentToken.Literal != "SOURCE" {
+			if !p.isType(models.TokenTypeSource) && p.currentToken.Literal != "SOURCE" {
 				return nil, p.expectedError("SOURCE after BY")
 			}
 			p.advance() // Consume SOURCE
@@ -351,7 +352,7 @@ func (p *Parser) parseMergeWhenClause() (*ast.MergeWhenClause, error) {
 	}
 
 	// Parse optional AND condition
-	if p.currentToken.Type == "AND" {
+	if p.isType(models.TokenTypeAnd) {
 		p.advance() // Consume AND
 		condition, err := p.parseExpression()
 		if err != nil {
@@ -361,7 +362,7 @@ func (p *Parser) parseMergeWhenClause() (*ast.MergeWhenClause, error) {
 	}
 
 	// Parse THEN
-	if p.currentToken.Type != "THEN" {
+	if !p.isType(models.TokenTypeThen) {
 		return nil, p.expectedError("THEN")
 	}
 	p.advance() // Consume THEN
@@ -380,20 +381,19 @@ func (p *Parser) parseMergeWhenClause() (*ast.MergeWhenClause, error) {
 func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 	action := &ast.MergeAction{}
 
-	switch p.currentToken.Type {
-	case "UPDATE":
+	if p.isType(models.TokenTypeUpdate) {
 		action.ActionType = "UPDATE"
 		p.advance() // Consume UPDATE
 
 		// Parse SET
-		if p.currentToken.Type != "SET" {
+		if !p.isType(models.TokenTypeSet) {
 			return nil, p.expectedError("SET after UPDATE")
 		}
 		p.advance() // Consume SET
 
 		// Parse SET clauses
 		for {
-			if p.currentToken.Type != "IDENT" && !p.canBeAlias() {
+			if !p.isType(models.TokenTypeIdentifier) && !p.canBeAlias() {
 				return nil, p.expectedError("column name")
 			}
 			// Handle qualified column names (e.g., t.name)
@@ -401,9 +401,9 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 			p.advance()
 
 			// Check for qualified name (table.column)
-			if p.currentToken.Type == "." {
+			if p.isType(models.TokenTypePeriod) {
 				p.advance() // Consume .
-				if p.currentToken.Type != "IDENT" && !p.canBeAlias() {
+				if !p.isType(models.TokenTypeIdentifier) && !p.canBeAlias() {
 					return nil, p.expectedError("column name after .")
 				}
 				columnName = columnName + "." + p.currentToken.Literal
@@ -412,7 +412,7 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 
 			setClause := ast.SetClause{Column: columnName}
 
-			if p.currentToken.Type != "=" {
+			if !p.isType(models.TokenTypeEq) {
 				return nil, p.expectedError("=")
 			}
 			p.advance() // Consume =
@@ -424,13 +424,12 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 			setClause.Value = value
 			action.SetClauses = append(action.SetClauses, setClause)
 
-			if p.currentToken.Type != "," {
+			if !p.isType(models.TokenTypeComma) {
 				break
 			}
 			p.advance() // Consume comma
 		}
-
-	case "INSERT":
+	} else if p.isType(models.TokenTypeInsert) {
 		if clauseType == "MATCHED" || clauseType == "NOT_MATCHED_BY_SOURCE" {
 			return nil, fmt.Errorf("INSERT not allowed in WHEN %s clause", clauseType)
 		}
@@ -438,37 +437,37 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 		p.advance() // Consume INSERT
 
 		// Parse optional column list
-		if p.currentToken.Type == "(" {
+		if p.isType(models.TokenTypeLParen) {
 			p.advance() // Consume (
 			for {
-				if p.currentToken.Type != "IDENT" {
+				if !p.isType(models.TokenTypeIdentifier) {
 					return nil, p.expectedError("column name")
 				}
 				action.Columns = append(action.Columns, p.currentToken.Literal)
 				p.advance()
 
-				if p.currentToken.Type != "," {
+				if !p.isType(models.TokenTypeComma) {
 					break
 				}
 				p.advance() // Consume comma
 			}
-			if p.currentToken.Type != ")" {
+			if !p.isType(models.TokenTypeRParen) {
 				return nil, p.expectedError(")")
 			}
 			p.advance() // Consume )
 		}
 
 		// Parse VALUES or DEFAULT VALUES
-		if p.currentToken.Type == "DEFAULT" {
+		if p.isType(models.TokenTypeDefault) {
 			p.advance() // Consume DEFAULT
-			if p.currentToken.Type != "VALUES" {
+			if !p.isType(models.TokenTypeValues) {
 				return nil, p.expectedError("VALUES after DEFAULT")
 			}
 			p.advance() // Consume VALUES
 			action.DefaultValues = true
-		} else if p.currentToken.Type == "VALUES" {
+		} else if p.isType(models.TokenTypeValues) {
 			p.advance() // Consume VALUES
-			if p.currentToken.Type != "(" {
+			if !p.isType(models.TokenTypeLParen) {
 				return nil, p.expectedError("(")
 			}
 			p.advance() // Consume (
@@ -480,28 +479,26 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 				}
 				action.Values = append(action.Values, value)
 
-				if p.currentToken.Type != "," {
+				if !p.isType(models.TokenTypeComma) {
 					break
 				}
 				p.advance() // Consume comma
 			}
 
-			if p.currentToken.Type != ")" {
+			if !p.isType(models.TokenTypeRParen) {
 				return nil, p.expectedError(")")
 			}
 			p.advance() // Consume )
 		} else {
 			return nil, p.expectedError("VALUES or DEFAULT VALUES")
 		}
-
-	case "DELETE":
+	} else if p.isType(models.TokenTypeDelete) {
 		if clauseType == "NOT_MATCHED" {
 			return nil, fmt.Errorf("DELETE not allowed in WHEN NOT MATCHED clause")
 		}
 		action.ActionType = "DELETE"
 		p.advance() // Consume DELETE
-
-	default:
+	} else {
 		return nil, p.expectedError("UPDATE, INSERT, or DELETE")
 	}
 

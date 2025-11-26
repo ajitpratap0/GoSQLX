@@ -6,6 +6,7 @@ package parser
 import (
 	"fmt"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
@@ -51,7 +52,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	columns := make([]ast.Expression, 0)
 	for {
 		// Handle * as a special case
-		if p.currentToken.Type == "*" {
+		if p.isType(models.TokenTypeAsterisk) {
 			columns = append(columns, &ast.Identifier{Name: "*"})
 			p.advance()
 		} else {
@@ -62,9 +63,9 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			}
 
 			// Check for optional column alias (AS alias_name)
-			if p.currentToken.Type == "AS" {
+			if p.isType(models.TokenTypeAs) {
 				p.advance() // Consume AS
-				if p.currentToken.Type != "IDENT" {
+				if !p.isType(models.TokenTypeIdentifier) {
 					return nil, p.expectedError("alias name after AS")
 				}
 				// Consume the alias name (for now we don't store it in AST)
@@ -75,14 +76,14 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		}
 
 		// Check if there are more columns
-		if p.currentToken.Type != "," {
+		if !p.isType(models.TokenTypeComma) {
 			break
 		}
 		p.advance() // Consume comma
 	}
 
 	// Parse FROM clause (optional to support SELECT without FROM like "SELECT 1")
-	if p.currentToken.Type != "FROM" && p.currentToken.Type != "EOF" && p.currentToken.Type != ";" {
+	if !p.isType(models.TokenTypeFrom) && !p.isType(models.TokenTypeEOF) && !p.isType(models.TokenTypeSemicolon) {
 		// If not FROM, EOF, or semicolon, it's likely an error
 		return nil, p.expectedError("FROM, semicolon, or end of statement")
 	}
@@ -91,11 +92,11 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	var tables []ast.TableReference
 	var joins []ast.JoinClause
 
-	if p.currentToken.Type == "FROM" {
+	if p.isType(models.TokenTypeFrom) {
 		p.advance() // Consume FROM
 
 		// Parse table name
-		if p.currentToken.Type != "IDENT" {
+		if !p.isType(models.TokenTypeIdentifier) {
 			return nil, p.expectedError("table name")
 		}
 		tableName = p.currentToken.Literal
@@ -107,14 +108,14 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		}
 
 		// Check for table alias
-		if p.currentToken.Type == "IDENT" || p.currentToken.Type == "AS" {
-			if p.currentToken.Type == "AS" {
+		if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeAs) {
+			if p.isType(models.TokenTypeAs) {
 				p.advance() // Consume AS
-				if p.currentToken.Type != "IDENT" {
+				if !p.isType(models.TokenTypeIdentifier) {
 					return nil, p.expectedError("alias after AS")
 				}
 			}
-			if p.currentToken.Type == "IDENT" {
+			if p.isType(models.TokenTypeIdentifier) {
 				tableRef.Alias = p.currentToken.Literal
 				p.advance()
 			}
@@ -129,40 +130,40 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			// Determine JOIN type
 			joinType := "INNER" // Default
 
-			if p.currentToken.Type == "LEFT" {
+			if p.isType(models.TokenTypeLeft) {
 				joinType = "LEFT"
 				p.advance()
-				if p.currentToken.Type == "OUTER" {
+				if p.isType(models.TokenTypeOuter) {
 					p.advance() // Optional OUTER keyword
 				}
-			} else if p.currentToken.Type == "RIGHT" {
+			} else if p.isType(models.TokenTypeRight) {
 				joinType = "RIGHT"
 				p.advance()
-				if p.currentToken.Type == "OUTER" {
+				if p.isType(models.TokenTypeOuter) {
 					p.advance() // Optional OUTER keyword
 				}
-			} else if p.currentToken.Type == "FULL" {
+			} else if p.isType(models.TokenTypeFull) {
 				joinType = "FULL"
 				p.advance()
-				if p.currentToken.Type == "OUTER" {
+				if p.isType(models.TokenTypeOuter) {
 					p.advance() // Optional OUTER keyword
 				}
-			} else if p.currentToken.Type == "INNER" {
+			} else if p.isType(models.TokenTypeInner) {
 				joinType = "INNER"
 				p.advance()
-			} else if p.currentToken.Type == "CROSS" {
+			} else if p.isType(models.TokenTypeCross) {
 				joinType = "CROSS"
 				p.advance()
 			}
 
 			// Expect JOIN keyword
-			if p.currentToken.Type != "JOIN" {
+			if !p.isType(models.TokenTypeJoin) {
 				return nil, fmt.Errorf("expected JOIN after %s, got %s", joinType, p.currentToken.Type)
 			}
 			p.advance() // Consume JOIN
 
 			// Parse joined table name
-			if p.currentToken.Type != "IDENT" {
+			if !p.isType(models.TokenTypeIdentifier) {
 				return nil, fmt.Errorf("expected table name after %s JOIN, got %s", joinType, p.currentToken.Type)
 			}
 			joinedTableName := p.currentToken.Literal
@@ -174,14 +175,14 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			}
 
 			// Check for table alias
-			if p.currentToken.Type == "IDENT" || p.currentToken.Type == "AS" {
-				if p.currentToken.Type == "AS" {
+			if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeAs) {
+				if p.isType(models.TokenTypeAs) {
 					p.advance() // Consume AS
-					if p.currentToken.Type != "IDENT" {
+					if !p.isType(models.TokenTypeIdentifier) {
 						return nil, p.expectedError("alias after AS")
 					}
 				}
-				if p.currentToken.Type == "IDENT" {
+				if p.isType(models.TokenTypeIdentifier) {
 					joinedTableRef.Alias = p.currentToken.Literal
 					p.advance()
 				}
@@ -192,7 +193,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 			// CROSS JOIN doesn't require ON clause
 			if joinType != "CROSS" {
-				if p.currentToken.Type == "ON" {
+				if p.isType(models.TokenTypeOn) {
 					p.advance() // Consume ON
 
 					// Parse join condition
@@ -201,11 +202,11 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 						return nil, fmt.Errorf("error parsing ON condition for %s JOIN: %v", joinType, err)
 					}
 					joinCondition = cond
-				} else if p.currentToken.Type == "USING" {
+				} else if p.isType(models.TokenTypeUsing) {
 					p.advance() // Consume USING
 
 					// Parse column list in parentheses
-					if p.currentToken.Type != "(" {
+					if !p.isType(models.TokenTypeLParen) {
 						return nil, p.expectedError("( after USING")
 					}
 					p.advance()
@@ -217,14 +218,14 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 					for {
 						// Parse column name
-						if p.currentToken.Type != "IDENT" {
+						if !p.isType(models.TokenTypeIdentifier) {
 							return nil, p.expectedError("column name in USING")
 						}
 						usingColumns = append(usingColumns, &ast.Identifier{Name: p.currentToken.Literal})
 						p.advance()
 
 						// Check for comma (more columns)
-						if p.currentToken.Type == "," {
+						if p.isType(models.TokenTypeComma) {
 							p.advance() // Consume comma
 							continue
 						}
@@ -232,7 +233,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 					}
 
 					// Check for closing parenthesis
-					if p.currentToken.Type != ")" {
+					if !p.isType(models.TokenTypeRParen) {
 						return nil, p.expectedError(") after USING column list")
 					}
 					p.advance()
@@ -289,7 +290,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	// Parse WHERE clause if present
-	if p.currentToken.Type == "WHERE" {
+	if p.isType(models.TokenTypeWhere) {
 		p.advance() // Consume WHERE
 
 		// Parse WHERE condition
@@ -303,9 +304,9 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	// Parse GROUP BY clause if present
-	if p.currentToken.Type == "GROUP" {
+	if p.isType(models.TokenTypeGroup) {
 		p.advance() // Consume GROUP
-		if p.currentToken.Type != "BY" {
+		if !p.isType(models.TokenTypeBy) {
 			return nil, p.expectedError("BY after GROUP")
 		}
 		p.advance() // Consume BY
@@ -319,12 +320,12 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 			// Check for grouping operations: ROLLUP, CUBE, GROUPING SETS
 			// Note: GROUPING SETS may come as a compound keyword or separate tokens
-			if p.currentToken.Type == "ROLLUP" {
+			if p.isType(models.TokenTypeRollup) {
 				expr, err = p.parseRollup()
-			} else if p.currentToken.Type == "CUBE" {
+			} else if p.isType(models.TokenTypeCube) {
 				expr, err = p.parseCube()
 			} else if p.currentToken.Literal == "GROUPING SETS" ||
-				(p.currentToken.Type == "GROUPING" && p.peekToken().Type == "SETS") {
+				(p.isType(models.TokenTypeGrouping) && p.peekToken().Type == "SETS") {
 				expr, err = p.parseGroupingSets()
 			} else {
 				expr, err = p.parseExpression()
@@ -336,7 +337,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			groupByExprs = append(groupByExprs, expr)
 
 			// Check for comma (more expressions)
-			if p.currentToken.Type != "," {
+			if !p.isType(models.TokenTypeComma) {
 				break
 			}
 			p.advance() // Consume comma
@@ -344,7 +345,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 		// MySQL syntax support: GROUP BY col1, col2 WITH ROLLUP / WITH CUBE
 		// This is different from SQL-99 GROUP BY ROLLUP(col1, col2)
-		if p.currentToken.Type == "WITH" {
+		if p.isType(models.TokenTypeWith) {
 			nextTok := p.peekToken()
 			if nextTok.Type == "ROLLUP" {
 				p.advance() // Consume WITH
@@ -368,7 +369,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	// Parse HAVING clause if present (must come after GROUP BY)
-	if p.currentToken.Type == "HAVING" {
+	if p.isType(models.TokenTypeHaving) {
 		p.advance() // Consume HAVING
 
 		// Parse HAVING condition
@@ -380,10 +381,10 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	// Parse ORDER BY clause if present
-	if p.currentToken.Type == "ORDER" {
+	if p.isType(models.TokenTypeOrder) {
 		p.advance() // Consume ORDER
 
-		if p.currentToken.Type != "BY" {
+		if !p.isType(models.TokenTypeBy) {
 			return nil, p.expectedError("BY")
 		}
 		p.advance() // Consume BY
@@ -403,10 +404,10 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			}
 
 			// Check for ASC/DESC after the expression
-			if p.currentToken.Type == "ASC" {
+			if p.isType(models.TokenTypeAsc) {
 				orderByExpr.Ascending = true
 				p.advance() // Consume ASC
-			} else if p.currentToken.Type == "DESC" {
+			} else if p.isType(models.TokenTypeDesc) {
 				orderByExpr.Ascending = false
 				p.advance() // Consume DESC
 			}
@@ -421,7 +422,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			selectStmt.OrderBy = append(selectStmt.OrderBy, orderByExpr)
 
 			// Check for comma (more expressions)
-			if p.currentToken.Type == "," {
+			if p.isType(models.TokenTypeComma) {
 				p.advance() // Consume comma
 			} else {
 				break
@@ -430,7 +431,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	// Parse LIMIT clause if present
-	if p.currentToken.Type == "LIMIT" {
+	if p.isType(models.TokenTypeLimit) {
 		p.advance() // Consume LIMIT
 
 		// Parse LIMIT value
@@ -448,7 +449,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	// Parse OFFSET clause if present
-	if p.currentToken.Type == "OFFSET" {
+	if p.isType(models.TokenTypeOffset) {
 		p.advance() // Consume OFFSET
 
 		// Parse OFFSET value
@@ -485,20 +486,20 @@ func (p *Parser) parseSelectWithSetOperations() (ast.Statement, error) {
 	}
 
 	// Check for set operations (UNION, EXCEPT, INTERSECT)
-	for p.currentToken.Type == "UNION" || p.currentToken.Type == "EXCEPT" || p.currentToken.Type == "INTERSECT" {
+	for p.isAnyType(models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect) {
 		// Parse the set operation type
 		operationType := p.currentToken.Type
 		p.advance()
 
 		// Check for ALL keyword
 		all := false
-		if p.currentToken.Type == "ALL" {
+		if p.isType(models.TokenTypeAll) {
 			all = true
 			p.advance()
 		}
 
 		// Parse the right-hand SELECT statement
-		if p.currentToken.Type != "SELECT" {
+		if !p.isType(models.TokenTypeSelect) {
 			return nil, p.expectedError("SELECT after set operation")
 		}
 		p.advance() // Consume SELECT

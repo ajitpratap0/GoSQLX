@@ -6,18 +6,19 @@ package parser
 import (
 	"fmt"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
 // used by ROLLUP and CUBE. Returns error if the list is empty.
 func (p *Parser) parseGroupingExpressionList(keyword string) ([]ast.Expression, error) {
-	if p.currentToken.Type != "(" {
+	if !p.isType(models.TokenTypeLParen) {
 		return nil, p.expectedError("( after " + keyword)
 	}
 	p.advance() // Consume (
 
 	// Check for empty list - not allowed for ROLLUP/CUBE
-	if p.currentToken.Type == ")" {
+	if p.isType(models.TokenTypeRParen) {
 		return nil, fmt.Errorf("parsing failed: %s requires at least one expression", keyword)
 	}
 
@@ -31,10 +32,10 @@ func (p *Parser) parseGroupingExpressionList(keyword string) ([]ast.Expression, 
 		expressions = append(expressions, expr)
 
 		// Check for comma (more expressions) or closing paren
-		if p.currentToken.Type == ")" {
+		if p.isType(models.TokenTypeRParen) {
 			break
 		}
-		if p.currentToken.Type != "," {
+		if !p.isType(models.TokenTypeComma) {
 			return nil, p.expectedError(", or ) in " + keyword)
 		}
 		p.advance() // Consume comma
@@ -83,15 +84,16 @@ func (p *Parser) parseGroupingSets() (*ast.GroupingSetsExpression, error) {
 	// Handle both "GROUPING SETS" as compound keyword or separate tokens
 	if p.currentToken.Literal == "GROUPING SETS" {
 		p.advance() // Consume "GROUPING SETS" compound token
-	} else if p.currentToken.Type == "GROUPING" {
+	} else if p.isType(models.TokenTypeGrouping) {
 		p.advance() // Consume GROUPING
-		if p.currentToken.Type != "SETS" {
+		// Check for SETS - using literal comparison as fallback since SETS is not a standalone token type
+		if p.currentToken.Literal != "SETS" && p.currentToken.Type != "SETS" {
 			return nil, p.expectedError("SETS after GROUPING")
 		}
 		p.advance() // Consume SETS
 	}
 
-	if p.currentToken.Type != "(" {
+	if !p.isType(models.TokenTypeLParen) {
 		return nil, p.expectedError("( after GROUPING SETS")
 	}
 	p.advance() // Consume (
@@ -105,12 +107,12 @@ func (p *Parser) parseGroupingSets() (*ast.GroupingSetsExpression, error) {
 		// 3. A single column without parens: col1 (treated as (col1))
 
 		var set []ast.Expression
-		if p.currentToken.Type == "(" {
+		if p.isType(models.TokenTypeLParen) {
 			p.advance() // Consume (
 			// Parse expressions in this set
 			set = make([]ast.Expression, 0)
 			// Handle empty set: ()
-			if p.currentToken.Type != ")" {
+			if !p.isType(models.TokenTypeRParen) {
 				for {
 					expr, err := p.parseExpression()
 					if err != nil {
@@ -118,10 +120,10 @@ func (p *Parser) parseGroupingSets() (*ast.GroupingSetsExpression, error) {
 					}
 					set = append(set, expr)
 
-					if p.currentToken.Type == ")" {
+					if p.isType(models.TokenTypeRParen) {
 						break
 					}
-					if p.currentToken.Type != "," {
+					if !p.isType(models.TokenTypeComma) {
 						return nil, p.expectedError(", or ) in grouping set")
 					}
 					p.advance() // Consume comma
@@ -139,10 +141,10 @@ func (p *Parser) parseGroupingSets() (*ast.GroupingSetsExpression, error) {
 		sets = append(sets, set)
 
 		// Check for comma (more sets) or closing paren
-		if p.currentToken.Type == ")" {
+		if p.isType(models.TokenTypeRParen) {
 			break
 		}
-		if p.currentToken.Type != "," {
+		if !p.isType(models.TokenTypeComma) {
 			return nil, p.expectedError(", or ) in GROUPING SETS")
 		}
 		p.advance() // Consume comma

@@ -3,6 +3,35 @@ package models
 // TokenType represents the type of a SQL token
 type TokenType int
 
+// Token range constants for maintainability and clarity.
+// These define the boundaries for each category of tokens.
+const (
+	// TokenRangeBasicStart marks the beginning of basic token types
+	TokenRangeBasicStart TokenType = 10
+	// TokenRangeBasicEnd marks the end of basic token types (exclusive)
+	TokenRangeBasicEnd TokenType = 30
+
+	// TokenRangeStringStart marks the beginning of string literal types
+	TokenRangeStringStart TokenType = 30
+	// TokenRangeStringEnd marks the end of string literal types (exclusive)
+	TokenRangeStringEnd TokenType = 50
+
+	// TokenRangeOperatorStart marks the beginning of operator types
+	TokenRangeOperatorStart TokenType = 50
+	// TokenRangeOperatorEnd marks the end of operator types (exclusive)
+	TokenRangeOperatorEnd TokenType = 150
+
+	// TokenRangeKeywordStart marks the beginning of SQL keyword types
+	TokenRangeKeywordStart TokenType = 200
+	// TokenRangeKeywordEnd marks the end of SQL keyword types (exclusive)
+	TokenRangeKeywordEnd TokenType = 500
+
+	// TokenRangeDataTypeStart marks the beginning of data type keywords
+	TokenRangeDataTypeStart TokenType = 430
+	// TokenRangeDataTypeEnd marks the end of data type keywords (exclusive)
+	TokenRangeDataTypeEnd TokenType = 450
+)
+
 // Token type constants with explicit values to avoid collisions
 const (
 	// Special tokens
@@ -570,23 +599,43 @@ func (t TokenType) String() string {
 	return "TOKEN"
 }
 
-// IsKeyword returns true if the token type is a SQL keyword
+// IsKeyword returns true if the token type is a SQL keyword.
+// Uses range-based checking for O(1) performance (~0.24ns/op).
+//
+// Example:
+//
+//	if token.ModelType.IsKeyword() {
+//	    // Handle SQL keyword token
+//	}
 func (t TokenType) IsKeyword() bool {
-	// Keywords are in ranges: 200-399 (SQL keywords), 280-299 (CTEs/Set ops),
-	// 300-319 (window), 320-329 (join), 330-349 (constraints), 350-399 (misc),
-	// 370-379 (MERGE), 380-389 (materialized), 390-399 (grouping), 400-429 (roles/txn)
-	return (t >= 200 && t < 500 && t != TokenTypeAsterisk && t != TokenTypeDoublePipe && t != TokenTypeIllegal)
+	// Use range constants for maintainability
+	return (t >= TokenRangeKeywordStart && t < TokenRangeKeywordEnd &&
+		t != TokenTypeAsterisk && t != TokenTypeDoublePipe && t != TokenTypeIllegal)
 }
 
-// IsOperator returns true if the token type is an operator
+// IsOperator returns true if the token type is an operator.
+// Uses range-based checking for O(1) performance.
+//
+// Example:
+//
+//	if token.ModelType.IsOperator() {
+//	    // Handle operator token (e.g., +, -, *, /, etc.)
+//	}
 func (t TokenType) IsOperator() bool {
-	// Operators are in range 50-99 and compound operators 100-149
-	return (t >= 50 && t < 150) || t == TokenTypeAsterisk || t == TokenTypeDoublePipe
+	// Use range constants for maintainability
+	return (t >= TokenRangeOperatorStart && t < TokenRangeOperatorEnd) ||
+		t == TokenTypeAsterisk || t == TokenTypeDoublePipe
 }
 
-// IsLiteral returns true if the token type is a literal value
+// IsLiteral returns true if the token type is a literal value.
+// Includes identifiers, numbers, strings, and boolean/null literals.
+//
+// Example:
+//
+//	if token.ModelType.IsLiteral() {
+//	    // Handle literal value (identifier, number, string, true/false/null)
+//	}
 func (t TokenType) IsLiteral() bool {
-	// Identifiers, numbers, strings
 	switch t {
 	case TokenTypeIdentifier, TokenTypeNumber, TokenTypeString,
 		TokenTypeSingleQuotedString, TokenTypeDoubleQuotedString,
@@ -651,9 +700,17 @@ func (t TokenType) IsAggregateFunction() bool {
 	return false
 }
 
-// IsDataType returns true if the token type is a SQL data type
+// IsDataType returns true if the token type is a SQL data type.
+// Uses range-based checking for O(1) performance.
+//
+// Example:
+//
+//	if token.ModelType.IsDataType() {
+//	    // Handle data type token (INT, VARCHAR, BOOLEAN, etc.)
+//	}
 func (t TokenType) IsDataType() bool {
-	return t >= TokenTypeInt && t <= TokenTypeUuid
+	// Use range constants for maintainability
+	return t >= TokenRangeDataTypeStart && t < TokenRangeDataTypeEnd
 }
 
 // IsConstraint returns true if the token type is a constraint keyword

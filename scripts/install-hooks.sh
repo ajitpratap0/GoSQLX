@@ -51,7 +51,7 @@ if [ -n "$UNFORMATTED" ]; then
     echo "$UNFORMATTED"
     echo ""
     echo "To fix, run: gofmt -w ."
-    echo "Or use: make fmt"
+    echo "Or use: task fmt"
     exit 1
 fi
 echo "✓ Code formatting check passed"

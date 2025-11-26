@@ -510,19 +510,28 @@ gosqlx validate current_file.sql
 ```
 
 ### Build Tools Integration
-```makefile
-# Makefile example
-.PHONY: sql-lint sql-format sql-check
+```yaml
+# Taskfile.yml example (using go-task)
+version: '3'
 
-sql-lint:
-	gosqlx validate src/**/*.sql
+tasks:
+  sql:lint:
+    desc: Validate SQL files
+    cmds:
+      - gosqlx validate src/**/*.sql
 
-sql-format:
-	gosqlx format -i src/**/*.sql
+  sql:format:
+    desc: Format SQL files in place
+    cmds:
+      - gosqlx format -i src/**/*.sql
 
-sql-check:
-	gosqlx format --check src/**/*.sql
+  sql:check:
+    desc: Check SQL formatting
+    cmds:
+      - gosqlx format --check src/**/*.sql
 ```
+
+Run with: `task sql:lint`, `task sql:format`, or `task sql:check`
 
 ## Troubleshooting
 

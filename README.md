@@ -691,39 +691,62 @@ GoSQLX/
 ### Prerequisites
 
 - Go 1.19+
-- Make (optional, for Makefile targets)
-- golint, staticcheck (for code quality)
+- [Task](https://taskfile.dev) - task runner (install: `go install github.com/go-task/task/v3/cmd/task@latest`)
+- golangci-lint, staticcheck (for code quality, install: `task deps:tools`)
+
+### Task Runner
+
+This project uses [Task](https://taskfile.dev) as the task runner. Install with:
+```bash
+go install github.com/go-task/task/v3/cmd/task@latest
+# Or: brew install go-task (macOS)
+```
 
 ### Building
 
 ```bash
-# Build the project
-make build
+# Show all available tasks
+task
 
-# Run quality checks
-make quality
+# Build the project
+task build
+
+# Build the CLI binary
+task build:cli
+
+# Install CLI globally
+task install
+
+# Run all quality checks
+task quality
 
 # Run all tests
-make test
+task test
+
+# Run tests with race detection (recommended)
+task test:race
 
 # Clean build artifacts
-make clean
+task clean
 ```
 
 ### Code Quality
 
 ```bash
 # Format code
-go fmt ./...
+task fmt
 
-# Vet code
-go vet ./...
+# Run go vet
+task vet
 
-# Run linter
-golint ./...
+# Run golangci-lint
+task lint
 
-# Static analysis
-staticcheck ./...
+# Run all quality checks (fmt, vet, lint)
+task quality
+
+# Full CI check (format, vet, lint, test:race)
+task check
 ```
 
 ## 🤝 Contributing

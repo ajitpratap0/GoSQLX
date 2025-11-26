@@ -48,85 +48,115 @@ The codebase uses extensive object pooling for performance optimization:
 
 ## Development Commands
 
+This project uses [Task](https://taskfile.dev) as the task runner. Install with:
+```bash
+go install github.com/go-task/task/v3/cmd/task@latest
+# Or: brew install go-task (macOS)
+```
+
 ### Building and Testing
 ```bash
-# Build the project
-make build
-go build -v ./...
+# Show all available tasks
+task
 
-# Build the CLI tool
-go build -o gosqlx ./cmd/gosqlx
+# Build all packages
+task build
+
+# Build the CLI binary
+task build:cli
+
+# Build CLI for all platforms
+task build:cli:all
+
+# Install CLI globally
+task install
 
 # Run all tests
-make test
-go test -v ./...
+task test
 
-# Run a single test by pattern
-go test -v -run TestTokenizer_SimpleSelect ./pkg/sql/tokenizer/
-go test -v -run TestParser_.*Window.* ./pkg/sql/parser/
+# Run tests with race detection (CRITICAL)
+task test:race
 
-# Run tests for specific packages
-go test -v ./pkg/sql/tokenizer/
-go test -v ./pkg/sql/parser/
-go test -v ./pkg/sql/ast/
-go test -v ./pkg/models/
-go test -v ./pkg/errors/
+# Run tests for specific package
+task test:pkg PKG=./pkg/sql/parser
+
+# Run tests in short mode
+task test:short
 
 # Run tests with coverage report
-make coverage
-go test -cover -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out -o coverage.html
+task coverage
 
-# Generate text coverage report for specific package
-go test -coverprofile=coverage.out ./pkg/models/
-go tool cover -func=coverage.out
+# Show coverage by function
+task coverage:func
 
 # Run benchmarks
-go test -bench=. -benchmem ./...
-go test -bench=BenchmarkTokenizer -benchmem ./pkg/sql/tokenizer/
-go test -bench=BenchmarkParser -benchmem ./pkg/sql/parser/
+task bench
+
+# Run benchmarks with CPU profiling
+task bench:cpu
+
+# Run fuzz tests
+task fuzz
 ```
 
 ### Code Quality
 ```bash
 # Format code
-make fmt
-go fmt ./...
+task fmt
 
-# Vet code
-make vet  
-go vet ./...
+# Check formatting (fails if not formatted)
+task fmt:check
 
-# Run linting (requires golint installation)
-make lint
-golint ./...
+# Run go vet
+task vet
 
-# Run all quality checks
-make quality
+# Run golangci-lint
+task lint
+
+# Run golangci-lint with auto-fix
+task lint:fix
+
+# Run staticcheck
+task staticcheck
+
+# Run all quality checks (fmt, vet, lint)
+task quality
+
+# Full check suite (format, vet, lint, test:race)
+task check
 
 # CRITICAL: Always run race detection during development
-go test -race ./...
-go test -race -benchmem ./...
-go test -race -timeout 30s ./pkg/...
+task test:race
+```
+
+### Security
+```bash
+# Run security vulnerability scan
+task security:scan
+
+# Validate security setup
+task security:validate
+```
+
+### CI/CD
+```bash
+# Run full CI pipeline
+task ci
+
+# Quick CI check (no race detection)
+task ci:quick
 ```
 
 ### Running Examples
 ```bash
-# Basic example (demonstrates tokenization and parsing)
-cd examples/cmd/
-go run example.go
-
-# SQL validator example
-cd examples/sql-validator/
-go run main.go
-
-# SQL formatter example
-cd examples/sql-formatter/
-go run main.go
+# Run basic example
+task examples
 
 # Run example tests
-cd examples/cmd/
-go test -v example_test.go
+task examples:test
+
+# Or run directly:
+go run ./examples/cmd/example.go
 ```
 
 ### CLI Tool Usage (v1.4.0+)

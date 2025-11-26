@@ -19,7 +19,7 @@ GoSQLX is **production-ready** for enterprise deployment with validated performa
 ### Dependencies
 - **Core Library**: Zero external dependencies
 - **Optional Tools**: Standard library only
-- **Build Tools**: Go toolchain, make (optional)
+- **Build Tools**: Go toolchain, Task (optional) - `go install github.com/go-task/task/v3/cmd/task@latest`
 
 ## Installation Methods
 

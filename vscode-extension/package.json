@@ -4,7 +4,7 @@
   "description": "High-performance SQL parsing, validation, formatting, and analysis powered by GoSQLX",
   "version": "0.1.0",
   "publisher": "ajitpratap0",
-  "license": "AGPL-3.0",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/ajitpratap0/GoSQLX"
@@ -60,82 +60,39 @@
         "gosqlx.enable": {
           "type": "boolean",
           "default": true,
-          "scope": "resource",
           "description": "Enable GoSQLX language server"
         },
         "gosqlx.executablePath": {
           "type": "string",
           "default": "gosqlx",
-          "scope": "machine-overridable",
           "description": "Path to the gosqlx executable"
         },
         "gosqlx.trace.server": {
           "type": "string",
           "enum": ["off", "messages", "verbose"],
           "default": "off",
-          "scope": "window",
           "description": "Traces the communication between VS Code and the GoSQLX language server"
         },
         "gosqlx.format.indentSize": {
           "type": "number",
           "default": 2,
-          "scope": "resource",
           "description": "Number of spaces for indentation when formatting SQL"
         },
         "gosqlx.format.uppercaseKeywords": {
           "type": "boolean",
           "default": true,
-          "scope": "resource",
           "description": "Convert SQL keywords to uppercase when formatting"
         },
         "gosqlx.validation.enable": {
           "type": "boolean",
           "default": true,
-          "scope": "resource",
           "description": "Enable real-time SQL validation"
         },
         "gosqlx.dialect": {
           "type": "string",
           "enum": ["generic", "postgresql", "mysql", "sqlserver", "oracle", "sqlite"],
           "default": "generic",
-          "scope": "resource",
           "description": "SQL dialect for validation and formatting"
-        },
-        "gosqlx.timeouts.startup": {
-          "type": "number",
-          "default": 10000,
-          "minimum": 1000,
-          "maximum": 300000,
-          "description": "Timeout for language server startup in milliseconds"
-        },
-        "gosqlx.timeouts.validation": {
-          "type": "number",
-          "default": 5000,
-          "minimum": 1000,
-          "maximum": 60000,
-          "description": "Timeout for executable validation in milliseconds"
-        },
-        "gosqlx.timeouts.analysis": {
-          "type": "number",
-          "default": 30000,
-          "minimum": 5000,
-          "maximum": 300000,
-          "description": "Timeout for SQL analysis command in milliseconds"
-        },
-        "gosqlx.telemetry.enable": {
-          "type": "boolean",
-          "default": false,
-          "description": "Enable anonymous usage telemetry to help improve GoSQLX. No SQL content or file paths are collected."
-        },
-        "gosqlx.performance.showStatusBar": {
-          "type": "boolean",
-          "default": false,
-          "description": "Show performance metrics in status bar"
-        },
-        "gosqlx.performance.collectMetrics": {
-          "type": "boolean",
-          "default": true,
-          "description": "Collect performance metrics for debugging"
         }
       }
     },
@@ -163,16 +120,6 @@
       {
         "command": "gosqlx.showOutput",
         "title": "Show Output Channel",
-        "category": "GoSQLX"
-      },
-      {
-        "command": "gosqlx.showMetrics",
-        "title": "Show Performance Metrics",
-        "category": "GoSQLX"
-      },
-      {
-        "command": "gosqlx.validateConfiguration",
-        "title": "Validate Configuration",
         "category": "GoSQLX"
       }
     ],
@@ -232,8 +179,6 @@
     "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {
-    "@types/glob": "^8.1.0",
-    "@types/mocha": "^10.0.6",
     "@types/node": "^20.10.0",
     "@types/vscode": "^1.85.0",
     "@typescript-eslint/eslint-plugin": "^6.13.0",
@@ -241,8 +186,6 @@
     "@vscode/test-electron": "^2.3.8",
     "@vscode/vsce": "^2.22.0",
     "eslint": "^8.54.0",
-    "glob": "^10.3.10",
-    "mocha": "^10.2.0",
     "typescript": "^5.3.2"
   }
 }

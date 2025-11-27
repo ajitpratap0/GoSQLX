@@ -18,8 +18,8 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 		return nil, goerrors.ExpectedTokenError(
 			"column name",
 			string(p.currentToken.Type),
-			models.Location{}, // TODO: Track token positions in parser
-			"",                // TODO: Preserve original SQL in parser
+			p.currentLocation(),
+			"",
 		)
 	}
 
@@ -28,8 +28,8 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 		return nil, goerrors.ExpectedTokenError(
 			"data type",
 			string(p.currentToken.Type),
-			models.Location{}, // TODO: Track token positions in parser
-			"",                // TODO: Preserve original SQL in parser
+			p.currentLocation(),
+			"",
 		)
 	}
 
@@ -48,8 +48,8 @@ func (p *Parser) parseTableConstraint() (*ast.TableConstraint, error) {
 		return nil, goerrors.ExpectedTokenError(
 			"constraint name",
 			string(p.currentToken.Type),
-			models.Location{}, // TODO: Track token positions in parser
-			"",                // TODO: Preserve original SQL in parser
+			p.currentLocation(),
+			"",
 		)
 	}
 
@@ -177,8 +177,8 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 				return nil, goerrors.ExpectedTokenError(
 					"JOIN after "+joinType,
 					string(p.currentToken.Type),
-					models.Location{}, // TODO: Track token positions in parser
-					"",                // TODO: Preserve original SQL in parser
+					p.currentLocation(),
+					"",
 				)
 			}
 			p.advance() // Consume JOIN
@@ -188,8 +188,8 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 				return nil, goerrors.ExpectedTokenError(
 					"table name after "+joinType+" JOIN",
 					string(p.currentToken.Type),
-					models.Location{}, // TODO: Track token positions in parser
-					"",                // TODO: Preserve original SQL in parser
+					p.currentLocation(),
+					"",
 				)
 			}
 			joinedTableName := p.currentToken.Literal
@@ -227,8 +227,8 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 					if err != nil {
 						return nil, goerrors.InvalidSyntaxError(
 							fmt.Sprintf("error parsing ON condition for %s JOIN: %v", joinType, err),
-							models.Location{}, // TODO: Track token positions in parser
-							"",                // TODO: Preserve original SQL in parser
+							p.currentLocation(),
+							"",
 						)
 					}
 					joinCondition = cond
@@ -558,8 +558,8 @@ func (p *Parser) parseSelectWithSetOperations() (ast.Statement, error) {
 			return nil, goerrors.InvalidSetOperationError(
 				string(operationType),
 				fmt.Sprintf("error parsing right SELECT: %v", err),
-				models.Location{}, // TODO: Track token positions in parser
-				"",                // TODO: Preserve original SQL in parser
+				p.currentLocation(),
+				"",
 			)
 		}
 

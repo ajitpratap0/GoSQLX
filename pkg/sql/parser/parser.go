@@ -62,6 +62,25 @@ func (p *Parser) Reset() {
 	p.currentToken = token.Token{}
 	p.depth = 0
 	p.ctx = nil
+	p.positions = nil
+}
+
+// currentLocation returns the source location of the current token.
+// Returns an empty location if position tracking is not enabled or position is out of bounds.
+func (p *Parser) currentLocation() models.Location {
+	if p.positions == nil || p.currentPos >= len(p.positions) {
+		return models.Location{}
+	}
+	return p.positions[p.currentPos].Start
+}
+
+// currentEndLocation returns the end source location of the current token.
+// Returns an empty location if position tracking is not enabled or position is out of bounds.
+func (p *Parser) currentEndLocation() models.Location {
+	if p.positions == nil || p.currentPos >= len(p.positions) {
+		return models.Location{}
+	}
+	return p.positions[p.currentPos].End
 }
 
 // MaxRecursionDepth defines the maximum allowed recursion depth for parsing operations.
@@ -79,6 +98,7 @@ type Parser struct {
 	currentToken token.Token
 	depth        int             // Current recursion depth
 	ctx          context.Context // Optional context for cancellation support
+	positions    []TokenPosition // Position mapping for error reporting
 }
 
 // Parse parses the tokens into an AST
@@ -129,6 +149,55 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 	}
 
 	return result, nil
+}
+
+// ParseWithPositions parses tokens with position tracking for enhanced error reporting.
+// This method accepts a ConversionResult from the token converter, which includes
+// both the converted tokens and their original source positions.
+// Errors generated during parsing will include accurate line/column information.
+func (p *Parser) ParseWithPositions(result *ConversionResult) (*ast.AST, error) {
+	p.tokens = result.Tokens
+	p.positions = result.PositionMapping
+	p.currentPos = 0
+	if len(result.Tokens) > 0 {
+		p.currentToken = result.Tokens[0]
+	}
+
+	// Get a pre-allocated AST from the pool
+	astResult := ast.NewAST()
+
+	// Pre-allocate statements slice based on a reasonable estimate
+	estimatedStmts := 1
+	if len(result.Tokens) > 100 {
+		estimatedStmts = 2
+	}
+	astResult.Statements = make([]ast.Statement, 0, estimatedStmts)
+
+	// Parse statements
+	for p.currentPos < len(result.Tokens) && !p.isType(models.TokenTypeEOF) {
+		if p.isType(models.TokenTypeSemicolon) {
+			p.advance()
+			continue
+		}
+
+		stmt, err := p.parseStatement()
+		if err != nil {
+			ast.ReleaseAST(astResult)
+			return nil, err
+		}
+		astResult.Statements = append(astResult.Statements, stmt)
+
+		if p.isType(models.TokenTypeSemicolon) {
+			p.advance()
+		}
+	}
+
+	if len(astResult.Statements) == 0 {
+		ast.ReleaseAST(astResult)
+		return nil, goerrors.IncompleteStatementError(p.currentLocation(), "")
+	}
+
+	return astResult, nil
 }
 
 // ParseContext parses the tokens into an AST with context support for cancellation.
@@ -207,7 +276,7 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 	// Check if we got any statements
 	if len(result.Statements) == 0 {
 		ast.ReleaseAST(result)
-		return nil, goerrors.IncompleteStatementError(models.Location{}, "")
+		return nil, goerrors.IncompleteStatementError(p.currentLocation(), "")
 	}
 
 	return result, nil
@@ -611,7 +680,7 @@ func (p *Parser) isBooleanLiteral() bool {
 
 // expectedError returns an error for unexpected token
 func (p *Parser) expectedError(expected string) error {
-	return goerrors.ExpectedTokenError(expected, string(p.currentToken.Type), models.Location{}, "")
+	return goerrors.ExpectedTokenError(expected, string(p.currentToken.Type), p.currentLocation(), "")
 }
 
 // parseIdent parses an identifier

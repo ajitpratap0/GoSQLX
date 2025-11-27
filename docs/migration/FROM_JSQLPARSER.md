@@ -839,7 +839,7 @@ GROUP BY u.id, u.name
 - [ ] Check if you use fluent API for SQL building
 
 ### Phase 2: Proof of Concept (Week 1-2)
-- [ ] Install Go 1.23+ on development machines
+- [ ] Install Go 1.24+ on development machines
 - [ ] Install GoSQLX: `go get github.com/ajitpratap0/GoSQLX`
 - [ ] Port one Java class to Go
 - [ ] Test with your SQL queries

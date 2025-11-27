@@ -1,6 +1,8 @@
 module github.com/ajitpratap0/GoSQLX
 
-go 1.25.0
+go 1.24.0
+
+toolchain go1.25.0
 
 require (
 	github.com/fsnotify/fsnotify v1.9.0

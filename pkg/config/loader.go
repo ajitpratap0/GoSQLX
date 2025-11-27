@@ -263,7 +263,7 @@ func Merge(configs ...*Config) *Config {
 // prevents setting booleans to false via environment variables to override a config
 // file that has them set to true. A proper fix would require using *bool pointers
 // for all boolean fields to distinguish between "not set" and "explicitly set to false".
-// See: https://github.com/ajitpratap0/GoSQLX/issues for tracking issue.
+// See: https://github.com/ajitpratap0/GoSQLX/issues/134 for tracking issue.
 func mergeInto(dst, src *Config) {
 	// Merge Format
 	if src.Format.Indent != 0 {

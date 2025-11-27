@@ -155,6 +155,7 @@ format:
 
 	t.Run("cache stats", func(t *testing.T) {
 		ClearConfigCache()
+		ResetConfigCacheStats()
 
 		stats := GetConfigCacheStats()
 		if stats.Size != 0 {
@@ -165,6 +166,40 @@ format:
 		}
 		if stats.TTL != 5*time.Minute {
 			t.Errorf("stats.TTL = %v, want 5m", stats.TTL)
+		}
+	})
+
+	t.Run("hit/miss metrics", func(t *testing.T) {
+		ClearConfigCache()
+		ResetConfigCacheStats()
+
+		// Create a test config file
+		configPath := filepath.Join(tmpDir, "metrics_test.yaml")
+		if err := os.WriteFile(configPath, []byte("format:\n  indent: 2\n"), 0644); err != nil {
+			t.Fatalf("failed to write test config: %v", err)
+		}
+
+		// First load - miss
+		_, err := LoadFromFileCached(configPath)
+		if err != nil {
+			t.Fatalf("LoadFromFileCached failed: %v", err)
+		}
+
+		// Second load - hit
+		_, err = LoadFromFileCached(configPath)
+		if err != nil {
+			t.Fatalf("LoadFromFileCached failed: %v", err)
+		}
+
+		stats := GetConfigCacheStats()
+		if stats.Misses != 1 {
+			t.Errorf("stats.Misses = %d, want 1", stats.Misses)
+		}
+		if stats.Hits != 1 {
+			t.Errorf("stats.Hits = %d, want 1", stats.Hits)
+		}
+		if stats.HitRate != 0.5 {
+			t.Errorf("stats.HitRate = %f, want 0.5", stats.HitRate)
 		}
 	})
 
@@ -188,8 +223,122 @@ format:
 	})
 }
 
+func TestConfigCacheTTLExpiration(t *testing.T) {
+	// Create a cache with a very short TTL for testing
+	oldCache := fileConfigCache
+	fileConfigCache = newConfigCache(100, 50*time.Millisecond)
+	defer func() { fileConfigCache = oldCache }()
+
+	ClearConfigCache()
+	ResetConfigCacheStats()
+
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "ttl_test.yaml")
+	if err := os.WriteFile(configPath, []byte("format:\n  indent: 2\n"), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	// First load - miss
+	_, err := LoadFromFileCached(configPath)
+	if err != nil {
+		t.Fatalf("LoadFromFileCached failed: %v", err)
+	}
+
+	// Immediate second load - should be hit
+	_, err = LoadFromFileCached(configPath)
+	if err != nil {
+		t.Fatalf("LoadFromFileCached failed: %v", err)
+	}
+
+	stats := GetConfigCacheStats()
+	if stats.Hits != 1 {
+		t.Errorf("stats.Hits = %d, want 1 (before TTL)", stats.Hits)
+	}
+
+	// Wait for TTL to expire
+	time.Sleep(100 * time.Millisecond)
+
+	// Third load - should be miss (TTL expired)
+	_, err = LoadFromFileCached(configPath)
+	if err != nil {
+		t.Fatalf("LoadFromFileCached failed: %v", err)
+	}
+
+	stats = GetConfigCacheStats()
+	if stats.Misses != 2 {
+		t.Errorf("stats.Misses = %d, want 2 (after TTL expiration)", stats.Misses)
+	}
+}
+
+func TestConfigCacheEviction(t *testing.T) {
+	// Create a small cache for testing eviction
+	oldCache := fileConfigCache
+	fileConfigCache = newConfigCache(5, 5*time.Minute)
+	defer func() { fileConfigCache = oldCache }()
+
+	ClearConfigCache()
+	ResetConfigCacheStats()
+
+	tmpDir := t.TempDir()
+
+	// Fill the cache to max
+	for i := 0; i < 5; i++ {
+		configPath := filepath.Join(tmpDir, "eviction_test_"+string(rune('a'+i))+".yaml")
+		if err := os.WriteFile(configPath, []byte("format:\n  indent: "+string(rune('0'+i))+"\n"), 0644); err != nil {
+			t.Fatalf("failed to write test config: %v", err)
+		}
+		_, err := LoadFromFileCached(configPath)
+		if err != nil {
+			t.Fatalf("LoadFromFileCached failed: %v", err)
+		}
+	}
+
+	if ConfigCacheSize() != 5 {
+		t.Errorf("cache size after fill = %d, want 5", ConfigCacheSize())
+	}
+
+	// Add one more to trigger eviction
+	newConfigPath := filepath.Join(tmpDir, "eviction_new.yaml")
+	if err := os.WriteFile(newConfigPath, []byte("format:\n  indent: 9\n"), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+	_, err := LoadFromFileCached(newConfigPath)
+	if err != nil {
+		t.Fatalf("LoadFromFileCached failed: %v", err)
+	}
+
+	// maxSize/2 = 5/2 = 2 (integer division), so we keep 2 entries and add 1 for total of 3
+	size := ConfigCacheSize()
+	if size != 3 {
+		t.Errorf("cache size after eviction = %d, want 3", size)
+	}
+
+	// Check eviction counter - we evicted 5 - 2 = 3 entries
+	stats := GetConfigCacheStats()
+	if stats.Evictions < 3 {
+		t.Errorf("stats.Evictions = %d, want >= 3", stats.Evictions)
+	}
+}
+
+func TestConfigCacheFileNotFound(t *testing.T) {
+	ClearConfigCache()
+	ResetConfigCacheStats()
+
+	// Try to load a non-existent file
+	_, err := LoadFromFileCached("/nonexistent/path/config.yaml")
+	if err == nil {
+		t.Error("LoadFromFileCached should fail for non-existent file")
+	}
+
+	// Cache should not have any entries
+	if ConfigCacheSize() != 0 {
+		t.Errorf("cache size = %d, want 0", ConfigCacheSize())
+	}
+}
+
 func TestConfigCacheConcurrency(t *testing.T) {
 	ClearConfigCache()
+	ResetConfigCacheStats()
 
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "concurrent.yaml")
@@ -227,9 +376,11 @@ func BenchmarkLoadFromFileCached(b *testing.B) {
 	}
 
 	ClearConfigCache()
+	ResetConfigCacheStats()
 	// First call to populate cache
 	_, _ = LoadFromFileCached(configPath)
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = LoadFromFileCached(configPath)
@@ -243,6 +394,7 @@ func BenchmarkLoadFromFileUncached(b *testing.B) {
 		b.Fatalf("failed to write test config: %v", err)
 	}
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = LoadFromFile(configPath)

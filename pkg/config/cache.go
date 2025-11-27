@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -14,11 +15,19 @@ type configCacheEntry struct {
 }
 
 // configCache provides thread-safe caching of loaded configurations
+// Note: There is a potential TOCTOU (Time-of-Check-Time-of-Use) race condition
+// between checking file modification time and using the cached config. This is
+// acceptable for a caching scenario as the worst case is returning slightly
+// stale data which will be refreshed on the next access.
 type configCache struct {
 	mu      sync.RWMutex
 	entries map[string]*configCacheEntry
 	maxSize int
 	ttl     time.Duration // Time-to-live for cache entries
+	// metrics for observability
+	hits      uint64
+	misses    uint64
+	evictions uint64
 }
 
 var (
@@ -42,24 +51,29 @@ func (c *configCache) get(path string) (*Config, bool) {
 
 	entry, ok := c.entries[path]
 	if !ok {
+		atomic.AddUint64(&c.misses, 1)
 		return nil, false
 	}
 
 	// Check TTL
 	if time.Since(entry.loadedAt) > c.ttl {
+		atomic.AddUint64(&c.misses, 1)
 		return nil, false
 	}
 
 	// Check if file has been modified
 	stat, err := os.Stat(path)
 	if err != nil {
+		atomic.AddUint64(&c.misses, 1)
 		return nil, false
 	}
 
 	if stat.ModTime() != entry.modTime {
+		atomic.AddUint64(&c.misses, 1)
 		return nil, false
 	}
 
+	atomic.AddUint64(&c.hits, 1)
 	// Return a clone to prevent mutation of cached config
 	return entry.config.Clone(), true
 }
@@ -68,15 +82,29 @@ func (c *configCache) get(path string) (*Config, bool) {
 func (c *configCache) set(path string, cfg *Config) {
 	stat, err := os.Stat(path)
 	if err != nil {
-		return // Don't cache if we can't get file info
+		// Don't cache if we can't get file info
+		// Note: This is a silent failure, but acceptable since caching is optional
+		return
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Simple eviction: clear cache when max size is reached
+	// Partial eviction: keep half the entries when max size is reached
+	// This prevents cache thrashing while maintaining performance
 	if len(c.entries) >= c.maxSize {
-		c.entries = make(map[string]*configCacheEntry)
+		newEntries := make(map[string]*configCacheEntry, c.maxSize/2)
+		count := 0
+		for k, v := range c.entries {
+			if count >= c.maxSize/2 {
+				break
+			}
+			newEntries[k] = v
+			count++
+		}
+		evicted := len(c.entries) - count
+		atomic.AddUint64(&c.evictions, uint64(evicted))
+		c.entries = newEntries
 	}
 
 	c.entries[path] = &configCacheEntry{
@@ -125,18 +153,44 @@ func ConfigCacheSize() int {
 
 // ConfigCacheStats holds cache statistics
 type ConfigCacheStats struct {
-	Size    int
-	MaxSize int
-	TTL     time.Duration
+	Size      int
+	MaxSize   int
+	TTL       time.Duration
+	Hits      uint64
+	Misses    uint64
+	Evictions uint64
+	HitRate   float64
 }
 
 // GetConfigCacheStats returns current cache statistics
 func GetConfigCacheStats() ConfigCacheStats {
-	return ConfigCacheStats{
-		Size:    fileConfigCache.size(),
-		MaxSize: fileConfigCache.maxSize,
-		TTL:     fileConfigCache.ttl,
+	hits := atomic.LoadUint64(&fileConfigCache.hits)
+	misses := atomic.LoadUint64(&fileConfigCache.misses)
+	evictions := atomic.LoadUint64(&fileConfigCache.evictions)
+
+	var hitRate float64
+	total := hits + misses
+	if total > 0 {
+		hitRate = float64(hits) / float64(total)
 	}
+
+	return ConfigCacheStats{
+		Size:      fileConfigCache.size(),
+		MaxSize:   fileConfigCache.maxSize,
+		TTL:       fileConfigCache.ttl,
+		Hits:      hits,
+		Misses:    misses,
+		Evictions: evictions,
+		HitRate:   hitRate,
+	}
+}
+
+// ResetConfigCacheStats resets the cache statistics counters.
+// Useful for testing and monitoring.
+func ResetConfigCacheStats() {
+	atomic.StoreUint64(&fileConfigCache.hits, 0)
+	atomic.StoreUint64(&fileConfigCache.misses, 0)
+	atomic.StoreUint64(&fileConfigCache.evictions, 0)
 }
 
 // LoadFromFileCached loads configuration from a file with caching.

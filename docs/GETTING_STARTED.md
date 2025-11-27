@@ -68,7 +68,7 @@ WHERE age > 18
 gosqlx analyze "SELECT COUNT(*) FROM orders GROUP BY status"
 ```
 
-**That's it!** You're validating and formatting SQL. ✨
+**That's it!** You're validating and formatting SQL.
 
 ---
 
@@ -102,11 +102,14 @@ func main() {
 }
 ```
 
-**That's it!** Just 3 lines of actual code. No pool management, no manual cleanup - everything is handled for you. 🎉
+**That's it!** Just 3 lines of actual code. No pool management, no manual cleanup - everything is handled for you.
 
 ### More Quick Examples
 
 ```go
+// Note: These examples assume proper imports are in place:
+// import "context", "time", "log", "fmt"
+
 // Validate SQL without parsing
 if err := gosqlx.Validate("SELECT * FROM users"); err != nil {
     fmt.Println("Invalid SQL:", err)
@@ -127,6 +130,7 @@ if err != nil {
 fmt.Printf("Parsed %d queries\n", len(asts))
 
 // Parse with timeout for long queries
+sql := "SELECT * FROM large_table"
 ast, err := gosqlx.ParseWithTimeout(sql, 5*time.Second)
 if err == context.DeadlineExceeded {
     fmt.Println("Query took too long to parse")
@@ -149,7 +153,7 @@ go run main.go
   Statements: 1
 ```
 
-**Congratulations!** You've parsed your first SQL query with GoSQLX! 🎉
+**Congratulations!** You've parsed your first SQL query with GoSQLX!
 
 > **Performance Note:** The simple API has < 1% overhead compared to the low-level API. Use it everywhere unless you need fine-grained control over resource management.
 
@@ -264,7 +268,7 @@ func ParseLowLevel(sql string) error {
 
 ---
 
-## Common Pitfalls ⚠️
+## Common Pitfalls
 
 ### 1. Forgetting to Return to Pool
 **❌ Wrong:**
@@ -397,7 +401,7 @@ gosqlx validate "your SQL here"
 
 ---
 
-## Performance Tips 💡
+## Performance Tips
 
 GoSQLX is designed for high performance. Here are quick tips:
 
@@ -411,7 +415,7 @@ See [Performance Optimization](USAGE_GUIDE.md#performance-optimization) for deta
 
 ---
 
-## What You've Learned ✅
+## What You've Learned
 
 - ✓ Installing GoSQLX (library and CLI)
 - ✓ Validating SQL with CLI
@@ -422,7 +426,7 @@ See [Performance Optimization](USAGE_GUIDE.md#performance-optimization) for deta
 
 ---
 
-## Next Steps 🚀
+## Next Steps
 
 **For CLI Users:**
 - Explore all CLI commands: [CLI Guide](CLI_GUIDE.md)
@@ -441,10 +445,10 @@ See [Performance Optimization](USAGE_GUIDE.md#performance-optimization) for deta
 
 ---
 
-**Time to first success:** < 5 minutes ✓
+**Time to first success:** < 5 minutes
 
 **Questions?** Open an issue or start a discussion on GitHub!
 
 ---
 
-*Built with ❤️ by the GoSQLX community*
+*Built by the GoSQLX community*

@@ -185,7 +185,7 @@ jobs:
 
 ## Links
 
-- [Full Documentation](../ACTION_README.md)
-- [Testing Guide](../ACTION_TESTING_GUIDE.md)
-- [Publishing Guide](../MARKETPLACE_PUBLISHING.md)
-- [Example Workflows](../workflows/examples/)
+- [Integration Guide](ACTION_INTEGRATION_GUIDE.md)
+- [Testing Guide](ACTION_TESTING_GUIDE.md)
+- [Publishing Guide](MARKETPLACE_PUBLISHING.md)
+- [Example Workflows](workflows/examples/)

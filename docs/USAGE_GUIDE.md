@@ -24,7 +24,7 @@ go get github.com/ajitpratap0/GoSQLX
 ```
 
 ### Minimum Go Version
-Go 1.24 or higher is required.
+Go 1.24+ or higher is required.
 
 ### Import Packages
 
@@ -136,40 +136,34 @@ import (
     "fmt"
     "github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
     "github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
-    "github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
 
 func ParseSQL(sql string) error {
     // Step 1: Tokenize
     tkz := tokenizer.GetTokenizer()
     defer tokenizer.PutTokenizer(tkz)
-    
+
     tokens, err := tkz.Tokenize([]byte(sql))
     if err != nil {
         return err
     }
-    
-    // Step 2: Convert to parser tokens
-    parserTokens := make([]token.Token, 0, len(tokens))
-    for _, tok := range tokens {
-        if tok.Token.Type == models.TokenTypeEOF {
-            break
-        }
-        parserTokens = append(parserTokens, token.Token{
-            Type:    fmt.Sprintf("%d", tok.Token.Type),
-            Literal: tok.Token.Value,
-        })
+
+    // Step 2: Convert to parser tokens using the proper converter
+    converter := parser.NewTokenConverter()
+    result, err := converter.Convert(tokens)
+    if err != nil {
+        return fmt.Errorf("token conversion failed: %w", err)
     }
-    
+
     // Step 3: Parse
     p := parser.NewParser()
     defer p.Release()
-    
-    ast, err := p.Parse(parserTokens)
+
+    ast, err := p.Parse(result.Tokens)
     if err != nil {
         return err
     }
-    
+
     fmt.Printf("Parsed: %T\n", ast)
     return nil
 }
@@ -243,24 +237,24 @@ Get detailed error information with line and column numbers:
 func HandleTokenizerError(sql string) {
     tkz := tokenizer.GetTokenizer()
     defer tokenizer.PutTokenizer(tkz)
-    
+
     tokens, err := tkz.Tokenize([]byte(sql))
     if err != nil {
-        if tkErr, ok := err.(tokenizer.TokenizerError); ok {
+        if tkErr, ok := err.(models.TokenizerError); ok {
             fmt.Printf("Syntax error at line %d, column %d: %s\n",
                 tkErr.Location.Line,
                 tkErr.Location.Column,
                 tkErr.Message)
-            
+
             // Show the problematic line
             lines := strings.Split(sql, "\n")
             if tkErr.Location.Line <= len(lines) {
-                fmt.Printf("Line %d: %s\n", 
-                    tkErr.Location.Line, 
+                fmt.Printf("Line %d: %s\n",
+                    tkErr.Location.Line,
                     lines[tkErr.Location.Line-1])
-                
+
                 // Show error position with caret
-                fmt.Printf("%*s^\n", 
+                fmt.Printf("%*s^\n",
                     tkErr.Location.Column+6, "") // +6 for "Line X: "
             }
         }
@@ -384,7 +378,7 @@ func CheckForInjection(sql string) {
     if result.HasCritical() {
         fmt.Printf("CRITICAL: Found %d critical security issues!\n", result.CriticalCount)
     }
-    if result.HasHigh() {
+    if result.HasHighOrAbove() {
         fmt.Printf("HIGH: Found %d high-severity issues\n", result.HighCount)
     }
 
@@ -419,7 +413,7 @@ func ValidateUserQuery(userInput string) error {
     scanner := security.NewScanner()
     result := scanner.Scan(ast)
 
-    if result.HasCritical() || result.HasHigh() {
+    if result.HasCritical() || result.HasHighOrAbove() {
         return fmt.Errorf("potential SQL injection detected: %d issues found",
             result.CriticalCount + result.HighCount)
     }
@@ -738,21 +732,28 @@ func OptimizedBatchProcess(queries []string) error {
 ### Pre-allocate Slices
 
 ```go
-func ProcessWithPreallocation(sql string, expectedTokens int) {
+func ProcessWithPreallocation(sql string) error {
     tkz := tokenizer.GetTokenizer()
     defer tokenizer.PutTokenizer(tkz)
-    
-    tokens, _ := tkz.Tokenize([]byte(sql))
-    
-    // Pre-allocate with expected capacity
-    parserTokens := make([]token.Token, 0, expectedTokens)
-    
-    for _, tok := range tokens {
-        if tok.Token.Type == models.TokenTypeEOF {
-            break
-        }
-        parserTokens = append(parserTokens, convertToken(tok))
+
+    tokens, err := tkz.Tokenize([]byte(sql))
+    if err != nil {
+        return err
     }
+
+    // Convert tokens using the proper converter
+    converter := parser.NewTokenConverter()
+    result, err := converter.Convert(tokens)
+    if err != nil {
+        return err
+    }
+
+    // Parse with pre-converted tokens
+    p := parser.NewParser()
+    defer p.Release()
+
+    _, err = p.Parse(result.Tokens)
+    return err
 }
 ```
 

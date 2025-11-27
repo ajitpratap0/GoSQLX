@@ -2,11 +2,11 @@
 
 Thank you for your interest in contributing to GoSQLX! This document provides comprehensive guidelines for contributing to the project.
 
-## 🎯 Project Mission
+## Project Mission
 
 GoSQLX aims to be the **fastest, most reliable, and most comprehensive SQL parsing library for Go**, suitable for production use in enterprise environments.
 
-## 🤝 Ways to Contribute
+## Ways to Contribute
 
 ### 1. Code Contributions
 - **Bug fixes**: Resolve issues in tokenization, parsing, or performance
@@ -33,7 +33,7 @@ GoSQLX aims to be the **fastest, most reliable, and most comprehensive SQL parsi
 
 ---
 
-## 🛠️ Development Setup
+## Development Setup
 
 ### Prerequisites
 - **Go 1.24+** (latest stable version recommended)
@@ -114,11 +114,11 @@ git push origin feature/your-feature-name
 
 ---
 
-## 📋 Contribution Guidelines
+## Contribution Guidelines
 
 ### Code Quality Standards
 
-#### 🔍 Testing Requirements
+#### Testing Requirements
 - **100% test coverage** for new code (use `go test -cover`)
 - **Race detection** must pass: `go test -race ./...`
 - **Performance tests** for optimization changes
@@ -153,7 +153,7 @@ func BenchmarkNewFeature(b *testing.B) {
 }
 ```
 
-#### 📝 Code Style
+#### Code Style
 - **Go fmt**: All code must be formatted with `go fmt`
 - **Go vet**: Must pass `go vet` without warnings
 - **Golint**: Follow Go naming conventions
@@ -181,7 +181,7 @@ func TokenizeSQL(sql []byte) ([]Token, error) {
 }
 ```
 
-#### 🔒 Security Guidelines
+#### Security Guidelines
 - **Input validation**: Always validate external input
 - **Memory safety**: Use Go's memory safety features correctly
 - **Resource limits**: Implement bounds checking for large inputs
@@ -210,7 +210,7 @@ func ProcessSQL(sql []byte) error {
 
 ### Performance Requirements
 
-#### ⚡ Performance Standards
+#### Performance Standards
 - **No performance regression**: New features must not slow down existing functionality
 - **Memory efficiency**: Minimize allocations in hot paths
 - **Concurrency safety**: All public APIs must be thread-safe
@@ -230,7 +230,7 @@ func OptimizedFunction() {
 
 ### Git Commit Guidelines
 
-#### 📝 Commit Message Format
+#### Commit Message Format
 ```
 <type>(<scope>): <subject>
 
@@ -270,7 +270,7 @@ Breaking change: ErrorLocation.Column now uses 1-based indexing
 
 ---
 
-## 🧪 Testing Guidelines
+## Testing Guidelines
 
 ### Test Organization
 ```
@@ -347,7 +347,7 @@ func FuzzTokenizer(f *testing.F) {
 
 ---
 
-## 🚀 Feature Development Process
+## Feature Development Process
 
 ### 1. RFC (Request for Comments)
 For significant features, create an RFC:
@@ -390,7 +390,7 @@ Many applications use PostgreSQL's JSON features extensively...
 
 ---
 
-## 📋 Pull Request Checklist
+## Pull Request Checklist
 
 ### Before Submitting
 - [ ] **Git Hooks**: Pre-commit hooks installed and passing (`task hooks:install`)
@@ -439,7 +439,7 @@ Why is this change needed?
 
 ---
 
-## 🐛 Bug Reports
+## Bug Reports
 
 ### Issue Template
 ```markdown
@@ -485,7 +485,7 @@ Any other relevant information
 
 ---
 
-## 🏗️ Architecture Guidelines
+## Architecture Guidelines
 
 ### Project Structure
 ```
@@ -553,7 +553,7 @@ func BenchmarkOptimizationImproved(b *testing.B) {
 
 ---
 
-## 📈 Performance Contribution Guidelines
+## Performance Contribution Guidelines
 
 ### Optimization Principles
 - **Measure first**: Always benchmark before optimizing
@@ -609,7 +609,7 @@ func TestMemoryLeak(t *testing.T) {
 
 ---
 
-## 🌟 Recognition
+## Recognition
 
 ### Contributors
 All contributors are recognized in:
@@ -625,7 +625,7 @@ All contributors are recognized in:
 
 ---
 
-## 📞 Getting Help
+## Getting Help
 
 ### Communication Channels
 - **GitHub Issues**: Bug reports and feature requests
@@ -646,7 +646,7 @@ Core maintainers hold virtual office hours:
 
 ---
 
-## 🎯 Contribution Goals
+## Contribution Goals
 
 ### Short-term (3 months)
 - **50+ contributors**: Grow the contributor base
@@ -665,7 +665,7 @@ Core maintainers hold virtual office hours:
 
 ---
 
-## 📄 Legal
+## Legal
 
 ### License
 By contributing to GoSQLX, you agree that your contributions will be licensed under the same license as the project.
@@ -674,15 +674,11 @@ By contributing to GoSQLX, you agree that your contributions will be licensed un
 Contributors retain copyright of their contributions while granting the project rights to use and distribute the code.
 
 ### Code of Conduct
-All contributors must follow our [Code of Conduct](CODE_OF_CONDUCT.md), which promotes:
-- **Respectful communication**
-- **Inclusive environment**
-- **Professional behavior**
-- **Constructive feedback**
+All contributors are expected to maintain professional and respectful communication, promote an inclusive environment, exhibit professional behavior, and provide constructive feedback.
 
 ---
 
-**Thank you for contributing to GoSQLX!** 🚀
+**Thank you for contributing to GoSQLX!**
 
 Together, we're building the future of high-performance SQL parsing in Go.
 

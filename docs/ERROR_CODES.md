@@ -1200,7 +1200,7 @@ import (
     "github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 )
 
-p := parser.New()
+p := parser.NewParser()
 ast, err := p.Parse(tokens)
 if err != nil {
     // Check for specific error code

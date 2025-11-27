@@ -51,7 +51,7 @@ jobs:
             - **Errors**: ${{ steps.validate.outputs.invalid-files }}
             - **Time**: ${{ steps.validate.outputs.validation-time }}ms
 
-            ${{ steps.validate.outputs.invalid-files == '0' ? '✅ All SQL files valid!' : '❌ Please fix SQL errors' }}`;
+            ${{ steps.validate.outputs.invalid-files == '0' ? 'All SQL files valid!' : 'Please fix SQL errors' }}`;
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -96,7 +96,7 @@ jobs:
             "type": "section",
             "text": {
               "type": "mrkdwn",
-              "text": "❌ SQL validation failed\n*Repository:* ${{ github.repository }}\n*Branch:* ${{ github.ref_name }}"
+              "text": "SQL validation failed\n*Repository:* ${{ github.repository }}\n*Branch:* ${{ github.ref_name }}"
             }
           }
         ]
@@ -120,7 +120,7 @@ jobs:
             "type": "section",
             "text": {
               "type": "mrkdwn",
-              "text": "*SQL Validation Results*\n\n• Files: ${{ steps.validate.outputs.validated-files }}\n• Errors: ${{ steps.validate.outputs.invalid-files }}\n• Time: ${{ steps.validate.outputs.validation-time }}ms\n• Status: ${{ steps.validate.outputs.invalid-files == '0' && '✅ Passed' || '❌ Failed' }}"
+              "text": "*SQL Validation Results*\n\n• Files: ${{ steps.validate.outputs.validated-files }}\n• Errors: ${{ steps.validate.outputs.invalid-files }}\n• Time: ${{ steps.validate.outputs.validation-time }}ms\n• Status: ${{ steps.validate.outputs.invalid-files == '0' && 'Passed' || 'Failed' }}"
             }
           },
           {
@@ -691,7 +691,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `### SQL Validation\n\n✓ Files: ${validated}\n✗ Errors: ${invalid}`
+              body: `### SQL Validation\n\nFiles: ${validated}\nErrors: ${invalid}`
             });
 
       # Slack notification on failure

@@ -51,11 +51,16 @@ if err != nil {
     // Syntax error found
 }
 
-// 3. Parse the tokens into an AST
-p := parser.NewParser(convertedTokens)
-defer p.Release()
+// 3. Convert tokens for parser
+convertedTokens, err := parser.ConvertTokensForParser(tokens)
+if err != nil {
+    // Token conversion error
+}
 
-result, err := p.Parse()
+// 4. Parse the tokens into an AST
+p := parser.NewParser()
+
+result, err := p.Parse(convertedTokens)
 if err != nil {
     // Parse error found
 }
@@ -113,13 +118,19 @@ func ValidateFile(filePath string) ValidationResult {
     }
 
     // Convert tokens for parser
-    convertedTokens := parser.ConvertTokensForParser(tokens)
+    convertedTokens, err := parser.ConvertTokensForParser(tokens)
+    if err != nil {
+        return ValidationResult{
+            FilePath: filePath,
+            Valid:    false,
+            Error:    fmt.Errorf("token conversion error: %w", err),
+        }
+    }
 
     // Create parser and parse
-    p := parser.NewParser(convertedTokens)
-    defer p.Release()
+    p := parser.NewParser()
 
-    _, err = p.Parse()
+    _, err = p.Parse(convertedTokens)
     if err != nil {
         return ValidationResult{
             FilePath: filePath,

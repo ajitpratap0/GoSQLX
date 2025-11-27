@@ -275,11 +275,12 @@ func ProcessWithLimit(sql string) error {
     if len(sql) > MaxQuerySize {
         return fmt.Errorf("query too large: %d bytes", len(sql))
     }
-    
+
     tkz := tokenizer.GetTokenizer()
     defer tokenizer.PutTokenizer(tkz)
-    
-    return tkz.Tokenize([]byte(sql))
+
+    _, err := tkz.Tokenize([]byte(sql))
+    return err
 }
 ```
 
@@ -606,7 +607,7 @@ func AnalyzeTokenStream(sql string) {
     }
     
     fmt.Println("Token Stream Analysis:")
-    fmt.Println("=" * 50)
+    fmt.Println("==================================================")
     
     for i, token := range tokens {
         if token.Token.Type == models.TokenTypeEOF {

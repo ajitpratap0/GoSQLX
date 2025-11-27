@@ -25,7 +25,7 @@ This comprehensive guide helps you achieve optimal performance with GoSQLX in pr
 
 ## Performance Overview
 
-###  Baseline Performance (v1.5.1)
+### Baseline Performance (v1.5.1)
 
 GoSQLX delivers production-validated performance across multiple workloads:
 
@@ -89,8 +89,9 @@ func profileCPU() {
         tokens, _ := tkz.Tokenize(sql)
         tokenizer.PutTokenizer(tkz)
 
-        p := parser.New()
-        _, _ = p.Parse(tokens)
+        convertedTokens, _ := parser.ConvertTokensForParser(tokens)
+        p := parser.NewParser()
+        _, _ = p.Parse(convertedTokens)
     }
 }
 ```
@@ -527,7 +528,7 @@ func pipelineProcessing(input <-chan []byte) <-chan Result {
     parsed := make(chan Result, 100)
     go func() {
         defer close(parsed)
-        p := parser.New()
+        p := parser.NewParser()
 
         for tokens := range tokenized {
             ast, err := p.Parse(tokens)

@@ -67,7 +67,7 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 | **DROP TABLE** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
 | **CREATE INDEX** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
 | Unique indexes | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
-| Partial indexes | ✅ | ❌ | ⚠️ | ❌ | ✅ | ✅ Full | 70% |
+| Partial indexes | ✅ | ❌ | ⚠️ | ❌ | ✅ | ⚠️ Partial | 40% |
 | **CREATE VIEW** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
 | **CREATE MATERIALIZED VIEW** | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ Full | 95% |
 | REFRESH MATERIALIZED VIEW | ✅ | ❌ | ❌ | ✅ | ❌ | ✅ Full | 95% |
@@ -82,13 +82,13 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 |---------|------------|-------|------------|--------|--------|---------------|---------------|
 | **INNER JOIN** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
 | **LEFT JOIN** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
-| **RIGHT JOIN** | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ Full | 80% |
-| **FULL OUTER JOIN** | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ Full | 60% |
+| **RIGHT JOIN** | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ Full | 100% |
+| **FULL OUTER JOIN** | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ Full | 85% |
 | **CROSS JOIN** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
-| **NATURAL JOIN** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ Full | 80% |
+| **NATURAL JOIN** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ Full | 95% |
 | Multiple table JOINs | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
 | Self JOINs | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
-| **LATERAL JOIN** | ✅ | ❌ | ❌ | ❌ | ❌ | 🔧 Syntax | 20% |
+| **LATERAL JOIN** | ✅ | ❌ | ❌ | ❌ | ❌ | 🔧 Syntax | 10% |
 
 ### Subqueries
 
@@ -111,9 +111,9 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 | **SUM** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
 | **AVG** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
 | **MIN/MAX** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
-| **GROUP_CONCAT** | ❌ | ✅ | ❌ | ❌ | ✅ | ✅ Full | 40% |
-| **STRING_AGG** | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ Full | 60% |
-| **ARRAY_AGG** | ✅ | ❌ | ❌ | ✅ | ❌ | ✅ Full | 40% |
+| **GROUP_CONCAT** | ❌ | ✅ | ❌ | ❌ | ✅ | ⚠️ Partial | 30% |
+| **STRING_AGG** | ✅ | ❌ | ✅ | ✅ | ❌ | ⚠️ Partial | 30% |
+| **ARRAY_AGG** | ✅ | ❌ | ❌ | ✅ | ❌ | ⚠️ Partial | 30% |
 
 ## Advanced SQL Features
 
@@ -146,8 +146,8 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 |---------|------------|-------|------------|--------|--------|---------------|---------------|
 | **UNION** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
 | **UNION ALL** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
-| **INTERSECT** | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ Full | 80% |
-| **EXCEPT/MINUS** | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ Full | 60% |
+| **INTERSECT** | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ Full | 90% |
+| **EXCEPT/MINUS** | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ Full | 90% |
 
 ### Grouping Operations (SQL-99 T431)
 
@@ -184,16 +184,18 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 
 ## Dialect-Specific Features
 
+**Note**: This section documents dialect-specific features where "Support Level" refers to the native database's support, while "GoSQLX Parser" and "Test Coverage" indicate GoSQLX implementation status. Many features listed have keyword recognition only (🔧 Syntax) without full parsing logic.
+
 ### PostgreSQL-Specific Features
 
 | Feature | Support Level | GoSQLX Parser | Test Coverage | Notes |
 |---------|---------------|---------------|---------------|-------|
-| **Arrays** | ✅ Full | ✅ Full | 90% | Array literals, indexing, operators |
-| **JSON/JSONB** | ✅ Full | ✅ Full | 85% | JSON operators, functions |
-| **Full-text search** | ✅ Full | 🔧 Syntax | 70% | tsvector, tsquery types |
-| **LATERAL joins** | ✅ Full | ✅ Full | 80% | Full parsing support |
-| **Custom operators** | ✅ Full | ⚠️ Partial | 60% | Basic operator recognition |
-| **Dollar quoting** | ✅ Full | ✅ Full | 90% | $tag$ string literals |
+| **Arrays** | ✅ Full | 🔧 Syntax | 40% | Keyword recognition only |
+| **JSON/JSONB** | ✅ Full | 🔧 Syntax | 30% | Data type recognition |
+| **Full-text search** | ✅ Full | 🔧 Syntax | 30% | tsvector, tsquery types |
+| **LATERAL joins** | ✅ Full | 🔧 Syntax | 20% | Keyword reserved, no parsing logic |
+| **Custom operators** | ✅ Full | ⚠️ Partial | 30% | Basic operator recognition |
+| **Dollar quoting** | ✅ Full | ⚠️ Partial | 40% | Limited support |
 
 ### MySQL-Specific Features
 
@@ -210,32 +212,32 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 
 | Feature | Support Level | GoSQLX Parser | Test Coverage | Notes |
 |---------|---------------|---------------|---------------|-------|
-| **MERGE** | ✅ Full | ✅ Full | 80% | MERGE statements |
-| **PIVOT/UNPIVOT** | ✅ Full | 🔧 Syntax | 60% | Basic syntax recognition |
-| **CROSS/OUTER APPLY** | ✅ Full | ✅ Full | 75% | Table-valued functions |
-| **HierarchyID** | ✅ Full | 🔧 Syntax | 50% | Data type recognition |
-| **T-SQL functions** | ✅ Full | ⚠️ Partial | 70% | Subset of T-SQL functions |
+| **MERGE** | ✅ Full | ✅ Full | 95% | MERGE statements with WHEN clauses |
+| **PIVOT/UNPIVOT** | ✅ Full | 🔧 Syntax | 10% | Keywords reserved, no parsing logic |
+| **CROSS/OUTER APPLY** | ✅ Full | 🔧 Syntax | 10% | Keywords reserved, no parsing logic |
+| **HierarchyID** | ✅ Full | 🔧 Syntax | 20% | Data type recognition |
+| **T-SQL functions** | ✅ Full | ⚠️ Partial | 40% | Subset of T-SQL functions |
 
 ### Oracle-Specific Features
 
 | Feature | Support Level | GoSQLX Parser | Test Coverage | Notes |
 |---------|---------------|---------------|---------------|-------|
-| **CONNECT BY** | ✅ Full | ✅ Full | 85% | Hierarchical queries |
-| **PRIOR operator** | ✅ Full | ✅ Full | 80% | Hierarchical navigation |
-| **DECODE function** | ✅ Full | ✅ Full | 90% | Conditional expressions |
-| **NVL/NVL2** | ✅ Full | ✅ Full | 95% | NULL handling functions |
-| **Dual table** | ✅ Full | ✅ Full | 100% | System table |
-| **Analytic functions** | ✅ Full | ✅ Full | 85% | Oracle analytics |
+| **CONNECT BY** | ✅ Full | 🔧 Syntax | 10% | Keywords reserved, no parsing logic |
+| **PRIOR operator** | ✅ Full | 🔧 Syntax | 10% | Keyword reserved, no parsing logic |
+| **DECODE function** | ✅ Full | ⚠️ Partial | 40% | Recognized as function, no special handling |
+| **NVL/NVL2** | ✅ Full | ⚠️ Partial | 40% | Recognized as function, no special handling |
+| **Dual table** | ✅ Full | ✅ Full | 100% | Standard table reference |
+| **Analytic functions** | ✅ Full | ⚠️ Partial | 60% | Subset via window functions |
 
 ### SQLite-Specific Features
 
 | Feature | Support Level | GoSQLX Parser | Test Coverage | Notes |
 |---------|---------------|---------------|---------------|-------|
-| **PRAGMA** | ✅ Full | 🔧 Syntax | 60% | Configuration statements |
-| **ATTACH/DETACH** | ✅ Full | 🔧 Syntax | 70% | Database operations |
-| **Type affinity** | ✅ Full | ⚠️ Partial | 50% | Flexible typing |
-| **WITHOUT ROWID** | ✅ Full | ✅ Full | 80% | Table option |
-| **Simplified syntax** | ✅ Full | ✅ Full | 95% | SQLite variations |
+| **PRAGMA** | ✅ Full | 🔧 Syntax | 10% | Keywords reserved, no parsing logic |
+| **ATTACH/DETACH** | ✅ Full | 🔧 Syntax | 10% | Keywords reserved, no parsing logic |
+| **Type affinity** | ✅ Full | ⚠️ Partial | 30% | Flexible typing |
+| **WITHOUT ROWID** | ✅ Full | ⚠️ Partial | 40% | Table option |
+| **Simplified syntax** | ✅ Full | ✅ Full | 85% | SQLite variations |
 
 ## SQL Standards Compliance
 
@@ -372,28 +374,37 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 
 ## Production Readiness Summary
 
-### ✅ Ready for Production
+### Ready for Production
 
 - **Core SQL operations** (SELECT, INSERT, UPDATE, DELETE)
 - **Standard joins and subqueries**
 - **Window functions and CTEs**
+- **MERGE statements** (SQL:2003 F312)
+- **GROUPING SETS, ROLLUP, CUBE** (SQL-99 T431)
+- **Materialized views**
+- **Table partitioning**
 - **Multi-dialect basic syntax**
 - **Unicode and international text**
 - **High-performance scenarios**
 
-### ⚠️ Suitable with Considerations
+### Suitable with Considerations
 
-- **Advanced dialect-specific features**
-- **Complex XML/JSON operations**
+- **Advanced dialect-specific features** (keyword recognition only for: LATERAL, PIVOT/UNPIVOT, CONNECT BY, PRAGMA, ATTACH/DETACH)
+- **Complex XML/JSON operations** (syntax recognition only)
+- **Dialect-specific functions** (DECODE, NVL, recognized as generic functions)
 - **Newest SQL standard features (SQL-2011+)**
 - **Very large query processing**
 
-### 🔧 Development Needed
+### Development Needed
 
+- **LATERAL JOIN parsing logic** (keywords reserved)
+- **PIVOT/UNPIVOT parsing logic** (keywords reserved)
+- **CONNECT BY hierarchical queries** (keywords reserved)
 - **Full XML function support**
 - **Advanced JSON operations**
 - **Row pattern recognition**
 - **Complete temporal table support**
+- **SQLite PRAGMA statements** (keywords reserved)
 
 ## Recommendations
 

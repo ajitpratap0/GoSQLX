@@ -7,7 +7,7 @@ This guide helps you choose the right SQL parsing tool for your needs. We provid
 
 ---
 
-## 📊 Quick Comparison Matrix
+## Quick Comparison Matrix
 
 | Feature | **GoSQLX** | SQLFluff | sqlfmt | JSQLParser | pg_query |
 |---------|------------|----------|--------|------------|----------|
@@ -32,7 +32,7 @@ This guide helps you choose the right SQL parsing tool for your needs. We provid
 
 ---
 
-## 🚀 Performance Comparison
+## Performance Comparison
 
 ### Throughput Benchmarks
 
@@ -92,7 +92,7 @@ sqlfmt:      Limited by Python GIL (~2x speedup)
 
 ---
 
-## 🆚 Detailed Comparisons
+## Detailed Comparisons
 
 ### GoSQLX vs SQLFluff
 
@@ -236,7 +236,7 @@ ast, _ := gosqlx.Parse("SELECT * FROM users")
 
 ---
 
-## 🎯 Decision Matrix
+## Decision Matrix
 
 ### Choose GoSQLX if:
 
@@ -305,7 +305,7 @@ ast, _ := gosqlx.Parse("SELECT * FROM users")
 
 ---
 
-## ❌ When NOT to Use GoSQLX
+## When NOT to Use GoSQLX
 
 Be honest about limitations:
 
@@ -334,7 +334,7 @@ Be honest about limitations:
 
 ---
 
-## 🔄 Migration Guides
+## Migration Guides
 
 **Complete migration guides with working code examples now available:**
 
@@ -412,7 +412,7 @@ ast, _ := parser.Parse([]byte(sql))
 
 ---
 
-## 📈 Performance Details
+## Performance Details
 
 ### Test Methodology
 
@@ -469,7 +469,7 @@ SQLFluff:    500 MB  (50KB per query)
 
 ---
 
-## 💡 Real-World Use Cases
+## Real-World Use Cases
 
 ### Use Case 1: CI/CD SQL Validation
 
@@ -515,7 +515,7 @@ Result: 36x faster, 95% less memory
 
 ---
 
-## 🎓 Feature Comparison Details
+## Feature Comparison Details
 
 ### SQL Standard Support
 
@@ -546,7 +546,7 @@ Result: 36x faster, 95% less memory
 
 ---
 
-## 🔮 Roadmap Comparison
+## Roadmap Comparison
 
 ### GoSQLX Roadmap
 
@@ -574,7 +574,7 @@ Result: 36x faster, 95% less memory
 
 ---
 
-## 📞 Get Help Choosing
+## Get Help Choosing
 
 Still unsure? Here's how to get help:
 
@@ -584,7 +584,7 @@ Still unsure? Here's how to get help:
 
 ---
 
-## 📚 Additional Resources
+## Additional Resources
 
 - **[Getting Started Guide](GETTING_STARTED.md)** - Quick 5-minute intro
 - **[Usage Guide](USAGE_GUIDE.md)** - Comprehensive patterns
@@ -593,7 +593,7 @@ Still unsure? Here's how to get help:
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 See something wrong or want to add a comparison? Please open a PR!
 

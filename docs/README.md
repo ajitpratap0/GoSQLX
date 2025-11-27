@@ -4,7 +4,7 @@ Comprehensive documentation for the GoSQLX SQL parsing SDK.
 
 **Current Version**: v1.5.1+ | **Last Updated**: November 2025
 
-## 📚 Documentation Index
+## Documentation Index
 
 ### Getting Started
 
@@ -55,7 +55,7 @@ Comprehensive documentation for the GoSQLX SQL parsing SDK.
 | [**migration/FROM_PG_QUERY.md**](migration/FROM_PG_QUERY.md) | Migrating from pg_query |
 | [**migration/FROM_SQLFLUFF.md**](migration/FROM_SQLFLUFF.md) | Migrating from SQLFluff |
 
-## 🚀 Quick Start Guides
+## Quick Start Guides
 
 ### For New Users
 1. Start with [USAGE_GUIDE.md](USAGE_GUIDE.md) - Basic usage patterns
@@ -72,7 +72,7 @@ Comprehensive documentation for the GoSQLX SQL parsing SDK.
 2. Review [SECURITY.md](SECURITY.md) - Security considerations
 3. Check [SQL_COMPATIBILITY.md](SQL_COMPATIBILITY.md) - Dialect support
 
-## 📖 Documentation Structure
+## Documentation Structure
 
 ```
 docs/
@@ -99,7 +99,7 @@ docs/
     └── FROM_SQLFLUFF.md
 ```
 
-## 🔍 Finding Information
+## Finding Information
 
 ### By Topic
 
@@ -152,7 +152,7 @@ docs/
 **"I found a memory leak"**
 → See [TROUBLESHOOTING.md#memory-leaks](TROUBLESHOOTING.md#memory-leaks)
 
-## 📊 Coverage Matrix
+## Coverage Matrix
 
 | Topic | API Ref | Usage | Architecture | Troubleshooting | Production |
 |-------|---------|-------|--------------|-----------------|------------|
@@ -169,7 +169,7 @@ docs/
 | Monitoring | | | | | ✓ |
 | Security | | | | | ✓ |
 
-## 💡 Contributing to Documentation
+## Contributing to Documentation
 
 We welcome documentation improvements! To contribute:
 
@@ -188,7 +188,7 @@ We welcome documentation improvements! To contribute:
 - Keep formatting consistent
 - Test all code examples
 
-## 📞 Getting Help
+## Getting Help
 
 If you can't find what you need:
 
@@ -197,7 +197,7 @@ If you can't find what you need:
 3. **Ask**: Open a [new issue](https://github.com/ajitpratap0/GoSQLX/issues/new)
 4. **Discuss**: Join [discussions](https://github.com/ajitpratap0/GoSQLX/discussions)
 
-## 🔄 Documentation Updates
+## Documentation Updates
 
 | Document | Last Updated | Version |
 |----------|--------------|---------|
@@ -213,7 +213,7 @@ If you can't find what you need:
 | ERROR_CODES.md | 2025-11 | v1.5.1 |
 | PERFORMANCE_TUNING.md | 2025-11 | v1.5.1 |
 
-## 🆕 Recent Feature Additions (v1.4+)
+## Recent Feature Additions (v1.4+)
 
 - **SQL Injection Detection** - `pkg/sql/security` package for pattern detection
 - **MERGE Statements** - SQL Server/PostgreSQL MERGE support

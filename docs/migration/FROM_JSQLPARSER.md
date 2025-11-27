@@ -191,11 +191,17 @@ func main() {
         panic(err)
     }
 
-    // Step 2: Parse
+    // Step 2: Convert tokens for parser
+    parserTokens, err := parser.ConvertTokensForParser(tokens)
+    if err != nil {
+        panic(err)
+    }
+
+    // Step 3: Parse
     p := parser.NewParser()
     defer p.Release()
 
-    ast, err := p.Parse(convertTokens(tokens))
+    ast, err := p.Parse(parserTokens)
     if err != nil {
         panic(err)
     }
@@ -361,10 +367,12 @@ func parseSQL(sql string) *ast.AST {
 
     tokens, _ := tkz.Tokenize([]byte(sql))
 
+    parserTokens, _ := parser.ConvertTokensForParser(tokens)
+
     p := parser.NewParser()
     defer p.Release()
 
-    astObj, _ := p.Parse(convertTokens(tokens))
+    astObj, _ := p.Parse(parserTokens)
     return astObj
 }
 ```
@@ -440,7 +448,8 @@ func parseMultiple(sql string) []interface{} {
             continue
         }
 
-        ast, _ := p.Parse(convertTokens(tokens))
+        parserTokens, _ := parser.ConvertTokensForParser(tokens)
+        ast, _ := p.Parse(parserTokens)
         statements = append(statements, ast)
     }
 

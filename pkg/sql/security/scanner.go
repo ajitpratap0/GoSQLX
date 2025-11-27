@@ -1,14 +1,13 @@
 // Package security provides SQL injection pattern detection and security scanning.
 // It analyzes parsed SQL AST to identify common injection patterns and vulnerabilities.
 //
-// The scanner detects:
+// The scanner detects 6 pattern types:
 //   - Tautologies: Always-true conditions like 1=1, 'a'='a'
 //   - Comment-based bypasses: --, /**/, #
-//   - Stacked queries: Multiple statements with dangerous operations
-//   - UNION-based extraction: Suspicious UNION SELECT patterns
-//   - Time-based blind: SLEEP(), WAITFOR DELAY, pg_sleep()
-//   - Boolean-based blind: Suspicious boolean logic patterns
-//   - Out-of-band: xp_cmdshell, LOAD_FILE(), etc.
+//   - UNION-based extraction: Suspicious UNION SELECT patterns with NULL columns or system tables
+//   - Time-based blind: SLEEP(), WAITFOR DELAY, pg_sleep(), BENCHMARK()
+//   - Out-of-band: xp_cmdshell, LOAD_FILE(), UTL_HTTP, etc.
+//   - Dangerous functions: EXEC(), sp_executesql, PREPARE FROM, etc.
 //
 // Example usage:
 //

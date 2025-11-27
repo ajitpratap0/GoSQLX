@@ -6,7 +6,7 @@
 - [High-Level API (pkg/gosqlx)](#high-level-api)
   - [Parsing Functions](#parsing-functions)
   - [Validation Functions](#validation-functions)
-  - [Metadata Extraction](#metadata-extraction)
+  - [Future Enhancements](#future-enhancements)
 - [Tokenizer API](#tokenizer-api)
   - [Functions](#functions)
   - [Supported Token Types](#supported-token-types)
@@ -226,150 +226,17 @@ if err := gosqlx.ValidateMultiple(queries); err != nil {
 
 ---
 
-### Metadata Extraction
+### Future Enhancements
 
-#### `ExtractTables(astNode *ast.AST) []string`
+**Note:** The following metadata extraction functions are planned for future releases but not yet implemented:
 
-Extract all table names from parsed SQL.
+- `ExtractTables(astNode *ast.AST) []string` - Extract table names from parsed SQL
+- `ExtractColumns(astNode *ast.AST) []string` - Extract column references
+- `ExtractFunctions(astNode *ast.AST) []string` - Extract function calls
+- `ExtractTablesQualified(astNode *ast.AST) []QualifiedName` - Extract tables with schema info
+- `ExtractColumnsQualified(astNode *ast.AST) []QualifiedName` - Extract columns with qualifiers
 
-```go
-sql := "SELECT * FROM users u JOIN orders o ON u.id = o.user_id"
-astNode, _ := gosqlx.Parse(sql)
-tables := gosqlx.ExtractTables(astNode)
-// Returns: ["users", "orders"]
-```
-
-**Extracts from:**
-- FROM clauses
-- JOIN clauses
-- Subqueries and CTEs
-- INSERT/UPDATE/DELETE statements
-
-**Returns:** Deduplicated slice of table names
-
----
-
-#### `ExtractTablesQualified(astNode *ast.AST) []QualifiedName`
-
-Extract table names with schema/alias information.
-
-```go
-sql := "SELECT * FROM public.users u"
-astNode, _ := gosqlx.Parse(sql)
-tables := gosqlx.ExtractTablesQualified(astNode)
-// Returns: [QualifiedName{Schema: "public", Name: "users"}]
-```
-
-**Use Case:** When schema information is needed
-
----
-
-#### `ExtractColumns(astNode *ast.AST) []string`
-
-Extract all column references from SQL.
-
-```go
-sql := "SELECT id, name, email FROM users WHERE active = true"
-astNode, _ := gosqlx.Parse(sql)
-columns := gosqlx.ExtractColumns(astNode)
-// Returns: ["id", "name", "email", "active"]
-```
-
-**Extracts from:**
-- SELECT columns
-- WHERE conditions
-- JOIN conditions
-- GROUP BY, HAVING, ORDER BY clauses
-
-**Returns:** Deduplicated slice of column names
-
----
-
-#### `ExtractColumnsQualified(astNode *ast.AST) []QualifiedName`
-
-Extract column references with table qualifiers.
-
-```go
-sql := "SELECT u.id, u.name, o.total FROM users u JOIN orders o ON u.id = o.user_id"
-astNode, _ := gosqlx.Parse(sql)
-columns := gosqlx.ExtractColumnsQualified(astNode)
-// Returns qualified names like "u.id", "u.name", "o.total", etc.
-```
-
-**Use Case:** Understanding column-to-table relationships
-
----
-
-#### `ExtractFunctions(astNode *ast.AST) []string`
-
-Extract all function calls from SQL.
-
-```go
-sql := "SELECT COUNT(*), MAX(price), AVG(quantity) FROM products"
-astNode, _ := gosqlx.Parse(sql)
-functions := gosqlx.ExtractFunctions(astNode)
-// Returns: ["COUNT", "MAX", "AVG"]
-```
-
-**Includes:**
-- Aggregate functions (COUNT, SUM, AVG, MIN, MAX)
-- Scalar functions (UPPER, LOWER, SUBSTRING, etc.)
-- Window functions (ROW_NUMBER, RANK, etc.)
-
----
-
-### Types
-
-#### `QualifiedName`
-
-Represents a schema.table.column qualified name.
-
-```go
-type QualifiedName struct {
-    Schema string // Optional schema name
-    Table  string // Table name
-    Name   string // Column or table name
-}
-```
-
-**Methods:**
-
-- `String() string` - Returns "schema.table.name" format
-- `FullName() string` - Returns meaningful name without schema
-
-**Examples:**
-
-```go
-// Column reference
-col := QualifiedName{Table: "users", Name: "id"}
-col.String()    // "users.id"
-col.FullName()  // "users.id"
-
-// Table reference with schema
-tbl := QualifiedName{Schema: "public", Name: "users"}
-tbl.String()    // "public.users"
-tbl.FullName()  // "users"
-
-// 3-part name
-full := QualifiedName{Schema: "db", Table: "public", Name: "users"}
-full.String()    // "db.public.users"
-full.FullName()  // "public.users"
-```
-
----
-
-### Known Limitations
-
-The high-level API extraction functions have the following parser limitations:
-
-1. **CASE Expressions**: Column references within CASE may not extract correctly
-2. **CAST Expressions**: Type conversion expressions not fully supported
-3. **IN Expressions**: Complex IN clauses may not parse completely
-4. **BETWEEN Expressions**: Range comparisons partially supported
-5. **Schema-Qualified Names**: `schema.table` format not fully supported
-6. **Complex Recursive CTEs**: Advanced recursive queries may fail
-
-For queries using these features, consider manual extraction or contributing parser enhancements.
+For now, use the AST Visitor pattern to manually traverse and extract metadata from parsed SQL.
 
 ---
 
@@ -392,10 +259,13 @@ For queries using these features, consider manual extraction or contributing par
 package main
 
 import (
+    "context"
     "fmt"
     "log"
+    "time"
 
     "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+    "github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
 func main() {
@@ -415,15 +285,25 @@ func main() {
     if err != nil {
         log.Fatal("Parse error:", err)
     }
+    defer ast.ReleaseAST(astNode)
 
-    // Extract metadata
-    tables := gosqlx.ExtractTables(astNode)
-    columns := gosqlx.ExtractColumns(astNode)
-    functions := gosqlx.ExtractFunctions(astNode)
+    // Parse with timeout
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
 
-    fmt.Printf("Tables: %v\n", tables)       // ["users", "orders"]
-    fmt.Printf("Columns: %v\n", columns)     // ["id", "name", "created_at", "user_id"]
-    fmt.Printf("Functions: %v\n", functions) // ["COUNT"]
+    astWithTimeout, err := gosqlx.ParseWithContext(ctx, sql)
+    if err != nil {
+        log.Fatal("Parse with context error:", err)
+    }
+    defer ast.ReleaseAST(astWithTimeout)
+
+    // Validate SQL syntax
+    if err := gosqlx.Validate(sql); err != nil {
+        log.Fatal("Validation error:", err)
+    }
+
+    fmt.Println("SQL parsed and validated successfully!")
+    fmt.Printf("Number of statements: %d\n", len(astNode.Statements))
 }
 ```
 
@@ -487,6 +367,35 @@ if err != nil {
 - Position tracking (line, column)
 - Dialect-specific tokens (PostgreSQL @>, MySQL backticks, etc.)
 
+---
+
+#### Method: `TokenizeContext(ctx context.Context, input []byte) ([]models.TokenWithSpan, error)`
+Tokenizes SQL input with context support for cancellation and timeouts.
+
+```go
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+
+tokens, err := tkz.TokenizeContext(ctx, []byte("SELECT * FROM users"))
+if err == context.DeadlineExceeded {
+    log.Println("Tokenization timed out")
+}
+```
+
+**Parameters:**
+- `ctx`: Context for cancellation/timeout control
+- `input`: SQL text as byte slice
+
+**Returns:**
+- `[]models.TokenWithSpan`: Array of tokens with position spans
+- `error`: `context.Canceled`, `context.DeadlineExceeded`, or tokenization error
+
+**Use Case:** Long-running tokenization with timeout/cancellation support
+
+**Note:** Context is checked every 100 tokens for efficient cancellation
+
+---
+
 #### Method: `Reset()`
 Resets the tokenizer state for reuse.
 
@@ -547,7 +456,7 @@ defer p.Release() // ALWAYS defer the release
 
 ### Type: `Parser`
 
-#### Method: `Parse(tokens []token.Token) (ast.Node, error)`
+#### Method: `Parse(tokens []token.Token) (*ast.AST, error)`
 Parses tokens into an AST.
 
 ```go
@@ -561,18 +470,70 @@ if err != nil {
 - `tokens`: Array of tokens to parse
 
 **Returns:**
-- `ast.Node`: Root node of the AST
+- `*ast.AST`: Root AST container with parsed statements
 - `error`: Parse error if any
 
 **Supported Statements:**
-- SELECT (with JOIN, GROUP BY, ORDER BY, HAVING)
+- SELECT (with JOIN, GROUP BY, ORDER BY, HAVING, CTEs, window functions)
 - INSERT (single and multi-row)
 - UPDATE (with WHERE)
 - DELETE (with WHERE)
-- CREATE TABLE
+- CREATE TABLE, CREATE INDEX, CREATE VIEW, CREATE MATERIALIZED VIEW
 - ALTER TABLE
-- DROP TABLE
-- CREATE INDEX
+- DROP TABLE, DROP INDEX, DROP VIEW
+- MERGE statements
+
+---
+
+#### Method: `ParseContext(ctx context.Context, tokens []token.Token) (*ast.AST, error)`
+Parses tokens with context support for cancellation and timeouts.
+
+```go
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+
+astNode, err := p.ParseContext(ctx, tokens)
+if err == context.DeadlineExceeded {
+    log.Println("Parsing timed out")
+}
+```
+
+**Parameters:**
+- `ctx`: Context for cancellation/timeout control
+- `tokens`: Array of tokens to parse
+
+**Returns:**
+- `*ast.AST`: Parsed AST
+- `error`: `context.Canceled`, `context.DeadlineExceeded`, or parse error
+
+**Use Case:** Long-running parsing with timeout/cancellation support
+
+---
+
+#### Method: `ParseWithPositions(result *ConversionResult) (*ast.AST, error)`
+Parses tokens with enhanced error reporting using position information.
+
+```go
+converter := parser.NewTokenConverter()
+result, err := converter.Convert(tokens)
+if err != nil {
+    log.Fatal(err)
+}
+
+astNode, err := p.ParseWithPositions(result)
+// Errors will include accurate line/column information
+```
+
+**Parameters:**
+- `result`: ConversionResult containing tokens and position mappings
+
+**Returns:**
+- `*ast.AST`: Parsed AST
+- `error`: Parse error with precise position information
+
+**Use Case:** When you need detailed error location reporting
+
+---
 
 #### Method: `Release()`
 Returns the parser to the pool.
@@ -4052,18 +4013,16 @@ The Security package provides SQL injection pattern detection and security scann
 
 ### Overview
 
-The scanner detects the following SQL injection patterns:
+The scanner detects the following 6 SQL injection patterns:
 
 | Pattern Type | Description | Severity |
 |-------------|-------------|----------|
 | **Tautology** | Always-true conditions (1=1, 'a'='a') | CRITICAL |
 | **Comment Bypass** | SQL comments used to bypass filters (--, /**/) | HIGH/MEDIUM |
-| **Stacked Query** | Multiple statements with dangerous operations | HIGH |
-| **UNION-Based** | Suspicious UNION SELECT patterns | HIGH |
-| **Time-Based Blind** | SLEEP(), WAITFOR DELAY, pg_sleep() | HIGH |
-| **Boolean-Based Blind** | Suspicious boolean logic patterns | MEDIUM |
-| **Out-of-Band** | xp_cmdshell, LOAD_FILE(), etc. | CRITICAL |
-| **Dangerous Functions** | Dynamic SQL execution functions | MEDIUM |
+| **UNION-Based** | Suspicious UNION SELECT with NULL columns or system tables | HIGH/CRITICAL |
+| **Time-Based Blind** | SLEEP(), WAITFOR DELAY, pg_sleep(), BENCHMARK() | HIGH |
+| **Out-of-Band** | xp_cmdshell, LOAD_FILE(), UTL_HTTP, etc. | CRITICAL |
+| **Dangerous Functions** | EXEC(), sp_executesql, PREPARE FROM, etc. | MEDIUM/CRITICAL |
 
 ---
 

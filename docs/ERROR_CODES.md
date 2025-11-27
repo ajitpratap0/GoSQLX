@@ -21,6 +21,11 @@ This document provides a comprehensive reference for all error codes in GoSQLX w
 | E2005 | Parser | Incomplete statement |
 | E2006 | Parser | Invalid expression |
 | E2007 | DoS Protection | Expression nesting exceeds maximum depth (100) |
+| E2008 | Parser | Unsupported data type |
+| E2009 | Parser | Unsupported constraint type |
+| E2010 | Parser | Unsupported JOIN type |
+| E2011 | Parser | Invalid CTE (WITH clause) syntax |
+| E2012 | Parser | Invalid set operation (UNION/EXCEPT/INTERSECT) |
 | E3001 | Semantic | Undefined table |
 | E3002 | Semantic | Undefined column |
 | E3003 | Semantic | Type mismatch |
@@ -156,6 +161,94 @@ SELECT * FROM data WHERE value = 1.5e
 
 -- Right: Valid scientific notation
 SELECT * FROM data WHERE value = 1.5e10
+```
+
+---
+
+#### E1004 - Invalid Operator Sequence
+
+**When it occurs**: An invalid operator sequence is encountered in the SQL input.
+
+**Example**:
+```sql
+SELECT * FROM users WHERE age >= = 18
+                              ^^^^
+```
+
+**Error message**:
+```
+Error E1004 at line 1, column 31: invalid operator sequence '>=='
+  1 | SELECT * FROM users WHERE age >= = 18
+                                    ^^^^
+Hint: Check operator syntax (valid operators: =, !=, <, >, <=, >=, <>, ||, etc.)
+```
+
+**Common causes**:
+- Duplicate operator characters
+- Invalid operator combinations
+- Typos in comparison operators
+- Mixing operators from different SQL dialects
+
+**Solutions**:
+```sql
+-- Wrong: Double equals
+SELECT * FROM users WHERE age >= = 18
+
+-- Right: Single comparison
+SELECT * FROM users WHERE age >= 18
+
+-- Wrong: Invalid combination
+SELECT * FROM users WHERE name =! 'John'
+
+-- Right: Use correct operator
+SELECT * FROM users WHERE name != 'John' OR name <> 'John'
+```
+
+---
+
+#### E1005 - Invalid Identifier Format
+
+**When it occurs**: An identifier (table name, column name, etc.) has invalid format.
+
+**Example**:
+```sql
+SELECT * FROM 123users
+              ^^^^^^^^
+```
+
+**Error message**:
+```
+Error E1005 at line 1, column 15: invalid identifier format '123users'
+  1 | SELECT * FROM 123users
+                    ^^^^^^^^
+Hint: Identifiers cannot start with digits. Use quotes for special names: "123users"
+```
+
+**Common causes**:
+- Identifiers starting with numbers
+- Using reserved keywords as unquoted identifiers
+- Special characters in identifiers without proper quoting
+- Invalid Unicode characters in identifiers
+
+**Solutions**:
+```sql
+-- Wrong: Identifier starts with number
+SELECT * FROM 123users
+
+-- Right: Quote the identifier
+SELECT * FROM "123users"
+
+-- Wrong: Reserved keyword as identifier
+SELECT select FROM table
+
+-- Right: Quote reserved keywords
+SELECT "select" FROM "table"
+
+-- Wrong: Special characters unquoted
+SELECT * FROM user-table
+
+-- Right: Quote identifiers with special characters
+SELECT * FROM "user-table"
 ```
 
 ---
@@ -399,6 +492,141 @@ UPDATE users SET name = 'John'
 
 ---
 
+#### E2004 - Invalid Syntax
+
+**When it occurs**: General SQL syntax error that doesn't fit other specific categories.
+
+**Example**:
+```sql
+SELECT * FROM users WHERE WHERE age > 18
+                          ^^^^^
+```
+
+**Error message**:
+```
+Error E2004 at line 1, column 27: invalid syntax: duplicate WHERE clause
+  1 | SELECT * FROM users WHERE WHERE age > 18
+                                ^^^^^
+Hint: Check SQL syntax for duplicate or misplaced keywords
+```
+
+**Common causes**:
+- Duplicate SQL keywords
+- Keywords in wrong positions
+- Malformed SQL structure
+- Missing or extra punctuation
+
+**Solutions**:
+```sql
+-- Wrong: Duplicate WHERE
+SELECT * FROM users WHERE WHERE age > 18
+
+-- Right: Single WHERE clause
+SELECT * FROM users WHERE age > 18
+
+-- Wrong: Misplaced keyword
+SELECT FROM users * WHERE age > 18
+
+-- Right: Correct keyword order
+SELECT * FROM users WHERE age > 18
+```
+
+---
+
+#### E2005 - Incomplete Statement
+
+**When it occurs**: A SQL statement is started but not completed.
+
+**Example**:
+```sql
+SELECT * FROM users WHERE
+                          ^
+```
+
+**Error message**:
+```
+Error E2005 at line 1, column 27: incomplete statement: expected expression after WHERE
+  1 | SELECT * FROM users WHERE
+                                ^
+Hint: Complete the WHERE clause with a condition
+```
+
+**Common causes**:
+- Incomplete WHERE conditions
+- Missing VALUES in INSERT
+- Incomplete subqueries
+- Truncated SQL statements
+
+**Solutions**:
+```sql
+-- Wrong: Incomplete WHERE
+SELECT * FROM users WHERE
+
+-- Right: Complete the condition
+SELECT * FROM users WHERE age > 18
+
+-- Wrong: Incomplete INSERT
+INSERT INTO users (name, age) VALUES
+
+-- Right: Provide values
+INSERT INTO users (name, age) VALUES ('John', 25)
+
+-- Wrong: Incomplete subquery
+SELECT * FROM (SELECT * FROM
+
+-- Right: Complete subquery
+SELECT * FROM (SELECT * FROM users) AS u
+```
+
+---
+
+#### E2006 - Invalid Expression
+
+**When it occurs**: An expression has invalid syntax or structure.
+
+**Example**:
+```sql
+SELECT * FROM users WHERE age > > 18
+                                ^^
+```
+
+**Error message**:
+```
+Error E2006 at line 1, column 33: invalid expression: unexpected operator '>'
+  1 | SELECT * FROM users WHERE age > > 18
+                                      ^^
+Hint: Check expression syntax and operator usage
+```
+
+**Common causes**:
+- Invalid operator sequences in expressions
+- Malformed function calls
+- Missing operands
+- Invalid comparison syntax
+
+**Solutions**:
+```sql
+-- Wrong: Double comparison operator
+SELECT * FROM users WHERE age > > 18
+
+-- Right: Single operator
+SELECT * FROM users WHERE age > 18
+
+-- Wrong: Missing operand
+SELECT * FROM users WHERE age >
+
+-- Right: Complete expression
+SELECT * FROM users WHERE age > 18
+
+-- Wrong: Invalid function syntax
+SELECT COUNT FROM users
+
+-- Right: Proper function call
+SELECT COUNT(*) FROM users
+```
+
+---
+
 #### E2007 - Recursion Depth Limit Exceeded
 
 **When it occurs**: Expression nesting exceeds the maximum allowed depth (100 levels).
@@ -479,6 +707,342 @@ func buildNestedQuery(depth int, maxDepth int) (string, error) {
     return fmt.Sprintf("SELECT * FROM (%s)", inner), nil
 }
 ```
+
+---
+
+#### E2008 - Unsupported Data Type
+
+**When it occurs**: A data type is used that GoSQLX does not currently support.
+
+**Example**:
+```sql
+CREATE TABLE users (id INT, data XML)
+                                 ^^^
+```
+
+**Error message**:
+```
+Error E2008 at line 1, column 33: unsupported data type 'XML'
+  1 | CREATE TABLE users (id INT, data XML)
+                                      ^^^
+Hint: This data type is not yet supported. Supported types include: INT, VARCHAR, TEXT, TIMESTAMP, etc.
+```
+
+**Common causes**:
+- Using database-specific types not yet implemented
+- Typos in data type names
+- Using deprecated or non-standard types
+- Advanced types like XML, JSON (support varies)
+
+**Solutions**:
+```sql
+-- Wrong: Unsupported XML type
+CREATE TABLE users (id INT, data XML)
+
+-- Right: Use TEXT or VARCHAR for structured data
+CREATE TABLE users (id INT, data TEXT)
+
+-- Wrong: Database-specific type
+CREATE TABLE logs (id INT, data HSTORE)
+
+-- Right: Use standard types
+CREATE TABLE logs (id INT, data JSONB)
+```
+
+---
+
+#### E2009 - Unsupported Constraint
+
+**When it occurs**: A constraint type is used that GoSQLX does not currently support.
+
+**Example**:
+```sql
+CREATE TABLE users (
+    id INT,
+    CONSTRAINT chk_custom CHECK (custom_function(id) > 0)
+)
+```
+
+**Error message**:
+```
+Error E2009 at line 3, column 35: unsupported constraint type with custom function
+  3 |     CONSTRAINT chk_custom CHECK (custom_function(id) > 0)
+                                        ^^^^^^^^^^^^^
+Hint: Complex CHECK constraints with custom functions may not be supported
+```
+
+**Common causes**:
+- Complex CHECK constraints with functions
+- Database-specific constraint syntax
+- Advanced constraint features
+- Trigger-based constraints
+
+**Solutions**:
+```sql
+-- May not be supported: Complex CHECK with function
+CREATE TABLE users (
+    id INT,
+    CONSTRAINT chk_custom CHECK (custom_function(id) > 0)
+)
+
+-- Supported: Simple CHECK constraint
+CREATE TABLE users (
+    id INT,
+    CONSTRAINT chk_id CHECK (id > 0)
+)
+
+-- Supported: Standard constraints
+CREATE TABLE users (
+    id INT PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL
+)
+```
+
+---
+
+#### E2010 - Unsupported JOIN Type
+
+**When it occurs**: A JOIN type is used that GoSQLX does not currently support.
+
+**Example**:
+```sql
+SELECT * FROM users
+LATERAL JOIN orders ON users.id = orders.user_id
+^^^^^^^
+```
+
+**Error message**:
+```
+Error E2010 at line 2, column 1: unsupported JOIN type 'LATERAL'
+  2 | LATERAL JOIN orders ON users.id = orders.user_id
+      ^^^^^^^
+Hint: Supported JOIN types: INNER, LEFT, RIGHT, FULL, CROSS, NATURAL
+```
+
+**Common causes**:
+- Using advanced JOIN types (LATERAL, APPLY)
+- Database-specific JOIN syntax
+- Typos in JOIN keywords
+
+**Solutions**:
+```sql
+-- Wrong: LATERAL JOIN (may not be supported)
+SELECT * FROM users
+LATERAL JOIN orders ON users.id = orders.user_id
+
+-- Right: Use standard JOIN types
+SELECT * FROM users
+LEFT JOIN orders ON users.id = orders.user_id
+
+-- Supported: Standard JOIN types
+SELECT * FROM users u
+INNER JOIN orders o ON u.id = o.user_id
+LEFT JOIN products p ON o.product_id = p.id
+CROSS JOIN categories c
+NATURAL JOIN preferences
+```
+
+---
+
+#### E2011 - Invalid CTE Syntax
+
+**When it occurs**: The syntax of a Common Table Expression (WITH clause) is invalid.
+
+**Example**:
+```sql
+WITH user_counts AS
+    SELECT dept, COUNT(*) FROM employees GROUP BY dept
+SELECT * FROM user_counts
+```
+
+**Error message**:
+```
+Error E2011 at line 2, column 5: invalid CTE syntax: missing parentheses around CTE query
+  2 |     SELECT dept, COUNT(*) FROM employees GROUP BY dept
+          ^^^^^^
+Hint: CTE queries must be enclosed in parentheses: WITH cte_name AS (SELECT ...)
+```
+
+**Common causes**:
+- Missing parentheses around CTE query
+- Missing column list in recursive CTE
+- Invalid RECURSIVE syntax
+- Missing UNION in recursive CTE
+
+**Solutions**:
+```sql
+-- Wrong: Missing parentheses
+WITH user_counts AS
+    SELECT dept, COUNT(*) FROM employees GROUP BY dept
+SELECT * FROM user_counts
+
+-- Right: Add parentheses
+WITH user_counts AS (
+    SELECT dept, COUNT(*) FROM employees GROUP BY dept
+)
+SELECT * FROM user_counts
+
+-- Wrong: Recursive CTE without proper structure
+WITH RECURSIVE hierarchy AS (
+    SELECT id, parent_id FROM nodes
+)
+SELECT * FROM hierarchy
+
+-- Right: Proper recursive CTE with UNION
+WITH RECURSIVE hierarchy AS (
+    SELECT id, parent_id, 1 as level FROM nodes WHERE parent_id IS NULL
+    UNION ALL
+    SELECT n.id, n.parent_id, h.level + 1
+    FROM nodes n
+    JOIN hierarchy h ON n.parent_id = h.id
+)
+SELECT * FROM hierarchy
+```
+
+---
+
+#### E2012 - Invalid Set Operation
+
+**When it occurs**: A set operation (UNION, INTERSECT, EXCEPT) has invalid syntax.
+
+**Example**:
+```sql
+SELECT id FROM users
+UNION
+SELECT id, name FROM orders
+```
+
+**Error message**:
+```
+Error E2012 at line 3, column 1: invalid set operation: column count mismatch (1 vs 2)
+  3 | SELECT id, name FROM orders
+      ^^^^^^
+Hint: All queries in a set operation must return the same number of columns
+```
+
+**Common causes**:
+- Mismatched column counts between queries
+- Incompatible data types
+- Missing ALL keyword when duplicates needed
+- ORDER BY in wrong position
+
+**Solutions**:
+```sql
+-- Wrong: Different column counts
+SELECT id FROM users
+UNION
+SELECT id, name FROM orders
+
+-- Right: Same column count
+SELECT id, name FROM users
+UNION
+SELECT id, customer_name FROM orders
+
+-- Wrong: ORDER BY in subquery
+(SELECT * FROM users ORDER BY name)
+UNION
+(SELECT * FROM admins)
+
+-- Right: ORDER BY at end
+SELECT * FROM users
+UNION
+SELECT * FROM admins
+ORDER BY name
+
+-- Use UNION ALL to keep duplicates
+SELECT status FROM orders
+UNION ALL
+SELECT status FROM archived_orders
+```
+
+---
+
+### E3xxx - Semantic Errors (Analysis)
+
+These errors occur during semantic analysis when validating table and column references, type compatibility, and other logical constraints.
+
+#### E3001 - Undefined Table
+
+**When it occurs**: A table reference cannot be resolved (semantic analysis feature).
+
+**Example**:
+```sql
+SELECT * FROM nonexistent_table
+```
+
+**Note**: This error requires semantic analysis to be enabled. It validates that referenced tables exist in the schema.
+
+---
+
+#### E3002 - Undefined Column
+
+**When it occurs**: A column reference cannot be resolved (semantic analysis feature).
+
+**Example**:
+```sql
+SELECT nonexistent_column FROM users
+```
+
+**Note**: This error requires semantic analysis to be enabled. It validates that referenced columns exist in their tables.
+
+---
+
+#### E3003 - Type Mismatch
+
+**When it occurs**: Type incompatibility in expressions or comparisons (semantic analysis feature).
+
+**Example**:
+```sql
+SELECT * FROM users WHERE age = 'not a number'
+```
+
+**Note**: This error requires semantic analysis with type checking enabled.
+
+---
+
+#### E3004 - Ambiguous Column
+
+**When it occurs**: A column name could refer to multiple tables (semantic analysis feature).
+
+**Example**:
+```sql
+SELECT id FROM users, orders WHERE id > 10
+```
+
+**Solution**: Qualify column names with table names or aliases:
+```sql
+SELECT users.id FROM users, orders WHERE users.id > 10
+```
+
+---
+
+### E4xxx - Unsupported Features
+
+These errors indicate features that are not yet implemented in GoSQLX.
+
+#### E4001 - Unsupported Feature
+
+**When it occurs**: A SQL feature is not yet supported by GoSQLX.
+
+**Example**:
+```sql
+-- Some advanced SQL feature not yet implemented
+```
+
+**Note**: GoSQLX is under active development. Check the documentation for currently supported features.
+
+---
+
+#### E4002 - Unsupported Dialect
+
+**When it occurs**: SQL dialect-specific syntax is not supported.
+
+**Example**:
+```sql
+-- Database-specific syntax
+```
+
+**Note**: GoSQLX supports standard SQL with extensions for PostgreSQL, MySQL, SQL Server, Oracle, and SQLite. Some dialect-specific features may not be available.
 
 ---
 

@@ -14,11 +14,11 @@
 
 GoSQLX has undergone a comprehensive security analysis across 7 critical security domains. The library demonstrates **strong security characteristics** suitable for production deployment with **minimal security concerns**.
 
-### 🆕 Security Package (v1.4+)
+### Security Package (v1.4+)
 
 GoSQLX now includes a dedicated **SQL Injection Detection** package (`pkg/sql/security`) that provides:
 
-- **8 Pattern Types**: Tautology, Comment Bypass, Stacked Query, UNION-based, Time-based, Boolean-based, Out-of-Band, Dangerous Functions
+- **6 Pattern Types**: Tautology, Comment Bypass, UNION-based, Time-based, Out-of-Band, Dangerous Functions
 - **4 Severity Levels**: CRITICAL, HIGH, MEDIUM, LOW
 - **Multi-Database Support**: PostgreSQL, MySQL, SQL Server, SQLite system table detection
 - **Thread-Safe**: Safe for concurrent use across goroutines

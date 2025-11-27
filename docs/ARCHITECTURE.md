@@ -133,15 +133,13 @@ The parser is organized into logical modules for maintainability:
 pkg/sql/parser/
 ├── parser.go       # Core parser and entry points
 ├── select.go       # SELECT statement parsing
-├── dml.go          # INSERT, UPDATE, DELETE parsing
+├── dml.go          # INSERT, UPDATE, DELETE, MERGE parsing
 ├── cte.go          # Common Table Expressions (WITH clause)
 ├── expressions.go  # Expression parsing (BETWEEN, IN, LIKE, etc.)
 ├── window.go       # Window functions (OVER, PARTITION BY)
 ├── grouping.go     # GROUPING SETS, ROLLUP, CUBE
-├── alter.go        # ALTER TABLE statements
-├── create.go       # CREATE statements (TABLE, VIEW, INDEX)
-├── drop.go         # DROP statements
-├── merge.go        # MERGE statements (SQL:2003)
+├── alter.go        # ALTER statements (TABLE, ROLE, POLICY, CONNECTOR)
+├── ddl.go          # DDL statements (CREATE, DROP, REFRESH)
 └── token_converter.go # Token format conversion
 ```
 
@@ -162,10 +160,10 @@ Parse()
 │   ├── parseInsertStatement()         # (dml.go)
 │   ├── parseUpdateStatement()         # (dml.go)
 │   ├── parseDeleteStatement()         # (dml.go)
-│   ├── parseMergeStatement()          # (merge.go)
-│   ├── parseCreateStatement()         # (create.go) - TABLE, VIEW, MATERIALIZED VIEW, INDEX
-│   ├── parseAlterStatement()          # (alter.go)
-│   └── parseDropStatement()           # (drop.go)
+│   ├── parseMergeStatement()          # (dml.go)
+│   ├── parseCreateStatement()         # (ddl.go) - TABLE, VIEW, MATERIALIZED VIEW, INDEX
+│   ├── parseAlterStatement()          # (alter.go) - TABLE, ROLE, POLICY, CONNECTOR
+│   └── parseDropStatement()           # (ddl.go)
 └── parseExpression()                   # (expressions.go)
     ├── parsePrimaryExpression()
     ├── parseBinaryExpression()

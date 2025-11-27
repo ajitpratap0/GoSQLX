@@ -848,7 +848,7 @@ ORDER BY order_count DESC
 - [ ] Document build complexity issues (if any)
 
 ### Phase 2: Proof of Concept (Week 1-2)
-- [ ] Install Go 1.19+ if not already present
+- [ ] Install Go 1.24+ if not already present
 - [ ] Install GoSQLX: `go get github.com/ajitpratap0/GoSQLX`
 - [ ] Test parsing your PostgreSQL queries
 - [ ] Implement custom normalization if needed

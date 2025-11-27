@@ -36,7 +36,7 @@ Describe the performance issue you're experiencing.
 - **OS**: [e.g. macOS, Linux, Windows]
 - **CPU**: [e.g. Intel i7, M1]
 - **RAM**: [e.g. 16GB]
-- **Go Version**: [e.g. 1.19]
+- **Go Version**: [e.g. 1.24]
 - **GoSQLX Version**: [e.g. v1.0.0]
 
 ## Expected Performance

@@ -332,7 +332,7 @@ A: Ensure you're using `defer` with all pool returns. See pool usage examples in
 A: This is unlikely - verify you're testing similar workloads. Contact us if issue persists.
 
 **Q: Compatibility issues with Go version**
-A: GoSQLX requires Go 1.19+. Update your Go version if needed.
+A: GoSQLX requires Go 1.24+. Update your Go version if needed.
 
 ---
 

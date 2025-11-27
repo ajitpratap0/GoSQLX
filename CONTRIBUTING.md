@@ -36,7 +36,7 @@ GoSQLX aims to be the **fastest, most reliable, and most comprehensive SQL parsi
 ## 🛠️ Development Setup
 
 ### Prerequisites
-- **Go 1.19+** (latest stable version recommended)
+- **Go 1.23+** (latest stable version recommended)
 - **Git** for version control
 - **Task** for task automation (optional) - Install with `go install github.com/go-task/task/v3/cmd/task@latest`
 

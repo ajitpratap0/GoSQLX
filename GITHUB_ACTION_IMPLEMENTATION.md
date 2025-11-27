@@ -177,7 +177,7 @@ This document summarizes the complete implementation of the official GoSQLX GitH
 
 ### Workflow Steps
 
-1. **Setup Go**: Install Go 1.19 using `actions/setup-go@v5`
+1. **Setup Go**: Install Go 1.25 using `actions/setup-go@v5`
 2. **Cache Binary**: Cache GoSQLX binary by version and OS
 3. **Install GoSQLX**: Install from source using `go install`
 4. **Find Files**: Use `find` command with glob patterns

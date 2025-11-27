@@ -16,7 +16,7 @@ go get github.com/ajitpratap0/GoSQLX
 go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest
 ```
 
-**Requirements**: Go 1.19 or higher
+**Requirements**: Go 1.23 or higher
 
 ---
 
@@ -37,7 +37,7 @@ gosqlx validate "SELECT 1"
 ### If you installed the library:
 ```bash
 go version
-# Should show Go 1.19+
+# Should show Go 1.23+
 ```
 
 ---

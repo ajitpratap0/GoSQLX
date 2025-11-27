@@ -1,6 +1,6 @@
 module github.com/ajitpratap0/GoSQLX/examples/tutorials/01-sql-validator
 
-go 1.21
+go 1.25
 
 replace github.com/ajitpratap0/GoSQLX => ../../../
 

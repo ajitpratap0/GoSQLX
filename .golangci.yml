@@ -6,21 +6,12 @@ run:
 
 linters:
   enable:
-    - govet
     - ineffassign
-    - staticcheck
     - unused
   disable:
     - errcheck
-
-settings:
-  govet:
-    disable:
-      - buildtag
-  staticcheck:
-    checks:
-      - all
-      - -QF*
+    - govet
+    - staticcheck
 
 issues:
   max-issues-per-linter: 0

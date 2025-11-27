@@ -65,7 +65,7 @@ func LoadFromFiles(searchPaths []string) (*Config, error) {
 		return nil, fmt.Errorf("no search paths provided")
 	}
 
-	var errs []error
+	var triedPaths []string
 	for _, path := range searchPaths {
 		config, err := LoadFromFile(path)
 		if err == nil {
@@ -74,7 +74,7 @@ func LoadFromFiles(searchPaths []string) (*Config, error) {
 
 		// Continue trying other paths if file doesn't exist
 		if errors.Is(err, os.ErrNotExist) {
-			errs = append(errs, fmt.Errorf("%s: not found", path))
+			triedPaths = append(triedPaths, path)
 			continue
 		}
 
@@ -82,8 +82,8 @@ func LoadFromFiles(searchPaths []string) (*Config, error) {
 		return nil, fmt.Errorf("failed to load config from %s: %w", path, err)
 	}
 
-	// If we get here, no config file was found
-	return nil, fmt.Errorf("no config file found in search paths")
+	// If we get here, no config file was found - include tried paths in error
+	return nil, fmt.Errorf("no config file found in search paths: tried %v", triedPaths)
 }
 
 // LoadFromEnvironment loads configuration from environment variables.
@@ -257,7 +257,13 @@ func Merge(configs ...*Config) *Config {
 	return result
 }
 
-// mergeInto merges src into dst, with non-zero values from src taking precedence
+// mergeInto merges src into dst, with non-zero values from src taking precedence.
+//
+// NOTE: Boolean fields are only merged when true. This is a known limitation that
+// prevents setting booleans to false via environment variables to override a config
+// file that has them set to true. A proper fix would require using *bool pointers
+// for all boolean fields to distinguish between "not set" and "explicitly set to false".
+// See: https://github.com/ajitpratap0/GoSQLX/issues for tracking issue.
 func mergeInto(dst, src *Config) {
 	// Merge Format
 	if src.Format.Indent != 0 {

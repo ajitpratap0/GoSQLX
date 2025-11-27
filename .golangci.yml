@@ -13,6 +13,15 @@ linters:
   disable:
     - errcheck
 
+linters-settings:
+  govet:
+    disable:
+      - buildtag
+  staticcheck:
+    checks:
+      - all
+      - -QF*
+
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0

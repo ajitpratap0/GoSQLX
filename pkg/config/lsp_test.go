@@ -34,7 +34,7 @@ func TestLoadFromLSPInitOptions(t *testing.T) {
 			},
 			want: func(c *Config) bool {
 				return c.Format.Indent == 4 &&
-					c.Format.UppercaseKeywords &&
+					BoolValue(c.Format.UppercaseKeywords) &&
 					c.Format.MaxLineLength == 80 &&
 					c.Validation.Dialect == "mysql"
 			},
@@ -189,23 +189,23 @@ func TestFromLSPSettings(t *testing.T) {
 	if cfg.Format.Indent != 4 {
 		t.Errorf("expected indent=4, got %d", cfg.Format.Indent)
 	}
-	if cfg.Format.UppercaseKeywords {
+	if BoolValue(cfg.Format.UppercaseKeywords) {
 		t.Error("expected uppercaseKeywords=false")
 	}
 	if cfg.Format.MaxLineLength != 100 {
 		t.Errorf("expected maxLineLength=100, got %d", cfg.Format.MaxLineLength)
 	}
-	if !cfg.Format.Compact {
+	if !BoolValue(cfg.Format.Compact) {
 		t.Error("expected compact=true")
 	}
 
 	if cfg.Validation.Dialect != "mysql" {
 		t.Errorf("expected dialect=mysql, got %s", cfg.Validation.Dialect)
 	}
-	if !cfg.Validation.StrictMode {
+	if !BoolValue(cfg.Validation.StrictMode) {
 		t.Error("expected strictMode=true")
 	}
-	if !cfg.Validation.Recursive {
+	if !BoolValue(cfg.Validation.Recursive) {
 		t.Error("expected recursive=true")
 	}
 	if cfg.Validation.Pattern != "*.mysql" {
@@ -218,11 +218,11 @@ func TestFromLSPSettings(t *testing.T) {
 	if cfg.Output.Format != "json" {
 		t.Errorf("expected format=json, got %s", cfg.Output.Format)
 	}
-	if !cfg.Output.Verbose {
+	if !BoolValue(cfg.Output.Verbose) {
 		t.Error("expected verbose=true")
 	}
 
-	if !cfg.Analyze.Security || !cfg.Analyze.Performance || !cfg.Analyze.Complexity || !cfg.Analyze.All {
+	if !BoolValue(cfg.Analyze.Security) || !BoolValue(cfg.Analyze.Performance) || !BoolValue(cfg.Analyze.Complexity) || !BoolValue(cfg.Analyze.All) {
 		t.Error("expected all analyze options=true")
 	}
 
@@ -251,7 +251,7 @@ func TestFromLSPSettings(t *testing.T) {
 	if cfg.Server.LogFile != "/tmp/lsp.log" {
 		t.Errorf("expected logFile=/tmp/lsp.log, got %s", cfg.Server.LogFile)
 	}
-	if cfg.Server.MetricsEnabled {
+	if BoolValue(cfg.Server.MetricsEnabled) {
 		t.Error("expected metricsEnabled=false")
 	}
 	if cfg.Server.ShutdownTimeout != 10*time.Second {

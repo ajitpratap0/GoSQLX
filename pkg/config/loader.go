@@ -109,7 +109,7 @@ func LoadFromEnvironment(prefix string) (*Config, error) {
 	}
 	if v := os.Getenv(prefix + "FORMAT_UPPERCASE_KEYWORDS"); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
-			config.Format.UppercaseKeywords = b
+			config.Format.UppercaseKeywords = Bool(b)
 		}
 	}
 	if v := os.Getenv(prefix + "FORMAT_MAX_LINE_LENGTH"); v != "" {
@@ -119,7 +119,7 @@ func LoadFromEnvironment(prefix string) (*Config, error) {
 	}
 	if v := os.Getenv(prefix + "FORMAT_COMPACT"); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
-			config.Format.Compact = b
+			config.Format.Compact = Bool(b)
 		}
 	}
 
@@ -129,12 +129,12 @@ func LoadFromEnvironment(prefix string) (*Config, error) {
 	}
 	if v := os.Getenv(prefix + "VALIDATION_STRICT_MODE"); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
-			config.Validation.StrictMode = b
+			config.Validation.StrictMode = Bool(b)
 		}
 	}
 	if v := os.Getenv(prefix + "VALIDATION_RECURSIVE"); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
-			config.Validation.Recursive = b
+			config.Validation.Recursive = Bool(b)
 		}
 	}
 	if v := os.Getenv(prefix + "VALIDATION_PATTERN"); v != "" {
@@ -152,29 +152,29 @@ func LoadFromEnvironment(prefix string) (*Config, error) {
 	}
 	if v := os.Getenv(prefix + "OUTPUT_VERBOSE"); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
-			config.Output.Verbose = b
+			config.Output.Verbose = Bool(b)
 		}
 	}
 
 	// Analyze settings
 	if v := os.Getenv(prefix + "ANALYZE_SECURITY"); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
-			config.Analyze.Security = b
+			config.Analyze.Security = Bool(b)
 		}
 	}
 	if v := os.Getenv(prefix + "ANALYZE_PERFORMANCE"); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
-			config.Analyze.Performance = b
+			config.Analyze.Performance = Bool(b)
 		}
 	}
 	if v := os.Getenv(prefix + "ANALYZE_COMPLEXITY"); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
-			config.Analyze.Complexity = b
+			config.Analyze.Complexity = Bool(b)
 		}
 	}
 	if v := os.Getenv(prefix + "ANALYZE_ALL"); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
-			config.Analyze.All = b
+			config.Analyze.All = Bool(b)
 		}
 	}
 
@@ -217,7 +217,7 @@ func LoadFromEnvironment(prefix string) (*Config, error) {
 	}
 	if v := os.Getenv(prefix + "SERVER_METRICS_ENABLED"); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
-			config.Server.MetricsEnabled = b
+			config.Server.MetricsEnabled = Bool(b)
 		}
 	}
 	if v := os.Getenv(prefix + "SERVER_SHUTDOWN_TIMEOUT"); v != "" {
@@ -257,25 +257,21 @@ func Merge(configs ...*Config) *Config {
 	return result
 }
 
-// mergeInto merges src into dst, with non-zero values from src taking precedence.
-//
-// NOTE: Boolean fields are only merged when true. This is a known limitation that
-// prevents setting booleans to false via environment variables to override a config
-// file that has them set to true. A proper fix would require using *bool pointers
-// for all boolean fields to distinguish between "not set" and "explicitly set to false".
-// See: https://github.com/ajitpratap0/GoSQLX/issues/134 for tracking issue.
+// mergeInto merges src into dst, with non-nil/non-zero values from src taking precedence.
+// Boolean fields use *bool pointers to distinguish between "not set" (nil) and
+// "explicitly set to false" (*false), allowing proper override behavior.
 func mergeInto(dst, src *Config) {
 	// Merge Format
 	if src.Format.Indent != 0 {
 		dst.Format.Indent = src.Format.Indent
 	}
-	if src.Format.UppercaseKeywords {
+	if src.Format.UppercaseKeywords != nil {
 		dst.Format.UppercaseKeywords = src.Format.UppercaseKeywords
 	}
 	if src.Format.MaxLineLength != 0 {
 		dst.Format.MaxLineLength = src.Format.MaxLineLength
 	}
-	if src.Format.Compact {
+	if src.Format.Compact != nil {
 		dst.Format.Compact = src.Format.Compact
 	}
 
@@ -283,10 +279,10 @@ func mergeInto(dst, src *Config) {
 	if src.Validation.Dialect != "" {
 		dst.Validation.Dialect = src.Validation.Dialect
 	}
-	if src.Validation.StrictMode {
+	if src.Validation.StrictMode != nil {
 		dst.Validation.StrictMode = src.Validation.StrictMode
 	}
-	if src.Validation.Recursive {
+	if src.Validation.Recursive != nil {
 		dst.Validation.Recursive = src.Validation.Recursive
 	}
 	if src.Validation.Pattern != "" {
@@ -300,21 +296,21 @@ func mergeInto(dst, src *Config) {
 	if src.Output.Format != "" {
 		dst.Output.Format = src.Output.Format
 	}
-	if src.Output.Verbose {
+	if src.Output.Verbose != nil {
 		dst.Output.Verbose = src.Output.Verbose
 	}
 
 	// Merge Analyze
-	if src.Analyze.Security {
+	if src.Analyze.Security != nil {
 		dst.Analyze.Security = src.Analyze.Security
 	}
-	if src.Analyze.Performance {
+	if src.Analyze.Performance != nil {
 		dst.Analyze.Performance = src.Analyze.Performance
 	}
-	if src.Analyze.Complexity {
+	if src.Analyze.Complexity != nil {
 		dst.Analyze.Complexity = src.Analyze.Complexity
 	}
-	if src.Analyze.All {
+	if src.Analyze.All != nil {
 		dst.Analyze.All = src.Analyze.All
 	}
 
@@ -345,7 +341,7 @@ func mergeInto(dst, src *Config) {
 	if src.Server.LogFile != "" {
 		dst.Server.LogFile = src.Server.LogFile
 	}
-	if src.Server.MetricsEnabled {
+	if src.Server.MetricsEnabled != nil {
 		dst.Server.MetricsEnabled = src.Server.MetricsEnabled
 	}
 	if src.Server.ShutdownTimeout != 0 {

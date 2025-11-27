@@ -63,14 +63,14 @@ func ToLSPSettings(c *Config) map[string]interface{} {
 	return map[string]interface{}{
 		"format": map[string]interface{}{
 			"indent":            c.Format.Indent,
-			"uppercaseKeywords": c.Format.UppercaseKeywords,
+			"uppercaseKeywords": BoolValue(c.Format.UppercaseKeywords),
 			"maxLineLength":     c.Format.MaxLineLength,
-			"compact":           c.Format.Compact,
+			"compact":           BoolValue(c.Format.Compact),
 		},
 		"validation": map[string]interface{}{
 			"dialect":    c.Validation.Dialect,
-			"strictMode": c.Validation.StrictMode,
-			"recursive":  c.Validation.Recursive,
+			"strictMode": BoolValue(c.Validation.StrictMode),
+			"recursive":  BoolValue(c.Validation.Recursive),
 			"pattern":    c.Validation.Pattern,
 			"security": map[string]interface{}{
 				"maxFileSize": c.Validation.Security.MaxFileSize,
@@ -78,13 +78,13 @@ func ToLSPSettings(c *Config) map[string]interface{} {
 		},
 		"output": map[string]interface{}{
 			"format":  c.Output.Format,
-			"verbose": c.Output.Verbose,
+			"verbose": BoolValue(c.Output.Verbose),
 		},
 		"analyze": map[string]interface{}{
-			"security":    c.Analyze.Security,
-			"performance": c.Analyze.Performance,
-			"complexity":  c.Analyze.Complexity,
-			"all":         c.Analyze.All,
+			"security":    BoolValue(c.Analyze.Security),
+			"performance": BoolValue(c.Analyze.Performance),
+			"complexity":  BoolValue(c.Analyze.Complexity),
+			"all":         BoolValue(c.Analyze.All),
 		},
 		"lsp": map[string]interface{}{
 			"rateLimitRequests": c.LSP.RateLimitRequests,
@@ -97,7 +97,7 @@ func ToLSPSettings(c *Config) map[string]interface{} {
 		"server": map[string]interface{}{
 			"logLevel":        c.Server.LogLevel,
 			"logFile":         c.Server.LogFile,
-			"metricsEnabled":  c.Server.MetricsEnabled,
+			"metricsEnabled":  BoolValue(c.Server.MetricsEnabled),
 			"shutdownTimeout": c.Server.ShutdownTimeout.String(),
 		},
 	}
@@ -114,13 +114,13 @@ func FromLSPSettings(settings map[string]interface{}) (*Config, error) {
 			config.Format.Indent = int(v)
 		}
 		if v, ok := format["uppercaseKeywords"].(bool); ok {
-			config.Format.UppercaseKeywords = v
+			config.Format.UppercaseKeywords = Bool(v)
 		}
 		if v, ok := format["maxLineLength"].(float64); ok {
 			config.Format.MaxLineLength = int(v)
 		}
 		if v, ok := format["compact"].(bool); ok {
-			config.Format.Compact = v
+			config.Format.Compact = Bool(v)
 		}
 	}
 
@@ -129,10 +129,10 @@ func FromLSPSettings(settings map[string]interface{}) (*Config, error) {
 			config.Validation.Dialect = v
 		}
 		if v, ok := validation["strictMode"].(bool); ok {
-			config.Validation.StrictMode = v
+			config.Validation.StrictMode = Bool(v)
 		}
 		if v, ok := validation["recursive"].(bool); ok {
-			config.Validation.Recursive = v
+			config.Validation.Recursive = Bool(v)
 		}
 		if v, ok := validation["pattern"].(string); ok {
 			config.Validation.Pattern = v
@@ -149,22 +149,22 @@ func FromLSPSettings(settings map[string]interface{}) (*Config, error) {
 			config.Output.Format = v
 		}
 		if v, ok := output["verbose"].(bool); ok {
-			config.Output.Verbose = v
+			config.Output.Verbose = Bool(v)
 		}
 	}
 
 	if analyze, ok := settings["analyze"].(map[string]interface{}); ok {
 		if v, ok := analyze["security"].(bool); ok {
-			config.Analyze.Security = v
+			config.Analyze.Security = Bool(v)
 		}
 		if v, ok := analyze["performance"].(bool); ok {
-			config.Analyze.Performance = v
+			config.Analyze.Performance = Bool(v)
 		}
 		if v, ok := analyze["complexity"].(bool); ok {
-			config.Analyze.Complexity = v
+			config.Analyze.Complexity = Bool(v)
 		}
 		if v, ok := analyze["all"].(bool); ok {
-			config.Analyze.All = v
+			config.Analyze.All = Bool(v)
 		}
 	}
 
@@ -201,7 +201,7 @@ func FromLSPSettings(settings map[string]interface{}) (*Config, error) {
 			config.Server.LogFile = v
 		}
 		if v, ok := server["metricsEnabled"].(bool); ok {
-			config.Server.MetricsEnabled = v
+			config.Server.MetricsEnabled = Bool(v)
 		}
 		if v, ok := server["shutdownTimeout"].(string); ok {
 			if d, err := time.ParseDuration(v); err == nil {

@@ -12,7 +12,7 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Format.Indent != 2 {
 		t.Errorf("expected indent=2, got %d", cfg.Format.Indent)
 	}
-	if !cfg.Format.UppercaseKeywords {
+	if !BoolValue(cfg.Format.UppercaseKeywords) {
 		t.Error("expected uppercase_keywords=true")
 	}
 	if cfg.Format.MaxLineLength != 120 {
@@ -50,7 +50,7 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Server.LogLevel != "info" {
 		t.Errorf("expected log_level=info, got %s", cfg.Server.LogLevel)
 	}
-	if !cfg.Server.MetricsEnabled {
+	if !BoolValue(cfg.Server.MetricsEnabled) {
 		t.Error("expected metrics_enabled=true")
 	}
 

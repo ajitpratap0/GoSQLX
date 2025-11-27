@@ -5,6 +5,28 @@ import (
 	"time"
 )
 
+// Bool returns a pointer to the given bool value.
+// Use this helper when setting boolean config values.
+func Bool(v bool) *bool {
+	return &v
+}
+
+// BoolValue returns the value of a bool pointer, or false if nil.
+func BoolValue(p *bool) bool {
+	if p == nil {
+		return false
+	}
+	return *p
+}
+
+// BoolValueOr returns the value of a bool pointer, or the default if nil.
+func BoolValueOr(p *bool, defaultVal bool) bool {
+	if p == nil {
+		return defaultVal
+	}
+	return *p
+}
+
 // Config represents unified GoSQLX configuration that can be shared across
 // CLI, LSP server, and VSCode extension. It supports loading from files,
 // environment variables, and LSP initialization options.
@@ -20,17 +42,17 @@ type Config struct {
 
 // FormatConfig holds SQL formatting options
 type FormatConfig struct {
-	Indent            int  `yaml:"indent" json:"indent"`                        // Number of spaces for indentation (default: 2)
-	UppercaseKeywords bool `yaml:"uppercase_keywords" json:"uppercaseKeywords"` // Convert SQL keywords to uppercase (default: true)
-	MaxLineLength     int  `yaml:"max_line_length" json:"maxLineLength"`        // Maximum line length before wrapping (default: 120)
-	Compact           bool `yaml:"compact" json:"compact"`                      // Use compact formatting (default: false)
+	Indent            int   `yaml:"indent" json:"indent"`                        // Number of spaces for indentation (default: 2)
+	UppercaseKeywords *bool `yaml:"uppercase_keywords" json:"uppercaseKeywords"` // Convert SQL keywords to uppercase (default: true)
+	MaxLineLength     int   `yaml:"max_line_length" json:"maxLineLength"`        // Maximum line length before wrapping (default: 120)
+	Compact           *bool `yaml:"compact" json:"compact"`                      // Use compact formatting (default: false)
 }
 
 // ValidationConfig holds SQL validation options
 type ValidationConfig struct {
 	Dialect    string         `yaml:"dialect" json:"dialect"`        // SQL dialect: postgresql, mysql, sqlserver, oracle, sqlite (default: "postgresql")
-	StrictMode bool           `yaml:"strict_mode" json:"strictMode"` // Enable strict validation mode (default: false)
-	Recursive  bool           `yaml:"recursive" json:"recursive"`    // Recursively validate files in directories (default: false)
+	StrictMode *bool          `yaml:"strict_mode" json:"strictMode"` // Enable strict validation mode (default: false)
+	Recursive  *bool          `yaml:"recursive" json:"recursive"`    // Recursively validate files in directories (default: false)
 	Pattern    string         `yaml:"pattern" json:"pattern"`        // File pattern for recursive validation (default: "*.sql")
 	Security   SecurityConfig `yaml:"security" json:"security"`      // Security validation settings
 }
@@ -43,15 +65,15 @@ type SecurityConfig struct {
 // OutputConfig holds output formatting options
 type OutputConfig struct {
 	Format  string `yaml:"format" json:"format"`   // Output format: text, json, yaml (default: "text")
-	Verbose bool   `yaml:"verbose" json:"verbose"` // Enable verbose output (default: false)
+	Verbose *bool  `yaml:"verbose" json:"verbose"` // Enable verbose output (default: false)
 }
 
 // AnalyzeConfig holds analysis options
 type AnalyzeConfig struct {
-	Security    bool `yaml:"security" json:"security"`       // Enable security analysis (default: false)
-	Performance bool `yaml:"performance" json:"performance"` // Enable performance analysis (default: false)
-	Complexity  bool `yaml:"complexity" json:"complexity"`   // Enable complexity analysis (default: false)
-	All         bool `yaml:"all" json:"all"`                 // Enable all analysis types (default: false)
+	Security    *bool `yaml:"security" json:"security"`       // Enable security analysis (default: false)
+	Performance *bool `yaml:"performance" json:"performance"` // Enable performance analysis (default: false)
+	Complexity  *bool `yaml:"complexity" json:"complexity"`   // Enable complexity analysis (default: false)
+	All         *bool `yaml:"all" json:"all"`                 // Enable all analysis types (default: false)
 }
 
 // LSPConfig holds LSP server-specific settings
@@ -68,7 +90,7 @@ type LSPConfig struct {
 type ServerConfig struct {
 	LogLevel        string        `yaml:"log_level" json:"logLevel"`               // Log level: debug, info, warn, error (default: "info")
 	LogFile         string        `yaml:"log_file" json:"logFile"`                 // Log file path (default: "" for stderr)
-	MetricsEnabled  bool          `yaml:"metrics_enabled" json:"metricsEnabled"`   // Enable metrics collection (default: true)
+	MetricsEnabled  *bool         `yaml:"metrics_enabled" json:"metricsEnabled"`   // Enable metrics collection (default: true)
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" json:"shutdownTimeout"` // Graceful shutdown timeout (default: 5s)
 }
 
@@ -77,14 +99,14 @@ func DefaultConfig() *Config {
 	return &Config{
 		Format: FormatConfig{
 			Indent:            2,
-			UppercaseKeywords: true,
+			UppercaseKeywords: Bool(true),
 			MaxLineLength:     120,
-			Compact:           false,
+			Compact:           Bool(false),
 		},
 		Validation: ValidationConfig{
 			Dialect:    "postgresql",
-			StrictMode: false,
-			Recursive:  false,
+			StrictMode: Bool(false),
+			Recursive:  Bool(false),
 			Pattern:    "*.sql",
 			Security: SecurityConfig{
 				MaxFileSize: 10 * 1024 * 1024, // 10MB
@@ -92,13 +114,13 @@ func DefaultConfig() *Config {
 		},
 		Output: OutputConfig{
 			Format:  "text",
-			Verbose: false,
+			Verbose: Bool(false),
 		},
 		Analyze: AnalyzeConfig{
-			Security:    false,
-			Performance: false,
-			Complexity:  false,
-			All:         false,
+			Security:    Bool(false),
+			Performance: Bool(false),
+			Complexity:  Bool(false),
+			All:         Bool(false),
 		},
 		LSP: LSPConfig{
 			RateLimitRequests: 100,
@@ -111,7 +133,7 @@ func DefaultConfig() *Config {
 		Server: ServerConfig{
 			LogLevel:        "info",
 			LogFile:         "",
-			MetricsEnabled:  true,
+			MetricsEnabled:  Bool(true),
 			ShutdownTimeout: 5 * time.Second,
 		},
 		Source: "default",

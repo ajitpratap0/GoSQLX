@@ -210,7 +210,7 @@ func TestLoadFromEnvironment(t *testing.T) {
 	if cfg.Validation.Dialect != "mysql" {
 		t.Errorf("expected dialect=mysql, got %s", cfg.Validation.Dialect)
 	}
-	if !cfg.Validation.StrictMode {
+	if !BoolValue(cfg.Validation.StrictMode) {
 		t.Error("expected strict_mode=true")
 	}
 	if cfg.LSP.RateLimitRequests != 200 {

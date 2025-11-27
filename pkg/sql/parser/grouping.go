@@ -18,11 +18,10 @@ func (p *Parser) parseGroupingExpressionList(keyword string) ([]ast.Expression, 
 
 	// Check for empty list - not allowed for ROLLUP/CUBE
 	if p.isType(models.TokenTypeRParen) {
-		// TODO: Add position tracking to parser for accurate error locations
 		return nil, goerrors.InvalidSyntaxError(
 			keyword+" requires at least one expression",
-			models.Location{}, // TODO: Track token positions in parser
-			"",                // TODO: Preserve original SQL in parser
+			p.currentLocation(),
+			"",
 		)
 	}
 

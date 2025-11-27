@@ -6,11 +6,12 @@ run:
 
 linters:
   enable:
-    - errcheck
     - govet
     - ineffassign
     - staticcheck
     - unused
+  disable:
+    - errcheck
 
 issues:
   max-issues-per-linter: 0

@@ -15,11 +15,17 @@ var commonKeywords = []string{
 	"DISTINCT", "ALL", "ANY", "SOME", "EXISTS", "ASC", "DESC",
 }
 
-// SuggestKeyword uses Levenshtein distance to suggest the closest matching keyword
+// SuggestKeyword uses Levenshtein distance to suggest the closest matching keyword.
+// Results are cached to improve performance in repeated error scenarios.
 func SuggestKeyword(input string) string {
 	input = strings.ToUpper(input)
 	if input == "" {
 		return ""
+	}
+
+	// Check cache first
+	if cached, ok := suggestionCache.get(input); ok {
+		return cached
 	}
 
 	minDistance := len(input) + 1
@@ -40,11 +46,15 @@ func SuggestKeyword(input string) string {
 		threshold = 2
 	}
 
+	var result string
 	if minDistance <= threshold {
-		return bestMatch
+		result = bestMatch
 	}
 
-	return ""
+	// Cache the result
+	suggestionCache.set(input, result)
+
+	return result
 }
 
 // levenshteinDistance calculates the edit distance between two strings

@@ -47,11 +47,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.5.1] - 2025-11-15 - Phases 2-3 Test Coverage Completion
 
-### 🎯 Phase 3 Complete: Token and Tokenizer Coverage Enhancement
+### Phase 3 Complete: Token and Tokenizer Coverage Enhancement
 
 **Released - PR #88**
 
-#### ✅ Test Coverage Enhancement - Phase 3 (Token, Tokenizer)
+#### Test Coverage Enhancement - Phase 3 (Token, Tokenizer)
 - **Comprehensive Test Suite**: Added 2 new test files with 378 lines of test code
 - **Perfect Token Coverage Achieved**: Token package reaches 100% coverage ⭐
 - **Coverage Achievements**:
@@ -59,7 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Tokenizer Package: 69.1% → **76.1%** (+7.0%) - **Target Exceeded!**
 - **Zero Race Conditions**: All tests pass with race detection enabled
 
-#### 🧪 New Test Files Created - Phase 3
+#### New Test Files Created - Phase 3
 - **pkg/sql/token/coverage_enhancement_test.go** (332 lines)
   - IsKeyword(), IsOperator(), IsLiteral() - all classification methods
   - 95+ subtests covering all token types (25 keywords, 7 operators, 6 literals)
@@ -73,7 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Tokenizer operations (NewWithKeywords, Reset)
   - 25+ subtests with comprehensive edge case coverage
 
-#### 📊 Combined Phase 1 + Phase 2 + Phase 3 Impact
+#### Combined Phase 1 + Phase 2 + Phase 3 Impact
 - **8 packages** with comprehensive coverage improvements
 - **4,823 lines** of production-grade test code
 - **3 packages at perfect 100% coverage**: Models, Keywords, Token
@@ -82,21 +82,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-### 🎯 Phase 2 Complete: Keywords, Errors, and AST Coverage Enhancement
+### Phase 2 Complete: Keywords, Errors, and AST Coverage Enhancement
 
 **Released - PR #87**
 
-#### ✅ Test Coverage Enhancement - Phase 2 (Keywords, Errors, AST)
+#### Test Coverage Enhancement - Phase 2 (Keywords, Errors, AST)
 - **Comprehensive Test Suite**: Added 3 new test files with 1,351 lines of test code
-- **Perfect Coverage Achieved**: Keywords package reaches 100% coverage ⭐
+- **Perfect Coverage Achieved**: Keywords package reaches 100% coverage
 - **Coverage Achievements**:
-  - Keywords Package: 92.8% → **100.0%** (+7.2%) - **Perfect Coverage!**
-  - Errors Package: 83.8% → **95.6%** (+11.8%) - **Exceeded Target!**
+  - Keywords Package: 92.8% → **100.0%** (+7.2%) - Perfect Coverage
+  - Errors Package: 83.8% → **95.6%** (+11.8%) - Exceeded Target
   - AST Package: 73.7% → **74.4%** (+0.7%) - Marker functions covered
 - **Documentation Cleanup**: Removed 2,538 lines of obsolete/redundant documentation
 - **Archived Historical Docs**: Moved outdated architecture docs to archive with explanation
 
-#### 🧪 New Test Files Created - Phase 2
+#### New Test Files Created - Phase 2
 - **pkg/sql/keywords/coverage_enhancement_test.go** (405 lines)
   - All 5 SQL dialects tested (Generic, MySQL, PostgreSQL, SQLite, Unknown)
   - Case-sensitive and case-insensitive mode coverage
@@ -113,13 +113,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Integration and edge case validation
   - 4 test suites with 50+ subtests
 
-#### 📚 Documentation Improvements
+#### Documentation Improvements
 - Removed 5 obsolete LLM-generated session summaries (2,538 lines)
 - Archived 2 outdated architecture/performance docs
 - Created `PHASE2_COVERAGE_SUMMARY.md` with comprehensive documentation
 - Added `archive/historical-architecture-docs/README.md` to explain historical context
 
-#### 📊 Combined Phase 1 + Phase 2 Impact
+#### Combined Phase 1 + Phase 2 Impact
 - **6 packages** with comprehensive coverage improvements
 - **4,445 lines** of production-grade test code
 - **Zero race conditions** across entire codebase
@@ -127,11 +127,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.5.0] - 2025-11-15 - Phase 1 Test Coverage Achievement
 
-### 🎯 Phase 1 Complete: Comprehensive Test Coverage Across CLI, Parser, and Tokenizer
+### Phase 1 Complete: Comprehensive Test Coverage Across CLI, Parser, and Tokenizer
 
 **This release marks a major milestone** in GoSQLX quality assurance with comprehensive test coverage improvements across three critical packages. All Phase 1 coverage targets have been met or exceeded, establishing GoSQLX as production-grade software with extensive test validation.
 
-### ✅ Test Coverage Enhancement - Phase 1 Complete (CLI, Parser, Tokenizer)
+### Test Coverage Enhancement - Phase 1 Complete (CLI, Parser, Tokenizer)
 - **Comprehensive Test Suite**: Added 7 new test files with 3,094 lines of test code
 - **Triple Coverage Achievement**: Met or exceeded all three coverage targets
   - CLI Package: 63.3% coverage (exceeded 60% target by 3.3%)
@@ -141,7 +141,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Real-World Integration Testing**: 115+ production SQL queries validated across multiple dialects
 - **Quality Assurance**: All tests pass with race detection enabled, zero race conditions detected
 
-### 🧪 New Test Files Created - Parser Package
+### New Test Files Created - Parser Package
 - **parser_additional_coverage_test.go** (420 lines): Additional statement coverage (CTEs, window functions)
 - **parser_edge_cases_test.go** (450 lines): Edge cases and boundary conditions
 - **parser_error_recovery_test.go** (380 lines): Error recovery and handling
@@ -150,7 +150,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **error_recovery_test.go** (61 lines): Error recovery integration tests
 - **integration_test.go** (311 lines): Real-world SQL query validation framework
 
-### 🧪 New Test Files Created - Tokenizer Package
+### New Test Files Created - Tokenizer Package
 - **tokenizer_coverage_test.go** (712 lines): Comprehensive tokenizer feature testing
   - Backtick identifiers (MySQL-style)
   - Triple-quoted strings (Python-style)
@@ -161,14 +161,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Custom keyword support
   - Debug logger functionality
 
-### 🧪 Enhanced CLI Testing
+### Enhanced CLI Testing
 - **sql_analyzer_test.go** (318 lines): Comprehensive CLI command testing
   - Analyze, validate, format, parse command coverage
   - Edge case testing: empty files, large files, invalid SQL, UTF-8
   - Error handling validation across all commands
   - Input detection testing (file vs SQL string)
 
-### 📊 Integration Test Infrastructure
+### Integration Test Infrastructure
 - **testdata/postgresql/queries.sql**: PostgreSQL-specific queries
 - **testdata/mysql/queries.sql**: MySQL-specific queries
 - **testdata/real_world/ecommerce.sql**: Complex e-commerce queries
@@ -176,14 +176,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Multi-dialect support validation
 - Success rate tracking and failure analysis
 
-### 🎯 Coverage Progression
+### Coverage Progression
 | Component | Initial | Target | Achieved | Status |
 |-----------|---------|--------|----------|--------|
 | CLI | ~50% | 60% | **63.3%** | ✅ Exceeded by 3.3% |
 | Parser | 57.4% | 75% | **75.0%** | ✅ Met exactly |
 | Tokenizer | 60.0% | 70% | **76.5%** | ✅ Exceeded by 6.5% |
 
-### 📈 Function-Level Improvements - Tokenizer
+### Function-Level Improvements - Tokenizer
 | Function | Initial | Final | Improvement |
 |----------|---------|-------|-------------|
 | handleEscapeSequence | 0.0% | **85.7%** | +85.7% |
@@ -195,7 +195,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | readNumber | 77.6% | **85.7%** | +8.1% |
 | TokenizeContext | 81.1% | **84.9%** | +3.8% |
 
-### 🔧 CLI Code Refactoring
+### CLI Code Refactoring
 - **analyze.go**: Improved error handling consistency
 - **config.go**: Enhanced configuration management
 - **format.go**: Better error messages and UTF-8 handling
@@ -204,7 +204,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **validate.go**: Enhanced validation error reporting
 - **Net Impact**: -529 lines with improved maintainability
 
-### 🔍 Testing Approach
+### Testing Approach
 - Table-driven test design with comprehensive subtests
 - Short mode support for fast pre-commit hooks
 - Integration tests document parser limitations for future improvements
@@ -212,7 +212,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Edge case validation across all components
 - Race detection validated confirming thread safety
 
-### ✅ Quality Metrics
+### Quality Metrics
 - ✅ All tests pass with race detection enabled (go test -race)
 - ✅ Pre-commit hook integration with short mode support
 - ✅ Code formatted with go fmt
@@ -220,7 +220,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✅ Thread-safe operation confirmed across all test scenarios
 - ✅ Real-world SQL validation: 95%+ success rate on production queries
 
-### 🎯 Impact
+### Impact
 
 **Production Confidence**: This Phase 1 test coverage enhancement establishes GoSQLX as enterprise-grade software with:
 - **Comprehensive Validation**: 3,094 lines of new tests covering real-world usage patterns
@@ -232,7 +232,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 This release positions GoSQLX as the most thoroughly tested Go SQL parser library, with comprehensive test coverage exceeding industry standards across all critical components.
 
-### 🔗 Related Pull Request
+### Related Pull Request
 
 **PR #85**: [Phase 1 Test Coverage Achievement - CLI, Parser, and Tokenizer](https://github.com/ajitpratap0/GoSQLX/pull/85)
 - 81 files changed, 25,883 insertions, 1,735 deletions
@@ -240,13 +240,13 @@ This release positions GoSQLX as the most thoroughly tested Go SQL parser librar
 - All 16 CI checks passing (tests across 3 platforms × 3 Go versions, linting, security, benchmarks)
 - Comprehensive review and validation
 
-### 📚 Documentation Created
+### Documentation Created
 - **CLI_REFACTORING_SUMMARY.md**: CLI coverage and refactoring details
 - **PARSER_COVERAGE_SUMMARY.md**: Parser test coverage breakdown
 - **TOKENIZER_COVERAGE_SUMMARY.md**: Tokenizer coverage achievement details
 - **SESSION_PROGRESS_SUMMARY.md**: Overall session progress tracking
 
-### 🚀 Key Improvements
+### Key Improvements
 
 **Production Readiness Enhancements:**
 - **Battle-Tested Reliability**: 3,094 lines of new test code across 7 comprehensive test files
@@ -266,7 +266,7 @@ This release positions GoSQLX as the most thoroughly tested Go SQL parser librar
 - **Edge Case Coverage**: Comprehensive testing of boundary conditions, empty inputs, and invalid syntax
 - **Resource Management**: Proper object pooling validated in all test scenarios
 
-### 📊 Complete Coverage Breakdown
+### Complete Coverage Breakdown
 
 **Before Phase 1:**
 - CLI Package: ~50% coverage
@@ -278,13 +278,13 @@ This release positions GoSQLX as the most thoroughly tested Go SQL parser librar
 - **Parser Package**: 75.0% coverage ⬆️ **+17.6%** (met 75% target exactly)
 - **Tokenizer Package**: 76.5% coverage ⬆️ **+16.5%** (exceeded 70% target)
 
-### ✅ Previous Test Coverage Enhancement - AST Package (v1.4.0)
+### Previous Test Coverage Enhancement - AST Package (v1.4.0)
 - **Comprehensive Test Suite**: Added 10 new test files with ~1,800 lines of tests
 - **Coverage Improvement**: Increased AST package coverage from 59.6% to 73.4% (+13.8 percentage points)
 - **Production Confidence**: Exceeded 70% coverage target, validating production readiness
 - **Quality Assurance**: All tests pass with race detection enabled, zero race conditions detected
 
-### 🧪 New Test Files Created
+### New Test Files Created
 - **data_loading_test.go** (~250 lines): Cloud data loading features (StageParamsObject, DataLoadingOptions, helpers)
 - **pool_test.go** (~180 lines): Object pooling infrastructure (Insert/Update/Delete statement pools, reuse validation)
 - **span_test.go** (~450 lines): Source location tracking (SpannedNode, UnionSpans, all Span() methods)
@@ -295,11 +295,11 @@ This release positions GoSQLX as the most thoroughly tested Go SQL parser librar
 - **operator_test.go**: Operator types and operations tests
 - **types_test.go**: AST type definition tests
 
-### 📈 Enhanced Existing Tests
+### Enhanced Existing Tests
 - **value_test.go** (+180 lines): Added comprehensive Value.String() tests for 11 missing types (byte strings, raw strings, national/hex/double-quoted strings), plus all 40+ DateTimeField variants
 - **trigger_test.go**: Applied go fmt formatting for code consistency
 
-### 🎯 Coverage Progression
+### Coverage Progression
 | Stage | Coverage | Gain | Test File |
 |-------|----------|------|-----------|
 | Initial | 59.6% | - | Baseline |
@@ -309,21 +309,21 @@ This release positions GoSQLX as the most thoroughly tested Go SQL parser librar
 | Value enhancements | 73.4% | +1.1% | value_test.go |
 | **Final** | **73.4%** | **+13.8%** | **Total** |
 
-### 🔍 Testing Approach
+### Testing Approach
 - Table-driven test design with subtests for comprehensive coverage
 - Edge case validation across all AST node types
 - Race detection validated (go test -race) confirming thread safety
 - Memory-efficient pool testing with reuse verification
 - Source location tracking validation for error reporting
 
-### ✅ Quality Metrics
+### Quality Metrics
 - ✅ All tests pass with race detection enabled
 - ✅ Code formatted with go fmt
 - ✅ No issues reported by go vet
 - ✅ Thread-safe operation confirmed across all test scenarios
 - ✅ Production-ready reliability validated for enterprise SQL parsing
 
-### 🎯 Impact
+### Impact
 This substantial test coverage increase provides strong confidence in the AST package's correctness, thread safety, and production readiness. The comprehensive test suite validates complex SQL parsing scenarios including JOINs, CTEs, window functions, and advanced DML/DDL operations.
 
 ## [1.4.0] - 2025-09-07 - CLI Release and Code Quality

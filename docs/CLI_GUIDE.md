@@ -298,21 +298,33 @@ Check SQL files for style issues and best practices.
 # Lint SQL files
 gosqlx lint query.sql
 
-# Lint with specific rules
-gosqlx lint --rules L001,L002,L005 query.sql
+# Lint multiple files
+gosqlx lint query1.sql query2.sql
 
 # Lint directory recursively
 gosqlx lint -r ./queries
+
+# Auto-fix violations where possible
+gosqlx lint --auto-fix query.sql
+
+# Set maximum line length
+gosqlx lint --max-length 120 query.sql
+
+# Fail on warnings (useful for CI)
+gosqlx lint --fail-on-warn query.sql
 ```
 
 **Available lint rules:**
-- L001: Missing semicolon at end of statement
-- L002: Inconsistent keyword casing
-- L005: Unused table alias
+- L001: Trailing whitespace at end of lines
+- L002: Mixed tabs and spaces for indentation
+- L005: Lines exceeding maximum length
 
 **Options:**
-- `--rules RULES`: Comma-separated list of rule codes to check
 - `-r, --recursive`: Recursively process directories
+- `-p, --pattern`: File pattern for recursive processing (default: "*.sql")
+- `--auto-fix`: Automatically fix violations where possible
+- `--max-length`: Maximum line length for L005 rule (default: 100)
+- `--fail-on-warn`: Exit with error code on warnings
 
 **Use Case:** Enforce SQL coding standards and best practices
 

@@ -36,31 +36,31 @@
 
 ---
 
-## 🎯 Overview
+## Overview
 
 GoSQLX is a high-performance SQL parsing library designed for production use. It provides zero-copy tokenization, intelligent object pooling, and comprehensive SQL dialect support while maintaining a simple, idiomatic Go API.
 
-### ✨ Key Features
+### Key Features
 
-- **🚀 Blazing Fast**: **1.38M+ ops/sec** sustained, **1.5M+ ops/sec** peak throughput
-- **💾 Memory Efficient**: **60-80% reduction** through intelligent object pooling
-- **🔒 Thread-Safe**: **Race-free**, linear scaling to **128+ cores**, **0 race conditions** detected
-- **✅ Production-Grade Testing**: **Token 100%** ⭐, **Keywords 100%** ⭐, **Errors 95.6%**, **Tokenizer 76.1%**, **Parser 76.1%**, **CLI 63.3%** coverage (Phases 1-3 complete)
-- **🔗 Complete JOIN Support**: All JOIN types (INNER/LEFT/RIGHT/FULL OUTER/CROSS/NATURAL) with proper tree logic
-- **🔄 Advanced SQL Features**: CTEs with RECURSIVE support, Set Operations (UNION/EXCEPT/INTERSECT)
-- **🪟 Window Functions**: Complete SQL-99 window function support with OVER clause, PARTITION BY, ORDER BY, frame specifications
-- **🔄 MERGE Statements**: Full SQL:2003 MERGE support with WHEN MATCHED/NOT MATCHED clauses
-- **📊 Grouping Operations**: GROUPING SETS, ROLLUP, CUBE (SQL-99 T431)
-- **🗃️ Materialized Views**: CREATE, DROP, REFRESH MATERIALIZED VIEW support
-- **📋 Table Partitioning**: PARTITION BY RANGE, LIST, HASH support
-- **🔐 SQL Injection Detection**: Built-in security scanner (`pkg/sql/security`) for injection pattern detection
-- **🌍 Unicode Support**: Complete UTF-8 support for international SQL
-- **🔧 Multi-Dialect**: PostgreSQL, MySQL, SQL Server, Oracle, SQLite
-- **📊 Zero-Copy**: Direct byte slice operations, **<1μs latency**
-- **🔍 Intelligent Errors**: Structured error codes with typo detection, context highlighting, and helpful hints
-- **🏗️ Production Ready**: Battle-tested with **0 race conditions** detected, **~80-85% SQL-99 compliance**
+- **Blazing Fast**: 1.38M+ ops/sec sustained, 1.5M+ ops/sec peak throughput
+- **Memory Efficient**: 60-80% reduction through intelligent object pooling
+- **Thread-Safe**: Race-free, linear scaling to 128+ cores, 0 race conditions detected
+- **Production-Grade Testing**: Token 100%, Keywords 100%, Errors 95.6%, Tokenizer 76.1%, Parser 76.1%, CLI 63.3% coverage
+- **Complete JOIN Support**: All JOIN types (INNER/LEFT/RIGHT/FULL OUTER/CROSS/NATURAL) with proper tree logic
+- **Advanced SQL Features**: CTEs with RECURSIVE support, Set Operations (UNION/EXCEPT/INTERSECT)
+- **Window Functions**: Complete SQL-99 window function support with OVER clause, PARTITION BY, ORDER BY, frame specs
+- **MERGE Statements**: Full SQL:2003 MERGE support with WHEN MATCHED/NOT MATCHED clauses
+- **Grouping Operations**: GROUPING SETS, ROLLUP, CUBE (SQL-99 T431)
+- **Materialized Views**: CREATE, DROP, REFRESH MATERIALIZED VIEW support
+- **Table Partitioning**: PARTITION BY RANGE, LIST, HASH support
+- **SQL Injection Detection**: Built-in security scanner (`pkg/sql/security`) for injection pattern detection
+- **Unicode Support**: Complete UTF-8 support for international SQL
+- **Multi-Dialect**: PostgreSQL, MySQL, SQL Server, Oracle, SQLite
+- **Zero-Copy**: Direct byte slice operations, <1μs latency
+- **Intelligent Errors**: Structured error codes with typo detection, context highlighting, and helpful hints
+- **Production Ready**: Battle-tested with 0 race conditions detected, ~80-85% SQL-99 compliance
 
-### 🎯 Performance & Quality Highlights (v1.5.0 + Phases 2-3)
+### Performance & Quality Highlights (v1.5.0+)
 
 <div align="center">
 
@@ -72,7 +72,7 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 
 </div>
 
-### 📈 Project Stats
+### Project Stats
 
 <div align="center">
 
@@ -85,7 +85,7 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 
 </div>
 
-## 📦 Installation
+## Installation
 
 ### Library Installation
 ```bash
@@ -107,7 +107,7 @@ go build -o gosqlx ./cmd/gosqlx
 - Go 1.24 or higher
 - No external dependencies
 
-## 🚀 Quick Start
+## Quick Start
 
 ### CLI Usage
 
@@ -305,22 +305,21 @@ func main() {
 
 > **Note:** The simple API has < 1% performance overhead compared to low-level API. Use the simple API unless you need fine-grained control.
 
-## 📚 Documentation
+## Documentation
 
-### 📖 Comprehensive Guides
+### Comprehensive Guides
 
 | Guide | Description |
 |-------|-------------|
-| [**Getting Started**](docs/GETTING_STARTED.md) | ⚡ Get started in 5 minutes |
-| [**Comparison Guide**](docs/COMPARISON.md) | 🆚 GoSQLX vs SQLFluff, JSQLParser, pg_query |
-| [**Error Reference**](docs/ERROR_REFERENCE.md) | 🔍 Complete error code reference with solutions |
+| [**Getting Started**](docs/GETTING_STARTED.md) | Get started in 5 minutes |
+| [**Comparison Guide**](docs/COMPARISON.md) | GoSQLX vs SQLFluff, JSQLParser, pg_query |
 | [**CLI Guide**](docs/CLI_GUIDE.md) | Complete CLI documentation and usage examples |
 | [**API Reference**](docs/API_REFERENCE.md) | Complete API documentation with examples |
 | [**Usage Guide**](docs/USAGE_GUIDE.md) | Detailed patterns and best practices |
 | [**Architecture**](docs/ARCHITECTURE.md) | System design and internal architecture |
 | [**Troubleshooting**](docs/TROUBLESHOOTING.md) | Common issues and solutions |
 
-### 🚀 Getting Started
+### Getting Started
 
 | Document | Purpose |
 |----------|---------|
@@ -329,7 +328,7 @@ func main() {
 | [**Security Analysis**](docs/SECURITY.md) | Security assessment |
 | [**Examples**](examples/) | Working code examples |
 
-### 📋 Quick Links
+### Quick Links
 
 - [Installation & Setup](docs/USAGE_GUIDE.md#getting-started)
 - [Basic Usage](docs/USAGE_GUIDE.md#basic-usage)
@@ -338,7 +337,7 @@ func main() {
 - [Error Handling](docs/TROUBLESHOOTING.md#error-messages)
 - [FAQ](docs/TROUBLESHOOTING.md#faq)
 
-### 🔄 Advanced SQL Features (v1.2.0)
+### Advanced SQL Features (v1.2.0)
 
 GoSQLX now supports Common Table Expressions (CTEs) and Set Operations alongside complete JOIN support:
 
@@ -441,7 +440,7 @@ if selectStmt, ok := ast.Statements[0].(*ast.SelectStatement); ok {
 - ✅ `NATURAL JOIN` - Natural joins (implicit ON clause)
 - ✅ `USING (column)` - Single-column using clause
 
-### 🆕 Advanced SQL Features (v1.4+)
+### Advanced SQL Features (v1.4+)
 
 #### MERGE Statements (SQL:2003 F312)
 
@@ -538,7 +537,7 @@ sql := `SELECT * FROM users WHERE deleted_at IS NULL`
 sql := `SELECT * FROM users ORDER BY last_login DESC NULLS LAST`
 ```
 
-## 💻 Examples
+## Examples
 
 ### Multi-Dialect Support
 
@@ -593,9 +592,9 @@ func ProcessConcurrently(queries []string) {
 }
 ```
 
-## 📊 Performance
+## Performance
 
-### 🎯 v1.0.0 Performance Improvements
+### v1.0.0 Performance Improvements
 
 | Metric | Previous | **v1.0.0** | Improvement |
 |--------|----------|------------|-------------|
@@ -635,9 +634,9 @@ BenchmarkTokensPerSecond-16               815,439      1,378 ns/op   8,847,625 t
 | **Scaling** | **Linear to 128+** | Perfect concurrency |
 | **Pool Efficiency** | **95%+ hit rate** | Effective reuse |
 
-See [PERFORMANCE_REPORT.md](PERFORMANCE_REPORT.md) for detailed analysis.
+Run `go test -bench=. -benchmem ./pkg/...` for detailed performance analysis.
 
-## 🧪 Testing
+## Testing
 
 ```bash
 # Run all tests with race detection
@@ -655,7 +654,7 @@ go test -v ./pkg/sql/tokenizer/
 go test -v ./pkg/sql/parser/
 ```
 
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 GoSQLX/
@@ -686,7 +685,7 @@ GoSQLX/
 └── tools/                  # Development tools
 ```
 
-## 🛠️ Development
+## Development
 
 ### Prerequisites
 
@@ -749,7 +748,7 @@ task quality
 task check
 ```
 
-## 🤝 Contributing
+## Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
@@ -769,11 +768,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 - Update documentation for API changes
 - Add benchmarks for performance-critical code
 
-## 📄 License
-
-This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0) - see the [LICENSE](LICENSE) file for details.
-
-## 🚀 Roadmap
+## Roadmap
 
 ### Phase 1: Core SQL Enhancements (Q1 2025) - v1.1.0 ✅
 - ✅ **Complete JOIN support** (INNER/LEFT/RIGHT/FULL OUTER/CROSS/NATURAL)
@@ -804,9 +799,9 @@ This project is licensed under the GNU Affero General Public License v3.0 (AGPL-
 - 📋 Performance analysis and hints
 - 📋 Schema validation
 
-[📄 Full Architectural Review & Roadmap](ARCHITECTURAL_REVIEW_AND_ROADMAP.md)
+See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed system design
 
-## 🤝 Community & Support
+## Community & Support
 
 <div align="center">
 
@@ -826,7 +821,7 @@ This project is licensed under the GNU Affero General Public License v3.0 (AGPL-
 
 </div>
 
-## 👥 Contributors
+## Contributors
 
 <div align="center">
 
@@ -854,7 +849,7 @@ We love your input! We want to make contributing as easy and transparent as poss
 
 </div>
 
-## 🎯 Use Cases
+## Use Cases
 
 <div align="center">
 
@@ -869,7 +864,7 @@ We love your input! We want to make contributing as easy and transparent as poss
 
 </div>
 
-## 📊 Who's Using GoSQLX
+## Who's Using GoSQLX
 
 <div align="center">
 
@@ -878,7 +873,7 @@ We love your input! We want to make contributing as easy and transparent as poss
 </div>
 
 
-## 📈 Project Metrics
+## Project Metrics
 
 <div align="center">
 
@@ -895,28 +890,7 @@ graph LR
 
 </div>
 
-## 🗺️ Roadmap
-
-<div align="center">
-
-### Release Timeline
-
-| Version | Status | Release Date | Features |
-|---------|--------|--------------|----------|
-| **v0.9.0** | ✅ Released | 2024-01-15 | Initial release |
-| **v1.0.0** | ✅ Released | 2024-12-01 | Production ready, +47% performance |
-| **v1.1.0** | ✅ Released | 2025-01-03 | Complete JOIN support, error handling |
-| **v1.2.0** | ✅ Released | 2025-08-15 | CTEs, set operations, ~70% SQL-92 compliance |
-| **v1.3.0** | ✅ Released | 2025-09-04 | Window functions, ~80-85% SQL-99 compliance |
-| **v1.4.0** | ✅ Released | 2025-09-07 | Production CLI, high-performance commands, memory leak fixes |
-| **v1.5.0** | 🎉 Current | 2025-11-15 | Phase 1 Test Coverage: CLI 63.3%, Parser 75%, Tokenizer 76.5% |
-| **v2.0.0** | 🔮 Future | Q4 2025 | Dialect specialization, advanced features |
-
-<a href="docs/ROADMAP.md"><img src="https://img.shields.io/badge/📋_Full_Roadmap-purple?style=for-the-badge" alt="Full Roadmap"></a>
-
-</div>
-
-## 💖 Support This Project
+## Support This Project
 
 <div align="center">
 
@@ -936,7 +910,7 @@ If GoSQLX helps your project, please consider:
 
 </div>
 
-## 📜 License
+## License
 
 <div align="center">
 

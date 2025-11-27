@@ -5,7 +5,6 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
@@ -137,11 +136,6 @@ func FuzzTokenizer(f *testing.F) {
 
 		// Verify error handling consistency
 		if err != nil {
-			// Error should be of correct type (either *errors.Error or another error type)
-			if _, ok := err.(*errors.Error); !ok {
-				// Allow other error types (e.g., context errors)
-				// Just verify it's not nil and has a message
-			}
 			// Error message should not be empty
 			if err.Error() == "" {
 				t.Errorf("Error message should not be empty for input: %q", truncateForDisplay(data, 50))

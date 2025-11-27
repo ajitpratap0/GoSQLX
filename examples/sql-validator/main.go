@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
@@ -141,7 +142,7 @@ func validateSQL(sql string, dialect string, verbose bool) ValidationResult {
 		result.Valid = false
 		result.Error = err
 		// Try to extract position from error
-		if tokErr, ok := err.(*tokenizer.TokenizerError); ok {
+		if tokErr, ok := err.(*errors.Error); ok {
 			result.Line = tokErr.Location.Line
 			result.Column = tokErr.Location.Column
 		}

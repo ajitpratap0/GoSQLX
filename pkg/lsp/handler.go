@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
@@ -247,8 +248,8 @@ func (h *Handler) validateDocument(uri, content string, version int) {
 	// Use high-level gosqlx.Parse which handles tokenization and parsing
 	_, err := gosqlx.Parse(content)
 	if err != nil {
-		// Parse error - create diagnostic
-		diag := h.createDiagnosticFromError(content, err.Error(), 0)
+		// Parse error - create diagnostic with error code if available
+		diag := h.createDiagnosticFromError(content, err, 0)
 		diagnostics = append(diagnostics, diag)
 	}
 
@@ -280,9 +281,31 @@ var (
 	bracketPattern = regexp.MustCompile(`\[(\d+):(\d+)\]`)
 )
 
-// createDiagnosticFromError creates a diagnostic from an error message
-func (h *Handler) createDiagnosticFromError(content, errMsg string, defaultLine int) Diagnostic {
-	line, char := extractPositionFromError(errMsg, content, defaultLine)
+// createDiagnosticFromError creates a diagnostic from an error
+func (h *Handler) createDiagnosticFromError(content string, err error, defaultLine int) Diagnostic {
+	var line, char int
+	var code interface{}
+	errMsg := err.Error()
+
+	// Extract position and code from structured error if available
+	if e, ok := err.(*errors.Error); ok {
+		// Use position from structured error (convert to 0-based)
+		line = e.Location.Line - 1
+		if line < 0 {
+			line = 0
+		}
+		char = e.Location.Column - 1
+		if char < 0 {
+			char = 0
+		}
+		// Extract error code
+		code = string(e.Code)
+		// Use the cleaner message without context
+		errMsg = e.Message
+	} else {
+		// Fallback to regex extraction for non-structured errors
+		line, char = extractPositionFromError(errMsg, content, defaultLine)
+	}
 
 	// Calculate end position (end of line or reasonable span)
 	lines := strings.Split(content, "\n")
@@ -312,6 +335,7 @@ func (h *Handler) createDiagnosticFromError(content, errMsg string, defaultLine 
 			End:   Position{Line: line, Character: endChar},
 		},
 		Severity: SeverityError,
+		Code:     code,
 		Source:   "gosqlx",
 		Message:  errMsg,
 	}

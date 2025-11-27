@@ -343,7 +343,7 @@ func TestRecursionDepthLimit_DeeplyNestedFunctionCalls(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for deeply nested function calls, got nil")
 	}
-	if !containsSubstring(err.Error(), "maximum recursion depth exceeded") {
+	if !containsSubstring(err.Error(), "recursion depth") && !containsSubstring(err.Error(), "exceeds limit") {
 		t.Errorf("unexpected error message: %v", err)
 	}
 }
@@ -392,7 +392,7 @@ func TestRecursionDepthLimit_DeeplyNestedCTEs(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for deeply nested CTEs, got nil")
 	}
-	if !containsSubstring(err.Error(), "maximum recursion depth exceeded") {
+	if !containsSubstring(err.Error(), "recursion depth") && !containsSubstring(err.Error(), "exceeds limit") {
 		t.Errorf("unexpected error message: %v", err)
 	}
 }
@@ -973,8 +973,8 @@ func TestRecursionDepthLimit_ExtremelyNestedParentheses(t *testing.T) {
 	}
 
 	// Verify the error message mentions recursion depth
-	if !containsSubstring(err.Error(), "maximum recursion depth exceeded") {
-		t.Errorf("expected 'maximum recursion depth exceeded' in error, got: %v", err)
+	if !containsSubstring(err.Error(), "recursion depth") && !containsSubstring(err.Error(), "exceeds limit") {
+		t.Errorf("expected recursion depth error, got: %v", err)
 	}
 
 	// Verify the parser didn't crash (stack overflow would panic)
@@ -1027,7 +1027,7 @@ func TestRecursionDepthLimit_NoStackOverflow(t *testing.T) {
 			_, err := parser.Parse(tokens)
 
 			if tc.expect == "success" {
-				if err != nil && containsSubstring(err.Error(), "maximum recursion depth exceeded") {
+				if err != nil && (containsSubstring(err.Error(), "recursion depth") || containsSubstring(err.Error(), "exceeds limit")) {
 					// Depth exactly at 100 might fail due to overhead in the call stack
 					// This is acceptable behavior
 					t.Logf("Note: Depth %d exceeded limit (acceptable at boundary)", tc.depth)
@@ -1035,8 +1035,8 @@ func TestRecursionDepthLimit_NoStackOverflow(t *testing.T) {
 			} else if tc.expect == "error" {
 				if err == nil {
 					t.Errorf("expected error for depth %d, got success", tc.depth)
-				} else if !containsSubstring(err.Error(), "maximum recursion depth exceeded") {
-					t.Errorf("expected 'maximum recursion depth exceeded', got: %v", err)
+				} else if !containsSubstring(err.Error(), "recursion depth") && !containsSubstring(err.Error(), "exceeds limit") {
+					t.Errorf("expected recursion depth error, got: %v", err)
 				}
 			}
 

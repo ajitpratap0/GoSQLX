@@ -11,12 +11,16 @@ This document provides a comprehensive reference for all error codes in GoSQLX w
 | E1003 | Tokenizer | Invalid numeric literal |
 | E1004 | Tokenizer | Invalid operator sequence |
 | E1005 | Tokenizer | Invalid identifier format |
+| E1006 | DoS Protection | Input exceeds maximum size limit (10MB) |
+| E1007 | DoS Protection | Token count exceeds limit (1,000,000) |
+| E1008 | DoS Protection | Tokenizer panic recovered |
 | E2001 | Parser | Unexpected token |
 | E2002 | Parser | Expected token not found |
 | E2003 | Parser | Missing required clause |
 | E2004 | Parser | General syntax error |
 | E2005 | Parser | Incomplete statement |
 | E2006 | Parser | Invalid expression |
+| E2007 | DoS Protection | Expression nesting exceeds maximum depth (100) |
 | E3001 | Semantic | Undefined table |
 | E3002 | Semantic | Undefined column |
 | E3003 | Semantic | Type mismatch |
@@ -156,6 +160,119 @@ SELECT * FROM data WHERE value = 1.5e10
 
 ---
 
+#### E1006 - Input Too Large
+
+**When it occurs**: Input SQL exceeds the maximum allowed size (10MB).
+
+**Example**:
+```sql
+-- Attempting to parse a 15MB SQL file
+```
+
+**Error message**:
+```
+Error E1006: input exceeds maximum size limit of 10485760 bytes (received 15728640 bytes)
+Hint: Split large SQL files into smaller batches or increase the size limit if appropriate
+```
+
+**Common causes**:
+- Very large SQL dump files
+- Programmatically generated SQL with millions of INSERT statements
+- Malicious input attempting denial-of-service attack
+- Concatenated SQL files without proper splitting
+
+**Solutions**:
+```go
+// Wrong: Parse entire large file at once
+largeSQL, _ := os.ReadFile("huge_dump.sql")
+ast, err := gosqlx.ParseBytes(largeSQL) // May fail with E1006
+
+// Right: Split into smaller batches
+batches := splitSQLIntoBatches(largeSQL, 5*1024*1024) // 5MB batches
+for _, batch := range batches {
+    ast, err := gosqlx.ParseBytes(batch)
+    // Process each batch
+}
+```
+
+---
+
+#### E1007 - Token Limit Exceeded
+
+**When it occurs**: The number of tokens exceeds the maximum allowed (1,000,000 tokens).
+
+**Example**:
+```sql
+-- SQL with hundreds of thousands of columns or values
+INSERT INTO logs VALUES (...), (...), (...) -- repeated 500,000 times
+```
+
+**Error message**:
+```
+Error E1007: token count exceeds limit of 1000000 tokens
+Hint: Break down large batch operations into smaller chunks
+```
+
+**Common causes**:
+- Massive batch INSERT statements
+- Extremely complex queries with thousands of JOINs or subqueries
+- Code generation gone wrong
+- DoS attack attempts
+
+**Solutions**:
+```go
+// Wrong: Single massive INSERT
+INSERT INTO logs VALUES (1, 'a'), (2, 'b'), ... // 100,000 rows
+
+// Right: Batch into reasonable chunks
+batchSize := 1000
+for i := 0; i < len(data); i += batchSize {
+    batch := data[i:min(i+batchSize, len(data))]
+    // Generate INSERT for this batch
+    // Parse and execute
+}
+```
+
+---
+
+#### E1008 - Tokenizer Panic Recovered
+
+**When it occurs**: The tokenizer encountered an internal error and recovered from a panic.
+
+**Example**:
+```sql
+-- Malformed input that triggers internal tokenizer error
+SELECT * FROM users WHERE id = \x00\x00\x00
+```
+
+**Error message**:
+```
+Error E1008: tokenizer panic recovered: runtime error
+Hint: The input may contain malformed or malicious content
+```
+
+**Common causes**:
+- Binary data mixed with SQL text
+- Corrupted file encoding
+- Null bytes or other control characters in input
+- Internal tokenizer bugs (please report these!)
+
+**Solutions**:
+```go
+// Validate input encoding before parsing
+if !utf8.Valid(sqlBytes) {
+    return errors.New("invalid UTF-8 encoding")
+}
+
+// Sanitize input to remove control characters
+sqlBytes = removeControlCharacters(sqlBytes)
+
+// Then parse
+ast, err := gosqlx.ParseBytes(sqlBytes)
+```
+
+---
+
 ### E2xxx - Parser Errors (Syntax Analysis)
 
 These errors occur during parsing when GoSQLX validates SQL grammar and structure.
@@ -278,6 +395,89 @@ UPDATE users name = 'John'
 
 -- Right: Add SET
 UPDATE users SET name = 'John'
+```
+
+---
+
+#### E2007 - Recursion Depth Limit Exceeded
+
+**When it occurs**: Expression nesting exceeds the maximum allowed depth (100 levels).
+
+**Example**:
+```sql
+-- Deeply nested subqueries or expressions
+SELECT * FROM (
+    SELECT * FROM (
+        SELECT * FROM (
+            -- ... 100+ levels deep
+        )
+    )
+)
+```
+
+**Error message**:
+```
+Error E2007: expression nesting exceeds maximum depth of 100
+Hint: Simplify the query by reducing nesting levels or breaking it into multiple statements
+```
+
+**Common causes**:
+- Programmatically generated queries with excessive nesting
+- Recursive query generation without depth limits
+- DoS attack attempts with deeply nested structures
+- Overly complex WHERE clauses with many nested conditions
+
+**Solutions**:
+```sql
+-- Wrong: Excessive nesting
+SELECT * FROM users WHERE (((((((status = 'active'))))))))) -- 100+ levels
+
+-- Right: Flatten the structure
+SELECT * FROM users WHERE status = 'active'
+
+-- Wrong: Deeply nested subqueries
+SELECT * FROM (
+    SELECT * FROM (
+        SELECT * FROM (
+            -- Many levels deep
+        )
+    )
+)
+
+-- Right: Use CTEs to flatten
+WITH level1 AS (
+    SELECT * FROM base_table
+),
+level2 AS (
+    SELECT * FROM level1 WHERE condition
+)
+SELECT * FROM level2
+```
+
+**Code example for generated queries**:
+```go
+// Wrong: No depth limit checking
+func buildNestedQuery(depth int) string {
+    if depth == 0 {
+        return "SELECT * FROM base"
+    }
+    return fmt.Sprintf("SELECT * FROM (%s)", buildNestedQuery(depth-1))
+}
+
+// Right: Enforce depth limits
+func buildNestedQuery(depth int, maxDepth int) (string, error) {
+    if depth > maxDepth {
+        return "", errors.New("query depth exceeds limit")
+    }
+    if depth == 0 {
+        return "SELECT * FROM base", nil
+    }
+    inner, err := buildNestedQuery(depth-1, maxDepth)
+    if err != nil {
+        return "", err
+    }
+    return fmt.Sprintf("SELECT * FROM (%s)", inner), nil
+}
 ```
 
 ---

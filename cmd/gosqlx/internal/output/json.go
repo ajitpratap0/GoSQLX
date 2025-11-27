@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
@@ -37,6 +38,7 @@ type JSONValidationResults struct {
 type JSONValidationError struct {
 	File    string `json:"file"`
 	Message string `json:"message"`
+	Code    string `json:"code,omitempty"`
 	Type    string `json:"type"` // "tokenization", "parsing", "syntax", "io"
 }
 
@@ -97,6 +99,7 @@ type JSONPosition struct {
 // JSONParseError represents a parsing error
 type JSONParseError struct {
 	Message  string        `json:"message"`
+	Code     string        `json:"code,omitempty"`
 	Type     string        `json:"type"` // "tokenization", "parsing", "io"
 	Position *JSONPosition `json:"position,omitempty"`
 }
@@ -130,10 +133,12 @@ func FormatValidationJSON(result *ValidationResult, inputFiles []string, include
 	// Add errors
 	for _, fileResult := range result.Files {
 		if fileResult.Error != nil {
+			errCode := extractErrorCode(fileResult.Error)
 			output.Errors = append(output.Errors, JSONValidationError{
 				File:    fileResult.Path,
 				Message: fileResult.Error.Error(),
-				Type:    categorizeError(fileResult.Error.Error()),
+				Code:    errCode,
+				Type:    categorizeByCode(errCode, fileResult.Error.Error()),
 			})
 		}
 	}
@@ -219,6 +224,7 @@ func FormatParseJSON(astObj *ast.AST, inputSource string, showTokens bool, token
 
 // FormatParseErrorJSON creates a JSON error output for parse failures
 func FormatParseErrorJSON(err error, inputSource string) ([]byte, error) {
+	errCode := extractErrorCode(err)
 	output := &JSONParseOutput{
 		Command: "parse",
 		Input: JSONInputInfo{
@@ -229,7 +235,8 @@ func FormatParseErrorJSON(err error, inputSource string) ([]byte, error) {
 		Status: "error",
 		Error: &JSONParseError{
 			Message: err.Error(),
-			Type:    categorizeError(err.Error()),
+			Code:    errCode,
+			Type:    categorizeByCode(errCode, err.Error()),
 		},
 	}
 
@@ -265,6 +272,34 @@ func determineStatus(result *ValidationResult) string {
 		return "success"
 	}
 	return "no_files"
+}
+
+// extractErrorCode extracts the error code from an error
+func extractErrorCode(err error) string {
+	if err == nil {
+		return ""
+	}
+	if code, ok := goerrors.ExtractErrorCode(err); ok {
+		return string(code)
+	}
+	return ""
+}
+
+// categorizeByCode categorizes errors by error code if available
+func categorizeByCode(code, errMsg string) string {
+	if code != "" {
+		switch {
+		case strings.HasPrefix(code, "E1"):
+			return "tokenization"
+		case strings.HasPrefix(code, "E2"):
+			return "parsing"
+		case strings.HasPrefix(code, "E3"):
+			return "semantic"
+		case strings.HasPrefix(code, "E4"):
+			return "unsupported"
+		}
+	}
+	return categorizeError(errMsg)
 }
 
 // categorizeError categorizes error messages by type

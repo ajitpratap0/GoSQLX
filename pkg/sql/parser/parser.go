@@ -26,6 +26,7 @@ import (
 	"strings"
 	"sync"
 
+	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
@@ -124,7 +125,7 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 	// Check if we got any statements
 	if len(result.Statements) == 0 {
 		ast.ReleaseAST(result)
-		return nil, fmt.Errorf("no SQL statements found")
+		return nil, goerrors.IncompleteStatementError(models.Location{}, "")
 	}
 
 	return result, nil
@@ -179,6 +180,7 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 		if err := ctx.Err(); err != nil {
 			// Clean up the AST on error
 			ast.ReleaseAST(result)
+			// Context cancellation is not a parsing error, return the context error directly
 			return nil, fmt.Errorf("parsing cancelled: %w", err)
 		}
 
@@ -205,7 +207,7 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 	// Check if we got any statements
 	if len(result.Statements) == 0 {
 		ast.ReleaseAST(result)
-		return nil, fmt.Errorf("no SQL statements found")
+		return nil, goerrors.IncompleteStatementError(models.Location{}, "")
 	}
 
 	return result, nil
@@ -227,6 +229,7 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 	// Check context if available
 	if p.ctx != nil {
 		if err := p.ctx.Err(); err != nil {
+			// Context cancellation is not a parsing error, return the context error directly
 			return nil, fmt.Errorf("parsing cancelled: %w", err)
 		}
 	}
@@ -608,7 +611,7 @@ func (p *Parser) isBooleanLiteral() bool {
 
 // expectedError returns an error for unexpected token
 func (p *Parser) expectedError(expected string) error {
-	return fmt.Errorf("expected %s, got %s", expected, p.currentToken.Type)
+	return goerrors.ExpectedTokenError(expected, string(p.currentToken.Type), models.Location{}, "")
 }
 
 // parseIdent parses an identifier

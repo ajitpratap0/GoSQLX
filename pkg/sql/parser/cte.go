@@ -6,6 +6,7 @@ package parser
 import (
 	"fmt"
 
+	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
@@ -28,7 +29,11 @@ func (p *Parser) parseWithStatement() (ast.Statement, error) {
 	for {
 		cte, err := p.parseCommonTableExpr()
 		if err != nil {
-			return nil, fmt.Errorf("error parsing CTE: %v", err)
+			return nil, goerrors.InvalidCTEError(
+				fmt.Sprintf("error parsing CTE definition: %v", err),
+				models.Location{},
+				"",
+			)
 		}
 		ctes = append(ctes, cte)
 
@@ -49,7 +54,11 @@ func (p *Parser) parseWithStatement() (ast.Statement, error) {
 	// Parse the main statement that follows the WITH clause
 	mainStmt, err := p.parseMainStatementAfterWith()
 	if err != nil {
-		return nil, fmt.Errorf("error parsing statement after WITH: %v", err)
+		return nil, goerrors.InvalidCTEError(
+			fmt.Sprintf("error parsing statement after WITH clause: %v", err),
+			models.Location{},
+			"",
+		)
 	}
 
 	// Attach WITH clause to the main statement
@@ -73,7 +82,11 @@ func (p *Parser) parseWithStatement() (ast.Statement, error) {
 		stmt.With = withClause
 		return stmt, nil
 	default:
-		return nil, fmt.Errorf("WITH clause not supported with statement type: %T", stmt)
+		return nil, goerrors.InvalidCTEError(
+			fmt.Sprintf("WITH clause not supported with statement type: %T", stmt),
+			models.Location{},
+			"",
+		)
 	}
 }
 
@@ -88,7 +101,11 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 	defer func() { p.depth-- }()
 
 	if p.depth > MaxRecursionDepth {
-		return nil, fmt.Errorf("maximum recursion depth exceeded (%d) - CTE too deeply nested", MaxRecursionDepth)
+		return nil, goerrors.InvalidCTEError(
+			fmt.Sprintf("maximum recursion depth exceeded (%d) - CTE too deeply nested", MaxRecursionDepth),
+			models.Location{},
+			"",
+		)
 	}
 
 	// Parse CTE name
@@ -155,7 +172,11 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 	// Parse the inner statement
 	stmt, err := p.parseStatement()
 	if err != nil {
-		return nil, fmt.Errorf("error parsing CTE statement: %v", err)
+		return nil, goerrors.InvalidCTEError(
+			fmt.Sprintf("error parsing CTE subquery: %v", err),
+			models.Location{},
+			"",
+		)
 	}
 
 	if !p.isType(models.TokenTypeRParen) {

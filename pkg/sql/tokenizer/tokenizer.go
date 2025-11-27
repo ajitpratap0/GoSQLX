@@ -162,16 +162,6 @@ type Tokenizer struct {
 	debugLog   DebugLogger
 }
 
-// TokenizerError is a simple error wrapper
-type TokenizerError struct {
-	Message  string
-	Location models.Location
-}
-
-func (e TokenizerError) Error() string {
-	return e.Message
-}
-
 // SetDebugLogger sets a debug logger for verbose tracing
 func (t *Tokenizer) SetDebugLogger(logger DebugLogger) {
 	t.debugLog = logger
@@ -190,7 +180,7 @@ func New() (*Tokenizer, error) {
 // NewWithKeywords initializes a Tokenizer with custom keywords
 func NewWithKeywords(kw *keywords.Keywords) (*Tokenizer, error) {
 	if kw == nil {
-		return nil, fmt.Errorf("keywords cannot be nil")
+		return nil, errors.InvalidSyntaxError("keywords cannot be nil", models.Location{Line: 1, Column: 0}, "")
 	}
 
 	return &Tokenizer{
@@ -270,10 +260,8 @@ func (t *Tokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) {
 
 			token, err := t.nextToken()
 			if err != nil {
-				tokenErr = TokenizerError{
-					Message:  err.Error(),
-					Location: t.toSQLPosition(startPos),
-				}
+				// nextToken returns structured errors, pass through directly
+				tokenErr = err
 				return
 			}
 
@@ -404,10 +392,8 @@ func (t *Tokenizer) TokenizeContext(ctx context.Context, input []byte) ([]models
 
 			token, err := t.nextToken()
 			if err != nil {
-				tokenErr = TokenizerError{
-					Message:  err.Error(),
-					Location: t.toSQLPosition(startPos),
-				}
+				// nextToken returns structured errors, pass through directly
+				tokenErr = err
 				return
 			}
 
@@ -664,10 +650,10 @@ func (t *Tokenizer) readQuotedIdentifier() (models.Token, error) {
 		}
 
 		if r == '\n' {
-			return models.Token{}, TokenizerError{
-				Message:  fmt.Sprintf("unterminated quoted identifier starting at line %d, column %d", startPos.Line, startPos.Column),
-				Location: models.Location{Line: startPos.Line, Column: startPos.Column},
-			}
+			return models.Token{}, errors.UnterminatedStringError(
+				models.Location{Line: startPos.Line, Column: startPos.Column},
+				string(t.input),
+			)
 		}
 
 		// Handle regular characters
@@ -676,10 +662,10 @@ func (t *Tokenizer) readQuotedIdentifier() (models.Token, error) {
 		t.pos.Column++
 	}
 
-	return models.Token{}, TokenizerError{
-		Message:  fmt.Sprintf("unterminated quoted identifier starting at line %d, column %d", startPos.Line, startPos.Column),
-		Location: models.Location{Line: startPos.Line, Column: startPos.Column},
-	}
+	return models.Token{}, errors.UnterminatedStringError(
+		t.toSQLPosition(startPos),
+		string(t.input),
+	)
 }
 
 // readBacktickIdentifier reads MySQL-style backtick identifiers
@@ -725,10 +711,10 @@ func (t *Tokenizer) readBacktickIdentifier() (models.Token, error) {
 		t.pos.Index++
 	}
 
-	return models.Token{}, TokenizerError{
-		Message:  fmt.Sprintf("unterminated backtick identifier starting at line %d, column %d", startPos.Line, startPos.Column),
-		Location: models.Location{Line: startPos.Line, Column: startPos.Column},
-	}
+	return models.Token{}, errors.UnterminatedStringError(
+		t.toSQLPosition(startPos),
+		string(t.input),
+	)
 }
 
 // readQuotedString handles the actual scanning of a single/double-quoted string
@@ -797,10 +783,11 @@ func (t *Tokenizer) readQuotedString(quote rune) (models.Token, error) {
 		if r == '\\' {
 			// Handle escape sequences
 			if err := t.handleEscapeSequence(&buf); err != nil {
-				return models.Token{}, TokenizerError{
-					Message:  fmt.Sprintf("invalid escape sequence at line %d, column %d", t.pos.Line, t.pos.Column),
-					Location: models.Location{Line: t.pos.Line, Column: startPos.Column},
-				}
+				return models.Token{}, errors.InvalidSyntaxError(
+					fmt.Sprintf("invalid escape sequence: %v", err),
+					models.Location{Line: t.pos.Line, Column: t.pos.Column},
+					string(t.input),
+				)
 			}
 			continue
 		}
@@ -819,10 +806,10 @@ func (t *Tokenizer) readQuotedString(quote rune) (models.Token, error) {
 		t.pos.Column++
 	}
 
-	return models.Token{}, TokenizerError{
-		Message:  fmt.Sprintf("unterminated quoted string starting at line %d, column %d", startPos.Line, startPos.Column),
-		Location: models.Location{Line: startPos.Line, Column: startPos.Column},
-	}
+	return models.Token{}, errors.UnterminatedStringError(
+		t.toSQLPosition(startPos),
+		string(t.input),
+	)
 }
 
 // readTripleQuotedString reads a triple-quoted string (e.g. "'abc"' or """abc""")
@@ -879,10 +866,10 @@ func (t *Tokenizer) readTripleQuotedString(quote rune) (models.Token, error) {
 		t.pos.Column++
 	}
 
-	return models.Token{}, TokenizerError{
-		Message:  fmt.Sprintf("unterminated triple-quoted string starting at line %d, column %d", startPos.Line, startPos.Column),
-		Location: models.Location{Line: startPos.Line, Column: startPos.Column},
-	}
+	return models.Token{}, errors.UnterminatedStringError(
+		t.toSQLPosition(startPos),
+		string(t.input),
+	)
 }
 
 // handleEscapeSequence handles escape sequences in string literals
@@ -891,7 +878,7 @@ func (t *Tokenizer) handleEscapeSequence(buf *bytes.Buffer) error {
 	t.pos.Column++
 
 	if t.pos.Index >= len(t.input) {
-		return fmt.Errorf("unexpected end of input after escape character")
+		return errors.IncompleteStatementError(t.getCurrentPosition(), string(t.input))
 	}
 
 	r, size := utf8.DecodeRune(t.input[t.pos.Index:])
@@ -905,7 +892,11 @@ func (t *Tokenizer) handleEscapeSequence(buf *bytes.Buffer) error {
 	case 't':
 		buf.WriteRune('\t')
 	default:
-		return fmt.Errorf("invalid escape sequence '\\%c'", r)
+		return errors.InvalidSyntaxError(
+			fmt.Sprintf("invalid escape sequence '\\%c'", r),
+			t.getCurrentPosition(),
+			string(t.input),
+		)
 	}
 
 	t.pos.Index += size
@@ -1013,7 +1004,7 @@ func (t *Tokenizer) readNumber(buf []byte) (models.Token, error) {
 // readPunctuation picks out punctuation or operator tokens
 func (t *Tokenizer) readPunctuation() (models.Token, error) {
 	if t.pos.Index >= len(t.input) {
-		return models.Token{}, fmt.Errorf("unexpected end of input")
+		return models.Token{}, errors.IncompleteStatementError(t.getCurrentPosition(), string(t.input))
 	}
 	r, size := utf8.DecodeRune(t.input[t.pos.Index:])
 	switch r {
@@ -1176,7 +1167,7 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		return t.readIdentifier()
 	}
 
-	return models.Token{}, fmt.Errorf("invalid character: %c", r)
+	return models.Token{}, errors.UnexpectedCharError(r, t.getCurrentPosition(), string(t.input))
 }
 
 // toSQLPosition converts an internal Position => a models.Location

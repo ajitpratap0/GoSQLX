@@ -1262,7 +1262,7 @@ func TestParser_ErrorRecovery_EmptyInput(t *testing.T) {
 			name:          "completely empty token list",
 			tokens:        []token.Token{},
 			wantErr:       true,
-			errorContains: "no SQL statements found",
+			errorContains: "incomplete SQL statement",
 		},
 		{
 			name: "only EOF token",
@@ -1270,7 +1270,7 @@ func TestParser_ErrorRecovery_EmptyInput(t *testing.T) {
 				{Type: "EOF", Literal: ""},
 			},
 			wantErr:       true,
-			errorContains: "no SQL statements found",
+			errorContains: "incomplete SQL statement",
 		},
 		{
 			name: "only semicolon",
@@ -1278,7 +1278,7 @@ func TestParser_ErrorRecovery_EmptyInput(t *testing.T) {
 				{Type: ";", Literal: ";"},
 			},
 			wantErr:       true,
-			errorContains: "no SQL statements found",
+			errorContains: "incomplete SQL statement",
 		},
 		{
 			name: "unknown statement type",

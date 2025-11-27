@@ -74,15 +74,6 @@ func (p *Parser) currentLocation() models.Location {
 	return p.positions[p.currentPos].Start
 }
 
-// currentEndLocation returns the end source location of the current token.
-// Returns an empty location if position tracking is not enabled or position is out of bounds.
-func (p *Parser) currentEndLocation() models.Location {
-	if p.positions == nil || p.currentPos >= len(p.positions) {
-		return models.Location{}
-	}
-	return p.positions[p.currentPos].End
-}
-
 // MaxRecursionDepth defines the maximum allowed recursion depth for parsing operations.
 // This prevents stack overflow from deeply nested expressions, CTEs, or other recursive structures.
 const MaxRecursionDepth = 100

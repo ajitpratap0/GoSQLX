@@ -13,6 +13,7 @@
     "url": "https://github.com/ajitpratap0/GoSQLX/issues"
   },
   "homepage": "https://github.com/ajitpratap0/GoSQLX#readme",
+  "icon": "images/icon.png",
   "engines": {
     "vscode": "^1.85.0"
   },

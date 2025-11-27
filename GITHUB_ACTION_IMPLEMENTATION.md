@@ -140,7 +140,7 @@ This document summarizes the complete implementation of the official GoSQLX GitH
 
 - **Type**: Composite Action
 - **Shell**: Bash (cross-platform compatible)
-- **Go Version**: 1.19+
+- **Go Version**: 1.24+
 - **Dependencies**:
   - `actions/setup-go@v5`
   - `actions/cache@v4`

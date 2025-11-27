@@ -13,14 +13,14 @@ linters:
     - unused
 
 issues:
-  exclude-rules:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+exclusions:
+  rules:
     - path: _test\.go
       linters:
         - errcheck
-
     - path: examples/
       linters:
         - errcheck
-
-  max-issues-per-linter: 0
-  max-same-issues: 0

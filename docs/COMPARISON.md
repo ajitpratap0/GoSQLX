@@ -589,7 +589,7 @@ Still unsure? Here's how to get help:
 - **[Getting Started Guide](GETTING_STARTED.md)** - Quick 5-minute intro
 - **[Usage Guide](USAGE_GUIDE.md)** - Comprehensive patterns
 - **[API Reference](API_REFERENCE.md)** - Complete API docs
-- **[Benchmarks](../PERFORMANCE_REPORT.md)** - Detailed performance analysis
+- **[Performance Tuning](PERFORMANCE_TUNING.md)** - Optimization and benchmarking
 
 ---
 

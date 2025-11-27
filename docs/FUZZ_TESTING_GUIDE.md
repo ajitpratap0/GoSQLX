@@ -423,7 +423,6 @@ parallel -j4 go test -fuzz={} -fuzztime=5m ./pkg/sql/{}/  ::: \
 
 - [Go Fuzzing Documentation](https://go.dev/doc/fuzz/)
 - [Fuzzing Tutorial](https://go.dev/security/fuzz/)
-- [GoSQLX Test Report](../TEST-004_FUZZ_TESTING_REPORT.md)
 
 ## Contributing
 

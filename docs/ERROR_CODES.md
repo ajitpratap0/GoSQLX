@@ -1336,7 +1336,7 @@ When working with errors in production:
 
 ## Getting Help
 
-- **Full Documentation**: See [ERROR_REFERENCE.md](ERROR_REFERENCE.md) for detailed error descriptions
+- **Full Documentation**: See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for error handling patterns
 - **GitHub Issues**: Report bugs or request features at [github.com/ajitpratap0/GoSQLX/issues](https://github.com/ajitpratap0/GoSQLX/issues)
 - **Help URLs**: Each error includes a help URL: `https://docs.gosqlx.dev/errors/<CODE>`
 

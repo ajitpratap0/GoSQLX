@@ -438,7 +438,8 @@ func ConcurrentPipeline(queries []string) []Result {
     results := make([]Result, 0, len(queries))
     for tokens := range tokenChan {
         p := parser.NewParser()
-        ast, _ := p.Parse(convertTokens(tokens))
+        converted, _ := parser.ConvertTokensForParser(tokens)
+        ast, _ := p.Parse(converted)
         p.Release()
         
         results = append(results, Result{AST: ast})

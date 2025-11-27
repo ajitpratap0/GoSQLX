@@ -27,7 +27,6 @@ Comprehensive documentation for the GoSQLX SQL parsing SDK.
 | Document | Description | Audience |
 |----------|-------------|----------|
 | [**ERROR_CODES.md**](ERROR_CODES.md) | Comprehensive error code reference (E1xxx-E4xxx) | Developers |
-| [**ERROR_REFERENCE.md**](ERROR_REFERENCE.md) | Error handling patterns and recovery strategies | Developers |
 | [**sql99-compliance-analysis.md**](sql99-compliance-analysis.md) | SQL-99 standard compliance analysis (~80-85%) | Architects |
 
 ### Deployment & Operations
@@ -88,11 +87,9 @@ docs/
 ├── SQL_COMPATIBILITY.md    # SQL dialect matrix
 ├── SECURITY.md             # Security analysis
 ├── ERROR_CODES.md          # Error code reference
-├── ERROR_REFERENCE.md      # Error handling guide
 ├── COMPARISON.md           # Parser comparison
 ├── FUZZ_TESTING_GUIDE.md   # Fuzz testing guide
 ├── sql99-compliance-analysis.md  # SQL-99 compliance
-├── CLEAN_ARCHITECTURE.md   # Architecture principles
 └── migration/              # Migration guides
     ├── FROM_JSQLPARSER.md
     ├── FROM_PG_QUERY.md

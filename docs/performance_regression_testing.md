@@ -182,7 +182,7 @@ Over time, minor optimizations may accumulate. If current performance is consist
 
 - [Benchmark Guide](../CLAUDE.md#performance-testing-new-features)
 - [Development Workflow](../CLAUDE.md#common-development-workflows)
-- [Production Metrics](../pkg/metrics/README.md)
+- [Metrics Package](../pkg/metrics/metrics.go)
 
 ## Version History
 

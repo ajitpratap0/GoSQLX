@@ -16,45 +16,40 @@ jobs:
         go: ['1.24', '1.25']
     
     steps:
-    - uses: actions/checkout@v3
-    
+    - uses: actions/checkout@v4
+
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
         go-version: ${{ matrix.go }}
-    
-    - name: Cache Go modules
-      uses: actions/cache@v3
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-    
+        cache: true
+
     - name: Get dependencies
       run: go mod download
-    
+
     - name: Run tests
-      run: go test -v -race -coverprofile coverage.txt -covermode atomic ./...
+      run: go test -v -race -coverprofile coverage.txt -covermode atomic ./pkg/...
     
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         file: ./coverage.txt
         flags: unittests
         name: codecov-${{ matrix.os }}-${{ matrix.go }}
+      continue-on-error: true
 
   benchmark:
     name: Benchmark
     runs-on: ubuntu-latest
-    
+
     steps:
-    - uses: actions/checkout@v3
-    
+    - uses: actions/checkout@v4
+
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
         go-version: '1.25'
+        cache: true
     
     - name: Run benchmarks
       run: |

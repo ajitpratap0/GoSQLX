@@ -6,6 +6,7 @@ package parser
 import (
 	"fmt"
 
+	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
@@ -82,7 +83,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 				expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "bool"}
 				p.advance()
 			default:
-				return nil, fmt.Errorf("unexpected token for value: %s", p.currentToken.Type)
+				return nil, goerrors.UnexpectedTokenError(string(p.currentToken.Type), p.currentToken.Literal, models.Location{}, "")
 			}
 			values = append(values, expr)
 
@@ -248,7 +249,7 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 	// Parse target table
 	tableRef, err := p.parseTableReference()
 	if err != nil {
-		return nil, fmt.Errorf("error parsing MERGE target table: %w", err)
+		return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing MERGE target table", models.Location{}, "", err)
 	}
 	stmt.TargetTable = *tableRef
 
@@ -274,7 +275,7 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 	// Parse source table (could be a table or subquery)
 	sourceRef, err := p.parseTableReference()
 	if err != nil {
-		return nil, fmt.Errorf("error parsing MERGE source: %w", err)
+		return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing MERGE source", models.Location{}, "", err)
 	}
 	stmt.SourceTable = *sourceRef
 
@@ -299,7 +300,7 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 
 	onCondition, err := p.parseExpression()
 	if err != nil {
-		return nil, fmt.Errorf("error parsing MERGE ON condition: %w", err)
+		return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing MERGE ON condition", models.Location{}, "", err)
 	}
 	stmt.OnCondition = onCondition
 
@@ -313,7 +314,7 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 	}
 
 	if len(stmt.WhenClauses) == 0 {
-		return nil, fmt.Errorf("MERGE statement requires at least one WHEN clause")
+		return nil, goerrors.MissingClauseError("WHEN", models.Location{}, "")
 	}
 
 	return stmt, nil
@@ -356,7 +357,7 @@ func (p *Parser) parseMergeWhenClause() (*ast.MergeWhenClause, error) {
 		p.advance() // Consume AND
 		condition, err := p.parseExpression()
 		if err != nil {
-			return nil, fmt.Errorf("error parsing WHEN condition: %w", err)
+			return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing WHEN condition", models.Location{}, "", err)
 		}
 		clause.Condition = condition
 	}
@@ -419,7 +420,7 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 
 			value, err := p.parseExpression()
 			if err != nil {
-				return nil, fmt.Errorf("error parsing SET value: %w", err)
+				return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing SET value", models.Location{}, "", err)
 			}
 			setClause.Value = value
 			action.SetClauses = append(action.SetClauses, setClause)
@@ -431,7 +432,7 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 		}
 	} else if p.isType(models.TokenTypeInsert) {
 		if clauseType == "MATCHED" || clauseType == "NOT_MATCHED_BY_SOURCE" {
-			return nil, fmt.Errorf("INSERT not allowed in WHEN %s clause", clauseType)
+			return nil, goerrors.InvalidSyntaxError(fmt.Sprintf("INSERT not allowed in WHEN %s clause", clauseType), models.Location{}, "")
 		}
 		action.ActionType = "INSERT"
 		p.advance() // Consume INSERT
@@ -475,7 +476,7 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 			for {
 				value, err := p.parseExpression()
 				if err != nil {
-					return nil, fmt.Errorf("error parsing INSERT value: %w", err)
+					return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing INSERT value", models.Location{}, "", err)
 				}
 				action.Values = append(action.Values, value)
 
@@ -494,7 +495,7 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 		}
 	} else if p.isType(models.TokenTypeDelete) {
 		if clauseType == "NOT_MATCHED" {
-			return nil, fmt.Errorf("DELETE not allowed in WHEN NOT MATCHED clause")
+			return nil, goerrors.InvalidSyntaxError("DELETE not allowed in WHEN NOT MATCHED clause", models.Location{}, "")
 		}
 		action.ActionType = "DELETE"
 		p.advance() // Consume DELETE

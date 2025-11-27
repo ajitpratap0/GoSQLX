@@ -4,8 +4,7 @@
 package parser
 
 import (
-	"fmt"
-
+	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
@@ -19,7 +18,12 @@ func (p *Parser) parseGroupingExpressionList(keyword string) ([]ast.Expression, 
 
 	// Check for empty list - not allowed for ROLLUP/CUBE
 	if p.isType(models.TokenTypeRParen) {
-		return nil, fmt.Errorf("parsing failed: %s requires at least one expression", keyword)
+		// TODO: Add position tracking to parser for accurate error locations
+		return nil, goerrors.InvalidSyntaxError(
+			keyword+" requires at least one expression",
+			models.Location{}, // TODO: Track token positions in parser
+			"",                // TODO: Preserve original SQL in parser
+		)
 	}
 
 	// Parse comma-separated expressions

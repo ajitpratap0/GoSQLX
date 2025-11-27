@@ -267,6 +267,55 @@ gosqlx parse -f tree complex_query.sql
 gosqlx parse -f json query.sql > ast.json
 ```
 
+### `gosqlx watch`
+Monitor SQL files for changes and validate/format in real-time.
+
+```bash
+# Watch current directory for SQL file changes
+gosqlx watch
+
+# Watch specific directory with validation
+gosqlx watch ./queries --validate
+
+# Watch with formatting on save
+gosqlx watch ./queries --format
+
+# Watch with custom pattern
+gosqlx watch ./queries --pattern "*.sql"
+```
+
+**Options:**
+- `--validate`: Run validation on file changes
+- `--format`: Auto-format files on save
+- `--pattern PATTERN`: File pattern to watch (default: "*.sql")
+
+**Use Case:** Real-time SQL development with automatic validation/formatting
+
+### `gosqlx lint`
+Check SQL files for style issues and best practices.
+
+```bash
+# Lint SQL files
+gosqlx lint query.sql
+
+# Lint with specific rules
+gosqlx lint --rules L001,L002,L005 query.sql
+
+# Lint directory recursively
+gosqlx lint -r ./queries
+```
+
+**Available lint rules:**
+- L001: Missing semicolon at end of statement
+- L002: Inconsistent keyword casing
+- L005: Unused table alias
+
+**Options:**
+- `--rules RULES`: Comma-separated list of rule codes to check
+- `-r, --recursive`: Recursively process directories
+
+**Use Case:** Enforce SQL coding standards and best practices
+
 ## Global Flags
 
 - `-v, --verbose`: Enable verbose output

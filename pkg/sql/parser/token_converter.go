@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 
+	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
@@ -76,8 +77,11 @@ func (tc *TokenConverter) Convert(tokens []models.TokenWithSpan) (*ConversionRes
 		// Handle single tokens
 		convertedToken, err := tc.convertSingleToken(t)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert token at line %d, column %d: %w",
-				t.Start.Line, t.Start.Column, err)
+			return nil, goerrors.InvalidSyntaxError(
+				fmt.Sprintf("failed to convert token: %v", err),
+				t.Start,
+				"", // SQL context not available in token converter
+			)
 		}
 
 		tc.buffer = append(tc.buffer, convertedToken)

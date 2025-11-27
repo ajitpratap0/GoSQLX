@@ -136,10 +136,6 @@ func FuzzTokenizer(f *testing.F) {
 
 		// Verify error handling consistency
 		if err != nil {
-			// Error should be of correct type
-			if _, ok := err.(TokenizerError); !ok {
-				t.Errorf("Error should be TokenizerError, got %T: %v", err, err)
-			}
 			// Error message should not be empty
 			if err.Error() == "" {
 				t.Errorf("Error message should not be empty for input: %q", truncateForDisplay(data, 50))

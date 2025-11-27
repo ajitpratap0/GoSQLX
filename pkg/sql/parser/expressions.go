@@ -6,6 +6,7 @@ package parser
 import (
 	"fmt"
 
+	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
@@ -15,6 +16,7 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 	// Check context if available
 	if p.ctx != nil {
 		if err := p.ctx.Err(); err != nil {
+			// Context cancellation is not a syntax error, wrap it directly
 			return nil, fmt.Errorf("parsing cancelled: %w", err)
 		}
 	}
@@ -24,7 +26,12 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 	defer func() { p.depth-- }()
 
 	if p.depth > MaxRecursionDepth {
-		return nil, fmt.Errorf("maximum recursion depth exceeded (%d) - expression too deeply nested", MaxRecursionDepth)
+		return nil, goerrors.RecursionDepthLimitError(
+			p.depth,
+			MaxRecursionDepth,
+			models.Location{Line: 0, Column: 0},
+			"",
+		)
 	}
 
 	// Start by parsing AND expressions (higher precedence)
@@ -108,7 +115,11 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 		// Parse lower bound
 		lower, err := p.parsePrimaryExpression()
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse BETWEEN lower bound: %w", err)
+			return nil, goerrors.InvalidSyntaxError(
+				fmt.Sprintf("failed to parse BETWEEN lower bound: %v", err),
+				models.Location{Line: 0, Column: 0},
+				"",
+			)
 		}
 
 		// Expect AND keyword
@@ -120,7 +131,11 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 		// Parse upper bound
 		upper, err := p.parsePrimaryExpression()
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse BETWEEN upper bound: %w", err)
+			return nil, goerrors.InvalidSyntaxError(
+				fmt.Sprintf("failed to parse BETWEEN upper bound: %v", err),
+				models.Location{Line: 0, Column: 0},
+				"",
+			)
 		}
 
 		return &ast.BetweenExpression{
@@ -139,7 +154,11 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 		// Parse pattern
 		pattern, err := p.parsePrimaryExpression()
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse LIKE pattern: %w", err)
+			return nil, goerrors.InvalidSyntaxError(
+				fmt.Sprintf("failed to parse LIKE pattern: %v", err),
+				models.Location{Line: 0, Column: 0},
+				"",
+			)
 		}
 
 		return &ast.BinaryExpression{
@@ -165,7 +184,11 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			// Parse subquery
 			subquery, err := p.parseSubquery()
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse IN subquery: %w", err)
+				return nil, goerrors.InvalidSyntaxError(
+					fmt.Sprintf("failed to parse IN subquery: %v", err),
+					models.Location{Line: 0, Column: 0},
+					"",
+				)
 			}
 
 			// Expect closing parenthesis
@@ -186,7 +209,11 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 		for {
 			value, err := p.parseExpression()
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse IN value: %w", err)
+				return nil, goerrors.InvalidSyntaxError(
+					fmt.Sprintf("failed to parse IN value: %v", err),
+					models.Location{Line: 0, Column: 0},
+					"",
+				)
 			}
 			values = append(values, value)
 
@@ -210,7 +237,12 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	// If NOT was consumed but no BETWEEN/LIKE/IN follows, we need to handle this case
 	// Put back the NOT by creating a NOT expression with left as the operand
 	if notPrefix {
-		return nil, fmt.Errorf("expected BETWEEN, LIKE, or IN after NOT")
+		return nil, goerrors.ExpectedTokenError(
+			"BETWEEN, LIKE, or IN",
+			"NOT",
+			models.Location{Line: 0, Column: 0},
+			"",
+		)
 	}
 
 	// Check for IS NULL / IS NOT NULL
@@ -256,7 +288,11 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			// Parse subquery
 			subquery, err := p.parseSubquery()
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse %s subquery: %w", quantifier, err)
+				return nil, goerrors.InvalidSyntaxError(
+					fmt.Sprintf("failed to parse %s subquery: %v", quantifier, err),
+					models.Location{Line: 0, Column: 0},
+					"",
+				)
 			}
 
 			// Expect closing parenthesis
@@ -394,7 +430,11 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			// Parse subquery
 			subquery, err := p.parseSubquery()
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse subquery: %w", err)
+				return nil, goerrors.InvalidSyntaxError(
+					fmt.Sprintf("failed to parse subquery: %v", err),
+					models.Location{Line: 0, Column: 0},
+					"",
+				)
 			}
 			// Expect closing parenthesis
 			if !p.isType(models.TokenTypeRParen) {
@@ -431,7 +471,11 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		// Parse the subquery
 		subquery, err := p.parseSubquery()
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse EXISTS subquery: %w", err)
+			return nil, goerrors.InvalidSyntaxError(
+				fmt.Sprintf("failed to parse EXISTS subquery: %v", err),
+				models.Location{Line: 0, Column: 0},
+				"",
+			)
 		}
 
 		// Expect closing parenthesis
@@ -458,7 +502,11 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 
 			subquery, err := p.parseSubquery()
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse NOT EXISTS subquery: %w", err)
+				return nil, goerrors.InvalidSyntaxError(
+					fmt.Sprintf("failed to parse NOT EXISTS subquery: %v", err),
+					models.Location{Line: 0, Column: 0},
+					"",
+				)
 			}
 
 			if !p.isType(models.TokenTypeRParen) {
@@ -487,7 +535,12 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		}, nil
 	}
 
-	return nil, fmt.Errorf("unexpected token: %s", p.currentToken.Type)
+	return nil, goerrors.UnexpectedTokenError(
+		string(p.currentToken.Type),
+		p.currentToken.Literal,
+		models.Location{Line: 0, Column: 0},
+		"",
+	)
 }
 
 // parseCaseExpression parses a CASE expression (both simple and searched forms)
@@ -508,7 +561,11 @@ func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
 		// This is a simple CASE - parse the value expression
 		value, err := p.parseExpression()
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse CASE value: %w", err)
+			return nil, goerrors.InvalidSyntaxError(
+				fmt.Sprintf("failed to parse CASE value: %v", err),
+				models.Location{Line: 0, Column: 0},
+				"",
+			)
 		}
 		caseExpr.Value = value
 	}
@@ -520,7 +577,11 @@ func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
 		// Parse the condition/value expression
 		condition, err := p.parseExpression()
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse WHEN condition: %w", err)
+			return nil, goerrors.InvalidSyntaxError(
+				fmt.Sprintf("failed to parse WHEN condition: %v", err),
+				models.Location{Line: 0, Column: 0},
+				"",
+			)
 		}
 
 		// Expect THEN keyword
@@ -532,7 +593,11 @@ func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
 		// Parse the result expression
 		result, err := p.parseExpression()
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse THEN result: %w", err)
+			return nil, goerrors.InvalidSyntaxError(
+				fmt.Sprintf("failed to parse THEN result: %v", err),
+				models.Location{Line: 0, Column: 0},
+				"",
+			)
 		}
 
 		caseExpr.WhenClauses = append(caseExpr.WhenClauses, ast.WhenClause{
@@ -543,7 +608,11 @@ func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
 
 	// Check that we have at least one WHEN clause
 	if len(caseExpr.WhenClauses) == 0 {
-		return nil, fmt.Errorf("CASE expression requires at least one WHEN clause")
+		return nil, goerrors.InvalidSyntaxError(
+			"CASE expression requires at least one WHEN clause",
+			models.Location{Line: 0, Column: 0},
+			"",
+		)
 	}
 
 	// Parse optional ELSE clause
@@ -552,7 +621,11 @@ func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
 
 		elseResult, err := p.parseExpression()
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse ELSE result: %w", err)
+			return nil, goerrors.InvalidSyntaxError(
+				fmt.Sprintf("failed to parse ELSE result: %v", err),
+				models.Location{Line: 0, Column: 0},
+				"",
+			)
 		}
 		caseExpr.ElseClause = elseResult
 	}
@@ -579,7 +652,12 @@ func (p *Parser) parseSubquery() (ast.Statement, error) {
 		return p.parseSelectWithSetOperations()
 	}
 
-	return nil, fmt.Errorf("expected SELECT or WITH, got %s", p.currentToken.Type)
+	return nil, goerrors.ExpectedTokenError(
+		"SELECT or WITH",
+		string(p.currentToken.Type),
+		models.Location{Line: 0, Column: 0},
+		"",
+	)
 }
 
 // parseFunctionCall parses a function call with optional OVER clause for window functions.

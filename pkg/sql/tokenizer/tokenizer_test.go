@@ -4,6 +4,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
@@ -385,9 +386,9 @@ ORDER BY
 		t.Fatal("expected error for unterminated string literal")
 	}
 
-	tokErr, ok := err.(TokenizerError)
+	tokErr, ok := err.(*errors.Error)
 	if !ok {
-		t.Fatalf("expected TokenizerError, got %T", err)
+		t.Fatalf("expected *errors.Error, got %T", err)
 	}
 
 	if tokErr.Location.Line != 10 {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"unicode/utf8"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
@@ -42,19 +43,20 @@ func (r *StringLiteralReader) ReadStringLiteral() (models.Token, error) {
 		if ch == '\\' {
 			// Handle escape sequences
 			if err := r.handleEscapeSequence(&buf); err != nil {
-				return models.Token{}, TokenizerError{
-					Message:  fmt.Sprintf("invalid escape sequence at line %d, column %d", r.pos.Line, r.pos.Column),
-					Location: models.Location{Line: r.pos.Line, Column: r.pos.Column},
-				}
+				return models.Token{}, errors.InvalidSyntaxError(
+					fmt.Sprintf("invalid escape sequence: %v", err),
+					models.Location{Line: r.pos.Line, Column: r.pos.Column},
+					string(r.input),
+				)
 			}
 			continue
 		}
 
 		if ch == '\n' {
-			return models.Token{}, TokenizerError{
-				Message:  fmt.Sprintf("unterminated string literal starting at line %d, column %d", startPos.Line, startPos.Column),
-				Location: models.Location{Line: startPos.Line, Column: startPos.Column},
-			}
+			return models.Token{}, errors.UnterminatedStringError(
+				models.Location{Line: startPos.Line, Column: startPos.Column},
+				string(r.input),
+			)
 		}
 
 		if ch == r.quote {
@@ -85,10 +87,10 @@ func (r *StringLiteralReader) ReadStringLiteral() (models.Token, error) {
 		r.pos.Column++
 	}
 
-	return models.Token{}, TokenizerError{
-		Message:  fmt.Sprintf("unterminated string literal starting at line %d, column %d", startPos.Line, startPos.Column),
-		Location: models.Location{Line: startPos.Line, Column: startPos.Column},
-	}
+	return models.Token{}, errors.UnterminatedStringError(
+		models.Location{Line: startPos.Line, Column: startPos.Column},
+		string(r.input),
+	)
 }
 
 // handleEscapeSequence processes escape sequences in string literals

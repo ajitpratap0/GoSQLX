@@ -196,6 +196,36 @@ if err := gosqlx.Validate("SELECT * FROM users"); err != nil {
 
 ---
 
+#### `ValidateMultiple(queries []string) error`
+
+Validates multiple SQL queries in a batch operation.
+
+```go
+queries := []string{
+    "SELECT * FROM users",
+    "INSERT INTO logs (msg) VALUES ('test')",
+    "UPDATE users SET name = 'John' WHERE id = 1",
+}
+if err := gosqlx.ValidateMultiple(queries); err != nil {
+    log.Fatal("Validation failed:", err)
+}
+```
+
+**Parameters:**
+- `queries`: A slice of SQL query strings to validate
+
+**Returns:**
+- `error`: First validation error encountered, or nil if all queries are valid
+
+**Benefits:**
+- Reuses tokenizer and parser objects across queries
+- More efficient than calling `Validate()` individually
+- Ideal for batch validation scenarios
+
+**Use Case:** Validating multiple SQL queries efficiently
+
+---
+
 ### Metadata Extraction
 
 #### `ExtractTables(astNode *ast.AST) []string`

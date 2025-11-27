@@ -4,9 +4,9 @@
 package parser
 
 import (
-	"fmt"
 	"strings"
 
+	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
@@ -141,7 +141,13 @@ func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStat
 
 	query, err := p.parseSelectWithSetOperations()
 	if err != nil {
-		return nil, fmt.Errorf("error parsing view query: %v", err)
+		return nil, goerrors.WrapError(
+			goerrors.ErrCodeInvalidSyntax,
+			"error parsing view query",
+			models.Location{}, // Location not available in current parser implementation
+			"",                // SQL not available in current parser implementation
+			err,
+		)
 	}
 	stmt.Query = query
 
@@ -249,7 +255,13 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 
 	query, err := p.parseSelectWithSetOperations()
 	if err != nil {
-		return nil, fmt.Errorf("error parsing materialized view query: %v", err)
+		return nil, goerrors.WrapError(
+			goerrors.ErrCodeInvalidSyntax,
+			"error parsing materialized view query",
+			models.Location{}, // Location not available in current parser implementation
+			"",                // SQL not available in current parser implementation
+			err,
+		)
 	}
 	stmt.Query = query
 

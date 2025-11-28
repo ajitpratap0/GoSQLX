@@ -56,11 +56,12 @@ func (w WithClause) Children() []Node {
 // CommonTableExpr represents a single Common Table Expression in a WITH clause.
 // It supports optional column specifications and any statement type as the CTE query.
 // Phase 2 Complete: Full parser support with column specifications.
+// Phase 2.6: Added MATERIALIZED/NOT MATERIALIZED support for query optimization hints.
 type CommonTableExpr struct {
 	Name         string
 	Columns      []string
 	Statement    Statement
-	Materialized *bool // TODO: Add MATERIALIZED/NOT MATERIALIZED parsing support
+	Materialized *bool // nil = default, true = MATERIALIZED, false = NOT MATERIALIZED
 }
 
 func (c *CommonTableExpr) statementNode()      {}
@@ -113,11 +114,27 @@ func (t *TableReference) statementNode()      {}
 func (t TableReference) TokenLiteral() string { return t.Name }
 func (t TableReference) Children() []Node     { return nil }
 
+// OrderByExpression represents an ORDER BY clause element with direction and NULL ordering
+type OrderByExpression struct {
+	Expression Expression // The expression to order by
+	Ascending  bool       // true for ASC (default), false for DESC
+	NullsFirst *bool      // nil = default behavior, true = NULLS FIRST, false = NULLS LAST
+}
+
+func (*OrderByExpression) expressionNode()        {}
+func (o *OrderByExpression) TokenLiteral() string { return "ORDER BY" }
+func (o *OrderByExpression) Children() []Node {
+	if o.Expression != nil {
+		return []Node{o.Expression}
+	}
+	return nil
+}
+
 // WindowSpec represents a window specification
 type WindowSpec struct {
 	Name        string
 	PartitionBy []Expression
-	OrderBy     []Expression
+	OrderBy     []OrderByExpression
 	FrameClause *WindowFrame
 }
 
@@ -126,7 +143,10 @@ func (w WindowSpec) TokenLiteral() string { return "WINDOW" }
 func (w WindowSpec) Children() []Node {
 	children := make([]Node, 0)
 	children = append(children, nodifyExpressions(w.PartitionBy)...)
-	children = append(children, nodifyExpressions(w.OrderBy)...)
+	for _, orderBy := range w.OrderBy {
+		orderBy := orderBy // G601: Create local copy to avoid memory aliasing
+		children = append(children, &orderBy)
+	}
 	if w.FrameClause != nil {
 		children = append(children, w.FrameClause)
 	}
@@ -150,6 +170,20 @@ type WindowFrameBound struct {
 	Value Expression
 }
 
+func (w *WindowFrameBound) expressionNode() {}
+func (w WindowFrameBound) TokenLiteral() string {
+	if w.Type != "" {
+		return w.Type
+	}
+	return "BOUND"
+}
+func (w WindowFrameBound) Children() []Node {
+	if w.Value != nil {
+		return []Node{w.Value}
+	}
+	return nil
+}
+
 // SelectStatement represents a SELECT SQL statement
 type SelectStatement struct {
 	With      *WithClause
@@ -162,10 +196,34 @@ type SelectStatement struct {
 	GroupBy   []Expression
 	Having    Expression
 	Windows   []WindowSpec
-	OrderBy   []Expression
+	OrderBy   []OrderByExpression
 	Limit     *int
 	Offset    *int
+	Fetch     *FetchClause // SQL-99 FETCH FIRST/NEXT clause (F861, F862)
 }
+
+// FetchClause represents the SQL-99 FETCH FIRST/NEXT clause (F861, F862)
+// Syntax: [OFFSET n {ROW | ROWS}] FETCH {FIRST | NEXT} n [{ROW | ROWS}] {ONLY | WITH TIES}
+// Examples:
+//   - OFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY
+//   - FETCH FIRST 5 ROWS ONLY
+//   - FETCH FIRST 10 PERCENT ROWS WITH TIES
+type FetchClause struct {
+	// OffsetValue is the number of rows to skip (OFFSET n ROWS)
+	OffsetValue *int64
+	// FetchValue is the number of rows to fetch (FETCH n ROWS)
+	FetchValue *int64
+	// FetchType is either "FIRST" or "NEXT"
+	FetchType string
+	// IsPercent indicates FETCH ... PERCENT ROWS
+	IsPercent bool
+	// WithTies indicates FETCH ... WITH TIES (includes tied rows)
+	WithTies bool
+}
+
+func (f *FetchClause) expressionNode()     {}
+func (f FetchClause) TokenLiteral() string { return "FETCH" }
+func (f FetchClause) Children() []Node     { return nil }
 
 func (s *SelectStatement) statementNode()      {}
 func (s SelectStatement) TokenLiteral() string { return "SELECT" }
@@ -177,9 +235,11 @@ func (s SelectStatement) Children() []Node {
 	}
 	children = append(children, nodifyExpressions(s.Columns)...)
 	for _, from := range s.From {
+		from := from // G601: Create local copy to avoid memory aliasing
 		children = append(children, &from)
 	}
 	for _, join := range s.Joins {
+		join := join // G601: Create local copy to avoid memory aliasing
 		children = append(children, &join)
 	}
 	if s.Where != nil {
@@ -190,9 +250,16 @@ func (s SelectStatement) Children() []Node {
 		children = append(children, s.Having)
 	}
 	for _, window := range s.Windows {
+		window := window // G601: Create local copy to avoid memory aliasing
 		children = append(children, &window)
 	}
-	children = append(children, nodifyExpressions(s.OrderBy)...)
+	for _, orderBy := range s.OrderBy {
+		orderBy := orderBy // G601: Create local copy to avoid memory aliasing
+		children = append(children, &orderBy)
+	}
+	if s.Fetch != nil {
+		children = append(children, s.Fetch)
+	}
 	return children
 }
 
@@ -203,6 +270,49 @@ func nodifyExpressions(exprs []Expression) []Node {
 		nodes[i] = expr
 	}
 	return nodes
+}
+
+// RollupExpression represents ROLLUP(col1, col2, ...) in GROUP BY clause
+// ROLLUP generates hierarchical grouping sets from right to left
+// Example: ROLLUP(a, b, c) generates grouping sets:
+//
+//	(a, b, c), (a, b), (a), ()
+type RollupExpression struct {
+	Expressions []Expression
+}
+
+func (r *RollupExpression) expressionNode()     {}
+func (r RollupExpression) TokenLiteral() string { return "ROLLUP" }
+func (r RollupExpression) Children() []Node     { return nodifyExpressions(r.Expressions) }
+
+// CubeExpression represents CUBE(col1, col2, ...) in GROUP BY clause
+// CUBE generates all possible combinations of grouping sets
+// Example: CUBE(a, b) generates grouping sets:
+//
+//	(a, b), (a), (b), ()
+type CubeExpression struct {
+	Expressions []Expression
+}
+
+func (c *CubeExpression) expressionNode()     {}
+func (c CubeExpression) TokenLiteral() string { return "CUBE" }
+func (c CubeExpression) Children() []Node     { return nodifyExpressions(c.Expressions) }
+
+// GroupingSetsExpression represents GROUPING SETS(...) in GROUP BY clause
+// Allows explicit specification of grouping sets
+// Example: GROUPING SETS((a, b), (a), ())
+type GroupingSetsExpression struct {
+	Sets [][]Expression // Each inner slice is one grouping set
+}
+
+func (g *GroupingSetsExpression) expressionNode()     {}
+func (g GroupingSetsExpression) TokenLiteral() string { return "GROUPING SETS" }
+func (g GroupingSetsExpression) Children() []Node {
+	children := make([]Node, 0)
+	for _, set := range g.Sets {
+		children = append(children, nodifyExpressions(set)...)
+	}
+	return children
 }
 
 // Identifier represents a column or table name
@@ -252,6 +362,7 @@ func (c CaseExpression) Children() []Node {
 		children = append(children, c.Value)
 	}
 	for _, when := range c.WhenClauses {
+		when := when // G601: Create local copy to avoid memory aliasing
 		children = append(children, &when)
 	}
 	if c.ElseClause != nil {
@@ -283,20 +394,56 @@ func (e ExistsExpression) Children() []Node {
 	return []Node{e.Subquery}
 }
 
-// InExpression represents expr IN (values)
+// InExpression represents expr IN (values) or expr IN (subquery)
 type InExpression struct {
-	Expr Expression
-	List []Expression
-	Not  bool
+	Expr     Expression
+	List     []Expression // For value list: IN (1, 2, 3)
+	Subquery Statement    // For subquery: IN (SELECT ...)
+	Not      bool
 }
 
 func (i *InExpression) expressionNode()     {}
 func (i InExpression) TokenLiteral() string { return "IN" }
 func (i InExpression) Children() []Node {
 	children := []Node{i.Expr}
-	children = append(children, nodifyExpressions(i.List)...)
+	if i.Subquery != nil {
+		children = append(children, i.Subquery)
+	} else {
+		children = append(children, nodifyExpressions(i.List)...)
+	}
 	return children
 }
+
+// SubqueryExpression represents a scalar subquery (SELECT ...)
+type SubqueryExpression struct {
+	Subquery Statement
+}
+
+func (s *SubqueryExpression) expressionNode()     {}
+func (s SubqueryExpression) TokenLiteral() string { return "SUBQUERY" }
+func (s SubqueryExpression) Children() []Node     { return []Node{s.Subquery} }
+
+// AnyExpression represents expr op ANY (subquery)
+type AnyExpression struct {
+	Expr     Expression
+	Operator string
+	Subquery Statement
+}
+
+func (a *AnyExpression) expressionNode()     {}
+func (a AnyExpression) TokenLiteral() string { return "ANY" }
+func (a AnyExpression) Children() []Node     { return []Node{a.Expr, a.Subquery} }
+
+// AllExpression represents expr op ALL (subquery)
+type AllExpression struct {
+	Expr     Expression
+	Operator string
+	Subquery Statement
+}
+
+func (al *AllExpression) expressionNode()     {}
+func (al AllExpression) TokenLiteral() string { return "ALL" }
+func (al AllExpression) Children() []Node     { return []Node{al.Expr, al.Subquery} }
 
 // BetweenExpression represents expr BETWEEN lower AND upper
 type BetweenExpression struct {
@@ -456,6 +603,7 @@ func (o OnConflict) Children() []Node {
 	children := nodifyExpressions(o.Target)
 	if o.Action.DoUpdate != nil {
 		for _, update := range o.Action.DoUpdate {
+			update := update // G601: Create local copy to avoid memory aliasing
 			children = append(children, &update)
 		}
 	}
@@ -479,6 +627,7 @@ func (u UpsertClause) TokenLiteral() string { return "ON DUPLICATE KEY UPDATE" }
 func (u UpsertClause) Children() []Node {
 	children := make([]Node, len(u.Updates))
 	for i, update := range u.Updates {
+		update := update // G601: Create local copy to avoid memory aliasing
 		children[i] = &update
 	}
 	return children
@@ -520,12 +669,15 @@ func (u UpdateStatement) Children() []Node {
 		children = append(children, u.With)
 	}
 	for _, update := range u.Updates {
+		update := update // G601: Create local copy to avoid memory aliasing
 		children = append(children, &update)
 	}
 	for _, assignment := range u.Assignments {
+		assignment := assignment // G601: Create local copy to avoid memory aliasing
 		children = append(children, &assignment)
 	}
 	for _, from := range u.From {
+		from := from // G601: Create local copy to avoid memory aliasing
 		children = append(children, &from)
 	}
 	if u.Where != nil {
@@ -544,6 +696,7 @@ type CreateTableStatement struct {
 	Constraints []TableConstraint
 	Inherits    []string
 	PartitionBy *PartitionBy
+	Partitions  []PartitionDefinition // Individual partition definitions
 	Options     []TableOption
 }
 
@@ -552,13 +705,19 @@ func (c CreateTableStatement) TokenLiteral() string { return "CREATE TABLE" }
 func (c CreateTableStatement) Children() []Node {
 	children := make([]Node, 0)
 	for _, col := range c.Columns {
+		col := col // G601: Create local copy to avoid memory aliasing
 		children = append(children, &col)
 	}
 	for _, constraint := range c.Constraints {
+		constraint := constraint // G601: Create local copy to avoid memory aliasing
 		children = append(children, &constraint)
 	}
 	if c.PartitionBy != nil {
 		children = append(children, c.PartitionBy)
+	}
+	for _, p := range c.Partitions {
+		p := p // G601: Create local copy
+		children = append(children, &p)
 	}
 	return children
 }
@@ -575,6 +734,7 @@ func (c ColumnDef) TokenLiteral() string { return c.Name }
 func (c ColumnDef) Children() []Node {
 	children := make([]Node, len(c.Constraints))
 	for i, constraint := range c.Constraints {
+		constraint := constraint // G601: Create local copy to avoid memory aliasing
 		children[i] = &constraint
 	}
 	return children
@@ -690,6 +850,7 @@ func (d DeleteStatement) Children() []Node {
 		children = append(children, d.With)
 	}
 	for _, using := range d.Using {
+		using := using // G601: Create local copy to avoid memory aliasing
 		children = append(children, &using)
 	}
 	if d.Where != nil {
@@ -710,6 +871,7 @@ func (a AlterTableStatement) TokenLiteral() string { return "ALTER TABLE" }
 func (a AlterTableStatement) Children() []Node {
 	children := make([]Node, len(a.Actions))
 	for i, action := range a.Actions {
+		action := action // G601: Create local copy to avoid memory aliasing
 		children[i] = &action
 	}
 	return children
@@ -752,6 +914,7 @@ func (c CreateIndexStatement) TokenLiteral() string { return "CREATE INDEX" }
 func (c CreateIndexStatement) Children() []Node {
 	children := make([]Node, 0)
 	for _, col := range c.Columns {
+		col := col // G601: Create local copy to avoid memory aliasing
 		children = append(children, &col)
 	}
 	if c.Where != nil {
@@ -771,6 +934,208 @@ type IndexColumn struct {
 func (i *IndexColumn) expressionNode()     {}
 func (i IndexColumn) TokenLiteral() string { return i.Column }
 func (i IndexColumn) Children() []Node     { return nil }
+
+// MergeStatement represents a MERGE statement (SQL:2003 F312)
+// Syntax: MERGE INTO target USING source ON condition
+//
+//	WHEN MATCHED THEN UPDATE/DELETE
+//	WHEN NOT MATCHED THEN INSERT
+//	WHEN NOT MATCHED BY SOURCE THEN UPDATE/DELETE
+type MergeStatement struct {
+	TargetTable TableReference     // The table being merged into
+	TargetAlias string             // Optional alias for target
+	SourceTable TableReference     // The source table or subquery
+	SourceAlias string             // Optional alias for source
+	OnCondition Expression         // The join/match condition
+	WhenClauses []*MergeWhenClause // List of WHEN clauses
+}
+
+func (m *MergeStatement) statementNode()      {}
+func (m MergeStatement) TokenLiteral() string { return "MERGE" }
+func (m MergeStatement) Children() []Node {
+	children := []Node{&m.TargetTable, &m.SourceTable}
+	if m.OnCondition != nil {
+		children = append(children, m.OnCondition)
+	}
+	for _, when := range m.WhenClauses {
+		children = append(children, when)
+	}
+	return children
+}
+
+// MergeWhenClause represents a WHEN clause in a MERGE statement
+// Types: MATCHED, NOT_MATCHED, NOT_MATCHED_BY_SOURCE
+type MergeWhenClause struct {
+	Type      string       // "MATCHED", "NOT_MATCHED", "NOT_MATCHED_BY_SOURCE"
+	Condition Expression   // Optional AND condition
+	Action    *MergeAction // The action to perform (UPDATE/INSERT/DELETE)
+}
+
+func (w *MergeWhenClause) expressionNode()     {}
+func (w MergeWhenClause) TokenLiteral() string { return "WHEN " + w.Type }
+func (w MergeWhenClause) Children() []Node {
+	children := make([]Node, 0)
+	if w.Condition != nil {
+		children = append(children, w.Condition)
+	}
+	if w.Action != nil {
+		children = append(children, w.Action)
+	}
+	return children
+}
+
+// MergeAction represents the action in a WHEN clause
+// ActionType: UPDATE, INSERT, DELETE
+type MergeAction struct {
+	ActionType    string       // "UPDATE", "INSERT", "DELETE"
+	SetClauses    []SetClause  // For UPDATE: SET column = value pairs
+	Columns       []string     // For INSERT: column list
+	Values        []Expression // For INSERT: value list
+	DefaultValues bool         // For INSERT: use DEFAULT VALUES
+}
+
+func (a *MergeAction) expressionNode()     {}
+func (a MergeAction) TokenLiteral() string { return a.ActionType }
+func (a MergeAction) Children() []Node {
+	children := make([]Node, 0)
+	for _, set := range a.SetClauses {
+		set := set // G601: Create local copy
+		children = append(children, &set)
+	}
+	for _, val := range a.Values {
+		children = append(children, val)
+	}
+	return children
+}
+
+// SetClause represents a SET clause in UPDATE (also used in MERGE UPDATE)
+type SetClause struct {
+	Column string
+	Value  Expression
+}
+
+func (s *SetClause) expressionNode()     {}
+func (s SetClause) TokenLiteral() string { return s.Column }
+func (s SetClause) Children() []Node {
+	if s.Value != nil {
+		return []Node{s.Value}
+	}
+	return nil
+}
+
+// CreateViewStatement represents a CREATE VIEW statement
+// Syntax: CREATE [OR REPLACE] [TEMP|TEMPORARY] VIEW [IF NOT EXISTS] name [(columns)] AS select
+type CreateViewStatement struct {
+	OrReplace   bool
+	Temporary   bool
+	IfNotExists bool
+	Name        string
+	Columns     []string  // Optional column list
+	Query       Statement // The SELECT statement
+	WithOption  string    // PostgreSQL: WITH (CHECK OPTION | CASCADED | LOCAL)
+}
+
+func (c *CreateViewStatement) statementNode()      {}
+func (c CreateViewStatement) TokenLiteral() string { return "CREATE VIEW" }
+func (c CreateViewStatement) Children() []Node {
+	if c.Query != nil {
+		return []Node{c.Query}
+	}
+	return nil
+}
+
+// CreateMaterializedViewStatement represents a CREATE MATERIALIZED VIEW statement
+// Syntax: CREATE MATERIALIZED VIEW [IF NOT EXISTS] name [(columns)] AS select [WITH [NO] DATA]
+type CreateMaterializedViewStatement struct {
+	IfNotExists bool
+	Name        string
+	Columns     []string  // Optional column list
+	Query       Statement // The SELECT statement
+	WithData    *bool     // nil = default, true = WITH DATA, false = WITH NO DATA
+	Tablespace  string    // Optional tablespace (PostgreSQL)
+}
+
+func (c *CreateMaterializedViewStatement) statementNode()      {}
+func (c CreateMaterializedViewStatement) TokenLiteral() string { return "CREATE MATERIALIZED VIEW" }
+func (c CreateMaterializedViewStatement) Children() []Node {
+	if c.Query != nil {
+		return []Node{c.Query}
+	}
+	return nil
+}
+
+// RefreshMaterializedViewStatement represents a REFRESH MATERIALIZED VIEW statement
+// Syntax: REFRESH MATERIALIZED VIEW [CONCURRENTLY] name [WITH [NO] DATA]
+type RefreshMaterializedViewStatement struct {
+	Concurrently bool
+	Name         string
+	WithData     *bool // nil = default, true = WITH DATA, false = WITH NO DATA
+}
+
+func (r *RefreshMaterializedViewStatement) statementNode()      {}
+func (r RefreshMaterializedViewStatement) TokenLiteral() string { return "REFRESH MATERIALIZED VIEW" }
+func (r RefreshMaterializedViewStatement) Children() []Node     { return nil }
+
+// DropStatement represents a DROP statement for tables, views, indexes, etc.
+// Syntax: DROP object_type [IF EXISTS] name [CASCADE|RESTRICT]
+type DropStatement struct {
+	ObjectType  string // TABLE, VIEW, MATERIALIZED VIEW, INDEX, etc.
+	IfExists    bool
+	Names       []string // Can drop multiple objects
+	CascadeType string   // CASCADE, RESTRICT, or empty
+}
+
+func (d *DropStatement) statementNode()      {}
+func (d DropStatement) TokenLiteral() string { return "DROP " + d.ObjectType }
+func (d DropStatement) Children() []Node     { return nil }
+
+// TruncateStatement represents a TRUNCATE TABLE statement
+// Syntax: TRUNCATE [TABLE] table_name [, table_name ...] [RESTART IDENTITY | CONTINUE IDENTITY] [CASCADE | RESTRICT]
+type TruncateStatement struct {
+	Tables           []string // Table names to truncate
+	RestartIdentity  bool     // RESTART IDENTITY - reset sequences
+	ContinueIdentity bool     // CONTINUE IDENTITY - keep sequences (default)
+	CascadeType      string   // CASCADE, RESTRICT, or empty
+}
+
+func (t *TruncateStatement) statementNode()      {}
+func (t TruncateStatement) TokenLiteral() string { return "TRUNCATE TABLE" }
+func (t TruncateStatement) Children() []Node     { return nil }
+
+// PartitionDefinition represents a partition definition in CREATE TABLE
+// Syntax: PARTITION name VALUES { LESS THAN (expr) | IN (list) | FROM (expr) TO (expr) }
+type PartitionDefinition struct {
+	Name       string
+	Type       string       // FOR VALUES, IN, LESS THAN
+	Values     []Expression // Partition values or bounds
+	LessThan   Expression   // For RANGE: LESS THAN (value)
+	From       Expression   // For RANGE: FROM (value)
+	To         Expression   // For RANGE: TO (value)
+	InValues   []Expression // For LIST: IN (values)
+	Tablespace string       // Optional tablespace
+}
+
+func (p *PartitionDefinition) expressionNode()     {}
+func (p PartitionDefinition) TokenLiteral() string { return "PARTITION " + p.Name }
+func (p PartitionDefinition) Children() []Node {
+	children := make([]Node, 0)
+	for _, v := range p.Values {
+		children = append(children, v)
+	}
+	if p.LessThan != nil {
+		children = append(children, p.LessThan)
+	}
+	if p.From != nil {
+		children = append(children, p.From)
+	}
+	if p.To != nil {
+		children = append(children, p.To)
+	}
+	for _, v := range p.InValues {
+		children = append(children, v)
+	}
+	return children
+}
 
 // AST represents the root of the Abstract Syntax Tree
 type AST struct {

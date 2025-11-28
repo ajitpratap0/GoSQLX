@@ -37,7 +37,12 @@ func convertTokensForWindowFunctions(tokens []models.TokenWithSpan) []token.Toke
 				t.Token.Value == "PRECEDING" || t.Token.Value == "FOLLOWING" ||
 				t.Token.Value == "DESC" || t.Token.Value == "ASC" ||
 				t.Token.Value == "BETWEEN" || t.Token.Value == "AND" ||
-				t.Token.Value == "ROW" {
+				t.Token.Value == "ROW" || t.Token.Value == "NULLS" ||
+				t.Token.Value == "FIRST" || t.Token.Value == "LAST" ||
+				// FETCH clause keywords (SQL-99 F861, F862)
+				t.Token.Value == "FETCH" || t.Token.Value == "NEXT" ||
+				t.Token.Value == "ONLY" || t.Token.Value == "TIES" ||
+				t.Token.Value == "PERCENT" || t.Token.Value == "OFFSET" {
 				tokenType = token.Type(t.Token.Value)
 			} else {
 				tokenType = "IDENT"
@@ -61,6 +66,27 @@ func convertTokensForWindowFunctions(tokens []models.TokenWithSpan) []token.Toke
 			tokenType = "AND"
 		case models.TokenTypeBetween:
 			tokenType = "BETWEEN"
+		// FETCH clause token types (SQL-99 F861, F862)
+		case models.TokenTypeFetch:
+			tokenType = "FETCH"
+		case models.TokenTypeNext:
+			tokenType = "NEXT"
+		case models.TokenTypeTies:
+			tokenType = "TIES"
+		case models.TokenTypePercent:
+			tokenType = "PERCENT"
+		case models.TokenTypeOnly:
+			tokenType = "ONLY"
+		case models.TokenTypeOffset:
+			tokenType = "OFFSET"
+		case models.TokenTypeFirst:
+			tokenType = "FIRST"
+		case models.TokenTypeLast:
+			tokenType = "LAST"
+		case models.TokenTypeRows:
+			tokenType = "ROWS"
+		case models.TokenTypeRow:
+			tokenType = "ROW"
 		case models.TokenTypeSum:
 			tokenType = "IDENT" // Treat SUM as identifier for function calls
 		case models.TokenTypeCount:

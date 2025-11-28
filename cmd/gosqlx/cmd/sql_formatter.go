@@ -80,6 +80,14 @@ func (f *SQLFormatter) formatStatement(stmt ast.Statement) error {
 		return f.formatCreateIndex(s)
 	case *ast.AlterTableStatement:
 		return f.formatAlterTable(s)
+	case *ast.DropStatement:
+		return f.formatDrop(s)
+	case *ast.CreateViewStatement:
+		return f.formatCreateView(s)
+	case *ast.CreateMaterializedViewStatement:
+		return f.formatCreateMaterializedView(s)
+	case *ast.RefreshMaterializedViewStatement:
+		return f.formatRefreshMaterializedView(s)
 	default:
 		return fmt.Errorf("unsupported statement type: %T", stmt)
 	}
@@ -122,6 +130,7 @@ func (f *SQLFormatter) formatSelect(stmt *ast.SelectStatement) error {
 
 	// JOINs
 	for _, join := range stmt.Joins {
+		join := join // G601: Create local copy to avoid memory aliasing
 		f.writeNewline()
 		if err := f.formatJoin(&join); err != nil {
 			return err
@@ -161,7 +170,28 @@ func (f *SQLFormatter) formatSelect(stmt *ast.SelectStatement) error {
 		f.writeNewline()
 		f.writeKeyword("ORDER BY")
 		f.builder.WriteString(" ")
-		f.formatExpressionList(stmt.OrderBy, ", ")
+		for i, orderBy := range stmt.OrderBy {
+			if i > 0 {
+				f.builder.WriteString(", ")
+			}
+			if orderBy.Expression != nil {
+				if err := f.formatExpression(orderBy.Expression); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to format ORDER BY expression: %v\n", err)
+				}
+			}
+			// Add ASC/DESC
+			if !orderBy.Ascending {
+				f.builder.WriteString(" DESC")
+			}
+			// Add NULLS FIRST/LAST if specified
+			if orderBy.NullsFirst != nil {
+				if *orderBy.NullsFirst {
+					f.builder.WriteString(" NULLS FIRST")
+				} else {
+					f.builder.WriteString(" NULLS LAST")
+				}
+			}
+		}
 	}
 
 	// LIMIT clause
@@ -228,6 +258,7 @@ func (f *SQLFormatter) formatUpdate(stmt *ast.UpdateStatement) error {
 		}
 
 		for i, update := range updates {
+			update := update // G601: Create local copy to avoid memory aliasing
 			if i > 0 {
 				f.builder.WriteString(", ")
 			}
@@ -293,6 +324,7 @@ func (f *SQLFormatter) formatCreateTable(stmt *ast.CreateTableStatement) error {
 	}
 
 	for i, col := range stmt.Columns {
+		col := col // G601: Create local copy to avoid memory aliasing
 		if i > 0 {
 			f.builder.WriteString(",")
 			if !f.compact {
@@ -356,6 +388,7 @@ func (f *SQLFormatter) formatAlterTable(stmt *ast.AlterTableStatement) error {
 	f.builder.WriteString(" " + stmt.Table)
 
 	for i, action := range stmt.Actions {
+		action := action // G601: Create local copy to avoid memory aliasing
 		if i > 0 {
 			f.builder.WriteString(",")
 		}
@@ -533,7 +566,26 @@ func (f *SQLFormatter) formatWindowSpec(spec *ast.WindowSpec) error {
 		}
 		f.writeKeyword("ORDER BY")
 		f.builder.WriteString(" ")
-		f.formatExpressionList(spec.OrderBy, ", ")
+		for i, orderBy := range spec.OrderBy {
+			if i > 0 {
+				f.builder.WriteString(", ")
+			}
+			if orderBy.Expression != nil {
+				if err := f.formatExpression(orderBy.Expression); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to format window ORDER BY expression: %v\n", err)
+				}
+			}
+			if !orderBy.Ascending {
+				f.builder.WriteString(" DESC")
+			}
+			if orderBy.NullsFirst != nil {
+				if *orderBy.NullsFirst {
+					f.builder.WriteString(" NULLS FIRST")
+				} else {
+					f.builder.WriteString(" NULLS LAST")
+				}
+			}
+		}
 	}
 
 	if spec.FrameClause != nil {
@@ -570,6 +622,7 @@ func (f *SQLFormatter) formatExpressionList(exprs []ast.Expression, separator st
 
 func (f *SQLFormatter) formatTableReferences(tables []ast.TableReference) {
 	for i, table := range tables {
+		table := table // G601: Create local copy to avoid memory aliasing
 		if i > 0 {
 			f.builder.WriteString(", ")
 		}
@@ -642,4 +695,140 @@ func (f *SQLFormatter) currentIndent() string {
 		return ""
 	}
 	return strings.Repeat(f.indent, f.newlineLevel)
+}
+
+// formatDrop formats DROP statements
+func (f *SQLFormatter) formatDrop(stmt *ast.DropStatement) error {
+	f.writeKeyword("DROP")
+	f.builder.WriteString(" ")
+	f.writeKeyword(stmt.ObjectType)
+
+	if stmt.IfExists {
+		f.builder.WriteString(" ")
+		f.writeKeyword("IF EXISTS")
+	}
+
+	for i, name := range stmt.Names {
+		if i > 0 {
+			f.builder.WriteString(",")
+		}
+		f.builder.WriteString(" " + name)
+	}
+
+	if stmt.CascadeType != "" {
+		f.builder.WriteString(" ")
+		f.writeKeyword(stmt.CascadeType)
+	}
+
+	return nil
+}
+
+// formatCreateView formats CREATE VIEW statements
+func (f *SQLFormatter) formatCreateView(stmt *ast.CreateViewStatement) error {
+	f.writeKeyword("CREATE")
+	if stmt.OrReplace {
+		f.builder.WriteString(" ")
+		f.writeKeyword("OR REPLACE")
+	}
+	if stmt.Temporary {
+		f.builder.WriteString(" ")
+		f.writeKeyword("TEMPORARY")
+	}
+	f.builder.WriteString(" ")
+	f.writeKeyword("VIEW")
+
+	if stmt.IfNotExists {
+		f.builder.WriteString(" ")
+		f.writeKeyword("IF NOT EXISTS")
+	}
+
+	f.builder.WriteString(" " + stmt.Name)
+
+	if len(stmt.Columns) > 0 {
+		f.builder.WriteString(" (")
+		for i, col := range stmt.Columns {
+			if i > 0 {
+				f.builder.WriteString(", ")
+			}
+			f.builder.WriteString(col)
+		}
+		f.builder.WriteString(")")
+	}
+
+	f.builder.WriteString(" ")
+	f.writeKeyword("AS")
+	f.writeNewline()
+	f.increaseIndent()
+	if err := f.formatStatement(stmt.Query); err != nil {
+		return err
+	}
+	f.decreaseIndent()
+
+	return nil
+}
+
+// formatCreateMaterializedView formats CREATE MATERIALIZED VIEW statements
+func (f *SQLFormatter) formatCreateMaterializedView(stmt *ast.CreateMaterializedViewStatement) error {
+	f.writeKeyword("CREATE MATERIALIZED VIEW")
+
+	if stmt.IfNotExists {
+		f.builder.WriteString(" ")
+		f.writeKeyword("IF NOT EXISTS")
+	}
+
+	f.builder.WriteString(" " + stmt.Name)
+
+	if len(stmt.Columns) > 0 {
+		f.builder.WriteString(" (")
+		for i, col := range stmt.Columns {
+			if i > 0 {
+				f.builder.WriteString(", ")
+			}
+			f.builder.WriteString(col)
+		}
+		f.builder.WriteString(")")
+	}
+
+	f.builder.WriteString(" ")
+	f.writeKeyword("AS")
+	f.writeNewline()
+	f.increaseIndent()
+	if err := f.formatStatement(stmt.Query); err != nil {
+		return err
+	}
+	f.decreaseIndent()
+
+	if stmt.WithData != nil {
+		f.writeNewline()
+		if *stmt.WithData {
+			f.writeKeyword("WITH DATA")
+		} else {
+			f.writeKeyword("WITH NO DATA")
+		}
+	}
+
+	return nil
+}
+
+// formatRefreshMaterializedView formats REFRESH MATERIALIZED VIEW statements
+func (f *SQLFormatter) formatRefreshMaterializedView(stmt *ast.RefreshMaterializedViewStatement) error {
+	f.writeKeyword("REFRESH MATERIALIZED VIEW")
+
+	if stmt.Concurrently {
+		f.builder.WriteString(" ")
+		f.writeKeyword("CONCURRENTLY")
+	}
+
+	f.builder.WriteString(" " + stmt.Name)
+
+	if stmt.WithData != nil {
+		f.builder.WriteString(" ")
+		if *stmt.WithData {
+			f.writeKeyword("WITH DATA")
+		} else {
+			f.writeKeyword("WITH NO DATA")
+		}
+	}
+
+	return nil
 }

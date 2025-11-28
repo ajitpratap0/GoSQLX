@@ -1,0 +1,39 @@
+{
+  "comments": {
+    "lineComment": "--",
+    "blockComment": ["/*", "*/"]
+  },
+  "brackets": [
+    ["(", ")"],
+    ["[", "]"],
+    ["{", "}"]
+  ],
+  "autoClosingPairs": [
+    { "open": "(", "close": ")" },
+    { "open": "[", "close": "]" },
+    { "open": "{", "close": "}" },
+    { "open": "'", "close": "'", "notIn": ["string", "comment"] },
+    { "open": "\"", "close": "\"", "notIn": ["string", "comment"] },
+    { "open": "`", "close": "`", "notIn": ["string", "comment"] },
+    { "open": "/*", "close": "*/", "notIn": ["string"] }
+  ],
+  "surroundingPairs": [
+    ["(", ")"],
+    ["[", "]"],
+    ["{", "}"],
+    ["'", "'"],
+    ["\"", "\""],
+    ["`", "`"]
+  ],
+  "folding": {
+    "markers": {
+      "start": "(?i)^\\s*(BEGIN|CASE|IF|LOOP|WHILE|FOR|CREATE|WITH)\\b",
+      "end": "(?i)^\\s*(END|;)\\s*$"
+    }
+  },
+  "wordPattern": "[\\w$#@]+",
+  "indentationRules": {
+    "increaseIndentPattern": "(?i)^\\s*(SELECT|FROM|WHERE|AND|OR|JOIN|LEFT|RIGHT|INNER|OUTER|CROSS|GROUP|ORDER|HAVING|UNION|INTERSECT|EXCEPT|CASE|WHEN|ELSE|BEGIN|IF|LOOP|WHILE|FOR|WITH)\\b",
+    "decreaseIndentPattern": "(?i)^\\s*(END|;|\\)|\\])\\s*$"
+  }
+}

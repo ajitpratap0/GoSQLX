@@ -2,30 +2,58 @@
 
 Comprehensive documentation for the GoSQLX SQL parsing SDK.
 
+**Current Version**: v1.5.1+ | **Last Updated**: November 2025
+
 ## 📚 Documentation Index
+
+### Getting Started
+
+| Document | Description | Audience |
+|----------|-------------|----------|
+| [**GETTING_STARTED.md**](GETTING_STARTED.md) | 5-minute quickstart guide for new users | Beginners |
+| [**CLI_GUIDE.md**](CLI_GUIDE.md) | Command-line tool usage and examples | CLI Users |
 
 ### Core Documentation
 
 | Document | Description | Audience |
 |----------|-------------|----------|
-| [**API_REFERENCE.md**](API_REFERENCE.md) | Complete API documentation with method signatures, parameters, and examples | Developers |
+| [**API_REFERENCE.md**](API_REFERENCE.md) | Complete API documentation with 4,400+ lines of examples | Developers |
 | [**USAGE_GUIDE.md**](USAGE_GUIDE.md) | Detailed usage patterns, best practices, and real-world examples | All Users |
 | [**ARCHITECTURE.md**](ARCHITECTURE.md) | System design, component architecture, and internal implementation | Contributors/Advanced |
 | [**TROUBLESHOOTING.md**](TROUBLESHOOTING.md) | Common issues, error messages, debugging techniques, and FAQ | Support/Debug |
+
+### Reference Documentation
+
+| Document | Description | Audience |
+|----------|-------------|----------|
+| [**ERROR_CODES.md**](ERROR_CODES.md) | Comprehensive error code reference (E1xxx-E4xxx) | Developers |
+| [**ERROR_REFERENCE.md**](ERROR_REFERENCE.md) | Error handling patterns and recovery strategies | Developers |
+| [**sql99-compliance-analysis.md**](sql99-compliance-analysis.md) | SQL-99 standard compliance analysis (~80-85%) | Architects |
 
 ### Deployment & Operations
 
 | Document | Description | Audience |
 |----------|-------------|----------|
 | [**PRODUCTION_GUIDE.md**](PRODUCTION_GUIDE.md) | Production deployment, monitoring, and performance optimization | DevOps/SRE |
+| [**PERFORMANCE_TUNING.md**](PERFORMANCE_TUNING.md) | Performance optimization and benchmarking guide | Performance Engineers |
 | [**SQL_COMPATIBILITY.md**](SQL_COMPATIBILITY.md) | SQL dialect support matrix and feature compatibility | Architects |
-| [**SECURITY.md**](SECURITY.md) | Security analysis, vulnerability assessment, and best practices | Security Teams |
+| [**SECURITY.md**](SECURITY.md) | Security analysis, vulnerability assessment, and SQL injection detection | Security Teams |
 
-### Release Information
+### Testing & Quality
 
-| Document | Description | Version |
-|----------|-------------|---------|
-| [**RELEASE_v1.0.md**](RELEASE_v1.0.md) | v1.0.0 release notes, features, and validation results | v1.0.0 |
+| Document | Description | Audience |
+|----------|-------------|----------|
+| [**FUZZ_TESTING_GUIDE.md**](FUZZ_TESTING_GUIDE.md) | Fuzz testing methodology and coverage | QA Engineers |
+| [**performance_regression_testing.md**](performance_regression_testing.md) | Performance regression testing guide | QA Engineers |
+| [**COMPARISON.md**](COMPARISON.md) | Comparison with other SQL parsers | Evaluators |
+
+### Migration Guides
+
+| Document | Description |
+|----------|-------------|
+| [**migration/FROM_JSQLPARSER.md**](migration/FROM_JSQLPARSER.md) | Migrating from JSqlParser |
+| [**migration/FROM_PG_QUERY.md**](migration/FROM_PG_QUERY.md) | Migrating from pg_query |
+| [**migration/FROM_SQLFLUFF.md**](migration/FROM_SQLFLUFF.md) | Migrating from SQLFluff |
 
 ## 🚀 Quick Start Guides
 
@@ -48,15 +76,27 @@ Comprehensive documentation for the GoSQLX SQL parsing SDK.
 
 ```
 docs/
-├── API_REFERENCE.md        # API documentation
+├── README.md               # This documentation index
+├── GETTING_STARTED.md      # 5-minute quickstart guide
+├── CLI_GUIDE.md            # CLI tool documentation
+├── API_REFERENCE.md        # Complete API documentation (4,400+ lines)
 ├── USAGE_GUIDE.md          # Usage patterns and examples
 ├── ARCHITECTURE.md         # System architecture
 ├── TROUBLESHOOTING.md      # Problem solving guide
 ├── PRODUCTION_GUIDE.md     # Production deployment
+├── PERFORMANCE_TUNING.md   # Performance optimization
 ├── SQL_COMPATIBILITY.md    # SQL dialect matrix
-├── SECURITY.md            # Security analysis
-├── RELEASE_v1.0.md        # Release notes
-└── README.md              # This file
+├── SECURITY.md             # Security analysis
+├── ERROR_CODES.md          # Error code reference
+├── ERROR_REFERENCE.md      # Error handling guide
+├── COMPARISON.md           # Parser comparison
+├── FUZZ_TESTING_GUIDE.md   # Fuzz testing guide
+├── sql99-compliance-analysis.md  # SQL-99 compliance
+├── CLEAN_ARCHITECTURE.md   # Architecture principles
+└── migration/              # Migration guides
+    ├── FROM_JSQLPARSER.md
+    ├── FROM_PG_QUERY.md
+    └── FROM_SQLFLUFF.md
 ```
 
 ## 🔍 Finding Information
@@ -161,13 +201,28 @@ If you can't find what you need:
 
 | Document | Last Updated | Version |
 |----------|--------------|---------|
-| API_REFERENCE.md | 2024-08 | v1.0.0 |
-| USAGE_GUIDE.md | 2024-08 | v1.0.0 |
-| ARCHITECTURE.md | 2024-08 | v1.0.0 |
-| TROUBLESHOOTING.md | 2024-08 | v1.0.0 |
-| PRODUCTION_GUIDE.md | 2024-08 | v1.0.0 |
-| SQL_COMPATIBILITY.md | 2024-08 | v1.0.0 |
-| SECURITY.md | 2024-08 | v1.0.0 |
+| API_REFERENCE.md | 2025-11 | v1.5.1 |
+| GETTING_STARTED.md | 2025-11 | v1.5.1 |
+| CLI_GUIDE.md | 2025-11 | v1.5.1 |
+| USAGE_GUIDE.md | 2025-11 | v1.5.1 |
+| ARCHITECTURE.md | 2025-11 | v1.5.1 |
+| TROUBLESHOOTING.md | 2025-11 | v1.5.1 |
+| PRODUCTION_GUIDE.md | 2025-11 | v1.5.1 |
+| SQL_COMPATIBILITY.md | 2025-11 | v1.5.1 |
+| SECURITY.md | 2025-11 | v1.5.1 |
+| ERROR_CODES.md | 2025-11 | v1.5.1 |
+| PERFORMANCE_TUNING.md | 2025-11 | v1.5.1 |
+
+## 🆕 Recent Feature Additions (v1.4+)
+
+- **SQL Injection Detection** - `pkg/sql/security` package for pattern detection
+- **MERGE Statements** - SQL Server/PostgreSQL MERGE support
+- **Grouping Sets** - ROLLUP, CUBE, GROUPING SETS (SQL-99 T431)
+- **Materialized Views** - CREATE/DROP/REFRESH MATERIALIZED VIEW
+- **Table Partitioning** - PARTITION BY RANGE/LIST/HASH
+- **Advanced Operators** - BETWEEN, IN, LIKE, IS NULL with full expression support
+- **Subquery Support** - Scalar, table, correlated, EXISTS subqueries
+- **NULLS FIRST/LAST** - ORDER BY with null ordering (SQL-99 F851)
 
 ---
 

@@ -34,7 +34,7 @@ What actually happened, including any error messages.
 
 ## Environment
 - **OS**: [e.g. macOS, Linux, Windows]
-- **Go Version**: [e.g. 1.19]
+- **Go Version**: [e.g. 1.24]
 - **GoSQLX Version**: [e.g. v1.0.0]
 
 ## Additional Context

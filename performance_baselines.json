@@ -1,0 +1,53 @@
+{
+  "version": "1.5.0",
+  "updated": "2025-11-26",
+  "baselines": {
+    "SimpleSelect": {
+      "ns_per_op": 650,
+      "tolerance_percent": 40,
+      "description": "Basic SELECT query: SELECT id, name FROM users",
+      "current_performance": "~550-610 ns/op in CI with ModelType fast path",
+      "note": "Test tokens include ModelType for fast int comparison path; increased tolerance for CI variability"
+    },
+    "ComplexQuery": {
+      "ns_per_op": 2500,
+      "tolerance_percent": 40,
+      "description": "Complex SELECT with JOIN, WHERE, ORDER BY, LIMIT",
+      "current_performance": "~2400-2600 ns/op in CI with ModelType fast path",
+      "note": "Test tokens include ModelType for fast int comparison path; increased tolerance for CI variability"
+    },
+    "WindowFunction": {
+      "ns_per_op": 1050,
+      "tolerance_percent": 40,
+      "description": "Window function query: ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...)",
+      "current_performance": "~885-1005 ns/op in CI with ModelType fast path",
+      "note": "Test tokens include ModelType for fast int comparison path; increased tolerance for CI variability"
+    },
+    "CTE": {
+      "ns_per_op": 1000,
+      "tolerance_percent": 40,
+      "description": "Common Table Expression with WITH clause",
+      "current_performance": "~855-967 ns/op in CI with ModelType fast path",
+      "note": "Test tokens include ModelType for fast int comparison path; increased tolerance for CI variability"
+    },
+    "INSERT": {
+      "ns_per_op": 750,
+      "tolerance_percent": 40,
+      "description": "Simple INSERT statement",
+      "current_performance": "~660-716 ns/op in CI with ModelType fast path",
+      "note": "Test tokens include ModelType for fast int comparison path; increased tolerance for CI variability"
+    },
+    "TokenizationThroughput": {
+      "tokens_per_sec": 8000000,
+      "tolerance_percent": 20,
+      "description": "Tokenizer throughput in tokens per second",
+      "note": "Measured separately via tokenizer benchmarks"
+    },
+    "EndToEndSustained": {
+      "ops_per_sec": 1380000,
+      "tolerance_percent": 20,
+      "description": "End-to-end sustained throughput in operations per second",
+      "note": "Measured via sustained load tests"
+    }
+  }
+}

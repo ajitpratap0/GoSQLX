@@ -3,65 +3,152 @@ package tokenizer
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
+const (
+	// MaxInputSize is the maximum allowed input size in bytes (10MB)
+	// This prevents DoS attacks via extremely large SQL queries
+	MaxInputSize = 10 * 1024 * 1024 // 10MB
+
+	// MaxTokens is the maximum number of tokens allowed in a single SQL query
+	// This prevents DoS attacks via token explosion
+	MaxTokens = 1000000 // 1M tokens
+)
+
 // keywordTokenTypes maps SQL keywords to their token types for fast lookup
 var keywordTokenTypes = map[string]models.TokenType{
-	"SELECT":    models.TokenTypeSelect,
-	"FROM":      models.TokenTypeFrom,
-	"WHERE":     models.TokenTypeWhere,
-	"GROUP":     models.TokenTypeGroup,
-	"ORDER":     models.TokenTypeOrder,
-	"HAVING":    models.TokenTypeHaving,
-	"JOIN":      models.TokenTypeJoin,
-	"INNER":     models.TokenTypeInner,
-	"LEFT":      models.TokenTypeLeft,
-	"RIGHT":     models.TokenTypeRight,
-	"OUTER":     models.TokenTypeOuter,
-	"ON":        models.TokenTypeOn,
-	"AND":       models.TokenTypeAnd,
-	"OR":        models.TokenTypeOr,
-	"NOT":       models.TokenTypeNot,
-	"AS":        models.TokenTypeAs,
-	"BY":        models.TokenTypeBy,
-	"IN":        models.TokenTypeIn,
-	"LIKE":      models.TokenTypeLike,
-	"BETWEEN":   models.TokenTypeBetween,
-	"IS":        models.TokenTypeIs,
-	"NULL":      models.TokenTypeNull,
-	"TRUE":      models.TokenTypeTrue,
-	"FALSE":     models.TokenTypeFalse,
-	"CASE":      models.TokenTypeCase,
-	"WHEN":      models.TokenTypeWhen,
-	"THEN":      models.TokenTypeThen,
-	"ELSE":      models.TokenTypeElse,
-	"END":       models.TokenTypeEnd,
-	"ASC":       models.TokenTypeAsc,
-	"DESC":      models.TokenTypeDesc,
-	"LIMIT":     models.TokenTypeLimit,
-	"OFFSET":    models.TokenTypeOffset,
-	"COUNT":     models.TokenTypeCount,
-	"FULL":      models.TokenTypeKeyword,
-	"CROSS":     models.TokenTypeKeyword,
-	"USING":     models.TokenTypeKeyword,
-	"WITH":      models.TokenTypeKeyword,
-	"RECURSIVE": models.TokenTypeKeyword,
-	"UNION":     models.TokenTypeKeyword,
-	"EXCEPT":    models.TokenTypeKeyword,
-	"INTERSECT": models.TokenTypeKeyword,
-	"ALL":       models.TokenTypeKeyword,
-	"SUM":       models.TokenTypeSum,
-	"AVG":       models.TokenTypeAvg,
-	"MIN":       models.TokenTypeMin,
-	"MAX":       models.TokenTypeMax,
+	"SELECT":  models.TokenTypeSelect,
+	"FROM":    models.TokenTypeFrom,
+	"WHERE":   models.TokenTypeWhere,
+	"GROUP":   models.TokenTypeGroup,
+	"ORDER":   models.TokenTypeOrder,
+	"HAVING":  models.TokenTypeHaving,
+	"JOIN":    models.TokenTypeJoin,
+	"INNER":   models.TokenTypeInner,
+	"LEFT":    models.TokenTypeLeft,
+	"RIGHT":   models.TokenTypeRight,
+	"OUTER":   models.TokenTypeOuter,
+	"ON":      models.TokenTypeOn,
+	"AND":     models.TokenTypeAnd,
+	"OR":      models.TokenTypeOr,
+	"NOT":     models.TokenTypeNot,
+	"AS":      models.TokenTypeAs,
+	"BY":      models.TokenTypeBy,
+	"IN":      models.TokenTypeIn,
+	"LIKE":    models.TokenTypeLike,
+	"BETWEEN": models.TokenTypeBetween,
+	"IS":      models.TokenTypeIs,
+	"NULL":    models.TokenTypeNull,
+	"TRUE":    models.TokenTypeTrue,
+	"FALSE":   models.TokenTypeFalse,
+	"CASE":    models.TokenTypeCase,
+	"WHEN":    models.TokenTypeWhen,
+	"THEN":    models.TokenTypeThen,
+	"ELSE":    models.TokenTypeElse,
+	"END":     models.TokenTypeEnd,
+	"ASC":     models.TokenTypeAsc,
+	"DESC":    models.TokenTypeDesc,
+	"LIMIT":   models.TokenTypeLimit,
+	"OFFSET":  models.TokenTypeOffset,
+	"COUNT":   models.TokenTypeCount,
+	// Additional Join Keywords
+	"FULL":    models.TokenTypeFull,
+	"CROSS":   models.TokenTypeCross,
+	"USING":   models.TokenTypeUsing,
+	"NATURAL": models.TokenTypeNatural,
+	// CTE and Set Operations
+	"WITH":      models.TokenTypeWith,
+	"RECURSIVE": models.TokenTypeRecursive,
+	"UNION":     models.TokenTypeUnion,
+	"EXCEPT":    models.TokenTypeExcept,
+	"INTERSECT": models.TokenTypeIntersect,
+	"ALL":       models.TokenTypeAll,
+	// Aggregate functions
+	"SUM": models.TokenTypeSum,
+	"AVG": models.TokenTypeAvg,
+	"MIN": models.TokenTypeMin,
+	"MAX": models.TokenTypeMax,
+	// SQL-99 grouping operations
+	"ROLLUP":   models.TokenTypeRollup,
+	"CUBE":     models.TokenTypeCube,
+	"GROUPING": models.TokenTypeGrouping,
+	"SETS":     models.TokenTypeSets,
+	// DML keywords
+	"INSERT":  models.TokenTypeInsert,
+	"UPDATE":  models.TokenTypeUpdate,
+	"DELETE":  models.TokenTypeDelete,
+	"INTO":    models.TokenTypeInto,
+	"VALUES":  models.TokenTypeValues,
+	"SET":     models.TokenTypeSet,
+	"DEFAULT": models.TokenTypeDefault,
+	// MERGE statement keywords (SQL:2003 F312)
+	"MERGE":   models.TokenTypeMerge,
+	"MATCHED": models.TokenTypeMatched,
+	"SOURCE":  models.TokenTypeSource,
+	"TARGET":  models.TokenTypeTarget,
+	// DDL keywords (Phase 4 - Materialized Views & Partitioning)
+	"CREATE":       models.TokenTypeCreate,
+	"DROP":         models.TokenTypeDrop,
+	"ALTER":        models.TokenTypeAlter,
+	"TRUNCATE":     models.TokenTypeTruncate,
+	"TABLE":        models.TokenTypeTable,
+	"INDEX":        models.TokenTypeIndex,
+	"VIEW":         models.TokenTypeView,
+	"MATERIALIZED": models.TokenTypeMaterialized,
+	"REFRESH":      models.TokenTypeRefresh,
+	"CONCURRENTLY": models.TokenTypeKeyword, // No specific type for this
+	"CASCADE":      models.TokenTypeCascade,
+	"RESTRICT":     models.TokenTypeRestrict,
+	"REPLACE":      models.TokenTypeReplace,
+	"TEMPORARY":    models.TokenTypeKeyword, // No specific type for this
+	// Note: TEMP is commonly used as identifier (e.g., CTE name "temp"), not added as keyword
+	"IF":         models.TokenTypeIf,
+	"EXISTS":     models.TokenTypeExists,
+	"UNIQUE":     models.TokenTypeUnique,
+	"PRIMARY":    models.TokenTypePrimary,
+	"KEY":        models.TokenTypeKey,
+	"REFERENCES": models.TokenTypeReferences,
+	"FOREIGN":    models.TokenTypeForeign,
+	"CHECK":      models.TokenTypeCheck,
+	"CONSTRAINT": models.TokenTypeConstraint,
+	"TABLESPACE": models.TokenTypeKeyword, // No specific type for this
+	// Window function keywords
+	"OVER":      models.TokenTypeOver,
+	"PARTITION": models.TokenTypePartition,
+	"ROWS":      models.TokenTypeRows,
+	"RANGE":     models.TokenTypeRange,
+	"UNBOUNDED": models.TokenTypeUnbounded,
+	"PRECEDING": models.TokenTypePreceding,
+	"FOLLOWING": models.TokenTypeFollowing,
+	"CURRENT":   models.TokenTypeCurrent,
+	"ROW":       models.TokenTypeRow,
+	"GROUPS":    models.TokenTypeGroups,
+	"FILTER":    models.TokenTypeFilter,
+	"EXCLUDE":   models.TokenTypeExclude,
+	// NULLS FIRST/LAST
+	"NULLS": models.TokenTypeNulls,
+	"FIRST": models.TokenTypeFirst,
+	"LAST":  models.TokenTypeLast,
+	// Additional SQL Keywords
+	"DISTINCT": models.TokenTypeDistinct,
+	"COLLATE":  models.TokenTypeCollate,
+	"TO":       models.TokenTypeKeyword, // Uses TO for RENAME TO
+	// Partitioning keywords (some use generic TokenTypeKeyword)
+	"LIST":     models.TokenTypeKeyword,
+	"HASH":     models.TokenTypeKeyword,
+	"LESS":     models.TokenTypeKeyword,
+	"THAN":     models.TokenTypeKeyword,
+	"MAXVALUE": models.TokenTypeKeyword,
 }
 
 // Tokenizer provides high-performance SQL tokenization with zero-copy operations
@@ -73,16 +160,6 @@ type Tokenizer struct {
 	line       int
 	keywords   *keywords.Keywords
 	debugLog   DebugLogger
-}
-
-// TokenizerError is a simple error wrapper
-type TokenizerError struct {
-	Message  string
-	Location models.Location
-}
-
-func (e TokenizerError) Error() string {
-	return e.Message
 }
 
 // SetDebugLogger sets a debug logger for verbose tracing
@@ -103,7 +180,7 @@ func New() (*Tokenizer, error) {
 // NewWithKeywords initializes a Tokenizer with custom keywords
 func NewWithKeywords(kw *keywords.Keywords) (*Tokenizer, error) {
 	if kw == nil {
-		return nil, fmt.Errorf("keywords cannot be nil")
+		return nil, errors.InvalidSyntaxError("keywords cannot be nil", models.Location{Line: 1, Column: 0}, "")
 	}
 
 	return &Tokenizer{
@@ -117,6 +194,13 @@ func NewWithKeywords(kw *keywords.Keywords) (*Tokenizer, error) {
 func (t *Tokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) {
 	// Record start time for metrics
 	startTime := time.Now()
+
+	// Validate input size to prevent DoS attacks
+	if len(input) > MaxInputSize {
+		err := errors.InputTooLargeError(int64(len(input)), MaxInputSize, models.Location{Line: 1, Column: 0})
+		metrics.RecordTokenization(time.Since(startTime), len(input), err)
+		return nil, err
+	}
 
 	// Reset state
 	t.Reset()
@@ -155,7 +239,7 @@ func (t *Tokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) {
 		// Ensure proper cleanup even if we panic
 		defer func() {
 			if r := recover(); r != nil {
-				tokenErr = fmt.Errorf("panic during tokenization: %v", r)
+				tokenErr = errors.TokenizerPanicError(r, t.getCurrentPosition())
 			}
 		}()
 
@@ -166,14 +250,150 @@ func (t *Tokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) {
 				break
 			}
 
+			// Check token count limit to prevent DoS attacks
+			if len(tokens) >= MaxTokens {
+				tokenErr = errors.TokenLimitReachedError(len(tokens)+1, MaxTokens, t.getCurrentPosition(), string(t.input))
+				return
+			}
+
 			startPos := t.pos
 
 			token, err := t.nextToken()
 			if err != nil {
-				tokenErr = TokenizerError{
-					Message:  err.Error(),
-					Location: t.toSQLPosition(startPos),
+				// nextToken returns structured errors, pass through directly
+				tokenErr = err
+				return
+			}
+
+			tokens = append(tokens, models.TokenWithSpan{
+				Token: token,
+				Start: t.toSQLPosition(startPos),
+				End:   t.getCurrentPosition(),
+			})
+		}
+	}()
+
+	if tokenErr != nil {
+		// Record metrics for failed tokenization
+		duration := time.Since(startTime)
+		metrics.RecordTokenization(duration, len(input), tokenErr)
+		return nil, tokenErr
+	}
+
+	// Add EOF token
+	tokens = append(tokens, models.TokenWithSpan{
+		Token: models.Token{Type: models.TokenTypeEOF},
+		Start: t.getCurrentPosition(),
+		End:   t.getCurrentPosition(),
+	})
+
+	// Record metrics for successful tokenization
+	duration := time.Since(startTime)
+	metrics.RecordTokenization(duration, len(input), nil)
+
+	return tokens, nil
+}
+
+// TokenizeContext processes the input and returns tokens with context support for cancellation.
+// It checks the context at regular intervals (every 100 tokens) to enable fast cancellation.
+// Returns context.Canceled or context.DeadlineExceeded when the context is cancelled.
+//
+// This method is useful for:
+//   - Long-running tokenization operations that need to be cancellable
+//   - Implementing timeouts for tokenization
+//   - Graceful shutdown scenarios
+//
+// Example:
+//
+//	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+//	defer cancel()
+//	tokens, err := tokenizer.TokenizeContext(ctx, []byte(sql))
+//	if err == context.DeadlineExceeded {
+//	    // Handle timeout
+//	}
+func (t *Tokenizer) TokenizeContext(ctx context.Context, input []byte) ([]models.TokenWithSpan, error) {
+	// Check context before starting
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	// Record start time for metrics
+	startTime := time.Now()
+
+	// Validate input size to prevent DoS attacks
+	if len(input) > MaxInputSize {
+		err := errors.InputTooLargeError(int64(len(input)), MaxInputSize, models.Location{Line: 1, Column: 0})
+		metrics.RecordTokenization(time.Since(startTime), len(input), err)
+		return nil, err
+	}
+
+	// Reset state
+	t.Reset()
+	t.input = input
+
+	// Pre-allocate line starts slice - reuse if possible
+	estimatedLines := len(input)/50 + 1 // Estimate 50 chars per line + 1 for initial 0
+	if cap(t.lineStarts) < estimatedLines {
+		t.lineStarts = make([]int, 0, estimatedLines)
+	} else {
+		t.lineStarts = t.lineStarts[:0]
+	}
+	t.lineStarts = append(t.lineStarts, 0)
+
+	// Pre-scan input to build line start indices
+	for i := 0; i < len(t.input); i++ {
+		if t.input[i] == '\n' {
+			t.lineStarts = append(t.lineStarts, i+1)
+		}
+	}
+
+	// Pre-allocate token slice with better capacity estimation
+	estimatedTokens := len(input) / 4
+	if estimatedTokens < 16 {
+		estimatedTokens = 16 // At least 16 tokens
+	}
+	tokens := make([]models.TokenWithSpan, 0, estimatedTokens)
+
+	// Get a buffer from the pool for string operations
+	buf := getBuffer()
+	defer putBuffer(buf)
+
+	var tokenErr error
+	func() {
+		// Ensure proper cleanup even if we panic
+		defer func() {
+			if r := recover(); r != nil {
+				tokenErr = errors.TokenizerPanicError(r, t.getCurrentPosition())
+			}
+		}()
+
+		for t.pos.Index < len(t.input) {
+			// Check context every 100 tokens for cancellation
+			if len(tokens)%100 == 0 {
+				if err := ctx.Err(); err != nil {
+					tokenErr = err
+					return
 				}
+			}
+
+			t.skipWhitespace()
+
+			if t.pos.Index >= len(t.input) {
+				break
+			}
+
+			// Check token count limit to prevent DoS attacks
+			if len(tokens) >= MaxTokens {
+				tokenErr = errors.TokenLimitReachedError(len(tokens)+1, MaxTokens, t.getCurrentPosition(), string(t.input))
+				return
+			}
+
+			startPos := t.pos
+
+			token, err := t.nextToken()
+			if err != nil {
+				// nextToken returns structured errors, pass through directly
+				tokenErr = err
 				return
 			}
 
@@ -207,8 +427,27 @@ func (t *Tokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) {
 }
 
 // skipWhitespace advances past any whitespace
+// Optimized with ASCII fast-path since >99% of SQL whitespace is ASCII
 func (t *Tokenizer) skipWhitespace() {
 	for t.pos.Index < len(t.input) {
+		b := t.input[t.pos.Index]
+		// Fast path: ASCII whitespace (covers >99% of cases)
+		if b < 128 {
+			switch b {
+			case ' ', '\t', '\r':
+				t.pos.Index++
+				t.pos.Column++
+				continue
+			case '\n':
+				t.pos.Index++
+				t.pos.Line++
+				t.pos.Column = 0
+				continue
+			}
+			// Not whitespace, exit
+			break
+		}
+		// Slow path: UTF-8 encoded character (rare in SQL)
 		r, size := utf8.DecodeRune(t.input[t.pos.Index:])
 		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
 			t.pos.AdvanceRune(r, size)
@@ -330,15 +569,16 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 
 // compoundKeywordStarts is a set of keywords that can start compound keywords
 var compoundKeywordStarts = map[string]bool{
-	"GROUP":   true,
-	"ORDER":   true,
-	"LEFT":    true,
-	"RIGHT":   true,
-	"INNER":   true,
-	"OUTER":   true,
-	"CROSS":   true,
-	"NATURAL": true,
-	"FULL":    true,
+	"GROUP":    true,
+	"ORDER":    true,
+	"LEFT":     true,
+	"RIGHT":    true,
+	"INNER":    true,
+	"OUTER":    true,
+	"CROSS":    true,
+	"NATURAL":  true,
+	"FULL":     true,
+	"GROUPING": true, // For GROUPING SETS
 }
 
 // compoundKeywordTypes maps compound SQL keywords to their token types
@@ -354,6 +594,7 @@ var compoundKeywordTypes = map[string]models.TokenType{
 	"LEFT OUTER JOIN":  models.TokenTypeKeyword,
 	"RIGHT OUTER JOIN": models.TokenTypeKeyword,
 	"FULL OUTER JOIN":  models.TokenTypeKeyword,
+	"GROUPING SETS":    models.TokenTypeKeyword, // SQL-99 grouping operation
 }
 
 // Helper function to check if a word can start a compound keyword
@@ -409,10 +650,10 @@ func (t *Tokenizer) readQuotedIdentifier() (models.Token, error) {
 		}
 
 		if r == '\n' {
-			return models.Token{}, TokenizerError{
-				Message:  fmt.Sprintf("unterminated quoted identifier starting at line %d, column %d", startPos.Line, startPos.Column),
-				Location: models.Location{Line: startPos.Line, Column: startPos.Column},
-			}
+			return models.Token{}, errors.UnterminatedStringError(
+				models.Location{Line: startPos.Line, Column: startPos.Column},
+				string(t.input),
+			)
 		}
 
 		// Handle regular characters
@@ -421,10 +662,10 @@ func (t *Tokenizer) readQuotedIdentifier() (models.Token, error) {
 		t.pos.Column++
 	}
 
-	return models.Token{}, TokenizerError{
-		Message:  fmt.Sprintf("unterminated quoted identifier starting at line %d, column %d", startPos.Line, startPos.Column),
-		Location: models.Location{Line: startPos.Line, Column: startPos.Column},
-	}
+	return models.Token{}, errors.UnterminatedStringError(
+		t.toSQLPosition(startPos),
+		string(t.input),
+	)
 }
 
 // readBacktickIdentifier reads MySQL-style backtick identifiers
@@ -470,10 +711,10 @@ func (t *Tokenizer) readBacktickIdentifier() (models.Token, error) {
 		t.pos.Index++
 	}
 
-	return models.Token{}, TokenizerError{
-		Message:  fmt.Sprintf("unterminated backtick identifier starting at line %d, column %d", startPos.Line, startPos.Column),
-		Location: models.Location{Line: startPos.Line, Column: startPos.Column},
-	}
+	return models.Token{}, errors.UnterminatedStringError(
+		t.toSQLPosition(startPos),
+		string(t.input),
+	)
 }
 
 // readQuotedString handles the actual scanning of a single/double-quoted string
@@ -542,10 +783,11 @@ func (t *Tokenizer) readQuotedString(quote rune) (models.Token, error) {
 		if r == '\\' {
 			// Handle escape sequences
 			if err := t.handleEscapeSequence(&buf); err != nil {
-				return models.Token{}, TokenizerError{
-					Message:  fmt.Sprintf("invalid escape sequence at line %d, column %d", t.pos.Line, t.pos.Column),
-					Location: models.Location{Line: t.pos.Line, Column: startPos.Column},
-				}
+				return models.Token{}, errors.InvalidSyntaxError(
+					fmt.Sprintf("invalid escape sequence: %v", err),
+					models.Location{Line: t.pos.Line, Column: t.pos.Column},
+					string(t.input),
+				)
 			}
 			continue
 		}
@@ -564,10 +806,10 @@ func (t *Tokenizer) readQuotedString(quote rune) (models.Token, error) {
 		t.pos.Column++
 	}
 
-	return models.Token{}, TokenizerError{
-		Message:  fmt.Sprintf("unterminated quoted string starting at line %d, column %d", startPos.Line, startPos.Column),
-		Location: models.Location{Line: startPos.Line, Column: startPos.Column},
-	}
+	return models.Token{}, errors.UnterminatedStringError(
+		t.toSQLPosition(startPos),
+		string(t.input),
+	)
 }
 
 // readTripleQuotedString reads a triple-quoted string (e.g. "'abc"' or """abc""")
@@ -624,10 +866,10 @@ func (t *Tokenizer) readTripleQuotedString(quote rune) (models.Token, error) {
 		t.pos.Column++
 	}
 
-	return models.Token{}, TokenizerError{
-		Message:  fmt.Sprintf("unterminated triple-quoted string starting at line %d, column %d", startPos.Line, startPos.Column),
-		Location: models.Location{Line: startPos.Line, Column: startPos.Column},
-	}
+	return models.Token{}, errors.UnterminatedStringError(
+		t.toSQLPosition(startPos),
+		string(t.input),
+	)
 }
 
 // handleEscapeSequence handles escape sequences in string literals
@@ -636,7 +878,7 @@ func (t *Tokenizer) handleEscapeSequence(buf *bytes.Buffer) error {
 	t.pos.Column++
 
 	if t.pos.Index >= len(t.input) {
-		return fmt.Errorf("unexpected end of input after escape character")
+		return errors.IncompleteStatementError(t.getCurrentPosition(), string(t.input))
 	}
 
 	r, size := utf8.DecodeRune(t.input[t.pos.Index:])
@@ -650,7 +892,11 @@ func (t *Tokenizer) handleEscapeSequence(buf *bytes.Buffer) error {
 	case 't':
 		buf.WriteRune('\t')
 	default:
-		return fmt.Errorf("invalid escape sequence '\\%c'", r)
+		return errors.InvalidSyntaxError(
+			fmt.Sprintf("invalid escape sequence '\\%c'", r),
+			t.getCurrentPosition(),
+			string(t.input),
+		)
 	}
 
 	t.pos.Index += size
@@ -690,12 +936,14 @@ func (t *Tokenizer) readNumber(buf []byte) (models.Token, error) {
 
 		// Must have at least one digit after decimal
 		if t.pos.Index >= len(t.input) {
-			return models.Token{}, fmt.Errorf("expected digit after decimal point")
+			value := string(t.input[start:t.pos.Index])
+			return models.Token{}, errors.InvalidNumberError(value+" (expected digit after decimal point)", t.getCurrentPosition(), string(t.input))
 		}
 
 		r, _ = utf8.DecodeRune(t.input[t.pos.Index:])
 		if r < '0' || r > '9' {
-			return models.Token{}, fmt.Errorf("expected digit after decimal point")
+			value := string(t.input[start:t.pos.Index])
+			return models.Token{}, errors.InvalidNumberError(value+" (expected digit after decimal point)", t.getCurrentPosition(), string(t.input))
 		}
 
 		// Read fractional part
@@ -725,12 +973,14 @@ func (t *Tokenizer) readNumber(buf []byte) (models.Token, error) {
 
 			// Must have at least one digit
 			if t.pos.Index >= len(t.input) {
-				return models.Token{}, fmt.Errorf("expected digit in exponent")
+				value := string(t.input[start:t.pos.Index])
+				return models.Token{}, errors.InvalidNumberError(value+" (expected digit in exponent)", t.getCurrentPosition(), string(t.input))
 			}
 
 			r, _ = utf8.DecodeRune(t.input[t.pos.Index:])
 			if r < '0' || r > '9' {
-				return models.Token{}, fmt.Errorf("expected digit in exponent")
+				value := string(t.input[start:t.pos.Index])
+				return models.Token{}, errors.InvalidNumberError(value+" (expected digit in exponent)", t.getCurrentPosition(), string(t.input))
 			}
 
 			// Read exponent part
@@ -754,7 +1004,7 @@ func (t *Tokenizer) readNumber(buf []byte) (models.Token, error) {
 // readPunctuation picks out punctuation or operator tokens
 func (t *Tokenizer) readPunctuation() (models.Token, error) {
 	if t.pos.Index >= len(t.input) {
-		return models.Token{}, fmt.Errorf("unexpected end of input")
+		return models.Token{}, errors.IncompleteStatementError(t.getCurrentPosition(), string(t.input))
 	}
 	r, size := utf8.DecodeRune(t.input[t.pos.Index:])
 	switch r {
@@ -917,7 +1167,7 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		return t.readIdentifier()
 	}
 
-	return models.Token{}, fmt.Errorf("invalid character: %c", r)
+	return models.Token{}, errors.UnexpectedCharError(r, t.getCurrentPosition(), string(t.input))
 }
 
 // toSQLPosition converts an internal Position => a models.Location
@@ -936,26 +1186,24 @@ func (t *Tokenizer) toSQLPosition(pos Position) models.Location {
 	}
 
 	// Calculate column by counting characters from line start
-	column := 0
+	// Column is 1-based, so we start at 1
+	column := 1
 	for i := lineStart; i < pos.Index && i < len(t.input); i++ {
 		if t.input[i] == '\t' {
 			column += 4 // Treat tab as 4 spaces
-		} else if t.input[i] == ' ' {
-			column++
-		} else if t.input[i] == '\'' {
-			// For string literals, point to the opening quote
-			if i < pos.Index-1 {
-				column--
-			}
-			column++
 		} else {
 			column++
 		}
 	}
 
+	// Ensure column is never less than 1
+	if column < 1 {
+		column = 1
+	}
+
 	return models.Location{
 		Line:   line,
-		Column: column - 2, // Adjust for indentation
+		Column: column,
 	}
 }
 

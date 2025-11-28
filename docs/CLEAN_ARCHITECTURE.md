@@ -1,5 +1,7 @@
 # GoSQLX Clean Architecture Guide
 
+**Version**: v1.5.1+ | **Last Updated**: November 2025
+
 This document outlines the architectural principles and structure of the GoSQLX codebase after comprehensive cleanup and optimization.
 
 ## 📁 Directory Structure
@@ -28,11 +30,14 @@ GoSQLX/
 │   │
 │   ├── sql/                    # SQL processing components
 │   │   ├── tokenizer/          # Lexical analysis
-│   │   ├── parser/             # Syntax analysis
+│   │   ├── parser/             # Syntax analysis (11 modular files)
 │   │   ├── ast/                # Abstract syntax trees
 │   │   ├── keywords/           # SQL keyword definitions
 │   │   ├── token/              # Token management
+│   │   ├── security/           # SQL injection detection (v1.4+)
 │   │   └── monitor/            # Performance monitoring
+│   │
+│   ├── gosqlx/                 # Simple high-level API (v1.4+)
 │   │
 │   └── metrics/                # Performance metrics
 │
@@ -128,12 +133,41 @@ CLI Commands → Business Logic → Core Library → Models
 - Node manipulation and transformation
 - Memory management with object pooling
 
+**Statement Types** (v1.5.1+):
+- `SelectStatement`, `InsertStatement`, `UpdateStatement`, `DeleteStatement`
+- `CreateStatement`, `AlterStatement`, `DropStatement`
+- `MergeStatement` (SQL:2003 F312)
+- `MaterializedViewStatement` (CREATE/DROP/REFRESH)
+- `WithStatement` (CTEs, recursive CTEs)
+
+**Expression Types** (v1.5.1+):
+- `BetweenExpression`, `InExpression`, `LikeExpression`, `IsNullExpression`
+- `SubqueryExpression` (scalar, table, correlated, EXISTS)
+- `WindowExpression` (OVER clause with PARTITION BY, ORDER BY, frames)
+- `GroupingExpression` (GROUPING SETS, ROLLUP, CUBE)
+
 ### `pkg/sql/keywords/`
 **Purpose**: SQL keyword recognition and categorization
 - Multi-dialect keyword support
 - Keyword classification and context
 - Reserved word identification
 - Dialect-specific variations
+
+### `pkg/sql/security/` (v1.4+)
+**Purpose**: SQL injection detection and security analysis
+- Pattern-based injection detection
+- Tautology recognition (`1=1`, `'a'='a'`)
+- UNION-based injection detection
+- Time-based blind injection detection
+- Comment bypass detection
+- Severity classification (Critical, High, Medium, Low)
+
+### `pkg/gosqlx/` (v1.4+)
+**Purpose**: Simple high-level API for common use cases
+- One-line parsing: `gosqlx.Parse(sql)`
+- Validation: `gosqlx.Validate(sql)`
+- Batch processing: `gosqlx.ParseMultiple(queries)`
+- Timeout support: `gosqlx.ParseWithTimeout(sql, timeout)`
 
 ## 🔄 Development Workflow
 

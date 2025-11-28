@@ -1,17 +1,12 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
+	"github.com/spf13/pflag"
 
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
+	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
 )
 
 var (
@@ -35,183 +30,133 @@ Examples:
   gosqlx analyze --all query.sql                  # Comprehensive analysis
   gosqlx analyze "SELECT * FROM users"            # Analyze query directly
 
+Pipeline/Stdin Examples:
+  echo "SELECT * FROM users" | gosqlx analyze     # Analyze from stdin (auto-detect)
+  cat query.sql | gosqlx analyze                  # Pipe file contents
+  gosqlx analyze -                                # Explicit stdin marker
+  gosqlx analyze < query.sql                      # Input redirection
+
 Analysis capabilities:
 • SQL injection pattern detection
 • Performance optimization suggestions
-• Query complexity scoring  
+• Query complexity scoring
 • Best practices validation
 • Multi-dialect compatibility checks
 
 Note: Advanced analysis features are implemented in Phase 4 of the roadmap.
 This is a basic implementation for CLI foundation.`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MaximumNArgs(1), // Changed to allow stdin with no args
 	RunE: analyzeRun,
 }
 
 func analyzeRun(cmd *cobra.Command, args []string) error {
-	input := args[0]
-
-	// Use robust input detection with security checks
-	inputResult, err := DetectAndReadInput(input)
-	if err != nil {
-		return fmt.Errorf("input processing failed: %w", err)
+	// Handle stdin input
+	if len(args) == 0 || (len(args) == 1 && args[0] == "-") {
+		if ShouldReadFromStdin(args) {
+			return analyzeFromStdin(cmd)
+		}
+		return fmt.Errorf("no input provided: specify file path, SQL query, or pipe via stdin")
 	}
 
-	// Use pooled tokenizer
-	tkz := tokenizer.GetTokenizer()
-	defer tokenizer.PutTokenizer(tkz)
-
-	// Tokenize
-	tokens, err := tkz.Tokenize(inputResult.Content)
+	// Load configuration with CLI flag overrides
+	cfg, err := config.LoadDefault()
 	if err != nil {
-		return fmt.Errorf("tokenization failed: %w", err)
+		// If config load fails, use defaults
+		cfg = config.DefaultConfig()
 	}
 
-	// Convert TokenWithSpan to Token using centralized converter
-	convertedTokens, err := parser.ConvertTokensForParser(tokens)
-	if err != nil {
-		return fmt.Errorf("token conversion failed: %w", err)
+	// Track which flags were explicitly set
+	flagsChanged := make(map[string]bool)
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		flagsChanged[f.Name] = true
+	})
+	if cmd.Parent() != nil && cmd.Parent().PersistentFlags() != nil {
+		cmd.Parent().PersistentFlags().Visit(func(f *pflag.Flag) {
+			flagsChanged[f.Name] = true
+		})
 	}
 
-	// Parse with proper error handling for memory management
-	p := parser.NewParser()
-	astObj, err := p.Parse(convertedTokens)
+	// Create analyzer options from config and flags
+	opts := AnalyzerOptionsFromConfig(cfg, flagsChanged, AnalyzerFlags{
+		Security:    analyzeSecurity,
+		Performance: analyzePerformance,
+		Complexity:  analyzeComplexity,
+		All:         analyzeAll,
+		Format:      format,
+		Verbose:     verbose,
+	})
+
+	// Create analyzer with injectable output writers
+	analyzer := NewAnalyzer(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
+
+	// Run analysis
+	result, err := analyzer.Analyze(args[0])
 	if err != nil {
-		// Parser failed, no AST to release
-		return fmt.Errorf("parsing failed: %w", err)
+		return err
 	}
 
-	// CRITICAL: Always release AST, even on analysis errors
-	defer func() {
-		ast.ReleaseAST(astObj)
-	}()
-
-	// Use AST-based analyzer for deep analysis
-	analyzer := NewSQLAnalyzer()
-	report, err := analyzer.Analyze(astObj)
-	if err != nil {
-		// AST will be released by defer above
-		return fmt.Errorf("analysis failed: %w", err)
-	}
-
-	// Display modern analysis report directly
-	return displayAnalysis(report)
+	// Display the report
+	return analyzer.DisplayReport(result.Report)
 }
 
-// Legacy types removed - now using unified AnalysisReport from analysis_types.go
-
-// filterIssuesByCategory filters issues by category for display
-func filterIssuesByCategory(issues []AnalysisIssue, category IssueCategory) []AnalysisIssue {
-	var filtered []AnalysisIssue
-	for _, issue := range issues {
-		if issue.Category == category {
-			filtered = append(filtered, issue)
-		}
+// analyzeFromStdin handles analysis from stdin input
+func analyzeFromStdin(cmd *cobra.Command) error {
+	// Read from stdin
+	content, err := ReadFromStdin()
+	if err != nil {
+		return fmt.Errorf("failed to read from stdin: %w", err)
 	}
-	return filtered
-}
 
-func displayAnalysis(analysis *AnalysisReport) error {
-	switch strings.ToLower(format) {
-	case "json":
-		encoder := json.NewEncoder(os.Stdout)
-		encoder.SetIndent("", "  ")
-		return encoder.Encode(analysis)
-	case "yaml":
-		encoder := yaml.NewEncoder(os.Stdout)
-		defer func() {
-			if err := encoder.Close(); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to close YAML encoder: %v\n", err)
-			}
-		}()
-		return encoder.Encode(analysis)
-	default:
-		// Table format
-		fmt.Printf("🔍 SQL Analysis Report\n")
-		fmt.Printf("═══════════════════════\n\n")
-
-		// Summary
-		fmt.Printf("📊 Summary:\n")
-		fmt.Printf("   Overall Score: %d/100 (Grade: %s)\n", analysis.OverallScore, analysis.Grade)
-		fmt.Printf("   Issues: %d (Critical: %d, High: %d, Medium: %d, Low: %d)\n",
-			analysis.TotalIssues, analysis.CriticalIssues, analysis.HighIssues, analysis.MediumIssues, analysis.LowIssues)
-		fmt.Printf("   Query Size: %d characters, %d statements, %d lines\n",
-			analysis.Query.Size, analysis.Query.StatementCount, analysis.Query.Lines)
-		if len(analysis.Query.Features) > 0 {
-			fmt.Printf("   Features: %s\n", strings.Join(analysis.Query.Features, ", "))
-		}
-		fmt.Printf("\n")
-
-		// Security
-		securityIssues := filterIssuesByCategory(analysis.Issues, IssueCategorySecurity)
-		fmt.Printf("🔒 Security Analysis:\n")
-		fmt.Printf("   Score: %d/100\n", analysis.SecurityScore)
-		if len(securityIssues) > 0 {
-			fmt.Printf("   Issues found:\n")
-			for _, issue := range securityIssues {
-				fmt.Printf("   • [%s] %s\n", strings.ToUpper(string(issue.Severity)), issue.Title)
-				if issue.Description != "" {
-					fmt.Printf("     %s\n", issue.Description)
-				}
-				if issue.Suggestion != "" {
-					fmt.Printf("     → %s\n", issue.Suggestion)
-				}
-			}
-		} else {
-			fmt.Printf("   ✅ No security issues detected\n")
-		}
-		fmt.Printf("\n")
-
-		// Performance
-		performanceIssues := filterIssuesByCategory(analysis.Issues, IssueCategoryPerformance)
-		fmt.Printf("⚡ Performance Analysis:\n")
-		fmt.Printf("   Score: %d/100\n", analysis.PerformanceScore)
-		if len(performanceIssues) > 0 {
-			fmt.Printf("   Issues found:\n")
-			for _, issue := range performanceIssues {
-				fmt.Printf("   • [%s] %s\n", strings.ToUpper(string(issue.Severity)), issue.Title)
-				if issue.Description != "" {
-					fmt.Printf("     %s\n", issue.Description)
-				}
-				if issue.Impact != "" {
-					fmt.Printf("     Impact: %s\n", issue.Impact)
-				}
-				if issue.Suggestion != "" {
-					fmt.Printf("     → %s\n", issue.Suggestion)
-				}
-			}
-		} else {
-			fmt.Printf("   ✅ No performance issues detected\n")
-		}
-		fmt.Printf("\n")
-
-		// Complexity
-		fmt.Printf("📈 Complexity Metrics:\n")
-		fmt.Printf("   Overall: %s (Score: %.1f)\n", analysis.ComplexityMetrics.OverallComplexity, analysis.ComplexityMetrics.ComplexityScore)
-		fmt.Printf("   JOINs: %d, Nesting: %d, Functions: %d\n",
-			analysis.ComplexityMetrics.JoinComplexity, analysis.ComplexityMetrics.NestingDepth, analysis.ComplexityMetrics.FunctionCount)
-		fmt.Printf("\n")
-
-		// Recommendations
-		if len(analysis.Recommendations) > 0 {
-			fmt.Printf("💡 Recommendations:\n")
-			for _, rec := range analysis.Recommendations {
-				fmt.Printf("   • %s\n", rec)
-			}
-			fmt.Printf("\n")
-		}
-
-		fmt.Printf("Generated at: %s\n", analysis.Timestamp.Format("2006-01-02 15:04:05"))
-
-		return nil
+	// Validate stdin content
+	if err := ValidateStdinInput(content); err != nil {
+		return fmt.Errorf("stdin validation failed: %w", err)
 	}
+
+	// Load configuration
+	cfg, err := config.LoadDefault()
+	if err != nil {
+		cfg = config.DefaultConfig()
+	}
+
+	// Track which flags were explicitly set
+	flagsChanged := make(map[string]bool)
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		flagsChanged[f.Name] = true
+	})
+	if cmd.Parent() != nil && cmd.Parent().PersistentFlags() != nil {
+		cmd.Parent().PersistentFlags().Visit(func(f *pflag.Flag) {
+			flagsChanged[f.Name] = true
+		})
+	}
+
+	// Create analyzer options
+	opts := AnalyzerOptionsFromConfig(cfg, flagsChanged, AnalyzerFlags{
+		Security:    analyzeSecurity,
+		Performance: analyzePerformance,
+		Complexity:  analyzeComplexity,
+		All:         analyzeAll,
+		Format:      format,
+		Verbose:     verbose,
+	})
+
+	// Create analyzer
+	analyzer := NewAnalyzer(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
+
+	// Analyze the stdin content (Analyze accepts string input directly)
+	result, err := analyzer.Analyze(string(content))
+	if err != nil {
+		return err
+	}
+
+	// Display the report
+	return analyzer.DisplayReport(result.Report)
 }
 
 func init() {
 	rootCmd.AddCommand(analyzeCmd)
 
-	analyzeCmd.Flags().BoolVar(&analyzeSecurity, "security", false, "focus on security vulnerability analysis")
-	analyzeCmd.Flags().BoolVar(&analyzePerformance, "performance", false, "focus on performance optimization analysis")
-	analyzeCmd.Flags().BoolVar(&analyzeComplexity, "complexity", false, "focus on complexity metrics")
-	analyzeCmd.Flags().BoolVar(&analyzeAll, "all", false, "comprehensive analysis (all categories)")
+	analyzeCmd.Flags().BoolVar(&analyzeSecurity, "security", false, "focus on security vulnerability analysis (config: analyze.security)")
+	analyzeCmd.Flags().BoolVar(&analyzePerformance, "performance", false, "focus on performance optimization analysis (config: analyze.performance)")
+	analyzeCmd.Flags().BoolVar(&analyzeComplexity, "complexity", false, "focus on complexity metrics (config: analyze.complexity)")
+	analyzeCmd.Flags().BoolVar(&analyzeAll, "all", false, "comprehensive analysis (config: analyze.all)")
 }

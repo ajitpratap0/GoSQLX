@@ -36,9 +36,9 @@ GoSQLX aims to be the **fastest, most reliable, and most comprehensive SQL parsi
 ## 🛠️ Development Setup
 
 ### Prerequisites
-- **Go 1.19+** (latest stable version recommended)
+- **Go 1.24+** (latest stable version recommended)
 - **Git** for version control
-- **Make** for build automation (optional)
+- **Task** for task automation (optional) - Install with `go install github.com/go-task/task/v3/cmd/task@latest`
 
 ### Getting Started
 ```bash
@@ -58,6 +58,33 @@ go test ./...
 
 # 6. Run tests with race detection (REQUIRED)
 go test -race ./...
+
+# 7. Install Git hooks (RECOMMENDED)
+task hooks:install
+# or
+./scripts/install-hooks.sh
+```
+
+### Installing Git Hooks
+
+GoSQLX provides pre-commit hooks to catch code quality issues before they reach CI/CD:
+
+```bash
+# Install hooks using Task
+task hooks:install
+
+# Or run the script directly
+./scripts/install-hooks.sh
+```
+
+The pre-commit hooks automatically run:
+- **go fmt**: Checks code formatting
+- **go vet**: Performs static analysis
+- **go test -short**: Runs tests in short mode
+
+To bypass hooks (not recommended):
+```bash
+git commit --no-verify
 ```
 
 ### Development Workflow
@@ -366,6 +393,7 @@ Many applications use PostgreSQL's JSON features extensively...
 ## 📋 Pull Request Checklist
 
 ### Before Submitting
+- [ ] **Git Hooks**: Pre-commit hooks installed and passing (`task hooks:install`)
 - [ ] **Tests**: All tests pass with `go test -race ./...`
 - [ ] **Coverage**: New code has >95% test coverage
 - [ ] **Performance**: No performance regression

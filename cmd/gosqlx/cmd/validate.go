@@ -3,22 +3,23 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
+	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
+	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/output"
 )
 
 var (
-	validateRecursive bool
-	validatePattern   string
-	validateQuiet     bool
-	validateStats     bool
+	validateRecursive    bool
+	validatePattern      string
+	validateQuiet        bool
+	validateStats        bool
+	validateDialect      string
+	validateStrict       bool
+	validateOutputFormat string
+	validateOutputFile   string
 )
 
 // validateCmd represents the validate command
@@ -29,203 +30,250 @@ var validateCmd = &cobra.Command{
 
 Examples:
   gosqlx validate query.sql              # Validate single file
-  gosqlx validate query1.sql query2.sql  # Validate multiple files  
+  gosqlx validate query1.sql query2.sql  # Validate multiple files
   gosqlx validate "*.sql"                # Validate all SQL files (with quotes)
   gosqlx validate -r ./queries/          # Recursively validate directory
   gosqlx validate --quiet query.sql      # Quiet mode (exit code only)
   gosqlx validate --stats ./queries/     # Show performance statistics
+  gosqlx validate --output-format sarif --output-file results.sarif queries/  # SARIF output for GitHub Code Scanning
+
+Pipeline/Stdin Examples:
+  echo "SELECT * FROM users" | gosqlx validate    # Validate from stdin (auto-detect)
+  cat query.sql | gosqlx validate                 # Pipe file contents
+  gosqlx validate -                               # Explicit stdin marker
+  gosqlx validate < query.sql                     # Input redirection
+
+Output Formats:
+  text  - Human-readable output (default)
+  json  - JSON format for programmatic consumption
+  sarif - SARIF 2.1.0 format for GitHub Code Scanning integration
 
 Performance Target: <10ms for typical queries (50-500 characters)
 Throughput: 100+ files/second in batch mode`,
-	Args: cobra.MinimumNArgs(1),
+	Args: cobra.MinimumNArgs(0), // Changed to allow stdin with no args
 	RunE: validateRun,
 }
 
 func validateRun(cmd *cobra.Command, args []string) error {
-	startTime := time.Now()
+	// Handle stdin input
+	if ShouldReadFromStdin(args) {
+		return validateFromStdin(cmd)
+	}
 
-	files, err := expandFileArgs(args)
+	// Validate that we have file arguments if not using stdin
+	if len(args) == 0 {
+		return fmt.Errorf("no input provided: specify file paths or pipe SQL via stdin")
+	}
+
+	// Load configuration with CLI flag overrides
+	cfg, err := config.LoadDefault()
 	if err != nil {
-		return fmt.Errorf("failed to expand file arguments: %w", err)
+		// If config load fails, use defaults
+		cfg = config.DefaultConfig()
 	}
 
-	if len(files) == 0 {
-		return fmt.Errorf("no SQL files found matching the specified patterns")
+	// Validate output format
+	if validateOutputFormat != "" && validateOutputFormat != "text" && validateOutputFormat != "json" && validateOutputFormat != "sarif" {
+		return fmt.Errorf("invalid output format: %s (valid options: text, json, sarif)", validateOutputFormat)
 	}
 
-	var totalFiles, validFiles, invalidFiles int
-	var totalBytes int64
+	// Track which flags were explicitly set
+	flagsChanged := make(map[string]bool)
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		flagsChanged[f.Name] = true
+	})
+	if cmd.Parent() != nil && cmd.Parent().PersistentFlags() != nil {
+		cmd.Parent().PersistentFlags().Visit(func(f *pflag.Flag) {
+			flagsChanged[f.Name] = true
+		})
+	}
 
-	for _, file := range files {
-		valid, size, err := validateFile(file)
-		totalFiles++
-		totalBytes += size
+	// Create validator options from config and flags
+	// When outputting SARIF or JSON, automatically enable quiet mode to avoid mixing output
+	quietMode := validateQuiet || validateOutputFormat == "sarif" || validateOutputFormat == "json"
 
+	opts := ValidatorOptionsFromConfig(cfg, flagsChanged, ValidatorFlags{
+		Recursive:  validateRecursive,
+		Pattern:    validatePattern,
+		Quiet:      quietMode,
+		ShowStats:  validateStats && validateOutputFormat == "text", // Only show text stats for text output
+		Dialect:    validateDialect,
+		StrictMode: validateStrict,
+		Verbose:    verbose,
+	})
+
+	// Create validator with injectable output writers
+	validator := NewValidator(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
+
+	// Run validation
+	result, err := validator.Validate(args)
+	if err != nil {
+		return err
+	}
+
+	// Handle different output formats
+	if validateOutputFormat == "sarif" {
+		// Generate SARIF output
+		sarifData, err := output.FormatSARIF(result, Version)
 		if err != nil {
-			if !validateQuiet {
-				fmt.Fprintf(os.Stderr, "❌ %s: %v\n", file, err)
-			}
-			invalidFiles++
-			continue
+			return fmt.Errorf("failed to generate SARIF output: %w", err)
 		}
 
-		if valid {
-			if !validateQuiet {
-				fmt.Printf("✅ %s: Valid SQL\n", file)
+		// Write SARIF output to file or stdout
+		if validateOutputFile != "" {
+			if err := os.WriteFile(validateOutputFile, sarifData, 0600); err != nil {
+				return fmt.Errorf("failed to write SARIF output: %w", err)
 			}
-			validFiles++
+			if !opts.Quiet {
+				fmt.Fprintf(cmd.OutOrStdout(), "SARIF output written to %s\n", validateOutputFile)
+			}
 		} else {
-			if !validateQuiet {
-				fmt.Printf("❌ %s: Invalid SQL\n", file)
+			fmt.Fprint(cmd.OutOrStdout(), string(sarifData))
+		}
+	} else if validateOutputFormat == "json" {
+		// Generate JSON output
+		jsonData, err := output.FormatValidationJSON(result, args, validateStats)
+		if err != nil {
+			return fmt.Errorf("failed to generate JSON output: %w", err)
+		}
+
+		// Write JSON output to file or stdout
+		if validateOutputFile != "" {
+			if err := os.WriteFile(validateOutputFile, jsonData, 0600); err != nil {
+				return fmt.Errorf("failed to write JSON output: %w", err)
 			}
-			invalidFiles++
+			if !opts.Quiet {
+				fmt.Fprintf(cmd.OutOrStdout(), "JSON output written to %s\n", validateOutputFile)
+			}
+		} else {
+			fmt.Fprint(cmd.OutOrStdout(), string(jsonData))
 		}
 	}
+	// Default text output is already handled by the validator
 
-	duration := time.Since(startTime)
-
-	if validateStats {
-		fmt.Printf("\n📊 Validation Statistics:\n")
-		fmt.Printf("   Files processed: %d\n", totalFiles)
-		fmt.Printf("   Valid files: %d\n", validFiles)
-		fmt.Printf("   Invalid files: %d\n", invalidFiles)
-		fmt.Printf("   Total size: %s\n", formatBytes(totalBytes))
-		fmt.Printf("   Duration: %v\n", duration)
-		fmt.Printf("   Throughput: %.1f files/sec\n", float64(totalFiles)/duration.Seconds())
-		if totalBytes > 0 {
-			fmt.Printf("   Speed: %s/sec\n", formatBytes(int64(float64(totalBytes)/duration.Seconds())))
-		}
-	}
-
-	if invalidFiles > 0 {
+	// Exit with error code if there were invalid files
+	if result.InvalidFiles > 0 {
 		os.Exit(1)
 	}
 
 	return nil
 }
 
-func validateFile(filename string) (bool, int64, error) {
-	// Use security validation first
-	if err := ValidateFileAccess(filename); err != nil {
-		return false, 0, fmt.Errorf("file access validation failed: %w", err)
-	}
-
-	data, err := os.ReadFile(filename)
+// validateFromStdin handles validation from stdin input
+func validateFromStdin(cmd *cobra.Command) error {
+	// Read from stdin
+	content, err := ReadFromStdin()
 	if err != nil {
-		return false, 0, fmt.Errorf("failed to read file: %w", err)
+		return fmt.Errorf("failed to read from stdin: %w", err)
 	}
 
-	if len(data) == 0 {
-		return true, 0, nil // Empty files are considered valid
+	// Validate stdin content
+	if err := ValidateStdinInput(content); err != nil {
+		return fmt.Errorf("stdin validation failed: %w", err)
 	}
 
-	// Use pooled tokenizer for performance
-	tkz := tokenizer.GetTokenizer()
-	defer tokenizer.PutTokenizer(tkz)
-
-	// Tokenize
-	tokens, err := tkz.Tokenize(data)
+	// Create a temporary file to leverage existing validation logic
+	tmpFile, err := os.CreateTemp("", "gosqlx-stdin-*.sql")
 	if err != nil {
-		return false, int64(len(data)), fmt.Errorf("tokenization failed: %w", err)
+		return fmt.Errorf("failed to create temporary file: %w", err)
 	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
 
-	if len(tokens) == 0 {
-		return true, int64(len(data)), nil
+	// Write stdin content to temp file
+	if _, err := tmpFile.Write(content); err != nil {
+		return fmt.Errorf("failed to write to temporary file: %w", err)
 	}
+	tmpFile.Close()
 
-	// Convert TokenWithSpan to Token using centralized converter
-	convertedTokens, err := parser.ConvertTokensForParser(tokens)
+	// Load configuration
+	cfg, err := config.LoadDefault()
 	if err != nil {
-		return false, int64(len(data)), fmt.Errorf("token conversion failed: %w", err)
+		cfg = config.DefaultConfig()
 	}
 
-	// Parse to validate syntax with proper error handling for memory management
-	p := parser.NewParser()
-	astObj, err := p.Parse(convertedTokens)
+	// Track which flags were explicitly set
+	flagsChanged := make(map[string]bool)
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		flagsChanged[f.Name] = true
+	})
+	if cmd.Parent() != nil && cmd.Parent().PersistentFlags() != nil {
+		cmd.Parent().PersistentFlags().Visit(func(f *pflag.Flag) {
+			flagsChanged[f.Name] = true
+		})
+	}
+
+	// Create validator options
+	quietMode := validateQuiet || validateOutputFormat == "sarif" || validateOutputFormat == "json"
+	opts := ValidatorOptionsFromConfig(cfg, flagsChanged, ValidatorFlags{
+		Recursive:  false, // stdin is always single input
+		Pattern:    "",
+		Quiet:      quietMode,
+		ShowStats:  validateStats && validateOutputFormat == "text", // Only show text stats for text output
+		Dialect:    validateDialect,
+		StrictMode: validateStrict,
+		Verbose:    verbose,
+	})
+
+	// Create validator
+	validator := NewValidator(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
+
+	// Validate the temporary file
+	result, err := validator.Validate([]string{tmpFile.Name()})
 	if err != nil {
-		// Parser failed, no AST to release
-		return false, int64(len(data)), fmt.Errorf("parsing failed: %w", err)
+		return err
 	}
 
-	// CRITICAL: Always release AST
-	defer func() {
-		ast.ReleaseAST(astObj)
-	}()
+	// Update result to show "stdin" instead of temp file path
+	// The validation has already output results with temp file path
+	// Different output formats are handled below
 
-	return true, int64(len(data)), nil
-}
+	// Handle different output formats
+	if validateOutputFormat == "sarif" {
+		sarifData, err := output.FormatSARIF(result, Version)
+		if err != nil {
+			return fmt.Errorf("failed to generate SARIF output: %w", err)
+		}
 
-func expandFileArgs(args []string) ([]string, error) {
-	var files []string
+		if err := WriteOutput(sarifData, validateOutputFile, cmd.OutOrStdout()); err != nil {
+			return err
+		}
 
-	for _, arg := range args {
-		if validateRecursive && isDirectory(arg) {
-			// Recursive directory processing
-			pattern := validatePattern
-			if pattern == "" {
-				pattern = "*.sql"
-			}
+		if validateOutputFile != "" && !opts.Quiet {
+			fmt.Fprintf(cmd.OutOrStdout(), "SARIF output written to %s\n", validateOutputFile)
+		}
+	} else if validateOutputFormat == "json" {
+		jsonData, err := output.FormatValidationJSON(result, []string{"stdin"}, validateStats)
+		if err != nil {
+			return fmt.Errorf("failed to generate JSON output: %w", err)
+		}
 
-			err := filepath.Walk(arg, func(path string, info os.FileInfo, err error) error {
-				if err != nil {
-					return err
-				}
+		if err := WriteOutput(jsonData, validateOutputFile, cmd.OutOrStdout()); err != nil {
+			return err
+		}
 
-				if !info.IsDir() {
-					matched, err := filepath.Match(pattern, filepath.Base(path))
-					if err != nil {
-						return err
-					}
-					if matched {
-						files = append(files, path)
-					}
-				}
-				return nil
-			})
-			if err != nil {
-				return nil, err
-			}
-		} else if strings.Contains(arg, "*") || strings.Contains(arg, "?") || strings.Contains(arg, "[") {
-			// Glob pattern
-			matches, err := filepath.Glob(arg)
-			if err != nil {
-				return nil, err
-			}
-			files = append(files, matches...)
-		} else {
-			// Regular file
-			files = append(files, arg)
+		if validateOutputFile != "" && !opts.Quiet {
+			fmt.Fprintf(cmd.OutOrStdout(), "JSON output written to %s\n", validateOutputFile)
 		}
 	}
 
-	return files, nil
-}
-
-func isDirectory(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.IsDir()
-}
-
-func formatBytes(bytes int64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
+	// Exit with error code if validation failed
+	if result.InvalidFiles > 0 {
+		os.Exit(1)
 	}
 
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+	return nil
 }
 
 func init() {
 	rootCmd.AddCommand(validateCmd)
 
-	validateCmd.Flags().BoolVarP(&validateRecursive, "recursive", "r", false, "recursively process directories")
-	validateCmd.Flags().StringVarP(&validatePattern, "pattern", "p", "*.sql", "file pattern for recursive processing")
+	validateCmd.Flags().BoolVarP(&validateRecursive, "recursive", "r", false, "recursively process directories (config: validate.recursive)")
+	validateCmd.Flags().StringVarP(&validatePattern, "pattern", "p", "*.sql", "file pattern for recursive processing (config: validate.pattern)")
 	validateCmd.Flags().BoolVarP(&validateQuiet, "quiet", "q", false, "quiet mode (exit code only)")
 	validateCmd.Flags().BoolVarP(&validateStats, "stats", "s", false, "show performance statistics")
+	validateCmd.Flags().StringVar(&validateDialect, "dialect", "", "SQL dialect: postgresql, mysql, sqlserver, oracle, sqlite (config: validate.dialect)")
+	validateCmd.Flags().BoolVar(&validateStrict, "strict", false, "enable strict validation mode (config: validate.strict_mode)")
+	validateCmd.Flags().StringVar(&validateOutputFormat, "output-format", "text", "output format: text, json, sarif")
+	validateCmd.Flags().StringVar(&validateOutputFile, "output-file", "", "output file path (default: stdout)")
 }

@@ -1,0 +1,249 @@
+{
+  "name": "gosqlx",
+  "displayName": "GoSQLX",
+  "description": "High-performance SQL parsing, validation, formatting, and analysis powered by GoSQLX",
+  "version": "0.1.0",
+  "publisher": "ajitpratap0",
+  "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ajitpratap0/GoSQLX"
+  },
+  "bugs": {
+    "url": "https://github.com/ajitpratap0/GoSQLX/issues"
+  },
+  "homepage": "https://github.com/ajitpratap0/GoSQLX#readme",
+  "icon": "images/icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Formatters"
+  ],
+  "keywords": [
+    "sql",
+    "parser",
+    "linter",
+    "formatter",
+    "gosqlx",
+    "postgresql",
+    "mysql",
+    "sqlserver",
+    "oracle",
+    "sqlite"
+  ],
+  "activationEvents": [
+    "onLanguage:sql",
+    "onLanguage:gosqlx"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "sql",
+        "aliases": ["SQL", "sql"],
+        "extensions": [".sql", ".pgsql", ".psql", ".mysql"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "sql",
+        "scopeName": "source.sql",
+        "path": "./syntaxes/sql.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "GoSQLX",
+      "properties": {
+        "gosqlx.enable": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Enable GoSQLX language server"
+        },
+        "gosqlx.executablePath": {
+          "type": "string",
+          "default": "gosqlx",
+          "scope": "machine-overridable",
+          "description": "Path to the gosqlx executable"
+        },
+        "gosqlx.trace.server": {
+          "type": "string",
+          "enum": ["off", "messages", "verbose"],
+          "default": "off",
+          "scope": "window",
+          "description": "Traces the communication between VS Code and the GoSQLX language server"
+        },
+        "gosqlx.format.indentSize": {
+          "type": "number",
+          "default": 2,
+          "scope": "resource",
+          "description": "Number of spaces for indentation when formatting SQL"
+        },
+        "gosqlx.format.uppercaseKeywords": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Convert SQL keywords to uppercase when formatting"
+        },
+        "gosqlx.validation.enable": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Enable real-time SQL validation"
+        },
+        "gosqlx.dialect": {
+          "type": "string",
+          "enum": ["generic", "postgresql", "mysql", "sqlserver", "oracle", "sqlite"],
+          "default": "generic",
+          "scope": "resource",
+          "description": "SQL dialect for validation and formatting"
+        },
+        "gosqlx.timeouts.startup": {
+          "type": "number",
+          "default": 10000,
+          "minimum": 1000,
+          "maximum": 300000,
+          "description": "Timeout for language server startup in milliseconds"
+        },
+        "gosqlx.timeouts.validation": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 1000,
+          "maximum": 60000,
+          "description": "Timeout for executable validation in milliseconds"
+        },
+        "gosqlx.timeouts.analysis": {
+          "type": "number",
+          "default": 30000,
+          "minimum": 5000,
+          "maximum": 300000,
+          "description": "Timeout for SQL analysis command in milliseconds"
+        },
+        "gosqlx.telemetry.enable": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable anonymous usage telemetry to help improve GoSQLX. No SQL content or file paths are collected."
+        },
+        "gosqlx.performance.showStatusBar": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show performance metrics in status bar"
+        },
+        "gosqlx.performance.collectMetrics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Collect performance metrics for debugging"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "gosqlx.validate",
+        "title": "Validate SQL",
+        "category": "GoSQLX"
+      },
+      {
+        "command": "gosqlx.format",
+        "title": "Format SQL",
+        "category": "GoSQLX"
+      },
+      {
+        "command": "gosqlx.analyze",
+        "title": "Analyze SQL",
+        "category": "GoSQLX"
+      },
+      {
+        "command": "gosqlx.restartServer",
+        "title": "Restart Language Server",
+        "category": "GoSQLX"
+      },
+      {
+        "command": "gosqlx.showOutput",
+        "title": "Show Output Channel",
+        "category": "GoSQLX"
+      },
+      {
+        "command": "gosqlx.showMetrics",
+        "title": "Show Performance Metrics",
+        "category": "GoSQLX"
+      },
+      {
+        "command": "gosqlx.validateConfiguration",
+        "title": "Validate Configuration",
+        "category": "GoSQLX"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "when": "resourceLangId == sql",
+          "command": "gosqlx.validate",
+          "group": "gosqlx@1"
+        },
+        {
+          "when": "resourceLangId == sql",
+          "command": "gosqlx.format",
+          "group": "gosqlx@2"
+        },
+        {
+          "when": "resourceLangId == sql",
+          "command": "gosqlx.analyze",
+          "group": "gosqlx@3"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "gosqlx.validate",
+          "when": "resourceLangId == sql"
+        },
+        {
+          "command": "gosqlx.format",
+          "when": "resourceLangId == sql"
+        },
+        {
+          "command": "gosqlx.analyze",
+          "when": "resourceLangId == sql"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "gosqlx.format",
+        "key": "ctrl+shift+f",
+        "mac": "cmd+shift+f",
+        "when": "resourceLangId == sql && editorTextFocus"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "@vscode/test-electron": "^2.3.8",
+    "@vscode/vsce": "^2.22.0",
+    "eslint": "^8.54.0",
+    "glob": "^10.3.10",
+    "mocha": "^10.2.0",
+    "typescript": "^5.3.2"
+  }
+}

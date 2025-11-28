@@ -24,9 +24,9 @@ func TestTokenizer_PostgreSQLParameters(t *testing.T) {
 			name:  "Multiple parameters",
 			input: "UPDATE users SET name = @name WHERE id = @id",
 			expectedTokens: []models.Token{
-				{Type: models.TokenTypeIdentifier, Value: "UPDATE"},
+				{Type: models.TokenTypeUpdate, Value: "UPDATE"},
 				{Type: models.TokenTypeIdentifier, Value: "users"},
-				{Type: models.TokenTypeIdentifier, Value: "SET"},
+				{Type: models.TokenTypeSet, Value: "SET"},
 				{Type: models.TokenTypeIdentifier, Value: "name"},
 				{Type: models.TokenTypeEq, Value: "="},
 				{Type: models.TokenTypePlaceholder, Value: "@name"},

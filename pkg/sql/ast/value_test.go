@@ -170,21 +170,49 @@ func TestDateTimeFieldString(t *testing.T) {
 		expected string
 	}{
 		{Year, "YEAR"},
+		{Years, "YEARS"},
 		{Month, "MONTH"},
+		{Months, "MONTHS"},
 		{Day, "DAY"},
+		{Days, "DAYS"},
 		{Hour, "HOUR"},
+		{Hours, "HOURS"},
 		{Minute, "MINUTE"},
+		{Minutes, "MINUTES"},
 		{Second, "SECOND"},
+		{Seconds, "SECONDS"},
 		{Millisecond, "MILLISECOND"},
+		{Milliseconds, "MILLISECONDS"},
 		{Microsecond, "MICROSECOND"},
+		{Microseconds, "MICROSECONDS"},
 		{Nanosecond, "NANOSECOND"},
+		{Nanoseconds, "NANOSECONDS"},
 		{Quarter, "QUARTER"},
 		{Week, "WEEK"},
+		{Weeks, "WEEKS"},
 		{DayOfWeek, "DAYOFWEEK"},
 		{DayOfYear, "DAYOFYEAR"},
 		{IsoWeek, "ISOWEEK"},
 		{Timezone, "TIMEZONE"},
+		{TimezoneAbbr, "TIMEZONE_ABBR"},
+		{TimezoneHour, "TIMEZONE_HOUR"},
+		{TimezoneMinute, "TIMEZONE_MINUTE"},
+		{TimezoneRegion, "TIMEZONE_REGION"},
 		{NoDateTime, "NODATETIME"},
+		{Date, "DATE"},
+		{Datetime, "DATETIME"},
+		{Time, "TIME"},
+		{Century, "CENTURY"},
+		{Decade, "DECADE"},
+		{Dow, "DOW"},
+		{Doy, "DOY"},
+		{Epoch, "EPOCH"},
+		{Isodow, "ISODOW"},
+		{Isoyear, "ISOYEAR"},
+		{Julian, "JULIAN"},
+		{Millenium, "MILLENIUM"},
+		{Millennium, "MILLENNIUM"},
+		{DateTimeField(999), "UNKNOWN"}, // Test default case
 	}
 
 	for _, tt := range tests {
@@ -307,3 +335,177 @@ func TestEscapeQuotedString(t *testing.T) {
 		})
 	}
 }
+
+// Test additional Value.String() cases for byte string literals
+func TestValueStringByteStringLiterals(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    Value
+		expected string
+	}{
+		{
+			name: "SingleQuotedByteStringLiteral",
+			value: Value{
+				Type:  SingleQuotedByteStringLiteralValue,
+				Value: "0101",
+			},
+			expected: "B'0101'",
+		},
+		{
+			name: "DoubleQuotedByteStringLiteral",
+			value: Value{
+				Type:  DoubleQuotedByteStringLiteralValue,
+				Value: "11001100",
+			},
+			expected: `B"11001100"`,
+		},
+		{
+			name: "TripleSingleQuotedByteStringLiteral",
+			value: Value{
+				Type:  TripleSingleQuotedByteStringLiteralValue,
+				Value: "010101",
+			},
+			expected: "B'''010101'''",
+		},
+		{
+			name: "TripleDoubleQuotedByteStringLiteral",
+			value: Value{
+				Type:  TripleDoubleQuotedByteStringLiteralValue,
+				Value: "111000",
+			},
+			expected: `B"""111000"""`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.value.String()
+			if got != tt.expected {
+				t.Errorf("Value.String() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+// Test additional Value.String() cases for raw string literals
+func TestValueStringRawStringLiterals(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    Value
+		expected string
+	}{
+		{
+			name: "SingleQuotedRawStringLiteral",
+			value: Value{
+				Type:  SingleQuotedRawStringLiteralValue,
+				Value: "C:\\path\\file.txt",
+			},
+			expected: "R'C:\\path\\file.txt'",
+		},
+		{
+			name: "DoubleQuotedRawStringLiteral",
+			value: Value{
+				Type:  DoubleQuotedRawStringLiteralValue,
+				Value: `raw\nstring`,
+			},
+			expected: `R"raw\nstring"`,
+		},
+		{
+			name: "TripleSingleQuotedRawStringLiteral",
+			value: Value{
+				Type: TripleSingleQuotedRawStringLiteralValue,
+				Value: `multiline
+raw`,
+			},
+			expected: `R'''multiline
+raw'''`,
+		},
+		{
+			name: "TripleDoubleQuotedRawStringLiteral",
+			value: Value{
+				Type: TripleDoubleQuotedRawStringLiteralValue,
+				Value: `more
+raw
+data`,
+			},
+			expected: `R"""more
+raw
+data"""`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.value.String()
+			if got != tt.expected {
+				t.Errorf("Value.String() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+// Test additional Value.String() cases for other string types
+func TestValueStringOtherStringTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    Value
+		expected string
+	}{
+		{
+			name: "NationalStringLiteral",
+			value: Value{
+				Type:  NationalStringLiteralValue,
+				Value: "hello",
+			},
+			expected: "N'hello'",
+		},
+		{
+			name: "HexStringLiteral",
+			value: Value{
+				Type:  HexStringLiteralValue,
+				Value: "48656C6C6F",
+			},
+			expected: "X'48656C6C6F'",
+		},
+		{
+			name: "DoubleQuotedString",
+			value: Value{
+				Type:  DoubleQuotedStringValue,
+				Value: "identifier",
+			},
+			expected: `"identifier"`,
+		},
+		{
+			name: "DoubleQuotedString with quotes",
+			value: Value{
+				Type:  DoubleQuotedStringValue,
+				Value: `my"table`,
+			},
+			expected: `"my""table"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.value.String()
+			if got != tt.expected {
+				t.Errorf("Value.String() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+// Test Value.String() default case with non-Number type
+func TestValueStringDefault(t *testing.T) {
+	value := Value{
+		Type:  NumberValue,
+		Value: 42, // Not a Number struct, just an int
+	}
+	got := value.String()
+	expected := "42"
+	if got != expected {
+		t.Errorf("Value.String() default case = %v, want %v", got, expected)
+	}
+}
+
+// Test DateTimeField.String() method

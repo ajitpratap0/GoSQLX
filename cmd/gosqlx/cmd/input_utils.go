@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/validate"
 )
 
 const (
@@ -38,25 +40,15 @@ func DetectAndReadInput(input string) (*InputResult, error) {
 	input = strings.TrimSpace(input)
 
 	// Check if input looks like a file path using os.Stat
-	if stat, err := os.Stat(input); err == nil {
-		// Input is a valid file path
-		if stat.IsDir() {
-			return nil, fmt.Errorf("input is a directory, not a file: %s", input)
-		}
-
-		// Security check: file size limit
-		if stat.Size() > MaxFileSize {
-			return nil, fmt.Errorf("file too large: %d bytes (max %d bytes)", stat.Size(), MaxFileSize)
-		}
-
-		// Check file extension for SQL files
-		ext := strings.ToLower(filepath.Ext(input))
-		if !isValidSQLFileExtension(ext) {
-			return nil, fmt.Errorf("unsupported file extension: %s (expected .sql, .txt, or no extension)", ext)
+	if _, err := os.Stat(input); err == nil {
+		// Input is a valid file path - perform comprehensive security validation
+		if err := validate.ValidateInputFile(input); err != nil {
+			return nil, fmt.Errorf("security validation failed: %w", err)
 		}
 
 		// Read the file
-		content, err := os.ReadFile(input)
+		// G304: Path is validated by ValidateInputFile above
+		content, err := os.ReadFile(input) // #nosec G304
 		if err != nil {
 			return nil, fmt.Errorf("failed to read file %s: %w", input, err)
 		}
@@ -179,26 +171,13 @@ func expandDirectory(dir string) ([]string, error) {
 }
 
 // ValidateFileAccess checks if we can read the file and it meets size requirements
+// Now uses enhanced security validation with path traversal and symlink checks
 func ValidateFileAccess(path string) error {
-	stat, err := os.Stat(path)
-	if err != nil {
-		return fmt.Errorf("cannot access file %s: %w", path, err)
-	}
+	// Use the enhanced security validator from internal package
+	return validate.ValidateInputFile(path)
+}
 
-	if stat.IsDir() {
-		return fmt.Errorf("path is a directory: %s", path)
-	}
-
-	if stat.Size() > MaxFileSize {
-		return fmt.Errorf("file too large: %d bytes (max %d)", stat.Size(), MaxFileSize)
-	}
-
-	// Test read permissions
-	file, err := os.Open(path)
-	if err != nil {
-		return fmt.Errorf("cannot open file %s: %w", path, err)
-	}
-	file.Close()
-
-	return nil
+// expandFileArgs is a lowercase alias for ExpandFileArgs for backward compatibility
+func expandFileArgs(args []string) ([]string, error) {
+	return ExpandFileArgs(args)
 }

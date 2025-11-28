@@ -39,27 +39,33 @@ func NewKeywords() *Keywords {
 func (k *Keywords) initialize() {
 	// Initialize DML keywords
 	k.DMLKeywords = map[string]models.TokenType{
-		"DISTINCT": models.TokenTypeKeyword,
-		"ALL":      models.TokenTypeKeyword,
-		"FETCH":    models.TokenTypeKeyword,
-		"NEXT":     models.TokenTypeKeyword,
-		"ROWS":     models.TokenTypeKeyword,
-		"ONLY":     models.TokenTypeKeyword,
-		"WITH":     models.TokenTypeKeyword,
-		"TIES":     models.TokenTypeKeyword,
-		"NULLS":    models.TokenTypeKeyword,
-		"FIRST":    models.TokenTypeKeyword,
-		"LAST":     models.TokenTypeKeyword,
+		"DISTINCT": models.TokenTypeDistinct,
+		"ALL":      models.TokenTypeAll,
+		"FETCH":    models.TokenTypeFetch,
+		"NEXT":     models.TokenTypeNext,
+		"ROWS":     models.TokenTypeRows,
+		"ONLY":     models.TokenTypeOnly,
+		"WITH":     models.TokenTypeWith,
+		"TIES":     models.TokenTypeTies,
+		"NULLS":    models.TokenTypeNulls,
+		"FIRST":    models.TokenTypeFirst,
+		"LAST":     models.TokenTypeLast,
+		"PERCENT":  models.TokenTypePercent,  // SQL-99 FETCH ... PERCENT ROWS
+		"ROLLUP":   models.TokenTypeRollup,   // SQL-99 grouping operation
+		"CUBE":     models.TokenTypeCube,     // SQL-99 grouping operation
+		"GROUPING": models.TokenTypeGrouping, // SQL-99 GROUPING SETS
+		"SETS":     models.TokenTypeSets,     // SQL-99 GROUPING SETS
 	}
 
 	// Initialize compound keywords
 	k.CompoundKeywords = map[string]models.TokenType{
-		"FULL JOIN":    models.TokenTypeKeyword,
-		"CROSS JOIN":   models.TokenTypeKeyword,
-		"NATURAL JOIN": models.TokenTypeKeyword,
-		"GROUP BY":     models.TokenTypeKeyword,
-		"ORDER BY":     models.TokenTypeKeyword,
-		"LEFT JOIN":    models.TokenTypeKeyword,
+		"FULL JOIN":     models.TokenTypeKeyword,
+		"CROSS JOIN":    models.TokenTypeKeyword,
+		"NATURAL JOIN":  models.TokenTypeKeyword,
+		"GROUP BY":      models.TokenTypeKeyword,
+		"ORDER BY":      models.TokenTypeKeyword,
+		"LEFT JOIN":     models.TokenTypeKeyword,
+		"GROUPING SETS": models.TokenTypeKeyword, // SQL-99 grouping operation
 	}
 
 	// Add all keywords to the main keyword map

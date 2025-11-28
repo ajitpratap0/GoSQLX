@@ -3,14 +3,11 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
+	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
 )
 
 var (
@@ -19,6 +16,7 @@ var (
 	formatUppercase  bool
 	formatCompact    bool
 	formatCheck      bool
+	formatMaxLine    int
 )
 
 // formatCmd represents the format command
@@ -37,169 +35,162 @@ Examples:
   gosqlx format "*.sql"                      # Format all SQL files
   gosqlx format -o formatted.sql query.sql   # Save to specific file
 
+Pipeline/Stdin Examples:
+  echo "SELECT * FROM users" | gosqlx format    # Format from stdin (auto-detect)
+  cat query.sql | gosqlx format                 # Pipe file contents
+  gosqlx format -                               # Explicit stdin marker
+  gosqlx format < query.sql                     # Input redirection
+  cat query.sql | gosqlx format > formatted.sql # Full pipeline
+
 Performance: 100x faster than SQLFluff for equivalent operations`,
-	Args: cobra.MinimumNArgs(1),
+	Args: cobra.MinimumNArgs(0), // Changed to allow stdin with no args
 	RunE: formatRun,
 }
 
 func formatRun(cmd *cobra.Command, args []string) error {
-	files, err := expandFileArgs(args)
+	// Handle stdin input
+	if ShouldReadFromStdin(args) {
+		return formatFromStdin(cmd)
+	}
+
+	// Validate that we have file arguments if not using stdin
+	if len(args) == 0 {
+		return fmt.Errorf("no input provided: specify file paths or pipe SQL via stdin")
+	}
+
+	// Load configuration with CLI flag overrides
+	cfg, err := config.LoadDefault()
 	if err != nil {
-		return fmt.Errorf("failed to expand file arguments: %w", err)
+		// If config load fails, use defaults
+		cfg = config.DefaultConfig()
 	}
 
-	if len(files) == 0 {
-		return fmt.Errorf("no SQL files found matching the specified patterns")
+	// Track which flags were explicitly set
+	flagsChanged := make(map[string]bool)
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		flagsChanged[f.Name] = true
+	})
+	if cmd.Parent() != nil && cmd.Parent().PersistentFlags() != nil {
+		cmd.Parent().PersistentFlags().Visit(func(f *pflag.Flag) {
+			flagsChanged[f.Name] = true
+		})
 	}
 
-	var needsFormatting []string
-	startTime := time.Now()
+	// Create formatter options from config and flags
+	opts := FormatterOptionsFromConfig(cfg, flagsChanged, FormatterFlags{
+		InPlace:    formatInPlace,
+		IndentSize: formatIndentSize,
+		Uppercase:  formatUppercase,
+		Compact:    formatCompact,
+		Check:      formatCheck,
+		MaxLine:    formatMaxLine,
+		Verbose:    verbose,
+		Output:     outputFile,
+	})
 
-	for _, file := range files {
-		formatted, changed, err := formatFile(file)
-		if err != nil {
-			return fmt.Errorf("failed to format %s: %w", file, err)
-		}
+	// Create formatter with injectable output writers
+	formatter := NewFormatter(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
 
-		if formatCheck {
-			if changed {
-				needsFormatting = append(needsFormatting, file)
-			}
-			continue
-		}
-
-		if formatInPlace {
-			if changed {
-				err = os.WriteFile(file, []byte(formatted), 0644)
-				if err != nil {
-					return fmt.Errorf("failed to write %s: %w", file, err)
-				}
-				if verbose {
-					fmt.Printf("Formatted: %s\n", file)
-				}
-			} else if verbose {
-				fmt.Printf("Already formatted: %s\n", file)
-			}
-		} else if output != "" {
-			err = os.WriteFile(output, []byte(formatted), 0644)
-			if err != nil {
-				return fmt.Errorf("failed to write output file: %w", err)
-			}
-		} else {
-			fmt.Print(formatted)
-		}
+	// Run formatting
+	result, err := formatter.Format(args)
+	if err != nil {
+		return err
 	}
 
-	if formatCheck {
-		if len(needsFormatting) > 0 {
-			fmt.Fprintf(os.Stderr, "The following files need formatting:\n")
-			for _, file := range needsFormatting {
-				fmt.Fprintf(os.Stderr, "  %s\n", file)
-			}
-			os.Exit(1)
-		}
-		fmt.Printf("All %d files are properly formatted (%v)\n", len(files), time.Since(startTime))
+	// Exit with error code if files need formatting in check mode
+	if len(result.NeedsFormatting) > 0 {
+		os.Exit(1)
 	}
 
 	return nil
 }
 
-func formatFile(filename string) (string, bool, error) {
-	// Use security validation first
-	if err := ValidateFileAccess(filename); err != nil {
-		return "", false, fmt.Errorf("file access validation failed: %w", err)
-	}
-
-	data, err := os.ReadFile(filename)
+// formatFromStdin handles formatting from stdin input
+func formatFromStdin(cmd *cobra.Command) error {
+	// Read from stdin
+	content, err := ReadFromStdin()
 	if err != nil {
-		return "", false, fmt.Errorf("failed to read file: %w", err)
+		return fmt.Errorf("failed to read from stdin: %w", err)
 	}
 
-	original := string(data)
-	if len(data) == 0 {
-		return original, false, nil
+	// Validate stdin content
+	if err := ValidateStdinInput(content); err != nil {
+		return fmt.Errorf("stdin validation failed: %w", err)
 	}
 
-	formatted, err := formatSQL(original, FormatOptions{
+	// Note: in-place mode is not supported for stdin (would be no-op)
+	if formatInPlace {
+		return fmt.Errorf("in-place mode (-i) is not supported with stdin input")
+	}
+
+	// Load configuration
+	cfg, err := config.LoadDefault()
+	if err != nil {
+		cfg = config.DefaultConfig()
+	}
+
+	// Track which flags were explicitly set
+	flagsChanged := make(map[string]bool)
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		flagsChanged[f.Name] = true
+	})
+	if cmd.Parent() != nil && cmd.Parent().PersistentFlags() != nil {
+		cmd.Parent().PersistentFlags().Visit(func(f *pflag.Flag) {
+			flagsChanged[f.Name] = true
+		})
+	}
+
+	// Create formatter options
+	opts := FormatterOptionsFromConfig(cfg, flagsChanged, FormatterFlags{
+		InPlace:    false, // always false for stdin
 		IndentSize: formatIndentSize,
 		Uppercase:  formatUppercase,
 		Compact:    formatCompact,
+		Check:      formatCheck,
+		MaxLine:    formatMaxLine,
+		Verbose:    verbose,
+		Output:     outputFile,
 	})
+
+	// Create formatter
+	formatter := NewFormatter(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
+
+	// Format the SQL content using the internal formatSQL method
+	formattedSQL, err := formatter.formatSQL(string(content))
 	if err != nil {
-		return "", false, err
+		return fmt.Errorf("formatting failed: %w", err)
 	}
 
-	changed := original != formatted
-	return formatted, changed, nil
-}
+	// In check mode, compare original and formatted
+	if formatCheck {
+		if string(content) != formattedSQL {
+			fmt.Fprintf(cmd.ErrOrStderr(), "stdin needs formatting\n")
+			os.Exit(1)
+		}
 
-type FormatOptions struct {
-	IndentSize int
-	Uppercase  bool
-	Compact    bool
-}
-
-func formatSQL(sql string, opts FormatOptions) (string, error) {
-	// Use pooled tokenizer for performance
-	tkz := tokenizer.GetTokenizer()
-	defer tokenizer.PutTokenizer(tkz)
-
-	// Tokenize the SQL
-	tokens, err := tkz.Tokenize([]byte(sql))
-	if err != nil {
-		return "", fmt.Errorf("tokenization failed: %w", err)
+		if verbose {
+			fmt.Fprintf(cmd.OutOrStdout(), "stdin is properly formatted\n")
+		}
+		return nil
 	}
 
-	if len(tokens) == 0 {
-		return "", nil
+	// Write formatted output
+	if err := WriteOutput([]byte(formattedSQL), outputFile, cmd.OutOrStdout()); err != nil {
+		return err
 	}
 
-	// Convert tokens for parser using centralized converter
-	convertedTokens, err := parser.ConvertTokensForParser(tokens)
-	if err != nil {
-		return "", fmt.Errorf("token conversion failed: %w", err)
-	}
-
-	// Parse to AST with proper error handling for memory management
-	p := parser.NewParser()
-	parsedAST, err := p.Parse(convertedTokens)
-	if err != nil {
-		// Parser failed, no AST to release
-		return "", fmt.Errorf("parsing failed: %w", err)
-	}
-
-	// CRITICAL: Always release AST, even on formatting errors
-	defer func() {
-		ast.ReleaseAST(parsedAST)
-	}()
-
-	// Configure formatter options
-	indentStr := strings.Repeat(" ", opts.IndentSize)
-	formatterOpts := FormatterOptions{
-		Indent:       indentStr,
-		Compact:      opts.Compact,
-		UppercaseKw:  opts.Uppercase,
-		AlignColumns: !opts.Compact, // Align columns unless in compact mode
-	}
-
-	// Create formatter and format the AST
-	formatter := NewSQLFormatter(formatterOpts)
-	formatted, err := formatter.Format(parsedAST)
-	if err != nil {
-		return "", fmt.Errorf("formatting failed: %w", err)
-	}
-
-	return formatted, nil
+	return nil
 }
 
 func init() {
 	rootCmd.AddCommand(formatCmd)
 
 	formatCmd.Flags().BoolVarP(&formatInPlace, "in-place", "i", false, "edit files in place")
-	formatCmd.Flags().IntVar(&formatIndentSize, "indent", 2, "indentation size in spaces")
-	formatCmd.Flags().BoolVar(&formatUppercase, "uppercase", true, "uppercase SQL keywords")
-	formatCmd.Flags().BoolVar(&formatCompact, "compact", false, "compact format (minimal whitespace)")
+	formatCmd.Flags().IntVar(&formatIndentSize, "indent", 2, "indentation size in spaces (config: format.indent)")
+	formatCmd.Flags().BoolVar(&formatUppercase, "uppercase", true, "uppercase SQL keywords (config: format.uppercase_keywords)")
+	formatCmd.Flags().BoolVar(&formatCompact, "compact", false, "compact format (config: format.compact)")
 	formatCmd.Flags().BoolVar(&formatCheck, "check", false, "check if files need formatting (CI mode)")
+	formatCmd.Flags().IntVar(&formatMaxLine, "max-line", 80, "maximum line length (config: format.max_line_length)")
 
 	// Add negation flags
 	formatCmd.Flags().BoolVar(&formatUppercase, "no-uppercase", false, "keep original keyword case")

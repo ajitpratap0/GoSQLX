@@ -6,9 +6,9 @@
 
 <h3>⚡ High-Performance SQL Parser for Go ⚡</h3>
 
-[![Go Version](https://img.shields.io/badge/Go-1.19+-00ADD8?style=for-the-badge&logo=go)](https://go.dev)
+[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=for-the-badge&logo=go)](https://go.dev)
 [![Release](https://img.shields.io/github/v/release/ajitpratap0/GoSQLX?style=for-the-badge&color=orange)](https://github.com/ajitpratap0/GoSQLX/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=for-the-badge)](https://www.gnu.org/licenses/agpl-3.0)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge)](http://makeapullrequest.com)
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/ajitpratap0/GoSQLX/test.yml?branch=main&label=Tests&style=flat-square)](https://github.com/ajitpratap0/GoSQLX/actions)
@@ -22,8 +22,11 @@
 **Production-ready, high-performance SQL parsing SDK for Go**  
 *Zero-copy tokenization • Object pooling • Multi-dialect support • Unicode-first design*
 
-[🚀 Installation](#-installation) • [⚡ Quick Start](#-quick-start) • [📚 Documentation](#-documentation) • [💡 Examples](#-examples) • [📊 Benchmarks](#-performance)
+### 🚀 **New to GoSQLX? [Get Started in 5 Minutes →](docs/GETTING_STARTED.md)**
 
+[📖 Installation](#-installation) • [⚡ Quick Start](#-quick-start) • [📚 Documentation](#-documentation) • [💡 Examples](#-examples) • [📊 Benchmarks](#-performance)
+
+<a href="https://github.com/ajitpratap0/GoSQLX/blob/main/docs/GETTING_STARTED.md"><img src="https://img.shields.io/badge/🚀_Getting_Started-00ADD8?style=for-the-badge" alt="Getting Started"></a>
 <a href="https://github.com/ajitpratap0/GoSQLX/blob/main/docs/USAGE_GUIDE.md"><img src="https://img.shields.io/badge/📖_User_Guide-2ea44f?style=for-the-badge" alt="User Guide"></a>
 <a href="https://pkg.go.dev/github.com/ajitpratap0/GoSQLX"><img src="https://img.shields.io/badge/📄_API_Docs-blue?style=for-the-badge" alt="API Docs"></a>
 <a href="https://github.com/ajitpratap0/GoSQLX/discussions"><img src="https://img.shields.io/badge/💬_Discussions-purple?style=for-the-badge" alt="Discussions"></a>
@@ -41,24 +44,31 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 
 - **🚀 Blazing Fast**: **1.38M+ ops/sec** sustained, **1.5M+ ops/sec** peak throughput
 - **💾 Memory Efficient**: **60-80% reduction** through intelligent object pooling
-- **🔒 Thread-Safe**: **Race-free**, linear scaling to **128+ cores**
+- **🔒 Thread-Safe**: **Race-free**, linear scaling to **128+ cores**, **0 race conditions** detected
+- **✅ Production-Grade Testing**: **Token 100%** ⭐, **Keywords 100%** ⭐, **Errors 95.6%**, **Tokenizer 76.1%**, **Parser 76.1%**, **CLI 63.3%** coverage (Phases 1-3 complete)
 - **🔗 Complete JOIN Support**: All JOIN types (INNER/LEFT/RIGHT/FULL OUTER/CROSS/NATURAL) with proper tree logic
 - **🔄 Advanced SQL Features**: CTEs with RECURSIVE support, Set Operations (UNION/EXCEPT/INTERSECT)
 - **🪟 Window Functions**: Complete SQL-99 window function support with OVER clause, PARTITION BY, ORDER BY, frame specifications
+- **🔄 MERGE Statements**: Full SQL:2003 MERGE support with WHEN MATCHED/NOT MATCHED clauses
+- **📊 Grouping Operations**: GROUPING SETS, ROLLUP, CUBE (SQL-99 T431)
+- **🗃️ Materialized Views**: CREATE, DROP, REFRESH MATERIALIZED VIEW support
+- **📋 Table Partitioning**: PARTITION BY RANGE, LIST, HASH support
+- **🔐 SQL Injection Detection**: Built-in security scanner (`pkg/sql/security`) for injection pattern detection
 - **🌍 Unicode Support**: Complete UTF-8 support for international SQL
 - **🔧 Multi-Dialect**: PostgreSQL, MySQL, SQL Server, Oracle, SQLite
 - **📊 Zero-Copy**: Direct byte slice operations, **<1μs latency**
+- **🔍 Intelligent Errors**: Structured error codes with typo detection, context highlighting, and helpful hints
 - **🏗️ Production Ready**: Battle-tested with **0 race conditions** detected, **~80-85% SQL-99 compliance**
 
-### 🎯 Performance Highlights (v1.4.0)
+### 🎯 Performance & Quality Highlights (v1.5.0 + Phases 2-3)
 
 <div align="center">
 
-| **1.38M+** | **8M+** | **<1μs** | **60-80%** | **30+** |
-|:---------:|:-------:|:----------:|:----------:|:-------:|
-| Ops/sec | Tokens/sec | Latency | Memory Saved | Total Tests |
+| **1.38M+** | **8M+** | **<1μs** | **60-80%** | **100%** ⭐ | **4,823** |
+|:---------:|:-------:|:----------:|:----------:|:-------:|:---------:|
+| Ops/sec | Tokens/sec | Latency | Memory Saved | Token Coverage | Test Lines Added |
 
-**✅ Window Functions** • **Zero race conditions** • **~80-85% SQL-99 compliance** • **Production validated**
+**✅ Phases 1-3 Complete** • **Zero race conditions** • **~80-85% SQL-99 compliance** • **115+ real-world SQL queries validated** • **Perfect Token & Keywords coverage!**
 
 </div>
 
@@ -94,12 +104,14 @@ go build -o gosqlx ./cmd/gosqlx
 ```
 
 **Requirements:**
-- Go 1.19 or higher
+- Go 1.24 or higher
 - No external dependencies
 
 ## 🚀 Quick Start
 
 ### CLI Usage
+
+**Standard Usage:**
 ```bash
 # Validate SQL syntax
 gosqlx validate "SELECT * FROM users WHERE active = true"
@@ -112,9 +124,93 @@ gosqlx analyze "SELECT COUNT(*) FROM orders GROUP BY status"
 
 # Parse SQL to AST representation
 gosqlx parse -f json complex_query.sql
+
+# Unix Pipeline Support (NEW in v1.5.0)
+cat query.sql | gosqlx format                    # Format from stdin
+echo "SELECT * FROM users" | gosqlx validate     # Validate from pipe
+gosqlx format query.sql | gosqlx validate        # Chain commands
+cat *.sql | gosqlx format | tee formatted.sql    # Pipeline composition
 ```
 
-### Library Usage
+**Pipeline/Stdin Support** (New in v1.6.0):
+```bash
+# Auto-detect piped input
+echo "SELECT * FROM users" | gosqlx validate
+cat query.sql | gosqlx format
+cat complex.sql | gosqlx analyze --security
+
+# Explicit stdin marker
+gosqlx validate -
+gosqlx format - < query.sql
+
+# Input redirection
+gosqlx validate < query.sql
+gosqlx parse < complex_query.sql
+
+# Full pipeline chains
+cat query.sql | gosqlx format | gosqlx validate
+echo "select * from users" | gosqlx format > formatted.sql
+find . -name "*.sql" -exec cat {} \; | gosqlx validate
+
+# Works on Windows PowerShell too!
+Get-Content query.sql | gosqlx format
+"SELECT * FROM users" | gosqlx validate
+```
+
+**Cross-Platform Pipeline Examples:**
+```bash
+# Unix/Linux/macOS
+cat query.sql | gosqlx format | tee formatted.sql | gosqlx validate
+echo "SELECT 1" | gosqlx validate && echo "Valid!"
+
+# Windows PowerShell
+Get-Content query.sql | gosqlx format | Set-Content formatted.sql
+"SELECT * FROM users" | gosqlx validate
+
+# Git hooks (pre-commit)
+git diff --cached --name-only --diff-filter=ACM "*.sql" | \
+  xargs cat | gosqlx validate --quiet
+```
+
+**Language Server Protocol (LSP)** (New):
+```bash
+# Start LSP server for IDE integration
+gosqlx lsp
+
+# With debug logging
+gosqlx lsp --log /tmp/gosqlx-lsp.log
+```
+
+The LSP server provides real-time SQL intelligence for IDEs:
+- **Diagnostics**: Real-time syntax error detection
+- **Hover**: Documentation for 40+ SQL keywords
+- **Completion**: 100+ SQL keywords and functions
+- **Formatting**: SQL code formatting
+
+**IDE Integration:**
+```jsonc
+// VSCode settings.json
+{
+  "gosqlx.lsp.enable": true,
+  "gosqlx.lsp.path": "gosqlx"
+}
+```
+
+```lua
+-- Neovim (nvim-lspconfig)
+require('lspconfig.configs').gosqlx = {
+  default_config = {
+    cmd = { 'gosqlx', 'lsp' },
+    filetypes = { 'sql' },
+    root_dir = function() return vim.fn.getcwd() end,
+  },
+}
+require('lspconfig').gosqlx.setup{}
+```
+
+### Library Usage - Simple API
+
+GoSQLX provides a simple, high-level API that handles all complexity for you:
 
 ```go
 package main
@@ -122,69 +218,92 @@ package main
 import (
     "fmt"
     "log"
-    
-    "github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
+
+    "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 )
 
 func main() {
-    // Get tokenizer from pool (always return it!)
-    tkz := tokenizer.GetTokenizer()
-    defer tokenizer.PutTokenizer(tkz)
-    
-    // Tokenize SQL
-    sql := "SELECT id, name FROM users WHERE age > 18"
-    tokens, err := tkz.Tokenize([]byte(sql))
+    // Parse SQL in one line - that's it!
+    ast, err := gosqlx.Parse("SELECT * FROM users WHERE active = true")
     if err != nil {
         log.Fatal(err)
     }
-    
-    // Process tokens
-    fmt.Printf("Generated %d tokens\n", len(tokens))
-    for _, token := range tokens {
-        fmt.Printf("  %s (line %d, col %d)\n", 
-            token.Token.Value,
-            token.Start.Line,
-            token.Start.Column)
-    }
+
+    fmt.Printf("Successfully parsed %d statement(s)\n", len(ast.Statements))
 }
 ```
 
-### Advanced Example with AST
+**That's it!** Just 3 lines of code. No pool management, no manual cleanup - everything is handled for you.
+
+### More Examples
+
+```go
+// Validate SQL without parsing
+if err := gosqlx.Validate("SELECT * FROM users"); err != nil {
+    fmt.Println("Invalid SQL:", err)
+}
+
+// Parse multiple queries efficiently
+queries := []string{
+    "SELECT * FROM users",
+    "SELECT * FROM orders",
+}
+asts, err := gosqlx.ParseMultiple(queries)
+
+// Parse with timeout for long queries
+ast, err := gosqlx.ParseWithTimeout(sql, 5*time.Second)
+
+// Parse from byte slice (zero-copy)
+ast, err := gosqlx.ParseBytes([]byte("SELECT * FROM users"))
+```
+
+### Advanced Usage - Low-Level API
+
+For performance-critical code that needs fine-grained control, use the low-level API:
 
 ```go
 package main
 
 import (
     "fmt"
-    
+
     "github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
     "github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 )
 
-func AnalyzeSQL(sql string) error {
-    // Tokenize
+func main() {
+    // Get tokenizer from pool (always return it!)
     tkz := tokenizer.GetTokenizer()
     defer tokenizer.PutTokenizer(tkz)
-    
+
+    // Tokenize SQL
+    sql := "SELECT id, name FROM users WHERE age > 18"
     tokens, err := tkz.Tokenize([]byte(sql))
     if err != nil {
-        return fmt.Errorf("tokenization failed: %w", err)
+        panic(err)
     }
-    
+
+    // Convert tokens
+    converter := parser.NewTokenConverter()
+    result, err := converter.Convert(tokens)
+    if err != nil {
+        panic(err)
+    }
+
     // Parse to AST
     p := parser.NewParser()
     defer p.Release()
-    
-    ast, err := p.Parse(convertTokens(tokens))
+
+    ast, err := p.Parse(result.Tokens)
     if err != nil {
-        return fmt.Errorf("parsing failed: %w", err)
+        panic(err)
     }
-    
-    // Analyze AST
+
     fmt.Printf("Statement type: %T\n", ast)
-    return nil
 }
 ```
+
+> **Note:** The simple API has < 1% performance overhead compared to low-level API. Use the simple API unless you need fine-grained control.
 
 ## 📚 Documentation
 
@@ -192,6 +311,9 @@ func AnalyzeSQL(sql string) error {
 
 | Guide | Description |
 |-------|-------------|
+| [**Getting Started**](docs/GETTING_STARTED.md) | ⚡ Get started in 5 minutes |
+| [**Comparison Guide**](docs/COMPARISON.md) | 🆚 GoSQLX vs SQLFluff, JSQLParser, pg_query |
+| [**Error Reference**](docs/ERROR_REFERENCE.md) | 🔍 Complete error code reference with solutions |
 | [**CLI Guide**](docs/CLI_GUIDE.md) | Complete CLI documentation and usage examples |
 | [**API Reference**](docs/API_REFERENCE.md) | Complete API documentation with examples |
 | [**Usage Guide**](docs/USAGE_GUIDE.md) | Detailed patterns and best practices |
@@ -310,13 +432,111 @@ if selectStmt, ok := ast.Statements[0].(*ast.SelectStatement); ok {
 ```
 
 **Supported JOIN Types:**
+
 - ✅ `INNER JOIN` - Standard inner joins
-- ✅ `LEFT JOIN` / `LEFT OUTER JOIN` - Left outer joins  
+- ✅ `LEFT JOIN` / `LEFT OUTER JOIN` - Left outer joins
 - ✅ `RIGHT JOIN` / `RIGHT OUTER JOIN` - Right outer joins
 - ✅ `FULL JOIN` / `FULL OUTER JOIN` - Full outer joins
 - ✅ `CROSS JOIN` - Cartesian product joins
 - ✅ `NATURAL JOIN` - Natural joins (implicit ON clause)
 - ✅ `USING (column)` - Single-column using clause
+
+### 🆕 Advanced SQL Features (v1.4+)
+
+#### MERGE Statements (SQL:2003 F312)
+
+```go
+sql := `
+    MERGE INTO target_table t
+    USING source_table s ON t.id = s.id
+    WHEN MATCHED THEN
+        UPDATE SET t.name = s.name, t.value = s.value
+    WHEN NOT MATCHED THEN
+        INSERT (id, name, value) VALUES (s.id, s.name, s.value)
+`
+ast, err := gosqlx.Parse(sql)
+```
+
+#### GROUPING SETS, ROLLUP, CUBE (SQL-99 T431)
+
+```go
+// GROUPING SETS - explicit grouping combinations
+sql := `SELECT region, product, SUM(sales)
+        FROM orders
+        GROUP BY GROUPING SETS ((region), (product), (region, product), ())`
+
+// ROLLUP - hierarchical subtotals
+sql := `SELECT year, quarter, month, SUM(revenue)
+        FROM sales
+        GROUP BY ROLLUP (year, quarter, month)`
+
+// CUBE - all possible combinations
+sql := `SELECT region, product, SUM(amount)
+        FROM sales
+        GROUP BY CUBE (region, product)`
+```
+
+#### Materialized Views
+
+```go
+// Create materialized view
+sql := `CREATE MATERIALIZED VIEW sales_summary AS
+        SELECT region, SUM(amount) as total
+        FROM sales GROUP BY region`
+
+// Refresh materialized view
+sql := `REFRESH MATERIALIZED VIEW CONCURRENTLY sales_summary`
+
+// Drop materialized view
+sql := `DROP MATERIALIZED VIEW IF EXISTS sales_summary`
+```
+
+#### SQL Injection Detection
+
+```go
+import "github.com/ajitpratap0/GoSQLX/pkg/sql/security"
+
+// Create scanner
+scanner := security.NewScanner()
+
+// Scan for injection patterns
+result := scanner.Scan(ast)
+
+if result.HasCritical() {
+    fmt.Printf("Found %d critical issues!\n", result.CriticalCount)
+    for _, finding := range result.Findings {
+        fmt.Printf("  [%s] %s: %s\n",
+            finding.Severity, finding.Pattern, finding.Description)
+    }
+}
+
+// Detected patterns include:
+// - Tautology (1=1, 'a'='a')
+// - UNION-based injection
+// - Time-based blind (SLEEP, WAITFOR DELAY)
+// - Comment bypass (--, /**/)
+// - Stacked queries
+// - Dangerous functions (xp_cmdshell, LOAD_FILE)
+```
+
+#### Expression Operators (BETWEEN, IN, LIKE, IS NULL)
+
+```go
+// BETWEEN with expressions
+sql := `SELECT * FROM orders WHERE amount BETWEEN 100 AND 500`
+
+// IN with subquery
+sql := `SELECT * FROM users WHERE id IN (SELECT user_id FROM admins)`
+
+// LIKE with pattern matching
+sql := `SELECT * FROM products WHERE name LIKE '%widget%'`
+
+// IS NULL / IS NOT NULL
+sql := `SELECT * FROM users WHERE deleted_at IS NULL`
+
+// NULLS FIRST/LAST ordering (SQL-99 F851)
+sql := `SELECT * FROM users ORDER BY last_login DESC NULLS LAST`
+```
 
 ## 💻 Examples
 
@@ -470,40 +690,63 @@ GoSQLX/
 
 ### Prerequisites
 
-- Go 1.19+
-- Make (optional, for Makefile targets)
-- golint, staticcheck (for code quality)
+- Go 1.24+
+- [Task](https://taskfile.dev) - task runner (install: `go install github.com/go-task/task/v3/cmd/task@latest`)
+- golangci-lint, staticcheck (for code quality, install: `task deps:tools`)
+
+### Task Runner
+
+This project uses [Task](https://taskfile.dev) as the task runner. Install with:
+```bash
+go install github.com/go-task/task/v3/cmd/task@latest
+# Or: brew install go-task (macOS)
+```
 
 ### Building
 
 ```bash
-# Build the project
-make build
+# Show all available tasks
+task
 
-# Run quality checks
-make quality
+# Build the project
+task build
+
+# Build the CLI binary
+task build:cli
+
+# Install CLI globally
+task install
+
+# Run all quality checks
+task quality
 
 # Run all tests
-make test
+task test
+
+# Run tests with race detection (recommended)
+task test:race
 
 # Clean build artifacts
-make clean
+task clean
 ```
 
 ### Code Quality
 
 ```bash
 # Format code
-go fmt ./...
+task fmt
 
-# Vet code
-go vet ./...
+# Run go vet
+task vet
 
-# Run linter
-golint ./...
+# Run golangci-lint
+task lint
 
-# Static analysis
-staticcheck ./...
+# Run all quality checks (fmt, vet, lint)
+task quality
+
+# Full CI check (format, vet, lint, test:race)
+task check
 ```
 
 ## 🤝 Contributing
@@ -528,7 +771,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0) - see the [LICENSE](LICENSE) file for details.
 
 ## 🚀 Roadmap
 
@@ -664,8 +907,9 @@ graph LR
 | **v1.0.0** | ✅ Released | 2024-12-01 | Production ready, +47% performance |
 | **v1.1.0** | ✅ Released | 2025-01-03 | Complete JOIN support, error handling |
 | **v1.2.0** | ✅ Released | 2025-08-15 | CTEs, set operations, ~70% SQL-92 compliance |
-| **v1.4.0** | 🎉 Current | 2025-09-07 | Production CLI, high-performance commands, memory leak fixes |
-| **v1.3.0** | ✅ Previous | 2025-09-04 | Window functions, ~80-85% SQL-99 compliance |
+| **v1.3.0** | ✅ Released | 2025-09-04 | Window functions, ~80-85% SQL-99 compliance |
+| **v1.4.0** | ✅ Released | 2025-09-07 | Production CLI, high-performance commands, memory leak fixes |
+| **v1.5.0** | 🎉 Current | 2025-11-15 | Phase 1 Test Coverage: CLI 63.3%, Parser 75%, Tokenizer 76.5% |
 | **v2.0.0** | 🔮 Future | Q4 2025 | Dialect specialization, advanced features |
 
 <a href="docs/ROADMAP.md"><img src="https://img.shields.io/badge/📋_Full_Roadmap-purple?style=for-the-badge" alt="Full Roadmap"></a>
@@ -696,7 +940,7 @@ If GoSQLX helps your project, please consider:
 
 <div align="center">
 
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)** - see the [LICENSE](LICENSE) file for details.
 
 </div>
 

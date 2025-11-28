@@ -21,20 +21,79 @@
 package parser
 
 import (
+	"context"
 	"fmt"
+	"strings"
+	"sync"
 
+	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
+
+// parserPool provides object pooling for Parser instances to reduce allocations.
+// This significantly improves performance in high-throughput scenarios.
+var parserPool = sync.Pool{
+	New: func() interface{} {
+		return &Parser{}
+	},
+}
+
+// GetParser returns a Parser instance from the pool.
+// The caller must call PutParser when done to return it to the pool.
+func GetParser() *Parser {
+	return parserPool.Get().(*Parser)
+}
+
+// PutParser returns a Parser instance to the pool after resetting it.
+// This should be called after parsing is complete to enable reuse.
+func PutParser(p *Parser) {
+	if p != nil {
+		p.Reset()
+		parserPool.Put(p)
+	}
+}
+
+// Reset clears the parser state for reuse from the pool.
+func (p *Parser) Reset() {
+	p.tokens = nil
+	p.currentPos = 0
+	p.currentToken = token.Token{}
+	p.depth = 0
+	p.ctx = nil
+	p.positions = nil
+}
+
+// currentLocation returns the source location of the current token.
+// Returns an empty location if position tracking is not enabled or position is out of bounds.
+func (p *Parser) currentLocation() models.Location {
+	if p.positions == nil || p.currentPos >= len(p.positions) {
+		return models.Location{}
+	}
+	return p.positions[p.currentPos].Start
+}
+
+// MaxRecursionDepth defines the maximum allowed recursion depth for parsing operations.
+// This prevents stack overflow from deeply nested expressions, CTEs, or other recursive structures.
+const MaxRecursionDepth = 100
+
+// modelTypeUnset is the zero value for ModelType, indicating the type was not set.
+// Used for fast path checks: tokens with ModelType set use O(1) switch dispatch.
+const modelTypeUnset models.TokenType = 0
 
 // Parser represents a SQL parser
 type Parser struct {
 	tokens       []token.Token
 	currentPos   int
 	currentToken token.Token
+	depth        int             // Current recursion depth
+	ctx          context.Context // Optional context for cancellation support
+	positions    []TokenPosition // Position mapping for error reporting
 }
 
 // Parse parses the tokens into an AST
+// Uses fast ModelType (int) comparisons for hot path optimization
 func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 	p.tokens = tokens
 	p.currentPos = 0
@@ -52,8 +111,14 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 	}
 	result.Statements = make([]ast.Statement, 0, estimatedStmts)
 
-	// Parse statements
-	for p.currentPos < len(tokens) && p.currentToken.Type != "EOF" {
+	// Parse statements using ModelType (int) comparisons for speed
+	for p.currentPos < len(tokens) && !p.isType(models.TokenTypeEOF) {
+		// Skip semicolons between statements
+		if p.isType(models.TokenTypeSemicolon) {
+			p.advance()
+			continue
+		}
+
 		stmt, err := p.parseStatement()
 		if err != nil {
 			// Clean up the AST on error
@@ -61,6 +126,148 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 			return nil, err
 		}
 		result.Statements = append(result.Statements, stmt)
+
+		// Optionally consume semicolon after statement
+		if p.isType(models.TokenTypeSemicolon) {
+			p.advance()
+		}
+	}
+
+	// Check if we got any statements
+	if len(result.Statements) == 0 {
+		ast.ReleaseAST(result)
+		return nil, goerrors.IncompleteStatementError(models.Location{}, "")
+	}
+
+	return result, nil
+}
+
+// ParseWithPositions parses tokens with position tracking for enhanced error reporting.
+// This method accepts a ConversionResult from the token converter, which includes
+// both the converted tokens and their original source positions.
+// Errors generated during parsing will include accurate line/column information.
+func (p *Parser) ParseWithPositions(result *ConversionResult) (*ast.AST, error) {
+	p.tokens = result.Tokens
+	p.positions = result.PositionMapping
+	p.currentPos = 0
+	if len(result.Tokens) > 0 {
+		p.currentToken = result.Tokens[0]
+	}
+
+	// Get a pre-allocated AST from the pool
+	astResult := ast.NewAST()
+
+	// Pre-allocate statements slice based on a reasonable estimate
+	estimatedStmts := 1
+	if len(result.Tokens) > 100 {
+		estimatedStmts = 2
+	}
+	astResult.Statements = make([]ast.Statement, 0, estimatedStmts)
+
+	// Parse statements
+	for p.currentPos < len(result.Tokens) && !p.isType(models.TokenTypeEOF) {
+		if p.isType(models.TokenTypeSemicolon) {
+			p.advance()
+			continue
+		}
+
+		stmt, err := p.parseStatement()
+		if err != nil {
+			ast.ReleaseAST(astResult)
+			return nil, err
+		}
+		astResult.Statements = append(astResult.Statements, stmt)
+
+		if p.isType(models.TokenTypeSemicolon) {
+			p.advance()
+		}
+	}
+
+	if len(astResult.Statements) == 0 {
+		ast.ReleaseAST(astResult)
+		return nil, goerrors.IncompleteStatementError(p.currentLocation(), "")
+	}
+
+	return astResult, nil
+}
+
+// ParseContext parses the tokens into an AST with context support for cancellation.
+// It checks the context at strategic points (every statement and expression) to enable fast cancellation.
+// Returns context.Canceled or context.DeadlineExceeded when the context is cancelled.
+//
+// This method is useful for:
+//   - Long-running parsing operations that need to be cancellable
+//   - Implementing timeouts for parsing
+//   - Graceful shutdown scenarios
+//
+// Example:
+//
+//	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+//	defer cancel()
+//	astNode, err := parser.ParseContext(ctx, tokens)
+//	if err == context.DeadlineExceeded {
+//	    // Handle timeout
+//	}
+func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.AST, error) {
+	// Check context before starting
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	// Store context for use during parsing
+	p.ctx = ctx
+	defer func() { p.ctx = nil }() // Clear context when done
+
+	p.tokens = tokens
+	p.currentPos = 0
+	if len(tokens) > 0 {
+		p.currentToken = tokens[0]
+	}
+
+	// Get a pre-allocated AST from the pool
+	result := ast.NewAST()
+
+	// Pre-allocate statements slice based on a reasonable estimate
+	estimatedStmts := 1 // Most SQL queries have just one statement
+	if len(tokens) > 100 {
+		estimatedStmts = 2 // For larger inputs, allocate more
+	}
+	result.Statements = make([]ast.Statement, 0, estimatedStmts)
+
+	// Parse statements using ModelType (int) comparisons for speed
+	for p.currentPos < len(tokens) && !p.isType(models.TokenTypeEOF) {
+		// Check context before each statement
+		if err := ctx.Err(); err != nil {
+			// Clean up the AST on error
+			ast.ReleaseAST(result)
+			// Context cancellation is not a parsing error, return the context error directly
+			return nil, fmt.Errorf("parsing cancelled: %w", err)
+		}
+
+		// Skip semicolons between statements
+		if p.isType(models.TokenTypeSemicolon) {
+			p.advance()
+			continue
+		}
+
+		stmt, err := p.parseStatement()
+		if err != nil {
+			// Clean up the AST on error
+			ast.ReleaseAST(result)
+			return nil, err
+		}
+		result.Statements = append(result.Statements, stmt)
+
+		// Optionally consume semicolon after statement
+		if p.isType(models.TokenTypeSemicolon) {
+			p.advance()
+		}
+	}
+
+	// Check if we got any statements
+	if len(result.Statements) == 0 {
+		ast.ReleaseAST(result)
+		return nil, goerrors.IncompleteStatementError(p.currentLocation(), "")
 	}
 
 	return result, nil
@@ -72,31 +279,97 @@ func (p *Parser) Release() {
 	p.tokens = nil
 	p.currentPos = 0
 	p.currentToken = token.Token{}
+	p.depth = 0
+	p.ctx = nil
 }
 
 // parseStatement parses a single SQL statement
+// Uses O(1) switch dispatch on ModelType (compiles to jump table) for optimal performance
 func (p *Parser) parseStatement() (ast.Statement, error) {
-	switch p.currentToken.Type {
-	case "WITH":
-		return p.parseWithStatement()
-	case "SELECT":
-		p.advance() // Consume SELECT
-		return p.parseSelectWithSetOperations()
-	case "INSERT":
-		p.advance() // Consume INSERT
-		return p.parseInsertStatement()
-	case "UPDATE":
-		p.advance() // Consume UPDATE
-		return p.parseUpdateStatement()
-	case "DELETE":
-		p.advance() // Consume DELETE
-		return p.parseDeleteStatement()
-	case "ALTER":
-		p.advance() // Consume ALTER
-		return p.parseAlterTableStmt()
-	default:
-		return nil, p.expectedError("statement")
+	// Check context if available
+	if p.ctx != nil {
+		if err := p.ctx.Err(); err != nil {
+			// Context cancellation is not a parsing error, return the context error directly
+			return nil, fmt.Errorf("parsing cancelled: %w", err)
+		}
 	}
+
+	// Fast path: O(1) switch dispatch on ModelType (compiles to jump table)
+	// This replaces the previous O(n) isAnyType + O(n) matchType approach
+	if p.currentToken.ModelType != modelTypeUnset {
+		switch p.currentToken.ModelType {
+		case models.TokenTypeWith:
+			return p.parseWithStatement()
+		case models.TokenTypeSelect:
+			p.advance()
+			return p.parseSelectWithSetOperations()
+		case models.TokenTypeInsert:
+			p.advance()
+			return p.parseInsertStatement()
+		case models.TokenTypeUpdate:
+			p.advance()
+			return p.parseUpdateStatement()
+		case models.TokenTypeDelete:
+			p.advance()
+			return p.parseDeleteStatement()
+		case models.TokenTypeAlter:
+			p.advance()
+			return p.parseAlterTableStmt()
+		case models.TokenTypeMerge:
+			p.advance()
+			return p.parseMergeStatement()
+		case models.TokenTypeCreate:
+			p.advance()
+			return p.parseCreateStatement()
+		case models.TokenTypeDrop:
+			p.advance()
+			return p.parseDropStatement()
+		case models.TokenTypeRefresh:
+			p.advance()
+			return p.parseRefreshStatement()
+		case models.TokenTypeTruncate:
+			p.advance()
+			return p.parseTruncateStatement()
+		}
+		// ModelType set but not a statement keyword - fall through to fallback
+	}
+
+	// Fallback: string comparison for tokens without ModelType (e.g., tests)
+	// or tokens with ModelType that aren't statement starters (e.g., operators)
+	if p.isType(models.TokenTypeWith) {
+		return p.parseWithStatement()
+	}
+	if p.matchType(models.TokenTypeSelect) {
+		return p.parseSelectWithSetOperations()
+	}
+	if p.matchType(models.TokenTypeInsert) {
+		return p.parseInsertStatement()
+	}
+	if p.matchType(models.TokenTypeUpdate) {
+		return p.parseUpdateStatement()
+	}
+	if p.matchType(models.TokenTypeDelete) {
+		return p.parseDeleteStatement()
+	}
+	if p.matchType(models.TokenTypeAlter) {
+		return p.parseAlterTableStmt()
+	}
+	if p.matchType(models.TokenTypeMerge) {
+		return p.parseMergeStatement()
+	}
+	if p.matchType(models.TokenTypeCreate) {
+		return p.parseCreateStatement()
+	}
+	if p.matchType(models.TokenTypeDrop) {
+		return p.parseDropStatement()
+	}
+	if p.matchType(models.TokenTypeRefresh) {
+		return p.parseRefreshStatement()
+	}
+	if p.matchType(models.TokenTypeTruncate) {
+		return p.parseTruncateStatement()
+	}
+	return nil, p.expectedError("statement")
 }
 
 // NewParser creates a new parser
@@ -124,9 +397,281 @@ func (p *Parser) advance() {
 	}
 }
 
+// peekToken returns the next token without advancing the parser position.
+// Returns an empty token if at the end of input.
+func (p *Parser) peekToken() token.Token {
+	nextPos := p.currentPos + 1
+	if nextPos < len(p.tokens) {
+		return p.tokens[nextPos]
+	}
+	return token.Token{}
+}
+
+// =============================================================================
+// ModelType-based Helper Methods (Phase 2 - Fast Int Comparisons)
+// =============================================================================
+// These methods use int-based ModelType comparisons which are significantly
+// faster than string comparisons (~0.24ns vs ~3.4ns). Use these for hot paths.
+// They include fallback to string-based Type comparison for backward compatibility
+// with tests that create tokens directly without setting ModelType.
+
+// modelTypeToString maps ModelType to expected string Type for fallback comparison.
+// This comprehensive map enables isType() to work with tokens that don't have ModelType set
+// (e.g., tokens created in tests without using the tokenizer).
+// NOTE: Only TokenTypes that exist in models package are included here.
+var modelTypeToString = map[models.TokenType]token.Type{
+	// Special tokens
+	models.TokenTypeEOF:        token.EOF,
+	models.TokenTypeSemicolon:  token.SEMICOLON,
+	models.TokenTypeIdentifier: "IDENT",
+
+	// Punctuation and operators
+	models.TokenTypeComma:    token.COMMA,
+	models.TokenTypeLParen:   "(",
+	models.TokenTypeRParen:   ")",
+	models.TokenTypeEq:       "=",
+	models.TokenTypeLt:       "<",
+	models.TokenTypeGt:       ">",
+	models.TokenTypeNeq:      "!=",
+	models.TokenTypeLtEq:     "<=",
+	models.TokenTypeGtEq:     ">=",
+	models.TokenTypeDot:      ".",
+	models.TokenTypeAsterisk: "*",
+
+	// Core SQL keywords
+	models.TokenTypeSelect: token.SELECT,
+	models.TokenTypeFrom:   token.FROM,
+	models.TokenTypeWhere:  token.WHERE,
+	models.TokenTypeInsert: token.INSERT,
+	models.TokenTypeUpdate: token.UPDATE,
+	models.TokenTypeDelete: token.DELETE,
+	models.TokenTypeInto:   "INTO",
+	models.TokenTypeValues: "VALUES",
+	models.TokenTypeSet:    "SET",
+	models.TokenTypeAs:     "AS",
+	models.TokenTypeOn:     "ON",
+
+	// DDL keywords
+	models.TokenTypeCreate:       "CREATE",
+	models.TokenTypeAlter:        token.ALTER,
+	models.TokenTypeDrop:         token.DROP,
+	models.TokenTypeTruncate:     "TRUNCATE",
+	models.TokenTypeTable:        "TABLE",
+	models.TokenTypeIndex:        "INDEX",
+	models.TokenTypeView:         "VIEW",
+	models.TokenTypePrimary:      "PRIMARY",
+	models.TokenTypeForeign:      "FOREIGN",
+	models.TokenTypeUnique:       "UNIQUE",
+	models.TokenTypeCheck:        "CHECK",
+	models.TokenTypeConstraint:   "CONSTRAINT",
+	models.TokenTypeDefault:      "DEFAULT",
+	models.TokenTypeReferences:   "REFERENCES",
+	models.TokenTypeCascade:      "CASCADE",
+	models.TokenTypeRestrict:     "RESTRICT",
+	models.TokenTypeMaterialized: "MATERIALIZED",
+	models.TokenTypeReplace:      "REPLACE",
+	models.TokenTypeCollate:      "COLLATE",
+
+	// Clause keywords
+	models.TokenTypeGroup:    "GROUP",
+	models.TokenTypeBy:       "BY",
+	models.TokenTypeHaving:   "HAVING",
+	models.TokenTypeOrder:    "ORDER",
+	models.TokenTypeAsc:      "ASC",
+	models.TokenTypeDesc:     "DESC",
+	models.TokenTypeLimit:    "LIMIT",
+	models.TokenTypeOffset:   "OFFSET",
+	models.TokenTypeDistinct: "DISTINCT",
+
+	// JOIN keywords
+	models.TokenTypeJoin:    "JOIN",
+	models.TokenTypeInner:   "INNER",
+	models.TokenTypeLeft:    "LEFT",
+	models.TokenTypeRight:   "RIGHT",
+	models.TokenTypeFull:    "FULL",
+	models.TokenTypeOuter:   "OUTER",
+	models.TokenTypeCross:   "CROSS",
+	models.TokenTypeNatural: "NATURAL",
+	models.TokenTypeUsing:   "USING",
+
+	// Set operations
+	models.TokenTypeUnion:     "UNION",
+	models.TokenTypeExcept:    "EXCEPT",
+	models.TokenTypeIntersect: "INTERSECT",
+	models.TokenTypeAll:       "ALL",
+
+	// Logical operators
+	models.TokenTypeAnd: "AND",
+	models.TokenTypeOr:  "OR",
+	models.TokenTypeNot: "NOT",
+
+	// Comparison operators
+	models.TokenTypeIs:      "IS",
+	models.TokenTypeIn:      "IN",
+	models.TokenTypeLike:    "LIKE",
+	models.TokenTypeBetween: "BETWEEN",
+	models.TokenTypeExists:  "EXISTS",
+	models.TokenTypeAny:     "ANY",
+
+	// NULL and boolean
+	models.TokenTypeNull:  "NULL",
+	models.TokenTypeTrue:  "TRUE",
+	models.TokenTypeFalse: "FALSE",
+
+	// Window function keywords
+	models.TokenTypeOver:      "OVER",
+	models.TokenTypePartition: "PARTITION",
+	models.TokenTypeRows:      "ROWS",
+	models.TokenTypeRange:     "RANGE",
+	models.TokenTypeUnbounded: "UNBOUNDED",
+	models.TokenTypePreceding: "PRECEDING",
+	models.TokenTypeFollowing: "FOLLOWING",
+	models.TokenTypeCurrent:   "CURRENT",
+	models.TokenTypeRow:       "ROW",
+	models.TokenTypeNulls:     "NULLS",
+	models.TokenTypeFirst:     "FIRST",
+	models.TokenTypeLast:      "LAST",
+	models.TokenTypeFilter:    "FILTER",
+
+	// Placeholder token - maps to "PLACEHOLDER" for tests that create tokens manually
+	models.TokenTypePlaceholder: "PLACEHOLDER",
+
+	// CTE keywords
+	models.TokenTypeWith:      token.WITH,
+	models.TokenTypeRecursive: "RECURSIVE",
+
+	// CASE expression
+	models.TokenTypeCase: "CASE",
+	models.TokenTypeWhen: "WHEN",
+	models.TokenTypeThen: "THEN",
+	models.TokenTypeElse: "ELSE",
+	models.TokenTypeEnd:  "END",
+
+	// MERGE keywords
+	models.TokenTypeMerge:   "MERGE",
+	models.TokenTypeMatched: "MATCHED",
+	models.TokenTypeSource:  "SOURCE",
+	models.TokenTypeTarget:  "TARGET",
+
+	// Grouping keywords
+	models.TokenTypeRollup:       "ROLLUP",
+	models.TokenTypeCube:         "CUBE",
+	models.TokenTypeGrouping:     "GROUPING",
+	models.TokenTypeGroupingSets: "GROUPING SETS",
+	models.TokenTypeSets:         "SETS",
+
+	// Data types
+	models.TokenTypeInt:     "INT",
+	models.TokenTypeInteger: "INTEGER",
+	models.TokenTypeVarchar: "VARCHAR",
+	models.TokenTypeText:    "TEXT",
+	models.TokenTypeBoolean: "BOOLEAN",
+
+	// FETCH clause keywords (SQL-99 F861, F862)
+	models.TokenTypeFetch:   "FETCH",
+	models.TokenTypeNext:    "NEXT",
+	models.TokenTypeTies:    "TIES",
+	models.TokenTypePercent: "PERCENT",
+	models.TokenTypeOnly:    "ONLY",
+
+	// Other keywords
+	models.TokenTypeIf:      "IF",
+	models.TokenTypeRefresh: "REFRESH",
+	models.TokenTypeTo:      "TO",
+}
+
+// isType checks if the current token's ModelType matches the expected type.
+// Falls back to string comparison if ModelType is not set (for backward compatibility).
+func (p *Parser) isType(expected models.TokenType) bool {
+	// Fast path: use int comparison if ModelType is set
+	if p.currentToken.ModelType != modelTypeUnset {
+		return p.currentToken.ModelType == expected
+	}
+	// Fallback: string comparison for tokens without ModelType
+	if str, ok := modelTypeToString[expected]; ok {
+		return p.currentToken.Type == str
+	}
+	return false
+}
+
+// isAnyType checks if the current token's ModelType matches any of the given types.
+// More efficient than multiple isType calls when checking many alternatives.
+func (p *Parser) isAnyType(types ...models.TokenType) bool {
+	for _, t := range types {
+		if p.isType(t) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchType checks if the current token's ModelType matches and advances if true.
+// Returns true if matched (and advanced), false otherwise.
+func (p *Parser) matchType(expected models.TokenType) bool {
+	if p.isType(expected) {
+		p.advance()
+		return true
+	}
+	return false
+}
+
+// isComparisonOperator checks if the current token is a comparison operator using O(1) switch.
+// This is a hot path optimization for expression parsing.
+func (p *Parser) isComparisonOperator() bool {
+	// Fast path: use ModelType switch for O(1) lookup
+	if p.currentToken.ModelType != modelTypeUnset {
+		switch p.currentToken.ModelType {
+		case models.TokenTypeEq, models.TokenTypeLt, models.TokenTypeGt,
+			models.TokenTypeNeq, models.TokenTypeLtEq, models.TokenTypeGtEq:
+			return true
+		}
+		return false
+	}
+	// Fallback: string comparison for tokens without ModelType (e.g., tests)
+	switch p.currentToken.Type {
+	case "=", "<", ">", "!=", "<=", ">=", "<>":
+		return true
+	}
+	return false
+}
+
+// isQuantifier checks if the current token is ANY or ALL using O(1) switch.
+// This is used for subquery quantifier operators like "= ANY (...)".
+func (p *Parser) isQuantifier() bool {
+	// Fast path: use ModelType switch for O(1) lookup
+	if p.currentToken.ModelType != modelTypeUnset {
+		switch p.currentToken.ModelType {
+		case models.TokenTypeAny, models.TokenTypeAll:
+			return true
+		}
+		return false
+	}
+	// Fallback: string comparison for tokens without ModelType
+	upper := strings.ToUpper(p.currentToken.Literal)
+	return upper == "ANY" || upper == "ALL"
+}
+
+// isBooleanLiteral checks if the current token is TRUE or FALSE using O(1) switch.
+// This is used for parsing boolean literal values in expressions.
+func (p *Parser) isBooleanLiteral() bool {
+	// Fast path: use ModelType switch for O(1) lookup
+	if p.currentToken.ModelType != modelTypeUnset {
+		switch p.currentToken.ModelType {
+		case models.TokenTypeTrue, models.TokenTypeFalse:
+			return true
+		}
+		return false
+	}
+	// Fallback: string comparison for tokens without ModelType
+	upper := strings.ToUpper(p.currentToken.Literal)
+	return upper == "TRUE" || upper == "FALSE"
+}
+
+// =============================================================================
+
 // expectedError returns an error for unexpected token
 func (p *Parser) expectedError(expected string) error {
-	return fmt.Errorf("expected %s, got %s", expected, p.currentToken.Type)
+	return goerrors.ExpectedTokenError(expected, string(p.currentToken.Type), p.currentLocation(), "")
 }
 
 // parseIdent parses an identifier
@@ -167,925 +712,35 @@ func (p *Parser) parseStringLiteral() string {
 	return value
 }
 
-// parseExpression parses an expression
-func (p *Parser) parseExpression() (ast.Expression, error) {
-	// Parse the left side of the expression
-	var left ast.Expression
+// Accepts IDENT or non-reserved keywords that can be used as table names
+func (p *Parser) parseTableReference() (*ast.TableReference, error) {
+	// Accept IDENT or keywords that can be used as table names
+	if p.currentToken.Type != "IDENT" && !p.isNonReservedKeyword() {
+		return nil, p.expectedError("table name")
+	}
+	tableName := p.currentToken.Literal
+	p.advance()
+	return &ast.TableReference{Name: tableName}, nil
+}
 
-	switch p.currentToken.Type {
-	case "IDENT":
-		// Handle identifiers and function calls
-		identName := p.currentToken.Literal
-		p.advance()
-
-		// Check for function call (identifier followed by parentheses)
-		if p.currentToken.Type == "(" {
-			// This is a function call
-			funcCall, err := p.parseFunctionCall(identName)
-			if err != nil {
-				return nil, err
-			}
-			left = funcCall
-		} else {
-			// Handle regular identifier or qualified identifier (table.column)
-			ident := &ast.Identifier{Name: identName}
-
-			// Check for qualified identifier (table.column)
-			if p.currentToken.Type == "." {
-				p.advance() // Consume .
-				if p.currentToken.Type != "IDENT" {
-					return nil, p.expectedError("identifier after .")
-				}
-				// Create a qualified identifier
-				ident = &ast.Identifier{
-					Table: ident.Name,
-					Name:  p.currentToken.Literal,
-				}
-				p.advance()
-			}
-
-			left = ident
-		}
-
-	case "STRING":
-		// Handle string literals
-		left = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "string"}
-		p.advance()
-
-	case "INT":
-		// Handle integer literals
-		left = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "int"}
-		p.advance()
-
-	case "FLOAT":
-		// Handle float literals
-		left = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "float"}
-		p.advance()
-
-	case "TRUE", "FALSE":
-		// Handle boolean literals
-		left = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "bool"}
-		p.advance()
-
+// isNonReservedKeyword checks if current token is a non-reserved keyword
+// that can be used as a table or column name
+func (p *Parser) isNonReservedKeyword() bool {
+	// These keywords can be used as table/column names in most SQL dialects
+	// Check uppercase version of token type for case-insensitive matching
+	upperType := strings.ToUpper(string(p.currentToken.Type))
+	switch upperType {
+	case "TARGET", "SOURCE", "MATCHED", "VALUE", "NAME", "TYPE", "STATUS":
+		return true
 	default:
-		return nil, fmt.Errorf("unexpected token: %s", p.currentToken.Type)
+		return false
 	}
-
-	// Check if this is a binary expression
-	if p.currentToken.Type == "=" || p.currentToken.Type == "<" ||
-		p.currentToken.Type == ">" || p.currentToken.Type == "!=" {
-		// Save the operator
-		operator := p.currentToken.Literal
-		p.advance()
-
-		// Parse the right side of the expression
-		right, err := p.parseExpression()
-		if err != nil {
-			return nil, err
-		}
-
-		// Create a binary expression
-		return &ast.BinaryExpression{
-			Left:     left,
-			Operator: operator,
-			Right:    right,
-		}, nil
-	}
-
-	return left, nil
 }
 
-// parseFunctionCall parses a function call with optional OVER clause for window functions.
-//
-// Examples:
-//
-//	COUNT(*) -> regular aggregate function
-//	ROW_NUMBER() OVER (ORDER BY id) -> window function with OVER clause
-//	SUM(salary) OVER (PARTITION BY dept ORDER BY date ROWS UNBOUNDED PRECEDING) -> window function with frame
-func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
-	// Expect opening parenthesis
-	if p.currentToken.Type != "(" {
-		return nil, p.expectedError("(")
-	}
-	p.advance() // Consume (
-
-	// Parse function arguments
-	var arguments []ast.Expression
-	var distinct bool
-
-	// Check for DISTINCT keyword
-	if p.currentToken.Type == "DISTINCT" {
-		distinct = true
-		p.advance()
-	}
-
-	// Parse arguments if not empty
-	if p.currentToken.Type != ")" {
-		for {
-			arg, err := p.parseExpression()
-			if err != nil {
-				return nil, err
-			}
-			arguments = append(arguments, arg)
-
-			// Check for comma or end of arguments
-			if p.currentToken.Type == "," {
-				p.advance() // Consume comma
-			} else if p.currentToken.Type == ")" {
-				break
-			} else {
-				return nil, p.expectedError(", or )")
-			}
-		}
-	}
-
-	// Expect closing parenthesis
-	if p.currentToken.Type != ")" {
-		return nil, p.expectedError(")")
-	}
-	p.advance() // Consume )
-
-	// Create function call
-	funcCall := &ast.FunctionCall{
-		Name:      funcName,
-		Arguments: arguments,
-		Distinct:  distinct,
-	}
-
-	// Check for OVER clause (window function)
-	if p.currentToken.Type == "OVER" {
-		p.advance() // Consume OVER
-
-		windowSpec, err := p.parseWindowSpec()
-		if err != nil {
-			return nil, err
-		}
-		funcCall.Over = windowSpec
-	}
-
-	return funcCall, nil
-}
-
-// parseWindowSpec parses a window specification (PARTITION BY, ORDER BY, frame clause)
-func (p *Parser) parseWindowSpec() (*ast.WindowSpec, error) {
-	// Expect opening parenthesis
-	if p.currentToken.Type != "(" {
-		return nil, p.expectedError("(")
-	}
-	p.advance() // Consume (
-
-	windowSpec := &ast.WindowSpec{}
-
-	// Parse PARTITION BY clause
-	if p.currentToken.Type == "PARTITION" {
-		p.advance() // Consume PARTITION
-		if p.currentToken.Type != "BY" {
-			return nil, p.expectedError("BY after PARTITION")
-		}
-		p.advance() // Consume BY
-
-		// Parse partition expressions
-		for {
-			expr, err := p.parseExpression()
-			if err != nil {
-				return nil, err
-			}
-			windowSpec.PartitionBy = append(windowSpec.PartitionBy, expr)
-
-			if p.currentToken.Type == "," {
-				p.advance() // Consume comma
-			} else {
-				break
-			}
-		}
-	}
-
-	// Parse ORDER BY clause
-	if p.currentToken.Type == "ORDER" {
-		p.advance() // Consume ORDER
-		if p.currentToken.Type != "BY" {
-			return nil, p.expectedError("BY after ORDER")
-		}
-		p.advance() // Consume BY
-
-		// Parse order expressions
-		for {
-			expr, err := p.parseExpression()
-			if err != nil {
-				return nil, err
-			}
-
-			// Check for ASC/DESC after the expression
-			if p.currentToken.Type == "ASC" || p.currentToken.Type == "DESC" {
-				p.advance() // Consume ASC/DESC (we don't store it in this simple implementation)
-			}
-
-			windowSpec.OrderBy = append(windowSpec.OrderBy, expr)
-
-			if p.currentToken.Type == "," {
-				p.advance() // Consume comma
-			} else {
-				break
-			}
-		}
-	}
-
-	// Parse frame clause (ROWS/RANGE with bounds)
-	if p.currentToken.Type == "ROWS" || p.currentToken.Type == "RANGE" {
-		frameType := p.currentToken.Literal
-		p.advance() // Consume ROWS/RANGE
-
-		frameClause, err := p.parseWindowFrame(frameType)
-		if err != nil {
-			return nil, err
-		}
-		windowSpec.FrameClause = frameClause
-	}
-
-	// Expect closing parenthesis
-	if p.currentToken.Type != ")" {
-		return nil, p.expectedError(")")
-	}
-	p.advance() // Consume )
-
-	return windowSpec, nil
-}
-
-// parseWindowFrame parses a window frame clause
-func (p *Parser) parseWindowFrame(frameType string) (*ast.WindowFrame, error) {
-	frame := &ast.WindowFrame{
-		Type: frameType,
-	}
-
-	// Parse frame bounds
-	if p.currentToken.Type == "BETWEEN" {
-		p.advance() // Consume BETWEEN
-
-		// Parse start bound
-		startBound, err := p.parseFrameBound()
-		if err != nil {
-			return nil, err
-		}
-		frame.Start = *startBound
-
-		// Expect AND
-		if p.currentToken.Type != "AND" {
-			return nil, p.expectedError("AND")
-		}
-		p.advance() // Consume AND
-
-		// Parse end bound
-		endBound, err := p.parseFrameBound()
-		if err != nil {
-			return nil, err
-		}
-		frame.End = endBound
-	} else {
-		// Single bound (implies CURRENT ROW as end)
-		startBound, err := p.parseFrameBound()
-		if err != nil {
-			return nil, err
-		}
-		frame.Start = *startBound
-		// End is nil for single bound
-	}
-
-	return frame, nil
-}
-
-// parseFrameBound parses a window frame bound
-func (p *Parser) parseFrameBound() (*ast.WindowFrameBound, error) {
-	bound := &ast.WindowFrameBound{}
-
-	if p.currentToken.Type == "UNBOUNDED" {
-		p.advance() // Consume UNBOUNDED
-		if p.currentToken.Type == "PRECEDING" {
-			bound.Type = "UNBOUNDED PRECEDING"
-			p.advance() // Consume PRECEDING
-		} else if p.currentToken.Type == "FOLLOWING" {
-			bound.Type = "UNBOUNDED FOLLOWING"
-			p.advance() // Consume FOLLOWING
-		} else {
-			return nil, p.expectedError("PRECEDING or FOLLOWING after UNBOUNDED")
-		}
-	} else if p.currentToken.Type == "CURRENT" {
-		p.advance() // Consume CURRENT
-		if p.currentToken.Type != "ROW" {
-			return nil, p.expectedError("ROW after CURRENT")
-		}
-		bound.Type = "CURRENT ROW"
-		p.advance() // Consume ROW
-	} else {
-		// Numeric bound
-		expr, err := p.parseExpression()
-		if err != nil {
-			return nil, err
-		}
-		bound.Value = expr
-
-		if p.currentToken.Type == "PRECEDING" {
-			bound.Type = "PRECEDING"
-			p.advance() // Consume PRECEDING
-		} else if p.currentToken.Type == "FOLLOWING" {
-			bound.Type = "FOLLOWING"
-			p.advance() // Consume FOLLOWING
-		} else {
-			return nil, p.expectedError("PRECEDING or FOLLOWING after numeric value")
-		}
-	}
-
-	return bound, nil
-}
-
-// parseColumnDef parses a column definition
-func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
-	name := p.parseIdent()
-	if name == nil {
-		return nil, fmt.Errorf("expected column name")
-	}
-
-	dataType := p.parseIdent()
-	if dataType == nil {
-		return nil, fmt.Errorf("expected data type")
-	}
-
-	colDef := &ast.ColumnDef{
-		Name: name.Name,
-		Type: dataType.Name,
-	}
-
-	return colDef, nil
-}
-
-// parseTableConstraint parses a table constraint
-func (p *Parser) parseTableConstraint() (*ast.TableConstraint, error) {
-	name := p.parseIdent()
-	if name == nil {
-		return nil, fmt.Errorf("expected constraint name")
-	}
-
-	constraint := &ast.TableConstraint{
-		Name: name.Name,
-	}
-
-	return constraint, nil
-}
-
-// parseSelectStatement parses a SELECT statement
-func (p *Parser) parseSelectStatement() (ast.Statement, error) {
-	// We've already consumed the SELECT token in matchToken
-
-	// Parse columns
-	columns := make([]ast.Expression, 0)
-	for {
-		// Handle * as a special case
-		if p.currentToken.Type == "*" {
-			columns = append(columns, &ast.Identifier{Name: "*"})
-			p.advance()
-		} else {
-			// Use parseExpression to handle all types including function calls
-			expr, err := p.parseExpression()
-			if err != nil {
-				return nil, err
-			}
-			columns = append(columns, expr)
-		}
-
-		// Check if there are more columns
-		if p.currentToken.Type != "," {
-			break
-		}
-		p.advance() // Consume comma
-	}
-
-	// Parse FROM clause
-	if p.currentToken.Type != "FROM" {
-		return nil, p.expectedError("FROM")
-	}
-	p.advance() // Consume FROM
-
-	// Parse table name
-	if p.currentToken.Type != "IDENT" {
-		return nil, p.expectedError("table name")
-	}
-	tableName := p.currentToken.Literal
-	p.advance()
-
-	// Create table reference
-	tableRef := ast.TableReference{
-		Name: tableName,
-	}
-
-	// Check for table alias
-	if p.currentToken.Type == "IDENT" || p.currentToken.Type == "AS" {
-		if p.currentToken.Type == "AS" {
-			p.advance() // Consume AS
-			if p.currentToken.Type != "IDENT" {
-				return nil, p.expectedError("alias after AS")
-			}
-		}
-		if p.currentToken.Type == "IDENT" {
-			tableRef.Alias = p.currentToken.Literal
-			p.advance()
-		}
-	}
-
-	// Create tables list for FROM clause
-	tables := []ast.TableReference{tableRef}
-
-	// Parse JOIN clauses if present
-	joins := []ast.JoinClause{}
-	for p.isJoinKeyword() {
-		// Determine JOIN type
-		joinType := "INNER" // Default
-
-		if p.currentToken.Type == "LEFT" {
-			joinType = "LEFT"
-			p.advance()
-			if p.currentToken.Type == "OUTER" {
-				p.advance() // Optional OUTER keyword
-			}
-		} else if p.currentToken.Type == "RIGHT" {
-			joinType = "RIGHT"
-			p.advance()
-			if p.currentToken.Type == "OUTER" {
-				p.advance() // Optional OUTER keyword
-			}
-		} else if p.currentToken.Type == "FULL" {
-			joinType = "FULL"
-			p.advance()
-			if p.currentToken.Type == "OUTER" {
-				p.advance() // Optional OUTER keyword
-			}
-		} else if p.currentToken.Type == "INNER" {
-			joinType = "INNER"
-			p.advance()
-		} else if p.currentToken.Type == "CROSS" {
-			joinType = "CROSS"
-			p.advance()
-		}
-
-		// Expect JOIN keyword
-		if p.currentToken.Type != "JOIN" {
-			return nil, fmt.Errorf("expected JOIN after %s, got %s", joinType, p.currentToken.Type)
-		}
-		p.advance() // Consume JOIN
-
-		// Parse joined table name
-		if p.currentToken.Type != "IDENT" {
-			return nil, fmt.Errorf("expected table name after %s JOIN, got %s", joinType, p.currentToken.Type)
-		}
-		joinedTableName := p.currentToken.Literal
-		p.advance()
-
-		// Create joined table reference
-		joinedTableRef := ast.TableReference{
-			Name: joinedTableName,
-		}
-
-		// Check for table alias
-		if p.currentToken.Type == "IDENT" || p.currentToken.Type == "AS" {
-			if p.currentToken.Type == "AS" {
-				p.advance() // Consume AS
-				if p.currentToken.Type != "IDENT" {
-					return nil, p.expectedError("alias after AS")
-				}
-			}
-			if p.currentToken.Type == "IDENT" {
-				joinedTableRef.Alias = p.currentToken.Literal
-				p.advance()
-			}
-		}
-
-		// Parse join condition (ON or USING)
-		var joinCondition ast.Expression
-
-		// CROSS JOIN doesn't require ON clause
-		if joinType != "CROSS" {
-			if p.currentToken.Type == "ON" {
-				p.advance() // Consume ON
-
-				// Parse join condition
-				cond, err := p.parseExpression()
-				if err != nil {
-					return nil, fmt.Errorf("error parsing ON condition for %s JOIN: %v", joinType, err)
-				}
-				joinCondition = cond
-			} else if p.currentToken.Type == "USING" {
-				p.advance() // Consume USING
-
-				// Parse column list in parentheses
-				if p.currentToken.Type != "(" {
-					return nil, p.expectedError("( after USING")
-				}
-				p.advance()
-
-				// TODO: LIMITATION - Currently only supports single column in USING clause
-				// Future enhancement needed for multi-column support like USING (col1, col2, col3)
-				// This requires parsing comma-separated column list and storing as []Expression
-				// Priority: Medium (Phase 2 enhancement)
-				if p.currentToken.Type != "IDENT" {
-					return nil, p.expectedError("column name in USING")
-				}
-				joinCondition = &ast.Identifier{Name: p.currentToken.Literal}
-				p.advance()
-
-				if p.currentToken.Type != ")" {
-					return nil, p.expectedError(") after USING column")
-				}
-				p.advance()
-			} else if joinType != "NATURAL" {
-				return nil, p.expectedError("ON or USING")
-			}
-		}
-
-		// Create join clause with proper tree relationships
-		// For SQL: FROM A JOIN B JOIN C (equivalent to (A JOIN B) JOIN C)
-		var leftTable ast.TableReference
-		if len(joins) == 0 {
-			// First join: A JOIN B
-			leftTable = tableRef
-		} else {
-			// Subsequent joins: (previous result) JOIN C
-			// We represent this by using a synthetic table reference that indicates
-			// the left side is the result of previous joins
-			leftTable = ast.TableReference{
-				Name:  fmt.Sprintf("(%s_with_%d_joins)", tableRef.Name, len(joins)),
-				Alias: "",
-			}
-		}
-
-		joinClause := ast.JoinClause{
-			Type:      joinType,
-			Left:      leftTable,
-			Right:     joinedTableRef,
-			Condition: joinCondition,
-		}
-
-		// Add join clause to joins list
-		joins = append(joins, joinClause)
-
-		// Note: We don't update tableRef here as each JOIN in the list
-		// represents a join with the accumulated result set
-	}
-
-	// Initialize SELECT statement
-	selectStmt := &ast.SelectStatement{
-		Columns:   columns,
-		From:      tables,
-		Joins:     joins,
-		TableName: tableName, // Add this for compatibility with tests
-	}
-
-	// Parse WHERE clause if present
-	if p.currentToken.Type == "WHERE" {
-		p.advance() // Consume WHERE
-
-		// Parse WHERE condition
-		whereClause, err := p.parseExpression()
-		if err != nil {
-			return nil, err
-		}
-
-		// Add WHERE clause to SELECT statement
-		selectStmt.Where = whereClause
-	}
-
-	// Parse ORDER BY clause if present
-	if p.currentToken.Type == "ORDER" {
-		p.advance() // Consume ORDER
-
-		if p.currentToken.Type != "BY" {
-			return nil, p.expectedError("BY")
-		}
-		p.advance() // Consume BY
-
-		// Parse ORDER BY expression
-		orderByExpr, err := p.parseExpression()
-		if err != nil {
-			return nil, err
-		}
-
-		// Check for direction (ASC/DESC)
-		// Note: Direction is handled separately in the actual implementation
-		if p.currentToken.Type == "DESC" {
-			p.advance() // Consume DESC
-		} else if p.currentToken.Type == "ASC" {
-			p.advance() // Consume ASC
-		}
-
-		// Add ORDER BY to SELECT statement
-		selectStmt.OrderBy = []ast.Expression{orderByExpr}
-	}
-
-	// Parse LIMIT clause if present
-	if p.currentToken.Type == "LIMIT" {
-		p.advance() // Consume LIMIT
-
-		// Parse LIMIT value
-		if p.currentToken.Type != "INT" {
-			return nil, p.expectedError("integer for LIMIT")
-		}
-
-		// Convert string to int
-		limitVal := 0
-		_, _ = fmt.Sscanf(p.currentToken.Literal, "%d", &limitVal)
-
-		// Add LIMIT to SELECT statement
-		selectStmt.Limit = &limitVal
-		p.advance()
-	}
-
-	// Parse OFFSET clause if present
-	if p.currentToken.Type == "OFFSET" {
-		p.advance() // Consume OFFSET
-
-		// Parse OFFSET value
-		if p.currentToken.Type != "INT" {
-			return nil, p.expectedError("integer for OFFSET")
-		}
-
-		// Convert string to int
-		offsetVal := 0
-		_, _ = fmt.Sscanf(p.currentToken.Literal, "%d", &offsetVal)
-
-		// Add OFFSET to SELECT statement
-		selectStmt.Offset = &offsetVal
-		p.advance()
-	}
-
-	return selectStmt, nil
-}
-
-// parseSelectWithSetOperations parses SELECT statements that may have set operations.
-// It supports UNION, UNION ALL, EXCEPT, and INTERSECT operations with proper left-associative parsing.
-//
-// Examples:
-//
-//	SELECT name FROM users UNION SELECT name FROM customers
-//	SELECT id FROM orders UNION ALL SELECT id FROM invoices
-//	SELECT product FROM inventory EXCEPT SELECT product FROM discontinued
-//	SELECT a FROM t1 UNION SELECT b FROM t2 INTERSECT SELECT c FROM t3
-func (p *Parser) parseSelectWithSetOperations() (ast.Statement, error) {
-	// Parse the first SELECT statement
-	leftStmt, err := p.parseSelectStatement()
-	if err != nil {
-		return nil, err
-	}
-
-	// Check for set operations (UNION, EXCEPT, INTERSECT)
-	for p.currentToken.Type == "UNION" || p.currentToken.Type == "EXCEPT" || p.currentToken.Type == "INTERSECT" {
-		// Parse the set operation type
-		operationType := p.currentToken.Type
-		p.advance()
-
-		// Check for ALL keyword
-		all := false
-		if p.currentToken.Type == "ALL" {
-			all = true
-			p.advance()
-		}
-
-		// Parse the right-hand SELECT statement
-		if p.currentToken.Type != "SELECT" {
-			return nil, p.expectedError("SELECT after set operation")
-		}
-		p.advance() // Consume SELECT
-
-		rightStmt, err := p.parseSelectStatement()
-		if err != nil {
-			return nil, fmt.Errorf("error parsing right SELECT in set operation: %v", err)
-		}
-
-		// Create the set operation with left as the accumulated result
-		setOp := &ast.SetOperation{
-			Left:     leftStmt,
-			Operator: string(operationType),
-			All:      all,
-			Right:    rightStmt,
-		}
-
-		leftStmt = setOp // The result becomes the left side for any subsequent operations
-	}
-
-	return leftStmt, nil
-}
-
-// parseInsertStatement parses an INSERT statement
-func (p *Parser) parseInsertStatement() (ast.Statement, error) {
-	// We've already consumed the INSERT token in matchToken
-
-	// Parse INTO
-	if p.currentToken.Type != "INTO" {
-		return nil, p.expectedError("INTO")
-	}
-	p.advance() // Consume INTO
-
-	// Parse table name
-	if p.currentToken.Type != "IDENT" {
-		return nil, p.expectedError("table name")
-	}
-	tableName := p.currentToken.Literal
-	p.advance()
-
-	// Parse column list if present
-	columns := make([]ast.Expression, 0)
-	if p.currentToken.Type == "(" {
-		p.advance() // Consume (
-
-		for {
-			// Parse column name
-			if p.currentToken.Type != "IDENT" {
-				return nil, p.expectedError("column name")
-			}
-			columns = append(columns, &ast.Identifier{Name: p.currentToken.Literal})
-			p.advance()
-
-			// Check if there are more columns
-			if p.currentToken.Type != "," {
-				break
-			}
-			p.advance() // Consume comma
-		}
-
-		if p.currentToken.Type != ")" {
-			return nil, p.expectedError(")")
-		}
-		p.advance() // Consume )
-	}
-
-	// Parse VALUES
-	if p.currentToken.Type != "VALUES" {
-		return nil, p.expectedError("VALUES")
-	}
-	p.advance() // Consume VALUES
-
-	// Parse value list
-	values := make([]ast.Expression, 0)
-	if p.currentToken.Type == "(" {
-		p.advance() // Consume (
-
-		for {
-			// Parse value
-			var expr ast.Expression
-			switch p.currentToken.Type {
-			case "STRING":
-				expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "string"}
-				p.advance()
-			case "INT":
-				expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "int"}
-				p.advance()
-			case "FLOAT":
-				expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "float"}
-				p.advance()
-			default:
-				return nil, fmt.Errorf("unexpected token for value: %s", p.currentToken.Type)
-			}
-			values = append(values, expr)
-
-			// Check if there are more values
-			if p.currentToken.Type != "," {
-				break
-			}
-			p.advance() // Consume comma
-		}
-
-		if p.currentToken.Type != ")" {
-			return nil, p.expectedError(")")
-		}
-		p.advance() // Consume )
-	}
-
-	// Create INSERT statement
-	return &ast.InsertStatement{
-		TableName: tableName,
-		Columns:   columns,
-		Values:    values,
-	}, nil
-}
-
-// parseUpdateStatement parses an UPDATE statement
-func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
-	// We've already consumed the UPDATE token in matchToken
-
-	// Parse table name
-	if p.currentToken.Type != "IDENT" {
-		return nil, p.expectedError("table name")
-	}
-	tableName := p.currentToken.Literal
-	p.advance()
-
-	// Parse SET
-	if p.currentToken.Type != "SET" {
-		return nil, p.expectedError("SET")
-	}
-	p.advance() // Consume SET
-
-	// Parse assignments
-	updates := make([]ast.UpdateExpression, 0)
-	for {
-		// Parse column name
-		if p.currentToken.Type != "IDENT" {
-			return nil, p.expectedError("column name")
-		}
-		columnName := p.currentToken.Literal
-		p.advance()
-
-		if p.currentToken.Type != "=" {
-			return nil, p.expectedError("=")
-		}
-		p.advance() // Consume =
-
-		// Parse value expression
-		var expr ast.Expression
-		switch p.currentToken.Type {
-		case "STRING":
-			expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "string"}
-			p.advance()
-		case "INT":
-			expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "int"}
-			p.advance()
-		case "FLOAT":
-			expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "float"}
-			p.advance()
-		case "TRUE", "FALSE":
-			expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "bool"}
-			p.advance()
-		default:
-			var err error
-			expr, err = p.parseExpression()
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		// Create update expression
-		columnExpr := &ast.Identifier{Name: columnName}
-		updateExpr := ast.UpdateExpression{
-			Column: columnExpr,
-			Value:  expr,
-		}
-		updates = append(updates, updateExpr)
-
-		// Check if there are more assignments
-		if p.currentToken.Type != "," {
-			break
-		}
-		p.advance() // Consume comma
-	}
-
-	// Parse WHERE clause if present
-	var whereClause ast.Expression
-	if p.currentToken.Type == "WHERE" {
-		p.advance() // Consume WHERE
-		var err error
-		whereClause, err = p.parseExpression()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Create UPDATE statement
-	return &ast.UpdateStatement{
-		TableName: tableName,
-		Updates:   updates,
-		Where:     whereClause,
-	}, nil
-}
-
-// parseDeleteStatement parses a DELETE statement
-func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
-	// We've already consumed the DELETE token in matchToken
-
-	// Parse FROM
-	if p.currentToken.Type != "FROM" {
-		return nil, p.expectedError("FROM")
-	}
-	p.advance() // Consume FROM
-
-	// Parse table name
-	if p.currentToken.Type != "IDENT" {
-		return nil, p.expectedError("table name")
-	}
-	tableName := p.currentToken.Literal
-	p.advance()
-
-	// Parse WHERE clause if present
-	var whereClause ast.Expression
-	if p.currentToken.Type == "WHERE" {
-		p.advance() // Consume WHERE
-		var err error
-		whereClause, err = p.parseExpression()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Create DELETE statement
-	return &ast.DeleteStatement{
-		TableName: tableName,
-		Where:     whereClause,
-	}, nil
+// canBeAlias checks if current token can be used as an alias
+// Aliases can be IDENT or certain non-reserved keywords
+func (p *Parser) canBeAlias() bool {
+	return p.currentToken.Type == "IDENT" || p.isNonReservedKeyword()
 }
 
 // parseAlterTableStmt is a simplified version for the parser implementation
@@ -1115,157 +770,3 @@ func (p *Parser) isJoinKeyword() bool {
 //	WITH RECURSIVE emp_tree AS (SELECT emp_id FROM employees) SELECT * FROM emp_tree
 //	WITH first AS (SELECT * FROM t1), second AS (SELECT * FROM first) SELECT * FROM second
 //	WITH summary(region, total) AS (SELECT region, SUM(amount) FROM sales GROUP BY region) SELECT * FROM summary
-func (p *Parser) parseWithStatement() (ast.Statement, error) {
-	// Consume WITH
-	p.advance()
-
-	// Check for RECURSIVE keyword
-	recursive := false
-	if p.currentToken.Type == "RECURSIVE" {
-		recursive = true
-		p.advance()
-	}
-
-	// Parse Common Table Expressions
-	ctes := []*ast.CommonTableExpr{}
-
-	for {
-		cte, err := p.parseCommonTableExpr()
-		if err != nil {
-			return nil, fmt.Errorf("error parsing CTE: %v", err)
-		}
-		ctes = append(ctes, cte)
-
-		// Check for more CTEs (comma-separated)
-		if p.currentToken.Type == "," {
-			p.advance() // Consume comma
-			continue
-		}
-		break
-	}
-
-	// Create WITH clause
-	withClause := &ast.WithClause{
-		Recursive: recursive,
-		CTEs:      ctes,
-	}
-
-	// Parse the main statement that follows the WITH clause
-	mainStmt, err := p.parseMainStatementAfterWith()
-	if err != nil {
-		return nil, fmt.Errorf("error parsing statement after WITH: %v", err)
-	}
-
-	// Attach WITH clause to the main statement
-	switch stmt := mainStmt.(type) {
-	case *ast.SelectStatement:
-		stmt.With = withClause
-		return stmt, nil
-	case *ast.SetOperation:
-		// For set operations, attach WITH to the left statement if it's a SELECT
-		if leftSelect, ok := stmt.Left.(*ast.SelectStatement); ok {
-			leftSelect.With = withClause
-		}
-		return stmt, nil
-	case *ast.InsertStatement:
-		stmt.With = withClause
-		return stmt, nil
-	case *ast.UpdateStatement:
-		stmt.With = withClause
-		return stmt, nil
-	case *ast.DeleteStatement:
-		stmt.With = withClause
-		return stmt, nil
-	default:
-		return nil, fmt.Errorf("WITH clause not supported with statement type: %T", stmt)
-	}
-}
-
-// parseCommonTableExpr parses a single Common Table Expression.
-// It handles CTE name, optional column list, AS keyword, and the CTE query in parentheses.
-//
-// Syntax: cte_name [(column_list)] AS (query)
-func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
-	// Parse CTE name
-	if p.currentToken.Type != "IDENT" {
-		return nil, p.expectedError("CTE name")
-	}
-	name := p.currentToken.Literal
-	p.advance()
-
-	// Parse optional column list
-	var columns []string
-	if p.currentToken.Type == "(" {
-		p.advance() // Consume (
-
-		for {
-			if p.currentToken.Type != "IDENT" {
-				return nil, p.expectedError("column name")
-			}
-			columns = append(columns, p.currentToken.Literal)
-			p.advance()
-
-			if p.currentToken.Type == "," {
-				p.advance() // Consume comma
-				continue
-			}
-			break
-		}
-
-		if p.currentToken.Type != ")" {
-			return nil, p.expectedError(")")
-		}
-		p.advance() // Consume )
-	}
-
-	// Parse AS keyword
-	if p.currentToken.Type != "AS" {
-		return nil, p.expectedError("AS")
-	}
-	p.advance()
-
-	// Parse the CTE query (must be in parentheses)
-	if p.currentToken.Type != "(" {
-		return nil, p.expectedError("( before CTE query")
-	}
-	p.advance() // Consume (
-
-	// Parse the inner statement
-	stmt, err := p.parseStatement()
-	if err != nil {
-		return nil, fmt.Errorf("error parsing CTE statement: %v", err)
-	}
-
-	if p.currentToken.Type != ")" {
-		return nil, p.expectedError(") after CTE query")
-	}
-	p.advance() // Consume )
-
-	return &ast.CommonTableExpr{
-		Name:      name,
-		Columns:   columns,
-		Statement: stmt,
-	}, nil
-}
-
-// parseMainStatementAfterWith parses the main statement after WITH clause.
-// It supports SELECT, INSERT, UPDATE, and DELETE statements, routing them to the appropriate
-// parsers while preserving set operation support for SELECT statements.
-func (p *Parser) parseMainStatementAfterWith() (ast.Statement, error) {
-	switch p.currentToken.Type {
-	case "SELECT":
-		p.advance() // Consume SELECT
-		return p.parseSelectWithSetOperations()
-	case "INSERT":
-		p.advance() // Consume INSERT
-		return p.parseInsertStatement()
-	case "UPDATE":
-		p.advance() // Consume UPDATE
-		return p.parseUpdateStatement()
-	case "DELETE":
-		p.advance() // Consume DELETE
-		return p.parseDeleteStatement()
-	default:
-		return nil, p.expectedError("SELECT, INSERT, UPDATE, or DELETE after WITH")
-	}
-}

@@ -125,27 +125,56 @@ The parser builds Abstract Syntax Trees from token streams.
 └──────────────────────────────────────┘
 ```
 
-**Parser Methods Hierarchy:**
+**Parser Methods Hierarchy (v1.4+ Modular Architecture):**
+
+The parser is organized into logical modules for maintainability:
+
+```
+pkg/sql/parser/
+├── parser.go       # Core parser and entry points
+├── select.go       # SELECT statement parsing
+├── dml.go          # INSERT, UPDATE, DELETE parsing
+├── cte.go          # Common Table Expressions (WITH clause)
+├── expressions.go  # Expression parsing (BETWEEN, IN, LIKE, etc.)
+├── window.go       # Window functions (OVER, PARTITION BY)
+├── grouping.go     # GROUPING SETS, ROLLUP, CUBE
+├── alter.go        # ALTER TABLE statements
+├── create.go       # CREATE statements (TABLE, VIEW, INDEX)
+├── drop.go         # DROP statements
+├── merge.go        # MERGE statements (SQL:2003)
+└── token_converter.go # Token format conversion
+```
+
+**Method Hierarchy:**
 
 ```
 Parse()
 ├── parseStatement()
-│   ├── parseSelectStatement()
+│   ├── parseWithStatement()          # CTEs (cte.go)
+│   ├── parseSelectWithSetOperations() # SELECT + UNION/EXCEPT/INTERSECT (select.go)
 │   │   ├── parseSelectClause()
 │   │   ├── parseFromClause()
 │   │   ├── parseJoinClause()
 │   │   ├── parseWhereClause()
-│   │   ├── parseGroupByClause()
+│   │   ├── parseGroupByClause()       # Includes GROUPING SETS (grouping.go)
 │   │   ├── parseHavingClause()
-│   │   └── parseOrderByClause()
-│   ├── parseInsertStatement()
-│   ├── parseUpdateStatement()
-│   ├── parseDeleteStatement()
-│   └── parseDDLStatement()
-└── parseExpression()
+│   │   └── parseOrderByClause()       # Includes NULLS FIRST/LAST
+│   ├── parseInsertStatement()         # (dml.go)
+│   ├── parseUpdateStatement()         # (dml.go)
+│   ├── parseDeleteStatement()         # (dml.go)
+│   ├── parseMergeStatement()          # (merge.go)
+│   ├── parseCreateStatement()         # (create.go) - TABLE, VIEW, MATERIALIZED VIEW, INDEX
+│   ├── parseAlterStatement()          # (alter.go)
+│   └── parseDropStatement()           # (drop.go)
+└── parseExpression()                   # (expressions.go)
     ├── parsePrimaryExpression()
     ├── parseBinaryExpression()
+    ├── parseBetweenExpression()
+    ├── parseInExpression()
+    ├── parseLikeExpression()
+    ├── parseIsNullExpression()
     ├── parseFunctionCall()
+    │   └── parseWindowSpec()          # (window.go)
     └── parseSubquery()
 ```
 
@@ -167,21 +196,47 @@ The Abstract Syntax Tree represents the structure of SQL statements.
 │  │ ├── Columns: []Expression  │      │
 │  │ ├── From: []Table          │      │
 │  │ ├── Where: Expression      │      │
+│  │ ├── GroupBy: []GroupingElement │  │
 │  │ └── ...                    │      │
 │  └────────────────────────────┘      │
 │  ┌────────────────────────────┐      │
-│  │ InsertStatement            │      │
-│  │ UpdateStatement            │      │
-│  │ DeleteStatement            │      │
-│  │ CreateTableStatement       │      │
+│  │ DML Statements             │      │
+│  │ ├── InsertStatement        │      │
+│  │ ├── UpdateStatement        │      │
+│  │ ├── DeleteStatement        │      │
+│  │ └── MergeStatement (v1.4+) │      │
+│  └────────────────────────────┘      │
+│  ┌────────────────────────────┐      │
+│  │ DDL Statements             │      │
+│  │ ├── CreateTableStatement   │      │
+│  │ ├── CreateViewStatement    │      │
+│  │ ├── CreateMaterializedView │      │
+│  │ ├── CreateIndexStatement   │      │
+│  │ ├── AlterTableStatement    │      │
+│  │ ├── DropTableStatement     │      │
+│  │ └── RefreshMaterializedView│      │
 │  └────────────────────────────┘      │
 ├──────────────────────────────────────┤
 │          Expression Types             │
 │  ┌────────────────────────────┐      │
 │  │ BinaryExpression           │      │
+│  │ UnaryExpression            │      │
 │  │ FunctionCall               │      │
+│  │ WindowFunction (v1.3+)     │      │
 │  │ Identifier                 │      │
 │  │ Literal                    │      │
+│  │ BetweenExpression (v1.4+)  │      │
+│  │ InExpression (v1.4+)       │      │
+│  │ LikeExpression (v1.4+)     │      │
+│  │ IsNullExpression (v1.4+)   │      │
+│  │ Subquery                   │      │
+│  │ CaseExpression             │      │
+│  └────────────────────────────┘      │
+│  ┌────────────────────────────┐      │
+│  │ Grouping Types (v1.4+)     │      │
+│  │ ├── GroupingSet            │      │
+│  │ ├── RollupGrouping         │      │
+│  │ └── CubeGrouping           │      │
 │  └────────────────────────────┘      │
 └──────────────────────────────────────┘
 ```

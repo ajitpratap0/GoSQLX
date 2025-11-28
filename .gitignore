@@ -8,13 +8,20 @@
 # Test binary, built with `go test -c`
 *.test
 
-# Built binary executables
-gosqlx
+# Built binary executables (only in root directory)
+/gosqlx
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 coverage.html
 *.prof
+
+# Security scan results
+*.sarif
+gosec-*.json
+
+# Test directories
+test-action/
 
 # Dependency directories (remove the comment below to include it)
 vendor/
@@ -43,3 +50,6 @@ build/
 
 # Log files
 *.log
+
+# Python version files (not needed for Go project)
+.python-version

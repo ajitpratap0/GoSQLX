@@ -1,0 +1,236 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run weekly on Sundays at midnight UTC
+    - cron: '0 0 * * 0'
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+env:
+  GOSEC_SEVERITY: medium
+  GOSEC_CONFIDENCE: medium
+
+jobs:
+  gosec:
+    name: GoSec Security Scanner
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'  # Match project requirements in go.mod
+          cache: true
+
+      - name: Run GoSec Security Scanner
+        uses: securego/gosec@v2.21.4
+        continue-on-error: true  # Don't fail immediately - let validation step decide
+        with:
+          # Full recursive scan - severity and confidence levels configurable via env vars
+          args: '-fmt sarif -out gosec-results.sarif -severity ${{ env.GOSEC_SEVERITY }} -confidence ${{ env.GOSEC_CONFIDENCE }} ./...'
+
+      - name: Upload GoSec SARIF file
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: gosec-results.sarif
+          category: gosec
+
+      - name: Check GoSec results
+        if: always()  # Always run validation even if scanner step failed
+        run: |
+          # Fail the build if high or critical vulnerabilities are found
+          # Check if SARIF file exists and has results
+          if [ ! -f gosec-results.sarif ]; then
+            echo "❌ GoSec SARIF file not found!"
+            exit 1
+          fi
+
+          # Check if file has any error-level results using jq
+          # We use jq to filter, then check if output is non-empty with grep -q .
+          # This handles the case where jq returns empty output (no vulnerabilities)
+          if jq -r '.runs[]?.results[]? | select(.level == "error")' gosec-results.sarif 2>/dev/null | grep -q .; then
+            echo "❌ High or critical security vulnerabilities found!"
+            jq -r '.runs[]?.results[]? | select(.level == "error") | "  - \(.ruleId): \(.message.text)"' gosec-results.sarif || true
+            exit 1
+          else
+            echo "✅ No high or critical security vulnerabilities found"
+          fi
+
+  trivy-repo:
+    name: Trivy Repository Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner in repo mode
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-repo-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          exit-code: '0' # Don't fail on SARIF generation to ensure upload completes
+
+      - name: Upload Trivy SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: 'trivy-repo-results.sarif'
+          category: trivy-repo
+
+      - name: Check Trivy results for critical vulnerabilities
+        run: |
+          # Fail the build if high or critical vulnerabilities are found
+          if [ ! -f trivy-repo-results.sarif ]; then
+            echo "❌ Trivy SARIF file not found!"
+            exit 1
+          fi
+
+          # Check if file has any error or warning level results
+          # We use jq to filter, then check if output is non-empty with grep -q .
+          if jq -r '.runs[]?.results[]? | select(.level == "error" or .level == "warning")' trivy-repo-results.sarif 2>/dev/null | grep -q .; then
+            echo "❌ High or critical vulnerabilities found in repository scan!"
+            jq -r '.runs[]?.results[]? | select(.level == "error" or .level == "warning") | "  - \(.ruleId): \(.message.text)"' trivy-repo-results.sarif || true
+            exit 1
+          else
+            echo "✅ No high or critical vulnerabilities found"
+          fi
+
+  trivy-config:
+    name: Trivy Config Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy configuration scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'config'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-config-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          exit-code: '0' # Don't fail on SARIF generation to ensure upload completes
+
+      - name: Upload Trivy config SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: 'trivy-config-results.sarif'
+          category: trivy-config
+
+      - name: Check Trivy config results for critical issues
+        run: |
+          # Fail the build if high or critical configuration issues are found
+          if [ ! -f trivy-config-results.sarif ]; then
+            echo "❌ Trivy config SARIF file not found!"
+            exit 1
+          fi
+
+          # Check if file has any error or warning level results
+          # We use jq to filter, then check if output is non-empty with grep -q .
+          if jq -r '.runs[]?.results[]? | select(.level == "error" or .level == "warning")' trivy-config-results.sarif 2>/dev/null | grep -q .; then
+            echo "❌ High or critical configuration issues found!"
+            jq -r '.runs[]?.results[]? | select(.level == "error" or .level == "warning") | "  - \(.ruleId): \(.message.text)"' trivy-config-results.sarif || true
+            exit 1
+          else
+            echo "✅ No high or critical configuration issues found"
+          fi
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          allow-licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC
+
+  govulncheck:
+    name: Go Vulnerability Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'  # Match project requirements in go.mod
+          cache: true
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        run: |
+          # Run govulncheck and capture both output and exit code
+          # govulncheck exit codes:
+          # 0 - no vulnerabilities found
+          # 1 - error during execution
+          # 3 - vulnerabilities found
+          set +e  # Don't exit immediately on error
+          govulncheck -show verbose ./...
+          EXIT_CODE=$?
+          set -e  # Re-enable exit on error
+
+          echo ""
+          if [ $EXIT_CODE -eq 3 ]; then
+            echo "❌ Vulnerabilities found in dependencies!"
+            echo "Please review the vulnerability report above and update affected dependencies."
+            exit 1
+          elif [ $EXIT_CODE -eq 1 ]; then
+            echo "❌ Error running govulncheck!"
+            exit 1
+          else
+            echo "✅ No known vulnerabilities found in dependencies"
+          fi
+
+  security-summary:
+    name: Security Scan Summary
+    runs-on: ubuntu-latest
+    needs: [gosec, trivy-repo, trivy-config, govulncheck]
+    if: always()
+    steps:
+      - name: Check job status
+        run: |
+          echo "### Security Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Scanner | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| GoSec | ${{ needs.gosec.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Trivy Repo | ${{ needs.trivy-repo.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Trivy Config | ${{ needs.trivy-config.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| GovulnCheck | ${{ needs.govulncheck.result }} |" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.gosec.result }}" != "success" ] || \
+             [ "${{ needs.trivy-repo.result }}" != "success" ] || \
+             [ "${{ needs.trivy-config.result }}" != "success" ] || \
+             [ "${{ needs.govulncheck.result }}" != "success" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ **Some security checks failed. Please review the results above.**" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **All security checks passed successfully!**" >> $GITHUB_STEP_SUMMARY
+          fi

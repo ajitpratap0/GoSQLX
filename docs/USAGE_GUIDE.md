@@ -1,8 +1,13 @@
 # GoSQLX Usage Guide
 
+**Version**: v1.5.1+ | **Last Updated**: November 2025
+
 ## Table of Contents
 - [Getting Started](#getting-started)
+- [Simple API (Recommended)](#simple-api-recommended)
 - [Basic Usage](#basic-usage)
+- [Advanced SQL Features (v1.4+)](#advanced-sql-features-v14)
+- [SQL Injection Detection](#sql-injection-detection)
 - [Advanced Patterns](#advanced-patterns)
 - [Real-World Examples](#real-world-examples)
 - [SQL Dialect Support](#sql-dialect-support)
@@ -19,7 +24,7 @@ go get github.com/ajitpratap0/GoSQLX
 ```
 
 ### Minimum Go Version
-Go 1.19 or higher is required.
+Go 1.24 or higher is required.
 
 ### Import Packages
 
@@ -30,6 +35,55 @@ import (
     "github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 ```
+
+## Simple API (Recommended)
+
+The simplest way to use GoSQLX is through the high-level API that handles all complexity for you:
+
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+
+    "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+)
+
+func main() {
+    // Parse SQL in one line - that's it!
+    ast, err := gosqlx.Parse("SELECT * FROM users WHERE active = true")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    fmt.Printf("Successfully parsed %d statement(s)\n", len(ast.Statements))
+}
+```
+
+### More Simple API Examples
+
+```go
+// Validate SQL without full parsing
+if err := gosqlx.Validate("SELECT * FROM users"); err != nil {
+    fmt.Println("Invalid SQL:", err)
+}
+
+// Parse multiple queries efficiently
+queries := []string{
+    "SELECT * FROM users",
+    "SELECT * FROM orders",
+}
+asts, err := gosqlx.ParseMultiple(queries)
+
+// Parse with timeout for long queries
+ast, err := gosqlx.ParseWithTimeout(sql, 5*time.Second)
+
+// Parse from byte slice (zero-copy)
+ast, err := gosqlx.ParseBytes([]byte("SELECT * FROM users"))
+```
+
+> **Note:** The simple API has < 1% performance overhead compared to the low-level API. Use the simple API unless you need fine-grained control.
 
 ## Basic Usage
 
@@ -211,6 +265,166 @@ func HandleTokenizerError(sql string) {
             }
         }
     }
+}
+```
+
+## Advanced SQL Features (v1.4+)
+
+### GROUPING SETS, ROLLUP, CUBE (SQL-99 T431)
+
+```go
+// GROUPING SETS - explicit grouping combinations
+sql := `SELECT region, product, SUM(sales)
+        FROM orders
+        GROUP BY GROUPING SETS ((region), (product), (region, product), ())`
+ast, err := gosqlx.Parse(sql)
+
+// ROLLUP - hierarchical subtotals
+sql := `SELECT year, quarter, month, SUM(revenue)
+        FROM sales
+        GROUP BY ROLLUP (year, quarter, month)`
+ast, err := gosqlx.Parse(sql)
+
+// CUBE - all possible combinations
+sql := `SELECT region, product, SUM(amount)
+        FROM sales
+        GROUP BY CUBE (region, product)`
+ast, err := gosqlx.Parse(sql)
+```
+
+### MERGE Statements (SQL:2003 F312)
+
+```go
+sql := `
+    MERGE INTO target_table t
+    USING source_table s ON t.id = s.id
+    WHEN MATCHED THEN
+        UPDATE SET t.name = s.name, t.value = s.value
+    WHEN NOT MATCHED THEN
+        INSERT (id, name, value) VALUES (s.id, s.name, s.value)
+`
+ast, err := gosqlx.Parse(sql)
+```
+
+### Materialized Views
+
+```go
+// Create materialized view
+sql := `CREATE MATERIALIZED VIEW sales_summary AS
+        SELECT region, SUM(amount) as total
+        FROM sales GROUP BY region`
+ast, err := gosqlx.Parse(sql)
+
+// Refresh materialized view
+sql := `REFRESH MATERIALIZED VIEW CONCURRENTLY sales_summary`
+ast, err := gosqlx.Parse(sql)
+
+// Drop materialized view
+sql := `DROP MATERIALIZED VIEW IF EXISTS sales_summary`
+ast, err := gosqlx.Parse(sql)
+```
+
+### Expression Operators (BETWEEN, IN, LIKE, IS NULL)
+
+```go
+// BETWEEN with expressions
+sql := `SELECT * FROM orders WHERE amount BETWEEN 100 AND 500`
+
+// IN with subquery
+sql := `SELECT * FROM users WHERE id IN (SELECT user_id FROM admins)`
+
+// LIKE with pattern matching
+sql := `SELECT * FROM products WHERE name LIKE '%widget%'`
+
+// IS NULL / IS NOT NULL
+sql := `SELECT * FROM users WHERE deleted_at IS NULL`
+
+// NULLS FIRST/LAST ordering (SQL-99 F851)
+sql := `SELECT * FROM users ORDER BY last_login DESC NULLS LAST`
+```
+
+### Subqueries
+
+```go
+// Scalar subquery
+sql := `SELECT name, (SELECT MAX(salary) FROM employees) as max_sal FROM users`
+
+// EXISTS subquery
+sql := `SELECT * FROM orders o
+        WHERE EXISTS (SELECT 1 FROM customers c WHERE c.id = o.customer_id)`
+
+// Correlated subquery
+sql := `SELECT * FROM employees e
+        WHERE salary > (SELECT AVG(salary) FROM employees WHERE dept = e.dept)`
+```
+
+## SQL Injection Detection
+
+GoSQLX includes a built-in security scanner (`pkg/sql/security`) for detecting SQL injection patterns:
+
+```go
+import (
+    "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+    "github.com/ajitpratap0/GoSQLX/pkg/sql/security"
+)
+
+func CheckForInjection(sql string) {
+    // Parse the SQL first
+    ast, err := gosqlx.Parse(sql)
+    if err != nil {
+        fmt.Println("Parse error:", err)
+        return
+    }
+
+    // Create scanner and scan for injection patterns
+    scanner := security.NewScanner()
+    result := scanner.Scan(ast)
+
+    // Check results
+    if result.HasCritical() {
+        fmt.Printf("CRITICAL: Found %d critical security issues!\n", result.CriticalCount)
+    }
+    if result.HasHigh() {
+        fmt.Printf("HIGH: Found %d high-severity issues\n", result.HighCount)
+    }
+
+    // Print all findings
+    for _, finding := range result.Findings {
+        fmt.Printf("[%s] %s: %s\n",
+            finding.Severity,
+            finding.Pattern,
+            finding.Description)
+    }
+}
+```
+
+### Detected Injection Patterns
+
+The security scanner detects:
+- **Tautology patterns**: `1=1`, `'a'='a'`, always-true conditions
+- **UNION-based injection**: Unauthorized UNION statements
+- **Time-based blind injection**: `SLEEP()`, `WAITFOR DELAY`
+- **Comment bypass**: `--`, `/**/` comment abuse
+- **Stacked queries**: Multiple statement injection
+- **Dangerous functions**: `xp_cmdshell`, `LOAD_FILE`, `INTO OUTFILE`
+
+```go
+// Example: Check user input for injection
+func ValidateUserQuery(userInput string) error {
+    ast, err := gosqlx.Parse(userInput)
+    if err != nil {
+        return fmt.Errorf("invalid SQL syntax: %w", err)
+    }
+
+    scanner := security.NewScanner()
+    result := scanner.Scan(ast)
+
+    if result.HasCritical() || result.HasHigh() {
+        return fmt.Errorf("potential SQL injection detected: %d issues found",
+            result.CriticalCount + result.HighCount)
+    }
+
+    return nil
 }
 ```
 

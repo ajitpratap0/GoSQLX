@@ -8,12 +8,17 @@ The GoSQLX Command Line Interface (CLI) provides high-performance SQL parsing, v
 ```bash
 git clone https://github.com/ajitpratap0/GoSQLX.git
 cd GoSQLX
-go build -o gosqlx ./cmd/gosqlx
+task build:cli  # or: go build -o gosqlx ./cmd/gosqlx
 ```
 
 ### Install via Go
 ```bash
 go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest
+```
+
+### Install Globally (from project)
+```bash
+task install
 ```
 
 ## Quick Start
@@ -46,39 +51,17 @@ CLI flags always override configuration file settings.
 
 ### Configuration Commands
 
-#### `gosqlx config init`
-Create a new configuration file with default settings:
-
 ```bash
-# Create .gosqlx.yml in current directory
+# Create a new configuration file
 gosqlx config init
-
-# Create config in home directory
 gosqlx config init --path ~/.gosqlx.yml
 
-# Create config in custom location
-gosqlx config init --path /path/to/config.yml
-```
-
-#### `gosqlx config validate`
-Validate configuration file syntax and values:
-
-```bash
-# Validate default config location
+# Validate configuration file
 gosqlx config validate
-
-# Validate specific config file
 gosqlx config validate --file /path/to/config.yml
-```
 
-#### `gosqlx config show`
-Display current configuration (merged from all sources):
-
-```bash
-# Show current configuration as YAML
+# Show current configuration
 gosqlx config show
-
-# Show as JSON
 gosqlx config show --format json
 ```
 
@@ -112,9 +95,9 @@ analyze:
   all: false                   # Enable all analysis features
 ```
 
-### Configuration Examples
+### Configuration Example
 
-**Team configuration for PostgreSQL projects** (`.gosqlx.yml`):
+**Team configuration** (`.gosqlx.yml`):
 ```yaml
 format:
   indent: 2
@@ -125,59 +108,19 @@ validate:
   dialect: postgresql
   strict_mode: true
 
-output:
-  format: table
-```
-
-**Personal configuration for MySQL** (`~/.gosqlx.yml`):
-```yaml
-format:
-  indent: 4
-  uppercase_keywords: false
-  compact: true
-
-validate:
-  dialect: mysql
-  recursive: true
-
 analyze:
-  all: true
-```
-
-**CI/CD configuration** (`.gosqlx.yml`):
-```yaml
-format:
-  indent: 2
-  uppercase_keywords: true
-  max_line_length: 80
-
-validate:
-  dialect: postgresql
-  strict_mode: true
-
-output:
-  format: json
-  verbose: false
+  security: true
+  performance: true
 ```
 
 ### Configuration Precedence
 
-When multiple configuration sources exist, settings are merged with this precedence:
-
-1. **CLI flags** (highest priority)
-2. **Current directory** `.gosqlx.yml`
-3. **Home directory** `~/.gosqlx.yml`
-4. **System-wide** `/etc/gosqlx.yml`
-5. **Built-in defaults** (lowest priority)
-
-Example:
-```bash
-# Config file has: indent: 2
-# CLI flag overrides: --indent 4
-# Result: Uses indent: 4
-
-gosqlx format --indent 4 query.sql
-```
+Settings are merged in this order (highest to lowest priority):
+1. CLI flags
+2. Current directory `.gosqlx.yml`
+3. Home directory `~/.gosqlx.yml`
+4. System-wide `/etc/gosqlx.yml`
+5. Built-in defaults
 
 ## Commands
 
@@ -192,13 +135,46 @@ gosqlx validate "SELECT id, name FROM users"
 gosqlx validate query.sql
 
 # Validate multiple files
-gosqlx validate *.sql
+gosqlx validate query1.sql query2.sql
 
-# Batch validation with verbose output
-gosqlx validate -v queries/
+# Validate with glob pattern
+gosqlx validate "*.sql"
+
+# Recursively validate directory
+gosqlx validate -r ./queries/
+
+# Quiet mode (exit code only)
+gosqlx validate --quiet query.sql
+
+# Show performance statistics
+gosqlx validate --stats ./queries/
+
+# SARIF output for GitHub Code Scanning
+gosqlx validate --output-format sarif --output-file results.sarif queries/
+
+# Validate from stdin
+echo "SELECT * FROM users" | gosqlx validate
+cat query.sql | gosqlx validate
+gosqlx validate -
+gosqlx validate < query.sql
 ```
 
-**Performance**: 1.38M+ operations/second sustained throughput
+**Options:**
+- `-r, --recursive`: Recursively process directories
+- `-p, --pattern`: File pattern for recursive processing (default: "*.sql")
+- `-q, --quiet`: Quiet mode (exit code only)
+- `-s, --stats`: Show performance statistics
+- `--dialect`: SQL dialect (postgresql, mysql, sqlserver, oracle, sqlite)
+- `--strict`: Enable strict validation mode
+- `--output-format`: Output format (text, json, sarif)
+- `--output-file`: Output file path (default: stdout)
+
+**Output Formats:**
+- `text`: Human-readable output (default)
+- `json`: JSON format for programmatic consumption
+- `sarif`: SARIF 2.1.0 format for GitHub Code Scanning integration
+
+**Performance**: <10ms for typical queries, 100+ files/second in batch mode
 
 ### `gosqlx format`
 Format SQL queries with intelligent indentation and style.
@@ -213,83 +189,129 @@ gosqlx format -i query.sql
 # Custom indentation (4 spaces)
 gosqlx format --indent 4 query.sql
 
+# Keep original keyword case
+gosqlx format --no-uppercase query.sql
+
 # Compact format
 gosqlx format --compact query.sql
 
 # Check if formatting is needed (CI mode)
-gosqlx format --check *.sql
+gosqlx format --check query.sql
+
+# Format all SQL files with glob
+gosqlx format "*.sql"
+
+# Save to specific file
+gosqlx format -o formatted.sql query.sql
+
+# Format from stdin
+echo "SELECT * FROM users" | gosqlx format
+cat query.sql | gosqlx format
+gosqlx format -
+gosqlx format < query.sql
+cat query.sql | gosqlx format > formatted.sql
 ```
 
 **Options:**
-- `-i, --in-place`: Edit files in place
-- `--indent SIZE`: Indentation size in spaces (default: 2)
+- `-i, --in-place`: Edit files in place (not supported with stdin)
+- `--indent INT`: Indentation size in spaces (default: 2)
 - `--uppercase`: Uppercase SQL keywords (default: true)
 - `--no-uppercase`: Keep original keyword case
 - `--compact`: Minimal whitespace format
-- `--check`: Exit with error if files need formatting
+- `--check`: Check if files need formatting (CI mode)
+- `--max-line INT`: Maximum line length (default: 80)
 
-**Performance**: 2,600+ files/second throughput
+**Performance**: 100x faster than SQLFluff for equivalent operations
 
 ### `gosqlx analyze`
-Deep analysis of SQL queries with detailed reports.
+Analyze SQL queries for security vulnerabilities, performance issues, and complexity metrics.
 
 ```bash
-# Analyze SQL structure
+# Basic analysis
+gosqlx analyze query.sql
+
+# Analyze direct SQL
 gosqlx analyze "SELECT u.name, COUNT(o.id) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name"
+
+# Security vulnerability scan
+gosqlx analyze --security query.sql
+
+# Performance optimization hints
+gosqlx analyze --performance query.sql
+
+# Complexity scoring
+gosqlx analyze --complexity query.sql
+
+# Comprehensive analysis
+gosqlx analyze --all query.sql
 
 # Analyze with JSON output
 gosqlx analyze -f json query.sql
 
-# Analyze multiple files
-gosqlx analyze queries/*.sql
-
-# Detailed analysis with security checks
-gosqlx analyze -v --security query.sql
+# Analyze from stdin
+echo "SELECT * FROM users" | gosqlx analyze
+cat query.sql | gosqlx analyze
+gosqlx analyze -
+gosqlx analyze < query.sql
 ```
 
-**Output formats:**
-- `table` (default): Human-readable table format
-- `json`: JSON output for programmatic use
-- `yaml`: YAML output
-- `tree`: AST tree visualization
+**Options:**
+- `--security`: Focus on security vulnerability analysis
+- `--performance`: Focus on performance optimization analysis
+- `--complexity`: Focus on complexity metrics
+- `--all`: Comprehensive analysis
+
+**Analysis capabilities:**
+- SQL injection pattern detection
+- Performance optimization suggestions
+- Query complexity scoring
+- Best practices validation
+- Multi-dialect compatibility checks
+
+**Note**: This is a basic implementation. Advanced analysis features are in Phase 4 of the roadmap.
 
 ### `gosqlx parse`
 Parse SQL into Abstract Syntax Tree (AST) representation.
 
 ```bash
 # Parse and display AST
+gosqlx parse query.sql
+
+# Parse direct SQL
 gosqlx parse "SELECT * FROM users WHERE age > 18"
 
-# Parse with tree visualization
-gosqlx parse -f tree complex_query.sql
+# Show detailed AST structure
+gosqlx parse --ast query.sql
+
+# Show tokenization output
+gosqlx parse --tokens query.sql
+
+# Show tree visualization
+gosqlx parse --tree query.sql
 
 # Parse to JSON for integration
 gosqlx parse -f json query.sql > ast.json
-```
 
-### `gosqlx watch`
-Monitor SQL files for changes and validate/format in real-time.
+# Parse to YAML
+gosqlx parse -f yaml query.sql
 
-```bash
-# Watch current directory for SQL file changes
-gosqlx watch
-
-# Watch specific directory with validation
-gosqlx watch ./queries --validate
-
-# Watch with formatting on save
-gosqlx watch ./queries --format
-
-# Watch with custom pattern
-gosqlx watch ./queries --pattern "*.sql"
+# Parse from stdin
+echo "SELECT * FROM users" | gosqlx parse
+cat query.sql | gosqlx parse
+gosqlx parse -
+gosqlx parse < query.sql
 ```
 
 **Options:**
-- `--validate`: Run validation on file changes
-- `--format`: Auto-format files on save
-- `--pattern PATTERN`: File pattern to watch (default: "*.sql")
+- `--ast`: Show detailed AST structure
+- `--tokens`: Show tokenization output
+- `--tree`: Show tree visualization
 
-**Use Case:** Real-time SQL development with automatic validation/formatting
+**Output formats:**
+- `json`: JSON output
+- `yaml`: YAML output
+- `table`: Table format
+- `tree`: Tree visualization
 
 ### `gosqlx lint`
 Check SQL files for style issues and best practices.
@@ -300,6 +322,9 @@ gosqlx lint query.sql
 
 # Lint multiple files
 gosqlx lint query1.sql query2.sql
+
+# Lint with glob pattern
+gosqlx lint "*.sql"
 
 # Lint directory recursively
 gosqlx lint -r ./queries
@@ -312,6 +337,11 @@ gosqlx lint --max-length 120 query.sql
 
 # Fail on warnings (useful for CI)
 gosqlx lint --fail-on-warn query.sql
+
+# Lint from stdin
+echo "SELECT * FROM users" | gosqlx lint
+cat query.sql | gosqlx lint
+gosqlx lint -
 ```
 
 **Available lint rules:**
@@ -326,13 +356,57 @@ gosqlx lint --fail-on-warn query.sql
 - `--max-length`: Maximum line length for L005 rule (default: 100)
 - `--fail-on-warn`: Exit with error code on warnings
 
-**Use Case:** Enforce SQL coding standards and best practices
+**Exit Codes:**
+- 0: No violations found
+- 1: Errors or warnings found (warnings only if --fail-on-warn is set)
+
+### `gosqlx lsp`
+Start the Language Server Protocol (LSP) server for IDE integration.
+
+```bash
+# Start LSP server on stdio
+gosqlx lsp
+
+# Start with logging enabled
+gosqlx lsp --log /tmp/lsp.log
+```
+
+**Features:**
+- Real-time syntax error detection
+- SQL formatting
+- Keyword documentation on hover
+- SQL keyword and function completion
+
+**IDE Integration:**
+
+See `gosqlx lsp --help` for VSCode, Neovim, and Emacs integration examples.
+
+### `gosqlx completion`
+Generate autocompletion script for your shell.
+
+```bash
+# Bash
+gosqlx completion bash > /etc/bash_completion.d/gosqlx
+
+# Zsh
+gosqlx completion zsh > "${fpath[1]}/_gosqlx"
+
+# Fish
+gosqlx completion fish > ~/.config/fish/completions/gosqlx.fish
+
+# PowerShell
+gosqlx completion powershell > gosqlx.ps1
+```
 
 ## Global Flags
+
+Available for all commands:
 
 - `-v, --verbose`: Enable verbose output
 - `-o, --output FILE`: Output to file instead of stdout
 - `-f, --format FORMAT`: Output format (auto, json, yaml, table, tree)
+- `-h, --help`: Help for any command
+- `--version`: Show version information
 
 ## File Input
 
@@ -413,20 +487,6 @@ For more details, see the [Security Validation Package](../cmd/gosqlx/internal/v
 
 ## Advanced Features
 
-### Batch Processing
-Process multiple files efficiently:
-
-```bash
-# Process entire directory
-gosqlx format -i sql_files/
-
-# Process with pattern matching
-gosqlx validate "src/**/*.sql"
-
-# Parallel processing for performance
-gosqlx analyze queries/ -v
-```
-
 ### CI/CD Integration
 Perfect for continuous integration:
 
@@ -435,10 +495,16 @@ Perfect for continuous integration:
 gosqlx format --check src/
 
 # Validation in CI pipeline
-gosqlx validate --strict queries/
+gosqlx validate -r --strict queries/
+
+# SARIF output for GitHub Code Scanning
+gosqlx validate --output-format sarif --output-file results.sarif queries/
 
 # Generate reports for analysis
 gosqlx analyze -f json src/ > analysis-report.json
+
+# Lint with fail on warnings
+gosqlx lint --fail-on-warn -r queries/
 ```
 
 ### SQL Dialect Support
@@ -452,58 +518,27 @@ Supports multiple SQL dialects:
 
 ### Advanced SQL Features Supported
 
-**Window Functions (Phase 2.5 - v1.3.0)**
-```sql
-SELECT 
-    name, 
-    salary,
-    ROW_NUMBER() OVER (PARTITION BY dept ORDER BY salary DESC) as rank,
-    LAG(salary, 1) OVER (ORDER BY hire_date) as prev_salary
-FROM employees;
-```
-
-**Common Table Expressions (CTEs)**
-```sql
-WITH RECURSIVE employee_hierarchy AS (
-    SELECT id, name, manager_id, 1 as level 
-    FROM employees WHERE manager_id IS NULL
-    UNION ALL
-    SELECT e.id, e.name, e.manager_id, eh.level + 1 
-    FROM employees e 
-    JOIN employee_hierarchy eh ON e.manager_id = eh.id
-)
-SELECT * FROM employee_hierarchy;
-```
-
-**Set Operations**
-```sql
-SELECT product FROM inventory 
-UNION SELECT product FROM orders
-EXCEPT SELECT product FROM discontinued
-INTERSECT SELECT product FROM active_catalog;
-```
-
-**Complete JOIN Support**
-```sql
-SELECT u.name, o.order_date, p.product_name
-FROM users u
-LEFT JOIN orders o ON u.id = o.user_id
-INNER JOIN products p ON o.product_id = p.id
-WHERE u.active = true;
-```
+- **Window Functions**: ROW_NUMBER, RANK, DENSE_RANK, LAG, LEAD, FIRST_VALUE, LAST_VALUE, etc.
+- **CTEs**: WITH clause, recursive CTEs
+- **Set Operations**: UNION, EXCEPT, INTERSECT
+- **JOINs**: LEFT, RIGHT, INNER, FULL OUTER, CROSS, NATURAL
+- **Advanced Expressions**: BETWEEN, IN, LIKE, IS NULL, CASE WHEN
+- **Modern SQL**: Materialized views, MERGE statements, GROUPING SETS, ROLLUP, CUBE
 
 ## Performance
 
 GoSQLX CLI delivers exceptional performance:
 
-| Operation | Throughput | Latency |
-|-----------|------------|---------|
-| **Validation** | 1.38M+ ops/sec | <1μs |
-| **Formatting** | 2,600+ files/sec | <1ms |
-| **Analysis** | 1M+ queries/sec | <2μs |
-| **Parsing** | 1.5M+ ops/sec | <1μs |
+| Operation | Throughput | Performance Target |
+|-----------|------------|-------------------|
+| **Validation** | 100+ files/sec | <10ms for typical queries |
+| **Formatting** | 100x faster than SQLFluff | High-performance processing |
+| **Analysis** | 1.38M+ ops/sec | Production-ready |
+| **Parsing** | 1.5M+ ops/sec | Direct AST inspection |
 
-**Memory efficiency:**
+**Core Library Performance:**
+- 1.38M+ operations/second sustained throughput
+- 1.5M peak with memory-efficient object pooling
 - 60-80% memory reduction through object pooling
 - Zero-copy tokenization
 - Concurrent processing support
@@ -520,54 +555,48 @@ Error at line 1, column 10: expected FROM, got IDENT 'FORM'
 Hint: Did you mean 'FROM'?
 ```
 
-## Examples
+## Usage Examples
 
-### 1. Validate and Format SQL Files
+### Validate and Format
 ```bash
-# Validate all SQL files in project
-gosqlx validate src/**/*.sql
+# Validate all SQL files
+gosqlx validate "src/**/*.sql"
 
 # Format with consistent style
-gosqlx format -i --indent 4 --uppercase src/**/*.sql
+gosqlx format -i --indent 4 src/**/*.sql
 
-# Check formatting in CI
+# CI format check
 gosqlx format --check src/ || exit 1
 ```
 
-### 2. SQL Analysis Workflow
+### Analysis and Linting
 ```bash
 # Analyze complex query
-gosqlx analyze -v "
-WITH sales_summary AS (
-    SELECT region, SUM(amount) as total 
-    FROM sales 
-    GROUP BY region
-    HAVING SUM(amount) > 1000
-)
-SELECT * FROM sales_summary 
-WHERE total > (SELECT AVG(total) FROM sales_summary)
-"
-```
+gosqlx analyze --all complex_query.sql
 
-### 3. Batch Processing
-```bash
-# Process multiple files with different operations
-find sql/ -name "*.sql" -exec gosqlx validate {} \;
-find sql/ -name "*.sql" -exec gosqlx format -i {} \;
-find sql/ -name "*.sql" -exec gosqlx analyze -f json {} \; > analysis.json
+# Lint with strict rules
+gosqlx lint --fail-on-warn -r queries/
 ```
 
 ## Integration
 
 ### Editor Integration
-GoSQLX can be integrated with editors for SQL linting and formatting:
+GoSQLX provides LSP server for rich IDE integration:
 
 ```bash
-# Format selection in editor
-gosqlx format --stdin < selection.sql
+# Start LSP server (for IDE integration)
+gosqlx lsp
+
+# Or use CLI commands for simple editor integration:
+
+# Format selection in editor (via stdin)
+cat selection.sql | gosqlx format
 
 # Validate on save
 gosqlx validate current_file.sql
+
+# Lint on save
+gosqlx lint current_file.sql
 ```
 
 ### Build Tools Integration
@@ -620,10 +649,10 @@ Error: file too large: 15728640 bytes (max 10485760 bytes)
 
 ### Performance Tips
 
-1. **Use batch processing** for multiple files
-2. **Enable verbose output** only when needed
-3. **Use appropriate output format** (JSON for scripts, table for humans)
-4. **Process files concurrently** when possible
+1. Use batch processing for multiple files with glob patterns
+2. Enable verbose output only when needed
+3. Use appropriate output format (JSON for scripts, table for humans)
+4. Leverage SARIF format for GitHub Code Scanning integration
 
 ## Contributing
 

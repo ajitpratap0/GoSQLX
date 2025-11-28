@@ -103,18 +103,13 @@ While no critical bugs were fixed, v1.5.0 includes:
 
 ### 📚 Documentation Updates
 
-New documentation added:
-- [RELEASE_NOTES_v1.5.0.md](RELEASE_NOTES_v1.5.0.md) - Comprehensive release notes
-- [CLI_REFACTORING_SUMMARY.md](CLI_REFACTORING_SUMMARY.md) - CLI coverage details
-- [PARSER_COVERAGE_SUMMARY.md](PARSER_COVERAGE_SUMMARY.md) - Parser test details
-- [TOKENIZER_COVERAGE_SUMMARY.md](TOKENIZER_COVERAGE_SUMMARY.md) - Tokenizer test details
-- Updated [CHANGELOG.md](CHANGELOG.md) with v1.5.0 release notes
+Updated documentation:
+- [CHANGELOG.md](../CHANGELOG.md) with v1.5.0 release notes
 
 ### 🔗 Related Resources
 
-- **Full Release Notes**: [RELEASE_NOTES_v1.5.0.md](RELEASE_NOTES_v1.5.0.md)
-- **Pull Request**: [PR #85](https://github.com/ajitpratap0/GoSQLX/pull/85)
-- **Changelog**: [CHANGELOG.md](CHANGELOG.md#150---2025-11-15---phase-1-test-coverage-achievement)
+- **Full Release Notes**: [CHANGELOG.md](../CHANGELOG.md)
+- **Pull Request**: [PR #138](https://github.com/ajitpratap0/GoSQLX/pull/138)
 - **Issues**: Report any issues at https://github.com/ajitpratap0/GoSQLX/issues
 
 ---

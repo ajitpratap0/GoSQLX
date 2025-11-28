@@ -128,7 +128,7 @@ Additional documentation updates:
 ### Team Communication
 
 - Notify team about new security features
-- Share SECURITY_SETUP.md with maintainers
+- Share docs/SECURITY_SETUP.md with maintainers
 - Schedule security training/review session
 - Document security incident response process
 
@@ -176,7 +176,7 @@ Security implementation is successful when:
 
 ## Support Resources
 
-- **Documentation**: See `SECURITY_SETUP.md` for detailed instructions
+- **Documentation**: See `docs/SECURITY_SETUP.md` for detailed instructions
 - **Security Policy**: See `SECURITY.md` for reporting procedures
 - **GitHub Docs**: https://docs.github.com/en/code-security
 - **GoSec Docs**: https://github.com/securego/gosec

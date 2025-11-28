@@ -2,11 +2,9 @@
 
 ## Table of Contents
 - [Common Issues](#common-issues)
-- [Error Messages](#error-messages)
+- [Error Codes Reference](#error-codes-reference)
 - [Performance Issues](#performance-issues)
 - [Memory Issues](#memory-issues)
-- [Unicode and Encoding Issues](#unicode-and-encoding-issues)
-- [Dialect-Specific Issues](#dialect-specific-issues)
 - [Debugging Techniques](#debugging-techniques)
 - [FAQ](#faq)
 
@@ -38,15 +36,14 @@ func GoodExample() {
 
 **Symptom:** Memory usage grows over time
 
-**Cause:** Not returning objects to pool
+**Cause:** Not returning pooled objects
 
 **Solution:**
 ```go
-// WRONG - Leaks tokenizer
+// WRONG - Leaks resources
 func LeakyFunction(sql string) error {
     tkz := tokenizer.GetTokenizer()
     // Missing: defer tokenizer.PutTokenizer(tkz)
-    
     tokens, err := tkz.Tokenize([]byte(sql))
     if err != nil {
         return err // Tokenizer never returned!
@@ -57,12 +54,9 @@ func LeakyFunction(sql string) error {
 // CORRECT - Always use defer
 func FixedFunction(sql string) error {
     tkz := tokenizer.GetTokenizer()
-    defer tokenizer.PutTokenizer(tkz) // Always executes
-    
-    tokens, err := tkz.Tokenize([]byte(sql))
-    if err != nil {
-        return err
-    }
+    defer tokenizer.PutTokenizer(tkz)
+    tokens, _ := tkz.Tokenize([]byte(sql))
+    _ = tokens
     return nil
 }
 ```
@@ -109,203 +103,175 @@ func ConcurrentGood(queries []string) {
 }
 ```
 
-## Error Messages
+## Error Codes Reference
 
-### "unterminated quoted identifier"
+### Tokenizer Errors (E1xxx)
 
-**Example Error:**
+**E1001 - Unexpected Character**
 ```
-unterminated quoted identifier starting at line 1, column 8
+Error E1001 at line 1, column 5: unexpected character: #
 ```
+- **Cause:** Invalid character in SQL
+- **Fix:** Use standard SQL syntax, quote special characters
 
-**Cause:** Missing closing quote for identifier
-
-**Examples:**
+**E1002 - Unterminated String**
 ```sql
--- Missing closing double quote
-SELECT "user_name FROM users;
-
--- Missing closing backtick (MySQL)
-SELECT `user_id FROM users;
-
--- Missing closing bracket (SQL Server)
-SELECT [user_id FROM users;
-```
-
-**Solution:** Ensure all quoted identifiers have matching closing quotes
-
-### "unterminated string literal"
-
-**Example Error:**
-```
-unterminated string literal starting at line 2, column 15
-```
-
-**Cause:** Missing closing quote for string
-
-**Examples:**
-```sql
--- Missing closing single quote
+-- WRONG
 SELECT * FROM users WHERE name = 'John;
 
--- Incorrect escaping
-SELECT * FROM users WHERE name = 'John's Pizza;
-```
-
-**Solution:** 
-```sql
--- Correct: Escape quotes by doubling
+-- CORRECT
 SELECT * FROM users WHERE name = 'John''s Pizza';
-
--- Or use different quote style if supported
-SELECT * FROM users WHERE name = "John's Pizza";
 ```
 
-### "invalid character"
+**E1003 - Invalid Number**
+- **Cause:** Malformed numeric literal (e.g., `1.2.3`, `1e2e3`)
+- **Fix:** Use valid numeric formats
 
-**Example Error:**
+**E1004 - Invalid Operator**
+- **Cause:** Invalid operator sequence
+- **Fix:** Check operator syntax for your SQL dialect
+
+**E1005 - Invalid Identifier**
+- **Cause:** Malformed identifier (e.g., unclosed quotes)
+- **Fix:** Ensure all quoted identifiers are properly closed
+
+**E1006 - Input Too Large**
+- **Cause:** SQL input exceeds size limits (DoS protection)
+- **Fix:** Split large queries or increase limits if appropriate
+
+**E1007 - Token Limit Reached**
+- **Cause:** Too many tokens generated (DoS protection)
+- **Fix:** Simplify query or increase limits
+
+**E1008 - Tokenizer Panic**
+- **Cause:** Internal tokenizer error (recovered panic)
+- **Fix:** Report bug with SQL that triggers this
+
+### Parser Errors (E2xxx)
+
+**E2001 - Unexpected Token**
 ```
-invalid character: #
+Error E2001 at line 1, column 15: unexpected token: LIMIT
 ```
+- **Cause:** Token not valid in current context
+- **Fix:** Check SQL syntax, verify keyword order
 
-**Cause:** Unsupported character in SQL
-
-**Common Causes:**
-1. Comments using unsupported syntax
-2. Special characters not properly quoted
-3. Encoding issues
-
-**Solution:**
-```sql
--- Use standard SQL comments
--- This is a comment (standard)
-/* This is also a comment */
-
--- Avoid # style comments (MySQL specific)
-# This might not work
-
--- Quote special characters in identifiers
-SELECT "column#1" FROM users;  -- Quoted
+**E2002 - Expected Token**
 ```
-
-### "unexpected token"
-
-**Example Error:**
+Error E2002 at line 1, column 20: expected FROM but got WHERE
 ```
-unexpected token: LIMIT at position 45
-```
+- **Fix:** Add missing required keyword
 
-**Cause:** Token not expected in current context
+**E2003 - Missing Clause**
+- **Cause:** Required SQL clause missing (e.g., SELECT without FROM)
+- **Fix:** Add required clause
 
-**Debugging Steps:**
-1. Check SQL syntax for your specific dialect
-2. Verify token order
-3. Look for missing keywords
+**E2004 - Invalid Syntax**
+- **Cause:** General syntax error
+- **Fix:** Review SQL syntax for your dialect
 
-```go
-func DebugUnexpectedToken(sql string) {
-    tkz := tokenizer.GetTokenizer()
-    defer tokenizer.PutTokenizer(tkz)
-    
-    tokens, err := tkz.Tokenize([]byte(sql))
-    if err != nil {
-        fmt.Printf("Tokenization failed: %v\n", err)
-        return
-    }
-    
-    // Print all tokens for debugging
-    for i, token := range tokens {
-        fmt.Printf("%d: %s (type: %d)\n", 
-            i, token.Token.Value, token.Token.Type)
-    }
-}
-```
+**E2005 - Incomplete Statement**
+- **Cause:** Statement ends unexpectedly
+- **Fix:** Complete the SQL statement
+
+**E2006 - Invalid Expression**
+- **Cause:** Expression syntax error
+- **Fix:** Check expression syntax (operators, parentheses)
+
+**E2007 - Recursion Depth Limit**
+- **Cause:** Query too deeply nested (DoS protection)
+- **Fix:** Simplify nested expressions
+
+**E2008 - Unsupported Data Type**
+- **Cause:** Data type not yet supported
+- **Fix:** Use supported data type or report feature request
+
+**E2009 - Unsupported Constraint**
+- **Cause:** Constraint type not supported
+- **Fix:** Use supported constraint or report feature request
+
+**E2010 - Unsupported Join**
+- **Cause:** JOIN type not supported
+- **Fix:** Use supported JOIN type
+
+**E2011 - Invalid CTE**
+- **Cause:** WITH clause syntax error
+- **Fix:** Check CTE syntax (column list, recursion)
+
+**E2012 - Invalid Set Operation**
+- **Cause:** UNION/EXCEPT/INTERSECT syntax error
+- **Fix:** Verify set operation syntax
+
+### Semantic Errors (E3xxx)
+
+**E3001 - Undefined Table**
+- **Cause:** Table reference not found
+- **Fix:** Define table or check spelling
+
+**E3002 - Undefined Column**
+- **Cause:** Column reference not found
+- **Fix:** Check column exists in table
+
+**E3003 - Type Mismatch**
+- **Cause:** Expression type incompatibility
+- **Fix:** Cast or convert types appropriately
+
+**E3004 - Ambiguous Column**
+- **Cause:** Column name exists in multiple tables
+- **Fix:** Use table qualifier (e.g., `users.id`)
+
+### Feature Errors (E4xxx)
+
+**E4001 - Unsupported Feature**
+- **Cause:** Feature not yet implemented
+- **Fix:** Report feature request or use alternative
+
+**E4002 - Unsupported Dialect**
+- **Cause:** SQL dialect not fully supported
+- **Fix:** Use standard SQL or report dialect feature request
 
 ## Performance Issues
 
-### Slow Tokenization
-
-**Symptom:** Tokenization takes longer than expected
+### Slow Parsing/Tokenization
 
 **Common Causes:**
-1. Very large SQL queries
-2. Complex Unicode processing
-3. Not reusing tokenizers
-
-**Diagnosis:**
-```go
-func MeasurePerformance(sql string) {
-    start := time.Now()
-    
-    tkz := tokenizer.GetTokenizer()
-    defer tokenizer.PutTokenizer(tkz)
-    
-    tokens, err := tkz.Tokenize([]byte(sql))
-    
-    elapsed := time.Since(start)
-    fmt.Printf("Tokenization took: %v\n", elapsed)
-    fmt.Printf("Tokens generated: %d\n", len(tokens))
-    fmt.Printf("Bytes per second: %.2f\n", 
-        float64(len(sql))/elapsed.Seconds())
-}
-```
+- Very large SQL queries (>1MB)
+- Not reusing tokenizers from pool
+- Processing in tight loops
 
 **Solutions:**
 
-1. **Reuse tokenizers:**
 ```go
-// Process multiple queries with one tokenizer
+// 1. Reuse tokenizers for batch processing
 func BatchProcess(queries []string) {
     tkz := tokenizer.GetTokenizer()
     defer tokenizer.PutTokenizer(tkz)
-    
+
     for _, sql := range queries {
         tkz.Reset()
         tokens, _ := tkz.Tokenize([]byte(sql))
         // Process...
     }
 }
-```
 
-2. **Limit query size:**
-```go
-const MaxQuerySize = 1_000_000 // 1MB
-
-func ProcessWithLimit(sql string) error {
-    if len(sql) > MaxQuerySize {
-        return fmt.Errorf("query too large: %d bytes", len(sql))
-    }
-
-    tkz := tokenizer.GetTokenizer()
-    defer tokenizer.PutTokenizer(tkz)
-
-    _, err := tkz.Tokenize([]byte(sql))
-    return err
-}
-```
-
-3. **Use concurrent processing:**
-```go
+// 2. Parallel processing with worker pool
 func ParallelProcess(queries []string) {
     numWorkers := runtime.NumCPU()
     work := make(chan string, len(queries))
-    
-    // Queue work
+
     for _, sql := range queries {
         work <- sql
     }
     close(work)
-    
-    // Process in parallel
+
     var wg sync.WaitGroup
     for i := 0; i < numWorkers; i++ {
         wg.Add(1)
         go func() {
             defer wg.Done()
-            
             tkz := tokenizer.GetTokenizer()
             defer tokenizer.PutTokenizer(tkz)
-            
+
             for sql := range work {
                 tkz.Reset()
                 tokens, _ := tkz.Tokenize([]byte(sql))
@@ -313,66 +279,36 @@ func ParallelProcess(queries []string) {
             }
         }()
     }
-    
     wg.Wait()
 }
+
+// 3. Limit input size
+const MaxQuerySize = 1_000_000 // 1MB
+if len(sql) > MaxQuerySize {
+    return fmt.Errorf("query too large: %d bytes", len(sql))
+}
 ```
-
-### High CPU Usage
-
-**Symptom:** CPU usage spikes during tokenization
 
 **Profiling:**
-```go
+```bash
+# CPU profiling
+go test -bench=. -cpuprofile=cpu.prof
+go tool pprof cpu.prof
+
+# Memory profiling
+go test -bench=. -memprofile=mem.prof
+go tool pprof mem.prof
+
+# Live profiling
 import _ "net/http/pprof"
-
-func init() {
-    go func() {
-        log.Println(http.ListenAndServe("localhost:6060", nil))
-    }()
-}
-
-// Profile with: go tool pprof http://localhost:6060/debug/pprof/profile
+# Visit http://localhost:6060/debug/pprof/
 ```
-
-**Common Causes:**
-1. Tokenizing in tight loops
-2. Not using pools effectively
-3. Excessive string operations
 
 ## Memory Issues
 
-### Memory Leaks
+### Common Leak Patterns
 
-**Detection:**
-```go
-func DetectLeak() {
-    var m runtime.MemStats
-    
-    // Baseline
-    runtime.GC()
-    runtime.ReadMemStats(&m)
-    baseline := m.Alloc
-    
-    // Run operations
-    for i := 0; i < 1000; i++ {
-        tkz := tokenizer.GetTokenizer()
-        tokens, _ := tkz.Tokenize([]byte("SELECT * FROM users"))
-        tokenizer.PutTokenizer(tkz)
-    }
-    
-    // Check memory
-    runtime.GC()
-    runtime.ReadMemStats(&m)
-    leaked := m.Alloc - baseline
-    
-    fmt.Printf("Potential leak: %d bytes\n", leaked)
-}
-```
-
-**Common Leak Patterns:**
-
-1. **Storing pooled objects:**
+**1. Storing pooled objects:**
 ```go
 // WRONG - Stores pooled object
 type BadCache struct {
@@ -389,17 +325,17 @@ type GoodCache struct{}
 func (c *GoodCache) Process(sql string) {
     tkz := tokenizer.GetTokenizer()
     defer tokenizer.PutTokenizer(tkz)
-    // Use and return
+    tokens, _ := tkz.Tokenize([]byte(sql))
+    _ = tokens
 }
 ```
 
-2. **Goroutine leaks:**
+**2. Goroutines without defer:**
 ```go
-// WRONG - Goroutine may leak
+// WRONG - May leak on panic
 func LeakyAsync(sql string) {
     go func() {
         tkz := tokenizer.GetTokenizer()
-        // If this panics, tokenizer is never returned
         tokens, _ := tkz.Tokenize([]byte(sql))
         tokenizer.PutTokenizer(tkz)
     }()
@@ -409,189 +345,42 @@ func LeakyAsync(sql string) {
 func SafeAsync(sql string) {
     go func() {
         tkz := tokenizer.GetTokenizer()
-        defer tokenizer.PutTokenizer(tkz) // Always returns
+        defer tokenizer.PutTokenizer(tkz)
         tokens, _ := tkz.Tokenize([]byte(sql))
+        _ = tokens
     }()
 }
 ```
 
-### High Memory Usage
+### Memory Monitoring
 
-**Monitoring:**
 ```go
 func MonitorMemory() {
-    ticker := time.NewTicker(10 * time.Second)
-    defer ticker.Stop()
-    
-    for range ticker.C {
-        var m runtime.MemStats
-        runtime.ReadMemStats(&m)
-        
-        fmt.Printf("Alloc: %d MB\n", m.Alloc/1024/1024)
-        fmt.Printf("Total: %d MB\n", m.TotalAlloc/1024/1024)
-        fmt.Printf("Sys: %d MB\n", m.Sys/1024/1024)
-        fmt.Printf("NumGC: %d\n", m.NumGC)
-    }
+    var m runtime.MemStats
+    runtime.ReadMemStats(&m)
+    fmt.Printf("Alloc: %d MB, NumGC: %d\n", m.Alloc/1024/1024, m.NumGC)
 }
-```
 
-**Optimization:**
-```go
-// Pre-allocate for known sizes
-func OptimizedTokenization(sql string) {
-    estimatedTokens := len(sql) / 5 // Rough estimate
-    
-    tkz := tokenizer.GetTokenizer()
-    defer tokenizer.PutTokenizer(tkz)
-    
-    tokens, _ := tkz.Tokenize([]byte(sql))
-    
-    // Pre-allocate result slice
-    result := make([]string, 0, estimatedTokens)
-    for _, token := range tokens {
-        result = append(result, token.Token.Value)
+func DetectLeak() {
+    var m runtime.MemStats
+    runtime.GC()
+    runtime.ReadMemStats(&m)
+    baseline := m.Alloc
+
+    for i := 0; i < 1000; i++ {
+        tkz := tokenizer.GetTokenizer()
+        tkz.Tokenize([]byte("SELECT * FROM users"))
+        tokenizer.PutTokenizer(tkz)
     }
+
+    runtime.GC()
+    runtime.ReadMemStats(&m)
+    leaked := m.Alloc - baseline
+    fmt.Printf("Potential leak: %d bytes\n", leaked)
 }
-```
-
-## Unicode and Encoding Issues
-
-### Invalid UTF-8 Sequences
-
-**Problem:** Tokenizer fails with encoding errors
-
-**Detection:**
-```go
-func ValidateUTF8(sql string) error {
-    if !utf8.ValidString(sql) {
-        return fmt.Errorf("invalid UTF-8 encoding")
-    }
-    
-    // Find invalid sequences
-    for i, r := range sql {
-        if r == utf8.RuneError {
-            return fmt.Errorf("invalid UTF-8 at position %d", i)
-        }
-    }
-    
-    return nil
-}
-```
-
-**Fix Encoding:**
-```go
-func FixEncoding(input []byte) []byte {
-    // Remove invalid UTF-8 sequences
-    return bytes.ToValidUTF8(input, []byte("?"))
-}
-```
-
-### Mixed Character Sets
-
-**Problem:** Mixing incompatible character sets
-
-**Solution:**
-```go
-func NormalizeCharsets(sql string) string {
-    // Normalize Unicode
-    return norm.NFC.String(sql)
-}
-```
-
-## Dialect-Specific Issues
-
-### PostgreSQL
-
-**Issue:** Array operators not recognized
-
-```go
-// Ensure PostgreSQL operators are handled
-sql := `SELECT * FROM users WHERE tags @> ARRAY['admin']`
-
-tkz := tokenizer.GetTokenizer()
-defer tokenizer.PutTokenizer(tkz)
-
-tokens, err := tkz.Tokenize([]byte(sql))
-if err != nil {
-    // Check if it's the @> operator causing issues
-    if strings.Contains(err.Error(), "@>") {
-        fmt.Println("PostgreSQL array operator issue")
-    }
-}
-```
-
-### MySQL
-
-**Issue:** Backtick identifiers not working
-
-```go
-// Test MySQL backtick support
-func TestMySQLBackticks() error {
-    sql := "SELECT `user_id` FROM `users`"
-    
-    tkz := tokenizer.GetTokenizer()
-    defer tokenizer.PutTokenizer(tkz)
-    
-    tokens, err := tkz.Tokenize([]byte(sql))
-    if err != nil {
-        return fmt.Errorf("MySQL backtick not supported: %v", err)
-    }
-    
-    // Verify backticks were tokenized correctly
-    for _, token := range tokens {
-        if token.Token.Type == models.TokenTypeIdentifier {
-            fmt.Printf("Identifier: %s\n", token.Token.Value)
-        }
-    }
-    
-    return nil
-}
-```
-
-### SQL Server
-
-**Issue:** Square brackets not recognized
-
-```go
-// Handle SQL Server brackets
-sql := "SELECT [user id] FROM [user table]"
-
-// Pre-process if needed
-processed := strings.ReplaceAll(sql, "[", `"`)
-processed = strings.ReplaceAll(processed, "]", `"`)
 ```
 
 ## Debugging Techniques
-
-### Enable Debug Logging
-
-```go
-type DebugTokenizer struct {
-    *tokenizer.Tokenizer
-    debug bool
-}
-
-func (d *DebugTokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) {
-    if d.debug {
-        fmt.Printf("Input: %s\n", string(input))
-        fmt.Printf("Length: %d bytes\n", len(input))
-    }
-    
-    start := time.Now()
-    tokens, err := d.Tokenizer.Tokenize(input)
-    
-    if d.debug {
-        fmt.Printf("Duration: %v\n", time.Since(start))
-        fmt.Printf("Tokens: %d\n", len(tokens))
-        
-        if err != nil {
-            fmt.Printf("Error: %v\n", err)
-        }
-    }
-    
-    return tokens, err
-}
-```
 
 ### Token Stream Analysis
 
@@ -599,84 +388,87 @@ func (d *DebugTokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) 
 func AnalyzeTokenStream(sql string) {
     tkz := tokenizer.GetTokenizer()
     defer tokenizer.PutTokenizer(tkz)
-    
+
     tokens, err := tkz.Tokenize([]byte(sql))
     if err != nil {
         fmt.Printf("Error: %v\n", err)
         return
     }
-    
-    fmt.Println("Token Stream Analysis:")
-    fmt.Println("==================================================")
-    
+
     for i, token := range tokens {
         if token.Token.Type == models.TokenTypeEOF {
-            fmt.Println("EOF reached")
             break
         }
-        
-        fmt.Printf("%3d | Type: %3d | Pos: L%d:C%d | Value: %q\n",
-            i,
-            token.Token.Type,
-            token.Start.Line,
-            token.Start.Column,
-            token.Token.Value)
+        fmt.Printf("%3d | Type: %3d | L%d:C%d | %q\n",
+            i, token.Token.Type, token.Start.Line,
+            token.Start.Column, token.Token.Value)
     }
-    
-    // Statistics
-    fmt.Printf("\nTotal tokens: %d\n", len(tokens))
-    fmt.Printf("Input size: %d bytes\n", len(sql))
-    fmt.Printf("Tokens per byte: %.2f\n", 
-        float64(len(tokens))/float64(len(sql)))
 }
 ```
 
-### Memory Profiling
+### Parser Testing
 
 ```go
-func ProfileMemory(sql string, iterations int) {
-    var m runtime.MemStats
-    
-    // Before
-    runtime.GC()
-    runtime.ReadMemStats(&m)
-    allocBefore := m.Alloc
-    
-    // Run tokenization
-    for i := 0; i < iterations; i++ {
-        tkz := tokenizer.GetTokenizer()
-        tokens, _ := tkz.Tokenize([]byte(sql))
-        _ = tokens
-        tokenizer.PutTokenizer(tkz)
+func TestParser(sql string) {
+    // Tokenize
+    tkz := tokenizer.GetTokenizer()
+    defer tokenizer.PutTokenizer(tkz)
+
+    tokens, err := tkz.Tokenize([]byte(sql))
+    if err != nil {
+        fmt.Printf("Tokenization error: %v\n", err)
+        return
     }
-    
-    // After
-    runtime.GC()
-    runtime.ReadMemStats(&m)
-    allocAfter := m.Alloc
-    
-    fmt.Printf("Memory used: %d bytes\n", allocAfter-allocBefore)
-    fmt.Printf("Per iteration: %d bytes\n", 
-        (allocAfter-allocBefore)/int64(iterations))
+
+    // Convert tokens
+    parserTokens, err := parser.ConvertTokensForParser(tokens)
+    if err != nil {
+        fmt.Printf("Token conversion error: %v\n", err)
+        return
+    }
+
+    // Parse
+    p := parser.NewParser()
+    astTree, err := p.Parse(parserTokens)
+    if err != nil {
+        fmt.Printf("Parse error: %v\n", err)
+        return
+    }
+    defer ast.ReleaseAST(astTree)
+
+    fmt.Printf("Parsed successfully: %d statements\n", len(astTree.Statements))
+}
+```
+
+### Security Scanning
+
+```go
+import "github.com/ajitpratap0/GoSQLX/pkg/sql/security"
+
+func CheckSQLSecurity(sql string) {
+    scanner := security.NewScanner()
+    result := scanner.Scan(sql)
+
+    if result.HasHighOrAbove() {
+        fmt.Printf("Security issues found:\n")
+        for _, finding := range result.Findings {
+            fmt.Printf("- [%s] %s\n", finding.Severity, finding.Description)
+        }
+    }
 }
 ```
 
 ## FAQ
 
-### Q: Why does my application panic when using tokenizers?
+### Q: Why does my application panic?
 
-**A:** Most likely you're not getting the tokenizer from the pool:
+**A:** Always get tokenizer from pool:
 ```go
-// Always use:
 tkz := tokenizer.GetTokenizer()
 defer tokenizer.PutTokenizer(tkz)
 ```
 
-### Q: How many tokenizers can I get from the pool simultaneously?
-
-**A:** The pool has no hard limit. It creates new instances as needed and reuses returned ones. For best performance, return tokenizers as soon as possible.
-
-### Q: Can I modify token values after tokenization?
+### Q: Can I modify tokens after tokenization?
 
 **A:** Yes, tokens are copies and can be safely modified:
 ```go
@@ -688,43 +480,28 @@ for i := range tokens {
 }
 ```
 
-### Q: How do I handle very large SQL files?
+### Q: How do I handle large SQL files (>10MB)?
 
-**A:** For files > 10MB, consider streaming or chunking:
+**A:** Stream and process in chunks:
 ```go
 func ProcessLargeFile(filename string) error {
-    file, err := os.Open(filename)
-    if err != nil {
-        return err
-    }
+    file, _ := os.Open(filename)
     defer file.Close()
-    
+
     scanner := bufio.NewScanner(file)
     scanner.Split(SplitOnSemicolon) // Custom splitter
-    
+
     tkz := tokenizer.GetTokenizer()
     defer tokenizer.PutTokenizer(tkz)
-    
+
     for scanner.Scan() {
-        sql := scanner.Text()
         tkz.Reset()
-        tokens, err := tkz.Tokenize([]byte(sql))
-        if err != nil {
-            return err
-        }
+        tokens, _ := tkz.Tokenize([]byte(scanner.Text()))
         // Process tokens...
     }
-    
     return scanner.Err()
 }
 ```
-
-### Q: Why is Unicode text tokenizing slowly?
-
-**A:** Complex Unicode requires more processing. Optimize by:
-1. Normalizing text before tokenization
-2. Using byte operations where possible
-3. Caching tokenization results for repeated queries
 
 ### Q: How do I test for race conditions?
 
@@ -736,43 +513,35 @@ go run -race main.go
 
 ### Q: Can I use GoSQLX with database/sql?
 
-**A:** GoSQLX is a parser/tokenizer, not a driver. Use it to analyze queries before sending to database/sql:
+**A:** Yes, use it to validate queries before execution:
 ```go
 func ValidateBeforeExecute(db *sql.DB, query string) error {
-    // Validate with GoSQLX
     tkz := tokenizer.GetTokenizer()
     defer tokenizer.PutTokenizer(tkz)
-    
-    _, err := tkz.Tokenize([]byte(query))
-    if err != nil {
+
+    if _, err := tkz.Tokenize([]byte(query)); err != nil {
         return fmt.Errorf("invalid SQL: %v", err)
     }
-    
-    // Execute with database/sql
-    _, err = db.Exec(query)
+
+    _, err := db.Exec(query)
     return err
 }
 ```
 
 ### Q: How do I contribute bug fixes?
 
-**A:** 
-1. Create a minimal reproduction case
-2. Include the SQL that causes the issue
-3. Submit an issue with:
-   - Go version
-   - GoSQLX version
-   - Full error message
-   - Sample code
+**A:** Submit an issue with:
+- Go version and GoSQLX version
+- Minimal reproduction case with SQL
+- Full error message
+- Sample code
 
 ## Getting Help
 
-If you're still experiencing issues:
+1. Check test suite for usage examples
+2. Review benchmarks for performance patterns
+3. Enable debug logging (see Debugging section)
+4. Profile your application (see Performance section)
+5. Submit an issue with reproduction steps
 
-1. **Check the test suite** - Examples of correct usage
-2. **Review benchmarks** - Performance patterns
-3. **Enable debug logging** - Understand what's happening
-4. **Profile your application** - Identify bottlenecks
-5. **Submit an issue** - With reproduction steps
-
-Remember: Most issues are related to improper pool usage or not using defer for cleanup.
+**Remember:** Most issues stem from improper pool usage or missing `defer` statements.

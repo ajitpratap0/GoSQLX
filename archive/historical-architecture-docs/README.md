@@ -29,7 +29,7 @@ For current architecture, performance, and roadmap information, please refer to:
 - **Current Architecture**: `/docs/ARCHITECTURE.md`
 - **Current Performance**: Root `README.md` Performance section
 - **Current Roadmap**: `/COMPREHENSIVE_ROADMAP_2025.md`
-- **Release Notes**: `/RELEASE_NOTES_v1.5.0.md`
+- **Release Notes**: `/CHANGELOG.md`
 - **Development Guide**: `/CLAUDE.md`
 
 ## Why These Documents Are Archived

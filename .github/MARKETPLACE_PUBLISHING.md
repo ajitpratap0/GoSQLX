@@ -95,8 +95,8 @@ See [ACTION_QUICK_REFERENCE.md](ACTION_QUICK_REFERENCE.md) for complete document
 ### Links
 
 - [Documentation](https://github.com/ajitpratap0/GoSQLX#readme)
-- [Examples](.github/workflows/examples/)
-- [Testing Guide](.github/ACTION_TESTING_GUIDE.md)
+- [Examples](./workflows/examples/)
+- [Testing Guide](ACTION_TESTING_GUIDE.md)
 
 ### Known Issues
 

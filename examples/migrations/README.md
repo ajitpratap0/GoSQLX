@@ -305,24 +305,23 @@ tokens2, _ := tkz.Tokenize(sql2)
 
 **Solution:** Check compatibility
 
-1. Review [SQL_COMPATIBILITY.md](../../docs/SQL_COMPATIBILITY.md)
-2. Check [ROADMAP.md](../../docs/ROADMAP.md) for planned features
-3. File an issue on [GitHub](https://github.com/ajitpratap0/GoSQLX/issues)
+1. Review [SQL_COMPATIBILITY.md](../../docs/SQL_COMPATIBILITY.md) for supported features
+2. File an issue on [GitHub](https://github.com/ajitpratap0/GoSQLX/issues)
 
 ## Next Steps
 
 1. **Review your tool:** Choose the relevant example (SQLFluff, JSQLParser, or pg_query)
 2. **Run the example:** Execute the Go file to see live demonstrations
-3. **Read the guide:** Check the corresponding migration guide in `docs/migrations/`
+3. **Read the guide:** Check the corresponding migration guide in `docs/migration/`
 4. **Plan migration:** Use the checklists in the guides
 5. **Test thoroughly:** Validate against your specific SQL workloads
 6. **Deploy:** Follow the deployment patterns shown in examples
 
 ## Additional Resources
 
-- **[FROM_SQLFLUFF.md](../../docs/migrations/FROM_SQLFLUFF.md)** - Complete SQLFluff migration guide
-- **[FROM_JSQLPARSER.md](../../docs/migrations/FROM_JSQLPARSER.md)** - Complete JSQLParser migration guide
-- **[FROM_PG_QUERY.md](../../docs/migrations/FROM_PG_QUERY.md)** - Complete pg_query migration guide
+- **[FROM_SQLFLUFF.md](../../docs/migration/FROM_SQLFLUFF.md)** - Complete SQLFluff migration guide
+- **[FROM_JSQLPARSER.md](../../docs/migration/FROM_JSQLPARSER.md)** - Complete JSQLParser migration guide
+- **[FROM_PG_QUERY.md](../../docs/migration/FROM_PG_QUERY.md)** - Complete pg_query migration guide
 - **[COMPARISON.md](../../docs/COMPARISON.md)** - Detailed feature comparison with competitors
 - **[API_REFERENCE.md](../../docs/API_REFERENCE.md)** - GoSQLX API documentation
 - **[USAGE_GUIDE.md](../../docs/USAGE_GUIDE.md)** - Common usage patterns

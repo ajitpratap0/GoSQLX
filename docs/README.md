@@ -112,7 +112,7 @@ docs/
 
 **Advanced Topics**
 - [Concurrent Processing](USAGE_GUIDE.md#concurrent-processing)
-- [Memory Optimization](ARCHITECTURE.md#memory-optimization-strategies)
+- [Memory Management](ARCHITECTURE.md#memory-management)
 - [Performance Tuning](PRODUCTION_GUIDE.md#performance-optimization)
 
 **Troubleshooting**

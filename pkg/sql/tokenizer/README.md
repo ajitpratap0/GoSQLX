@@ -396,7 +396,7 @@ go func() {
 
 - [Main API Reference](../../../docs/API_REFERENCE.md)
 - [Architecture Guide](../../../docs/ARCHITECTURE.md)
-- [Unicode Support](../../../docs/UNICODE_SUPPORT.md)
+- [SQL Compatibility](../../../docs/SQL_COMPATIBILITY.md)
 - [Examples](../../../examples/)
 
 ## Version History

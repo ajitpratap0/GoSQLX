@@ -60,6 +60,6 @@ Invalid: 1
 
 ## Integration
 
-See `.github/workflows/validate.yml` for GitHub Actions integration example.
+See `.github/workflows/test-github-action.yml` for GitHub Actions integration example.
 
 For the complete tutorial, see: `docs/tutorials/01-sql-validator-cicd.md`

@@ -26,10 +26,10 @@ This directory contains historical architectural reviews and performance reports
 
 For current architecture, performance, and roadmap information, please refer to:
 
-- **Current Architecture**: `/docs/ARCHITECTURE.md`
-- **Current Performance**: Root `README.md` Performance section
-- **Release Notes**: `/CHANGELOG.md`
-- **Development Guide**: `/CLAUDE.md`
+- **Current Architecture**: [../../docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md)
+- **Current Performance**: Root [README.md](../../README.md) Performance section
+- **Release Notes**: [../../CHANGELOG.md](../../CHANGELOG.md)
+- **Development Guide**: [../../CLAUDE.md](../../CLAUDE.md)
 
 ## Why These Documents Are Archived
 

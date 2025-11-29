@@ -188,4 +188,4 @@ jobs:
 - [Integration Guide](ACTION_INTEGRATION_GUIDE.md)
 - [Testing Guide](ACTION_TESTING_GUIDE.md)
 - [Publishing Guide](MARKETPLACE_PUBLISHING.md)
-- [Example Workflows](workflows/examples/)
+- [Example Workflows](./workflows/examples/)

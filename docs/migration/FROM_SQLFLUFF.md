@@ -898,7 +898,7 @@ Use SQLFluff for unsupported dialects, or contribute dialect support to GoSQLX!
 
 ### Migration Support
 - **[Comparison Guide](../COMPARISON.md)** - Detailed feature comparison
-- **[Performance Guide](../PRODUCTION_GUIDE.md)** - Production best practices
+- **[Production Guide](../PRODUCTION_GUIDE.md)** - Production best practices
 - **[Troubleshooting](../TROUBLESHOOTING.md)** - Common issues and solutions
 
 ---

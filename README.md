@@ -836,7 +836,6 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed system design
 We love your input! We want to make contributing as easy and transparent as possible.
 
 <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/📝_Contributing_Guide-blue?style=for-the-badge" alt="Contributing Guide"></a>
-<a href="CODE_OF_CONDUCT.md"><img src="https://img.shields.io/badge/📜_Code_of_Conduct-green?style=for-the-badge" alt="Code of Conduct"></a>
 <a href="https://github.com/ajitpratap0/GoSQLX/issues/new/choose"><img src="https://img.shields.io/badge/🚀_Start_Contributing-orange?style=for-the-badge" alt="Start Contributing"></a>
 
 #### Quick Contribution Guide

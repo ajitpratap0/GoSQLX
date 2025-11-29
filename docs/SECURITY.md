@@ -387,7 +387,7 @@ err := validator.Validate(filepath)
 ### Documentation
 
 - **Package Documentation**: [cmd/gosqlx/internal/validate/README.md](../cmd/gosqlx/internal/validate/README.md)
-- **CLI Guide**: [docs/CLI_GUIDE.md](CLI_GUIDE.md#security-limits-and-protections)
+- **CLI Guide**: [CLI_GUIDE.md](CLI_GUIDE.md)
 - **Security Tests**: `cmd/gosqlx/internal/validate/security_test.go`
 - **Demo Tests**: `cmd/gosqlx/internal/validate/security_demo_test.go`
 

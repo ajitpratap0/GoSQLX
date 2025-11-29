@@ -29,8 +29,8 @@ These reports show a 78.3% pass rate and critical race conditions. The current c
 ## Current Status Reports
 
 For current codebase assessment, refer to:
-- **CHANGELOG.md** - Release history and validation status
-- **CLAUDE.md** - Production readiness documentation and current metrics
+- [**CHANGELOG.md**](../../CHANGELOG.md) - Release history and validation status
+- [**CLAUDE.md**](../../CLAUDE.md) - Production readiness documentation and current metrics
 
 ## Why Archived?
 

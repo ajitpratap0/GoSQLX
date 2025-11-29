@@ -117,7 +117,7 @@ docs/
 
 **Troubleshooting**
 - [Common Issues](TROUBLESHOOTING.md#common-issues)
-- [Error Messages](TROUBLESHOOTING.md#error-messages)
+- [Error Codes Reference](TROUBLESHOOTING.md#error-codes-reference)
 - [FAQ](TROUBLESHOOTING.md#faq)
 
 **SQL Dialects**
@@ -141,13 +141,13 @@ docs/
 → See [USAGE_GUIDE.md#unicode-and-international-support](USAGE_GUIDE.md#unicode-and-international-support)
 
 **"I'm getting an error"**
-→ See [TROUBLESHOOTING.md#error-messages](TROUBLESHOOTING.md#error-messages)
+→ See [TROUBLESHOOTING.md#error-codes-reference](TROUBLESHOOTING.md#error-codes-reference)
 
 **"My application is slow"**
 → See [TROUBLESHOOTING.md#performance-issues](TROUBLESHOOTING.md#performance-issues)
 
 **"I found a memory leak"**
-→ See [TROUBLESHOOTING.md#memory-leaks](TROUBLESHOOTING.md#memory-leaks)
+→ See [TROUBLESHOOTING.md#memory-issues](TROUBLESHOOTING.md#memory-issues)
 
 ## Coverage Matrix
 

@@ -81,7 +81,7 @@ Description:
 
 ### Documentation
 
-See [ACTION_README.md](ACTION_README.md) for complete documentation and examples.
+See [ACTION_QUICK_REFERENCE.md](ACTION_QUICK_REFERENCE.md) for complete documentation and examples.
 
 ### Quick Start
 
@@ -138,7 +138,7 @@ branding:
    - Secondary category: Code quality
 
 3. **Marketplace README**:
-   - The `ACTION_README.md` content should be the main documentation
+   - The `ACTION_QUICK_REFERENCE.md` content should be the main documentation
    - Consider copying it to root README or having a marketplace-specific version
 
 ### 5. Version Management Strategy

@@ -210,16 +210,11 @@ SQLFluff:    ~50 KB   (25x)
 
 Complete guides with working examples:
 
-- **[From SQLFluff](migrations/FROM_SQLFLUFF.md)** - 100-800x faster, API mapping, config conversion
-- **[From JSQLParser](migrations/FROM_JSQLPARSER.md)** - Type mapping, service wrappers, patterns
-- **[From pg_query](migrations/FROM_PG_QUERY.md)** - FFI elimination, multi-dialect support
+- **[From SQLFluff](migration/FROM_SQLFLUFF.md)** - 100-800x faster, API mapping, config conversion
+- **[From JSQLParser](migration/FROM_JSQLPARSER.md)** - Type mapping, service wrappers, patterns
+- **[From pg_query](migration/FROM_PG_QUERY.md)** - FFI elimination, multi-dialect support
 
-**Working Examples:**
-```bash
-go run examples/migrations/from_sqlfluff_example.go
-go run examples/migrations/from_jsqlparser_example.go
-go run examples/migrations/from_pg_query_example.go
-```
+See individual migration guides for code examples and patterns.
 
 ---
 

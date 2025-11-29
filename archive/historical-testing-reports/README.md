@@ -29,9 +29,8 @@ These reports show a 78.3% pass rate and critical race conditions. The current c
 ## Current Status Reports
 
 For current codebase assessment, refer to:
-- **COMPREHENSIVE_TEST_FINAL_REPORT.md** - Latest comprehensive validation
-- **FINAL_RACE_DETECTION_VALIDATION.md** - Current race condition status  
-- **CLAUDE.md** - Production readiness documentation
+- **CHANGELOG.md** - Release history and validation status
+- **CLAUDE.md** - Production readiness documentation and current metrics
 
 ## Why Archived?
 

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -86,8 +87,15 @@ func analyzeRun(cmd *cobra.Command, args []string) error {
 		Verbose:     verbose,
 	})
 
+	// Use a buffer to capture output when writing to file
+	var outputBuf bytes.Buffer
+	var outWriter = cmd.OutOrStdout()
+	if outputFile != "" {
+		outWriter = &outputBuf
+	}
+
 	// Create analyzer with injectable output writers
-	analyzer := NewAnalyzer(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
+	analyzer := NewAnalyzer(outWriter, cmd.ErrOrStderr(), opts)
 
 	// Run analysis
 	result, err := analyzer.Analyze(args[0])
@@ -95,8 +103,16 @@ func analyzeRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Display the report
-	return analyzer.DisplayReport(result.Report)
+	// Display the report (writes to outWriter)
+	if err := analyzer.DisplayReport(result.Report); err != nil {
+		return err
+	}
+
+	// Write to file if specified
+	if outputFile != "" {
+		return WriteOutput(outputBuf.Bytes(), outputFile, cmd.OutOrStdout())
+	}
+	return nil
 }
 
 // analyzeFromStdin handles analysis from stdin input
@@ -139,8 +155,15 @@ func analyzeFromStdin(cmd *cobra.Command) error {
 		Verbose:     verbose,
 	})
 
+	// Use a buffer to capture output when writing to file
+	var outputBuf bytes.Buffer
+	var outWriter = cmd.OutOrStdout()
+	if outputFile != "" {
+		outWriter = &outputBuf
+	}
+
 	// Create analyzer
-	analyzer := NewAnalyzer(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
+	analyzer := NewAnalyzer(outWriter, cmd.ErrOrStderr(), opts)
 
 	// Analyze the stdin content (Analyze accepts string input directly)
 	result, err := analyzer.Analyze(string(content))
@@ -148,8 +171,16 @@ func analyzeFromStdin(cmd *cobra.Command) error {
 		return err
 	}
 
-	// Display the report
-	return analyzer.DisplayReport(result.Report)
+	// Display the report (writes to outWriter)
+	if err := analyzer.DisplayReport(result.Report); err != nil {
+		return err
+	}
+
+	// Write to file if specified
+	if outputFile != "" {
+		return WriteOutput(outputBuf.Bytes(), outputFile, cmd.OutOrStdout())
+	}
+	return nil
 }
 
 func init() {

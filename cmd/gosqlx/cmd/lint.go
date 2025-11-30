@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -79,13 +81,20 @@ func lintRun(cmd *cobra.Command, args []string) error {
 		result = l.LintFiles(args)
 	}
 
+	// Use a buffer to capture output when writing to file
+	var outputBuf bytes.Buffer
+	var outWriter io.Writer = cmd.OutOrStdout()
+	if outputFile != "" {
+		outWriter = &outputBuf
+	}
+
 	// Display results
 	output := linter.FormatResult(result)
-	fmt.Fprint(cmd.OutOrStdout(), output)
+	fmt.Fprint(outWriter, output)
 
 	// Apply auto-fix if requested
 	if lintAutoFix && result.TotalViolations > 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), "\nApplying auto-fixes...")
+		fmt.Fprintln(outWriter, "\nApplying auto-fixes...")
 		fixCount := 0
 
 		for _, fileResult := range result.Files {
@@ -134,11 +143,18 @@ func lintRun(cmd *cobra.Command, args []string) error {
 					continue
 				}
 				fixCount++
-				fmt.Fprintf(cmd.OutOrStdout(), "Fixed: %s\n", fileResult.Filename)
+				fmt.Fprintf(outWriter, "Fixed: %s\n", fileResult.Filename)
 			}
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "\nAuto-fixed %d file(s)\n", fixCount)
+		fmt.Fprintf(outWriter, "\nAuto-fixed %d file(s)\n", fixCount)
+	}
+
+	// Write to file if specified
+	if outputFile != "" {
+		if err := WriteOutput(outputBuf.Bytes(), outputFile, cmd.OutOrStdout()); err != nil {
+			return err
+		}
 	}
 
 	// Exit with error code if there were violations
@@ -181,22 +197,33 @@ func lintFromStdin(cmd *cobra.Command) error {
 	// Lint the content
 	result := l.LintString(string(content), "stdin")
 
+	// Use a buffer to capture output when writing to file
+	var outputBuf bytes.Buffer
+	var outWriter io.Writer = cmd.OutOrStdout()
+	if outputFile != "" {
+		outWriter = &outputBuf
+	}
+
 	// Display results
-	fmt.Fprintf(cmd.OutOrStdout(), "Linting stdin input:\n\n")
+	fmt.Fprintf(outWriter, "Linting stdin input:\n\n")
 
 	if len(result.Violations) == 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), "No violations found.")
+		fmt.Fprintln(outWriter, "No violations found.")
+		// Write to file if specified
+		if outputFile != "" {
+			return WriteOutput(outputBuf.Bytes(), outputFile, cmd.OutOrStdout())
+		}
 		return nil
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Found %d violation(s):\n\n", len(result.Violations))
+	fmt.Fprintf(outWriter, "Found %d violation(s):\n\n", len(result.Violations))
 	for i, violation := range result.Violations {
-		fmt.Fprintf(cmd.OutOrStdout(), "%d. %s\n", i+1, linter.FormatViolation(violation))
+		fmt.Fprintf(outWriter, "%d. %s\n", i+1, linter.FormatViolation(violation))
 	}
 
 	// Apply auto-fix if requested
 	if lintAutoFix {
-		fmt.Fprintln(cmd.OutOrStdout(), "\nAuto-fixed output:")
+		fmt.Fprintln(outWriter, "\nAuto-fixed output:")
 		fixed := string(content)
 		for _, rule := range l.Rules() {
 			if rule.CanAutoFix() {
@@ -206,7 +233,14 @@ func lintFromStdin(cmd *cobra.Command) error {
 				}
 			}
 		}
-		fmt.Fprintln(cmd.OutOrStdout(), fixed)
+		fmt.Fprintln(outWriter, fixed)
+	}
+
+	// Write to file if specified
+	if outputFile != "" {
+		if err := WriteOutput(outputBuf.Bytes(), outputFile, cmd.OutOrStdout()); err != nil {
+			return err
+		}
 	}
 
 	// Exit with error code if there were violations

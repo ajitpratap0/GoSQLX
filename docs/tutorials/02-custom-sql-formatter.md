@@ -194,13 +194,15 @@ func (f *Formatter) Format(sql string) (string, error) {
     }
 
     // Convert tokens for parser
-    convertedTokens := parser.ConvertTokensForParser(tokens)
+    convertedTokens, err := parser.ConvertTokensForParser(tokens)
+    if err != nil {
+        return "", fmt.Errorf("token conversion error: %w", err)
+    }
 
     // Create parser and parse
-    p := parser.NewParser(convertedTokens)
-    defer p.Release()
+    p := parser.NewParser()
 
-    result, err := p.Parse()
+    result, err := p.Parse(convertedTokens)
     if err != nil {
         return "", fmt.Errorf("parse error: %w", err)
     }
@@ -472,7 +474,14 @@ func (f *Formatter) writeKeyword(keyword string) {
     case "lower":
         f.writeString(strings.ToLower(keyword))
     case "title":
-        f.writeString(strings.Title(strings.ToLower(keyword)))
+        // Title case for keywords (capitalize first letter of each word)
+        words := strings.Fields(strings.ToLower(keyword))
+        for i, word := range words {
+            if len(word) > 0 {
+                words[i] = strings.ToUpper(word[:1]) + word[1:]
+            }
+        }
+        f.writeString(strings.Join(words, " "))
     default:
         f.writeString(keyword)
     }

@@ -362,7 +362,7 @@ func (p *SQLProcessor) ScanForInjection(sql []byte) error {
     scanner := security.NewScanner()
     result := scanner.Scan(ast)
 
-    if result.HasCritical() || result.HasHigh() {
+    if result.HasCritical() || result.HasHighOrAbove() {
         return fmt.Errorf("potential SQL injection detected: %d issues",
             result.CriticalCount + result.HighCount)
     }
@@ -382,8 +382,8 @@ func (p *SQLProcessor) ScanForInjection(sql []byte) error {
 
 ### 1. Performance Metrics
 ```go
-// Optional: Use tools/metrics for production monitoring
-import "github.com/ajitpratap0/GoSQLX/tools/metrics"
+// Optional: Use pkg/metrics for production monitoring
+import "github.com/ajitpratap0/GoSQLX/pkg/metrics"
 
 func init() {
     metrics.Enable() // Optional monitoring
@@ -550,14 +550,17 @@ type ProductionConfig struct {
 
 ### Debugging Tools
 ```bash
-# Use profiler tool for analysis
-go run ./tools/profiler/main.go -mode performance
+# Use built-in metrics package for performance monitoring
+# Import and use: github.com/ajitpratap0/GoSQLX/pkg/metrics
 
-# Use validator for health checks
-go run ./tools/validator/main.go -mode integration
+# Example: Check metrics snapshot
+metrics.GetSnapshot() // Returns current metrics
 
-# Monitor with built-in metrics
-curl http://localhost:8080/metrics
+# Monitor memory usage in production
+var m runtime.MemStats
+runtime.ReadMemStats(&m)
+log.Printf("Memory: Alloc=%d KB, Sys=%d KB, NumGC=%d",
+    m.Alloc/1024, m.Sys/1024, m.NumGC)
 ```
 
 ## Performance Benchmarks

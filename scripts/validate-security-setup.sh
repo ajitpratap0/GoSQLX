@@ -52,7 +52,7 @@ echo "----------------------------"
 check_file ".github/workflows/security.yml" "Security workflow"
 check_file ".github/dependabot.yml" "Dependabot config"
 check_file "SECURITY.md" "Security policy"
-check_file "SECURITY_SETUP.md" "Setup guide"
+check_file "docs/SECURITY_SETUP.md" "Setup guide"
 check_file ".github/SECURITY_CHECKLIST.md" "Setup checklist"
 echo ""
 

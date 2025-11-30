@@ -1,6 +1,6 @@
-# GoSQLX Security Analysis Report
+# GoSQLX Security Documentation
 
-> **Note**: This document provides comprehensive security analysis and the SQL injection detection API. For security policies and vulnerability reporting, see [SECURITY.md](../SECURITY.md) in the project root.
+This document provides comprehensive security analysis, operational security setup, and the SQL injection detection API. For vulnerability reporting, see [SECURITY.md](../SECURITY.md) in the project root.
 
 ## 🛡️ Comprehensive Security Assessment
 
@@ -14,11 +14,11 @@
 
 GoSQLX has undergone a comprehensive security analysis across 7 critical security domains. The library demonstrates **strong security characteristics** suitable for production deployment with **minimal security concerns**.
 
-### 🆕 Security Package (v1.4+)
+### Security Package (v1.4+)
 
 GoSQLX now includes a dedicated **SQL Injection Detection** package (`pkg/sql/security`) that provides:
 
-- **8 Pattern Types**: Tautology, Comment Bypass, Stacked Query, UNION-based, Time-based, Boolean-based, Out-of-Band, Dangerous Functions
+- **6 Pattern Types**: Tautology, Comment Bypass, UNION-based, Time-based, Out-of-Band, Dangerous Functions
 - **4 Severity Levels**: CRITICAL, HIGH, MEDIUM, LOW
 - **Multi-Database Support**: PostgreSQL, MySQL, SQL Server, SQLite system table detection
 - **Thread-Safe**: Safe for concurrent use across goroutines
@@ -387,7 +387,7 @@ err := validator.Validate(filepath)
 ### Documentation
 
 - **Package Documentation**: [cmd/gosqlx/internal/validate/README.md](../cmd/gosqlx/internal/validate/README.md)
-- **CLI Guide**: [docs/CLI_GUIDE.md](CLI_GUIDE.md#security-limits-and-protections)
+- **CLI Guide**: [CLI_GUIDE.md](CLI_GUIDE.md)
 - **Security Tests**: `cmd/gosqlx/internal/validate/security_test.go`
 - **Demo Tests**: `cmd/gosqlx/internal/validate/security_demo_test.go`
 
@@ -484,24 +484,113 @@ if err != nil {
 
 ### Recommended Additional Measures
 
-1. **Static Analysis Integration**
-   ```bash
-   # Add to CI/CD pipeline
-   go install github.com/securecodewarrior/gosec/cmd/gosec@latest
-   gosec ./...
-   ```
+**Static Analysis**: See Security Scanning Infrastructure section below for GoSec, Trivy, and GovulnCheck setup.
 
-2. **Dependency Scanning**
-   ```bash
-   # Regular dependency auditing
-   go list -json -deps ./... | nancy sleuth
-   ```
+**Fuzz Testing** (Future Enhancement):
+```bash
+# Consider adding go-fuzz for continuous fuzzing
+go install github.com/dvyukov/go-fuzz/go-fuzz@latest
+```
 
-3. **Fuzz Testing** (Future Enhancement)
-   ```bash
-   # Consider adding go-fuzz for continuous fuzzing
-   go install github.com/dvyukov/go-fuzz/go-fuzz@latest
-   ```
+---
+
+## 🔧 Security Scanning Infrastructure
+
+### Security Workflow Components
+
+GoSQLX implements comprehensive security scanning with four key tools:
+
+1. **GoSec** - Static security analysis for Go code (v2.21.4+)
+2. **Trivy** - Vulnerability scanner for dependencies and configurations (v0.28.0+)
+3. **GovulnCheck** - Official Go vulnerability database checker
+4. **Dependabot** - Automated dependency update management
+
+### Workflow Configuration
+
+**Triggers**: Push to main/develop, PRs to main, weekly (Sundays midnight UTC), manual dispatch
+
+**Security Jobs**:
+- GoSec: Scans code, uploads SARIF to GitHub Security tab
+- Trivy Repository: Scans dependencies (CRITICAL/HIGH/MEDIUM)
+- Trivy Config: Scans GitHub Actions, Dockerfiles, configs
+- Dependency Review: Checks licenses (MIT, Apache-2.0, BSD-2/3-Clause, ISC)
+- GovulnCheck: Official Go vulnerability checker
+- Security Summary: Aggregates all results
+
+**Dependabot Configuration**:
+- Go modules: Daily at 3 AM EST, max 10 PRs, grouped minor/patch updates
+- GitHub Actions: Weekly Mondays 3 AM EST, max 5 PRs
+- Labels: `dependencies`, `automated`, commit prefix `chore(deps)` or `chore(ci)`
+
+### Enabling GitHub Security Features
+
+**Step 1: Enable Security Features** (Settings → Security & analysis):
+- ✅ Dependency graph
+- ✅ Dependabot alerts and security updates
+- ✅ Code scanning (CodeQL)
+- ✅ Secret scanning and push protection
+
+**Step 2: Branch Protection** (Settings → Branches):
+- Require status checks: GoSec, Trivy scans, GovulnCheck
+- Require up-to-date branches
+- Require signed commits (recommended)
+
+**Step 3: Notifications** (Settings → Notifications):
+- Email for security advisories and code scanning
+- Web notifications for Dependabot alerts
+
+### Manual Security Testing
+
+**GoSec**:
+```bash
+go install github.com/securego/gosec/v2/cmd/gosec@latest
+gosec -severity=medium -confidence=medium ./...
+gosec -exclude=G104,G107 ./...  # Exclude specific checks
+```
+
+**Trivy**:
+```bash
+brew install aquasecurity/trivy/trivy
+trivy fs --severity CRITICAL,HIGH,MEDIUM .
+trivy fs --format json --output trivy-report.json .
+```
+
+**GovulnCheck**:
+```bash
+go install golang.org/x/vuln/cmd/govulncheck@latest
+govulncheck ./...
+govulncheck -show verbose ./...
+```
+
+### Handling Security Alerts
+
+**Dependabot PRs**:
+- Safe auto-merge: Patch updates (1.2.3→1.2.4), minor with passing tests
+- Manual review: Major updates (1.x→2.0), failing tests, core dependencies
+
+**Response by Severity**:
+- Critical/High: Hotfix within 24-48h, security advisory, patch release
+- Medium: Issue tracking, next minor release
+- Low: Issue tracking, maintenance release, may defer
+
+### Security Metrics
+
+**Track**:
+- Vulnerability resolution time (< 7 days high/critical, < 30 days medium/low)
+- Dependabot PR merge rate (> 80% within 7 days)
+- Security alert backlog (< 5 open alerts)
+- False positive rate
+
+### Troubleshooting
+
+**GoSec false positives**:
+```go
+// #nosec G104 -- Intentional: error handling not required
+_, _ = fmt.Fprintf(w, "output")
+```
+
+**Trivy timeout**: Increase timeout in workflow YAML
+**Too many Dependabot PRs**: Change schedule to "weekly" in dependabot.yml
 
 ---
 
@@ -520,7 +609,7 @@ if err != nil {
 ### Long-term Security Goals
 - [ ] Security audit by third-party firm
 - [ ] CVE monitoring and response process
-- [ ] Security-focused documentation expansion
+- [ ] Quarterly security posture reviews
 
 ---
 
@@ -552,6 +641,34 @@ GoSQLX is **approved for production deployment** in security-sensitive environme
 
 ---
 
-**Security Analysis Completed**: August 2025  
-**Next Review**: Recommended within 6 months or upon major version release  
+## 📚 Best Practices
+
+### For Maintainers
+
+1. **Review Weekly Scans**: Check Sunday scan results every Monday, prioritize findings
+2. **Keep Actions Updated**: Accept Dependabot PRs for GitHub Actions, review changelogs
+3. **Document Security Decisions**: Add comments when dismissing alerts, document risk acceptance
+4. **Regular Security Audits**: Quarterly reviews, consider annual penetration testing
+
+### For Contributors
+
+1. **Run Security Checks Locally**: Run gosec before submitting PRs
+2. **Security-Conscious Coding**: No hardcoded credentials, use secure defaults, follow OWASP guidelines
+3. **Dependency Management**: Minimize dependencies, justify additions, check security history
+
+---
+
+## 📖 References
+
+- [GoSec Documentation](https://github.com/securego/gosec)
+- [Trivy Documentation](https://aquasecurity.github.io/trivy/)
+- [GovulnCheck Documentation](https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck)
+- [Dependabot Documentation](https://docs.github.com/en/code-security/dependabot)
+- [GitHub Code Scanning](https://docs.github.com/en/code-security/code-scanning)
+- [OWASP Secure Coding Practices](https://owasp.org/www-project-secure-coding-practices-quick-reference-guide/)
+
+---
+
+**Security Analysis Completed**: November 2025
+**Next Review**: May 2026 (6 months) or upon major version release
 **Contact**: For security questions or to report issues, please use responsible disclosure practices

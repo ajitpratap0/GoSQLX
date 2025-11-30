@@ -61,28 +61,28 @@ This guide helps you migrate from SQLFluff (Python) to GoSQLX (Go), covering fea
 
 ### You Should Migrate If:
 
-✅ **Performance is critical**
+**Performance is critical**
 - CI/CD pipelines taking too long (SQLFluff validates at ~1 query/sec)
 - Real-time SQL validation in web applications
 - Processing thousands of queries per second
 - Batch processing large SQL files
 
-✅ **You're in the Go ecosystem**
+**You're in the Go ecosystem**
 - Building Go applications or tools
 - Want zero-dependency deployment
 - Need native concurrency support
 
-✅ **Memory efficiency matters**
+**Memory efficiency matters**
 - Processing very large SQL files
 - High-throughput services
 - Memory-constrained environments
 
 ### You Should Stay with SQLFluff If:
 
-❌ **You need extensive linting rules** (GoSQLX has 0 rules currently)
-❌ **You need exotic SQL dialects** (Snowflake, BigQuery-specific features)
-❌ **You're heavily invested in Python** ecosystem
-❌ **You need template language support** (Jinja, dbt)
+- **You need extensive linting rules** (GoSQLX has 0 rules currently)
+- **You need exotic SQL dialects** (Snowflake, BigQuery-specific features)
+- **You're heavily invested in Python** ecosystem
+- **You need template language support** (Jinja, dbt)
 
 ---
 
@@ -91,43 +91,43 @@ This guide helps you migrate from SQLFluff (Python) to GoSQLX (Go), covering fea
 | Feature | SQLFluff | GoSQLX | Notes |
 |---------|----------|--------|-------|
 | **Core Functionality** |
-| SQL Parsing | ✅ Yes | ✅ Yes | GoSQLX 1000x faster |
-| SQL Validation | ✅ Yes | ✅ Yes | Similar accuracy |
-| SQL Formatting | ✅ Yes | ✅ Yes | Different style defaults |
-| Syntax Error Detection | ✅ Yes | ✅ Yes | Both provide line/column info |
+| SQL Parsing | Yes | Yes | GoSQLX 1000x faster |
+| SQL Validation | Yes | Yes | Similar accuracy |
+| SQL Formatting | Yes | Yes | Different style defaults |
+| Syntax Error Detection | Yes | Yes | Both provide line/column info |
 | **Linting & Rules** |
-| Linting Rules | ✅ 60+ rules | ❌ Planned v1.5.0 | Major gap |
-| Custom Rules | ✅ Yes | ❌ Planned v1.5.0 | |
-| Rule Configuration | ✅ .sqlfluff | ❌ Planned v1.5.0 | |
-| Auto-fix | ✅ Yes | ❌ Planned v1.5.0 | |
+| Linting Rules | 60+ rules | Planned v1.5.0 | Major gap |
+| Custom Rules | Yes | Planned v1.5.0 | |
+| Rule Configuration | .sqlfluff | Planned v1.5.0 | |
+| Auto-fix | Yes | Planned v1.5.0 | |
 | **SQL Dialect Support** |
-| PostgreSQL | ✅ Yes | ✅ Yes | GoSQLX ~80-85% coverage |
-| MySQL | ✅ Yes | ✅ Yes | GoSQLX ~80% coverage |
-| SQL Server | ✅ Yes | ✅ Yes | GoSQLX ~75% coverage |
-| Oracle | ✅ Yes | ✅ Yes | GoSQLX ~70% coverage |
-| SQLite | ✅ Yes | ✅ Yes | GoSQLX ~85% coverage |
-| Snowflake | ✅ Yes | ❌ No | |
-| BigQuery | ✅ Yes | ❌ No | |
-| Redshift | ✅ Yes | ❌ No | |
-| 50+ Other Dialects | ✅ Yes | ❌ No | |
+| PostgreSQL | Yes | Yes | GoSQLX ~80-85% coverage |
+| MySQL | Yes | Yes | GoSQLX ~80% coverage |
+| SQL Server | Yes | Yes | GoSQLX ~75% coverage |
+| Oracle | Yes | Yes | GoSQLX ~70% coverage |
+| SQLite | Yes | Yes | GoSQLX ~85% coverage |
+| Snowflake | Yes | No | |
+| BigQuery | Yes | No | |
+| Redshift | Yes | No | |
+| 50+ Other Dialects | Yes | No | |
 | **API & Integration** |
-| CLI Tool | ✅ Yes | ✅ Yes | GoSQLX is faster |
-| Programmatic API | ✅ Complex | ✅ Simple | GoSQLX easier to use |
-| Library Integration | ✅ Python | ✅ Go | |
-| VSCode Extension | ✅ Yes | ❌ Planned v1.6.0 | |
-| Pre-commit Hooks | ✅ Yes | ✅ Yes | GoSQLX 100-1000x faster |
+| CLI Tool | Yes | Yes | GoSQLX is faster |
+| Programmatic API | Complex | Simple | GoSQLX easier to use |
+| Library Integration | Python | Go | |
+| VSCode Extension | Yes | Planned v1.6.0 | |
+| Pre-commit Hooks | Yes | Yes | GoSQLX 100-1000x faster |
 | **Performance** |
 | Parse Speed | 1,000 ops/sec | 1.38M ops/sec | 1380x faster |
 | Memory per Query | 50KB | 1.8KB | 28x less memory |
 | Concurrent Processing | Limited (GIL) | Native | Linear scaling |
 | **Configuration** |
-| Config Files | ✅ .sqlfluff | ⚠️ Planned v1.5.0 | |
-| Inline Ignores | ✅ Yes | ❌ Planned v1.5.0 | |
-| Rule Exclusions | ✅ Yes | ❌ Planned v1.5.0 | |
+| Config Files | .sqlfluff | Planned v1.5.0 | |
+| Inline Ignores | Yes | Planned v1.5.0 | |
+| Rule Exclusions | Yes | Planned v1.5.0 | |
 | **Template Support** |
-| Jinja Templates | ✅ Yes | ❌ No | |
-| dbt Integration | ✅ Yes | ❌ No | |
-| Custom Templating | ✅ Yes | ❌ No | |
+| Jinja Templates | Yes | No | |
+| dbt Integration | Yes | No | |
+| Custom Templating | Yes | No | |
 
 ---
 
@@ -228,21 +228,18 @@ func FormatSQL(sql string) string {
     tokens, _ := tkz.Tokenize([]byte(sql))
 
     var result strings.Builder
-    indent := 0
 
-    for _, tok := range tokens {
+    for i, tok := range tokens {
         if tok.Token.Type == models.TokenTypeEOF {
             break
         }
 
-        // Add newlines for major keywords
-        if isSelectKeyword(tok.Token.Type) {
-            result.WriteString("\n")
-            result.WriteString(strings.Repeat("  ", indent))
+        // Add space between tokens
+        if i > 0 && tok.Token.Value != "," && tok.Token.Value != ")" {
+            result.WriteString(" ")
         }
 
         result.WriteString(strings.ToUpper(tok.Token.Value))
-        result.WriteString(" ")
     }
 
     return strings.TrimSpace(result.String())
@@ -280,7 +277,8 @@ def validate_directory(directory):
 # Takes ~30 seconds for 100 files
 results = validate_directory('./queries/')
 for filename, result in results.items():
-    print(f"{filename}: {'✓' if result['valid'] else '✗'}")
+    status = "VALID" if result['valid'] else "INVALID"
+    print(f"{filename}: {status}")
 ```
 
 #### GoSQLX (Go)
@@ -328,9 +326,9 @@ func main() {
     // Takes ~0.03 seconds for 100 files (1000x faster!)
     results := validateDirectory("./queries/")
     for filename, valid := range results {
-        status := "✗"
+        status := "INVALID"
         if valid {
-            status = "✓"
+            status = "VALID"
         }
         fmt.Printf("%s: %s\n", filename, status)
     }
@@ -630,7 +628,7 @@ time sqlfluff lint migrations/*.sql
 # - Time: ~2500 seconds (41 minutes)
 # - Memory: 250MB peak
 # - CPU: 100% (single-threaded due to GIL)
-# - Result: ❌ Too slow for CI/CD
+# - Conclusion: Too slow for CI/CD
 ```
 
 **GoSQLX:**
@@ -641,7 +639,7 @@ time gosqlx validate migrations/*.sql
 # - Time: ~3.6 seconds
 # - Memory: 50MB peak
 # - CPU: 1600% (uses all 16 cores)
-# - Result: ✅ Perfect for CI/CD
+# - Conclusion: Perfect for CI/CD
 ```
 
 **Improvement:** 694x faster, practical for pre-commit hooks!
@@ -651,39 +649,39 @@ time gosqlx validate migrations/*.sql
 ## Migration Checklist
 
 ### Phase 1: Assessment (Day 1)
-- [ ] List all current uses of SQLFluff in your project
-- [ ] Identify which features you actually use (parsing, linting, formatting)
-- [ ] Check which SQL dialects you support (GoSQLX supports 5)
-- [ ] Review your linting rules (GoSQLX has none yet)
-- [ ] Assess template language usage (Jinja, dbt - not supported in GoSQLX)
+- List all current uses of SQLFluff in your project
+- Identify which features you actually use (parsing, linting, formatting)
+- Check which SQL dialects you support (GoSQLX supports 5)
+- Review your linting rules (GoSQLX has none yet)
+- Assess template language usage (Jinja, dbt - not supported in GoSQLX)
 
 ### Phase 2: Preparation (Day 1-2)
-- [ ] Install Go 1.24+ on development machines
-- [ ] Install GoSQLX: `go get github.com/ajitpratap0/GoSQLX`
-- [ ] Test GoSQLX with sample queries from your project
-- [ ] Benchmark performance improvement on your queries
-- [ ] Document any unsupported features
+- Install Go 1.24+ on development machines
+- Install GoSQLX: `go get github.com/ajitpratap0/GoSQLX`
+- Test GoSQLX with sample queries from your project
+- Benchmark performance improvement on your queries
+- Document any unsupported features
 
 ### Phase 3: Migration (Day 2-3)
-- [ ] Replace SQLFluff validation with GoSQLX in codebase
-- [ ] Update CI/CD pipelines to use GoSQLX
-- [ ] Update pre-commit hooks
-- [ ] Migrate formatting scripts
-- [ ] Update documentation and developer guides
+- Replace SQLFluff validation with GoSQLX in codebase
+- Update CI/CD pipelines to use GoSQLX
+- Update pre-commit hooks
+- Migrate formatting scripts
+- Update documentation and developer guides
 
 ### Phase 4: Testing (Day 3-4)
-- [ ] Test all SQL files with GoSQLX
-- [ ] Verify error messages are helpful
-- [ ] Compare formatting output (may differ)
-- [ ] Load test if using in production API
-- [ ] Train team on new tools
+- Test all SQL files with GoSQLX
+- Verify error messages are helpful
+- Compare formatting output (may differ)
+- Load test if using in production API
+- Train team on new tools
 
 ### Phase 5: Cleanup (Day 4-5)
-- [ ] Remove SQLFluff dependencies
-- [ ] Clean up old configuration files (.sqlfluff)
-- [ ] Update team documentation
-- [ ] Monitor performance improvements
-- [ ] Celebrate 1000x speedup! 🎉
+- Remove SQLFluff dependencies
+- Clean up old configuration files (.sqlfluff)
+- Update team documentation
+- Monitor performance improvements
+- Celebrate 1000x speedup and improved developer experience!
 
 ---
 
@@ -781,6 +779,7 @@ func main() {
 Before: 41 minutes
 After:  3.6 seconds
 Improvement: 683x faster
+Status: PASS
 ```
 
 **Pre-commit Hooks:**
@@ -788,6 +787,7 @@ Improvement: 683x faster
 Before: 30-60 seconds (developers bypassed)
 After:  0.1-0.3 seconds (developers always use)
 Improvement: 100-600x faster
+Status: PASS
 ```
 
 **Infrastructure Costs:**
@@ -795,6 +795,7 @@ Improvement: 100-600x faster
 Before: $500/month (50 CI runners needed for parallelism)
 After:  $50/month (5 CI runners sufficient)
 Savings: $450/month = $5,400/year
+Status: SUCCESS
 ```
 
 **Developer Productivity:**
@@ -802,6 +803,7 @@ Savings: $450/month = $5,400/year
 Before: Developers bypassed slow pre-commit hooks
 After:  100% adoption of fast validation
 Result: Fewer bugs in production
+Status: SUCCESS
 ```
 
 ### Lessons Learned
@@ -825,8 +827,8 @@ Result: Fewer bugs in production
 - Rule configuration per project
 
 **GoSQLX Status:**
-- ❌ No linting rules yet
-- ⏳ Planned for v1.5.0 (Q1 2025)
+- No linting rules yet
+- Planned for v1.5.0 (Q1 2025)
 - Will start with 10 basic rules
 
 **Workaround:**
@@ -846,8 +848,8 @@ sqlfluff lint --rules L001,L003,L009 query.sql
 - Custom template engines
 
 **GoSQLX Status:**
-- ❌ No template support
-- ❌ No plans currently
+- No template support
+- No plans currently
 
 **Workaround:**
 Render templates first, then validate:
@@ -875,9 +877,9 @@ Use SQLFluff for unsupported dialects, or contribute dialect support to GoSQLX!
 - `sqlfluff fix` command
 
 **GoSQLX Status:**
-- ⚠️ Basic formatting only
-- ❌ No intelligent auto-fix yet
-- ⏳ Planned for v1.5.0
+- Basic formatting only (no intelligent fixes yet)
+- No intelligent auto-fix yet
+- Planned for v1.5.0
 
 ---
 
@@ -896,7 +898,7 @@ Use SQLFluff for unsupported dialects, or contribute dialect support to GoSQLX!
 
 ### Migration Support
 - **[Comparison Guide](../COMPARISON.md)** - Detailed feature comparison
-- **[Performance Guide](../PRODUCTION_GUIDE.md)** - Production best practices
+- **[Production Guide](../PRODUCTION_GUIDE.md)** - Production best practices
 - **[Troubleshooting](../TROUBLESHOOTING.md)** - Common issues and solutions
 
 ---

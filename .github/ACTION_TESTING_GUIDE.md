@@ -232,57 +232,50 @@ EOF
 
 ## Manual Testing Checklist
 
-Before publishing, test these scenarios:
+Before publishing, verify the following scenarios:
 
-### ✅ Basic Functionality
+### Basic Functionality
+- Action installs GoSQLX successfully
+- Validates valid SQL files without errors
+- Detects and reports invalid SQL files
+- Properly fails when `fail-on-error: true`
+- Continues when `fail-on-error: false`
 
-- [ ] Action installs GoSQLX successfully
-- [ ] Validates valid SQL files without errors
-- [ ] Detects and reports invalid SQL files
-- [ ] Properly fails when `fail-on-error: true`
-- [ ] Continues when `fail-on-error: false`
+### File Pattern Matching
+- `**/*.sql` finds all SQL files recursively
+- `*.sql` finds only root-level SQL files
+- Custom patterns work correctly
+- Empty pattern results are handled gracefully
 
-### ✅ File Pattern Matching
+### Configuration Options
+- `dialect` parameter changes validation behavior
+- `strict` mode enables stricter validation
+- `show-stats` displays performance metrics
+- `config` file is loaded and applied
+- `working-directory` changes context correctly
 
-- [ ] `**/*.sql` finds all SQL files recursively
-- [ ] `*.sql` finds only root-level SQL files
-- [ ] Custom patterns work correctly
-- [ ] Empty pattern results are handled gracefully
+### Outputs
+- `validated-files` count is accurate
+- `invalid-files` count matches errors
+- `validation-time` is reported
+- `formatted-files` count works with format-check
 
-### ✅ Configuration Options
+### Error Handling
+- Missing GoSQLX installation is detected
+- No SQL files found is handled gracefully
+- Invalid config file is reported
+- File read errors are caught
 
-- [ ] `dialect` parameter changes validation behavior
-- [ ] `strict` mode enables stricter validation
-- [ ] `show-stats` displays performance metrics
-- [ ] `config` file is loaded and applied
-- [ ] `working-directory` changes context correctly
+### Performance
+- Completes quickly (under 2 minutes for 100 files)
+- Binary caching works across runs
+- Memory usage is reasonable
 
-### ✅ Outputs
-
-- [ ] `validated-files` count is accurate
-- [ ] `invalid-files` count matches errors
-- [ ] `validation-time` is reported
-- [ ] `formatted-files` count works with format-check
-
-### ✅ Error Handling
-
-- [ ] Missing GoSQLX installation is detected
-- [ ] No SQL files found is handled gracefully
-- [ ] Invalid config file is reported
-- [ ] File read errors are caught
-
-### ✅ Performance
-
-- [ ] Completes quickly (<2 minutes for 100 files)
-- [ ] Binary caching works across runs
-- [ ] Memory usage is reasonable
-
-### ✅ Integration
-
-- [ ] Works with matrix strategy
-- [ ] Compatible with other actions
-- [ ] PR comments work correctly
-- [ ] Artifacts upload successfully
+### Integration
+- Works with matrix strategy
+- Compatible with other actions
+- PR comments work correctly
+- Artifacts upload successfully
 
 ## Automated Testing
 
@@ -532,9 +525,9 @@ jobs:
 
 After successful testing:
 
-1. ✅ All tests pass
-2. ✅ Performance meets targets
-3. ✅ Documentation is complete
-4. ✅ Ready for publishing
+1. All tests pass
+2. Performance meets targets
+3. Documentation is complete
+4. Ready for publishing
 
 See [MARKETPLACE_PUBLISHING.md](MARKETPLACE_PUBLISHING.md) for publishing instructions.

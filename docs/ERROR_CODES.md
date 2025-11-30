@@ -1,6 +1,6 @@
 # GoSQLX Error Codes Reference
 
-This document provides a comprehensive reference for all error codes in GoSQLX with detailed examples, common causes, and solutions.
+Comprehensive reference for all error codes in GoSQLX with examples and solutions.
 
 ## Quick Reference
 
@@ -21,6 +21,11 @@ This document provides a comprehensive reference for all error codes in GoSQLX w
 | E2005 | Parser | Incomplete statement |
 | E2006 | Parser | Invalid expression |
 | E2007 | DoS Protection | Expression nesting exceeds maximum depth (100) |
+| E2008 | Parser | Unsupported data type |
+| E2009 | Parser | Unsupported constraint type |
+| E2010 | Parser | Unsupported JOIN type |
+| E2011 | Parser | Invalid CTE (WITH clause) syntax |
+| E2012 | Parser | Invalid set operation (UNION/EXCEPT/INTERSECT) |
 | E3001 | Semantic | Undefined table |
 | E3002 | Semantic | Undefined column |
 | E3003 | Semantic | Type mismatch |
@@ -30,79 +35,30 @@ This document provides a comprehensive reference for all error codes in GoSQLX w
 
 ---
 
-## Error Code Categories
+## E1xxx - Tokenizer Errors
 
-### E1xxx - Tokenizer Errors (Lexical Analysis)
+### E1001 - Unexpected Character
 
-These errors occur during the tokenization phase when GoSQLX converts SQL text into tokens.
+Invalid or unsupported character in SQL input.
 
-#### E1001 - Unexpected Character
-
-**When it occurs**: An unexpected or invalid character is found in the SQL input.
-
-**Example**:
-```sql
-SELECT * FROM users WHERE name = 'John' & age > 18
-                                        ^
-```
-
-**Error message**:
-```
-Error E1001 at line 1, column 39: unexpected character '&'
-  1 | SELECT * FROM users WHERE name = 'John' & age > 18
-                                              ^
-Hint: Remove or escape the character '&'
-Help: https://docs.gosqlx.dev/errors/E1001
-```
-
-**Common causes**:
-- Using unsupported operators (use `AND` instead of `&`, `OR` instead of `|`)
-- Special characters in identifiers without proper quoting
-- Copy-paste errors introducing non-SQL characters
-- Hidden Unicode characters
-
-**Solutions**:
 ```sql
 -- Wrong: Using bitwise operator
 SELECT * FROM users WHERE name = 'John' & age > 18
 
--- Right: Use logical AND operator
+-- Right: Use logical AND
 SELECT * FROM users WHERE name = 'John' AND age > 18
-
--- Wrong: Special characters in identifier
-SELECT user-id FROM accounts
-
--- Right: Quote the identifier
-SELECT "user-id" FROM accounts
 ```
+
+**Common fixes:**
+- Use `AND` instead of `&`, `OR` instead of `|`
+- Quote identifiers with special characters: `"user-id"`
 
 ---
 
-#### E1002 - Unterminated String
+### E1002 - Unterminated String
 
-**When it occurs**: A string literal is not properly closed with a matching quote.
+String literal not properly closed.
 
-**Example**:
-```sql
-SELECT * FROM users WHERE name = 'John
-                                 ^
-```
-
-**Error message**:
-```
-Error E1002 at line 1, column 34: unterminated string literal
-  1 | SELECT * FROM users WHERE name = 'John
-                                       ^
-Hint: Make sure all string literals are properly closed with matching quotes
-```
-
-**Common causes**:
-- Missing closing quote
-- Unescaped quotes within strings
-- Multiline strings without proper formatting
-- Wrong quote type (mixing ' and ")
-
-**Solutions**:
 ```sql
 -- Wrong: Missing closing quote
 SELECT * FROM users WHERE name = 'John
@@ -110,40 +66,16 @@ SELECT * FROM users WHERE name = 'John
 -- Right: Add closing quote
 SELECT * FROM users WHERE name = 'John'
 
--- Wrong: Unescaped quote
-SELECT * FROM users WHERE name = 'O'Brien'
-
--- Right: Escape the quote
+-- Escape quotes within strings
 SELECT * FROM users WHERE name = 'O''Brien'
 ```
 
 ---
 
-#### E1003 - Invalid Number
+### E1003 - Invalid Number
 
-**When it occurs**: A numeric literal has invalid format.
+Numeric literal has invalid format.
 
-**Example**:
-```sql
-SELECT * FROM products WHERE price > 19.99.5
-                                     ^^^^^^^
-```
-
-**Error message**:
-```
-Error E1003 at line 1, column 37: invalid numeric literal: '19.99.5'
-  1 | SELECT * FROM products WHERE price > 19.99.5
-                                           ^^^^^^^
-Hint: Check the numeric format (e.g., 123, 123.45, 1.23e10)
-```
-
-**Common causes**:
-- Multiple decimal points
-- Invalid scientific notation
-- Non-numeric characters in numbers
-- Trailing/leading decimals without digits
-
-**Solutions**:
 ```sql
 -- Wrong: Multiple decimal points
 SELECT * FROM products WHERE price > 19.99.5
@@ -151,37 +83,50 @@ SELECT * FROM products WHERE price > 19.99.5
 -- Right: Valid decimal
 SELECT * FROM products WHERE price > 19.99
 
--- Wrong: Invalid scientific notation
-SELECT * FROM data WHERE value = 1.5e
-
--- Right: Valid scientific notation
+-- Valid scientific notation
 SELECT * FROM data WHERE value = 1.5e10
 ```
 
 ---
 
-#### E1006 - Input Too Large
+### E1004 - Invalid Operator Sequence
 
-**When it occurs**: Input SQL exceeds the maximum allowed size (10MB).
+Invalid operator combination encountered.
 
-**Example**:
 ```sql
--- Attempting to parse a 15MB SQL file
+-- Wrong: Double equals
+SELECT * FROM users WHERE age >= = 18
+
+-- Right: Single comparison
+SELECT * FROM users WHERE age >= 18
+
+-- Use correct operator
+SELECT * FROM users WHERE name != 'John' OR name <> 'John'
 ```
 
-**Error message**:
-```
-Error E1006: input exceeds maximum size limit of 10485760 bytes (received 15728640 bytes)
-Hint: Split large SQL files into smaller batches or increase the size limit if appropriate
+---
+
+### E1005 - Invalid Identifier Format
+
+Identifier (table/column name) has invalid format.
+
+```sql
+-- Wrong: Identifier starts with number
+SELECT * FROM 123users
+
+-- Right: Quote the identifier
+SELECT * FROM "123users"
+
+-- Quote reserved keywords
+SELECT "select" FROM "table"
 ```
 
-**Common causes**:
-- Very large SQL dump files
-- Programmatically generated SQL with millions of INSERT statements
-- Malicious input attempting denial-of-service attack
-- Concatenated SQL files without proper splitting
+---
 
-**Solutions**:
+### E1006 - Input Too Large
+
+Input SQL exceeds maximum size (10MB).
+
 ```go
 // Wrong: Parse entire large file at once
 largeSQL, _ := os.ReadFile("huge_dump.sql")
@@ -197,29 +142,10 @@ for _, batch := range batches {
 
 ---
 
-#### E1007 - Token Limit Exceeded
+### E1007 - Token Limit Exceeded
 
-**When it occurs**: The number of tokens exceeds the maximum allowed (1,000,000 tokens).
+Token count exceeds maximum (1,000,000 tokens).
 
-**Example**:
-```sql
--- SQL with hundreds of thousands of columns or values
-INSERT INTO logs VALUES (...), (...), (...) -- repeated 500,000 times
-```
-
-**Error message**:
-```
-Error E1007: token count exceeds limit of 1000000 tokens
-Hint: Break down large batch operations into smaller chunks
-```
-
-**Common causes**:
-- Massive batch INSERT statements
-- Extremely complex queries with thousands of JOINs or subqueries
-- Code generation gone wrong
-- DoS attack attempts
-
-**Solutions**:
 ```go
 // Wrong: Single massive INSERT
 INSERT INTO logs VALUES (1, 'a'), (2, 'b'), ... // 100,000 rows
@@ -228,36 +154,16 @@ INSERT INTO logs VALUES (1, 'a'), (2, 'b'), ... // 100,000 rows
 batchSize := 1000
 for i := 0; i < len(data); i += batchSize {
     batch := data[i:min(i+batchSize, len(data))]
-    // Generate INSERT for this batch
-    // Parse and execute
+    // Generate and parse INSERT for this batch
 }
 ```
 
 ---
 
-#### E1008 - Tokenizer Panic Recovered
+### E1008 - Tokenizer Panic Recovered
 
-**When it occurs**: The tokenizer encountered an internal error and recovered from a panic.
+Tokenizer encountered internal error.
 
-**Example**:
-```sql
--- Malformed input that triggers internal tokenizer error
-SELECT * FROM users WHERE id = \x00\x00\x00
-```
-
-**Error message**:
-```
-Error E1008: tokenizer panic recovered: runtime error
-Hint: The input may contain malformed or malicious content
-```
-
-**Common causes**:
-- Binary data mixed with SQL text
-- Corrupted file encoding
-- Null bytes or other control characters in input
-- Internal tokenizer bugs (please report these!)
-
-**Solutions**:
 ```go
 // Validate input encoding before parsing
 if !utf8.Valid(sqlBytes) {
@@ -266,43 +172,17 @@ if !utf8.Valid(sqlBytes) {
 
 // Sanitize input to remove control characters
 sqlBytes = removeControlCharacters(sqlBytes)
-
-// Then parse
 ast, err := gosqlx.ParseBytes(sqlBytes)
 ```
 
 ---
 
-### E2xxx - Parser Errors (Syntax Analysis)
+## E2xxx - Parser Errors
 
-These errors occur during parsing when GoSQLX validates SQL grammar and structure.
+### E2001 - Unexpected Token
 
-#### E2001 - Unexpected Token
+Token doesn't fit SQL grammar at this position.
 
-**When it occurs**: The parser encounters a token that doesn't fit the SQL grammar at this position.
-
-**Example**:
-```sql
-SELECT * FORM users
-         ^^^^
-```
-
-**Error message**:
-```
-Error E2001 at line 1, column 10: unexpected token: IDENT ('FORM')
-  1 | SELECT * FORM users
-               ^^^^
-Hint: Did you mean 'FROM'?
-Help: https://docs.gosqlx.dev/errors/E2001
-```
-
-**Common causes**:
-- Typos in SQL keywords
-- Missing or extra tokens
-- Incorrect SQL syntax
-- Wrong keyword order
-
-**Solutions**:
 ```sql
 -- Wrong: Typo in FROM
 SELECT * FORM users
@@ -319,30 +199,10 @@ SELECT id, name FROM users
 
 ---
 
-#### E2002 - Expected Token
+### E2002 - Expected Token
 
-**When it occurs**: The parser expected a specific token but found something else.
+Parser expected specific token but found something else.
 
-**Example**:
-```sql
-SELECT * WHERE age > 18
-         ^^^^^
-```
-
-**Error message**:
-```
-Error E2002 at line 1, column 10: expected FROM, got WHERE
-  1 | SELECT * WHERE age > 18
-               ^^^^^
-Hint: Add the required 'FROM' clause to complete this statement
-```
-
-**Common causes**:
-- Missing required keywords
-- Incorrect clause order
-- Omitted table name or other required elements
-
-**Solutions**:
 ```sql
 -- Wrong: Missing FROM clause
 SELECT * WHERE age > 18
@@ -350,39 +210,16 @@ SELECT * WHERE age > 18
 -- Right: Add FROM clause
 SELECT * FROM users WHERE age > 18
 
--- Wrong: Wrong order
-SELECT * WHERE age > 18 FROM users
-
--- Right: Correct order
+-- Ensure correct clause order
 SELECT * FROM users WHERE age > 18
 ```
 
 ---
 
-#### E2003 - Missing Clause
+### E2003 - Missing Clause
 
-**When it occurs**: A required SQL clause is missing from the statement.
+Required SQL clause is missing.
 
-**Example**:
-```sql
-INSERT users VALUES ('John', 25)
-       ^^^^^
-```
-
-**Error message**:
-```
-Error E2003 at line 1, column 8: missing required INTO clause
-  1 | INSERT users VALUES ('John', 25)
-           ^^^^^
-Hint: Add the required 'INTO' clause to complete this statement
-```
-
-**Common causes**:
-- Forgetting required keywords (INTO, FROM, SET)
-- Incomplete statement structure
-- Misunderstanding SQL syntax requirements
-
-**Solutions**:
 ```sql
 -- Wrong: Missing INTO
 INSERT users VALUES ('John', 25)
@@ -399,35 +236,64 @@ UPDATE users SET name = 'John'
 
 ---
 
-#### E2007 - Recursion Depth Limit Exceeded
+### E2004 - Invalid Syntax
 
-**When it occurs**: Expression nesting exceeds the maximum allowed depth (100 levels).
+General SQL syntax error.
 
-**Example**:
 ```sql
--- Deeply nested subqueries or expressions
-SELECT * FROM (
-    SELECT * FROM (
-        SELECT * FROM (
-            -- ... 100+ levels deep
-        )
-    )
-)
+-- Wrong: Duplicate WHERE
+SELECT * FROM users WHERE WHERE age > 18
+
+-- Right: Single WHERE clause
+SELECT * FROM users WHERE age > 18
 ```
 
-**Error message**:
-```
-Error E2007: expression nesting exceeds maximum depth of 100
-Hint: Simplify the query by reducing nesting levels or breaking it into multiple statements
+---
+
+### E2005 - Incomplete Statement
+
+SQL statement started but not completed.
+
+```sql
+-- Wrong: Incomplete WHERE
+SELECT * FROM users WHERE
+
+-- Right: Complete the condition
+SELECT * FROM users WHERE age > 18
+
+-- Wrong: Incomplete INSERT
+INSERT INTO users (name, age) VALUES
+
+-- Right: Provide values
+INSERT INTO users (name, age) VALUES ('John', 25)
 ```
 
-**Common causes**:
-- Programmatically generated queries with excessive nesting
-- Recursive query generation without depth limits
-- DoS attack attempts with deeply nested structures
-- Overly complex WHERE clauses with many nested conditions
+---
 
-**Solutions**:
+### E2006 - Invalid Expression
+
+Expression has invalid syntax.
+
+```sql
+-- Wrong: Double comparison operator
+SELECT * FROM users WHERE age > > 18
+
+-- Right: Single operator
+SELECT * FROM users WHERE age > 18
+
+-- Wrong: Invalid function syntax
+SELECT COUNT FROM users
+
+-- Right: Proper function call
+SELECT COUNT(*) FROM users
+```
+
+---
+
+### E2007 - Recursion Depth Limit Exceeded
+
+Expression nesting exceeds maximum depth (100 levels).
+
 ```sql
 -- Wrong: Excessive nesting
 SELECT * FROM users WHERE (((((((status = 'active'))))))))) -- 100+ levels
@@ -435,16 +301,7 @@ SELECT * FROM users WHERE (((((((status = 'active'))))))))) -- 100+ levels
 -- Right: Flatten the structure
 SELECT * FROM users WHERE status = 'active'
 
--- Wrong: Deeply nested subqueries
-SELECT * FROM (
-    SELECT * FROM (
-        SELECT * FROM (
-            -- Many levels deep
-        )
-    )
-)
-
--- Right: Use CTEs to flatten
+-- Use CTEs instead of deep nesting
 WITH level1 AS (
     SELECT * FROM base_table
 ),
@@ -454,142 +311,105 @@ level2 AS (
 SELECT * FROM level2
 ```
 
-**Code example for generated queries**:
-```go
-// Wrong: No depth limit checking
-func buildNestedQuery(depth int) string {
-    if depth == 0 {
-        return "SELECT * FROM base"
-    }
-    return fmt.Sprintf("SELECT * FROM (%s)", buildNestedQuery(depth-1))
-}
+---
 
-// Right: Enforce depth limits
-func buildNestedQuery(depth int, maxDepth int) (string, error) {
-    if depth > maxDepth {
-        return "", errors.New("query depth exceeds limit")
-    }
-    if depth == 0 {
-        return "SELECT * FROM base", nil
-    }
-    inner, err := buildNestedQuery(depth-1, maxDepth)
-    if err != nil {
-        return "", err
-    }
-    return fmt.Sprintf("SELECT * FROM (%s)", inner), nil
-}
+### E2008 - Unsupported Data Type
+
+Data type not yet supported.
+
+```sql
+-- Wrong: Unsupported XML type
+CREATE TABLE users (id INT, data XML)
+
+-- Right: Use TEXT or VARCHAR
+CREATE TABLE users (id INT, data TEXT)
 ```
 
 ---
 
-### Advanced SQL Features - Common Errors
+### E2009 - Unsupported Constraint
 
-#### Window Functions
+Constraint type not supported.
 
-**Missing OVER clause**:
 ```sql
--- Wrong
-SELECT name, ROW_NUMBER() FROM employees
+-- May not be supported: Complex CHECK with function
+CREATE TABLE users (
+    id INT,
+    CONSTRAINT chk_custom CHECK (custom_function(id) > 0)
+)
 
--- Right
-SELECT name, ROW_NUMBER() OVER (ORDER BY salary DESC) FROM employees
-```
-
-**PARTITION BY without OVER**:
-```sql
--- Wrong
-SELECT name, RANK() PARTITION BY dept FROM employees
-
--- Right
-SELECT name, RANK() OVER (PARTITION BY dept ORDER BY salary DESC) FROM employees
-```
-
-**Window frame without ORDER BY**:
-```sql
--- Wrong
-SELECT SUM(amount) OVER (ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM sales
-
--- Right
-SELECT SUM(amount) OVER (ORDER BY date ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM sales
+-- Supported: Simple CHECK constraint
+CREATE TABLE users (
+    id INT,
+    CONSTRAINT chk_id CHECK (id > 0)
+)
 ```
 
 ---
 
-#### Common Table Expressions (CTEs)
+### E2010 - Unsupported JOIN Type
 
-**CTE without following statement**:
+JOIN type not supported.
+
 ```sql
--- Wrong
-WITH user_counts AS (
-    SELECT dept, COUNT(*) as cnt FROM employees GROUP BY dept
-)
+-- Wrong: LATERAL JOIN (may not be supported)
+SELECT * FROM users
+LATERAL JOIN orders ON users.id = orders.user_id
 
--- Right
-WITH user_counts AS (
-    SELECT dept, COUNT(*) as cnt FROM employees GROUP BY dept
-)
-SELECT * FROM user_counts WHERE cnt > 5
+-- Right: Use standard JOIN types
+SELECT * FROM users
+LEFT JOIN orders ON users.id = orders.user_id
+
+-- Supported: INNER, LEFT, RIGHT, FULL, CROSS, NATURAL
 ```
 
-**Recursive CTE without UNION**:
-```sql
--- Wrong
-WITH RECURSIVE emp_tree AS (
-    SELECT id, name, manager_id FROM employees
-)
-SELECT * FROM emp_tree
+---
 
--- Right
-WITH RECURSIVE emp_tree AS (
-    SELECT id, name, manager_id, 1 as level
-    FROM employees
-    WHERE manager_id IS NULL
+### E2011 - Invalid CTE Syntax
+
+CTE (WITH clause) syntax is invalid.
+
+```sql
+-- Wrong: Missing parentheses
+WITH user_counts AS
+    SELECT dept, COUNT(*) FROM employees GROUP BY dept
+SELECT * FROM user_counts
+
+-- Right: Add parentheses
+WITH user_counts AS (
+    SELECT dept, COUNT(*) FROM employees GROUP BY dept
+)
+SELECT * FROM user_counts
+
+-- Proper recursive CTE with UNION
+WITH RECURSIVE hierarchy AS (
+    SELECT id, parent_id, 1 as level FROM nodes WHERE parent_id IS NULL
     UNION ALL
-    SELECT e.id, e.name, e.manager_id, et.level + 1
-    FROM employees e
-    JOIN emp_tree et ON e.manager_id = et.id
+    SELECT n.id, n.parent_id, h.level + 1
+    FROM nodes n
+    JOIN hierarchy h ON n.parent_id = h.id
 )
-SELECT * FROM emp_tree
-```
-
-**Missing comma between multiple CTEs**:
-```sql
--- Wrong
-WITH cte1 AS (SELECT * FROM users)
-     cte2 AS (SELECT * FROM orders)
-SELECT * FROM cte1
-
--- Right
-WITH cte1 AS (SELECT * FROM users),
-     cte2 AS (SELECT * FROM orders)
-SELECT * FROM cte1
+SELECT * FROM hierarchy
 ```
 
 ---
 
-#### Set Operations (UNION, INTERSECT, EXCEPT)
+### E2012 - Invalid Set Operation
 
-**Mismatched column counts**:
+Set operation (UNION, INTERSECT, EXCEPT) has invalid syntax.
+
 ```sql
--- Wrong
+-- Wrong: Different column counts
+SELECT id FROM users
+UNION
+SELECT id, name FROM orders
+
+-- Right: Same column count
 SELECT id, name FROM users
 UNION
-SELECT id FROM orders
+SELECT id, customer_name FROM orders
 
--- Right
-SELECT id, name FROM users
-UNION
-SELECT order_id, customer_name FROM orders
-```
-
-**ORDER BY in subquery**:
-```sql
--- Wrong
-(SELECT * FROM users ORDER BY name)
-UNION
-(SELECT * FROM admins ORDER BY name)
-
--- Right
+-- ORDER BY at end only
 SELECT * FROM users
 UNION
 SELECT * FROM admins
@@ -598,37 +418,129 @@ ORDER BY name
 
 ---
 
-#### JOIN Operations
+## E3xxx - Semantic Errors
 
-**Missing ON/USING clause**:
+**Note:** Semantic errors require semantic analysis to be enabled.
+
+### E3001 - Undefined Table
+
+Table reference cannot be resolved.
+
 ```sql
--- Wrong
-SELECT * FROM users JOIN orders
-
--- Right
-SELECT * FROM users JOIN orders ON users.id = orders.user_id
-
--- Also Right: Using USING clause
-SELECT * FROM users JOIN orders USING (user_id)
-```
-
-**Ambiguous column reference**:
-```sql
--- Wrong
-SELECT id FROM users, orders WHERE id > 10
-
--- Right
-SELECT users.id FROM users, orders WHERE users.id > 10
-
--- Also Right: Use aliases
-SELECT u.id FROM users u, orders o WHERE u.id > 10
+SELECT * FROM nonexistent_table
 ```
 
 ---
 
-## Error Handling Best Practices
+### E3002 - Undefined Column
 
-### 1. Check Error Codes Programmatically
+Column reference cannot be resolved.
+
+```sql
+SELECT nonexistent_column FROM users
+```
+
+---
+
+### E3003 - Type Mismatch
+
+Type incompatibility in expressions.
+
+```sql
+-- Wrong: String instead of number
+SELECT * FROM users WHERE age > '18'
+
+-- Right: Numeric value
+SELECT * FROM users WHERE age > 18
+```
+
+---
+
+### E3004 - Ambiguous Column
+
+Column name could refer to multiple tables.
+
+```sql
+-- Wrong: Ambiguous column
+SELECT id FROM users, orders WHERE id > 10
+
+-- Right: Qualify column names
+SELECT users.id FROM users, orders WHERE users.id > 10
+```
+
+---
+
+## E4xxx - Unsupported Features
+
+### E4001 - Unsupported Feature
+
+SQL feature not yet implemented.
+
+**Note:** GoSQLX is under active development. Check documentation for currently supported features.
+
+---
+
+### E4002 - Unsupported Dialect
+
+SQL dialect-specific syntax not supported.
+
+**Note:** GoSQLX supports standard SQL with extensions for PostgreSQL, MySQL, SQL Server, Oracle, and SQLite. Some dialect-specific features may not be available.
+
+---
+
+## Common SQL Patterns
+
+### Window Functions
+
+```sql
+-- Wrong: Missing OVER clause
+SELECT name, ROW_NUMBER() FROM employees
+
+-- Right: Add OVER clause
+SELECT name, ROW_NUMBER() OVER (ORDER BY salary DESC) FROM employees
+
+-- Window frame requires ORDER BY
+SELECT SUM(amount) OVER (ORDER BY date ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM sales
+```
+
+### Common Table Expressions
+
+```sql
+-- Wrong: CTE without following statement
+WITH user_counts AS (
+    SELECT dept, COUNT(*) as cnt FROM employees GROUP BY dept
+)
+
+-- Right: Add SELECT statement
+WITH user_counts AS (
+    SELECT dept, COUNT(*) as cnt FROM employees GROUP BY dept
+)
+SELECT * FROM user_counts WHERE cnt > 5
+
+-- Multiple CTEs need commas
+WITH cte1 AS (SELECT * FROM users),
+     cte2 AS (SELECT * FROM orders)
+SELECT * FROM cte1
+```
+
+### JOIN Operations
+
+```sql
+-- Wrong: Missing ON clause
+SELECT * FROM users JOIN orders
+
+-- Right: Add ON clause
+SELECT * FROM users JOIN orders ON users.id = orders.user_id
+
+-- Or use USING clause
+SELECT * FROM users JOIN orders USING (user_id)
+```
+
+---
+
+## Error Handling in Code
+
+### Check Error Codes
 
 ```go
 import (
@@ -636,12 +548,11 @@ import (
     "github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 )
 
-p := parser.New()
+p := parser.NewParser()
 ast, err := p.Parse(tokens)
 if err != nil {
     // Check for specific error code
     if errors.IsCode(err, errors.ErrCodeExpectedToken) {
-        // Handle syntax errors
         fmt.Println("SQL syntax error detected")
     }
 
@@ -651,7 +562,7 @@ if err != nil {
 }
 ```
 
-### 2. Use Structured Error Information
+### Use Structured Error Information
 
 ```go
 if parseErr, ok := err.(*errors.Error); ok {
@@ -668,100 +579,9 @@ if parseErr, ok := err.(*errors.Error); ok {
 }
 ```
 
-### 3. Format Errors for User Display
-
-```go
-import "github.com/ajitpratap0/GoSQLX/pkg/errors"
-
-// Get formatted error with context
-formatted := errors.FormatErrorWithContext(err, sqlQuery)
-fmt.Println(formatted)
-
-// Get error summary (no context)
-summary := errors.FormatErrorSummary(err)
-fmt.Println(summary)
-
-// Format with custom suggestion
-formatted := errors.FormatErrorWithSuggestion(
-    errors.ErrCodeExpectedToken,
-    "expected FROM",
-    location,
-    sqlQuery,
-    4, // highlight length
-    "Use FROM keyword after SELECT",
-)
-```
-
-### 4. Extract Error Components
-
-```go
-// Check if it's a structured error
-if errors.IsStructuredError(err) {
-    // Extract location
-    if loc, ok := errors.ExtractLocation(err); ok {
-        fmt.Printf("Error at line %d, column %d\n", loc.Line, loc.Column)
-    }
-
-    // Extract error code
-    if code, ok := errors.ExtractErrorCode(err); ok {
-        fmt.Printf("Error code: %s\n", code)
-    }
-}
-```
-
----
-
-## Common Mistake Patterns
-
-GoSQLX provides intelligent suggestions for 20+ common SQL mistakes:
-
-### Type Mismatches
-
-```sql
--- ❌ Wrong: String instead of number
-SELECT * FROM users WHERE age > '18'
-
--- ✓ Right: Numeric value
-SELECT * FROM users WHERE age > 18
-
-Hint: Remove quotes around numeric values
-```
-
-### Missing Operators
-
-```sql
--- ❌ Wrong: Missing comparison operator
-SELECT * FROM users WHERE age 18
-
--- ✓ Right: Add comparison operator
-SELECT * FROM users WHERE age = 18
-```
-
-### Aggregate Function Syntax
-
-```sql
--- ❌ Wrong: Missing parentheses
-SELECT COUNT * FROM users
-
--- ✓ Right: Proper function syntax
-SELECT COUNT(*) FROM users
-```
-
-### GROUP BY Requirements
-
-```sql
--- ❌ Wrong: Missing GROUP BY
-SELECT dept, COUNT(*) FROM employees
-
--- ✓ Right: Add GROUP BY
-SELECT dept, COUNT(*) FROM employees GROUP BY dept
-```
-
 ---
 
 ## Performance Tips
-
-When working with errors in production:
 
 1. **Cache error patterns**: Error suggestions use Levenshtein distance which can be cached
 2. **Use error codes**: Check error codes instead of string matching
@@ -772,24 +592,21 @@ When working with errors in production:
 
 ## Getting Help
 
-- **Full Documentation**: See [ERROR_REFERENCE.md](ERROR_REFERENCE.md) for detailed error descriptions
-- **GitHub Issues**: Report bugs or request features at [github.com/ajitpratap0/GoSQLX/issues](https://github.com/ajitpratap0/GoSQLX/issues)
+- **Troubleshooting Guide**: See [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+- **GitHub Issues**: [github.com/ajitpratap0/GoSQLX/issues](https://github.com/ajitpratap0/GoSQLX/issues)
 - **Help URLs**: Each error includes a help URL: `https://docs.gosqlx.dev/errors/<CODE>`
 
 ---
 
-## Error Code Changelog
+## Changelog
 
 ### v1.4.0
 - Added comprehensive error context formatting
 - Added intelligent error suggestions
 - Added Unicode support in error messages
-- Added window function error patterns
-- Added CTE error patterns
-- Added set operation error patterns
+- Added window function, CTE, and set operation error patterns
 
 ### v1.3.0
 - Initial structured error system
 - Basic error codes (E1xxx-E4xxx)
-- Position tracking
-- Simple hints
+- Position tracking and hints

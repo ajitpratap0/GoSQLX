@@ -195,11 +195,17 @@ func main() {
         panic(err)
     }
 
+    // Convert tokens for parser
+    parserTokens, err := parser.ConvertTokensForParser(tokens)
+    if err != nil {
+        panic(err)
+    }
+
     // Parse to AST (simpler structure)
     p := parser.NewParser()
     defer p.Release()
 
-    ast, err := p.Parse(convertTokens(tokens))
+    ast, err := p.Parse(parserTokens)
     if err != nil {
         panic(err)
     }
@@ -246,8 +252,8 @@ package main
 
 import (
     "fmt"
-    "regexp"
     "github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
+    "github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
 func main() {
@@ -564,9 +570,11 @@ func parseSQL(sql string) *ast.AST {
     defer tokenizer.PutTokenizer(tkz)
     tokens, _ := tkz.Tokenize([]byte(sql))
 
+    parserTokens, _ := parser.ConvertTokensForParser(tokens)
+
     p := parser.NewParser()
     defer p.Release()
-    astObj, _ := p.Parse(convertTokens(tokens))
+    astObj, _ := p.Parse(parserTokens)
 
     return astObj
 }

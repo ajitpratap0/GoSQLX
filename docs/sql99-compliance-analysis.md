@@ -32,7 +32,7 @@ This document provides a comprehensive analysis of SQL-99 standard compliance ga
 
 ## Currently Implemented SQL-99 Features
 
-### ✅ Core Data Manipulation (100% Coverage)
+### Core Data Manipulation (100% Coverage)
 
 **SELECT Statement** - Fully implemented with comprehensive support:
 - Basic SELECT with column projection
@@ -60,7 +60,7 @@ This document provides a comprehensive analysis of SQL-99 standard compliance ga
 - DELETE FROM with WHERE clause
 - Conditional deletion
 
-### ✅ JOIN Operations (100% Coverage)
+### JOIN Operations (100% Coverage)
 
 Full support for all SQL-99 JOIN types:
 - **INNER JOIN** - Fully implemented with ON and USING clauses
@@ -72,7 +72,7 @@ Full support for all SQL-99 JOIN types:
 - **Multiple JOINs** - Proper left-associative parsing
 - **Self JOINs** - Supported
 
-### ✅ Subqueries (100% Coverage)
+### Subqueries (100% Coverage)
 
 Comprehensive subquery support:
 - Scalar subqueries (single value)
@@ -84,7 +84,7 @@ Comprehensive subquery support:
 - ANY/SOME quantified comparisons
 - ALL quantified comparisons
 
-### ✅ Common Table Expressions (100% Coverage)
+### Common Table Expressions (100% Coverage)
 
 **Phase 2 Complete** - Full CTE implementation:
 - Basic WITH clause
@@ -94,7 +94,7 @@ Comprehensive subquery support:
 - CTE references in main query
 - Nested CTEs
 
-### ✅ Window Functions (95% Coverage)
+### Window Functions (95% Coverage)
 
 **Phase 2.5 Complete** - Comprehensive window function support:
 
@@ -127,7 +127,7 @@ Comprehensive subquery support:
 - GROUPS frame unit (SQL:2016, but commonly backported)
 - Named window specifications (WINDOW clause)
 
-### ✅ Set Operations (100% Coverage)
+### Set Operations (100% Coverage)
 
 **Phase 2 Complete** - Full set operation support:
 - UNION - Combines results with duplicate elimination
@@ -137,7 +137,7 @@ Comprehensive subquery support:
 - Left-associative parsing for chained operations
 - Proper precedence handling
 
-### ✅ Aggregate Functions (95% Coverage)
+### Aggregate Functions (95% Coverage)
 
 Standard SQL-99 aggregates:
 - COUNT(*) and COUNT(column)
@@ -151,7 +151,7 @@ Standard SQL-99 aggregates:
 - FILTER clause for conditional aggregation
 - WITHIN GROUP (ORDER BY) for ordered-set aggregates
 
-### ✅ Expression Support (90% Coverage)
+### Expression Support (90% Coverage)
 
 **Fully Implemented:**
 - Binary expressions (arithmetic, comparison, logical)
@@ -177,7 +177,7 @@ Standard SQL-99 aggregates:
 - Array expressions and constructors
 - Row value constructors (multi-column comparisons)
 
-### ✅ DDL Operations (80% Coverage)
+### DDL Operations (80% Coverage)
 
 **CREATE TABLE** - Comprehensive support:
 - Column definitions with data types
@@ -212,7 +212,7 @@ Standard SQL-99 aggregates:
 
 Based on comprehensive codebase analysis, the following SQL-99 features are **NOT currently implemented**:
 
-### 🔴 High Priority Missing Features
+### High Priority Missing Features
 
 #### 1. FETCH FIRST / OFFSET-FETCH Clause
 **Status**: Not implemented (keyword recognized but no parsing)
@@ -384,9 +384,9 @@ FROM orders;
 ---
 
 #### 7. MERGE Statement (UPSERT)
-**Status**: Syntax recognition (test data exists, partial parsing)
+**Status**: IMPLEMENTED (v1.5.0+)
 **SQL-99 Feature**: F312 (SQL:2003 but commonly needed)
-**Importance**: MEDIUM
+**Importance**: MEDIUM (no longer a gap)
 **Reason**: Efficient UPSERT operations (Oracle, SQL Server, PostgreSQL 15+)
 
 **Examples:**
@@ -401,21 +401,21 @@ WHEN NOT MATCHED THEN
 ```
 
 **Current Status**:
+- MERGE parsing implemented in parser.go parseMergeStatement()
+- AST MergeStatement node exists and fully supported
 - Test files: `testdata/oracle/06_merge_statement.sql`, `testdata/mssql/05_merge_statement.sql`
-- SQL_COMPATIBILITY.md: "✅ Full" support listed (80% coverage) - **CONTRADICTORY**
-- No MERGE parsing in parser.go parseStatement()
-- No AST MergeStatement node found
+- SQL_COMPATIBILITY.md: Full support listed (80% coverage) - ACCURATE
 
-**Implementation Impact**: High (new statement type, complex matching logic, multiple actions)
+**Note**: This feature was completed in v1.5.0 and is no longer part of the gap analysis. Consider removing from Phase 3 implementation roadmap.
 
 ---
 
-### 🟡 Medium Priority Missing Features
+### Medium Priority Missing Features
 
 #### 8. TRUNCATE TABLE
-**Status**: Not implemented
+**Status**: IMPLEMENTED (v1.5.0+)
 **SQL-99 Feature**: F201 (SQL:2008)
-**Importance**: MEDIUM
+**Importance**: MEDIUM (no longer a gap)
 **Reason**: Efficient table clearing (faster than DELETE)
 
 **Examples:**
@@ -425,10 +425,11 @@ TRUNCATE TABLE temp_data CASCADE;
 ```
 
 **Current Status**:
-- No parser support
-- SQL_COMPATIBILITY.md: "✅ Full" (90% coverage) - **CONTRADICTORY**
+- TRUNCATE parsing implemented in parser.go parseTruncateStatement()
+- AST TruncateStatement node exists and fully supported
+- SQL_COMPATIBILITY.md: Full support listed (90% coverage) - ACCURATE
 
-**Implementation Impact**: Low (simple statement, minimal AST changes)
+**Note**: This feature was completed in v1.5.0 and is no longer part of the gap analysis. Remove from Phase 1 implementation roadmap.
 
 ---
 
@@ -504,7 +505,7 @@ SELECT items[1] FROM orders;
 
 ---
 
-### 🟢 Lower Priority Missing Features
+### Lower Priority Missing Features
 
 #### 12. INTERSECT ALL and EXCEPT ALL
 **Status**: Not implemented
@@ -605,16 +606,17 @@ GRANT ALL PRIVILEGES ON DATABASE mydb TO admin_user;
 ### Phase 1: High-Impact Quick Wins (4-6 weeks)
 **Goal**: Reach 88-90% compliance with minimal effort
 
-| Feature | Priority | Effort | Impact | Order |
-|---------|----------|--------|--------|-------|
-| **NULLS FIRST/LAST** | P0 | 8h | High | 1 |
-| **FETCH FIRST / OFFSET-FETCH** | P0 | 16h | High | 2 |
-| **COALESCE/NULLIF** | P1 | 8h | Medium | 3 |
-| **TRUNCATE TABLE** | P1 | 8h | Medium | 4 |
-| **DISTINCT in aggregates** (verification) | P1 | 4h | Medium | 5 |
-| **INTERSECT/EXCEPT ALL** | P1 | 6h | Low | 6 |
+| Feature | Priority | Effort | Impact | Order | Status |
+|---------|----------|--------|--------|-------|--------|
+| **NULLS FIRST/LAST** | P0 | 8h | High | 1 | TODO |
+| **FETCH FIRST / OFFSET-FETCH** | P0 | 16h | High | 2 | TODO |
+| **COALESCE/NULLIF** | P1 | 8h | Medium | 3 | TODO |
+| **DISTINCT in aggregates** (verification) | P1 | 4h | Medium | 4 | TODO |
+| **INTERSECT/EXCEPT ALL** | P1 | 6h | Low | 5 | TODO |
 
-**Phase 1 Total**: ~50 hours
+Note: TRUNCATE TABLE (previously P1) has been COMPLETED in v1.5.0 and removed from this phase.
+
+**Phase 1 Total**: ~42 hours (reduced from 50)
 **Compliance Gain**: +8-10%
 **New Compliance**: 88-90%
 
@@ -640,14 +642,15 @@ GRANT ALL PRIVILEGES ON DATABASE mydb TO admin_user;
 ### Phase 3: Advanced Features (Optional - 4-6 weeks)
 **Goal**: Reach 95%+ compliance with advanced SQL-99 features
 
-| Feature | Priority | Effort | Impact | Order |
-|---------|----------|--------|--------|-------|
-| **LATERAL Joins** | P1 | 24h | Medium-High | 1 |
-| **MERGE Statement** | P1 | 32h | Medium | 2 |
-| **Array Support (Basic)** | P2 | 20h | Medium | 3 |
-| **TABLE Constructor** | P2 | 12h | Low | 4 |
+| Feature | Priority | Effort | Impact | Order | Status |
+|---------|----------|--------|--------|-------|--------|
+| **LATERAL Joins** | P1 | 24h | Medium-High | 1 | TODO |
+| **Array Support (Basic)** | P2 | 20h | Medium | 2 | TODO |
+| **TABLE Constructor** | P2 | 12h | Low | 3 | TODO |
 
-**Phase 3 Total**: ~88 hours
+Note: MERGE Statement (previously P1, 32h) has been COMPLETED in v1.5.0 and removed from this phase.
+
+**Phase 3 Total**: ~56 hours (reduced from 88)
 **Compliance Gain**: +3-4%
 **New Compliance**: 95-96%
 
@@ -655,15 +658,17 @@ GRANT ALL PRIVILEGES ON DATABASE mydb TO admin_user;
 
 ### Timeline Summary
 
-| Phase | Duration | Effort | Compliance | Features |
-|-------|----------|--------|------------|----------|
-| **Current State** | - | - | 80-85% | Baseline |
-| **Phase 1** | 4-6 weeks | 50h | 88-90% | 6 features |
-| **Phase 2** | 6-8 weeks | 84h | 93-94% | 5 features |
-| **Phase 3** | 4-6 weeks | 88h | 95-96% | 4 features |
-| **Total** | 14-20 weeks | 222h | 95-96% | 15 features |
+| Phase | Duration | Effort | Compliance | Features | Status |
+|-------|----------|--------|------------|----------|--------|
+| **Current State** | - | - | 80-85% | Baseline | - |
+| **Phase 1** | 4-6 weeks | 42h | 88-90% | 5 features | TODO |
+| **Phase 2** | 6-8 weeks | 84h | 93-94% | 5 features | TODO |
+| **Phase 3** | 4-6 weeks | 56h | 95-96% | 3 features | TODO |
+| **Total** | 14-20 weeks | 182h | 95-96% | 13 features | Updated |
 
-**Recommended Path to 95%**: Complete Phase 1 + Phase 2 + partial Phase 3 (LATERAL, MERGE)
+Note: Total effort reduced by 40 hours (18%) due to MERGE and TRUNCATE completion in v1.5.0.
+
+**Recommended Path to 95%**: Complete Phase 1 + Phase 2 + Phase 3 (LATERAL, Array Support)
 
 ---
 
@@ -900,29 +905,32 @@ if p.currentToken.Type == "FILTER" {
 
 ### Breakdown by Category
 
-| Category | Features | Total Effort | % of Total |
-|----------|----------|--------------|------------|
-| **ORDER BY Enhancements** | NULLS FIRST/LAST | 8h | 3.6% |
-| **Pagination** | FETCH/OFFSET | 16h | 7.2% |
-| **Analytical SQL** | ROLLUP, CUBE, GROUPING SETS, FILTER | 72h | 32.4% |
-| **Window Function Enhancements** | Frame EXCLUDE | 12h | 5.4% |
-| **JOIN Enhancements** | LATERAL | 24h | 10.8% |
-| **DML Enhancements** | MERGE, TRUNCATE | 40h | 18.0% |
-| **Function Enhancements** | COALESCE, NULLIF | 8h | 3.6% |
-| **Set Operations** | INTERSECT/EXCEPT ALL | 6h | 2.7% |
-| **Data Types** | Array Support | 20h | 9.0% |
-| **Value Constructors** | TABLE constructor | 12h | 5.4% |
-| **Testing & Documentation** | All features | 44h | 19.8% |
-| **TOTAL** | 15 features | **222h** | 100% |
+| Category | Features | Total Effort | % of Total | Status |
+|----------|----------|--------------|------------|--------|
+| **ORDER BY Enhancements** | NULLS FIRST/LAST | 8h | 4.4% | TODO |
+| **Pagination** | FETCH/OFFSET | 16h | 8.8% | TODO |
+| **Analytical SQL** | ROLLUP, CUBE, GROUPING SETS, FILTER | 72h | 39.6% | TODO |
+| **Window Function Enhancements** | Frame EXCLUDE | 12h | 6.6% | TODO |
+| **JOIN Enhancements** | LATERAL | 24h | 13.2% | TODO |
+| **Function Enhancements** | COALESCE, NULLIF | 8h | 4.4% | TODO |
+| **Set Operations** | INTERSECT/EXCEPT ALL | 6h | 3.3% | TODO |
+| **Data Types** | Array Support | 20h | 11.0% | TODO |
+| **Value Constructors** | TABLE constructor | 12h | 6.6% | TODO |
+| **Testing & Documentation** | All features | 18h | 9.9% | TODO |
+| **TOTAL** | 13 features | **182h** | 100% | Updated |
+
+Note: MERGE (32h) and TRUNCATE (8h) are COMPLETED in v1.5.0. Testing/Documentation effort reduced proportionally.
 
 ### Effort by Complexity Level
 
-| Complexity | Features | Effort | Avg per Feature |
-|------------|----------|--------|-----------------|
-| **Low** | 5 | 34h | 6.8h |
-| **Medium** | 6 | 88h | 14.7h |
-| **High** | 4 | 100h | 25h |
-| **TOTAL** | 15 | 222h | 14.8h |
+| Complexity | Features | Effort | Avg per Feature | Status |
+|------------|----------|--------|-----------------|--------|
+| **Low** | 4 | 26h | 6.5h | TODO |
+| **Medium** | 6 | 88h | 14.7h | TODO |
+| **High** | 3 | 68h | 22.7h | TODO |
+| **TOTAL** | 13 | 182h | 14.0h | Updated |
+
+Note: Reduced from 15 features/222h due to MERGE and TRUNCATE completion.
 
 ---
 
@@ -948,12 +956,18 @@ if p.currentToken.Type == "FILTER" {
 
 ### Development Best Practices
 
-1. **Test-Driven Development**:
+1. **API Usage**:
+   - For pooled parser instances: `GetParser()` and `PutParser(p)`
+   - For parsing with position tracking: `ParseWithPositions(ConversionResult)`
+   - Token conversion utilities are test-only helpers in individual test files
+   - Always use `ParseWithPositions()` for production code to get accurate error locations
+
+2. **Test-Driven Development**:
    - Write tests first based on SQL-99 standard examples
    - Include test data files in testdata/ directories
    - Use existing test patterns (parser_test.go, integration_test.go)
 
-2. **AST Design Principles**:
+3. **AST Design Principles**:
    - Minimize breaking changes to existing AST
    - Use optional fields (pointers) for new features
    - Maintain backward compatibility with object pools
@@ -979,13 +993,13 @@ if p.currentToken.Type == "FILTER" {
 
 For each feature implementation:
 
-1. ✅ **Tests Pass**: `go test -race ./...`
-2. ✅ **Benchmarks**: Performance regression < 5%
-3. ✅ **Coverage**: Feature coverage > 90%
-4. ✅ **Documentation**: Updated CLAUDE.md, CHANGELOG.md
-5. ✅ **Examples**: Real-world test cases in testdata/
-6. ✅ **Race Detection**: Zero race conditions
-7. ✅ **Code Review**: Peer review completed
+1. **Tests Pass**: `go test -race ./...`
+2. **Benchmarks**: Performance regression < 5%
+3. **Coverage**: Feature coverage > 90%
+4. **Documentation**: Updated CLAUDE.md, CHANGELOG.md
+5. **Examples**: Real-world test cases in testdata/
+6. **Race Detection**: Zero race conditions
+7. **Code Review**: Peer review completed
 
 ---
 

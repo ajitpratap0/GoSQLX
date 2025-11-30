@@ -65,7 +65,7 @@ Release title: v1.0.0: GoSQLX GitHub Action - Ultra-Fast SQL Validation
 Description:
 ## GoSQLX GitHub Action v1.0.0
 
-### 🚀 Features
+### Features
 
 - **Ultra-Fast Validation**: 100-1000x faster than SQLFluff
 - **Multi-Dialect Support**: PostgreSQL, MySQL, SQL Server, Oracle, SQLite
@@ -73,17 +73,17 @@ Description:
 - **Comprehensive Analysis**: Security and performance checks
 - **Zero Configuration**: Works out of the box
 
-### 📊 Performance
+### Performance
 
 - **Throughput**: 1.38M+ operations/second
 - **Validation Speed**: <10ms for typical queries
 - **Batch Processing**: 100+ files/second
 
-### 📖 Documentation
+### Documentation
 
-See [ACTION_README.md](ACTION_README.md) for complete documentation and examples.
+See [ACTION_QUICK_REFERENCE.md](ACTION_QUICK_REFERENCE.md) for complete documentation and examples.
 
-### 🎯 Quick Start
+### Quick Start
 
 ```yaml
 - uses: ajitpratap0/GoSQLX@v1
@@ -92,17 +92,17 @@ See [ACTION_README.md](ACTION_README.md) for complete documentation and examples
     validate: true
 ```
 
-### 🔗 Links
+### Links
 
 - [Documentation](https://github.com/ajitpratap0/GoSQLX#readme)
-- [Examples](.github/workflows/examples/)
-- [Testing Guide](.github/ACTION_TESTING_GUIDE.md)
+- [Examples](./workflows/examples/)
+- [Testing Guide](ACTION_TESTING_GUIDE.md)
 
-### 🐛 Known Issues
+### Known Issues
 
 None at this time.
 
-### 🙏 Acknowledgments
+### Acknowledgments
 
 Built with GitHub Actions and Go.
 ```
@@ -138,7 +138,7 @@ branding:
    - Secondary category: Code quality
 
 3. **Marketplace README**:
-   - The `ACTION_README.md` content should be the main documentation
+   - The `ACTION_QUICK_REFERENCE.md` content should be the main documentation
    - Consider copying it to root README or having a marketplace-specific version
 
 ### 5. Version Management Strategy
@@ -259,11 +259,11 @@ jobs:
 Add relevant badges to increase trust:
 
 ```markdown
-[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-GoSQLX-blue.svg)](...)
-[![GitHub Release](https://img.shields.io/github/release/ajitpratap0/GoSQLX.svg)](...)
-[![GitHub Stars](https://img.shields.io/github/stars/ajitpratap0/GoSQLX.svg)](...)
+[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-GoSQLX-blue.svg)](https://github.com/marketplace/actions/gosqlx-sql-validator)
+[![GitHub Release](https://img.shields.io/github/release/ajitpratap0/GoSQLX.svg)](https://github.com/ajitpratap0/GoSQLX/releases)
+[![GitHub Stars](https://img.shields.io/github/stars/ajitpratap0/GoSQLX.svg)](https://github.com/ajitpratap0/GoSQLX)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Go Report Card](https://goreportcard.com/badge/github.com/ajitpratap0/GoSQLX)](...)
+[![Go Report Card](https://goreportcard.com/badge/github.com/ajitpratap0/GoSQLX)](https://goreportcard.com/report/github.com/ajitpratap0/GoSQLX)
 ```
 
 ## Updating the Action
@@ -477,4 +477,4 @@ git push -f origin v1
 - [ ] Post-release testing completed
 - [ ] Announcement prepared
 
-Ready to publish! 🚀
+Ready to publish!

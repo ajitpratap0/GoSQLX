@@ -16,16 +16,17 @@ This comprehensive guide helps you achieve optimal performance with GoSQLX in pr
 4. [Memory Management](#memory-management)
 5. [Concurrent Processing Patterns](#concurrent-processing-patterns)
 6. [Benchmarking Methodology](#benchmarking-methodology)
-7. [Common Performance Patterns](#common-performance-patterns)
-8. [Production Deployment Checklist](#production-deployment-checklist)
-9. [Troubleshooting Performance Issues](#troubleshooting-performance-issues)
-10. [Real-World Case Studies](#real-world-case-studies)
+7. [Performance Regression Testing](#performance-regression-testing)
+8. [Common Performance Patterns](#common-performance-patterns)
+9. [Production Deployment Checklist](#production-deployment-checklist)
+10. [Troubleshooting Performance Issues](#troubleshooting-performance-issues)
+11. [Real-World Case Studies](#real-world-case-studies)
 
 ---
 
 ## Performance Overview
 
-###  Baseline Performance (v1.5.1)
+### Baseline Performance (v1.5.1)
 
 GoSQLX delivers production-validated performance across multiple workloads:
 
@@ -39,17 +40,8 @@ GoSQLX delivers production-validated performance across multiple workloads:
 | **Concurrent Scaling** | Linear to 128+ cores | Native Go concurrency |
 | **Tokenization Speed** | 8M tokens/sec | Raw tokenization throughput |
 
-### Performance Characteristics
-
-```
-Query Complexity vs Latency:
-- Simple SELECT:     <0.5ms  (SELECT * FROM users)
-- Medium JOIN:       ~0.7ms  (3-table JOIN with WHERE)
-- Complex Analytics: ~1.2ms  (CTEs + window functions + 5 JOINs)
-- Very Large Query:  ~5ms    (100KB+ SQL with deep nesting)
-```
-
-**Key Insight**: GoSQLX is optimized for the 80% use case - typical production SQL queries complete in sub-millisecond time.
+### Query Complexity vs Latency
+- Simple SELECT: <0.5ms | Medium JOIN: ~0.7ms | Complex Analytics: ~1.2ms | Very Large: ~5ms
 
 ---
 
@@ -89,8 +81,9 @@ func profileCPU() {
         tokens, _ := tkz.Tokenize(sql)
         tokenizer.PutTokenizer(tkz)
 
-        p := parser.New()
-        _, _ = p.Parse(tokens)
+        convertedTokens, _ := parser.ConvertTokensForParser(tokens)
+        p := parser.NewParser()
+        _, _ = p.Parse(convertedTokens)
     }
 }
 ```
@@ -98,16 +91,9 @@ func profileCPU() {
 #### Analyzing CPU Profiles
 
 ```bash
-# Run your application with profiling
-go run main.go
-
-# Analyze the profile
+go run main.go  # Run with profiling
 go tool pprof cpu.prof
-
-# In pprof interactive mode:
-(pprof) top 10              # Show top 10 CPU consumers
-(pprof) list TokenizeContext # Show line-by-line profile for function
-(pprof) web                 # Generate visual call graph (requires graphviz)
+# In pprof: top 10, list TokenizeContext, web (for call graph)
 ```
 
 ### 2. Memory Profiling
@@ -141,13 +127,8 @@ func profileMemory() {
 #### Analyzing Memory Profiles
 
 ```bash
-# Analyze memory profile
 go tool pprof mem.prof
-
-# Show allocations
-(pprof) top 10              # Top 10 memory allocators
-(pprof) list NewAST         # Memory allocations in specific function
-(pprof) alloc_space         # Total allocations (not just live objects)
+# In pprof: top 10, list NewAST, alloc_space
 ```
 
 ### 3. Continuous Profiling in Production
@@ -171,13 +152,8 @@ func main() {
 
 Access profiles via HTTP:
 ```bash
-# CPU profile (30 second sample)
 curl http://localhost:6060/debug/pprof/profile?seconds=30 > cpu.prof
-
-# Heap profile
 curl http://localhost:6060/debug/pprof/heap > heap.prof
-
-# Goroutine profile
 curl http://localhost:6060/debug/pprof/goroutine > goroutine.prof
 ```
 
@@ -527,7 +503,7 @@ func pipelineProcessing(input <-chan []byte) <-chan Result {
     parsed := make(chan Result, 100)
     go func() {
         defer close(parsed)
-        p := parser.New()
+        p := parser.NewParser()
 
         for tokens := range tokenized {
             ast, err := p.Parse(tokens)
@@ -576,48 +552,113 @@ What to look for:
 ### 3. Comparing Benchmarks (Before/After Optimization)
 
 ```bash
-# Save baseline
 go test -bench=BenchmarkTokenizer -benchmem -count=5 > baseline.txt
-
-# Make your changes
-
-# Compare with baseline
+# Make changes
 go test -bench=BenchmarkTokenizer -benchmem -count=5 > new.txt
 benchstat baseline.txt new.txt
-
-# Output:
-# name              old time/op    new time/op    delta
-# TokenizeSimple-16   724ns ± 2%     580ns ± 3%  -19.89%  (p=0.000 n=5+5)
-#
-# name              old alloc/op   new alloc/op   delta
-# TokenizeSimple-16   1.86kB ± 0%    1.12kB ± 0%  -39.78%  (p=0.000 n=5+5)
+# Shows delta: TokenizeSimple-16: 724ns → 580ns (-19.89%)
 ```
 
 ### 4. Custom Benchmarks for Your Workload
 
 ```go
 func BenchmarkYourWorkload(b *testing.B) {
-    // Load your real production SQL
     queries := loadProductionSQL("testdata/production_queries.sql")
-
-    b.ResetTimer()  // Reset timer after setup
-
+    b.ResetTimer()
     for i := 0; i < b.N; i++ {
-        sql := queries[i%len(queries)]
-
         tkz := tokenizer.GetTokenizer()
-        _, err := tkz.Tokenize(sql)
+        _, err := tkz.Tokenize(queries[i%len(queries)])
         tokenizer.PutTokenizer(tkz)
-
-        if err != nil {
-            b.Fatal(err)
-        }
+        if err != nil { b.Fatal(err) }
     }
-
-    // Report custom metrics
-    b.ReportMetric(float64(len(queries)), "queries")
 }
 ```
+
+---
+
+## Performance Regression Testing
+
+### Overview
+
+GoSQLX includes automated performance regression tests to prevent performance degradation over time. The suite tracks key metrics against established baselines and alerts developers to regressions.
+
+### Running Regression Tests
+
+#### Quick Test (Recommended for CI/CD)
+```bash
+go test -v ./pkg/sql/parser/ -run TestPerformanceRegression
+```
+- **Execution Time:** ~8 seconds
+- **Coverage:** 5 critical query types
+- **Exit Code 0:** All tests passed
+- **Exit Code 1:** Performance regression detected
+
+#### Baseline Benchmark
+```bash
+go test -bench=BenchmarkPerformanceBaseline -benchmem -count=5 ./pkg/sql/parser/
+```
+Use this after significant parser changes to establish new performance baselines.
+
+### Performance Baselines
+
+Current baselines are stored in `performance_baselines.json`:
+
+| Query Type | Baseline | Current | Metrics |
+|------------|----------|---------|---------|
+| **SimpleSelect** | 280 ns/op | ~265 ns/op | 9 allocs, 536 B/op |
+| **ComplexQuery** | 1100 ns/op | ~1020 ns/op | 36 allocs, 1433 B/op |
+| **WindowFunction** | 450 ns/op | ~400 ns/op | 14 allocs, 760 B/op |
+| **CTE** | 450 ns/op | ~395 ns/op | 14 allocs, 880 B/op |
+| **INSERT** | 350 ns/op | ~310 ns/op | 14 allocs, 536 B/op |
+
+**Thresholds:**
+- **Failure:** 20% degradation from baseline
+- **Warning:** 10% degradation from baseline
+
+### Test Output Examples
+
+**Successful Run:**
+```
+✓ All performance tests passed (5 tests, 0 failures, 0 warnings)
+```
+
+**Regression Detected:**
+```
+✗ ComplexQuery: 25.5% slower (1381 ns/op vs 1100 ns/op baseline)
+⚠ SimpleSelect: 12.3% slower (approaching threshold)
+```
+
+### Updating Baselines
+
+**When to Update:**
+- Intentional optimizations improve performance
+- Parser architecture changes fundamentally
+- New SQL features are added
+
+**How to Update:**
+1. Run baseline benchmark with multiple iterations
+2. Calculate new conservative baselines (add 10-15% buffer)
+3. Update `performance_baselines.json`
+4. Update the `updated` timestamp
+5. Commit with clear explanation
+
+### CI/CD Integration
+
+```yaml
+# GitHub Actions example
+- name: Performance Regression Tests
+  run: |
+    go test -v ./pkg/sql/parser/ -run TestPerformanceRegression
+  timeout-minutes: 2
+```
+
+### Troubleshooting Regression Tests
+
+**Test Timing Variance:** System load, CPU throttling, background processes affect results. Run tests multiple times.
+
+**False Positives:** Check system load, run test 3-5 times to confirm, consider increasing tolerance.
+
+**Baseline Drift:** If performance is consistently better, document improvements and update baselines.
 
 ---
 

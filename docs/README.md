@@ -4,7 +4,7 @@ Comprehensive documentation for the GoSQLX SQL parsing SDK.
 
 **Current Version**: v1.5.1+ | **Last Updated**: November 2025
 
-## 📚 Documentation Index
+## Documentation Index
 
 ### Getting Started
 
@@ -27,7 +27,6 @@ Comprehensive documentation for the GoSQLX SQL parsing SDK.
 | Document | Description | Audience |
 |----------|-------------|----------|
 | [**ERROR_CODES.md**](ERROR_CODES.md) | Comprehensive error code reference (E1xxx-E4xxx) | Developers |
-| [**ERROR_REFERENCE.md**](ERROR_REFERENCE.md) | Error handling patterns and recovery strategies | Developers |
 | [**sql99-compliance-analysis.md**](sql99-compliance-analysis.md) | SQL-99 standard compliance analysis (~80-85%) | Architects |
 
 ### Deployment & Operations
@@ -55,7 +54,7 @@ Comprehensive documentation for the GoSQLX SQL parsing SDK.
 | [**migration/FROM_PG_QUERY.md**](migration/FROM_PG_QUERY.md) | Migrating from pg_query |
 | [**migration/FROM_SQLFLUFF.md**](migration/FROM_SQLFLUFF.md) | Migrating from SQLFluff |
 
-## 🚀 Quick Start Guides
+## Quick Start Guides
 
 ### For New Users
 1. Start with [USAGE_GUIDE.md](USAGE_GUIDE.md) - Basic usage patterns
@@ -72,7 +71,7 @@ Comprehensive documentation for the GoSQLX SQL parsing SDK.
 2. Review [SECURITY.md](SECURITY.md) - Security considerations
 3. Check [SQL_COMPATIBILITY.md](SQL_COMPATIBILITY.md) - Dialect support
 
-## 📖 Documentation Structure
+## Documentation Structure
 
 ```
 docs/
@@ -88,25 +87,23 @@ docs/
 ├── SQL_COMPATIBILITY.md    # SQL dialect matrix
 ├── SECURITY.md             # Security analysis
 ├── ERROR_CODES.md          # Error code reference
-├── ERROR_REFERENCE.md      # Error handling guide
 ├── COMPARISON.md           # Parser comparison
 ├── FUZZ_TESTING_GUIDE.md   # Fuzz testing guide
 ├── sql99-compliance-analysis.md  # SQL-99 compliance
-├── CLEAN_ARCHITECTURE.md   # Architecture principles
 └── migration/              # Migration guides
     ├── FROM_JSQLPARSER.md
     ├── FROM_PG_QUERY.md
     └── FROM_SQLFLUFF.md
 ```
 
-## 🔍 Finding Information
+## Finding Information
 
 ### By Topic
 
 **Installation & Setup**
 - [Installation](USAGE_GUIDE.md#installation)
 - [Prerequisites](PRODUCTION_GUIDE.md#prerequisites)
-- [Quick Start](../README.md#-quick-start)
+- [Quick Start](../README.md#quick-start)
 
 **Basic Usage**
 - [Simple Tokenization](USAGE_GUIDE.md#simple-tokenization)
@@ -115,12 +112,12 @@ docs/
 
 **Advanced Topics**
 - [Concurrent Processing](USAGE_GUIDE.md#concurrent-processing)
-- [Memory Optimization](ARCHITECTURE.md#memory-optimization-strategies)
+- [Memory Management](ARCHITECTURE.md#memory-management)
 - [Performance Tuning](PRODUCTION_GUIDE.md#performance-optimization)
 
 **Troubleshooting**
 - [Common Issues](TROUBLESHOOTING.md#common-issues)
-- [Error Messages](TROUBLESHOOTING.md#error-messages)
+- [Error Codes Reference](TROUBLESHOOTING.md#error-codes-reference)
 - [FAQ](TROUBLESHOOTING.md#faq)
 
 **SQL Dialects**
@@ -144,15 +141,15 @@ docs/
 → See [USAGE_GUIDE.md#unicode-and-international-support](USAGE_GUIDE.md#unicode-and-international-support)
 
 **"I'm getting an error"**
-→ See [TROUBLESHOOTING.md#error-messages](TROUBLESHOOTING.md#error-messages)
+→ See [TROUBLESHOOTING.md#error-codes-reference](TROUBLESHOOTING.md#error-codes-reference)
 
 **"My application is slow"**
 → See [TROUBLESHOOTING.md#performance-issues](TROUBLESHOOTING.md#performance-issues)
 
 **"I found a memory leak"**
-→ See [TROUBLESHOOTING.md#memory-leaks](TROUBLESHOOTING.md#memory-leaks)
+→ See [TROUBLESHOOTING.md#memory-issues](TROUBLESHOOTING.md#memory-issues)
 
-## 📊 Coverage Matrix
+## Coverage Matrix
 
 | Topic | API Ref | Usage | Architecture | Troubleshooting | Production |
 |-------|---------|-------|--------------|-----------------|------------|
@@ -169,7 +166,7 @@ docs/
 | Monitoring | | | | | ✓ |
 | Security | | | | | ✓ |
 
-## 💡 Contributing to Documentation
+## Contributing to Documentation
 
 We welcome documentation improvements! To contribute:
 
@@ -188,7 +185,7 @@ We welcome documentation improvements! To contribute:
 - Keep formatting consistent
 - Test all code examples
 
-## 📞 Getting Help
+## Getting Help
 
 If you can't find what you need:
 
@@ -197,7 +194,7 @@ If you can't find what you need:
 3. **Ask**: Open a [new issue](https://github.com/ajitpratap0/GoSQLX/issues/new)
 4. **Discuss**: Join [discussions](https://github.com/ajitpratap0/GoSQLX/discussions)
 
-## 🔄 Documentation Updates
+## Documentation Updates
 
 | Document | Last Updated | Version |
 |----------|--------------|---------|
@@ -213,7 +210,7 @@ If you can't find what you need:
 | ERROR_CODES.md | 2025-11 | v1.5.1 |
 | PERFORMANCE_TUNING.md | 2025-11 | v1.5.1 |
 
-## 🆕 Recent Feature Additions (v1.4+)
+## Recent Feature Additions (v1.4+)
 
 - **SQL Injection Detection** - `pkg/sql/security` package for pattern detection
 - **MERGE Statements** - SQL Server/PostgreSQL MERGE support

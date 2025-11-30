@@ -79,19 +79,17 @@ func main() {
 
     // Lint SQL string
     sql := `SELECT * FROM users WHERE active = true  `  // Trailing space
-    results, err := l.LintString(sql, "query.sql")
-    if err != nil {
+    result := l.LintString(sql, "query.sql")
+    if result.Error != nil {
         // Handle error
     }
 
     // Check violations
-    for _, result := range results {
-        for _, violation := range result.Violations {
-            fmt.Printf("[%s] Line %d: %s\n",
-                violation.RuleID,
-                violation.Line,
-                violation.Message)
-        }
+    for _, violation := range result.Violations {
+        fmt.Printf("[%s] Line %d: %s\n",
+            violation.Rule,
+            violation.Location.Line,
+            violation.Message)
     }
 }
 ```
@@ -108,13 +106,21 @@ sql := `SELECT *
 FROM users	WHERE active = true`  // Mixed tabs/spaces, trailing space
 
 // Lint and get violations
-results, _ := l.LintString(sql, "query.sql")
+result := l.LintString(sql, "query.sql")
 
-// Auto-fix violations
-for _, result := range results {
-    for _, violation := range result.Violations {
-        if violation.CanAutoFix {
-            fixedSQL, err := violation.Fix(sql)
+// Auto-fix violations by rule
+for _, rule := range l.Rules() {
+    if rule.CanAutoFix() {
+        // Get violations for this rule
+        ruleViolations := []Violation{}
+        for _, v := range result.Violations {
+            if v.Rule == rule.ID() {
+                ruleViolations = append(ruleViolations, v)
+            }
+        }
+
+        if len(ruleViolations) > 0 {
+            fixedSQL, err := rule.Fix(sql, ruleViolations)
             if err == nil {
                 sql = fixedSQL
             }
@@ -154,7 +160,7 @@ type Context struct {
     Lines    []string                   // Split by line
     Tokens   []models.TokenWithSpan     // Tokenization result
     AST      *ast.AST                   // Parsed AST (if available)
-    Errors   []error                    // Parse errors
+    ParseErr error                      // Parse error (if any)
 }
 ```
 
@@ -164,12 +170,14 @@ Represents a rule violation:
 
 ```go
 type Violation struct {
-    RuleID      string
-    Message     string
-    Line        int
-    Column      int
-    Severity    Severity
-    CanAutoFix  bool
+    Rule       string          // Rule ID (e.g., "L001")
+    RuleName   string          // Human-readable rule name
+    Severity   Severity        // Severity level
+    Message    string          // Violation description
+    Location   models.Location // Position in source (1-based)
+    Line       string          // The actual line content
+    Suggestion string          // How to fix the violation
+    CanAutoFix bool            // Whether this violation can be auto-fixed
 }
 ```
 
@@ -220,10 +228,11 @@ func (r *MyCustomRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
         // Check for your pattern
         if /* violation found */ {
             violations = append(violations, linter.Violation{
-                RuleID:     r.ID(),
+                Rule:       r.ID(),
+                RuleName:   r.Name(),
                 Message:    "Custom violation message",
-                Line:       lineNum + 1,  // 1-based
-                Column:     0,
+                Location:   models.Location{Line: lineNum + 1, Column: 1},  // 1-based
+                Line:       line,
                 Severity:   r.Severity(),
                 CanAutoFix: false,
             })

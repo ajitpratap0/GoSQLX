@@ -1040,6 +1040,22 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 				t.pos.AdvanceRune(nxtR, nxtSize)
 				return models.Token{Type: models.TokenTypeArrow, Value: "->"}, nil
 			}
+			// Check for line comment: --
+			if nxtR == '-' {
+				t.pos.AdvanceRune(nxtR, nxtSize)
+				// Skip until end of line or EOF
+				for t.pos.Index < len(t.input) {
+					cr, csize := utf8.DecodeRune(t.input[t.pos.Index:])
+					if cr == '\n' {
+						t.pos.AdvanceRune(cr, csize) // Skip the newline too
+						break
+					}
+					t.pos.AdvanceRune(cr, csize)
+				}
+				// Return the next token (skip the comment)
+				t.skipWhitespace()
+				return t.nextToken()
+			}
 		}
 		return models.Token{Type: models.TokenTypeMinus, Value: "-"}, nil
 	case '*':
@@ -1047,6 +1063,32 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		return models.Token{Type: models.TokenTypeMul, Value: "*"}, nil
 	case '/':
 		t.pos.AdvanceRune(r, size)
+		if t.pos.Index < len(t.input) {
+			nxtR, nxtSize := utf8.DecodeRune(t.input[t.pos.Index:])
+			// Check for block comment: /*
+			if nxtR == '*' {
+				t.pos.AdvanceRune(nxtR, nxtSize)
+				// Skip until */ or EOF
+				for t.pos.Index < len(t.input) {
+					cr, csize := utf8.DecodeRune(t.input[t.pos.Index:])
+					if cr == '*' {
+						t.pos.AdvanceRune(cr, csize)
+						if t.pos.Index < len(t.input) {
+							nr, ns := utf8.DecodeRune(t.input[t.pos.Index:])
+							if nr == '/' {
+								t.pos.AdvanceRune(nr, ns) // End of block comment
+								break
+							}
+						}
+					} else {
+						t.pos.AdvanceRune(cr, csize)
+					}
+				}
+				// Return the next token (skip the comment)
+				t.skipWhitespace()
+				return t.nextToken()
+			}
+		}
 		return models.Token{Type: models.TokenTypeDiv, Value: "/"}, nil
 	case '=':
 		t.pos.AdvanceRune(r, size)

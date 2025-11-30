@@ -184,7 +184,7 @@ func TestParseIdent_EdgeCases(t *testing.T) {
 		{
 			name:      "Quoted identifier",
 			sql:       `SELECT "user_id" FROM "user_table"`,
-			shouldErr: true, // Quoted identifiers may not be fully supported
+			shouldErr: false, // Double-quoted identifiers are now supported
 		},
 		{
 			name:      "Multiple identifiers in SELECT",

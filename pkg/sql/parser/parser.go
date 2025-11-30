@@ -605,6 +605,13 @@ func (p *Parser) isAnyType(types ...models.TokenType) bool {
 	return false
 }
 
+// isIdentifier checks if the current token is an identifier.
+// Includes both regular identifiers and double-quoted identifiers.
+// In SQL, double-quoted strings are treated as identifiers (e.g., "column_name").
+func (p *Parser) isIdentifier() bool {
+	return p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeDoubleQuotedString)
+}
+
 // matchType checks if the current token's ModelType matches and advances if true.
 // Returns true if matched (and advanced), false otherwise.
 func (p *Parser) matchType(expected models.TokenType) bool {
@@ -676,7 +683,9 @@ func (p *Parser) expectedError(expected string) error {
 
 // parseIdent parses an identifier
 func (p *Parser) parseIdent() *ast.Identifier {
-	if p.currentToken.Type != token.IDENT && p.currentToken.Type != "IDENT" {
+	// Accept both regular identifiers and double-quoted identifiers
+	if p.currentToken.Type != token.IDENT && p.currentToken.Type != "IDENT" &&
+		!p.isType(models.TokenTypeDoubleQuotedString) {
 		return nil
 	}
 	ident := &ast.Identifier{Name: p.currentToken.Literal}
@@ -714,8 +723,8 @@ func (p *Parser) parseStringLiteral() string {
 
 // Accepts IDENT or non-reserved keywords that can be used as table names
 func (p *Parser) parseTableReference() (*ast.TableReference, error) {
-	// Accept IDENT or keywords that can be used as table names
-	if p.currentToken.Type != "IDENT" && !p.isNonReservedKeyword() {
+	// Accept IDENT, double-quoted identifiers, or keywords that can be used as table names
+	if !p.isIdentifier() && !p.isNonReservedKeyword() {
 		return nil, p.expectedError("table name")
 	}
 	tableName := p.currentToken.Literal
@@ -738,9 +747,9 @@ func (p *Parser) isNonReservedKeyword() bool {
 }
 
 // canBeAlias checks if current token can be used as an alias
-// Aliases can be IDENT or certain non-reserved keywords
+// Aliases can be IDENT, double-quoted identifiers, or certain non-reserved keywords
 func (p *Parser) canBeAlias() bool {
-	return p.currentToken.Type == "IDENT" || p.isNonReservedKeyword()
+	return p.isIdentifier() || p.isNonReservedKeyword()
 }
 
 // parseAlterTableStmt is a simplified version for the parser implementation
@@ -754,7 +763,7 @@ func (p *Parser) parseAlterTableStmt() (ast.Statement, error) {
 // isJoinKeyword checks if current token is a JOIN-related keyword
 func (p *Parser) isJoinKeyword() bool {
 	switch p.currentToken.Type {
-	case "JOIN", "INNER", "LEFT", "RIGHT", "FULL", "CROSS":
+	case "JOIN", "INNER", "LEFT", "RIGHT", "FULL", "CROSS", "NATURAL":
 		return true
 	default:
 		return false

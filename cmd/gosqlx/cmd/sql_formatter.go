@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -482,8 +483,72 @@ func (f *SQLFormatter) formatExpression(expr ast.Expression) error {
 		}
 		f.builder.WriteString(e.Name)
 	case *ast.LiteralValue:
-		f.builder.WriteString(e.TokenLiteral())
+		// Handle string literals with proper quoting
+		if e.Type == "string" || e.Type == "STRING" {
+			// Escape single quotes in the string value and wrap in quotes
+			// Use type assertion for efficiency instead of fmt.Sprintf
+			var strVal string
+			if str, ok := e.Value.(string); ok {
+				strVal = str
+			} else {
+				strVal = fmt.Sprintf("%v", e.Value)
+			}
+			escaped := strings.ReplaceAll(strVal, "'", "''")
+			f.builder.WriteString("'")
+			f.builder.WriteString(escaped)
+			f.builder.WriteString("'")
+		} else if e.Type == "null" || e.Type == "NULL" {
+			f.writeKeyword("NULL")
+		} else {
+			// For non-string types, use type assertions for common types
+			switch v := e.Value.(type) {
+			case string:
+				f.builder.WriteString(v)
+			case int:
+				f.builder.WriteString(strconv.Itoa(v))
+			case int64:
+				f.builder.WriteString(strconv.FormatInt(v, 10))
+			case float64:
+				f.builder.WriteString(strconv.FormatFloat(v, 'f', -1, 64))
+			case bool:
+				if v {
+					f.writeKeyword("TRUE")
+				} else {
+					f.writeKeyword("FALSE")
+				}
+			default:
+				f.builder.WriteString(fmt.Sprintf("%v", e.Value))
+			}
+		}
 	case *ast.BinaryExpression:
+		// Handle IS NULL / IS NOT NULL specially
+		if e.Operator == "IS NULL" {
+			if err := f.formatExpression(e.Left); err != nil {
+				return err
+			}
+			if e.Not {
+				f.builder.WriteString(" IS NOT NULL")
+			} else {
+				f.builder.WriteString(" IS NULL")
+			}
+			return nil
+		}
+		// Handle LIKE operator
+		if e.Operator == "LIKE" {
+			if err := f.formatExpression(e.Left); err != nil {
+				return err
+			}
+			if e.Not {
+				f.builder.WriteString(" NOT LIKE ")
+			} else {
+				f.builder.WriteString(" LIKE ")
+			}
+			if err := f.formatExpression(e.Right); err != nil {
+				return err
+			}
+			return nil
+		}
+		// Standard binary expression
 		if err := f.formatExpression(e.Left); err != nil {
 			return err
 		}
@@ -544,6 +609,79 @@ func (f *SQLFormatter) formatExpression(expr ast.Expression) error {
 		}
 		f.builder.WriteString(" ")
 		f.writeKeyword("END")
+	case *ast.BetweenExpression:
+		// Handle BETWEEN expr AND expr
+		if err := f.formatExpression(e.Expr); err != nil {
+			return err
+		}
+		if e.Not {
+			f.builder.WriteString(" ")
+			f.writeKeyword("NOT BETWEEN")
+		} else {
+			f.builder.WriteString(" ")
+			f.writeKeyword("BETWEEN")
+		}
+		f.builder.WriteString(" ")
+		if err := f.formatExpression(e.Lower); err != nil {
+			return err
+		}
+		f.builder.WriteString(" ")
+		f.writeKeyword("AND")
+		f.builder.WriteString(" ")
+		if err := f.formatExpression(e.Upper); err != nil {
+			return err
+		}
+	case *ast.InExpression:
+		// Handle IN (values) or IN (subquery)
+		if err := f.formatExpression(e.Expr); err != nil {
+			return err
+		}
+		if e.Not {
+			f.builder.WriteString(" ")
+			f.writeKeyword("NOT IN")
+		} else {
+			f.builder.WriteString(" ")
+			f.writeKeyword("IN")
+		}
+		f.builder.WriteString(" (")
+		if e.Subquery != nil {
+			// IN (SELECT ...)
+			if selectStmt, ok := e.Subquery.(*ast.SelectStatement); ok {
+				if err := f.formatSelect(selectStmt); err != nil {
+					return err
+				}
+			}
+		} else {
+			// IN (value1, value2, ...)
+			f.formatExpressionList(e.List, ", ")
+		}
+		f.builder.WriteString(")")
+	case *ast.ExistsExpression:
+		// Handle EXISTS (subquery) - NOT EXISTS is handled via UnaryExpression
+		f.writeKeyword("EXISTS")
+		f.builder.WriteString(" (")
+		if selectStmt, ok := e.Subquery.(*ast.SelectStatement); ok {
+			if err := f.formatSelect(selectStmt); err != nil {
+				return err
+			}
+		}
+		f.builder.WriteString(")")
+	case *ast.SubqueryExpression:
+		// Handle scalar subquery (SELECT ...)
+		f.builder.WriteString("(")
+		if selectStmt, ok := e.Subquery.(*ast.SelectStatement); ok {
+			if err := f.formatSelect(selectStmt); err != nil {
+				return err
+			}
+		}
+		f.builder.WriteString(")")
+	case *ast.UnaryExpression:
+		// Handle NOT expr, - expr, etc.
+		f.builder.WriteString(e.Operator.String())
+		f.builder.WriteString(" ")
+		if err := f.formatExpression(e.Expr); err != nil {
+			return err
+		}
 	default:
 		// Fallback for unsupported expressions
 		f.builder.WriteString(expr.TokenLiteral())

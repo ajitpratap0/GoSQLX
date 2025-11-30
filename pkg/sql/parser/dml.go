@@ -70,7 +70,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 			// including function calls like NOW(), UUID(), etc.
 			expr, err := p.parseExpression()
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to parse value at position %d in VALUES clause: %w", len(values)+1, err)
 			}
 			values = append(values, expr)
 

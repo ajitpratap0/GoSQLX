@@ -689,7 +689,9 @@ func (f *SQLFormatter) formatExpression(expr ast.Expression) error {
 		}
 		f.builder.WriteString(" ")
 		f.writeKeyword("AS")
-		f.builder.WriteString(" " + e.Alias)
+		f.builder.WriteString(" ")
+		// Quote alias if it contains special characters or is a reserved keyword
+		f.formatIdentifier(e.Alias)
 	default:
 		// Fallback for unsupported expressions
 		f.builder.WriteString(expr.TokenLiteral())
@@ -806,7 +808,46 @@ func (f *SQLFormatter) formatUpdateExpression(update *ast.UpdateExpression) erro
 func (f *SQLFormatter) formatColumnDef(col *ast.ColumnDef) {
 	f.builder.WriteString(col.Name + " " + col.Type)
 	for _, constraint := range col.Constraints {
-		f.builder.WriteString(" " + constraint.Type)
+		f.builder.WriteString(" ")
+		f.writeKeyword(constraint.Type)
+		// Format DEFAULT value if present
+		if constraint.Type == "DEFAULT" && constraint.Default != nil {
+			f.builder.WriteString(" ")
+			if err := f.formatExpression(constraint.Default); err != nil {
+				// Fallback to token literal on error
+				f.builder.WriteString(constraint.Default.TokenLiteral())
+			}
+		}
+		// Format CHECK expression if present
+		if constraint.Type == "CHECK" && constraint.Check != nil {
+			f.builder.WriteString(" (")
+			if err := f.formatExpression(constraint.Check); err != nil {
+				f.builder.WriteString(constraint.Check.TokenLiteral())
+			}
+			f.builder.WriteString(")")
+		}
+		// Format REFERENCES if present
+		if constraint.Type == "REFERENCES" && constraint.References != nil {
+			f.builder.WriteString(" ")
+			f.builder.WriteString(constraint.References.Table)
+			if len(constraint.References.Columns) > 0 {
+				f.builder.WriteString("(")
+				f.builder.WriteString(strings.Join(constraint.References.Columns, ", "))
+				f.builder.WriteString(")")
+			}
+			if constraint.References.OnDelete != "" {
+				f.builder.WriteString(" ")
+				f.writeKeyword("ON DELETE")
+				f.builder.WriteString(" ")
+				f.writeKeyword(constraint.References.OnDelete)
+			}
+			if constraint.References.OnUpdate != "" {
+				f.builder.WriteString(" ")
+				f.writeKeyword("ON UPDATE")
+				f.builder.WriteString(" ")
+				f.writeKeyword(constraint.References.OnUpdate)
+			}
+		}
 	}
 }
 
@@ -828,6 +869,49 @@ func (f *SQLFormatter) writeKeyword(keyword string) {
 	} else {
 		f.builder.WriteString(strings.ToLower(keyword))
 	}
+}
+
+// formatIdentifier formats an identifier, quoting it if it contains special characters
+// or is a reserved keyword
+func (f *SQLFormatter) formatIdentifier(ident string) {
+	if f.needsQuoting(ident) {
+		f.builder.WriteString("\"")
+		// Escape any existing double quotes by doubling them
+		escaped := strings.ReplaceAll(ident, "\"", "\"\"")
+		f.builder.WriteString(escaped)
+		f.builder.WriteString("\"")
+	} else {
+		f.builder.WriteString(ident)
+	}
+}
+
+// needsQuoting returns true if the identifier needs to be quoted
+func (f *SQLFormatter) needsQuoting(ident string) bool {
+	if len(ident) == 0 {
+		return true
+	}
+	// Check if it starts with a digit
+	if ident[0] >= '0' && ident[0] <= '9' {
+		return true
+	}
+	// Check for special characters (allow only letters, digits, and underscore)
+	for _, c := range ident {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
+			return true
+		}
+	}
+	// Check for common SQL reserved keywords that might be used as aliases
+	reserved := map[string]bool{
+		"SELECT": true, "FROM": true, "WHERE": true, "AND": true, "OR": true,
+		"ORDER": true, "BY": true, "GROUP": true, "HAVING": true, "JOIN": true,
+		"LEFT": true, "RIGHT": true, "INNER": true, "OUTER": true, "ON": true,
+		"AS": true, "TABLE": true, "INDEX": true, "CREATE": true, "DROP": true,
+		"INSERT": true, "UPDATE": true, "DELETE": true, "INTO": true, "VALUES": true,
+		"SET": true, "NULL": true, "NOT": true, "IN": true, "LIKE": true,
+		"BETWEEN": true, "EXISTS": true, "CASE": true, "WHEN": true, "THEN": true,
+		"ELSE": true, "END": true, "DISTINCT": true, "ALL": true, "UNION": true,
+	}
+	return reserved[strings.ToUpper(ident)]
 }
 
 func (f *SQLFormatter) writeNewline() {

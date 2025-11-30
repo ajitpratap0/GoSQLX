@@ -88,14 +88,31 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 				return nil, err
 			}
 
-			// Check for optional column alias (AS alias_name)
+			// Check for optional column alias (AS alias_name or just alias_name)
 			if p.isType(models.TokenTypeAs) {
 				p.advance() // Consume AS
 				if !p.isIdentifier() {
 					return nil, p.expectedError("alias name after AS")
 				}
-				// Consume the alias name (for now we don't store it in AST)
+				alias := p.currentToken.Literal
 				p.advance()
+				// Wrap expression with alias
+				expr = &ast.AliasedExpression{
+					Expr:  expr,
+					Alias: alias,
+				}
+			} else if p.canBeAlias() {
+				// Handle implicit alias (identifier without AS keyword)
+				// But only for certain expression types, not for simple identifiers
+				// to avoid ambiguity with FROM clause
+				if _, ok := expr.(*ast.Identifier); !ok {
+					alias := p.currentToken.Literal
+					p.advance()
+					expr = &ast.AliasedExpression{
+						Expr:  expr,
+						Alias: alias,
+					}
+				}
 			}
 
 			columns = append(columns, expr)
@@ -121,19 +138,53 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	if p.isType(models.TokenTypeFrom) {
 		p.advance() // Consume FROM
 
-		// Parse table name
-		if !p.isIdentifier() {
-			return nil, p.expectedError("table name")
-		}
-		tableName = p.currentToken.Literal
-		p.advance()
+		var tableRef ast.TableReference
 
-		// Create table reference
-		tableRef := ast.TableReference{
-			Name: tableName,
+		// Check for derived table (subquery in parentheses)
+		if p.isType(models.TokenTypeLParen) {
+			p.advance() // Consume (
+
+			// Check if this is a subquery (starts with SELECT or WITH)
+			if !p.isType(models.TokenTypeSelect) && !p.isType(models.TokenTypeWith) {
+				return nil, p.expectedError("SELECT in derived table")
+			}
+
+			// Consume SELECT token before calling parseSelectStatement
+			p.advance() // Consume SELECT
+
+			// Parse the subquery
+			subquery, err := p.parseSelectStatement()
+			if err != nil {
+				return nil, err
+			}
+			selectStmt, ok := subquery.(*ast.SelectStatement)
+			if !ok {
+				return nil, p.expectedError("SELECT statement in derived table")
+			}
+
+			// Expect closing parenthesis
+			if !p.isType(models.TokenTypeRParen) {
+				return nil, p.expectedError(")")
+			}
+			p.advance() // Consume )
+
+			tableRef = ast.TableReference{
+				Subquery: selectStmt,
+			}
+		} else {
+			// Parse regular table name
+			if !p.isIdentifier() {
+				return nil, p.expectedError("table name")
+			}
+			tableName = p.currentToken.Literal
+			p.advance()
+
+			tableRef = ast.TableReference{
+				Name: tableName,
+			}
 		}
 
-		// Check for table alias
+		// Check for table alias (required for derived tables, optional for regular tables)
 		if p.isIdentifier() || p.isType(models.TokenTypeAs) {
 			if p.isType(models.TokenTypeAs) {
 				p.advance() // Consume AS
@@ -205,21 +256,53 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			}
 			p.advance() // Consume JOIN
 
-			// Parse joined table name
-			if !p.isIdentifier() {
-				return nil, goerrors.ExpectedTokenError(
-					"table name after "+joinType+" JOIN",
-					string(p.currentToken.Type),
-					p.currentLocation(),
-					"",
-				)
-			}
-			joinedTableName := p.currentToken.Literal
-			p.advance()
+			var joinedTableRef ast.TableReference
 
-			// Create joined table reference
-			joinedTableRef := ast.TableReference{
-				Name: joinedTableName,
+			// Check for derived table (subquery in parentheses)
+			if p.isType(models.TokenTypeLParen) {
+				p.advance() // Consume (
+
+				// Check if this is a subquery (starts with SELECT or WITH)
+				if !p.isType(models.TokenTypeSelect) && !p.isType(models.TokenTypeWith) {
+					return nil, p.expectedError("SELECT in derived table")
+				}
+
+				// Consume SELECT token before calling parseSelectStatement
+				p.advance() // Consume SELECT
+
+				// Parse the subquery
+				subquery, err := p.parseSelectStatement()
+				if err != nil {
+					return nil, err
+				}
+				selectStmt, ok := subquery.(*ast.SelectStatement)
+				if !ok {
+					return nil, p.expectedError("SELECT statement in derived table")
+				}
+
+				// Expect closing parenthesis
+				if !p.isType(models.TokenTypeRParen) {
+					return nil, p.expectedError(")")
+				}
+				p.advance() // Consume )
+
+				joinedTableRef = ast.TableReference{
+					Subquery: selectStmt,
+				}
+			} else {
+				// Parse regular joined table name
+				if !p.isIdentifier() {
+					return nil, goerrors.ExpectedTokenError(
+						"table name after "+joinType+" JOIN",
+						string(p.currentToken.Type),
+						p.currentLocation(),
+						"",
+					)
+				}
+				joinedTableRef = ast.TableReference{
+					Name: p.currentToken.Literal,
+				}
+				p.advance()
 			}
 
 			// Check for table alias

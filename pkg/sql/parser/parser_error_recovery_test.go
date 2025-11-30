@@ -358,7 +358,7 @@ func TestInsertStatement_EdgeCases(t *testing.T) {
 		{
 			name:      "INSERT with NULL",
 			sql:       "INSERT INTO users (name, deleted_at) VALUES ('John', NULL)",
-			shouldErr: true, // NULL not supported as value
+			shouldErr: false, // NULL is now supported as a valid expression value
 		},
 		{
 			name:      "INSERT with numeric values",

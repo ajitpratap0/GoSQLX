@@ -632,6 +632,9 @@ func (cc *columnCollector) collectFromExpression(expr ast.Expression) {
 		for _, v := range e.Values {
 			cc.collectFromExpression(v)
 		}
+	case *ast.AliasedExpression:
+		// Unwrap the aliased expression and collect from inner expression
+		cc.collectFromExpression(e.Expr)
 	}
 }
 
@@ -790,6 +793,9 @@ func (qcc *qualifiedColumnCollector) collectFromExpression(expr ast.Expression) 
 		for _, v := range e.Values {
 			qcc.collectFromExpression(v)
 		}
+	case *ast.AliasedExpression:
+		// Unwrap the aliased expression and collect from inner expression
+		qcc.collectFromExpression(e.Expr)
 	}
 }
 
@@ -953,6 +959,9 @@ func (fc *functionCollector) collectFromExpression(expr ast.Expression) {
 		for _, v := range e.Values {
 			fc.collectFromExpression(v)
 		}
+	case *ast.AliasedExpression:
+		// Unwrap the aliased expression and collect from inner expression
+		fc.collectFromExpression(e.Expr)
 	}
 }
 

@@ -9,7 +9,6 @@ import (
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
 
 // parseInsertStatement parses an INSERT statement
@@ -67,23 +66,11 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 		p.advance() // Consume (
 
 		for {
-			// Parse value
-			var expr ast.Expression
-			switch p.currentToken.Type {
-			case "STRING":
-				expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "string"}
-				p.advance()
-			case "INT":
-				expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "int"}
-				p.advance()
-			case "FLOAT":
-				expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "float"}
-				p.advance()
-			case token.TRUE, token.FALSE:
-				expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "bool"}
-				p.advance()
-			default:
-				return nil, goerrors.UnexpectedTokenError(string(p.currentToken.Type), p.currentToken.Literal, models.Location{}, "")
+			// Parse value using parseExpression to support all expression types
+			// including function calls like NOW(), UUID(), etc.
+			expr, err := p.parseExpression()
+			if err != nil {
+				return nil, err
 			}
 			values = append(values, expr)
 

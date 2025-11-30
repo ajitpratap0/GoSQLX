@@ -682,6 +682,14 @@ func (f *SQLFormatter) formatExpression(expr ast.Expression) error {
 		if err := f.formatExpression(e.Expr); err != nil {
 			return err
 		}
+	case *ast.AliasedExpression:
+		// Handle expr AS alias
+		if err := f.formatExpression(e.Expr); err != nil {
+			return err
+		}
+		f.builder.WriteString(" ")
+		f.writeKeyword("AS")
+		f.builder.WriteString(" " + e.Alias)
 	default:
 		// Fallback for unsupported expressions
 		f.builder.WriteString(expr.TokenLiteral())
@@ -769,8 +777,20 @@ func (f *SQLFormatter) formatTableReferences(tables []ast.TableReference) {
 }
 
 func (f *SQLFormatter) formatTableReference(table *ast.TableReference) {
-	f.builder.WriteString(table.Name)
+	if table.Subquery != nil {
+		// Format derived table (subquery)
+		f.builder.WriteString("(")
+		if err := f.formatSelect(table.Subquery); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to format derived table: %v\n", err)
+		}
+		f.builder.WriteString(")")
+	} else {
+		// Format regular table name
+		f.builder.WriteString(table.Name)
+	}
 	if table.Alias != "" {
+		f.builder.WriteString(" ")
+		f.writeKeyword("AS")
 		f.builder.WriteString(" " + table.Alias)
 	}
 }

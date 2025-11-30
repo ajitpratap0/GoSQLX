@@ -74,7 +74,7 @@ func TestHandler_DocumentSymbol(t *testing.T) {
 		{
 			name:          "CREATE TABLE returns SymbolStruct kind",
 			sql:           "CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(100))",
-			expectedCount: 0, // Parser may not support CREATE TABLE yet, expect 0
+			expectedCount: 1, // Parser now supports CREATE TABLE with column constraints
 			checkSymbols: func(t *testing.T, symbols []DocumentSymbol) {
 				// Only check if symbols were returned
 				if len(symbols) > 0 {

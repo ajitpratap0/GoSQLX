@@ -11,7 +11,7 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
-// parseColumnDef parses a column definition
+// parseColumnDef parses a column definition including column constraints
 func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 	name := p.parseIdent()
 	if name == nil {
@@ -23,6 +23,7 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 		)
 	}
 
+	// Parse data type (including parameterized types like VARCHAR(100), DECIMAL(10,2))
 	dataType := p.parseIdent()
 	if dataType == nil {
 		return nil, goerrors.ExpectedTokenError(
@@ -33,31 +34,389 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 		)
 	}
 
+	dataTypeStr := dataType.Name
+
+	// Check for type parameters like VARCHAR(100) or DECIMAL(10,2)
+	if p.isType(models.TokenTypeLParen) {
+		dataTypeStr += "("
+		p.advance() // Consume (
+
+		// Parse first parameter (can be number or identifier like MAX)
+		if p.isType(models.TokenTypeNumber) || p.isType(models.TokenTypeIdentifier) {
+			dataTypeStr += p.currentToken.Literal
+			p.advance()
+		}
+
+		// Check for second parameter (e.g., DECIMAL(10,2))
+		if p.isType(models.TokenTypeComma) {
+			dataTypeStr += ","
+			p.advance()
+			if p.isType(models.TokenTypeNumber) || p.isType(models.TokenTypeIdentifier) {
+				dataTypeStr += p.currentToken.Literal
+				p.advance()
+			}
+		}
+
+		if !p.isType(models.TokenTypeRParen) {
+			return nil, p.expectedError(") after type parameters")
+		}
+		dataTypeStr += ")"
+		p.advance() // Consume )
+	}
+
 	colDef := &ast.ColumnDef{
 		Name: name.Name,
-		Type: dataType.Name,
+		Type: dataTypeStr,
+	}
+
+	// Parse column constraints
+	for {
+		constraint, ok, err := p.parseColumnConstraint()
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			break
+		}
+		colDef.Constraints = append(colDef.Constraints, *constraint)
 	}
 
 	return colDef, nil
 }
 
-// parseTableConstraint parses a table constraint
+// parseColumnConstraint parses a single column constraint
+// Returns (constraint, found, error)
+func (p *Parser) parseColumnConstraint() (*ast.ColumnConstraint, bool, error) {
+	constraint := &ast.ColumnConstraint{}
+
+	// PRIMARY KEY
+	if p.isType(models.TokenTypePrimary) {
+		p.advance() // Consume PRIMARY
+		if !p.isType(models.TokenTypeKey) {
+			return nil, false, p.expectedError("KEY after PRIMARY")
+		}
+		p.advance() // Consume KEY
+		constraint.Type = "PRIMARY KEY"
+		return constraint, true, nil
+	}
+
+	// NOT NULL
+	if p.isType(models.TokenTypeNot) {
+		p.advance() // Consume NOT
+		if !p.isType(models.TokenTypeNull) {
+			return nil, false, p.expectedError("NULL after NOT")
+		}
+		p.advance() // Consume NULL
+		constraint.Type = "NOT NULL"
+		return constraint, true, nil
+	}
+
+	// NULL (explicit nullable)
+	if p.isType(models.TokenTypeNull) {
+		p.advance() // Consume NULL
+		constraint.Type = "NULL"
+		return constraint, true, nil
+	}
+
+	// UNIQUE
+	if p.isType(models.TokenTypeUnique) {
+		p.advance() // Consume UNIQUE
+		constraint.Type = "UNIQUE"
+		return constraint, true, nil
+	}
+
+	// DEFAULT value
+	if p.isType(models.TokenTypeDefault) {
+		p.advance() // Consume DEFAULT
+		constraint.Type = "DEFAULT"
+
+		// Parse default value - can be a literal, function call, or expression in parentheses
+		expr, err := p.parseExpression()
+		if err != nil {
+			return nil, false, err
+		}
+		constraint.Default = expr
+		return constraint, true, nil
+	}
+
+	// CHECK (expression)
+	if p.isType(models.TokenTypeCheck) {
+		p.advance() // Consume CHECK
+		constraint.Type = "CHECK"
+
+		if !p.isType(models.TokenTypeLParen) {
+			return nil, false, p.expectedError("( after CHECK")
+		}
+		p.advance() // Consume (
+
+		expr, err := p.parseExpression()
+		if err != nil {
+			return nil, false, err
+		}
+		constraint.Check = expr
+
+		if !p.isType(models.TokenTypeRParen) {
+			return nil, false, p.expectedError(") after CHECK expression")
+		}
+		p.advance() // Consume )
+		return constraint, true, nil
+	}
+
+	// REFERENCES table(column) - inline foreign key
+	if p.isType(models.TokenTypeReferences) {
+		p.advance() // Consume REFERENCES
+		constraint.Type = "REFERENCES"
+
+		// Parse referenced table name
+		if !p.isType(models.TokenTypeIdentifier) {
+			return nil, false, p.expectedError("table name after REFERENCES")
+		}
+		refDef := &ast.ReferenceDefinition{
+			Table: p.currentToken.Literal,
+		}
+		p.advance()
+
+		// Parse optional column list
+		if p.isType(models.TokenTypeLParen) {
+			p.advance() // Consume (
+			for {
+				if !p.isType(models.TokenTypeIdentifier) {
+					return nil, false, p.expectedError("column name in REFERENCES")
+				}
+				refDef.Columns = append(refDef.Columns, p.currentToken.Literal)
+				p.advance()
+
+				if p.isType(models.TokenTypeComma) {
+					p.advance()
+					continue
+				}
+				break
+			}
+			if !p.isType(models.TokenTypeRParen) {
+				return nil, false, p.expectedError(") after REFERENCES columns")
+			}
+			p.advance() // Consume )
+		}
+
+		// Parse optional ON DELETE/UPDATE
+		refDef.OnDelete, refDef.OnUpdate = p.parseReferentialActions()
+		constraint.References = refDef
+		return constraint, true, nil
+	}
+
+	// AUTO_INCREMENT (MySQL)
+	if p.isType(models.TokenTypeAutoIncrement) {
+		p.advance() // Consume AUTO_INCREMENT
+		constraint.Type = "AUTO_INCREMENT"
+		constraint.AutoIncrement = true
+		return constraint, true, nil
+	}
+
+	// No constraint found
+	return nil, false, nil
+}
+
+// parseReferentialActions parses ON DELETE and ON UPDATE actions
+func (p *Parser) parseReferentialActions() (onDelete, onUpdate string) {
+	for {
+		if !p.isType(models.TokenTypeOn) {
+			break
+		}
+		p.advance() // Consume ON
+
+		if p.isType(models.TokenTypeDelete) {
+			p.advance() // Consume DELETE
+			onDelete = p.parseReferentialAction()
+		} else if p.isType(models.TokenTypeUpdate) {
+			p.advance() // Consume UPDATE
+			onUpdate = p.parseReferentialAction()
+		} else {
+			break
+		}
+	}
+	return
+}
+
+// parseReferentialAction parses a single referential action (CASCADE, SET NULL, etc.)
+func (p *Parser) parseReferentialAction() string {
+	if p.isType(models.TokenTypeCascade) {
+		p.advance()
+		return "CASCADE"
+	}
+	if p.isType(models.TokenTypeRestrict) {
+		p.advance()
+		return "RESTRICT"
+	}
+	if p.isType(models.TokenTypeSet) {
+		p.advance() // Consume SET
+		if p.isType(models.TokenTypeNull) {
+			p.advance()
+			return "SET NULL"
+		}
+		if p.isType(models.TokenTypeDefault) {
+			p.advance()
+			return "SET DEFAULT"
+		}
+	}
+	if p.isTokenMatch("NO") {
+		p.advance() // Consume NO
+		if p.isTokenMatch("ACTION") {
+			p.advance()
+			return "NO ACTION"
+		}
+	}
+	return ""
+}
+
+// parseTableConstraint parses a table constraint (PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK)
 func (p *Parser) parseTableConstraint() (*ast.TableConstraint, error) {
-	name := p.parseIdent()
-	if name == nil {
-		return nil, goerrors.ExpectedTokenError(
-			"constraint name",
-			string(p.currentToken.Type),
-			p.currentLocation(),
-			"",
-		)
+	constraint := &ast.TableConstraint{}
+
+	// Check for optional CONSTRAINT keyword (may already be consumed by caller)
+	if p.isType(models.TokenTypeConstraint) {
+		p.advance() // Consume CONSTRAINT
 	}
 
-	constraint := &ast.TableConstraint{
-		Name: name.Name,
+	// Check for optional constraint name (identifier that isn't a constraint type keyword)
+	// Constraint name comes before the constraint type (PRIMARY, FOREIGN, UNIQUE, CHECK)
+	if p.isType(models.TokenTypeIdentifier) &&
+		!p.isAnyType(models.TokenTypePrimary, models.TokenTypeForeign, models.TokenTypeUnique, models.TokenTypeCheck) {
+		constraint.Name = p.currentToken.Literal
+		p.advance()
 	}
 
-	return constraint, nil
+	// PRIMARY KEY (column_list)
+	if p.isType(models.TokenTypePrimary) {
+		p.advance() // Consume PRIMARY
+		if !p.isType(models.TokenTypeKey) {
+			return nil, p.expectedError("KEY after PRIMARY")
+		}
+		p.advance() // Consume KEY
+		constraint.Type = "PRIMARY KEY"
+
+		// Parse column list
+		columns, err := p.parseConstraintColumnList()
+		if err != nil {
+			return nil, err
+		}
+		constraint.Columns = columns
+		return constraint, nil
+	}
+
+	// FOREIGN KEY (column_list) REFERENCES table(column_list)
+	if p.isType(models.TokenTypeForeign) {
+		p.advance() // Consume FOREIGN
+		if !p.isType(models.TokenTypeKey) {
+			return nil, p.expectedError("KEY after FOREIGN")
+		}
+		p.advance() // Consume KEY
+		constraint.Type = "FOREIGN KEY"
+
+		// Parse column list
+		columns, err := p.parseConstraintColumnList()
+		if err != nil {
+			return nil, err
+		}
+		constraint.Columns = columns
+
+		// Expect REFERENCES
+		if !p.isType(models.TokenTypeReferences) {
+			return nil, p.expectedError("REFERENCES after FOREIGN KEY columns")
+		}
+		p.advance() // Consume REFERENCES
+
+		// Parse referenced table
+		if !p.isType(models.TokenTypeIdentifier) {
+			return nil, p.expectedError("table name after REFERENCES")
+		}
+		refDef := &ast.ReferenceDefinition{
+			Table: p.currentToken.Literal,
+		}
+		p.advance()
+
+		// Parse optional referenced column list
+		if p.isType(models.TokenTypeLParen) {
+			refColumns, err := p.parseConstraintColumnList()
+			if err != nil {
+				return nil, err
+			}
+			refDef.Columns = refColumns
+		}
+
+		// Parse optional ON DELETE/UPDATE
+		refDef.OnDelete, refDef.OnUpdate = p.parseReferentialActions()
+		constraint.References = refDef
+		return constraint, nil
+	}
+
+	// UNIQUE (column_list)
+	if p.isType(models.TokenTypeUnique) {
+		p.advance() // Consume UNIQUE
+		constraint.Type = "UNIQUE"
+
+		// Parse column list
+		columns, err := p.parseConstraintColumnList()
+		if err != nil {
+			return nil, err
+		}
+		constraint.Columns = columns
+		return constraint, nil
+	}
+
+	// CHECK (expression)
+	if p.isType(models.TokenTypeCheck) {
+		p.advance() // Consume CHECK
+		constraint.Type = "CHECK"
+
+		if !p.isType(models.TokenTypeLParen) {
+			return nil, p.expectedError("( after CHECK")
+		}
+		p.advance() // Consume (
+
+		expr, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+		constraint.Check = expr
+
+		if !p.isType(models.TokenTypeRParen) {
+			return nil, p.expectedError(") after CHECK expression")
+		}
+		p.advance() // Consume )
+		return constraint, nil
+	}
+
+	return nil, p.expectedError("constraint name or constraint type (PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK)")
+}
+
+// parseConstraintColumnList parses a parenthesized list of column names
+func (p *Parser) parseConstraintColumnList() ([]string, error) {
+	if !p.isType(models.TokenTypeLParen) {
+		return nil, p.expectedError("( for column list")
+	}
+	p.advance() // Consume (
+
+	var columns []string
+	for {
+		if !p.isType(models.TokenTypeIdentifier) {
+			return nil, p.expectedError("column name")
+		}
+		columns = append(columns, p.currentToken.Literal)
+		p.advance()
+
+		if p.isType(models.TokenTypeComma) {
+			p.advance()
+			continue
+		}
+		break
+	}
+
+	if !p.isType(models.TokenTypeRParen) {
+		return nil, p.expectedError(") after column list")
+	}
+	p.advance() // Consume )
+
+	return columns, nil
 }
 
 // parseSelectStatement parses a SELECT statement

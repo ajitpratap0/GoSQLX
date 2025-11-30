@@ -175,6 +175,12 @@ var (
 		},
 	}
 
+	aliasedExprPool = sync.Pool{
+		New: func() interface{} {
+			return &AliasedExpression{}
+		},
+	}
+
 	// Slice pools
 	exprSlicePool = sync.Pool{
 		New: func() interface{} {
@@ -652,6 +658,14 @@ func PutExpression(expr Expression) {
 			e.Length = nil
 			substringExprPool.Put(e)
 
+		case *AliasedExpression:
+			if e.Expr != nil {
+				workQueue = append(workQueue, e.Expr)
+			}
+			e.Expr = nil
+			e.Alias = ""
+			aliasedExprPool.Put(e)
+
 		// Default case - expression type not pooled, just ignore
 		default:
 			// Unknown expression type - no pool available
@@ -779,4 +793,20 @@ func PutCastExpression(ce *CastExpression) {
 	ce.Expr = nil
 	ce.Type = ""
 	castExprPool.Put(ce)
+}
+
+// GetAliasedExpression retrieves an AliasedExpression from the pool
+func GetAliasedExpression() *AliasedExpression {
+	return aliasedExprPool.Get().(*AliasedExpression)
+}
+
+// PutAliasedExpression returns an AliasedExpression to the pool
+func PutAliasedExpression(ae *AliasedExpression) {
+	if ae == nil {
+		return
+	}
+	PutExpression(ae.Expr)
+	ae.Expr = nil
+	ae.Alias = ""
+	aliasedExprPool.Put(ae)
 }

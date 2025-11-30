@@ -566,3 +566,298 @@ func TestParseColumnDef_MoreCases(t *testing.T) {
 		})
 	}
 }
+
+// TestDerivedTables_Comprehensive tests derived table (subquery in FROM) parsing
+func TestDerivedTables_Comprehensive(t *testing.T) {
+	tests := []struct {
+		name      string
+		sql       string
+		shouldErr bool
+	}{
+		{
+			name:      "Simple derived table",
+			sql:       "SELECT * FROM (SELECT id, name FROM users) AS u",
+			shouldErr: false,
+		},
+		{
+			name:      "Derived table with WHERE",
+			sql:       "SELECT * FROM (SELECT id, name FROM users WHERE active = true) AS active_users",
+			shouldErr: false,
+		},
+		{
+			name:      "Derived table in JOIN",
+			sql:       "SELECT u.name, o.total FROM users u JOIN (SELECT user_id, SUM(amount) AS total FROM orders GROUP BY user_id) AS o ON u.id = o.user_id",
+			shouldErr: false,
+		},
+		{
+			name:      "Multiple derived tables",
+			sql:       "SELECT a.name, b.cnt FROM (SELECT * FROM users) AS a JOIN (SELECT user_id, COUNT(*) AS cnt FROM orders GROUP BY user_id) AS b ON a.id = b.user_id",
+			shouldErr: false,
+		},
+		{
+			name:      "Nested derived tables (2 levels)",
+			sql:       "SELECT * FROM (SELECT * FROM (SELECT id FROM users) AS inner_q) AS outer_q",
+			shouldErr: false,
+		},
+		{
+			name:      "Derived table with complex subquery",
+			sql:       "SELECT * FROM (SELECT u.id, u.name, COUNT(o.id) AS order_count FROM users u LEFT JOIN orders o ON u.id = o.user_id GROUP BY u.id, u.name HAVING COUNT(o.id) > 5) AS active_customers",
+			shouldErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens := tokenizeSQL(t, tt.sql)
+			p := NewParser()
+			result, err := p.Parse(tokens)
+
+			if tt.shouldErr {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+					return
+				}
+				if result == nil || len(result.Statements) == 0 {
+					t.Error("Expected parsed statement, got nil or empty")
+				}
+			}
+		})
+	}
+}
+
+// TestColumnConstraints_REFERENCES tests REFERENCES constraint parsing
+func TestColumnConstraints_REFERENCES(t *testing.T) {
+	tests := []struct {
+		name      string
+		sql       string
+		shouldErr bool
+	}{
+		{
+			name:      "Simple REFERENCES",
+			sql:       "CREATE TABLE orders (user_id INT REFERENCES users(id))",
+			shouldErr: false,
+		},
+		{
+			name:      "REFERENCES with ON DELETE CASCADE",
+			sql:       "CREATE TABLE orders (user_id INT REFERENCES users(id) ON DELETE CASCADE)",
+			shouldErr: false,
+		},
+		{
+			name:      "REFERENCES with ON UPDATE SET NULL",
+			sql:       "CREATE TABLE orders (user_id INT REFERENCES users(id) ON UPDATE SET NULL)",
+			shouldErr: false,
+		},
+		{
+			name:      "REFERENCES with both ON DELETE and ON UPDATE",
+			sql:       "CREATE TABLE comments (post_id INT REFERENCES posts(id) ON DELETE CASCADE ON UPDATE SET NULL)",
+			shouldErr: false,
+		},
+		{
+			name:      "REFERENCES with RESTRICT",
+			sql:       "CREATE TABLE items (category_id INT REFERENCES categories(id) ON DELETE RESTRICT)",
+			shouldErr: false,
+		},
+		{
+			name:      "REFERENCES with SET DEFAULT",
+			sql:       "CREATE TABLE logs (user_id INT REFERENCES users(id) ON DELETE SET DEFAULT)",
+			shouldErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens := tokenizeSQL(t, tt.sql)
+			p := NewParser()
+			result, err := p.Parse(tokens)
+
+			if tt.shouldErr {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+					return
+				}
+				if result == nil || len(result.Statements) == 0 {
+					t.Error("Expected parsed statement, got nil or empty")
+				}
+			}
+		})
+	}
+}
+
+// TestColumnConstraints_CHECK tests CHECK constraint parsing
+func TestColumnConstraints_CHECK(t *testing.T) {
+	tests := []struct {
+		name      string
+		sql       string
+		shouldErr bool
+	}{
+		{
+			name:      "Simple CHECK with comparison",
+			sql:       "CREATE TABLE products (quantity INT CHECK (quantity >= 0))",
+			shouldErr: false,
+		},
+		{
+			name:      "CHECK with multiple conditions",
+			sql:       "CREATE TABLE users (age INT CHECK (age >= 0 AND age <= 150))",
+			shouldErr: false,
+		},
+		{
+			name:      "CHECK on string column",
+			sql:       "CREATE TABLE statuses (status VARCHAR(20) CHECK (status IN ('active', 'inactive', 'pending')))",
+			shouldErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens := tokenizeSQL(t, tt.sql)
+			p := NewParser()
+			result, err := p.Parse(tokens)
+
+			if tt.shouldErr {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+					return
+				}
+				if result == nil || len(result.Statements) == 0 {
+					t.Error("Expected parsed statement, got nil or empty")
+				}
+			}
+		})
+	}
+}
+
+// TestInsertWithFunctionCalls tests INSERT VALUES with function calls
+func TestInsertWithFunctionCalls(t *testing.T) {
+	tests := []struct {
+		name      string
+		sql       string
+		shouldErr bool
+	}{
+		{
+			name:      "INSERT with NOW()",
+			sql:       "INSERT INTO logs (created_at) VALUES (NOW())",
+			shouldErr: false,
+		},
+		{
+			name:      "INSERT with multiple functions",
+			sql:       "INSERT INTO users (id, created_at, updated_at) VALUES (UUID(), NOW(), NOW())",
+			shouldErr: false,
+		},
+		{
+			name:      "INSERT with CONCAT",
+			sql:       "INSERT INTO messages (content) VALUES (CONCAT('Hello, ', 'World!'))",
+			shouldErr: false,
+		},
+		{
+			name:      "INSERT with arithmetic expression",
+			sql:       "INSERT INTO orders (total) VALUES (100 + 50 * 2)",
+			shouldErr: false,
+		},
+		{
+			name:      "INSERT with nested functions",
+			sql:       "INSERT INTO logs (message) VALUES (UPPER(CONCAT('Error: ', 'test')))",
+			shouldErr: false,
+		},
+		{
+			name:      "INSERT with NULL",
+			sql:       "INSERT INTO users (name, deleted_at) VALUES ('John', NULL)",
+			shouldErr: false,
+		},
+		{
+			name:      "INSERT with mixed values",
+			sql:       "INSERT INTO orders (id, amount, description, created_at) VALUES (1, 99.99, 'Test order', CURRENT_TIMESTAMP)",
+			shouldErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens := tokenizeSQL(t, tt.sql)
+			p := NewParser()
+			result, err := p.Parse(tokens)
+
+			if tt.shouldErr {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+					return
+				}
+				if result == nil || len(result.Statements) == 0 {
+					t.Error("Expected parsed statement, got nil or empty")
+				}
+			}
+		})
+	}
+}
+
+// TestAliasedExpressions tests column aliases with AS keyword
+func TestAliasedExpressions(t *testing.T) {
+	tests := []struct {
+		name      string
+		sql       string
+		shouldErr bool
+	}{
+		{
+			name:      "Simple alias",
+			sql:       "SELECT id AS user_id FROM users",
+			shouldErr: false,
+		},
+		{
+			name:      "Multiple aliases",
+			sql:       "SELECT id AS user_id, name AS user_name, email AS contact_email FROM users",
+			shouldErr: false,
+		},
+		{
+			name:      "Alias on expression",
+			sql:       "SELECT COUNT(*) AS total_count FROM users",
+			shouldErr: false,
+		},
+		{
+			name:      "Alias on complex expression",
+			sql:       "SELECT price * quantity AS total_price FROM order_items",
+			shouldErr: false,
+		},
+		{
+			name:      "Mixed aliased and non-aliased columns",
+			sql:       "SELECT id, name AS full_name, email FROM users",
+			shouldErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens := tokenizeSQL(t, tt.sql)
+			p := NewParser()
+			result, err := p.Parse(tokens)
+
+			if tt.shouldErr {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+					return
+				}
+				if result == nil || len(result.Statements) == 0 {
+					t.Error("Expected parsed statement, got nil or empty")
+				}
+			}
+		})
+	}
+}

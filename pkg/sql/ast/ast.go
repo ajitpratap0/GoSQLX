@@ -105,14 +105,29 @@ func (j JoinClause) Children() []Node {
 }
 
 // TableReference represents a table in FROM clause
+// Can be either a simple table name or a derived table (subquery)
 type TableReference struct {
-	Name  string
-	Alias string
+	Name     string           // Table name (empty if this is a derived table)
+	Alias    string           // Optional alias
+	Subquery *SelectStatement // For derived tables: (SELECT ...) AS alias
 }
 
-func (t *TableReference) statementNode()      {}
-func (t TableReference) TokenLiteral() string { return t.Name }
-func (t TableReference) Children() []Node     { return nil }
+func (t *TableReference) statementNode() {}
+func (t TableReference) TokenLiteral() string {
+	if t.Name != "" {
+		return t.Name
+	}
+	if t.Alias != "" {
+		return t.Alias
+	}
+	return "subquery"
+}
+func (t TableReference) Children() []Node {
+	if t.Subquery != nil {
+		return []Node{t.Subquery}
+	}
+	return nil
+}
 
 // OrderByExpression represents an ORDER BY clause element with direction and NULL ordering
 type OrderByExpression struct {
@@ -521,6 +536,16 @@ type CastExpression struct {
 func (c *CastExpression) expressionNode()     {}
 func (c CastExpression) TokenLiteral() string { return "CAST" }
 func (c CastExpression) Children() []Node     { return []Node{c.Expr} }
+
+// AliasedExpression represents an expression with an alias (expr AS alias)
+type AliasedExpression struct {
+	Expr  Expression
+	Alias string
+}
+
+func (a *AliasedExpression) expressionNode()     {}
+func (a AliasedExpression) TokenLiteral() string { return a.Alias }
+func (a AliasedExpression) Children() []Node     { return []Node{a.Expr} }
 
 // ExtractExpression represents EXTRACT(field FROM source)
 type ExtractExpression struct {

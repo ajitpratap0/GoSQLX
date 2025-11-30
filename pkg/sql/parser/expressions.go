@@ -88,10 +88,10 @@ func (p *Parser) parseAndExpression() (ast.Expression, error) {
 	return left, nil
 }
 
-// parseComparisonExpression parses an expression with comparison operators (highest precedence)
+// parseComparisonExpression parses an expression with comparison operators
 func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
-	// Parse the left side (primary expression)
-	left, err := p.parsePrimaryExpression()
+	// Parse the left side using additive expression for arithmetic support
+	left, err := p.parseAdditiveExpression()
 	if err != nil {
 		return nil, err
 	}
@@ -332,6 +332,65 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	return left, nil
 }
 
+// parseAdditiveExpression parses expressions with + and - operators
+func (p *Parser) parseAdditiveExpression() (ast.Expression, error) {
+	// Parse the left side using multiplicative expression
+	left, err := p.parseMultiplicativeExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	// Handle + and - operators (left-associative)
+	for p.isType(models.TokenTypePlus) || p.isType(models.TokenTypeMinus) {
+		operator := p.currentToken.Literal
+		p.advance() // Consume operator
+
+		right, err := p.parseMultiplicativeExpression()
+		if err != nil {
+			return nil, err
+		}
+
+		left = &ast.BinaryExpression{
+			Left:     left,
+			Operator: operator,
+			Right:    right,
+		}
+	}
+
+	return left, nil
+}
+
+// parseMultiplicativeExpression parses expressions with *, /, and % operators
+func (p *Parser) parseMultiplicativeExpression() (ast.Expression, error) {
+	// Parse the left side using primary expression
+	left, err := p.parsePrimaryExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	// Handle *, /, and % operators (left-associative)
+	// Note: TokenTypeAsterisk is used for both * (SELECT) and multiplication
+	// We check context: after an expression, asterisk means multiplication
+	for p.isType(models.TokenTypeAsterisk) || p.isType(models.TokenTypeMul) ||
+		p.isType(models.TokenTypeDiv) || p.currentToken.Type == "%" {
+		operator := p.currentToken.Literal
+		p.advance() // Consume operator
+
+		right, err := p.parsePrimaryExpression()
+		if err != nil {
+			return nil, err
+		}
+
+		left = &ast.BinaryExpression{
+			Left:     left,
+			Operator: operator,
+			Right:    right,
+		}
+	}
+
+	return left, nil
+}
+
 // parsePrimaryExpression parses a primary expression (literals, identifiers, function calls)
 func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 	if p.isType(models.TokenTypeCase) {
@@ -339,8 +398,9 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return p.parseCaseExpression()
 	}
 
-	if p.isType(models.TokenTypeIdentifier) {
+	if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeDoubleQuotedString) {
 		// Handle identifiers and function calls
+		// Double-quoted strings are treated as identifiers in SQL (e.g., "column_name")
 		identName := p.currentToken.Literal
 		p.advance()
 
@@ -354,21 +414,29 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			return funcCall, nil
 		}
 
-		// Handle regular identifier or qualified identifier (table.column)
+		// Handle regular identifier or qualified identifier (table.column or table.*)
 		ident := &ast.Identifier{Name: identName}
 
-		// Check for qualified identifier (table.column)
+		// Check for qualified identifier (table.column) or qualified asterisk (table.*)
 		if p.isType(models.TokenTypePeriod) {
 			p.advance() // Consume .
-			if !p.isType(models.TokenTypeIdentifier) {
-				return nil, p.expectedError("identifier after .")
+			if p.isType(models.TokenTypeAsterisk) {
+				// Handle table.* (qualified asterisk)
+				ident = &ast.Identifier{
+					Table: ident.Name,
+					Name:  "*",
+				}
+				p.advance()
+			} else if p.isIdentifier() {
+				// Handle table.column (qualified identifier)
+				ident = &ast.Identifier{
+					Table: ident.Name,
+					Name:  p.currentToken.Literal,
+				}
+				p.advance()
+			} else {
+				return nil, p.expectedError("identifier or * after .")
 			}
-			// Create a qualified identifier
-			ident = &ast.Identifier{
-				Table: ident.Name,
-				Name:  p.currentToken.Literal,
-			}
-			p.advance()
 		}
 
 		return ident, nil

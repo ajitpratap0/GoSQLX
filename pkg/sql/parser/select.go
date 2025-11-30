@@ -64,6 +64,16 @@ func (p *Parser) parseTableConstraint() (*ast.TableConstraint, error) {
 func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	// We've already consumed the SELECT token in matchToken
 
+	// Check for DISTINCT or ALL keyword
+	isDistinct := false
+	if p.isType(models.TokenTypeDistinct) {
+		isDistinct = true
+		p.advance() // Consume DISTINCT
+	} else if p.isType(models.TokenTypeAll) {
+		// ALL is the default, just consume it
+		p.advance()
+	}
+
 	// Parse columns
 	columns := make([]ast.Expression, 0)
 	for {
@@ -81,7 +91,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			// Check for optional column alias (AS alias_name)
 			if p.isType(models.TokenTypeAs) {
 				p.advance() // Consume AS
-				if !p.isType(models.TokenTypeIdentifier) {
+				if !p.isIdentifier() {
 					return nil, p.expectedError("alias name after AS")
 				}
 				// Consume the alias name (for now we don't store it in AST)
@@ -112,7 +122,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		p.advance() // Consume FROM
 
 		// Parse table name
-		if !p.isType(models.TokenTypeIdentifier) {
+		if !p.isIdentifier() {
 			return nil, p.expectedError("table name")
 		}
 		tableName = p.currentToken.Literal
@@ -124,14 +134,14 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		}
 
 		// Check for table alias
-		if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeAs) {
+		if p.isIdentifier() || p.isType(models.TokenTypeAs) {
 			if p.isType(models.TokenTypeAs) {
 				p.advance() // Consume AS
-				if !p.isType(models.TokenTypeIdentifier) {
+				if !p.isIdentifier() {
 					return nil, p.expectedError("alias after AS")
 				}
 			}
-			if p.isType(models.TokenTypeIdentifier) {
+			if p.isIdentifier() {
 				tableRef.Alias = p.currentToken.Literal
 				p.advance()
 			}
@@ -145,6 +155,13 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		for p.isJoinKeyword() {
 			// Determine JOIN type
 			joinType := "INNER" // Default
+			isNatural := false
+
+			// Check for NATURAL keyword first (NATURAL can precede LEFT, RIGHT, FULL, INNER JOIN)
+			if p.isType(models.TokenTypeNatural) {
+				isNatural = true
+				p.advance()
+			}
 
 			if p.isType(models.TokenTypeLeft) {
 				joinType = "LEFT"
@@ -172,6 +189,11 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 				p.advance()
 			}
 
+			// If NATURAL, prepend to join type
+			if isNatural {
+				joinType = "NATURAL " + joinType
+			}
+
 			// Expect JOIN keyword
 			if !p.isType(models.TokenTypeJoin) {
 				return nil, goerrors.ExpectedTokenError(
@@ -184,7 +206,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			p.advance() // Consume JOIN
 
 			// Parse joined table name
-			if !p.isType(models.TokenTypeIdentifier) {
+			if !p.isIdentifier() {
 				return nil, goerrors.ExpectedTokenError(
 					"table name after "+joinType+" JOIN",
 					string(p.currentToken.Type),
@@ -201,14 +223,14 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			}
 
 			// Check for table alias
-			if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeAs) {
+			if p.isIdentifier() || p.isType(models.TokenTypeAs) {
 				if p.isType(models.TokenTypeAs) {
 					p.advance() // Consume AS
-					if !p.isType(models.TokenTypeIdentifier) {
+					if !p.isIdentifier() {
 						return nil, p.expectedError("alias after AS")
 					}
 				}
-				if p.isType(models.TokenTypeIdentifier) {
+				if p.isIdentifier() {
 					joinedTableRef.Alias = p.currentToken.Literal
 					p.advance()
 				}
@@ -217,8 +239,9 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			// Parse join condition (ON or USING)
 			var joinCondition ast.Expression
 
-			// CROSS JOIN doesn't require ON clause
-			if joinType != "CROSS" {
+			// CROSS JOIN and NATURAL JOIN don't require ON clause
+			isCrossJoin := joinType == "CROSS"
+			if !isCrossJoin && !isNatural {
 				if p.isType(models.TokenTypeOn) {
 					p.advance() // Consume ON
 
@@ -248,7 +271,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 					for {
 						// Parse column name
-						if !p.isType(models.TokenTypeIdentifier) {
+						if !p.isIdentifier() {
 							return nil, p.expectedError("column name in USING")
 						}
 						usingColumns = append(usingColumns, &ast.Identifier{Name: p.currentToken.Literal})
@@ -275,7 +298,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 					} else {
 						joinCondition = &ast.ListExpression{Values: usingColumns}
 					}
-				} else if joinType != "NATURAL" {
+				} else {
 					return nil, p.expectedError("ON or USING")
 				}
 			}
@@ -313,6 +336,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 	// Initialize SELECT statement
 	selectStmt := &ast.SelectStatement{
+		Distinct:  isDistinct,
 		Columns:   columns,
 		From:      tables,
 		Joins:     joins,

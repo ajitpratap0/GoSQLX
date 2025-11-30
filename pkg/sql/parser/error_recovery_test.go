@@ -999,7 +999,7 @@ func TestParser_ErrorRecovery_Expressions(t *testing.T) {
 				{Type: "FROM", Literal: "FROM"}, // Invalid token after dot
 			},
 			wantErr:       true,
-			errorContains: "identifier after .",
+			errorContains: "identifier or * after .",
 		},
 		// Note: Maximum recursion depth is already tested in CTE tests
 		// Expression parsing doesn't trigger depth limits due to shallow call structure

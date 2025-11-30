@@ -103,7 +103,7 @@ docs/
 **Installation & Setup**
 - [Installation](USAGE_GUIDE.md#installation)
 - [Prerequisites](PRODUCTION_GUIDE.md#prerequisites)
-- [Quick Start](../README.md#-quick-start)
+- [Quick Start](../README.md#quick-start)
 
 **Basic Usage**
 - [Simple Tokenization](USAGE_GUIDE.md#simple-tokenization)

@@ -578,3 +578,313 @@ func TestSetOperations_Precedence(t *testing.T) {
 		})
 	}
 }
+
+// TestParseNaturalJoin_EdgeCases tests NATURAL JOIN variants
+func TestParseNaturalJoin_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name      string
+		sql       string
+		shouldErr bool
+	}{
+		{
+			name:      "NATURAL JOIN",
+			sql:       "SELECT * FROM t1 NATURAL JOIN t2",
+			shouldErr: false,
+		},
+		{
+			name:      "NATURAL LEFT JOIN",
+			sql:       "SELECT * FROM t1 NATURAL LEFT JOIN t2",
+			shouldErr: false,
+		},
+		{
+			name:      "NATURAL RIGHT JOIN",
+			sql:       "SELECT * FROM t1 NATURAL RIGHT JOIN t2",
+			shouldErr: false,
+		},
+		{
+			name:      "NATURAL FULL JOIN",
+			sql:       "SELECT * FROM t1 NATURAL FULL JOIN t2",
+			shouldErr: false,
+		},
+		{
+			name:      "NATURAL LEFT OUTER JOIN",
+			sql:       "SELECT * FROM t1 NATURAL LEFT OUTER JOIN t2",
+			shouldErr: false,
+		},
+		{
+			name:      "mixed NATURAL and regular JOIN",
+			sql:       "SELECT * FROM t1 NATURAL JOIN t2 JOIN t3 ON t2.id = t3.id",
+			shouldErr: false,
+		},
+		{
+			name:      "multiple NATURAL JOINs",
+			sql:       "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3",
+			shouldErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens := tokenizeSQL(t, tt.sql)
+
+			p := NewParser()
+			astObj := ast.NewAST()
+			defer ast.ReleaseAST(astObj)
+
+			result, err := p.Parse(tokens)
+			if tt.shouldErr {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error, got: %v", err)
+				}
+				if result == nil || len(result.Statements) == 0 {
+					t.Error("Expected parsed statement, got nil or empty")
+				}
+			}
+		})
+	}
+}
+
+// TestParseArithmeticPrecedence_EdgeCases tests arithmetic expression precedence
+func TestParseArithmeticPrecedence_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name      string
+		sql       string
+		shouldErr bool
+	}{
+		{
+			name:      "simple addition",
+			sql:       "SELECT 1 + 2 FROM dual",
+			shouldErr: false,
+		},
+		{
+			name:      "mixed operators precedence",
+			sql:       "SELECT 1 + 2 * 3 FROM dual",
+			shouldErr: false,
+		},
+		{
+			name:      "complex arithmetic chain",
+			sql:       "SELECT 1 + 2 * 3 - 4 / 2 FROM dual",
+			shouldErr: false,
+		},
+		{
+			name:      "arithmetic in WHERE",
+			sql:       "SELECT * FROM orders WHERE total * 0.1 > 100",
+			shouldErr: false,
+		},
+		{
+			name:      "arithmetic with columns",
+			sql:       "SELECT price * quantity AS total FROM items",
+			shouldErr: false,
+		},
+		{
+			name:      "nested arithmetic",
+			sql:       "SELECT (a + b) * (c - d) FROM calc",
+			shouldErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens := tokenizeSQL(t, tt.sql)
+
+			p := NewParser()
+			astObj := ast.NewAST()
+			defer ast.ReleaseAST(astObj)
+
+			result, err := p.Parse(tokens)
+			if tt.shouldErr {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error, got: %v", err)
+				}
+				if result == nil || len(result.Statements) == 0 {
+					t.Error("Expected parsed statement, got nil or empty")
+				}
+			}
+		})
+	}
+}
+
+// TestParseDoubleQuotedIdentifiers_EdgeCases tests double-quoted identifiers
+func TestParseDoubleQuotedIdentifiers_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name      string
+		sql       string
+		shouldErr bool
+	}{
+		{
+			name:      "double-quoted column",
+			sql:       `SELECT "column_name" FROM users`,
+			shouldErr: false,
+		},
+		{
+			name:      "double-quoted table",
+			sql:       `SELECT * FROM "my_table"`,
+			shouldErr: false,
+		},
+		{
+			name:      "mixed quoted identifiers",
+			sql:       `SELECT "user_id", name FROM "user_table"`,
+			shouldErr: false,
+		},
+		{
+			name:      "double-quoted with alias",
+			sql:       `SELECT "col" AS "alias" FROM "tbl"`,
+			shouldErr: false,
+		},
+		{
+			name:      "double-quoted in JOIN",
+			sql:       `SELECT * FROM "t1" JOIN "t2" ON "t1"."id" = "t2"."id"`,
+			shouldErr: false,
+		},
+		{
+			name:      "reserved word as identifier",
+			sql:       `SELECT "select", "from" FROM "table"`,
+			shouldErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens := tokenizeSQL(t, tt.sql)
+
+			p := NewParser()
+			astObj := ast.NewAST()
+			defer ast.ReleaseAST(astObj)
+
+			result, err := p.Parse(tokens)
+			if tt.shouldErr {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error, got: %v", err)
+				}
+				if result == nil || len(result.Statements) == 0 {
+					t.Error("Expected parsed statement, got nil or empty")
+				}
+			}
+		})
+	}
+}
+
+// TestParseQualifiedAsterisk_EdgeCases tests table.* syntax
+func TestParseQualifiedAsterisk_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name      string
+		sql       string
+		shouldErr bool
+	}{
+		{
+			name:      "simple qualified asterisk",
+			sql:       "SELECT t.* FROM users t",
+			shouldErr: false,
+		},
+		{
+			name:      "qualified asterisk with other columns",
+			sql:       "SELECT u.*, o.order_date FROM users u JOIN orders o ON u.id = o.user_id",
+			shouldErr: false,
+		},
+		{
+			name:      "multiple qualified asterisks",
+			sql:       "SELECT t1.*, t2.* FROM table1 t1 CROSS JOIN table2 t2",
+			shouldErr: false,
+		},
+		{
+			name:      "qualified asterisk with full table name",
+			sql:       "SELECT users.* FROM users",
+			shouldErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens := tokenizeSQL(t, tt.sql)
+
+			p := NewParser()
+			astObj := ast.NewAST()
+			defer ast.ReleaseAST(astObj)
+
+			result, err := p.Parse(tokens)
+			if tt.shouldErr {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error, got: %v", err)
+				}
+				if result == nil || len(result.Statements) == 0 {
+					t.Error("Expected parsed statement, got nil or empty")
+				}
+			}
+		})
+	}
+}
+
+// TestParseDistinct_EdgeCases tests DISTINCT keyword parsing
+func TestParseDistinct_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name      string
+		sql       string
+		shouldErr bool
+	}{
+		{
+			name:      "simple DISTINCT",
+			sql:       "SELECT DISTINCT id FROM users",
+			shouldErr: false,
+		},
+		{
+			name:      "DISTINCT with multiple columns",
+			sql:       "SELECT DISTINCT name, email FROM users",
+			shouldErr: false,
+		},
+		{
+			name:      "DISTINCT ALL (default)",
+			sql:       "SELECT ALL id FROM users",
+			shouldErr: false,
+		},
+		{
+			name:      "DISTINCT with ORDER BY",
+			sql:       "SELECT DISTINCT name FROM users ORDER BY name",
+			shouldErr: false,
+		},
+		{
+			name:      "DISTINCT with WHERE",
+			sql:       "SELECT DISTINCT status FROM orders WHERE total > 100",
+			shouldErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens := tokenizeSQL(t, tt.sql)
+
+			p := NewParser()
+			astObj := ast.NewAST()
+			defer ast.ReleaseAST(astObj)
+
+			result, err := p.Parse(tokens)
+			if tt.shouldErr {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error, got: %v", err)
+				}
+				if result == nil || len(result.Statements) == 0 {
+					t.Error("Expected parsed statement, got nil or empty")
+				}
+			}
+		})
+	}
+}

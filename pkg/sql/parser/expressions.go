@@ -435,7 +435,11 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				}
 				p.advance()
 			} else {
-				return nil, p.expectedError("identifier or * after .")
+				return nil, goerrors.InvalidSyntaxError(
+					"expected column name or * after table qualifier",
+					p.currentLocation(),
+					"Use table.column or table.* syntax",
+				)
 			}
 		}
 

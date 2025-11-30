@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -485,13 +486,39 @@ func (f *SQLFormatter) formatExpression(expr ast.Expression) error {
 		// Handle string literals with proper quoting
 		if e.Type == "string" || e.Type == "STRING" {
 			// Escape single quotes in the string value and wrap in quotes
-			strVal := fmt.Sprintf("%v", e.Value)
+			// Use type assertion for efficiency instead of fmt.Sprintf
+			var strVal string
+			if str, ok := e.Value.(string); ok {
+				strVal = str
+			} else {
+				strVal = fmt.Sprintf("%v", e.Value)
+			}
 			escaped := strings.ReplaceAll(strVal, "'", "''")
-			f.builder.WriteString("'" + escaped + "'")
+			f.builder.WriteString("'")
+			f.builder.WriteString(escaped)
+			f.builder.WriteString("'")
 		} else if e.Type == "null" || e.Type == "NULL" {
 			f.writeKeyword("NULL")
 		} else {
-			f.builder.WriteString(fmt.Sprintf("%v", e.Value))
+			// For non-string types, use type assertions for common types
+			switch v := e.Value.(type) {
+			case string:
+				f.builder.WriteString(v)
+			case int:
+				f.builder.WriteString(strconv.Itoa(v))
+			case int64:
+				f.builder.WriteString(strconv.FormatInt(v, 10))
+			case float64:
+				f.builder.WriteString(strconv.FormatFloat(v, 'f', -1, 64))
+			case bool:
+				if v {
+					f.writeKeyword("TRUE")
+				} else {
+					f.writeKeyword("FALSE")
+				}
+			default:
+				f.builder.WriteString(fmt.Sprintf("%v", e.Value))
+			}
 		}
 	case *ast.BinaryExpression:
 		// Handle IS NULL / IS NOT NULL specially

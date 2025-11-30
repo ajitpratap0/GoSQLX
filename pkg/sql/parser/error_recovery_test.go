@@ -999,7 +999,7 @@ func TestParser_ErrorRecovery_Expressions(t *testing.T) {
 				{Type: "FROM", Literal: "FROM"}, // Invalid token after dot
 			},
 			wantErr:       true,
-			errorContains: "identifier or * after .",
+			errorContains: "expected column name or * after table qualifier",
 		},
 		// Note: Maximum recursion depth is already tested in CTE tests
 		// Expression parsing doesn't trigger depth limits due to shallow call structure

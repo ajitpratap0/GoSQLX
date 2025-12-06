@@ -278,6 +278,7 @@ const (
 	TokenTypeTies         TokenType = 376 // TIES keyword for WITH TIES in FETCH clause
 	TokenTypePercent      TokenType = 377 // PERCENT keyword for FETCH ... PERCENT ROWS
 	TokenTypeTruncate     TokenType = 378 // TRUNCATE keyword for TRUNCATE TABLE statement
+	TokenTypeReturning    TokenType = 379 // RETURNING keyword for PostgreSQL RETURNING clause
 
 	// Grouping Set Keywords (390-399)
 	TokenTypeGroupingSets TokenType = 390

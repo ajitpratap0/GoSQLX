@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/linter"
+	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/keywords"
+	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/style"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/whitespace"
 )
 
@@ -29,7 +31,14 @@ var lintCmd = &cobra.Command{
 The linter checks for common issues like:
   • L001: Trailing whitespace at end of lines
   • L002: Mixed tabs and spaces for indentation
+  • L003: Consecutive blank lines
+  • L004: Indentation depth (excessive nesting)
   • L005: Lines exceeding maximum length
+  • L006: SELECT column alignment
+  • L007: Keyword case consistency (uppercase/lowercase)
+  • L008: Comma placement (trailing vs leading)
+  • L009: Aliasing consistency (table aliases)
+  • L010: Redundant whitespace (multiple spaces)
 
 Examples:
   gosqlx lint query.sql                # Lint single file
@@ -264,9 +273,21 @@ func lintFromStdin(cmd *cobra.Command) error {
 // createLinter creates a new linter instance with configured rules
 func createLinter() *linter.Linter {
 	return linter.New(
-		whitespace.NewTrailingWhitespaceRule(),
-		whitespace.NewMixedIndentationRule(),
-		whitespace.NewLongLinesRule(lintMaxLength),
+		// Whitespace rules (L001, L002, L003, L004, L005, L010)
+		whitespace.NewTrailingWhitespaceRule(),     // L001
+		whitespace.NewMixedIndentationRule(),       // L002
+		whitespace.NewConsecutiveBlankLinesRule(1), // L003
+		whitespace.NewIndentationDepthRule(4, 4),   // L004
+		whitespace.NewLongLinesRule(lintMaxLength), // L005
+		whitespace.NewRedundantWhitespaceRule(),    // L010
+
+		// Style rules (L006, L008, L009)
+		style.NewColumnAlignmentRule(),                   // L006
+		style.NewCommaPlacementRule(style.CommaTrailing), // L008
+		style.NewAliasingConsistencyRule(true),           // L009
+
+		// Keyword rules (L007)
+		keywords.NewKeywordCaseRule(keywords.CaseUpper), // L007
 	)
 }
 

@@ -11,10 +11,14 @@ jobs:
     name: Test
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         go: ['1.24', '1.25']
-    
+    env:
+      # Prevent Go from auto-downloading toolchain which conflicts with setup-go cache
+      GOTOOLCHAIN: local
+
     steps:
     - uses: actions/checkout@v4
 

@@ -103,6 +103,9 @@ var keywordTokenTypes = map[string]models.TokenType{
 	"TRUNCATE":     models.TokenTypeTruncate,
 	"TABLE":        models.TokenTypeTable,
 	"INDEX":        models.TokenTypeIndex,
+	"ADD":          models.TokenTypeKeyword, // ALTER TABLE ADD
+	"COLUMN":       models.TokenTypeColumn,  // ALTER TABLE ADD COLUMN
+	"RENAME":       models.TokenTypeKeyword, // ALTER TABLE RENAME
 	"VIEW":         models.TokenTypeView,
 	"MATERIALIZED": models.TokenTypeMaterialized,
 	"REFRESH":      models.TokenTypeRefresh,

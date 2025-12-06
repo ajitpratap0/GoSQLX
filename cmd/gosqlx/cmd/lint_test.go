@@ -52,7 +52,7 @@ func TestLintCmd_Basic(t *testing.T) {
 				"query1.sql",
 				"query2.sql",
 				"Total files: 3",
-				"Total violations: 2",
+				"Total violations: 3", // L001 x2 + L010 x1 (redundant whitespace for double space)
 			},
 			expectedError: false,
 		},
@@ -222,7 +222,7 @@ func TestLintCmd_Recursive(t *testing.T) {
 			},
 			pattern:            "migration_*.sql",
 			expectedFileCount:  2,
-			expectedViolations: 1,
+			expectedViolations: 2, // L001 + L010 (double trailing space)
 			expectedInOutput:   []string{"migration_002.sql", "Total files: 2"},
 		},
 		{
@@ -234,8 +234,8 @@ func TestLintCmd_Recursive(t *testing.T) {
 			},
 			pattern:            "*.sql",
 			expectedFileCount:  3,
-			expectedViolations: 2,
-			expectedInOutput:   []string{"Total files: 3", "Total violations: 2"},
+			expectedViolations: 3, // L001 x2 + L010 x1 (double space triggers redundant whitespace)
+			expectedInOutput:   []string{"Total files: 3", "Total violations: 3"},
 		},
 		{
 			name: "No matching files",
@@ -257,7 +257,7 @@ func TestLintCmd_Recursive(t *testing.T) {
 			},
 			pattern:            "*.sql",
 			expectedFileCount:  3,
-			expectedViolations: 2,
+			expectedViolations: 3, // L001 + L010 (trailing.sql) + L005 (long.sql)
 			expectedInOutput:   []string{"Total files: 3", "trailing.sql", "long.sql"},
 		},
 	}
@@ -379,9 +379,10 @@ func TestLintCmd_AutoFix(t *testing.T) {
 				"test.sql": "SELECT column1, column2, column3, column4, column5, column6, column7, column8, column9, column10 FROM users WHERE active = true",
 			},
 			expectedFixed: map[string]string{
-				"test.sql": "SELECT column1, column2, column3, column4, column5, column6, column7, column8, column9, column10 FROM users WHERE active = true",
+				// L005 can't be auto-fixed, but L007 (keyword case) will fix 'true' -> 'TRUE'
+				"test.sql": "SELECT column1, column2, column3, column4, column5, column6, column7, column8, column9, column10 FROM users WHERE active = TRUE",
 			},
-			expectedInOutput: []string{"Auto-fixed 0 file(s)"},
+			expectedInOutput: []string{"Auto-fixed 1 file(s)"}, // L007 auto-fix applied
 		},
 	}
 
@@ -809,7 +810,7 @@ func TestLintCmd_Output(t *testing.T) {
 			},
 			expectedOutput: []string{
 				"Total files: 3",
-				"Total violations: 2",
+				"Total violations: 3", // L001 x2 + L010 x1 (redundant whitespace)
 			},
 		},
 	}
@@ -911,12 +912,12 @@ func TestCreateLinter(t *testing.T) {
 		{
 			name:          "Default max-length",
 			maxLength:     100,
-			expectedRules: 3, // L001, L002, L005
+			expectedRules: 10, // L001, L002, L003, L004, L005, L006, L007, L008, L009, L010
 		},
 		{
 			name:          "Custom max-length",
 			maxLength:     120,
-			expectedRules: 3,
+			expectedRules: 10,
 		},
 	}
 
@@ -934,11 +935,11 @@ func TestCreateLinter(t *testing.T) {
 				t.Errorf("Expected %d rules, got %d", tt.expectedRules, len(rules))
 			}
 
-			// Verify rule IDs
-			expectedIDs := []string{"L001", "L002", "L005"}
+			// Verify rule IDs include all expected rules
+			expectedIDs := []string{"L001", "L002", "L003", "L004", "L005", "L010", "L006", "L008", "L009", "L007"}
 			for i, rule := range rules {
-				if rule.ID() != expectedIDs[i] {
-					t.Errorf("Expected rule ID %s, got %s", expectedIDs[i], rule.ID())
+				if i < len(expectedIDs) && rule.ID() != expectedIDs[i] {
+					t.Errorf("Expected rule ID %s at position %d, got %s", expectedIDs[i], i, rule.ID())
 				}
 			}
 

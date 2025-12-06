@@ -87,11 +87,23 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 		p.advance() // Consume )
 	}
 
+	// Parse RETURNING clause if present (PostgreSQL)
+	var returning []ast.Expression
+	if p.isType(models.TokenTypeReturning) || p.currentToken.Literal == "RETURNING" {
+		p.advance() // Consume RETURNING
+		var err error
+		returning, err = p.parseReturningColumns()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Create INSERT statement
 	return &ast.InsertStatement{
 		TableName: tableName,
 		Columns:   columns,
 		Values:    values,
+		Returning: returning,
 	}, nil
 }
 
@@ -176,11 +188,23 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 		}
 	}
 
+	// Parse RETURNING clause if present (PostgreSQL)
+	var returning []ast.Expression
+	if p.isType(models.TokenTypeReturning) || p.currentToken.Literal == "RETURNING" {
+		p.advance() // Consume RETURNING
+		var err error
+		returning, err = p.parseReturningColumns()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Create UPDATE statement
 	return &ast.UpdateStatement{
 		TableName: tableName,
 		Updates:   updates,
 		Where:     whereClause,
+		Returning: returning,
 	}, nil
 }
 
@@ -212,10 +236,22 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 		}
 	}
 
+	// Parse RETURNING clause if present (PostgreSQL)
+	var returning []ast.Expression
+	if p.isType(models.TokenTypeReturning) || p.currentToken.Literal == "RETURNING" {
+		p.advance() // Consume RETURNING
+		var err error
+		returning, err = p.parseReturningColumns()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Create DELETE statement
 	return &ast.DeleteStatement{
 		TableName: tableName,
 		Where:     whereClause,
+		Returning: returning,
 	}, nil
 }
 
@@ -491,6 +527,35 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 	}
 
 	return action, nil
+}
+
+// parseReturningColumns parses the columns in a RETURNING clause
+// Supports: column names, *, qualified names (table.column), expressions
+func (p *Parser) parseReturningColumns() ([]ast.Expression, error) {
+	var columns []ast.Expression
+
+	for {
+		// Check for * (return all columns)
+		if p.isType(models.TokenTypeMul) {
+			columns = append(columns, &ast.Identifier{Name: "*"})
+			p.advance()
+		} else {
+			// Parse expression (can be column name, qualified name, or expression)
+			expr, err := p.parseExpression()
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse RETURNING column: %w", err)
+			}
+			columns = append(columns, expr)
+		}
+
+		// Check for comma to continue parsing more columns
+		if !p.isType(models.TokenTypeComma) {
+			break
+		}
+		p.advance() // Consume comma
+	}
+
+	return columns, nil
 }
 
 // parseTableReference parses a simple table reference (table name)

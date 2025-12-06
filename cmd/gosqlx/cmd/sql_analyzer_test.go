@@ -756,3 +756,123 @@ func TestSQLAnalyzer_MixedStatements(t *testing.T) {
 		})
 	}
 }
+
+// TestSQLAnalyzer_SecurityScannerIntegration tests that the security scanner
+// integration is working correctly to detect SQL injection patterns
+func TestSQLAnalyzer_SecurityScannerIntegration(t *testing.T) {
+	tests := []struct {
+		name              string
+		sql               string
+		expectedIssues    []string // Issue IDs that should be detected
+		expectedSeverity  string   // Expected severity level
+		expectedMinIssues int      // Minimum number of issues
+	}{
+		{
+			name:              "Tautology detection - string equality",
+			sql:               "SELECT * FROM users WHERE username = 'admin' OR '1'='1'",
+			expectedIssues:    []string{"TAUTOLOGY"},
+			expectedSeverity:  "critical",
+			expectedMinIssues: 2, // TAUTOLOGY (from OR check) + TAUTOLOGY (from direct check)
+		},
+		{
+			name:              "Tautology detection - numeric equality",
+			sql:               "SELECT * FROM users WHERE id = 1 OR 1=1",
+			expectedIssues:    []string{"TAUTOLOGY"},
+			expectedSeverity:  "critical",
+			expectedMinIssues: 2,
+		},
+		{
+			name:              "Time-based injection - SLEEP function",
+			sql:               "SELECT * FROM users WHERE id = 1; SELECT SLEEP(5)",
+			expectedIssues:    []string{"TIME_BASED"},
+			expectedSeverity:  "high",
+			expectedMinIssues: 1,
+		},
+		{
+			name:              "Dangerous function - LOAD_FILE",
+			sql:               "SELECT LOAD_FILE('/etc/passwd') FROM dual",
+			expectedIssues:    []string{"OUT_OF_BAND"},
+			expectedSeverity:  "critical",
+			expectedMinIssues: 1,
+		},
+		{
+			name:              "Clean query - no injection",
+			sql:               "SELECT name, email FROM users WHERE id = 1",
+			expectedIssues:    []string{},
+			expectedSeverity:  "",
+			expectedMinIssues: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tkz := tokenizer.GetTokenizer()
+			defer tokenizer.PutTokenizer(tkz)
+
+			tokens, err := tkz.Tokenize([]byte(tt.sql))
+			if err != nil {
+				t.Fatalf("Tokenization failed: %v", err)
+			}
+
+			convertedTokens, err := parser.ConvertTokensForParser(tokens)
+			if err != nil {
+				t.Fatalf("Token conversion failed: %v", err)
+			}
+
+			p := parser.NewParser()
+			result, err := p.Parse(convertedTokens)
+			if err != nil {
+				t.Skipf("Parsing failed (may not be supported): %v", err)
+				return
+			}
+			defer ast.ReleaseAST(result)
+
+			analyzer := NewSQLAnalyzer()
+			report, err := analyzer.Analyze(result)
+			if err != nil {
+				t.Fatalf("Analysis failed: %v", err)
+			}
+
+			// Check for expected issues
+			for _, expectedIssueID := range tt.expectedIssues {
+				found := false
+				for _, issue := range report.Issues {
+					if issue.ID == expectedIssueID {
+						found = true
+						// Check severity if specified
+						if tt.expectedSeverity != "" && string(issue.Severity) != tt.expectedSeverity {
+							t.Errorf("Issue %s has wrong severity: expected %s, got %s",
+								expectedIssueID, tt.expectedSeverity, issue.Severity)
+						}
+						break
+					}
+				}
+				if !found {
+					t.Errorf("Expected issue %s not found. Issues found: %v",
+						expectedIssueID, getIssueIDs(report.Issues))
+				}
+			}
+
+			// Check minimum issue count for security issues
+			securityIssueCount := 0
+			for _, issue := range report.Issues {
+				if issue.Category == IssueCategorySecurity {
+					securityIssueCount++
+				}
+			}
+			if tt.expectedMinIssues > 0 && securityIssueCount < tt.expectedMinIssues {
+				t.Errorf("Expected at least %d security issues, got %d. Issues: %v",
+					tt.expectedMinIssues, securityIssueCount, getIssueIDs(report.Issues))
+			}
+		})
+	}
+}
+
+// getIssueIDs returns a slice of issue IDs for debugging
+func getIssueIDs(issues []AnalysisIssue) []string {
+	ids := make([]string, len(issues))
+	for i, issue := range issues {
+		ids[i] = issue.ID
+	}
+	return ids
+}

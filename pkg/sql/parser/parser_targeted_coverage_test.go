@@ -861,3 +861,250 @@ func TestAliasedExpressions(t *testing.T) {
 		})
 	}
 }
+
+// TestReturningClause tests PostgreSQL RETURNING clause for INSERT, UPDATE, DELETE
+func TestReturningClause(t *testing.T) {
+	tests := []struct {
+		name         string
+		sql          string
+		shouldErr    bool
+		stmtType     string
+		returningLen int
+	}{
+		// INSERT RETURNING
+		{
+			name:         "INSERT RETURNING single column",
+			sql:          "INSERT INTO users (name, email) VALUES ('John', 'john@example.com') RETURNING id",
+			shouldErr:    false,
+			stmtType:     "INSERT",
+			returningLen: 1,
+		},
+		{
+			name:         "INSERT RETURNING multiple columns",
+			sql:          "INSERT INTO users (name) VALUES ('John') RETURNING id, created_at",
+			shouldErr:    false,
+			stmtType:     "INSERT",
+			returningLen: 2,
+		},
+		{
+			name:         "INSERT RETURNING *",
+			sql:          "INSERT INTO users (name) VALUES ('John') RETURNING *",
+			shouldErr:    false,
+			stmtType:     "INSERT",
+			returningLen: 1,
+		},
+		// UPDATE RETURNING
+		{
+			name:         "UPDATE RETURNING single column",
+			sql:          "UPDATE users SET status = 'active' WHERE id = 1 RETURNING id",
+			shouldErr:    false,
+			stmtType:     "UPDATE",
+			returningLen: 1,
+		},
+		{
+			name:         "UPDATE RETURNING multiple columns",
+			sql:          "UPDATE users SET status = 'active' WHERE id = 1 RETURNING id, status",
+			shouldErr:    false,
+			stmtType:     "UPDATE",
+			returningLen: 2,
+		},
+		{
+			name:         "UPDATE RETURNING *",
+			sql:          "UPDATE products SET price = price * 1.1 RETURNING *",
+			shouldErr:    false,
+			stmtType:     "UPDATE",
+			returningLen: 1,
+		},
+		// DELETE RETURNING
+		{
+			name:         "DELETE RETURNING single column",
+			sql:          "DELETE FROM users WHERE id = 1 RETURNING id",
+			shouldErr:    false,
+			stmtType:     "DELETE",
+			returningLen: 1,
+		},
+		{
+			name:         "DELETE RETURNING multiple columns",
+			sql:          "DELETE FROM sessions WHERE expired_at < NOW() RETURNING user_id, session_id",
+			shouldErr:    false,
+			stmtType:     "DELETE",
+			returningLen: 2,
+		},
+		{
+			name:         "DELETE RETURNING *",
+			sql:          "DELETE FROM users WHERE id = 1 RETURNING *",
+			shouldErr:    false,
+			stmtType:     "DELETE",
+			returningLen: 1,
+		},
+		// Edge cases
+		{
+			name:         "UPDATE without WHERE with RETURNING",
+			sql:          "UPDATE users SET status = 'active' RETURNING id",
+			shouldErr:    false,
+			stmtType:     "UPDATE",
+			returningLen: 1,
+		},
+		{
+			name:         "DELETE without WHERE with RETURNING",
+			sql:          "DELETE FROM temp_data RETURNING id",
+			shouldErr:    false,
+			stmtType:     "DELETE",
+			returningLen: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens := tokenizeSQL(t, tt.sql)
+			p := NewParser()
+			result, err := p.Parse(tokens)
+
+			if tt.shouldErr {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+					return
+				}
+				if result == nil || len(result.Statements) == 0 {
+					t.Error("Expected parsed statement, got nil or empty")
+					return
+				}
+
+				// Verify the statement type and RETURNING clause
+				stmt := result.Statements[0]
+				switch tt.stmtType {
+				case "INSERT":
+					insertStmt, ok := stmt.(*ast.InsertStatement)
+					if !ok {
+						t.Errorf("Expected InsertStatement, got %T", stmt)
+						return
+					}
+					if len(insertStmt.Returning) != tt.returningLen {
+						t.Errorf("Expected %d RETURNING columns, got %d", tt.returningLen, len(insertStmt.Returning))
+					}
+				case "UPDATE":
+					updateStmt, ok := stmt.(*ast.UpdateStatement)
+					if !ok {
+						t.Errorf("Expected UpdateStatement, got %T", stmt)
+						return
+					}
+					if len(updateStmt.Returning) != tt.returningLen {
+						t.Errorf("Expected %d RETURNING columns, got %d", tt.returningLen, len(updateStmt.Returning))
+					}
+				case "DELETE":
+					deleteStmt, ok := stmt.(*ast.DeleteStatement)
+					if !ok {
+						t.Errorf("Expected DeleteStatement, got %T", stmt)
+						return
+					}
+					if len(deleteStmt.Returning) != tt.returningLen {
+						t.Errorf("Expected %d RETURNING columns, got %d", tt.returningLen, len(deleteStmt.Returning))
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestAlterTableOperations tests ALTER TABLE column operations (#149)
+func TestAlterTableOperations(t *testing.T) {
+	tests := []struct {
+		name      string
+		sql       string
+		shouldErr bool
+	}{
+		// ADD COLUMN
+		{
+			name:      "ADD COLUMN simple",
+			sql:       "ALTER TABLE users ADD COLUMN email VARCHAR(255)",
+			shouldErr: false,
+		},
+		{
+			name:      "ADD COLUMN with NOT NULL",
+			sql:       "ALTER TABLE users ADD COLUMN status VARCHAR(50) NOT NULL",
+			shouldErr: false,
+		},
+		{
+			name:      "ADD COLUMN with DEFAULT",
+			sql:       "ALTER TABLE users ADD COLUMN created_at TIMESTAMP DEFAULT NOW()",
+			shouldErr: false,
+		},
+		// DROP COLUMN
+		{
+			name:      "DROP COLUMN simple",
+			sql:       "ALTER TABLE users DROP COLUMN temp_field",
+			shouldErr: false,
+		},
+		{
+			name:      "DROP COLUMN with CASCADE",
+			sql:       "ALTER TABLE users DROP COLUMN old_field CASCADE",
+			shouldErr: false,
+		},
+		// RENAME COLUMN
+		{
+			name:      "RENAME COLUMN",
+			sql:       "ALTER TABLE users RENAME COLUMN old_name TO new_name",
+			shouldErr: false,
+		},
+		// ALTER COLUMN
+		{
+			name:      "ALTER COLUMN TYPE",
+			sql:       "ALTER TABLE users ALTER COLUMN age TYPE BIGINT",
+			shouldErr: false,
+		},
+		// ADD CONSTRAINT
+		{
+			name:      "ADD CONSTRAINT PRIMARY KEY",
+			sql:       "ALTER TABLE users ADD CONSTRAINT pk_users PRIMARY KEY (id)",
+			shouldErr: false,
+		},
+		{
+			name:      "ADD CONSTRAINT FOREIGN KEY",
+			sql:       "ALTER TABLE orders ADD CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users(id)",
+			shouldErr: false,
+		},
+		// DROP CONSTRAINT
+		{
+			name:      "DROP CONSTRAINT",
+			sql:       "ALTER TABLE users DROP CONSTRAINT constraint_name",
+			shouldErr: false,
+		},
+		{
+			name:      "DROP CONSTRAINT with CASCADE",
+			sql:       "ALTER TABLE users DROP CONSTRAINT pk_users CASCADE",
+			shouldErr: false,
+		},
+		// RENAME TABLE
+		{
+			name:      "RENAME TABLE",
+			sql:       "ALTER TABLE old_table RENAME TO new_table",
+			shouldErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens := tokenizeSQL(t, tt.sql)
+			p := NewParser()
+			result, err := p.Parse(tokens)
+
+			if tt.shouldErr {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+					return
+				}
+				if result == nil || len(result.Statements) == 0 {
+					t.Error("Expected parsed statement, got nil or empty")
+				}
+			}
+		})
+	}
+}

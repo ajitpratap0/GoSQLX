@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/security"
 )
 
 // SQLAnalyzer provides deep AST-based analysis of SQL queries
@@ -49,6 +50,11 @@ func (a *SQLAnalyzer) Analyze(astObj *ast.AST) (*AnalysisReport, error) {
 			return nil, fmt.Errorf("AST traversal failed: %w", err)
 		}
 	}
+
+	// Run security scanner for injection patterns (tautologies, UNION-based, time-based, etc.)
+	securityScanner := security.NewScanner()
+	securityResult := securityScanner.Scan(astObj)
+	a.convertSecurityFindings(securityResult)
 
 	// Calculate final metrics and scores
 	a.calculateComplexityMetrics()
@@ -519,4 +525,38 @@ func (a *SQLAnalyzer) reset() {
 	a.hasCartesian = false
 	a.hasSelectStar = false
 	a.hasLiteralInWhere = false
+}
+
+// convertSecurityFindings converts security scanner findings to unified AnalysisIssue format
+func (a *SQLAnalyzer) convertSecurityFindings(result *security.ScanResult) {
+	for _, finding := range result.Findings {
+		// Map security severity to analysis severity
+		var sev IssueSeverity
+		switch finding.Severity {
+		case security.SeverityCritical:
+			sev = IssueSeverityCritical
+		case security.SeverityHigh:
+			sev = IssueSeverityHigh
+		case security.SeverityMedium:
+			sev = IssueSeverityMedium
+		case security.SeverityLow:
+			sev = IssueSeverityLow
+		default:
+			sev = IssueSeverityMedium
+		}
+
+		// Create issue from security finding
+		issue := NewIssue(string(finding.Pattern), IssueCategorySecurity, sev).
+			WithDescription(finding.Description).
+			WithSuggestion(finding.Suggestion).
+			Build()
+
+		// Add risk as impact if available
+		if finding.Risk != "" {
+			issue.Impact = finding.Risk
+		}
+
+		a.Issues = append(a.Issues, issue)
+		a.adjustSecurityScore(sev)
+	}
 }

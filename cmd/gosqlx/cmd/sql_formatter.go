@@ -81,6 +81,8 @@ func (f *SQLFormatter) formatStatement(stmt ast.Statement) error {
 		return f.formatCreateIndex(s)
 	case *ast.AlterTableStatement:
 		return f.formatAlterTable(s)
+	case *ast.AlterStatement:
+		return f.formatAlterStatement(s)
 	case *ast.DropStatement:
 		return f.formatDrop(s)
 	case *ast.CreateViewStatement:
@@ -401,6 +403,94 @@ func (f *SQLFormatter) formatAlterTable(stmt *ast.AlterTableStatement) error {
 	}
 
 	return nil
+}
+
+// formatAlterStatement formats the generic ALTER statement (from alter.go)
+func (f *SQLFormatter) formatAlterStatement(stmt *ast.AlterStatement) error {
+	// Format ALTER TABLE if it's a table alteration
+	if stmt.Type == ast.AlterTypeTable {
+		f.writeKeyword("ALTER TABLE")
+		f.builder.WriteString(" " + stmt.Name)
+
+		// Format the operation if present
+		if stmt.Operation != nil {
+			if op, ok := stmt.Operation.(*ast.AlterTableOperation); ok {
+				f.writeNewline()
+				f.increaseIndent()
+				f.builder.WriteString(f.currentIndent())
+				f.formatAlterTableOperation(op)
+				f.decreaseIndent()
+			}
+		}
+		return nil
+	}
+
+	// For other ALTER types, provide a basic format
+	f.writeKeyword("ALTER")
+	switch stmt.Type {
+	case ast.AlterTypeRole:
+		f.builder.WriteString(" ")
+		f.writeKeyword("ROLE")
+	case ast.AlterTypePolicy:
+		f.builder.WriteString(" ")
+		f.writeKeyword("POLICY")
+	case ast.AlterTypeConnector:
+		f.builder.WriteString(" ")
+		f.writeKeyword("CONNECTOR")
+	}
+	f.builder.WriteString(" " + stmt.Name)
+
+	return nil
+}
+
+// formatAlterTableOperation formats a single ALTER TABLE operation
+func (f *SQLFormatter) formatAlterTableOperation(op *ast.AlterTableOperation) {
+	switch op.Type {
+	case ast.AddColumn:
+		f.writeKeyword("ADD")
+		if op.ColumnKeyword {
+			f.builder.WriteString(" ")
+			f.writeKeyword("COLUMN")
+		}
+		if op.ColumnDef != nil {
+			f.builder.WriteString(" " + op.ColumnDef.Name)
+			if op.ColumnDef.Type != "" {
+				f.builder.WriteString(" " + op.ColumnDef.Type)
+			}
+		}
+	case ast.DropColumn:
+		f.writeKeyword("DROP")
+		if op.ColumnKeyword {
+			f.builder.WriteString(" ")
+			f.writeKeyword("COLUMN")
+		}
+		if op.ColumnDef != nil {
+			f.builder.WriteString(" " + op.ColumnDef.Name)
+		}
+	case ast.AddConstraint:
+		f.writeKeyword("ADD CONSTRAINT")
+		if op.Constraint != nil && op.Constraint.Name != "" {
+			f.builder.WriteString(" " + op.Constraint.Name)
+		}
+	case ast.DropConstraint:
+		f.writeKeyword("DROP CONSTRAINT")
+		if op.ConstraintName != nil {
+			f.builder.WriteString(" " + op.ConstraintName.String())
+		}
+	case ast.RenameColumn:
+		f.writeKeyword("RENAME COLUMN")
+		if op.OldColumnName != nil {
+			f.builder.WriteString(" " + op.OldColumnName.String())
+		}
+		f.builder.WriteString(" ")
+		f.writeKeyword("TO")
+		if op.NewColumnName != nil {
+			f.builder.WriteString(" " + op.NewColumnName.String())
+		}
+	default:
+		// Fallback for unsupported operations
+		f.builder.WriteString("...")
+	}
 }
 
 // formatWithClause formats WITH (CTE) clauses

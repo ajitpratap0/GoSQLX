@@ -56,6 +56,7 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 - **SQL Injection Detection**: Built-in security scanner (`pkg/sql/security`) for injection pattern detection
 - **Unicode Support**: Complete UTF-8 support for international SQL
 - **Multi-Dialect**: PostgreSQL, MySQL, SQL Server, Oracle, SQLite
+- **PostgreSQL Extensions**: LATERAL JOIN, DISTINCT ON, FILTER clause, JSON/JSONB operators, aggregate ORDER BY
 - **Zero-Copy**: Direct byte slice operations, <1μs latency
 - **Intelligent Errors**: Structured error codes with typo detection, context highlighting, and helpful hints
 - **Production Ready**: Battle-tested with 0 race conditions detected, ~80-85% SQL-99 compliance
@@ -535,6 +536,102 @@ sql := `SELECT * FROM users WHERE deleted_at IS NULL`
 
 // NULLS FIRST/LAST ordering (SQL-99 F851)
 sql := `SELECT * FROM users ORDER BY last_login DESC NULLS LAST`
+```
+
+#### PostgreSQL-Specific Features (v1.6+)
+
+**LATERAL JOIN** - Correlated subqueries in FROM clause:
+
+```go
+// LATERAL allows referencing columns from preceding tables
+sql := `
+    SELECT u.name, recent_orders.order_date, recent_orders.total
+    FROM users u
+    LEFT JOIN LATERAL (
+        SELECT order_date, total
+        FROM orders
+        WHERE user_id = u.id
+        ORDER BY order_date DESC
+        LIMIT 1
+    ) AS recent_orders ON true
+`
+ast, err := gosqlx.Parse(sql)
+```
+
+**ORDER BY inside Aggregates** - Ordered set functions:
+
+```go
+// STRING_AGG with ORDER BY
+sql := `SELECT STRING_AGG(name, ', ' ORDER BY name DESC NULLS LAST) FROM users`
+
+// ARRAY_AGG with ORDER BY
+sql := `SELECT ARRAY_AGG(value ORDER BY created_at, priority DESC) FROM items`
+
+// JSON_AGG with ORDER BY
+sql := `SELECT JSON_AGG(employee_data ORDER BY hire_date) FROM employees`
+
+// Multiple aggregates with different orderings
+sql := `
+    SELECT
+        department,
+        STRING_AGG(name, '; ' ORDER BY name ASC NULLS FIRST) AS employee_names,
+        ARRAY_AGG(salary ORDER BY salary DESC) AS salaries
+    FROM employees
+    GROUP BY department
+`
+ast, err := gosqlx.Parse(sql)
+```
+
+**JSON/JSONB Operators** - PostgreSQL JSON support:
+
+```go
+// Arrow operators for field access
+sql := `SELECT data -> 'user' -> 'profile' ->> 'email' FROM users`
+
+// Path operators for nested access
+sql := `SELECT data #> '{address,city}', data #>> '{address,zipcode}' FROM users`
+
+// Containment operators
+sql := `SELECT * FROM users WHERE data @> '{"active": true}'`
+sql := `SELECT * FROM users WHERE '{"admin": true}' <@ data`
+
+// Combined JSON operators in complex queries
+sql := `
+    SELECT
+        u.id,
+        u.data ->> 'name' AS user_name,
+        u.data -> 'settings' ->> 'theme' AS theme
+    FROM users u
+    WHERE u.data @> '{"verified": true}'
+    AND u.data ->> 'status' = 'active'
+`
+ast, err := gosqlx.Parse(sql)
+```
+
+**DISTINCT ON** - PostgreSQL unique row selection:
+
+```go
+// Select first row per group based on ordering
+sql := `
+    SELECT DISTINCT ON (user_id) user_id, created_at, status
+    FROM orders
+    ORDER BY user_id, created_at DESC
+`
+ast, err := gosqlx.Parse(sql)
+```
+
+**FILTER Clause** - Conditional aggregation:
+
+```go
+// COUNT with FILTER
+sql := `
+    SELECT
+        COUNT(*) AS total_orders,
+        COUNT(*) FILTER (WHERE status = 'completed') AS completed_orders,
+        SUM(amount) FILTER (WHERE region = 'US') AS us_revenue
+    FROM orders
+`
+ast, err := gosqlx.Parse(sql)
 ```
 
 ## Examples

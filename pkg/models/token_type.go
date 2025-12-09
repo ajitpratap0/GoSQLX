@@ -117,18 +117,19 @@ const (
 	TokenTypeCaretAt                            TokenType = 111
 	TokenTypePGSquareRoot                       TokenType = 112
 	TokenTypePGCubeRoot                         TokenType = 113
-	TokenTypeArrow                              TokenType = 114
-	TokenTypeLongArrow                          TokenType = 115
-	TokenTypeHashArrow                          TokenType = 116
-	TokenTypeHashLongArrow                      TokenType = 117
-	TokenTypeAtArrow                            TokenType = 118
-	TokenTypeArrowAt                            TokenType = 119
-	TokenTypeHashMinus                          TokenType = 120
-	TokenTypeAtQuestion                         TokenType = 121
-	TokenTypeAtAt                               TokenType = 122
-	TokenTypeQuestionAnd                        TokenType = 123
-	TokenTypeQuestionPipe                       TokenType = 124
-	TokenTypeCustomBinaryOperator               TokenType = 125
+	// JSON/JSONB operators (PostgreSQL)
+	TokenTypeArrow                TokenType = 114 // -> JSON field access (returns JSON)
+	TokenTypeLongArrow            TokenType = 115 // ->> JSON field access (returns text)
+	TokenTypeHashArrow            TokenType = 116 // #> JSON path access (returns JSON)
+	TokenTypeHashLongArrow        TokenType = 117 // #>> JSON path access (returns text)
+	TokenTypeAtArrow              TokenType = 118 // @> JSON contains
+	TokenTypeArrowAt              TokenType = 119 // <@ JSON is contained by
+	TokenTypeHashMinus            TokenType = 120 // #- Delete at JSON path
+	TokenTypeAtQuestion           TokenType = 121 // @? JSON path query
+	TokenTypeAtAt                 TokenType = 122 // @@ Full text search
+	TokenTypeQuestionAnd          TokenType = 123 // ?& JSON key exists all
+	TokenTypeQuestionPipe         TokenType = 124 // ?| JSON key exists any
+	TokenTypeCustomBinaryOperator TokenType = 125
 
 	// SQL Keywords (200-399)
 	TokenTypeKeyword TokenType = 200 // Generic keyword
@@ -230,6 +231,7 @@ const (
 	TokenTypeNatural TokenType = 321
 	TokenTypeFull    TokenType = 322
 	TokenTypeUsing   TokenType = 323
+	TokenTypeLateral TokenType = 324 // LATERAL keyword for correlated subqueries in FROM clause
 
 	// Constraint Keywords (330-349)
 	TokenTypePrimary       TokenType = 330
@@ -400,6 +402,19 @@ var tokenStringMap = map[TokenType]string{
 	TokenTypeAtSign:          "AT_SIGN",
 	TokenTypeQuestion:        "QUESTION",
 
+	// JSON/JSONB operators
+	TokenTypeArrow:         "ARROW",           // ->
+	TokenTypeLongArrow:     "LONG_ARROW",      // ->>
+	TokenTypeHashArrow:     "HASH_ARROW",      // #>
+	TokenTypeHashLongArrow: "HASH_LONG_ARROW", // #>>
+	TokenTypeAtArrow:       "AT_ARROW",        // @>
+	TokenTypeArrowAt:       "ARROW_AT",        // <@
+	TokenTypeHashMinus:     "HASH_MINUS",      // #-
+	TokenTypeAtQuestion:    "AT_QUESTION",     // @?
+	TokenTypeAtAt:          "AT_AT",           // @@
+	TokenTypeQuestionAnd:   "QUESTION_AND",    // ?&
+	TokenTypeQuestionPipe:  "QUESTION_PIPE",   // ?|
+
 	// SQL Keywords
 	TokenTypeKeyword: "KEYWORD",
 	TokenTypeSelect:  "SELECT",
@@ -500,6 +515,7 @@ var tokenStringMap = map[TokenType]string{
 	TokenTypeNatural: "NATURAL",
 	TokenTypeFull:    "FULL",
 	TokenTypeUsing:   "USING",
+	TokenTypeLateral: "LATERAL",
 
 	// Constraint Keywords
 	TokenTypePrimary:       "PRIMARY",

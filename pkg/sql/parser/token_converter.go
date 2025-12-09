@@ -452,6 +452,8 @@ func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) {
 		return "NATURAL", models.TokenTypeNatural
 	case "USING":
 		return "USING", models.TokenTypeUsing
+	case "LATERAL":
+		return "LATERAL", models.TokenTypeLateral
 
 	// Other common keywords
 	case "DISTINCT":
@@ -564,6 +566,7 @@ func buildTypeMapping() map[models.TokenType]token.Type {
 		models.TokenTypeNatural: "NATURAL",
 		models.TokenTypeFull:    "FULL",
 		models.TokenTypeUsing:   "USING",
+		models.TokenTypeLateral: "LATERAL",
 
 		// Constraint Keywords
 		models.TokenTypePrimary:       "PRIMARY",

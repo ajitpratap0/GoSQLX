@@ -535,6 +535,13 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 		var tableRef ast.TableReference
 
+		// Check for LATERAL keyword (PostgreSQL)
+		isLateral := false
+		if p.isType(models.TokenTypeLateral) {
+			isLateral = true
+			p.advance() // Consume LATERAL
+		}
+
 		// Check for derived table (subquery in parentheses)
 		if p.isType(models.TokenTypeLParen) {
 			p.advance() // Consume (
@@ -565,6 +572,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 			tableRef = ast.TableReference{
 				Subquery: selectStmt,
+				Lateral:  isLateral,
 			}
 		} else {
 			// Parse regular table name
@@ -575,7 +583,8 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			p.advance()
 
 			tableRef = ast.TableReference{
-				Name: tableName,
+				Name:    tableName,
+				Lateral: isLateral,
 			}
 		}
 
@@ -653,6 +662,13 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 			var joinedTableRef ast.TableReference
 
+			// Check for LATERAL keyword (PostgreSQL) in JOIN clause
+			isLateralJoin := false
+			if p.isType(models.TokenTypeLateral) {
+				isLateralJoin = true
+				p.advance() // Consume LATERAL
+			}
+
 			// Check for derived table (subquery in parentheses)
 			if p.isType(models.TokenTypeLParen) {
 				p.advance() // Consume (
@@ -683,6 +699,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 				joinedTableRef = ast.TableReference{
 					Subquery: selectStmt,
+					Lateral:  isLateralJoin,
 				}
 			} else {
 				// Parse regular joined table name
@@ -695,7 +712,8 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 					)
 				}
 				joinedTableRef = ast.TableReference{
-					Name: p.currentToken.Literal,
+					Name:    p.currentToken.Literal,
+					Lateral: isLateralJoin,
 				}
 				p.advance()
 			}

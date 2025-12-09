@@ -681,9 +681,52 @@ func (f *SQLFormatter) formatExpression(expr ast.Expression) error {
 			f.builder.WriteString(" ")
 		}
 		f.formatExpressionList(e.Arguments, ", ")
+
+		// ORDER BY inside aggregate functions (STRING_AGG, ARRAY_AGG, etc.)
+		if len(e.OrderBy) > 0 {
+			f.builder.WriteString(" ")
+			f.writeKeyword("ORDER BY")
+			f.builder.WriteString(" ")
+			for i, orderBy := range e.OrderBy {
+				if i > 0 {
+					f.builder.WriteString(", ")
+				}
+				if err := f.formatExpression(orderBy.Expression); err != nil {
+					return err
+				}
+				if !orderBy.Ascending {
+					f.builder.WriteString(" ")
+					f.writeKeyword("DESC")
+				}
+				if orderBy.NullsFirst != nil {
+					f.builder.WriteString(" ")
+					f.writeKeyword("NULLS")
+					f.builder.WriteString(" ")
+					if *orderBy.NullsFirst {
+						f.writeKeyword("FIRST")
+					} else {
+						f.writeKeyword("LAST")
+					}
+				}
+			}
+		}
+
 		f.builder.WriteString(")")
 
-		// Window function
+		// Filter clause (SQL:2003 T612)
+		if e.Filter != nil {
+			f.builder.WriteString(" ")
+			f.writeKeyword("FILTER")
+			f.builder.WriteString(" (")
+			f.writeKeyword("WHERE")
+			f.builder.WriteString(" ")
+			if err := f.formatExpression(e.Filter); err != nil {
+				return err
+			}
+			f.builder.WriteString(")")
+		}
+
+		// Window function (OVER clause)
 		if e.Over != nil {
 			f.builder.WriteString(" ")
 			f.writeKeyword("OVER")
@@ -897,6 +940,12 @@ func (f *SQLFormatter) formatTableReferences(tables []ast.TableReference) {
 }
 
 func (f *SQLFormatter) formatTableReference(table *ast.TableReference) {
+	// Output LATERAL keyword if set
+	if table.Lateral {
+		f.writeKeyword("LATERAL")
+		f.builder.WriteString(" ")
+	}
+
 	if table.Subquery != nil {
 		// Format derived table (subquery)
 		f.builder.WriteString("(")

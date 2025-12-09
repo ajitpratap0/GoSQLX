@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **LATERAL JOIN Support** (#173): PostgreSQL LATERAL keyword for correlated subqueries
+  - Added `Lateral bool` field to `TableReference` AST node
+  - Parser recognizes LATERAL in FROM and JOIN clauses
+  - Supports: `LEFT JOIN LATERAL`, `INNER JOIN LATERAL`, `CROSS JOIN LATERAL`
+  - CLI formatter properly outputs LATERAL keyword
+- **ORDER BY inside Aggregates** (#174): PostgreSQL aggregate function ordering
+  - Added `OrderBy []OrderByExpression` field to `FunctionCall` AST
+  - Supports: STRING_AGG, ARRAY_AGG, JSON_AGG, JSONB_AGG, XMLAGG, GROUP_CONCAT
+  - Full modifier support: ASC/DESC, NULLS FIRST/LAST
+  - Works with window functions and complex expressions
+- **JSON/JSONB Operators** (#175): Complete PostgreSQL JSON operator support
+  - Arrow operators: `->`, `->>` (field access)
+  - Path operators: `#>`, `#>>` (path access)
+  - Containment: `@>`, `<@` (contains/contained by)
+  - Delete: `#-` (delete at path)
+  - Proper operator precedence in expression parsing
+  - Supports chained operators: `data -> 'a' -> 'b' ->> 'c'`
+- **Integration Tests**: Comprehensive tests combining LATERAL, aggregate ORDER BY, and JSON operators
+- **Performance Benchmarks**: New benchmarks for JSON operators, LATERAL JOIN, and aggregate ORDER BY parsing
 - **Language Server Protocol (LSP)** (CLI-009): Full LSP server implementation for IDE integration
   - `textDocument/didOpen`, `textDocument/didChange` - Document synchronization
   - `textDocument/publishDiagnostics` - Real-time SQL syntax error reporting

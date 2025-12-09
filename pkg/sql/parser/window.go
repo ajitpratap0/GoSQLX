@@ -30,6 +30,11 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 	// Parse arguments if not empty
 	if !p.isType(models.TokenTypeRParen) {
 		for {
+			// Check if we've hit ORDER BY inside the function (for STRING_AGG, ARRAY_AGG, etc.)
+			if p.isType(models.TokenTypeOrder) {
+				break
+			}
+
 			arg, err := p.parseExpression()
 			if err != nil {
 				return nil, err
@@ -37,6 +42,61 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 			arguments = append(arguments, arg)
 
 			// Check for comma or end of arguments
+			if p.isType(models.TokenTypeComma) {
+				p.advance() // Consume comma
+			} else if p.isType(models.TokenTypeRParen) || p.isType(models.TokenTypeOrder) {
+				break
+			} else {
+				return nil, p.expectedError(", or )")
+			}
+		}
+	}
+
+	// Parse ORDER BY clause inside aggregate functions (STRING_AGG, ARRAY_AGG, etc.)
+	// Syntax: STRING_AGG(name, ', ' ORDER BY name ASC)
+	var orderByExprs []ast.OrderByExpression
+	if p.isType(models.TokenTypeOrder) {
+		p.advance() // Consume ORDER
+
+		// Expect BY keyword
+		if !p.isType(models.TokenTypeBy) {
+			return nil, p.expectedError("BY after ORDER")
+		}
+		p.advance() // Consume BY
+
+		// Parse order expressions
+		for {
+			expr, err := p.parseExpression()
+			if err != nil {
+				return nil, err
+			}
+
+			// Create OrderByExpression with defaults
+			orderByExpr := ast.OrderByExpression{
+				Expression: expr,
+				Ascending:  true, // Default to ASC
+				NullsFirst: nil,  // Default behavior (database-specific)
+			}
+
+			// Check for ASC/DESC after the expression
+			if p.isType(models.TokenTypeAsc) {
+				orderByExpr.Ascending = true
+				p.advance() // Consume ASC
+			} else if p.isType(models.TokenTypeDesc) {
+				orderByExpr.Ascending = false
+				p.advance() // Consume DESC
+			}
+
+			// Check for NULLS FIRST/LAST
+			nullsFirst, err := p.parseNullsClause()
+			if err != nil {
+				return nil, err
+			}
+			orderByExpr.NullsFirst = nullsFirst
+
+			orderByExprs = append(orderByExprs, orderByExpr)
+
+			// Check for comma (multiple order columns) or end
 			if p.isType(models.TokenTypeComma) {
 				p.advance() // Consume comma
 			} else if p.isType(models.TokenTypeRParen) {
@@ -58,6 +118,7 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 		Name:      funcName,
 		Arguments: arguments,
 		Distinct:  distinct,
+		OrderBy:   orderByExprs,
 	}
 
 	// Check for FILTER clause (SQL:2003 T612)

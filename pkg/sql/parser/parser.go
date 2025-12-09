@@ -494,6 +494,7 @@ var modelTypeToString = map[models.TokenType]token.Type{
 	models.TokenTypeCross:   "CROSS",
 	models.TokenTypeNatural: "NATURAL",
 	models.TokenTypeUsing:   "USING",
+	models.TokenTypeLateral: "LATERAL",
 
 	// Set operations
 	models.TokenTypeUnion:     "UNION",

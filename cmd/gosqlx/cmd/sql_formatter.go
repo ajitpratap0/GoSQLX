@@ -940,6 +940,12 @@ func (f *SQLFormatter) formatTableReferences(tables []ast.TableReference) {
 }
 
 func (f *SQLFormatter) formatTableReference(table *ast.TableReference) {
+	// Output LATERAL keyword if set
+	if table.Lateral {
+		f.writeKeyword("LATERAL")
+		f.builder.WriteString(" ")
+	}
+
 	if table.Subquery != nil {
 		// Format derived table (subquery)
 		f.builder.WriteString("(")

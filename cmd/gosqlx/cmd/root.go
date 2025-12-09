@@ -5,7 +5,7 @@ import (
 )
 
 // Version is the current version of gosqlx CLI
-var Version = "1.4.0"
+var Version = "1.6.0"
 
 var (
 	// Global flags

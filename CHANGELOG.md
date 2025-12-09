@@ -5,64 +5,336 @@ All notable changes to GoSQLX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.6.0] - 2025-12-09 - Major Feature Release: PostgreSQL Extensions, LSP Server & Developer Tools
 
-### Added
-- **LATERAL JOIN Support** (#173): PostgreSQL LATERAL keyword for correlated subqueries
-  - Added `Lateral bool` field to `TableReference` AST node
-  - Parser recognizes LATERAL in FROM and JOIN clauses
-  - Supports: `LEFT JOIN LATERAL`, `INNER JOIN LATERAL`, `CROSS JOIN LATERAL`
-  - CLI formatter properly outputs LATERAL keyword
-- **ORDER BY inside Aggregates** (#174): PostgreSQL aggregate function ordering
-  - Added `OrderBy []OrderByExpression` field to `FunctionCall` AST
-  - Supports: STRING_AGG, ARRAY_AGG, JSON_AGG, JSONB_AGG, XMLAGG, GROUP_CONCAT
-  - Full modifier support: ASC/DESC, NULLS FIRST/LAST
-  - Works with window functions and complex expressions
-- **JSON/JSONB Operators** (#175): Complete PostgreSQL JSON operator support
-  - Arrow operators: `->`, `->>` (field access)
-  - Path operators: `#>`, `#>>` (path access)
-  - Containment: `@>`, `<@` (contains/contained by)
-  - Delete: `#-` (delete at path)
-  - Proper operator precedence in expression parsing
-  - Supports chained operators: `data -> 'a' -> 'b' ->> 'c'`
-- **Integration Tests**: Comprehensive tests combining LATERAL, aggregate ORDER BY, and JSON operators
-- **Performance Benchmarks**: New benchmarks for JSON operators, LATERAL JOIN, and aggregate ORDER BY parsing
-- **Language Server Protocol (LSP)** (CLI-009): Full LSP server implementation for IDE integration
-  - `textDocument/didOpen`, `textDocument/didChange` - Document synchronization
-  - `textDocument/publishDiagnostics` - Real-time SQL syntax error reporting
-  - `textDocument/hover` - Keyword/function documentation (60+ keywords)
-  - `textDocument/completion` - SQL autocomplete (100+ keywords, 20+ snippets)
-  - `textDocument/formatting` - SQL formatting support
-  - `textDocument/documentSymbol` - SQL statement outline
-  - `textDocument/signatureHelp` - Function signatures (20+ SQL functions)
-  - `textDocument/codeAction` - Quick fixes (add semicolon, uppercase keywords)
-  - Rate limiting (100 req/sec), content size limits, malformed request handling
-- **MATERIALIZED CTE Support** (Phase 2.6): PostgreSQL-compatible `AS MATERIALIZED` and `AS NOT MATERIALIZED` syntax
-- **Comprehensive Metrics System**: Thread-safe performance monitoring
-  - Parser operation metrics (duration, errors, statement counts)
-  - AST pool metrics (gets/puts/balance for AST, statement, expression pools)
-  - Tokenizer pool metrics with hit rate tracking
-- **GROUPING SETS, ROLLUP, CUBE** (SQL-99 T431): Complete grouping operations support for advanced aggregations
-- **MERGE Statements** (SQL:2003 F312): Full MERGE support with WHEN MATCHED/NOT MATCHED clauses
-- **Materialized Views**: CREATE, DROP, REFRESH MATERIALIZED VIEW support
-- **Table Partitioning**: PARTITION BY RANGE, LIST, HASH support
-- **SQL Injection Detection**: Built-in security scanner (`pkg/sql/security`) for pattern detection
-- **Expression Operators**: BETWEEN, IN, LIKE, IS NULL with full expression support
-- **Subquery Support**: Scalar, table, correlated, EXISTS subqueries
-- **NULLS FIRST/LAST**: ORDER BY null ordering (SQL-99 F851)
+This release represents a major milestone with 20+ PRs merged, adding comprehensive PostgreSQL support, a full Language Server Protocol implementation, VSCode extension, and significant performance optimizations.
+
+### Highlights
+- **PostgreSQL Extensions**: LATERAL JOIN, JSON/JSONB operators, DISTINCT ON, FILTER clause, aggregate ORDER BY
+- **Language Server Protocol**: Full LSP server for IDE integration with real-time diagnostics
+- **VSCode Extension**: Official extension with syntax highlighting, formatting, and autocomplete
+- **Performance**: 14x faster token type checking, 575x faster keyword suggestions with caching
+- **Developer Experience**: go-task build system, 10 linter rules, structured error codes
+
+---
+
+### Added - PostgreSQL Features (PRs #173-#177)
+
+#### LATERAL JOIN Support (#173)
+- Added `Lateral bool` field to `TableReference` AST node
+- Parser recognizes LATERAL in FROM and JOIN clauses
+- Supports: `LEFT JOIN LATERAL`, `INNER JOIN LATERAL`, `CROSS JOIN LATERAL`
+- CLI formatter properly outputs LATERAL keyword
+
+#### ORDER BY inside Aggregates (#174)
+- Added `OrderBy []OrderByExpression` field to `FunctionCall` AST
+- Supports: STRING_AGG, ARRAY_AGG, JSON_AGG, JSONB_AGG, XMLAGG, GROUP_CONCAT
+- Full modifier support: ASC/DESC, NULLS FIRST/LAST
+- Works with window functions and complex expressions
+
+#### JSON/JSONB Operators (#175)
+- Arrow operators: `->`, `->>` (field access)
+- Path operators: `#>`, `#>>` (path access)
+- Containment: `@>`, `<@` (contains/contained by)
+- Existence: `?`, `?|`, `?&` (key existence checks)
+- Delete: `#-` (delete at path)
+- Proper operator precedence in expression parsing
+- Supports chained operators: `data -> 'a' -> 'b' ->> 'c'`
+
+#### PostgreSQL DISTINCT ON (#171, PR #176)
+- `SELECT DISTINCT ON (column1, column2) ...` syntax
+- Multi-column expression support
+- 8 comprehensive test cases
+
+#### FILTER Clause (SQL:2003 T612, PR #176)
+- `COUNT(*) FILTER (WHERE condition)` syntax
+- Works with all aggregate functions
+- 13 test cases covering edge cases
+
+#### RETURNING Clause (#159, PR #164)
+- PostgreSQL-style RETURNING for INSERT, UPDATE, DELETE
+- Supports: column names, `*`, qualified names, expressions
+- Added `TokenTypeReturning` (379) for RETURNING keyword
+
+---
+
+### Added - Language Server Protocol (PRs #128-#129)
+
+#### LSP Server Implementation (CLI-009)
+- JSON-RPC 2.0 protocol handler over stdio
+- `textDocument/didOpen`, `textDocument/didChange`, `textDocument/didClose` - Document sync
+- `textDocument/publishDiagnostics` - Real-time SQL syntax error reporting
+- `textDocument/hover` - Keyword/function documentation (60+ keywords)
+- `textDocument/completion` - SQL autocomplete (100+ keywords, 22 snippets)
+- `textDocument/formatting` - SQL code formatting
+- `textDocument/documentSymbol` - SQL statement outline navigation
+- `textDocument/signatureHelp` - Function signatures (20+ SQL functions)
+- `textDocument/codeAction` - Quick fixes (add semicolon, uppercase keywords)
+- Rate limiting (100 req/sec), content size limits (10MB), document limits (5MB)
+- Incremental document sync for better performance with large files
+- Error position extraction from parser messages
+
+#### Usage
+```bash
+gosqlx lsp              # Start LSP server on stdio
+gosqlx lsp --log /tmp/lsp.log  # With debug logging
+```
+
+---
+
+### Added - VSCode Extension (PRs #132, #135)
+
+#### Official GoSQLX Extension
+- Real-time SQL validation via LSP
+- SQL syntax highlighting with comprehensive TextMate grammar
+- SQL formatting with customizable options
+- Intelligent autocomplete for SQL keywords and functions
+- Hover documentation for SQL keywords
+- Multi-dialect support (PostgreSQL, MySQL, SQL Server, Oracle, SQLite)
+
+#### Commands
+- GoSQLX: Validate SQL
+- GoSQLX: Format SQL
+- GoSQLX: Analyze SQL
+- GoSQLX: Restart Language Server
+
+#### Settings
+- `gosqlx.enable`: Enable/disable language server
+- `gosqlx.executablePath`: Path to gosqlx binary
+- `gosqlx.format.indentSize`: Formatting indent size
+- `gosqlx.format.uppercaseKeywords`: Uppercase SQL keywords
+- `gosqlx.dialect`: SQL dialect selection
+
+---
+
+### Added - SQL Standards Compliance (PRs #124-#126)
+
+#### Token Type Unification (ARCH-002, PR #124)
+- **120+ new SQL token types** with proper categorization
+- Helper methods: `IsKeyword()`, `IsOperator()`, `IsLiteral()`, `IsDMLKeyword()`, `IsDDLKeyword()`, `IsJoinKeyword()`, `IsWindowKeyword()`, `IsAggregateFunction()`, `IsDataType()`, `IsConstraint()`, `IsSetOperation()`
+- ModelType field for O(1) int-based comparisons
+- **14x faster** token type checking (0.28ns vs 4.9ns)
+- Token range constants for category boundaries
+
+#### FETCH FIRST / OFFSET-FETCH (SQL-99 F861, F862, PR #125)
+- `FETCH FIRST n ROWS ONLY` / `FETCH NEXT n ROWS ONLY`
+- `FETCH FIRST n ROWS WITH TIES` (preserves ties in sort order)
+- `FETCH FIRST n PERCENT ROWS ONLY` (percentage-based limiting)
+- `OFFSET n ROWS` combined with FETCH clause
+- Added `FetchClause` AST node
+
+#### TRUNCATE TABLE (SQL:2008, PR #126)
+- Basic syntax: `TRUNCATE [TABLE] table_name`
+- Multiple tables: `TRUNCATE TABLE t1, t2, t3`
+- Identity behavior: `RESTART IDENTITY` / `CONTINUE IDENTITY`
+- Cascade behavior: `CASCADE` / `RESTRICT`
+- Added `TruncateStatement` AST node
+
+#### MATERIALIZED CTE Support (PR #129)
+- `WITH cte AS MATERIALIZED (...)` syntax
+- `WITH cte AS NOT MATERIALIZED (...)` syntax
+- PostgreSQL-compatible optimization hints
+
+---
+
+### Added - Parser Enhancements (PRs #162-#164, #176)
+
+#### Column Constraints (PR #163, #146)
+- Column constraints: PRIMARY KEY, NOT NULL, NULL, UNIQUE, DEFAULT, CHECK, REFERENCES, AUTO_INCREMENT
+- Table-level constraints: PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK with CONSTRAINT name
+- Parameterized types: VARCHAR(100), DECIMAL(10,2), CHAR(50)
+- Referential actions: ON DELETE/UPDATE CASCADE, SET NULL, SET DEFAULT, RESTRICT, NO ACTION
+
+#### Derived Tables / Subqueries in FROM (#148, PR #163)
+- `(SELECT ...) AS alias` in FROM clause
+- Support in JOIN clauses
+- Full nested subquery support
+
+#### Column Aliases with AS Keyword (#160, PR #163)
+- Added `AliasedExpression` AST type
+- Preserves `AS` keyword in formatted output
+
+#### Function Calls in INSERT VALUES (#158, PR #163)
+- NOW(), UUID(), CONCAT(), arithmetic expressions in VALUES
+- Expression-based VALUES parsing
+
+#### Parser Bug Fixes (PR #162)
+- **#142** DISTINCT/ALL keyword support in SELECT
+- **#143** Arithmetic expression operator precedence (+, -, *, /, %)
+- **#144** SQL comments: line (`--`) and block (`/* */`)
+- **#145** Double-quoted identifiers: `"column_name"`
+- **#147** NATURAL JOIN, NATURAL LEFT/RIGHT JOIN
+- **#150** String literal quoting with single quotes
+- **#151** IS NULL / IS NOT NULL formatting
+- **#152** BETWEEN expression formatting
+- **#153** IN expression formatting
+- **#157** Qualified asterisk: `table.*` syntax
+
+---
+
+### Added - Linter Rules (PRs #164, #176)
+
+#### 10 Complete Lint Rules
+| Rule | Name | Description | Auto-Fix |
+|------|------|-------------|----------|
+| L001 | Trailing Whitespace | Detects trailing whitespace | Yes |
+| L002 | Mixed Tabs/Spaces | Detects mixed indentation | No |
+| L003 | Consecutive Blank Lines | Detects multiple blank lines | Yes |
+| L004 | Indentation Depth | Warns on excessive nesting (>4 levels) | No |
+| L005 | Line Length | Warns on long lines | No |
+| L006 | Column Alignment | Checks SELECT column alignment | No |
+| L007 | Keyword Case | Enforces uppercase/lowercase keywords | Yes |
+| L008 | Comma Placement | Trailing vs leading comma style | No |
+| L009 | Aliasing Consistency | Detects mixed table aliasing | No |
+| L010 | Redundant Whitespace | Finds multiple consecutive spaces | Yes |
+
+---
+
+### Added - Security Scanner (PRs #164, #176)
+
+#### CLI Integration (#154)
+- Integrated `pkg/sql/security` scanner into CLI analyzer
+- Security score adjustments based on finding severity
+- 100% detection rate on injection patterns
+
+#### Detection Patterns
+- Tautology patterns (`'1'='1'`, `OR 1=1`)
+- UNION-based injection
+- Time-based blind injection (SLEEP, WAITFOR DELAY)
+- Comment bypass (`--`, `/**/`)
+- Stacked queries
+- Dangerous functions (xp_cmdshell, LOAD_FILE)
+
+---
+
+### Added - Developer Tools (PRs #131, #133, #136)
+
+#### go-task Build System (PR #131)
+- Replaced Makefile with comprehensive Taskfile.yml (420+ lines)
+- 45+ tasks vs original 10 Makefile targets
+- Task namespacing: `build:cli`, `test:race`, `lint:fix`
+- Cross-platform builds (linux, darwin, windows / amd64, arm64)
+- CPU and memory profiling support
+- Fuzz testing integration
+- Security scanning (govulncheck)
+- Development watch mode
+
+#### Structured Error Codes (PR #133)
+- Tokenizer errors: E1001-E1005
+- Parser errors: E2001-E2012
+- Semantic errors: E3001-E3004 (UndefinedTable, UndefinedColumn, TypeMismatch, AmbiguousColumn)
+- All errors include: error codes, location info, helpful hints, doc links
+- CLI JSON output includes `Code` field
+
+#### Unified Configuration Package (PR #133)
+- `pkg/config/` with Config struct
+- File and environment loaders
+- LSP integration
+- 78.6% test coverage
+
+#### Caching System (PR #136)
+- Keyword suggestion cache: **575x speedup** (12.87ns vs 7402ns)
+- Config file cache: **22.5x speedup** (1302ns vs 29379ns)
+- Thread-safe with RWMutex
+- Automatic invalidation on file modification
+
+---
+
+### Added - Metrics & Monitoring (PR #129)
+
+#### Comprehensive Metrics System
+- Parser operation metrics (duration, errors, statement counts)
+- AST pool metrics (gets/puts/balance)
+- Statement pool metrics
+- Expression pool metrics
+- Tokenizer pool metrics with hit rate tracking
+- Thread-safe atomic counters
+
+---
+
+### Added - Test Coverage (PRs #137, #138)
+
+#### AST Test Coverage to 80%+ (PR #138)
+- DateTimeField.String() covering 44+ cases
+- Parser position tracking infrastructure
+- `ParseWithPositions()` method for position-aware parsing
+- `currentLocation()` helper for accurate error locations
+
+#### AST Interface Tests (PR #137)
+- statementNode() marker methods for all statements
+- expressionNode() marker methods for all expressions
+- TokenLiteral() for 60+ node types
+- Children() with comprehensive branch coverage
+- Coverage improved from 60.7% to 70.1%
+
+---
 
 ### Improved
-- **AST Pool Architecture**: Iterative cleanup with work queue pattern to prevent stack overflow
-  - Added 8 new expression pools (Exists, Any, All, List, Unary, Extract, Position, Substring)
-  - MaxCleanupDepth and MaxWorkQueueSize limits for deeply nested expressions
-- **Type Assertion Safety**: Added proper `ok` pattern checking in `alter.go` and `value.go`
-- **Race Condition Fixes**: Fixed data races in metrics, documents, and watch modules
-- **Tokenizer Column Calculation**: Consistent 1-based column numbers, never negative
+
+#### Performance Optimizations (PR #127)
+- O(1) switch dispatch on ModelType instead of O(n) isAnyType() calls
+- isComparisonOperator() helper with O(1) ModelType switch
+- Buffer pooling for keyword conversion (sync.Pool)
+- ASCII fast-path in skipWhitespace for >99% of cases
+- Parser pooling: GetParser/PutParser via sync.Pool
+- CPU-scaled sustained load tests
+
+#### AST Pool Architecture (PR #129)
+- Iterative cleanup with work queue pattern to prevent stack overflow
+- Added 8 new expression pools (Exists, Any, All, List, Unary, Extract, Position, Substring)
+- MaxCleanupDepth and MaxWorkQueueSize limits
+
+#### Type Assertion Safety (PR #129)
+- Added proper `ok` pattern checking in `alter.go` and `value.go`
+
+#### Race Condition Fixes (PR #129)
+- Fixed data races in metrics.go using atomic operations
+- Fixed race condition in LSP documents.go with defensive copy
+- Fixed race condition in watch.go with RWMutex protection
+
+#### Documentation Cleanup (PR #141)
+- Deleted 4 LLM-generated files (~1,725 lines)
+- Fixed API_REFERENCE.md return types
+- Added 10 missing error codes to ERROR_CODES.md
+- Fixed 50+ broken links and inaccurate references
+
+---
+
+### Changed
+
+#### Go Version Update (PR #140)
+- Minimum requirement: Go 1.24+ (was 1.19)
+- Toolchain: Go 1.25.0
+- Updated all CI/CD workflows to test against Go 1.24, 1.25
+- golangci-lint upgraded to v2.6.2
+
+#### CLI Output Improvements (PR #163)
+- Output file flag (`-o`) now functional for lint and analyze commands
+- MERGE statement formatter with full clause support
+
+---
 
 ### Fixed
-- Critical type assertion panics in ALTER and VALUE parsing
-- Race conditions in concurrent document management
-- LSP hover returning nil instead of empty response
+
+- Critical type assertion panics in ALTER and VALUE parsing (PR #129)
+- Race conditions in concurrent document management (PR #129)
+- LSP hover returning nil instead of empty response (PR #129)
+- Tokenizer negative column numbers in toSQLPosition (PR #129)
+- L004 indentation depth display for depth > 9 (PR #164)
+- CAST keyword missing from tokenizer keywordTokenTypes map (PR #176)
+- || operator test with correct TokenTypeSingleQuotedString (PR #176)
+
+---
+
+### Known Issues (Future Enhancements)
+
+The following features were identified during real-world testing and are tracked for future releases:
+- **#178**: PostgreSQL JSONB existence operators (?, ?|, ?&) in parser
+- **#179**: Multi-row INSERT VALUES syntax
+- **#180**: BETWEEN with complex expression bounds
+- **#181**: Tuple expressions in IN clause
+- **#182**: PostgreSQL ARRAY constructor syntax
+- **#183**: WITHIN GROUP ordered set aggregates
 
 ## [1.5.1] - 2025-11-15 - Phases 2-3 Test Coverage Completion
 
@@ -646,7 +918,8 @@ This substantial test coverage increase provides strong confidence in the AST pa
 
 | Version | Release Date | Status | Key Features |
 |---------|--------------|--------|--------------|
-| 1.5.0 | 2025-11-15 | Current | Phase 1 Test Coverage: CLI 63.3%, Parser 75%, Tokenizer 76.5% |
+| 1.6.0 | 2025-12-09 | Current | PostgreSQL Extensions, LSP Server, VSCode Extension, 14x faster tokens |
+| 1.5.0 | 2025-11-15 | Stable | Phase 1 Test Coverage: CLI 63.3%, Parser 75%, Tokenizer 76.5% |
 | 1.4.0 | 2025-09-07 | Previous | Production CLI, high-performance commands, memory leak fixes |
 | 1.3.0 | 2025-09-04 | Stable | Window functions, ~80-85% SQL-99 compliance |
 | 1.2.0 | 2025-09-04 | Previous | CTEs, set operations, ~70% SQL-92 compliance |
@@ -676,7 +949,8 @@ For questions about upgrading or changelog entries:
 - Open an issue: https://github.com/ajitpratap0/GoSQLX/issues
 - Join discussions: https://github.com/ajitpratap0/GoSQLX/discussions
 
-[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.5.1...HEAD
+[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/ajitpratap0/GoSQLX/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.3.0...v1.4.0

@@ -425,9 +425,42 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 	// Check for DISTINCT or ALL keyword
 	isDistinct := false
+	var distinctOnColumns []ast.Expression
 	if p.isType(models.TokenTypeDistinct) {
 		isDistinct = true
 		p.advance() // Consume DISTINCT
+
+		// Check for DISTINCT ON (PostgreSQL)
+		if p.isType(models.TokenTypeOn) {
+			p.advance() // Consume ON
+
+			// Expect opening parenthesis
+			if !p.isType(models.TokenTypeLParen) {
+				return nil, p.expectedError("( after DISTINCT ON")
+			}
+			p.advance() // Consume (
+
+			// Parse comma-separated list of expressions
+			for {
+				expr, err := p.parseExpression()
+				if err != nil {
+					return nil, err
+				}
+				distinctOnColumns = append(distinctOnColumns, expr)
+
+				// Check for comma (more expressions)
+				if !p.isType(models.TokenTypeComma) {
+					break
+				}
+				p.advance() // Consume comma
+			}
+
+			// Expect closing parenthesis
+			if !p.isType(models.TokenTypeRParen) {
+				return nil, p.expectedError(") after DISTINCT ON expression list")
+			}
+			p.advance() // Consume )
+		}
 	} else if p.isType(models.TokenTypeAll) {
 		// ALL is the default, just consume it
 		p.advance()
@@ -781,11 +814,12 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 	// Initialize SELECT statement
 	selectStmt := &ast.SelectStatement{
-		Distinct:  isDistinct,
-		Columns:   columns,
-		From:      tables,
-		Joins:     joins,
-		TableName: tableName, // Add this for compatibility with tests
+		Distinct:          isDistinct,
+		DistinctOnColumns: distinctOnColumns,
+		Columns:           columns,
+		From:              tables,
+		Joins:             joins,
+		TableName:         tableName, // Add this for compatibility with tests
 	}
 
 	// Parse WHERE clause if present

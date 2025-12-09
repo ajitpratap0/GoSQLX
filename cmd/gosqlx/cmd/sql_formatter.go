@@ -93,6 +93,8 @@ func (f *SQLFormatter) formatStatement(stmt ast.Statement) error {
 		return f.formatRefreshMaterializedView(s)
 	case *ast.SetOperation:
 		return f.formatSetOperation(s)
+	case *ast.MergeStatement:
+		return f.formatMergeStatement(s)
 	default:
 		return fmt.Errorf("unsupported statement type: %T", stmt)
 	}
@@ -1186,6 +1188,150 @@ func (f *SQLFormatter) formatRefreshMaterializedView(stmt *ast.RefreshMaterializ
 		} else {
 			f.writeKeyword("WITH NO DATA")
 		}
+	}
+
+	return nil
+}
+
+// formatMergeStatement formats MERGE statements with proper indentation
+func (f *SQLFormatter) formatMergeStatement(stmt *ast.MergeStatement) error {
+	// MERGE INTO target_table
+	f.writeKeyword("MERGE INTO")
+	f.builder.WriteString(" ")
+	f.formatTableReference(&stmt.TargetTable)
+	if stmt.TargetAlias != "" {
+		f.builder.WriteString(" " + stmt.TargetAlias)
+	}
+
+	// USING source_table
+	f.writeNewline()
+	f.writeKeyword("USING")
+	f.builder.WriteString(" ")
+	f.formatTableReference(&stmt.SourceTable)
+	if stmt.SourceAlias != "" {
+		f.builder.WriteString(" " + stmt.SourceAlias)
+	}
+
+	// ON condition
+	if stmt.OnCondition != nil {
+		f.writeNewline()
+		f.writeKeyword("ON")
+		f.builder.WriteString(" ")
+		if err := f.formatExpression(stmt.OnCondition); err != nil {
+			return fmt.Errorf("failed to format ON condition: %w", err)
+		}
+	}
+
+	// WHEN clauses
+	for _, whenClause := range stmt.WhenClauses {
+		if err := f.formatMergeWhenClause(whenClause); err != nil {
+			return fmt.Errorf("failed to format WHEN clause: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// formatMergeWhenClause formats a WHEN clause in a MERGE statement
+func (f *SQLFormatter) formatMergeWhenClause(when *ast.MergeWhenClause) error {
+	f.writeNewline()
+	f.writeKeyword("WHEN")
+	f.builder.WriteString(" ")
+
+	// Format the match type
+	switch when.Type {
+	case "MATCHED":
+		f.writeKeyword("MATCHED")
+	case "NOT_MATCHED":
+		f.writeKeyword("NOT MATCHED")
+	case "NOT_MATCHED_BY_SOURCE":
+		f.writeKeyword("NOT MATCHED BY SOURCE")
+	default:
+		f.writeKeyword(when.Type)
+	}
+
+	// Format optional AND condition
+	if when.Condition != nil {
+		f.builder.WriteString(" ")
+		f.writeKeyword("AND")
+		f.builder.WriteString(" ")
+		if err := f.formatExpression(when.Condition); err != nil {
+			return fmt.Errorf("failed to format WHEN condition: %w", err)
+		}
+	}
+
+	// Format THEN action
+	f.builder.WriteString(" ")
+	f.writeKeyword("THEN")
+	f.writeNewline()
+	f.increaseIndent()
+	f.builder.WriteString(f.currentIndent())
+	if err := f.formatMergeAction(when.Action); err != nil {
+		return fmt.Errorf("failed to format MERGE action: %w", err)
+	}
+	f.decreaseIndent()
+
+	return nil
+}
+
+// formatMergeAction formats the action part of a WHEN clause (UPDATE/INSERT/DELETE)
+func (f *SQLFormatter) formatMergeAction(action *ast.MergeAction) error {
+	if action == nil {
+		return nil
+	}
+
+	switch action.ActionType {
+	case "UPDATE":
+		f.writeKeyword("UPDATE SET")
+		if len(action.SetClauses) > 0 {
+			f.builder.WriteString(" ")
+			for i, setClause := range action.SetClauses {
+				if i > 0 {
+					f.builder.WriteString(", ")
+				}
+				f.builder.WriteString(setClause.Column)
+				f.builder.WriteString(" = ")
+				if err := f.formatExpression(setClause.Value); err != nil {
+					return fmt.Errorf("failed to format SET clause value: %w", err)
+				}
+			}
+		}
+
+	case "INSERT":
+		f.writeKeyword("INSERT")
+		if action.DefaultValues {
+			f.builder.WriteString(" ")
+			f.writeKeyword("DEFAULT VALUES")
+		} else if len(action.Columns) > 0 {
+			f.builder.WriteString(" (")
+			for i, col := range action.Columns {
+				if i > 0 {
+					f.builder.WriteString(", ")
+				}
+				f.builder.WriteString(col)
+			}
+			f.builder.WriteString(")")
+			if len(action.Values) > 0 {
+				f.writeNewline()
+				f.builder.WriteString(f.currentIndent())
+				f.writeKeyword("VALUES")
+				f.builder.WriteString(" (")
+				f.formatExpressionList(action.Values, ", ")
+				f.builder.WriteString(")")
+			}
+		} else if len(action.Values) > 0 {
+			f.builder.WriteString(" ")
+			f.writeKeyword("VALUES")
+			f.builder.WriteString(" (")
+			f.formatExpressionList(action.Values, ", ")
+			f.builder.WriteString(")")
+		}
+
+	case "DELETE":
+		f.writeKeyword("DELETE")
+
+	default:
+		return fmt.Errorf("unsupported merge action type: %s", action.ActionType)
 	}
 
 	return nil

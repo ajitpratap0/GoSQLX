@@ -49,8 +49,7 @@ func TestTokenizer_Operators(t *testing.T) {
 				value     string
 			}{
 				{models.TokenTypeIdentifier, "data"},
-				{models.TokenTypeArrow, "->"},
-				{models.TokenTypeGt, ">"},
+				{models.TokenTypeLongArrow, "->>"},
 				{models.TokenTypeSingleQuotedString, "field"},
 			},
 		},

@@ -1042,6 +1042,14 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 			nxtR, nxtSize := utf8.DecodeRune(t.input[t.pos.Index:])
 			if nxtR == '>' {
 				t.pos.AdvanceRune(nxtR, nxtSize)
+				// Check for ->> (JSON text extraction)
+				if t.pos.Index < len(t.input) {
+					thirdR, thirdSize := utf8.DecodeRune(t.input[t.pos.Index:])
+					if thirdR == '>' {
+						t.pos.AdvanceRune(thirdR, thirdSize)
+						return models.Token{Type: models.TokenTypeLongArrow, Value: "->>"}, nil
+					}
+				}
 				return models.Token{Type: models.TokenTypeArrow, Value: "->"}, nil
 			}
 			// Check for line comment: --
@@ -1114,6 +1122,10 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 			} else if nxtR == '>' {
 				t.pos.AdvanceRune(nxtR, nxtSize)
 				return models.Token{Type: models.TokenTypeNeq, Value: "<>"}, nil
+			} else if nxtR == '@' {
+				// <@ is the "is contained by" JSON operator
+				t.pos.AdvanceRune(nxtR, nxtSize)
+				return models.Token{Type: models.TokenTypeArrowAt, Value: "<@"}, nil
 			}
 		}
 		return models.Token{Type: models.TokenTypeLt, Value: "<"}, nil
@@ -1207,6 +1219,54 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		}
 		// Just a standalone @ symbol
 		return models.Token{Type: models.TokenTypeAtSign, Value: "@"}, nil
+	case '#':
+		t.pos.AdvanceRune(r, size)
+		// Check for PostgreSQL JSON operators
+		if t.pos.Index < len(t.input) {
+			nextR, nextSize := utf8.DecodeRune(t.input[t.pos.Index:])
+
+			// Check for #> (JSON path access)
+			if nextR == '>' {
+				t.pos.AdvanceRune(nextR, nextSize)
+				// Check for #>> (JSON path access as text)
+				if t.pos.Index < len(t.input) {
+					thirdR, thirdSize := utf8.DecodeRune(t.input[t.pos.Index:])
+					if thirdR == '>' {
+						t.pos.AdvanceRune(thirdR, thirdSize)
+						return models.Token{Type: models.TokenTypeHashLongArrow, Value: "#>>"}, nil
+					}
+				}
+				return models.Token{Type: models.TokenTypeHashArrow, Value: "#>"}, nil
+			}
+
+			// Check for #- (delete at JSON path)
+			if nextR == '-' {
+				t.pos.AdvanceRune(nextR, nextSize)
+				return models.Token{Type: models.TokenTypeHashMinus, Value: "#-"}, nil
+			}
+		}
+		// Just a standalone # symbol
+		return models.Token{Type: models.TokenTypeSharp, Value: "#"}, nil
+	case '?':
+		t.pos.AdvanceRune(r, size)
+		// Check for PostgreSQL JSON operators
+		if t.pos.Index < len(t.input) {
+			nextR, nextSize := utf8.DecodeRune(t.input[t.pos.Index:])
+
+			// Check for ?| (any key exists)
+			if nextR == '|' {
+				t.pos.AdvanceRune(nextR, nextSize)
+				return models.Token{Type: models.TokenTypeQuestionPipe, Value: "?|"}, nil
+			}
+
+			// Check for ?& (all keys exist)
+			if nextR == '&' {
+				t.pos.AdvanceRune(nextR, nextSize)
+				return models.Token{Type: models.TokenTypeQuestionAnd, Value: "?&"}, nil
+			}
+		}
+		// Just a standalone ? symbol (used for single key existence check)
+		return models.Token{Type: models.TokenTypeQuestion, Value: "?"}, nil
 	}
 
 	if isIdentifierStart(r) {

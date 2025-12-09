@@ -110,6 +110,7 @@ type TableReference struct {
 	Name     string           // Table name (empty if this is a derived table)
 	Alias    string           // Optional alias
 	Subquery *SelectStatement // For derived tables: (SELECT ...) AS alias
+	Lateral  bool             // LATERAL keyword for correlated subqueries (PostgreSQL)
 }
 
 func (t *TableReference) statementNode() {}
@@ -348,7 +349,8 @@ type FunctionCall struct {
 	Arguments []Expression // Renamed from Args for consistency
 	Over      *WindowSpec  // For window functions
 	Distinct  bool
-	Filter    Expression // WHERE clause for aggregate functions
+	Filter    Expression          // WHERE clause for aggregate functions
+	OrderBy   []OrderByExpression // ORDER BY clause for aggregate functions (STRING_AGG, ARRAY_AGG, etc.)
 }
 
 func (f *FunctionCall) expressionNode()     {}
@@ -360,6 +362,10 @@ func (f FunctionCall) Children() []Node {
 	}
 	if f.Filter != nil {
 		children = append(children, f.Filter)
+	}
+	for _, orderBy := range f.OrderBy {
+		orderBy := orderBy // G601: Create local copy to avoid memory aliasing
+		children = append(children, &orderBy)
 	}
 	return children
 }

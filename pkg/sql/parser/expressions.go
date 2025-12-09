@@ -390,8 +390,8 @@ func (p *Parser) parseAdditiveExpression() (ast.Expression, error) {
 
 // parseMultiplicativeExpression parses expressions with *, /, and % operators
 func (p *Parser) parseMultiplicativeExpression() (ast.Expression, error) {
-	// Parse the left side using primary expression
-	left, err := p.parsePrimaryExpression()
+	// Parse the left side using JSON operator expression (higher precedence)
+	left, err := p.parseJSONExpression()
 	if err != nil {
 		return nil, err
 	}
@@ -404,7 +404,7 @@ func (p *Parser) parseMultiplicativeExpression() (ast.Expression, error) {
 		operator := p.currentToken.Literal
 		p.advance() // Consume operator
 
-		right, err := p.parsePrimaryExpression()
+		right, err := p.parseJSONExpression()
 		if err != nil {
 			return nil, err
 		}
@@ -417,6 +417,58 @@ func (p *Parser) parseMultiplicativeExpression() (ast.Expression, error) {
 	}
 
 	return left, nil
+}
+
+// parseJSONExpression parses JSON/JSONB operators (PostgreSQL)
+// Handles: ->, ->>, #>, #>>, @>, <@, ?, ?|, ?&, #-
+func (p *Parser) parseJSONExpression() (ast.Expression, error) {
+	// Parse the left side using primary expression
+	left, err := p.parsePrimaryExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	// Handle JSON operators (left-associative for chaining like data->'a'->'b')
+	for p.isJSONOperator() {
+		operator := p.currentToken.Literal
+		operatorType := p.currentToken.Type
+		p.advance() // Consume JSON operator
+
+		// Parse the right side
+		right, err := p.parsePrimaryExpression()
+		if err != nil {
+			return nil, err
+		}
+
+		left = &ast.BinaryExpression{
+			Left:     left,
+			Operator: operator,
+			Right:    right,
+		}
+
+		// Store operator type for semantic analysis if needed
+		_ = operatorType
+	}
+
+	return left, nil
+}
+
+// isJSONOperator checks if current token is a JSON/JSONB operator
+func (p *Parser) isJSONOperator() bool {
+	switch p.currentToken.Type {
+	case "ARROW", // ->
+		"LONG_ARROW",      // ->>
+		"HASH_ARROW",      // #>
+		"HASH_LONG_ARROW", // #>>
+		"AT_ARROW",        // @>
+		"ARROW_AT",        // <@
+		"HASH_MINUS",      // #-
+		"QUESTION",        // ?
+		"QUESTION_PIPE",   // ?|
+		"QUESTION_AND":    // ?&
+		return true
+	}
+	return false
 }
 
 // parsePrimaryExpression parses a primary expression (literals, identifiers, function calls)

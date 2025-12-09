@@ -23,7 +23,7 @@ var RESERVED_FOR_TABLE_ALIAS = []Keyword{
 	{Word: "PIVOT", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
 	{Word: "UNPIVOT", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
 	{Word: "TOP", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
-	{Word: "LATERAL", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "LATERAL", Type: models.TokenTypeLateral, Reserved: true, ReservedForTableAlias: true},
 	{Word: "VIEW", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
 	{Word: "LIMIT", Type: models.TokenTypeLimit, Reserved: true, ReservedForTableAlias: true},
 	{Word: "OFFSET", Type: models.TokenTypeOffset, Reserved: true, ReservedForTableAlias: true},

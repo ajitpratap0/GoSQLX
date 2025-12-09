@@ -91,6 +91,8 @@ func (f *SQLFormatter) formatStatement(stmt ast.Statement) error {
 		return f.formatCreateMaterializedView(s)
 	case *ast.RefreshMaterializedViewStatement:
 		return f.formatRefreshMaterializedView(s)
+	case *ast.SetOperation:
+		return f.formatSetOperation(s)
 	default:
 		return fmt.Errorf("unsupported statement type: %T", stmt)
 	}
@@ -209,6 +211,30 @@ func (f *SQLFormatter) formatSelect(stmt *ast.SelectStatement) error {
 		f.writeNewline()
 		f.writeKeyword("OFFSET")
 		f.builder.WriteString(fmt.Sprintf(" %d", *stmt.Offset))
+	}
+
+	return nil
+}
+
+// formatSetOperation formats UNION, EXCEPT, INTERSECT statements
+func (f *SQLFormatter) formatSetOperation(stmt *ast.SetOperation) error {
+	// Format left statement
+	if err := f.formatStatement(stmt.Left); err != nil {
+		return fmt.Errorf("failed to format left side of %s: %w", stmt.Operator, err)
+	}
+
+	// Add newline and operator
+	f.writeNewline()
+	f.writeKeyword(stmt.Operator)
+	if stmt.All {
+		f.builder.WriteString(" ")
+		f.writeKeyword("ALL")
+	}
+	f.writeNewline()
+
+	// Format right statement
+	if err := f.formatStatement(stmt.Right); err != nil {
+		return fmt.Errorf("failed to format right side of %s: %w", stmt.Operator, err)
 	}
 
 	return nil

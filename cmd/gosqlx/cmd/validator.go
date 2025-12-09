@@ -98,30 +98,36 @@ func (v *Validator) Validate(args []string) (*output.ValidationResult, error) {
 	return result, nil
 }
 
-// validateFile validates a single SQL file
+// validateFile validates a single SQL file or direct SQL input
 func (v *Validator) validateFile(filename string) output.FileValidationResult {
 	result := output.FileValidationResult{
 		Path: filename,
 	}
 
-	// Use security validation first
-	if err := ValidateFileAccess(filename); err != nil {
-		result.Error = fmt.Errorf("file access validation failed: %w", err)
-		return result
-	}
-
-	// G304: Path is validated by ValidateFileAccess above
-	data, err := os.ReadFile(filename) // #nosec G304
+	// Use robust input detection with security checks
+	inputResult, err := DetectAndReadInput(filename)
 	if err != nil {
-		result.Error = fmt.Errorf("failed to read file: %w", err)
+		// Special handling for empty files - they're considered valid
+		if strings.Contains(err.Error(), "file is empty") {
+			result.Valid = true
+			result.Size = 0
+			return result
+		}
+		// Map file path errors to "file access validation failed" for consistency
+		if strings.Contains(err.Error(), "invalid file path") || strings.Contains(err.Error(), "security validation failed") {
+			result.Error = fmt.Errorf("file access validation failed: %w", err)
+		} else {
+			result.Error = fmt.Errorf("input processing failed: %w", err)
+		}
 		return result
 	}
 
+	data := inputResult.Content
 	result.Size = int64(len(data))
 
 	if len(data) == 0 {
 		result.Valid = true
-		return result // Empty files are considered valid
+		return result // Empty inputs are considered valid
 	}
 
 	// Use pooled tokenizer for performance
@@ -169,6 +175,7 @@ func (v *Validator) expandFileArgs(args []string) ([]string, error) {
 	var files []string
 
 	for _, arg := range args {
+		// Check if it's a directory first
 		if v.Opts.Recursive && v.isDirectory(arg) {
 			// Recursive directory processing
 			pattern := v.Opts.Pattern
@@ -195,15 +202,16 @@ func (v *Validator) expandFileArgs(args []string) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-		} else if strings.Contains(arg, "*") || strings.Contains(arg, "?") || strings.Contains(arg, "[") {
-			// Glob pattern
+		} else if !looksLikeSQL(arg) && (strings.Contains(arg, "*") || strings.Contains(arg, "?") || strings.Contains(arg, "[")) {
+			// Only treat as glob pattern if it doesn't look like SQL
+			// This prevents "SELECT * FROM" from being treated as a glob pattern
 			matches, err := filepath.Glob(arg)
 			if err != nil {
 				return nil, err
 			}
 			files = append(files, matches...)
 		} else {
-			// Regular file
+			// Regular file or direct SQL input
 			files = append(files, arg)
 		}
 	}

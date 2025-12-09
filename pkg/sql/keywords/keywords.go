@@ -107,6 +107,7 @@ var ADDITIONAL_KEYWORDS = []Keyword{
 	{Word: "THEN", Type: models.TokenTypeThen, Reserved: true, ReservedForTableAlias: false},
 	{Word: "ELSE", Type: models.TokenTypeElse, Reserved: true, ReservedForTableAlias: false},
 	{Word: "END", Type: models.TokenTypeEnd, Reserved: true, ReservedForTableAlias: false},
+	{Word: "CAST", Type: models.TokenTypeCast, Reserved: true, ReservedForTableAlias: false},
 	// Window function names (Phase 2.5)
 	{Word: "ROW_NUMBER", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "RANK", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},

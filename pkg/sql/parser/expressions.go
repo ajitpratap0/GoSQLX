@@ -90,8 +90,8 @@ func (p *Parser) parseAndExpression() (ast.Expression, error) {
 
 // parseComparisonExpression parses an expression with comparison operators
 func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
-	// Parse the left side using additive expression for arithmetic support
-	left, err := p.parseAdditiveExpression()
+	// Parse the left side using string concatenation expression for arithmetic support
+	left, err := p.parseStringConcatExpression()
 	if err != nil {
 		return nil, err
 	}
@@ -332,6 +332,34 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	return left, nil
 }
 
+// parseStringConcatExpression parses expressions with || (string concatenation) operator
+func (p *Parser) parseStringConcatExpression() (ast.Expression, error) {
+	// Parse the left side using additive expression
+	left, err := p.parseAdditiveExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	// Handle || (string concatenation) operator (left-associative)
+	for p.isType(models.TokenTypeStringConcat) {
+		operator := p.currentToken.Literal
+		p.advance() // Consume ||
+
+		right, err := p.parseAdditiveExpression()
+		if err != nil {
+			return nil, err
+		}
+
+		left = &ast.BinaryExpression{
+			Left:     left,
+			Operator: operator,
+			Right:    right,
+		}
+	}
+
+	return left, nil
+}
+
 // parseAdditiveExpression parses expressions with + and - operators
 func (p *Parser) parseAdditiveExpression() (ast.Expression, error) {
 	// Parse the left side using multiplicative expression
@@ -396,6 +424,11 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 	if p.isType(models.TokenTypeCase) {
 		// Handle CASE expressions (both simple and searched forms)
 		return p.parseCaseExpression()
+	}
+
+	if p.isType(models.TokenTypeCast) {
+		// Handle CAST(expr AS type) expressions
+		return p.parseCastExpression()
 	}
 
 	if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeDoubleQuotedString) {
@@ -709,6 +742,98 @@ func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
 	p.advance() // Consume END
 
 	return caseExpr, nil
+}
+
+// parseCastExpression parses a CAST expression: CAST(expr AS type)
+//
+// Examples:
+//
+//	CAST(id AS VARCHAR)
+//	CAST(price AS DECIMAL(10,2))
+//	CAST(name AS VARCHAR(100))
+func (p *Parser) parseCastExpression() (*ast.CastExpression, error) {
+	// Consume CAST keyword
+	p.advance()
+
+	// Expect opening parenthesis
+	if !p.isType(models.TokenTypeLParen) {
+		return nil, p.expectedError("(")
+	}
+	p.advance() // Consume (
+
+	// Parse the expression to be cast
+	expr, err := p.parseExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	// Expect AS keyword
+	if !p.isType(models.TokenTypeAs) {
+		return nil, p.expectedError("AS")
+	}
+	p.advance() // Consume AS
+
+	// Parse the target data type
+	// The type can be:
+	// - Simple type: VARCHAR, INT, DECIMAL, etc.
+	// - Type with precision: VARCHAR(100), DECIMAL(10,2), etc.
+	if !p.isType(models.TokenTypeIdentifier) {
+		return nil, p.expectedError("data type")
+	}
+
+	dataType := p.currentToken.Literal
+	p.advance() // Consume type name
+
+	// Check for type parameters (e.g., VARCHAR(100), DECIMAL(10,2))
+	if p.isType(models.TokenTypeLParen) {
+		p.advance() // Consume (
+
+		// Build the full type string including parameters
+		typeParams := "("
+		paramCount := 0
+
+		for !p.isType(models.TokenTypeRParen) {
+			if paramCount > 0 {
+				if !p.isType(models.TokenTypeComma) {
+					return nil, p.expectedError(", or )")
+				}
+				typeParams += p.currentToken.Literal
+				p.advance() // Consume comma
+			}
+
+			// Parse parameter (should be a number)
+			if p.currentToken.Type != "INT" && !p.isType(models.TokenTypeIdentifier) {
+				return nil, goerrors.InvalidSyntaxError(
+					"expected numeric type parameter",
+					p.currentLocation(),
+					"Use CAST(expr AS TYPE(precision[, scale]))",
+				)
+			}
+
+			typeParams += p.currentToken.Literal
+			p.advance()
+			paramCount++
+		}
+
+		typeParams += ")"
+		dataType += typeParams
+
+		if !p.isType(models.TokenTypeRParen) {
+			return nil, p.expectedError(")")
+		}
+		p.advance() // Consume )
+	}
+
+	// Expect closing parenthesis of CAST
+	if !p.isType(models.TokenTypeRParen) {
+		return nil, p.expectedError(")")
+	}
+	p.advance() // Consume )
+
+	return &ast.CastExpression{
+		Expr: expr,
+		Type: dataType,
+	}, nil
 }
 
 // parseSubquery parses a subquery (SELECT or WITH statement).

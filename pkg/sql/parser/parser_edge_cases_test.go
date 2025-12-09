@@ -508,8 +508,7 @@ func TestParseWithStatement_Recursion(t *testing.T) {
 				}
 			} else {
 				if err != nil {
-					t.Skipf("Parsing not fully supported: %v", err)
-					return
+					t.Fatalf("Failed to parse: %v", err)
 				}
 				if result == nil || len(result.Statements) == 0 {
 					t.Error("Expected parsed statement, got nil or empty")

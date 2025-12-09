@@ -40,7 +40,8 @@ func DetectAndReadInput(input string) (*InputResult, error) {
 	input = strings.TrimSpace(input)
 
 	// Check if input looks like a file path using os.Stat
-	if _, err := os.Stat(input); err == nil {
+	_, statErr := os.Stat(input)
+	if statErr == nil {
 		// Input is a valid file path - perform comprehensive security validation
 		if err := validate.ValidateInputFile(input); err != nil {
 			return nil, fmt.Errorf("security validation failed: %w", err)
@@ -64,7 +65,14 @@ func DetectAndReadInput(input string) (*InputResult, error) {
 		}, nil
 	}
 
-	// Input is not a valid file path, treat as direct SQL
+	// If stat failed, check if it looks like a file path that doesn't exist
+	// (contains path separators or has .sql extension)
+	if strings.Contains(input, string(filepath.Separator)) || strings.HasSuffix(strings.ToLower(input), ".sql") {
+		// Looks like a file path but doesn't exist - return the original stat error
+		return nil, fmt.Errorf("invalid file path: %w", statErr)
+	}
+
+	// Input is not a file path, treat as direct SQL
 	// Validate that it looks like SQL (basic heuristics)
 	if !looksLikeSQL(input) {
 		return nil, fmt.Errorf("input does not appear to be valid SQL or a file path: %s", input)
@@ -100,7 +108,7 @@ func looksLikeSQL(input string) bool {
 	// Check for common SQL keywords at the beginning
 	sqlKeywords := []string{
 		"SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "DROP", "ALTER",
-		"WITH", "EXPLAIN", "ANALYZE", "SHOW", "DESCRIBE", "DESC",
+		"WITH", "EXPLAIN", "ANALYZE", "SHOW", "DESCRIBE", "DESC", "MERGE",
 	}
 
 	for _, keyword := range sqlKeywords {

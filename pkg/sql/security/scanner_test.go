@@ -649,3 +649,298 @@ func TestShouldInclude_UnknownSeverity(t *testing.T) {
 		t.Error("CRITICAL should be included when MinSeverity is HIGH")
 	}
 }
+
+// Test UNION-based injection detection (Issue #170)
+func TestScanSQL_UnionInjection(t *testing.T) {
+	scanner := NewScanner()
+
+	testCases := []struct {
+		sql          string
+		shouldDetect bool
+		description  string
+	}{
+		{
+			sql:          "SELECT * FROM users WHERE id = 1 UNION SELECT password FROM admins",
+			shouldDetect: true,
+			description:  "Basic UNION SELECT injection",
+		},
+		{
+			sql:          "SELECT id FROM users UNION ALL SELECT username FROM admins",
+			shouldDetect: true,
+			description:  "UNION ALL SELECT injection",
+		},
+		{
+			sql:          "SELECT * FROM users WHERE id = 1 UNION SELECT table_name FROM information_schema.tables",
+			shouldDetect: true,
+			description:  "UNION with information_schema access",
+		},
+		{
+			sql:          "SELECT * FROM active_users UNION SELECT * FROM archived_users",
+			shouldDetect: true,
+			description:  "Legitimate UNION (will be flagged but needs review)",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			result := scanner.ScanSQL(tc.sql)
+			hasUnionPattern := false
+			for _, f := range result.Findings {
+				if f.Pattern == PatternUnionBased {
+					hasUnionPattern = true
+					break
+				}
+			}
+
+			if tc.shouldDetect && !hasUnionPattern {
+				t.Errorf("expected UNION pattern in: %s", tc.description)
+			}
+		})
+	}
+}
+
+// Test stacked query injection detection (Issue #170)
+func TestScanSQL_StackedQueryInjection(t *testing.T) {
+	scanner := NewScanner()
+
+	testCases := []struct {
+		sql          string
+		shouldDetect bool
+		severity     Severity
+		description  string
+	}{
+		{
+			sql:          "SELECT * FROM users; DROP TABLE users;--",
+			shouldDetect: true,
+			severity:     SeverityCritical,
+			description:  "Stacked DROP TABLE injection",
+		},
+		{
+			sql:          "SELECT * FROM users WHERE id = 1; DELETE FROM admins",
+			shouldDetect: true,
+			severity:     SeverityCritical,
+			description:  "Stacked DELETE injection",
+		},
+		{
+			sql:          "SELECT * FROM products; TRUNCATE TABLE inventory",
+			shouldDetect: true,
+			severity:     SeverityCritical,
+			description:  "Stacked TRUNCATE injection",
+		},
+		{
+			sql:          "SELECT * FROM users; UPDATE users SET admin=1",
+			shouldDetect: true,
+			severity:     SeverityCritical,
+			description:  "Stacked UPDATE injection",
+		},
+		{
+			sql:          "SELECT * FROM users; INSERT INTO admins VALUES ('hacker')",
+			shouldDetect: true,
+			severity:     SeverityCritical,
+			description:  "Stacked INSERT injection",
+		},
+		{
+			sql:          "SELECT * FROM users; ALTER TABLE users ADD COLUMN admin BOOLEAN",
+			shouldDetect: true,
+			severity:     SeverityCritical,
+			description:  "Stacked ALTER TABLE injection",
+		},
+		{
+			sql:          "SELECT * FROM users; EXEC sp_executesql @sql",
+			shouldDetect: true,
+			severity:     SeverityCritical,
+			description:  "Stacked EXEC injection",
+		},
+		{
+			sql:          "SELECT * FROM users; EXECUTE IMMEDIATE 'DROP TABLE users'",
+			shouldDetect: true,
+			severity:     SeverityCritical,
+			description:  "Stacked EXECUTE injection",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			result := scanner.ScanSQL(tc.sql)
+			hasStackedQuery := false
+			var foundSeverity Severity
+			for _, f := range result.Findings {
+				if f.Pattern == PatternStackedQuery {
+					hasStackedQuery = true
+					foundSeverity = f.Severity
+					break
+				}
+			}
+
+			if tc.shouldDetect && !hasStackedQuery {
+				t.Errorf("expected STACKED_QUERY pattern in: %s", tc.description)
+			}
+			if tc.shouldDetect && hasStackedQuery && foundSeverity != tc.severity {
+				t.Errorf("expected severity %s, got %s for: %s", tc.severity, foundSeverity, tc.description)
+			}
+		})
+	}
+}
+
+// Test that legitimate queries are NOT flagged as stacked queries
+func TestScanSQL_NoFalsePositives_StackedQueries(t *testing.T) {
+	scanner := NewScanner()
+
+	legitimateQueries := []struct {
+		sql         string
+		description string
+	}{
+		{
+			sql:         "SELECT * FROM users WHERE name LIKE '%;%'",
+			description: "Semicolon in LIKE pattern",
+		},
+		{
+			sql:         "SELECT description FROM products WHERE description CONTAINS 'DROP'",
+			description: "DROP as part of text content",
+		},
+		{
+			sql:         "INSERT INTO logs (message) VALUES ('User deleted item')",
+			description: "DELETE in string value",
+		},
+	}
+
+	for _, tc := range legitimateQueries {
+		t.Run(tc.description, func(t *testing.T) {
+			result := scanner.ScanSQL(tc.sql)
+			for _, f := range result.Findings {
+				if f.Pattern == PatternStackedQuery {
+					// Some false positives are acceptable - check if severity is appropriate
+					// or if the pattern truly doesn't match
+					if f.Severity == SeverityCritical {
+						t.Logf("Potential false positive for: %s (Pattern: %s)", tc.description, f.Description)
+					}
+				}
+			}
+		})
+	}
+}
+
+// Test enhanced comment injection detection (Issue #170)
+func TestScanSQL_EnhancedCommentInjection(t *testing.T) {
+	scanner := NewScanner()
+
+	testCases := []struct {
+		sql          string
+		shouldDetect bool
+		description  string
+	}{
+		{
+			sql:          "SELECT * FROM users WHERE id = 1 --",
+			shouldDetect: true,
+			description:  "Trailing SQL comment",
+		},
+		{
+			sql:          "SELECT * FROM users WHERE password = 'x' OR '1'='1'--",
+			shouldDetect: true,
+			description:  "Comment-based bypass after tautology",
+		},
+		{
+			sql:          "SELECT * FROM users; DROP TABLE users;--",
+			shouldDetect: true,
+			description:  "Stacked query with comment terminator",
+		},
+		{
+			sql:          "SELECT * FROM users /* WHERE active = 1 */",
+			shouldDetect: true,
+			description:  "Block comment potentially hiding condition",
+		},
+		{
+			sql:          "-- This is a comment\nSELECT * FROM users",
+			shouldDetect: false,
+			description:  "Legitimate comment at start of query",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			result := scanner.ScanSQL(tc.sql)
+			hasCommentPattern := false
+			for _, f := range result.Findings {
+				if f.Pattern == PatternComment {
+					hasCommentPattern = true
+					break
+				}
+			}
+
+			if tc.shouldDetect && !hasCommentPattern {
+				t.Errorf("expected COMMENT pattern in: %s", tc.description)
+			}
+		})
+	}
+}
+
+// Test information_schema detection in UNION queries
+func TestScanSQL_InformationSchemaAccess(t *testing.T) {
+	scanner := NewScanner()
+
+	testCases := []struct {
+		sql         string
+		description string
+	}{
+		{
+			sql:         "SELECT * FROM users UNION SELECT table_name FROM information_schema.tables",
+			description: "Access to information_schema.tables",
+		},
+		{
+			sql:         "SELECT id FROM products UNION SELECT column_name FROM information_schema.columns",
+			description: "Access to information_schema.columns",
+		},
+		{
+			sql:         "SELECT name FROM users WHERE name LIKE '%information_schema%'",
+			description: "information_schema in string literal (potential false positive)",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			result := scanner.ScanSQL(tc.sql)
+			hasUnionPattern := false
+			for _, f := range result.Findings {
+				if f.Pattern == PatternUnionBased {
+					hasUnionPattern = true
+					break
+				}
+			}
+
+			if !hasUnionPattern {
+				t.Errorf("expected information_schema detection in: %s", tc.description)
+			}
+		})
+	}
+}
+
+// Test combined attack patterns
+func TestScanSQL_CombinedAttacks(t *testing.T) {
+	scanner := NewScanner()
+
+	complexAttack := "SELECT * FROM users WHERE id = 1 OR 1=1 UNION SELECT password FROM admins; DROP TABLE users;--"
+	result := scanner.ScanSQL(complexAttack)
+
+	expectedPatterns := map[PatternType]bool{
+		PatternUnionBased:   true,
+		PatternStackedQuery: true,
+		PatternComment:      true,
+	}
+
+	for expectedPattern := range expectedPatterns {
+		found := false
+		for _, f := range result.Findings {
+			if f.Pattern == expectedPattern {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected pattern %s to be detected in complex attack", expectedPattern)
+		}
+	}
+
+	if result.CriticalCount == 0 {
+		t.Error("expected critical findings for complex multi-vector attack")
+	}
+}

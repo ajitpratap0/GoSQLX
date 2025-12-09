@@ -485,8 +485,11 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	// Parse FROM clause (optional to support SELECT without FROM like "SELECT 1")
-	if !p.isType(models.TokenTypeFrom) && !p.isType(models.TokenTypeEOF) && !p.isType(models.TokenTypeSemicolon) {
-		// If not FROM, EOF, or semicolon, it's likely an error
+	// Also allow set operation keywords (UNION, EXCEPT, INTERSECT) for queries in CTEs
+	if !p.isType(models.TokenTypeFrom) && !p.isType(models.TokenTypeEOF) &&
+		!p.isType(models.TokenTypeSemicolon) && !p.isType(models.TokenTypeRParen) &&
+		!p.isAnyType(models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect) {
+		// If not FROM, EOF, semicolon, right paren, or set operation, it's likely an error
 		return nil, p.expectedError("FROM, semicolon, or end of statement")
 	}
 

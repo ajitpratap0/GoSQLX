@@ -45,7 +45,7 @@ func TestParser_FilterClause_BasicCount(t *testing.T) {
 	defer parser.Release()
 	defer ast.ReleaseAST(result)
 
-	if result.Statements == nil || len(result.Statements) == 0 {
+	if len(result.Statements) == 0 {
 		t.Fatal("Expected at least one statement")
 	}
 
@@ -327,7 +327,7 @@ func TestParser_FilterClause_WithWindowFunction(t *testing.T) {
 		t.Error("Expected OVER clause (window function)")
 	}
 
-	if funcCall.Over.PartitionBy == nil || len(funcCall.Over.PartitionBy) == 0 {
+	if len(funcCall.Over.PartitionBy) == 0 {
 		t.Error("Expected PARTITION BY in window spec")
 	}
 }

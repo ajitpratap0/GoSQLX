@@ -117,8 +117,8 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 		if err != nil {
 			return nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse BETWEEN lower bound: %v", err),
-				models.Location{Line: 0, Column: 0},
-				"",
+				p.currentLocation(),
+				p.currentToken.Literal,
 			)
 		}
 
@@ -133,8 +133,8 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 		if err != nil {
 			return nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse BETWEEN upper bound: %v", err),
-				models.Location{Line: 0, Column: 0},
-				"",
+				p.currentLocation(),
+				p.currentToken.Literal,
 			)
 		}
 
@@ -156,8 +156,8 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 		if err != nil {
 			return nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse LIKE pattern: %v", err),
-				models.Location{Line: 0, Column: 0},
-				"",
+				p.currentLocation(),
+				p.currentToken.Literal,
 			)
 		}
 
@@ -186,8 +186,8 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			if err != nil {
 				return nil, goerrors.InvalidSyntaxError(
 					fmt.Sprintf("failed to parse IN subquery: %v", err),
-					models.Location{Line: 0, Column: 0},
-					"",
+					p.currentLocation(),
+					p.currentToken.Literal,
 				)
 			}
 

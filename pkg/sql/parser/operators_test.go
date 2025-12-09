@@ -3,6 +3,7 @@ package parser
 import (
 	"testing"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
@@ -506,5 +507,164 @@ func TestParser_OperatorErrors(t *testing.T) {
 				t.Error("expected error, got nil")
 			}
 		})
+	}
+}
+
+// TestParser_StringConcatenation tests || (string concatenation) operator
+func TestParser_StringConcatenation(t *testing.T) {
+	// SELECT 'Hello' || ' ' || 'World'
+	// Must include ModelType for tokens to be properly recognized
+	// Use TokenTypeSingleQuotedString (31) for string literals, matching tokenizer output
+	// Include EOF token at the end
+	tokens := []token.Token{
+		{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: "STRING", ModelType: models.TokenTypeSingleQuotedString, Literal: "Hello"},
+		{Type: "STRING_CONCAT", ModelType: models.TokenTypeStringConcat, Literal: "||"},
+		{Type: "STRING", ModelType: models.TokenTypeSingleQuotedString, Literal: " "},
+		{Type: "STRING_CONCAT", ModelType: models.TokenTypeStringConcat, Literal: "||"},
+		{Type: "STRING", ModelType: models.TokenTypeSingleQuotedString, Literal: "World"},
+		{Type: "EOF", ModelType: models.TokenTypeEOF, Literal: ""},
+	}
+
+	parser := NewParser()
+	defer parser.Release()
+
+	tree, err := parser.Parse(tokens)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer ast.ReleaseAST(tree)
+
+	stmt := tree.Statements[0].(*ast.SelectStatement)
+	if len(stmt.Columns) != 1 {
+		t.Fatalf("expected 1 column, got %d", len(stmt.Columns))
+	}
+
+	// The expression should be: ('Hello' || ' ') || 'World'
+	// This is left-associative
+	outerBinExpr, ok := stmt.Columns[0].(*ast.BinaryExpression)
+	if !ok {
+		t.Fatalf("expected BinaryExpression, got %T", stmt.Columns[0])
+	}
+
+	if outerBinExpr.Operator != "||" {
+		t.Errorf("expected outer operator '||', got %q", outerBinExpr.Operator)
+	}
+
+	// Left side should be another binary expression
+	innerBinExpr, ok := outerBinExpr.Left.(*ast.BinaryExpression)
+	if !ok {
+		t.Fatalf("expected left to be BinaryExpression, got %T", outerBinExpr.Left)
+	}
+
+	if innerBinExpr.Operator != "||" {
+		t.Errorf("expected inner operator '||', got %q", innerBinExpr.Operator)
+	}
+
+	// Verify left side is 'Hello'
+	leftLit, ok := innerBinExpr.Left.(*ast.LiteralValue)
+	if !ok || leftLit.Value != "Hello" {
+		t.Error("expected left to be 'Hello'")
+	}
+
+	// Verify middle is ' '
+	middleLit, ok := innerBinExpr.Right.(*ast.LiteralValue)
+	if !ok || middleLit.Value != " " {
+		t.Error("expected middle to be ' '")
+	}
+
+	// Verify right side is 'World'
+	rightLit, ok := outerBinExpr.Right.(*ast.LiteralValue)
+	if !ok || rightLit.Value != "World" {
+		t.Error("expected right to be 'World'")
+	}
+}
+
+// TestParser_StringConcatWithColumns tests || with column names
+func TestParser_StringConcatWithColumns(t *testing.T) {
+	// SELECT first_name || ' ' || last_name FROM users
+	tokens := []token.Token{
+		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "IDENT", Literal: "first_name"},
+		{Type: "STRING_CONCAT", Literal: "||"},
+		{Type: "STRING", Literal: " "},
+		{Type: "STRING_CONCAT", Literal: "||"},
+		{Type: "IDENT", Literal: "last_name"},
+		{Type: "FROM", Literal: "FROM"},
+		{Type: "IDENT", Literal: "users"},
+	}
+
+	parser := NewParser()
+	defer parser.Release()
+
+	tree, err := parser.Parse(tokens)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer ast.ReleaseAST(tree)
+
+	stmt := tree.Statements[0].(*ast.SelectStatement)
+	if len(stmt.Columns) != 1 {
+		t.Fatalf("expected 1 column, got %d", len(stmt.Columns))
+	}
+
+	// Should be a binary expression
+	binExpr, ok := stmt.Columns[0].(*ast.BinaryExpression)
+	if !ok {
+		t.Fatalf("expected BinaryExpression, got %T", stmt.Columns[0])
+	}
+
+	if binExpr.Operator != "||" {
+		t.Errorf("expected operator '||', got %q", binExpr.Operator)
+	}
+}
+
+// TestParser_StringConcatWithAlias tests || with AS alias
+func TestParser_StringConcatWithAlias(t *testing.T) {
+	// SELECT first_name || last_name AS fullname FROM users
+	tokens := []token.Token{
+		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "IDENT", Literal: "first_name"},
+		{Type: "STRING_CONCAT", Literal: "||"},
+		{Type: "IDENT", Literal: "last_name"},
+		{Type: "AS", Literal: "AS"},
+		{Type: "IDENT", Literal: "fullname"},
+		{Type: "FROM", Literal: "FROM"},
+		{Type: "IDENT", Literal: "users"},
+	}
+
+	parser := NewParser()
+	defer parser.Release()
+
+	tree, err := parser.Parse(tokens)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer ast.ReleaseAST(tree)
+
+	stmt := tree.Statements[0].(*ast.SelectStatement)
+	if len(stmt.Columns) != 1 {
+		t.Fatalf("expected 1 column, got %d", len(stmt.Columns))
+	}
+
+	// The column should be an AliasedExpression
+	aliased, ok := stmt.Columns[0].(*ast.AliasedExpression)
+	if !ok {
+		t.Fatalf("expected AliasedExpression, got %T", stmt.Columns[0])
+	}
+
+	// The expression should be a BinaryExpression with ||
+	binExpr, ok := aliased.Expr.(*ast.BinaryExpression)
+	if !ok {
+		t.Fatalf("expected BinaryExpression in alias, got %T", aliased.Expr)
+	}
+
+	if binExpr.Operator != "||" {
+		t.Errorf("expected operator '||', got %q", binExpr.Operator)
+	}
+
+	// Verify alias name
+	if aliased.Alias != "fullname" {
+		t.Errorf("expected alias 'fullname', got %q", aliased.Alias)
 	}
 }

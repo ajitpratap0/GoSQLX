@@ -169,8 +169,19 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 	}
 	p.advance() // Consume (
 
-	// Parse the inner statement
-	stmt, err := p.parseStatement()
+	// Parse the inner statement - handle SELECT with set operations support
+	var stmt ast.Statement
+	var err error
+
+	if p.isType(models.TokenTypeSelect) {
+		// For SELECT statements, use parseSelectWithSetOperations to support UNION, EXCEPT, INTERSECT
+		p.advance() // Consume SELECT
+		stmt, err = p.parseSelectWithSetOperations()
+	} else {
+		// For other statement types (INSERT, UPDATE, DELETE, WITH), use parseStatement
+		stmt, err = p.parseStatement()
+	}
+
 	if err != nil {
 		return nil, goerrors.InvalidCTEError(
 			fmt.Sprintf("error parsing CTE subquery: %v", err),

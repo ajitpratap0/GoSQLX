@@ -1,13 +1,15 @@
 // Package security provides SQL injection pattern detection and security scanning.
 // It analyzes parsed SQL AST to identify common injection patterns and vulnerabilities.
 //
-// The scanner detects 6 pattern types:
+// The scanner detects 8 pattern types:
 //   - Tautologies: Always-true conditions like 1=1, 'a'='a'
-//   - Comment-based bypasses: --, /**/, #
-//   - UNION-based extraction: Suspicious UNION SELECT patterns with NULL columns or system tables
+//   - Comment-based bypasses: --, /**/, #, trailing comments
+//   - UNION-based extraction: UNION SELECT patterns, information_schema access
+//   - Stacked queries: Destructive statements after semicolon (DROP, DELETE, etc.)
 //   - Time-based blind: SLEEP(), WAITFOR DELAY, pg_sleep(), BENCHMARK()
 //   - Out-of-band: xp_cmdshell, LOAD_FILE(), UTL_HTTP, etc.
 //   - Dangerous functions: EXEC(), sp_executesql, PREPARE FROM, etc.
+//   - Boolean-based: Conditional logic exploitation
 //
 // Example usage:
 //
@@ -96,6 +98,19 @@ func initCompiledPatterns() {
 		regexp.MustCompile(`(?i)\bsp_executesql\b`),
 		regexp.MustCompile(`(?i)\bPREPARE\s+\w+\s+FROM\b`),
 	}
+
+	// UNION-based injection patterns
+	compiledPatterns[PatternUnionBased] = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)\bUNION\s+(ALL\s+)?SELECT\b`),
+		regexp.MustCompile(`(?i)\binformation_schema\b`),
+	}
+
+	// Stacked query injection patterns (destructive statements after semicolon)
+	compiledPatterns[PatternStackedQuery] = []*regexp.Regexp{
+		regexp.MustCompile(`;\s*(?i)(DROP|DELETE|TRUNCATE|UPDATE|INSERT|ALTER)\b`),
+		regexp.MustCompile(`;\s*(?i)EXEC\b`),
+		regexp.MustCompile(`;\s*(?i)EXECUTE\b`),
+	}
 }
 
 // initCommentPatterns initializes comment detection patterns once.
@@ -105,11 +120,12 @@ func initCommentPatterns() {
 		description string
 		severity    Severity
 	}{
-		{regexp.MustCompile(`--\s*$`), "Single-line comment at end of input", SeverityMedium},
+		{regexp.MustCompile(`--\s*$`), "Trailing SQL comment may indicate injection", SeverityMedium},
 		{regexp.MustCompile(`--\s*['")\]]`), "Comment after quote/bracket (potential bypass)", SeverityHigh},
-		{regexp.MustCompile(`/\*.*\*/`), "Block comment (potential bypass)", SeverityLow},
-		{regexp.MustCompile(`/\*!.*\*/`), "MySQL conditional comment", SeverityMedium},
+		{regexp.MustCompile(`/\*[^*]*\*+(?:[^/*][^*]*\*+)*/\s*$`), "Unclosed or trailing block comment may indicate injection", SeverityMedium},
+		{regexp.MustCompile(`/\*!.*\*/`), "MySQL conditional comment (version-specific execution)", SeverityMedium},
 		{regexp.MustCompile(`#\s*$`), "Hash comment at end (MySQL)", SeverityMedium},
+		{regexp.MustCompile(`;\s*--`), "Statement terminator followed by comment", SeverityHigh},
 	}
 }
 
@@ -243,6 +259,12 @@ func (s *Scanner) ScanSQL(sql string) *ScanResult {
 
 	// Check for dangerous function patterns
 	s.detectRegexPatterns(sql, PatternDangerousFunc, result)
+
+	// Check for UNION-based injection patterns
+	s.detectRegexPatterns(sql, PatternUnionBased, result)
+
+	// Check for stacked query patterns
+	s.detectRegexPatterns(sql, PatternStackedQuery, result)
 
 	// Update counts
 	s.updateCounts(result)
@@ -635,16 +657,29 @@ func (s *Scanner) detectRegexPatterns(sql string, patternType PatternType, resul
 		PatternTimeBased:     SeverityHigh,
 		PatternOutOfBand:     SeverityCritical,
 		PatternDangerousFunc: SeverityMedium,
+		PatternUnionBased:    SeverityCritical,
+		PatternStackedQuery:  SeverityCritical,
 	}
 
 	riskMap := map[PatternType]string{
 		PatternTimeBased:     "Time-based blind SQL injection",
 		PatternOutOfBand:     "Out-of-band data exfiltration or command execution",
 		PatternDangerousFunc: "Dynamic SQL execution vulnerability",
+		PatternUnionBased:    "UNION-based SQL injection for data extraction",
+		PatternStackedQuery:  "Stacked query injection with destructive operations",
+	}
+
+	suggestionMap := map[PatternType]string{
+		PatternTimeBased:     "Review and sanitize SQL input",
+		PatternOutOfBand:     "Review and sanitize SQL input",
+		PatternDangerousFunc: "Review and sanitize SQL input",
+		PatternUnionBased:    "Use parameterized queries and validate input",
+		PatternStackedQuery:  "Block semicolons in user input or use parameterized queries",
 	}
 
 	severity := severityMap[patternType]
 	risk := riskMap[patternType]
+	suggestion := suggestionMap[patternType]
 
 	for _, re := range patterns {
 		if matches := re.FindStringSubmatch(sql); len(matches) > 0 {
@@ -653,7 +688,7 @@ func (s *Scanner) detectRegexPatterns(sql string, patternType PatternType, resul
 				Pattern:     patternType,
 				Description: "Pattern detected: " + matches[0],
 				Risk:        risk,
-				Suggestion:  "Review and sanitize SQL input",
+				Suggestion:  suggestion,
 			}
 			if s.shouldInclude(finding.Severity) {
 				result.Findings = append(result.Findings, finding)

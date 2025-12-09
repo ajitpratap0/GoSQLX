@@ -201,20 +201,21 @@ func (w WindowFrameBound) Children() []Node {
 
 // SelectStatement represents a SELECT SQL statement
 type SelectStatement struct {
-	With      *WithClause
-	Distinct  bool
-	Columns   []Expression
-	From      []TableReference
-	TableName string // Added for pool operations
-	Joins     []JoinClause
-	Where     Expression
-	GroupBy   []Expression
-	Having    Expression
-	Windows   []WindowSpec
-	OrderBy   []OrderByExpression
-	Limit     *int
-	Offset    *int
-	Fetch     *FetchClause // SQL-99 FETCH FIRST/NEXT clause (F861, F862)
+	With              *WithClause
+	Distinct          bool
+	DistinctOnColumns []Expression // PostgreSQL DISTINCT ON (expr, ...) clause
+	Columns           []Expression
+	From              []TableReference
+	TableName         string // Added for pool operations
+	Joins             []JoinClause
+	Where             Expression
+	GroupBy           []Expression
+	Having            Expression
+	Windows           []WindowSpec
+	OrderBy           []OrderByExpression
+	Limit             *int
+	Offset            *int
+	Fetch             *FetchClause // SQL-99 FETCH FIRST/NEXT clause (F861, F862)
 }
 
 // FetchClause represents the SQL-99 FETCH FIRST/NEXT clause (F861, F862)
@@ -248,6 +249,7 @@ func (s SelectStatement) Children() []Node {
 	if s.With != nil {
 		children = append(children, s.With)
 	}
+	children = append(children, nodifyExpressions(s.DistinctOnColumns)...)
 	children = append(children, nodifyExpressions(s.Columns)...)
 	for _, from := range s.From {
 		from := from // G601: Create local copy to avoid memory aliasing

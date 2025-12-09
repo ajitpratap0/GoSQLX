@@ -60,6 +60,37 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 		Distinct:  distinct,
 	}
 
+	// Check for FILTER clause (SQL:2003 T612)
+	// Syntax: FILTER (WHERE condition)
+	if p.isType(models.TokenTypeFilter) {
+		p.advance() // Consume FILTER
+
+		// Expect opening parenthesis
+		if !p.isType(models.TokenTypeLParen) {
+			return nil, p.expectedError("( after FILTER")
+		}
+		p.advance() // Consume (
+
+		// Expect WHERE keyword
+		if !p.isType(models.TokenTypeWhere) {
+			return nil, p.expectedError("WHERE after FILTER (")
+		}
+		p.advance() // Consume WHERE
+
+		// Parse filter condition expression
+		filterExpr, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+		funcCall.Filter = filterExpr
+
+		// Expect closing parenthesis
+		if !p.isType(models.TokenTypeRParen) {
+			return nil, p.expectedError(") after FILTER condition")
+		}
+		p.advance() // Consume )
+	}
+
 	// Check for OVER clause (window function)
 	if p.isType(models.TokenTypeOver) {
 		p.advance() // Consume OVER

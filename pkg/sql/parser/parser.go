@@ -426,17 +426,18 @@ var modelTypeToString = map[models.TokenType]token.Type{
 	models.TokenTypeIdentifier: "IDENT",
 
 	// Punctuation and operators
-	models.TokenTypeComma:    token.COMMA,
-	models.TokenTypeLParen:   "(",
-	models.TokenTypeRParen:   ")",
-	models.TokenTypeEq:       "=",
-	models.TokenTypeLt:       "<",
-	models.TokenTypeGt:       ">",
-	models.TokenTypeNeq:      "!=",
-	models.TokenTypeLtEq:     "<=",
-	models.TokenTypeGtEq:     ">=",
-	models.TokenTypeDot:      ".",
-	models.TokenTypeAsterisk: "*",
+	models.TokenTypeComma:        token.COMMA,
+	models.TokenTypeLParen:       "(",
+	models.TokenTypeRParen:       ")",
+	models.TokenTypeEq:           "=",
+	models.TokenTypeLt:           "<",
+	models.TokenTypeGt:           ">",
+	models.TokenTypeNeq:          "!=",
+	models.TokenTypeLtEq:         "<=",
+	models.TokenTypeGtEq:         ">=",
+	models.TokenTypeDot:          ".",
+	models.TokenTypeAsterisk:     "*",
+	models.TokenTypeStringConcat: "STRING_CONCAT",
 
 	// Core SQL keywords
 	models.TokenTypeSelect: token.SELECT,
@@ -546,6 +547,9 @@ var modelTypeToString = map[models.TokenType]token.Type{
 	models.TokenTypeThen: "THEN",
 	models.TokenTypeElse: "ELSE",
 	models.TokenTypeEnd:  "END",
+
+	// CAST expression
+	models.TokenTypeCast: "CAST",
 
 	// MERGE keywords
 	models.TokenTypeMerge:   "MERGE",

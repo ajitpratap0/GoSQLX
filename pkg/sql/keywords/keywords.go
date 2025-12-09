@@ -107,6 +107,7 @@ var ADDITIONAL_KEYWORDS = []Keyword{
 	{Word: "THEN", Type: models.TokenTypeThen, Reserved: true, ReservedForTableAlias: false},
 	{Word: "ELSE", Type: models.TokenTypeElse, Reserved: true, ReservedForTableAlias: false},
 	{Word: "END", Type: models.TokenTypeEnd, Reserved: true, ReservedForTableAlias: false},
+	{Word: "CAST", Type: models.TokenTypeCast, Reserved: true, ReservedForTableAlias: false},
 	// Window function names (Phase 2.5)
 	{Word: "ROW_NUMBER", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "RANK", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
@@ -121,6 +122,8 @@ var ADDITIONAL_KEYWORDS = []Keyword{
 	{Word: "CUBE", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
 	{Word: "GROUPING", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
 	{Word: "SETS", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
+	// FILTER clause for aggregate functions (SQL:2003 T612)
+	{Word: "FILTER", Type: models.TokenTypeFilter, Reserved: true, ReservedForTableAlias: false},
 	// MERGE statement keywords (SQL:2003 F312)
 	{Word: "MERGE", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
 	{Word: "USING", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},

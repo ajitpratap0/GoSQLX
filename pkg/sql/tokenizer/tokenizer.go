@@ -56,6 +56,7 @@ var keywordTokenTypes = map[string]models.TokenType{
 	"THEN":    models.TokenTypeThen,
 	"ELSE":    models.TokenTypeElse,
 	"END":     models.TokenTypeEnd,
+	"CAST":    models.TokenTypeCast,
 	"ASC":     models.TokenTypeAsc,
 	"DESC":    models.TokenTypeDesc,
 	"LIMIT":   models.TokenTypeLimit,

@@ -121,7 +121,11 @@ func TestParser_SimpleCTE(t *testing.T) {
 }
 
 func TestParser_RecursiveCTE(t *testing.T) {
-	sql := `WITH RECURSIVE emp_tree AS (SELECT emp_id FROM employees) SELECT emp_id FROM emp_tree`
+	sql := `WITH RECURSIVE cte AS (
+		SELECT 1 AS n
+		UNION ALL
+		SELECT n + 1 FROM cte WHERE n < 10
+	) SELECT * FROM cte`
 
 	// Get tokenizer from pool
 	tkz := tokenizer.GetTokenizer()
@@ -133,14 +137,17 @@ func TestParser_RecursiveCTE(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	// Convert tokens for parser
-	convertedTokens := convertTokensForCTE(tokens)
+	// Convert tokens for parser using standard converter
+	convertedTokens, err := ConvertTokensForParser(tokens)
+	if err != nil {
+		t.Fatalf("Failed to convert tokens: %v", err)
+	}
 
 	// Parse tokens
 	parser := &Parser{}
 	astObj, err := parser.Parse(convertedTokens)
 	if err != nil {
-		t.Fatalf("Failed to parse recursive CTE: %v", err)
+		t.Fatalf("Failed to parse recursive CTE with UNION ALL: %v", err)
 	}
 	defer ast.ReleaseAST(astObj)
 
@@ -172,8 +179,43 @@ func TestParser_RecursiveCTE(t *testing.T) {
 	// Verify CTE details
 	if len(selectStmt.With.CTEs) > 0 {
 		cte := selectStmt.With.CTEs[0]
-		if cte.Name != "emp_tree" {
-			t.Errorf("Expected CTE name 'emp_tree', got '%s'", cte.Name)
+		if cte.Name != "cte" {
+			t.Errorf("Expected CTE name 'cte', got '%s'", cte.Name)
+		}
+
+		// Verify the CTE statement is a SetOperation (UNION ALL)
+		setOp, ok := cte.Statement.(*ast.SetOperation)
+		if !ok {
+			t.Fatalf("Expected SetOperation in CTE body, got %T", cte.Statement)
+		}
+
+		// Verify it's UNION ALL
+		if setOp.Operator != "UNION" {
+			t.Errorf("Expected UNION operator, got %s", setOp.Operator)
+		}
+		if !setOp.All {
+			t.Error("Expected UNION ALL (All flag should be true)")
+		}
+
+		// Verify left side is SELECT 1 AS n
+		leftSelect, ok := setOp.Left.(*ast.SelectStatement)
+		if !ok {
+			t.Fatalf("Expected left side to be SelectStatement, got %T", setOp.Left)
+		}
+		if len(leftSelect.Columns) != 1 {
+			t.Errorf("Expected 1 column in left SELECT, got %d", len(leftSelect.Columns))
+		}
+
+		// Verify right side is SELECT n + 1 FROM cte WHERE n < 10
+		rightSelect, ok := setOp.Right.(*ast.SelectStatement)
+		if !ok {
+			t.Fatalf("Expected right side to be SelectStatement, got %T", setOp.Right)
+		}
+		if len(rightSelect.Columns) != 1 {
+			t.Errorf("Expected 1 column in right SELECT, got %d", len(rightSelect.Columns))
+		}
+		if rightSelect.Where == nil {
+			t.Error("Expected WHERE clause in right SELECT")
 		}
 	}
 }

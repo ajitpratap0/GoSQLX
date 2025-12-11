@@ -88,7 +88,7 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 | **NATURAL JOIN** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ Full | 95% |
 | Multiple table JOINs | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
 | Self JOINs | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
-| **LATERAL JOIN** | ✅ | ❌ | ❌ | ❌ | ❌ | 🔧 Syntax | 10% |
+| **LATERAL JOIN** | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ Full | 95% |
 
 ### Subqueries
 
@@ -191,9 +191,12 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 | Feature | Support Level | GoSQLX Parser | Test Coverage | Notes |
 |---------|---------------|---------------|---------------|-------|
 | **Arrays** | ✅ Full | 🔧 Syntax | 40% | Keyword recognition only |
-| **JSON/JSONB** | ✅ Full | 🔧 Syntax | 30% | Data type recognition |
+| **JSON/JSONB** | ✅ Full | ✅ Full | 95% | Full operator support (`->`, `->>`, `#>`, `#>>`, `@>`, `<@`, `?`, `?|`, `?&`, `#-`) |
+| **DISTINCT ON** | ✅ Full | ✅ Full | 95% | PostgreSQL-specific SELECT DISTINCT ON (columns) |
+| **FILTER clause** | ✅ Full | ✅ Full | 95% | Aggregate FILTER (WHERE condition) support |
+| **RETURNING clause** | ✅ Full | ✅ Full | 95% | INSERT/UPDATE/DELETE RETURNING support |
 | **Full-text search** | ✅ Full | 🔧 Syntax | 30% | tsvector, tsquery types |
-| **LATERAL joins** | ✅ Full | 🔧 Syntax | 20% | Keyword reserved, no parsing logic |
+| **LATERAL joins** | ✅ Full | ✅ Full | 95% | Full support with LEFT/INNER/CROSS variants |
 | **Custom operators** | ✅ Full | ⚠️ Partial | 30% | Basic operator recognition |
 | **Dollar quoting** | ✅ Full | ⚠️ Partial | 40% | Limited support |
 

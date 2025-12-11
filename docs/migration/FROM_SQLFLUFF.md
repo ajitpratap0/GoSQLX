@@ -820,7 +820,7 @@ Status: SUCCESS
 
 ### Features Not Available in GoSQLX
 
-#### 1. Linting Rules (Coming in v1.5.0)
+#### 1. Linting Rules (Available in v1.6.0)
 **SQLFluff Has:**
 - 60+ built-in rules (L001-L064)
 - Custom rule creation
@@ -927,7 +927,7 @@ Use SQLFluff for unsupported dialects, or contribute dialect support to GoSQLX!
 ## FAQ
 
 ### Q: Can I use both SQLFluff and GoSQLX together?
-**A:** Yes! Use GoSQLX for fast parsing/validation and SQLFluff for linting until GoSQLX adds linting rules in v1.5.0.
+**A:** Yes! GoSQLX now has 10 linting rules (L001-L010) with auto-fix in v1.6.0. Use GoSQLX for fast parsing/validation/linting, and SQLFluff for comprehensive 60+ rule coverage.
 
 ### Q: Will GoSQLX replace SQLFluff completely?
 **A:** Not yet. SQLFluff has more features (linting, templates, dialects). But for parsing/validation, GoSQLX is 1000x faster!

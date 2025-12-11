@@ -290,7 +290,7 @@ func normalizeQuery(sql string) string {
     return result
 }
 
-// Note: Built-in normalization planned for GoSQLX v1.5.0
+// Note: Built-in normalization is planned for a future release
 ```
 
 ### Example 3: Multi-Dialect Support
@@ -684,7 +684,7 @@ func main() {
     cache.IsDuplicate("SELECT * FROM users WHERE id = 2") // true (duplicate pattern)
 }
 
-// Note: Built-in fingerprinting planned for GoSQLX v1.5.0
+// Note: Built-in fingerprinting is planned for a future release
 ```
 
 ### Pattern 2: Database Migration Tool
@@ -1143,7 +1143,7 @@ For heavy PL/pgSQL use, keep pg_query or contribute PL/pgSQL support to GoSQLX.
 **A:** You'll go from 100% to ~80-85% coverage. For most applications, this is sufficient. Test your queries!
 
 ### Q: What about normalization/fingerprinting?
-**A:** Implement manually (examples provided) or wait for v1.5.0 with built-in support.
+**A:** Implement manually using the examples provided above. Built-in support is planned for a future release.
 
 ### Q: Can I support multiple databases?
 **A:** Yes! That's GoSQLX's main advantage. Support PostgreSQL + MySQL + SQL Server + Oracle + SQLite.

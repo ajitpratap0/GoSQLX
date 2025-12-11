@@ -1061,8 +1061,8 @@ For PostgreSQL-only projects needing 100% compliance, keep pg_query.
 - `pg_query.Fingerprint()` built-in
 
 **GoSQLX Status:**
-- ❌ Not available yet
-- ⏳ Planned for v1.5.0
+- ⚠️ Not yet available (planned for future release)
+- Implement normalization manually for now
 
 **Workaround:**
 Implement normalization manually (see examples above).
@@ -1086,8 +1086,8 @@ For heavy PL/pgSQL use, keep pg_query or contribute PL/pgSQL support to GoSQLX.
 - Array operators (&&, @>, etc.)
 
 **GoSQLX Status:**
-- ⚠️ Partial support
-- Common operators work, exotic ones may not
+- ✅ JSON/JSONB operators supported in v1.6.0 (`->`, `->>`, `#>`, `#>>`, `@>`, `<@`, `?`, `?|`, `?&`, `#-`)
+- ⚠️ Array operators have partial support
 
 ---
 

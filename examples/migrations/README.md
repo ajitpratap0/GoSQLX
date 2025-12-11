@@ -334,6 +334,6 @@ tokens2, _ := tkz.Tokenize(sql2)
 
 ---
 
-**Last Updated:** November 2025
-**GoSQLX Version:** v1.4.0
+**Last Updated:** December 2025
+**GoSQLX Version:** v1.6.0
 **All examples tested and validated.**

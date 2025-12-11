@@ -1,7 +1,7 @@
 # GoSQLX vs Alternatives: Comprehensive Comparison
 
-**Last Updated:** 2025-11-28
-**GoSQLX Version:** v1.5.1
+**Last Updated:** 2025-12-11
+**GoSQLX Version:** v1.6.0
 
 This guide helps you choose the right SQL parsing tool for your needs. We provide an honest assessment of GoSQLX's strengths and limitations compared to popular alternatives.
 
@@ -311,6 +311,6 @@ See individual migration guides for code examples and patterns.
 ---
 
 **Last Updated:** 2025-11-28
-**Version:** v1.5.1
+**Version:** v1.6.0
 
 *Benchmark numbers are reproducible. See `/benchmarks` directory.*

@@ -4,6 +4,61 @@ This guide helps you upgrade between versions of GoSQLX.
 
 ---
 
+## Upgrading to v1.6.0 from v1.5.x
+
+**Release Date**: December 11, 2025
+**Type**: Major Feature Release (Non-Breaking)
+**Focus**: PostgreSQL Extensions, LSP Server, Developer Tools
+
+### 🎯 Quick Summary
+
+v1.6.0 is a **100% backward compatible** major feature release. It adds comprehensive PostgreSQL support, a full Language Server Protocol implementation, VSCode extension, and significant performance optimizations.
+
+### ✅ What's New
+
+**PostgreSQL Extensions:**
+- LATERAL JOIN support with LEFT/INNER/CROSS variants
+- JSON/JSONB operators: `->`, `->>`, `#>`, `#>>`, `@>`, `<@`, `?`, `?|`, `?&`, `#-`
+- DISTINCT ON (column1, column2) syntax
+- FILTER (WHERE condition) clause for aggregates
+- ORDER BY inside aggregates (STRING_AGG, ARRAY_AGG, JSON_AGG)
+- RETURNING clause for INSERT, UPDATE, DELETE
+
+**Language Server Protocol:**
+- Full LSP server for IDE integration (`gosqlx lsp`)
+- Real-time diagnostics, completion (100+ keywords), hover (60+ keywords)
+- Document symbols, signature help, code actions
+
+**VSCode Extension:**
+- Official GoSQLX extension with syntax highlighting
+- SQL formatting and intelligent autocomplete
+
+**Performance Improvements:**
+- 14x faster token type comparison with O(1) int-based lookups
+- 575x faster keyword suggestions with caching
+- 22.5x faster config file loading
+
+**Developer Tools:**
+- go-task Taskfile.yml replacing Makefile
+- 10 linter rules (L001-L010) with auto-fix
+- Structured error codes (E1001-E3004)
+
+### 📦 Upgrade Steps
+
+```bash
+# Update your go.mod
+go get github.com/ajitpratap0/GoSQLX@v1.6.0
+
+# Or update CLI
+go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@v1.6.0
+```
+
+### ⚠️ Breaking Changes
+
+**None** - v1.6.0 is fully backward compatible with v1.5.x.
+
+---
+
 ## Upgrading to v1.5.0 from v1.4.0
 
 **Release Date**: November 15, 2025

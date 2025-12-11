@@ -33,7 +33,7 @@ Key features:
 • CI/CD integration with proper exit codes
 
 Performance: 1.38M+ operations/second, 100-1000x faster than competitors.`,
-	Version: "1.4.0",
+	Version: "1.6.0",
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

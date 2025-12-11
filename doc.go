@@ -2,7 +2,7 @@
 // and object pooling. It offers production-ready SQL lexing, parsing, and AST generation with
 // support for multiple SQL dialects and advanced SQL features.
 //
-// GoSQLX v1.4.0 includes both a powerful Go SDK and a high-performance CLI tool for SQL processing.
+// GoSQLX v1.6.0 includes both a powerful Go SDK and a high-performance CLI tool for SQL processing.
 //
 // Core Features:
 //
@@ -15,7 +15,7 @@
 // - Visitor pattern support for AST traversal
 // - Production-ready CLI tool with 1.38M+ ops/sec performance
 //
-// Advanced SQL Features (Phase 2.5 - v1.3.0+):
+// Advanced SQL Features (Phase 2.5 - v1.3.0+, PostgreSQL Extensions v1.6.0+):
 //
 // - Window functions with OVER clause (ROW_NUMBER, RANK, LAG, LEAD, etc.)
 // - PARTITION BY and ORDER BY window specifications
@@ -27,7 +27,7 @@
 // - Complete JOIN support (INNER/LEFT/RIGHT/FULL/CROSS/NATURAL)
 // - ~80-85% SQL-99 standards compliance
 //
-// CLI Tool (v1.4.0):
+// CLI Tool (v1.6.0):
 //
 // Install the CLI:
 //

@@ -61,15 +61,34 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 - **Intelligent Errors**: Structured error codes with typo detection, context highlighting, and helpful hints
 - **Production Ready**: Battle-tested with 0 race conditions detected, ~80-85% SQL-99 compliance
 
-### Performance & Quality Highlights (v1.5.0+)
+### Performance & Quality Highlights (v1.6.0)
 
 <div align="center">
 
-| **1.38M+** | **8M+** | **<1μs** | **60-80%** | **100%** ⭐ | **4,823** |
+| **1.38M+** | **8M+** | **<1μs** | **14x** | **575x** | **100%** ⭐ |
 |:---------:|:-------:|:----------:|:----------:|:-------:|:---------:|
-| Ops/sec | Tokens/sec | Latency | Memory Saved | Token Coverage | Test Lines Added |
+| Ops/sec | Tokens/sec | Latency | Faster Tokens | Cache Speedup | Token Coverage |
 
-**✅ Phases 1-3 Complete** • **Zero race conditions** • **~80-85% SQL-99 compliance** • **115+ real-world SQL queries validated** • **Perfect Token & Keywords coverage!**
+**✅ v1.6.0 Released** • **LSP Server** • **VSCode Extension** • **PostgreSQL JSON/JSONB** • **10 Linter Rules** • **~85% SQL-99 compliance**
+
+</div>
+
+### 🎉 What's New in v1.6.0
+
+<div align="center">
+
+| Feature | Description |
+|---------|-------------|
+| **🔌 LSP Server** | Full Language Server Protocol for IDE integration with diagnostics, completion, hover |
+| **📝 VSCode Extension** | Official extension with syntax highlighting, formatting, and autocomplete |
+| **🐘 PostgreSQL Extensions** | LATERAL JOIN, JSON/JSONB operators (`->`, `->>`, `@>`, `#>`), DISTINCT ON, FILTER clause |
+| **🔍 Linter Rules** | 10 built-in rules (L001-L010) with auto-fix for SELECT *, missing aliases, etc. |
+| **🛡️ Security Scanner** | Enhanced SQL injection detection with severity classification |
+| **⚡ Performance** | 14x faster token comparison, 575x faster keyword suggestions via caching |
+| **🏗️ go-task** | Modern task runner (Taskfile.yml) replacing Makefile |
+| **🔢 Structured Errors** | Error codes E1001-E3004 for tokenizer, parser, and semantic errors |
+
+See [CHANGELOG.md](CHANGELOG.md) for the complete list of 20+ PRs merged in this release.
 
 </div>
 
@@ -173,7 +192,7 @@ git diff --cached --name-only --diff-filter=ACM "*.sql" | \
   xargs cat | gosqlx validate --quiet
 ```
 
-**Language Server Protocol (LSP)** (New):
+**Language Server Protocol (LSP)** (v1.6.0):
 ```bash
 # Start LSP server for IDE integration
 gosqlx lsp
@@ -183,10 +202,37 @@ gosqlx lsp --log /tmp/gosqlx-lsp.log
 ```
 
 The LSP server provides real-time SQL intelligence for IDEs:
-- **Diagnostics**: Real-time syntax error detection
-- **Hover**: Documentation for 40+ SQL keywords
-- **Completion**: 100+ SQL keywords and functions
-- **Formatting**: SQL code formatting
+- **Diagnostics**: Real-time syntax error detection with position info
+- **Hover**: Documentation for 60+ SQL keywords
+- **Completion**: 100+ SQL keywords, functions, and 22 snippets
+- **Formatting**: SQL code formatting via `textDocument/formatting`
+- **Document Symbols**: SQL statement outline navigation
+- **Signature Help**: Function signatures for 20+ SQL functions
+- **Code Actions**: Quick fixes (add semicolon, uppercase keywords)
+
+**Linting** (v1.6.0):
+```bash
+# Run built-in linter rules
+gosqlx lint query.sql
+
+# With auto-fix
+gosqlx lint --fix query.sql
+
+# Specific rules
+gosqlx lint --rules L001,L002,L003 query.sql
+```
+
+Available rules (L001-L010):
+- `L001`: Avoid SELECT *
+- `L002`: Missing table aliases in JOIN
+- `L003`: Implicit column aliases
+- `L004`: Missing WHERE clause in UPDATE/DELETE
+- `L005`: Inefficient LIKE patterns
+- `L006`: Use explicit JOIN syntax (not comma joins)
+- `L007`: ORDER BY ordinal numbers
+- `L008`: Inconsistent keyword casing
+- `L009`: Missing column list in INSERT
+- `L010`: Avoid DISTINCT without ORDER BY
 
 **IDE Integration:**
 ```jsonc
@@ -1024,6 +1070,6 @@ This project is licensed under the **GNU Affero General Public License v3.0 (AGP
 <a href="https://github.com/ajitpratap0/GoSQLX/watchers"><img src="https://img.shields.io/badge/👁️_Watch-green?style=for-the-badge" alt="Watch"></a>
 </p>
 
-<sub>Copyright © 2024 GoSQLX. All rights reserved.</sub>
+<sub>Copyright © 2024-2025 GoSQLX. All rights reserved.</sub>
 
 </div>

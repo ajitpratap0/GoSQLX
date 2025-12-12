@@ -8,11 +8,42 @@ import (
 )
 
 const (
-	// MaxFileSize limits file size to prevent DoS attacks (10MB)
+	// MaxFileSize limits file size to prevent DoS attacks.
+	//
+	// Default: 10MB (10 * 1024 * 1024 bytes)
+	//
+	// This limit prevents:
+	//   - Memory exhaustion from loading large files
+	//   - Denial of service attacks
+	//   - Processing timeouts
+	//
+	// Can be configured in .gosqlx.yml:
+	//
+	//	validate:
+	//	  security:
+	//	    max_file_size: 20971520  # 20MB
 	MaxFileSize = 10 * 1024 * 1024
 )
 
-// SecurityValidator provides comprehensive file security validation
+// SecurityValidator provides comprehensive file security validation.
+//
+// Implements defense-in-depth security checks for file access including:
+//   - Path traversal prevention
+//   - Symlink validation
+//   - File size limits
+//   - File type validation
+//   - Permission checks
+//
+// Fields:
+//   - MaxFileSize: Maximum allowed file size in bytes
+//   - AllowedExtensions: Array of permitted file extensions (.sql, .txt)
+//   - AllowSymlinks: Whether to allow symlink following (default: false)
+//   - WorkingDirectory: Optional directory restriction for path validation
+//
+// Thread Safety:
+//
+//	SecurityValidator instances are not thread-safe. Create separate
+//	instances for concurrent use or use appropriate synchronization.
 type SecurityValidator struct {
 	MaxFileSize       int64
 	AllowedExtensions []string
@@ -20,6 +51,31 @@ type SecurityValidator struct {
 	WorkingDirectory  string // Optional: restrict to working directory
 }
 
+// NewSecurityValidator creates a validator with default security settings.
+//
+// Returns a SecurityValidator configured with production-ready defaults:
+//   - MaxFileSize: 10MB
+//   - AllowedExtensions: .sql, .txt, and files without extension
+//   - AllowSymlinks: false (symlinks rejected for security)
+//   - WorkingDirectory: empty (no directory restriction)
+//
+// Returns:
+//   - *SecurityValidator with default configuration
+//
+// Example:
+//
+//	validator := NewSecurityValidator()
+//	if err := validator.Validate("query.sql"); err != nil {
+//	    log.Fatalf("Validation failed: %v", err)
+//	}
+//
+// Customization:
+//
+//	validator := NewSecurityValidator()
+//	validator.MaxFileSize = 20 * 1024 * 1024  // Allow 20MB files
+//	validator.AllowSymlinks = true             // Allow symlinks
+//	validator.WorkingDirectory = "/safe/path"  // Restrict to directory
+//
 // NewSecurityValidator creates a validator with default security settings
 func NewSecurityValidator() *SecurityValidator {
 	return &SecurityValidator{
@@ -30,12 +86,85 @@ func NewSecurityValidator() *SecurityValidator {
 	}
 }
 
+// ValidateInputFile performs comprehensive security validation on a file path.
+//
+// This is the primary security entry point for file validation. It creates
+// a SecurityValidator with default settings and validates the given file path.
+//
+// Security checks performed:
+//  1. Path traversal prevention (../ sequences)
+//  2. Symlink resolution and validation
+//  3. File existence and accessibility
+//  4. Regular file check (not directory, device, etc.)
+//  5. File size limit enforcement (10MB default)
+//  6. File extension validation (.sql, .txt)
+//  7. Read permission verification
+//
+// Parameters:
+//   - path: File path to validate (absolute or relative)
+//
+// Returns:
+//   - nil if file is safe to read
+//   - error with specific security violation details
+//
+// Example:
+//
+//	if err := validate.ValidateInputFile("query.sql"); err != nil {
+//	    return fmt.Errorf("security check failed: %w", err)
+//	}
+//	// Safe to read file
+//	content, _ := os.ReadFile("query.sql")
+//
+// Security guarantees:
+//   - File cannot be outside working directory (if symlink)
+//   - File size is within configured limits
+//   - File is a regular file with valid extension
+//   - File is readable by current process
+//
 // ValidateInputFile performs comprehensive security validation on a file path
 func ValidateInputFile(path string) error {
 	validator := NewSecurityValidator()
 	return validator.Validate(path)
 }
 
+// Validate performs comprehensive security checks on a file path.
+//
+// This is the core validation method that performs all security checks
+// in the correct order to prevent TOCTOU attacks and other vulnerabilities.
+//
+// Validation sequence:
+//  1. Path traversal check on original path
+//  2. Symlink resolution to real path
+//  3. Symlink policy enforcement (if AllowSymlinks is false)
+//  4. File existence and accessibility check
+//  5. Regular file verification (not directory/device/socket)
+//  6. File size limit enforcement
+//  7. File extension validation
+//  8. Read permission test
+//
+// Parameters:
+//   - path: File path to validate
+//
+// Returns:
+//   - nil if all security checks pass
+//   - error with specific check that failed
+//
+// The validation is defensive and fails closed - any error results in
+// rejection to maintain security guarantees.
+//
+// Example:
+//
+//	validator := &SecurityValidator{
+//	    MaxFileSize: 5 * 1024 * 1024,  // 5MB
+//	    AllowedExtensions: []string{".sql"},
+//	    AllowSymlinks: false,
+//	    WorkingDirectory: "/project/sql",
+//	}
+//	if err := validator.Validate("query.sql"); err != nil {
+//	    log.Printf("Validation failed: %v", err)
+//	    return err
+//	}
+//
 // Validate performs comprehensive security checks on a file path
 func (v *SecurityValidator) Validate(path string) error {
 	// 1. Check for path traversal attempts BEFORE resolving symlinks
@@ -191,12 +320,57 @@ func (v *SecurityValidator) validateExtension(path string) error {
 	return fmt.Errorf("unsupported file extension: %s (allowed: %v)", ext, v.AllowedExtensions)
 }
 
+// ValidateFileAccess is a convenience function that validates file access.
+//
+// This function provides backward compatibility with existing code that uses
+// ValidateFileAccess. It delegates to ValidateInputFile for actual validation.
+//
+// Parameters:
+//   - path: File path to validate
+//
+// Returns:
+//   - nil if file is safe to access
+//   - error if validation fails
+//
+// This is equivalent to calling ValidateInputFile directly.
+//
 // ValidateFileAccess is a convenience function that validates file access
 // This is compatible with the existing ValidateFileAccess function in cmd
 func ValidateFileAccess(path string) error {
 	return ValidateInputFile(path)
 }
 
+// IsSecurePath performs a quick check if a path looks secure.
+//
+// Performs lightweight path validation without filesystem access, useful
+// for early filtering before expensive validation. This is a heuristic
+// check and should not be relied upon as the sole security measure.
+//
+// Checks performed:
+//   - No directory traversal sequences (..)
+//   - No null bytes
+//   - Not targeting sensitive system directories
+//
+// Parameters:
+//   - path: File path to check
+//
+// Returns:
+//   - true if path appears safe (passes heuristics)
+//   - false if path contains suspicious patterns
+//
+// Note: This is a preliminary check only. Always use ValidateInputFile
+// or SecurityValidator.Validate for comprehensive security validation.
+//
+// Example:
+//
+//	if !IsSecurePath(userInput) {
+//	    return errors.New("suspicious path detected")
+//	}
+//	// Still need full validation
+//	if err := ValidateInputFile(userInput); err != nil {
+//	    return err
+//	}
+//
 // IsSecurePath performs a quick check if a path looks secure
 func IsSecurePath(path string) bool {
 	// Quick checks without filesystem access

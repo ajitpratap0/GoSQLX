@@ -8,7 +8,40 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config represents the complete GoSQLX CLI configuration
+// Config represents the complete GoSQLX CLI configuration.
+//
+// Configuration files use YAML format and are loaded from:
+//  1. Current directory: .gosqlx.yml
+//  2. Home directory: ~/.gosqlx.yml
+//  3. System: /etc/gosqlx.yml
+//
+// CLI flags always override configuration file settings.
+//
+// Example configuration file:
+//
+//	format:
+//	  indent: 2
+//	  uppercase_keywords: true
+//	  max_line_length: 80
+//	  compact: false
+//
+//	validate:
+//	  dialect: postgresql
+//	  strict_mode: false
+//	  recursive: false
+//	  pattern: "*.sql"
+//	  security:
+//	    max_file_size: 10485760
+//
+//	output:
+//	  format: auto
+//	  verbose: false
+//
+//	analyze:
+//	  security: true
+//	  performance: true
+//	  complexity: true
+//	  all: false
 type Config struct {
 	Format     FormatConfig     `yaml:"format"`
 	Validation ValidationConfig `yaml:"validate"`
@@ -16,7 +49,15 @@ type Config struct {
 	Analyze    AnalyzeConfig    `yaml:"analyze"`
 }
 
-// FormatConfig holds formatting options
+// FormatConfig holds SQL formatting options.
+//
+// Controls how SQL is formatted by the format command.
+//
+// Fields:
+//   - Indent: Number of spaces for indentation (0-8, default: 2)
+//   - UppercaseKeywords: Convert SQL keywords to uppercase (default: true)
+//   - MaxLineLength: Maximum line length for wrapping (0-500, default: 80)
+//   - Compact: Use compact format with minimal whitespace (default: false)
 type FormatConfig struct {
 	Indent            int  `yaml:"indent"`
 	UppercaseKeywords bool `yaml:"uppercase_keywords"`
@@ -24,7 +65,16 @@ type FormatConfig struct {
 	Compact           bool `yaml:"compact"`
 }
 
-// ValidationConfig holds validation options
+// ValidationConfig holds SQL validation options.
+//
+// Controls validation behavior including dialect selection and security limits.
+//
+// Fields:
+//   - Dialect: SQL dialect for validation (postgresql, mysql, sqlserver, oracle, sqlite, generic)
+//   - StrictMode: Enable strict validation rules (default: false)
+//   - Recursive: Recursively process directories (default: false)
+//   - Pattern: File pattern for recursive processing (default: "*.sql")
+//   - Security: Security-related limits (file size, etc.)
 type ValidationConfig struct {
 	Dialect    string         `yaml:"dialect"`
 	StrictMode bool           `yaml:"strict_mode"`
@@ -33,18 +83,42 @@ type ValidationConfig struct {
 	Security   SecurityConfig `yaml:"security"`
 }
 
-// SecurityConfig holds security-related limits
+// SecurityConfig holds security-related limits for file operations.
+//
+// Prevents resource exhaustion and security vulnerabilities.
+//
+// Fields:
+//   - MaxFileSize: Maximum allowed file size in bytes (default: 10MB)
+//
+// Example:
+//
+//	security:
+//	  max_file_size: 20971520  # 20MB
 type SecurityConfig struct {
 	MaxFileSize int64 `yaml:"max_file_size"` // Maximum file size in bytes
 }
 
-// OutputConfig holds output formatting options
+// OutputConfig holds output formatting options.
+//
+// Controls output format and verbosity for all commands.
+//
+// Fields:
+//   - Format: Output format (json, yaml, table, tree, auto) (default: auto)
+//   - Verbose: Enable detailed output for debugging (default: false)
 type OutputConfig struct {
 	Format  string `yaml:"format"` // json, yaml, table
 	Verbose bool   `yaml:"verbose"`
 }
 
-// AnalyzeConfig holds analysis options
+// AnalyzeConfig holds SQL analysis options.
+//
+// Controls which analysis features are enabled by default.
+//
+// Fields:
+//   - Security: Perform security vulnerability analysis (default: true)
+//   - Performance: Perform performance analysis (default: true)
+//   - Complexity: Calculate complexity metrics (default: true)
+//   - All: Enable comprehensive analysis (default: false)
 type AnalyzeConfig struct {
 	Security    bool `yaml:"security"`
 	Performance bool `yaml:"performance"`
@@ -52,7 +126,27 @@ type AnalyzeConfig struct {
 	All         bool `yaml:"all"`
 }
 
-// DefaultConfig returns a configuration with sensible defaults
+// DefaultConfig returns a configuration with sensible defaults.
+//
+// This function creates a Config instance with production-ready defaults
+// suitable for most use cases. These defaults balance performance, code quality,
+// and compatibility.
+//
+// Default values:
+//   - Format: 2-space indentation, uppercase keywords, 80-char line length
+//   - Validation: PostgreSQL dialect, non-strict mode, *.sql pattern
+//   - Security: 10MB max file size
+//   - Output: Auto format selection, non-verbose
+//   - Analysis: All features enabled except comprehensive mode
+//
+// Returns:
+//   - *Config with default values initialized
+//
+// Usage:
+//
+//	cfg := config.DefaultConfig()
+//	cfg.Format.Indent = 4  // Customize as needed
+//	cfg.Save(".gosqlx.yml")
 func DefaultConfig() *Config {
 	return &Config{
 		Format: FormatConfig{
@@ -83,7 +177,33 @@ func DefaultConfig() *Config {
 	}
 }
 
-// Load reads a configuration file from the specified path
+// Load reads a configuration file from the specified path.
+//
+// This function loads and parses a YAML configuration file, validates the
+// configuration values, and returns a Config instance.
+//
+// The path is automatically expanded if it starts with ~ (home directory).
+//
+// Parameters:
+//   - path: File path to the configuration file (absolute or relative)
+//
+// Returns:
+//   - *Config: Loaded and validated configuration
+//   - error: File reading, parsing, or validation error
+//
+// Possible errors:
+//   - File not found or inaccessible
+//   - Invalid YAML syntax
+//   - Configuration validation failure (invalid values)
+//   - Home directory lookup failure (for ~ expansion)
+//
+// Example:
+//
+//	cfg, err := config.Load(".gosqlx.yml")
+//	if err != nil {
+//	    log.Fatalf("Failed to load config: %v", err)
+//	}
+//	fmt.Printf("Using dialect: %s\n", cfg.Validation.Dialect)
 func Load(path string) (*Config, error) {
 	// Expand home directory if present
 	if len(path) > 0 && path[0] == '~' {
@@ -113,12 +233,33 @@ func Load(path string) (*Config, error) {
 	return config, nil
 }
 
-// LoadDefault tries to load configuration from standard locations with precedence
-// Priority order:
-// 1. Current directory: .gosqlx.yml
-// 2. Home directory: ~/.gosqlx.yml
-// 3. System: /etc/gosqlx.yml
-// Returns default config if no file is found
+// LoadDefault tries to load configuration from standard locations with precedence.
+//
+// This function searches for configuration files in multiple standard locations
+// and loads the first one found. If no configuration file exists, it returns
+// a default configuration.
+//
+// Search order (first found wins):
+//  1. Current directory: .gosqlx.yml
+//  2. Home directory: ~/.gosqlx.yml
+//  3. System-wide: /etc/gosqlx.yml
+//  4. Built-in defaults (if no file found)
+//
+// This allows for flexible configuration strategies:
+//   - Project-specific config in current directory
+//   - User-specific config in home directory
+//   - System-wide config for all users
+//   - Automatic fallback to sensible defaults
+//
+// Returns:
+//   - *Config: Loaded configuration or defaults
+//   - error: Always returns a valid Config (errors are logged but not fatal)
+//
+// Example:
+//
+//	cfg, err := config.LoadDefault()
+//	// cfg is always non-nil, even if err != nil
+//	// err indicates which config was loaded or if defaults were used
 func LoadDefault() (*Config, error) {
 	searchPaths := []string{
 		".gosqlx.yml",

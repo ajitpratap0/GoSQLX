@@ -30,6 +30,14 @@ func BoolValueOr(p *bool, defaultVal bool) bool {
 // Config represents unified GoSQLX configuration that can be shared across
 // CLI, LSP server, and VSCode extension. It supports loading from files,
 // environment variables, and LSP initialization options.
+//
+// Config objects are designed to be immutable after loading. Use Clone() to create
+// a copy before making modifications. All configuration sections use pointer types
+// for boolean fields to distinguish between "not set" (nil) and "explicitly false".
+//
+// The Source field tracks where the configuration was loaded from, which is useful
+// for debugging and logging. When configurations are merged, the Source field
+// combines all sources (e.g., "default+file+environment").
 type Config struct {
 	Format     FormatConfig     `yaml:"format" json:"format"`
 	Validation ValidationConfig `yaml:"validation" json:"validation"`
@@ -40,7 +48,11 @@ type Config struct {
 	Source     string           `yaml:"-" json:"-"` // where config came from (file path, "environment", "lsp", etc.)
 }
 
-// FormatConfig holds SQL formatting options
+// FormatConfig holds SQL formatting options for the formatter.
+//
+// Boolean fields use *bool pointers to distinguish between "not set" (nil)
+// and "explicitly set to false". This allows proper override behavior when
+// merging configurations from multiple sources.
 type FormatConfig struct {
 	Indent            int   `yaml:"indent" json:"indent"`                        // Number of spaces for indentation (default: 2)
 	UppercaseKeywords *bool `yaml:"uppercase_keywords" json:"uppercaseKeywords"` // Convert SQL keywords to uppercase (default: true)
@@ -48,7 +60,13 @@ type FormatConfig struct {
 	Compact           *bool `yaml:"compact" json:"compact"`                      // Use compact formatting (default: false)
 }
 
-// ValidationConfig holds SQL validation options
+// ValidationConfig holds SQL validation options for the parser and validator.
+//
+// The Dialect field determines which SQL keywords and syntax are recognized.
+// Supported values: "postgresql", "mysql", "sqlserver", "oracle", "sqlite".
+//
+// The Pattern field is used for recursive file validation and supports standard
+// glob patterns like "*.sql", "queries/**/*.sql", etc.
 type ValidationConfig struct {
 	Dialect    string         `yaml:"dialect" json:"dialect"`        // SQL dialect: postgresql, mysql, sqlserver, oracle, sqlite (default: "postgresql")
 	StrictMode *bool          `yaml:"strict_mode" json:"strictMode"` // Enable strict validation mode (default: false)
@@ -57,18 +75,31 @@ type ValidationConfig struct {
 	Security   SecurityConfig `yaml:"security" json:"security"`      // Security validation settings
 }
 
-// SecurityConfig holds security validation settings
+// SecurityConfig holds security validation settings for file size limits
+// and other security-related constraints.
+//
+// MaxFileSize prevents processing of excessively large files that could
+// cause memory exhaustion. The default is 10MB (10 * 1024 * 1024 bytes).
 type SecurityConfig struct {
 	MaxFileSize int64 `yaml:"max_file_size" json:"maxFileSize"` // Maximum file size in bytes (default: 10MB)
 }
 
-// OutputConfig holds output formatting options
+// OutputConfig holds output formatting options for CLI and LSP responses.
+//
+// The Format field determines the output format for validation results,
+// analysis reports, and other tool outputs. Supported values: "text", "json", "yaml".
 type OutputConfig struct {
 	Format  string `yaml:"format" json:"format"`   // Output format: text, json, yaml (default: "text")
 	Verbose *bool  `yaml:"verbose" json:"verbose"` // Enable verbose output (default: false)
 }
 
-// AnalyzeConfig holds analysis options
+// AnalyzeConfig holds analysis options for SQL query analysis.
+//
+// Each boolean field enables a specific type of analysis:
+//   - Security: SQL injection detection and security pattern scanning
+//   - Performance: Query performance hints and optimization suggestions
+//   - Complexity: Query complexity metrics and readability analysis
+//   - All: Enables all analysis types at once
 type AnalyzeConfig struct {
 	Security    *bool `yaml:"security" json:"security"`       // Enable security analysis (default: false)
 	Performance *bool `yaml:"performance" json:"performance"` // Enable performance analysis (default: false)
@@ -76,7 +107,17 @@ type AnalyzeConfig struct {
 	All         *bool `yaml:"all" json:"all"`                 // Enable all analysis types (default: false)
 }
 
-// LSPConfig holds LSP server-specific settings
+// LSPConfig holds LSP server-specific settings for the Language Server Protocol server.
+//
+// Rate limiting prevents denial-of-service from excessive requests. Requests are
+// limited to RateLimitRequests per RateLimitWindow duration.
+//
+// Size limits prevent memory exhaustion from large documents. MaxDocumentSize limits
+// the size of individual SQL files, while MaxContentLength limits the total size
+// of all content in a single LSP request.
+//
+// TraceServer controls LSP protocol tracing: "off" (default), "messages" (log messages),
+// or "verbose" (log messages with full content).
 type LSPConfig struct {
 	RateLimitRequests int           `yaml:"rate_limit_requests" json:"rateLimitRequests"` // Max requests per window (default: 100)
 	RateLimitWindow   time.Duration `yaml:"rate_limit_window" json:"rateLimitWindow"`     // Rate limit time window (default: 1s)
@@ -86,7 +127,13 @@ type LSPConfig struct {
 	TraceServer       string        `yaml:"trace_server" json:"traceServer"`              // LSP trace level: off, messages, verbose (default: "off")
 }
 
-// ServerConfig holds general server settings
+// ServerConfig holds general server settings for logging, metrics, and lifecycle management.
+//
+// LogLevel determines the verbosity of logging: "debug", "info", "warn", "error".
+// LogFile specifies where to write logs; empty string means stderr.
+//
+// ShutdownTimeout controls how long the server waits for graceful shutdown
+// before forcefully terminating. This allows in-flight requests to complete.
 type ServerConfig struct {
 	LogLevel        string        `yaml:"log_level" json:"logLevel"`               // Log level: debug, info, warn, error (default: "info")
 	LogFile         string        `yaml:"log_file" json:"logFile"`                 // Log file path (default: "" for stderr)

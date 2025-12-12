@@ -5,6 +5,51 @@ import (
 	"strings"
 )
 
+// FormatPRComment formats validation results as a GitHub PR comment with markdown.
+//
+// Generates a comprehensive, well-formatted Markdown comment suitable for
+// posting to GitHub Pull Requests. The comment includes summary statistics,
+// detailed error information, and performance metrics.
+//
+// Parameters:
+//   - result: Validation results to format
+//
+// Returns:
+//   - Markdown-formatted string ready for PR comment
+//
+// Output includes:
+//   - Header with validation status (✅ success or ❌ failure)
+//   - Summary statistics table (total files, valid/invalid counts, duration)
+//   - Performance metrics (throughput)
+//   - Detailed error listing for each invalid file
+//   - Footer with tool attribution
+//
+// Example:
+//
+//	result := &ValidationResult{
+//	    TotalFiles:   2,
+//	    ValidFiles:   1,
+//	    InvalidFiles: 1,
+//	    Duration:     10 * time.Millisecond,
+//	    Files: []FileValidationResult{
+//	        {Path: "broken.sql", Valid: false, Error: errors.New("syntax error")},
+//	    },
+//	}
+//	comment := FormatPRComment(result)
+//	// Post comment to GitHub PR via API
+//
+// Usage in GitHub Actions:
+//
+//   - name: Validate SQL
+//     id: validate
+//     run: gosqlx validate ./sql/ > results.txt
+//   - name: Comment PR
+//     uses: actions/github-script@v6
+//     with:
+//     script: |
+//     const comment = require('fs').readFileSync('results.txt', 'utf8');
+//     github.rest.issues.createComment({...});
+//
 // FormatPRComment formats validation results as a GitHub PR comment with markdown
 func FormatPRComment(result *ValidationResult) string {
 	var sb strings.Builder
@@ -61,6 +106,39 @@ func FormatPRComment(result *ValidationResult) string {
 	return sb.String()
 }
 
+// FormatPRCommentCompact formats validation results as a compact PR comment.
+//
+// Generates a concise PR comment with limited error display, suitable for
+// large validation runs where the full comment would be too long.
+//
+// Parameters:
+//   - result: Validation results to format
+//   - maxErrors: Maximum number of errors to display in the comment
+//
+// Returns:
+//   - Compact Markdown-formatted string for PR comment
+//
+// The compact format includes:
+//   - Single-line header with status
+//   - Brief error listing (up to maxErrors)
+//   - Truncation notice if more errors exist
+//   - Performance metrics footer
+//
+// This format is useful when:
+//   - Validating large numbers of files (100+)
+//   - Many files have errors (10+)
+//   - GitHub's comment size limits may be reached
+//   - Quick overview is preferred over detailed breakdown
+//
+// Example:
+//
+//	result := &ValidationResult{
+//	    TotalFiles:   100,
+//	    InvalidFiles: 25,
+//	}
+//	comment := FormatPRCommentCompact(result, 5)  // Show only first 5 errors
+//	// Posts "## ❌ GoSQLX: Found issues in 25/100 files" with top 5 errors
+//
 // FormatPRCommentCompact formats validation results as a compact PR comment
 // Useful for large validation runs to avoid overly long comments
 func FormatPRCommentCompact(result *ValidationResult, maxErrors int) string {

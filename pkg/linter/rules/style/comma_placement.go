@@ -7,23 +7,68 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
-// CommaStyle represents the preferred comma placement style
+// CommaStyle represents the preferred comma placement style in multi-line lists.
 type CommaStyle string
 
 const (
-	// CommaTrailing means commas at end of lines: col1,
+	// CommaTrailing places commas at the end of lines (traditional style).
+	// Example:
+	//   SELECT
+	//       column1,
+	//       column2,
+	//       column3
+	//   FROM table
 	CommaTrailing CommaStyle = "trailing"
-	// CommaLeading means commas at start of lines: , col1
+
+	// CommaLeading places commas at the start of lines (modern style).
+	// Example:
+	//   SELECT
+	//       column1
+	//       , column2
+	//       , column3
+	//   FROM table
 	CommaLeading CommaStyle = "leading"
 )
 
-// CommaPlacementRule checks for consistent comma placement
+// CommaPlacementRule (L008) enforces consistent comma placement style.
+//
+// Inconsistent comma placement reduces readability and makes it harder to scan
+// column lists or value lists. This rule detects commas that don't match the
+// configured placement style.
+//
+// Rule ID: L008
+// Severity: Info
+// Auto-fix: Not supported (requires multi-line restructuring)
+//
+// Example violation (CommaTrailing style):
+//
+//	SELECT
+//	    user_id
+//	    , username     <- Leading comma (violation)
+//	    , email
+//	FROM users
+//
+// Expected output:
+//
+//	SELECT
+//	    user_id,       <- Trailing comma
+//	    username,
+//	    email
+//	FROM users
+//
+// The rule checks commas in SELECT columns, INSERT value lists, and other
+// comma-separated contexts.
 type CommaPlacementRule struct {
 	linter.BaseRule
 	preferredStyle CommaStyle
 }
 
-// NewCommaPlacementRule creates a new L008 rule instance
+// NewCommaPlacementRule creates a new L008 rule instance.
+//
+// Parameters:
+//   - preferredStyle: CommaTrailing or CommaLeading (defaults to CommaTrailing if empty)
+//
+// Returns a configured CommaPlacementRule ready for use with the linter.
 func NewCommaPlacementRule(preferredStyle CommaStyle) *CommaPlacementRule {
 	if preferredStyle == "" {
 		preferredStyle = CommaTrailing // Default to trailing commas
@@ -40,7 +85,13 @@ func NewCommaPlacementRule(preferredStyle CommaStyle) *CommaPlacementRule {
 	}
 }
 
-// Check performs the comma placement check
+// Check performs the comma placement check on SQL content.
+//
+// Scans each line for leading or trailing commas and reports violations when they
+// don't match the preferred style. Lines starting with SQL keywords (FROM, WHERE,
+// etc.) are skipped as they indicate new clauses rather than continuation lines.
+//
+// Returns a slice of violations (one per misplaced comma) and nil error.
 func (r *CommaPlacementRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 	violations := []linter.Violation{}
 
@@ -107,7 +158,13 @@ func (r *CommaPlacementRule) Check(ctx *linter.Context) ([]linter.Violation, err
 	return violations, nil
 }
 
-// isNewClause checks if a line starts with a SQL clause keyword
+// isNewClause checks if a line starts with a SQL clause keyword.
+//
+// Tests whether the line begins with keywords like SELECT, FROM, WHERE, JOIN, etc.
+// that indicate the start of a new SQL clause rather than a continuation of a
+// comma-separated list.
+//
+// Returns true if the line starts with a clause keyword, false otherwise.
 func isNewClause(line string) bool {
 	line = strings.ToUpper(strings.TrimSpace(line))
 	clauses := []string{"SELECT", "FROM", "WHERE", "AND", "OR", "JOIN", "LEFT", "RIGHT",
@@ -122,7 +179,18 @@ func isNewClause(line string) bool {
 	return false
 }
 
-// Fix is not supported for this rule (requires careful restructuring)
+// Fix is not supported for this rule as it requires multi-line restructuring.
+//
+// Auto-fixing comma placement would require:
+//   - Moving commas between lines while preserving formatting
+//   - Handling comments that may appear before/after commas
+//   - Understanding list context (SELECT columns vs INSERT values vs function args)
+//   - Adjusting whitespace appropriately
+//
+// These transformations are complex and best performed by developers or dedicated
+// SQL formatters that understand full query structure.
+//
+// Returns the content unchanged with nil error.
 func (r *CommaPlacementRule) Fix(content string, violations []linter.Violation) (string, error) {
 	// No auto-fix available
 	return content, nil

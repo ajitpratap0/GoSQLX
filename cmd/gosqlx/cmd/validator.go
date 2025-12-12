@@ -15,7 +15,18 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
-// ValidatorOptions contains configuration for the SQL validator
+// ValidatorOptions contains configuration for the SQL validator.
+//
+// Controls validation behavior including recursion, output modes, and dialect.
+//
+// Fields:
+//   - Recursive: Process directories recursively
+//   - Pattern: File pattern for recursive processing (default: "*.sql")
+//   - Quiet: Suppress output (exit code only)
+//   - ShowStats: Display performance statistics
+//   - Dialect: SQL dialect for validation (postgresql, mysql, etc.)
+//   - StrictMode: Enable strict validation rules
+//   - Verbose: Enable verbose output with debugging information
 type ValidatorOptions struct {
 	Recursive  bool
 	Pattern    string
@@ -26,13 +37,65 @@ type ValidatorOptions struct {
 	Verbose    bool
 }
 
-// Validator provides SQL validation functionality with injectable output
+// Validator provides SQL validation functionality with injectable output.
+//
+// The Validator is designed for testability with injectable I/O writers
+// and separated validation logic from command-line concerns.
+//
+// Fields:
+//   - Out: Output writer for success messages (default: os.Stdout)
+//   - Err: Error writer for error messages (default: os.Stderr)
+//   - Opts: Validation options and configuration
+//
+// Thread Safety:
+//
+//	Validator instances are not thread-safe. Create separate instances
+//	for concurrent validation or use appropriate synchronization.
+//
+// Example:
+//
+//	validator := NewValidator(os.Stdout, os.Stderr, ValidatorOptions{
+//	    Recursive: true,
+//	    Pattern:   "*.sql",
+//	    ShowStats: true,
+//	})
+//	result, err := validator.Validate([]string{"./queries"})
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	if result.InvalidFiles > 0 {
+//	    os.Exit(1)
+//	}
 type Validator struct {
 	Out  io.Writer
 	Err  io.Writer
 	Opts ValidatorOptions
 }
 
+// NewValidator creates a new Validator with the given options.
+//
+// Constructs a Validator instance with specified I/O writers and options.
+// This is the primary way to create a Validator for both CLI and programmatic use.
+//
+// Parameters:
+//   - out: Output writer for success messages and results
+//   - err: Error writer for error messages and diagnostics
+//   - opts: Validation options controlling behavior
+//
+// Returns:
+//   - *Validator ready for validation operations
+//
+// Example:
+//
+//	// CLI usage
+//	validator := NewValidator(os.Stdout, os.Stderr, opts)
+//
+//	// Testing usage with buffers
+//	var outBuf, errBuf bytes.Buffer
+//	validator := NewValidator(&outBuf, &errBuf, ValidatorOptions{Quiet: true})
+//	result, _ := validator.Validate([]string{"test.sql"})
+//	assert.Equal(t, 1, result.ValidFiles)
+//
 // NewValidator creates a new Validator with the given options
 func NewValidator(out, err io.Writer, opts ValidatorOptions) *Validator {
 	return &Validator{
@@ -42,6 +105,48 @@ func NewValidator(out, err io.Writer, opts ValidatorOptions) *Validator {
 	}
 }
 
+// Validate validates the given SQL files or patterns.
+//
+// This is the main validation entry point that processes file arguments,
+// expands patterns, and validates each file using the GoSQLX parser.
+//
+// The method:
+//  1. Expands file arguments (globs, directories, individual files)
+//  2. Validates each file using tokenizer and parser
+//  3. Collects results and statistics
+//  4. Outputs progress and errors (unless quiet mode)
+//  5. Returns comprehensive validation results
+//
+// Parameters:
+//   - args: Array of file paths, glob patterns, or directory paths
+//
+// Returns:
+//   - *ValidationResult: Comprehensive validation results
+//   - error: If argument expansion fails or no files found
+//
+// The returned ValidationResult contains:
+//   - TotalFiles, ValidFiles, InvalidFiles counts
+//   - Individual file results with errors
+//   - Performance statistics (duration, throughput)
+//
+// Exit code handling (caller responsibility):
+//   - 0 if all files valid (InvalidFiles == 0)
+//   - 1 if any files invalid (InvalidFiles > 0)
+//
+// Example:
+//
+//	validator := NewValidator(os.Stdout, os.Stderr, ValidatorOptions{
+//	    ShowStats: true,
+//	})
+//	result, err := validator.Validate([]string{"queries/*.sql", "migrations/"})
+//	if err != nil {
+//	    log.Fatalf("Validation failed: %v", err)
+//	}
+//	if result.InvalidFiles > 0 {
+//	    fmt.Fprintf(os.Stderr, "Found %d invalid files\n", result.InvalidFiles)
+//	    os.Exit(1)
+//	}
+//
 // Validate validates the given SQL files or patterns
 func (v *Validator) Validate(args []string) (*output.ValidationResult, error) {
 	startTime := time.Now()

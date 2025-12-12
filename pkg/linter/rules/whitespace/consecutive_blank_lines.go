@@ -7,13 +7,43 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
-// ConsecutiveBlankLinesRule checks for multiple consecutive blank lines
+// ConsecutiveBlankLinesRule (L003) detects and fixes excessive consecutive blank lines.
+//
+// Excessive blank lines reduce code density and make it harder to view complete queries
+// on screen. This rule enforces a configurable maximum number of consecutive blank
+// lines, improving readability without eliminating vertical spacing entirely.
+//
+// Rule ID: L003
+// Severity: Warning
+// Auto-fix: Supported
+//
+// Example violation (maxConsecutive=1):
+//
+//	SELECT * FROM users
+//
+//
+//	WHERE active = true  <- Two blank lines above (violation)
+//
+// Fixed output:
+//
+//	SELECT * FROM users
+//
+//	WHERE active = true  <- Single blank line
+//
+// The rule also removes excessive blank lines at the end of files.
 type ConsecutiveBlankLinesRule struct {
 	linter.BaseRule
 	maxConsecutive int
 }
 
-// NewConsecutiveBlankLinesRule creates a new L003 rule instance
+// NewConsecutiveBlankLinesRule creates a new L003 rule instance.
+//
+// Parameters:
+//   - maxConsecutive: Maximum number of consecutive blank lines allowed (minimum 1)
+//
+// If maxConsecutive is less than 1, defaults to 1.
+//
+// Returns a configured ConsecutiveBlankLinesRule ready for use with the linter.
 func NewConsecutiveBlankLinesRule(maxConsecutive int) *ConsecutiveBlankLinesRule {
 	if maxConsecutive < 1 {
 		maxConsecutive = 1 // Default to max 1 consecutive blank line
@@ -30,7 +60,13 @@ func NewConsecutiveBlankLinesRule(maxConsecutive int) *ConsecutiveBlankLinesRule
 	}
 }
 
-// Check performs the consecutive blank lines check
+// Check performs the consecutive blank lines check on SQL content.
+//
+// Scans through lines tracking consecutive blank lines. Reports violations when
+// consecutive blank count exceeds maxConsecutive. Also checks for excessive blank
+// lines at file end.
+//
+// Returns a slice of violations (one per sequence of excessive blank lines) and nil error.
 func (r *ConsecutiveBlankLinesRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 	violations := []linter.Violation{}
 
@@ -90,7 +126,13 @@ func (r *ConsecutiveBlankLinesRule) Check(ctx *linter.Context) ([]linter.Violati
 	return violations, nil
 }
 
-// Fix removes excess consecutive blank lines
+// Fix removes excess consecutive blank lines from SQL content.
+//
+// Processes content line by line, preserving up to maxConsecutive blank lines in
+// any sequence. Additional blank lines beyond the limit are removed. Also trims
+// excess trailing blank lines at file end.
+//
+// Returns the fixed content with consecutive blank lines reduced to maximum, and nil error.
 func (r *ConsecutiveBlankLinesRule) Fix(content string, violations []linter.Violation) (string, error) {
 	lines := strings.Split(content, "\n")
 	result := make([]string, 0, len(lines))

@@ -1,4 +1,5 @@
-// Package tokenizer provides a high-performance SQL tokenizer with zero-copy operations
+// Package tokenizer provides high-performance SQL tokenization with zero-copy operations.
+// See doc.go for comprehensive package documentation.
 package tokenizer
 
 import (
@@ -16,12 +17,43 @@ import (
 )
 
 const (
-	// MaxInputSize is the maximum allowed input size in bytes (10MB)
-	// This prevents DoS attacks via extremely large SQL queries
+	// MaxInputSize is the maximum allowed input size in bytes (10MB default).
+	//
+	// This limit prevents denial-of-service (DoS) attacks via extremely large
+	// SQL queries that could exhaust server memory. Queries exceeding this size
+	// will return an InputTooLargeError.
+	//
+	// Rationale:
+	//   - 10MB is sufficient for complex SQL queries with large IN clauses
+	//   - Protects against malicious or accidental memory exhaustion
+	//   - Can be increased if needed for legitimate large queries
+	//
+	// If your application requires larger queries, consider:
+	//   - Breaking queries into smaller batches
+	//   - Using prepared statements with parameter binding
+	//   - Increasing the limit (but ensure adequate memory protection)
 	MaxInputSize = 10 * 1024 * 1024 // 10MB
 
 	// MaxTokens is the maximum number of tokens allowed in a single SQL query
-	// This prevents DoS attacks via token explosion
+	// (1M tokens default).
+	//
+	// This limit prevents denial-of-service (DoS) attacks via "token explosion"
+	// where maliciously crafted or accidentally generated SQL creates an excessive
+	// number of tokens, exhausting CPU and memory.
+	//
+	// Rationale:
+	//   - 1M tokens is far beyond any reasonable SQL query size
+	//   - Typical queries have 10-1000 tokens
+	//   - Complex queries rarely exceed 10,000 tokens
+	//   - Protects against pathological cases and attacks
+	//
+	// Example token counts:
+	//   - Simple SELECT: ~10-50 tokens
+	//   - Complex query with joins: ~100-500 tokens
+	//   - Large IN clause with 1000 values: ~3000-4000 tokens
+	//
+	// If this limit is hit on a legitimate query, the query should likely
+	// be redesigned for better performance and maintainability.
 	MaxTokens = 1000000 // 1M tokens
 )
 
@@ -155,23 +187,81 @@ var keywordTokenTypes = map[string]models.TokenType{
 	"MAXVALUE": models.TokenTypeKeyword,
 }
 
-// Tokenizer provides high-performance SQL tokenization with zero-copy operations
+// Tokenizer provides high-performance SQL tokenization with zero-copy operations.
+// It converts raw SQL bytes into a stream of tokens with precise position tracking.
+//
+// Features:
+//   - Zero-copy operations on input byte slices (no string allocations)
+//   - Precise line/column tracking for error reporting (1-based indexing)
+//   - Unicode support for international SQL queries
+//   - PostgreSQL operator support (JSON, array, text search operators)
+//   - DoS protection with input size and token count limits
+//
+// Thread Safety:
+//   - Individual instances are NOT safe for concurrent use
+//   - Use GetTokenizer/PutTokenizer for safe pooling across goroutines
+//   - Each goroutine should use its own Tokenizer instance
+//
+// Memory Management:
+//   - Reuses internal buffers to minimize allocations
+//   - Preserves slice capacity across Reset() calls
+//   - Integrates with sync.Pool for instance reuse
+//
+// Usage:
+//
+//	// With pooling (recommended for production)
+//	tkz := GetTokenizer()
+//	defer PutTokenizer(tkz)
+//	tokens, err := tkz.Tokenize([]byte(sql))
+//
+//	// Without pooling (simple usage)
+//	tkz, _ := New()
+//	tokens, err := tkz.Tokenize([]byte(sql))
 type Tokenizer struct {
-	input      []byte
-	pos        Position
-	lineStart  Position
-	lineStarts []int
-	line       int
-	keywords   *keywords.Keywords
-	debugLog   DebugLogger
+	input      []byte             // Input SQL bytes (zero-copy reference)
+	pos        Position           // Current scanning position
+	lineStart  Position           // Start of current line
+	lineStarts []int              // Byte offsets of line starts (for position tracking)
+	line       int                // Current line number (1-based)
+	keywords   *keywords.Keywords // Keyword classifier for token type determination
+	debugLog   DebugLogger        // Optional debug logger for verbose tracing
 }
 
-// SetDebugLogger sets a debug logger for verbose tracing
+// SetDebugLogger sets a debug logger for verbose tracing during tokenization.
+// The logger receives debug messages for each token produced, which is useful
+// for diagnosing tokenization issues or understanding token stream structure.
+//
+// Pass nil to disable debug logging.
+//
+// Example:
+//
+//	type MyLogger struct{}
+//	func (l *MyLogger) Debug(format string, args ...interface{}) {
+//	    log.Printf("[TOKENIZER] "+format, args...)
+//	}
+//
+//	tkz := GetTokenizer()
+//	tkz.SetDebugLogger(&MyLogger{})
+//	tokens, _ := tkz.Tokenize([]byte(sql))
 func (t *Tokenizer) SetDebugLogger(logger DebugLogger) {
 	t.debugLog = logger
 }
 
-// New creates a new Tokenizer with default configuration
+// New creates a new Tokenizer with default configuration and keyword support.
+// The returned tokenizer is ready to use for tokenizing SQL statements.
+//
+// For production use, prefer GetTokenizer() which uses object pooling for
+// better performance and reduced allocations.
+//
+// Returns an error only if keyword initialization fails (extremely rare).
+//
+// Example:
+//
+//	tkz, err := tokenizer.New()
+//	if err != nil {
+//	    return err
+//	}
+//	tokens, err := tkz.Tokenize([]byte("SELECT * FROM users"))
 func New() (*Tokenizer, error) {
 	kw := keywords.NewKeywords()
 	return &Tokenizer{
@@ -181,7 +271,22 @@ func New() (*Tokenizer, error) {
 	}, nil
 }
 
-// NewWithKeywords initializes a Tokenizer with custom keywords
+// NewWithKeywords initializes a Tokenizer with a custom keyword classifier.
+// This allows you to customize keyword recognition for specific SQL dialects
+// or to add custom keywords.
+//
+// The keywords parameter must not be nil.
+//
+// Returns an error if keywords is nil.
+//
+// Example:
+//
+//	kw := keywords.NewKeywords()
+//	// Customize keywords as needed...
+//	tkz, err := tokenizer.NewWithKeywords(kw)
+//	if err != nil {
+//	    return err
+//	}
 func NewWithKeywords(kw *keywords.Keywords) (*Tokenizer, error) {
 	if kw == nil {
 		return nil, errors.InvalidSyntaxError("keywords cannot be nil", models.Location{Line: 1, Column: 0}, "")
@@ -194,7 +299,65 @@ func NewWithKeywords(kw *keywords.Keywords) (*Tokenizer, error) {
 	}, nil
 }
 
-// Tokenize processes the input and returns tokens
+// Tokenize converts raw SQL bytes into a slice of tokens with position information.
+//
+// This is the main entry point for tokenization. It performs zero-copy tokenization
+// directly on the input byte slice and returns tokens with precise start/end positions.
+//
+// Performance: 8M+ tokens/sec sustained throughput with zero-copy operations.
+//
+// DoS Protection:
+//   - Input size limited to MaxInputSize (10MB default)
+//   - Token count limited to MaxTokens (1M default)
+//   - Returns errors if limits exceeded
+//
+// Position Tracking:
+//   - All positions are 1-based (first line is 1, first column is 1)
+//   - Start position is inclusive, end position is exclusive
+//   - Position information preserved for all tokens including EOF
+//
+// Error Handling:
+//   - Returns structured errors with precise position information
+//   - Common errors: UnterminatedStringError, UnexpectedCharError, InvalidNumberError
+//   - Errors include line/column location and context
+//
+// Parameters:
+//   - input: Raw SQL bytes to tokenize (not modified, zero-copy reference)
+//
+// Returns:
+//   - []models.TokenWithSpan: Slice of tokens with position spans (includes EOF token)
+//   - error: Tokenization error with position information, or nil on success
+//
+// Example:
+//
+//	tkz := GetTokenizer()
+//	defer PutTokenizer(tkz)
+//
+//	sql := "SELECT id, name FROM users WHERE active = true"
+//	tokens, err := tkz.Tokenize([]byte(sql))
+//	if err != nil {
+//	    log.Printf("Tokenization error at line %d: %v",
+//	        err.(errors.TokenizerError).Location.Line, err)
+//	    return err
+//	}
+//
+//	for _, tok := range tokens {
+//	    fmt.Printf("Token: %s (type: %v) at %d:%d\n",
+//	        tok.Token.Value, tok.Token.Type,
+//	        tok.Start.Line, tok.Start.Column)
+//	}
+//
+// PostgreSQL Operators (v1.6.0):
+//
+//	sql := "SELECT data->'field' FROM table WHERE config @> '{\"key\":\"value\"}'"
+//	tokens, _ := tkz.Tokenize([]byte(sql))
+//	// Produces tokens for: -> (JSON field access), @> (JSONB contains)
+//
+// Unicode Support:
+//
+//	sql := "SELECT 名前 FROM ユーザー WHERE 'こんにちは'"
+//	tokens, _ := tkz.Tokenize([]byte(sql))
+//	// Correctly tokenizes Unicode identifiers and string literals
 func (t *Tokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) {
 	// Record start time for metrics
 	startTime := time.Now()

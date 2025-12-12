@@ -8,14 +8,47 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
-// IndentationDepthRule checks for excessive indentation depth
+// IndentationDepthRule (L004) detects excessive indentation depth indicating overly
+// complex query structure.
+//
+// Deep nesting in SQL queries often indicates complex subqueries that may benefit
+// from refactoring into CTEs, views, or application-level logic. This rule helps
+// identify queries that may be hard to understand and maintain.
+//
+// Rule ID: L004
+// Severity: Warning
+// Auto-fix: Not supported (requires query restructuring)
+//
+// Example violation (maxDepth=4, indentSize=4):
+//
+//	SELECT *
+//	FROM (
+//	    SELECT *
+//	    FROM (
+//	        SELECT *
+//	        FROM (
+//	            SELECT *
+//	            FROM (
+//	                SELECT * FROM deep_table  <- 5 levels deep (violation)
+//
+// This rule calculates indentation depth by dividing total leading whitespace by
+// indentSize, treating tabs as indentSize spaces.
 type IndentationDepthRule struct {
 	linter.BaseRule
 	maxDepth   int
 	indentSize int // Size of one indentation level (default 4)
 }
 
-// NewIndentationDepthRule creates a new L004 rule instance
+// NewIndentationDepthRule creates a new L004 rule instance.
+//
+// Parameters:
+//   - maxDepth: Maximum indentation depth allowed (minimum 1, default 4)
+//   - indentSize: Number of spaces per indentation level (minimum 1, default 4)
+//
+// Tabs are counted as indentSize spaces. If parameters are less than 1, defaults
+// are applied.
+//
+// Returns a configured IndentationDepthRule ready for use with the linter.
 func NewIndentationDepthRule(maxDepth int, indentSize int) *IndentationDepthRule {
 	if maxDepth < 1 {
 		maxDepth = 4 // Default max depth
@@ -36,7 +69,15 @@ func NewIndentationDepthRule(maxDepth int, indentSize int) *IndentationDepthRule
 	}
 }
 
-// Check performs the indentation depth check
+// Check performs the indentation depth check on SQL content.
+//
+// Calculates the indentation depth of each non-empty line by counting leading
+// whitespace (tabs converted to indentSize spaces) and dividing by indentSize.
+// Reports violations for lines exceeding maxDepth.
+//
+// Empty lines are skipped as they don't contribute to query complexity.
+//
+// Returns a slice of violations (one per line exceeding maximum depth) and nil error.
 func (r *IndentationDepthRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 	violations := []linter.Violation{}
 
@@ -66,7 +107,12 @@ func (r *IndentationDepthRule) Check(ctx *linter.Context) ([]linter.Violation, e
 	return violations, nil
 }
 
-// calculateIndentDepth calculates the indentation depth of a line
+// calculateIndentDepth calculates the indentation depth of a line.
+//
+// Counts leading spaces and tabs, converting tabs to indentSize spaces, then
+// divides total by indentSize to get the depth level.
+//
+// Returns the indentation depth as an integer level count.
 func (r *IndentationDepthRule) calculateIndentDepth(line string) int {
 	spaces := 0
 	tabs := 0
@@ -86,7 +132,16 @@ func (r *IndentationDepthRule) calculateIndentDepth(line string) int {
 	return totalSpaces / r.indentSize
 }
 
-// Fix is not supported for this rule (requires query restructuring)
+// Fix is not supported for this rule as it requires semantic query restructuring.
+//
+// Reducing indentation depth requires understanding query logic and potentially:
+//   - Converting nested subqueries to CTEs
+//   - Breaking complex queries into views
+//   - Simplifying join conditions
+//
+// These transformations require human judgment and cannot be automated safely.
+//
+// Returns the content unchanged with nil error.
 func (r *IndentationDepthRule) Fix(content string, violations []linter.Violation) (string, error) {
 	// No auto-fix available for indentation depth
 	return content, nil

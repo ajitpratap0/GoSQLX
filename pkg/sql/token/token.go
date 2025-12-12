@@ -2,29 +2,80 @@ package token
 
 import "github.com/ajitpratap0/GoSQLX/pkg/models"
 
-// Type represents a token type (string-based, for backward compatibility)
+// Type represents a token type using string values.
+// This is the legacy type system maintained for backward compatibility.
+// For new code, prefer using models.TokenType (int-based) for better performance.
 type Type string
 
-// Token represents a lexical token
-// The Token struct supports both string-based (Type) and int-based (ModelType) type systems.
-// ModelType is the primary system going forward, while Type is maintained for backward compatibility.
+// Token represents a lexical token in SQL source code.
+//
+// The Token struct supports a dual type system:
+//   - Type: String-based type (backward compatibility, human-readable)
+//   - ModelType: Integer-based type (primary, high-performance)
+//   - Literal: The actual text value of the token
+//
+// The ModelType field should be used for type checking in performance-critical code,
+// as integer comparisons are significantly faster than string comparisons.
+//
+// Example:
+//
+//	tok := Token{
+//	    Type:      SELECT,
+//	    ModelType: models.TokenTypeSelect,
+//	    Literal:   "SELECT",
+//	}
+//
+//	// Prefer fast integer comparison
+//	if tok.IsType(models.TokenTypeSelect) {
+//	    // Process SELECT token
+//	}
 type Token struct {
 	Type      Type             // String-based type (backward compatibility)
 	ModelType models.TokenType // Int-based type (primary, for performance)
 	Literal   string           // The literal value of the token
 }
 
-// HasModelType returns true if the ModelType field is populated
+// HasModelType returns true if the ModelType field is populated with a valid type.
+// Returns false for TokenTypeUnknown or zero value.
+//
+// Example:
+//
+//	tok := Token{ModelType: models.TokenTypeSelect, Literal: "SELECT"}
+//	if tok.HasModelType() {
+//	    // Use fast ModelType-based operations
+//	}
 func (t Token) HasModelType() bool {
 	return t.ModelType != models.TokenTypeUnknown && t.ModelType != 0
 }
 
-// IsType checks if the token matches the given models.TokenType (fast int comparison)
+// IsType checks if the token matches the given models.TokenType.
+// This uses fast integer comparison and is the preferred way to check token types.
+//
+// Example:
+//
+//	tok := Token{ModelType: models.TokenTypeSelect, Literal: "SELECT"}
+//	if tok.IsType(models.TokenTypeSelect) {
+//	    fmt.Println("This is a SELECT token")
+//	}
 func (t Token) IsType(expected models.TokenType) bool {
 	return t.ModelType == expected
 }
 
-// IsAnyType checks if the token matches any of the given models.TokenType values
+// IsAnyType checks if the token matches any of the given models.TokenType values.
+// Returns true if the token's ModelType matches any type in the provided list.
+//
+// Example:
+//
+//	tok := Token{ModelType: models.TokenTypeSelect, Literal: "SELECT"}
+//	dmlKeywords := []models.TokenType{
+//	    models.TokenTypeSelect,
+//	    models.TokenTypeInsert,
+//	    models.TokenTypeUpdate,
+//	    models.TokenTypeDelete,
+//	}
+//	if tok.IsAnyType(dmlKeywords...) {
+//	    fmt.Println("This is a DML statement keyword")
+//	}
 func (t Token) IsAnyType(types ...models.TokenType) bool {
 	for _, typ := range types {
 		if t.ModelType == typ {
@@ -34,7 +85,15 @@ func (t Token) IsAnyType(types ...models.TokenType) bool {
 	return false
 }
 
-// Token types
+// Token type constants define string-based token types for backward compatibility.
+// For new code, prefer using models.TokenType (integer-based) for better performance.
+//
+// These constants are organized into categories:
+//   - Special tokens: ILLEGAL, EOF, WS
+//   - Identifiers and literals: IDENT, INT, FLOAT, STRING, TRUE, FALSE
+//   - Operators: EQ, NEQ, LT, LTE, GT, GTE, ASTERISK
+//   - Delimiters: COMMA, SEMICOLON, LPAREN, RPAREN, DOT
+//   - SQL keywords: SELECT, INSERT, UPDATE, DELETE, FROM, WHERE, etc.
 const (
 	// Special tokens
 	ILLEGAL = Type("ILLEGAL")
@@ -129,7 +188,15 @@ const (
 	EQUAL        = Type("=")
 )
 
-// IsKeyword returns true if the token type is a keyword
+// IsKeyword returns true if the token type is a SQL keyword.
+// Checks against common SQL keywords like SELECT, INSERT, FROM, WHERE, etc.
+//
+// Example:
+//
+//	typ := SELECT
+//	if typ.IsKeyword() {
+//	    fmt.Println("This is a keyword token type")
+//	}
 func (t Type) IsKeyword() bool {
 	switch t {
 	case SELECT, INSERT, UPDATE, DELETE, FROM, WHERE, ORDER, BY, GROUP, HAVING, LIMIT, OFFSET, AS, AND, OR, IN, NOT, NULL, INTO, VALUES, TRUE, FALSE, SET, ALTER, TABLE:
@@ -139,7 +206,15 @@ func (t Type) IsKeyword() bool {
 	}
 }
 
-// IsOperator returns true if the token type is an operator
+// IsOperator returns true if the token type is an operator.
+// Checks for comparison and arithmetic operators.
+//
+// Example:
+//
+//	typ := EQ
+//	if typ.IsOperator() {
+//	    fmt.Println("This is an operator token type")
+//	}
 func (t Type) IsOperator() bool {
 	switch t {
 	case EQ, NEQ, LT, LTE, GT, GTE, ASTERISK:
@@ -149,7 +224,15 @@ func (t Type) IsOperator() bool {
 	}
 }
 
-// IsLiteral returns true if the token type is a literal
+// IsLiteral returns true if the token type is a literal value.
+// Checks for identifiers, numbers, strings, and boolean literals.
+//
+// Example:
+//
+//	typ := STRING
+//	if typ.IsLiteral() {
+//	    fmt.Println("This is a literal value token type")
+//	}
 func (t Type) IsLiteral() bool {
 	switch t {
 	case IDENT, INT, FLOAT, STRING, TRUE, FALSE:
@@ -159,7 +242,8 @@ func (t Type) IsLiteral() bool {
 	}
 }
 
-// stringToModelType maps string-based token types to models.TokenType for unified type system
+// stringToModelType maps string-based token types to models.TokenType for unified type system.
+// This enables conversion between the legacy string-based Type and the modern int-based ModelType.
 var stringToModelType = map[Type]models.TokenType{
 	// Special tokens
 	ILLEGAL:    models.TokenTypeIllegal,
@@ -227,7 +311,14 @@ var stringToModelType = map[Type]models.TokenType{
 	CREATEROLE: models.TokenTypeCreateRole,
 }
 
-// ToModelType converts a string-based Type to models.TokenType
+// ToModelType converts a string-based Type to models.TokenType.
+// Returns the corresponding integer-based token type, or models.TokenTypeKeyword
+// for unknown types.
+//
+// Example:
+//
+//	typ := SELECT
+//	modelType := typ.ToModelType()  // models.TokenTypeSelect
 func (t Type) ToModelType() models.TokenType {
 	if mt, ok := stringToModelType[t]; ok {
 		return mt
@@ -236,7 +327,16 @@ func (t Type) ToModelType() models.TokenType {
 	return models.TokenTypeKeyword // Default to generic keyword
 }
 
-// NewTokenWithModelType creates a token with both string and int types populated
+// NewTokenWithModelType creates a token with both string and int types populated.
+// This is the preferred way to create tokens as it ensures both type systems are
+// properly initialized.
+//
+// Example:
+//
+//	tok := NewTokenWithModelType(SELECT, "SELECT")
+//	// tok.Type = SELECT
+//	// tok.ModelType = models.TokenTypeSelect
+//	// tok.Literal = "SELECT"
 func NewTokenWithModelType(typ Type, literal string) Token {
 	return Token{
 		Type:      typ,

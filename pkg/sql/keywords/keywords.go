@@ -1,5 +1,9 @@
 // Package keywords provides SQL keyword definitions and categorization for multiple SQL dialects.
 // It includes reserved words, DDL/DML keywords, dialect-specific extensions, and window function keywords.
+//
+// This file contains the core keyword collections and the New() constructor for creating
+// keyword instances with dialect-specific support. See doc.go for comprehensive package
+// documentation and examples.
 package keywords
 
 import (
@@ -8,7 +12,11 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
-// Reserved keywords that can't be used as table aliases
+// RESERVED_FOR_TABLE_ALIAS contains keywords that cannot be used as table aliases.
+// These keywords are reserved in the context of table aliasing and will cause
+// syntax errors if used without the AS keyword in most SQL dialects.
+//
+// Examples: SELECT, FROM, WHERE, JOIN, LATERAL (v1.6.0), RETURNING (v1.6.0)
 var RESERVED_FOR_TABLE_ALIAS = []Keyword{
 	{Word: "AS", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
 	{Word: "WITH", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
@@ -94,6 +102,12 @@ var RESERVED_FOR_TABLE_ALIAS = []Keyword{
 	{Word: "PERCENT", Type: models.TokenTypePercent, Reserved: true, ReservedForTableAlias: true},
 }
 
+// ADDITIONAL_KEYWORDS contains SQL keywords that are reserved but not specifically
+// reserved for table aliases. These include expression keywords (BETWEEN, IS, NULL),
+// window function names (ROW_NUMBER, RANK, LAG, LEAD), grouping operations
+// (ROLLUP, CUBE, GROUPING SETS), and DDL/DML keywords.
+//
+// v1.6.0 additions: FILTER, MERGE, MATERIALIZED, TRUNCATE, FETCH-related keywords
 var ADDITIONAL_KEYWORDS = []Keyword{
 	{Word: "BETWEEN", Type: models.TokenTypeBetween, Reserved: true, ReservedForTableAlias: false},
 	{Word: "IS", Type: models.TokenTypeIs, Reserved: true, ReservedForTableAlias: false},
@@ -171,8 +185,24 @@ var ADDITIONAL_KEYWORDS = []Keyword{
 	{Word: "IDENTITY", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 }
 
-// addKeywordsWithCategory is a helper method to add multiple keywords
-// New creates a new Keywords instance with the specified dialect and case sensitivity
+// New creates a new Keywords instance with the specified SQL dialect and case sensitivity.
+//
+// The dialect parameter determines which dialect-specific keywords to include:
+//   - DialectGeneric: Standard SQL keywords only
+//   - DialectPostgreSQL: Includes PostgreSQL extensions (ILIKE, LATERAL, MATERIALIZED, RETURNING)
+//   - DialectMySQL: Includes MySQL extensions (ZEROFILL, UNSIGNED, FORCE)
+//   - DialectSQLite: Includes SQLite extensions (AUTOINCREMENT, VACUUM)
+//
+// The ignoreCase parameter controls case sensitivity, though it's always set to true
+// internally as SQL keywords are case-insensitive by standard.
+//
+// Example:
+//
+//	// Create PostgreSQL keyword instance
+//	kw := keywords.New(keywords.DialectPostgreSQL, true)
+//	if kw.IsKeyword("LATERAL") {
+//	    fmt.Println("LATERAL is a PostgreSQL keyword")
+//	}
 func New(dialect SQLDialect, ignoreCase bool) *Keywords {
 	k := &Keywords{
 		reservedKeywords: make(map[string]bool),
@@ -247,7 +277,18 @@ func (k *Keywords) containsKeyword(word string) bool {
 	return exists
 }
 
-// GetTokenType returns the token type for a given keyword
+// GetTokenType returns the token type for a given keyword.
+// If the word is not a recognized keyword, it returns models.TokenTypeWord.
+//
+// The lookup is case-insensitive when the Keywords instance was created
+// with case-insensitive matching (default behavior).
+//
+// Example:
+//
+//	kw := keywords.New(keywords.DialectGeneric, true)
+//	tokenType := kw.GetTokenType("SELECT")  // models.TokenTypeSelect
+//	tokenType = kw.GetTokenType("select")   // models.TokenTypeSelect (case-insensitive)
+//	tokenType = kw.GetTokenType("unknown")  // models.TokenTypeWord
 func (k *Keywords) GetTokenType(word string) models.TokenType {
 	var key string
 	if k.ignoreCase {

@@ -8,17 +8,30 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
-// CaseStyle represents the preferred keyword case style
+// CaseStyle represents the preferred keyword case style for SQL keywords.
 type CaseStyle string
 
 const (
-	// CaseUpper prefers uppercase keywords (SELECT, FROM, WHERE)
+	// CaseUpper enforces uppercase keywords (SELECT, FROM, WHERE).
+	// This is the traditional SQL style and is recommended by most database vendors.
 	CaseUpper CaseStyle = "upper"
-	// CaseLower prefers lowercase keywords (select, from, where)
+
+	// CaseLower enforces lowercase keywords (select, from, where).
+	// This style is preferred by some modern development teams for consistency
+	// with application code conventions.
 	CaseLower CaseStyle = "lower"
 )
 
-// SQL keywords to check for case consistency
+// sqlKeywords contains all recognized SQL keywords across multiple dialects.
+// Keywords are stored in uppercase for case-insensitive matching.
+//
+// Includes keywords from:
+//   - SQL-99 standard
+//   - PostgreSQL (including v1.6.0 extensions)
+//   - MySQL/MariaDB
+//   - SQL Server (T-SQL)
+//   - Oracle (PL/SQL)
+//   - SQLite
 var sqlKeywords = map[string]bool{
 	"SELECT": true, "FROM": true, "WHERE": true, "AND": true, "OR": true,
 	"NOT": true, "IN": true, "IS": true, "NULL": true, "LIKE": true,
@@ -41,13 +54,43 @@ var sqlKeywords = map[string]bool{
 	"ROLLUP": true, "CUBE": true, "GROUPING": true, "SETS": true,
 }
 
-// KeywordCaseRule checks for consistent keyword case
+// KeywordCaseRule (L007) enforces consistent case for SQL keywords.
+//
+// Inconsistent keyword casing reduces readability and looks unprofessional. This
+// rule detects keywords that don't match the configured case style and supports
+// automatic conversion to the preferred style.
+//
+// Rule ID: L007
+// Severity: Warning
+// Auto-fix: Supported
+//
+// Example violation (CaseUpper style):
+//
+//	select * from users where active = true  <- Lowercase keywords (violation)
+//
+// Fixed output:
+//
+//	SELECT * FROM users WHERE active = true  <- Uppercase keywords
+//
+// The rule recognizes 60+ SQL keywords across multiple dialects including DDL, DML,
+// JOINs, window functions, CTEs, and PostgreSQL extensions. Identifiers (table names,
+// column names) are never modified.
+//
+// String literal handling:
+//   - Keywords inside 'single quotes' are NOT converted
+//   - Keywords inside "double quotes" are NOT converted
+//   - Only keywords in SQL code are affected
 type KeywordCaseRule struct {
 	linter.BaseRule
 	preferredStyle CaseStyle
 }
 
-// NewKeywordCaseRule creates a new L007 rule instance
+// NewKeywordCaseRule creates a new L007 rule instance.
+//
+// Parameters:
+//   - preferredStyle: CaseUpper or CaseLower (defaults to CaseUpper if empty)
+//
+// Returns a configured KeywordCaseRule ready for use with the linter.
 func NewKeywordCaseRule(preferredStyle CaseStyle) *KeywordCaseRule {
 	if preferredStyle == "" {
 		preferredStyle = CaseUpper // Default to uppercase
@@ -64,7 +107,13 @@ func NewKeywordCaseRule(preferredStyle CaseStyle) *KeywordCaseRule {
 	}
 }
 
-// Check performs the keyword case consistency check
+// Check performs the keyword case consistency check on SQL content.
+//
+// Tokenizes each line to find words, checks if each word is a SQL keyword, and
+// compares its case against the preferred style. String literals are skipped to
+// avoid flagging keywords that appear in quoted strings.
+//
+// Returns a slice of violations (one per keyword not matching preferred case) and nil error.
 func (r *KeywordCaseRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 	violations := []linter.Violation{}
 
@@ -107,13 +156,19 @@ func (r *KeywordCaseRule) Check(ctx *linter.Context) ([]linter.Violation, error)
 	return violations, nil
 }
 
-// wordToken represents a word found in a line with its position
+// wordToken represents a word extracted from a line with its position.
 type wordToken struct {
 	text   string
-	column int // 1-indexed
+	column int // 1-indexed column position in the line
 }
 
-// tokenizeLine extracts words from a line with their positions
+// tokenizeLine extracts words from a line with their column positions.
+//
+// Parses the line character by character, extracting sequences of letters, digits,
+// and underscores as words. Skips content inside string literals (both single and
+// double quoted) to avoid extracting keywords from SQL string values.
+//
+// Returns a slice of wordTokens representing each word and its position.
 func tokenizeLine(line string) []wordToken {
 	words := []wordToken{}
 	inString := false
@@ -174,7 +229,18 @@ func tokenizeLine(line string) []wordToken {
 	return words
 }
 
-// Fix converts all keywords to the preferred case
+// Fix converts all keywords to the preferred case in SQL content.
+//
+// Processes content line by line, converting keywords to the configured case style
+// while preserving:
+//   - Identifier case (table names, column names, aliases)
+//   - String literal content (keywords inside quotes are not changed)
+//   - Whitespace and formatting
+//
+// The fix is applied to all keywords regardless of violations parameter, ensuring
+// consistent case throughout the content.
+//
+// Returns the fixed content with all keywords in preferred case, and nil error.
 func (r *KeywordCaseRule) Fix(content string, violations []linter.Violation) (string, error) {
 	lines := strings.Split(content, "\n")
 
@@ -185,7 +251,13 @@ func (r *KeywordCaseRule) Fix(content string, violations []linter.Violation) (st
 	return strings.Join(lines, "\n"), nil
 }
 
-// fixLine fixes keyword case in a single line
+// fixLine fixes keyword case in a single line.
+//
+// Uses a state machine to track whether currently inside a string literal. For
+// words outside strings, checks if they're keywords and converts them to the
+// preferred case. Non-keywords are preserved unchanged.
+//
+// Returns the fixed line with keywords in preferred case.
 func (r *KeywordCaseRule) fixLine(line string) string {
 	result := strings.Builder{}
 	inString := false
@@ -242,7 +314,15 @@ func (r *KeywordCaseRule) fixLine(line string) string {
 	return result.String()
 }
 
-// convertKeyword converts a word to the preferred case if it's a keyword
+// convertKeyword converts a word to the preferred case if it's a keyword.
+//
+// Checks if the word (case-insensitively) is a recognized SQL keyword. If yes,
+// converts to preferred case. If no, returns the word unchanged.
+//
+// Parameters:
+//   - word: The word to potentially convert
+//
+// Returns the word in preferred case if it's a keyword, otherwise unchanged.
 func (r *KeywordCaseRule) convertKeyword(word string) string {
 	upperWord := strings.ToUpper(word)
 	if sqlKeywords[upperWord] {

@@ -8,13 +8,36 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
-// LongLinesRule checks for lines exceeding maximum length
+// LongLinesRule (L005) detects lines exceeding a configurable maximum length.
+//
+// Long lines reduce readability, especially in code reviews, side-by-side diffs,
+// and terminal environments. This rule enforces a maximum line length to improve
+// readability across different viewing contexts.
+//
+// Rule ID: L005
+// Severity: Info
+// Auto-fix: Not supported (requires semantic understanding)
+//
+// Example violation (maxLength=80):
+//
+//	SELECT user_id, username, email, created_at, updated_at, last_login FROM users WHERE active = true  <- 95 chars (violation)
+//
+// The rule skips comment-only lines as they often contain documentation or URLs
+// that shouldn't be broken. Lines with trailing whitespace are measured including
+// the whitespace.
 type LongLinesRule struct {
 	linter.BaseRule
 	MaxLength int
 }
 
-// NewLongLinesRule creates a new L005 rule instance
+// NewLongLinesRule creates a new L005 rule instance.
+//
+// Parameters:
+//   - maxLength: Maximum line length in characters (minimum 1, default 100)
+//
+// If maxLength is 0 or negative, defaults to 100 characters.
+//
+// Returns a configured LongLinesRule ready for use with the linter.
 func NewLongLinesRule(maxLength int) *LongLinesRule {
 	if maxLength <= 0 {
 		maxLength = 100 // Default to 100 characters
@@ -32,7 +55,15 @@ func NewLongLinesRule(maxLength int) *LongLinesRule {
 	}
 }
 
-// Check performs the long lines check
+// Check performs the long lines check on SQL content.
+//
+// Measures each line's length and reports violations for lines exceeding MaxLength.
+// Empty lines and comment-only lines (starting with -- or /*) are skipped.
+//
+// The violation column points to the position just after MaxLength to indicate
+// where the line becomes too long.
+//
+// Returns a slice of violations (one per line exceeding maximum length) and nil error.
 func (r *LongLinesRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 	violations := []linter.Violation{}
 
@@ -67,7 +98,18 @@ func (r *LongLinesRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 	return violations, nil
 }
 
-// Fix is not supported for long lines (requires semantic understanding)
+// Fix is not supported for this rule as it requires semantic understanding.
+//
+// Breaking long lines requires understanding:
+//   - SQL clause boundaries (WHERE, AND, OR, etc.)
+//   - String literal boundaries
+//   - Appropriate indentation for continuation
+//   - Logical grouping of conditions
+//
+// These decisions require human judgment about readability and cannot be automated
+// safely without risk of creating worse formatting.
+//
+// Returns the content unchanged with nil error.
 func (r *LongLinesRule) Fix(content string, violations []linter.Violation) (string, error) {
 	// No automatic fix available
 	return content, nil

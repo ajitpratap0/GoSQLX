@@ -12,13 +12,102 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
-// Handler processes LSP requests and notifications
+// Handler processes LSP requests and notifications.
+//
+// Handler implements all LSP protocol handlers for the GoSQLX language server.
+// It coordinates between the LSP protocol layer, document management, and the
+// GoSQLX SQL parser to provide comprehensive code intelligence features.
+//
+// # Supported LSP Methods
+//
+// Lifecycle:
+//   - initialize: Server initialization and capability negotiation
+//   - initialized: Confirmation of successful initialization
+//   - shutdown: Graceful shutdown preparation
+//   - exit: Final shutdown notification
+//
+// Text Synchronization:
+//   - textDocument/didOpen: Document opened in editor
+//   - textDocument/didChange: Document content modified (incremental sync supported)
+//   - textDocument/didClose: Document closed in editor
+//   - textDocument/didSave: Document saved to disk
+//
+// Code Intelligence:
+//   - textDocument/hover: Show keyword documentation (60+ SQL keywords)
+//   - textDocument/completion: Auto-complete keywords and snippets (100+ items)
+//   - textDocument/formatting: Format SQL with intelligent indentation
+//   - textDocument/documentSymbol: Outline view of SQL statements
+//   - textDocument/signatureHelp: Function parameter help (20+ functions)
+//   - textDocument/codeAction: Quick fixes for common errors
+//
+// Diagnostics:
+//   - textDocument/publishDiagnostics: Real-time syntax error reporting
+//
+// # Keyword Documentation
+//
+// The handler provides hover documentation for SQL keywords including:
+//   - Core DML: SELECT, INSERT, UPDATE, DELETE, MERGE
+//   - DDL: CREATE, ALTER, DROP, TRUNCATE
+//   - JOINs: INNER, LEFT, RIGHT, FULL OUTER, CROSS, NATURAL
+//   - Clauses: WHERE, GROUP BY, HAVING, ORDER BY, LIMIT, OFFSET
+//   - CTEs: WITH, RECURSIVE
+//   - Set Operations: UNION, EXCEPT, INTERSECT
+//   - Window Functions: ROW_NUMBER, RANK, DENSE_RANK, LAG, LEAD, etc.
+//   - Aggregates: COUNT, SUM, AVG, MIN, MAX
+//   - Advanced: ROLLUP, CUBE, GROUPING SETS, PARTITION BY
+//
+// # Completion Features
+//
+// Auto-completion includes:
+//   - 100+ SQL keywords with context-appropriate filtering
+//   - 22 code snippets for common SQL patterns
+//   - Trigger characters: space, dot, opening parenthesis
+//   - Prefix-based filtering for fast results
+//
+// Snippet examples:
+//   - "sel" → Complete SELECT statement template
+//   - "cte" → Common Table Expression with RECURSIVE option
+//   - "window" → Window function with PARTITION BY and ORDER BY
+//   - "merge" → MERGE statement with MATCHED/NOT MATCHED clauses
+//
+// # Error Handling
+//
+// The handler provides sophisticated error reporting:
+//   - Position extraction from GoSQLX structured errors
+//   - Fallback regex patterns for unstructured error messages
+//   - Error code propagation for diagnostic categorization
+//   - Precise error ranges for IDE underlining
+//
+// # Document Size Limits
+//
+// Documents are subject to size limits for performance:
+//   - MaxDocumentSize (5MB): Documents larger than this skip validation
+//   - Warning message sent to client for oversized documents
+//   - Documents still opened but diagnostics disabled
+//
+// # Thread Safety
+//
+// Handler operations are thread-safe through:
+//   - DocumentManager's read/write locking
+//   - Immutable keyword and snippet data structures
+//   - No shared mutable state between requests
 type Handler struct {
 	server   *Server
 	keywords *keywords.Keywords
 }
 
-// NewHandler creates a new LSP request handler
+// NewHandler creates a new LSP request handler.
+//
+// This constructor initializes the handler with a reference to the server
+// and sets up the SQL keywords database for hover documentation and completion.
+//
+// The handler uses DialectGeneric for maximum SQL compatibility across
+// PostgreSQL, MySQL, SQL Server, Oracle, and SQLite dialects.
+//
+// Parameters:
+//   - server: The LSP server instance that owns this handler
+//
+// Returns a fully initialized Handler ready to process LSP requests.
 func NewHandler(server *Server) *Handler {
 	return &Handler{
 		server:   server,
@@ -423,7 +512,24 @@ func isWhitespace(c byte) bool {
 	return c == ' ' || c == '\t' || c == '\n' || c == '\r'
 }
 
-// handleHover provides hover information for SQL keywords
+// handleHover provides hover information for SQL keywords.
+//
+// When the user hovers over a SQL keyword in their editor, this handler
+// returns markdown-formatted documentation with syntax examples.
+//
+// The handler supports 60+ SQL keywords across all major categories:
+//   - Core DML: SELECT, INSERT, UPDATE, DELETE
+//   - JOINs: INNER, LEFT, RIGHT, FULL OUTER, CROSS
+//   - Clauses: WHERE, GROUP BY, HAVING, ORDER BY
+//   - CTEs: WITH, RECURSIVE
+//   - Window Functions: ROW_NUMBER, RANK, DENSE_RANK, LAG, LEAD
+//   - Set Operations: UNION, EXCEPT, INTERSECT
+//   - Advanced: ROLLUP, CUBE, GROUPING SETS
+//
+// Returns:
+//   - Hover with markdown documentation if keyword found
+//   - Empty Hover if position is not on a keyword
+//   - Error if document not found or params invalid
 func (h *Handler) handleHover(params json.RawMessage) (*Hover, error) {
 	var p TextDocumentPositionParams
 	if err := json.Unmarshal(params, &p); err != nil {
@@ -456,7 +562,28 @@ func (h *Handler) handleHover(params json.RawMessage) (*Hover, error) {
 	}, nil
 }
 
-// handleCompletion provides completion suggestions
+// handleCompletion provides completion suggestions for SQL keywords and snippets.
+//
+// This handler implements intelligent auto-completion that helps users write
+// SQL faster with less typing. It provides context-aware suggestions based on
+// the current cursor position and partial input.
+//
+// Features:
+//   - 100+ SQL keywords with descriptions
+//   - 22 code snippets for common SQL patterns
+//   - Prefix-based filtering for fast results
+//   - Trigger characters: space, dot, opening parenthesis
+//   - Result limiting (max 100 items) for performance
+//
+// The completion list includes:
+//   - Keywords: DML, DDL, JOINs, clauses, functions
+//   - Functions: Aggregates, window functions, string/date functions
+//   - Snippets: Complete statement templates with placeholders
+//
+// Returns:
+//   - CompletionList with filtered items based on current input
+//   - Empty list if no matches or document not found
+//   - IsIncomplete=true if results were truncated
 func (h *Handler) handleCompletion(params json.RawMessage) (*CompletionList, error) {
 	var p CompletionParams
 	if err := json.Unmarshal(params, &p); err != nil {
@@ -499,7 +626,32 @@ func (h *Handler) handleCompletion(params json.RawMessage) (*CompletionList, err
 	}, nil
 }
 
-// handleFormatting formats the SQL document
+// handleFormatting formats the SQL document with intelligent indentation.
+//
+// This handler provides SQL code formatting to improve readability and
+// maintain consistent style across SQL files. The formatter applies
+// intelligent rules for clause alignment and keyword positioning.
+//
+// Formatting Features:
+//   - Keyword normalization (uppercase/lowercase based on config)
+//   - Intelligent indentation for nested clauses
+//   - Clause alignment (SELECT, FROM, WHERE, etc. on new lines)
+//   - AND/OR operator indentation
+//   - JOIN clause alignment
+//   - GROUP BY, ORDER BY, HAVING clause formatting
+//   - Configurable tab size and spaces vs. tabs
+//   - Optional final newline insertion
+//
+// Configuration Options (from FormattingOptions):
+//   - TabSize: Number of spaces per indentation level
+//   - InsertSpaces: Use spaces (true) or tabs (false)
+//   - InsertFinalNewline: Add newline at end of file
+//   - TrimTrailingWhitespace: Remove trailing spaces
+//
+// Returns:
+//   - Array of TextEdit to replace entire document with formatted version
+//   - Empty array if formatting produces no changes
+//   - Error if document not found or formatting fails
 func (h *Handler) handleFormatting(params json.RawMessage) ([]TextEdit, error) {
 	var p DocumentFormattingParams
 	if err := json.Unmarshal(params, &p); err != nil {
@@ -1068,7 +1220,32 @@ func (h *Handler) extractStatementSymbol(stmt interface{}, index int, lines []st
 	}
 }
 
-// handleSignatureHelp provides signature help for SQL functions
+// handleSignatureHelp provides signature help for SQL functions.
+//
+// This handler displays function parameter information when the user types
+// an opening parenthesis or comma. It helps users understand function
+// signatures without leaving their editor.
+//
+// Supported Functions (20+):
+//   - Aggregates: COUNT, SUM, AVG, MIN, MAX
+//   - Window: ROW_NUMBER, RANK, DENSE_RANK, NTILE, LAG, LEAD, FIRST_VALUE, LAST_VALUE
+//   - String: SUBSTRING, TRIM, UPPER, LOWER, LENGTH, CONCAT
+//   - Type: CAST, COALESCE, NULLIF
+//
+// Trigger Characters:
+//   - '(': Show signature when function call begins
+//   - ',': Update active parameter when typing arguments
+//
+// The response includes:
+//   - Function signature with parameter names
+//   - Documentation for the function
+//   - Documentation for each parameter
+//   - Active parameter highlighting
+//
+// Returns:
+//   - SignatureHelp with function signature and active parameter
+//   - Empty SignatureHelp if cursor not in function call
+//   - Error if document not found or params invalid
 func (h *Handler) handleSignatureHelp(params json.RawMessage) (*SignatureHelp, error) {
 	var p TextDocumentPositionParams
 	if err := json.Unmarshal(params, &p); err != nil {
@@ -1321,7 +1498,34 @@ func getSQLFunctionSignature(funcName string) *SignatureInformation {
 	return signatures[funcName]
 }
 
-// handleCodeAction provides code actions (quick fixes) for diagnostics
+// handleCodeAction provides code actions (quick fixes) for diagnostics.
+//
+// This handler suggests automatic fixes for common SQL syntax errors and
+// style issues. Code actions appear in the editor as lightbulb suggestions
+// that users can apply with a single click.
+//
+// Supported Quick Fixes:
+//   - Add missing semicolon at end of statement
+//   - Convert keywords to uppercase for style consistency
+//   - Fix common syntax errors with automatic corrections
+//
+// Code Action Workflow:
+//  1. Editor sends diagnostics that need fixes
+//  2. Handler analyzes error messages
+//  3. Generates appropriate TextEdit operations
+//  4. Returns CodeAction with title and edit
+//  5. User accepts/rejects fix in editor
+//
+// Each CodeAction includes:
+//   - Title: Human-readable description of the fix
+//   - Kind: Type of action (quickfix, refactor, etc.)
+//   - Diagnostics: Which diagnostics this action resolves
+//   - Edit: WorkspaceEdit with precise text changes
+//
+// Returns:
+//   - Array of CodeAction suggestions for the given diagnostics
+//   - Empty array if no fixes available
+//   - Error if params invalid
 func (h *Handler) handleCodeAction(params json.RawMessage) ([]CodeAction, error) {
 	var p CodeActionParams
 	if err := json.Unmarshal(params, &p); err != nil {

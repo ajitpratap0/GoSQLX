@@ -145,7 +145,7 @@ gosqlx analyze "SELECT COUNT(*) FROM orders GROUP BY status"
 # Parse SQL to AST representation
 gosqlx parse -f json complex_query.sql
 
-# Unix Pipeline Support (NEW in v1.5.0)
+# Unix Pipeline Support
 cat query.sql | gosqlx format                    # Format from stdin
 echo "SELECT * FROM users" | gosqlx validate     # Validate from pipe
 gosqlx format query.sql | gosqlx validate        # Chain commands

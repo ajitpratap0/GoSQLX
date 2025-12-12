@@ -2,7 +2,7 @@
 
 Comprehensive documentation for the GoSQLX SQL parsing SDK.
 
-**Current Version**: v1.5.1+ | **Last Updated**: November 2025
+**Current Version**: v1.6.0 | **Last Updated**: December 2025
 
 ## Documentation Index
 
@@ -198,17 +198,17 @@ If you can't find what you need:
 
 | Document | Last Updated | Version |
 |----------|--------------|---------|
-| API_REFERENCE.md | 2025-11 | v1.5.1 |
-| GETTING_STARTED.md | 2025-11 | v1.5.1 |
-| CLI_GUIDE.md | 2025-11 | v1.5.1 |
-| USAGE_GUIDE.md | 2025-11 | v1.5.1 |
-| ARCHITECTURE.md | 2025-11 | v1.5.1 |
-| TROUBLESHOOTING.md | 2025-11 | v1.5.1 |
-| PRODUCTION_GUIDE.md | 2025-11 | v1.5.1 |
-| SQL_COMPATIBILITY.md | 2025-11 | v1.5.1 |
-| SECURITY.md | 2025-11 | v1.5.1 |
-| ERROR_CODES.md | 2025-11 | v1.5.1 |
-| PERFORMANCE_TUNING.md | 2025-11 | v1.5.1 |
+| API_REFERENCE.md | 2025-12 | v1.6.0 |
+| GETTING_STARTED.md | 2025-12 | v1.6.0 |
+| CLI_GUIDE.md | 2025-12 | v1.6.0 |
+| USAGE_GUIDE.md | 2025-12 | v1.6.0 |
+| ARCHITECTURE.md | 2025-12 | v1.6.0 |
+| TROUBLESHOOTING.md | 2025-12 | v1.6.0 |
+| PRODUCTION_GUIDE.md | 2025-12 | v1.6.0 |
+| SQL_COMPATIBILITY.md | 2025-12 | v1.6.0 |
+| SECURITY.md | 2025-12 | v1.6.0 |
+| ERROR_CODES.md | 2025-12 | v1.6.0 |
+| PERFORMANCE_TUNING.md | 2025-12 | v1.6.0 |
 
 ## Recent Feature Additions (v1.4+)
 

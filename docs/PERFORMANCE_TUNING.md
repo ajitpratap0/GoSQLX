@@ -1,7 +1,7 @@
 # GoSQLX Performance Tuning Guide
 
-**Last Updated:** 2025-11-17
-**GoSQLX Version:** v1.5.1+
+**Last Updated:** 2025-12-11
+**GoSQLX Version:** v1.6.0
 **Target Audience:** Production engineers, performance engineers, developers optimizing high-throughput systems
 
 This comprehensive guide helps you achieve optimal performance with GoSQLX in production environments. We cover profiling techniques, object pool optimization, concurrent processing patterns, memory management, and benchmark-driven optimization.
@@ -26,7 +26,7 @@ This comprehensive guide helps you achieve optimal performance with GoSQLX in pr
 
 ## Performance Overview
 
-### Baseline Performance (v1.5.1)
+### Baseline Performance (v1.6.0)
 
 GoSQLX delivers production-validated performance across multiple workloads:
 

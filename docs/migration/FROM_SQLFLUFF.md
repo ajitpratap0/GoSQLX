@@ -51,9 +51,9 @@ This guide helps you migrate from SQLFluff (Python) to GoSQLX (Go), covering fea
 
 **Key Trade-offs:**
 - 5 SQL dialects (vs SQLFluff's 60+)
-- No linting rules yet (planned for v1.5.0)
+- 10 linting rules (vs SQLFluff's 60+) - available in v1.6.0
 - No template language support
-- No VSCode extension yet (planned for v1.6.0)
+- VSCode extension available in v1.6.0
 
 ---
 
@@ -79,7 +79,7 @@ This guide helps you migrate from SQLFluff (Python) to GoSQLX (Go), covering fea
 
 ### You Should Stay with SQLFluff If:
 
-- **You need extensive linting rules** (GoSQLX has 0 rules currently)
+- **You need extensive linting rules** (GoSQLX has 10 rules in v1.6.0, vs SQLFluff's 60+)
 - **You need exotic SQL dialects** (Snowflake, BigQuery-specific features)
 - **You're heavily invested in Python** ecosystem
 - **You need template language support** (Jinja, dbt)
@@ -96,10 +96,10 @@ This guide helps you migrate from SQLFluff (Python) to GoSQLX (Go), covering fea
 | SQL Formatting | Yes | Yes | Different style defaults |
 | Syntax Error Detection | Yes | Yes | Both provide line/column info |
 | **Linting & Rules** |
-| Linting Rules | 60+ rules | Planned v1.5.0 | Major gap |
-| Custom Rules | Yes | Planned v1.5.0 | |
-| Rule Configuration | .sqlfluff | Planned v1.5.0 | |
-| Auto-fix | Yes | Planned v1.5.0 | |
+| Linting Rules | 60+ rules | 10 rules (v1.6.0) | GoSQLX growing |
+| Custom Rules | Yes | Coming soon | |
+| Rule Configuration | .sqlfluff | .gosqlx.yml (v1.6.0) | |
+| Auto-fix | Yes | Yes (v1.6.0) | |
 | **SQL Dialect Support** |
 | PostgreSQL | Yes | Yes | GoSQLX ~80-85% coverage |
 | MySQL | Yes | Yes | GoSQLX ~80% coverage |
@@ -114,16 +114,16 @@ This guide helps you migrate from SQLFluff (Python) to GoSQLX (Go), covering fea
 | CLI Tool | Yes | Yes | GoSQLX is faster |
 | Programmatic API | Complex | Simple | GoSQLX easier to use |
 | Library Integration | Python | Go | |
-| VSCode Extension | Yes | Planned v1.6.0 | |
+| VSCode Extension | Yes | Yes (v1.6.0) | |
 | Pre-commit Hooks | Yes | Yes | GoSQLX 100-1000x faster |
 | **Performance** |
 | Parse Speed | 1,000 ops/sec | 1.38M ops/sec | 1380x faster |
 | Memory per Query | 50KB | 1.8KB | 28x less memory |
 | Concurrent Processing | Limited (GIL) | Native | Linear scaling |
 | **Configuration** |
-| Config Files | .sqlfluff | Planned v1.5.0 | |
-| Inline Ignores | Yes | Planned v1.5.0 | |
-| Rule Exclusions | Yes | Planned v1.5.0 | |
+| Config Files | .sqlfluff | .gosqlx.yml (v1.6.0) | |
+| Inline Ignores | Yes | Coming soon | |
+| Rule Exclusions | Yes | Coming soon | |
 | **Template Support** |
 | Jinja Templates | Yes | No | |
 | dbt Integration | Yes | No | |
@@ -487,9 +487,9 @@ indent_unit = space
 capitalisation_policy = upper
 ```
 
-#### GoSQLX (Planned v1.5.0)
+#### GoSQLX (v1.6.0+)
 ```yaml
-# .gosqlx.yml (coming in v1.5.0)
+# .gosqlx.yml (available in v1.6.0)
 dialect: postgres
 formatting:
   max_line_length: 120
@@ -820,16 +820,16 @@ Status: SUCCESS
 
 ### Features Not Available in GoSQLX
 
-#### 1. Linting Rules (Coming in v1.5.0)
+#### 1. Linting Rules (Available in v1.6.0)
 **SQLFluff Has:**
 - 60+ built-in rules (L001-L064)
 - Custom rule creation
 - Rule configuration per project
 
 **GoSQLX Status:**
-- No linting rules yet
-- Planned for v1.5.0 (Q1 2025)
-- Will start with 10 basic rules
+- 10 linting rules (L001-L010) available in v1.6.0
+- Rules cover: trailing whitespace, missing semicolons, keyword case, etc.
+- Auto-fix support for applicable rules
 
 **Workaround:**
 Keep SQLFluff for linting, use GoSQLX for parsing/validation:
@@ -877,9 +877,9 @@ Use SQLFluff for unsupported dialects, or contribute dialect support to GoSQLX!
 - `sqlfluff fix` command
 
 **GoSQLX Status:**
-- Basic formatting only (no intelligent fixes yet)
-- No intelligent auto-fix yet
-- Planned for v1.5.0
+- Auto-fix available in v1.6.0
+- Supports 10 linting rules with automatic corrections
+- Use `gosqlx lint --fix` to apply fixes
 
 ---
 
@@ -927,7 +927,7 @@ Use SQLFluff for unsupported dialects, or contribute dialect support to GoSQLX!
 ## FAQ
 
 ### Q: Can I use both SQLFluff and GoSQLX together?
-**A:** Yes! Use GoSQLX for fast parsing/validation and SQLFluff for linting until GoSQLX adds linting rules in v1.5.0.
+**A:** Yes! GoSQLX now has 10 linting rules (L001-L010) with auto-fix in v1.6.0. Use GoSQLX for fast parsing/validation/linting, and SQLFluff for comprehensive 60+ rule coverage.
 
 ### Q: Will GoSQLX replace SQLFluff completely?
 **A:** Not yet. SQLFluff has more features (linting, templates, dialects). But for parsing/validation, GoSQLX is 1000x faster!

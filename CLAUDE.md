@@ -8,6 +8,7 @@ GoSQLX is a **production-ready**, **race-free**, high-performance SQL parsing SD
 
 **Requirements**: Go 1.24+
 
+
 ### **Production Status**: ✅ **VALIDATED FOR PRODUCTION DEPLOYMENT** (v1.6.0+)
 - **Thread Safety**: Confirmed race-free through comprehensive concurrent testing
 - **Performance**: 1.38M+ operations/second sustained, up to 1.5M peak with memory-efficient object pooling

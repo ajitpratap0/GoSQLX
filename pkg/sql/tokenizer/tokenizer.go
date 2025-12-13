@@ -185,6 +185,10 @@ var keywordTokenTypes = map[string]models.TokenType{
 	"LESS":     models.TokenTypeKeyword,
 	"THAN":     models.TokenTypeKeyword,
 	"MAXVALUE": models.TokenTypeKeyword,
+	// PostgreSQL ARRAY constructor (SQL-99)
+	"ARRAY": models.TokenTypeArray,
+	// WITHIN GROUP ordered set aggregates (SQL:2003)
+	"WITHIN": models.TokenTypeWithin,
 }
 
 // Tokenizer provides high-performance SQL tokenization with zero-copy operations.

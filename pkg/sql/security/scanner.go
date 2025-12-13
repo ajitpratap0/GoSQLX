@@ -585,9 +585,11 @@ func (s *Scanner) scanSelectStatement(stmt *ast.SelectStatement, result *ScanRes
 
 // scanInsertStatement analyzes INSERT for injection patterns.
 func (s *Scanner) scanInsertStatement(stmt *ast.InsertStatement, result *ScanResult) {
-	// Check values for suspicious patterns
-	for _, val := range stmt.Values {
-		s.scanExpressionForDangerousFunctions(val, result)
+	// Check values for suspicious patterns (multi-row support)
+	for _, row := range stmt.Values {
+		for _, val := range row {
+			s.scanExpressionForDangerousFunctions(val, result)
+		}
 	}
 }
 

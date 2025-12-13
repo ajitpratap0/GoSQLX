@@ -539,7 +539,7 @@ func TestInsertStatement(t *testing.T) {
 			stmt: &InsertStatement{
 				TableName: "users",
 				Columns:   []Expression{&Identifier{Name: "name"}, &Identifier{Name: "email"}},
-				Values:    []Expression{&LiteralValue{Value: "John"}, &LiteralValue{Value: "john@example.com"}},
+				Values:    [][]Expression{{&LiteralValue{Value: "John"}, &LiteralValue{Value: "john@example.com"}}},
 			},
 			wantLiteral: "INSERT",
 			minChildren: 2,

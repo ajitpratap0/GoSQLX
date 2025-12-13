@@ -53,7 +53,7 @@ var (
 		New: func() interface{} {
 			return &InsertStatement{
 				Columns: make([]Expression, 0, 4),
-				Values:  make([]Expression, 0, 4),
+				Values:  make([][]Expression, 0, 4),
 			}
 		},
 	}
@@ -125,6 +125,22 @@ var (
 		New: func() interface{} {
 			return &InExpression{
 				List: make([]Expression, 0, 4),
+			}
+		},
+	}
+
+	tupleExprPool = sync.Pool{
+		New: func() interface{} {
+			return &TupleExpression{
+				Expressions: make([]Expression, 0, 4),
+			}
+		},
+	}
+
+	arrayConstructorPool = sync.Pool{
+		New: func() interface{} {
+			return &ArrayConstructorExpression{
+				Elements: make([]Expression, 0, 4),
 			}
 		},
 	}
@@ -337,9 +353,13 @@ func PutInsertStatement(stmt *InsertStatement) {
 		PutExpression(stmt.Columns[i])
 		stmt.Columns[i] = nil
 	}
+	// Clean up multi-row values
 	for i := range stmt.Values {
-		PutExpression(stmt.Values[i])
-		stmt.Values[i] = nil
+		for j := range stmt.Values[i] {
+			PutExpression(stmt.Values[i][j])
+			stmt.Values[i][j] = nil
+		}
+		stmt.Values[i] = stmt.Values[i][:0]
 	}
 
 	// Reset slices but keep capacity
@@ -784,6 +804,27 @@ func PutExpression(expr Expression) {
 			e.Values = e.Values[:0]
 			listExprPool.Put(e)
 
+		case *TupleExpression:
+			for i := range e.Expressions {
+				if e.Expressions[i] != nil {
+					workQueue = append(workQueue, e.Expressions[i])
+				}
+				e.Expressions[i] = nil
+			}
+			e.Expressions = e.Expressions[:0]
+			tupleExprPool.Put(e)
+
+		case *ArrayConstructorExpression:
+			for i := range e.Elements {
+				if e.Elements[i] != nil {
+					workQueue = append(workQueue, e.Elements[i])
+				}
+				e.Elements[i] = nil
+			}
+			e.Elements = e.Elements[:0]
+			e.Subquery = nil
+			arrayConstructorPool.Put(e)
+
 		case *UnaryExpression:
 			if e.Expr != nil {
 				workQueue = append(workQueue, e.Expr)
@@ -931,6 +972,48 @@ func PutInExpression(ie *InExpression) {
 	ie.Subquery = nil
 	ie.Not = false
 	inExprPool.Put(ie)
+}
+
+// GetTupleExpression gets a TupleExpression from the pool
+func GetTupleExpression() *TupleExpression {
+	te := tupleExprPool.Get().(*TupleExpression)
+	te.Expressions = te.Expressions[:0]
+	return te
+}
+
+// PutTupleExpression returns a TupleExpression to the pool
+func PutTupleExpression(te *TupleExpression) {
+	if te == nil {
+		return
+	}
+	for i := range te.Expressions {
+		PutExpression(te.Expressions[i])
+		te.Expressions[i] = nil
+	}
+	te.Expressions = te.Expressions[:0]
+	tupleExprPool.Put(te)
+}
+
+// GetArrayConstructor gets an ArrayConstructorExpression from the pool
+func GetArrayConstructor() *ArrayConstructorExpression {
+	ac := arrayConstructorPool.Get().(*ArrayConstructorExpression)
+	ac.Elements = ac.Elements[:0]
+	ac.Subquery = nil
+	return ac
+}
+
+// PutArrayConstructor returns an ArrayConstructorExpression to the pool
+func PutArrayConstructor(ac *ArrayConstructorExpression) {
+	if ac == nil {
+		return
+	}
+	for i := range ac.Elements {
+		PutExpression(ac.Elements[i])
+		ac.Elements[i] = nil
+	}
+	ac.Elements = ac.Elements[:0]
+	ac.Subquery = nil
+	arrayConstructorPool.Put(ac)
 }
 
 // GetSubqueryExpression gets a SubqueryExpression from the pool

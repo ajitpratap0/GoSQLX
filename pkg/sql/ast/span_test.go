@@ -163,7 +163,7 @@ func TestAST_Span(t *testing.T) {
 
 		stmt2 := &InsertStatement{
 			Columns: []Expression{},
-			Values:  []Expression{},
+			Values:  [][]Expression{},
 		}
 		SetSpan(stmt2, models.Span{
 			Start: models.Location{Line: 3, Column: 1},
@@ -239,7 +239,7 @@ func TestInsertStatement_Span(t *testing.T) {
 
 		stmt := &InsertStatement{
 			Columns: []Expression{col},
-			Values:  []Expression{val},
+			Values:  [][]Expression{{val}},
 		}
 
 		// Just call Span() to ensure it works
@@ -255,7 +255,7 @@ func TestInsertStatement_Span(t *testing.T) {
 
 		stmt := &InsertStatement{
 			Columns:   []Expression{},
-			Values:    []Expression{},
+			Values:    [][]Expression{},
 			Returning: []Expression{ret},
 		}
 

@@ -138,6 +138,10 @@ var ADDITIONAL_KEYWORDS = []Keyword{
 	{Word: "SETS", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
 	// FILTER clause for aggregate functions (SQL:2003 T612)
 	{Word: "FILTER", Type: models.TokenTypeFilter, Reserved: true, ReservedForTableAlias: false},
+	// ARRAY constructor (SQL-99, PostgreSQL)
+	{Word: "ARRAY", Type: models.TokenTypeArray, Reserved: true, ReservedForTableAlias: false},
+	// WITHIN GROUP ordered set aggregates (SQL:2003)
+	{Word: "WITHIN", Type: models.TokenTypeWithin, Reserved: true, ReservedForTableAlias: false},
 	// MERGE statement keywords (SQL:2003 F312)
 	{Word: "MERGE", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
 	{Word: "USING", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},

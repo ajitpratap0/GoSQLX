@@ -112,8 +112,9 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	if p.isType(models.TokenTypeBetween) {
 		p.advance() // Consume BETWEEN
 
-		// Parse lower bound
-		lower, err := p.parsePrimaryExpression()
+		// Parse lower bound - use parseStringConcatExpression to support complex expressions
+		// like: price BETWEEN price * 0.9 AND price * 1.1
+		lower, err := p.parseStringConcatExpression()
 		if err != nil {
 			return nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse BETWEEN lower bound: %v", err),
@@ -128,8 +129,8 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 		}
 		p.advance() // Consume AND
 
-		// Parse upper bound
-		upper, err := p.parsePrimaryExpression()
+		// Parse upper bound - use parseStringConcatExpression to support complex expressions
+		upper, err := p.parseStringConcatExpression()
 		if err != nil {
 			return nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse BETWEEN upper bound: %v", err),
@@ -483,6 +484,11 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return p.parseCastExpression()
 	}
 
+	if p.isType(models.TokenTypeArray) {
+		// Handle ARRAY[...] or ARRAY(SELECT ...) constructor
+		return p.parseArrayConstructor()
+	}
+
 	if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeDoubleQuotedString) {
 		// Handle identifiers and function calls
 		// Double-quoted strings are treated as identifiers in SQL (e.g., "column_name")
@@ -601,13 +607,35 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			return &ast.SubqueryExpression{Subquery: subquery}, nil
 		}
 
-		// Regular parenthesized expression
+		// Regular parenthesized expression - could be tuple (a, b, c) or single (expr)
 		expr, err := p.parseExpression()
 		if err != nil {
 			return nil, err
 		}
 
-		// Expect closing parenthesis
+		// Check if this is a tuple (has comma after first expression)
+		if p.isType(models.TokenTypeComma) {
+			// This is a tuple expression (col1, col2, ...)
+			tuple := ast.GetTupleExpression()
+			tuple.Expressions = append(tuple.Expressions, expr)
+
+			for p.isType(models.TokenTypeComma) {
+				p.advance() // Consume comma
+				nextExpr, err := p.parseExpression()
+				if err != nil {
+					return nil, err
+				}
+				tuple.Expressions = append(tuple.Expressions, nextExpr)
+			}
+
+			if !p.isType(models.TokenTypeRParen) {
+				return nil, p.expectedError(")")
+			}
+			p.advance() // Consume )
+			return tuple, nil
+		}
+
+		// Expect closing parenthesis for single expression
 		if !p.isType(models.TokenTypeRParen) {
 			return nil, p.expectedError(")")
 		}
@@ -886,6 +914,84 @@ func (p *Parser) parseCastExpression() (*ast.CastExpression, error) {
 		Expr: expr,
 		Type: dataType,
 	}, nil
+}
+
+// parseArrayConstructor parses PostgreSQL ARRAY constructor syntax.
+// Supports both ARRAY[...] (square bracket) and ARRAY(...) (subquery) forms.
+//
+// Examples:
+//
+//	ARRAY[1, 2, 3]                   - Array literal with square brackets
+//	ARRAY['a', 'b', 'c']             - String array
+//	ARRAY[x, y, z]                   - Array from expressions
+//	ARRAY(SELECT id FROM users)      - Array from subquery
+func (p *Parser) parseArrayConstructor() (*ast.ArrayConstructorExpression, error) {
+	p.advance() // Consume ARRAY
+
+	arrayExpr := ast.GetArrayConstructor()
+
+	// Check for square bracket syntax: ARRAY[...]
+	if p.isType(models.TokenTypeLBracket) {
+		p.advance() // Consume [
+
+		// Parse comma-separated list of expressions (can be empty)
+		if !p.isType(models.TokenTypeRBracket) {
+			for {
+				elem, err := p.parseExpression()
+				if err != nil {
+					return nil, err
+				}
+				arrayExpr.Elements = append(arrayExpr.Elements, elem)
+
+				if p.isType(models.TokenTypeComma) {
+					p.advance() // Consume comma
+				} else if p.isType(models.TokenTypeRBracket) {
+					break
+				} else {
+					return nil, p.expectedError(", or ]")
+				}
+			}
+		}
+
+		// Expect closing bracket
+		if !p.isType(models.TokenTypeRBracket) {
+			return nil, p.expectedError("]")
+		}
+		p.advance() // Consume ]
+
+		return arrayExpr, nil
+	}
+
+	// Check for parenthesis syntax: ARRAY(SELECT ...)
+	if p.isType(models.TokenTypeLParen) {
+		p.advance() // Consume (
+
+		// Expect a subquery
+		if !p.isType(models.TokenTypeSelect) && !p.isType(models.TokenTypeWith) {
+			return nil, p.expectedError("SELECT in ARRAY subquery")
+		}
+
+		subquery, err := p.parseSubquery()
+		if err != nil {
+			return nil, err
+		}
+
+		selectStmt, ok := subquery.(*ast.SelectStatement)
+		if !ok {
+			return nil, p.expectedError("SELECT statement in ARRAY subquery")
+		}
+		arrayExpr.Subquery = selectStmt
+
+		// Expect closing parenthesis
+		if !p.isType(models.TokenTypeRParen) {
+			return nil, p.expectedError(")")
+		}
+		p.advance() // Consume )
+
+		return arrayExpr, nil
+	}
+
+	return nil, p.expectedError("[ or (")
 }
 
 // parseSubquery parses a subquery (SELECT or WITH statement).

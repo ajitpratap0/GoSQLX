@@ -21,9 +21,12 @@ func TestInsertStatementPool(t *testing.T) {
 			&Identifier{Name: "name"},
 			&Identifier{Name: "email"},
 		}
-		stmt.Values = []Expression{
-			&LiteralValue{Value: "John"},
-			&LiteralValue{Value: "john@example.com"},
+		// Values is now [][]Expression for multi-row support
+		stmt.Values = [][]Expression{
+			{
+				&LiteralValue{Value: "John"},
+				&LiteralValue{Value: "john@example.com"},
+			},
 		}
 
 		// Return to pool
@@ -371,7 +374,8 @@ func TestMemoryLeaks_InsertStatementPool(t *testing.T) {
 
 		stmt.TableName = "users"
 		stmt.Columns = append(stmt.Columns, &Identifier{Name: "name"}, &Identifier{Name: "email"})
-		stmt.Values = append(stmt.Values, &LiteralValue{Value: "John"}, &LiteralValue{Value: "john@test.com"})
+		// Values is now [][]Expression for multi-row support
+		stmt.Values = append(stmt.Values, []Expression{&LiteralValue{Value: "John"}, &LiteralValue{Value: "john@test.com"}})
 
 		PutInsertStatement(stmt)
 

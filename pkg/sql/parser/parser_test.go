@@ -160,8 +160,12 @@ func TestParserInsert(t *testing.T) {
 	if len(stmt.Columns) != 2 {
 		t.Fatalf("expected 2 columns, got %d", len(stmt.Columns))
 	}
-	if len(stmt.Values) != 2 {
-		t.Fatalf("expected 2 values, got %d", len(stmt.Values))
+	// Values is now [][]Expression for multi-row support
+	if len(stmt.Values) != 1 {
+		t.Fatalf("expected 1 row of values, got %d", len(stmt.Values))
+	}
+	if len(stmt.Values[0]) != 2 {
+		t.Fatalf("expected 2 values in first row, got %d", len(stmt.Values[0]))
 	}
 }
 

@@ -602,13 +602,15 @@ func (i Identifier) Children() []Node     { return nil }
 // New in v1.6.0:
 //   - Filter: FILTER clause for conditional aggregation
 //   - OrderBy: ORDER BY clause for order-sensitive aggregates (STRING_AGG, ARRAY_AGG, etc.)
+//   - WithinGroup: ORDER BY clause for ordered-set aggregates (PERCENTILE_CONT, PERCENTILE_DISC, MODE, etc.)
 type FunctionCall struct {
-	Name      string
-	Arguments []Expression // Renamed from Args for consistency
-	Over      *WindowSpec  // For window functions
-	Distinct  bool
-	Filter    Expression          // WHERE clause for aggregate functions
-	OrderBy   []OrderByExpression // ORDER BY clause for aggregate functions (STRING_AGG, ARRAY_AGG, etc.)
+	Name        string
+	Arguments   []Expression // Renamed from Args for consistency
+	Over        *WindowSpec  // For window functions
+	Distinct    bool
+	Filter      Expression          // WHERE clause for aggregate functions
+	OrderBy     []OrderByExpression // ORDER BY clause for aggregate functions (STRING_AGG, ARRAY_AGG, etc.)
+	WithinGroup []OrderByExpression // ORDER BY clause for ordered-set aggregates (PERCENTILE_CONT, etc.)
 }
 
 func (f *FunctionCall) expressionNode()     {}
@@ -622,6 +624,10 @@ func (f FunctionCall) Children() []Node {
 		children = append(children, f.Filter)
 	}
 	for _, orderBy := range f.OrderBy {
+		orderBy := orderBy // G601: Create local copy to avoid memory aliasing
+		children = append(children, &orderBy)
+	}
+	for _, orderBy := range f.WithinGroup {
 		orderBy := orderBy // G601: Create local copy to avoid memory aliasing
 		children = append(children, &orderBy)
 	}
@@ -887,6 +893,38 @@ func (l *ListExpression) expressionNode()     {}
 func (l ListExpression) TokenLiteral() string { return "LIST" }
 func (l ListExpression) Children() []Node     { return nodifyExpressions(l.Values) }
 
+// TupleExpression represents a row constructor / tuple (col1, col2) for multi-column comparisons
+// Used in: WHERE (user_id, status) IN ((1, 'active'), (2, 'pending'))
+type TupleExpression struct {
+	Expressions []Expression
+}
+
+func (t *TupleExpression) expressionNode()     {}
+func (t TupleExpression) TokenLiteral() string { return "TUPLE" }
+func (t TupleExpression) Children() []Node     { return nodifyExpressions(t.Expressions) }
+
+// ArrayConstructorExpression represents PostgreSQL ARRAY constructor syntax.
+// Creates an array value from a list of expressions or a subquery.
+//
+// Examples:
+//
+//	ARRAY[1, 2, 3]                    - Integer array literal
+//	ARRAY['admin', 'moderator']      - Text array literal
+//	ARRAY(SELECT id FROM users)      - Array from subquery
+type ArrayConstructorExpression struct {
+	Elements []Expression     // Elements inside ARRAY[...]
+	Subquery *SelectStatement // For ARRAY(SELECT ...) syntax (optional)
+}
+
+func (a *ArrayConstructorExpression) expressionNode()     {}
+func (a ArrayConstructorExpression) TokenLiteral() string { return "ARRAY" }
+func (a ArrayConstructorExpression) Children() []Node {
+	if a.Subquery != nil {
+		return []Node{a.Subquery}
+	}
+	return nodifyExpressions(a.Elements)
+}
+
 // UnaryExpression represents operations like NOT expr
 type UnaryExpression struct {
 	Operator UnaryOperator
@@ -963,7 +1001,7 @@ type InsertStatement struct {
 	With       *WithClause
 	TableName  string
 	Columns    []Expression
-	Values     []Expression
+	Values     [][]Expression   // Multi-row support: each inner slice is one row of values
 	Query      *SelectStatement // For INSERT ... SELECT
 	Returning  []Expression
 	OnConflict *OnConflict
@@ -978,7 +1016,10 @@ func (i InsertStatement) Children() []Node {
 		children = append(children, i.With)
 	}
 	children = append(children, nodifyExpressions(i.Columns)...)
-	children = append(children, nodifyExpressions(i.Values)...)
+	// Flatten multi-row values for Children()
+	for _, row := range i.Values {
+		children = append(children, nodifyExpressions(row)...)
+	}
 	if i.Query != nil {
 		children = append(children, i.Query)
 	}

@@ -256,9 +256,14 @@ func (f *SQLFormatter) formatInsert(stmt *ast.InsertStatement) error {
 	if len(stmt.Values) > 0 {
 		f.writeNewline()
 		f.writeKeyword("VALUES")
-		f.builder.WriteString(" (")
-		f.formatExpressionList(stmt.Values, ", ")
-		f.builder.WriteString(")")
+		for i, row := range stmt.Values {
+			if i > 0 {
+				f.builder.WriteString(",")
+			}
+			f.builder.WriteString(" (")
+			f.formatExpressionList(row, ", ")
+			f.builder.WriteString(")")
+		}
 	}
 
 	if stmt.Query != nil {

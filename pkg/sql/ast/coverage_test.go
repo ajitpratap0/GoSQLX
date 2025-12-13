@@ -298,10 +298,10 @@ func TestSpanMethods(t *testing.T) {
 				&Identifier{Name: "id"},
 				&Identifier{Name: "name"},
 			},
-			Values: []Expression{
+			Values: [][]Expression{{
 				&LiteralValue{Value: 1},
 				&LiteralValue{Value: "test"},
-			},
+			}},
 		}
 		span := insert.Span()
 		// Should return combined span of components
@@ -830,7 +830,7 @@ func TestInsertStatementChildrenCoverage(t *testing.T) {
 			},
 			TableName: "users",
 			Columns:   []Expression{&Identifier{Name: "id"}},
-			Values:    []Expression{&LiteralValue{Value: 1}},
+			Values:    [][]Expression{{&LiteralValue{Value: 1}}},
 			Query:     &SelectStatement{},
 			Returning: []Expression{&Identifier{Name: "id"}},
 			OnConflict: &OnConflict{

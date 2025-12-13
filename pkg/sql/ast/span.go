@@ -96,9 +96,11 @@ func (i *InsertStatement) Span() models.Span {
 		}
 	}
 
-	for _, val := range i.Values {
-		if spanned, ok := val.(Spanned); ok {
-			spans = append(spans, spanned.Span())
+	for _, row := range i.Values {
+		for _, val := range row {
+			if spanned, ok := val.(Spanned); ok {
+				spans = append(spans, spanned.Span())
+			}
 		}
 	}
 

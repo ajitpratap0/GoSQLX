@@ -277,11 +277,26 @@ func (tc *TokenConverter) convertSingleToken(t models.TokenWithSpan) (token.Toke
 		}, nil
 	}
 
-	// Handle placeholder token - normalize to TokenTypePlaceholder
+	// Handle JSONB key existence operators (?, ?|, ?&)
+	// These are PostgreSQL JSONB operators, not SQL placeholders
 	if t.Token.Type == models.TokenTypeQuestion {
 		return token.Token{
-			Type:      "?",
-			ModelType: models.TokenTypePlaceholder,
+			Type:      "QUESTION",
+			ModelType: models.TokenTypeQuestion,
+			Literal:   t.Token.Value,
+		}, nil
+	}
+	if t.Token.Type == models.TokenTypeQuestionPipe {
+		return token.Token{
+			Type:      "QUESTION_PIPE",
+			ModelType: models.TokenTypeQuestionPipe,
+			Literal:   t.Token.Value,
+		}, nil
+	}
+	if t.Token.Type == models.TokenTypeQuestionAnd {
+		return token.Token{
+			Type:      "QUESTION_AND",
+			ModelType: models.TokenTypeQuestionAnd,
 			Literal:   t.Token.Value,
 		}, nil
 	}
@@ -596,6 +611,8 @@ func buildTypeMapping() map[models.TokenType]token.Type {
 		models.TokenTypeGroups:    "GROUPS",
 		models.TokenTypeFilter:    "FILTER",
 		models.TokenTypeExclude:   "EXCLUDE",
+		models.TokenTypeArray:     "ARRAY",
+		models.TokenTypeWithin:    "WITHIN",
 
 		// Additional Join Keywords
 		models.TokenTypeCross:   "CROSS",
@@ -752,6 +769,11 @@ func buildTypeMapping() map[models.TokenType]token.Type {
 		models.TokenTypeIllegal:    "ILLEGAL",
 		models.TokenTypeAsterisk:   "*",
 		models.TokenTypeDoublePipe: "||",
+
+		// PostgreSQL JSONB existence operators
+		models.TokenTypeQuestion:     "QUESTION",      // ? key exists
+		models.TokenTypeQuestionPipe: "QUESTION_PIPE", // ?| any keys exist
+		models.TokenTypeQuestionAnd:  "QUESTION_AND",  // ?& all keys exist
 	}
 }
 

@@ -727,6 +727,11 @@ var modelTypeToString = map[models.TokenType]token.Type{
 	models.TokenTypeGtEq:         ">=",
 	models.TokenTypeDot:          ".",
 	models.TokenTypeAsterisk:     "*",
+	models.TokenTypePlus:         "PLUS",
+	models.TokenTypeMinus:        "MINUS",
+	models.TokenTypeMul:          "MUL",
+	models.TokenTypeDiv:          "DIV",
+	models.TokenTypeMod:          "MOD",
 	models.TokenTypeStringConcat: "STRING_CONCAT",
 
 	// Core SQL keywords

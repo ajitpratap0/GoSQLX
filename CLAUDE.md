@@ -6,6 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 GoSQLX is a **production-ready**, **race-free**, high-performance SQL parsing SDK for Go that provides lexing, parsing, and AST generation with zero-copy optimizations. The library is designed for enterprise use with comprehensive object pooling for memory efficiency.
 
+**Requirements**: Go 1.24+
+
+
 ### **Production Status**: ✅ **VALIDATED FOR PRODUCTION DEPLOYMENT** (v1.6.0+)
 - **Thread Safety**: Confirmed race-free through comprehensive concurrent testing
 - **Performance**: 1.38M+ operations/second sustained, up to 1.5M peak with memory-efficient object pooling
@@ -27,6 +30,7 @@ GoSQLX is a **production-ready**, **race-free**, high-performance SQL parsing SD
 - **Errors** (`pkg/errors/`): Structured error handling system with error codes and position tracking
 - **Metrics** (`pkg/metrics/`): Production performance monitoring and observability
 - **Security** (`pkg/sql/security/`): SQL injection detection with pattern scanning and severity classification
+- **Linter** (`pkg/linter/`): SQL linting engine with 10 built-in rules (L001-L010) for style enforcement
 - **CLI** (`cmd/gosqlx/`): Production-ready command-line tool for SQL validation, formatting, and analysis
 - **LSP** (`pkg/lsp/`): Language Server Protocol server for IDE integration (diagnostics, hover, completion, formatting)
 
@@ -42,7 +46,7 @@ The codebase uses extensive object pooling for performance optimization:
 ### Token Processing Flow
 
 1. **Input**: Raw SQL bytes → `tokenizer.Tokenize()` → `[]models.TokenWithSpan`
-2. **Conversion**: Token conversion → `parser.convertTokens()` → `[]token.Token` 
+2. **Conversion**: Token conversion → `parser.ConvertTokensForParser()` → `[]token.Token`
 3. **Parsing**: Parser consumption → `parser.Parse()` → `*ast.AST`
 4. **Cleanup**: Release pooled objects back to pools when done
 
@@ -129,6 +133,14 @@ task check
 task test:race
 ```
 
+### Pre-commit Hooks
+The repository has pre-commit hooks that automatically run on every commit:
+1. `go fmt` - Code formatting check
+2. `go vet` - Static analysis
+3. `go test -short` - Short test suite
+
+If a commit fails pre-commit checks, fix the issues and retry the commit.
+
 ### Security
 ```bash
 # Run security vulnerability scan
@@ -180,6 +192,14 @@ go run ./examples/cmd/example.go
 # Install globally
 go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest
 ```
+
+### Additional Documentation
+- `docs/GETTING_STARTED.md` - Quick start guide for new users
+- `docs/USAGE_GUIDE.md` - Comprehensive usage guide
+- `docs/LSP_GUIDE.md` - Complete LSP server documentation and IDE integration
+- `docs/LINTING_RULES.md` - All 10 linting rules (L001-L010) reference
+- `docs/CONFIGURATION.md` - Configuration file (.gosqlx.yml) guide
+- `docs/SQL_COMPATIBILITY.md` - SQL dialect compatibility matrix
 
 ## Key Implementation Details
 
@@ -294,6 +314,12 @@ Tests are organized with comprehensive coverage (30+ test files, 6 benchmark fil
 
 ### Component-Specific Testing
 ```bash
+# Run a single test by name
+go test -v -run TestSpecificTestName ./pkg/sql/parser/
+
+# Run tests matching a pattern
+go test -v -run "TestParser_Window.*" ./pkg/sql/parser/
+
 # Core library testing with race detection
 go test -race ./pkg/sql/tokenizer/ -v
 go test -race ./pkg/sql/parser/ -v
@@ -600,6 +626,32 @@ ORDER BY o.order_date DESC;
 SELECT u.name, p.title FROM users u
 JOIN posts p USING (user_id)
 WHERE p.published = true;
+```
+
+### PostgreSQL Extensions (v1.6.0) - Complete ✅
+```sql
+-- LATERAL JOIN - correlated subqueries in FROM clause
+SELECT u.name, r.order_date FROM users u,
+LATERAL (SELECT * FROM orders WHERE user_id = u.id ORDER BY order_date DESC LIMIT 3) r;
+
+-- JSON/JSONB Operators (->/->>/#>/#>>/@>/<@/?/?|/?&/#-)
+SELECT data->>'name' AS name, data->'address'->>'city' AS city FROM users;
+SELECT * FROM products WHERE attributes @> '{"color": "red"}';
+SELECT * FROM users WHERE profile ? 'email';
+
+-- DISTINCT ON - PostgreSQL-specific row selection
+SELECT DISTINCT ON (dept_id) dept_id, name, salary
+FROM employees ORDER BY dept_id, salary DESC;
+
+-- FILTER Clause - conditional aggregation (SQL:2003)
+SELECT COUNT(*) FILTER (WHERE status = 'active') AS active_count,
+       SUM(amount) FILTER (WHERE type = 'credit') AS total_credits
+FROM transactions;
+
+-- RETURNING Clause - return modified rows
+INSERT INTO users (name, email) VALUES ('John', 'john@example.com') RETURNING id, created_at;
+UPDATE products SET price = price * 1.1 WHERE category = 'Electronics' RETURNING id, price;
+DELETE FROM sessions WHERE expired_at < NOW() RETURNING user_id;
 ```
 
 ### DDL and DML Operations - Complete ✅

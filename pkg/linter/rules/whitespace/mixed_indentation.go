@@ -7,12 +7,45 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
-// MixedIndentationRule checks for mixed tabs and spaces in indentation
+// MixedIndentationRule (L002) detects and fixes inconsistent use of tabs and spaces
+// for indentation within a file.
+//
+// Mixed indentation causes display issues across different editors and environments
+// where tab width settings vary. This rule enforces consistent indentation by
+// detecting both line-level mixing (tabs and spaces on the same line) and file-level
+// inconsistency (some lines using tabs, others using spaces).
+//
+// Rule ID: L002
+// Severity: Error
+// Auto-fix: Supported (converts all tabs to 4 spaces)
+//
+// Example violations:
+//
+//	SELECT *        <- Uses spaces
+//	FROM users      <- Uses spaces
+//		WHERE active  <- Uses tab
+//
+// Fixed output (all spaces):
+//
+//	SELECT *
+//	FROM users
+//	    WHERE active
+//
+// The auto-fix converts all leading tabs to 4 spaces, preserving tabs that appear
+// inside SQL strings or after non-whitespace characters.
 type MixedIndentationRule struct {
 	linter.BaseRule
 }
 
-// NewMixedIndentationRule creates a new L002 rule instance
+// NewMixedIndentationRule creates a new L002 rule instance.
+//
+// The rule detects two types of violations:
+//  1. Line-level: Tabs and spaces mixed on the same line's indentation
+//  2. File-level: Different lines using different indentation styles
+//
+// Auto-fix converts all indentation to spaces (4 spaces per tab).
+//
+// Returns a configured MixedIndentationRule ready for use with the linter.
 func NewMixedIndentationRule() *MixedIndentationRule {
 	return &MixedIndentationRule{
 		BaseRule: linter.NewBaseRule(
@@ -25,7 +58,16 @@ func NewMixedIndentationRule() *MixedIndentationRule {
 	}
 }
 
-// Check performs the mixed indentation check
+// Check performs the mixed indentation check on SQL content.
+//
+// The check works in two phases:
+//  1. Detects lines with both tabs and spaces in leading whitespace
+//  2. Tracks first indentation type seen and reports inconsistency with that style
+//
+// Only leading whitespace (indentation) is checked; tabs and spaces after content
+// are not considered violations.
+//
+// Returns a slice of violations (one per inconsistent line) and nil error.
 func (r *MixedIndentationRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 	violations := []linter.Violation{}
 
@@ -91,7 +133,15 @@ func (r *MixedIndentationRule) Check(ctx *linter.Context) ([]linter.Violation, e
 	return violations, nil
 }
 
-// Fix converts all indentation to spaces (4 spaces per tab)
+// Fix converts all indentation to spaces (4 spaces per tab).
+//
+// Processes each line by replacing tabs with 4 spaces in the leading whitespace only.
+// Tabs that appear after non-whitespace content (e.g., inside string literals or
+// after SQL keywords) are preserved unchanged.
+//
+// This is a safe, idempotent transformation that doesn't affect SQL semantics.
+//
+// Returns the fixed content with consistent space-based indentation, and nil error.
 func (r *MixedIndentationRule) Fix(content string, violations []linter.Violation) (string, error) {
 	lines := strings.Split(content, "\n")
 
@@ -107,7 +157,11 @@ func (r *MixedIndentationRule) Fix(content string, violations []linter.Violation
 	return strings.Join(lines, "\n"), nil
 }
 
-// getLeadingWhitespace returns the leading whitespace of a line
+// getLeadingWhitespace extracts the leading whitespace characters from a line.
+//
+// Returns all consecutive spaces and tabs from the start of the line until the
+// first non-whitespace character. If the entire line is whitespace, returns the
+// full line.
 func getLeadingWhitespace(line string) string {
 	for i, char := range line {
 		if char != ' ' && char != '\t' {

@@ -1,23 +1,173 @@
-// Package security provides SQL injection pattern detection and security scanning.
-// It analyzes parsed SQL AST to identify common injection patterns and vulnerabilities.
+// Package security provides SQL injection pattern detection and security scanning
+// capabilities for GoSQLX. It analyzes both parsed SQL ASTs and raw SQL strings
+// to identify common SQL injection patterns and security vulnerabilities.
 //
-// The scanner detects 8 pattern types:
-//   - Tautologies: Always-true conditions like 1=1, 'a'='a'
-//   - Comment-based bypasses: --, /**/, #, trailing comments
-//   - UNION-based extraction: UNION SELECT patterns, information_schema access
-//   - Stacked queries: Destructive statements after semicolon (DROP, DELETE, etc.)
-//   - Time-based blind: SLEEP(), WAITFOR DELAY, pg_sleep(), BENCHMARK()
-//   - Out-of-band: xp_cmdshell, LOAD_FILE(), UTL_HTTP, etc.
-//   - Dangerous functions: EXEC(), sp_executesql, PREPARE FROM, etc.
-//   - Boolean-based: Conditional logic exploitation
+// # Overview
 //
-// Example usage:
+// The security scanner performs static analysis on SQL to detect potential
+// injection attacks and unsafe patterns. It uses a combination of AST traversal,
+// pattern matching, and heuristic analysis to identify security issues.
 //
+// # Pattern Detection
+//
+// The scanner detects 8 types of SQL injection patterns:
+//
+//   - TAUTOLOGY: Always-true conditions (1=1, 'a'='a') used to bypass authentication
+//   - COMMENT_BYPASS: Comment-based injection (--, /**/, #) to bypass validation
+//   - UNION_BASED: UNION SELECT patterns for data extraction and schema enumeration
+//   - STACKED_QUERY: Multiple statements with destructive operations (DROP, DELETE)
+//   - TIME_BASED: Time delay functions (SLEEP, WAITFOR, pg_sleep) for blind injection
+//   - OUT_OF_BAND: External data exfiltration (xp_cmdshell, LOAD_FILE, UTL_HTTP)
+//   - DANGEROUS_FUNCTION: Dynamic SQL execution (EXEC, sp_executesql, PREPARE FROM)
+//   - BOOLEAN_BASED: Conditional logic exploitation for data extraction
+//
+// # Severity Levels
+//
+// Each finding is assigned one of four severity levels:
+//
+//   - CRITICAL: Definite injection pattern detected (e.g., OR 1=1 --)
+//   - HIGH: Highly suspicious patterns requiring immediate review
+//   - MEDIUM: Potentially unsafe patterns that need investigation
+//   - LOW: Informational findings and best practice violations
+//
+// # Basic Usage
+//
+// AST-based scanning:
+//
+//	import (
+//	    "github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
+//	    "github.com/ajitpratap0/GoSQLX/pkg/sql/security"
+//	)
+//
+//	// Parse SQL into AST
+//	ast, err := parser.Parse(tokens)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//
+//	// Scan for security issues
 //	scanner := security.NewScanner()
 //	results := scanner.Scan(ast)
+//
+//	// Review findings
 //	for _, finding := range results.Findings {
-//	    fmt.Printf("%s: %s at line %d\n", finding.Severity, finding.Pattern, finding.Line)
+//	    fmt.Printf("[%s] %s: %s\n",
+//	        finding.Severity,
+//	        finding.Pattern,
+//	        finding.Description)
 //	}
+//
+// Raw SQL scanning:
+//
+//	scanner := security.NewScanner()
+//	results := scanner.ScanSQL("SELECT * FROM users WHERE id = 1 OR 1=1 --")
+//
+//	if results.HasCritical() {
+//	    fmt.Println("CRITICAL security issues found!")
+//	    for _, f := range results.Findings {
+//	        fmt.Printf("  - %s: %s\n", f.Pattern, f.Description)
+//	        fmt.Printf("    Risk: %s\n", f.Risk)
+//	        fmt.Printf("    Suggestion: %s\n", f.Suggestion)
+//	    }
+//	}
+//
+// # Filtering by Severity
+//
+// Filter findings by minimum severity level:
+//
+//	// Only report HIGH and CRITICAL findings
+//	scanner, err := security.NewScannerWithSeverity(security.SeverityHigh)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//
+//	results := scanner.Scan(ast)
+//	fmt.Printf("Found %d high-severity issues\n", results.HighCount + results.CriticalCount)
+//
+// # Scan Results
+//
+// The ScanResult structure provides comprehensive information:
+//
+//	results := scanner.Scan(ast)
+//
+//	fmt.Printf("Total findings: %d\n", results.TotalCount)
+//	fmt.Printf("Critical: %d, High: %d, Medium: %d, Low: %d\n",
+//	    results.CriticalCount,
+//	    results.HighCount,
+//	    results.MediumCount,
+//	    results.LowCount)
+//
+//	// Check severity thresholds
+//	if results.IsClean() {
+//	    fmt.Println("No security issues detected")
+//	}
+//
+//	if results.HasHighOrAbove() {
+//	    fmt.Println("High-priority security issues require attention")
+//	}
+//
+// # Finding Details
+//
+// Each Finding contains detailed information:
+//
+//	for _, finding := range results.Findings {
+//	    fmt.Printf("Pattern: %s\n", finding.Pattern)      // Pattern type
+//	    fmt.Printf("Severity: %s\n", finding.Severity)    // Risk level
+//	    fmt.Printf("Description: %s\n", finding.Description) // What was found
+//	    fmt.Printf("Risk: %s\n", finding.Risk)           // Security impact
+//	    fmt.Printf("Suggestion: %s\n", finding.Suggestion) // Remediation advice
+//	    if finding.Line > 0 {
+//	        fmt.Printf("Location: Line %d, Column %d\n", finding.Line, finding.Column)
+//	    }
+//	}
+//
+// # Performance Considerations
+//
+// The scanner uses pre-compiled regex patterns (initialized once at package load)
+// for optimal performance. Scanning is thread-safe and suitable for concurrent use.
+//
+// # Production Integration
+//
+// Example CI/CD integration:
+//
+//	scanner := security.NewScanner()
+//	results := scanner.ScanSQL(userProvidedSQL)
+//
+//	if results.HasCritical() {
+//	    // Block deployment
+//	    log.Fatal("CRITICAL security vulnerabilities detected")
+//	}
+//
+//	if results.HasHighOrAbove() {
+//	    // Require security review
+//	    fmt.Println("WARNING: High-severity security issues require review")
+//	}
+//
+// # Pattern Examples
+//
+// TAUTOLOGY detection:
+//
+//	"SELECT * FROM users WHERE username='admin' OR 1=1 --"
+//	→ CRITICAL: Always-true condition detected
+//
+// UNION_BASED detection:
+//
+//	"SELECT name FROM products UNION SELECT password FROM users"
+//	→ CRITICAL: UNION-based data extraction
+//
+// TIME_BASED detection:
+//
+//	"SELECT * FROM orders WHERE id=1 AND SLEEP(5)"
+//	→ HIGH: Time-based blind injection
+//
+// STACKED_QUERY detection:
+//
+//	"SELECT * FROM users; DROP TABLE users --"
+//	→ CRITICAL: Stacked query with destructive operation
+//
+// # Version
+//
+// This package is part of GoSQLX v1.6.0 and is production-ready for enterprise use.
 package security
 
 import (
@@ -30,6 +180,7 @@ import (
 )
 
 // Severity represents the severity level of a security finding.
+// It is used to categorize the risk and priority of detected vulnerabilities.
 type Severity string
 
 const (
@@ -149,49 +300,118 @@ var systemTableNames = []string{
 	"sys",
 }
 
-// PatternType categorizes the type of injection pattern detected.
+// PatternType categorizes the type of SQL injection pattern detected by the scanner.
+// Each pattern type represents a specific attack vector or vulnerability class.
 type PatternType string
 
 const (
-	PatternTautology     PatternType = "TAUTOLOGY"
-	PatternComment       PatternType = "COMMENT_BYPASS"
-	PatternStackedQuery  PatternType = "STACKED_QUERY"
-	PatternUnionBased    PatternType = "UNION_BASED"
-	PatternTimeBased     PatternType = "TIME_BASED"
-	PatternBooleanBased  PatternType = "BOOLEAN_BASED"
-	PatternOutOfBand     PatternType = "OUT_OF_BAND"
+	// PatternTautology detects always-true conditions (1=1, 'a'='a') used to bypass authentication
+	PatternTautology PatternType = "TAUTOLOGY"
+
+	// PatternComment detects comment-based injection (--, /**/, #) to bypass validation
+	PatternComment PatternType = "COMMENT_BYPASS"
+
+	// PatternStackedQuery detects multiple statements with destructive operations (DROP, DELETE)
+	PatternStackedQuery PatternType = "STACKED_QUERY"
+
+	// PatternUnionBased detects UNION SELECT patterns for data extraction and schema enumeration
+	PatternUnionBased PatternType = "UNION_BASED"
+
+	// PatternTimeBased detects time delay functions (SLEEP, WAITFOR, pg_sleep) for blind injection
+	PatternTimeBased PatternType = "TIME_BASED"
+
+	// PatternBooleanBased detects conditional logic exploitation for data extraction
+	PatternBooleanBased PatternType = "BOOLEAN_BASED"
+
+	// PatternOutOfBand detects external data exfiltration (xp_cmdshell, LOAD_FILE, UTL_HTTP)
+	PatternOutOfBand PatternType = "OUT_OF_BAND"
+
+	// PatternDangerousFunc detects dynamic SQL execution (EXEC, sp_executesql, PREPARE FROM)
 	PatternDangerousFunc PatternType = "DANGEROUS_FUNCTION"
 )
 
 // Finding represents a single security finding from the scanner.
+// It contains detailed information about a detected vulnerability including
+// severity, pattern type, location, and remediation suggestions.
 type Finding struct {
-	Severity    Severity    `json:"severity"`
-	Pattern     PatternType `json:"pattern"`
-	Description string      `json:"description"`
-	Risk        string      `json:"risk"`
-	Line        int         `json:"line,omitempty"`
-	Column      int         `json:"column,omitempty"`
-	SQL         string      `json:"sql,omitempty"`
-	Suggestion  string      `json:"suggestion,omitempty"`
+	// Severity indicates the risk level (CRITICAL, HIGH, MEDIUM, LOW)
+	Severity Severity `json:"severity"`
+
+	// Pattern indicates the type of injection pattern detected
+	Pattern PatternType `json:"pattern"`
+
+	// Description provides human-readable explanation of what was found
+	Description string `json:"description"`
+
+	// Risk describes the potential security impact
+	Risk string `json:"risk"`
+
+	// Line number where the issue was detected (if available)
+	Line int `json:"line,omitempty"`
+
+	// Column number where the issue was detected (if available)
+	Column int `json:"column,omitempty"`
+
+	// SQL contains the problematic SQL fragment (if available)
+	SQL string `json:"sql,omitempty"`
+
+	// Suggestion provides remediation advice
+	Suggestion string `json:"suggestion,omitempty"`
 }
 
-// ScanResult contains all findings from a security scan.
+// ScanResult contains all findings from a security scan along with summary statistics.
+// Use the helper methods HasCritical(), HasHighOrAbove(), and IsClean() to
+// quickly assess the scan results.
 type ScanResult struct {
-	Findings      []Finding `json:"findings"`
-	TotalCount    int       `json:"total_count"`
-	CriticalCount int       `json:"critical_count"`
-	HighCount     int       `json:"high_count"`
-	MediumCount   int       `json:"medium_count"`
-	LowCount      int       `json:"low_count"`
+	// Findings contains all detected security issues
+	Findings []Finding `json:"findings"`
+
+	// TotalCount is the total number of findings across all severity levels
+	TotalCount int `json:"total_count"`
+
+	// CriticalCount is the number of CRITICAL severity findings
+	CriticalCount int `json:"critical_count"`
+
+	// HighCount is the number of HIGH severity findings
+	HighCount int `json:"high_count"`
+
+	// MediumCount is the number of MEDIUM severity findings
+	MediumCount int `json:"medium_count"`
+
+	// LowCount is the number of LOW severity findings
+	LowCount int `json:"low_count"`
 }
 
-// Scanner performs security analysis on SQL AST.
+// Scanner performs security analysis on SQL ASTs and raw SQL strings.
+// It detects SQL injection patterns using a combination of AST traversal,
+// regex pattern matching, and heuristic analysis.
+//
+// Scanner is safe for concurrent use from multiple goroutines as it uses
+// pre-compiled patterns and maintains no mutable state during scanning.
+//
+// Example usage:
+//
+//	scanner := security.NewScanner()
+//	results := scanner.Scan(ast)
+//	if results.HasCritical() {
+//	    log.Fatal("Critical security issues detected")
+//	}
 type Scanner struct {
-	// MinSeverity filters findings below this severity level
+	// MinSeverity filters findings below this severity level.
+	// Only findings with severity >= MinSeverity are included in results.
 	MinSeverity Severity
 }
 
 // NewScanner creates a new security scanner with default settings.
+// The default scanner reports all findings (MinSeverity = SeverityLow).
+//
+// The scanner is immediately ready to use and is safe for concurrent scanning
+// from multiple goroutines.
+//
+// Example:
+//
+//	scanner := security.NewScanner()
+//	results := scanner.Scan(ast)
 func NewScanner() *Scanner {
 	// Initialize package-level patterns once
 	compiledPatternsOnce.Do(initCompiledPatterns)
@@ -203,7 +423,19 @@ func NewScanner() *Scanner {
 }
 
 // NewScannerWithSeverity creates a scanner filtering by minimum severity.
-// Returns an error if the severity is not valid.
+// Only findings at or above the specified severity level will be reported.
+//
+// Returns an error if the severity level is not recognized. Valid severity levels are:
+// SeverityLow, SeverityMedium, SeverityHigh, SeverityCritical.
+//
+// Example:
+//
+//	// Only report HIGH and CRITICAL findings
+//	scanner, err := security.NewScannerWithSeverity(security.SeverityHigh)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	results := scanner.Scan(ast)
 func NewScannerWithSeverity(minSeverity Severity) (*Scanner, error) {
 	// Validate severity
 	if !isValidSeverity(minSeverity) {
@@ -221,7 +453,29 @@ func isValidSeverity(severity Severity) bool {
 	return exists
 }
 
-// Scan analyzes an AST for SQL injection patterns.
+// Scan analyzes a parsed SQL AST for SQL injection patterns and vulnerabilities.
+// It performs deep traversal of the AST to detect suspicious patterns including
+// tautologies, dangerous functions, UNION-based injection, and other attack vectors.
+//
+// The method is safe for concurrent use as it does not modify the Scanner state.
+//
+// Returns a ScanResult containing all detected findings that meet the MinSeverity
+// threshold, along with summary statistics by severity level.
+//
+// Example:
+//
+//	ast, err := parser.Parse(tokens)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//
+//	scanner := security.NewScanner()
+//	results := scanner.Scan(ast)
+//
+//	fmt.Printf("Found %d security issues\n", results.TotalCount)
+//	for _, finding := range results.Findings {
+//	    fmt.Printf("[%s] %s\n", finding.Severity, finding.Description)
+//	}
 func (s *Scanner) Scan(tree *ast.AST) *ScanResult {
 	result := &ScanResult{
 		Findings: make([]Finding, 0),
@@ -241,8 +495,31 @@ func (s *Scanner) Scan(tree *ast.AST) *ScanResult {
 	return result
 }
 
-// ScanSQL analyzes raw SQL string for injection patterns.
-// This is useful for detecting patterns that might not be in the AST.
+// ScanSQL analyzes raw SQL string for injection patterns using regex-based detection.
+// This method is useful for detecting patterns that might not be visible in the AST,
+// such as SQL comments, or when you don't have a parsed AST available.
+//
+// The method uses pre-compiled regex patterns to detect:
+//   - Comment-based injection (--, /**/, #)
+//   - Time-based blind injection (SLEEP, WAITFOR, pg_sleep, BENCHMARK)
+//   - Out-of-band data exfiltration (xp_cmdshell, LOAD_FILE, UTL_HTTP)
+//   - Dangerous functions (EXEC, sp_executesql, PREPARE FROM)
+//   - UNION-based injection (UNION SELECT, information_schema)
+//   - Stacked query injection (semicolon-separated destructive statements)
+//
+// The method is safe for concurrent use.
+//
+// Example:
+//
+//	scanner := security.NewScanner()
+//	results := scanner.ScanSQL("SELECT * FROM users WHERE id = 1 OR 1=1 --")
+//
+//	if results.HasCritical() {
+//	    fmt.Println("CRITICAL security issue detected!")
+//	    for _, finding := range results.Findings {
+//	        fmt.Printf("  %s: %s\n", finding.Pattern, finding.Description)
+//	    }
+//	}
 func (s *Scanner) ScanSQL(sql string) *ScanResult {
 	result := &ScanResult{
 		Findings: make([]Finding, 0),
@@ -733,17 +1010,42 @@ func (s *Scanner) updateCounts(result *ScanResult) {
 	}
 }
 
-// HasCritical returns true if any critical findings exist.
+// HasCritical returns true if any CRITICAL severity findings exist.
+// Use this to quickly check for definite security vulnerabilities that
+// require immediate attention.
+//
+// Example:
+//
+//	if results.HasCritical() {
+//	    log.Fatal("CRITICAL security vulnerabilities detected - blocking deployment")
+//	}
 func (r *ScanResult) HasCritical() bool {
 	return r.CriticalCount > 0
 }
 
-// HasHighOrAbove returns true if any high or critical findings exist.
+// HasHighOrAbove returns true if any HIGH or CRITICAL severity findings exist.
+// Use this to check for issues that require security review before deployment.
+//
+// Example:
+//
+//	if results.HasHighOrAbove() {
+//	    fmt.Println("WARNING: High-priority security issues require review")
+//	    // Trigger security team notification
+//	}
 func (r *ScanResult) HasHighOrAbove() bool {
 	return r.CriticalCount > 0 || r.HighCount > 0
 }
 
-// IsClean returns true if no findings exist.
+// IsClean returns true if no findings of any severity level exist.
+// A clean result indicates no security issues were detected.
+//
+// Example:
+//
+//	if results.IsClean() {
+//	    fmt.Println("✓ No security issues detected")
+//	} else {
+//	    fmt.Printf("⚠ Found %d security issues\n", results.TotalCount)
+//	}
 func (r *ScanResult) IsClean() bool {
 	return r.TotalCount == 0
 }

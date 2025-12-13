@@ -8,7 +8,31 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
-// RedundantWhitespaceRule checks for redundant/excessive whitespace
+// RedundantWhitespaceRule (L010) detects and removes multiple consecutive spaces
+// outside of string literals and indentation.
+//
+// Inconsistent spacing between SQL keywords and identifiers reduces readability and
+// can indicate careless formatting. This rule enforces single-space separation while
+// preserving intentional spacing in string literals and line indentation.
+//
+// Rule ID: L010
+// Severity: Info
+// Auto-fix: Supported
+//
+// Example violations:
+//
+//	SELECT  *  FROM  users   <- Multiple spaces between keywords (violation)
+//	WHERE  status  =  'active'
+//
+// Fixed output:
+//
+//	SELECT * FROM users      <- Single spaces
+//	WHERE status = 'active'
+//
+// The rule preserves:
+//   - Leading indentation (not considered redundant)
+//   - Spaces inside string literals ('multiple  spaces')
+//   - Tabs (not replaced, only consecutive spaces are affected)
 type RedundantWhitespaceRule struct {
 	linter.BaseRule
 }
@@ -18,7 +42,13 @@ var (
 	multipleSpacesRegex = regexp.MustCompile(`  +`) // Two or more consecutive spaces
 )
 
-// NewRedundantWhitespaceRule creates a new L010 rule instance
+// NewRedundantWhitespaceRule creates a new L010 rule instance.
+//
+// The rule detects sequences of 2 or more consecutive spaces outside of string
+// literals and indentation, supporting automatic fixing by reducing them to single
+// spaces.
+//
+// Returns a configured RedundantWhitespaceRule ready for use with the linter.
 func NewRedundantWhitespaceRule() *RedundantWhitespaceRule {
 	return &RedundantWhitespaceRule{
 		BaseRule: linter.NewBaseRule(
@@ -31,7 +61,13 @@ func NewRedundantWhitespaceRule() *RedundantWhitespaceRule {
 	}
 }
 
-// Check performs the redundant whitespace check
+// Check performs the redundant whitespace check on SQL content.
+//
+// Extracts non-string portions of each line and searches for sequences of 2+ spaces
+// using regex pattern matching. Leading whitespace (indentation) is skipped. For
+// each match, a violation is reported.
+//
+// Returns a slice of violations (one per redundant whitespace sequence) and nil error.
 func (r *RedundantWhitespaceRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 	violations := []linter.Violation{}
 
@@ -71,13 +107,20 @@ func (r *RedundantWhitespaceRule) Check(ctx *linter.Context) ([]linter.Violation
 	return violations, nil
 }
 
-// linePart represents a non-string portion of a line
+// linePart represents a non-string portion of a line with its position.
 type linePart struct {
 	text     string
 	startCol int // 0-indexed position in original line
 }
 
-// extractNonStringParts extracts parts of a line that are not inside string literals
+// extractNonStringParts extracts parts of a line outside of string literals.
+//
+// Parses the line character by character, tracking single and double quoted strings.
+// Returns slices of text that are not inside quotes, along with their starting
+// column positions in the original line.
+//
+// This ensures redundant whitespace inside strings like 'multiple  spaces' is
+// preserved and not flagged as violations.
 func extractNonStringParts(line string) []linePart {
 	parts := []linePart{}
 	inString := false
@@ -126,7 +169,12 @@ func extractNonStringParts(line string) []linePart {
 	return parts
 }
 
-// Fix removes redundant whitespace
+// Fix removes redundant whitespace from SQL content.
+//
+// Processes content line by line, reducing multiple consecutive spaces to single
+// spaces while preserving leading indentation and spaces inside string literals.
+//
+// Returns the fixed content with redundant whitespace removed, and nil error.
 func (r *RedundantWhitespaceRule) Fix(content string, violations []linter.Violation) (string, error) {
 	lines := strings.Split(content, "\n")
 
@@ -137,7 +185,13 @@ func (r *RedundantWhitespaceRule) Fix(content string, violations []linter.Violat
 	return strings.Join(lines, "\n"), nil
 }
 
-// fixLine reduces multiple spaces to single space, preserving strings and indentation
+// fixLine reduces multiple spaces to single space in a line.
+//
+// Preserves leading whitespace (indentation) and spaces inside string literals
+// (both single and double quoted). Uses state machine to track whether currently
+// inside a string.
+//
+// Returns the fixed line with redundant whitespace removed.
 func (r *RedundantWhitespaceRule) fixLine(line string) string {
 	// Preserve leading whitespace (indentation)
 	leading := ""

@@ -913,36 +913,89 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ## Roadmap
 
-### Phase 1: Core SQL Enhancements (Q1 2025) - v1.1.0 ✅
-- ✅ **Complete JOIN support** (INNER/LEFT/RIGHT/FULL OUTER/CROSS/NATURAL)
-- ✅ **Proper join tree logic** with left-associative relationships  
-- ✅ **USING clause parsing** (single-column, multi-column planned for Phase 2)
-- ✅ **Enhanced error handling** with contextual JOIN error messages
-- ✅ **Comprehensive test coverage** (15+ JOIN scenarios including error cases)
-- 🏗️ **CTE foundation laid** (AST structures, tokens, parser integration points)
+<div align="center">
 
-### Phase 2: CTE & Advanced Features (Q1 2025) - v1.2.0 ✅
+| Phase | Version | Status | Highlights |
+|-------|---------|--------|------------|
+| **Phase 1** | v1.1.0 | ✅ Complete | JOIN Support |
+| **Phase 2** | v1.2.0 | ✅ Complete | CTEs & Set Operations |
+| **Phase 2.5** | v1.3.0-v1.4.0 | ✅ Complete | Window Functions, MERGE, Grouping Sets |
+| **Phase 3** | v1.5.0-v1.6.0 | ✅ Complete | PostgreSQL Extensions, LSP, Linter |
+| **Phase 4** | v1.7.0 | 🚧 In Progress | MySQL & SQL Server Dialects |
+| **Phase 5** | v2.0.0 | 📋 Planned | Query Intelligence & Optimization |
+| **Phase 6** | v2.1.0 | 📋 Planned | Schema Awareness & Validation |
+
+</div>
+
+### Phase 1: Core SQL Enhancements - v1.1.0 ✅
+- ✅ **Complete JOIN support** (INNER/LEFT/RIGHT/FULL OUTER/CROSS/NATURAL)
+- ✅ **Proper join tree logic** with left-associative relationships
+- ✅ **USING clause parsing** for single and multi-column joins
+- ✅ **Enhanced error handling** with contextual JOIN error messages
+- ✅ **Comprehensive test coverage** (15+ JOIN scenarios)
+
+### Phase 2: CTE & Set Operations - v1.2.0 ✅
 - ✅ **Common Table Expressions (CTEs)** with RECURSIVE support
 - ✅ **Set operations** (UNION/EXCEPT/INTERSECT with ALL modifier)
 - ✅ **Left-associative set operation parsing**
 - ✅ **CTE column specifications** and multiple CTE definitions
-- ✅ **Integration of CTEs with set operations**
-- ✅ **Enhanced error handling** with contextual messages
 - ✅ **~70% SQL-92 compliance** achieved
 
-### Phase 3: Dialect Specialization (Q1 2025) - v2.0.0
-- 📋 PostgreSQL arrays, JSONB, custom types
-- 📋 MySQL-specific syntax and functions
-- 📋 SQL Server T-SQL extensions
-- 📋 Multi-dialect parser with auto-detection
+### Phase 2.5: Window Functions & Advanced SQL - v1.3.0-v1.4.0 ✅
+- ✅ **Window Functions** - Complete SQL-99 support (ROW_NUMBER, RANK, DENSE_RANK, NTILE, LAG, LEAD, FIRST_VALUE, LAST_VALUE)
+- ✅ **Window Frames** - ROWS/RANGE with PRECEDING/FOLLOWING/CURRENT ROW
+- ✅ **MERGE Statements** - SQL:2003 F312 with WHEN MATCHED/NOT MATCHED clauses
+- ✅ **GROUPING SETS, ROLLUP, CUBE** - SQL-99 T431 advanced grouping
+- ✅ **Materialized Views** - CREATE, REFRESH, DROP support
+- ✅ **Expression Operators** - BETWEEN, IN, LIKE, IS NULL, NULLS FIRST/LAST
+- ✅ **~75% SQL-99 compliance** achieved
 
-### Phase 4: Intelligence Layer (Q2 2025) - v2.1.0
-- 📋 Query optimization suggestions
-- 📋 Security vulnerability detection
-- 📋 Performance analysis and hints
-- 📋 Schema validation
+### Phase 3: PostgreSQL Extensions & Developer Tools - v1.5.0-v1.6.0 ✅
+- ✅ **LATERAL JOIN** - Correlated subqueries in FROM clause
+- ✅ **JSON/JSONB Operators** - All 10 operators (`->`, `->>`, `#>`, `#>>`, `@>`, `<@`, `?`, `?|`, `?&`, `#-`)
+- ✅ **DISTINCT ON** - PostgreSQL-specific row selection
+- ✅ **FILTER Clause** - Conditional aggregation (SQL:2003 T612)
+- ✅ **Aggregate ORDER BY** - ORDER BY inside STRING_AGG, ARRAY_AGG, etc.
+- ✅ **RETURNING Clause** - Return modified rows from INSERT/UPDATE/DELETE
+- ✅ **LSP Server** - Full Language Server Protocol with diagnostics, completion, hover, formatting
+- ✅ **Linter Engine** - 10 built-in rules (L001-L010) with auto-fix
+- ✅ **Security Scanner** - SQL injection detection with severity classification
+- ✅ **Structured Errors** - Error codes E1001-E3004 with position tracking
+- ✅ **CLI Enhancements** - Pipeline support, stdin detection, cross-platform
+- ✅ **~80-85% SQL-99 compliance** achieved
 
-See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed system design
+### Phase 4: MySQL & SQL Server Dialects - v1.7.0 🚧
+- 🚧 **MySQL Extensions** - AUTO_INCREMENT, REPLACE INTO, ON DUPLICATE KEY
+- 📋 **MySQL Functions** - DATE_FORMAT, IFNULL, GROUP_CONCAT specifics
+- 📋 **SQL Server T-SQL** - TOP, OFFSET-FETCH, OUTPUT clause
+- 📋 **SQL Server Functions** - ISNULL, CONVERT, DATEPART specifics
+- 📋 **Dialect Auto-Detection** - Automatic syntax detection from queries
+- 📋 **Cross-Dialect Translation** - Convert between dialect syntaxes
+
+### Phase 5: Query Intelligence & Optimization - v2.0.0 📋
+- 📋 **Query Cost Estimation** - Complexity analysis and scoring
+- 📋 **Index Recommendations** - Suggest indexes based on query patterns
+- 📋 **Join Order Optimization** - Recommend optimal join sequences
+- 📋 **Subquery Optimization** - Detect and suggest subquery improvements
+- 📋 **N+1 Query Detection** - Identify inefficient query patterns
+- 📋 **Performance Hints** - Actionable optimization suggestions
+
+### Phase 6: Schema Awareness & Validation - v2.1.0 📋
+- 📋 **Schema Definition Parsing** - Full DDL understanding
+- 📋 **Type Checking** - Validate column types in expressions
+- 📋 **Foreign Key Validation** - Verify relationship integrity
+- 📋 **Constraint Checking** - NOT NULL, UNIQUE, CHECK validation
+- 📋 **Schema Diff** - Compare and generate migration scripts
+- 📋 **Entity-Relationship Extraction** - Generate ER diagrams from DDL
+
+### Future Considerations 🔮
+- 📋 **Stored Procedures** - CREATE PROCEDURE/FUNCTION parsing
+- 📋 **Triggers** - CREATE TRIGGER support
+- 📋 **PL/pgSQL** - PostgreSQL procedural language
+- 📋 **Query Rewriting** - Automatic query transformation
+- 📋 **WASM Support** - Browser-based SQL parsing
+
+See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed system design and [CHANGELOG.md](CHANGELOG.md) for version history
 
 ## Community & Support
 

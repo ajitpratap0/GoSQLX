@@ -10,25 +10,86 @@ import (
 )
 
 const (
-	// MaxFileSize limits file size to prevent DoS attacks (10MB)
+	// MaxFileSize limits file size to prevent DoS attacks.
+	//
+	// Default: 10MB (10 * 1024 * 1024 bytes)
+	//
+	// This is the maximum size for files and stdin input to prevent:
+	//   - Memory exhaustion
+	//   - Denial of service attacks
+	//   - Processing timeouts
 	MaxFileSize = 10 * 1024 * 1024
 )
 
-// InputType represents the type of input detected
+// InputType represents the type of input detected.
+//
+// Used to distinguish between direct SQL input and file-based input
+// for appropriate handling in commands.
 type InputType int
 
 const (
+	// InputTypeSQL indicates direct SQL query string input.
 	InputTypeSQL InputType = iota
+	// InputTypeFile indicates file path input.
 	InputTypeFile
 )
 
-// InputResult contains the detected input type and content
+// InputResult contains the detected input type and content.
+//
+// Returned by DetectAndReadInput to provide both the raw SQL content
+// and metadata about the input source.
+//
+// Fields:
+//   - Type: Input type (InputTypeSQL or InputTypeFile)
+//   - Content: Raw SQL content as bytes
+//   - Source: Original input string or file path for error reporting
 type InputResult struct {
 	Type    InputType
 	Content []byte
 	Source  string // Original input string or file path
 }
 
+// DetectAndReadInput robustly detects whether input is a file path or direct SQL.
+//
+// This function implements intelligent input detection with security validation.
+// It determines if the input is a file path or direct SQL and returns the
+// appropriate content with full security checks.
+//
+// Detection logic:
+//  1. Check if input is a valid file path (os.Stat succeeds)
+//  2. If file exists, validate security and read content
+//  3. If not a file, check if it looks like a file path (.sql extension, path separators)
+//  4. If looks like file path, return file not found error
+//  5. Otherwise treat as direct SQL query
+//
+// Security measures:
+//   - File path validation (path traversal prevention)
+//   - File size limits (10MB default)
+//   - SQL length limits for direct input
+//   - Binary data detection
+//   - File extension validation
+//
+// Parameters:
+//   - input: String that may be a file path or direct SQL
+//
+// Returns:
+//   - *InputResult: Detected input with content and metadata
+//   - error: If validation fails or input is invalid
+//
+// Example:
+//
+//	// File input
+//	result, err := DetectAndReadInput("query.sql")
+//	// result.Type == InputTypeFile, result.Content contains file contents
+//
+//	// Direct SQL
+//	result, err := DetectAndReadInput("SELECT * FROM users")
+//	// result.Type == InputTypeSQL, result.Content contains SQL query
+//
+//	// Error case
+//	result, err := DetectAndReadInput("nonexistent.sql")
+//	// Returns file not found error
+//
 // DetectAndReadInput robustly detects whether input is a file path or direct SQL
 // and returns the SQL content with proper validation and security limits
 func DetectAndReadInput(input string) (*InputResult, error) {

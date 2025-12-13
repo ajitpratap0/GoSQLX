@@ -9,7 +9,18 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
-// JSONValidationOutput represents the JSON output format for validation command
+// JSONValidationOutput represents the JSON output format for validation command.
+//
+// Provides structured JSON output for SQL validation results, suitable for
+// programmatic consumption, CI/CD integration, and automated processing.
+//
+// Fields:
+//   - Command: Command name ("validate")
+//   - Input: Input metadata (type, files, count)
+//   - Status: Overall status ("success", "failure", "no_files")
+//   - Results: Validation results summary
+//   - Errors: Array of validation errors (empty if all valid)
+//   - Stats: Performance statistics (optional)
 type JSONValidationOutput struct {
 	Command string                `json:"command"`
 	Input   JSONInputInfo         `json:"input"`
@@ -19,14 +30,29 @@ type JSONValidationOutput struct {
 	Stats   *JSONValidationStats  `json:"stats,omitempty"`
 }
 
-// JSONInputInfo contains information about the input
+// JSONInputInfo contains information about the input.
+//
+// Describes the input source and files processed in the validation run.
+//
+// Fields:
+//   - Type: Input type ("file", "files", "stdin", "directory")
+//   - Files: Array of file paths processed
+//   - Count: Number of files processed
 type JSONInputInfo struct {
 	Type  string   `json:"type"` // "file", "files", "stdin", "directory"
 	Files []string `json:"files,omitempty"`
 	Count int      `json:"count"`
 }
 
-// JSONValidationResults contains validation results
+// JSONValidationResults contains validation results.
+//
+// Provides summary statistics about validation outcomes.
+//
+// Fields:
+//   - Valid: True if all files passed validation
+//   - TotalFiles: Total number of files processed
+//   - ValidFiles: Number of files that passed validation
+//   - InvalidFiles: Number of files with validation errors
 type JSONValidationResults struct {
 	Valid        bool `json:"valid"`
 	TotalFiles   int  `json:"total_files"`
@@ -34,7 +60,15 @@ type JSONValidationResults struct {
 	InvalidFiles int  `json:"invalid_files"`
 }
 
-// JSONValidationError represents a single validation error
+// JSONValidationError represents a single validation error.
+//
+// Contains detailed information about a validation failure for one file.
+//
+// Fields:
+//   - File: File path where error occurred
+//   - Message: Error message text
+//   - Code: Error code (e.g., "E1001") if available
+//   - Type: Error category ("tokenization", "parsing", "syntax", "io")
 type JSONValidationError struct {
 	File    string `json:"file"`
 	Message string `json:"message"`
@@ -42,7 +76,16 @@ type JSONValidationError struct {
 	Type    string `json:"type"` // "tokenization", "parsing", "syntax", "io"
 }
 
-// JSONValidationStats contains performance statistics
+// JSONValidationStats contains performance statistics.
+//
+// Provides detailed performance metrics for the validation run.
+//
+// Fields:
+//   - Duration: Human-readable duration string (e.g., "10ms")
+//   - DurationMs: Duration in milliseconds
+//   - TotalBytes: Total size of processed files in bytes
+//   - ThroughputFPS: Files processed per second
+//   - ThroughputBPS: Bytes processed per second
 type JSONValidationStats struct {
 	Duration      string  `json:"duration"`
 	DurationMs    float64 `json:"duration_ms"`
@@ -51,7 +94,17 @@ type JSONValidationStats struct {
 	ThroughputBPS int64   `json:"throughput_bytes_per_sec,omitempty"`
 }
 
-// JSONParseOutput represents the JSON output format for parse command
+// JSONParseOutput represents the JSON output format for parse command.
+//
+// Provides structured JSON output for SQL parsing results, including
+// AST structure, token information, and metadata.
+//
+// Fields:
+//   - Command: Command name ("parse")
+//   - Input: Input metadata
+//   - Status: Parse status ("success" or "error")
+//   - Results: Parse results (AST, tokens, metadata) if successful
+//   - Error: Error information if parsing failed
 type JSONParseOutput struct {
 	Command string           `json:"command"`
 	Input   JSONInputInfo    `json:"input"`
@@ -60,7 +113,16 @@ type JSONParseOutput struct {
 	Error   *JSONParseError  `json:"error,omitempty"`
 }
 
-// JSONParseResult contains parse results
+// JSONParseResult contains parse results.
+//
+// Represents the successful parsing of SQL including AST structure,
+// token information, and parsing metadata.
+//
+// Fields:
+//   - AST: Abstract Syntax Tree representation
+//   - Tokens: Token stream (optional, if requested)
+//   - TokenCount: Number of tokens generated
+//   - Metadata: Parser metadata (version, compliance, features)
 type JSONParseResult struct {
 	AST        *JSONASTRepresentation `json:"ast,omitempty"`
 	Tokens     []JSONToken            `json:"tokens,omitempty"`
@@ -68,35 +130,76 @@ type JSONParseResult struct {
 	Metadata   JSONParseMetadata      `json:"metadata"`
 }
 
-// JSONASTRepresentation represents the AST structure
+// JSONASTRepresentation represents the AST structure.
+//
+// Provides a JSON-friendly representation of the Abstract Syntax Tree
+// generated from SQL parsing.
+//
+// Fields:
+//   - Type: AST type ("AST")
+//   - Statements: Array of top-level SQL statements
+//   - Count: Number of statements in the AST
 type JSONASTRepresentation struct {
 	Type       string          `json:"type"`
 	Statements []JSONStatement `json:"statements"`
 	Count      int             `json:"statement_count"`
 }
 
-// JSONStatement represents a single AST statement
+// JSONStatement represents a single AST statement.
+//
+// Represents one SQL statement from the AST with type information,
+// details, and optional position information.
+//
+// Fields:
+//   - Type: Statement type (e.g., "SelectStatement", "InsertStatement")
+//   - Details: Type-specific details (columns, tables, clauses)
+//   - Position: Source position (optional)
 type JSONStatement struct {
 	Type     string                 `json:"type"`
 	Details  map[string]interface{} `json:"details,omitempty"`
 	Position *JSONPosition          `json:"position,omitempty"`
 }
 
-// JSONToken represents a single token
+// JSONToken represents a single token.
+//
+// Represents a lexical token from SQL tokenization with type,
+// value, and source position.
+//
+// Fields:
+//   - Type: Token type (e.g., "KEYWORD", "IDENTIFIER", "NUMBER")
+//   - Value: Token text value
+//   - Position: Source position (line, column)
 type JSONToken struct {
 	Type     string        `json:"type"`
 	Value    string        `json:"value"`
 	Position *JSONPosition `json:"position"`
 }
 
-// JSONPosition represents a position in the source
+// JSONPosition represents a position in the source.
+//
+// Identifies a specific location in the SQL source text using
+// line, column, and optional byte offset.
+//
+// Fields:
+//   - Line: Line number (1-based)
+//   - Column: Column number (1-based)
+//   - Offset: Byte offset from start (optional)
 type JSONPosition struct {
 	Line   int `json:"line"`
 	Column int `json:"column"`
 	Offset int `json:"offset,omitempty"`
 }
 
-// JSONParseError represents a parsing error
+// JSONParseError represents a parsing error.
+//
+// Contains detailed information about parsing failures including
+// error type, message, code, and source position.
+//
+// Fields:
+//   - Message: Error message text
+//   - Code: Error code (e.g., "E2001") if available
+//   - Type: Error category ("tokenization", "parsing", "io")
+//   - Position: Source position where error occurred (optional)
 type JSONParseError struct {
 	Message  string        `json:"message"`
 	Code     string        `json:"code,omitempty"`
@@ -104,13 +207,47 @@ type JSONParseError struct {
 	Position *JSONPosition `json:"position,omitempty"`
 }
 
-// JSONParseMetadata contains metadata about the parsing
+// JSONParseMetadata contains metadata about the parsing.
+//
+// Provides information about the parser capabilities and configuration.
+//
+// Fields:
+//   - ParserVersion: Parser version string
+//   - SQLCompliance: SQL standard compliance level (e.g., "~80-85% SQL-99")
+//   - Features: Supported SQL features (CTEs, Window Functions, etc.)
 type JSONParseMetadata struct {
 	ParserVersion string   `json:"parser_version"`
 	SQLCompliance string   `json:"sql_compliance"`
 	Features      []string `json:"features"`
 }
 
+// FormatValidationJSON converts validation results to JSON format.
+//
+// Generates structured JSON output from validation results, suitable for
+// programmatic consumption, CI/CD integration, and automated processing.
+//
+// Parameters:
+//   - result: Validation results to format
+//   - inputFiles: Array of input file paths
+//   - includeStats: Whether to include performance statistics
+//
+// Returns:
+//   - JSON-encoded bytes with indentation for readability
+//   - Error if marshaling fails
+//
+// Example:
+//
+//	result := &ValidationResult{
+//	    TotalFiles: 2,
+//	    ValidFiles: 1,
+//	    InvalidFiles: 1,
+//	}
+//	jsonData, err := FormatValidationJSON(result, []string{"query.sql"}, true)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	fmt.Println(string(jsonData))
+//
 // FormatValidationJSON converts validation results to JSON format
 func FormatValidationJSON(result *ValidationResult, inputFiles []string, includeStats bool) ([]byte, error) {
 	output := &JSONValidationOutput{

@@ -8,23 +8,59 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
-// AliasStyle represents the preferred alias style
+// AliasStyle represents the preferred alias style for table and column aliases.
 type AliasStyle string
 
 const (
-	// AliasExplicit requires explicit AS keyword: table AS t
+	// AliasExplicit requires explicit AS keyword for clarity.
+	// Example: FROM users AS u, orders AS o
 	AliasExplicit AliasStyle = "explicit"
-	// AliasImplicit allows implicit aliases: table t
+
+	// AliasImplicit allows implicit aliases for brevity.
+	// Example: FROM users u, orders o
 	AliasImplicit AliasStyle = "implicit"
 )
 
-// AliasingConsistencyRule checks for consistent aliasing patterns
+// AliasingConsistencyRule (L009) checks for consistent use of table and column aliases.
+//
+// Inconsistent aliasing reduces query readability and can indicate mixing of full
+// table names with aliases throughout a query. This rule detects:
+//  1. Queries where some tables have aliases while others don't
+//  2. Queries that reference full table names when aliases are defined
+//
+// Rule ID: L009
+// Severity: Warning
+// Auto-fix: Not supported (requires semantic analysis and renaming)
+//
+// Example violation:
+//
+//	SELECT u.name, orders.total    <- Mixed: alias 'u' and full name 'orders'
+//	FROM users AS u
+//	JOIN orders ON users.id = orders.user_id
+//	                ^^^^^^                      <- Using full name when alias exists
+//
+// Expected output:
+//
+//	SELECT u.name, o.total         <- Consistent: all aliases
+//	FROM users AS u
+//	JOIN orders AS o ON u.id = o.user_id
+//
+// The rule uses AST analysis when available for accurate detection, falling back
+// to text-based analysis for syntactically invalid SQL.
 type AliasingConsistencyRule struct {
 	linter.BaseRule
 	preferExplicitAS bool
 }
 
-// NewAliasingConsistencyRule creates a new L009 rule instance
+// NewAliasingConsistencyRule creates a new L009 rule instance.
+//
+// Parameters:
+//   - preferExplicitAS: If true, prefers explicit AS keyword in aliases (recommended)
+//
+// Note: The preferExplicitAS parameter is currently informational. The rule focuses
+// on consistency of alias usage rather than AS keyword presence.
+//
+// Returns a configured AliasingConsistencyRule ready for use with the linter.
 func NewAliasingConsistencyRule(preferExplicitAS bool) *AliasingConsistencyRule {
 	return &AliasingConsistencyRule{
 		BaseRule: linter.NewBaseRule(
@@ -38,7 +74,13 @@ func NewAliasingConsistencyRule(preferExplicitAS bool) *AliasingConsistencyRule 
 	}
 }
 
-// Check performs the aliasing consistency check
+// Check performs the aliasing consistency check on SQL content.
+//
+// If AST is available, uses AST-based analysis to accurately detect aliasing issues
+// by examining FROM and JOIN clauses. If AST is unavailable or parsing failed, falls
+// back to text-based pattern matching.
+//
+// Returns a slice of violations for inconsistent alias usage, and nil error.
 func (r *AliasingConsistencyRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 	// Check if we have AST available
 	if ctx.AST == nil || ctx.ParseErr != nil {
@@ -50,7 +92,15 @@ func (r *AliasingConsistencyRule) Check(ctx *linter.Context) ([]linter.Violation
 	return r.checkASTBased(ctx)
 }
 
-// checkTextBased performs text-based alias checking
+// checkTextBased performs text-based alias checking using pattern matching.
+//
+// Scans SQL text for FROM/JOIN clauses to identify alias definitions, then looks
+// for qualified references (table.column) to check if full table names are used
+// when aliases exist.
+//
+// This is less accurate than AST analysis but works on syntactically invalid SQL.
+//
+// Returns violations for detected inconsistencies.
 func (r *AliasingConsistencyRule) checkTextBased(ctx *linter.Context) ([]linter.Violation, error) {
 	violations := []linter.Violation{}
 
@@ -142,7 +192,13 @@ func (r *AliasingConsistencyRule) checkTextBased(ctx *linter.Context) ([]linter.
 	return violations, nil
 }
 
-// checkASTBased performs AST-based alias checking
+// checkASTBased performs AST-based alias checking using parsed query structure.
+//
+// Walks the AST to extract table references from SELECT statements, identifying
+// which tables have aliases and which don't. Reports violations when aliasing is
+// inconsistent within a query.
+//
+// Returns violations for queries with mixed aliased/non-aliased tables.
 func (r *AliasingConsistencyRule) checkASTBased(ctx *linter.Context) ([]linter.Violation, error) {
 	astViolations := []linter.Violation{}
 
@@ -157,7 +213,13 @@ func (r *AliasingConsistencyRule) checkASTBased(ctx *linter.Context) ([]linter.V
 	return astViolations, nil
 }
 
-// checkSelectStatement checks a SELECT statement for aliasing consistency
+// checkSelectStatement checks a SELECT statement for aliasing consistency.
+//
+// Examines FROM clause and JOIN clauses to collect aliased and non-aliased tables.
+// Reports a violation if both types exist in the same query, as this indicates
+// inconsistent aliasing style.
+//
+// Returns violations for the statement.
 func (r *AliasingConsistencyRule) checkSelectStatement(stmt *ast.SelectStatement, ctx *linter.Context) []linter.Violation {
 	stmtViolations := []linter.Violation{}
 
@@ -203,7 +265,13 @@ func (r *AliasingConsistencyRule) checkSelectStatement(stmt *ast.SelectStatement
 	return stmtViolations
 }
 
-// tokenizeForAliases extracts words from a line for alias analysis
+// tokenizeForAliases extracts words from a line for alias analysis.
+//
+// Splits the line into words while skipping content inside string literals. This
+// allows the text-based checker to identify keywords like FROM, JOIN, AS without
+// being confused by these words appearing in SQL string values.
+//
+// Returns a slice of words extracted from non-string portions of the line.
 func tokenizeForAliases(line string) []string {
 	words := []string{}
 	inString := false
@@ -252,7 +320,18 @@ func tokenizeForAliases(line string) []string {
 	return words
 }
 
-// Fix is not supported for this rule
+// Fix is not supported for this rule as it requires semantic analysis and renaming.
+//
+// Auto-fixing aliasing consistency would require:
+//   - Adding aliases to all tables (choosing appropriate short names)
+//   - Renaming all table references throughout the query
+//   - Handling qualified column references (table.column -> alias.column)
+//   - Preserving query semantics and avoiding name conflicts
+//
+// These transformations risk breaking queries and are best done manually by
+// developers who understand the query logic.
+//
+// Returns the content unchanged with nil error.
 func (r *AliasingConsistencyRule) Fix(content string, violations []linter.Violation) (string, error) {
 	return content, nil
 }

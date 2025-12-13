@@ -1,3 +1,7 @@
+// Package ast provides operator definitions for SQL expressions.
+//
+// This file defines unary and binary operators supported in SQL expressions,
+// including standard SQL operators and PostgreSQL-specific extensions.
 package ast
 
 import (
@@ -5,7 +9,43 @@ import (
 	"strings"
 )
 
-// UnaryOperator represents unary operators in SQL expressions
+// UnaryOperator represents unary operators in SQL expressions.
+//
+// UnaryOperator defines all unary operators that can be applied to a single
+// expression. This includes standard SQL operators (NOT, +, -) and database-specific
+// operators (PostgreSQL bitwise, factorial, mathematical operators).
+//
+// Supported Operators:
+//   - Standard SQL: Plus (+expr), Minus (-expr), Not (NOT expr)
+//   - PostgreSQL Bitwise: PGBitwiseNot (~expr)
+//   - PostgreSQL Math: PGSquareRoot (|/expr), PGCubeRoot (||/expr), PGAbs (@expr)
+//   - PostgreSQL Factorial: PGPostfixFactorial (expr!), PGPrefixFactorial (!!expr)
+//   - Hive: BangNot (!expr)
+//
+// Example - Using unary operators:
+//
+//	// NOT expression
+//	notExpr := &ast.UnaryExpression{
+//	    Operator: ast.Not,
+//	    Expr:     &ast.Identifier{Name: "active"},
+//	}
+//	// SQL: NOT active
+//
+//	// Negation
+//	negExpr := &ast.UnaryExpression{
+//	    Operator: ast.Minus,
+//	    Expr:     &ast.LiteralValue{Value: 42, Type: "INTEGER"},
+//	}
+//	// SQL: -42
+//
+//	// PostgreSQL square root
+//	sqrtExpr := &ast.UnaryExpression{
+//	    Operator: ast.PGSquareRoot,
+//	    Expr:     &ast.LiteralValue{Value: 9, Type: "INTEGER"},
+//	}
+//	// SQL: |/9  (PostgreSQL)
+//
+// See also: BinaryOperator, UnaryExpression
 type UnaryOperator int
 
 const (
@@ -59,7 +99,90 @@ func (op UnaryOperator) String() string {
 	}
 }
 
-// BinaryOperator represents binary operators in SQL expressions
+// BinaryOperator represents binary operators in SQL expressions.
+//
+// BinaryOperator defines all binary operators that can be applied between two
+// expressions. This includes standard SQL operators and database-specific extensions,
+// notably PostgreSQL's JSON/JSONB operators added in v1.6.0.
+//
+// Operator Categories:
+//   - Comparison: Eq (=), NotEq (<>), Lt (<), Gt (>), LtEq (<=), GtEq (>=), Spaceship (<=>)
+//   - Arithmetic: BinaryPlus (+), BinaryMinus (-), Multiply (*), Divide (/), Modulo (%)
+//   - Logical: And (AND), Or (OR), Xor (XOR)
+//   - String: StringConcat (||)
+//   - Bitwise: BitwiseAnd (&), BitwiseOr (|), BitwiseXor (^)
+//   - Bitwise Shifts: PGBitwiseShiftLeft (<<), PGBitwiseShiftRight (>>)
+//   - Pattern Matching: PGRegexMatch (~), PGRegexIMatch (~*), PGLikeMatch (~~), PGILikeMatch (~~*)
+//   - PostgreSQL Math: PGExp (^), DuckIntegerDivide (//), MyIntegerDivide (DIV)
+//   - PostgreSQL JSON/JSONB (v1.6.0): Arrow (->), LongArrow (->>), HashArrow (#>), etc.
+//   - Range: Overlaps (OVERLAPS)
+//
+// PostgreSQL JSON/JSONB Operators (v1.6.0):
+//   - Arrow (->): Extract JSON field or array element (returns JSON)
+//   - LongArrow (->>): Extract JSON field or array element as text
+//   - HashArrow (#>): Extract JSON at path (returns JSON)
+//   - HashLongArrow (#>>): Extract JSON at path as text
+//   - AtArrow (@>): JSON contains operator
+//   - ArrowAt (<@): JSON is contained by operator
+//   - Question (?): JSON key exists
+//   - QuestionPipe (?|): Any of the keys exist
+//   - QuestionAnd (?&): All of the keys exist
+//   - HashMinus (#-): Delete key from JSON
+//
+// Example - Comparison operator:
+//
+//	// Build: age > 18
+//	expr := &ast.BinaryExpression{
+//	    Left:     &ast.Identifier{Name: "age"},
+//	    Operator: ast.Gt.String(),  // ">"
+//	    Right:    &ast.LiteralValue{Value: 18, Type: "INTEGER"},
+//	}
+//
+// Example - Logical operator:
+//
+//	// Build: active = true AND status = 'pending'
+//	expr := &ast.BinaryExpression{
+//	    Left: &ast.BinaryExpression{
+//	        Left:     &ast.Identifier{Name: "active"},
+//	        Operator: ast.Eq.String(),
+//	        Right:    &ast.LiteralValue{Value: true, Type: "BOOLEAN"},
+//	    },
+//	    Operator: ast.And.String(),
+//	    Right: &ast.BinaryExpression{
+//	        Left:     &ast.Identifier{Name: "status"},
+//	        Operator: ast.Eq.String(),
+//	        Right:    &ast.LiteralValue{Value: "pending", Type: "STRING"},
+//	    },
+//	}
+//
+// Example - PostgreSQL JSON operator (v1.6.0):
+//
+//	// Build: data->>'email'
+//	expr := &ast.BinaryExpression{
+//	    Left:     &ast.Identifier{Name: "data"},
+//	    Operator: ast.LongArrow.String(),  // "->>"
+//	    Right:    &ast.LiteralValue{Value: "email", Type: "STRING"},
+//	}
+//	// SQL: data->>'email'  (extracts email field as text)
+//
+// Example - PostgreSQL JSON contains (v1.6.0):
+//
+//	// Build: attributes @> '{"color": "red"}'
+//	expr := &ast.BinaryExpression{
+//	    Left:     &ast.Identifier{Name: "attributes"},
+//	    Operator: ast.AtArrow.String(),  // "@>"
+//	    Right:    &ast.LiteralValue{Value: `{"color": "red"}`, Type: "STRING"},
+//	}
+//	// SQL: attributes @> '{"color": "red"}'
+//
+// Note: Use the String() method to get the operator symbol for BinaryExpression.Operator.
+//
+// New in v1.6.0:
+//   - JSON/JSONB operators: Arrow, LongArrow, HashArrow, HashLongArrow
+//   - JSON existence operators: Question, QuestionPipe, QuestionAnd
+//   - JSON manipulation: HashMinus, AtArrow, ArrowAt
+//
+// See also: UnaryOperator, BinaryExpression, CustomBinaryOperator
 type BinaryOperator int
 
 const (

@@ -1,6 +1,55 @@
 package models
 
-// TokenType represents the type of a SQL token
+// TokenType represents the type of a SQL token.
+//
+// TokenType is the core classification system for all lexical units in SQL.
+// GoSQLX v1.6.0 supports 500+ distinct token types organized into logical
+// ranges for efficient categorization and type checking.
+//
+// Token Type Organization:
+//
+//   - Special (0-9): EOF, UNKNOWN
+//   - Basic (10-29): WORD, NUMBER, IDENTIFIER, PLACEHOLDER
+//   - Strings (30-49): Various string literal formats
+//   - Operators (50-149): Arithmetic, comparison, JSON/JSONB operators
+//   - Keywords (200-499): SQL keywords by category
+//   - Data Types (430-449): SQL data type keywords
+//
+// v1.6.0 PostgreSQL Extensions:
+//
+//   - JSON/JSONB Operators: ->, ->>, #>, #>>, @>, <@, #-, @?, @@, ?&, ?|
+//   - LATERAL: Correlated subqueries in FROM clause
+//   - RETURNING: Return modified rows from DML statements
+//   - FILTER: Conditional aggregation in window functions
+//   - DISTINCT ON: PostgreSQL-specific row selection
+//
+// Performance: TokenType is an int with O(1) lookup via range checking.
+// All Is* methods use constant-time comparisons.
+//
+// Example usage:
+//
+//	// Check token category
+//	if tokenType.IsKeyword() {
+//	    // Handle SQL keyword
+//	}
+//	if tokenType.IsOperator() {
+//	    // Handle operator (+, -, *, /, ->, etc.)
+//	}
+//
+//	// Check specific categories
+//	if tokenType.IsWindowKeyword() {
+//	    // Handle OVER, PARTITION BY, ROWS, RANGE
+//	}
+//	if tokenType.IsDMLKeyword() {
+//	    // Handle SELECT, INSERT, UPDATE, DELETE
+//	}
+//
+//	// PostgreSQL JSON operators
+//	switch tokenType {
+//	case TokenTypeArrow:      // -> (JSON field access)
+//	case TokenTypeLongArrow:  // ->> (JSON field as text)
+//	    // Handle JSON operations
+//	}
 type TokenType int
 
 // Token range constants for maintainability and clarity.
@@ -618,7 +667,18 @@ var tokenStringMap = map[TokenType]string{
 	TokenTypeDoublePipe: "||",
 }
 
-// String returns a string representation of the token type
+// String returns a string representation of the token type.
+//
+// Provides human-readable names for debugging, error messages, and logging.
+// Uses O(1) map lookup for fast conversion.
+//
+// Example:
+//
+//	tokenType := models.TokenTypeSelect
+//	fmt.Println(tokenType.String()) // Output: "SELECT"
+//
+//	tokenType = models.TokenTypeLongArrow
+//	fmt.Println(tokenType.String()) // Output: "LONG_ARROW"
 func (t TokenType) String() string {
 	if str, exists := tokenStringMap[t]; exists {
 		return str

@@ -1,13 +1,62 @@
-// Package lsp implements a Language Server Protocol (LSP) server for GoSQLX.
-// It provides real-time SQL validation, formatting, and code intelligence features
-// for IDEs and text editors.
+/*
+Package lsp implements the Language Server Protocol (LSP) server for GoSQLX.
+
+The LSP server provides comprehensive SQL code intelligence features for IDEs and text editors,
+including real-time diagnostics, formatting, completion, and navigation capabilities.
+
+# Protocol Implementation
+
+This file defines the LSP protocol types and structures according to the Language Server Protocol
+specification (version 3.17). It provides complete type definitions for:
+
+  - JSON-RPC 2.0 message structures (Request, Response, Notification)
+  - LSP lifecycle messages (Initialize, Initialized, Shutdown, Exit)
+  - Text document synchronization (didOpen, didChange, didClose, didSave)
+  - Code intelligence features (Completion, Hover, Formatting, etc.)
+  - Diagnostic publishing (Errors, Warnings, Information)
+
+# Error Codes
+
+The package defines standard JSON-RPC 2.0 error codes:
+  - ParseError (-32700): Invalid JSON received
+  - InvalidRequest (-32600): Invalid JSON-RPC request
+  - MethodNotFound (-32601): Method not supported
+  - InvalidParams (-32602): Invalid method parameters
+  - InternalError (-32603): Internal server error
+
+And LSP-specific error codes:
+  - ServerNotInitialized (-32002): Server not yet initialized
+  - RequestCancelled (-32800): Request cancelled by client
+  - ContentModified (-32801): Content modified during operation
+  - RequestFailed (-32803): Request failed
+
+# Usage
+
+This package is typically not used directly. Instead, use the Server type from server.go
+to create and run an LSP server instance.
+*/
 package lsp
 
 import "encoding/json"
 
 // JSON-RPC 2.0 message types
 
-// Request represents a JSON-RPC 2.0 request message
+// Request represents a JSON-RPC 2.0 request message.
+//
+// A request is a message sent from the client to the server expecting a response.
+// It contains a unique ID to correlate the request with its response, a method name
+// identifying the operation to perform, and optional parameters for the method.
+//
+// The JSONRPC field must always be "2.0" per the JSON-RPC 2.0 specification.
+//
+// Example request:
+//
+//	{
+//	  "jsonrpc": "2.0",
+//	  "id": 1,
+//	  "method": "textDocument/hover",
+//	  "params": { "textDocument": { "uri": "file:///query.sql" }, "position": { "line": 0, "character": 5 } }
+//	}
 type Request struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      interface{}     `json:"id,omitempty"`
@@ -15,7 +64,29 @@ type Request struct {
 	Params  json.RawMessage `json:"params,omitempty"`
 }
 
-// Response represents a JSON-RPC 2.0 response message
+// Response represents a JSON-RPC 2.0 response message.
+//
+// A response is sent from the server back to the client in reply to a request.
+// It contains the same ID as the request to correlate them. Either Result or
+// Error will be set, but never both.
+//
+// The JSONRPC field must always be "2.0" per the JSON-RPC 2.0 specification.
+//
+// Example successful response:
+//
+//	{
+//	  "jsonrpc": "2.0",
+//	  "id": 1,
+//	  "result": { "contents": { "kind": "markdown", "value": "**SELECT** - Retrieves data..." } }
+//	}
+//
+// Example error response:
+//
+//	{
+//	  "jsonrpc": "2.0",
+//	  "id": 1,
+//	  "error": { "code": -32601, "message": "Method not found" }
+//	}
 type Response struct {
 	JSONRPC string         `json:"jsonrpc"`
 	ID      interface{}    `json:"id,omitempty"`
@@ -23,14 +94,33 @@ type Response struct {
 	Error   *ResponseError `json:"error,omitempty"`
 }
 
-// ResponseError represents a JSON-RPC 2.0 error
+// ResponseError represents a JSON-RPC 2.0 error.
+//
+// This type carries error information when a request fails. The Code field
+// contains a numeric error code (see error code constants), Message provides
+// a human-readable description, and Data optionally contains additional context.
+//
+// Standard error codes are defined as package constants (ParseError, InvalidRequest, etc.).
 type ResponseError struct {
 	Code    int         `json:"code"`
 	Message string      `json:"message"`
 	Data    interface{} `json:"data,omitempty"`
 }
 
-// Notification represents a JSON-RPC 2.0 notification (request without ID)
+// Notification represents a JSON-RPC 2.0 notification (request without ID).
+//
+// A notification is a special type of request that does not expect a response.
+// It has no ID field, and the server will not send a response. Notifications
+// are used for events that the client sends to the server without needing
+// acknowledgment, such as document change notifications.
+//
+// Example notification:
+//
+//	{
+//	  "jsonrpc": "2.0",
+//	  "method": "textDocument/didChange",
+//	  "params": { "textDocument": { "uri": "file:///query.sql", "version": 2 }, "contentChanges": [...] }
+//	}
 type Notification struct {
 	JSONRPC string          `json:"jsonrpc"`
 	Method  string          `json:"method"`

@@ -1,35 +1,115 @@
 // Package ast provides Abstract Syntax Tree (AST) node definitions for SQL statements.
-// It includes comprehensive support for DDL and DML operations, Common Table Expressions (CTEs),
-// set operations, and window functions, with object pooling for performance optimization.
 //
-// Phase 2 Features (v1.2.0+):
-//   - WithClause and CommonTableExpr for CTE support
-//   - SetOperation for UNION, EXCEPT, INTERSECT operations
-//   - Recursive CTE support with proper AST representation
-//   - Integration with all statement types
+// This package implements a comprehensive AST representation for SQL with support for
+// multiple SQL dialects (PostgreSQL, MySQL, SQL Server, Oracle, SQLite). It includes
+// extensive object pooling for memory efficiency and high-performance SQL parsing.
 //
-// Phase 2.5 Features (v1.3.0+):
-//   - WindowSpec for window function specifications
-//   - WindowFrame and WindowFrameBound for frame clauses
-//   - Enhanced FunctionCall with Over field for window functions
-//   - Complete window function AST integration
+// For complete documentation including architecture overview, usage examples, visitor
+// pattern, and feature support matrix, see the package-level documentation in doc.go.
+//
+// Key features:
+//   - Complete SQL-99/SQL:2003 statement support (DDL, DML, CTEs, window functions)
+//   - PostgreSQL extensions (LATERAL, DISTINCT ON, FILTER, RETURNING, JSON operators)
+//   - Advanced grouping (GROUPING SETS, ROLLUP, CUBE)
+//   - MERGE statements (SQL:2003 F312)
+//   - Object pooling for 60-80% memory reduction
+//   - Thread-safe with zero race conditions
+//   - Visitor pattern for AST traversal
+//
+// Quick Start Example:
+//
+//	// Get AST from pool
+//	astObj := ast.NewAST()
+//	defer ast.ReleaseAST(astObj)  // Always use defer
+//
+//	// Get SELECT statement from pool
+//	stmt := ast.GetSelectStatement()
+//	defer ast.PutSelectStatement(stmt)
+//
+//	// Build and use AST nodes...
+//
+// Version 1.6.0 adds PostgreSQL extensions including LATERAL JOIN, DISTINCT ON,
+// FILTER clause, RETURNING clause, JSON/JSONB operators, and FETCH FIRST/NEXT.
 package ast
 
 import "fmt"
 
-// Node represents any node in the AST
+// Node represents any node in the Abstract Syntax Tree.
+//
+// Node is the base interface that all AST nodes must implement. It provides
+// two core methods for tree inspection and traversal:
+//
+//   - TokenLiteral(): Returns the literal token value that starts this node
+//   - Children(): Returns all child nodes for tree traversal
+//
+// The Node interface enables the visitor pattern for AST traversal. Use the
+// Walk() and Inspect() functions from visitor.go to traverse the tree.
+//
+// Example - Checking node type:
+//
+//	switch node := astNode.(type) {
+//	case *SelectStatement:
+//	    fmt.Println("Found SELECT statement")
+//	case *BinaryExpression:
+//	    fmt.Printf("Binary operator: %s\n", node.Operator)
+//	}
 type Node interface {
 	TokenLiteral() string
 	Children() []Node
 }
 
-// Statement represents a SQL statement
+// Statement represents a SQL statement node in the AST.
+//
+// Statement extends the Node interface and represents top-level SQL statements
+// such as SELECT, INSERT, UPDATE, DELETE, CREATE TABLE, etc. Statements form
+// the root nodes of the syntax tree.
+//
+// All statement types implement both Node and Statement interfaces. The
+// statementNode() method is a marker method to distinguish statements from
+// expressions at compile time.
+//
+// Supported Statement Types:
+//   - DML: SelectStatement, InsertStatement, UpdateStatement, DeleteStatement
+//   - DDL: CreateTableStatement, AlterTableStatement, DropStatement
+//   - Advanced: MergeStatement, TruncateStatement, WithClause, SetOperation
+//   - Views: CreateViewStatement, CreateMaterializedViewStatement
+//
+// Example - Type assertion:
+//
+//	if stmt, ok := node.(Statement); ok {
+//	    fmt.Printf("Statement type: %s\n", stmt.TokenLiteral())
+//	}
 type Statement interface {
 	Node
 	statementNode()
 }
 
-// Expression represents a SQL expression
+// Expression represents a SQL expression node in the AST.
+//
+// Expression extends the Node interface and represents SQL expressions that
+// can appear within statements, such as literals, identifiers, binary operations,
+// function calls, subqueries, etc.
+//
+// All expression types implement both Node and Expression interfaces. The
+// expressionNode() method is a marker method to distinguish expressions from
+// statements at compile time.
+//
+// Supported Expression Types:
+//   - Basic: Identifier, LiteralValue, AliasedExpression
+//   - Operators: BinaryExpression, UnaryExpression, BetweenExpression, InExpression
+//   - Functions: FunctionCall (with window function support)
+//   - Subqueries: SubqueryExpression, ExistsExpression, AnyExpression, AllExpression
+//   - Conditional: CaseExpression, CastExpression
+//   - Grouping: RollupExpression, CubeExpression, GroupingSetsExpression
+//
+// Example - Building an expression:
+//
+//	// Build: column = 'value'
+//	expr := &BinaryExpression{
+//	    Left:     &Identifier{Name: "column"},
+//	    Operator: "=",
+//	    Right:    &LiteralValue{Value: "value", Type: "STRING"},
+//	}
 type Expression interface {
 	Node
 	expressionNode()
@@ -104,8 +184,46 @@ func (j JoinClause) Children() []Node {
 	return children
 }
 
-// TableReference represents a table in FROM clause
-// Can be either a simple table name or a derived table (subquery)
+// TableReference represents a table reference in a FROM clause.
+//
+// TableReference can represent either a simple table name or a derived table
+// (subquery). It supports PostgreSQL's LATERAL keyword for correlated subqueries.
+//
+// Fields:
+//   - Name: Table name (empty if this is a derived table/subquery)
+//   - Alias: Optional table alias (AS alias)
+//   - Subquery: Subquery for derived tables: (SELECT ...) AS alias
+//   - Lateral: LATERAL keyword for correlated subqueries (PostgreSQL v1.6.0)
+//
+// The Lateral field enables PostgreSQL's LATERAL JOIN feature, which allows
+// subqueries in the FROM clause to reference columns from preceding tables.
+//
+// Example - Simple table reference:
+//
+//	TableReference{
+//	    Name:  "users",
+//	    Alias: "u",
+//	}
+//	// SQL: FROM users u
+//
+// Example - Derived table (subquery):
+//
+//	TableReference{
+//	    Alias: "recent_orders",
+//	    Subquery: selectStmt,
+//	}
+//	// SQL: FROM (SELECT ...) AS recent_orders
+//
+// Example - LATERAL JOIN (PostgreSQL v1.6.0):
+//
+//	TableReference{
+//	    Lateral:  true,
+//	    Alias:    "r",
+//	    Subquery: correlatedSelectStmt,
+//	}
+//	// SQL: FROM users u, LATERAL (SELECT * FROM orders WHERE user_id = u.id) r
+//
+// New in v1.6.0: Lateral field for PostgreSQL LATERAL JOIN support.
 type TableReference struct {
 	Name     string           // Table name (empty if this is a derived table)
 	Alias    string           // Optional alias
@@ -200,7 +318,73 @@ func (w WindowFrameBound) Children() []Node {
 	return nil
 }
 
-// SelectStatement represents a SELECT SQL statement
+// SelectStatement represents a SELECT SQL statement with full SQL-99/SQL:2003 support.
+//
+// SelectStatement is the primary query statement type supporting:
+//   - CTEs (WITH clause)
+//   - DISTINCT and DISTINCT ON (PostgreSQL)
+//   - Multiple FROM tables and subqueries
+//   - All JOIN types with LATERAL support
+//   - WHERE, GROUP BY, HAVING, ORDER BY clauses
+//   - Window functions with PARTITION BY and frame specifications
+//   - LIMIT/OFFSET and SQL-99 FETCH clause
+//
+// Fields:
+//   - With: WITH clause for Common Table Expressions (CTEs)
+//   - Distinct: DISTINCT keyword for duplicate elimination
+//   - DistinctOnColumns: DISTINCT ON (expr, ...) for PostgreSQL (v1.6.0)
+//   - Columns: SELECT list expressions (columns, *, functions, etc.)
+//   - From: FROM clause table references (tables, subqueries, LATERAL)
+//   - TableName: Table name for simple queries (pool optimization)
+//   - Joins: JOIN clauses (INNER, LEFT, RIGHT, FULL, CROSS, NATURAL)
+//   - Where: WHERE clause filter condition
+//   - GroupBy: GROUP BY expressions (including ROLLUP, CUBE, GROUPING SETS)
+//   - Having: HAVING clause filter condition
+//   - Windows: Window specifications (WINDOW clause)
+//   - OrderBy: ORDER BY expressions with NULLS FIRST/LAST
+//   - Limit: LIMIT clause (number of rows)
+//   - Offset: OFFSET clause (skip rows)
+//   - Fetch: SQL-99 FETCH FIRST/NEXT clause (v1.6.0)
+//
+// Example - Basic SELECT:
+//
+//	SelectStatement{
+//	    Columns: []Expression{&Identifier{Name: "id"}, &Identifier{Name: "name"}},
+//	    From:    []TableReference{{Name: "users"}},
+//	    Where:   &BinaryExpression{...},
+//	}
+//	// SQL: SELECT id, name FROM users WHERE ...
+//
+// Example - DISTINCT ON (PostgreSQL v1.6.0):
+//
+//	SelectStatement{
+//	    DistinctOnColumns: []Expression{&Identifier{Name: "dept_id"}},
+//	    Columns:           []Expression{&Identifier{Name: "dept_id"}, &Identifier{Name: "name"}},
+//	    From:              []TableReference{{Name: "employees"}},
+//	}
+//	// SQL: SELECT DISTINCT ON (dept_id) dept_id, name FROM employees
+//
+// Example - Window function with FETCH (v1.6.0):
+//
+//	SelectStatement{
+//	    Columns: []Expression{
+//	        &FunctionCall{
+//	            Name: "ROW_NUMBER",
+//	            Over: &WindowSpec{
+//	                OrderBy: []OrderByExpression{{Expression: &Identifier{Name: "salary"}, Ascending: false}},
+//	            },
+//	        },
+//	    },
+//	    From:  []TableReference{{Name: "employees"}},
+//	    Fetch: &FetchClause{FetchValue: ptrInt64(10), FetchType: "FIRST"},
+//	}
+//	// SQL: SELECT ROW_NUMBER() OVER (ORDER BY salary DESC) FROM employees FETCH FIRST 10 ROWS ONLY
+//
+// New in v1.6.0:
+//   - DistinctOnColumns for PostgreSQL DISTINCT ON
+//   - Fetch for SQL-99 FETCH FIRST/NEXT clause
+//   - Enhanced LATERAL JOIN support via TableReference.Lateral
+//   - FILTER clause support via FunctionCall.Filter
 type SelectStatement struct {
 	With              *WithClause
 	Distinct          bool
@@ -343,7 +527,81 @@ func (i *Identifier) expressionNode()     {}
 func (i Identifier) TokenLiteral() string { return i.Name }
 func (i Identifier) Children() []Node     { return nil }
 
-// FunctionCall represents a function call expression
+// FunctionCall represents a function call expression with full SQL-99/PostgreSQL support.
+//
+// FunctionCall supports:
+//   - Scalar functions: UPPER(), LOWER(), COALESCE(), etc.
+//   - Aggregate functions: COUNT(), SUM(), AVG(), MAX(), MIN(), etc.
+//   - Window functions: ROW_NUMBER(), RANK(), DENSE_RANK(), LAG(), LEAD(), etc.
+//   - DISTINCT modifier: COUNT(DISTINCT column)
+//   - FILTER clause: Conditional aggregation (PostgreSQL v1.6.0)
+//   - ORDER BY clause: For order-sensitive aggregates like STRING_AGG, ARRAY_AGG (v1.6.0)
+//   - OVER clause: Window specifications for window functions
+//
+// Fields:
+//   - Name: Function name (e.g., "COUNT", "SUM", "ROW_NUMBER")
+//   - Arguments: Function arguments (expressions)
+//   - Over: Window specification for window functions (OVER clause)
+//   - Distinct: DISTINCT modifier for aggregates (COUNT(DISTINCT col))
+//   - Filter: FILTER clause for conditional aggregation (PostgreSQL v1.6.0)
+//   - OrderBy: ORDER BY clause for order-sensitive aggregates (v1.6.0)
+//
+// Example - Basic aggregate:
+//
+//	FunctionCall{
+//	    Name:      "COUNT",
+//	    Arguments: []Expression{&Identifier{Name: "id"}},
+//	}
+//	// SQL: COUNT(id)
+//
+// Example - Window function:
+//
+//	FunctionCall{
+//	    Name: "ROW_NUMBER",
+//	    Over: &WindowSpec{
+//	        PartitionBy: []Expression{&Identifier{Name: "dept_id"}},
+//	        OrderBy:     []OrderByExpression{{Expression: &Identifier{Name: "salary"}, Ascending: false}},
+//	    },
+//	}
+//	// SQL: ROW_NUMBER() OVER (PARTITION BY dept_id ORDER BY salary DESC)
+//
+// Example - FILTER clause (PostgreSQL v1.6.0):
+//
+//	FunctionCall{
+//	    Name:      "COUNT",
+//	    Arguments: []Expression{&Identifier{Name: "id"}},
+//	    Filter:    &BinaryExpression{Left: &Identifier{Name: "status"}, Operator: "=", Right: &LiteralValue{Value: "active"}},
+//	}
+//	// SQL: COUNT(id) FILTER (WHERE status = 'active')
+//
+// Example - ORDER BY in aggregate (PostgreSQL v1.6.0):
+//
+//	FunctionCall{
+//	    Name:      "STRING_AGG",
+//	    Arguments: []Expression{&Identifier{Name: "name"}, &LiteralValue{Value: ", "}},
+//	    OrderBy:   []OrderByExpression{{Expression: &Identifier{Name: "name"}, Ascending: true}},
+//	}
+//	// SQL: STRING_AGG(name, ', ' ORDER BY name)
+//
+// Example - Window function with frame:
+//
+//	FunctionCall{
+//	    Name:      "AVG",
+//	    Arguments: []Expression{&Identifier{Name: "amount"}},
+//	    Over: &WindowSpec{
+//	        OrderBy: []OrderByExpression{{Expression: &Identifier{Name: "date"}, Ascending: true}},
+//	        FrameClause: &WindowFrame{
+//	            Type:  "ROWS",
+//	            Start: WindowFrameBound{Type: "2 PRECEDING"},
+//	            End:   &WindowFrameBound{Type: "CURRENT ROW"},
+//	        },
+//	    },
+//	}
+//	// SQL: AVG(amount) OVER (ORDER BY date ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)
+//
+// New in v1.6.0:
+//   - Filter: FILTER clause for conditional aggregation
+//   - OrderBy: ORDER BY clause for order-sensitive aggregates (STRING_AGG, ARRAY_AGG, etc.)
 type FunctionCall struct {
 	Name      string
 	Arguments []Expression // Renamed from Args for consistency
@@ -482,7 +740,115 @@ func (b BetweenExpression) Children() []Node {
 	return []Node{b.Expr, b.Lower, b.Upper}
 }
 
-// BinaryExpression represents operations like WHERE column = value
+// BinaryExpression represents binary operations between two expressions.
+//
+// BinaryExpression supports all standard SQL binary operators plus PostgreSQL-specific
+// operators including JSON/JSONB operators added in v1.6.0.
+//
+// Fields:
+//   - Left: Left-hand side expression
+//   - Operator: Binary operator (=, <, >, +, -, *, /, AND, OR, ->, #>, etc.)
+//   - Right: Right-hand side expression
+//   - Not: NOT modifier for negation (NOT expr)
+//   - CustomOp: PostgreSQL custom operators (OPERATOR(schema.name))
+//
+// Supported Operator Categories:
+//   - Comparison: =, <>, <, >, <=, >=, <=> (spaceship)
+//   - Arithmetic: +, -, *, /, %, DIV, // (integer division)
+//   - Logical: AND, OR, XOR
+//   - String: || (concatenation)
+//   - Bitwise: &, |, ^, <<, >> (shifts)
+//   - Pattern: LIKE, ILIKE, SIMILAR TO
+//   - Range: OVERLAPS
+//   - PostgreSQL JSON/JSONB (v1.6.0): ->, ->>, #>, #>>, @>, <@, ?, ?|, ?&, #-
+//
+// Example - Basic comparison:
+//
+//	BinaryExpression{
+//	    Left:     &Identifier{Name: "age"},
+//	    Operator: ">",
+//	    Right:    &LiteralValue{Value: 18, Type: "INTEGER"},
+//	}
+//	// SQL: age > 18
+//
+// Example - Logical AND:
+//
+//	BinaryExpression{
+//	    Left: &BinaryExpression{
+//	        Left:     &Identifier{Name: "active"},
+//	        Operator: "=",
+//	        Right:    &LiteralValue{Value: true, Type: "BOOLEAN"},
+//	    },
+//	    Operator: "AND",
+//	    Right: &BinaryExpression{
+//	        Left:     &Identifier{Name: "status"},
+//	        Operator: "=",
+//	        Right:    &LiteralValue{Value: "pending", Type: "STRING"},
+//	    },
+//	}
+//	// SQL: active = true AND status = 'pending'
+//
+// Example - PostgreSQL JSON operator -> (v1.6.0):
+//
+//	BinaryExpression{
+//	    Left:     &Identifier{Name: "data"},
+//	    Operator: "->",
+//	    Right:    &LiteralValue{Value: "name", Type: "STRING"},
+//	}
+//	// SQL: data->'name'
+//
+// Example - PostgreSQL JSON operator ->> (v1.6.0):
+//
+//	BinaryExpression{
+//	    Left:     &Identifier{Name: "data"},
+//	    Operator: "->>",
+//	    Right:    &LiteralValue{Value: "email", Type: "STRING"},
+//	}
+//	// SQL: data->>'email'  (returns text)
+//
+// Example - PostgreSQL JSON contains @> (v1.6.0):
+//
+//	BinaryExpression{
+//	    Left:     &Identifier{Name: "attributes"},
+//	    Operator: "@>",
+//	    Right:    &LiteralValue{Value: `{"color": "red"}`, Type: "STRING"},
+//	}
+//	// SQL: attributes @> '{"color": "red"}'
+//
+// Example - PostgreSQL JSON key exists ? (v1.6.0):
+//
+//	BinaryExpression{
+//	    Left:     &Identifier{Name: "profile"},
+//	    Operator: "?",
+//	    Right:    &LiteralValue{Value: "email", Type: "STRING"},
+//	}
+//	// SQL: profile ? 'email'
+//
+// Example - Custom PostgreSQL operator:
+//
+//	BinaryExpression{
+//	    Left:     &Identifier{Name: "point1"},
+//	    Operator: "",
+//	    Right:    &Identifier{Name: "point2"},
+//	    CustomOp: &CustomBinaryOperator{Parts: []string{"pg_catalog", "<->"}},
+//	}
+//	// SQL: point1 OPERATOR(pg_catalog.<->) point2
+//
+// New in v1.6.0:
+//   - JSON/JSONB operators: ->, ->>, #>, #>>, @>, <@, ?, ?|, ?&, #-
+//   - CustomOp field for PostgreSQL custom operators
+//
+// PostgreSQL JSON/JSONB Operator Reference:
+//   - -> (Arrow): Extract JSON field or array element (returns JSON)
+//   - ->> (LongArrow): Extract JSON field or array element as text
+//   - #> (HashArrow): Extract JSON at path (returns JSON)
+//   - #>> (HashLongArrow): Extract JSON at path as text
+//   - @> (AtArrow): JSON contains (does left JSON contain right?)
+//   - <@ (ArrowAt): JSON is contained by (is left JSON contained in right?)
+//   - ? (Question): JSON key exists
+//   - ?| (QuestionPipe): Any of the keys exist
+//   - ?& (QuestionAnd): All of the keys exist
+//   - #- (HashMinus): Delete key from JSON
 type BinaryExpression struct {
 	Left     Expression
 	Operator string

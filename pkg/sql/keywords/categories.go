@@ -6,10 +6,22 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
-// KeywordCategory represents a category of SQL keywords
+// KeywordCategory represents a category of SQL keywords mapped to their token types.
+// Each category groups related keywords together (e.g., DML keywords, compound keywords).
 type KeywordCategory map[string]models.TokenType
 
-// Keywords holds all SQL keyword categories and configuration
+// Keywords holds all SQL keyword categories and configuration for a specific SQL dialect.
+//
+// This is the main structure for keyword management, containing:
+//   - Keyword categorization (DML, compound keywords)
+//   - Complete keyword mapping to token types
+//   - Reserved keyword tracking
+//   - Dialect-specific configuration
+//   - Case sensitivity settings
+//
+// Use New() to create a properly initialized Keywords instance:
+//
+//	kw := keywords.New(keywords.DialectPostgreSQL, true)
 type Keywords struct {
 	// Keyword categories
 	DMLKeywords      KeywordCategory
@@ -88,7 +100,18 @@ func (k *Keywords) initialize() {
 	}
 }
 
-// IsKeyword checks if a string is a keyword
+// IsKeyword checks if a string is a recognized SQL keyword.
+// Returns true if the word is found in the keyword map, false otherwise.
+//
+// The check is case-insensitive when the Keywords instance was created
+// with case-insensitive matching (default).
+//
+// Example:
+//
+//	kw := keywords.New(keywords.DialectGeneric, true)
+//	kw.IsKeyword("SELECT")   // true
+//	kw.IsKeyword("select")   // true (case-insensitive)
+//	kw.IsKeyword("unknown")  // false
 func (k *Keywords) IsKeyword(s string) bool {
 	if k.ignoreCase {
 		s = strings.ToUpper(s)
@@ -108,7 +131,15 @@ func (k *Keywords) GetKeywordType(s string) models.TokenType {
 	return models.TokenTypeWord
 }
 
-// IsReserved checks if a keyword is reserved
+// IsReserved checks if a keyword is reserved and cannot be used as an identifier.
+// Reserved keywords include SQL statements (SELECT, INSERT), clauses (WHERE, FROM),
+// and other keywords that have special meaning in SQL syntax.
+//
+// Example:
+//
+//	kw := keywords.New(keywords.DialectGeneric, true)
+//	kw.IsReserved("SELECT")      // true - reserved keyword
+//	kw.IsReserved("ROW_NUMBER")  // false - window function (non-reserved)
 func (k *Keywords) IsReserved(s string) bool {
 	if k.ignoreCase {
 		s = strings.ToUpper(s)

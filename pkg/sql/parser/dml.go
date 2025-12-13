@@ -87,6 +87,21 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 		p.advance() // Consume )
 	}
 
+	// Parse ON CONFLICT clause if present (PostgreSQL UPSERT)
+	var onConflict *ast.OnConflict
+	if p.isType(models.TokenTypeOn) {
+		// Peek ahead to check for CONFLICT
+		if p.peekToken().Literal == "CONFLICT" {
+			p.advance() // Consume ON
+			p.advance() // Consume CONFLICT
+			var err error
+			onConflict, err = p.parseOnConflictClause()
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	// Parse RETURNING clause if present (PostgreSQL)
 	var returning []ast.Expression
 	if p.isType(models.TokenTypeReturning) || p.currentToken.Literal == "RETURNING" {
@@ -100,10 +115,11 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 
 	// Create INSERT statement
 	return &ast.InsertStatement{
-		TableName: tableName,
-		Columns:   columns,
-		Values:    values,
-		Returning: returning,
+		TableName:  tableName,
+		Columns:    columns,
+		Values:     values,
+		OnConflict: onConflict,
+		Returning:  returning,
 	}, nil
 }
 
@@ -556,6 +572,112 @@ func (p *Parser) parseReturningColumns() ([]ast.Expression, error) {
 	}
 
 	return columns, nil
+}
+
+// parseOnConflictClause parses the ON CONFLICT clause (PostgreSQL UPSERT)
+// Syntax: ON CONFLICT [(columns)] | ON CONSTRAINT name DO NOTHING | DO UPDATE SET ...
+func (p *Parser) parseOnConflictClause() (*ast.OnConflict, error) {
+	onConflict := &ast.OnConflict{}
+
+	// Parse optional conflict target: (column_list) or ON CONSTRAINT constraint_name
+	if p.isType(models.TokenTypeLParen) {
+		p.advance() // Consume (
+		var targets []ast.Expression
+
+		for {
+			if !p.isType(models.TokenTypeIdentifier) {
+				return nil, p.expectedError("column name in ON CONFLICT target")
+			}
+			targets = append(targets, &ast.Identifier{Name: p.currentToken.Literal})
+			p.advance()
+
+			if !p.isType(models.TokenTypeComma) {
+				break
+			}
+			p.advance() // Consume comma
+		}
+
+		if !p.isType(models.TokenTypeRParen) {
+			return nil, p.expectedError(")")
+		}
+		p.advance() // Consume )
+		onConflict.Target = targets
+	} else if p.isType(models.TokenTypeOn) && p.peekToken().Literal == "CONSTRAINT" {
+		// ON CONSTRAINT constraint_name
+		p.advance() // Consume ON
+		p.advance() // Consume CONSTRAINT
+		if !p.isType(models.TokenTypeIdentifier) {
+			return nil, p.expectedError("constraint name")
+		}
+		onConflict.Constraint = p.currentToken.Literal
+		p.advance()
+	}
+
+	// Parse DO keyword
+	if p.currentToken.Literal != "DO" {
+		return nil, p.expectedError("DO")
+	}
+	p.advance() // Consume DO
+
+	// Parse action: NOTHING or UPDATE
+	if p.currentToken.Literal == "NOTHING" {
+		onConflict.Action = ast.OnConflictAction{DoNothing: true}
+		p.advance() // Consume NOTHING
+	} else if p.isType(models.TokenTypeUpdate) {
+		p.advance() // Consume UPDATE
+
+		// Parse SET keyword
+		if !p.isType(models.TokenTypeSet) {
+			return nil, p.expectedError("SET")
+		}
+		p.advance() // Consume SET
+
+		// Parse update assignments
+		var updates []ast.UpdateExpression
+		for {
+			if !p.isType(models.TokenTypeIdentifier) {
+				return nil, p.expectedError("column name")
+			}
+			columnName := p.currentToken.Literal
+			p.advance()
+
+			if !p.isType(models.TokenTypeEq) {
+				return nil, p.expectedError("=")
+			}
+			p.advance() // Consume =
+
+			// Parse value expression (supports EXCLUDED.column references)
+			value, err := p.parseExpression()
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse ON CONFLICT UPDATE value: %w", err)
+			}
+
+			updates = append(updates, ast.UpdateExpression{
+				Column: &ast.Identifier{Name: columnName},
+				Value:  value,
+			})
+
+			if !p.isType(models.TokenTypeComma) {
+				break
+			}
+			p.advance() // Consume comma
+		}
+		onConflict.Action.DoUpdate = updates
+
+		// Parse optional WHERE clause
+		if p.isType(models.TokenTypeWhere) {
+			p.advance() // Consume WHERE
+			where, err := p.parseExpression()
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse ON CONFLICT WHERE clause: %w", err)
+			}
+			onConflict.Action.Where = where
+		}
+	} else {
+		return nil, p.expectedError("NOTHING or UPDATE")
+	}
+
+	return onConflict, nil
 }
 
 // parseTableReference parses a simple table reference (table name)

@@ -1430,6 +1430,29 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		}
 		// Just a standalone ? symbol (used for single key existence check)
 		return models.Token{Type: models.TokenTypeQuestion, Value: "?"}, nil
+	case '$':
+		// Handle PostgreSQL positional parameters ($1, $2, etc.)
+		t.pos.AdvanceRune(r, size)
+		if t.pos.Index < len(t.input) {
+			nextR, _ := utf8.DecodeRune(t.input[t.pos.Index:])
+			// Check if followed by a digit (positional parameter)
+			if nextR >= '0' && nextR <= '9' {
+				// Read the number part
+				start := t.pos.Index
+				for t.pos.Index < len(t.input) {
+					digitR, digitSize := utf8.DecodeRune(t.input[t.pos.Index:])
+					if digitR < '0' || digitR > '9' {
+						break
+					}
+					t.pos.AdvanceRune(digitR, digitSize)
+				}
+				paramNum := string(t.input[start:t.pos.Index])
+				return models.Token{Type: models.TokenTypePlaceholder, Value: "$" + paramNum}, nil
+			}
+		}
+		// Just a standalone $ symbol (could be dollar-quoted string start or error)
+		// For now, treat as placeholder
+		return models.Token{Type: models.TokenTypePlaceholder, Value: "$"}, nil
 	}
 
 	if isIdentifierStart(r) {

@@ -401,6 +401,7 @@ type SelectStatement struct {
 	Limit             *int
 	Offset            *int
 	Fetch             *FetchClause // SQL-99 FETCH FIRST/NEXT clause (F861, F862)
+	For               *ForClause   // Row-level locking clause (SQL:2003, PostgreSQL, MySQL)
 }
 
 // FetchClause represents the SQL-99 FETCH FIRST/NEXT clause (F861, F862)
@@ -425,6 +426,34 @@ type FetchClause struct {
 func (f *FetchClause) expressionNode()     {}
 func (f FetchClause) TokenLiteral() string { return "FETCH" }
 func (f FetchClause) Children() []Node     { return nil }
+
+// ForClause represents row-level locking clauses in SELECT statements (SQL:2003, PostgreSQL, MySQL)
+// Syntax: FOR {UPDATE | SHARE | NO KEY UPDATE | KEY SHARE} [OF table_name [, ...]] [NOWAIT | SKIP LOCKED]
+// Examples:
+//   - FOR UPDATE
+//   - FOR SHARE NOWAIT
+//   - FOR UPDATE OF orders SKIP LOCKED
+//   - FOR NO KEY UPDATE
+//   - FOR KEY SHARE
+type ForClause struct {
+	// LockType specifies the type of lock:
+	// "UPDATE" - exclusive lock for UPDATE operations
+	// "SHARE" - shared lock for read operations
+	// "NO KEY UPDATE" - PostgreSQL: exclusive lock that doesn't block SHARE locks on same row
+	// "KEY SHARE" - PostgreSQL: shared lock that doesn't block UPDATE locks
+	LockType string
+	// Tables specifies which tables to lock (FOR UPDATE OF table_name)
+	// Empty slice means lock all tables in the query
+	Tables []string
+	// NoWait indicates NOWAIT option (fail immediately if lock cannot be acquired)
+	NoWait bool
+	// SkipLocked indicates SKIP LOCKED option (skip rows that can't be locked)
+	SkipLocked bool
+}
+
+func (f *ForClause) expressionNode()     {}
+func (f ForClause) TokenLiteral() string { return "FOR" }
+func (f ForClause) Children() []Node     { return nil }
 
 func (s *SelectStatement) statementNode()      {}
 func (s SelectStatement) TokenLiteral() string { return "SELECT" }
@@ -461,6 +490,9 @@ func (s SelectStatement) Children() []Node {
 	}
 	if s.Fetch != nil {
 		children = append(children, s.Fetch)
+	}
+	if s.For != nil {
+		children = append(children, s.For)
 	}
 	return children
 }
@@ -995,6 +1027,16 @@ func (s SubstringExpression) Children() []Node {
 	}
 	return children
 }
+
+// IntervalExpression represents INTERVAL 'value' for date/time arithmetic
+// Examples: INTERVAL '1 day', INTERVAL '2 hours', INTERVAL '1 year 2 months'
+type IntervalExpression struct {
+	Value string // The interval specification string (e.g., '1 day', '2 hours')
+}
+
+func (i *IntervalExpression) expressionNode()     {}
+func (i IntervalExpression) TokenLiteral() string { return "INTERVAL" }
+func (i IntervalExpression) Children() []Node     { return []Node{} }
 
 // InsertStatement represents an INSERT SQL statement
 type InsertStatement struct {

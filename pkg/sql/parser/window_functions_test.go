@@ -15,18 +15,19 @@ func convertTokensForWindowFunctions(tokens []models.TokenWithSpan) []token.Toke
 	for _, t := range tokens {
 		// Handle compound keywords by splitting them
 		if t.Token.Value == "ORDER BY" {
-			result = append(result, token.Token{Type: "ORDER", Literal: "ORDER"})
-			result = append(result, token.Token{Type: "BY", Literal: "BY"})
+			result = append(result, token.Token{Type: "ORDER", Literal: "ORDER", ModelType: models.TokenTypeOrder})
+			result = append(result, token.Token{Type: "BY", Literal: "BY", ModelType: models.TokenTypeBy})
 			continue
 		}
 		if t.Token.Value == "GROUP BY" {
-			result = append(result, token.Token{Type: "GROUP", Literal: "GROUP"})
-			result = append(result, token.Token{Type: "BY", Literal: "BY"})
+			result = append(result, token.Token{Type: "GROUP", Literal: "GROUP", ModelType: models.TokenTypeGroup})
+			result = append(result, token.Token{Type: "BY", Literal: "BY", ModelType: models.TokenTypeBy})
 			continue
 		}
 
 		// Determine token type
 		var tokenType token.Type
+		modelType := t.Token.Type // Use the tokenizer's type as the model type
 
 		switch t.Token.Type {
 		case models.TokenTypeIdentifier:
@@ -42,7 +43,13 @@ func convertTokensForWindowFunctions(tokens []models.TokenWithSpan) []token.Toke
 				// FETCH clause keywords (SQL-99 F861, F862)
 				t.Token.Value == "FETCH" || t.Token.Value == "NEXT" ||
 				t.Token.Value == "ONLY" || t.Token.Value == "TIES" ||
-				t.Token.Value == "PERCENT" || t.Token.Value == "OFFSET" {
+				t.Token.Value == "PERCENT" || t.Token.Value == "OFFSET" ||
+				// Row locking keywords (SQL:2003, PostgreSQL, MySQL)
+				t.Token.Value == "UPDATE" || t.Token.Value == "SHARE" ||
+				t.Token.Value == "NOWAIT" || t.Token.Value == "SKIP" ||
+				t.Token.Value == "LOCKED" || t.Token.Value == "OF" ||
+				t.Token.Value == "NO" || t.Token.Value == "KEY" ||
+				t.Token.Value == "FOR" {
 				tokenType = token.Type(t.Token.Value)
 			} else {
 				tokenType = "IDENT"
@@ -87,22 +94,34 @@ func convertTokensForWindowFunctions(tokens []models.TokenWithSpan) []token.Toke
 			tokenType = "ROWS"
 		case models.TokenTypeRow:
 			tokenType = "ROW"
-		case models.TokenTypeSum:
-			tokenType = "IDENT" // Treat SUM as identifier for function calls
-		case models.TokenTypeCount:
-			tokenType = "IDENT" // Treat COUNT as identifier for function calls
-		case models.TokenTypeAvg:
-			tokenType = "IDENT" // Treat AVG as identifier for function calls
-		case models.TokenTypeMin:
-			tokenType = "IDENT" // Treat MIN as identifier for function calls
-		case models.TokenTypeMax:
-			tokenType = "IDENT" // Treat MAX as identifier for function calls
-		case models.TokenTypeString:
+		// Row locking token types (SQL:2003, PostgreSQL, MySQL)
+		case models.TokenTypeFor:
+			tokenType = "FOR"
+		case models.TokenTypeUpdate:
+			tokenType = "UPDATE"
+		case models.TokenTypeShare:
+			tokenType = "SHARE"
+		case models.TokenTypeNoWait:
+			tokenType = "NOWAIT"
+		case models.TokenTypeSkip:
+			tokenType = "SKIP"
+		case models.TokenTypeLocked:
+			tokenType = "LOCKED"
+		case models.TokenTypeOf:
+			tokenType = "OF"
+		case models.TokenTypeSum, models.TokenTypeCount, models.TokenTypeAvg,
+			models.TokenTypeMin, models.TokenTypeMax:
+			tokenType = "IDENT"                    // Treat aggregate functions as identifiers for function calls
+			modelType = models.TokenTypeIdentifier // Normalize to identifier for parser
+		case models.TokenTypeString, models.TokenTypeSingleQuotedString, models.TokenTypeDoubleQuotedString:
 			tokenType = "STRING"
 		case models.TokenTypeNumber:
 			tokenType = "INT"
 		case models.TokenTypeOperator:
 			tokenType = token.Type(t.Token.Value)
+		case models.TokenTypeMul, models.TokenTypeAsterisk:
+			tokenType = "*"
+			modelType = models.TokenTypeAsterisk // Normalize MUL to ASTERISK for parser
 		case models.TokenTypeLParen:
 			tokenType = "("
 		case models.TokenTypeRParen:
@@ -123,8 +142,9 @@ func convertTokensForWindowFunctions(tokens []models.TokenWithSpan) []token.Toke
 		// Only add tokens with valid types and values
 		if tokenType != "" && t.Token.Value != "" {
 			result = append(result, token.Token{
-				Type:    tokenType,
-				Literal: t.Token.Value,
+				Type:      tokenType,
+				Literal:   t.Token.Value,
+				ModelType: modelType,
 			})
 		}
 	}

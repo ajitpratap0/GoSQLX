@@ -157,6 +157,12 @@ var (
 		},
 	}
 
+	intervalExprPool = sync.Pool{
+		New: func() interface{} {
+			return &IntervalExpression{}
+		},
+	}
+
 	// Additional expression pools for complete coverage
 	existsExprPool = sync.Pool{
 		New: func() interface{} {
@@ -504,6 +510,8 @@ func PutSelectStatement(stmt *SelectStatement) {
 	stmt.Where = nil
 	stmt.Limit = nil
 	stmt.Offset = nil
+	stmt.Fetch = nil
+	stmt.For = nil
 
 	// Return to pool
 	selectStmtPool.Put(stmt)
@@ -771,6 +779,10 @@ func PutExpression(expr Expression) {
 			e.Expr = nil
 			e.Type = ""
 			castExprPool.Put(e)
+
+		case *IntervalExpression:
+			e.Value = ""
+			intervalExprPool.Put(e)
 
 		case *ExistsExpression:
 			e.Subquery = nil
@@ -1044,6 +1056,20 @@ func PutCastExpression(ce *CastExpression) {
 	ce.Expr = nil
 	ce.Type = ""
 	castExprPool.Put(ce)
+}
+
+// GetIntervalExpression gets an IntervalExpression from the pool
+func GetIntervalExpression() *IntervalExpression {
+	return intervalExprPool.Get().(*IntervalExpression)
+}
+
+// PutIntervalExpression returns an IntervalExpression to the pool
+func PutIntervalExpression(ie *IntervalExpression) {
+	if ie == nil {
+		return
+	}
+	ie.Value = ""
+	intervalExprPool.Put(ie)
 }
 
 // GetAliasedExpression retrieves an AliasedExpression from the pool

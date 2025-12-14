@@ -67,6 +67,15 @@ func (k *Keywords) initialize() {
 		"CUBE":     models.TokenTypeCube,     // SQL-99 grouping operation
 		"GROUPING": models.TokenTypeGrouping, // SQL-99 GROUPING SETS
 		"SETS":     models.TokenTypeSets,     // SQL-99 GROUPING SETS
+		"CAST":     models.TokenTypeCast,     // CAST expression
+		"INTERVAL": models.TokenTypeInterval, // INTERVAL expression
+		// Row locking keywords (SQL:2003, PostgreSQL, MySQL)
+		"FOR":    models.TokenTypeFor,
+		"SHARE":  models.TokenTypeShare,
+		"NOWAIT": models.TokenTypeNoWait,
+		"SKIP":   models.TokenTypeSkip,
+		"LOCKED": models.TokenTypeLocked,
+		"OF":     models.TokenTypeOf,
 	}
 
 	// Initialize compound keywords

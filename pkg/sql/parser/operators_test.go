@@ -995,3 +995,193 @@ func TestParser_StringConcatWithAlias(t *testing.T) {
 		t.Errorf("expected alias 'fullname', got %q", aliased.Alias)
 	}
 }
+
+// TestParser_PostgreSQLRegexOperators tests PostgreSQL regex matching operators (~, ~*, !~, !~*)
+// Issue #190: Support PostgreSQL regular expression operators
+func TestParser_PostgreSQLRegexOperators(t *testing.T) {
+	tests := []struct {
+		name     string
+		tokens   []token.Token
+		operator string
+	}{
+		{
+			name: "Tilde operator - case-sensitive regex match",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "*", Literal: "*"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "users"},
+				{Type: "WHERE", Literal: "WHERE"},
+				{Type: "IDENT", Literal: "name"},
+				{Type: "~", Literal: "~", ModelType: models.TokenTypeTilde},
+				{Type: "STRING", Literal: "^J.*"},
+			},
+			operator: "~",
+		},
+		{
+			name: "Tilde-asterisk operator - case-insensitive regex match",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "*", Literal: "*"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "products"},
+				{Type: "WHERE", Literal: "WHERE"},
+				{Type: "IDENT", Literal: "description"},
+				{Type: "~*", Literal: "~*", ModelType: models.TokenTypeTildeAsterisk},
+				{Type: "STRING", Literal: "sale|discount"},
+			},
+			operator: "~*",
+		},
+		{
+			name: "Exclamation-tilde operator - case-sensitive regex non-match",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "*", Literal: "*"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "logs"},
+				{Type: "WHERE", Literal: "WHERE"},
+				{Type: "IDENT", Literal: "message"},
+				{Type: "!~", Literal: "!~", ModelType: models.TokenTypeExclamationMarkTilde},
+				{Type: "STRING", Literal: "DEBUG"},
+			},
+			operator: "!~",
+		},
+		{
+			name: "Exclamation-tilde-asterisk operator - case-insensitive regex non-match",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "*", Literal: "*"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "emails"},
+				{Type: "WHERE", Literal: "WHERE"},
+				{Type: "IDENT", Literal: "subject"},
+				{Type: "!~*", Literal: "!~*", ModelType: models.TokenTypeExclamationMarkTildeAsterisk},
+				{Type: "STRING", Literal: "spam"},
+			},
+			operator: "!~*",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewParser()
+			defer parser.Release()
+
+			tree, err := parser.Parse(tt.tokens)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			defer ast.ReleaseAST(tree)
+
+			stmt := tree.Statements[0].(*ast.SelectStatement)
+			if stmt.Where == nil {
+				t.Fatal("expected WHERE clause")
+			}
+
+			binExpr, ok := stmt.Where.(*ast.BinaryExpression)
+			if !ok {
+				t.Fatalf("expected BinaryExpression, got %T", stmt.Where)
+			}
+
+			if binExpr.Operator != tt.operator {
+				t.Errorf("expected operator %q, got %q", tt.operator, binExpr.Operator)
+			}
+
+			// Verify left side is an identifier
+			_, ok = binExpr.Left.(*ast.Identifier)
+			if !ok {
+				t.Errorf("expected left side to be Identifier, got %T", binExpr.Left)
+			}
+
+			// Verify right side is a literal value (the regex pattern)
+			_, ok = binExpr.Right.(*ast.LiteralValue)
+			if !ok {
+				t.Errorf("expected right side to be LiteralValue, got %T", binExpr.Right)
+			}
+		})
+	}
+}
+
+// TestParser_PostgreSQLRegexWithComplexExpressions tests regex operators in complex expressions
+func TestParser_PostgreSQLRegexWithComplexExpressions(t *testing.T) {
+	tests := []struct {
+		name   string
+		tokens []token.Token
+	}{
+		{
+			name: "Regex with AND condition",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "*", Literal: "*"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "users"},
+				{Type: "WHERE", Literal: "WHERE"},
+				{Type: "IDENT", Literal: "name"},
+				{Type: "~", Literal: "~", ModelType: models.TokenTypeTilde},
+				{Type: "STRING", Literal: "^[A-Z]"},
+				{Type: "AND", Literal: "AND"},
+				{Type: "IDENT", Literal: "email"},
+				{Type: "~*", Literal: "~*", ModelType: models.TokenTypeTildeAsterisk},
+				{Type: "STRING", Literal: "@example\\.com$"},
+			},
+		},
+		{
+			name: "Regex with OR condition",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "*", Literal: "*"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "products"},
+				{Type: "WHERE", Literal: "WHERE"},
+				{Type: "IDENT", Literal: "name"},
+				{Type: "!~", Literal: "!~", ModelType: models.TokenTypeExclamationMarkTilde},
+				{Type: "STRING", Literal: "deprecated"},
+				{Type: "OR", Literal: "OR"},
+				{Type: "IDENT", Literal: "status"},
+				{Type: "=", Literal: "="},
+				{Type: "STRING", Literal: "active"},
+			},
+		},
+		{
+			name: "Multiple regex operators",
+			tokens: []token.Token{
+				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "*", Literal: "*"},
+				{Type: "FROM", Literal: "FROM"},
+				{Type: "IDENT", Literal: "logs"},
+				{Type: "WHERE", Literal: "WHERE"},
+				{Type: "IDENT", Literal: "message"},
+				{Type: "~", Literal: "~", ModelType: models.TokenTypeTilde},
+				{Type: "STRING", Literal: "ERROR"},
+				{Type: "AND", Literal: "AND"},
+				{Type: "IDENT", Literal: "message"},
+				{Type: "!~*", Literal: "!~*", ModelType: models.TokenTypeExclamationMarkTildeAsterisk},
+				{Type: "STRING", Literal: "ignored"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewParser()
+			defer parser.Release()
+
+			tree, err := parser.Parse(tt.tokens)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			defer ast.ReleaseAST(tree)
+
+			stmt := tree.Statements[0].(*ast.SelectStatement)
+			if stmt.Where == nil {
+				t.Fatal("expected WHERE clause")
+			}
+
+			// The WHERE clause should contain a complex expression with regex operators
+			_, ok := stmt.Where.(*ast.BinaryExpression)
+			if !ok {
+				t.Fatalf("expected BinaryExpression, got %T", stmt.Where)
+			}
+		})
+	}
+}

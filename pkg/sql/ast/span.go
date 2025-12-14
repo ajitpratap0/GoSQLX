@@ -166,6 +166,11 @@ func (e *CastExpression) Span() models.Span {
 	return models.EmptySpan()
 }
 
+func (i *IntervalExpression) Span() models.Span {
+	// IntervalExpression has no child expressions, return empty span
+	return models.EmptySpan()
+}
+
 func (e *FunctionCall) Span() models.Span {
 	spans := make([]models.Span, 0)
 

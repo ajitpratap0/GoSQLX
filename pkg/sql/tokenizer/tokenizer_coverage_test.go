@@ -791,3 +791,184 @@ func TestTokenizeCancellation(t *testing.T) {
 		t.Error("Expected tokens or error, got neither")
 	}
 }
+
+// TestPostgreSQLRegexOperators tests PostgreSQL regex matching operators
+// Issue #190: Support PostgreSQL regular expression operators (~, ~*, !~, !~*)
+func TestPostgreSQLRegexOperators(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		wantToken models.TokenType
+		wantValue string
+		wantErr   bool
+	}{
+		{
+			name:      "Tilde operator - case-sensitive regex match",
+			input:     "~",
+			wantToken: models.TokenTypeTilde,
+			wantValue: "~",
+			wantErr:   false,
+		},
+		{
+			name:      "Tilde-asterisk operator - case-insensitive regex match",
+			input:     "~*",
+			wantToken: models.TokenTypeTildeAsterisk,
+			wantValue: "~*",
+			wantErr:   false,
+		},
+		{
+			name:      "Exclamation-tilde operator - case-sensitive regex non-match",
+			input:     "!~",
+			wantToken: models.TokenTypeExclamationMarkTilde,
+			wantValue: "!~",
+			wantErr:   false,
+		},
+		{
+			name:      "Exclamation-tilde-asterisk operator - case-insensitive regex non-match",
+			input:     "!~*",
+			wantToken: models.TokenTypeExclamationMarkTildeAsterisk,
+			wantValue: "!~*",
+			wantErr:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tkz := GetTokenizer()
+			defer PutTokenizer(tkz)
+
+			tokens, err := tkz.Tokenize([]byte(tt.input))
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if len(tokens) < 1 {
+				t.Error("Expected at least one token, got empty result")
+				return
+			}
+
+			if tokens[0].Token.Type != tt.wantToken {
+				t.Errorf("Expected token type %v, got %v", tt.wantToken, tokens[0].Token.Type)
+			}
+
+			if tokens[0].Token.Value != tt.wantValue {
+				t.Errorf("Expected token value %q, got %q", tt.wantValue, tokens[0].Token.Value)
+			}
+		})
+	}
+}
+
+// TestPostgreSQLRegexOperatorsInSQL tests regex operators in SQL context
+func TestPostgreSQLRegexOperatorsInSQL(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		wantTokens  []models.TokenType
+		description string
+	}{
+		{
+			name:  "Case-sensitive regex match",
+			input: "SELECT * FROM users WHERE name ~ '^J.*'",
+			wantTokens: []models.TokenType{
+				models.TokenTypeSelect,
+				models.TokenTypeMul,
+				models.TokenTypeFrom,
+				models.TokenTypeIdentifier,
+				models.TokenTypeWhere,
+				models.TokenTypeIdentifier,
+				models.TokenTypeTilde,
+				models.TokenTypeSingleQuotedString,
+			},
+			description: "Simple regex match with ~ operator",
+		},
+		{
+			name:  "Case-insensitive regex match",
+			input: "SELECT * FROM products WHERE description ~* 'sale|discount'",
+			wantTokens: []models.TokenType{
+				models.TokenTypeSelect,
+				models.TokenTypeMul,
+				models.TokenTypeFrom,
+				models.TokenTypeIdentifier,
+				models.TokenTypeWhere,
+				models.TokenTypeIdentifier,
+				models.TokenTypeTildeAsterisk,
+				models.TokenTypeSingleQuotedString,
+			},
+			description: "Regex match with ~* operator for case-insensitive search",
+		},
+		{
+			name:  "Case-sensitive regex non-match",
+			input: "SELECT * FROM logs WHERE message !~ 'DEBUG'",
+			wantTokens: []models.TokenType{
+				models.TokenTypeSelect,
+				models.TokenTypeMul,
+				models.TokenTypeFrom,
+				models.TokenTypeIdentifier,
+				models.TokenTypeWhere,
+				models.TokenTypeIdentifier,
+				models.TokenTypeExclamationMarkTilde,
+				models.TokenTypeSingleQuotedString,
+			},
+			description: "Regex non-match with !~ operator",
+		},
+		{
+			name:  "Case-insensitive regex non-match",
+			input: "SELECT * FROM emails WHERE subject !~* 'spam'",
+			wantTokens: []models.TokenType{
+				models.TokenTypeSelect,
+				models.TokenTypeMul,
+				models.TokenTypeFrom,
+				models.TokenTypeIdentifier,
+				models.TokenTypeWhere,
+				models.TokenTypeIdentifier,
+				models.TokenTypeExclamationMarkTildeAsterisk,
+				models.TokenTypeSingleQuotedString,
+			},
+			description: "Regex non-match with !~* operator for case-insensitive search",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tkz := GetTokenizer()
+			defer PutTokenizer(tkz)
+
+			tokens, err := tkz.Tokenize([]byte(tt.input))
+			if err != nil {
+				t.Fatalf("Unexpected tokenization error: %v", err)
+			}
+
+			// Filter out EOF token for comparison
+			var actualTokens []models.TokenType
+			for _, tok := range tokens {
+				if tok.Token.Type != models.TokenTypeEOF {
+					actualTokens = append(actualTokens, tok.Token.Type)
+				}
+			}
+
+			if len(actualTokens) != len(tt.wantTokens) {
+				t.Errorf("Expected %d tokens, got %d", len(tt.wantTokens), len(actualTokens))
+				t.Logf("Description: %s", tt.description)
+				t.Logf("Expected: %v", tt.wantTokens)
+				t.Logf("Actual:   %v", actualTokens)
+				return
+			}
+
+			for i, want := range tt.wantTokens {
+				if actualTokens[i] != want {
+					t.Errorf("Token %d: expected %v, got %v", i, want, actualTokens[i])
+					t.Logf("Description: %s", tt.description)
+				}
+			}
+		})
+	}
+}

@@ -1036,6 +1036,16 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		selectStmt.Fetch = fetchClause
 	}
 
+	// Parse FOR clause if present (row-level locking)
+	// Syntax: FOR {UPDATE | SHARE | NO KEY UPDATE | KEY SHARE} [OF table_name [, ...]] [NOWAIT | SKIP LOCKED]
+	if p.isType(models.TokenTypeFor) {
+		forClause, err := p.parseForClause()
+		if err != nil {
+			return nil, err
+		}
+		selectStmt.For = forClause
+	}
+
 	return selectStmt, nil
 }
 
@@ -1163,4 +1173,90 @@ func (p *Parser) parseFetchClause() (*ast.FetchClause, error) {
 	}
 
 	return fetchClause, nil
+}
+
+// parseForClause parses row-level locking clauses in SELECT statements (SQL:2003, PostgreSQL, MySQL).
+// Syntax: FOR {UPDATE | SHARE | NO KEY UPDATE | KEY SHARE} [OF table_name [, ...]] [NOWAIT | SKIP LOCKED]
+//
+// Examples:
+//
+//	FOR UPDATE
+//	FOR SHARE NOWAIT
+//	FOR UPDATE OF orders SKIP LOCKED
+//	FOR NO KEY UPDATE
+//	FOR KEY SHARE
+func (p *Parser) parseForClause() (*ast.ForClause, error) {
+	forClause := &ast.ForClause{}
+
+	// Consume FOR keyword (already checked by caller)
+	p.advance()
+
+	// Parse lock type: UPDATE, SHARE, or compound types (NO KEY UPDATE, KEY SHARE)
+	if p.isTokenMatch("UPDATE") {
+		forClause.LockType = "UPDATE"
+		p.advance()
+	} else if p.isTokenMatch("SHARE") {
+		forClause.LockType = "SHARE"
+		p.advance()
+	} else if p.isTokenMatch("NO") {
+		// NO KEY UPDATE
+		p.advance() // Consume NO
+		if !p.isTokenMatch("KEY") {
+			return nil, p.expectedError("KEY after NO in FOR clause")
+		}
+		p.advance() // Consume KEY
+		if !p.isTokenMatch("UPDATE") {
+			return nil, p.expectedError("UPDATE after NO KEY in FOR clause")
+		}
+		forClause.LockType = "NO KEY UPDATE"
+		p.advance()
+	} else if p.isTokenMatch("KEY") {
+		// KEY SHARE
+		p.advance() // Consume KEY
+		if !p.isTokenMatch("SHARE") {
+			return nil, p.expectedError("SHARE after KEY in FOR clause")
+		}
+		forClause.LockType = "KEY SHARE"
+		p.advance()
+	} else {
+		return nil, p.expectedError("UPDATE, SHARE, NO KEY UPDATE, or KEY SHARE after FOR")
+	}
+
+	// Parse OF table_name [, ...] if present
+	if p.isTokenMatch("OF") {
+		p.advance() // Consume OF
+
+		// Parse comma-separated list of table names
+		forClause.Tables = make([]string, 0)
+		for {
+			// Expect an identifier (table name)
+			if !p.isIdentifier() {
+				return nil, p.expectedError("table name after OF")
+			}
+			forClause.Tables = append(forClause.Tables, p.currentToken.Literal)
+			p.advance()
+
+			// Check for comma to continue, otherwise break
+			if p.isType(models.TokenTypeComma) {
+				p.advance() // Consume comma
+			} else {
+				break
+			}
+		}
+	}
+
+	// Parse NOWAIT or SKIP LOCKED
+	if p.isTokenMatch("NOWAIT") {
+		forClause.NoWait = true
+		p.advance()
+	} else if p.isTokenMatch("SKIP") {
+		p.advance() // Consume SKIP
+		if !p.isTokenMatch("LOCKED") {
+			return nil, p.expectedError("LOCKED after SKIP")
+		}
+		forClause.SkipLocked = true
+		p.advance() // Consume LOCKED
+	}
+
+	return forClause, nil
 }

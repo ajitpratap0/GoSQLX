@@ -5,6 +5,7 @@ package parser
 
 import (
 	"fmt"
+	"strings"
 
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
@@ -420,13 +421,30 @@ func (p *Parser) parseMultiplicativeExpression() (ast.Expression, error) {
 	return left, nil
 }
 
-// parseJSONExpression parses JSON/JSONB operators (PostgreSQL)
-// Handles: ->, ->>, #>, #>>, @>, <@, ?, ?|, ?&, #-
+// parseJSONExpression parses JSON/JSONB operators (PostgreSQL) and type casting
+// Handles: ->, ->>, #>, #>>, @>, <@, ?, ?|, ?&, #-, ::
 func (p *Parser) parseJSONExpression() (ast.Expression, error) {
 	// Parse the left side using primary expression
 	left, err := p.parsePrimaryExpression()
 	if err != nil {
 		return nil, err
+	}
+
+	// Handle type casting (::) with highest precedence
+	// PostgreSQL: expr::type (e.g., '123'::integer, column::text)
+	for p.isType(models.TokenTypeDoubleColon) {
+		p.advance() // Consume ::
+
+		// Parse the target data type
+		dataType, err := p.parseDataType()
+		if err != nil {
+			return nil, err
+		}
+
+		left = &ast.CastExpression{
+			Expr: left,
+			Type: dataType,
+		}
 	}
 
 	// Handle JSON operators (left-associative for chaining like data->'a'->'b')
@@ -449,9 +467,109 @@ func (p *Parser) parseJSONExpression() (ast.Expression, error) {
 
 		// Store operator type for semantic analysis if needed
 		_ = operatorType
+
+		// Check for type casting after JSON operations
+		for p.isType(models.TokenTypeDoubleColon) {
+			p.advance() // Consume ::
+
+			dataType, err := p.parseDataType()
+			if err != nil {
+				return nil, err
+			}
+
+			left = &ast.CastExpression{
+				Expr: left,
+				Type: dataType,
+			}
+		}
 	}
 
 	return left, nil
+}
+
+// parseDataType parses a SQL data type for CAST or :: expressions
+// Handles: simple types (INTEGER, TEXT), parameterized types (VARCHAR(100), NUMERIC(10,2))
+func (p *Parser) parseDataType() (string, error) {
+	// Data type can be an identifier or a keyword like INT, VARCHAR, etc.
+	if !p.isIdentifier() && !p.isDataTypeKeyword() {
+		return "", p.expectedError("data type")
+	}
+
+	// Use strings.Builder for efficient string concatenation
+	var sb strings.Builder
+	sb.WriteString(p.currentToken.Literal)
+	p.advance() // Consume type name
+
+	// Check for type parameters (e.g., VARCHAR(100), DECIMAL(10,2))
+	if p.isType(models.TokenTypeLParen) {
+		p.advance() // Consume (
+		sb.WriteByte('(')
+
+		paramCount := 0
+		for !p.isType(models.TokenTypeRParen) {
+			if paramCount > 0 {
+				if !p.isType(models.TokenTypeComma) {
+					return "", p.expectedError(", or )")
+				}
+				sb.WriteString(p.currentToken.Literal)
+				p.advance() // Consume comma
+			}
+
+			// Parse parameter (should be a number or identifier)
+			// Use token type constants for consistency
+			if !p.isType(models.TokenTypeNumber) && !p.isType(models.TokenTypeIdentifier) && !p.isNumericLiteral() {
+				return "", goerrors.InvalidSyntaxError(
+					fmt.Sprintf("expected numeric type parameter, got '%s'", p.currentToken.Literal),
+					p.currentLocation(),
+					"Use TYPE(precision[, scale]) syntax",
+				)
+			}
+
+			sb.WriteString(p.currentToken.Literal)
+			p.advance()
+			paramCount++
+		}
+
+		sb.WriteByte(')')
+
+		if !p.isType(models.TokenTypeRParen) {
+			return "", p.expectedError(")")
+		}
+		p.advance() // Consume )
+	}
+
+	// Check for array type suffix (e.g., INTEGER[], TEXT[])
+	if p.isType(models.TokenTypeLBracket) {
+		p.advance() // Consume [
+		if !p.isType(models.TokenTypeRBracket) {
+			return "", p.expectedError("]")
+		}
+		p.advance() // Consume ]
+		sb.WriteString("[]")
+	}
+
+	return sb.String(), nil
+}
+
+// isNumericLiteral checks if current token is a numeric literal (handles INT/NUMBER token types)
+func (p *Parser) isNumericLiteral() bool {
+	// Check for various numeric token type representations
+	switch p.currentToken.Type {
+	case "INT", "NUMBER", "FLOAT":
+		return true
+	}
+	return p.isType(models.TokenTypeNumber)
+}
+
+// isDataTypeKeyword checks if current token is a SQL data type keyword
+func (p *Parser) isDataTypeKeyword() bool {
+	switch p.currentToken.Type {
+	case "INT", "INTEGER", "BIGINT", "SMALLINT", "FLOAT", "DOUBLE", "DECIMAL",
+		"NUMERIC", "VARCHAR", "CHAR", "TEXT", "BOOLEAN", "DATE", "TIME",
+		"TIMESTAMP", "INTERVAL", "BLOB", "CLOB", "JSON", "UUID":
+		return true
+	}
+	return false
 }
 
 // isJSONOperator checks if current token is a JSON/JSONB operator

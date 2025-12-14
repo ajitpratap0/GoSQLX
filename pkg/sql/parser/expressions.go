@@ -5,6 +5,7 @@ package parser
 
 import (
 	"fmt"
+	"strings"
 
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
@@ -493,42 +494,42 @@ func (p *Parser) parseDataType() (string, error) {
 		return "", p.expectedError("data type")
 	}
 
-	dataType := p.currentToken.Literal
+	// Use strings.Builder for efficient string concatenation
+	var sb strings.Builder
+	sb.WriteString(p.currentToken.Literal)
 	p.advance() // Consume type name
 
 	// Check for type parameters (e.g., VARCHAR(100), DECIMAL(10,2))
 	if p.isType(models.TokenTypeLParen) {
 		p.advance() // Consume (
+		sb.WriteByte('(')
 
-		// Build the full type string including parameters
-		typeParams := "("
 		paramCount := 0
-
 		for !p.isType(models.TokenTypeRParen) {
 			if paramCount > 0 {
 				if !p.isType(models.TokenTypeComma) {
 					return "", p.expectedError(", or )")
 				}
-				typeParams += p.currentToken.Literal
+				sb.WriteString(p.currentToken.Literal)
 				p.advance() // Consume comma
 			}
 
 			// Parse parameter (should be a number or identifier)
-			if p.currentToken.Type != "INT" && !p.isType(models.TokenTypeIdentifier) && p.currentToken.Type != "NUMBER" {
+			// Use token type constants for consistency
+			if !p.isType(models.TokenTypeNumber) && !p.isType(models.TokenTypeIdentifier) && !p.isNumericLiteral() {
 				return "", goerrors.InvalidSyntaxError(
-					"expected numeric type parameter",
+					fmt.Sprintf("expected numeric type parameter, got '%s'", p.currentToken.Literal),
 					p.currentLocation(),
 					"Use TYPE(precision[, scale]) syntax",
 				)
 			}
 
-			typeParams += p.currentToken.Literal
+			sb.WriteString(p.currentToken.Literal)
 			p.advance()
 			paramCount++
 		}
 
-		typeParams += ")"
-		dataType += typeParams
+		sb.WriteByte(')')
 
 		if !p.isType(models.TokenTypeRParen) {
 			return "", p.expectedError(")")
@@ -543,10 +544,20 @@ func (p *Parser) parseDataType() (string, error) {
 			return "", p.expectedError("]")
 		}
 		p.advance() // Consume ]
-		dataType += "[]"
+		sb.WriteString("[]")
 	}
 
-	return dataType, nil
+	return sb.String(), nil
+}
+
+// isNumericLiteral checks if current token is a numeric literal (handles INT/NUMBER token types)
+func (p *Parser) isNumericLiteral() bool {
+	// Check for various numeric token type representations
+	switch p.currentToken.Type {
+	case "INT", "NUMBER", "FLOAT":
+		return true
+	}
+	return p.isType(models.TokenTypeNumber)
 }
 
 // isDataTypeKeyword checks if current token is a SQL data type keyword

@@ -1450,8 +1450,11 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 				return models.Token{Type: models.TokenTypePlaceholder, Value: "$" + paramNum}, nil
 			}
 		}
-		// Just a standalone $ symbol (could be dollar-quoted string start or error)
-		// For now, treat as placeholder
+		// TODO(#189): PostgreSQL dollar-quoted strings ($tag$...$tag$) are not yet supported.
+		// Dollar-quoted strings allow arbitrary string content without escaping quotes.
+		// Example: $body$SELECT * FROM users WHERE name = 'John'$body$
+		// For now, standalone $ is treated as a placeholder token.
+		// Future implementation should check for $identifier$ pattern and read until closing tag.
 		return models.Token{Type: models.TokenTypePlaceholder, Value: "$"}, nil
 	}
 

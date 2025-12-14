@@ -231,3 +231,91 @@ func TestParser_JSONOperatorPrecedence(t *testing.T) {
 		})
 	}
 }
+
+// TestParser_JSONBExistenceOperators tests JSONB key existence operators (?, ?|, ?&)
+func TestParser_JSONBExistenceOperators(t *testing.T) {
+	tests := []struct {
+		name     string
+		sql      string
+		wantErr  bool
+		operator string
+	}{
+		{
+			name:     "Key exists operator ?",
+			sql:      "SELECT * FROM users WHERE data ? 'active'",
+			wantErr:  false,
+			operator: "?",
+		},
+		{
+			name:     "Key exists with identifier",
+			sql:      "SELECT * FROM users WHERE profile ? 'email'",
+			wantErr:  false,
+			operator: "?",
+		},
+		{
+			name:     "Chained JSON operators with ?",
+			sql:      "SELECT * FROM users WHERE data->'profile' ? 'email'",
+			wantErr:  false,
+			operator: "?",
+		},
+		{
+			name:     "? with multiple conditions",
+			sql:      "SELECT * FROM users WHERE data ? 'active' AND data ? 'verified'",
+			wantErr:  false,
+			operator: "?",
+		},
+		{
+			name:     "? in SELECT list",
+			sql:      "SELECT data ? 'active' AS is_active FROM users",
+			wantErr:  false,
+			operator: "?",
+		},
+		{
+			name:     "?| with simple value",
+			sql:      "SELECT * FROM users WHERE data ?| 'tags'",
+			wantErr:  false,
+			operator: "?|",
+		},
+		{
+			name:     "?& with simple value",
+			sql:      "SELECT * FROM users WHERE data ?& 'keys'",
+			wantErr:  false,
+			operator: "?&",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Tokenize
+			tkz := tokenizer.GetTokenizer()
+			defer tokenizer.PutTokenizer(tkz)
+
+			tokens, err := tkz.Tokenize([]byte(tt.sql))
+			if err != nil {
+				t.Fatalf("Tokenize failed: %v", err)
+			}
+
+			// Convert tokens
+			convertedTokens, err := ConvertTokensForParser(tokens)
+			if err != nil {
+				t.Fatalf("ConvertTokensForParser failed: %v", err)
+			}
+
+			// Parse
+			p := NewParser()
+			astObj, err := p.Parse(convertedTokens)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			// Validate structure for successful parses
+			if !tt.wantErr && astObj != nil {
+				stmt := astObj.Statements[0].(*ast.SelectStatement)
+				if stmt == nil {
+					t.Fatal("Expected SelectStatement")
+				}
+			}
+		})
+	}
+}

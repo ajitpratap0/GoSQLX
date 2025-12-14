@@ -60,21 +60,29 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 	}
 	p.advance() // Consume VALUES
 
-	// Parse value list
-	values := make([]ast.Expression, 0)
-	if p.isType(models.TokenTypeLParen) {
+	// Parse value rows - supports multi-row INSERT: VALUES (a, b), (c, d), (e, f)
+	values := make([][]ast.Expression, 0)
+	for {
+		if !p.isType(models.TokenTypeLParen) {
+			if len(values) == 0 {
+				return nil, p.expectedError("(")
+			}
+			break
+		}
 		p.advance() // Consume (
 
+		// Parse one row of values
+		row := make([]ast.Expression, 0)
 		for {
 			// Parse value using parseExpression to support all expression types
 			// including function calls like NOW(), UUID(), etc.
 			expr, err := p.parseExpression()
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse value at position %d in VALUES clause: %w", len(values)+1, err)
+				return nil, fmt.Errorf("failed to parse value at position %d in VALUES row %d: %w", len(row)+1, len(values)+1, err)
 			}
-			values = append(values, expr)
+			row = append(row, expr)
 
-			// Check if there are more values
+			// Check if there are more values in this row
 			if !p.isType(models.TokenTypeComma) {
 				break
 			}
@@ -85,6 +93,14 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 			return nil, p.expectedError(")")
 		}
 		p.advance() // Consume )
+
+		values = append(values, row)
+
+		// Check if there are more rows (comma after closing paren)
+		if !p.isType(models.TokenTypeComma) {
+			break
+		}
+		p.advance() // Consume comma between rows
 	}
 
 	// Parse RETURNING clause if present (PostgreSQL)

@@ -337,6 +337,8 @@ const (
 	TokenTypeCube         TokenType = 392
 	TokenTypeGrouping     TokenType = 393
 	TokenTypeSets         TokenType = 394 // SETS keyword for GROUPING SETS
+	TokenTypeArray        TokenType = 395 // ARRAY keyword for PostgreSQL array constructor
+	TokenTypeWithin       TokenType = 396 // WITHIN keyword for WITHIN GROUP clause
 
 	// Role/Permission Keywords (400-419)
 	TokenTypeRole       TokenType = 400
@@ -620,6 +622,8 @@ var tokenStringMap = map[TokenType]string{
 	TokenTypeCube:         "CUBE",
 	TokenTypeGrouping:     "GROUPING",
 	TokenTypeSets:         "SETS",
+	TokenTypeArray:        "ARRAY",
+	TokenTypeWithin:       "WITHIN",
 
 	// Role/Permission Keywords
 	TokenTypeRole:       "ROLE",

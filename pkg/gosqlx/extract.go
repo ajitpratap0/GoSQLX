@@ -928,8 +928,10 @@ func (fc *functionCollector) collectFromNode(node ast.Node) {
 			fc.collectFromNode(n.With)
 		}
 	case *ast.InsertStatement:
-		for _, val := range n.Values {
-			fc.collectFromExpression(val)
+		for _, row := range n.Values {
+			for _, val := range row {
+				fc.collectFromExpression(val)
+			}
 		}
 		if n.Query != nil {
 			fc.collectFromNode(n.Query)

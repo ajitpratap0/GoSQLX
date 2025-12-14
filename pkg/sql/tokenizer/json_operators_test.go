@@ -214,11 +214,11 @@ func TestTokenizer_JSONExistenceOperators(t *testing.T) {
 		},
 		{
 			name:  "Any keys exist operator ?|",
-			input: "data ?| array['a','b']",
+			input: "data ?| ARRAY['a','b']",
 			expected: []models.TokenType{
 				models.TokenTypeIdentifier,         // data
 				models.TokenTypeQuestionPipe,       // ?|
-				models.TokenTypeIdentifier,         // array
+				models.TokenTypeArray,              // ARRAY (now a keyword)
 				models.TokenTypeLBracket,           // [
 				models.TokenTypeSingleQuotedString, // 'a'
 				models.TokenTypeComma,              // ,
@@ -228,11 +228,11 @@ func TestTokenizer_JSONExistenceOperators(t *testing.T) {
 		},
 		{
 			name:  "All keys exist operator ?&",
-			input: "data ?& array['a','b']",
+			input: "data ?& ARRAY['a','b']",
 			expected: []models.TokenType{
 				models.TokenTypeIdentifier,         // data
 				models.TokenTypeQuestionAnd,        // ?&
-				models.TokenTypeIdentifier,         // array
+				models.TokenTypeArray,              // ARRAY (now a keyword)
 				models.TokenTypeLBracket,           // [
 				models.TokenTypeSingleQuotedString, // 'a'
 				models.TokenTypeComma,              // ,

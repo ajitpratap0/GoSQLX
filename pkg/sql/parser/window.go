@@ -121,6 +121,87 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 		OrderBy:   orderByExprs,
 	}
 
+	// Check for WITHIN GROUP clause (SQL:2003 ordered-set aggregates)
+	// Syntax: WITHIN GROUP (ORDER BY expression [ASC|DESC] [NULLS FIRST|LAST])
+	// Used with: PERCENTILE_CONT, PERCENTILE_DISC, MODE, LISTAGG, etc.
+	if p.isType(models.TokenTypeWithin) {
+		p.advance() // Consume WITHIN
+
+		// Expect GROUP keyword
+		if !p.isType(models.TokenTypeGroup) {
+			return nil, p.expectedError("GROUP after WITHIN")
+		}
+		p.advance() // Consume GROUP
+
+		// Expect opening parenthesis
+		if !p.isType(models.TokenTypeLParen) {
+			return nil, p.expectedError("( after WITHIN GROUP")
+		}
+		p.advance() // Consume (
+
+		// Expect ORDER BY clause
+		if !p.isType(models.TokenTypeOrder) {
+			return nil, p.expectedError("ORDER BY in WITHIN GROUP")
+		}
+		p.advance() // Consume ORDER
+
+		if !p.isType(models.TokenTypeBy) {
+			return nil, p.expectedError("BY after ORDER")
+		}
+		p.advance() // Consume BY
+
+		// Parse order expressions
+		var withinGroupOrderBy []ast.OrderByExpression
+		for {
+			expr, err := p.parseExpression()
+			if err != nil {
+				return nil, err
+			}
+
+			// Create OrderByExpression with defaults
+			orderByExpr := ast.OrderByExpression{
+				Expression: expr,
+				Ascending:  true, // Default to ASC
+				NullsFirst: nil,  // Default behavior (database-specific)
+			}
+
+			// Check for ASC/DESC after the expression
+			if p.isType(models.TokenTypeAsc) {
+				orderByExpr.Ascending = true
+				p.advance() // Consume ASC
+			} else if p.isType(models.TokenTypeDesc) {
+				orderByExpr.Ascending = false
+				p.advance() // Consume DESC
+			}
+
+			// Check for NULLS FIRST/LAST
+			nullsFirst, err := p.parseNullsClause()
+			if err != nil {
+				return nil, err
+			}
+			orderByExpr.NullsFirst = nullsFirst
+
+			withinGroupOrderBy = append(withinGroupOrderBy, orderByExpr)
+
+			// Check for comma (multiple order columns) or end
+			if p.isType(models.TokenTypeComma) {
+				p.advance() // Consume comma
+			} else if p.isType(models.TokenTypeRParen) {
+				break
+			} else {
+				return nil, p.expectedError(", or )")
+			}
+		}
+
+		// Expect closing parenthesis
+		if !p.isType(models.TokenTypeRParen) {
+			return nil, p.expectedError(") after WITHIN GROUP ORDER BY")
+		}
+		p.advance() // Consume )
+
+		funcCall.WithinGroup = withinGroupOrderBy
+	}
+
 	// Check for FILTER clause (SQL:2003 T612)
 	// Syntax: FILTER (WHERE condition)
 	if p.isType(models.TokenTypeFilter) {

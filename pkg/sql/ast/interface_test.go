@@ -799,7 +799,7 @@ func TestInsertStatementChildren(t *testing.T) {
 		stmt := &InsertStatement{
 			With:       &WithClause{},
 			Columns:    []Expression{testIdent},
-			Values:     []Expression{testExpr},
+			Values:     [][]Expression{{testExpr}},
 			Query:      &SelectStatement{},
 			Returning:  []Expression{testIdent},
 			OnConflict: &OnConflict{},

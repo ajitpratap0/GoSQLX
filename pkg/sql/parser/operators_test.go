@@ -351,6 +351,160 @@ func TestParser_BetweenWithIdentifiers(t *testing.T) {
 	}
 }
 
+// TestParser_BetweenWithArithmeticExpressions tests BETWEEN with complex expressions (Issue #180)
+func TestParser_BetweenWithArithmeticExpressions(t *testing.T) {
+	// SELECT * FROM products WHERE price BETWEEN price * 0.9 AND price * 1.1
+	tokens := []token.Token{
+		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "*", Literal: "*"},
+		{Type: "FROM", Literal: "FROM"},
+		{Type: "IDENT", Literal: "products"},
+		{Type: "WHERE", Literal: "WHERE"},
+		{Type: "IDENT", Literal: "price"},
+		{Type: "BETWEEN", Literal: "BETWEEN"},
+		{Type: "IDENT", Literal: "price"},
+		{Type: "*", Literal: "*"},
+		{Type: "FLOAT", Literal: "0.9"},
+		{Type: "AND", Literal: "AND"},
+		{Type: "IDENT", Literal: "price"},
+		{Type: "*", Literal: "*"},
+		{Type: "FLOAT", Literal: "1.1"},
+	}
+
+	parser := NewParser()
+	defer parser.Release()
+
+	tree, err := parser.Parse(tokens)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer ast.ReleaseAST(tree)
+
+	stmt := tree.Statements[0].(*ast.SelectStatement)
+	betweenExpr := stmt.Where.(*ast.BetweenExpression)
+
+	// Verify lower bound is a binary expression (multiplication)
+	lowerBinary, ok := betweenExpr.Lower.(*ast.BinaryExpression)
+	if !ok {
+		t.Fatalf("expected lower bound to be BinaryExpression, got %T", betweenExpr.Lower)
+	}
+	if lowerBinary.Operator != "*" {
+		t.Errorf("expected lower bound operator '*', got '%s'", lowerBinary.Operator)
+	}
+
+	// Verify upper bound is a binary expression (multiplication)
+	upperBinary, ok := betweenExpr.Upper.(*ast.BinaryExpression)
+	if !ok {
+		t.Fatalf("expected upper bound to be BinaryExpression, got %T", betweenExpr.Upper)
+	}
+	if upperBinary.Operator != "*" {
+		t.Errorf("expected upper bound operator '*', got '%s'", upperBinary.Operator)
+	}
+}
+
+// TestParser_BetweenWithAdditionSubtraction tests BETWEEN with +/- expressions
+func TestParser_BetweenWithAdditionSubtraction(t *testing.T) {
+	// SELECT * FROM orders WHERE total BETWEEN subtotal - 10 AND subtotal + 10
+	tokens := []token.Token{
+		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "*", Literal: "*"},
+		{Type: "FROM", Literal: "FROM"},
+		{Type: "IDENT", Literal: "orders"},
+		{Type: "WHERE", Literal: "WHERE"},
+		{Type: "IDENT", Literal: "total"},
+		{Type: "BETWEEN", Literal: "BETWEEN"},
+		{Type: "IDENT", Literal: "subtotal"},
+		{Type: "MINUS", Literal: "-"},
+		{Type: "INT", Literal: "10"},
+		{Type: "AND", Literal: "AND"},
+		{Type: "IDENT", Literal: "subtotal"},
+		{Type: "PLUS", Literal: "+"},
+		{Type: "INT", Literal: "10"},
+	}
+
+	parser := NewParser()
+	defer parser.Release()
+
+	tree, err := parser.Parse(tokens)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer ast.ReleaseAST(tree)
+
+	stmt := tree.Statements[0].(*ast.SelectStatement)
+	betweenExpr := stmt.Where.(*ast.BetweenExpression)
+
+	// Verify lower bound is subtraction
+	lowerBinary, ok := betweenExpr.Lower.(*ast.BinaryExpression)
+	if !ok {
+		t.Fatalf("expected lower bound to be BinaryExpression, got %T", betweenExpr.Lower)
+	}
+	if lowerBinary.Operator != "-" {
+		t.Errorf("expected lower bound operator '-', got '%s'", lowerBinary.Operator)
+	}
+
+	// Verify upper bound is addition
+	upperBinary, ok := betweenExpr.Upper.(*ast.BinaryExpression)
+	if !ok {
+		t.Fatalf("expected upper bound to be BinaryExpression, got %T", betweenExpr.Upper)
+	}
+	if upperBinary.Operator != "+" {
+		t.Errorf("expected upper bound operator '+', got '%s'", upperBinary.Operator)
+	}
+}
+
+// TestParser_BetweenWithFunctionCallsAndArithmetic tests BETWEEN with function calls
+func TestParser_BetweenWithFunctionCallsAndArithmetic(t *testing.T) {
+	// SELECT * FROM orders WHERE amount BETWEEN MIN(price) AND MAX(price) * 2
+	tokens := []token.Token{
+		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "*", Literal: "*"},
+		{Type: "FROM", Literal: "FROM"},
+		{Type: "IDENT", Literal: "orders"},
+		{Type: "WHERE", Literal: "WHERE"},
+		{Type: "IDENT", Literal: "amount"},
+		{Type: "BETWEEN", Literal: "BETWEEN"},
+		{Type: "IDENT", Literal: "MIN"},
+		{Type: "(", Literal: "("},
+		{Type: "IDENT", Literal: "price"},
+		{Type: ")", Literal: ")"},
+		{Type: "AND", Literal: "AND"},
+		{Type: "IDENT", Literal: "MAX"},
+		{Type: "(", Literal: "("},
+		{Type: "IDENT", Literal: "price"},
+		{Type: ")", Literal: ")"},
+		{Type: "*", Literal: "*"},
+		{Type: "INT", Literal: "2"},
+	}
+
+	parser := NewParser()
+	defer parser.Release()
+
+	tree, err := parser.Parse(tokens)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer ast.ReleaseAST(tree)
+
+	stmt := tree.Statements[0].(*ast.SelectStatement)
+	betweenExpr := stmt.Where.(*ast.BetweenExpression)
+
+	// Verify lower bound is a function call
+	_, ok := betweenExpr.Lower.(*ast.FunctionCall)
+	if !ok {
+		t.Fatalf("expected lower bound to be FunctionCall, got %T", betweenExpr.Lower)
+	}
+
+	// Verify upper bound is a binary expression (function * number)
+	upperBinary, ok := betweenExpr.Upper.(*ast.BinaryExpression)
+	if !ok {
+		t.Fatalf("expected upper bound to be BinaryExpression, got %T", betweenExpr.Upper)
+	}
+	if upperBinary.Operator != "*" {
+		t.Errorf("expected upper bound operator '*', got '%s'", upperBinary.Operator)
+	}
+}
+
 // TestParser_InWithNumbers tests IN with numeric values
 func TestParser_InWithNumbers(t *testing.T) {
 	// SELECT * FROM products WHERE category_id IN (1, 2, 3)
@@ -396,6 +550,179 @@ func TestParser_InWithNumbers(t *testing.T) {
 		if lit.Type != "int" {
 			t.Errorf("expected int type at index %d, got %s", i, lit.Type)
 		}
+	}
+}
+
+// TestParser_TupleInExpression tests tuple expressions in IN clause
+// WHERE (user_id, status) IN ((1, 'active'), (2, 'pending'))
+func TestParser_TupleInExpression(t *testing.T) {
+	// SELECT * FROM orders WHERE (user_id, status) IN ((1, 'active'), (2, 'pending'))
+	tokens := []token.Token{
+		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "*", Literal: "*"},
+		{Type: "FROM", Literal: "FROM"},
+		{Type: "IDENT", Literal: "orders"},
+		{Type: "WHERE", Literal: "WHERE"},
+		{Type: "(", Literal: "("}, // tuple start
+		{Type: "IDENT", Literal: "user_id"},
+		{Type: ",", Literal: ","},
+		{Type: "IDENT", Literal: "status"},
+		{Type: ")", Literal: ")"}, // tuple end
+		{Type: "IN", Literal: "IN"},
+		{Type: "(", Literal: "("}, // IN list start
+		{Type: "(", Literal: "("}, // first tuple value
+		{Type: "INT", Literal: "1"},
+		{Type: ",", Literal: ","},
+		{Type: "STRING", Literal: "active"},
+		{Type: ")", Literal: ")"},
+		{Type: ",", Literal: ","}, // between tuples
+		{Type: "(", Literal: "("}, // second tuple value
+		{Type: "INT", Literal: "2"},
+		{Type: ",", Literal: ","},
+		{Type: "STRING", Literal: "pending"},
+		{Type: ")", Literal: ")"},
+		{Type: ")", Literal: ")"}, // IN list end
+	}
+
+	parser := NewParser()
+	defer parser.Release()
+
+	tree, err := parser.Parse(tokens)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer ast.ReleaseAST(tree)
+
+	stmt := tree.Statements[0].(*ast.SelectStatement)
+	inExpr, ok := stmt.Where.(*ast.InExpression)
+	if !ok {
+		t.Fatalf("expected InExpression, got %T", stmt.Where)
+	}
+
+	// Left side should be a TupleExpression with 2 columns
+	tupleLeft, ok := inExpr.Expr.(*ast.TupleExpression)
+	if !ok {
+		t.Fatalf("expected TupleExpression on left side of IN, got %T", inExpr.Expr)
+	}
+
+	if len(tupleLeft.Expressions) != 2 {
+		t.Errorf("expected 2 expressions in left tuple, got %d", len(tupleLeft.Expressions))
+	}
+
+	// IN list should contain 2 tuple values
+	if len(inExpr.List) != 2 {
+		t.Fatalf("expected 2 values in IN list, got %d", len(inExpr.List))
+	}
+
+	// First value should be TupleExpression (1, 'active')
+	tuple1, ok := inExpr.List[0].(*ast.TupleExpression)
+	if !ok {
+		t.Fatalf("expected TupleExpression at index 0, got %T", inExpr.List[0])
+	}
+	if len(tuple1.Expressions) != 2 {
+		t.Errorf("expected 2 expressions in first value tuple, got %d", len(tuple1.Expressions))
+	}
+
+	// Second value should be TupleExpression (2, 'pending')
+	tuple2, ok := inExpr.List[1].(*ast.TupleExpression)
+	if !ok {
+		t.Fatalf("expected TupleExpression at index 1, got %T", inExpr.List[1])
+	}
+	if len(tuple2.Expressions) != 2 {
+		t.Errorf("expected 2 expressions in second value tuple, got %d", len(tuple2.Expressions))
+	}
+}
+
+// TestParser_TupleNotInExpression tests tuple with NOT IN
+func TestParser_TupleNotInExpression(t *testing.T) {
+	// SELECT * FROM orders WHERE (user_id, status) NOT IN ((1, 'cancelled'))
+	tokens := []token.Token{
+		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "*", Literal: "*"},
+		{Type: "FROM", Literal: "FROM"},
+		{Type: "IDENT", Literal: "orders"},
+		{Type: "WHERE", Literal: "WHERE"},
+		{Type: "(", Literal: "("},
+		{Type: "IDENT", Literal: "user_id"},
+		{Type: ",", Literal: ","},
+		{Type: "IDENT", Literal: "status"},
+		{Type: ")", Literal: ")"},
+		{Type: "NOT", Literal: "NOT"},
+		{Type: "IN", Literal: "IN"},
+		{Type: "(", Literal: "("},
+		{Type: "(", Literal: "("},
+		{Type: "INT", Literal: "1"},
+		{Type: ",", Literal: ","},
+		{Type: "STRING", Literal: "cancelled"},
+		{Type: ")", Literal: ")"},
+		{Type: ")", Literal: ")"},
+	}
+
+	parser := NewParser()
+	defer parser.Release()
+
+	tree, err := parser.Parse(tokens)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer ast.ReleaseAST(tree)
+
+	stmt := tree.Statements[0].(*ast.SelectStatement)
+	inExpr, ok := stmt.Where.(*ast.InExpression)
+	if !ok {
+		t.Fatalf("expected InExpression, got %T", stmt.Where)
+	}
+
+	if !inExpr.Not {
+		t.Error("expected Not to be true for NOT IN")
+	}
+
+	// Left side should be TupleExpression
+	_, ok = inExpr.Expr.(*ast.TupleExpression)
+	if !ok {
+		t.Fatalf("expected TupleExpression on left side, got %T", inExpr.Expr)
+	}
+
+	if len(inExpr.List) != 1 {
+		t.Errorf("expected 1 value in IN list, got %d", len(inExpr.List))
+	}
+}
+
+// TestParser_SimpleTupleExpression tests parsing a standalone tuple
+func TestParser_SimpleTupleExpression(t *testing.T) {
+	// SELECT (1, 2, 3)
+	tokens := []token.Token{
+		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "(", Literal: "("},
+		{Type: "INT", Literal: "1"},
+		{Type: ",", Literal: ","},
+		{Type: "INT", Literal: "2"},
+		{Type: ",", Literal: ","},
+		{Type: "INT", Literal: "3"},
+		{Type: ")", Literal: ")"},
+	}
+
+	parser := NewParser()
+	defer parser.Release()
+
+	tree, err := parser.Parse(tokens)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer ast.ReleaseAST(tree)
+
+	stmt := tree.Statements[0].(*ast.SelectStatement)
+	if len(stmt.Columns) != 1 {
+		t.Fatalf("expected 1 column, got %d", len(stmt.Columns))
+	}
+
+	tuple, ok := stmt.Columns[0].(*ast.TupleExpression)
+	if !ok {
+		t.Fatalf("expected TupleExpression, got %T", stmt.Columns[0])
+	}
+
+	if len(tuple.Expressions) != 3 {
+		t.Errorf("expected 3 expressions in tuple, got %d", len(tuple.Expressions))
 	}
 }
 

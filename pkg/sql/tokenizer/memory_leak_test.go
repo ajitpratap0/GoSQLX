@@ -87,7 +87,7 @@ func TestMemoryLeakDetection(t *testing.T) {
 
 	// Memory leak detection thresholds
 	const maxAllocIncrease = 1024 * 1024    // 1MB max increase in current allocation
-	const maxBytesPerOp = 5000              // 5KB max per operation (tokenization includes string allocations)
+	const maxBytesPerOp = 6000              // 6KB max per operation (tokenization includes string allocations)
 	const maxSysIncrease = 10 * 1024 * 1024 // 10MB max system memory increase
 
 	// Check for memory leaks

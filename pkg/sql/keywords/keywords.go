@@ -62,7 +62,7 @@ var RESERVED_FOR_TABLE_ALIAS = []Keyword{
 	{Word: "QUALIFY", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
 	{Word: "WINDOW", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
 	{Word: "END", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
-	{Word: "FOR", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "FOR", Type: models.TokenTypeFor, Reserved: true, ReservedForTableAlias: true},
 	{Word: "PARTITION", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
 	{Word: "PREWHERE", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
 	{Word: "SETTINGS", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
@@ -122,6 +122,7 @@ var ADDITIONAL_KEYWORDS = []Keyword{
 	{Word: "ELSE", Type: models.TokenTypeElse, Reserved: true, ReservedForTableAlias: false},
 	{Word: "END", Type: models.TokenTypeEnd, Reserved: true, ReservedForTableAlias: false},
 	{Word: "CAST", Type: models.TokenTypeCast, Reserved: true, ReservedForTableAlias: false},
+	{Word: "INTERVAL", Type: models.TokenTypeInterval, Reserved: true, ReservedForTableAlias: false},
 	// Window function names (Phase 2.5)
 	{Word: "ROW_NUMBER", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "RANK", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
@@ -187,6 +188,12 @@ var ADDITIONAL_KEYWORDS = []Keyword{
 	{Word: "RESTART", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "CONTINUE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "IDENTITY", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	// Row Locking Keywords (SQL:2003, PostgreSQL, MySQL)
+	{Word: "SHARE", Type: models.TokenTypeShare, Reserved: true, ReservedForTableAlias: false},
+	{Word: "NOWAIT", Type: models.TokenTypeNoWait, Reserved: true, ReservedForTableAlias: false},
+	{Word: "SKIP", Type: models.TokenTypeSkip, Reserved: true, ReservedForTableAlias: false},
+	{Word: "LOCKED", Type: models.TokenTypeLocked, Reserved: true, ReservedForTableAlias: false},
+	{Word: "OF", Type: models.TokenTypeOf, Reserved: true, ReservedForTableAlias: false},
 }
 
 // New creates a new Keywords instance with the specified SQL dialect and case sensitivity.

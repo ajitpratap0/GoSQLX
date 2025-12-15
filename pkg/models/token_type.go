@@ -331,6 +331,13 @@ const (
 	TokenTypeTruncate     TokenType = 378 // TRUNCATE keyword for TRUNCATE TABLE statement
 	TokenTypeReturning    TokenType = 379 // RETURNING keyword for PostgreSQL RETURNING clause
 
+	// Row Locking Keywords (380-389)
+	TokenTypeShare  TokenType = 380 // SHARE keyword for FOR SHARE row locking
+	TokenTypeNoWait TokenType = 381 // NOWAIT keyword for FOR UPDATE/SHARE NOWAIT
+	TokenTypeSkip   TokenType = 382 // SKIP keyword for FOR UPDATE SKIP LOCKED
+	TokenTypeLocked TokenType = 383 // LOCKED keyword for SKIP LOCKED
+	TokenTypeOf     TokenType = 384 // OF keyword for FOR UPDATE OF table_name
+
 	// Grouping Set Keywords (390-399)
 	TokenTypeGroupingSets TokenType = 390
 	TokenTypeRollup       TokenType = 391
@@ -452,6 +459,15 @@ var tokenStringMap = map[TokenType]string{
 	TokenTypeExclamationMark: "EXCLAMATION_MARK",
 	TokenTypeAtSign:          "AT_SIGN",
 	TokenTypeQuestion:        "QUESTION",
+
+	// PostgreSQL regex operators
+	TokenTypeTildeAsterisk:                      "TILDE_ASTERISK",                         // ~*
+	TokenTypeExclamationMarkTilde:               "EXCLAMATION_MARK_TILDE",                 // !~
+	TokenTypeExclamationMarkTildeAsterisk:       "EXCLAMATION_MARK_TILDE_ASTERISK",        // !~*
+	TokenTypeDoubleTilde:                        "DOUBLE_TILDE",                           // ~~
+	TokenTypeDoubleTildeAsterisk:                "DOUBLE_TILDE_ASTERISK",                  // ~~*
+	TokenTypeExclamationMarkDoubleTilde:         "EXCLAMATION_MARK_DOUBLE_TILDE",          // !~~
+	TokenTypeExclamationMarkDoubleTildeAsterisk: "EXCLAMATION_MARK_DOUBLE_TILDE_ASTERISK", // !~~*
 
 	// JSON/JSONB operators
 	TokenTypeArrow:         "ARROW",           // ->
@@ -615,6 +631,14 @@ var tokenStringMap = map[TokenType]string{
 	TokenTypeTies:         "TIES",
 	TokenTypePercent:      "PERCENT",
 	TokenTypeTruncate:     "TRUNCATE",
+	TokenTypeReturning:    "RETURNING",
+
+	// Row Locking Keywords
+	TokenTypeShare:  "SHARE",
+	TokenTypeNoWait: "NOWAIT",
+	TokenTypeSkip:   "SKIP",
+	TokenTypeLocked: "LOCKED",
+	TokenTypeOf:     "OF",
 
 	// Grouping Set Keywords
 	TokenTypeGroupingSets: "GROUPING_SETS",

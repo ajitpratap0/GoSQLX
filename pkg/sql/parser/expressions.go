@@ -602,6 +602,11 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return p.parseCastExpression()
 	}
 
+	if p.isType(models.TokenTypeInterval) {
+		// Handle INTERVAL 'value' expressions
+		return p.parseIntervalExpression()
+	}
+
 	if p.isType(models.TokenTypeArray) {
 		// Handle ARRAY[...] or ARRAY(SELECT ...) constructor
 		return p.parseArrayConstructor()
@@ -1031,6 +1036,35 @@ func (p *Parser) parseCastExpression() (*ast.CastExpression, error) {
 	return &ast.CastExpression{
 		Expr: expr,
 		Type: dataType,
+	}, nil
+}
+
+// parseIntervalExpression parses an INTERVAL expression: INTERVAL 'value'
+//
+// Examples:
+//
+//	INTERVAL '1 day'
+//	INTERVAL '2 hours'
+//	INTERVAL '1 year 2 months 3 days'
+//	INTERVAL '30 days'
+func (p *Parser) parseIntervalExpression() (*ast.IntervalExpression, error) {
+	// Consume INTERVAL keyword
+	p.advance()
+
+	// Expect a string literal for the interval value
+	if p.currentToken.Type != "STRING" {
+		return nil, goerrors.InvalidSyntaxError(
+			"expected string literal after INTERVAL keyword",
+			p.currentLocation(),
+			"Use INTERVAL 'value' syntax (e.g., INTERVAL '1 day')",
+		)
+	}
+
+	value := p.currentToken.Literal
+	p.advance() // Consume the string literal
+
+	return &ast.IntervalExpression{
+		Value: value,
 	}, nil
 }
 

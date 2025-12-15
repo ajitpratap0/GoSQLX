@@ -717,6 +717,13 @@ func buildTypeMapping() map[models.TokenType]token.Type {
 		models.TokenTypeMin:   "IDENT",
 		models.TokenTypeMax:   "IDENT",
 
+		// Row Locking Keywords (SQL:2003, PostgreSQL, MySQL)
+		models.TokenTypeShare:  "SHARE",
+		models.TokenTypeNoWait: "NOWAIT",
+		models.TokenTypeSkip:   "SKIP",
+		models.TokenTypeLocked: "LOCKED",
+		models.TokenTypeOf:     "OF",
+
 		// Compound keywords
 		models.TokenTypeGroupBy:   "GROUP BY",
 		models.TokenTypeOrderBy:   "ORDER BY",

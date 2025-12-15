@@ -847,6 +847,9 @@ var modelTypeToString = map[models.TokenType]token.Type{
 	// CAST expression
 	models.TokenTypeCast: "CAST",
 
+	// INTERVAL expression
+	models.TokenTypeInterval: "INTERVAL",
+
 	// MERGE keywords
 	models.TokenTypeMerge:   "MERGE",
 	models.TokenTypeMatched: "MATCHED",
@@ -929,14 +932,16 @@ func (p *Parser) isComparisonOperator() bool {
 	if p.currentToken.ModelType != modelTypeUnset {
 		switch p.currentToken.ModelType {
 		case models.TokenTypeEq, models.TokenTypeLt, models.TokenTypeGt,
-			models.TokenTypeNeq, models.TokenTypeLtEq, models.TokenTypeGtEq:
+			models.TokenTypeNeq, models.TokenTypeLtEq, models.TokenTypeGtEq,
+			models.TokenTypeTilde, models.TokenTypeTildeAsterisk,
+			models.TokenTypeExclamationMarkTilde, models.TokenTypeExclamationMarkTildeAsterisk:
 			return true
 		}
 		return false
 	}
 	// Fallback: string comparison for tokens without ModelType (e.g., tests)
 	switch p.currentToken.Type {
-	case "=", "<", ">", "!=", "<=", ">=", "<>":
+	case "=", "<", ">", "!=", "<=", ">=", "<>", "~", "~*", "!~", "!~*":
 		return true
 	}
 	return false

@@ -59,41 +59,42 @@ const (
 
 // keywordTokenTypes maps SQL keywords to their token types for fast lookup
 var keywordTokenTypes = map[string]models.TokenType{
-	"SELECT":  models.TokenTypeSelect,
-	"FROM":    models.TokenTypeFrom,
-	"WHERE":   models.TokenTypeWhere,
-	"GROUP":   models.TokenTypeGroup,
-	"ORDER":   models.TokenTypeOrder,
-	"HAVING":  models.TokenTypeHaving,
-	"JOIN":    models.TokenTypeJoin,
-	"INNER":   models.TokenTypeInner,
-	"LEFT":    models.TokenTypeLeft,
-	"RIGHT":   models.TokenTypeRight,
-	"OUTER":   models.TokenTypeOuter,
-	"ON":      models.TokenTypeOn,
-	"AND":     models.TokenTypeAnd,
-	"OR":      models.TokenTypeOr,
-	"NOT":     models.TokenTypeNot,
-	"AS":      models.TokenTypeAs,
-	"BY":      models.TokenTypeBy,
-	"IN":      models.TokenTypeIn,
-	"LIKE":    models.TokenTypeLike,
-	"BETWEEN": models.TokenTypeBetween,
-	"IS":      models.TokenTypeIs,
-	"NULL":    models.TokenTypeNull,
-	"TRUE":    models.TokenTypeTrue,
-	"FALSE":   models.TokenTypeFalse,
-	"CASE":    models.TokenTypeCase,
-	"WHEN":    models.TokenTypeWhen,
-	"THEN":    models.TokenTypeThen,
-	"ELSE":    models.TokenTypeElse,
-	"END":     models.TokenTypeEnd,
-	"CAST":    models.TokenTypeCast,
-	"ASC":     models.TokenTypeAsc,
-	"DESC":    models.TokenTypeDesc,
-	"LIMIT":   models.TokenTypeLimit,
-	"OFFSET":  models.TokenTypeOffset,
-	"COUNT":   models.TokenTypeCount,
+	"SELECT":   models.TokenTypeSelect,
+	"FROM":     models.TokenTypeFrom,
+	"WHERE":    models.TokenTypeWhere,
+	"GROUP":    models.TokenTypeGroup,
+	"ORDER":    models.TokenTypeOrder,
+	"HAVING":   models.TokenTypeHaving,
+	"JOIN":     models.TokenTypeJoin,
+	"INNER":    models.TokenTypeInner,
+	"LEFT":     models.TokenTypeLeft,
+	"RIGHT":    models.TokenTypeRight,
+	"OUTER":    models.TokenTypeOuter,
+	"ON":       models.TokenTypeOn,
+	"AND":      models.TokenTypeAnd,
+	"OR":       models.TokenTypeOr,
+	"NOT":      models.TokenTypeNot,
+	"AS":       models.TokenTypeAs,
+	"BY":       models.TokenTypeBy,
+	"IN":       models.TokenTypeIn,
+	"LIKE":     models.TokenTypeLike,
+	"BETWEEN":  models.TokenTypeBetween,
+	"IS":       models.TokenTypeIs,
+	"NULL":     models.TokenTypeNull,
+	"TRUE":     models.TokenTypeTrue,
+	"FALSE":    models.TokenTypeFalse,
+	"CASE":     models.TokenTypeCase,
+	"WHEN":     models.TokenTypeWhen,
+	"THEN":     models.TokenTypeThen,
+	"ELSE":     models.TokenTypeElse,
+	"END":      models.TokenTypeEnd,
+	"CAST":     models.TokenTypeCast,
+	"INTERVAL": models.TokenTypeInterval,
+	"ASC":      models.TokenTypeAsc,
+	"DESC":     models.TokenTypeDesc,
+	"LIMIT":    models.TokenTypeLimit,
+	"OFFSET":   models.TokenTypeOffset,
+	"COUNT":    models.TokenTypeCount,
 	// Additional Join Keywords
 	"FULL":    models.TokenTypeFull,
 	"CROSS":   models.TokenTypeCross,
@@ -175,6 +176,12 @@ var keywordTokenTypes = map[string]models.TokenType{
 	"NULLS": models.TokenTypeNulls,
 	"FIRST": models.TokenTypeFirst,
 	"LAST":  models.TokenTypeLast,
+	// FETCH clause keywords (SQL:2008 standard pagination)
+	"FETCH":   models.TokenTypeFetch,
+	"NEXT":    models.TokenTypeNext,
+	"ONLY":    models.TokenTypeOnly,
+	"TIES":    models.TokenTypeTies,
+	"PERCENT": models.TokenTypePercent,
 	// Additional SQL Keywords
 	"DISTINCT": models.TokenTypeDistinct,
 	"COLLATE":  models.TokenTypeCollate,
@@ -189,6 +196,13 @@ var keywordTokenTypes = map[string]models.TokenType{
 	"ARRAY": models.TokenTypeArray,
 	// WITHIN GROUP ordered set aggregates (SQL:2003)
 	"WITHIN": models.TokenTypeWithin,
+	// Row locking keywords (SQL:2003, PostgreSQL, MySQL)
+	"FOR":    models.TokenTypeFor,
+	"SHARE":  models.TokenTypeShare,
+	"NOWAIT": models.TokenTypeNoWait,
+	"SKIP":   models.TokenTypeSkip,
+	"LOCKED": models.TokenTypeLocked,
+	"OF":     models.TokenTypeOf,
 }
 
 // Tokenizer provides high-performance SQL tokenization with zero-copy operations.
@@ -1314,6 +1328,20 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 				t.pos.AdvanceRune(nxtR, nxtSize)
 				return models.Token{Type: models.TokenTypeNeq, Value: "!="}, nil
 			}
+			// Check for PostgreSQL regex operators !~ and !~*
+			if nxtR == '~' {
+				t.pos.AdvanceRune(nxtR, nxtSize)
+				// Check for !~* (case-insensitive regex non-match)
+				if t.pos.Index < len(t.input) {
+					thirdR, thirdSize := utf8.DecodeRune(t.input[t.pos.Index:])
+					if thirdR == '*' {
+						t.pos.AdvanceRune(thirdR, thirdSize)
+						return models.Token{Type: models.TokenTypeExclamationMarkTildeAsterisk, Value: "!~*"}, nil
+					}
+				}
+				// Just !~ (case-sensitive regex non-match)
+				return models.Token{Type: models.TokenTypeExclamationMarkTilde, Value: "!~"}, nil
+			}
 		}
 		return models.Token{Type: models.TokenTypeExclamationMark, Value: "!"}, nil
 	case ':':
@@ -1460,6 +1488,19 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		// For now, standalone $ is treated as a placeholder token.
 		// Future implementation should check for $identifier$ pattern and read until closing tag.
 		return models.Token{Type: models.TokenTypePlaceholder, Value: "$"}, nil
+	case '~':
+		// Handle PostgreSQL regex operators ~ and ~*
+		t.pos.AdvanceRune(r, size)
+		// Check for ~* (case-insensitive regex match)
+		if t.pos.Index < len(t.input) {
+			nextR, nextSize := utf8.DecodeRune(t.input[t.pos.Index:])
+			if nextR == '*' {
+				t.pos.AdvanceRune(nextR, nextSize)
+				return models.Token{Type: models.TokenTypeTildeAsterisk, Value: "~*"}, nil
+			}
+		}
+		// Just ~ (case-sensitive regex match)
+		return models.Token{Type: models.TokenTypeTilde, Value: "~"}, nil
 	}
 
 	if isIdentifierStart(r) {

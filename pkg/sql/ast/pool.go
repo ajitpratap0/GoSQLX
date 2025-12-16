@@ -163,6 +163,20 @@ var (
 		},
 	}
 
+	arraySubscriptExprPool = sync.Pool{
+		New: func() interface{} {
+			return &ArraySubscriptExpression{
+				Indices: make([]Expression, 0, 2), // Most common: 1-2 dimensions
+			}
+		},
+	}
+
+	arraySliceExprPool = sync.Pool{
+		New: func() interface{} {
+			return &ArraySliceExpression{}
+		},
+	}
+
 	// Additional expression pools for complete coverage
 	existsExprPool = sync.Pool{
 		New: func() interface{} {
@@ -784,6 +798,34 @@ func PutExpression(expr Expression) {
 			e.Value = ""
 			intervalExprPool.Put(e)
 
+		case *ArraySubscriptExpression:
+			if e.Array != nil {
+				workQueue = append(workQueue, e.Array)
+			}
+			for i := range e.Indices {
+				if e.Indices[i] != nil {
+					workQueue = append(workQueue, e.Indices[i])
+				}
+			}
+			e.Array = nil
+			e.Indices = e.Indices[:0]
+			arraySubscriptExprPool.Put(e)
+
+		case *ArraySliceExpression:
+			if e.Array != nil {
+				workQueue = append(workQueue, e.Array)
+			}
+			if e.Start != nil {
+				workQueue = append(workQueue, e.Start)
+			}
+			if e.End != nil {
+				workQueue = append(workQueue, e.End)
+			}
+			e.Array = nil
+			e.Start = nil
+			e.End = nil
+			arraySliceExprPool.Put(e)
+
 		case *ExistsExpression:
 			e.Subquery = nil
 			existsExprPool.Put(e)
@@ -1086,4 +1128,56 @@ func PutAliasedExpression(ae *AliasedExpression) {
 	ae.Expr = nil
 	ae.Alias = ""
 	aliasedExprPool.Put(ae)
+}
+
+// GetArraySubscriptExpression gets an ArraySubscriptExpression from the pool
+func GetArraySubscriptExpression() *ArraySubscriptExpression {
+	return arraySubscriptExprPool.Get().(*ArraySubscriptExpression)
+}
+
+// PutArraySubscriptExpression returns an ArraySubscriptExpression to the pool
+func PutArraySubscriptExpression(ase *ArraySubscriptExpression) {
+	if ase == nil {
+		return
+	}
+	// Clean up array expression
+	if ase.Array != nil {
+		PutExpression(ase.Array)
+		ase.Array = nil
+	}
+	// Clean up indices
+	for i := range ase.Indices {
+		if ase.Indices[i] != nil {
+			PutExpression(ase.Indices[i])
+		}
+	}
+	ase.Indices = ase.Indices[:0] // Clear slice but keep capacity
+	arraySubscriptExprPool.Put(ase)
+}
+
+// GetArraySliceExpression gets an ArraySliceExpression from the pool
+func GetArraySliceExpression() *ArraySliceExpression {
+	return arraySliceExprPool.Get().(*ArraySliceExpression)
+}
+
+// PutArraySliceExpression returns an ArraySliceExpression to the pool
+func PutArraySliceExpression(ase *ArraySliceExpression) {
+	if ase == nil {
+		return
+	}
+	// Clean up array expression
+	if ase.Array != nil {
+		PutExpression(ase.Array)
+		ase.Array = nil
+	}
+	// Clean up start/end expressions
+	if ase.Start != nil {
+		PutExpression(ase.Start)
+		ase.Start = nil
+	}
+	if ase.End != nil {
+		PutExpression(ase.End)
+		ase.End = nil
+	}
+	arraySliceExprPool.Put(ase)
 }

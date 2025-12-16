@@ -208,8 +208,15 @@ func TestParse_TupleIn_WithSubquery(t *testing.T) {
 	}
 	defer ast.ReleaseAST(astObj)
 
-	stmt := astObj.Statements[0].(*ast.SelectStatement)
-	inExpr := stmt.Where.(*ast.InExpression)
+	stmt, ok := astObj.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", astObj.Statements[0])
+	}
+
+	inExpr, ok := stmt.Where.(*ast.InExpression)
+	if !ok {
+		t.Fatalf("expected InExpression, got %T", stmt.Where)
+	}
 
 	// Verify it's a tuple
 	leftTuple, ok := inExpr.Expr.(*ast.TupleExpression)

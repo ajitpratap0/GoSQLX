@@ -107,15 +107,22 @@ func TestParser_TupleIn_NotIn(t *testing.T) {
 	}
 	defer ast.ReleaseAST(tree)
 
-	stmt := tree.Statements[0].(*ast.SelectStatement)
-	inExpr := stmt.Where.(*ast.InExpression)
+	stmt, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", tree.Statements[0])
+	}
+
+	inExpr, ok := stmt.Where.(*ast.InExpression)
+	if !ok {
+		t.Fatalf("expected InExpression, got %T", stmt.Where)
+	}
 
 	if !inExpr.Not {
 		t.Error("expected NOT to be true for NOT IN")
 	}
 
 	// Verify left side is a tuple
-	_, ok := inExpr.Expr.(*ast.TupleExpression)
+	_, ok = inExpr.Expr.(*ast.TupleExpression)
 	if !ok {
 		t.Fatalf("expected left side to be TupleExpression, got %T", inExpr.Expr)
 	}
@@ -147,11 +154,21 @@ func TestParser_TupleIn_ThreeElements(t *testing.T) {
 	}
 	defer ast.ReleaseAST(tree)
 
-	stmt := tree.Statements[0].(*ast.SelectStatement)
-	inExpr := stmt.Where.(*ast.InExpression)
+	stmt, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", tree.Statements[0])
+	}
+
+	inExpr, ok := stmt.Where.(*ast.InExpression)
+	if !ok {
+		t.Fatalf("expected InExpression, got %T", stmt.Where)
+	}
 
 	// Verify left side has 3 elements
-	leftTuple := inExpr.Expr.(*ast.TupleExpression)
+	leftTuple, ok := inExpr.Expr.(*ast.TupleExpression)
+	if !ok {
+		t.Fatalf("expected TupleExpression, got %T", inExpr.Expr)
+	}
 	if len(leftTuple.Expressions) != 3 {
 		t.Errorf("expected 3 elements in left tuple, got %d", len(leftTuple.Expressions))
 	}
@@ -163,7 +180,11 @@ func TestParser_TupleIn_ThreeElements(t *testing.T) {
 
 	// Verify each tuple has 3 elements
 	for i, item := range inExpr.List {
-		tuple := item.(*ast.TupleExpression)
+		tuple, ok := item.(*ast.TupleExpression)
+		if !ok {
+			t.Errorf("expected TupleExpression at List[%d], got %T", i, item)
+			continue
+		}
 		if len(tuple.Expressions) != 3 {
 			t.Errorf("expected 3 elements in List[%d], got %d", i, len(tuple.Expressions))
 		}
@@ -196,17 +217,27 @@ func TestParser_TupleIn_WithExpressions(t *testing.T) {
 	}
 	defer ast.ReleaseAST(tree)
 
-	stmt := tree.Statements[0].(*ast.SelectStatement)
-	inExpr := stmt.Where.(*ast.InExpression)
+	stmt, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", tree.Statements[0])
+	}
+
+	inExpr, ok := stmt.Where.(*ast.InExpression)
+	if !ok {
+		t.Fatalf("expected InExpression, got %T", stmt.Where)
+	}
 
 	// Verify left side is a tuple with binary expressions
-	leftTuple := inExpr.Expr.(*ast.TupleExpression)
+	leftTuple, ok := inExpr.Expr.(*ast.TupleExpression)
+	if !ok {
+		t.Fatalf("expected TupleExpression, got %T", inExpr.Expr)
+	}
 	if len(leftTuple.Expressions) != 2 {
 		t.Fatalf("expected 2 elements in left tuple, got %d", len(leftTuple.Expressions))
 	}
 
 	// First element should be a binary expression (a + 1)
-	_, ok := leftTuple.Expressions[0].(*ast.BinaryExpression)
+	_, ok = leftTuple.Expressions[0].(*ast.BinaryExpression)
 	if !ok {
 		t.Errorf("expected first element to be BinaryExpression, got %T", leftTuple.Expressions[0])
 	}
@@ -244,18 +275,28 @@ func TestParser_TupleIn_WithFunctionCalls(t *testing.T) {
 	}
 	defer ast.ReleaseAST(tree)
 
-	stmt := tree.Statements[0].(*ast.SelectStatement)
-	inExpr := stmt.Where.(*ast.InExpression)
+	stmt, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", tree.Statements[0])
+	}
+
+	inExpr, ok := stmt.Where.(*ast.InExpression)
+	if !ok {
+		t.Fatalf("expected InExpression, got %T", stmt.Where)
+	}
 
 	// Verify left side is a tuple with function calls
-	leftTuple := inExpr.Expr.(*ast.TupleExpression)
+	leftTuple, ok := inExpr.Expr.(*ast.TupleExpression)
+	if !ok {
+		t.Fatalf("expected TupleExpression, got %T", inExpr.Expr)
+	}
 	if len(leftTuple.Expressions) != 2 {
 		t.Fatalf("expected 2 elements in left tuple, got %d", len(leftTuple.Expressions))
 	}
 
 	// Both elements should be function calls
 	for i, elem := range leftTuple.Expressions {
-		_, ok := elem.(*ast.FunctionCall)
+		_, ok = elem.(*ast.FunctionCall)
 		if !ok {
 			t.Errorf("expected element[%d] to be FunctionCall, got %T", i, elem)
 		}
@@ -288,8 +329,15 @@ func TestParser_TupleIn_WithSubquery(t *testing.T) {
 	}
 	defer ast.ReleaseAST(tree)
 
-	stmt := tree.Statements[0].(*ast.SelectStatement)
-	inExpr := stmt.Where.(*ast.InExpression)
+	stmt, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", tree.Statements[0])
+	}
+
+	inExpr, ok := stmt.Where.(*ast.InExpression)
+	if !ok {
+		t.Fatalf("expected InExpression, got %T", stmt.Where)
+	}
 
 	// Verify left side is a tuple
 	leftTuple, ok := inExpr.Expr.(*ast.TupleExpression)
@@ -338,8 +386,15 @@ func TestParser_TupleIn_SingleElementTuple(t *testing.T) {
 	}
 	defer ast.ReleaseAST(tree)
 
-	stmt := tree.Statements[0].(*ast.SelectStatement)
-	inExpr := stmt.Where.(*ast.InExpression)
+	stmt, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", tree.Statements[0])
+	}
+
+	inExpr, ok := stmt.Where.(*ast.InExpression)
+	if !ok {
+		t.Fatalf("expected InExpression, got %T", stmt.Where)
+	}
 
 	// Left side could be identifier or single-element tuple
 	// Either is acceptable
@@ -374,8 +429,15 @@ func TestParser_TupleIn_QualifiedColumns(t *testing.T) {
 	}
 	defer ast.ReleaseAST(tree)
 
-	stmt := tree.Statements[0].(*ast.SelectStatement)
-	inExpr := stmt.Where.(*ast.InExpression)
+	stmt, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", tree.Statements[0])
+	}
+
+	inExpr, ok := stmt.Where.(*ast.InExpression)
+	if !ok {
+		t.Fatalf("expected InExpression, got %T", stmt.Where)
+	}
 
 	// Verify left side is a tuple
 	leftTuple, ok := inExpr.Expr.(*ast.TupleExpression)
@@ -426,7 +488,10 @@ func TestParser_TupleIn_ComplexConditions(t *testing.T) {
 	}
 	defer ast.ReleaseAST(tree)
 
-	stmt := tree.Statements[0].(*ast.SelectStatement)
+	stmt, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", tree.Statements[0])
+	}
 
 	// WHERE should be a binary AND expression
 	binExpr, ok := stmt.Where.(*ast.BinaryExpression)

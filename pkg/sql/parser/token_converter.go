@@ -781,6 +781,12 @@ func buildTypeMapping() map[models.TokenType]token.Type {
 		models.TokenTypeQuestion:     "QUESTION",      // ? key exists
 		models.TokenTypeQuestionPipe: "QUESTION_PIPE", // ?| any keys exist
 		models.TokenTypeQuestionAnd:  "QUESTION_AND",  // ?& all keys exist
+
+		// PostgreSQL regex operators
+		models.TokenTypeTilde:                        "~",   // ~ case-sensitive regex match
+		models.TokenTypeTildeAsterisk:                "~*",  // ~* case-insensitive regex match
+		models.TokenTypeExclamationMarkTilde:         "!~",  // !~ case-sensitive regex non-match
+		models.TokenTypeExclamationMarkTildeAsterisk: "!~*", // !~* case-insensitive regex non-match
 	}
 }
 

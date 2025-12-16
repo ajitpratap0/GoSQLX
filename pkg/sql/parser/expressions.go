@@ -657,6 +657,12 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			}
 		}
 
+		// Check for array subscript or slice syntax: identifier[...]
+		// This handles: arr[1], arr[1][2], arr[1:3], arr[2:], arr[:5]
+		if p.isType(models.TokenTypeLBracket) {
+			return p.parseArrayAccessExpression(ident)
+		}
+
 		return ident, nil
 	}
 
@@ -763,6 +769,13 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			return nil, p.expectedError(")")
 		}
 		p.advance() // Consume )
+
+		// Check for array subscript or slice on parenthesized expression
+		// This handles: (expr)[1], (SELECT arr)[2:3]
+		if p.isType(models.TokenTypeLBracket) {
+			return p.parseArrayAccessExpression(expr)
+		}
+
 		return expr, nil
 	}
 
@@ -1173,3 +1186,132 @@ func (p *Parser) parseSubquery() (ast.Statement, error) {
 //
 //	COUNT(*) -> regular aggregate function
 //	ROW_NUMBER() OVER (ORDER BY id) -> window function with OVER clause
+
+// parseArrayAccessExpression parses array subscript and slice expressions.
+//
+// Supports:
+//   - Single subscript: arr[1]
+//   - Multi-dimensional subscript: arr[1][2][3]
+//   - Slice with both bounds: arr[1:3]
+//   - Slice from start: arr[:5]
+//   - Slice to end: arr[2:]
+//   - Full slice: arr[:]
+//
+// Examples:
+//
+//	tags[1]              -> ArraySubscriptExpression with single index
+//	matrix[2][3]         -> Nested ArraySubscriptExpression (multi-dimensional)
+//	arr[1:3]             -> ArraySliceExpression with start and end
+//	arr[2:]              -> ArraySliceExpression with start only
+//	arr[:5]              -> ArraySliceExpression with end only
+//	(SELECT arr)[1]      -> Array access on subquery result
+func (p *Parser) parseArrayAccessExpression(arrayExpr ast.Expression) (ast.Expression, error) {
+	// arrayExpr is the expression before the first '['
+	// We need to parse one or more '[...]' subscripts/slices
+
+	result := arrayExpr
+
+	// Loop to handle chained subscripts: arr[1][2][3]
+	for p.isType(models.TokenTypeLBracket) {
+		p.advance() // Consume [
+
+		// Check for empty brackets [] - this is an error
+		if p.isType(models.TokenTypeRBracket) {
+			return nil, goerrors.InvalidSyntaxError(
+				"empty array subscript [] is not allowed",
+				p.currentLocation(),
+				"Use arr[index] or arr[start:end] syntax",
+			)
+		}
+
+		// Check for slice starting with colon: arr[:end]
+		if p.isType(models.TokenTypeColon) {
+			p.advance() // Consume :
+
+			// Parse end expression (if not ']')
+			var endExpr ast.Expression
+			if !p.isType(models.TokenTypeRBracket) {
+				end, err := p.parseExpression()
+				if err != nil {
+					return nil, goerrors.InvalidSyntaxError(
+						fmt.Sprintf("failed to parse array slice end: %v", err),
+						p.currentLocation(),
+						"",
+					)
+				}
+				endExpr = end
+			}
+
+			// Expect closing bracket
+			if !p.isType(models.TokenTypeRBracket) {
+				return nil, p.expectedError("]")
+			}
+			p.advance() // Consume ]
+
+			// Create ArraySliceExpression with no start
+			sliceExpr := ast.GetArraySliceExpression()
+			sliceExpr.Array = result
+			sliceExpr.Start = nil
+			sliceExpr.End = endExpr
+			result = sliceExpr
+			continue
+		}
+
+		// Parse first expression (index or slice start)
+		firstExpr, err := p.parseExpression()
+		if err != nil {
+			return nil, goerrors.InvalidSyntaxError(
+				fmt.Sprintf("failed to parse array index/slice: %v", err),
+				p.currentLocation(),
+				"",
+			)
+		}
+
+		// Check if this is a slice (has colon) or subscript
+		if p.isType(models.TokenTypeColon) {
+			p.advance() // Consume :
+
+			// Parse end expression (if not ']')
+			var endExpr ast.Expression
+			if !p.isType(models.TokenTypeRBracket) {
+				end, err := p.parseExpression()
+				if err != nil {
+					return nil, goerrors.InvalidSyntaxError(
+						fmt.Sprintf("failed to parse array slice end: %v", err),
+						p.currentLocation(),
+						"",
+					)
+				}
+				endExpr = end
+			}
+
+			// Expect closing bracket
+			if !p.isType(models.TokenTypeRBracket) {
+				return nil, p.expectedError("]")
+			}
+			p.advance() // Consume ]
+
+			// Create ArraySliceExpression
+			sliceExpr := ast.GetArraySliceExpression()
+			sliceExpr.Array = result
+			sliceExpr.Start = firstExpr
+			sliceExpr.End = endExpr
+			result = sliceExpr
+		} else {
+			// This is a subscript, not a slice
+			// Expect closing bracket
+			if !p.isType(models.TokenTypeRBracket) {
+				return nil, p.expectedError("]")
+			}
+			p.advance() // Consume ]
+
+			// Create ArraySubscriptExpression with single index
+			subscriptExpr := ast.GetArraySubscriptExpression()
+			subscriptExpr.Array = result
+			subscriptExpr.Indices = append(subscriptExpr.Indices, firstExpr)
+			result = subscriptExpr
+		}
+	}
+
+	return result, nil
+}

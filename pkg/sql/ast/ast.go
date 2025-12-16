@@ -1038,6 +1038,58 @@ func (i *IntervalExpression) expressionNode()     {}
 func (i IntervalExpression) TokenLiteral() string { return "INTERVAL" }
 func (i IntervalExpression) Children() []Node     { return []Node{} }
 
+// ArraySubscriptExpression represents array element access syntax.
+// Supports single and multi-dimensional array subscripting.
+//
+// Examples:
+//
+//	tags[1]              - Single subscript
+//	matrix[2][3]         - Multi-dimensional subscript
+//	arr[i]               - Subscript with variable
+//	(SELECT arr)[1]      - Subscript on subquery result
+type ArraySubscriptExpression struct {
+	Array   Expression   // The array expression being subscripted
+	Indices []Expression // Subscript indices (one or more for multi-dimensional arrays)
+}
+
+func (a *ArraySubscriptExpression) expressionNode()     {}
+func (a ArraySubscriptExpression) TokenLiteral() string { return "[]" }
+func (a ArraySubscriptExpression) Children() []Node {
+	children := []Node{a.Array}
+	for _, idx := range a.Indices {
+		children = append(children, idx)
+	}
+	return children
+}
+
+// ArraySliceExpression represents array slicing syntax for extracting subarrays.
+// Supports PostgreSQL-style array slicing with optional start/end bounds.
+//
+// Examples:
+//
+//	arr[1:3]    - Slice from index 1 to 3 (inclusive)
+//	arr[2:]     - Slice from index 2 to end
+//	arr[:5]     - Slice from start to index 5
+//	arr[:]      - Full array slice (copy)
+type ArraySliceExpression struct {
+	Array Expression // The array expression being sliced
+	Start Expression // Start index (nil means from beginning)
+	End   Expression // End index (nil means to end)
+}
+
+func (a *ArraySliceExpression) expressionNode()     {}
+func (a ArraySliceExpression) TokenLiteral() string { return "[:]" }
+func (a ArraySliceExpression) Children() []Node {
+	children := []Node{a.Array}
+	if a.Start != nil {
+		children = append(children, a.Start)
+	}
+	if a.End != nil {
+		children = append(children, a.End)
+	}
+	return children
+}
+
 // InsertStatement represents an INSERT SQL statement
 type InsertStatement struct {
 	With       *WithClause

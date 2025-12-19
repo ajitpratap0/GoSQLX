@@ -98,8 +98,8 @@ func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStat
 		stmt.IfNotExists = true
 	}
 
-	// Parse view name
-	if !p.isType(models.TokenTypeIdentifier) {
+	// Parse view name (supports double-quoted identifiers for PostgreSQL compatibility)
+	if !p.isIdentifier() {
 		return nil, p.expectedError("view name")
 	}
 	stmt.Name = p.currentToken.Literal
@@ -109,7 +109,7 @@ func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStat
 	if p.isType(models.TokenTypeLParen) {
 		p.advance() // Consume (
 		for {
-			if !p.isType(models.TokenTypeIdentifier) {
+			if !p.isIdentifier() {
 				return nil, p.expectedError("column name")
 			}
 			stmt.Columns = append(stmt.Columns, p.currentToken.Literal)
@@ -202,8 +202,8 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 		stmt.IfNotExists = true
 	}
 
-	// Parse view name
-	if !p.isType(models.TokenTypeIdentifier) {
+	// Parse view name (supports double-quoted identifiers for PostgreSQL compatibility)
+	if !p.isIdentifier() {
 		return nil, p.expectedError("materialized view name")
 	}
 	stmt.Name = p.currentToken.Literal
@@ -213,7 +213,7 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 	if p.isType(models.TokenTypeLParen) {
 		p.advance() // Consume (
 		for {
-			if !p.isType(models.TokenTypeIdentifier) {
+			if !p.isIdentifier() {
 				return nil, p.expectedError("column name")
 			}
 			stmt.Columns = append(stmt.Columns, p.currentToken.Literal)
@@ -234,7 +234,7 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 	// Parse optional TABLESPACE
 	if p.isTokenMatch("TABLESPACE") {
 		p.advance() // Consume TABLESPACE
-		if !p.isType(models.TokenTypeIdentifier) {
+		if !p.isIdentifier() {
 			return nil, p.expectedError("tablespace name")
 		}
 		stmt.Tablespace = p.currentToken.Literal
@@ -307,8 +307,8 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 		stmt.IfNotExists = true
 	}
 
-	// Parse table name
-	if !p.isType(models.TokenTypeIdentifier) {
+	// Parse table name (supports double-quoted identifiers for PostgreSQL compatibility)
+	if !p.isIdentifier() {
 		return nil, p.expectedError("table name")
 	}
 	stmt.Name = p.currentToken.Literal
@@ -398,7 +398,7 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 		if p.isType(models.TokenTypeEq) {
 			p.advance() // Consume =
 		}
-		if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeString) {
+		if p.isIdentifier() || p.isType(models.TokenTypeString) {
 			opt.Value = p.currentToken.Literal
 			p.advance()
 		}
@@ -434,7 +434,7 @@ func (p *Parser) parsePartitionByClause() (*ast.PartitionBy, error) {
 
 	// Parse column list
 	for {
-		if !p.isType(models.TokenTypeIdentifier) {
+		if !p.isIdentifier() {
 			return nil, p.expectedError("column name")
 		}
 		partitionBy.Columns = append(partitionBy.Columns, p.currentToken.Literal)
@@ -466,8 +466,8 @@ func (p *Parser) parsePartitionDefinition() (*ast.PartitionDefinition, error) {
 	}
 	p.advance() // Consume PARTITION
 
-	// Parse partition name
-	if !p.isType(models.TokenTypeIdentifier) {
+	// Parse partition name (supports double-quoted identifiers)
+	if !p.isIdentifier() {
 		return nil, p.expectedError("partition name")
 	}
 	partDef.Name = p.currentToken.Literal
@@ -581,7 +581,7 @@ func (p *Parser) parsePartitionDefinition() (*ast.PartitionDefinition, error) {
 	// Parse optional TABLESPACE
 	if p.isTokenMatch("TABLESPACE") {
 		p.advance() // Consume TABLESPACE
-		if !p.isType(models.TokenTypeIdentifier) {
+		if !p.isIdentifier() {
 			return nil, p.expectedError("tablespace name")
 		}
 		partDef.Tablespace = p.currentToken.Literal
@@ -611,8 +611,8 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 		stmt.IfNotExists = true
 	}
 
-	// Parse index name
-	if !p.isType(models.TokenTypeIdentifier) {
+	// Parse index name (supports double-quoted identifiers)
+	if !p.isIdentifier() {
 		return nil, p.expectedError("index name")
 	}
 	stmt.Name = p.currentToken.Literal
@@ -624,8 +624,8 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 	}
 	p.advance() // Consume ON
 
-	// Parse table name
-	if !p.isType(models.TokenTypeIdentifier) {
+	// Parse table name (supports double-quoted identifiers for PostgreSQL compatibility)
+	if !p.isIdentifier() {
 		return nil, p.expectedError("table name")
 	}
 	stmt.Table = p.currentToken.Literal
@@ -634,7 +634,7 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 	// Parse optional USING
 	if p.isType(models.TokenTypeUsing) {
 		p.advance() // Consume USING
-		if !p.isType(models.TokenTypeIdentifier) {
+		if !p.isIdentifier() {
 			return nil, p.expectedError("index method")
 		}
 		stmt.Using = p.currentToken.Literal
@@ -650,7 +650,7 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 	// Parse column list
 	for {
 		col := ast.IndexColumn{}
-		if !p.isType(models.TokenTypeIdentifier) {
+		if !p.isIdentifier() {
 			return nil, p.expectedError("column name")
 		}
 		col.Column = p.currentToken.Literal
@@ -739,9 +739,9 @@ func (p *Parser) parseDropStatement() (*ast.DropStatement, error) {
 		stmt.IfExists = true
 	}
 
-	// Parse object names (can be comma-separated)
+	// Parse object names (can be comma-separated, supports double-quoted identifiers)
 	for {
-		if !p.isType(models.TokenTypeIdentifier) {
+		if !p.isIdentifier() {
 			return nil, p.expectedError("object name")
 		}
 		stmt.Names = append(stmt.Names, p.currentToken.Literal)
@@ -788,8 +788,8 @@ func (p *Parser) parseRefreshStatement() (*ast.RefreshMaterializedViewStatement,
 		p.advance()
 	}
 
-	// Parse view name
-	if !p.isType(models.TokenTypeIdentifier) {
+	// Parse view name (supports double-quoted identifiers for PostgreSQL compatibility)
+	if !p.isIdentifier() {
 		return nil, p.expectedError("materialized view name")
 	}
 	stmt.Name = p.currentToken.Literal
@@ -827,9 +827,9 @@ func (p *Parser) parseTruncateStatement() (*ast.TruncateStatement, error) {
 		p.advance() // Consume TABLE
 	}
 
-	// Parse table names (can be comma-separated)
+	// Parse table names (can be comma-separated, supports double-quoted identifiers)
 	for {
-		if !p.isType(models.TokenTypeIdentifier) {
+		if !p.isIdentifier() {
 			return nil, p.expectedError("table name")
 		}
 		stmt.Tables = append(stmt.Tables, p.currentToken.Literal)

@@ -21,8 +21,8 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 	}
 	p.advance() // Consume INTO
 
-	// Parse table name
-	if !p.isType(models.TokenTypeIdentifier) {
+	// Parse table name (supports double-quoted identifiers for PostgreSQL compatibility)
+	if !p.isIdentifier() {
 		return nil, p.expectedError("table name")
 	}
 	tableName := p.currentToken.Literal
@@ -34,8 +34,8 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 		p.advance() // Consume (
 
 		for {
-			// Parse column name
-			if !p.isType(models.TokenTypeIdentifier) {
+			// Parse column name (supports double-quoted identifiers)
+			if !p.isIdentifier() {
 				return nil, p.expectedError("column name")
 			}
 			columns = append(columns, &ast.Identifier{Name: p.currentToken.Literal})
@@ -143,8 +143,8 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 	// We've already consumed the UPDATE token in matchToken
 
-	// Parse table name
-	if !p.isType(models.TokenTypeIdentifier) {
+	// Parse table name (supports double-quoted identifiers for PostgreSQL compatibility)
+	if !p.isIdentifier() {
 		return nil, p.expectedError("table name")
 	}
 	tableName := p.currentToken.Literal
@@ -159,8 +159,8 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 	// Parse assignments
 	updates := make([]ast.UpdateExpression, 0)
 	for {
-		// Parse column name
-		if !p.isType(models.TokenTypeIdentifier) {
+		// Parse column name (supports double-quoted identifiers)
+		if !p.isIdentifier() {
 			return nil, p.expectedError("column name")
 		}
 		columnName := p.currentToken.Literal
@@ -250,8 +250,8 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 	}
 	p.advance() // Consume FROM
 
-	// Parse table name
-	if !p.isType(models.TokenTypeIdentifier) {
+	// Parse table name (supports double-quoted identifiers for PostgreSQL compatibility)
+	if !p.isIdentifier() {
 		return nil, p.expectedError("table name")
 	}
 	tableName := p.currentToken.Literal
@@ -311,7 +311,7 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 	// Parse optional target alias (AS alias or just alias)
 	if p.isType(models.TokenTypeAs) {
 		p.advance() // Consume AS
-		if !p.isType(models.TokenTypeIdentifier) && !p.isNonReservedKeyword() {
+		if !p.isIdentifier() && !p.isNonReservedKeyword() {
 			return nil, p.expectedError("target alias after AS")
 		}
 		stmt.TargetAlias = p.currentToken.Literal
@@ -337,7 +337,7 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 	// Parse optional source alias
 	if p.isType(models.TokenTypeAs) {
 		p.advance() // Consume AS
-		if !p.isType(models.TokenTypeIdentifier) && !p.isNonReservedKeyword() {
+		if !p.isIdentifier() && !p.isNonReservedKeyword() {
 			return nil, p.expectedError("source alias after AS")
 		}
 		stmt.SourceAlias = p.currentToken.Literal
@@ -449,7 +449,7 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 
 		// Parse SET clauses
 		for {
-			if !p.isType(models.TokenTypeIdentifier) && !p.canBeAlias() {
+			if !p.isIdentifier() && !p.canBeAlias() {
 				return nil, p.expectedError("column name")
 			}
 			// Handle qualified column names (e.g., t.name)
@@ -459,7 +459,7 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 			// Check for qualified name (table.column)
 			if p.isType(models.TokenTypePeriod) {
 				p.advance() // Consume .
-				if !p.isType(models.TokenTypeIdentifier) && !p.canBeAlias() {
+				if !p.isIdentifier() && !p.canBeAlias() {
 					return nil, p.expectedError("column name after .")
 				}
 				columnName = columnName + "." + p.currentToken.Literal
@@ -496,7 +496,7 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 		if p.isType(models.TokenTypeLParen) {
 			p.advance() // Consume (
 			for {
-				if !p.isType(models.TokenTypeIdentifier) {
+				if !p.isIdentifier() {
 					return nil, p.expectedError("column name")
 				}
 				action.Columns = append(action.Columns, p.currentToken.Literal)
@@ -601,7 +601,7 @@ func (p *Parser) parseOnConflictClause() (*ast.OnConflict, error) {
 		var targets []ast.Expression
 
 		for {
-			if !p.isType(models.TokenTypeIdentifier) {
+			if !p.isIdentifier() {
 				return nil, p.expectedError("column name in ON CONFLICT target")
 			}
 			targets = append(targets, &ast.Identifier{Name: p.currentToken.Literal})
@@ -622,7 +622,7 @@ func (p *Parser) parseOnConflictClause() (*ast.OnConflict, error) {
 		// ON CONSTRAINT constraint_name
 		p.advance() // Consume ON
 		p.advance() // Consume CONSTRAINT
-		if !p.isType(models.TokenTypeIdentifier) {
+		if !p.isIdentifier() {
 			return nil, p.expectedError("constraint name")
 		}
 		onConflict.Constraint = p.currentToken.Literal
@@ -651,7 +651,7 @@ func (p *Parser) parseOnConflictClause() (*ast.OnConflict, error) {
 		// Parse update assignments
 		var updates []ast.UpdateExpression
 		for {
-			if !p.isType(models.TokenTypeIdentifier) {
+			if !p.isIdentifier() {
 				return nil, p.expectedError("column name")
 			}
 			columnName := p.currentToken.Literal

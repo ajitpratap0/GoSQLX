@@ -167,8 +167,8 @@ func (p *Parser) parseColumnConstraint() (*ast.ColumnConstraint, bool, error) {
 		p.advance() // Consume REFERENCES
 		constraint.Type = "REFERENCES"
 
-		// Parse referenced table name
-		if !p.isType(models.TokenTypeIdentifier) {
+		// Parse referenced table name (supports double-quoted identifiers)
+		if !p.isIdentifier() {
 			return nil, false, p.expectedError("table name after REFERENCES")
 		}
 		refDef := &ast.ReferenceDefinition{
@@ -180,7 +180,7 @@ func (p *Parser) parseColumnConstraint() (*ast.ColumnConstraint, bool, error) {
 		if p.isType(models.TokenTypeLParen) {
 			p.advance() // Consume (
 			for {
-				if !p.isType(models.TokenTypeIdentifier) {
+				if !p.isIdentifier() {
 					return nil, false, p.expectedError("column name in REFERENCES")
 				}
 				refDef.Columns = append(refDef.Columns, p.currentToken.Literal)
@@ -325,8 +325,8 @@ func (p *Parser) parseTableConstraint() (*ast.TableConstraint, error) {
 		}
 		p.advance() // Consume REFERENCES
 
-		// Parse referenced table
-		if !p.isType(models.TokenTypeIdentifier) {
+		// Parse referenced table (supports double-quoted identifiers)
+		if !p.isIdentifier() {
 			return nil, p.expectedError("table name after REFERENCES")
 		}
 		refDef := &ast.ReferenceDefinition{
@@ -398,7 +398,7 @@ func (p *Parser) parseConstraintColumnList() ([]string, error) {
 
 	var columns []string
 	for {
-		if !p.isType(models.TokenTypeIdentifier) {
+		if !p.isIdentifier() {
 			return nil, p.expectedError("column name")
 		}
 		columns = append(columns, p.currentToken.Literal)

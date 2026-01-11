@@ -108,8 +108,8 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 		)
 	}
 
-	// Parse CTE name
-	if !p.isType(models.TokenTypeIdentifier) {
+	// Parse CTE name (supports double-quoted identifiers)
+	if !p.isIdentifier() {
 		return nil, p.expectedError("CTE name")
 	}
 	name := p.currentToken.Literal
@@ -121,7 +121,7 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 		p.advance() // Consume (
 
 		for {
-			if !p.isType(models.TokenTypeIdentifier) {
+			if !p.isIdentifier() {
 				return nil, p.expectedError("column name")
 			}
 			columns = append(columns, p.currentToken.Literal)

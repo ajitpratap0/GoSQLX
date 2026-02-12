@@ -47,9 +47,8 @@ export GOSQLX_LIB_PATH=/path/to/libgosqlx.so
 ```python
 import pygosqlx
 
-# Parse SQL and inspect the AST
+# Parse SQL - raises ParseError on invalid SQL
 result = pygosqlx.parse("SELECT id, name FROM users WHERE active = true")
-print(result.success)          # True
 print(result.statement_count)  # 1
 print(result.statement_types)  # ['SELECT']
 
@@ -60,16 +59,16 @@ print(is_valid)  # True
 is_valid = pygosqlx.validate("SELEC * FORM users")
 print(is_valid)  # False
 
+# Validate with detailed error info
+detail = pygosqlx.validate_detailed("SELEC * FORM users")
+if not detail.valid:
+    print(detail.error)        # Error message
+    print(detail.error_line)   # Line number
+    print(detail.error_column) # Column number
+
 # Format SQL
 formatted = pygosqlx.format("select id,name from users where id=1")
 print(formatted)
-# SELECT
-#   id,
-#   name
-# FROM
-#   users
-# WHERE
-#   id = 1
 
 # Extract table names
 tables = pygosqlx.extract_tables(
@@ -91,53 +90,77 @@ print(functions)  # ['COUNT', 'AVG']
 meta = pygosqlx.extract_metadata(
     "SELECT u.name, COUNT(o.id) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name"
 )
-print(meta["tables"])     # ['users', 'orders']
-print(meta["columns"])    # ['name', 'id']
-print(meta["functions"])  # ['COUNT']
+print(meta.tables)     # ['users', 'orders']
+print(meta.columns)    # ['name', 'id']
+print(meta.functions)  # ['COUNT']
+# Qualified names available too:
+for qn in meta.tables_qualified:
+    print(f"{qn.schema}.{qn.name}" if qn.schema else qn.name)
 ```
 
 ### Error Handling
 
 ```python
-import pygosqlx
+from pygosqlx import parse, validate, extract_tables
+from pygosqlx.exceptions import ParseError, FormatError, GoSQLXError
 
-# parse() returns error info in the result
-result = pygosqlx.parse("SELECT * FORM users")
-if not result.success:
-    print(f"Error: {result.error}")
+# parse() raises ParseError on invalid SQL
+try:
+    result = parse("SELECT * FORM users")
+except ParseError as e:
+    print(f"Error: {e.message}")
+    print(f"At line {e.line}, column {e.column}")
 
-# validate() returns a boolean
-if not pygosqlx.validate("BAD SQL"):
+# validate() returns a boolean (never raises)
+if not validate("BAD SQL"):
     print("Invalid SQL")
 
-# extract_tables() raises ValueError on parse failure
+# extract_*() functions raise ParseError on invalid SQL
 try:
-    tables = pygosqlx.extract_tables("NOT VALID SQL")
-except ValueError as e:
+    tables = extract_tables("NOT VALID SQL")
+except ParseError as e:
     print(f"Parse error: {e}")
+
+# All exceptions inherit from GoSQLXError
+try:
+    parse("???")
+except GoSQLXError as e:
+    print(f"Caught: {e}")
 ```
 
 ## API Reference
 
 | Function | Returns | Description |
 |---|---|---|
-| `parse(sql)` | `ParseResult` | Parse SQL; returns statement types, count, and errors |
+| `parse(sql)` | `ParseResult` | Parse SQL; raises `ParseError` on failure |
 | `validate(sql)` | `bool` | Check if SQL is syntactically valid |
+| `validate_detailed(sql)` | `ValidationResult` | Validate with error line/column details |
 | `format(sql)` | `str` | Format/pretty-print a SQL statement |
-| `extract_tables(sql)` | `list[str]` | Extract all table names from a SQL statement |
-| `extract_columns(sql)` | `list[str]` | Extract all column names from a SQL statement |
-| `extract_functions(sql)` | `list[str]` | Extract all function calls from a SQL statement |
-| `extract_metadata(sql)` | `dict` | Extract tables, columns, and functions in one call |
+| `extract_tables(sql)` | `list[str]` | Extract all table names |
+| `extract_columns(sql)` | `list[str]` | Extract all column names |
+| `extract_functions(sql)` | `list[str]` | Extract all function calls |
+| `extract_metadata(sql)` | `Metadata` | Extract tables, columns, functions, and qualified names |
 | `version()` | `str` | Get the GoSQLX library version |
 
-### `ParseResult` Fields
+### Data Types
 
-| Field | Type | Description |
+| Type | Fields |
+|---|---|
+| `ParseResult` | `statement_count: int`, `statement_types: list[str]` |
+| `ValidationResult` | `valid: bool`, `error: str?`, `error_line: int?`, `error_column: int?` |
+| `Metadata` | `tables`, `columns`, `functions`, `tables_qualified`, `columns_qualified` |
+| `QualifiedName` | `name: str`, `schema: str`, `table: str` |
+
+### Exceptions
+
+| Exception | Base | When |
 |---|---|---|
-| `success` | `bool` | Whether parsing succeeded |
-| `statement_count` | `int` | Number of statements parsed |
-| `statement_types` | `list[str]` | Statement types (e.g., `['SELECT']`, `['INSERT']`) |
-| `error` | `str or None` | Error message if parsing failed |
+| `GoSQLXError` | `Exception` | Base for all PyGoSQLX errors |
+| `ParseError` | `GoSQLXError` | SQL parsing fails |
+| `FormatError` | `GoSQLXError` | SQL formatting fails |
+| `ValidationError` | `GoSQLXError` | SQL validation fails |
+
+All exceptions have `message`, `code`, `line`, and `column` attributes.
 
 ## Platform Support
 
@@ -183,8 +206,10 @@ pytest
 
 ```bash
 cd python
-pytest -v
-pytest --cov=pygosqlx
+pytest -v                    # All tests
+pytest tests/test_types.py   # Type/exception tests (no shared library needed)
+pytest tests/test_integration.py  # Integration tests (requires shared library)
+pytest --cov=pygosqlx        # With coverage
 ```
 
 ### Project structure
@@ -192,13 +217,16 @@ pytest --cov=pygosqlx
 ```
 python/
   pygosqlx/
-    __init__.py     # Package entry point, public API
-    core.py         # ctypes bindings to the Go shared library
-    lib/            # Shared library output directory (built artifacts)
+    __init__.py       # Package entry point, public API
+    core.py           # ctypes bindings to the Go shared library
+    exceptions.py     # Custom exception hierarchy
+    py.typed          # PEP 561 type hint marker
+    lib/              # Shared library output directory (built artifacts)
   tests/
-    test_core.py    # Unit tests
-  pyproject.toml    # Package metadata and build config
-  setup.py          # Legacy build support
+    test_types.py         # Type and exception tests (40 tests)
+    test_integration.py   # Integration tests with shared library (36 tests)
+  pyproject.toml      # Package metadata and build config
+  setup.py            # Legacy build support
 ```
 
 ## License

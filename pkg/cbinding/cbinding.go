@@ -75,11 +75,13 @@ func extractErrorPosition(errMsg string) (int, int) {
 }
 
 // toJSON marshals the value to a JSON C string. If marshaling fails, it returns
-// a fallback error JSON string.
+// a fallback error JSON string with the error message properly escaped.
 func toJSON(v interface{}) *C.char {
 	jsonBytes, err := json.Marshal(v)
 	if err != nil {
-		fallback := `{"error":"json marshal failed: ` + err.Error() + `"}`
+		// Marshal the error message separately to ensure proper JSON escaping
+		errMsg, _ := json.Marshal("json marshal failed: " + err.Error())
+		fallback := `{"error":` + string(errMsg) + `}`
 		return C.CString(fallback)
 	}
 	return C.CString(string(jsonBytes))

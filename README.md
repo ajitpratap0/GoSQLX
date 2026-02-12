@@ -19,8 +19,8 @@
 [![GitHub Forks](https://img.shields.io/github/forks/ajitpratap0/GoSQLX?style=social)](https://github.com/ajitpratap0/GoSQLX/network/members)
 [![GitHub Watchers](https://img.shields.io/github/watchers/ajitpratap0/GoSQLX?style=social)](https://github.com/ajitpratap0/GoSQLX/watchers)
 
-**Production-ready, high-performance SQL parsing SDK for Go**  
-*Zero-copy tokenization • Object pooling • Multi-dialect support • Unicode-first design*
+**Production-ready, high-performance SQL parsing SDK for Go**
+*Zero-copy tokenization • Object pooling • Multi-dialect support • Unicode-first design • [Python bindings](python/README.md)*
 
 ### 🚀 **New to GoSQLX? [Get Started in 5 Minutes →](docs/GETTING_STARTED.md)**
 
@@ -60,6 +60,7 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 - **Parser Enhancements (v1.7.0)**: Schema-qualified names, `::` type casting, UPSERT, ARRAY constructors, regex operators, INTERVAL, FOR UPDATE/SHARE, positional parameters
 - **Zero-Copy**: Direct byte slice operations, <1μs latency
 - **Intelligent Errors**: Structured error codes with typo detection, context highlighting, and helpful hints
+- **Python Bindings**: [PyGoSQLX](python/README.md) — use GoSQLX from Python via ctypes FFI, 100x+ faster than pure Python parsers
 - **Production Ready**: Battle-tested with 0 race conditions detected, ~80-85% SQL-99 compliance
 
 ### Performance & Quality Highlights (v1.7.0)
@@ -124,9 +125,34 @@ cd GoSQLX
 go build -o gosqlx ./cmd/gosqlx
 ```
 
+### Python Bindings (PyGoSQLX)
+
+Use GoSQLX from Python with native performance via ctypes FFI:
+
+```bash
+# Build the shared library (requires Go 1.24+)
+cd pkg/cbinding && ./build.sh && cd ../..
+
+# Install the Python package
+cd python && pip install .
+```
+
+```python
+import pygosqlx
+
+result = pygosqlx.parse("SELECT * FROM users WHERE active = true")
+print(result.statement_types)  # ['SELECT']
+
+tables = pygosqlx.extract_tables("SELECT * FROM users u JOIN orders o ON u.id = o.user_id")
+print(tables)  # ['users', 'orders']
+```
+
+See the full [PyGoSQLX documentation](python/README.md) for the complete API.
+
 **Requirements:**
 - Go 1.24 or higher
-- No external dependencies
+- Python 3.8+ (for Python bindings)
+- No external dependencies for the Go library
 
 ## Quick Start
 
@@ -366,6 +392,7 @@ func main() {
 | [**API Reference**](docs/API_REFERENCE.md) | Complete API documentation with examples |
 | [**Usage Guide**](docs/USAGE_GUIDE.md) | Detailed patterns and best practices |
 | [**Architecture**](docs/ARCHITECTURE.md) | System design and internal architecture |
+| [**Python Bindings**](python/README.md) | PyGoSQLX — Python API, installation, and examples |
 | [**Troubleshooting**](docs/TROUBLESHOOTING.md) | Common issues and solutions |
 
 ### Getting Started
@@ -812,6 +839,7 @@ GoSQLX/
 │   ├── config/              # Configuration management (YAML/JSON/env)
 │   ├── metrics/             # Performance monitoring and observability
 │   ├── gosqlx/              # High-level simple API (recommended entry point)
+│   ├── cbinding/            # C shared library bindings (for Python/FFI)
 │   ├── linter/              # SQL linting engine with 10 rules (L001-L010)
 │   ├── lsp/                 # Language Server Protocol server for IDEs
 │   ├── compatibility/       # API stability testing
@@ -823,6 +851,7 @@ GoSQLX/
 │       ├── keywords/        # Multi-dialect SQL keyword definitions
 │       ├── security/        # SQL injection detection
 │       └── monitor/         # SQL monitoring utilities
+├── python/                  # PyGoSQLX - Python bindings via ctypes FFI
 ├── examples/                # Usage examples and tutorials
 ├── docs/                    # Comprehensive documentation (20+ guides)
 └── vscode-extension/        # Official VSCode extension
@@ -975,6 +1004,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 - ✅ **Positional Parameters** - `$1`, `$2` style placeholders
 - ✅ **WITHIN GROUP** - Ordered-set aggregate functions
 - ✅ **Multi-row INSERT** - Batch VALUES support
+- ✅ **Python Bindings** - [PyGoSQLX](python/README.md) with ctypes FFI, thread-safe, memory-safe
 
 ### Phase 5: Query Intelligence & Optimization - v2.0.0 📋
 - 📋 **Query Cost Estimation** - Complexity analysis and scoring
@@ -1060,6 +1090,7 @@ We love your input! We want to make contributing as easy and transparent as poss
 | **🏗️ DevTools** | IDE integration & linting | Syntax highlighting, auto-completion |
 | **📚 Education** | SQL learning platforms | Interactive parsing, error explanation |
 | **🔄 Migration** | Cross-database migration | Dialect conversion, compatibility check |
+| **🐍 Python** | SQL parsing in Python apps | Native speed via FFI, 100x+ faster than pure Python |
 
 </div>
 

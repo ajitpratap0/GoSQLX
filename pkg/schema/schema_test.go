@@ -250,35 +250,3 @@ func TestTable_EmptyColumnNames(t *testing.T) {
 		t.Fatalf("expected 0 column names, got %d", len(names))
 	}
 }
-
-// buildTestSchema creates a test schema with users and orders tables.
-func buildTestSchema() *Schema {
-	s := NewSchema("testdb")
-
-	// Users table
-	users := NewTable("users")
-	users.AddColumn(&Column{Name: "id", DataType: "INT", Nullable: false})
-	users.AddColumn(&Column{Name: "name", DataType: "VARCHAR(100)", Nullable: false})
-	users.AddColumn(&Column{Name: "email", DataType: "VARCHAR(255)", Nullable: true})
-	users.PrimaryKey = []string{"id"}
-	s.AddTable(users)
-
-	// Orders table
-	orders := NewTable("orders")
-	orders.AddColumn(&Column{Name: "id", DataType: "INT", Nullable: false})
-	orders.AddColumn(&Column{Name: "user_id", DataType: "INT", Nullable: false})
-	orders.AddColumn(&Column{Name: "total", DataType: "DECIMAL(10,2)", Nullable: false})
-	orders.AddColumn(&Column{Name: "status", DataType: "VARCHAR(20)", Nullable: true})
-	orders.PrimaryKey = []string{"id"}
-	orders.ForeignKeys = []ForeignKey{
-		{
-			Name:       "fk_orders_user",
-			Columns:    []string{"user_id"},
-			RefTable:   "users",
-			RefColumns: []string{"id"},
-		},
-	}
-	s.AddTable(orders)
-
-	return s
-}

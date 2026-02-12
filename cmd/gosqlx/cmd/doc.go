@@ -327,7 +327,7 @@
 //
 // Version information:
 //
-//	Version = "1.6.0" - Current CLI version
+//	Version = "1.7.0" - Current CLI version
 //
 // # Dependencies
 //

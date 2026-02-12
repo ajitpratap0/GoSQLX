@@ -9,15 +9,21 @@ import (
 // This version tracks feature releases and compatibility.
 // Format: MAJOR.MINOR.PATCH (Semantic Versioning 2.0.0)
 //
-// Version 1.6.0 includes:
-//   - PostgreSQL enhancements (LATERAL JOIN, JSON operators, DISTINCT ON)
-//   - FILTER clause support for conditional aggregation
-//   - RETURNING clause for DML statements
-//   - Enhanced LSP server with improved diagnostics
-//   - Expanded linting rules (L001-L010)
-//   - SARIF output format for GitHub Code Scanning
-//   - Configuration file support (.gosqlx.yml)
-var Version = "1.6.0"
+// Version 1.7.0 includes:
+//   - Schema-qualified table names (schema.table, db.schema.table)
+//   - PostgreSQL :: type casting operator
+//   - ARRAY constructor expressions
+//   - WITHIN GROUP clause for ordered-set aggregates
+//   - JSONB operators (@?, @@)
+//   - Regex operators (~, ~*, !~, !~*)
+//   - INTERVAL expressions
+//   - FETCH FIRST/NEXT with OFFSET
+//   - FOR UPDATE/SHARE locking clauses
+//   - Multi-row INSERT VALUES
+//   - PostgreSQL UPSERT (ON CONFLICT)
+//   - Positional parameters ($1, $2)
+//   - Array subscript and slice operations
+var Version = "1.7.0"
 
 var (
 	// verbose enables detailed output for debugging and troubleshooting.
@@ -105,7 +111,7 @@ Key features:
 • CI/CD integration with proper exit codes
 
 Performance: 1.38M+ operations/second, 100-1000x faster than competitors.`,
-	Version: "1.6.0",
+	Version: "1.7.0",
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

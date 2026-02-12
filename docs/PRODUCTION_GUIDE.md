@@ -1,6 +1,6 @@
 # GoSQLX Production Deployment Guide
 
-**Version**: v1.6.0 | **Last Updated**: December 2025
+**Version**: v1.7.0 | **Last Updated**: February 2026
 
 Comprehensive guide for deploying GoSQLX in production environments.
 

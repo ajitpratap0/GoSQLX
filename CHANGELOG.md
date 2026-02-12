@@ -5,6 +5,144 @@ All notable changes to GoSQLX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-02-12 - Parser Enhancements: Schema-Qualified Names, Array/Regex Operators & SQL Standards
+
+This release delivers 9 commits with major parser enhancements across 4 feature batches, 2 critical bug fixes, and comprehensive test improvements. Schema-qualified table names (`schema.table`) now work across all statement types, and the parser gains support for ARRAY constructors, regex operators, INTERVAL expressions, FETCH/FOR UPDATE, multi-row INSERT, PostgreSQL UPSERT, type casting, and positional parameters.
+
+### Highlights
+- **Schema-Qualified Names**: `schema.table` and `db.schema.table` support in SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, TRUNCATE, JOIN (Fixes #202)
+- **Double-Quoted Identifiers**: ANSI SQL quoted identifiers in all DML/DDL statements (#200, #201)
+- **Parser Batches 5-8**: ARRAY constructors, WITHIN GROUP, JSONB operators, INTERVAL, FETCH, FOR UPDATE, multi-row INSERT, UPSERT, type casting (`::` operator), positional parameters (`$1`), array subscript/slice, regex operators, BETWEEN tests
+- **Test Coverage**: 30+ new test cases for schema qualification, tuple IN expressions, quoted identifiers
+
+---
+
+### Added - Parser Enhancements Batch 5 (PR #187)
+
+#### ARRAY Constructor Syntax (#182)
+- `ARRAY[1, 2, 3]` constructor expression parsing
+- Nested arrays: `ARRAY[ARRAY[1,2], ARRAY[3,4]]`
+- Empty arrays: `ARRAY[]`
+
+#### WITHIN GROUP Ordered-Set Aggregates (#183)
+- `PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY salary)` syntax
+- Supports PERCENTILE_DISC, MODE, and other ordered-set aggregates
+- Added `WithinGroup` field to `FunctionCall` AST
+
+#### JSONB Operators Enhancement
+- Concatenation operator: `||` for JSONB
+- Delete operators: `-` (key delete), `#-` (path delete)
+- All 10 JSON/JSONB operators fully supported
+
+---
+
+### Added - Parser Enhancements Batch 6 (PR #196)
+
+#### PostgreSQL UPSERT / ON CONFLICT (#193)
+- `INSERT ... ON CONFLICT (columns) DO NOTHING` syntax
+- `INSERT ... ON CONFLICT (columns) DO UPDATE SET ...` syntax
+- `ON CONFLICT ON CONSTRAINT constraint_name` variant
+- Added `OnConflict` AST node with target columns, constraint, and update actions
+
+#### PostgreSQL Type Casting (#188)
+- `expr::type` operator syntax (e.g., `'123'::INTEGER`, `column::TEXT`)
+- Chained casts: `value::TEXT::VARCHAR(50)`
+- Parameterized types: `name::VARCHAR(100)`
+- Array types: `tags::TEXT[]`
+- All standard data types supported
+
+#### Positional Parameters (#195)
+- `$1`, `$2`, `$N` parameter placeholders
+- Works in all expression contexts (WHERE, SELECT, VALUES, etc.)
+
+---
+
+### Added - Parser Enhancements Batch 7 (PR #197)
+
+#### INTERVAL Expressions
+- `INTERVAL '1 year'`, `INTERVAL '30 days'` syntax
+- Time intervals: `INTERVAL '2 hours 30 minutes'`
+- Added `IntervalExpression` AST node
+
+#### FETCH FIRST/NEXT Enhancements
+- Extended FETCH clause with additional syntax variants
+- Better SQL-99 compliance for OFFSET-FETCH patterns
+
+#### FOR UPDATE / FOR SHARE (SQL:2003)
+- `SELECT ... FOR UPDATE` row-level locking
+- `SELECT ... FOR SHARE` shared locking
+- `FOR UPDATE OF table_name` targeted locking
+- `FOR UPDATE NOWAIT` / `FOR UPDATE SKIP LOCKED`
+- Added `ForClause` AST node
+
+#### Multi-row INSERT (#179)
+- `INSERT INTO t VALUES (1, 'a'), (2, 'b'), (3, 'c')` syntax
+- Updated `InsertStatement.Values` to `[][]Expression` for multi-row support
+
+---
+
+### Added - Parser Enhancements Batch 8 (PR #198)
+
+#### Array Subscript and Slice (#180, #190)
+- `array[1]` subscript access
+- `array[1:3]` slice syntax
+- Chained access: `matrix[1][2]`
+- Added `ArraySubscriptExpression` AST node
+
+#### Regex Operators (#191)
+- `~` case-sensitive match
+- `~*` case-insensitive match
+- `!~` case-sensitive not match
+- `!~*` case-insensitive not match
+
+#### BETWEEN Expression Tests
+- Comprehensive test suite for BETWEEN with complex expression bounds
+
+---
+
+### Fixed
+
+#### Schema-Qualified Table Names (#202, PR #204)
+- `SELECT * FROM schema.table_name` now parses correctly (was: E2002 error)
+- Added `parseQualifiedName()` helper supporting up to 3-part names (`db.schema.table`)
+- Applied to: SELECT FROM, JOIN, INSERT INTO, UPDATE, DELETE FROM, CREATE TABLE/VIEW/INDEX, DROP, TRUNCATE, REFRESH MATERIALIZED VIEW
+- Removed "Schema-Qualified Table Names" from known parser limitations
+- Enabled `TestExtractTablesQualified_WithSchema` with 6 test cases
+- 24 new parser tests in `schema_qualified_test.go`
+
+#### Double-Quoted Identifiers in DML/DDL (#200, PR #201)
+- `isIdentifier()` now used instead of `isType(TokenTypeIdentifier)` across all parsers
+- Fixed in: INSERT, UPDATE, DELETE, MERGE, CREATE, DROP, TRUNCATE, REFRESH, CTE, constraints
+- 527 lines of new tests in `double_quoted_identifier_test.go`
+
+---
+
+### Improved
+
+#### Documentation (PRs #185, #186)
+- Comprehensive godoc documentation update across all packages
+- Updated docs to reflect v1.6.0 features as available
+
+#### Test Coverage
+- Tuple expressions in IN clause: comprehensive tests (PR #199)
+- Safe type assertions pattern applied across test files
+- Performance regression test baselines updated for CI variability
+
+---
+
+### Known Issues (Resolved from v1.6.0)
+
+The following issues from v1.6.0 Known Issues have been resolved:
+- ~~**#179**: Multi-row INSERT VALUES syntax~~ → Fixed in PR #197
+- ~~**#180**: BETWEEN with complex expression bounds~~ → Fixed in PR #198
+- ~~**#181**: Tuple expressions in IN clause~~ → Tests added in PR #199
+- ~~**#182**: PostgreSQL ARRAY constructor syntax~~ → Fixed in PR #187
+- ~~**#183**: WITHIN GROUP ordered set aggregates~~ → Fixed in PR #187
+
+### Remaining Known Issues
+- **#178**: PostgreSQL JSONB existence operators (?, ?|, ?&) in parser (partial - tokenizer supports them)
+- Oracle PL/SQL `CREATE OR REPLACE FUNCTION` not supported (part of #202 report)
+
 ## [1.6.0] - 2025-12-09 - Major Feature Release: PostgreSQL Extensions, LSP Server & Developer Tools
 
 This release represents a major milestone with 20+ PRs merged, adding comprehensive PostgreSQL support, a full Language Server Protocol implementation, VSCode extension, and significant performance optimizations.
@@ -918,7 +1056,8 @@ This substantial test coverage increase provides strong confidence in the AST pa
 
 | Version | Release Date | Status | Key Features |
 |---------|--------------|--------|--------------|
-| 1.6.0 | 2025-12-09 | Current | PostgreSQL Extensions, LSP Server, VSCode Extension, 14x faster tokens |
+| 1.7.0 | 2026-02-12 | Current | Schema-qualified names, Parser Batches 5-8, quoted identifiers fix |
+| 1.6.0 | 2025-12-09 | Previous | PostgreSQL Extensions, LSP Server, VSCode Extension, 14x faster tokens |
 | 1.5.0 | 2025-11-15 | Stable | Phase 1 Test Coverage: CLI 63.3%, Parser 75%, Tokenizer 76.5% |
 | 1.4.0 | 2025-09-07 | Previous | Production CLI, high-performance commands, memory leak fixes |
 | 1.3.0 | 2025-09-04 | Stable | Window functions, ~80-85% SQL-99 compliance |
@@ -949,7 +1088,8 @@ For questions about upgrading or changelog entries:
 - Open an issue: https://github.com/ajitpratap0/GoSQLX/issues
 - Join discussions: https://github.com/ajitpratap0/GoSQLX/discussions
 
-[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/ajitpratap0/GoSQLX/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.4.0...v1.5.0

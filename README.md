@@ -61,34 +61,34 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 - **Intelligent Errors**: Structured error codes with typo detection, context highlighting, and helpful hints
 - **Production Ready**: Battle-tested with 0 race conditions detected, ~80-85% SQL-99 compliance
 
-### Performance & Quality Highlights (v1.6.0)
+### Performance & Quality Highlights (v1.7.0)
 
 <div align="center">
 
-| **1.38M+** | **8M+** | **<1μs** | **14x** | **575x** | **100%** ⭐ |
+| **1.38M+** | **8M+** | **<1μs** | **14x** | **575x** | **100%** |
 |:---------:|:-------:|:----------:|:----------:|:-------:|:---------:|
 | Ops/sec | Tokens/sec | Latency | Faster Tokens | Cache Speedup | Token Coverage |
 
-**✅ v1.6.0 Released** • **LSP Server** • **VSCode Extension** • **PostgreSQL JSON/JSONB** • **10 Linter Rules** • **~85% SQL-99 compliance**
+**v1.7.0 Released** • **Schema-Qualified Names** • **PostgreSQL Type Casting** • **UPSERT** • **ARRAY Constructors** • **~85% SQL-99 compliance**
 
 </div>
 
-### 🎉 What's New in v1.6.0
+### What's New in v1.7.0
 
 <div align="center">
 
 | Feature | Description |
 |---------|-------------|
-| **🔌 LSP Server** | Full Language Server Protocol for IDE integration with diagnostics, completion, hover |
-| **📝 VSCode Extension** | Official extension with syntax highlighting, formatting, and autocomplete |
-| **🐘 PostgreSQL Extensions** | LATERAL JOIN, JSON/JSONB operators (`->`, `->>`, `@>`, `#>`), DISTINCT ON, FILTER clause |
-| **🔍 Linter Rules** | 10 built-in rules (L001-L010) with auto-fix for SELECT *, missing aliases, etc. |
-| **🛡️ Security Scanner** | Enhanced SQL injection detection with severity classification |
-| **⚡ Performance** | 14x faster token comparison, 575x faster keyword suggestions via caching |
-| **🏗️ go-task** | Modern task runner (Taskfile.yml) replacing Makefile |
-| **🔢 Structured Errors** | Error codes E1001-E3004 for tokenizer, parser, and semantic errors |
+| **Schema-Qualified Names** | Full `schema.table` and `db.schema.table` support across all DML/DDL |
+| **PostgreSQL Type Casting** | `::` operator for type casts (`SELECT 1::int`, `col::text`) |
+| **UPSERT (ON CONFLICT)** | PostgreSQL `INSERT ... ON CONFLICT DO UPDATE/NOTHING` |
+| **ARRAY Constructors** | `ARRAY[1, 2, 3]` with subscript and slice operations |
+| **Regex Operators** | `~`, `~*`, `!~`, `!~*` for PostgreSQL pattern matching |
+| **INTERVAL Expressions** | `INTERVAL '1 day'` temporal literal support |
+| **FOR UPDATE/SHARE** | Row-level locking clauses for SELECT statements |
+| **Positional Parameters** | `$1`, `$2` style PostgreSQL parameter placeholders |
 
-See [CHANGELOG.md](CHANGELOG.md) for the complete list of 20+ PRs merged in this release.
+See [CHANGELOG.md](CHANGELOG.md) for the complete list of changes in this release.
 
 </div>
 
@@ -921,7 +921,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 | **Phase 2** | v1.2.0 | ✅ Complete | CTEs & Set Operations |
 | **Phase 2.5** | v1.3.0-v1.4.0 | ✅ Complete | Window Functions, MERGE, Grouping Sets |
 | **Phase 3** | v1.5.0-v1.6.0 | ✅ Complete | PostgreSQL Extensions, LSP, Linter |
-| **Phase 4** | v1.7.0 | 🚧 In Progress | MySQL & SQL Server Dialects |
+| **Phase 4** | v1.7.0 | ✅ Complete | Parser Enhancements, Schema-Qualified Names, PostgreSQL Extensions |
 | **Phase 5** | v2.0.0 | 📋 Planned | Query Intelligence & Optimization |
 | **Phase 6** | v2.1.0 | 📋 Planned | Schema Awareness & Validation |
 
@@ -964,13 +964,17 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 - ✅ **CLI Enhancements** - Pipeline support, stdin detection, cross-platform
 - ✅ **~80-85% SQL-99 compliance** achieved
 
-### Phase 4: MySQL & SQL Server Dialects - v1.7.0 🚧
-- 🚧 **MySQL Extensions** - AUTO_INCREMENT, REPLACE INTO, ON DUPLICATE KEY
-- 📋 **MySQL Functions** - DATE_FORMAT, IFNULL, GROUP_CONCAT specifics
-- 📋 **SQL Server T-SQL** - TOP, OFFSET-FETCH, OUTPUT clause
-- 📋 **SQL Server Functions** - ISNULL, CONVERT, DATEPART specifics
-- 📋 **Dialect Auto-Detection** - Automatic syntax detection from queries
-- 📋 **Cross-Dialect Translation** - Convert between dialect syntaxes
+### Phase 4: Parser Enhancements & PostgreSQL Extensions - v1.7.0 ✅
+- ✅ **Schema-Qualified Names** - `schema.table` and `db.schema.table` across all DML/DDL
+- ✅ **PostgreSQL Type Casting** - `::` operator for type casts
+- ✅ **UPSERT** - `INSERT ... ON CONFLICT DO UPDATE/NOTHING`
+- ✅ **ARRAY Constructors** - `ARRAY[1, 2, 3]` with subscript/slice operations
+- ✅ **Regex Operators** - `~`, `~*`, `!~`, `!~*` for pattern matching
+- ✅ **INTERVAL Expressions** - Temporal literals
+- ✅ **FOR UPDATE/SHARE** - Row-level locking clauses
+- ✅ **Positional Parameters** - `$1`, `$2` style placeholders
+- ✅ **WITHIN GROUP** - Ordered-set aggregate functions
+- ✅ **Multi-row INSERT** - Batch VALUES support
 
 ### Phase 5: Query Intelligence & Optimization - v2.0.0 📋
 - 📋 **Query Cost Estimation** - Complexity analysis and scoring
@@ -1123,6 +1127,6 @@ This project is licensed under the **GNU Affero General Public License v3.0 (AGP
 <a href="https://github.com/ajitpratap0/GoSQLX/watchers"><img src="https://img.shields.io/badge/👁️_Watch-green?style=for-the-badge" alt="Watch"></a>
 </p>
 
-<sub>Copyright © 2024-2025 GoSQLX. All rights reserved.</sub>
+<sub>Copyright © 2024-2026 GoSQLX. All rights reserved.</sub>
 
 </div>

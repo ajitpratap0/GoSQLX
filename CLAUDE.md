@@ -8,7 +8,7 @@ GoSQLX is a **production-ready**, **race-free**, high-performance SQL parsing SD
 
 **Requirements**: Go 1.24+ (toolchain go1.25.0)
 
-**Production Status**: ✅ Validated for production deployment (v1.6.0+)
+**Production Status**: ✅ Validated for production deployment (v1.6.0+, current: v1.7.0)
 - Thread-safe with zero race conditions (20,000+ concurrent operations tested)
 - 1.38M+ ops/sec sustained, 1.5M peak with memory-efficient object pooling
 - ~80-85% SQL-99 compliance (window functions, CTEs, set operations, MERGE, etc.)
@@ -88,6 +88,7 @@ task ci                 # Full CI pipeline
 ```bash
 go test -v -run TestSpecificName ./pkg/sql/parser/
 go test -v -run "TestParser_Window.*" ./pkg/sql/parser/
+go test -v -run "TestParser_TupleIn/Basic" ./pkg/sql/parser/  # Run specific subtest
 ```
 
 ### CLI Tool
@@ -132,6 +133,15 @@ defer ast.ReleaseAST(astObj)       // MANDATORY
 - Error codes: E1001-E3004 for tokenizer, parser, semantic errors
 - Use `pkg/errors/` for structured error creation
 
+### Safe Type Assertions in Tests
+Always use the two-value form for type assertions to avoid panics:
+```go
+stmt, ok := tree.Statements[0].(*ast.SelectStatement)
+if !ok {
+    t.Fatalf("expected SelectStatement, got %T", tree.Statements[0])
+}
+```
+
 ## Testing Requirements
 
 ### Race Detection is Mandatory
@@ -153,6 +163,12 @@ task bench                                                    # All benchmarks
 go test -bench=BenchmarkName -benchmem ./pkg/sql/parser/     # Specific benchmark
 go test -bench=. -benchmem -cpuprofile=cpu.prof ./pkg/...    # With profiling
 ```
+
+### Performance Regression Tests
+- Baselines defined in `performance_baselines.json` at project root
+- CI environment variability may require baseline adjustments (tolerance %)
+- Run locally: `go test -run TestPerformanceRegression ./pkg/sql/parser/`
+- Skip with race detector (adds 3-5x overhead): automatically skipped
 
 ## Common Workflows
 

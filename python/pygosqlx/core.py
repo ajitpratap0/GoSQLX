@@ -246,6 +246,21 @@ def _parse_error_from_json(data: Dict[str, Any]) -> ParseError:
     )
 
 
+def _check_parse_error(data: Dict[str, Any]) -> None:
+    """Check a JSON response for parse errors and raise if found.
+
+    Detects errors using both the ``success`` flag (used by gosqlx_parse)
+    and the ``error`` string (used by extract_* functions).  This ensures
+    every public function that should raise on invalid SQL uses the same
+    detection logic.
+    """
+    has_error_field = bool(data.get("error"))
+    has_success_false = "success" in data and not data["success"]
+
+    if has_error_field or has_success_false:
+        raise _parse_error_from_json(data)
+
+
 def _parse_qualified_names(raw_list: List[Dict[str, str]]) -> List[QualifiedName]:
     """Convert a list of raw dicts to QualifiedName objects."""
     result = []
@@ -282,8 +297,7 @@ def parse(sql: str) -> ParseResult:
     lib = _get_lib()
     data = _call_and_decode(lib.gosqlx_parse, sql.encode("utf-8"))
 
-    if not data.get("success", False):
-        raise _parse_error_from_json(data)
+    _check_parse_error(data)
 
     return ParseResult(
         statement_count=data.get("statement_count", 0),
@@ -345,7 +359,7 @@ def format(sql: str) -> str:
     lib = _get_lib()
     data = _call_and_decode(lib.gosqlx_format, sql.encode("utf-8"))
 
-    if "error" in data and data["error"]:
+    if data.get("error"):
         raise FormatError(message=data["error"])
 
     return data.get("formatted", data.get("result", sql))
@@ -366,8 +380,7 @@ def extract_tables(sql: str) -> List[str]:
     lib = _get_lib()
     data = _call_and_decode(lib.gosqlx_extract_tables, sql.encode("utf-8"))
 
-    if "error" in data and data["error"]:
-        raise _parse_error_from_json(data)
+    _check_parse_error(data)
 
     return data.get("tables", [])
 
@@ -393,8 +406,7 @@ def extract_columns(sql: str) -> List[str]:
     lib = _get_lib()
     data = _call_and_decode(lib.gosqlx_extract_columns, sql.encode("utf-8"))
 
-    if "error" in data and data["error"]:
-        raise _parse_error_from_json(data)
+    _check_parse_error(data)
 
     return data.get("columns", [])
 
@@ -420,8 +432,7 @@ def extract_functions(sql: str) -> List[str]:
     lib = _get_lib()
     data = _call_and_decode(lib.gosqlx_extract_functions, sql.encode("utf-8"))
 
-    if "error" in data and data["error"]:
-        raise _parse_error_from_json(data)
+    _check_parse_error(data)
 
     return data.get("functions", [])
 
@@ -450,8 +461,7 @@ def extract_metadata(sql: str) -> Metadata:
     lib = _get_lib()
     data = _call_and_decode(lib.gosqlx_extract_metadata, sql.encode("utf-8"))
 
-    if "error" in data and data["error"]:
-        raise _parse_error_from_json(data)
+    _check_parse_error(data)
 
     return Metadata(
         tables=data.get("tables", []),

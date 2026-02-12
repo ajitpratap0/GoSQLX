@@ -155,7 +155,6 @@ func gosqlx_parse(sql *C.char) *C.char {
 		}
 		return toJSON(result)
 	}
-	defer ast.ReleaseAST(tree)
 
 	stmtTypes := make([]string, 0, len(tree.Statements))
 	for _, stmt := range tree.Statements {
@@ -249,7 +248,6 @@ func gosqlx_extract_tables(sql *C.char) *C.char {
 	if err != nil {
 		return toJSON(map[string]interface{}{"error": err.Error()})
 	}
-	defer ast.ReleaseAST(tree)
 
 	tables := gosqlx.ExtractTables(tree)
 	if tables == nil {
@@ -276,7 +274,6 @@ func gosqlx_extract_columns(sql *C.char) *C.char {
 	if err != nil {
 		return toJSON(map[string]interface{}{"error": err.Error()})
 	}
-	defer ast.ReleaseAST(tree)
 
 	columns := gosqlx.ExtractColumns(tree)
 	if columns == nil {
@@ -303,7 +300,6 @@ func gosqlx_extract_functions(sql *C.char) *C.char {
 	if err != nil {
 		return toJSON(map[string]interface{}{"error": err.Error()})
 	}
-	defer ast.ReleaseAST(tree)
 
 	functions := gosqlx.ExtractFunctions(tree)
 	if functions == nil {
@@ -330,7 +326,6 @@ func gosqlx_extract_metadata(sql *C.char) *C.char {
 	if err != nil {
 		return toJSON(map[string]interface{}{"error": err.Error()})
 	}
-	defer ast.ReleaseAST(tree)
 
 	metadata := gosqlx.ExtractMetadata(tree)
 

@@ -61,6 +61,9 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
+// Version is the current GoSQLX library version.
+const Version = "1.7.0"
+
 // Parse tokenizes and parses SQL in one call, returning an Abstract Syntax Tree (AST).
 //
 // This function handles all object pool management internally, making it ideal for

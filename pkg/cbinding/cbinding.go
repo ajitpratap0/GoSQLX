@@ -13,8 +13,9 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
-// VERSION is the version of the GoSQLX C binding library.
-const VERSION = "1.7.0"
+// VERSION is the version of the GoSQLX C binding library,
+// sourced from the gosqlx package to avoid hardcoded duplication.
+var VERSION = gosqlx.Version
 
 // errorPositionRegex matches "line X, column Y" patterns in error messages.
 var errorPositionRegex = regexp.MustCompile(`line\s+(\d+),\s*column\s+(\d+)`)
@@ -129,6 +130,16 @@ func statementTypeName(stmt ast.Statement) string {
 	}
 }
 
+// gosqlx_parse parses a SQL string and returns a JSON-encoded ParseResult.
+// The result contains success status, statement count, statement types, and
+// error details (with line/column) on failure.
+//
+// Parameters:
+//   - sql: a C string containing the SQL to parse.
+//
+// Returns a C string with the JSON result. The caller must free the returned
+// pointer with gosqlx_free.
+//
 //export gosqlx_parse
 func gosqlx_parse(sql *C.char) *C.char {
 	goSQL := C.GoString(sql)
@@ -159,6 +170,16 @@ func gosqlx_parse(sql *C.char) *C.char {
 	return toJSON(result)
 }
 
+// gosqlx_validate validates a SQL string for syntactic correctness and returns
+// a JSON-encoded ValidationResult. The result contains a valid flag and error
+// details (with line/column) on failure.
+//
+// Parameters:
+//   - sql: a C string containing the SQL to validate.
+//
+// Returns a C string with the JSON result. The caller must free the returned
+// pointer with gosqlx_free.
+//
 //export gosqlx_validate
 func gosqlx_validate(sql *C.char) *C.char {
 	goSQL := C.GoString(sql)
@@ -179,6 +200,16 @@ func gosqlx_validate(sql *C.char) *C.char {
 	return toJSON(result)
 }
 
+// gosqlx_format formats a SQL string using default formatting options and
+// returns a JSON-encoded FormatResult. The result contains the formatted SQL
+// on success or an error message on failure.
+//
+// Parameters:
+//   - sql: a C string containing the SQL to format.
+//
+// Returns a C string with the JSON result. The caller must free the returned
+// pointer with gosqlx_free.
+//
 //export gosqlx_format
 func gosqlx_format(sql *C.char) *C.char {
 	goSQL := C.GoString(sql)
@@ -200,6 +231,16 @@ func gosqlx_format(sql *C.char) *C.char {
 	return toJSON(result)
 }
 
+// gosqlx_extract_tables parses a SQL string and extracts all referenced table
+// names. Returns a JSON object with a "tables" array on success or an "error"
+// field on failure.
+//
+// Parameters:
+//   - sql: a C string containing the SQL to analyze.
+//
+// Returns a C string with the JSON result. The caller must free the returned
+// pointer with gosqlx_free.
+//
 //export gosqlx_extract_tables
 func gosqlx_extract_tables(sql *C.char) *C.char {
 	goSQL := C.GoString(sql)
@@ -217,6 +258,16 @@ func gosqlx_extract_tables(sql *C.char) *C.char {
 	return toJSON(map[string]interface{}{"tables": tables})
 }
 
+// gosqlx_extract_columns parses a SQL string and extracts all referenced column
+// names. Returns a JSON object with a "columns" array on success or an "error"
+// field on failure.
+//
+// Parameters:
+//   - sql: a C string containing the SQL to analyze.
+//
+// Returns a C string with the JSON result. The caller must free the returned
+// pointer with gosqlx_free.
+//
 //export gosqlx_extract_columns
 func gosqlx_extract_columns(sql *C.char) *C.char {
 	goSQL := C.GoString(sql)
@@ -234,6 +285,16 @@ func gosqlx_extract_columns(sql *C.char) *C.char {
 	return toJSON(map[string]interface{}{"columns": columns})
 }
 
+// gosqlx_extract_functions parses a SQL string and extracts all referenced
+// function names (e.g., COUNT, SUM). Returns a JSON object with a "functions"
+// array on success or an "error" field on failure.
+//
+// Parameters:
+//   - sql: a C string containing the SQL to analyze.
+//
+// Returns a C string with the JSON result. The caller must free the returned
+// pointer with gosqlx_free.
+//
 //export gosqlx_extract_functions
 func gosqlx_extract_functions(sql *C.char) *C.char {
 	goSQL := C.GoString(sql)
@@ -251,6 +312,16 @@ func gosqlx_extract_functions(sql *C.char) *C.char {
 	return toJSON(map[string]interface{}{"functions": functions})
 }
 
+// gosqlx_extract_metadata parses a SQL string and extracts comprehensive
+// metadata including tables, columns, and functions with both simple name
+// lists and schema-qualified variants. Returns a JSON-encoded MetadataResult.
+//
+// Parameters:
+//   - sql: a C string containing the SQL to analyze.
+//
+// Returns a C string with the JSON result. The caller must free the returned
+// pointer with gosqlx_free.
+//
 //export gosqlx_extract_metadata
 func gosqlx_extract_metadata(sql *C.char) *C.char {
 	goSQL := C.GoString(sql)
@@ -307,11 +378,26 @@ func gosqlx_extract_metadata(sql *C.char) *C.char {
 	return toJSON(result)
 }
 
+// gosqlx_free releases memory allocated by the C binding functions.
+// Every C string returned by gosqlx_parse, gosqlx_validate, gosqlx_format,
+// gosqlx_extract_tables, gosqlx_extract_columns, gosqlx_extract_functions,
+// gosqlx_extract_metadata, and gosqlx_version must be freed with this function
+// to avoid memory leaks.
+//
+// Parameters:
+//   - ptr: a C string pointer previously returned by a gosqlx_* function.
+//
 //export gosqlx_free
 func gosqlx_free(ptr *C.char) {
 	C.free(unsafe.Pointer(ptr))
 }
 
+// gosqlx_version returns the current GoSQLX library version as a C string.
+// The version follows semantic versioning (e.g., "1.7.0").
+//
+// Returns a C string with the version. The caller must free the returned
+// pointer with gosqlx_free.
+//
 //export gosqlx_version
 func gosqlx_version() *C.char {
 	cachedVersionOnce.Do(func() {

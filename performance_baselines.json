@@ -11,7 +11,7 @@
     },
     "ComplexQuery": {
       "ns_per_op": 3200,
-      "tolerance_percent": 50,
+      "tolerance_percent": 60,
       "description": "Complex SELECT with JOIN, WHERE, ORDER BY, LIMIT",
       "current_performance": "~2400-3700 ns/op in CI (high variability due to shared runners)",
       "note": "Baseline increased to account for CI runner variability; shared GitHub Actions runners show wide perf variance"

@@ -962,8 +962,8 @@ func TestFormatResult(t *testing.T) {
 
 func TestDefaultRules(t *testing.T) {
 	rules := DefaultRules()
-	if len(rules) != 8 {
-		t.Errorf("expected 8 default rules, got %d", len(rules))
+	if len(rules) != 12 {
+		t.Errorf("expected 12 default rules, got %d", len(rules))
 	}
 
 	ids := make(map[string]bool)
@@ -992,6 +992,7 @@ func TestRuleMetadata(t *testing.T) {
 	expectedIDs := []string{
 		"OPT-001", "OPT-002", "OPT-003", "OPT-004",
 		"OPT-005", "OPT-006", "OPT-007", "OPT-008",
+		"OPT-009", "OPT-010", "OPT-011", "OPT-012",
 	}
 
 	for i, rule := range rules {
@@ -1078,4 +1079,246 @@ func containsSubstring(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+// ---------------------------------------------------------------------------
+// OPT-009: N+1 Query Detection
+// ---------------------------------------------------------------------------
+
+func TestNPlusOneRule(t *testing.T) {
+	opt := New()
+
+	tests := []struct {
+		name    string
+		sql     string
+		wantHit bool
+	}{
+		{
+			name:    "correlated subquery in WHERE triggers",
+			sql:     "SELECT id, name FROM users WHERE EXISTS (SELECT 1 FROM orders WHERE orders.user_id = users.id)",
+			wantHit: true,
+		},
+		{
+			name:    "uncorrelated subquery does not trigger",
+			sql:     "SELECT id FROM users WHERE id IN (SELECT user_id FROM orders)",
+			wantHit: false,
+		},
+		{
+			name:    "simple query does not trigger",
+			sql:     "SELECT id, name FROM users WHERE id = 1",
+			wantHit: false,
+		},
+		{
+			name:    "INSERT does not trigger",
+			sql:     "INSERT INTO users (name) VALUES ('Alice')",
+			wantHit: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mustAnalyze(t, opt, tt.sql)
+			got := hasSuggestion(result, "OPT-009")
+			if got != tt.wantHit {
+				t.Errorf("OPT-009 hit=%v, want %v for SQL: %s", got, tt.wantHit, tt.sql)
+			}
+		})
+	}
+}
+
+func TestNPlusOneRuleDirect(t *testing.T) {
+	rule := &NPlusOneRule{}
+	if rule.ID() != "OPT-009" {
+		t.Errorf("expected OPT-009, got %s", rule.ID())
+	}
+	if rule.Name() == "" {
+		t.Error("expected non-empty name")
+	}
+	if rule.Description() == "" {
+		t.Error("expected non-empty description")
+	}
+	// nil statement
+	suggestions := rule.Analyze(nil)
+	if len(suggestions) != 0 {
+		t.Errorf("expected 0 suggestions for nil, got %d", len(suggestions))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// OPT-010: Index Recommendation
+// ---------------------------------------------------------------------------
+
+func TestIndexRecommendationRule(t *testing.T) {
+	opt := New()
+
+	tests := []struct {
+		name    string
+		sql     string
+		wantHit bool
+	}{
+		{
+			name:    "WHERE + ORDER BY suggests composite index",
+			sql:     "SELECT id, name FROM users WHERE status = 'active' ORDER BY created_at",
+			wantHit: true,
+		},
+		{
+			name:    "multiple WHERE columns suggests composite index",
+			sql:     "SELECT id FROM users WHERE status = 'active' AND role = 'admin'",
+			wantHit: true,
+		},
+		{
+			name:    "JOIN columns suggest index",
+			sql:     "SELECT u.id FROM users u JOIN orders o ON u.id = o.user_id JOIN payments p ON o.id = p.order_id",
+			wantHit: true,
+		},
+		{
+			name:    "simple query without WHERE",
+			sql:     "SELECT id FROM users",
+			wantHit: false,
+		},
+		{
+			name:    "INSERT does not trigger",
+			sql:     "INSERT INTO users (name) VALUES ('Alice')",
+			wantHit: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mustAnalyze(t, opt, tt.sql)
+			got := hasSuggestion(result, "OPT-010")
+			if got != tt.wantHit {
+				t.Errorf("OPT-010 hit=%v, want %v for SQL: %s", got, tt.wantHit, tt.sql)
+			}
+		})
+	}
+}
+
+func TestIndexRecommendationRuleDirect(t *testing.T) {
+	rule := &IndexRecommendationRule{}
+	if rule.ID() != "OPT-010" {
+		t.Errorf("expected OPT-010, got %s", rule.ID())
+	}
+	if rule.Name() == "" {
+		t.Error("expected non-empty name")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// OPT-011: Join Order Optimization
+// ---------------------------------------------------------------------------
+
+func TestJoinOrderRule(t *testing.T) {
+	opt := New()
+
+	tests := []struct {
+		name    string
+		sql     string
+		wantHit bool
+	}{
+		{
+			name:    "multi-join with filtered non-driving table triggers",
+			sql:     "SELECT a.id FROM alpha a JOIN beta b ON a.id = b.alpha_id JOIN gamma g ON b.id = g.beta_id WHERE b.status = 'active'",
+			wantHit: true,
+		},
+		{
+			name:    "4+ joins suggests CTE breakup",
+			sql:     "SELECT a.id FROM a JOIN b ON a.id = b.a_id JOIN c ON b.id = c.b_id JOIN d ON c.id = d.c_id JOIN e ON d.id = e.d_id",
+			wantHit: true,
+		},
+		{
+			name:    "single join does not trigger",
+			sql:     "SELECT u.id FROM users u JOIN orders o ON u.id = o.user_id",
+			wantHit: false,
+		},
+		{
+			name:    "no joins does not trigger",
+			sql:     "SELECT id FROM users",
+			wantHit: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mustAnalyze(t, opt, tt.sql)
+			got := hasSuggestion(result, "OPT-011")
+			if got != tt.wantHit {
+				t.Errorf("OPT-011 hit=%v, want %v for SQL: %s", got, tt.wantHit, tt.sql)
+			}
+		})
+	}
+}
+
+func TestJoinOrderRuleDirect(t *testing.T) {
+	rule := &JoinOrderRule{}
+	if rule.ID() != "OPT-011" {
+		t.Errorf("expected OPT-011, got %s", rule.ID())
+	}
+}
+
+// ---------------------------------------------------------------------------
+// OPT-012: Query Cost Estimation
+// ---------------------------------------------------------------------------
+
+func TestQueryCostRule(t *testing.T) {
+	opt := New()
+
+	tests := []struct {
+		name    string
+		sql     string
+		wantHit bool
+	}{
+		{
+			name:    "complex query with many joins and subqueries triggers",
+			sql:     "SELECT a.id FROM a JOIN b ON a.id = b.a_id JOIN c ON b.id = c.b_id JOIN d ON c.id = d.c_id WHERE EXISTS (SELECT 1 FROM e WHERE e.d_id = d.id) GROUP BY a.id HAVING COUNT(*) > 1 ORDER BY a.id",
+			wantHit: true,
+		},
+		{
+			name:    "simple select does not trigger high cost",
+			sql:     "SELECT id FROM users WHERE id = 1",
+			wantHit: false,
+		},
+		{
+			name:    "DELETE without WHERE triggers moderate+ cost",
+			sql:     "DELETE FROM users",
+			wantHit: false, // cost=7, under 10 threshold
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mustAnalyze(t, opt, tt.sql)
+			got := hasSuggestion(result, "OPT-012")
+			if got != tt.wantHit {
+				t.Errorf("OPT-012 hit=%v, want %v for SQL: %s\nSuggestions: %+v", got, tt.wantHit, tt.sql, result.Suggestions)
+			}
+		})
+	}
+}
+
+func TestQueryCostRuleDirect(t *testing.T) {
+	rule := &QueryCostRule{}
+	if rule.ID() != "OPT-012" {
+		t.Errorf("expected OPT-012, got %s", rule.ID())
+	}
+	if rule.Name() == "" {
+		t.Error("expected non-empty name")
+	}
+	if rule.Description() == "" {
+		t.Error("expected non-empty description")
+	}
+}
+
+func TestEstimateStatementCostNil(t *testing.T) {
+	cost := estimateStmtCost(nil)
+	if cost != 0 {
+		t.Errorf("expected 0 for nil statement, got %d", cost)
+	}
+}
+
+func TestDefaultRulesCount(t *testing.T) {
+	rules := DefaultRules()
+	if len(rules) != 12 {
+		t.Errorf("expected 12 default rules, got %d", len(rules))
+	}
 }

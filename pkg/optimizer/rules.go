@@ -18,6 +18,10 @@ func DefaultRules() []Rule {
 		&OrInWhereRule{},
 		&LeadingWildcardLikeRule{},
 		&FunctionOnColumnRule{},
+		&NPlusOneRule{},
+		&IndexRecommendationRule{},
+		&JoinOrderRule{},
+		&QueryCostRule{},
 	}
 }
 
@@ -648,4 +652,456 @@ func isStarIdentifier(expr ast.Expression) bool {
 	}
 
 	return false
+}
+
+// ---------------------------------------------------------------------------
+// OPT-009: N+1 Query Detection
+// ---------------------------------------------------------------------------
+
+type NPlusOneRule struct{}
+
+func (r *NPlusOneRule) ID() string   { return "OPT-009" }
+func (r *NPlusOneRule) Name() string { return "N+1 Query Detection" }
+func (r *NPlusOneRule) Description() string {
+	return "Detects correlated subquery patterns that may indicate N+1 query problems."
+}
+
+func (r *NPlusOneRule) Analyze(stmt ast.Statement) []Suggestion {
+	var suggestions []Suggestion
+	sel, ok := stmt.(*ast.SelectStatement)
+	if !ok {
+		return suggestions
+	}
+	outerTables := collectOuterTables(sel)
+	for _, col := range sel.Columns {
+		if detectCorrelatedSubquery(col, outerTables) {
+			suggestions = append(suggestions, Suggestion{
+				RuleID:       r.ID(),
+				Severity:     SeverityWarning,
+				Message:      "Correlated subquery in SELECT list may cause N+1 query pattern",
+				Detail:       "A correlated subquery in the SELECT list executes once per row. Rewrite as a JOIN or CTE.",
+				Line:         1,
+				Column:       1,
+				SuggestedSQL: "Rewrite as: SELECT ... FROM outer JOIN inner ON ...",
+			})
+			break
+		}
+	}
+	if sel.Where != nil && detectCorrelatedSubqueryInWhere(sel.Where, outerTables) {
+		suggestions = append(suggestions, Suggestion{
+			RuleID:       r.ID(),
+			Severity:     SeverityWarning,
+			Message:      "Correlated subquery in WHERE clause may cause N+1 execution pattern",
+			Detail:       "A correlated subquery in WHERE executes once per outer row. Consider rewriting as a JOIN.",
+			Line:         1,
+			Column:       1,
+			SuggestedSQL: "Rewrite as a JOIN or use a well-indexed EXISTS clause",
+		})
+	}
+	return suggestions
+}
+
+func collectOuterTables(sel *ast.SelectStatement) map[string]bool {
+	tables := make(map[string]bool)
+	for _, from := range sel.From {
+		if from.Name != "" {
+			tables[strings.ToLower(from.Name)] = true
+		}
+		if from.Alias != "" {
+			tables[strings.ToLower(from.Alias)] = true
+		}
+	}
+	return tables
+}
+
+func detectCorrelatedSubquery(expr ast.Expression, outerTables map[string]bool) bool {
+	if expr == nil {
+		return false
+	}
+	switch e := expr.(type) {
+	case *ast.AliasedExpression:
+		return detectCorrelatedSubquery(e.Expr, outerTables)
+	case *ast.SubqueryExpression:
+		return stmtRefsOuterTables(e.Subquery, outerTables)
+	case *ast.BinaryExpression:
+		return detectCorrelatedSubquery(e.Left, outerTables) || detectCorrelatedSubquery(e.Right, outerTables)
+	}
+	return false
+}
+
+func detectCorrelatedSubqueryInWhere(expr ast.Expression, outerTables map[string]bool) bool {
+	if expr == nil {
+		return false
+	}
+	switch e := expr.(type) {
+	case *ast.SubqueryExpression:
+		return stmtRefsOuterTables(e.Subquery, outerTables)
+	case *ast.ExistsExpression:
+		return stmtRefsOuterTables(e.Subquery, outerTables)
+	case *ast.BinaryExpression:
+		return detectCorrelatedSubqueryInWhere(e.Left, outerTables) || detectCorrelatedSubqueryInWhere(e.Right, outerTables)
+	case *ast.UnaryExpression:
+		return detectCorrelatedSubqueryInWhere(e.Expr, outerTables)
+	}
+	return false
+}
+
+func stmtRefsOuterTables(stmt ast.Statement, outerTables map[string]bool) bool {
+	if stmt == nil {
+		return false
+	}
+	sel, ok := stmt.(*ast.SelectStatement)
+	if !ok {
+		return false
+	}
+	if sel.Where != nil {
+		refs := gatherTableQualifiers(sel.Where)
+		for _, ref := range refs {
+			if outerTables[strings.ToLower(ref)] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func gatherTableQualifiers(expr ast.Expression) []string {
+	if expr == nil {
+		return nil
+	}
+	var refs []string
+	switch e := expr.(type) {
+	case *ast.Identifier:
+		if e.Table != "" {
+			refs = append(refs, e.Table)
+		}
+	case *ast.BinaryExpression:
+		refs = append(refs, gatherTableQualifiers(e.Left)...)
+		refs = append(refs, gatherTableQualifiers(e.Right)...)
+	case *ast.UnaryExpression:
+		refs = append(refs, gatherTableQualifiers(e.Expr)...)
+	}
+	return refs
+}
+
+// ---------------------------------------------------------------------------
+// OPT-010: Index Recommendation
+// ---------------------------------------------------------------------------
+
+type IndexRecommendationRule struct{}
+
+func (r *IndexRecommendationRule) ID() string   { return "OPT-010" }
+func (r *IndexRecommendationRule) Name() string { return "Index Recommendation" }
+func (r *IndexRecommendationRule) Description() string {
+	return "Suggests indexes for columns used in WHERE, JOIN ON, and ORDER BY clauses."
+}
+
+func (r *IndexRecommendationRule) Analyze(stmt ast.Statement) []Suggestion {
+	var suggestions []Suggestion
+	sel, ok := stmt.(*ast.SelectStatement)
+	if !ok {
+		return suggestions
+	}
+	var whereCols []string
+	if sel.Where != nil {
+		whereCols = gatherFilterColumns(sel.Where)
+	}
+	var joinCols []string
+	for _, join := range sel.Joins {
+		if join.Condition != nil {
+			joinCols = append(joinCols, gatherFilterColumns(join.Condition)...)
+		}
+	}
+	var orderCols []string
+	for _, ob := range sel.OrderBy {
+		if id, ok := ob.Expression.(*ast.Identifier); ok {
+			name := id.Name
+			if id.Table != "" {
+				name = id.Table + "." + name
+			}
+			orderCols = append(orderCols, name)
+		}
+	}
+	if len(whereCols) > 0 && len(orderCols) > 0 {
+		allCols := append(dedup(whereCols), dedup(orderCols)...)
+		suggestions = append(suggestions, Suggestion{
+			RuleID:       r.ID(),
+			Severity:     SeverityInfo,
+			Message:      "Consider a composite index covering WHERE and ORDER BY columns",
+			Detail:       "A composite index on filter + sort columns can avoid a separate sort step.",
+			Line:         1,
+			Column:       1,
+			SuggestedSQL: fmt.Sprintf("CREATE INDEX idx_covering ON <table> (%s)", strings.Join(allCols, ", ")),
+		})
+	} else if len(whereCols) > 1 {
+		suggestions = append(suggestions, Suggestion{
+			RuleID:       r.ID(),
+			Severity:     SeverityInfo,
+			Message:      "Consider a composite index on WHERE columns",
+			Detail:       "Multiple WHERE columns may benefit from a composite index.",
+			Line:         1,
+			Column:       1,
+			SuggestedSQL: fmt.Sprintf("CREATE INDEX idx_filter ON <table> (%s)", strings.Join(dedup(whereCols), ", ")),
+		})
+	}
+	for _, col := range dedup(joinCols) {
+		suggestions = append(suggestions, Suggestion{
+			RuleID:       r.ID(),
+			Severity:     SeverityInfo,
+			Message:      fmt.Sprintf("Ensure column %q used in JOIN has an index", col),
+			Detail:       "Columns in JOIN conditions should be indexed.",
+			Line:         1,
+			Column:       1,
+			SuggestedSQL: fmt.Sprintf("CREATE INDEX idx_%s ON <table> (%s)", strings.ReplaceAll(col, ".", "_"), col),
+		})
+	}
+	return suggestions
+}
+
+func gatherFilterColumns(expr ast.Expression) []string {
+	if expr == nil {
+		return nil
+	}
+	var cols []string
+	switch e := expr.(type) {
+	case *ast.BinaryExpression:
+		if isComparisonOperator(e.Operator) {
+			if id, ok := e.Left.(*ast.Identifier); ok {
+				name := id.Name
+				if id.Table != "" {
+					name = id.Table + "." + name
+				}
+				cols = append(cols, name)
+			}
+		} else if strings.EqualFold(e.Operator, "AND") || strings.EqualFold(e.Operator, "OR") {
+			cols = append(cols, gatherFilterColumns(e.Left)...)
+			cols = append(cols, gatherFilterColumns(e.Right)...)
+		}
+	}
+	return cols
+}
+
+func dedup(ss []string) []string {
+	seen := make(map[string]bool, len(ss))
+	var result []string
+	for _, s := range ss {
+		if !seen[s] {
+			seen[s] = true
+			result = append(result, s)
+		}
+	}
+	return result
+}
+
+// ---------------------------------------------------------------------------
+// OPT-011: Join Order Optimization
+// ---------------------------------------------------------------------------
+
+type JoinOrderRule struct{}
+
+func (r *JoinOrderRule) ID() string   { return "OPT-011" }
+func (r *JoinOrderRule) Name() string { return "Join Order Optimization" }
+func (r *JoinOrderRule) Description() string {
+	return "Analyzes JOIN order and provides hints for optimal join sequencing."
+}
+
+func (r *JoinOrderRule) Analyze(stmt ast.Statement) []Suggestion {
+	var suggestions []Suggestion
+	sel, ok := stmt.(*ast.SelectStatement)
+	if !ok {
+		return suggestions
+	}
+	if len(sel.Joins) < 2 {
+		return suggestions
+	}
+	joinsNoCond := 0
+	for _, join := range sel.Joins {
+		if join.Condition == nil {
+			joinsNoCond++
+		}
+	}
+	if joinsNoCond > 0 {
+		suggestions = append(suggestions, Suggestion{
+			RuleID:   r.ID(),
+			Severity: SeverityWarning,
+			Message:  fmt.Sprintf("%d JOIN(s) without ON conditions in a multi-join query", joinsNoCond),
+			Detail:   "JOINs without conditions produce Cartesian products.",
+			Line:     1,
+			Column:   1,
+		})
+	}
+	if sel.Where != nil && len(sel.From) > 0 {
+		filteredTbls := gatherFilteredTables(sel.Where)
+		drivingTable := sel.From[0].Name
+		for _, ft := range filteredTbls {
+			if !strings.EqualFold(ft, drivingTable) && ft != "" {
+				suggestions = append(suggestions, Suggestion{
+					RuleID:       r.ID(),
+					Severity:     SeverityInfo,
+					Message:      fmt.Sprintf("Table %q has WHERE filters but is not the driving table", ft),
+					Detail:       "Place the most filtered table first in FROM.",
+					Line:         1,
+					Column:       1,
+					SuggestedSQL: fmt.Sprintf("FROM %s JOIN %s ON ...", ft, drivingTable),
+				})
+				break
+			}
+		}
+	}
+	if len(sel.Joins) >= 4 {
+		suggestions = append(suggestions, Suggestion{
+			RuleID:       r.ID(),
+			Severity:     SeverityInfo,
+			Message:      fmt.Sprintf("Query joins %d tables — consider CTEs for readability", len(sel.Joins)+1),
+			Detail:       "Queries with many joins can be hard to optimize.",
+			Line:         1,
+			Column:       1,
+			SuggestedSQL: "WITH filtered AS (SELECT ... WHERE ...) SELECT ... FROM filtered JOIN ...",
+		})
+	}
+	return suggestions
+}
+
+func gatherFilteredTables(expr ast.Expression) []string {
+	if expr == nil {
+		return nil
+	}
+	var tables []string
+	switch e := expr.(type) {
+	case *ast.BinaryExpression:
+		if isComparisonOperator(e.Operator) {
+			if id, ok := e.Left.(*ast.Identifier); ok && id.Table != "" {
+				tables = append(tables, id.Table)
+			}
+		} else {
+			tables = append(tables, gatherFilteredTables(e.Left)...)
+			tables = append(tables, gatherFilteredTables(e.Right)...)
+		}
+	}
+	return tables
+}
+
+// ---------------------------------------------------------------------------
+// OPT-012: Query Cost Estimation
+// ---------------------------------------------------------------------------
+
+type QueryCostRule struct{}
+
+func (r *QueryCostRule) ID() string   { return "OPT-012" }
+func (r *QueryCostRule) Name() string { return "Query Cost Estimation" }
+func (r *QueryCostRule) Description() string {
+	return "Estimates query complexity by scoring structural elements and flags high-cost queries."
+}
+
+func (r *QueryCostRule) Analyze(stmt ast.Statement) []Suggestion {
+	var suggestions []Suggestion
+	cost := estimateStmtCost(stmt)
+	if cost >= 20 {
+		suggestions = append(suggestions, Suggestion{
+			RuleID:       r.ID(),
+			Severity:     SeverityWarning,
+			Message:      fmt.Sprintf("High query complexity score: %d — consider simplifying", cost),
+			Detail:       fmt.Sprintf("Structural complexity score of %d (scale: 1-50+). Scores above 20 indicate expensive queries.", cost),
+			Line:         1,
+			Column:       1,
+			SuggestedSQL: "Break into CTEs: WITH step1 AS (...), step2 AS (...) SELECT ...",
+		})
+	} else if cost >= 10 {
+		suggestions = append(suggestions, Suggestion{
+			RuleID:   r.ID(),
+			Severity: SeverityInfo,
+			Message:  fmt.Sprintf("Moderate query complexity score: %d", cost),
+			Detail:   fmt.Sprintf("Structural complexity score of %d. Ensure appropriate indexes exist.", cost),
+			Line:     1,
+			Column:   1,
+		})
+	}
+	return suggestions
+}
+
+func estimateStmtCost(stmt ast.Statement) int {
+	if stmt == nil {
+		return 0
+	}
+	cost := 0
+	switch s := stmt.(type) {
+	case *ast.SelectStatement:
+		cost += 1
+		for _, j := range s.Joins {
+			switch strings.ToUpper(j.Type) {
+			case "FULL", "CROSS":
+				cost += 4
+			case "LEFT", "RIGHT":
+				cost += 3
+			default:
+				cost += 2
+			}
+		}
+		for _, from := range s.From {
+			if from.Subquery != nil {
+				cost += 5
+			}
+		}
+		cost += len(s.GroupBy) * 2
+		if s.Having != nil {
+			cost += 3
+		}
+		cost += len(s.Windows) * 3
+		cost += len(s.OrderBy)
+		if s.Distinct {
+			cost += 2
+		}
+		if s.With != nil {
+			for _, cte := range s.With.CTEs {
+				cost += 3
+				if cte.Statement != nil {
+					cost += estimateStmtCost(cte.Statement)
+				}
+			}
+		}
+		if s.Where != nil {
+			cost += countSubqCost(s.Where)
+		}
+	case *ast.SetOperation:
+		cost += estimateStmtCost(s.Left) + estimateStmtCost(s.Right) + 3
+	case *ast.UpdateStatement:
+		cost += 2
+		if s.Where == nil {
+			cost += 5
+		}
+	case *ast.DeleteStatement:
+		cost += 2
+		if s.Where == nil {
+			cost += 5
+		}
+	default:
+		cost += 1
+	}
+	return cost
+}
+
+func countSubqCost(expr ast.Expression) int {
+	if expr == nil {
+		return 0
+	}
+	cost := 0
+	switch e := expr.(type) {
+	case *ast.SubqueryExpression:
+		cost += 5
+		if e.Subquery != nil {
+			cost += estimateStmtCost(e.Subquery)
+		}
+	case *ast.InExpression:
+		if e.Subquery != nil {
+			cost += 4
+		}
+	case *ast.ExistsExpression:
+		cost += 4
+	case *ast.BinaryExpression:
+		cost += countSubqCost(e.Left)
+		cost += countSubqCost(e.Right)
+	case *ast.UnaryExpression:
+		cost += countSubqCost(e.Expr)
+	}
+	return cost
 }

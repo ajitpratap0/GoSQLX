@@ -1,7 +1,6 @@
 #!/bin/bash
 set -e
 
-# Build shared library for current platform
 echo "Building GoSQLX shared library..."
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -14,18 +13,31 @@ case $OS in
     darwin)
         EXT="dylib"
         ;;
+    mingw*|msys*|cygwin*)
+        EXT="dll"
+        ;;
     *)
         echo "Unsupported OS: $OS"
+        echo "Supported: linux, darwin, windows (via MSYS2/MinGW)"
         exit 1
         ;;
 esac
 
-OUTPUT_DIR="../../python/pygosqlx/lib"
+OUTPUT_DIR="${OUTPUT_DIR:-../../python/pygosqlx/lib}"
 mkdir -p "$OUTPUT_DIR"
+
+echo "Platform: $OS/$ARCH"
+echo "Output: $OUTPUT_DIR/libgosqlx.$EXT"
 
 CGO_ENABLED=1 go build -buildmode=c-shared \
     -o "$OUTPUT_DIR/libgosqlx.${EXT}" \
     .
 
-echo "Built: $OUTPUT_DIR/libgosqlx.${EXT}"
-echo "Header: $OUTPUT_DIR/libgosqlx.h"
+echo ""
+echo "Build complete:"
+echo "  Library: $OUTPUT_DIR/libgosqlx.${EXT}"
+echo "  Header:  $OUTPUT_DIR/libgosqlx.h"
+echo ""
+echo "To use with Python:"
+echo "  export GOSQLX_LIB_PATH=$OUTPUT_DIR/libgosqlx.${EXT}"
+echo "  python -c 'import pygosqlx; print(pygosqlx.version())'"

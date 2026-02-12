@@ -61,9 +61,9 @@ var SNOWFLAKE_SPECIFIC = []Keyword{
 	{Word: "REMOVE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 
 	// Access Control
-	{Word: "ROLE", Type: models.TokenTypeRole, Reserved: false, ReservedForTableAlias: false},
-	{Word: "GRANT", Type: models.TokenTypeGrant, Reserved: true, ReservedForTableAlias: false},
-	{Word: "REVOKE", Type: models.TokenTypeRevoke, Reserved: true, ReservedForTableAlias: false},
+	{Word: "ROLE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "GRANT", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
+	{Word: "REVOKE", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
 	{Word: "OWNERSHIP", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 
 	// Snowflake-specific functions

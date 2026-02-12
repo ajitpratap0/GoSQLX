@@ -106,7 +106,14 @@ func DetectDialect(sql string) SQLDialect {
 		return DialectGeneric
 	}
 
-	upper := strings.ToUpper(sql)
+	// Optimization: dialect hints typically appear in the first 1000 characters.
+	// For very long SQL strings, limit the scan to avoid O(n*m) overhead.
+	scanSQL := sql
+	if len(scanSQL) > 2000 {
+		scanSQL = scanSQL[:2000]
+	}
+
+	upper := strings.ToUpper(scanSQL)
 	scores := make(map[SQLDialect]int)
 
 	// Check keyword-based hints

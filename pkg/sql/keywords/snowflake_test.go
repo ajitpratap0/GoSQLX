@@ -55,9 +55,9 @@ func TestSnowflakeKeywords(t *testing.T) {
 		{"REMOVE", models.TokenTypeKeyword},
 
 		// Access Control
-		{"ROLE", models.TokenTypeRole},
-		{"GRANT", models.TokenTypeGrant},
-		{"REVOKE", models.TokenTypeRevoke},
+		{"ROLE", models.TokenTypeKeyword},
+		{"GRANT", models.TokenTypeKeyword},
+		{"REVOKE", models.TokenTypeKeyword},
 		{"OWNERSHIP", models.TokenTypeKeyword},
 
 		// Snowflake functions

@@ -45,7 +45,7 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 - **Blazing Fast**: 1.38M+ ops/sec sustained, 1.5M+ ops/sec peak throughput
 - **Memory Efficient**: 60-80% reduction through intelligent object pooling
 - **Thread-Safe**: Race-free, linear scaling to 128+ cores, 0 race conditions detected
-- **Production-Grade Testing**: Token 100%, Keywords 100%, Errors 95.6%, Tokenizer 76.1%, Parser 76.1%, CLI 63.3% coverage
+- **Production-Grade Testing**: Token 100%, Keywords 100%, Errors 95.6%, Parser 84.7%, Tokenizer 76.1%, CLI 63.3% coverage
 - **Complete JOIN Support**: All JOIN types (INNER/LEFT/RIGHT/FULL OUTER/CROSS/NATURAL) with proper tree logic
 - **Advanced SQL Features**: CTEs with RECURSIVE support, Set Operations (UNION/EXCEPT/INTERSECT)
 - **Window Functions**: Complete SQL-99 window function support with OVER clause, PARTITION BY, ORDER BY, frame specs
@@ -57,6 +57,7 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 - **Unicode Support**: Complete UTF-8 support for international SQL
 - **Multi-Dialect**: PostgreSQL, MySQL, SQL Server, Oracle, SQLite
 - **PostgreSQL Extensions**: LATERAL JOIN, DISTINCT ON, FILTER clause, JSON/JSONB operators, aggregate ORDER BY
+- **Parser Enhancements (v1.7.0)**: Schema-qualified names, `::` type casting, UPSERT, ARRAY constructors, regex operators, INTERVAL, FOR UPDATE/SHARE, positional parameters
 - **Zero-Copy**: Direct byte slice operations, <1μs latency
 - **Intelligent Errors**: Structured error codes with typo detection, context highlighting, and helpful hints
 - **Production Ready**: Battle-tested with 0 race conditions detected, ~80-85% SQL-99 compliance
@@ -152,7 +153,7 @@ gosqlx format query.sql | gosqlx validate        # Chain commands
 cat *.sql | gosqlx format | tee formatted.sql    # Pipeline composition
 ```
 
-**Pipeline/Stdin Support** (New in v1.6.0):
+**Pipeline/Stdin Support** (v1.6.0+):
 ```bash
 # Auto-detect piped input
 echo "SELECT * FROM users" | gosqlx validate
@@ -192,7 +193,7 @@ git diff --cached --name-only --diff-filter=ACM "*.sql" | \
   xargs cat | gosqlx validate --quiet
 ```
 
-**Language Server Protocol (LSP)** (v1.6.0):
+**Language Server Protocol (LSP)** (v1.6.0+):
 ```bash
 # Start LSP server for IDE integration
 gosqlx lsp
@@ -210,7 +211,7 @@ The LSP server provides real-time SQL intelligence for IDEs:
 - **Signature Help**: Function signatures for 20+ SQL functions
 - **Code Actions**: Quick fixes (add semicolon, uppercase keywords)
 
-**Linting** (v1.6.0):
+**Linting** (v1.6.0+):
 ```bash
 # Run built-in linter rules
 gosqlx lint query.sql
@@ -223,16 +224,16 @@ gosqlx lint --rules L001,L002,L003 query.sql
 ```
 
 Available rules (L001-L010):
-- `L001`: Avoid SELECT *
-- `L002`: Missing table aliases in JOIN
-- `L003`: Implicit column aliases
-- `L004`: Missing WHERE clause in UPDATE/DELETE
-- `L005`: Inefficient LIKE patterns
-- `L006`: Use explicit JOIN syntax (not comma joins)
-- `L007`: ORDER BY ordinal numbers
-- `L008`: Inconsistent keyword casing
-- `L009`: Missing column list in INSERT
-- `L010`: Avoid DISTINCT without ORDER BY
+- `L001`: Trailing Whitespace (auto-fix)
+- `L002`: Mixed Indentation (auto-fix)
+- `L003`: Consecutive Blank Lines (auto-fix)
+- `L004`: Indentation Depth
+- `L005`: Line Length
+- `L006`: Column Alignment
+- `L007`: Keyword Case (auto-fix)
+- `L008`: Comma Placement
+- `L009`: Aliasing Consistency
+- `L010`: Redundant Whitespace (auto-fix)
 
 **IDE Integration:**
 ```jsonc
@@ -346,7 +347,8 @@ func main() {
         panic(err)
     }
 
-    fmt.Printf("Statement type: %T\n", ast)
+    fmt.Printf("Parsed %d statement(s)\n", len(ast.Statements))
+    fmt.Printf("Statement type: %T\n", ast.Statements[0])
 }
 ```
 
@@ -373,6 +375,10 @@ func main() {
 | [**Production Guide**](docs/PRODUCTION_GUIDE.md) | Deployment and monitoring |
 | [**SQL Compatibility**](docs/SQL_COMPATIBILITY.md) | Dialect support matrix |
 | [**Security Analysis**](docs/SECURITY.md) | Security assessment |
+| [**LSP Guide**](docs/LSP_GUIDE.md) | LSP server and IDE integration |
+| [**Linting Rules**](docs/LINTING_RULES.md) | All 10 linting rules reference |
+| [**Error Codes**](docs/ERROR_CODES.md) | Error code reference (E1001-E3004) |
+| [**Upgrade Guide**](docs/UPGRADE_GUIDE.md) | Version upgrade instructions |
 | [**Examples**](examples/) | Working code examples |
 
 ### Quick Links
@@ -384,9 +390,9 @@ func main() {
 - [Error Handling](docs/TROUBLESHOOTING.md#error-messages)
 - [FAQ](docs/TROUBLESHOOTING.md#faq)
 
-### Advanced SQL Features (v1.2.0)
+### Advanced SQL Features
 
-GoSQLX now supports Common Table Expressions (CTEs) and Set Operations alongside complete JOIN support:
+GoSQLX supports Common Table Expressions (CTEs) and Set Operations alongside complete JOIN support:
 
 #### Common Table Expressions (CTEs)
 
@@ -459,19 +465,17 @@ sql := `
     ORDER BY o.order_date DESC
 `
 
-// Parse with automatic JOIN tree construction
-tkz := tokenizer.GetTokenizer()
-defer tokenizer.PutTokenizer(tkz)
-
-tokens, err := tkz.Tokenize([]byte(sql))
-parser := parser.NewParser()
-ast, err := parser.Parse(tokens)
+// Parse with the simple API (recommended)
+tree, err := gosqlx.Parse(sql)
+if err != nil {
+    panic(err)
+}
 
 // Access JOIN information
-if selectStmt, ok := ast.Statements[0].(*ast.SelectStatement); ok {
+if selectStmt, ok := tree.Statements[0].(*ast.SelectStatement); ok {
     fmt.Printf("Found %d JOINs:\n", len(selectStmt.Joins))
     for i, join := range selectStmt.Joins {
-        fmt.Printf("JOIN %d: %s (left: %s, right: %s)\n", 
+        fmt.Printf("JOIN %d: %s (left: %s, right: %s)\n",
             i+1, join.Type, join.Left.Name, join.Right.Name)
     }
 }
@@ -801,31 +805,27 @@ go test -v ./pkg/sql/parser/
 
 ```
 GoSQLX/
+├── cmd/gosqlx/              # CLI tool (validate, format, parse, analyze, lint, lsp)
 ├── pkg/
-│   ├── models/              # Core data structures
-│   │   ├── token.go        # Token definitions
-│   │   └── location.go     # Position tracking
+│   ├── models/              # Core data structures (tokens, spans, locations)
+│   ├── errors/              # Structured error handling with position tracking
+│   ├── config/              # Configuration management (YAML/JSON/env)
+│   ├── metrics/             # Performance monitoring and observability
+│   ├── gosqlx/              # High-level simple API (recommended entry point)
+│   ├── linter/              # SQL linting engine with 10 rules (L001-L010)
+│   ├── lsp/                 # Language Server Protocol server for IDEs
+│   ├── compatibility/       # API stability testing
 │   └── sql/
-│       ├── tokenizer/       # Lexical analysis
-│       │   ├── tokenizer.go
-│       │   └── pool.go
-│       ├── parser/          # Syntax analysis
-│       │   ├── parser.go
-│       │   └── expressions.go
-│       ├── ast/            # Abstract syntax tree
-│       │   ├── nodes.go
-│       │   └── statements.go
-│       └── keywords/        # SQL keywords
-├── examples/               # Usage examples
-│   └── cmd/
-│       ├── example.go
-│       └── example_test.go
-├── docs/                   # Documentation
-│   ├── API_REFERENCE.md
-│   ├── USAGE_GUIDE.md
-│   ├── ARCHITECTURE.md
-│   └── TROUBLESHOOTING.md
-└── tools/                  # Development tools
+│       ├── tokenizer/       # Zero-copy lexical analysis
+│       ├── parser/          # Recursive descent parser
+│       ├── ast/             # Abstract syntax tree nodes with visitor pattern
+│       ├── token/           # Token type definitions and pool management
+│       ├── keywords/        # Multi-dialect SQL keyword definitions
+│       ├── security/        # SQL injection detection
+│       └── monitor/         # SQL monitoring utilities
+├── examples/                # Usage examples and tutorials
+├── docs/                    # Comprehensive documentation (20+ guides)
+└── vscode-extension/        # Official VSCode extension
 ```
 
 ## Development

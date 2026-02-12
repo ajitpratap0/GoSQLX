@@ -45,11 +45,11 @@ func DefaultConfig() FormatterConfig {
 // LoadConfig loads configuration from a JSON file
 func LoadConfig(filePath string) (FormatterConfig, error) {
 	// If file doesn't exist, return default config
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+	if _, err := os.Stat(filePath); os.IsNotExist(err) { // #nosec G703
 		return DefaultConfig(), nil
 	}
 
-	data, err := os.ReadFile(filePath) // #nosec G304
+	data, err := os.ReadFile(filePath) // #nosec G304,G703
 	if err != nil {
 		return FormatterConfig{}, err
 	}

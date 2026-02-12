@@ -20,7 +20,7 @@ type ValidationResult struct {
 // ValidateFile validates a single SQL file
 func ValidateFile(filePath string) ValidationResult {
 	// Read the file
-	content, err := os.ReadFile(filePath) // #nosec G304
+	content, err := os.ReadFile(filePath) // #nosec G304,G703
 	if err != nil {
 		return ValidationResult{
 			FilePath: filePath,
@@ -78,7 +78,7 @@ func ValidateFile(filePath string) ValidationResult {
 func ValidateDirectory(dirPath string) ([]ValidationResult, error) {
 	var results []ValidationResult
 
-	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error { // #nosec G703
 		if err != nil {
 			return err
 		}

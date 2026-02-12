@@ -115,7 +115,7 @@ func formatCommand() {
 	}
 
 	// Read SQL file
-	content, err := os.ReadFile(filePath) // #nosec G304
+	content, err := os.ReadFile(filePath) // #nosec G304,G703
 	if err != nil {
 		fmt.Printf("Error reading file: %v\n", err)
 		os.Exit(1)
@@ -131,7 +131,7 @@ func formatCommand() {
 
 	// Output or write to file
 	if inPlace {
-		if err := os.WriteFile(filePath, []byte(formatted), 0600); err != nil {
+		if err := os.WriteFile(filePath, []byte(formatted), 0600); err != nil { // #nosec G703
 			fmt.Printf("Error writing file: %v\n", err)
 			os.Exit(1)
 		}

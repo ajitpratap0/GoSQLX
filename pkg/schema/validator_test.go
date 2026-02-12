@@ -553,3 +553,49 @@ func TestFindClosest(t *testing.T) {
 		}
 	}
 }
+
+func TestValidator_CaseInsensitiveLookups(t *testing.T) {
+	v := NewValidator(helperSchema())
+
+	// Table name case-insensitive
+	errs, err := v.Validate("SELECT id, name FROM USERS")
+	if err != nil {
+		t.Fatalf("Validate failed: %v", err)
+	}
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors for case-insensitive table lookup, got %d: %v", len(errs), errs)
+	}
+
+	// Mixed case
+	errs, err = v.Validate("SELECT id FROM Users")
+	if err != nil {
+		t.Fatalf("Validate failed: %v", err)
+	}
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors for mixed-case table name, got %d: %v", len(errs), errs)
+	}
+}
+
+func TestSchema_CaseInsensitiveColumnLookup(t *testing.T) {
+	s := NewSchema("test")
+	tbl := NewTable("users")
+	tbl.AddColumn(&Column{Name: "ID", DataType: "INT"})
+	s.AddTable(tbl)
+
+	// Case-insensitive table lookup
+	if _, ok := s.GetTable("USERS"); !ok {
+		t.Fatal("expected case-insensitive table lookup to succeed")
+	}
+	if _, ok := s.GetTable("users"); !ok {
+		t.Fatal("expected case-insensitive table lookup to succeed")
+	}
+
+	// Case-insensitive column lookup
+	tbl2, _ := s.GetTable("users")
+	if _, ok := tbl2.GetColumn("id"); !ok {
+		t.Fatal("expected case-insensitive column lookup to succeed")
+	}
+	if _, ok := tbl2.GetColumn("ID"); !ok {
+		t.Fatal("expected case-insensitive column lookup to succeed")
+	}
+}

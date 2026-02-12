@@ -31,7 +31,10 @@
 //	// errors[0].Message: column "email" does not exist in table "users"
 package schema
 
-import "sort"
+import (
+	"sort"
+	"strings"
+)
 
 // Schema represents a database schema with tables, columns, and constraints.
 type Schema struct {
@@ -87,23 +90,25 @@ func NewSchema(name string) *Schema {
 }
 
 // AddTable adds a table to the schema. If a table with the same name already
-// exists, it is replaced.
+// exists, it is replaced. Tables are stored with their original name but
+// lookups are case-insensitive.
 func (s *Schema) AddTable(table *Table) {
-	s.Tables[table.Name] = table
+	s.Tables[strings.ToLower(table.Name)] = table
 }
 
 // GetTable looks up a table by name. Returns the table and true if found,
-// or nil and false if not found. The lookup is case-sensitive.
+// or nil and false if not found. The lookup is case-insensitive.
 func (s *Schema) GetTable(name string) (*Table, bool) {
-	t, ok := s.Tables[name]
+	t, ok := s.Tables[strings.ToLower(name)]
 	return t, ok
 }
 
-// TableNames returns a sorted list of all table names in the schema.
+// TableNames returns a sorted list of all table names in the schema,
+// using the original names from the Table structs.
 func (s *Schema) TableNames() []string {
 	names := make([]string, 0, len(s.Tables))
-	for name := range s.Tables {
-		names = append(names, name)
+	for _, t := range s.Tables {
+		names = append(names, t.Name)
 	}
 	sort.Strings(names)
 	return names
@@ -118,23 +123,25 @@ func NewTable(name string) *Table {
 }
 
 // AddColumn adds a column to the table. If a column with the same name
-// already exists, it is replaced.
+// already exists, it is replaced. Columns are stored with their original
+// name but lookups are case-insensitive.
 func (t *Table) AddColumn(col *Column) {
-	t.Columns[col.Name] = col
+	t.Columns[strings.ToLower(col.Name)] = col
 }
 
 // GetColumn looks up a column by name. Returns the column and true if found,
-// or nil and false if not found. The lookup is case-sensitive.
+// or nil and false if not found. The lookup is case-insensitive.
 func (t *Table) GetColumn(name string) (*Column, bool) {
-	c, ok := t.Columns[name]
+	c, ok := t.Columns[strings.ToLower(name)]
 	return c, ok
 }
 
-// ColumnNames returns a sorted list of all column names in the table.
+// ColumnNames returns a sorted list of all column names in the table,
+// using the original names from the Column structs.
 func (t *Table) ColumnNames() []string {
 	names := make([]string, 0, len(t.Columns))
-	for name := range t.Columns {
-		names = append(names, name)
+	for _, c := range t.Columns {
+		names = append(names, c.Name)
 	}
 	sort.Strings(names)
 	return names

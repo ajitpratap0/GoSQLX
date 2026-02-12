@@ -3,12 +3,38 @@ package schema
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
+// tableMapPool reuses map[string]string allocations for table alias resolution.
+// This avoids allocating a new map for every validated statement.
+var tableMapPool = sync.Pool{
+	New: func() interface{} {
+		return make(map[string]string, 8)
+	},
+}
+
+// getTableMap retrieves a map from the pool.
+func getTableMap() map[string]string {
+	return tableMapPool.Get().(map[string]string)
+}
+
+// putTableMap clears and returns a map to the pool.
+func putTableMap(m map[string]string) {
+	for k := range m {
+		delete(m, k)
+	}
+	tableMapPool.Put(m)
+}
+
 // ValidationError represents a single validation issue found in a SQL query.
+// Note: Line and Column are populated when position information is available
+// from AST nodes. Currently, most AST nodes do not carry position data, so
+// these fields will be 0 for most errors. Future AST enhancements will enable
+// precise source location tracking.
 type ValidationError struct {
 	Message    string // Human-readable description of the issue
 	Line       int    // Line number (1-based, 0 if unknown)
@@ -76,8 +102,9 @@ func (v *Validator) validateStatement(stmt ast.Statement) []ValidationError {
 func (v *Validator) validateSelect(s *ast.SelectStatement) []ValidationError {
 	var errors []ValidationError
 
-	// Build a map of available tables: alias -> tableName
-	tableMap := make(map[string]string) // alias or name -> actual table name
+	// Build a map of available tables: alias -> tableName (pooled for reuse)
+	tableMap := getTableMap()
+	defer putTableMap(tableMap)
 
 	// Validate FROM tables
 	for _, ref := range s.From {
@@ -221,7 +248,8 @@ func (v *Validator) validateUpdate(s *ast.UpdateStatement) []ValidationError {
 	}
 
 	// Build table map for column validation
-	tableMap := make(map[string]string)
+	tableMap := getTableMap()
+	defer putTableMap(tableMap)
 	if s.Alias != "" {
 		tableMap[s.Alias] = tableName
 	} else {
@@ -282,7 +310,8 @@ func (v *Validator) validateDelete(s *ast.DeleteStatement) []ValidationError {
 	}
 
 	// Build table map for column validation
-	tableMap := make(map[string]string)
+	tableMap := getTableMap()
+	defer putTableMap(tableMap)
 	if s.Alias != "" {
 		tableMap[s.Alias] = tableName
 	} else {

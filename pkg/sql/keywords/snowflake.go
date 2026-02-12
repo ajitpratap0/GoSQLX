@@ -43,7 +43,7 @@ var SNOWFLAKE_SPECIFIC = []Keyword{
 
 	// Snowflake DDL
 	{Word: "WAREHOUSE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
-	{Word: "DATABASE", Type: models.TokenTypeDatabase, Reserved: false, ReservedForTableAlias: false},
+	{Word: "DATABASE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "CLONE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "UNDROP", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: false},
 	{Word: "RECLUSTER", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
@@ -51,7 +51,7 @@ var SNOWFLAKE_SPECIFIC = []Keyword{
 	// Time Travel
 	{Word: "BEFORE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "AT", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
-	{Word: "TIMESTAMP", Type: models.TokenTypeTimestamp, Reserved: false, ReservedForTableAlias: false},
+	{Word: "TIMESTAMP", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "STATEMENT", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 
 	// Data Loading

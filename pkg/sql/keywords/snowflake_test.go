@@ -37,7 +37,7 @@ func TestSnowflakeKeywords(t *testing.T) {
 
 		// Snowflake DDL
 		{"WAREHOUSE", models.TokenTypeKeyword},
-		{"DATABASE", models.TokenTypeDatabase},
+		{"DATABASE", models.TokenTypeKeyword},
 		{"CLONE", models.TokenTypeKeyword},
 		{"UNDROP", models.TokenTypeKeyword},
 		{"RECLUSTER", models.TokenTypeKeyword},
@@ -45,7 +45,7 @@ func TestSnowflakeKeywords(t *testing.T) {
 		// Time Travel
 		{"BEFORE", models.TokenTypeKeyword},
 		{"AT", models.TokenTypeKeyword},
-		{"TIMESTAMP", models.TokenTypeTimestamp},
+		{"TIMESTAMP", models.TokenTypeKeyword},
 		{"STATEMENT", models.TokenTypeKeyword},
 
 		// Data Loading
@@ -640,4 +640,30 @@ func TestDialectAllDialectsCoverage(t *testing.T) {
 			}
 		})
 	}
+}
+
+func BenchmarkDetectDialect(b *testing.B) {
+	b.Run("Simple", func(b *testing.B) {
+		sql := "SELECT * FROM users WHERE id = 1"
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			DetectDialect(sql)
+		}
+	})
+
+	b.Run("Snowflake", func(b *testing.B) {
+		sql := "SELECT FLATTEN(data) FROM my_table QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY ts) = 1"
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			DetectDialect(sql)
+		}
+	})
+
+	b.Run("LargeSQL", func(b *testing.B) {
+		sql := strings.Repeat("SELECT * FROM users WHERE id = 1; ", 100)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			DetectDialect(sql)
+		}
+	})
 }

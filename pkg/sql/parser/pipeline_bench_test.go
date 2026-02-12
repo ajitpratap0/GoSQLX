@@ -59,13 +59,13 @@ func BenchmarkFullPipeline(b *testing.B) {
 // BenchmarkParseError benchmarks error handling performance for invalid SQL.
 func BenchmarkParseError(b *testing.B) {
 	queries := map[string]string{
-		"missing_from":       "SELECT * WHERE x = 1",
-		"missing_table":      "SELECT * FROM",
-		"bad_syntax":         "SELECTT * FROM users",
-		"incomplete_insert":  "INSERT INTO users",
-		"trailing_comma":     "SELECT a, b, FROM t",
-		"unmatched_paren":    "SELECT (a + b FROM t",
-		"empty":              "",
+		"missing_from":      "SELECT * WHERE x = 1",
+		"missing_table":     "SELECT * FROM",
+		"bad_syntax":        "SELECTT * FROM users",
+		"incomplete_insert": "INSERT INTO users",
+		"trailing_comma":    "SELECT a, b, FROM t",
+		"unmatched_paren":   "SELECT (a + b FROM t",
+		"empty":             "",
 	}
 
 	for name, sql := range queries {

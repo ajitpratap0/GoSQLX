@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"strconv"
+	"sync"
 	"unsafe"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
@@ -17,6 +18,13 @@ const VERSION = "1.7.0"
 
 // errorPositionRegex matches "line X, column Y" patterns in error messages.
 var errorPositionRegex = regexp.MustCompile(`line\s+(\d+),\s*column\s+(\d+)`)
+
+// cachedVersion is a process-lifetime C string for gosqlx_version().
+// Allocated once via sync.Once to avoid leaking memory on every call.
+var (
+	cachedVersion     *C.char
+	cachedVersionOnce sync.Once
+)
 
 // ParseResult represents the result of parsing SQL.
 type ParseResult struct {
@@ -79,8 +87,12 @@ func extractErrorPosition(errMsg string) (int, int) {
 func toJSON(v interface{}) *C.char {
 	jsonBytes, err := json.Marshal(v)
 	if err != nil {
-		// Marshal the error message separately to ensure proper JSON escaping
-		errMsg, _ := json.Marshal("json marshal failed: " + err.Error())
+		// Marshal the error message separately to ensure proper JSON escaping.
+		errMsg, marshalErr := json.Marshal("json marshal failed: " + err.Error())
+		if marshalErr != nil {
+			// Both marshals failed; return a safe static fallback.
+			return C.CString(`{"error":"json marshal failed"}`)
+		}
 		fallback := `{"error":` + string(errMsg) + `}`
 		return C.CString(fallback)
 	}
@@ -132,6 +144,7 @@ func gosqlx_parse(sql *C.char) *C.char {
 		}
 		return toJSON(result)
 	}
+	defer ast.ReleaseAST(tree)
 
 	stmtTypes := make([]string, 0, len(tree.Statements))
 	for _, stmt := range tree.Statements {
@@ -195,6 +208,7 @@ func gosqlx_extract_tables(sql *C.char) *C.char {
 	if err != nil {
 		return toJSON(map[string]interface{}{"error": err.Error()})
 	}
+	defer ast.ReleaseAST(tree)
 
 	tables := gosqlx.ExtractTables(tree)
 	if tables == nil {
@@ -211,6 +225,7 @@ func gosqlx_extract_columns(sql *C.char) *C.char {
 	if err != nil {
 		return toJSON(map[string]interface{}{"error": err.Error()})
 	}
+	defer ast.ReleaseAST(tree)
 
 	columns := gosqlx.ExtractColumns(tree)
 	if columns == nil {
@@ -227,6 +242,7 @@ func gosqlx_extract_functions(sql *C.char) *C.char {
 	if err != nil {
 		return toJSON(map[string]interface{}{"error": err.Error()})
 	}
+	defer ast.ReleaseAST(tree)
 
 	functions := gosqlx.ExtractFunctions(tree)
 	if functions == nil {
@@ -243,6 +259,7 @@ func gosqlx_extract_metadata(sql *C.char) *C.char {
 	if err != nil {
 		return toJSON(map[string]interface{}{"error": err.Error()})
 	}
+	defer ast.ReleaseAST(tree)
 
 	metadata := gosqlx.ExtractMetadata(tree)
 
@@ -297,7 +314,10 @@ func gosqlx_free(ptr *C.char) {
 
 //export gosqlx_version
 func gosqlx_version() *C.char {
-	return C.CString(VERSION)
+	cachedVersionOnce.Do(func() {
+		cachedVersion = C.CString(VERSION)
+	})
+	return cachedVersion
 }
 
 func main() {}

@@ -17,6 +17,7 @@ func TestParseValidSQL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
+	defer ast.ReleaseAST(tree)
 	if tree == nil {
 		t.Fatal("expected non-nil AST")
 	}
@@ -40,6 +41,7 @@ func TestParseMultipleStatements(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
+	defer ast.ReleaseAST(tree)
 	if tree == nil {
 		t.Fatal("expected non-nil AST")
 	}
@@ -83,6 +85,7 @@ func TestExtractTables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
+	defer ast.ReleaseAST(tree)
 
 	tables := gosqlx.ExtractTables(tree)
 	if len(tables) == 0 {
@@ -106,6 +109,7 @@ func TestExtractColumns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
+	defer ast.ReleaseAST(tree)
 
 	columns := gosqlx.ExtractColumns(tree)
 	if len(columns) == 0 {
@@ -129,6 +133,7 @@ func TestExtractFunctions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
+	defer ast.ReleaseAST(tree)
 
 	functions := gosqlx.ExtractFunctions(tree)
 	if len(functions) == 0 {
@@ -152,6 +157,7 @@ func TestExtractMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}
+	defer ast.ReleaseAST(tree)
 
 	metadata := gosqlx.ExtractMetadata(tree)
 	if metadata == nil {

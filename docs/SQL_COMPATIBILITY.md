@@ -1,12 +1,27 @@
 # GoSQLX SQL Feature Compatibility Matrix
 
-**Version**: v1.6.0 | **Last Updated**: December 2025
+**Version**: v1.7.0 | **Last Updated**: February 2026
 
 ## Overview
 
 This matrix documents the comprehensive SQL feature support in GoSQLX across different SQL dialects and standards. The testing was conducted using the comprehensive integration test suite with 500+ test cases covering real-world SQL patterns.
 
-### Recent Additions (v1.6.0)
+### Recent Additions (v1.7.0)
+- ✅ **Schema-Qualified Names**: Full support for `schema.table`, `db.schema.table` in all DML/DDL statements
+- ✅ **PostgreSQL Enhancements**:
+  - **Type Casting** - `::` operator for PostgreSQL-style casts (`SELECT 1::int`)
+  - **UPSERT** - `INSERT ... ON CONFLICT DO UPDATE/NOTHING`
+  - **Positional Parameters** - `$1`, `$2` style parameter placeholders
+  - **JSONB Operators** - Additional `@?` and `@@` operators
+  - **Regex Operators** - `~`, `~*`, `!~`, `!~*` for pattern matching
+- ✅ **ARRAY Constructors**: `ARRAY[1, 2, 3]` expressions with subscript/slice operations
+- ✅ **WITHIN GROUP** - Ordered-set aggregate functions
+- ✅ **INTERVAL Expressions** - `INTERVAL '1 day'` temporal literals
+- ✅ **FOR UPDATE/SHARE** - Row-level locking clauses
+- ✅ **Multi-row INSERT** - `INSERT INTO t VALUES (1), (2), (3)` batch inserts
+- ✅ **BETWEEN Expressions** - Enhanced BETWEEN support in expressions
+
+### Previous Additions (v1.6.0)
 - ✅ **PostgreSQL Extensions**:
   - **LATERAL JOIN** - Correlated subqueries in FROM clause
   - **JSON/JSONB Operators** - Complete operator set (`->`, `->>`, `#>`, `#>>`, `@>`, `<@`, `?`, `?|`, `?&`, `#-`)
@@ -482,7 +497,7 @@ RETURNING user_id, session_id;
 
 ## SQL Standards Compliance Summary
 
-### Overall Compliance (v1.6.0)
+### Overall Compliance (v1.7.0)
 
 | Standard | Compliance % | Status | Notes |
 |----------|--------------|--------|-------|
@@ -589,7 +604,7 @@ RETURNING user_id, session_id;
 
 ## Production Readiness Summary
 
-### Ready for Production (v1.6.0)
+### Ready for Production (v1.7.0)
 
 **Core DML/DDL**:
 - **Core SQL operations** (SELECT, INSERT, UPDATE, DELETE, TRUNCATE)
@@ -600,7 +615,7 @@ RETURNING user_id, session_id;
 - **Materialized views**
 - **Table partitioning**
 
-**PostgreSQL Extensions** (v1.6.0):
+**PostgreSQL Extensions** (v1.6.0-v1.7.0):
 - **JSON/JSONB operators** - All 10 operators (`->`, `->>`, `#>`, `#>>`, `@>`, `<@`, `?`, `?|`, `?&`, `#-`)
 - **LATERAL JOIN** - Full support with LEFT/INNER/CROSS variants
 - **DISTINCT ON** - PostgreSQL-specific row selection
@@ -671,32 +686,38 @@ RETURNING user_id, session_id;
 
 ---
 
-**Last Updated**: December 2025
-**GoSQLX Version**: 1.6.0
-**Test Suite Version**: 1.6.0
-**Total Test Cases**: 650+
+**Last Updated**: February 2026
+**GoSQLX Version**: 1.7.0
+**Test Suite Version**: 1.7.0
+**Total Test Cases**: 700+
 **Coverage Percentage**: 95%+
-**SQL-99 Compliance**: ~80-85%
-**PostgreSQL Compliance**: ~95% (core features), ~80% (extensions)
+**SQL-99 Compliance**: ~85%
+**PostgreSQL Compliance**: ~95% (core features), ~85% (extensions)
 
-## Quick Reference: What's New in v1.6.0
+## Quick Reference: What's New in v1.7.0
 
-### PostgreSQL Extensions (6 Major Features)
-1. **JSON/JSONB Operators** - All 10 operators supported
-2. **LATERAL JOIN** - Correlated subqueries in FROM clause
-3. **DISTINCT ON** - PostgreSQL-specific row selection
-4. **FILTER Clause** - Conditional aggregation (SQL:2003)
-5. **Aggregate ORDER BY** - Ordering within aggregates
-6. **RETURNING Clause** - Return modified rows
+### Schema & Name Resolution
+1. **Schema-Qualified Table Names** - `schema.table` and `db.schema.table` in all statements
+2. **Double-Quoted Identifiers** - Proper handling in PostgreSQL contexts
+
+### PostgreSQL Enhancements (8 Features)
+1. **Type Casting** - `::` operator (`SELECT 1::int`, `col::text`)
+2. **UPSERT** - `INSERT ... ON CONFLICT DO UPDATE/NOTHING`
+3. **Positional Parameters** - `$1`, `$2` style placeholders
+4. **JSONB Operators** - Additional `@?` and `@@` operators
+5. **Regex Operators** - `~`, `~*`, `!~`, `!~*` pattern matching
+6. **ARRAY Constructors** - `ARRAY[1, 2, 3]` with subscript/slice
+7. **INTERVAL Expressions** - `INTERVAL '1 day'` temporal literals
+8. **WITHIN GROUP** - Ordered-set aggregate functions
 
 ### SQL Standards
-1. **FETCH FIRST n ROWS** (SQL-99 F861)
-2. **FETCH WITH TIES** (SQL-99 F862)
-3. **OFFSET-FETCH** - Standard pagination
-4. **TRUNCATE TABLE** - SQL:2008 with CASCADE support
+1. **FOR UPDATE/SHARE** - Row-level locking clauses
+2. **Multi-row INSERT** - Batch `VALUES` lists
+3. **BETWEEN Expressions** - Enhanced expression support
+4. **FETCH with OFFSET** - Standard pagination improvements
 
 ### Migration Notes
-- **From v1.4/v1.5**: All existing queries continue to work. New features are additive.
-- **PostgreSQL Users**: Can now use native PostgreSQL syntax without workarounds
-- **Multi-dialect Projects**: PostgreSQL-specific features automatically detected
-- **Performance**: No performance regression; JSON operators add <1% overhead
+- **From v1.6.0**: All existing queries continue to work. New features are additive.
+- **Schema Users**: Can now use `schema.table` syntax in SELECT, INSERT, UPDATE, DELETE, and DDL
+- **PostgreSQL Users**: Full `::` type casting, UPSERT, and positional parameters
+- **Performance**: No performance regression from new features

@@ -4,6 +4,54 @@ This guide helps you upgrade between versions of GoSQLX.
 
 ---
 
+## Upgrading to v1.7.0 from v1.6.x
+
+**Release Date**: February 12, 2026
+**Type**: Feature Release (Non-Breaking)
+**Focus**: Parser Enhancements, Schema-Qualified Names, PostgreSQL Extensions
+
+### Quick Summary
+
+v1.7.0 is a **100% backward compatible** feature release. It adds schema-qualified table names, PostgreSQL type casting, UPSERT support, ARRAY constructors, and many parser enhancements across 8 batches of improvements.
+
+### What's New
+
+**Schema-Qualified Names:**
+- Full `schema.table` and `db.schema.table` support in SELECT, INSERT, UPDATE, DELETE
+- Schema-qualified names in DDL (CREATE TABLE/VIEW/INDEX, DROP, TRUNCATE)
+- Backward-compatible: stored as dotted strings in existing Name fields
+
+**PostgreSQL Extensions:**
+- `::` type casting operator (`SELECT 1::int`, `col::text`)
+- UPSERT: `INSERT ... ON CONFLICT DO UPDATE/NOTHING`
+- Positional parameters: `$1`, `$2` style placeholders
+- JSONB operators: `@?` and `@@`
+- Regex operators: `~`, `~*`, `!~`, `!~*`
+
+**Parser Enhancements:**
+- ARRAY constructor expressions with subscript/slice
+- WITHIN GROUP clause for ordered-set aggregates
+- INTERVAL expressions
+- FOR UPDATE/SHARE locking clauses
+- Multi-row INSERT VALUES
+- Enhanced BETWEEN support in expressions
+
+### Upgrade Steps
+
+```bash
+# Update your go.mod
+go get github.com/ajitpratap0/GoSQLX@v1.7.0
+
+# Or update CLI
+go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@v1.7.0
+```
+
+### Breaking Changes
+
+**None** - v1.7.0 is fully backward compatible with v1.6.x.
+
+---
+
 ## Upgrading to v1.6.0 from v1.5.x
 
 **Release Date**: December 11, 2025

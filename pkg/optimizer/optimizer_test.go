@@ -28,16 +28,6 @@ func hasSuggestion(result *OptimizationResult, ruleID string) bool {
 	return false
 }
 
-func countSuggestions(result *OptimizationResult, ruleID string) int {
-	count := 0
-	for _, s := range result.Suggestions {
-		if s.RuleID == ruleID {
-			count++
-		}
-	}
-	return count
-}
-
 // ---------------------------------------------------------------------------
 // OPT-001: SELECT * Detection
 // ---------------------------------------------------------------------------

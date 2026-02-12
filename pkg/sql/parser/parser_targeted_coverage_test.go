@@ -259,32 +259,32 @@ func TestParseObjectName_EdgeCases(t *testing.T) {
 		{
 			name:      "Qualified table name (schema.table)",
 			sql:       "SELECT * FROM public.users",
-			shouldErr: true, // Qualified table names in FROM may not be fully supported
+			shouldErr: false,
 		},
 		{
 			name:      "Fully qualified (db.schema.table)",
 			sql:       "SELECT * FROM mydb.public.users",
-			shouldErr: true, // Fully qualified names may not be fully supported
+			shouldErr: false,
 		},
 		{
 			name:      "Multiple qualified names in JOIN",
 			sql:       "SELECT * FROM public.users u JOIN public.orders o ON u.id = o.user_id",
-			shouldErr: true, // Qualified table names in JOIN may not be fully supported
+			shouldErr: false,
 		},
 		{
 			name:      "Qualified name in INSERT",
 			sql:       "INSERT INTO public.users (name) VALUES ('John')",
-			shouldErr: true, // Qualified names in INSERT may not be fully supported
+			shouldErr: false,
 		},
 		{
 			name:      "Qualified name in UPDATE",
 			sql:       "UPDATE public.users SET name = 'Jane' WHERE id = 1",
-			shouldErr: true, // Qualified names in UPDATE may not be fully supported
+			shouldErr: false,
 		},
 		{
 			name:      "Qualified name in DELETE",
 			sql:       "DELETE FROM public.users WHERE id = 1",
-			shouldErr: true, // Qualified names in DELETE may not be fully supported
+			shouldErr: false,
 		},
 		{
 			name:      "Qualified column reference",

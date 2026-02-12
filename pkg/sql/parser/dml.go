@@ -21,12 +21,11 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 	}
 	p.advance() // Consume INTO
 
-	// Parse table name (supports double-quoted identifiers for PostgreSQL compatibility)
-	if !p.isIdentifier() {
+	// Parse table name (supports schema.table qualification and double-quoted identifiers)
+	tableName, err := p.parseQualifiedName()
+	if err != nil {
 		return nil, p.expectedError("table name")
 	}
-	tableName := p.currentToken.Literal
-	p.advance()
 
 	// Parse column list if present
 	columns := make([]ast.Expression, 0)
@@ -143,12 +142,11 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 	// We've already consumed the UPDATE token in matchToken
 
-	// Parse table name (supports double-quoted identifiers for PostgreSQL compatibility)
-	if !p.isIdentifier() {
+	// Parse table name (supports schema.table qualification and double-quoted identifiers)
+	tableName, err := p.parseQualifiedName()
+	if err != nil {
 		return nil, p.expectedError("table name")
 	}
-	tableName := p.currentToken.Literal
-	p.advance()
 
 	// Parse SET
 	if !p.isType(models.TokenTypeSet) {
@@ -250,12 +248,11 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 	}
 	p.advance() // Consume FROM
 
-	// Parse table name (supports double-quoted identifiers for PostgreSQL compatibility)
-	if !p.isIdentifier() {
+	// Parse table name (supports schema.table qualification and double-quoted identifiers)
+	tableName, err := p.parseQualifiedName()
+	if err != nil {
 		return nil, p.expectedError("table name")
 	}
-	tableName := p.currentToken.Literal
-	p.advance()
 
 	// Parse WHERE clause if present
 	var whereClause ast.Expression

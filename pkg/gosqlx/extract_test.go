@@ -169,8 +169,88 @@ func TestExtractTablesQualified_SimpleTable(t *testing.T) {
 }
 
 func TestExtractTablesQualified_WithSchema(t *testing.T) {
-	// Skipping - Schema-qualified table names (schema.table) not supported in parser yet
-	t.Skip("Schema-qualified table names not supported in parser yet")
+	tests := []struct {
+		name     string
+		sql      string
+		expected []QualifiedName
+	}{
+		{
+			name: "schema.table in SELECT",
+			sql:  "SELECT * FROM public.users",
+			expected: []QualifiedName{
+				{Schema: "public", Name: "users"},
+			},
+		},
+		{
+			name: "schema.table in JOIN",
+			sql:  "SELECT * FROM public.users u JOIN app.orders o ON u.id = o.user_id",
+			expected: []QualifiedName{
+				{Schema: "public", Name: "users"},
+				{Schema: "app", Name: "orders"},
+			},
+		},
+		{
+			name: "schema.table in INSERT",
+			sql:  "INSERT INTO myschema.users (name) VALUES ('test')",
+			expected: []QualifiedName{
+				{Schema: "myschema", Name: "users"},
+			},
+		},
+		{
+			name: "schema.table in UPDATE",
+			sql:  "UPDATE myschema.users SET name = 'test'",
+			expected: []QualifiedName{
+				{Schema: "myschema", Name: "users"},
+			},
+		},
+		{
+			name: "schema.table in DELETE",
+			sql:  "DELETE FROM myschema.users WHERE id = 1",
+			expected: []QualifiedName{
+				{Schema: "myschema", Name: "users"},
+			},
+		},
+		{
+			name: "3-part name (db.schema.table)",
+			sql:  "SELECT * FROM mydb.public.users",
+			expected: []QualifiedName{
+				{Schema: "mydb", Table: "public", Name: "users"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tree, err := Parse(tt.sql)
+			if err != nil {
+				t.Fatalf("Failed to parse %q: %v", tt.sql, err)
+			}
+			if tree != nil {
+				defer ast.ReleaseAST(tree)
+			}
+
+			result := ExtractTablesQualified(tree)
+			if len(result) != len(tt.expected) {
+				t.Fatalf("expected %d qualified tables, got %d: %v", len(tt.expected), len(result), result)
+			}
+
+			// Build a map for easier lookup
+			resultMap := make(map[string]QualifiedName)
+			for _, qn := range result {
+				resultMap[qn.String()] = qn
+			}
+			for _, exp := range tt.expected {
+				found, ok := resultMap[exp.String()]
+				if !ok {
+					t.Errorf("expected qualified table %q not found in results %v", exp.String(), result)
+					continue
+				}
+				if found.Schema != exp.Schema || found.Table != exp.Table || found.Name != exp.Name {
+					t.Errorf("expected %+v, got %+v", exp, found)
+				}
+			}
+		})
+	}
 }
 
 func TestQualifiedName_String(t *testing.T) {

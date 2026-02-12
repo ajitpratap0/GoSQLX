@@ -68,14 +68,7 @@
 //     Example (not fully supported):
 //     SELECT * FROM products WHERE price BETWEEN min_price AND max_price
 //
-//  5. Schema-Qualified Table Names:
-//     Schema-qualified table names (schema.table format) are not fully supported by the
-//     parser. Tables with explicit schema qualifiers may not be parsed correctly.
-//
-//     Example (not fully supported):
-//     SELECT * FROM public.users JOIN app.orders ON users.id = orders.user_id
-//
-//  6. Complex Recursive CTEs:
+//  5. Complex Recursive CTEs:
 //     Recursive Common Table Expressions (CTEs) with complex JOIN syntax are not fully
 //     supported. Simple recursive CTEs work, but complex variations may fail to parse.
 //

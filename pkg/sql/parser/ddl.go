@@ -98,12 +98,12 @@ func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStat
 		stmt.IfNotExists = true
 	}
 
-	// Parse view name (supports double-quoted identifiers for PostgreSQL compatibility)
-	if !p.isIdentifier() {
+	// Parse view name (supports schema.view qualification and double-quoted identifiers)
+	viewName, err := p.parseQualifiedName()
+	if err != nil {
 		return nil, p.expectedError("view name")
 	}
-	stmt.Name = p.currentToken.Literal
-	p.advance()
+	stmt.Name = viewName
 
 	// Parse optional column list
 	if p.isType(models.TokenTypeLParen) {
@@ -202,12 +202,12 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 		stmt.IfNotExists = true
 	}
 
-	// Parse view name (supports double-quoted identifiers for PostgreSQL compatibility)
-	if !p.isIdentifier() {
+	// Parse view name (supports schema.view qualification and double-quoted identifiers)
+	matViewName, err := p.parseQualifiedName()
+	if err != nil {
 		return nil, p.expectedError("materialized view name")
 	}
-	stmt.Name = p.currentToken.Literal
-	p.advance()
+	stmt.Name = matViewName
 
 	// Parse optional column list
 	if p.isType(models.TokenTypeLParen) {
@@ -307,12 +307,12 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 		stmt.IfNotExists = true
 	}
 
-	// Parse table name (supports double-quoted identifiers for PostgreSQL compatibility)
-	if !p.isIdentifier() {
+	// Parse table name (supports schema.table qualification and double-quoted identifiers)
+	createTableName, err := p.parseQualifiedName()
+	if err != nil {
 		return nil, p.expectedError("table name")
 	}
-	stmt.Name = p.currentToken.Literal
-	p.advance()
+	stmt.Name = createTableName
 
 	// Expect opening parenthesis for column definitions
 	if !p.isType(models.TokenTypeLParen) {
@@ -611,12 +611,12 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 		stmt.IfNotExists = true
 	}
 
-	// Parse index name (supports double-quoted identifiers)
-	if !p.isIdentifier() {
+	// Parse index name (supports schema.index qualification and double-quoted identifiers)
+	indexName, err := p.parseQualifiedName()
+	if err != nil {
 		return nil, p.expectedError("index name")
 	}
-	stmt.Name = p.currentToken.Literal
-	p.advance()
+	stmt.Name = indexName
 
 	// Expect ON
 	if !p.isType(models.TokenTypeOn) {
@@ -624,12 +624,12 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 	}
 	p.advance() // Consume ON
 
-	// Parse table name (supports double-quoted identifiers for PostgreSQL compatibility)
-	if !p.isIdentifier() {
+	// Parse table name (supports schema.table qualification and double-quoted identifiers)
+	indexTableName, err := p.parseQualifiedName()
+	if err != nil {
 		return nil, p.expectedError("table name")
 	}
-	stmt.Table = p.currentToken.Literal
-	p.advance()
+	stmt.Table = indexTableName
 
 	// Parse optional USING
 	if p.isType(models.TokenTypeUsing) {
@@ -739,13 +739,13 @@ func (p *Parser) parseDropStatement() (*ast.DropStatement, error) {
 		stmt.IfExists = true
 	}
 
-	// Parse object names (can be comma-separated, supports double-quoted identifiers)
+	// Parse object names (can be comma-separated, supports schema.name qualification)
 	for {
-		if !p.isIdentifier() {
+		dropName, err := p.parseQualifiedName()
+		if err != nil {
 			return nil, p.expectedError("object name")
 		}
-		stmt.Names = append(stmt.Names, p.currentToken.Literal)
-		p.advance()
+		stmt.Names = append(stmt.Names, dropName)
 
 		if p.isType(models.TokenTypeComma) {
 			p.advance() // Consume comma
@@ -788,12 +788,12 @@ func (p *Parser) parseRefreshStatement() (*ast.RefreshMaterializedViewStatement,
 		p.advance()
 	}
 
-	// Parse view name (supports double-quoted identifiers for PostgreSQL compatibility)
-	if !p.isIdentifier() {
+	// Parse view name (supports schema.view qualification and double-quoted identifiers)
+	refreshViewName, err := p.parseQualifiedName()
+	if err != nil {
 		return nil, p.expectedError("materialized view name")
 	}
-	stmt.Name = p.currentToken.Literal
-	p.advance()
+	stmt.Name = refreshViewName
 
 	// Parse optional WITH [NO] DATA
 	// Note: DATA and NO may be tokenized as IDENT since they're common identifiers
@@ -827,13 +827,13 @@ func (p *Parser) parseTruncateStatement() (*ast.TruncateStatement, error) {
 		p.advance() // Consume TABLE
 	}
 
-	// Parse table names (can be comma-separated, supports double-quoted identifiers)
+	// Parse table names (can be comma-separated, supports schema.table qualification)
 	for {
-		if !p.isIdentifier() {
+		truncTableName, err := p.parseQualifiedName()
+		if err != nil {
 			return nil, p.expectedError("table name")
 		}
-		stmt.Tables = append(stmt.Tables, p.currentToken.Literal)
-		p.advance()
+		stmt.Tables = append(stmt.Tables, truncTableName)
 
 		if p.isType(models.TokenTypeComma) {
 			p.advance() // Consume comma

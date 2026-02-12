@@ -234,7 +234,7 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 		TableName:   tableName,
 		Assignments: updates,
 		Where:       whereClause,
-		Returning: returning,
+		Returning:   returning,
 	}, nil
 }
 

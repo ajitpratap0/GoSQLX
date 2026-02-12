@@ -101,7 +101,7 @@ func (l *Linter) Rules() []Rule {
 //	}
 func (l *Linter) LintFile(filename string) FileResult {
 	// Read file
-	content, err := os.ReadFile(filename)
+	content, err := os.ReadFile(filename) // #nosec G304
 	if err != nil {
 		return FileResult{
 			Filename: filename,

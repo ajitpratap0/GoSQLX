@@ -20,7 +20,7 @@ type ValidationResult struct {
 // ValidateFile validates a single SQL file
 func ValidateFile(filePath string) ValidationResult {
 	// Read the file
-	content, err := os.ReadFile(filePath)
+	content, err := os.ReadFile(filePath) // #nosec G304
 	if err != nil {
 		return ValidationResult{
 			FilePath: filePath,

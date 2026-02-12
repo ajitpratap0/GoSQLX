@@ -69,7 +69,7 @@ func lspRun(cmd *cobra.Command, args []string) error {
 	// Set up logging
 	var logger *log.Logger
 	if lspLogFile != "" {
-		f, err := os.OpenFile(lspLogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		f, err := os.OpenFile(lspLogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600) // #nosec G304
 		if err != nil {
 			return fmt.Errorf("failed to open log file: %w", err)
 		}

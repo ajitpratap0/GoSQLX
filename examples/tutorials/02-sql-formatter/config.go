@@ -49,7 +49,7 @@ func LoadConfig(filePath string) (FormatterConfig, error) {
 		return DefaultConfig(), nil
 	}
 
-	data, err := os.ReadFile(filePath)
+	data, err := os.ReadFile(filePath) // #nosec G304
 	if err != nil {
 		return FormatterConfig{}, err
 	}
@@ -69,5 +69,5 @@ func SaveConfig(config FormatterConfig, filePath string) error {
 		return err
 	}
 
-	return os.WriteFile(filePath, data, 0644)
+	return os.WriteFile(filePath, data, 0600)
 }

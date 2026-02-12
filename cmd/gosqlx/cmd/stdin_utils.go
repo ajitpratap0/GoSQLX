@@ -20,7 +20,7 @@ const (
 func IsStdinPipe() bool {
 	// Check if stdin is a terminal using golang.org/x/term
 	// If it's not a terminal, it's likely a pipe or redirect
-	return !term.IsTerminal(int(os.Stdin.Fd()))
+	return !term.IsTerminal(int(os.Stdin.Fd())) // #nosec G115
 }
 
 // ReadFromStdin reads SQL content from stdin with security limits

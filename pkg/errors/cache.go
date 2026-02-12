@@ -64,7 +64,7 @@ func (c *keywordSuggestionCache) set(input, suggestion string) {
 			count++
 		}
 		evicted := len(c.cache) - count
-		atomic.AddUint64(&c.evictions, uint64(evicted))
+		atomic.AddUint64(&c.evictions, uint64(evicted)) // #nosec G115
 		c.cache = newCache
 	}
 

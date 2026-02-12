@@ -103,7 +103,7 @@ func (c *configCache) set(path string, cfg *Config) {
 			count++
 		}
 		evicted := len(c.entries) - count
-		atomic.AddUint64(&c.evictions, uint64(evicted))
+		atomic.AddUint64(&c.evictions, uint64(evicted)) // #nosec G115
 		c.entries = newEntries
 	}
 

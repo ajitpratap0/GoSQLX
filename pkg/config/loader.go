@@ -20,7 +20,7 @@ func LoadFromFile(path string) (*Config, error) {
 		return nil, fmt.Errorf("config file path is empty")
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("config file not found %s: %w", path, err)

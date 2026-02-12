@@ -26,7 +26,75 @@ const (
 
 	// DialectSQLite represents SQLite-specific keywords and extensions
 	DialectSQLite SQLDialect = "sqlite"
+
+	// DialectSQLServer represents SQL Server-specific keywords and extensions
+	DialectSQLServer SQLDialect = "sqlserver"
+
+	// DialectOracle represents Oracle-specific keywords and extensions
+	DialectOracle SQLDialect = "oracle"
+
+	// DialectSnowflake represents Snowflake-specific keywords and extensions.
+	// Includes semi-structured data types (VARIANT, OBJECT), Snowflake objects
+	// (WAREHOUSE, STREAM, TASK, PIPE, STAGE), time travel (BEFORE, AT),
+	// data loading (COPY, PUT, GET), and Snowflake-specific functions (IFF, NVL, etc.)
+	DialectSnowflake SQLDialect = "snowflake"
+
+	// DialectBigQuery represents Google BigQuery-specific keywords and extensions
+	DialectBigQuery SQLDialect = "bigquery"
+
+	// DialectRedshift represents Amazon Redshift-specific keywords and extensions
+	DialectRedshift SQLDialect = "redshift"
 )
+
+// DialectKeywords returns the additional keywords for a specific dialect.
+// This is a convenience function for retrieving dialect-specific keyword lists
+// without constructing a full Keywords instance.
+//
+// Returns nil for DialectGeneric and unrecognized dialects.
+//
+// Example:
+//
+//	snowflakeKws := keywords.DialectKeywords(keywords.DialectSnowflake)
+//	for _, kw := range snowflakeKws {
+//	    fmt.Println(kw.Word)
+//	}
+func DialectKeywords(dialect SQLDialect) []Keyword {
+	switch dialect {
+	case DialectSnowflake:
+		return SNOWFLAKE_SPECIFIC
+	case DialectMySQL:
+		return MYSQL_SPECIFIC
+	case DialectPostgreSQL:
+		return POSTGRESQL_SPECIFIC
+	case DialectSQLite:
+		return SQLITE_SPECIFIC
+	default:
+		return nil
+	}
+}
+
+// AllDialects returns all supported SQL dialect identifiers.
+// This includes both fully implemented dialects (with dialect-specific keywords)
+// and placeholder dialects that currently use only the base keyword set.
+//
+// Example:
+//
+//	for _, d := range keywords.AllDialects() {
+//	    fmt.Println(d)
+//	}
+func AllDialects() []SQLDialect {
+	return []SQLDialect{
+		DialectGeneric,
+		DialectPostgreSQL,
+		DialectMySQL,
+		DialectSQLServer,
+		DialectOracle,
+		DialectSQLite,
+		DialectSnowflake,
+		DialectBigQuery,
+		DialectRedshift,
+	}
+}
 
 // GetCompoundKeywords returns the compound keywords map.
 // Compound keywords are multi-word SQL keywords like "GROUP BY", "ORDER BY",

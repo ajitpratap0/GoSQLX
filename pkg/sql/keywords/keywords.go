@@ -255,6 +255,8 @@ func New(dialect SQLDialect, ignoreCase bool) *Keywords {
 		k.addKeywordsWithCategory(POSTGRESQL_SPECIFIC)
 	case DialectSQLite:
 		k.addKeywordsWithCategory(SQLITE_SPECIFIC)
+	case DialectSnowflake:
+		k.addKeywordsWithCategory(SNOWFLAKE_SPECIFIC)
 	}
 
 	return k

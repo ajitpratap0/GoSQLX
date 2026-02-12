@@ -23,19 +23,6 @@ func parseSQLHelper(t *testing.T, sql string) *ast.AST {
 	return tree
 }
 
-// parseSQLExpectError tokenizes and parses SQL, expecting an error.
-func parseSQLExpectError(t *testing.T, sql string) {
-	t.Helper()
-	tokens := tokenizeSQL(t, sql)
-	p := NewParser()
-	defer p.Release()
-
-	_, err := p.Parse(tokens)
-	if err == nil {
-		t.Fatalf("expected error for %q, got nil", sql)
-	}
-}
-
 // parseTokensHelper parses manually-constructed tokens, returning the AST tree.
 func parseTokensHelper(t *testing.T, tokens []token.Token) *ast.AST {
 	t.Helper()

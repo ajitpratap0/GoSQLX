@@ -437,4 +437,4 @@ When adding new configuration options:
 
 ## License
 
-This package is part of GoSQLX and is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
+This package is part of GoSQLX and is licensed under the Apache License 2.0.

@@ -339,7 +339,7 @@ Contributions are welcome! Please see our [Contributing Guide](https://github.co
 
 ## License
 
-GNU Affero General Public License v3.0 (AGPL-3.0) - see [LICENSE](https://github.com/ajitpratap0/GoSQLX/blob/main/LICENSE)
+Apache License 2.0 - see [LICENSE](https://github.com/ajitpratap0/GoSQLX/blob/main/LICENSE)
 
 ## Release Notes
 

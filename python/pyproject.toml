@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "pygosqlx"
+version = "0.1.0"
+description = "Python bindings for GoSQLX - High-performance SQL parser"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+
+[project.urls]
+Homepage = "https://github.com/ajitpratap0/GoSQLX"
+Repository = "https://github.com/ajitpratap0/GoSQLX"

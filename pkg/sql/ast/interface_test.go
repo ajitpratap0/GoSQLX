@@ -820,16 +820,15 @@ func TestUpdateStatementChildren(t *testing.T) {
 	t.Run("full_update", func(t *testing.T) {
 		stmt := &UpdateStatement{
 			With:        &WithClause{},
-			Updates:     []UpdateExpression{{Column: testIdent, Value: testExpr}},
 			Assignments: []UpdateExpression{{Column: testIdent, Value: testExpr}},
 			From:        []TableReference{{Name: "users"}},
 			Where:       testExpr,
 			Returning:   []Expression{testIdent},
 		}
 		children := stmt.Children()
-		// With + 1 update + 1 assignment + 1 from + where + 1 returning = 6
-		if len(children) != 6 {
-			t.Errorf("Children() returned %d, want 6", len(children))
+		// With + 1 assignment + 1 from + where + 1 returning = 5
+		if len(children) != 5 {
+			t.Errorf("Children() returned %d, want 5", len(children))
 		}
 	})
 }

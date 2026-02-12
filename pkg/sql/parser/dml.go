@@ -231,9 +231,9 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 
 	// Create UPDATE statement
 	return &ast.UpdateStatement{
-		TableName: tableName,
-		Updates:   updates,
-		Where:     whereClause,
+		TableName:   tableName,
+		Assignments: updates,
+		Where:       whereClause,
 		Returning: returning,
 	}, nil
 }

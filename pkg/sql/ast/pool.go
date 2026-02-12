@@ -61,7 +61,7 @@ var (
 	updateStmtPool = sync.Pool{
 		New: func() interface{} {
 			return &UpdateStatement{
-				Updates: make([]UpdateExpression, 0, 4),
+				Assignments: make([]UpdateExpression, 0, 4),
 			}
 		},
 	}
@@ -403,16 +403,16 @@ func PutUpdateStatement(stmt *UpdateStatement) {
 	}
 
 	// Clean up expressions
-	for i := range stmt.Updates {
-		PutExpression(stmt.Updates[i].Column)
-		PutExpression(stmt.Updates[i].Value)
-		stmt.Updates[i].Column = nil
-		stmt.Updates[i].Value = nil
+	for i := range stmt.Assignments {
+		PutExpression(stmt.Assignments[i].Column)
+		PutExpression(stmt.Assignments[i].Value)
+		stmt.Assignments[i].Column = nil
+		stmt.Assignments[i].Value = nil
 	}
 	PutExpression(stmt.Where)
 
 	// Reset fields
-	stmt.Updates = stmt.Updates[:0]
+	stmt.Assignments = stmt.Assignments[:0]
 	stmt.Where = nil
 	stmt.TableName = ""
 

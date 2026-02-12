@@ -83,19 +83,26 @@ func (v *Validator) ValidateAST(tree *ast.AST) []ValidationError {
 }
 
 // validateStatement dispatches validation based on statement type.
+// Performs both basic validation (table/column existence) and
+// constraint validation (NOT NULL, type checking).
 func (v *Validator) validateStatement(stmt ast.Statement) []ValidationError {
+	var errors []ValidationError
+
 	switch s := stmt.(type) {
 	case *ast.SelectStatement:
-		return v.validateSelect(s)
+		errors = append(errors, v.validateSelect(s)...)
 	case *ast.InsertStatement:
-		return v.validateInsert(s)
+		errors = append(errors, v.validateInsert(s)...)
 	case *ast.UpdateStatement:
-		return v.validateUpdate(s)
+		errors = append(errors, v.validateUpdate(s)...)
 	case *ast.DeleteStatement:
-		return v.validateDelete(s)
-	default:
-		return nil
+		errors = append(errors, v.validateDelete(s)...)
 	}
+
+	// Constraint-level validation (NOT NULL, type checking)
+	errors = append(errors, v.validateConstraints(stmt)...)
+
+	return errors
 }
 
 // validateSelect validates a SELECT statement against the schema.

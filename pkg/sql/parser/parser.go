@@ -1026,15 +1026,35 @@ func (p *Parser) parseStringLiteral() string {
 	return value
 }
 
+// parseQualifiedName parses a potentially schema-qualified name (e.g., schema.table or db.schema.table).
+// Returns the full dotted name as a string. Supports up to 3-part names.
+func (p *Parser) parseQualifiedName() (string, error) {
+	if !p.isIdentifier() && !p.isNonReservedKeyword() {
+		return "", p.expectedError("identifier")
+	}
+	name := p.currentToken.Literal
+	p.advance()
+
+	// Check for schema.table or db.schema.table
+	for p.isType(models.TokenTypePeriod) {
+		p.advance() // Consume .
+		if !p.isIdentifier() && !p.isNonReservedKeyword() {
+			return "", p.expectedError("identifier after .")
+		}
+		name = name + "." + p.currentToken.Literal
+		p.advance()
+	}
+
+	return name, nil
+}
+
 // Accepts IDENT or non-reserved keywords that can be used as table names
 func (p *Parser) parseTableReference() (*ast.TableReference, error) {
-	// Accept IDENT, double-quoted identifiers, or keywords that can be used as table names
-	if !p.isIdentifier() && !p.isNonReservedKeyword() {
-		return nil, p.expectedError("table name")
+	name, err := p.parseQualifiedName()
+	if err != nil {
+		return nil, err
 	}
-	tableName := p.currentToken.Literal
-	p.advance()
-	return &ast.TableReference{Name: tableName}, nil
+	return &ast.TableReference{Name: name}, nil
 }
 
 // isNonReservedKeyword checks if current token is a non-reserved keyword

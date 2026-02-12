@@ -575,12 +575,12 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 				Lateral:  isLateral,
 			}
 		} else {
-			// Parse regular table name
-			if !p.isIdentifier() {
-				return nil, p.expectedError("table name")
+			// Parse regular table name (supports schema.table qualification)
+			qualifiedName, err := p.parseQualifiedName()
+			if err != nil {
+				return nil, err
 			}
-			tableName = p.currentToken.Literal
-			p.advance()
+			tableName = qualifiedName
 
 			tableRef = ast.TableReference{
 				Name:    tableName,
@@ -702,8 +702,9 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 					Lateral:  isLateralJoin,
 				}
 			} else {
-				// Parse regular joined table name
-				if !p.isIdentifier() {
+				// Parse regular joined table name (supports schema.table qualification)
+				joinedName, err := p.parseQualifiedName()
+				if err != nil {
 					return nil, goerrors.ExpectedTokenError(
 						"table name after "+joinType+" JOIN",
 						string(p.currentToken.Type),
@@ -712,10 +713,9 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 					)
 				}
 				joinedTableRef = ast.TableReference{
-					Name:    p.currentToken.Literal,
+					Name:    joinedName,
 					Lateral: isLateralJoin,
 				}
-				p.advance()
 			}
 
 			// Check for table alias

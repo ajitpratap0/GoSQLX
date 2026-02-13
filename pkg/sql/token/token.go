@@ -2,9 +2,9 @@ package token
 
 import "github.com/ajitpratap0/GoSQLX/pkg/models"
 
-// Type represents a token type using string values.
-// This is the legacy type system maintained for backward compatibility.
-// For new code, prefer using models.TokenType (int-based) for better performance.
+// Deprecated: Type is the legacy string-based token type system. It will be removed
+// in a future version as part of the token type unification (see #215).
+// Use models.TokenType (int-based) instead for all new code.
 type Type string
 
 // Token represents a lexical token in SQL source code.

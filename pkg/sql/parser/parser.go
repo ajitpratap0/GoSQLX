@@ -292,6 +292,32 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 	return result, nil
 }
 
+// ParseFromModelTokens parses tokenizer output ([]models.TokenWithSpan) directly into an AST.
+//
+// This is the preferred entry point for parsing SQL. It accepts the output of the
+// tokenizer directly, without requiring the caller to manually convert tokens via
+// ConvertTokensForParser. Internally, it still performs conversion for now, but this
+// will be optimized in a future version to bypass the legacy token.Type system entirely.
+//
+// Usage:
+//
+//	p := parser.GetParser()
+//	defer parser.PutParser(p)
+//	astObj, err := p.ParseFromModelTokens(tokenizerOutput)
+//	if err != nil {
+//	    // handle error
+//	}
+//	defer ast.ReleaseAST(astObj)
+//
+// See issue #215 for the token type unification roadmap.
+func (p *Parser) ParseFromModelTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
+	converted, err := ConvertTokensForParser(tokens)
+	if err != nil {
+		return nil, fmt.Errorf("token conversion failed: %w", err)
+	}
+	return p.Parse(converted)
+}
+
 // ParseWithPositions parses tokens with position tracking for enhanced error reporting.
 //
 // This method accepts a ConversionResult from ConvertTokensForParser(), which includes
@@ -705,6 +731,9 @@ func (p *Parser) peekToken() token.Token {
 // They include fallback to string-based Type comparison for backward compatibility
 // with tests that create tokens directly without setting ModelType.
 
+// Deprecated: modelTypeToString is part of the legacy dual token type bridge.
+// It will be removed once all tokens use models.TokenType exclusively (see #215).
+//
 // modelTypeToString maps ModelType to expected string Type for fallback comparison.
 // This comprehensive map enables isType() to work with tokens that don't have ModelType set
 // (e.g., tokens created in tests without using the tokenizer).

@@ -833,6 +833,10 @@ func buildTypeMapping() map[models.TokenType]token.Type {
 //	ast, err := p.Parse(parserTokens)
 //	defer ast.ReleaseAST(ast)
 //
+// Deprecated: ConvertTokensForParser is part of the legacy dual token type bridge.
+// Use ParseFromModelTokens on the Parser instead, which accepts tokenizer output directly.
+// This function will be removed in a future version (see #215).
+//
 // Backward Compatibility: Maintains compatibility with existing CLI code.
 //
 // Thread Safety: Safe for concurrent calls - creates new converter instance.

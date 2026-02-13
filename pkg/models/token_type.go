@@ -393,312 +393,11 @@ const (
 	TokenTypeDoublePipe TokenType = 502 // || concatenation operator
 )
 
-// tokenStringMap provides efficient O(1) lookup for token type to string conversion
-var tokenStringMap = map[TokenType]string{
-	// Special tokens
-	TokenTypeEOF:     "EOF",
-	TokenTypeUnknown: "UNKNOWN",
-
-	// Basic token types
-	TokenTypeWord:        "WORD",
-	TokenTypeNumber:      "NUMBER",
-	TokenTypeChar:        "CHAR",
-	TokenTypeWhitespace:  "WHITESPACE",
-	TokenTypeIdentifier:  "IDENTIFIER",
-	TokenTypePlaceholder: "PLACEHOLDER",
-
-	// String literals
-	TokenTypeString:                   "STRING",
-	TokenTypeSingleQuotedString:       "STRING",
-	TokenTypeDoubleQuotedString:       "DOUBLE_QUOTED_STRING",
-	TokenTypeTripleSingleQuotedString: "TRIPLE_SINGLE_QUOTED_STRING",
-	TokenTypeTripleDoubleQuotedString: "TRIPLE_DOUBLE_QUOTED_STRING",
-	TokenTypeDollarQuotedString:       "DOLLAR_QUOTED_STRING",
-	TokenTypeByteStringLiteral:        "BYTE_STRING_LITERAL",
-	TokenTypeNationalStringLiteral:    "NATIONAL_STRING_LITERAL",
-	TokenTypeEscapedStringLiteral:     "ESCAPED_STRING_LITERAL",
-	TokenTypeUnicodeStringLiteral:     "UNICODE_STRING_LITERAL",
-	TokenTypeHexStringLiteral:         "HEX_STRING_LITERAL",
-
-	// Operators and punctuation
-	TokenTypeOperator:        "OPERATOR",
-	TokenTypeComma:           "COMMA",
-	TokenTypeEq:              "EQ",
-	TokenTypeDoubleEq:        "DOUBLE_EQ",
-	TokenTypeNeq:             "NEQ",
-	TokenTypeLt:              "LT",
-	TokenTypeGt:              "GT",
-	TokenTypeLtEq:            "LT_EQ",
-	TokenTypeGtEq:            "GT_EQ",
-	TokenTypeSpaceship:       "SPACESHIP",
-	TokenTypePlus:            "PLUS",
-	TokenTypeMinus:           "MINUS",
-	TokenTypeMul:             "MUL",
-	TokenTypeDiv:             "DIV",
-	TokenTypeDuckIntDiv:      "DUCK_INT_DIV",
-	TokenTypeMod:             "MOD",
-	TokenTypeStringConcat:    "STRING_CONCAT",
-	TokenTypeLParen:          "LPAREN",
-	TokenTypeRParen:          "RPAREN",
-	TokenTypePeriod:          "PERIOD",
-	TokenTypeColon:           "COLON",
-	TokenTypeDoubleColon:     "DOUBLE_COLON",
-	TokenTypeAssignment:      "ASSIGNMENT",
-	TokenTypeSemicolon:       "SEMICOLON",
-	TokenTypeBackslash:       "BACKSLASH",
-	TokenTypeLBracket:        "LBRACKET",
-	TokenTypeRBracket:        "RBRACKET",
-	TokenTypeAmpersand:       "AMPERSAND",
-	TokenTypePipe:            "PIPE",
-	TokenTypeCaret:           "CARET",
-	TokenTypeLBrace:          "LBRACE",
-	TokenTypeRBrace:          "RBRACE",
-	TokenTypeRArrow:          "R_ARROW",
-	TokenTypeSharp:           "SHARP",
-	TokenTypeTilde:           "TILDE",
-	TokenTypeExclamationMark: "EXCLAMATION_MARK",
-	TokenTypeAtSign:          "AT_SIGN",
-	TokenTypeQuestion:        "QUESTION",
-
-	// PostgreSQL regex operators
-	TokenTypeTildeAsterisk:                      "TILDE_ASTERISK",                         // ~*
-	TokenTypeExclamationMarkTilde:               "EXCLAMATION_MARK_TILDE",                 // !~
-	TokenTypeExclamationMarkTildeAsterisk:       "EXCLAMATION_MARK_TILDE_ASTERISK",        // !~*
-	TokenTypeDoubleTilde:                        "DOUBLE_TILDE",                           // ~~
-	TokenTypeDoubleTildeAsterisk:                "DOUBLE_TILDE_ASTERISK",                  // ~~*
-	TokenTypeExclamationMarkDoubleTilde:         "EXCLAMATION_MARK_DOUBLE_TILDE",          // !~~
-	TokenTypeExclamationMarkDoubleTildeAsterisk: "EXCLAMATION_MARK_DOUBLE_TILDE_ASTERISK", // !~~*
-
-	// JSON/JSONB operators
-	TokenTypeArrow:         "ARROW",           // ->
-	TokenTypeLongArrow:     "LONG_ARROW",      // ->>
-	TokenTypeHashArrow:     "HASH_ARROW",      // #>
-	TokenTypeHashLongArrow: "HASH_LONG_ARROW", // #>>
-	TokenTypeAtArrow:       "AT_ARROW",        // @>
-	TokenTypeArrowAt:       "ARROW_AT",        // <@
-	TokenTypeHashMinus:     "HASH_MINUS",      // #-
-	TokenTypeAtQuestion:    "AT_QUESTION",     // @?
-	TokenTypeAtAt:          "AT_AT",           // @@
-	TokenTypeQuestionAnd:   "QUESTION_AND",    // ?&
-	TokenTypeQuestionPipe:  "QUESTION_PIPE",   // ?|
-
-	// SQL Keywords
-	TokenTypeKeyword: "KEYWORD",
-	TokenTypeSelect:  "SELECT",
-	TokenTypeFrom:    "FROM",
-	TokenTypeWhere:   "WHERE",
-	TokenTypeJoin:    "JOIN",
-	TokenTypeInner:   "INNER",
-	TokenTypeLeft:    "LEFT",
-	TokenTypeRight:   "RIGHT",
-	TokenTypeOuter:   "OUTER",
-	TokenTypeOn:      "ON",
-	TokenTypeAs:      "AS",
-	TokenTypeAnd:     "AND",
-	TokenTypeOr:      "OR",
-	TokenTypeNot:     "NOT",
-	TokenTypeIn:      "IN",
-	TokenTypeLike:    "LIKE",
-	TokenTypeBetween: "BETWEEN",
-	TokenTypeIs:      "IS",
-	TokenTypeNull:    "NULL",
-	TokenTypeTrue:    "TRUE",
-	TokenTypeFalse:   "FALSE",
-	TokenTypeCase:    "CASE",
-	TokenTypeWhen:    "WHEN",
-	TokenTypeThen:    "THEN",
-	TokenTypeElse:    "ELSE",
-	TokenTypeEnd:     "END",
-	TokenTypeGroup:   "GROUP",
-	TokenTypeBy:      "BY",
-	TokenTypeHaving:  "HAVING",
-	TokenTypeOrder:   "ORDER",
-	TokenTypeAsc:     "ASC",
-	TokenTypeDesc:    "DESC",
-	TokenTypeLimit:   "LIMIT",
-	TokenTypeOffset:  "OFFSET",
-
-	// Aggregate functions
-	TokenTypeCount: "COUNT",
-	TokenTypeSum:   "SUM",
-	TokenTypeAvg:   "AVG",
-	TokenTypeMin:   "MIN",
-	TokenTypeMax:   "MAX",
-
-	// DML Keywords
-	TokenTypeInsert: "INSERT",
-	TokenTypeUpdate: "UPDATE",
-	TokenTypeDelete: "DELETE",
-	TokenTypeInto:   "INTO",
-	TokenTypeValues: "VALUES",
-	TokenTypeSet:    "SET",
-
-	// DDL Keywords
-	TokenTypeCreate:   "CREATE",
-	TokenTypeAlter:    "ALTER",
-	TokenTypeDrop:     "DROP",
-	TokenTypeTable:    "TABLE",
-	TokenTypeIndex:    "INDEX",
-	TokenTypeView:     "VIEW",
-	TokenTypeColumn:   "COLUMN",
-	TokenTypeDatabase: "DATABASE",
-	TokenTypeSchema:   "SCHEMA",
-	TokenTypeTrigger:  "TRIGGER",
-
-	// Compound keywords
-	TokenTypeGroupBy:   "GROUP_BY",
-	TokenTypeOrderBy:   "ORDER_BY",
-	TokenTypeLeftJoin:  "LEFT_JOIN",
-	TokenTypeRightJoin: "RIGHT_JOIN",
-	TokenTypeInnerJoin: "INNER_JOIN",
-	TokenTypeOuterJoin: "OUTER_JOIN",
-	TokenTypeFullJoin:  "FULL_JOIN",
-	TokenTypeCrossJoin: "CROSS_JOIN",
-
-	// CTE and Set Operations
-	TokenTypeWith:      "WITH",
-	TokenTypeRecursive: "RECURSIVE",
-	TokenTypeUnion:     "UNION",
-	TokenTypeExcept:    "EXCEPT",
-	TokenTypeIntersect: "INTERSECT",
-	TokenTypeAll:       "ALL",
-
-	// Window Function Keywords
-	TokenTypeOver:      "OVER",
-	TokenTypePartition: "PARTITION",
-	TokenTypeRows:      "ROWS",
-	TokenTypeRange:     "RANGE",
-	TokenTypeUnbounded: "UNBOUNDED",
-	TokenTypePreceding: "PRECEDING",
-	TokenTypeFollowing: "FOLLOWING",
-	TokenTypeCurrent:   "CURRENT",
-	TokenTypeRow:       "ROW",
-	TokenTypeGroups:    "GROUPS",
-	TokenTypeFilter:    "FILTER",
-	TokenTypeExclude:   "EXCLUDE",
-
-	// Additional Join Keywords
-	TokenTypeCross:   "CROSS",
-	TokenTypeNatural: "NATURAL",
-	TokenTypeFull:    "FULL",
-	TokenTypeUsing:   "USING",
-	TokenTypeLateral: "LATERAL",
-
-	// Constraint Keywords
-	TokenTypePrimary:       "PRIMARY",
-	TokenTypeKey:           "KEY",
-	TokenTypeForeign:       "FOREIGN",
-	TokenTypeReferences:    "REFERENCES",
-	TokenTypeUnique:        "UNIQUE",
-	TokenTypeCheck:         "CHECK",
-	TokenTypeDefault:       "DEFAULT",
-	TokenTypeAutoIncrement: "AUTO_INCREMENT",
-	TokenTypeConstraint:    "CONSTRAINT",
-	TokenTypeNotNull:       "NOT_NULL",
-	TokenTypeNullable:      "NULLABLE",
-
-	// Additional SQL Keywords
-	TokenTypeDistinct: "DISTINCT",
-	TokenTypeExists:   "EXISTS",
-	TokenTypeAny:      "ANY",
-	TokenTypeSome:     "SOME",
-	TokenTypeCast:     "CAST",
-	TokenTypeConvert:  "CONVERT",
-	TokenTypeCollate:  "COLLATE",
-	TokenTypeCascade:  "CASCADE",
-	TokenTypeRestrict: "RESTRICT",
-	TokenTypeReplace:  "REPLACE",
-	TokenTypeRename:   "RENAME",
-	TokenTypeTo:       "TO",
-	TokenTypeIf:       "IF",
-	TokenTypeOnly:     "ONLY",
-	TokenTypeFor:      "FOR",
-	TokenTypeNulls:    "NULLS",
-	TokenTypeFirst:    "FIRST",
-	TokenTypeLast:     "LAST",
-	TokenTypeFetch:    "FETCH",
-	TokenTypeNext:     "NEXT",
-
-	// MERGE Statement Keywords
-	TokenTypeMerge:   "MERGE",
-	TokenTypeMatched: "MATCHED",
-	TokenTypeTarget:  "TARGET",
-	TokenTypeSource:  "SOURCE",
-
-	// Materialized View Keywords
-	TokenTypeMaterialized: "MATERIALIZED",
-	TokenTypeRefresh:      "REFRESH",
-	TokenTypeTies:         "TIES",
-	TokenTypePercent:      "PERCENT",
-	TokenTypeTruncate:     "TRUNCATE",
-	TokenTypeReturning:    "RETURNING",
-
-	// Row Locking Keywords
-	TokenTypeShare:  "SHARE",
-	TokenTypeNoWait: "NOWAIT",
-	TokenTypeSkip:   "SKIP",
-	TokenTypeLocked: "LOCKED",
-	TokenTypeOf:     "OF",
-
-	// Grouping Set Keywords
-	TokenTypeGroupingSets: "GROUPING_SETS",
-	TokenTypeRollup:       "ROLLUP",
-	TokenTypeCube:         "CUBE",
-	TokenTypeGrouping:     "GROUPING",
-	TokenTypeSets:         "SETS",
-	TokenTypeArray:        "ARRAY",
-	TokenTypeWithin:       "WITHIN",
-
-	// Role/Permission Keywords
-	TokenTypeRole:       "ROLE",
-	TokenTypeUser:       "USER",
-	TokenTypeGrant:      "GRANT",
-	TokenTypeRevoke:     "REVOKE",
-	TokenTypePrivilege:  "PRIVILEGE",
-	TokenTypePassword:   "PASSWORD",
-	TokenTypeLogin:      "LOGIN",
-	TokenTypeSuperuser:  "SUPERUSER",
-	TokenTypeCreateDB:   "CREATEDB",
-	TokenTypeCreateRole: "CREATEROLE",
-
-	// Transaction Keywords
-	TokenTypeBegin:     "BEGIN",
-	TokenTypeCommit:    "COMMIT",
-	TokenTypeRollback:  "ROLLBACK",
-	TokenTypeSavepoint: "SAVEPOINT",
-
-	// Data Type Keywords
-	TokenTypeInt:          "INT",
-	TokenTypeInteger:      "INTEGER",
-	TokenTypeBigInt:       "BIGINT",
-	TokenTypeSmallInt:     "SMALLINT",
-	TokenTypeFloat:        "FLOAT",
-	TokenTypeDouble:       "DOUBLE",
-	TokenTypeDecimal:      "DECIMAL",
-	TokenTypeNumeric:      "NUMERIC",
-	TokenTypeVarchar:      "VARCHAR",
-	TokenTypeCharDataType: "CHAR",
-	TokenTypeText:         "TEXT",
-	TokenTypeBoolean:      "BOOLEAN",
-	TokenTypeDate:         "DATE",
-	TokenTypeTime:         "TIME",
-	TokenTypeTimestamp:    "TIMESTAMP",
-	TokenTypeInterval:     "INTERVAL",
-	TokenTypeBlob:         "BLOB",
-	TokenTypeClob:         "CLOB",
-	TokenTypeJson:         "JSON",
-	TokenTypeUuid:         "UUID",
-
-	// Special Token Types
-	TokenTypeIllegal:    "ILLEGAL",
-	TokenTypeAsterisk:   "*",
-	TokenTypeDoublePipe: "||",
-}
-
-// String returns a string representation of the token type.
+// String returns a human-readable string representation of the token type.
 //
-// Provides human-readable names for debugging, error messages, and logging.
-// Uses O(1) map lookup for fast conversion.
+// Provides names for debugging, error messages, and logging.
+// Uses a switch statement for O(1) compiled jump-table lookup.
+// Covers ALL defined TokenType constants for completeness.
 //
 // Example:
 //
@@ -708,10 +407,574 @@ var tokenStringMap = map[TokenType]string{
 //	tokenType = models.TokenTypeLongArrow
 //	fmt.Println(tokenType.String()) // Output: "LONG_ARROW"
 func (t TokenType) String() string {
-	if str, exists := tokenStringMap[t]; exists {
-		return str
+	switch t {
+	// Special tokens
+	case TokenTypeEOF:
+		return "EOF"
+	case TokenTypeUnknown:
+		return "UNKNOWN"
+
+	// Basic token types (10-29)
+	case TokenTypeWord:
+		return "WORD"
+	case TokenTypeNumber:
+		return "NUMBER"
+	case TokenTypeChar:
+		return "CHAR"
+	case TokenTypeWhitespace:
+		return "WHITESPACE"
+	case TokenTypeIdentifier:
+		return "IDENTIFIER"
+	case TokenTypePlaceholder:
+		return "PLACEHOLDER"
+
+	// String literals (30-49)
+	case TokenTypeString:
+		return "STRING"
+	case TokenTypeSingleQuotedString:
+		return "STRING"
+	case TokenTypeDoubleQuotedString:
+		return "DOUBLE_QUOTED_STRING"
+	case TokenTypeTripleSingleQuotedString:
+		return "TRIPLE_SINGLE_QUOTED_STRING"
+	case TokenTypeTripleDoubleQuotedString:
+		return "TRIPLE_DOUBLE_QUOTED_STRING"
+	case TokenTypeDollarQuotedString:
+		return "DOLLAR_QUOTED_STRING"
+	case TokenTypeByteStringLiteral:
+		return "BYTE_STRING_LITERAL"
+	case TokenTypeNationalStringLiteral:
+		return "NATIONAL_STRING_LITERAL"
+	case TokenTypeEscapedStringLiteral:
+		return "ESCAPED_STRING_LITERAL"
+	case TokenTypeUnicodeStringLiteral:
+		return "UNICODE_STRING_LITERAL"
+	case TokenTypeHexStringLiteral:
+		return "HEX_STRING_LITERAL"
+
+	// Operators and punctuation (50-99)
+	case TokenTypeOperator:
+		return "OPERATOR"
+	case TokenTypeComma:
+		return "COMMA"
+	case TokenTypeEq:
+		return "EQ"
+	case TokenTypeDoubleEq:
+		return "DOUBLE_EQ"
+	case TokenTypeNeq:
+		return "NEQ"
+	case TokenTypeLt:
+		return "LT"
+	case TokenTypeGt:
+		return "GT"
+	case TokenTypeLtEq:
+		return "LT_EQ"
+	case TokenTypeGtEq:
+		return "GT_EQ"
+	case TokenTypeSpaceship:
+		return "SPACESHIP"
+	case TokenTypePlus:
+		return "PLUS"
+	case TokenTypeMinus:
+		return "MINUS"
+	case TokenTypeMul:
+		return "MUL"
+	case TokenTypeDiv:
+		return "DIV"
+	case TokenTypeDuckIntDiv:
+		return "DUCK_INT_DIV"
+	case TokenTypeMod:
+		return "MOD"
+	case TokenTypeStringConcat:
+		return "STRING_CONCAT"
+	case TokenTypeLParen:
+		return "LPAREN"
+	case TokenTypeRParen:
+		return "RPAREN"
+	case TokenTypePeriod:
+		return "PERIOD"
+	case TokenTypeColon:
+		return "COLON"
+	case TokenTypeDoubleColon:
+		return "DOUBLE_COLON"
+	case TokenTypeAssignment:
+		return "ASSIGNMENT"
+	case TokenTypeSemicolon:
+		return "SEMICOLON"
+	case TokenTypeBackslash:
+		return "BACKSLASH"
+	case TokenTypeLBracket:
+		return "LBRACKET"
+	case TokenTypeRBracket:
+		return "RBRACKET"
+	case TokenTypeAmpersand:
+		return "AMPERSAND"
+	case TokenTypePipe:
+		return "PIPE"
+	case TokenTypeCaret:
+		return "CARET"
+	case TokenTypeLBrace:
+		return "LBRACE"
+	case TokenTypeRBrace:
+		return "RBRACE"
+	case TokenTypeRArrow:
+		return "R_ARROW"
+	case TokenTypeSharp:
+		return "SHARP"
+	case TokenTypeTilde:
+		return "TILDE"
+	case TokenTypeExclamationMark:
+		return "EXCLAMATION_MARK"
+	case TokenTypeAtSign:
+		return "AT_SIGN"
+	case TokenTypeQuestion:
+		return "QUESTION"
+
+	// Compound operators (100-149)
+	case TokenTypeTildeAsterisk:
+		return "TILDE_ASTERISK"
+	case TokenTypeExclamationMarkTilde:
+		return "EXCLAMATION_MARK_TILDE"
+	case TokenTypeExclamationMarkTildeAsterisk:
+		return "EXCLAMATION_MARK_TILDE_ASTERISK"
+	case TokenTypeDoubleTilde:
+		return "DOUBLE_TILDE"
+	case TokenTypeDoubleTildeAsterisk:
+		return "DOUBLE_TILDE_ASTERISK"
+	case TokenTypeExclamationMarkDoubleTilde:
+		return "EXCLAMATION_MARK_DOUBLE_TILDE"
+	case TokenTypeExclamationMarkDoubleTildeAsterisk:
+		return "EXCLAMATION_MARK_DOUBLE_TILDE_ASTERISK"
+	case TokenTypeShiftLeft:
+		return "SHIFT_LEFT"
+	case TokenTypeShiftRight:
+		return "SHIFT_RIGHT"
+	case TokenTypeOverlap:
+		return "OVERLAP"
+	case TokenTypeDoubleExclamationMark:
+		return "DOUBLE_EXCLAMATION_MARK"
+	case TokenTypeCaretAt:
+		return "CARET_AT"
+	case TokenTypePGSquareRoot:
+		return "PG_SQUARE_ROOT"
+	case TokenTypePGCubeRoot:
+		return "PG_CUBE_ROOT"
+	case TokenTypeArrow:
+		return "ARROW"
+	case TokenTypeLongArrow:
+		return "LONG_ARROW"
+	case TokenTypeHashArrow:
+		return "HASH_ARROW"
+	case TokenTypeHashLongArrow:
+		return "HASH_LONG_ARROW"
+	case TokenTypeAtArrow:
+		return "AT_ARROW"
+	case TokenTypeArrowAt:
+		return "ARROW_AT"
+	case TokenTypeHashMinus:
+		return "HASH_MINUS"
+	case TokenTypeAtQuestion:
+		return "AT_QUESTION"
+	case TokenTypeAtAt:
+		return "AT_AT"
+	case TokenTypeQuestionAnd:
+		return "QUESTION_AND"
+	case TokenTypeQuestionPipe:
+		return "QUESTION_PIPE"
+	case TokenTypeCustomBinaryOperator:
+		return "CUSTOM_BINARY_OPERATOR"
+
+	// SQL Keywords (200-399)
+	case TokenTypeKeyword:
+		return "KEYWORD"
+	case TokenTypeSelect:
+		return "SELECT"
+	case TokenTypeFrom:
+		return "FROM"
+	case TokenTypeWhere:
+		return "WHERE"
+	case TokenTypeJoin:
+		return "JOIN"
+	case TokenTypeInner:
+		return "INNER"
+	case TokenTypeLeft:
+		return "LEFT"
+	case TokenTypeRight:
+		return "RIGHT"
+	case TokenTypeOuter:
+		return "OUTER"
+	case TokenTypeOn:
+		return "ON"
+	case TokenTypeAs:
+		return "AS"
+	case TokenTypeAnd:
+		return "AND"
+	case TokenTypeOr:
+		return "OR"
+	case TokenTypeNot:
+		return "NOT"
+	case TokenTypeIn:
+		return "IN"
+	case TokenTypeLike:
+		return "LIKE"
+	case TokenTypeBetween:
+		return "BETWEEN"
+	case TokenTypeIs:
+		return "IS"
+	case TokenTypeNull:
+		return "NULL"
+	case TokenTypeTrue:
+		return "TRUE"
+	case TokenTypeFalse:
+		return "FALSE"
+	case TokenTypeCase:
+		return "CASE"
+	case TokenTypeWhen:
+		return "WHEN"
+	case TokenTypeThen:
+		return "THEN"
+	case TokenTypeElse:
+		return "ELSE"
+	case TokenTypeEnd:
+		return "END"
+	case TokenTypeGroup:
+		return "GROUP"
+	case TokenTypeBy:
+		return "BY"
+	case TokenTypeHaving:
+		return "HAVING"
+	case TokenTypeOrder:
+		return "ORDER"
+	case TokenTypeAsc:
+		return "ASC"
+	case TokenTypeDesc:
+		return "DESC"
+	case TokenTypeLimit:
+		return "LIMIT"
+	case TokenTypeOffset:
+		return "OFFSET"
+
+	// DML Keywords
+	case TokenTypeInsert:
+		return "INSERT"
+	case TokenTypeUpdate:
+		return "UPDATE"
+	case TokenTypeDelete:
+		return "DELETE"
+	case TokenTypeInto:
+		return "INTO"
+	case TokenTypeValues:
+		return "VALUES"
+	case TokenTypeSet:
+		return "SET"
+
+	// DDL Keywords
+	case TokenTypeCreate:
+		return "CREATE"
+	case TokenTypeAlter:
+		return "ALTER"
+	case TokenTypeDrop:
+		return "DROP"
+	case TokenTypeTable:
+		return "TABLE"
+	case TokenTypeIndex:
+		return "INDEX"
+	case TokenTypeView:
+		return "VIEW"
+	case TokenTypeColumn:
+		return "COLUMN"
+	case TokenTypeDatabase:
+		return "DATABASE"
+	case TokenTypeSchema:
+		return "SCHEMA"
+	case TokenTypeTrigger:
+		return "TRIGGER"
+
+	// Aggregate functions
+	case TokenTypeCount:
+		return "COUNT"
+	case TokenTypeSum:
+		return "SUM"
+	case TokenTypeAvg:
+		return "AVG"
+	case TokenTypeMin:
+		return "MIN"
+	case TokenTypeMax:
+		return "MAX"
+
+	// Compound keywords
+	case TokenTypeGroupBy:
+		return "GROUP_BY"
+	case TokenTypeOrderBy:
+		return "ORDER_BY"
+	case TokenTypeLeftJoin:
+		return "LEFT_JOIN"
+	case TokenTypeRightJoin:
+		return "RIGHT_JOIN"
+	case TokenTypeInnerJoin:
+		return "INNER_JOIN"
+	case TokenTypeOuterJoin:
+		return "OUTER_JOIN"
+	case TokenTypeFullJoin:
+		return "FULL_JOIN"
+	case TokenTypeCrossJoin:
+		return "CROSS_JOIN"
+
+	// CTE and Set Operations
+	case TokenTypeWith:
+		return "WITH"
+	case TokenTypeRecursive:
+		return "RECURSIVE"
+	case TokenTypeUnion:
+		return "UNION"
+	case TokenTypeExcept:
+		return "EXCEPT"
+	case TokenTypeIntersect:
+		return "INTERSECT"
+	case TokenTypeAll:
+		return "ALL"
+
+	// Window Function Keywords
+	case TokenTypeOver:
+		return "OVER"
+	case TokenTypePartition:
+		return "PARTITION"
+	case TokenTypeRows:
+		return "ROWS"
+	case TokenTypeRange:
+		return "RANGE"
+	case TokenTypeUnbounded:
+		return "UNBOUNDED"
+	case TokenTypePreceding:
+		return "PRECEDING"
+	case TokenTypeFollowing:
+		return "FOLLOWING"
+	case TokenTypeCurrent:
+		return "CURRENT"
+	case TokenTypeRow:
+		return "ROW"
+	case TokenTypeGroups:
+		return "GROUPS"
+	case TokenTypeFilter:
+		return "FILTER"
+	case TokenTypeExclude:
+		return "EXCLUDE"
+
+	// Additional Join Keywords
+	case TokenTypeCross:
+		return "CROSS"
+	case TokenTypeNatural:
+		return "NATURAL"
+	case TokenTypeFull:
+		return "FULL"
+	case TokenTypeUsing:
+		return "USING"
+	case TokenTypeLateral:
+		return "LATERAL"
+
+	// Constraint Keywords
+	case TokenTypePrimary:
+		return "PRIMARY"
+	case TokenTypeKey:
+		return "KEY"
+	case TokenTypeForeign:
+		return "FOREIGN"
+	case TokenTypeReferences:
+		return "REFERENCES"
+	case TokenTypeUnique:
+		return "UNIQUE"
+	case TokenTypeCheck:
+		return "CHECK"
+	case TokenTypeDefault:
+		return "DEFAULT"
+	case TokenTypeAutoIncrement:
+		return "AUTO_INCREMENT"
+	case TokenTypeConstraint:
+		return "CONSTRAINT"
+	case TokenTypeNotNull:
+		return "NOT_NULL"
+	case TokenTypeNullable:
+		return "NULLABLE"
+
+	// Additional SQL Keywords
+	case TokenTypeDistinct:
+		return "DISTINCT"
+	case TokenTypeExists:
+		return "EXISTS"
+	case TokenTypeAny:
+		return "ANY"
+	case TokenTypeSome:
+		return "SOME"
+	case TokenTypeCast:
+		return "CAST"
+	case TokenTypeConvert:
+		return "CONVERT"
+	case TokenTypeCollate:
+		return "COLLATE"
+	case TokenTypeCascade:
+		return "CASCADE"
+	case TokenTypeRestrict:
+		return "RESTRICT"
+	case TokenTypeReplace:
+		return "REPLACE"
+	case TokenTypeRename:
+		return "RENAME"
+	case TokenTypeTo:
+		return "TO"
+	case TokenTypeIf:
+		return "IF"
+	case TokenTypeOnly:
+		return "ONLY"
+	case TokenTypeFor:
+		return "FOR"
+	case TokenTypeNulls:
+		return "NULLS"
+	case TokenTypeFirst:
+		return "FIRST"
+	case TokenTypeLast:
+		return "LAST"
+	case TokenTypeFetch:
+		return "FETCH"
+	case TokenTypeNext:
+		return "NEXT"
+
+	// MERGE Statement Keywords
+	case TokenTypeMerge:
+		return "MERGE"
+	case TokenTypeMatched:
+		return "MATCHED"
+	case TokenTypeTarget:
+		return "TARGET"
+	case TokenTypeSource:
+		return "SOURCE"
+
+	// Materialized View Keywords
+	case TokenTypeMaterialized:
+		return "MATERIALIZED"
+	case TokenTypeRefresh:
+		return "REFRESH"
+	case TokenTypeTies:
+		return "TIES"
+	case TokenTypePercent:
+		return "PERCENT"
+	case TokenTypeTruncate:
+		return "TRUNCATE"
+	case TokenTypeReturning:
+		return "RETURNING"
+
+	// Row Locking Keywords
+	case TokenTypeShare:
+		return "SHARE"
+	case TokenTypeNoWait:
+		return "NOWAIT"
+	case TokenTypeSkip:
+		return "SKIP"
+	case TokenTypeLocked:
+		return "LOCKED"
+	case TokenTypeOf:
+		return "OF"
+
+	// Grouping Set Keywords
+	case TokenTypeGroupingSets:
+		return "GROUPING_SETS"
+	case TokenTypeRollup:
+		return "ROLLUP"
+	case TokenTypeCube:
+		return "CUBE"
+	case TokenTypeGrouping:
+		return "GROUPING"
+	case TokenTypeSets:
+		return "SETS"
+	case TokenTypeArray:
+		return "ARRAY"
+	case TokenTypeWithin:
+		return "WITHIN"
+
+	// Role/Permission Keywords
+	case TokenTypeRole:
+		return "ROLE"
+	case TokenTypeUser:
+		return "USER"
+	case TokenTypeGrant:
+		return "GRANT"
+	case TokenTypeRevoke:
+		return "REVOKE"
+	case TokenTypePrivilege:
+		return "PRIVILEGE"
+	case TokenTypePassword:
+		return "PASSWORD"
+	case TokenTypeLogin:
+		return "LOGIN"
+	case TokenTypeSuperuser:
+		return "SUPERUSER"
+	case TokenTypeCreateDB:
+		return "CREATEDB"
+	case TokenTypeCreateRole:
+		return "CREATEROLE"
+
+	// Transaction Keywords
+	case TokenTypeBegin:
+		return "BEGIN"
+	case TokenTypeCommit:
+		return "COMMIT"
+	case TokenTypeRollback:
+		return "ROLLBACK"
+	case TokenTypeSavepoint:
+		return "SAVEPOINT"
+
+	// Data Type Keywords
+	case TokenTypeInt:
+		return "INT"
+	case TokenTypeInteger:
+		return "INTEGER"
+	case TokenTypeBigInt:
+		return "BIGINT"
+	case TokenTypeSmallInt:
+		return "SMALLINT"
+	case TokenTypeFloat:
+		return "FLOAT"
+	case TokenTypeDouble:
+		return "DOUBLE"
+	case TokenTypeDecimal:
+		return "DECIMAL"
+	case TokenTypeNumeric:
+		return "NUMERIC"
+	case TokenTypeVarchar:
+		return "VARCHAR"
+	case TokenTypeCharDataType:
+		return "CHAR"
+	case TokenTypeText:
+		return "TEXT"
+	case TokenTypeBoolean:
+		return "BOOLEAN"
+	case TokenTypeDate:
+		return "DATE"
+	case TokenTypeTime:
+		return "TIME"
+	case TokenTypeTimestamp:
+		return "TIMESTAMP"
+	case TokenTypeInterval:
+		return "INTERVAL"
+	case TokenTypeBlob:
+		return "BLOB"
+	case TokenTypeClob:
+		return "CLOB"
+	case TokenTypeJson:
+		return "JSON"
+	case TokenTypeUuid:
+		return "UUID"
+
+	// Special Token Types
+	case TokenTypeIllegal:
+		return "ILLEGAL"
+	case TokenTypeAsterisk:
+		return "*"
+	case TokenTypeDoublePipe:
+		return "||"
+
+	default:
+		return "TOKEN"
 	}
-	return "TOKEN"
 }
 
 // IsKeyword returns true if the token type is a SQL keyword.

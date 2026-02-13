@@ -5,6 +5,7 @@ package parser
 
 import (
 	"fmt"
+	"strings"
 
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
@@ -171,20 +172,20 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 
 		// Parse value expression
 		var expr ast.Expression
-		switch p.currentToken.Type {
-		case "STRING":
+		if p.isStringLiteral() {
 			expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "string"}
 			p.advance()
-		case "INT":
-			expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "int"}
+		} else if p.isNumericLiteral() {
+			litType := "int"
+			if strings.ContainsAny(p.currentToken.Literal, ".eE") {
+				litType = "float"
+			}
+			expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: litType}
 			p.advance()
-		case "FLOAT":
-			expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "float"}
-			p.advance()
-		case "TRUE", "FALSE":
+		} else if p.isBooleanLiteral() {
 			expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "bool"}
 			p.advance()
-		default:
+		} else {
 			var err error
 			expr, err = p.parseExpression()
 			if err != nil {

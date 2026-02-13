@@ -5,6 +5,7 @@ package parser
 
 import (
 	"fmt"
+	"strings"
 
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
@@ -873,7 +874,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			} else if p.isType(models.TokenTypeCube) {
 				expr, err = p.parseCube()
 			} else if p.currentToken.Literal == "GROUPING SETS" ||
-				(p.isType(models.TokenTypeGrouping) && p.peekToken().Type == "SETS") {
+				(p.isType(models.TokenTypeGrouping) && strings.EqualFold(p.peekToken().Literal, "SETS")) {
 				expr, err = p.parseGroupingSets()
 			} else {
 				expr, err = p.parseExpression()
@@ -895,7 +896,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		// This is different from SQL-99 GROUP BY ROLLUP(col1, col2)
 		if p.isType(models.TokenTypeWith) {
 			nextTok := p.peekToken()
-			switch nextTok.Type {
+			switch strings.ToUpper(nextTok.Literal) {
 			case "ROLLUP":
 				p.advance() // Consume WITH
 				p.advance() // Consume ROLLUP
@@ -984,7 +985,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		p.advance() // Consume LIMIT
 
 		// Parse LIMIT value
-		if p.currentToken.Type != "INT" {
+		if !p.isNumericLiteral() {
 			return nil, p.expectedError("integer for LIMIT")
 		}
 
@@ -1002,7 +1003,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		p.advance() // Consume OFFSET
 
 		// Parse OFFSET value
-		if p.currentToken.Type != "INT" {
+		if !p.isNumericLiteral() {
 			return nil, p.expectedError("integer for OFFSET")
 		}
 
@@ -1066,7 +1067,7 @@ func (p *Parser) parseSelectWithSetOperations() (ast.Statement, error) {
 	// Check for set operations (UNION, EXCEPT, INTERSECT)
 	for p.isAnyType(models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect) {
 		// Parse the set operation type
-		operationType := p.currentToken.Type
+		operationLiteral := p.currentToken.Literal
 		p.advance()
 
 		// Check for ALL keyword
@@ -1085,7 +1086,7 @@ func (p *Parser) parseSelectWithSetOperations() (ast.Statement, error) {
 		rightStmt, err := p.parseSelectStatement()
 		if err != nil {
 			return nil, goerrors.InvalidSetOperationError(
-				string(operationType),
+				operationLiteral,
 				fmt.Sprintf("error parsing right SELECT: %v", err),
 				p.currentLocation(),
 				"",
@@ -1095,7 +1096,7 @@ func (p *Parser) parseSelectWithSetOperations() (ast.Statement, error) {
 		// Create the set operation with left as the accumulated result
 		setOp := &ast.SetOperation{
 			Left:     leftStmt,
-			Operator: string(operationType),
+			Operator: operationLiteral,
 			All:      all,
 			Right:    rightStmt,
 		}
@@ -1133,7 +1134,7 @@ func (p *Parser) parseFetchClause() (*ast.FetchClause, error) {
 	}
 
 	// Parse the count value
-	if p.currentToken.Type != "INT" {
+	if !p.isNumericLiteral() {
 		return nil, p.expectedError("integer for FETCH count")
 	}
 

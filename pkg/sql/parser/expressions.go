@@ -103,7 +103,8 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	notPrefix := false
 	if p.isType(models.TokenTypeNot) {
 		nextToken := p.peekToken()
-		if nextToken.Type == "BETWEEN" || nextToken.Type == "LIKE" || nextToken.Type == "ILIKE" || nextToken.Type == "IN" {
+		nextUpper := strings.ToUpper(nextToken.Literal)
+		if nextUpper == "BETWEEN" || nextUpper == "LIKE" || nextUpper == "ILIKE" || nextUpper == "IN" {
 			notPrefix = true
 			p.advance() // Consume NOT only if followed by valid operator
 		}
@@ -149,7 +150,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	}
 
 	// Check for LIKE/ILIKE operator
-	if p.isType(models.TokenTypeLike) || p.currentToken.Type == "ILIKE" {
+	if p.isType(models.TokenTypeLike) || strings.EqualFold(p.currentToken.Literal, "ILIKE") {
 		operator := p.currentToken.Literal
 		p.advance() // Consume LIKE/ILIKE
 
@@ -278,7 +279,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 
 		// Check for ANY/ALL subquery operators (uses O(1) switch instead of O(n) isAnyType)
 		if p.isQuantifier() {
-			quantifier := p.currentToken.Type
+			quantifier := p.currentToken.Literal
 			p.advance() // Consume ANY/ALL
 
 			// Expect opening parenthesis
@@ -402,7 +403,7 @@ func (p *Parser) parseMultiplicativeExpression() (ast.Expression, error) {
 	// Note: TokenTypeAsterisk is used for both * (SELECT) and multiplication
 	// We check context: after an expression, asterisk means multiplication
 	for p.isType(models.TokenTypeAsterisk) || p.isType(models.TokenTypeMul) ||
-		p.isType(models.TokenTypeDiv) || p.currentToken.Type == "%" {
+		p.isType(models.TokenTypeDiv) || p.isType(models.TokenTypeMod) {
 		operator := p.currentToken.Literal
 		p.advance() // Consume operator
 
@@ -450,7 +451,7 @@ func (p *Parser) parseJSONExpression() (ast.Expression, error) {
 	// Handle JSON operators (left-associative for chaining like data->'a'->'b')
 	for p.isJSONOperator() {
 		operator := p.currentToken.Literal
-		operatorType := p.currentToken.Type
+		operatorType := p.currentToken.ModelType
 		p.advance() // Consume JSON operator
 
 		// Parse the right side
@@ -553,17 +554,28 @@ func (p *Parser) parseDataType() (string, error) {
 
 // isNumericLiteral checks if current token is a numeric literal (handles INT/NUMBER token types)
 func (p *Parser) isNumericLiteral() bool {
-	// Check for various numeric token type representations
+	if p.currentToken.ModelType != modelTypeUnset {
+		return p.currentToken.ModelType == models.TokenTypeNumber
+	}
+	// String fallback for tokens created without ModelType
 	switch p.currentToken.Type {
 	case "INT", "NUMBER", "FLOAT":
 		return true
 	}
-	return p.isType(models.TokenTypeNumber)
+	return false
 }
 
 // isDataTypeKeyword checks if current token is a SQL data type keyword
 func (p *Parser) isDataTypeKeyword() bool {
-	switch p.currentToken.Type {
+	// Check ModelType for known data type tokens
+	switch p.currentToken.ModelType {
+	case models.TokenTypeInt, models.TokenTypeInteger, models.TokenTypeVarchar,
+		models.TokenTypeText, models.TokenTypeBoolean, models.TokenTypeFloat,
+		models.TokenTypeInterval:
+		return true
+	}
+	// Fallback: check literal for data type keywords not all represented in models
+	switch strings.ToUpper(p.currentToken.Literal) {
 	case "INT", "INTEGER", "BIGINT", "SMALLINT", "FLOAT", "DOUBLE", "DECIMAL",
 		"NUMERIC", "VARCHAR", "CHAR", "TEXT", "BOOLEAN", "DATE", "TIME",
 		"TIMESTAMP", "INTERVAL", "BLOB", "CLOB", "JSON", "UUID":
@@ -574,17 +586,17 @@ func (p *Parser) isDataTypeKeyword() bool {
 
 // isJSONOperator checks if current token is a JSON/JSONB operator
 func (p *Parser) isJSONOperator() bool {
-	switch p.currentToken.Type {
-	case "ARROW", // ->
-		"LONG_ARROW",      // ->>
-		"HASH_ARROW",      // #>
-		"HASH_LONG_ARROW", // #>>
-		"AT_ARROW",        // @>
-		"ARROW_AT",        // <@
-		"HASH_MINUS",      // #-
-		"QUESTION",        // ?
-		"QUESTION_PIPE",   // ?|
-		"QUESTION_AND":    // ?&
+	switch p.currentToken.ModelType {
+	case models.TokenTypeArrow,         // ->
+		models.TokenTypeLongArrow,     // ->>
+		models.TokenTypeHashArrow,     // #>
+		models.TokenTypeHashLongArrow, // #>>
+		models.TokenTypeAtArrow,       // @>
+		models.TokenTypeArrowAt,       // <@
+		models.TokenTypeHashMinus,     // #-
+		models.TokenTypeQuestion,      // ?
+		models.TokenTypeQuestionPipe,  // ?|
+		models.TokenTypeQuestionAnd:   // ?&
 		return true
 	}
 	return false
@@ -672,25 +684,22 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return &ast.Identifier{Name: "*"}, nil
 	}
 
-	if p.currentToken.Type == "STRING" {
+	if p.isStringLiteral() {
 		// Handle string literals
 		value := p.currentToken.Literal
 		p.advance()
 		return &ast.LiteralValue{Value: value, Type: "string"}, nil
 	}
 
-	if p.currentToken.Type == "INT" {
-		// Handle integer literals
+	if p.isNumericLiteral() {
+		// Handle numeric literals (int or float)
 		value := p.currentToken.Literal
+		litType := "int"
+		if strings.ContainsAny(value, ".eE") {
+			litType = "float"
+		}
 		p.advance()
-		return &ast.LiteralValue{Value: value, Type: "int"}, nil
-	}
-
-	if p.currentToken.Type == "FLOAT" {
-		// Handle float literals
-		value := p.currentToken.Literal
-		p.advance()
-		return &ast.LiteralValue{Value: value, Type: "float"}, nil
+		return &ast.LiteralValue{Value: value, Type: litType}, nil
 	}
 
 	if p.isBooleanLiteral() {
@@ -1018,7 +1027,7 @@ func (p *Parser) parseCastExpression() (*ast.CastExpression, error) {
 			}
 
 			// Parse parameter (should be a number)
-			if p.currentToken.Type != "INT" && !p.isType(models.TokenTypeIdentifier) {
+			if !p.isNumericLiteral() && !p.isType(models.TokenTypeIdentifier) {
 				return nil, goerrors.InvalidSyntaxError(
 					"expected numeric type parameter",
 					p.currentLocation(),
@@ -1065,7 +1074,7 @@ func (p *Parser) parseIntervalExpression() (*ast.IntervalExpression, error) {
 	p.advance()
 
 	// Expect a string literal for the interval value
-	if p.currentToken.Type != "STRING" {
+	if !p.isStringLiteral() {
 		return nil, goerrors.InvalidSyntaxError(
 			"expected string literal after INTERVAL keyword",
 			p.currentLocation(),

@@ -18,7 +18,7 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 	if name == nil {
 		return nil, goerrors.ExpectedTokenError(
 			"column name",
-			string(p.currentToken.Type),
+			p.currentToken.ModelType.String(),
 			p.currentLocation(),
 			"",
 		)
@@ -29,7 +29,7 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 	if dataType == nil {
 		return nil, goerrors.ExpectedTokenError(
 			"data type",
-			string(p.currentToken.Type),
+			p.currentToken.ModelType.String(),
 			p.currentLocation(),
 			"",
 		)
@@ -651,7 +651,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			if !p.isType(models.TokenTypeJoin) {
 				return nil, goerrors.ExpectedTokenError(
 					"JOIN after "+joinType,
-					string(p.currentToken.Type),
+					p.currentToken.ModelType.String(),
 					p.currentLocation(),
 					"",
 				)
@@ -705,7 +705,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 				if err != nil {
 					return nil, goerrors.ExpectedTokenError(
 						"table name after "+joinType+" JOIN",
-						string(p.currentToken.Type),
+						p.currentToken.ModelType.String(),
 						p.currentLocation(),
 						"",
 					)

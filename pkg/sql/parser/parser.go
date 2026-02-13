@@ -661,10 +661,23 @@ func NewParser() *Parser {
 //
 //lint:ignore SA1019 intentional use during #215 migration
 func (p *Parser) matchToken(expected token.Type) bool { //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
-	// Convert both to strings for comparison
-	expectedStr := string(expected)
-	currentStr := string(p.currentToken.Type)
-	if currentStr == expectedStr {
+	if mt, ok := stringTypeToModelType[expected]; ok && mt != models.TokenTypeKeyword {
+		// Specific ModelType — use fast integer comparison
+		if p.currentToken.ModelType == mt {
+			p.advance()
+			return true
+		}
+		// Token may have generic ModelType (e.g., TokenTypeKeyword) if the converter
+		// didn't assign a specific type. Fall through to string comparison.
+		if p.currentToken.ModelType == models.TokenTypeKeyword &&
+			strings.EqualFold(string(p.currentToken.Type), string(expected)) {
+			p.advance()
+			return true
+		}
+		return false
+	}
+	// Generic keyword or unmapped token: compare strings
+	if strings.EqualFold(string(p.currentToken.Type), string(expected)) {
 		p.advance()
 		return true
 	}
@@ -984,14 +997,11 @@ func (p *Parser) isIdentifier() bool {
 // Handles all string token subtypes (single-quoted, dollar-quoted, etc.)
 // Also handles string fallback for tokens created without ModelType.
 func (p *Parser) isStringLiteral() bool {
-	if p.currentToken.ModelType != modelTypeUnset {
-		switch p.currentToken.ModelType {
-		case models.TokenTypeString, models.TokenTypeSingleQuotedString, models.TokenTypeDollarQuotedString:
-			return true
-		}
-		return false
+	switch p.currentToken.ModelType {
+	case models.TokenTypeString, models.TokenTypeSingleQuotedString, models.TokenTypeDollarQuotedString:
+		return true
 	}
-	return p.currentToken.Type == "STRING"
+	return false
 }
 
 // isComparisonOperator checks if the current token is a comparison operator using O(1) switch.
@@ -1028,7 +1038,7 @@ func (p *Parser) isBooleanLiteral() bool {
 
 // expectedError returns an error for unexpected token
 func (p *Parser) expectedError(expected string) error {
-	return goerrors.ExpectedTokenError(expected, string(p.currentToken.Type), p.currentLocation(), "")
+	return goerrors.ExpectedTokenError(expected, p.currentToken.ModelType.String(), p.currentLocation(), "")
 }
 
 // parseIdent parses an identifier
@@ -1104,15 +1114,20 @@ func (p *Parser) parseTableReference() (*ast.TableReference, error) {
 // isNonReservedKeyword checks if current token is a non-reserved keyword
 // that can be used as a table or column name
 func (p *Parser) isNonReservedKeyword() bool {
-	// These keywords can be used as table/column names in most SQL dialects
-	// Check uppercase version of token type for case-insensitive matching
-	upperType := strings.ToUpper(string(p.currentToken.Type))
-	switch upperType {
-	case "TARGET", "SOURCE", "MATCHED", "VALUE", "NAME", "TYPE", "STATUS":
+	// These keywords can be used as table/column names in most SQL dialects.
+	// Use ModelType where possible, with literal fallback for tokens that have
+	// the generic TokenTypeKeyword.
+	switch p.currentToken.ModelType {
+	case models.TokenTypeTarget, models.TokenTypeSource, models.TokenTypeMatched:
 		return true
-	default:
-		return false
+	case models.TokenTypeKeyword:
+		// Token may have generic ModelType; check literal for specific keywords
+		switch strings.ToUpper(p.currentToken.Literal) {
+		case "TARGET", "SOURCE", "MATCHED", "VALUE", "NAME", "TYPE", "STATUS":
+			return true
+		}
 	}
+	return false
 }
 
 // canBeAlias checks if current token can be used as an alias

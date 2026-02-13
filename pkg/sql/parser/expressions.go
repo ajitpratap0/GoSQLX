@@ -557,11 +557,6 @@ func (p *Parser) isNumericLiteral() bool {
 	if p.currentToken.ModelType != modelTypeUnset {
 		return p.currentToken.ModelType == models.TokenTypeNumber
 	}
-	// String fallback for tokens created without ModelType
-	switch p.currentToken.Type {
-	case "INT", "NUMBER", "FLOAT":
-		return true
-	}
 	return false
 }
 
@@ -866,7 +861,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 	}
 
 	return nil, goerrors.UnexpectedTokenError(
-		string(p.currentToken.Type),
+		p.currentToken.ModelType.String(),
 		p.currentToken.Literal,
 		models.Location{Line: 0, Column: 0},
 		"",
@@ -1183,7 +1178,7 @@ func (p *Parser) parseSubquery() (ast.Statement, error) {
 
 	return nil, goerrors.ExpectedTokenError(
 		"SELECT or WITH",
-		string(p.currentToken.Type),
+		p.currentToken.ModelType.String(),
 		models.Location{Line: 0, Column: 0},
 		"",
 	)

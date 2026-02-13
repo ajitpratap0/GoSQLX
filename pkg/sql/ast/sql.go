@@ -55,6 +55,11 @@ func (a AST) SQL() string {
 // Expressions
 // ============================================================
 
+// SQL returns the SQL representation of the identifier.
+// Identifiers are emitted unescaped because they have already been validated
+// during parsing — the tokenizer and parser only accept syntactically valid
+// identifiers (or quoted identifiers whose quotes are preserved in the AST).
+// Re-escaping here would be redundant and could introduce double-quoting bugs.
 func (i *Identifier) SQL() string {
 	if i == nil {
 		return ""

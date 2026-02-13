@@ -73,7 +73,7 @@ func safeIdentifier(name string) string {
 		return `""`
 	}
 	for _, r := range name {
-		if !(r == '_' || r == '*' || r == '.' || unicode.IsLetter(r) || unicode.IsDigit(r)) {
+		if r != '_' && r != '*' && r != '.' && !unicode.IsLetter(r) && !unicode.IsDigit(r) {
 			return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
 		}
 	}
@@ -514,11 +514,11 @@ func (s *SelectStatement) SQL() string {
 	}
 
 	if s.Limit != nil {
-		sb.WriteString(fmt.Sprintf(" LIMIT %d", *s.Limit))
+		fmt.Fprintf(sb, " LIMIT %d", *s.Limit)
 	}
 
 	if s.Offset != nil {
-		sb.WriteString(fmt.Sprintf(" OFFSET %d", *s.Offset))
+		fmt.Fprintf(sb, " OFFSET %d", *s.Offset)
 	}
 
 	if s.Fetch != nil {
@@ -705,11 +705,11 @@ func (c *CreateTableStatement) SQL() string {
 	}
 
 	if c.PartitionBy != nil {
-		sb.WriteString(fmt.Sprintf(" PARTITION BY %s (%s)", c.PartitionBy.Type, strings.Join(c.PartitionBy.Columns, ", ")))
+		fmt.Fprintf(sb, " PARTITION BY %s (%s)", c.PartitionBy.Type, strings.Join(c.PartitionBy.Columns, ", "))
 	}
 
 	for _, opt := range c.Options {
-		sb.WriteString(fmt.Sprintf(" %s=%s", opt.Name, opt.Value))
+		fmt.Fprintf(sb, " %s=%s", opt.Name, opt.Value)
 	}
 
 	return sb.String()
@@ -1024,10 +1024,10 @@ func (s *Select) SQL() string {
 		sb.WriteString(orderBySQL(s.OrderBy))
 	}
 	if s.Limit != nil {
-		sb.WriteString(fmt.Sprintf(" LIMIT %d", *s.Limit))
+		fmt.Fprintf(sb, " LIMIT %d", *s.Limit)
 	}
 	if s.Offset != nil {
-		sb.WriteString(fmt.Sprintf(" OFFSET %d", *s.Offset))
+		fmt.Fprintf(sb, " OFFSET %d", *s.Offset)
 	}
 	return sb.String()
 }
@@ -1222,11 +1222,11 @@ func fetchSQL(f *FetchClause) string {
 	sb := getBuilder()
 	defer putBuilder(sb)
 	if f.OffsetValue != nil {
-		sb.WriteString(fmt.Sprintf(" OFFSET %d ROWS", *f.OffsetValue))
+		fmt.Fprintf(sb, " OFFSET %d ROWS", *f.OffsetValue)
 	}
-	sb.WriteString(fmt.Sprintf(" FETCH %s", f.FetchType))
+	fmt.Fprintf(sb, " FETCH %s", f.FetchType)
 	if f.FetchValue != nil {
-		sb.WriteString(fmt.Sprintf(" %d", *f.FetchValue))
+		fmt.Fprintf(sb, " %d", *f.FetchValue)
 	}
 	if f.IsPercent {
 		sb.WriteString(" PERCENT")

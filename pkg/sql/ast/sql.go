@@ -435,10 +435,7 @@ func (u *UpdateStatement) SQL() string {
 	}
 
 	sb.WriteString(" SET ")
-	updates := u.Updates
-	if len(updates) == 0 {
-		updates = u.Assignments
-	}
+	updates := u.Assignments
 	upds := make([]string, len(updates))
 	for i, upd := range updates {
 		upds[i] = exprSQL(upd.Column) + " = " + exprSQL(upd.Value)

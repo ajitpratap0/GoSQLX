@@ -701,7 +701,9 @@ func (p *Parser) peekToken() token.Token {
 // This is used by normalizeTokens() to ensure all tokens have ModelType set,
 // enabling pure integer comparison in isType() without string fallbacks.
 // Tokens with types not in this map get models.TokenTypeKeyword as a generic fallback.
-var stringTypeToModelType = map[token.Type]models.TokenType{
+//
+//lint:ignore SA1019 intentional use of deprecated token.Type during #215 migration — this map bridges string→int types
+var stringTypeToModelType = map[token.Type]models.TokenType{ //nolint:staticcheck // bridge map for #215 migration
 	// Special tokens
 	"EOF":   models.TokenTypeEOF,
 	"IDENT": models.TokenTypeIdentifier,

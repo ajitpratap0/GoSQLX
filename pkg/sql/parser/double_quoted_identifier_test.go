@@ -41,6 +41,7 @@ func parseSQLWithQuotedIdentifiers(t *testing.T, sql string) (*ast.AST, error) {
 func convertTokensWithQuotedIdentifiers(tokens []models.TokenWithSpan) []token.Token {
 	result := make([]token.Token, 0, len(tokens))
 	for _, t := range tokens {
+		//lint:ignore SA1019 intentional use during #215 migration
 		var tokenType token.Type
 		var modelType models.TokenType = t.Token.Type // Preserve the original ModelType
 		literal := t.Token.Value
@@ -52,12 +53,14 @@ func convertTokensWithQuotedIdentifiers(tokens []models.TokenWithSpan) []token.T
 			// Double-quoted strings should be treated as identifiers in SQL
 			tokenType = "DOUBLE_QUOTED_STRING"
 		case models.TokenTypeKeyword:
+			//lint:ignore SA1019 intentional use during #215 migration
 			tokenType = token.Type(t.Token.Value)
 		case models.TokenTypeString:
 			tokenType = "STRING"
 		case models.TokenTypeNumber:
 			tokenType = "INT"
 		case models.TokenTypeOperator:
+			//lint:ignore SA1019 intentional use during #215 migration
 			tokenType = token.Type(t.Token.Value)
 		case models.TokenTypeLParen:
 			tokenType = "("
@@ -81,6 +84,7 @@ func convertTokensWithQuotedIdentifiers(tokens []models.TokenWithSpan) []token.T
 			literal = "*"
 		default:
 			if t.Token.Value != "" {
+				//lint:ignore SA1019 intentional use during #215 migration
 				tokenType = token.Type(t.Token.Value)
 			}
 		}

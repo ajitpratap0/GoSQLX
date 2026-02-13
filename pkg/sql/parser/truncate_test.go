@@ -14,6 +14,7 @@ func convertTokensForTruncate(tokens []models.TokenWithSpan) []token.Token {
 	result := make([]token.Token, 0, len(tokens))
 	for _, t := range tokens {
 		// Determine token type
+		//lint:ignore SA1019 intentional use during #215 migration
 		tokenType := token.Type(t.Token.Value)
 		if t.Token.Type == models.TokenTypeIdentifier {
 			tokenType = "IDENT"

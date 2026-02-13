@@ -38,7 +38,8 @@ type TokenConverter struct {
 	buffer []token.Token
 
 	// Type mapping cache for performance (pre-computed)
-	typeMap map[models.TokenType]token.Type
+	//lint:ignore SA1019 intentional use during #215 migration
+	typeMap map[models.TokenType]token.Type //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
 }
 
 // ConversionResult contains the converted tokens and their position mappings for error reporting.
@@ -348,7 +349,8 @@ func (tc *TokenConverter) convertSingleToken(t models.TokenWithSpan) (token.Toke
 		}
 		// Use the keyword value as the type
 		return token.Token{
-			Type:      token.Type(t.Token.Value),
+			//lint:ignore SA1019 intentional use during #215 migration
+			Type:      token.Type(t.Token.Value), //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
 			ModelType: models.TokenTypeKeyword,
 			Literal:   t.Token.Value,
 		}, nil
@@ -364,7 +366,8 @@ func (tc *TokenConverter) convertSingleToken(t models.TokenWithSpan) (token.Toke
 	}
 
 	// Fallback to string conversion for unmapped types
-	tokenType := token.Type(fmt.Sprintf("%v", t.Token.Type))
+	//lint:ignore SA1019 intentional use during #215 migration
+	tokenType := token.Type(fmt.Sprintf("%v", t.Token.Type)) //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
 
 	return token.Token{
 		Type:      tokenType,
@@ -385,7 +388,9 @@ func containsDecimalOrExponent(s string) bool {
 
 // getKeywordTokenTypeWithModel returns both the parser token type (string) and models.TokenType (int)
 // for SQL keywords that come as IDENTIFIER. This enables unified type system support.
-func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) {
+//
+//lint:ignore SA1019 intentional use during #215 migration
+func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) { //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
 	// Fast path: Use pooled buffer for uppercase conversion (avoids allocation per call)
 	// SQL keywords are ASCII, so this is safe and much faster than string operations
 	var upper []byte
@@ -532,8 +537,11 @@ func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) {
 
 // buildTypeMapping creates an optimized lookup table for token type conversion
 // Includes all token types defined in models.TokenType for comprehensive coverage
-func buildTypeMapping() map[models.TokenType]token.Type {
-	return map[models.TokenType]token.Type{
+//
+//lint:ignore SA1019 intentional use during #215 migration
+func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
+	//lint:ignore SA1019 intentional use during #215 migration
+	return map[models.TokenType]token.Type{ //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
 		// SQL Keywords (core)
 		models.TokenTypeSelect:  "SELECT",
 		models.TokenTypeFrom:    "FROM",
@@ -832,6 +840,10 @@ func buildTypeMapping() map[models.TokenType]token.Type {
 //	defer parser.PutParser(p)
 //	ast, err := p.Parse(parserTokens)
 //	defer ast.ReleaseAST(ast)
+//
+// Deprecated: ConvertTokensForParser is part of the legacy dual token type bridge.
+// Use ParseFromModelTokens on the Parser instead, which accepts tokenizer output directly.
+// This function will be removed in a future version (see #215).
 //
 // Backward Compatibility: Maintains compatibility with existing CLI code.
 //

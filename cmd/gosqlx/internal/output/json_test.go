@@ -134,6 +134,7 @@ func TestFormatParseJSON_Success(t *testing.T) {
 		t.Fatalf("Tokenization failed: %v", err)
 	}
 
+	//lint:ignore SA1019 intentional use during #215 migration
 	convertedTokens, err := parser.ConvertTokensForParser(tokens)
 	if err != nil {
 		t.Fatalf("Token conversion failed: %v", err)
@@ -359,6 +360,7 @@ func TestConvertStatementToJSON(t *testing.T) {
 		t.Fatalf("Tokenization failed: %v", err)
 	}
 
+	//lint:ignore SA1019 intentional use during #215 migration
 	convertedTokens, err := parser.ConvertTokensForParser(tokens)
 	if err != nil {
 		t.Fatalf("Token conversion failed: %v", err)

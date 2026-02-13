@@ -204,7 +204,8 @@ func parseAndDisplayFilter(sql string) {
 	}
 
 	// Convert tokens
-	tokens, err := parser.ConvertTokensForParser(tokensWithSpan)
+	//lint:ignore SA1019 intentional use during #215 migration
+	tokens, err := parser.ConvertTokensForParser(tokensWithSpan) //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
 	if err != nil {
 		log.Printf("   Token conversion error: %v", err)
 		return

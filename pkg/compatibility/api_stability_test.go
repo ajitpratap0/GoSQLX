@@ -148,7 +148,8 @@ func TestAPIStability_TokenTypes(t *testing.T) {
 	// Critical token types that must not change - verify exported constants exist and have correct values
 	// Only test tokens that are actually exported from the token package
 	tests := []struct {
-		name          string
+		name string
+		//lint:ignore SA1019 intentional use during #215 migration
 		actualValue   token.Type
 		expectedValue string
 	}{
@@ -195,6 +196,7 @@ func TestAPIStability_ParserOutput(t *testing.T) {
 	}
 
 	// Convert tokens
+	//lint:ignore SA1019 intentional use during #215 migration
 	convertedTokens, err := parser.ConvertTokensForParser(tokens)
 	if err != nil {
 		t.Fatalf("Token conversion failed: %v", err)
@@ -250,6 +252,7 @@ func TestAPIStability_ErrorHandling(t *testing.T) {
 			return
 		}
 
+		//lint:ignore SA1019 intentional use during #215 migration
 		convertedTokens, err := parser.ConvertTokensForParser(tokens)
 		if err != nil {
 			t.Logf("✓ Token conversion error handling stable: %v", err)

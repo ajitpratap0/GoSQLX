@@ -18,6 +18,7 @@ func parseSQL(b *testing.B, sql string) *ast.AST {
 		b.Fatalf("Failed to tokenize: %v", err)
 	}
 
+	//lint:ignore SA1019 intentional use during #215 migration
 	convertedTokens, convErr := parser.ConvertTokensForParser(tokens)
 	if convErr != nil {
 		b.Fatalf("Failed to convert tokens: %v", convErr)
@@ -77,6 +78,7 @@ func BenchmarkScanner_TautologyDetection(b *testing.B) {
 			b.Fatalf("Failed to tokenize: %v", err)
 		}
 
+		//lint:ignore SA1019 intentional use during #215 migration
 		convertedTokens, convErr := parser.ConvertTokensForParser(tokens)
 		if convErr != nil {
 			b.Fatalf("Failed to convert tokens: %v", convErr)
@@ -246,6 +248,7 @@ func BenchmarkScanner_MultipleStatements(b *testing.B) {
 			b.Fatalf("Failed to tokenize: %v", err)
 		}
 
+		//lint:ignore SA1019 intentional use during #215 migration
 		convertedTokens, convErr := parser.ConvertTokensForParser(tokens)
 		if convErr != nil {
 			b.Fatalf("Failed to convert tokens: %v", convErr)

@@ -148,7 +148,8 @@ func (l *Linter) LintString(sql string, filename string) FileResult {
 		ctx.WithTokens(tokens)
 
 		// Attempt parsing (best effort - some rules are token-only)
-		convertedTokens, convErr := parser.ConvertTokensForParser(tokens)
+		//lint:ignore SA1019 intentional use during #215 migration
+		convertedTokens, convErr := parser.ConvertTokensForParser(tokens) //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
 		if convErr == nil {
 			p := parser.NewParser()
 			astObj, parseErr := p.Parse(convertedTokens)

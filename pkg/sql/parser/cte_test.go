@@ -14,6 +14,7 @@ func convertTokensForCTE(tokens []models.TokenWithSpan) []token.Token {
 	result := make([]token.Token, 0, len(tokens))
 	for _, t := range tokens {
 		// Determine token type
+		//lint:ignore SA1019 intentional use during #215 migration
 		var tokenType token.Type
 
 		switch t.Token.Type {
@@ -21,12 +22,14 @@ func convertTokensForCTE(tokens []models.TokenWithSpan) []token.Token {
 			tokenType = "IDENT"
 		case models.TokenTypeKeyword:
 			// Use the keyword value as the token type
+			//lint:ignore SA1019 intentional use during #215 migration
 			tokenType = token.Type(t.Token.Value)
 		case models.TokenTypeString:
 			tokenType = "STRING"
 		case models.TokenTypeNumber:
 			tokenType = "INT"
 		case models.TokenTypeOperator:
+			//lint:ignore SA1019 intentional use during #215 migration
 			tokenType = token.Type(t.Token.Value)
 		case models.TokenTypeLParen:
 			tokenType = "("
@@ -41,6 +44,7 @@ func convertTokensForCTE(tokens []models.TokenWithSpan) []token.Token {
 		default:
 			// For any other type, use the value as the type if it looks like a keyword
 			if t.Token.Value != "" {
+				//lint:ignore SA1019 intentional use during #215 migration
 				tokenType = token.Type(t.Token.Value)
 			}
 		}

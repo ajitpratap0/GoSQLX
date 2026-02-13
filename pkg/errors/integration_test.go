@@ -74,6 +74,7 @@ func TestErrorPropagation_TokenizerToParser(t *testing.T) {
 			}
 
 			// Convert tokens and parse
+			//lint:ignore SA1019 intentional use during #215 migration
 			parserTokens, _ := parser.ConvertTokensForParser(tokens)
 			p := parser.NewParser()
 			_, parseErr := p.Parse(parserTokens)
@@ -151,6 +152,7 @@ func TestErrorCodeExtraction(t *testing.T) {
 			}
 
 			// Parse
+			//lint:ignore SA1019 intentional use during #215 migration
 			parserTokens, _ := parser.ConvertTokensForParser(tokens)
 			p := parser.NewParser()
 			_, parseErr := p.Parse(parserTokens)
@@ -218,6 +220,7 @@ func TestErrorLocationPropagation(t *testing.T) {
 			}
 
 			// Parse
+			//lint:ignore SA1019 intentional use during #215 migration
 			parserTokens, _ := parser.ConvertTokensForParser(tokens)
 			p := parser.NewParser()
 			_, parseErr := p.Parse(parserTokens)

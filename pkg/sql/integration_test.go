@@ -227,6 +227,7 @@ func testSQLFile(t *testing.T, file SQLTestFile) TestResult {
 	}
 
 	// Convert tokens
+	//lint:ignore SA1019 intentional use during #215 migration
 	convertedTokens, err := parser.ConvertTokensForParser(tokens)
 	if err != nil {
 		result.Error = fmt.Errorf("token conversion failed: %w", err)
@@ -433,6 +434,7 @@ func BenchmarkIntegration_SimpleQueries(b *testing.B) {
 			sqlStatement := extractSQLStatement(file.Content)
 			tkz := tokenizer.GetTokenizer()
 			tokens, _ := tkz.Tokenize([]byte(sqlStatement))
+			//lint:ignore SA1019 intentional use during #215 migration
 			convertedTokens, _ := parser.ConvertTokensForParser(tokens)
 			tokenizer.PutTokenizer(tkz)
 
@@ -465,6 +467,7 @@ func BenchmarkIntegration_ComplexQueries(b *testing.B) {
 			sqlStatement := extractSQLStatement(file.Content)
 			tkz := tokenizer.GetTokenizer()
 			tokens, _ := tkz.Tokenize([]byte(sqlStatement))
+			//lint:ignore SA1019 intentional use during #215 migration
 			convertedTokens, _ := parser.ConvertTokensForParser(tokens)
 			tokenizer.PutTokenizer(tkz)
 
@@ -497,6 +500,7 @@ func BenchmarkIntegration_RealWorldScenarios(b *testing.B) {
 			sqlStatement := extractSQLStatement(file.Content)
 			tkz := tokenizer.GetTokenizer()
 			tokens, _ := tkz.Tokenize([]byte(sqlStatement))
+			//lint:ignore SA1019 intentional use during #215 migration
 			convertedTokens, _ := parser.ConvertTokensForParser(tokens)
 			tokenizer.PutTokenizer(tkz)
 

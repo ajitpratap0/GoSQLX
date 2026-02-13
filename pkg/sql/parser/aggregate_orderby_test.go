@@ -25,12 +25,14 @@ func convertTokensForAggregateTests(tokens []models.TokenWithSpan) []token.Token
 		}
 
 		// Determine token type
+		//lint:ignore SA1019 intentional use during #215 migration
 		var tokenType token.Type
 
 		switch t.Token.Type {
 		case models.TokenTypeIdentifier:
 			tokenType = "IDENT"
 		case models.TokenTypeKeyword:
+			//lint:ignore SA1019 intentional use during #215 migration
 			tokenType = token.Type(t.Token.Value)
 		case models.TokenTypeFrom:
 			tokenType = "FROM"
@@ -67,6 +69,7 @@ func convertTokensForAggregateTests(tokens []models.TokenWithSpan) []token.Token
 		case models.TokenTypeNumber:
 			tokenType = "INT"
 		case models.TokenTypeOperator:
+			//lint:ignore SA1019 intentional use during #215 migration
 			tokenType = token.Type(t.Token.Value)
 		case models.TokenTypeLParen:
 			tokenType = "("
@@ -95,6 +98,7 @@ func convertTokensForAggregateTests(tokens []models.TokenWithSpan) []token.Token
 		default:
 			// For any other type, use the value as the type if it looks like a keyword
 			if t.Token.Value != "" {
+				//lint:ignore SA1019 intentional use during #215 migration
 				tokenType = token.Type(t.Token.Value)
 			}
 		}

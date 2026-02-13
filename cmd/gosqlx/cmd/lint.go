@@ -92,7 +92,7 @@ func lintRun(cmd *cobra.Command, args []string) error {
 
 	// Use a buffer to capture output when writing to file
 	var outputBuf bytes.Buffer
-	var outWriter io.Writer = cmd.OutOrStdout()
+	outWriter := io.Writer(cmd.OutOrStdout())
 	if outputFile != "" {
 		outWriter = &outputBuf
 	}
@@ -171,9 +171,10 @@ func lintRun(cmd *cobra.Command, args []string) error {
 	warningCount := 0
 	for _, fileResult := range result.Files {
 		for _, violation := range fileResult.Violations {
-			if violation.Severity == linter.SeverityError {
+			switch violation.Severity {
+			case linter.SeverityError:
 				errorCount++
-			} else if violation.Severity == linter.SeverityWarning {
+			case linter.SeverityWarning:
 				warningCount++
 			}
 		}
@@ -208,7 +209,7 @@ func lintFromStdin(cmd *cobra.Command) error {
 
 	// Use a buffer to capture output when writing to file
 	var outputBuf bytes.Buffer
-	var outWriter io.Writer = cmd.OutOrStdout()
+	outWriter := io.Writer(cmd.OutOrStdout())
 	if outputFile != "" {
 		outWriter = &outputBuf
 	}
@@ -256,9 +257,10 @@ func lintFromStdin(cmd *cobra.Command) error {
 	errorCount := 0
 	warningCount := 0
 	for _, violation := range result.Violations {
-		if violation.Severity == linter.SeverityError {
+		switch violation.Severity {
+		case linter.SeverityError:
 			errorCount++
-		} else if violation.Severity == linter.SeverityWarning {
+		case linter.SeverityWarning:
 			warningCount++
 		}
 	}

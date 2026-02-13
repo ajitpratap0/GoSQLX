@@ -73,7 +73,7 @@ func lspRun(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to open log file: %w", err)
 		}
-		defer f.Close()
+		defer f.Close() //nolint:errcheck // best-effort close of log file
 		logger = log.New(f, "[gosqlx-lsp] ", log.LstdFlags|log.Lshortfile)
 	} else {
 		// Discard logs by default (LSP should only communicate via protocol)

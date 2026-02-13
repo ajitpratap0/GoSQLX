@@ -602,7 +602,8 @@ func (f *SQLFormatter) formatExpression(expr ast.Expression) error {
 		f.builder.WriteString(e.Name)
 	case *ast.LiteralValue:
 		// Handle string literals with proper quoting
-		if e.Type == "string" || e.Type == "STRING" {
+		switch e.Type {
+		case "string", "STRING":
 			// Escape single quotes in the string value and wrap in quotes
 			// Use type assertion for efficiency instead of fmt.Sprintf
 			var strVal string
@@ -615,9 +616,9 @@ func (f *SQLFormatter) formatExpression(expr ast.Expression) error {
 			f.builder.WriteString("'")
 			f.builder.WriteString(escaped)
 			f.builder.WriteString("'")
-		} else if e.Type == "null" || e.Type == "NULL" {
+		case "null", "NULL":
 			f.writeKeyword("NULL")
-		} else {
+		default:
 			// For non-string types, use type assertions for common types
 			switch v := e.Value.(type) {
 			case string:
@@ -1063,7 +1064,7 @@ func (f *SQLFormatter) needsQuoting(ident string) bool {
 	}
 	// Check for special characters (allow only letters, digits, and underscore)
 	for _, c := range ident {
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '_' {
 			return true
 		}
 	}

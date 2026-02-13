@@ -950,12 +950,12 @@ func (t *Tokenizer) readQuotedString(quote rune) (models.Token, error) {
 			value := buf.String()
 			// For test compatibility, use appropriate token types based on quote style
 			var tokenType models.TokenType
-			if originalQuote == '\'' || originalQuote == '\u2018' || originalQuote == '\u2019' ||
-				originalQuote == '«' || originalQuote == '»' {
+			switch originalQuote {
+			case '\'', '\u2018', '\u2019', '«', '»':
 				tokenType = models.TokenTypeSingleQuotedString // 124
-			} else if originalQuote == '"' || originalQuote == '\u201C' || originalQuote == '\u201D' {
+			case '"', '\u201C', '\u201D':
 				tokenType = models.TokenTypeDoubleQuotedString // 124
-			} else {
+			default:
 				tokenType = models.TokenTypeString // 20
 			}
 			return models.Token{
@@ -1297,13 +1297,14 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		t.pos.AdvanceRune(r, size)
 		if t.pos.Index < len(t.input) {
 			nxtR, nxtSize := utf8.DecodeRune(t.input[t.pos.Index:])
-			if nxtR == '=' {
+			switch nxtR {
+			case '=':
 				t.pos.AdvanceRune(nxtR, nxtSize)
 				return models.Token{Type: models.TokenTypeLtEq, Value: "<="}, nil
-			} else if nxtR == '>' {
+			case '>':
 				t.pos.AdvanceRune(nxtR, nxtSize)
 				return models.Token{Type: models.TokenTypeNeq, Value: "<>"}, nil
-			} else if nxtR == '@' {
+			case '@':
 				// <@ is the "is contained by" JSON operator
 				t.pos.AdvanceRune(nxtR, nxtSize)
 				return models.Token{Type: models.TokenTypeArrowAt, Value: "<@"}, nil
@@ -1463,14 +1464,15 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		// Just a standalone ? symbol (used for single key existence check)
 		return models.Token{Type: models.TokenTypeQuestion, Value: "?"}, nil
 	case '$':
-		// Handle PostgreSQL positional parameters ($1, $2, etc.)
+		// Handle PostgreSQL positional parameters ($1, $2, etc.) and dollar-quoted strings
+		startPos := t.pos.Clone()
 		t.pos.AdvanceRune(r, size)
 		if t.pos.Index < len(t.input) {
 			nextR, _ := utf8.DecodeRune(t.input[t.pos.Index:])
 			// Check if followed by a digit (positional parameter)
 			if nextR >= '0' && nextR <= '9' {
 				// Read the number part
-				start := t.pos.Index
+				numStart := t.pos.Index
 				for t.pos.Index < len(t.input) {
 					digitR, digitSize := utf8.DecodeRune(t.input[t.pos.Index:])
 					if digitR < '0' || digitR > '9' {
@@ -1478,15 +1480,16 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 					}
 					t.pos.AdvanceRune(digitR, digitSize)
 				}
-				paramNum := string(t.input[start:t.pos.Index])
+				paramNum := string(t.input[numStart:t.pos.Index])
 				return models.Token{Type: models.TokenTypePlaceholder, Value: "$" + paramNum}, nil
 			}
+			// Check for dollar-quoted string: $$...$$ or $tag$...$tag$
+			if nextR == '$' || isDollarTagChar(nextR) {
+				return t.readDollarQuotedString(startPos)
+			}
 		}
-		// TODO(#189): PostgreSQL dollar-quoted strings ($tag$...$tag$) are not yet supported.
-		// Dollar-quoted strings allow arbitrary string content without escaping quotes.
-		// Example: $body$SELECT * FROM users WHERE name = 'John'$body$
-		// For now, standalone $ is treated as a placeholder token.
-		// Future implementation should check for $identifier$ pattern and read until closing tag.
+		// If $ is at end of input, fall through to standalone placeholder
+		// Standalone $ is a placeholder token
 		return models.Token{Type: models.TokenTypePlaceholder, Value: "$"}, nil
 	case '~':
 		// Handle PostgreSQL regex operators ~ and ~*

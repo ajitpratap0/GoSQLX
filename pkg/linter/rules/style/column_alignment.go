@@ -193,12 +193,13 @@ func (r *ColumnAlignmentRule) checkColumnAlignment(indents []int, lines []int, _
 func getIndentSize(line string) int {
 	count := 0
 	for _, ch := range line {
-		if ch == ' ' {
+		switch ch {
+		case ' ':
 			count++
-		} else if ch == '\t' {
+		case '\t':
 			count += 4 // Treat tab as 4 spaces
-		} else {
-			break
+		default:
+			return count
 		}
 	}
 	return count

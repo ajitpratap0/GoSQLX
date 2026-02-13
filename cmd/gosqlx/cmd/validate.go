@@ -112,7 +112,8 @@ func validateRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Handle different output formats
-	if validateOutputFormat == "sarif" {
+	switch validateOutputFormat {
+	case "sarif":
 		// Generate SARIF output
 		sarifData, err := output.FormatSARIF(result, Version)
 		if err != nil {
@@ -130,7 +131,7 @@ func validateRun(cmd *cobra.Command, args []string) error {
 		} else {
 			fmt.Fprint(cmd.OutOrStdout(), string(sarifData))
 		}
-	} else if validateOutputFormat == "json" {
+	case "json":
 		// Generate JSON output
 		jsonData, err := output.FormatValidationJSON(result, args, validateStats)
 		if err != nil {
@@ -149,7 +150,7 @@ func validateRun(cmd *cobra.Command, args []string) error {
 			fmt.Fprint(cmd.OutOrStdout(), string(jsonData))
 		}
 	}
-	// Default text output is already handled by the validator
+	// Default text output is already handled by the validator (no case needed)
 
 	// Exit with error code if there were invalid files
 	if result.InvalidFiles > 0 {
@@ -177,14 +178,16 @@ func validateFromStdin(cmd *cobra.Command) error {
 	if err != nil {
 		return fmt.Errorf("failed to create temporary file: %w", err)
 	}
-	defer os.Remove(tmpFile.Name())
-	defer tmpFile.Close()
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+	defer func() { _ = tmpFile.Close() }()
 
 	// Write stdin content to temp file
 	if _, err := tmpFile.Write(content); err != nil {
 		return fmt.Errorf("failed to write to temporary file: %w", err)
 	}
-	tmpFile.Close()
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temporary file: %w", err)
+	}
 
 	// Load configuration
 	cfg, err := config.LoadDefault()
@@ -229,7 +232,8 @@ func validateFromStdin(cmd *cobra.Command) error {
 	// Different output formats are handled below
 
 	// Handle different output formats
-	if validateOutputFormat == "sarif" {
+	switch validateOutputFormat {
+	case "sarif":
 		sarifData, err := output.FormatSARIF(result, Version)
 		if err != nil {
 			return fmt.Errorf("failed to generate SARIF output: %w", err)
@@ -242,7 +246,7 @@ func validateFromStdin(cmd *cobra.Command) error {
 		if validateOutputFile != "" && !opts.Quiet {
 			fmt.Fprintf(cmd.OutOrStdout(), "SARIF output written to %s\n", validateOutputFile)
 		}
-	} else if validateOutputFormat == "json" {
+	case "json":
 		jsonData, err := output.FormatValidationJSON(result, []string{"stdin"}, validateStats)
 		if err != nil {
 			return fmt.Errorf("failed to generate JSON output: %w", err)

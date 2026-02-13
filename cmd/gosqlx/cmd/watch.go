@@ -372,9 +372,10 @@ func (fw *FileWatcher) shouldProcessFile(filename string) bool {
 // printWatchStatus displays the initial watch status
 func (fw *FileWatcher) printWatchStatus() {
 	modeStr := string(fw.opts.Mode)
-	if fw.opts.Mode == WatchModeValidate {
+	switch fw.opts.Mode {
+	case WatchModeValidate:
 		modeStr = "validation"
-	} else if fw.opts.Mode == WatchModeFormat {
+	case WatchModeFormat:
 		modeStr = "formatting"
 	}
 

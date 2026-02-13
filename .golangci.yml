@@ -8,10 +8,15 @@ linters:
   enable:
     - ineffassign
     - unused
-  disable:
     - errcheck
     - govet
     - staticcheck
+  settings:
+    errcheck:
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
 
 issues:
   max-issues-per-linter: 0

@@ -134,7 +134,7 @@ func DetectDialect(sql string) SQLDialect {
 	}
 
 	// Find the dialect with the highest score
-	var bestDialect SQLDialect = DialectGeneric
+	bestDialect := DialectGeneric
 	bestScore := 0
 	for dialect, score := range scores {
 		if score > bestScore {

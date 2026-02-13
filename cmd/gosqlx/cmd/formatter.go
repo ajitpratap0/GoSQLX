@@ -200,7 +200,7 @@ func (f *Formatter) formatSQL(sql string) (string, error) {
 	}
 
 	// Convert tokens for parser using centralized converter
-	convertedTokens, err := parser.ConvertTokensForParser(tokens)
+	convertedTokens, err := parser.ConvertTokensForParser(tokens) //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
 	if err != nil {
 		return "", fmt.Errorf("token conversion failed: %w", err)
 	}

@@ -694,7 +694,7 @@ func NewParser() *Parser {
 }
 
 // matchToken checks if the current token matches the expected type
-func (p *Parser) matchToken(expected token.Type) bool {
+func (p *Parser) matchToken(expected token.Type) bool { //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
 	// Convert both to strings for comparison
 	expectedStr := string(expected)
 	currentStr := string(p.currentToken.Type)
@@ -738,7 +738,7 @@ func (p *Parser) peekToken() token.Token {
 // This comprehensive map enables isType() to work with tokens that don't have ModelType set
 // (e.g., tokens created in tests without using the tokenizer).
 // NOTE: Only TokenTypes that exist in models package are included here.
-var modelTypeToString = map[models.TokenType]token.Type{
+var modelTypeToString = map[models.TokenType]token.Type{ //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
 	// Special tokens
 	models.TokenTypeEOF:        token.EOF,
 	models.TokenTypeSemicolon:  token.SEMICOLON,

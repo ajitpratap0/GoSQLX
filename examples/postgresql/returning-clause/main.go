@@ -216,7 +216,7 @@ func parseAndDisplayReturning(sql string) {
 	}
 
 	// Convert tokens
-	tokens, err := parser.ConvertTokensForParser(tokensWithSpan)
+	tokens, err := parser.ConvertTokensForParser(tokensWithSpan) //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
 	if err != nil {
 		log.Printf("   Token conversion error: %v", err)
 		return

@@ -159,7 +159,7 @@ func validateSQL(sql string, dialect string, verbose bool) ValidationResult {
 	parserTokens := make([]token.Token, len(tokens))
 	for i, t := range tokens {
 		parserTokens[i] = token.Token{
-			Type:    token.Type(t.Token.Value), // Use the value as the type string
+			Type:    token.Type(t.Token.Value), //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
 			Literal: string(t.Token.Value),
 		}
 	}

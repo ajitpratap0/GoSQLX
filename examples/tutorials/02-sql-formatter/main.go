@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 func main() {
@@ -115,7 +116,7 @@ func formatCommand() {
 	}
 
 	// Read SQL file
-	content, err := os.ReadFile(filePath)
+	content, err := os.ReadFile(filepath.Clean(filePath)) // #nosec G304 // #nosec G304,G703
 	if err != nil {
 		fmt.Printf("Error reading file: %v\n", err)
 		os.Exit(1)
@@ -131,7 +132,7 @@ func formatCommand() {
 
 	// Output or write to file
 	if inPlace {
-		if err := os.WriteFile(filePath, []byte(formatted), 0644); err != nil {
+		if err := os.WriteFile(filePath, []byte(formatted), 0600); err != nil { // #nosec G703
 			fmt.Printf("Error writing file: %v\n", err)
 			os.Exit(1)
 		}

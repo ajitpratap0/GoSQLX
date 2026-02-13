@@ -431,7 +431,7 @@ We welcome contributions! Please see:
 
 | Action Version | GoSQLX Version | Go Version |
 |---------------|----------------|------------|
-| v1.x | v1.4.0+ | 1.24+ |
+| v1.x | v1.4.0+ | 1.21+ |
 
 ## License
 

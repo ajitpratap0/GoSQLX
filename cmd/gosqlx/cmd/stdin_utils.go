@@ -20,7 +20,7 @@ const (
 func IsStdinPipe() bool {
 	// Check if stdin is a terminal using golang.org/x/term
 	// If it's not a terminal, it's likely a pipe or redirect
-	return !term.IsTerminal(int(os.Stdin.Fd()))
+	return !term.IsTerminal(int(os.Stdin.Fd())) // #nosec G115
 }
 
 // ReadFromStdin reads SQL content from stdin with security limits
@@ -84,7 +84,7 @@ func WriteOutput(content []byte, outputFile string, writer io.Writer) error {
 	if outputFile != "" {
 		// Security: Use 0600 permissions for output files (owner read/write only)
 		// G306: This is intentional - output files should be user-private
-		if err := os.WriteFile(outputFile, content, 0600); err != nil { // #nosec G306
+		if err := os.WriteFile(outputFile, content, 0600); err != nil { // #nosec G306,G703
 			return fmt.Errorf("failed to write to file %s: %w", outputFile, err)
 		}
 		return nil

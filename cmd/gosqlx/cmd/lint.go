@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -112,7 +113,7 @@ func lintRun(cmd *cobra.Command, args []string) error {
 			}
 
 			// Read file content
-			content, err := os.ReadFile(fileResult.Filename)
+			content, err := os.ReadFile(filepath.Clean(fileResult.Filename)) // #nosec G304
 			if err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "Error reading %s: %v\n", fileResult.Filename, err)
 				continue

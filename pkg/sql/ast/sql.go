@@ -59,8 +59,7 @@ func (b *BinaryExpression) SQL() string {
 
 	upperOp := strings.ToUpper(op)
 
-	// Handle IS NULL / IS NOT NULL — operator already contains NULL,
-	// so do not append the right-hand side again.
+	// Handle IS NULL / IS NOT NULL (right side is NULL literal)
 	if upperOp == "IS NULL" || upperOp == "IS NOT NULL" {
 		return fmt.Sprintf("%s %s", left, upperOp)
 	}
@@ -75,7 +74,6 @@ func (b *BinaryExpression) SQL() string {
 		}
 	}
 
-	// Logical operators get spaces, others too
 	return fmt.Sprintf("%s %s %s", left, op, right)
 }
 
@@ -269,6 +267,7 @@ func (a *ArraySliceExpression) SQL() string {
 }
 
 // GROUP BY advanced expressions
+
 func (r *RollupExpression) SQL() string {
 	return "ROLLUP(" + exprListSQL(r.Expressions) + ")"
 }
@@ -319,6 +318,7 @@ func (s *SelectStatement) SQL() string {
 	}
 
 	for _, j := range s.Joins {
+		j := j // G601: Create local copy to avoid memory aliasing
 		sb.WriteString(" ")
 		sb.WriteString(joinSQL(&j))
 	}
@@ -516,9 +516,11 @@ func (c *CreateTableStatement) SQL() string {
 
 	parts := make([]string, 0, len(c.Columns)+len(c.Constraints))
 	for _, col := range c.Columns {
+		col := col // G601: Create local copy to avoid memory aliasing
 		parts = append(parts, columnDefSQL(&col))
 	}
 	for _, con := range c.Constraints {
+		con := con // G601: Create local copy to avoid memory aliasing
 		parts = append(parts, tableConstraintSQL(&con))
 	}
 	sb.WriteString(strings.Join(parts, ", "))
@@ -585,6 +587,7 @@ func (a *AlterTableStatement) SQL() string {
 	sb.WriteString("ALTER TABLE ")
 	sb.WriteString(a.Table)
 	for _, action := range a.Actions {
+		action := action // G601: Create local copy to avoid memory aliasing
 		sb.WriteString(" ")
 		sb.WriteString(alterActionSQL(&action))
 	}
@@ -771,6 +774,7 @@ func (m *MergeStatement) SQL() string {
 }
 
 // DML types from dml.go
+
 func (s *Select) SQL() string {
 	var sb strings.Builder
 	sb.WriteString("SELECT ")
@@ -887,7 +891,6 @@ func exprSQL(e Expression) string {
 	if s, ok := e.(interface{ SQL() string }); ok {
 		return s.SQL()
 	}
-	// Fallback to TokenLiteral
 	return e.TokenLiteral()
 }
 
@@ -1079,6 +1082,7 @@ func columnDefSQL(c *ColumnDef) string {
 	sb.WriteString(" ")
 	sb.WriteString(c.Type)
 	for _, con := range c.Constraints {
+		con := con // G601: Create local copy to avoid memory aliasing
 		sb.WriteString(" ")
 		sb.WriteString(columnConstraintSQL(&con))
 	}

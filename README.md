@@ -130,7 +130,7 @@ go build -o gosqlx ./cmd/gosqlx
 Use GoSQLX from Python with native performance via ctypes FFI:
 
 ```bash
-# Build the shared library (requires Go 1.24+)
+# Build the shared library (requires Go 1.21+)
 cd pkg/cbinding && ./build.sh && cd ../..
 
 # Install the Python package
@@ -150,7 +150,7 @@ print(tables)  # ['users', 'orders']
 See the full [PyGoSQLX documentation](python/README.md) for the complete API.
 
 **Requirements:**
-- Go 1.24 or higher
+- Go 1.21 or higher
 - Python 3.8+ (for Python bindings)
 - No external dependencies for the Go library
 
@@ -861,7 +861,7 @@ GoSQLX/
 
 ### Prerequisites
 
-- Go 1.24+
+- Go 1.21+
 - [Task](https://taskfile.dev) - task runner (install: `go install github.com/go-task/task/v3/cmd/task@latest`)
 - golangci-lint, staticcheck (for code quality, install: `task deps:tools`)
 

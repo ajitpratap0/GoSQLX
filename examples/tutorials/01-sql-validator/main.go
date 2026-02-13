@@ -18,7 +18,7 @@ func main() {
 	target := os.Args[1]
 
 	// Check if target exists
-	info, err := os.Stat(target)
+	info, err := os.Stat(target) // #nosec G703
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)

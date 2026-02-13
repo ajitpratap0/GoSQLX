@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 )
 
 // FormatterConfig holds all formatting preferences
@@ -45,11 +46,11 @@ func DefaultConfig() FormatterConfig {
 // LoadConfig loads configuration from a JSON file
 func LoadConfig(filePath string) (FormatterConfig, error) {
 	// If file doesn't exist, return default config
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+	if _, err := os.Stat(filePath); os.IsNotExist(err) { // #nosec G703
 		return DefaultConfig(), nil
 	}
 
-	data, err := os.ReadFile(filePath)
+	data, err := os.ReadFile(filepath.Clean(filePath)) // #nosec G304 // #nosec G304,G703
 	if err != nil {
 		return FormatterConfig{}, err
 	}
@@ -69,5 +70,5 @@ func SaveConfig(config FormatterConfig, filePath string) error {
 		return err
 	}
 
-	return os.WriteFile(filePath, data, 0644)
+	return os.WriteFile(filePath, data, 0600)
 }

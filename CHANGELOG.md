@@ -467,9 +467,9 @@ gosqlx lsp --log /tmp/lsp.log  # With debug logging
 ### Changed
 
 #### Go Version Update (PR #140)
-- Minimum requirement: Go 1.24+ (was 1.19)
-- Toolchain: Go 1.25.0
-- Updated all CI/CD workflows to test against Go 1.24, 1.25
+- Minimum requirement: Go 1.21+ (was 1.19)
+- Toolchain: Go 1.21+
+- Updated all CI/CD workflows to test against Go 1.21+
 - golangci-lint upgraded to v2.6.2
 
 #### CLI Output Improvements (PR #163)

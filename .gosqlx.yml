@@ -1,0 +1,45 @@
+# GoSQLX Configuration Example
+# Place this file in your project root as .gosqlx.yml
+
+# SQL dialect (auto-detect if not specified)
+# Options: postgresql, mysql, sqlserver, oracle, sqlite
+dialect: postgresql
+
+# Linting rules
+lint:
+  # Enable/disable specific rules (use rule codes)
+  # Available rules: L001-L010
+  rules:
+    - L007  # Keyword Case Consistency
+    - L001  # Trailing Whitespace
+    - L002  # Mixed Indentation
+    - L004  # Indentation Depth
+    - L009  # Aliasing Consistency
+
+  # Maximum line length (0 = unlimited)
+  max-line-length: 120
+
+  # Severity threshold: error, warning, info
+  severity: warning
+
+  # Auto-fix violations where possible
+  auto-fix: false
+
+# Validation settings
+validate:
+  # Strict mode: additional syntax checks
+  strict: false
+
+  # Fail on first error or collect all
+  fail-fast: false
+
+# File patterns
+files:
+  # Include patterns
+  include:
+    - "**/*.sql"
+  # Exclude patterns
+  exclude:
+    - "**/vendor/**"
+    - "**/node_modules/**"
+    - "**/testdata/**"

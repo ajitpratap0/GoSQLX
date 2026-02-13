@@ -174,7 +174,7 @@ func (v *Validator) Validate(args []string) (*output.ValidationResult, error) {
 
 		if fileResult.Error != nil {
 			if !v.Opts.Quiet {
-				fmt.Fprintf(v.Err, "❌ %s: %v\n", file, fileResult.Error)
+				fmt.Fprintf(v.Err, "❌ %s: %v\n", file, fileResult.Error) // #nosec G705
 			}
 			result.InvalidFiles++
 			continue
@@ -182,12 +182,12 @@ func (v *Validator) Validate(args []string) (*output.ValidationResult, error) {
 
 		if fileResult.Valid {
 			if !v.Opts.Quiet {
-				fmt.Fprintf(v.Out, "✅ %s: Valid SQL\n", file)
+				fmt.Fprintf(v.Out, "✅ %s: Valid SQL\n", file) // #nosec G705
 			}
 			result.ValidFiles++
 		} else {
 			if !v.Opts.Quiet {
-				fmt.Fprintf(v.Out, "❌ %s: Invalid SQL\n", file)
+				fmt.Fprintf(v.Out, "❌ %s: Invalid SQL\n", file) // #nosec G705
 			}
 			result.InvalidFiles++
 		}

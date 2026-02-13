@@ -210,3 +210,25 @@ func (r BaseRule) Severity() Severity {
 func (r BaseRule) CanAutoFix() bool {
 	return r.canAutoFix
 }
+
+// ValidRuleIDs returns the set of all implemented rule IDs.
+// Use this to validate that user-specified rule names in configuration
+// files (e.g., .gosqlx.yml) reference actual rules.
+var ValidRuleIDs = map[string]string{
+	"L001": "Trailing Whitespace",
+	"L002": "Mixed Indentation",
+	"L003": "Consecutive Blank Lines",
+	"L004": "Indentation Depth",
+	"L005": "Long Lines",
+	"L006": "Column Alignment",
+	"L007": "Keyword Case Consistency",
+	"L008": "Comma Placement",
+	"L009": "Aliasing Consistency",
+	"L010": "Redundant Whitespace",
+}
+
+// IsValidRuleID checks whether a rule ID corresponds to an implemented rule.
+func IsValidRuleID(id string) bool {
+	_, ok := ValidRuleIDs[id]
+	return ok
+}

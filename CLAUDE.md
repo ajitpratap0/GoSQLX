@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 GoSQLX is a **production-ready**, **race-free**, high-performance SQL parsing SDK for Go that provides lexing, parsing, and AST generation with zero-copy optimizations. The library is designed for enterprise use with comprehensive object pooling for memory efficiency.
 
-**Requirements**: Go 1.24+ (toolchain go1.25.0)
+**Requirements**: Go 1.21+
 
 **Production Status**: ✅ Validated for production deployment (v1.6.0+, current: v1.7.0)
 - Thread-safe with zero race conditions (20,000+ concurrent operations tested)

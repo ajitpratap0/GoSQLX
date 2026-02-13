@@ -1,4 +1,4 @@
-// Package optimizer provides SQL query optimization suggestions by analyzing parsed ASTs.
+// Package advisor provides SQL query optimization suggestions by analyzing parsed ASTs.
 //
 // The optimizer walks the Abstract Syntax Tree produced by the GoSQLX parser and
 // applies configurable rules to detect common performance anti-patterns. Each rule
@@ -20,7 +20,7 @@
 //
 //	astNode, _ := gosqlx.Parse(sql)
 //	result := opt.Analyze(astNode)
-package optimizer
+package advisor
 
 import (
 	"fmt"

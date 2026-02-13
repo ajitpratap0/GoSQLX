@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ajitpratap0/GoSQLX/pkg/optimizer"
+	"github.com/ajitpratap0/GoSQLX/pkg/advisor"
 )
 
 // optimizeCmd represents the optimize command
@@ -78,7 +78,7 @@ func optimizeFromStdin(cmd *cobra.Command) error {
 
 // runOptimize performs the optimization analysis and outputs results
 func runOptimize(cmd *cobra.Command, sql string) error {
-	opt := optimizer.New()
+	opt := advisor.New()
 
 	result, err := opt.AnalyzeSQL(sql)
 	if err != nil {
@@ -111,15 +111,15 @@ func runOptimize(cmd *cobra.Command, sql string) error {
 }
 
 // outputOptimizeJSON writes the optimization result as JSON
-func outputOptimizeJSON(w io.Writer, result *optimizer.OptimizationResult) error {
+func outputOptimizeJSON(w io.Writer, result *advisor.OptimizationResult) error {
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(result)
 }
 
 // outputOptimizeText writes the optimization result as human-readable text
-func outputOptimizeText(w io.Writer, result *optimizer.OptimizationResult) {
-	fmt.Fprint(w, optimizer.FormatResult(result))
+func outputOptimizeText(w io.Writer, result *advisor.OptimizationResult) {
+	fmt.Fprint(w, advisor.FormatResult(result))
 }
 
 func init() {

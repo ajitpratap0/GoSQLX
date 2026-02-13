@@ -656,7 +656,7 @@ time gosqlx validate migrations/*.sql
 - Assess template language usage (Jinja, dbt - not supported in GoSQLX)
 
 ### Phase 2: Preparation (Day 1-2)
-- Install Go 1.24+ on development machines
+- Install Go 1.21+ on development machines
 - Install GoSQLX: `go get github.com/ajitpratap0/GoSQLX`
 - Test GoSQLX with sample queries from your project
 - Benchmark performance improvement on your queries

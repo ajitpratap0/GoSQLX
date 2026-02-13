@@ -11,7 +11,7 @@ GoSQLX is **production-ready** for enterprise deployment with validated performa
 ## Prerequisites
 
 ### System Requirements
-- **Go Version**: 1.24+ (latest stable recommended)
+- **Go Version**: 1.21+ (latest stable recommended)
 - **Memory**: Minimum 512MB, recommended 2GB+ for high-load
 - **CPU**: Any modern architecture (x86_64, ARM64)  
 - **OS**: Linux, macOS, Windows (cross-platform)
@@ -38,7 +38,7 @@ go build ./pkg/...
 
 ### 3. Container Deployment
 ```dockerfile
-FROM golang:1.24-alpine AS builder
+FROM golang:1.21-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download

@@ -1,6 +1,6 @@
 module github.com/ajitpratap0/GoSQLX/examples/tutorials/02-sql-formatter
 
-go 1.24.0
+go 1.21
 
 replace github.com/ajitpratap0/GoSQLX => ../../../
 

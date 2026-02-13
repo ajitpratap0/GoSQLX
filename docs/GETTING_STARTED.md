@@ -14,7 +14,7 @@ Welcome! This guide will get you parsing SQL in under 5 minutes. No prior experi
 
 ## Step 1: Install GoSQLX (30 seconds)
 
-**Requirements**: Go 1.24+ (toolchain go1.25.0 for CLI builds)
+**Requirements**: Go 1.21+
 
 ### Option A: Install CLI Tool (Recommended)
 ```bash
@@ -29,7 +29,7 @@ go get github.com/ajitpratap0/GoSQLX
 **Verify installation:**
 ```bash
 # Check Go version
-go version  # Should show Go 1.24+
+go version  # Should show Go 1.21+
 
 # If you installed CLI:
 gosqlx --version

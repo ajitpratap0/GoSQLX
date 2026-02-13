@@ -1023,7 +1023,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
         with:
-          go-version: '1.24'
+          go-version: '1.21'
       - name: Install GoSQLX
         run: go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest
       - name: Validate SQL

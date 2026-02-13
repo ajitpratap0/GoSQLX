@@ -2,17 +2,18 @@ package parser
 
 import (
 	"errors"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
 
 func eof() token.Token {
-	return token.Token{Type: "EOF", Literal: ""}
+	return token.Token{Type: "EOF", ModelType: models.TokenTypeEOF, Literal: ""}
 }
 
 func semi() token.Token {
-	return token.Token{Type: ";", Literal: ";"}
+	return token.Token{Type: ";", ModelType: models.TokenTypeSemicolon, Literal: ";"}
 }
 
 func tok(typ, lit string) token.Token {

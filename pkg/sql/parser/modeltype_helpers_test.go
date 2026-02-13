@@ -35,7 +35,7 @@ func TestIsAnyType(t *testing.T) {
 		},
 		{
 			name:     "match after normalization",
-			token:    token.Token{Type: "SELECT", Literal: "SELECT"},
+			token:    token.Token{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 			types:    []models.TokenType{models.TokenTypeSelect, models.TokenTypeInsert},
 			expected: true,
 		},
@@ -96,7 +96,8 @@ func TestMatchType(t *testing.T) {
 		{
 			name: "match after normalization",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "FROM", Literal: "FROM"},
 			},
 			matchAgainst: models.TokenTypeSelect,
@@ -128,7 +129,8 @@ func TestMatchType(t *testing.T) {
 // from string Type for tokens that don't have ModelType set.
 func TestNormalizeTokens(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "INSERT", Literal: "INSERT"},
 		{Type: "UPDATE", Literal: "UPDATE"},
 		{Type: "DELETE", Literal: "DELETE"},

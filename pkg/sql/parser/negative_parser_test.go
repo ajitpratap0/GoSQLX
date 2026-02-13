@@ -3,6 +3,7 @@ package parser
 import (
 	"context"
 	"fmt"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"strings"
 	"testing"
 	"time"
@@ -25,13 +26,15 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "SELECT with no columns or table",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 			},
 		},
 		{
 			name: "SELECT FROM WHERE - no columns no table no condition",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "WHERE", Literal: "WHERE"},
 			},
@@ -39,7 +42,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "missing FROM clause",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "id"},
 				{Type: "WHERE", Literal: "WHERE"},
 				{Type: "IDENT", Literal: "x"},
@@ -50,7 +54,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "unclosed parenthesis in expression",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "(", Literal: "("},
 				{Type: "IDENT", Literal: "a"},
 				{Type: "+", Literal: "+"},
@@ -63,7 +68,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "extra closing parenthesis",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "a"},
 				{Type: ")", Literal: ")"},
 				{Type: "FROM", Literal: "FROM"},
@@ -73,7 +79,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "duplicate WHERE clauses",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -90,7 +97,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "duplicate FROM clauses",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "t1"},
@@ -101,7 +109,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "trailing garbage after valid SELECT",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -113,7 +122,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "JOIN without ON condition",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "a"},
@@ -125,7 +135,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "JOIN with ON but no condition",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "a"},
@@ -137,7 +148,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "JOIN without table name",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "a"},
@@ -151,7 +163,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "INSERT missing INTO",
 			tokens: []token.Token{
-				{Type: "INSERT", Literal: "INSERT"},
+				{Type: "INSERT",
+					ModelType: models.TokenTypeInsert, Literal: "INSERT"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "VALUES", Literal: "VALUES"},
 				{Type: "(", Literal: "("},
@@ -162,7 +175,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "INSERT INTO missing VALUES",
 			tokens: []token.Token{
-				{Type: "INSERT", Literal: "INSERT"},
+				{Type: "INSERT",
+					ModelType: models.TokenTypeInsert, Literal: "INSERT"},
 				{Type: "INTO", Literal: "INTO"},
 				{Type: "IDENT", Literal: "users"},
 			},
@@ -170,7 +184,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "UPDATE missing SET",
 			tokens: []token.Token{
-				{Type: "UPDATE", Literal: "UPDATE"},
+				{Type: "UPDATE",
+					ModelType: models.TokenTypeUpdate, Literal: "UPDATE"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "WHERE", Literal: "WHERE"},
 				{Type: "IDENT", Literal: "id"},
@@ -181,32 +196,37 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "DELETE missing FROM",
 			tokens: []token.Token{
-				{Type: "DELETE", Literal: "DELETE"},
+				{Type: "DELETE",
+					ModelType: models.TokenTypeDelete, Literal: "DELETE"},
 				{Type: "IDENT", Literal: "users"},
 			},
 		},
 		{
 			name: "lone keyword WHERE",
 			tokens: []token.Token{
-				{Type: "WHERE", Literal: "WHERE"},
+				{Type: "WHERE",
+					ModelType: models.TokenTypeWhere, Literal: "WHERE"},
 			},
 		},
 		{
 			name: "lone keyword FROM",
 			tokens: []token.Token{
-				{Type: "FROM", Literal: "FROM"},
+				{Type: "FROM",
+					ModelType: models.TokenTypeFrom, Literal: "FROM"},
 			},
 		},
 		{
 			name: "lone keyword JOIN",
 			tokens: []token.Token{
-				{Type: "JOIN", Literal: "JOIN"},
+				{Type: "JOIN",
+					ModelType: models.TokenTypeJoin, Literal: "JOIN"},
 			},
 		},
 		{
 			name: "consecutive commas in SELECT list",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "a"},
 				{Type: ",", Literal: ","},
 				{Type: ",", Literal: ","},
@@ -218,7 +238,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "trailing comma in SELECT list",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "a"},
 				{Type: ",", Literal: ","},
 				{Type: "FROM", Literal: "FROM"},
@@ -228,7 +249,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "ORDER BY with no column",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "t"},
@@ -239,7 +261,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "GROUP BY with no column",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "t"},
@@ -250,7 +273,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "HAVING without GROUP BY",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "t"},
@@ -263,7 +287,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "malformed subquery - unclosed",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "(", Literal: "("},
 				{Type: "SELECT", Literal: "SELECT"},
 				{Type: "INT", Literal: "1"},
@@ -275,7 +300,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "nested unclosed parentheses",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "(", Literal: "("},
 				{Type: "(", Literal: "("},
 				{Type: "IDENT", Literal: "a"},
@@ -288,7 +314,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "operator with no operands",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "+", Literal: "+"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "t"},
@@ -297,7 +324,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "dangling AND in WHERE",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "t"},
@@ -312,7 +340,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "dangling OR in WHERE",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "t"},
@@ -326,7 +355,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "CREATE TABLE with no columns",
 			tokens: []token.Token{
-				{Type: "CREATE", Literal: "CREATE"},
+				{Type: "CREATE",
+					ModelType: models.TokenTypeCreate, Literal: "CREATE"},
 				{Type: "TABLE", Literal: "TABLE"},
 				{Type: "IDENT", Literal: "t"},
 				{Type: "(", Literal: "("},
@@ -336,7 +366,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "only semicolons",
 			tokens: []token.Token{
-				{Type: ";", Literal: ";"},
+				{Type: ";",
+					ModelType: models.TokenTypeSemicolon, Literal: ";"},
 				{Type: ";", Literal: ";"},
 				{Type: ";", Literal: ";"},
 			},
@@ -344,7 +375,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "LIMIT without value",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "t"},
@@ -354,7 +386,8 @@ func TestNegativeParser_MalformedSQL(t *testing.T) {
 		{
 			name: "OFFSET without value",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "t"},
@@ -462,7 +495,8 @@ func tokenizeForTest(t *testing.T, sql string) []token.Token {
 func TestPoolContamination(t *testing.T) {
 	// Pattern A: simple SELECT
 	tokensA := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "IDENT", Literal: "id"},
 		{Type: ",", Literal: ","},
 		{Type: "IDENT", Literal: "name"},
@@ -476,7 +510,8 @@ func TestPoolContamination(t *testing.T) {
 
 	// Pattern B: INSERT
 	tokensB := []token.Token{
-		{Type: "INSERT", Literal: "INSERT"},
+		{Type: "INSERT",
+			ModelType: models.TokenTypeInsert, Literal: "INSERT"},
 		{Type: "INTO", Literal: "INTO"},
 		{Type: "IDENT", Literal: "orders"},
 		{Type: "(", Literal: "("},
@@ -494,7 +529,8 @@ func TestPoolContamination(t *testing.T) {
 
 	// Pattern C: CREATE TABLE
 	tokensC := []token.Token{
-		{Type: "CREATE", Literal: "CREATE"},
+		{Type: "CREATE",
+			ModelType: models.TokenTypeCreate, Literal: "CREATE"},
 		{Type: "TABLE", Literal: "TABLE"},
 		{Type: "IDENT", Literal: "products"},
 		{Type: "(", Literal: "("},
@@ -579,14 +615,16 @@ func TestPoolContamination(t *testing.T) {
 func TestPoolContamination_ErrorThenSuccess(t *testing.T) {
 	// Malformed SQL
 	badTokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "WHERE", Literal: "WHERE"},
 	}
 
 	// Valid SQL
 	goodTokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "IDENT", Literal: "id"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "users"},
@@ -615,7 +653,8 @@ func TestPoolContamination_Concurrent(t *testing.T) {
 	patterns := [][]token.Token{
 		// SELECT
 		{
-			{Type: "SELECT", Literal: "SELECT"},
+			{Type: "SELECT",
+				ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 			{Type: "*", Literal: "*"},
 			{Type: "FROM", Literal: "FROM"},
 			{Type: "IDENT", Literal: "users"},
@@ -673,16 +712,16 @@ func TestPoolContamination_Concurrent(t *testing.T) {
 func TestContextCancellation_MidParse(t *testing.T) {
 	// Build a large token list to increase chance of mid-parse cancellation
 	var tokens []token.Token
-	tokens = append(tokens, token.Token{Type: "SELECT", Literal: "SELECT"})
+	tokens = append(tokens, token.Token{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"})
 	for i := 0; i < 100; i++ {
 		if i > 0 {
-			tokens = append(tokens, token.Token{Type: ",", Literal: ","})
+			tokens = append(tokens, token.Token{Type: ",", ModelType: models.TokenTypeComma, Literal: ","})
 		}
-		tokens = append(tokens, token.Token{Type: "IDENT", Literal: "col"})
+		tokens = append(tokens, token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "col"})
 	}
 	tokens = append(tokens,
-		token.Token{Type: "FROM", Literal: "FROM"},
-		token.Token{Type: "IDENT", Literal: "big_table"},
+		token.Token{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
+		token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "big_table"},
 	)
 
 	// Cancel context almost immediately

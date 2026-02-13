@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
@@ -20,7 +21,8 @@ func TestParser_AlterTable(t *testing.T) {
 		{
 			name: "ALTER TABLE ADD COLUMN",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "TABLE", Literal: "TABLE"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "ADD", Literal: "ADD"},
@@ -33,7 +35,8 @@ func TestParser_AlterTable(t *testing.T) {
 		{
 			name: "ALTER TABLE DROP COLUMN",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "TABLE", Literal: "TABLE"},
 				{Type: "IDENT", Literal: "employees"},
 				{Type: "DROP", Literal: "DROP"},
@@ -45,7 +48,8 @@ func TestParser_AlterTable(t *testing.T) {
 		{
 			name: "ALTER TABLE RENAME",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "TABLE", Literal: "TABLE"},
 				{Type: "IDENT", Literal: "old_name"},
 				{Type: "RENAME", Literal: "RENAME"},
@@ -82,7 +86,8 @@ func TestParser_StringLiterals(t *testing.T) {
 		{
 			name: "SELECT with single-quoted string",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "STRING", Literal: "hello world"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "messages"},
@@ -92,7 +97,8 @@ func TestParser_StringLiterals(t *testing.T) {
 		{
 			name: "INSERT with string literal",
 			tokens: []token.Token{
-				{Type: "INSERT", Literal: "INSERT"},
+				{Type: "INSERT",
+					ModelType: models.TokenTypeInsert, Literal: "INSERT"},
 				{Type: "INTO", Literal: "INTO"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "(", Literal: "("},
@@ -108,7 +114,8 @@ func TestParser_StringLiterals(t *testing.T) {
 		{
 			name: "WHERE clause with string comparison",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -145,7 +152,8 @@ func TestParser_WindowFrameBounds(t *testing.T) {
 		{
 			name: "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "SUM"},
 				{Type: "(", Literal: "("},
 				{Type: "IDENT", Literal: "amount"},
@@ -171,7 +179,8 @@ func TestParser_WindowFrameBounds(t *testing.T) {
 		{
 			name: "RANGE BETWEEN N PRECEDING AND N FOLLOWING",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "AVG"},
 				{Type: "(", Literal: "("},
 				{Type: "IDENT", Literal: "price"},
@@ -197,7 +206,8 @@ func TestParser_WindowFrameBounds(t *testing.T) {
 		{
 			name: "ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "COUNT"},
 				{Type: "(", Literal: "("},
 				{Type: "*", Literal: "*"},
@@ -223,7 +233,8 @@ func TestParser_WindowFrameBounds(t *testing.T) {
 		{
 			name: "ROWS N PRECEDING (no AND clause)",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "SUM"},
 				{Type: "(", Literal: "("},
 				{Type: "IDENT", Literal: "value"},
@@ -269,7 +280,8 @@ func TestParser_ExpressionEdgeCases(t *testing.T) {
 		{
 			name: "nested parenthesized expressions",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "(", Literal: "("},
 				{Type: "(", Literal: "("},
 				{Type: "IDENT", Literal: "a"},
@@ -287,7 +299,8 @@ func TestParser_ExpressionEdgeCases(t *testing.T) {
 		{
 			name: "complex boolean expression with NOT",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -308,7 +321,8 @@ func TestParser_ExpressionEdgeCases(t *testing.T) {
 		{
 			name: "BETWEEN expression",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "products"},
@@ -324,7 +338,8 @@ func TestParser_ExpressionEdgeCases(t *testing.T) {
 		{
 			name: "IN expression with list",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "orders"},
@@ -344,7 +359,8 @@ func TestParser_ExpressionEdgeCases(t *testing.T) {
 		{
 			name: "LIKE expression",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -358,7 +374,8 @@ func TestParser_ExpressionEdgeCases(t *testing.T) {
 		{
 			name: "IS NULL expression",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "customers"},
@@ -372,7 +389,8 @@ func TestParser_ExpressionEdgeCases(t *testing.T) {
 		{
 			name: "IS NOT NULL expression",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "posts"},
@@ -387,7 +405,8 @@ func TestParser_ExpressionEdgeCases(t *testing.T) {
 		{
 			name: "arithmetic expression with multiple operators",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "a"},
 				{Type: "+", Literal: "+"},
 				{Type: "IDENT", Literal: "b"},
@@ -428,7 +447,8 @@ func TestParser_ErrorRecovery(t *testing.T) {
 		{
 			name: "missing FROM keyword",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "IDENT", Literal: "users"}, // Missing FROM
 			},
@@ -437,7 +457,8 @@ func TestParser_ErrorRecovery(t *testing.T) {
 		{
 			name: "missing table name after FROM",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				// Missing table name - parser will hit EOF
@@ -447,7 +468,8 @@ func TestParser_ErrorRecovery(t *testing.T) {
 		{
 			name: "missing closing parenthesis in function",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "COUNT"},
 				{Type: "(", Literal: "("},
 				{Type: "*", Literal: "*"},
@@ -460,7 +482,8 @@ func TestParser_ErrorRecovery(t *testing.T) {
 		{
 			name: "incomplete WHERE clause",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -472,7 +495,8 @@ func TestParser_ErrorRecovery(t *testing.T) {
 		{
 			name: "missing SET in UPDATE",
 			tokens: []token.Token{
-				{Type: "UPDATE", Literal: "UPDATE"},
+				{Type: "UPDATE",
+					ModelType: models.TokenTypeUpdate, Literal: "UPDATE"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "WHERE", Literal: "WHERE"}, // Missing SET
 				{Type: "IDENT", Literal: "id"},
@@ -484,7 +508,8 @@ func TestParser_ErrorRecovery(t *testing.T) {
 		{
 			name: "invalid JOIN syntax - missing table",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -500,7 +525,8 @@ func TestParser_ErrorRecovery(t *testing.T) {
 		{
 			name: "missing comparison operator in WHERE",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -514,7 +540,8 @@ func TestParser_ErrorRecovery(t *testing.T) {
 		{
 			name: "invalid ORDER BY syntax - missing BY",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -540,7 +567,8 @@ func TestParser_ErrorRecovery(t *testing.T) {
 			// Verify parser is still in valid state by creating a new parser for a simple query
 			if err != nil {
 				simpleTokens := []token.Token{
-					{Type: "SELECT", Literal: "SELECT"},
+					{Type: "SELECT",
+						ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 					{Type: "*", Literal: "*"},
 					{Type: "FROM", Literal: "FROM"},
 					{Type: "IDENT", Literal: "test"},
@@ -568,7 +596,8 @@ func TestParser_CTEEdgeCases(t *testing.T) {
 		{
 			name: "CTE with INSERT statement",
 			tokens: []token.Token{
-				{Type: "WITH", Literal: "WITH"},
+				{Type: "WITH",
+					ModelType: models.TokenTypeWith, Literal: "WITH"},
 				{Type: "IDENT", Literal: "new_users"},
 				{Type: "AS", Literal: "AS"},
 				{Type: "(", Literal: "("},
@@ -594,7 +623,8 @@ func TestParser_CTEEdgeCases(t *testing.T) {
 		{
 			name: "CTE with UPDATE statement",
 			tokens: []token.Token{
-				{Type: "WITH", Literal: "WITH"},
+				{Type: "WITH",
+					ModelType: models.TokenTypeWith, Literal: "WITH"},
 				{Type: "IDENT", Literal: "active"},
 				{Type: "AS", Literal: "AS"},
 				{Type: "(", Literal: "("},
@@ -628,7 +658,8 @@ func TestParser_CTEEdgeCases(t *testing.T) {
 		{
 			name: "CTE with DELETE statement",
 			tokens: []token.Token{
-				{Type: "WITH", Literal: "WITH"},
+				{Type: "WITH",
+					ModelType: models.TokenTypeWith, Literal: "WITH"},
 				{Type: "IDENT", Literal: "old_records"},
 				{Type: "AS", Literal: "AS"},
 				{Type: "(", Literal: "("},
@@ -682,7 +713,8 @@ func TestParser_SetOperationPrecedence(t *testing.T) {
 		{
 			name: "UNION ALL with multiple queries",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "INT", Literal: "1"},
 				{Type: "UNION", Literal: "UNION"},
 				{Type: "ALL", Literal: "ALL"},
@@ -698,7 +730,8 @@ func TestParser_SetOperationPrecedence(t *testing.T) {
 		{
 			name: "EXCEPT and INTERSECT combination",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "a"},
@@ -718,7 +751,8 @@ func TestParser_SetOperationPrecedence(t *testing.T) {
 		{
 			name: "parenthesized UNION",
 			tokens: []token.Token{
-				{Type: "(", Literal: "("},
+				{Type: "(",
+					ModelType: models.TokenTypeLParen, Literal: "("},
 				{Type: "SELECT", Literal: "SELECT"},
 				{Type: "INT", Literal: "1"},
 				{Type: "UNION", Literal: "UNION"},
@@ -759,7 +793,8 @@ func TestParser_TableDrivenComplexScenarios(t *testing.T) {
 			name: "subquery in WHERE clause",
 			desc: "Tests subquery handling in WHERE predicates",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "orders"},
@@ -783,7 +818,8 @@ func TestParser_TableDrivenComplexScenarios(t *testing.T) {
 			name: "CASE expression in SELECT",
 			desc: "Tests CASE WHEN THEN ELSE END expression",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "CASE", Literal: "CASE"},
 				{Type: "WHEN", Literal: "WHEN"},
 				{Type: "IDENT", Literal: "age"},
@@ -803,7 +839,8 @@ func TestParser_TableDrivenComplexScenarios(t *testing.T) {
 			name: "DISTINCT with aggregate",
 			desc: "Tests DISTINCT keyword with aggregation",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "COUNT", Literal: "COUNT"},
 				{Type: "(", Literal: "("},
 				{Type: "DISTINCT", Literal: "DISTINCT"},
@@ -818,7 +855,8 @@ func TestParser_TableDrivenComplexScenarios(t *testing.T) {
 			name: "GROUP BY with HAVING",
 			desc: "Tests GROUP BY clause with HAVING filter",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "category"},
 				{Type: ",", Literal: ","},
 				{Type: "COUNT", Literal: "COUNT"},
@@ -868,7 +906,8 @@ func TestParser_GroupingOperations(t *testing.T) {
 			name: "ROLLUP with two columns",
 			desc: "GROUP BY ROLLUP(a, b)",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "a"},
 				{Type: ",", Literal: ","},
 				{Type: "IDENT", Literal: "b"},
@@ -889,7 +928,8 @@ func TestParser_GroupingOperations(t *testing.T) {
 			name: "Empty ROLLUP fails",
 			desc: "GROUP BY ROLLUP() should fail",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "a"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "t"},
@@ -906,7 +946,8 @@ func TestParser_GroupingOperations(t *testing.T) {
 			name: "CUBE with two columns",
 			desc: "GROUP BY CUBE(a, b)",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "a"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "t"},
@@ -925,7 +966,8 @@ func TestParser_GroupingOperations(t *testing.T) {
 			name: "Empty CUBE fails",
 			desc: "GROUP BY CUBE() should fail",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "a"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "t"},
@@ -942,7 +984,8 @@ func TestParser_GroupingOperations(t *testing.T) {
 			name: "GROUPING SETS with multiple sets",
 			desc: "GROUP BY GROUPING SETS((a, b), (a), ())",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "a"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "t"},
@@ -970,7 +1013,8 @@ func TestParser_GroupingOperations(t *testing.T) {
 			name: "GROUPING SETS with only empty set",
 			desc: "GROUP BY GROUPING SETS(()) is valid for grand total",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "total"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "t"},
@@ -989,7 +1033,8 @@ func TestParser_GroupingOperations(t *testing.T) {
 			name: "Mixed regular column and ROLLUP",
 			desc: "GROUP BY a, ROLLUP(b, c)",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "a"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "t"},

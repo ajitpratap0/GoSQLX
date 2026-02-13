@@ -4,6 +4,7 @@
 package parser
 
 import (
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -14,7 +15,8 @@ import (
 // Example: SELECT * FROM orders WHERE created_at BETWEEN NOW() - INTERVAL '30 days' AND NOW()
 func TestParser_BetweenWithIntervalArithmetic(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "orders"},
@@ -98,7 +100,8 @@ func TestParser_BetweenWithIntervalArithmetic(t *testing.T) {
 // Example: SELECT * FROM data WHERE value BETWEEN (SELECT min_val FROM limits) AND (SELECT max_val FROM limits)
 func TestParser_BetweenWithSubqueries(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "data"},
@@ -177,7 +180,8 @@ func TestParser_BetweenWithSubqueries(t *testing.T) {
 // Example: SELECT * FROM sales WHERE amount BETWEEN (price * 0.8) + discount AND (price * 1.2) - fee
 func TestParser_BetweenWithMixedComplexExpressions(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "sales"},
@@ -248,7 +252,8 @@ func TestParser_BetweenWithMixedComplexExpressions(t *testing.T) {
 // Example: SELECT * FROM metrics WHERE score BETWEEN ROUND(AVG(baseline)) AND CEIL(MAX(threshold))
 func TestParser_BetweenWithNestedFunctionCalls(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "metrics"},
@@ -331,7 +336,8 @@ func TestParser_BetweenWithNestedFunctionCalls(t *testing.T) {
 // Example: SELECT * FROM products WHERE price BETWEEN CAST(min_price AS DECIMAL) AND CAST(max_price AS DECIMAL)
 func TestParser_BetweenWithCastExpressions(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "products"},
@@ -391,7 +397,8 @@ func TestParser_BetweenWithCastExpressions(t *testing.T) {
 // Example: SELECT * FROM orders WHERE total BETWEEN CASE WHEN discount THEN 100 ELSE 200 END AND 1000
 func TestParser_BetweenWithCaseExpressions(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "orders"},
@@ -448,7 +455,8 @@ func TestParser_BetweenWithCaseExpressions(t *testing.T) {
 // Example: SELECT * FROM products WHERE price NOT BETWEEN price * 0.5 AND price * 2
 func TestParser_NotBetweenWithComplexExpressions(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "products"},
@@ -508,7 +516,8 @@ func TestParser_NotBetweenWithComplexExpressions(t *testing.T) {
 // Example: SELECT * FROM users WHERE full_name BETWEEN first_name || ' A' AND first_name || ' Z'
 func TestParser_BetweenWithStringConcatenation(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "users"},

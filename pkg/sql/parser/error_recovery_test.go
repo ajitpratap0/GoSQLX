@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"strings"
 	"testing"
 
@@ -18,7 +19,8 @@ func TestParser_ErrorRecovery_SELECT(t *testing.T) {
 		{
 			name: "missing FROM keyword",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "IDENT", Literal: "users"}, // Missing FROM
 			},
@@ -28,7 +30,8 @@ func TestParser_ErrorRecovery_SELECT(t *testing.T) {
 		{
 			name: "missing table name after FROM",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "WHERE", Literal: "WHERE"}, // Missing table name
@@ -39,7 +42,8 @@ func TestParser_ErrorRecovery_SELECT(t *testing.T) {
 		{
 			name: "missing expression after WHERE",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -52,7 +56,8 @@ func TestParser_ErrorRecovery_SELECT(t *testing.T) {
 		{
 			name: "missing column name in SELECT list",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: ",", Literal: ","}, // Missing column before comma
 				{Type: "IDENT", Literal: "name"},
 				{Type: "FROM", Literal: "FROM"},
@@ -64,7 +69,8 @@ func TestParser_ErrorRecovery_SELECT(t *testing.T) {
 		{
 			name: "invalid JOIN without table",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -77,7 +83,8 @@ func TestParser_ErrorRecovery_SELECT(t *testing.T) {
 		{
 			name: "JOIN without ON or USING clause",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -91,7 +98,8 @@ func TestParser_ErrorRecovery_SELECT(t *testing.T) {
 		{
 			name: "missing condition after ON in JOIN",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -106,7 +114,8 @@ func TestParser_ErrorRecovery_SELECT(t *testing.T) {
 		{
 			name: "missing column list in USING clause",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -122,7 +131,8 @@ func TestParser_ErrorRecovery_SELECT(t *testing.T) {
 		{
 			name: "missing ORDER BY columns",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -136,7 +146,8 @@ func TestParser_ErrorRecovery_SELECT(t *testing.T) {
 		{
 			name: "missing GROUP BY columns",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -180,7 +191,8 @@ func TestParser_ErrorRecovery_INSERT(t *testing.T) {
 		{
 			name: "missing INTO keyword",
 			tokens: []token.Token{
-				{Type: "INSERT", Literal: "INSERT"},
+				{Type: "INSERT",
+					ModelType: models.TokenTypeInsert, Literal: "INSERT"},
 				{Type: "IDENT", Literal: "users"}, // Missing INTO
 			},
 			wantErr:       true,
@@ -189,7 +201,8 @@ func TestParser_ErrorRecovery_INSERT(t *testing.T) {
 		{
 			name: "missing table name after INTO",
 			tokens: []token.Token{
-				{Type: "INSERT", Literal: "INSERT"},
+				{Type: "INSERT",
+					ModelType: models.TokenTypeInsert, Literal: "INSERT"},
 				{Type: "INTO", Literal: "INTO"},
 				{Type: "VALUES", Literal: "VALUES"}, // Missing table name
 			},
@@ -199,7 +212,8 @@ func TestParser_ErrorRecovery_INSERT(t *testing.T) {
 		{
 			name: "missing VALUES keyword",
 			tokens: []token.Token{
-				{Type: "INSERT", Literal: "INSERT"},
+				{Type: "INSERT",
+					ModelType: models.TokenTypeInsert, Literal: "INSERT"},
 				{Type: "INTO", Literal: "INTO"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "(", Literal: "("},
@@ -213,7 +227,8 @@ func TestParser_ErrorRecovery_INSERT(t *testing.T) {
 		{
 			name: "missing opening parenthesis in VALUES",
 			tokens: []token.Token{
-				{Type: "INSERT", Literal: "INSERT"},
+				{Type: "INSERT",
+					ModelType: models.TokenTypeInsert, Literal: "INSERT"},
 				{Type: "INTO", Literal: "INTO"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "VALUES", Literal: "VALUES"},
@@ -225,7 +240,8 @@ func TestParser_ErrorRecovery_INSERT(t *testing.T) {
 		{
 			name: "empty VALUES clause",
 			tokens: []token.Token{
-				{Type: "INSERT", Literal: "INSERT"},
+				{Type: "INSERT",
+					ModelType: models.TokenTypeInsert, Literal: "INSERT"},
 				{Type: "INTO", Literal: "INTO"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "VALUES", Literal: "VALUES"},
@@ -238,7 +254,8 @@ func TestParser_ErrorRecovery_INSERT(t *testing.T) {
 		{
 			name: "missing closing parenthesis in column list",
 			tokens: []token.Token{
-				{Type: "INSERT", Literal: "INSERT"},
+				{Type: "INSERT",
+					ModelType: models.TokenTypeInsert, Literal: "INSERT"},
 				{Type: "INTO", Literal: "INTO"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "(", Literal: "("},
@@ -284,7 +301,8 @@ func TestParser_ErrorRecovery_UPDATE(t *testing.T) {
 		{
 			name: "missing table name",
 			tokens: []token.Token{
-				{Type: "UPDATE", Literal: "UPDATE"},
+				{Type: "UPDATE",
+					ModelType: models.TokenTypeUpdate, Literal: "UPDATE"},
 				{Type: "SET", Literal: "SET"}, // Missing table name
 			},
 			wantErr:       true,
@@ -293,7 +311,8 @@ func TestParser_ErrorRecovery_UPDATE(t *testing.T) {
 		{
 			name: "missing SET keyword",
 			tokens: []token.Token{
-				{Type: "UPDATE", Literal: "UPDATE"},
+				{Type: "UPDATE",
+					ModelType: models.TokenTypeUpdate, Literal: "UPDATE"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "IDENT", Literal: "name"}, // Missing SET
 			},
@@ -303,7 +322,8 @@ func TestParser_ErrorRecovery_UPDATE(t *testing.T) {
 		{
 			name: "missing assignment in SET",
 			tokens: []token.Token{
-				{Type: "UPDATE", Literal: "UPDATE"},
+				{Type: "UPDATE",
+					ModelType: models.TokenTypeUpdate, Literal: "UPDATE"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "SET", Literal: "SET"},
 				{Type: "WHERE", Literal: "WHERE"}, // Missing assignment
@@ -314,7 +334,8 @@ func TestParser_ErrorRecovery_UPDATE(t *testing.T) {
 		{
 			name: "missing value after equals in SET",
 			tokens: []token.Token{
-				{Type: "UPDATE", Literal: "UPDATE"},
+				{Type: "UPDATE",
+					ModelType: models.TokenTypeUpdate, Literal: "UPDATE"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "SET", Literal: "SET"},
 				{Type: "IDENT", Literal: "name"},
@@ -357,7 +378,8 @@ func TestParser_ErrorRecovery_DELETE(t *testing.T) {
 		{
 			name: "missing FROM keyword",
 			tokens: []token.Token{
-				{Type: "DELETE", Literal: "DELETE"},
+				{Type: "DELETE",
+					ModelType: models.TokenTypeDelete, Literal: "DELETE"},
 				{Type: "IDENT", Literal: "users"}, // Missing FROM
 			},
 			wantErr:       true,
@@ -366,7 +388,8 @@ func TestParser_ErrorRecovery_DELETE(t *testing.T) {
 		{
 			name: "missing table name after FROM",
 			tokens: []token.Token{
-				{Type: "DELETE", Literal: "DELETE"},
+				{Type: "DELETE",
+					ModelType: models.TokenTypeDelete, Literal: "DELETE"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "WHERE", Literal: "WHERE"}, // Missing table name
 			},
@@ -376,7 +399,8 @@ func TestParser_ErrorRecovery_DELETE(t *testing.T) {
 		{
 			name: "missing condition after WHERE",
 			tokens: []token.Token{
-				{Type: "DELETE", Literal: "DELETE"},
+				{Type: "DELETE",
+					ModelType: models.TokenTypeDelete, Literal: "DELETE"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "WHERE", Literal: "WHERE"},
@@ -418,7 +442,8 @@ func TestParser_ErrorRecovery_CTE(t *testing.T) {
 		{
 			name: "missing CTE name after WITH",
 			tokens: []token.Token{
-				{Type: "WITH", Literal: "WITH"},
+				{Type: "WITH",
+					ModelType: models.TokenTypeWith, Literal: "WITH"},
 				{Type: "AS", Literal: "AS"}, // Missing CTE name
 			},
 			wantErr:       true,
@@ -427,7 +452,8 @@ func TestParser_ErrorRecovery_CTE(t *testing.T) {
 		{
 			name: "missing AS keyword in CTE",
 			tokens: []token.Token{
-				{Type: "WITH", Literal: "WITH"},
+				{Type: "WITH",
+					ModelType: models.TokenTypeWith, Literal: "WITH"},
 				{Type: "IDENT", Literal: "temp"},
 				{Type: "(", Literal: "("}, // Missing AS
 			},
@@ -437,7 +463,8 @@ func TestParser_ErrorRecovery_CTE(t *testing.T) {
 		{
 			name: "missing opening parenthesis after AS",
 			tokens: []token.Token{
-				{Type: "WITH", Literal: "WITH"},
+				{Type: "WITH",
+					ModelType: models.TokenTypeWith, Literal: "WITH"},
 				{Type: "IDENT", Literal: "temp"},
 				{Type: "AS", Literal: "AS"},
 				{Type: "SELECT", Literal: "SELECT"}, // Missing (
@@ -448,7 +475,8 @@ func TestParser_ErrorRecovery_CTE(t *testing.T) {
 		{
 			name: "empty CTE query",
 			tokens: []token.Token{
-				{Type: "WITH", Literal: "WITH"},
+				{Type: "WITH",
+					ModelType: models.TokenTypeWith, Literal: "WITH"},
 				{Type: "IDENT", Literal: "temp"},
 				{Type: "AS", Literal: "AS"},
 				{Type: "(", Literal: "("},
@@ -460,7 +488,8 @@ func TestParser_ErrorRecovery_CTE(t *testing.T) {
 		{
 			name: "missing closing parenthesis in CTE",
 			tokens: []token.Token{
-				{Type: "WITH", Literal: "WITH"},
+				{Type: "WITH",
+					ModelType: models.TokenTypeWith, Literal: "WITH"},
 				{Type: "IDENT", Literal: "temp"},
 				{Type: "AS", Literal: "AS"},
 				{Type: "(", Literal: "("},
@@ -477,7 +506,8 @@ func TestParser_ErrorRecovery_CTE(t *testing.T) {
 		{
 			name: "missing main query after CTE",
 			tokens: []token.Token{
-				{Type: "WITH", Literal: "WITH"},
+				{Type: "WITH",
+					ModelType: models.TokenTypeWith, Literal: "WITH"},
 				{Type: "IDENT", Literal: "temp"},
 				{Type: "AS", Literal: "AS"},
 				{Type: "(", Literal: "("},
@@ -530,7 +560,8 @@ func TestParser_ErrorRecovery_SetOperations(t *testing.T) {
 		{
 			name: "missing right SELECT after UNION",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -543,7 +574,8 @@ func TestParser_ErrorRecovery_SetOperations(t *testing.T) {
 		{
 			name: "invalid token after UNION",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -556,7 +588,8 @@ func TestParser_ErrorRecovery_SetOperations(t *testing.T) {
 		{
 			name: "missing right SELECT after EXCEPT",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -569,7 +602,8 @@ func TestParser_ErrorRecovery_SetOperations(t *testing.T) {
 		{
 			name: "missing right SELECT after INTERSECT",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -612,7 +646,8 @@ func TestParser_ErrorRecovery_WindowFunctions(t *testing.T) {
 		{
 			name: "missing opening parenthesis after OVER",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "ROW_NUMBER"},
 				{Type: "(", Literal: "("},
 				{Type: ")", Literal: ")"},
@@ -625,7 +660,8 @@ func TestParser_ErrorRecovery_WindowFunctions(t *testing.T) {
 		{
 			name: "empty OVER clause",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "ROW_NUMBER"},
 				{Type: "(", Literal: "("},
 				{Type: ")", Literal: ")"},
@@ -640,7 +676,8 @@ func TestParser_ErrorRecovery_WindowFunctions(t *testing.T) {
 		{
 			name: "missing columns after PARTITION BY",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "ROW_NUMBER"},
 				{Type: "(", Literal: "("},
 				{Type: ")", Literal: ")"},
@@ -656,7 +693,8 @@ func TestParser_ErrorRecovery_WindowFunctions(t *testing.T) {
 		{
 			name: "missing columns after ORDER BY in window",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "ROW_NUMBER"},
 				{Type: "(", Literal: "("},
 				{Type: ")", Literal: ")"},
@@ -700,7 +738,8 @@ func TestParser_ErrorRecovery_ParserState(t *testing.T) {
 		{
 			name: "parser state after SELECT error",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				// Missing FROM - will cause error
 			},
@@ -708,7 +747,8 @@ func TestParser_ErrorRecovery_ParserState(t *testing.T) {
 		{
 			name: "parser state after INSERT error",
 			tokens: []token.Token{
-				{Type: "INSERT", Literal: "INSERT"},
+				{Type: "INSERT",
+					ModelType: models.TokenTypeInsert, Literal: "INSERT"},
 				{Type: "INTO", Literal: "INTO"},
 				// Missing table name - will cause error
 			},
@@ -716,7 +756,8 @@ func TestParser_ErrorRecovery_ParserState(t *testing.T) {
 		{
 			name: "parser state after UPDATE error",
 			tokens: []token.Token{
-				{Type: "UPDATE", Literal: "UPDATE"},
+				{Type: "UPDATE",
+					ModelType: models.TokenTypeUpdate, Literal: "UPDATE"},
 				{Type: "IDENT", Literal: "users"},
 				// Missing SET - will cause error
 			},
@@ -755,7 +796,8 @@ func TestParser_ErrorRecovery_NoCascadingErrors(t *testing.T) {
 		{
 			name: "missing FROM doesn't cascade",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "IDENT", Literal: "users"}, // Missing FROM
 				{Type: "WHERE", Literal: "WHERE"},
@@ -768,7 +810,8 @@ func TestParser_ErrorRecovery_NoCascadingErrors(t *testing.T) {
 		{
 			name: "missing VALUES doesn't cascade",
 			tokens: []token.Token{
-				{Type: "INSERT", Literal: "INSERT"},
+				{Type: "INSERT",
+					ModelType: models.TokenTypeInsert, Literal: "INSERT"},
 				{Type: "INTO", Literal: "INTO"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "(", Literal: "("},
@@ -819,7 +862,8 @@ func TestParser_ErrorRecovery_ALTER(t *testing.T) {
 		{
 			name: "missing object type after ALTER",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "IDENT", Literal: "users"}, // Missing TABLE/ROLE/POLICY/CONNECTOR
 			},
 			wantErr:       true,
@@ -828,7 +872,8 @@ func TestParser_ErrorRecovery_ALTER(t *testing.T) {
 		{
 			name: "missing table name after ALTER TABLE",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "TABLE", Literal: "TABLE"},
 				{Type: "ADD", Literal: "ADD"}, // Missing table name
 			},
@@ -838,7 +883,8 @@ func TestParser_ErrorRecovery_ALTER(t *testing.T) {
 		{
 			name: "missing operation after table name",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "TABLE", Literal: "TABLE"},
 				{Type: "IDENT", Literal: "users"},
 				// Missing ADD/DROP/RENAME/ALTER
@@ -849,7 +895,8 @@ func TestParser_ErrorRecovery_ALTER(t *testing.T) {
 		{
 			name: "missing COLUMN or CONSTRAINT after ADD",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "TABLE", Literal: "TABLE"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "ADD", Literal: "ADD"},
@@ -861,7 +908,8 @@ func TestParser_ErrorRecovery_ALTER(t *testing.T) {
 		{
 			name: "missing column definition after ADD COLUMN",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "TABLE", Literal: "TABLE"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "ADD", Literal: "ADD"},
@@ -874,7 +922,8 @@ func TestParser_ErrorRecovery_ALTER(t *testing.T) {
 		{
 			name: "missing constraint definition after ADD CONSTRAINT",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "TABLE", Literal: "TABLE"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "ADD", Literal: "ADD"},
@@ -887,7 +936,8 @@ func TestParser_ErrorRecovery_ALTER(t *testing.T) {
 		{
 			name: "missing COLUMN or CONSTRAINT after DROP",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "TABLE", Literal: "TABLE"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "DROP", Literal: "DROP"},
@@ -899,7 +949,8 @@ func TestParser_ErrorRecovery_ALTER(t *testing.T) {
 		{
 			name: "missing TO or COLUMN after RENAME",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "TABLE", Literal: "TABLE"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "RENAME", Literal: "RENAME"},
@@ -911,7 +962,8 @@ func TestParser_ErrorRecovery_ALTER(t *testing.T) {
 		{
 			name: "missing TO keyword in RENAME COLUMN",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "TABLE", Literal: "TABLE"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "RENAME", Literal: "RENAME"},
@@ -925,7 +977,8 @@ func TestParser_ErrorRecovery_ALTER(t *testing.T) {
 		{
 			name: "missing COLUMN after ALTER",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "TABLE", Literal: "TABLE"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "ALTER", Literal: "ALTER"},
@@ -967,7 +1020,8 @@ func TestParser_ErrorRecovery_Expressions(t *testing.T) {
 		{
 			name: "unexpected token in expression",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "WHERE", Literal: "WHERE"}, // Invalid token for expression
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -978,7 +1032,8 @@ func TestParser_ErrorRecovery_Expressions(t *testing.T) {
 		{
 			name: "missing right operand in binary expression",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -993,7 +1048,8 @@ func TestParser_ErrorRecovery_Expressions(t *testing.T) {
 		{
 			name: "missing identifier after dot",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: ".", Literal: "."},
 				{Type: "FROM", Literal: "FROM"}, // Invalid token after dot
@@ -1036,7 +1092,8 @@ func TestParser_ErrorRecovery_FunctionCalls(t *testing.T) {
 		{
 			name: "missing opening parenthesis in function call",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "COUNT"},
 				{Type: "*", Literal: "*"}, // Missing (
 				{Type: "FROM", Literal: "FROM"},
@@ -1048,7 +1105,8 @@ func TestParser_ErrorRecovery_FunctionCalls(t *testing.T) {
 		{
 			name: "missing closing parenthesis in function call",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "COUNT"},
 				{Type: "(", Literal: "("},
 				{Type: "*", Literal: "*"},
@@ -1060,7 +1118,8 @@ func TestParser_ErrorRecovery_FunctionCalls(t *testing.T) {
 		{
 			name: "invalid function argument",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "SUM"},
 				{Type: "(", Literal: "("},
 				{Type: "WHERE", Literal: "WHERE"}, // Invalid argument
@@ -1071,7 +1130,8 @@ func TestParser_ErrorRecovery_FunctionCalls(t *testing.T) {
 		{
 			name: "missing comma between function arguments",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "CONCAT"},
 				{Type: "(", Literal: "("},
 				{Type: "STRING", Literal: "hello"},
@@ -1114,7 +1174,8 @@ func TestParser_ErrorRecovery_WindowFrames(t *testing.T) {
 		{
 			name: "missing AND in BETWEEN frame",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "SUM"},
 				{Type: "(", Literal: "("},
 				{Type: "IDENT", Literal: "amount"},
@@ -1133,7 +1194,8 @@ func TestParser_ErrorRecovery_WindowFrames(t *testing.T) {
 		{
 			name: "missing PRECEDING or FOLLOWING after UNBOUNDED",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "SUM"},
 				{Type: "(", Literal: "("},
 				{Type: "IDENT", Literal: "amount"},
@@ -1150,7 +1212,8 @@ func TestParser_ErrorRecovery_WindowFrames(t *testing.T) {
 		{
 			name: "missing ROW after CURRENT",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "SUM"},
 				{Type: "(", Literal: "("},
 				{Type: "IDENT", Literal: "amount"},
@@ -1167,7 +1230,8 @@ func TestParser_ErrorRecovery_WindowFrames(t *testing.T) {
 		{
 			name: "missing PRECEDING or FOLLOWING after numeric value",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "SUM"},
 				{Type: "(", Literal: "("},
 				{Type: "IDENT", Literal: "amount"},
@@ -1184,7 +1248,8 @@ func TestParser_ErrorRecovery_WindowFrames(t *testing.T) {
 		{
 			name: "missing BY after PARTITION",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "ROW_NUMBER"},
 				{Type: "(", Literal: "("},
 				{Type: ")", Literal: ")"},
@@ -1199,7 +1264,8 @@ func TestParser_ErrorRecovery_WindowFrames(t *testing.T) {
 		{
 			name: "missing BY after ORDER in window",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "ROW_NUMBER"},
 				{Type: "(", Literal: "("},
 				{Type: ")", Literal: ")"},
@@ -1214,7 +1280,8 @@ func TestParser_ErrorRecovery_WindowFrames(t *testing.T) {
 		{
 			name: "missing closing parenthesis in window spec",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "IDENT", Literal: "ROW_NUMBER"},
 				{Type: "(", Literal: "("},
 				{Type: ")", Literal: ")"},
@@ -1267,7 +1334,8 @@ func TestParser_ErrorRecovery_EmptyInput(t *testing.T) {
 		{
 			name: "only EOF token",
 			tokens: []token.Token{
-				{Type: "EOF", Literal: ""},
+				{Type: "EOF",
+					ModelType: models.TokenTypeEOF, Literal: ""},
 			},
 			wantErr:       true,
 			errorContains: "incomplete SQL statement",
@@ -1275,7 +1343,8 @@ func TestParser_ErrorRecovery_EmptyInput(t *testing.T) {
 		{
 			name: "only semicolon",
 			tokens: []token.Token{
-				{Type: ";", Literal: ";"},
+				{Type: ";",
+					ModelType: models.TokenTypeSemicolon, Literal: ";"},
 			},
 			wantErr:       true,
 			errorContains: "incomplete SQL statement",
@@ -1283,7 +1352,8 @@ func TestParser_ErrorRecovery_EmptyInput(t *testing.T) {
 		{
 			name: "unknown statement type",
 			tokens: []token.Token{
-				{Type: "UNKNOWN", Literal: "UNKNOWN"},
+				{Type: "UNKNOWN",
+					ModelType: models.TokenTypeKeyword, Literal: "UNKNOWN"},
 			},
 			wantErr:       true,
 			errorContains: "statement",
@@ -1321,12 +1391,14 @@ func TestParser_ErrorRecovery_SequentialParsing(t *testing.T) {
 		{
 			name: "recover after SELECT error",
 			invalidSQL: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				// Missing FROM
 			},
 			validSQL: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
@@ -1336,12 +1408,14 @@ func TestParser_ErrorRecovery_SequentialParsing(t *testing.T) {
 		{
 			name: "recover after INSERT error",
 			invalidSQL: []token.Token{
-				{Type: "INSERT", Literal: "INSERT"},
+				{Type: "INSERT",
+					ModelType: models.TokenTypeInsert, Literal: "INSERT"},
 				{Type: "INTO", Literal: "INTO"},
 				// Missing table name
 			},
 			validSQL: []token.Token{
-				{Type: "INSERT", Literal: "INSERT"},
+				{Type: "INSERT",
+					ModelType: models.TokenTypeInsert, Literal: "INSERT"},
 				{Type: "INTO", Literal: "INTO"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "VALUES", Literal: "VALUES"},
@@ -1354,12 +1428,14 @@ func TestParser_ErrorRecovery_SequentialParsing(t *testing.T) {
 		{
 			name: "recover after UPDATE error",
 			invalidSQL: []token.Token{
-				{Type: "UPDATE", Literal: "UPDATE"},
+				{Type: "UPDATE",
+					ModelType: models.TokenTypeUpdate, Literal: "UPDATE"},
 				{Type: "IDENT", Literal: "users"},
 				// Missing SET
 			},
 			validSQL: []token.Token{
-				{Type: "UPDATE", Literal: "UPDATE"},
+				{Type: "UPDATE",
+					ModelType: models.TokenTypeUpdate, Literal: "UPDATE"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "SET", Literal: "SET"},
 				{Type: "IDENT", Literal: "name"},
@@ -1371,11 +1447,13 @@ func TestParser_ErrorRecovery_SequentialParsing(t *testing.T) {
 		{
 			name: "recover after DELETE error",
 			invalidSQL: []token.Token{
-				{Type: "DELETE", Literal: "DELETE"},
+				{Type: "DELETE",
+					ModelType: models.TokenTypeDelete, Literal: "DELETE"},
 				// Missing FROM
 			},
 			validSQL: []token.Token{
-				{Type: "DELETE", Literal: "DELETE"},
+				{Type: "DELETE",
+					ModelType: models.TokenTypeDelete, Literal: "DELETE"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
 			},
@@ -1417,7 +1495,8 @@ func TestParser_ErrorRecovery_AlterRole(t *testing.T) {
 		{
 			name: "missing TO in RENAME",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "ROLE", Literal: "ROLE"},
 				{Type: "IDENT", Literal: "old_role"},
 				{Type: "RENAME", Literal: "RENAME"},
@@ -1429,7 +1508,8 @@ func TestParser_ErrorRecovery_AlterRole(t *testing.T) {
 		{
 			name: "missing MEMBER after ADD",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "ROLE", Literal: "ROLE"},
 				{Type: "IDENT", Literal: "role1"},
 				{Type: "ADD", Literal: "ADD"},
@@ -1441,7 +1521,8 @@ func TestParser_ErrorRecovery_AlterRole(t *testing.T) {
 		{
 			name: "missing MEMBER after DROP",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "ROLE", Literal: "ROLE"},
 				{Type: "IDENT", Literal: "role1"},
 				{Type: "DROP", Literal: "DROP"},
@@ -1453,7 +1534,8 @@ func TestParser_ErrorRecovery_AlterRole(t *testing.T) {
 		{
 			name: "missing operation after role name",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "ROLE", Literal: "ROLE"},
 				{Type: "IDENT", Literal: "role1"},
 				// Missing operation
@@ -1464,7 +1546,8 @@ func TestParser_ErrorRecovery_AlterRole(t *testing.T) {
 		{
 			name: "missing UNTIL after VALID",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "ROLE", Literal: "ROLE"},
 				{Type: "IDENT", Literal: "role1"},
 				{Type: "WITH", Literal: "WITH"},
@@ -1507,7 +1590,8 @@ func TestParser_ErrorRecovery_AlterPolicy(t *testing.T) {
 		{
 			name: "missing ON keyword",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "POLICY", Literal: "POLICY"},
 				{Type: "IDENT", Literal: "policy1"},
 				{Type: "IDENT", Literal: "table1"}, // Missing ON
@@ -1518,7 +1602,8 @@ func TestParser_ErrorRecovery_AlterPolicy(t *testing.T) {
 		{
 			name: "missing TO in RENAME",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "POLICY", Literal: "POLICY"},
 				{Type: "IDENT", Literal: "policy1"},
 				{Type: "ON", Literal: "ON"},
@@ -1532,7 +1617,8 @@ func TestParser_ErrorRecovery_AlterPolicy(t *testing.T) {
 		{
 			name: "missing opening parenthesis in USING",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "POLICY", Literal: "POLICY"},
 				{Type: "IDENT", Literal: "policy1"},
 				{Type: "ON", Literal: "ON"},
@@ -1546,7 +1632,8 @@ func TestParser_ErrorRecovery_AlterPolicy(t *testing.T) {
 		{
 			name: "missing closing parenthesis in USING",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "POLICY", Literal: "POLICY"},
 				{Type: "IDENT", Literal: "policy1"},
 				{Type: "ON", Literal: "ON"},
@@ -1592,7 +1679,8 @@ func TestParser_ErrorRecovery_AlterConnector(t *testing.T) {
 		{
 			name: "missing SET keyword",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "CONNECTOR", Literal: "CONNECTOR"},
 				{Type: "IDENT", Literal: "connector1"},
 				{Type: "URL", Literal: "URL"}, // Missing SET
@@ -1603,7 +1691,8 @@ func TestParser_ErrorRecovery_AlterConnector(t *testing.T) {
 		{
 			name: "missing property type after SET",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "CONNECTOR", Literal: "CONNECTOR"},
 				{Type: "IDENT", Literal: "connector1"},
 				{Type: "SET", Literal: "SET"},
@@ -1615,7 +1704,8 @@ func TestParser_ErrorRecovery_AlterConnector(t *testing.T) {
 		{
 			name: "missing opening parenthesis in DCPROPERTIES",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "CONNECTOR", Literal: "CONNECTOR"},
 				{Type: "IDENT", Literal: "connector1"},
 				{Type: "SET", Literal: "SET"},
@@ -1628,7 +1718,8 @@ func TestParser_ErrorRecovery_AlterConnector(t *testing.T) {
 		{
 			name: "missing equals in DCPROPERTIES",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "CONNECTOR", Literal: "CONNECTOR"},
 				{Type: "IDENT", Literal: "connector1"},
 				{Type: "SET", Literal: "SET"},
@@ -1643,7 +1734,8 @@ func TestParser_ErrorRecovery_AlterConnector(t *testing.T) {
 		{
 			name: "missing closing parenthesis in DCPROPERTIES",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "CONNECTOR", Literal: "CONNECTOR"},
 				{Type: "IDENT", Literal: "connector1"},
 				{Type: "SET", Literal: "SET"},
@@ -1660,7 +1752,8 @@ func TestParser_ErrorRecovery_AlterConnector(t *testing.T) {
 		{
 			name: "missing USER or ROLE after OWNER",
 			tokens: []token.Token{
-				{Type: "ALTER", Literal: "ALTER"},
+				{Type: "ALTER",
+					ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: "CONNECTOR", Literal: "CONNECTOR"},
 				{Type: "IDENT", Literal: "connector1"},
 				{Type: "SET", Literal: "SET"},
@@ -1699,30 +1792,30 @@ func generateDeeplyNestedCTE(depth int) []token.Token {
 	// Generate nested WITH clauses
 	for i := 0; i < depth; i++ {
 		tokens = append(tokens,
-			token.Token{Type: "WITH", Literal: "WITH"},
-			token.Token{Type: "IDENT", Literal: "cte"},
-			token.Token{Type: "AS", Literal: "AS"},
-			token.Token{Type: "(", Literal: "("},
+			token.Token{Type: "WITH", ModelType: models.TokenTypeWith, Literal: "WITH"},
+			token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "cte"},
+			token.Token{Type: "AS", ModelType: models.TokenTypeAs, Literal: "AS"},
+			token.Token{Type: "(", ModelType: models.TokenTypeLParen, Literal: "("},
 		)
 	}
 
 	// Add a simple SELECT in the innermost level
 	tokens = append(tokens,
-		token.Token{Type: "SELECT", Literal: "SELECT"},
-		token.Token{Type: "INT", Literal: "1"},
+		token.Token{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"},
+		token.Token{Type: "INT", ModelType: models.TokenTypeNumber, Literal: "1"},
 	)
 
 	// Close all parentheses
 	for i := 0; i < depth; i++ {
-		tokens = append(tokens, token.Token{Type: ")", Literal: ")"})
+		tokens = append(tokens, token.Token{Type: ")", ModelType: models.TokenTypeRParen, Literal: ")"})
 	}
 
 	// Add final SELECT
 	tokens = append(tokens,
-		token.Token{Type: "SELECT", Literal: "SELECT"},
-		token.Token{Type: "*", Literal: "*"},
-		token.Token{Type: "FROM", Literal: "FROM"},
-		token.Token{Type: "IDENT", Literal: "cte"},
+		token.Token{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"},
+		token.Token{Type: "*", ModelType: models.TokenTypeAsterisk, Literal: "*"},
+		token.Token{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
+		token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "cte"},
 	)
 
 	return tokens

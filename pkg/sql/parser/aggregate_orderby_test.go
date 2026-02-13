@@ -19,8 +19,8 @@ func convertTokensForAggregateTests(tokens []models.TokenWithSpan) []token.Token
 	for _, t := range tokens {
 		// Handle compound keywords by splitting them
 		if t.Token.Value == "ORDER BY" || t.Token.Type == models.TokenTypeOrderBy {
-			result = append(result, token.Token{Type: "ORDER", Literal: "ORDER"})
-			result = append(result, token.Token{Type: "BY", Literal: "BY"})
+			result = append(result, token.Token{Type: "ORDER", ModelType: models.TokenTypeOrder, Literal: "ORDER"})
+			result = append(result, token.Token{Type: "BY", ModelType: models.TokenTypeBy, Literal: "BY"})
 			continue
 		}
 

@@ -77,15 +77,6 @@ func (p *Parser) isStatementStartingKeyword() bool {
 			return true
 		}
 	}
-	// Fallback: string comparison for tokens without ModelType (e.g., tests)
-	switch string(p.currentToken.Type) {
-	case "SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "ALTER", "DROP",
-		"WITH", "MERGE", "REFRESH", "TRUNCATE",
-		"EXPLAIN", "ANALYZE", "SHOW", "DESCRIBE", "GRANT", "REVOKE",
-		"SET", "USE", "BEGIN", "COMMIT", "ROLLBACK", "VACUUM",
-		"CALL", "EXECUTE":
-		return true
-	}
 	return false
 }
 

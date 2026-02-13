@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -86,6 +89,12 @@ func calculateDegradation(actual, baseline int64) float64 {
 
 // TestPerformanceRegression tests for performance regressions against baselines
 func TestPerformanceRegression(t *testing.T) {
+	// Skip on older Go versions — perf baselines are calibrated for Go 1.24+
+	// Older compilers produce slower code, causing false regression failures
+	if !goVersionAtLeast(1, 24) {
+		t.Skip("Skipping performance regression tests on Go < 1.24 (baselines calibrated for 1.24+)")
+	}
+
 	// Skip performance tests when race detector is enabled
 	// Race detector adds 3-5x overhead making performance measurements unreliable
 	// This is detected via the raceEnabled variable set in performance_regression_race.go
@@ -400,4 +409,20 @@ func BenchmarkPerformanceBaseline(b *testing.B) {
 		b.ReportAllocs()
 		benchmarkParser(b, insertTokens)
 	})
+}
+
+// goVersionAtLeast checks if the current Go version is >= major.minor.
+func goVersionAtLeast(major, minor int) bool {
+	v := runtime.Version() // e.g. "go1.24.1"
+	v = strings.TrimPrefix(v, "go")
+	parts := strings.Split(v, ".")
+	if len(parts) < 2 {
+		return false
+	}
+	maj, err1 := strconv.Atoi(parts[0])
+	min, err2 := strconv.Atoi(parts[1])
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	return maj > major || (maj == major && min >= minor)
 }

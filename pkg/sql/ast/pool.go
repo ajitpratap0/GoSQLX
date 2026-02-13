@@ -357,6 +357,34 @@ func ReleaseAST(ast *AST) {
 	astPool.Put(ast)
 }
 
+// ReleaseStatements returns a slice of statements back to their respective pools.
+// Use this to clean up statements returned by ParseWithRecovery, which returns
+// []Statement rather than an *AST.
+//
+// Example:
+//
+//	stmts, errs := parser.ParseWithRecovery(tokens)
+//	defer ast.ReleaseStatements(stmts)
+//	// ... process stmts and errs ...
+func ReleaseStatements(stmts []Statement) {
+	for i := range stmts {
+		if stmts[i] == nil {
+			continue
+		}
+		switch stmt := stmts[i].(type) {
+		case *SelectStatement:
+			PutSelectStatement(stmt)
+		case *InsertStatement:
+			PutInsertStatement(stmt)
+		case *UpdateStatement:
+			PutUpdateStatement(stmt)
+		case *DeleteStatement:
+			PutDeleteStatement(stmt)
+		}
+		stmts[i] = nil
+	}
+}
+
 // GetInsertStatement gets an InsertStatement from the pool
 func GetInsertStatement() *InsertStatement {
 	return insertStmtPool.Get().(*InsertStatement)

@@ -525,10 +525,7 @@ func (s *Scanner) ScanSQL(sql string) *ScanResult {
 		Findings: make([]Finding, 0),
 	}
 
-	// Strip dollar-quoted string contents to prevent false positives and
-	// ensure injection patterns hidden inside dollar-quoted strings are not missed.
-	// The content of dollar-quoted strings is replaced with empty strings so that
-	// the structural SQL around them is still scanned.
+	// Strip dollar-quoted string content to prevent false positives
 	sql = stripDollarQuotedStrings(sql)
 
 	// Check for comment-based bypass patterns in raw SQL

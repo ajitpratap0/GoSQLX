@@ -17,6 +17,14 @@ linters:
         - fmt.Fprint
         - fmt.Fprintf
         - fmt.Fprintln
+        - fmt.Print
+        - fmt.Printf
+        - fmt.Println
+    staticcheck:
+      checks:
+        - "all"
+        - "-QF*"
+        - "-ST*"
 
 issues:
   max-issues-per-linter: 0

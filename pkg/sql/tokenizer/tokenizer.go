@@ -950,12 +950,12 @@ func (t *Tokenizer) readQuotedString(quote rune) (models.Token, error) {
 			value := buf.String()
 			// For test compatibility, use appropriate token types based on quote style
 			var tokenType models.TokenType
-			switch originalQuote {
-			case '\'', '\u2018', '\u2019', '«', '»':
+			if originalQuote == '\'' || originalQuote == '\u2018' || originalQuote == '\u2019' ||
+				originalQuote == '«' || originalQuote == '»' {
 				tokenType = models.TokenTypeSingleQuotedString // 124
-			case '"', '\u201C', '\u201D':
+			} else if originalQuote == '"' || originalQuote == '\u201C' || originalQuote == '\u201D' {
 				tokenType = models.TokenTypeDoubleQuotedString // 124
-			default:
+			} else {
 				tokenType = models.TokenTypeString // 20
 			}
 			return models.Token{
@@ -1297,14 +1297,13 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		t.pos.AdvanceRune(r, size)
 		if t.pos.Index < len(t.input) {
 			nxtR, nxtSize := utf8.DecodeRune(t.input[t.pos.Index:])
-			switch nxtR {
-			case '=':
+			if nxtR == '=' {
 				t.pos.AdvanceRune(nxtR, nxtSize)
 				return models.Token{Type: models.TokenTypeLtEq, Value: "<="}, nil
-			case '>':
+			} else if nxtR == '>' {
 				t.pos.AdvanceRune(nxtR, nxtSize)
 				return models.Token{Type: models.TokenTypeNeq, Value: "<>"}, nil
-			case '@':
+			} else if nxtR == '@' {
 				// <@ is the "is contained by" JSON operator
 				t.pos.AdvanceRune(nxtR, nxtSize)
 				return models.Token{Type: models.TokenTypeArrowAt, Value: "<@"}, nil
@@ -1464,15 +1463,14 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		// Just a standalone ? symbol (used for single key existence check)
 		return models.Token{Type: models.TokenTypeQuestion, Value: "?"}, nil
 	case '$':
-		// Handle PostgreSQL positional parameters ($1, $2, etc.) and dollar-quoted strings
-		startPos := t.pos.Clone()
+		// Handle PostgreSQL positional parameters ($1, $2, etc.)
 		t.pos.AdvanceRune(r, size)
 		if t.pos.Index < len(t.input) {
 			nextR, _ := utf8.DecodeRune(t.input[t.pos.Index:])
 			// Check if followed by a digit (positional parameter)
 			if nextR >= '0' && nextR <= '9' {
 				// Read the number part
-				numStart := t.pos.Index
+				start := t.pos.Index
 				for t.pos.Index < len(t.input) {
 					digitR, digitSize := utf8.DecodeRune(t.input[t.pos.Index:])
 					if digitR < '0' || digitR > '9' {
@@ -1480,16 +1478,72 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 					}
 					t.pos.AdvanceRune(digitR, digitSize)
 				}
-				paramNum := string(t.input[numStart:t.pos.Index])
+				paramNum := string(t.input[start:t.pos.Index])
 				return models.Token{Type: models.TokenTypePlaceholder, Value: "$" + paramNum}, nil
 			}
-			// Check for dollar-quoted string: $$...$$ or $tag$...$tag$
-			if nextR == '$' || isDollarTagChar(nextR) {
-				return t.readDollarQuotedString(startPos)
+		}
+		// PostgreSQL dollar-quoted strings: $$...$$ or $tag$...$tag$
+		// Check if this starts a dollar-quoted string
+		if t.pos.Index < len(t.input) {
+			nextR, _ := utf8.DecodeRune(t.input[t.pos.Index:])
+			if nextR == '$' || isIdentifierStart(nextR) {
+				// Try to read the opening tag
+				tagStart := t.pos.Index
+				if nextR == '$' {
+					// $$ case - empty tag
+				} else {
+					// $tag$ case - read identifier
+					for t.pos.Index < len(t.input) {
+						cr, cs := utf8.DecodeRune(t.input[t.pos.Index:])
+						if cr == '$' {
+							break
+						}
+						if !isIdentifierChar(cr) {
+							// Not a valid tag, treat as standalone $
+							return models.Token{Type: models.TokenTypePlaceholder, Value: "$"}, nil
+						}
+						t.pos.AdvanceRune(cr, cs)
+					}
+				}
+				// Check for closing $ of the tag
+				if t.pos.Index >= len(t.input) {
+					return models.Token{Type: models.TokenTypePlaceholder, Value: "$"}, nil
+				}
+				closingR, closingSize := utf8.DecodeRune(t.input[t.pos.Index:])
+				if closingR != '$' {
+					return models.Token{Type: models.TokenTypePlaceholder, Value: "$"}, nil
+				}
+				tag := string(t.input[tagStart:t.pos.Index])
+				t.pos.AdvanceRune(closingR, closingSize) // consume closing $ of opening tag
+
+				// Now read content until we find $tag$
+				closingTag := "$" + tag + "$"
+				contentStart := t.pos.Index
+				for t.pos.Index < len(t.input) {
+					if t.input[t.pos.Index] == '$' && t.pos.Index+len(closingTag) <= len(t.input) {
+						candidate := string(t.input[t.pos.Index : t.pos.Index+len(closingTag)])
+						if candidate == closingTag {
+							content := string(t.input[contentStart:t.pos.Index])
+							// Advance past the closing tag
+							for i := 0; i < len(closingTag); {
+								cr, cs := utf8.DecodeRune([]byte(closingTag[i:]))
+								t.pos.AdvanceRune(cr, cs)
+								i += cs
+							}
+							return models.Token{Type: models.TokenTypeDollarQuotedString, Value: content}, nil
+						}
+					}
+					cr, cs := utf8.DecodeRune(t.input[t.pos.Index:])
+					t.pos.AdvanceRune(cr, cs)
+				}
+				// Unterminated dollar-quoted string
+				return models.Token{}, errors.UnterminatedStringError(
+					models.Location{Line: t.pos.Line, Column: t.pos.Column},
+					string(t.input),
+				)
 			}
 		}
-		// If $ is at end of input, fall through to standalone placeholder
-		// Standalone $ is a placeholder token
+		// Standalone $ - treat as placeholder
 		return models.Token{Type: models.TokenTypePlaceholder, Value: "$"}, nil
 	case '~':
 		// Handle PostgreSQL regex operators ~ and ~*

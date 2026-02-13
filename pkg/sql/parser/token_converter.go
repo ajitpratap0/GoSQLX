@@ -735,11 +735,12 @@ func buildTypeMapping() map[models.TokenType]token.Type {
 		models.TokenTypeCrossJoin: "CROSS JOIN",
 
 		// Identifiers and Literals
-		models.TokenTypeIdentifier: "IDENT",
-		models.TokenTypeString:     "STRING",
-		models.TokenTypeNumber:     "NUMBER",
-		models.TokenTypeWord:       "WORD",
-		models.TokenTypeChar:       "CHAR",
+		models.TokenTypeIdentifier:         "IDENT",
+		models.TokenTypeString:             "STRING",
+		models.TokenTypeDollarQuotedString: "STRING",
+		models.TokenTypeNumber:             "NUMBER",
+		models.TokenTypeWord:               "WORD",
+		models.TokenTypeChar:               "CHAR",
 
 		// Operators and Punctuation
 		models.TokenTypeEq:          "=",

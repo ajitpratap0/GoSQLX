@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/lsp"
 	"github.com/spf13/cobra"
@@ -69,7 +70,7 @@ func lspRun(cmd *cobra.Command, args []string) error {
 	// Set up logging
 	var logger *log.Logger
 	if lspLogFile != "" {
-		f, err := os.OpenFile(lspLogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600) // #nosec G304
+		f, err := os.OpenFile(filepath.Clean(lspLogFile), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600) // #nosec G304
 		if err != nil {
 			return fmt.Errorf("failed to open log file: %w", err)
 		}

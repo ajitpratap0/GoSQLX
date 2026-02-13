@@ -3,6 +3,7 @@ package schema
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
@@ -56,7 +57,7 @@ func LoadFromDDL(sql string) (*Schema, error) {
 // LoadFromDDLFile reads a file at the given path and loads schema from the
 // DDL statements contained within it.
 func LoadFromDDLFile(path string) (*Schema, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path)) // #nosec G304
 	if err != nil {
 		return nil, fmt.Errorf("failed to read DDL file %q: %w", path, err)
 	}

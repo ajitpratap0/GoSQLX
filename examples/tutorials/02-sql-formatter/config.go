@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 )
 
 // FormatterConfig holds all formatting preferences
@@ -49,7 +50,7 @@ func LoadConfig(filePath string) (FormatterConfig, error) {
 		return DefaultConfig(), nil
 	}
 
-	data, err := os.ReadFile(filePath) // #nosec G304,G703
+	data, err := os.ReadFile(filepath.Clean(filePath)) // #nosec G304 // #nosec G304,G703
 	if err != nil {
 		return FormatterConfig{}, err
 	}

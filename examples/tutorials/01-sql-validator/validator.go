@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"path/filepath"
 	"strings"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
@@ -20,7 +21,7 @@ type ValidationResult struct {
 // ValidateFile validates a single SQL file
 func ValidateFile(filePath string) ValidationResult {
 	// Read the file
-	content, err := os.ReadFile(filePath) // #nosec G304,G703
+	content, err := os.ReadFile(filepath.Clean(filePath)) // #nosec G304 // #nosec G304,G703
 	if err != nil {
 		return ValidationResult{
 			FilePath: filePath,

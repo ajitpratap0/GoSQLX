@@ -318,6 +318,7 @@ func (s *SelectStatement) SQL() string {
 	}
 
 	for _, j := range s.Joins {
+		j := j // G601: Create local copy to avoid memory aliasing
 		sb.WriteString(" ")
 		sb.WriteString(joinSQL(&j))
 	}
@@ -586,6 +587,7 @@ func (a *AlterTableStatement) SQL() string {
 	sb.WriteString("ALTER TABLE ")
 	sb.WriteString(a.Table)
 	for _, action := range a.Actions {
+		action := action // G601: Create local copy to avoid memory aliasing
 		sb.WriteString(" ")
 		sb.WriteString(alterActionSQL(&action))
 	}
@@ -1080,6 +1082,7 @@ func columnDefSQL(c *ColumnDef) string {
 	sb.WriteString(" ")
 	sb.WriteString(c.Type)
 	for _, con := range c.Constraints {
+		con := con // G601: Create local copy to avoid memory aliasing
 		sb.WriteString(" ")
 		sb.WriteString(columnConstraintSQL(&con))
 	}

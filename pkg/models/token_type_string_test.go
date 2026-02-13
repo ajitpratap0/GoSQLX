@@ -104,7 +104,7 @@ func TestTokenTypeString_UnknownValue(t *testing.T) {
 func TestTokenTypeString_FmtStringer(t *testing.T) {
 	// Verify it implements fmt.Stringer interface
 	var _ fmt.Stringer = TokenType(0)
-	s := fmt.Sprintf("%s", TokenTypeSelect)
+	s := TokenTypeSelect.String()
 	if s != "SELECT" {
 		t.Errorf("fmt.Sprintf with TokenTypeSelect = %q, want %q", s, "SELECT")
 	}

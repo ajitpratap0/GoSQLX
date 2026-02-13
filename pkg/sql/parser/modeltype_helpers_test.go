@@ -50,7 +50,7 @@ func TestIsAnyType(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tokens := []token.Token{tt.token}
-			normalizeTokens(tokens)
+			tokens = normalizeTokens(tokens)
 			p := &Parser{
 				tokens:       tokens,
 				currentPos:   0,
@@ -107,7 +107,7 @@ func TestMatchType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			normalizeTokens(tt.tokens)
+			tt.tokens = normalizeTokens(tt.tokens)
 			p := &Parser{
 				tokens:       tt.tokens,
 				currentPos:   0,
@@ -135,7 +135,7 @@ func TestNormalizeTokens(t *testing.T) {
 		{Type: "IDENT", Literal: "foo"},
 	}
 
-	normalizeTokens(tokens)
+	tokens = normalizeTokens(tokens)
 
 	expected := []models.TokenType{
 		models.TokenTypeSelect,
@@ -159,7 +159,7 @@ func TestNormalizeTokensPreservesExisting(t *testing.T) {
 		{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 	}
 
-	normalizeTokens(tokens)
+	tokens = normalizeTokens(tokens)
 
 	if tokens[0].ModelType != models.TokenTypeSelect {
 		t.Errorf("normalizeTokens overwrote existing ModelType: got %d", tokens[0].ModelType)

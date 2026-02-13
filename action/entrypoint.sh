@@ -44,11 +44,13 @@ elif [[ "$SQL_FILES" == "*.sql" ]]; then
     FILES+=("$f")
   done < <(find . -maxdepth 1 -type f -name "*.sql" -print0 2>/dev/null | sort -z)
 else
-  # Use bash globbing
+  # Use find with sanitized pattern to avoid command injection
   shopt -s globstar nullglob 2>/dev/null || true
-  for f in $SQL_FILES; do
-    [ -f "$f" ] && FILES+=("$f")
-  done
+  # Sanitize: only allow safe glob characters
+  SAFE_PATTERN=$(echo "$SQL_FILES" | sed 's/[^a-zA-Z0-9_.*/?\/\-]//g')
+  while IFS= read -r -d '' f; do
+    FILES+=("$f")
+  done < <(find . -type f -path "./$SAFE_PATTERN" -print0 2>/dev/null | sort -z)
 fi
 
 if [ ${#FILES[@]} -eq 0 ]; then

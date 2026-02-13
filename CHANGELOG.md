@@ -5,6 +5,32 @@ All notable changes to GoSQLX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added - Query Optimization Engine (PR #210, closes #81)
+- New `pkg/optimizer/` package with 12 optimization rules
+- Rules OPT-001 through OPT-008: SELECT * detection, missing WHERE, Cartesian products, DISTINCT overuse, subquery in WHERE, OR in WHERE, leading wildcard LIKE, function on indexed column
+- Rules OPT-009 through OPT-012: N+1 query detection, index recommendations, join order optimization, query cost estimation
+- CLI command `gosqlx optimize` with text/JSON output
+- Complexity scoring and query classification
+
+### Added - Schema Validation Extensions (PR #209, closes #82)
+- Constraint validation: NOT NULL checking for INSERT/UPDATE
+- Type compatibility checking for INSERT values vs column types
+- Foreign key integrity validation
+- Object pooling for validation maps
+- Case-insensitive table/column lookups
+
+### Added - SQL Dialect Support (PR #211)
+- Snowflake dialect keyword detection and support
+- Multi-dialect detection engine with weighted scoring
+- Dialect-specific keyword sets for Snowflake, PostgreSQL, MySQL, SQL Server, Oracle, SQLite
+
+### Fixed
+- Relaxed performance baselines for CI runner variability
+- Standardized token types in Snowflake keywords
+- Optimized dialect hint scanning with scan length limit
+
 ## [1.7.0] - 2026-02-12 - Parser Enhancements: Schema-Qualified Names, Array/Regex Operators & SQL Standards
 
 This release delivers 9 commits with major parser enhancements across 4 feature batches, 2 critical bug fixes, and comprehensive test improvements. Schema-qualified table names (`schema.table`) now work across all statement types, and the parser gains support for ARRAY constructors, regex operators, INTERVAL expressions, FETCH/FOR UPDATE, multi-row INSERT, PostgreSQL UPSERT, type casting, and positional parameters.

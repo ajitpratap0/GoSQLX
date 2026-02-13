@@ -78,17 +78,17 @@ func extractTable(ct *ast.CreateTableStatement) (*Table, error) {
 		// Process column constraints
 		for _, constraint := range colDef.Constraints {
 			constraintType := strings.ToUpper(constraint.Type)
-			switch {
-			case constraintType == "NOT NULL":
+			switch constraintType {
+			case "NOT NULL":
 				col.Nullable = false
-			case constraintType == "PRIMARY KEY":
+			case "PRIMARY KEY":
 				col.Nullable = false
 				table.PrimaryKey = append(table.PrimaryKey, colDef.Name)
-			case constraintType == "DEFAULT":
+			case "DEFAULT":
 				if constraint.Default != nil {
 					col.Default = constraint.Default.TokenLiteral()
 				}
-			case constraintType == "REFERENCES":
+			case "REFERENCES":
 				if constraint.References != nil {
 					col.References = &ForeignKeyRef{
 						Table: constraint.References.Table,
@@ -104,7 +104,7 @@ func extractTable(ct *ast.CreateTableStatement) (*Table, error) {
 					}
 					table.ForeignKeys = append(table.ForeignKeys, fk)
 				}
-			case constraintType == "UNIQUE":
+			case "UNIQUE":
 				table.Indexes = append(table.Indexes, Index{
 					Columns: []string{colDef.Name},
 					Unique:  true,
@@ -118,8 +118,8 @@ func extractTable(ct *ast.CreateTableStatement) (*Table, error) {
 	// Process table-level constraints
 	for _, constraint := range ct.Constraints {
 		constraintType := strings.ToUpper(constraint.Type)
-		switch {
-		case constraintType == "PRIMARY KEY":
+		switch constraintType {
+		case "PRIMARY KEY":
 			table.PrimaryKey = constraint.Columns
 			// Mark PK columns as NOT NULL
 			for _, colName := range constraint.Columns {
@@ -127,7 +127,7 @@ func extractTable(ct *ast.CreateTableStatement) (*Table, error) {
 					col.Nullable = false
 				}
 			}
-		case constraintType == "FOREIGN KEY":
+		case "FOREIGN KEY":
 			if constraint.References != nil {
 				fk := ForeignKey{
 					Name:       constraint.Name,
@@ -137,7 +137,7 @@ func extractTable(ct *ast.CreateTableStatement) (*Table, error) {
 				}
 				table.ForeignKeys = append(table.ForeignKeys, fk)
 			}
-		case constraintType == "UNIQUE":
+		case "UNIQUE":
 			table.Indexes = append(table.Indexes, Index{
 				Name:    constraint.Name,
 				Columns: constraint.Columns,

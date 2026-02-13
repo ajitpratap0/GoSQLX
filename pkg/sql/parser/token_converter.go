@@ -736,7 +736,8 @@ func buildTypeMapping() map[models.TokenType]token.Type {
 
 		// Identifiers and Literals
 		models.TokenTypeIdentifier: "IDENT",
-		models.TokenTypeString:     "STRING",
+		models.TokenTypeString:              "STRING",
+		models.TokenTypeDollarQuotedString: "STRING",
 		models.TokenTypeNumber:     "NUMBER",
 		models.TokenTypeWord:       "WORD",
 		models.TokenTypeChar:       "CHAR",

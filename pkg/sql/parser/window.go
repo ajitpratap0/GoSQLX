@@ -29,12 +29,7 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 
 	// Parse arguments if not empty
 	if !p.isType(models.TokenTypeRParen) {
-		for {
-			// Check if we've hit ORDER BY inside the function (for STRING_AGG, ARRAY_AGG, etc.)
-			if p.isType(models.TokenTypeOrder) {
-				break
-			}
-
+		for !p.isType(models.TokenTypeOrder) {
 			arg, err := p.parseExpression()
 			if err != nil {
 				return nil, err

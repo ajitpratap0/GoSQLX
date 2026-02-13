@@ -218,10 +218,7 @@ func (p *Parser) parseColumnConstraint() (*ast.ColumnConstraint, bool, error) {
 
 // parseReferentialActions parses ON DELETE and ON UPDATE actions
 func (p *Parser) parseReferentialActions() (onDelete, onUpdate string) {
-	for {
-		if !p.isType(models.TokenTypeOn) {
-			break
-		}
+	for p.isType(models.TokenTypeOn) {
 		p.advance() // Consume ON
 
 		if p.isType(models.TokenTypeDelete) {
@@ -898,14 +895,15 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		// This is different from SQL-99 GROUP BY ROLLUP(col1, col2)
 		if p.isType(models.TokenTypeWith) {
 			nextTok := p.peekToken()
-			if nextTok.Type == "ROLLUP" {
+			switch nextTok.Type {
+			case "ROLLUP":
 				p.advance() // Consume WITH
 				p.advance() // Consume ROLLUP
 				// Wrap all existing expressions in a RollupExpression
 				groupByExprs = []ast.Expression{
 					&ast.RollupExpression{Expressions: groupByExprs},
 				}
-			} else if nextTok.Type == "CUBE" {
+			case "CUBE":
 				p.advance() // Consume WITH
 				p.advance() // Consume CUBE
 				// Wrap all existing expressions in a CubeExpression

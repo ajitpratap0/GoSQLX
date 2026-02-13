@@ -118,14 +118,16 @@ func (r *IndentationDepthRule) calculateIndentDepth(line string) int {
 	tabs := 0
 
 	for _, ch := range line {
-		if ch == ' ' {
+		switch ch {
+		case ' ':
 			spaces++
-		} else if ch == '\t' {
+		case '\t':
 			tabs++
-		} else {
-			break
+		default:
+			goto done
 		}
 	}
+done:
 
 	// Calculate total depth: tabs count as full indents, spaces as partial
 	totalSpaces := tabs*r.indentSize + spaces

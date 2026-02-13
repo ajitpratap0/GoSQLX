@@ -87,7 +87,7 @@ func runOptimize(cmd *cobra.Command, sql string) error {
 
 	// Use a buffer to capture output when writing to file
 	var outputBuf bytes.Buffer
-	var outWriter io.Writer = cmd.OutOrStdout()
+	outWriter := io.Writer(cmd.OutOrStdout())
 	if outputFile != "" {
 		outWriter = &outputBuf
 	}

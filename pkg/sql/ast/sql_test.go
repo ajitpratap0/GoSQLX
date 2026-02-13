@@ -179,7 +179,7 @@ func TestInsertStatementSQL(t *testing.T) {
 func TestUpdateStatementSQL(t *testing.T) {
 	stmt := &UpdateStatement{
 		TableName: "users",
-		Assignments: []UpdateExpression{
+		Updates: []UpdateExpression{
 			{Column: &Identifier{Name: "name"}, Value: &LiteralValue{Value: "Bob", Type: "STRING"}},
 		},
 		Where: &BinaryExpression{

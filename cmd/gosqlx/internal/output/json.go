@@ -505,7 +505,7 @@ func convertStatementToJSON(stmt ast.Statement) JSONStatement {
 	case *ast.UpdateStatement:
 		result.Details["has_table"] = s.TableName != ""
 		result.Details["has_where"] = s.Where != nil
-		result.Details["set_count"] = len(s.Updates)
+		result.Details["set_count"] = len(s.Assignments)
 	case *ast.DeleteStatement:
 		result.Details["has_table"] = s.TableName != ""
 		result.Details["has_where"] = s.Where != nil

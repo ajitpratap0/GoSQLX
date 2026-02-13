@@ -1187,11 +1187,16 @@ type UpdateStatement struct {
 	With        *WithClause
 	TableName   string
 	Alias       string
-	Updates     []UpdateExpression // Keep for backward compatibility
-	Assignments []UpdateExpression // New field for consistency with span.go
+	Assignments []UpdateExpression // SET clause assignments
 	From        []TableReference
 	Where       Expression
 	Returning   []Expression
+}
+
+// GetUpdates returns Assignments for backward compatibility.
+// Deprecated: Use Assignments directly instead.
+func (u *UpdateStatement) GetUpdates() []UpdateExpression {
+	return u.Assignments
 }
 
 func (u *UpdateStatement) statementNode()      {}
@@ -1201,10 +1206,6 @@ func (u UpdateStatement) Children() []Node {
 	children := make([]Node, 0)
 	if u.With != nil {
 		children = append(children, u.With)
-	}
-	for _, update := range u.Updates {
-		update := update // G601: Create local copy to avoid memory aliasing
-		children = append(children, &update)
 	}
 	for _, assignment := range u.Assignments {
 		assignment := assignment // G601: Create local copy to avoid memory aliasing

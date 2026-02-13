@@ -602,10 +602,6 @@ func (cc *columnCollector) collectFromNode(node ast.Node) {
 			cc.collectFromNode(n.With)
 		}
 	case *ast.UpdateStatement:
-		for _, update := range n.Updates {
-			update := update // G601: Create local copy to avoid memory aliasing
-			cc.collectFromNode(&update)
-		}
 		for _, assignment := range n.Assignments {
 			assignment := assignment // G601: Create local copy to avoid memory aliasing
 			cc.collectFromNode(&assignment)
@@ -763,10 +759,6 @@ func (qcc *qualifiedColumnCollector) collectFromNode(node ast.Node) {
 			qcc.collectFromNode(n.With)
 		}
 	case *ast.UpdateStatement:
-		for _, update := range n.Updates {
-			update := update // G601: Create local copy to avoid memory aliasing
-			qcc.collectFromNode(&update)
-		}
 		for _, assignment := range n.Assignments {
 			assignment := assignment // G601: Create local copy to avoid memory aliasing
 			qcc.collectFromNode(&assignment)
@@ -933,10 +925,6 @@ func (fc *functionCollector) collectFromNode(node ast.Node) {
 			fc.collectFromNode(n.With)
 		}
 	case *ast.UpdateStatement:
-		for _, update := range n.Updates {
-			update := update // G601: Create local copy to avoid memory aliasing
-			fc.collectFromNode(&update)
-		}
 		for _, assignment := range n.Assignments {
 			assignment := assignment // G601: Create local copy to avoid memory aliasing
 			fc.collectFromNode(&assignment)

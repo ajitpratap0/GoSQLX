@@ -7,7 +7,6 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
-// TestRoundtrip parses SQL → AST → SQL() → parse again → compare
 func TestRoundtrip(t *testing.T) {
 	tests := []struct {
 		name string
@@ -46,33 +45,22 @@ func TestRoundtrip(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Parse original SQL
 			ast1, err := gosqlx.Parse(tt.sql)
 			if err != nil {
 				t.Fatalf("Failed to parse original SQL %q: %v", tt.sql, err)
 			}
-
-			// Generate SQL from AST
 			generated := ast1.SQL()
 			if generated == "" {
 				t.Fatalf("SQL() returned empty string for %q", tt.sql)
 			}
-
-			// Parse the generated SQL
 			ast2, err := gosqlx.Parse(generated)
 			if err != nil {
 				t.Fatalf("Failed to parse generated SQL %q (from %q): %v", generated, tt.sql, err)
 			}
-
-			// Generate SQL again from second parse
 			generated2 := ast2.SQL()
-
-			// The two generated SQLs should be identical (idempotent)
 			if generated != generated2 {
 				t.Errorf("Non-idempotent roundtrip:\n  original:    %s\n  generated1:  %s\n  generated2:  %s", tt.sql, generated, generated2)
 			}
-
-			// Basic structural check: same number of statements
 			if len(ast1.Statements) != len(ast2.Statements) {
 				t.Errorf("Statement count mismatch: %d vs %d", len(ast1.Statements), len(ast2.Statements))
 			}
@@ -80,17 +68,9 @@ func TestRoundtrip(t *testing.T) {
 	}
 }
 
-// TestRoundtripAST_SQL tests the AST-level SQL() method
 func TestRoundtripAST_SQL(t *testing.T) {
-	a := ast.AST{
-		Statements: []ast.Statement{
-			&ast.SelectStatement{
-				Columns: []ast.Expression{&ast.Identifier{Name: "1"}},
-			},
-		},
-	}
-	got := a.SQL()
-	if got != "SELECT 1" {
+	a := ast.AST{Statements: []ast.Statement{&ast.SelectStatement{Columns: []ast.Expression{&ast.Identifier{Name: "1"}}}}}
+	if got := a.SQL(); got != "SELECT 1" {
 		t.Errorf("AST.SQL() = %q, want %q", got, "SELECT 1")
 	}
 }

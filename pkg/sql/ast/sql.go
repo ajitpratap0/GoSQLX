@@ -57,8 +57,15 @@ func (b *BinaryExpression) SQL() string {
 		op = b.CustomOp.String()
 	}
 
-	// Handle special operators like LIKE, ILIKE, SIMILAR TO
 	upperOp := strings.ToUpper(op)
+
+	// Handle IS NULL / IS NOT NULL — operator already contains NULL,
+	// so do not append the right-hand side again.
+	if upperOp == "IS NULL" || upperOp == "IS NOT NULL" {
+		return fmt.Sprintf("%s %s", left, upperOp)
+	}
+
+	// Handle special operators like LIKE, ILIKE, SIMILAR TO
 	if b.Not {
 		switch upperOp {
 		case "LIKE", "ILIKE", "SIMILAR TO":

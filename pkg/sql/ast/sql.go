@@ -267,6 +267,7 @@ func (a *ArraySliceExpression) SQL() string {
 }
 
 // GROUP BY advanced expressions
+
 func (r *RollupExpression) SQL() string {
 	return "ROLLUP(" + exprListSQL(r.Expressions) + ")"
 }
@@ -769,6 +770,7 @@ func (m *MergeStatement) SQL() string {
 }
 
 // DML types from dml.go
+
 func (s *Select) SQL() string {
 	var sb strings.Builder
 	sb.WriteString("SELECT ")

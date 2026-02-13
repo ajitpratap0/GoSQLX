@@ -338,6 +338,13 @@ const (
 	TokenTypeLocked TokenType = 383 // LOCKED keyword for SKIP LOCKED
 	TokenTypeOf     TokenType = 384 // OF keyword for FOR UPDATE OF table_name
 
+	// Miscellaneous Keywords (385-389)
+	TokenTypeConcurrently TokenType = 385 // CONCURRENTLY keyword
+	TokenTypeRestart      TokenType = 386 // RESTART keyword
+	TokenTypeContinue     TokenType = 387 // CONTINUE keyword
+	TokenTypeIdentity     TokenType = 388 // IDENTITY keyword
+	TokenTypeWindow       TokenType = 389 // WINDOW keyword
+
 	// Grouping Set Keywords (390-399)
 	TokenTypeGroupingSets TokenType = 390
 	TokenTypeRollup       TokenType = 391
@@ -357,7 +364,13 @@ const (
 	TokenTypeLogin      TokenType = 406
 	TokenTypeSuperuser  TokenType = 407
 	TokenTypeCreateDB   TokenType = 408
-	TokenTypeCreateRole TokenType = 409
+	TokenTypeCreateRole   TokenType = 409
+	TokenTypeNoSuperuser  TokenType = 410
+	TokenTypeNoCreateDB   TokenType = 411
+	TokenTypeNoCreateRole TokenType = 412
+	TokenTypeNoLogin      TokenType = 413
+	TokenTypeILike        TokenType = 414
+	TokenTypeFloatLiteral TokenType = 415 // Float numeric literal (e.g., 3.14, 1e10)
 
 	// Transaction Keywords (420-429)
 	TokenTypeBegin     TokenType = 420
@@ -638,7 +651,12 @@ var tokenStringMap = map[TokenType]string{
 	TokenTypeNoWait: "NOWAIT",
 	TokenTypeSkip:   "SKIP",
 	TokenTypeLocked: "LOCKED",
-	TokenTypeOf:     "OF",
+	TokenTypeOf:           "OF",
+	TokenTypeConcurrently: "CONCURRENTLY",
+	TokenTypeRestart:      "RESTART",
+	TokenTypeContinue:     "CONTINUE",
+	TokenTypeIdentity:     "IDENTITY",
+	TokenTypeWindow:       "WINDOW",
 
 	// Grouping Set Keywords
 	TokenTypeGroupingSets: "GROUPING_SETS",
@@ -659,7 +677,13 @@ var tokenStringMap = map[TokenType]string{
 	TokenTypeLogin:      "LOGIN",
 	TokenTypeSuperuser:  "SUPERUSER",
 	TokenTypeCreateDB:   "CREATEDB",
-	TokenTypeCreateRole: "CREATEROLE",
+	TokenTypeCreateRole:   "CREATEROLE",
+	TokenTypeNoSuperuser:  "NOSUPERUSER",
+	TokenTypeNoCreateDB:   "NOCREATEDB",
+	TokenTypeNoCreateRole: "NOCREATEROLE",
+	TokenTypeNoLogin:      "NOLOGIN",
+	TokenTypeILike:        "ILIKE",
+	TokenTypeFloatLiteral: "FLOAT_LITERAL",
 
 	// Transaction Keywords
 	TokenTypeBegin:     "BEGIN",

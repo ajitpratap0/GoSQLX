@@ -779,7 +779,7 @@ var compoundKeywordTypes = map[string]models.TokenType{
 	"LEFT OUTER JOIN":  models.TokenTypeKeyword,
 	"RIGHT OUTER JOIN": models.TokenTypeKeyword,
 	"FULL OUTER JOIN":  models.TokenTypeKeyword,
-	"GROUPING SETS":    models.TokenTypeKeyword, // SQL-99 grouping operation
+	"GROUPING SETS":    models.TokenTypeGroupingSets, // SQL-99 grouping operation
 }
 
 // Helper function to check if a word can start a compound keyword

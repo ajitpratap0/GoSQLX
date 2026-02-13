@@ -16,12 +16,8 @@ import (
 // (needed because some keywords like DATA, NO may be tokenized as identifiers)
 func (p *Parser) isTokenMatch(keyword string) bool {
 	upperKeyword := strings.ToUpper(keyword)
-	// Check if token type matches the keyword directly
-	if strings.ToUpper(string(p.currentToken.Type)) == upperKeyword {
-		return true
-	}
-	// Check if it's an identifier with matching literal (case-insensitive)
-	if p.currentToken.Type == "IDENT" && strings.ToUpper(p.currentToken.Literal) == upperKeyword {
+	// Check if token literal matches the keyword (case-insensitive)
+	if strings.ToUpper(p.currentToken.Literal) == upperKeyword {
 		return true
 	}
 	return false

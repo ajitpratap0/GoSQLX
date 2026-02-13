@@ -17,7 +17,7 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 	if name == nil {
 		return nil, goerrors.ExpectedTokenError(
 			"column name",
-			string(p.currentToken.Type),
+			tokenTypeString(p.currentToken.Type),
 			p.currentLocation(),
 			"",
 		)
@@ -28,7 +28,7 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 	if dataType == nil {
 		return nil, goerrors.ExpectedTokenError(
 			"data type",
-			string(p.currentToken.Type),
+			tokenTypeString(p.currentToken.Type),
 			p.currentLocation(),
 			"",
 		)
@@ -650,7 +650,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			if !p.isType(models.TokenTypeJoin) {
 				return nil, goerrors.ExpectedTokenError(
 					"JOIN after "+joinType,
-					string(p.currentToken.Type),
+					tokenTypeString(p.currentToken.Type),
 					p.currentLocation(),
 					"",
 				)
@@ -704,7 +704,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 				if err != nil {
 					return nil, goerrors.ExpectedTokenError(
 						"table name after "+joinType+" JOIN",
-						string(p.currentToken.Type),
+						tokenTypeString(p.currentToken.Type),
 						p.currentLocation(),
 						"",
 					)
@@ -873,7 +873,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			} else if p.isType(models.TokenTypeCube) {
 				expr, err = p.parseCube()
 			} else if p.currentToken.Literal == "GROUPING SETS" ||
-				(p.isType(models.TokenTypeGrouping) && p.peekToken().Type == "SETS") {
+				(p.isType(models.TokenTypeGrouping) && p.peekToken().Type == models.TokenTypeSets) {
 				expr, err = p.parseGroupingSets()
 			} else {
 				expr, err = p.parseExpression()
@@ -896,14 +896,14 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		if p.isType(models.TokenTypeWith) {
 			nextTok := p.peekToken()
 			switch nextTok.Type {
-			case "ROLLUP":
+			case models.TokenTypeRollup:
 				p.advance() // Consume WITH
 				p.advance() // Consume ROLLUP
 				// Wrap all existing expressions in a RollupExpression
 				groupByExprs = []ast.Expression{
 					&ast.RollupExpression{Expressions: groupByExprs},
 				}
-			case "CUBE":
+			case models.TokenTypeCube:
 				p.advance() // Consume WITH
 				p.advance() // Consume CUBE
 				// Wrap all existing expressions in a CubeExpression
@@ -984,7 +984,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		p.advance() // Consume LIMIT
 
 		// Parse LIMIT value
-		if p.currentToken.Type != "INT" {
+		if !p.isIntLiteral() {
 			return nil, p.expectedError("integer for LIMIT")
 		}
 
@@ -1002,7 +1002,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		p.advance() // Consume OFFSET
 
 		// Parse OFFSET value
-		if p.currentToken.Type != "INT" {
+		if !p.isIntLiteral() {
 			return nil, p.expectedError("integer for OFFSET")
 		}
 
@@ -1066,7 +1066,7 @@ func (p *Parser) parseSelectWithSetOperations() (ast.Statement, error) {
 	// Check for set operations (UNION, EXCEPT, INTERSECT)
 	for p.isAnyType(models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect) {
 		// Parse the set operation type
-		operationType := p.currentToken.Type
+		operationLiteral := p.currentToken.Literal
 		p.advance()
 
 		// Check for ALL keyword
@@ -1085,7 +1085,7 @@ func (p *Parser) parseSelectWithSetOperations() (ast.Statement, error) {
 		rightStmt, err := p.parseSelectStatement()
 		if err != nil {
 			return nil, goerrors.InvalidSetOperationError(
-				string(operationType),
+				operationLiteral,
 				fmt.Sprintf("error parsing right SELECT: %v", err),
 				p.currentLocation(),
 				"",
@@ -1095,7 +1095,7 @@ func (p *Parser) parseSelectWithSetOperations() (ast.Statement, error) {
 		// Create the set operation with left as the accumulated result
 		setOp := &ast.SetOperation{
 			Left:     leftStmt,
-			Operator: string(operationType),
+			Operator: operationLiteral,
 			All:      all,
 			Right:    rightStmt,
 		}
@@ -1133,7 +1133,7 @@ func (p *Parser) parseFetchClause() (*ast.FetchClause, error) {
 	}
 
 	// Parse the count value
-	if p.currentToken.Type != "INT" {
+	if !p.isIntLiteral() {
 		return nil, p.expectedError("integer for FETCH count")
 	}
 

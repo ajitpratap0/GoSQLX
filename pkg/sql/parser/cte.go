@@ -108,8 +108,8 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 		)
 	}
 
-	// Parse CTE name (supports double-quoted identifiers)
-	if !p.isIdentifier() {
+	// Parse CTE name (supports double-quoted identifiers and non-reserved keywords)
+	if !p.isIdentifier() && !p.isNonReservedKeyword() {
 		return nil, p.expectedError("CTE name")
 	}
 	name := p.currentToken.Literal

@@ -119,7 +119,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 
 	// Parse RETURNING clause if present (PostgreSQL)
 	var returning []ast.Expression
-	if p.isType(models.TokenTypeReturning) || p.currentToken.Literal == "RETURNING" {
+	if p.isType(models.TokenTypeReturning) {
 		p.advance() // Consume RETURNING
 		var err error
 		returning, err = p.parseReturningColumns()
@@ -171,20 +171,19 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 
 		// Parse value expression
 		var expr ast.Expression
-		switch p.currentToken.Type {
-		case "STRING":
+		if p.isStringLiteral() {
 			expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "string"}
 			p.advance()
-		case "INT":
+		} else if p.isIntLiteral() {
 			expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "int"}
 			p.advance()
-		case "FLOAT":
+		} else if p.isFloatLiteral() {
 			expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "float"}
 			p.advance()
-		case "TRUE", "FALSE":
+		} else if p.isBooleanLiteral() {
 			expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "bool"}
 			p.advance()
-		default:
+		} else {
 			var err error
 			expr, err = p.parseExpression()
 			if err != nil {
@@ -220,7 +219,7 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 
 	// Parse RETURNING clause if present (PostgreSQL)
 	var returning []ast.Expression
-	if p.isType(models.TokenTypeReturning) || p.currentToken.Literal == "RETURNING" {
+	if p.isType(models.TokenTypeReturning) {
 		p.advance() // Consume RETURNING
 		var err error
 		returning, err = p.parseReturningColumns()
@@ -267,7 +266,7 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 
 	// Parse RETURNING clause if present (PostgreSQL)
 	var returning []ast.Expression
-	if p.isType(models.TokenTypeReturning) || p.currentToken.Literal == "RETURNING" {
+	if p.isType(models.TokenTypeReturning) {
 		p.advance() // Consume RETURNING
 		var err error
 		returning, err = p.parseReturningColumns()

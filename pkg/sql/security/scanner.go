@@ -524,10 +524,6 @@ func isSecurityIdentStart(b byte) bool {
 	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || b == '_'
 }
 
-func isSecurityIdentChar(b byte) bool {
-	return isSecurityIdentStart(b) || (b >= '0' && b <= '9')
-}
-
 func (s *Scanner) ScanSQL(sql string) *ScanResult {
 	result := &ScanResult{
 		Findings: make([]Finding, 0),

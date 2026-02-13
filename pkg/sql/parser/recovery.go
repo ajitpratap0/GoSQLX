@@ -175,11 +175,10 @@ func (p *Parser) parseWithRecovery(tokens []token.Token) ([]ast.Statement, []err
 			// Create a ParseError with position info, preserving original error
 			loc := p.currentLocation()
 			pe := &ParseError{
-				Msg:      err.Error(),
-				TokenIdx: stmtStartPos,
-				Line:     loc.Line,
-				Column:   loc.Column,
-				Cause:    err,
+				Msg:       err.Error(),
+				TokenIdx:  savedPos,
+				Line:      loc.Line,
+				Column:    loc.Column,
 			}
 			if stmtStartPos < len(tokens) {
 				pe.TokenType = string(tokens[stmtStartPos].Type)

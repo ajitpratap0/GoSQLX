@@ -820,6 +820,7 @@ var stringTypeToModelType = map[token.Type]models.TokenType{ //nolint:staticchec
 	"IS":      models.TokenTypeIs,
 	"IN":      models.TokenTypeIn,
 	"LIKE":    models.TokenTypeLike,
+	"ILIKE":   models.TokenTypeILike,
 	"BETWEEN": models.TokenTypeBetween,
 	"EXISTS":  models.TokenTypeExists,
 	"ANY":     models.TokenTypeAny,
@@ -979,6 +980,20 @@ func (p *Parser) isIdentifier() bool {
 	return p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeDoubleQuotedString)
 }
 
+// isStringLiteral checks if the current token is a string literal.
+// Handles all string token subtypes (single-quoted, dollar-quoted, etc.)
+// Also handles string fallback for tokens created without ModelType.
+func (p *Parser) isStringLiteral() bool {
+	if p.currentToken.ModelType != modelTypeUnset {
+		switch p.currentToken.ModelType {
+		case models.TokenTypeString, models.TokenTypeSingleQuotedString, models.TokenTypeDollarQuotedString:
+			return true
+		}
+		return false
+	}
+	return p.currentToken.Type == "STRING"
+}
+
 // isComparisonOperator checks if the current token is a comparison operator using O(1) switch.
 func (p *Parser) isComparisonOperator() bool {
 	switch p.currentToken.ModelType {
@@ -1047,7 +1062,7 @@ func (p *Parser) parseObjectName() ast.ObjectName {
 
 // parseStringLiteral parses a string literal
 func (p *Parser) parseStringLiteral() string {
-	if !p.isType(models.TokenTypeString) {
+	if !p.isStringLiteral() {
 		return ""
 	}
 	value := p.currentToken.Literal

@@ -391,9 +391,10 @@ const (
 	TokenTypeIllegal    TokenType = 500 // For parser compatibility with token.ILLEGAL
 	TokenTypeAsterisk   TokenType = 501 // Explicit asterisk token type
 	TokenTypeDoublePipe TokenType = 502 // || concatenation operator
+	TokenTypeILike      TokenType = 503 // ILIKE (case-insensitive LIKE, PostgreSQL)
 )
 
-// String returns a human-readable string representation of the token type.
+// String returns a string representation of the token type.
 //
 // Provides names for debugging, error messages, and logging.
 // Uses a switch statement for O(1) compiled jump-table lookup.

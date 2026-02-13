@@ -569,6 +569,7 @@ func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck /
 		models.TokenTypeIn:      "IN",
 		models.TokenTypeBetween: "BETWEEN",
 		models.TokenTypeLike:    "LIKE",
+		models.TokenTypeILike:   "ILIKE",
 		models.TokenTypeIs:      "IS",
 		models.TokenTypeNot:     "NOT",
 		models.TokenTypeNull:    "NULL",

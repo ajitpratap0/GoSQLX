@@ -78,6 +78,7 @@ var keywordTokenTypes = map[string]models.TokenType{
 	"BY":       models.TokenTypeBy,
 	"IN":       models.TokenTypeIn,
 	"LIKE":     models.TokenTypeLike,
+	"ILIKE":    models.TokenTypeILike,
 	"BETWEEN":  models.TokenTypeBetween,
 	"IS":       models.TokenTypeIs,
 	"NULL":     models.TokenTypeNull,

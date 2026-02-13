@@ -90,7 +90,7 @@ func (p *Parser) parseGroupingSets() (*ast.GroupingSetsExpression, error) {
 	} else if p.isType(models.TokenTypeGrouping) {
 		p.advance() // Consume GROUPING
 		// Check for SETS - using literal comparison as fallback since SETS is not a standalone token type
-		if p.currentToken.Literal != "SETS" && p.currentToken.Type != "SETS" {
+		if p.currentToken.Literal != "SETS" && !p.isType(models.TokenTypeSets) {
 			return nil, p.expectedError("SETS after GROUPING")
 		}
 		p.advance() // Consume SETS

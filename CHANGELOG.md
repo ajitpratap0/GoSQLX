@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added - Query Optimization Engine (PR #210, closes #81)
-- New `pkg/optimizer/` package with 12 optimization rules
+- New `pkg/advisor/` package with 12 optimization rules
 - Rules OPT-001 through OPT-008: SELECT * detection, missing WHERE, Cartesian products, DISTINCT overuse, subquery in WHERE, OR in WHERE, leading wildcard LIKE, function on indexed column
 - Rules OPT-009 through OPT-012: N+1 query detection, index recommendations, join order optimization, query cost estimation
 - CLI command `gosqlx optimize` with text/JSON output

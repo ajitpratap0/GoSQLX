@@ -1,4 +1,4 @@
-package optimizer
+package advisor
 
 import (
 	"testing"

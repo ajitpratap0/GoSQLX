@@ -425,7 +425,7 @@ func (u *UpdateStatement) SQL() string {
 	}
 
 	sb.WriteString(" SET ")
-	updates := u.Updates
+	updates := u.Assignments
 	if len(updates) == 0 {
 		updates = u.Assignments
 	}

@@ -7,6 +7,7 @@ package ast
 import (
 	"fmt"
 	"strings"
+	"unicode"
 )
 
 // SQL returns the SQL string representation of the AST.
@@ -26,9 +27,50 @@ func (a AST) SQL() string {
 
 func (i *Identifier) SQL() string {
 	if i.Table != "" {
-		return i.Table + "." + i.Name
+		return safeIdentifier(i.Table) + "." + safeIdentifier(i.Name)
 	}
-	return i.Name
+	return safeIdentifier(i.Name)
+}
+
+// safeIdentifier returns the identifier unchanged if it contains only safe
+// characters (letters, digits, underscores, dots, *). Otherwise it double-
+// quotes it with proper escaping to prevent SQL identifier injection.
+func safeIdentifier(name string) string {
+	if name == "" {
+		return `""`
+	}
+	for _, r := range name {
+		if !(r == '_' || r == '*' || r == '.' || unicode.IsLetter(r) || unicode.IsDigit(r)) {
+			return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
+		}
+	}
+	return name
+}
+
+// escapeStringLiteral escapes a string for safe inclusion in a single-quoted
+// SQL literal, handling characters that can lead to SQL injection.
+func escapeStringLiteral(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch r {
+		case '\'':
+			b.WriteString("''")
+		case '\\':
+			b.WriteString(`\\`)
+		case '\x00':
+			// Drop null bytes — invalid in SQL string literals.
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\x1a': // Ctrl-Z (EOF on Windows)
+			b.WriteString(`\Z`)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func (l *LiteralValue) SQL() string {
@@ -37,11 +79,7 @@ func (l *LiteralValue) SQL() string {
 	}
 	switch strings.ToUpper(l.Type) {
 	case "STRING":
-		s := fmt.Sprintf("%v", l.Value)
-		s = strings.ReplaceAll(s, "\x00", "") // strip null bytes
-		s = strings.ReplaceAll(s, `\`, `\\`)  // escape backslashes
-		s = strings.ReplaceAll(s, "'", "''")  // escape single quotes
-		return fmt.Sprintf("'%s'", s)
+		return "'" + escapeStringLiteral(fmt.Sprintf("%v", l.Value)) + "'"
 	case "BOOLEAN":
 		return strings.ToUpper(fmt.Sprintf("%v", l.Value))
 	default:

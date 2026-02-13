@@ -59,8 +59,7 @@ func (b *BinaryExpression) SQL() string {
 
 	upperOp := strings.ToUpper(op)
 
-	// Handle IS NULL / IS NOT NULL — operator already contains NULL,
-	// so do not append the right-hand side again.
+	// Handle IS NULL / IS NOT NULL (right side is NULL literal)
 	if upperOp == "IS NULL" || upperOp == "IS NOT NULL" {
 		return fmt.Sprintf("%s %s", left, upperOp)
 	}
@@ -75,7 +74,6 @@ func (b *BinaryExpression) SQL() string {
 		}
 	}
 
-	// Logical operators get spaces, others too
 	return fmt.Sprintf("%s %s %s", left, op, right)
 }
 
@@ -269,6 +267,7 @@ func (a *ArraySliceExpression) SQL() string {
 }
 
 // GROUP BY advanced expressions
+
 func (r *RollupExpression) SQL() string {
 	return "ROLLUP(" + exprListSQL(r.Expressions) + ")"
 }
@@ -432,7 +431,7 @@ func (u *UpdateStatement) SQL() string {
 	}
 
 	sb.WriteString(" SET ")
-	updates := u.Assignments
+	updates := u.Updates
 	if len(updates) == 0 {
 		updates = u.Assignments
 	}
@@ -771,6 +770,7 @@ func (m *MergeStatement) SQL() string {
 }
 
 // DML types from dml.go
+
 func (s *Select) SQL() string {
 	var sb strings.Builder
 	sb.WriteString("SELECT ")
@@ -887,7 +887,6 @@ func exprSQL(e Expression) string {
 	if s, ok := e.(interface{ SQL() string }); ok {
 		return s.SQL()
 	}
-	// Fallback to TokenLiteral
 	return e.TokenLiteral()
 }
 

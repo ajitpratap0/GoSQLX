@@ -994,7 +994,6 @@ func (p *Parser) isStringLiteral() bool {
 	return p.currentToken.Type == "STRING"
 }
 
-
 // isComparisonOperator checks if the current token is a comparison operator using O(1) switch.
 func (p *Parser) isComparisonOperator() bool {
 	switch p.currentToken.ModelType {

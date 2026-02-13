@@ -36,7 +36,11 @@ fi
 
 CMD="$CMD --verbose"
 
-START_TIME=$(date +%s%3N)
+if date +%s%3N >/dev/null 2>&1; then
+  START_TIME=$(date +%s%3N)
+else
+  START_TIME=$(python3 -c 'import time; print(int(time.time()*1000))')
+fi
 VALIDATED=0
 INVALID=0
 
@@ -59,7 +63,11 @@ while IFS= read -r file; do
   fi
 done < "$RUNNER_TEMP/gosqlx-files.txt"
 
-END_TIME=$(date +%s%3N)
+if date +%s%3N >/dev/null 2>&1; then
+  END_TIME=$(date +%s%3N)
+else
+  END_TIME=$(python3 -c 'import time; print(int(time.time()*1000))')
+fi
 DURATION=$((END_TIME - START_TIME))
 
 echo "::notice::Validation complete: $VALIDATED valid, $INVALID invalid files (${DURATION}ms)"

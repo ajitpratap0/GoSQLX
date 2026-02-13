@@ -47,10 +47,6 @@ func TestCorpus(t *testing.T) {
 
 	t.Logf("found %d SQL corpus files", len(files))
 
-	passed := 0
-	failed := 0
-	total := 0
-
 	for _, file := range files {
 		file := file // capture
 		relPath, _ := filepath.Rel(corpusRoot, file)
@@ -69,21 +65,16 @@ func TestCorpus(t *testing.T) {
 				t.Skip("no statements found in file")
 			}
 
-			fileFailed := false
 			for i, stmt := range statements {
 				stmt = strings.TrimSpace(stmt)
 				if stmt == "" {
 					continue
 				}
-				total++
-
 				tkz := tokenizer.GetTokenizer()
 				tokens, err := tkz.Tokenize([]byte(stmt))
 				tokenizer.PutTokenizer(tkz)
 				if err != nil {
 					t.Skipf("statement %d: tokenize error: %v\n  SQL: %.200s", i+1, err, stmt)
-					fileFailed = true
-					failed++
 					continue
 				}
 
@@ -91,8 +82,6 @@ func TestCorpus(t *testing.T) {
 				result, err := converter.Convert(tokens)
 				if err != nil {
 					t.Skipf("statement %d: token conversion error: %v\n  SQL: %.200s", i+1, err, stmt)
-					fileFailed = true
-					failed++
 					continue
 				}
 
@@ -101,13 +90,8 @@ func TestCorpus(t *testing.T) {
 				PutParser(p)
 				if err != nil {
 					t.Skipf("statement %d: parse error: %v\n  SQL: %.200s", i+1, err, stmt)
-					fileFailed = true
-					failed++
-				} else {
-					passed++
 				}
 			}
-			_ = fileFailed
 		})
 	}
 }

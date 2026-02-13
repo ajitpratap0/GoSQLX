@@ -2,6 +2,8 @@ package tokenizer
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
@@ -615,29 +617,14 @@ func TestNewWithKeywords(t *testing.T) {
 	}
 }
 
-// mockDebugLogger is a simple mock implementation of DebugLogger
-type mockDebugLogger struct {
-	messages []string
-}
-
-func (m *mockDebugLogger) Debug(format string, args ...interface{}) {
-	// Store messages for potential verification
-	if m.messages == nil {
-		m.messages = make([]string, 0)
-	}
-	// We don't actually need to store them for this test
-}
-
-// TestSetDebugLogger tests the debug logger functionality
-func TestSetDebugLogger(t *testing.T) {
+// TestSetLogger tests the slog-based logger functionality
+func TestSetLogger(t *testing.T) {
 	tkz := GetTokenizer()
 	defer PutTokenizer(tkz)
 
-	// Create a mock logger
-	logger := &mockDebugLogger{}
-
-	// Set debug logger (should not panic)
-	tkz.SetDebugLogger(logger)
+	// Set a debug-level slog logger
+	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	tkz.SetLogger(logger)
 
 	// Test that tokenization still works with logger set
 	input := "SELECT * FROM users"
@@ -651,7 +638,7 @@ func TestSetDebugLogger(t *testing.T) {
 	}
 
 	// Set logger to nil (should also work)
-	tkz.SetDebugLogger(nil)
+	tkz.SetLogger(nil)
 
 	// Test again
 	tokens, err = tkz.Tokenize([]byte(input))

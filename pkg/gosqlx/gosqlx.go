@@ -615,3 +615,31 @@ func Format(sql string, options FormatOptions) (string, error) {
 
 	return result, nil
 }
+
+// ParseWithRecovery tokenizes and parses SQL with error recovery, returning
+// partial AST statements and all collected errors. Unlike Parse, it does not
+// stop at the first error — it synchronises and continues, collecting every
+// error it can find. This is ideal for IDE / LSP use-cases where the user
+// wants to see all diagnostics at once.
+//
+// Thread Safety: safe for concurrent use; each call uses pooled objects.
+func ParseWithRecovery(sql string) ([]ast.Statement, []error) {
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+
+	tokens, err := tkz.Tokenize([]byte(sql))
+	if err != nil {
+		return nil, []error{fmt.Errorf("tokenization failed: %w", err)}
+	}
+
+	converter := parser.NewTokenConverter()
+	result, err := converter.Convert(tokens)
+	if err != nil {
+		return nil, []error{fmt.Errorf("token conversion failed: %w", err)}
+	}
+
+	p := parser.NewParser()
+	defer p.Release()
+
+	return p.ParseWithRecovery(result.Tokens)
+}

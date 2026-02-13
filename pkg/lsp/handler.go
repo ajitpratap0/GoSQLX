@@ -10,6 +10,7 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 )
 
 // Handler processes LSP requests and notifications.
@@ -334,11 +335,11 @@ func (h *Handler) handleDidSave(params json.RawMessage) {
 func (h *Handler) validateDocument(uri, content string, version int) {
 	var diagnostics []Diagnostic
 
-	// Use high-level gosqlx.Parse which handles tokenization and parsing
-	_, err := gosqlx.Parse(content)
-	if err != nil {
-		// Parse error - create diagnostic with error code if available
-		diag := h.createDiagnosticFromError(content, err, 0)
+	// Use ParseWithRecovery for multi-error diagnostics so the user sees
+	// every problem at once instead of fixing them one-by-one.
+	_, errs := gosqlx.ParseWithRecovery(content)
+	for i, err := range errs {
+		diag := h.createDiagnosticFromError(content, err, i)
 		diagnostics = append(diagnostics, diag)
 	}
 
@@ -376,8 +377,18 @@ func (h *Handler) createDiagnosticFromError(content string, err error, defaultLi
 	var code interface{}
 	errMsg := err.Error()
 
-	// Extract position and code from structured error if available
-	if e, ok := err.(*errors.Error); ok {
+	// Extract position from recovery ParseError if available
+	if pe, ok := err.(*parser.ParseError); ok {
+		line = pe.Line - 1
+		if line < 0 {
+			line = 0
+		}
+		char = pe.Column - 1
+		if char < 0 {
+			char = 0
+		}
+		errMsg = pe.Msg
+	} else if e, ok := err.(*errors.Error); ok {
 		// Use position from structured error (convert to 0-based)
 		line = e.Location.Line - 1
 		if line < 0 {

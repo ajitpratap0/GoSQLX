@@ -12,11 +12,6 @@ inputs:
     required: true
     default: '**/*.sql'
 
-  sql-files:
-    description: 'Alias for files - glob pattern for SQL files (e.g., "**/*.sql")'
-    required: false
-    default: '**/*.sql'
-
   rules:
     description: 'Comma-separated list of lint rule codes to enable (e.g., "L007,L006"). See docs/LINTING_RULES.md for the full list.'
     required: false

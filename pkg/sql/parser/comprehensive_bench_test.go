@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"runtime"
 	"sync"
 	"testing"
@@ -13,19 +14,21 @@ import (
 // Generate complex token sets for comprehensive testing
 func generateLargeSelectTokens(numColumns int) []token.Token {
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 	}
 
 	// Add multiple columns
 	for i := 0; i < numColumns; i++ {
 		if i > 0 {
-			tokens = append(tokens, token.Token{Type: ",", Literal: ","})
+			tokens = append(tokens, token.Token{Type: ",", ModelType: models.TokenTypeComma, Literal: ","})
 		}
-		tokens = append(tokens, token.Token{Type: "IDENT", Literal: fmt.Sprintf("col%d", i)})
+		tokens = append(tokens, token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: fmt.Sprintf("col%d", i)})
 	}
 
 	tokens = append(tokens, []token.Token{
-		{Type: "FROM", Literal: "FROM"},
+		{Type: "FROM",
+			ModelType: models.TokenTypeFrom, Literal: "FROM"},
 		{Type: "IDENT", Literal: "large_table"},
 		{Type: "WHERE", Literal: "WHERE"},
 		{Type: "IDENT", Literal: "active"},
@@ -39,7 +42,8 @@ func generateLargeSelectTokens(numColumns int) []token.Token {
 
 func generateComplexJoinTokens(numJoins int) []token.Token {
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "IDENT", Literal: "t1"},
 		{Type: ".", Literal: "."},
 		{Type: "IDENT", Literal: "id"},
@@ -48,7 +52,8 @@ func generateComplexJoinTokens(numJoins int) []token.Token {
 	// Add columns from joined tables
 	for i := 0; i < numJoins; i++ {
 		colTokens := []token.Token{
-			{Type: ",", Literal: ","},
+			{Type: ",",
+				ModelType: models.TokenTypeComma, Literal: ","},
 			{Type: "IDENT", Literal: fmt.Sprintf("t%d", i+2)},
 			{Type: ".", Literal: "."},
 			{Type: "IDENT", Literal: "name"},
@@ -58,7 +63,8 @@ func generateComplexJoinTokens(numJoins int) []token.Token {
 
 	// Add FROM clause
 	tokens = append(tokens, []token.Token{
-		{Type: "FROM", Literal: "FROM"},
+		{Type: "FROM",
+			ModelType: models.TokenTypeFrom, Literal: "FROM"},
 		{Type: "IDENT", Literal: "table1"},
 		{Type: "IDENT", Literal: "t1"},
 	}...)
@@ -66,7 +72,8 @@ func generateComplexJoinTokens(numJoins int) []token.Token {
 	// Add multiple joins
 	for i := 0; i < numJoins; i++ {
 		joinTokens := []token.Token{
-			{Type: "JOIN", Literal: "JOIN"},
+			{Type: "JOIN",
+				ModelType: models.TokenTypeJoin, Literal: "JOIN"},
 			{Type: "IDENT", Literal: fmt.Sprintf("table%d", i+2)},
 			{Type: "IDENT", Literal: fmt.Sprintf("t%d", i+2)},
 			{Type: "ON", Literal: "ON"},
@@ -82,7 +89,7 @@ func generateComplexJoinTokens(numJoins int) []token.Token {
 	}
 
 	// Add EOF token
-	tokens = append(tokens, token.Token{Type: "EOF", Literal: ""})
+	tokens = append(tokens, token.Token{Type: "EOF", ModelType: models.TokenTypeEOF, Literal: ""})
 
 	return tokens
 }
@@ -108,7 +115,8 @@ func BenchmarkParserComplexity(b *testing.B) {
 	b.Run("SingleJoin", func(b *testing.B) {
 		// Use existing complex SELECT tokens which include JOIN
 		tokens := []token.Token{
-			{Type: "SELECT", Literal: "SELECT"},
+			{Type: "SELECT",
+				ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 			{Type: "IDENT", Literal: "u"},
 			{Type: ".", Literal: "."},
 			{Type: "IDENT", Literal: "id"},
@@ -137,7 +145,8 @@ func BenchmarkParserComplexity(b *testing.B) {
 
 	b.Run("SimpleWhere", func(b *testing.B) {
 		tokens := []token.Token{
-			{Type: "SELECT", Literal: "SELECT"},
+			{Type: "SELECT",
+				ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 			{Type: "IDENT", Literal: "id"},
 			{Type: "FROM", Literal: "FROM"},
 			{Type: "IDENT", Literal: "users"},
@@ -329,7 +338,8 @@ func BenchmarkParserStatementTypes(b *testing.B) {
 		{
 			name: "INSERT_Simple",
 			tokens: []token.Token{
-				{Type: "INSERT", Literal: "INSERT"},
+				{Type: "INSERT",
+					ModelType: models.TokenTypeInsert, Literal: "INSERT"},
 				{Type: "INTO", Literal: "INTO"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "(", Literal: "("},
@@ -345,7 +355,8 @@ func BenchmarkParserStatementTypes(b *testing.B) {
 		{
 			name: "UPDATE_Simple",
 			tokens: []token.Token{
-				{Type: "UPDATE", Literal: "UPDATE"},
+				{Type: "UPDATE",
+					ModelType: models.TokenTypeUpdate, Literal: "UPDATE"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "SET", Literal: "SET"},
 				{Type: "IDENT", Literal: "active"},
@@ -361,7 +372,8 @@ func BenchmarkParserStatementTypes(b *testing.B) {
 		{
 			name: "DELETE_Simple",
 			tokens: []token.Token{
-				{Type: "DELETE", Literal: "DELETE"},
+				{Type: "DELETE",
+					ModelType: models.TokenTypeDelete, Literal: "DELETE"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "users"},
 				{Type: "WHERE", Literal: "WHERE"},
@@ -390,7 +402,8 @@ func BenchmarkParserMixedWorkload(b *testing.B) {
 		generateLargeSelectTokens(5),
 		generateLargeSelectTokens(20),
 		{
-			{Type: "INSERT", Literal: "INSERT"},
+			{Type: "INSERT",
+				ModelType: models.TokenTypeInsert, Literal: "INSERT"},
 			{Type: "INTO", Literal: "INTO"},
 			{Type: "IDENT", Literal: "users"},
 			{Type: "(", Literal: "("},

@@ -12,7 +12,8 @@ import (
 func TestParser_BetweenExpression(t *testing.T) {
 	// SELECT * FROM products WHERE price BETWEEN 10 AND 100
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "products"},
@@ -58,7 +59,8 @@ func TestParser_BetweenExpression(t *testing.T) {
 func TestParser_NotBetweenExpression(t *testing.T) {
 	// SELECT * FROM products WHERE price NOT BETWEEN 10 AND 100
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "products"},
@@ -92,7 +94,8 @@ func TestParser_NotBetweenExpression(t *testing.T) {
 func TestParser_InExpression(t *testing.T) {
 	// SELECT * FROM orders WHERE status IN ('pending', 'processing', 'shipped')
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "orders"},
@@ -136,7 +139,8 @@ func TestParser_InExpression(t *testing.T) {
 func TestParser_NotInExpression(t *testing.T) {
 	// SELECT * FROM orders WHERE status NOT IN ('cancelled')
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "orders"},
@@ -170,7 +174,8 @@ func TestParser_NotInExpression(t *testing.T) {
 func TestParser_LikeExpression(t *testing.T) {
 	// SELECT * FROM users WHERE email LIKE '%@example.com'
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "users"},
@@ -208,7 +213,8 @@ func TestParser_LikeExpression(t *testing.T) {
 func TestParser_NotLikeExpression(t *testing.T) {
 	// SELECT * FROM users WHERE name NOT LIKE 'Admin%'
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "users"},
@@ -240,7 +246,8 @@ func TestParser_NotLikeExpression(t *testing.T) {
 func TestParser_IsNullExpression(t *testing.T) {
 	// SELECT * FROM customers WHERE deleted_at IS NULL
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "customers"},
@@ -278,7 +285,8 @@ func TestParser_IsNullExpression(t *testing.T) {
 func TestParser_IsNotNullExpression(t *testing.T) {
 	// SELECT * FROM posts WHERE published_at IS NOT NULL
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "posts"},
@@ -314,7 +322,8 @@ func TestParser_IsNotNullExpression(t *testing.T) {
 func TestParser_BetweenWithIdentifiers(t *testing.T) {
 	// SELECT * FROM events WHERE event_date BETWEEN start_date AND end_date
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "events"},
@@ -355,7 +364,8 @@ func TestParser_BetweenWithIdentifiers(t *testing.T) {
 func TestParser_BetweenWithArithmeticExpressions(t *testing.T) {
 	// SELECT * FROM products WHERE price BETWEEN price * 0.9 AND price * 1.1
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "products"},
@@ -406,7 +416,8 @@ func TestParser_BetweenWithArithmeticExpressions(t *testing.T) {
 func TestParser_BetweenWithAdditionSubtraction(t *testing.T) {
 	// SELECT * FROM orders WHERE total BETWEEN subtotal - 10 AND subtotal + 10
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "orders"},
@@ -457,7 +468,8 @@ func TestParser_BetweenWithAdditionSubtraction(t *testing.T) {
 func TestParser_BetweenWithFunctionCallsAndArithmetic(t *testing.T) {
 	// SELECT * FROM orders WHERE amount BETWEEN MIN(price) AND MAX(price) * 2
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "orders"},
@@ -509,7 +521,8 @@ func TestParser_BetweenWithFunctionCallsAndArithmetic(t *testing.T) {
 func TestParser_InWithNumbers(t *testing.T) {
 	// SELECT * FROM products WHERE category_id IN (1, 2, 3)
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "products"},
@@ -558,7 +571,8 @@ func TestParser_InWithNumbers(t *testing.T) {
 func TestParser_TupleInExpression(t *testing.T) {
 	// SELECT * FROM orders WHERE (user_id, status) IN ((1, 'active'), (2, 'pending'))
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "orders"},
@@ -637,7 +651,8 @@ func TestParser_TupleInExpression(t *testing.T) {
 func TestParser_TupleNotInExpression(t *testing.T) {
 	// SELECT * FROM orders WHERE (user_id, status) NOT IN ((1, 'cancelled'))
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "orders"},
@@ -692,7 +707,8 @@ func TestParser_TupleNotInExpression(t *testing.T) {
 func TestParser_SimpleTupleExpression(t *testing.T) {
 	// SELECT (1, 2, 3)
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "(", Literal: "("},
 		{Type: "INT", Literal: "1"},
 		{Type: ",", Literal: ","},
@@ -731,7 +747,8 @@ func TestParser_CombinedOperators(t *testing.T) {
 	// SELECT * FROM users WHERE age BETWEEN 18 AND 65 AND status IN ('active') AND name LIKE 'J%' AND deleted_at IS NULL
 	// This is a complex test combining all operators with AND
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "*", Literal: "*"},
 		{Type: "FROM", Literal: "FROM"},
 		{Type: "IDENT", Literal: "users"},
@@ -783,7 +800,8 @@ func TestParser_OperatorErrors(t *testing.T) {
 		{
 			name: "BETWEEN without AND",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "t"},
@@ -797,7 +815,8 @@ func TestParser_OperatorErrors(t *testing.T) {
 		{
 			name: "IN without closing paren",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "t"},
@@ -812,7 +831,8 @@ func TestParser_OperatorErrors(t *testing.T) {
 		{
 			name: "IS without NULL",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
+				{Type: "SELECT",
+					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 				{Type: "*", Literal: "*"},
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "t"},
@@ -911,7 +931,8 @@ func TestParser_StringConcatenation(t *testing.T) {
 func TestParser_StringConcatWithColumns(t *testing.T) {
 	// SELECT first_name || ' ' || last_name FROM users
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "IDENT", Literal: "first_name"},
 		{Type: "STRING_CONCAT", Literal: "||"},
 		{Type: "STRING", Literal: " "},
@@ -950,7 +971,8 @@ func TestParser_StringConcatWithColumns(t *testing.T) {
 func TestParser_StringConcatWithAlias(t *testing.T) {
 	// SELECT first_name || last_name AS fullname FROM users
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "IDENT", Literal: "first_name"},
 		{Type: "STRING_CONCAT", Literal: "||"},
 		{Type: "IDENT", Literal: "last_name"},

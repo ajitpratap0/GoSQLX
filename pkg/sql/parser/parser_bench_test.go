@@ -264,20 +264,20 @@ func BenchmarkParser_RecursionDepthCheck(b *testing.B) {
 			name: "ModerateNesting",
 			tokens: func() []token.Token {
 				// Build a moderately nested query (20 levels) - realistic usage
-				tokens := []token.Token{{Type: "SELECT", Literal: "SELECT"}}
+				tokens := []token.Token{{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"}}
 				for i := 0; i < 20; i++ {
 					tokens = append(tokens,
-						token.Token{Type: "IDENT", Literal: "func"},
-						token.Token{Type: "(", Literal: "("},
+						token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "func"},
+						token.Token{Type: "(", ModelType: models.TokenTypeLParen, Literal: "("},
 					)
 				}
-				tokens = append(tokens, token.Token{Type: "IDENT", Literal: "x"})
+				tokens = append(tokens, token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "x"})
 				for i := 0; i < 20; i++ {
-					tokens = append(tokens, token.Token{Type: ")", Literal: ")"})
+					tokens = append(tokens, token.Token{Type: ")", ModelType: models.TokenTypeRParen, Literal: ")"})
 				}
 				tokens = append(tokens,
-					token.Token{Type: "FROM", Literal: "FROM"},
-					token.Token{Type: "IDENT", Literal: "t"},
+					token.Token{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
+					token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "t"},
 				)
 				return tokens
 			}(),
@@ -287,20 +287,20 @@ func BenchmarkParser_RecursionDepthCheck(b *testing.B) {
 			tokens: func() []token.Token {
 				// Build a deeply nested query (80 levels) - approaching limit
 				// Tests performance near MaxRecursionDepth (100 levels)
-				tokens := []token.Token{{Type: "SELECT", Literal: "SELECT"}}
+				tokens := []token.Token{{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"}}
 				for i := 0; i < 80; i++ {
 					tokens = append(tokens,
-						token.Token{Type: "IDENT", Literal: "func"},
-						token.Token{Type: "(", Literal: "("},
+						token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "func"},
+						token.Token{Type: "(", ModelType: models.TokenTypeLParen, Literal: "("},
 					)
 				}
-				tokens = append(tokens, token.Token{Type: "IDENT", Literal: "x"})
+				tokens = append(tokens, token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "x"})
 				for i := 0; i < 80; i++ {
-					tokens = append(tokens, token.Token{Type: ")", Literal: ")"})
+					tokens = append(tokens, token.Token{Type: ")", ModelType: models.TokenTypeRParen, Literal: ")"})
 				}
 				tokens = append(tokens,
-					token.Token{Type: "FROM", Literal: "FROM"},
-					token.Token{Type: "IDENT", Literal: "t"},
+					token.Token{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
+					token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "t"},
 				)
 				return tokens
 			}(),
@@ -310,20 +310,20 @@ func BenchmarkParser_RecursionDepthCheck(b *testing.B) {
 			tokens: func() []token.Token {
 				// Build a very deeply nested query (90 levels) - near limit threshold
 				// Tests performance at 90% of MaxRecursionDepth (100 levels)
-				tokens := []token.Token{{Type: "SELECT", Literal: "SELECT"}}
+				tokens := []token.Token{{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"}}
 				for i := 0; i < 90; i++ {
 					tokens = append(tokens,
-						token.Token{Type: "IDENT", Literal: "func"},
-						token.Token{Type: "(", Literal: "("},
+						token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "func"},
+						token.Token{Type: "(", ModelType: models.TokenTypeLParen, Literal: "("},
 					)
 				}
-				tokens = append(tokens, token.Token{Type: "IDENT", Literal: "x"})
+				tokens = append(tokens, token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "x"})
 				for i := 0; i < 90; i++ {
-					tokens = append(tokens, token.Token{Type: ")", Literal: ")"})
+					tokens = append(tokens, token.Token{Type: ")", ModelType: models.TokenTypeRParen, Literal: ")"})
 				}
 				tokens = append(tokens,
-					token.Token{Type: "FROM", Literal: "FROM"},
-					token.Token{Type: "IDENT", Literal: "t"},
+					token.Token{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
+					token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "t"},
 				)
 				return tokens
 			}(),

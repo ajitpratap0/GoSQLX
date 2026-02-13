@@ -4,6 +4,7 @@
 package parser
 
 import (
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -12,7 +13,8 @@ import (
 
 func TestParser_DistinctOn_Basic(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "DISTINCT", Literal: "DISTINCT"},
 		{Type: "ON", Literal: "ON"},
 		{Type: "(", Literal: "("},
@@ -83,7 +85,8 @@ func TestParser_DistinctOn_Basic(t *testing.T) {
 
 func TestParser_DistinctOn_MultipleColumns(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "DISTINCT", Literal: "DISTINCT"},
 		{Type: "ON", Literal: "ON"},
 		{Type: "(", Literal: "("},
@@ -164,7 +167,8 @@ func TestParser_DistinctOn_MultipleColumns(t *testing.T) {
 
 func TestParser_DistinctOn_WithExpression(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "DISTINCT", Literal: "DISTINCT"},
 		{Type: "ON", Literal: "ON"},
 		{Type: "(", Literal: "("},
@@ -220,7 +224,8 @@ func TestParser_DistinctOn_WithExpression(t *testing.T) {
 
 func TestParser_DistinctOn_WithWhere(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "DISTINCT", Literal: "DISTINCT"},
 		{Type: "ON", Literal: "ON"},
 		{Type: "(", Literal: "("},
@@ -277,7 +282,8 @@ func TestParser_DistinctOn_WithWhere(t *testing.T) {
 
 func TestParser_DistinctOn_QualifiedColumn(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "DISTINCT", Literal: "DISTINCT"},
 		{Type: "ON", Literal: "ON"},
 		{Type: "(", Literal: "("},
@@ -332,7 +338,8 @@ func TestParser_DistinctOn_QualifiedColumn(t *testing.T) {
 
 func TestParser_DistinctWithoutOn_StillWorks(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "DISTINCT", Literal: "DISTINCT"},
 		{Type: "IDENT", Literal: "dept_id"},
 		{Type: ",", Literal: ","},
@@ -379,7 +386,8 @@ func TestParser_DistinctWithoutOn_StillWorks(t *testing.T) {
 
 func TestParser_DistinctOn_ErrorMissingParenthesis(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "DISTINCT", Literal: "DISTINCT"},
 		{Type: "ON", Literal: "ON"},
 		{Type: "IDENT", Literal: "dept_id"},
@@ -398,7 +406,8 @@ func TestParser_DistinctOn_ErrorMissingParenthesis(t *testing.T) {
 
 func TestParser_DistinctOn_ErrorMissingClosingParenthesis(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "DISTINCT", Literal: "DISTINCT"},
 		{Type: "ON", Literal: "ON"},
 		{Type: "(", Literal: "("},
@@ -419,7 +428,8 @@ func TestParser_DistinctOn_ErrorMissingClosingParenthesis(t *testing.T) {
 
 func TestParser_DistinctOn_WithLimit(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
+		{Type: "SELECT",
+			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: "DISTINCT", Literal: "DISTINCT"},
 		{Type: "ON", Literal: "ON"},
 		{Type: "(", Literal: "("},

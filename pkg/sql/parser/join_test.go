@@ -18,66 +18,66 @@ func convertTokens(tokens []models.TokenWithSpan) []token.Token {
 		// Handle compound JOIN tokens by splitting them
 		switch t.Token.Type {
 		case models.TokenTypeInnerJoin:
-			result = append(result, token.Token{Type: "INNER", Literal: "INNER"})
-			result = append(result, token.Token{Type: "JOIN", Literal: "JOIN"})
+			result = append(result, token.Token{Type: "INNER", ModelType: models.TokenTypeInner, Literal: "INNER"})
+			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
 			continue
 		case models.TokenTypeLeftJoin:
-			result = append(result, token.Token{Type: "LEFT", Literal: "LEFT"})
-			result = append(result, token.Token{Type: "JOIN", Literal: "JOIN"})
+			result = append(result, token.Token{Type: "LEFT", ModelType: models.TokenTypeLeft, Literal: "LEFT"})
+			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
 			continue
 		case models.TokenTypeRightJoin:
-			result = append(result, token.Token{Type: "RIGHT", Literal: "RIGHT"})
-			result = append(result, token.Token{Type: "JOIN", Literal: "JOIN"})
+			result = append(result, token.Token{Type: "RIGHT", ModelType: models.TokenTypeRight, Literal: "RIGHT"})
+			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
 			continue
 		case models.TokenTypeOuterJoin:
-			result = append(result, token.Token{Type: "OUTER", Literal: "OUTER"})
-			result = append(result, token.Token{Type: "JOIN", Literal: "JOIN"})
+			result = append(result, token.Token{Type: "OUTER", ModelType: models.TokenTypeOuter, Literal: "OUTER"})
+			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
 			continue
 		}
 
 		// Handle compound tokens that come as strings
 		if t.Token.Value == "INNER JOIN" {
-			result = append(result, token.Token{Type: "INNER", Literal: "INNER"})
-			result = append(result, token.Token{Type: "JOIN", Literal: "JOIN"})
+			result = append(result, token.Token{Type: "INNER", ModelType: models.TokenTypeInner, Literal: "INNER"})
+			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
 			continue
 		} else if t.Token.Value == "LEFT JOIN" {
-			result = append(result, token.Token{Type: "LEFT", Literal: "LEFT"})
-			result = append(result, token.Token{Type: "JOIN", Literal: "JOIN"})
+			result = append(result, token.Token{Type: "LEFT", ModelType: models.TokenTypeLeft, Literal: "LEFT"})
+			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
 			continue
 		} else if t.Token.Value == "RIGHT JOIN" {
-			result = append(result, token.Token{Type: "RIGHT", Literal: "RIGHT"})
-			result = append(result, token.Token{Type: "JOIN", Literal: "JOIN"})
+			result = append(result, token.Token{Type: "RIGHT", ModelType: models.TokenTypeRight, Literal: "RIGHT"})
+			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
 			continue
 		} else if t.Token.Value == "FULL JOIN" || t.Token.Type == models.TokenTypeKeyword && t.Token.Value == "FULL JOIN" {
-			result = append(result, token.Token{Type: "FULL", Literal: "FULL"})
-			result = append(result, token.Token{Type: "JOIN", Literal: "JOIN"})
+			result = append(result, token.Token{Type: "FULL", ModelType: models.TokenTypeFull, Literal: "FULL"})
+			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
 			continue
 		} else if t.Token.Value == "CROSS JOIN" || t.Token.Type == models.TokenTypeKeyword && t.Token.Value == "CROSS JOIN" {
-			result = append(result, token.Token{Type: "CROSS", Literal: "CROSS"})
-			result = append(result, token.Token{Type: "JOIN", Literal: "JOIN"})
+			result = append(result, token.Token{Type: "CROSS", ModelType: models.TokenTypeCross, Literal: "CROSS"})
+			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
 			continue
 		} else if t.Token.Value == "LEFT OUTER JOIN" {
-			result = append(result, token.Token{Type: "LEFT", Literal: "LEFT"})
-			result = append(result, token.Token{Type: "OUTER", Literal: "OUTER"})
-			result = append(result, token.Token{Type: "JOIN", Literal: "JOIN"})
+			result = append(result, token.Token{Type: "LEFT", ModelType: models.TokenTypeLeft, Literal: "LEFT"})
+			result = append(result, token.Token{Type: "OUTER", ModelType: models.TokenTypeOuter, Literal: "OUTER"})
+			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
 			continue
 		} else if t.Token.Value == "RIGHT OUTER JOIN" {
-			result = append(result, token.Token{Type: "RIGHT", Literal: "RIGHT"})
-			result = append(result, token.Token{Type: "OUTER", Literal: "OUTER"})
-			result = append(result, token.Token{Type: "JOIN", Literal: "JOIN"})
+			result = append(result, token.Token{Type: "RIGHT", ModelType: models.TokenTypeRight, Literal: "RIGHT"})
+			result = append(result, token.Token{Type: "OUTER", ModelType: models.TokenTypeOuter, Literal: "OUTER"})
+			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
 			continue
 		} else if t.Token.Value == "FULL OUTER JOIN" {
-			result = append(result, token.Token{Type: "FULL", Literal: "FULL"})
-			result = append(result, token.Token{Type: "OUTER", Literal: "OUTER"})
-			result = append(result, token.Token{Type: "JOIN", Literal: "JOIN"})
+			result = append(result, token.Token{Type: "FULL", ModelType: models.TokenTypeFull, Literal: "FULL"})
+			result = append(result, token.Token{Type: "OUTER", ModelType: models.TokenTypeOuter, Literal: "OUTER"})
+			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
 			continue
 		} else if t.Token.Value == "ORDER BY" || t.Token.Type == models.TokenTypeOrderBy {
-			result = append(result, token.Token{Type: "ORDER", Literal: "ORDER"})
-			result = append(result, token.Token{Type: "BY", Literal: "BY"})
+			result = append(result, token.Token{Type: "ORDER", ModelType: models.TokenTypeOrder, Literal: "ORDER"})
+			result = append(result, token.Token{Type: "BY", ModelType: models.TokenTypeBy, Literal: "BY"})
 			continue
 		} else if t.Token.Value == "GROUP BY" || t.Token.Type == models.TokenTypeGroupBy {
-			result = append(result, token.Token{Type: "GROUP", Literal: "GROUP"})
-			result = append(result, token.Token{Type: "BY", Literal: "BY"})
+			result = append(result, token.Token{Type: "GROUP", ModelType: models.TokenTypeGroup, Literal: "GROUP"})
+			result = append(result, token.Token{Type: "BY", ModelType: models.TokenTypeBy, Literal: "BY"})
 			continue
 		}
 

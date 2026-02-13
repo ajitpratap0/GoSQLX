@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"strings"
 	"testing"
 
@@ -168,7 +169,8 @@ func TestParsePartitionDefinition(t *testing.T) {
 func TestParseAlterRole(t *testing.T) {
 	t.Run("RENAME TO", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "ROLE", Literal: "ROLE"},
 			{Type: "IDENT", Literal: "admin"},
 			{Type: "RENAME", Literal: "RENAME"},
@@ -199,7 +201,8 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("ADD MEMBER", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "ROLE", Literal: "ROLE"},
 			{Type: "IDENT", Literal: "admins"},
 			{Type: "ADD", Literal: "ADD"},
@@ -221,7 +224,8 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("DROP MEMBER", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "ROLE", Literal: "ROLE"},
 			{Type: "IDENT", Literal: "admins"},
 			{Type: "DROP", Literal: "DROP"},
@@ -240,7 +244,8 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("SET config TO", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "ROLE", Literal: "ROLE"},
 			{Type: "IDENT", Literal: "admin"},
 			{Type: "SET", Literal: "SET"},
@@ -263,7 +268,8 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("SET config equals", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "ROLE", Literal: "ROLE"},
 			{Type: "IDENT", Literal: "admin"},
 			{Type: "SET", Literal: "SET"},
@@ -283,7 +289,8 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("RESET config", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "ROLE", Literal: "ROLE"},
 			{Type: "IDENT", Literal: "admin"},
 			{Type: "RESET", Literal: "RESET"},
@@ -304,7 +311,8 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("RESET ALL", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "ROLE", Literal: "ROLE"},
 			{Type: "IDENT", Literal: "admin"},
 			{Type: "RESET", Literal: "RESET"},
@@ -322,7 +330,8 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH SUPERUSER", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "ROLE", Literal: "ROLE"},
 			{Type: "IDENT", Literal: "admin"},
 			{Type: "WITH", Literal: "WITH"},
@@ -343,7 +352,8 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH NOSUPERUSER", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "ROLE", Literal: "ROLE"},
 			{Type: "IDENT", Literal: "admin"},
 			{Type: "WITH", Literal: "WITH"},
@@ -355,7 +365,8 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH CREATEDB", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "ROLE", Literal: "ROLE"},
 			{Type: "IDENT", Literal: "admin"},
 			{Type: "WITH", Literal: "WITH"},
@@ -367,7 +378,8 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH NOCREATEDB", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "ROLE", Literal: "ROLE"},
 			{Type: "IDENT", Literal: "admin"},
 			{Type: "WITH", Literal: "WITH"},
@@ -379,7 +391,8 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH CREATEROLE", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "ROLE", Literal: "ROLE"},
 			{Type: "IDENT", Literal: "admin"},
 			{Type: "WITH", Literal: "WITH"},
@@ -391,7 +404,8 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH NOCREATEROLE", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "ROLE", Literal: "ROLE"},
 			{Type: "IDENT", Literal: "admin"},
 			{Type: "WITH", Literal: "WITH"},
@@ -403,7 +417,8 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH LOGIN", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "ROLE", Literal: "ROLE"},
 			{Type: "IDENT", Literal: "admin"},
 			{Type: "WITH", Literal: "WITH"},
@@ -415,7 +430,8 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH NOLOGIN", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "ROLE", Literal: "ROLE"},
 			{Type: "IDENT", Literal: "admin"},
 			{Type: "WITH", Literal: "WITH"},
@@ -427,7 +443,8 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH PASSWORD", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "ROLE", Literal: "ROLE"},
 			{Type: "IDENT", Literal: "admin"},
 			{Type: "WITH", Literal: "WITH"},
@@ -440,7 +457,8 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH PASSWORD NULL", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "ROLE", Literal: "ROLE"},
 			{Type: "IDENT", Literal: "admin"},
 			{Type: "WITH", Literal: "WITH"},
@@ -453,7 +471,8 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH VALID UNTIL", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "ROLE", Literal: "ROLE"},
 			{Type: "IDENT", Literal: "admin"},
 			{Type: "WITH", Literal: "WITH"},
@@ -471,7 +490,8 @@ func TestParseAlterRole(t *testing.T) {
 func TestParseAlterPolicy(t *testing.T) {
 	t.Run("RENAME TO", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "POLICY", Literal: "POLICY"},
 			{Type: "IDENT", Literal: "user_policy"},
 			{Type: "ON", Literal: "ON"},
@@ -495,7 +515,8 @@ func TestParseAlterPolicy(t *testing.T) {
 
 	t.Run("with TO roles", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "POLICY", Literal: "POLICY"},
 			{Type: "IDENT", Literal: "user_policy"},
 			{Type: "ON", Literal: "ON"},
@@ -520,7 +541,8 @@ func TestParseAlterPolicy(t *testing.T) {
 
 	t.Run("with USING", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "POLICY", Literal: "POLICY"},
 			{Type: "IDENT", Literal: "user_policy"},
 			{Type: "ON", Literal: "ON"},
@@ -544,7 +566,8 @@ func TestParseAlterPolicy(t *testing.T) {
 
 	t.Run("with WITH CHECK", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "POLICY", Literal: "POLICY"},
 			{Type: "IDENT", Literal: "user_policy"},
 			{Type: "ON", Literal: "ON"},
@@ -569,7 +592,8 @@ func TestParseAlterPolicy(t *testing.T) {
 
 	t.Run("with TO and USING", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "POLICY", Literal: "POLICY"},
 			{Type: "IDENT", Literal: "user_policy"},
 			{Type: "ON", Literal: "ON"},
@@ -1074,7 +1098,8 @@ func TestParseReturningClauseCoverage(t *testing.T) {
 func TestParseAlterConnectorCoverage(t *testing.T) {
 	t.Run("SET DCPROPERTIES", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "CONNECTOR", Literal: "CONNECTOR"},
 			{Type: "IDENT", Literal: "my_connector"},
 			{Type: "SET", Literal: "SET"},
@@ -1095,7 +1120,8 @@ func TestParseAlterConnectorCoverage(t *testing.T) {
 
 	t.Run("SET URL", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "CONNECTOR", Literal: "CONNECTOR"},
 			{Type: "IDENT", Literal: "my_connector"},
 			{Type: "SET", Literal: "SET"},
@@ -1108,7 +1134,8 @@ func TestParseAlterConnectorCoverage(t *testing.T) {
 
 	t.Run("SET OWNER USER", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "CONNECTOR", Literal: "CONNECTOR"},
 			{Type: "IDENT", Literal: "my_connector"},
 			{Type: "SET", Literal: "SET"},
@@ -1122,7 +1149,8 @@ func TestParseAlterConnectorCoverage(t *testing.T) {
 
 	t.Run("SET OWNER ROLE", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER", Literal: "ALTER"},
+			{Type: "ALTER",
+				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
 			{Type: "CONNECTOR", Literal: "CONNECTOR"},
 			{Type: "IDENT", Literal: "my_connector"},
 			{Type: "SET", Literal: "SET"},

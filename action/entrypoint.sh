@@ -16,6 +16,7 @@ RULES="${RULES:-}"
 SEVERITY="${SEVERITY:-warning}"
 CONFIG="${CONFIG:-}"
 GOSQLX_BIN="${GOSQLX_BIN:-gosqlx}"
+TIMEOUT="${TIMEOUT:-600}"
 
 # Resolve gosqlx binary
 if ! command -v "$GOSQLX_BIN" &>/dev/null; then
@@ -44,11 +45,13 @@ elif [[ "$SQL_FILES" == "*.sql" ]]; then
     FILES+=("$f")
   done < <(find . -maxdepth 1 -type f -name "*.sql" -print0 2>/dev/null | sort -z)
 else
-  # Use bash globbing
+  # Use find with sanitized pattern to avoid command injection
   shopt -s globstar nullglob 2>/dev/null || true
-  for f in $SQL_FILES; do
-    [ -f "$f" ] && FILES+=("$f")
-  done
+  # Sanitize: only allow safe glob characters
+  SAFE_PATTERN=$(echo "$SQL_FILES" | sed 's/[^a-zA-Z0-9_.*/?\/\-]//g')
+  while IFS= read -r -d '' f; do
+    FILES+=("$f")
+  done < <(find . -type f -path "./$SAFE_PATTERN" -print0 2>/dev/null | sort -z)
 fi
 
 if [ ${#FILES[@]} -eq 0 ]; then
@@ -64,19 +67,6 @@ VALIDATE_FLAGS=()
 
 if [ -n "$CONFIG" ] && [ -f "$CONFIG" ]; then
   echo "Using config: $CONFIG"
-  # Validate rule names in config match implemented rules
-  VALID_RULES="L001 L002 L003 L004 L005 L006 L007 L008 L009 L010"
-  if command -v grep &>/dev/null && grep -q 'rules:' "$CONFIG"; then
-    while IFS= read -r rule_line; do
-      rule_id=$(echo "$rule_line" | sed 's/^[[:space:]]*-[[:space:]]*//' | sed 's/[[:space:]]*#.*//')
-      if [ -n "$rule_id" ]; then
-        if ! echo "$VALID_RULES" | grep -qw "$rule_id"; then
-          echo "::error::Unknown rule '$rule_id' in $CONFIG. Valid rules: $VALID_RULES"
-          exit 1
-        fi
-      fi
-    done < <(sed -n '/^[[:space:]]*rules:/,/^[[:space:]]*[^-[:space:]]/{ /^[[:space:]]*-/p; }' "$CONFIG")
-  fi
   export GOSQLX_CONFIG="$CONFIG"
 fi
 
@@ -99,11 +89,21 @@ for file in "${FILES[@]}"; do
   # Strip leading ./
   display_file="${file#./}"
 
-  # --- Validate ---
-  if output=$("$GOSQLX_BIN" validate "$file" 2>&1); then
+  # --- Validate (with timeout) ---
+  TIMEOUT_CMD=""
+  if command -v timeout &>/dev/null; then
+    TIMEOUT_CMD="timeout $TIMEOUT"
+  elif command -v gtimeout &>/dev/null; then
+    TIMEOUT_CMD="gtimeout $TIMEOUT"
+  fi
+  if output=$($TIMEOUT_CMD "$GOSQLX_BIN" validate "$file" 2>&1); then
     TOTAL_VALID=$((TOTAL_VALID + 1))
   else
     VALIDATE_ERRORS=$((VALIDATE_ERRORS + 1))
+    # Check if it was a timeout
+    if [ $? -eq 124 ]; then
+      echo "::error file=${display_file}::Validation timed out after ${TIMEOUT}s"
+    fi
     # Parse output for line-level annotations if possible
     while IFS= read -r line; do
       if [[ "$line" =~ [Ll]ine[[:space:]]*([0-9]+) ]]; then

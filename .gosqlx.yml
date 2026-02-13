@@ -7,14 +7,13 @@ dialect: postgresql
 
 # Linting rules
 lint:
-  # Enable/disable specific rules (use rule codes)
-  # Available rules: L001-L010
+  # Enable/disable specific rule categories
   rules:
-    - L007  # Keyword Case Consistency
-    - L001  # Trailing Whitespace
-    - L002  # Mixed Indentation
-    - L004  # Indentation Depth
-    - L009  # Aliasing Consistency
+    - L007                # Keyword Case — enforce uppercase SQL keywords
+    - L001                # Trailing Whitespace — no trailing whitespace
+    - L002                # Mixed Indentation — consistent indentation
+    - L006                # No SELECT * — discourage SELECT *
+    - L009                # Aliasing Consistency — require table aliases in JOINs
 
   # Maximum line length (0 = unlimited)
   max-line-length: 120

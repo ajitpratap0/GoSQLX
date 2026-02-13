@@ -80,12 +80,10 @@ func TestParseWithContext_CancelledContext(t *testing.T) {
 
 // TestParseWithContext_Timeout verifies that timeout is respected
 func TestParseWithContext_Timeout(t *testing.T) {
-	// Use a very short timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
+	// Use an already-expired context to avoid timing-dependent flakiness
+	// (on fast machines/OS combos, nanosecond timeouts may not expire before the parse completes)
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-1*time.Second))
 	defer cancel()
-
-	// Give the timeout time to expire
-	time.Sleep(10 * time.Millisecond)
 
 	sql := "SELECT * FROM users"
 

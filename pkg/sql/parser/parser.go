@@ -951,7 +951,7 @@ func (p *Parser) isType(expected models.TokenType) bool {
 }
 
 // matchType checks if the current token's ModelType matches the expected type and advances if so.
-func (p *Parser) matchType(expected models.TokenType) bool {
+func (p *Parser) matchType(expected models.TokenType) bool { //nolint:unused // symmetric with matchToken; used in tests, kept for API completeness
 	if p.currentToken.ModelType == expected {
 		p.advance()
 		return true

@@ -515,9 +515,11 @@ func (c *CreateTableStatement) SQL() string {
 
 	parts := make([]string, 0, len(c.Columns)+len(c.Constraints))
 	for _, col := range c.Columns {
+		col := col // G601: Create local copy to avoid memory aliasing
 		parts = append(parts, columnDefSQL(&col))
 	}
 	for _, con := range c.Constraints {
+		con := con // G601: Create local copy to avoid memory aliasing
 		parts = append(parts, tableConstraintSQL(&con))
 	}
 	sb.WriteString(strings.Join(parts, ", "))

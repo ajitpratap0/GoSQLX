@@ -388,6 +388,7 @@ func containsDecimalOrExponent(s string) bool {
 
 // getKeywordTokenTypeWithModel returns both the parser token type (string) and models.TokenType (int)
 // for SQL keywords that come as IDENTIFIER. This enables unified type system support.
+//
 //lint:ignore SA1019 intentional use during #215 migration
 func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) { //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
 	// Fast path: Use pooled buffer for uppercase conversion (avoids allocation per call)
@@ -536,6 +537,7 @@ func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) {
 
 // buildTypeMapping creates an optimized lookup table for token type conversion
 // Includes all token types defined in models.TokenType for comprehensive coverage
+//
 //lint:ignore SA1019 intentional use during #215 migration
 func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
 	//lint:ignore SA1019 intentional use during #215 migration

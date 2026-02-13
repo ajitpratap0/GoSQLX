@@ -1,4 +1,4 @@
--- GORM-style: Preload associations
+-- GORM-style: Preload associations (auto-generated)
 SELECT * FROM "users" WHERE "users"."deleted_at" IS NULL;
 
 SELECT * FROM "profiles" WHERE "profiles"."user_id" IN (1,2,3,4,5) AND "profiles"."deleted_at" IS NULL;

@@ -12,6 +12,21 @@ inputs:
     required: true
     default: '**/*.sql'
 
+  sql-files:
+    description: 'Alias for files - glob pattern for SQL files (e.g., "**/*.sql")'
+    required: false
+    default: '**/*.sql'
+
+  rules:
+    description: 'Comma-separated list of lint rules to enable (e.g., "keyword-case,no-select-star")'
+    required: false
+    default: ''
+
+  severity:
+    description: 'Severity threshold for failure: error, warning, or info'
+    required: false
+    default: 'warning'
+
   validate:
     description: 'Enable SQL validation (syntax checking)'
     required: false

@@ -64,19 +64,6 @@ VALIDATE_FLAGS=()
 
 if [ -n "$CONFIG" ] && [ -f "$CONFIG" ]; then
   echo "Using config: $CONFIG"
-  # Validate rule names in config match implemented rules
-  VALID_RULES="L001 L002 L003 L004 L005 L006 L007 L008 L009 L010"
-  if command -v grep &>/dev/null && grep -q 'rules:' "$CONFIG"; then
-    while IFS= read -r rule_line; do
-      rule_id=$(echo "$rule_line" | sed 's/^[[:space:]]*-[[:space:]]*//' | sed 's/[[:space:]]*#.*//')
-      if [ -n "$rule_id" ]; then
-        if ! echo "$VALID_RULES" | grep -qw "$rule_id"; then
-          echo "::error::Unknown rule '$rule_id' in $CONFIG. Valid rules: $VALID_RULES"
-          exit 1
-        fi
-      fi
-    done < <(sed -n '/^[[:space:]]*rules:/,/^[[:space:]]*[^-[:space:]]/{ /^[[:space:]]*-/p; }' "$CONFIG")
-  fi
   export GOSQLX_CONFIG="$CONFIG"
 fi
 

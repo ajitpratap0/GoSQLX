@@ -38,9 +38,9 @@ func (l *LiteralValue) SQL() string {
 	switch strings.ToUpper(l.Type) {
 	case "STRING":
 		s := fmt.Sprintf("%v", l.Value)
-		s = strings.ReplaceAll(s, "\x00", "")  // strip null bytes
-		s = strings.ReplaceAll(s, `\`, `\\`)    // escape backslashes
-		s = strings.ReplaceAll(s, "'", "''")    // escape single quotes
+		s = strings.ReplaceAll(s, "\x00", "") // strip null bytes
+		s = strings.ReplaceAll(s, `\`, `\\`)  // escape backslashes
+		s = strings.ReplaceAll(s, "'", "''")  // escape single quotes
 		return fmt.Sprintf("'%s'", s)
 	case "BOOLEAN":
 		return strings.ToUpper(fmt.Sprintf("%v", l.Value))

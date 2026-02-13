@@ -146,23 +146,17 @@ func TestInsertStatementSQL(t *testing.T) {
 			want: "INSERT INTO users (name) VALUES ('Alice'), ('Bob')",
 		},
 		{
-			name: "insert with on conflict",
+			name: "insert with on conflict do nothing",
 			stmt: &InsertStatement{
 				TableName: "users",
-				Columns:   []Expression{&Identifier{Name: "email"}, &Identifier{Name: "name"}},
-				Values: [][]Expression{
-					{&LiteralValue{Value: "a@b.com", Type: "STRING"}, &LiteralValue{Value: "A", Type: "STRING"}},
-				},
+				Columns:   []Expression{&Identifier{Name: "email"}},
+				Values:    [][]Expression{{&LiteralValue{Value: "a@b.com", Type: "STRING"}}},
 				OnConflict: &OnConflict{
 					Target: []Expression{&Identifier{Name: "email"}},
-					Action: OnConflictAction{
-						DoUpdate: []UpdateExpression{
-							{Column: &Identifier{Name: "name"}, Value: &Identifier{Name: "EXCLUDED.name"}},
-						},
-					},
+					Action: OnConflictAction{DoNothing: true},
 				},
 			},
-			want: "INSERT INTO users (email, name) VALUES ('a@b.com', 'A') ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name",
+			want: "INSERT INTO users (email) VALUES ('a@b.com') ON CONFLICT (email) DO NOTHING",
 		},
 	}
 
@@ -179,7 +173,7 @@ func TestInsertStatementSQL(t *testing.T) {
 func TestUpdateStatementSQL(t *testing.T) {
 	stmt := &UpdateStatement{
 		TableName: "users",
-		Assignments: []UpdateExpression{
+		Updates: []UpdateExpression{
 			{Column: &Identifier{Name: "name"}, Value: &LiteralValue{Value: "Bob", Type: "STRING"}},
 		},
 		Where: &BinaryExpression{
@@ -313,6 +307,15 @@ func TestExpressionSQL(t *testing.T) {
 			name: "null literal",
 			expr: &LiteralValue{Value: nil, Type: "NULL"},
 			want: "NULL",
+		},
+		{
+			name: "is null",
+			expr: &BinaryExpression{
+				Left:     &Identifier{Name: "email"},
+				Operator: "IS NULL",
+				Right:    &LiteralValue{Value: nil, Type: "null"},
+			},
+			want: "email IS NULL",
 		},
 		{
 			name: "tuple",

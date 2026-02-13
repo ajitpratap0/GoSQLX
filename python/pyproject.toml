@@ -7,14 +7,14 @@ name = "pygosqlx"
 version = "0.1.0"
 description = "Python bindings for GoSQLX - High-performance SQL parser"
 requires-python = ">=3.8"
-license = {text = "AGPL-3.0"}
+license = {text = "Apache-2.0"}
 authors = [
     {name = "GoSQLX Contributors"}
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",

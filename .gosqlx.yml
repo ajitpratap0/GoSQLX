@@ -9,11 +9,11 @@ dialect: postgresql
 lint:
   # Enable/disable specific rule categories
   rules:
-    - keyword-case        # Enforce uppercase SQL keywords
-    - trailing-whitespace # No trailing whitespace
-    - indent-consistent   # Consistent indentation
-    - no-select-star      # Discourage SELECT *
-    - table-alias         # Require table aliases in JOINs
+    - L007                # Keyword Case — enforce uppercase SQL keywords
+    - L001                # Trailing Whitespace — no trailing whitespace
+    - L002                # Mixed Indentation — consistent indentation
+    - L006                # No SELECT * — discourage SELECT *
+    - L009                # Aliasing Consistency — require table aliases in JOINs
 
   # Maximum line length (0 = unlimited)
   max-line-length: 120

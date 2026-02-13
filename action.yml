@@ -18,7 +18,7 @@ inputs:
     default: '**/*.sql'
 
   rules:
-    description: 'Comma-separated list of lint rules to enable (e.g., "keyword-case,no-select-star")'
+    description: 'Comma-separated list of lint rule codes to enable (e.g., "L007,L006"). See docs/LINTING_RULES.md for the full list.'
     required: false
     default: ''
 
@@ -86,6 +86,11 @@ inputs:
     description: 'GoSQLX version to use (default: latest)'
     required: false
     default: 'latest'
+
+  timeout:
+    description: 'Timeout in seconds for each file validation (default: 600)'
+    required: false
+    default: '600'
 
   working-directory:
     description: 'Working directory for SQL file operations'
@@ -172,160 +177,24 @@ runs:
       id: find-files
       shell: bash
       working-directory: ${{ inputs.working-directory }}
-      run: |
-        # Validate working-directory exists and is within repo
-        WORKDIR="${{ inputs.working-directory }}"
-        if [ ! -d "$WORKDIR" ]; then
-          echo "::error::Working directory does not exist: $WORKDIR"
-          exit 1
-        fi
-
-        # Ensure working directory is within the repository
-        REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "$GITHUB_WORKSPACE")
-        WORKDIR_ABS=$(cd "$WORKDIR" && pwd)
-        if [[ "$WORKDIR_ABS" != "$REPO_ROOT"* ]]; then
-          echo "::error::Working directory must be within repository: $WORKDIR_ABS"
-          exit 1
-        fi
-
-        # Sanitize file pattern to prevent command injection
-        PATTERN="${{ inputs.files }}"
-        # Remove dangerous characters that could lead to command injection
-        if echo "$PATTERN" | grep -qE '[;&|`$()]'; then
-          echo "::error::File pattern contains invalid characters: $PATTERN"
-          exit 1
-        fi
-
-        echo "Finding SQL files matching pattern: $PATTERN"
-
-        # Use find to locate SQL files matching the pattern
-        # Convert glob pattern to find-compatible pattern
-        # Handle common glob patterns
-        if [[ "$PATTERN" == "**/*.sql" ]]; then
-          FILES=$(find . -type f -name "*.sql" 2>/dev/null | sort || true)
-        elif [[ "$PATTERN" == "*.sql" ]]; then
-          FILES=$(find . -maxdepth 1 -type f -name "*.sql" 2>/dev/null | sort || true)
-        elif [[ "$PATTERN" =~ ^(.+)/\*\*/(.+)$ ]]; then
-          # Handle patterns like "dir/**/*.sql" - extract base dir and file pattern
-          BASE_DIR="${BASH_REMATCH[1]}"
-          FILE_PATTERN="${BASH_REMATCH[2]}"
-          FILES=$(find "./$BASE_DIR" -type f -name "$FILE_PATTERN" 2>/dev/null | sort || true)
-        else
-          # Custom pattern without ** - try direct find with escaped pattern
-          FILES=$(find . -type f -path "./$PATTERN" 2>/dev/null | sort || true)
-        fi
-
-        if [ -z "$FILES" ]; then
-          echo "WARNING: No SQL files found matching pattern: ${{ inputs.files }}"
-          echo "file-count=0" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-
-        FILE_COUNT=$(echo "$FILES" | wc -l)
-        echo "Found $FILE_COUNT SQL file(s)"
-        echo "$FILES" | head -10
-        if [ $FILE_COUNT -gt 10 ]; then
-          echo "... and $((FILE_COUNT - 10)) more files"
-        fi
-
-        # Save file list for later steps (use RUNNER_TEMP for cross-platform compatibility)
-        echo "$FILES" > "$RUNNER_TEMP/gosqlx-files.txt"
-        echo "file-count=$FILE_COUNT" >> $GITHUB_OUTPUT
+      env:
+        INPUT_FILES: ${{ inputs.files }}
+        INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      run: bash "${{ github.action_path }}/action/scripts/find-files.sh"
 
     - name: Validate SQL files
       id: validate
       if: inputs.validate == 'true' && steps.find-files.outputs.file-count != '0'
       shell: bash
       working-directory: ${{ inputs.working-directory }}
-      run: |
-        echo "::group::SQL Validation"
-
-        # Build validation command
-        CMD="$HOME/go/bin/gosqlx validate"
-
-        # Add config if provided
-        if [ -n "${{ inputs.config }}" ]; then
-          if [ -f "${{ inputs.config }}" ]; then
-            echo "Using config file: ${{ inputs.config }}"
-            export GOSQLX_CONFIG="${{ inputs.config }}"
-          else
-            echo "::warning::Config file not found: ${{ inputs.config }}"
-          fi
-        fi
-
-        # Add dialect if provided (with validation)
-        DIALECT="${{ inputs.dialect }}"
-        if [ -n "$DIALECT" ]; then
-          # Validate dialect is one of the allowed values
-          if [[ "$DIALECT" =~ ^(postgresql|mysql|sqlserver|oracle|sqlite)$ ]]; then
-            CMD="$CMD --dialect $DIALECT"
-          else
-            echo "::warning::Invalid dialect '$DIALECT', skipping dialect flag"
-          fi
-        fi
-
-        # Add strict mode if enabled
-        if [ "${{ inputs.strict }}" = "true" ]; then
-          CMD="$CMD --strict"
-        fi
-
-        # Add stats if enabled
-        if [ "${{ inputs.show-stats }}" = "true" ]; then
-          CMD="$CMD --stats"
-        fi
-
-        # Add verbose output for GitHub Actions
-        CMD="$CMD --verbose"
-
-        # Read files and validate
-        START_TIME=$(date +%s%3N)
-        VALIDATED=0
-        INVALID=0
-
-        while IFS= read -r file; do
-          # Sanitize file path for display
-          SAFE_FILE="${file//[^a-zA-Z0-9\/._-]/}"
-          echo "Validating: $file"
-
-          # Use quoted variable to prevent word splitting
-          if $CMD "$file" 2>&1; then
-            echo "✓ Valid: $file"
-            VALIDATED=$((VALIDATED + 1))
-          else
-            echo "✗ Invalid: $file"
-            echo "::error file=$SAFE_FILE::SQL validation failed"
-            INVALID=$((INVALID + 1))
-          fi
-        done < "$RUNNER_TEMP/gosqlx-files.txt"
-
-        END_TIME=$(date +%s%3N)
-        DURATION=$((END_TIME - START_TIME))
-
-        echo "::endgroup::"
-
-        # Output summary
-        echo "::notice::Validation complete: $VALIDATED valid, $INVALID invalid files (${DURATION}ms)"
-
-        # Set outputs
-        echo "validated-files=$VALIDATED" >> $GITHUB_OUTPUT
-        echo "invalid-files=$INVALID" >> $GITHUB_OUTPUT
-        echo "validation-time=$DURATION" >> $GITHUB_OUTPUT
-
-        # Create job summary
-        echo "## SQL Validation Results" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
-        echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-        echo "| Files Validated | $VALIDATED |" >> $GITHUB_STEP_SUMMARY
-        echo "| Validation Errors | $INVALID |" >> $GITHUB_STEP_SUMMARY
-        echo "| Duration | ${DURATION}ms |" >> $GITHUB_STEP_SUMMARY
-        echo "| Throughput | $(awk "BEGIN {printf \"%.2f\", $VALIDATED * 1000 / $DURATION}") files/sec |" >> $GITHUB_STEP_SUMMARY
-
-        # Fail if there are invalid files and fail-on-error is true
-        if [ $INVALID -gt 0 ] && [ "${{ inputs.fail-on-error }}" = "true" ]; then
-          echo "::error::Validation failed with $INVALID invalid file(s)"
-          exit 1
-        fi
+      env:
+        INPUT_CONFIG: ${{ inputs.config }}
+        INPUT_DIALECT: ${{ inputs.dialect }}
+        INPUT_STRICT: ${{ inputs.strict }}
+        INPUT_SHOW_STATS: ${{ inputs.show-stats }}
+        INPUT_FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
+        INPUT_TIMEOUT: ${{ inputs.timeout }}
+      run: bash "${{ github.action_path }}/action/scripts/validate.sh"
 
     - name: Generate SARIF output
       id: sarif

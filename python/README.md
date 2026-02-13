@@ -8,7 +8,7 @@ Powered by Go's compiled performance, PyGoSQLX is 100x+ faster than pure Python 
 
 ### Step 1: Build the shared library
 
-Requires Go 1.24+ installed.
+Requires Go 1.21+ installed.
 
 ```bash
 cd pkg/cbinding

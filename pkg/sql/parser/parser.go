@@ -245,6 +245,7 @@ type Parser struct {
 //
 // Thread Safety: NOT thread-safe - use separate parser instances per goroutine.
 func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
+	normalizeTokens(tokens)
 	p.tokens = tokens
 	p.currentPos = 0
 	if len(tokens) > 0 {
@@ -363,6 +364,7 @@ func (p *Parser) ParseFromModelTokens(tokens []models.TokenWithSpan) (*ast.AST, 
 //
 // Thread Safety: NOT thread-safe - use separate parser instances per goroutine.
 func (p *Parser) ParseWithPositions(result *ConversionResult) (*ast.AST, error) {
+	normalizeTokens(result.Tokens)
 	p.tokens = result.Tokens
 	p.positions = result.PositionMapping
 	p.currentPos = 0
@@ -489,6 +491,7 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 	p.ctx = ctx
 	defer func() { p.ctx = nil }() // Clear context when done
 
+	normalizeTokens(tokens)
 	p.tokens = tokens
 	p.currentPos = 0
 	if len(tokens) > 0 {
@@ -610,79 +613,40 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		}
 	}
 
-	// Fast path: O(1) switch dispatch on ModelType (compiles to jump table)
-	// This replaces the previous O(n) isAnyType + O(n) matchType approach
-	if p.currentToken.ModelType != modelTypeUnset {
-		switch p.currentToken.ModelType {
-		case models.TokenTypeWith:
-			return p.parseWithStatement()
-		case models.TokenTypeSelect:
-			p.advance()
-			return p.parseSelectWithSetOperations()
-		case models.TokenTypeInsert:
-			p.advance()
-			return p.parseInsertStatement()
-		case models.TokenTypeUpdate:
-			p.advance()
-			return p.parseUpdateStatement()
-		case models.TokenTypeDelete:
-			p.advance()
-			return p.parseDeleteStatement()
-		case models.TokenTypeAlter:
-			p.advance()
-			return p.parseAlterTableStmt()
-		case models.TokenTypeMerge:
-			p.advance()
-			return p.parseMergeStatement()
-		case models.TokenTypeCreate:
-			p.advance()
-			return p.parseCreateStatement()
-		case models.TokenTypeDrop:
-			p.advance()
-			return p.parseDropStatement()
-		case models.TokenTypeRefresh:
-			p.advance()
-			return p.parseRefreshStatement()
-		case models.TokenTypeTruncate:
-			p.advance()
-			return p.parseTruncateStatement()
-		}
-		// ModelType set but not a statement keyword - fall through to fallback
-	}
-
-	// Fallback: string comparison for tokens without ModelType (e.g., tests)
-	// or tokens with ModelType that aren't statement starters (e.g., operators)
-	if p.isType(models.TokenTypeWith) {
+	// O(1) switch dispatch on ModelType (compiles to jump table).
+	// All tokens are normalized at parse entry so ModelType is always set.
+	switch p.currentToken.ModelType {
+	case models.TokenTypeWith:
 		return p.parseWithStatement()
-	}
-	if p.matchType(models.TokenTypeSelect) {
+	case models.TokenTypeSelect:
+		p.advance()
 		return p.parseSelectWithSetOperations()
-	}
-	if p.matchType(models.TokenTypeInsert) {
+	case models.TokenTypeInsert:
+		p.advance()
 		return p.parseInsertStatement()
-	}
-	if p.matchType(models.TokenTypeUpdate) {
+	case models.TokenTypeUpdate:
+		p.advance()
 		return p.parseUpdateStatement()
-	}
-	if p.matchType(models.TokenTypeDelete) {
+	case models.TokenTypeDelete:
+		p.advance()
 		return p.parseDeleteStatement()
-	}
-	if p.matchType(models.TokenTypeAlter) {
+	case models.TokenTypeAlter:
+		p.advance()
 		return p.parseAlterTableStmt()
-	}
-	if p.matchType(models.TokenTypeMerge) {
+	case models.TokenTypeMerge:
+		p.advance()
 		return p.parseMergeStatement()
-	}
-	if p.matchType(models.TokenTypeCreate) {
+	case models.TokenTypeCreate:
+		p.advance()
 		return p.parseCreateStatement()
-	}
-	if p.matchType(models.TokenTypeDrop) {
+	case models.TokenTypeDrop:
+		p.advance()
 		return p.parseDropStatement()
-	}
-	if p.matchType(models.TokenTypeRefresh) {
+	case models.TokenTypeRefresh:
+		p.advance()
 		return p.parseRefreshStatement()
-	}
-	if p.matchType(models.TokenTypeTruncate) {
+	case models.TokenTypeTruncate:
+		p.advance()
 		return p.parseTruncateStatement()
 	}
 	return nil, p.expectedError("statement")
@@ -733,201 +697,256 @@ func (p *Parser) peekToken() token.Token {
 // They include fallback to string-based Type comparison for backward compatibility
 // with tests that create tokens directly without setting ModelType.
 
-// Deprecated: modelTypeToString is part of the legacy dual token type bridge.
-// It will be removed once all tokens use models.TokenType exclusively (see #215).
-//
-// modelTypeToString maps ModelType to expected string Type for fallback comparison.
-// This comprehensive map enables isType() to work with tokens that don't have ModelType set
-// (e.g., tokens created in tests without using the tokenizer).
-// NOTE: Only TokenTypes that exist in models package are included here.
-//
-//lint:ignore SA1019 intentional use during #215 migration
-var modelTypeToString = map[models.TokenType]token.Type{ //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
+// stringTypeToModelType maps string-based token Type to ModelType for token normalization.
+// This is used by normalizeTokens() to ensure all tokens have ModelType set,
+// enabling pure integer comparison in isType() without string fallbacks.
+// Tokens with types not in this map get models.TokenTypeKeyword as a generic fallback.
+var stringTypeToModelType = map[token.Type]models.TokenType{
 	// Special tokens
-	models.TokenTypeEOF:        token.EOF,
-	models.TokenTypeSemicolon:  token.SEMICOLON,
-	models.TokenTypeIdentifier: "IDENT",
+	"EOF":        models.TokenTypeEOF,
+	"IDENT":      models.TokenTypeIdentifier,
+	";":          models.TokenTypeSemicolon,
+
+	// Literals
+	"INT":        models.TokenTypeNumber,
+	"int":        models.TokenTypeNumber, // lowercase variant in some tests
+	"FLOAT":      models.TokenTypeNumber,
+	"STRING":     models.TokenTypeString,
+	"NUMBER":     models.TokenTypeNumber,
 
 	// Punctuation and operators
-	models.TokenTypeComma:        token.COMMA,
-	models.TokenTypeLParen:       "(",
-	models.TokenTypeRParen:       ")",
-	models.TokenTypeEq:           "=",
-	models.TokenTypeLt:           "<",
-	models.TokenTypeGt:           ">",
-	models.TokenTypeNeq:          "!=",
-	models.TokenTypeLtEq:         "<=",
-	models.TokenTypeGtEq:         ">=",
-	models.TokenTypeDot:          ".",
-	models.TokenTypeAsterisk:     "*",
-	models.TokenTypePlus:         "PLUS",
-	models.TokenTypeMinus:        "MINUS",
-	models.TokenTypeMul:          "MUL",
-	models.TokenTypeDiv:          "DIV",
-	models.TokenTypeMod:          "MOD",
-	models.TokenTypeStringConcat: "STRING_CONCAT",
+	",":          models.TokenTypeComma,
+	"(":          models.TokenTypeLParen,
+	")":          models.TokenTypeRParen,
+	"=":          models.TokenTypeEq,
+	"<":          models.TokenTypeLt,
+	">":          models.TokenTypeGt,
+	"!=":         models.TokenTypeNeq,
+	"<>":         models.TokenTypeNeq,
+	"<=":         models.TokenTypeLtEq,
+	">=":         models.TokenTypeGtEq,
+	".":          models.TokenTypePeriod,
+	"*":          models.TokenTypeAsterisk,
+	"+":          models.TokenTypePlus,
+	"PLUS":       models.TokenTypePlus,
+	"-":          models.TokenTypeMinus,
+	"MINUS":      models.TokenTypeMinus,
+	"MUL":        models.TokenTypeMul,
+	"/":          models.TokenTypeDiv,
+	"DIV":        models.TokenTypeDiv,
+	"%":          models.TokenTypeMod,
+	"MOD":        models.TokenTypeMod,
+	"STRING_CONCAT": models.TokenTypeStringConcat,
+	"||":         models.TokenTypeStringConcat,
+	"~":          models.TokenTypeTilde,
+	"~*":         models.TokenTypeTildeAsterisk,
+	"!~":         models.TokenTypeExclamationMarkTilde,
+	"!~*":        models.TokenTypeExclamationMarkTildeAsterisk,
+	"PLACEHOLDER": models.TokenTypePlaceholder,
 
 	// Core SQL keywords
-	models.TokenTypeSelect: token.SELECT,
-	models.TokenTypeFrom:   token.FROM,
-	models.TokenTypeWhere:  token.WHERE,
-	models.TokenTypeInsert: token.INSERT,
-	models.TokenTypeUpdate: token.UPDATE,
-	models.TokenTypeDelete: token.DELETE,
-	models.TokenTypeInto:   "INTO",
-	models.TokenTypeValues: "VALUES",
-	models.TokenTypeSet:    "SET",
-	models.TokenTypeAs:     "AS",
-	models.TokenTypeOn:     "ON",
+	"SELECT":     models.TokenTypeSelect,
+	"FROM":       models.TokenTypeFrom,
+	"WHERE":      models.TokenTypeWhere,
+	"INSERT":     models.TokenTypeInsert,
+	"UPDATE":     models.TokenTypeUpdate,
+	"DELETE":     models.TokenTypeDelete,
+	"INTO":       models.TokenTypeInto,
+	"VALUES":     models.TokenTypeValues,
+	"SET":        models.TokenTypeSet,
+	"AS":         models.TokenTypeAs,
+	"ON":         models.TokenTypeOn,
 
 	// DDL keywords
-	models.TokenTypeCreate:       "CREATE",
-	models.TokenTypeAlter:        token.ALTER,
-	models.TokenTypeDrop:         token.DROP,
-	models.TokenTypeTruncate:     "TRUNCATE",
-	models.TokenTypeTable:        "TABLE",
-	models.TokenTypeIndex:        "INDEX",
-	models.TokenTypeView:         "VIEW",
-	models.TokenTypePrimary:      "PRIMARY",
-	models.TokenTypeForeign:      "FOREIGN",
-	models.TokenTypeUnique:       "UNIQUE",
-	models.TokenTypeCheck:        "CHECK",
-	models.TokenTypeConstraint:   "CONSTRAINT",
-	models.TokenTypeDefault:      "DEFAULT",
-	models.TokenTypeReferences:   "REFERENCES",
-	models.TokenTypeCascade:      "CASCADE",
-	models.TokenTypeRestrict:     "RESTRICT",
-	models.TokenTypeMaterialized: "MATERIALIZED",
-	models.TokenTypeReplace:      "REPLACE",
-	models.TokenTypeCollate:      "COLLATE",
+	"CREATE":       models.TokenTypeCreate,
+	"ALTER":        models.TokenTypeAlter,
+	"DROP":         models.TokenTypeDrop,
+	"TRUNCATE":     models.TokenTypeTruncate,
+	"TABLE":        models.TokenTypeTable,
+	"INDEX":        models.TokenTypeIndex,
+	"VIEW":         models.TokenTypeView,
+	"PRIMARY":      models.TokenTypePrimary,
+	"FOREIGN":      models.TokenTypeForeign,
+	"UNIQUE":       models.TokenTypeUnique,
+	"CHECK":        models.TokenTypeCheck,
+	"CONSTRAINT":   models.TokenTypeConstraint,
+	"DEFAULT":      models.TokenTypeDefault,
+	"REFERENCES":   models.TokenTypeReferences,
+	"CASCADE":      models.TokenTypeCascade,
+	"RESTRICT":     models.TokenTypeRestrict,
+	"MATERIALIZED": models.TokenTypeMaterialized,
+	"REPLACE":      models.TokenTypeReplace,
+	"COLLATE":      models.TokenTypeCollate,
+	"COLUMN":       models.TokenTypeColumn,
+	"RENAME":       models.TokenTypeRename,
 
 	// Clause keywords
-	models.TokenTypeGroup:    "GROUP",
-	models.TokenTypeBy:       "BY",
-	models.TokenTypeHaving:   "HAVING",
-	models.TokenTypeOrder:    "ORDER",
-	models.TokenTypeAsc:      "ASC",
-	models.TokenTypeDesc:     "DESC",
-	models.TokenTypeLimit:    "LIMIT",
-	models.TokenTypeOffset:   "OFFSET",
-	models.TokenTypeDistinct: "DISTINCT",
+	"GROUP":    models.TokenTypeGroup,
+	"BY":       models.TokenTypeBy,
+	"HAVING":   models.TokenTypeHaving,
+	"ORDER":    models.TokenTypeOrder,
+	"ASC":      models.TokenTypeAsc,
+	"DESC":     models.TokenTypeDesc,
+	"LIMIT":    models.TokenTypeLimit,
+	"OFFSET":   models.TokenTypeOffset,
+	"DISTINCT": models.TokenTypeDistinct,
 
 	// JOIN keywords
-	models.TokenTypeJoin:    "JOIN",
-	models.TokenTypeInner:   "INNER",
-	models.TokenTypeLeft:    "LEFT",
-	models.TokenTypeRight:   "RIGHT",
-	models.TokenTypeFull:    "FULL",
-	models.TokenTypeOuter:   "OUTER",
-	models.TokenTypeCross:   "CROSS",
-	models.TokenTypeNatural: "NATURAL",
-	models.TokenTypeUsing:   "USING",
-	models.TokenTypeLateral: "LATERAL",
+	"JOIN":    models.TokenTypeJoin,
+	"INNER":   models.TokenTypeInner,
+	"LEFT":    models.TokenTypeLeft,
+	"RIGHT":   models.TokenTypeRight,
+	"FULL":    models.TokenTypeFull,
+	"OUTER":   models.TokenTypeOuter,
+	"CROSS":   models.TokenTypeCross,
+	"NATURAL": models.TokenTypeNatural,
+	"USING":   models.TokenTypeUsing,
+	"LATERAL": models.TokenTypeLateral,
 
 	// Set operations
-	models.TokenTypeUnion:     "UNION",
-	models.TokenTypeExcept:    "EXCEPT",
-	models.TokenTypeIntersect: "INTERSECT",
-	models.TokenTypeAll:       "ALL",
+	"UNION":     models.TokenTypeUnion,
+	"EXCEPT":    models.TokenTypeExcept,
+	"INTERSECT": models.TokenTypeIntersect,
+	"ALL":       models.TokenTypeAll,
 
 	// Logical operators
-	models.TokenTypeAnd: "AND",
-	models.TokenTypeOr:  "OR",
-	models.TokenTypeNot: "NOT",
+	"AND": models.TokenTypeAnd,
+	"OR":  models.TokenTypeOr,
+	"NOT": models.TokenTypeNot,
 
 	// Comparison operators
-	models.TokenTypeIs:      "IS",
-	models.TokenTypeIn:      "IN",
-	models.TokenTypeLike:    "LIKE",
-	models.TokenTypeBetween: "BETWEEN",
-	models.TokenTypeExists:  "EXISTS",
-	models.TokenTypeAny:     "ANY",
+	"IS":      models.TokenTypeIs,
+	"IN":      models.TokenTypeIn,
+	"LIKE":    models.TokenTypeLike,
+	"BETWEEN": models.TokenTypeBetween,
+	"EXISTS":  models.TokenTypeExists,
+	"ANY":     models.TokenTypeAny,
 
 	// NULL and boolean
-	models.TokenTypeNull:  "NULL",
-	models.TokenTypeTrue:  "TRUE",
-	models.TokenTypeFalse: "FALSE",
+	"NULL":  models.TokenTypeNull,
+	"TRUE":  models.TokenTypeTrue,
+	"FALSE": models.TokenTypeFalse,
 
 	// Window function keywords
-	models.TokenTypeOver:      "OVER",
-	models.TokenTypePartition: "PARTITION",
-	models.TokenTypeRows:      "ROWS",
-	models.TokenTypeRange:     "RANGE",
-	models.TokenTypeUnbounded: "UNBOUNDED",
-	models.TokenTypePreceding: "PRECEDING",
-	models.TokenTypeFollowing: "FOLLOWING",
-	models.TokenTypeCurrent:   "CURRENT",
-	models.TokenTypeRow:       "ROW",
-	models.TokenTypeNulls:     "NULLS",
-	models.TokenTypeFirst:     "FIRST",
-	models.TokenTypeLast:      "LAST",
-	models.TokenTypeFilter:    "FILTER",
-
-	// Placeholder token - maps to "PLACEHOLDER" for tests that create tokens manually
-	models.TokenTypePlaceholder: "PLACEHOLDER",
+	"OVER":      models.TokenTypeOver,
+	"PARTITION": models.TokenTypePartition,
+	"ROWS":      models.TokenTypeRows,
+	"RANGE":     models.TokenTypeRange,
+	"UNBOUNDED": models.TokenTypeUnbounded,
+	"PRECEDING": models.TokenTypePreceding,
+	"FOLLOWING": models.TokenTypeFollowing,
+	"CURRENT":   models.TokenTypeCurrent,
+	"ROW":       models.TokenTypeRow,
+	"NULLS":     models.TokenTypeNulls,
+	"FIRST":     models.TokenTypeFirst,
+	"LAST":      models.TokenTypeLast,
+	"FILTER":    models.TokenTypeFilter,
 
 	// CTE keywords
-	models.TokenTypeWith:      token.WITH,
-	models.TokenTypeRecursive: "RECURSIVE",
+	"WITH":      models.TokenTypeWith,
+	"RECURSIVE": models.TokenTypeRecursive,
 
 	// CASE expression
-	models.TokenTypeCase: "CASE",
-	models.TokenTypeWhen: "WHEN",
-	models.TokenTypeThen: "THEN",
-	models.TokenTypeElse: "ELSE",
-	models.TokenTypeEnd:  "END",
+	"CASE": models.TokenTypeCase,
+	"WHEN": models.TokenTypeWhen,
+	"THEN": models.TokenTypeThen,
+	"ELSE": models.TokenTypeElse,
+	"END":  models.TokenTypeEnd,
 
 	// CAST expression
-	models.TokenTypeCast: "CAST",
+	"CAST": models.TokenTypeCast,
 
 	// INTERVAL expression
-	models.TokenTypeInterval: "INTERVAL",
+	"INTERVAL": models.TokenTypeInterval,
 
 	// MERGE keywords
-	models.TokenTypeMerge:   "MERGE",
-	models.TokenTypeMatched: "MATCHED",
-	models.TokenTypeSource:  "SOURCE",
-	models.TokenTypeTarget:  "TARGET",
+	"MERGE":   models.TokenTypeMerge,
+	"MATCHED": models.TokenTypeMatched,
+	"SOURCE":  models.TokenTypeSource,
+	"TARGET":  models.TokenTypeTarget,
 
 	// Grouping keywords
-	models.TokenTypeRollup:       "ROLLUP",
-	models.TokenTypeCube:         "CUBE",
-	models.TokenTypeGrouping:     "GROUPING",
-	models.TokenTypeGroupingSets: "GROUPING SETS",
-	models.TokenTypeSets:         "SETS",
+	"ROLLUP":       models.TokenTypeRollup,
+	"CUBE":         models.TokenTypeCube,
+	"GROUPING":     models.TokenTypeGrouping,
+	"GROUPING SETS": models.TokenTypeGroupingSets,
+	"SETS":         models.TokenTypeSets,
 
 	// Data types
-	models.TokenTypeInt:     "INT",
-	models.TokenTypeInteger: "INTEGER",
-	models.TokenTypeVarchar: "VARCHAR",
-	models.TokenTypeText:    "TEXT",
-	models.TokenTypeBoolean: "BOOLEAN",
+	"INTEGER": models.TokenTypeInteger,
+	"VARCHAR": models.TokenTypeVarchar,
+	"TEXT":    models.TokenTypeText,
+	"BOOLEAN": models.TokenTypeBoolean,
 
-	// FETCH clause keywords (SQL-99 F861, F862)
-	models.TokenTypeFetch:   "FETCH",
-	models.TokenTypeNext:    "NEXT",
-	models.TokenTypeTies:    "TIES",
-	models.TokenTypePercent: "PERCENT",
-	models.TokenTypeOnly:    "ONLY",
+	// FETCH clause keywords
+	"FETCH":   models.TokenTypeFetch,
+	"NEXT":    models.TokenTypeNext,
+	"TIES":    models.TokenTypeTies,
+	"PERCENT": models.TokenTypePercent,
+	"ONLY":    models.TokenTypeOnly,
+
+	// Role-related keywords
+	"ROLE":       models.TokenTypeRole,
+	"USER":       models.TokenTypeUser,
+	"PASSWORD":   models.TokenTypePassword,
+	"LOGIN":      models.TokenTypeLogin,
+	"SUPERUSER":  models.TokenTypeSuperuser,
+	"CREATEDB":   models.TokenTypeCreateDB,
+	"CREATEROLE": models.TokenTypeCreateRole,
+	"TO":         models.TokenTypeTo,
+
+	// Locking keywords
+	"SHARE":          models.TokenTypeShare,
+	"KEY SHARE":      models.TokenTypeKeyword,
+	"NO KEY UPDATE":  models.TokenTypeKeyword,
 
 	// Other keywords
-	models.TokenTypeIf:      "IF",
-	models.TokenTypeRefresh: "REFRESH",
-	models.TokenTypeTo:      "TO",
+	"IF":             models.TokenTypeIf,
+	"REFRESH":        models.TokenTypeRefresh,
+	"COUNT":          models.TokenTypeCount,
+	"MATERIALIZED VIEW": models.TokenTypeKeyword,
+
+	// Generic/uncommon keywords (map to generic keyword type)
+	"ADD":          models.TokenTypeKeyword,
+	"NOSUPERUSER":  models.TokenTypeKeyword,
+	"NOLOGIN":      models.TokenTypeKeyword,
+	"NOCREATEDB":   models.TokenTypeKeyword,
+	"NOCREATEROLE": models.TokenTypeKeyword,
+	"OWNER":        models.TokenTypeKeyword,
+	"VALID":        models.TokenTypeKeyword,
+	"UNTIL":        models.TokenTypeKeyword,
+	"CONNECTOR":    models.TokenTypeKeyword,
+	"POLICY":       models.TokenTypeKeyword,
+	"DCPROPERTIES": models.TokenTypeKeyword,
+	"HASH":         models.TokenTypeKeyword,
+	"RESET":        models.TokenTypeKeyword,
+	"MEMBER":       models.TokenTypeKeyword,
+	"URL":          models.TokenTypeKeyword,
+	"UNKNOWN":      models.TokenTypeKeyword,
+}
+
+// normalizeTokens ensures all tokens have ModelType set by inferring it from the string Type.
+// This is called once at parse entry to enable pure integer comparison in isType().
+// Tokens produced by ConvertTokensForParser already have ModelType set and are unaffected.
+func normalizeTokens(tokens []token.Token) {
+	for i := range tokens {
+		if tokens[i].ModelType == modelTypeUnset {
+			if mt, ok := stringTypeToModelType[tokens[i].Type]; ok {
+				tokens[i].ModelType = mt
+			} else {
+				// For any unknown string type, set as generic keyword
+				// This ensures isType() always has an int to compare
+				tokens[i].ModelType = models.TokenTypeKeyword
+			}
+		}
+	}
 }
 
 // isType checks if the current token's ModelType matches the expected type.
-// Falls back to string comparison if ModelType is not set (for backward compatibility).
+// Pure integer comparison — no string fallback. All tokens are normalized at parse entry
+// via normalizeTokens() to ensure ModelType is always set.
 func (p *Parser) isType(expected models.TokenType) bool {
-	// Fast path: use int comparison if ModelType is set
-	if p.currentToken.ModelType != modelTypeUnset {
-		return p.currentToken.ModelType == expected
-	}
-	// Fallback: string comparison for tokens without ModelType
-	if str, ok := modelTypeToString[expected]; ok {
-		return p.currentToken.Type == str
-	}
-	return false
+	return p.currentToken.ModelType == expected
 }
 
 // isAnyType checks if the current token's ModelType matches any of the given types.
@@ -959,57 +978,33 @@ func (p *Parser) matchType(expected models.TokenType) bool {
 }
 
 // isComparisonOperator checks if the current token is a comparison operator using O(1) switch.
-// This is a hot path optimization for expression parsing.
 func (p *Parser) isComparisonOperator() bool {
-	// Fast path: use ModelType switch for O(1) lookup
-	if p.currentToken.ModelType != modelTypeUnset {
-		switch p.currentToken.ModelType {
-		case models.TokenTypeEq, models.TokenTypeLt, models.TokenTypeGt,
-			models.TokenTypeNeq, models.TokenTypeLtEq, models.TokenTypeGtEq,
-			models.TokenTypeTilde, models.TokenTypeTildeAsterisk,
-			models.TokenTypeExclamationMarkTilde, models.TokenTypeExclamationMarkTildeAsterisk:
-			return true
-		}
-		return false
-	}
-	// Fallback: string comparison for tokens without ModelType (e.g., tests)
-	switch p.currentToken.Type {
-	case "=", "<", ">", "!=", "<=", ">=", "<>", "~", "~*", "!~", "!~*":
+	switch p.currentToken.ModelType {
+	case models.TokenTypeEq, models.TokenTypeLt, models.TokenTypeGt,
+		models.TokenTypeNeq, models.TokenTypeLtEq, models.TokenTypeGtEq,
+		models.TokenTypeTilde, models.TokenTypeTildeAsterisk,
+		models.TokenTypeExclamationMarkTilde, models.TokenTypeExclamationMarkTildeAsterisk:
 		return true
 	}
 	return false
 }
 
 // isQuantifier checks if the current token is ANY or ALL using O(1) switch.
-// This is used for subquery quantifier operators like "= ANY (...)".
 func (p *Parser) isQuantifier() bool {
-	// Fast path: use ModelType switch for O(1) lookup
-	if p.currentToken.ModelType != modelTypeUnset {
-		switch p.currentToken.ModelType {
-		case models.TokenTypeAny, models.TokenTypeAll:
-			return true
-		}
-		return false
+	switch p.currentToken.ModelType {
+	case models.TokenTypeAny, models.TokenTypeAll:
+		return true
 	}
-	// Fallback: string comparison for tokens without ModelType
-	upper := strings.ToUpper(p.currentToken.Literal)
-	return upper == "ANY" || upper == "ALL"
+	return false
 }
 
 // isBooleanLiteral checks if the current token is TRUE or FALSE using O(1) switch.
-// This is used for parsing boolean literal values in expressions.
 func (p *Parser) isBooleanLiteral() bool {
-	// Fast path: use ModelType switch for O(1) lookup
-	if p.currentToken.ModelType != modelTypeUnset {
-		switch p.currentToken.ModelType {
-		case models.TokenTypeTrue, models.TokenTypeFalse:
-			return true
-		}
-		return false
+	switch p.currentToken.ModelType {
+	case models.TokenTypeTrue, models.TokenTypeFalse:
+		return true
 	}
-	// Fallback: string comparison for tokens without ModelType
-	upper := strings.ToUpper(p.currentToken.Literal)
-	return upper == "TRUE" || upper == "FALSE"
+	return false
 }
 
 // =============================================================================
@@ -1022,8 +1017,7 @@ func (p *Parser) expectedError(expected string) error {
 // parseIdent parses an identifier
 func (p *Parser) parseIdent() *ast.Identifier {
 	// Accept both regular identifiers and double-quoted identifiers
-	if p.currentToken.Type != token.IDENT && p.currentToken.Type != "IDENT" &&
-		!p.isType(models.TokenTypeDoubleQuotedString) {
+	if !p.isType(models.TokenTypeIdentifier) && !p.isType(models.TokenTypeDoubleQuotedString) {
 		return nil
 	}
 	ident := &ast.Identifier{Name: p.currentToken.Literal}
@@ -1051,7 +1045,7 @@ func (p *Parser) parseObjectName() ast.ObjectName {
 
 // parseStringLiteral parses a string literal
 func (p *Parser) parseStringLiteral() string {
-	if p.currentToken.Type != token.STRING && p.currentToken.Type != "STRING" {
+	if !p.isType(models.TokenTypeString) {
 		return ""
 	}
 	value := p.currentToken.Literal
@@ -1120,12 +1114,11 @@ func (p *Parser) parseAlterTableStmt() (ast.Statement, error) {
 
 // isJoinKeyword checks if current token is a JOIN-related keyword
 func (p *Parser) isJoinKeyword() bool {
-	switch p.currentToken.Type {
-	case "JOIN", "INNER", "LEFT", "RIGHT", "FULL", "CROSS", "NATURAL":
-		return true
-	default:
-		return false
-	}
+	return p.isAnyType(
+		models.TokenTypeJoin, models.TokenTypeInner, models.TokenTypeLeft,
+		models.TokenTypeRight, models.TokenTypeFull, models.TokenTypeCross,
+		models.TokenTypeNatural,
+	)
 }
 
 // parseWithStatement parses a WITH statement (Common Table Expression).

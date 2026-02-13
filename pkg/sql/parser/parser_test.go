@@ -201,8 +201,8 @@ func TestParserUpdate(t *testing.T) {
 	if stmt.TableName != "users" {
 		t.Fatalf("expected table name 'users', got %q", stmt.TableName)
 	}
-	if len(stmt.Updates) != 1 {
-		t.Fatalf("expected 1 update, got %d", len(stmt.Updates))
+	if len(stmt.Assignments) != 1 {
+		t.Fatalf("expected 1 update, got %d", len(stmt.Assignments))
 	}
 	if stmt.Where == nil {
 		t.Fatal("expected WHERE clause, got nil")

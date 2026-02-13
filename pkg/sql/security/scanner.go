@@ -600,14 +600,9 @@ func (s *Scanner) scanUpdateStatement(stmt *ast.UpdateStatement, result *ScanRes
 		s.scanExpression(stmt.Where, result, "WHERE clause")
 	}
 
-	// Check SET values - use Assignments field
+	// Check SET values
 	for _, assignment := range stmt.Assignments {
 		s.scanExpressionForDangerousFunctions(assignment.Value, result)
-	}
-
-	// Also check Updates field for backward compatibility
-	for _, update := range stmt.Updates {
-		s.scanExpressionForDangerousFunctions(update.Value, result)
 	}
 }
 

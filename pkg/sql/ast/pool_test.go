@@ -61,7 +61,7 @@ func TestUpdateStatementPool(t *testing.T) {
 
 		// Use it
 		stmt.TableName = "users"
-		stmt.Updates = []UpdateExpression{
+		stmt.Assignments = []UpdateExpression{
 			{
 				Column: &Identifier{Name: "email"},
 				Value:  &LiteralValue{Value: "new@example.com"},
@@ -80,8 +80,8 @@ func TestUpdateStatementPool(t *testing.T) {
 		if stmt.TableName != "" {
 			t.Errorf("TableName not cleared, got %v", stmt.TableName)
 		}
-		if len(stmt.Updates) != 0 {
-			t.Errorf("Updates not cleared, len = %d", len(stmt.Updates))
+		if len(stmt.Assignments) != 0 {
+			t.Errorf("Updates not cleared, len = %d", len(stmt.Assignments))
 		}
 		if stmt.Where != nil {
 			t.Errorf("Where not cleared, got %v", stmt.Where)
@@ -432,7 +432,7 @@ func TestMemoryLeaks_UpdateStatementPool(t *testing.T) {
 		stmt := GetUpdateStatement()
 
 		stmt.TableName = "users"
-		stmt.Updates = append(stmt.Updates, UpdateExpression{
+		stmt.Assignments = append(stmt.Assignments, UpdateExpression{
 			Column: &Identifier{Name: "status"},
 			Value:  &LiteralValue{Value: "active"},
 		})

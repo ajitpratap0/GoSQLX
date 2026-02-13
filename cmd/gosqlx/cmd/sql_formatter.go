@@ -283,17 +283,12 @@ func (f *SQLFormatter) formatUpdate(stmt *ast.UpdateStatement) error {
 		f.builder.WriteString(" " + stmt.Alias)
 	}
 
-	if len(stmt.Updates) > 0 || len(stmt.Assignments) > 0 {
+	if len(stmt.Assignments) > 0 {
 		f.writeNewline()
 		f.writeKeyword("SET")
 		f.builder.WriteString(" ")
 
-		updates := stmt.Updates
-		if len(stmt.Assignments) > 0 {
-			updates = stmt.Assignments
-		}
-
-		for i, update := range updates {
+		for i, update := range stmt.Assignments {
 			update := update // G601: Create local copy to avoid memory aliasing
 			if i > 0 {
 				f.builder.WriteString(", ")

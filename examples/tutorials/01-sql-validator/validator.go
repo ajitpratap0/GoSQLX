@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"path/filepath"
 	"strings"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"

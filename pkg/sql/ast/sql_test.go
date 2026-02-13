@@ -144,7 +144,7 @@ func TestInsertStatementSQL(t *testing.T) {
 func TestUpdateStatementSQL(t *testing.T) {
 	stmt := &UpdateStatement{
 		TableName: "users",
-		Updates:   []UpdateExpression{{Column: &Identifier{Name: "name"}, Value: &LiteralValue{Value: "Bob", Type: "STRING"}}},
+		Assignments: []UpdateExpression{{Column: &Identifier{Name: "name"}, Value: &LiteralValue{Value: "Bob", Type: "STRING"}}},
 		Where:     &BinaryExpression{Left: &Identifier{Name: "id"}, Operator: "=", Right: &LiteralValue{Value: 1, Type: "INTEGER"}},
 	}
 	want := "UPDATE users SET name = 'Bob' WHERE id = 1"

@@ -646,7 +646,9 @@ WHERE active = TRUE`
 			keywords.NewKeywordCaseRule(keywords.CaseUpper),
 		)
 		result := l.LintString(sqlWithComments, "comments.sql")
-		// TODO: Comments should ideally be handled - keywords in comments shouldn't trigger violations
+		// NOTE: Comment-aware linting is tracked in a future enhancement.
+		// Keywords inside comments may still trigger violations until the
+		// tokenizer skips comment tokens during rule evaluation.
 		t.Logf("SQL with comments violations: %d", len(result.Violations))
 	})
 }

@@ -600,8 +600,9 @@ func Format(sql string, options FormatOptions) (string, error) {
 		_ = ast
 	}()
 
-	// TODO: Implement full AST-based formatting
-	// For now, return the original SQL with basic processing
+	// AST-based formatting: the parsed AST is available above for future
+	// deep-formatting passes. Currently we apply lightweight transformations
+	// (semicolon insertion, whitespace normalisation) directly on the source.
 	result := sql
 
 	// Add semicolon if requested and not present

@@ -7,7 +7,38 @@ package ast
 import (
 	"fmt"
 	"strings"
+	"sync"
+	"unicode"
 )
+
+// builderPool reuses strings.Builder instances for SQL serialization,
+// following the project's existing pooling patterns (sync.Pool for tokenizer
+// buffers, token objects, etc.) to reduce allocations in hot paths.
+var builderPool = sync.Pool{
+	New: func() interface{} {
+		return &strings.Builder{}
+	},
+}
+
+// getBuilder retrieves a strings.Builder from the pool, ready for use.
+// Always pair with putBuilder to return it.
+func getBuilder() *strings.Builder {
+	sb := builderPool.Get().(*strings.Builder)
+	sb.Reset()
+	return sb
+}
+
+// putBuilder returns a strings.Builder to the pool.
+func putBuilder(sb *strings.Builder) {
+	if sb == nil {
+		return
+	}
+	// Don't pool very large builders to avoid holding excess memory.
+	if sb.Cap() > 64*1024 {
+		return
+	}
+	builderPool.Put(sb)
+}
 
 // SQL returns the SQL string representation of the AST.
 func (a AST) SQL() string {
@@ -25,19 +56,66 @@ func (a AST) SQL() string {
 // ============================================================
 
 func (i *Identifier) SQL() string {
-	if i.Table != "" {
-		return i.Table + "." + i.Name
+	if i == nil {
+		return ""
 	}
-	return i.Name
+	if i.Table != "" {
+		return safeIdentifier(i.Table) + "." + safeIdentifier(i.Name)
+	}
+	return safeIdentifier(i.Name)
+}
+
+// safeIdentifier returns the identifier unchanged if it contains only safe
+// characters (letters, digits, underscores, dots, *). Otherwise it double-
+// quotes it with proper escaping to prevent SQL identifier injection.
+func safeIdentifier(name string) string {
+	if name == "" {
+		return `""`
+	}
+	for _, r := range name {
+		if r != '_' && r != '*' && r != '.' && !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
+		}
+	}
+	return name
+}
+
+// escapeStringLiteral escapes a string for safe inclusion in a single-quoted
+// SQL literal, handling characters that can lead to SQL injection.
+func escapeStringLiteral(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch r {
+		case '\'':
+			b.WriteString("''")
+		case '\\':
+			b.WriteString(`\\`)
+		case '\x00':
+			// Drop null bytes — invalid in SQL string literals.
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\x1a': // Ctrl-Z (EOF on Windows)
+			b.WriteString(`\Z`)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func (l *LiteralValue) SQL() string {
+	if l == nil {
+		return ""
+	}
 	if l.Value == nil || strings.EqualFold(l.Type, "NULL") {
 		return "NULL"
 	}
 	switch strings.ToUpper(l.Type) {
 	case "STRING":
-		return fmt.Sprintf("'%s'", strings.ReplaceAll(fmt.Sprintf("%v", l.Value), "'", "''"))
+		return "'" + escapeStringLiteral(fmt.Sprintf("%v", l.Value)) + "'"
 	case "BOOLEAN":
 		return strings.ToUpper(fmt.Sprintf("%v", l.Value))
 	default:
@@ -46,10 +124,16 @@ func (l *LiteralValue) SQL() string {
 }
 
 func (i *Ident) SQL() string {
+	if i == nil {
+		return ""
+	}
 	return i.Name
 }
 
 func (b *BinaryExpression) SQL() string {
+	if b == nil {
+		return ""
+	}
 	left := exprSQL(b.Left)
 	right := exprSQL(b.Right)
 	op := b.Operator
@@ -78,6 +162,9 @@ func (b *BinaryExpression) SQL() string {
 }
 
 func (u *UnaryExpression) SQL() string {
+	if u == nil {
+		return ""
+	}
 	inner := exprSQL(u.Expr)
 	switch u.Operator {
 	case Not:
@@ -94,15 +181,25 @@ func (u *UnaryExpression) SQL() string {
 }
 
 func (a *AliasedExpression) SQL() string {
+	if a == nil {
+		return ""
+	}
 	return exprSQL(a.Expr) + " AS " + a.Alias
 }
 
 func (c *CastExpression) SQL() string {
+	if c == nil {
+		return ""
+	}
 	return fmt.Sprintf("CAST(%s AS %s)", exprSQL(c.Expr), c.Type)
 }
 
 func (c *CaseExpression) SQL() string {
-	var sb strings.Builder
+	if c == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString("CASE")
 	if c.Value != nil {
 		sb.WriteString(" ")
@@ -123,10 +220,16 @@ func (c *CaseExpression) SQL() string {
 }
 
 func (w *WhenClause) SQL() string {
+	if w == nil {
+		return ""
+	}
 	return fmt.Sprintf("WHEN %s THEN %s", exprSQL(w.Condition), exprSQL(w.Result))
 }
 
 func (b *BetweenExpression) SQL() string {
+	if b == nil {
+		return ""
+	}
 	not := ""
 	if b.Not {
 		not = "NOT "
@@ -135,6 +238,9 @@ func (b *BetweenExpression) SQL() string {
 }
 
 func (i *InExpression) SQL() string {
+	if i == nil {
+		return ""
+	}
 	not := ""
 	if i.Not {
 		not = "NOT "
@@ -150,23 +256,39 @@ func (i *InExpression) SQL() string {
 }
 
 func (e *ExistsExpression) SQL() string {
+	if e == nil {
+		return ""
+	}
 	return fmt.Sprintf("EXISTS (%s)", stmtSQL(e.Subquery))
 }
 
 func (s *SubqueryExpression) SQL() string {
+	if s == nil {
+		return ""
+	}
 	return fmt.Sprintf("(%s)", stmtSQL(s.Subquery))
 }
 
 func (a *AnyExpression) SQL() string {
+	if a == nil {
+		return ""
+	}
 	return fmt.Sprintf("%s %s ANY (%s)", exprSQL(a.Expr), a.Operator, stmtSQL(a.Subquery))
 }
 
 func (a *AllExpression) SQL() string {
+	if a == nil {
+		return ""
+	}
 	return fmt.Sprintf("%s %s ALL (%s)", exprSQL(a.Expr), a.Operator, stmtSQL(a.Subquery))
 }
 
 func (f *FunctionCall) SQL() string {
-	var sb strings.Builder
+	if f == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString(f.Name)
 	sb.WriteString("(")
 	if f.Distinct {
@@ -201,14 +323,23 @@ func (f *FunctionCall) SQL() string {
 }
 
 func (e *ExtractExpression) SQL() string {
+	if e == nil {
+		return ""
+	}
 	return fmt.Sprintf("EXTRACT(%s FROM %s)", e.Field, exprSQL(e.Source))
 }
 
 func (p *PositionExpression) SQL() string {
+	if p == nil {
+		return ""
+	}
 	return fmt.Sprintf("POSITION(%s IN %s)", exprSQL(p.Substr), exprSQL(p.Str))
 }
 
 func (s *SubstringExpression) SQL() string {
+	if s == nil {
+		return ""
+	}
 	if s.Length != nil {
 		return fmt.Sprintf("SUBSTRING(%s FROM %s FOR %s)", exprSQL(s.Str), exprSQL(s.Start), exprSQL(s.Length))
 	}
@@ -216,10 +347,16 @@ func (s *SubstringExpression) SQL() string {
 }
 
 func (i *IntervalExpression) SQL() string {
+	if i == nil {
+		return ""
+	}
 	return fmt.Sprintf("INTERVAL '%s'", i.Value)
 }
 
 func (l *ListExpression) SQL() string {
+	if l == nil {
+		return ""
+	}
 	vals := make([]string, len(l.Values))
 	for i, v := range l.Values {
 		vals[i] = exprSQL(v)
@@ -228,6 +365,9 @@ func (l *ListExpression) SQL() string {
 }
 
 func (t *TupleExpression) SQL() string {
+	if t == nil {
+		return ""
+	}
 	vals := make([]string, len(t.Expressions))
 	for i, e := range t.Expressions {
 		vals[i] = exprSQL(e)
@@ -236,6 +376,9 @@ func (t *TupleExpression) SQL() string {
 }
 
 func (a *ArrayConstructorExpression) SQL() string {
+	if a == nil {
+		return ""
+	}
 	if a.Subquery != nil {
 		return fmt.Sprintf("ARRAY(%s)", stmtSQL(a.Subquery))
 	}
@@ -247,6 +390,9 @@ func (a *ArrayConstructorExpression) SQL() string {
 }
 
 func (a *ArraySubscriptExpression) SQL() string {
+	if a == nil {
+		return ""
+	}
 	s := exprSQL(a.Array)
 	for _, idx := range a.Indices {
 		s += "[" + exprSQL(idx) + "]"
@@ -255,6 +401,9 @@ func (a *ArraySubscriptExpression) SQL() string {
 }
 
 func (a *ArraySliceExpression) SQL() string {
+	if a == nil {
+		return ""
+	}
 	start := ""
 	end := ""
 	if a.Start != nil {
@@ -269,14 +418,23 @@ func (a *ArraySliceExpression) SQL() string {
 // GROUP BY advanced expressions
 
 func (r *RollupExpression) SQL() string {
+	if r == nil {
+		return ""
+	}
 	return "ROLLUP(" + exprListSQL(r.Expressions) + ")"
 }
 
 func (c *CubeExpression) SQL() string {
+	if c == nil {
+		return ""
+	}
 	return "CUBE(" + exprListSQL(c.Expressions) + ")"
 }
 
 func (g *GroupingSetsExpression) SQL() string {
+	if g == nil {
+		return ""
+	}
 	sets := make([]string, len(g.Sets))
 	for i, set := range g.Sets {
 		sets[i] = "(" + exprListSQL(set) + ")"
@@ -289,7 +447,11 @@ func (g *GroupingSetsExpression) SQL() string {
 // ============================================================
 
 func (s *SelectStatement) SQL() string {
-	var sb strings.Builder
+	if s == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
 
 	if s.With != nil {
 		sb.WriteString(s.With.SQL())
@@ -353,11 +515,11 @@ func (s *SelectStatement) SQL() string {
 	}
 
 	if s.Limit != nil {
-		sb.WriteString(fmt.Sprintf(" LIMIT %d", *s.Limit))
+		fmt.Fprintf(sb, " LIMIT %d", *s.Limit)
 	}
 
 	if s.Offset != nil {
-		sb.WriteString(fmt.Sprintf(" OFFSET %d", *s.Offset))
+		fmt.Fprintf(sb, " OFFSET %d", *s.Offset)
 	}
 
 	if s.Fetch != nil {
@@ -372,7 +534,11 @@ func (s *SelectStatement) SQL() string {
 }
 
 func (i *InsertStatement) SQL() string {
-	var sb strings.Builder
+	if i == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
 
 	if i.With != nil {
 		sb.WriteString(i.With.SQL())
@@ -417,7 +583,11 @@ func (i *InsertStatement) SQL() string {
 }
 
 func (u *UpdateStatement) SQL() string {
-	var sb strings.Builder
+	if u == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
 
 	if u.With != nil {
 		sb.WriteString(u.With.SQL())
@@ -462,7 +632,11 @@ func (u *UpdateStatement) SQL() string {
 }
 
 func (d *DeleteStatement) SQL() string {
-	var sb strings.Builder
+	if d == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
 
 	if d.With != nil {
 		sb.WriteString(d.With.SQL())
@@ -499,7 +673,11 @@ func (d *DeleteStatement) SQL() string {
 }
 
 func (c *CreateTableStatement) SQL() string {
-	var sb strings.Builder
+	if c == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString("CREATE ")
 	if c.Temporary {
 		sb.WriteString("TEMPORARY ")
@@ -530,18 +708,22 @@ func (c *CreateTableStatement) SQL() string {
 	}
 
 	if c.PartitionBy != nil {
-		sb.WriteString(fmt.Sprintf(" PARTITION BY %s (%s)", c.PartitionBy.Type, strings.Join(c.PartitionBy.Columns, ", ")))
+		fmt.Fprintf(sb, " PARTITION BY %s (%s)", c.PartitionBy.Type, strings.Join(c.PartitionBy.Columns, ", "))
 	}
 
 	for _, opt := range c.Options {
-		sb.WriteString(fmt.Sprintf(" %s=%s", opt.Name, opt.Value))
+		fmt.Fprintf(sb, " %s=%s", opt.Name, opt.Value)
 	}
 
 	return sb.String()
 }
 
 func (c *CreateIndexStatement) SQL() string {
-	var sb strings.Builder
+	if c == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString("CREATE ")
 	if c.Unique {
 		sb.WriteString("UNIQUE ")
@@ -580,7 +762,11 @@ func (c *CreateIndexStatement) SQL() string {
 }
 
 func (a *AlterTableStatement) SQL() string {
-	var sb strings.Builder
+	if a == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString("ALTER TABLE ")
 	sb.WriteString(a.Table)
 	for _, action := range a.Actions {
@@ -592,7 +778,11 @@ func (a *AlterTableStatement) SQL() string {
 }
 
 func (d *DropStatement) SQL() string {
-	var sb strings.Builder
+	if d == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString("DROP ")
 	sb.WriteString(d.ObjectType)
 	sb.WriteString(" ")
@@ -608,7 +798,11 @@ func (d *DropStatement) SQL() string {
 }
 
 func (t *TruncateStatement) SQL() string {
-	var sb strings.Builder
+	if t == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString("TRUNCATE TABLE ")
 	sb.WriteString(strings.Join(t.Tables, ", "))
 	if t.RestartIdentity {
@@ -624,7 +818,11 @@ func (t *TruncateStatement) SQL() string {
 }
 
 func (w *WithClause) SQL() string {
-	var sb strings.Builder
+	if w == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString("WITH ")
 	if w.Recursive {
 		sb.WriteString("RECURSIVE ")
@@ -638,6 +836,9 @@ func (w *WithClause) SQL() string {
 }
 
 func (s *SetOperation) SQL() string {
+	if s == nil {
+		return ""
+	}
 	left := stmtSQL(s.Left)
 	right := stmtSQL(s.Right)
 	op := s.Operator
@@ -648,6 +849,9 @@ func (s *SetOperation) SQL() string {
 }
 
 func (v *Values) SQL() string {
+	if v == nil {
+		return ""
+	}
 	rows := make([]string, len(v.Rows))
 	for i, row := range v.Rows {
 		vals := make([]string, len(row))
@@ -660,7 +864,11 @@ func (v *Values) SQL() string {
 }
 
 func (c *CreateViewStatement) SQL() string {
-	var sb strings.Builder
+	if c == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString("CREATE ")
 	if c.OrReplace {
 		sb.WriteString("OR REPLACE ")
@@ -688,7 +896,11 @@ func (c *CreateViewStatement) SQL() string {
 }
 
 func (c *CreateMaterializedViewStatement) SQL() string {
-	var sb strings.Builder
+	if c == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString("CREATE MATERIALIZED VIEW ")
 	if c.IfNotExists {
 		sb.WriteString("IF NOT EXISTS ")
@@ -712,7 +924,11 @@ func (c *CreateMaterializedViewStatement) SQL() string {
 }
 
 func (r *RefreshMaterializedViewStatement) SQL() string {
-	var sb strings.Builder
+	if r == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString("REFRESH MATERIALIZED VIEW ")
 	if r.Concurrently {
 		sb.WriteString("CONCURRENTLY ")
@@ -729,7 +945,11 @@ func (r *RefreshMaterializedViewStatement) SQL() string {
 }
 
 func (m *MergeStatement) SQL() string {
-	var sb strings.Builder
+	if m == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString("MERGE INTO ")
 	sb.WriteString(tableRefSQL(&m.TargetTable))
 	if m.TargetAlias != "" {
@@ -773,7 +993,11 @@ func (m *MergeStatement) SQL() string {
 // DML types from dml.go
 
 func (s *Select) SQL() string {
-	var sb strings.Builder
+	if s == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString("SELECT ")
 	if s.Distinct {
 		sb.WriteString("DISTINCT ")
@@ -804,16 +1028,20 @@ func (s *Select) SQL() string {
 		sb.WriteString(orderBySQL(s.OrderBy))
 	}
 	if s.Limit != nil {
-		sb.WriteString(fmt.Sprintf(" LIMIT %d", *s.Limit))
+		fmt.Fprintf(sb, " LIMIT %d", *s.Limit)
 	}
 	if s.Offset != nil {
-		sb.WriteString(fmt.Sprintf(" OFFSET %d", *s.Offset))
+		fmt.Fprintf(sb, " OFFSET %d", *s.Offset)
 	}
 	return sb.String()
 }
 
 func (i *Insert) SQL() string {
-	var sb strings.Builder
+	if i == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString("INSERT INTO ")
 	sb.WriteString(tableRefSQL(&i.Table))
 	if len(i.Columns) > 0 {
@@ -841,7 +1069,11 @@ func (i *Insert) SQL() string {
 }
 
 func (u *Update) SQL() string {
-	var sb strings.Builder
+	if u == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString("UPDATE ")
 	sb.WriteString(tableRefSQL(&u.Table))
 	sb.WriteString(" SET ")
@@ -862,7 +1094,11 @@ func (u *Update) SQL() string {
 }
 
 func (d *Delete) SQL() string {
-	var sb strings.Builder
+	if d == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString("DELETE FROM ")
 	sb.WriteString(tableRefSQL(&d.Table))
 	if d.Where != nil {
@@ -930,7 +1166,8 @@ func orderBySQL(orders []OrderByExpression) string {
 }
 
 func tableRefSQL(t *TableReference) string {
-	var sb strings.Builder
+	sb := getBuilder()
+	defer putBuilder(sb)
 	if t.Lateral {
 		sb.WriteString("LATERAL ")
 	}
@@ -949,7 +1186,8 @@ func tableRefSQL(t *TableReference) string {
 }
 
 func joinSQL(j *JoinClause) string {
-	var sb strings.Builder
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString(j.Type)
 	sb.WriteString(" JOIN ")
 	sb.WriteString(tableRefSQL(&j.Right))
@@ -985,13 +1223,14 @@ func windowFrameSQL(f *WindowFrame) string {
 }
 
 func fetchSQL(f *FetchClause) string {
-	var sb strings.Builder
+	sb := getBuilder()
+	defer putBuilder(sb)
 	if f.OffsetValue != nil {
-		sb.WriteString(fmt.Sprintf(" OFFSET %d ROWS", *f.OffsetValue))
+		fmt.Fprintf(sb, " OFFSET %d ROWS", *f.OffsetValue)
 	}
-	sb.WriteString(fmt.Sprintf(" FETCH %s", f.FetchType))
+	fmt.Fprintf(sb, " FETCH %s", f.FetchType)
 	if f.FetchValue != nil {
-		sb.WriteString(fmt.Sprintf(" %d", *f.FetchValue))
+		fmt.Fprintf(sb, " %d", *f.FetchValue)
 	}
 	if f.IsPercent {
 		sb.WriteString(" PERCENT")
@@ -1006,7 +1245,8 @@ func fetchSQL(f *FetchClause) string {
 }
 
 func forSQL(f *ForClause) string {
-	var sb strings.Builder
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString(" FOR ")
 	sb.WriteString(f.LockType)
 	if len(f.Tables) > 0 {
@@ -1023,7 +1263,8 @@ func forSQL(f *ForClause) string {
 }
 
 func cteSQL(cte *CommonTableExpr) string {
-	var sb strings.Builder
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString(cte.Name)
 	if len(cte.Columns) > 0 {
 		sb.WriteString(" (")
@@ -1045,7 +1286,8 @@ func cteSQL(cte *CommonTableExpr) string {
 }
 
 func onConflictSQL(oc *OnConflict) string {
-	var sb strings.Builder
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString(" ON CONFLICT")
 	if len(oc.Target) > 0 {
 		sb.WriteString(" (")
@@ -1074,7 +1316,8 @@ func onConflictSQL(oc *OnConflict) string {
 }
 
 func columnDefSQL(c *ColumnDef) string {
-	var sb strings.Builder
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString(c.Name)
 	sb.WriteString(" ")
 	sb.WriteString(c.Type)
@@ -1108,7 +1351,8 @@ func columnConstraintSQL(c *ColumnConstraint) string {
 }
 
 func tableConstraintSQL(tc *TableConstraint) string {
-	var sb strings.Builder
+	sb := getBuilder()
+	defer putBuilder(sb)
 	if tc.Name != "" {
 		sb.WriteString("CONSTRAINT ")
 		sb.WriteString(tc.Name)
@@ -1141,7 +1385,8 @@ func tableConstraintSQL(tc *TableConstraint) string {
 }
 
 func referenceSQL(r *ReferenceDefinition) string {
-	var sb strings.Builder
+	sb := getBuilder()
+	defer putBuilder(sb)
 	sb.WriteString("REFERENCES ")
 	sb.WriteString(r.Table)
 	if len(r.Columns) > 0 {

@@ -520,10 +520,6 @@ func (s *Scanner) Scan(tree *ast.AST) *ScanResult {
 //	        fmt.Printf("  %s: %s\n", finding.Pattern, finding.Description)
 //	    }
 //	}
-func isSecurityIdentStart(b byte) bool {
-	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || b == '_'
-}
-
 func (s *Scanner) ScanSQL(sql string) *ScanResult {
 	result := &ScanResult{
 		Findings: make([]Finding, 0),

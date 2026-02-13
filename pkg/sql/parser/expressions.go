@@ -587,7 +587,7 @@ func (p *Parser) isDataTypeKeyword() bool {
 // isJSONOperator checks if current token is a JSON/JSONB operator
 func (p *Parser) isJSONOperator() bool {
 	switch p.currentToken.ModelType {
-	case models.TokenTypeArrow,         // ->
+	case models.TokenTypeArrow, // ->
 		models.TokenTypeLongArrow,     // ->>
 		models.TokenTypeHashArrow,     // #>
 		models.TokenTypeHashLongArrow, // #>>

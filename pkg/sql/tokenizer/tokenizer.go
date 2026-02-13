@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -243,27 +244,7 @@ type Tokenizer struct {
 	lineStarts []int              // Byte offsets of line starts (for position tracking)
 	line       int                // Current line number (1-based)
 	keywords   *keywords.Keywords // Keyword classifier for token type determination
-	debugLog   DebugLogger        // Optional debug logger for verbose tracing
-}
-
-// SetDebugLogger sets a debug logger for verbose tracing during tokenization.
-// The logger receives debug messages for each token produced, which is useful
-// for diagnosing tokenization issues or understanding token stream structure.
-//
-// Pass nil to disable debug logging.
-//
-// Example:
-//
-//	type MyLogger struct{}
-//	func (l *MyLogger) Debug(format string, args ...interface{}) {
-//	    log.Printf("[TOKENIZER] "+format, args...)
-//	}
-//
-//	tkz := GetTokenizer()
-//	tkz.SetDebugLogger(&MyLogger{})
-//	tokens, _ := tkz.Tokenize([]byte(sql))
-func (t *Tokenizer) SetDebugLogger(logger DebugLogger) {
-	t.debugLog = logger
+	logger     *slog.Logger       // Optional structured logger for verbose tracing
 }
 
 // New creates a new Tokenizer with default configuration and keyword support.
@@ -451,11 +432,19 @@ func (t *Tokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) {
 				return
 			}
 
-			tokens = append(tokens, models.TokenWithSpan{
+			tw := models.TokenWithSpan{
 				Token: token,
 				Start: t.toSQLPosition(startPos),
 				End:   t.getCurrentPosition(),
-			})
+			}
+			if t.logger != nil && t.logger.Enabled(context.Background(), slog.LevelDebug) {
+				t.logger.LogAttrs(context.Background(), slog.LevelDebug, "token",
+					slog.String("type", fmt.Sprintf("%T", token)),
+					slog.Int("start_line", int(tw.Start.Line)),
+					slog.Int("start_col", int(tw.Start.Column)),
+				)
+			}
+			tokens = append(tokens, tw)
 		}
 	}()
 
@@ -583,11 +572,19 @@ func (t *Tokenizer) TokenizeContext(ctx context.Context, input []byte) ([]models
 				return
 			}
 
-			tokens = append(tokens, models.TokenWithSpan{
+			tw := models.TokenWithSpan{
 				Token: token,
 				Start: t.toSQLPosition(startPos),
 				End:   t.getCurrentPosition(),
-			})
+			}
+			if t.logger != nil && t.logger.Enabled(context.Background(), slog.LevelDebug) {
+				t.logger.LogAttrs(context.Background(), slog.LevelDebug, "token",
+					slog.String("type", fmt.Sprintf("%T", token)),
+					slog.Int("start_line", int(tw.Start.Line)),
+					slog.Int("start_col", int(tw.Start.Column)),
+				)
+			}
+			tokens = append(tokens, tw)
 		}
 	}()
 

@@ -135,7 +135,7 @@ func PutTokenizer(t *Tokenizer) {
 //   - lineStarts: Empty slice with preserved capacity (contains [0])
 //   - input: nil (ready for new input)
 //   - keywords: Preserved (immutable, no need to reset)
-//   - debugLog: nil (must be set again if needed)
+//   - logger: nil (must be set again if needed)
 //
 // Performance: By preserving slice capacity, subsequent Tokenize() calls
 // avoid reallocation of lineStarts for similarly-sized inputs.
@@ -160,5 +160,5 @@ func (t *Tokenizer) Reset() {
 	t.line = 0
 
 	// Don't reset keywords as they're constant
-	t.debugLog = nil
+	t.logger = nil
 }

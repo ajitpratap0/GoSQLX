@@ -520,15 +520,75 @@ func (s *Scanner) Scan(tree *ast.AST) *ScanResult {
 //	        fmt.Printf("  %s: %s\n", finding.Pattern, finding.Description)
 //	    }
 //	}
+// stripDollarQuotedStrings replaces the content of PostgreSQL dollar-quoted strings
+// with empty strings to prevent false positive security findings from string literals.
+// For example, $$DROP TABLE users$$ becomes $$$$ and $tag$content$tag$ becomes $tag$$tag$.
+func stripDollarQuotedStrings(sql string) string {
+	var result strings.Builder
+	i := 0
+	for i < len(sql) {
+		if sql[i] != '$' {
+			result.WriteByte(sql[i])
+			i++
+			continue
+		}
+		// Try to match opening tag: $identifier$ or $$
+		tagStart := i + 1
+		tagEnd := tagStart
+		if tagEnd < len(sql) && sql[tagEnd] == '$' {
+			// $$ - empty tag
+		} else {
+			// Try to read identifier
+			if tagEnd < len(sql) && (isSecurityIdentStart(sql[tagEnd])) {
+				tagEnd++
+				for tagEnd < len(sql) && isSecurityIdentChar(sql[tagEnd]) {
+					tagEnd++
+				}
+				if tagEnd >= len(sql) || sql[tagEnd] != '$' {
+					result.WriteByte(sql[i])
+					i++
+					continue
+				}
+			} else {
+				result.WriteByte(sql[i])
+				i++
+				continue
+			}
+		}
+		tag := sql[tagStart:tagEnd]
+		closingTag := "$" + tag + "$"
+		openEnd := tagEnd + 1 // position after closing $ of opening tag
+
+		// Find closing tag
+		closeIdx := strings.Index(sql[openEnd:], closingTag)
+		if closeIdx < 0 {
+			// Unterminated - just output as-is
+			result.WriteByte(sql[i])
+			i++
+			continue
+		}
+		// Write opening tag, skip content, write closing tag
+		result.WriteString(closingTag)
+		result.WriteString(closingTag)
+		i = openEnd + closeIdx + len(closingTag)
+	}
+	return result.String()
+}
+
+func isSecurityIdentStart(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || b == '_'
+}
+
+func isSecurityIdentChar(b byte) bool {
+	return isSecurityIdentStart(b) || (b >= '0' && b <= '9')
+}
+
 func (s *Scanner) ScanSQL(sql string) *ScanResult {
 	result := &ScanResult{
 		Findings: make([]Finding, 0),
 	}
 
-	// Strip dollar-quoted string contents to prevent false positives and
-	// ensure injection patterns hidden inside dollar-quoted strings are not missed.
-	// The content of dollar-quoted strings is replaced with empty strings so that
-	// the structural SQL around them is still scanned.
+	// Strip dollar-quoted string content to prevent false positives
 	sql = stripDollarQuotedStrings(sql)
 
 	// Check for comment-based bypass patterns in raw SQL

@@ -124,9 +124,10 @@ func TestRequireInvalidSQL_Valid(t *testing.T) {
 func TestAssertFormattedSQL_Matching(t *testing.T) {
 	mockT := &mockTestingT{}
 
-	// Note: Current Format implementation returns input as-is
+	// AST-based formatting with default options (IndentSize=2) produces multi-line output
 	sql := "SELECT * FROM users"
-	result := AssertFormattedSQL(mockT, sql, sql)
+	expected := "SELECT *\nFROM users"
+	result := AssertFormattedSQL(mockT, sql, expected)
 
 	if !result {
 		t.Error("AssertFormattedSQL should return true for matching format")

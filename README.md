@@ -8,7 +8,7 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go)](https://go.dev)
 [![Release](https://img.shields.io/github/v/release/ajitpratap0/GoSQLX?style=for-the-badge&color=orange)](https://github.com/ajitpratap0/GoSQLX/releases)
-[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg?style=for-the-badge)](https://www.gnu.org/licenses/agpl-3.0)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg?style=for-the-badge)](https://www.apache.org/licenses/LICENSE-2.0)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge)](http://makeapullrequest.com)
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/ajitpratap0/GoSQLX/test.yml?branch=main&label=Tests&style=flat-square)](https://github.com/ajitpratap0/GoSQLX/actions)
@@ -1144,7 +1144,7 @@ If GoSQLX helps your project, please consider:
 
 <div align="center">
 
-This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)** - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **Apache License 2.0** - see the [LICENSE](LICENSE) file for details.
 
 </div>
 

@@ -2275,7 +2275,7 @@ GoSQLX achieves **~80-85% SQL-99 compliance** with comprehensive support for:
   - `ERROR_CODES.md` - Complete error code reference
 - **Examples**: See `/examples` directory
 - **Issue Tracker**: GitHub Issues
-- **License**: MIT
+- **License**: Apache-2.0
 
 ---
 

@@ -231,4 +231,4 @@ python/
 
 ## License
 
-AGPL-3.0. See the [LICENSE](../LICENSE) file in the repository root.
+Apache-2.0. See the [LICENSE](../LICENSE) file in the repository root.

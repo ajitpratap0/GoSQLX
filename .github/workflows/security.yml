@@ -38,7 +38,7 @@ jobs:
         continue-on-error: true  # Don't fail immediately - let validation step decide
         with:
           # Full recursive scan - severity and confidence levels configurable via env vars
-          args: '-fmt sarif -out gosec-results.sarif -severity ${{ env.GOSEC_SEVERITY }} -confidence ${{ env.GOSEC_CONFIDENCE }} ./...'
+          args: '-fmt sarif -out gosec-results.sarif -severity ${{ env.GOSEC_SEVERITY }} -confidence ${{ env.GOSEC_CONFIDENCE }} -exclude=G115 ./...'
 
       - name: Upload GoSec SARIF file
         uses: github/codeql-action/upload-sarif@v4

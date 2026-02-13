@@ -82,6 +82,7 @@ func convertTokens(tokens []models.TokenWithSpan) []token.Token {
 		}
 
 		// Map token type to string for single tokens
+		//lint:ignore SA1019 intentional use during #215 migration
 		tokenType := token.Type(fmt.Sprintf("%v", t.Token.Type))
 
 		// Try to map to proper token type string
@@ -140,10 +141,12 @@ func convertTokens(tokens []models.TokenWithSpan) []token.Token {
 			// For any other type, use the value as the type if it looks like a keyword
 			// This handles keywords like FULL, CROSS, USING that don't have specific token types
 			if t.Token.Value != "" {
+				//lint:ignore SA1019 intentional use during #215 migration
 				tokenType = token.Type(t.Token.Value)
 			}
 			// Special handling for keywords that come through as TokenTypeKeyword
 			if t.Token.Type == models.TokenTypeKeyword {
+				//lint:ignore SA1019 intentional use during #215 migration
 				tokenType = token.Type(t.Token.Value)
 			}
 		}

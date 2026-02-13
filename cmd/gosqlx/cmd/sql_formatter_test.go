@@ -57,6 +57,7 @@ func TestSQLFormatter_BasicFormatting(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
+			//lint:ignore SA1019 intentional use during #215 migration
 			convertedTokens, err := parser.ConvertTokensForParser(tokens)
 			if err != nil {
 				t.Fatalf("Token conversion failed: %v", err)
@@ -134,6 +135,7 @@ func TestSQLFormatter_JOINStatements(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
+			//lint:ignore SA1019 intentional use during #215 migration
 			convertedTokens, err := parser.ConvertTokensForParser(tokens)
 			if err != nil {
 				t.Fatalf("Token conversion failed: %v", err)
@@ -198,6 +200,7 @@ func TestSQLFormatter_WithClauses(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
+			//lint:ignore SA1019 intentional use during #215 migration
 			convertedTokens, err := parser.ConvertTokensForParser(tokens)
 			if err != nil {
 				t.Fatalf("Token conversion failed: %v", err)
@@ -267,6 +270,7 @@ func TestSQLFormatter_WindowFunctions(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
+			//lint:ignore SA1019 intentional use during #215 migration
 			convertedTokens, err := parser.ConvertTokensForParser(tokens)
 			if err != nil {
 				t.Fatalf("Token conversion failed: %v", err)
@@ -326,6 +330,7 @@ func TestSQLFormatter_InsertStatements(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
+			//lint:ignore SA1019 intentional use during #215 migration
 			convertedTokens, err := parser.ConvertTokensForParser(tokens)
 			if err != nil {
 				t.Fatalf("Token conversion failed: %v", err)
@@ -395,6 +400,7 @@ func TestSQLFormatter_DDLStatements(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
+			//lint:ignore SA1019 intentional use during #215 migration
 			convertedTokens, err := parser.ConvertTokensForParser(tokens)
 			if err != nil {
 				t.Fatalf("Token conversion failed: %v", err)
@@ -464,6 +470,7 @@ func TestSQLFormatter_ComplexExpressions(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
+			//lint:ignore SA1019 intentional use during #215 migration
 			convertedTokens, err := parser.ConvertTokensForParser(tokens)
 			if err != nil {
 				t.Fatalf("Token conversion failed: %v", err)
@@ -527,6 +534,7 @@ func TestSQLFormatter_Options(t *testing.T) {
 		for _, indentSize := range indentSizes {
 			tkz := tokenizer.GetTokenizer()
 			tokens, _ := tkz.Tokenize([]byte(sql))
+			//lint:ignore SA1019 intentional use during #215 migration
 			convertedTokens, _ := parser.ConvertTokensForParser(tokens)
 			p := parser.NewParser()
 			astObj := ast.NewAST()
@@ -559,6 +567,7 @@ func TestSQLFormatter_Options(t *testing.T) {
 		for _, uppercase := range []bool{true, false} {
 			tkz := tokenizer.GetTokenizer()
 			tokens, _ := tkz.Tokenize([]byte(sql))
+			//lint:ignore SA1019 intentional use during #215 migration
 			convertedTokens, _ := parser.ConvertTokensForParser(tokens)
 			p := parser.NewParser()
 			astObj := ast.NewAST()

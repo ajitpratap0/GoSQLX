@@ -26,6 +26,7 @@ func convertTokensForWindowFunctions(tokens []models.TokenWithSpan) []token.Toke
 		}
 
 		// Determine token type
+		//lint:ignore SA1019 intentional use during #215 migration
 		var tokenType token.Type
 		modelType := t.Token.Type // Use the tokenizer's type as the model type
 
@@ -50,12 +51,14 @@ func convertTokensForWindowFunctions(tokens []models.TokenWithSpan) []token.Toke
 				t.Token.Value == "LOCKED" || t.Token.Value == "OF" ||
 				t.Token.Value == "NO" || t.Token.Value == "KEY" ||
 				t.Token.Value == "FOR" {
+				//lint:ignore SA1019 intentional use during #215 migration
 				tokenType = token.Type(t.Token.Value)
 			} else {
 				tokenType = "IDENT"
 			}
 		case models.TokenTypeKeyword:
 			// Use the keyword value as the token type
+			//lint:ignore SA1019 intentional use during #215 migration
 			tokenType = token.Type(t.Token.Value)
 		case models.TokenTypeFrom:
 			tokenType = "FROM"
@@ -118,6 +121,7 @@ func convertTokensForWindowFunctions(tokens []models.TokenWithSpan) []token.Toke
 		case models.TokenTypeNumber:
 			tokenType = "INT"
 		case models.TokenTypeOperator:
+			//lint:ignore SA1019 intentional use during #215 migration
 			tokenType = token.Type(t.Token.Value)
 		case models.TokenTypeMul, models.TokenTypeAsterisk:
 			tokenType = "*"
@@ -135,6 +139,7 @@ func convertTokensForWindowFunctions(tokens []models.TokenWithSpan) []token.Toke
 		default:
 			// For any other type, use the value as the type if it looks like a keyword
 			if t.Token.Value != "" {
+				//lint:ignore SA1019 intentional use during #215 migration
 				tokenType = token.Type(t.Token.Value)
 			}
 		}

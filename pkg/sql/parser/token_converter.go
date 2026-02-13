@@ -38,6 +38,7 @@ type TokenConverter struct {
 	buffer []token.Token
 
 	// Type mapping cache for performance (pre-computed)
+	//lint:ignore SA1019 intentional use during #215 migration
 	typeMap map[models.TokenType]token.Type //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
 }
 
@@ -348,6 +349,7 @@ func (tc *TokenConverter) convertSingleToken(t models.TokenWithSpan) (token.Toke
 		}
 		// Use the keyword value as the type
 		return token.Token{
+			//lint:ignore SA1019 intentional use during #215 migration
 			Type:      token.Type(t.Token.Value), //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
 			ModelType: models.TokenTypeKeyword,
 			Literal:   t.Token.Value,
@@ -364,6 +366,7 @@ func (tc *TokenConverter) convertSingleToken(t models.TokenWithSpan) (token.Toke
 	}
 
 	// Fallback to string conversion for unmapped types
+	//lint:ignore SA1019 intentional use during #215 migration
 	tokenType := token.Type(fmt.Sprintf("%v", t.Token.Type)) //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
 
 	return token.Token{
@@ -385,6 +388,7 @@ func containsDecimalOrExponent(s string) bool {
 
 // getKeywordTokenTypeWithModel returns both the parser token type (string) and models.TokenType (int)
 // for SQL keywords that come as IDENTIFIER. This enables unified type system support.
+//lint:ignore SA1019 intentional use during #215 migration
 func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) { //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
 	// Fast path: Use pooled buffer for uppercase conversion (avoids allocation per call)
 	// SQL keywords are ASCII, so this is safe and much faster than string operations
@@ -532,7 +536,9 @@ func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) {
 
 // buildTypeMapping creates an optimized lookup table for token type conversion
 // Includes all token types defined in models.TokenType for comprehensive coverage
+//lint:ignore SA1019 intentional use during #215 migration
 func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
+	//lint:ignore SA1019 intentional use during #215 migration
 	return map[models.TokenType]token.Type{ //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
 		// SQL Keywords (core)
 		models.TokenTypeSelect:  "SELECT",

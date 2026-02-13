@@ -239,6 +239,7 @@ WHEN MATCHED THEN
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
+			//lint:ignore SA1019 intentional use during #215 migration
 			convertedTokens, err := parser.ConvertTokensForParser(tokens)
 			if err != nil {
 				t.Fatalf("Token conversion failed: %v", err)
@@ -357,6 +358,7 @@ WHEN MATCHED AND s.value IS NOT NULL THEN
 				return
 			}
 
+			//lint:ignore SA1019 intentional use during #215 migration
 			convertedTokens, err := parser.ConvertTokensForParser(tokens)
 			if err != nil {
 				if !tt.shouldError {
@@ -433,6 +435,7 @@ WHEN MATCHED THEN UPDATE SET t.val = s.val`
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
+			//lint:ignore SA1019 intentional use during #215 migration
 			convertedTokens, err := parser.ConvertTokensForParser(tokens)
 			if err != nil {
 				t.Fatalf("Token conversion failed: %v", err)

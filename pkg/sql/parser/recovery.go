@@ -154,6 +154,7 @@ func (p *Parser) ParseWithRecovery(tokens []token.Token) ([]ast.Statement, []err
 
 // parseWithRecovery is the internal implementation shared by both public APIs.
 func (p *Parser) parseWithRecovery(tokens []token.Token) ([]ast.Statement, []error) {
+	tokens = normalizeTokens(tokens)
 	p.tokens = tokens
 	p.currentPos = 0
 	if len(tokens) > 0 {

@@ -282,7 +282,7 @@ func TestParser_ExpressionEdgeCases(t *testing.T) {
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "data"},
 			},
-			wantErr: true, // Nested parentheses in SELECT not yet supported
+			wantErr: false, // Nested parentheses now work with normalized ModelType
 		},
 		{
 			name: "complex boolean expression with NOT",
@@ -400,7 +400,7 @@ func TestParser_ExpressionEdgeCases(t *testing.T) {
 				{Type: "FROM", Literal: "FROM"},
 				{Type: "IDENT", Literal: "calculations"},
 			},
-			wantErr: true, // Complex arithmetic in SELECT list not yet supported
+			wantErr: false, // Complex arithmetic now works with normalized ModelType
 		},
 	}
 

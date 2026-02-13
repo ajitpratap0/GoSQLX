@@ -90,7 +90,13 @@ for file in "${FILES[@]}"; do
   display_file="${file#./}"
 
   # --- Validate (with timeout) ---
-  if output=$(timeout "$TIMEOUT" "$GOSQLX_BIN" validate "$file" 2>&1); then
+  TIMEOUT_CMD=""
+  if command -v timeout &>/dev/null; then
+    TIMEOUT_CMD="timeout $TIMEOUT"
+  elif command -v gtimeout &>/dev/null; then
+    TIMEOUT_CMD="gtimeout $TIMEOUT"
+  fi
+  if output=$($TIMEOUT_CMD "$GOSQLX_BIN" validate "$file" 2>&1); then
     TOTAL_VALID=$((TOTAL_VALID + 1))
   else
     VALIDATE_ERRORS=$((VALIDATE_ERRORS + 1))

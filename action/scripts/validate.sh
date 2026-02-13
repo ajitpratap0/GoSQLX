@@ -7,6 +7,25 @@ set -euo pipefail
 
 TIMEOUT="${INPUT_TIMEOUT:-600}"
 
+# Cross-platform millisecond timestamp (macOS date lacks %3N)
+millis() {
+  python3 -c 'import time; print(int(time.time()*1000))'
+}
+
+# Cross-platform timeout (macOS lacks timeout, use gtimeout or perl fallback)
+run_with_timeout() {
+  local secs="$1"
+  shift
+  if command -v timeout &>/dev/null; then
+    timeout "$secs" "$@"
+  elif command -v gtimeout &>/dev/null; then
+    gtimeout "$secs" "$@"
+  else
+    # Fallback: run without timeout
+    "$@"
+  fi
+}
+
 # Build validation command
 CMD="$HOME/go/bin/gosqlx validate"
 
@@ -36,11 +55,7 @@ fi
 
 CMD="$CMD --verbose"
 
-if date +%s%3N >/dev/null 2>&1; then
-  START_TIME=$(date +%s%3N)
-else
-  START_TIME=$(python3 -c 'import time; print(int(time.time()*1000))')
-fi
+START_TIME=$(millis)
 VALIDATED=0
 INVALID=0
 
@@ -48,7 +63,7 @@ while IFS= read -r file; do
   SAFE_FILE="${file//[^a-zA-Z0-9\/._-]/}"
   echo "Validating: $file"
 
-  if timeout "$TIMEOUT" $CMD "$file" 2>&1; then
+  if run_with_timeout "$TIMEOUT" $CMD "$file" 2>&1; then
     echo "✓ Valid: $file"
     VALIDATED=$((VALIDATED + 1))
   else
@@ -63,11 +78,7 @@ while IFS= read -r file; do
   fi
 done < "$RUNNER_TEMP/gosqlx-files.txt"
 
-if date +%s%3N >/dev/null 2>&1; then
-  END_TIME=$(date +%s%3N)
-else
-  END_TIME=$(python3 -c 'import time; print(int(time.time()*1000))')
-fi
+END_TIME=$(millis)
 DURATION=$((END_TIME - START_TIME))
 
 echo "::notice::Validation complete: $VALIDATED valid, $INVALID invalid files (${DURATION}ms)"

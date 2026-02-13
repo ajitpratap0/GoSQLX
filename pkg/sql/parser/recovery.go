@@ -82,7 +82,8 @@ func (p *Parser) isStatementStartingKeyword() bool {
 	case "SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "ALTER", "DROP",
 		"WITH", "MERGE", "REFRESH", "TRUNCATE",
 		"EXPLAIN", "ANALYZE", "SHOW", "DESCRIBE", "GRANT", "REVOKE",
-		"SET", "USE", "BEGIN", "COMMIT", "ROLLBACK", "VACUUM":
+		"SET", "USE", "BEGIN", "COMMIT", "ROLLBACK", "VACUUM",
+		"CALL", "EXECUTE":
 		return true
 	}
 	return false
@@ -112,34 +113,41 @@ func (p *Parser) synchronize() {
 // tokens (semicolons and statement-starting keywords) to skip past errors and
 // continue parsing subsequent statements.
 //
-// Thread Safety: Parser instances are NOT safe for concurrent use. Use GetParser()/
-// PutParser() to obtain a dedicated instance per goroutine.
+// The caller MUST call Release() on the returned RecoveryResult to return the
+// parser to the pool.
 //
-// The caller MUST release the returned statements back to the pool when done
-// using ast.ReleaseStatements(). Failing to do so will leak pooled objects.
+// Thread Safety: This function is safe for concurrent use — each call obtains its
+// own parser instance from the pool.
+//
+// Example:
+//
+//	result := parser.ParseMultiWithRecovery(tokens)
+//	defer result.Release()
+//	fmt.Printf("parsed %d statements with %d errors\n", len(result.Statements), len(result.Errors))
+func ParseMultiWithRecovery(tokens []token.Token) *RecoveryResult {
+	p := GetParser()
+	stmts, errs := p.parseWithRecovery(tokens)
+	return &RecoveryResult{
+		Statements: stmts,
+		Errors:     errs,
+		parser:     p,
+	}
+}
+
+// ParseWithRecovery parses a token stream, recovering from errors to collect multiple
+// errors and return a partial AST with successfully parsed statements.
+//
+// WARNING: This method mutates the parser's internal state (tokens, currentPos) and
+// is NOT safe for concurrent use on the same Parser instance. For thread-safe usage,
+// prefer ParseMultiWithRecovery() which obtains a parser from the pool.
+//
+// Callers are responsible for returning the parser to the pool via PutParser when done.
 //
 // Example:
 //
 //	p := parser.GetParser()
 //	defer parser.PutParser(p)
-//
 //	stmts, errs := p.ParseWithRecovery(tokens)
-//	defer ast.ReleaseStatements(stmts)
-//
-//	for _, err := range errs {
-//	    log.Printf("parse error: %v", err)
-//	}
-//	for _, stmt := range stmts {
-//	    // process successfully parsed statements
-//	}
-//
-// Parameters:
-//   - tokens: Slice of parser tokens to parse
-//
-// Returns:
-//   - []ast.Statement: Successfully parsed statements (may be empty). Caller must
-//     release via ast.ReleaseStatements().
-//   - []error: All parse errors encountered (each includes position information)
 func (p *Parser) ParseWithRecovery(tokens []token.Token) ([]ast.Statement, []error) {
 	return p.parseWithRecovery(tokens)
 }
@@ -169,9 +177,10 @@ func (p *Parser) parseWithRecovery(tokens []token.Token) ([]ast.Statement, []err
 			loc := p.currentLocation()
 			pe := &ParseError{
 				Msg:      err.Error(),
-				TokenIdx: savedPos,
+				TokenIdx: stmtStartPos,
 				Line:     loc.Line,
 				Column:   loc.Column,
+				Cause:    err,
 			}
 			if stmtStartPos < len(tokens) {
 				pe.TokenType = string(tokens[stmtStartPos].Type)

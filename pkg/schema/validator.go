@@ -264,7 +264,7 @@ func (v *Validator) validateUpdate(s *ast.UpdateStatement) []ValidationError {
 	}
 
 	// Validate SET column names (using Updates field)
-	for _, upd := range s.Updates {
+	for _, upd := range s.Assignments {
 		colName := extractColumnName(upd.Column)
 		if colName == "" {
 			continue

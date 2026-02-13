@@ -145,7 +145,7 @@ func (v *Validator) validateUpdateNotNull(s *ast.UpdateStatement) []ValidationEr
 		}
 	}
 
-	for _, upd := range s.Updates {
+	for _, upd := range s.Assignments {
 		checkAssignment(upd.Column, upd.Value)
 	}
 	for _, upd := range s.Assignments {

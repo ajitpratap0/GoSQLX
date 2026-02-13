@@ -37,11 +37,7 @@ func (l *LiteralValue) SQL() string {
 	}
 	switch strings.ToUpper(l.Type) {
 	case "STRING":
-		s := fmt.Sprintf("%v", l.Value)
-		s = strings.ReplaceAll(s, "\\", "\\\\")
-		s = strings.ReplaceAll(s, "'", "''")
-		s = strings.ReplaceAll(s, "\x00", "")
-		return fmt.Sprintf("'%s'", s)
+		return fmt.Sprintf("'%s'", strings.ReplaceAll(fmt.Sprintf("%v", l.Value), "'", "''"))
 	case "BOOLEAN":
 		return strings.ToUpper(fmt.Sprintf("%v", l.Value))
 	default:
@@ -435,7 +431,7 @@ func (u *UpdateStatement) SQL() string {
 	}
 
 	sb.WriteString(" SET ")
-	updates := u.Updates
+	updates := u.Assignments
 	if len(updates) == 0 {
 		updates = u.Assignments
 	}

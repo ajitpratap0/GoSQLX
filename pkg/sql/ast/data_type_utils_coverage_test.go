@@ -75,7 +75,7 @@ func TestColumnConstraint_String(t *testing.T) {
 
 	// With references
 	cc2 := &ColumnConstraint{
-		Type: "REFERENCES",
+		Type:       "REFERENCES",
 		References: &ReferenceDefinition{Table: "users", Columns: []string{"id"}},
 	}
 	s2 := cc2.String()

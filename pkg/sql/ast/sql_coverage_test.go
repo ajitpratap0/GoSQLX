@@ -373,7 +373,7 @@ func TestWindowFrameSQL(t *testing.T) {
 		From:    []TableReference{{Name: "t"}},
 		Windows: []WindowSpec{
 			{
-				Name: "w1",
+				Name:        "w1",
 				PartitionBy: []Expression{&Identifier{Name: "a"}},
 				OrderBy:     []OrderByExpression{{Expression: &Identifier{Name: "b"}, Ascending: true}},
 				FrameClause: &WindowFrame{
@@ -434,7 +434,7 @@ func TestForSQL(t *testing.T) {
 func TestTableConstraintSQL(t *testing.T) {
 	// Via CreateTableStatement
 	stmt := &CreateTableStatement{
-		Name: "t",
+		Name:    "t",
 		Columns: []ColumnDef{{Name: "id", Type: "INT"}},
 		Constraints: []TableConstraint{
 			{Name: "pk", Type: "PRIMARY KEY", Columns: []string{"id"}},

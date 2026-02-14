@@ -53,7 +53,6 @@ package gosqlx
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -590,29 +589,27 @@ func DefaultFormatOptions() FormatOptions {
 //
 // Returns the formatted SQL string or an error if SQL is invalid.
 func Format(sql string, options FormatOptions) (string, error) {
-	// First validate that the SQL is parseable
-	ast, err := Parse(sql)
+	// Parse SQL into AST
+	parsedAST, err := Parse(sql)
 	if err != nil {
 		return "", fmt.Errorf("cannot format invalid SQL: %w", err)
 	}
-	defer func() {
-		// Ensure proper cleanup of AST resources
-		_ = ast
-	}()
 
-	// AST-based formatting: the parsed AST is available above for future
-	// deep-formatting passes. Currently we apply lightweight transformations
-	// (semicolon insertion, whitespace normalisation) directly on the source.
-	result := sql
-
-	// Add semicolon if requested and not present
-	if options.AddSemicolon && len(result) > 0 {
-		trimmed := strings.TrimSpace(result)
-		if !strings.HasSuffix(trimmed, ";") {
-			result = trimmed + ";"
-		}
+	// Convert gosqlx FormatOptions to ast.FormatOptions
+	kwCase := ast.KeywordPreserve
+	if options.UppercaseKeywords {
+		kwCase = ast.KeywordUpper
+	}
+	astOpts := ast.FormatOptions{
+		IndentStyle:      ast.IndentSpaces,
+		IndentWidth:      options.IndentSize,
+		KeywordCase:      kwCase,
+		LineWidth:        options.SingleLineLimit,
+		NewlinePerClause: options.IndentSize > 0,
+		AddSemicolon:     options.AddSemicolon,
 	}
 
+	result := parsedAST.Format(astOpts)
 	return result, nil
 }
 

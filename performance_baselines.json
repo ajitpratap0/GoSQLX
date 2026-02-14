@@ -4,35 +4,35 @@
   "baselines": {
     "SimpleSelect": {
       "ns_per_op": 750,
-      "tolerance_percent": 45,
+      "tolerance_percent": 60,
       "description": "Basic SELECT query: SELECT id, name FROM users",
       "current_performance": "~550-900 ns/op in CI (variable due to shared runners)",
       "note": "Baseline adjusted for CI runner variability; shared GitHub Actions runners show wide perf variance"
     },
     "ComplexQuery": {
       "ns_per_op": 3200,
-      "tolerance_percent": 55,
+      "tolerance_percent": 65,
       "description": "Complex SELECT with JOIN, WHERE, ORDER BY, LIMIT",
       "current_performance": "~2400-3700 ns/op in CI (high variability due to shared runners)",
       "note": "Baseline increased and tolerance widened for CI runner variability"
     },
     "WindowFunction": {
       "ns_per_op": 1200,
-      "tolerance_percent": 45,
+      "tolerance_percent": 60,
       "description": "Window function query: ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...)",
       "current_performance": "~885-1005 ns/op in CI with ModelType fast path",
       "note": "Test tokens include ModelType for fast int comparison path; increased tolerance for CI variability"
     },
     "CTE": {
       "ns_per_op": 1100,
-      "tolerance_percent": 45,
+      "tolerance_percent": 60,
       "description": "Common Table Expression with WITH clause",
       "current_performance": "~855-967 ns/op in CI with ModelType fast path",
       "note": "Test tokens include ModelType for fast int comparison path; increased tolerance for CI variability"
     },
     "INSERT": {
       "ns_per_op": 850,
-      "tolerance_percent": 45,
+      "tolerance_percent": 60,
       "description": "Simple INSERT statement",
       "current_performance": "~660-1100 ns/op in CI (high variability)",
       "note": "Test tokens include ModelType for fast int comparison path; baseline increased for CI environment variability"

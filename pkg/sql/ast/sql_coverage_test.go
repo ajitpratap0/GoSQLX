@@ -5,9 +5,7 @@ import (
 	"testing"
 )
 
-func covIntPtr(v int) *int       { return &v }
-func covBoolPtr(v bool) *bool    { return &v }
-func covStrPtr(v string) *string { return &v }
+func covBoolPtr(v bool) *bool { return &v }
 
 func TestCreateIndexStatement_SQL(t *testing.T) {
 	stmt := &CreateIndexStatement{

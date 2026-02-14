@@ -26,6 +26,8 @@ var globalTypeMap map[models.TokenType]token.Type //nolint:staticcheck // intent
 var globalTypeMapOnce sync.Once
 
 // getTypeMap returns the singleton type mapping, initializing it on first call.
+//
+//lint:ignore SA1019 bridge code for #215 migration
 func getTypeMap() map[models.TokenType]token.Type { //nolint:staticcheck // bridge code for #215 migration
 	globalTypeMapOnce.Do(func() {
 		globalTypeMap = buildTypeMapping()

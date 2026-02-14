@@ -134,8 +134,9 @@ func parseQuery(sql string) (bool, string) {
 		return false, "Tokenization error: " + err.Error()
 	}
 
-	// Parse (includes token conversion)
+	// Parse directly from model tokens
 	p := parser.NewParser()
+	defer p.Release()
 	_, err = p.ParseFromModelTokens(tokens)
 	if err != nil {
 		return false, "Parse error: " + err.Error()

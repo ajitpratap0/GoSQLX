@@ -199,6 +199,8 @@ func (f *Formatter) formatSQL(sql string) (string, error) {
 		return "", nil
 	}
 
+	// Convert tokens for parser using centralized converter
+
 	// Parse to AST with proper error handling for memory management
 	p := parser.NewParser()
 	parsedAST, err := p.ParseFromModelTokens(tokens)

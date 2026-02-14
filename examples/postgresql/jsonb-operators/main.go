@@ -182,6 +182,8 @@ func parseAndDisplayJSON(sql string) {
 		return
 	}
 
+	
+	// Parse
 	p := parser.NewParser()
 	defer p.Release()
 

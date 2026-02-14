@@ -195,8 +195,9 @@ func TestAPIStability_ParserOutput(t *testing.T) {
 		t.Fatalf("Tokenization failed: %v", err)
 	}
 
-	// Parse (includes token conversion)
+	// Parse directly from model tokens
 	p := parser.NewParser()
+	defer p.Release()
 	astObj, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Parsing failed: %v", err)
@@ -246,6 +247,7 @@ func TestAPIStability_ErrorHandling(t *testing.T) {
 		}
 
 		p := parser.NewParser()
+		defer p.Release()
 		_, err = p.ParseFromModelTokens(tokens)
 		if err == nil {
 			t.Error("Parser should return error for invalid SQL - error handling broken")

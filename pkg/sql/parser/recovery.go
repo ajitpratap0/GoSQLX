@@ -143,6 +143,15 @@ func (p *Parser) ParseWithRecovery(tokens []token.Token) ([]ast.Statement, []err
 	return p.parseWithRecovery(tokens)
 }
 
+// ParseWithRecoveryFromModelTokens parses tokenizer output with error recovery.
+func (p *Parser) ParseWithRecoveryFromModelTokens(tokens []models.TokenWithSpan) ([]ast.Statement, []error) {
+	converted, err := convertModelTokens(tokens)
+	if err != nil {
+		return nil, []error{fmt.Errorf("token conversion failed: %w", err)}
+	}
+	return p.parseWithRecovery(converted)
+}
+
 // parseWithRecovery is the internal implementation shared by both public APIs.
 func (p *Parser) parseWithRecovery(tokens []token.Token) ([]ast.Statement, []error) {
 	tokens = normalizeTokens(tokens)

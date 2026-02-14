@@ -75,6 +75,9 @@ func TestParser_JSONArrowOperator(t *testing.T) {
 				t.Fatalf("Tokenize failed: %v", err)
 			}
 
+			// Convert tokens
+
+			// Parse
 			p := NewParser()
 			astObj, err := p.ParseFromModelTokens(tokens)
 			if (err != nil) != tt.wantErr {
@@ -163,7 +166,9 @@ func TestParser_JSONComplexExpressions(t *testing.T) {
 				t.Fatalf("Tokenize failed: %v", err)
 			}
 
-			// Parse (includes token conversion)
+			// Convert tokens
+
+			// Parse
 			p := NewParser()
 			_, err = p.ParseFromModelTokens(tokens)
 			if (err != nil) != tt.wantErr {
@@ -203,7 +208,9 @@ func TestParser_JSONOperatorPrecedence(t *testing.T) {
 				t.Fatalf("Tokenize failed: %v", err)
 			}
 
-			// Parse (includes token conversion)
+			// Convert tokens
+
+			// Parse
 			p := NewParser()
 			_, err = p.ParseFromModelTokens(tokens)
 			if (err != nil) != tt.wantErr {
@@ -276,6 +283,9 @@ func TestParser_JSONBExistenceOperators(t *testing.T) {
 				t.Fatalf("Tokenize failed: %v", err)
 			}
 
+			// Convert tokens
+
+			// Parse
 			p := NewParser()
 			astObj, err := p.ParseFromModelTokens(tokens)
 			if (err != nil) != tt.wantErr {

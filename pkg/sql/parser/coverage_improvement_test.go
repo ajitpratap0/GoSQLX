@@ -999,23 +999,18 @@ func TestParseWithPositionsCoverage(t *testing.T) {
 
 	for _, tt := range sqls {
 		t.Run(tt.name, func(t *testing.T) {
-			converter := NewTokenConverter()
 			tkz := tokenizer.GetTokenizer()
 			defer tokenizer.PutTokenizer(tkz)
 
-			rawTokens, err := tkz.Tokenize([]byte(tt.sql))
+			tokens, err := tkz.Tokenize([]byte(tt.sql))
 			if err != nil {
 				t.Fatalf("tokenize error: %v", err)
-			}
-			result, err := converter.Convert(rawTokens)
-			if err != nil {
-				t.Fatalf("convert error: %v", err)
 			}
 
 			p := NewParser()
 			defer p.Release()
 
-			astResult, err := p.ParseWithPositions(result)
+			astResult, err := p.ParseFromModelTokensWithPositions(tokens)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

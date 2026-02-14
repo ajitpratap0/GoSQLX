@@ -141,19 +141,11 @@ func Parse(sql string) (*ast.AST, error) {
 		return nil, fmt.Errorf("tokenization failed: %w", err)
 	}
 
-	// Step 3: Convert to parser tokens using the proper converter
-	converter := parser.GetTokenConverter()
-	defer parser.PutTokenConverter(converter)
-	result, err := converter.Convert(tokens)
-	if err != nil {
-		return nil, fmt.Errorf("token conversion failed: %w", err)
-	}
-
-	// Step 4: Parse to AST
+	// Step 3: Parse to AST directly from model tokens
 	p := parser.NewParser()
 	defer p.Release()
 
-	astNode, err := p.Parse(result.Tokens)
+	astNode, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
 		return nil, fmt.Errorf("parsing failed: %w", err)
 	}
@@ -236,19 +228,11 @@ func ParseWithContext(ctx context.Context, sql string) (*ast.AST, error) {
 		return nil, fmt.Errorf("tokenization failed: %w", err)
 	}
 
-	// Step 3: Convert to parser tokens using the proper converter
-	converter := parser.GetTokenConverter()
-	defer parser.PutTokenConverter(converter)
-	result, err := converter.Convert(tokens)
-	if err != nil {
-		return nil, fmt.Errorf("token conversion failed: %w", err)
-	}
-
-	// Step 4: Parse to AST with context support
+	// Step 3: Parse to AST with context support
 	p := parser.NewParser()
 	defer p.Release()
 
-	astNode, err := p.ParseContext(ctx, result.Tokens)
+	astNode, err := p.ParseContextFromModelTokens(ctx, tokens)
 	if err != nil {
 		return nil, fmt.Errorf("parsing failed: %w", err)
 	}
@@ -407,9 +391,6 @@ func ParseMultiple(queries []string) ([]*ast.AST, error) {
 	p := parser.NewParser()
 	defer p.Release()
 
-	converter := parser.GetTokenConverter()
-	defer parser.PutTokenConverter(converter)
-
 	results := make([]*ast.AST, 0, len(queries))
 
 	for i, sql := range queries {
@@ -422,14 +403,8 @@ func ParseMultiple(queries []string) ([]*ast.AST, error) {
 			return nil, fmt.Errorf("query %d: tokenization failed: %w", i, err)
 		}
 
-		// Convert tokens
-		result, err := converter.Convert(tokens)
-		if err != nil {
-			return nil, fmt.Errorf("query %d: token conversion failed: %w", i, err)
-		}
-
-		// Parse
-		astNode, err := p.Parse(result.Tokens)
+		// Parse directly from model tokens
+		astNode, err := p.ParseFromModelTokens(tokens)
 		if err != nil {
 			return nil, fmt.Errorf("query %d: parsing failed: %w", i, err)
 		}
@@ -461,9 +436,6 @@ func ValidateMultiple(queries []string) error {
 	p := parser.NewParser()
 	defer p.Release()
 
-	converter := parser.GetTokenConverter()
-	defer parser.PutTokenConverter(converter)
-
 	for i, sql := range queries {
 		tkz.Reset()
 
@@ -473,14 +445,8 @@ func ValidateMultiple(queries []string) error {
 			return fmt.Errorf("query %d: %w", i, err)
 		}
 
-		// Convert
-		result, err := converter.Convert(tokens)
-		if err != nil {
-			return fmt.Errorf("query %d: %w", i, err)
-		}
-
-		// Parse
-		_, err = p.Parse(result.Tokens)
+		// Parse directly from model tokens
+		_, err = p.ParseFromModelTokens(tokens)
 		if err != nil {
 			return fmt.Errorf("query %d: %w", i, err)
 		}
@@ -633,15 +599,8 @@ func ParseWithRecovery(sql string) ([]ast.Statement, []error) {
 		return nil, []error{fmt.Errorf("tokenization failed: %w", err)}
 	}
 
-	converter := parser.GetTokenConverter()
-	defer parser.PutTokenConverter(converter)
-	result, err := converter.Convert(tokens)
-	if err != nil {
-		return nil, []error{fmt.Errorf("token conversion failed: %w", err)}
-	}
-
 	p := parser.NewParser()
 	defer p.Release()
 
-	return p.ParseWithRecovery(result.Tokens)
+	return p.ParseWithRecoveryFromModelTokens(tokens)
 }

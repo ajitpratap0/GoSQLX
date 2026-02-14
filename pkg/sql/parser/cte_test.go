@@ -21,6 +21,8 @@ func TestParser_SimpleCTE(t *testing.T) {
 	}
 
 	// Convert tokens for parser
+
+	// Parse tokens
 	parser := &Parser{}
 	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
@@ -84,6 +86,8 @@ func TestParser_RecursiveCTE(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
+
+	// Convert tokens for parser using standard converter
 
 	// Parse tokens
 	parser := &Parser{}
@@ -176,6 +180,8 @@ func TestParser_MultipleCTEs(t *testing.T) {
 	}
 
 	// Convert tokens for parser
+
+	// Parse tokens
 	parser := &Parser{}
 	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
@@ -228,6 +234,8 @@ func TestParser_CTEWithColumns(t *testing.T) {
 	}
 
 	// Convert tokens for parser
+
+	// Parse tokens
 	parser := &Parser{}
 	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
@@ -308,6 +316,8 @@ func TestParser_MaterializedCTE(t *testing.T) {
 			}
 
 			// Convert tokens for parser
+
+			// Parse tokens
 			parser := &Parser{}
 			astObj, err := parser.ParseFromModelTokens(tokens)
 			if err != nil {

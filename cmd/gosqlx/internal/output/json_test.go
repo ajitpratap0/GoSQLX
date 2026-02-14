@@ -134,6 +134,7 @@ func TestFormatParseJSON_Success(t *testing.T) {
 		t.Fatalf("Tokenization failed: %v", err)
 	}
 
+
 	p := parser.NewParser()
 	astObj, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
@@ -353,6 +354,7 @@ func TestConvertStatementToJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Tokenization failed: %v", err)
 	}
+
 
 	p := parser.NewParser()
 	astObj, err := p.ParseFromModelTokens(tokens)

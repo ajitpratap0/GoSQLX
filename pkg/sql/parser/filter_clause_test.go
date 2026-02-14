@@ -22,7 +22,9 @@ func setupParserForFilter(sql string) (*Parser, *ast.AST, error) {
 		return nil, nil, err
 	}
 
-	// Parse tokens directly from model tokens
+	// Convert tokens for parser using the public converter
+
+	// Parse tokens
 	parser := NewParser()
 	astObj, err := parser.ParseFromModelTokens(tokens)
 	return parser, astObj, err

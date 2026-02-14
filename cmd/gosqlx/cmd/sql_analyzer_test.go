@@ -60,6 +60,7 @@ func TestSQLAnalyzer_AnalyzeFixtures(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
+
 			p := parser.NewParser()
 			astObj := ast.NewAST()
 			defer ast.ReleaseAST(astObj)
@@ -206,6 +207,7 @@ func TestSQLAnalyzer_IssueDetails(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
+
 			p := parser.NewParser()
 			astObj := ast.NewAST()
 			defer ast.ReleaseAST(astObj)
@@ -288,6 +290,7 @@ func TestSQLAnalyzer_ComplexityMetrics(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
+
 			p := parser.NewParser()
 			astObj := ast.NewAST()
 			defer ast.ReleaseAST(astObj)
@@ -364,6 +367,7 @@ func TestSQLAnalyzer_ScoreCalculation(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
+
 			p := parser.NewParser()
 			astObj := ast.NewAST()
 			defer ast.ReleaseAST(astObj)
@@ -408,6 +412,7 @@ func TestSQLAnalyzer_ResetFunctionality(t *testing.T) {
 		t.Fatalf("Tokenization failed: %v", err)
 	}
 
+
 	p1 := parser.NewParser()
 	astObj1 := ast.NewAST()
 	defer ast.ReleaseAST(astObj1)
@@ -430,6 +435,7 @@ func TestSQLAnalyzer_ResetFunctionality(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Second tokenization failed: %v", err)
 	}
+
 
 	p2 := parser.NewParser()
 	astObj2 := ast.NewAST()
@@ -478,6 +484,7 @@ func TestSQLAnalyzer_InsertStatements(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
+
 
 			p := parser.NewParser()
 			astObj := ast.NewAST()
@@ -535,6 +542,7 @@ func TestSQLAnalyzer_UpdateStatements(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
+
 
 			p := parser.NewParser()
 			astObj := ast.NewAST()
@@ -604,6 +612,7 @@ func TestSQLAnalyzer_DeleteStatements(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
+
 
 			p := parser.NewParser()
 			astObj := ast.NewAST()
@@ -676,6 +685,7 @@ func TestSQLAnalyzer_MixedStatements(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
+
 
 			p := parser.NewParser()
 			astObj := ast.NewAST()
@@ -763,6 +773,7 @@ func TestSQLAnalyzer_SecurityScannerIntegration(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
+
 
 			p := parser.NewParser()
 			result, err := p.ParseFromModelTokens(tokens)

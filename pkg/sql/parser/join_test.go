@@ -1,163 +1,11 @@
 package parser
 
 import (
-	"fmt"
 	"testing"
 
-	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
-
-// convertTokens converts models.TokenWithSpan to token.Token for parser
-func convertTokens(tokens []models.TokenWithSpan) []token.Token {
-	result := make([]token.Token, 0, len(tokens)*2) // Extra space for split tokens
-
-	for _, t := range tokens {
-		// Handle compound JOIN tokens by splitting them
-		switch t.Token.Type {
-		case models.TokenTypeInnerJoin:
-			result = append(result, token.Token{Type: "INNER", ModelType: models.TokenTypeInner, Literal: "INNER"})
-			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
-			continue
-		case models.TokenTypeLeftJoin:
-			result = append(result, token.Token{Type: "LEFT", ModelType: models.TokenTypeLeft, Literal: "LEFT"})
-			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
-			continue
-		case models.TokenTypeRightJoin:
-			result = append(result, token.Token{Type: "RIGHT", ModelType: models.TokenTypeRight, Literal: "RIGHT"})
-			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
-			continue
-		case models.TokenTypeOuterJoin:
-			result = append(result, token.Token{Type: "OUTER", ModelType: models.TokenTypeOuter, Literal: "OUTER"})
-			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
-			continue
-		}
-
-		// Handle compound tokens that come as strings
-		if t.Token.Value == "INNER JOIN" {
-			result = append(result, token.Token{Type: "INNER", ModelType: models.TokenTypeInner, Literal: "INNER"})
-			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
-			continue
-		} else if t.Token.Value == "LEFT JOIN" {
-			result = append(result, token.Token{Type: "LEFT", ModelType: models.TokenTypeLeft, Literal: "LEFT"})
-			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
-			continue
-		} else if t.Token.Value == "RIGHT JOIN" {
-			result = append(result, token.Token{Type: "RIGHT", ModelType: models.TokenTypeRight, Literal: "RIGHT"})
-			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
-			continue
-		} else if t.Token.Value == "FULL JOIN" || t.Token.Type == models.TokenTypeKeyword && t.Token.Value == "FULL JOIN" {
-			result = append(result, token.Token{Type: "FULL", ModelType: models.TokenTypeFull, Literal: "FULL"})
-			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
-			continue
-		} else if t.Token.Value == "CROSS JOIN" || t.Token.Type == models.TokenTypeKeyword && t.Token.Value == "CROSS JOIN" {
-			result = append(result, token.Token{Type: "CROSS", ModelType: models.TokenTypeCross, Literal: "CROSS"})
-			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
-			continue
-		} else if t.Token.Value == "LEFT OUTER JOIN" {
-			result = append(result, token.Token{Type: "LEFT", ModelType: models.TokenTypeLeft, Literal: "LEFT"})
-			result = append(result, token.Token{Type: "OUTER", ModelType: models.TokenTypeOuter, Literal: "OUTER"})
-			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
-			continue
-		} else if t.Token.Value == "RIGHT OUTER JOIN" {
-			result = append(result, token.Token{Type: "RIGHT", ModelType: models.TokenTypeRight, Literal: "RIGHT"})
-			result = append(result, token.Token{Type: "OUTER", ModelType: models.TokenTypeOuter, Literal: "OUTER"})
-			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
-			continue
-		} else if t.Token.Value == "FULL OUTER JOIN" {
-			result = append(result, token.Token{Type: "FULL", ModelType: models.TokenTypeFull, Literal: "FULL"})
-			result = append(result, token.Token{Type: "OUTER", ModelType: models.TokenTypeOuter, Literal: "OUTER"})
-			result = append(result, token.Token{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"})
-			continue
-		} else if t.Token.Value == "ORDER BY" || t.Token.Type == models.TokenTypeOrderBy {
-			result = append(result, token.Token{Type: "ORDER", ModelType: models.TokenTypeOrder, Literal: "ORDER"})
-			result = append(result, token.Token{Type: "BY", ModelType: models.TokenTypeBy, Literal: "BY"})
-			continue
-		} else if t.Token.Value == "GROUP BY" || t.Token.Type == models.TokenTypeGroupBy {
-			result = append(result, token.Token{Type: "GROUP", ModelType: models.TokenTypeGroup, Literal: "GROUP"})
-			result = append(result, token.Token{Type: "BY", ModelType: models.TokenTypeBy, Literal: "BY"})
-			continue
-		}
-
-		// Map token type to string for single tokens
-		//lint:ignore SA1019 intentional use during #215 migration
-		tokenType := token.Type(fmt.Sprintf("%v", t.Token.Type))
-
-		// Try to map to proper token type string
-		switch t.Token.Type {
-		case models.TokenTypeSelect:
-			tokenType = "SELECT"
-		case models.TokenTypeFrom:
-			tokenType = "FROM"
-		case models.TokenTypeWhere:
-			tokenType = "WHERE"
-		case models.TokenTypeJoin:
-			tokenType = "JOIN"
-		case models.TokenTypeInner:
-			tokenType = "INNER"
-		case models.TokenTypeLeft:
-			tokenType = "LEFT"
-		case models.TokenTypeRight:
-			tokenType = "RIGHT"
-		case models.TokenTypeOuter:
-			tokenType = "OUTER"
-		case models.TokenTypeOn:
-			tokenType = "ON"
-		case models.TokenTypeAs:
-			tokenType = "AS"
-		case models.TokenTypeIdentifier:
-			tokenType = "IDENT"
-		case models.TokenTypeMul:
-			tokenType = "*"
-		case models.TokenTypeEq:
-			tokenType = "="
-		case models.TokenTypePeriod:
-			tokenType = "."
-		case models.TokenTypeLParen:
-			tokenType = "("
-		case models.TokenTypeRParen:
-			tokenType = ")"
-		case models.TokenTypeComma:
-			tokenType = ","
-		case models.TokenTypeOrder:
-			tokenType = "ORDER"
-		case models.TokenTypeBy:
-			tokenType = "BY"
-		case models.TokenTypeDesc:
-			tokenType = "DESC"
-		case models.TokenTypeAsc:
-			tokenType = "ASC"
-		case models.TokenTypeLimit:
-			tokenType = "LIMIT"
-		case models.TokenTypeTrue:
-			tokenType = "TRUE"
-		case models.TokenTypeNumber:
-			tokenType = "INT"
-		case models.TokenTypeEOF:
-			tokenType = "EOF"
-		default:
-			// For any other type, use the value as the type if it looks like a keyword
-			// This handles keywords like FULL, CROSS, USING that don't have specific token types
-			if t.Token.Value != "" {
-				//lint:ignore SA1019 intentional use during #215 migration
-				tokenType = token.Type(t.Token.Value)
-			}
-			// Special handling for keywords that come through as TokenTypeKeyword
-			if t.Token.Type == models.TokenTypeKeyword {
-				//lint:ignore SA1019 intentional use during #215 migration
-				tokenType = token.Type(t.Token.Value)
-			}
-		}
-
-		result = append(result, token.Token{
-			Type:    tokenType,
-			Literal: t.Token.Value,
-		})
-	}
-	return result
-}
 
 func TestParser_JoinTypes(t *testing.T) {
 	tests := []struct {
@@ -253,11 +101,10 @@ func TestParser_JoinTypes(t *testing.T) {
 			}
 
 			// Convert tokens for parser
-			convertedTokens := convertTokens(tokens)
 
 			// Parse tokens
 			parser := &Parser{}
-			astObj, err := parser.Parse(convertedTokens)
+			astObj, err := parser.ParseFromModelTokens(tokens)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -313,11 +160,10 @@ func TestParser_ComplexJoins(t *testing.T) {
 	}
 
 	// Convert tokens for parser
-	convertedTokens := convertTokens(tokens)
 
 	// Parse tokens
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}
@@ -435,11 +281,10 @@ func TestParser_InvalidJoinSyntax(t *testing.T) {
 			}
 
 			// Convert tokens for parser
-			convertedTokens := convertTokens(tokens)
 
 			// Parse tokens
 			parser := &Parser{}
-			astObj, err := parser.Parse(convertedTokens)
+			astObj, err := parser.ParseFromModelTokens(tokens)
 
 			if tt.expectedError != "" {
 				// We expect an error
@@ -504,11 +349,10 @@ func TestParser_JoinTreeLogic(t *testing.T) {
 	}
 
 	// Convert tokens for parser
-	convertedTokens := convertTokens(tokens)
 
 	// Parse tokens
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}
@@ -618,11 +462,10 @@ func TestParser_MultiColumnUSING(t *testing.T) {
 			}
 
 			// Convert tokens for parser
-			convertedTokens := convertTokens(tokens)
 
 			// Parse tokens
 			parser := &Parser{}
-			astObj, err := parser.Parse(convertedTokens)
+			astObj, err := parser.ParseFromModelTokens(tokens)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -751,11 +594,10 @@ func TestParser_MultiColumnUSINGEdgeCases(t *testing.T) {
 			}
 
 			// Convert tokens for parser
-			convertedTokens := convertTokens(tokens)
 
 			// Parse tokens
 			parser := &Parser{}
-			astObj, err := parser.Parse(convertedTokens)
+			astObj, err := parser.ParseFromModelTokens(tokens)
 
 			if tt.wantErr {
 				if err == nil {
@@ -834,11 +676,10 @@ func TestParser_MultiColumnUSINGWithComplexQueries(t *testing.T) {
 			}
 
 			// Convert tokens for parser
-			convertedTokens := convertTokens(tokens)
 
 			// Parse tokens
 			parser := &Parser{}
-			astObj, err := parser.Parse(convertedTokens)
+			astObj, err := parser.ParseFromModelTokens(tokens)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
 				return

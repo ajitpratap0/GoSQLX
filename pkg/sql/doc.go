@@ -25,11 +25,14 @@
 //	defer tokenizer.PutTokenizer(tkz)
 //	tokens, err := tkz.Tokenize([]byte("SELECT * FROM users"))
 //
-// 2. Parsing (pkg/sql/parser):
+// 2. Token Conversion (pkg/sql/parser):
 //
-//	p := parser.GetParser()
-//	defer parser.PutParser(p)
-//	astObj, err := p.ParseFromModelTokens(tokens)
+//	parserTokens := parser.ParseFromModelTokens(tokens)
+//
+// 3. Parsing (pkg/sql/parser):
+//
+//	p := &parser.Parser{}
+//	astObj, err := p.Parse(parserTokens)
 //	defer ast.ReleaseAST(astObj)
 //
 // 4. AST Traversal (pkg/sql/ast):

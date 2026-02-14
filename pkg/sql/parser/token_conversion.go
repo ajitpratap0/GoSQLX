@@ -1,5 +1,8 @@
 package parser
 
+// token_conversion.go contains internal token conversion logic from models.TokenWithSpan
+// to token.Token. This is an unexported implementation detail used by ParseFromModelTokens.
+
 import (
 	"fmt"
 	"sync"
@@ -9,8 +12,6 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
 
-// keywordBufferPool reuses byte buffers for keyword uppercase conversion.
-// Most SQL keywords are short (max ~20 chars), so a 32-byte buffer covers all cases.
 var keywordBufferPool = sync.Pool{
 	New: func() interface{} {
 		buf := make([]byte, 32)
@@ -18,124 +19,40 @@ var keywordBufferPool = sync.Pool{
 	},
 }
 
-// globalTypeMap is a package-level singleton for the static token type mapping.
-// Initialized once via sync.Once since the mapping never changes at runtime.
-//
-//lint:ignore SA1019 intentional use during #215 migration
-var globalTypeMap map[models.TokenType]token.Type //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
-var globalTypeMapOnce sync.Once
-
-// getTypeMap returns the singleton type mapping, initializing it on first call.
-//
-//lint:ignore SA1019 bridge code for #215 migration
-func getTypeMap() map[models.TokenType]token.Type { //nolint:staticcheck // bridge code for #215 migration
-	globalTypeMapOnce.Do(func() {
-		globalTypeMap = buildTypeMapping()
-	})
-	return globalTypeMap
-}
-
-// converterPool pools TokenConverter instances to eliminate per-call allocation.
-var converterPool = sync.Pool{
-	New: func() interface{} {
-		return &TokenConverter{
-			buffer: make([]token.Token, 0, 256),
-		}
-	},
-}
-
-// GetTokenConverter returns a pooled TokenConverter. Call PutTokenConverter when done.
-func GetTokenConverter() *TokenConverter {
-	return converterPool.Get().(*TokenConverter)
-}
-
-// PutTokenConverter returns a TokenConverter to the pool.
-func PutTokenConverter(tc *TokenConverter) {
-	tc.buffer = tc.buffer[:0]
-	converterPool.Put(tc)
-}
-
-// TokenConverter provides centralized, optimized token conversion from tokenizer output
-// (models.TokenWithSpan) to parser input (token.Token).
-//
-// The converter performs the following transformations:
-//   - Converts tokenizer TokenType to parser token.Type
-//   - Splits compound tokens (e.g., "GROUPING SETS" -> ["GROUPING", "SETS"])
-//   - Preserves source position information for error reporting
-//   - Uses object pooling for temporary buffers to reduce allocations
-//
-// Performance:
-//   - Throughput: ~10M tokens/second conversion rate
-//   - Memory: Zero allocations for keyword conversion via sync.Pool
-//   - Overhead: ~80ns per token (including position tracking)
-//
-// Thread Safety: NOT thread-safe - obtain separate instances via GetTokenConverter().
-type TokenConverter struct {
-	// Pre-allocated buffer to reduce memory allocations
-	buffer []token.Token
-}
-
-// ConversionResult contains the converted tokens and their position mappings for error reporting.
-//
-// Position mappings enable the parser to report errors with accurate line and column
-// numbers from the original SQL source. Each parser token is mapped back to its
-// corresponding tokenizer token with full position information.
-//
-// Usage:
-//
-//	converter := parser.GetTokenConverter()
-//	defer parser.PutTokenConverter(converter)
-//	result, _ := converter.Convert(tokenizerOutput)
-//	ast, err := parser.ParseWithPositions(result)
-//	if err != nil {
-//	    // Error includes line/column from original source
-//	    log.Printf("Parse error at line %d, column %d: %v",
-//	        err.Location.Line, err.Location.Column, err)
-//	}
+// ConversionResult contains converted tokens and position mappings for error reporting.
 type ConversionResult struct {
 	Tokens          []token.Token
-	PositionMapping []TokenPosition // Maps parser token index to original position
+	PositionMapping []TokenPosition
 }
 
 // TokenPosition maps a parser token back to its original source position.
-//
-// This structure enables precise error reporting by maintaining the connection between
-// parser tokens and their original source locations in the SQL text.
-//
-// Fields:
-//   - OriginalIndex: Index in the original tokenizer output slice
-//   - Start: Starting position (line, column, offset) in source SQL
-//   - End: Ending position (line, column, offset) in source SQL
-//   - SourceToken: Reference to original tokenizer token for full context
 type TokenPosition struct {
-	OriginalIndex int                   // Index in original token slice
-	Start         models.Location       // Original start position
-	End           models.Location       // Original end position
-	SourceToken   *models.TokenWithSpan // Reference to original token for error reporting
+	OriginalIndex int
+	Start         models.Location
+	End           models.Location
+	SourceToken   *models.TokenWithSpan
 }
 
-// NewTokenConverter creates an optimized token converter.
-//
-// Deprecated: Use GetTokenConverter/PutTokenConverter for pooled usage.
-func NewTokenConverter() *TokenConverter {
-	return &TokenConverter{
-		buffer: make([]token.Token, 0, 256),
+type tokenConverter struct {
+	buffer  []token.Token
+	typeMap map[models.TokenType]token.Type //nolint:staticcheck
+}
+
+func newTokenConverter() *tokenConverter {
+	return &tokenConverter{
+		buffer:  make([]token.Token, 0, 256),
+		typeMap: buildTypeMapping(),
 	}
 }
 
-// Convert converts tokenizer tokens to parser tokens with position tracking
-func (tc *TokenConverter) Convert(tokens []models.TokenWithSpan) (*ConversionResult, error) {
-	// Reset buffer but keep capacity
+func (tc *tokenConverter) convert(tokens []models.TokenWithSpan) (*ConversionResult, error) {
 	tc.buffer = tc.buffer[:0]
-	positions := make([]TokenPosition, 0, len(tokens)*2) // Account for compound token expansion
+	positions := make([]TokenPosition, 0, len(tokens)*2)
 
 	for originalIndex, t := range tokens {
-		t := t // G601: Create local copy to avoid memory aliasing
-		// Handle compound tokens that need to be split
+		t := t
 		if expanded := tc.handleCompoundToken(t); len(expanded) > 0 {
 			tc.buffer = append(tc.buffer, expanded...)
-
-			// Map all expanded tokens back to original position
 			for range expanded {
 				positions = append(positions, TokenPosition{
 					OriginalIndex: originalIndex,
@@ -147,13 +64,11 @@ func (tc *TokenConverter) Convert(tokens []models.TokenWithSpan) (*ConversionRes
 			continue
 		}
 
-		// Handle single tokens
 		convertedToken, err := tc.convertSingleToken(t)
 		if err != nil {
 			return nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to convert token: %v", err),
-				t.Start,
-				"", // SQL context not available in token converter
+				t.Start, "",
 			)
 		}
 
@@ -166,20 +81,15 @@ func (tc *TokenConverter) Convert(tokens []models.TokenWithSpan) (*ConversionRes
 		})
 	}
 
-	// Create result with copied slices to prevent buffer reuse issues
 	result := &ConversionResult{
 		Tokens:          make([]token.Token, len(tc.buffer)),
 		PositionMapping: positions,
 	}
 	copy(result.Tokens, tc.buffer)
-
 	return result, nil
 }
 
-// handleCompoundToken processes compound tokens that need to be split into multiple tokens
-// It populates both the string-based Type and int-based ModelType for unified type system
-func (tc *TokenConverter) handleCompoundToken(t models.TokenWithSpan) []token.Token {
-	// Handle typed compound tokens first (most specific)
+func (tc *tokenConverter) handleCompoundToken(t models.TokenWithSpan) []token.Token {
 	switch t.Token.Type {
 	case models.TokenTypeInnerJoin:
 		return []token.Token{
@@ -228,7 +138,6 @@ func (tc *TokenConverter) handleCompoundToken(t models.TokenWithSpan) []token.To
 		}
 	}
 
-	// Handle compound tokens that come as string values (fallback)
 	switch t.Token.Value {
 	case "INNER JOIN":
 		return []token.Token{
@@ -285,134 +194,67 @@ func (tc *TokenConverter) handleCompoundToken(t models.TokenWithSpan) []token.To
 		}
 	}
 
-	// Not a compound token
 	return nil
 }
 
-// convertSingleToken converts a single token using the type mapping
-// It populates both the string-based Type and int-based ModelType for unified type system
-func (tc *TokenConverter) convertSingleToken(t models.TokenWithSpan) (token.Token, error) {
-	// Handle asterisk/multiplication token - normalize to TokenTypeAsterisk for parser
-	// The tokenizer produces TokenTypeMul (62) but parser expects TokenTypeAsterisk (501)
+func (tc *tokenConverter) convertSingleToken(t models.TokenWithSpan) (token.Token, error) {
 	if t.Token.Type == models.TokenTypeMul {
 		return token.Token{
-			Type:      "*",
-			ModelType: models.TokenTypeAsterisk, // Normalize to asterisk for parser compatibility
-			Literal:   t.Token.Value,
+			Type: "*", ModelType: models.TokenTypeAsterisk, Literal: t.Token.Value,
 		}, nil
 	}
 
-	// Handle aggregate function tokens - normalize to TokenTypeIdentifier for parser
-	// The parser expects these to be identifiers so it can parse them as function calls
 	switch t.Token.Type {
 	case models.TokenTypeCount, models.TokenTypeSum, models.TokenTypeAvg,
 		models.TokenTypeMin, models.TokenTypeMax:
 		return token.Token{
-			Type:      "IDENT",
-			ModelType: models.TokenTypeIdentifier, // Normalize to identifier for function parsing
-			Literal:   t.Token.Value,
+			Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: t.Token.Value,
 		}, nil
 	}
 
-	// Handle JSONB key existence operators (?, ?|, ?&)
-	// These are PostgreSQL JSONB operators, not SQL placeholders
 	if t.Token.Type == models.TokenTypeQuestion {
-		return token.Token{
-			Type:      "QUESTION",
-			ModelType: models.TokenTypeQuestion,
-			Literal:   t.Token.Value,
-		}, nil
+		return token.Token{Type: "QUESTION", ModelType: models.TokenTypeQuestion, Literal: t.Token.Value}, nil
 	}
 	if t.Token.Type == models.TokenTypeQuestionPipe {
-		return token.Token{
-			Type:      "QUESTION_PIPE",
-			ModelType: models.TokenTypeQuestionPipe,
-			Literal:   t.Token.Value,
-		}, nil
+		return token.Token{Type: "QUESTION_PIPE", ModelType: models.TokenTypeQuestionPipe, Literal: t.Token.Value}, nil
 	}
 	if t.Token.Type == models.TokenTypeQuestionAnd {
-		return token.Token{
-			Type:      "QUESTION_AND",
-			ModelType: models.TokenTypeQuestionAnd,
-			Literal:   t.Token.Value,
-		}, nil
+		return token.Token{Type: "QUESTION_AND", ModelType: models.TokenTypeQuestionAnd, Literal: t.Token.Value}, nil
 	}
 
-	// Handle NUMBER tokens - convert to INT or FLOAT based on value
 	if t.Token.Type == models.TokenTypeNumber {
-		// Check if it's a float (contains decimal point or exponent)
 		if containsDecimalOrExponent(t.Token.Value) {
-			return token.Token{
-				Type:      "FLOAT",
-				ModelType: models.TokenTypeNumber, // Preserve original ModelType
-				Literal:   t.Token.Value,
-			}, nil
+			return token.Token{Type: "FLOAT", ModelType: models.TokenTypeNumber, Literal: t.Token.Value}, nil
 		}
-		return token.Token{
-			Type:      "INT",
-			ModelType: models.TokenTypeNumber, // Preserve original ModelType
-			Literal:   t.Token.Value,
-		}, nil
+		return token.Token{Type: "INT", ModelType: models.TokenTypeNumber, Literal: t.Token.Value}, nil
 	}
 
-	// Handle IDENTIFIER tokens that might be keywords
 	if t.Token.Type == models.TokenTypeIdentifier {
-		// Check if this identifier is actually a SQL keyword that the parser expects
 		if keywordType, modelType := getKeywordTokenTypeWithModel(t.Token.Value); keywordType != "" {
-			return token.Token{
-				Type:      keywordType,
-				ModelType: modelType,
-				Literal:   t.Token.Value,
-			}, nil
+			return token.Token{Type: keywordType, ModelType: modelType, Literal: t.Token.Value}, nil
 		}
-		// Regular identifier
-		return token.Token{
-			Type:      "IDENT",
-			ModelType: models.TokenTypeIdentifier,
-			Literal:   t.Token.Value,
-		}, nil
+		return token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: t.Token.Value}, nil
 	}
 
-	// Handle generic KEYWORD tokens - convert based on value
 	if t.Token.Type == models.TokenTypeKeyword {
-		// Check if this keyword has a specific token type
 		if keywordType, modelType := getKeywordTokenTypeWithModel(t.Token.Value); keywordType != "" {
-			return token.Token{
-				Type:      keywordType,
-				ModelType: modelType,
-				Literal:   t.Token.Value,
-			}, nil
+			return token.Token{Type: keywordType, ModelType: modelType, Literal: t.Token.Value}, nil
 		}
-		// Use the keyword value as the type
 		return token.Token{
-			//lint:ignore SA1019 intentional use during #215 migration
-			Type:      token.Type(t.Token.Value), //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
+			Type:      token.Type(t.Token.Value), //nolint:staticcheck
 			ModelType: models.TokenTypeKeyword,
 			Literal:   t.Token.Value,
 		}, nil
 	}
 
-	// Try mapped type first (most efficient)
-	if mappedType, exists := getTypeMap()[t.Token.Type]; exists {
-		return token.Token{
-			Type:      mappedType,
-			ModelType: t.Token.Type, // Preserve the original ModelType
-			Literal:   t.Token.Value,
-		}, nil
+	if mappedType, exists := tc.typeMap[t.Token.Type]; exists {
+		return token.Token{Type: mappedType, ModelType: t.Token.Type, Literal: t.Token.Value}, nil
 	}
 
-	// Fallback to string conversion for unmapped types
-	//lint:ignore SA1019 intentional use during #215 migration
-	tokenType := token.Type(fmt.Sprintf("%v", t.Token.Type)) //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
-
-	return token.Token{
-		Type:      tokenType,
-		ModelType: t.Token.Type, // Preserve the original ModelType
-		Literal:   t.Token.Value,
-	}, nil
+	tokenType := token.Type(fmt.Sprintf("%v", t.Token.Type)) //nolint:staticcheck
+	return token.Token{Type: tokenType, ModelType: t.Token.Type, Literal: t.Token.Value}, nil
 }
 
-// containsDecimalOrExponent checks if a number string is a float
 func containsDecimalOrExponent(s string) bool {
 	for _, ch := range s {
 		if ch == '.' || ch == 'e' || ch == 'E' {
@@ -422,34 +264,25 @@ func containsDecimalOrExponent(s string) bool {
 	return false
 }
 
-// getKeywordTokenTypeWithModel returns both the parser token type (string) and models.TokenType (int)
-// for SQL keywords that come as IDENTIFIER. This enables unified type system support.
-//
-//lint:ignore SA1019 intentional use during #215 migration
-func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) { //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
-	// Fast path: Use pooled buffer for uppercase conversion (avoids allocation per call)
-	// SQL keywords are ASCII, so this is safe and much faster than string operations
+func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) { //nolint:staticcheck
 	var upper []byte
 	n := len(value)
 	if n <= 32 {
-		// Use pooled buffer for small strings (covers all SQL keywords)
 		bufPtr := keywordBufferPool.Get().(*[]byte)
 		upper = (*bufPtr)[:n]
 		defer keywordBufferPool.Put(bufPtr)
 	} else {
-		// Fallback for unusually long identifiers
 		upper = make([]byte, n)
 	}
 	for i := 0; i < n; i++ {
 		c := value[i]
 		if c >= 'a' && c <= 'z' {
-			upper[i] = c - 32 // Convert to uppercase
+			upper[i] = c - 32
 		} else {
 			upper[i] = c
 		}
 	}
 	switch string(upper) {
-	// DML statements
 	case "INSERT":
 		return "INSERT", models.TokenTypeInsert
 	case "UPDATE":
@@ -462,8 +295,6 @@ func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) {
 		return "VALUES", models.TokenTypeValues
 	case "SET":
 		return "SET", models.TokenTypeSet
-
-	// DDL statements
 	case "CREATE":
 		return "CREATE", models.TokenTypeCreate
 	case "ALTER":
@@ -476,14 +307,10 @@ func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) {
 		return "INDEX", models.TokenTypeIndex
 	case "VIEW":
 		return "VIEW", models.TokenTypeView
-
-	// CTE and advanced features
 	case "WITH":
 		return "WITH", models.TokenTypeWith
 	case "RECURSIVE":
 		return "RECURSIVE", models.TokenTypeRecursive
-
-	// Set operations
 	case "UNION":
 		return "UNION", models.TokenTypeUnion
 	case "EXCEPT":
@@ -492,8 +319,6 @@ func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) {
 		return "INTERSECT", models.TokenTypeIntersect
 	case "ALL":
 		return "ALL", models.TokenTypeAll
-
-	// Data types and constraints
 	case "PRIMARY":
 		return "PRIMARY", models.TokenTypePrimary
 	case "KEY":
@@ -510,14 +335,10 @@ func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) {
 		return "DEFAULT", models.TokenTypeDefault
 	case "CONSTRAINT":
 		return "CONSTRAINT", models.TokenTypeConstraint
-
-	// Column attributes
 	case "AUTO_INCREMENT":
 		return "AUTO_INCREMENT", models.TokenTypeAutoIncrement
 	case "AUTOINCREMENT":
 		return "AUTOINCREMENT", models.TokenTypeAutoIncrement
-
-	// Window function keywords
 	case "OVER":
 		return "OVER", models.TokenTypeOver
 	case "PARTITION":
@@ -536,8 +357,6 @@ func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) {
 		return "CURRENT", models.TokenTypeCurrent
 	case "ROW":
 		return "ROW", models.TokenTypeRow
-
-	// Join types (some might come as IDENTIFIER)
 	case "CROSS":
 		return "CROSS", models.TokenTypeCross
 	case "NATURAL":
@@ -546,8 +365,6 @@ func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) {
 		return "USING", models.TokenTypeUsing
 	case "LATERAL":
 		return "LATERAL", models.TokenTypeLateral
-
-	// Other common keywords
 	case "DISTINCT":
 		return "DISTINCT", models.TokenTypeDistinct
 	case "EXISTS":
@@ -556,29 +373,19 @@ func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) {
 		return "ANY", models.TokenTypeAny
 	case "SOME":
 		return "SOME", models.TokenTypeSome
-
-	// Grouping set keywords
 	case "ROLLUP":
 		return "ROLLUP", models.TokenTypeRollup
 	case "CUBE":
 		return "CUBE", models.TokenTypeCube
 	case "GROUPING":
 		return "GROUPING", models.TokenTypeGrouping
-
 	default:
-		// Not a recognized keyword, will be treated as identifier
 		return "", models.TokenTypeUnknown
 	}
 }
 
-// buildTypeMapping creates an optimized lookup table for token type conversion
-// Includes all token types defined in models.TokenType for comprehensive coverage
-//
-//lint:ignore SA1019 intentional use during #215 migration
-func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
-	//lint:ignore SA1019 intentional use during #215 migration
-	return map[models.TokenType]token.Type{ //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
-		// SQL Keywords (core)
+func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck
+	return map[models.TokenType]token.Type{ //nolint:staticcheck
 		models.TokenTypeSelect:  "SELECT",
 		models.TokenTypeFrom:    "FROM",
 		models.TokenTypeWhere:   "WHERE",
@@ -614,7 +421,6 @@ func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck /
 		models.TokenTypeTrue:    "TRUE",
 		models.TokenTypeFalse:   "FALSE",
 
-		// DML Keywords
 		models.TokenTypeInsert: "INSERT",
 		models.TokenTypeUpdate: "UPDATE",
 		models.TokenTypeDelete: "DELETE",
@@ -622,7 +428,6 @@ func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck /
 		models.TokenTypeValues: "VALUES",
 		models.TokenTypeSet:    "SET",
 
-		// DDL Keywords
 		models.TokenTypeCreate:   "CREATE",
 		models.TokenTypeAlter:    "ALTER",
 		models.TokenTypeDrop:     "DROP",
@@ -635,7 +440,6 @@ func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck /
 		models.TokenTypeSchema:   "SCHEMA",
 		models.TokenTypeTrigger:  "TRIGGER",
 
-		// CTE and Set Operations
 		models.TokenTypeWith:      "WITH",
 		models.TokenTypeRecursive: "RECURSIVE",
 		models.TokenTypeUnion:     "UNION",
@@ -643,7 +447,6 @@ func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck /
 		models.TokenTypeIntersect: "INTERSECT",
 		models.TokenTypeAll:       "ALL",
 
-		// Window Function Keywords
 		models.TokenTypeOver:      "OVER",
 		models.TokenTypePartition: "PARTITION",
 		models.TokenTypeRows:      "ROWS",
@@ -659,14 +462,12 @@ func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck /
 		models.TokenTypeArray:     "ARRAY",
 		models.TokenTypeWithin:    "WITHIN",
 
-		// Additional Join Keywords
 		models.TokenTypeCross:   "CROSS",
 		models.TokenTypeNatural: "NATURAL",
 		models.TokenTypeFull:    "FULL",
 		models.TokenTypeUsing:   "USING",
 		models.TokenTypeLateral: "LATERAL",
 
-		// Constraint Keywords
 		models.TokenTypePrimary:       "PRIMARY",
 		models.TokenTypeKey:           "KEY",
 		models.TokenTypeForeign:       "FOREIGN",
@@ -679,7 +480,6 @@ func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck /
 		models.TokenTypeNotNull:       "NOT_NULL",
 		models.TokenTypeNullable:      "NULLABLE",
 
-		// Additional SQL Keywords
 		models.TokenTypeDistinct: "DISTINCT",
 		models.TokenTypeExists:   "EXISTS",
 		models.TokenTypeAny:      "ANY",
@@ -699,23 +499,19 @@ func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck /
 		models.TokenTypeFirst:    "FIRST",
 		models.TokenTypeLast:     "LAST",
 
-		// MERGE Statement Keywords
 		models.TokenTypeMerge:   "MERGE",
 		models.TokenTypeMatched: "MATCHED",
 		models.TokenTypeTarget:  "TARGET",
 		models.TokenTypeSource:  "SOURCE",
 
-		// Materialized View Keywords
 		models.TokenTypeMaterialized: "MATERIALIZED",
 		models.TokenTypeRefresh:      "REFRESH",
 
-		// Grouping Set Keywords
 		models.TokenTypeGroupingSets: "GROUPING SETS",
 		models.TokenTypeRollup:       "ROLLUP",
 		models.TokenTypeCube:         "CUBE",
 		models.TokenTypeGrouping:     "GROUPING",
 
-		// Role/Permission Keywords
 		models.TokenTypeRole:       "ROLE",
 		models.TokenTypeUser:       "USER",
 		models.TokenTypeGrant:      "GRANT",
@@ -727,13 +523,11 @@ func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck /
 		models.TokenTypeCreateDB:   "CREATEDB",
 		models.TokenTypeCreateRole: "CREATEROLE",
 
-		// Transaction Keywords
 		models.TokenTypeBegin:     "BEGIN",
 		models.TokenTypeCommit:    "COMMIT",
 		models.TokenTypeRollback:  "ROLLBACK",
 		models.TokenTypeSavepoint: "SAVEPOINT",
 
-		// Data Type Keywords
 		models.TokenTypeInt:          "INT",
 		models.TokenTypeInteger:      "INTEGER",
 		models.TokenTypeBigInt:       "BIGINT",
@@ -755,21 +549,18 @@ func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck /
 		models.TokenTypeJson:         "JSON",
 		models.TokenTypeUuid:         "UUID",
 
-		// Aggregate functions - map to IDENT so they can be used as function names
 		models.TokenTypeCount: "IDENT",
 		models.TokenTypeSum:   "IDENT",
 		models.TokenTypeAvg:   "IDENT",
 		models.TokenTypeMin:   "IDENT",
 		models.TokenTypeMax:   "IDENT",
 
-		// Row Locking Keywords (SQL:2003, PostgreSQL, MySQL)
 		models.TokenTypeShare:  "SHARE",
 		models.TokenTypeNoWait: "NOWAIT",
 		models.TokenTypeSkip:   "SKIP",
 		models.TokenTypeLocked: "LOCKED",
 		models.TokenTypeOf:     "OF",
 
-		// Compound keywords
 		models.TokenTypeGroupBy:   "GROUP BY",
 		models.TokenTypeOrderBy:   "ORDER BY",
 		models.TokenTypeLeftJoin:  "LEFT JOIN",
@@ -779,7 +570,6 @@ func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck /
 		models.TokenTypeFullJoin:  "FULL JOIN",
 		models.TokenTypeCrossJoin: "CROSS JOIN",
 
-		// Identifiers and Literals
 		models.TokenTypeIdentifier:         "IDENT",
 		models.TokenTypeString:             "STRING",
 		models.TokenTypeDollarQuotedString: "STRING",
@@ -787,7 +577,6 @@ func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck /
 		models.TokenTypeWord:               "WORD",
 		models.TokenTypeChar:               "CHAR",
 
-		// Operators and Punctuation
 		models.TokenTypeEq:          "=",
 		models.TokenTypeDoubleEq:    "==",
 		models.TokenTypeNeq:         "!=",
@@ -813,7 +602,6 @@ func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck /
 		models.TokenTypeDoubleColon: "::",
 		models.TokenTypeAssignment:  ":=",
 
-		// Special tokens
 		models.TokenTypeEOF:        "EOF",
 		models.TokenTypeUnknown:    "UNKNOWN",
 		models.TokenTypeWhitespace: "WHITESPACE",
@@ -823,75 +611,31 @@ func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck /
 		models.TokenTypeAsterisk:   "*",
 		models.TokenTypeDoublePipe: "||",
 
-		// PostgreSQL JSONB existence operators
-		models.TokenTypeQuestion:     "QUESTION",      // ? key exists
-		models.TokenTypeQuestionPipe: "QUESTION_PIPE", // ?| any keys exist
-		models.TokenTypeQuestionAnd:  "QUESTION_AND",  // ?& all keys exist
+		models.TokenTypeQuestion:     "QUESTION",
+		models.TokenTypeQuestionPipe: "QUESTION_PIPE",
+		models.TokenTypeQuestionAnd:  "QUESTION_AND",
 
-		// PostgreSQL regex operators
-		models.TokenTypeTilde:                        "~",   // ~ case-sensitive regex match
-		models.TokenTypeTildeAsterisk:                "~*",  // ~* case-insensitive regex match
-		models.TokenTypeExclamationMarkTilde:         "!~",  // !~ case-sensitive regex non-match
-		models.TokenTypeExclamationMarkTildeAsterisk: "!~*", // !~* case-insensitive regex non-match
+		models.TokenTypeTilde:                        "~",
+		models.TokenTypeTildeAsterisk:                "~*",
+		models.TokenTypeExclamationMarkTilde:         "!~",
+		models.TokenTypeExclamationMarkTildeAsterisk: "!~*",
 	}
 }
 
-// ConvertTokensWithPositions converts tokenizer output to parser input with position tracking.
-//
-// This function provides both converted tokens and position mappings for enhanced error reporting.
-// It is the recommended conversion method for production use where detailed error messages with
-// line and column information are important.
-//
-// The returned ConversionResult can be passed directly to ParseWithPositions() for
-// position-aware parsing.
-//
-// Parameters:
-//   - tokens: Slice of tokenizer output (models.TokenWithSpan)
-//
-// Returns:
-//   - *ConversionResult: Converted tokens with position mappings
-//   - error: Conversion error if token is invalid
-//
-// Performance:
-//   - Throughput: ~10M tokens/second
-//   - Overhead: ~80ns per token
-//   - Memory: Allocates slices for tokens and position mappings
-//
-// Usage (Recommended for Production):
-//
-//	// Tokenize SQL
-//	tkz := tokenizer.GetTokenizer()
-//	defer tokenizer.PutTokenizer(tkz)
-//	tokens, err := tkz.Tokenize([]byte("SELECT * FROM users WHERE id = $1"))
-//	if err != nil {
-//	    log.Fatal(err)
-//	}
-//
-//	// Convert with position tracking
-//	result, err := parser.ConvertTokensWithPositions(tokens)
-//	if err != nil {
-//	    log.Fatal(err)
-//	}
-//
-//	// Parse with position information
-//	p := parser.GetParser()
-//	defer parser.PutParser(p)
-//	ast, err := p.ParseWithPositions(result)
-//	if err != nil {
-//	    // Error includes line/column information
-//	    log.Printf("Parse error at line %d, column %d: %v",
-//	        err.Location.Line, err.Location.Column, err)
-//	    return
-//	}
-//	defer ast.ReleaseAST(ast)
-//
-// Position Mapping:
-//   - Each parser token is mapped back to its tokenizer token
-//   - Compound tokens (e.g., "GROUPING SETS") map all parts to original position
-//   - Position information includes line, column, and byte offset
-//
-// Thread Safety: Safe for concurrent calls - creates new converter instance.
-func ConvertTokensWithPositions(tokens []models.TokenWithSpan) (*ConversionResult, error) {
-	converter := NewTokenConverter()
-	return converter.Convert(tokens)
+// convertModelTokens converts tokenizer output to parser tokens.
+// This is the internal implementation used by ParseFromModelTokens.
+func convertModelTokens(tokens []models.TokenWithSpan) ([]token.Token, error) {
+	tc := newTokenConverter()
+	result, err := tc.convert(tokens)
+	if err != nil {
+		return nil, err
+	}
+	return result.Tokens, nil
+}
+
+// convertModelTokensWithPositions converts tokenizer output with position tracking.
+// Used by ParseFromModelTokensWithPositions for enhanced error reporting.
+func convertModelTokensWithPositions(tokens []models.TokenWithSpan) (*ConversionResult, error) {
+	tc := newTokenConverter()
+	return tc.convert(tokens)
 }

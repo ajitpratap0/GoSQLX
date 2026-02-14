@@ -57,6 +57,7 @@ func TestSQLFormatter_BasicFormatting(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
+
 			p := parser.NewParser()
 			astObj := ast.NewAST()
 			defer ast.ReleaseAST(astObj)
@@ -129,6 +130,7 @@ func TestSQLFormatter_JOINStatements(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
+
 			p := parser.NewParser()
 			astObj := ast.NewAST()
 			defer ast.ReleaseAST(astObj)
@@ -187,6 +189,7 @@ func TestSQLFormatter_WithClauses(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
+
 
 			p := parser.NewParser()
 			astObj := ast.NewAST()
@@ -252,6 +255,7 @@ func TestSQLFormatter_WindowFunctions(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
+
 			p := parser.NewParser()
 			astObj := ast.NewAST()
 			defer ast.ReleaseAST(astObj)
@@ -305,6 +309,7 @@ func TestSQLFormatter_InsertStatements(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
+
 
 			p := parser.NewParser()
 			astObj := ast.NewAST()
@@ -370,6 +375,7 @@ func TestSQLFormatter_DDLStatements(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
+
 			p := parser.NewParser()
 			astObj := ast.NewAST()
 			defer ast.ReleaseAST(astObj)
@@ -433,6 +439,7 @@ func TestSQLFormatter_ComplexExpressions(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
+
 
 			p := parser.NewParser()
 			astObj := ast.NewAST()

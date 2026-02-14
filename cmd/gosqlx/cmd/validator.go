@@ -251,6 +251,9 @@ func (v *Validator) validateFile(filename string) output.FileValidationResult {
 		return result
 	}
 
+	// Convert TokenWithSpan to Token using centralized converter
+
+	// Parse to validate syntax with proper error handling for memory management
 	p := parser.NewParser()
 	astObj, err := p.ParseFromModelTokens(tokens)
 	if err != nil {

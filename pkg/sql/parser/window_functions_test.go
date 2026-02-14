@@ -21,6 +21,8 @@ func TestParser_BasicWindowFunction(t *testing.T) {
 	}
 
 	// Convert tokens for parser
+
+	// Parse tokens
 	parser := &Parser{}
 	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
@@ -80,6 +82,8 @@ func TestParser_WindowFunctionWithPartition(t *testing.T) {
 	}
 
 	// Convert tokens for parser
+
+	// Parse tokens
 	parser := &Parser{}
 	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
@@ -139,6 +143,8 @@ func TestParser_WindowFunctionWithFrame(t *testing.T) {
 	}
 
 	// Convert tokens for parser
+
+	// Parse tokens
 	parser := &Parser{}
 	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
@@ -243,6 +249,8 @@ func TestParser_AnalyticFunctions(t *testing.T) {
 			}
 
 			// Convert tokens for parser
+
+			// Parse tokens
 			parser := &Parser{}
 			astObj, err := parser.ParseFromModelTokens(tokens)
 			if err != nil {
@@ -326,6 +334,8 @@ func TestParser_RankingFunctions(t *testing.T) {
 			}
 
 			// Convert tokens for parser
+
+			// Parse tokens
 			parser := &Parser{}
 			astObj, err := parser.ParseFromModelTokens(tokens)
 			if err != nil {
@@ -388,6 +398,8 @@ func TestParser_ComplexWindowFunction(t *testing.T) {
 	}
 
 	// Convert tokens for parser
+
+	// Parse tokens
 	parser := &Parser{}
 	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {

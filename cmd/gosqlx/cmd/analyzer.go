@@ -68,6 +68,9 @@ func (a *Analyzer) Analyze(input string) (*AnalyzerResult, error) {
 		return result, result.Error
 	}
 
+	// Convert TokenWithSpan to Token using centralized converter
+
+	// Parse with proper error handling for memory management
 	p := parser.NewParser()
 	astObj, err := p.ParseFromModelTokens(tokens)
 	if err != nil {

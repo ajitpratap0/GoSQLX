@@ -38,15 +38,10 @@ func BenchmarkFullPipeline(b *testing.B) {
 				}
 
 				// Step 2: Convert
-				converter := NewTokenConverter()
-				result, err := converter.Convert(tokens)
-				if err != nil {
-					b.Fatal(err)
-				}
 
 				// Step 3: Parse
 				p := NewParser()
-				_, err = p.ParseWithPositions(result)
+				_, err = p.ParseFromModelTokensWithPositions(tokens)
 				p.Release()
 				if err != nil {
 					b.Fatal(err)
@@ -82,14 +77,8 @@ func BenchmarkParseError(b *testing.B) {
 					continue // tokenizer error path
 				}
 
-				converter := NewTokenConverter()
-				result, err := converter.Convert(tokens)
-				if err != nil {
-					continue // conversion error path
-				}
-
 				p := NewParser()
-				_, _ = p.ParseWithPositions(result)
+				_, _ = p.ParseFromModelTokensWithPositions(tokens)
 				p.Release()
 			}
 		})

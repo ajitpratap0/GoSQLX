@@ -148,7 +148,9 @@ func TestSustainedLoad_Parsing10Seconds(t *testing.T) {
 						continue
 					}
 
-					// Parse using pooled parser (includes token conversion)
+					// Convert tokens
+
+					// Parse using pooled parser
 					p := GetParser()
 					_, err = p.ParseFromModelTokens(tokens)
 					PutParser(p)
@@ -276,7 +278,9 @@ func TestSustainedLoad_EndToEnd10Seconds(t *testing.T) {
 						continue
 					}
 
-					// Parse using pooled parser (includes token conversion)
+					// Convert tokens
+
+					// Parse using pooled parser
 					p := GetParser()
 					_, err = p.ParseFromModelTokens(tokens)
 					PutParser(p)
@@ -390,11 +394,9 @@ func TestSustainedLoad_MemoryStability(t *testing.T) {
 
 					if err == nil {
 						p := GetParser()
-						_, parseErr := p.ParseFromModelTokens(tokens)
+						_, _ = p.ParseFromModelTokens(tokens)
 						PutParser(p)
-						if parseErr == nil {
-							localOps++
-						}
+						localOps++
 					}
 
 					// Occasional GC to help detect leaks
@@ -609,7 +611,7 @@ func TestSustainedLoad_ComplexQueries(t *testing.T) {
 						continue
 					}
 
-					// Parse using pooled parser (includes token conversion)
+					// Parse using pooled parser
 					p := GetParser()
 					_, err = p.ParseFromModelTokens(tokens)
 					PutParser(p)

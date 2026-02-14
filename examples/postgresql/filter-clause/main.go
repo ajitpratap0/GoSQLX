@@ -203,6 +203,8 @@ func parseAndDisplayFilter(sql string) {
 		return
 	}
 
+	
+	// Parse
 	p := parser.NewParser()
 	defer p.Release()
 

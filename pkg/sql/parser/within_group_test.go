@@ -188,6 +188,9 @@ func TestParser_WithinGroup(t *testing.T) {
 				t.Fatalf("Tokenize failed: %v", err)
 			}
 
+			// Convert tokens
+
+			// Parse
 			p := NewParser()
 			astObj, err := p.ParseFromModelTokens(tokens)
 			if (err != nil) != tt.wantErr {

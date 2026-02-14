@@ -275,6 +275,7 @@ func TestValidateMultiple(t *testing.T) {
 func BenchmarkParse(b *testing.B) {
 	sql := "SELECT id, name, email FROM users WHERE age > 18"
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, err := Parse(sql)

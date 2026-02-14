@@ -327,7 +327,7 @@ func BenchmarkLowLevel_ParseMultiple(b *testing.B) {
 			}
 
 			converter := parser.GetTokenConverter()
-		defer parser.PutTokenConverter(converter)
+			defer parser.PutTokenConverter(converter)
 			result, err := converter.Convert(tokens)
 			if err != nil {
 				tokenizer.PutTokenizer(tkz)

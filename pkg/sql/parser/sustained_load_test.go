@@ -148,16 +148,9 @@ func TestSustainedLoad_Parsing10Seconds(t *testing.T) {
 						continue
 					}
 
-					// Convert tokens
-					convertedTokens, convErr := ConvertTokensForParser(tokens)
-					if convErr != nil {
-						localErrs++
-						continue
-					}
-
-					// Parse using pooled parser
+					// Parse using pooled parser (includes token conversion)
 					p := GetParser()
-					_, err = p.Parse(convertedTokens)
+					_, err = p.ParseFromModelTokens(tokens)
 					PutParser(p)
 					if err != nil {
 						localErrs++
@@ -283,16 +276,9 @@ func TestSustainedLoad_EndToEnd10Seconds(t *testing.T) {
 						continue
 					}
 
-					// Convert tokens
-					convertedTokens, convErr := ConvertTokensForParser(tokens)
-					if convErr != nil {
-						localErrs++
-						continue
-					}
-
-					// Parse using pooled parser
+					// Parse using pooled parser (includes token conversion)
 					p := GetParser()
-					_, err = p.Parse(convertedTokens)
+					_, err = p.ParseFromModelTokens(tokens)
 					PutParser(p)
 					if err != nil {
 						localErrs++
@@ -403,11 +389,10 @@ func TestSustainedLoad_MemoryStability(t *testing.T) {
 					tokenizer.PutTokenizer(tkz)
 
 					if err == nil {
-						convertedTokens, convErr := ConvertTokensForParser(tokens)
-						if convErr == nil {
-							p := GetParser()
-							_, _ = p.Parse(convertedTokens)
-							PutParser(p)
+						p := GetParser()
+						_, parseErr := p.ParseFromModelTokens(tokens)
+						PutParser(p)
+						if parseErr == nil {
 							localOps++
 						}
 					}
@@ -624,15 +609,9 @@ func TestSustainedLoad_ComplexQueries(t *testing.T) {
 						continue
 					}
 
-					convertedTokens, convErr := ConvertTokensForParser(tokens)
-					if convErr != nil {
-						localErrs++
-						continue
-					}
-
-					// Parse using pooled parser
+					// Parse using pooled parser (includes token conversion)
 					p := GetParser()
-					_, err = p.Parse(convertedTokens)
+					_, err = p.ParseFromModelTokens(tokens)
 					PutParser(p)
 					if err != nil {
 						localErrs++

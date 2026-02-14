@@ -188,15 +188,8 @@ func TestParser_WithinGroup(t *testing.T) {
 				t.Fatalf("Tokenize failed: %v", err)
 			}
 
-			// Convert tokens
-			convertedTokens, err := ConvertTokensForParser(tokens)
-			if err != nil {
-				t.Fatalf("ConvertTokensForParser failed: %v", err)
-			}
-
-			// Parse
 			p := NewParser()
-			astObj, err := p.Parse(convertedTokens)
+			astObj, err := p.ParseFromModelTokens(tokens)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -238,13 +231,8 @@ func TestParser_WithinGroupLISTAGG(t *testing.T) {
 				t.Fatalf("Tokenize failed: %v", err)
 			}
 
-			convertedTokens, err := ConvertTokensForParser(tokens)
-			if err != nil {
-				t.Fatalf("ConvertTokensForParser failed: %v", err)
-			}
-
 			p := NewParser()
-			_, err = p.Parse(convertedTokens)
+			_, err = p.ParseFromModelTokens(tokens)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -265,13 +253,8 @@ func TestParser_WithinGroupPooling(t *testing.T) {
 			t.Fatalf("Tokenize failed: %v", err)
 		}
 
-		convertedTokens, err := ConvertTokensForParser(tokens)
-		if err != nil {
-			t.Fatalf("ConvertTokensForParser failed: %v", err)
-		}
-
 		p := NewParser()
-		astObj, err := p.Parse(convertedTokens)
+		astObj, err := p.ParseFromModelTokens(tokens)
 		if err != nil {
 			t.Fatalf("Parse failed: %v", err)
 		}

@@ -134,16 +134,9 @@ func parseQuery(sql string) (bool, string) {
 		return false, "Tokenization error: " + err.Error()
 	}
 
-	// Convert tokens for parser
-	//lint:ignore SA1019 intentional use during #215 migration
-	convertedTokens, err := parser.ConvertTokensForParser(tokens)
-	if err != nil {
-		return false, "Token conversion error: " + err.Error()
-	}
-
-	// Parse
+	// Parse (includes token conversion)
 	p := parser.NewParser()
-	_, err = p.Parse(convertedTokens)
+	_, err = p.ParseFromModelTokens(tokens)
 	if err != nil {
 		return false, "Parse error: " + err.Error()
 	}

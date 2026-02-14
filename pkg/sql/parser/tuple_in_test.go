@@ -22,15 +22,9 @@ func TestParser_TupleIn_Basic(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
-	parserTokens, err := ConvertTokensForParser(tokens)
-	if err != nil {
-		t.Fatalf("token conversion error: %v", err)
-	}
-
 	parser := NewParser()
 	defer parser.Release()
-
-	tree, err := parser.Parse(parserTokens)
+	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -93,15 +87,9 @@ func TestParser_TupleIn_NotIn(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
-	parserTokens, err := ConvertTokensForParser(tokens)
-	if err != nil {
-		t.Fatalf("token conversion error: %v", err)
-	}
-
 	parser := NewParser()
 	defer parser.Release()
-
-	tree, err := parser.Parse(parserTokens)
+	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -140,15 +128,9 @@ func TestParser_TupleIn_ThreeElements(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
-	parserTokens, err := ConvertTokensForParser(tokens)
-	if err != nil {
-		t.Fatalf("token conversion error: %v", err)
-	}
-
 	parser := NewParser()
 	defer parser.Release()
-
-	tree, err := parser.Parse(parserTokens)
+	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -203,15 +185,9 @@ func TestParser_TupleIn_WithExpressions(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
-	parserTokens, err := ConvertTokensForParser(tokens)
-	if err != nil {
-		t.Fatalf("token conversion error: %v", err)
-	}
-
 	parser := NewParser()
 	defer parser.Release()
-
-	tree, err := parser.Parse(parserTokens)
+	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -261,15 +237,9 @@ func TestParser_TupleIn_WithFunctionCalls(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
-	parserTokens, err := ConvertTokensForParser(tokens)
-	if err != nil {
-		t.Fatalf("token conversion error: %v", err)
-	}
-
 	parser := NewParser()
 	defer parser.Release()
-
-	tree, err := parser.Parse(parserTokens)
+	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -315,15 +285,9 @@ func TestParser_TupleIn_WithSubquery(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
-	parserTokens, err := ConvertTokensForParser(tokens)
-	if err != nil {
-		t.Fatalf("token conversion error: %v", err)
-	}
-
 	parser := NewParser()
 	defer parser.Release()
-
-	tree, err := parser.Parse(parserTokens)
+	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -372,15 +336,9 @@ func TestParser_TupleIn_SingleElementTuple(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
-	parserTokens, err := ConvertTokensForParser(tokens)
-	if err != nil {
-		t.Fatalf("token conversion error: %v", err)
-	}
-
 	parser := NewParser()
 	defer parser.Release()
-
-	tree, err := parser.Parse(parserTokens)
+	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -415,15 +373,9 @@ func TestParser_TupleIn_QualifiedColumns(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
-	parserTokens, err := ConvertTokensForParser(tokens)
-	if err != nil {
-		t.Fatalf("token conversion error: %v", err)
-	}
-
 	parser := NewParser()
 	defer parser.Release()
-
-	tree, err := parser.Parse(parserTokens)
+	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -474,15 +426,9 @@ func TestParser_TupleIn_ComplexConditions(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
-	parserTokens, err := ConvertTokensForParser(tokens)
-	if err != nil {
-		t.Fatalf("token conversion error: %v", err)
-	}
-
 	parser := NewParser()
 	defer parser.Release()
-
-	tree, err := parser.Parse(parserTokens)
+	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -529,15 +475,9 @@ func TestParser_TupleIn_MixedTypes(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
-	parserTokens, err := ConvertTokensForParser(tokens)
-	if err != nil {
-		t.Fatalf("token conversion error: %v", err)
-	}
-
 	parser := NewParser()
 	defer parser.Release()
-
-	tree, err := parser.Parse(parserTokens)
+	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -615,19 +555,12 @@ func TestParser_TupleIn_ErrorCases(t *testing.T) {
 				return
 			}
 
-			parserTokens, err := ConvertTokensForParser(tokens)
-			if err != nil {
-				// Token conversion error is acceptable
-				t.Logf("Token conversion error (expected): %v", err)
-				return
-			}
-
 			parser := NewParser()
 			defer parser.Release()
 
-			tree, err := parser.Parse(parserTokens)
+			tree, err := parser.ParseFromModelTokens(tokens)
 			if err != nil {
-				// Parser error is expected for invalid syntax
+				// Parser/conversion error is expected for invalid syntax
 				t.Logf("Parser error (expected): %v", err)
 				return
 			}
@@ -672,15 +605,9 @@ func TestParser_TupleIn_MismatchedSizes(t *testing.T) {
 				t.Fatalf("tokenizer error: %v", err)
 			}
 
-			parserTokens, err := ConvertTokensForParser(tokens)
-			if err != nil {
-				t.Fatalf("token conversion error: %v", err)
-			}
-
 			parser := NewParser()
 			defer parser.Release()
-
-			tree, err := parser.Parse(parserTokens)
+			tree, err := parser.ParseFromModelTokens(tokens)
 			if err != nil {
 				// Some implementations may reject mismatched tuples at parse time
 				t.Logf("Parser rejected mismatched sizes: %v", err)

@@ -6,13 +6,10 @@ package parser
 import (
 	"testing"
 
-	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
-// parseDDLSQL is a helper to tokenize and parse SQL for DDL testing
 func parseDDLSQL(t *testing.T, sql string) *ast.AST {
 	t.Helper()
 
@@ -24,65 +21,13 @@ func parseDDLSQL(t *testing.T, sql string) *ast.AST {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForDDL(tokens)
-
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}
 
 	return astObj
-}
-
-// convertTokensForDDL converts tokenizer tokens to parser tokens
-func convertTokensForDDL(tokens []models.TokenWithSpan) []token.Token {
-	result := make([]token.Token, 0, len(tokens))
-	for _, t := range tokens {
-		//lint:ignore SA1019 intentional use during #215 migration
-		var tokenType token.Type
-
-		switch t.Token.Type {
-		case models.TokenTypeIdentifier:
-			tokenType = "IDENT"
-		case models.TokenTypeKeyword:
-			// Use the keyword value as the token type (CREATE, DROP, etc.)
-			//lint:ignore SA1019 intentional use during #215 migration
-			tokenType = token.Type(t.Token.Value)
-		case models.TokenTypeString:
-			tokenType = "STRING"
-		case models.TokenTypeNumber:
-			tokenType = "INT"
-		case models.TokenTypeOperator:
-			//lint:ignore SA1019 intentional use during #215 migration
-			tokenType = token.Type(t.Token.Value)
-		case models.TokenTypeLParen:
-			tokenType = "("
-		case models.TokenTypeRParen:
-			tokenType = ")"
-		case models.TokenTypeComma:
-			tokenType = ","
-		case models.TokenTypePeriod:
-			tokenType = "."
-		case models.TokenTypeEq:
-			tokenType = "="
-		case models.TokenTypeSemicolon:
-			tokenType = ";"
-		default:
-			if t.Token.Value != "" {
-				//lint:ignore SA1019 intentional use during #215 migration
-				tokenType = token.Type(t.Token.Value)
-			}
-		}
-
-		if tokenType != "" && t.Token.Value != "" {
-			result = append(result, token.Token{
-				Type:    tokenType,
-				Literal: t.Token.Value,
-			})
-		}
-	}
-	return result
 }
 
 func TestParser_CreateView(t *testing.T) {

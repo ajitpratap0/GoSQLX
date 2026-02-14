@@ -78,7 +78,7 @@ func TestParseFromModelTokens_InsertStatement(t *testing.T) {
 
 func TestParseFromModelTokens_ProducesSameResultAsParse(t *testing.T) {
 	// Verify that ParseFromModelTokens produces equivalent results to
-	// the manual ConvertTokensForParser + Parse path
+	// the manual TokenConverter.Convert + Parse path
 	tokens := []models.TokenWithSpan{
 		{Token: models.Token{Type: models.TokenTypeSelect, Value: "SELECT"}},
 		{Token: models.Token{Type: models.TokenTypeNumber, Value: "1"}},
@@ -94,14 +94,16 @@ func TestParseFromModelTokens_ProducesSameResultAsParse(t *testing.T) {
 	}
 	defer ast.ReleaseAST(result1)
 
-	// Path 2: ConvertTokensForParser + Parse
-	converted, err := ConvertTokensForParser(tokens)
+	// Path 2: TokenConverter.Convert + Parse
+	converter := GetTokenConverter()
+	convResult, err := converter.Convert(tokens)
+	PutTokenConverter(converter)
 	if err != nil {
-		t.Fatalf("ConvertTokensForParser failed: %v", err)
+		t.Fatalf("TokenConverter.Convert failed: %v", err)
 	}
 	p2 := GetParser()
 	defer PutParser(p2)
-	result2, err := p2.Parse(converted)
+	result2, err := p2.Parse(convResult.Tokens)
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}

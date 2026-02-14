@@ -3,58 +3,9 @@ package parser
 import (
 	"testing"
 
-	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
-
-// convertTokensForMerge converts TokenWithSpan to Token for parser
-func convertTokensForMerge(tokens []models.TokenWithSpan) []token.Token {
-	result := make([]token.Token, 0, len(tokens))
-	for _, t := range tokens {
-		//lint:ignore SA1019 intentional use during #215 migration
-		var tokenType token.Type
-
-		switch t.Token.Type {
-		case models.TokenTypeIdentifier:
-			tokenType = "IDENT"
-		case models.TokenTypeKeyword:
-			//lint:ignore SA1019 intentional use during #215 migration
-			tokenType = token.Type(t.Token.Value)
-		case models.TokenTypeString:
-			tokenType = "STRING"
-		case models.TokenTypeNumber:
-			tokenType = "INT"
-		case models.TokenTypeOperator:
-			//lint:ignore SA1019 intentional use during #215 migration
-			tokenType = token.Type(t.Token.Value)
-		case models.TokenTypeLParen:
-			tokenType = "("
-		case models.TokenTypeRParen:
-			tokenType = ")"
-		case models.TokenTypeComma:
-			tokenType = ","
-		case models.TokenTypePeriod:
-			tokenType = "."
-		case models.TokenTypeEq:
-			tokenType = "="
-		default:
-			if t.Token.Value != "" {
-				//lint:ignore SA1019 intentional use during #215 migration
-				tokenType = token.Type(t.Token.Value)
-			}
-		}
-
-		if tokenType != "" && t.Token.Value != "" {
-			result = append(result, token.Token{
-				Type:    tokenType,
-				Literal: t.Token.Value,
-			})
-		}
-	}
-	return result
-}
 
 func TestParser_BasicMerge_WhenMatched_Update(t *testing.T) {
 	sql := `MERGE INTO target_table t USING source_table s ON t.id = s.id WHEN MATCHED THEN UPDATE SET t.name = s.name`
@@ -67,10 +18,8 @@ func TestParser_BasicMerge_WhenMatched_Update(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForMerge(tokens)
-
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse MERGE: %v", err)
 	}
@@ -140,10 +89,8 @@ func TestParser_Merge_WhenNotMatched_Insert(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForMerge(tokens)
-
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse MERGE: %v", err)
 	}
@@ -191,10 +138,8 @@ func TestParser_Merge_WhenMatched_Delete(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForMerge(tokens)
-
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse MERGE: %v", err)
 	}
@@ -236,10 +181,8 @@ func TestParser_Merge_MultipleWhenClauses(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForMerge(tokens)
-
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse MERGE: %v", err)
 	}
@@ -286,10 +229,8 @@ func TestParser_Merge_WithAndCondition(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForMerge(tokens)
-
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse MERGE with AND condition: %v", err)
 	}
@@ -325,10 +266,8 @@ func TestParser_Merge_NotMatchedBySource(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForMerge(tokens)
-
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse MERGE NOT MATCHED BY SOURCE: %v", err)
 	}
@@ -364,10 +303,8 @@ func TestParser_Merge_InsertDefaultValues(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForMerge(tokens)
-
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse MERGE with DEFAULT VALUES: %v", err)
 	}
@@ -403,10 +340,8 @@ func TestParser_Merge_WithASKeyword(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForMerge(tokens)
-
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse MERGE with AS keyword: %v", err)
 	}
@@ -441,10 +376,8 @@ func TestParser_Merge_MultipleSetClauses(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForMerge(tokens)
-
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse MERGE with multiple SET clauses: %v", err)
 	}
@@ -480,10 +413,8 @@ func TestParser_Merge_Error_NoWhenClause(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForMerge(tokens)
-
 	parser := &Parser{}
-	_, err = parser.Parse(convertedTokens)
+	_, err = parser.ParseFromModelTokens(tokens)
 	if err == nil {
 		t.Error("Expected error for MERGE without WHEN clause")
 	}
@@ -500,10 +431,8 @@ func TestParser_Merge_Error_InsertInMatchedClause(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForMerge(tokens)
-
 	parser := &Parser{}
-	_, err = parser.Parse(convertedTokens)
+	_, err = parser.ParseFromModelTokens(tokens)
 	if err == nil {
 		t.Error("Expected error for INSERT in WHEN MATCHED clause")
 	}
@@ -520,10 +449,8 @@ func TestParser_Merge_Error_DeleteInNotMatchedClause(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForMerge(tokens)
-
 	parser := &Parser{}
-	_, err = parser.Parse(convertedTokens)
+	_, err = parser.ParseFromModelTokens(tokens)
 	if err == nil {
 		t.Error("Expected error for DELETE in WHEN NOT MATCHED clause")
 	}
@@ -538,7 +465,13 @@ func BenchmarkParser_Merge_Simple(b *testing.B) {
 	defer tokenizer.PutTokenizer(tkz)
 
 	tokens, _ := tkz.Tokenize(sqlBytes)
-	convertedTokens := convertTokensForMerge(tokens)
+	converter := GetTokenConverter()
+	convResult, convErr := converter.Convert(tokens)
+	PutTokenConverter(converter)
+	if convErr != nil {
+		b.Fatalf("Convert error: %v", convErr)
+	}
+	convertedTokens := convResult.Tokens
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -564,7 +497,13 @@ func BenchmarkParser_Merge_Complex(b *testing.B) {
 	defer tokenizer.PutTokenizer(tkz)
 
 	tokens, _ := tkz.Tokenize(sqlBytes)
-	convertedTokens := convertTokensForMerge(tokens)
+	converter := GetTokenConverter()
+	convResult, convErr := converter.Convert(tokens)
+	PutTokenConverter(converter)
+	if convErr != nil {
+		b.Fatalf("Convert error: %v", convErr)
+	}
+	convertedTokens := convResult.Tokens
 
 	b.ResetTimer()
 	b.ReportAllocs()

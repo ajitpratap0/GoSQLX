@@ -203,19 +203,10 @@ func parseAndDisplayFilter(sql string) {
 		return
 	}
 
-	// Convert tokens
-	//lint:ignore SA1019 intentional use during #215 migration
-	tokens, err := parser.ConvertTokensForParser(tokensWithSpan) //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
-	if err != nil {
-		log.Printf("   Token conversion error: %v", err)
-		return
-	}
-
-	// Parse
 	p := parser.NewParser()
 	defer p.Release()
 
-	astObj, err := p.Parse(tokens)
+	astObj, err := p.ParseFromModelTokens(tokensWithSpan)
 	if err != nil {
 		log.Printf("   Parse error: %v", err)
 		return
@@ -229,7 +220,7 @@ func parseAndDisplayFilter(sql string) {
 
 	fmt.Println("   Parsed Successfully!")
 	fmt.Printf("   - Statement Type: %s\n", getFilterStatementType(astObj.Statements[0]))
-	fmt.Printf("   - Token Count: %d\n", len(tokens))
+	fmt.Printf("   - Token Count: %d\n", len(tokensWithSpan))
 
 	// Count FILTER clauses
 	filterCount := countFilterClauses(sql)

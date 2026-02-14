@@ -97,14 +97,9 @@ func TestParser_InsertOnConflict(t *testing.T) {
 				t.Fatalf("Tokenize() error = %v", err)
 			}
 
-			convertedTokens, err := ConvertTokensForParser(tokens)
-			if err != nil {
-				t.Fatalf("ConvertTokensForParser() error = %v", err)
-			}
-
 			p := NewParser()
 			defer p.Release()
-			result, err := p.Parse(convertedTokens)
+			result, err := p.ParseFromModelTokens(tokens)
 
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("Parse() error = %v, wantErr %v", err, tt.wantErr)
@@ -167,14 +162,9 @@ func TestParser_InsertOnConflictWithReturning(t *testing.T) {
 		t.Fatalf("Tokenize() error = %v", err)
 	}
 
-	convertedTokens, err := ConvertTokensForParser(tokens)
-	if err != nil {
-		t.Fatalf("ConvertTokensForParser() error = %v", err)
-	}
-
 	p := NewParser()
 	defer p.Release()
-	result, err := p.Parse(convertedTokens)
+	result, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -238,14 +228,9 @@ func TestParser_InsertOnConflictErrors(t *testing.T) {
 				t.Fatalf("Tokenize() error = %v", err)
 			}
 
-			convertedTokens, err := ConvertTokensForParser(tokens)
-			if err != nil {
-				t.Fatalf("ConvertTokensForParser() error = %v", err)
-			}
-
 			p := NewParser()
 			defer p.Release()
-			_, err = p.Parse(convertedTokens)
+			_, err = p.ParseFromModelTokens(tokens)
 			if err == nil {
 				t.Error("Parse() expected error, got nil")
 			}
@@ -286,14 +271,9 @@ func TestParser_InsertOnConflictComplexExpressions(t *testing.T) {
 				t.Fatalf("Tokenize() error = %v", err)
 			}
 
-			convertedTokens, err := ConvertTokensForParser(tokens)
-			if err != nil {
-				t.Fatalf("ConvertTokensForParser() error = %v", err)
-			}
-
 			p := NewParser()
 			defer p.Release()
-			result, err := p.Parse(convertedTokens)
+			result, err := p.ParseFromModelTokens(tokens)
 			if err != nil {
 				t.Fatalf("Parse() error = %v", err)
 			}

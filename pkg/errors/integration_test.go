@@ -74,10 +74,8 @@ func TestErrorPropagation_TokenizerToParser(t *testing.T) {
 			}
 
 			// Convert tokens and parse
-			//lint:ignore SA1019 intentional use during #215 migration
-			parserTokens, _ := parser.ConvertTokensForParser(tokens)
 			p := parser.NewParser()
-			_, parseErr := p.Parse(parserTokens)
+			_, parseErr := p.ParseFromModelTokens(tokens)
 
 			// Verify parser error
 			if parseErr == nil {
@@ -152,10 +150,8 @@ func TestErrorCodeExtraction(t *testing.T) {
 			}
 
 			// Parse
-			//lint:ignore SA1019 intentional use during #215 migration
-			parserTokens, _ := parser.ConvertTokensForParser(tokens)
 			p := parser.NewParser()
-			_, parseErr := p.Parse(parserTokens)
+			_, parseErr := p.ParseFromModelTokens(tokens)
 
 			if parseErr == nil {
 				t.Fatalf("Expected error for SQL: %s", tc.sql)
@@ -220,10 +216,8 @@ func TestErrorLocationPropagation(t *testing.T) {
 			}
 
 			// Parse
-			//lint:ignore SA1019 intentional use during #215 migration
-			parserTokens, _ := parser.ConvertTokensForParser(tokens)
 			p := parser.NewParser()
-			_, parseErr := p.Parse(parserTokens)
+			_, parseErr := p.ParseFromModelTokens(tokens)
 
 			if parseErr == nil {
 				t.Fatalf("Expected error for SQL: %s", tc.sql)

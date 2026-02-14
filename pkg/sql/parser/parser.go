@@ -312,11 +312,13 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 //
 // See issue #215 for the token type unification roadmap.
 func (p *Parser) ParseFromModelTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
-	converted, err := ConvertTokensForParser(tokens)
+	converter := GetTokenConverter()
+	defer PutTokenConverter(converter)
+	result, err := converter.Convert(tokens)
 	if err != nil {
 		return nil, fmt.Errorf("token conversion failed: %w", err)
 	}
-	return p.Parse(converted)
+	return p.Parse(result.Tokens)
 }
 
 // ParseWithPositions parses tokens with position tracking for enhanced error reporting.

@@ -18,6 +18,41 @@ var keywordBufferPool = sync.Pool{
 	},
 }
 
+// globalTypeMap is a package-level singleton for the static token type mapping.
+// Initialized once via sync.Once since the mapping never changes at runtime.
+//
+//lint:ignore SA1019 intentional use during #215 migration
+var globalTypeMap map[models.TokenType]token.Type //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
+var globalTypeMapOnce sync.Once
+
+// getTypeMap returns the singleton type mapping, initializing it on first call.
+func getTypeMap() map[models.TokenType]token.Type { //nolint:staticcheck
+	globalTypeMapOnce.Do(func() {
+		globalTypeMap = buildTypeMapping()
+	})
+	return globalTypeMap
+}
+
+// converterPool pools TokenConverter instances to eliminate per-call allocation.
+var converterPool = sync.Pool{
+	New: func() interface{} {
+		return &TokenConverter{
+			buffer: make([]token.Token, 0, 256),
+		}
+	},
+}
+
+// GetTokenConverter returns a pooled TokenConverter. Call PutTokenConverter when done.
+func GetTokenConverter() *TokenConverter {
+	return converterPool.Get().(*TokenConverter)
+}
+
+// PutTokenConverter returns a TokenConverter to the pool.
+func PutTokenConverter(tc *TokenConverter) {
+	tc.buffer = tc.buffer[:0]
+	converterPool.Put(tc)
+}
+
 // TokenConverter provides centralized, optimized token conversion from tokenizer output
 // (models.TokenWithSpan) to parser input (token.Token).
 //
@@ -32,14 +67,10 @@ var keywordBufferPool = sync.Pool{
 //   - Memory: Zero allocations for keyword conversion via sync.Pool
 //   - Overhead: ~80ns per token (including position tracking)
 //
-// Thread Safety: NOT thread-safe - create separate instances per goroutine.
+// Thread Safety: NOT thread-safe - obtain separate instances via GetTokenConverter().
 type TokenConverter struct {
 	// Pre-allocated buffer to reduce memory allocations
 	buffer []token.Token
-
-	// Type mapping cache for performance (pre-computed)
-	//lint:ignore SA1019 intentional use during #215 migration
-	typeMap map[models.TokenType]token.Type //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
 }
 
 // ConversionResult contains the converted tokens and their position mappings for error reporting.
@@ -79,11 +110,12 @@ type TokenPosition struct {
 	SourceToken   *models.TokenWithSpan // Reference to original token for error reporting
 }
 
-// NewTokenConverter creates an optimized token converter
+// NewTokenConverter creates an optimized token converter.
+//
+// Deprecated: Use GetTokenConverter/PutTokenConverter for pooled usage.
 func NewTokenConverter() *TokenConverter {
 	return &TokenConverter{
-		buffer:  make([]token.Token, 0, 256), // Pre-allocate reasonable buffer
-		typeMap: buildTypeMapping(),
+		buffer: make([]token.Token, 0, 256),
 	}
 }
 
@@ -357,7 +389,7 @@ func (tc *TokenConverter) convertSingleToken(t models.TokenWithSpan) (token.Toke
 	}
 
 	// Try mapped type first (most efficient)
-	if mappedType, exists := tc.typeMap[t.Token.Type]; exists {
+	if mappedType, exists := getTypeMap()[t.Token.Type]; exists {
 		return token.Token{
 			Type:      mappedType,
 			ModelType: t.Token.Type, // Preserve the original ModelType

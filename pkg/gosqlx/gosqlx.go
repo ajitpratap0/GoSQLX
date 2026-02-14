@@ -142,7 +142,8 @@ func Parse(sql string) (*ast.AST, error) {
 	}
 
 	// Step 3: Convert to parser tokens using the proper converter
-	converter := parser.NewTokenConverter()
+	converter := parser.GetTokenConverter()
+	defer parser.PutTokenConverter(converter)
 	result, err := converter.Convert(tokens)
 	if err != nil {
 		return nil, fmt.Errorf("token conversion failed: %w", err)
@@ -236,7 +237,8 @@ func ParseWithContext(ctx context.Context, sql string) (*ast.AST, error) {
 	}
 
 	// Step 3: Convert to parser tokens using the proper converter
-	converter := parser.NewTokenConverter()
+	converter := parser.GetTokenConverter()
+	defer parser.PutTokenConverter(converter)
 	result, err := converter.Convert(tokens)
 	if err != nil {
 		return nil, fmt.Errorf("token conversion failed: %w", err)
@@ -405,7 +407,8 @@ func ParseMultiple(queries []string) ([]*ast.AST, error) {
 	p := parser.NewParser()
 	defer p.Release()
 
-	converter := parser.NewTokenConverter()
+	converter := parser.GetTokenConverter()
+	defer parser.PutTokenConverter(converter)
 
 	results := make([]*ast.AST, 0, len(queries))
 
@@ -458,7 +461,8 @@ func ValidateMultiple(queries []string) error {
 	p := parser.NewParser()
 	defer p.Release()
 
-	converter := parser.NewTokenConverter()
+	converter := parser.GetTokenConverter()
+	defer parser.PutTokenConverter(converter)
 
 	for i, sql := range queries {
 		tkz.Reset()
@@ -629,7 +633,8 @@ func ParseWithRecovery(sql string) ([]ast.Statement, []error) {
 		return nil, []error{fmt.Errorf("tokenization failed: %w", err)}
 	}
 
-	converter := parser.NewTokenConverter()
+	converter := parser.GetTokenConverter()
+	defer parser.PutTokenConverter(converter)
 	result, err := converter.Convert(tokens)
 	if err != nil {
 		return nil, []error{fmt.Errorf("token conversion failed: %w", err)}

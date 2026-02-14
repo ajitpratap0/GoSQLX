@@ -37,7 +37,8 @@ func BenchmarkLowLevel_Parse(b *testing.B) {
 		}
 
 		// Step 3: Convert tokens
-		converter := parser.NewTokenConverter()
+		converter := parser.GetTokenConverter()
+		defer parser.PutTokenConverter(converter)
 		result, err := converter.Convert(tokens)
 		if err != nil {
 			tokenizer.PutTokenizer(tkz)
@@ -85,7 +86,8 @@ func BenchmarkLowLevel_ParseSimple(b *testing.B) {
 			b.Fatal(err)
 		}
 
-		converter := parser.NewTokenConverter()
+		converter := parser.GetTokenConverter()
+		defer parser.PutTokenConverter(converter)
 		result, err := converter.Convert(tokens)
 		if err != nil {
 			tokenizer.PutTokenizer(tkz)
@@ -151,7 +153,8 @@ func BenchmarkLowLevel_ParseComplex(b *testing.B) {
 			b.Fatal(err)
 		}
 
-		converter := parser.NewTokenConverter()
+		converter := parser.GetTokenConverter()
+		defer parser.PutTokenConverter(converter)
 		result, err := converter.Convert(tokens)
 		if err != nil {
 			tokenizer.PutTokenizer(tkz)
@@ -197,7 +200,8 @@ func BenchmarkLowLevel_ParseWindowFunction(b *testing.B) {
 			b.Fatal(err)
 		}
 
-		converter := parser.NewTokenConverter()
+		converter := parser.GetTokenConverter()
+		defer parser.PutTokenConverter(converter)
 		result, err := converter.Convert(tokens)
 		if err != nil {
 			tokenizer.PutTokenizer(tkz)
@@ -253,7 +257,8 @@ func BenchmarkLowLevel_ParseCTE(b *testing.B) {
 			b.Fatal(err)
 		}
 
-		converter := parser.NewTokenConverter()
+		converter := parser.GetTokenConverter()
+		defer parser.PutTokenConverter(converter)
 		result, err := converter.Convert(tokens)
 		if err != nil {
 			tokenizer.PutTokenizer(tkz)
@@ -321,7 +326,8 @@ func BenchmarkLowLevel_ParseMultiple(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			converter := parser.NewTokenConverter()
+			converter := parser.GetTokenConverter()
+			defer parser.PutTokenConverter(converter)
 			result, err := converter.Convert(tokens)
 			if err != nil {
 				tokenizer.PutTokenizer(tkz)

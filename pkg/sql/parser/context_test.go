@@ -2,6 +2,7 @@ package parser
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -107,12 +108,14 @@ func TestParseContext_CancelledContext(t *testing.T) {
 
 // TestParseContext_Timeout verifies that timeout is respected
 func TestParseContext_Timeout(t *testing.T) {
-	// Use a very short timeout that should expire before processing
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
+	// Use a short timeout and wait well beyond it to guarantee expiry.
+	// Windows has ~15.6ms timer granularity, so 1ns+10ms is unreliable there.
+	// Using 1ms timeout + 100ms sleep ensures the context is expired on all platforms.
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
 	defer cancel()
 
-	// Give the timeout time to expire
-	time.Sleep(10 * time.Millisecond)
+	// Wait long enough for the deadline to expire on all platforms (including Windows)
+	time.Sleep(100 * time.Millisecond)
 
 	sql := "SELECT * FROM users"
 	tokens := tokenizeSQL(t, sql)
@@ -122,7 +125,8 @@ func TestParseContext_Timeout(t *testing.T) {
 
 	ast, err := p.ParseContext(ctx, tokens)
 
-	if err != context.DeadlineExceeded {
+	// Use errors.Is for proper unwrapping — ParseContext may wrap the context error
+	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("Expected context.DeadlineExceeded error, got: %v", err)
 	}
 

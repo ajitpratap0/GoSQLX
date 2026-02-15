@@ -532,6 +532,269 @@ func TestTruncateFormat_Nil(t *testing.T) {
 	}
 }
 
+func TestMergeFormat_Readable(t *testing.T) {
+	stmt := &MergeStatement{
+		TargetTable: TableReference{Name: "target"},
+		TargetAlias: "t",
+		SourceTable: TableReference{Name: "source"},
+		SourceAlias: "s",
+		OnCondition: &BinaryExpression{Left: &Identifier{Name: "t.id"}, Operator: "=", Right: &Identifier{Name: "s.id"}},
+		WhenClauses: []*MergeWhenClause{
+			{
+				Type: "MATCHED",
+				Action: &MergeAction{
+					ActionType: "UPDATE",
+					SetClauses: []SetClause{{Column: "name", Value: &Identifier{Name: "s.name"}}},
+				},
+			},
+			{
+				Type: "NOT_MATCHED",
+				Action: &MergeAction{
+					ActionType: "INSERT",
+					Columns:    []string{"id", "name"},
+					Values:     []Expression{&Identifier{Name: "s.id"}, &Identifier{Name: "s.name"}},
+				},
+			},
+		},
+	}
+	result := stmt.Format(ReadableStyle())
+	for _, kw := range []string{"MERGE INTO", "USING", "ON", "WHEN MATCHED", "UPDATE SET", "WHEN NOT MATCHED", "INSERT", "VALUES"} {
+		if !strings.Contains(result, kw) {
+			t.Errorf("expected %q in:\n%s", kw, result)
+		}
+	}
+}
+
+func TestMergeFormat_Nil(t *testing.T) {
+	var stmt *MergeStatement
+	if stmt.Format(CompactStyle()) != "" {
+		t.Error("nil should return empty string")
+	}
+}
+
+func TestMergeFormat_Delete(t *testing.T) {
+	stmt := &MergeStatement{
+		TargetTable: TableReference{Name: "t"},
+		SourceTable: TableReference{Name: "s"},
+		OnCondition: &BinaryExpression{Left: &Identifier{Name: "t.id"}, Operator: "=", Right: &Identifier{Name: "s.id"}},
+		WhenClauses: []*MergeWhenClause{
+			{Type: "MATCHED", Action: &MergeAction{ActionType: "DELETE"}},
+		},
+	}
+	result := stmt.Format(ReadableStyle())
+	if !strings.Contains(result, "DELETE") {
+		t.Errorf("expected DELETE in:\n%s", result)
+	}
+}
+
+func TestMergeFormat_DefaultValues(t *testing.T) {
+	stmt := &MergeStatement{
+		TargetTable: TableReference{Name: "t"},
+		SourceTable: TableReference{Name: "s"},
+		OnCondition: &BinaryExpression{Left: &Identifier{Name: "t.id"}, Operator: "=", Right: &Identifier{Name: "s.id"}},
+		WhenClauses: []*MergeWhenClause{
+			{Type: "NOT_MATCHED", Action: &MergeAction{ActionType: "INSERT", DefaultValues: true}},
+		},
+	}
+	result := stmt.Format(ReadableStyle())
+	if !strings.Contains(result, "DEFAULT VALUES") {
+		t.Errorf("expected DEFAULT VALUES in:\n%s", result)
+	}
+}
+
+func TestMergeFormat_WhenCondition(t *testing.T) {
+	stmt := &MergeStatement{
+		TargetTable: TableReference{Name: "t"},
+		SourceTable: TableReference{Name: "s"},
+		OnCondition: &BinaryExpression{Left: &Identifier{Name: "t.id"}, Operator: "=", Right: &Identifier{Name: "s.id"}},
+		WhenClauses: []*MergeWhenClause{
+			{
+				Type:      "MATCHED",
+				Condition: &BinaryExpression{Left: &Identifier{Name: "s.active"}, Operator: "=", Right: &LiteralValue{Value: "true"}},
+				Action:    &MergeAction{ActionType: "DELETE"},
+			},
+		},
+	}
+	result := stmt.Format(ReadableStyle())
+	if !strings.Contains(result, "AND") {
+		t.Errorf("expected AND condition in:\n%s", result)
+	}
+}
+
+func TestCaseFormat_Simple(t *testing.T) {
+	expr := &CaseExpression{
+		Value: &Identifier{Name: "status"},
+		WhenClauses: []WhenClause{
+			{Condition: &LiteralValue{Value: "1"}, Result: &LiteralValue{Value: "'active'"}},
+			{Condition: &LiteralValue{Value: "2"}, Result: &LiteralValue{Value: "'inactive'"}},
+		},
+		ElseClause: &LiteralValue{Value: "'unknown'"},
+	}
+	result := expr.Format(ReadableStyle())
+	for _, kw := range []string{"CASE", "WHEN", "THEN", "ELSE", "END"} {
+		if !strings.Contains(result, kw) {
+			t.Errorf("expected %q in: %s", kw, result)
+		}
+	}
+	if !strings.Contains(result, "status") {
+		t.Errorf("expected simple CASE value in: %s", result)
+	}
+}
+
+func TestCaseFormat_Searched(t *testing.T) {
+	expr := &CaseExpression{
+		WhenClauses: []WhenClause{
+			{Condition: &BinaryExpression{Left: &Identifier{Name: "x"}, Operator: ">", Right: &LiteralValue{Value: "0"}}, Result: &LiteralValue{Value: "'pos'"}},
+		},
+	}
+	result := expr.Format(ReadableStyle())
+	if !strings.Contains(result, "CASE WHEN") {
+		t.Errorf("expected searched CASE in: %s", result)
+	}
+}
+
+func TestCaseFormat_Nil(t *testing.T) {
+	var expr *CaseExpression
+	if expr.Format(CompactStyle()) != "" {
+		t.Error("nil should return empty string")
+	}
+}
+
+func TestBetweenFormat(t *testing.T) {
+	expr := &BetweenExpression{
+		Expr:  &Identifier{Name: "age"},
+		Lower: &LiteralValue{Value: "18"},
+		Upper: &LiteralValue{Value: "65"},
+	}
+	result := expr.Format(ReadableStyle())
+	expected := "age BETWEEN 18 AND 65"
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestBetweenFormat_Not(t *testing.T) {
+	expr := &BetweenExpression{
+		Expr:  &Identifier{Name: "age"},
+		Lower: &LiteralValue{Value: "18"},
+		Upper: &LiteralValue{Value: "65"},
+		Not:   true,
+	}
+	result := expr.Format(ReadableStyle())
+	if !strings.Contains(result, "NOT BETWEEN") {
+		t.Errorf("expected NOT BETWEEN in: %s", result)
+	}
+}
+
+func TestBetweenFormat_Nil(t *testing.T) {
+	var expr *BetweenExpression
+	if expr.Format(CompactStyle()) != "" {
+		t.Error("nil should return empty string")
+	}
+}
+
+func TestInFormat_Values(t *testing.T) {
+	expr := &InExpression{
+		Expr: &Identifier{Name: "id"},
+		List: []Expression{&LiteralValue{Value: "1"}, &LiteralValue{Value: "2"}, &LiteralValue{Value: "3"}},
+	}
+	result := expr.Format(ReadableStyle())
+	expected := "id IN (1, 2, 3)"
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestInFormat_Not(t *testing.T) {
+	expr := &InExpression{
+		Expr: &Identifier{Name: "id"},
+		List: []Expression{&LiteralValue{Value: "1"}},
+		Not:  true,
+	}
+	result := expr.Format(ReadableStyle())
+	if !strings.Contains(result, "NOT IN") {
+		t.Errorf("expected NOT IN in: %s", result)
+	}
+}
+
+func TestInFormat_Subquery(t *testing.T) {
+	expr := &InExpression{
+		Expr: &Identifier{Name: "id"},
+		Subquery: &SelectStatement{
+			Columns: []Expression{&Identifier{Name: "id"}},
+			From:    []TableReference{{Name: "other"}},
+		},
+	}
+	result := expr.Format(ReadableStyle())
+	if !strings.Contains(result, "IN (") || !strings.Contains(result, "SELECT") {
+		t.Errorf("expected IN (SELECT ...) in: %s", result)
+	}
+}
+
+func TestInFormat_Nil(t *testing.T) {
+	var expr *InExpression
+	if expr.Format(CompactStyle()) != "" {
+		t.Error("nil should return empty string")
+	}
+}
+
+func TestExistsFormat(t *testing.T) {
+	expr := &ExistsExpression{
+		Subquery: &SelectStatement{
+			Columns: []Expression{&LiteralValue{Value: "1"}},
+			From:    []TableReference{{Name: "users"}},
+			Where:   &BinaryExpression{Left: &Identifier{Name: "active"}, Operator: "=", Right: &LiteralValue{Value: "true"}},
+		},
+	}
+	result := expr.Format(ReadableStyle())
+	if !strings.Contains(result, "EXISTS") || !strings.Contains(result, "SELECT") {
+		t.Errorf("expected EXISTS (SELECT ...) in: %s", result)
+	}
+}
+
+func TestExistsFormat_Nil(t *testing.T) {
+	var expr *ExistsExpression
+	if expr.Format(CompactStyle()) != "" {
+		t.Error("nil should return empty string")
+	}
+}
+
+func TestSubqueryFormat(t *testing.T) {
+	expr := &SubqueryExpression{
+		Subquery: &SelectStatement{
+			Columns: []Expression{&Identifier{Name: "max_id"}},
+			From:    []TableReference{{Name: "orders"}},
+		},
+	}
+	result := expr.Format(CompactStyle())
+	if !strings.HasPrefix(result, "(") || !strings.HasSuffix(result, ")") {
+		t.Errorf("expected wrapped in parens: %s", result)
+	}
+	if !strings.Contains(result, "SELECT") {
+		t.Errorf("expected SELECT in: %s", result)
+	}
+}
+
+func TestSubqueryFormat_Nil(t *testing.T) {
+	var expr *SubqueryExpression
+	if expr.Format(CompactStyle()) != "" {
+		t.Error("nil should return empty string")
+	}
+}
+
+func TestCaseFormat_LowerKeywords(t *testing.T) {
+	expr := &CaseExpression{
+		WhenClauses: []WhenClause{
+			{Condition: &LiteralValue{Value: "true"}, Result: &LiteralValue{Value: "1"}},
+		},
+	}
+	opts := FormatOptions{KeywordCase: KeywordLower}
+	result := expr.Format(opts)
+	if !strings.Contains(result, "case") || !strings.Contains(result, "when") || !strings.Contains(result, "end") {
+		t.Errorf("expected lowercase keywords in: %s", result)
+	}
+}
+
 func TestFormatRoundtrip(t *testing.T) {
 	// Format with compact style should produce parseable SQL equivalent to SQL()
 	stmt := &SelectStatement{

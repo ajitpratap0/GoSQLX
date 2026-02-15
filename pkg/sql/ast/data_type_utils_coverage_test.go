@@ -2,6 +2,7 @@ package ast
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -60,8 +61,10 @@ func TestReferenceDefinition_String(t *testing.T) {
 		Match:    "FULL",
 	}
 	s := r.String()
-	if s == "" {
-		t.Error("should not be empty")
+	for _, want := range []string{"orders", "id", "CASCADE", "SET NULL", "FULL"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("ReferenceDefinition.String() missing %q, got: %s", want, s)
+		}
 	}
 }
 
@@ -69,8 +72,8 @@ func TestColumnConstraint_String(t *testing.T) {
 	// With default
 	cc := &ColumnConstraint{Type: "DEFAULT", Default: &LiteralValue{Value: "0"}}
 	s := cc.String()
-	if s == "" {
-		t.Error("should not be empty")
+	if !strings.Contains(s, "DEFAULT") || !strings.Contains(s, "0") {
+		t.Errorf("ColumnConstraint DEFAULT should contain 'DEFAULT' and '0', got: %s", s)
 	}
 
 	// With references
@@ -79,21 +82,21 @@ func TestColumnConstraint_String(t *testing.T) {
 		References: &ReferenceDefinition{Table: "users", Columns: []string{"id"}},
 	}
 	s2 := cc2.String()
-	if s2 == "" {
-		t.Error("should not be empty")
+	if !strings.Contains(s2, "REFERENCES") || !strings.Contains(s2, "users") {
+		t.Errorf("ColumnConstraint REFERENCES should contain 'REFERENCES' and 'users', got: %s", s2)
 	}
 
 	// With check
 	cc3 := &ColumnConstraint{Type: "CHECK", Check: &Identifier{Name: "x > 0"}}
 	s3 := cc3.String()
-	if s3 == "" {
-		t.Error("should not be empty")
+	if !strings.Contains(s3, "CHECK") {
+		t.Errorf("ColumnConstraint CHECK should contain 'CHECK', got: %s", s3)
 	}
 
 	// Auto increment
 	cc4 := &ColumnConstraint{AutoIncrement: true}
 	s4 := cc4.String()
-	if s4 == "" {
-		t.Error("should not be empty")
+	if !strings.Contains(s4, "AUTO_INCREMENT") && !strings.Contains(s4, "AUTOINCREMENT") && !strings.Contains(strings.ToUpper(s4), "AUTO") {
+		t.Errorf("ColumnConstraint AutoIncrement should mention auto increment, got: %s", s4)
 	}
 }

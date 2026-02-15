@@ -28,6 +28,13 @@
 //	rule := transform.AddJoinFromSQL("LEFT JOIN orders ON orders.user_id = users.id")
 //	transform.Apply(stmt, rule)
 //
+// # Security
+//
+// WARNING: Functions that accept raw SQL strings (AddWhereFromSQL, AddJoinFromSQL)
+// must not receive untrusted user input. Passing unsanitized input could produce
+// unintended query modifications. Use parameterized queries or construct AST nodes
+// directly (AddWhere, AddJoin) for untrusted input.
+//
 // # Composability
 //
 // Multiple transforms can be chained:

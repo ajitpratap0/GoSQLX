@@ -151,4 +151,3 @@ func FormatSQL(stmt ast.Statement) string {
 	}
 	return ""
 }
-

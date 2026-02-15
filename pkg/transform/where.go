@@ -65,6 +65,11 @@ func ReplaceWhere(condition ast.Expression) Rule {
 
 // AddWhereFromSQL returns a Rule that parses a SQL condition string and adds it
 // as an AND condition to the existing WHERE clause.
+//
+// WARNING: sql parameter must not contain untrusted user input.
+// This function parses raw SQL — passing unsanitized input could
+// produce unintended query modifications. Use parameterized queries
+// or construct AST nodes directly for untrusted input.
 func AddWhereFromSQL(sql string) Rule {
 	return RuleFunc(func(stmt ast.Statement) error {
 		condition, err := parseCondition(sql)

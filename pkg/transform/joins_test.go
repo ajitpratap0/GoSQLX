@@ -51,3 +51,11 @@ func TestJoin_UnsupportedStatement(t *testing.T) {
 		t.Fatal("expected error for DELETE")
 	}
 }
+
+func TestAddJoin_InvalidType(t *testing.T) {
+	stmt := mustParse(t, "SELECT * FROM users")
+	err := Apply(stmt, AddJoin("LATERAL", "orders", nil))
+	if err == nil {
+		t.Fatal("expected error for invalid join type")
+	}
+}

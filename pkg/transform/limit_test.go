@@ -63,3 +63,19 @@ func TestLimit_UnsupportedStatement(t *testing.T) {
 		t.Fatal("expected error for DELETE")
 	}
 }
+
+func TestSetLimit_Negative(t *testing.T) {
+	stmt := mustParse(t, "SELECT * FROM users")
+	err := Apply(stmt, SetLimit(-1))
+	if err == nil {
+		t.Fatal("expected error for negative limit")
+	}
+}
+
+func TestSetOffset_Negative(t *testing.T) {
+	stmt := mustParse(t, "SELECT * FROM users")
+	err := Apply(stmt, SetOffset(-5))
+	if err == nil {
+		t.Fatal("expected error for negative offset")
+	}
+}

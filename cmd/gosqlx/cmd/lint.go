@@ -176,6 +176,21 @@ func lintRun(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Run security scanner if --security flag is set
+	securityFindingCount := 0
+	if lintSecurity {
+		for _, fileResult := range result.Files {
+			if fileResult.Error != nil {
+				continue
+			}
+			content, readErr := os.ReadFile(fileResult.Filename)
+			if readErr != nil {
+				continue
+			}
+			securityFindingCount += runSecurityScan(string(content), fileResult.Filename, outWriter)
+		}
+	}
+
 	// Return error if there were violations or file errors
 	errorCount := 0
 	warningCount := 0
@@ -199,6 +214,9 @@ func lintRun(cmd *cobra.Command, args []string) error {
 	}
 	if errorCount > 0 || (lintFailOnWarn && warningCount > 0) {
 		return fmt.Errorf("%d error(s) and %d warning(s) found", errorCount, warningCount)
+	}
+	if securityFindingCount > 0 {
+		return fmt.Errorf("%d security finding(s) detected", securityFindingCount)
 	}
 
 	return nil

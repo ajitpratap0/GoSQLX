@@ -40,26 +40,26 @@
 //
 // # Token Management
 //
-// The parser uses ModelType-based token matching for optimal performance. ModelType is an
+// The parser uses Type-based token matching for optimal performance. Type is an
 // integer enumeration that enables O(1) switch-based dispatch instead of O(n) string comparisons.
 // This optimization provides ~14x performance improvement on hot paths (0.24ns vs 3.4ns per comparison).
 //
 // Fast path example:
 //
-//	if p.currentToken.ModelType == models.TokenTypeSelect {
+//	if p.currentToken.Type == models.TokenTypeSelect {
 //	    // O(1) integer comparison
 //	    return p.parseSelectWithSetOperations()
 //	}
 //
-// The parser maintains backward compatibility with string-based token matching for tests
-// and legacy code that creates tokens without ModelType.
+// The parser maintains backward compatibility with legacy token matching for tests
+// and legacy code that creates tokens without Type.
 //
 // # Performance Optimizations
 //
 // The parser implements several performance optimizations:
 //
 //   - Object Pooling: All major data structures use sync.Pool for zero-allocation reuse
-//   - Fast Token Dispatch: O(1) ModelType switch instead of O(n) string comparisons
+//   - Fast Token Dispatch: O(1) Type switch instead of O(n) string comparisons
 //   - Pre-allocation: Statement slices pre-allocated based on input size estimation
 //   - Zero-copy Operations: Direct token access without string allocation
 //   - Recursion Depth Limiting: MaxRecursionDepth prevents stack overflow (DoS protection)

@@ -468,8 +468,8 @@ func TestParser_ArraySubscript_ErrorEmptyBrackets(t *testing.T) {
 // TestParser_ArraySubscriptExpression_Children tests that Children() returns correct nodes
 func TestParser_ArraySubscriptExpression_Children(t *testing.T) {
 	arrayIdent := &ast.Identifier{Name: "arr"}
-	index1 := &ast.LiteralValue{Value: "1", Type: "int"}
-	index2 := &ast.LiteralValue{Value: "2", Type: "int"}
+	index1 := &ast.LiteralValue{Value: "1", Type: "NUMBER"}
+	index2 := &ast.LiteralValue{Value: "2", Type: "NUMBER"}
 
 	subscriptExpr := &ast.ArraySubscriptExpression{
 		Array:   arrayIdent,
@@ -485,8 +485,8 @@ func TestParser_ArraySubscriptExpression_Children(t *testing.T) {
 // TestParser_ArraySliceExpression_Children tests that Children() returns correct nodes
 func TestParser_ArraySliceExpression_Children(t *testing.T) {
 	arrayIdent := &ast.Identifier{Name: "arr"}
-	start := &ast.LiteralValue{Value: "1", Type: "int"}
-	end := &ast.LiteralValue{Value: "3", Type: "int"}
+	start := &ast.LiteralValue{Value: "1", Type: "NUMBER"}
+	end := &ast.LiteralValue{Value: "3", Type: "NUMBER"}
 
 	sliceExpr := &ast.ArraySliceExpression{
 		Array: arrayIdent,

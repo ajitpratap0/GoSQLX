@@ -9,15 +9,32 @@ import (
 )
 
 func eof() token.Token {
-	return token.Token{Type: "EOF", ModelType: models.TokenTypeEOF, Literal: ""}
+	return token.Token{Type: models.TokenTypeEOF, Literal: ""}
 }
 
 func semi() token.Token {
-	return token.Token{Type: ";", ModelType: models.TokenTypeSemicolon, Literal: ";"}
+	return token.Token{Type: models.TokenTypeSemicolon, Literal: ";"}
+}
+
+// stringToTokenType is a helper for tests that creates tokens from string type names.
+var testStringToType = map[string]models.TokenType{
+	"SELECT": models.TokenTypeSelect, "FROM": models.TokenTypeFrom,
+	"WHERE": models.TokenTypeWhere, "IDENT": models.TokenTypeIdentifier,
+	"INT": models.TokenTypeNumber, "STRING": models.TokenTypeString,
+	"=": models.TokenTypeEq, ",": models.TokenTypeComma,
+	"(": models.TokenTypeLParen, ")": models.TokenTypeRParen,
+	";": models.TokenTypeSemicolon, "EOF": models.TokenTypeEOF,
+	"*": models.TokenTypeAsterisk, ".": models.TokenTypePeriod,
+	"INSERT": models.TokenTypeInsert, "INTO": models.TokenTypeInto,
+	"VALUES": models.TokenTypeValues, "UPDATE": models.TokenTypeUpdate,
+	"SET": models.TokenTypeSet, "DELETE": models.TokenTypeDelete,
 }
 
 func tok(typ, lit string) token.Token {
-	return token.Token{Type: token.Type(typ), Literal: lit}
+	if mt, ok := testStringToType[typ]; ok {
+		return token.Token{Type: mt, Literal: lit}
+	}
+	return token.Token{Type: models.TokenTypeKeyword, Literal: lit}
 }
 
 // TestParseWithRecovery_MultipleErrors tests that multiple syntax errors are all reported.

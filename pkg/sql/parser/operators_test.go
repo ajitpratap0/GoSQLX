@@ -12,17 +12,16 @@ import (
 func TestParser_BetweenExpression(t *testing.T) {
 	// SELECT * FROM products WHERE price BETWEEN 10 AND 100
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "*", Literal: "*"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "products"},
-		{Type: "WHERE", Literal: "WHERE"},
-		{Type: "IDENT", Literal: "price"},
-		{Type: "BETWEEN", Literal: "BETWEEN"},
-		{Type: "INT", Literal: "10"},
-		{Type: "AND", Literal: "AND"},
-		{Type: "INT", Literal: "100"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "products"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeIdentifier, Literal: "price"},
+		{Type: models.TokenTypeBetween, Literal: "BETWEEN"},
+		{Type: models.TokenTypeNumber, Literal: "10"},
+		{Type: models.TokenTypeAnd, Literal: "AND"},
+		{Type: models.TokenTypeNumber, Literal: "100"},
 	}
 
 	parser := NewParser()
@@ -59,18 +58,17 @@ func TestParser_BetweenExpression(t *testing.T) {
 func TestParser_NotBetweenExpression(t *testing.T) {
 	// SELECT * FROM products WHERE price NOT BETWEEN 10 AND 100
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "*", Literal: "*"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "products"},
-		{Type: "WHERE", Literal: "WHERE"},
-		{Type: "IDENT", Literal: "price"},
-		{Type: "NOT", Literal: "NOT"},
-		{Type: "BETWEEN", Literal: "BETWEEN"},
-		{Type: "INT", Literal: "10"},
-		{Type: "AND", Literal: "AND"},
-		{Type: "INT", Literal: "100"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "products"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeIdentifier, Literal: "price"},
+		{Type: models.TokenTypeNot, Literal: "NOT"},
+		{Type: models.TokenTypeBetween, Literal: "BETWEEN"},
+		{Type: models.TokenTypeNumber, Literal: "10"},
+		{Type: models.TokenTypeAnd, Literal: "AND"},
+		{Type: models.TokenTypeNumber, Literal: "100"},
 	}
 
 	parser := NewParser()
@@ -94,21 +92,20 @@ func TestParser_NotBetweenExpression(t *testing.T) {
 func TestParser_InExpression(t *testing.T) {
 	// SELECT * FROM orders WHERE status IN ('pending', 'processing', 'shipped')
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "*", Literal: "*"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "orders"},
-		{Type: "WHERE", Literal: "WHERE"},
-		{Type: "IDENT", Literal: "status"},
-		{Type: "IN", Literal: "IN"},
-		{Type: "(", Literal: "("},
-		{Type: "STRING", Literal: "pending"},
-		{Type: ",", Literal: ","},
-		{Type: "STRING", Literal: "processing"},
-		{Type: ",", Literal: ","},
-		{Type: "STRING", Literal: "shipped"},
-		{Type: ")", Literal: ")"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "orders"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeIdentifier, Literal: "status"},
+		{Type: models.TokenTypeIn, Literal: "IN"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeString, Literal: "pending"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeString, Literal: "processing"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeString, Literal: "shipped"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
 	}
 
 	parser := NewParser()
@@ -139,18 +136,17 @@ func TestParser_InExpression(t *testing.T) {
 func TestParser_NotInExpression(t *testing.T) {
 	// SELECT * FROM orders WHERE status NOT IN ('cancelled')
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "*", Literal: "*"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "orders"},
-		{Type: "WHERE", Literal: "WHERE"},
-		{Type: "IDENT", Literal: "status"},
-		{Type: "NOT", Literal: "NOT"},
-		{Type: "IN", Literal: "IN"},
-		{Type: "(", Literal: "("},
-		{Type: "STRING", Literal: "cancelled"},
-		{Type: ")", Literal: ")"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "orders"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeIdentifier, Literal: "status"},
+		{Type: models.TokenTypeNot, Literal: "NOT"},
+		{Type: models.TokenTypeIn, Literal: "IN"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeString, Literal: "cancelled"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
 	}
 
 	parser := NewParser()
@@ -174,15 +170,14 @@ func TestParser_NotInExpression(t *testing.T) {
 func TestParser_LikeExpression(t *testing.T) {
 	// SELECT * FROM users WHERE email LIKE '%@example.com'
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "*", Literal: "*"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "users"},
-		{Type: "WHERE", Literal: "WHERE"},
-		{Type: "IDENT", Literal: "email"},
-		{Type: "LIKE", Literal: "LIKE"},
-		{Type: "STRING", Literal: "%@example.com"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "users"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeIdentifier, Literal: "email"},
+		{Type: models.TokenTypeLike, Literal: "LIKE"},
+		{Type: models.TokenTypeString, Literal: "%@example.com"},
 	}
 
 	parser := NewParser()
@@ -213,16 +208,15 @@ func TestParser_LikeExpression(t *testing.T) {
 func TestParser_NotLikeExpression(t *testing.T) {
 	// SELECT * FROM users WHERE name NOT LIKE 'Admin%'
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "*", Literal: "*"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "users"},
-		{Type: "WHERE", Literal: "WHERE"},
-		{Type: "IDENT", Literal: "name"},
-		{Type: "NOT", Literal: "NOT"},
-		{Type: "LIKE", Literal: "LIKE"},
-		{Type: "STRING", Literal: "Admin%"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "users"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeIdentifier, Literal: "name"},
+		{Type: models.TokenTypeNot, Literal: "NOT"},
+		{Type: models.TokenTypeLike, Literal: "LIKE"},
+		{Type: models.TokenTypeString, Literal: "Admin%"},
 	}
 
 	parser := NewParser()
@@ -246,15 +240,14 @@ func TestParser_NotLikeExpression(t *testing.T) {
 func TestParser_IsNullExpression(t *testing.T) {
 	// SELECT * FROM customers WHERE deleted_at IS NULL
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "*", Literal: "*"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "customers"},
-		{Type: "WHERE", Literal: "WHERE"},
-		{Type: "IDENT", Literal: "deleted_at"},
-		{Type: "IS", Literal: "IS"},
-		{Type: "NULL", Literal: "NULL"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "customers"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeIdentifier, Literal: "deleted_at"},
+		{Type: models.TokenTypeIs, Literal: "IS"},
+		{Type: models.TokenTypeNull, Literal: "NULL"},
 	}
 
 	parser := NewParser()
@@ -285,16 +278,15 @@ func TestParser_IsNullExpression(t *testing.T) {
 func TestParser_IsNotNullExpression(t *testing.T) {
 	// SELECT * FROM posts WHERE published_at IS NOT NULL
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "*", Literal: "*"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "posts"},
-		{Type: "WHERE", Literal: "WHERE"},
-		{Type: "IDENT", Literal: "published_at"},
-		{Type: "IS", Literal: "IS"},
-		{Type: "NOT", Literal: "NOT"},
-		{Type: "NULL", Literal: "NULL"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "posts"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeIdentifier, Literal: "published_at"},
+		{Type: models.TokenTypeIs, Literal: "IS"},
+		{Type: models.TokenTypeNot, Literal: "NOT"},
+		{Type: models.TokenTypeNull, Literal: "NULL"},
 	}
 
 	parser := NewParser()
@@ -322,17 +314,16 @@ func TestParser_IsNotNullExpression(t *testing.T) {
 func TestParser_BetweenWithIdentifiers(t *testing.T) {
 	// SELECT * FROM events WHERE event_date BETWEEN start_date AND end_date
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "*", Literal: "*"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "events"},
-		{Type: "WHERE", Literal: "WHERE"},
-		{Type: "IDENT", Literal: "event_date"},
-		{Type: "BETWEEN", Literal: "BETWEEN"},
-		{Type: "IDENT", Literal: "start_date"},
-		{Type: "AND", Literal: "AND"},
-		{Type: "IDENT", Literal: "end_date"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "events"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeIdentifier, Literal: "event_date"},
+		{Type: models.TokenTypeBetween, Literal: "BETWEEN"},
+		{Type: models.TokenTypeIdentifier, Literal: "start_date"},
+		{Type: models.TokenTypeAnd, Literal: "AND"},
+		{Type: models.TokenTypeIdentifier, Literal: "end_date"},
 	}
 
 	parser := NewParser()
@@ -364,21 +355,20 @@ func TestParser_BetweenWithIdentifiers(t *testing.T) {
 func TestParser_BetweenWithArithmeticExpressions(t *testing.T) {
 	// SELECT * FROM products WHERE price BETWEEN price * 0.9 AND price * 1.1
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "*", Literal: "*"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "products"},
-		{Type: "WHERE", Literal: "WHERE"},
-		{Type: "IDENT", Literal: "price"},
-		{Type: "BETWEEN", Literal: "BETWEEN"},
-		{Type: "IDENT", Literal: "price"},
-		{Type: "*", Literal: "*"},
-		{Type: "FLOAT", Literal: "0.9"},
-		{Type: "AND", Literal: "AND"},
-		{Type: "IDENT", Literal: "price"},
-		{Type: "*", Literal: "*"},
-		{Type: "FLOAT", Literal: "1.1"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "products"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeIdentifier, Literal: "price"},
+		{Type: models.TokenTypeBetween, Literal: "BETWEEN"},
+		{Type: models.TokenTypeIdentifier, Literal: "price"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeNumber, Literal: "0.9"},
+		{Type: models.TokenTypeAnd, Literal: "AND"},
+		{Type: models.TokenTypeIdentifier, Literal: "price"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeNumber, Literal: "1.1"},
 	}
 
 	parser := NewParser()
@@ -416,21 +406,20 @@ func TestParser_BetweenWithArithmeticExpressions(t *testing.T) {
 func TestParser_BetweenWithAdditionSubtraction(t *testing.T) {
 	// SELECT * FROM orders WHERE total BETWEEN subtotal - 10 AND subtotal + 10
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "*", Literal: "*"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "orders"},
-		{Type: "WHERE", Literal: "WHERE"},
-		{Type: "IDENT", Literal: "total"},
-		{Type: "BETWEEN", Literal: "BETWEEN"},
-		{Type: "IDENT", Literal: "subtotal"},
-		{Type: "MINUS", Literal: "-"},
-		{Type: "INT", Literal: "10"},
-		{Type: "AND", Literal: "AND"},
-		{Type: "IDENT", Literal: "subtotal"},
-		{Type: "PLUS", Literal: "+"},
-		{Type: "INT", Literal: "10"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "orders"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeIdentifier, Literal: "total"},
+		{Type: models.TokenTypeBetween, Literal: "BETWEEN"},
+		{Type: models.TokenTypeIdentifier, Literal: "subtotal"},
+		{Type: models.TokenTypeMinus, Literal: "-"},
+		{Type: models.TokenTypeNumber, Literal: "10"},
+		{Type: models.TokenTypeAnd, Literal: "AND"},
+		{Type: models.TokenTypeIdentifier, Literal: "subtotal"},
+		{Type: models.TokenTypePlus, Literal: "+"},
+		{Type: models.TokenTypeNumber, Literal: "10"},
 	}
 
 	parser := NewParser()
@@ -468,25 +457,24 @@ func TestParser_BetweenWithAdditionSubtraction(t *testing.T) {
 func TestParser_BetweenWithFunctionCallsAndArithmetic(t *testing.T) {
 	// SELECT * FROM orders WHERE amount BETWEEN MIN(price) AND MAX(price) * 2
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "*", Literal: "*"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "orders"},
-		{Type: "WHERE", Literal: "WHERE"},
-		{Type: "IDENT", Literal: "amount"},
-		{Type: "BETWEEN", Literal: "BETWEEN"},
-		{Type: "IDENT", Literal: "MIN"},
-		{Type: "(", Literal: "("},
-		{Type: "IDENT", Literal: "price"},
-		{Type: ")", Literal: ")"},
-		{Type: "AND", Literal: "AND"},
-		{Type: "IDENT", Literal: "MAX"},
-		{Type: "(", Literal: "("},
-		{Type: "IDENT", Literal: "price"},
-		{Type: ")", Literal: ")"},
-		{Type: "*", Literal: "*"},
-		{Type: "INT", Literal: "2"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "orders"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeIdentifier, Literal: "amount"},
+		{Type: models.TokenTypeBetween, Literal: "BETWEEN"},
+		{Type: models.TokenTypeIdentifier, Literal: "MIN"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeIdentifier, Literal: "price"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeAnd, Literal: "AND"},
+		{Type: models.TokenTypeIdentifier, Literal: "MAX"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeIdentifier, Literal: "price"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeNumber, Literal: "2"},
 	}
 
 	parser := NewParser()
@@ -521,21 +509,20 @@ func TestParser_BetweenWithFunctionCallsAndArithmetic(t *testing.T) {
 func TestParser_InWithNumbers(t *testing.T) {
 	// SELECT * FROM products WHERE category_id IN (1, 2, 3)
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "*", Literal: "*"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "products"},
-		{Type: "WHERE", Literal: "WHERE"},
-		{Type: "IDENT", Literal: "category_id"},
-		{Type: "IN", Literal: "IN"},
-		{Type: "(", Literal: "("},
-		{Type: "INT", Literal: "1"},
-		{Type: ",", Literal: ","},
-		{Type: "INT", Literal: "2"},
-		{Type: ",", Literal: ","},
-		{Type: "INT", Literal: "3"},
-		{Type: ")", Literal: ")"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "products"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeIdentifier, Literal: "category_id"},
+		{Type: models.TokenTypeIn, Literal: "IN"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeNumber, Literal: "1"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeNumber, Literal: "2"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeNumber, Literal: "3"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
 	}
 
 	parser := NewParser()
@@ -571,31 +558,30 @@ func TestParser_InWithNumbers(t *testing.T) {
 func TestParser_TupleInExpression(t *testing.T) {
 	// SELECT * FROM orders WHERE (user_id, status) IN ((1, 'active'), (2, 'pending'))
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "*", Literal: "*"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "orders"},
-		{Type: "WHERE", Literal: "WHERE"},
-		{Type: "(", Literal: "("}, // tuple start
-		{Type: "IDENT", Literal: "user_id"},
-		{Type: ",", Literal: ","},
-		{Type: "IDENT", Literal: "status"},
-		{Type: ")", Literal: ")"}, // tuple end
-		{Type: "IN", Literal: "IN"},
-		{Type: "(", Literal: "("}, // IN list start
-		{Type: "(", Literal: "("}, // first tuple value
-		{Type: "INT", Literal: "1"},
-		{Type: ",", Literal: ","},
-		{Type: "STRING", Literal: "active"},
-		{Type: ")", Literal: ")"},
-		{Type: ",", Literal: ","}, // between tuples
-		{Type: "(", Literal: "("}, // second tuple value
-		{Type: "INT", Literal: "2"},
-		{Type: ",", Literal: ","},
-		{Type: "STRING", Literal: "pending"},
-		{Type: ")", Literal: ")"},
-		{Type: ")", Literal: ")"}, // IN list end
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "orders"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeLParen, Literal: "("}, // tuple start
+		{Type: models.TokenTypeIdentifier, Literal: "user_id"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeIdentifier, Literal: "status"},
+		{Type: models.TokenTypeRParen, Literal: ")"}, // tuple end
+		{Type: models.TokenTypeIn, Literal: "IN"},
+		{Type: models.TokenTypeLParen, Literal: "("}, // IN list start
+		{Type: models.TokenTypeLParen, Literal: "("}, // first tuple value
+		{Type: models.TokenTypeNumber, Literal: "1"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeString, Literal: "active"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeComma, Literal: ","},  // between tuples
+		{Type: models.TokenTypeLParen, Literal: "("}, // second tuple value
+		{Type: models.TokenTypeNumber, Literal: "2"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeString, Literal: "pending"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeRParen, Literal: ")"}, // IN list end
 	}
 
 	parser := NewParser()
@@ -651,26 +637,25 @@ func TestParser_TupleInExpression(t *testing.T) {
 func TestParser_TupleNotInExpression(t *testing.T) {
 	// SELECT * FROM orders WHERE (user_id, status) NOT IN ((1, 'cancelled'))
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "*", Literal: "*"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "orders"},
-		{Type: "WHERE", Literal: "WHERE"},
-		{Type: "(", Literal: "("},
-		{Type: "IDENT", Literal: "user_id"},
-		{Type: ",", Literal: ","},
-		{Type: "IDENT", Literal: "status"},
-		{Type: ")", Literal: ")"},
-		{Type: "NOT", Literal: "NOT"},
-		{Type: "IN", Literal: "IN"},
-		{Type: "(", Literal: "("},
-		{Type: "(", Literal: "("},
-		{Type: "INT", Literal: "1"},
-		{Type: ",", Literal: ","},
-		{Type: "STRING", Literal: "cancelled"},
-		{Type: ")", Literal: ")"},
-		{Type: ")", Literal: ")"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "orders"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeIdentifier, Literal: "user_id"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeIdentifier, Literal: "status"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeNot, Literal: "NOT"},
+		{Type: models.TokenTypeIn, Literal: "IN"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeNumber, Literal: "1"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeString, Literal: "cancelled"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
 	}
 
 	parser := NewParser()
@@ -707,15 +692,14 @@ func TestParser_TupleNotInExpression(t *testing.T) {
 func TestParser_SimpleTupleExpression(t *testing.T) {
 	// SELECT (1, 2, 3)
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "(", Literal: "("},
-		{Type: "INT", Literal: "1"},
-		{Type: ",", Literal: ","},
-		{Type: "INT", Literal: "2"},
-		{Type: ",", Literal: ","},
-		{Type: "INT", Literal: "3"},
-		{Type: ")", Literal: ")"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeNumber, Literal: "1"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeNumber, Literal: "2"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeNumber, Literal: "3"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
 	}
 
 	parser := NewParser()
@@ -747,23 +731,22 @@ func TestParser_CombinedOperators(t *testing.T) {
 	// SELECT * FROM users WHERE age BETWEEN 18 AND 65 AND status IN ('active') AND name LIKE 'J%' AND deleted_at IS NULL
 	// This is a complex test combining all operators with AND
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "*", Literal: "*"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "users"},
-		{Type: "WHERE", Literal: "WHERE"},
-		{Type: "IDENT", Literal: "age"},
-		{Type: "BETWEEN", Literal: "BETWEEN"},
-		{Type: "INT", Literal: "18"},
-		{Type: "AND", Literal: "AND"},
-		{Type: "INT", Literal: "65"},
-		{Type: "AND", Literal: "AND"},
-		{Type: "IDENT", Literal: "status"},
-		{Type: "IN", Literal: "IN"},
-		{Type: "(", Literal: "("},
-		{Type: "STRING", Literal: "active"},
-		{Type: ")", Literal: ")"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "users"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeIdentifier, Literal: "age"},
+		{Type: models.TokenTypeBetween, Literal: "BETWEEN"},
+		{Type: models.TokenTypeNumber, Literal: "18"},
+		{Type: models.TokenTypeAnd, Literal: "AND"},
+		{Type: models.TokenTypeNumber, Literal: "65"},
+		{Type: models.TokenTypeAnd, Literal: "AND"},
+		{Type: models.TokenTypeIdentifier, Literal: "status"},
+		{Type: models.TokenTypeIn, Literal: "IN"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeString, Literal: "active"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
 	}
 
 	parser := NewParser()
@@ -800,46 +783,43 @@ func TestParser_OperatorErrors(t *testing.T) {
 		{
 			name: "BETWEEN without AND",
 			tokens: []token.Token{
-				{Type: "SELECT",
-					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "t"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "x"},
-				{Type: "BETWEEN", Literal: "BETWEEN"},
-				{Type: "INT", Literal: "1"},
-				{Type: "INT", Literal: "10"}, // Missing AND
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "t"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "x"},
+				{Type: models.TokenTypeBetween, Literal: "BETWEEN"},
+				{Type: models.TokenTypeNumber, Literal: "1"},
+				{Type: models.TokenTypeNumber, Literal: "10"}, // Missing AND
 			},
 		},
 		{
 			name: "IN without closing paren",
 			tokens: []token.Token{
-				{Type: "SELECT",
-					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "t"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "x"},
-				{Type: "IN", Literal: "IN"},
-				{Type: "(", Literal: "("},
-				{Type: "INT", Literal: "1"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "t"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "x"},
+				{Type: models.TokenTypeIn, Literal: "IN"},
+				{Type: models.TokenTypeLParen, Literal: "("},
+				{Type: models.TokenTypeNumber, Literal: "1"},
 				// Missing )
 			},
 		},
 		{
 			name: "IS without NULL",
 			tokens: []token.Token{
-				{Type: "SELECT",
-					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "t"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "x"},
-				{Type: "IS", Literal: "IS"},
-				{Type: "INT", Literal: "1"}, // Should be NULL
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "t"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "x"},
+				{Type: models.TokenTypeIs, Literal: "IS"},
+				{Type: models.TokenTypeNumber, Literal: "1"}, // Should be NULL
 			},
 		},
 	}
@@ -860,17 +840,17 @@ func TestParser_OperatorErrors(t *testing.T) {
 // TestParser_StringConcatenation tests || (string concatenation) operator
 func TestParser_StringConcatenation(t *testing.T) {
 	// SELECT 'Hello' || ' ' || 'World'
-	// Must include ModelType for tokens to be properly recognized
+	// Must include Type for tokens to be properly recognized
 	// Use TokenTypeSingleQuotedString (31) for string literals, matching tokenizer output
 	// Include EOF token at the end
 	tokens := []token.Token{
-		{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "STRING", ModelType: models.TokenTypeSingleQuotedString, Literal: "Hello"},
-		{Type: "STRING_CONCAT", ModelType: models.TokenTypeStringConcat, Literal: "||"},
-		{Type: "STRING", ModelType: models.TokenTypeSingleQuotedString, Literal: " "},
-		{Type: "STRING_CONCAT", ModelType: models.TokenTypeStringConcat, Literal: "||"},
-		{Type: "STRING", ModelType: models.TokenTypeSingleQuotedString, Literal: "World"},
-		{Type: "EOF", ModelType: models.TokenTypeEOF, Literal: ""},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeString, Literal: "Hello"},
+		{Type: models.TokenTypeStringConcat, Literal: "||"},
+		{Type: models.TokenTypeString, Literal: " "},
+		{Type: models.TokenTypeStringConcat, Literal: "||"},
+		{Type: models.TokenTypeString, Literal: "World"},
+		{Type: models.TokenTypeEOF, Literal: ""},
 	}
 
 	parser := NewParser()
@@ -931,15 +911,14 @@ func TestParser_StringConcatenation(t *testing.T) {
 func TestParser_StringConcatWithColumns(t *testing.T) {
 	// SELECT first_name || ' ' || last_name FROM users
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "IDENT", Literal: "first_name"},
-		{Type: "STRING_CONCAT", Literal: "||"},
-		{Type: "STRING", Literal: " "},
-		{Type: "STRING_CONCAT", Literal: "||"},
-		{Type: "IDENT", Literal: "last_name"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "users"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeIdentifier, Literal: "first_name"},
+		{Type: models.TokenTypeStringConcat, Literal: "||"},
+		{Type: models.TokenTypeString, Literal: " "},
+		{Type: models.TokenTypeStringConcat, Literal: "||"},
+		{Type: models.TokenTypeIdentifier, Literal: "last_name"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "users"},
 	}
 
 	parser := NewParser()
@@ -971,15 +950,14 @@ func TestParser_StringConcatWithColumns(t *testing.T) {
 func TestParser_StringConcatWithAlias(t *testing.T) {
 	// SELECT first_name || last_name AS fullname FROM users
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "IDENT", Literal: "first_name"},
-		{Type: "STRING_CONCAT", Literal: "||"},
-		{Type: "IDENT", Literal: "last_name"},
-		{Type: "AS", Literal: "AS"},
-		{Type: "IDENT", Literal: "fullname"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "users"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeIdentifier, Literal: "first_name"},
+		{Type: models.TokenTypeStringConcat, Literal: "||"},
+		{Type: models.TokenTypeIdentifier, Literal: "last_name"},
+		{Type: models.TokenTypeAs, Literal: "AS"},
+		{Type: models.TokenTypeIdentifier, Literal: "fullname"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "users"},
 	}
 
 	parser := NewParser()
@@ -1029,56 +1007,56 @@ func TestParser_PostgreSQLRegexOperators(t *testing.T) {
 		{
 			name: "Tilde operator - case-sensitive regex match",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "users"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "name"},
-				{Type: "~", Literal: "~", ModelType: models.TokenTypeTilde},
-				{Type: "STRING", Literal: "^J.*"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "users"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "name"},
+				{Type: models.TokenTypeTilde, Literal: "~"},
+				{Type: models.TokenTypeString, Literal: "^J.*"},
 			},
 			operator: "~",
 		},
 		{
 			name: "Tilde-asterisk operator - case-insensitive regex match",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "products"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "description"},
-				{Type: "~*", Literal: "~*", ModelType: models.TokenTypeTildeAsterisk},
-				{Type: "STRING", Literal: "sale|discount"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "products"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "description"},
+				{Type: models.TokenTypeTildeAsterisk, Literal: "~*"},
+				{Type: models.TokenTypeString, Literal: "sale|discount"},
 			},
 			operator: "~*",
 		},
 		{
 			name: "Exclamation-tilde operator - case-sensitive regex non-match",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "logs"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "message"},
-				{Type: "!~", Literal: "!~", ModelType: models.TokenTypeExclamationMarkTilde},
-				{Type: "STRING", Literal: "DEBUG"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "logs"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "message"},
+				{Type: models.TokenTypeExclamationMarkTilde, Literal: "!~"},
+				{Type: models.TokenTypeString, Literal: "DEBUG"},
 			},
 			operator: "!~",
 		},
 		{
 			name: "Exclamation-tilde-asterisk operator - case-insensitive regex non-match",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "emails"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "subject"},
-				{Type: "!~*", Literal: "!~*", ModelType: models.TokenTypeExclamationMarkTildeAsterisk},
-				{Type: "STRING", Literal: "spam"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "emails"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "subject"},
+				{Type: models.TokenTypeExclamationMarkTildeAsterisk, Literal: "!~*"},
+				{Type: models.TokenTypeString, Literal: "spam"},
 			},
 			operator: "!~*",
 		},
@@ -1133,52 +1111,52 @@ func TestParser_PostgreSQLRegexWithComplexExpressions(t *testing.T) {
 		{
 			name: "Regex with AND condition",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "users"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "name"},
-				{Type: "~", Literal: "~", ModelType: models.TokenTypeTilde},
-				{Type: "STRING", Literal: "^[A-Z]"},
-				{Type: "AND", Literal: "AND"},
-				{Type: "IDENT", Literal: "email"},
-				{Type: "~*", Literal: "~*", ModelType: models.TokenTypeTildeAsterisk},
-				{Type: "STRING", Literal: "@example\\.com$"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "users"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "name"},
+				{Type: models.TokenTypeTilde, Literal: "~"},
+				{Type: models.TokenTypeString, Literal: "^[A-Z]"},
+				{Type: models.TokenTypeAnd, Literal: "AND"},
+				{Type: models.TokenTypeIdentifier, Literal: "email"},
+				{Type: models.TokenTypeTildeAsterisk, Literal: "~*"},
+				{Type: models.TokenTypeString, Literal: "@example\\.com$"},
 			},
 		},
 		{
 			name: "Regex with OR condition",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "products"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "name"},
-				{Type: "!~", Literal: "!~", ModelType: models.TokenTypeExclamationMarkTilde},
-				{Type: "STRING", Literal: "deprecated"},
-				{Type: "OR", Literal: "OR"},
-				{Type: "IDENT", Literal: "status"},
-				{Type: "=", Literal: "="},
-				{Type: "STRING", Literal: "active"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "products"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "name"},
+				{Type: models.TokenTypeExclamationMarkTilde, Literal: "!~"},
+				{Type: models.TokenTypeString, Literal: "deprecated"},
+				{Type: models.TokenTypeOr, Literal: "OR"},
+				{Type: models.TokenTypeIdentifier, Literal: "status"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeString, Literal: "active"},
 			},
 		},
 		{
 			name: "Multiple regex operators",
 			tokens: []token.Token{
-				{Type: "SELECT", Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "logs"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "message"},
-				{Type: "~", Literal: "~", ModelType: models.TokenTypeTilde},
-				{Type: "STRING", Literal: "ERROR"},
-				{Type: "AND", Literal: "AND"},
-				{Type: "IDENT", Literal: "message"},
-				{Type: "!~*", Literal: "!~*", ModelType: models.TokenTypeExclamationMarkTildeAsterisk},
-				{Type: "STRING", Literal: "ignored"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "logs"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "message"},
+				{Type: models.TokenTypeTilde, Literal: "~"},
+				{Type: models.TokenTypeString, Literal: "ERROR"},
+				{Type: models.TokenTypeAnd, Literal: "AND"},
+				{Type: models.TokenTypeIdentifier, Literal: "message"},
+				{Type: models.TokenTypeExclamationMarkTildeAsterisk, Literal: "!~*"},
+				{Type: models.TokenTypeString, Literal: "ignored"},
 			},
 		},
 	}

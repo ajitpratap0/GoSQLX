@@ -451,7 +451,7 @@ func (p *Parser) parseJSONExpression() (ast.Expression, error) {
 	// Handle JSON operators (left-associative for chaining like data->'a'->'b')
 	for p.isJSONOperator() {
 		operator := p.currentToken.Literal
-		operatorType := p.currentToken.ModelType
+		operatorType := p.currentToken.Type
 		p.advance() // Consume JSON operator
 
 		// Parse the right side
@@ -554,16 +554,16 @@ func (p *Parser) parseDataType() (string, error) {
 
 // isNumericLiteral checks if current token is a numeric literal (handles INT/NUMBER token types)
 func (p *Parser) isNumericLiteral() bool {
-	if p.currentToken.ModelType != modelTypeUnset {
-		return p.currentToken.ModelType == models.TokenTypeNumber
+	if p.currentToken.Type != models.TokenTypeUnknown {
+		return p.currentToken.Type == models.TokenTypeNumber
 	}
 	return false
 }
 
 // isDataTypeKeyword checks if current token is a SQL data type keyword
 func (p *Parser) isDataTypeKeyword() bool {
-	// Check ModelType for known data type tokens
-	switch p.currentToken.ModelType {
+	// Check Type for known data type tokens
+	switch p.currentToken.Type {
 	case models.TokenTypeInt, models.TokenTypeInteger, models.TokenTypeVarchar,
 		models.TokenTypeText, models.TokenTypeBoolean, models.TokenTypeFloat,
 		models.TokenTypeInterval:
@@ -581,7 +581,7 @@ func (p *Parser) isDataTypeKeyword() bool {
 
 // isJSONOperator checks if current token is a JSON/JSONB operator
 func (p *Parser) isJSONOperator() bool {
-	switch p.currentToken.ModelType {
+	switch p.currentToken.Type {
 	case models.TokenTypeArrow, // ->
 		models.TokenTypeLongArrow,     // ->>
 		models.TokenTypeHashArrow,     // #>
@@ -861,7 +861,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 	}
 
 	return nil, goerrors.UnexpectedTokenError(
-		p.currentToken.ModelType.String(),
+		p.currentToken.Type.String(),
 		p.currentToken.Literal,
 		models.Location{Line: 0, Column: 0},
 		"",
@@ -1178,7 +1178,7 @@ func (p *Parser) parseSubquery() (ast.Statement, error) {
 
 	return nil, goerrors.ExpectedTokenError(
 		"SELECT or WITH",
-		p.currentToken.ModelType.String(),
+		p.currentToken.Type.String(),
 		models.Location{Line: 0, Column: 0},
 		"",
 	)

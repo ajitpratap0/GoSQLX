@@ -65,8 +65,8 @@ func (r *RecoveryResult) Release() {
 
 // isStatementStartingKeyword checks if the current token is a statement-starting keyword.
 func (p *Parser) isStatementStartingKeyword() bool {
-	if p.currentToken.ModelType != modelTypeUnset {
-		switch p.currentToken.ModelType {
+	if p.currentToken.Type != models.TokenTypeUnknown {
+		switch p.currentToken.Type {
 		case models.TokenTypeSelect, models.TokenTypeInsert, models.TokenTypeUpdate,
 			models.TokenTypeDelete, models.TokenTypeCreate, models.TokenTypeAlter,
 			models.TokenTypeDrop, models.TokenTypeWith, models.TokenTypeMerge,
@@ -154,7 +154,6 @@ func (p *Parser) ParseWithRecoveryFromModelTokens(tokens []models.TokenWithSpan)
 
 // parseWithRecovery is the internal implementation shared by both public APIs.
 func (p *Parser) parseWithRecovery(tokens []token.Token) ([]ast.Statement, []error) {
-	tokens = normalizeTokens(tokens)
 	p.tokens = tokens
 	p.currentPos = 0
 	if len(tokens) > 0 {
@@ -184,7 +183,7 @@ func (p *Parser) parseWithRecovery(tokens []token.Token) ([]ast.Statement, []err
 				Cause:    err,
 			}
 			if stmtStartPos < len(tokens) {
-				pe.TokenType = string(tokens[stmtStartPos].Type)
+				pe.TokenType = tokens[stmtStartPos].Type.String()
 				pe.Literal = tokens[stmtStartPos].Literal
 			}
 			errors = append(errors, pe)

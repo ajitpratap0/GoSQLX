@@ -8,103 +8,103 @@ import (
 )
 
 var (
-	// Simple SELECT query tokens - with ModelType for fast int comparison path
+	// Simple SELECT query tokens - with Type for fast int comparison path
 	simpleSelectTokens = []token.Token{
-		{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "id"},
-		{Type: ",", ModelType: models.TokenTypeComma, Literal: ","},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "name"},
-		{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "users"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeIdentifier, Literal: "id"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeIdentifier, Literal: "name"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "users"},
 	}
 
 	// Complex SELECT query with JOIN, WHERE, ORDER BY, LIMIT, OFFSET
 	complexSelectTokens = []token.Token{
-		{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "u"},
-		{Type: ".", ModelType: models.TokenTypePeriod, Literal: "."},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "id"},
-		{Type: ",", ModelType: models.TokenTypeComma, Literal: ","},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "u"},
-		{Type: ".", ModelType: models.TokenTypePeriod, Literal: "."},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "name"},
-		{Type: ",", ModelType: models.TokenTypeComma, Literal: ","},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "o"},
-		{Type: ".", ModelType: models.TokenTypePeriod, Literal: "."},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "order_date"},
-		{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "users"},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "u"},
-		{Type: "JOIN", ModelType: models.TokenTypeJoin, Literal: "JOIN"},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "orders"},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "o"},
-		{Type: "ON", ModelType: models.TokenTypeOn, Literal: "ON"},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "u"},
-		{Type: ".", ModelType: models.TokenTypePeriod, Literal: "."},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "id"},
-		{Type: "=", ModelType: models.TokenTypeEq, Literal: "="},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "o"},
-		{Type: ".", ModelType: models.TokenTypePeriod, Literal: "."},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "user_id"},
-		{Type: "WHERE", ModelType: models.TokenTypeWhere, Literal: "WHERE"},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "u"},
-		{Type: ".", ModelType: models.TokenTypePeriod, Literal: "."},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "active"},
-		{Type: "=", ModelType: models.TokenTypeEq, Literal: "="},
-		{Type: "TRUE", ModelType: models.TokenTypeTrue, Literal: "TRUE"},
-		{Type: "ORDER", ModelType: models.TokenTypeOrder, Literal: "ORDER"},
-		{Type: "BY", ModelType: models.TokenTypeBy, Literal: "BY"},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "o"},
-		{Type: ".", ModelType: models.TokenTypePeriod, Literal: "."},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "order_date"},
-		{Type: "DESC", ModelType: models.TokenTypeDesc, Literal: "DESC"},
-		{Type: "LIMIT", ModelType: models.TokenTypeLimit, Literal: "LIMIT"},
-		{Type: "INT", ModelType: models.TokenTypeNumber, Literal: "10"},
-		{Type: "OFFSET", ModelType: models.TokenTypeOffset, Literal: "OFFSET"},
-		{Type: "INT", ModelType: models.TokenTypeNumber, Literal: "20"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeIdentifier, Literal: "u"},
+		{Type: models.TokenTypePeriod, Literal: "."},
+		{Type: models.TokenTypeIdentifier, Literal: "id"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeIdentifier, Literal: "u"},
+		{Type: models.TokenTypePeriod, Literal: "."},
+		{Type: models.TokenTypeIdentifier, Literal: "name"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeIdentifier, Literal: "o"},
+		{Type: models.TokenTypePeriod, Literal: "."},
+		{Type: models.TokenTypeIdentifier, Literal: "order_date"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "users"},
+		{Type: models.TokenTypeIdentifier, Literal: "u"},
+		{Type: models.TokenTypeJoin, Literal: "JOIN"},
+		{Type: models.TokenTypeIdentifier, Literal: "orders"},
+		{Type: models.TokenTypeIdentifier, Literal: "o"},
+		{Type: models.TokenTypeOn, Literal: "ON"},
+		{Type: models.TokenTypeIdentifier, Literal: "u"},
+		{Type: models.TokenTypePeriod, Literal: "."},
+		{Type: models.TokenTypeIdentifier, Literal: "id"},
+		{Type: models.TokenTypeEq, Literal: "="},
+		{Type: models.TokenTypeIdentifier, Literal: "o"},
+		{Type: models.TokenTypePeriod, Literal: "."},
+		{Type: models.TokenTypeIdentifier, Literal: "user_id"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeIdentifier, Literal: "u"},
+		{Type: models.TokenTypePeriod, Literal: "."},
+		{Type: models.TokenTypeIdentifier, Literal: "active"},
+		{Type: models.TokenTypeEq, Literal: "="},
+		{Type: models.TokenTypeTrue, Literal: "TRUE"},
+		{Type: models.TokenTypeOrder, Literal: "ORDER"},
+		{Type: models.TokenTypeBy, Literal: "BY"},
+		{Type: models.TokenTypeIdentifier, Literal: "o"},
+		{Type: models.TokenTypePeriod, Literal: "."},
+		{Type: models.TokenTypeIdentifier, Literal: "order_date"},
+		{Type: models.TokenTypeDesc, Literal: "DESC"},
+		{Type: models.TokenTypeLimit, Literal: "LIMIT"},
+		{Type: models.TokenTypeNumber, Literal: "10"},
+		{Type: models.TokenTypeOffset, Literal: "OFFSET"},
+		{Type: models.TokenTypeNumber, Literal: "20"},
 	}
 
 	// INSERT query tokens
 	insertTokens = []token.Token{
-		{Type: "INSERT", ModelType: models.TokenTypeInsert, Literal: "INSERT"},
-		{Type: "INTO", ModelType: models.TokenTypeInto, Literal: "INTO"},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "users"},
-		{Type: "(", ModelType: models.TokenTypeLeftParen, Literal: "("},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "name"},
-		{Type: ",", ModelType: models.TokenTypeComma, Literal: ","},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "email"},
-		{Type: ")", ModelType: models.TokenTypeRightParen, Literal: ")"},
-		{Type: "VALUES", ModelType: models.TokenTypeValues, Literal: "VALUES"},
-		{Type: "(", ModelType: models.TokenTypeLeftParen, Literal: "("},
-		{Type: "STRING", ModelType: models.TokenTypeString, Literal: "John"},
-		{Type: ",", ModelType: models.TokenTypeComma, Literal: ","},
-		{Type: "STRING", ModelType: models.TokenTypeString, Literal: "john@example.com"},
-		{Type: ")", ModelType: models.TokenTypeRightParen, Literal: ")"},
+		{Type: models.TokenTypeInsert, Literal: "INSERT"},
+		{Type: models.TokenTypeInto, Literal: "INTO"},
+		{Type: models.TokenTypeIdentifier, Literal: "users"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeIdentifier, Literal: "name"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeIdentifier, Literal: "email"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeValues, Literal: "VALUES"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeString, Literal: "John"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeString, Literal: "john@example.com"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
 	}
 
 	// UPDATE query tokens
 	updateTokens = []token.Token{
-		{Type: "UPDATE", ModelType: models.TokenTypeUpdate, Literal: "UPDATE"},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "users"},
-		{Type: "SET", ModelType: models.TokenTypeSet, Literal: "SET"},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "active"},
-		{Type: "=", ModelType: models.TokenTypeEq, Literal: "="},
-		{Type: "FALSE", ModelType: models.TokenTypeFalse, Literal: "FALSE"},
-		{Type: "WHERE", ModelType: models.TokenTypeWhere, Literal: "WHERE"},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "last_login"},
-		{Type: "<", ModelType: models.TokenTypeLt, Literal: "<"},
-		{Type: "STRING", ModelType: models.TokenTypeString, Literal: "2024-01-01"},
+		{Type: models.TokenTypeUpdate, Literal: "UPDATE"},
+		{Type: models.TokenTypeIdentifier, Literal: "users"},
+		{Type: models.TokenTypeSet, Literal: "SET"},
+		{Type: models.TokenTypeIdentifier, Literal: "active"},
+		{Type: models.TokenTypeEq, Literal: "="},
+		{Type: models.TokenTypeFalse, Literal: "FALSE"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeIdentifier, Literal: "last_login"},
+		{Type: models.TokenTypeLt, Literal: "<"},
+		{Type: models.TokenTypeString, Literal: "2024-01-01"},
 	}
 
 	// DELETE query tokens
 	deleteTokens = []token.Token{
-		{Type: "DELETE", ModelType: models.TokenTypeDelete, Literal: "DELETE"},
-		{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "users"},
-		{Type: "WHERE", ModelType: models.TokenTypeWhere, Literal: "WHERE"},
-		{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "active"},
-		{Type: "=", ModelType: models.TokenTypeEq, Literal: "="},
-		{Type: "FALSE", ModelType: models.TokenTypeFalse, Literal: "FALSE"},
+		{Type: models.TokenTypeDelete, Literal: "DELETE"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "users"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeIdentifier, Literal: "active"},
+		{Type: models.TokenTypeEq, Literal: "="},
+		{Type: models.TokenTypeFalse, Literal: "FALSE"},
 	}
 )
 
@@ -264,20 +264,20 @@ func BenchmarkParser_RecursionDepthCheck(b *testing.B) {
 			name: "ModerateNesting",
 			tokens: func() []token.Token {
 				// Build a moderately nested query (20 levels) - realistic usage
-				tokens := []token.Token{{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"}}
+				tokens := []token.Token{{Type: models.TokenTypeSelect, Literal: "SELECT"}}
 				for i := 0; i < 20; i++ {
 					tokens = append(tokens,
-						token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "func"},
-						token.Token{Type: "(", ModelType: models.TokenTypeLParen, Literal: "("},
+						token.Token{Type: models.TokenTypeIdentifier, Literal: "func"},
+						token.Token{Type: models.TokenTypeLParen, Literal: "("},
 					)
 				}
-				tokens = append(tokens, token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "x"})
+				tokens = append(tokens, token.Token{Type: models.TokenTypeIdentifier, Literal: "x"})
 				for i := 0; i < 20; i++ {
-					tokens = append(tokens, token.Token{Type: ")", ModelType: models.TokenTypeRParen, Literal: ")"})
+					tokens = append(tokens, token.Token{Type: models.TokenTypeRParen, Literal: ")"})
 				}
 				tokens = append(tokens,
-					token.Token{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
-					token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "t"},
+					token.Token{Type: models.TokenTypeFrom, Literal: "FROM"},
+					token.Token{Type: models.TokenTypeIdentifier, Literal: "t"},
 				)
 				return tokens
 			}(),
@@ -287,20 +287,20 @@ func BenchmarkParser_RecursionDepthCheck(b *testing.B) {
 			tokens: func() []token.Token {
 				// Build a deeply nested query (80 levels) - approaching limit
 				// Tests performance near MaxRecursionDepth (100 levels)
-				tokens := []token.Token{{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"}}
+				tokens := []token.Token{{Type: models.TokenTypeSelect, Literal: "SELECT"}}
 				for i := 0; i < 80; i++ {
 					tokens = append(tokens,
-						token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "func"},
-						token.Token{Type: "(", ModelType: models.TokenTypeLParen, Literal: "("},
+						token.Token{Type: models.TokenTypeIdentifier, Literal: "func"},
+						token.Token{Type: models.TokenTypeLParen, Literal: "("},
 					)
 				}
-				tokens = append(tokens, token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "x"})
+				tokens = append(tokens, token.Token{Type: models.TokenTypeIdentifier, Literal: "x"})
 				for i := 0; i < 80; i++ {
-					tokens = append(tokens, token.Token{Type: ")", ModelType: models.TokenTypeRParen, Literal: ")"})
+					tokens = append(tokens, token.Token{Type: models.TokenTypeRParen, Literal: ")"})
 				}
 				tokens = append(tokens,
-					token.Token{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
-					token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "t"},
+					token.Token{Type: models.TokenTypeFrom, Literal: "FROM"},
+					token.Token{Type: models.TokenTypeIdentifier, Literal: "t"},
 				)
 				return tokens
 			}(),
@@ -310,20 +310,20 @@ func BenchmarkParser_RecursionDepthCheck(b *testing.B) {
 			tokens: func() []token.Token {
 				// Build a very deeply nested query (90 levels) - near limit threshold
 				// Tests performance at 90% of MaxRecursionDepth (100 levels)
-				tokens := []token.Token{{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"}}
+				tokens := []token.Token{{Type: models.TokenTypeSelect, Literal: "SELECT"}}
 				for i := 0; i < 90; i++ {
 					tokens = append(tokens,
-						token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "func"},
-						token.Token{Type: "(", ModelType: models.TokenTypeLParen, Literal: "("},
+						token.Token{Type: models.TokenTypeIdentifier, Literal: "func"},
+						token.Token{Type: models.TokenTypeLParen, Literal: "("},
 					)
 				}
-				tokens = append(tokens, token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "x"})
+				tokens = append(tokens, token.Token{Type: models.TokenTypeIdentifier, Literal: "x"})
 				for i := 0; i < 90; i++ {
-					tokens = append(tokens, token.Token{Type: ")", ModelType: models.TokenTypeRParen, Literal: ")"})
+					tokens = append(tokens, token.Token{Type: models.TokenTypeRParen, Literal: ")"})
 				}
 				tokens = append(tokens,
-					token.Token{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
-					token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "t"},
+					token.Token{Type: models.TokenTypeFrom, Literal: "FROM"},
+					token.Token{Type: models.TokenTypeIdentifier, Literal: "t"},
 				)
 				return tokens
 			}(),

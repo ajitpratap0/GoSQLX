@@ -1025,7 +1025,7 @@ func (t TokenType) String() string {
 //
 // Example:
 //
-//	if token.ModelType.IsKeyword() {
+//	if token.Type.IsKeyword() {
 //	    // Handle SQL keyword token
 //	}
 func (t TokenType) IsKeyword() bool {
@@ -1039,7 +1039,7 @@ func (t TokenType) IsKeyword() bool {
 //
 // Example:
 //
-//	if token.ModelType.IsOperator() {
+//	if token.Type.IsOperator() {
 //	    // Handle operator token (e.g., +, -, *, /, etc.)
 //	}
 func (t TokenType) IsOperator() bool {
@@ -1053,7 +1053,7 @@ func (t TokenType) IsOperator() bool {
 //
 // Example:
 //
-//	if token.ModelType.IsLiteral() {
+//	if token.Type.IsLiteral() {
 //	    // Handle literal value (identifier, number, string, true/false/null)
 //	}
 func (t TokenType) IsLiteral() bool {
@@ -1126,7 +1126,7 @@ func (t TokenType) IsAggregateFunction() bool {
 //
 // Example:
 //
-//	if token.ModelType.IsDataType() {
+//	if token.Type.IsDataType() {
 //	    // Handle data type token (INT, VARCHAR, BOOLEAN, etc.)
 //	}
 func (t TokenType) IsDataType() bool {

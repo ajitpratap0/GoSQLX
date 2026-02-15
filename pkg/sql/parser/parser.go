@@ -130,6 +130,7 @@ func (p *Parser) Reset() {
 	p.depth = 0
 	p.ctx = nil
 	p.positions = nil
+	p.strict = false
 }
 
 // currentLocation returns the source location of the current token.
@@ -191,6 +192,22 @@ const MaxRecursionDepth = 100
 //   - Latency: 347ns average for complex queries
 //   - Token Processing: 8M tokens/second
 //   - Allocation: <100 bytes/op with object pooling
+//
+// ParserOption configures optional parser behavior.
+type ParserOption func(*Parser)
+
+// WithStrictMode enables strict parsing mode. In strict mode, the parser rejects
+// empty statements (e.g., lone semicolons like ";;; SELECT 1 ;;;" will error
+// instead of silently discarding empty statements between semicolons).
+//
+// By default, the parser operates in lenient mode where empty statements are
+// silently ignored for backward compatibility.
+func WithStrictMode() ParserOption {
+	return func(p *Parser) {
+		p.strict = true
+	}
+}
+
 type Parser struct {
 	tokens       []token.Token
 	currentPos   int
@@ -198,6 +215,7 @@ type Parser struct {
 	depth        int             // Current recursion depth
 	ctx          context.Context // Optional context for cancellation support
 	positions    []TokenPosition // Position mapping for error reporting
+	strict       bool            // Strict mode rejects empty statements
 }
 
 // Parse parses a token stream into an Abstract Syntax Tree (AST).
@@ -263,6 +281,14 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 	for p.currentPos < len(tokens) && !p.isType(models.TokenTypeEOF) {
 		// Skip semicolons between statements
 		if p.isType(models.TokenTypeSemicolon) {
+			if p.strict {
+				ast.ReleaseAST(result)
+				return nil, goerrors.InvalidSyntaxError(
+					"empty statement not allowed in strict mode",
+					p.currentLocation(),
+					"remove extra semicolons or disable strict mode",
+				)
+			}
 			p.advance()
 			continue
 		}
@@ -284,6 +310,13 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 	// Check if we got any statements
 	if len(result.Statements) == 0 {
 		ast.ReleaseAST(result)
+		if p.strict {
+			return nil, goerrors.InvalidSyntaxError(
+				"empty statement not allowed in strict mode",
+				p.currentLocation(),
+				"provide at least one SQL statement",
+			)
+		}
 		return nil, goerrors.IncompleteStatementError(models.Location{}, "")
 	}
 
@@ -388,6 +421,14 @@ func (p *Parser) ParseWithPositions(result *ConversionResult) (*ast.AST, error) 
 	// Parse statements
 	for p.currentPos < len(result.Tokens) && !p.isType(models.TokenTypeEOF) {
 		if p.isType(models.TokenTypeSemicolon) {
+			if p.strict {
+				ast.ReleaseAST(astResult)
+				return nil, goerrors.InvalidSyntaxError(
+					"empty statement not allowed in strict mode",
+					p.currentLocation(),
+					"remove extra semicolons or disable strict mode",
+				)
+			}
 			p.advance()
 			continue
 		}
@@ -406,6 +447,13 @@ func (p *Parser) ParseWithPositions(result *ConversionResult) (*ast.AST, error) 
 
 	if len(astResult.Statements) == 0 {
 		ast.ReleaseAST(astResult)
+		if p.strict {
+			return nil, goerrors.InvalidSyntaxError(
+				"empty statement not allowed in strict mode",
+				p.currentLocation(),
+				"provide at least one SQL statement",
+			)
+		}
 		return nil, goerrors.IncompleteStatementError(p.currentLocation(), "")
 	}
 
@@ -654,9 +702,20 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 	return nil, p.expectedError("statement")
 }
 
-// NewParser creates a new parser
-func NewParser() *Parser {
-	return &Parser{}
+// NewParser creates a new parser with optional configuration.
+func NewParser(opts ...ParserOption) *Parser {
+	p := &Parser{}
+	for _, opt := range opts {
+		opt(p)
+	}
+	return p
+}
+
+// ApplyOptions applies parser options to configure behavior.
+func (p *Parser) ApplyOptions(opts ...ParserOption) {
+	for _, opt := range opts {
+		opt(p)
+	}
 }
 
 // advance moves to the next token

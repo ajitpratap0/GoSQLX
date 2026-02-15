@@ -466,6 +466,17 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 	// Parse columns
 	columns := make([]ast.Expression, 0)
+
+	// Check for SELECT FROM (missing column list)
+	if p.isType(models.TokenTypeFrom) {
+		return nil, goerrors.ExpectedTokenError(
+			"column expression",
+			"FROM",
+			p.currentLocation(),
+			"SELECT requires at least one column expression before FROM",
+		)
+	}
+
 	for {
 		// Handle * as a special case
 		if p.isType(models.TokenTypeAsterisk) {
@@ -531,77 +542,35 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	if p.isType(models.TokenTypeFrom) {
 		p.advance() // Consume FROM
 
-		var tableRef ast.TableReference
-
-		// Check for LATERAL keyword (PostgreSQL)
-		isLateral := false
-		if p.isType(models.TokenTypeLateral) {
-			isLateral = true
-			p.advance() // Consume LATERAL
+		// Check for missing table name after FROM
+		if p.isType(models.TokenTypeEOF) || p.isType(models.TokenTypeSemicolon) {
+			return nil, goerrors.ExpectedTokenError(
+				"table name",
+				p.currentToken.Type.String(),
+				p.currentLocation(),
+				"FROM clause requires at least one table reference",
+			)
 		}
 
-		// Check for derived table (subquery in parentheses)
-		if p.isType(models.TokenTypeLParen) {
-			p.advance() // Consume (
-
-			// Check if this is a subquery (starts with SELECT or WITH)
-			if !p.isType(models.TokenTypeSelect) && !p.isType(models.TokenTypeWith) {
-				return nil, p.expectedError("SELECT in derived table")
-			}
-
-			// Consume SELECT token before calling parseSelectStatement
-			p.advance() // Consume SELECT
-
-			// Parse the subquery
-			subquery, err := p.parseSelectStatement()
-			if err != nil {
-				return nil, err
-			}
-			selectStmt, ok := subquery.(*ast.SelectStatement)
-			if !ok {
-				return nil, p.expectedError("SELECT statement in derived table")
-			}
-
-			// Expect closing parenthesis
-			if !p.isType(models.TokenTypeRParen) {
-				return nil, p.expectedError(")")
-			}
-			p.advance() // Consume )
-
-			tableRef = ast.TableReference{
-				Subquery: selectStmt,
-				Lateral:  isLateral,
-			}
-		} else {
-			// Parse regular table name (supports schema.table qualification)
-			qualifiedName, err := p.parseQualifiedName()
-			if err != nil {
-				return nil, err
-			}
-			tableName = qualifiedName
-
-			tableRef = ast.TableReference{
-				Name:    tableName,
-				Lateral: isLateral,
-			}
+		// Parse first table reference
+		tableRef, err := p.parseFromTableReference()
+		if err != nil {
+			return nil, err
 		}
-
-		// Check for table alias (required for derived tables, optional for regular tables)
-		if p.isIdentifier() || p.isType(models.TokenTypeAs) {
-			if p.isType(models.TokenTypeAs) {
-				p.advance() // Consume AS
-				if !p.isIdentifier() {
-					return nil, p.expectedError("alias after AS")
-				}
-			}
-			if p.isIdentifier() {
-				tableRef.Alias = p.currentToken.Literal
-				p.advance()
-			}
-		}
+		tableName = tableRef.Name
 
 		// Create tables list for FROM clause
 		tables = []ast.TableReference{tableRef}
+
+		// Parse additional comma-separated table references
+		for p.isType(models.TokenTypeComma) {
+			p.advance() // Consume comma
+			additionalRef, err := p.parseFromTableReference()
+			if err != nil {
+				return nil, err
+			}
+			tables = append(tables, additionalRef)
+		}
 
 		// Parse JOIN clauses if present
 		joins = []ast.JoinClause{}
@@ -842,6 +811,20 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	if p.isType(models.TokenTypeWhere) {
 		p.advance() // Consume WHERE
 
+		// Check for incomplete WHERE clause (missing expression)
+		if p.isType(models.TokenTypeEOF) || p.isType(models.TokenTypeSemicolon) ||
+			p.isType(models.TokenTypeGroup) || p.isType(models.TokenTypeOrder) ||
+			p.isType(models.TokenTypeLimit) || p.isType(models.TokenTypeHaving) ||
+			p.isType(models.TokenTypeUnion) || p.isType(models.TokenTypeExcept) ||
+			p.isType(models.TokenTypeIntersect) || p.isType(models.TokenTypeRParen) {
+			return nil, goerrors.ExpectedTokenError(
+				"expression after WHERE",
+				p.currentToken.Type.String(),
+				p.currentLocation(),
+				"WHERE clause requires a boolean expression",
+			)
+		}
+
 		// Parse WHERE condition
 		whereClause, err := p.parseExpression()
 		if err != nil {
@@ -1046,6 +1029,80 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	return selectStmt, nil
+}
+
+// parseFromTableReference parses a single table reference in a FROM clause,
+// including derived tables (subqueries), LATERAL, and optional aliases.
+func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
+	var tableRef ast.TableReference
+
+	// Check for LATERAL keyword (PostgreSQL)
+	isLateral := false
+	if p.isType(models.TokenTypeLateral) {
+		isLateral = true
+		p.advance() // Consume LATERAL
+	}
+
+	// Check for derived table (subquery in parentheses)
+	if p.isType(models.TokenTypeLParen) {
+		p.advance() // Consume (
+
+		// Check if this is a subquery (starts with SELECT or WITH)
+		if !p.isType(models.TokenTypeSelect) && !p.isType(models.TokenTypeWith) {
+			return tableRef, p.expectedError("SELECT in derived table")
+		}
+
+		// Consume SELECT token before calling parseSelectStatement
+		p.advance() // Consume SELECT
+
+		// Parse the subquery
+		subquery, err := p.parseSelectStatement()
+		if err != nil {
+			return tableRef, err
+		}
+		selectStmt, ok := subquery.(*ast.SelectStatement)
+		if !ok {
+			return tableRef, p.expectedError("SELECT statement in derived table")
+		}
+
+		// Expect closing parenthesis
+		if !p.isType(models.TokenTypeRParen) {
+			return tableRef, p.expectedError(")")
+		}
+		p.advance() // Consume )
+
+		tableRef = ast.TableReference{
+			Subquery: selectStmt,
+			Lateral:  isLateral,
+		}
+	} else {
+		// Parse regular table name (supports schema.table qualification)
+		qualifiedName, err := p.parseQualifiedName()
+		if err != nil {
+			return tableRef, err
+		}
+
+		tableRef = ast.TableReference{
+			Name:    qualifiedName,
+			Lateral: isLateral,
+		}
+	}
+
+	// Check for table alias (required for derived tables, optional for regular tables)
+	if p.isIdentifier() || p.isType(models.TokenTypeAs) {
+		if p.isType(models.TokenTypeAs) {
+			p.advance() // Consume AS
+			if !p.isIdentifier() {
+				return tableRef, p.expectedError("alias after AS")
+			}
+		}
+		if p.isIdentifier() {
+			tableRef.Alias = p.currentToken.Literal
+			p.advance()
+		}
+	}
+
+	return tableRef, nil
 }
 
 // parseSelectWithSetOperations parses SELECT statements that may have set operations.

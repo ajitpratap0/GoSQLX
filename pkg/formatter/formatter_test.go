@@ -1,6 +1,7 @@
 package formatter
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -50,5 +51,30 @@ func TestNew_DefaultIndent(t *testing.T) {
 	f := New(Options{})
 	if f.opts.IndentSize != 2 {
 		t.Errorf("default IndentSize = %d, want 2", f.opts.IndentSize)
+	}
+}
+
+func TestFormat_UppercaseOutput(t *testing.T) {
+	f := New(Options{Uppercase: true})
+	result, err := f.Format("select id from users")
+	if err != nil {
+		t.Fatalf("Format() error = %v", err)
+	}
+	if !strings.Contains(result, "SELECT") {
+		t.Errorf("Expected uppercase SELECT in output, got: %s", result)
+	}
+	if !strings.Contains(result, "FROM") {
+		t.Errorf("Expected uppercase FROM in output, got: %s", result)
+	}
+}
+
+func TestFormat_CompactOutput(t *testing.T) {
+	f := New(Options{Compact: true})
+	result, err := f.Format("SELECT id, name FROM users WHERE id = 1")
+	if err != nil {
+		t.Fatalf("Format() error = %v", err)
+	}
+	if strings.Contains(result, "\n") {
+		t.Errorf("Compact mode should not contain newlines, got: %s", result)
 	}
 }

@@ -65,6 +65,9 @@ func (f *Formatter) Format(sql string) (string, error) {
 	if f.opts.Compact {
 		style = ast.CompactStyle()
 	}
+	if f.opts.IndentSize > 0 {
+		style.IndentWidth = f.opts.IndentSize
+	}
 	if f.opts.Uppercase {
 		style.KeywordCase = ast.KeywordUpper
 	}

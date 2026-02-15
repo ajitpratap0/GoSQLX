@@ -29,37 +29,56 @@ func TestValidateCheckMode(t *testing.T) {
 	}{
 		{
 			name:      "check valid file produces no output",
-			args:      []string{"--check", validSQL},
+			args:      []string{"validate", "--check", validSQL},
 			wantErr:   false,
 			wantEmpty: true,
 		},
 		{
 			name:      "quiet valid file produces no output",
-			args:      []string{"--quiet", validSQL},
+			args:      []string{"validate", "--quiet", validSQL},
 			wantErr:   false,
 			wantEmpty: true,
 		},
 		{
 			name:    "check invalid file returns error",
-			args:    []string{"--check", invalidSQL},
+			args:    []string{"validate", "--check", invalidSQL},
 			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Reset the global flag
+			// Save and reset all global validate flags
+			savedQuiet := validateQuiet
+			savedRecursive := validateRecursive
+			savedPattern := validatePattern
+			savedStats := validateStats
+			savedDialect := validateDialect
+			savedStrict := validateStrict
+			savedOutputFormat := validateOutputFormat
+			savedOutputFile := validateOutputFile
+			t.Cleanup(func() {
+				validateQuiet = savedQuiet
+				validateRecursive = savedRecursive
+				validatePattern = savedPattern
+				validateStats = savedStats
+				validateDialect = savedDialect
+				validateStrict = savedStrict
+				validateOutputFormat = savedOutputFormat
+				validateOutputFile = savedOutputFile
+			})
+
 			validateQuiet = false
 
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			cmd := validateCmd
-			cmd.SetOut(stdout)
-			cmd.SetErr(stderr)
-			cmd.SetArgs(tt.args)
+			// Use rootCmd to properly route subcommands (cobra's Execute traverses to root anyway)
+			rootCmd.SetOut(stdout)
+			rootCmd.SetErr(stderr)
+			rootCmd.SetArgs(tt.args)
 
-			err := cmd.Execute()
+			err := rootCmd.Execute()
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Execute() error = %v, wantErr %v", err, tt.wantErr)
@@ -68,9 +87,6 @@ func TestValidateCheckMode(t *testing.T) {
 			if tt.wantEmpty && stdout.Len() > 0 {
 				t.Errorf("Expected empty stdout in check mode, got: %s", stdout.String())
 			}
-
-			// Reset
-			validateQuiet = false
 		})
 	}
 }

@@ -239,7 +239,6 @@ WHEN MATCHED THEN
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
-
 			p := parser.NewParser()
 			astObj := ast.NewAST()
 			defer ast.ReleaseAST(astObj)
@@ -420,7 +419,6 @@ WHEN MATCHED THEN UPDATE SET t.val = s.val`
 			if err != nil {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
-
 
 			p := parser.NewParser()
 			astObj := ast.NewAST()

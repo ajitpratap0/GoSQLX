@@ -13,6 +13,7 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/style"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/whitespace"
+	"github.com/ajitpratap0/GoSQLX/pkg/security"
 )
 
 var (
@@ -21,6 +22,7 @@ var (
 	lintAutoFix    bool
 	lintMaxLength  int
 	lintFailOnWarn bool
+	lintSecurity   bool
 )
 
 // lintCmd represents the lint command
@@ -334,6 +336,18 @@ func lintInlineSQL(cmd *cobra.Command, sql string) error {
 	return nil
 }
 
+// runSecurityScan runs the security scanner on the given SQL and prints findings.
+// Returns the number of security findings.
+func runSecurityScan(sql string, filename string, outWriter io.Writer) int {
+	scanner := security.NewScanner()
+	findings := scanner.Scan(sql)
+	for _, f := range findings {
+		fmt.Fprintf(outWriter, "  [%s] %s:%d:%d — %s (%s)\n",
+			f.Severity, filename, f.Line, f.Column, f.Message, f.RuleID)
+	}
+	return len(findings)
+}
+
 // createLinter creates a new linter instance with configured rules
 func createLinter() *linter.Linter {
 	return linter.New(
@@ -363,4 +377,5 @@ func init() {
 	lintCmd.Flags().BoolVar(&lintAutoFix, "auto-fix", false, "automatically fix violations where possible")
 	lintCmd.Flags().IntVar(&lintMaxLength, "max-length", 100, "maximum line length (L005 rule)")
 	lintCmd.Flags().BoolVar(&lintFailOnWarn, "fail-on-warn", false, "exit with error code on warnings")
+	lintCmd.Flags().BoolVar(&lintSecurity, "security", false, "run security scanner (LIKE injection, tautology, UNION injection)")
 }

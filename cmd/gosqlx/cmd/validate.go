@@ -9,7 +9,6 @@ import (
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/output"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
 var (
@@ -267,34 +266,22 @@ func validateFromStdin(cmd *cobra.Command) error {
 	return nil
 }
 
-// validateInlineSQL validates inline SQL passed as a command argument
+// validateInlineSQL validates inline SQL passed as a command argument.
+// Uses the fast-path Validate() which skips full AST construction (#274).
 func validateInlineSQL(cmd *cobra.Command, sql string) error {
-	// Parse the SQL string directly using tokenizer and parser
-	tkz := tokenizer.GetTokenizer()
-	defer tokenizer.PutTokenizer(tkz)
-
-	tokens, err := tkz.Tokenize([]byte(sql))
+	err := parser.Validate(sql)
 	if err != nil {
 		if !validateQuiet {
 			fmt.Fprintf(cmd.ErrOrStderr(), "✗ Invalid SQL: %v\n", err)
 		}
-		return fmt.Errorf("validation failed: tokenization error: %w", err)
+		return fmt.Errorf("validation failed: %w", err)
 	}
 
-	if len(tokens) == 0 {
+	if sql == "" {
 		if !validateQuiet {
 			fmt.Fprintln(cmd.OutOrStdout(), "✓ Empty input (no statements)")
 		}
 		return nil
-	}
-
-	p := parser.NewParser()
-	_, err = p.ParseFromModelTokens(tokens)
-	if err != nil {
-		if !validateQuiet {
-			fmt.Fprintf(cmd.ErrOrStderr(), "✗ Invalid SQL: %v\n", err)
-		}
-		return fmt.Errorf("validation failed: parse error: %w", err)
 	}
 
 	if !validateQuiet {

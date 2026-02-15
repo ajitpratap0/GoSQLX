@@ -281,13 +281,9 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 	for p.currentPos < len(tokens) && !p.isType(models.TokenTypeEOF) {
 		// Skip semicolons between statements
 		if p.isType(models.TokenTypeSemicolon) {
-			if p.strict {
+			if err := p.checkStrictEmptySemicolon(); err != nil {
 				ast.ReleaseAST(result)
-				return nil, goerrors.InvalidSyntaxError(
-					"empty statement not allowed in strict mode",
-					p.currentLocation(),
-					"remove extra semicolons or disable strict mode",
-				)
+				return nil, err
 			}
 			p.advance()
 			continue
@@ -310,12 +306,8 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 	// Check if we got any statements
 	if len(result.Statements) == 0 {
 		ast.ReleaseAST(result)
-		if p.strict {
-			return nil, goerrors.InvalidSyntaxError(
-				"empty statement not allowed in strict mode",
-				p.currentLocation(),
-				"provide at least one SQL statement",
-			)
+		if err := p.checkStrictEmpty(); err != nil {
+			return nil, err
 		}
 		return nil, goerrors.IncompleteStatementError(models.Location{}, "")
 	}
@@ -421,13 +413,9 @@ func (p *Parser) ParseWithPositions(result *ConversionResult) (*ast.AST, error) 
 	// Parse statements
 	for p.currentPos < len(result.Tokens) && !p.isType(models.TokenTypeEOF) {
 		if p.isType(models.TokenTypeSemicolon) {
-			if p.strict {
+			if err := p.checkStrictEmptySemicolon(); err != nil {
 				ast.ReleaseAST(astResult)
-				return nil, goerrors.InvalidSyntaxError(
-					"empty statement not allowed in strict mode",
-					p.currentLocation(),
-					"remove extra semicolons or disable strict mode",
-				)
+				return nil, err
 			}
 			p.advance()
 			continue
@@ -447,12 +435,8 @@ func (p *Parser) ParseWithPositions(result *ConversionResult) (*ast.AST, error) 
 
 	if len(astResult.Statements) == 0 {
 		ast.ReleaseAST(astResult)
-		if p.strict {
-			return nil, goerrors.InvalidSyntaxError(
-				"empty statement not allowed in strict mode",
-				p.currentLocation(),
-				"provide at least one SQL statement",
-			)
+		if err := p.checkStrictEmpty(); err != nil {
+			return nil, err
 		}
 		return nil, goerrors.IncompleteStatementError(p.currentLocation(), "")
 	}
@@ -716,6 +700,31 @@ func (p *Parser) ApplyOptions(opts ...ParserOption) {
 	for _, opt := range opts {
 		opt(p)
 	}
+}
+
+// checkStrictEmpty returns an error if strict mode is enabled and no statements were parsed.
+// This consolidates the repeated strict empty-statement check pattern.
+func (p *Parser) checkStrictEmpty() error {
+	if p.strict {
+		return goerrors.InvalidSyntaxError(
+			"empty statement not allowed in strict mode",
+			p.currentLocation(),
+			"provide at least one SQL statement",
+		)
+	}
+	return nil
+}
+
+// checkStrictEmptySemicolon returns an error if strict mode is enabled and a bare semicolon is encountered.
+func (p *Parser) checkStrictEmptySemicolon() error {
+	if p.strict {
+		return goerrors.InvalidSyntaxError(
+			"empty statement not allowed in strict mode",
+			p.currentLocation(),
+			"remove extra semicolons or disable strict mode",
+		)
+	}
+	return nil
 }
 
 // advance moves to the next token

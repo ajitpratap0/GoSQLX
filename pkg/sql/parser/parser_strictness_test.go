@@ -240,6 +240,72 @@ func TestStrictMode_WithApplyOptions(t *testing.T) {
 	}
 }
 
+// =============================================================================
+// Issue #306 — ParseWithPositions strict mode trailing semicolon
+// =============================================================================
+
+func parseSQLStrictWithPositions(t *testing.T, sql string) error {
+	t.Helper()
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+	tokens, err := tkz.Tokenize([]byte(sql))
+	if err != nil {
+		t.Fatalf("tokenize error for %q: %v", sql, err)
+	}
+	p := NewParser(WithStrictMode())
+	_, err = p.ParseFromModelTokensWithPositions(tokens)
+	return err
+}
+
+func TestStrictMode_ParseWithPositions_TrailingSemicolon(t *testing.T) {
+	if err := parseSQLStrictWithPositions(t, "SELECT 1;"); err != nil {
+		t.Fatalf("ParseWithPositions strict mode should accept trailing semicolon: %v", err)
+	}
+}
+
+func TestStrictMode_ParseWithPositions_ValidSQL(t *testing.T) {
+	if err := parseSQLStrictWithPositions(t, "SELECT 1"); err != nil {
+		t.Fatalf("ParseWithPositions strict mode should accept valid SQL: %v", err)
+	}
+}
+
+func TestStrictMode_ParseWithPositions_RejectsLeadingSemicolon(t *testing.T) {
+	err := parseSQLStrictWithPositions(t, "; SELECT 1")
+	if err == nil {
+		t.Fatal("ParseWithPositions strict mode should reject leading semicolons")
+	}
+}
+
+func TestStrictMode_ParseWithPositions_MultipleStatements(t *testing.T) {
+	if err := parseSQLStrictWithPositions(t, "SELECT 1; SELECT 2"); err != nil {
+		t.Fatalf("ParseWithPositions strict mode should accept multiple statements: %v", err)
+	}
+}
+
+// =============================================================================
+// Issue #306 — WHERE clause guard keywords (FETCH, FOR)
+// =============================================================================
+
+func TestMalformedSQL_WhereFollowedByFetch(t *testing.T) {
+	err := parseSQLCheck(t, "SELECT * FROM t WHERE FETCH FIRST 10 ROWS ONLY")
+	if err == nil {
+		t.Fatal("expected error for WHERE followed by FETCH")
+	}
+	if !strings.Contains(err.Error(), "expression after WHERE") {
+		t.Errorf("expected error about expression after WHERE, got: %v", err)
+	}
+}
+
+func TestMalformedSQL_WhereFollowedByFor(t *testing.T) {
+	err := parseSQLCheck(t, "SELECT * FROM t WHERE FOR UPDATE")
+	if err == nil {
+		t.Fatal("expected error for WHERE followed by FOR")
+	}
+	if !strings.Contains(err.Error(), "expression after WHERE") {
+		t.Errorf("expected error about expression after WHERE, got: %v", err)
+	}
+}
+
 func TestNewParser_WithStrictMode(t *testing.T) {
 	p := NewParser(WithStrictMode())
 	if !p.strict {

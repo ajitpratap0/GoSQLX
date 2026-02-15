@@ -816,7 +816,8 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			p.isType(models.TokenTypeGroup) || p.isType(models.TokenTypeOrder) ||
 			p.isType(models.TokenTypeLimit) || p.isType(models.TokenTypeHaving) ||
 			p.isType(models.TokenTypeUnion) || p.isType(models.TokenTypeExcept) ||
-			p.isType(models.TokenTypeIntersect) || p.isType(models.TokenTypeRParen) {
+			p.isType(models.TokenTypeIntersect) || p.isType(models.TokenTypeRParen) ||
+			p.isType(models.TokenTypeFetch) || p.isType(models.TokenTypeFor) {
 			return nil, goerrors.ExpectedTokenError(
 				"expression after WHERE",
 				p.currentToken.Type.String(),

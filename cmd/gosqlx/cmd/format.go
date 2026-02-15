@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
 )
@@ -74,15 +73,7 @@ func formatRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Track which flags were explicitly set
-	flagsChanged := make(map[string]bool)
-	cmd.Flags().Visit(func(f *pflag.Flag) {
-		flagsChanged[f.Name] = true
-	})
-	if cmd.Parent() != nil && cmd.Parent().PersistentFlags() != nil {
-		cmd.Parent().PersistentFlags().Visit(func(f *pflag.Flag) {
-			flagsChanged[f.Name] = true
-		})
-	}
+	flagsChanged := trackChangedFlags(cmd)
 
 	// Create formatter options from config and flags
 	opts := FormatterOptionsFromConfig(cfg, flagsChanged, FormatterFlags{
@@ -143,15 +134,7 @@ func formatFromStdin(cmd *cobra.Command) error {
 	}
 
 	// Track which flags were explicitly set
-	flagsChanged := make(map[string]bool)
-	cmd.Flags().Visit(func(f *pflag.Flag) {
-		flagsChanged[f.Name] = true
-	})
-	if cmd.Parent() != nil && cmd.Parent().PersistentFlags() != nil {
-		cmd.Parent().PersistentFlags().Visit(func(f *pflag.Flag) {
-			flagsChanged[f.Name] = true
-		})
-	}
+	flagsChanged := trackChangedFlags(cmd)
 
 	// Create formatter options
 	opts := FormatterOptionsFromConfig(cfg, flagsChanged, FormatterFlags{
@@ -207,15 +190,7 @@ func formatInlineSQL(cmd *cobra.Command, sql string) error {
 	}
 
 	// Track which flags were explicitly set
-	flagsChanged := make(map[string]bool)
-	cmd.Flags().Visit(func(f *pflag.Flag) {
-		flagsChanged[f.Name] = true
-	})
-	if cmd.Parent() != nil && cmd.Parent().PersistentFlags() != nil {
-		cmd.Parent().PersistentFlags().Visit(func(f *pflag.Flag) {
-			flagsChanged[f.Name] = true
-		})
-	}
+	flagsChanged := trackChangedFlags(cmd)
 
 	opts := FormatterOptionsFromConfig(cfg, flagsChanged, FormatterFlags{
 		InPlace:    false,

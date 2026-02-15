@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/output"
@@ -82,30 +81,22 @@ func validateRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Validate output format
-	if validateOutputFormat != "" && validateOutputFormat != "text" && validateOutputFormat != "json" && validateOutputFormat != "sarif" {
-		return fmt.Errorf("invalid output format: %s (valid options: text, json, sarif)", validateOutputFormat)
+	if validateOutputFormat != "" && validateOutputFormat != OutputFormatText && validateOutputFormat != OutputFormatJSON && validateOutputFormat != OutputFormatSARIF {
+		return fmt.Errorf("invalid output format: %s (valid options: %s, %s, %s)", validateOutputFormat, OutputFormatText, OutputFormatJSON, OutputFormatSARIF)
 	}
 
 	// Track which flags were explicitly set
-	flagsChanged := make(map[string]bool)
-	cmd.Flags().Visit(func(f *pflag.Flag) {
-		flagsChanged[f.Name] = true
-	})
-	if cmd.Parent() != nil && cmd.Parent().PersistentFlags() != nil {
-		cmd.Parent().PersistentFlags().Visit(func(f *pflag.Flag) {
-			flagsChanged[f.Name] = true
-		})
-	}
+	flagsChanged := trackChangedFlags(cmd)
 
 	// Create validator options from config and flags
 	// When outputting SARIF or JSON, automatically enable quiet mode to avoid mixing output
-	quietMode := validateQuiet || validateOutputFormat == "sarif" || validateOutputFormat == "json"
+	quietMode := validateQuiet || validateOutputFormat == OutputFormatSARIF || validateOutputFormat == OutputFormatJSON
 
 	opts := ValidatorOptionsFromConfig(cfg, flagsChanged, ValidatorFlags{
 		Recursive:  validateRecursive,
 		Pattern:    validatePattern,
 		Quiet:      quietMode,
-		ShowStats:  validateStats && validateOutputFormat == "text", // Only show text stats for text output
+		ShowStats:  validateStats && validateOutputFormat == OutputFormatText, // Only show text stats for text output
 		Dialect:    validateDialect,
 		StrictMode: validateStrict,
 		Verbose:    verbose,
@@ -122,7 +113,7 @@ func validateRun(cmd *cobra.Command, args []string) error {
 
 	// Handle different output formats
 	switch validateOutputFormat {
-	case "sarif":
+	case OutputFormatSARIF:
 		// Generate SARIF output
 		sarifData, err := output.FormatSARIF(result, Version)
 		if err != nil {
@@ -140,7 +131,7 @@ func validateRun(cmd *cobra.Command, args []string) error {
 		} else {
 			fmt.Fprint(cmd.OutOrStdout(), string(sarifData))
 		}
-	case "json":
+	case OutputFormatJSON:
 		// Generate JSON output
 		jsonData, err := output.FormatValidationJSON(result, args, validateStats)
 		if err != nil {
@@ -205,23 +196,15 @@ func validateFromStdin(cmd *cobra.Command) error {
 	}
 
 	// Track which flags were explicitly set
-	flagsChanged := make(map[string]bool)
-	cmd.Flags().Visit(func(f *pflag.Flag) {
-		flagsChanged[f.Name] = true
-	})
-	if cmd.Parent() != nil && cmd.Parent().PersistentFlags() != nil {
-		cmd.Parent().PersistentFlags().Visit(func(f *pflag.Flag) {
-			flagsChanged[f.Name] = true
-		})
-	}
+	flagsChanged := trackChangedFlags(cmd)
 
 	// Create validator options
-	quietMode := validateQuiet || validateOutputFormat == "sarif" || validateOutputFormat == "json"
+	quietMode := validateQuiet || validateOutputFormat == OutputFormatSARIF || validateOutputFormat == OutputFormatJSON
 	opts := ValidatorOptionsFromConfig(cfg, flagsChanged, ValidatorFlags{
 		Recursive:  false, // stdin is always single input
 		Pattern:    "",
 		Quiet:      quietMode,
-		ShowStats:  validateStats && validateOutputFormat == "text", // Only show text stats for text output
+		ShowStats:  validateStats && validateOutputFormat == OutputFormatText, // Only show text stats for text output
 		Dialect:    validateDialect,
 		StrictMode: validateStrict,
 		Verbose:    verbose,
@@ -242,7 +225,7 @@ func validateFromStdin(cmd *cobra.Command) error {
 
 	// Handle different output formats
 	switch validateOutputFormat {
-	case "sarif":
+	case OutputFormatSARIF:
 		sarifData, err := output.FormatSARIF(result, Version)
 		if err != nil {
 			return fmt.Errorf("failed to generate SARIF output: %w", err)
@@ -255,7 +238,7 @@ func validateFromStdin(cmd *cobra.Command) error {
 		if validateOutputFile != "" && !opts.Quiet {
 			fmt.Fprintf(cmd.OutOrStdout(), "SARIF output written to %s\n", validateOutputFile)
 		}
-	case "json":
+	case OutputFormatJSON:
 		jsonData, err := output.FormatValidationJSON(result, []string{"stdin"}, validateStats)
 		if err != nil {
 			return fmt.Errorf("failed to generate JSON output: %w", err)

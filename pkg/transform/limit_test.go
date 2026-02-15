@@ -72,6 +72,38 @@ func TestSetLimit_Negative(t *testing.T) {
 	}
 }
 
+func TestSetLimit_NegativeLarge(t *testing.T) {
+	stmt := mustParse(t, "SELECT * FROM users")
+	err := Apply(stmt, SetLimit(-100))
+	if err == nil {
+		t.Fatal("expected error for negative limit")
+	}
+}
+
+func TestSetLimit_Zero(t *testing.T) {
+	// LIMIT 0 is valid SQL — returns an empty result set.
+	stmt := mustParse(t, "SELECT * FROM users")
+	err := Apply(stmt, SetLimit(0))
+	if err != nil {
+		t.Fatalf("SetLimit(0) should succeed: %v", err)
+	}
+	out := format(stmt)
+	assertContains(t, out, "LIMIT")
+	assertContains(t, out, "0")
+}
+
+func TestSetOffset_Zero(t *testing.T) {
+	// OFFSET 0 is valid SQL — no offset applied.
+	stmt := mustParse(t, "SELECT * FROM users")
+	err := Apply(stmt, SetOffset(0))
+	if err != nil {
+		t.Fatalf("SetOffset(0) should succeed: %v", err)
+	}
+	out := format(stmt)
+	assertContains(t, out, "OFFSET")
+	assertContains(t, out, "0")
+}
+
 func TestSetOffset_Negative(t *testing.T) {
 	stmt := mustParse(t, "SELECT * FROM users")
 	err := Apply(stmt, SetOffset(-5))

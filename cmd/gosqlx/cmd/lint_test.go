@@ -152,8 +152,8 @@ func TestLintCmd_NonExistentFile(t *testing.T) {
 	args := []string{"/nonexistent/file.sql"}
 	err := lintRun(cmd, args)
 
-	if err != nil {
-		t.Errorf("Command should not return error for file read failure: %v", err)
+	if err == nil {
+		t.Errorf("Command should return error for file read failure")
 	}
 
 	output := outBuf.String()

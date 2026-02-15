@@ -151,6 +151,9 @@ func parseAndDisplayLateral(sql string) {
 		return
 	}
 
+	// Convert tokens using the exported function
+
+	// Parse
 	p := parser.NewParser()
 	defer p.Release()
 

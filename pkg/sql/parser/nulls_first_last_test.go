@@ -4,30 +4,7 @@ import (
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
-
-// Helper function to parse SQL and return AST (similar to window_functions_test.go)
-func parseSQL(t *testing.T, sql string) *ast.AST {
-	// Get tokenizer from pool
-	tkz := tokenizer.GetTokenizer()
-	defer tokenizer.PutTokenizer(tkz)
-
-	// Tokenize SQL
-	tokens, err := tkz.Tokenize([]byte(sql))
-	if err != nil {
-		t.Fatalf("Failed to tokenize: %v", err)
-	}
-
-	// Parse tokens
-	parser := &Parser{}
-	astObj, err := parser.ParseFromModelTokens(tokens)
-	if err != nil {
-		t.Fatalf("Failed to parse: %v", err)
-	}
-
-	return astObj
-}
 
 // TestParser_NullsFirstLast_SelectStatement tests NULLS FIRST/LAST in SELECT ORDER BY
 func TestParser_NullsFirstLast_SelectStatement(t *testing.T) {

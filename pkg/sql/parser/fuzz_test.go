@@ -84,15 +84,10 @@ func FuzzParse(f *testing.F) {
 		}
 
 		// Step 2: Convert tokens — must not panic
-		converter := NewTokenConverter()
-		result, err := converter.Convert(tokens)
-		if err != nil {
-			return // conversion errors are expected
-		}
 
 		// Step 3: Parse — must not panic
 		p := NewParser()
 		defer p.Release()
-		_, _ = p.ParseWithPositions(result)
+		_, _ = p.ParseFromModelTokensWithPositions(tokens)
 	})
 }

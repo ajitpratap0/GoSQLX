@@ -444,7 +444,7 @@
 //
 // Generate JSON for AST:
 //
-//	astObj := parser.Parse(tokens)
+//	astObj := parser.ParseFromModelTokens(tokensWithSpan)
 //	jsonData, _ := output.FormatParseJSON(astObj, "query.sql", false, nil)
 //	fmt.Println(string(jsonData))
 //

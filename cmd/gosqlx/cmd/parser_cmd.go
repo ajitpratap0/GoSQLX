@@ -77,9 +77,10 @@ func (p *Parser) Parse(input string) (*ParserResult, error) {
 		return result, nil
 	}
 
-	pr := parser.GetParser()
-	defer parser.PutParser(pr)
-	astObj, err := pr.ParseFromModelTokens(tokens)
+	// Parse to AST with proper error handling for memory management
+	pr := parser.NewParser()
+	defer pr.Release()
+	astObj, err := pr.ParseFromModelTokens(result.Tokens)
 	if err != nil {
 		// Parser failed, no AST to release
 		result.Error = fmt.Errorf("parsing failed: %w", err)

@@ -43,11 +43,10 @@ func ValidateFile(filePath string) ValidationResult {
 		}
 	}
 
-	// Create parser
+	// Create parser and parse
 	p := parser.NewParser()
 	defer p.Release()
 
-	// Parse the tokens
 	_, err = p.ParseFromModelTokens(tokens)
 	if err != nil {
 		return ValidationResult{

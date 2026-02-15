@@ -226,7 +226,7 @@ func testSQLFile(t *testing.T, file SQLTestFile) TestResult {
 		return result
 	}
 
-	// Parse (includes token conversion)
+	// Parse directly from model tokens
 	p := parser.NewParser()
 	defer p.Release()
 
@@ -426,6 +426,7 @@ func BenchmarkIntegration_SimpleQueries(b *testing.B) {
 			sqlStatement := extractSQLStatement(file.Content)
 			tkz := tokenizer.GetTokenizer()
 			tokens, _ := tkz.Tokenize([]byte(sqlStatement))
+
 			tokenizer.PutTokenizer(tkz)
 
 			p := parser.NewParser()
@@ -457,6 +458,7 @@ func BenchmarkIntegration_ComplexQueries(b *testing.B) {
 			sqlStatement := extractSQLStatement(file.Content)
 			tkz := tokenizer.GetTokenizer()
 			tokens, _ := tkz.Tokenize([]byte(sqlStatement))
+
 			tokenizer.PutTokenizer(tkz)
 
 			p := parser.NewParser()
@@ -488,6 +490,7 @@ func BenchmarkIntegration_RealWorldScenarios(b *testing.B) {
 			sqlStatement := extractSQLStatement(file.Content)
 			tkz := tokenizer.GetTokenizer()
 			tokens, _ := tkz.Tokenize([]byte(sqlStatement))
+
 			tokenizer.PutTokenizer(tkz)
 
 			p := parser.NewParser()

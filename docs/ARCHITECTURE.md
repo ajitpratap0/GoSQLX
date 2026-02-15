@@ -441,7 +441,7 @@ pkg/sql/parser/
 ├── grouping.go        # GROUPING SETS, ROLLUP, CUBE
 ├── alter.go           # ALTER TABLE statements
 ├── ddl.go             # DDL statements (CREATE, DROP, REFRESH, TRUNCATE)
-└── token_converter.go # Token format conversion with position tracking
+└── token_conversion.go # Internal token conversion (unexported)
 ```
 
 **Statement Parsing Methods:**
@@ -601,15 +601,16 @@ tokens, err := tkz.Tokenize([]byte(sql))
 // Returns: []models.TokenWithSpan with position info
 // [{Token: SELECT, Start: {Line:1, Col:1}, End: {Line:1, Col:6}}, ...]
 
-// 3. Token conversion (pkg/sql/parser/token_converter.go)
-converted, err := parser.ConvertTokensForParser(tokens)
+// 3. Token conversion (pkg/sql/parser/token_conversion.go)
+p := parser.NewParser()
+defer p.Release()
 // Returns: []token.Token for parser consumption
 
 // 4. Parsing (pkg/sql/parser)
 p := parser.GetParser()
 defer parser.PutParser(p)
 
-ast, err := p.Parse(converted)
+ast, err := p.ParseFromModelTokens(tokens)
 // Returns: *ast.AST containing statements
 
 // 5. Access parsed structure
@@ -741,8 +742,9 @@ func ProcessConcurrent(queries []string) []Result {
             defer parser.PutParser(p)
 
             tokens, _ := tkz.Tokenize([]byte(query))
-            converted, _ := parser.ConvertTokensForParser(tokens)
-            ast, _ := p.Parse(converted)
+            p := parser.NewParser()
+            defer p.Release()
+            ast, _ := p.ParseFromModelTokens(tokens)
 
             results[idx] = Result{AST: ast}
         }(i, sql)

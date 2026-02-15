@@ -53,3 +53,4 @@ build/
 
 # Python version files (not needed for Go project)
 .python-version
+sql-validator

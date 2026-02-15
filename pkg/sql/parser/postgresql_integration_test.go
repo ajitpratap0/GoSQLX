@@ -93,6 +93,7 @@ func TestParser_PostgreSQL_IntegrationAllFeatures(t *testing.T) {
 
 			parser := NewParser()
 			defer parser.Release()
+
 			result, err := parser.ParseFromModelTokens(tokens)
 			if err != nil {
 				t.Fatalf("Parse error for %s: %v\nSQL: %s", tt.description, err, tt.sql)
@@ -166,20 +167,12 @@ func BenchmarkParser_JSONOperators(b *testing.B) {
 				b.Fatalf("Tokenize error: %v", err)
 			}
 
-			converter := GetTokenConverter()
-			convResult, err := converter.Convert(tokens)
-			PutTokenConverter(converter)
-			if err != nil {
-				b.Fatalf("Convert error: %v", err)
-			}
-			convertedTokens := convResult.Tokens
-
 			b.ResetTimer()
 			b.ReportAllocs()
 
 			for i := 0; i < b.N; i++ {
 				parser := NewParser()
-				result, err := parser.Parse(convertedTokens)
+				result, err := parser.ParseFromModelTokens(tokens)
 				if err != nil {
 					b.Fatalf("Parse error: %v", err)
 				}
@@ -210,20 +203,12 @@ func BenchmarkParser_LateralJoin(b *testing.B) {
 		b.Fatalf("Tokenize error: %v", err)
 	}
 
-	converter := GetTokenConverter()
-	convResult, err := converter.Convert(tokens)
-	PutTokenConverter(converter)
-	if err != nil {
-		b.Fatalf("Convert error: %v", err)
-	}
-	convertedTokens := convResult.Tokens
-
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
 		parser := NewParser()
-		result, err := parser.Parse(convertedTokens)
+		result, err := parser.ParseFromModelTokens(tokens)
 		if err != nil {
 			b.Fatalf("Parse error: %v", err)
 		}
@@ -249,20 +234,12 @@ func BenchmarkParser_AggregateOrderBy(b *testing.B) {
 		b.Fatalf("Tokenize error: %v", err)
 	}
 
-	converter := GetTokenConverter()
-	convResult, err := converter.Convert(tokens)
-	PutTokenConverter(converter)
-	if err != nil {
-		b.Fatalf("Convert error: %v", err)
-	}
-	convertedTokens := convResult.Tokens
-
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
 		parser := NewParser()
-		result, err := parser.Parse(convertedTokens)
+		result, err := parser.ParseFromModelTokens(tokens)
 		if err != nil {
 			b.Fatalf("Parse error: %v", err)
 		}

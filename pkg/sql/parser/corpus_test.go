@@ -72,15 +72,8 @@ func TestCorpus(t *testing.T) {
 					continue
 				}
 
-				converter := NewTokenConverter()
-				result, err := converter.Convert(tokens)
-				if err != nil {
-					t.Skipf("statement %d: token conversion error: %v\n  SQL: %.200s", i+1, err, stmt)
-					continue
-				}
-
 				p := GetParser()
-				_, err = p.Parse(result.Tokens)
+				_, err = p.ParseFromModelTokens(tokens)
 				PutParser(p)
 				if err != nil {
 					t.Skipf("statement %d: parse error: %v\n  SQL: %.200s", i+1, err, stmt)

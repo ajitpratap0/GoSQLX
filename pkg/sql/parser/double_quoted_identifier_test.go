@@ -8,9 +8,7 @@ package parser
 import (
 	"testing"
 
-	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
@@ -27,78 +25,15 @@ func parseSQLWithQuotedIdentifiers(t *testing.T, sql string) (*ast.AST, error) {
 		return nil, err
 	}
 
-	convertedTokens := convertTokensWithQuotedIdentifiers(tokens)
-
 	parser := NewParser()
 	defer parser.Release()
 
-	tree, err := parser.Parse(convertedTokens)
+	tree, err := parser.ParseFromModelTokens(tokens)
 	return tree, err
 }
 
 // convertTokensWithQuotedIdentifiers converts tokenizer tokens to parser tokens,
 // including proper handling of quoted strings (double-quoted, backticks) as identifiers
-func convertTokensWithQuotedIdentifiers(tokens []models.TokenWithSpan) []token.Token {
-	result := make([]token.Token, 0, len(tokens))
-	for _, t := range tokens {
-		//lint:ignore SA1019 intentional use during #215 migration
-		var tokenType token.Type
-		var modelType models.TokenType = t.Token.Type // Preserve the original ModelType
-		literal := t.Token.Value
-
-		switch t.Token.Type {
-		case models.TokenTypeIdentifier:
-			tokenType = "IDENT"
-		case models.TokenTypeDoubleQuotedString:
-			// Double-quoted strings should be treated as identifiers in SQL
-			tokenType = "DOUBLE_QUOTED_STRING"
-		case models.TokenTypeKeyword:
-			//lint:ignore SA1019 intentional use during #215 migration
-			tokenType = token.Type(t.Token.Value)
-		case models.TokenTypeString:
-			tokenType = "STRING"
-		case models.TokenTypeNumber:
-			tokenType = "INT"
-		case models.TokenTypeOperator:
-			//lint:ignore SA1019 intentional use during #215 migration
-			tokenType = token.Type(t.Token.Value)
-		case models.TokenTypeLParen:
-			tokenType = "("
-		case models.TokenTypeRParen:
-			tokenType = ")"
-		case models.TokenTypeComma:
-			tokenType = ","
-		case models.TokenTypePeriod:
-			tokenType = "."
-		case models.TokenTypeEq:
-			tokenType = "="
-		case models.TokenTypeSemicolon:
-			tokenType = ";"
-		case models.TokenTypeAsterisk:
-			tokenType = "*"
-			literal = "*"
-		case models.TokenTypeMul:
-			// Normalize multiplication to asterisk for parser compatibility
-			tokenType = "*"
-			modelType = models.TokenTypeAsterisk
-			literal = "*"
-		default:
-			if t.Token.Value != "" {
-				//lint:ignore SA1019 intentional use during #215 migration
-				tokenType = token.Type(t.Token.Value)
-			}
-		}
-
-		if tokenType != "" {
-			result = append(result, token.Token{
-				Type:      tokenType,
-				ModelType: modelType,
-				Literal:   literal,
-			})
-		}
-	}
-	return result
-}
 
 func TestDoubleQuotedIdentifiers_SELECT(t *testing.T) {
 	tests := []struct {

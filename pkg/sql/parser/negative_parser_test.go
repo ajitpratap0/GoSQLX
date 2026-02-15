@@ -481,15 +481,12 @@ func tokenizeForTest(t *testing.T, sql string) []token.Token {
 		return nil
 	}
 
-	converter := GetTokenConverter()
-	defer PutTokenConverter(converter)
-	result, err := converter.Convert(modelTokens)
+	converted, err := convertModelTokens(modelTokens)
 	if err != nil {
 		t.Logf("token conversion failed: %v", err)
 		return nil
 	}
-
-	return result.Tokens
+	return converted
 }
 
 // TestPoolContamination verifies that parsing different SQL patterns through pooled

@@ -68,7 +68,7 @@ if err != nil {
 
 - **parser.go** (1,628 lines): Main parser with all parsing logic
 - **alter.go** (368 lines): DDL ALTER statement parsing
-- **token_converter.go** (~200 lines): Token type conversion utilities
+- **token_conversion.go** (~200 lines): Internal token conversion (unexported)
 
 ### Parsing Flow
 

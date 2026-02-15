@@ -148,9 +148,9 @@ func (l *Linter) LintString(sql string, filename string) FileResult {
 		ctx.WithTokens(tokens)
 
 		// Attempt parsing (best effort - some rules are token-only)
-		p := parser.GetParser()
+		p := parser.NewParser()
+		defer p.Release()
 		astObj, parseErr := p.ParseFromModelTokens(tokens)
-		parser.PutParser(p)
 		ctx.WithAST(astObj, parseErr)
 	}
 

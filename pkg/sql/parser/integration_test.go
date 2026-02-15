@@ -63,8 +63,9 @@ func TestIntegration_RealWorldQueries(t *testing.T) {
 					continue
 				}
 
-				// Parse (includes token conversion)
+				// Parse
 				p := NewParser()
+				defer p.Release()
 				_, parseErr := p.ParseFromModelTokens(tokens)
 
 				if parseErr != nil {
@@ -250,7 +251,9 @@ func testDialectQueries(t *testing.T, filePath string, dialectName string) {
 				return
 			}
 
-			// Parse (includes token conversion)
+			// Convert tokens
+
+			// Parse
 			p := NewParser()
 			_, parseErr := p.ParseFromModelTokens(tokens)
 

@@ -23,8 +23,11 @@ func TestParser_ArraySubscript_Single(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
+	// Convert to parser tokens
+
 	parser := NewParser()
 	defer parser.Release()
+
 	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -87,8 +90,11 @@ func TestParser_ArraySubscript_MultiDimensional(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
+	// Convert to parser tokens
+
 	parser := NewParser()
 	defer parser.Release()
+
 	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -143,8 +149,11 @@ func TestParser_ArraySlice_BothBounds(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
+	// Convert to parser tokens
+
 	parser := NewParser()
 	defer parser.Release()
+
 	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -211,8 +220,11 @@ func TestParser_ArraySlice_StartOnly(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
+	// Convert to parser tokens
+
 	parser := NewParser()
 	defer parser.Release()
+
 	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -266,8 +278,11 @@ func TestParser_ArraySlice_EndOnly(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
+	// Convert to parser tokens
+
 	parser := NewParser()
 	defer parser.Release()
+
 	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -321,8 +336,11 @@ func TestParser_ArraySubscript_InWhereClause(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
+	// Convert to parser tokens
+
 	parser := NewParser()
 	defer parser.Release()
+
 	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -377,8 +395,11 @@ func TestParser_ArraySubscript_OnParenthesizedExpr(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
+	// Convert to parser tokens
+
 	parser := NewParser()
 	defer parser.Release()
+
 	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -426,6 +447,8 @@ func TestParser_ArraySubscript_ErrorEmptyBrackets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tokenizer error: %v", err)
 	}
+
+	// Convert to parser tokens
 
 	parser := NewParser()
 	defer parser.Release()

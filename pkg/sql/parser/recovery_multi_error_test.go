@@ -17,7 +17,6 @@ func semi() token.Token {
 }
 
 func tok(typ, lit string) token.Token {
-	//lint:ignore SA1019 intentional use during #215 migration
 	return token.Token{Type: token.Type(typ), Literal: lit}
 }
 

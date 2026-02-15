@@ -148,8 +148,7 @@ func TestAPIStability_TokenTypes(t *testing.T) {
 	// Critical token types that must not change - verify exported constants exist and have correct values
 	// Only test tokens that are actually exported from the token package
 	tests := []struct {
-		name string
-		//lint:ignore SA1019 intentional use during #215 migration
+		name          string
 		actualValue   token.Type
 		expectedValue string
 	}{
@@ -195,8 +194,9 @@ func TestAPIStability_ParserOutput(t *testing.T) {
 		t.Fatalf("Tokenization failed: %v", err)
 	}
 
-	// Parse (includes token conversion)
+	// Parse directly from model tokens
 	p := parser.NewParser()
+	defer p.Release()
 	astObj, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Parsing failed: %v", err)
@@ -246,6 +246,7 @@ func TestAPIStability_ErrorHandling(t *testing.T) {
 		}
 
 		p := parser.NewParser()
+		defer p.Release()
 		_, err = p.ParseFromModelTokens(tokens)
 		if err == nil {
 			t.Error("Parser should return error for invalid SQL - error handling broken")

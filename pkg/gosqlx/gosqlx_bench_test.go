@@ -20,41 +20,27 @@ func BenchmarkHighLevel_Parse(b *testing.B) {
 	}
 }
 
-// BenchmarkLowLevel_Parse benchmarks the direct low-level tokenizer + parser API
+// BenchmarkLowLevel_Parse benchmarks the low-level tokenizer+parser API
 func BenchmarkLowLevel_Parse(b *testing.B) {
 	sql := "SELECT id, name, email FROM users WHERE age > 18"
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		// Step 1: Get tokenizer from pool
 		tkz := tokenizer.GetTokenizer()
-
-		// Step 2: Tokenize SQL
 		tokens, err := tkz.Tokenize([]byte(sql))
 		if err != nil {
 			tokenizer.PutTokenizer(tkz)
 			b.Fatal(err)
 		}
 
-		// Step 3: Convert tokens
-		converter := parser.GetTokenConverter()
-		defer parser.PutTokenConverter(converter)
-		result, err := converter.Convert(tokens)
-		if err != nil {
-			tokenizer.PutTokenizer(tkz)
-			b.Fatal(err)
-		}
-
-		// Step 4: Parse to AST
 		p := parser.NewParser()
-		_, err = p.Parse(result.Tokens)
+		_, err = p.ParseFromModelTokens(tokens)
 		if err != nil {
 			p.Release()
 			tokenizer.PutTokenizer(tkz)
 			b.Fatal(err)
 		}
 
-		// Step 5: Cleanup
 		p.Release()
 		tokenizer.PutTokenizer(tkz)
 	}
@@ -86,16 +72,8 @@ func BenchmarkLowLevel_ParseSimple(b *testing.B) {
 			b.Fatal(err)
 		}
 
-		converter := parser.GetTokenConverter()
-		defer parser.PutTokenConverter(converter)
-		result, err := converter.Convert(tokens)
-		if err != nil {
-			tokenizer.PutTokenizer(tkz)
-			b.Fatal(err)
-		}
-
 		p := parser.NewParser()
-		_, err = p.Parse(result.Tokens)
+		_, err = p.ParseFromModelTokens(tokens)
 		if err != nil {
 			p.Release()
 			tokenizer.PutTokenizer(tkz)
@@ -153,16 +131,8 @@ func BenchmarkLowLevel_ParseComplex(b *testing.B) {
 			b.Fatal(err)
 		}
 
-		converter := parser.GetTokenConverter()
-		defer parser.PutTokenConverter(converter)
-		result, err := converter.Convert(tokens)
-		if err != nil {
-			tokenizer.PutTokenizer(tkz)
-			b.Fatal(err)
-		}
-
 		p := parser.NewParser()
-		_, err = p.Parse(result.Tokens)
+		_, err = p.ParseFromModelTokens(tokens)
 		if err != nil {
 			p.Release()
 			tokenizer.PutTokenizer(tkz)
@@ -200,16 +170,8 @@ func BenchmarkLowLevel_ParseWindowFunction(b *testing.B) {
 			b.Fatal(err)
 		}
 
-		converter := parser.GetTokenConverter()
-		defer parser.PutTokenConverter(converter)
-		result, err := converter.Convert(tokens)
-		if err != nil {
-			tokenizer.PutTokenizer(tkz)
-			b.Fatal(err)
-		}
-
 		p := parser.NewParser()
-		_, err = p.Parse(result.Tokens)
+		_, err = p.ParseFromModelTokens(tokens)
 		if err != nil {
 			p.Release()
 			tokenizer.PutTokenizer(tkz)
@@ -257,16 +219,8 @@ func BenchmarkLowLevel_ParseCTE(b *testing.B) {
 			b.Fatal(err)
 		}
 
-		converter := parser.GetTokenConverter()
-		defer parser.PutTokenConverter(converter)
-		result, err := converter.Convert(tokens)
-		if err != nil {
-			tokenizer.PutTokenizer(tkz)
-			b.Fatal(err)
-		}
-
 		p := parser.NewParser()
-		_, err = p.Parse(result.Tokens)
+		_, err = p.ParseFromModelTokens(tokens)
 		if err != nil {
 			p.Release()
 			tokenizer.PutTokenizer(tkz)
@@ -326,16 +280,8 @@ func BenchmarkLowLevel_ParseMultiple(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			converter := parser.GetTokenConverter()
-			defer parser.PutTokenConverter(converter)
-			result, err := converter.Convert(tokens)
-			if err != nil {
-				tokenizer.PutTokenizer(tkz)
-				b.Fatal(err)
-			}
-
 			p := parser.NewParser()
-			_, err = p.Parse(result.Tokens)
+			_, err = p.ParseFromModelTokens(tokens)
 			if err != nil {
 				p.Release()
 				tokenizer.PutTokenizer(tkz)

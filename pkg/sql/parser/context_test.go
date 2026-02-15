@@ -22,13 +22,11 @@ func tokenizeSQL(t *testing.T, sql string) []token.Token {
 		t.Fatalf("Failed to tokenize SQL: %v", err)
 	}
 
-	converter := NewTokenConverter()
-	result, err := converter.Convert(tokens)
+	converted, err := convertModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to convert tokens: %v", err)
 	}
-
-	return result.Tokens
+	return converted
 }
 
 // TestParseContext_BasicSuccess verifies that ParseContext works for valid SQL
@@ -364,17 +362,10 @@ func TestParseContext_ErrorHandling(t *testing.T) {
 				return
 			}
 
-			converter := NewTokenConverter()
-			result, convErr := converter.Convert(tokens)
-			if convErr != nil {
-				// Expected for some invalid SQL
-				return
-			}
-
 			p := NewParser()
 			defer p.Release()
 
-			ast, err := p.ParseContext(ctx, result.Tokens)
+			ast, err := p.ParseContextFromModelTokens(ctx, tokens)
 
 			if tt.shouldError && err == nil {
 				t.Error("Expected error but got none")

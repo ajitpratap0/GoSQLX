@@ -21,6 +21,8 @@ func TestParser_SimpleUnion(t *testing.T) {
 	}
 
 	// Convert tokens for parser
+
+	// Parse tokens
 	parser := &Parser{}
 	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
@@ -71,6 +73,8 @@ func TestParser_UnionAll(t *testing.T) {
 	}
 
 	// Convert tokens for parser
+
+	// Parse tokens
 	parser := &Parser{}
 	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
@@ -112,6 +116,8 @@ func TestParser_Except(t *testing.T) {
 	}
 
 	// Convert tokens for parser
+
+	// Parse tokens
 	parser := &Parser{}
 	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
@@ -150,6 +156,8 @@ func TestParser_Intersect(t *testing.T) {
 	}
 
 	// Convert tokens for parser
+
+	// Parse tokens
 	parser := &Parser{}
 	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
@@ -188,6 +196,8 @@ func TestParser_MultipleSetOperations(t *testing.T) {
 	}
 
 	// Convert tokens for parser
+
+	// Parse tokens
 	parser := &Parser{}
 	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
@@ -242,6 +252,8 @@ func TestParser_SetOperationWithCTE(t *testing.T) {
 	}
 
 	// Convert tokens for parser
+
+	// Parse tokens
 	parser := &Parser{}
 	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {

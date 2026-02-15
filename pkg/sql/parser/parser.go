@@ -13,7 +13,8 @@
 //	defer parser.PutParser(parser)
 //
 //	// Parse tokens to AST
-//	astObj, err := parser.ParseFromModelTokens(tokens)
+//	result := parser.ParseFromModelTokens(tokens)
+//	astObj, err := parser.ParseWithPositions(result)
 //	defer ast.ReleaseAST(astObj)
 //
 // # v1.6.0 PostgreSQL Extensions
@@ -208,7 +209,7 @@ type Parser struct {
 // performance on hot paths.
 //
 // Parameters:
-//   - tokens: Slice of parser tokens (or use ParseFromModelTokens to parse tokenizer output directly)
+//   - tokens: Slice of parser tokens (use ParseFromModelTokens instead)
 //
 // Returns:
 //   - *ast.AST: Parsed Abstract Syntax Tree containing one or more statements
@@ -229,8 +230,11 @@ type Parser struct {
 //	parser := parser.GetParser()
 //	defer parser.PutParser(parser)
 //
-//	// Parse tokenizer output directly (preferred)
-//	ast, err := parser.ParseFromModelTokens(tokenizerOutput)
+//	// Convert tokenizer output to parser tokens
+//	// Use ParseFromModelTokens directly
+//
+//	// Parse tokens
+//	ast, err := parser.Parse(tokens.Tokens)
 //	if err != nil {
 //	    log.Printf("Parse error: %v", err)
 //	    return
@@ -292,39 +296,44 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 // ParseFromModelTokens parses tokenizer output ([]models.TokenWithSpan) directly into an AST.
 //
 // This is the preferred entry point for parsing SQL. It accepts the output of the
-// tokenizer directly, without requiring the caller to manually convert tokens via
-// manual token conversion. Internally, it still performs conversion for now, but this
-// will be optimized in a future version to bypass the legacy token.Type system entirely.
-//
-// Usage:
-//
-//	p := parser.GetParser()
-//	defer parser.PutParser(p)
-//	astObj, err := p.ParseFromModelTokens(tokenizerOutput)
-//	if err != nil {
-//	    // handle error
-//	}
-//	defer ast.ReleaseAST(astObj)
+// tokenizer directly, without requiring manual token conversion.
 //
 // See issue #215 for the token type unification roadmap.
 func (p *Parser) ParseFromModelTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
-	converter := GetTokenConverter()
-	defer PutTokenConverter(converter)
-	result, err := converter.Convert(tokens)
+	converted, err := convertModelTokens(tokens)
 	if err != nil {
 		return nil, fmt.Errorf("token conversion failed: %w", err)
 	}
-	return p.Parse(result.Tokens)
+	return p.Parse(converted)
+}
+
+// ParseFromModelTokensWithPositions parses tokenizer output with position tracking
+// for enhanced error reporting. This replaces the ConvertTokensWithPositions + ParseWithPositions flow.
+func (p *Parser) ParseFromModelTokensWithPositions(tokens []models.TokenWithSpan) (*ast.AST, error) {
+	result, err := convertModelTokensWithPositions(tokens)
+	if err != nil {
+		return nil, fmt.Errorf("token conversion failed: %w", err)
+	}
+	return p.ParseWithPositions(result)
+}
+
+// ParseContextFromModelTokens parses tokenizer output with context support for cancellation.
+func (p *Parser) ParseContextFromModelTokens(ctx context.Context, tokens []models.TokenWithSpan) (*ast.AST, error) {
+	converted, err := convertModelTokens(tokens)
+	if err != nil {
+		return nil, fmt.Errorf("token conversion failed: %w", err)
+	}
+	return p.ParseContext(ctx, converted)
 }
 
 // ParseWithPositions parses tokens with position tracking for enhanced error reporting.
 //
-// This method accepts a ConversionResult (from token conversion) which includes
+// This method accepts a ConversionResult from convertModelTokensWithPositions(), which includes
 // both the converted tokens and their original source positions from the tokenizer.
 // Syntax errors will include accurate line and column information for debugging.
 //
 // Parameters:
-//   - result: ConversionResult containing tokens and position mapping
+//   - result: ConversionResult from convertModelTokensWithPositions containing tokens and position mapping
 //
 // Returns:
 //   - *ast.AST: Parsed Abstract Syntax Tree containing one or more statements
@@ -345,10 +354,10 @@ func (p *Parser) ParseFromModelTokens(tokens []models.TokenWithSpan) (*ast.AST, 
 //	parser := parser.GetParser()
 //	defer parser.PutParser(parser)
 //
-//	// Convert tokenizer output and parse with position information
-//	converter := parser.GetTokenConverter()
-//	defer parser.PutTokenConverter(converter)
-//	result, _ := converter.Convert(tokenizerOutput)
+//	// Convert tokenizer output with position tracking
+//	// Use ParseFromModelTokensWithPositions instead
+//
+//	// Parse with position information
 //	ast, err := parser.ParseWithPositions(result)
 //	if err != nil {
 //	    // Error includes line/column information
@@ -656,9 +665,7 @@ func NewParser() *Parser {
 }
 
 // matchToken checks if the current token matches the expected type
-//
-//lint:ignore SA1019 intentional use during #215 migration
-func (p *Parser) matchToken(expected token.Type) bool { //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
+func (p *Parser) matchToken(expected token.Type) bool {
 	if mt, ok := stringTypeToModelType[expected]; ok && mt != models.TokenTypeKeyword {
 		// Specific ModelType — use fast integer comparison
 		if p.currentToken.ModelType == mt {
@@ -712,9 +719,7 @@ func (p *Parser) peekToken() token.Token {
 // This is used by normalizeTokens() to ensure all tokens have ModelType set,
 // enabling pure integer comparison in isType() without string fallbacks.
 // Tokens with types not in this map get models.TokenTypeKeyword as a generic fallback.
-//
-//lint:ignore SA1019 intentional use of deprecated token.Type during #215 migration — this map bridges string→int types
-var stringTypeToModelType = map[token.Type]models.TokenType{ //nolint:staticcheck // bridge map for #215 migration
+var stringTypeToModelType = map[token.Type]models.TokenType{
 	// Special tokens
 	"EOF":   models.TokenTypeEOF,
 	"IDENT": models.TokenTypeIdentifier,
@@ -941,7 +946,7 @@ var stringTypeToModelType = map[token.Type]models.TokenType{ //nolint:staticchec
 
 // normalizeTokens ensures all tokens have ModelType set by inferring it from the string Type.
 // This is called once at parse entry to enable pure integer comparison in isType().
-// Tokens produced by the token converter already have ModelType set and are unaffected.
+// Tokens produced by convertModelTokens already have ModelType set and are unaffected.
 func normalizeTokens(tokens []token.Token) []token.Token {
 	copied := make([]token.Token, len(tokens))
 	copy(copied, tokens)

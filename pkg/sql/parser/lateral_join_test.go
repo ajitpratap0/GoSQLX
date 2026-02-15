@@ -22,16 +22,12 @@ func TestParser_LateralBasic(t *testing.T) {
 	}
 
 	// Convert tokens for parser
-	result, err := ConvertTokensWithPositions(tokens)
-	if err != nil {
-		t.Fatalf("Failed to convert tokens: %v", err)
-	}
 
 	// Parse tokens
 	parser := GetParser()
 	defer PutParser(parser)
 
-	astObj, err := parser.ParseWithPositions(result)
+	astObj, err := parser.ParseFromModelTokensWithPositions(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}
@@ -77,16 +73,12 @@ func TestParser_LateralFlagFalseWithoutKeyword(t *testing.T) {
 	}
 
 	// Convert tokens for parser
-	result, err := ConvertTokensWithPositions(tokens)
-	if err != nil {
-		t.Fatalf("Failed to convert tokens: %v", err)
-	}
 
 	// Parse tokens
 	parser := GetParser()
 	defer PutParser(parser)
 
-	astObj, err := parser.ParseWithPositions(result)
+	astObj, err := parser.ParseFromModelTokensWithPositions(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}
@@ -127,16 +119,12 @@ LEFT JOIN LATERAL (SELECT p.product_name FROM orders o JOIN products p ON o.prod
 	}
 
 	// Convert tokens for parser
-	result, err := ConvertTokensWithPositions(tokens)
-	if err != nil {
-		t.Fatalf("Failed to convert tokens: %v", err)
-	}
 
 	// Parse tokens
 	parser := GetParser()
 	defer PutParser(parser)
 
-	astObj, err := parser.ParseWithPositions(result)
+	astObj, err := parser.ParseFromModelTokensWithPositions(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}

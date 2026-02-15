@@ -465,20 +465,13 @@ func BenchmarkParser_Merge_Simple(b *testing.B) {
 	defer tokenizer.PutTokenizer(tkz)
 
 	tokens, _ := tkz.Tokenize(sqlBytes)
-	converter := GetTokenConverter()
-	convResult, convErr := converter.Convert(tokens)
-	PutTokenConverter(converter)
-	if convErr != nil {
-		b.Fatalf("Convert error: %v", convErr)
-	}
-	convertedTokens := convResult.Tokens
 
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
 		parser := &Parser{}
-		astObj, err := parser.Parse(convertedTokens)
+		astObj, err := parser.ParseFromModelTokens(tokens)
 		if err != nil {
 			b.Fatalf("Parse error: %v", err)
 		}
@@ -497,20 +490,13 @@ func BenchmarkParser_Merge_Complex(b *testing.B) {
 	defer tokenizer.PutTokenizer(tkz)
 
 	tokens, _ := tkz.Tokenize(sqlBytes)
-	converter := GetTokenConverter()
-	convResult, convErr := converter.Convert(tokens)
-	PutTokenConverter(converter)
-	if convErr != nil {
-		b.Fatalf("Convert error: %v", convErr)
-	}
-	convertedTokens := convResult.Tokens
 
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
 		parser := &Parser{}
-		astObj, err := parser.Parse(convertedTokens)
+		astObj, err := parser.ParseFromModelTokens(tokens)
 		if err != nil {
 			b.Fatalf("Parse error: %v", err)
 		}

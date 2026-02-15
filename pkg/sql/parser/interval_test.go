@@ -23,8 +23,11 @@ func TestParser_IntervalExpression_Simple(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
+	// Convert to parser tokens
+
 	parser := NewParser()
 	defer parser.Release()
+
 	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -71,8 +74,11 @@ func TestParser_IntervalExpression_WithArithmetic(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
+	// Convert to parser tokens
+
 	parser := NewParser()
 	defer parser.Release()
+
 	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -126,8 +132,11 @@ func TestParser_IntervalExpression_Multiple(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
+	// Convert to parser tokens
+
 	parser := NewParser()
 	defer parser.Release()
+
 	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -188,8 +197,11 @@ func TestParser_IntervalExpression_InWhereClause(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
+	// Convert to parser tokens
+
 	parser := NewParser()
 	defer parser.Release()
+
 	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -243,8 +255,11 @@ func TestParser_IntervalExpression_Addition(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
+	// Convert to parser tokens
+
 	parser := NewParser()
 	defer parser.Release()
+
 	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -298,8 +313,11 @@ func TestParser_IntervalExpression_ComplexValue(t *testing.T) {
 		t.Fatalf("tokenizer error: %v", err)
 	}
 
+	// Convert to parser tokens
+
 	parser := NewParser()
 	defer parser.Release()
+
 	tree, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -341,6 +359,8 @@ func TestParser_IntervalExpression_ErrorMissingString(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tokenizer error: %v", err)
 	}
+
+	// Convert to parser tokens
 
 	parser := NewParser()
 	defer parser.Release()

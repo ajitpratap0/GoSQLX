@@ -419,7 +419,7 @@ func (p *Parser) parseConstraintColumnList() ([]string, error) {
 
 // parseSelectStatement parses a SELECT statement
 func (p *Parser) parseSelectStatement() (ast.Statement, error) {
-	// We've already consumed the SELECT token in matchToken
+	// We've already consumed the SELECT token in matchType
 
 	// Check for DISTINCT or ALL keyword
 	isDistinct := false

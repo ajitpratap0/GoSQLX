@@ -664,31 +664,6 @@ func NewParser() *Parser {
 	return &Parser{}
 }
 
-// matchToken checks if the current token matches the expected type
-func (p *Parser) matchToken(expected token.Type) bool {
-	if mt, ok := stringTypeToModelType[expected]; ok && mt != models.TokenTypeKeyword {
-		// Specific ModelType — use fast integer comparison
-		if p.currentToken.ModelType == mt {
-			p.advance()
-			return true
-		}
-		// Token may have generic ModelType (e.g., TokenTypeKeyword) if the converter
-		// didn't assign a specific type. Fall through to string comparison.
-		if p.currentToken.ModelType == models.TokenTypeKeyword &&
-			strings.EqualFold(string(p.currentToken.Type), string(expected)) {
-			p.advance()
-			return true
-		}
-		return false
-	}
-	// Generic keyword or unmapped token: compare strings
-	if strings.EqualFold(string(p.currentToken.Type), string(expected)) {
-		p.advance()
-		return true
-	}
-	return false
-}
-
 // advance moves to the next token
 func (p *Parser) advance() {
 	p.currentPos++
@@ -925,23 +900,26 @@ var stringTypeToModelType = map[token.Type]models.TokenType{
 	"COUNT":             models.TokenTypeCount,
 	"MATERIALIZED VIEW": models.TokenTypeKeyword,
 
+	// ALTER-related keywords
+	"ADD":          models.TokenTypeAdd,
+	"NOSUPERUSER":  models.TokenTypeNosuperuser,
+	"NOLOGIN":      models.TokenTypeNologin,
+	"NOCREATEDB":   models.TokenTypeNocreatedb,
+	"NOCREATEROLE": models.TokenTypeNocreaterole,
+	"OWNER":        models.TokenTypeOwner,
+	"VALID":        models.TokenTypeValid,
+	"CONNECTOR":    models.TokenTypeConnector,
+	"POLICY":       models.TokenTypePolicy,
+	"DCPROPERTIES": models.TokenTypeDcproperties,
+	"MEMBER":       models.TokenTypeMember,
+	"URL":          models.TokenTypeUrl,
+
+	"UNTIL": models.TokenTypeUntil,
+	"RESET": models.TokenTypeReset,
+
 	// Generic/uncommon keywords (map to generic keyword type)
-	"ADD":          models.TokenTypeKeyword,
-	"NOSUPERUSER":  models.TokenTypeKeyword,
-	"NOLOGIN":      models.TokenTypeKeyword,
-	"NOCREATEDB":   models.TokenTypeKeyword,
-	"NOCREATEROLE": models.TokenTypeKeyword,
-	"OWNER":        models.TokenTypeKeyword,
-	"VALID":        models.TokenTypeKeyword,
-	"UNTIL":        models.TokenTypeKeyword,
-	"CONNECTOR":    models.TokenTypeKeyword,
-	"POLICY":       models.TokenTypeKeyword,
-	"DCPROPERTIES": models.TokenTypeKeyword,
-	"HASH":         models.TokenTypeKeyword,
-	"RESET":        models.TokenTypeKeyword,
-	"MEMBER":       models.TokenTypeKeyword,
-	"URL":          models.TokenTypeKeyword,
-	"UNKNOWN":      models.TokenTypeKeyword,
+	"HASH":    models.TokenTypeKeyword,
+	"UNKNOWN": models.TokenTypeKeyword,
 }
 
 // normalizeTokens ensures all tokens have ModelType set by inferring it from the string Type.
@@ -951,10 +929,12 @@ func normalizeTokens(tokens []token.Token) []token.Token {
 	copied := make([]token.Token, len(tokens))
 	copy(copied, tokens)
 	for i := range copied {
-		if copied[i].ModelType == modelTypeUnset {
+		// Normalize tokens that either have no ModelType set, or have the generic
+		// TokenTypeKeyword when a more specific type is available in the map.
+		if copied[i].ModelType == modelTypeUnset || copied[i].ModelType == models.TokenTypeKeyword {
 			if mt, ok := stringTypeToModelType[copied[i].Type]; ok {
 				copied[i].ModelType = mt
-			} else {
+			} else if copied[i].ModelType == modelTypeUnset {
 				copied[i].ModelType = models.TokenTypeKeyword
 			}
 		}
@@ -970,7 +950,7 @@ func (p *Parser) isType(expected models.TokenType) bool {
 }
 
 // matchType checks if the current token's ModelType matches the expected type and advances if so.
-func (p *Parser) matchType(expected models.TokenType) bool { //nolint:unused // symmetric with matchToken; used in tests, kept for API completeness
+func (p *Parser) matchType(expected models.TokenType) bool {
 	if p.currentToken.ModelType == expected {
 		p.advance()
 		return true
@@ -1142,7 +1122,7 @@ func (p *Parser) canBeAlias() bool {
 // parseAlterTableStmt is a simplified version for the parser implementation
 // It delegates to the more comprehensive parseAlterStatement in alter.go
 func (p *Parser) parseAlterTableStmt() (ast.Statement, error) {
-	// We've already consumed the ALTER token in matchToken
+	// We've already consumed the ALTER token in matchType
 	// This is just a placeholder that delegates to the main implementation
 	return p.parseAlterStatement()
 }

@@ -84,7 +84,7 @@ func TestAPIStability_PublicFunctions(t *testing.T) {
 		{
 			name:         "parser.NewParser",
 			function:     parser.NewParser,
-			expectedType: "func() *parser.Parser",
+			expectedType: "func(...parser.ParserOption) *parser.Parser",
 		},
 	}
 

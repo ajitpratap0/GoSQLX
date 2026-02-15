@@ -148,8 +148,7 @@ func TestAPIStability_TokenTypes(t *testing.T) {
 	// Critical token types that must not change - verify exported constants exist and have correct values
 	// Only test tokens that are actually exported from the token package
 	tests := []struct {
-		name string
-		//lint:ignore SA1019 intentional use during #215 migration
+		name          string
 		actualValue   token.Type
 		expectedValue string
 	}{

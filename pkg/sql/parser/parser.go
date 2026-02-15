@@ -665,9 +665,7 @@ func NewParser() *Parser {
 }
 
 // matchToken checks if the current token matches the expected type
-//
-//lint:ignore SA1019 intentional use during #215 migration
-func (p *Parser) matchToken(expected token.Type) bool { //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
+func (p *Parser) matchToken(expected token.Type) bool {
 	if mt, ok := stringTypeToModelType[expected]; ok && mt != models.TokenTypeKeyword {
 		// Specific ModelType — use fast integer comparison
 		if p.currentToken.ModelType == mt {
@@ -721,9 +719,7 @@ func (p *Parser) peekToken() token.Token {
 // This is used by normalizeTokens() to ensure all tokens have ModelType set,
 // enabling pure integer comparison in isType() without string fallbacks.
 // Tokens with types not in this map get models.TokenTypeKeyword as a generic fallback.
-//
-//lint:ignore SA1019 intentional use of deprecated token.Type during #215 migration — this map bridges string→int types
-var stringTypeToModelType = map[token.Type]models.TokenType{ //nolint:staticcheck // bridge map for #215 migration
+var stringTypeToModelType = map[token.Type]models.TokenType{
 	// Special tokens
 	"EOF":   models.TokenTypeEOF,
 	"IDENT": models.TokenTypeIdentifier,

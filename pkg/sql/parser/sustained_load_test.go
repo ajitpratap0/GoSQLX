@@ -473,8 +473,8 @@ func TestSustainedLoad_VaryingWorkers(t *testing.T) {
 	duration := 1 * time.Second
 	workerCounts := []int{10, 50, 100}
 	if raceEnabled {
-		duration = 1 * time.Second        // Reduce with race detector
-		workerCounts = []int{10, 50}      // Reduce worker counts
+		duration = 1 * time.Second   // Reduce with race detector
+		workerCounts = []int{10, 50} // Reduce worker counts
 	}
 
 	sql := []byte("SELECT id, name FROM users WHERE active = true")

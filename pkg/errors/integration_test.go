@@ -45,8 +45,8 @@ func TestErrorPropagation_TokenizerToParser(t *testing.T) {
 		{
 			name:          "unexpected keyword usage",
 			sql:           "SELECT FROM users",
-			expectedCode:  errors.ErrCodeUnexpectedToken,
-			expectedInMsg: "unexpected",
+			expectedCode:  errors.ErrCodeExpectedToken,
+			expectedInMsg: "expected",
 		},
 	}
 
@@ -134,7 +134,7 @@ func TestErrorCodeExtraction(t *testing.T) {
 		{
 			name:         "invalid WHERE clause",
 			sql:          "SELECT * FROM users WHERE",
-			expectedCode: errors.ErrCodeUnexpectedToken, // Unexpected EOF after WHERE
+			expectedCode: errors.ErrCodeExpectedToken, // Expected expression after WHERE, got EOF
 		},
 	}
 

@@ -841,9 +841,10 @@ func TestLateralJoinParsing(sql string) {
     }
 
     // Parse
-    parserTokens, _ := parser.ConvertTokensForParser(tokens)
     p := parser.NewParser()
-    astTree, err := p.Parse(parserTokens)
+        defer p.Release()
+    p := parser.NewParser()
+    astTree, err := p.ParseFromModelTokens(tokens)
     if err != nil {
         log.Printf("Parse failed: %v", err)
         return
@@ -1440,8 +1441,9 @@ func ProcessManyQueries(queries []string) {
             continue
         }
 
-        parserTokens, _ := parser.ConvertTokensForParser(tokens)
-        astTree, err := p.Parse(parserTokens)
+        p := parser.NewParser()
+        defer p.Release()
+        astTree, err := p.ParseFromModelTokens(tokens)
         if err != nil {
             continue
         }
@@ -1723,7 +1725,8 @@ func TestParser(sql string) {
     }
 
     // Convert tokens
-    parserTokens, err := parser.ConvertTokensForParser(tokens)
+    p := parser.NewParser()
+    defer p.Release()
     if err != nil {
         fmt.Printf("Token conversion error: %v\n", err)
         return
@@ -1731,7 +1734,7 @@ func TestParser(sql string) {
 
     // Parse
     p := parser.NewParser()
-    astTree, err := p.Parse(parserTokens)
+    astTree, err := p.ParseFromModelTokens(tokens)
     if err != nil {
         fmt.Printf("Parse error: %v\n", err)
         return

@@ -196,7 +196,8 @@ func main() {
     }
 
     // Convert tokens for parser
-    parserTokens, err := parser.ConvertTokensForParser(tokens)
+    p := parser.NewParser()
+    defer p.Release()
     if err != nil {
         panic(err)
     }
@@ -205,7 +206,7 @@ func main() {
     p := parser.NewParser()
     defer p.Release()
 
-    ast, err := p.Parse(parserTokens)
+    ast, err := p.ParseFromModelTokens(tokens)
     if err != nil {
         panic(err)
     }
@@ -570,11 +571,12 @@ func parseSQL(sql string) *ast.AST {
     defer tokenizer.PutTokenizer(tkz)
     tokens, _ := tkz.Tokenize([]byte(sql))
 
-    parserTokens, _ := parser.ConvertTokensForParser(tokens)
+    p := parser.NewParser()
+        defer p.Release()
 
     p := parser.NewParser()
     defer p.Release()
-    astObj, _ := p.Parse(parserTokens)
+    astObj, _ := p.ParseFromModelTokens(tokens)
 
     return astObj
 }

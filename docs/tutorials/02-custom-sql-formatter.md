@@ -194,7 +194,8 @@ func (f *Formatter) Format(sql string) (string, error) {
     }
 
     // Convert tokens for parser
-    convertedTokens, err := parser.ConvertTokensForParser(tokens)
+    p := parser.NewParser()
+    defer p.Release()
     if err != nil {
         return "", fmt.Errorf("token conversion error: %w", err)
     }
@@ -202,7 +203,7 @@ func (f *Formatter) Format(sql string) (string, error) {
     // Create parser and parse
     p := parser.NewParser()
 
-    result, err := p.Parse(convertedTokens)
+    result, err := p.ParseFromModelTokens(tokens)
     if err != nil {
         return "", fmt.Errorf("parse error: %w", err)
     }

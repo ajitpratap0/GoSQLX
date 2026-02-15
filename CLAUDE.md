@@ -35,8 +35,7 @@ GoSQLX is a **production-ready**, **race-free**, high-performance SQL parsing SD
 
 ```
 Raw SQL bytes → tokenizer.Tokenize() → []models.TokenWithSpan
-             → parser.ConvertTokensForParser() → []token.Token
-             → parser.Parse() → *ast.AST
+             → parser.ParseFromModelTokens() → *ast.AST
 ```
 
 ### Object Pooling (Critical for Performance)

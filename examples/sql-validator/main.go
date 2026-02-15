@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/errors"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
@@ -155,16 +155,7 @@ func validateSQL(sql string, dialect string, verbose bool) ValidationResult {
 	p := parser.NewParser()
 	defer p.Release()
 
-	// Convert tokens for parser
-	parserTokens := make([]token.Token, len(tokens))
-	for i, t := range tokens {
-		parserTokens[i] = token.Token{
-			Type:    token.Type(t.Token.Value), 
-			Literal: string(t.Token.Value),
-		}
-	}
-
-	ast, err := p.Parse(parserTokens)
+	astResult, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
 		result.Valid = false
 		result.Error = err
@@ -172,21 +163,21 @@ func validateSQL(sql string, dialect string, verbose bool) ValidationResult {
 	}
 
 	// Extract metadata
-	if ast != nil {
-		result.StatementType = detectStatementType(parserTokens)
-		result.Tables = extractTableNames(parserTokens)
-		result.Warnings = checkForWarnings(parserTokens, dialect)
+	if astResult != nil {
+		result.StatementType = detectStatementType(tokens)
+		result.Tables = extractTableNames(tokens)
+		result.Warnings = checkForWarnings(tokens, dialect)
 	}
 
 	return result
 }
 
-func detectStatementType(tokens []token.Token) string {
+func detectStatementType(tokens []models.TokenWithSpan) string {
 	if len(tokens) == 0 {
 		return "UNKNOWN"
 	}
 
-	switch strings.ToUpper(tokens[0].Literal) {
+	switch strings.ToUpper(tokens[0].Token.Value) {
 	case "SELECT":
 		return "SELECT"
 	case "INSERT":
@@ -197,7 +188,7 @@ func detectStatementType(tokens []token.Token) string {
 		return "DELETE"
 	case "CREATE":
 		if len(tokens) > 1 {
-			return "CREATE " + strings.ToUpper(tokens[1].Literal)
+			return "CREATE " + strings.ToUpper(tokens[1].Token.Value)
 		}
 		return "CREATE"
 	case "ALTER":
@@ -209,20 +200,20 @@ func detectStatementType(tokens []token.Token) string {
 	}
 }
 
-func extractTableNames(tokens []token.Token) []string {
+func extractTableNames(tokens []models.TokenWithSpan) []string {
 	tables := []string{}
 	fromNext := false
 	joinNext := false
 
-	for _, token := range tokens {
-		upper := strings.ToUpper(token.Literal)
+	for _, t := range tokens {
+		upper := strings.ToUpper(t.Token.Value)
 		if upper == "FROM" || upper == "INTO" || upper == "UPDATE" {
 			fromNext = true
 		} else if upper == "JOIN" {
 			joinNext = true
 		} else if fromNext || joinNext {
-			if token.Type != "" { // Identifier (non-empty type)
-				tables = append(tables, token.Literal)
+			if t.Token.Type == models.TokenTypeIdentifier {
+				tables = append(tables, t.Token.Value)
 				fromNext = false
 				joinNext = false
 			}
@@ -232,15 +223,15 @@ func extractTableNames(tokens []token.Token) []string {
 	return tables
 }
 
-func checkForWarnings(tokens []token.Token, dialect string) []string {
+func checkForWarnings(tokens []models.TokenWithSpan, dialect string) []string {
 	warnings := []string{}
 
 	// Check for dialect-specific issues
-	for _, token := range tokens {
-		upper := strings.ToUpper(token.Literal)
+	for _, t := range tokens {
+		upper := strings.ToUpper(t.Token.Value)
 
 		// MySQL-specific
-		if dialect != "mysql" && strings.Contains(token.Literal, "`") {
+		if dialect != "mysql" && strings.Contains(t.Token.Value, "`") {
 			warnings = append(warnings, "Backtick identifiers are MySQL-specific")
 		}
 
@@ -250,7 +241,7 @@ func checkForWarnings(tokens []token.Token, dialect string) []string {
 		}
 
 		// SQL Server-specific
-		if dialect != "mssql" && strings.HasPrefix(token.Literal, "[") {
+		if dialect != "mssql" && strings.HasPrefix(t.Token.Value, "[") {
 			warnings = append(warnings, "Bracket identifiers are SQL Server-specific")
 		}
 	}

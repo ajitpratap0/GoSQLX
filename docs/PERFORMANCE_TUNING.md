@@ -218,9 +218,10 @@ func profileCPU() {
         tokens, _ := tkz.Tokenize(sql)
         tokenizer.PutTokenizer(tkz)
 
-        convertedTokens, _ := parser.ConvertTokensForParser(tokens)
         p := parser.NewParser()
-        _, _ = p.Parse(convertedTokens)
+        defer p.Release()
+        p := parser.NewParser()
+        _, _ = p.ParseFromModelTokens(tokens)
     }
 }
 ```

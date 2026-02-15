@@ -73,6 +73,13 @@ func lintRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no input provided: specify file paths or pipe SQL via stdin")
 	}
 
+	// If single argument that looks like inline SQL (not a file), lint it directly
+	if len(args) == 1 {
+		if _, statErr := os.Stat(args[0]); statErr != nil && looksLikeSQL(args[0]) {
+			return lintInlineSQL(cmd, args[0])
+		}
+	}
+
 	// Create linter with default rules
 	l := createLinter()
 
@@ -167,7 +174,7 @@ func lintRun(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Exit with error code if there were violations or file errors
+	// Return error if there were violations or file errors
 	errorCount := 0
 	warningCount := 0
 	fileErrorCount := 0
@@ -185,12 +192,11 @@ func lintRun(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Exit with error if there are file errors, lint errors, or warnings with fail-on-warn flag
 	if fileErrorCount > 0 {
 		return fmt.Errorf("%d file(s) had errors", fileErrorCount)
 	}
 	if errorCount > 0 || (lintFailOnWarn && warningCount > 0) {
-		os.Exit(1)
+		return fmt.Errorf("%d error(s) and %d warning(s) found", errorCount, warningCount)
 	}
 
 	return nil
@@ -274,7 +280,55 @@ func lintFromStdin(cmd *cobra.Command) error {
 	}
 
 	if errorCount > 0 || (lintFailOnWarn && warningCount > 0) {
-		os.Exit(1)
+		return fmt.Errorf("%d error(s) and %d warning(s) found", errorCount, warningCount)
+	}
+
+	return nil
+}
+
+// lintInlineSQL lints inline SQL passed as a command argument
+func lintInlineSQL(cmd *cobra.Command, sql string) error {
+	l := createLinter()
+	result := l.LintString(sql, "inline")
+
+	var outputBuf bytes.Buffer
+	outWriter := io.Writer(cmd.OutOrStdout())
+	if outputFile != "" {
+		outWriter = &outputBuf
+	}
+
+	if len(result.Violations) == 0 {
+		fmt.Fprintln(outWriter, "No violations found.")
+		if outputFile != "" {
+			return WriteOutput(outputBuf.Bytes(), outputFile, cmd.OutOrStdout())
+		}
+		return nil
+	}
+
+	fmt.Fprintf(outWriter, "Found %d violation(s):\n\n", len(result.Violations))
+	for i, violation := range result.Violations {
+		fmt.Fprintf(outWriter, "%d. %s\n", i+1, linter.FormatViolation(violation))
+	}
+
+	if outputFile != "" {
+		if err := WriteOutput(outputBuf.Bytes(), outputFile, cmd.OutOrStdout()); err != nil {
+			return err
+		}
+	}
+
+	errorCount := 0
+	warningCount := 0
+	for _, violation := range result.Violations {
+		switch violation.Severity {
+		case linter.SeverityError:
+			errorCount++
+		case linter.SeverityWarning:
+			warningCount++
+		}
+	}
+
+	if errorCount > 0 || (lintFailOnWarn && warningCount > 0) {
+		return fmt.Errorf("%d error(s) and %d warning(s) found", errorCount, warningCount)
 	}
 
 	return nil

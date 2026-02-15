@@ -56,17 +56,22 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 
 	// Parse VALUES or SELECT
 	var values [][]ast.Expression
-	var query ast.Statement
+	var query ast.QueryExpression
 
-	if p.isType(models.TokenTypeSelect) {
+	switch {
+	case p.isType(models.TokenTypeSelect):
 		// INSERT ... SELECT syntax
 		p.advance() // Consume SELECT
 		stmt, err := p.parseSelectWithSetOperations()
 		if err != nil {
 			return nil, err
 		}
-		query = stmt
-	} else if p.isType(models.TokenTypeValues) {
+		qe, ok := stmt.(ast.QueryExpression)
+		if !ok {
+			return nil, fmt.Errorf("expected SELECT or set operation in INSERT ... SELECT, got %T", stmt)
+		}
+		query = qe
+	case p.isType(models.TokenTypeValues):
 		p.advance() // Consume VALUES
 
 		// Parse value rows - supports multi-row INSERT: VALUES (a, b), (c, d), (e, f)
@@ -111,7 +116,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 			}
 			p.advance() // Consume comma between rows
 		}
-	} else {
+	default:
 		return nil, p.expectedError("VALUES or SELECT")
 	}
 
@@ -473,7 +478,7 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 				if !p.isIdentifier() && !p.canBeAlias() {
 					return nil, p.expectedError("column name after .")
 				}
-				columnName = columnName + "." + p.currentToken.Literal
+				columnName = fmt.Sprintf("%s.%s", columnName, p.currentToken.Literal)
 				p.advance()
 			}
 

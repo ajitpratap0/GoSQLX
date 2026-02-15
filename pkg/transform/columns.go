@@ -1,6 +1,7 @@
 package transform
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -34,10 +35,16 @@ func RemoveColumn(name string) Rule {
 			return err
 		}
 		filtered := make([]ast.Expression, 0, len(sel.Columns))
+		found := false
 		for _, col := range sel.Columns {
-			if !columnMatches(col, name) {
+			if columnMatches(col, name) {
+				found = true
+			} else {
 				filtered = append(filtered, col)
 			}
+		}
+		if !found {
+			return fmt.Errorf("column %q not found", name)
 		}
 		sel.Columns = filtered
 		return nil

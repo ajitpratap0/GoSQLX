@@ -9,6 +9,11 @@ import (
 	"strings"
 )
 
+// Formatter is the interface for AST nodes that support configurable SQL formatting.
+type Formatter interface {
+	Format(FormatOptions) string
+}
+
 // KeywordCase controls how SQL keywords are emitted.
 type KeywordCase int
 
@@ -122,7 +127,7 @@ func (f *formatter) result() string {
 func (a AST) Format(opts FormatOptions) string {
 	parts := make([]string, 0, len(a.Statements))
 	for _, stmt := range a.Statements {
-		if s, ok := stmt.(interface{ Format(FormatOptions) string }); ok {
+		if s, ok := stmt.(Formatter); ok {
 			parts = append(parts, s.Format(opts))
 		} else if s, ok := stmt.(interface{ SQL() string }); ok {
 			parts = append(parts, s.SQL())
@@ -270,7 +275,7 @@ func (i *InsertStatement) Format(opts FormatOptions) string {
 
 	if i.Query != nil {
 		sb.WriteString(f.clauseSep())
-		if fq, ok := i.Query.(interface{ Format(FormatOptions) string }); ok {
+		if fq, ok := i.Query.(Formatter); ok {
 			sb.WriteString(fq.Format(opts))
 		} else {
 			sb.WriteString(stmtSQL(i.Query))
@@ -511,7 +516,7 @@ func (s *SetOperation) Format(opts FormatOptions) string {
 	sb := f.sb
 
 	if s.Left != nil {
-		if ls, ok := s.Left.(interface{ Format(FormatOptions) string }); ok {
+		if ls, ok := s.Left.(Formatter); ok {
 			sb.WriteString(ls.Format(opts))
 		} else {
 			sb.WriteString(stmtSQL(s.Left))
@@ -525,7 +530,7 @@ func (s *SetOperation) Format(opts FormatOptions) string {
 	sb.WriteString(f.kw(op))
 	sb.WriteString(f.clauseSep())
 	if s.Right != nil {
-		if rs, ok := s.Right.(interface{ Format(FormatOptions) string }); ok {
+		if rs, ok := s.Right.(Formatter); ok {
 			sb.WriteString(rs.Format(opts))
 		} else {
 			sb.WriteString(stmtSQL(s.Right))
@@ -676,7 +681,7 @@ func (c *CreateViewStatement) Format(opts FormatOptions) string {
 	sb.WriteString(" ")
 	sb.WriteString(f.kw("AS"))
 	sb.WriteString(f.clauseSep())
-	if qs, ok := c.Query.(interface{ Format(FormatOptions) string }); ok {
+	if qs, ok := c.Query.(Formatter); ok {
 		sb.WriteString(qs.Format(opts))
 	} else {
 		sb.WriteString(stmtSQL(c.Query))
@@ -726,7 +731,7 @@ func (c *CreateMaterializedViewStatement) Format(opts FormatOptions) string {
 	sb.WriteString(" ")
 	sb.WriteString(f.kw("AS"))
 	sb.WriteString(f.clauseSep())
-	if qs, ok := c.Query.(interface{ Format(FormatOptions) string }); ok {
+	if qs, ok := c.Query.(Formatter); ok {
 		sb.WriteString(qs.Format(opts))
 	} else {
 		sb.WriteString(stmtSQL(c.Query))
@@ -849,7 +854,7 @@ func formatExpr(e Expression, opts FormatOptions) string {
 	if e == nil {
 		return ""
 	}
-	if fe, ok := e.(interface{ Format(FormatOptions) string }); ok {
+	if fe, ok := e.(Formatter); ok {
 		return fe.Format(opts)
 	}
 	return exprSQL(e)
@@ -860,7 +865,7 @@ func formatStmt(s Statement, opts FormatOptions) string {
 	if s == nil {
 		return ""
 	}
-	if fs, ok := s.(interface{ Format(FormatOptions) string }); ok {
+	if fs, ok := s.(Formatter); ok {
 		return fs.Format(opts)
 	}
 	return stmtSQL(s)
@@ -1108,7 +1113,7 @@ func formatWith(w *WithClause, f *formatter) string {
 			s += "(" + strings.Join(cte.Columns, ", ") + ") "
 		}
 		s += f.kw("AS") + " ("
-		if qs, ok := cte.Statement.(interface{ Format(FormatOptions) string }); ok {
+		if qs, ok := cte.Statement.(Formatter); ok {
 			s += qs.Format(f.opts)
 		} else {
 			s += stmtSQL(cte.Statement)

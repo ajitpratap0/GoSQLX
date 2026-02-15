@@ -5,10 +5,11 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/output"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
 var (
@@ -65,6 +66,13 @@ func validateRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no input provided: specify file paths or pipe SQL via stdin")
 	}
 
+	// If single argument that looks like inline SQL (not a file), validate it directly
+	if len(args) == 1 {
+		if _, err := os.Stat(args[0]); err != nil && looksLikeSQL(args[0]) {
+			return validateInlineSQL(cmd, args[0])
+		}
+	}
+
 	// Load configuration with CLI flag overrides
 	cfg, err := config.LoadDefault()
 	if err != nil {
@@ -73,30 +81,22 @@ func validateRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Validate output format
-	if validateOutputFormat != "" && validateOutputFormat != "text" && validateOutputFormat != "json" && validateOutputFormat != "sarif" {
-		return fmt.Errorf("invalid output format: %s (valid options: text, json, sarif)", validateOutputFormat)
+	if validateOutputFormat != "" && validateOutputFormat != OutputFormatText && validateOutputFormat != OutputFormatJSON && validateOutputFormat != OutputFormatSARIF {
+		return fmt.Errorf("invalid output format: %s (valid options: %s, %s, %s)", validateOutputFormat, OutputFormatText, OutputFormatJSON, OutputFormatSARIF)
 	}
 
 	// Track which flags were explicitly set
-	flagsChanged := make(map[string]bool)
-	cmd.Flags().Visit(func(f *pflag.Flag) {
-		flagsChanged[f.Name] = true
-	})
-	if cmd.Parent() != nil && cmd.Parent().PersistentFlags() != nil {
-		cmd.Parent().PersistentFlags().Visit(func(f *pflag.Flag) {
-			flagsChanged[f.Name] = true
-		})
-	}
+	flagsChanged := trackChangedFlags(cmd)
 
 	// Create validator options from config and flags
 	// When outputting SARIF or JSON, automatically enable quiet mode to avoid mixing output
-	quietMode := validateQuiet || validateOutputFormat == "sarif" || validateOutputFormat == "json"
+	quietMode := validateQuiet || validateOutputFormat == OutputFormatSARIF || validateOutputFormat == OutputFormatJSON
 
 	opts := ValidatorOptionsFromConfig(cfg, flagsChanged, ValidatorFlags{
 		Recursive:  validateRecursive,
 		Pattern:    validatePattern,
 		Quiet:      quietMode,
-		ShowStats:  validateStats && validateOutputFormat == "text", // Only show text stats for text output
+		ShowStats:  validateStats && validateOutputFormat == OutputFormatText, // Only show text stats for text output
 		Dialect:    validateDialect,
 		StrictMode: validateStrict,
 		Verbose:    verbose,
@@ -113,7 +113,7 @@ func validateRun(cmd *cobra.Command, args []string) error {
 
 	// Handle different output formats
 	switch validateOutputFormat {
-	case "sarif":
+	case OutputFormatSARIF:
 		// Generate SARIF output
 		sarifData, err := output.FormatSARIF(result, Version)
 		if err != nil {
@@ -131,7 +131,7 @@ func validateRun(cmd *cobra.Command, args []string) error {
 		} else {
 			fmt.Fprint(cmd.OutOrStdout(), string(sarifData))
 		}
-	case "json":
+	case OutputFormatJSON:
 		// Generate JSON output
 		jsonData, err := output.FormatValidationJSON(result, args, validateStats)
 		if err != nil {
@@ -152,9 +152,9 @@ func validateRun(cmd *cobra.Command, args []string) error {
 	}
 	// Default text output is already handled by the validator (no case needed)
 
-	// Exit with error code if there were invalid files
+	// Return error if there were invalid files
 	if result.InvalidFiles > 0 {
-		os.Exit(1)
+		return fmt.Errorf("validation failed: %d invalid file(s)", result.InvalidFiles)
 	}
 
 	return nil
@@ -196,23 +196,15 @@ func validateFromStdin(cmd *cobra.Command) error {
 	}
 
 	// Track which flags were explicitly set
-	flagsChanged := make(map[string]bool)
-	cmd.Flags().Visit(func(f *pflag.Flag) {
-		flagsChanged[f.Name] = true
-	})
-	if cmd.Parent() != nil && cmd.Parent().PersistentFlags() != nil {
-		cmd.Parent().PersistentFlags().Visit(func(f *pflag.Flag) {
-			flagsChanged[f.Name] = true
-		})
-	}
+	flagsChanged := trackChangedFlags(cmd)
 
 	// Create validator options
-	quietMode := validateQuiet || validateOutputFormat == "sarif" || validateOutputFormat == "json"
+	quietMode := validateQuiet || validateOutputFormat == OutputFormatSARIF || validateOutputFormat == OutputFormatJSON
 	opts := ValidatorOptionsFromConfig(cfg, flagsChanged, ValidatorFlags{
 		Recursive:  false, // stdin is always single input
 		Pattern:    "",
 		Quiet:      quietMode,
-		ShowStats:  validateStats && validateOutputFormat == "text", // Only show text stats for text output
+		ShowStats:  validateStats && validateOutputFormat == OutputFormatText, // Only show text stats for text output
 		Dialect:    validateDialect,
 		StrictMode: validateStrict,
 		Verbose:    verbose,
@@ -233,7 +225,7 @@ func validateFromStdin(cmd *cobra.Command) error {
 
 	// Handle different output formats
 	switch validateOutputFormat {
-	case "sarif":
+	case OutputFormatSARIF:
 		sarifData, err := output.FormatSARIF(result, Version)
 		if err != nil {
 			return fmt.Errorf("failed to generate SARIF output: %w", err)
@@ -246,7 +238,7 @@ func validateFromStdin(cmd *cobra.Command) error {
 		if validateOutputFile != "" && !opts.Quiet {
 			fmt.Fprintf(cmd.OutOrStdout(), "SARIF output written to %s\n", validateOutputFile)
 		}
-	case "json":
+	case OutputFormatJSON:
 		jsonData, err := output.FormatValidationJSON(result, []string{"stdin"}, validateStats)
 		if err != nil {
 			return fmt.Errorf("failed to generate JSON output: %w", err)
@@ -261,11 +253,47 @@ func validateFromStdin(cmd *cobra.Command) error {
 		}
 	}
 
-	// Exit with error code if validation failed
+	// Return error if validation failed
 	if result.InvalidFiles > 0 {
-		os.Exit(1)
+		return fmt.Errorf("validation failed: %d invalid file(s)", result.InvalidFiles)
 	}
 
+	return nil
+}
+
+// validateInlineSQL validates inline SQL passed as a command argument
+func validateInlineSQL(cmd *cobra.Command, sql string) error {
+	// Parse the SQL string directly using tokenizer and parser
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+
+	tokens, err := tkz.Tokenize([]byte(sql))
+	if err != nil {
+		if !validateQuiet {
+			fmt.Fprintf(cmd.ErrOrStderr(), "✗ Invalid SQL: %v\n", err)
+		}
+		return fmt.Errorf("validation failed: tokenization error: %w", err)
+	}
+
+	if len(tokens) == 0 {
+		if !validateQuiet {
+			fmt.Fprintln(cmd.OutOrStdout(), "✓ Empty input (no statements)")
+		}
+		return nil
+	}
+
+	p := parser.NewParser()
+	_, err = p.ParseFromModelTokens(tokens)
+	if err != nil {
+		if !validateQuiet {
+			fmt.Fprintf(cmd.ErrOrStderr(), "✗ Invalid SQL: %v\n", err)
+		}
+		return fmt.Errorf("validation failed: parse error: %w", err)
+	}
+
+	if !validateQuiet {
+		fmt.Fprintln(cmd.OutOrStdout(), "✓ Valid SQL")
+	}
 	return nil
 }
 

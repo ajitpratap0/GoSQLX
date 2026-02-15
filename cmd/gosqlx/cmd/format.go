@@ -3,9 +3,9 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
 )
@@ -58,6 +58,13 @@ func formatRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no input provided: specify file paths or pipe SQL via stdin")
 	}
 
+	// If single argument that looks like inline SQL (not a file), format it directly
+	if len(args) == 1 {
+		if _, err := os.Stat(args[0]); err != nil && looksLikeSQL(args[0]) {
+			return formatInlineSQL(cmd, args[0])
+		}
+	}
+
 	// Load configuration with CLI flag overrides
 	cfg, err := config.LoadDefault()
 	if err != nil {
@@ -66,15 +73,7 @@ func formatRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Track which flags were explicitly set
-	flagsChanged := make(map[string]bool)
-	cmd.Flags().Visit(func(f *pflag.Flag) {
-		flagsChanged[f.Name] = true
-	})
-	if cmd.Parent() != nil && cmd.Parent().PersistentFlags() != nil {
-		cmd.Parent().PersistentFlags().Visit(func(f *pflag.Flag) {
-			flagsChanged[f.Name] = true
-		})
-	}
+	flagsChanged := trackChangedFlags(cmd)
 
 	// Create formatter options from config and flags
 	opts := FormatterOptionsFromConfig(cfg, flagsChanged, FormatterFlags{
@@ -135,15 +134,7 @@ func formatFromStdin(cmd *cobra.Command) error {
 	}
 
 	// Track which flags were explicitly set
-	flagsChanged := make(map[string]bool)
-	cmd.Flags().Visit(func(f *pflag.Flag) {
-		flagsChanged[f.Name] = true
-	})
-	if cmd.Parent() != nil && cmd.Parent().PersistentFlags() != nil {
-		cmd.Parent().PersistentFlags().Visit(func(f *pflag.Flag) {
-			flagsChanged[f.Name] = true
-		})
-	}
+	flagsChanged := trackChangedFlags(cmd)
 
 	// Create formatter options
 	opts := FormatterOptionsFromConfig(cfg, flagsChanged, FormatterFlags{
@@ -179,12 +170,51 @@ func formatFromStdin(cmd *cobra.Command) error {
 		return nil
 	}
 
-	// Write formatted output
+	// Write formatted output with trailing newline
+	if !strings.HasSuffix(formattedSQL, "\n") {
+		formattedSQL += "\n"
+	}
 	if err := WriteOutput([]byte(formattedSQL), outputFile, cmd.OutOrStdout()); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// formatInlineSQL formats inline SQL passed as a command argument
+func formatInlineSQL(cmd *cobra.Command, sql string) error {
+	// Load configuration
+	cfg, err := config.LoadDefault()
+	if err != nil {
+		cfg = config.DefaultConfig()
+	}
+
+	// Track which flags were explicitly set
+	flagsChanged := trackChangedFlags(cmd)
+
+	opts := FormatterOptionsFromConfig(cfg, flagsChanged, FormatterFlags{
+		InPlace:    false,
+		IndentSize: formatIndentSize,
+		Uppercase:  formatUppercase,
+		Compact:    formatCompact,
+		Check:      formatCheck,
+		MaxLine:    formatMaxLine,
+		Verbose:    verbose,
+		Output:     outputFile,
+	})
+
+	formatter := NewFormatter(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
+	formattedSQL, err := formatter.formatSQL(sql)
+	if err != nil {
+		return fmt.Errorf("formatting failed: %w", err)
+	}
+
+	// Ensure trailing newline
+	if !strings.HasSuffix(formattedSQL, "\n") {
+		formattedSQL += "\n"
+	}
+
+	return WriteOutput([]byte(formattedSQL), outputFile, cmd.OutOrStdout())
 }
 
 func init() {

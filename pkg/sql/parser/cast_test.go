@@ -15,16 +15,15 @@ import (
 func TestParser_CastExpression_Simple(t *testing.T) {
 	// SELECT CAST(id AS VARCHAR) FROM users
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "CAST", Literal: "CAST"},
-		{Type: "(", Literal: "("},
-		{Type: "IDENT", Literal: "id"},
-		{Type: "AS", Literal: "AS"},
-		{Type: "IDENT", Literal: "VARCHAR"},
-		{Type: ")", Literal: ")"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "users"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeCast, Literal: "CAST"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeIdentifier, Literal: "id"},
+		{Type: models.TokenTypeAs, Literal: "AS"},
+		{Type: models.TokenTypeIdentifier, Literal: "VARCHAR"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "users"},
 	}
 
 	parser := NewParser()
@@ -68,21 +67,20 @@ func TestParser_CastExpression_Simple(t *testing.T) {
 func TestParser_CastExpression_WithPrecision(t *testing.T) {
 	// SELECT CAST(price AS DECIMAL(10,2)) FROM products
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "CAST", Literal: "CAST"},
-		{Type: "(", Literal: "("},
-		{Type: "IDENT", Literal: "price"},
-		{Type: "AS", Literal: "AS"},
-		{Type: "IDENT", Literal: "DECIMAL"},
-		{Type: "(", Literal: "("},
-		{Type: "INT", Literal: "10"},
-		{Type: ",", Literal: ","},
-		{Type: "INT", Literal: "2"},
-		{Type: ")", Literal: ")"},
-		{Type: ")", Literal: ")"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "products"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeCast, Literal: "CAST"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeIdentifier, Literal: "price"},
+		{Type: models.TokenTypeAs, Literal: "AS"},
+		{Type: models.TokenTypeIdentifier, Literal: "DECIMAL"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeNumber, Literal: "10"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeNumber, Literal: "2"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "products"},
 	}
 
 	parser := NewParser()
@@ -106,19 +104,18 @@ func TestParser_CastExpression_WithPrecision(t *testing.T) {
 func TestParser_CastExpression_VarcharWithLength(t *testing.T) {
 	// SELECT CAST(name AS VARCHAR(100)) FROM users
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "CAST", Literal: "CAST"},
-		{Type: "(", Literal: "("},
-		{Type: "IDENT", Literal: "name"},
-		{Type: "AS", Literal: "AS"},
-		{Type: "IDENT", Literal: "VARCHAR"},
-		{Type: "(", Literal: "("},
-		{Type: "INT", Literal: "100"},
-		{Type: ")", Literal: ")"},
-		{Type: ")", Literal: ")"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "users"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeCast, Literal: "CAST"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeIdentifier, Literal: "name"},
+		{Type: models.TokenTypeAs, Literal: "AS"},
+		{Type: models.TokenTypeIdentifier, Literal: "VARCHAR"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeNumber, Literal: "100"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "users"},
 	}
 
 	parser := NewParser()
@@ -142,23 +139,22 @@ func TestParser_CastExpression_VarcharWithLength(t *testing.T) {
 func TestParser_CastExpression_MultipleCasts(t *testing.T) {
 	// SELECT CAST(id AS VARCHAR), CAST(price AS DECIMAL) FROM products
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "CAST", Literal: "CAST"},
-		{Type: "(", Literal: "("},
-		{Type: "IDENT", Literal: "id"},
-		{Type: "AS", Literal: "AS"},
-		{Type: "IDENT", Literal: "VARCHAR"},
-		{Type: ")", Literal: ")"},
-		{Type: ",", Literal: ","},
-		{Type: "CAST", Literal: "CAST"},
-		{Type: "(", Literal: "("},
-		{Type: "IDENT", Literal: "price"},
-		{Type: "AS", Literal: "AS"},
-		{Type: "IDENT", Literal: "DECIMAL"},
-		{Type: ")", Literal: ")"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "products"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeCast, Literal: "CAST"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeIdentifier, Literal: "id"},
+		{Type: models.TokenTypeAs, Literal: "AS"},
+		{Type: models.TokenTypeIdentifier, Literal: "VARCHAR"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeCast, Literal: "CAST"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeIdentifier, Literal: "price"},
+		{Type: models.TokenTypeAs, Literal: "AS"},
+		{Type: models.TokenTypeIdentifier, Literal: "DECIMAL"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "products"},
 	}
 
 	parser := NewParser()
@@ -199,18 +195,17 @@ func TestParser_CastExpression_MultipleCasts(t *testing.T) {
 func TestParser_CastExpression_WithArithmetic(t *testing.T) {
 	// SELECT CAST(price * 1.1 AS DECIMAL) FROM products
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "CAST", Literal: "CAST"},
-		{Type: "(", Literal: "("},
-		{Type: "IDENT", Literal: "price"},
-		{Type: "*", Literal: "*"},
-		{Type: "FLOAT", Literal: "1.1"},
-		{Type: "AS", Literal: "AS"},
-		{Type: "IDENT", Literal: "DECIMAL"},
-		{Type: ")", Literal: ")"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "products"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeCast, Literal: "CAST"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeIdentifier, Literal: "price"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeNumber, Literal: "1.1"},
+		{Type: models.TokenTypeAs, Literal: "AS"},
+		{Type: models.TokenTypeIdentifier, Literal: "DECIMAL"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "products"},
 	}
 
 	parser := NewParser()
@@ -235,20 +230,19 @@ func TestParser_CastExpression_WithArithmetic(t *testing.T) {
 func TestParser_CastExpression_InWhereClause(t *testing.T) {
 	// SELECT * FROM users WHERE CAST(id AS INT) = 1
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "*", Literal: "*"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "users"},
-		{Type: "WHERE", Literal: "WHERE"},
-		{Type: "CAST", Literal: "CAST"},
-		{Type: "(", Literal: "("},
-		{Type: "IDENT", Literal: "id"},
-		{Type: "AS", Literal: "AS"},
-		{Type: "IDENT", Literal: "INT"},
-		{Type: ")", Literal: ")"},
-		{Type: "=", Literal: "="},
-		{Type: "INT", Literal: "1"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "users"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeCast, Literal: "CAST"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeIdentifier, Literal: "id"},
+		{Type: models.TokenTypeAs, Literal: "AS"},
+		{Type: models.TokenTypeIdentifier, Literal: "INT"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeEq, Literal: "="},
+		{Type: models.TokenTypeNumber, Literal: "1"},
 	}
 
 	parser := NewParser()
@@ -282,21 +276,20 @@ func TestParser_CastExpression_InWhereClause(t *testing.T) {
 func TestParser_CastExpression_Nested(t *testing.T) {
 	// SELECT CAST(CAST(id AS VARCHAR) AS TEXT) FROM users
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "CAST", Literal: "CAST"},
-		{Type: "(", Literal: "("},
-		{Type: "CAST", Literal: "CAST"},
-		{Type: "(", Literal: "("},
-		{Type: "IDENT", Literal: "id"},
-		{Type: "AS", Literal: "AS"},
-		{Type: "IDENT", Literal: "VARCHAR"},
-		{Type: ")", Literal: ")"},
-		{Type: "AS", Literal: "AS"},
-		{Type: "IDENT", Literal: "TEXT"},
-		{Type: ")", Literal: ")"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "users"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeCast, Literal: "CAST"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeCast, Literal: "CAST"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeIdentifier, Literal: "id"},
+		{Type: models.TokenTypeAs, Literal: "AS"},
+		{Type: models.TokenTypeIdentifier, Literal: "VARCHAR"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeAs, Literal: "AS"},
+		{Type: models.TokenTypeIdentifier, Literal: "TEXT"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "users"},
 	}
 
 	parser := NewParser()

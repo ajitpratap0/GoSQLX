@@ -17,31 +17,31 @@ func TestIsAnyType(t *testing.T) {
 	}{
 		{
 			name:     "match first type with ModelType",
-			token:    token.Token{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"},
+			token:    token.Token{Type: models.TokenTypeSelect, Literal: "SELECT"},
 			types:    []models.TokenType{models.TokenTypeSelect, models.TokenTypeInsert},
 			expected: true,
 		},
 		{
 			name:     "match second type with ModelType",
-			token:    token.Token{Type: "INSERT", ModelType: models.TokenTypeInsert, Literal: "INSERT"},
+			token:    token.Token{Type: models.TokenTypeInsert, Literal: "INSERT"},
 			types:    []models.TokenType{models.TokenTypeSelect, models.TokenTypeInsert},
 			expected: true,
 		},
 		{
 			name:     "no match with ModelType",
-			token:    token.Token{Type: "UPDATE", ModelType: models.TokenTypeUpdate, Literal: "UPDATE"},
+			token:    token.Token{Type: models.TokenTypeUpdate, Literal: "UPDATE"},
 			types:    []models.TokenType{models.TokenTypeSelect, models.TokenTypeInsert},
 			expected: false,
 		},
 		{
 			name:     "match after normalization",
-			token:    token.Token{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"},
+			token:    token.Token{Type: models.TokenTypeSelect, Literal: "SELECT"},
 			types:    []models.TokenType{models.TokenTypeSelect, models.TokenTypeInsert},
 			expected: true,
 		},
 		{
 			name:     "single type match",
-			token:    token.Token{Type: "DELETE", ModelType: models.TokenTypeDelete, Literal: "DELETE"},
+			token:    token.Token{Type: models.TokenTypeDelete, Literal: "DELETE"},
 			types:    []models.TokenType{models.TokenTypeDelete},
 			expected: true,
 		},
@@ -76,8 +76,8 @@ func TestMatchType(t *testing.T) {
 		{
 			name: "match and advance with ModelType",
 			tokens: []token.Token{
-				{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-				{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
 			},
 			matchAgainst: models.TokenTypeSelect,
 			wantMatch:    true,
@@ -86,8 +86,8 @@ func TestMatchType(t *testing.T) {
 		{
 			name: "no match, no advance",
 			tokens: []token.Token{
-				{Type: "INSERT", ModelType: models.TokenTypeInsert, Literal: "INSERT"},
-				{Type: "INTO", ModelType: models.TokenTypeInto, Literal: "INTO"},
+				{Type: models.TokenTypeInsert, Literal: "INSERT"},
+				{Type: models.TokenTypeInto, Literal: "INTO"},
 			},
 			matchAgainst: models.TokenTypeSelect,
 			wantMatch:    false,
@@ -96,9 +96,8 @@ func TestMatchType(t *testing.T) {
 		{
 			name: "match after normalization",
 			tokens: []token.Token{
-				{Type: "SELECT",
-					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-				{Type: "FROM", Literal: "FROM"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
 			},
 			matchAgainst: models.TokenTypeSelect,
 			wantMatch:    true,
@@ -129,12 +128,11 @@ func TestMatchType(t *testing.T) {
 // from string Type for tokens that don't have ModelType set.
 func TestNormalizeTokens(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "INSERT", Literal: "INSERT"},
-		{Type: "UPDATE", Literal: "UPDATE"},
-		{Type: "DELETE", Literal: "DELETE"},
-		{Type: "IDENT", Literal: "foo"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeInsert, Literal: "INSERT"},
+		{Type: models.TokenTypeUpdate, Literal: "UPDATE"},
+		{Type: models.TokenTypeDelete, Literal: "DELETE"},
+		{Type: models.TokenTypeIdentifier, Literal: "foo"},
 	}
 
 	tokens = normalizeTokens(tokens)
@@ -148,8 +146,8 @@ func TestNormalizeTokens(t *testing.T) {
 	}
 
 	for i, tok := range tokens {
-		if tok.ModelType != expected[i] {
-			t.Errorf("token[%d] (%s): ModelType = %d, expected %d", i, tok.Literal, tok.ModelType, expected[i])
+		if tok.Type != expected[i] {
+			t.Errorf("token[%d] (%s): ModelType = %d, expected %d", i, tok.Literal, tok.Type, expected[i])
 		}
 	}
 }
@@ -158,12 +156,12 @@ func TestNormalizeTokens(t *testing.T) {
 // overwrite ModelType that is already set.
 func TestNormalizeTokensPreservesExisting(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
 	}
 
 	tokens = normalizeTokens(tokens)
 
-	if tokens[0].ModelType != models.TokenTypeSelect {
-		t.Errorf("normalizeTokens overwrote existing ModelType: got %d", tokens[0].ModelType)
+	if tokens[0].Type != models.TokenTypeSelect {
+		t.Errorf("normalizeTokens overwrote existing ModelType: got %d", tokens[0].Type)
 	}
 }

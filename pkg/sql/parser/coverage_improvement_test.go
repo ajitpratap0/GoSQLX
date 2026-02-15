@@ -169,13 +169,12 @@ func TestParsePartitionDefinition(t *testing.T) {
 func TestParseAlterRole(t *testing.T) {
 	t.Run("RENAME TO", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "ROLE", Literal: "ROLE"},
-			{Type: "IDENT", Literal: "admin"},
-			{Type: "RENAME", Literal: "RENAME"},
-			{Type: "TO", Literal: "TO"},
-			{Type: "IDENT", Literal: "superadmin"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeRole, Literal: "ROLE"},
+			{Type: models.TokenTypeIdentifier, Literal: "admin"},
+			{Type: models.TokenTypeRename, Literal: "RENAME"},
+			{Type: models.TokenTypeTo, Literal: "TO"},
+			{Type: models.TokenTypeIdentifier, Literal: "superadmin"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -201,13 +200,12 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("ADD MEMBER", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "ROLE", Literal: "ROLE"},
-			{Type: "IDENT", Literal: "admins"},
-			{Type: "ADD", Literal: "ADD"},
-			{Type: "MEMBER", Literal: "MEMBER"},
-			{Type: "IDENT", Literal: "john"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeRole, Literal: "ROLE"},
+			{Type: models.TokenTypeIdentifier, Literal: "admins"},
+			{Type: models.TokenTypeAdd, Literal: "ADD"},
+			{Type: models.TokenTypeMember, Literal: "MEMBER"},
+			{Type: models.TokenTypeIdentifier, Literal: "john"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -224,13 +222,12 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("DROP MEMBER", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "ROLE", Literal: "ROLE"},
-			{Type: "IDENT", Literal: "admins"},
-			{Type: "DROP", Literal: "DROP"},
-			{Type: "MEMBER", Literal: "MEMBER"},
-			{Type: "IDENT", Literal: "john"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeRole, Literal: "ROLE"},
+			{Type: models.TokenTypeIdentifier, Literal: "admins"},
+			{Type: models.TokenTypeDrop, Literal: "DROP"},
+			{Type: models.TokenTypeMember, Literal: "MEMBER"},
+			{Type: models.TokenTypeIdentifier, Literal: "john"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -244,14 +241,13 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("SET config TO", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "ROLE", Literal: "ROLE"},
-			{Type: "IDENT", Literal: "admin"},
-			{Type: "SET", Literal: "SET"},
-			{Type: "IDENT", Literal: "search_path"},
-			{Type: "TO", Literal: "TO"},
-			{Type: "IDENT", Literal: "public"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeRole, Literal: "ROLE"},
+			{Type: models.TokenTypeIdentifier, Literal: "admin"},
+			{Type: models.TokenTypeSet, Literal: "SET"},
+			{Type: models.TokenTypeIdentifier, Literal: "search_path"},
+			{Type: models.TokenTypeTo, Literal: "TO"},
+			{Type: models.TokenTypeIdentifier, Literal: "public"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -268,14 +264,13 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("SET config equals", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "ROLE", Literal: "ROLE"},
-			{Type: "IDENT", Literal: "admin"},
-			{Type: "SET", Literal: "SET"},
-			{Type: "IDENT", Literal: "search_path"},
-			{Type: "=", Literal: "="},
-			{Type: "IDENT", Literal: "public"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeRole, Literal: "ROLE"},
+			{Type: models.TokenTypeIdentifier, Literal: "admin"},
+			{Type: models.TokenTypeSet, Literal: "SET"},
+			{Type: models.TokenTypeIdentifier, Literal: "search_path"},
+			{Type: models.TokenTypeEq, Literal: "="},
+			{Type: models.TokenTypeIdentifier, Literal: "public"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -289,12 +284,11 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("RESET config", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "ROLE", Literal: "ROLE"},
-			{Type: "IDENT", Literal: "admin"},
-			{Type: "RESET", Literal: "RESET"},
-			{Type: "IDENT", Literal: "search_path"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeRole, Literal: "ROLE"},
+			{Type: models.TokenTypeIdentifier, Literal: "admin"},
+			{Type: models.TokenTypeReset, Literal: "RESET"},
+			{Type: models.TokenTypeIdentifier, Literal: "search_path"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -311,12 +305,11 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("RESET ALL", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "ROLE", Literal: "ROLE"},
-			{Type: "IDENT", Literal: "admin"},
-			{Type: "RESET", Literal: "RESET"},
-			{Type: "ALL", Literal: "ALL"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeRole, Literal: "ROLE"},
+			{Type: models.TokenTypeIdentifier, Literal: "admin"},
+			{Type: models.TokenTypeReset, Literal: "RESET"},
+			{Type: models.TokenTypeAll, Literal: "ALL"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -330,12 +323,11 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH SUPERUSER", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "ROLE", Literal: "ROLE"},
-			{Type: "IDENT", Literal: "admin"},
-			{Type: "WITH", Literal: "WITH"},
-			{Type: "SUPERUSER", Literal: "SUPERUSER"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeRole, Literal: "ROLE"},
+			{Type: models.TokenTypeIdentifier, Literal: "admin"},
+			{Type: models.TokenTypeWith, Literal: "WITH"},
+			{Type: models.TokenTypeSuperuser, Literal: "SUPERUSER"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -352,12 +344,11 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH NOSUPERUSER", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "ROLE", Literal: "ROLE"},
-			{Type: "IDENT", Literal: "admin"},
-			{Type: "WITH", Literal: "WITH"},
-			{Type: "NOSUPERUSER", Literal: "NOSUPERUSER"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeRole, Literal: "ROLE"},
+			{Type: models.TokenTypeIdentifier, Literal: "admin"},
+			{Type: models.TokenTypeWith, Literal: "WITH"},
+			{Type: models.TokenTypeNosuperuser, Literal: "NOSUPERUSER"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -365,12 +356,11 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH CREATEDB", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "ROLE", Literal: "ROLE"},
-			{Type: "IDENT", Literal: "admin"},
-			{Type: "WITH", Literal: "WITH"},
-			{Type: "CREATEDB", Literal: "CREATEDB"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeRole, Literal: "ROLE"},
+			{Type: models.TokenTypeIdentifier, Literal: "admin"},
+			{Type: models.TokenTypeWith, Literal: "WITH"},
+			{Type: models.TokenTypeCreateDB, Literal: "CREATEDB"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -378,12 +368,11 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH NOCREATEDB", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "ROLE", Literal: "ROLE"},
-			{Type: "IDENT", Literal: "admin"},
-			{Type: "WITH", Literal: "WITH"},
-			{Type: "NOCREATEDB", Literal: "NOCREATEDB"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeRole, Literal: "ROLE"},
+			{Type: models.TokenTypeIdentifier, Literal: "admin"},
+			{Type: models.TokenTypeWith, Literal: "WITH"},
+			{Type: models.TokenTypeNocreatedb, Literal: "NOCREATEDB"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -391,12 +380,11 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH CREATEROLE", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "ROLE", Literal: "ROLE"},
-			{Type: "IDENT", Literal: "admin"},
-			{Type: "WITH", Literal: "WITH"},
-			{Type: "CREATEROLE", Literal: "CREATEROLE"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeRole, Literal: "ROLE"},
+			{Type: models.TokenTypeIdentifier, Literal: "admin"},
+			{Type: models.TokenTypeWith, Literal: "WITH"},
+			{Type: models.TokenTypeCreateRole, Literal: "CREATEROLE"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -404,12 +392,11 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH NOCREATEROLE", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "ROLE", Literal: "ROLE"},
-			{Type: "IDENT", Literal: "admin"},
-			{Type: "WITH", Literal: "WITH"},
-			{Type: "NOCREATEROLE", Literal: "NOCREATEROLE"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeRole, Literal: "ROLE"},
+			{Type: models.TokenTypeIdentifier, Literal: "admin"},
+			{Type: models.TokenTypeWith, Literal: "WITH"},
+			{Type: models.TokenTypeNocreaterole, Literal: "NOCREATEROLE"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -417,12 +404,11 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH LOGIN", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "ROLE", Literal: "ROLE"},
-			{Type: "IDENT", Literal: "admin"},
-			{Type: "WITH", Literal: "WITH"},
-			{Type: "LOGIN", Literal: "LOGIN"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeRole, Literal: "ROLE"},
+			{Type: models.TokenTypeIdentifier, Literal: "admin"},
+			{Type: models.TokenTypeWith, Literal: "WITH"},
+			{Type: models.TokenTypeLogin, Literal: "LOGIN"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -430,12 +416,11 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH NOLOGIN", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "ROLE", Literal: "ROLE"},
-			{Type: "IDENT", Literal: "admin"},
-			{Type: "WITH", Literal: "WITH"},
-			{Type: "NOLOGIN", Literal: "NOLOGIN"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeRole, Literal: "ROLE"},
+			{Type: models.TokenTypeIdentifier, Literal: "admin"},
+			{Type: models.TokenTypeWith, Literal: "WITH"},
+			{Type: models.TokenTypeNologin, Literal: "NOLOGIN"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -443,13 +428,12 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH PASSWORD", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "ROLE", Literal: "ROLE"},
-			{Type: "IDENT", Literal: "admin"},
-			{Type: "WITH", Literal: "WITH"},
-			{Type: "PASSWORD", Literal: "PASSWORD"},
-			{Type: "STRING", Literal: "secret123"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeRole, Literal: "ROLE"},
+			{Type: models.TokenTypeIdentifier, Literal: "admin"},
+			{Type: models.TokenTypeWith, Literal: "WITH"},
+			{Type: models.TokenTypePassword, Literal: "PASSWORD"},
+			{Type: models.TokenTypeString, Literal: "secret123"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -457,13 +441,12 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH PASSWORD NULL", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "ROLE", Literal: "ROLE"},
-			{Type: "IDENT", Literal: "admin"},
-			{Type: "WITH", Literal: "WITH"},
-			{Type: "PASSWORD", Literal: "PASSWORD"},
-			{Type: "NULL", Literal: "NULL"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeRole, Literal: "ROLE"},
+			{Type: models.TokenTypeIdentifier, Literal: "admin"},
+			{Type: models.TokenTypeWith, Literal: "WITH"},
+			{Type: models.TokenTypePassword, Literal: "PASSWORD"},
+			{Type: models.TokenTypeNull, Literal: "NULL"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -471,14 +454,13 @@ func TestParseAlterRole(t *testing.T) {
 
 	t.Run("WITH VALID UNTIL", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "ROLE", Literal: "ROLE"},
-			{Type: "IDENT", Literal: "admin"},
-			{Type: "WITH", Literal: "WITH"},
-			{Type: "VALID", Literal: "VALID"},
-			{Type: "UNTIL", Literal: "UNTIL"},
-			{Type: "STRING", Literal: "2026-12-31"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeRole, Literal: "ROLE"},
+			{Type: models.TokenTypeIdentifier, Literal: "admin"},
+			{Type: models.TokenTypeWith, Literal: "WITH"},
+			{Type: models.TokenTypeValid, Literal: "VALID"},
+			{Type: models.TokenTypeUntil, Literal: "UNTIL"},
+			{Type: models.TokenTypeString, Literal: "2026-12-31"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -490,15 +472,14 @@ func TestParseAlterRole(t *testing.T) {
 func TestParseAlterPolicy(t *testing.T) {
 	t.Run("RENAME TO", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "POLICY", Literal: "POLICY"},
-			{Type: "IDENT", Literal: "user_policy"},
-			{Type: "ON", Literal: "ON"},
-			{Type: "IDENT", Literal: "users"},
-			{Type: "RENAME", Literal: "RENAME"},
-			{Type: "TO", Literal: "TO"},
-			{Type: "IDENT", Literal: "new_policy"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypePolicy, Literal: "POLICY"},
+			{Type: models.TokenTypeIdentifier, Literal: "user_policy"},
+			{Type: models.TokenTypeOn, Literal: "ON"},
+			{Type: models.TokenTypeIdentifier, Literal: "users"},
+			{Type: models.TokenTypeRename, Literal: "RENAME"},
+			{Type: models.TokenTypeTo, Literal: "TO"},
+			{Type: models.TokenTypeIdentifier, Literal: "new_policy"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -515,16 +496,15 @@ func TestParseAlterPolicy(t *testing.T) {
 
 	t.Run("with TO roles", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "POLICY", Literal: "POLICY"},
-			{Type: "IDENT", Literal: "user_policy"},
-			{Type: "ON", Literal: "ON"},
-			{Type: "IDENT", Literal: "users"},
-			{Type: "TO", Literal: "TO"},
-			{Type: "IDENT", Literal: "admin"},
-			{Type: ",", Literal: ","},
-			{Type: "IDENT", Literal: "manager"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypePolicy, Literal: "POLICY"},
+			{Type: models.TokenTypeIdentifier, Literal: "user_policy"},
+			{Type: models.TokenTypeOn, Literal: "ON"},
+			{Type: models.TokenTypeIdentifier, Literal: "users"},
+			{Type: models.TokenTypeTo, Literal: "TO"},
+			{Type: models.TokenTypeIdentifier, Literal: "admin"},
+			{Type: models.TokenTypeComma, Literal: ","},
+			{Type: models.TokenTypeIdentifier, Literal: "manager"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -541,18 +521,17 @@ func TestParseAlterPolicy(t *testing.T) {
 
 	t.Run("with USING", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "POLICY", Literal: "POLICY"},
-			{Type: "IDENT", Literal: "user_policy"},
-			{Type: "ON", Literal: "ON"},
-			{Type: "IDENT", Literal: "users"},
-			{Type: "USING", Literal: "USING"},
-			{Type: "(", Literal: "("},
-			{Type: "IDENT", Literal: "user_id"},
-			{Type: "=", Literal: "="},
-			{Type: "IDENT", Literal: "current_user"},
-			{Type: ")", Literal: ")"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypePolicy, Literal: "POLICY"},
+			{Type: models.TokenTypeIdentifier, Literal: "user_policy"},
+			{Type: models.TokenTypeOn, Literal: "ON"},
+			{Type: models.TokenTypeIdentifier, Literal: "users"},
+			{Type: models.TokenTypeUsing, Literal: "USING"},
+			{Type: models.TokenTypeLParen, Literal: "("},
+			{Type: models.TokenTypeIdentifier, Literal: "user_id"},
+			{Type: models.TokenTypeEq, Literal: "="},
+			{Type: models.TokenTypeIdentifier, Literal: "current_user"},
+			{Type: models.TokenTypeRParen, Literal: ")"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -566,19 +545,18 @@ func TestParseAlterPolicy(t *testing.T) {
 
 	t.Run("with WITH CHECK", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "POLICY", Literal: "POLICY"},
-			{Type: "IDENT", Literal: "user_policy"},
-			{Type: "ON", Literal: "ON"},
-			{Type: "IDENT", Literal: "users"},
-			{Type: "WITH", Literal: "WITH"},
-			{Type: "CHECK", Literal: "CHECK"},
-			{Type: "(", Literal: "("},
-			{Type: "IDENT", Literal: "status"},
-			{Type: "=", Literal: "="},
-			{Type: "STRING", Literal: "active"},
-			{Type: ")", Literal: ")"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypePolicy, Literal: "POLICY"},
+			{Type: models.TokenTypeIdentifier, Literal: "user_policy"},
+			{Type: models.TokenTypeOn, Literal: "ON"},
+			{Type: models.TokenTypeIdentifier, Literal: "users"},
+			{Type: models.TokenTypeWith, Literal: "WITH"},
+			{Type: models.TokenTypeCheck, Literal: "CHECK"},
+			{Type: models.TokenTypeLParen, Literal: "("},
+			{Type: models.TokenTypeIdentifier, Literal: "status"},
+			{Type: models.TokenTypeEq, Literal: "="},
+			{Type: models.TokenTypeString, Literal: "active"},
+			{Type: models.TokenTypeRParen, Literal: ")"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -592,20 +570,19 @@ func TestParseAlterPolicy(t *testing.T) {
 
 	t.Run("with TO and USING", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "POLICY", Literal: "POLICY"},
-			{Type: "IDENT", Literal: "user_policy"},
-			{Type: "ON", Literal: "ON"},
-			{Type: "IDENT", Literal: "users"},
-			{Type: "TO", Literal: "TO"},
-			{Type: "IDENT", Literal: "admin"},
-			{Type: "USING", Literal: "USING"},
-			{Type: "(", Literal: "("},
-			{Type: "IDENT", Literal: "department"},
-			{Type: "=", Literal: "="},
-			{Type: "STRING", Literal: "IT"},
-			{Type: ")", Literal: ")"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypePolicy, Literal: "POLICY"},
+			{Type: models.TokenTypeIdentifier, Literal: "user_policy"},
+			{Type: models.TokenTypeOn, Literal: "ON"},
+			{Type: models.TokenTypeIdentifier, Literal: "users"},
+			{Type: models.TokenTypeTo, Literal: "TO"},
+			{Type: models.TokenTypeIdentifier, Literal: "admin"},
+			{Type: models.TokenTypeUsing, Literal: "USING"},
+			{Type: models.TokenTypeLParen, Literal: "("},
+			{Type: models.TokenTypeIdentifier, Literal: "department"},
+			{Type: models.TokenTypeEq, Literal: "="},
+			{Type: models.TokenTypeString, Literal: "IT"},
+			{Type: models.TokenTypeRParen, Literal: ")"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -1093,21 +1070,20 @@ func TestParseReturningClauseCoverage(t *testing.T) {
 func TestParseAlterConnectorCoverage(t *testing.T) {
 	t.Run("SET DCPROPERTIES", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "CONNECTOR", Literal: "CONNECTOR"},
-			{Type: "IDENT", Literal: "my_connector"},
-			{Type: "SET", Literal: "SET"},
-			{Type: "DCPROPERTIES", Literal: "DCPROPERTIES"},
-			{Type: "(", Literal: "("},
-			{Type: "IDENT", Literal: "host"},
-			{Type: "=", Literal: "="},
-			{Type: "STRING", Literal: "localhost"},
-			{Type: ",", Literal: ","},
-			{Type: "IDENT", Literal: "port"},
-			{Type: "=", Literal: "="},
-			{Type: "STRING", Literal: "5432"},
-			{Type: ")", Literal: ")"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeConnector, Literal: "CONNECTOR"},
+			{Type: models.TokenTypeIdentifier, Literal: "my_connector"},
+			{Type: models.TokenTypeSet, Literal: "SET"},
+			{Type: models.TokenTypeDcproperties, Literal: "DCPROPERTIES"},
+			{Type: models.TokenTypeLParen, Literal: "("},
+			{Type: models.TokenTypeIdentifier, Literal: "host"},
+			{Type: models.TokenTypeEq, Literal: "="},
+			{Type: models.TokenTypeString, Literal: "localhost"},
+			{Type: models.TokenTypeComma, Literal: ","},
+			{Type: models.TokenTypeIdentifier, Literal: "port"},
+			{Type: models.TokenTypeEq, Literal: "="},
+			{Type: models.TokenTypeString, Literal: "5432"},
+			{Type: models.TokenTypeRParen, Literal: ")"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -1115,13 +1091,12 @@ func TestParseAlterConnectorCoverage(t *testing.T) {
 
 	t.Run("SET URL", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "CONNECTOR", Literal: "CONNECTOR"},
-			{Type: "IDENT", Literal: "my_connector"},
-			{Type: "SET", Literal: "SET"},
-			{Type: "URL", Literal: "URL"},
-			{Type: "STRING", Literal: "jdbc:postgresql://localhost:5432/db"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeConnector, Literal: "CONNECTOR"},
+			{Type: models.TokenTypeIdentifier, Literal: "my_connector"},
+			{Type: models.TokenTypeSet, Literal: "SET"},
+			{Type: models.TokenTypeUrl, Literal: "URL"},
+			{Type: models.TokenTypeString, Literal: "jdbc:postgresql://localhost:5432/db"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -1129,14 +1104,13 @@ func TestParseAlterConnectorCoverage(t *testing.T) {
 
 	t.Run("SET OWNER USER", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "CONNECTOR", Literal: "CONNECTOR"},
-			{Type: "IDENT", Literal: "my_connector"},
-			{Type: "SET", Literal: "SET"},
-			{Type: "OWNER", Literal: "OWNER"},
-			{Type: "USER", Literal: "USER"},
-			{Type: "IDENT", Literal: "admin"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeConnector, Literal: "CONNECTOR"},
+			{Type: models.TokenTypeIdentifier, Literal: "my_connector"},
+			{Type: models.TokenTypeSet, Literal: "SET"},
+			{Type: models.TokenTypeOwner, Literal: "OWNER"},
+			{Type: models.TokenTypeUser, Literal: "USER"},
+			{Type: models.TokenTypeIdentifier, Literal: "admin"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)
@@ -1144,14 +1118,13 @@ func TestParseAlterConnectorCoverage(t *testing.T) {
 
 	t.Run("SET OWNER ROLE", func(t *testing.T) {
 		tokens := []token.Token{
-			{Type: "ALTER",
-				ModelType: models.TokenTypeAlter, Literal: "ALTER"},
-			{Type: "CONNECTOR", Literal: "CONNECTOR"},
-			{Type: "IDENT", Literal: "my_connector"},
-			{Type: "SET", Literal: "SET"},
-			{Type: "OWNER", Literal: "OWNER"},
-			{Type: "ROLE", Literal: "ROLE"},
-			{Type: "IDENT", Literal: "admin_role"},
+			{Type: models.TokenTypeAlter, Literal: "ALTER"},
+			{Type: models.TokenTypeConnector, Literal: "CONNECTOR"},
+			{Type: models.TokenTypeIdentifier, Literal: "my_connector"},
+			{Type: models.TokenTypeSet, Literal: "SET"},
+			{Type: models.TokenTypeOwner, Literal: "OWNER"},
+			{Type: models.TokenTypeRole, Literal: "ROLE"},
+			{Type: models.TokenTypeIdentifier, Literal: "admin_role"},
 		}
 		tree := parseTokensHelper(t, tokens)
 		defer ast.ReleaseAST(tree)

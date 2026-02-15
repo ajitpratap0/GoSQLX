@@ -10,13 +10,12 @@ import (
 
 func TestParserSimpleSelect(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "IDENT", Literal: "id"},
-		{Type: ",", Literal: ","},
-		{Type: "IDENT", Literal: "name"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "users"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeIdentifier, Literal: "id"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeIdentifier, Literal: "name"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "users"},
 	}
 
 	parser := NewParser()
@@ -47,49 +46,48 @@ func TestParserSimpleSelect(t *testing.T) {
 
 func TestParserComplexSelect(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "IDENT", Literal: "u"},
-		{Type: ".", Literal: "."},
-		{Type: "IDENT", Literal: "id"},
-		{Type: ",", Literal: ","},
-		{Type: "IDENT", Literal: "u"},
-		{Type: ".", Literal: "."},
-		{Type: "IDENT", Literal: "name"},
-		{Type: ",", Literal: ","},
-		{Type: "IDENT", Literal: "o"},
-		{Type: ".", Literal: "."},
-		{Type: "IDENT", Literal: "order_date"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "users"},
-		{Type: "IDENT", Literal: "u"},
-		{Type: "JOIN", Literal: "JOIN"},
-		{Type: "IDENT", Literal: "orders"},
-		{Type: "IDENT", Literal: "o"},
-		{Type: "ON", Literal: "ON"},
-		{Type: "IDENT", Literal: "u"},
-		{Type: ".", Literal: "."},
-		{Type: "IDENT", Literal: "id"},
-		{Type: "=", Literal: "="},
-		{Type: "IDENT", Literal: "o"},
-		{Type: ".", Literal: "."},
-		{Type: "IDENT", Literal: "user_id"},
-		{Type: "WHERE", Literal: "WHERE"},
-		{Type: "IDENT", Literal: "u"},
-		{Type: ".", Literal: "."},
-		{Type: "IDENT", Literal: "active"},
-		{Type: "=", Literal: "="},
-		{Type: "TRUE", Literal: "TRUE"},
-		{Type: "ORDER", Literal: "ORDER"},
-		{Type: "BY", Literal: "BY"},
-		{Type: "IDENT", Literal: "o"},
-		{Type: ".", Literal: "."},
-		{Type: "IDENT", Literal: "order_date"},
-		{Type: "DESC", Literal: "DESC"},
-		{Type: "LIMIT", Literal: "LIMIT"},
-		{Type: "INT", Literal: "10"},
-		{Type: "OFFSET", Literal: "OFFSET"},
-		{Type: "INT", Literal: "20"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeIdentifier, Literal: "u"},
+		{Type: models.TokenTypePeriod, Literal: "."},
+		{Type: models.TokenTypeIdentifier, Literal: "id"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeIdentifier, Literal: "u"},
+		{Type: models.TokenTypePeriod, Literal: "."},
+		{Type: models.TokenTypeIdentifier, Literal: "name"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeIdentifier, Literal: "o"},
+		{Type: models.TokenTypePeriod, Literal: "."},
+		{Type: models.TokenTypeIdentifier, Literal: "order_date"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "users"},
+		{Type: models.TokenTypeIdentifier, Literal: "u"},
+		{Type: models.TokenTypeJoin, Literal: "JOIN"},
+		{Type: models.TokenTypeIdentifier, Literal: "orders"},
+		{Type: models.TokenTypeIdentifier, Literal: "o"},
+		{Type: models.TokenTypeOn, Literal: "ON"},
+		{Type: models.TokenTypeIdentifier, Literal: "u"},
+		{Type: models.TokenTypePeriod, Literal: "."},
+		{Type: models.TokenTypeIdentifier, Literal: "id"},
+		{Type: models.TokenTypeEq, Literal: "="},
+		{Type: models.TokenTypeIdentifier, Literal: "o"},
+		{Type: models.TokenTypePeriod, Literal: "."},
+		{Type: models.TokenTypeIdentifier, Literal: "user_id"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeIdentifier, Literal: "u"},
+		{Type: models.TokenTypePeriod, Literal: "."},
+		{Type: models.TokenTypeIdentifier, Literal: "active"},
+		{Type: models.TokenTypeEq, Literal: "="},
+		{Type: models.TokenTypeTrue, Literal: "TRUE"},
+		{Type: models.TokenTypeOrder, Literal: "ORDER"},
+		{Type: models.TokenTypeBy, Literal: "BY"},
+		{Type: models.TokenTypeIdentifier, Literal: "o"},
+		{Type: models.TokenTypePeriod, Literal: "."},
+		{Type: models.TokenTypeIdentifier, Literal: "order_date"},
+		{Type: models.TokenTypeDesc, Literal: "DESC"},
+		{Type: models.TokenTypeLimit, Literal: "LIMIT"},
+		{Type: models.TokenTypeNumber, Literal: "10"},
+		{Type: models.TokenTypeOffset, Literal: "OFFSET"},
+		{Type: models.TokenTypeNumber, Literal: "20"},
 	}
 
 	parser := NewParser()
@@ -126,21 +124,20 @@ func TestParserComplexSelect(t *testing.T) {
 
 func TestParserInsert(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "INSERT",
-			ModelType: models.TokenTypeInsert, Literal: "INSERT"},
-		{Type: "INTO", Literal: "INTO"},
-		{Type: "IDENT", Literal: "users"},
-		{Type: "(", Literal: "("},
-		{Type: "IDENT", Literal: "name"},
-		{Type: ",", Literal: ","},
-		{Type: "IDENT", Literal: "email"},
-		{Type: ")", Literal: ")"},
-		{Type: "VALUES", Literal: "VALUES"},
-		{Type: "(", Literal: "("},
-		{Type: "STRING", Literal: "John"},
-		{Type: ",", Literal: ","},
-		{Type: "STRING", Literal: "john@example.com"},
-		{Type: ")", Literal: ")"},
+		{Type: models.TokenTypeInsert, Literal: "INSERT"},
+		{Type: models.TokenTypeInto, Literal: "INTO"},
+		{Type: models.TokenTypeIdentifier, Literal: "users"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeIdentifier, Literal: "name"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeIdentifier, Literal: "email"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeValues, Literal: "VALUES"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeString, Literal: "John"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeString, Literal: "john@example.com"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
 	}
 
 	parser := NewParser()
@@ -175,17 +172,16 @@ func TestParserInsert(t *testing.T) {
 
 func TestParserUpdate(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "UPDATE",
-			ModelType: models.TokenTypeUpdate, Literal: "UPDATE"},
-		{Type: "IDENT", Literal: "users"},
-		{Type: "SET", Literal: "SET"},
-		{Type: "IDENT", Literal: "active"},
-		{Type: "=", Literal: "="},
-		{Type: "FALSE", Literal: "FALSE"},
-		{Type: "WHERE", Literal: "WHERE"},
-		{Type: "IDENT", Literal: "last_login"},
-		{Type: "<", Literal: "<"},
-		{Type: "STRING", Literal: "2024-01-01"},
+		{Type: models.TokenTypeUpdate, Literal: "UPDATE"},
+		{Type: models.TokenTypeIdentifier, Literal: "users"},
+		{Type: models.TokenTypeSet, Literal: "SET"},
+		{Type: models.TokenTypeIdentifier, Literal: "active"},
+		{Type: models.TokenTypeEq, Literal: "="},
+		{Type: models.TokenTypeFalse, Literal: "FALSE"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeIdentifier, Literal: "last_login"},
+		{Type: models.TokenTypeLt, Literal: "<"},
+		{Type: models.TokenTypeString, Literal: "2024-01-01"},
 	}
 
 	parser := NewParser()
@@ -216,14 +212,13 @@ func TestParserUpdate(t *testing.T) {
 
 func TestParserDelete(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "DELETE",
-			ModelType: models.TokenTypeDelete, Literal: "DELETE"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "users"},
-		{Type: "WHERE", Literal: "WHERE"},
-		{Type: "IDENT", Literal: "active"},
-		{Type: "=", Literal: "="},
-		{Type: "FALSE", Literal: "FALSE"},
+		{Type: models.TokenTypeDelete, Literal: "DELETE"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "users"},
+		{Type: models.TokenTypeWhere, Literal: "WHERE"},
+		{Type: models.TokenTypeIdentifier, Literal: "active"},
+		{Type: models.TokenTypeEq, Literal: "="},
+		{Type: models.TokenTypeFalse, Literal: "FALSE"},
 	}
 
 	parser := NewParser()
@@ -251,11 +246,10 @@ func TestParserDelete(t *testing.T) {
 
 func TestParserParallel(t *testing.T) {
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "IDENT", Literal: "id"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "users"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeIdentifier, Literal: "id"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "users"},
 	}
 
 	t.Run("Parallel", func(t *testing.T) {
@@ -280,28 +274,27 @@ func TestParserReuse(t *testing.T) {
 
 	queries := [][]token.Token{
 		{ // Simple SELECT
-			{Type: "SELECT",
-				ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-			{Type: "IDENT", Literal: "id"},
-			{Type: "FROM", Literal: "FROM"},
-			{Type: "IDENT", Literal: "users"},
+			{Type: models.TokenTypeSelect, Literal: "SELECT"},
+			{Type: models.TokenTypeIdentifier, Literal: "id"},
+			{Type: models.TokenTypeFrom, Literal: "FROM"},
+			{Type: models.TokenTypeIdentifier, Literal: "users"},
 		},
 		{ // INSERT
-			{Type: "INSERT", Literal: "INSERT"},
-			{Type: "INTO", Literal: "INTO"},
-			{Type: "IDENT", Literal: "users"},
-			{Type: "VALUES", Literal: "VALUES"},
-			{Type: "(", Literal: "("},
-			{Type: "STRING", Literal: "test"},
-			{Type: ")", Literal: ")"},
+			{Type: models.TokenTypeInsert, Literal: "INSERT"},
+			{Type: models.TokenTypeInto, Literal: "INTO"},
+			{Type: models.TokenTypeIdentifier, Literal: "users"},
+			{Type: models.TokenTypeValues, Literal: "VALUES"},
+			{Type: models.TokenTypeLParen, Literal: "("},
+			{Type: models.TokenTypeString, Literal: "test"},
+			{Type: models.TokenTypeRParen, Literal: ")"},
 		},
 		{ // UPDATE
-			{Type: "UPDATE", Literal: "UPDATE"},
-			{Type: "IDENT", Literal: "users"},
-			{Type: "SET", Literal: "SET"},
-			{Type: "IDENT", Literal: "name"},
-			{Type: "=", Literal: "="},
-			{Type: "STRING", Literal: "test"},
+			{Type: models.TokenTypeUpdate, Literal: "UPDATE"},
+			{Type: models.TokenTypeIdentifier, Literal: "users"},
+			{Type: models.TokenTypeSet, Literal: "SET"},
+			{Type: models.TokenTypeIdentifier, Literal: "name"},
+			{Type: models.TokenTypeEq, Literal: "="},
+			{Type: models.TokenTypeString, Literal: "test"},
 		},
 	}
 
@@ -327,29 +320,28 @@ func TestRecursionDepthLimit_DeeplyNestedFunctionCalls(t *testing.T) {
 
 	// Build tokens for: SELECT f1(f2(f3(...f150(x)...))) FROM t
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
 	}
 
 	// Add opening function calls
 	for i := 0; i < 150; i++ {
 		tokens = append(tokens,
-			token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "func"},
-			token.Token{Type: "(", ModelType: models.TokenTypeLParen, Literal: "("},
+			token.Token{Type: models.TokenTypeIdentifier, Literal: "func"},
+			token.Token{Type: models.TokenTypeLParen, Literal: "("},
 		)
 	}
 
 	// Add innermost argument
-	tokens = append(tokens, token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "x"})
+	tokens = append(tokens, token.Token{Type: models.TokenTypeIdentifier, Literal: "x"})
 
 	// Add closing parentheses
 	for i := 0; i < 150; i++ {
-		tokens = append(tokens, token.Token{Type: ")", ModelType: models.TokenTypeRParen, Literal: ")"})
+		tokens = append(tokens, token.Token{Type: models.TokenTypeRParen, Literal: ")"})
 	}
 
 	tokens = append(tokens,
-		token.Token{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
-		token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "t"},
+		token.Token{Type: models.TokenTypeFrom, Literal: "FROM"},
+		token.Token{Type: models.TokenTypeIdentifier, Literal: "t"},
 	)
 
 	_, err := parser.Parse(tokens)
@@ -373,32 +365,32 @@ func TestRecursionDepthLimit_DeeplyNestedCTEs(t *testing.T) {
 	// Add nested WITH clauses (150 levels deep)
 	for i := 0; i < 150; i++ {
 		tokens = append(tokens,
-			token.Token{Type: "WITH", ModelType: models.TokenTypeWith, Literal: "WITH"},
-			token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "cte"},
-			token.Token{Type: "AS", ModelType: models.TokenTypeAs, Literal: "AS"},
-			token.Token{Type: "(", ModelType: models.TokenTypeLParen, Literal: "("},
+			token.Token{Type: models.TokenTypeWith, Literal: "WITH"},
+			token.Token{Type: models.TokenTypeIdentifier, Literal: "cte"},
+			token.Token{Type: models.TokenTypeAs, Literal: "AS"},
+			token.Token{Type: models.TokenTypeLParen, Literal: "("},
 		)
 	}
 
 	// Add innermost SELECT
 	tokens = append(tokens,
-		token.Token{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "x"},
-		token.Token{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
-		token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "t"},
+		token.Token{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		token.Token{Type: models.TokenTypeIdentifier, Literal: "x"},
+		token.Token{Type: models.TokenTypeFrom, Literal: "FROM"},
+		token.Token{Type: models.TokenTypeIdentifier, Literal: "t"},
 	)
 
 	// Close all CTEs
 	for i := 0; i < 150; i++ {
-		tokens = append(tokens, token.Token{Type: ")", ModelType: models.TokenTypeRParen, Literal: ")"})
+		tokens = append(tokens, token.Token{Type: models.TokenTypeRParen, Literal: ")"})
 	}
 
 	// Add final SELECT
 	tokens = append(tokens,
-		token.Token{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		token.Token{Type: "*", ModelType: models.TokenTypeAsterisk, Literal: "*"},
-		token.Token{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
-		token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "cte"},
+		token.Token{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		token.Token{Type: models.TokenTypeAsterisk, Literal: "*"},
+		token.Token{Type: models.TokenTypeFrom, Literal: "FROM"},
+		token.Token{Type: models.TokenTypeIdentifier, Literal: "cte"},
 	)
 
 	_, err := parser.Parse(tokens)
@@ -417,29 +409,28 @@ func TestRecursionDepthLimit_DepthResetAfterError(t *testing.T) {
 
 	// First, parse a query with deeply nested function calls that exceeds the limit (150 levels)
 	deepTokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
 	}
 
 	// Add opening function calls
 	for i := 0; i < 150; i++ {
 		deepTokens = append(deepTokens,
-			token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "func"},
-			token.Token{Type: "(", ModelType: models.TokenTypeLParen, Literal: "("},
+			token.Token{Type: models.TokenTypeIdentifier, Literal: "func"},
+			token.Token{Type: models.TokenTypeLParen, Literal: "("},
 		)
 	}
 
 	// Add innermost argument
-	deepTokens = append(deepTokens, token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "x"})
+	deepTokens = append(deepTokens, token.Token{Type: models.TokenTypeIdentifier, Literal: "x"})
 
 	// Add closing parentheses
 	for i := 0; i < 150; i++ {
-		deepTokens = append(deepTokens, token.Token{Type: ")", ModelType: models.TokenTypeRParen, Literal: ")"})
+		deepTokens = append(deepTokens, token.Token{Type: models.TokenTypeRParen, Literal: ")"})
 	}
 
 	deepTokens = append(deepTokens,
-		token.Token{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
-		token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "t"},
+		token.Token{Type: models.TokenTypeFrom, Literal: "FROM"},
+		token.Token{Type: models.TokenTypeIdentifier, Literal: "t"},
 	)
 
 	_, err := parser.Parse(deepTokens)
@@ -449,11 +440,10 @@ func TestRecursionDepthLimit_DepthResetAfterError(t *testing.T) {
 
 	// Now parse a simple query - it should succeed, proving depth was reset
 	simpleTokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "IDENT", Literal: "id"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "users"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeIdentifier, Literal: "id"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "users"},
 	}
 
 	tree, err := parser.Parse(simpleTokens)
@@ -472,21 +462,20 @@ func TestRecursionDepthLimit_RecursiveCTELimit(t *testing.T) {
 
 	// Build a simple recursive CTE - this should work
 	tokens := []token.Token{
-		{Type: "WITH",
-			ModelType: models.TokenTypeWith, Literal: "WITH"},
-		{Type: "RECURSIVE", Literal: "RECURSIVE"},
-		{Type: "IDENT", Literal: "cte"},
-		{Type: "AS", Literal: "AS"},
-		{Type: "(", Literal: "("},
-		{Type: "SELECT", Literal: "SELECT"},
-		{Type: "IDENT", Literal: "id"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "t"},
-		{Type: ")", Literal: ")"},
-		{Type: "SELECT", Literal: "SELECT"},
-		{Type: "*", Literal: "*"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "cte"},
+		{Type: models.TokenTypeWith, Literal: "WITH"},
+		{Type: models.TokenTypeRecursive, Literal: "RECURSIVE"},
+		{Type: models.TokenTypeIdentifier, Literal: "cte"},
+		{Type: models.TokenTypeAs, Literal: "AS"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeIdentifier, Literal: "id"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "t"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "cte"},
 	}
 
 	tree, err := parser.Parse(tokens)
@@ -505,19 +494,18 @@ func TestRecursionDepthLimit_ComplexWindowFunctions(t *testing.T) {
 
 	// Test a reasonable window function - should work
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: "IDENT", Literal: "ROW_NUMBER"},
-		{Type: "(", Literal: "("},
-		{Type: ")", Literal: ")"},
-		{Type: "OVER", Literal: "OVER"},
-		{Type: "(", Literal: "("},
-		{Type: "ORDER", Literal: "ORDER"},
-		{Type: "BY", Literal: "BY"},
-		{Type: "IDENT", Literal: "id"},
-		{Type: ")", Literal: ")"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "t"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeIdentifier, Literal: "ROW_NUMBER"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeOver, Literal: "OVER"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeOrder, Literal: "ORDER"},
+		{Type: models.TokenTypeBy, Literal: "BY"},
+		{Type: models.TokenTypeIdentifier, Literal: "id"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "t"},
 	}
 
 	tree, err := parser.Parse(tokens)
@@ -539,19 +527,18 @@ func TestParser_LogicalOperators(t *testing.T) {
 		{
 			name: "Simple AND",
 			tokens: []token.Token{
-				{Type: "SELECT",
-					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "users"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "id"},
-				{Type: "=", Literal: "="},
-				{Type: "INT", Literal: "1"},
-				{Type: "AND", Literal: "AND"},
-				{Type: "IDENT", Literal: "active"},
-				{Type: "=", Literal: "="},
-				{Type: "TRUE", Literal: "TRUE"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "users"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "id"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeNumber, Literal: "1"},
+				{Type: models.TokenTypeAnd, Literal: "AND"},
+				{Type: models.TokenTypeIdentifier, Literal: "active"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeTrue, Literal: "TRUE"},
 			},
 			verify: func(t *testing.T, tree *ast.AST) {
 				stmt := tree.Statements[0].(*ast.SelectStatement)
@@ -570,19 +557,18 @@ func TestParser_LogicalOperators(t *testing.T) {
 		{
 			name: "Simple OR",
 			tokens: []token.Token{
-				{Type: "SELECT",
-					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "users"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "status"},
-				{Type: "=", Literal: "="},
-				{Type: "STRING", Literal: "active"},
-				{Type: "OR", Literal: "OR"},
-				{Type: "IDENT", Literal: "status"},
-				{Type: "=", Literal: "="},
-				{Type: "STRING", Literal: "pending"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "users"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "status"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeString, Literal: "active"},
+				{Type: models.TokenTypeOr, Literal: "OR"},
+				{Type: models.TokenTypeIdentifier, Literal: "status"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeString, Literal: "pending"},
 			},
 			verify: func(t *testing.T, tree *ast.AST) {
 				stmt := tree.Statements[0].(*ast.SelectStatement)
@@ -595,23 +581,22 @@ func TestParser_LogicalOperators(t *testing.T) {
 		{
 			name: "Three ANDs",
 			tokens: []token.Token{
-				{Type: "SELECT",
-					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "users"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "a"},
-				{Type: "=", Literal: "="},
-				{Type: "INT", Literal: "1"},
-				{Type: "AND", Literal: "AND"},
-				{Type: "IDENT", Literal: "b"},
-				{Type: "=", Literal: "="},
-				{Type: "INT", Literal: "2"},
-				{Type: "AND", Literal: "AND"},
-				{Type: "IDENT", Literal: "c"},
-				{Type: "=", Literal: "="},
-				{Type: "INT", Literal: "3"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "users"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "a"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeNumber, Literal: "1"},
+				{Type: models.TokenTypeAnd, Literal: "AND"},
+				{Type: models.TokenTypeIdentifier, Literal: "b"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeNumber, Literal: "2"},
+				{Type: models.TokenTypeAnd, Literal: "AND"},
+				{Type: models.TokenTypeIdentifier, Literal: "c"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeNumber, Literal: "3"},
 			},
 			verify: func(t *testing.T, tree *ast.AST) {
 				stmt := tree.Statements[0].(*ast.SelectStatement)
@@ -629,23 +614,22 @@ func TestParser_LogicalOperators(t *testing.T) {
 		{
 			name: "Three ORs",
 			tokens: []token.Token{
-				{Type: "SELECT",
-					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "users"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "x"},
-				{Type: "=", Literal: "="},
-				{Type: "INT", Literal: "1"},
-				{Type: "OR", Literal: "OR"},
-				{Type: "IDENT", Literal: "y"},
-				{Type: "=", Literal: "="},
-				{Type: "INT", Literal: "2"},
-				{Type: "OR", Literal: "OR"},
-				{Type: "IDENT", Literal: "z"},
-				{Type: "=", Literal: "="},
-				{Type: "INT", Literal: "3"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "users"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "x"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeNumber, Literal: "1"},
+				{Type: models.TokenTypeOr, Literal: "OR"},
+				{Type: models.TokenTypeIdentifier, Literal: "y"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeNumber, Literal: "2"},
+				{Type: models.TokenTypeOr, Literal: "OR"},
+				{Type: models.TokenTypeIdentifier, Literal: "z"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeNumber, Literal: "3"},
 			},
 			verify: func(t *testing.T, tree *ast.AST) {
 				stmt := tree.Statements[0].(*ast.SelectStatement)
@@ -663,19 +647,18 @@ func TestParser_LogicalOperators(t *testing.T) {
 		{
 			name: "AND with placeholders",
 			tokens: []token.Token{
-				{Type: "SELECT",
-					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "users"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "id"},
-				{Type: "=", Literal: "="},
-				{Type: "PLACEHOLDER", Literal: "$1"},
-				{Type: "AND", Literal: "AND"},
-				{Type: "IDENT", Literal: "name"},
-				{Type: "=", Literal: "="},
-				{Type: "PLACEHOLDER", Literal: "$2"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "users"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "id"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypePlaceholder, Literal: "$1"},
+				{Type: models.TokenTypeAnd, Literal: "AND"},
+				{Type: models.TokenTypeIdentifier, Literal: "name"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypePlaceholder, Literal: "$2"},
 			},
 			verify: func(t *testing.T, tree *ast.AST) {
 				stmt := tree.Statements[0].(*ast.SelectStatement)
@@ -694,19 +677,18 @@ func TestParser_LogicalOperators(t *testing.T) {
 		{
 			name: "OR with placeholders",
 			tokens: []token.Token{
-				{Type: "SELECT",
-					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "users"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "id"},
-				{Type: "=", Literal: "="},
-				{Type: "PLACEHOLDER", Literal: "$1"},
-				{Type: "OR", Literal: "OR"},
-				{Type: "IDENT", Literal: "name"},
-				{Type: "=", Literal: "="},
-				{Type: "PLACEHOLDER", Literal: "$2"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "users"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "id"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypePlaceholder, Literal: "$1"},
+				{Type: models.TokenTypeOr, Literal: "OR"},
+				{Type: models.TokenTypeIdentifier, Literal: "name"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypePlaceholder, Literal: "$2"},
 			},
 			verify: func(t *testing.T, tree *ast.AST) {
 				stmt := tree.Statements[0].(*ast.SelectStatement)
@@ -719,19 +701,18 @@ func TestParser_LogicalOperators(t *testing.T) {
 		{
 			name: "Mixed AND/OR with literals",
 			tokens: []token.Token{
-				{Type: "SELECT",
-					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "users"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "id"},
-				{Type: "=", Literal: "="},
-				{Type: "INT", Literal: "5"},
-				{Type: "AND", Literal: "AND"},
-				{Type: "IDENT", Literal: "name"},
-				{Type: "=", Literal: "="},
-				{Type: "PLACEHOLDER", Literal: "$1"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "users"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "id"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeNumber, Literal: "5"},
+				{Type: models.TokenTypeAnd, Literal: "AND"},
+				{Type: models.TokenTypeIdentifier, Literal: "name"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypePlaceholder, Literal: "$1"},
 			},
 			verify: func(t *testing.T, tree *ast.AST) {
 				stmt := tree.Statements[0].(*ast.SelectStatement)
@@ -744,19 +725,18 @@ func TestParser_LogicalOperators(t *testing.T) {
 		{
 			name: "Multiple comparison operators",
 			tokens: []token.Token{
-				{Type: "SELECT",
-					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "users"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "age"},
-				{Type: ">", Literal: ">"},
-				{Type: "INT", Literal: "18"},
-				{Type: "AND", Literal: "AND"},
-				{Type: "IDENT", Literal: "age"},
-				{Type: "<", Literal: "<"},
-				{Type: "INT", Literal: "65"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "users"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "age"},
+				{Type: models.TokenTypeGt, Literal: ">"},
+				{Type: models.TokenTypeNumber, Literal: "18"},
+				{Type: models.TokenTypeAnd, Literal: "AND"},
+				{Type: models.TokenTypeIdentifier, Literal: "age"},
+				{Type: models.TokenTypeLt, Literal: "<"},
+				{Type: models.TokenTypeNumber, Literal: "65"},
 			},
 			verify: func(t *testing.T, tree *ast.AST) {
 				stmt := tree.Statements[0].(*ast.SelectStatement)
@@ -778,19 +758,18 @@ func TestParser_LogicalOperators(t *testing.T) {
 		{
 			name: "AND with inequality operators",
 			tokens: []token.Token{
-				{Type: "SELECT",
-					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "users"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "status"},
-				{Type: "!=", Literal: "!="},
-				{Type: "STRING", Literal: "deleted"},
-				{Type: "AND", Literal: "AND"},
-				{Type: "IDENT", Literal: "age"},
-				{Type: ">=", Literal: ">="},
-				{Type: "INT", Literal: "18"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "users"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "status"},
+				{Type: models.TokenTypeNeq, Literal: "!="},
+				{Type: models.TokenTypeString, Literal: "deleted"},
+				{Type: models.TokenTypeAnd, Literal: "AND"},
+				{Type: models.TokenTypeIdentifier, Literal: "age"},
+				{Type: models.TokenTypeGtEq, Literal: ">="},
+				{Type: models.TokenTypeNumber, Literal: "18"},
 			},
 			verify: func(t *testing.T, tree *ast.AST) {
 				stmt := tree.Statements[0].(*ast.SelectStatement)
@@ -811,23 +790,22 @@ func TestParser_LogicalOperators(t *testing.T) {
 		{
 			name: "Complex nested AND/OR",
 			tokens: []token.Token{
-				{Type: "SELECT",
-					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "users"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "a"},
-				{Type: "=", Literal: "="},
-				{Type: "INT", Literal: "1"},
-				{Type: "AND", Literal: "AND"},
-				{Type: "IDENT", Literal: "b"},
-				{Type: "=", Literal: "="},
-				{Type: "INT", Literal: "2"},
-				{Type: "OR", Literal: "OR"},
-				{Type: "IDENT", Literal: "c"},
-				{Type: "=", Literal: "="},
-				{Type: "INT", Literal: "3"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "users"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "a"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeNumber, Literal: "1"},
+				{Type: models.TokenTypeAnd, Literal: "AND"},
+				{Type: models.TokenTypeIdentifier, Literal: "b"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeNumber, Literal: "2"},
+				{Type: models.TokenTypeOr, Literal: "OR"},
+				{Type: models.TokenTypeIdentifier, Literal: "c"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeNumber, Literal: "3"},
 			},
 			verify: func(t *testing.T, tree *ast.AST) {
 				stmt := tree.Statements[0].(*ast.SelectStatement)
@@ -875,50 +853,48 @@ func TestParser_LogicalOperatorPrecedence(t *testing.T) {
 		{
 			name: "AND binds tighter than OR",
 			tokens: []token.Token{
-				{Type: "SELECT",
-					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "t"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "a"},
-				{Type: "=", Literal: "="},
-				{Type: "INT", Literal: "1"},
-				{Type: "OR", Literal: "OR"},
-				{Type: "IDENT", Literal: "b"},
-				{Type: "=", Literal: "="},
-				{Type: "INT", Literal: "2"},
-				{Type: "AND", Literal: "AND"},
-				{Type: "IDENT", Literal: "c"},
-				{Type: "=", Literal: "="},
-				{Type: "INT", Literal: "3"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "t"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "a"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeNumber, Literal: "1"},
+				{Type: models.TokenTypeOr, Literal: "OR"},
+				{Type: models.TokenTypeIdentifier, Literal: "b"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeNumber, Literal: "2"},
+				{Type: models.TokenTypeAnd, Literal: "AND"},
+				{Type: models.TokenTypeIdentifier, Literal: "c"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeNumber, Literal: "3"},
 			},
 			expected: "a=1 OR (b=2 AND c=3)",
 		},
 		{
 			name: "Multiple ANDs with OR",
 			tokens: []token.Token{
-				{Type: "SELECT",
-					ModelType: models.TokenTypeSelect, Literal: "SELECT"},
-				{Type: "*", Literal: "*"},
-				{Type: "FROM", Literal: "FROM"},
-				{Type: "IDENT", Literal: "t"},
-				{Type: "WHERE", Literal: "WHERE"},
-				{Type: "IDENT", Literal: "a"},
-				{Type: "=", Literal: "="},
-				{Type: "INT", Literal: "1"},
-				{Type: "AND", Literal: "AND"},
-				{Type: "IDENT", Literal: "b"},
-				{Type: "=", Literal: "="},
-				{Type: "INT", Literal: "2"},
-				{Type: "OR", Literal: "OR"},
-				{Type: "IDENT", Literal: "c"},
-				{Type: "=", Literal: "="},
-				{Type: "INT", Literal: "3"},
-				{Type: "AND", Literal: "AND"},
-				{Type: "IDENT", Literal: "d"},
-				{Type: "=", Literal: "="},
-				{Type: "INT", Literal: "4"},
+				{Type: models.TokenTypeSelect, Literal: "SELECT"},
+				{Type: models.TokenTypeAsterisk, Literal: "*"},
+				{Type: models.TokenTypeFrom, Literal: "FROM"},
+				{Type: models.TokenTypeIdentifier, Literal: "t"},
+				{Type: models.TokenTypeWhere, Literal: "WHERE"},
+				{Type: models.TokenTypeIdentifier, Literal: "a"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeNumber, Literal: "1"},
+				{Type: models.TokenTypeAnd, Literal: "AND"},
+				{Type: models.TokenTypeIdentifier, Literal: "b"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeNumber, Literal: "2"},
+				{Type: models.TokenTypeOr, Literal: "OR"},
+				{Type: models.TokenTypeIdentifier, Literal: "c"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeNumber, Literal: "3"},
+				{Type: models.TokenTypeAnd, Literal: "AND"},
+				{Type: models.TokenTypeIdentifier, Literal: "d"},
+				{Type: models.TokenTypeEq, Literal: "="},
+				{Type: models.TokenTypeNumber, Literal: "4"},
 			},
 			expected: "(a=1 AND b=2) OR (c=3 AND d=4)",
 		},
@@ -966,8 +942,7 @@ func TestRecursionDepthLimit_ExtremelyNestedParentheses(t *testing.T) {
 	// Build tokens for: SELECT ((((...((x))...))) FROM t
 	// With 1000 levels of nested parentheses
 	tokens := []token.Token{
-		{Type: "SELECT",
-			ModelType: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
 	}
 
 	// Note: Parentheses in SQL expressions would require expression parsing
@@ -978,22 +953,22 @@ func TestRecursionDepthLimit_ExtremelyNestedParentheses(t *testing.T) {
 	// Add opening function calls (1000 levels)
 	for i := 0; i < 1000; i++ {
 		tokens = append(tokens,
-			token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "func"},
-			token.Token{Type: "(", ModelType: models.TokenTypeLParen, Literal: "("},
+			token.Token{Type: models.TokenTypeIdentifier, Literal: "func"},
+			token.Token{Type: models.TokenTypeLParen, Literal: "("},
 		)
 	}
 
 	// Add innermost argument
-	tokens = append(tokens, token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "x"})
+	tokens = append(tokens, token.Token{Type: models.TokenTypeIdentifier, Literal: "x"})
 
 	// Add closing parentheses (1000 levels)
 	for i := 0; i < 1000; i++ {
-		tokens = append(tokens, token.Token{Type: ")", ModelType: models.TokenTypeRParen, Literal: ")"})
+		tokens = append(tokens, token.Token{Type: models.TokenTypeRParen, Literal: ")"})
 	}
 
 	tokens = append(tokens,
-		token.Token{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
-		token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "t"},
+		token.Token{Type: models.TokenTypeFrom, Literal: "FROM"},
+		token.Token{Type: models.TokenTypeIdentifier, Literal: "t"},
 	)
 
 	// This should be rejected due to exceeding MaxRecursionDepth (100)
@@ -1033,24 +1008,24 @@ func TestRecursionDepthLimit_NoStackOverflow(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Build nested function call tokens
-			tokens := []token.Token{{Type: "SELECT", ModelType: models.TokenTypeSelect, Literal: "SELECT"}}
+			tokens := []token.Token{{Type: models.TokenTypeSelect, Literal: "SELECT"}}
 
 			for i := 0; i < tc.depth; i++ {
 				tokens = append(tokens,
-					token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "f"},
-					token.Token{Type: "(", ModelType: models.TokenTypeLParen, Literal: "("},
+					token.Token{Type: models.TokenTypeIdentifier, Literal: "f"},
+					token.Token{Type: models.TokenTypeLParen, Literal: "("},
 				)
 			}
 
-			tokens = append(tokens, token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "x"})
+			tokens = append(tokens, token.Token{Type: models.TokenTypeIdentifier, Literal: "x"})
 
 			for i := 0; i < tc.depth; i++ {
-				tokens = append(tokens, token.Token{Type: ")", ModelType: models.TokenTypeRParen, Literal: ")"})
+				tokens = append(tokens, token.Token{Type: models.TokenTypeRParen, Literal: ")"})
 			}
 
 			tokens = append(tokens,
-				token.Token{Type: "FROM", ModelType: models.TokenTypeFrom, Literal: "FROM"},
-				token.Token{Type: "IDENT", ModelType: models.TokenTypeIdentifier, Literal: "t"},
+				token.Token{Type: models.TokenTypeFrom, Literal: "FROM"},
+				token.Token{Type: models.TokenTypeIdentifier, Literal: "t"},
 			)
 
 			// Parse and check result

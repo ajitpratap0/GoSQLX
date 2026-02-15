@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
@@ -16,25 +17,25 @@ func main() {
 
 	// Example 1: Basic DISTINCT ON with single column
 	example1 := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
-		{Type: "DISTINCT", Literal: "DISTINCT"},
-		{Type: "ON", Literal: "ON"},
-		{Type: "(", Literal: "("},
-		{Type: "IDENT", Literal: "dept_id"},
-		{Type: ")", Literal: ")"},
-		{Type: "IDENT", Literal: "dept_id"},
-		{Type: ",", Literal: ","},
-		{Type: "IDENT", Literal: "name"},
-		{Type: ",", Literal: ","},
-		{Type: "IDENT", Literal: "salary"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "employees"},
-		{Type: "ORDER", Literal: "ORDER"},
-		{Type: "BY", Literal: "BY"},
-		{Type: "IDENT", Literal: "dept_id"},
-		{Type: ",", Literal: ","},
-		{Type: "IDENT", Literal: "salary"},
-		{Type: "DESC", Literal: "DESC"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeDistinct, Literal: "DISTINCT"},
+		{Type: models.TokenTypeOn, Literal: "ON"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeIdentifier, Literal: "dept_id"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeIdentifier, Literal: "dept_id"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeIdentifier, Literal: "name"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeIdentifier, Literal: "salary"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "employees"},
+		{Type: models.TokenTypeOrder, Literal: "ORDER"},
+		{Type: models.TokenTypeBy, Literal: "BY"},
+		{Type: models.TokenTypeIdentifier, Literal: "dept_id"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeIdentifier, Literal: "salary"},
+		{Type: models.TokenTypeDesc, Literal: "DESC"},
 	}
 
 	fmt.Println("Example 1: Basic DISTINCT ON")
@@ -43,22 +44,22 @@ func main() {
 
 	// Example 2: DISTINCT ON with multiple columns
 	example2 := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
-		{Type: "DISTINCT", Literal: "DISTINCT"},
-		{Type: "ON", Literal: "ON"},
-		{Type: "(", Literal: "("},
-		{Type: "IDENT", Literal: "user_id"},
-		{Type: ",", Literal: ","},
-		{Type: "IDENT", Literal: "category"},
-		{Type: ")", Literal: ")"},
-		{Type: "*", Literal: "*"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "purchases"},
-		{Type: "ORDER", Literal: "ORDER"},
-		{Type: "BY", Literal: "BY"},
-		{Type: "IDENT", Literal: "user_id"},
-		{Type: ",", Literal: ","},
-		{Type: "IDENT", Literal: "category"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeDistinct, Literal: "DISTINCT"},
+		{Type: models.TokenTypeOn, Literal: "ON"},
+		{Type: models.TokenTypeLParen, Literal: "("},
+		{Type: models.TokenTypeIdentifier, Literal: "user_id"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeIdentifier, Literal: "category"},
+		{Type: models.TokenTypeRParen, Literal: ")"},
+		{Type: models.TokenTypeAsterisk, Literal: "*"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "purchases"},
+		{Type: models.TokenTypeOrder, Literal: "ORDER"},
+		{Type: models.TokenTypeBy, Literal: "BY"},
+		{Type: models.TokenTypeIdentifier, Literal: "user_id"},
+		{Type: models.TokenTypeComma, Literal: ","},
+		{Type: models.TokenTypeIdentifier, Literal: "category"},
 	}
 
 	fmt.Println("\nExample 2: DISTINCT ON with Multiple Columns")
@@ -67,11 +68,11 @@ func main() {
 
 	// Example 3: Regular DISTINCT (should still work)
 	example3 := []token.Token{
-		{Type: "SELECT", Literal: "SELECT"},
-		{Type: "DISTINCT", Literal: "DISTINCT"},
-		{Type: "IDENT", Literal: "country"},
-		{Type: "FROM", Literal: "FROM"},
-		{Type: "IDENT", Literal: "customers"},
+		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+		{Type: models.TokenTypeDistinct, Literal: "DISTINCT"},
+		{Type: models.TokenTypeIdentifier, Literal: "country"},
+		{Type: models.TokenTypeFrom, Literal: "FROM"},
+		{Type: models.TokenTypeIdentifier, Literal: "customers"},
 	}
 
 	fmt.Println("\nExample 3: Regular DISTINCT (backward compatibility)")

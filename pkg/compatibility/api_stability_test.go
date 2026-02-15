@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
@@ -145,39 +146,42 @@ func TestAPIStability_PoolBehavior(t *testing.T) {
 
 // TestAPIStability_TokenTypes ensures token type constants remain stable
 func TestAPIStability_TokenTypes(t *testing.T) {
-	// Critical token types that must not change - verify exported constants exist and have correct values
-	// Only test tokens that are actually exported from the token package
+	// Critical token types that must not change - verify models.TokenType constants exist
+	// and have non-zero values. The legacy string-based token.Type was removed in #215.
 	tests := []struct {
-		name          string
-		actualValue   token.Type
-		expectedValue string
+		name        string
+		actualValue models.TokenType
 	}{
-		{"SELECT", token.SELECT, "SELECT"},
-		{"FROM", token.FROM, "FROM"},
-		{"WHERE", token.WHERE, "WHERE"},
-		{"INSERT", token.INSERT, "INSERT"},
-		{"UPDATE", token.UPDATE, "UPDATE"},
-		{"DELETE", token.DELETE, "DELETE"},
-		{"ALTER", token.ALTER, "ALTER"},
-		{"DROP", token.DROP, "DROP"},
-		{"TABLE", token.TABLE, "TABLE"},
-		{"IDENT", token.IDENT, "IDENT"},
-		{"INT", token.INT, "INT"},
-		{"STRING", token.STRING, "STRING"},
-		{"EOF", token.EOF, "EOF"},
-		{"ILLEGAL", token.ILLEGAL, "ILLEGAL"},
+		{"Select", models.TokenTypeSelect},
+		{"From", models.TokenTypeFrom},
+		{"Where", models.TokenTypeWhere},
+		{"Insert", models.TokenTypeInsert},
+		{"Update", models.TokenTypeUpdate},
+		{"Delete", models.TokenTypeDelete},
+		{"Alter", models.TokenTypeAlter},
+		{"Drop", models.TokenTypeDrop},
+		{"Table", models.TokenTypeTable},
+		{"Identifier", models.TokenTypeIdentifier},
+		{"Number", models.TokenTypeNumber},
+		{"String", models.TokenTypeString},
+		{"EOF", models.TokenTypeEOF},
+		{"Illegal", models.TokenTypeIllegal},
 	}
 
 	for _, tt := range tests {
-		t.Run("Token_"+tt.name, func(t *testing.T) {
-			// Verify token constant has expected string value
-			if string(tt.actualValue) != tt.expectedValue {
-				t.Errorf("Token type %s changed value\nExpected: %s\nGot: %s",
-					tt.name, tt.expectedValue, string(tt.actualValue))
+		t.Run("TokenType_"+tt.name, func(t *testing.T) {
+			if tt.actualValue == models.TokenTypeUnknown {
+				t.Errorf("Token type %s has zero/unknown value", tt.name)
 			} else {
-				t.Logf("✓ Token %s stable: %s", tt.name, tt.actualValue)
+				t.Logf("✓ TokenType %s stable: %d (%s)", tt.name, tt.actualValue, tt.actualValue.String())
 			}
 		})
+	}
+
+	// Verify token.Token struct has the expected fields
+	tok := token.Token{Type: models.TokenTypeSelect, Literal: "SELECT"}
+	if !tok.IsType(models.TokenTypeSelect) {
+		t.Error("token.Token.IsType() not working correctly")
 	}
 }
 

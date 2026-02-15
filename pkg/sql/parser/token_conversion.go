@@ -35,7 +35,7 @@ type TokenPosition struct {
 
 type tokenConverter struct {
 	buffer  []token.Token
-	typeMap map[models.TokenType]token.Type //nolint:staticcheck //lint:ignore SA1019 token.Type kept for backward compat
+	typeMap map[models.TokenType]token.Type //nolint:all // token.Type kept for backward compat during #215 migration
 }
 
 func newTokenConverter() *tokenConverter {
@@ -241,7 +241,7 @@ func (tc *tokenConverter) convertSingleToken(t models.TokenWithSpan) (token.Toke
 			return token.Token{Type: keywordType, ModelType: modelType, Literal: t.Token.Value}, nil
 		}
 		return token.Token{
-			Type:      token.Type(t.Token.Value), //nolint:staticcheck //lint:ignore SA1019 token.Type kept for backward compat
+			Type:      token.Type(t.Token.Value), //nolint:all // token.Type kept for backward compat during #215 migration
 			ModelType: models.TokenTypeKeyword,
 			Literal:   t.Token.Value,
 		}, nil
@@ -251,7 +251,7 @@ func (tc *tokenConverter) convertSingleToken(t models.TokenWithSpan) (token.Toke
 		return token.Token{Type: mappedType, ModelType: t.Token.Type, Literal: t.Token.Value}, nil
 	}
 
-	tokenType := token.Type(fmt.Sprintf("%v", t.Token.Type)) //nolint:staticcheck //lint:ignore SA1019 token.Type kept for backward compat
+	tokenType := token.Type(fmt.Sprintf("%v", t.Token.Type)) //nolint:all // token.Type kept for backward compat during #215 migration
 	return token.Token{Type: tokenType, ModelType: t.Token.Type, Literal: t.Token.Value}, nil
 }
 
@@ -264,7 +264,7 @@ func containsDecimalOrExponent(s string) bool {
 	return false
 }
 
-func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) { //nolint:staticcheck //lint:ignore SA1019 token.Type kept for backward compat
+func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) { //nolint:all // token.Type kept for backward compat during #215 migration
 	var upper []byte
 	n := len(value)
 	if n <= 32 {
@@ -384,8 +384,8 @@ func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) {
 	}
 }
 
-func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck //lint:ignore SA1019 token.Type kept for backward compat
-	return map[models.TokenType]token.Type{ //nolint:staticcheck //lint:ignore SA1019 token.Type kept for backward compat
+func buildTypeMapping() map[models.TokenType]token.Type { //nolint:all // token.Type kept for backward compat during #215 migration
+	return map[models.TokenType]token.Type{ //nolint:all // token.Type kept for backward compat during #215 migration
 		models.TokenTypeSelect:  "SELECT",
 		models.TokenTypeFrom:    "FROM",
 		models.TokenTypeWhere:   "WHERE",

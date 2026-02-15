@@ -117,7 +117,7 @@ func TestLooksLikeSQL(t *testing.T) {
 		{"CreateStatement", "CREATE TABLE users (id INT)", true},
 		{"WithCTE", "WITH cte AS (SELECT 1) SELECT * FROM cte", true},
 		{"LowercaseSelect", "select id from users", true},
-		{"SQLWithSemicolon", "some random text; but has semicolon", true},
+		{"SQLWithSemicolon", "some random text; but has semicolon", false},
 		{"PlainText", "this is just plain text", false},
 		{"Filename", "myfile.sql", false},
 		{"Path", "/path/to/file", false},

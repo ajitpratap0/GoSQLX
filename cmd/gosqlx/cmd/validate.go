@@ -9,6 +9,8 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/output"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
 var (
@@ -159,9 +161,9 @@ func validateRun(cmd *cobra.Command, args []string) error {
 	}
 	// Default text output is already handled by the validator (no case needed)
 
-	// Exit with error code if there were invalid files
+	// Return error if there were invalid files
 	if result.InvalidFiles > 0 {
-		os.Exit(1)
+		return fmt.Errorf("validation failed: %d invalid file(s)", result.InvalidFiles)
 	}
 
 	return nil
@@ -268,9 +270,9 @@ func validateFromStdin(cmd *cobra.Command) error {
 		}
 	}
 
-	// Exit with error code if validation failed
+	// Return error if validation failed
 	if result.InvalidFiles > 0 {
-		os.Exit(1)
+		return fmt.Errorf("validation failed: %d invalid file(s)", result.InvalidFiles)
 	}
 
 	return nil
@@ -278,54 +280,36 @@ func validateFromStdin(cmd *cobra.Command) error {
 
 // validateInlineSQL validates inline SQL passed as a command argument
 func validateInlineSQL(cmd *cobra.Command, sql string) error {
-	// Write to temp file and validate using existing logic
-	tmpFile, err := os.CreateTemp("", "gosqlx-inline-*.sql")
+	// Parse the SQL string directly using tokenizer and parser
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+
+	tokens, err := tkz.Tokenize([]byte(sql))
 	if err != nil {
-		return fmt.Errorf("failed to create temporary file: %w", err)
-	}
-	defer func() { _ = os.Remove(tmpFile.Name()) }()
-	defer func() { _ = tmpFile.Close() }()
-
-	if _, err := tmpFile.WriteString(sql); err != nil {
-		return fmt.Errorf("failed to write to temporary file: %w", err)
-	}
-	if err := tmpFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temporary file: %w", err)
+		if !validateQuiet {
+			fmt.Fprintf(cmd.ErrOrStderr(), "✗ Invalid SQL: %v\n", err)
+		}
+		return fmt.Errorf("validation failed: tokenization error: %w", err)
 	}
 
-	// Load configuration
-	cfg, err := config.LoadDefault()
+	if len(tokens) == 0 {
+		if !validateQuiet {
+			fmt.Fprintln(cmd.OutOrStdout(), "✓ Empty input (no statements)")
+		}
+		return nil
+	}
+
+	p := parser.NewParser()
+	_, err = p.ParseFromModelTokens(tokens)
 	if err != nil {
-		cfg = config.DefaultConfig()
+		if !validateQuiet {
+			fmt.Fprintf(cmd.ErrOrStderr(), "✗ Invalid SQL: %v\n", err)
+		}
+		return fmt.Errorf("validation failed: parse error: %w", err)
 	}
 
-	flagsChanged := make(map[string]bool)
-	cmd.Flags().Visit(func(f *pflag.Flag) {
-		flagsChanged[f.Name] = true
-	})
-	if cmd.Parent() != nil && cmd.Parent().PersistentFlags() != nil {
-		cmd.Parent().PersistentFlags().Visit(func(f *pflag.Flag) {
-			flagsChanged[f.Name] = true
-		})
-	}
-
-	quietMode := validateQuiet || validateOutputFormat == "sarif" || validateOutputFormat == "json"
-	opts := ValidatorOptionsFromConfig(cfg, flagsChanged, ValidatorFlags{
-		Quiet:      quietMode,
-		ShowStats:  validateStats && validateOutputFormat == "text",
-		Dialect:    validateDialect,
-		StrictMode: validateStrict,
-		Verbose:    verbose,
-	})
-
-	validator := NewValidator(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
-	result, err := validator.Validate([]string{tmpFile.Name()})
-	if err != nil {
-		return err
-	}
-
-	if result.InvalidFiles > 0 {
-		os.Exit(1)
+	if !validateQuiet {
+		fmt.Fprintln(cmd.OutOrStdout(), "✓ Valid SQL")
 	}
 	return nil
 }

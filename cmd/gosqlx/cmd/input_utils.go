@@ -163,23 +163,17 @@ func isValidSQLFileExtension(ext string) bool {
 
 // looksLikeSQL performs basic heuristic checks to see if input looks like SQL
 func looksLikeSQL(input string) bool {
-	// Convert to uppercase for case-insensitive checking
-	upperInput := strings.ToUpper(strings.TrimSpace(input))
-
-	// Check for common SQL keywords at the beginning
-	sqlKeywords := []string{
+	upper := strings.ToUpper(strings.TrimSpace(input))
+	keywords := []string{
 		"SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "DROP", "ALTER",
-		"WITH", "EXPLAIN", "ANALYZE", "SHOW", "DESCRIBE", "DESC", "MERGE",
+		"TRUNCATE", "WITH", "MERGE", "EXPLAIN", "ANALYZE", "SHOW", "DESCRIBE", "DESC",
 	}
-
-	for _, keyword := range sqlKeywords {
-		if strings.HasPrefix(upperInput, keyword) {
+	for _, kw := range keywords {
+		if strings.HasPrefix(upper, kw+" ") || strings.HasPrefix(upper, kw+"\n") || strings.HasPrefix(upper, kw+"\t") || upper == kw {
 			return true
 		}
 	}
-
-	// If no keywords found but contains semicolon, might still be SQL
-	return strings.Contains(input, ";")
+	return false
 }
 
 // ExpandFileArgs expands file arguments, handling directories and wildcards

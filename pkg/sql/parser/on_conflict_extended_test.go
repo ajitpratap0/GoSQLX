@@ -23,33 +23,33 @@ func TestParser_InsertOnConflict_Extended(t *testing.T) {
 		wantErr         bool
 	}{
 		{
-			name:           "ON CONFLICT ON CONSTRAINT with DO UPDATE and WHERE",
-			input:          "INSERT INTO users (id, name) VALUES (1, 'test') ON CONFLICT ON CONSTRAINT users_pkey DO UPDATE SET name = EXCLUDED.name WHERE users.active = true",
-			wantTableName:  "users",
-			wantConstraint: "users_pkey",
+			name:            "ON CONFLICT ON CONSTRAINT with DO UPDATE and WHERE",
+			input:           "INSERT INTO users (id, name) VALUES (1, 'test') ON CONFLICT ON CONSTRAINT users_pkey DO UPDATE SET name = EXCLUDED.name WHERE users.active = true",
+			wantTableName:   "users",
+			wantConstraint:  "users_pkey",
 			wantUpdateCount: 1,
-			wantHasWhere:   true,
+			wantHasWhere:    true,
 		},
 		{
-			name:           "ON CONFLICT with multiple target columns DO UPDATE",
-			input:          "INSERT INTO orders (user_id, product_id, qty) VALUES (1, 2, 5) ON CONFLICT (user_id, product_id) DO UPDATE SET qty = orders.qty + EXCLUDED.qty",
-			wantTableName:  "orders",
-			wantTargetCols: 2,
+			name:            "ON CONFLICT with multiple target columns DO UPDATE",
+			input:           "INSERT INTO orders (user_id, product_id, qty) VALUES (1, 2, 5) ON CONFLICT (user_id, product_id) DO UPDATE SET qty = orders.qty + EXCLUDED.qty",
+			wantTableName:   "orders",
+			wantTargetCols:  2,
 			wantUpdateCount: 1,
 		},
 		{
-			name:           "ON CONFLICT with multiple target columns and WHERE",
-			input:          "INSERT INTO orders (user_id, product_id, qty) VALUES (1, 2, 5) ON CONFLICT (user_id, product_id) DO UPDATE SET qty = EXCLUDED.qty WHERE orders.qty < EXCLUDED.qty",
-			wantTableName:  "orders",
-			wantTargetCols: 2,
+			name:            "ON CONFLICT with multiple target columns and WHERE",
+			input:           "INSERT INTO orders (user_id, product_id, qty) VALUES (1, 2, 5) ON CONFLICT (user_id, product_id) DO UPDATE SET qty = EXCLUDED.qty WHERE orders.qty < EXCLUDED.qty",
+			wantTableName:   "orders",
+			wantTargetCols:  2,
 			wantUpdateCount: 1,
-			wantHasWhere:   true,
+			wantHasWhere:    true,
 		},
 		{
-			name:          "ON CONFLICT DO NOTHING without target",
-			input:         "INSERT INTO logs (msg) VALUES ('hello') ON CONFLICT DO NOTHING",
-			wantTableName: "logs",
-			wantDoNothing: true,
+			name:           "ON CONFLICT DO NOTHING without target",
+			input:          "INSERT INTO logs (msg) VALUES ('hello') ON CONFLICT DO NOTHING",
+			wantTableName:  "logs",
+			wantDoNothing:  true,
 			wantTargetCols: 0,
 		},
 		{
@@ -122,19 +122,19 @@ func TestParser_InsertOnConflict_Extended(t *testing.T) {
 
 func TestParser_InsertSelectOnConflict(t *testing.T) {
 	tests := []struct {
-		name  string
-		input string
-		wantDoNothing bool
+		name            string
+		input           string
+		wantDoNothing   bool
 		wantUpdateCount int
 	}{
 		{
-			name:  "INSERT SELECT ON CONFLICT DO NOTHING",
-			input: "INSERT INTO archive (id, name) SELECT id, name FROM users ON CONFLICT DO NOTHING",
+			name:          "INSERT SELECT ON CONFLICT DO NOTHING",
+			input:         "INSERT INTO archive (id, name) SELECT id, name FROM users ON CONFLICT DO NOTHING",
 			wantDoNothing: true,
 		},
 		{
-			name:  "INSERT SELECT ON CONFLICT DO UPDATE",
-			input: "INSERT INTO archive (id, name) SELECT id, name FROM users ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name",
+			name:            "INSERT SELECT ON CONFLICT DO UPDATE",
+			input:           "INSERT INTO archive (id, name) SELECT id, name FROM users ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name",
 			wantUpdateCount: 1,
 		},
 	}

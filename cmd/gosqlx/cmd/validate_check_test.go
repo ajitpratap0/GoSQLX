@@ -22,10 +22,10 @@ func TestValidateCheckMode(t *testing.T) {
 	}
 
 	tests := []struct {
-		name       string
-		args       []string
-		wantErr    bool
-		wantEmpty  bool // stdout+stderr should be empty in quiet mode
+		name      string
+		args      []string
+		wantErr   bool
+		wantEmpty bool // stdout+stderr should be empty in quiet mode
 	}{
 		{
 			name:      "check valid file produces no output",

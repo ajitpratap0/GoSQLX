@@ -212,6 +212,589 @@ func TestKeywordCase(t *testing.T) {
 	}
 }
 
+func TestAlterTableFormat_Readable(t *testing.T) {
+	stmt := &AlterTableStatement{
+		Table: "users",
+		Actions: []AlterTableAction{
+			{Type: "ADD COLUMN", ColumnDef: &ColumnDef{Name: "email", Type: "VARCHAR(255)"}},
+		},
+	}
+
+	result := stmt.Format(ReadableStyle())
+	if !strings.Contains(result, "ALTER TABLE") {
+		t.Error("expected ALTER TABLE keyword")
+	}
+	if !strings.Contains(result, "ADD COLUMN") {
+		t.Error("expected ADD COLUMN")
+	}
+	if !strings.Contains(result, "email") {
+		t.Error("expected column name email")
+	}
+	if !strings.HasSuffix(result, ";") {
+		t.Error("ReadableStyle should end with semicolon")
+	}
+}
+
+func TestAlterTableFormat_DropColumn(t *testing.T) {
+	stmt := &AlterTableStatement{
+		Table: "users",
+		Actions: []AlterTableAction{
+			{Type: "DROP COLUMN", ColumnName: "age"},
+		},
+	}
+
+	result := stmt.Format(CompactStyle())
+	if !strings.Contains(result, "DROP COLUMN age") {
+		t.Errorf("expected DROP COLUMN age, got: %s", result)
+	}
+}
+
+func TestAlterTableFormat_MultipleActions(t *testing.T) {
+	stmt := &AlterTableStatement{
+		Table: "users",
+		Actions: []AlterTableAction{
+			{Type: "ADD COLUMN", ColumnDef: &ColumnDef{Name: "email", Type: "TEXT"}},
+			{Type: "DROP COLUMN", ColumnName: "age"},
+		},
+	}
+
+	result := stmt.Format(CompactStyle())
+	if !strings.Contains(result, ",") {
+		t.Errorf("expected comma between actions, got: %s", result)
+	}
+}
+
+func TestAlterTableFormat_Nil(t *testing.T) {
+	var stmt *AlterTableStatement
+	if stmt.Format(CompactStyle()) != "" {
+		t.Error("nil should return empty string")
+	}
+}
+
+func TestCreateIndexFormat_Readable(t *testing.T) {
+	stmt := &CreateIndexStatement{
+		Unique:      true,
+		IfNotExists: true,
+		Name:        "idx_users_email",
+		Table:       "users",
+		Columns:     []IndexColumn{{Column: "email", Direction: "ASC"}},
+		Using:       "btree",
+	}
+
+	result := stmt.Format(ReadableStyle())
+	if !strings.Contains(result, "CREATE UNIQUE INDEX IF NOT EXISTS") {
+		t.Errorf("expected CREATE UNIQUE INDEX IF NOT EXISTS, got: %s", result)
+	}
+	if !strings.Contains(result, "ON users") {
+		t.Errorf("expected ON users, got: %s", result)
+	}
+	if !strings.Contains(result, "USING btree") {
+		t.Errorf("expected USING btree, got: %s", result)
+	}
+	if !strings.Contains(result, "email ASC") {
+		t.Errorf("expected email ASC, got: %s", result)
+	}
+}
+
+func TestCreateIndexFormat_WithWhere(t *testing.T) {
+	stmt := &CreateIndexStatement{
+		Name:    "idx_active",
+		Table:   "users",
+		Columns: []IndexColumn{{Column: "id"}},
+		Where:   &BinaryExpression{Left: &Identifier{Name: "active"}, Operator: "=", Right: &LiteralValue{Value: "true"}},
+	}
+
+	result := stmt.Format(CompactStyle())
+	if !strings.Contains(result, "WHERE") {
+		t.Errorf("expected WHERE clause, got: %s", result)
+	}
+}
+
+func TestCreateIndexFormat_Nil(t *testing.T) {
+	var stmt *CreateIndexStatement
+	if stmt.Format(CompactStyle()) != "" {
+		t.Error("nil should return empty string")
+	}
+}
+
+func TestCreateIndexFormat_NullsLast(t *testing.T) {
+	stmt := &CreateIndexStatement{
+		Name:    "idx_test",
+		Table:   "t",
+		Columns: []IndexColumn{{Column: "a", NullsLast: true, Collate: "en_US"}},
+	}
+	result := stmt.Format(ReadableStyle())
+	if !strings.Contains(result, "COLLATE en_US") {
+		t.Errorf("expected COLLATE, got: %s", result)
+	}
+	if !strings.Contains(result, "NULLS LAST") {
+		t.Errorf("expected NULLS LAST, got: %s", result)
+	}
+}
+
+func TestCreateViewFormat_Readable(t *testing.T) {
+	stmt := &CreateViewStatement{
+		OrReplace: true,
+		Name:      "active_users",
+		Columns:   []string{"id", "name"},
+		Query: &SelectStatement{
+			Columns: []Expression{&Identifier{Name: "id"}, &Identifier{Name: "name"}},
+			From:    []TableReference{{Name: "users"}},
+			Where:   &BinaryExpression{Left: &Identifier{Name: "active"}, Operator: "=", Right: &LiteralValue{Value: "true"}},
+		},
+	}
+
+	result := stmt.Format(ReadableStyle())
+	if !strings.Contains(result, "CREATE OR REPLACE VIEW") {
+		t.Errorf("expected CREATE OR REPLACE VIEW, got: %s", result)
+	}
+	if !strings.Contains(result, "(id, name)") {
+		t.Errorf("expected column list, got: %s", result)
+	}
+	if !strings.Contains(result, "AS") {
+		t.Errorf("expected AS keyword, got: %s", result)
+	}
+}
+
+func TestCreateViewFormat_Nil(t *testing.T) {
+	var stmt *CreateViewStatement
+	if stmt.Format(CompactStyle()) != "" {
+		t.Error("nil should return empty string")
+	}
+}
+
+func TestCreateViewFormat_WithOption(t *testing.T) {
+	stmt := &CreateViewStatement{
+		Name:       "v",
+		Query:      &SelectStatement{Columns: []Expression{&Identifier{Name: "1"}}},
+		WithOption: "WITH CHECK OPTION",
+	}
+	result := stmt.Format(ReadableStyle())
+	if !strings.Contains(result, "WITH CHECK OPTION") {
+		t.Errorf("expected WITH CHECK OPTION, got: %s", result)
+	}
+}
+
+func TestCreateMaterializedViewFormat_Readable(t *testing.T) {
+	withData := true
+	stmt := &CreateMaterializedViewStatement{
+		IfNotExists: true,
+		Name:        "mv_stats",
+		Columns:     []string{"cnt"},
+		Query: &SelectStatement{
+			Columns: []Expression{&FunctionCall{Name: "count", Arguments: []Expression{&Identifier{Name: "*"}}}},
+			From:    []TableReference{{Name: "events"}},
+		},
+		WithData: &withData,
+	}
+
+	result := stmt.Format(ReadableStyle())
+	if !strings.Contains(result, "CREATE MATERIALIZED VIEW IF NOT EXISTS") {
+		t.Errorf("expected CREATE MATERIALIZED VIEW IF NOT EXISTS, got: %s", result)
+	}
+	if !strings.Contains(result, "WITH DATA") {
+		t.Errorf("expected WITH DATA, got: %s", result)
+	}
+}
+
+func TestCreateMaterializedViewFormat_NoData(t *testing.T) {
+	noData := false
+	stmt := &CreateMaterializedViewStatement{
+		Name:     "mv_test",
+		Query:    &SelectStatement{Columns: []Expression{&Identifier{Name: "1"}}},
+		WithData: &noData,
+	}
+	result := stmt.Format(CompactStyle())
+	if !strings.Contains(result, "WITH NO DATA") {
+		t.Errorf("expected WITH NO DATA, got: %s", result)
+	}
+}
+
+func TestCreateMaterializedViewFormat_Nil(t *testing.T) {
+	var stmt *CreateMaterializedViewStatement
+	if stmt.Format(CompactStyle()) != "" {
+		t.Error("nil should return empty string")
+	}
+}
+
+func TestCreateMaterializedViewFormat_Tablespace(t *testing.T) {
+	stmt := &CreateMaterializedViewStatement{
+		Name:       "mv_ts",
+		Query:      &SelectStatement{Columns: []Expression{&Identifier{Name: "1"}}},
+		Tablespace: "fast_ssd",
+	}
+	result := stmt.Format(ReadableStyle())
+	if !strings.Contains(result, "TABLESPACE fast_ssd") {
+		t.Errorf("expected TABLESPACE, got: %s", result)
+	}
+}
+
+func TestRefreshMaterializedViewFormat_Readable(t *testing.T) {
+	withData := true
+	stmt := &RefreshMaterializedViewStatement{
+		Concurrently: true,
+		Name:         "mv_stats",
+		WithData:     &withData,
+	}
+
+	result := stmt.Format(ReadableStyle())
+	if !strings.Contains(result, "REFRESH MATERIALIZED VIEW CONCURRENTLY") {
+		t.Errorf("expected REFRESH MATERIALIZED VIEW CONCURRENTLY, got: %s", result)
+	}
+	if !strings.Contains(result, "WITH DATA") {
+		t.Errorf("expected WITH DATA, got: %s", result)
+	}
+}
+
+func TestRefreshMaterializedViewFormat_Nil(t *testing.T) {
+	var stmt *RefreshMaterializedViewStatement
+	if stmt.Format(CompactStyle()) != "" {
+		t.Error("nil should return empty string")
+	}
+}
+
+func TestDropFormat_Readable(t *testing.T) {
+	stmt := &DropStatement{
+		ObjectType:  "TABLE",
+		IfExists:    true,
+		Names:       []string{"users", "orders"},
+		CascadeType: "CASCADE",
+	}
+
+	result := stmt.Format(ReadableStyle())
+	if !strings.Contains(result, "DROP TABLE IF EXISTS") {
+		t.Errorf("expected DROP TABLE IF EXISTS, got: %s", result)
+	}
+	if !strings.Contains(result, "users, orders") {
+		t.Errorf("expected multiple table names, got: %s", result)
+	}
+	if !strings.Contains(result, "CASCADE") {
+		t.Errorf("expected CASCADE, got: %s", result)
+	}
+}
+
+func TestDropFormat_Simple(t *testing.T) {
+	stmt := &DropStatement{
+		ObjectType: "INDEX",
+		Names:      []string{"idx_test"},
+	}
+	result := stmt.Format(CompactStyle())
+	expected := "DROP INDEX idx_test"
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestDropFormat_Nil(t *testing.T) {
+	var stmt *DropStatement
+	if stmt.Format(CompactStyle()) != "" {
+		t.Error("nil should return empty string")
+	}
+}
+
+func TestTruncateFormat_Readable(t *testing.T) {
+	stmt := &TruncateStatement{
+		Tables:          []string{"users", "orders"},
+		RestartIdentity: true,
+		CascadeType:     "CASCADE",
+	}
+
+	result := stmt.Format(ReadableStyle())
+	if !strings.Contains(result, "TRUNCATE TABLE") {
+		t.Errorf("expected TRUNCATE TABLE, got: %s", result)
+	}
+	if !strings.Contains(result, "users, orders") {
+		t.Errorf("expected table names, got: %s", result)
+	}
+	if !strings.Contains(result, "RESTART IDENTITY") {
+		t.Errorf("expected RESTART IDENTITY, got: %s", result)
+	}
+	if !strings.Contains(result, "CASCADE") {
+		t.Errorf("expected CASCADE, got: %s", result)
+	}
+}
+
+func TestTruncateFormat_ContinueIdentity(t *testing.T) {
+	stmt := &TruncateStatement{
+		Tables:           []string{"t"},
+		ContinueIdentity: true,
+	}
+	result := stmt.Format(ReadableStyle())
+	if !strings.Contains(result, "CONTINUE IDENTITY") {
+		t.Errorf("expected CONTINUE IDENTITY, got: %s", result)
+	}
+}
+
+func TestTruncateFormat_Nil(t *testing.T) {
+	var stmt *TruncateStatement
+	if stmt.Format(CompactStyle()) != "" {
+		t.Error("nil should return empty string")
+	}
+}
+
+func TestMergeFormat_Readable(t *testing.T) {
+	stmt := &MergeStatement{
+		TargetTable: TableReference{Name: "target"},
+		TargetAlias: "t",
+		SourceTable: TableReference{Name: "source"},
+		SourceAlias: "s",
+		OnCondition: &BinaryExpression{Left: &Identifier{Name: "t.id"}, Operator: "=", Right: &Identifier{Name: "s.id"}},
+		WhenClauses: []*MergeWhenClause{
+			{
+				Type: "MATCHED",
+				Action: &MergeAction{
+					ActionType: "UPDATE",
+					SetClauses: []SetClause{{Column: "name", Value: &Identifier{Name: "s.name"}}},
+				},
+			},
+			{
+				Type: "NOT_MATCHED",
+				Action: &MergeAction{
+					ActionType: "INSERT",
+					Columns:    []string{"id", "name"},
+					Values:     []Expression{&Identifier{Name: "s.id"}, &Identifier{Name: "s.name"}},
+				},
+			},
+		},
+	}
+	result := stmt.Format(ReadableStyle())
+	for _, kw := range []string{"MERGE INTO", "USING", "ON", "WHEN MATCHED", "UPDATE SET", "WHEN NOT MATCHED", "INSERT", "VALUES"} {
+		if !strings.Contains(result, kw) {
+			t.Errorf("expected %q in:\n%s", kw, result)
+		}
+	}
+}
+
+func TestMergeFormat_Nil(t *testing.T) {
+	var stmt *MergeStatement
+	if stmt.Format(CompactStyle()) != "" {
+		t.Error("nil should return empty string")
+	}
+}
+
+func TestMergeFormat_Delete(t *testing.T) {
+	stmt := &MergeStatement{
+		TargetTable: TableReference{Name: "t"},
+		SourceTable: TableReference{Name: "s"},
+		OnCondition: &BinaryExpression{Left: &Identifier{Name: "t.id"}, Operator: "=", Right: &Identifier{Name: "s.id"}},
+		WhenClauses: []*MergeWhenClause{
+			{Type: "MATCHED", Action: &MergeAction{ActionType: "DELETE"}},
+		},
+	}
+	result := stmt.Format(ReadableStyle())
+	if !strings.Contains(result, "DELETE") {
+		t.Errorf("expected DELETE in:\n%s", result)
+	}
+}
+
+func TestMergeFormat_DefaultValues(t *testing.T) {
+	stmt := &MergeStatement{
+		TargetTable: TableReference{Name: "t"},
+		SourceTable: TableReference{Name: "s"},
+		OnCondition: &BinaryExpression{Left: &Identifier{Name: "t.id"}, Operator: "=", Right: &Identifier{Name: "s.id"}},
+		WhenClauses: []*MergeWhenClause{
+			{Type: "NOT_MATCHED", Action: &MergeAction{ActionType: "INSERT", DefaultValues: true}},
+		},
+	}
+	result := stmt.Format(ReadableStyle())
+	if !strings.Contains(result, "DEFAULT VALUES") {
+		t.Errorf("expected DEFAULT VALUES in:\n%s", result)
+	}
+}
+
+func TestMergeFormat_WhenCondition(t *testing.T) {
+	stmt := &MergeStatement{
+		TargetTable: TableReference{Name: "t"},
+		SourceTable: TableReference{Name: "s"},
+		OnCondition: &BinaryExpression{Left: &Identifier{Name: "t.id"}, Operator: "=", Right: &Identifier{Name: "s.id"}},
+		WhenClauses: []*MergeWhenClause{
+			{
+				Type:      "MATCHED",
+				Condition: &BinaryExpression{Left: &Identifier{Name: "s.active"}, Operator: "=", Right: &LiteralValue{Value: "true"}},
+				Action:    &MergeAction{ActionType: "DELETE"},
+			},
+		},
+	}
+	result := stmt.Format(ReadableStyle())
+	if !strings.Contains(result, "AND") {
+		t.Errorf("expected AND condition in:\n%s", result)
+	}
+}
+
+func TestCaseFormat_Simple(t *testing.T) {
+	expr := &CaseExpression{
+		Value: &Identifier{Name: "status"},
+		WhenClauses: []WhenClause{
+			{Condition: &LiteralValue{Value: "1"}, Result: &LiteralValue{Value: "'active'"}},
+			{Condition: &LiteralValue{Value: "2"}, Result: &LiteralValue{Value: "'inactive'"}},
+		},
+		ElseClause: &LiteralValue{Value: "'unknown'"},
+	}
+	result := expr.Format(ReadableStyle())
+	for _, kw := range []string{"CASE", "WHEN", "THEN", "ELSE", "END"} {
+		if !strings.Contains(result, kw) {
+			t.Errorf("expected %q in: %s", kw, result)
+		}
+	}
+	if !strings.Contains(result, "status") {
+		t.Errorf("expected simple CASE value in: %s", result)
+	}
+}
+
+func TestCaseFormat_Searched(t *testing.T) {
+	expr := &CaseExpression{
+		WhenClauses: []WhenClause{
+			{Condition: &BinaryExpression{Left: &Identifier{Name: "x"}, Operator: ">", Right: &LiteralValue{Value: "0"}}, Result: &LiteralValue{Value: "'pos'"}},
+		},
+	}
+	result := expr.Format(ReadableStyle())
+	if !strings.Contains(result, "CASE WHEN") {
+		t.Errorf("expected searched CASE in: %s", result)
+	}
+}
+
+func TestCaseFormat_Nil(t *testing.T) {
+	var expr *CaseExpression
+	if expr.Format(CompactStyle()) != "" {
+		t.Error("nil should return empty string")
+	}
+}
+
+func TestBetweenFormat(t *testing.T) {
+	expr := &BetweenExpression{
+		Expr:  &Identifier{Name: "age"},
+		Lower: &LiteralValue{Value: "18"},
+		Upper: &LiteralValue{Value: "65"},
+	}
+	result := expr.Format(ReadableStyle())
+	expected := "age BETWEEN 18 AND 65"
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestBetweenFormat_Not(t *testing.T) {
+	expr := &BetweenExpression{
+		Expr:  &Identifier{Name: "age"},
+		Lower: &LiteralValue{Value: "18"},
+		Upper: &LiteralValue{Value: "65"},
+		Not:   true,
+	}
+	result := expr.Format(ReadableStyle())
+	if !strings.Contains(result, "NOT BETWEEN") {
+		t.Errorf("expected NOT BETWEEN in: %s", result)
+	}
+}
+
+func TestBetweenFormat_Nil(t *testing.T) {
+	var expr *BetweenExpression
+	if expr.Format(CompactStyle()) != "" {
+		t.Error("nil should return empty string")
+	}
+}
+
+func TestInFormat_Values(t *testing.T) {
+	expr := &InExpression{
+		Expr: &Identifier{Name: "id"},
+		List: []Expression{&LiteralValue{Value: "1"}, &LiteralValue{Value: "2"}, &LiteralValue{Value: "3"}},
+	}
+	result := expr.Format(ReadableStyle())
+	expected := "id IN (1, 2, 3)"
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestInFormat_Not(t *testing.T) {
+	expr := &InExpression{
+		Expr: &Identifier{Name: "id"},
+		List: []Expression{&LiteralValue{Value: "1"}},
+		Not:  true,
+	}
+	result := expr.Format(ReadableStyle())
+	if !strings.Contains(result, "NOT IN") {
+		t.Errorf("expected NOT IN in: %s", result)
+	}
+}
+
+func TestInFormat_Subquery(t *testing.T) {
+	expr := &InExpression{
+		Expr: &Identifier{Name: "id"},
+		Subquery: &SelectStatement{
+			Columns: []Expression{&Identifier{Name: "id"}},
+			From:    []TableReference{{Name: "other"}},
+		},
+	}
+	result := expr.Format(ReadableStyle())
+	if !strings.Contains(result, "IN (") || !strings.Contains(result, "SELECT") {
+		t.Errorf("expected IN (SELECT ...) in: %s", result)
+	}
+}
+
+func TestInFormat_Nil(t *testing.T) {
+	var expr *InExpression
+	if expr.Format(CompactStyle()) != "" {
+		t.Error("nil should return empty string")
+	}
+}
+
+func TestExistsFormat(t *testing.T) {
+	expr := &ExistsExpression{
+		Subquery: &SelectStatement{
+			Columns: []Expression{&LiteralValue{Value: "1"}},
+			From:    []TableReference{{Name: "users"}},
+			Where:   &BinaryExpression{Left: &Identifier{Name: "active"}, Operator: "=", Right: &LiteralValue{Value: "true"}},
+		},
+	}
+	result := expr.Format(ReadableStyle())
+	if !strings.Contains(result, "EXISTS") || !strings.Contains(result, "SELECT") {
+		t.Errorf("expected EXISTS (SELECT ...) in: %s", result)
+	}
+}
+
+func TestExistsFormat_Nil(t *testing.T) {
+	var expr *ExistsExpression
+	if expr.Format(CompactStyle()) != "" {
+		t.Error("nil should return empty string")
+	}
+}
+
+func TestSubqueryFormat(t *testing.T) {
+	expr := &SubqueryExpression{
+		Subquery: &SelectStatement{
+			Columns: []Expression{&Identifier{Name: "max_id"}},
+			From:    []TableReference{{Name: "orders"}},
+		},
+	}
+	result := expr.Format(CompactStyle())
+	if !strings.HasPrefix(result, "(") || !strings.HasSuffix(result, ")") {
+		t.Errorf("expected wrapped in parens: %s", result)
+	}
+	if !strings.Contains(result, "SELECT") {
+		t.Errorf("expected SELECT in: %s", result)
+	}
+}
+
+func TestSubqueryFormat_Nil(t *testing.T) {
+	var expr *SubqueryExpression
+	if expr.Format(CompactStyle()) != "" {
+		t.Error("nil should return empty string")
+	}
+}
+
+func TestCaseFormat_LowerKeywords(t *testing.T) {
+	expr := &CaseExpression{
+		WhenClauses: []WhenClause{
+			{Condition: &LiteralValue{Value: "true"}, Result: &LiteralValue{Value: "1"}},
+		},
+	}
+	opts := FormatOptions{KeywordCase: KeywordLower}
+	result := expr.Format(opts)
+	if !strings.Contains(result, "case") || !strings.Contains(result, "when") || !strings.Contains(result, "end") {
+		t.Errorf("expected lowercase keywords in: %s", result)
+	}
+}
+
 func TestFormatRoundtrip(t *testing.T) {
 	// Format with compact style should produce parseable SQL equivalent to SQL()
 	stmt := &SelectStatement{

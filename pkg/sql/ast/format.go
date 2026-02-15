@@ -535,6 +535,556 @@ func (s *SetOperation) Format(opts FormatOptions) string {
 	return f.result()
 }
 
+// Format returns formatted SQL for an AlterTableStatement.
+func (a *AlterTableStatement) Format(opts FormatOptions) string {
+	if a == nil {
+		return ""
+	}
+	f := newFormatter(opts)
+	sb := f.sb
+
+	sb.WriteString(f.kw("ALTER TABLE"))
+	sb.WriteString(" ")
+	sb.WriteString(a.Table)
+
+	for i, action := range a.Actions {
+		if i > 0 {
+			sb.WriteString(",")
+		}
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(f.kw(action.Type))
+		if action.ColumnDef != nil {
+			sb.WriteString(" ")
+			sb.WriteString(columnDefSQL(action.ColumnDef))
+		} else if action.Constraint != nil {
+			sb.WriteString(" ")
+			sb.WriteString(tableConstraintSQL(action.Constraint))
+		} else if action.ColumnName != "" {
+			sb.WriteString(" ")
+			sb.WriteString(action.ColumnName)
+		}
+	}
+
+	if opts.AddSemicolon {
+		sb.WriteString(";")
+	}
+
+	return f.result()
+}
+
+// Format returns formatted SQL for a CreateIndexStatement.
+func (c *CreateIndexStatement) Format(opts FormatOptions) string {
+	if c == nil {
+		return ""
+	}
+	f := newFormatter(opts)
+	sb := f.sb
+
+	sb.WriteString(f.kw("CREATE"))
+	sb.WriteString(" ")
+	if c.Unique {
+		sb.WriteString(f.kw("UNIQUE"))
+		sb.WriteString(" ")
+	}
+	sb.WriteString(f.kw("INDEX"))
+	sb.WriteString(" ")
+	if c.IfNotExists {
+		sb.WriteString(f.kw("IF NOT EXISTS"))
+		sb.WriteString(" ")
+	}
+	sb.WriteString(c.Name)
+	sb.WriteString(" ")
+	sb.WriteString(f.kw("ON"))
+	sb.WriteString(" ")
+	sb.WriteString(c.Table)
+
+	if c.Using != "" {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("USING"))
+		sb.WriteString(" ")
+		sb.WriteString(c.Using)
+	}
+
+	sb.WriteString(" (")
+	cols := make([]string, len(c.Columns))
+	for i, col := range c.Columns {
+		s := col.Column
+		if col.Collate != "" {
+			s += " " + f.kw("COLLATE") + " " + col.Collate
+		}
+		if col.Direction != "" {
+			s += " " + f.kw(col.Direction)
+		}
+		if col.NullsLast {
+			s += " " + f.kw("NULLS LAST")
+		}
+		cols[i] = s
+	}
+	sb.WriteString(strings.Join(cols, ", "))
+	sb.WriteString(")")
+
+	if c.Where != nil {
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(f.kw("WHERE"))
+		sb.WriteString(" ")
+		sb.WriteString(exprSQL(c.Where))
+	}
+
+	if opts.AddSemicolon {
+		sb.WriteString(";")
+	}
+
+	return f.result()
+}
+
+// Format returns formatted SQL for a CreateViewStatement.
+func (c *CreateViewStatement) Format(opts FormatOptions) string {
+	if c == nil {
+		return ""
+	}
+	f := newFormatter(opts)
+	sb := f.sb
+
+	sb.WriteString(f.kw("CREATE"))
+	sb.WriteString(" ")
+	if c.OrReplace {
+		sb.WriteString(f.kw("OR REPLACE"))
+		sb.WriteString(" ")
+	}
+	if c.Temporary {
+		sb.WriteString(f.kw("TEMPORARY"))
+		sb.WriteString(" ")
+	}
+	sb.WriteString(f.kw("VIEW"))
+	sb.WriteString(" ")
+	if c.IfNotExists {
+		sb.WriteString(f.kw("IF NOT EXISTS"))
+		sb.WriteString(" ")
+	}
+	sb.WriteString(c.Name)
+
+	if len(c.Columns) > 0 {
+		sb.WriteString(" (")
+		sb.WriteString(strings.Join(c.Columns, ", "))
+		sb.WriteString(")")
+	}
+
+	sb.WriteString(" ")
+	sb.WriteString(f.kw("AS"))
+	sb.WriteString(f.clauseSep())
+	if qs, ok := c.Query.(interface{ Format(FormatOptions) string }); ok {
+		sb.WriteString(qs.Format(opts))
+	} else {
+		sb.WriteString(stmtSQL(c.Query))
+	}
+
+	if c.WithOption != "" {
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(f.kw(c.WithOption))
+	}
+
+	if opts.AddSemicolon {
+		sb.WriteString(";")
+	}
+
+	return f.result()
+}
+
+// Format returns formatted SQL for a CreateMaterializedViewStatement.
+func (c *CreateMaterializedViewStatement) Format(opts FormatOptions) string {
+	if c == nil {
+		return ""
+	}
+	f := newFormatter(opts)
+	sb := f.sb
+
+	sb.WriteString(f.kw("CREATE MATERIALIZED VIEW"))
+	sb.WriteString(" ")
+	if c.IfNotExists {
+		sb.WriteString(f.kw("IF NOT EXISTS"))
+		sb.WriteString(" ")
+	}
+	sb.WriteString(c.Name)
+
+	if len(c.Columns) > 0 {
+		sb.WriteString(" (")
+		sb.WriteString(strings.Join(c.Columns, ", "))
+		sb.WriteString(")")
+	}
+
+	if c.Tablespace != "" {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("TABLESPACE"))
+		sb.WriteString(" ")
+		sb.WriteString(c.Tablespace)
+	}
+
+	sb.WriteString(" ")
+	sb.WriteString(f.kw("AS"))
+	sb.WriteString(f.clauseSep())
+	if qs, ok := c.Query.(interface{ Format(FormatOptions) string }); ok {
+		sb.WriteString(qs.Format(opts))
+	} else {
+		sb.WriteString(stmtSQL(c.Query))
+	}
+
+	if c.WithData != nil {
+		sb.WriteString(f.clauseSep())
+		if *c.WithData {
+			sb.WriteString(f.kw("WITH DATA"))
+		} else {
+			sb.WriteString(f.kw("WITH NO DATA"))
+		}
+	}
+
+	if opts.AddSemicolon {
+		sb.WriteString(";")
+	}
+
+	return f.result()
+}
+
+// Format returns formatted SQL for a RefreshMaterializedViewStatement.
+func (r *RefreshMaterializedViewStatement) Format(opts FormatOptions) string {
+	if r == nil {
+		return ""
+	}
+	f := newFormatter(opts)
+	sb := f.sb
+
+	sb.WriteString(f.kw("REFRESH MATERIALIZED VIEW"))
+	sb.WriteString(" ")
+	if r.Concurrently {
+		sb.WriteString(f.kw("CONCURRENTLY"))
+		sb.WriteString(" ")
+	}
+	sb.WriteString(r.Name)
+
+	if r.WithData != nil {
+		sb.WriteString(f.clauseSep())
+		if *r.WithData {
+			sb.WriteString(f.kw("WITH DATA"))
+		} else {
+			sb.WriteString(f.kw("WITH NO DATA"))
+		}
+	}
+
+	if opts.AddSemicolon {
+		sb.WriteString(";")
+	}
+
+	return f.result()
+}
+
+// Format returns formatted SQL for a DropStatement.
+func (d *DropStatement) Format(opts FormatOptions) string {
+	if d == nil {
+		return ""
+	}
+	f := newFormatter(opts)
+	sb := f.sb
+
+	sb.WriteString(f.kw("DROP"))
+	sb.WriteString(" ")
+	sb.WriteString(f.kw(d.ObjectType))
+	sb.WriteString(" ")
+	if d.IfExists {
+		sb.WriteString(f.kw("IF EXISTS"))
+		sb.WriteString(" ")
+	}
+	sb.WriteString(strings.Join(d.Names, ", "))
+
+	if d.CascadeType != "" {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw(d.CascadeType))
+	}
+
+	if opts.AddSemicolon {
+		sb.WriteString(";")
+	}
+
+	return f.result()
+}
+
+// Format returns formatted SQL for a TruncateStatement.
+func (t *TruncateStatement) Format(opts FormatOptions) string {
+	if t == nil {
+		return ""
+	}
+	f := newFormatter(opts)
+	sb := f.sb
+
+	sb.WriteString(f.kw("TRUNCATE"))
+	sb.WriteString(" ")
+	sb.WriteString(f.kw("TABLE"))
+	sb.WriteString(" ")
+	sb.WriteString(strings.Join(t.Tables, ", "))
+
+	if t.RestartIdentity {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("RESTART IDENTITY"))
+	} else if t.ContinueIdentity {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("CONTINUE IDENTITY"))
+	}
+
+	if t.CascadeType != "" {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw(t.CascadeType))
+	}
+
+	if opts.AddSemicolon {
+		sb.WriteString(";")
+	}
+
+	return f.result()
+}
+
+// formatExpr formats an expression using Format if available, otherwise SQL().
+func formatExpr(e Expression, opts FormatOptions) string {
+	if e == nil {
+		return ""
+	}
+	if fe, ok := e.(interface{ Format(FormatOptions) string }); ok {
+		return fe.Format(opts)
+	}
+	return exprSQL(e)
+}
+
+// formatStmt formats a statement using Format if available, otherwise SQL().
+func formatStmt(s Statement, opts FormatOptions) string {
+	if s == nil {
+		return ""
+	}
+	if fs, ok := s.(interface{ Format(FormatOptions) string }); ok {
+		return fs.Format(opts)
+	}
+	return stmtSQL(s)
+}
+
+// Format returns formatted SQL for a MergeStatement.
+func (m *MergeStatement) Format(opts FormatOptions) string {
+	if m == nil {
+		return ""
+	}
+	f := newFormatter(opts)
+	sb := f.sb
+
+	sb.WriteString(f.kw("MERGE INTO"))
+	sb.WriteString(" ")
+	sb.WriteString(tableRefSQL(&m.TargetTable))
+	if m.TargetAlias != "" {
+		sb.WriteString(" ")
+		sb.WriteString(m.TargetAlias)
+	}
+
+	sb.WriteString(f.clauseSep())
+	sb.WriteString(f.kw("USING"))
+	sb.WriteString(" ")
+	sb.WriteString(tableRefSQL(&m.SourceTable))
+	if m.SourceAlias != "" {
+		sb.WriteString(" ")
+		sb.WriteString(m.SourceAlias)
+	}
+
+	sb.WriteString(f.clauseSep())
+	sb.WriteString(f.kw("ON"))
+	sb.WriteString(" ")
+	sb.WriteString(exprSQL(m.OnCondition))
+
+	for _, when := range m.WhenClauses {
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(f.kw("WHEN"))
+		sb.WriteString(" ")
+		switch when.Type {
+		case "MATCHED":
+			sb.WriteString(f.kw("MATCHED"))
+		case "NOT_MATCHED":
+			sb.WriteString(f.kw("NOT MATCHED"))
+		case "NOT_MATCHED_BY_SOURCE":
+			sb.WriteString(f.kw("NOT MATCHED BY SOURCE"))
+		default:
+			sb.WriteString(f.kw(when.Type))
+		}
+		if when.Condition != nil {
+			sb.WriteString(" ")
+			sb.WriteString(f.kw("AND"))
+			sb.WriteString(" ")
+			sb.WriteString(exprSQL(when.Condition))
+		}
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("THEN"))
+
+		if when.Action != nil {
+			sb.WriteString(" ")
+			switch when.Action.ActionType {
+			case "UPDATE":
+				sb.WriteString(f.kw("UPDATE"))
+				sb.WriteString(" ")
+				sb.WriteString(f.kw("SET"))
+				sb.WriteString(" ")
+				sets := make([]string, len(when.Action.SetClauses))
+				for i, sc := range when.Action.SetClauses {
+					sets[i] = sc.Column + " = " + exprSQL(sc.Value)
+				}
+				sb.WriteString(strings.Join(sets, ", "))
+			case "DELETE":
+				sb.WriteString(f.kw("DELETE"))
+			case "INSERT":
+				sb.WriteString(f.kw("INSERT"))
+				if when.Action.DefaultValues {
+					sb.WriteString(" ")
+					sb.WriteString(f.kw("DEFAULT VALUES"))
+				} else {
+					if len(when.Action.Columns) > 0 {
+						sb.WriteString(" (")
+						sb.WriteString(strings.Join(when.Action.Columns, ", "))
+						sb.WriteString(")")
+					}
+					if len(when.Action.Values) > 0 {
+						sb.WriteString(" ")
+						sb.WriteString(f.kw("VALUES"))
+						sb.WriteString(" (")
+						vals := make([]string, len(when.Action.Values))
+						for i, v := range when.Action.Values {
+							vals[i] = exprSQL(v)
+						}
+						sb.WriteString(strings.Join(vals, ", "))
+						sb.WriteString(")")
+					}
+				}
+			}
+		}
+	}
+
+	if opts.AddSemicolon {
+		sb.WriteString(";")
+	}
+
+	return f.result()
+}
+
+// Format returns formatted SQL for a CaseExpression.
+func (c *CaseExpression) Format(opts FormatOptions) string {
+	if c == nil {
+		return ""
+	}
+	f := newFormatter(opts)
+	sb := f.sb
+
+	sb.WriteString(f.kw("CASE"))
+	if c.Value != nil {
+		sb.WriteString(" ")
+		sb.WriteString(formatExpr(c.Value, opts))
+	}
+	for _, when := range c.WhenClauses {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("WHEN"))
+		sb.WriteString(" ")
+		sb.WriteString(formatExpr(when.Condition, opts))
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("THEN"))
+		sb.WriteString(" ")
+		sb.WriteString(formatExpr(when.Result, opts))
+	}
+	if c.ElseClause != nil {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("ELSE"))
+		sb.WriteString(" ")
+		sb.WriteString(formatExpr(c.ElseClause, opts))
+	}
+	sb.WriteString(" ")
+	sb.WriteString(f.kw("END"))
+
+	return f.result()
+}
+
+// Format returns formatted SQL for a BetweenExpression.
+func (b *BetweenExpression) Format(opts FormatOptions) string {
+	if b == nil {
+		return ""
+	}
+	f := newFormatter(opts)
+	sb := f.sb
+
+	sb.WriteString(formatExpr(b.Expr, opts))
+	sb.WriteString(" ")
+	if b.Not {
+		sb.WriteString(f.kw("NOT"))
+		sb.WriteString(" ")
+	}
+	sb.WriteString(f.kw("BETWEEN"))
+	sb.WriteString(" ")
+	sb.WriteString(formatExpr(b.Lower, opts))
+	sb.WriteString(" ")
+	sb.WriteString(f.kw("AND"))
+	sb.WriteString(" ")
+	sb.WriteString(formatExpr(b.Upper, opts))
+
+	return f.result()
+}
+
+// Format returns formatted SQL for an InExpression.
+func (i *InExpression) Format(opts FormatOptions) string {
+	if i == nil {
+		return ""
+	}
+	f := newFormatter(opts)
+	sb := f.sb
+
+	sb.WriteString(formatExpr(i.Expr, opts))
+	sb.WriteString(" ")
+	if i.Not {
+		sb.WriteString(f.kw("NOT"))
+		sb.WriteString(" ")
+	}
+	sb.WriteString(f.kw("IN"))
+	sb.WriteString(" (")
+	if i.Subquery != nil {
+		sb.WriteString(formatStmt(i.Subquery, opts))
+	} else {
+		parts := make([]string, len(i.List))
+		for idx, e := range i.List {
+			parts[idx] = formatExpr(e, opts)
+		}
+		sb.WriteString(strings.Join(parts, ", "))
+	}
+	sb.WriteString(")")
+
+	return f.result()
+}
+
+// Format returns formatted SQL for an ExistsExpression.
+func (e *ExistsExpression) Format(opts FormatOptions) string {
+	if e == nil {
+		return ""
+	}
+	f := newFormatter(opts)
+	sb := f.sb
+
+	sb.WriteString(f.kw("EXISTS"))
+	sb.WriteString(" (")
+	sb.WriteString(formatStmt(e.Subquery, opts))
+	sb.WriteString(")")
+
+	return f.result()
+}
+
+// Format returns formatted SQL for a SubqueryExpression.
+func (s *SubqueryExpression) Format(opts FormatOptions) string {
+	if s == nil {
+		return ""
+	}
+	f := newFormatter(opts)
+	sb := f.sb
+
+	sb.WriteString("(")
+	sb.WriteString(formatStmt(s.Subquery, opts))
+	sb.WriteString(")")
+
+	return f.result()
+}
+
 // formatWith formats a WITH clause using the given formatter.
 func formatWith(w *WithClause, f *formatter) string {
 	if w == nil {

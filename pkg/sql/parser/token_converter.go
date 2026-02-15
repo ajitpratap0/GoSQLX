@@ -83,7 +83,9 @@ type TokenConverter struct {
 //
 // Usage:
 //
-//	result := parser.ConvertTokensForParser(tokenizerOutput)
+//	converter := parser.GetTokenConverter()
+//	defer parser.PutTokenConverter(converter)
+//	result, _ := converter.Convert(tokenizerOutput)
 //	ast, err := parser.ParseWithPositions(result)
 //	if err != nil {
 //	    // Error includes line/column from original source
@@ -852,7 +854,7 @@ func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck /
 //
 // Performance:
 //   - Throughput: ~10M tokens/second
-//   - Overhead: ~80ns per token (same as ConvertTokensForParser)
+//   - Overhead: ~80ns per token
 //   - Memory: Allocates slices for tokens and position mappings
 //
 // Usage (Recommended for Production):

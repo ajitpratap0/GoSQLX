@@ -77,7 +77,8 @@ func (p *Parser) Parse(input string) (*ParserResult, error) {
 		return result, nil
 	}
 
-	pr := parser.NewParser()
+	pr := parser.GetParser()
+	defer parser.PutParser(pr)
 	astObj, err := pr.ParseFromModelTokens(tokens)
 	if err != nil {
 		// Parser failed, no AST to release

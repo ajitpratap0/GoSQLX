@@ -42,18 +42,11 @@ func (f *Formatter) Format(sql string) (string, error) {
 		return "", fmt.Errorf("tokenization error: %w", err)
 	}
 
-	// Convert tokens for parser
-	parserTokens, err := parser.ConvertTokensForParser(tokens)
-	if err != nil {
-		return "", fmt.Errorf("token conversion error: %w", err)
-	}
+	// Parse tokens directly
+	p := parser.GetParser()
+	defer parser.PutParser(p)
 
-	// Create parser
-	p := parser.NewParser()
-	defer p.Release()
-
-	// Parse
-	result, err := p.Parse(parserTokens)
+	result, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
 		return "", fmt.Errorf("parse error: %w", err)
 	}

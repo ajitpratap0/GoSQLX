@@ -29,8 +29,3 @@ linters:
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude-rules:
-    - path: pkg/sql/parser/token_conversion\.go
-      linters:
-        - staticcheck
-      text: "SA1019"

@@ -2,9 +2,13 @@ package token
 
 import "github.com/ajitpratap0/GoSQLX/pkg/models"
 
-// Deprecated: Type is the legacy string-based token type system. It will be removed
+// Type is the legacy string-based token type system. It will be removed
 // in a future version as part of the token type unification (see #215).
 // Use models.TokenType (int-based) instead for all new code.
+//
+// NOTE: The "Deprecated" marker is intentionally omitted while internal bridge
+// code (token_conversion.go) still requires this type. It will be re-added
+// once the bridge is eliminated in the final #215 phase.
 type Type string
 
 // Token represents a lexical token in SQL source code.

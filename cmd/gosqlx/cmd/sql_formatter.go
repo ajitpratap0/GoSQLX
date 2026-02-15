@@ -268,7 +268,15 @@ func (f *SQLFormatter) formatInsert(stmt *ast.InsertStatement) error {
 
 	if stmt.Query != nil {
 		f.writeNewline()
-		return f.formatSelect(stmt.Query)
+		if sel, ok := stmt.Query.(*ast.SelectStatement); ok {
+			return f.formatSelect(sel)
+		}
+		// For SetOperation or other statement types, use Format if available
+		if fmtable, ok := stmt.Query.(interface {
+			Format(ast.FormatOptions) string
+		}); ok {
+			f.builder.WriteString(fmtable.Format(ast.FormatOptions{}))
+		}
 	}
 
 	return nil

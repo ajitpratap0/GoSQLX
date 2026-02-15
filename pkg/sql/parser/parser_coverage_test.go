@@ -590,7 +590,7 @@ func TestParser_CTEEdgeCases(t *testing.T) {
 				{Type: models.TokenTypeFrom, Literal: "FROM"},
 				{Type: models.TokenTypeIdentifier, Literal: "new_users"},
 			},
-			wantErr: true, // INSERT SELECT with CTE not yet fully supported
+			wantErr: false, // INSERT ... SELECT is now supported
 		},
 		{
 			name: "CTE with UPDATE statement",

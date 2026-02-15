@@ -561,7 +561,7 @@ func (i *InsertStatement) SQL() string {
 
 	if i.Query != nil {
 		sb.WriteString(" ")
-		sb.WriteString(i.Query.SQL())
+		sb.WriteString(stmtSQL(i.Query))
 	} else if len(i.Values) > 0 {
 		sb.WriteString(" VALUES ")
 		rows := make([]string, len(i.Values))

@@ -23,6 +23,9 @@ import (
 // - No goroutine leaks (goroutine count returns to baseline)
 // - No panics or race conditions
 func TestConcurrencyPoolExhaustion_10K_Tokenizer_Goroutines(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping stress test in short mode")
+	}
 	const (
 		numGoroutines = 10000
 		testTimeout   = 30 * time.Second
@@ -127,6 +130,9 @@ func TestConcurrencyPoolExhaustion_10K_Tokenizer_Goroutines(t *testing.T) {
 // - Proper cleanup of all pooled objects
 // - Tests pool coordination between tokenizer and parser
 func TestConcurrencyPoolExhaustion_10K_Full_Pipeline(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping stress test in short mode")
+	}
 	const (
 		numGoroutines = 10000
 		testTimeout   = 30 * time.Second
@@ -236,6 +242,9 @@ func TestConcurrencyPoolExhaustion_10K_Full_Pipeline(t *testing.T) {
 // - No deadlocks or pool exhaustion issues
 // - Memory returns to baseline after cleanup
 func TestConcurrencyPoolExhaustion_10K_AST_Creation_Release(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping stress test in short mode")
+	}
 	const (
 		numGoroutines = 10000
 		testTimeout   = 30 * time.Second
@@ -354,6 +363,9 @@ func TestConcurrencyPoolExhaustion_10K_AST_Creation_Release(t *testing.T) {
 // - All goroutines complete successfully
 // - Proper cleanup after release
 func TestConcurrencyPoolExhaustion_All_Objects_In_Use(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping stress test in short mode")
+	}
 	const (
 		numGoroutines = 1000
 		holdDuration  = 100 * time.Millisecond
@@ -482,6 +494,9 @@ func TestConcurrencyPoolExhaustion_All_Objects_In_Use(t *testing.T) {
 // - No accumulated goroutine growth over multiple cycles
 // - All pooled objects properly cleaned up
 func TestConcurrencyPoolExhaustion_Goroutine_Leak_Detection(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping stress test in short mode")
+	}
 	const (
 		numCycles          = 5
 		goroutinesPerCycle = 2000

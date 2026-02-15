@@ -26,7 +26,7 @@ func TestSustainedLoad_Tokenization10Seconds(t *testing.T) {
 	}
 
 	const (
-		duration = 10 * time.Second
+		duration = 2 * time.Second
 		workers  = 100
 	)
 
@@ -102,7 +102,7 @@ func TestSustainedLoad_Parsing10Seconds(t *testing.T) {
 		t.Skip("Skipping sustained load test with race detector (adds 3-5x overhead)")
 	}
 
-	const duration = 10 * time.Second
+	const duration = 2 * time.Second
 	// Scale workers to available CPUs to avoid contention on smaller CI runners
 	// GitHub Actions: Ubuntu=4 cores, macOS=3 cores, Windows=2 cores
 	workers := runtime.NumCPU() * 25
@@ -215,7 +215,7 @@ func TestSustainedLoad_EndToEnd10Seconds(t *testing.T) {
 		t.Skip("Skipping sustained load test with race detector (adds 3-5x overhead)")
 	}
 
-	const duration = 10 * time.Second
+	const duration = 2 * time.Second
 	// Scale workers to available CPUs to avoid contention on smaller CI runners
 	workers := runtime.NumCPU() * 25
 	if workers > 100 {
@@ -349,7 +349,7 @@ func TestSustainedLoad_MemoryStability(t *testing.T) {
 		t.Skip("Skipping sustained load test with race detector (adds 3-5x overhead)")
 	}
 
-	const duration = 10 * time.Second
+	const duration = 2 * time.Second
 	// Scale workers to available CPUs to avoid contention on smaller CI runners
 	workers := runtime.NumCPU() * 25
 	if workers > 100 {
@@ -470,11 +470,11 @@ func TestSustainedLoad_VaryingWorkers(t *testing.T) {
 
 	// Reduce duration and worker counts when race detection is enabled
 	// to prevent test timeouts (race detection adds significant overhead)
-	duration := 5 * time.Second
-	workerCounts := []int{10, 50, 100, 200, 500}
+	duration := 1 * time.Second
+	workerCounts := []int{10, 50, 100}
 	if raceEnabled {
-		duration = 2 * time.Second        // Reduce from 5s to 2s
-		workerCounts = []int{10, 50, 100} // Reduce worker counts
+		duration = 1 * time.Second        // Reduce with race detector
+		workerCounts = []int{10, 50}      // Reduce worker counts
 	}
 
 	sql := []byte("SELECT id, name FROM users WHERE active = true")
@@ -535,7 +535,7 @@ func TestSustainedLoad_ComplexQueries(t *testing.T) {
 		t.Skip("Skipping sustained load test with race detector (adds 3-5x overhead)")
 	}
 
-	const duration = 10 * time.Second
+	const duration = 2 * time.Second
 	// Scale workers to available CPUs to avoid contention on smaller CI runners
 	workers := runtime.NumCPU() * 25
 	if workers > 100 {

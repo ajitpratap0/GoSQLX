@@ -388,10 +388,24 @@ const (
 	TokenTypeUuid         TokenType = 449
 
 	// Special Token Types (500-509)
-	TokenTypeIllegal    TokenType = 500 // For parser compatibility with token.ILLEGAL
-	TokenTypeAsterisk   TokenType = 501 // Explicit asterisk token type
-	TokenTypeDoublePipe TokenType = 502 // || concatenation operator
-	TokenTypeILike      TokenType = 503 // ILIKE (case-insensitive LIKE, PostgreSQL)
+	TokenTypeIllegal      TokenType = 500 // For parser compatibility with token.ILLEGAL
+	TokenTypeAsterisk     TokenType = 501 // Explicit asterisk token type
+	TokenTypeDoublePipe   TokenType = 502 // || concatenation operator
+	TokenTypeILike        TokenType = 503 // ILIKE (case-insensitive LIKE, PostgreSQL)
+	TokenTypeAdd          TokenType = 504 // ADD keyword for ALTER TABLE ADD
+	TokenTypeNosuperuser  TokenType = 505 // NOSUPERUSER keyword for ALTER ROLE
+	TokenTypeNocreatedb   TokenType = 506 // NOCREATEDB keyword for ALTER ROLE
+	TokenTypeNocreaterole TokenType = 507 // NOCREATEROLE keyword for ALTER ROLE
+	TokenTypeNologin      TokenType = 508 // NOLOGIN keyword for ALTER ROLE
+	TokenTypeValid        TokenType = 509 // VALID keyword for ALTER ROLE
+	TokenTypeDcproperties TokenType = 510 // DCPROPERTIES keyword for ALTER CONNECTOR
+	TokenTypeUrl          TokenType = 511 // URL keyword for ALTER CONNECTOR
+	TokenTypeOwner        TokenType = 512 // OWNER keyword for ALTER CONNECTOR
+	TokenTypeMember       TokenType = 513 // MEMBER keyword for ALTER ROLE
+	TokenTypeConnector    TokenType = 514 // CONNECTOR keyword for CREATE/ALTER CONNECTOR
+	TokenTypePolicy       TokenType = 515 // POLICY keyword for CREATE/ALTER POLICY
+	TokenTypeUntil        TokenType = 516 // UNTIL keyword for VALID UNTIL
+	TokenTypeReset        TokenType = 517 // RESET keyword for ALTER ROLE RESET
 )
 
 // String returns a string representation of the token type.
@@ -972,6 +986,34 @@ func (t TokenType) String() string {
 		return "*"
 	case TokenTypeDoublePipe:
 		return "||"
+	case TokenTypeAdd:
+		return "ADD"
+	case TokenTypeNosuperuser:
+		return "NOSUPERUSER"
+	case TokenTypeNocreatedb:
+		return "NOCREATEDB"
+	case TokenTypeNocreaterole:
+		return "NOCREATEROLE"
+	case TokenTypeNologin:
+		return "NOLOGIN"
+	case TokenTypeValid:
+		return "VALID"
+	case TokenTypeDcproperties:
+		return "DCPROPERTIES"
+	case TokenTypeUrl:
+		return "URL"
+	case TokenTypeOwner:
+		return "OWNER"
+	case TokenTypeMember:
+		return "MEMBER"
+	case TokenTypeConnector:
+		return "CONNECTOR"
+	case TokenTypePolicy:
+		return "POLICY"
+	case TokenTypeUntil:
+		return "UNTIL"
+	case TokenTypeReset:
+		return "RESET"
 
 	default:
 		return "TOKEN"

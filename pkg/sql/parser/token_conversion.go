@@ -379,6 +379,37 @@ func getKeywordTokenTypeWithModel(value string) (token.Type, models.TokenType) {
 		return "CUBE", models.TokenTypeCube
 	case "GROUPING":
 		return "GROUPING", models.TokenTypeGrouping
+
+	// ALTER-related keywords
+	case "ADD":
+		return "ADD", models.TokenTypeAdd
+	case "NOSUPERUSER":
+		return "NOSUPERUSER", models.TokenTypeNosuperuser
+	case "NOCREATEDB":
+		return "NOCREATEDB", models.TokenTypeNocreatedb
+	case "NOCREATEROLE":
+		return "NOCREATEROLE", models.TokenTypeNocreaterole
+	case "NOLOGIN":
+		return "NOLOGIN", models.TokenTypeNologin
+	case "VALID":
+		return "VALID", models.TokenTypeValid
+	case "DCPROPERTIES":
+		return "DCPROPERTIES", models.TokenTypeDcproperties
+	case "URL":
+		return "URL", models.TokenTypeUrl
+	case "OWNER":
+		return "OWNER", models.TokenTypeOwner
+	case "MEMBER":
+		return "MEMBER", models.TokenTypeMember
+	case "CONNECTOR":
+		return "CONNECTOR", models.TokenTypeConnector
+	case "POLICY":
+		return "POLICY", models.TokenTypePolicy
+	case "UNTIL":
+		return "UNTIL", models.TokenTypeUntil
+	case "RESET":
+		return "RESET", models.TokenTypeReset
+
 	default:
 		return "", models.TokenTypeUnknown
 	}
@@ -512,16 +543,30 @@ func buildTypeMapping() map[models.TokenType]token.Type { // token.Type used her
 		models.TokenTypeCube:         "CUBE",
 		models.TokenTypeGrouping:     "GROUPING",
 
-		models.TokenTypeRole:       "ROLE",
-		models.TokenTypeUser:       "USER",
-		models.TokenTypeGrant:      "GRANT",
-		models.TokenTypeRevoke:     "REVOKE",
-		models.TokenTypePrivilege:  "PRIVILEGE",
-		models.TokenTypePassword:   "PASSWORD",
-		models.TokenTypeLogin:      "LOGIN",
-		models.TokenTypeSuperuser:  "SUPERUSER",
-		models.TokenTypeCreateDB:   "CREATEDB",
-		models.TokenTypeCreateRole: "CREATEROLE",
+		models.TokenTypeRole:         "ROLE",
+		models.TokenTypeUser:         "USER",
+		models.TokenTypeGrant:        "GRANT",
+		models.TokenTypeRevoke:       "REVOKE",
+		models.TokenTypePrivilege:    "PRIVILEGE",
+		models.TokenTypePassword:     "PASSWORD",
+		models.TokenTypeLogin:        "LOGIN",
+		models.TokenTypeSuperuser:    "SUPERUSER",
+		models.TokenTypeCreateDB:     "CREATEDB",
+		models.TokenTypeCreateRole:   "CREATEROLE",
+		models.TokenTypeAdd:          "ADD",
+		models.TokenTypeNosuperuser:  "NOSUPERUSER",
+		models.TokenTypeNocreatedb:   "NOCREATEDB",
+		models.TokenTypeNocreaterole: "NOCREATEROLE",
+		models.TokenTypeNologin:      "NOLOGIN",
+		models.TokenTypeValid:        "VALID",
+		models.TokenTypeDcproperties: "DCPROPERTIES",
+		models.TokenTypeUrl:          "URL",
+		models.TokenTypeOwner:        "OWNER",
+		models.TokenTypeMember:       "MEMBER",
+		models.TokenTypeConnector:    "CONNECTOR",
+		models.TokenTypePolicy:       "POLICY",
+		models.TokenTypeUntil:        "UNTIL",
+		models.TokenTypeReset:        "RESET",
 
 		models.TokenTypeBegin:     "BEGIN",
 		models.TokenTypeCommit:    "COMMIT",

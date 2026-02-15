@@ -1,8 +1,8 @@
 package parser
 
 import (
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
 
 // parseAlterStatement parses ALTER statements
@@ -11,16 +11,16 @@ func (p *Parser) parseAlterStatement() (*ast.AlterStatement, error) {
 
 	// Parse the type of object being altered
 	switch {
-	case p.matchToken(token.TABLE):
+	case p.matchType(models.TokenTypeTable):
 		stmt.Type = ast.AlterTypeTable
 		return p.parseAlterTableStatement(stmt)
-	case p.matchToken(token.ROLE):
+	case p.matchType(models.TokenTypeRole):
 		stmt.Type = ast.AlterTypeRole
 		return p.parseAlterRoleStatement(stmt)
-	case p.matchToken(token.POLICY):
+	case p.matchType(models.TokenTypePolicy):
 		stmt.Type = ast.AlterTypePolicy
 		return p.parseAlterPolicyStatement(stmt)
-	case p.matchToken(token.CONNECTOR):
+	case p.matchType(models.TokenTypeConnector):
 		stmt.Type = ast.AlterTypeConnector
 		return p.parseAlterConnectorStatement(stmt)
 	default:
@@ -34,15 +34,15 @@ func (p *Parser) parseAlterTableStatement(stmt *ast.AlterStatement) (*ast.AlterS
 	op := &ast.AlterTableOperation{}
 
 	switch {
-	case p.matchToken(token.ADD):
-		if p.matchToken(token.COLUMN) {
+	case p.matchType(models.TokenTypeAdd):
+		if p.matchType(models.TokenTypeColumn) {
 			op.Type = ast.AddColumn
 			colDef, err := p.parseColumnDef()
 			if err != nil {
 				return nil, err
 			}
 			op.ColumnDef = colDef
-		} else if p.matchToken(token.CONSTRAINT) {
+		} else if p.matchType(models.TokenTypeConstraint) {
 			op.Type = ast.AddConstraint
 			constraint, err := p.parseTableConstraint()
 			if err != nil {
@@ -53,8 +53,8 @@ func (p *Parser) parseAlterTableStatement(stmt *ast.AlterStatement) (*ast.AlterS
 			return nil, p.expectedError("COLUMN or CONSTRAINT")
 		}
 
-	case p.matchToken(token.DROP):
-		if p.matchToken(token.COLUMN) {
+	case p.matchType(models.TokenTypeDrop):
+		if p.matchType(models.TokenTypeColumn) {
 			op.Type = ast.DropColumn
 			// Convert ast.Identifier to ast.Ident
 			ident := p.parseIdent()
@@ -62,10 +62,10 @@ func (p *Parser) parseAlterTableStatement(stmt *ast.AlterStatement) (*ast.AlterS
 				return nil, p.expectedError("column name")
 			}
 			op.ColumnName = &ast.Ident{Name: ident.Name}
-			if p.matchToken(token.CASCADE) {
+			if p.matchType(models.TokenTypeCascade) {
 				op.CascadeDrops = true
 			}
-		} else if p.matchToken(token.CONSTRAINT) {
+		} else if p.matchType(models.TokenTypeConstraint) {
 			op.Type = ast.DropConstraint
 			// Convert ast.Identifier to ast.Ident
 			ident := p.parseIdent()
@@ -73,18 +73,18 @@ func (p *Parser) parseAlterTableStatement(stmt *ast.AlterStatement) (*ast.AlterS
 				return nil, p.expectedError("constraint name")
 			}
 			op.ConstraintName = &ast.Ident{Name: ident.Name}
-			if p.matchToken(token.CASCADE) {
+			if p.matchType(models.TokenTypeCascade) {
 				op.CascadeDrops = true
 			}
 		} else {
 			return nil, p.expectedError("COLUMN or CONSTRAINT")
 		}
 
-	case p.matchToken(token.RENAME):
-		if p.matchToken(token.TO) {
+	case p.matchType(models.TokenTypeRename):
+		if p.matchType(models.TokenTypeTo) {
 			op.Type = ast.RenameTable
 			op.NewTableName = p.parseObjectName()
-		} else if p.matchToken(token.COLUMN) {
+		} else if p.matchType(models.TokenTypeColumn) {
 			op.Type = ast.RenameColumn
 			// Convert ast.Identifier to ast.Ident
 			ident := p.parseIdent()
@@ -92,7 +92,7 @@ func (p *Parser) parseAlterTableStatement(stmt *ast.AlterStatement) (*ast.AlterS
 				return nil, p.expectedError("column name")
 			}
 			op.ColumnName = &ast.Ident{Name: ident.Name}
-			if !p.matchToken(token.TO) {
+			if !p.matchType(models.TokenTypeTo) {
 				return nil, p.expectedError("TO")
 			}
 			// Convert ast.Identifier to ast.Ident
@@ -105,8 +105,8 @@ func (p *Parser) parseAlterTableStatement(stmt *ast.AlterStatement) (*ast.AlterS
 			return nil, p.expectedError("TO or COLUMN")
 		}
 
-	case p.matchToken(token.ALTER):
-		if !p.matchToken(token.COLUMN) {
+	case p.matchType(models.TokenTypeAlter):
+		if !p.matchType(models.TokenTypeColumn) {
 			return nil, p.expectedError("COLUMN")
 		}
 		op.Type = ast.AlterColumn
@@ -136,31 +136,31 @@ func (p *Parser) parseAlterRoleStatement(stmt *ast.AlterStatement) (*ast.AlterSt
 	op := &ast.AlterRoleOperation{}
 
 	switch {
-	case p.matchToken(token.RENAME):
-		if !p.matchToken(token.TO) {
+	case p.matchType(models.TokenTypeRename):
+		if !p.matchType(models.TokenTypeTo) {
 			return nil, p.expectedError("TO")
 		}
 		op.Type = ast.RenameRole
 		op.NewName = p.parseIdentAsString()
 
-	case p.matchToken(token.ADD):
-		if !p.matchToken(token.MEMBER) {
+	case p.matchType(models.TokenTypeAdd):
+		if !p.matchType(models.TokenTypeMember) {
 			return nil, p.expectedError("MEMBER")
 		}
 		op.Type = ast.AddMember
 		op.MemberName = p.parseIdentAsString()
 
-	case p.matchToken(token.DROP):
-		if !p.matchToken(token.MEMBER) {
+	case p.matchType(models.TokenTypeDrop):
+		if !p.matchType(models.TokenTypeMember) {
 			return nil, p.expectedError("MEMBER")
 		}
 		op.Type = ast.DropMember
 		op.MemberName = p.parseIdentAsString()
 
-	case p.matchToken(token.SET):
+	case p.matchType(models.TokenTypeSet):
 		op.Type = ast.SetConfig
 		op.ConfigName = p.parseIdentAsString()
-		if p.matchToken(token.TO) || p.matchToken(token.EQUAL) {
+		if p.matchType(models.TokenTypeTo) || p.matchType(models.TokenTypeEq) {
 			expr, err := p.parseExpression()
 			if err != nil {
 				return nil, err
@@ -168,15 +168,15 @@ func (p *Parser) parseAlterRoleStatement(stmt *ast.AlterStatement) (*ast.AlterSt
 			op.ConfigValue = expr
 		}
 
-	case p.matchToken(token.RESET):
+	case p.matchType(models.TokenTypeReset):
 		op.Type = ast.ResetConfig
-		if p.matchToken(token.ALL) {
+		if p.matchType(models.TokenTypeAll) {
 			op.ConfigName = "ALL"
 		} else {
 			op.ConfigName = p.parseIdentAsString()
 		}
 
-	case p.matchToken(token.WITH):
+	case p.matchType(models.TokenTypeWith):
 		op.Type = ast.WithOptions
 		for {
 			option, err := p.parseRoleOption()
@@ -184,7 +184,7 @@ func (p *Parser) parseAlterRoleStatement(stmt *ast.AlterStatement) (*ast.AlterSt
 				return nil, err
 			}
 			op.Options = append(op.Options, *option)
-			if !p.matchToken(token.COMMA) {
+			if !p.matchType(models.TokenTypeComma) {
 				break
 			}
 		}
@@ -200,31 +200,31 @@ func (p *Parser) parseAlterRoleStatement(stmt *ast.AlterStatement) (*ast.AlterSt
 // parseAlterPolicyStatement parses ALTER POLICY statements
 func (p *Parser) parseAlterPolicyStatement(stmt *ast.AlterStatement) (*ast.AlterStatement, error) {
 	stmt.Name = p.parseIdentAsString()
-	if !p.matchToken(token.ON) {
+	if !p.matchType(models.TokenTypeOn) {
 		return nil, p.expectedError("ON")
 	}
 	p.parseIdentAsString() // table name
 
 	op := &ast.AlterPolicyOperation{}
 
-	if p.matchToken(token.RENAME) {
-		if !p.matchToken(token.TO) {
+	if p.matchType(models.TokenTypeRename) {
+		if !p.matchType(models.TokenTypeTo) {
 			return nil, p.expectedError("TO")
 		}
 		op.Type = ast.RenamePolicy
 		op.NewName = p.parseIdentAsString()
 	} else {
 		op.Type = ast.ModifyPolicy
-		if p.matchToken(token.TO) {
+		if p.matchType(models.TokenTypeTo) {
 			for {
 				op.To = append(op.To, p.parseIdentAsString())
-				if !p.matchToken(token.COMMA) {
+				if !p.matchType(models.TokenTypeComma) {
 					break
 				}
 			}
 		}
-		if p.matchToken(token.USING) {
-			if !p.matchToken(token.LPAREN) {
+		if p.matchType(models.TokenTypeUsing) {
+			if !p.matchType(models.TokenTypeLParen) {
 				return nil, p.expectedError("(")
 			}
 			expr, err := p.parseExpression()
@@ -232,12 +232,12 @@ func (p *Parser) parseAlterPolicyStatement(stmt *ast.AlterStatement) (*ast.Alter
 				return nil, err
 			}
 			op.Using = expr
-			if !p.matchToken(token.RPAREN) {
+			if !p.matchType(models.TokenTypeRParen) {
 				return nil, p.expectedError(")")
 			}
 		}
-		if p.matchToken(token.WITH) && p.matchToken(token.CHECK) {
-			if !p.matchToken(token.LPAREN) {
+		if p.matchType(models.TokenTypeWith) && p.matchType(models.TokenTypeCheck) {
+			if !p.matchType(models.TokenTypeLParen) {
 				return nil, p.expectedError("(")
 			}
 			expr, err := p.parseExpression()
@@ -245,7 +245,7 @@ func (p *Parser) parseAlterPolicyStatement(stmt *ast.AlterStatement) (*ast.Alter
 				return nil, err
 			}
 			op.WithCheck = expr
-			if !p.matchToken(token.RPAREN) {
+			if !p.matchType(models.TokenTypeRParen) {
 				return nil, p.expectedError(")")
 			}
 		}
@@ -258,42 +258,42 @@ func (p *Parser) parseAlterPolicyStatement(stmt *ast.AlterStatement) (*ast.Alter
 // parseAlterConnectorStatement parses ALTER CONNECTOR statements
 func (p *Parser) parseAlterConnectorStatement(stmt *ast.AlterStatement) (*ast.AlterStatement, error) {
 	stmt.Name = p.parseIdentAsString()
-	if !p.matchToken(token.SET) {
+	if !p.matchType(models.TokenTypeSet) {
 		return nil, p.expectedError("SET")
 	}
 
 	op := &ast.AlterConnectorOperation{}
 
 	switch {
-	case p.matchToken(token.DCPROPERTIES):
-		if !p.matchToken(token.LPAREN) {
+	case p.matchType(models.TokenTypeDcproperties):
+		if !p.matchType(models.TokenTypeLParen) {
 			return nil, p.expectedError("(")
 		}
 		op.Properties = make(map[string]string)
 		for {
 			key := p.parseIdentAsString()
-			if !p.matchToken(token.EQUAL) {
+			if !p.matchType(models.TokenTypeEq) {
 				return nil, p.expectedError("=")
 			}
 			value := p.parseStringLiteral()
 			op.Properties[key] = value
 
-			if !p.matchToken(token.COMMA) {
+			if !p.matchType(models.TokenTypeComma) {
 				break
 			}
 		}
-		if !p.matchToken(token.RPAREN) {
+		if !p.matchType(models.TokenTypeRParen) {
 			return nil, p.expectedError(")")
 		}
 
-	case p.matchToken(token.URL):
+	case p.matchType(models.TokenTypeUrl):
 		op.URL = p.parseStringLiteral()
 
-	case p.matchToken(token.OWNER):
+	case p.matchType(models.TokenTypeOwner):
 		owner := &ast.AlterConnectorOwner{}
-		if p.matchToken(token.USER) {
+		if p.matchType(models.TokenTypeUser) {
 			owner.IsUser = true
-		} else if p.matchToken(token.ROLE) {
+		} else if p.matchType(models.TokenTypeRole) {
 			owner.IsUser = false
 		} else {
 			return nil, p.expectedError("USER or ROLE")
@@ -314,30 +314,54 @@ func (p *Parser) parseRoleOption() (*ast.RoleOption, error) {
 	option := &ast.RoleOption{}
 
 	switch {
-	case p.matchToken(token.SUPERUSER), p.matchToken(token.NOSUPERUSER):
+	case p.isType(models.TokenTypeSuperuser):
 		option.Name = "SUPERUSER"
 		option.Type = ast.SuperUser
-		option.Value = p.currentToken.Type == token.SUPERUSER
+		option.Value = true
+		p.advance()
+	case p.isType(models.TokenTypeNosuperuser):
+		option.Name = "SUPERUSER"
+		option.Type = ast.SuperUser
+		option.Value = false
+		p.advance()
 
-	case p.matchToken(token.CREATEDB), p.matchToken(token.NOCREATEDB):
+	case p.isType(models.TokenTypeCreateDB):
 		option.Name = "CREATEDB"
 		option.Type = ast.CreateDB
-		option.Value = p.currentToken.Type == token.CREATEDB
+		option.Value = true
+		p.advance()
+	case p.isType(models.TokenTypeNocreatedb):
+		option.Name = "CREATEDB"
+		option.Type = ast.CreateDB
+		option.Value = false
+		p.advance()
 
-	case p.matchToken(token.CREATEROLE), p.matchToken(token.NOCREATEROLE):
+	case p.isType(models.TokenTypeCreateRole):
 		option.Name = "CREATEROLE"
 		option.Type = ast.CreateRole
-		option.Value = p.currentToken.Type == token.CREATEROLE
+		option.Value = true
+		p.advance()
+	case p.isType(models.TokenTypeNocreaterole):
+		option.Name = "CREATEROLE"
+		option.Type = ast.CreateRole
+		option.Value = false
+		p.advance()
 
-	case p.matchToken(token.LOGIN), p.matchToken(token.NOLOGIN):
+	case p.isType(models.TokenTypeLogin):
 		option.Name = "LOGIN"
 		option.Type = ast.Login
-		option.Value = p.currentToken.Type == token.LOGIN
+		option.Value = true
+		p.advance()
+	case p.isType(models.TokenTypeNologin):
+		option.Name = "LOGIN"
+		option.Type = ast.Login
+		option.Value = false
+		p.advance()
 
-	case p.matchToken(token.PASSWORD):
+	case p.matchType(models.TokenTypePassword):
 		option.Name = "PASSWORD"
 		option.Type = ast.Password
-		if p.matchToken(token.NULL) {
+		if p.matchType(models.TokenTypeNull) {
 			option.Value = nil
 		} else {
 			expr, err := p.parseExpression()
@@ -347,10 +371,10 @@ func (p *Parser) parseRoleOption() (*ast.RoleOption, error) {
 			option.Value = expr
 		}
 
-	case p.matchToken(token.VALID):
+	case p.matchType(models.TokenTypeValid):
 		option.Name = "VALID"
 		option.Type = ast.ValidUntil
-		if !p.matchToken(token.UNTIL) {
+		if !p.matchType(models.TokenTypeUntil) {
 			return nil, p.expectedError("UNTIL")
 		}
 		expr, err := p.parseExpression()

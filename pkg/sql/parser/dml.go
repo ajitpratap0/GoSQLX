@@ -14,7 +14,7 @@ import (
 
 // parseInsertStatement parses an INSERT statement
 func (p *Parser) parseInsertStatement() (ast.Statement, error) {
-	// We've already consumed the INSERT token in matchToken
+	// We've already consumed the INSERT token in matchType
 
 	// Parse INTO
 	if !p.isType(models.TokenTypeInto) {
@@ -141,7 +141,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 
 // parseUpdateStatement parses an UPDATE statement
 func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
-	// We've already consumed the UPDATE token in matchToken
+	// We've already consumed the UPDATE token in matchType
 
 	// Parse table name (supports schema.table qualification and double-quoted identifiers)
 	tableName, err := p.parseQualifiedName()
@@ -241,7 +241,7 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 
 // parseDeleteStatement parses a DELETE statement
 func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
-	// We've already consumed the DELETE token in matchToken
+	// We've already consumed the DELETE token in matchType
 
 	// Parse FROM
 	if !p.isType(models.TokenTypeFrom) {

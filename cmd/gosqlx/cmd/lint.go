@@ -167,10 +167,14 @@ func lintRun(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Exit with error code if there were violations
+	// Exit with error code if there were violations or file errors
 	errorCount := 0
 	warningCount := 0
+	fileErrorCount := 0
 	for _, fileResult := range result.Files {
+		if fileResult.Error != nil {
+			fileErrorCount++
+		}
 		for _, violation := range fileResult.Violations {
 			switch violation.Severity {
 			case linter.SeverityError:
@@ -181,7 +185,10 @@ func lintRun(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Exit with error if there are errors, or warnings with fail-on-warn flag
+	// Exit with error if there are file errors, lint errors, or warnings with fail-on-warn flag
+	if fileErrorCount > 0 {
+		return fmt.Errorf("%d file(s) had errors", fileErrorCount)
+	}
 	if errorCount > 0 || (lintFailOnWarn && warningCount > 0) {
 		os.Exit(1)
 	}

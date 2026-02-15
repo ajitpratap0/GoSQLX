@@ -102,6 +102,11 @@ func formatRun(cmd *cobra.Command, args []string) error {
 		os.Exit(1)
 	}
 
+	// Exit with error code if any files failed to format
+	if result.FailedFiles > 0 {
+		return fmt.Errorf("%d file(s) failed to format", result.FailedFiles)
+	}
+
 	return nil
 }
 

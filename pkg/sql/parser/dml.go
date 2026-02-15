@@ -54,53 +54,65 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 		p.advance() // Consume )
 	}
 
-	// Parse VALUES
-	if !p.isType(models.TokenTypeValues) {
-		return nil, p.expectedError("VALUES")
-	}
-	p.advance() // Consume VALUES
+	// Parse VALUES or SELECT
+	var values [][]ast.Expression
+	var query ast.Statement
 
-	// Parse value rows - supports multi-row INSERT: VALUES (a, b), (c, d), (e, f)
-	values := make([][]ast.Expression, 0)
-	for {
-		if !p.isType(models.TokenTypeLParen) {
-			if len(values) == 0 {
-				return nil, p.expectedError("(")
-			}
-			break
+	if p.isType(models.TokenTypeSelect) {
+		// INSERT ... SELECT syntax
+		p.advance() // Consume SELECT
+		stmt, err := p.parseSelectWithSetOperations()
+		if err != nil {
+			return nil, err
 		}
-		p.advance() // Consume (
+		query = stmt
+	} else if p.isType(models.TokenTypeValues) {
+		p.advance() // Consume VALUES
 
-		// Parse one row of values
-		row := make([]ast.Expression, 0)
+		// Parse value rows - supports multi-row INSERT: VALUES (a, b), (c, d), (e, f)
+		values = make([][]ast.Expression, 0)
 		for {
-			// Parse value using parseExpression to support all expression types
-			// including function calls like NOW(), UUID(), etc.
-			expr, err := p.parseExpression()
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse value at position %d in VALUES row %d: %w", len(row)+1, len(values)+1, err)
+			if !p.isType(models.TokenTypeLParen) {
+				if len(values) == 0 {
+					return nil, p.expectedError("(")
+				}
+				break
 			}
-			row = append(row, expr)
+			p.advance() // Consume (
 
-			// Check if there are more values in this row
+			// Parse one row of values
+			row := make([]ast.Expression, 0)
+			for {
+				// Parse value using parseExpression to support all expression types
+				// including function calls like NOW(), UUID(), etc.
+				expr, err := p.parseExpression()
+				if err != nil {
+					return nil, fmt.Errorf("failed to parse value at position %d in VALUES row %d: %w", len(row)+1, len(values)+1, err)
+				}
+				row = append(row, expr)
+
+				// Check if there are more values in this row
+				if !p.isType(models.TokenTypeComma) {
+					break
+				}
+				p.advance() // Consume comma
+			}
+
+			if !p.isType(models.TokenTypeRParen) {
+				return nil, p.expectedError(")")
+			}
+			p.advance() // Consume )
+
+			values = append(values, row)
+
+			// Check if there are more rows (comma after closing paren)
 			if !p.isType(models.TokenTypeComma) {
 				break
 			}
-			p.advance() // Consume comma
+			p.advance() // Consume comma between rows
 		}
-
-		if !p.isType(models.TokenTypeRParen) {
-			return nil, p.expectedError(")")
-		}
-		p.advance() // Consume )
-
-		values = append(values, row)
-
-		// Check if there are more rows (comma after closing paren)
-		if !p.isType(models.TokenTypeComma) {
-			break
-		}
-		p.advance() // Consume comma between rows
+	} else {
+		return nil, p.expectedError("VALUES or SELECT")
 	}
 
 	// Parse ON CONFLICT clause if present (PostgreSQL UPSERT)
@@ -134,6 +146,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 		TableName:  tableName,
 		Columns:    columns,
 		Values:     values,
+		Query:      query,
 		OnConflict: onConflict,
 		Returning:  returning,
 	}, nil

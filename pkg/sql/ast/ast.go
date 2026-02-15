@@ -150,6 +150,13 @@ func (c CommonTableExpr) Children() []Node {
 	return []Node{c.Statement}
 }
 
+// QueryExpression is a Statement that can appear as the source of INSERT ... SELECT.
+// Only *SelectStatement and *SetOperation satisfy this interface.
+type QueryExpression interface {
+	Statement
+	queryExpressionNode()
+}
+
 // SetOperation represents set operations (UNION, EXCEPT, INTERSECT) between two statements.
 // It supports the ALL modifier (e.g., UNION ALL) and proper left-associative parsing.
 // Phase 2 Complete: Full parser support with left-associative precedence.
@@ -160,8 +167,9 @@ type SetOperation struct {
 	All      bool // UNION ALL vs UNION
 }
 
-func (s *SetOperation) statementNode()      {}
-func (s SetOperation) TokenLiteral() string { return s.Operator }
+func (s *SetOperation) statementNode()       {}
+func (s *SetOperation) queryExpressionNode() {}
+func (s SetOperation) TokenLiteral() string  { return s.Operator }
 func (s SetOperation) Children() []Node {
 	return []Node{s.Left, s.Right}
 }
@@ -455,8 +463,9 @@ func (f *ForClause) expressionNode()     {}
 func (f ForClause) TokenLiteral() string { return "FOR" }
 func (f ForClause) Children() []Node     { return nil }
 
-func (s *SelectStatement) statementNode()      {}
-func (s SelectStatement) TokenLiteral() string { return "SELECT" }
+func (s *SelectStatement) statementNode()       {}
+func (s *SelectStatement) queryExpressionNode() {}
+func (s SelectStatement) TokenLiteral() string  { return "SELECT" }
 
 func (s SelectStatement) Children() []Node {
 	children := make([]Node, 0)
@@ -1095,8 +1104,8 @@ type InsertStatement struct {
 	With       *WithClause
 	TableName  string
 	Columns    []Expression
-	Values     [][]Expression // Multi-row support: each inner slice is one row of values
-	Query      Statement      // For INSERT ... SELECT (SelectStatement or SetOperation)
+	Values     [][]Expression  // Multi-row support: each inner slice is one row of values
+	Query      QueryExpression // For INSERT ... SELECT (SelectStatement or SetOperation)
 	Returning  []Expression
 	OnConflict *OnConflict
 }

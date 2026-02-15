@@ -195,12 +195,13 @@ func ReadInputWithFallback(args []string) (*InputResult, error) {
 	return GetInputSource(inputArg)
 }
 
-// ShouldReadFromStdin determines if we should read from stdin based on args
-// This is a simple helper for commands that need to check stdin state
+// ShouldReadFromStdin determines if we should read from stdin based on args.
+// Returns true only when stdin actually has piped data available.
+// When stdin is a TTY (interactive terminal), returns false to avoid blocking.
 func ShouldReadFromStdin(args []string) bool {
-	// Explicit stdin marker
+	// Explicit stdin marker — only honor if stdin is actually piped
 	if len(args) > 0 && args[0] == "-" {
-		return true
+		return IsStdinPipe()
 	}
 
 	// No args and stdin is piped

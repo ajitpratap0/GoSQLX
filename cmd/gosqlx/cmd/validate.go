@@ -65,6 +65,13 @@ func validateRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no input provided: specify file paths or pipe SQL via stdin")
 	}
 
+	// If single argument that looks like inline SQL (not a file), validate it directly
+	if len(args) == 1 {
+		if _, err := os.Stat(args[0]); err != nil && looksLikeSQL(args[0]) {
+			return validateInlineSQL(cmd, args[0])
+		}
+	}
+
 	// Load configuration with CLI flag overrides
 	cfg, err := config.LoadDefault()
 	if err != nil {
@@ -266,6 +273,60 @@ func validateFromStdin(cmd *cobra.Command) error {
 		os.Exit(1)
 	}
 
+	return nil
+}
+
+// validateInlineSQL validates inline SQL passed as a command argument
+func validateInlineSQL(cmd *cobra.Command, sql string) error {
+	// Write to temp file and validate using existing logic
+	tmpFile, err := os.CreateTemp("", "gosqlx-inline-*.sql")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary file: %w", err)
+	}
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+	defer func() { _ = tmpFile.Close() }()
+
+	if _, err := tmpFile.WriteString(sql); err != nil {
+		return fmt.Errorf("failed to write to temporary file: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temporary file: %w", err)
+	}
+
+	// Load configuration
+	cfg, err := config.LoadDefault()
+	if err != nil {
+		cfg = config.DefaultConfig()
+	}
+
+	flagsChanged := make(map[string]bool)
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		flagsChanged[f.Name] = true
+	})
+	if cmd.Parent() != nil && cmd.Parent().PersistentFlags() != nil {
+		cmd.Parent().PersistentFlags().Visit(func(f *pflag.Flag) {
+			flagsChanged[f.Name] = true
+		})
+	}
+
+	quietMode := validateQuiet || validateOutputFormat == "sarif" || validateOutputFormat == "json"
+	opts := ValidatorOptionsFromConfig(cfg, flagsChanged, ValidatorFlags{
+		Quiet:      quietMode,
+		ShowStats:  validateStats && validateOutputFormat == "text",
+		Dialect:    validateDialect,
+		StrictMode: validateStrict,
+		Verbose:    verbose,
+	})
+
+	validator := NewValidator(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
+	result, err := validator.Validate([]string{tmpFile.Name()})
+	if err != nil {
+		return err
+	}
+
+	if result.InvalidFiles > 0 {
+		os.Exit(1)
+	}
 	return nil
 }
 

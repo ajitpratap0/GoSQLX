@@ -56,7 +56,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 
 	// Parse VALUES or SELECT
 	var values [][]ast.Expression
-	var query ast.Statement
+	var query ast.QueryExpression
 
 	if p.isType(models.TokenTypeSelect) {
 		// INSERT ... SELECT syntax
@@ -65,7 +65,11 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 		if err != nil {
 			return nil, err
 		}
-		query = stmt
+		qe, ok := stmt.(ast.QueryExpression)
+		if !ok {
+			return nil, fmt.Errorf("expected SELECT or set operation in INSERT ... SELECT, got %T", stmt)
+		}
+		query = qe
 	} else if p.isType(models.TokenTypeValues) {
 		p.advance() // Consume VALUES
 

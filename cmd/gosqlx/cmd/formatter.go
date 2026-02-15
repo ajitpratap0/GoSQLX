@@ -124,7 +124,11 @@ func (f *Formatter) Format(args []string) (*FormatterResult, error) {
 			}
 			result.FormattedFiles++
 		} else {
-			fmt.Fprint(f.Out, fileResult.Formatted)
+			output := fileResult.Formatted
+			if !strings.HasSuffix(output, "\n") {
+				output += "\n"
+			}
+			fmt.Fprint(f.Out, output)
 			result.FormattedFiles++
 		}
 	}

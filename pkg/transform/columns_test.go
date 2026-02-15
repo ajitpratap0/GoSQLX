@@ -50,6 +50,28 @@ func TestAddSelectStar(t *testing.T) {
 	assertContains(t, out, "*")
 }
 
+func TestRemoveColumn_Nonexistent(t *testing.T) {
+	stmt := mustParse(t, "SELECT id, name FROM users")
+	err := Apply(stmt, RemoveColumn("nonexistent"))
+	if err == nil {
+		t.Fatal("expected error for nonexistent column")
+	}
+	if err.Error() != `column "nonexistent" not found` {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRemoveColumn_SingleColumn(t *testing.T) {
+	stmt := mustParse(t, "SELECT id, name FROM users")
+	err := Apply(stmt, RemoveColumn("id"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := format(stmt)
+	assertNotContains(t, out, "id")
+	assertContains(t, out, "name")
+}
+
 func TestColumns_UnsupportedStatement(t *testing.T) {
 	stmt := mustParse(t, "UPDATE users SET name = 'bob'")
 	err := Apply(stmt, AddColumn(&ast.Identifier{Name: "x"}))

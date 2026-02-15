@@ -35,7 +35,17 @@ func TestInsertSelect(t *testing.T) {
 
 			// For UNION case, the top-level might be SetOperation
 			if tt.name == "with UNION" {
-				// Just verify it parsed without error
+				// The top-level should be InsertStatement with a SetOperation query
+				insert, ok := result.Statements[0].(*ast.InsertStatement)
+				if !ok {
+					t.Fatalf("expected InsertStatement, got %T", result.Statements[0])
+				}
+				if insert.Query == nil {
+					t.Fatal("expected Query to be set for UNION case")
+				}
+				if _, ok := insert.Query.(*ast.SetOperation); !ok {
+					t.Fatalf("expected Query to be *SetOperation, got %T", insert.Query)
+				}
 				return
 			}
 
@@ -54,5 +64,14 @@ func TestInsertSelect(t *testing.T) {
 			// Verify SQL() roundtrip doesn't panic
 			_ = insert.SQL()
 		})
+	}
+}
+
+func TestInsertNoValuesOrSelect(t *testing.T) {
+	tokens := tokenizeSQL(t, "INSERT INTO t1")
+	p := NewParser()
+	_, err := p.Parse(tokens)
+	if err == nil {
+		t.Fatal("expected error for INSERT INTO t1 with no VALUES or SELECT")
 	}
 }

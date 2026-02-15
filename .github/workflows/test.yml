@@ -74,6 +74,6 @@ jobs:
 
     - name: Run benchmarks
       run: |
-        go test -bench=. -benchmem ./pkg/sql/tokenizer/
-        go test -bench=. -benchmem ./pkg/sql/parser/
-        go test -bench=. -benchmem ./pkg/sql/ast/
+        go test -run=^$ -bench=. -benchmem -timeout=5m ./pkg/sql/tokenizer/
+        go test -run=^$ -bench=. -benchmem -timeout=5m ./pkg/sql/parser/
+        go test -run=^$ -bench=. -benchmem -timeout=5m ./pkg/sql/ast/

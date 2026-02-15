@@ -464,8 +464,8 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		p.advance()
 	}
 
-	// Parse columns
-	columns := make([]ast.Expression, 0)
+	// Parse columns — pre-allocate to reduce repeated slice growth
+	columns := make([]ast.Expression, 0, 8)
 
 	// Check for SELECT FROM (missing column list)
 	if p.isType(models.TokenTypeFrom) {
@@ -846,7 +846,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 
 		// Parse GROUP BY expressions (comma-separated list)
 		// Supports: regular expressions, ROLLUP, CUBE, GROUPING SETS
-		groupByExprs := make([]ast.Expression, 0)
+		groupByExprs := make([]ast.Expression, 0, 4)
 		for {
 			var expr ast.Expression
 			var err error

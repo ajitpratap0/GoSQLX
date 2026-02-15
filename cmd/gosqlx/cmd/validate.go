@@ -56,6 +56,12 @@ Throughput: 100+ files/second in batch mode`,
 }
 
 func validateRun(cmd *cobra.Command, args []string) error {
+	// In quiet/check mode, silence all cobra output — only exit code matters
+	if validateQuiet {
+		cmd.SilenceErrors = true
+		cmd.SilenceUsage = true
+	}
+
 	// Handle stdin input
 	if ShouldReadFromStdin(args) {
 		return validateFromStdin(cmd)
@@ -303,6 +309,7 @@ func init() {
 	validateCmd.Flags().BoolVarP(&validateRecursive, "recursive", "r", false, "recursively process directories (config: validate.recursive)")
 	validateCmd.Flags().StringVarP(&validatePattern, "pattern", "p", "*.sql", "file pattern for recursive processing (config: validate.pattern)")
 	validateCmd.Flags().BoolVarP(&validateQuiet, "quiet", "q", false, "quiet mode (exit code only)")
+	validateCmd.Flags().BoolVar(&validateQuiet, "check", false, "check mode (alias for --quiet): exit code only, no output")
 	validateCmd.Flags().BoolVarP(&validateStats, "stats", "s", false, "show performance statistics")
 	validateCmd.Flags().StringVar(&validateDialect, "dialect", "", "SQL dialect: postgresql, mysql, sqlserver, oracle, sqlite (config: validate.dialect)")
 	validateCmd.Flags().BoolVar(&validateStrict, "strict", false, "enable strict validation mode (config: validate.strict_mode)")

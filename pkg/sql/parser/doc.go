@@ -282,6 +282,23 @@
 //   - SQL:2008 Features: TRUNCATE TABLE, enhanced grouping operations
 //   - Vendor Extensions: PostgreSQL, MySQL, SQL Server, Oracle specific syntax
 //
+// # Empty Statement Handling
+//
+// By default, the parser silently ignores empty statements between semicolons.
+// For example, ";;; SELECT 1 ;;;" is treated as a single "SELECT 1" statement.
+// This lenient behavior matches common SQL client behavior where extra semicolons
+// are harmless.
+//
+// To reject empty statements, enable strict mode:
+//
+//	p := parser.NewParser(parser.WithStrictMode())
+//	// or
+//	p := parser.GetParser()
+//	p.ApplyOptions(parser.WithStrictMode())
+//
+// In strict mode, empty statements (consecutive semicolons or leading/trailing
+// semicolons with no SQL) return an error.
+//
 // # Limitations
 //
 // Current limitations (will be addressed in future releases):

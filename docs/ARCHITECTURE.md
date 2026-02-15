@@ -441,7 +441,7 @@ pkg/sql/parser/
 ├── grouping.go        # GROUPING SETS, ROLLUP, CUBE
 ├── alter.go           # ALTER TABLE statements
 ├── ddl.go             # DDL statements (CREATE, DROP, REFRESH, TRUNCATE)
-└── token_converter.go # Token format conversion with position tracking
+└── token_conversion.go # Internal token conversion (unexported)
 ```
 
 **Statement Parsing Methods:**
@@ -601,7 +601,7 @@ tokens, err := tkz.Tokenize([]byte(sql))
 // Returns: []models.TokenWithSpan with position info
 // [{Token: SELECT, Start: {Line:1, Col:1}, End: {Line:1, Col:6}}, ...]
 
-// 3. Token conversion (pkg/sql/parser/token_converter.go)
+// 3. Token conversion (pkg/sql/parser/token_conversion.go)
 p := parser.NewParser()
 defer p.Release()
 // Returns: []token.Token for parser consumption

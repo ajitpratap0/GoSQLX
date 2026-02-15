@@ -57,17 +57,11 @@ func TestSQLFormatter_BasicFormatting(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
-			//lint:ignore SA1019 intentional use during #215 migration
-			convertedTokens, err := parser.ConvertTokensForParser(tokens)
-			if err != nil {
-				t.Fatalf("Token conversion failed: %v", err)
-			}
-
 			p := parser.NewParser()
 			astObj := ast.NewAST()
 			defer ast.ReleaseAST(astObj)
 
-			result, err := p.Parse(convertedTokens)
+			result, err := p.ParseFromModelTokens(tokens)
 			if err != nil {
 				t.Skipf("Parsing failed (may not be supported yet): %v", err)
 				return
@@ -135,17 +129,11 @@ func TestSQLFormatter_JOINStatements(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
-			//lint:ignore SA1019 intentional use during #215 migration
-			convertedTokens, err := parser.ConvertTokensForParser(tokens)
-			if err != nil {
-				t.Fatalf("Token conversion failed: %v", err)
-			}
-
 			p := parser.NewParser()
 			astObj := ast.NewAST()
 			defer ast.ReleaseAST(astObj)
 
-			result, err := p.Parse(convertedTokens)
+			result, err := p.ParseFromModelTokens(tokens)
 			if err != nil {
 				t.Skipf("Parsing failed (may not be supported yet): %v", err)
 				return
@@ -200,17 +188,11 @@ func TestSQLFormatter_WithClauses(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
-			//lint:ignore SA1019 intentional use during #215 migration
-			convertedTokens, err := parser.ConvertTokensForParser(tokens)
-			if err != nil {
-				t.Fatalf("Token conversion failed: %v", err)
-			}
-
 			p := parser.NewParser()
 			astObj := ast.NewAST()
 			defer ast.ReleaseAST(astObj)
 
-			result, err := p.Parse(convertedTokens)
+			result, err := p.ParseFromModelTokens(tokens)
 			if err != nil {
 				t.Skipf("Parsing failed (may not be supported yet): %v", err)
 				return
@@ -270,17 +252,11 @@ func TestSQLFormatter_WindowFunctions(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
-			//lint:ignore SA1019 intentional use during #215 migration
-			convertedTokens, err := parser.ConvertTokensForParser(tokens)
-			if err != nil {
-				t.Fatalf("Token conversion failed: %v", err)
-			}
-
 			p := parser.NewParser()
 			astObj := ast.NewAST()
 			defer ast.ReleaseAST(astObj)
 
-			result, err := p.Parse(convertedTokens)
+			result, err := p.ParseFromModelTokens(tokens)
 			if err != nil {
 				t.Skipf("Parsing failed (may not be supported yet): %v", err)
 				return
@@ -330,17 +306,11 @@ func TestSQLFormatter_InsertStatements(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
-			//lint:ignore SA1019 intentional use during #215 migration
-			convertedTokens, err := parser.ConvertTokensForParser(tokens)
-			if err != nil {
-				t.Fatalf("Token conversion failed: %v", err)
-			}
-
 			p := parser.NewParser()
 			astObj := ast.NewAST()
 			defer ast.ReleaseAST(astObj)
 
-			result, err := p.Parse(convertedTokens)
+			result, err := p.ParseFromModelTokens(tokens)
 			if err != nil {
 				t.Skipf("Parsing failed (may not be supported yet): %v", err)
 				return
@@ -400,17 +370,11 @@ func TestSQLFormatter_DDLStatements(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
-			//lint:ignore SA1019 intentional use during #215 migration
-			convertedTokens, err := parser.ConvertTokensForParser(tokens)
-			if err != nil {
-				t.Fatalf("Token conversion failed: %v", err)
-			}
-
 			p := parser.NewParser()
 			astObj := ast.NewAST()
 			defer ast.ReleaseAST(astObj)
 
-			result, err := p.Parse(convertedTokens)
+			result, err := p.ParseFromModelTokens(tokens)
 			if err != nil {
 				t.Skipf("Parsing failed (may not be supported yet): %v", err)
 				return
@@ -470,17 +434,11 @@ func TestSQLFormatter_ComplexExpressions(t *testing.T) {
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
-			//lint:ignore SA1019 intentional use during #215 migration
-			convertedTokens, err := parser.ConvertTokensForParser(tokens)
-			if err != nil {
-				t.Fatalf("Token conversion failed: %v", err)
-			}
-
 			p := parser.NewParser()
 			astObj := ast.NewAST()
 			defer ast.ReleaseAST(astObj)
 
-			result, err := p.Parse(convertedTokens)
+			result, err := p.ParseFromModelTokens(tokens)
 			if err != nil {
 				t.Skipf("Parsing failed (may not be supported yet): %v", err)
 				return
@@ -534,11 +492,9 @@ func TestSQLFormatter_Options(t *testing.T) {
 		for _, indentSize := range indentSizes {
 			tkz := tokenizer.GetTokenizer()
 			tokens, _ := tkz.Tokenize([]byte(sql))
-			//lint:ignore SA1019 intentional use during #215 migration
-			convertedTokens, _ := parser.ConvertTokensForParser(tokens)
 			p := parser.NewParser()
 			astObj := ast.NewAST()
-			result, err := p.Parse(convertedTokens)
+			result, err := p.ParseFromModelTokens(tokens)
 			if err != nil {
 				tokenizer.PutTokenizer(tkz)
 				ast.ReleaseAST(astObj)
@@ -567,11 +523,9 @@ func TestSQLFormatter_Options(t *testing.T) {
 		for _, uppercase := range []bool{true, false} {
 			tkz := tokenizer.GetTokenizer()
 			tokens, _ := tkz.Tokenize([]byte(sql))
-			//lint:ignore SA1019 intentional use during #215 migration
-			convertedTokens, _ := parser.ConvertTokensForParser(tokens)
 			p := parser.NewParser()
 			astObj := ast.NewAST()
-			result, err := p.Parse(convertedTokens)
+			result, err := p.ParseFromModelTokens(tokens)
 			if err != nil {
 				tokenizer.PutTokenizer(tkz)
 				ast.ReleaseAST(astObj)

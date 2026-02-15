@@ -191,8 +191,8 @@ func BenchmarkTokenConverter_MemoryReuse(b *testing.B) {
 	}
 }
 
-// BenchmarkConvertTokensForParser tests the convenience function
-func BenchmarkConvertTokensForParser(b *testing.B) {
+// BenchmarkPooledTokenConverter tests the pooled converter path
+func BenchmarkPooledTokenConverter(b *testing.B) {
 	sql := "SELECT u.name, p.title FROM users u JOIN posts p ON u.id = p.user_id WHERE u.active = true"
 
 	tkz := tokenizer.GetTokenizer()
@@ -207,12 +207,14 @@ func BenchmarkConvertTokensForParser(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		result, err := ConvertTokensForParser(tokens)
+		converter := GetTokenConverter()
+		result, err := converter.Convert(tokens)
+		PutTokenConverter(converter)
 		if err != nil {
-			b.Fatalf("ConvertTokensForParser failed: %v", err)
+			b.Fatalf("TokenConverter.Convert failed: %v", err)
 		}
-		if len(result) == 0 {
-			b.Fatal("No tokens converted by ConvertTokensForParser")
+		if len(result.Tokens) == 0 {
+			b.Fatal("No tokens converted by TokenConverter")
 		}
 	}
 }
@@ -307,13 +309,16 @@ func BenchmarkCompareConversionMethods(b *testing.B) {
 		}
 	})
 
-	b.Run("ConvenienceFunction", func(b *testing.B) {
+	b.Run("PooledConverter", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			_, err := ConvertTokensForParser(tokens)
+			converter := GetTokenConverter()
+			result, err := converter.Convert(tokens)
+			PutTokenConverter(converter)
 			if err != nil {
 				b.Fatal(err)
 			}
+			_ = result.Tokens
 		}
 	})
 }

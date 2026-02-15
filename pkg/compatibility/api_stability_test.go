@@ -195,16 +195,9 @@ func TestAPIStability_ParserOutput(t *testing.T) {
 		t.Fatalf("Tokenization failed: %v", err)
 	}
 
-	// Convert tokens
-	//lint:ignore SA1019 intentional use during #215 migration
-	convertedTokens, err := parser.ConvertTokensForParser(tokens)
-	if err != nil {
-		t.Fatalf("Token conversion failed: %v", err)
-	}
-
-	// Parse
+	// Parse (includes token conversion)
 	p := parser.NewParser()
-	astObj, err := p.Parse(convertedTokens)
+	astObj, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Parsing failed: %v", err)
 	}
@@ -252,15 +245,8 @@ func TestAPIStability_ErrorHandling(t *testing.T) {
 			return
 		}
 
-		//lint:ignore SA1019 intentional use during #215 migration
-		convertedTokens, err := parser.ConvertTokensForParser(tokens)
-		if err != nil {
-			t.Logf("✓ Token conversion error handling stable: %v", err)
-			return
-		}
-
 		p := parser.NewParser()
-		_, err = p.Parse(convertedTokens)
+		_, err = p.ParseFromModelTokens(tokens)
 		if err == nil {
 			t.Error("Parser should return error for invalid SQL - error handling broken")
 		} else {

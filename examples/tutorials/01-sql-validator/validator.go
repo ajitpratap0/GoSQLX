@@ -43,22 +43,12 @@ func ValidateFile(filePath string) ValidationResult {
 		}
 	}
 
-	// Convert tokens for parser
-	parserTokens, err := parser.ConvertTokensForParser(tokens)
-	if err != nil {
-		return ValidationResult{
-			FilePath: filePath,
-			Valid:    false,
-			Error:    fmt.Errorf("token conversion error: %w", err),
-		}
-	}
-
 	// Create parser
 	p := parser.NewParser()
 	defer p.Release()
 
 	// Parse the tokens
-	_, err = p.Parse(parserTokens)
+	_, err = p.ParseFromModelTokens(tokens)
 	if err != nil {
 		return ValidationResult{
 			FilePath: filePath,

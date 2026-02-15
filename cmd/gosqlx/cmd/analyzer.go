@@ -68,17 +68,8 @@ func (a *Analyzer) Analyze(input string) (*AnalyzerResult, error) {
 		return result, result.Error
 	}
 
-	// Convert TokenWithSpan to Token using centralized converter
-	//lint:ignore SA1019 intentional use during #215 migration
-	convertedTokens, err := parser.ConvertTokensForParser(tokens) //nolint:staticcheck // intentional use of deprecated type for Phase 1 bridge
-	if err != nil {
-		result.Error = fmt.Errorf("token conversion failed: %w", err)
-		return result, result.Error
-	}
-
-	// Parse with proper error handling for memory management
 	p := parser.NewParser()
-	astObj, err := p.Parse(convertedTokens)
+	astObj, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
 		// Parser failed, no AST to release
 		result.Error = fmt.Errorf("parsing failed: %w", err)

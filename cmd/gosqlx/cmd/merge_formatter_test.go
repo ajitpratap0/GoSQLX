@@ -239,17 +239,11 @@ WHEN MATCHED THEN
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
-			//lint:ignore SA1019 intentional use during #215 migration
-			convertedTokens, err := parser.ConvertTokensForParser(tokens)
-			if err != nil {
-				t.Fatalf("Token conversion failed: %v", err)
-			}
-
 			p := parser.NewParser()
 			astObj := ast.NewAST()
 			defer ast.ReleaseAST(astObj)
 
-			result, err := p.Parse(convertedTokens)
+			result, err := p.ParseFromModelTokens(tokens)
 			if err != nil {
 				t.Skipf("Parsing failed (may not be supported yet): %v", err)
 				return
@@ -358,20 +352,11 @@ WHEN MATCHED AND s.value IS NOT NULL THEN
 				return
 			}
 
-			//lint:ignore SA1019 intentional use during #215 migration
-			convertedTokens, err := parser.ConvertTokensForParser(tokens)
-			if err != nil {
-				if !tt.shouldError {
-					t.Fatalf("Unexpected token conversion error: %v", err)
-				}
-				return
-			}
-
 			p := parser.NewParser()
 			astObj := ast.NewAST()
 			defer ast.ReleaseAST(astObj)
 
-			result, err := p.Parse(convertedTokens)
+			result, err := p.ParseFromModelTokens(tokens)
 			if err != nil {
 				if !tt.shouldError {
 					t.Skipf("Parsing failed (may not be supported yet): %v", err)
@@ -435,17 +420,11 @@ WHEN MATCHED THEN UPDATE SET t.val = s.val`
 				t.Fatalf("Tokenization failed: %v", err)
 			}
 
-			//lint:ignore SA1019 intentional use during #215 migration
-			convertedTokens, err := parser.ConvertTokensForParser(tokens)
-			if err != nil {
-				t.Fatalf("Token conversion failed: %v", err)
-			}
-
 			p := parser.NewParser()
 			astObj := ast.NewAST()
 			defer ast.ReleaseAST(astObj)
 
-			result, err := p.Parse(convertedTokens)
+			result, err := p.ParseFromModelTokens(tokens)
 			if err != nil {
 				t.Skipf("Parsing failed (may not be supported yet): %v", err)
 				return

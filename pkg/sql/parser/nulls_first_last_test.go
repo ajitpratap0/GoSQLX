@@ -19,12 +19,9 @@ func parseSQL(t *testing.T, sql string) *ast.AST {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	// Convert tokens for parser - reusing window functions converter which handles all keywords
-	convertedTokens := convertTokensForWindowFunctions(tokens)
-
 	// Parse tokens
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}

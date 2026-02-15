@@ -3,62 +3,9 @@ package parser
 import (
 	"testing"
 
-	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
-
-// convertTokensForSetOps converts TokenWithSpan to Token for parser
-func convertTokensForSetOps(tokens []models.TokenWithSpan) []token.Token {
-	result := make([]token.Token, 0, len(tokens))
-	for _, t := range tokens {
-		// Determine token type
-		//lint:ignore SA1019 intentional use during #215 migration
-		var tokenType token.Type
-
-		switch t.Token.Type {
-		case models.TokenTypeIdentifier:
-			tokenType = "IDENT"
-		case models.TokenTypeKeyword:
-			// Use the keyword value as the token type
-			//lint:ignore SA1019 intentional use during #215 migration
-			tokenType = token.Type(t.Token.Value)
-		case models.TokenTypeString:
-			tokenType = "STRING"
-		case models.TokenTypeNumber:
-			tokenType = "INT"
-		case models.TokenTypeOperator:
-			//lint:ignore SA1019 intentional use during #215 migration
-			tokenType = token.Type(t.Token.Value)
-		case models.TokenTypeLParen:
-			tokenType = "("
-		case models.TokenTypeRParen:
-			tokenType = ")"
-		case models.TokenTypeComma:
-			tokenType = ","
-		case models.TokenTypePeriod:
-			tokenType = "."
-		case models.TokenTypeEq:
-			tokenType = "="
-		default:
-			// For any other type, use the value as the type if it looks like a keyword
-			if t.Token.Value != "" {
-				//lint:ignore SA1019 intentional use during #215 migration
-				tokenType = token.Type(t.Token.Value)
-			}
-		}
-
-		// Only add tokens with valid types and values
-		if tokenType != "" && t.Token.Value != "" {
-			result = append(result, token.Token{
-				Type:    tokenType,
-				Literal: t.Token.Value,
-			})
-		}
-	}
-	return result
-}
 
 func TestParser_SimpleUnion(t *testing.T) {
 	sql := `SELECT name FROM users UNION SELECT name FROM customers`
@@ -74,11 +21,8 @@ func TestParser_SimpleUnion(t *testing.T) {
 	}
 
 	// Convert tokens for parser
-	convertedTokens := convertTokensForSetOps(tokens)
-
-	// Parse tokens
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse UNION: %v", err)
 	}
@@ -127,11 +71,8 @@ func TestParser_UnionAll(t *testing.T) {
 	}
 
 	// Convert tokens for parser
-	convertedTokens := convertTokensForSetOps(tokens)
-
-	// Parse tokens
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse UNION ALL: %v", err)
 	}
@@ -171,11 +112,8 @@ func TestParser_Except(t *testing.T) {
 	}
 
 	// Convert tokens for parser
-	convertedTokens := convertTokensForSetOps(tokens)
-
-	// Parse tokens
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse EXCEPT: %v", err)
 	}
@@ -212,11 +150,8 @@ func TestParser_Intersect(t *testing.T) {
 	}
 
 	// Convert tokens for parser
-	convertedTokens := convertTokensForSetOps(tokens)
-
-	// Parse tokens
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse INTERSECT: %v", err)
 	}
@@ -253,11 +188,8 @@ func TestParser_MultipleSetOperations(t *testing.T) {
 	}
 
 	// Convert tokens for parser
-	convertedTokens := convertTokensForSetOps(tokens)
-
-	// Parse tokens
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse multiple set operations: %v", err)
 	}
@@ -310,11 +242,8 @@ func TestParser_SetOperationWithCTE(t *testing.T) {
 	}
 
 	// Convert tokens for parser
-	convertedTokens := convertTokensForSetOps(tokens)
-
-	// Parse tokens
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse CTE with set operation: %v", err)
 	}

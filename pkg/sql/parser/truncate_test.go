@@ -3,37 +3,9 @@ package parser
 import (
 	"testing"
 
-	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
-
-// convertTokensForTruncate converts TokenWithSpan to Token for parser
-func convertTokensForTruncate(tokens []models.TokenWithSpan) []token.Token {
-	result := make([]token.Token, 0, len(tokens))
-	for _, t := range tokens {
-		// Determine token type
-		//lint:ignore SA1019 intentional use during #215 migration
-		tokenType := token.Type(t.Token.Value)
-		if t.Token.Type == models.TokenTypeIdentifier {
-			tokenType = "IDENT"
-		} else if t.Token.Type == models.TokenTypeNumber {
-			tokenType = "NUMBER"
-		} else if t.Token.Type == models.TokenTypeString {
-			tokenType = "STRING"
-		} else if t.Token.Type == models.TokenTypeEOF {
-			tokenType = token.EOF
-		}
-
-		result = append(result, token.Token{
-			Type:      tokenType,
-			Literal:   t.Token.Value,
-			ModelType: t.Token.Type,
-		})
-	}
-	return result
-}
 
 func TestParser_TruncateTable_Basic(t *testing.T) {
 	sql := "TRUNCATE TABLE users"
@@ -46,10 +18,8 @@ func TestParser_TruncateTable_Basic(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForTruncate(tokens)
-
 	parser := &Parser{}
-	result, err := parser.Parse(convertedTokens)
+	result, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}
@@ -91,10 +61,8 @@ func TestParser_TruncateTable_WithoutTableKeyword(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForTruncate(tokens)
-
 	parser := &Parser{}
-	result, err := parser.Parse(convertedTokens)
+	result, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}
@@ -124,10 +92,8 @@ func TestParser_TruncateTable_MultipleTables(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForTruncate(tokens)
-
 	parser := &Parser{}
-	result, err := parser.Parse(convertedTokens)
+	result, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}
@@ -164,10 +130,8 @@ func TestParser_TruncateTable_RestartIdentity(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForTruncate(tokens)
-
 	parser := &Parser{}
-	result, err := parser.Parse(convertedTokens)
+	result, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}
@@ -197,10 +161,8 @@ func TestParser_TruncateTable_ContinueIdentity(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForTruncate(tokens)
-
 	parser := &Parser{}
-	result, err := parser.Parse(convertedTokens)
+	result, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}
@@ -230,10 +192,8 @@ func TestParser_TruncateTable_Cascade(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForTruncate(tokens)
-
 	parser := &Parser{}
-	result, err := parser.Parse(convertedTokens)
+	result, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}
@@ -259,10 +219,8 @@ func TestParser_TruncateTable_Restrict(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForTruncate(tokens)
-
 	parser := &Parser{}
-	result, err := parser.Parse(convertedTokens)
+	result, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}
@@ -288,10 +246,8 @@ func TestParser_TruncateTable_FullSyntax(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForTruncate(tokens)
-
 	parser := &Parser{}
-	result, err := parser.Parse(convertedTokens)
+	result, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}
@@ -329,10 +285,8 @@ func TestParser_TruncateTable_MultipleTablesWithRestrict(t *testing.T) {
 		t.Fatalf("Failed to tokenize: %v", err)
 	}
 
-	convertedTokens := convertTokensForTruncate(tokens)
-
 	parser := &Parser{}
-	result, err := parser.Parse(convertedTokens)
+	result, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}
@@ -463,10 +417,8 @@ func TestParser_TruncateTable_TableDriven(t *testing.T) {
 				t.Fatalf("Failed to tokenize: %v", err)
 			}
 
-			convertedTokens := convertTokensForTruncate(tokens)
-
 			parser := &Parser{}
-			result, err := parser.Parse(convertedTokens)
+			result, err := parser.ParseFromModelTokens(tokens)
 
 			if tt.shouldErr {
 				if err == nil {

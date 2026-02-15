@@ -75,15 +75,8 @@ func TestParser_JSONArrowOperator(t *testing.T) {
 				t.Fatalf("Tokenize failed: %v", err)
 			}
 
-			// Convert tokens
-			convertedTokens, err := ConvertTokensForParser(tokens)
-			if err != nil {
-				t.Fatalf("ConvertTokensForParser failed: %v", err)
-			}
-
-			// Parse
 			p := NewParser()
-			astObj, err := p.Parse(convertedTokens)
+			astObj, err := p.ParseFromModelTokens(tokens)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -170,15 +163,9 @@ func TestParser_JSONComplexExpressions(t *testing.T) {
 				t.Fatalf("Tokenize failed: %v", err)
 			}
 
-			// Convert tokens
-			convertedTokens, err := ConvertTokensForParser(tokens)
-			if err != nil {
-				t.Fatalf("ConvertTokensForParser failed: %v", err)
-			}
-
-			// Parse
+			// Parse (includes token conversion)
 			p := NewParser()
-			_, err = p.Parse(convertedTokens)
+			_, err = p.ParseFromModelTokens(tokens)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -216,15 +203,9 @@ func TestParser_JSONOperatorPrecedence(t *testing.T) {
 				t.Fatalf("Tokenize failed: %v", err)
 			}
 
-			// Convert tokens
-			convertedTokens, err := ConvertTokensForParser(tokens)
-			if err != nil {
-				t.Fatalf("ConvertTokensForParser failed: %v", err)
-			}
-
-			// Parse
+			// Parse (includes token conversion)
 			p := NewParser()
-			_, err = p.Parse(convertedTokens)
+			_, err = p.ParseFromModelTokens(tokens)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -295,15 +276,8 @@ func TestParser_JSONBExistenceOperators(t *testing.T) {
 				t.Fatalf("Tokenize failed: %v", err)
 			}
 
-			// Convert tokens
-			convertedTokens, err := ConvertTokensForParser(tokens)
-			if err != nil {
-				t.Fatalf("ConvertTokensForParser failed: %v", err)
-			}
-
-			// Parse
 			p := NewParser()
-			astObj, err := p.Parse(convertedTokens)
+			astObj, err := p.ParseFromModelTokens(tokens)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
 				return

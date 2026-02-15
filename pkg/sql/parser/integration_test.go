@@ -63,22 +63,9 @@ func TestIntegration_RealWorldQueries(t *testing.T) {
 					continue
 				}
 
-				// Convert tokens
-				convertedTokens, convErr := ConvertTokensForParser(tokens)
-				if convErr != nil {
-					failedQueries = append(failedQueries, QueryFailure{
-						File:  path,
-						Index: i + 1,
-						Query: truncateQuery(query),
-						Error: "Token conversion failed: " + convErr.Error(),
-					})
-					t.Logf("❌ %s: Token conversion failed: %v", queryName, convErr)
-					continue
-				}
-
-				// Parse
+				// Parse (includes token conversion)
 				p := NewParser()
-				_, parseErr := p.Parse(convertedTokens)
+				_, parseErr := p.ParseFromModelTokens(tokens)
 
 				if parseErr != nil {
 					failedQueries = append(failedQueries, QueryFailure{
@@ -263,18 +250,9 @@ func testDialectQueries(t *testing.T, filePath string, dialectName string) {
 				return
 			}
 
-			// Convert tokens
-			convertedTokens, convErr := ConvertTokensForParser(tokens)
-			if convErr != nil {
-				failureCount++
-				t.Logf("Query #%d token conversion failed: %v", queryNum, convErr)
-				t.Logf("Query: %s", truncateQuery(query))
-				return
-			}
-
-			// Parse
+			// Parse (includes token conversion)
 			p := NewParser()
-			_, parseErr := p.Parse(convertedTokens)
+			_, parseErr := p.ParseFromModelTokens(tokens)
 
 			if parseErr != nil {
 				failureCount++

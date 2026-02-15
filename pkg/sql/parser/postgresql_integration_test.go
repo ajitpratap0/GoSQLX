@@ -91,15 +91,9 @@ func TestParser_PostgreSQL_IntegrationAllFeatures(t *testing.T) {
 				t.Fatalf("Tokenize error: %v", err)
 			}
 
-			convertedTokens, err := ConvertTokensForParser(tokens)
-			if err != nil {
-				t.Fatalf("Convert error: %v", err)
-			}
-
 			parser := NewParser()
 			defer parser.Release()
-
-			result, err := parser.Parse(convertedTokens)
+			result, err := parser.ParseFromModelTokens(tokens)
 			if err != nil {
 				t.Fatalf("Parse error for %s: %v\nSQL: %s", tt.description, err, tt.sql)
 			}
@@ -172,10 +166,13 @@ func BenchmarkParser_JSONOperators(b *testing.B) {
 				b.Fatalf("Tokenize error: %v", err)
 			}
 
-			convertedTokens, err := ConvertTokensForParser(tokens)
+			converter := GetTokenConverter()
+			convResult, err := converter.Convert(tokens)
+			PutTokenConverter(converter)
 			if err != nil {
 				b.Fatalf("Convert error: %v", err)
 			}
+			convertedTokens := convResult.Tokens
 
 			b.ResetTimer()
 			b.ReportAllocs()
@@ -213,10 +210,13 @@ func BenchmarkParser_LateralJoin(b *testing.B) {
 		b.Fatalf("Tokenize error: %v", err)
 	}
 
-	convertedTokens, err := ConvertTokensForParser(tokens)
+	converter := GetTokenConverter()
+	convResult, err := converter.Convert(tokens)
+	PutTokenConverter(converter)
 	if err != nil {
 		b.Fatalf("Convert error: %v", err)
 	}
+	convertedTokens := convResult.Tokens
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -249,10 +249,13 @@ func BenchmarkParser_AggregateOrderBy(b *testing.B) {
 		b.Fatalf("Tokenize error: %v", err)
 	}
 
-	convertedTokens, err := ConvertTokensForParser(tokens)
+	converter := GetTokenConverter()
+	convResult, err := converter.Convert(tokens)
+	PutTokenConverter(converter)
 	if err != nil {
 		b.Fatalf("Convert error: %v", err)
 	}
+	convertedTokens := convResult.Tokens
 
 	b.ResetTimer()
 	b.ReportAllocs()

@@ -3,158 +3,9 @@ package parser
 import (
 	"testing"
 
-	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
-
-// convertTokensForWindowFunctions converts TokenWithSpan to Token for parser
-func convertTokensForWindowFunctions(tokens []models.TokenWithSpan) []token.Token {
-	result := make([]token.Token, 0, len(tokens))
-	for _, t := range tokens {
-		// Handle compound keywords by splitting them
-		if t.Token.Value == "ORDER BY" {
-			result = append(result, token.Token{Type: "ORDER", Literal: "ORDER", ModelType: models.TokenTypeOrder})
-			result = append(result, token.Token{Type: "BY", Literal: "BY", ModelType: models.TokenTypeBy})
-			continue
-		}
-		if t.Token.Value == "GROUP BY" {
-			result = append(result, token.Token{Type: "GROUP", Literal: "GROUP", ModelType: models.TokenTypeGroup})
-			result = append(result, token.Token{Type: "BY", Literal: "BY", ModelType: models.TokenTypeBy})
-			continue
-		}
-
-		// Determine token type
-		//lint:ignore SA1019 intentional use during #215 migration
-		var tokenType token.Type
-		modelType := t.Token.Type // Use the tokenizer's type as the model type
-
-		switch t.Token.Type {
-		case models.TokenTypeIdentifier:
-			// Handle window function keywords that might be tokenized as identifiers
-			if t.Token.Value == "OVER" || t.Token.Value == "PARTITION" ||
-				t.Token.Value == "ROWS" || t.Token.Value == "RANGE" ||
-				t.Token.Value == "CURRENT" || t.Token.Value == "UNBOUNDED" ||
-				t.Token.Value == "PRECEDING" || t.Token.Value == "FOLLOWING" ||
-				t.Token.Value == "DESC" || t.Token.Value == "ASC" ||
-				t.Token.Value == "BETWEEN" || t.Token.Value == "AND" ||
-				t.Token.Value == "ROW" || t.Token.Value == "NULLS" ||
-				t.Token.Value == "FIRST" || t.Token.Value == "LAST" ||
-				// FETCH clause keywords (SQL-99 F861, F862)
-				t.Token.Value == "FETCH" || t.Token.Value == "NEXT" ||
-				t.Token.Value == "ONLY" || t.Token.Value == "TIES" ||
-				t.Token.Value == "PERCENT" || t.Token.Value == "OFFSET" ||
-				// Row locking keywords (SQL:2003, PostgreSQL, MySQL)
-				t.Token.Value == "UPDATE" || t.Token.Value == "SHARE" ||
-				t.Token.Value == "NOWAIT" || t.Token.Value == "SKIP" ||
-				t.Token.Value == "LOCKED" || t.Token.Value == "OF" ||
-				t.Token.Value == "NO" || t.Token.Value == "KEY" ||
-				t.Token.Value == "FOR" {
-				//lint:ignore SA1019 intentional use during #215 migration
-				tokenType = token.Type(t.Token.Value)
-			} else {
-				tokenType = "IDENT"
-			}
-		case models.TokenTypeKeyword:
-			// Use the keyword value as the token type
-			//lint:ignore SA1019 intentional use during #215 migration
-			tokenType = token.Type(t.Token.Value)
-		case models.TokenTypeFrom:
-			tokenType = "FROM"
-		case models.TokenTypeSelect:
-			tokenType = "SELECT"
-		case models.TokenTypeOrder:
-			tokenType = "ORDER"
-		case models.TokenTypeBy:
-			tokenType = "BY"
-		case models.TokenTypeDesc:
-			tokenType = "DESC"
-		case models.TokenTypeAsc:
-			tokenType = "ASC"
-		case models.TokenTypeAnd:
-			tokenType = "AND"
-		case models.TokenTypeBetween:
-			tokenType = "BETWEEN"
-		// FETCH clause token types (SQL-99 F861, F862)
-		case models.TokenTypeFetch:
-			tokenType = "FETCH"
-		case models.TokenTypeNext:
-			tokenType = "NEXT"
-		case models.TokenTypeTies:
-			tokenType = "TIES"
-		case models.TokenTypePercent:
-			tokenType = "PERCENT"
-		case models.TokenTypeOnly:
-			tokenType = "ONLY"
-		case models.TokenTypeOffset:
-			tokenType = "OFFSET"
-		case models.TokenTypeFirst:
-			tokenType = "FIRST"
-		case models.TokenTypeLast:
-			tokenType = "LAST"
-		case models.TokenTypeRows:
-			tokenType = "ROWS"
-		case models.TokenTypeRow:
-			tokenType = "ROW"
-		// Row locking token types (SQL:2003, PostgreSQL, MySQL)
-		case models.TokenTypeFor:
-			tokenType = "FOR"
-		case models.TokenTypeUpdate:
-			tokenType = "UPDATE"
-		case models.TokenTypeShare:
-			tokenType = "SHARE"
-		case models.TokenTypeNoWait:
-			tokenType = "NOWAIT"
-		case models.TokenTypeSkip:
-			tokenType = "SKIP"
-		case models.TokenTypeLocked:
-			tokenType = "LOCKED"
-		case models.TokenTypeOf:
-			tokenType = "OF"
-		case models.TokenTypeSum, models.TokenTypeCount, models.TokenTypeAvg,
-			models.TokenTypeMin, models.TokenTypeMax:
-			tokenType = "IDENT"                    // Treat aggregate functions as identifiers for function calls
-			modelType = models.TokenTypeIdentifier // Normalize to identifier for parser
-		case models.TokenTypeString, models.TokenTypeSingleQuotedString, models.TokenTypeDoubleQuotedString:
-			tokenType = "STRING"
-		case models.TokenTypeNumber:
-			tokenType = "INT"
-		case models.TokenTypeOperator:
-			//lint:ignore SA1019 intentional use during #215 migration
-			tokenType = token.Type(t.Token.Value)
-		case models.TokenTypeMul, models.TokenTypeAsterisk:
-			tokenType = "*"
-			modelType = models.TokenTypeAsterisk // Normalize MUL to ASTERISK for parser
-		case models.TokenTypeLParen:
-			tokenType = "("
-		case models.TokenTypeRParen:
-			tokenType = ")"
-		case models.TokenTypeComma:
-			tokenType = ","
-		case models.TokenTypePeriod:
-			tokenType = "."
-		case models.TokenTypeEq:
-			tokenType = "="
-		default:
-			// For any other type, use the value as the type if it looks like a keyword
-			if t.Token.Value != "" {
-				//lint:ignore SA1019 intentional use during #215 migration
-				tokenType = token.Type(t.Token.Value)
-			}
-		}
-
-		// Only add tokens with valid types and values
-		if tokenType != "" && t.Token.Value != "" {
-			result = append(result, token.Token{
-				Type:      tokenType,
-				Literal:   t.Token.Value,
-				ModelType: modelType,
-			})
-		}
-	}
-	return result
-}
 
 func TestParser_BasicWindowFunction(t *testing.T) {
 	sql := `SELECT name, ROW_NUMBER() OVER (ORDER BY id) FROM users`
@@ -170,11 +21,8 @@ func TestParser_BasicWindowFunction(t *testing.T) {
 	}
 
 	// Convert tokens for parser
-	convertedTokens := convertTokensForWindowFunctions(tokens)
-
-	// Parse tokens
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse window function: %v", err)
 	}
@@ -232,11 +80,8 @@ func TestParser_WindowFunctionWithPartition(t *testing.T) {
 	}
 
 	// Convert tokens for parser
-	convertedTokens := convertTokensForWindowFunctions(tokens)
-
-	// Parse tokens
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse window function with partition: %v", err)
 	}
@@ -294,11 +139,8 @@ func TestParser_WindowFunctionWithFrame(t *testing.T) {
 	}
 
 	// Convert tokens for parser
-	convertedTokens := convertTokensForWindowFunctions(tokens)
-
-	// Parse tokens
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse window function with frame: %v", err)
 	}
@@ -401,11 +243,8 @@ func TestParser_AnalyticFunctions(t *testing.T) {
 			}
 
 			// Convert tokens for parser
-			convertedTokens := convertTokensForWindowFunctions(tokens)
-
-			// Parse tokens
 			parser := &Parser{}
-			astObj, err := parser.Parse(convertedTokens)
+			astObj, err := parser.ParseFromModelTokens(tokens)
 			if err != nil {
 				t.Fatalf("Failed to parse %s: %v", tt.funcName, err)
 			}
@@ -487,11 +326,8 @@ func TestParser_RankingFunctions(t *testing.T) {
 			}
 
 			// Convert tokens for parser
-			convertedTokens := convertTokensForWindowFunctions(tokens)
-
-			// Parse tokens
 			parser := &Parser{}
-			astObj, err := parser.Parse(convertedTokens)
+			astObj, err := parser.ParseFromModelTokens(tokens)
 			if err != nil {
 				t.Fatalf("Failed to parse %s: %v", tt.funcName, err)
 			}
@@ -552,11 +388,8 @@ func TestParser_ComplexWindowFunction(t *testing.T) {
 	}
 
 	// Convert tokens for parser
-	convertedTokens := convertTokensForWindowFunctions(tokens)
-
-	// Parse tokens
 	parser := &Parser{}
-	astObj, err := parser.Parse(convertedTokens)
+	astObj, err := parser.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("Failed to parse complex window function: %v", err)
 	}

@@ -226,19 +226,11 @@ func testSQLFile(t *testing.T, file SQLTestFile) TestResult {
 		return result
 	}
 
-	// Convert tokens
-	//lint:ignore SA1019 intentional use during #215 migration
-	convertedTokens, err := parser.ConvertTokensForParser(tokens)
-	if err != nil {
-		result.Error = fmt.Errorf("token conversion failed: %w", err)
-		return result
-	}
-
-	// Parse
+	// Parse (includes token conversion)
 	p := parser.NewParser()
 	defer p.Release()
 
-	ast, err := p.Parse(convertedTokens)
+	ast, err := p.ParseFromModelTokens(tokens)
 	result.ParseTime = time.Since(startTime)
 
 	if err != nil {
@@ -434,12 +426,10 @@ func BenchmarkIntegration_SimpleQueries(b *testing.B) {
 			sqlStatement := extractSQLStatement(file.Content)
 			tkz := tokenizer.GetTokenizer()
 			tokens, _ := tkz.Tokenize([]byte(sqlStatement))
-			//lint:ignore SA1019 intentional use during #215 migration
-			convertedTokens, _ := parser.ConvertTokensForParser(tokens)
 			tokenizer.PutTokenizer(tkz)
 
 			p := parser.NewParser()
-			_, _ = p.Parse(convertedTokens)
+			_, _ = p.ParseFromModelTokens(tokens)
 			p.Release()
 		}
 	}
@@ -467,12 +457,10 @@ func BenchmarkIntegration_ComplexQueries(b *testing.B) {
 			sqlStatement := extractSQLStatement(file.Content)
 			tkz := tokenizer.GetTokenizer()
 			tokens, _ := tkz.Tokenize([]byte(sqlStatement))
-			//lint:ignore SA1019 intentional use during #215 migration
-			convertedTokens, _ := parser.ConvertTokensForParser(tokens)
 			tokenizer.PutTokenizer(tkz)
 
 			p := parser.NewParser()
-			_, _ = p.Parse(convertedTokens)
+			_, _ = p.ParseFromModelTokens(tokens)
 			p.Release()
 		}
 	}
@@ -500,12 +488,10 @@ func BenchmarkIntegration_RealWorldScenarios(b *testing.B) {
 			sqlStatement := extractSQLStatement(file.Content)
 			tkz := tokenizer.GetTokenizer()
 			tokens, _ := tkz.Tokenize([]byte(sqlStatement))
-			//lint:ignore SA1019 intentional use during #215 migration
-			convertedTokens, _ := parser.ConvertTokensForParser(tokens)
 			tokenizer.PutTokenizer(tkz)
 
 			p := parser.NewParser()
-			_, _ = p.Parse(convertedTokens)
+			_, _ = p.ParseFromModelTokens(tokens)
 			p.Release()
 		}
 	}

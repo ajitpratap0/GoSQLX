@@ -83,7 +83,9 @@ type TokenConverter struct {
 //
 // Usage:
 //
-//	result := parser.ConvertTokensForParser(tokenizerOutput)
+//	converter := parser.GetTokenConverter()
+//	defer parser.PutTokenConverter(converter)
+//	result, _ := converter.Convert(tokenizerOutput)
 //	ast, err := parser.ParseWithPositions(result)
 //	if err != nil {
 //	    // Error includes line/column from original source
@@ -834,64 +836,6 @@ func buildTypeMapping() map[models.TokenType]token.Type { //nolint:staticcheck /
 	}
 }
 
-// ConvertTokensForParser converts tokenizer output to parser input tokens.
-//
-// This is a convenience function that creates a TokenConverter and performs the conversion
-// in a single call. It returns only the converted tokens without position mappings, making
-// it suitable for use cases where enhanced error reporting is not required.
-//
-// For position-aware parsing with enhanced error reporting, use ConvertTokensWithPositions() instead.
-//
-// Parameters:
-//   - tokens: Slice of tokenizer output (models.TokenWithSpan)
-//
-// Returns:
-//   - []token.Token: Converted parser tokens
-//   - error: Conversion error if token is invalid
-//
-// Performance:
-//   - Throughput: ~10M tokens/second
-//   - Overhead: ~80ns per token
-//   - Memory: Allocates new slice for tokens
-//
-// Usage:
-//
-//	// Tokenize SQL
-//	tkz := tokenizer.GetTokenizer()
-//	defer tokenizer.PutTokenizer(tkz)
-//	tokens, err := tkz.Tokenize([]byte("SELECT * FROM users"))
-//	if err != nil {
-//	    log.Fatal(err)
-//	}
-//
-//	// Convert for parser (basic mode)
-//	parserTokens, err := parser.ConvertTokensForParser(tokens)
-//	if err != nil {
-//	    log.Fatal(err)
-//	}
-//
-//	// Parse
-//	p := parser.GetParser()
-//	defer parser.PutParser(p)
-//	ast, err := p.Parse(parserTokens)
-//	defer ast.ReleaseAST(ast)
-//
-// Deprecated: ConvertTokensForParser is part of the legacy dual token type bridge.
-// Use ParseFromModelTokens on the Parser instead, which accepts tokenizer output directly.
-// This function will be removed in a future version (see #215).
-//
-// Backward Compatibility: Maintains compatibility with existing CLI code.
-//
-// Thread Safety: Safe for concurrent calls - creates new converter instance.
-func ConvertTokensForParser(tokens []models.TokenWithSpan) ([]token.Token, error) {
-	converter := NewTokenConverter()
-	result, err := converter.Convert(tokens)
-	if err != nil {
-		return nil, err
-	}
-	return result.Tokens, nil
-}
-
 // ConvertTokensWithPositions converts tokenizer output to parser input with position tracking.
 //
 // This function provides both converted tokens and position mappings for enhanced error reporting.
@@ -910,7 +854,7 @@ func ConvertTokensForParser(tokens []models.TokenWithSpan) ([]token.Token, error
 //
 // Performance:
 //   - Throughput: ~10M tokens/second
-//   - Overhead: ~80ns per token (same as ConvertTokensForParser)
+//   - Overhead: ~80ns per token
 //   - Memory: Allocates slices for tokens and position mappings
 //
 // Usage (Recommended for Production):

@@ -7,112 +7,9 @@ package parser
 import (
 	"testing"
 
-	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
-
-// convertTokensForAggregateTests converts TokenWithSpan to Token for parser
-func convertTokensForAggregateTests(tokens []models.TokenWithSpan) []token.Token {
-	result := make([]token.Token, 0, len(tokens))
-	for _, t := range tokens {
-		// Handle compound keywords by splitting them
-		if t.Token.Value == "ORDER BY" || t.Token.Type == models.TokenTypeOrderBy {
-			result = append(result, token.Token{Type: "ORDER", ModelType: models.TokenTypeOrder, Literal: "ORDER"})
-			result = append(result, token.Token{Type: "BY", ModelType: models.TokenTypeBy, Literal: "BY"})
-			continue
-		}
-
-		// Determine token type
-		//lint:ignore SA1019 intentional use during #215 migration
-		var tokenType token.Type
-
-		switch t.Token.Type {
-		case models.TokenTypeIdentifier:
-			tokenType = "IDENT"
-		case models.TokenTypeKeyword:
-			//lint:ignore SA1019 intentional use during #215 migration
-			tokenType = token.Type(t.Token.Value)
-		case models.TokenTypeFrom:
-			tokenType = "FROM"
-		case models.TokenTypeSelect:
-			tokenType = "SELECT"
-		case models.TokenTypeOrder:
-			tokenType = "ORDER"
-		case models.TokenTypeBy:
-			tokenType = "BY"
-		case models.TokenTypeDesc:
-			tokenType = "DESC"
-		case models.TokenTypeAsc:
-			tokenType = "ASC"
-		case models.TokenTypeWhere:
-			tokenType = "WHERE"
-		case models.TokenTypeNulls:
-			tokenType = "NULLS"
-		case models.TokenTypeFirst:
-			tokenType = "FIRST"
-		case models.TokenTypeLast:
-			tokenType = "LAST"
-		case models.TokenTypeDistinct:
-			tokenType = "DISTINCT"
-		case models.TokenTypeOver:
-			tokenType = "OVER"
-		case models.TokenTypePartition:
-			tokenType = "PARTITION"
-		case models.TokenTypeString:
-			tokenType = "STRING"
-		case models.TokenTypeSingleQuotedString:
-			tokenType = "STRING"
-		case models.TokenTypeDoubleQuotedString:
-			tokenType = "IDENT" // Double-quoted strings are identifiers in SQL
-		case models.TokenTypeNumber:
-			tokenType = "INT"
-		case models.TokenTypeOperator:
-			//lint:ignore SA1019 intentional use during #215 migration
-			tokenType = token.Type(t.Token.Value)
-		case models.TokenTypeLParen:
-			tokenType = "("
-		case models.TokenTypeRParen:
-			tokenType = ")"
-		case models.TokenTypeComma:
-			tokenType = ","
-		case models.TokenTypePeriod:
-			tokenType = "."
-		case models.TokenTypeEq:
-			tokenType = "="
-		case models.TokenTypeAsterisk:
-			tokenType = "*"
-		case models.TokenTypeCase:
-			tokenType = "CASE"
-		case models.TokenTypeWhen:
-			tokenType = "WHEN"
-		case models.TokenTypeThen:
-			tokenType = "THEN"
-		case models.TokenTypeElse:
-			tokenType = "ELSE"
-		case models.TokenTypeEnd:
-			tokenType = "END"
-		case models.TokenTypeAs:
-			tokenType = "AS"
-		default:
-			// For any other type, use the value as the type if it looks like a keyword
-			if t.Token.Value != "" {
-				//lint:ignore SA1019 intentional use during #215 migration
-				tokenType = token.Type(t.Token.Value)
-			}
-		}
-
-		// Only add tokens with valid types and values
-		if tokenType != "" && t.Token.Value != "" {
-			result = append(result, token.Token{
-				Type:    tokenType,
-				Literal: t.Token.Value,
-			})
-		}
-	}
-	return result
-}
 
 func TestParser_AggregateOrderBy_StringAgg(t *testing.T) {
 	tests := []struct {
@@ -177,9 +74,8 @@ func TestParser_AggregateOrderBy_StringAgg(t *testing.T) {
 				t.Fatalf("tokenization failed: %v", err)
 			}
 
-			convertedTokens := convertTokensForAggregateTests(tokens)
 			parser := &Parser{}
-			result, err := parser.Parse(convertedTokens)
+			result, err := parser.ParseFromModelTokens(tokens)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
@@ -311,9 +207,8 @@ func TestParser_AggregateOrderBy_ArrayAgg(t *testing.T) {
 				t.Fatalf("tokenization failed: %v", err)
 			}
 
-			convertedTokens := convertTokensForAggregateTests(tokens)
 			parser := &Parser{}
-			result, err := parser.Parse(convertedTokens)
+			result, err := parser.ParseFromModelTokens(tokens)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
@@ -410,9 +305,8 @@ func TestParser_AggregateOrderBy_OtherAggregates(t *testing.T) {
 				t.Fatalf("tokenization failed: %v", err)
 			}
 
-			convertedTokens := convertTokensForAggregateTests(tokens)
 			parser := &Parser{}
-			result, err := parser.Parse(convertedTokens)
+			result, err := parser.ParseFromModelTokens(tokens)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
@@ -473,9 +367,8 @@ func TestParser_AggregateOrderBy_ComplexExpressions(t *testing.T) {
 				t.Fatalf("tokenization failed: %v", err)
 			}
 
-			convertedTokens := convertTokensForAggregateTests(tokens)
 			parser := &Parser{}
-			result, err := parser.Parse(convertedTokens)
+			result, err := parser.ParseFromModelTokens(tokens)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
@@ -528,9 +421,8 @@ func TestParser_AggregateOrderBy_WithWindowFunctions(t *testing.T) {
 				t.Fatalf("tokenization failed: %v", err)
 			}
 
-			convertedTokens := convertTokensForAggregateTests(tokens)
 			parser := &Parser{}
-			result, err := parser.Parse(convertedTokens)
+			result, err := parser.ParseFromModelTokens(tokens)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
@@ -588,9 +480,8 @@ func TestParser_AggregateOrderBy_ErrorCases(t *testing.T) {
 				t.Fatalf("tokenization failed: %v", err)
 			}
 
-			convertedTokens := convertTokensForAggregateTests(tokens)
 			parser := &Parser{}
-			_, err = parser.Parse(convertedTokens)
+			_, err = parser.ParseFromModelTokens(tokens)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
@@ -616,9 +507,8 @@ func TestParser_AggregateOrderBy_InSubquery(t *testing.T) {
 		t.Fatalf("tokenization failed: %v", err)
 	}
 
-	convertedTokens := convertTokensForAggregateTests(tokens)
 	parser := &Parser{}
-	result, err := parser.Parse(convertedTokens)
+	result, err := parser.ParseFromModelTokens(tokens)
 
 	if err != nil {
 		t.Fatalf("Parse() failed: %v", err)

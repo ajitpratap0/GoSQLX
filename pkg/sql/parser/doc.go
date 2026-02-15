@@ -26,13 +26,13 @@
 //
 // The typical parsing flow involves three stages:
 //
-//  1. Token Conversion: Convert tokenizer output to parser tokens
+//  1. Tokenization: Tokenize SQL input
 //     tokens := tokenizer.Tokenize(sqlBytes)
-//     result := parser.ConvertTokensForParser(tokens)
 //
-//  2. AST Generation: Parse tokens into Abstract Syntax Tree
-//     parser := parser.GetParser()
-//     defer parser.PutParser(parser)
+//  2. AST Generation: Parse tokens directly into Abstract Syntax Tree
+//     p := parser.GetParser()
+//     defer parser.PutParser(p)
+//     astObj, err := p.ParseFromModelTokens(tokens)
 //     ast, err := parser.ParseWithPositions(result)
 //
 //  3. AST Processing: Traverse and analyze the generated AST
@@ -227,13 +227,10 @@
 //	    // Handle tokenization error
 //	}
 //
-//	// Convert tokens
-//	result := parser.ConvertTokensForParser(tokens)
-//
-//	// Parse to AST
+//	// Parse tokens directly to AST
 //	p := parser.GetParser()
 //	defer parser.PutParser(p)
-//	astObj, err := p.ParseWithPositions(result)
+//	astObj, err := p.ParseFromModelTokens(tokens)
 //	defer ast.ReleaseAST(astObj)
 //	if err != nil {
 //	    // Handle parsing error with line/column information

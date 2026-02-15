@@ -250,7 +250,6 @@ func (tc *tokenConverter) convertSingleToken(t models.TokenWithSpan) (token.Toke
 	return token.Token{Type: t.Token.Type, Literal: t.Token.Value}, nil
 }
 
-
 // getIdentifierKeywordType remaps identifiers that are actually SQL keywords.
 // This is conservative — only includes keywords that the parser expects as specific types,
 // NOT data type keywords (VARCHAR, etc.) which should stay as identifiers.

@@ -840,7 +840,7 @@ func TestParser_OperatorErrors(t *testing.T) {
 // TestParser_StringConcatenation tests || (string concatenation) operator
 func TestParser_StringConcatenation(t *testing.T) {
 	// SELECT 'Hello' || ' ' || 'World'
-	// Must include ModelType for tokens to be properly recognized
+	// Must include Type for tokens to be properly recognized
 	// Use TokenTypeSingleQuotedString (31) for string literals, matching tokenizer output
 	// Include EOF token at the end
 	tokens := []token.Token{

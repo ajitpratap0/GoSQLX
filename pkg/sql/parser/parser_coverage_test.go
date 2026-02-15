@@ -283,7 +283,7 @@ func TestParser_ExpressionEdgeCases(t *testing.T) {
 				{Type: models.TokenTypeFrom, Literal: "FROM"},
 				{Type: models.TokenTypeIdentifier, Literal: "data"},
 			},
-			wantErr: false, // Nested parentheses now work with normalized ModelType
+			wantErr: false, // Nested parentheses now work with normalized Type
 		},
 		{
 			name: "complex boolean expression with NOT",
@@ -401,7 +401,7 @@ func TestParser_ExpressionEdgeCases(t *testing.T) {
 				{Type: models.TokenTypeFrom, Literal: "FROM"},
 				{Type: models.TokenTypeIdentifier, Literal: "calculations"},
 			},
-			wantErr: false, // Complex arithmetic now works with normalized ModelType
+			wantErr: false, // Complex arithmetic now works with normalized Type
 		},
 	}
 

@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	// Simple SELECT query tokens - with ModelType for fast int comparison path
+	// Simple SELECT query tokens - with Type for fast int comparison path
 	simpleSelectTokens = []token.Token{
 		{Type: models.TokenTypeSelect, Literal: "SELECT"},
 		{Type: models.TokenTypeIdentifier, Literal: "id"},

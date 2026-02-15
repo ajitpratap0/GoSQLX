@@ -155,7 +155,7 @@ func (p *Parser) currentLocation() models.Location {
 // Error: Exceeding this depth returns goerrors.RecursionDepthLimitError
 const MaxRecursionDepth = 100
 
-// Used for fast path checks: tokens with ModelType set use O(1) switch dispatch.
+// Used for fast path checks: tokens with Type set use O(1) switch dispatch.
 
 // Parser represents a SQL parser that converts a stream of tokens into an Abstract Syntax Tree (AST).
 //
@@ -164,7 +164,7 @@ const MaxRecursionDepth = 100
 //
 // Architecture:
 //   - Recursive Descent: Top-down parsing with predictive lookahead
-//   - Statement Routing: O(1) ModelType-based dispatch for statement types
+//   - Statement Routing: O(1) Type-based dispatch for statement types
 //   - Expression Precedence: Handles operator precedence via recursive descent levels
 //   - Error Recovery: Provides detailed syntax error messages with position information
 //
@@ -203,7 +203,7 @@ type Parser struct {
 // Parse parses a token stream into an Abstract Syntax Tree (AST).
 //
 // This is the primary parsing method that converts tokens from the tokenizer into a structured
-// AST representing the SQL statements. It uses fast O(1) ModelType-based dispatch for optimal
+// AST representing the SQL statements. It uses fast O(1) Type-based dispatch for optimal
 // performance on hot paths.
 //
 // Parameters:
@@ -243,7 +243,6 @@ type Parser struct {
 //
 // Thread Safety: NOT thread-safe - use separate parser instances per goroutine.
 func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
-	tokens = normalizeTokens(tokens)
 	p.tokens = tokens
 	p.currentPos = 0
 	if len(tokens) > 0 {
@@ -260,7 +259,7 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 	}
 	result.Statements = make([]ast.Statement, 0, estimatedStmts)
 
-	// Parse statements using ModelType (int) comparisons for speed
+	// Parse statements using Type (int) comparisons for speed
 	for p.currentPos < len(tokens) && !p.isType(models.TokenTypeEOF) {
 		// Skip semicolons between statements
 		if p.isType(models.TokenTypeSemicolon) {
@@ -369,7 +368,6 @@ func (p *Parser) ParseContextFromModelTokens(ctx context.Context, tokens []model
 //
 // Thread Safety: NOT thread-safe - use separate parser instances per goroutine.
 func (p *Parser) ParseWithPositions(result *ConversionResult) (*ast.AST, error) {
-	result.Tokens = normalizeTokens(result.Tokens)
 	p.tokens = result.Tokens
 	p.positions = result.PositionMapping
 	p.currentPos = 0
@@ -496,7 +494,6 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 	p.ctx = ctx
 	defer func() { p.ctx = nil }() // Clear context when done
 
-	tokens = normalizeTokens(tokens)
 	p.tokens = tokens
 	p.currentPos = 0
 	if len(tokens) > 0 {
@@ -513,7 +510,7 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 	}
 	result.Statements = make([]ast.Statement, 0, estimatedStmts)
 
-	// Parse statements using ModelType (int) comparisons for speed
+	// Parse statements using Type (int) comparisons for speed
 	for p.currentPos < len(tokens) && !p.isType(models.TokenTypeEOF) {
 		// Check context before each statement
 		if err := ctx.Err(); err != nil {
@@ -562,17 +559,17 @@ func (p *Parser) Release() {
 	p.ctx = nil
 }
 
-// parseStatement parses a single SQL statement using O(1) ModelType-based dispatch.
+// parseStatement parses a single SQL statement using O(1) Type-based dispatch.
 //
 // This is the statement routing function that examines the current token and dispatches
 // to the appropriate specialized parser based on the statement type. It uses O(1) switch
-// dispatch on ModelType (integer enum) which compiles to a jump table for optimal performance.
+// dispatch on Type (integer enum) which compiles to a jump table for optimal performance.
 //
 // Performance Optimization:
-//   - Fast Path: O(1) ModelType switch (~0.24ns per comparison)
-//   - Fallback: String-based matching for tokens without ModelType (~3.4ns)
+//   - Fast Path: O(1) Type switch (~0.24ns per comparison)
+//   - Fallback: String-based matching for tokens without Type (~3.4ns)
 //   - Jump Table: Compiler generates jump table for switch on integers
-//   - 14x Faster: ModelType vs string comparison on hot paths
+//   - 14x Faster: Type vs string comparison on hot paths
 //
 // Supported Statement Types:
 //
@@ -618,8 +615,8 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		}
 	}
 
-	// O(1) switch dispatch on ModelType (compiles to jump table).
-	// All tokens are normalized at parse entry so ModelType is always set.
+	// O(1) switch dispatch on Type (compiles to jump table).
+	// All tokens are normalized at parse entry so Type is always set.
 	switch p.currentToken.Type {
 	case models.TokenTypeWith:
 		return p.parseWithStatement()
@@ -681,28 +678,20 @@ func (p *Parser) peekToken() token.Token {
 }
 
 // =============================================================================
-// ModelType-based Helper Methods (Phase 2 - Fast Int Comparisons)
+// Type-based Helper Methods (Fast Int Comparisons)
 // =============================================================================
-// These methods use int-based ModelType comparisons which are significantly
+// These methods use int-based Type comparisons which are significantly
 // faster than string comparisons (~0.24ns vs ~3.4ns). Use these for hot paths.
 // They include fallback to string-based Type comparison for backward compatibility
-// with tests that create tokens directly without setting ModelType.
+// with tests that create tokens directly without setting Type.
 
-// normalizeTokens copies tokens and ensures all have a valid Type set.
-func normalizeTokens(tokens []token.Token) []token.Token {
-	copied := make([]token.Token, len(tokens))
-	copy(copied, tokens)
-	return copied
-}
-
-// isType checks if the current token's ModelType matches the expected type.
-// Pure integer comparison — no string fallback. All tokens are normalized at parse entry
-// via normalizeTokens() to ensure ModelType is always set.
+// isType checks if the current token's Type matches the expected type.
+// Pure integer comparison — no string fallback.
 func (p *Parser) isType(expected models.TokenType) bool {
 	return p.currentToken.Type == expected
 }
 
-// matchType checks if the current token's ModelType matches the expected type and advances if so.
+// matchType checks if the current token's Type matches the expected type and advances if so.
 func (p *Parser) matchType(expected models.TokenType) bool {
 	if p.currentToken.Type == expected {
 		p.advance()
@@ -711,7 +700,7 @@ func (p *Parser) matchType(expected models.TokenType) bool {
 	return false
 }
 
-// isAnyType checks if the current token's ModelType matches any of the given types.
+// isAnyType checks if the current token's Type matches any of the given types.
 // More efficient than multiple isType calls when checking many alternatives.
 func (p *Parser) isAnyType(types ...models.TokenType) bool {
 	for _, t := range types {
@@ -731,7 +720,7 @@ func (p *Parser) isIdentifier() bool {
 
 // isStringLiteral checks if the current token is a string literal.
 // Handles all string token subtypes (single-quoted, dollar-quoted, etc.)
-// Also handles string fallback for tokens created without ModelType.
+// Also handles string fallback for tokens created without Type.
 func (p *Parser) isStringLiteral() bool {
 	switch p.currentToken.Type {
 	case models.TokenTypeString, models.TokenTypeSingleQuotedString, models.TokenTypeDollarQuotedString:
@@ -851,13 +840,13 @@ func (p *Parser) parseTableReference() (*ast.TableReference, error) {
 // that can be used as a table or column name
 func (p *Parser) isNonReservedKeyword() bool {
 	// These keywords can be used as table/column names in most SQL dialects.
-	// Use ModelType where possible, with literal fallback for tokens that have
+	// Use Type where possible, with literal fallback for tokens that have
 	// the generic TokenTypeKeyword.
 	switch p.currentToken.Type {
 	case models.TokenTypeTarget, models.TokenTypeSource, models.TokenTypeMatched:
 		return true
 	case models.TokenTypeKeyword:
-		// Token may have generic ModelType; check literal for specific keywords
+		// Token may have generic Type; check literal for specific keywords
 		switch strings.ToUpper(p.currentToken.Literal) {
 		case "TARGET", "SOURCE", "MATCHED", "VALUE", "NAME", "TYPE", "STATUS":
 			return true

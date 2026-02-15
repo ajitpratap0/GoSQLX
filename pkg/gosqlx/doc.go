@@ -65,7 +65,7 @@
 //   - Tokenization: 8M+ tokens/second
 //   - Latency: <1μs for complex queries with window functions
 //   - Memory reduction: 60-80% with object pooling
-//   - Token comparison: 14x faster with ModelType field (0.28ns vs 4.9ns)
+//   - Token comparison: 14x faster with Type field (0.28ns vs 4.9ns)
 //   - Keyword suggestions: 575x faster with caching
 //
 // # Thread Safety

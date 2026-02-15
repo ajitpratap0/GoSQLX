@@ -562,7 +562,7 @@ func (p *Parser) isNumericLiteral() bool {
 
 // isDataTypeKeyword checks if current token is a SQL data type keyword
 func (p *Parser) isDataTypeKeyword() bool {
-	// Check ModelType for known data type tokens
+	// Check Type for known data type tokens
 	switch p.currentToken.Type {
 	case models.TokenTypeInt, models.TokenTypeInteger, models.TokenTypeVarchar,
 		models.TokenTypeText, models.TokenTypeBoolean, models.TokenTypeFloat,

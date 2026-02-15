@@ -25,16 +25,3 @@ func parseSQL(t *testing.T, sql string) *ast.AST {
 	return result
 }
 
-// parseSQLErr is a test helper that tokenizes and parses SQL, returning the error.
-func parseSQLErr(t *testing.T, sql string) (*ast.AST, error) {
-	t.Helper()
-	tkz := tokenizer.GetTokenizer()
-	defer tokenizer.PutTokenizer(tkz)
-	tokens, err := tkz.Tokenize([]byte(sql))
-	if err != nil {
-		t.Fatalf("tokenize: %v", err)
-	}
-	p := NewParser()
-	defer p.Release()
-	return p.ParseFromModelTokens(tokens)
-}

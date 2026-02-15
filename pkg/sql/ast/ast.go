@@ -1095,8 +1095,8 @@ type InsertStatement struct {
 	With       *WithClause
 	TableName  string
 	Columns    []Expression
-	Values     [][]Expression   // Multi-row support: each inner slice is one row of values
-	Query      *SelectStatement // For INSERT ... SELECT
+	Values     [][]Expression // Multi-row support: each inner slice is one row of values
+	Query      Statement      // For INSERT ... SELECT (SelectStatement or SetOperation)
 	Returning  []Expression
 	OnConflict *OnConflict
 }

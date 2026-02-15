@@ -270,7 +270,11 @@ func (i *InsertStatement) Format(opts FormatOptions) string {
 
 	if i.Query != nil {
 		sb.WriteString(f.clauseSep())
-		sb.WriteString(i.Query.Format(opts))
+		if fq, ok := i.Query.(interface{ Format(FormatOptions) string }); ok {
+			sb.WriteString(fq.Format(opts))
+		} else {
+			sb.WriteString(stmtSQL(i.Query))
+		}
 	} else if len(i.Values) > 0 {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("VALUES"))

@@ -24,4 +24,3 @@ func parseSQL(t *testing.T, sql string) *ast.AST {
 	}
 	return result
 }
-

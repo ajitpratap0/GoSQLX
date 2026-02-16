@@ -65,6 +65,30 @@ func TestParseWithRecovery(t *testing.T) {
 			if tt.wantStmts && len(stmts) == 0 {
 				t.Error("expected statements but got none")
 			}
+			// Verify parsed statement content for known-valid inputs
+			if tt.name == "valid single statement" {
+				if len(stmts) != 1 {
+					t.Fatalf("expected 1 statement, got %d", len(stmts))
+				}
+				if _, ok := stmts[0].(*ast.SelectStatement); !ok {
+					t.Errorf("expected *ast.SelectStatement, got %T", stmts[0])
+				}
+			}
+			if tt.name == "valid multiple statements" {
+				if len(stmts) != 2 {
+					t.Fatalf("expected 2 statements, got %d", len(stmts))
+				}
+				for i, stmt := range stmts {
+					if _, ok := stmt.(*ast.SelectStatement); !ok {
+						t.Errorf("statement[%d]: expected *ast.SelectStatement, got %T", i, stmt)
+					}
+				}
+			}
+			if tt.name == "mixed valid and invalid" && len(stmts) > 0 {
+				if _, ok := stmts[0].(*ast.SelectStatement); !ok {
+					t.Errorf("recovered statement: expected *ast.SelectStatement, got %T", stmts[0])
+				}
+			}
 		})
 	}
 }
@@ -187,25 +211,33 @@ func TestExtractEdgeCases(t *testing.T) {
 	t.Run("columns from CAST", func(t *testing.T) {
 		r := mustParseHelper(t, "SELECT CAST(age AS TEXT) FROM users")
 		cols := ExtractColumns(r)
-		_ = cols
+		if len(cols) == 0 {
+			t.Error("expected columns from CAST expression")
+		}
 	})
 
 	t.Run("columns from IN", func(t *testing.T) {
 		r := mustParseHelper(t, "SELECT * FROM t WHERE status IN ('a', 'b', 'c')")
 		cols := ExtractColumns(r)
-		_ = cols
+		if len(cols) == 0 {
+			t.Error("expected columns from IN expression")
+		}
 	})
 
 	t.Run("columns from BETWEEN", func(t *testing.T) {
 		r := mustParseHelper(t, "SELECT * FROM t WHERE age BETWEEN min_age AND max_age")
 		cols := ExtractColumns(r)
-		_ = cols
+		if len(cols) == 0 {
+			t.Error("expected columns from BETWEEN expression")
+		}
 	})
 
 	t.Run("columns from unary NOT", func(t *testing.T) {
 		r := mustParseHelper(t, "SELECT * FROM t WHERE NOT active")
 		cols := ExtractColumns(r)
-		_ = cols
+		if len(cols) == 0 {
+			t.Error("expected columns from NOT expression")
+		}
 	})
 
 	t.Run("tables from UNION", func(t *testing.T) {
@@ -267,7 +299,9 @@ func TestExtractEdgeCases(t *testing.T) {
 	t.Run("UPDATE", func(t *testing.T) {
 		r := mustParseHelper(t, "UPDATE users SET name = 'test', email = 'x@x.com' WHERE id = 1")
 		cols := ExtractColumns(r)
-		_ = cols
+		if len(cols) == 0 {
+			t.Error("expected columns from UPDATE")
+		}
 	})
 
 	t.Run("INSERT", func(t *testing.T) {
@@ -281,155 +315,210 @@ func TestExtractEdgeCases(t *testing.T) {
 	t.Run("aliased expressions", func(t *testing.T) {
 		r := mustParseHelper(t, "SELECT name AS user_name, age AS user_age FROM users")
 		cols := ExtractColumns(r)
-		_ = cols
+		if len(cols) == 0 {
+			t.Error("expected columns from aliased expressions")
+		}
 	})
 
 	t.Run("qualified columns complex", func(t *testing.T) {
 		r := mustParseHelper(t, `SELECT u.name, CASE WHEN u.age > 18 THEN 'adult' ELSE 'minor' END,
 			CAST(u.salary AS TEXT) FROM users u`)
 		cols := ExtractColumnsQualified(r)
-		_ = cols
+		if len(cols) == 0 {
+			t.Error("expected qualified columns from complex query")
+		}
 	})
 
 	t.Run("function with filter", func(t *testing.T) {
 		r := mustParseHelper(t, "SELECT COUNT(*) FILTER (WHERE active) FROM users")
 		cols := ExtractColumns(r)
-		_ = cols
+		if len(cols) == 0 {
+			t.Error("expected columns from FILTER expression")
+		}
 	})
 
 	t.Run("multiple function calls", func(t *testing.T) {
 		r := mustParseHelper(t, `SELECT UPPER(name), LOWER(email), LENGTH(name) FROM users`)
 		fns := ExtractFunctions(r)
-		_ = fns
+		if len(fns) < 3 {
+			t.Errorf("expected >= 3 functions, got %d", len(fns))
+		}
 		cols := ExtractColumns(r)
-		_ = cols
+		if len(cols) == 0 {
+			t.Error("expected columns from function arguments")
+		}
 	})
 
 	// Cover INSERT/UPDATE/DELETE/CTE/SetOperation paths in all collectors
 	t.Run("qualified cols from INSERT with SELECT", func(t *testing.T) {
 		r := mustParseHelper(t, "INSERT INTO t2 (name) SELECT name FROM t1 WHERE id > 0")
 		cols := ExtractColumnsQualified(r)
-		_ = cols
+		if len(cols) == 0 {
+			t.Error("expected qualified columns from INSERT...SELECT")
+		}
 	})
 
 	t.Run("qualified cols from UPDATE", func(t *testing.T) {
 		r := mustParseHelper(t, "UPDATE users SET name = 'test' WHERE id = 1")
 		cols := ExtractColumnsQualified(r)
-		_ = cols
+		if len(cols) == 0 {
+			t.Error("expected qualified columns from UPDATE")
+		}
 	})
 
 	t.Run("qualified cols from DELETE", func(t *testing.T) {
 		r := mustParseHelper(t, "DELETE FROM users WHERE id = 1")
 		cols := ExtractColumnsQualified(r)
-		_ = cols
+		if len(cols) == 0 {
+			t.Error("expected qualified columns from DELETE")
+		}
 	})
 
 	t.Run("qualified cols from CTE", func(t *testing.T) {
 		r := mustParseHelper(t, "WITH cte AS (SELECT u.id, u.name FROM users u) SELECT cte.id FROM cte")
 		cols := ExtractColumnsQualified(r)
-		_ = cols
+		if len(cols) == 0 {
+			t.Error("expected qualified columns from CTE")
+		}
 	})
 
 	t.Run("qualified cols from UNION", func(t *testing.T) {
 		r := mustParseHelper(t, "SELECT u.name FROM users u UNION SELECT o.name FROM orders o")
 		cols := ExtractColumnsQualified(r)
-		_ = cols
+		if len(cols) == 0 {
+			t.Error("expected qualified columns from UNION")
+		}
 	})
 
 	t.Run("functions from INSERT with values", func(t *testing.T) {
 		r := mustParseHelper(t, "INSERT INTO t (name) VALUES (UPPER('test'))")
 		fns := ExtractFunctions(r)
-		_ = fns
+		if len(fns) == 0 {
+			t.Error("expected functions from INSERT VALUES")
+		}
 	})
 
 	t.Run("functions from UPDATE", func(t *testing.T) {
 		r := mustParseHelper(t, "UPDATE users SET name = UPPER('test') WHERE LENGTH(name) > 5")
 		fns := ExtractFunctions(r)
-		_ = fns
+		if len(fns) >= 0 {
+			// UPPER and LENGTH expected
+			if len(fns) < 2 {
+				t.Errorf("expected >= 2 functions from UPDATE, got %d", len(fns))
+			}
+		}
 	})
 
 	t.Run("functions from DELETE", func(t *testing.T) {
 		r := mustParseHelper(t, "DELETE FROM users WHERE LENGTH(name) = 0")
 		fns := ExtractFunctions(r)
-		_ = fns
+		if len(fns) == 0 {
+			t.Error("expected functions from DELETE WHERE")
+		}
 	})
 
 	t.Run("functions from CTE", func(t *testing.T) {
 		r := mustParseHelper(t, "WITH cte AS (SELECT COUNT(*) as cnt FROM users) SELECT cnt FROM cte")
 		fns := ExtractFunctions(r)
-		_ = fns
+		if len(fns) == 0 {
+			t.Error("expected functions from CTE")
+		}
 	})
 
 	t.Run("functions from UNION", func(t *testing.T) {
 		r := mustParseHelper(t, "SELECT COUNT(*) FROM t1 UNION SELECT SUM(x) FROM t2")
 		fns := ExtractFunctions(r)
-		_ = fns
+		if len(fns) < 2 {
+			t.Errorf("expected >= 2 functions from UNION, got %d", len(fns))
+		}
 	})
 
 	t.Run("functions from CASE expression", func(t *testing.T) {
 		r := mustParseHelper(t, "SELECT CASE WHEN COUNT(*) > 0 THEN MAX(x) ELSE MIN(x) END FROM t")
 		fns := ExtractFunctions(r)
-		_ = fns
+		if len(fns) < 2 {
+			t.Errorf("expected >= 2 functions from CASE, got %d", len(fns))
+		}
 	})
 
 	t.Run("functions from IN expression", func(t *testing.T) {
 		r := mustParseHelper(t, "SELECT * FROM t WHERE UPPER(name) IN ('A', 'B')")
 		fns := ExtractFunctions(r)
-		_ = fns
+		if len(fns) == 0 {
+			t.Error("expected functions from IN expression")
+		}
 	})
 
 	t.Run("functions from BETWEEN", func(t *testing.T) {
 		r := mustParseHelper(t, "SELECT * FROM t WHERE ABS(x) BETWEEN 0 AND 100")
 		fns := ExtractFunctions(r)
-		_ = fns
+		if len(fns) == 0 {
+			t.Error("expected functions from BETWEEN expression")
+		}
 	})
 
 	t.Run("tables from CTE", func(t *testing.T) {
 		r := mustParseHelper(t, "WITH cte AS (SELECT * FROM users) SELECT * FROM cte")
 		tables := ExtractTables(r)
-		_ = tables
+		if len(tables) == 0 {
+			t.Error("expected tables from CTE")
+		}
 	})
 
 	t.Run("tables from INSERT", func(t *testing.T) {
 		r := mustParseHelper(t, "INSERT INTO t2 (name) SELECT name FROM t1")
 		tables := ExtractTables(r)
-		_ = tables
+		if len(tables) < 2 {
+			t.Errorf("expected >= 2 tables from INSERT...SELECT, got %d", len(tables))
+		}
 	})
 
 	t.Run("tables from UPDATE with subquery in WHERE", func(t *testing.T) {
 		r := mustParseHelper(t, "UPDATE users SET active = true WHERE id IN (SELECT id FROM admins)")
 		tables := ExtractTables(r)
-		_ = tables
+		if len(tables) < 2 {
+			t.Errorf("expected >= 2 tables from UPDATE with subquery, got %d", len(tables))
+		}
 	})
 
 	t.Run("qualified tables from CTE", func(t *testing.T) {
 		r := mustParseHelper(t, "WITH cte AS (SELECT * FROM users) SELECT * FROM cte")
 		tables := ExtractTablesQualified(r)
-		_ = tables
+		if len(tables) == 0 {
+			t.Error("expected qualified tables from CTE")
+		}
 	})
 
 	t.Run("columns from GROUP BY and HAVING", func(t *testing.T) {
 		r := mustParseHelper(t, "SELECT dept, COUNT(*) FROM emp GROUP BY dept HAVING COUNT(*) > 5")
 		cols := ExtractColumns(r)
-		_ = cols
+		if len(cols) == 0 {
+			t.Error("expected columns from GROUP BY/HAVING")
+		}
 	})
 
 	t.Run("columns from ORDER BY", func(t *testing.T) {
 		r := mustParseHelper(t, "SELECT name, age FROM users ORDER BY age DESC")
 		cols := ExtractColumns(r)
-		_ = cols
+		if len(cols) == 0 {
+			t.Error("expected columns from ORDER BY")
+		}
 	})
 
 	t.Run("qualified cols with GROUP BY HAVING ORDER BY", func(t *testing.T) {
 		r := mustParseHelper(t, "SELECT u.dept, COUNT(*) FROM users u GROUP BY u.dept HAVING COUNT(*) > 5 ORDER BY u.dept")
 		cols := ExtractColumnsQualified(r)
-		_ = cols
+		if len(cols) == 0 {
+			t.Error("expected qualified columns from GROUP BY/HAVING/ORDER BY")
+		}
 	})
 
 	t.Run("functions from HAVING and ORDER BY", func(t *testing.T) {
 		r := mustParseHelper(t, "SELECT dept, COUNT(*) FROM emp GROUP BY dept HAVING SUM(salary) > 1000 ORDER BY COUNT(*)")
 		fns := ExtractFunctions(r)
-		_ = fns
+		if len(fns) < 2 {
+			t.Errorf("expected >= 2 functions from HAVING/ORDER BY, got %d", len(fns))
+		}
 	})
 
 	t.Run("nil AST", func(t *testing.T) {

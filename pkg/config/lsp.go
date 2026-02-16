@@ -392,8 +392,7 @@ func ValidateLSPValue(section, key string, value interface{}) error {
 		}
 
 	case "gosqlx.server":
-		switch key {
-		case "logLevel":
+		if key == "logLevel" {
 			if v, ok := value.(string); ok {
 				config.Server.LogLevel = v
 			} else {

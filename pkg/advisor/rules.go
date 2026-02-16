@@ -171,8 +171,7 @@ func hasJoinCondition(expr ast.Expression, tableNames []string) bool {
 		return false
 	}
 
-	switch e := expr.(type) {
-	case *ast.BinaryExpression:
+	if e, ok := expr.(*ast.BinaryExpression); ok {
 		if e.Operator == "AND" || e.Operator == "OR" {
 			return hasJoinCondition(e.Left, tableNames) || hasJoinCondition(e.Right, tableNames)
 		}
@@ -376,8 +375,7 @@ func containsOrCondition(expr ast.Expression) bool {
 		return false
 	}
 
-	switch e := expr.(type) {
-	case *ast.BinaryExpression:
+	if e, ok := expr.(*ast.BinaryExpression); ok {
 		if strings.EqualFold(e.Operator, "OR") {
 			// Check if the OR operates on different columns
 			leftCols := collectColumnNames(e.Left)

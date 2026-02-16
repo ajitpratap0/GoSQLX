@@ -206,15 +206,13 @@ func tokenizeLine(line string) []wordToken {
 				wordStart = i
 			}
 			currentWord.WriteRune(ch)
-		} else {
-			if wordStart >= 0 {
-				words = append(words, wordToken{
-					text:   currentWord.String(),
-					column: wordStart + 1, // 1-indexed
-				})
-				currentWord.Reset()
-				wordStart = -1
-			}
+		} else if wordStart >= 0 {
+			words = append(words, wordToken{
+				text:   currentWord.String(),
+				column: wordStart + 1, // 1-indexed
+			})
+			currentWord.Reset()
+			wordStart = -1
 		}
 	}
 

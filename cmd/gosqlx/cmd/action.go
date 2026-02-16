@@ -303,9 +303,40 @@ func defaultLinter() *linter.Linter {
 	)
 }
 
+// allRules returns every built-in rule keyed by its ID.
+func allRules() map[string]linter.Rule {
+	all := []linter.Rule{
+		whitespace.NewTrailingWhitespaceRule(),
+		whitespace.NewMixedIndentationRule(),
+		keywords.NewKeywordCaseRule(keywords.CaseUpper),
+		style.NewColumnAlignmentRule(),
+	}
+	m := make(map[string]linter.Rule, len(all))
+	for _, r := range all {
+		m[r.ID()] = r
+	}
+	return m
+}
+
 // lintFile runs the linter on a file and returns violations.
-func lintFile(filePath string, _ []string) []lintViolation {
-	l := defaultLinter()
+// When ruleList is non-empty only the rules whose IDs match are executed.
+func lintFile(filePath string, ruleList []string) []lintViolation {
+	var l *linter.Linter
+	if len(ruleList) == 0 {
+		l = defaultLinter()
+	} else {
+		available := allRules()
+		var selected []linter.Rule
+		for _, id := range ruleList {
+			if r, ok := available[id]; ok {
+				selected = append(selected, r)
+			}
+		}
+		if len(selected) == 0 {
+			return nil
+		}
+		l = linter.New(selected...)
+	}
 	result := l.LintFile(filePath)
 
 	if result.Error != nil {

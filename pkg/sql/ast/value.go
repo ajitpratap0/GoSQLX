@@ -333,8 +333,9 @@ func (d DateTimeField) String() string {
 		return "MICROSECOND"
 	case Microseconds:
 		return "MICROSECONDS"
-	case Millenium: //nolint:misspell // intentional: SQL accepts both spellings
-		return "MILLENIUM" //nolint:misspell // intentional: matches SQL keyword
+	//nolint:misspell // intentional: SQL accepts both spellings (Millenium / MILLENIUM)
+	case Millenium:
+		return "MILLENIUM"
 	case Millennium:
 		return "MILLENNIUM"
 	case Millisecond:

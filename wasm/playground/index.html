@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GoSQLX Playground</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; height: 100vh; display: flex; flex-direction: column; }
+  header { background: #161b22; border-bottom: 1px solid #30363d; padding: 12px 20px; display: flex; align-items: center; gap: 16px; }
+  header h1 { font-size: 18px; font-weight: 600; color: #58a6ff; }
+  header .status { font-size: 12px; color: #8b949e; margin-left: auto; }
+  header .status.ready { color: #3fb950; }
+  .container { flex: 1; display: flex; overflow: hidden; }
+  .panel { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .panel-header { background: #161b22; border-bottom: 1px solid #30363d; padding: 8px 16px; font-size: 13px; font-weight: 600; color: #8b949e; display: flex; align-items: center; gap: 8px; }
+  .divider { width: 4px; background: #30363d; cursor: col-resize; }
+  .divider:hover { background: #58a6ff; }
+  textarea { flex: 1; background: #0d1117; color: #c9d1d9; border: none; padding: 16px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 14px; line-height: 1.6; resize: none; outline: none; }
+  textarea::placeholder { color: #484f58; }
+  .output { flex: 1; overflow: auto; padding: 16px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+  .tabs { display: flex; gap: 0; }
+  .tab { padding: 8px 16px; cursor: pointer; border-bottom: 2px solid transparent; color: #8b949e; font-size: 13px; transition: all 0.15s; }
+  .tab:hover { color: #c9d1d9; }
+  .tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+  .error { color: #f85149; }
+  .valid { color: #3fb950; }
+  .btn { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  .btn:hover { background: #30363d; }
+</style>
+</head>
+<body>
+<header>
+  <h1>⚡ GoSQLX Playground</h1>
+  <button class="btn" onclick="runExample()">Load Example</button>
+  <span id="status" class="status">Loading WASM...</span>
+</header>
+<div class="container">
+  <div class="panel">
+    <div class="panel-header">📝 SQL Input</div>
+    <textarea id="input" placeholder="Enter SQL here..." spellcheck="false">SELECT u.name, u.email, COUNT(o.id) AS order_count
+FROM users u
+LEFT JOIN orders o ON o.user_id = u.id
+WHERE u.active = true
+GROUP BY u.name, u.email
+HAVING COUNT(o.id) > 5
+ORDER BY order_count DESC
+LIMIT 10;</textarea>
+  </div>
+  <div class="divider" id="divider"></div>
+  <div class="panel">
+    <div class="panel-header">
+      <div class="tabs">
+        <div class="tab active" data-tab="ast">AST</div>
+        <div class="tab" data-tab="format">Format</div>
+        <div class="tab" data-tab="lint">Lint</div>
+        <div class="tab" data-tab="validate">Validate</div>
+      </div>
+    </div>
+    <div class="output" id="output"></div>
+  </div>
+</div>
+<script src="wasm_exec.js"></script>
+<script>
+let currentTab = 'ast';
+let wasmReady = false;
+
+const go = new Go();
+WebAssembly.instantiateStreaming(fetch('gosqlx.wasm'), go.importObject).then(result => {
+  go.run(result.instance);
+  wasmReady = true;
+  document.getElementById('status').textContent = '✓ Ready';
+  document.getElementById('status').className = 'status ready';
+  run();
+}).catch(err => {
+  document.getElementById('status').textContent = '✗ Failed to load';
+  document.getElementById('output').innerHTML = '<span class="error">' + err + '</span>';
+});
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    currentTab = tab.dataset.tab;
+    run();
+  });
+});
+
+document.getElementById('input').addEventListener('input', debounce(run, 200));
+
+function run() {
+  if (!wasmReady) return;
+  const sql = document.getElementById('input').value;
+  const out = document.getElementById('output');
+  if (!sql.trim()) { out.textContent = ''; return; }
+  try {
+    let result;
+    switch (currentTab) {
+      case 'ast': result = gosqlxParse(sql); break;
+      case 'format': result = gosqlxFormat(sql); break;
+      case 'lint': result = gosqlxLint(sql); break;
+      case 'validate': result = gosqlxValidate(sql); break;
+    }
+    // Check for error in JSON result
+    try {
+      const parsed = JSON.parse(result);
+      if (parsed.error) {
+        out.innerHTML = '<span class="error">' + escapeHtml(parsed.error) + '</span>';
+      } else if (parsed.valid === true) {
+        out.innerHTML = '<span class="valid">✓ Valid SQL</span>';
+      } else if (parsed.valid === false) {
+        out.innerHTML = '<span class="error">✗ Invalid: ' + escapeHtml(parsed.error) + '</span>';
+      } else {
+        out.textContent = result;
+      }
+    } catch {
+      // Not JSON (e.g., formatted SQL)
+      out.textContent = result;
+    }
+  } catch (e) {
+    out.innerHTML = '<span class="error">' + escapeHtml(e.toString()) + '</span>';
+  }
+}
+
+function runExample() {
+  document.getElementById('input').value = `WITH monthly_sales AS (
+  SELECT
+    DATE_TRUNC('month', created_at) AS month,
+    product_id,
+    SUM(amount) AS total
+  FROM sales
+  WHERE created_at >= '2024-01-01'
+  GROUP BY 1, 2
+)
+SELECT
+  m.month,
+  p.name,
+  m.total,
+  RANK() OVER (PARTITION BY m.month ORDER BY m.total DESC) AS rank
+FROM monthly_sales m
+JOIN products p ON p.id = m.product_id
+ORDER BY m.month, rank;`;
+  run();
+}
+
+function debounce(fn, ms) {
+  let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Resizable divider
+const divider = document.getElementById('divider');
+let dragging = false;
+divider.addEventListener('mousedown', () => { dragging = true; document.body.style.cursor = 'col-resize'; });
+document.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  const container = document.querySelector('.container');
+  const rect = container.getBoundingClientRect();
+  const pct = ((e.clientX - rect.left) / rect.width) * 100;
+  const panels = container.querySelectorAll('.panel');
+  panels[0].style.flex = 'none';
+  panels[0].style.width = Math.max(20, Math.min(80, pct)) + '%';
+  panels[1].style.flex = '1';
+});
+document.addEventListener('mouseup', () => { dragging = false; document.body.style.cursor = ''; });
+</script>
+</body>
+</html>

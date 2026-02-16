@@ -353,6 +353,11 @@ func ReleaseAST(ast *AST) {
 	// Reset slice but keep capacity
 	ast.Statements = ast.Statements[:0]
 
+	// Reset comments but keep capacity
+	if cap(ast.Comments) > 0 {
+		ast.Comments = ast.Comments[:0]
+	}
+
 	// Return to pool
 	astPool.Put(ast)
 }

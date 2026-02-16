@@ -138,7 +138,34 @@ func (a AST) Format(opts FormatOptions) string {
 		// Each statement already gets semicolons from its own Format
 		sep = "\n"
 	}
-	return strings.Join(parts, sep)
+	result := strings.Join(parts, sep)
+
+	// Emit preserved comments around the formatted SQL
+	if len(a.Comments) > 0 {
+		var leading, trailing []string
+		for _, c := range a.Comments {
+			if c.Inline {
+				// Inline comments (on same line as code) → trailing
+				trailing = append(trailing, c.Text)
+			} else {
+				// Comments on their own line → leading
+				leading = append(leading, c.Text)
+			}
+		}
+		var sb strings.Builder
+		for _, lc := range leading {
+			sb.WriteString(lc)
+			sb.WriteString("\n")
+		}
+		sb.WriteString(result)
+		for _, tc := range trailing {
+			sb.WriteString(" ")
+			sb.WriteString(tc)
+		}
+		result = sb.String()
+	}
+
+	return result
 }
 
 // Format returns formatted SQL for a SelectStatement.

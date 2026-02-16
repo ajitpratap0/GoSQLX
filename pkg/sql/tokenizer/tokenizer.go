@@ -245,6 +245,7 @@ type Tokenizer struct {
 	line       int                // Current line number (1-based)
 	keywords   *keywords.Keywords // Keyword classifier for token type determination
 	logger     *slog.Logger       // Optional structured logger for verbose tracing
+	Comments   []models.Comment   // Comments captured during tokenization
 }
 
 // New creates a new Tokenizer with default configuration and keyword support.
@@ -1233,6 +1234,8 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 			}
 			// Check for line comment: --
 			if nxtR == '-' {
+				commentStartIdx := t.pos.Index - size // back to first '-'
+				commentStartPos := t.toSQLPosition(Position{Index: commentStartIdx})
 				t.pos.AdvanceRune(nxtR, nxtSize)
 				// Skip until end of line or EOF
 				for t.pos.Index < len(t.input) {
@@ -1243,6 +1246,19 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 					}
 					t.pos.AdvanceRune(cr, csize)
 				}
+				commentEndIdx := t.pos.Index
+				// Trim trailing newline from comment text
+				textEnd := commentEndIdx
+				if textEnd > 0 && t.input[textEnd-1] == '\n' {
+					textEnd--
+				}
+				t.Comments = append(t.Comments, models.Comment{
+					Text:   string(t.input[commentStartIdx:textEnd]),
+					Style:  models.LineComment,
+					Start:  commentStartPos,
+					End:    t.toSQLPosition(t.pos),
+					Inline: t.hasCodeBeforeOnLine(commentStartIdx),
+				})
 				// Return the next token (skip the comment)
 				t.skipWhitespace()
 				return t.nextToken()
@@ -1258,6 +1274,8 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 			nxtR, nxtSize := utf8.DecodeRune(t.input[t.pos.Index:])
 			// Check for block comment: /*
 			if nxtR == '*' {
+				commentStartIdx := t.pos.Index - size // back to '/'
+				commentStartPos := t.toSQLPosition(Position{Index: commentStartIdx})
 				t.pos.AdvanceRune(nxtR, nxtSize)
 				// Skip until */ or EOF
 				for t.pos.Index < len(t.input) {
@@ -1275,6 +1293,13 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 						t.pos.AdvanceRune(cr, csize)
 					}
 				}
+				t.Comments = append(t.Comments, models.Comment{
+					Text:   string(t.input[commentStartIdx:t.pos.Index]),
+					Style:  models.BlockComment,
+					Start:  commentStartPos,
+					End:    t.toSQLPosition(t.pos),
+					Inline: t.hasCodeBeforeOnLine(commentStartIdx),
+				})
 				// Return the next token (skip the comment)
 				t.skipWhitespace()
 				return t.nextToken()
@@ -1635,4 +1660,24 @@ func (t *Tokenizer) getLocation(pos int) models.Location {
 
 func isIdentifierChar(r rune) bool {
 	return isUnicodeIdentifierPart(r)
+}
+
+// hasCodeBeforeOnLine checks if there are non-whitespace characters on the same
+// line before the given byte index. Used to determine if a comment is inline.
+func (t *Tokenizer) hasCodeBeforeOnLine(idx int) bool {
+	// Find the start of the line containing idx
+	lineStart := 0
+	for i := len(t.lineStarts) - 1; i >= 0; i-- {
+		if t.lineStarts[i] <= idx {
+			lineStart = t.lineStarts[i]
+			break
+		}
+	}
+	// Check for non-whitespace between lineStart and idx
+	for i := lineStart; i < idx && i < len(t.input); i++ {
+		if t.input[i] != ' ' && t.input[i] != '\t' && t.input[i] != '\r' {
+			return true
+		}
+	}
+	return false
 }

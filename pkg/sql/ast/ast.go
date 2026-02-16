@@ -32,7 +32,11 @@
 // FILTER clause, RETURNING clause, JSON/JSONB operators, and FETCH FIRST/NEXT.
 package ast
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
+)
 
 // Node represents any node in the Abstract Syntax Tree.
 //
@@ -1684,6 +1688,7 @@ func (p PartitionDefinition) Children() []Node {
 // AST represents the root of the Abstract Syntax Tree
 type AST struct {
 	Statements []Statement
+	Comments   []models.Comment // Comments captured during tokenization, preserved during formatting
 }
 
 func (a AST) TokenLiteral() string { return "" }

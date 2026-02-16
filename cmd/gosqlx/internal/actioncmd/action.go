@@ -36,16 +36,20 @@ func builtinRules() []linter.Rule {
 	}
 }
 
-var (
-	actionFiles    string
-	actionRules    string
-	actionSeverity string
-	actionConfig   string
-	actionTimeout  int
-)
+// actionFlags holds the flag values for the action subcommand,
+// avoiding package-level mutable state.
+type actionFlags struct {
+	files    string
+	rules    string
+	severity string
+	config   string
+	timeout  int
+}
 
 // NewCmd returns the action cobra.Command.
 func NewCmd() *cobra.Command {
+	f := &actionFlags{}
+
 	cmd := &cobra.Command{
 		Use:   "action",
 		Short: "Run GoSQLX checks for GitHub Actions CI",
@@ -61,14 +65,16 @@ Environment variables (also settable via flags):
   SEVERITY   - threshold: error, warning, info (default: warning)
   CONFIG     - path to .gosqlx.yml config file
   TIMEOUT    - per-file timeout in seconds (default: 600)`,
-		RunE: runAction,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runAction(cmd, args, f)
+		},
 	}
 
-	cmd.Flags().StringVar(&actionFiles, "files", "", "glob pattern for SQL files (env: SQL_FILES)")
-	cmd.Flags().StringVar(&actionRules, "rules", "", "comma-separated lint rules (env: RULES)")
-	cmd.Flags().StringVar(&actionSeverity, "severity", "", "severity threshold: error, warning, info (env: SEVERITY)")
-	cmd.Flags().StringVar(&actionConfig, "config", "", "path to config file (env: CONFIG)")
-	cmd.Flags().IntVar(&actionTimeout, "timeout", 0, "per-file timeout in seconds (env: TIMEOUT)")
+	cmd.Flags().StringVar(&f.files, "files", "", "glob pattern for SQL files (env: SQL_FILES)")
+	cmd.Flags().StringVar(&f.rules, "rules", "", "comma-separated lint rules (env: RULES)")
+	cmd.Flags().StringVar(&f.severity, "severity", "", "severity threshold: error, warning, info (env: SEVERITY)")
+	cmd.Flags().StringVar(&f.config, "config", "", "path to config file (env: CONFIG)")
+	cmd.Flags().IntVar(&f.timeout, "timeout", 0, "per-file timeout in seconds (env: TIMEOUT)")
 
 	return cmd
 }
@@ -83,13 +89,13 @@ func envDefault(flagVal, envKey, fallback string) string {
 	return fallback
 }
 
-func runAction(_ *cobra.Command, _ []string) error {
-	pattern := envDefault(actionFiles, "SQL_FILES", "**/*.sql")
-	rules := envDefault(actionRules, "RULES", "")
-	severity := envDefault(actionSeverity, "SEVERITY", "warning")
-	cfgPath := envDefault(actionConfig, "CONFIG", "")
+func runAction(_ *cobra.Command, _ []string, f *actionFlags) error {
+	pattern := envDefault(f.files, "SQL_FILES", "**/*.sql")
+	rules := envDefault(f.rules, "RULES", "")
+	severity := envDefault(f.severity, "SEVERITY", "warning")
+	cfgPath := envDefault(f.config, "CONFIG", "")
 
-	timeoutSec := actionTimeout
+	timeoutSec := f.timeout
 	if timeoutSec == 0 {
 		if v := os.Getenv("TIMEOUT"); v != "" {
 			if parsed, err := strconv.Atoi(v); err == nil {

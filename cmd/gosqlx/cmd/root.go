@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/actioncmd"
+	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/cmdutil"
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/lspcmd"
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/optimizecmd"
 )
@@ -167,5 +168,9 @@ func init() {
 	// Register subcommands from internal packages
 	rootCmd.AddCommand(lspcmd.NewCmd())
 	rootCmd.AddCommand(actioncmd.NewCmd())
-	rootCmd.AddCommand(optimizecmd.NewCmd(&outputFile, &format))
+	rootCmd.AddCommand(optimizecmd.NewCmd(&cmdutil.RootFlags{
+		Verbose:    &verbose,
+		OutputFile: &outputFile,
+		Format:     &format,
+	}))
 }

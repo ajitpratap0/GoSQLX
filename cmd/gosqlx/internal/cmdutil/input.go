@@ -91,7 +91,7 @@ func DetectAndReadInput(input string) (*InputResult, error) {
 // IsValidSQLFileExtension checks if the file extension is acceptable for SQL.
 func IsValidSQLFileExtension(ext string) bool {
 	switch ext {
-	case ".sql", ".txt", "":
+	case ".sql", ".txt":
 		return true
 	default:
 		return false

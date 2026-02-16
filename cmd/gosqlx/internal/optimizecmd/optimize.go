@@ -16,9 +16,8 @@ import (
 
 // NewCmd returns the optimize cobra.Command.
 //
-// The outputFile and format parameters are pointers to the root command's
-// persistent flag values, allowing this subcommand to access global flags.
-func NewCmd(outputFile *string, format *string) *cobra.Command {
+// rf provides access to the root command's persistent flag values.
+func NewCmd(rf *cmdutil.RootFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "optimize [file|sql]",
 		Short: "Analyze SQL for optimization opportunities",
@@ -48,7 +47,7 @@ Output includes an optimization score (0-100), complexity classification,
 and detailed suggestions.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runOptimize(cmd, args, outputFile, format)
+			return runOptimize(cmd, args, rf.OutputFile, rf.Format)
 		},
 	}
 

@@ -1,4 +1,5 @@
-package cmd
+// Package optimizecmd implements the gosqlx optimize subcommand.
+package optimizecmd
 
 import (
 	"bytes"
@@ -9,14 +10,19 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/cmdutil"
 	"github.com/ajitpratap0/GoSQLX/pkg/advisor"
 )
 
-// optimizeCmd represents the optimize command
-var optimizeCmd = &cobra.Command{
-	Use:   "optimize [file|sql]",
-	Short: "Analyze SQL for optimization opportunities",
-	Long: `Analyze SQL queries and provide optimization suggestions.
+// NewCmd returns the optimize cobra.Command.
+//
+// The outputFile and format parameters are pointers to the root command's
+// persistent flag values, allowing this subcommand to access global flags.
+func NewCmd(outputFile *string, format *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "optimize [file|sql]",
+		Short: "Analyze SQL for optimization opportunities",
+		Long: `Analyze SQL queries and provide optimization suggestions.
 
 The optimizer checks for common performance anti-patterns including:
   * OPT-001: SELECT * usage (recommends explicit column lists)
@@ -40,44 +46,45 @@ Examples:
 
 Output includes an optimization score (0-100), complexity classification,
 and detailed suggestions.`,
-	Args: cobra.MaximumNArgs(1),
-	RunE: optimizeRun,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runOptimize(cmd, args, outputFile, format)
+		},
+	}
+
+	return cmd
 }
 
-func optimizeRun(cmd *cobra.Command, args []string) error {
-	// Handle stdin input
+func runOptimize(cmd *cobra.Command, args []string, outputFile *string, format *string) error {
 	if len(args) == 0 || (len(args) == 1 && args[0] == "-") {
-		if ShouldReadFromStdin(args) {
-			return optimizeFromStdin(cmd)
+		if cmdutil.ShouldReadFromStdin(args) {
+			return optimizeFromStdin(cmd, outputFile, format)
 		}
 		return fmt.Errorf("no input provided: specify file path, SQL query, or pipe via stdin")
 	}
 
-	// Detect and read input (file or direct SQL)
-	input, err := DetectAndReadInput(args[0])
+	input, err := cmdutil.DetectAndReadInput(args[0])
 	if err != nil {
 		return fmt.Errorf("failed to read input: %w", err)
 	}
 
-	return runOptimize(cmd, string(input.Content))
+	return doOptimize(cmd, string(input.Content), outputFile, format)
 }
 
-// optimizeFromStdin handles optimization from stdin input
-func optimizeFromStdin(cmd *cobra.Command) error {
-	content, err := ReadFromStdin()
+func optimizeFromStdin(cmd *cobra.Command, outputFile *string, format *string) error {
+	content, err := cmdutil.ReadFromStdin()
 	if err != nil {
 		return fmt.Errorf("failed to read from stdin: %w", err)
 	}
 
-	if err := ValidateStdinInput(content); err != nil {
+	if err := cmdutil.ValidateStdinInput(content); err != nil {
 		return fmt.Errorf("stdin validation failed: %w", err)
 	}
 
-	return runOptimize(cmd, string(content))
+	return doOptimize(cmd, string(content), outputFile, format)
 }
 
-// runOptimize performs the optimization analysis and outputs results
-func runOptimize(cmd *cobra.Command, sql string) error {
+func doOptimize(cmd *cobra.Command, sql string, outputFile *string, format *string) error {
 	opt := advisor.New()
 
 	result, err := opt.AnalyzeSQL(sql)
@@ -85,15 +92,13 @@ func runOptimize(cmd *cobra.Command, sql string) error {
 		return fmt.Errorf("optimization analysis failed: %w", err)
 	}
 
-	// Use a buffer to capture output when writing to file
 	var outputBuf bytes.Buffer
 	outWriter := io.Writer(cmd.OutOrStdout())
-	if outputFile != "" {
+	if *outputFile != "" {
 		outWriter = &outputBuf
 	}
 
-	// Format output based on requested format
-	switch strings.ToLower(format) {
+	switch strings.ToLower(*format) {
 	case "json":
 		if err := outputOptimizeJSON(outWriter, result); err != nil {
 			return err
@@ -102,26 +107,19 @@ func runOptimize(cmd *cobra.Command, sql string) error {
 		outputOptimizeText(outWriter, result)
 	}
 
-	// Write to file if specified
-	if outputFile != "" {
-		return WriteOutput(outputBuf.Bytes(), outputFile, cmd.OutOrStdout())
+	if *outputFile != "" {
+		return cmdutil.WriteOutput(outputBuf.Bytes(), *outputFile, cmd.OutOrStdout())
 	}
 
 	return nil
 }
 
-// outputOptimizeJSON writes the optimization result as JSON
 func outputOptimizeJSON(w io.Writer, result *advisor.OptimizationResult) error {
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(result)
 }
 
-// outputOptimizeText writes the optimization result as human-readable text
 func outputOptimizeText(w io.Writer, result *advisor.OptimizationResult) {
 	fmt.Fprint(w, advisor.FormatResult(result))
-}
-
-func init() {
-	rootCmd.AddCommand(optimizeCmd)
 }

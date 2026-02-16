@@ -2,6 +2,10 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/actioncmd"
+	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/lspcmd"
+	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/optimizecmd"
 )
 
 // Version is the current version of gosqlx CLI.
@@ -159,4 +163,9 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
 	rootCmd.PersistentFlags().StringVarP(&outputFile, "output", "o", "", "output file (default: stdout)")
 	rootCmd.PersistentFlags().StringVarP(&format, "format", "f", "auto", "output format: json, yaml, table, tree, auto")
+
+	// Register subcommands from internal packages
+	rootCmd.AddCommand(lspcmd.NewCmd())
+	rootCmd.AddCommand(actioncmd.NewCmd())
+	rootCmd.AddCommand(optimizecmd.NewCmd(&outputFile, &format))
 }

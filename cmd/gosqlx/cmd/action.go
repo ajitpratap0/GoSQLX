@@ -335,7 +335,7 @@ func validateFileWithTimeout(filePath string, timeout time.Duration) error {
 	ch := make(chan result, 1)
 
 	go func() {
-		data, err := os.ReadFile(filePath)
+		data, err := os.ReadFile(filepath.Clean(filePath))
 		if err != nil {
 			ch <- result{err: fmt.Errorf("cannot read file: %w", err)}
 			return
@@ -353,7 +353,7 @@ func validateFileWithTimeout(filePath string, timeout time.Duration) error {
 
 // writeStepSummary appends a markdown summary to the GitHub step summary file.
 func writeStepSummary(path string, total, valid, valErrors, lintErrors, lintWarnings int) {
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(filepath.Clean(path), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return
 	}

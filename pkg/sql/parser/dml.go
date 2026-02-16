@@ -68,7 +68,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 		}
 		qe, ok := stmt.(ast.QueryExpression)
 		if !ok {
-			return nil, fmt.Errorf("expected SELECT or set operation in INSERT ... SELECT, got %T", stmt)
+			return nil, fmt.Errorf("expected SELECT or set operation in INSERT ... SELECT, got %T: %w", stmt, ErrUnexpectedStatement)
 		}
 		query = qe
 	case p.isType(models.TokenTypeValues):

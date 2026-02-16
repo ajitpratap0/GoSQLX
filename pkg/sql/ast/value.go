@@ -256,7 +256,7 @@ const (
 	Julian
 	Microsecond
 	Microseconds
-	Millenium
+	Millenium //nolint:misspell // intentional: SQL accepts both spellings
 	Millennium
 	Millisecond
 	Milliseconds
@@ -333,6 +333,7 @@ func (d DateTimeField) String() string {
 		return "MICROSECOND"
 	case Microseconds:
 		return "MICROSECONDS"
+	//nolint:misspell // intentional: SQL accepts both spellings (Millenium / MILLENIUM)
 	case Millenium:
 		return "MILLENIUM"
 	case Millennium:

@@ -1207,6 +1207,7 @@ type UpdateStatement struct {
 }
 
 // GetUpdates returns Assignments for backward compatibility.
+//
 // Deprecated: Use Assignments directly instead.
 func (u *UpdateStatement) GetUpdates() []UpdateExpression {
 	return u.Assignments

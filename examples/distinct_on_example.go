@@ -82,21 +82,29 @@ func main() {
 
 func parseAndDisplay(tokens []token.Token) {
 	p := parser.NewParser()
-	defer p.Release()
 
 	astObj, err := p.Parse(tokens)
 	if err != nil {
+		p.Release()
 		log.Fatalf("Parse error: %v", err)
 	}
+
+	displayAST(p, astObj)
+}
+
+func displayAST(p *parser.Parser, astObj *ast.AST) {
+	defer p.Release()
 	defer ast.ReleaseAST(astObj)
 
 	if len(astObj.Statements) == 0 {
-		log.Fatal("No statements parsed")
+		fmt.Println("No statements parsed")
+		return
 	}
 
 	stmt, ok := astObj.Statements[0].(*ast.SelectStatement)
 	if !ok {
-		log.Fatalf("Expected SelectStatement, got %T", astObj.Statements[0])
+		fmt.Printf("Expected SelectStatement, got %T\n", astObj.Statements[0])
+		return
 	}
 
 	fmt.Println("Parsed Successfully!")

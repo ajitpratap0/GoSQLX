@@ -257,9 +257,8 @@ func (p *Parser) displayTree(astObj *ast.AST) error {
 
 		fmt.Fprintf(p.Out, "%s %s\n", prefix, stmtType)
 
-		// Add basic tree structure for different statement types
-		switch s := stmt.(type) {
-		case *ast.SelectStatement:
+		// Add basic tree structure for SELECT statements
+		if s, ok := stmt.(*ast.SelectStatement); ok {
 			if len(s.Columns) > 0 {
 				fmt.Fprintf(p.Out, "%s├── Columns (%d items)\n", childPrefix, len(s.Columns))
 			}

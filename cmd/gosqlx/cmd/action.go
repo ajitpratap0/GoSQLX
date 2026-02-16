@@ -22,16 +22,16 @@ import (
 // truth — both defaultLinter() and allRules() derive from it.
 func builtinRules() []linter.Rule {
 	return []linter.Rule{
-		whitespace.NewTrailingWhitespaceRule(),       // L001
-		whitespace.NewMixedIndentationRule(),         // L002
-		whitespace.NewConsecutiveBlankLinesRule(2),    // L003
-		whitespace.NewIndentationDepthRule(10, 4),    // L004
-		whitespace.NewLongLinesRule(120),             // L005
-		style.NewColumnAlignmentRule(),               // L006
-		keywords.NewKeywordCaseRule(keywords.CaseUpper), // L007
+		whitespace.NewTrailingWhitespaceRule(),           // L001
+		whitespace.NewMixedIndentationRule(),             // L002
+		whitespace.NewConsecutiveBlankLinesRule(2),       // L003
+		whitespace.NewIndentationDepthRule(10, 4),        // L004
+		whitespace.NewLongLinesRule(120),                 // L005
+		style.NewColumnAlignmentRule(),                   // L006
+		keywords.NewKeywordCaseRule(keywords.CaseUpper),  // L007
 		style.NewCommaPlacementRule(style.CommaTrailing), // L008
-		style.NewAliasingConsistencyRule(true),       // L009
-		whitespace.NewRedundantWhitespaceRule(),      // L010
+		style.NewAliasingConsistencyRule(true),           // L009
+		whitespace.NewRedundantWhitespaceRule(),          // L010
 	}
 }
 

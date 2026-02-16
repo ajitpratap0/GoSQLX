@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
@@ -53,12 +54,21 @@ func (f *Formatter) Format(sql string) (string, error) {
 		return "", nil
 	}
 
+	// Capture comments from tokenizer before parsing
+	comments := tkz.Comments
+
 	p := parser.NewParser()
 	parsedAST, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
 		return "", fmt.Errorf("parsing failed: %w", err)
 	}
 	defer ast.ReleaseAST(parsedAST)
+
+	// Attach captured comments to AST
+	if len(comments) > 0 {
+		parsedAST.Comments = make([]models.Comment, len(comments))
+		copy(parsedAST.Comments, comments)
+	}
 
 	// Use AST's built-in Format method
 	style := ast.ReadableStyle()

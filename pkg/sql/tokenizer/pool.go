@@ -161,4 +161,9 @@ func (t *Tokenizer) Reset() {
 
 	// Don't reset keywords as they're constant
 	t.logger = nil
+
+	// Preserve Comments slice capacity but reset length
+	if cap(t.Comments) > 0 {
+		t.Comments = t.Comments[:0]
+	}
 }

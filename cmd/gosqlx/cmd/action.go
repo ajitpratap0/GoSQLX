@@ -18,6 +18,23 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 )
 
+// builtinRules returns all built-in lint rules. This is the single source of
+// truth — both defaultLinter() and allRules() derive from it.
+func builtinRules() []linter.Rule {
+	return []linter.Rule{
+		whitespace.NewTrailingWhitespaceRule(),           // L001
+		whitespace.NewMixedIndentationRule(),             // L002
+		whitespace.NewConsecutiveBlankLinesRule(2),       // L003
+		whitespace.NewIndentationDepthRule(10, 4),        // L004
+		whitespace.NewLongLinesRule(120),                 // L005
+		style.NewColumnAlignmentRule(),                   // L006
+		keywords.NewKeywordCaseRule(keywords.CaseUpper),  // L007
+		style.NewCommaPlacementRule(style.CommaTrailing), // L008
+		style.NewAliasingConsistencyRule(true),           // L009
+		whitespace.NewRedundantWhitespaceRule(),          // L010
+	}
+}
+
 var (
 	actionFiles    string
 	actionRules    string
@@ -293,19 +310,40 @@ type lintViolation struct {
 	Message  string
 }
 
-// defaultLinter creates a linter with standard rules.
+// defaultLinter creates a linter with all built-in rules.
 func defaultLinter() *linter.Linter {
-	return linter.New(
-		whitespace.NewTrailingWhitespaceRule(),
-		whitespace.NewMixedIndentationRule(),
-		keywords.NewKeywordCaseRule(keywords.CaseUpper),
-		style.NewColumnAlignmentRule(),
-	)
+	return linter.New(builtinRules()...)
+}
+
+// allRules returns every built-in rule keyed by its ID.
+func allRules() map[string]linter.Rule {
+	all := builtinRules()
+	m := make(map[string]linter.Rule, len(all))
+	for _, r := range all {
+		m[r.ID()] = r
+	}
+	return m
 }
 
 // lintFile runs the linter on a file and returns violations.
-func lintFile(filePath string, _ []string) []lintViolation {
-	l := defaultLinter()
+// When ruleList is non-empty only the rules whose IDs match are executed.
+func lintFile(filePath string, ruleList []string) []lintViolation {
+	var l *linter.Linter
+	if len(ruleList) == 0 {
+		l = defaultLinter()
+	} else {
+		available := allRules()
+		var selected []linter.Rule
+		for _, id := range ruleList {
+			if r, ok := available[id]; ok {
+				selected = append(selected, r)
+			}
+		}
+		if len(selected) == 0 {
+			return nil
+		}
+		l = linter.New(selected...)
+	}
 	result := l.LintFile(filePath)
 
 	if result.Error != nil {

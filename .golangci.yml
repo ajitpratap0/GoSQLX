@@ -11,6 +11,8 @@ linters:
     - errcheck
     - govet
     - staticcheck
+    - misspell
+    - gocritic
   settings:
     errcheck:
       exclude-functions:
@@ -25,6 +27,9 @@ linters:
         - "all"
         - "-QF*"
         - "-ST*"
+    gocritic:
+      disabled-checks:
+        - ifElseChain
 
 issues:
   max-issues-per-linter: 0

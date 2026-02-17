@@ -1105,13 +1105,14 @@ func (a ArraySliceExpression) Children() []Node {
 
 // InsertStatement represents an INSERT SQL statement
 type InsertStatement struct {
-	With       *WithClause
-	TableName  string
-	Columns    []Expression
-	Values     [][]Expression  // Multi-row support: each inner slice is one row of values
-	Query      QueryExpression // For INSERT ... SELECT (SelectStatement or SetOperation)
-	Returning  []Expression
-	OnConflict *OnConflict
+	With           *WithClause
+	TableName      string
+	Columns        []Expression
+	Values         [][]Expression  // Multi-row support: each inner slice is one row of values
+	Query          QueryExpression // For INSERT ... SELECT (SelectStatement or SetOperation)
+	Returning      []Expression
+	OnConflict     *OnConflict
+	OnDuplicateKey *UpsertClause // MySQL: ON DUPLICATE KEY UPDATE
 }
 
 func (i *InsertStatement) statementNode()      {}
@@ -1133,6 +1134,9 @@ func (i InsertStatement) Children() []Node {
 	children = append(children, nodifyExpressions(i.Returning)...)
 	if i.OnConflict != nil {
 		children = append(children, i.OnConflict)
+	}
+	if i.OnDuplicateKey != nil {
+		children = append(children, i.OnDuplicateKey)
 	}
 	return children
 }
@@ -1698,6 +1702,44 @@ func (a AST) Children() []Node {
 	children := make([]Node, len(a.Statements))
 	for i, stmt := range a.Statements {
 		children[i] = stmt
+	}
+	return children
+}
+
+// ShowStatement represents MySQL SHOW commands (SHOW TABLES, SHOW DATABASES, SHOW CREATE TABLE x, etc.)
+type ShowStatement struct {
+	ShowType  string // TABLES, DATABASES, CREATE TABLE, COLUMNS, INDEX, etc.
+	ObjectName string // For SHOW CREATE TABLE x, SHOW COLUMNS FROM x, etc.
+	From      string // For SHOW ... FROM database
+}
+
+func (s *ShowStatement) statementNode()      {}
+func (s ShowStatement) TokenLiteral() string { return "SHOW" }
+func (s ShowStatement) Children() []Node     { return nil }
+
+// DescribeStatement represents MySQL DESCRIBE/DESC/EXPLAIN table commands
+type DescribeStatement struct {
+	TableName string
+}
+
+func (d *DescribeStatement) statementNode()      {}
+func (d DescribeStatement) TokenLiteral() string { return "DESCRIBE" }
+func (d DescribeStatement) Children() []Node     { return nil }
+
+// ReplaceStatement represents MySQL REPLACE INTO statement
+type ReplaceStatement struct {
+	TableName string
+	Columns   []Expression
+	Values    [][]Expression
+}
+
+func (r *ReplaceStatement) statementNode()      {}
+func (r ReplaceStatement) TokenLiteral() string { return "REPLACE" }
+func (r ReplaceStatement) Children() []Node {
+	children := make([]Node, 0)
+	children = append(children, nodifyExpressions(r.Columns)...)
+	for _, row := range r.Values {
+		children = append(children, nodifyExpressions(row)...)
 	}
 	return children
 }

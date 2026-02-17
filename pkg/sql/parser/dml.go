@@ -120,15 +120,34 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 		return nil, p.expectedError("VALUES or SELECT")
 	}
 
-	// Parse ON CONFLICT clause if present (PostgreSQL UPSERT)
+	// Parse ON CONFLICT clause (PostgreSQL) or ON DUPLICATE KEY UPDATE (MySQL)
 	var onConflict *ast.OnConflict
+	var onDuplicateKey *ast.UpsertClause
 	if p.isType(models.TokenTypeOn) {
-		// Peek ahead to check for CONFLICT
-		if p.peekToken().Literal == "CONFLICT" {
+		nextLit := strings.ToUpper(p.peekToken().Literal)
+		if nextLit == "CONFLICT" {
 			p.advance() // Consume ON
 			p.advance() // Consume CONFLICT
 			var err error
 			onConflict, err = p.parseOnConflictClause()
+			if err != nil {
+				return nil, err
+			}
+		} else if nextLit == "DUPLICATE" {
+			p.advance() // Consume ON
+			p.advance() // Consume DUPLICATE
+			// Expect KEY
+			if strings.ToUpper(p.currentToken.Literal) != "KEY" && !p.isType(models.TokenTypeKey) {
+				return nil, p.expectedError("KEY")
+			}
+			p.advance() // Consume KEY
+			// Expect UPDATE
+			if !p.isType(models.TokenTypeUpdate) {
+				return nil, p.expectedError("UPDATE")
+			}
+			p.advance() // Consume UPDATE
+			var err error
+			onDuplicateKey, err = p.parseOnDuplicateKeyUpdateClause()
 			if err != nil {
 				return nil, err
 			}
@@ -148,12 +167,13 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 
 	// Create INSERT statement
 	return &ast.InsertStatement{
-		TableName:  tableName,
-		Columns:    columns,
-		Values:     values,
-		Query:      query,
-		OnConflict: onConflict,
-		Returning:  returning,
+		TableName:      tableName,
+		Columns:        columns,
+		Values:         values,
+		Query:          query,
+		OnConflict:     onConflict,
+		OnDuplicateKey: onDuplicateKey,
+		Returning:      returning,
 	}, nil
 }
 
@@ -237,6 +257,14 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 		}
 	}
 
+	// Parse LIMIT clause if present (MySQL)
+	if p.isType(models.TokenTypeLimit) {
+		p.advance() // Consume LIMIT
+		if p.isNumericLiteral() {
+			p.advance() // Consume limit value (MySQL UPDATE LIMIT)
+		}
+	}
+
 	// Parse RETURNING clause if present (PostgreSQL)
 	var returning []ast.Expression
 	if p.isType(models.TokenTypeReturning) || p.currentToken.Literal == "RETURNING" {
@@ -281,6 +309,14 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 		whereClause, err = p.parseExpression()
 		if err != nil {
 			return nil, err
+		}
+	}
+
+	// Parse LIMIT clause if present (MySQL)
+	if p.isType(models.TokenTypeLimit) {
+		p.advance() // Consume LIMIT
+		if p.isNumericLiteral() {
+			p.advance() // Consume limit value
 		}
 	}
 
@@ -710,6 +746,39 @@ func (p *Parser) parseOnConflictClause() (*ast.OnConflict, error) {
 	}
 
 	return onConflict, nil
+}
+
+// parseOnDuplicateKeyUpdateClause parses the assignments in ON DUPLICATE KEY UPDATE
+func (p *Parser) parseOnDuplicateKeyUpdateClause() (*ast.UpsertClause, error) {
+	upsert := &ast.UpsertClause{}
+	for {
+		if !p.isIdentifier() {
+			return nil, p.expectedError("column name in ON DUPLICATE KEY UPDATE")
+		}
+		columnName := p.currentToken.Literal
+		p.advance()
+
+		if !p.isType(models.TokenTypeEq) {
+			return nil, p.expectedError("=")
+		}
+		p.advance()
+
+		value, err := p.parseExpression()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse ON DUPLICATE KEY UPDATE value: %w", err)
+		}
+
+		upsert.Updates = append(upsert.Updates, ast.UpdateExpression{
+			Column: &ast.Identifier{Name: columnName},
+			Value:  value,
+		})
+
+		if !p.isType(models.TokenTypeComma) {
+			break
+		}
+		p.advance() // Consume comma
+	}
+	return upsert, nil
 }
 
 // parseTableReference parses a simple table reference (table name)

@@ -1232,6 +1232,21 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		t.pos.AdvanceRune(r, size)
 		return models.Token{Type: models.TokenTypeRightParen, Value: ")"}, nil
 	case '[':
+		// SQL Server dialect: [identifier] is a quoted identifier
+		if t.dialect == keywords.DialectSQLServer {
+			t.pos.AdvanceRune(r, size) // Consume [
+			var ident []byte
+			for t.pos.Index < len(t.input) {
+				ch, chSize := utf8.DecodeRune(t.input[t.pos.Index:])
+				if ch == ']' {
+					t.pos.AdvanceRune(ch, chSize) // Consume ]
+					return models.Token{Type: models.TokenTypeIdentifier, Value: string(ident)}, nil
+				}
+				ident = append(ident, t.input[t.pos.Index:t.pos.Index+chSize]...)
+				t.pos.AdvanceRune(ch, chSize)
+			}
+			return models.Token{}, fmt.Errorf("unterminated bracket identifier at position %d", t.pos.Index)
+		}
 		t.pos.AdvanceRune(r, size)
 		return models.Token{Type: models.TokenTypeLBracket, Value: "["}, nil
 	case ']':

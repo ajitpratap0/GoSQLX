@@ -8,6 +8,7 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/output"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 )
 
@@ -269,7 +270,12 @@ func validateFromStdin(cmd *cobra.Command) error {
 // validateInlineSQL validates inline SQL passed as a command argument.
 // Uses the fast-path Validate() which skips full AST construction (#274).
 func validateInlineSQL(cmd *cobra.Command, sql string) error {
-	err := parser.Validate(sql)
+	var err error
+	if validateDialect != "" {
+		err = parser.ValidateWithDialect(sql, keywords.SQLDialect(validateDialect))
+	} else {
+		err = parser.Validate(sql)
+	}
 	if err != nil {
 		if !validateQuiet {
 			fmt.Fprintf(cmd.ErrOrStderr(), "✗ Invalid SQL: %v\n", err)

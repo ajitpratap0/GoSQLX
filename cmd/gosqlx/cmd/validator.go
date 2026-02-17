@@ -11,6 +11,7 @@ import (
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/output"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
@@ -235,9 +236,14 @@ func (v *Validator) validateFile(filename string) output.FileValidationResult {
 		return result // Empty inputs are considered valid
 	}
 
-	// Use pooled tokenizer for performance
+	// Use pooled tokenizer for performance with dialect support
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
+
+	// Configure dialect if specified
+	if v.Opts.Dialect != "" {
+		tkz.SetDialect(keywords.SQLDialect(v.Opts.Dialect))
+	}
 
 	// Tokenize
 	tokens, err := tkz.Tokenize(data)
@@ -254,7 +260,7 @@ func (v *Validator) validateFile(filename string) output.FileValidationResult {
 	// Convert TokenWithSpan to Token using centralized converter
 
 	// Parse to validate syntax with proper error handling for memory management
-	p := parser.NewParser()
+	p := parser.NewParser(parser.WithDialect(v.Opts.Dialect))
 	astObj, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
 		result.Error = fmt.Errorf("parsing failed: %w", err)

@@ -8,6 +8,7 @@ import (
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
@@ -118,4 +119,73 @@ func ParseBytesWithTokens(input []byte) (*ast.AST, []token.Token, error) {
 	}
 
 	return astResult, converted, nil
+}
+
+// ValidateWithDialect checks whether the given SQL string is syntactically valid
+// using the specified SQL dialect for keyword recognition.
+func ValidateWithDialect(sql string, dialect keywords.SQLDialect) error {
+	return ValidateBytesWithDialect([]byte(sql), dialect)
+}
+
+// ValidateBytesWithDialect is like ValidateWithDialect but accepts []byte.
+func ValidateBytesWithDialect(input []byte, dialect keywords.SQLDialect) error {
+	if len(trimBytes(input)) == 0 {
+		return nil
+	}
+
+	tkz, err := tokenizer.NewWithDialect(dialect)
+	if err != nil {
+		return fmt.Errorf("tokenizer initialization: %w", err)
+	}
+
+	tokens, err := tkz.Tokenize(input)
+	if err != nil {
+		return fmt.Errorf("tokenization error: %w", err)
+	}
+
+	if len(tokens) == 0 {
+		return nil
+	}
+
+	p := NewParser(WithDialect(string(dialect)))
+	defer p.Release()
+
+	converted, convErr := convertModelTokens(tokens)
+	if convErr != nil {
+		return fmt.Errorf("token conversion failed: %w", convErr)
+	}
+
+	astResult, parseErr := p.Parse(converted)
+	if parseErr != nil {
+		return parseErr
+	}
+	ast.ReleaseAST(astResult)
+	return nil
+}
+
+// ParseWithDialect parses SQL using the specified dialect for keyword recognition.
+// This is a convenience function combining dialect-aware tokenization and parsing.
+func ParseWithDialect(sql string, dialect keywords.SQLDialect) (*ast.AST, error) {
+	return ParseBytesWithDialect([]byte(sql), dialect)
+}
+
+// ParseBytesWithDialect is like ParseWithDialect but accepts []byte.
+func ParseBytesWithDialect(input []byte, dialect keywords.SQLDialect) (*ast.AST, error) {
+	tkz, err := tokenizer.NewWithDialect(dialect)
+	if err != nil {
+		return nil, fmt.Errorf("tokenizer initialization: %w", err)
+	}
+
+	tokens, err := tkz.Tokenize(input)
+	if err != nil {
+		return nil, fmt.Errorf("tokenization error: %w", err)
+	}
+
+	if len(tokens) == 0 {
+		return nil, goerrors.IncompleteStatementError(models.Location{}, "")
+	}
+
+	p := NewParser(WithDialect(string(dialect)))
+
+	return p.ParseFromModelTokens(tokens)
 }

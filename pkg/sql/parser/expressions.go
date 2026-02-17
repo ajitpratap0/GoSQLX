@@ -599,6 +599,20 @@ func (p *Parser) isJSONOperator() bool {
 
 // parsePrimaryExpression parses a primary expression (literals, identifiers, function calls)
 func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
+	// Handle unary minus (negative numbers: -6, -3.14)
+	if p.isType(models.TokenTypeMinus) {
+		p.advance() // Consume -
+		expr, err := p.parsePrimaryExpression()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.BinaryExpression{
+			Left:     &ast.LiteralValue{Value: "0", Type: "INTEGER"},
+			Operator: "-",
+			Right:    expr,
+		}, nil
+	}
+
 	if p.isType(models.TokenTypeCase) {
 		// Handle CASE expressions (both simple and searched forms)
 		return p.parseCaseExpression()
@@ -619,9 +633,10 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return p.parseArrayConstructor()
 	}
 
-	if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeDoubleQuotedString) {
+	if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeDoubleQuotedString) || p.isNonReservedKeyword() {
 		// Handle identifiers and function calls
 		// Double-quoted strings are treated as identifiers in SQL (e.g., "column_name")
+		// Non-reserved keywords (TARGET, SOURCE, etc.) can also be used as identifiers
 		identName := p.currentToken.Literal
 		p.advance()
 

@@ -10,6 +10,7 @@ import (
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // parseInsertStatement parses an INSERT statement
@@ -52,6 +53,13 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 			return nil, p.expectedError(")")
 		}
 		p.advance() // Consume )
+	}
+
+	// Parse SQL Server OUTPUT clause (between column list and VALUES)
+	var outputCols []ast.Expression
+	if p.dialect == string(keywords.DialectSQLServer) && strings.ToUpper(p.currentToken.Literal) == "OUTPUT" {
+		p.advance() // Consume OUTPUT
+		outputCols, _ = p.parseOutputColumns()
 	}
 
 	// Parse VALUES or SELECT
@@ -150,6 +158,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 	return &ast.InsertStatement{
 		TableName:  tableName,
 		Columns:    columns,
+		Output:     outputCols,
 		Values:     values,
 		Query:      query,
 		OnConflict: onConflict,
@@ -386,6 +395,16 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 
 	if len(stmt.WhenClauses) == 0 {
 		return nil, goerrors.MissingClauseError("WHEN", models.Location{}, "")
+	}
+
+	// Parse optional OUTPUT clause (SQL Server)
+	if p.dialect == string(keywords.DialectSQLServer) && strings.ToUpper(p.currentToken.Literal) == "OUTPUT" {
+		p.advance() // Consume OUTPUT
+		cols, err := p.parseOutputColumns()
+		if err != nil {
+			return nil, err
+		}
+		stmt.Output = cols
 	}
 
 	return stmt, nil
@@ -712,5 +731,20 @@ func (p *Parser) parseOnConflictClause() (*ast.OnConflict, error) {
 	return onConflict, nil
 }
 
-// parseTableReference parses a simple table reference (table name)
-// Returns a TableReference with the Name field populated
+// parseOutputColumns parses comma-separated OUTPUT column expressions
+// e.g., INSERTED.id, INSERTED.name, DELETED.*, inserted.*
+func (p *Parser) parseOutputColumns() ([]ast.Expression, error) {
+	var cols []ast.Expression
+	for {
+		expr, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+		cols = append(cols, expr)
+		if !p.isType(models.TokenTypeComma) {
+			break
+		}
+		p.advance() // Consume comma
+	}
+	return cols, nil
+}

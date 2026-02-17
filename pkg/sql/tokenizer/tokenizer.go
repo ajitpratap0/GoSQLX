@@ -238,15 +238,15 @@ var keywordTokenTypes = map[string]models.TokenType{
 //	tkz, _ := New()
 //	tokens, err := tkz.Tokenize([]byte(sql))
 type Tokenizer struct {
-	input      []byte             // Input SQL bytes (zero-copy reference)
-	pos        Position           // Current scanning position
-	lineStart  Position           // Start of current line
-	lineStarts []int              // Byte offsets of line starts (for position tracking)
-	line       int                // Current line number (1-based)
-	keywords   *keywords.Keywords // Keyword classifier for token type determination
+	input      []byte              // Input SQL bytes (zero-copy reference)
+	pos        Position            // Current scanning position
+	lineStart  Position            // Start of current line
+	lineStarts []int               // Byte offsets of line starts (for position tracking)
+	line       int                 // Current line number (1-based)
+	keywords   *keywords.Keywords  // Keyword classifier for token type determination
 	dialect    keywords.SQLDialect // SQL dialect for dialect-specific keyword recognition
-	logger     *slog.Logger       // Optional structured logger for verbose tracing
-	Comments   []models.Comment   // Comments captured during tokenization
+	logger     *slog.Logger        // Optional structured logger for verbose tracing
+	Comments   []models.Comment    // Comments captured during tokenization
 }
 
 // New creates a new Tokenizer with default configuration and keyword support.

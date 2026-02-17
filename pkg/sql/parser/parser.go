@@ -208,6 +208,24 @@ func WithStrictMode() ParserOption {
 	}
 }
 
+// WithDialect sets the SQL dialect for dialect-aware parsing.
+// Supported values: "postgresql", "mysql", "sqlserver", "oracle", "sqlite", etc.
+// If not set, defaults to "postgresql" for backward compatibility.
+func WithDialect(dialect string) ParserOption {
+	return func(p *Parser) {
+		p.dialect = dialect
+	}
+}
+
+// Dialect returns the SQL dialect configured for this parser.
+// Returns "postgresql" if no dialect was explicitly set.
+func (p *Parser) Dialect() string {
+	if p.dialect == "" {
+		return "postgresql"
+	}
+	return p.dialect
+}
+
 type Parser struct {
 	tokens       []token.Token
 	currentPos   int
@@ -216,6 +234,7 @@ type Parser struct {
 	ctx          context.Context // Optional context for cancellation support
 	positions    []TokenPosition // Position mapping for error reporting
 	strict       bool            // Strict mode rejects empty statements
+	dialect      string          // SQL dialect for dialect-aware parsing (default: "postgresql")
 }
 
 // Parse parses a token stream into an Abstract Syntax Tree (AST).

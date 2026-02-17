@@ -238,14 +238,15 @@ var keywordTokenTypes = map[string]models.TokenType{
 //	tkz, _ := New()
 //	tokens, err := tkz.Tokenize([]byte(sql))
 type Tokenizer struct {
-	input      []byte             // Input SQL bytes (zero-copy reference)
-	pos        Position           // Current scanning position
-	lineStart  Position           // Start of current line
-	lineStarts []int              // Byte offsets of line starts (for position tracking)
-	line       int                // Current line number (1-based)
-	keywords   *keywords.Keywords // Keyword classifier for token type determination
-	logger     *slog.Logger       // Optional structured logger for verbose tracing
-	Comments   []models.Comment   // Comments captured during tokenization
+	input      []byte              // Input SQL bytes (zero-copy reference)
+	pos        Position            // Current scanning position
+	lineStart  Position            // Start of current line
+	lineStarts []int               // Byte offsets of line starts (for position tracking)
+	line       int                 // Current line number (1-based)
+	keywords   *keywords.Keywords  // Keyword classifier for token type determination
+	dialect    keywords.SQLDialect // SQL dialect for dialect-specific keyword recognition
+	logger     *slog.Logger        // Optional structured logger for verbose tracing
+	Comments   []models.Comment    // Comments captured during tokenization
 }
 
 // New creates a new Tokenizer with default configuration and keyword support.
@@ -267,9 +268,41 @@ func New() (*Tokenizer, error) {
 	kw := keywords.NewKeywords()
 	return &Tokenizer{
 		keywords:   kw,
+		dialect:    keywords.DialectPostgreSQL,
 		pos:        NewPosition(1, 0),
 		lineStarts: []int{0},
 	}, nil
+}
+
+// NewWithDialect creates a new Tokenizer configured for the given SQL dialect.
+// Dialect-specific keywords are recognized based on the dialect parameter.
+// If dialect is empty or unknown, defaults to DialectPostgreSQL.
+func NewWithDialect(dialect keywords.SQLDialect) (*Tokenizer, error) {
+	if dialect == "" || dialect == keywords.DialectUnknown {
+		dialect = keywords.DialectPostgreSQL
+	}
+	kw := keywords.New(dialect, true)
+	return &Tokenizer{
+		keywords:   kw,
+		dialect:    dialect,
+		pos:        NewPosition(1, 0),
+		lineStarts: []int{0},
+	}, nil
+}
+
+// Dialect returns the SQL dialect configured for this tokenizer.
+func (t *Tokenizer) Dialect() keywords.SQLDialect {
+	return t.dialect
+}
+
+// SetDialect reconfigures the tokenizer for a different SQL dialect.
+// This rebuilds the keyword set to include dialect-specific keywords.
+func (t *Tokenizer) SetDialect(dialect keywords.SQLDialect) {
+	if dialect == "" || dialect == keywords.DialectUnknown {
+		dialect = keywords.DialectPostgreSQL
+	}
+	t.dialect = dialect
+	t.keywords = keywords.New(dialect, true)
 }
 
 // NewWithKeywords initializes a Tokenizer with a custom keyword classifier.

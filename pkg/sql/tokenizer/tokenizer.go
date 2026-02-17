@@ -206,9 +206,9 @@ var keywordTokenTypes = map[string]models.TokenType{
 	"LOCKED": models.TokenTypeLocked,
 	"OF":     models.TokenTypeOf,
 	// MySQL admin/utility keywords
-	"SHOW":     models.TokenTypeShow,
-	"DESCRIBE": models.TokenTypeDescribe,
-	"EXPLAIN":  models.TokenTypeExplain,
+	"SHOW":      models.TokenTypeShow,
+	"DESCRIBE":  models.TokenTypeDescribe,
+	"EXPLAIN":   models.TokenTypeExplain,
 	"DATABASES": models.TokenTypeKeyword,
 	"TABLES":    models.TokenTypeKeyword,
 }

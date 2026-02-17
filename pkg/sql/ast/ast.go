@@ -1708,9 +1708,9 @@ func (a AST) Children() []Node {
 
 // ShowStatement represents MySQL SHOW commands (SHOW TABLES, SHOW DATABASES, SHOW CREATE TABLE x, etc.)
 type ShowStatement struct {
-	ShowType  string // TABLES, DATABASES, CREATE TABLE, COLUMNS, INDEX, etc.
+	ShowType   string // TABLES, DATABASES, CREATE TABLE, COLUMNS, INDEX, etc.
 	ObjectName string // For SHOW CREATE TABLE x, SHOW COLUMNS FROM x, etc.
-	From      string // For SHOW ... FROM database
+	From       string // For SHOW ... FROM database
 }
 
 func (s *ShowStatement) statementNode()      {}

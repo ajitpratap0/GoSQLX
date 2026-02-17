@@ -1,4 +1,5 @@
-package cmd
+// Package actioncmd implements the gosqlx action subcommand for GitHub Actions CI.
+package actioncmd
 
 import (
 	"fmt"
@@ -35,20 +36,24 @@ func builtinRules() []linter.Rule {
 	}
 }
 
-var (
-	actionFiles    string
-	actionRules    string
-	actionSeverity string
-	actionConfig   string
-	actionTimeout  int
-)
+// actionFlags holds the flag values for the action subcommand,
+// avoiding package-level mutable state.
+type actionFlags struct {
+	files    string
+	rules    string
+	severity string
+	config   string
+	timeout  int
+}
 
-// actionCmd implements the GitHub Actions entrypoint as a Go subcommand.
-// It finds SQL files, runs lint + validate, and outputs GitHub Actions annotations.
-var actionCmd = &cobra.Command{
-	Use:   "action",
-	Short: "Run GoSQLX checks for GitHub Actions CI",
-	Long: `Run SQL validation and linting with GitHub Actions annotation output.
+// NewCmd returns the action cobra.Command.
+func NewCmd() *cobra.Command {
+	f := &actionFlags{}
+
+	cmd := &cobra.Command{
+		Use:   "action",
+		Short: "Run GoSQLX checks for GitHub Actions CI",
+		Long: `Run SQL validation and linting with GitHub Actions annotation output.
 
 This command replaces the shell-based entrypoint for the GoSQLX GitHub Action.
 It finds SQL files matching a glob pattern, runs validation and linting on each,
@@ -60,20 +65,20 @@ Environment variables (also settable via flags):
   SEVERITY   - threshold: error, warning, info (default: warning)
   CONFIG     - path to .gosqlx.yml config file
   TIMEOUT    - per-file timeout in seconds (default: 600)`,
-	RunE: runAction,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runAction(cmd, args, f)
+		},
+	}
+
+	cmd.Flags().StringVar(&f.files, "files", "", "glob pattern for SQL files (env: SQL_FILES)")
+	cmd.Flags().StringVar(&f.rules, "rules", "", "comma-separated lint rules (env: RULES)")
+	cmd.Flags().StringVar(&f.severity, "severity", "", "severity threshold: error, warning, info (env: SEVERITY)")
+	cmd.Flags().StringVar(&f.config, "config", "", "path to config file (env: CONFIG)")
+	cmd.Flags().IntVar(&f.timeout, "timeout", 0, "per-file timeout in seconds (env: TIMEOUT)")
+
+	return cmd
 }
 
-func init() {
-	actionCmd.Flags().StringVar(&actionFiles, "files", "", "glob pattern for SQL files (env: SQL_FILES)")
-	actionCmd.Flags().StringVar(&actionRules, "rules", "", "comma-separated lint rules (env: RULES)")
-	actionCmd.Flags().StringVar(&actionSeverity, "severity", "", "severity threshold: error, warning, info (env: SEVERITY)")
-	actionCmd.Flags().StringVar(&actionConfig, "config", "", "path to config file (env: CONFIG)")
-	actionCmd.Flags().IntVar(&actionTimeout, "timeout", 0, "per-file timeout in seconds (env: TIMEOUT)")
-
-	rootCmd.AddCommand(actionCmd)
-}
-
-// envDefault returns the flag value if non-empty, otherwise the env var, otherwise the fallback.
 func envDefault(flagVal, envKey, fallback string) string {
 	if flagVal != "" {
 		return flagVal
@@ -84,13 +89,13 @@ func envDefault(flagVal, envKey, fallback string) string {
 	return fallback
 }
 
-func runAction(_ *cobra.Command, _ []string) error {
-	pattern := envDefault(actionFiles, "SQL_FILES", "**/*.sql")
-	rules := envDefault(actionRules, "RULES", "")
-	severity := envDefault(actionSeverity, "SEVERITY", "warning")
-	cfgPath := envDefault(actionConfig, "CONFIG", "")
+func runAction(_ *cobra.Command, _ []string, f *actionFlags) error {
+	pattern := envDefault(f.files, "SQL_FILES", "**/*.sql")
+	rules := envDefault(f.rules, "RULES", "")
+	severity := envDefault(f.severity, "SEVERITY", "warning")
+	cfgPath := envDefault(f.config, "CONFIG", "")
 
-	timeoutSec := actionTimeout
+	timeoutSec := f.timeout
 	if timeoutSec == 0 {
 		if v := os.Getenv("TIMEOUT"); v != "" {
 			if parsed, err := strconv.Atoi(v); err == nil {
@@ -116,7 +121,6 @@ func runAction(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	// Find SQL files
 	files, err := findSQLFiles(pattern)
 	if err != nil {
 		return fmt.Errorf("finding SQL files: %w", err)
@@ -127,7 +131,6 @@ func runAction(_ *cobra.Command, _ []string) error {
 	}
 	fmt.Printf("Found %d SQL file(s)\n", len(files))
 
-	// Parse rules
 	var ruleList []string
 	if rules != "" {
 		for _, r := range strings.Split(rules, ",") {
@@ -151,7 +154,6 @@ func runAction(_ *cobra.Command, _ []string) error {
 	for _, file := range files {
 		displayFile := strings.TrimPrefix(file, "./")
 
-		// Validate
 		vErr := validateFileWithTimeout(file, timeout)
 		if vErr != nil {
 			validateErrors++
@@ -171,7 +173,6 @@ func runAction(_ *cobra.Command, _ []string) error {
 			totalValid++
 		}
 
-		// Lint
 		violations := lintFile(file, ruleList)
 		for _, v := range violations {
 			level := "notice"
@@ -186,7 +187,6 @@ func runAction(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	// Summary
 	fmt.Println()
 	fmt.Println("==============================")
 	fmt.Println("  GoSQLX Results Summary")
@@ -198,12 +198,10 @@ func runAction(_ *cobra.Command, _ []string) error {
 	fmt.Printf("  Lint warnings:      %d\n", lintWarnings)
 	fmt.Println("==============================")
 
-	// GitHub step summary
 	if summaryPath := os.Getenv("GITHUB_STEP_SUMMARY"); summaryPath != "" {
 		writeStepSummary(summaryPath, len(files), totalValid, validateErrors, lintErrors, lintWarnings)
 	}
 
-	// Exit code based on severity
 	fail := false
 	switch severity {
 	case "error":
@@ -218,7 +216,6 @@ func runAction(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-// ghAnnotation prints a GitHub Actions annotation.
 func ghAnnotation(level, file string, line int, msg string) {
 	params := ""
 	if file != "" {
@@ -234,7 +231,6 @@ func ghAnnotation(level, file string, line int, msg string) {
 	}
 }
 
-// extractLineNumber extracts a line number from text matching "line N".
 func extractLineNumber(re *regexp.Regexp, text string) int {
 	m := re.FindStringSubmatch(text)
 	if len(m) >= 2 {
@@ -244,7 +240,6 @@ func extractLineNumber(re *regexp.Regexp, text string) int {
 	return 0
 }
 
-// findSQLFiles locates SQL files matching the given glob pattern.
 func findSQLFiles(pattern string) ([]string, error) {
 	var files []string
 
@@ -252,7 +247,7 @@ func findSQLFiles(pattern string) ([]string, error) {
 	case pattern == "**/*.sql":
 		err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
 			if err != nil {
-				return nil // skip errors
+				return nil
 			}
 			if !info.IsDir() && strings.HasSuffix(strings.ToLower(path), ".sql") {
 				files = append(files, path)
@@ -273,7 +268,6 @@ func findSQLFiles(pattern string) ([]string, error) {
 			}
 		}
 	default:
-		// Try filepath.Glob first, fall back to Walk with path matching
 		matched, err := filepath.Glob(pattern)
 		if err == nil && len(matched) > 0 {
 			for _, m := range matched {
@@ -283,7 +277,6 @@ func findSQLFiles(pattern string) ([]string, error) {
 				}
 			}
 		} else {
-			// Walk and match with filepath.Match
 			err = filepath.Walk(".", func(path string, info os.FileInfo, walkErr error) error {
 				if walkErr != nil {
 					return nil
@@ -303,7 +296,6 @@ func findSQLFiles(pattern string) ([]string, error) {
 	return files, nil
 }
 
-// lintViolation represents a single lint finding.
 type lintViolation struct {
 	Line     int
 	Severity string
@@ -365,7 +357,6 @@ func lintFile(filePath string, ruleList []string) []lintViolation {
 	return violations
 }
 
-// validateFileWithTimeout validates a SQL file with a timeout.
 func validateFileWithTimeout(filePath string, timeout time.Duration) error {
 	type result struct {
 		err error
@@ -389,7 +380,6 @@ func validateFileWithTimeout(filePath string, timeout time.Duration) error {
 	}
 }
 
-// writeStepSummary appends a markdown summary to the GitHub step summary file.
 func writeStepSummary(path string, total, valid, valErrors, lintErrors, lintWarnings int) {
 	f, err := os.OpenFile(filepath.Clean(path), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {

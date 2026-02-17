@@ -1,4 +1,5 @@
-package cmd
+// Package lspcmd implements the gosqlx lsp subcommand.
+package lspcmd
 
 import (
 	"fmt"
@@ -15,11 +16,12 @@ var (
 	lspLogFile string
 )
 
-// lspCmd represents the lsp command
-var lspCmd = &cobra.Command{
-	Use:   "lsp",
-	Short: "Start Language Server Protocol (LSP) server",
-	Long: `Start the GoSQLX LSP server for IDE integration.
+// NewCmd returns the lsp cobra.Command.
+func NewCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "lsp",
+		Short: "Start Language Server Protocol (LSP) server",
+		Long: `Start the GoSQLX LSP server for IDE integration.
 
 The LSP server provides real-time SQL validation, formatting,
 hover documentation, and code completion for IDEs and text editors.
@@ -57,17 +59,15 @@ Emacs Integration (lsp-mode):
       :new-connection (lsp-stdio-connection '("gosqlx" "lsp"))
       :major-modes '(sql-mode)
       :server-id 'gosqlx))`,
-	RunE: lspRun,
+		RunE: runLSP,
+	}
+
+	cmd.Flags().StringVar(&lspLogFile, "log", "", "Log file path (optional, for debugging)")
+
+	return cmd
 }
 
-func init() {
-	rootCmd.AddCommand(lspCmd)
-
-	lspCmd.Flags().StringVar(&lspLogFile, "log", "", "Log file path (optional, for debugging)")
-}
-
-func lspRun(cmd *cobra.Command, args []string) error {
-	// Set up logging
+func runLSP(_ *cobra.Command, _ []string) error {
 	var logger *log.Logger
 	if lspLogFile != "" {
 		f, err := os.OpenFile(filepath.Clean(lspLogFile), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600) // #nosec G304
@@ -77,13 +77,11 @@ func lspRun(cmd *cobra.Command, args []string) error {
 		defer func() { _ = f.Close() }()
 		logger = log.New(f, "[gosqlx-lsp] ", log.LstdFlags|log.Lshortfile)
 	} else {
-		// Discard logs by default (LSP should only communicate via protocol)
 		logger = log.New(io.Discard, "", 0)
 	}
 
 	logger.Println("Starting GoSQLX LSP server...")
 
-	// Create and run the LSP server
 	server := lsp.NewStdioServer(logger)
 	return server.Run()
 }

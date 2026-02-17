@@ -60,6 +60,7 @@ import (
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
 
@@ -958,11 +959,18 @@ func (p *Parser) parseAlterTableStmt() (ast.Statement, error) {
 
 // isJoinKeyword checks if current token is a JOIN-related keyword
 func (p *Parser) isJoinKeyword() bool {
-	return p.isAnyType(
+	if p.isAnyType(
 		models.TokenTypeJoin, models.TokenTypeInner, models.TokenTypeLeft,
 		models.TokenTypeRight, models.TokenTypeFull, models.TokenTypeCross,
 		models.TokenTypeNatural,
-	)
+	) {
+		return true
+	}
+	// SQL Server: OUTER APPLY starts with OUTER
+	if p.dialect == string(keywords.DialectSQLServer) && p.isType(models.TokenTypeOuter) {
+		return true
+	}
+	return false
 }
 
 // parseWithStatement parses a WITH statement (Common Table Expression).

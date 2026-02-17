@@ -5,11 +5,13 @@ package parser
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // parseColumnDef parses a column definition including column constraints
@@ -464,6 +466,26 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		p.advance()
 	}
 
+	// Parse SQL Server TOP clause: SELECT TOP n [PERCENT] ...
+	var topClause *ast.TopClause
+	if p.dialect == string(keywords.DialectSQLServer) && strings.ToUpper(p.currentToken.Literal) == "TOP" {
+		p.advance() // Consume TOP
+		if !p.isType(models.TokenTypeNumber) {
+			return nil, p.expectedError("number after TOP")
+		}
+		n, err := strconv.ParseInt(p.currentToken.Literal, 10, 64)
+		if err != nil {
+			return nil, p.expectedError("integer after TOP")
+		}
+		p.advance() // Consume number
+		topClause = &ast.TopClause{Count: n}
+		// Check for optional PERCENT
+		if p.isType(models.TokenTypePercent) || (p.currentToken.Type == models.TokenTypeKeyword && strings.ToUpper(p.currentToken.Literal) == "PERCENT") {
+			topClause.IsPercent = true
+			p.advance() // Consume PERCENT
+		}
+	}
+
 	// Parse columns — pre-allocate to reduce repeated slice growth
 	columns := make([]ast.Expression, 0, 8)
 
@@ -609,6 +631,18 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			} else if p.isType(models.TokenTypeCross) {
 				joinType = "CROSS"
 				p.advance()
+				// SQL Server CROSS APPLY
+				if p.dialect == string(keywords.DialectSQLServer) && p.currentToken.Type == models.TokenTypeIdentifier && strings.ToUpper(p.currentToken.Literal) == "APPLY" {
+					joinType = "CROSS APPLY"
+					p.advance() // Consume APPLY
+				}
+			} else if p.isType(models.TokenTypeOuter) && p.dialect == string(keywords.DialectSQLServer) {
+				p.advance() // Consume OUTER
+				// SQL Server OUTER APPLY
+				if p.currentToken.Type == models.TokenTypeIdentifier && strings.ToUpper(p.currentToken.Literal) == "APPLY" {
+					joinType = "OUTER APPLY"
+					p.advance() // Consume APPLY
+				}
 			}
 
 			// If NATURAL, prepend to join type
@@ -616,16 +650,20 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 				joinType = "NATURAL " + joinType
 			}
 
-			// Expect JOIN keyword
-			if !p.isType(models.TokenTypeJoin) {
-				return nil, goerrors.ExpectedTokenError(
-					"JOIN after "+joinType,
-					p.currentToken.Type.String(),
-					p.currentLocation(),
-					"",
-				)
+			// APPLY joins don't use JOIN keyword
+			isApply := joinType == "CROSS APPLY" || joinType == "OUTER APPLY"
+			if !isApply {
+				// Expect JOIN keyword
+				if !p.isType(models.TokenTypeJoin) {
+					return nil, goerrors.ExpectedTokenError(
+						"JOIN after "+joinType,
+						p.currentToken.Type.String(),
+						p.currentLocation(),
+						"",
+					)
+				}
+				p.advance() // Consume JOIN
 			}
-			p.advance() // Consume JOIN
 
 			var joinedTableRef ast.TableReference
 
@@ -703,7 +741,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			var joinCondition ast.Expression
 
 			// CROSS JOIN and NATURAL JOIN don't require ON clause
-			isCrossJoin := joinType == "CROSS"
+			isCrossJoin := joinType == "CROSS" || isApply
 			if !isCrossJoin && !isNatural {
 				if p.isType(models.TokenTypeOn) {
 					p.advance() // Consume ON
@@ -801,6 +839,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	selectStmt := &ast.SelectStatement{
 		Distinct:          isDistinct,
 		DistinctOnColumns: distinctOnColumns,
+		Top:               topClause,
 		Columns:           columns,
 		From:              tables,
 		Joins:             joins,

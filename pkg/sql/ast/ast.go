@@ -401,6 +401,7 @@ type SelectStatement struct {
 	With              *WithClause
 	Distinct          bool
 	DistinctOnColumns []Expression // PostgreSQL DISTINCT ON (expr, ...) clause
+	Top               *TopClause   // SQL Server TOP N [PERCENT] clause
 	Columns           []Expression
 	From              []TableReference
 	TableName         string // Added for pool operations
@@ -415,6 +416,17 @@ type SelectStatement struct {
 	Fetch             *FetchClause // SQL-99 FETCH FIRST/NEXT clause (F861, F862)
 	For               *ForClause   // Row-level locking clause (SQL:2003, PostgreSQL, MySQL)
 }
+
+// TopClause represents SQL Server's TOP N [PERCENT] clause
+// Syntax: SELECT TOP n [PERCENT] columns...
+type TopClause struct {
+	Count     int64 // Number of rows (or percentage)
+	IsPercent bool  // Whether PERCENT keyword was specified
+}
+
+func (t *TopClause) expressionNode()     {}
+func (t TopClause) TokenLiteral() string { return "TOP" }
+func (t TopClause) Children() []Node     { return nil }
 
 // FetchClause represents the SQL-99 FETCH FIRST/NEXT clause (F861, F862)
 // Syntax: [OFFSET n {ROW | ROWS}] FETCH {FIRST | NEXT} n [{ROW | ROWS}] {ONLY | WITH TIES}
@@ -1108,6 +1120,7 @@ type InsertStatement struct {
 	With       *WithClause
 	TableName  string
 	Columns    []Expression
+	Output     []Expression    // SQL Server OUTPUT clause columns
 	Values     [][]Expression  // Multi-row support: each inner slice is one row of values
 	Query      QueryExpression // For INSERT ... SELECT (SelectStatement or SetOperation)
 	Returning  []Expression
@@ -1497,6 +1510,7 @@ type MergeStatement struct {
 	SourceAlias string             // Optional alias for source
 	OnCondition Expression         // The join/match condition
 	WhenClauses []*MergeWhenClause // List of WHEN clauses
+	Output      []Expression       // SQL Server OUTPUT clause columns
 }
 
 func (m *MergeStatement) statementNode()      {}

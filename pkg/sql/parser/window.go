@@ -5,6 +5,8 @@
 package parser
 
 import (
+	"strings"
+
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
@@ -40,6 +42,15 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 			if p.isType(models.TokenTypeComma) {
 				p.advance() // Consume comma
 			} else if p.isType(models.TokenTypeRParen) || p.isType(models.TokenTypeOrder) {
+				break
+			} else if strings.ToUpper(p.currentToken.Literal) == "SEPARATOR" {
+				// MySQL GROUP_CONCAT SEPARATOR clause
+				p.advance() // Consume SEPARATOR
+				sepArg, err := p.parseExpression()
+				if err != nil {
+					return nil, err
+				}
+				arguments = append(arguments, sepArg)
 				break
 			} else {
 				return nil, p.expectedError(", or )")
@@ -96,10 +107,22 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 				p.advance() // Consume comma
 			} else if p.isType(models.TokenTypeRParen) {
 				break
+			} else if strings.EqualFold(p.currentToken.Literal, "SEPARATOR") {
+				break // Let SEPARATOR be handled below
 			} else {
 				return nil, p.expectedError(", or )")
 			}
 		}
+	}
+
+	// Handle MySQL SEPARATOR clause (GROUP_CONCAT)
+	if strings.EqualFold(p.currentToken.Literal, "SEPARATOR") {
+		p.advance() // Consume SEPARATOR
+		sepExpr, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+		arguments = append(arguments, sepExpr)
 	}
 
 	// Expect closing parenthesis

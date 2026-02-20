@@ -701,6 +701,15 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 	case models.TokenTypeTruncate:
 		p.advance()
 		return p.parseTruncateStatement()
+	case models.TokenTypeShow:
+		p.advance()
+		return p.parseShowStatement()
+	case models.TokenTypeDescribe, models.TokenTypeExplain:
+		p.advance()
+		return p.parseDescribeStatement()
+	case models.TokenTypeReplace:
+		p.advance()
+		return p.parseReplaceStatement()
 	}
 	return nil, p.expectedError("statement")
 }

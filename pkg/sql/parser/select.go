@@ -974,12 +974,25 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		}
 
 		// Convert string to int
-		limitVal := 0
-		_, _ = fmt.Sscanf(p.currentToken.Literal, "%d", &limitVal)
-
-		// Add LIMIT to SELECT statement
-		selectStmt.Limit = &limitVal
+		firstVal := 0
+		_, _ = fmt.Sscanf(p.currentToken.Literal, "%d", &firstVal)
 		p.advance()
+
+		// MySQL-style LIMIT offset, count: LIMIT 10, 20
+		if p.dialect == "mysql" && p.isType(models.TokenTypeComma) {
+			p.advance() // Consume comma
+			if !p.isNumericLiteral() {
+				return nil, p.expectedError("integer for LIMIT count")
+			}
+			secondVal := 0
+			_, _ = fmt.Sscanf(p.currentToken.Literal, "%d", &secondVal)
+			p.advance()
+			// In MySQL LIMIT offset, count: first is offset, second is count
+			selectStmt.Offset = &firstVal
+			selectStmt.Limit = &secondVal
+		} else {
+			selectStmt.Limit = &firstVal
+		}
 	}
 
 	// Parse OFFSET clause if present (MySQL-style OFFSET or SQL-99 OFFSET ... ROWS)

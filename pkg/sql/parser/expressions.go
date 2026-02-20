@@ -172,6 +172,26 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 		}, nil
 	}
 
+	// Check for REGEXP/RLIKE operator (MySQL)
+	if strings.EqualFold(p.currentToken.Literal, "REGEXP") || strings.EqualFold(p.currentToken.Literal, "RLIKE") {
+		operator := strings.ToUpper(p.currentToken.Literal)
+		p.advance()
+		pattern, err := p.parsePrimaryExpression()
+		if err != nil {
+			return nil, goerrors.InvalidSyntaxError(
+				fmt.Sprintf("failed to parse REGEXP pattern: %v", err),
+				p.currentLocation(),
+				p.currentToken.Literal,
+			)
+		}
+		return &ast.BinaryExpression{
+			Left:     left,
+			Operator: operator,
+			Right:    pattern,
+			Not:      notPrefix,
+		}, nil
+	}
+
 	// Check for IN operator
 	if p.isType(models.TokenTypeIn) {
 		p.advance() // Consume IN
@@ -619,6 +639,17 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return p.parseArrayConstructor()
 	}
 
+	// Handle keywords that can be used as function names in MySQL (IF, REPLACE, etc.)
+	if (p.isType(models.TokenTypeIf) || p.isType(models.TokenTypeReplace)) && p.peekToken().Type == models.TokenTypeLParen {
+		identName := p.currentToken.Literal
+		p.advance()
+		funcCall, err := p.parseFunctionCall(identName)
+		if err != nil {
+			return nil, err
+		}
+		return funcCall, nil
+	}
+
 	if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeDoubleQuotedString) {
 		// Handle identifiers and function calls
 		// Double-quoted strings are treated as identifiers in SQL (e.g., "column_name")
@@ -632,6 +663,12 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			if err != nil {
 				return nil, err
 			}
+
+			// MySQL MATCH(...) AGAINST(...) full-text search
+			if strings.EqualFold(identName, "MATCH") && strings.EqualFold(p.currentToken.Literal, "AGAINST") {
+				return p.parseMatchAgainst(funcCall)
+			}
+
 			return funcCall, nil
 		}
 
@@ -1068,21 +1105,29 @@ func (p *Parser) parseIntervalExpression() (*ast.IntervalExpression, error) {
 	// Consume INTERVAL keyword
 	p.advance()
 
-	// Expect a string literal for the interval value
-	if !p.isStringLiteral() {
-		return nil, goerrors.InvalidSyntaxError(
-			"expected string literal after INTERVAL keyword",
-			p.currentLocation(),
-			"Use INTERVAL 'value' syntax (e.g., INTERVAL '1 day')",
-		)
+	// Support both PostgreSQL style: INTERVAL '1 day'
+	// and MySQL style: INTERVAL 30 DAY, INTERVAL 1 HOUR
+	if p.isStringLiteral() {
+		value := p.currentToken.Literal
+		p.advance()
+		return &ast.IntervalExpression{Value: value}, nil
 	}
 
-	value := p.currentToken.Literal
-	p.advance() // Consume the string literal
+	// MySQL style: INTERVAL <number> <unit>
+	if p.isNumericLiteral() {
+		numStr := p.currentToken.Literal
+		p.advance()
+		// Expect a unit keyword (DAY, HOUR, MINUTE, SECOND, MONTH, YEAR, WEEK, etc.)
+		unit := strings.ToUpper(p.currentToken.Literal)
+		p.advance()
+		return &ast.IntervalExpression{Value: numStr + " " + unit}, nil
+	}
 
-	return &ast.IntervalExpression{
-		Value: value,
-	}, nil
+	return nil, goerrors.InvalidSyntaxError(
+		"expected string literal or number after INTERVAL keyword",
+		p.currentLocation(),
+		"Use INTERVAL '1 day' or INTERVAL 1 DAY syntax",
+	)
 }
 
 // parseArrayConstructor parses PostgreSQL ARRAY constructor syntax.

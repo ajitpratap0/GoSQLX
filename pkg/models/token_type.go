@@ -406,6 +406,9 @@ const (
 	TokenTypePolicy       TokenType = 515 // POLICY keyword for CREATE/ALTER POLICY
 	TokenTypeUntil        TokenType = 516 // UNTIL keyword for VALID UNTIL
 	TokenTypeReset        TokenType = 517 // RESET keyword for ALTER ROLE RESET
+	TokenTypeShow         TokenType = 518 // SHOW keyword for MySQL SHOW commands
+	TokenTypeDescribe     TokenType = 519 // DESCRIBE keyword for MySQL DESCRIBE command
+	TokenTypeExplain      TokenType = 520 // EXPLAIN keyword
 )
 
 // String returns a string representation of the token type.
@@ -1014,6 +1017,12 @@ func (t TokenType) String() string {
 		return "UNTIL"
 	case TokenTypeReset:
 		return "RESET"
+	case TokenTypeShow:
+		return "SHOW"
+	case TokenTypeDescribe:
+		return "DESCRIBE"
+	case TokenTypeExplain:
+		return "EXPLAIN"
 
 	default:
 		return "TOKEN"

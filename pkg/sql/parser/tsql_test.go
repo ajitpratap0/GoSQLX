@@ -169,12 +169,12 @@ func TestTSQL_NegativeNumberInFunction(t *testing.T) {
 func TestTSQL_TestdataFiles(t *testing.T) {
 	// Files that are expected to pass
 	expectedPass := map[string]bool{
-		"01_top_select.sql":        true,
-		"02_top_percent.sql":       true,
-		"03_square_brackets.sql":   true,
-		"04_offset_fetch.sql":      true,
-		"05_merge_statement.sql":   true,
-		"06_cte_basic.sql":         true,
+		"01_top_select.sql":      true,
+		"02_top_percent.sql":     true,
+		"03_square_brackets.sql": true,
+		"04_offset_fetch.sql":    true,
+		"05_merge_statement.sql": true,
+		"06_cte_basic.sql":       true,
 		// "07_recursive_cte.sql" uses OPTION (MAXRECURSION) — not yet supported
 		"08_window_row_number.sql": true,
 		"09_window_rank.sql":       true,

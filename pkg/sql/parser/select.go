@@ -5,7 +5,6 @@ package parser
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
@@ -467,18 +466,26 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	// Parse SQL Server TOP clause: SELECT TOP n [PERCENT] ...
+	// Supports both TOP 10 and TOP (10) syntax
 	var topClause *ast.TopClause
 	if p.dialect == string(keywords.DialectSQLServer) && strings.ToUpper(p.currentToken.Literal) == "TOP" {
 		p.advance() // Consume TOP
-		if !p.isType(models.TokenTypeNumber) {
-			return nil, p.expectedError("number after TOP")
+		// Support parenthesized expression: TOP (expr)
+		hasParen := p.isType(models.TokenTypeLParen)
+		if hasParen {
+			p.advance() // Consume (
 		}
-		n, err := strconv.ParseInt(p.currentToken.Literal, 10, 64)
+		countExpr, err := p.parsePrimaryExpression()
 		if err != nil {
-			return nil, p.expectedError("integer after TOP")
+			return nil, fmt.Errorf("expected expression after TOP: %w", err)
 		}
-		p.advance() // Consume number
-		topClause = &ast.TopClause{Count: n}
+		if hasParen {
+			if !p.isType(models.TokenTypeRightParen) {
+				return nil, p.expectedError(") after TOP expression")
+			}
+			p.advance() // Consume )
+		}
+		topClause = &ast.TopClause{Count: countExpr}
 		// Check for optional PERCENT
 		if p.isType(models.TokenTypePercent) || (p.currentToken.Type == models.TokenTypeKeyword && strings.ToUpper(p.currentToken.Literal) == "PERCENT") {
 			topClause.IsPercent = true

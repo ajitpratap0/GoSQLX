@@ -419,14 +419,20 @@ type SelectStatement struct {
 
 // TopClause represents SQL Server's TOP N [PERCENT] clause
 // Syntax: SELECT TOP n [PERCENT] columns...
+// Count is an Expression to support TOP (10), TOP (@var), TOP (subquery)
 type TopClause struct {
-	Count     int64 // Number of rows (or percentage)
-	IsPercent bool  // Whether PERCENT keyword was specified
+	Count     Expression // Number of rows (or percentage) as an expression
+	IsPercent bool       // Whether PERCENT keyword was specified
 }
 
 func (t *TopClause) expressionNode()     {}
 func (t TopClause) TokenLiteral() string { return "TOP" }
-func (t TopClause) Children() []Node     { return nil }
+func (t TopClause) Children() []Node {
+	if t.Count != nil {
+		return []Node{t.Count}
+	}
+	return nil
+}
 
 // FetchClause represents the SQL-99 FETCH FIRST/NEXT clause (F861, F862)
 // Syntax: [OFFSET n {ROW | ROWS}] FETCH {FIRST | NEXT} n [{ROW | ROWS}] {ONLY | WITH TIES}

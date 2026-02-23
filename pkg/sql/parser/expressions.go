@@ -10,6 +10,7 @@ import (
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // parseExpression parses an expression with OR operators (lowest precedence)
@@ -619,17 +620,22 @@ func (p *Parser) isJSONOperator() bool {
 
 // parsePrimaryExpression parses a primary expression (literals, identifiers, function calls)
 func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
-	// Handle unary minus (negative numbers: -6, -3.14)
-	if p.isType(models.TokenTypeMinus) {
-		p.advance() // Consume -
+	// Handle unary minus/plus (-6, -3.14, +x)
+	if p.isType(models.TokenTypeMinus) || p.isType(models.TokenTypePlus) {
+		var op ast.UnaryOperator
+		if p.isType(models.TokenTypeMinus) {
+			op = ast.Minus
+		} else {
+			op = ast.Plus
+		}
+		p.advance() // Consume -/+
 		expr, err := p.parsePrimaryExpression()
 		if err != nil {
 			return nil, err
 		}
-		return &ast.BinaryExpression{
-			Left:     &ast.LiteralValue{Value: "0", Type: "INTEGER"},
-			Operator: "-",
-			Right:    expr,
+		return &ast.UnaryExpression{
+			Operator: op,
+			Expr:     expr,
 		}, nil
 	}
 
@@ -664,7 +670,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return funcCall, nil
 	}
 
-	if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeDoubleQuotedString) || p.isNonReservedKeyword() {
+	if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeDoubleQuotedString) || (p.dialect == string(keywords.DialectSQLServer) && p.isNonReservedKeyword()) {
 		// Handle identifiers and function calls
 		// Double-quoted strings are treated as identifiers in SQL (e.g., "column_name")
 		// Non-reserved keywords (TARGET, SOURCE, etc.) can also be used as identifiers

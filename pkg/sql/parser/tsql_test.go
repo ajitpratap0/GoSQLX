@@ -22,8 +22,12 @@ func TestTSQL_TopSelect(t *testing.T) {
 	if stmt.Top == nil {
 		t.Fatal("expected Top clause")
 	}
-	if stmt.Top.Count != 10 {
-		t.Errorf("expected Top.Count=10, got %d", stmt.Top.Count)
+	lit, ok2 := stmt.Top.Count.(*ast.LiteralValue)
+	if !ok2 {
+		t.Fatal("expected Top.Count to be LiteralValue")
+	}
+	if lit.Value != "10" {
+		t.Errorf("expected Top.Count value '10', got %q", lit.Value)
 	}
 	if stmt.Top.IsPercent {
 		t.Error("expected IsPercent=false")
@@ -42,8 +46,12 @@ func TestTSQL_TopPercent(t *testing.T) {
 	if stmt.Top == nil {
 		t.Fatal("expected Top clause")
 	}
-	if stmt.Top.Count != 50 {
-		t.Errorf("expected Top.Count=50, got %d", stmt.Top.Count)
+	lit, ok := stmt.Top.Count.(*ast.LiteralValue)
+	if !ok {
+		t.Fatal("expected Top.Count to be LiteralValue")
+	}
+	if lit.Value != "50" {
+		t.Errorf("expected Top.Count value '50', got %q", lit.Value)
 	}
 	if !stmt.Top.IsPercent {
 		t.Error("expected IsPercent=true")
@@ -159,9 +167,49 @@ func TestTSQL_InsertOutput(t *testing.T) {
 
 func TestTSQL_NegativeNumberInFunction(t *testing.T) {
 	sql := `SELECT DATEADD(MONTH, -6, GETDATE())`
-	_, err := ParseWithDialect(sql, keywords.DialectSQLServer)
+	result, err := ParseWithDialect(sql, keywords.DialectSQLServer)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	stmt := result.Statements[0].(*ast.SelectStatement)
+	// The first column should be a function call; verify the -6 arg is a UnaryExpression
+	fc, ok := stmt.Columns[0].(*ast.FunctionCall)
+	if !ok {
+		t.Fatal("expected FunctionCall")
+	}
+	unary, ok := fc.Arguments[1].(*ast.UnaryExpression)
+	if !ok {
+		t.Fatalf("expected UnaryExpression for -6, got %T", fc.Arguments[1])
+	}
+	if unary.Operator != ast.Minus {
+		t.Errorf("expected operator Minus, got %v", unary.Operator)
+	}
+}
+
+func TestTSQL_TopWithParentheses(t *testing.T) {
+	result, err := ParseWithDialect("SELECT TOP (10) id, name FROM users", keywords.DialectSQLServer)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	stmt := result.Statements[0].(*ast.SelectStatement)
+	if stmt.Top == nil {
+		t.Fatal("expected Top clause")
+	}
+	lit, ok := stmt.Top.Count.(*ast.LiteralValue)
+	if !ok {
+		t.Fatalf("expected LiteralValue, got %T", stmt.Top.Count)
+	}
+	if lit.Value != "10" {
+		t.Errorf("expected '10', got %q", lit.Value)
+	}
+}
+
+func TestTSQL_TargetAsColumnName(t *testing.T) {
+	// TARGET should be usable as identifier in SQL Server (non-reserved keyword)
+	sql := `SELECT target, source FROM my_table`
+	_, err := ParseWithDialect(sql, keywords.DialectSQLServer)
+	if err != nil {
+		t.Fatalf("unexpected error in SQL Server dialect: %v", err)
 	}
 }
 

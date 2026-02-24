@@ -388,7 +388,7 @@ func gosqlx_free(ptr *C.char) {
 }
 
 // gosqlx_version returns the current GoSQLX library version as a C string.
-// The version follows semantic versioning (e.g., "1.7.0").
+// The version follows semantic versioning (e.g., "1.8.0").
 //
 // Returns a C string with the version. The caller must free the returned
 // pointer with gosqlx_free.

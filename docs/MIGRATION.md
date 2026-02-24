@@ -1,6 +1,6 @@
 # Migration Guide: v1.7.0 to v1.8.0
 
-**Last Updated**: February 2026
+**Last Updated**: 2026-02-24
 
 This guide covers breaking changes in GoSQLX v1.8.0 and how to update your code. The primary breaking change is the token type system overhaul (#215) completed across PRs #252, #254, #255, #257, #258, #281, #267, #282, and #283.
 

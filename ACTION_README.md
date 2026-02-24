@@ -8,7 +8,7 @@ Ultra-fast SQL validation, linting, and formatting for your CI/CD pipelines. **1
 
 ## Features
 
-- **Ultra-Fast Performance**: 1.38M+ operations/second, validate 100+ files in milliseconds
+- **Ultra-Fast Performance**: 1.5M+ operations/second, validate 100+ files in milliseconds
 - **Multi-Dialect Support**: PostgreSQL, MySQL, SQL Server, Oracle, SQLite
 - **Comprehensive Validation**: Syntax checking with detailed error reporting
 - **Format Checking**: Ensure consistent SQL formatting across your codebase
@@ -414,7 +414,7 @@ We welcome contributions! Please see:
 ### Benchmark Results (v1.4.0)
 
 - **Tokenization**: 8M tokens/second
-- **Parsing**: 1.38M operations/second sustained, 1.5M peak
+- **Parsing**: 1.5M operations/second sustained, 1.97M peak
 - **Validation**: <10ms for typical queries (50-500 characters)
 - **Batch Processing**: 100+ files/second
 - **Memory**: 60-80% reduction with object pooling

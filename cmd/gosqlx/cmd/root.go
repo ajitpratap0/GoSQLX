@@ -14,7 +14,7 @@ import (
 // This version tracks feature releases and compatibility.
 // Format: MAJOR.MINOR.PATCH (Semantic Versioning 2.0.0)
 //
-// Version 1.7.0 includes:
+// Version 1.8.0 includes:
 //   - Schema-qualified table names (schema.table, db.schema.table)
 //   - PostgreSQL :: type casting operator
 //   - ARRAY constructor expressions
@@ -28,7 +28,7 @@ import (
 //   - PostgreSQL UPSERT (ON CONFLICT)
 //   - Positional parameters ($1, $2)
 //   - Array subscript and slice operations
-var Version = "1.7.0"
+var Version = "1.8.0"
 
 var (
 	// verbose enables detailed output for debugging and troubleshooting.
@@ -115,8 +115,8 @@ Key features:
 • Batch processing with directory/glob patterns
 • CI/CD integration with proper exit codes
 
-Performance: 1.38M+ operations/second, 100-1000x faster than competitors.`,
-	Version: "1.7.0",
+Performance: 1.5M+ operations/second sustained, 1.97M peak. 100-1000x faster than competitors.`,
+	Version: "1.8.0",
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

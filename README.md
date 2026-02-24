@@ -21,7 +21,7 @@
 [![GitHub Watchers](https://img.shields.io/github/watchers/ajitpratap0/GoSQLX?style=social)](https://github.com/ajitpratap0/GoSQLX/watchers)
 
 **Production-ready, high-performance SQL parsing SDK for Go**
-*Zero-copy tokenization • Object pooling • Multi-dialect support • Unicode-first design • [Python bindings](python/README.md)*
+*Zero-copy tokenization • Object pooling • Multi-dialect engine • Query transforms • WASM playground • [Python bindings](python/README.md)*
 
 ### 🚀 **New to GoSQLX? [Get Started in 5 Minutes →](docs/GETTING_STARTED.md)**
 
@@ -43,55 +43,58 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 
 ### Key Features
 
-- **Blazing Fast**: 1.38M+ ops/sec sustained, 1.5M+ ops/sec peak throughput
+- **Blazing Fast**: ~50% faster parsing in v1.8.0 via token type overhaul; 1.25M+ ops/sec peak throughput
 - **Memory Efficient**: 60-80% reduction through intelligent object pooling
 - **Thread-Safe**: Race-free, linear scaling to 128+ cores, 0 race conditions detected
-- **Production-Grade Testing**: Token 100%, Keywords 100%, Errors 95.6%, Parser 84.7%, Tokenizer 76.1%, CLI 63.3% coverage
+- **Multi-Dialect Engine** (v1.8.0): First-class dialect support with `ParseWithDialect()` — PostgreSQL, MySQL, SQL Server, Oracle, SQLite, Snowflake
+- **MySQL Syntax** (v1.8.0): SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE KEY UPDATE, GROUP_CONCAT, MATCH AGAINST, REGEXP/RLIKE
+- **Query Transform API** (v1.8.0): Programmatic SQL rewriting — add WHERE clauses, columns, JOINs, pagination via composable rules (`pkg/transform/`)
+- **WASM Playground** (v1.8.0): Browser-based SQL parsing, formatting, linting via WebAssembly
+- **Comment Preservation** (v1.8.0): SQL comments survive parse-format round-trips
+- **AST-to-SQL Roundtrip** (v1.8.0): `SQL()` methods on all AST nodes for full serialization
+- **AST-based Formatter** (v1.8.0): Configurable SQL formatter with CompactStyle/ReadableStyle presets
+- **Error Recovery** (v1.8.0): Multi-error parsing with `ParseWithRecovery()` for IDE-quality diagnostics
 - **Complete JOIN Support**: All JOIN types (INNER/LEFT/RIGHT/FULL OUTER/CROSS/NATURAL) with proper tree logic
 - **Advanced SQL Features**: CTEs with RECURSIVE support, Set Operations (UNION/EXCEPT/INTERSECT)
 - **Window Functions**: Complete SQL-99 window function support with OVER clause, PARTITION BY, ORDER BY, frame specs
 - **MERGE Statements**: Full SQL:2003 MERGE support with WHEN MATCHED/NOT MATCHED clauses
 - **Grouping Operations**: GROUPING SETS, ROLLUP, CUBE (SQL-99 T431)
-- **Materialized Views**: CREATE, DROP, REFRESH MATERIALIZED VIEW support
-- **Table Partitioning**: PARTITION BY RANGE, LIST, HASH support
-- **SQL Injection Detection**: Built-in security scanner (`pkg/sql/security`) for injection pattern detection
+- **PostgreSQL Extensions**: LATERAL JOIN, DISTINCT ON, FILTER clause, JSON/JSONB operators, aggregate ORDER BY, `::` type casting, UPSERT, dollar-quoted strings
+- **SQL Injection Detection**: Built-in security scanner (`pkg/sql/security`) with LIKE injection, blind injection, tautology detection
 - **Unicode Support**: Complete UTF-8 support for international SQL
-- **Multi-Dialect**: PostgreSQL, MySQL, SQL Server, Oracle, SQLite
-- **PostgreSQL Extensions**: LATERAL JOIN, DISTINCT ON, FILTER clause, JSON/JSONB operators, aggregate ORDER BY
-- **Parser Enhancements (v1.7.0)**: Schema-qualified names, `::` type casting, UPSERT, ARRAY constructors, regex operators, INTERVAL, FOR UPDATE/SHARE, positional parameters
 - **Zero-Copy**: Direct byte slice operations, <1μs latency
 - **Intelligent Errors**: Structured error codes with typo detection, context highlighting, and helpful hints
 - **Python Bindings**: [PyGoSQLX](python/README.md) — use GoSQLX from Python via ctypes FFI, 100x+ faster than pure Python parsers
-- **Production Ready**: Battle-tested with 0 race conditions detected, ~80-85% SQL-99 compliance
+- **Production Ready**: Battle-tested with 0 race conditions detected, ~85% SQL-99 compliance, Apache-2.0 licensed
 
-### Performance & Quality Highlights (v1.7.0)
+### Performance & Quality Highlights (v1.8.0)
 
 <div align="center">
 
-| **1.38M+** | **8M+** | **<1μs** | **14x** | **575x** | **100%** |
+| **~50%** | **1.25M+** | **<1μs** | **6** | **84%+** | **74** |
 |:---------:|:-------:|:----------:|:----------:|:-------:|:---------:|
-| Ops/sec | Tokens/sec | Latency | Faster Tokens | Cache Speedup | Token Coverage |
+| Faster Parsing | Peak Ops/sec | Latency | SQL Dialects | Parser Coverage | New Commits |
 
-**v1.7.0 Released** • **Schema-Qualified Names** • **PostgreSQL Type Casting** • **UPSERT** • **ARRAY Constructors** • **~85% SQL-99 compliance**
+**v1.8.0 Released** • **Dialect Engine** • **MySQL Support** • **Query Transforms** • **WASM Playground** • **Comment Preservation**
 
 </div>
 
-### What's New in v1.7.0
+### What's New in v1.8.0
 
 <div align="center">
 
 | Feature | Description |
 |---------|-------------|
-| **Schema-Qualified Names** | Full `schema.table` and `db.schema.table` support across all DML/DDL |
-| **PostgreSQL Type Casting** | `::` operator for type casts (`SELECT 1::int`, `col::text`) |
-| **UPSERT (ON CONFLICT)** | PostgreSQL `INSERT ... ON CONFLICT DO UPDATE/NOTHING` |
-| **ARRAY Constructors** | `ARRAY[1, 2, 3]` with subscript and slice operations |
-| **Regex Operators** | `~`, `~*`, `!~`, `!~*` for PostgreSQL pattern matching |
-| **INTERVAL Expressions** | `INTERVAL '1 day'` temporal literal support |
-| **FOR UPDATE/SHARE** | Row-level locking clauses for SELECT statements |
-| **Positional Parameters** | `$1`, `$2` style PostgreSQL parameter placeholders |
+| **Dialect Mode Engine** | `ParseWithDialect()` / `--dialect` CLI flag — PostgreSQL, MySQL, SQL Server, Oracle, SQLite, Snowflake |
+| **MySQL Syntax** | SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE KEY UPDATE, GROUP_CONCAT, MATCH AGAINST, REGEXP |
+| **Query Transform API** | Programmatic SQL rewriting: add WHERE, columns, JOINs, pagination via composable rules |
+| **WASM Playground** | Browser-based SQL parsing, formatting, and linting via WebAssembly |
+| **Comment Preservation** | SQL comments survive parse-format round-trips |
+| **AST-to-SQL Roundtrip** | `SQL()` methods on all AST nodes for full serialization |
+| **~50% Faster Parsing** | Token type overhaul: O(1) integer comparison replaces string matching |
+| **Error Recovery** | `ParseWithRecovery()` returns partial AST with all errors for IDE diagnostics |
 
-See [CHANGELOG.md](CHANGELOG.md) for the complete list of changes in this release.
+See [CHANGELOG.md](CHANGELOG.md) for the complete list of 74 commits in this release.
 
 </div>
 
@@ -159,21 +162,26 @@ See the full [PyGoSQLX documentation](python/README.md) for the complete API.
 
 ### CLI Usage
 
-**Standard Usage:**
+**Inline SQL:**
 ```bash
 # Validate SQL syntax
 gosqlx validate "SELECT * FROM users WHERE active = true"
 
+# Analyze SQL structure and complexity
+gosqlx analyze "SELECT COUNT(*) FROM orders GROUP BY status"
+```
+
+**File Processing:**
+```bash
 # Format SQL files with intelligent indentation
 gosqlx format -i query.sql
 
-# Analyze SQL structure and complexity
-gosqlx analyze "SELECT COUNT(*) FROM orders GROUP BY status"
-
 # Parse SQL to AST representation
 gosqlx parse -f json complex_query.sql
+```
 
-# Unix Pipeline Support
+**Pipeline/Stdin:**
+```bash
 cat query.sql | gosqlx format                    # Format from stdin
 echo "SELECT * FROM users" | gosqlx validate     # Validate from pipe
 gosqlx format query.sql | gosqlx validate        # Chain commands
@@ -402,12 +410,13 @@ func main() {
 |----------|---------|
 | [**Production Guide**](docs/PRODUCTION_GUIDE.md) | Deployment and monitoring |
 | [**SQL Compatibility**](docs/SQL_COMPATIBILITY.md) | Dialect support matrix |
+| [**Migration Guide**](docs/MIGRATION.md) | v1.7.0 → v1.8.0 breaking changes |
 | [**Security Analysis**](docs/SECURITY.md) | Security assessment |
 | [**LSP Guide**](docs/LSP_GUIDE.md) | LSP server and IDE integration |
 | [**Linting Rules**](docs/LINTING_RULES.md) | All 10 linting rules reference |
 | [**Error Codes**](docs/ERROR_CODES.md) | Error code reference (E1001-E3004) |
 | [**Upgrade Guide**](docs/UPGRADE_GUIDE.md) | Version upgrade instructions |
-| [**Examples**](examples/) | Working code examples |
+| [**Examples**](examples/) | Working code examples (including transform API) |
 
 ### Quick Links
 
@@ -714,17 +723,45 @@ ast, err := gosqlx.Parse(sql)
 
 ## Examples
 
-### Multi-Dialect Support
+### Multi-Dialect Support (v1.8.0)
 
 ```go
-// PostgreSQL with array operators
-sql := `SELECT * FROM users WHERE tags @> ARRAY['admin']`
+import "github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 
-// MySQL with backticks
-sql := "SELECT `user_id`, `name` FROM `users`"
+// Parse with explicit dialect
+ast, err := parser.ParseWithDialect("SHOW TABLES", "mysql")
 
-// SQL Server with brackets
-sql := "SELECT [user_id], [name] FROM [users]"
+// MySQL-specific syntax
+ast, err = parser.ParseWithDialect(`
+    INSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com')
+    ON DUPLICATE KEY UPDATE email = VALUES(email)
+`, "mysql")
+
+// PostgreSQL (default)
+ast, err = parser.ParseWithDialect(`
+    SELECT * FROM users WHERE tags @> ARRAY['admin']
+`, "postgresql")
+
+// CLI with dialect flag
+// gosqlx validate --dialect mysql "SHOW TABLES"
+```
+
+### Query Transform API (v1.8.0)
+
+```go
+import "github.com/ajitpratap0/GoSQLX/pkg/transform"
+
+// Parse SQL, add multi-tenant WHERE filter
+stmt, _ := transform.ParseSQL("SELECT * FROM orders")
+transform.AddWhere(stmt, "tenant_id = 42")
+sql := transform.FormatSQL(stmt) // SELECT * FROM orders WHERE tenant_id = 42
+
+// Composable rules
+transform.Apply(stmt,
+    transform.AddWhereRule("active = true"),
+    transform.SetLimitRule(100),
+    transform.AddOrderByRule("created_at", "DESC"),
+)
 ```
 
 ### Unicode and International SQL
@@ -833,7 +870,9 @@ go test -v ./pkg/sql/parser/
 
 ```
 GoSQLX/
-├── cmd/gosqlx/              # CLI tool (validate, format, parse, analyze, lint, lsp)
+├── cmd/gosqlx/              # CLI tool (validate, format, parse, analyze, lint, lsp, optimize, action)
+│   ├── cmd/                 # Core CLI commands
+│   └── internal/            # Extracted sub-packages (lspcmd, actioncmd, optimizecmd, cmdutil)
 ├── pkg/
 │   ├── models/              # Core data structures (tokens, spans, locations)
 │   ├── errors/              # Structured error handling with position tracking
@@ -843,17 +882,22 @@ GoSQLX/
 │   ├── cbinding/            # C shared library bindings (for Python/FFI)
 │   ├── linter/              # SQL linting engine with 10 rules (L001-L010)
 │   ├── lsp/                 # Language Server Protocol server for IDEs
+│   ├── transform/           # Query rewriting/transform API (v1.8.0)
+│   ├── formatter/           # Public SQL formatter package (v1.8.0)
+│   ├── advisor/             # Query optimization advisor with 12 rules
+│   ├── schema/              # Schema-aware validation
 │   ├── compatibility/       # API stability testing
 │   └── sql/
-│       ├── tokenizer/       # Zero-copy lexical analysis
-│       ├── parser/          # Recursive descent parser
-│       ├── ast/             # Abstract syntax tree nodes with visitor pattern
-│       ├── token/           # Token type definitions and pool management
+│       ├── tokenizer/       # Zero-copy lexical analysis with dialect support
+│       ├── parser/          # Recursive descent parser with dialect modes
+│       ├── ast/             # Abstract syntax tree with SQL() serialization
+│       ├── token/           # Token type definitions (int-based, v1.8.0)
 │       ├── keywords/        # Multi-dialect SQL keyword definitions
-│       ├── security/        # SQL injection detection
+│       ├── security/        # SQL injection detection with fuzz testing
 │       └── monitor/         # SQL monitoring utilities
+├── wasm/                    # WebAssembly build + browser playground (v1.8.0)
 ├── python/                  # PyGoSQLX - Python bindings via ctypes FFI
-├── examples/                # Usage examples and tutorials
+├── examples/                # Usage examples (including transform examples)
 ├── docs/                    # Comprehensive documentation (20+ guides)
 └── vscode-extension/        # Official VSCode extension
 ```
@@ -951,48 +995,28 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 | **Phase 2** | v1.2.0 | ✅ Complete | CTEs & Set Operations |
 | **Phase 2.5** | v1.3.0-v1.4.0 | ✅ Complete | Window Functions, MERGE, Grouping Sets |
 | **Phase 3** | v1.5.0-v1.6.0 | ✅ Complete | PostgreSQL Extensions, LSP, Linter |
-| **Phase 4** | v1.7.0 | ✅ Complete | Parser Enhancements, Schema-Qualified Names, PostgreSQL Extensions |
-| **Phase 5** | v2.0.0 | 📋 Planned | Query Intelligence & Optimization |
-| **Phase 6** | v2.1.0 | 📋 Planned | Schema Awareness & Validation |
+| **Phase 4** | v1.7.0 | ✅ Complete | Parser Enhancements, Schema-Qualified Names |
+| **Phase 5** | v1.8.0 | ✅ Complete | Dialect Engine, MySQL, Query Transforms, WASM, Token Overhaul |
+| **Phase 6** | v2.0.0 | 📋 Planned | Advanced Optimizations & Schema Intelligence |
 
 </div>
 
-### Phase 1: Core SQL Enhancements - v1.1.0 ✅
-- ✅ **Complete JOIN support** (INNER/LEFT/RIGHT/FULL OUTER/CROSS/NATURAL)
-- ✅ **Proper join tree logic** with left-associative relationships
-- ✅ **USING clause parsing** for single and multi-column joins
-- ✅ **Enhanced error handling** with contextual JOIN error messages
-- ✅ **Comprehensive test coverage** (15+ JOIN scenarios)
-
-### Phase 2: CTE & Set Operations - v1.2.0 ✅
-- ✅ **Common Table Expressions (CTEs)** with RECURSIVE support
-- ✅ **Set operations** (UNION/EXCEPT/INTERSECT with ALL modifier)
-- ✅ **Left-associative set operation parsing**
-- ✅ **CTE column specifications** and multiple CTE definitions
-- ✅ **~70% SQL-92 compliance** achieved
-
-### Phase 2.5: Window Functions & Advanced SQL - v1.3.0-v1.4.0 ✅
-- ✅ **Window Functions** - Complete SQL-99 support (ROW_NUMBER, RANK, DENSE_RANK, NTILE, LAG, LEAD, FIRST_VALUE, LAST_VALUE)
-- ✅ **Window Frames** - ROWS/RANGE with PRECEDING/FOLLOWING/CURRENT ROW
-- ✅ **MERGE Statements** - SQL:2003 F312 with WHEN MATCHED/NOT MATCHED clauses
-- ✅ **GROUPING SETS, ROLLUP, CUBE** - SQL-99 T431 advanced grouping
-- ✅ **Materialized Views** - CREATE, REFRESH, DROP support
-- ✅ **Expression Operators** - BETWEEN, IN, LIKE, IS NULL, NULLS FIRST/LAST
-- ✅ **~75% SQL-99 compliance** achieved
-
-### Phase 3: PostgreSQL Extensions & Developer Tools - v1.5.0-v1.6.0 ✅
-- ✅ **LATERAL JOIN** - Correlated subqueries in FROM clause
-- ✅ **JSON/JSONB Operators** - All 10 operators (`->`, `->>`, `#>`, `#>>`, `@>`, `<@`, `?`, `?|`, `?&`, `#-`)
-- ✅ **DISTINCT ON** - PostgreSQL-specific row selection
-- ✅ **FILTER Clause** - Conditional aggregation (SQL:2003 T612)
-- ✅ **Aggregate ORDER BY** - ORDER BY inside STRING_AGG, ARRAY_AGG, etc.
-- ✅ **RETURNING Clause** - Return modified rows from INSERT/UPDATE/DELETE
-- ✅ **LSP Server** - Full Language Server Protocol with diagnostics, completion, hover, formatting
-- ✅ **Linter Engine** - 10 built-in rules (L001-L010) with auto-fix
-- ✅ **Security Scanner** - SQL injection detection with severity classification
-- ✅ **Structured Errors** - Error codes E1001-E3004 with position tracking
-- ✅ **CLI Enhancements** - Pipeline support, stdin detection, cross-platform
-- ✅ **~80-85% SQL-99 compliance** achieved
+### Phase 5: Dialect Engine, Query Transforms & Tooling - v1.8.0 ✅
+- ✅ **Dialect Mode Engine** - `ParseWithDialect()`, `--dialect` CLI flag, 6 dialects
+- ✅ **MySQL Syntax** - SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE KEY UPDATE, GROUP_CONCAT, MATCH AGAINST, REGEXP
+- ✅ **Query Transform API** - `pkg/transform/` with WHERE, columns, JOINs, tables, LIMIT/OFFSET, ORDER BY manipulation
+- ✅ **WASM Playground** - Browser-based SQL parsing, formatting, linting via WebAssembly
+- ✅ **Comment Preservation** - SQL comments survive parse-format round-trips
+- ✅ **AST-to-SQL Serialization** - `SQL()` methods on all AST nodes with roundtrip support
+- ✅ **AST-based Formatter** - CompactStyle/ReadableStyle presets with keyword casing options
+- ✅ **DDL Formatters** - Format() for ALTER TABLE, CREATE INDEX/VIEW, DROP, TRUNCATE
+- ✅ **Error Recovery** - `ParseWithRecovery()` for multi-error IDE diagnostics
+- ✅ **Dollar-Quoted Strings** - PostgreSQL `$$body$$` tokenizer support
+- ✅ **Token Type Overhaul** - ~50% faster parsing via O(1) integer token comparison
+- ✅ **Query Advisor** - 12 optimization rules (OPT-001 through OPT-012)
+- ✅ **Schema Validation** - NOT NULL, type compatibility, foreign key validation
+- ✅ **Snowflake Dialect** - Keyword detection and support
+- ✅ **Apache-2.0 License** - Relicensed from AGPL
 
 ### Phase 4: Parser Enhancements & PostgreSQL Extensions - v1.7.0 ✅
 - ✅ **Schema-Qualified Names** - `schema.table` and `db.schema.table` across all DML/DDL
@@ -1003,32 +1027,15 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 - ✅ **INTERVAL Expressions** - Temporal literals
 - ✅ **FOR UPDATE/SHARE** - Row-level locking clauses
 - ✅ **Positional Parameters** - `$1`, `$2` style placeholders
-- ✅ **WITHIN GROUP** - Ordered-set aggregate functions
-- ✅ **Multi-row INSERT** - Batch VALUES support
 - ✅ **Python Bindings** - [PyGoSQLX](python/README.md) with ctypes FFI, thread-safe, memory-safe
 
-### Phase 5: Query Intelligence & Optimization - v2.0.0 📋
-- 📋 **Query Cost Estimation** - Complexity analysis and scoring
-- 📋 **Index Recommendations** - Suggest indexes based on query patterns
-- 📋 **Join Order Optimization** - Recommend optimal join sequences
-- 📋 **Subquery Optimization** - Detect and suggest subquery improvements
-- 📋 **N+1 Query Detection** - Identify inefficient query patterns
-- 📋 **Performance Hints** - Actionable optimization suggestions
-
-### Phase 6: Schema Awareness & Validation - v2.1.0 📋
-- 📋 **Schema Definition Parsing** - Full DDL understanding
-- 📋 **Type Checking** - Validate column types in expressions
-- 📋 **Foreign Key Validation** - Verify relationship integrity
-- 📋 **Constraint Checking** - NOT NULL, UNIQUE, CHECK validation
+### Phase 6: Advanced Optimizations & Schema Intelligence - v2.0.0 📋
+- 📋 **Advanced Query Cost Estimation** - Extended complexity analysis
 - 📋 **Schema Diff** - Compare and generate migration scripts
 - 📋 **Entity-Relationship Extraction** - Generate ER diagrams from DDL
-
-### Future Considerations 🔮
 - 📋 **Stored Procedures** - CREATE PROCEDURE/FUNCTION parsing
-- 📋 **Triggers** - CREATE TRIGGER support
 - 📋 **PL/pgSQL** - PostgreSQL procedural language
-- 📋 **Query Rewriting** - Automatic query transformation
-- 📋 **WASM Support** - Browser-based SQL parsing
+- 📋 **T-SQL Extensions** - PIVOT/UNPIVOT, CROSS/OUTER APPLY parsing
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed system design and [CHANGELOG.md](CHANGELOG.md) for version history
 

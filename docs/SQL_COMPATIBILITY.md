@@ -1,12 +1,33 @@
 # GoSQLX SQL Feature Compatibility Matrix
 
-**Version**: v1.7.0 | **Last Updated**: February 2026
+**Version**: v1.8.0 | **Last Updated**: 2026-02-24
 
 ## Overview
 
-This matrix documents the comprehensive SQL feature support in GoSQLX across different SQL dialects and standards. The testing was conducted using the comprehensive integration test suite with 500+ test cases covering real-world SQL patterns.
+This matrix documents the comprehensive SQL feature support in GoSQLX across different SQL dialects and standards. The testing was conducted using the comprehensive integration test suite with 700+ test cases covering real-world SQL patterns.
 
-### Recent Additions (v1.7.0)
+### Recent Additions (v1.8.0)
+- ✅ **Dialect Mode Engine**: First-class dialect support with `ParseWithDialect()` — thread dialect through tokenizer and parser
+- ✅ **MySQL Syntax Support**:
+  - **LIMIT offset, count** - MySQL-style `LIMIT 10, 20`
+  - **ON DUPLICATE KEY UPDATE** - MySQL upsert syntax
+  - **SHOW statements** - `SHOW TABLES`, `SHOW DATABASES`, `SHOW CREATE TABLE`
+  - **DESCRIBE/EXPLAIN** - Table description commands
+  - **REPLACE INTO** - MySQL insert-or-replace
+  - **UPDATE/DELETE with LIMIT** - MySQL extension
+  - **GROUP_CONCAT** - With ORDER BY and SEPARATOR clause
+  - **MATCH AGAINST** - Full-text search expressions
+  - **REGEXP/RLIKE** - Regular expression operators
+  - **INTERVAL number unit** - MySQL-style `INTERVAL 30 DAY`
+- ✅ **Query Transform API**: Programmatic SQL rewriting via `pkg/transform/`
+- ✅ **Comment Preservation**: Comments survive parse-format round-trips
+- ✅ **AST-to-SQL Serialization**: `SQL()` methods on all AST nodes
+- ✅ **Dollar-Quoted Strings**: PostgreSQL `$$body$$` and `$tag$body$tag$`
+- ✅ **Error Recovery**: Multi-error parsing with `ParseWithRecovery()`
+- ✅ **~50% Faster Parsing**: Token type overhaul with O(1) integer comparison
+- ✅ **Snowflake Dialect**: Keyword detection and weighted dialect scoring
+
+### Previous Additions (v1.7.0)
 - ✅ **Schema-Qualified Names**: Full support for `schema.table`, `db.schema.table` in all DML/DDL statements
 - ✅ **PostgreSQL Enhancements**:
   - **Type Casting** - `::` operator for PostgreSQL-style casts (`SELECT 1::int`)
@@ -19,7 +40,6 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 - ✅ **INTERVAL Expressions** - `INTERVAL '1 day'` temporal literals
 - ✅ **FOR UPDATE/SHARE** - Row-level locking clauses
 - ✅ **Multi-row INSERT** - `INSERT INTO t VALUES (1), (2), (3)` batch inserts
-- ✅ **BETWEEN Expressions** - Enhanced BETWEEN support in expressions
 
 ### Previous Additions (v1.6.0)
 - ✅ **PostgreSQL Extensions**:
@@ -158,9 +178,9 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 | **FILTER Clause** (SQL:2003) | ✅ | ❌ | ❌ | ✅ | ❌ | ✅ Full | 95% |
 | COUNT(*) FILTER (WHERE...) | ✅ | ❌ | ❌ | ✅ | ❌ | ✅ Full | 95% |
 | Aggregate ORDER BY (PostgreSQL) | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ Full | 95% |
-| **GROUP_CONCAT** | ❌ | ✅ | ❌ | ❌ | ✅ | ⚠️ Partial | 30% |
-| **STRING_AGG** | ✅ | ❌ | ✅ | ✅ | ❌ | ⚠️ Partial | 30% |
-| **ARRAY_AGG** | ✅ | ❌ | ❌ | ✅ | ❌ | ⚠️ Partial | 30% |
+| **GROUP_CONCAT** | ❌ | ✅ | ❌ | ❌ | ✅ | ✅ Full | 95% |
+| **STRING_AGG** | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ Full | 90% |
+| **ARRAY_AGG** | ✅ | ❌ | ❌ | ✅ | ❌ | ✅ Full | 90% |
 
 ## Advanced SQL Features
 
@@ -265,18 +285,28 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 | **Full-text search** | ✅ Full | 🔧 Syntax | 30% | tsvector, tsquery types |
 | **LATERAL Joins** | ✅ Full | ✅ Full | 95% | Full support with LEFT/INNER/CROSS variants |
 | **Custom operators** | ✅ Full | ⚠️ Partial | 30% | Basic operator recognition |
-| **Dollar quoting** | ✅ Full | ⚠️ Partial | 40% | Limited support |
+| **Dollar quoting** | ✅ Full | ✅ Full | 90% | `$$body$$` and `$tag$body$tag$` (v1.8.0) |
 
-### MySQL-Specific Features
+### MySQL-Specific Features (Enhanced in v1.8.0)
 
 | Feature | Support Level | GoSQLX Parser | Test Coverage | Notes |
 |---------|---------------|---------------|---------------|-------|
+| **SHOW statements** | ✅ Full | ✅ Full | 95% | SHOW TABLES, DATABASES, CREATE TABLE (v1.8.0) |
+| **DESCRIBE/EXPLAIN** | ✅ Full | ✅ Full | 95% | Table description commands (v1.8.0) |
+| **REPLACE INTO** | ✅ Full | ✅ Full | 95% | MySQL insert-or-replace (v1.8.0) |
+| **ON DUPLICATE KEY UPDATE** | ✅ Full | ✅ Full | 95% | MySQL upsert syntax (v1.8.0) |
+| **LIMIT offset, count** | ✅ Full | ✅ Full | 95% | MySQL-style `LIMIT 10, 20` (v1.8.0) |
+| **UPDATE/DELETE with LIMIT** | ✅ Full | ✅ Full | 90% | MySQL extension (v1.8.0) |
+| **GROUP_CONCAT** | ✅ Full | ✅ Full | 95% | With ORDER BY and SEPARATOR (v1.8.0) |
+| **MATCH/AGAINST** | ✅ Full | ✅ Full | 95% | Full-text search (v1.8.0) |
+| **REGEXP/RLIKE** | ✅ Full | ✅ Full | 90% | Regular expression operators (v1.8.0) |
+| **INTERVAL number unit** | ✅ Full | ✅ Full | 90% | MySQL-style `INTERVAL 30 DAY` (v1.8.0) |
+| **IF()/REPLACE() as functions** | ✅ Full | ✅ Full | 85% | Keywords usable as function names (v1.8.0) |
 | **Storage engines** | ✅ Full | 🔧 Syntax | 80% | ENGINE=InnoDB syntax |
 | **Index hints** | ✅ Full | ✅ Full | 75% | USE/IGNORE/FORCE INDEX |
 | **Partitioning** | ✅ Full | 🔧 Syntax | 70% | PARTITION BY syntax |
-| **MATCH/AGAINST** | ✅ Full | ✅ Full | 85% | Full-text search |
 | **AUTO_INCREMENT** | ✅ Full | ✅ Full | 95% | Column property |
-| **REPLACE INTO** | ✅ Full | ✅ Full | 90% | MySQL-specific INSERT |
+| **Backtick identifiers** | ✅ Full | ✅ Full | 100% | `` `table`.`column` `` syntax |
 
 ### SQL Server-Specific Features
 
@@ -495,16 +525,79 @@ WHERE expired_at < NOW()
 RETURNING user_id, session_id;
 ```
 
+## Dialect Mode Engine (v1.8.0)
+
+GoSQLX v1.8.0 introduces a first-class dialect mode engine that threads the SQL dialect through the tokenizer and parser. This enables dialect-specific keyword recognition, syntax parsing, and validation.
+
+### Supported Dialects
+
+| Dialect | Dialect String | Keyword Set | Dialect-Specific Parsing | Status |
+|---------|---------------|-------------|--------------------------|--------|
+| **PostgreSQL** | `"postgresql"` | Full PG keywords | `::`, `ON CONFLICT`, `$$`, JSONB ops, LATERAL, DISTINCT ON | ✅ Default dialect |
+| **MySQL** | `"mysql"` | MySQL keywords | SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE KEY, LIMIT n,m, GROUP_CONCAT, MATCH AGAINST, REGEXP | ✅ Full support |
+| **SQL Server** | `"sqlserver"` | T-SQL keywords | MERGE, bracket identifiers `[col]` | ⚠️ Keywords + basic parsing |
+| **Oracle** | `"oracle"` | Oracle keywords | DUAL table, basic PL/SQL keywords | ⚠️ Keywords + basic parsing |
+| **SQLite** | `"sqlite"` | SQLite keywords | Flexible typing, simplified syntax | ⚠️ Keywords + basic parsing |
+| **Snowflake** | `"snowflake"` | Snowflake keywords | Stage operations, VARIANT type | ⚠️ Keyword detection only |
+
+### Usage
+
+```go
+// API
+ast, err := parser.ParseWithDialect("SHOW TABLES", "mysql")
+err = parser.ValidateWithDialect("DESCRIBE users", "mysql")
+
+// CLI
+gosqlx validate --dialect mysql "SHOW TABLES"
+gosqlx format --dialect mysql query.sql
+```
+
+### Known Gaps by Dialect
+
+#### PostgreSQL (default, best supported)
+- PL/pgSQL procedural blocks not parsed
+- Some advanced array operations limited
+- Full-text search `tsvector`/`tsquery` syntax-only recognition
+
+#### MySQL
+- Stored procedures / functions not parsed
+- HANDLER statements not supported
+- XA transactions not supported
+- CREATE EVENT not supported
+
+#### SQL Server (T-SQL)
+- PIVOT/UNPIVOT keywords reserved but no parsing logic
+- CROSS/OUTER APPLY keywords reserved but no parsing logic
+- TRY/CATCH blocks not supported
+- OPENROWSET / OPENQUERY not supported
+
+#### Oracle
+- CONNECT BY / START WITH / PRIOR not parsed (keywords reserved)
+- PL/SQL blocks not supported
+- DECODE recognized as generic function only
+- Pipelined table functions not supported
+
+#### SQLite
+- PRAGMA statements not parsed (keyword reserved)
+- ATTACH/DETACH not parsed (keywords reserved)
+- VACUUM not supported
+- Virtual tables (FTS5, rtree) not supported
+
+#### Snowflake
+- Keyword detection and dialect scoring only
+- No Snowflake-specific parsing (stages, COPY INTO, VARIANT operations)
+- QUALIFY clause not supported
+
 ## SQL Standards Compliance Summary
 
-### Overall Compliance (v1.7.0)
+### Overall Compliance (v1.8.0)
 
 | Standard | Compliance % | Status | Notes |
 |----------|--------------|--------|-------|
 | **SQL-92 Entry** | ~95% | ✅ Excellent | All core features supported |
 | **SQL-92 Intermediate** | ~85% | ✅ Strong | Most features supported |
-| **SQL-99 Core** | ~80-85% | ✅ Strong | Window functions, CTEs, recursive queries |
-| **SQL:2003** | ~70% | ✅ Good | MERGE, FILTER, enhanced window functions |
+| **SQL-99 Core** | ~85% | ✅ Strong | Window functions, CTEs, recursive queries |
+| **SQL:2003** | ~75% | ✅ Good | MERGE, FILTER, enhanced window functions |
 | **SQL:2008** | ~65% | ✅ Good | TRUNCATE, FETCH FIRST/NEXT |
 | **SQL:2011** | ~40% | ⚠️ Partial | Some temporal features, limited support |
 | **SQL:2016** | ~50% | ⚠️ Partial | JSON support via PostgreSQL extensions |
@@ -527,13 +620,14 @@ RETURNING user_id, session_id;
 
 ### Dialect-Specific Compliance
 
-| Database | Core Features | Extensions | Overall Rating |
-|----------|---------------|------------|----------------|
-| **PostgreSQL** | 95% | 80% | ⭐⭐⭐⭐⭐ Excellent |
-| **MySQL** | 90% | 75% | ⭐⭐⭐⭐ Very Good |
-| **SQL Server** | 85% | 65% | ⭐⭐⭐⭐ Very Good |
-| **Oracle** | 80% | 60% | ⭐⭐⭐⭐ Good |
-| **SQLite** | 85% | 50% | ⭐⭐⭐⭐ Good |
+| Database | Core Features | Extensions | Overall Rating | Notes |
+|----------|---------------|------------|----------------|-------|
+| **PostgreSQL** | 95% | 85% | ⭐⭐⭐⭐⭐ Excellent | Default dialect, best supported |
+| **MySQL** | 95% | 85% | ⭐⭐⭐⭐⭐ Excellent | Full dialect parsing (v1.8.0) |
+| **SQL Server** | 85% | 65% | ⭐⭐⭐⭐ Very Good | Keywords + MERGE |
+| **Oracle** | 80% | 60% | ⭐⭐⭐⭐ Good | Keywords + basic features |
+| **SQLite** | 85% | 50% | ⭐⭐⭐⭐ Good | Keywords + basic features |
+| **Snowflake** | 80% | 30% | ⭐⭐⭐ Good | Keyword detection only |
 
 ## Performance Characteristics by Feature
 
@@ -628,7 +722,7 @@ RETURNING user_id, session_id;
 - **OFFSET-FETCH** - Standard row limiting
 - **Multi-dialect basic syntax**
 - **Unicode and international text**
-- **High-performance scenarios** (1.5M ops/sec peak)
+- **High-performance scenarios** (1.25M ops/sec peak)
 
 ### Suitable with Considerations
 
@@ -686,38 +780,47 @@ RETURNING user_id, session_id;
 
 ---
 
-**Last Updated**: February 2026
-**GoSQLX Version**: 1.7.0
-**Test Suite Version**: 1.7.0
-**Total Test Cases**: 700+
+**Last Updated**: 2026-02-24
+**GoSQLX Version**: 1.8.0
+**Test Suite Version**: 1.8.0
+**Total Test Cases**: 800+
 **Coverage Percentage**: 95%+
 **SQL-99 Compliance**: ~85%
 **PostgreSQL Compliance**: ~95% (core features), ~85% (extensions)
+**MySQL Compliance**: ~95% (core features), ~85% (extensions)
 
-## Quick Reference: What's New in v1.7.0
+## Quick Reference: What's New in v1.8.0
 
-### Schema & Name Resolution
-1. **Schema-Qualified Table Names** - `schema.table` and `db.schema.table` in all statements
-2. **Double-Quoted Identifiers** - Proper handling in PostgreSQL contexts
+### Dialect Engine
+1. **ParseWithDialect()** - Parse SQL with dialect-specific syntax
+2. **ValidateWithDialect()** - Validate with dialect awareness
+3. **--dialect CLI flag** - Specify dialect for CLI commands
+4. **6 Supported Dialects** - PostgreSQL, MySQL, SQL Server, Oracle, SQLite, Snowflake
 
-### PostgreSQL Enhancements (8 Features)
-1. **Type Casting** - `::` operator (`SELECT 1::int`, `col::text`)
-2. **UPSERT** - `INSERT ... ON CONFLICT DO UPDATE/NOTHING`
-3. **Positional Parameters** - `$1`, `$2` style placeholders
-4. **JSONB Operators** - Additional `@?` and `@@` operators
-5. **Regex Operators** - `~`, `~*`, `!~`, `!~*` pattern matching
-6. **ARRAY Constructors** - `ARRAY[1, 2, 3]` with subscript/slice
-7. **INTERVAL Expressions** - `INTERVAL '1 day'` temporal literals
-8. **WITHIN GROUP** - Ordered-set aggregate functions
+### MySQL Syntax (11 Features)
+1. **SHOW statements** - SHOW TABLES, DATABASES, CREATE TABLE
+2. **DESCRIBE/EXPLAIN** - Table description
+3. **REPLACE INTO** - Insert-or-replace
+4. **ON DUPLICATE KEY UPDATE** - MySQL upsert
+5. **LIMIT offset, count** - MySQL-style pagination
+6. **UPDATE/DELETE with LIMIT** - Row limiting extension
+7. **GROUP_CONCAT** - With ORDER BY and SEPARATOR
+8. **MATCH AGAINST** - Full-text search
+9. **REGEXP/RLIKE** - Regular expression operators
+10. **INTERVAL number unit** - MySQL-style intervals
+11. **IF()/REPLACE() as functions** - Keywords as function names
 
-### SQL Standards
-1. **FOR UPDATE/SHARE** - Row-level locking clauses
-2. **Multi-row INSERT** - Batch `VALUES` lists
-3. **BETWEEN Expressions** - Enhanced expression support
-4. **FETCH with OFFSET** - Standard pagination improvements
+### New Capabilities
+1. **Query Transform API** - `pkg/transform/` for programmatic SQL rewriting
+2. **Comment Preservation** - Comments survive parse-format round-trips
+3. **AST-to-SQL** - `SQL()` methods on all nodes for roundtrip serialization
+4. **WASM Playground** - Browser-based SQL parsing and formatting
+5. **Error Recovery** - `ParseWithRecovery()` for multi-error diagnostics
+6. **Dollar-Quoted Strings** - PostgreSQL `$$body$$` support
+7. **~50% Faster Parsing** - O(1) integer token comparison
 
 ### Migration Notes
-- **From v1.6.0**: All existing queries continue to work. New features are additive.
-- **Schema Users**: Can now use `schema.table` syntax in SELECT, INSERT, UPDATE, DELETE, and DDL
-- **PostgreSQL Users**: Full `::` type casting, UPSERT, and positional parameters
-- **Performance**: No performance regression from new features
+- **From v1.7.0**: High-level API (`gosqlx.Parse()`, `gosqlx.Validate()`) is fully backward compatible
+- **Breaking**: `token.Token.ModelType` renamed to `Type`; string-based `token.Type` removed. See [MIGRATION.md](MIGRATION.md)
+- **MySQL Users**: Use `parser.ParseWithDialect(sql, "mysql")` for MySQL-specific syntax
+- **Performance**: ~50% faster parsing from token type overhaul

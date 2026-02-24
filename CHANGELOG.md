@@ -5,31 +5,331 @@ All notable changes to GoSQLX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.8.0] - 2026-02-24 - Multi-Dialect Engine, Query Transform API, WASM Playground & Token Type Overhaul
 
-### Added - Query Optimization Engine (PR #210, closes #81)
-- New `pkg/advisor/` package with 12 optimization rules
-- Rules OPT-001 through OPT-008: SELECT * detection, missing WHERE, Cartesian products, DISTINCT overuse, subquery in WHERE, OR in WHERE, leading wildcard LIKE, function on indexed column
-- Rules OPT-009 through OPT-012: N+1 query detection, index recommendations, join order optimization, query cost estimation
+This release represents the largest update since v1.0.0 with **74 commits** across 30+ PRs. It introduces a dialect-aware parsing engine with full MySQL syntax support, a programmatic Query Transform API, WebAssembly browser playground, comment-preserving formatter, AST-to-SQL serialization, and completes a multi-phase token type refactor that delivers ~50% faster parsing.
+
+### Highlights
+- **Dialect Mode Engine**: Thread SQL dialect through tokenizer and parser with `ParseWithDialect()` / `--dialect` CLI flag
+- **MySQL Syntax Support**: SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE KEY UPDATE, LIMIT offset/count, GROUP_CONCAT with SEPARATOR, MATCH AGAINST, REGEXP/RLIKE
+- **Query Transform API**: Programmatic SQL rewriting — add WHERE clauses, columns, JOINs, pagination, rename tables via composable rules
+- **WASM Playground**: Browser-based SQL parsing, formatting, linting, and validation via WebAssembly
+- **Comment Preservation**: SQL comments survive parse-format round-trips
+- **AST-to-SQL Serialization**: `SQL()` methods on all AST nodes enable full roundtrip support
+- **Token Type Overhaul (BREAKING)**: Legacy string-based `token.Type` removed; all token comparisons now use O(1) integer operations (~50% faster parsing)
+- **AST-based Formatter**: Configurable SQL formatter with CompactStyle/ReadableStyle presets and keyword casing options
+- **DDL Formatters**: Format() methods for ALTER TABLE, CREATE INDEX/VIEW, DROP, TRUNCATE and more
+- **Error Recovery**: Multi-error parsing with `ParseWithRecovery()` for IDE-quality diagnostics
+- **Dollar-Quoted Strings**: PostgreSQL `$$body$$` and `$tag$body$tag$` tokenizer support
+- **~50% Faster Parsing**: Token type unification eliminates string comparisons on all hot paths
+
+---
+
+### ✨ Features
+
+#### Dialect Mode Engine (PR #315, closes #249 Phase 1)
+- `tokenizer.NewWithDialect(dialect)` constructor for dialect-aware keyword recognition
+- `tokenizer.SetDialect(dialect)` to reconfigure pooled tokenizers
+- `parser.WithDialect(dialect)` parser option
+- `parser.ParseWithDialect(sql, dialect)` / `ValidateWithDialect(sql, dialect)` convenience functions
+- `ParseBytesWithDialect` / `ValidateBytesWithDialect` byte-slice variants
+- CLI `--dialect` flag for `validate` and other commands
+- Defaults to PostgreSQL for backward compatibility
+
+#### MySQL Syntax Support (PR #316, closes #249 Phase 2)
+- **LIMIT offset, count**: MySQL-style `LIMIT 10, 20` (offset first, then count)
+- **ON DUPLICATE KEY UPDATE**: MySQL upsert syntax for INSERT statements
+- **SHOW statements**: `SHOW TABLES`, `SHOW DATABASES`, `SHOW CREATE TABLE x`
+- **DESCRIBE/EXPLAIN**: Table description commands
+- **REPLACE INTO**: MySQL-specific insert-or-replace statement
+- **UPDATE/DELETE with LIMIT**: MySQL extension for limiting affected rows
+- **INTERVAL number unit**: MySQL-style `INTERVAL 30 DAY` (in addition to PostgreSQL's `INTERVAL '30 days'`)
+- **IF()/REPLACE() functions**: Keywords usable as function names in MySQL mode
+- **GROUP_CONCAT**: With ORDER BY and SEPARATOR clause support
+- **MATCH AGAINST**: Full-text search expressions
+- **REGEXP/RLIKE**: Regular expression operators
+- New AST nodes: `ShowStatement`, `DescribeStatement`, `ReplaceStatement`
+- New token types: `TokenTypeShow`, `TokenTypeDescribe`, `TokenTypeExplain`
+- 30 MySQL test data files, 15+ unit tests
+
+#### Query Rewriting/Transform API (PR #285, closes #247)
+- New `pkg/transform/` package for programmatic SQL modification via AST manipulation
+- **WHERE**: `AddWhere`, `RemoveWhere`, `ReplaceWhere`, `AddWhereFromSQL`
+- **Columns**: `AddColumn`, `RemoveColumn`, `ReplaceColumn`, `AddSelectStar`
+- **JOINs**: `AddJoin`, `RemoveJoin`, `AddJoinFromSQL`
+- **Tables**: `ReplaceTable`, `AddTableAlias`, `QualifyColumns`
+- **LIMIT/OFFSET**: `SetLimit`, `SetOffset`, `RemoveLimit`, `RemoveOffset`
+- **ORDER BY**: `AddOrderBy`, `RemoveOrderBy`
+- `Rule` interface with `Apply(stmt)` and `RuleFunc` adapter for composable rule chaining
+- 5 documented examples: multi-tenant filtering, column projection, JOIN injection, pagination, table migration
+- 28 tests across 6 test files
+
+#### Comment Preservation in AST and Formatter (PR #311, closes #275)
+- `models.Comment` type for representing SQL comments with position information
+- Tokenizer captures line (`--`) and block (`/* */`) comments during tokenization
+- AST stores captured comments and emits them during formatting
+- Formatter preserves comments through parse-format round-trips
+- AST pool properly resets comments on release
+
+#### WASM Build + Web Playground (PR #309, closes #226)
+- WebAssembly build target for browser-based SQL parsing
+- WASM bindings for parse, format, lint, and validate operations
+- Single-page playground with split-pane UI
+- Ready for GitHub Pages deployment
+
+#### AST-to-SQL Serialization with Roundtrip Support (PR #234, closes #221)
+- `SQL()` methods on all AST node types: SELECT, INSERT, UPDATE, DELETE, CREATE TABLE/INDEX/VIEW, ALTER TABLE, DROP, TRUNCATE, MERGE, CTEs, set operations
+- Expression serialization: Binary, Unary, CASE, CAST, BETWEEN, IN, EXISTS, IS NULL, LIKE, subqueries, function calls, EXTRACT, POSITION, SUBSTRING, INTERVAL
+- Clause serialization: WHERE, JOIN, ORDER BY, GROUP BY, HAVING, LIMIT, OFFSET, FETCH, FOR UPDATE, window functions, DISTINCT ON, LATERAL, RETURNING, ON CONFLICT
+- 29 roundtrip tests verifying `parse(sql).SQL()` → parse again → idempotent
+
+#### AST-based SQL Formatter with Style Presets (PR #265, closes #244)
+- `FormatOptions` struct with configurable indent style (spaces/tabs), indent width, keyword case (upper/lower/preserve), line width
+- **CompactStyle**: Minimal whitespace, single-line output, preserved keyword case
+- **ReadableStyle**: Indented, keywords uppercase, one clause per line, semicolons
+- `gosqlx.Format()` updated to use AST-based formatting
+- 12 tests covering both styles, keyword casing, roundtrip verification, all major statement types
+
+#### DDL Statement Formatters (PR #284, closes #271)
+- `Format()` methods for: AlterTableStatement (ADD/DROP COLUMN, constraints, multi-action), CreateIndexStatement (UNIQUE, IF NOT EXISTS, USING, WHERE), CreateViewStatement (OR REPLACE, TEMPORARY), CreateMaterializedViewStatement (TABLESPACE, WITH DATA), RefreshMaterializedViewStatement (CONCURRENTLY), DropStatement (IF EXISTS, CASCADE/RESTRICT), TruncateStatement (RESTART/CONTINUE IDENTITY)
+- 23 new tests covering compact and readable styles
+
+#### Error Recovery for Multi-Error Parsing (PR #236, closes #218)
+- Parser error recovery: synchronizes to next statement on error and continues parsing
+- Returns partial AST with all collected errors for IDE-quality diagnostics
+
+#### ParseWithRecovery API + LSP Integration (PR #264, closes #245)
+- `gosqlx.ParseWithRecovery()` high-level API returning partial AST and all errors
+- LSP `validateDocument` upgraded to use `ParseWithRecovery` for multi-error diagnostics
+- 8 new LSP functional tests covering diagnostics, completion, and hover
+
+#### Dollar-Quoted String Support (PR #233, closes #217)
+- PostgreSQL `$$body$$` and `$tag$body$tag$` syntax in tokenizer
+- Handles empty tags, named tags, nesting, multiline, unterminated errors
+- Security scanner strips dollar-quoted content to prevent bypass and false positives
+- 13 tokenizer + 5 security tests
+
+#### Schema-Aware Validation Package (PR #209, closes #82)
+- `pkg/schema/` with constraint validation: NOT NULL checking for INSERT/UPDATE
+- Type compatibility checking for INSERT values vs column types
+- Foreign key integrity validation
+- Object pooling for validation maps; case-insensitive table/column lookups
+
+#### Query Optimization Engine (PR #210, closes #81)
+- `pkg/advisor/` (renamed from `pkg/optimizer/` in PR #261) with 12 optimization rules
+- Rules OPT-001 through OPT-012: SELECT * detection, missing WHERE, Cartesian products, DISTINCT overuse, subquery in WHERE, OR in WHERE, leading wildcard LIKE, function on indexed column, N+1 query detection, index recommendations, join order optimization, query cost estimation
 - CLI command `gosqlx optimize` with text/JSON output
 - Complexity scoring and query classification
 
-### Added - Schema Validation Extensions (PR #209, closes #82)
-- Constraint validation: NOT NULL checking for INSERT/UPDATE
-- Type compatibility checking for INSERT values vs column types
-- Foreign key integrity validation
-- Object pooling for validation maps
-- Case-insensitive table/column lookups
-
-### Added - SQL Dialect Support (PR #211)
+#### Snowflake Dialect Support (PR #211)
 - Snowflake dialect keyword detection and support
 - Multi-dialect detection engine with weighted scoring
 - Dialect-specific keyword sets for Snowflake, PostgreSQL, MySQL, SQL Server, Oracle, SQLite
 
-### Fixed
-- Relaxed performance baselines for CI runner variability
-- Standardized token types in Snowflake keywords
-- Optimized dialect hint scanning with scan length limit
+#### Python Bindings Foundation (PR #208, closes #75)
+- CGo shared library (`pkg/cbinding/`) for FFI integration
+- Python package `pygosqlx` with parse, validate, format, extract_tables APIs
+- Thread-safe and memory-safe via ctypes FFI
+
+#### GitHub Action for SQL Lint + Validation (PRs #237, #259, closes #223, #242)
+- GitHub Action published to marketplace as **GoSQLX Lint Action**
+- Inputs: `sql-files`, `rules`, `severity`, `config`, `timeout`
+- PR annotations (`::error`, `::warning`), SARIF output support
+- Rewritten in Go as `gosqlx action` subcommand (PR #310, closes #251) for better error handling
+
+#### Public Formatter Package (PR #307)
+- `pkg/formatter/` with clean public API: `formatter.New(opts).Format(sql)` and `formatter.FormatString(sql)`
+
+#### VSCode Extension + Editor LSP Docs (PR #263, closes #246)
+- Updated VSCode extension for marketplace publishing
+- Added Neovim and JetBrains LSP configuration documentation
+
+#### Replace DebugLogger with slog (PR #262, closes #224)
+- Custom `DebugLogger` interface replaced with Go standard `log/slog` (Go 1.21+)
+- `SetLogger(*slog.Logger)` method replaces `SetDebugLogger`
+- Structured debug logging guarded by level checks (zero cost when disabled)
+
+---
+
+### 🐛 Bug Fixes
+
+#### Batch 1 — Critical Bug Fixes (PR #304, closes #288, #289, #291)
+- **INSERT ... SELECT**: Parser now accepts `INSERT INTO ... SELECT` in addition to `INSERT INTO ... VALUES` with UNION support
+- **Non-zero exit codes**: `format` and `lint` CLI commands now return non-zero exit codes on failure
+- **SetLimit validation**: Added test coverage for negative values and zero
+
+#### Batch 2 — UX/Consistency Fixes (PR #305, closes #290, #292, #294, #295)
+- **Consistent inline SQL handling** for format/validate/lint commands
+- **RemoveColumn** now returns error for missing columns instead of silent no-op
+- **TTY detection**: CLI shows help instead of hanging when no input is piped
+- **Trailing newline** added to format output
+- Narrowed `InsertStatement.Query` to `QueryExpression` interface
+- Named `Formatter` interface replaces ad-hoc type assertions
+
+#### Batch 3 — Parser Strictness (PR #306, closes #296, #300)
+- `SELECT FROM users` (missing column list) now returns error
+- `SELECT * FROM users WHERE` (incomplete WHERE) now returns error
+- `SELECT * FROM` (missing table name) now returns error
+- `SELECT * FROM t1, t2` comma-separated tables now parse correctly
+- `WithStrictMode()` parser option that rejects empty statements between semicolons
+
+#### Batch 4 — Enhancements (PR #307, closes #273, #293, #297, #298, #299)
+- **validate --check** quiet mode: `--check` alias for `--quiet`, only exit code produced
+- **Wide SELECT proven O(n)**: Benchmark confirmed linear scaling (100→5000 columns)
+- Pre-allocated columns/groupBy slices to reduce allocations
+- Benchmark CI job fix: added `-run=^$` to skip regular tests, `-timeout=5m` safety net
+- Additional UPSERT edge case test coverage
+
+#### Architect Review Quick Wins (PR #312)
+- Fixed `lintFile` ignoring `--rules` flag (functional bug)
+- Added WASM build verification to CI
+- Expanded golangci-lint config with misspell, gocritic checks
+
+#### Other Fixes
+- Fixed flaky `TestParseContext_Timeout` on Windows (PR #266)
+- Consolidated `UpdateStatement` dual fields (PR #229, closes #216)
+- Updated schema package to use `Assignments` instead of removed `Updates` field (PR #240)
+- Removed legacy build tags for govet CI fix (PR #239)
+
+---
+
+### ⚡ Performance
+
+#### ~50% Faster Parsing via Token Type Unification (PRs #252, #254, #255, #257, #258, #281, #267, #282, #283)
+- All token type checks now use O(1) integer comparison instead of string comparison
+- `matchToken()` migrated to O(1) `matchType()` across all 59 call sites
+- Benchmark results on Apple M4:
+  - SimpleSelect 10 cols: 1542 → 783 ns/op (**49% faster**)
+  - SimpleSelect 100 cols: 9736 → 4843 ns/op (**50% faster**)
+  - SimpleSelect 1000 cols: 83612 → 39487 ns/op (**53% faster**)
+  - SingleJoin: 1425 → 621 ns/op (**56% faster**)
+  - SimpleWhere: 736 → 373 ns/op (**49% faster**)
+
+#### Validate() Fast Path (PR #308, closes #274)
+- Skip full AST construction for validation-only calls
+
+#### ParseBytes Zero-Copy (PR #308, closes #277)
+- Avoid `string([]byte)` allocation in `ParseBytes`
+
+#### Pool TokenConverter (PR #278, closes #269)
+- Eliminate per-call map allocation via sync.Pool
+
+#### Reduced Parser Test Runtime (PR #287, closes #273)
+- Faster test suite execution
+
+#### Full Pipeline Benchmark (PR #231, closes #222)
+- `BenchmarkFullPipeline` covering tokenize→convert→parse for 10 query types
+- `BenchmarkParseError` benchmarking error handling paths
+
+---
+
+### 🔧 Refactoring
+
+#### Token Type Unification — Complete (#215, PRs #252, #254, #255, #257, #258, #281, #267, #282, #283)
+- **Phase 1** (PR #252): `TokenType.String()` switch-based implementation, `ParseFromModelTokens()` entry point
+- **Phase 2A** (PR #254): Core parser token infrastructure migration
+- **Phase 2B** (PR #255): Remaining parser files migration
+- **Phase 2C** (PR #257): Test files migration to `models.TokenType`
+- **Phase 3A** (PR #258): `matchToken()` and remaining string Type usage migrated
+- **Phase 3B** (PRs #281, #267): `ConvertTokensForParser` eliminated, `token_converter.go` deleted (~1,100 net lines removed)
+- **Phase 4A** (PR #282): `matchToken()` to O(1) int comparison (~50% faster)
+- **Phase 4B** (PR #283): **BREAKING** — Legacy `token.Type` string system removed, `ModelType` renamed to `Type`, net -1,680 lines
+
+#### Split cmd/ Package into Sub-Packages (PR #314)
+- Extracted `cmd/gosqlx/internal/lspcmd/`, `actioncmd/`, `optimizecmd/`, `cmdutil/`
+- Each sub-package exports `NewCmd()` returning `*cobra.Command`
+- Pure structural refactor, no behavior changes
+
+#### Rename pkg/optimizer → pkg/advisor (PR #261, closes #243)
+- Better reflects static analysis nature (pattern-matching rules, not query optimization)
+
+#### Replace DebugLogger with slog (PR #262, closes #224)
+- Replaces custom interface with Go standard `log/slog`
+
+#### Resolve Remaining TODOs (PR #260, closes #248)
+- Cleaned up tracked TODO items across the codebase
+
+---
+
+### 🔒 Security
+
+#### Enhanced Security Scanner (PR #308, closes #276)
+- LIKE injection detection patterns
+- Blind injection detection (time-based, boolean-based)
+- Enhanced tautology detection
+- Rule registry architecture for extensible pattern matching
+- Dollar-quoted string stripping prevents bypass and false positives (PR #233)
+
+---
+
+### 📦 CI/CD
+
+- Consolidated CI workflows and updated action versions (PR #286)
+- Re-enabled errcheck, govet, staticcheck linters (PR #235, closes #219)
+- Lowered Go version requirement to 1.21+ (PR #228, closes #213)
+- Added dedicated `-race` test CI job (PR #313)
+- Added WASM build verification to CI (PR #312)
+- Expanded golangci-lint config with misspell, gocritic (PR #312)
+- GitHub Action rewritten in Go for reliability (PR #310, closes #251)
+
+---
+
+### 📚 Documentation
+
+- Fixed README accuracy issues and updated for v1.7.0 (PR #207)
+- Added VSCode extension and editor LSP setup documentation (PR #263)
+- 5 documented transform API examples in `examples/transform/`
+- Added `ACTION_README.md` for GitHub Action usage
+
+---
+
+### ⚠️ Breaking Changes
+
+#### Token Type System Overhaul (PR #283, closes #215)
+
+The legacy string-based `token.Type` system has been removed entirely. This is a breaking change for code that directly references the old string-based token types.
+
+```go
+// Before (v1.7.0 — string-based):
+tok := token.Token{Type: token.SELECT, ModelType: models.TokenTypeSelect, Literal: "SELECT"}
+if tok.Type == token.SELECT { ... }
+
+// After (v1.8.0 — int-based):
+tok := token.Token{Type: models.TokenTypeSelect, Literal: "SELECT"}
+if tok.Type == models.TokenTypeSelect { ... }
+```
+
+**What changed:**
+- Removed `type Type string` from `pkg/sql/token`
+- Removed `Type` (string) field from `token.Token` struct
+- Renamed `ModelType` field to `Type` in `token.Token` (now `models.TokenType` int)
+- Removed all string-based token constants (`token.SELECT`, `token.FROM`, etc.)
+- Removed `stringTypeToModelType` bridge map and `normalizeTokens()`
+
+**Who is affected:** Only users who directly access `token.Token` fields or use string-based token constants from `pkg/sql/token`. Users of the high-level `gosqlx.Parse()` / `gosqlx.Validate()` API are **not affected**.
+
+See [docs/MIGRATION.md](docs/MIGRATION.md) for detailed migration instructions.
+
+---
+
+### 🧪 Testing
+
+- Fuzz testing for parser, security scanner, and formatter (PR #279, closes #270)
+- AST and models test coverage boost (PR #280, closes #268)
+- Negative parser test suite with pool contamination tests (PR #232, closes #220)
+- Real-world SQL test corpus: TPC-H, TPC-DS, ORM patterns (PR #238, closes #225)
+- Parser fuzz tests (PR #230, closes #214)
+- Parser coverage improved from 79.8% to 84.7% (PR #206)
+- gosqlx package coverage improved from 71.6% to 84.0% (PR #313)
+- Added comprehensive MySQL test suite with 30 test data files (PR #316)
+
+---
+
+### 🔄 License
+
+- Relicensed from AGPL to **Apache License 2.0** (PR #227, closes #212)
+
+---
 
 ## [1.7.0] - 2026-02-12 - Parser Enhancements: Schema-Qualified Names, Array/Regex Operators & SQL Standards
 
@@ -1082,7 +1382,8 @@ This substantial test coverage increase provides strong confidence in the AST pa
 
 | Version | Release Date | Status | Key Features |
 |---------|--------------|--------|--------------|
-| 1.7.0 | 2026-02-12 | Current | Schema-qualified names, Parser Batches 5-8, quoted identifiers fix |
+| 1.8.0 | 2026-02-24 | Current | Dialect engine, MySQL support, Query Transform API, WASM, Token type overhaul |
+| 1.7.0 | 2026-02-12 | Previous | Schema-qualified names, Parser Batches 5-8, quoted identifiers fix |
 | 1.6.0 | 2025-12-09 | Previous | PostgreSQL Extensions, LSP Server, VSCode Extension, 14x faster tokens |
 | 1.5.0 | 2025-11-15 | Stable | Phase 1 Test Coverage: CLI 63.3%, Parser 75%, Tokenizer 76.5% |
 | 1.4.0 | 2025-09-07 | Previous | Production CLI, high-performance commands, memory leak fixes |
@@ -1114,7 +1415,8 @@ For questions about upgrading or changelog entries:
 - Open an issue: https://github.com/ajitpratap0/GoSQLX/issues
 - Join discussions: https://github.com/ajitpratap0/GoSQLX/discussions
 
-[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/ajitpratap0/GoSQLX/compare/v1.5.0...v1.5.1

@@ -213,6 +213,120 @@ func TestTSQL_TargetAsColumnName(t *testing.T) {
 	}
 }
 
+func TestTSQL_WithNolock(t *testing.T) {
+	sql := `SELECT id, name FROM users WITH (NOLOCK) WHERE active = 1`
+	result, err := ParseWithDialect(sql, keywords.DialectSQLServer)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	stmt, ok := result.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatal("expected SelectStatement")
+	}
+	if len(stmt.From) == 0 {
+		t.Fatal("expected FROM clause")
+	}
+	if len(stmt.From[0].TableHints) != 1 {
+		t.Fatalf("expected 1 table hint, got %d", len(stmt.From[0].TableHints))
+	}
+	if stmt.From[0].TableHints[0] != "NOLOCK" {
+		t.Errorf("expected hint 'NOLOCK', got %q", stmt.From[0].TableHints[0])
+	}
+}
+
+func TestTSQL_WithMultipleHints(t *testing.T) {
+	sql := `SELECT id FROM orders WITH (ROWLOCK, UPDLOCK) WHERE status = 'pending'`
+	result, err := ParseWithDialect(sql, keywords.DialectSQLServer)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	stmt := result.Statements[0].(*ast.SelectStatement)
+	if len(stmt.From[0].TableHints) != 2 {
+		t.Fatalf("expected 2 table hints, got %d", len(stmt.From[0].TableHints))
+	}
+	if stmt.From[0].TableHints[0] != "ROWLOCK" {
+		t.Errorf("expected hint 'ROWLOCK', got %q", stmt.From[0].TableHints[0])
+	}
+	if stmt.From[0].TableHints[1] != "UPDLOCK" {
+		t.Errorf("expected hint 'UPDLOCK', got %q", stmt.From[0].TableHints[1])
+	}
+}
+
+func TestTSQL_WithNolockAlias(t *testing.T) {
+	sql := `SELECT u.id FROM users u WITH (NOLOCK) WHERE u.active = 1`
+	result, err := ParseWithDialect(sql, keywords.DialectSQLServer)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	stmt := result.Statements[0].(*ast.SelectStatement)
+	if stmt.From[0].Alias != "u" {
+		t.Errorf("expected alias 'u', got %q", stmt.From[0].Alias)
+	}
+	if len(stmt.From[0].TableHints) != 1 {
+		t.Fatalf("expected 1 table hint, got %d", len(stmt.From[0].TableHints))
+	}
+	if stmt.From[0].TableHints[0] != "NOLOCK" {
+		t.Errorf("expected hint 'NOLOCK', got %q", stmt.From[0].TableHints[0])
+	}
+}
+
+func TestTSQL_TopWithTies(t *testing.T) {
+	sql := `SELECT TOP 10 WITH TIES id, salary FROM employees ORDER BY salary DESC`
+	result, err := ParseWithDialect(sql, keywords.DialectSQLServer)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	stmt, ok := result.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatal("expected SelectStatement")
+	}
+	if stmt.Top == nil {
+		t.Fatal("expected Top clause")
+	}
+	lit, ok := stmt.Top.Count.(*ast.LiteralValue)
+	if !ok {
+		t.Fatalf("expected LiteralValue, got %T", stmt.Top.Count)
+	}
+	if lit.Value != "10" {
+		t.Errorf("expected '10', got %q", lit.Value)
+	}
+	if stmt.Top.IsPercent {
+		t.Error("expected IsPercent=false")
+	}
+	if !stmt.Top.WithTies {
+		t.Error("expected WithTies=true")
+	}
+}
+
+func TestTSQL_TopPercentWithTies(t *testing.T) {
+	sql := `SELECT TOP (10) PERCENT WITH TIES id FROM employees ORDER BY salary DESC`
+	result, err := ParseWithDialect(sql, keywords.DialectSQLServer)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	stmt := result.Statements[0].(*ast.SelectStatement)
+	if stmt.Top == nil {
+		t.Fatal("expected Top clause")
+	}
+	if !stmt.Top.IsPercent {
+		t.Error("expected IsPercent=true")
+	}
+	if !stmt.Top.WithTies {
+		t.Error("expected WithTies=true")
+	}
+}
+
+func TestTSQL_OuterWithoutApplyError(t *testing.T) {
+	sql := `SELECT * FROM users u OUTER JOIN orders o ON u.id = o.user_id`
+	_, err := ParseWithDialect(sql, keywords.DialectSQLServer)
+	if err == nil {
+		t.Fatal("expected error for OUTER without APPLY")
+	}
+	if !strings.Contains(err.Error(), "APPLY") {
+		t.Errorf("expected error to mention APPLY, got: %v", err)
+	}
+}
+
 // TestTSQL_TestdataFiles validates all testdata/mssql/ files that should parse
 func TestTSQL_TestdataFiles(t *testing.T) {
 	// Files that are expected to pass

@@ -237,10 +237,11 @@ func (j JoinClause) Children() []Node {
 //
 // New in v1.6.0: Lateral field for PostgreSQL LATERAL JOIN support.
 type TableReference struct {
-	Name     string           // Table name (empty if this is a derived table)
-	Alias    string           // Optional alias
-	Subquery *SelectStatement // For derived tables: (SELECT ...) AS alias
-	Lateral  bool             // LATERAL keyword for correlated subqueries (PostgreSQL)
+	Name       string           // Table name (empty if this is a derived table)
+	Alias      string           // Optional alias
+	Subquery   *SelectStatement // For derived tables: (SELECT ...) AS alias
+	Lateral    bool             // LATERAL keyword for correlated subqueries (PostgreSQL)
+	TableHints []string         // SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
 }
 
 func (t *TableReference) statementNode() {}
@@ -423,6 +424,7 @@ type SelectStatement struct {
 type TopClause struct {
 	Count     Expression // Number of rows (or percentage) as an expression
 	IsPercent bool       // Whether PERCENT keyword was specified
+	WithTies  bool       // Whether WITH TIES was specified (SQL Server)
 }
 
 func (t *TopClause) expressionNode()     {}

@@ -68,6 +68,8 @@ func DialectKeywords(dialect SQLDialect) []Keyword {
 		return POSTGRESQL_SPECIFIC
 	case DialectSQLite:
 		return SQLITE_SPECIFIC
+	case DialectSQLServer:
+		return SQLSERVER_SPECIFIC
 	default:
 		return nil
 	}
@@ -201,4 +203,28 @@ var SQLITE_SPECIFIC = []Keyword{
 	{Word: "TEMPORARY", Type: models.TokenTypeKeyword},
 	{Word: "VACUUM", Type: models.TokenTypeKeyword},
 	{Word: "VIRTUAL", Type: models.TokenTypeKeyword},
+}
+
+// SQLSERVER_SPECIFIC contains SQL Server (T-SQL) specific keywords and extensions.
+// These keywords are recognized when using DialectSQLServer.
+//
+// Examples: NOLOCK, ROWLOCK, ISNULL, NVARCHAR, SCOPE_IDENTITY
+var SQLSERVER_SPECIFIC = []Keyword{
+	{Word: "NOLOCK", Type: models.TokenTypeKeyword},
+	{Word: "ROWLOCK", Type: models.TokenTypeKeyword},
+	{Word: "UPDLOCK", Type: models.TokenTypeKeyword},
+	{Word: "HOLDLOCK", Type: models.TokenTypeKeyword},
+	{Word: "READPAST", Type: models.TokenTypeKeyword},
+	{Word: "GETDATE", Type: models.TokenTypeKeyword},
+	{Word: "GETUTCDATE", Type: models.TokenTypeKeyword},
+	{Word: "SYSDATETIME", Type: models.TokenTypeKeyword},
+	{Word: "NEWID", Type: models.TokenTypeKeyword},
+	{Word: "ISNULL", Type: models.TokenTypeKeyword},
+	{Word: "NVARCHAR", Type: models.TokenTypeKeyword},
+	{Word: "DATETIME2", Type: models.TokenTypeKeyword},
+	{Word: "UNIQUEIDENTIFIER", Type: models.TokenTypeKeyword},
+	{Word: "INSERTED", Type: models.TokenTypeKeyword},
+	{Word: "DELETED", Type: models.TokenTypeKeyword},
+	{Word: "SCOPE_IDENTITY", Type: models.TokenTypeKeyword},
+	{Word: "OUTPUT", Type: models.TokenTypeKeyword},
 }

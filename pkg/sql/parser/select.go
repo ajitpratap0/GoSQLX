@@ -491,6 +491,12 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			topClause.IsPercent = true
 			p.advance() // Consume PERCENT
 		}
+		// Check for optional WITH TIES
+		if p.isType(models.TokenTypeWith) && p.peekToken().Type == models.TokenTypeTies {
+			topClause.WithTies = true
+			p.advance() // Consume WITH
+			p.advance() // Consume TIES
+		}
 	}
 
 	// Parse columns — pre-allocate to reduce repeated slice growth
@@ -649,6 +655,8 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 				if p.currentToken.Type == models.TokenTypeIdentifier && strings.ToUpper(p.currentToken.Literal) == "APPLY" {
 					joinType = "OUTER APPLY"
 					p.advance() // Consume APPLY
+				} else {
+					return nil, p.expectedError("APPLY after OUTER (SQL Server OUTER APPLY)")
 				}
 			}
 
@@ -741,6 +749,17 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 				if p.isIdentifier() {
 					joinedTableRef.Alias = p.currentToken.Literal
 					p.advance()
+				}
+			}
+
+			// SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
+			if p.dialect == string(keywords.DialectSQLServer) && p.isType(models.TokenTypeWith) {
+				if p.peekToken().Type == models.TokenTypeLParen {
+					hints, err := p.parseTableHints()
+					if err != nil {
+						return nil, err
+					}
+					joinedTableRef.TableHints = hints
 				}
 			}
 
@@ -1162,7 +1181,47 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		}
 	}
 
+	// SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
+	if p.dialect == string(keywords.DialectSQLServer) && p.isType(models.TokenTypeWith) {
+		if p.peekToken().Type == models.TokenTypeLParen {
+			hints, err := p.parseTableHints()
+			if err != nil {
+				return tableRef, err
+			}
+			tableRef.TableHints = hints
+		}
+	}
+
 	return tableRef, nil
+}
+
+// parseTableHints parses SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
+// Called when current token is WITH and peek is LParen.
+func (p *Parser) parseTableHints() ([]string, error) {
+	p.advance() // Consume WITH
+	p.advance() // Consume (
+
+	var hints []string
+	for {
+		if p.isType(models.TokenTypeRParen) {
+			break
+		}
+		hint := strings.ToUpper(p.currentToken.Literal)
+		if hint == "" {
+			return nil, p.expectedError("table hint inside WITH (...)")
+		}
+		hints = append(hints, hint)
+		p.advance()
+		// Consume optional comma between hints
+		if p.isType(models.TokenTypeComma) {
+			p.advance()
+		}
+	}
+	if !p.isType(models.TokenTypeRParen) {
+		return nil, p.expectedError(") after table hints")
+	}
+	p.advance() // Consume )
+	return hints, nil
 }
 
 // parseSelectWithSetOperations parses SELECT statements that may have set operations.

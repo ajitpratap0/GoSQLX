@@ -259,6 +259,14 @@ func New(dialect SQLDialect, ignoreCase bool) *Keywords {
 		k.addKeywordsWithCategory(SNOWFLAKE_SPECIFIC)
 	}
 
+	// Build O(1) lookup cache for compound keyword first-words
+	k.compoundKeywordStarts = make(map[string]bool, len(k.CompoundKeywords))
+	for compound := range k.CompoundKeywords {
+		if idx := strings.Index(compound, " "); idx > 0 {
+			k.compoundKeywordStarts[compound[:idx]] = true
+		}
+	}
+
 	return k
 }
 

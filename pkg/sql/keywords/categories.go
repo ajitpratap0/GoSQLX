@@ -28,10 +28,11 @@ type Keywords struct {
 	CompoundKeywords KeywordCategory
 
 	// Core keyword mapping and configuration
-	keywordMap       map[string]Keyword
-	reservedKeywords map[string]bool
-	dialect          SQLDialect
-	ignoreCase       bool
+	keywordMap              map[string]Keyword
+	reservedKeywords        map[string]bool
+	compoundKeywordStarts   map[string]bool // O(1) lookup for first words of compound keywords
+	dialect                 SQLDialect
+	ignoreCase              bool
 }
 
 // NewKeywords creates a new Keywords instance

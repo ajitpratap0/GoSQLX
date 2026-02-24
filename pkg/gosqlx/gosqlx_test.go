@@ -1,3 +1,17 @@
+// Copyright 2026 GoSQLX Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package gosqlx
 
 import (
@@ -237,6 +251,55 @@ func TestParseMultiple(t *testing.T) {
 			t.Errorf("ParseMultiple() should return empty slice for no queries")
 		}
 	})
+}
+
+func TestParseMultiple_StateIsolation(t *testing.T) {
+	// Verify that parser state (depth, dialect, strict) is fully reset between
+	// queries in a batch. A complex query followed by a simple one must not
+	// carry over any residual state.
+	queries := []string{
+		// Complex nested query that exercises recursion depth
+		"SELECT * FROM (SELECT id, name FROM (SELECT * FROM users) AS inner_t) AS outer_t WHERE id > 1",
+		// Simple query — must parse cleanly with no leftover depth/state
+		"SELECT 1",
+		// INSERT to confirm different statement types work after SELECT
+		"INSERT INTO logs (msg) VALUES ('ok')",
+		// Window function to exercise a different parser path
+		"SELECT name, ROW_NUMBER() OVER (ORDER BY id) AS rn FROM users",
+		// Another simple query at the end
+		"DELETE FROM temp WHERE id = 1",
+	}
+
+	asts, err := ParseMultiple(queries)
+	if err != nil {
+		t.Fatalf("ParseMultiple() state isolation failed: %v", err)
+	}
+
+	if len(asts) != len(queries) {
+		t.Fatalf("ParseMultiple() returned %d ASTs, want %d", len(asts), len(queries))
+	}
+
+	for i, a := range asts {
+		if a == nil {
+			t.Errorf("ParseMultiple() AST %d is nil", i)
+			continue
+		}
+		if len(a.Statements) == 0 {
+			t.Errorf("ParseMultiple() AST %d has no statements", i)
+		}
+	}
+
+	// Verify each query also parses identically when parsed individually
+	for i, sql := range queries {
+		individual, err := Parse(sql)
+		if err != nil {
+			t.Fatalf("Parse() for query %d failed: %v", i, err)
+		}
+		if len(individual.Statements) != len(asts[i].Statements) {
+			t.Errorf("query %d: ParseMultiple produced %d statements, Parse produced %d",
+				i, len(asts[i].Statements), len(individual.Statements))
+		}
+	}
 }
 
 func TestValidateMultiple(t *testing.T) {

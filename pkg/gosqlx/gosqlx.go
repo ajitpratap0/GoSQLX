@@ -1,3 +1,17 @@
+// Copyright 2026 GoSQLX Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // Package gosqlx provides high-level convenience functions for SQL parsing, validation,
 // and metadata extraction with automatic object pool management.
 //
@@ -399,8 +413,11 @@ func ParseMultiple(queries []string) ([]*ast.AST, error) {
 	results := make([]*ast.AST, 0, len(queries))
 
 	for i, sql := range queries {
-		// Reset tokenizer state between queries
+		// Reset tokenizer and parser state between queries to ensure full isolation.
+		// Without parser reset, residual state (depth, dialect, strict) could leak
+		// between queries in the batch.
 		tkz.Reset()
+		p.Reset()
 
 		// Tokenize
 		tokens, err := tkz.Tokenize([]byte(sql))

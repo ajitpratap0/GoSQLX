@@ -1,3 +1,17 @@
+// Copyright 2026 GoSQLX Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // Package errors provides a structured error system for GoSQLX v1.6.0 with rich context,
 // intelligent suggestions, and comprehensive error codes.
 //
@@ -157,7 +171,7 @@
 //	//   2 |
 //	//
 //	// Hint: Did you mean 'FROM' instead of 'FORM'?
-//	// Help: https://docs.gosqlx.dev/errors/E2002
+//	// Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md
 //
 //	// Brief summary for logging
 //	summary := errors.FormatErrorSummary(err)

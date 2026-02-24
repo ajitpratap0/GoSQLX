@@ -126,12 +126,7 @@ func (k *Keywords) IsCompoundKeywordStart(word string) bool {
 	if k.ignoreCase {
 		word = strings.ToUpper(word)
 	}
-	for compound := range k.CompoundKeywords {
-		if strings.HasPrefix(compound, word+" ") {
-			return true
-		}
-	}
-	return false
+	return k.compoundKeywordStarts[word]
 }
 
 // MYSQL_SPECIFIC contains MySQL-specific keywords and extensions.

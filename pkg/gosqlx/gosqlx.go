@@ -37,8 +37,8 @@
 //	tkz := tokenizer.GetTokenizer()
 //	defer tokenizer.PutTokenizer(tkz)
 //
-//	p := parser.NewParser()
-//	defer p.Release()
+//	p := parser.GetParser()
+//	defer parser.PutParser(p)
 //
 //	// Reuse objects for multiple queries
 //	for _, sql := range queries {
@@ -53,6 +53,7 @@ package gosqlx
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -142,8 +143,8 @@ func Parse(sql string) (*ast.AST, error) {
 	}
 
 	// Step 3: Parse to AST directly from model tokens
-	p := parser.NewParser()
-	defer p.Release()
+	p := parser.GetParser()
+	defer parser.PutParser(p)
 
 	astNode, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
@@ -229,8 +230,8 @@ func ParseWithContext(ctx context.Context, sql string) (*ast.AST, error) {
 	}
 
 	// Step 3: Parse to AST with context support
-	p := parser.NewParser()
-	defer p.Release()
+	p := parser.GetParser()
+	defer parser.PutParser(p)
 
 	astNode, err := p.ParseContextFromModelTokens(ctx, tokens)
 	if err != nil {
@@ -271,9 +272,13 @@ func ParseWithTimeout(sql string, timeout time.Duration) (*ast.AST, error) {
 //
 // Returns nil if SQL is valid, or an error describing the problem.
 func Validate(sql string) error {
-	// Just use Parse and discard the result
-	// This ensures validation is comprehensive
-	_, err := Parse(sql)
+	// Reject empty/whitespace-only input
+	if len(strings.TrimSpace(sql)) == 0 {
+		return fmt.Errorf("invalid SQL: empty input")
+	}
+
+	// Use the dedicated validation fast-path that avoids building a full AST
+	err := parser.ValidateBytes([]byte(sql))
 	if err != nil {
 		return fmt.Errorf("invalid SQL: %w", err)
 	}
@@ -388,8 +393,8 @@ func ParseMultiple(queries []string) ([]*ast.AST, error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 
-	p := parser.NewParser()
-	defer p.Release()
+	p := parser.GetParser()
+	defer parser.PutParser(p)
 
 	results := make([]*ast.AST, 0, len(queries))
 
@@ -433,8 +438,8 @@ func ValidateMultiple(queries []string) error {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 
-	p := parser.NewParser()
-	defer p.Release()
+	p := parser.GetParser()
+	defer parser.PutParser(p)
 
 	for i, sql := range queries {
 		tkz.Reset()
@@ -529,8 +534,8 @@ type FormatOptions struct {
 	// Default: 80 characters
 	// Recommended range: 80-120 characters
 	//
-	// Note: This is currently a placeholder for future implementation. The formatter
-	// will respect this value in a future release to provide intelligent line breaking.
+	// Deprecated: This field is reserved for future implementation and currently has no effect.
+	// It will be functional in a future release with intelligent line breaking support.
 	SingleLineLimit int
 }
 
@@ -599,8 +604,8 @@ func ParseWithRecovery(sql string) ([]ast.Statement, []error) {
 		return nil, []error{fmt.Errorf("tokenization failed: %w", err)}
 	}
 
-	p := parser.NewParser()
-	defer p.Release()
+	p := parser.GetParser()
+	defer parser.PutParser(p)
 
 	return p.ParseWithRecoveryFromModelTokens(tokens)
 }

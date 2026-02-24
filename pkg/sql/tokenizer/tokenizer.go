@@ -728,6 +728,22 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 	}
 
 	ident := string(t.input[start:t.pos.Index])
+
+	// SQL Server dialect: N'...' national string literal
+	if t.dialect == keywords.DialectSQLServer && (ident == "N" || ident == "n") {
+		if t.pos.Index < len(t.input) && t.input[t.pos.Index] == '\'' {
+			tok, err := t.readQuotedString('\'')
+			if err != nil {
+				return models.Token{}, err
+			}
+			return models.Token{
+				Type:  models.TokenTypeNationalStringLiteral,
+				Value: tok.Value,
+				Quote: 'N',
+			}, nil
+		}
+	}
+
 	word := &models.Word{
 		Value: ident,
 	}
@@ -1251,7 +1267,11 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 				ident = append(ident, t.input[t.pos.Index:t.pos.Index+chSize]...)
 				t.pos.AdvanceRune(ch, chSize)
 			}
-			return models.Token{}, fmt.Errorf("unterminated bracket identifier at position %d", t.pos.Index)
+			return models.Token{}, errors.InvalidSyntaxError(
+				"unterminated bracket identifier",
+				t.getCurrentPosition(),
+				string(t.input),
+			)
 		}
 		t.pos.AdvanceRune(r, size)
 		return models.Token{Type: models.TokenTypeLBracket, Value: "["}, nil
@@ -1470,9 +1490,23 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 				return models.Token{Type: models.TokenTypeAtArrow, Value: "@>"}, nil
 			}
 
-			// Check for @@ (full text search operator)
+			// Check for @@ (full text search operator or SQL Server global variable)
 			if nextR == '@' {
 				t.pos.AdvanceRune(nextR, nextSize)
+				// SQL Server dialect: @@NAME is a global variable identifier
+				if t.dialect == keywords.DialectSQLServer && t.pos.Index < len(t.input) {
+					peekR, _ := utf8.DecodeRune(t.input[t.pos.Index:])
+					if isIdentifierStart(peekR) {
+						identToken, err := t.readIdentifier()
+						if err != nil {
+							return models.Token{}, err
+						}
+						return models.Token{
+							Type:  models.TokenTypeIdentifier,
+							Value: "@@" + identToken.Value,
+						}, nil
+					}
+				}
 				return models.Token{Type: models.TokenTypeAtAt, Value: "@@"}, nil
 			}
 
@@ -1492,6 +1526,37 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		// Just a standalone @ symbol
 		return models.Token{Type: models.TokenTypeAtSign, Value: "@"}, nil
 	case '#':
+		// SQL Server dialect: #temp and ##global temp table identifiers
+		if t.dialect == keywords.DialectSQLServer {
+			start := t.pos.Index
+			t.pos.AdvanceRune(r, size) // consume first #
+			// Check for ## (global temp table)
+			if t.pos.Index < len(t.input) {
+				nextR, nextSize := utf8.DecodeRune(t.input[t.pos.Index:])
+				if nextR == '#' {
+					t.pos.AdvanceRune(nextR, nextSize) // consume second #
+				}
+			}
+			// Read the identifier part
+			if t.pos.Index < len(t.input) {
+				nextR, _ := utf8.DecodeRune(t.input[t.pos.Index:])
+				if isIdentifierStart(nextR) {
+					for t.pos.Index < len(t.input) {
+						cr, cs := utf8.DecodeRune(t.input[t.pos.Index:])
+						if !isIdentifierChar(cr) {
+							break
+						}
+						t.pos.AdvanceRune(cr, cs)
+					}
+					return models.Token{
+						Type:  models.TokenTypeIdentifier,
+						Value: string(t.input[start:t.pos.Index]),
+					}, nil
+				}
+			}
+			// Not followed by identifier — fall through to standalone #
+			return models.Token{Type: models.TokenTypeSharp, Value: string(t.input[start:t.pos.Index])}, nil
+		}
 		t.pos.AdvanceRune(r, size)
 		// Check for PostgreSQL JSON operators
 		if t.pos.Index < len(t.input) {

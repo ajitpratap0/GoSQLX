@@ -146,6 +146,7 @@ func (p *Parser) Reset() {
 	p.ctx = nil
 	p.positions = nil
 	p.strict = false
+	p.dialect = ""
 }
 
 // currentLocation returns the source location of the current token.

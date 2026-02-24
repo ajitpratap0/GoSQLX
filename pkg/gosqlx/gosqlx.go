@@ -460,6 +460,7 @@ func ValidateMultiple(queries []string) error {
 
 	for i, sql := range queries {
 		tkz.Reset()
+		p.Reset()
 
 		// Tokenize
 		tokens, err := tkz.Tokenize([]byte(sql))

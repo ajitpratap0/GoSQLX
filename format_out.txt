@@ -1,0 +1,7 @@
+SELECT
+user_id,
+  count(*)
+FROM users
+WHERE age > 18
+GROUP BY user_id
+ORDER BY count(*) DESC

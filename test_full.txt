@@ -1,0 +1,50 @@
+?   	github.com/ajitpratap0/GoSQLX	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/cmd/gosqlx	[no test files]
+ok  	github.com/ajitpratap0/GoSQLX/cmd/gosqlx/cmd	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/actioncmd	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/cmdutil	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config	(cached)
+?   	github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/lspcmd	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/optimizecmd	[no test files]
+ok  	github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/output	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/validate	(cached)
+?   	github.com/ajitpratap0/GoSQLX/examples	[no test files]
+ok  	github.com/ajitpratap0/GoSQLX/examples/cmd	(cached)
+?   	github.com/ajitpratap0/GoSQLX/examples/error-demo	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/examples/getting-started/01-hello-world	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/examples/linter-example	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/examples/multirow_insert	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/examples/postgresql/filter-clause	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/examples/postgresql/jsonb-operators	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/examples/postgresql/lateral-join	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/examples/postgresql/returning-clause	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/examples/sql-formatter	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/examples/sql-validator	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/examples/transform	[no test files]
+ok  	github.com/ajitpratap0/GoSQLX/pkg/advisor	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/cbinding	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/compatibility	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/config	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/errors	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/formatter	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/gosqlx	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/gosqlx/testing	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/linter	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/linter/rules	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/linter/rules/keywords	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/linter/rules/style	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/linter/rules/whitespace	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/lsp	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/metrics	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/models	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/schema	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/security	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/sql	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/sql/ast	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/sql/keywords	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/sql/monitor	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/sql/parser	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/sql/security	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/sql/token	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer	(cached)
+ok  	github.com/ajitpratap0/GoSQLX/pkg/transform	(cached)

@@ -1,0 +1,50 @@
+?   	github.com/ajitpratap0/GoSQLX	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/cmd/gosqlx	[no test files]
+ok  	github.com/ajitpratap0/GoSQLX/cmd/gosqlx/cmd	0.896s
+ok  	github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/actioncmd	1.225s
+ok  	github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/cmdutil	1.658s
+ok  	github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config	2.109s
+?   	github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/lspcmd	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/optimizecmd	[no test files]
+ok  	github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/output	2.565s
+ok  	github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/validate	3.037s
+?   	github.com/ajitpratap0/GoSQLX/examples	[no test files]
+ok  	github.com/ajitpratap0/GoSQLX/examples/cmd	3.503s
+?   	github.com/ajitpratap0/GoSQLX/examples/error-demo	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/examples/getting-started/01-hello-world	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/examples/linter-example	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/examples/multirow_insert	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/examples/postgresql/filter-clause	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/examples/postgresql/jsonb-operators	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/examples/postgresql/lateral-join	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/examples/postgresql/returning-clause	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/examples/sql-formatter	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/examples/sql-validator	[no test files]
+?   	github.com/ajitpratap0/GoSQLX/examples/transform	[no test files]
+ok  	github.com/ajitpratap0/GoSQLX/pkg/advisor	3.976s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/cbinding	3.313s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/compatibility	3.732s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/config	4.260s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/errors	4.600s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/formatter	4.654s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/gosqlx	4.672s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/gosqlx/testing	4.670s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/linter	4.662s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/linter/rules	4.688s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/linter/rules/keywords	4.659s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/linter/rules/style	4.662s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/linter/rules/whitespace	4.621s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/lsp	11.651s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/metrics	4.653s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/models	4.686s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/schema	4.652s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/security	4.625s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/sql	4.654s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/sql/ast	4.846s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/sql/keywords	4.541s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/sql/monitor	4.623s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/sql/parser	4.804s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/sql/security	4.173s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/sql/token	4.073s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer	4.198s
+ok  	github.com/ajitpratap0/GoSQLX/pkg/transform	4.107s

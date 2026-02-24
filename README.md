@@ -43,7 +43,7 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 
 ### Key Features
 
-- **Blazing Fast**: ~50% faster parsing in v1.8.0 via token type overhaul; 1.5M+ ops/sec peak throughput
+- **Blazing Fast**: ~50% faster parsing in v1.8.0 via token type overhaul; 1.25M+ ops/sec peak throughput
 - **Memory Efficient**: 60-80% reduction through intelligent object pooling
 - **Thread-Safe**: Race-free, linear scaling to 128+ cores, 0 race conditions detected
 - **Multi-Dialect Engine** (v1.8.0): First-class dialect support with `ParseWithDialect()` — PostgreSQL, MySQL, SQL Server, Oracle, SQLite, Snowflake
@@ -71,7 +71,7 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 
 <div align="center">
 
-| **~50%** | **1.5M+** | **<1μs** | **6** | **84%+** | **74** |
+| **~50%** | **1.25M+** | **<1μs** | **6** | **84%+** | **74** |
 |:---------:|:-------:|:----------:|:----------:|:-------:|:---------:|
 | Faster Parsing | Peak Ops/sec | Latency | SQL Dialects | Parser Coverage | New Commits |
 
@@ -162,21 +162,26 @@ See the full [PyGoSQLX documentation](python/README.md) for the complete API.
 
 ### CLI Usage
 
-**Standard Usage:**
+**Inline SQL:**
 ```bash
 # Validate SQL syntax
 gosqlx validate "SELECT * FROM users WHERE active = true"
 
+# Analyze SQL structure and complexity
+gosqlx analyze "SELECT COUNT(*) FROM orders GROUP BY status"
+```
+
+**File Processing:**
+```bash
 # Format SQL files with intelligent indentation
 gosqlx format -i query.sql
 
-# Analyze SQL structure and complexity
-gosqlx analyze "SELECT COUNT(*) FROM orders GROUP BY status"
-
 # Parse SQL to AST representation
 gosqlx parse -f json complex_query.sql
+```
 
-# Unix Pipeline Support
+**Pipeline/Stdin:**
+```bash
 cat query.sql | gosqlx format                    # Format from stdin
 echo "SELECT * FROM users" | gosqlx validate     # Validate from pipe
 gosqlx format query.sql | gosqlx validate        # Chain commands

@@ -1,6 +1,6 @@
 # GoSQLX SQL Feature Compatibility Matrix
 
-**Version**: v1.8.0 | **Last Updated**: February 2026
+**Version**: v1.8.0 | **Last Updated**: 2026-02-24
 
 ## Overview
 
@@ -722,7 +722,7 @@ gosqlx format --dialect mysql query.sql
 - **OFFSET-FETCH** - Standard row limiting
 - **Multi-dialect basic syntax**
 - **Unicode and international text**
-- **High-performance scenarios** (1.5M ops/sec peak)
+- **High-performance scenarios** (1.25M ops/sec peak)
 
 ### Suitable with Considerations
 
@@ -780,7 +780,7 @@ gosqlx format --dialect mysql query.sql
 
 ---
 
-**Last Updated**: February 2026
+**Last Updated**: 2026-02-24
 **GoSQLX Version**: 1.8.0
 **Test Suite Version**: 1.8.0
 **Total Test Cases**: 800+

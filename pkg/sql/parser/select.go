@@ -10,6 +10,7 @@ import (
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // parseColumnDef parses a column definition including column constraints
@@ -464,6 +465,40 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		p.advance()
 	}
 
+	// Parse SQL Server TOP clause: SELECT TOP n [PERCENT] ...
+	// Supports both TOP 10 and TOP (10) syntax
+	var topClause *ast.TopClause
+	if p.dialect == string(keywords.DialectSQLServer) && strings.ToUpper(p.currentToken.Literal) == "TOP" {
+		p.advance() // Consume TOP
+		// Support parenthesized expression: TOP (expr)
+		hasParen := p.isType(models.TokenTypeLParen)
+		if hasParen {
+			p.advance() // Consume (
+		}
+		countExpr, err := p.parsePrimaryExpression()
+		if err != nil {
+			return nil, fmt.Errorf("expected expression after TOP: %w", err)
+		}
+		if hasParen {
+			if !p.isType(models.TokenTypeRightParen) {
+				return nil, p.expectedError(") after TOP expression")
+			}
+			p.advance() // Consume )
+		}
+		topClause = &ast.TopClause{Count: countExpr}
+		// Check for optional PERCENT
+		if p.isType(models.TokenTypePercent) || (p.currentToken.Type == models.TokenTypeKeyword && strings.ToUpper(p.currentToken.Literal) == "PERCENT") {
+			topClause.IsPercent = true
+			p.advance() // Consume PERCENT
+		}
+		// Check for optional WITH TIES
+		if p.isType(models.TokenTypeWith) && p.peekToken().Type == models.TokenTypeTies {
+			topClause.WithTies = true
+			p.advance() // Consume WITH
+			p.advance() // Consume TIES
+		}
+	}
+
 	// Parse columns — pre-allocate to reduce repeated slice growth
 	columns := make([]ast.Expression, 0, 8)
 
@@ -609,6 +644,20 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			} else if p.isType(models.TokenTypeCross) {
 				joinType = "CROSS"
 				p.advance()
+				// SQL Server CROSS APPLY
+				if p.dialect == string(keywords.DialectSQLServer) && p.currentToken.Type == models.TokenTypeIdentifier && strings.ToUpper(p.currentToken.Literal) == "APPLY" {
+					joinType = "CROSS APPLY"
+					p.advance() // Consume APPLY
+				}
+			} else if p.isType(models.TokenTypeOuter) && p.dialect == string(keywords.DialectSQLServer) {
+				p.advance() // Consume OUTER
+				// SQL Server OUTER APPLY
+				if p.currentToken.Type == models.TokenTypeIdentifier && strings.ToUpper(p.currentToken.Literal) == "APPLY" {
+					joinType = "OUTER APPLY"
+					p.advance() // Consume APPLY
+				} else {
+					return nil, p.expectedError("APPLY after OUTER (SQL Server OUTER APPLY)")
+				}
 			}
 
 			// If NATURAL, prepend to join type
@@ -616,16 +665,20 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 				joinType = "NATURAL " + joinType
 			}
 
-			// Expect JOIN keyword
-			if !p.isType(models.TokenTypeJoin) {
-				return nil, goerrors.ExpectedTokenError(
-					"JOIN after "+joinType,
-					p.currentToken.Type.String(),
-					p.currentLocation(),
-					"",
-				)
+			// APPLY joins don't use JOIN keyword
+			isApply := joinType == "CROSS APPLY" || joinType == "OUTER APPLY"
+			if !isApply {
+				// Expect JOIN keyword
+				if !p.isType(models.TokenTypeJoin) {
+					return nil, goerrors.ExpectedTokenError(
+						"JOIN after "+joinType,
+						p.currentToken.Type.String(),
+						p.currentLocation(),
+						"",
+					)
+				}
+				p.advance() // Consume JOIN
 			}
-			p.advance() // Consume JOIN
 
 			var joinedTableRef ast.TableReference
 
@@ -699,11 +752,22 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 				}
 			}
 
+			// SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
+			if p.dialect == string(keywords.DialectSQLServer) && p.isType(models.TokenTypeWith) {
+				if p.peekToken().Type == models.TokenTypeLParen {
+					hints, err := p.parseTableHints()
+					if err != nil {
+						return nil, err
+					}
+					joinedTableRef.TableHints = hints
+				}
+			}
+
 			// Parse join condition (ON or USING)
 			var joinCondition ast.Expression
 
 			// CROSS JOIN and NATURAL JOIN don't require ON clause
-			isCrossJoin := joinType == "CROSS"
+			isCrossJoin := joinType == "CROSS" || isApply
 			if !isCrossJoin && !isNatural {
 				if p.isType(models.TokenTypeOn) {
 					p.advance() // Consume ON
@@ -801,6 +865,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	selectStmt := &ast.SelectStatement{
 		Distinct:          isDistinct,
 		DistinctOnColumns: distinctOnColumns,
+		Top:               topClause,
 		Columns:           columns,
 		From:              tables,
 		Joins:             joins,
@@ -1116,7 +1181,47 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		}
 	}
 
+	// SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
+	if p.dialect == string(keywords.DialectSQLServer) && p.isType(models.TokenTypeWith) {
+		if p.peekToken().Type == models.TokenTypeLParen {
+			hints, err := p.parseTableHints()
+			if err != nil {
+				return tableRef, err
+			}
+			tableRef.TableHints = hints
+		}
+	}
+
 	return tableRef, nil
+}
+
+// parseTableHints parses SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
+// Called when current token is WITH and peek is LParen.
+func (p *Parser) parseTableHints() ([]string, error) {
+	p.advance() // Consume WITH
+	p.advance() // Consume (
+
+	var hints []string
+	for {
+		if p.isType(models.TokenTypeRParen) {
+			break
+		}
+		hint := strings.ToUpper(p.currentToken.Literal)
+		if hint == "" {
+			return nil, p.expectedError("table hint inside WITH (...)")
+		}
+		hints = append(hints, hint)
+		p.advance()
+		// Consume optional comma between hints
+		if p.isType(models.TokenTypeComma) {
+			p.advance()
+		}
+	}
+	if !p.isType(models.TokenTypeRParen) {
+		return nil, p.expectedError(") after table hints")
+	}
+	p.advance() // Consume )
+	return hints, nil
 }
 
 // parseSelectWithSetOperations parses SELECT statements that may have set operations.

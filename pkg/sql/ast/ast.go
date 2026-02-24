@@ -237,10 +237,11 @@ func (j JoinClause) Children() []Node {
 //
 // New in v1.6.0: Lateral field for PostgreSQL LATERAL JOIN support.
 type TableReference struct {
-	Name     string           // Table name (empty if this is a derived table)
-	Alias    string           // Optional alias
-	Subquery *SelectStatement // For derived tables: (SELECT ...) AS alias
-	Lateral  bool             // LATERAL keyword for correlated subqueries (PostgreSQL)
+	Name       string           // Table name (empty if this is a derived table)
+	Alias      string           // Optional alias
+	Subquery   *SelectStatement // For derived tables: (SELECT ...) AS alias
+	Lateral    bool             // LATERAL keyword for correlated subqueries (PostgreSQL)
+	TableHints []string         // SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
 }
 
 func (t *TableReference) statementNode() {}
@@ -401,6 +402,7 @@ type SelectStatement struct {
 	With              *WithClause
 	Distinct          bool
 	DistinctOnColumns []Expression // PostgreSQL DISTINCT ON (expr, ...) clause
+	Top               *TopClause   // SQL Server TOP N [PERCENT] clause
 	Columns           []Expression
 	From              []TableReference
 	TableName         string // Added for pool operations
@@ -414,6 +416,24 @@ type SelectStatement struct {
 	Offset            *int
 	Fetch             *FetchClause // SQL-99 FETCH FIRST/NEXT clause (F861, F862)
 	For               *ForClause   // Row-level locking clause (SQL:2003, PostgreSQL, MySQL)
+}
+
+// TopClause represents SQL Server's TOP N [PERCENT] clause
+// Syntax: SELECT TOP n [PERCENT] columns...
+// Count is an Expression to support TOP (10), TOP (@var), TOP (subquery)
+type TopClause struct {
+	Count     Expression // Number of rows (or percentage) as an expression
+	IsPercent bool       // Whether PERCENT keyword was specified
+	WithTies  bool       // Whether WITH TIES was specified (SQL Server)
+}
+
+func (t *TopClause) expressionNode()     {}
+func (t TopClause) TokenLiteral() string { return "TOP" }
+func (t TopClause) Children() []Node {
+	if t.Count != nil {
+		return []Node{t.Count}
+	}
+	return nil
 }
 
 // FetchClause represents the SQL-99 FETCH FIRST/NEXT clause (F861, F862)
@@ -1108,6 +1128,7 @@ type InsertStatement struct {
 	With           *WithClause
 	TableName      string
 	Columns        []Expression
+	Output         []Expression    // SQL Server OUTPUT clause columns
 	Values         [][]Expression  // Multi-row support: each inner slice is one row of values
 	Query          QueryExpression // For INSERT ... SELECT (SelectStatement or SetOperation)
 	Returning      []Expression
@@ -1501,6 +1522,7 @@ type MergeStatement struct {
 	SourceAlias string             // Optional alias for source
 	OnCondition Expression         // The join/match condition
 	WhenClauses []*MergeWhenClause // List of WHEN clauses
+	Output      []Expression       // SQL Server OUTPUT clause columns
 }
 
 func (m *MergeStatement) statementNode()      {}

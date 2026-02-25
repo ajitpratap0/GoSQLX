@@ -688,17 +688,57 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 	case models.TokenTypeWith:
 		return p.parseWithStatement()
 	case models.TokenTypeSelect:
+		stmtPos := p.currentLocation()
 		p.advance()
-		return p.parseSelectWithSetOperations()
+		stmt, err := p.parseSelectWithSetOperations()
+		if err != nil {
+			return nil, err
+		}
+		if ss, ok := stmt.(*ast.SelectStatement); ok {
+			if ss.Pos == (models.Location{}) {
+				ss.Pos = stmtPos
+			}
+		}
+		return stmt, nil
 	case models.TokenTypeInsert:
+		stmtPos := p.currentLocation()
 		p.advance()
-		return p.parseInsertStatement()
+		stmt, err := p.parseInsertStatement()
+		if err != nil {
+			return nil, err
+		}
+		if is, ok := stmt.(*ast.InsertStatement); ok {
+			if is.Pos == (models.Location{}) {
+				is.Pos = stmtPos
+			}
+		}
+		return stmt, nil
 	case models.TokenTypeUpdate:
+		stmtPos := p.currentLocation()
 		p.advance()
-		return p.parseUpdateStatement()
+		stmt, err := p.parseUpdateStatement()
+		if err != nil {
+			return nil, err
+		}
+		if us, ok := stmt.(*ast.UpdateStatement); ok {
+			if us.Pos == (models.Location{}) {
+				us.Pos = stmtPos
+			}
+		}
+		return stmt, nil
 	case models.TokenTypeDelete:
+		stmtPos := p.currentLocation()
 		p.advance()
-		return p.parseDeleteStatement()
+		stmt, err := p.parseDeleteStatement()
+		if err != nil {
+			return nil, err
+		}
+		if ds, ok := stmt.(*ast.DeleteStatement); ok {
+			if ds.Pos == (models.Location{}) {
+				ds.Pos = stmtPos
+			}
+		}
+		return stmt, nil
 	case models.TokenTypeAlter:
 		p.advance()
 		return p.parseAlterTableStmt()
@@ -884,7 +924,8 @@ func (p *Parser) parseIdent() *ast.Identifier {
 	if !p.isType(models.TokenTypeIdentifier) && !p.isType(models.TokenTypeDoubleQuotedString) {
 		return nil
 	}
-	ident := &ast.Identifier{Name: p.currentToken.Literal}
+	pos := p.currentLocation()
+	ident := &ast.Identifier{Name: p.currentToken.Literal, Pos: pos}
 	p.advance()
 	return ident
 }

@@ -264,13 +264,18 @@ func (r *AliasingConsistencyRule) checkSelectStatement(stmt *ast.SelectStatement
 
 	// Check if there are both aliased and non-aliased tables
 	if len(tableAliases) > 0 && len(tableNames) > 0 {
+		// Use the statement's source position if available, otherwise default to line 1
+		stmtLoc := models.Location{Line: 1, Column: 1}
+		if stmt.Pos.Line > 0 {
+			stmtLoc = stmt.Pos
+		}
 		stmtViolations = append(stmtViolations, linter.Violation{
 			Rule:       r.ID(),
 			RuleName:   r.Name(),
 			Severity:   r.Severity(),
 			Message:    "Some tables have aliases while others don't",
-			Location:   models.Location{Line: 1, Column: 1},
-			Line:       ctx.GetLine(1),
+			Location:   stmtLoc,
+			Line:       ctx.GetLine(stmtLoc.Line),
 			Suggestion: "Use aliases consistently for all tables in the query",
 			CanAutoFix: false,
 		})

@@ -198,6 +198,7 @@ type JoinClause struct {
 	Left      TableReference
 	Right     TableReference
 	Condition Expression
+	Pos       models.Location // Source position of the JOIN keyword (1-based line and column)
 }
 
 func (j *JoinClause) expressionNode()     {}
@@ -428,8 +429,9 @@ type SelectStatement struct {
 	OrderBy           []OrderByExpression
 	Limit             *int
 	Offset            *int
-	Fetch             *FetchClause // SQL-99 FETCH FIRST/NEXT clause (F861, F862)
-	For               *ForClause   // Row-level locking clause (SQL:2003, PostgreSQL, MySQL)
+	Fetch             *FetchClause    // SQL-99 FETCH FIRST/NEXT clause (F861, F862)
+	For               *ForClause      // Row-level locking clause (SQL:2003, PostgreSQL, MySQL)
+	Pos               models.Location // Source position of the SELECT keyword (1-based line and column)
 }
 
 // TopClause represents SQL Server's TOP N [PERCENT] clause
@@ -599,7 +601,8 @@ func (g GroupingSetsExpression) Children() []Node {
 // Identifier represents a column or table name
 type Identifier struct {
 	Name  string
-	Table string // Optional table qualifier
+	Table string          // Optional table qualifier
+	Pos   models.Location // Source position of this identifier (1-based line and column)
 }
 
 func (i *Identifier) expressionNode()     {}
@@ -690,6 +693,7 @@ type FunctionCall struct {
 	Filter      Expression          // WHERE clause for aggregate functions
 	OrderBy     []OrderByExpression // ORDER BY clause for aggregate functions (STRING_AGG, ARRAY_AGG, etc.)
 	WithinGroup []OrderByExpression // ORDER BY clause for ordered-set aggregates (PERCENTILE_CONT, etc.)
+	Pos         models.Location     // Source position of the function name (1-based line and column)
 }
 
 func (f *FunctionCall) expressionNode()     {}
@@ -940,6 +944,7 @@ type BinaryExpression struct {
 	Right    Expression
 	Not      bool                  // For NOT (expr)
 	CustomOp *CustomBinaryOperator // For PostgreSQL custom operators
+	Pos      models.Location       // Source position of the operator (1-based line and column)
 }
 
 func (b *BinaryExpression) expressionNode() {}
@@ -1008,6 +1013,7 @@ func (a ArrayConstructorExpression) Children() []Node {
 type UnaryExpression struct {
 	Operator UnaryOperator
 	Expr     Expression
+	Pos      models.Location // Source position of the operator (1-based line and column)
 }
 
 func (u *UnaryExpression) expressionNode() {}
@@ -1147,7 +1153,8 @@ type InsertStatement struct {
 	Query          QueryExpression // For INSERT ... SELECT (SelectStatement or SetOperation)
 	Returning      []Expression
 	OnConflict     *OnConflict
-	OnDuplicateKey *UpsertClause // MySQL: ON DUPLICATE KEY UPDATE
+	OnDuplicateKey *UpsertClause   // MySQL: ON DUPLICATE KEY UPDATE
+	Pos            models.Location // Source position of the INSERT keyword (1-based line and column)
 }
 
 func (i *InsertStatement) statementNode()      {}
@@ -1243,6 +1250,7 @@ type UpdateStatement struct {
 	From        []TableReference
 	Where       Expression
 	Returning   []Expression
+	Pos         models.Location // Source position of the UPDATE keyword (1-based line and column)
 }
 
 // GetUpdates returns Assignments for backward compatibility.
@@ -1427,6 +1435,7 @@ type DeleteStatement struct {
 	Using     []TableReference
 	Where     Expression
 	Returning []Expression
+	Pos       models.Location // Source position of the DELETE keyword (1-based line and column)
 }
 
 func (d *DeleteStatement) statementNode()      {}

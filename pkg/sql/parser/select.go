@@ -721,6 +721,7 @@ func (p *Parser) parseJoinClauses(firstRef ast.TableReference) ([]ast.JoinClause
 	joins := []ast.JoinClause{}
 
 	for p.isJoinKeyword() {
+		joinPos := p.currentLocation()
 		joinType, isNatural, err := p.parseJoinType()
 		if err != nil {
 			return nil, err
@@ -765,6 +766,7 @@ func (p *Parser) parseJoinClauses(firstRef ast.TableReference) ([]ast.JoinClause
 			Left:      leftTable,
 			Right:     joinedTableRef,
 			Condition: joinCondition,
+			Pos:       joinPos,
 		})
 	}
 	return joins, nil

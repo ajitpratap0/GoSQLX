@@ -391,9 +391,10 @@ func TestPositionsWithoutPositionTracking(t *testing.T) {
 
 	sel := tree.Statements[0].(*ast.SelectStatement)
 
-	// Without position tracking, Pos should be zero
-	if sel.Pos.Line != 0 || sel.Pos.Column != 0 {
-		t.Errorf("expected zero position without tracking, got line=%d col=%d",
+	// With unified token types, positions are always available from TokenWithSpan spans.
+	// ParseFromModelTokens now inherently carries position info.
+	if sel.Pos.Line == 0 && sel.Pos.Column == 0 {
+		t.Errorf("expected non-zero position with unified tokens, got line=%d col=%d",
 			sel.Pos.Line, sel.Pos.Column)
 	}
 }

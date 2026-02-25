@@ -432,91 +432,174 @@ func (p *Parser) parseConstraintColumnList() ([]string, error) {
 	return columns, nil
 }
 
-// parseSelectStatement parses a SELECT statement
+// parseSelectStatement parses a SELECT statement.
+// It delegates each clause to a focused helper method.
 func (p *Parser) parseSelectStatement() (ast.Statement, error) {
-	// We've already consumed the SELECT token in matchType
+	// We've already consumed the SELECT token in matchType.
 
-	// Check for DISTINCT or ALL keyword
-	isDistinct := false
-	var distinctOnColumns []ast.Expression
+	// DISTINCT / ALL modifier
+	isDistinct, distinctOnColumns, err := p.parseDistinctModifier()
+	if err != nil {
+		return nil, err
+	}
+
+	// SQL Server TOP clause
+	topClause, err := p.parseTopClause()
+	if err != nil {
+		return nil, err
+	}
+
+	// Column list
+	columns, err := p.parseSelectColumnList()
+	if err != nil {
+		return nil, err
+	}
+
+	// FROM … JOIN clauses
+	tableName, tables, joins, err := p.parseFromClause()
+	if err != nil {
+		return nil, err
+	}
+
+	// Initialise the statement early so clause parsers can check dialect etc.
+	selectStmt := &ast.SelectStatement{
+		Distinct:          isDistinct,
+		DistinctOnColumns: distinctOnColumns,
+		Top:               topClause,
+		Columns:           columns,
+		From:              tables,
+		Joins:             joins,
+		TableName:         tableName,
+	}
+
+	// WHERE
+	if selectStmt.Where, err = p.parseWhereClause(); err != nil {
+		return nil, err
+	}
+
+	// GROUP BY
+	if selectStmt.GroupBy, err = p.parseGroupByClause(); err != nil {
+		return nil, err
+	}
+
+	// HAVING
+	if selectStmt.Having, err = p.parseHavingClause(); err != nil {
+		return nil, err
+	}
+
+	// ORDER BY
+	if selectStmt.OrderBy, err = p.parseOrderByClause(); err != nil {
+		return nil, err
+	}
+
+	// LIMIT / OFFSET
+	if selectStmt.Limit, selectStmt.Offset, err = p.parseLimitOffsetClause(); err != nil {
+		return nil, err
+	}
+
+	// FETCH FIRST / NEXT
+	if p.isType(models.TokenTypeFetch) {
+		if selectStmt.Fetch, err = p.parseFetchClause(); err != nil {
+			return nil, err
+		}
+	}
+
+	// FOR UPDATE / SHARE / …
+	if p.isType(models.TokenTypeFor) {
+		if selectStmt.For, err = p.parseForClause(); err != nil {
+			return nil, err
+		}
+	}
+
+	return selectStmt, nil
+}
+
+// parseDistinctModifier parses the optional DISTINCT [ON (...)] or ALL keyword
+// immediately after SELECT.
+func (p *Parser) parseDistinctModifier() (isDistinct bool, distinctOnColumns []ast.Expression, err error) {
 	if p.isType(models.TokenTypeDistinct) {
 		isDistinct = true
 		p.advance() // Consume DISTINCT
 
-		// Check for DISTINCT ON (PostgreSQL)
+		// PostgreSQL DISTINCT ON (expr, ...)
 		if p.isType(models.TokenTypeOn) {
 			p.advance() // Consume ON
 
-			// Expect opening parenthesis
 			if !p.isType(models.TokenTypeLParen) {
-				return nil, p.expectedError("( after DISTINCT ON")
+				return false, nil, p.expectedError("( after DISTINCT ON")
 			}
 			p.advance() // Consume (
 
-			// Parse comma-separated list of expressions
 			for {
-				expr, err := p.parseExpression()
-				if err != nil {
-					return nil, err
+				expr, e := p.parseExpression()
+				if e != nil {
+					return false, nil, e
 				}
 				distinctOnColumns = append(distinctOnColumns, expr)
-
-				// Check for comma (more expressions)
 				if !p.isType(models.TokenTypeComma) {
 					break
 				}
-				p.advance() // Consume comma
+				p.advance()
 			}
 
-			// Expect closing parenthesis
 			if !p.isType(models.TokenTypeRParen) {
-				return nil, p.expectedError(") after DISTINCT ON expression list")
+				return false, nil, p.expectedError(") after DISTINCT ON expression list")
 			}
 			p.advance() // Consume )
 		}
 	} else if p.isType(models.TokenTypeAll) {
-		// ALL is the default, just consume it
+		p.advance() // ALL is the default; just consume it
+	}
+	return isDistinct, distinctOnColumns, nil
+}
+
+// parseTopClause parses SQL Server's TOP n [PERCENT] [WITH TIES] clause.
+// Returns nil when the current dialect is not SQL Server or TOP is absent.
+func (p *Parser) parseTopClause() (*ast.TopClause, error) {
+	if p.dialect != string(keywords.DialectSQLServer) || strings.ToUpper(p.currentToken.Literal) != "TOP" {
+		return nil, nil
+	}
+	p.advance() // Consume TOP
+
+	hasParen := p.isType(models.TokenTypeLParen)
+	if hasParen {
+		p.advance() // Consume (
+	}
+
+	countExpr, err := p.parsePrimaryExpression()
+	if err != nil {
+		return nil, fmt.Errorf("expected expression after TOP: %w", err)
+	}
+
+	if hasParen {
+		if !p.isType(models.TokenTypeRightParen) {
+			return nil, p.expectedError(") after TOP expression")
+		}
+		p.advance() // Consume )
+	}
+
+	topClause := &ast.TopClause{Count: countExpr}
+
+	// Optional PERCENT
+	if p.isType(models.TokenTypePercent) ||
+		(p.currentToken.Type == models.TokenTypeKeyword && strings.ToUpper(p.currentToken.Literal) == "PERCENT") {
+		topClause.IsPercent = true
 		p.advance()
 	}
 
-	// Parse SQL Server TOP clause: SELECT TOP n [PERCENT] ...
-	// Supports both TOP 10 and TOP (10) syntax
-	var topClause *ast.TopClause
-	if p.dialect == string(keywords.DialectSQLServer) && strings.ToUpper(p.currentToken.Literal) == "TOP" {
-		p.advance() // Consume TOP
-		// Support parenthesized expression: TOP (expr)
-		hasParen := p.isType(models.TokenTypeLParen)
-		if hasParen {
-			p.advance() // Consume (
-		}
-		countExpr, err := p.parsePrimaryExpression()
-		if err != nil {
-			return nil, fmt.Errorf("expected expression after TOP: %w", err)
-		}
-		if hasParen {
-			if !p.isType(models.TokenTypeRightParen) {
-				return nil, p.expectedError(") after TOP expression")
-			}
-			p.advance() // Consume )
-		}
-		topClause = &ast.TopClause{Count: countExpr}
-		// Check for optional PERCENT
-		if p.isType(models.TokenTypePercent) || (p.currentToken.Type == models.TokenTypeKeyword && strings.ToUpper(p.currentToken.Literal) == "PERCENT") {
-			topClause.IsPercent = true
-			p.advance() // Consume PERCENT
-		}
-		// Check for optional WITH TIES
-		if p.isType(models.TokenTypeWith) && p.peekToken().Type == models.TokenTypeTies {
-			topClause.WithTies = true
-			p.advance() // Consume WITH
-			p.advance() // Consume TIES
-		}
+	// Optional WITH TIES
+	if p.isType(models.TokenTypeWith) && p.peekToken().Type == models.TokenTypeTies {
+		topClause.WithTies = true
+		p.advance() // Consume WITH
+		p.advance() // Consume TIES
 	}
 
-	// Parse columns — pre-allocate to reduce repeated slice growth
-	columns := make([]ast.Expression, 0, 8)
+	return topClause, nil
+}
 
-	// Check for SELECT FROM (missing column list)
+// parseSelectColumnList parses the comma-separated column/expression list in SELECT.
+func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
+	// Guard: SELECT immediately followed by FROM is an error.
 	if p.isType(models.TokenTypeFrom) {
 		return nil, goerrors.ExpectedTokenError(
 			"column expression",
@@ -526,19 +609,21 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		)
 	}
 
+	columns := make([]ast.Expression, 0, 8)
 	for {
-		// Handle * as a special case
+		var expr ast.Expression
+
 		if p.isType(models.TokenTypeAsterisk) {
-			columns = append(columns, &ast.Identifier{Name: "*"})
+			expr = &ast.Identifier{Name: "*"}
 			p.advance()
 		} else {
-			// Use parseExpression to handle all types including function calls
-			expr, err := p.parseExpression()
+			var err error
+			expr, err = p.parseExpression()
 			if err != nil {
 				return nil, err
 			}
 
-			// Check for optional column alias (AS alias_name or just alias_name)
+			// Optional alias: AS name  or  implicit name (non-identifier expressions only)
 			if p.isType(models.TokenTypeAs) {
 				p.advance() // Consume AS
 				if !p.isIdentifier() {
@@ -546,582 +631,519 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 				}
 				alias := p.currentToken.Literal
 				p.advance()
-				// Wrap expression with alias
-				expr = &ast.AliasedExpression{
-					Expr:  expr,
-					Alias: alias,
-				}
+				expr = &ast.AliasedExpression{Expr: expr, Alias: alias}
 			} else if p.canBeAlias() {
-				// Handle implicit alias (identifier without AS keyword)
-				// But only for certain expression types, not for simple identifiers
-				// to avoid ambiguity with FROM clause
 				if _, ok := expr.(*ast.Identifier); !ok {
 					alias := p.currentToken.Literal
 					p.advance()
-					expr = &ast.AliasedExpression{
-						Expr:  expr,
-						Alias: alias,
-					}
+					expr = &ast.AliasedExpression{Expr: expr, Alias: alias}
 				}
 			}
-
-			columns = append(columns, expr)
 		}
 
-		// Check if there are more columns
+		columns = append(columns, expr)
+
 		if !p.isType(models.TokenTypeComma) {
 			break
 		}
 		p.advance() // Consume comma
 	}
+	return columns, nil
+}
 
-	// Parse FROM clause (optional to support SELECT without FROM like "SELECT 1")
-	// Also allow set operation keywords (UNION, EXCEPT, INTERSECT) for queries in CTEs
-	if !p.isType(models.TokenTypeFrom) && !p.isType(models.TokenTypeEOF) &&
-		!p.isType(models.TokenTypeSemicolon) && !p.isType(models.TokenTypeRParen) &&
-		!p.isAnyType(models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect) {
-		// If not FROM, EOF, semicolon, right paren, or set operation, it's likely an error
-		return nil, p.expectedError("FROM, semicolon, or end of statement")
+// parseFromClause parses the FROM clause including comma-separated table references
+// and any subsequent JOIN clauses.  Returns the primary table name (for compatibility),
+// the full table-reference slice, and the join slice.
+func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReference, joins []ast.JoinClause, err error) {
+	// FROM is optional (e.g. SELECT 1).  Validate that the next token makes sense.
+	if !p.isType(models.TokenTypeFrom) {
+		if !p.isType(models.TokenTypeEOF) &&
+			!p.isType(models.TokenTypeSemicolon) &&
+			!p.isType(models.TokenTypeRParen) &&
+			!p.isAnyType(models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect) {
+			return "", nil, nil, p.expectedError("FROM, semicolon, or end of statement")
+		}
+		return "", nil, nil, nil
 	}
 
-	var tableName string
-	var tables []ast.TableReference
-	var joins []ast.JoinClause
+	p.advance() // Consume FROM
 
-	if p.isType(models.TokenTypeFrom) {
-		p.advance() // Consume FROM
+	if p.isType(models.TokenTypeEOF) || p.isType(models.TokenTypeSemicolon) {
+		return "", nil, nil, goerrors.ExpectedTokenError(
+			"table name",
+			p.currentToken.Type.String(),
+			p.currentLocation(),
+			"FROM clause requires at least one table reference",
+		)
+	}
 
-		// Check for missing table name after FROM
-		if p.isType(models.TokenTypeEOF) || p.isType(models.TokenTypeSemicolon) {
-			return nil, goerrors.ExpectedTokenError(
-				"table name",
-				p.currentToken.Type.String(),
-				p.currentLocation(),
-				"FROM clause requires at least one table reference",
-			)
+	// First table reference
+	firstRef, e := p.parseFromTableReference()
+	if e != nil {
+		return "", nil, nil, e
+	}
+	tableName = firstRef.Name
+	tables = []ast.TableReference{firstRef}
+
+	// Additional comma-separated table references (implicit cross joins)
+	for p.isType(models.TokenTypeComma) {
+		p.advance()
+		ref, e2 := p.parseFromTableReference()
+		if e2 != nil {
+			return "", nil, nil, e2
 		}
+		tables = append(tables, ref)
+	}
 
-		// Parse first table reference
-		tableRef, err := p.parseFromTableReference()
+	// JOIN clauses
+	joins, err = p.parseJoinClauses(firstRef)
+	return tableName, tables, joins, err
+}
+
+// parseJoinClauses parses zero or more JOIN clauses that follow the FROM table list.
+// firstRef is the primary (left-most) table, used for building JoinClause.Left.
+func (p *Parser) parseJoinClauses(firstRef ast.TableReference) ([]ast.JoinClause, error) {
+	joins := []ast.JoinClause{}
+
+	for p.isJoinKeyword() {
+		joinType, isNatural, err := p.parseJoinType()
 		if err != nil {
 			return nil, err
 		}
-		tableName = tableRef.Name
 
-		// Create tables list for FROM clause
-		tables = []ast.TableReference{tableRef}
+		// Expect JOIN keyword (APPLY variants skip it)
+		isApply := joinType == "CROSS APPLY" || joinType == "OUTER APPLY"
+		if !isApply {
+			if !p.isType(models.TokenTypeJoin) {
+				return nil, goerrors.ExpectedTokenError(
+					"JOIN after "+joinType,
+					p.currentToken.Type.String(),
+					p.currentLocation(),
+					"",
+				)
+			}
+			p.advance() // Consume JOIN
+		}
 
-		// Parse additional comma-separated table references
-		for p.isType(models.TokenTypeComma) {
-			p.advance() // Consume comma
-			additionalRef, err := p.parseFromTableReference()
+		joinedTableRef, err := p.parseJoinedTableRef(joinType)
+		if err != nil {
+			return nil, err
+		}
+
+		joinCondition, err := p.parseJoinCondition(joinType, isNatural, isApply)
+		if err != nil {
+			return nil, err
+		}
+
+		// Build left-side reference (synthetic for chained joins)
+		var leftTable ast.TableReference
+		if len(joins) == 0 {
+			leftTable = firstRef
+		} else {
+			leftTable = ast.TableReference{
+				Name: fmt.Sprintf("(%s_with_%d_joins)", firstRef.Name, len(joins)),
+			}
+		}
+
+		joins = append(joins, ast.JoinClause{
+			Type:      joinType,
+			Left:      leftTable,
+			Right:     joinedTableRef,
+			Condition: joinCondition,
+		})
+	}
+	return joins, nil
+}
+
+// parseJoinType parses the optional NATURAL keyword and the join-type keywords
+// (LEFT, RIGHT, FULL, INNER, CROSS, OUTER APPLY, …) that precede the JOIN keyword.
+// Returns (joinType string, isNatural bool, err).
+func (p *Parser) parseJoinType() (string, bool, error) {
+	joinType := "INNER"
+	isNatural := false
+
+	if p.isType(models.TokenTypeNatural) {
+		isNatural = true
+		p.advance()
+	}
+
+	switch {
+	case p.isType(models.TokenTypeLeft):
+		joinType = "LEFT"
+		p.advance()
+		if p.isType(models.TokenTypeOuter) {
+			p.advance()
+		}
+	case p.isType(models.TokenTypeRight):
+		joinType = "RIGHT"
+		p.advance()
+		if p.isType(models.TokenTypeOuter) {
+			p.advance()
+		}
+	case p.isType(models.TokenTypeFull):
+		joinType = "FULL"
+		p.advance()
+		if p.isType(models.TokenTypeOuter) {
+			p.advance()
+		}
+	case p.isType(models.TokenTypeInner):
+		joinType = "INNER"
+		p.advance()
+	case p.isType(models.TokenTypeCross):
+		joinType = "CROSS"
+		p.advance()
+		if p.dialect == string(keywords.DialectSQLServer) &&
+			p.currentToken.Type == models.TokenTypeIdentifier &&
+			strings.ToUpper(p.currentToken.Literal) == "APPLY" {
+			joinType = "CROSS APPLY"
+			p.advance()
+		}
+	case p.isType(models.TokenTypeOuter) && p.dialect == string(keywords.DialectSQLServer):
+		p.advance()
+		if p.currentToken.Type == models.TokenTypeIdentifier &&
+			strings.ToUpper(p.currentToken.Literal) == "APPLY" {
+			joinType = "OUTER APPLY"
+			p.advance()
+		} else {
+			return "", false, p.expectedError("APPLY after OUTER (SQL Server OUTER APPLY)")
+		}
+	}
+
+	if isNatural {
+		joinType = "NATURAL " + joinType
+	}
+	return joinType, isNatural, nil
+}
+
+// parseJoinedTableRef parses the table reference on the right-hand side of a JOIN.
+func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error) {
+	var ref ast.TableReference
+
+	// Optional LATERAL (PostgreSQL)
+	isLateral := false
+	if p.isType(models.TokenTypeLateral) {
+		isLateral = true
+		p.advance()
+	}
+
+	if p.isType(models.TokenTypeLParen) {
+		// Derived table (subquery)
+		p.advance() // Consume (
+
+		if !p.isType(models.TokenTypeSelect) && !p.isType(models.TokenTypeWith) {
+			return ref, p.expectedError("SELECT in derived table")
+		}
+		p.advance() // Consume SELECT
+
+		subquery, err := p.parseSelectStatement()
+		if err != nil {
+			return ref, err
+		}
+		selectStmt, ok := subquery.(*ast.SelectStatement)
+		if !ok {
+			return ref, p.expectedError("SELECT statement in derived table")
+		}
+
+		if !p.isType(models.TokenTypeRParen) {
+			return ref, p.expectedError(")")
+		}
+		p.advance() // Consume )
+
+		ref = ast.TableReference{Subquery: selectStmt, Lateral: isLateral}
+	} else {
+		joinedName, err := p.parseQualifiedName()
+		if err != nil {
+			return ref, goerrors.ExpectedTokenError(
+				"table name after "+joinType+" JOIN",
+				p.currentToken.Type.String(),
+				p.currentLocation(),
+				"",
+			)
+		}
+		ref = ast.TableReference{Name: joinedName, Lateral: isLateral}
+	}
+
+	// Optional alias
+	if p.isIdentifier() || p.isType(models.TokenTypeAs) {
+		if p.isType(models.TokenTypeAs) {
+			p.advance()
+			if !p.isIdentifier() {
+				return ref, p.expectedError("alias after AS")
+			}
+		}
+		if p.isIdentifier() {
+			ref.Alias = p.currentToken.Literal
+			p.advance()
+		}
+	}
+
+	// SQL Server table hints
+	if p.dialect == string(keywords.DialectSQLServer) && p.isType(models.TokenTypeWith) {
+		if p.peekToken().Type == models.TokenTypeLParen {
+			hints, err := p.parseTableHints()
 			if err != nil {
-				return nil, err
+				return ref, err
 			}
-			tables = append(tables, additionalRef)
+			ref.TableHints = hints
 		}
-
-		// Parse JOIN clauses if present
-		joins = []ast.JoinClause{}
-		for p.isJoinKeyword() {
-			// Determine JOIN type
-			joinType := "INNER" // Default
-			isNatural := false
-
-			// Check for NATURAL keyword first (NATURAL can precede LEFT, RIGHT, FULL, INNER JOIN)
-			if p.isType(models.TokenTypeNatural) {
-				isNatural = true
-				p.advance()
-			}
-
-			if p.isType(models.TokenTypeLeft) {
-				joinType = "LEFT"
-				p.advance()
-				if p.isType(models.TokenTypeOuter) {
-					p.advance() // Optional OUTER keyword
-				}
-			} else if p.isType(models.TokenTypeRight) {
-				joinType = "RIGHT"
-				p.advance()
-				if p.isType(models.TokenTypeOuter) {
-					p.advance() // Optional OUTER keyword
-				}
-			} else if p.isType(models.TokenTypeFull) {
-				joinType = "FULL"
-				p.advance()
-				if p.isType(models.TokenTypeOuter) {
-					p.advance() // Optional OUTER keyword
-				}
-			} else if p.isType(models.TokenTypeInner) {
-				joinType = "INNER"
-				p.advance()
-			} else if p.isType(models.TokenTypeCross) {
-				joinType = "CROSS"
-				p.advance()
-				// SQL Server CROSS APPLY
-				if p.dialect == string(keywords.DialectSQLServer) && p.currentToken.Type == models.TokenTypeIdentifier && strings.ToUpper(p.currentToken.Literal) == "APPLY" {
-					joinType = "CROSS APPLY"
-					p.advance() // Consume APPLY
-				}
-			} else if p.isType(models.TokenTypeOuter) && p.dialect == string(keywords.DialectSQLServer) {
-				p.advance() // Consume OUTER
-				// SQL Server OUTER APPLY
-				if p.currentToken.Type == models.TokenTypeIdentifier && strings.ToUpper(p.currentToken.Literal) == "APPLY" {
-					joinType = "OUTER APPLY"
-					p.advance() // Consume APPLY
-				} else {
-					return nil, p.expectedError("APPLY after OUTER (SQL Server OUTER APPLY)")
-				}
-			}
-
-			// If NATURAL, prepend to join type
-			if isNatural {
-				joinType = "NATURAL " + joinType
-			}
-
-			// APPLY joins don't use JOIN keyword
-			isApply := joinType == "CROSS APPLY" || joinType == "OUTER APPLY"
-			if !isApply {
-				// Expect JOIN keyword
-				if !p.isType(models.TokenTypeJoin) {
-					return nil, goerrors.ExpectedTokenError(
-						"JOIN after "+joinType,
-						p.currentToken.Type.String(),
-						p.currentLocation(),
-						"",
-					)
-				}
-				p.advance() // Consume JOIN
-			}
-
-			var joinedTableRef ast.TableReference
-
-			// Check for LATERAL keyword (PostgreSQL) in JOIN clause
-			isLateralJoin := false
-			if p.isType(models.TokenTypeLateral) {
-				isLateralJoin = true
-				p.advance() // Consume LATERAL
-			}
-
-			// Check for derived table (subquery in parentheses)
-			if p.isType(models.TokenTypeLParen) {
-				p.advance() // Consume (
-
-				// Check if this is a subquery (starts with SELECT or WITH)
-				if !p.isType(models.TokenTypeSelect) && !p.isType(models.TokenTypeWith) {
-					return nil, p.expectedError("SELECT in derived table")
-				}
-
-				// Consume SELECT token before calling parseSelectStatement
-				p.advance() // Consume SELECT
-
-				// Parse the subquery
-				subquery, err := p.parseSelectStatement()
-				if err != nil {
-					return nil, err
-				}
-				selectStmt, ok := subquery.(*ast.SelectStatement)
-				if !ok {
-					return nil, p.expectedError("SELECT statement in derived table")
-				}
-
-				// Expect closing parenthesis
-				if !p.isType(models.TokenTypeRParen) {
-					return nil, p.expectedError(")")
-				}
-				p.advance() // Consume )
-
-				joinedTableRef = ast.TableReference{
-					Subquery: selectStmt,
-					Lateral:  isLateralJoin,
-				}
-			} else {
-				// Parse regular joined table name (supports schema.table qualification)
-				joinedName, err := p.parseQualifiedName()
-				if err != nil {
-					return nil, goerrors.ExpectedTokenError(
-						"table name after "+joinType+" JOIN",
-						p.currentToken.Type.String(),
-						p.currentLocation(),
-						"",
-					)
-				}
-				joinedTableRef = ast.TableReference{
-					Name:    joinedName,
-					Lateral: isLateralJoin,
-				}
-			}
-
-			// Check for table alias
-			if p.isIdentifier() || p.isType(models.TokenTypeAs) {
-				if p.isType(models.TokenTypeAs) {
-					p.advance() // Consume AS
-					if !p.isIdentifier() {
-						return nil, p.expectedError("alias after AS")
-					}
-				}
-				if p.isIdentifier() {
-					joinedTableRef.Alias = p.currentToken.Literal
-					p.advance()
-				}
-			}
-
-			// SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
-			if p.dialect == string(keywords.DialectSQLServer) && p.isType(models.TokenTypeWith) {
-				if p.peekToken().Type == models.TokenTypeLParen {
-					hints, err := p.parseTableHints()
-					if err != nil {
-						return nil, err
-					}
-					joinedTableRef.TableHints = hints
-				}
-			}
-
-			// Parse join condition (ON or USING)
-			var joinCondition ast.Expression
-
-			// CROSS JOIN and NATURAL JOIN don't require ON clause
-			isCrossJoin := joinType == "CROSS" || isApply
-			if !isCrossJoin && !isNatural {
-				if p.isType(models.TokenTypeOn) {
-					p.advance() // Consume ON
-
-					// Parse join condition
-					cond, err := p.parseExpression()
-					if err != nil {
-						return nil, goerrors.InvalidSyntaxError(
-							fmt.Sprintf("error parsing ON condition for %s JOIN: %v", joinType, err),
-							p.currentLocation(),
-							"",
-						)
-					}
-					joinCondition = cond
-				} else if p.isType(models.TokenTypeUsing) {
-					p.advance() // Consume USING
-
-					// Parse column list in parentheses
-					if !p.isType(models.TokenTypeLParen) {
-						return nil, p.expectedError("( after USING")
-					}
-					p.advance()
-
-					// Parse comma-separated column list for USING clause
-					// Supports both single column: USING (id)
-					// and multi-column: USING (id, name, category)
-					var usingColumns []ast.Expression
-
-					for {
-						// Parse column name
-						if !p.isIdentifier() {
-							return nil, p.expectedError("column name in USING")
-						}
-						usingColumns = append(usingColumns, &ast.Identifier{Name: p.currentToken.Literal})
-						p.advance()
-
-						// Check for comma (more columns)
-						if p.isType(models.TokenTypeComma) {
-							p.advance() // Consume comma
-							continue
-						}
-						break
-					}
-
-					// Check for closing parenthesis
-					if !p.isType(models.TokenTypeRParen) {
-						return nil, p.expectedError(") after USING column list")
-					}
-					p.advance()
-
-					// Store as single identifier for single column (backward compatibility)
-					// or as ListExpression for multiple columns
-					if len(usingColumns) == 1 {
-						joinCondition = usingColumns[0]
-					} else {
-						joinCondition = &ast.ListExpression{Values: usingColumns}
-					}
-				} else {
-					return nil, p.expectedError("ON or USING")
-				}
-			}
-
-			// Create join clause with proper tree relationships
-			// For SQL: FROM A JOIN B JOIN C (equivalent to (A JOIN B) JOIN C)
-			var leftTable ast.TableReference
-			if len(joins) == 0 {
-				// First join: A JOIN B
-				leftTable = tableRef
-			} else {
-				// Subsequent joins: (previous result) JOIN C
-				// We represent this by using a synthetic table reference that indicates
-				// the left side is the result of previous joins
-				leftTable = ast.TableReference{
-					Name:  fmt.Sprintf("(%s_with_%d_joins)", tableRef.Name, len(joins)),
-					Alias: "",
-				}
-			}
-
-			joinClause := ast.JoinClause{
-				Type:      joinType,
-				Left:      leftTable,
-				Right:     joinedTableRef,
-				Condition: joinCondition,
-			}
-
-			// Add join clause to joins list
-			joins = append(joins, joinClause)
-
-			// Note: We don't update tableRef here as each JOIN in the list
-			// represents a join with the accumulated result set
-		}
-	} // End of FROM clause parsing
-
-	// Initialize SELECT statement
-	selectStmt := &ast.SelectStatement{
-		Distinct:          isDistinct,
-		DistinctOnColumns: distinctOnColumns,
-		Top:               topClause,
-		Columns:           columns,
-		From:              tables,
-		Joins:             joins,
-		TableName:         tableName, // Add this for compatibility with tests
 	}
 
-	// Parse WHERE clause if present
-	if p.isType(models.TokenTypeWhere) {
-		p.advance() // Consume WHERE
+	return ref, nil
+}
 
-		// Check for incomplete WHERE clause (missing expression)
-		if p.isType(models.TokenTypeEOF) || p.isType(models.TokenTypeSemicolon) ||
-			p.isType(models.TokenTypeGroup) || p.isType(models.TokenTypeOrder) ||
-			p.isType(models.TokenTypeLimit) || p.isType(models.TokenTypeHaving) ||
-			p.isType(models.TokenTypeUnion) || p.isType(models.TokenTypeExcept) ||
-			p.isType(models.TokenTypeIntersect) || p.isType(models.TokenTypeRParen) ||
-			p.isType(models.TokenTypeFetch) || p.isType(models.TokenTypeFor) {
-			return nil, goerrors.ExpectedTokenError(
-				"expression after WHERE",
-				p.currentToken.Type.String(),
+// parseJoinCondition parses the ON / USING clause that follows a joined table reference.
+// CROSS JOIN, APPLY, and NATURAL JOIN variants do not require a condition.
+func (p *Parser) parseJoinCondition(joinType string, isNatural, isApply bool) (ast.Expression, error) {
+	isCrossJoin := joinType == "CROSS" || isApply
+	if isCrossJoin || isNatural {
+		return nil, nil
+	}
+
+	if p.isType(models.TokenTypeOn) {
+		p.advance() // Consume ON
+		cond, err := p.parseExpression()
+		if err != nil {
+			return nil, goerrors.InvalidSyntaxError(
+				fmt.Sprintf("error parsing ON condition for %s JOIN: %v", joinType, err),
 				p.currentLocation(),
-				"WHERE clause requires a boolean expression",
+				"",
 			)
 		}
-
-		// Parse WHERE condition
-		whereClause, err := p.parseExpression()
-		if err != nil {
-			return nil, err
-		}
-
-		// Add WHERE clause to SELECT statement
-		selectStmt.Where = whereClause
+		return cond, nil
 	}
 
-	// Parse GROUP BY clause if present
-	if p.isType(models.TokenTypeGroup) {
-		p.advance() // Consume GROUP
-		if !p.isType(models.TokenTypeBy) {
-			return nil, p.expectedError("BY after GROUP")
+	if p.isType(models.TokenTypeUsing) {
+		p.advance() // Consume USING
+		if !p.isType(models.TokenTypeLParen) {
+			return nil, p.expectedError("( after USING")
 		}
-		p.advance() // Consume BY
+		p.advance()
 
-		// Parse GROUP BY expressions (comma-separated list)
-		// Supports: regular expressions, ROLLUP, CUBE, GROUPING SETS
-		groupByExprs := make([]ast.Expression, 0, 4)
+		var usingColumns []ast.Expression
 		for {
-			var expr ast.Expression
-			var err error
-
-			// Check for grouping operations: ROLLUP, CUBE, GROUPING SETS
-			// Note: GROUPING SETS may come as a compound keyword or separate tokens
-			if p.isType(models.TokenTypeRollup) {
-				expr, err = p.parseRollup()
-			} else if p.isType(models.TokenTypeCube) {
-				expr, err = p.parseCube()
-			} else if p.currentToken.Literal == "GROUPING SETS" ||
-				(p.isType(models.TokenTypeGrouping) && strings.EqualFold(p.peekToken().Literal, "SETS")) {
-				expr, err = p.parseGroupingSets()
-			} else {
-				expr, err = p.parseExpression()
+			if !p.isIdentifier() {
+				return nil, p.expectedError("column name in USING")
 			}
-
-			if err != nil {
-				return nil, err
-			}
-			groupByExprs = append(groupByExprs, expr)
-
-			// Check for comma (more expressions)
+			usingColumns = append(usingColumns, &ast.Identifier{Name: p.currentToken.Literal})
+			p.advance()
 			if !p.isType(models.TokenTypeComma) {
 				break
 			}
-			p.advance() // Consume comma
+			p.advance()
 		}
 
-		// MySQL syntax support: GROUP BY col1, col2 WITH ROLLUP / WITH CUBE
-		// This is different from SQL-99 GROUP BY ROLLUP(col1, col2)
-		if p.isType(models.TokenTypeWith) {
-			nextTok := p.peekToken()
-			switch strings.ToUpper(nextTok.Literal) {
-			case "ROLLUP":
-				p.advance() // Consume WITH
-				p.advance() // Consume ROLLUP
-				// Wrap all existing expressions in a RollupExpression
-				groupByExprs = []ast.Expression{
-					&ast.RollupExpression{Expressions: groupByExprs},
-				}
-			case "CUBE":
-				p.advance() // Consume WITH
-				p.advance() // Consume CUBE
-				// Wrap all existing expressions in a CubeExpression
-				groupByExprs = []ast.Expression{
-					&ast.CubeExpression{Expressions: groupByExprs},
-				}
-			}
-			// Note: WITH not followed by ROLLUP/CUBE will be handled elsewhere (e.g., CTE)
+		if !p.isType(models.TokenTypeRParen) {
+			return nil, p.expectedError(") after USING column list")
 		}
+		p.advance()
 
-		selectStmt.GroupBy = groupByExprs
+		if len(usingColumns) == 1 {
+			return usingColumns[0], nil
+		}
+		return &ast.ListExpression{Values: usingColumns}, nil
 	}
 
-	// Parse HAVING clause if present (must come after GROUP BY)
-	if p.isType(models.TokenTypeHaving) {
-		p.advance() // Consume HAVING
+	return nil, p.expectedError("ON or USING")
+}
 
-		// Parse HAVING condition
-		havingClause, err := p.parseExpression()
+// parseWhereClause parses "WHERE <expr>" if present.
+// Returns nil (no error) when WHERE is absent.
+func (p *Parser) parseWhereClause() (ast.Expression, error) {
+	if !p.isType(models.TokenTypeWhere) {
+		return nil, nil
+	}
+	p.advance() // Consume WHERE
+
+	// Guard against a WHERE keyword with no following expression.
+	if p.isType(models.TokenTypeEOF) || p.isType(models.TokenTypeSemicolon) ||
+		p.isType(models.TokenTypeGroup) || p.isType(models.TokenTypeOrder) ||
+		p.isType(models.TokenTypeLimit) || p.isType(models.TokenTypeHaving) ||
+		p.isType(models.TokenTypeUnion) || p.isType(models.TokenTypeExcept) ||
+		p.isType(models.TokenTypeIntersect) || p.isType(models.TokenTypeRParen) ||
+		p.isType(models.TokenTypeFetch) || p.isType(models.TokenTypeFor) {
+		return nil, goerrors.ExpectedTokenError(
+			"expression after WHERE",
+			p.currentToken.Type.String(),
+			p.currentLocation(),
+			"WHERE clause requires a boolean expression",
+		)
+	}
+
+	return p.parseExpression()
+}
+
+// parseGroupByClause parses "GROUP BY <expr> [, ...]" including ROLLUP, CUBE,
+// GROUPING SETS, and MySQL's trailing WITH ROLLUP / WITH CUBE syntax.
+// Returns nil slice (no error) when GROUP BY is absent.
+func (p *Parser) parseGroupByClause() ([]ast.Expression, error) {
+	if !p.isType(models.TokenTypeGroup) {
+		return nil, nil
+	}
+	p.advance() // Consume GROUP
+
+	if !p.isType(models.TokenTypeBy) {
+		return nil, p.expectedError("BY after GROUP")
+	}
+	p.advance() // Consume BY
+
+	groupByExprs := make([]ast.Expression, 0, 4)
+	for {
+		var (
+			expr ast.Expression
+			err  error
+		)
+
+		switch {
+		case p.isType(models.TokenTypeRollup):
+			expr, err = p.parseRollup()
+		case p.isType(models.TokenTypeCube):
+			expr, err = p.parseCube()
+		case p.currentToken.Literal == "GROUPING SETS" ||
+			(p.isType(models.TokenTypeGrouping) && strings.EqualFold(p.peekToken().Literal, "SETS")):
+			expr, err = p.parseGroupingSets()
+		default:
+			expr, err = p.parseExpression()
+		}
+
 		if err != nil {
 			return nil, err
 		}
-		selectStmt.Having = havingClause
+		groupByExprs = append(groupByExprs, expr)
+
+		if !p.isType(models.TokenTypeComma) {
+			break
+		}
+		p.advance()
 	}
 
-	// Parse ORDER BY clause if present
-	if p.isType(models.TokenTypeOrder) {
-		p.advance() // Consume ORDER
-
-		if !p.isType(models.TokenTypeBy) {
-			return nil, p.expectedError("BY")
-		}
-		p.advance() // Consume BY
-
-		// Parse order expressions (comma-separated list)
-		for {
-			expr, err := p.parseExpression()
-			if err != nil {
-				return nil, err
-			}
-
-			// Create OrderByExpression with defaults
-			orderByExpr := ast.OrderByExpression{
-				Expression: expr,
-				Ascending:  true, // Default to ASC
-				NullsFirst: nil,  // Default behavior (database-specific)
-			}
-
-			// Check for ASC/DESC after the expression
-			if p.isType(models.TokenTypeAsc) {
-				orderByExpr.Ascending = true
-				p.advance() // Consume ASC
-			} else if p.isType(models.TokenTypeDesc) {
-				orderByExpr.Ascending = false
-				p.advance() // Consume DESC
-			}
-
-			// Check for NULLS FIRST/LAST
-			nullsFirst, err := p.parseNullsClause()
-			if err != nil {
-				return nil, err
-			}
-			orderByExpr.NullsFirst = nullsFirst
-
-			selectStmt.OrderBy = append(selectStmt.OrderBy, orderByExpr)
-
-			// Check for comma (more expressions)
-			if p.isType(models.TokenTypeComma) {
-				p.advance() // Consume comma
-			} else {
-				break
-			}
+	// MySQL: GROUP BY col1 WITH ROLLUP / WITH CUBE
+	if p.isType(models.TokenTypeWith) {
+		switch strings.ToUpper(p.peekToken().Literal) {
+		case "ROLLUP":
+			p.advance() // Consume WITH
+			p.advance() // Consume ROLLUP
+			groupByExprs = []ast.Expression{&ast.RollupExpression{Expressions: groupByExprs}}
+		case "CUBE":
+			p.advance() // Consume WITH
+			p.advance() // Consume CUBE
+			groupByExprs = []ast.Expression{&ast.CubeExpression{Expressions: groupByExprs}}
 		}
 	}
 
-	// Parse LIMIT clause if present
+	return groupByExprs, nil
+}
+
+// parseHavingClause parses "HAVING <expr>" if present.
+// Returns nil (no error) when HAVING is absent.
+func (p *Parser) parseHavingClause() (ast.Expression, error) {
+	if !p.isType(models.TokenTypeHaving) {
+		return nil, nil
+	}
+	p.advance() // Consume HAVING
+	return p.parseExpression()
+}
+
+// parseOrderByClause parses "ORDER BY <expr> [ASC|DESC] [NULLS FIRST|LAST] [, ...]".
+// Returns nil slice (no error) when ORDER BY is absent.
+func (p *Parser) parseOrderByClause() ([]ast.OrderByExpression, error) {
+	if !p.isType(models.TokenTypeOrder) {
+		return nil, nil
+	}
+	p.advance() // Consume ORDER
+
+	if !p.isType(models.TokenTypeBy) {
+		return nil, p.expectedError("BY")
+	}
+	p.advance() // Consume BY
+
+	var orderByExprs []ast.OrderByExpression
+	for {
+		expr, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+
+		entry := ast.OrderByExpression{
+			Expression: expr,
+			Ascending:  true,
+			NullsFirst: nil,
+		}
+
+		if p.isType(models.TokenTypeAsc) {
+			entry.Ascending = true
+			p.advance()
+		} else if p.isType(models.TokenTypeDesc) {
+			entry.Ascending = false
+			p.advance()
+		}
+
+		nullsFirst, err := p.parseNullsClause()
+		if err != nil {
+			return nil, err
+		}
+		entry.NullsFirst = nullsFirst
+
+		orderByExprs = append(orderByExprs, entry)
+
+		if !p.isType(models.TokenTypeComma) {
+			break
+		}
+		p.advance()
+	}
+	return orderByExprs, nil
+}
+
+// parseLimitOffsetClause parses optional LIMIT and/or OFFSET clauses.
+// Supports standard "LIMIT n OFFSET m", MySQL "LIMIT offset, count", and
+// SQL-99 "OFFSET n ROWS" (ROW/ROWS consumed but value stored).
+// Returns (limit, offset, error); either or both pointers may be nil.
+func (p *Parser) parseLimitOffsetClause() (limit *int, offset *int, err error) {
+	// LIMIT clause
 	if p.isType(models.TokenTypeLimit) {
-		p.advance() // Consume LIMIT
+		p.advance()
 
-		// Parse LIMIT value
 		if !p.isNumericLiteral() {
-			return nil, p.expectedError("integer for LIMIT")
+			return nil, nil, p.expectedError("integer for LIMIT")
 		}
-
-		// Convert string to int
 		firstVal := 0
 		_, _ = fmt.Sscanf(p.currentToken.Literal, "%d", &firstVal)
 		p.advance()
 
-		// MySQL-style LIMIT offset, count: LIMIT 10, 20
+		// MySQL: LIMIT offset, count
 		if p.dialect == "mysql" && p.isType(models.TokenTypeComma) {
-			p.advance() // Consume comma
+			p.advance()
 			if !p.isNumericLiteral() {
-				return nil, p.expectedError("integer for LIMIT count")
+				return nil, nil, p.expectedError("integer for LIMIT count")
 			}
 			secondVal := 0
 			_, _ = fmt.Sscanf(p.currentToken.Literal, "%d", &secondVal)
 			p.advance()
-			// In MySQL LIMIT offset, count: first is offset, second is count
-			selectStmt.Offset = &firstVal
-			selectStmt.Limit = &secondVal
+			offset = &firstVal
+			limit = &secondVal
 		} else {
-			selectStmt.Limit = &firstVal
+			limit = &firstVal
 		}
 	}
 
-	// Parse OFFSET clause if present (MySQL-style OFFSET or SQL-99 OFFSET ... ROWS)
+	// OFFSET clause
 	if p.isType(models.TokenTypeOffset) {
-		p.advance() // Consume OFFSET
-
-		// Parse OFFSET value
-		if !p.isNumericLiteral() {
-			return nil, p.expectedError("integer for OFFSET")
-		}
-
-		// Convert string to int
-		offsetVal := 0
-		_, _ = fmt.Sscanf(p.currentToken.Literal, "%d", &offsetVal)
-
-		// Add OFFSET to SELECT statement
-		selectStmt.Offset = &offsetVal
 		p.advance()
 
-		// Check for ROW/ROWS (SQL-99 style: OFFSET n ROWS)
+		if !p.isNumericLiteral() {
+			return nil, nil, p.expectedError("integer for OFFSET")
+		}
+		offsetVal := 0
+		_, _ = fmt.Sscanf(p.currentToken.Literal, "%d", &offsetVal)
+		offset = &offsetVal
+		p.advance()
+
+		// SQL-99: OFFSET n ROWS
 		if p.isAnyType(models.TokenTypeRow, models.TokenTypeRows) {
-			p.advance() // Consume ROW/ROWS
+			p.advance()
 		}
 	}
 
-	// Parse FETCH clause if present (SQL-99 F861, F862)
-	// Syntax: FETCH {FIRST | NEXT} n [{ROW | ROWS}] [{PERCENT}] {ONLY | WITH TIES}
-	if p.isType(models.TokenTypeFetch) {
-		fetchClause, err := p.parseFetchClause()
-		if err != nil {
-			return nil, err
-		}
-
-		// If FETCH has an offset (from OFFSET ... ROWS before FETCH), it was already set above
-		// For standalone FETCH with OFFSET embedded (SQL-99), we need to handle it in parseFetchClause
-
-		selectStmt.Fetch = fetchClause
-	}
-
-	// Parse FOR clause if present (row-level locking)
-	// Syntax: FOR {UPDATE | SHARE | NO KEY UPDATE | KEY SHARE} [OF table_name [, ...]] [NOWAIT | SKIP LOCKED]
-	if p.isType(models.TokenTypeFor) {
-		forClause, err := p.parseForClause()
-		if err != nil {
-			return nil, err
-		}
-		selectStmt.For = forClause
-	}
-
-	return selectStmt, nil
+	return limit, offset, nil
 }
 
 // parseFromTableReference parses a single table reference in a FROM clause,

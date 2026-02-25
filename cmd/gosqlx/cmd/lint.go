@@ -1,3 +1,17 @@
+// Copyright 2026 GoSQLX Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package cmd
 
 import (
@@ -9,11 +23,12 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/style"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/whitespace"
-	"github.com/ajitpratap0/GoSQLX/pkg/security"
+	sqlsecurity "github.com/ajitpratap0/GoSQLX/pkg/sql/security"
 )
 
 var (
@@ -357,13 +372,18 @@ func lintInlineSQL(cmd *cobra.Command, sql string) error {
 // runSecurityScan runs the security scanner on the given SQL and prints findings.
 // Returns the number of security findings.
 func runSecurityScan(sql string, filename string, outWriter io.Writer) int {
-	scanner := security.NewScanner()
-	findings := scanner.Scan(sql)
-	for _, f := range findings {
-		fmt.Fprintf(outWriter, "  [%s] %s:%d:%d — %s (%s)\n",
-			f.Severity, filename, f.Line, f.Column, f.Message, f.RuleID)
+	tree, err := gosqlx.Parse(sql)
+	if err != nil {
+		fmt.Fprintf(outWriter, "  [WARN] %s: could not parse for security scan: %v\n", filename, err)
+		return 0
 	}
-	return len(findings)
+	scanner := sqlsecurity.NewScanner()
+	result := scanner.Scan(tree)
+	for _, f := range result.Findings {
+		fmt.Fprintf(outWriter, "  [%s] %s:%d:%d — %s (%s)\n",
+			f.Severity, filename, f.Line, f.Column, f.Description, f.Pattern)
+	}
+	return result.TotalCount
 }
 
 // createLinter creates a new linter instance with configured rules

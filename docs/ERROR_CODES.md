@@ -817,7 +817,7 @@ Error E2002 at line 3, column 10: expected FROM, got WHERE
   4 | ORDER BY name
 
 Hint: Add FROM clause before WHERE
-Help: https://docs.gosqlx.dev/errors/E2002
+Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md
 ```
 
 ### Intelligent Error Suggestions
@@ -883,7 +883,7 @@ See [LSP_GUIDE.md](LSP_GUIDE.md) for complete LSP documentation.
 - **Troubleshooting Guide**: See [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 - **LSP Guide**: See [LSP_GUIDE.md](LSP_GUIDE.md) for IDE integration
 - **GitHub Issues**: [github.com/ajitpratap0/GoSQLX/issues](https://github.com/ajitpratap0/GoSQLX/issues)
-- **Help URLs**: Each error includes a help URL: `https://docs.gosqlx.dev/errors/<CODE>`
+- **Help URLs**: Each error includes a help URL pointing to this document on GitHub
 
 ---
 

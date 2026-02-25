@@ -1,3 +1,17 @@
+// Copyright 2026 GoSQLX Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // Package errors provides a structured error system for GoSQLX with error codes,
 // context extraction, and intelligent hints for debugging SQL parsing issues.
 //
@@ -119,7 +133,7 @@ const (
 //	  6 |
 //
 //	Hint: Expected FROM keyword after SELECT clause
-//	Help: https://docs.gosqlx.dev/errors/E2001
+//	Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md
 //
 // Thread Safety: Error instances are immutable after creation. Methods like
 // WithContext, WithHint return new Error instances and are safe for concurrent use.
@@ -185,7 +199,7 @@ type ErrorContext struct {
 //	               ^^^^
 //
 //	Hint: Did you mean 'FROM' instead of 'FORM'?
-//	Help: https://docs.gosqlx.dev/errors/E2002
+//	Help: https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md
 //
 // This method is called automatically when the error is printed or logged.
 func (e *Error) Error() string {
@@ -312,7 +326,7 @@ func (e *Error) Unwrap() error {
 //	    "unexpected token: COMMA",
 //	    models.Location{Line: 5, Column: 20},
 //	)
-//	// err.HelpURL is automatically set to https://docs.gosqlx.dev/errors/E2001
+//	// err.HelpURL is automatically set to https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md
 //
 // The error can be enhanced with additional context:
 //
@@ -322,7 +336,7 @@ func NewError(code ErrorCode, message string, location models.Location) *Error {
 		Code:     code,
 		Message:  message,
 		Location: location,
-		HelpURL:  fmt.Sprintf("https://docs.gosqlx.dev/errors/%s", code),
+		HelpURL:  fmt.Sprintf("https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md#%s", code),
 	}
 }
 

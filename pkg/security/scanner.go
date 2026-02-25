@@ -1,3 +1,17 @@
+// Copyright 2026 GoSQLX Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package security
 
 import (
@@ -7,15 +21,24 @@ import (
 )
 
 // Severity represents the severity level of a security finding.
+//
+// Deprecated: Use pkg/sql/security instead.
 type Severity int
 
 const (
+	// Deprecated: Use pkg/sql/security instead.
 	SeverityInfo Severity = iota
+	// Deprecated: Use pkg/sql/security instead.
 	SeverityWarning
+	// Deprecated: Use pkg/sql/security instead.
 	SeverityError
+	// Deprecated: Use pkg/sql/security instead.
 	SeverityCritical
 )
 
+// String returns the string representation of the severity level.
+//
+// Deprecated: Use pkg/sql/security instead.
 func (s Severity) String() string {
 	switch s {
 	case SeverityInfo:
@@ -32,6 +55,8 @@ func (s Severity) String() string {
 }
 
 // Finding represents a security issue found in SQL.
+//
+// Deprecated: Use pkg/sql/security instead.
 type Finding struct {
 	RuleID   string   `json:"rule_id"`
 	Severity Severity `json:"severity"`
@@ -43,6 +68,8 @@ type Finding struct {
 }
 
 // Rule defines a security scanning rule.
+//
+// Deprecated: Use pkg/sql/security instead.
 type Rule interface {
 	// ID returns the unique rule identifier.
 	ID() string
@@ -53,11 +80,15 @@ type Rule interface {
 }
 
 // Scanner scans SQL for security issues using registered rules.
+//
+// Deprecated: Use pkg/sql/security instead.
 type Scanner struct {
 	rules []Rule
 }
 
 // NewScanner creates a Scanner with the default rule set.
+//
+// Deprecated: Use pkg/sql/security instead.
 func NewScanner() *Scanner {
 	return &Scanner{
 		rules: defaultRules(),
@@ -65,16 +96,22 @@ func NewScanner() *Scanner {
 }
 
 // NewScannerWithRules creates a Scanner with the given rules.
+//
+// Deprecated: Use pkg/sql/security instead.
 func NewScannerWithRules(rules ...Rule) *Scanner {
 	return &Scanner{rules: rules}
 }
 
 // AddRule registers an additional rule.
+//
+// Deprecated: Use pkg/sql/security instead.
 func (s *Scanner) AddRule(r Rule) {
 	s.rules = append(s.rules, r)
 }
 
 // Scan checks the SQL string against all registered rules.
+//
+// Deprecated: Use pkg/sql/security instead.
 func (s *Scanner) Scan(sql string) []Finding {
 	var findings []Finding
 	for _, r := range s.rules {
@@ -92,6 +129,8 @@ func (s *Scanner) Scan(sql string) []Finding {
 }
 
 // Rules returns the registered rules (for introspection).
+//
+// Deprecated: Use pkg/sql/security instead.
 func (s *Scanner) Rules() []Rule {
 	return s.rules
 }
@@ -124,9 +163,18 @@ func posToLineCol(sql string, pos int) (int, int) {
 // --- TautologyRule (blind injection) ---
 
 // TautologyRule detects tautology patterns like OR 1=1, OR 'a'='a'.
+//
+// Deprecated: Use pkg/sql/security instead.
 type TautologyRule struct{}
 
-func (r *TautologyRule) ID() string          { return "SEC001" }
+// ID returns the unique rule identifier.
+//
+// Deprecated: Use pkg/sql/security instead.
+func (r *TautologyRule) ID() string { return "SEC001" }
+
+// Description returns a human-readable description.
+//
+// Deprecated: Use pkg/sql/security instead.
 func (r *TautologyRule) Description() string { return "Tautology / blind injection detection" }
 
 var tautologyPatterns = []*regexp.Regexp{
@@ -142,6 +190,9 @@ var tautologyPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\bOR\s+''\s*=\s*''`),
 }
 
+// Check scans the SQL and returns any findings.
+//
+// Deprecated: Use pkg/sql/security instead.
 func (r *TautologyRule) Check(sql string) []Finding {
 	var findings []Finding
 	upper := strings.ToUpper(sql)
@@ -164,9 +215,18 @@ func (r *TautologyRule) Check(sql string) []Finding {
 // --- LikeInjectionRule ---
 
 // LikeInjectionRule detects LIKE with string concatenation patterns.
+//
+// Deprecated: Use pkg/sql/security instead.
 type LikeInjectionRule struct{}
 
-func (r *LikeInjectionRule) ID() string          { return "SEC002" }
+// ID returns the unique rule identifier.
+//
+// Deprecated: Use pkg/sql/security instead.
+func (r *LikeInjectionRule) ID() string { return "SEC002" }
+
+// Description returns a human-readable description.
+//
+// Deprecated: Use pkg/sql/security instead.
 func (r *LikeInjectionRule) Description() string { return "LIKE injection detection" }
 
 var likePatterns = []*regexp.Regexp{
@@ -178,6 +238,9 @@ var likePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\bLIKE\s+CONCAT\s*\(\s*'%'\s*,`),
 }
 
+// Check scans the SQL and returns any findings.
+//
+// Deprecated: Use pkg/sql/security instead.
 func (r *LikeInjectionRule) Check(sql string) []Finding {
 	var findings []Finding
 	for _, pat := range likePatterns {
@@ -198,9 +261,18 @@ func (r *LikeInjectionRule) Check(sql string) []Finding {
 // --- UnionInjectionRule ---
 
 // UnionInjectionRule detects suspicious UNION SELECT patterns.
+//
+// Deprecated: Use pkg/sql/security instead.
 type UnionInjectionRule struct{}
 
-func (r *UnionInjectionRule) ID() string          { return "SEC003" }
+// ID returns the unique rule identifier.
+//
+// Deprecated: Use pkg/sql/security instead.
+func (r *UnionInjectionRule) ID() string { return "SEC003" }
+
+// Description returns a human-readable description.
+//
+// Deprecated: Use pkg/sql/security instead.
 func (r *UnionInjectionRule) Description() string { return "UNION-based injection detection" }
 
 var unionPatterns = []*regexp.Regexp{
@@ -212,6 +284,9 @@ var unionPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\bUNION\s+(ALL\s+)?SELECT\s+.*\binformation_schema\b`),
 }
 
+// Check scans the SQL and returns any findings.
+//
+// Deprecated: Use pkg/sql/security instead.
 func (r *UnionInjectionRule) Check(sql string) []Finding {
 	var findings []Finding
 	for _, pat := range unionPatterns {

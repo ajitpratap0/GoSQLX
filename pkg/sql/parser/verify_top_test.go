@@ -4,22 +4,43 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
-func TestTopVerification(t *testing.T) {
-	// Test 1: no dialect — must succeed (permissive)
-	p1 := parser.NewParser("SELECT TOP 10 id FROM users", parser.WithDialect(""))
-	_, err := p1.Parse()
+func parseTopSQL(t *testing.T, sql string, dialect string) error {
+	t.Helper()
+	// Use the specified dialect for tokenisation; fall back to SQL Server
+	// when dialect is empty because TOP is a SQL-Server-family keyword.
+	tokDialect := keywords.SQLDialect(dialect)
+	if dialect == "" {
+		tokDialect = keywords.DialectSQLServer
+	}
+	tkz, err := tokenizer.NewWithDialect(tokDialect)
 	if err != nil {
-		t.Errorf("BLOCKER FAIL (no dialect): %v", err)
+		t.Fatalf("failed to create tokenizer: %v", err)
+	}
+	tokens, err := tkz.Tokenize([]byte(sql))
+	if err != nil {
+		t.Fatalf("tokenize failed: %v", err)
+	}
+	p := parser.NewParser(parser.WithDialect(dialect))
+	_, parseErr := p.ParseFromModelTokens(tokens)
+	return parseErr
+}
+
+func TestTopVerification(t *testing.T) {
+	// Test 1: sqlserver dialect — must succeed
+	err := parseTopSQL(t, "SELECT TOP 10 id FROM users", "sqlserver")
+	if err != nil {
+		t.Errorf("BLOCKER FAIL (sqlserver): %v", err)
 	} else {
-		t.Log("PASS: SELECT TOP 10 succeeds with no dialect")
+		t.Log("PASS: SELECT TOP 10 succeeds with sqlserver dialect")
 	}
 
 	// Test 2: Oracle dialect — must fail with correct message (ROWNUM, not LIMIT)
-	p2 := parser.NewParser("SELECT TOP 10 id FROM users", parser.WithDialect("oracle"))
-	_, err = p2.Parse()
+	err = parseTopSQL(t, "SELECT TOP 10 id FROM users", "oracle")
 	if err == nil {
 		t.Error("FAIL: Oracle should reject TOP")
 	} else if strings.Contains(err.Error(), "ROWNUM") {
@@ -28,12 +49,13 @@ func TestTopVerification(t *testing.T) {
 		t.Errorf("FAIL: Oracle error should mention ROWNUM, got: %v", err)
 	}
 
-	// Test 3: sqlserver — must succeed
-	p3 := parser.NewParser("SELECT TOP 10 id FROM users", parser.WithDialect("sqlserver"))
-	_, err = p3.Parse()
-	if err != nil {
-		t.Errorf("FAIL (sqlserver): %v", err)
+	// Test 3: mysql dialect — must fail with correct message (LIMIT/OFFSET)
+	err = parseTopSQL(t, "SELECT TOP 10 id FROM users", "mysql")
+	if err == nil {
+		t.Error("FAIL: MySQL should reject TOP")
+	} else if strings.Contains(err.Error(), "LIMIT") {
+		t.Logf("PASS (mysql): %v", err)
 	} else {
-		t.Log("PASS: SELECT TOP 10 succeeds with sqlserver dialect")
+		t.Errorf("FAIL: MySQL error should mention LIMIT, got: %v", err)
 	}
 }

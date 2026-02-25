@@ -67,9 +67,6 @@ func parseSQLWithDialect(t *testing.T, sql string, dialect keywords.SQLDialect) 
 	return stmt
 }
 
-// ptrInt returns a pointer to an int value — convenient for comparing Limit/Offset.
-func ptrInt(v int) *int { return &v }
-
 // -----------------------------------------------------------------------------
 // parseDistinctModifier
 // -----------------------------------------------------------------------------

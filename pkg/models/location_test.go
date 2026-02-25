@@ -135,3 +135,18 @@ func BenchmarkEmptySpan(b *testing.B) {
 		_ = EmptySpan()
 	}
 }
+
+func TestLocationIsZero(t *testing.T) {
+	if !(Location{}).IsZero() {
+		t.Error("zero Location should be zero")
+	}
+	if (Location{Line: 1}).IsZero() {
+		t.Error("non-zero Location should not be zero")
+	}
+	if (Location{Column: 1}).IsZero() {
+		t.Error("non-zero Location should not be zero")
+	}
+	if (Location{Line: 1, Column: 1}).IsZero() {
+		t.Error("non-zero Location with both fields should not be zero")
+	}
+}

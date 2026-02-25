@@ -20,6 +20,7 @@ import (
 	"sync"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
@@ -368,25 +369,11 @@ func (v *Validator) validateExpressionColumns(expr ast.Expression, tableMap map[
 		if e.Table != "" {
 			// Qualified reference: table.column
 			errs := v.validateQualifiedColumn(e.Table, e.Name, tableMap)
-			// Attach position from AST node
-			for i := range errs {
-				if errs[i].Line == 0 {
-					errs[i].Line = e.Pos.Line
-					errs[i].Column = e.Pos.Column
-				}
-			}
-			errors = append(errors, errs...)
+			errors = append(errors, v.attachPositionToErrors(errs, e.Pos)...)
 		} else {
 			// Unqualified reference: just column name
 			errs := v.validateUnqualifiedColumn(e.Name, tableMap)
-			// Attach position from AST node
-			for i := range errs {
-				if errs[i].Line == 0 {
-					errs[i].Line = e.Pos.Line
-					errs[i].Column = e.Pos.Column
-				}
-			}
-			errors = append(errors, errs...)
+			errors = append(errors, v.attachPositionToErrors(errs, e.Pos)...)
 		}
 
 	case *ast.AliasedExpression:
@@ -602,6 +589,19 @@ func extractColumnName(expr ast.Expression) string {
 	}
 }
 
+// attachPositionToErrors attaches a source position to any errors that do not yet
+// have a position (Line == 0). This avoids repeating the position-attachment loop
+// at every call site and centralises the "only fill zero positions" rule.
+func (v *Validator) attachPositionToErrors(errs []ValidationError, pos models.Location) []ValidationError {
+	for i := range errs {
+		if errs[i].Line == 0 {
+			errs[i].Line = pos.Line
+			errs[i].Column = pos.Column
+		}
+	}
+	return errs
+}
+
 // extractExprPos extracts the source position (line, column) from an expression.
 // Returns (0, 0) if the expression doesn't carry position information.
 func extractExprPos(expr ast.Expression) (line, column int) {
@@ -615,6 +615,18 @@ func extractExprPos(expr ast.Expression) (line, column int) {
 		return e.Pos.Line, e.Pos.Column
 	case *ast.AliasedExpression:
 		return extractExprPos(e.Expr)
+	case *ast.CaseExpression:
+		return e.Pos.Line, e.Pos.Column
+	case *ast.InExpression:
+		return e.Pos.Line, e.Pos.Column
+	case *ast.BetweenExpression:
+		return e.Pos.Line, e.Pos.Column
+	case *ast.SubqueryExpression:
+		return e.Pos.Line, e.Pos.Column
+	case *ast.BinaryExpression:
+		return e.Pos.Line, e.Pos.Column
+	case *ast.UnaryExpression:
+		return e.Pos.Line, e.Pos.Column
 	default:
 		return 0, 0
 	}

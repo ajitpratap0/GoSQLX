@@ -51,6 +51,17 @@ type Location struct {
 	Column int // Column number (1-based)
 }
 
+// IsZero reports whether the location is the zero value (i.e., no position information).
+// A zero Location has both Line and Column equal to 0.
+//
+// Example:
+//
+//	loc := models.Location{}
+//	if loc.IsZero() {
+//	    // no position info available
+//	}
+func (l Location) IsZero() bool { return l == (Location{}) }
+
 // Span represents a range in the source code.
 //
 // Span defines a contiguous region of source code from a Start location

@@ -402,8 +402,14 @@ func TestOracleKeywordListNonNil(t *testing.T) {
 // helpers
 // ---------------------------------------------------------------------------
 
-// containsAny returns true if s contains any of the given substrings
-// (case-insensitive).
+// containsAny reports whether s contains any of the given substrings using a
+// case-insensitive comparison.  Both s and each element of substrs are
+// lowercased before matching, so the caller does not need to normalise them.
+//
+// Example:
+//
+//	containsAny("LIMIT clause not supported", "limit", "SQL Server") // true
+//	containsAny("unknown dialect", "TOP", "FETCH")                   // false
 func containsAny(s string, substrs ...string) bool {
 	lower := strings.ToLower(s)
 	for _, sub := range substrs {

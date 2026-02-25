@@ -27,6 +27,7 @@ import (
 
 // WITH summary(region, total) AS (SELECT region, SUM(amount) FROM sales GROUP BY region) SELECT * FROM summary
 func (p *Parser) parseWithStatement() (ast.Statement, error) {
+	withPos := p.currentLocation()
 	// Consume WITH
 	p.advance()
 
@@ -63,6 +64,7 @@ func (p *Parser) parseWithStatement() (ast.Statement, error) {
 	withClause := &ast.WithClause{
 		Recursive: recursive,
 		CTEs:      ctes,
+		Pos:       withPos,
 	}
 
 	// Parse the main statement that follows the WITH clause
@@ -126,6 +128,7 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 	if !p.isIdentifier() {
 		return nil, p.expectedError("CTE name")
 	}
+	cteNamePos := p.currentLocation()
 	name := p.currentToken.Literal
 	p.advance()
 
@@ -214,6 +217,7 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 		Columns:      columns,
 		Statement:    stmt,
 		Materialized: materialized,
+		Pos:          cteNamePos,
 	}, nil
 }
 

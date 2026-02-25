@@ -139,6 +139,7 @@ type Expression interface {
 type WithClause struct {
 	Recursive bool
 	CTEs      []*CommonTableExpr
+	Pos       models.Location // Source position of the WITH keyword (1-based line and column)
 }
 
 func (w *WithClause) statementNode()      {}
@@ -159,7 +160,8 @@ type CommonTableExpr struct {
 	Name         string
 	Columns      []string
 	Statement    Statement
-	Materialized *bool // nil = default, true = MATERIALIZED, false = NOT MATERIALIZED
+	Materialized *bool           // nil = default, true = MATERIALIZED, false = NOT MATERIALIZED
+	Pos          models.Location // Source position of the CTE name (1-based line and column)
 }
 
 func (c *CommonTableExpr) statementNode()      {}
@@ -722,6 +724,7 @@ type CaseExpression struct {
 	Value       Expression // Optional CASE value
 	WhenClauses []WhenClause
 	ElseClause  Expression
+	Pos         models.Location // Source position of the CASE keyword (1-based line and column)
 }
 
 func (c *CaseExpression) expressionNode()     {}
@@ -745,6 +748,7 @@ func (c CaseExpression) Children() []Node {
 type WhenClause struct {
 	Condition Expression
 	Result    Expression
+	Pos       models.Location // Source position of the WHEN keyword (1-based line and column)
 }
 
 func (w *WhenClause) expressionNode()     {}
@@ -770,6 +774,7 @@ type InExpression struct {
 	List     []Expression // For value list: IN (1, 2, 3)
 	Subquery Statement    // For subquery: IN (SELECT ...)
 	Not      bool
+	Pos      models.Location // Source position of the IN keyword (1-based line and column)
 }
 
 func (i *InExpression) expressionNode()     {}
@@ -787,6 +792,7 @@ func (i InExpression) Children() []Node {
 // SubqueryExpression represents a scalar subquery (SELECT ...)
 type SubqueryExpression struct {
 	Subquery Statement
+	Pos      models.Location // Source position of the opening parenthesis (1-based line and column)
 }
 
 func (s *SubqueryExpression) expressionNode()     {}
@@ -821,6 +827,7 @@ type BetweenExpression struct {
 	Lower Expression
 	Upper Expression
 	Not   bool
+	Pos   models.Location // Source position of the BETWEEN keyword (1-based line and column)
 }
 
 func (b *BetweenExpression) expressionNode()     {}

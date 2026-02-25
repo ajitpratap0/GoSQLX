@@ -451,6 +451,9 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		string(keywords.DialectOracle):     true,
 	}
 	if nonTopDialects[p.dialect] && strings.ToUpper(p.currentToken.Literal) == "TOP" {
+		if p.dialect == string(keywords.DialectOracle) {
+			return nil, fmt.Errorf("TOP clause is not supported in Oracle; use ROWNUM or FETCH FIRST … ROWS ONLY instead")
+		}
 		return nil, fmt.Errorf("TOP clause is not supported in %s; use LIMIT/OFFSET instead", p.dialect)
 	}
 

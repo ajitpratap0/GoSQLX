@@ -444,6 +444,8 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	// Reject TOP in dialects that use LIMIT/OFFSET or ROWNUM/FETCH FIRST instead.
+	// String comparison is used here because the lexer has no TokenTypeTOP constant;
+	// TOP is emitted as an identifier literal (see parseTopClause comment).
 	nonTopDialects := map[string]bool{
 		string(keywords.DialectMySQL):      true,
 		string(keywords.DialectPostgreSQL): true,
@@ -569,6 +571,11 @@ func (p *Parser) parseDistinctModifier() (isDistinct bool, distinctOnColumns []a
 
 // parseTopClause parses SQL Server's TOP n [PERCENT] [WITH TIES] clause.
 // Returns nil when the current dialect is not SQL Server or TOP is absent.
+//
+// Note: "TOP" is detected via a string comparison rather than a dedicated token-type
+// constant because the lexer does not define a TokenTypeTOP — it tokenises TOP as a
+// plain identifier/keyword literal.  A future lexer enhancement could introduce
+// models.TokenTypeTop and replace the strings.ToUpper check below.
 func (p *Parser) parseTopClause() (*ast.TopClause, error) {
 	if p.dialect != string(keywords.DialectSQLServer) || strings.ToUpper(p.currentToken.Literal) != "TOP" {
 		return nil, nil

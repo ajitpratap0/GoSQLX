@@ -131,6 +131,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 
 	// Check for BETWEEN operator
 	if p.isType(models.TokenTypeBetween) {
+		betweenPos := p.currentLocation()
 		p.advance() // Consume BETWEEN
 
 		// Parse lower bound - use parseStringConcatExpression to support complex expressions
@@ -165,6 +166,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			Lower: lower,
 			Upper: upper,
 			Not:   notPrefix,
+			Pos:   betweenPos,
 		}, nil
 	}
 
@@ -222,6 +224,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 
 	// Check for IN operator
 	if p.isType(models.TokenTypeIn) {
+		inPos := p.currentLocation()
 		p.advance() // Consume IN
 
 		// Expect opening parenthesis
@@ -252,6 +255,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 				Expr:     left,
 				Subquery: subquery,
 				Not:      notPrefix,
+				Pos:      inPos,
 			}, nil
 		}
 
@@ -282,6 +286,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			Expr: left,
 			List: values,
 			Not:  notPrefix,
+			Pos:  inPos,
 		}, nil
 	}
 
@@ -709,7 +714,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		if err != nil {
 			return nil, err
 		}
-		if funcCall.Pos == (models.Location{}) {
+		if funcCall.Pos.IsZero() {
 			funcCall.Pos = kwPos
 		}
 		return funcCall, nil
@@ -731,7 +736,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				return nil, err
 			}
 			// Assign position of function name
-			if funcCall.Pos == (models.Location{}) {
+			if funcCall.Pos.IsZero() {
 				funcCall.Pos = identPos
 			}
 
@@ -829,6 +834,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 
 	if p.isType(models.TokenTypeLParen) {
 		// Handle parenthesized expression or subquery
+		parenPos := p.currentLocation()
 		p.advance() // Consume (
 
 		// Check if this is a subquery (starts with SELECT or WITH)
@@ -847,7 +853,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				return nil, p.expectedError(")")
 			}
 			p.advance() // Consume )
-			return &ast.SubqueryExpression{Subquery: subquery}, nil
+			return &ast.SubqueryExpression{Subquery: subquery, Pos: parenPos}, nil
 		}
 
 		// Regular parenthesized expression - could be tuple (a, b, c) or single (expr)
@@ -986,10 +992,12 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 // Simple CASE: CASE expr WHEN value THEN result ... [ELSE result] END
 // Searched CASE: CASE WHEN condition THEN result ... [ELSE result] END
 func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
+	casePos := p.currentLocation()
 	p.advance() // Consume CASE
 
 	caseExpr := &ast.CaseExpression{
 		WhenClauses: make([]ast.WhenClause, 0),
+		Pos:         casePos,
 	}
 
 	// Check if this is a simple CASE (has a value expression) or searched CASE (no value)
@@ -1010,6 +1018,7 @@ func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
 
 	// Parse WHEN clauses (at least one required)
 	for p.isType(models.TokenTypeWhen) {
+		whenPos := p.currentLocation()
 		p.advance() // Consume WHEN
 
 		// Parse the condition/value expression
@@ -1041,6 +1050,7 @@ func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
 		caseExpr.WhenClauses = append(caseExpr.WhenClauses, ast.WhenClause{
 			Condition: condition,
 			Result:    result,
+			Pos:       whenPos,
 		})
 	}
 

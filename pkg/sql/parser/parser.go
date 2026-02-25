@@ -695,7 +695,7 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 			return nil, err
 		}
 		if ss, ok := stmt.(*ast.SelectStatement); ok {
-			if ss.Pos == (models.Location{}) {
+			if ss.Pos.IsZero() {
 				ss.Pos = stmtPos
 			}
 		}
@@ -708,7 +708,7 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 			return nil, err
 		}
 		if is, ok := stmt.(*ast.InsertStatement); ok {
-			if is.Pos == (models.Location{}) {
+			if is.Pos.IsZero() {
 				is.Pos = stmtPos
 			}
 		}
@@ -721,7 +721,7 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 			return nil, err
 		}
 		if us, ok := stmt.(*ast.UpdateStatement); ok {
-			if us.Pos == (models.Location{}) {
+			if us.Pos.IsZero() {
 				us.Pos = stmtPos
 			}
 		}
@@ -734,7 +734,7 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 			return nil, err
 		}
 		if ds, ok := stmt.(*ast.DeleteStatement); ok {
-			if ds.Pos == (models.Location{}) {
+			if ds.Pos.IsZero() {
 				ds.Pos = stmtPos
 			}
 		}

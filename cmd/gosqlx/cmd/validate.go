@@ -35,6 +35,7 @@ var (
 	validateStrict       bool
 	validateOutputFormat string
 	validateOutputFile   string
+	validateListDialects bool
 )
 
 // validateCmd represents the validate command
@@ -70,6 +71,14 @@ Throughput: 100+ files/second in batch mode`,
 }
 
 func validateRun(cmd *cobra.Command, args []string) error {
+	// --list-dialects: print all valid dialects and exit.
+	if validateListDialects {
+		for _, d := range keywords.AllDialects() {
+			fmt.Fprintln(cmd.OutOrStdout(), string(d))
+		}
+		return nil
+	}
+
 	// In quiet/check mode, silence all cobra output — only exit code matters
 	if validateQuiet {
 		cmd.SilenceErrors = true
@@ -327,4 +336,5 @@ func init() {
 	validateCmd.Flags().BoolVar(&validateStrict, "strict", false, "enable strict validation mode (config: validate.strict_mode)")
 	validateCmd.Flags().StringVar(&validateOutputFormat, "output-format", "text", "output format: text, json, sarif")
 	validateCmd.Flags().StringVar(&validateOutputFile, "output-file", "", "output file path (default: stdout)")
+	validateCmd.Flags().BoolVar(&validateListDialects, "list-dialects", false, "print all valid SQL dialects and exit")
 }

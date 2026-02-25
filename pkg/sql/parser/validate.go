@@ -18,6 +18,7 @@ package parser
 
 import (
 	"fmt"
+	"strings"
 
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
@@ -80,6 +81,19 @@ func trimBytes(b []byte) []byte {
 		end--
 	}
 	return b[start:end]
+}
+
+// validDialectList returns a human-readable comma-separated list of all valid
+// dialect names for use in error messages.
+func validDialectList() string {
+	dialects := keywords.AllDialects()
+	names := make([]string, 0, len(dialects))
+	for _, d := range dialects {
+		if d != keywords.DialectUnknown {
+			names = append(names, string(d))
+		}
+	}
+	return strings.Join(names, ", ")
 }
 
 // ParseBytes parses SQL from a []byte input without requiring a string conversion.
@@ -147,6 +161,11 @@ func ValidateBytesWithDialect(input []byte, dialect keywords.SQLDialect) error {
 		return nil
 	}
 
+	if !keywords.IsValidDialect(string(dialect)) {
+		return fmt.Errorf("unknown SQL dialect %q; valid dialects: %s",
+			dialect, validDialectList())
+	}
+
 	tkz, err := tokenizer.NewWithDialect(dialect)
 	if err != nil {
 		return fmt.Errorf("tokenizer initialization: %w", err)
@@ -185,6 +204,11 @@ func ParseWithDialect(sql string, dialect keywords.SQLDialect) (*ast.AST, error)
 
 // ParseBytesWithDialect is like ParseWithDialect but accepts []byte.
 func ParseBytesWithDialect(input []byte, dialect keywords.SQLDialect) (*ast.AST, error) {
+	if !keywords.IsValidDialect(string(dialect)) {
+		return nil, fmt.Errorf("unknown SQL dialect %q; valid dialects: %s",
+			dialect, validDialectList())
+	}
+
 	tkz, err := tokenizer.NewWithDialect(dialect)
 	if err != nil {
 		return nil, fmt.Errorf("tokenizer initialization: %w", err)

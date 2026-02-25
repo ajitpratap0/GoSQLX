@@ -84,9 +84,31 @@ func DialectKeywords(dialect SQLDialect) []Keyword {
 		return SQLITE_SPECIFIC
 	case DialectSQLServer:
 		return SQLSERVER_SPECIFIC
+	case DialectOracle:
+		return ORACLE_SPECIFIC
 	default:
 		return nil
 	}
+}
+
+// IsValidDialect reports whether name is a recognised SQL dialect identifier.
+// An empty string is also considered valid (meaning "use the default dialect").
+//
+// Example:
+//
+//	keywords.IsValidDialect("mysql")      // true
+//	keywords.IsValidDialect("fakesql")    // false
+//	keywords.IsValidDialect("")           // true  (default)
+func IsValidDialect(name string) bool {
+	if name == "" {
+		return true
+	}
+	for _, d := range AllDialects() {
+		if string(d) == name {
+			return true
+		}
+	}
+	return false
 }
 
 // AllDialects returns all supported SQL dialect identifiers.
@@ -236,4 +258,66 @@ var SQLSERVER_SPECIFIC = []Keyword{
 	{Word: "DELETED", Type: models.TokenTypeKeyword},
 	{Word: "SCOPE_IDENTITY", Type: models.TokenTypeKeyword},
 	{Word: "OUTPUT", Type: models.TokenTypeKeyword},
+}
+
+// ORACLE_SPECIFIC contains Oracle Database-specific keywords and extensions.
+// These keywords are recognized when using DialectOracle.
+//
+// Examples: ROWNUM, ROWID, SYSDATE, DUAL, CONNECT BY, NVL, DECODE
+var ORACLE_SPECIFIC = []Keyword{
+	{Word: "ROWNUM", Type: models.TokenTypeKeyword},
+	{Word: "ROWID", Type: models.TokenTypeKeyword},
+	{Word: "SYSDATE", Type: models.TokenTypeKeyword},
+	{Word: "SYSTIMESTAMP", Type: models.TokenTypeKeyword},
+	{Word: "DUAL", Type: models.TokenTypeKeyword},
+	{Word: "NOCYCLE", Type: models.TokenTypeKeyword},
+	{Word: "PRIOR", Type: models.TokenTypeKeyword},
+	{Word: "LEVEL", Type: models.TokenTypeKeyword},
+	{Word: "CONNECT_BY_ROOT", Type: models.TokenTypeKeyword},
+	{Word: "NVL", Type: models.TokenTypeKeyword},
+	{Word: "NVL2", Type: models.TokenTypeKeyword},
+	{Word: "DECODE", Type: models.TokenTypeKeyword},
+	{Word: "GREATEST", Type: models.TokenTypeKeyword},
+	{Word: "LEAST", Type: models.TokenTypeKeyword},
+	{Word: "LPAD", Type: models.TokenTypeKeyword},
+	{Word: "RPAD", Type: models.TokenTypeKeyword},
+	{Word: "INSTR", Type: models.TokenTypeKeyword},
+	{Word: "SUBSTR", Type: models.TokenTypeKeyword},
+	{Word: "TRUNC", Type: models.TokenTypeKeyword},
+	{Word: "ROUND", Type: models.TokenTypeKeyword},
+	{Word: "MOD", Type: models.TokenTypeKeyword},
+	{Word: "NCHAR", Type: models.TokenTypeKeyword},
+	{Word: "VARCHAR2", Type: models.TokenTypeKeyword},
+	{Word: "NUMBER", Type: models.TokenTypeKeyword},
+	{Word: "CLOB", Type: models.TokenTypeKeyword},
+	{Word: "BLOB", Type: models.TokenTypeKeyword},
+	{Word: "NCLOB", Type: models.TokenTypeKeyword},
+	{Word: "RAW", Type: models.TokenTypeKeyword},
+	{Word: "LONG", Type: models.TokenTypeKeyword},
+	{Word: "PIPELINED", Type: models.TokenTypeKeyword},
+	{Word: "BULK", Type: models.TokenTypeKeyword},
+	{Word: "COLLECT", Type: models.TokenTypeKeyword},
+	{Word: "FORALL", Type: models.TokenTypeKeyword},
+	{Word: "EXCEPTION", Type: models.TokenTypeKeyword},
+	{Word: "PRAGMA", Type: models.TokenTypeKeyword},
+	{Word: "SEQUENCE", Type: models.TokenTypeKeyword},
+	{Word: "NEXTVAL", Type: models.TokenTypeKeyword},
+	{Word: "CURRVAL", Type: models.TokenTypeKeyword},
+	{Word: "NOCACHE", Type: models.TokenTypeKeyword},
+	{Word: "NOCOPY", Type: models.TokenTypeKeyword},
+	{Word: "MERGE", Type: models.TokenTypeKeyword},
+	{Word: "MATCHED", Type: models.TokenTypeKeyword},
+	{Word: "PARTITION", Type: models.TokenTypeKeyword},
+	{Word: "SUBPARTITION", Type: models.TokenTypeKeyword},
+	{Word: "TABLESPACE", Type: models.TokenTypeKeyword},
+	{Word: "STORAGE", Type: models.TokenTypeKeyword},
+	{Word: "FLASHBACK", Type: models.TokenTypeKeyword},
+	{Word: "VERSIONS", Type: models.TokenTypeKeyword},
+	{Word: "SCN", Type: models.TokenTypeKeyword},
+	{Word: "TIMESTAMP", Type: models.TokenTypeKeyword},
+	{Word: "MINVALUE", Type: models.TokenTypeKeyword},
+	{Word: "MAXVALUE", Type: models.TokenTypeKeyword},
+	{Word: "INCREMENT", Type: models.TokenTypeKeyword},
+	{Word: "NOMINVALUE", Type: models.TokenTypeKeyword},
+	{Word: "NOMAXVALUE", Type: models.TokenTypeKeyword},
 }

@@ -443,6 +443,14 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		return nil, err
 	}
 
+	// Reject TOP clause in MySQL and PostgreSQL — these dialects use LIMIT/OFFSET.
+	if (p.dialect == string(keywords.DialectMySQL) || p.dialect == string(keywords.DialectPostgreSQL)) &&
+		strings.ToUpper(p.currentToken.Literal) == "TOP" {
+		return nil, fmt.Errorf(
+			"TOP clause is not supported in %s; use LIMIT/OFFSET instead", p.dialect,
+		)
+	}
+
 	// SQL Server TOP clause
 	topClause, err := p.parseTopClause()
 	if err != nil {
@@ -592,6 +600,7 @@ func (p *Parser) parseTopClause() (*ast.TopClause, error) {
 		topClause.WithTies = true
 		p.advance() // Consume WITH
 		p.advance() // Consume TIES
+
 	}
 
 	return topClause, nil
@@ -1100,7 +1109,13 @@ func (p *Parser) parseOrderByClause() ([]ast.OrderByExpression, error) {
 func (p *Parser) parseLimitOffsetClause() (limit *int, offset *int, err error) {
 	// LIMIT clause
 	if p.isType(models.TokenTypeLimit) {
-		p.advance()
+		// Reject LIMIT in SQL Server — use TOP or OFFSET/FETCH NEXT instead.
+		if p.dialect == string(keywords.DialectSQLServer) {
+			return nil, nil, fmt.Errorf(
+				"LIMIT clause is not supported in SQL Server; use TOP or OFFSET/FETCH NEXT instead",
+			)
+		}
+		p.advance() // Consume LIMIT
 
 		if !p.isNumericLiteral() {
 			return nil, nil, p.expectedError("integer for LIMIT")

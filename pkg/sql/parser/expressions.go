@@ -167,6 +167,15 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	// Check for LIKE/ILIKE operator
 	if p.isType(models.TokenTypeLike) || strings.EqualFold(p.currentToken.Literal, "ILIKE") {
 		operator := p.currentToken.Literal
+		// Reject ILIKE in non-PostgreSQL dialects — it is a PostgreSQL extension.
+		if strings.EqualFold(operator, "ILIKE") &&
+			p.dialect != "" &&
+			p.dialect != string(keywords.DialectPostgreSQL) {
+			return nil, fmt.Errorf(
+				"ILIKE is a PostgreSQL-specific operator and is not supported in %s; "+
+					"use LIKE or LOWER() for case-insensitive matching", p.dialect,
+			)
+		}
 		p.advance() // Consume LIKE/ILIKE
 
 		// Parse pattern

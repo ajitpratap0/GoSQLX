@@ -103,8 +103,8 @@ func TestConfigWithFlags(t *testing.T) {
 	if cfg.Format.Indent != 2 {
 		t.Errorf("expected default indent 2, got %d", cfg.Format.Indent)
 	}
-	if cfg.Validation.Dialect != "postgresql" {
-		t.Errorf("expected default dialect 'postgresql', got '%s'", cfg.Validation.Dialect)
+	if cfg.Validation.Dialect != "" {
+		t.Errorf("expected default dialect '' (empty), got '%s'", cfg.Validation.Dialect)
 	}
 
 	// Simulate CLI flags overriding config

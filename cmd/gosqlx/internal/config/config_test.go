@@ -38,8 +38,8 @@ func TestDefaultConfig(t *testing.T) {
 	}
 
 	// Test validation defaults
-	if cfg.Validation.Dialect != "postgresql" {
-		t.Errorf("expected dialect to be 'postgresql', got '%s'", cfg.Validation.Dialect)
+	if cfg.Validation.Dialect != "" {
+		t.Errorf("expected dialect to be '' (empty = permissive), got '%s'", cfg.Validation.Dialect)
 	}
 	if cfg.Validation.StrictMode {
 		t.Error("expected strict_mode to be false")

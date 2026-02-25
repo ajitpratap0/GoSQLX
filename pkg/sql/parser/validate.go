@@ -24,7 +24,6 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
@@ -58,12 +57,7 @@ func ValidateBytes(input []byte) error {
 	p := GetParser()
 	defer PutParser(p)
 
-	converted, convErr := convertModelTokens(tokens)
-	if convErr != nil {
-		return fmt.Errorf("token conversion failed: %w", convErr)
-	}
-
-	astResult, parseErr := p.Parse(converted)
+	astResult, parseErr := p.ParseFromModelTokens(tokens)
 	if parseErr != nil {
 		return parseErr
 	}
@@ -120,9 +114,9 @@ func ParseBytes(input []byte) (*ast.AST, error) {
 	return p.ParseFromModelTokens(tokens)
 }
 
-// ParseBytesWithTokens is like ParseBytes but also returns the token slice
-// for callers that need both.
-func ParseBytesWithTokens(input []byte) (*ast.AST, []token.Token, error) {
+// ParseBytesWithTokens is like ParseBytes but also returns the preprocessed
+// token slice ([]models.TokenWithSpan) for callers that need both.
+func ParseBytesWithTokens(input []byte) (*ast.AST, []models.TokenWithSpan, error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 
@@ -138,17 +132,13 @@ func ParseBytesWithTokens(input []byte) (*ast.AST, []token.Token, error) {
 	p := GetParser()
 	defer PutParser(p)
 
-	converted, convErr := convertModelTokens(tokens)
-	if convErr != nil {
-		return nil, nil, fmt.Errorf("token conversion failed: %w", convErr)
-	}
-
-	astResult, parseErr := p.Parse(converted)
+	preprocessed := preprocessTokens(tokens)
+	astResult, parseErr := p.parseTokens(preprocessed)
 	if parseErr != nil {
 		return nil, nil, parseErr
 	}
 
-	return astResult, converted, nil
+	return astResult, preprocessed, nil
 }
 
 // ValidateWithDialect checks whether the given SQL string is syntactically valid
@@ -185,12 +175,7 @@ func ValidateBytesWithDialect(input []byte, dialect keywords.SQLDialect) error {
 	p := NewParser(WithDialect(string(dialect)))
 	defer p.Release()
 
-	converted, convErr := convertModelTokens(tokens)
-	if convErr != nil {
-		return fmt.Errorf("token conversion failed: %w", convErr)
-	}
-
-	astResult, parseErr := p.Parse(converted)
+	astResult, parseErr := p.ParseFromModelTokens(tokens)
 	if parseErr != nil {
 		return parseErr
 	}

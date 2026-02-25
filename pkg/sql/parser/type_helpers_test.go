@@ -18,38 +18,44 @@ import (
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
+
+// mkSpanToken is a convenience helper that wraps a models.Token into a
+// models.TokenWithSpan with empty span information.  It keeps test table
+// entries terse.
+func mkSpanToken(typ models.TokenType, value string) models.TokenWithSpan {
+	return models.WrapToken(models.Token{Type: typ, Value: value})
+}
 
 // TestIsAnyType tests the isAnyType helper method
 func TestIsAnyType(t *testing.T) {
 	tests := []struct {
 		name     string
-		token    token.Token
+		token    models.TokenWithSpan
 		types    []models.TokenType
 		expected bool
 	}{
 		{
 			name:     "match first type",
-			token:    token.Token{Type: models.TokenTypeSelect, Literal: "SELECT"},
+			token:    mkSpanToken(models.TokenTypeSelect, "SELECT"),
 			types:    []models.TokenType{models.TokenTypeSelect, models.TokenTypeInsert},
 			expected: true,
 		},
 		{
 			name:     "match second type",
-			token:    token.Token{Type: models.TokenTypeInsert, Literal: "INSERT"},
+			token:    mkSpanToken(models.TokenTypeInsert, "INSERT"),
 			types:    []models.TokenType{models.TokenTypeSelect, models.TokenTypeInsert},
 			expected: true,
 		},
 		{
 			name:     "no match",
-			token:    token.Token{Type: models.TokenTypeUpdate, Literal: "UPDATE"},
+			token:    mkSpanToken(models.TokenTypeUpdate, "UPDATE"),
 			types:    []models.TokenType{models.TokenTypeSelect, models.TokenTypeInsert},
 			expected: false,
 		},
 		{
 			name:     "single type match",
-			token:    token.Token{Type: models.TokenTypeDelete, Literal: "DELETE"},
+			token:    mkSpanToken(models.TokenTypeDelete, "DELETE"),
 			types:    []models.TokenType{models.TokenTypeDelete},
 			expected: true,
 		},
@@ -57,7 +63,7 @@ func TestIsAnyType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tokens := []token.Token{tt.token}
+			tokens := []models.TokenWithSpan{tt.token}
 			p := &Parser{
 				tokens:       tokens,
 				currentPos:   0,
@@ -75,16 +81,16 @@ func TestIsAnyType(t *testing.T) {
 func TestMatchType(t *testing.T) {
 	tests := []struct {
 		name         string
-		tokens       []token.Token
+		tokens       []models.TokenWithSpan
 		matchAgainst models.TokenType
 		wantMatch    bool
 		wantPosAfter int
 	}{
 		{
 			name: "match and advance",
-			tokens: []token.Token{
-				{Type: models.TokenTypeSelect, Literal: "SELECT"},
-				{Type: models.TokenTypeFrom, Literal: "FROM"},
+			tokens: []models.TokenWithSpan{
+				mkSpanToken(models.TokenTypeSelect, "SELECT"),
+				mkSpanToken(models.TokenTypeFrom, "FROM"),
 			},
 			matchAgainst: models.TokenTypeSelect,
 			wantMatch:    true,
@@ -92,9 +98,9 @@ func TestMatchType(t *testing.T) {
 		},
 		{
 			name: "no match, no advance",
-			tokens: []token.Token{
-				{Type: models.TokenTypeInsert, Literal: "INSERT"},
-				{Type: models.TokenTypeInto, Literal: "INTO"},
+			tokens: []models.TokenWithSpan{
+				mkSpanToken(models.TokenTypeInsert, "INSERT"),
+				mkSpanToken(models.TokenTypeInto, "INTO"),
 			},
 			matchAgainst: models.TokenTypeSelect,
 			wantMatch:    false,

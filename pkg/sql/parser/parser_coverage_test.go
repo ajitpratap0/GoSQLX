@@ -827,7 +827,7 @@ func TestParser_TableDrivenComplexScenarios(t *testing.T) {
 				{Type: models.TokenTypeFrom, Literal: "FROM"},
 				{Type: models.TokenTypeIdentifier, Literal: "orders"},
 			},
-			wantErr: true, // DISTINCT in aggregate not yet supported
+			wantErr: false, // COUNT(DISTINCT ...) is now supported
 		},
 		{
 			name: "GROUP BY with HAVING",
@@ -853,7 +853,7 @@ func TestParser_TableDrivenComplexScenarios(t *testing.T) {
 				{Type: models.TokenTypeGt, Literal: ">"},
 				{Type: models.TokenTypeNumber, Literal: "10"},
 			},
-			wantErr: true, // HAVING clause not yet supported
+			wantErr: false, // GROUP BY with HAVING is now supported
 		},
 	}
 

@@ -33,7 +33,7 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 	if name == nil {
 		return nil, goerrors.ExpectedTokenError(
 			"column name",
-			p.currentToken.Type.String(),
+			p.currentToken.Token.Type.String(),
 			p.currentLocation(),
 			"",
 		)
@@ -44,7 +44,7 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 	if dataType == nil {
 		return nil, goerrors.ExpectedTokenError(
 			"data type",
-			p.currentToken.Type.String(),
+			p.currentToken.Token.Type.String(),
 			p.currentLocation(),
 			"",
 		)
@@ -59,7 +59,7 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 
 		// Parse first parameter (can be number or identifier like MAX)
 		if p.isType(models.TokenTypeNumber) || p.isType(models.TokenTypeIdentifier) {
-			dataTypeStr += p.currentToken.Literal
+			dataTypeStr += p.currentToken.Token.Value
 			p.advance()
 		}
 
@@ -68,7 +68,7 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 			dataTypeStr += ","
 			p.advance()
 			if p.isType(models.TokenTypeNumber) || p.isType(models.TokenTypeIdentifier) {
-				dataTypeStr += p.currentToken.Literal
+				dataTypeStr += p.currentToken.Token.Value
 				p.advance()
 			}
 		}
@@ -188,7 +188,7 @@ func (p *Parser) parseColumnConstraint() (*ast.ColumnConstraint, bool, error) {
 			return nil, false, p.expectedError("table name after REFERENCES")
 		}
 		refDef := &ast.ReferenceDefinition{
-			Table: p.currentToken.Literal,
+			Table: p.currentToken.Token.Value,
 		}
 		p.advance()
 
@@ -199,7 +199,7 @@ func (p *Parser) parseColumnConstraint() (*ast.ColumnConstraint, bool, error) {
 				if !p.isIdentifier() {
 					return nil, false, p.expectedError("column name in REFERENCES")
 				}
-				refDef.Columns = append(refDef.Columns, p.currentToken.Literal)
+				refDef.Columns = append(refDef.Columns, p.currentToken.Token.Value)
 				p.advance()
 
 				if p.isType(models.TokenTypeComma) {
@@ -294,7 +294,7 @@ func (p *Parser) parseTableConstraint() (*ast.TableConstraint, error) {
 	// Constraint name comes before the constraint type (PRIMARY, FOREIGN, UNIQUE, CHECK)
 	if p.isType(models.TokenTypeIdentifier) &&
 		!p.isAnyType(models.TokenTypePrimary, models.TokenTypeForeign, models.TokenTypeUnique, models.TokenTypeCheck) {
-		constraint.Name = p.currentToken.Literal
+		constraint.Name = p.currentToken.Token.Value
 		p.advance()
 	}
 
@@ -343,7 +343,7 @@ func (p *Parser) parseTableConstraint() (*ast.TableConstraint, error) {
 			return nil, p.expectedError("table name after REFERENCES")
 		}
 		refDef := &ast.ReferenceDefinition{
-			Table: p.currentToken.Literal,
+			Table: p.currentToken.Token.Value,
 		}
 		p.advance()
 
@@ -414,7 +414,7 @@ func (p *Parser) parseConstraintColumnList() ([]string, error) {
 		if !p.isIdentifier() {
 			return nil, p.expectedError("column name")
 		}
-		columns = append(columns, p.currentToken.Literal)
+		columns = append(columns, p.currentToken.Token.Value)
 		p.advance()
 
 		if p.isType(models.TokenTypeComma) {
@@ -452,7 +452,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		string(keywords.DialectSQLite):     true,
 		string(keywords.DialectOracle):     true,
 	}
-	if nonTopDialects[p.dialect] && strings.ToUpper(p.currentToken.Literal) == "TOP" {
+	if nonTopDialects[p.dialect] && strings.ToUpper(p.currentToken.Token.Value) == "TOP" {
 		if p.dialect == string(keywords.DialectOracle) {
 			return nil, fmt.Errorf("TOP clause is not supported in Oracle; use ROWNUM or FETCH FIRST … ROWS ONLY instead")
 		}
@@ -577,7 +577,7 @@ func (p *Parser) parseDistinctModifier() (isDistinct bool, distinctOnColumns []a
 // plain identifier/keyword literal.  A future lexer enhancement could introduce
 // models.TokenTypeTop and replace the strings.ToUpper check below.
 func (p *Parser) parseTopClause() (*ast.TopClause, error) {
-	if p.dialect != string(keywords.DialectSQLServer) || strings.ToUpper(p.currentToken.Literal) != "TOP" {
+	if p.dialect != string(keywords.DialectSQLServer) || strings.ToUpper(p.currentToken.Token.Value) != "TOP" {
 		return nil, nil
 	}
 	p.advance() // Consume TOP
@@ -603,13 +603,13 @@ func (p *Parser) parseTopClause() (*ast.TopClause, error) {
 
 	// Optional PERCENT
 	if p.isType(models.TokenTypePercent) ||
-		(p.currentToken.Type == models.TokenTypeKeyword && strings.ToUpper(p.currentToken.Literal) == "PERCENT") {
+		(p.currentToken.Token.Type == models.TokenTypeKeyword && strings.ToUpper(p.currentToken.Token.Value) == "PERCENT") {
 		topClause.IsPercent = true
 		p.advance()
 	}
 
 	// Optional WITH TIES
-	if p.isType(models.TokenTypeWith) && p.peekToken().Type == models.TokenTypeTies {
+	if p.isType(models.TokenTypeWith) && p.peekToken().Token.Type == models.TokenTypeTies {
 		topClause.WithTies = true
 		p.advance() // Consume WITH
 		p.advance() // Consume TIES
@@ -635,7 +635,9 @@ func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
 	for {
 		var expr ast.Expression
 
-		if p.isType(models.TokenTypeAsterisk) {
+		if p.isType(models.TokenTypeAsterisk) || p.isType(models.TokenTypeMul) {
+			// Both TokenTypeAsterisk and TokenTypeMul represent '*' in SQL.
+			// The tokenizer may produce either depending on context.
 			expr = &ast.Identifier{Name: "*"}
 			p.advance()
 		} else {
@@ -651,12 +653,12 @@ func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
 				if !p.isIdentifier() {
 					return nil, p.expectedError("alias name after AS")
 				}
-				alias := p.currentToken.Literal
+				alias := p.currentToken.Token.Value
 				p.advance()
 				expr = &ast.AliasedExpression{Expr: expr, Alias: alias}
 			} else if p.canBeAlias() {
 				if _, ok := expr.(*ast.Identifier); !ok {
-					alias := p.currentToken.Literal
+					alias := p.currentToken.Token.Value
 					p.advance()
 					expr = &ast.AliasedExpression{Expr: expr, Alias: alias}
 				}
@@ -693,7 +695,7 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 	if p.isType(models.TokenTypeEOF) || p.isType(models.TokenTypeSemicolon) {
 		return "", nil, nil, goerrors.ExpectedTokenError(
 			"table name",
-			p.currentToken.Type.String(),
+			p.currentToken.Token.Type.String(),
 			p.currentLocation(),
 			"FROM clause requires at least one table reference",
 		)
@@ -740,7 +742,7 @@ func (p *Parser) parseJoinClauses(firstRef ast.TableReference) ([]ast.JoinClause
 			if !p.isType(models.TokenTypeJoin) {
 				return nil, goerrors.ExpectedTokenError(
 					"JOIN after "+joinType,
-					p.currentToken.Type.String(),
+					p.currentToken.Token.Type.String(),
 					p.currentLocation(),
 					"",
 				)
@@ -817,15 +819,15 @@ func (p *Parser) parseJoinType() (string, bool, error) {
 		joinType = "CROSS"
 		p.advance()
 		if p.dialect == string(keywords.DialectSQLServer) &&
-			p.currentToken.Type == models.TokenTypeIdentifier &&
-			strings.ToUpper(p.currentToken.Literal) == "APPLY" {
+			p.currentToken.Token.Type == models.TokenTypeIdentifier &&
+			strings.ToUpper(p.currentToken.Token.Value) == "APPLY" {
 			joinType = "CROSS APPLY"
 			p.advance()
 		}
 	case p.isType(models.TokenTypeOuter) && p.dialect == string(keywords.DialectSQLServer):
 		p.advance()
-		if p.currentToken.Type == models.TokenTypeIdentifier &&
-			strings.ToUpper(p.currentToken.Literal) == "APPLY" {
+		if p.currentToken.Token.Type == models.TokenTypeIdentifier &&
+			strings.ToUpper(p.currentToken.Token.Value) == "APPLY" {
 			joinType = "OUTER APPLY"
 			p.advance()
 		} else {
@@ -879,7 +881,7 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 		if err != nil {
 			return ref, goerrors.ExpectedTokenError(
 				"table name after "+joinType+" JOIN",
-				p.currentToken.Type.String(),
+				p.currentToken.Token.Type.String(),
 				p.currentLocation(),
 				"",
 			)
@@ -896,14 +898,14 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 			}
 		}
 		if p.isIdentifier() {
-			ref.Alias = p.currentToken.Literal
+			ref.Alias = p.currentToken.Token.Value
 			p.advance()
 		}
 	}
 
 	// SQL Server table hints
 	if p.dialect == string(keywords.DialectSQLServer) && p.isType(models.TokenTypeWith) {
-		if p.peekToken().Type == models.TokenTypeLParen {
+		if p.peekToken().Token.Type == models.TokenTypeLParen {
 			hints, err := p.parseTableHints()
 			if err != nil {
 				return ref, err
@@ -948,7 +950,7 @@ func (p *Parser) parseJoinCondition(joinType string, isNatural, isApply bool) (a
 			if !p.isIdentifier() {
 				return nil, p.expectedError("column name in USING")
 			}
-			usingColumns = append(usingColumns, &ast.Identifier{Name: p.currentToken.Literal})
+			usingColumns = append(usingColumns, &ast.Identifier{Name: p.currentToken.Token.Value})
 			p.advance()
 			if !p.isType(models.TokenTypeComma) {
 				break
@@ -987,7 +989,7 @@ func (p *Parser) parseWhereClause() (ast.Expression, error) {
 		p.isType(models.TokenTypeFetch) || p.isType(models.TokenTypeFor) {
 		return nil, goerrors.ExpectedTokenError(
 			"expression after WHERE",
-			p.currentToken.Type.String(),
+			p.currentToken.Token.Type.String(),
 			p.currentLocation(),
 			"WHERE clause requires a boolean expression",
 		)
@@ -1022,8 +1024,8 @@ func (p *Parser) parseGroupByClause() ([]ast.Expression, error) {
 			expr, err = p.parseRollup()
 		case p.isType(models.TokenTypeCube):
 			expr, err = p.parseCube()
-		case p.currentToken.Literal == "GROUPING SETS" ||
-			(p.isType(models.TokenTypeGrouping) && strings.EqualFold(p.peekToken().Literal, "SETS")):
+		case p.currentToken.Token.Value == "GROUPING SETS" ||
+			(p.isType(models.TokenTypeGrouping) && strings.EqualFold(p.peekToken().Token.Value, "SETS")):
 			expr, err = p.parseGroupingSets()
 		default:
 			expr, err = p.parseExpression()
@@ -1042,7 +1044,7 @@ func (p *Parser) parseGroupByClause() ([]ast.Expression, error) {
 
 	// MySQL: GROUP BY col1 WITH ROLLUP / WITH CUBE
 	if p.isType(models.TokenTypeWith) {
-		switch strings.ToUpper(p.peekToken().Literal) {
+		switch strings.ToUpper(p.peekToken().Token.Value) {
 		case "ROLLUP":
 			p.advance() // Consume WITH
 			p.advance() // Consume ROLLUP
@@ -1138,7 +1140,7 @@ func (p *Parser) parseLimitOffsetClause() (limit *int, offset *int, err error) {
 			return nil, nil, p.expectedError("integer for LIMIT")
 		}
 		firstVal := 0
-		_, _ = fmt.Sscanf(p.currentToken.Literal, "%d", &firstVal)
+		_, _ = fmt.Sscanf(p.currentToken.Token.Value, "%d", &firstVal)
 		p.advance()
 
 		// MySQL: LIMIT offset, count
@@ -1148,7 +1150,7 @@ func (p *Parser) parseLimitOffsetClause() (limit *int, offset *int, err error) {
 				return nil, nil, p.expectedError("integer for LIMIT count")
 			}
 			secondVal := 0
-			_, _ = fmt.Sscanf(p.currentToken.Literal, "%d", &secondVal)
+			_, _ = fmt.Sscanf(p.currentToken.Token.Value, "%d", &secondVal)
 			p.advance()
 			offset = &firstVal
 			limit = &secondVal
@@ -1165,7 +1167,7 @@ func (p *Parser) parseLimitOffsetClause() (limit *int, offset *int, err error) {
 			return nil, nil, p.expectedError("integer for OFFSET")
 		}
 		offsetVal := 0
-		_, _ = fmt.Sscanf(p.currentToken.Literal, "%d", &offsetVal)
+		_, _ = fmt.Sscanf(p.currentToken.Token.Value, "%d", &offsetVal)
 		offset = &offsetVal
 		p.advance()
 
@@ -1244,14 +1246,14 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 			}
 		}
 		if p.isIdentifier() {
-			tableRef.Alias = p.currentToken.Literal
+			tableRef.Alias = p.currentToken.Token.Value
 			p.advance()
 		}
 	}
 
 	// SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
 	if p.dialect == string(keywords.DialectSQLServer) && p.isType(models.TokenTypeWith) {
-		if p.peekToken().Type == models.TokenTypeLParen {
+		if p.peekToken().Token.Type == models.TokenTypeLParen {
 			hints, err := p.parseTableHints()
 			if err != nil {
 				return tableRef, err
@@ -1274,7 +1276,7 @@ func (p *Parser) parseTableHints() ([]string, error) {
 		if p.isType(models.TokenTypeRParen) {
 			break
 		}
-		hint := strings.ToUpper(p.currentToken.Literal)
+		hint := strings.ToUpper(p.currentToken.Token.Value)
 		if hint == "" {
 			return nil, p.expectedError("table hint inside WITH (...)")
 		}
@@ -1311,7 +1313,7 @@ func (p *Parser) parseSelectWithSetOperations() (ast.Statement, error) {
 	// Check for set operations (UNION, EXCEPT, INTERSECT)
 	for p.isAnyType(models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect) {
 		// Parse the set operation type
-		operationLiteral := p.currentToken.Literal
+		operationLiteral := p.currentToken.Token.Value
 		p.advance()
 
 		// Check for ALL keyword
@@ -1384,7 +1386,7 @@ func (p *Parser) parseFetchClause() (*ast.FetchClause, error) {
 
 	// Convert string to int64
 	var fetchVal int64
-	_, _ = fmt.Sscanf(p.currentToken.Literal, "%d", &fetchVal)
+	_, _ = fmt.Sscanf(p.currentToken.Token.Value, "%d", &fetchVal)
 	fetchClause.FetchValue = &fetchVal
 	p.advance()
 
@@ -1476,7 +1478,7 @@ func (p *Parser) parseForClause() (*ast.ForClause, error) {
 			if !p.isIdentifier() {
 				return nil, p.expectedError("table name after OF")
 			}
-			forClause.Tables = append(forClause.Tables, p.currentToken.Literal)
+			forClause.Tables = append(forClause.Tables, p.currentToken.Token.Value)
 			p.advance()
 
 			// Check for comma to continue, otherwise break

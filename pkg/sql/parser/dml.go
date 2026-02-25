@@ -53,7 +53,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 			if !p.isIdentifier() {
 				return nil, p.expectedError("column name")
 			}
-			columns = append(columns, &ast.Identifier{Name: p.currentToken.Literal})
+			columns = append(columns, &ast.Identifier{Name: p.currentToken.Token.Value})
 			p.advance()
 
 			// Check if there are more columns
@@ -71,7 +71,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 
 	// Parse SQL Server OUTPUT clause (between column list and VALUES)
 	var outputCols []ast.Expression
-	if p.dialect == string(keywords.DialectSQLServer) && strings.ToUpper(p.currentToken.Literal) == "OUTPUT" {
+	if p.dialect == string(keywords.DialectSQLServer) && strings.ToUpper(p.currentToken.Token.Value) == "OUTPUT" {
 		p.advance() // Consume OUTPUT
 		var err error
 		outputCols, err = p.parseOutputColumns()
@@ -150,7 +150,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 	var onConflict *ast.OnConflict
 	var onDuplicateKey *ast.UpsertClause
 	if p.isType(models.TokenTypeOn) {
-		nextLit := strings.ToUpper(p.peekToken().Literal)
+		nextLit := strings.ToUpper(p.peekToken().Token.Value)
 		if nextLit == "CONFLICT" {
 			p.advance() // Consume ON
 			p.advance() // Consume CONFLICT
@@ -163,7 +163,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 			p.advance() // Consume ON
 			p.advance() // Consume DUPLICATE
 			// Expect KEY
-			if strings.ToUpper(p.currentToken.Literal) != "KEY" && !p.isType(models.TokenTypeKey) {
+			if strings.ToUpper(p.currentToken.Token.Value) != "KEY" && !p.isType(models.TokenTypeKey) {
 				return nil, p.expectedError("KEY")
 			}
 			p.advance() // Consume KEY
@@ -182,7 +182,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 
 	// Parse RETURNING clause if present (PostgreSQL)
 	var returning []ast.Expression
-	if p.isType(models.TokenTypeReturning) || p.currentToken.Literal == "RETURNING" {
+	if p.isType(models.TokenTypeReturning) || p.currentToken.Token.Value == "RETURNING" {
 		p.advance() // Consume RETURNING
 		var err error
 		returning, err = p.parseReturningColumns()
@@ -227,7 +227,7 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 		if !p.isIdentifier() {
 			return nil, p.expectedError("column name")
 		}
-		columnName := p.currentToken.Literal
+		columnName := p.currentToken.Token.Value
 		p.advance()
 
 		if !p.isType(models.TokenTypeEq) {
@@ -238,17 +238,17 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 		// Parse value expression
 		var expr ast.Expression
 		if p.isStringLiteral() {
-			expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "string"}
+			expr = &ast.LiteralValue{Value: p.currentToken.Token.Value, Type: "string"}
 			p.advance()
 		} else if p.isNumericLiteral() {
 			litType := "int"
-			if strings.ContainsAny(p.currentToken.Literal, ".eE") {
+			if strings.ContainsAny(p.currentToken.Token.Value, ".eE") {
 				litType = "float"
 			}
-			expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: litType}
+			expr = &ast.LiteralValue{Value: p.currentToken.Token.Value, Type: litType}
 			p.advance()
 		} else if p.isBooleanLiteral() {
-			expr = &ast.LiteralValue{Value: p.currentToken.Literal, Type: "bool"}
+			expr = &ast.LiteralValue{Value: p.currentToken.Token.Value, Type: "bool"}
 			p.advance()
 		} else {
 			var err error
@@ -294,7 +294,7 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 
 	// Parse RETURNING clause if present (PostgreSQL)
 	var returning []ast.Expression
-	if p.isType(models.TokenTypeReturning) || p.currentToken.Literal == "RETURNING" {
+	if p.isType(models.TokenTypeReturning) || p.currentToken.Token.Value == "RETURNING" {
 		p.advance() // Consume RETURNING
 		var err error
 		returning, err = p.parseReturningColumns()
@@ -349,7 +349,7 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 
 	// Parse RETURNING clause if present (PostgreSQL)
 	var returning []ast.Expression
-	if p.isType(models.TokenTypeReturning) || p.currentToken.Literal == "RETURNING" {
+	if p.isType(models.TokenTypeReturning) || p.currentToken.Token.Value == "RETURNING" {
 		p.advance() // Consume RETURNING
 		var err error
 		returning, err = p.parseReturningColumns()
@@ -393,15 +393,15 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 		if !p.isIdentifier() && !p.isNonReservedKeyword() {
 			return nil, p.expectedError("target alias after AS")
 		}
-		stmt.TargetAlias = p.currentToken.Literal
+		stmt.TargetAlias = p.currentToken.Token.Value
 		p.advance()
-	} else if p.canBeAlias() && !p.isType(models.TokenTypeUsing) && p.currentToken.Literal != "USING" {
-		stmt.TargetAlias = p.currentToken.Literal
+	} else if p.canBeAlias() && !p.isType(models.TokenTypeUsing) && p.currentToken.Token.Value != "USING" {
+		stmt.TargetAlias = p.currentToken.Token.Value
 		p.advance()
 	}
 
 	// Parse USING
-	if !p.isType(models.TokenTypeUsing) && p.currentToken.Literal != "USING" {
+	if !p.isType(models.TokenTypeUsing) && p.currentToken.Token.Value != "USING" {
 		return nil, p.expectedError("USING")
 	}
 	p.advance() // Consume USING
@@ -419,10 +419,10 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 		if !p.isIdentifier() && !p.isNonReservedKeyword() {
 			return nil, p.expectedError("source alias after AS")
 		}
-		stmt.SourceAlias = p.currentToken.Literal
+		stmt.SourceAlias = p.currentToken.Token.Value
 		p.advance()
-	} else if p.canBeAlias() && !p.isType(models.TokenTypeOn) && p.currentToken.Literal != "ON" {
-		stmt.SourceAlias = p.currentToken.Literal
+	} else if p.canBeAlias() && !p.isType(models.TokenTypeOn) && p.currentToken.Token.Value != "ON" {
+		stmt.SourceAlias = p.currentToken.Token.Value
 		p.advance()
 	}
 
@@ -452,7 +452,7 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 	}
 
 	// Parse optional OUTPUT clause (SQL Server)
-	if p.dialect == string(keywords.DialectSQLServer) && strings.ToUpper(p.currentToken.Literal) == "OUTPUT" {
+	if p.dialect == string(keywords.DialectSQLServer) && strings.ToUpper(p.currentToken.Token.Value) == "OUTPUT" {
 		p.advance() // Consume OUTPUT
 		cols, err := p.parseOutputColumns()
 		if err != nil {
@@ -471,12 +471,12 @@ func (p *Parser) parseMergeWhenClause() (*ast.MergeWhenClause, error) {
 	p.advance() // Consume WHEN
 
 	// Determine clause type: MATCHED, NOT MATCHED, NOT MATCHED BY SOURCE
-	if p.isType(models.TokenTypeMatched) || p.currentToken.Literal == "MATCHED" {
+	if p.isType(models.TokenTypeMatched) || p.currentToken.Token.Value == "MATCHED" {
 		clause.Type = "MATCHED"
 		p.advance() // Consume MATCHED
 	} else if p.isType(models.TokenTypeNot) {
 		p.advance() // Consume NOT
-		if !p.isType(models.TokenTypeMatched) && p.currentToken.Literal != "MATCHED" {
+		if !p.isType(models.TokenTypeMatched) && p.currentToken.Token.Value != "MATCHED" {
 			return nil, p.expectedError("MATCHED after NOT")
 		}
 		p.advance() // Consume MATCHED
@@ -484,7 +484,7 @@ func (p *Parser) parseMergeWhenClause() (*ast.MergeWhenClause, error) {
 		// Check for BY SOURCE
 		if p.isType(models.TokenTypeBy) {
 			p.advance() // Consume BY
-			if !p.isType(models.TokenTypeSource) && p.currentToken.Literal != "SOURCE" {
+			if !p.isType(models.TokenTypeSource) && p.currentToken.Token.Value != "SOURCE" {
 				return nil, p.expectedError("SOURCE after BY")
 			}
 			p.advance() // Consume SOURCE
@@ -542,7 +542,7 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 				return nil, p.expectedError("column name")
 			}
 			// Handle qualified column names (e.g., t.name)
-			columnName := p.currentToken.Literal
+			columnName := p.currentToken.Token.Value
 			p.advance()
 
 			// Check for qualified name (table.column)
@@ -551,7 +551,7 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 				if !p.isIdentifier() && !p.canBeAlias() {
 					return nil, p.expectedError("column name after .")
 				}
-				columnName = fmt.Sprintf("%s.%s", columnName, p.currentToken.Literal)
+				columnName = fmt.Sprintf("%s.%s", columnName, p.currentToken.Token.Value)
 				p.advance()
 			}
 
@@ -588,7 +588,7 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 				if !p.isIdentifier() {
 					return nil, p.expectedError("column name")
 				}
-				action.Columns = append(action.Columns, p.currentToken.Literal)
+				action.Columns = append(action.Columns, p.currentToken.Token.Value)
 				p.advance()
 
 				if !p.isType(models.TokenTypeComma) {
@@ -693,7 +693,7 @@ func (p *Parser) parseOnConflictClause() (*ast.OnConflict, error) {
 			if !p.isIdentifier() {
 				return nil, p.expectedError("column name in ON CONFLICT target")
 			}
-			targets = append(targets, &ast.Identifier{Name: p.currentToken.Literal})
+			targets = append(targets, &ast.Identifier{Name: p.currentToken.Token.Value})
 			p.advance()
 
 			if !p.isType(models.TokenTypeComma) {
@@ -707,25 +707,25 @@ func (p *Parser) parseOnConflictClause() (*ast.OnConflict, error) {
 		}
 		p.advance() // Consume )
 		onConflict.Target = targets
-	} else if p.isType(models.TokenTypeOn) && p.peekToken().Literal == "CONSTRAINT" {
+	} else if p.isType(models.TokenTypeOn) && p.peekToken().Token.Value == "CONSTRAINT" {
 		// ON CONSTRAINT constraint_name
 		p.advance() // Consume ON
 		p.advance() // Consume CONSTRAINT
 		if !p.isIdentifier() {
 			return nil, p.expectedError("constraint name")
 		}
-		onConflict.Constraint = p.currentToken.Literal
+		onConflict.Constraint = p.currentToken.Token.Value
 		p.advance()
 	}
 
 	// Parse DO keyword
-	if p.currentToken.Literal != "DO" {
+	if p.currentToken.Token.Value != "DO" {
 		return nil, p.expectedError("DO")
 	}
 	p.advance() // Consume DO
 
 	// Parse action: NOTHING or UPDATE
-	if p.currentToken.Literal == "NOTHING" {
+	if p.currentToken.Token.Value == "NOTHING" {
 		onConflict.Action = ast.OnConflictAction{DoNothing: true}
 		p.advance() // Consume NOTHING
 	} else if p.isType(models.TokenTypeUpdate) {
@@ -743,7 +743,7 @@ func (p *Parser) parseOnConflictClause() (*ast.OnConflict, error) {
 			if !p.isIdentifier() {
 				return nil, p.expectedError("column name")
 			}
-			columnName := p.currentToken.Literal
+			columnName := p.currentToken.Token.Value
 			p.advance()
 
 			if !p.isType(models.TokenTypeEq) {
@@ -810,7 +810,7 @@ func (p *Parser) parseOnDuplicateKeyUpdateClause() (*ast.UpsertClause, error) {
 		if !p.isIdentifier() {
 			return nil, p.expectedError("column name in ON DUPLICATE KEY UPDATE")
 		}
-		columnName := p.currentToken.Literal
+		columnName := p.currentToken.Token.Value
 		p.advance()
 
 		if !p.isType(models.TokenTypeEq) {

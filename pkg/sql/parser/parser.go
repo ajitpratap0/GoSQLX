@@ -86,7 +86,7 @@ import (
 // []models.TokenWithSpan directly; span information is no longer stripped.
 type ConversionResult struct {
 	Tokens          []models.TokenWithSpan
-	PositionMapping []TokenPosition // retained for API compatibility; positions are embedded in spans
+	PositionMapping []TokenPosition // Deprecated: always nil — positions are now embedded in TokenWithSpan.Start/End fields
 }
 
 // TokenPosition maps a parser token back to its original source position.
@@ -379,51 +379,11 @@ func (p *Parser) ParseContextFromModelTokens(ctx context.Context, tokens []model
 
 // ParseWithPositions parses tokens with position tracking for enhanced error reporting.
 //
-// This method accepts a ConversionResult from convertModelTokensWithPositions(), which includes
-// both the converted tokens and their original source positions from the tokenizer.
-// Syntax errors will include accurate line and column information for debugging.
-//
-// Parameters:
-//   - result: ConversionResult from convertModelTokensWithPositions containing tokens and position mapping
-//
-// Returns:
-//   - *ast.AST: Parsed Abstract Syntax Tree containing one or more statements
-//   - error: Syntax error with line/column position information
-//
-// Performance:
-//   - Slightly slower than Parse() due to position tracking overhead (~5%)
-//   - Average: ~365ns for complex queries (vs 347ns for Parse)
-//   - Recommended for production use where error reporting is important
-//
-// Error Reporting Enhancement:
-//   - Includes line and column numbers in error messages
-//   - Example: "expected 'FROM' but got 'WHERE' at line 1, column 15"
-//   - Position information extracted from tokenizer output
-//
-// Usage:
-//
-//	parser := parser.GetParser()
-//	defer parser.PutParser(parser)
-//
-//	// Convert tokenizer output with position tracking
-//	// Use ParseFromModelTokensWithPositions instead
-//
-//	// Parse with position information
-//	ast, err := parser.ParseWithPositions(result)
-//	if err != nil {
-//	    // Error includes line/column information
-//	    log.Printf("Parse error at %v: %v", err.Location, err)
-//	    return
-//	}
-//	defer ast.ReleaseAST(ast)
-//
-// This is the recommended parsing method for production use where detailed error
-// reporting is important for debugging and user feedback.
+// ParseWithPositions parses a ConversionResult into an AST.
+// Since models.TokenWithSpan already embeds span/position information,
+// this is now a thin wrapper around parseTokens — no separate conversion step needed.
 //
 // Thread Safety: NOT thread-safe - use separate parser instances per goroutine.
-// ParseWithPositions parses a ConversionResult into an AST.
-// Since models.TokenWithSpan already embeds span information, this is now a
-// thin wrapper around parseTokens.
 func (p *Parser) ParseWithPositions(result *ConversionResult) (*ast.AST, error) {
 	return p.parseTokens(result.Tokens)
 }

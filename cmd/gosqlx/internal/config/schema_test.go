@@ -163,8 +163,8 @@ func TestGetSchema(t *testing.T) {
 	if len(schema.Validation.Dialect.Options) != len(ValidDialects) {
 		t.Errorf("expected %d dialect options, got %d", len(ValidDialects), len(schema.Validation.Dialect.Options))
 	}
-	if schema.Validation.Dialect.Default != "postgresql" {
-		t.Errorf("expected validate.dialect.default to be 'postgresql', got '%s'", schema.Validation.Dialect.Default)
+	if schema.Validation.Dialect.Default != "" {
+		t.Errorf("expected validate.dialect.default to be '' (empty), got '%s'", schema.Validation.Dialect.Default)
 	}
 	if schema.Validation.Dialect.Desc == "" {
 		t.Error("validate.dialect.description should not be empty")

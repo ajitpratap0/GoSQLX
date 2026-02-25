@@ -172,8 +172,8 @@ func GetSchema() *ConfigSchema {
 				Desc    string   `yaml:"description"`
 			}{
 				Options: ValidDialects,
-				Default: "postgresql",
-				Desc:    "SQL dialect for validation",
+				Default: "",
+				Desc:    "SQL dialect for validation (empty = permissive, accepts all dialects)",
 			},
 			StrictMode: struct {
 				Default bool   `yaml:"default"`

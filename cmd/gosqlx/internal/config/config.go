@@ -170,7 +170,7 @@ func DefaultConfig() *Config {
 			Compact:           false,
 		},
 		Validation: ValidationConfig{
-			Dialect:    "postgresql",
+			Dialect:    "",
 			StrictMode: false,
 			Recursive:  false,
 			Pattern:    "*.sql",
@@ -343,17 +343,19 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("format.max_line_length must be between 0 and 500, got %d", c.Format.MaxLineLength)
 	}
 
-	// Validate dialect
-	validDialects := []string{"postgresql", "mysql", "sqlserver", "oracle", "sqlite", "generic"}
-	dialectValid := false
-	for _, d := range validDialects {
-		if c.Validation.Dialect == d {
-			dialectValid = true
-			break
+	// Validate dialect (empty string means permissive/no dialect gates)
+	if c.Validation.Dialect != "" {
+		validDialects := []string{"postgresql", "mysql", "sqlserver", "oracle", "sqlite", "generic"}
+		dialectValid := false
+		for _, d := range validDialects {
+			if c.Validation.Dialect == d {
+				dialectValid = true
+				break
+			}
 		}
-	}
-	if !dialectValid {
-		return fmt.Errorf("validate.dialect must be one of: %v, got '%s'", validDialects, c.Validation.Dialect)
+		if !dialectValid {
+			return fmt.Errorf("validate.dialect must be one of: %v, got '%s'", validDialects, c.Validation.Dialect)
+		}
 	}
 
 	// Validate output format

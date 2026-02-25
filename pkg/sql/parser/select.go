@@ -443,6 +443,20 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		return nil, err
 	}
 
+	// Reject TOP in dialects that use LIMIT/OFFSET or ROWNUM/FETCH FIRST instead.
+	nonTopDialects := map[string]bool{
+		string(keywords.DialectMySQL):      true,
+		string(keywords.DialectPostgreSQL): true,
+		string(keywords.DialectSQLite):     true,
+		string(keywords.DialectOracle):     true,
+	}
+	if nonTopDialects[p.dialect] && strings.ToUpper(p.currentToken.Literal) == "TOP" {
+		if p.dialect == string(keywords.DialectOracle) {
+			return nil, fmt.Errorf("TOP clause is not supported in Oracle; use ROWNUM or FETCH FIRST … ROWS ONLY instead")
+		}
+		return nil, fmt.Errorf("TOP clause is not supported in %s; use LIMIT/OFFSET instead", p.dialect)
+	}
+
 	// SQL Server TOP clause
 	topClause, err := p.parseTopClause()
 	if err != nil {
@@ -592,6 +606,7 @@ func (p *Parser) parseTopClause() (*ast.TopClause, error) {
 		topClause.WithTies = true
 		p.advance() // Consume WITH
 		p.advance() // Consume TIES
+
 	}
 
 	return topClause, nil
@@ -1100,7 +1115,15 @@ func (p *Parser) parseOrderByClause() ([]ast.OrderByExpression, error) {
 func (p *Parser) parseLimitOffsetClause() (limit *int, offset *int, err error) {
 	// LIMIT clause
 	if p.isType(models.TokenTypeLimit) {
-		p.advance()
+		// Reject LIMIT in SQL Server and Oracle — these dialects use TOP/OFFSET-FETCH or ROWNUM/FETCH FIRST.
+		if p.dialect == string(keywords.DialectSQLServer) || p.dialect == string(keywords.DialectOracle) {
+			msg := "LIMIT clause is not supported in SQL Server; use TOP or OFFSET/FETCH NEXT instead"
+			if p.dialect == string(keywords.DialectOracle) {
+				msg = "LIMIT clause is not supported in Oracle; use ROWNUM or FETCH FIRST … ROWS ONLY instead"
+			}
+			return nil, nil, fmt.Errorf("%s", msg)
+		}
+		p.advance() // Consume LIMIT
 
 		if !p.isNumericLiteral() {
 			return nil, nil, p.expectedError("integer for LIMIT")

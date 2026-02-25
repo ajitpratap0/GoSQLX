@@ -76,6 +76,11 @@ func validateRun(cmd *cobra.Command, args []string) error {
 		cmd.SilenceUsage = true
 	}
 
+	// Reject unknown dialect names early before any parsing.
+	if validateDialect != "" && !keywords.IsValidDialect(validateDialect) {
+		return fmt.Errorf("unknown SQL dialect %q; valid dialects: postgresql, mysql, sqlserver, oracle, sqlite, snowflake, bigquery, redshift", validateDialect)
+	}
+
 	// Handle stdin input
 	if ShouldReadFromStdin(args) {
 		return validateFromStdin(cmd)

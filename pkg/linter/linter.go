@@ -161,10 +161,10 @@ func (l *Linter) LintString(sql string, filename string) FileResult {
 	if tokenErr == nil {
 		ctx.WithTokens(tokens)
 
-		// Attempt parsing (best effort - some rules are token-only)
+		// Attempt parsing with position tracking (best effort - some rules are token-only)
 		p := parser.NewParser()
 		defer p.Release()
-		astObj, parseErr := p.ParseFromModelTokens(tokens)
+		astObj, parseErr := p.ParseFromModelTokensWithPositions(tokens)
 		ctx.WithAST(astObj, parseErr)
 	}
 

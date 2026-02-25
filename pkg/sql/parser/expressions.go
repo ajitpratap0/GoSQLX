@@ -58,6 +58,7 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 
 	// Handle OR operators (lowest precedence, left-associative)
 	for p.isType(models.TokenTypeOr) {
+		opPos := p.currentLocation()
 		operator := p.currentToken.Literal
 		p.advance() // Consume OR
 
@@ -70,6 +71,7 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 			Left:     left,
 			Operator: operator,
 			Right:    right,
+			Pos:      opPos,
 		}
 	}
 
@@ -86,6 +88,7 @@ func (p *Parser) parseAndExpression() (ast.Expression, error) {
 
 	// Handle AND operators (middle precedence, left-associative)
 	for p.isType(models.TokenTypeAnd) {
+		opPos := p.currentLocation()
 		operator := p.currentToken.Literal
 		p.advance() // Consume AND
 
@@ -98,6 +101,7 @@ func (p *Parser) parseAndExpression() (ast.Expression, error) {
 			Left:     left,
 			Operator: operator,
 			Right:    right,
+			Pos:      opPos,
 		}
 	}
 
@@ -294,6 +298,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 
 	// Check for IS NULL / IS NOT NULL
 	if p.isType(models.TokenTypeIs) {
+		isPos := p.currentLocation()
 		p.advance() // Consume IS
 
 		isNot := false
@@ -309,6 +314,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 				Operator: "IS NULL",
 				Right:    &ast.LiteralValue{Value: nil, Type: "null"},
 				Not:      isNot,
+				Pos:      isPos,
 			}, nil
 		}
 
@@ -317,7 +323,8 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 
 	// Check if this is a comparison binary expression (uses O(1) switch instead of O(n) isAnyType)
 	if p.isComparisonOperator() {
-		// Save the operator
+		// Save the operator and its position
+		opPos := p.currentLocation()
 		operator := p.currentToken.Literal
 		p.advance()
 
@@ -373,6 +380,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			Left:     left,
 			Operator: operator,
 			Right:    right,
+			Pos:      opPos,
 		}, nil
 	}
 
@@ -389,6 +397,7 @@ func (p *Parser) parseStringConcatExpression() (ast.Expression, error) {
 
 	// Handle || (string concatenation) operator (left-associative)
 	for p.isType(models.TokenTypeStringConcat) {
+		opPos := p.currentLocation()
 		operator := p.currentToken.Literal
 		p.advance() // Consume ||
 
@@ -401,6 +410,7 @@ func (p *Parser) parseStringConcatExpression() (ast.Expression, error) {
 			Left:     left,
 			Operator: operator,
 			Right:    right,
+			Pos:      opPos,
 		}
 	}
 
@@ -417,6 +427,7 @@ func (p *Parser) parseAdditiveExpression() (ast.Expression, error) {
 
 	// Handle + and - operators (left-associative)
 	for p.isType(models.TokenTypePlus) || p.isType(models.TokenTypeMinus) {
+		opPos := p.currentLocation()
 		operator := p.currentToken.Literal
 		p.advance() // Consume operator
 
@@ -429,6 +440,7 @@ func (p *Parser) parseAdditiveExpression() (ast.Expression, error) {
 			Left:     left,
 			Operator: operator,
 			Right:    right,
+			Pos:      opPos,
 		}
 	}
 
@@ -448,6 +460,7 @@ func (p *Parser) parseMultiplicativeExpression() (ast.Expression, error) {
 	// We check context: after an expression, asterisk means multiplication
 	for p.isType(models.TokenTypeAsterisk) || p.isType(models.TokenTypeMul) ||
 		p.isType(models.TokenTypeDiv) || p.isType(models.TokenTypeMod) {
+		opPos := p.currentLocation()
 		operator := p.currentToken.Literal
 		p.advance() // Consume operator
 
@@ -460,6 +473,7 @@ func (p *Parser) parseMultiplicativeExpression() (ast.Expression, error) {
 			Left:     left,
 			Operator: operator,
 			Right:    right,
+			Pos:      opPos,
 		}
 	}
 
@@ -494,6 +508,7 @@ func (p *Parser) parseJSONExpression() (ast.Expression, error) {
 
 	// Handle JSON operators (left-associative for chaining like data->'a'->'b')
 	for p.isJSONOperator() {
+		opPos := p.currentLocation()
 		operator := p.currentToken.Literal
 		operatorType := p.currentToken.Type
 		p.advance() // Consume JSON operator
@@ -508,6 +523,7 @@ func (p *Parser) parseJSONExpression() (ast.Expression, error) {
 			Left:     left,
 			Operator: operator,
 			Right:    right,
+			Pos:      opPos,
 		}
 
 		// Store operator type for semantic analysis if needed
@@ -645,6 +661,7 @@ func (p *Parser) isJSONOperator() bool {
 func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 	// Handle unary minus/plus (-6, -3.14, +x)
 	if p.isType(models.TokenTypeMinus) || p.isType(models.TokenTypePlus) {
+		unaryPos := p.currentLocation()
 		var op ast.UnaryOperator
 		if p.isType(models.TokenTypeMinus) {
 			op = ast.Minus
@@ -659,6 +676,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return &ast.UnaryExpression{
 			Operator: op,
 			Expr:     expr,
+			Pos:      unaryPos,
 		}, nil
 	}
 
@@ -684,11 +702,15 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 
 	// Handle keywords that can be used as function names in MySQL (IF, REPLACE, etc.)
 	if (p.isType(models.TokenTypeIf) || p.isType(models.TokenTypeReplace)) && p.peekToken().Type == models.TokenTypeLParen {
+		kwPos := p.currentLocation()
 		identName := p.currentToken.Literal
 		p.advance()
 		funcCall, err := p.parseFunctionCall(identName)
 		if err != nil {
 			return nil, err
+		}
+		if funcCall.Pos == (models.Location{}) {
+			funcCall.Pos = kwPos
 		}
 		return funcCall, nil
 	}
@@ -697,6 +719,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		// Handle identifiers and function calls
 		// Double-quoted strings are treated as identifiers in SQL (e.g., "column_name")
 		// Non-reserved keywords (TARGET, SOURCE, etc.) can also be used as identifiers
+		identPos := p.currentLocation()
 		identName := p.currentToken.Literal
 		p.advance()
 
@@ -706,6 +729,10 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			funcCall, err := p.parseFunctionCall(identName)
 			if err != nil {
 				return nil, err
+			}
+			// Assign position of function name
+			if funcCall.Pos == (models.Location{}) {
+				funcCall.Pos = identPos
 			}
 
 			// MySQL MATCH(...) AGAINST(...) full-text search
@@ -717,7 +744,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		}
 
 		// Handle regular identifier or qualified identifier (table.column or table.*)
-		ident := &ast.Identifier{Name: identName}
+		ident := &ast.Identifier{Name: identName, Pos: identPos}
 
 		// Check for qualified identifier (table.column) or qualified asterisk (table.*)
 		if p.isType(models.TokenTypePeriod) {
@@ -727,6 +754,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				ident = &ast.Identifier{
 					Table: ident.Name,
 					Name:  "*",
+					Pos:   identPos,
 				}
 				p.advance()
 			} else if p.isIdentifier() {
@@ -734,6 +762,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				ident = &ast.Identifier{
 					Table: ident.Name,
 					Name:  p.currentToken.Literal,
+					Pos:   identPos,
 				}
 				p.advance()
 			} else {
@@ -895,6 +924,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 
 	if p.isType(models.TokenTypeNot) {
 		// Handle NOT expression (NOT EXISTS, NOT boolean)
+		notPos := p.currentLocation()
 		p.advance() // Consume NOT
 
 		if p.isType(models.TokenTypeExists) {
@@ -926,6 +956,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				Operator: "NOT",
 				Right:    nil,
 				Not:      true,
+				Pos:      notPos,
 			}, nil
 		}
 
@@ -938,6 +969,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return &ast.UnaryExpression{
 			Operator: ast.Not,
 			Expr:     expr,
+			Pos:      notPos,
 		}, nil
 	}
 

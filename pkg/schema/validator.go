@@ -59,10 +59,14 @@ type ValidationError struct {
 
 // Error returns a human-readable string for the validation error.
 func (e ValidationError) Error() string {
-	if e.Suggestion != "" {
-		return fmt.Sprintf("%s: %s (suggestion: %s)", e.Severity, e.Message, e.Suggestion)
+	loc := ""
+	if e.Line > 0 {
+		loc = fmt.Sprintf(" at line %d, column %d", e.Line, e.Column)
 	}
-	return fmt.Sprintf("%s: %s", e.Severity, e.Message)
+	if e.Suggestion != "" {
+		return fmt.Sprintf("%s: %s%s (suggestion: %s)", e.Severity, e.Message, loc, e.Suggestion)
+	}
+	return fmt.Sprintf("%s: %s%s", e.Severity, e.Message, loc)
 }
 
 // Validator validates SQL queries against a schema.
@@ -225,10 +229,13 @@ func (v *Validator) validateInsert(s *ast.InsertStatement) []ValidationError {
 			continue
 		}
 		if _, ok := table.GetColumn(colName); !ok {
+			line, col := extractExprPos(colExpr)
 			errors = append(errors, ValidationError{
 				Message:    fmt.Sprintf("column %q does not exist in table %q", colName, tableName),
 				Severity:   "error",
 				Suggestion: v.suggestColumn(table, colName),
+				Line:       line,
+				Column:     col,
 			})
 		}
 	}
@@ -277,32 +284,20 @@ func (v *Validator) validateUpdate(s *ast.UpdateStatement) []ValidationError {
 		tableMap[tableName] = tableName
 	}
 
-	// Validate SET column names (using Updates field)
+	// Validate SET column names
 	for _, upd := range s.Assignments {
 		colName := extractColumnName(upd.Column)
 		if colName == "" {
 			continue
 		}
 		if _, ok := table.GetColumn(colName); !ok {
+			line, col := extractExprPos(upd.Column)
 			errors = append(errors, ValidationError{
 				Message:    fmt.Sprintf("column %q does not exist in table %q", colName, tableName),
 				Severity:   "error",
 				Suggestion: v.suggestColumn(table, colName),
-			})
-		}
-	}
-
-	// Also check Assignments field for consistency
-	for _, upd := range s.Assignments {
-		colName := extractColumnName(upd.Column)
-		if colName == "" {
-			continue
-		}
-		if _, ok := table.GetColumn(colName); !ok {
-			errors = append(errors, ValidationError{
-				Message:    fmt.Sprintf("column %q does not exist in table %q", colName, tableName),
-				Severity:   "error",
-				Suggestion: v.suggestColumn(table, colName),
+				Line:       line,
+				Column:     col,
 			})
 		}
 	}
@@ -372,10 +367,26 @@ func (v *Validator) validateExpressionColumns(expr ast.Expression, tableMap map[
 		}
 		if e.Table != "" {
 			// Qualified reference: table.column
-			errors = append(errors, v.validateQualifiedColumn(e.Table, e.Name, tableMap)...)
+			errs := v.validateQualifiedColumn(e.Table, e.Name, tableMap)
+			// Attach position from AST node
+			for i := range errs {
+				if errs[i].Line == 0 {
+					errs[i].Line = e.Pos.Line
+					errs[i].Column = e.Pos.Column
+				}
+			}
+			errors = append(errors, errs...)
 		} else {
 			// Unqualified reference: just column name
-			errors = append(errors, v.validateUnqualifiedColumn(e.Name, tableMap)...)
+			errs := v.validateUnqualifiedColumn(e.Name, tableMap)
+			// Attach position from AST node
+			for i := range errs {
+				if errs[i].Line == 0 {
+					errs[i].Line = e.Pos.Line
+					errs[i].Column = e.Pos.Column
+				}
+			}
+			errors = append(errors, errs...)
 		}
 
 	case *ast.AliasedExpression:
@@ -588,6 +599,22 @@ func extractColumnName(expr ast.Expression) string {
 		return extractColumnName(e.Expr)
 	default:
 		return ""
+	}
+}
+
+// extractExprPos extracts the source position (line, column) from an expression.
+// Returns (0, 0) if the expression doesn't carry position information.
+func extractExprPos(expr ast.Expression) (line, column int) {
+	if expr == nil {
+		return 0, 0
+	}
+	switch e := expr.(type) {
+	case *ast.Identifier:
+		return e.Pos.Line, e.Pos.Column
+	case *ast.AliasedExpression:
+		return extractExprPos(e.Expr)
+	default:
+		return 0, 0
 	}
 }
 

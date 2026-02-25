@@ -39,7 +39,7 @@ func (p *Parser) parseMatchAgainst(matchFunc *ast.FunctionCall) (ast.Expression,
 	// Consume optional mode keywords until we hit )
 	mode := ""
 	for !p.isType(models.TokenTypeRParen) && !p.isType(models.TokenTypeEOF) {
-		mode += " " + p.currentToken.Literal
+		mode += " " + p.currentToken.Token.Value
 		p.advance()
 	}
 
@@ -77,7 +77,7 @@ func (p *Parser) parseMatchAgainst(matchFunc *ast.FunctionCall) (ast.Expression,
 func (p *Parser) parseShowStatement() (ast.Statement, error) {
 	show := &ast.ShowStatement{}
 
-	upper := strings.ToUpper(p.currentToken.Literal)
+	upper := strings.ToUpper(p.currentToken.Token.Value)
 
 	switch upper {
 	case "TABLES":
@@ -86,7 +86,7 @@ func (p *Parser) parseShowStatement() (ast.Statement, error) {
 		// Optional FROM database
 		if p.isType(models.TokenTypeFrom) {
 			p.advance()
-			show.From = p.currentToken.Literal
+			show.From = p.currentToken.Token.Value
 			p.advance()
 		}
 	case "DATABASES":
@@ -103,7 +103,7 @@ func (p *Parser) parseShowStatement() (ast.Statement, error) {
 			}
 			show.ObjectName = name
 		} else {
-			show.ShowType = "CREATE " + strings.ToUpper(p.currentToken.Literal)
+			show.ShowType = "CREATE " + strings.ToUpper(p.currentToken.Token.Value)
 			p.advance()
 			name, err := p.parseQualifiedName()
 			if err != nil {
@@ -191,7 +191,7 @@ func (p *Parser) parseReplaceStatement() (ast.Statement, error) {
 			if !p.isIdentifier() {
 				return nil, p.expectedError("column name")
 			}
-			columns = append(columns, &ast.Identifier{Name: p.currentToken.Literal})
+			columns = append(columns, &ast.Identifier{Name: p.currentToken.Token.Value})
 			p.advance()
 			if !p.isType(models.TokenTypeComma) {
 				break

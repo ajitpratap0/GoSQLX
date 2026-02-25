@@ -59,7 +59,7 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 	// Handle OR operators (lowest precedence, left-associative)
 	for p.isType(models.TokenTypeOr) {
 		opPos := p.currentLocation()
-		operator := p.currentToken.Literal
+		operator := p.currentToken.Token.Value
 		p.advance() // Consume OR
 
 		right, err := p.parseAndExpression()
@@ -89,7 +89,7 @@ func (p *Parser) parseAndExpression() (ast.Expression, error) {
 	// Handle AND operators (middle precedence, left-associative)
 	for p.isType(models.TokenTypeAnd) {
 		opPos := p.currentLocation()
-		operator := p.currentToken.Literal
+		operator := p.currentToken.Token.Value
 		p.advance() // Consume AND
 
 		right, err := p.parseComparisonExpression()
@@ -122,7 +122,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	notPrefix := false
 	if p.isType(models.TokenTypeNot) {
 		nextToken := p.peekToken()
-		nextUpper := strings.ToUpper(nextToken.Literal)
+		nextUpper := strings.ToUpper(nextToken.Token.Value)
 		if nextUpper == "BETWEEN" || nextUpper == "LIKE" || nextUpper == "ILIKE" || nextUpper == "IN" {
 			notPrefix = true
 			p.advance() // Consume NOT only if followed by valid operator
@@ -141,7 +141,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			return nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse BETWEEN lower bound: %v", err),
 				p.currentLocation(),
-				p.currentToken.Literal,
+				p.currentToken.Token.Value,
 			)
 		}
 
@@ -157,7 +157,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			return nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse BETWEEN upper bound: %v", err),
 				p.currentLocation(),
-				p.currentToken.Literal,
+				p.currentToken.Token.Value,
 			)
 		}
 
@@ -171,8 +171,8 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	}
 
 	// Check for LIKE/ILIKE operator
-	if p.isType(models.TokenTypeLike) || strings.EqualFold(p.currentToken.Literal, "ILIKE") {
-		operator := p.currentToken.Literal
+	if p.isType(models.TokenTypeLike) || strings.EqualFold(p.currentToken.Token.Value, "ILIKE") {
+		operator := p.currentToken.Token.Value
 		// Reject ILIKE in non-PostgreSQL dialects — it is a PostgreSQL extension.
 		if strings.EqualFold(operator, "ILIKE") &&
 			p.dialect != "" &&
@@ -190,7 +190,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			return nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse LIKE pattern: %v", err),
 				p.currentLocation(),
-				p.currentToken.Literal,
+				p.currentToken.Token.Value,
 			)
 		}
 
@@ -203,15 +203,15 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	}
 
 	// Check for REGEXP/RLIKE operator (MySQL)
-	if strings.EqualFold(p.currentToken.Literal, "REGEXP") || strings.EqualFold(p.currentToken.Literal, "RLIKE") {
-		operator := strings.ToUpper(p.currentToken.Literal)
+	if strings.EqualFold(p.currentToken.Token.Value, "REGEXP") || strings.EqualFold(p.currentToken.Token.Value, "RLIKE") {
+		operator := strings.ToUpper(p.currentToken.Token.Value)
 		p.advance()
 		pattern, err := p.parsePrimaryExpression()
 		if err != nil {
 			return nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse REGEXP pattern: %v", err),
 				p.currentLocation(),
-				p.currentToken.Literal,
+				p.currentToken.Token.Value,
 			)
 		}
 		return &ast.BinaryExpression{
@@ -241,7 +241,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 				return nil, goerrors.InvalidSyntaxError(
 					fmt.Sprintf("failed to parse IN subquery: %v", err),
 					p.currentLocation(),
-					p.currentToken.Literal,
+					p.currentToken.Token.Value,
 				)
 			}
 
@@ -330,12 +330,12 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	if p.isComparisonOperator() {
 		// Save the operator and its position
 		opPos := p.currentLocation()
-		operator := p.currentToken.Literal
+		operator := p.currentToken.Token.Value
 		p.advance()
 
 		// Check for ANY/ALL subquery operators (uses O(1) switch instead of O(n) isAnyType)
 		if p.isQuantifier() {
-			quantifier := p.currentToken.Literal
+			quantifier := p.currentToken.Token.Value
 			p.advance() // Consume ANY/ALL
 
 			// Expect opening parenthesis
@@ -403,7 +403,7 @@ func (p *Parser) parseStringConcatExpression() (ast.Expression, error) {
 	// Handle || (string concatenation) operator (left-associative)
 	for p.isType(models.TokenTypeStringConcat) {
 		opPos := p.currentLocation()
-		operator := p.currentToken.Literal
+		operator := p.currentToken.Token.Value
 		p.advance() // Consume ||
 
 		right, err := p.parseAdditiveExpression()
@@ -433,7 +433,7 @@ func (p *Parser) parseAdditiveExpression() (ast.Expression, error) {
 	// Handle + and - operators (left-associative)
 	for p.isType(models.TokenTypePlus) || p.isType(models.TokenTypeMinus) {
 		opPos := p.currentLocation()
-		operator := p.currentToken.Literal
+		operator := p.currentToken.Token.Value
 		p.advance() // Consume operator
 
 		right, err := p.parseMultiplicativeExpression()
@@ -466,7 +466,7 @@ func (p *Parser) parseMultiplicativeExpression() (ast.Expression, error) {
 	for p.isType(models.TokenTypeAsterisk) || p.isType(models.TokenTypeMul) ||
 		p.isType(models.TokenTypeDiv) || p.isType(models.TokenTypeMod) {
 		opPos := p.currentLocation()
-		operator := p.currentToken.Literal
+		operator := p.currentToken.Token.Value
 		p.advance() // Consume operator
 
 		right, err := p.parseJSONExpression()
@@ -514,8 +514,8 @@ func (p *Parser) parseJSONExpression() (ast.Expression, error) {
 	// Handle JSON operators (left-associative for chaining like data->'a'->'b')
 	for p.isJSONOperator() {
 		opPos := p.currentLocation()
-		operator := p.currentToken.Literal
-		operatorType := p.currentToken.Type
+		operator := p.currentToken.Token.Value
+		operatorType := p.currentToken.Token.Type
 		p.advance() // Consume JSON operator
 
 		// Parse the right side
@@ -563,7 +563,7 @@ func (p *Parser) parseDataType() (string, error) {
 
 	// Use strings.Builder for efficient string concatenation
 	var sb strings.Builder
-	sb.WriteString(p.currentToken.Literal)
+	sb.WriteString(p.currentToken.Token.Value)
 	p.advance() // Consume type name
 
 	// Check for type parameters (e.g., VARCHAR(100), DECIMAL(10,2))
@@ -577,7 +577,7 @@ func (p *Parser) parseDataType() (string, error) {
 				if !p.isType(models.TokenTypeComma) {
 					return "", p.expectedError(", or )")
 				}
-				sb.WriteString(p.currentToken.Literal)
+				sb.WriteString(p.currentToken.Token.Value)
 				p.advance() // Consume comma
 			}
 
@@ -585,13 +585,13 @@ func (p *Parser) parseDataType() (string, error) {
 			// Use token type constants for consistency
 			if !p.isType(models.TokenTypeNumber) && !p.isType(models.TokenTypeIdentifier) && !p.isNumericLiteral() {
 				return "", goerrors.InvalidSyntaxError(
-					fmt.Sprintf("expected numeric type parameter, got '%s'", p.currentToken.Literal),
+					fmt.Sprintf("expected numeric type parameter, got '%s'", p.currentToken.Token.Value),
 					p.currentLocation(),
 					"Use TYPE(precision[, scale]) syntax",
 				)
 			}
 
-			sb.WriteString(p.currentToken.Literal)
+			sb.WriteString(p.currentToken.Token.Value)
 			p.advance()
 			paramCount++
 		}
@@ -619,8 +619,8 @@ func (p *Parser) parseDataType() (string, error) {
 
 // isNumericLiteral checks if current token is a numeric literal (handles INT/NUMBER token types)
 func (p *Parser) isNumericLiteral() bool {
-	if p.currentToken.Type != models.TokenTypeUnknown {
-		return p.currentToken.Type == models.TokenTypeNumber
+	if p.currentToken.Token.Type != models.TokenTypeUnknown {
+		return p.currentToken.Token.Type == models.TokenTypeNumber
 	}
 	return false
 }
@@ -628,14 +628,14 @@ func (p *Parser) isNumericLiteral() bool {
 // isDataTypeKeyword checks if current token is a SQL data type keyword
 func (p *Parser) isDataTypeKeyword() bool {
 	// Check Type for known data type tokens
-	switch p.currentToken.Type {
+	switch p.currentToken.Token.Type {
 	case models.TokenTypeInt, models.TokenTypeInteger, models.TokenTypeVarchar,
 		models.TokenTypeText, models.TokenTypeBoolean, models.TokenTypeFloat,
 		models.TokenTypeInterval:
 		return true
 	}
 	// Fallback: check literal for data type keywords not all represented in models
-	switch strings.ToUpper(p.currentToken.Literal) {
+	switch strings.ToUpper(p.currentToken.Token.Value) {
 	case "INT", "INTEGER", "BIGINT", "SMALLINT", "FLOAT", "DOUBLE", "DECIMAL",
 		"NUMERIC", "VARCHAR", "CHAR", "TEXT", "BOOLEAN", "DATE", "TIME",
 		"TIMESTAMP", "INTERVAL", "BLOB", "CLOB", "JSON", "UUID":
@@ -646,7 +646,7 @@ func (p *Parser) isDataTypeKeyword() bool {
 
 // isJSONOperator checks if current token is a JSON/JSONB operator
 func (p *Parser) isJSONOperator() bool {
-	switch p.currentToken.Type {
+	switch p.currentToken.Token.Type {
 	case models.TokenTypeArrow, // ->
 		models.TokenTypeLongArrow,     // ->>
 		models.TokenTypeHashArrow,     // #>
@@ -706,9 +706,9 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 	}
 
 	// Handle keywords that can be used as function names in MySQL (IF, REPLACE, etc.)
-	if (p.isType(models.TokenTypeIf) || p.isType(models.TokenTypeReplace)) && p.peekToken().Type == models.TokenTypeLParen {
+	if (p.isType(models.TokenTypeIf) || p.isType(models.TokenTypeReplace)) && p.peekToken().Token.Type == models.TokenTypeLParen {
 		kwPos := p.currentLocation()
-		identName := p.currentToken.Literal
+		identName := p.currentToken.Token.Value
 		p.advance()
 		funcCall, err := p.parseFunctionCall(identName)
 		if err != nil {
@@ -725,7 +725,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		// Double-quoted strings are treated as identifiers in SQL (e.g., "column_name")
 		// Non-reserved keywords (TARGET, SOURCE, etc.) can also be used as identifiers
 		identPos := p.currentLocation()
-		identName := p.currentToken.Literal
+		identName := p.currentToken.Token.Value
 		p.advance()
 
 		// Check for function call (identifier followed by parentheses)
@@ -741,7 +741,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			}
 
 			// MySQL MATCH(...) AGAINST(...) full-text search
-			if strings.EqualFold(identName, "MATCH") && strings.EqualFold(p.currentToken.Literal, "AGAINST") {
+			if strings.EqualFold(identName, "MATCH") && strings.EqualFold(p.currentToken.Token.Value, "AGAINST") {
 				return p.parseMatchAgainst(funcCall)
 			}
 
@@ -754,8 +754,9 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		// Check for qualified identifier (table.column) or qualified asterisk (table.*)
 		if p.isType(models.TokenTypePeriod) {
 			p.advance() // Consume .
-			if p.isType(models.TokenTypeAsterisk) {
-				// Handle table.* (qualified asterisk)
+			if p.isType(models.TokenTypeAsterisk) || p.isType(models.TokenTypeMul) {
+				// Handle table.* (qualified asterisk).
+				// Both TokenTypeAsterisk and TokenTypeMul represent '*'.
 				ident = &ast.Identifier{
 					Table: ident.Name,
 					Name:  "*",
@@ -766,7 +767,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				// Handle table.column (qualified identifier)
 				ident = &ast.Identifier{
 					Table: ident.Name,
-					Name:  p.currentToken.Literal,
+					Name:  p.currentToken.Token.Value,
 					Pos:   identPos,
 				}
 				p.advance()
@@ -788,22 +789,23 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return ident, nil
 	}
 
-	if p.isType(models.TokenTypeAsterisk) {
-		// Handle asterisk (e.g., in COUNT(*) or SELECT *)
+	if p.isType(models.TokenTypeAsterisk) || p.isType(models.TokenTypeMul) {
+		// Handle asterisk (e.g., in COUNT(*) or SELECT *).
+		// Both TokenTypeAsterisk and TokenTypeMul represent '*' from the tokenizer.
 		p.advance()
 		return &ast.Identifier{Name: "*"}, nil
 	}
 
 	if p.isStringLiteral() {
 		// Handle string literals
-		value := p.currentToken.Literal
+		value := p.currentToken.Token.Value
 		p.advance()
 		return &ast.LiteralValue{Value: value, Type: "string"}, nil
 	}
 
 	if p.isNumericLiteral() {
 		// Handle numeric literals (int or float)
-		value := p.currentToken.Literal
+		value := p.currentToken.Token.Value
 		litType := "int"
 		if strings.ContainsAny(value, ".eE") {
 			litType = "float"
@@ -814,14 +816,14 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 
 	if p.isBooleanLiteral() {
 		// Handle boolean literals (uses O(1) switch instead of O(n) isAnyType)
-		value := p.currentToken.Literal
+		value := p.currentToken.Token.Value
 		p.advance()
 		return &ast.LiteralValue{Value: value, Type: "bool"}, nil
 	}
 
 	if p.isType(models.TokenTypePlaceholder) {
 		// Handle SQL placeholders (e.g., $1, $2 for PostgreSQL; @param for SQL Server)
-		value := p.currentToken.Literal
+		value := p.currentToken.Token.Value
 		p.advance()
 		return &ast.LiteralValue{Value: value, Type: "placeholder"}, nil
 	}
@@ -980,8 +982,8 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 	}
 
 	return nil, goerrors.UnexpectedTokenError(
-		p.currentToken.Type.String(),
-		p.currentToken.Literal,
+		p.currentToken.Token.Type.String(),
+		p.currentToken.Token.Value,
 		models.Location{Line: 0, Column: 0},
 		"",
 	)
@@ -1124,7 +1126,7 @@ func (p *Parser) parseCastExpression() (*ast.CastExpression, error) {
 		return nil, p.expectedError("data type")
 	}
 
-	dataType := p.currentToken.Literal
+	dataType := p.currentToken.Token.Value
 	p.advance() // Consume type name
 
 	// Check for type parameters (e.g., VARCHAR(100), DECIMAL(10,2))
@@ -1140,7 +1142,7 @@ func (p *Parser) parseCastExpression() (*ast.CastExpression, error) {
 				if !p.isType(models.TokenTypeComma) {
 					return nil, p.expectedError(", or )")
 				}
-				typeParams += p.currentToken.Literal
+				typeParams += p.currentToken.Token.Value
 				p.advance() // Consume comma
 			}
 
@@ -1153,7 +1155,7 @@ func (p *Parser) parseCastExpression() (*ast.CastExpression, error) {
 				)
 			}
 
-			typeParams += p.currentToken.Literal
+			typeParams += p.currentToken.Token.Value
 			p.advance()
 			paramCount++
 		}
@@ -1194,17 +1196,17 @@ func (p *Parser) parseIntervalExpression() (*ast.IntervalExpression, error) {
 	// Support both PostgreSQL style: INTERVAL '1 day'
 	// and MySQL style: INTERVAL 30 DAY, INTERVAL 1 HOUR
 	if p.isStringLiteral() {
-		value := p.currentToken.Literal
+		value := p.currentToken.Token.Value
 		p.advance()
 		return &ast.IntervalExpression{Value: value}, nil
 	}
 
 	// MySQL style: INTERVAL <number> <unit>
 	if p.isNumericLiteral() {
-		numStr := p.currentToken.Literal
+		numStr := p.currentToken.Token.Value
 		p.advance()
 		// Expect a unit keyword (DAY, HOUR, MINUTE, SECOND, MONTH, YEAR, WEEK, etc.)
-		unit := strings.ToUpper(p.currentToken.Literal)
+		unit := strings.ToUpper(p.currentToken.Token.Value)
 		p.advance()
 		return &ast.IntervalExpression{Value: numStr + " " + unit}, nil
 	}
@@ -1309,7 +1311,7 @@ func (p *Parser) parseSubquery() (ast.Statement, error) {
 
 	return nil, goerrors.ExpectedTokenError(
 		"SELECT or WITH",
-		p.currentToken.Type.String(),
+		p.currentToken.Token.Type.String(),
 		models.Location{Line: 0, Column: 0},
 		"",
 	)

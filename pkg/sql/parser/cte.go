@@ -129,7 +129,7 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 		return nil, p.expectedError("CTE name")
 	}
 	cteNamePos := p.currentLocation()
-	name := p.currentToken.Literal
+	name := p.currentToken.Token.Value
 	p.advance()
 
 	// Parse optional column list
@@ -141,7 +141,7 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 			if !p.isIdentifier() {
 				return nil, p.expectedError("column name")
 			}
-			columns = append(columns, p.currentToken.Literal)
+			columns = append(columns, p.currentToken.Token.Value)
 			p.advance()
 
 			if p.isType(models.TokenTypeComma) {

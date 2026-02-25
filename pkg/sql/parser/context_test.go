@@ -25,22 +25,24 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
-// Helper function to tokenize SQL for tests
+// Helper function to tokenize SQL for tests.
+// Returns []token.Token for compatibility with ParseContext (backward-compat shim).
 func tokenizeSQL(t *testing.T, sql string) []token.Token {
 	t.Helper()
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 
-	tokens, err := tkz.Tokenize([]byte(sql))
+	spanTokens, err := tkz.Tokenize([]byte(sql))
 	if err != nil {
 		t.Fatalf("Failed to tokenize SQL: %v", err)
 	}
 
-	converted, err := convertModelTokens(tokens)
-	if err != nil {
-		t.Fatalf("Failed to convert tokens: %v", err)
+	// Wrap models.TokenWithSpan → token.Token for the ParseContext shim.
+	result := make([]token.Token, len(spanTokens))
+	for i, st := range spanTokens {
+		result[i] = token.Token{Type: st.Token.Type, Literal: st.Token.Value}
 	}
-	return converted
+	return result
 }
 
 // TestParseContext_BasicSuccess verifies that ParseContext works for valid SQL

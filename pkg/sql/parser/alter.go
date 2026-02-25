@@ -285,7 +285,10 @@ func (p *Parser) parseAlterConnectorStatement(stmt *ast.AlterStatement) (*ast.Al
 		}
 		op.Properties = make(map[string]string)
 		for {
-			key := p.parseIdentAsString()
+			// DCPROPERTIES keys are arbitrary user-defined names that may
+			// coincide with SQL keywords (e.g. "key", "url").  Accept any
+			// word-like token as a bare identifier here.
+			key := p.parseBareWordAsString()
 			if !p.matchType(models.TokenTypeEq) {
 				return nil, p.expectedError("=")
 			}

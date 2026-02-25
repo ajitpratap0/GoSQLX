@@ -99,12 +99,12 @@ func (p *Parser) parseCube() (*ast.CubeExpression, error) {
 // Example: GROUPING SETS((a, b), (a), ()) generates exactly those three grouping sets
 func (p *Parser) parseGroupingSets() (*ast.GroupingSetsExpression, error) {
 	// Handle both "GROUPING SETS" as compound keyword or separate tokens
-	if p.currentToken.Literal == "GROUPING SETS" {
+	if p.currentToken.Token.Value == "GROUPING SETS" {
 		p.advance() // Consume "GROUPING SETS" compound token
 	} else if p.isType(models.TokenTypeGrouping) {
 		p.advance() // Consume GROUPING
 		// Check for SETS - using literal comparison as fallback since SETS is not a standalone token type
-		if p.currentToken.Literal != "SETS" && !p.isType(models.TokenTypeSets) {
+		if p.currentToken.Token.Value != "SETS" && !p.isType(models.TokenTypeSets) {
 			return nil, p.expectedError("SETS after GROUPING")
 		}
 		p.advance() // Consume SETS

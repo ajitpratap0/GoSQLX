@@ -57,7 +57,7 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 				p.advance() // Consume comma
 			} else if p.isType(models.TokenTypeRParen) || p.isType(models.TokenTypeOrder) {
 				break
-			} else if strings.ToUpper(p.currentToken.Literal) == "SEPARATOR" {
+			} else if strings.ToUpper(p.currentToken.Token.Value) == "SEPARATOR" {
 				// MySQL GROUP_CONCAT SEPARATOR clause
 				p.advance() // Consume SEPARATOR
 				sepArg, err := p.parseExpression()
@@ -121,7 +121,7 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 				p.advance() // Consume comma
 			} else if p.isType(models.TokenTypeRParen) {
 				break
-			} else if strings.EqualFold(p.currentToken.Literal, "SEPARATOR") {
+			} else if strings.EqualFold(p.currentToken.Token.Value, "SEPARATOR") {
 				break // Let SEPARATOR be handled below
 			} else {
 				return nil, p.expectedError(", or )")
@@ -130,7 +130,7 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 	}
 
 	// Handle MySQL SEPARATOR clause (GROUP_CONCAT)
-	if strings.EqualFold(p.currentToken.Literal, "SEPARATOR") {
+	if strings.EqualFold(p.currentToken.Token.Value, "SEPARATOR") {
 		p.advance() // Consume SEPARATOR
 		sepExpr, err := p.parseExpression()
 		if err != nil {
@@ -363,7 +363,7 @@ func (p *Parser) parseWindowSpec() (*ast.WindowSpec, error) {
 
 	// Parse frame clause (ROWS/RANGE with bounds)
 	if p.isAnyType(models.TokenTypeRows, models.TokenTypeRange) {
-		frameType := p.currentToken.Literal
+		frameType := p.currentToken.Token.Value
 		p.advance() // Consume ROWS/RANGE
 
 		frameClause, err := p.parseWindowFrame(frameType)

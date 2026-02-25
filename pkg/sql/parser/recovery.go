@@ -79,8 +79,8 @@ func (r *RecoveryResult) Release() {
 
 // isStatementStartingKeyword checks if the current token is a statement-starting keyword.
 func (p *Parser) isStatementStartingKeyword() bool {
-	if p.currentToken.Type != models.TokenTypeUnknown {
-		switch p.currentToken.Type {
+	if p.currentToken.Token.Type != models.TokenTypeUnknown {
+		switch p.currentToken.Token.Type {
 		case models.TokenTypeSelect, models.TokenTypeInsert, models.TokenTypeUpdate,
 			models.TokenTypeDelete, models.TokenTypeCreate, models.TokenTypeAlter,
 			models.TokenTypeDrop, models.TokenTypeWith, models.TokenTypeMerge,
@@ -130,8 +130,13 @@ func (p *Parser) synchronize() {
 //	defer result.Release()
 //	fmt.Printf("parsed %d statements with %d errors\n", len(result.Statements), len(result.Errors))
 func ParseMultiWithRecovery(tokens []token.Token) *RecoveryResult {
+	// Wrap legacy token.Token into models.TokenWithSpan for the unified path.
+	wrapped := make([]models.TokenWithSpan, len(tokens))
+	for i, t := range tokens {
+		wrapped[i] = models.WrapToken(models.Token{Type: t.Type, Value: t.Literal})
+	}
 	p := GetParser()
-	stmts, errs := p.parseWithRecovery(tokens)
+	stmts, errs := p.parseWithRecovery(preprocessTokens(wrapped))
 	return &RecoveryResult{
 		Statements: stmts,
 		Errors:     errs,
@@ -154,20 +159,22 @@ func ParseMultiWithRecovery(tokens []token.Token) *RecoveryResult {
 //	defer parser.PutParser(p)
 //	stmts, errs := p.ParseWithRecovery(tokens)
 func (p *Parser) ParseWithRecovery(tokens []token.Token) ([]ast.Statement, []error) {
-	return p.parseWithRecovery(tokens)
+	// Wrap legacy token.Token into models.TokenWithSpan for the unified path.
+	wrapped := make([]models.TokenWithSpan, len(tokens))
+	for i, t := range tokens {
+		wrapped[i] = models.WrapToken(models.Token{Type: t.Type, Value: t.Literal})
+	}
+	return p.parseWithRecovery(preprocessTokens(wrapped))
 }
 
 // ParseWithRecoveryFromModelTokens parses tokenizer output with error recovery.
 func (p *Parser) ParseWithRecoveryFromModelTokens(tokens []models.TokenWithSpan) ([]ast.Statement, []error) {
-	converted, err := convertModelTokens(tokens)
-	if err != nil {
-		return nil, []error{fmt.Errorf("token conversion failed: %w", err)}
-	}
-	return p.parseWithRecovery(converted)
+	return p.parseWithRecovery(preprocessTokens(tokens))
 }
 
 // parseWithRecovery is the internal implementation shared by both public APIs.
-func (p *Parser) parseWithRecovery(tokens []token.Token) ([]ast.Statement, []error) {
+// It expects a preprocessed []models.TokenWithSpan (output of preprocessTokens).
+func (p *Parser) parseWithRecovery(tokens []models.TokenWithSpan) ([]ast.Statement, []error) {
 	p.tokens = tokens
 	p.currentPos = 0
 	if len(tokens) > 0 {
@@ -197,8 +204,8 @@ func (p *Parser) parseWithRecovery(tokens []token.Token) ([]ast.Statement, []err
 				Cause:    err,
 			}
 			if stmtStartPos < len(tokens) {
-				pe.TokenType = tokens[stmtStartPos].Type.String()
-				pe.Literal = tokens[stmtStartPos].Literal
+				pe.TokenType = tokens[stmtStartPos].Token.Type.String()
+				pe.Literal = tokens[stmtStartPos].Token.Value
 			}
 			errors = append(errors, pe)
 			// If parseStatement didn't advance (e.g., unrecognized keyword),

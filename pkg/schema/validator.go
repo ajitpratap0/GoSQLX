@@ -611,6 +611,8 @@ func extractExprPos(expr ast.Expression) (line, column int) {
 	switch e := expr.(type) {
 	case *ast.Identifier:
 		return e.Pos.Line, e.Pos.Column
+	case *ast.FunctionCall:
+		return e.Pos.Line, e.Pos.Column
 	case *ast.AliasedExpression:
 		return extractExprPos(e.Expr)
 	default:

@@ -267,6 +267,42 @@ func TestAcceptTopInSQLServer(t *testing.T) {
 	}
 }
 
+// TestRejectTopInSQLite checks that TOP is rejected when dialect is SQLite.
+func TestRejectTopInSQLite(t *testing.T) {
+	sql := "SELECT TOP 10 id, name FROM users"
+	_, err := ParseWithDialect(sql, keywords.DialectSQLite)
+	if err == nil {
+		t.Fatal("expected error: TOP should be rejected in SQLite dialect")
+	}
+	if !containsAny(err.Error(), "TOP", "sqlite", "LIMIT") {
+		t.Errorf("error should mention TOP or SQLite, got: %v", err)
+	}
+}
+
+// TestRejectTopInOracle checks that TOP is rejected when dialect is Oracle.
+func TestRejectTopInOracle(t *testing.T) {
+	sql := "SELECT TOP 10 id, name FROM users"
+	_, err := ParseWithDialect(sql, keywords.DialectOracle)
+	if err == nil {
+		t.Fatal("expected error: TOP should be rejected in Oracle dialect")
+	}
+	if !containsAny(err.Error(), "TOP", "oracle", "LIMIT") {
+		t.Errorf("error should mention TOP or Oracle, got: %v", err)
+	}
+}
+
+// TestRejectLimitInOracle checks that LIMIT is rejected when dialect is Oracle.
+func TestRejectLimitInOracle(t *testing.T) {
+	sql := "SELECT id, name FROM users LIMIT 10"
+	_, err := ParseWithDialect(sql, keywords.DialectOracle)
+	if err == nil {
+		t.Fatal("expected error: LIMIT should be rejected in Oracle dialect")
+	}
+	if !containsAny(err.Error(), "LIMIT", "Oracle", "ROWNUM", "FETCH") {
+		t.Errorf("error should mention LIMIT or Oracle, got: %v", err)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // ILIKE dialect gate
 // ---------------------------------------------------------------------------

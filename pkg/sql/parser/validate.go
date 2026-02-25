@@ -89,6 +89,8 @@ func validDialectList() string {
 	dialects := keywords.AllDialects()
 	names := make([]string, 0, len(dialects))
 	for _, d := range dialects {
+		// Belt-and-suspenders: DialectUnknown is not in AllDialects(), but guard
+		// here in case a future refactor inadvertently adds it back.
 		if d != keywords.DialectUnknown {
 			names = append(names, string(d))
 		}

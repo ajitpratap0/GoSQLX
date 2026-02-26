@@ -84,7 +84,7 @@ func (f *Formatter) Format(sql string) (string, error) {
 		copy(parsedAST.Comments, comments)
 	}
 
-	// Use AST's built-in Format method
+	// Build format options and delegate to the visitor-based renderer.
 	style := ast.ReadableStyle()
 	if f.opts.Compact {
 		style = ast.CompactStyle()
@@ -96,7 +96,7 @@ func (f *Formatter) Format(sql string) (string, error) {
 		style.KeywordCase = ast.KeywordUpper
 	}
 
-	return parsedAST.Format(style), nil
+	return FormatAST(parsedAST, style), nil
 }
 
 // FormatString is a convenience function that formats SQL with default options.

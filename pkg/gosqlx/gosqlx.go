@@ -70,6 +70,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
@@ -602,7 +603,7 @@ func Format(sql string, options FormatOptions) (string, error) {
 		AddSemicolon:     options.AddSemicolon,
 	}
 
-	result := parsedAST.Format(astOpts)
+	result := formatter.FormatAST(parsedAST, astOpts)
 	return result, nil
 }
 

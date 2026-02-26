@@ -17,6 +17,7 @@ package transform
 import (
 	"fmt"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
@@ -151,17 +152,5 @@ func ParseSQL(sql string) (*ast.AST, error) {
 
 // FormatSQL formats an AST statement back to SQL using compact style.
 func FormatSQL(stmt ast.Statement) string {
-	type formattable interface {
-		Format(ast.FormatOptions) string
-	}
-	if f, ok := stmt.(formattable); ok {
-		return f.Format(ast.CompactStyle())
-	}
-	type sqlable interface {
-		SQL() string
-	}
-	if s, ok := stmt.(sqlable); ok {
-		return s.SQL()
-	}
-	return ""
+	return formatter.FormatStatement(stmt, ast.CompactStyle())
 }

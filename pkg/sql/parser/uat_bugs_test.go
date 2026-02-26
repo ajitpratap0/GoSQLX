@@ -15,10 +15,10 @@
 // Package parser — UAT bug regression tests.
 //
 // Covers the four fixes from the UAT review:
-//   1. Error positions: parser errors must include correct line/column from token spans.
-//   2. MySQL VALUES() helper: ON DUPLICATE KEY UPDATE VALUES(col) now parses correctly.
-//   3. Error hint grammar: hints no longer say "'x' keyword" when x is not a keyword.
-//   4. ParseWithDialect wrapper: top-level gosqlx.ParseWithDialect convenience function.
+//  1. Error positions: parser errors must include correct line/column from token spans.
+//  2. MySQL VALUES() helper: ON DUPLICATE KEY UPDATE VALUES(col) now parses correctly.
+//  3. Error hint grammar: hints no longer say "'x' keyword" when x is not a keyword.
+//  4. ParseWithDialect wrapper: top-level gosqlx.ParseWithDialect convenience function.
 package parser_test
 
 import (

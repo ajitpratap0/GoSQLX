@@ -151,7 +151,7 @@ func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStat
 			goerrors.ErrCodeInvalidSyntax,
 			"error parsing view query",
 			p.currentLocation(),
-			"",                // SQL not available in current parser implementation
+			"", // SQL not available in current parser implementation
 			err,
 		)
 	}
@@ -265,7 +265,7 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 			goerrors.ErrCodeInvalidSyntax,
 			"error parsing materialized view query",
 			p.currentLocation(),
-			"",                // SQL not available in current parser implementation
+			"", // SQL not available in current parser implementation
 			err,
 		)
 	}

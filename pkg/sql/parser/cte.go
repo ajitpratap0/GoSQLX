@@ -46,7 +46,7 @@ func (p *Parser) parseWithStatement() (ast.Statement, error) {
 		if err != nil {
 			return nil, goerrors.InvalidCTEError(
 				fmt.Sprintf("error parsing CTE definition: %v", err),
-				models.Location{},
+				p.currentLocation(),
 				"",
 			)
 		}
@@ -72,7 +72,7 @@ func (p *Parser) parseWithStatement() (ast.Statement, error) {
 	if err != nil {
 		return nil, goerrors.InvalidCTEError(
 			fmt.Sprintf("error parsing statement after WITH clause: %v", err),
-			models.Location{},
+			p.currentLocation(),
 			"",
 		)
 	}
@@ -100,7 +100,7 @@ func (p *Parser) parseWithStatement() (ast.Statement, error) {
 	default:
 		return nil, goerrors.InvalidCTEError(
 			fmt.Sprintf("WITH clause not supported with statement type: %T", stmt),
-			models.Location{},
+			p.currentLocation(),
 			"",
 		)
 	}
@@ -119,7 +119,7 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 	if p.depth > MaxRecursionDepth {
 		return nil, goerrors.InvalidCTEError(
 			fmt.Sprintf("maximum recursion depth exceeded (%d) - CTE too deeply nested", MaxRecursionDepth),
-			models.Location{},
+			p.currentLocation(),
 			"",
 		)
 	}
@@ -202,7 +202,7 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 	if err != nil {
 		return nil, goerrors.InvalidCTEError(
 			fmt.Sprintf("error parsing CTE subquery: %v", err),
-			models.Location{},
+			p.currentLocation(),
 			"",
 		)
 	}

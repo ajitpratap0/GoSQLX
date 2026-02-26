@@ -366,13 +366,15 @@ func TestMultipleStatementPositions(t *testing.T) {
 }
 
 // -----------------------------------------------------------------------------
-// TestPositionsWithoutPositionTracking verifies graceful degradation
-// when using basic Parse (no position tracking), positions are zero.
+// TestPositionsWithoutPositionTracking verifies that ParseFromModelTokens
+// now provides accurate position information (Bug 1 fix: error positions
+// were always 0,0 because the position mapping was discarded).
 // -----------------------------------------------------------------------------
 
 func TestPositionsWithoutPositionTracking(t *testing.T) {
-	// When using ParseFromModelTokens (not WithPositions), positions should
-	// be zero values. This tests backward compatibility.
+	// Bug 1 fix: ParseFromModelTokens now uses convertModelTokensWithPositions
+	// internally, so positions are always populated — even when the caller
+	// does not explicitly call ParseFromModelTokensWithPositions.
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 
@@ -391,9 +393,10 @@ func TestPositionsWithoutPositionTracking(t *testing.T) {
 
 	sel := tree.Statements[0].(*ast.SelectStatement)
 
-	// Without position tracking, Pos should be zero
-	if sel.Pos.Line != 0 || sel.Pos.Column != 0 {
-		t.Errorf("expected zero position without tracking, got line=%d col=%d",
+	// ParseFromModelTokens now populates positions so that error messages
+	// report accurate line/column. The SELECT keyword is at line 1, column 1.
+	if sel.Pos.Line != 1 || sel.Pos.Column != 1 {
+		t.Errorf("expected position line=1 col=1, got line=%d col=%d",
 			sel.Pos.Line, sel.Pos.Column)
 	}
 }

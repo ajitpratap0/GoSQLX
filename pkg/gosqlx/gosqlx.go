@@ -71,6 +71,7 @@ import (
 	"time"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
@@ -626,4 +627,38 @@ func ParseWithRecovery(sql string) ([]ast.Statement, []error) {
 	defer parser.PutParser(p)
 
 	return p.ParseWithRecoveryFromModelTokens(tokens)
+}
+
+// ParseWithDialect tokenizes and parses SQL using a specific SQL dialect for
+// keyword recognition and dialect-aware parsing rules.
+//
+// This is a top-level convenience wrapper around pkg/sql/parser.ParseWithDialect.
+// It is equivalent to calling Parse but instructs the tokenizer and parser to
+// apply dialect-specific rules (e.g., MySQL-specific syntax, PostgreSQL extensions).
+//
+// Supported dialects:
+//   - keywords.DialectGeneric    — generic SQL (default fallback)
+//   - keywords.DialectMySQL      — MySQL / MariaDB
+//   - keywords.DialectPostgreSQL — PostgreSQL
+//   - keywords.DialectSQLite     — SQLite
+//   - keywords.DialectSQLServer  — Microsoft SQL Server (T-SQL)
+//   - keywords.DialectOracle     — Oracle Database (PL/SQL)
+//   - keywords.DialectSnowflake  — Snowflake SQL
+//
+// Example — parse MySQL-specific syntax:
+//
+//	sql := "INSERT INTO t (id, name) VALUES (1, 'Alice') ON DUPLICATE KEY UPDATE name=VALUES(name)"
+//	ast, err := gosqlx.ParseWithDialect(sql, keywords.DialectMySQL)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//
+// Example — parse PostgreSQL JSON operators:
+//
+//	sql := "SELECT data->>'name' FROM users"
+//	ast, err := gosqlx.ParseWithDialect(sql, keywords.DialectPostgreSQL)
+//
+// Returns an error if the dialect is unknown or if SQL is syntactically invalid.
+func ParseWithDialect(sql string, dialect keywords.SQLDialect) (*ast.AST, error) {
+	return parser.ParseWithDialect(sql, dialect)
 }

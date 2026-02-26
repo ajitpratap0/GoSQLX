@@ -58,12 +58,7 @@ func ValidateBytes(input []byte) error {
 	p := GetParser()
 	defer PutParser(p)
 
-	converted, convErr := convertModelTokens(tokens)
-	if convErr != nil {
-		return fmt.Errorf("token conversion failed: %w", convErr)
-	}
-
-	astResult, parseErr := p.Parse(converted)
+	astResult, parseErr := p.ParseFromModelTokens(tokens)
 	if parseErr != nil {
 		return parseErr
 	}

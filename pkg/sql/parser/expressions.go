@@ -45,7 +45,7 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 		return nil, goerrors.RecursionDepthLimitError(
 			p.depth,
 			MaxRecursionDepth,
-			models.Location{Line: 0, Column: 0},
+			p.currentLocation(),
 			"",
 		)
 	}
@@ -266,7 +266,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			if err != nil {
 				return nil, goerrors.InvalidSyntaxError(
 					fmt.Sprintf("failed to parse IN value: %v", err),
-					models.Location{Line: 0, Column: 0},
+					p.currentLocation(),
 					"",
 				)
 			}
@@ -296,7 +296,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 		return nil, goerrors.ExpectedTokenError(
 			"BETWEEN, LIKE, or IN",
 			"NOT",
-			models.Location{Line: 0, Column: 0},
+			p.currentLocation(),
 			"",
 		)
 	}
@@ -349,7 +349,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			if err != nil {
 				return nil, goerrors.InvalidSyntaxError(
 					fmt.Sprintf("failed to parse %s subquery: %v", quantifier, err),
-					models.Location{Line: 0, Column: 0},
+					p.currentLocation(),
 					"",
 				)
 			}
@@ -705,6 +705,23 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return p.parseArrayConstructor()
 	}
 
+	// Handle MySQL VALUES(column) helper in ON DUPLICATE KEY UPDATE.
+	// VALUES is normally a DML keyword, but inside ON DUPLICATE KEY UPDATE it acts
+	// as a scalar function that returns the value that was attempted for insertion.
+	// e.g.: INSERT INTO t (id, name) VALUES (1, 'Alice') ON DUPLICATE KEY UPDATE name=VALUES(name)
+	if p.isType(models.TokenTypeValues) && p.peekToken().Type == models.TokenTypeLParen {
+		valuesPos := p.currentLocation()
+		p.advance() // Consume VALUES
+		funcCall, err := p.parseFunctionCall("VALUES")
+		if err != nil {
+			return nil, err
+		}
+		if funcCall.Pos.IsZero() {
+			funcCall.Pos = valuesPos
+		}
+		return funcCall, nil
+	}
+
 	// Handle keywords that can be used as function names in MySQL (IF, REPLACE, etc.)
 	if (p.isType(models.TokenTypeIf) || p.isType(models.TokenTypeReplace)) && p.peekToken().Type == models.TokenTypeLParen {
 		kwPos := p.currentLocation()
@@ -844,7 +861,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			if err != nil {
 				return nil, goerrors.InvalidSyntaxError(
 					fmt.Sprintf("failed to parse subquery: %v", err),
-					models.Location{Line: 0, Column: 0},
+					p.currentLocation(),
 					"",
 				)
 			}
@@ -914,7 +931,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		if err != nil {
 			return nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse EXISTS subquery: %v", err),
-				models.Location{Line: 0, Column: 0},
+				p.currentLocation(),
 				"",
 			)
 		}
@@ -946,7 +963,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			if err != nil {
 				return nil, goerrors.InvalidSyntaxError(
 					fmt.Sprintf("failed to parse NOT EXISTS subquery: %v", err),
-					models.Location{Line: 0, Column: 0},
+					p.currentLocation(),
 					"",
 				)
 			}
@@ -982,7 +999,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 	return nil, goerrors.UnexpectedTokenError(
 		p.currentToken.Type.String(),
 		p.currentToken.Literal,
-		models.Location{Line: 0, Column: 0},
+		p.currentLocation(),
 		"",
 	)
 }
@@ -1009,7 +1026,7 @@ func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
 		if err != nil {
 			return nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse CASE value: %v", err),
-				models.Location{Line: 0, Column: 0},
+				p.currentLocation(),
 				"",
 			)
 		}
@@ -1026,7 +1043,7 @@ func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
 		if err != nil {
 			return nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse WHEN condition: %v", err),
-				models.Location{Line: 0, Column: 0},
+				p.currentLocation(),
 				"",
 			)
 		}
@@ -1042,7 +1059,7 @@ func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
 		if err != nil {
 			return nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse THEN result: %v", err),
-				models.Location{Line: 0, Column: 0},
+				p.currentLocation(),
 				"",
 			)
 		}
@@ -1058,7 +1075,7 @@ func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
 	if len(caseExpr.WhenClauses) == 0 {
 		return nil, goerrors.InvalidSyntaxError(
 			"CASE expression requires at least one WHEN clause",
-			models.Location{Line: 0, Column: 0},
+			p.currentLocation(),
 			"",
 		)
 	}
@@ -1071,7 +1088,7 @@ func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
 		if err != nil {
 			return nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse ELSE result: %v", err),
-				models.Location{Line: 0, Column: 0},
+				p.currentLocation(),
 				"",
 			)
 		}
@@ -1310,7 +1327,7 @@ func (p *Parser) parseSubquery() (ast.Statement, error) {
 	return nil, goerrors.ExpectedTokenError(
 		"SELECT or WITH",
 		p.currentToken.Type.String(),
-		models.Location{Line: 0, Column: 0},
+		p.currentLocation(),
 		"",
 	)
 }

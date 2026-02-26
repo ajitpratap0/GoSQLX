@@ -133,7 +133,7 @@ func GenerateHint(code ErrorCode, expected, found string) string {
 				return fmt.Sprintf("Did you mean '%s' instead of '%s'?", expected, found)
 			}
 		}
-		return fmt.Sprintf("Expected '%s' keyword here", expected)
+		return fmt.Sprintf("expected %s here", expected)
 
 	case ErrCodeUnexpectedToken:
 		// Suggest what might have been intended

@@ -354,14 +354,16 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 //
 // This is the preferred entry point for parsing SQL. It accepts the output of the
 // tokenizer directly, without requiring manual token conversion.
+// Position tracking is enabled automatically so that syntax errors include accurate
+// line/column information extracted from the tokenizer's span data.
 //
 // See issue #215 for the token type unification roadmap.
 func (p *Parser) ParseFromModelTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
-	converted, err := convertModelTokens(tokens)
+	result, err := convertModelTokensWithPositions(tokens)
 	if err != nil {
 		return nil, fmt.Errorf("token conversion failed: %w", err)
 	}
-	return p.Parse(converted)
+	return p.ParseWithPositions(result)
 }
 
 // ParseFromModelTokensWithPositions parses tokenizer output with position tracking

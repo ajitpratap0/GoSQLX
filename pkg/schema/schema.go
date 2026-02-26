@@ -50,6 +50,84 @@ import (
 	"strings"
 )
 
+// Catalog represents a database catalog containing multiple schemas (databases).
+// It allows cross-schema query validation and catalog-level operations.
+//
+// Example:
+//
+//	cat := schema.NewCatalog()
+//	s1 := schema.NewSchema("app_db")
+//	s2 := schema.NewSchema("audit_db")
+//	cat.AddSchema(s1)
+//	cat.AddSchema(s2)
+//	cat.DefaultSchema = "app_db"
+type Catalog struct {
+	Name          string
+	DefaultSchema string
+	Schemas       map[string]*Schema
+}
+
+// NewCatalog creates a new empty Catalog.
+func NewCatalog() *Catalog {
+	return &Catalog{
+		Schemas: make(map[string]*Schema),
+	}
+}
+
+// AddSchema adds (or replaces) a schema in the catalog.
+// Lookups are case-insensitive.
+func (c *Catalog) AddSchema(s *Schema) {
+	c.Schemas[strings.ToLower(s.Name)] = s
+}
+
+// GetSchema returns a schema by name (case-insensitive).
+func (c *Catalog) GetSchema(name string) (*Schema, bool) {
+	s, ok := c.Schemas[strings.ToLower(name)]
+	return s, ok
+}
+
+// GetDefaultSchema returns the default schema of the catalog.
+// If DefaultSchema is set, it is used. Otherwise the single schema is returned
+// when there is exactly one, and nil/false is returned for empty or ambiguous catalogs.
+func (c *Catalog) GetDefaultSchema() (*Schema, bool) {
+	if c.DefaultSchema != "" {
+		return c.GetSchema(c.DefaultSchema)
+	}
+	if len(c.Schemas) == 1 {
+		for _, s := range c.Schemas {
+			return s, true
+		}
+	}
+	return nil, false
+}
+
+// ResolveTable looks up a table by name across the catalog.
+// It first searches the default schema, then every other schema.
+// Returns the owning schema, the table, and true when found.
+func (c *Catalog) ResolveTable(tableName string) (*Schema, *Table, bool) {
+	if s, ok := c.GetDefaultSchema(); ok {
+		if t, ok := s.GetTable(tableName); ok {
+			return s, t, true
+		}
+	}
+	for _, s := range c.Schemas {
+		if t, ok := s.GetTable(tableName); ok {
+			return s, t, true
+		}
+	}
+	return nil, nil, false
+}
+
+// SchemaNames returns a sorted list of all schema names in the catalog.
+func (c *Catalog) SchemaNames() []string {
+	names := make([]string, 0, len(c.Schemas))
+	for _, s := range c.Schemas {
+		names = append(names, s.Name)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // Schema represents a database schema with tables, columns, and constraints.
 type Schema struct {
 	Name   string

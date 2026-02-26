@@ -44,6 +44,108 @@ const (
 )
 
 var (
+	// DDL statement pools
+	createTableStmtPool = sync.Pool{
+		New: func() interface{} {
+			return &CreateTableStatement{
+				Columns:     make([]ColumnDef, 0, 4),
+				Constraints: make([]TableConstraint, 0, 2),
+				Inherits:    make([]string, 0),
+				Options:     make([]TableOption, 0),
+			}
+		},
+	}
+
+	alterTableStmtPool = sync.Pool{
+		New: func() interface{} {
+			return &AlterTableStatement{
+				Actions: make([]AlterTableAction, 0, 2),
+			}
+		},
+	}
+
+	createIndexStmtPool = sync.Pool{
+		New: func() interface{} {
+			return &CreateIndexStatement{
+				Columns: make([]IndexColumn, 0, 4),
+			}
+		},
+	}
+
+	mergeStmtPool = sync.Pool{
+		New: func() interface{} {
+			return &MergeStatement{
+				WhenClauses: make([]*MergeWhenClause, 0, 2),
+				Output:      make([]Expression, 0, 2),
+			}
+		},
+	}
+
+	createViewStmtPool = sync.Pool{
+		New: func() interface{} {
+			return &CreateViewStatement{
+				Columns: make([]string, 0),
+			}
+		},
+	}
+
+	createMaterializedViewStmtPool = sync.Pool{
+		New: func() interface{} {
+			return &CreateMaterializedViewStatement{
+				Columns: make([]string, 0),
+			}
+		},
+	}
+
+	refreshMaterializedViewStmtPool = sync.Pool{
+		New: func() interface{} {
+			return &RefreshMaterializedViewStatement{}
+		},
+	}
+
+	dropStmtPool = sync.Pool{
+		New: func() interface{} {
+			return &DropStatement{
+				Names: make([]string, 0, 2),
+			}
+		},
+	}
+
+	truncateStmtPool = sync.Pool{
+		New: func() interface{} {
+			return &TruncateStatement{
+				Tables: make([]string, 0, 2),
+			}
+		},
+	}
+
+	showStmtPool = sync.Pool{
+		New: func() interface{} {
+			return &ShowStatement{}
+		},
+	}
+
+	describeStmtPool = sync.Pool{
+		New: func() interface{} {
+			return &DescribeStatement{}
+		},
+	}
+
+	replaceStmtPool = sync.Pool{
+		New: func() interface{} {
+			return &ReplaceStatement{
+				Columns: make([]Expression, 0, 4),
+				Values:  make([][]Expression, 0, 4),
+			}
+		},
+	}
+
+	alterStmtPool = sync.Pool{
+		New: func() interface{} {
+			return &AlterStatement{}
+		},
+	}
+
 	// AST node pools
 	astPool = sync.Pool{
 		New: func() interface{} {
@@ -351,16 +453,7 @@ func ReleaseAST(ast *AST) {
 
 	// Clean up all statements
 	for i := range ast.Statements {
-		switch stmt := ast.Statements[i].(type) {
-		case *SelectStatement:
-			PutSelectStatement(stmt)
-		case *InsertStatement:
-			PutInsertStatement(stmt)
-		case *UpdateStatement:
-			PutUpdateStatement(stmt)
-		case *DeleteStatement:
-			PutDeleteStatement(stmt)
-		}
+		releaseStatement(ast.Statements[i])
 		ast.Statements[i] = nil
 	}
 
@@ -390,17 +483,52 @@ func ReleaseStatements(stmts []Statement) {
 		if stmts[i] == nil {
 			continue
 		}
-		switch stmt := stmts[i].(type) {
-		case *SelectStatement:
-			PutSelectStatement(stmt)
-		case *InsertStatement:
-			PutInsertStatement(stmt)
-		case *UpdateStatement:
-			PutUpdateStatement(stmt)
-		case *DeleteStatement:
-			PutDeleteStatement(stmt)
-		}
+		releaseStatement(stmts[i])
 		stmts[i] = nil
+	}
+}
+
+// releaseStatement returns a single Statement to its pool.
+// This is the central dispatch used by both ReleaseAST and ReleaseStatements.
+func releaseStatement(stmt Statement) {
+	if stmt == nil {
+		return
+	}
+	switch s := stmt.(type) {
+	case *SelectStatement:
+		PutSelectStatement(s)
+	case *InsertStatement:
+		PutInsertStatement(s)
+	case *UpdateStatement:
+		PutUpdateStatement(s)
+	case *DeleteStatement:
+		PutDeleteStatement(s)
+	case *CreateTableStatement:
+		PutCreateTableStatement(s)
+	case *AlterTableStatement:
+		PutAlterTableStatement(s)
+	case *CreateIndexStatement:
+		PutCreateIndexStatement(s)
+	case *MergeStatement:
+		PutMergeStatement(s)
+	case *CreateViewStatement:
+		PutCreateViewStatement(s)
+	case *CreateMaterializedViewStatement:
+		PutCreateMaterializedViewStatement(s)
+	case *RefreshMaterializedViewStatement:
+		PutRefreshMaterializedViewStatement(s)
+	case *DropStatement:
+		PutDropStatement(s)
+	case *TruncateStatement:
+		PutTruncateStatement(s)
+	case *ShowStatement:
+		PutShowStatement(s)
+	case *DescribeStatement:
+		PutDescribeStatement(s)
+	case *ReplaceStatement:
+		PutReplaceStatement(s)
+	case *AlterStatement:
+		PutAlterStatement(s)
 	}
 }
 
@@ -1227,4 +1355,447 @@ func PutArraySliceExpression(ase *ArraySliceExpression) {
 		ase.End = nil
 	}
 	arraySliceExprPool.Put(ase)
+}
+
+// ============================================================
+// DDL Statement Pool Functions
+// ============================================================
+
+// GetCreateTableStatement gets a CreateTableStatement from the pool.
+func GetCreateTableStatement() *CreateTableStatement {
+	stmt := createTableStmtPool.Get().(*CreateTableStatement)
+	stmt.Columns = stmt.Columns[:0]
+	stmt.Constraints = stmt.Constraints[:0]
+	stmt.Inherits = stmt.Inherits[:0]
+	stmt.Options = stmt.Options[:0]
+	return stmt
+}
+
+// PutCreateTableStatement returns a CreateTableStatement to the pool.
+// It recursively releases any nested expressions (column defaults, check constraints, etc.).
+func PutCreateTableStatement(stmt *CreateTableStatement) {
+	if stmt == nil {
+		return
+	}
+
+	// Release expressions embedded in column definitions
+	for i := range stmt.Columns {
+		for j := range stmt.Columns[i].Constraints {
+			PutExpression(stmt.Columns[i].Constraints[j].Default)
+			PutExpression(stmt.Columns[i].Constraints[j].Check)
+			stmt.Columns[i].Constraints[j].Default = nil
+			stmt.Columns[i].Constraints[j].Check = nil
+			stmt.Columns[i].Constraints[j].References = nil
+		}
+		stmt.Columns[i].Constraints = stmt.Columns[i].Constraints[:0]
+		stmt.Columns[i].Name = ""
+		stmt.Columns[i].Type = ""
+	}
+	stmt.Columns = stmt.Columns[:0]
+
+	// Release expressions in table constraints
+	for i := range stmt.Constraints {
+		PutExpression(stmt.Constraints[i].Check)
+		stmt.Constraints[i].Check = nil
+		stmt.Constraints[i].References = nil
+		stmt.Constraints[i].Name = ""
+		stmt.Constraints[i].Type = ""
+		stmt.Constraints[i].Columns = stmt.Constraints[i].Columns[:0]
+	}
+	stmt.Constraints = stmt.Constraints[:0]
+
+	// Release expressions in PartitionBy
+	if stmt.PartitionBy != nil {
+		for i, expr := range stmt.PartitionBy.Boundary {
+			PutExpression(expr)
+			stmt.PartitionBy.Boundary[i] = nil
+		}
+		stmt.PartitionBy.Boundary = stmt.PartitionBy.Boundary[:0]
+		stmt.PartitionBy.Columns = stmt.PartitionBy.Columns[:0]
+		stmt.PartitionBy.Type = ""
+		stmt.PartitionBy = nil
+	}
+
+	// Release expressions in PartitionDefinitions
+	for i := range stmt.Partitions {
+		for j, expr := range stmt.Partitions[i].Values {
+			PutExpression(expr)
+			stmt.Partitions[i].Values[j] = nil
+		}
+		PutExpression(stmt.Partitions[i].LessThan)
+		PutExpression(stmt.Partitions[i].From)
+		PutExpression(stmt.Partitions[i].To)
+		for j, expr := range stmt.Partitions[i].InValues {
+			PutExpression(expr)
+			stmt.Partitions[i].InValues[j] = nil
+		}
+		stmt.Partitions[i].Values = stmt.Partitions[i].Values[:0]
+		stmt.Partitions[i].InValues = stmt.Partitions[i].InValues[:0]
+		stmt.Partitions[i].LessThan = nil
+		stmt.Partitions[i].From = nil
+		stmt.Partitions[i].To = nil
+		stmt.Partitions[i].Name = ""
+		stmt.Partitions[i].Type = ""
+		stmt.Partitions[i].Tablespace = ""
+	}
+	stmt.Partitions = stmt.Partitions[:0]
+
+	stmt.Inherits = stmt.Inherits[:0]
+
+	for i := range stmt.Options {
+		stmt.Options[i].Name = ""
+		stmt.Options[i].Value = ""
+	}
+	stmt.Options = stmt.Options[:0]
+
+	// Reset scalar fields
+	stmt.IfNotExists = false
+	stmt.Temporary = false
+	stmt.Name = ""
+
+	createTableStmtPool.Put(stmt)
+}
+
+// GetAlterTableStatement gets an AlterTableStatement from the pool.
+func GetAlterTableStatement() *AlterTableStatement {
+	stmt := alterTableStmtPool.Get().(*AlterTableStatement)
+	stmt.Actions = stmt.Actions[:0]
+	return stmt
+}
+
+// PutAlterTableStatement returns an AlterTableStatement to the pool.
+// It recursively releases nested expressions in column definitions and constraints.
+func PutAlterTableStatement(stmt *AlterTableStatement) {
+	if stmt == nil {
+		return
+	}
+
+	for i := range stmt.Actions {
+		// Release nested ColumnDef expressions
+		if stmt.Actions[i].ColumnDef != nil {
+			for j := range stmt.Actions[i].ColumnDef.Constraints {
+				PutExpression(stmt.Actions[i].ColumnDef.Constraints[j].Default)
+				PutExpression(stmt.Actions[i].ColumnDef.Constraints[j].Check)
+				stmt.Actions[i].ColumnDef.Constraints[j].Default = nil
+				stmt.Actions[i].ColumnDef.Constraints[j].Check = nil
+				stmt.Actions[i].ColumnDef.Constraints[j].References = nil
+			}
+			stmt.Actions[i].ColumnDef.Constraints = stmt.Actions[i].ColumnDef.Constraints[:0]
+			stmt.Actions[i].ColumnDef = nil
+		}
+		// Release nested TableConstraint expressions
+		if stmt.Actions[i].Constraint != nil {
+			PutExpression(stmt.Actions[i].Constraint.Check)
+			stmt.Actions[i].Constraint.Check = nil
+			stmt.Actions[i].Constraint = nil
+		}
+		stmt.Actions[i].Type = ""
+		stmt.Actions[i].ColumnName = ""
+	}
+	stmt.Actions = stmt.Actions[:0]
+	stmt.Table = ""
+
+	alterTableStmtPool.Put(stmt)
+}
+
+// GetCreateIndexStatement gets a CreateIndexStatement from the pool.
+func GetCreateIndexStatement() *CreateIndexStatement {
+	stmt := createIndexStmtPool.Get().(*CreateIndexStatement)
+	stmt.Columns = stmt.Columns[:0]
+	return stmt
+}
+
+// PutCreateIndexStatement returns a CreateIndexStatement to the pool.
+// It releases the optional WHERE expression.
+func PutCreateIndexStatement(stmt *CreateIndexStatement) {
+	if stmt == nil {
+		return
+	}
+
+	PutExpression(stmt.Where)
+
+	for i := range stmt.Columns {
+		stmt.Columns[i].Column = ""
+		stmt.Columns[i].Collate = ""
+		stmt.Columns[i].Direction = ""
+		stmt.Columns[i].NullsLast = false
+	}
+	stmt.Columns = stmt.Columns[:0]
+
+	stmt.Where = nil
+	stmt.Unique = false
+	stmt.IfNotExists = false
+	stmt.Name = ""
+	stmt.Table = ""
+	stmt.Using = ""
+
+	createIndexStmtPool.Put(stmt)
+}
+
+// GetMergeStatement gets a MergeStatement from the pool.
+func GetMergeStatement() *MergeStatement {
+	stmt := mergeStmtPool.Get().(*MergeStatement)
+	stmt.WhenClauses = stmt.WhenClauses[:0]
+	stmt.Output = stmt.Output[:0]
+	return stmt
+}
+
+// PutMergeStatement returns a MergeStatement to the pool.
+// It recursively releases nested expressions in WHEN clauses and OUTPUT.
+func PutMergeStatement(stmt *MergeStatement) {
+	if stmt == nil {
+		return
+	}
+
+	// Release OnCondition
+	PutExpression(stmt.OnCondition)
+	stmt.OnCondition = nil
+
+	// Release WHEN clause expressions
+	for i := range stmt.WhenClauses {
+		if stmt.WhenClauses[i] == nil {
+			continue
+		}
+		PutExpression(stmt.WhenClauses[i].Condition)
+		stmt.WhenClauses[i].Condition = nil
+		if stmt.WhenClauses[i].Action != nil {
+			for j := range stmt.WhenClauses[i].Action.SetClauses {
+				PutExpression(stmt.WhenClauses[i].Action.SetClauses[j].Value)
+				stmt.WhenClauses[i].Action.SetClauses[j].Value = nil
+				stmt.WhenClauses[i].Action.SetClauses[j].Column = ""
+			}
+			stmt.WhenClauses[i].Action.SetClauses = stmt.WhenClauses[i].Action.SetClauses[:0]
+			for j, expr := range stmt.WhenClauses[i].Action.Values {
+				PutExpression(expr)
+				stmt.WhenClauses[i].Action.Values[j] = nil
+			}
+			stmt.WhenClauses[i].Action.Values = stmt.WhenClauses[i].Action.Values[:0]
+			stmt.WhenClauses[i].Action.Columns = stmt.WhenClauses[i].Action.Columns[:0]
+			stmt.WhenClauses[i].Action.ActionType = ""
+			stmt.WhenClauses[i].Action.DefaultValues = false
+			stmt.WhenClauses[i].Action = nil
+		}
+		stmt.WhenClauses[i].Type = ""
+		stmt.WhenClauses[i] = nil
+	}
+	stmt.WhenClauses = stmt.WhenClauses[:0]
+
+	// Release OUTPUT expressions
+	for i, expr := range stmt.Output {
+		PutExpression(expr)
+		stmt.Output[i] = nil
+	}
+	stmt.Output = stmt.Output[:0]
+
+	// Reset TargetTable / SourceTable (value types — zero them out)
+	stmt.TargetTable = TableReference{}
+	stmt.SourceTable = TableReference{}
+	stmt.TargetAlias = ""
+	stmt.SourceAlias = ""
+
+	mergeStmtPool.Put(stmt)
+}
+
+// GetCreateViewStatement gets a CreateViewStatement from the pool.
+func GetCreateViewStatement() *CreateViewStatement {
+	stmt := createViewStmtPool.Get().(*CreateViewStatement)
+	stmt.Columns = stmt.Columns[:0]
+	return stmt
+}
+
+// PutCreateViewStatement returns a CreateViewStatement to the pool.
+// It recursively releases the nested query statement.
+func PutCreateViewStatement(stmt *CreateViewStatement) {
+	if stmt == nil {
+		return
+	}
+
+	// Recursively release the nested SELECT query
+	releaseStatement(stmt.Query)
+
+	stmt.OrReplace = false
+	stmt.Temporary = false
+	stmt.IfNotExists = false
+	stmt.Name = ""
+	stmt.Columns = stmt.Columns[:0]
+	stmt.Query = nil
+	stmt.WithOption = ""
+
+	createViewStmtPool.Put(stmt)
+}
+
+// GetCreateMaterializedViewStatement gets a CreateMaterializedViewStatement from the pool.
+func GetCreateMaterializedViewStatement() *CreateMaterializedViewStatement {
+	stmt := createMaterializedViewStmtPool.Get().(*CreateMaterializedViewStatement)
+	stmt.Columns = stmt.Columns[:0]
+	return stmt
+}
+
+// PutCreateMaterializedViewStatement returns a CreateMaterializedViewStatement to the pool.
+// It recursively releases the nested query statement.
+func PutCreateMaterializedViewStatement(stmt *CreateMaterializedViewStatement) {
+	if stmt == nil {
+		return
+	}
+
+	// Recursively release the nested SELECT query
+	releaseStatement(stmt.Query)
+
+	stmt.IfNotExists = false
+	stmt.Name = ""
+	stmt.Columns = stmt.Columns[:0]
+	stmt.Query = nil
+	stmt.WithData = nil
+	stmt.Tablespace = ""
+
+	createMaterializedViewStmtPool.Put(stmt)
+}
+
+// GetRefreshMaterializedViewStatement gets a RefreshMaterializedViewStatement from the pool.
+func GetRefreshMaterializedViewStatement() *RefreshMaterializedViewStatement {
+	return refreshMaterializedViewStmtPool.Get().(*RefreshMaterializedViewStatement)
+}
+
+// PutRefreshMaterializedViewStatement returns a RefreshMaterializedViewStatement to the pool.
+func PutRefreshMaterializedViewStatement(stmt *RefreshMaterializedViewStatement) {
+	if stmt == nil {
+		return
+	}
+
+	stmt.Concurrently = false
+	stmt.Name = ""
+	stmt.WithData = nil
+
+	refreshMaterializedViewStmtPool.Put(stmt)
+}
+
+// GetDropStatement gets a DropStatement from the pool.
+func GetDropStatement() *DropStatement {
+	stmt := dropStmtPool.Get().(*DropStatement)
+	stmt.Names = stmt.Names[:0]
+	return stmt
+}
+
+// PutDropStatement returns a DropStatement to the pool.
+func PutDropStatement(stmt *DropStatement) {
+	if stmt == nil {
+		return
+	}
+
+	stmt.ObjectType = ""
+	stmt.IfExists = false
+	stmt.Names = stmt.Names[:0]
+	stmt.CascadeType = ""
+
+	dropStmtPool.Put(stmt)
+}
+
+// GetTruncateStatement gets a TruncateStatement from the pool.
+func GetTruncateStatement() *TruncateStatement {
+	stmt := truncateStmtPool.Get().(*TruncateStatement)
+	stmt.Tables = stmt.Tables[:0]
+	return stmt
+}
+
+// PutTruncateStatement returns a TruncateStatement to the pool.
+func PutTruncateStatement(stmt *TruncateStatement) {
+	if stmt == nil {
+		return
+	}
+
+	stmt.Tables = stmt.Tables[:0]
+	stmt.RestartIdentity = false
+	stmt.ContinueIdentity = false
+	stmt.CascadeType = ""
+
+	truncateStmtPool.Put(stmt)
+}
+
+// GetShowStatement gets a ShowStatement from the pool.
+func GetShowStatement() *ShowStatement {
+	return showStmtPool.Get().(*ShowStatement)
+}
+
+// PutShowStatement returns a ShowStatement to the pool.
+func PutShowStatement(stmt *ShowStatement) {
+	if stmt == nil {
+		return
+	}
+
+	stmt.ShowType = ""
+	stmt.ObjectName = ""
+	stmt.From = ""
+
+	showStmtPool.Put(stmt)
+}
+
+// GetDescribeStatement gets a DescribeStatement from the pool.
+func GetDescribeStatement() *DescribeStatement {
+	return describeStmtPool.Get().(*DescribeStatement)
+}
+
+// PutDescribeStatement returns a DescribeStatement to the pool.
+func PutDescribeStatement(stmt *DescribeStatement) {
+	if stmt == nil {
+		return
+	}
+
+	stmt.TableName = ""
+
+	describeStmtPool.Put(stmt)
+}
+
+// GetReplaceStatement gets a ReplaceStatement from the pool.
+func GetReplaceStatement() *ReplaceStatement {
+	stmt := replaceStmtPool.Get().(*ReplaceStatement)
+	stmt.Columns = stmt.Columns[:0]
+	stmt.Values = stmt.Values[:0]
+	return stmt
+}
+
+// PutReplaceStatement returns a ReplaceStatement to the pool.
+// It recursively releases nested column and value expressions.
+func PutReplaceStatement(stmt *ReplaceStatement) {
+	if stmt == nil {
+		return
+	}
+
+	for i := range stmt.Columns {
+		PutExpression(stmt.Columns[i])
+		stmt.Columns[i] = nil
+	}
+	stmt.Columns = stmt.Columns[:0]
+
+	for i := range stmt.Values {
+		for j := range stmt.Values[i] {
+			PutExpression(stmt.Values[i][j])
+			stmt.Values[i][j] = nil
+		}
+		stmt.Values[i] = stmt.Values[i][:0]
+	}
+	stmt.Values = stmt.Values[:0]
+
+	stmt.TableName = ""
+
+	replaceStmtPool.Put(stmt)
+}
+
+// GetAlterStatement gets an AlterStatement from the pool.
+func GetAlterStatement() *AlterStatement {
+	return alterStmtPool.Get().(*AlterStatement)
+}
+
+// PutAlterStatement returns an AlterStatement to the pool.
+// It zeroes all fields; the Operation interface value is cleared but
+// its internal allocations are not recursively pooled (they use custom types).
+func PutAlterStatement(stmt *AlterStatement) {
+	if stmt == nil {
+		return
+	}
+
+	stmt.Type = 0
+	stmt.Name = ""
+	stmt.Operation = nil
+
+	alterStmtPool.Put(stmt)
 }

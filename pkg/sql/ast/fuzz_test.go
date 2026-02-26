@@ -17,6 +17,7 @@ package ast_test
 import (
 	"testing"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
@@ -80,7 +81,7 @@ func FuzzFormat(f *testing.F) {
 
 		// Format with multiple styles — must not panic
 		for _, style := range formatStyles {
-			_ = parsed.Format(style)
+			_ = formatter.FormatAST(parsed, style)
 		}
 	})
 }

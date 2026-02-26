@@ -269,7 +269,8 @@ func extractTable(ct *ast.CreateTableStatement) (*Table, error) {
 	table := NewTable(ct.Name)
 
 	// Extract columns
-	for _, colDef := range ct.Columns {
+	for i := range ct.Columns {
+		colDef := ct.Columns[i] // avoid G601: copy loop variable before taking its address
 		col := extractColumnFromDef(&colDef)
 
 		// Process column constraints that also affect table-level metadata

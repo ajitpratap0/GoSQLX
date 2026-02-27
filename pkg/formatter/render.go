@@ -138,7 +138,7 @@ func FormatStatement(s ast.Statement, opts ast.FormatOptions) string {
 		return renderCreateTable(v, opts)
 	case *ast.SetOperation:
 		return renderSetOperation(v, opts)
-	case *ast.AlterTableStatement:
+	case *ast.AlterTableStatement: //nolint:staticcheck // AlterTableStatement kept for backward compatibility
 		return renderAlterTable(v, opts)
 	case *ast.CreateIndexStatement:
 		return renderCreateIndex(v, opts)
@@ -569,7 +569,7 @@ func renderSetOperation(s *ast.SetOperation, opts ast.FormatOptions) string {
 	return f.result()
 }
 
-func renderAlterTable(a *ast.AlterTableStatement, opts ast.FormatOptions) string {
+func renderAlterTable(a *ast.AlterTableStatement, opts ast.FormatOptions) string { //nolint:staticcheck // AlterTableStatement kept for backward compatibility
 	if a == nil {
 		return ""
 	}

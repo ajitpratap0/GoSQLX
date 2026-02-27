@@ -131,7 +131,7 @@ func statementTypeName(stmt ast.Statement) string {
 		return "CREATE_VIEW"
 	case *ast.CreateIndexStatement:
 		return "CREATE_INDEX"
-	case *ast.AlterTableStatement:
+	case *ast.AlterTableStatement: //nolint:staticcheck // AlterTableStatement kept for backward compatibility
 		return "ALTER_TABLE"
 	case *ast.DropStatement:
 		return "DROP"

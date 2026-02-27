@@ -519,7 +519,7 @@ func (a *SQLAnalyzer) buildQueryInfo(astObj *ast.AST, sql string) QueryInfo {
 			stmtTypes = append(stmtTypes, "CREATE TABLE")
 		case *ast.CreateIndexStatement:
 			stmtTypes = append(stmtTypes, "CREATE INDEX")
-		case *ast.AlterTableStatement:
+		case *ast.AlterTableStatement: //nolint:staticcheck // AlterTableStatement kept for backward compatibility
 			stmtTypes = append(stmtTypes, "ALTER TABLE")
 		default:
 			stmtTypes = append(stmtTypes, "OTHER")

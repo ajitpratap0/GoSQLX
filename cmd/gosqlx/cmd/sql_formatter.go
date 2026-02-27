@@ -93,7 +93,7 @@ func (f *SQLFormatter) formatStatement(stmt ast.Statement) error {
 		return f.formatCreateTable(s)
 	case *ast.CreateIndexStatement:
 		return f.formatCreateIndex(s)
-	case *ast.AlterTableStatement:
+	case *ast.AlterTableStatement: //nolint:staticcheck // AlterTableStatement kept for backward compatibility
 		return f.formatAlterTable(s)
 	case *ast.AlterStatement:
 		return f.formatAlterStatement(s)
@@ -437,7 +437,7 @@ func (f *SQLFormatter) formatCreateIndex(stmt *ast.CreateIndexStatement) error {
 }
 
 // formatAlterTable formats ALTER TABLE statements
-func (f *SQLFormatter) formatAlterTable(stmt *ast.AlterTableStatement) error {
+func (f *SQLFormatter) formatAlterTable(stmt *ast.AlterTableStatement) error { //nolint:staticcheck // AlterTableStatement kept for backward compatibility
 	f.writeKeyword("ALTER TABLE")
 	f.builder.WriteString(" " + stmt.Table)
 

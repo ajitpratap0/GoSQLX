@@ -28,21 +28,20 @@ import (
 // This version tracks feature releases and compatibility.
 // Format: MAJOR.MINOR.PATCH (Semantic Versioning 2.0.0)
 //
-// Version 1.8.0 includes:
-//   - Schema-qualified table names (schema.table, db.schema.table)
-//   - PostgreSQL :: type casting operator
-//   - ARRAY constructor expressions
-//   - WITHIN GROUP clause for ordered-set aggregates
-//   - JSONB operators (@?, @@)
-//   - Regex operators (~, ~*, !~, !~*)
-//   - INTERVAL expressions
-//   - FETCH FIRST/NEXT with OFFSET
-//   - FOR UPDATE/SHARE locking clauses
-//   - Multi-row INSERT VALUES
-//   - PostgreSQL UPSERT (ON CONFLICT)
-//   - Positional parameters ($1, $2)
-//   - Array subscript and slice operations
-var Version = "1.8.0"
+// Version 1.9.0 includes:
+//   - SQLite PRAGMA fully parsed (bare, arg, and assignment forms)
+//   - WITHOUT ROWID support in CREATE TABLE
+//   - Tautology injection detection (1=1, 'a'='a', OR TRUE) → CRITICAL
+//   - UNION false-positive fix: PatternUnionInjection (CRITICAL) / PatternUnionGeneric (HIGH)
+//   - E1009 ErrCodeUnterminatedBlockComment for /* ... */ errors
+//   - MySQL backtick and SQL Server bracket reserved-word identifiers
+//   - KEY/INDEX/VIEW reserved keywords valid in qualified identifiers
+//   - NATURAL JOIN type stored correctly
+//   - OVER <window_name> (bare name, no parens) per SQL:2003 §7.11
+//   - token_count, Query Size, CTE output, SELECT indentation fixes
+//   - lint exits 1 on any violation (usable as CI gate)
+//   - validate output standardized to ✅/❌
+var Version = "1.9.0"
 
 var (
 	// verbose enables detailed output for debugging and troubleshooting.
@@ -130,7 +129,7 @@ Key features:
 • CI/CD integration with proper exit codes
 
 Performance: 1.5M+ operations/second sustained, 1.97M peak. 100-1000x faster than competitors.`,
-	Version: "1.8.0",
+	Version: "1.9.0",
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

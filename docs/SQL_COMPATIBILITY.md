@@ -1,12 +1,21 @@
 # GoSQLX SQL Feature Compatibility Matrix
 
-**Version**: v1.8.0 | **Last Updated**: 2026-02-24
+**Version**: v1.9.0 | **Last Updated**: 2026-02-28
 
 ## Overview
 
 This matrix documents the comprehensive SQL feature support in GoSQLX across different SQL dialects and standards. The testing was conducted using the comprehensive integration test suite with 700+ test cases covering real-world SQL patterns.
 
-### Recent Additions (v1.8.0)
+### Recent Additions (v1.9.0)
+- ✅ **SQLite PRAGMA**: Fully parsed — bare (`PRAGMA x`), arg (`PRAGMA x(n)`), and assignment (`PRAGMA x=v`) forms; `PragmaStatement` AST node
+- ✅ **WITHOUT ROWID**: `CREATE TABLE ... WITHOUT ROWID`; reserved keywords now valid as DDL column names
+- ✅ **Tautology Detection**: `ScanSQL()` detects `1=1`, `'a'='a'`, `col=col`, `OR TRUE` → CRITICAL severity (`PatternTautology`)
+- ✅ **UNION Detection Split**: `PatternUnionInjection` (CRITICAL, system tables + NULL padding) / `PatternUnionGeneric` (HIGH) — eliminates false-positive CRITICAL on legitimate queries
+- ✅ **E1009**: `ErrCodeUnterminatedBlockComment` for unterminated `/* ... */` block comments
+- ✅ **Dialect Fixes**: MySQL backtick + SQL Server bracket reserved-word identifiers now parsed correctly
+- ✅ **Parser Fixes**: KEY/INDEX in qualified names, NATURAL JOIN type, OVER window_name (bare name per SQL:2003 §7.11)
+
+### Previous Additions (v1.8.0)
 - ✅ **Dialect Mode Engine**: First-class dialect support with `ParseWithDialect()` — thread dialect through tokenizer and parser
 - ✅ **MySQL Syntax Support**:
   - **LIMIT offset, count** - MySQL-style `LIMIT 10, 20`
@@ -333,10 +342,10 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 
 | Feature | Support Level | GoSQLX Parser | Test Coverage | Notes |
 |---------|---------------|---------------|---------------|-------|
-| **PRAGMA** | ✅ Full | 🔧 Syntax | 10% | Keywords reserved, no parsing logic |
+| **PRAGMA** | ✅ Full | ✅ Full | 90% | Bare, arg, and assignment forms fully parsed |
 | **ATTACH/DETACH** | ✅ Full | 🔧 Syntax | 10% | Keywords reserved, no parsing logic |
 | **Type affinity** | ✅ Full | ⚠️ Partial | 30% | Flexible typing |
-| **WITHOUT ROWID** | ✅ Full | ⚠️ Partial | 40% | Table option |
+| **WITHOUT ROWID** | ✅ Full | ✅ Full | 85% | CREATE TABLE option fully supported |
 | **Simplified syntax** | ✅ Full | ✅ Full | 85% | SQLite variations |
 
 ## SQL Standards Compliance
@@ -590,7 +599,7 @@ gosqlx format --dialect mysql query.sql
 
 ## SQL Standards Compliance Summary
 
-### Overall Compliance (v1.8.0)
+### Overall Compliance (v1.9.0)
 
 | Standard | Compliance % | Status | Notes |
 |----------|--------------|--------|-------|
@@ -780,14 +789,36 @@ gosqlx format --dialect mysql query.sql
 
 ---
 
-**Last Updated**: 2026-02-24
-**GoSQLX Version**: 1.8.0
-**Test Suite Version**: 1.8.0
+**Last Updated**: 2026-02-28
+**GoSQLX Version**: 1.9.0
+**Test Suite Version**: 1.9.0
 **Total Test Cases**: 800+
 **Coverage Percentage**: 95%+
 **SQL-99 Compliance**: ~85%
 **PostgreSQL Compliance**: ~95% (core features), ~85% (extensions)
 **MySQL Compliance**: ~95% (core features), ~85% (extensions)
+
+## Quick Reference: What's New in v1.9.0
+
+### SQLite Enhancements
+1. **PRAGMA** - Fully parsed: bare (`PRAGMA x`), arg (`PRAGMA x(n)`), assignment (`PRAGMA x=v`)
+2. **WITHOUT ROWID** - `CREATE TABLE ... WITHOUT ROWID` fully supported
+3. **Reserved keywords as DDL column names** - No longer cause parse errors
+
+### Security Scanner
+1. **Tautology detection** - `1=1`, `'a'='a'`, `col=col`, `OR TRUE` → CRITICAL (`PatternTautology`)
+2. **UNION split** - `PatternUnionInjection` (CRITICAL) vs `PatternUnionGeneric` (HIGH)
+
+### Parser Fixes
+1. **KEY/INDEX/VIEW** in qualified identifiers (e.g., `a.key`)
+2. **NATURAL JOIN** - type stored as `"NATURAL"` not `"NATURAL INNER"`
+3. **OVER window_name** - bare window name reference (SQL:2003 §7.11)
+4. **MySQL backtick** + **SQL Server bracket** reserved-word identifiers
+
+### Error Codes
+1. **E1009** - `ErrCodeUnterminatedBlockComment` for unterminated `/* ... */`
+
+---
 
 ## Quick Reference: What's New in v1.8.0
 

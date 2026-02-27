@@ -1,7 +1,7 @@
 # GoSQLX Error Codes Reference
 
-**Version**: v1.6.0
-**Last Updated**: December 2025
+**Version**: v1.9.0
+**Last Updated**: 2026-02-28
 
 Comprehensive reference for all error codes in GoSQLX with examples and solutions.
 
@@ -63,6 +63,7 @@ Comprehensive reference for all error codes in GoSQLX with examples and solution
 | E1006 | DoS Protection | Input exceeds maximum size limit (10MB) |
 | E1007 | DoS Protection | Token count exceeds limit (1,000,000) |
 | E1008 | DoS Protection | Tokenizer panic recovered |
+| E1009 | Tokenizer | Unterminated block comment (missing `*/`) |
 | **E2xxx** | **Parser Errors** | **SQL syntax and parsing failures** |
 | E2001 | Parser | Unexpected token |
 | E2002 | Parser | Expected token not found |
@@ -226,6 +227,21 @@ if !utf8.Valid(sqlBytes) {
 sqlBytes = removeControlCharacters(sqlBytes)
 ast, err := gosqlx.ParseBytes(sqlBytes)
 ```
+
+---
+
+### E1009 - Unterminated Block Comment
+
+Emitted when the tokenizer reaches end-of-input while scanning a `/* ... */` block
+comment without finding the closing `*/`.
+
+```sql
+SELECT * FROM users /* this comment is never closed
+```
+
+**Error message:** `unterminated block comment (missing */)`
+**Hint:** Close the comment with `*/` or check for unmatched `/*`
+**Builder:** `errors.UnterminatedBlockCommentError(location, sql)`
 
 ---
 

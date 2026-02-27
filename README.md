@@ -43,7 +43,7 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 
 ### Key Features
 
-- **Blazing Fast**: ~50% faster parsing in v1.8.0 via token type overhaul; 1.25M+ ops/sec peak throughput
+- **Blazing Fast**: ~50% faster parsing via token type overhaul; 1.25M+ ops/sec peak throughput
 - **Memory Efficient**: 60-80% reduction through intelligent object pooling
 - **Thread-Safe**: Race-free, linear scaling to 128+ cores, 0 race conditions detected
 - **Multi-Dialect Engine** (v1.8.0): First-class dialect support with `ParseWithDialect()` — PostgreSQL, MySQL, SQL Server, Oracle, SQLite, Snowflake
@@ -67,7 +67,7 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 - **Python Bindings**: [PyGoSQLX](python/README.md) — use GoSQLX from Python via ctypes FFI, 100x+ faster than pure Python parsers
 - **Production Ready**: Battle-tested with 0 race conditions detected, ~85% SQL-99 compliance, Apache-2.0 licensed
 
-### Performance & Quality Highlights (v1.8.0)
+### Performance & Quality Highlights (v1.9.0)
 
 <div align="center">
 
@@ -75,26 +75,26 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 |:---------:|:-------:|:----------:|:----------:|:-------:|:---------:|
 | Faster Parsing | Peak Ops/sec | Latency | SQL Dialects | Parser Coverage | New Commits |
 
-**v1.8.0 Released** • **Dialect Engine** • **MySQL Support** • **Query Transforms** • **WASM Playground** • **Comment Preservation**
+**v1.9.0 Released** • **SQLite PRAGMA** • **Tautology Detection** • **19 Post-UAT Fixes** • **lint CI-gate** • **UNION false-positive fix**
 
 </div>
 
-### What's New in v1.8.0
+### What's New in v1.9.0
 
 <div align="center">
 
 | Feature | Description |
 |---------|-------------|
-| **Dialect Mode Engine** | `ParseWithDialect()` / `--dialect` CLI flag — PostgreSQL, MySQL, SQL Server, Oracle, SQLite, Snowflake |
-| **MySQL Syntax** | SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE KEY UPDATE, GROUP_CONCAT, MATCH AGAINST, REGEXP |
-| **Query Transform API** | Programmatic SQL rewriting: add WHERE, columns, JOINs, pagination via composable rules |
-| **WASM Playground** | Browser-based SQL parsing, formatting, and linting via WebAssembly |
-| **Comment Preservation** | SQL comments survive parse-format round-trips |
-| **AST-to-SQL Roundtrip** | `SQL()` methods on all AST nodes for full serialization |
-| **~50% Faster Parsing** | Token type overhaul: O(1) integer comparison replaces string matching |
-| **Error Recovery** | `ParseWithRecovery()` returns partial AST with all errors for IDE diagnostics |
+| **SQLite PRAGMA** | Fully parsed: bare (`PRAGMA x`), arg (`PRAGMA x(n)`), assignment (`PRAGMA x=v`) forms |
+| **WITHOUT ROWID** | SQLite `CREATE TABLE ... WITHOUT ROWID`; reserved keywords valid as DDL column names |
+| **Tautology Detection** | `ScanSQL()` detects `1=1`, `'a'='a'`, `col=col`, `OR TRUE` → CRITICAL severity |
+| **UNION False-positive Fix** | `PatternUnionInjection` (CRITICAL, system tables) vs `PatternUnionGeneric` (HIGH) |
+| **lint CI-gate** | `gosqlx lint` now exits 1 on any violation — usable in CI pipelines without `--fail-on-warn` |
+| **CLI Output Fixes** | token_count, Query Size, CTE output, SELECT indentation, ✅/❌ validate output all corrected |
+| **Parser Fixes** | KEY/INDEX in qualified names, NATURAL JOIN type, OVER window_name, backtick/bracket identifiers |
+| **E1009** | Dedicated error code `ErrCodeUnterminatedBlockComment` for unterminated `/* ... */` comments |
 
-See [CHANGELOG.md](CHANGELOG.md) for the complete list of 74 commits in this release.
+See [CHANGELOG.md](CHANGELOG.md) for the complete list of 19 fixes in this release.
 
 </div>
 

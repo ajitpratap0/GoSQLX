@@ -4,8 +4,8 @@ This document provides comprehensive security analysis, operational security set
 
 ## 🛡️ Comprehensive Security Assessment
 
-**Analysis Date**: December 2025
-**Version**: v1.6.0
+**Analysis Date**: 2026-02-28
+**Version**: v1.9.0
 **Security Score**: 9.0/10 ⭐⭐⭐⭐⭐
 
 ---
@@ -14,7 +14,7 @@ This document provides comprehensive security analysis, operational security set
 
 GoSQLX has undergone a comprehensive security analysis across 7 critical security domains. The library demonstrates **strong security characteristics** suitable for production deployment with **minimal security concerns**.
 
-### Security Package (v1.4+)
+### Security Package (v1.4+, updated v1.9.0)
 
 GoSQLX now includes a dedicated **SQL Injection Detection** package (`pkg/sql/security`) that provides:
 
@@ -23,6 +23,26 @@ GoSQLX now includes a dedicated **SQL Injection Detection** package (`pkg/sql/se
 - **Multi-Database Support**: PostgreSQL, MySQL, SQL Server, SQLite system table detection
 - **Thread-Safe**: Safe for concurrent use across goroutines
 - **High Performance**: 100,000+ queries/second scanning throughput
+
+### Tautology Detection (v1.9.0)
+
+`ScanSQL()` detects always-true conditions commonly used in SQL injection:
+
+- **Numeric**: `1=1`, `0=0`, `2=2` (any single-digit repeat)
+- **String**: `'a'='a'`, `'admin'='admin'`
+- **Identifier**: `id=id`, `t.col=t.col`
+- **Keyword**: `OR TRUE`
+
+**Severity**: CRITICAL (`PatternTautology`)
+
+### UNION Detection (v1.9.0)
+
+UNION-based injection detection is now split into two patterns to eliminate false positives:
+
+- **`PatternUnionInjection`** (CRITICAL): UNION combined with system table access (e.g., `information_schema`, `sqlite_master`) or NULL-padding — strongly indicates injection
+- **`PatternUnionGeneric`** (HIGH): Any `UNION SELECT` not matching the above — may be legitimate application code, requires review
+
+This split eliminates false-positive CRITICAL alerts on legitimate multi-query application code using `UNION`.
 
 ```go
 import "github.com/ajitpratap0/GoSQLX/pkg/sql/security"

@@ -78,6 +78,25 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
 
+// ConversionResult holds a preprocessed token stream and optional source-position
+// mappings. Callers typically obtain this via ParseFromModelTokensWithPositions and
+// pass it to ParseWithPositions.
+//
+// After the token-type unification (#322) the Tokens field holds
+// []models.TokenWithSpan directly; span information is no longer stripped.
+type ConversionResult struct {
+	Tokens          []models.TokenWithSpan
+	PositionMapping []TokenPosition // Deprecated: always nil — positions are now embedded in TokenWithSpan.Start/End fields
+}
+
+// TokenPosition maps a parser token back to its original source position.
+type TokenPosition struct {
+	OriginalIndex int
+	Start         models.Location
+	End           models.Location
+	SourceToken   *models.TokenWithSpan
+}
+
 // parserPool provides object pooling for Parser instances to reduce allocations.
 // This significantly improves performance in high-throughput scenarios.
 //
@@ -141,21 +160,21 @@ func PutParser(p *Parser) {
 func (p *Parser) Reset() {
 	p.tokens = nil
 	p.currentPos = 0
-	p.currentToken = token.Token{}
+	p.currentToken = models.TokenWithSpan{}
 	p.depth = 0
 	p.ctx = nil
-	p.positions = nil
 	p.strict = false
 	p.dialect = ""
 }
 
 // currentLocation returns the source location of the current token.
-// Returns an empty location if position tracking is not enabled or position is out of bounds.
+// Span information is embedded directly in models.TokenWithSpan so no
+// separate position-mapping slice is required.
 func (p *Parser) currentLocation() models.Location {
-	if p.positions == nil || p.currentPos >= len(p.positions) {
-		return models.Location{}
+	if p.currentPos < len(p.tokens) {
+		return p.tokens[p.currentPos].Start
 	}
-	return p.positions[p.currentPos].Start
+	return models.Location{}
 }
 
 // MaxRecursionDepth defines the maximum allowed recursion depth for parsing operations.
@@ -243,59 +262,39 @@ func (p *Parser) Dialect() string {
 }
 
 type Parser struct {
-	tokens       []token.Token
+	tokens       []models.TokenWithSpan
 	currentPos   int
-	currentToken token.Token
+	currentToken models.TokenWithSpan
 	depth        int             // Current recursion depth
 	ctx          context.Context // Optional context for cancellation support
-	positions    []TokenPosition // Position mapping for error reporting
 	strict       bool            // Strict mode rejects empty statements
 	dialect      string          // SQL dialect for dialect-aware parsing (default: "postgresql")
 }
 
-// Parse parses a token stream into an Abstract Syntax Tree (AST).
+// Parse parses a slice of token.Token into an AST.
 //
-// This is the primary parsing method that converts tokens from the tokenizer into a structured
-// AST representing the SQL statements. It uses fast O(1) Type-based dispatch for optimal
-// performance on hot paths.
+// This API is preserved for backward compatibility. Prefer ParseFromModelTokens
+// which accepts []models.TokenWithSpan directly and preserves span information.
 //
-// Parameters:
-//   - tokens: Slice of parser tokens (use ParseFromModelTokens instead)
-//
-// Returns:
-//   - *ast.AST: Parsed Abstract Syntax Tree containing one or more statements
-//   - error: Syntax error with basic error information (no position tracking)
-//
-// Performance:
-//   - Average: 347ns for complex queries with window functions
-//   - Throughput: 1.38M+ operations/second sustained
-//   - Memory: <100 bytes/op with object pooling
-//
-// Error Handling:
-//   - Returns syntax errors without position information
-//   - Use ParseWithPositions() for enhanced error reporting with line/column
-//   - Cleans up AST on error (no memory leaks)
-//
-// Usage:
-//
-//	parser := parser.GetParser()
-//	defer parser.PutParser(parser)
-//
-//	// Convert tokenizer output to parser tokens
-//	// Use ParseFromModelTokens directly
-//
-//	// Parse tokens
-//	ast, err := parser.Parse(tokens.Tokens)
-//	if err != nil {
-//	    log.Printf("Parse error: %v", err)
-//	    return
-//	}
-//	defer ast.ReleaseAST(ast)
-//
-// For position-aware error reporting, use ParseWithPositions() instead.
+// Internally the tokens are wrapped into models.TokenWithSpan (with empty spans)
+// and the preprocessing step is applied before parsing.
 //
 // Thread Safety: NOT thread-safe - use separate parser instances per goroutine.
 func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
+	// Wrap legacy token.Token into models.TokenWithSpan (spans are zero).
+	wrapped := make([]models.TokenWithSpan, len(tokens))
+	for i, t := range tokens {
+		wrapped[i] = models.WrapToken(models.Token{Type: t.Type, Value: t.Literal})
+	}
+	// Preprocessing still normalises compound tokens and keyword types.
+	preprocessed := preprocessTokens(wrapped)
+	return p.parseTokens(preprocessed)
+}
+
+// parseTokens is the core parsing routine. It takes a preprocessed
+// []models.TokenWithSpan (already normalised by preprocessTokens) and returns
+// the parsed AST.
+func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 	p.tokens = tokens
 	p.currentPos = 0
 	if len(tokens) > 0 {
@@ -353,130 +352,40 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 // ParseFromModelTokens parses tokenizer output ([]models.TokenWithSpan) directly into an AST.
 //
 // This is the preferred entry point for parsing SQL. It accepts the output of the
-// tokenizer directly, without requiring manual token conversion.
+// tokenizer directly without any conversion step. Span information is preserved
+// throughout parsing and is available for error reporting.
 //
-// See issue #215 for the token type unification roadmap.
+// Issue #322: token_conversion.go has been removed; preprocessing is now a
+// lightweight normalisation step that works entirely with models.TokenWithSpan.
 func (p *Parser) ParseFromModelTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
-	converted, err := convertModelTokens(tokens)
-	if err != nil {
-		return nil, fmt.Errorf("token conversion failed: %w", err)
-	}
-	return p.Parse(converted)
+	preprocessed := preprocessTokens(tokens)
+	return p.parseTokens(preprocessed)
 }
 
 // ParseFromModelTokensWithPositions parses tokenizer output with position tracking
-// for enhanced error reporting. This replaces the ConvertTokensWithPositions + ParseWithPositions flow.
+// for enhanced error reporting. Since models.TokenWithSpan already carries span
+// information, this is now equivalent to ParseFromModelTokens but also populates
+// the ConversionResult position mapping for callers that need it.
 func (p *Parser) ParseFromModelTokensWithPositions(tokens []models.TokenWithSpan) (*ast.AST, error) {
-	result, err := convertModelTokensWithPositions(tokens)
-	if err != nil {
-		return nil, fmt.Errorf("token conversion failed: %w", err)
-	}
-	return p.ParseWithPositions(result)
+	preprocessed := preprocessTokens(tokens)
+	return p.parseTokens(preprocessed)
 }
 
 // ParseContextFromModelTokens parses tokenizer output with context support for cancellation.
 func (p *Parser) ParseContextFromModelTokens(ctx context.Context, tokens []models.TokenWithSpan) (*ast.AST, error) {
-	converted, err := convertModelTokens(tokens)
-	if err != nil {
-		return nil, fmt.Errorf("token conversion failed: %w", err)
-	}
-	return p.ParseContext(ctx, converted)
+	preprocessed := preprocessTokens(tokens)
+	return p.parseContextTokens(ctx, preprocessed)
 }
 
 // ParseWithPositions parses tokens with position tracking for enhanced error reporting.
 //
-// This method accepts a ConversionResult from convertModelTokensWithPositions(), which includes
-// both the converted tokens and their original source positions from the tokenizer.
-// Syntax errors will include accurate line and column information for debugging.
-//
-// Parameters:
-//   - result: ConversionResult from convertModelTokensWithPositions containing tokens and position mapping
-//
-// Returns:
-//   - *ast.AST: Parsed Abstract Syntax Tree containing one or more statements
-//   - error: Syntax error with line/column position information
-//
-// Performance:
-//   - Slightly slower than Parse() due to position tracking overhead (~5%)
-//   - Average: ~365ns for complex queries (vs 347ns for Parse)
-//   - Recommended for production use where error reporting is important
-//
-// Error Reporting Enhancement:
-//   - Includes line and column numbers in error messages
-//   - Example: "expected 'FROM' but got 'WHERE' at line 1, column 15"
-//   - Position information extracted from tokenizer output
-//
-// Usage:
-//
-//	parser := parser.GetParser()
-//	defer parser.PutParser(parser)
-//
-//	// Convert tokenizer output with position tracking
-//	// Use ParseFromModelTokensWithPositions instead
-//
-//	// Parse with position information
-//	ast, err := parser.ParseWithPositions(result)
-//	if err != nil {
-//	    // Error includes line/column information
-//	    log.Printf("Parse error at %v: %v", err.Location, err)
-//	    return
-//	}
-//	defer ast.ReleaseAST(ast)
-//
-// This is the recommended parsing method for production use where detailed error
-// reporting is important for debugging and user feedback.
+// ParseWithPositions parses a ConversionResult into an AST.
+// Since models.TokenWithSpan already embeds span/position information,
+// this is now a thin wrapper around parseTokens — no separate conversion step needed.
 //
 // Thread Safety: NOT thread-safe - use separate parser instances per goroutine.
 func (p *Parser) ParseWithPositions(result *ConversionResult) (*ast.AST, error) {
-	p.tokens = result.Tokens
-	p.positions = result.PositionMapping
-	p.currentPos = 0
-	if len(result.Tokens) > 0 {
-		p.currentToken = result.Tokens[0]
-	}
-
-	// Get a pre-allocated AST from the pool
-	astResult := ast.NewAST()
-
-	// Pre-allocate statements slice based on a reasonable estimate
-	estimatedStmts := 1
-	if len(result.Tokens) > 100 {
-		estimatedStmts = 2
-	}
-	astResult.Statements = make([]ast.Statement, 0, estimatedStmts)
-
-	// Parse statements
-	for p.currentPos < len(result.Tokens) && !p.isType(models.TokenTypeEOF) {
-		if p.isType(models.TokenTypeSemicolon) {
-			if err := p.checkStrictEmptySemicolon(); err != nil {
-				ast.ReleaseAST(astResult)
-				return nil, err
-			}
-			p.advance()
-			continue
-		}
-
-		stmt, err := p.parseStatement()
-		if err != nil {
-			ast.ReleaseAST(astResult)
-			return nil, err
-		}
-		astResult.Statements = append(astResult.Statements, stmt)
-
-		if p.isType(models.TokenTypeSemicolon) {
-			p.advance()
-		}
-	}
-
-	if len(astResult.Statements) == 0 {
-		ast.ReleaseAST(astResult)
-		if err := p.checkStrictEmpty(); err != nil {
-			return nil, err
-		}
-		return nil, goerrors.IncompleteStatementError(p.currentLocation(), "")
-	}
-
-	return astResult, nil
+	return p.parseTokens(result.Tokens)
 }
 
 // ParseContext parses tokens into an AST with context support for cancellation and timeouts.
@@ -551,7 +460,21 @@ func (p *Parser) ParseWithPositions(result *ConversionResult) (*ast.AST, error) 
 //   - Negligible impact on modern CPUs with branch prediction
 //
 // Thread Safety: NOT thread-safe - use separate parser instances per goroutine.
+// ParseContext parses a slice of token.Token with context support (backward compat shim).
+// For new code prefer ParseContextFromModelTokens.
 func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.AST, error) {
+	// Wrap legacy token.Token into models.TokenWithSpan.
+	wrapped := make([]models.TokenWithSpan, len(tokens))
+	for i, t := range tokens {
+		wrapped[i] = models.WrapToken(models.Token{Type: t.Type, Value: t.Literal})
+	}
+	preprocessed := preprocessTokens(wrapped)
+	return p.parseContextTokens(ctx, preprocessed)
+}
+
+// parseContextTokens is the core context-aware parsing routine. It takes
+// a preprocessed []models.TokenWithSpan and respects ctx for cancellation.
+func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWithSpan) (*ast.AST, error) {
 	// Check context before starting
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -621,7 +544,7 @@ func (p *Parser) Release() {
 	// Reset internal state to avoid memory leaks
 	p.tokens = nil
 	p.currentPos = 0
-	p.currentToken = token.Token{}
+	p.currentToken = models.TokenWithSpan{}
 	p.depth = 0
 	p.ctx = nil
 }
@@ -682,9 +605,9 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		}
 	}
 
-	// O(1) switch dispatch on Type (compiles to jump table).
+	// O(1) switch dispatch on Token.Type (compiles to jump table).
 	// All tokens are normalized at parse entry so Type is always set.
-	switch p.currentToken.Type {
+	switch p.currentToken.Token.Type {
 	case models.TokenTypeWith:
 		return p.parseWithStatement()
 	case models.TokenTypeSelect:
@@ -820,13 +743,13 @@ func (p *Parser) advance() {
 }
 
 // peekToken returns the next token without advancing the parser position.
-// Returns an empty token if at the end of input.
-func (p *Parser) peekToken() token.Token {
+// Returns an empty TokenWithSpan if at the end of input.
+func (p *Parser) peekToken() models.TokenWithSpan {
 	nextPos := p.currentPos + 1
 	if nextPos < len(p.tokens) {
 		return p.tokens[nextPos]
 	}
-	return token.Token{}
+	return models.TokenWithSpan{}
 }
 
 // =============================================================================
@@ -840,12 +763,12 @@ func (p *Parser) peekToken() token.Token {
 // isType checks if the current token's Type matches the expected type.
 // Pure integer comparison — no string fallback.
 func (p *Parser) isType(expected models.TokenType) bool {
-	return p.currentToken.Type == expected
+	return p.currentToken.Token.Type == expected
 }
 
 // matchType checks if the current token's Type matches the expected type and advances if so.
 func (p *Parser) matchType(expected models.TokenType) bool {
-	if p.currentToken.Type == expected {
+	if p.currentToken.Token.Type == expected {
 		p.advance()
 		return true
 	}
@@ -872,9 +795,8 @@ func (p *Parser) isIdentifier() bool {
 
 // isStringLiteral checks if the current token is a string literal.
 // Handles all string token subtypes (single-quoted, dollar-quoted, etc.)
-// Also handles string fallback for tokens created without Type.
 func (p *Parser) isStringLiteral() bool {
-	switch p.currentToken.Type {
+	switch p.currentToken.Token.Type {
 	case models.TokenTypeString, models.TokenTypeSingleQuotedString, models.TokenTypeDollarQuotedString:
 		return true
 	}
@@ -883,7 +805,7 @@ func (p *Parser) isStringLiteral() bool {
 
 // isComparisonOperator checks if the current token is a comparison operator using O(1) switch.
 func (p *Parser) isComparisonOperator() bool {
-	switch p.currentToken.Type {
+	switch p.currentToken.Token.Type {
 	case models.TokenTypeEq, models.TokenTypeLt, models.TokenTypeGt,
 		models.TokenTypeNeq, models.TokenTypeLtEq, models.TokenTypeGtEq,
 		models.TokenTypeTilde, models.TokenTypeTildeAsterisk,
@@ -895,7 +817,7 @@ func (p *Parser) isComparisonOperator() bool {
 
 // isQuantifier checks if the current token is ANY or ALL using O(1) switch.
 func (p *Parser) isQuantifier() bool {
-	switch p.currentToken.Type {
+	switch p.currentToken.Token.Type {
 	case models.TokenTypeAny, models.TokenTypeAll:
 		return true
 	}
@@ -904,7 +826,7 @@ func (p *Parser) isQuantifier() bool {
 
 // isBooleanLiteral checks if the current token is TRUE or FALSE using O(1) switch.
 func (p *Parser) isBooleanLiteral() bool {
-	switch p.currentToken.Type {
+	switch p.currentToken.Token.Type {
 	case models.TokenTypeTrue, models.TokenTypeFalse:
 		return true
 	}
@@ -915,7 +837,7 @@ func (p *Parser) isBooleanLiteral() bool {
 
 // expectedError returns an error for unexpected token
 func (p *Parser) expectedError(expected string) error {
-	return goerrors.ExpectedTokenError(expected, p.currentToken.Type.String(), p.currentLocation(), "")
+	return goerrors.ExpectedTokenError(expected, p.currentToken.Token.Type.String(), p.currentLocation(), "")
 }
 
 // parseIdent parses an identifier
@@ -925,7 +847,7 @@ func (p *Parser) parseIdent() *ast.Identifier {
 		return nil
 	}
 	pos := p.currentLocation()
-	ident := &ast.Identifier{Name: p.currentToken.Literal, Pos: pos}
+	ident := &ast.Identifier{Name: p.currentToken.Token.Value, Pos: pos}
 	p.advance()
 	return ident
 }
@@ -937,6 +859,30 @@ func (p *Parser) parseIdentAsString() string {
 		return ""
 	}
 	return ident.Name
+}
+
+// parseBareWordAsString parses any word-like token (identifier or keyword) and
+// returns its value as a string.  This is used in contexts where arbitrary
+// user-defined names may collide with SQL keywords (e.g. DCPROPERTIES keys).
+// It advances the parser position and returns "" if no word-like token is found.
+func (p *Parser) parseBareWordAsString() string {
+	typ := p.currentToken.Token.Type
+	// Reject punctuation / operator / structural tokens.
+	switch typ {
+	case models.TokenTypeEOF, models.TokenTypeEq, models.TokenTypeComma,
+		models.TokenTypeLParen, models.TokenTypeRParen,
+		models.TokenTypeLBracket, models.TokenTypeRBracket,
+		models.TokenTypeLBrace, models.TokenTypeRBrace,
+		models.TokenTypeSemicolon, models.TokenTypePeriod,
+		models.TokenTypeUnknown:
+		return ""
+	}
+	if p.currentToken.Token.Value == "" {
+		return ""
+	}
+	val := p.currentToken.Token.Value
+	p.advance()
+	return val
 }
 
 // parseObjectName parses an object name (possibly qualified)
@@ -953,7 +899,7 @@ func (p *Parser) parseStringLiteral() string {
 	if !p.isStringLiteral() {
 		return ""
 	}
-	value := p.currentToken.Literal
+	value := p.currentToken.Token.Value
 	p.advance()
 	return value
 }
@@ -964,7 +910,7 @@ func (p *Parser) parseQualifiedName() (string, error) {
 	if !p.isIdentifier() && !p.isNonReservedKeyword() {
 		return "", p.expectedError("identifier")
 	}
-	name := p.currentToken.Literal
+	name := p.currentToken.Token.Value
 	p.advance()
 
 	// Check for schema.table or db.schema.table
@@ -973,7 +919,7 @@ func (p *Parser) parseQualifiedName() (string, error) {
 		if !p.isIdentifier() && !p.isNonReservedKeyword() {
 			return "", p.expectedError("identifier after .")
 		}
-		name = name + "." + p.currentToken.Literal
+		name = name + "." + p.currentToken.Token.Value
 		p.advance()
 	}
 
@@ -993,14 +939,14 @@ func (p *Parser) parseTableReference() (*ast.TableReference, error) {
 // that can be used as a table or column name
 func (p *Parser) isNonReservedKeyword() bool {
 	// These keywords can be used as table/column names in most SQL dialects.
-	// Use Type where possible, with literal fallback for tokens that have
+	// Use Type where possible, with value fallback for tokens that have
 	// the generic TokenTypeKeyword.
-	switch p.currentToken.Type {
+	switch p.currentToken.Token.Type {
 	case models.TokenTypeTarget, models.TokenTypeSource, models.TokenTypeMatched:
 		return true
 	case models.TokenTypeKeyword:
-		// Token may have generic Type; check literal for specific keywords
-		switch strings.ToUpper(p.currentToken.Literal) {
+		// Token may have generic Type; check value for specific keywords
+		switch strings.ToUpper(p.currentToken.Token.Value) {
 		case "TARGET", "SOURCE", "MATCHED", "VALUE", "NAME", "TYPE", "STATUS":
 			return true
 		}

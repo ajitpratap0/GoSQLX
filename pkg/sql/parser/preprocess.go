@@ -12,280 +12,186 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package parser
+// Package parser — token preprocessing (normalization) for the parser.
+//
+// preprocessTokens replaces the old token_conversion.go conversion layer.
+// Instead of converting models.TokenWithSpan → token.Token (which stripped span
+// information), it now normalises a []models.TokenWithSpan in-place so the parser
+// can consume it directly.
+//
+// The two responsibilities of the old layer are preserved here:
+//
+//  1. Compound-token expansion   – e.g. a single INNER_JOIN token becomes
+//     [INNER, JOIN] (each carrying the original span).
+//  2. Token-type normalisation – identifier/keyword strings whose type was
+//     not resolved by the tokenizer are remapped to the appropriate
+//     models.TokenType constant.
 
-// token_conversion.go contains internal token conversion logic from models.TokenWithSpan
-// to token.Token. This is an unexported implementation detail used by ParseFromModelTokens.
+package parser
 
 import (
 	"sync"
 
-	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
-
-	"fmt"
 )
 
-var keywordBufferPool = sync.Pool{
+// kwBufPool is a small byte-buffer pool used to avoid allocations during
+// upper-case conversion of short keyword strings.
+var kwBufPool = sync.Pool{
 	New: func() interface{} {
 		buf := make([]byte, 32)
 		return &buf
 	},
 }
 
-// ConversionResult contains converted tokens and position mappings for error reporting.
-type ConversionResult struct {
-	Tokens          []token.Token
-	PositionMapping []TokenPosition
-}
-
-// TokenPosition maps a parser token back to its original source position.
-type TokenPosition struct {
-	OriginalIndex int
-	Start         models.Location
-	End           models.Location
-	SourceToken   *models.TokenWithSpan
-}
-
-type tokenConverter struct {
-	buffer []token.Token
-}
-
-func newTokenConverter() *tokenConverter {
-	return &tokenConverter{
-		buffer: make([]token.Token, 0, 256),
-	}
-}
-
-func (tc *tokenConverter) convert(tokens []models.TokenWithSpan) (*ConversionResult, error) {
-	tc.buffer = tc.buffer[:0]
-	positions := make([]TokenPosition, 0, len(tokens)*2)
-
-	for originalIndex, t := range tokens {
-		t := t
-		if expanded := tc.handleCompoundToken(t); len(expanded) > 0 {
-			tc.buffer = append(tc.buffer, expanded...)
-			for range expanded {
-				positions = append(positions, TokenPosition{
-					OriginalIndex: originalIndex,
-					Start:         t.Start,
-					End:           t.End,
-					SourceToken:   &t,
-				})
-			}
+// preprocessTokens normalises a token stream for the parser.
+// It expands compound tokens and remaps identifier/keyword types, returning a
+// new slice of models.TokenWithSpan that the parser consumes directly.
+func preprocessTokens(tokens []models.TokenWithSpan) []models.TokenWithSpan {
+	result := make([]models.TokenWithSpan, 0, len(tokens)+4)
+	for i := range tokens {
+		t := tokens[i]
+		if expanded := expandCompoundToken(t); len(expanded) > 0 {
+			result = append(result, expanded...)
 			continue
 		}
-
-		convertedToken, err := tc.convertSingleToken(t)
-		if err != nil {
-			return nil, goerrors.InvalidSyntaxError(
-				fmt.Sprintf("failed to convert token: %v", err),
-				t.Start, "",
-			)
-		}
-
-		tc.buffer = append(tc.buffer, convertedToken)
-		positions = append(positions, TokenPosition{
-			OriginalIndex: originalIndex,
-			Start:         t.Start,
-			End:           t.End,
-			SourceToken:   &t,
-		})
+		result = append(result, normalizeToken(t))
 	}
-
-	result := &ConversionResult{
-		Tokens:          make([]token.Token, len(tc.buffer)),
-		PositionMapping: positions,
-	}
-	copy(result.Tokens, tc.buffer)
-	return result, nil
+	return result
 }
 
-func (tc *tokenConverter) handleCompoundToken(t models.TokenWithSpan) []token.Token {
-	switch t.Token.Type {
-	case models.TokenTypeInnerJoin:
-		return []token.Token{
-			{Type: models.TokenTypeInner, Literal: "INNER"},
-			{Type: models.TokenTypeJoin, Literal: "JOIN"},
+// expandCompoundToken returns the expansion of a compound token such as
+// INNER_JOIN → [INNER, JOIN]. Returns nil if the token is not compound.
+func expandCompoundToken(t models.TokenWithSpan) []models.TokenWithSpan {
+	makeTwo := func(t1Type models.TokenType, t1Val, t2Val string, t2Type models.TokenType) []models.TokenWithSpan {
+		return []models.TokenWithSpan{
+			{Token: models.Token{Type: t1Type, Value: t1Val}, Start: t.Start, End: t.End},
+			{Token: models.Token{Type: t2Type, Value: t2Val}, Start: t.Start, End: t.End},
 		}
-	case models.TokenTypeLeftJoin:
-		return []token.Token{
-			{Type: models.TokenTypeLeft, Literal: "LEFT"},
-			{Type: models.TokenTypeJoin, Literal: "JOIN"},
-		}
-	case models.TokenTypeRightJoin:
-		return []token.Token{
-			{Type: models.TokenTypeRight, Literal: "RIGHT"},
-			{Type: models.TokenTypeJoin, Literal: "JOIN"},
-		}
-	case models.TokenTypeOuterJoin:
-		return []token.Token{
-			{Type: models.TokenTypeOuter, Literal: "OUTER"},
-			{Type: models.TokenTypeJoin, Literal: "JOIN"},
-		}
-	case models.TokenTypeFullJoin:
-		return []token.Token{
-			{Type: models.TokenTypeFull, Literal: "FULL"},
-			{Type: models.TokenTypeJoin, Literal: "JOIN"},
-		}
-	case models.TokenTypeCrossJoin:
-		return []token.Token{
-			{Type: models.TokenTypeCross, Literal: "CROSS"},
-			{Type: models.TokenTypeJoin, Literal: "JOIN"},
-		}
-	case models.TokenTypeOrderBy:
-		return []token.Token{
-			{Type: models.TokenTypeOrder, Literal: "ORDER"},
-			{Type: models.TokenTypeBy, Literal: "BY"},
-		}
-	case models.TokenTypeGroupBy:
-		return []token.Token{
-			{Type: models.TokenTypeGroup, Literal: "GROUP"},
-			{Type: models.TokenTypeBy, Literal: "BY"},
-		}
-	case models.TokenTypeGroupingSets:
-		return []token.Token{
-			{Type: models.TokenTypeGrouping, Literal: "GROUPING"},
-			{Type: models.TokenTypeSets, Literal: "SETS"},
+	}
+	makeThree := func(t1Type models.TokenType, t1Val string, t2Type models.TokenType, t2Val string, t3Type models.TokenType, t3Val string) []models.TokenWithSpan {
+		return []models.TokenWithSpan{
+			{Token: models.Token{Type: t1Type, Value: t1Val}, Start: t.Start, End: t.End},
+			{Token: models.Token{Type: t2Type, Value: t2Val}, Start: t.Start, End: t.End},
+			{Token: models.Token{Type: t3Type, Value: t3Val}, Start: t.Start, End: t.End},
 		}
 	}
 
+	switch t.Token.Type {
+	case models.TokenTypeInnerJoin:
+		return makeTwo(models.TokenTypeInner, "INNER", "JOIN", models.TokenTypeJoin)
+	case models.TokenTypeLeftJoin:
+		return makeTwo(models.TokenTypeLeft, "LEFT", "JOIN", models.TokenTypeJoin)
+	case models.TokenTypeRightJoin:
+		return makeTwo(models.TokenTypeRight, "RIGHT", "JOIN", models.TokenTypeJoin)
+	case models.TokenTypeOuterJoin:
+		return makeTwo(models.TokenTypeOuter, "OUTER", "JOIN", models.TokenTypeJoin)
+	case models.TokenTypeFullJoin:
+		return makeTwo(models.TokenTypeFull, "FULL", "JOIN", models.TokenTypeJoin)
+	case models.TokenTypeCrossJoin:
+		return makeTwo(models.TokenTypeCross, "CROSS", "JOIN", models.TokenTypeJoin)
+	case models.TokenTypeOrderBy:
+		return makeTwo(models.TokenTypeOrder, "ORDER", "BY", models.TokenTypeBy)
+	case models.TokenTypeGroupBy:
+		return makeTwo(models.TokenTypeGroup, "GROUP", "BY", models.TokenTypeBy)
+	case models.TokenTypeGroupingSets:
+		return makeTwo(models.TokenTypeGrouping, "GROUPING", "SETS", models.TokenTypeSets)
+	}
+
+	// Value-based compound token matching (tokenizer may produce these as
+	// TokenTypeKeyword with a multi-word value).
 	switch t.Token.Value {
 	case "INNER JOIN":
-		return []token.Token{
-			{Type: models.TokenTypeInner, Literal: "INNER"},
-			{Type: models.TokenTypeJoin, Literal: "JOIN"},
-		}
+		return makeTwo(models.TokenTypeInner, "INNER", "JOIN", models.TokenTypeJoin)
 	case "LEFT JOIN":
-		return []token.Token{
-			{Type: models.TokenTypeLeft, Literal: "LEFT"},
-			{Type: models.TokenTypeJoin, Literal: "JOIN"},
-		}
+		return makeTwo(models.TokenTypeLeft, "LEFT", "JOIN", models.TokenTypeJoin)
 	case "RIGHT JOIN":
-		return []token.Token{
-			{Type: models.TokenTypeRight, Literal: "RIGHT"},
-			{Type: models.TokenTypeJoin, Literal: "JOIN"},
-		}
+		return makeTwo(models.TokenTypeRight, "RIGHT", "JOIN", models.TokenTypeJoin)
 	case "FULL JOIN":
-		return []token.Token{
-			{Type: models.TokenTypeFull, Literal: "FULL"},
-			{Type: models.TokenTypeJoin, Literal: "JOIN"},
-		}
+		return makeTwo(models.TokenTypeFull, "FULL", "JOIN", models.TokenTypeJoin)
 	case "CROSS JOIN":
-		return []token.Token{
-			{Type: models.TokenTypeCross, Literal: "CROSS"},
-			{Type: models.TokenTypeJoin, Literal: "JOIN"},
-		}
+		return makeTwo(models.TokenTypeCross, "CROSS", "JOIN", models.TokenTypeJoin)
 	case "LEFT OUTER JOIN":
-		return []token.Token{
-			{Type: models.TokenTypeLeft, Literal: "LEFT"},
-			{Type: models.TokenTypeOuter, Literal: "OUTER"},
-			{Type: models.TokenTypeJoin, Literal: "JOIN"},
-		}
+		return makeThree(models.TokenTypeLeft, "LEFT", models.TokenTypeOuter, "OUTER", models.TokenTypeJoin, "JOIN")
 	case "RIGHT OUTER JOIN":
-		return []token.Token{
-			{Type: models.TokenTypeRight, Literal: "RIGHT"},
-			{Type: models.TokenTypeOuter, Literal: "OUTER"},
-			{Type: models.TokenTypeJoin, Literal: "JOIN"},
-		}
+		return makeThree(models.TokenTypeRight, "RIGHT", models.TokenTypeOuter, "OUTER", models.TokenTypeJoin, "JOIN")
 	case "FULL OUTER JOIN":
-		return []token.Token{
-			{Type: models.TokenTypeFull, Literal: "FULL"},
-			{Type: models.TokenTypeOuter, Literal: "OUTER"},
-			{Type: models.TokenTypeJoin, Literal: "JOIN"},
-		}
+		return makeThree(models.TokenTypeFull, "FULL", models.TokenTypeOuter, "OUTER", models.TokenTypeJoin, "JOIN")
 	case "ORDER BY":
-		return []token.Token{
-			{Type: models.TokenTypeOrder, Literal: "ORDER"},
-			{Type: models.TokenTypeBy, Literal: "BY"},
-		}
+		return makeTwo(models.TokenTypeOrder, "ORDER", "BY", models.TokenTypeBy)
 	case "GROUP BY":
-		return []token.Token{
-			{Type: models.TokenTypeGroup, Literal: "GROUP"},
-			{Type: models.TokenTypeBy, Literal: "BY"},
-		}
+		return makeTwo(models.TokenTypeGroup, "GROUP", "BY", models.TokenTypeBy)
+	case "GROUPING SETS":
+		return makeTwo(models.TokenTypeGrouping, "GROUPING", "SETS", models.TokenTypeSets)
 	}
 
 	return nil
 }
 
-func (tc *tokenConverter) convertSingleToken(t models.TokenWithSpan) (token.Token, error) {
-	if t.Token.Type == models.TokenTypeMul {
-		return token.Token{
-			Type: models.TokenTypeAsterisk, Literal: t.Token.Value,
-		}, nil
-	}
+// normalizeToken maps a TokenWithSpan to a canonical form expected by the
+// parser. Type mismatches that existed in the tokenizer are corrected here.
+func normalizeToken(t models.TokenWithSpan) models.TokenWithSpan {
+	// TokenTypeMul (*) is the same symbol as TokenTypeAsterisk for the
+	// parser. The parser explicitly checks both types wherever '*' can appear
+	// (SELECT list wildcard, table.* qualified wildcard, COUNT(*) argument).
+	// No remap is performed here to preserve the distinction for binary multiply.
 
+	// Aggregate-function tokens (COUNT, SUM, AVG, MIN, MAX) must be treated
+	// as identifiers so they can be used as function-call names.
 	switch t.Token.Type {
 	case models.TokenTypeCount, models.TokenTypeSum, models.TokenTypeAvg,
 		models.TokenTypeMin, models.TokenTypeMax:
-		return token.Token{
-			Type: models.TokenTypeIdentifier, Literal: t.Token.Value,
-		}, nil
+		t.Token.Type = models.TokenTypeIdentifier
+		return t
 	}
 
-	if t.Token.Type == models.TokenTypeQuestion {
-		return token.Token{Type: models.TokenTypeQuestion, Literal: t.Token.Value}, nil
-	}
-	if t.Token.Type == models.TokenTypeQuestionPipe {
-		return token.Token{Type: models.TokenTypeQuestionPipe, Literal: t.Token.Value}, nil
-	}
-	if t.Token.Type == models.TokenTypeQuestionAnd {
-		return token.Token{Type: models.TokenTypeQuestionAnd, Literal: t.Token.Value}, nil
-	}
-
-	if t.Token.Type == models.TokenTypeNumber {
-		return token.Token{Type: models.TokenTypeNumber, Literal: t.Token.Value}, nil
-	}
-
+	// Identifier tokens whose *value* is a keyword that the parser dispatches
+	// on by type need to be remapped.
 	if t.Token.Type == models.TokenTypeIdentifier {
-		// Only remap identifiers to well-known SQL keywords that the parser
-		// needs as specific types. Data type keywords (VARCHAR, INTEGER, etc.)
-		// are intentionally left as identifiers since the parser handles them
-		// via isDataTypeKeyword() with literal fallback.
-		if modelType := getIdentifierKeywordType(t.Token.Value); modelType != models.TokenTypeUnknown {
-			return token.Token{Type: modelType, Literal: t.Token.Value}, nil
+		if remapped := identifierKeywordType(t.Token.Value); remapped != models.TokenTypeUnknown {
+			t.Token.Type = remapped
 		}
-		return token.Token{Type: models.TokenTypeIdentifier, Literal: t.Token.Value}, nil
+		return t
 	}
 
+	// Generic TokenTypeKeyword tokens need a specific type for the parser.
 	if t.Token.Type == models.TokenTypeKeyword {
-		if modelType := getKeywordModelType(t.Token.Value); modelType != models.TokenTypeUnknown {
-			return token.Token{Type: modelType, Literal: t.Token.Value}, nil
+		if remapped := keywordType(t.Token.Value); remapped != models.TokenTypeUnknown {
+			t.Token.Type = remapped
 		}
-		return token.Token{
-			Type:    models.TokenTypeKeyword,
-			Literal: t.Token.Value,
-		}, nil
+		return t
 	}
 
-	// Direct pass-through: the models.TokenType is already the correct type
-	return token.Token{Type: t.Token.Type, Literal: t.Token.Value}, nil
+	return t
 }
 
-// getIdentifierKeywordType remaps identifiers that are actually SQL keywords.
-// This is conservative — only includes keywords that the parser expects as specific types,
-// NOT data type keywords (VARCHAR, etc.) which should stay as identifiers.
-func getIdentifierKeywordType(value string) models.TokenType {
+// toUpper converts s to uppercase using a pooled byte buffer for short strings.
+func toUpper(s string) string {
+	n := len(s)
 	var upper []byte
-	n := len(value)
 	if n <= 32 {
-		bufPtr := keywordBufferPool.Get().(*[]byte)
+		bufPtr := kwBufPool.Get().(*[]byte)
 		upper = (*bufPtr)[:n]
-		defer keywordBufferPool.Put(bufPtr)
+		defer kwBufPool.Put(bufPtr)
 	} else {
 		upper = make([]byte, n)
 	}
 	for i := 0; i < n; i++ {
-		c := value[i]
+		c := s[i]
 		if c >= 'a' && c <= 'z' {
 			upper[i] = c - 32
 		} else {
 			upper[i] = c
 		}
 	}
-	switch string(upper) {
+	return string(upper)
+}
+
+// identifierKeywordType remaps identifiers that carry SQL keyword values to
+// their specific models.TokenType. This is conservative: only keywords that
+// the parser dispatches on by type are included.
+func identifierKeywordType(value string) models.TokenType {
+	switch toUpper(value) {
 	case "INSERT":
 		return models.TokenTypeInsert
 	case "UPDATE":
@@ -338,9 +244,7 @@ func getIdentifierKeywordType(value string) models.TokenType {
 		return models.TokenTypeDefault
 	case "CONSTRAINT":
 		return models.TokenTypeConstraint
-	case "AUTO_INCREMENT":
-		return models.TokenTypeAutoIncrement
-	case "AUTOINCREMENT":
+	case "AUTO_INCREMENT", "AUTOINCREMENT":
 		return models.TokenTypeAutoIncrement
 	case "OVER":
 		return models.TokenTypeOver
@@ -415,27 +319,9 @@ func getIdentifierKeywordType(value string) models.TokenType {
 	}
 }
 
-// getKeywordModelType maps keyword string values to models.TokenType.
-// This is comprehensive — used for tokens already typed as TokenTypeKeyword.
-func getKeywordModelType(value string) models.TokenType {
-	var upper []byte
-	n := len(value)
-	if n <= 32 {
-		bufPtr := keywordBufferPool.Get().(*[]byte)
-		upper = (*bufPtr)[:n]
-		defer keywordBufferPool.Put(bufPtr)
-	} else {
-		upper = make([]byte, n)
-	}
-	for i := 0; i < n; i++ {
-		c := value[i]
-		if c >= 'a' && c <= 'z' {
-			upper[i] = c - 32
-		} else {
-			upper[i] = c
-		}
-	}
-	switch string(upper) {
+// keywordType maps generic TokenTypeKeyword strings to specific token types.
+func keywordType(value string) models.TokenType {
+	switch toUpper(value) {
 	case "INSERT":
 		return models.TokenTypeInsert
 	case "UPDATE":
@@ -488,9 +374,7 @@ func getKeywordModelType(value string) models.TokenType {
 		return models.TokenTypeDefault
 	case "CONSTRAINT":
 		return models.TokenTypeConstraint
-	case "AUTO_INCREMENT":
-		return models.TokenTypeAutoIncrement
-	case "AUTOINCREMENT":
+	case "AUTO_INCREMENT", "AUTOINCREMENT":
 		return models.TokenTypeAutoIncrement
 	case "OVER":
 		return models.TokenTypeOver
@@ -711,20 +595,4 @@ func getKeywordModelType(value string) models.TokenType {
 	default:
 		return models.TokenTypeUnknown
 	}
-}
-
-// convertModelTokens converts tokenizer output to parser tokens.
-func convertModelTokens(tokens []models.TokenWithSpan) ([]token.Token, error) {
-	tc := newTokenConverter()
-	result, err := tc.convert(tokens)
-	if err != nil {
-		return nil, err
-	}
-	return result.Tokens, nil
-}
-
-// convertModelTokensWithPositions converts tokenizer output with position tracking.
-func convertModelTokensWithPositions(tokens []models.TokenWithSpan) (*ConversionResult, error) {
-	tc := newTokenConverter()
-	return tc.convert(tokens)
 }

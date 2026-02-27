@@ -30,7 +30,7 @@ import (
 // (needed because some keywords like DATA, NO may be tokenized as identifiers)
 func (p *Parser) isTokenMatch(keyword string) bool {
 	// Check if token literal matches the keyword (case-insensitive)
-	return strings.EqualFold(p.currentToken.Literal, keyword)
+	return strings.EqualFold(p.currentToken.Token.Value, keyword)
 }
 
 // parseCreateStatement parses CREATE statements (TABLE, VIEW, MATERIALIZED VIEW, INDEX)
@@ -118,7 +118,7 @@ func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStat
 			if !p.isIdentifier() {
 				return nil, p.expectedError("column name")
 			}
-			stmt.Columns = append(stmt.Columns, p.currentToken.Literal)
+			stmt.Columns = append(stmt.Columns, p.currentToken.Token.Value)
 			p.advance()
 
 			if p.isType(models.TokenTypeComma) {
@@ -222,7 +222,7 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 			if !p.isIdentifier() {
 				return nil, p.expectedError("column name")
 			}
-			stmt.Columns = append(stmt.Columns, p.currentToken.Literal)
+			stmt.Columns = append(stmt.Columns, p.currentToken.Token.Value)
 			p.advance()
 
 			if p.isType(models.TokenTypeComma) {
@@ -243,7 +243,7 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 		if !p.isIdentifier() {
 			return nil, p.expectedError("tablespace name")
 		}
-		stmt.Tablespace = p.currentToken.Literal
+		stmt.Tablespace = p.currentToken.Token.Value
 		p.advance()
 	}
 
@@ -399,13 +399,13 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 	// Parse optional table options
 	for p.isTokenMatch("ENGINE") || p.isTokenMatch("CHARSET") ||
 		p.isType(models.TokenTypeCollate) || p.isTokenMatch("COMMENT") {
-		opt := ast.TableOption{Name: p.currentToken.Literal}
+		opt := ast.TableOption{Name: p.currentToken.Token.Value}
 		p.advance()
 		if p.isType(models.TokenTypeEq) {
 			p.advance() // Consume =
 		}
 		if p.isIdentifier() || p.isType(models.TokenTypeString) {
-			opt.Value = p.currentToken.Literal
+			opt.Value = p.currentToken.Token.Value
 			p.advance()
 		}
 		stmt.Options = append(stmt.Options, opt)
@@ -443,7 +443,7 @@ func (p *Parser) parsePartitionByClause() (*ast.PartitionBy, error) {
 		if !p.isIdentifier() {
 			return nil, p.expectedError("column name")
 		}
-		partitionBy.Columns = append(partitionBy.Columns, p.currentToken.Literal)
+		partitionBy.Columns = append(partitionBy.Columns, p.currentToken.Token.Value)
 		p.advance()
 
 		if p.isType(models.TokenTypeComma) {
@@ -476,7 +476,7 @@ func (p *Parser) parsePartitionDefinition() (*ast.PartitionDefinition, error) {
 	if !p.isIdentifier() {
 		return nil, p.expectedError("partition name")
 	}
-	partDef.Name = p.currentToken.Literal
+	partDef.Name = p.currentToken.Token.Value
 	p.advance()
 
 	// Parse VALUES clause
@@ -590,7 +590,7 @@ func (p *Parser) parsePartitionDefinition() (*ast.PartitionDefinition, error) {
 		if !p.isIdentifier() {
 			return nil, p.expectedError("tablespace name")
 		}
-		partDef.Tablespace = p.currentToken.Literal
+		partDef.Tablespace = p.currentToken.Token.Value
 		p.advance()
 	}
 
@@ -643,7 +643,7 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 		if !p.isIdentifier() {
 			return nil, p.expectedError("index method")
 		}
-		stmt.Using = p.currentToken.Literal
+		stmt.Using = p.currentToken.Token.Value
 		p.advance()
 	}
 
@@ -659,7 +659,7 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 		if !p.isIdentifier() {
 			return nil, p.expectedError("column name")
 		}
-		col.Column = p.currentToken.Literal
+		col.Column = p.currentToken.Token.Value
 		p.advance()
 
 		// Parse optional direction

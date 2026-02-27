@@ -16,88 +16,86 @@ package parser
 
 import (
 	"fmt"
-	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"runtime"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
 // Generate complex token sets for comprehensive testing
-func generateLargeSelectTokens(numColumns int) []token.Token {
-	tokens := []token.Token{
-		{Type: models.TokenTypeSelect, Literal: "SELECT"},
+
+func generateLargeSelectTokens(numColumns int) []models.TokenWithSpan {
+	tokens := []models.TokenWithSpan{
+		tw(models.TokenTypeSelect, "SELECT"),
 	}
 
 	// Add multiple columns
 	for i := 0; i < numColumns; i++ {
 		if i > 0 {
-			tokens = append(tokens, token.Token{Type: models.TokenTypeComma, Literal: ","})
+			tokens = append(tokens, tw(models.TokenTypeComma, ","))
 		}
-		tokens = append(tokens, token.Token{Type: models.TokenTypeIdentifier, Literal: fmt.Sprintf("col%d", i)})
+		tokens = append(tokens, tw(models.TokenTypeIdentifier, fmt.Sprintf("col%d", i)))
 	}
 
-	tokens = append(tokens, []token.Token{
-		{Type: models.TokenTypeFrom, Literal: "FROM"},
-		{Type: models.TokenTypeIdentifier, Literal: "large_table"},
-		{Type: models.TokenTypeWhere, Literal: "WHERE"},
-		{Type: models.TokenTypeIdentifier, Literal: "active"},
-		{Type: models.TokenTypeEq, Literal: "="},
-		{Type: models.TokenTypeTrue, Literal: "TRUE"},
-		{Type: models.TokenTypeEOF, Literal: ""},
-	}...)
+	tokens = append(tokens,
+		tw(models.TokenTypeFrom, "FROM"),
+		tw(models.TokenTypeIdentifier, "large_table"),
+		tw(models.TokenTypeWhere, "WHERE"),
+		tw(models.TokenTypeIdentifier, "active"),
+		tw(models.TokenTypeEq, "="),
+		tw(models.TokenTypeTrue, "TRUE"),
+		tw(models.TokenTypeEOF, ""),
+	)
 
 	return tokens
 }
 
-func generateComplexJoinTokens(numJoins int) []token.Token {
-	tokens := []token.Token{
-		{Type: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: models.TokenTypeIdentifier, Literal: "t1"},
-		{Type: models.TokenTypePeriod, Literal: "."},
-		{Type: models.TokenTypeIdentifier, Literal: "id"},
+func generateComplexJoinTokens(numJoins int) []models.TokenWithSpan {
+	tokens := []models.TokenWithSpan{
+		tw(models.TokenTypeSelect, "SELECT"),
+		tw(models.TokenTypeIdentifier, "t1"),
+		tw(models.TokenTypePeriod, "."),
+		tw(models.TokenTypeIdentifier, "id"),
 	}
 
 	// Add columns from joined tables
 	for i := 0; i < numJoins; i++ {
-		colTokens := []token.Token{
-			{Type: models.TokenTypeComma, Literal: ","},
-			{Type: models.TokenTypeIdentifier, Literal: fmt.Sprintf("t%d", i+2)},
-			{Type: models.TokenTypePeriod, Literal: "."},
-			{Type: models.TokenTypeIdentifier, Literal: "name"},
-		}
-		tokens = append(tokens, colTokens...)
+		tokens = append(tokens,
+			tw(models.TokenTypeComma, ","),
+			tw(models.TokenTypeIdentifier, fmt.Sprintf("t%d", i+2)),
+			tw(models.TokenTypePeriod, "."),
+			tw(models.TokenTypeIdentifier, "name"),
+		)
 	}
 
 	// Add FROM clause
-	tokens = append(tokens, []token.Token{
-		{Type: models.TokenTypeFrom, Literal: "FROM"},
-		{Type: models.TokenTypeIdentifier, Literal: "table1"},
-		{Type: models.TokenTypeIdentifier, Literal: "t1"},
-	}...)
+	tokens = append(tokens,
+		tw(models.TokenTypeFrom, "FROM"),
+		tw(models.TokenTypeIdentifier, "table1"),
+		tw(models.TokenTypeIdentifier, "t1"),
+	)
 
 	// Add multiple joins
 	for i := 0; i < numJoins; i++ {
-		joinTokens := []token.Token{
-			{Type: models.TokenTypeJoin, Literal: "JOIN"},
-			{Type: models.TokenTypeIdentifier, Literal: fmt.Sprintf("table%d", i+2)},
-			{Type: models.TokenTypeIdentifier, Literal: fmt.Sprintf("t%d", i+2)},
-			{Type: models.TokenTypeOn, Literal: "ON"},
-			{Type: models.TokenTypeIdentifier, Literal: "t1"},
-			{Type: models.TokenTypePeriod, Literal: "."},
-			{Type: models.TokenTypeIdentifier, Literal: "id"},
-			{Type: models.TokenTypeEq, Literal: "="},
-			{Type: models.TokenTypeIdentifier, Literal: fmt.Sprintf("t%d", i+2)},
-			{Type: models.TokenTypePeriod, Literal: "."},
-			{Type: models.TokenTypeIdentifier, Literal: "ref_id"},
-		}
-		tokens = append(tokens, joinTokens...)
+		tokens = append(tokens,
+			tw(models.TokenTypeJoin, "JOIN"),
+			tw(models.TokenTypeIdentifier, fmt.Sprintf("table%d", i+2)),
+			tw(models.TokenTypeIdentifier, fmt.Sprintf("t%d", i+2)),
+			tw(models.TokenTypeOn, "ON"),
+			tw(models.TokenTypeIdentifier, "t1"),
+			tw(models.TokenTypePeriod, "."),
+			tw(models.TokenTypeIdentifier, "id"),
+			tw(models.TokenTypeEq, "="),
+			tw(models.TokenTypeIdentifier, fmt.Sprintf("t%d", i+2)),
+			tw(models.TokenTypePeriod, "."),
+			tw(models.TokenTypeIdentifier, "ref_id"),
+		)
 	}
 
 	// Add EOF token
-	tokens = append(tokens, token.Token{Type: models.TokenTypeEOF, Literal: ""})
+	tokens = append(tokens, tw(models.TokenTypeEOF, ""))
 
 	return tokens
 }
@@ -121,59 +119,59 @@ func BenchmarkParserComplexity(b *testing.B) {
 	})
 
 	b.Run("SingleJoin", func(b *testing.B) {
-		// Use existing complex SELECT tokens which include JOIN
-		tokens := []token.Token{
-			{Type: models.TokenTypeSelect, Literal: "SELECT"},
-			{Type: models.TokenTypeIdentifier, Literal: "u"},
-			{Type: models.TokenTypePeriod, Literal: "."},
-			{Type: models.TokenTypeIdentifier, Literal: "id"},
-			{Type: models.TokenTypeComma, Literal: ","},
-			{Type: models.TokenTypeIdentifier, Literal: "o"},
-			{Type: models.TokenTypePeriod, Literal: "."},
-			{Type: models.TokenTypeIdentifier, Literal: "total"},
-			{Type: models.TokenTypeFrom, Literal: "FROM"},
-			{Type: models.TokenTypeIdentifier, Literal: "users"},
-			{Type: models.TokenTypeIdentifier, Literal: "u"},
-			{Type: models.TokenTypeJoin, Literal: "JOIN"},
-			{Type: models.TokenTypeIdentifier, Literal: "orders"},
-			{Type: models.TokenTypeIdentifier, Literal: "o"},
-			{Type: models.TokenTypeOn, Literal: "ON"},
-			{Type: models.TokenTypeIdentifier, Literal: "u"},
-			{Type: models.TokenTypePeriod, Literal: "."},
-			{Type: models.TokenTypeIdentifier, Literal: "id"},
-			{Type: models.TokenTypeEq, Literal: "="},
-			{Type: models.TokenTypeIdentifier, Literal: "o"},
-			{Type: models.TokenTypePeriod, Literal: "."},
-			{Type: models.TokenTypeIdentifier, Literal: "user_id"},
-			{Type: models.TokenTypeEOF, Literal: ""},
+		tokens := []models.TokenWithSpan{
+			tw(models.TokenTypeSelect, "SELECT"),
+			tw(models.TokenTypeIdentifier, "u"),
+			tw(models.TokenTypePeriod, "."),
+			tw(models.TokenTypeIdentifier, "id"),
+			tw(models.TokenTypeComma, ","),
+			tw(models.TokenTypeIdentifier, "o"),
+			tw(models.TokenTypePeriod, "."),
+			tw(models.TokenTypeIdentifier, "total"),
+			tw(models.TokenTypeFrom, "FROM"),
+			tw(models.TokenTypeIdentifier, "users"),
+			tw(models.TokenTypeIdentifier, "u"),
+			tw(models.TokenTypeJoin, "JOIN"),
+			tw(models.TokenTypeIdentifier, "orders"),
+			tw(models.TokenTypeIdentifier, "o"),
+			tw(models.TokenTypeOn, "ON"),
+			tw(models.TokenTypeIdentifier, "u"),
+			tw(models.TokenTypePeriod, "."),
+			tw(models.TokenTypeIdentifier, "id"),
+			tw(models.TokenTypeEq, "="),
+			tw(models.TokenTypeIdentifier, "o"),
+			tw(models.TokenTypePeriod, "."),
+			tw(models.TokenTypeIdentifier, "user_id"),
+			tw(models.TokenTypeEOF, ""),
 		}
 		benchmarkParserWithTokens(b, tokens)
 	})
 
 	b.Run("SimpleWhere", func(b *testing.B) {
-		tokens := []token.Token{
-			{Type: models.TokenTypeSelect, Literal: "SELECT"},
-			{Type: models.TokenTypeIdentifier, Literal: "id"},
-			{Type: models.TokenTypeFrom, Literal: "FROM"},
-			{Type: models.TokenTypeIdentifier, Literal: "users"},
-			{Type: models.TokenTypeWhere, Literal: "WHERE"},
-			{Type: models.TokenTypeIdentifier, Literal: "active"},
-			{Type: models.TokenTypeEq, Literal: "="},
-			{Type: models.TokenTypeTrue, Literal: "TRUE"},
-			{Type: models.TokenTypeEOF, Literal: ""},
+		tokens := []models.TokenWithSpan{
+			tw(models.TokenTypeSelect, "SELECT"),
+			tw(models.TokenTypeIdentifier, "id"),
+			tw(models.TokenTypeFrom, "FROM"),
+			tw(models.TokenTypeIdentifier, "users"),
+			tw(models.TokenTypeWhere, "WHERE"),
+			tw(models.TokenTypeIdentifier, "active"),
+			tw(models.TokenTypeEq, "="),
+			tw(models.TokenTypeTrue, "TRUE"),
+			tw(models.TokenTypeEOF, ""),
 		}
 		benchmarkParserWithTokens(b, tokens)
 	})
 }
 
-func benchmarkParserWithTokens(b *testing.B, tokens []token.Token) {
+func benchmarkParserWithTokens(b *testing.B, tokens []models.TokenWithSpan) {
+	b.Helper()
 	parser := NewParser()
 	defer parser.Release()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		tree, err := parser.Parse(tokens)
+		tree, err := parser.ParseFromModelTokens(tokens)
 		if err != nil {
 			panic(err)
 		}
@@ -198,7 +196,7 @@ func BenchmarkParserConcurrency(b *testing.B) {
 				defer parser.Release()
 
 				for pb.Next() {
-					tree, err := parser.Parse(tokens)
+					tree, err := parser.ParseFromModelTokens(tokens)
 					if err != nil {
 						panic(err)
 					}
@@ -227,7 +225,7 @@ func BenchmarkParserMemoryScaling(b *testing.B) {
 			defer parser.Release()
 
 			for pb.Next() {
-				tree, err := parser.Parse(complexTokens)
+				tree, err := parser.ParseFromModelTokens(complexTokens)
 				if err != nil {
 					panic(err)
 				}
@@ -270,7 +268,7 @@ func BenchmarkParserThroughput(b *testing.B) {
 					defer parser.Release()
 
 					for j := 0; j < opsPerGoroutine; j++ {
-						tree, err := parser.Parse(tokens)
+						tree, err := parser.ParseFromModelTokens(tokens)
 						if err != nil {
 							panic(err)
 						}
@@ -313,7 +311,7 @@ func BenchmarkParserSustainedLoad(b *testing.B) {
 				defer parser.Release()
 
 				for time.Now().Before(endTime) {
-					tree, err := parser.Parse(tokens)
+					tree, err := parser.ParseFromModelTokens(tokens)
 					if err != nil {
 						panic(err)
 					}
@@ -339,51 +337,51 @@ func BenchmarkParserStatementTypes(b *testing.B) {
 	// Test different statement types for performance comparison
 	testCases := []struct {
 		name   string
-		tokens []token.Token
+		tokens []models.TokenWithSpan
 	}{
 		{
 			name: "INSERT_Simple",
-			tokens: []token.Token{
-				{Type: models.TokenTypeInsert, Literal: "INSERT"},
-				{Type: models.TokenTypeInto, Literal: "INTO"},
-				{Type: models.TokenTypeIdentifier, Literal: "users"},
-				{Type: models.TokenTypeLParen, Literal: "("},
-				{Type: models.TokenTypeIdentifier, Literal: "name"},
-				{Type: models.TokenTypeRParen, Literal: ")"},
-				{Type: models.TokenTypeValues, Literal: "VALUES"},
-				{Type: models.TokenTypeLParen, Literal: "("},
-				{Type: models.TokenTypeString, Literal: "John"},
-				{Type: models.TokenTypeRParen, Literal: ")"},
-				{Type: models.TokenTypeEOF, Literal: ""},
+			tokens: []models.TokenWithSpan{
+				tw(models.TokenTypeInsert, "INSERT"),
+				tw(models.TokenTypeInto, "INTO"),
+				tw(models.TokenTypeIdentifier, "users"),
+				tw(models.TokenTypeLParen, "("),
+				tw(models.TokenTypeIdentifier, "name"),
+				tw(models.TokenTypeRParen, ")"),
+				tw(models.TokenTypeValues, "VALUES"),
+				tw(models.TokenTypeLParen, "("),
+				tw(models.TokenTypeString, "John"),
+				tw(models.TokenTypeRParen, ")"),
+				tw(models.TokenTypeEOF, ""),
 			},
 		},
 		{
 			name: "UPDATE_Simple",
-			tokens: []token.Token{
-				{Type: models.TokenTypeUpdate, Literal: "UPDATE"},
-				{Type: models.TokenTypeIdentifier, Literal: "users"},
-				{Type: models.TokenTypeSet, Literal: "SET"},
-				{Type: models.TokenTypeIdentifier, Literal: "active"},
-				{Type: models.TokenTypeEq, Literal: "="},
-				{Type: models.TokenTypeTrue, Literal: "TRUE"},
-				{Type: models.TokenTypeWhere, Literal: "WHERE"},
-				{Type: models.TokenTypeIdentifier, Literal: "id"},
-				{Type: models.TokenTypeEq, Literal: "="},
-				{Type: models.TokenTypeNumber, Literal: "1"},
-				{Type: models.TokenTypeEOF, Literal: ""},
+			tokens: []models.TokenWithSpan{
+				tw(models.TokenTypeUpdate, "UPDATE"),
+				tw(models.TokenTypeIdentifier, "users"),
+				tw(models.TokenTypeSet, "SET"),
+				tw(models.TokenTypeIdentifier, "active"),
+				tw(models.TokenTypeEq, "="),
+				tw(models.TokenTypeTrue, "TRUE"),
+				tw(models.TokenTypeWhere, "WHERE"),
+				tw(models.TokenTypeIdentifier, "id"),
+				tw(models.TokenTypeEq, "="),
+				tw(models.TokenTypeNumber, "1"),
+				tw(models.TokenTypeEOF, ""),
 			},
 		},
 		{
 			name: "DELETE_Simple",
-			tokens: []token.Token{
-				{Type: models.TokenTypeDelete, Literal: "DELETE"},
-				{Type: models.TokenTypeFrom, Literal: "FROM"},
-				{Type: models.TokenTypeIdentifier, Literal: "users"},
-				{Type: models.TokenTypeWhere, Literal: "WHERE"},
-				{Type: models.TokenTypeIdentifier, Literal: "active"},
-				{Type: models.TokenTypeEq, Literal: "="},
-				{Type: models.TokenTypeFalse, Literal: "FALSE"},
-				{Type: models.TokenTypeEOF, Literal: ""},
+			tokens: []models.TokenWithSpan{
+				tw(models.TokenTypeDelete, "DELETE"),
+				tw(models.TokenTypeFrom, "FROM"),
+				tw(models.TokenTypeIdentifier, "users"),
+				tw(models.TokenTypeWhere, "WHERE"),
+				tw(models.TokenTypeIdentifier, "active"),
+				tw(models.TokenTypeEq, "="),
+				tw(models.TokenTypeFalse, "FALSE"),
+				tw(models.TokenTypeEOF, ""),
 			},
 		},
 		{
@@ -401,21 +399,21 @@ func BenchmarkParserStatementTypes(b *testing.B) {
 
 func BenchmarkParserMixedWorkload(b *testing.B) {
 	// Simulate realistic mixed workload
-	statements := [][]token.Token{
+	statements := [][]models.TokenWithSpan{
 		generateLargeSelectTokens(5),
 		generateLargeSelectTokens(20),
 		{
-			{Type: models.TokenTypeInsert, Literal: "INSERT"},
-			{Type: models.TokenTypeInto, Literal: "INTO"},
-			{Type: models.TokenTypeIdentifier, Literal: "users"},
-			{Type: models.TokenTypeLParen, Literal: "("},
-			{Type: models.TokenTypeIdentifier, Literal: "name"},
-			{Type: models.TokenTypeRParen, Literal: ")"},
-			{Type: models.TokenTypeValues, Literal: "VALUES"},
-			{Type: models.TokenTypeLParen, Literal: "("},
-			{Type: models.TokenTypeString, Literal: "Test"},
-			{Type: models.TokenTypeRParen, Literal: ")"},
-			{Type: models.TokenTypeEOF, Literal: ""},
+			tw(models.TokenTypeInsert, "INSERT"),
+			tw(models.TokenTypeInto, "INTO"),
+			tw(models.TokenTypeIdentifier, "users"),
+			tw(models.TokenTypeLParen, "("),
+			tw(models.TokenTypeIdentifier, "name"),
+			tw(models.TokenTypeRParen, ")"),
+			tw(models.TokenTypeValues, "VALUES"),
+			tw(models.TokenTypeLParen, "("),
+			tw(models.TokenTypeString, "Test"),
+			tw(models.TokenTypeRParen, ")"),
+			tw(models.TokenTypeEOF, ""),
 		},
 	}
 
@@ -428,7 +426,7 @@ func BenchmarkParserMixedWorkload(b *testing.B) {
 
 		for i := 0; i < b.N; i++ {
 			tokens := statements[i%len(statements)]
-			tree, err := parser.Parse(tokens)
+			tree, err := parser.ParseFromModelTokens(tokens)
 			if err != nil {
 				panic(err)
 			}
@@ -449,7 +447,7 @@ func BenchmarkParserMixedWorkload(b *testing.B) {
 			i := 0
 			for pb.Next() {
 				tokens := statements[i%len(statements)]
-				tree, err := parser.Parse(tokens)
+				tree, err := parser.ParseFromModelTokens(tokens)
 				if err != nil {
 					panic(err)
 				}
@@ -477,7 +475,7 @@ func BenchmarkParserGCPressure(b *testing.B) {
 			// Force allocation/deallocation cycles
 			for j := 0; j < 5; j++ {
 				parser := NewParser()
-				tree, err := parser.Parse(tokens)
+				tree, err := parser.ParseFromModelTokens(tokens)
 				if err != nil {
 					panic(err)
 				}

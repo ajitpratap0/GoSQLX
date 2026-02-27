@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
 
 // PerformanceBaseline represents a single performance baseline
@@ -195,24 +194,24 @@ func TestPerformanceRegression(t *testing.T) {
 		baseline := config.Baselines["WindowFunction"]
 
 		// Window function query: SELECT name, ROW_NUMBER() OVER (PARTITION BY dept ORDER BY salary) FROM employees
-		windowTokens := []token.Token{
-			{Type: models.TokenTypeSelect, Literal: "SELECT"},
-			{Type: models.TokenTypeIdentifier, Literal: "name"},
-			{Type: models.TokenTypeComma, Literal: ","},
-			{Type: models.TokenTypeIdentifier, Literal: "ROW_NUMBER"},
-			{Type: models.TokenTypeLParen, Literal: "("},
-			{Type: models.TokenTypeRParen, Literal: ")"},
-			{Type: models.TokenTypeOver, Literal: "OVER"},
-			{Type: models.TokenTypeLParen, Literal: "("},
-			{Type: models.TokenTypePartition, Literal: "PARTITION"},
-			{Type: models.TokenTypeBy, Literal: "BY"},
-			{Type: models.TokenTypeIdentifier, Literal: "dept"},
-			{Type: models.TokenTypeOrder, Literal: "ORDER"},
-			{Type: models.TokenTypeBy, Literal: "BY"},
-			{Type: models.TokenTypeIdentifier, Literal: "salary"},
-			{Type: models.TokenTypeRParen, Literal: ")"},
-			{Type: models.TokenTypeFrom, Literal: "FROM"},
-			{Type: models.TokenTypeIdentifier, Literal: "employees"},
+		windowTokens := []models.TokenWithSpan{
+			tw(models.TokenTypeSelect, "SELECT"),
+			tw(models.TokenTypeIdentifier, "name"),
+			tw(models.TokenTypeComma, ","),
+			tw(models.TokenTypeIdentifier, "ROW_NUMBER"),
+			tw(models.TokenTypeLParen, "("),
+			tw(models.TokenTypeRParen, ")"),
+			tw(models.TokenTypeOver, "OVER"),
+			tw(models.TokenTypeLParen, "("),
+			tw(models.TokenTypePartition, "PARTITION"),
+			tw(models.TokenTypeBy, "BY"),
+			tw(models.TokenTypeIdentifier, "dept"),
+			tw(models.TokenTypeOrder, "ORDER"),
+			tw(models.TokenTypeBy, "BY"),
+			tw(models.TokenTypeIdentifier, "salary"),
+			tw(models.TokenTypeRParen, ")"),
+			tw(models.TokenTypeFrom, "FROM"),
+			tw(models.TokenTypeIdentifier, "employees"),
 		}
 
 		result := testing.Benchmark(func(b *testing.B) {
@@ -245,20 +244,20 @@ func TestPerformanceRegression(t *testing.T) {
 		baseline := config.Baselines["CTE"]
 
 		// CTE query: WITH cte AS (SELECT id FROM users) SELECT * FROM cte
-		cteTokens := []token.Token{
-			{Type: models.TokenTypeWith, Literal: "WITH"},
-			{Type: models.TokenTypeIdentifier, Literal: "cte"},
-			{Type: models.TokenTypeAs, Literal: "AS"},
-			{Type: models.TokenTypeLParen, Literal: "("},
-			{Type: models.TokenTypeSelect, Literal: "SELECT"},
-			{Type: models.TokenTypeIdentifier, Literal: "id"},
-			{Type: models.TokenTypeFrom, Literal: "FROM"},
-			{Type: models.TokenTypeIdentifier, Literal: "users"},
-			{Type: models.TokenTypeRParen, Literal: ")"},
-			{Type: models.TokenTypeSelect, Literal: "SELECT"},
-			{Type: models.TokenTypeAsterisk, Literal: "*"},
-			{Type: models.TokenTypeFrom, Literal: "FROM"},
-			{Type: models.TokenTypeIdentifier, Literal: "cte"},
+		cteTokens := []models.TokenWithSpan{
+			tw(models.TokenTypeWith, "WITH"),
+			tw(models.TokenTypeIdentifier, "cte"),
+			tw(models.TokenTypeAs, "AS"),
+			tw(models.TokenTypeLParen, "("),
+			tw(models.TokenTypeSelect, "SELECT"),
+			tw(models.TokenTypeIdentifier, "id"),
+			tw(models.TokenTypeFrom, "FROM"),
+			tw(models.TokenTypeIdentifier, "users"),
+			tw(models.TokenTypeRParen, ")"),
+			tw(models.TokenTypeSelect, "SELECT"),
+			tw(models.TokenTypeAsterisk, "*"),
+			tw(models.TokenTypeFrom, "FROM"),
+			tw(models.TokenTypeIdentifier, "cte"),
 		}
 
 		result := testing.Benchmark(func(b *testing.B) {
@@ -376,44 +375,44 @@ func BenchmarkPerformanceBaseline(b *testing.B) {
 	})
 
 	b.Run("WindowFunction", func(b *testing.B) {
-		windowTokens := []token.Token{
-			{Type: models.TokenTypeSelect, Literal: "SELECT"},
-			{Type: models.TokenTypeIdentifier, Literal: "name"},
-			{Type: models.TokenTypeComma, Literal: ","},
-			{Type: models.TokenTypeIdentifier, Literal: "ROW_NUMBER"},
-			{Type: models.TokenTypeLParen, Literal: "("},
-			{Type: models.TokenTypeRParen, Literal: ")"},
-			{Type: models.TokenTypeOver, Literal: "OVER"},
-			{Type: models.TokenTypeLParen, Literal: "("},
-			{Type: models.TokenTypePartition, Literal: "PARTITION"},
-			{Type: models.TokenTypeBy, Literal: "BY"},
-			{Type: models.TokenTypeIdentifier, Literal: "dept"},
-			{Type: models.TokenTypeOrder, Literal: "ORDER"},
-			{Type: models.TokenTypeBy, Literal: "BY"},
-			{Type: models.TokenTypeIdentifier, Literal: "salary"},
-			{Type: models.TokenTypeRParen, Literal: ")"},
-			{Type: models.TokenTypeFrom, Literal: "FROM"},
-			{Type: models.TokenTypeIdentifier, Literal: "employees"},
+		windowTokens := []models.TokenWithSpan{
+			tw(models.TokenTypeSelect, "SELECT"),
+			tw(models.TokenTypeIdentifier, "name"),
+			tw(models.TokenTypeComma, ","),
+			tw(models.TokenTypeIdentifier, "ROW_NUMBER"),
+			tw(models.TokenTypeLParen, "("),
+			tw(models.TokenTypeRParen, ")"),
+			tw(models.TokenTypeOver, "OVER"),
+			tw(models.TokenTypeLParen, "("),
+			tw(models.TokenTypePartition, "PARTITION"),
+			tw(models.TokenTypeBy, "BY"),
+			tw(models.TokenTypeIdentifier, "dept"),
+			tw(models.TokenTypeOrder, "ORDER"),
+			tw(models.TokenTypeBy, "BY"),
+			tw(models.TokenTypeIdentifier, "salary"),
+			tw(models.TokenTypeRParen, ")"),
+			tw(models.TokenTypeFrom, "FROM"),
+			tw(models.TokenTypeIdentifier, "employees"),
 		}
 		b.ReportAllocs()
 		benchmarkParser(b, windowTokens)
 	})
 
 	b.Run("CTE", func(b *testing.B) {
-		cteTokens := []token.Token{
-			{Type: models.TokenTypeWith, Literal: "WITH"},
-			{Type: models.TokenTypeIdentifier, Literal: "cte"},
-			{Type: models.TokenTypeAs, Literal: "AS"},
-			{Type: models.TokenTypeLParen, Literal: "("},
-			{Type: models.TokenTypeSelect, Literal: "SELECT"},
-			{Type: models.TokenTypeIdentifier, Literal: "id"},
-			{Type: models.TokenTypeFrom, Literal: "FROM"},
-			{Type: models.TokenTypeIdentifier, Literal: "users"},
-			{Type: models.TokenTypeRParen, Literal: ")"},
-			{Type: models.TokenTypeSelect, Literal: "SELECT"},
-			{Type: models.TokenTypeAsterisk, Literal: "*"},
-			{Type: models.TokenTypeFrom, Literal: "FROM"},
-			{Type: models.TokenTypeIdentifier, Literal: "cte"},
+		cteTokens := []models.TokenWithSpan{
+			tw(models.TokenTypeWith, "WITH"),
+			tw(models.TokenTypeIdentifier, "cte"),
+			tw(models.TokenTypeAs, "AS"),
+			tw(models.TokenTypeLParen, "("),
+			tw(models.TokenTypeSelect, "SELECT"),
+			tw(models.TokenTypeIdentifier, "id"),
+			tw(models.TokenTypeFrom, "FROM"),
+			tw(models.TokenTypeIdentifier, "users"),
+			tw(models.TokenTypeRParen, ")"),
+			tw(models.TokenTypeSelect, "SELECT"),
+			tw(models.TokenTypeAsterisk, "*"),
+			tw(models.TokenTypeFrom, "FROM"),
+			tw(models.TokenTypeIdentifier, "cte"),
 		}
 		b.ReportAllocs()
 		benchmarkParser(b, cteTokens)

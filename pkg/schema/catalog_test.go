@@ -127,8 +127,11 @@ func TestCatalog_ResolveTable(t *testing.T) {
 	c.AddSchema(auditSchema)
 
 	// Resolve from default schema
-	_, got, ok := c.ResolveTable("users")
-	if !ok {
+	_, got, err := c.ResolveTable("users")
+	if err != nil {
+		t.Fatalf("unexpected error resolving 'users': %v", err)
+	}
+	if got == nil {
 		t.Fatal("expected to resolve table 'users' from default schema")
 	}
 	if got.Name != "users" {
@@ -136,18 +139,90 @@ func TestCatalog_ResolveTable(t *testing.T) {
 	}
 
 	// Resolve from non-default schema
-	_, got2, ok := c.ResolveTable("events")
-	if !ok {
+	_, got2, err := c.ResolveTable("events")
+	if err != nil {
+		t.Fatalf("unexpected error resolving 'events': %v", err)
+	}
+	if got2 == nil {
 		t.Fatal("expected to resolve table 'events' from audit schema")
 	}
 	if got2.Name != "events" {
 		t.Fatalf("expected table 'events', got %q", got2.Name)
 	}
 
-	// Non-existent table
-	_, _, ok = c.ResolveTable("nonexistent")
-	if ok {
-		t.Fatal("expected ResolveTable to fail for nonexistent table")
+	// Non-existent table: no error, but table is nil
+	_, notFound, err := c.ResolveTable("nonexistent")
+	if err != nil {
+		t.Fatalf("expected no error for nonexistent table, got: %v", err)
+	}
+	if notFound != nil {
+		t.Fatal("expected nil table for nonexistent lookup")
+	}
+}
+
+// TestCatalog_ResolveTable_Ambiguous verifies that ResolveTable returns an
+// error when the same table name exists in multiple schemas and no default
+// schema has been set.  This prevents silent wrong-table resolution.
+func TestCatalog_ResolveTable_Ambiguous(t *testing.T) {
+	c := NewCatalog()
+	// Two schemas both own a "users" table; no DefaultSchema is set.
+	s1 := NewSchema("app")
+	t1 := NewTable("users")
+	t1.AddColumn(&Column{Name: "id", DataType: "INT"})
+	s1.AddTable(t1)
+	c.AddSchema(s1)
+
+	s2 := NewSchema("audit")
+	t2 := NewTable("users")
+	t2.AddColumn(&Column{Name: "user_id", DataType: "INT"})
+	s2.AddTable(t2)
+	c.AddSchema(s2)
+
+	// No DefaultSchema — resolution should be flagged as ambiguous.
+	_, _, err := c.ResolveTable("users")
+	if err == nil {
+		t.Fatal("expected ambiguity error when same table name exists in multiple schemas with no default")
+	}
+	if !strings.Contains(err.Error(), "ambiguous table reference") {
+		t.Fatalf("expected 'ambiguous table reference' in error, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "app") || !strings.Contains(err.Error(), "audit") {
+		t.Fatalf("expected schema names in error message, got: %v", err)
+	}
+
+	// Setting a default schema resolves the ambiguity by preferring it.
+	c.DefaultSchema = "app"
+	_, resolved, err := c.ResolveTable("users")
+	if err != nil {
+		t.Fatalf("unexpected error after setting default schema: %v", err)
+	}
+	if resolved == nil {
+		t.Fatal("expected non-nil table after default schema is set")
+	}
+	// The default schema's table should be returned (has column "id").
+	if _, ok := resolved.GetColumn("id"); !ok {
+		t.Fatal("expected 'id' column from the default 'app' schema's users table")
+	}
+}
+
+func TestCatalog_ResolveTable_NoDefault_UniqueTable(t *testing.T) {
+	// When no default schema is set but only one schema owns the table,
+	// ResolveTable should succeed without error.
+	c := NewCatalog()
+	s1 := NewSchema("app")
+	s1.AddTable(NewTable("users"))
+	c.AddSchema(s1)
+
+	s2 := NewSchema("audit")
+	s2.AddTable(NewTable("events")) // different table name
+	c.AddSchema(s2)
+
+	_, tbl, err := c.ResolveTable("users")
+	if err != nil {
+		t.Fatalf("unexpected error for unambiguous lookup: %v", err)
+	}
+	if tbl == nil {
+		t.Fatal("expected to find 'users' table in 'app' schema")
 	}
 }
 
@@ -177,8 +252,11 @@ func TestLoadCatalogFromDDL_Simple(t *testing.T) {
 		t.Fatalf("LoadCatalogFromDDL failed: %v", err)
 	}
 
-	_, tbl, ok := cat.ResolveTable("users")
-	if !ok {
+	_, tbl, err := cat.ResolveTable("users")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tbl == nil {
 		t.Fatal("expected to find table 'users'")
 	}
 	if _, ok := tbl.GetColumn("id"); !ok {
@@ -198,10 +276,14 @@ func TestLoadCatalogFromDDL_MultipleTables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadCatalogFromDDL failed: %v", err)
 	}
-	if _, _, ok := cat.ResolveTable("users"); !ok {
+	if _, tblU, err := cat.ResolveTable("users"); err != nil {
+		t.Fatalf("unexpected error resolving 'users': %v", err)
+	} else if tblU == nil {
 		t.Fatal("expected table 'users'")
 	}
-	if _, _, ok := cat.ResolveTable("orders"); !ok {
+	if _, tblO, err := cat.ResolveTable("orders"); err != nil {
+		t.Fatalf("unexpected error resolving 'orders': %v", err)
+	} else if tblO == nil {
 		t.Fatal("expected table 'orders'")
 	}
 }
@@ -216,8 +298,11 @@ func TestLoadCatalogFromDDL_AlterTableAddColumn(t *testing.T) {
 		t.Fatalf("LoadCatalogFromDDL failed: %v", err)
 	}
 
-	_, tbl, ok := cat.ResolveTable("users")
-	if !ok {
+	_, tbl, err := cat.ResolveTable("users")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tbl == nil {
 		t.Fatal("expected to find table 'users'")
 	}
 	if _, ok := tbl.GetColumn("email"); !ok {
@@ -235,8 +320,11 @@ func TestLoadCatalogFromDDL_AlterTableDropColumn(t *testing.T) {
 		t.Fatalf("LoadCatalogFromDDL failed: %v", err)
 	}
 
-	_, tbl, ok := cat.ResolveTable("users")
-	if !ok {
+	_, tbl, err := cat.ResolveTable("users")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tbl == nil {
 		t.Fatal("expected table 'users'")
 	}
 	if _, ok := tbl.GetColumn("temp_col"); ok {
@@ -257,8 +345,11 @@ func TestLoadCatalogFromDDL_AlterTableRenameColumn(t *testing.T) {
 		t.Fatalf("LoadCatalogFromDDL failed: %v", err)
 	}
 
-	_, tbl, ok := cat.ResolveTable("users")
-	if !ok {
+	_, tbl, err := cat.ResolveTable("users")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tbl == nil {
 		t.Fatal("expected table 'users'")
 	}
 	if _, ok := tbl.GetColumn("old_name"); ok {

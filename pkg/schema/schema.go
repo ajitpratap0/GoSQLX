@@ -46,6 +46,7 @@
 package schema
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 )
@@ -103,19 +104,56 @@ func (c *Catalog) GetDefaultSchema() (*Schema, bool) {
 
 // ResolveTable looks up a table by name across the catalog.
 // It first searches the default schema, then every other schema.
-// Returns the owning schema, the table, and true when found.
-func (c *Catalog) ResolveTable(tableName string) (*Schema, *Table, bool) {
+//
+// When no default schema is set and the same table name exists in more than
+// one schema, ResolveTable returns an ambiguity error so callers are never
+// silently handed the wrong table:
+//
+//	ambiguous table reference: 'users' exists in multiple schemas [app, audit]; qualify with schema name
+//
+// Returns the owning schema, the table, and nil error when found unambiguously.
+// Returns nil, nil, nil when the table does not exist in any schema.
+// Returns nil, nil, error when the reference is ambiguous.
+func (c *Catalog) ResolveTable(tableName string) (*Schema, *Table, error) {
+	// If a default schema is configured, search it first.  A hit here is
+	// always unambiguous because the user explicitly declared intent.
 	if s, ok := c.GetDefaultSchema(); ok {
 		if t, ok := s.GetTable(tableName); ok {
-			return s, t, true
+			return s, t, nil
 		}
 	}
+
+	// No default schema (or table not found in the default): scan every
+	// schema and collect all matches so we can detect ambiguity.
+	type match struct {
+		schema *Schema
+		table  *Table
+	}
+	var matches []match
 	for _, s := range c.Schemas {
 		if t, ok := s.GetTable(tableName); ok {
-			return s, t, true
+			matches = append(matches, match{s, t})
 		}
 	}
-	return nil, nil, false
+
+	switch len(matches) {
+	case 0:
+		return nil, nil, nil
+	case 1:
+		return matches[0].schema, matches[0].table, nil
+	default:
+		// More than one schema owns a table with this name and there is no
+		// default schema to resolve the tie — surface an actionable error.
+		schemaNames := make([]string, 0, len(matches))
+		for _, m := range matches {
+			schemaNames = append(schemaNames, m.schema.Name)
+		}
+		sort.Strings(schemaNames)
+		return nil, nil, fmt.Errorf(
+			"ambiguous table reference: %q exists in multiple schemas %v; qualify with schema name",
+			tableName, schemaNames,
+		)
+	}
 }
 
 // SchemaNames returns a sorted list of all schema names in the catalog.

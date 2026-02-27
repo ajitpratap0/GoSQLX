@@ -16,6 +16,7 @@ package errors
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
@@ -271,12 +272,5 @@ func AmbiguousColumnError(columnName string, tables []string, location models.Lo
 
 // joinStrings is a helper to join strings with a separator
 func joinStrings(strs []string, sep string) string {
-	if len(strs) == 0 {
-		return ""
-	}
-	result := strs[0]
-	for i := 1; i < len(strs); i++ {
-		result += sep + strs[i]
-	}
-	return result
+	return strings.Join(strs, sep)
 }

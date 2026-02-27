@@ -158,7 +158,7 @@ func PutParser(p *Parser) {
 
 // Reset clears the parser state for reuse from the pool.
 func (p *Parser) Reset() {
-	p.tokens = nil
+	p.tokens = p.tokens[:0]
 	p.currentPos = 0
 	p.currentToken = models.TokenWithSpan{}
 	p.depth = 0
@@ -739,6 +739,8 @@ func (p *Parser) advance() {
 	p.currentPos++
 	if p.currentPos < len(p.tokens) {
 		p.currentToken = p.tokens[p.currentPos]
+	} else {
+		p.currentToken = models.TokenWithSpan{} // EOF sentinel
 	}
 }
 

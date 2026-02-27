@@ -31,7 +31,7 @@ import (
 )
 
 func init() {
-	ast.FormatStatementFunc = FormatStatement
-	ast.FormatExpressionFunc = FormatExpression
-	ast.FormatASTFunc = FormatAST
+	ast.FormatStatementFunc = FormatStatement   //nolint:staticcheck // intentional use of deprecated bridge
+	ast.FormatExpressionFunc = FormatExpression //nolint:staticcheck // intentional use of deprecated bridge
+	ast.FormatASTFunc = FormatAST               //nolint:staticcheck // intentional use of deprecated bridge
 }

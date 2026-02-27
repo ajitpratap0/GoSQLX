@@ -251,8 +251,6 @@ func (p *Parser) parseReplaceStatement() (ast.Statement, error) {
 	replStmt := ast.GetReplaceStatement()
 	replStmt.TableName = tableName
 	replStmt.Columns = append(replStmt.Columns, columns...)
-	for _, row := range values {
-		replStmt.Values = append(replStmt.Values, row)
-	}
+	replStmt.Values = append(replStmt.Values, values...)
 	return replStmt, nil
 }

@@ -13,14 +13,17 @@
 // limitations under the License.
 
 // Package parser - ddl.go
-// DDL statement parsing: CREATE, DROP, REFRESH for views, materialized views, tables, and indexes.
+// DDL statement parsing: CREATE TABLE core, DROP, TRUNCATE.
+// Related modules:
+//   - ddl_columns.go  — column definitions and table constraints
+//   - ddl_index.go    — CREATE INDEX
+//   - ddl_view.go     — CREATE VIEW, CREATE MATERIALIZED VIEW, REFRESH
 
 package parser
 
 import (
 	"strings"
 
-	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
@@ -83,219 +86,11 @@ func (p *Parser) parseCreateStatement() (ast.Statement, error) {
 	return nil, p.expectedError("TABLE, VIEW, MATERIALIZED VIEW, or INDEX after CREATE")
 }
 
-// parseCreateView parses CREATE [OR REPLACE] [TEMPORARY] VIEW statement
-func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStatement, error) {
-	stmt := ast.GetCreateViewStatement()
-	stmt.OrReplace = orReplace
-	stmt.Temporary = temporary
-
-	// Check for IF NOT EXISTS
-	if p.isType(models.TokenTypeIf) {
-		p.advance() // Consume IF
-		if !p.isType(models.TokenTypeNot) {
-			return nil, p.expectedError("NOT after IF")
-		}
-		p.advance() // Consume NOT
-		if !p.isType(models.TokenTypeExists) {
-			return nil, p.expectedError("EXISTS after NOT")
-		}
-		p.advance() // Consume EXISTS
-		stmt.IfNotExists = true
-	}
-
-	// Parse view name (supports schema.view qualification and double-quoted identifiers)
-	viewName, err := p.parseQualifiedName()
-	if err != nil {
-		return nil, p.expectedError("view name")
-	}
-	stmt.Name = viewName
-
-	// Parse optional column list
-	if p.isType(models.TokenTypeLParen) {
-		p.advance() // Consume (
-		for {
-			if !p.isIdentifier() {
-				return nil, p.expectedError("column name")
-			}
-			stmt.Columns = append(stmt.Columns, p.currentToken.Token.Value)
-			p.advance()
-
-			if p.isType(models.TokenTypeComma) {
-				p.advance() // Consume comma
-				continue
-			}
-			break
-		}
-		if !p.isType(models.TokenTypeRParen) {
-			return nil, p.expectedError(")")
-		}
-		p.advance() // Consume )
-	}
-
-	// Expect AS
-	if !p.isType(models.TokenTypeAs) {
-		return nil, p.expectedError("AS")
-	}
-	p.advance() // Consume AS
-
-	// Parse the SELECT statement
-	if !p.isType(models.TokenTypeSelect) {
-		return nil, p.expectedError("SELECT")
-	}
-	p.advance() // Consume SELECT
-
-	query, err := p.parseSelectWithSetOperations()
-	if err != nil {
-		return nil, goerrors.WrapError(
-			goerrors.ErrCodeInvalidSyntax,
-			"error parsing view query",
-			p.currentLocation(),
-			"", // SQL not available in current parser implementation
-			err,
-		)
-	}
-	stmt.Query = query
-
-	// Parse optional WITH CHECK OPTION
-	if p.isType(models.TokenTypeWith) {
-		p.advance() // Consume WITH
-		if p.isType(models.TokenTypeCheck) {
-			p.advance() // Consume CHECK
-			if p.isTokenMatch("OPTION") {
-				p.advance() // Consume OPTION
-				stmt.WithOption = "CHECK OPTION"
-			}
-		} else if p.isTokenMatch("CASCADED") {
-			p.advance() // Consume CASCADED
-			if p.isType(models.TokenTypeCheck) {
-				p.advance() // Consume CHECK
-				if p.isTokenMatch("OPTION") {
-					p.advance() // Consume OPTION
-					stmt.WithOption = "CASCADED CHECK OPTION"
-				}
-			}
-		} else if p.isTokenMatch("LOCAL") {
-			p.advance() // Consume LOCAL
-			if p.isType(models.TokenTypeCheck) {
-				p.advance() // Consume CHECK
-				if p.isTokenMatch("OPTION") {
-					p.advance() // Consume OPTION
-					stmt.WithOption = "LOCAL CHECK OPTION"
-				}
-			}
-		}
-	}
-
-	return stmt, nil
-}
-
-// parseCreateMaterializedView parses CREATE MATERIALIZED VIEW statement
-func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewStatement, error) {
-	stmt := ast.GetCreateMaterializedViewStatement()
-
-	// Check for IF NOT EXISTS
-	if p.isType(models.TokenTypeIf) {
-		p.advance() // Consume IF
-		if !p.isType(models.TokenTypeNot) {
-			return nil, p.expectedError("NOT after IF")
-		}
-		p.advance() // Consume NOT
-		if !p.isType(models.TokenTypeExists) {
-			return nil, p.expectedError("EXISTS after NOT")
-		}
-		p.advance() // Consume EXISTS
-		stmt.IfNotExists = true
-	}
-
-	// Parse view name (supports schema.view qualification and double-quoted identifiers)
-	matViewName, err := p.parseQualifiedName()
-	if err != nil {
-		return nil, p.expectedError("materialized view name")
-	}
-	stmt.Name = matViewName
-
-	// Parse optional column list
-	if p.isType(models.TokenTypeLParen) {
-		p.advance() // Consume (
-		for {
-			if !p.isIdentifier() {
-				return nil, p.expectedError("column name")
-			}
-			stmt.Columns = append(stmt.Columns, p.currentToken.Token.Value)
-			p.advance()
-
-			if p.isType(models.TokenTypeComma) {
-				p.advance() // Consume comma
-				continue
-			}
-			break
-		}
-		if !p.isType(models.TokenTypeRParen) {
-			return nil, p.expectedError(")")
-		}
-		p.advance() // Consume )
-	}
-
-	// Parse optional TABLESPACE
-	if p.isTokenMatch("TABLESPACE") {
-		p.advance() // Consume TABLESPACE
-		if !p.isIdentifier() {
-			return nil, p.expectedError("tablespace name")
-		}
-		stmt.Tablespace = p.currentToken.Token.Value
-		p.advance()
-	}
-
-	// Expect AS
-	if !p.isType(models.TokenTypeAs) {
-		return nil, p.expectedError("AS")
-	}
-	p.advance() // Consume AS
-
-	// Parse the SELECT statement
-	if !p.isType(models.TokenTypeSelect) {
-		return nil, p.expectedError("SELECT")
-	}
-	p.advance() // Consume SELECT
-
-	query, err := p.parseSelectWithSetOperations()
-	if err != nil {
-		return nil, goerrors.WrapError(
-			goerrors.ErrCodeInvalidSyntax,
-			"error parsing materialized view query",
-			p.currentLocation(),
-			"", // SQL not available in current parser implementation
-			err,
-		)
-	}
-	stmt.Query = query
-
-	// Parse optional WITH [NO] DATA
-	// Note: DATA and NO may be tokenized as IDENT since they're common identifiers
-	if p.isType(models.TokenTypeWith) {
-		p.advance() // Consume WITH
-		if p.isTokenMatch("NO") {
-			p.advance() // Consume NO
-			if !p.isTokenMatch("DATA") {
-				return nil, p.expectedError("DATA after NO")
-			}
-			p.advance() // Consume DATA
-			withData := false
-			stmt.WithData = &withData
-		} else if p.isTokenMatch("DATA") {
-			p.advance() // Consume DATA
-			withData := true
-			stmt.WithData = &withData
-		}
-	}
-
-	return stmt, nil
-}
-
 // parseCreateTable parses CREATE TABLE statement with partitioning support
 func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, error) {
-	stmt := ast.GetCreateTableStatement()
-	stmt.Temporary = temporary
+	stmt := &ast.CreateTableStatement{
+		Temporary: temporary,
+	}
 
 	// Check for IF NOT EXISTS
 	if p.isType(models.TokenTypeIf) {
@@ -595,121 +390,9 @@ func (p *Parser) parsePartitionDefinition() (*ast.PartitionDefinition, error) {
 	return partDef, nil
 }
 
-// parseCreateIndex parses CREATE [UNIQUE] INDEX statement
-func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error) {
-	stmt := ast.GetCreateIndexStatement()
-	stmt.Unique = unique
-
-	// Check for IF NOT EXISTS
-	if p.isType(models.TokenTypeIf) {
-		p.advance() // Consume IF
-		if !p.isType(models.TokenTypeNot) {
-			return nil, p.expectedError("NOT after IF")
-		}
-		p.advance() // Consume NOT
-		if !p.isType(models.TokenTypeExists) {
-			return nil, p.expectedError("EXISTS after NOT")
-		}
-		p.advance() // Consume EXISTS
-		stmt.IfNotExists = true
-	}
-
-	// Parse index name (supports schema.index qualification and double-quoted identifiers)
-	indexName, err := p.parseQualifiedName()
-	if err != nil {
-		return nil, p.expectedError("index name")
-	}
-	stmt.Name = indexName
-
-	// Expect ON
-	if !p.isType(models.TokenTypeOn) {
-		return nil, p.expectedError("ON")
-	}
-	p.advance() // Consume ON
-
-	// Parse table name (supports schema.table qualification and double-quoted identifiers)
-	indexTableName, err := p.parseQualifiedName()
-	if err != nil {
-		return nil, p.expectedError("table name")
-	}
-	stmt.Table = indexTableName
-
-	// Parse optional USING
-	if p.isType(models.TokenTypeUsing) {
-		p.advance() // Consume USING
-		if !p.isIdentifier() {
-			return nil, p.expectedError("index method")
-		}
-		stmt.Using = p.currentToken.Token.Value
-		p.advance()
-	}
-
-	// Expect opening parenthesis
-	if !p.isType(models.TokenTypeLParen) {
-		return nil, p.expectedError("(")
-	}
-	p.advance() // Consume (
-
-	// Parse column list
-	for {
-		col := ast.IndexColumn{}
-		if !p.isIdentifier() {
-			return nil, p.expectedError("column name")
-		}
-		col.Column = p.currentToken.Token.Value
-		p.advance()
-
-		// Parse optional direction
-		if p.isType(models.TokenTypeAsc) {
-			col.Direction = "ASC"
-			p.advance()
-		} else if p.isType(models.TokenTypeDesc) {
-			col.Direction = "DESC"
-			p.advance()
-		}
-
-		// Parse optional NULLS LAST
-		if p.isType(models.TokenTypeNulls) {
-			p.advance() // Consume NULLS
-			if p.isType(models.TokenTypeLast) {
-				col.NullsLast = true
-				p.advance()
-			} else if p.isType(models.TokenTypeFirst) {
-				p.advance()
-			}
-		}
-
-		stmt.Columns = append(stmt.Columns, col)
-
-		if p.isType(models.TokenTypeComma) {
-			p.advance() // Consume comma
-			continue
-		}
-		break
-	}
-
-	// Expect closing parenthesis
-	if !p.isType(models.TokenTypeRParen) {
-		return nil, p.expectedError(")")
-	}
-	p.advance() // Consume )
-
-	// Parse optional WHERE clause (partial index)
-	if p.isType(models.TokenTypeWhere) {
-		p.advance() // Consume WHERE
-		whereClause, err := p.parseExpression()
-		if err != nil {
-			return nil, err
-		}
-		stmt.Where = whereClause
-	}
-
-	return stmt, nil
-}
-
 // parseDropStatement parses DROP statements (TABLE, VIEW, MATERIALIZED VIEW, INDEX)
 func (p *Parser) parseDropStatement() (*ast.DropStatement, error) {
-	stmt := ast.GetDropStatement()
+	stmt := &ast.DropStatement{}
 
 	// Determine object type
 	if p.isType(models.TokenTypeMaterialized) {
@@ -769,61 +452,10 @@ func (p *Parser) parseDropStatement() (*ast.DropStatement, error) {
 	return stmt, nil
 }
 
-// parseRefreshStatement parses REFRESH MATERIALIZED VIEW statement
-func (p *Parser) parseRefreshStatement() (*ast.RefreshMaterializedViewStatement, error) {
-	// Expect MATERIALIZED
-	if !p.isType(models.TokenTypeMaterialized) {
-		return nil, p.expectedError("MATERIALIZED after REFRESH")
-	}
-	p.advance() // Consume MATERIALIZED
-
-	// Expect VIEW
-	if !p.isType(models.TokenTypeView) {
-		return nil, p.expectedError("VIEW after MATERIALIZED")
-	}
-	p.advance() // Consume VIEW
-
-	stmt := ast.GetRefreshMaterializedViewStatement()
-
-	// Check for CONCURRENTLY
-	if p.isTokenMatch("CONCURRENTLY") {
-		stmt.Concurrently = true
-		p.advance()
-	}
-
-	// Parse view name (supports schema.view qualification and double-quoted identifiers)
-	refreshViewName, err := p.parseQualifiedName()
-	if err != nil {
-		return nil, p.expectedError("materialized view name")
-	}
-	stmt.Name = refreshViewName
-
-	// Parse optional WITH [NO] DATA
-	// Note: DATA and NO may be tokenized as IDENT since they're common identifiers
-	if p.isType(models.TokenTypeWith) {
-		p.advance() // Consume WITH
-		if p.isTokenMatch("NO") {
-			p.advance() // Consume NO
-			if !p.isTokenMatch("DATA") {
-				return nil, p.expectedError("DATA after NO")
-			}
-			p.advance() // Consume DATA
-			withData := false
-			stmt.WithData = &withData
-		} else if p.isTokenMatch("DATA") {
-			p.advance() // Consume DATA
-			withData := true
-			stmt.WithData = &withData
-		}
-	}
-
-	return stmt, nil
-}
-
 // parseTruncateStatement parses TRUNCATE TABLE statement
 // Syntax: TRUNCATE [TABLE] table_name [, table_name ...] [RESTART IDENTITY | CONTINUE IDENTITY] [CASCADE | RESTRICT]
 func (p *Parser) parseTruncateStatement() (*ast.TruncateStatement, error) {
-	stmt := ast.GetTruncateStatement()
+	stmt := &ast.TruncateStatement{}
 
 	// Optional TABLE keyword
 	if p.isType(models.TokenTypeTable) {

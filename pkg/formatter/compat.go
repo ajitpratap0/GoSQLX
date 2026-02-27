@@ -31,7 +31,10 @@ import (
 )
 
 func init() {
-	ast.FormatStatementFunc = FormatStatement   //nolint:staticcheck // intentional use of deprecated bridge
-	ast.FormatExpressionFunc = FormatExpression //nolint:staticcheck // intentional use of deprecated bridge
-	ast.FormatASTFunc = FormatAST               //nolint:staticcheck // intentional use of deprecated bridge
+	//lint:ignore SA1019 intentional bridge — pkg/formatter wires itself into the ast shim variables
+	ast.FormatStatementFunc = FormatStatement //nolint:staticcheck
+	//lint:ignore SA1019 intentional bridge — pkg/formatter wires itself into the ast shim variables
+	ast.FormatExpressionFunc = FormatExpression //nolint:staticcheck
+	//lint:ignore SA1019 intentional bridge — pkg/formatter wires itself into the ast shim variables
+	ast.FormatASTFunc = FormatAST //nolint:staticcheck
 }

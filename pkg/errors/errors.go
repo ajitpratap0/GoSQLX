@@ -64,14 +64,15 @@ type ErrorCode string
 // Error code categories
 const (
 	// E1xxx: Tokenizer errors
-	ErrCodeUnexpectedChar     ErrorCode = "E1001" // Unexpected character in input
-	ErrCodeUnterminatedString ErrorCode = "E1002" // String literal not closed
-	ErrCodeInvalidNumber      ErrorCode = "E1003" // Invalid numeric literal
-	ErrCodeInvalidOperator    ErrorCode = "E1004" // Invalid operator sequence
-	ErrCodeInvalidIdentifier  ErrorCode = "E1005" // Invalid identifier format
-	ErrCodeInputTooLarge      ErrorCode = "E1006" // Input exceeds size limits (DoS protection)
-	ErrCodeTokenLimitReached  ErrorCode = "E1007" // Token count exceeds limit (DoS protection)
-	ErrCodeTokenizerPanic     ErrorCode = "E1008" // Tokenizer panic recovered
+	ErrCodeUnexpectedChar           ErrorCode = "E1001" // Unexpected character in input
+	ErrCodeUnterminatedString       ErrorCode = "E1002" // String literal not closed
+	ErrCodeInvalidNumber            ErrorCode = "E1003" // Invalid numeric literal
+	ErrCodeInvalidOperator          ErrorCode = "E1004" // Invalid operator sequence
+	ErrCodeInvalidIdentifier        ErrorCode = "E1005" // Invalid identifier format
+	ErrCodeInputTooLarge            ErrorCode = "E1006" // Input exceeds size limits (DoS protection)
+	ErrCodeTokenLimitReached        ErrorCode = "E1007" // Token count exceeds limit (DoS protection)
+	ErrCodeTokenizerPanic           ErrorCode = "E1008" // Tokenizer panic recovered
+	ErrCodeUnterminatedBlockComment ErrorCode = "E1009" // Block comment not closed
 
 	// E2xxx: Parser syntax errors
 	ErrCodeUnexpectedToken       ErrorCode = "E2001" // Unexpected token encountered

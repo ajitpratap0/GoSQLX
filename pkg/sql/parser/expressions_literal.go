@@ -146,8 +146,10 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 					Pos:   identPos,
 				}
 				p.advance()
-			} else if p.isIdentifier() {
-				// Handle table.column (qualified identifier)
+			} else if p.isIdentifier() || p.isNonReservedKeyword() {
+				// Handle table.column (qualified identifier).
+				// isNonReservedKeyword covers reserved words valid as column
+				// names after a dot, e.g. table.KEY, schema.INDEX, alias.VIEW.
 				ident = &ast.Identifier{
 					Table: ident.Name,
 					Name:  p.currentToken.Token.Value,

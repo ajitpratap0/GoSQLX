@@ -279,8 +279,18 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 	return funcCall, nil
 }
 
-// parseWindowSpec parses a window specification (PARTITION BY, ORDER BY, frame clause)
+// parseWindowSpec parses a window specification (PARTITION BY, ORDER BY, frame clause).
+// Supports both inline specs OVER (...) and named window references OVER w (SQL:2003 §7.11).
 func (p *Parser) parseWindowSpec() (*ast.WindowSpec, error) {
+	// Named window reference: OVER w — bare identifier, no parentheses.
+	// This must be checked before the '(' path so that e.g. OVER w is not
+	// mistakenly rejected.
+	if p.isIdentifier() {
+		spec := &ast.WindowSpec{Name: p.currentToken.Token.Value}
+		p.advance()
+		return spec, nil
+	}
+
 	// Expect opening parenthesis
 	if !p.isType(models.TokenTypeLParen) {
 		return nil, p.expectedError("(")

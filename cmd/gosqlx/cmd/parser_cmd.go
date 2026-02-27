@@ -115,7 +115,7 @@ func (p *Parser) Display(result *ParserResult) error {
 		return p.displayTree(result.AST)
 	}
 
-	return p.displayAST(result.AST)
+	return p.displayAST(result)
 }
 
 // displayTokens displays token information
@@ -181,10 +181,10 @@ type StatementDisplay struct {
 }
 
 // displayAST displays AST structure
-func (p *Parser) displayAST(astObj *ast.AST) error {
+func (p *Parser) displayAST(result *ParserResult) error {
 	// Use the new JSON output format for consistency
 	if strings.ToLower(p.Opts.Format) == "json" {
-		return p.displayASTJSON(astObj)
+		return p.displayASTJSON(result)
 	}
 
 	type ASTDisplay struct {
@@ -195,14 +195,14 @@ func (p *Parser) displayAST(astObj *ast.AST) error {
 	}
 
 	var statements []StatementDisplay
-	for _, stmt := range astObj.Statements {
+	for _, stmt := range result.AST.Statements {
 		statements = append(statements, convertStatement(stmt))
 	}
 
 	display := ASTDisplay{
 		Type:       "AST",
 		Statements: statements,
-		TokenCount: len(astObj.Statements),
+		TokenCount: len(result.Tokens),
 		Metadata: map[string]interface{}{
 			"parser_version": "2.0.0-alpha",
 			"sql_compliance": "~80-85% SQL-99",
@@ -223,6 +223,7 @@ func (p *Parser) displayAST(astObj *ast.AST) error {
 		fmt.Fprintf(p.Out, "AST Structure:\n")
 		fmt.Fprintf(p.Out, "  Type: %s\n", display.Type)
 		fmt.Fprintf(p.Out, "  Statements: %d\n", len(display.Statements))
+		fmt.Fprintf(p.Out, "  Token Count: %d\n", display.TokenCount)
 		fmt.Fprintf(p.Out, "  SQL Compliance: %s\n", display.Metadata["sql_compliance"])
 		fmt.Fprintf(p.Out, "\nStatements:\n")
 		for i, stmt := range display.Statements {
@@ -238,9 +239,9 @@ func (p *Parser) displayAST(astObj *ast.AST) error {
 }
 
 // displayASTJSON displays AST in JSON format using the standardized output format
-func (p *Parser) displayASTJSON(astObj *ast.AST) error {
+func (p *Parser) displayASTJSON(result *ParserResult) error {
 	// Use the standardized JSON output format
-	jsonData, err := output.FormatParseJSON(astObj, "input", false, nil)
+	jsonData, err := output.FormatParseJSON(result.AST, "input", false, nil, len(result.Tokens))
 	if err != nil {
 		return fmt.Errorf("failed to format JSON output: %w", err)
 	}
@@ -329,6 +330,10 @@ func convertStatement(stmt ast.Statement) StatementDisplay {
 		}
 		if s.Limit != nil {
 			details["has_limit"] = true
+		}
+		if s.With != nil {
+			details["has_with"] = true
+			details["cte_count"] = len(s.With.CTEs)
 		}
 	case *ast.InsertStatement:
 		details["table"] = "present"

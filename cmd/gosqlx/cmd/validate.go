@@ -71,6 +71,8 @@ Throughput: 100+ files/second in batch mode`,
 }
 
 func validateRun(cmd *cobra.Command, args []string) error {
+	cmd.SilenceUsage = true
+
 	// --list-dialects: print all valid dialects and exit.
 	if validateListDialects {
 		for _, d := range keywords.AllDialects() {
@@ -306,20 +308,20 @@ func validateInlineSQL(cmd *cobra.Command, sql string) error {
 	}
 	if err != nil {
 		if !validateQuiet {
-			fmt.Fprintf(cmd.ErrOrStderr(), "✗ Invalid SQL: %v\n", err)
+			fmt.Fprintf(cmd.ErrOrStderr(), "❌ Invalid SQL: %v\n", err)
 		}
 		return fmt.Errorf("validation failed: %w", err)
 	}
 
 	if sql == "" {
 		if !validateQuiet {
-			fmt.Fprintln(cmd.OutOrStdout(), "✓ Empty input (no statements)")
+			fmt.Fprintln(cmd.OutOrStdout(), "✅ Empty input (no statements)")
 		}
 		return nil
 	}
 
 	if !validateQuiet {
-		fmt.Fprintln(cmd.OutOrStdout(), "✓ Valid SQL")
+		fmt.Fprintln(cmd.OutOrStdout(), "✅ Valid SQL")
 	}
 	return nil
 }

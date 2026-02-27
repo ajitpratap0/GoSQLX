@@ -80,6 +80,8 @@ Exit Codes:
 }
 
 func lintRun(cmd *cobra.Command, args []string) error {
+	cmd.SilenceUsage = true
+
 	// Handle stdin input
 	if ShouldReadFromStdin(args) {
 		return lintFromStdin(cmd)
@@ -209,6 +211,7 @@ func lintRun(cmd *cobra.Command, args []string) error {
 	// Return error if there were violations or file errors
 	errorCount := 0
 	warningCount := 0
+	infoCount := 0
 	fileErrorCount := 0
 	for _, fileResult := range result.Files {
 		if fileResult.Error != nil {
@@ -220,16 +223,22 @@ func lintRun(cmd *cobra.Command, args []string) error {
 				errorCount++
 			case linter.SeverityWarning:
 				warningCount++
+			case linter.SeverityInfo:
+				infoCount++
 			}
 		}
 	}
 
 	if fileErrorCount > 0 {
-		return fmt.Errorf("%d file(s) had errors", fileErrorCount)
+		return fmt.Errorf("linting failed: %d file(s) had errors", fileErrorCount)
 	}
-	if errorCount > 0 || (lintFailOnWarn && warningCount > 0) {
-		return fmt.Errorf("%d error(s) and %d warning(s) found", errorCount, warningCount)
+
+	totalViolations := errorCount + warningCount + infoCount
+	if totalViolations > 0 {
+		return fmt.Errorf("found %d violation(s): %d error(s), %d warning(s), %d info(s)",
+			totalViolations, errorCount, warningCount, infoCount)
 	}
+
 	if securityFindingCount > 0 {
 		return fmt.Errorf("%d security finding(s) detected", securityFindingCount)
 	}

@@ -1384,7 +1384,7 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 					}
 				}
 				if !closed {
-					return models.Token{}, errors.UnterminatedStringError(
+					return models.Token{}, errors.UnterminatedBlockCommentError(
 						commentStartPos,
 						string(t.input),
 					)

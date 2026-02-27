@@ -689,6 +689,22 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 	case models.TokenTypeReplace:
 		p.advance()
 		return p.parseReplaceStatement()
+	case models.TokenTypeKeyword:
+		// Handle keyword-type tokens that have dedicated parsers.
+		// PRAGMA is a SQLite statement keyword tokenized as TokenTypeKeyword
+		// when the SQLite dialect keyword set is active.
+		if strings.EqualFold(p.currentToken.Token.Value, "PRAGMA") {
+			p.advance()
+			return p.parsePragmaStatement()
+		}
+	case models.TokenTypeIdentifier:
+		// PRAGMA may be tokenized as IDENTIFIER when no dialect-specific keyword
+		// set is active (e.g. when using the default PostgreSQL tokenizer dialect).
+		// Support it as a statement keyword regardless of tokenizer dialect.
+		if strings.EqualFold(p.currentToken.Token.Value, "PRAGMA") {
+			p.advance()
+			return p.parsePragmaStatement()
+		}
 	}
 	return nil, p.expectedError("statement")
 }
@@ -945,6 +961,11 @@ func (p *Parser) isNonReservedKeyword() bool {
 	// the generic TokenTypeKeyword.
 	switch p.currentToken.Token.Type {
 	case models.TokenTypeTarget, models.TokenTypeSource, models.TokenTypeMatched:
+		return true
+	case models.TokenTypeTable, models.TokenTypeIndex, models.TokenTypeView,
+		models.TokenTypeKey, models.TokenTypeColumn, models.TokenTypeDatabase:
+		// DDL keywords that are commonly used as quoted identifiers in MySQL (backtick)
+		// and SQL Server (bracket) dialects.
 		return true
 	case models.TokenTypeKeyword:
 		// Token may have generic Type; check value for specific keywords

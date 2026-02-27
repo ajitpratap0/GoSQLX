@@ -23,9 +23,31 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
+// parseColumnName parses a column name in DDL context, accepting reserved keywords
+// like KEY, TABLE, INDEX as column names when context is unambiguous.
+// In SQLite and other dialects, many reserved words may appear as column names.
+func (p *Parser) parseColumnName() *ast.Identifier {
+	val := p.currentToken.Token.Value
+	if val == "" {
+		return nil
+	}
+	// Accept identifiers, double-quoted identifiers, and any keyword token
+	// that could be used as a column name (e.g. KEY, TABLE, INDEX, etc.)
+	switch p.currentToken.Token.Type {
+	case models.TokenTypeEOF, models.TokenTypeComma, models.TokenTypeLParen,
+		models.TokenTypeRParen, models.TokenTypeSemicolon, models.TokenTypePeriod,
+		models.TokenTypeUnknown:
+		return nil
+	}
+	pos := p.currentLocation()
+	ident := &ast.Identifier{Name: val, Pos: pos}
+	p.advance()
+	return ident
+}
+
 // parseColumnDef parses a column definition including column constraints
 func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
-	name := p.parseIdent()
+	name := p.parseColumnName()
 	if name == nil {
 		return nil, goerrors.ExpectedTokenError(
 			"column name",
@@ -35,8 +57,9 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 		)
 	}
 
-	// Parse data type (including parameterized types like VARCHAR(100), DECIMAL(10,2))
-	dataType := p.parseIdent()
+	// Parse data type (including parameterized types like VARCHAR(100), DECIMAL(10,2)).
+	// Use parseColumnName to accept keyword-based type names such as INTEGER, TEXT, REAL.
+	dataType := p.parseColumnName()
 	if dataType == nil {
 		return nil, goerrors.ExpectedTokenError(
 			"data type",

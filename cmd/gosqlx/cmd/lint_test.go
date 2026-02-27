@@ -53,7 +53,7 @@ func TestLintCmd_Basic(t *testing.T) {
 				"Trailing Whitespace",
 				"line 1",
 			},
-			expectedError: false,
+			expectedError: true, // Any violation now causes non-zero exit (CI gate behavior)
 		},
 		{
 			name: "Multiple files with violations",
@@ -68,7 +68,7 @@ func TestLintCmd_Basic(t *testing.T) {
 				"Total files: 3",
 				"Total violations: 3", // L001 x2 + L010 x1 (redundant whitespace for double space)
 			},
-			expectedError: false,
+			expectedError: true, // Any violation now causes non-zero exit (CI gate behavior)
 		},
 		// Skipped: L002 is SeverityError which triggers os.Exit(1) regardless of --fail-on-warn
 		// This would be tested in integration tests with subprocess
@@ -82,7 +82,7 @@ func TestLintCmd_Basic(t *testing.T) {
 		// 		"L002", // Mixed indentation - SeverityError (triggers os.Exit)
 		// 		"L005", // Long lines - SeverityInfo
 		// 	},
-		// 	expectedError: false,
+		// 	expectedError: true,
 		// },
 		{
 			name: "Long line violation (L005)",
@@ -94,7 +94,7 @@ func TestLintCmd_Basic(t *testing.T) {
 				"Long Lines",
 				"exceeds maximum length",
 			},
-			expectedError: false,
+			expectedError: true, // Any violation (including info-level) now causes non-zero exit (CI gate behavior)
 		},
 	}
 
@@ -307,11 +307,10 @@ func TestLintCmd_Recursive(t *testing.T) {
 			lintMaxLength = 100
 			lintFailOnWarn = false
 
-			// Run lint command
-			err := lintRun(cmd, []string{tmpDir})
-			if err != nil {
-				t.Errorf("Unexpected error: %v", err)
-			}
+			// Run lint command.
+			// Note: lintRun returns an error when violations are found (CI gate behavior).
+			// For recursive tests, we only verify that the output content is correct.
+			_ = lintRun(cmd, []string{tmpDir})
 
 			// Verify output
 			output := outBuf.String()
@@ -430,11 +429,10 @@ func TestLintCmd_AutoFix(t *testing.T) {
 			lintMaxLength = 100
 			lintFailOnWarn = false
 
-			// Run lint command
-			err := lintRun(cmd, args)
-			if err != nil {
-				t.Errorf("Unexpected error: %v", err)
-			}
+			// Run lint command.
+			// Note: lintRun returns an error when violations are found (CI gate behavior).
+			// For auto-fix tests, we only verify that the files were fixed correctly.
+			_ = lintRun(cmd, args)
 
 			// Verify output
 			output := outBuf.String()
@@ -490,11 +488,10 @@ func TestLintCmd_AutoFix_PreservesPermissions(t *testing.T) {
 	lintMaxLength = 100
 	lintFailOnWarn = false
 
-	// Run lint command
-	err = lintRun(cmd, []string{filename})
-	if err != nil {
-		t.Errorf("Unexpected error: %v", err)
-	}
+	// Run lint command.
+	// Note: lintRun returns an error when violations are found (CI gate behavior).
+	// For this test we only verify that file permissions are preserved.
+	_ = lintRun(cmd, []string{filename})
 
 	// Verify permissions preserved
 	newInfo, err := os.Stat(filename)
@@ -518,6 +515,7 @@ func TestLintCmd_Flags(t *testing.T) {
 		maxLength      int
 		failOnWarn     bool
 		expectedOutput []string
+		expectedError  bool // whether violations are expected (non-zero exit)
 	}{
 		{
 			name: "Custom max-length flag",
@@ -526,6 +524,7 @@ func TestLintCmd_Flags(t *testing.T) {
 			},
 			maxLength:      50,
 			expectedOutput: []string{"L005", "exceeds maximum length"},
+			expectedError:  true, // L005 info violation triggers non-zero exit
 		},
 		{
 			name: "Max-length allows longer lines",
@@ -534,6 +533,7 @@ func TestLintCmd_Flags(t *testing.T) {
 			},
 			maxLength:      200,
 			expectedOutput: []string{"Total violations: 0"},
+			expectedError:  false,
 		},
 		{
 			name: "Pattern flag with recursive",
@@ -544,6 +544,7 @@ func TestLintCmd_Flags(t *testing.T) {
 			recursive:      true,
 			pattern:        "migration_*.sql",
 			expectedOutput: []string{"migration_001.sql", "Total files: 1"},
+			expectedError:  true, // trailing whitespace violation triggers non-zero exit
 		},
 		{
 			name: "Multiple flags combined",
@@ -554,6 +555,7 @@ func TestLintCmd_Flags(t *testing.T) {
 			pattern:        "*.sql",
 			maxLength:      80,
 			expectedOutput: []string{"query.sql", "L001"},
+			expectedError:  true, // L001 warning violation triggers non-zero exit
 		},
 	}
 
@@ -602,8 +604,14 @@ func TestLintCmd_Flags(t *testing.T) {
 			}
 
 			err := lintRun(cmd, args)
-			if err != nil {
-				t.Errorf("Unexpected error: %v", err)
+			if tt.expectedError {
+				if err == nil {
+					t.Errorf("Expected error (violations found) but got none")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
 			}
 
 			// Verify output
@@ -855,11 +863,10 @@ func TestLintCmd_Output(t *testing.T) {
 			lintMaxLength = 100
 			lintFailOnWarn = false
 
-			// Run lint command
-			err := lintRun(cmd, args)
-			if err != nil {
-				t.Errorf("Unexpected error: %v", err)
-			}
+			// Run lint command.
+			// Note: lintRun returns an error when violations are found (CI gate behavior).
+			// For output-formatting tests, we only verify that the output content is correct.
+			_ = lintRun(cmd, args)
 
 			// Verify output
 			output := outBuf.String()
@@ -892,11 +899,11 @@ func TestLintCmd_ExitCodes(t *testing.T) {
 			description: "Clean SQL should not trigger exit",
 		},
 		{
-			name:        "Warning without fail-on-warn - exit 0",
+			name:        "Warning without fail-on-warn - exit 1",
 			content:     "SELECT * FROM users  ",
 			failOnWarn:  false,
-			shouldExit:  false,
-			description: "Warnings alone should not trigger exit by default",
+			shouldExit:  true,
+			description: "Any violation (including warnings) triggers exit 1 for CI gate behavior",
 		},
 		{
 			name:        "Warning with fail-on-warn - would exit 1",
@@ -1019,11 +1026,10 @@ func TestCreateLinter_MaxLengthPassedToRule(t *testing.T) {
 			lintAutoFix = false
 			lintFailOnWarn = false
 
-			// Run lint command
-			err := lintRun(cmd, []string{filename})
-			if err != nil {
-				t.Errorf("Unexpected error: %v", err)
-			}
+			// Run lint command.
+			// Note: lintRun returns an error when violations are found (CI gate behavior).
+			// For this test, we only verify that L005 violation is correctly detected in output.
+			_ = lintRun(cmd, []string{filename})
 
 			// Check for L005 violation
 			output := outBuf.String()

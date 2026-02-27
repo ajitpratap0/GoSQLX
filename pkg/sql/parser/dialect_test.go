@@ -373,6 +373,31 @@ func TestAcceptILIKEDefaultDialect(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Backtick and bracket reserved-word regression tests (DIALECT-1, DIALECT-2)
+// ---------------------------------------------------------------------------
+
+// TestMySQL_BacktickReservedWordAsTable verifies that MySQL backtick-quoted
+// reserved words are accepted as column and table names.
+func TestMySQL_BacktickReservedWordAsTable(t *testing.T) {
+	// `table` and `key` are reserved words but valid as quoted identifiers
+	sql := "SELECT `select`, `from` FROM `table`"
+	_, err := ParseWithDialect(sql, keywords.DialectMySQL)
+	if err != nil {
+		t.Fatalf("backtick-quoted reserved word as table name failed: %v", err)
+	}
+}
+
+// TestSQLServer_BracketReservedWordAsTable verifies that SQL Server bracket-quoted
+// reserved words are accepted as column and table names.
+func TestSQLServer_BracketReservedWordAsTable(t *testing.T) {
+	sql := "SELECT [select], [from] FROM [table]"
+	_, err := ParseWithDialect(sql, keywords.DialectSQLServer)
+	if err != nil {
+		t.Fatalf("bracket-quoted reserved word as table name failed: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Oracle keywords
 // ---------------------------------------------------------------------------
 

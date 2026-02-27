@@ -54,7 +54,13 @@ func NewSQLAnalyzer() *SQLAnalyzer {
 }
 
 // Analyze performs comprehensive AST-based analysis
-func (a *SQLAnalyzer) Analyze(astObj *ast.AST) (*AnalysisReport, error) {
+func (a *SQLAnalyzer) Analyze(astObj *ast.AST, sqlArgs ...string) (*AnalysisReport, error) {
+	// Extract optional SQL string for query metadata
+	sql := ""
+	if len(sqlArgs) > 0 {
+		sql = sqlArgs[0]
+	}
+
 	// Reset analyzer state
 	a.reset()
 
@@ -85,7 +91,7 @@ func (a *SQLAnalyzer) Analyze(astObj *ast.AST) (*AnalysisReport, error) {
 	overallScore := a.calculateOverallScore()
 
 	// Build query metadata
-	queryInfo := a.buildQueryInfo(astObj)
+	queryInfo := a.buildQueryInfo(astObj, sql)
 
 	return &AnalysisReport{
 		Timestamp:         time.Now(),
@@ -496,7 +502,7 @@ func (a *SQLAnalyzer) generateRecommendations() []string {
 }
 
 // buildQueryInfo constructs query metadata from the AST
-func (a *SQLAnalyzer) buildQueryInfo(astObj *ast.AST) QueryInfo {
+func (a *SQLAnalyzer) buildQueryInfo(astObj *ast.AST, sql string) QueryInfo {
 	stmtTypes := make([]string, 0, len(astObj.Statements))
 
 	for _, stmt := range astObj.Statements {
@@ -513,14 +519,22 @@ func (a *SQLAnalyzer) buildQueryInfo(astObj *ast.AST) QueryInfo {
 			stmtTypes = append(stmtTypes, "CREATE TABLE")
 		case *ast.CreateIndexStatement:
 			stmtTypes = append(stmtTypes, "CREATE INDEX")
-		case *ast.AlterTableStatement:
+		case *ast.AlterTableStatement: //nolint:staticcheck // AlterTableStatement kept for backward compatibility
 			stmtTypes = append(stmtTypes, "ALTER TABLE")
 		default:
 			stmtTypes = append(stmtTypes, "OTHER")
 		}
 	}
 
+	size := len(sql)
+	lines := 1
+	if size > 0 {
+		lines = strings.Count(sql, "\n") + 1
+	}
+
 	return QueryInfo{
+		Size:           size,
+		Lines:          lines,
 		StatementCount: len(astObj.Statements),
 		StatementTypes: stmtTypes,
 	}

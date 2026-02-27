@@ -34,3 +34,9 @@ linters:
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
+  exclude-rules:
+    # AlterTableStatement is deprecated in favour of AlterStatement but retained
+    # for backward compatibility. Internal usages in type switches and formatter
+    # helpers are intentional — suppress SA1019 on these known call sites.
+    - linters: [staticcheck]
+      text: "ast.AlterTableStatement is deprecated"

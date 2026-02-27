@@ -75,7 +75,7 @@ func (p *Parser) parseMatchAgainst(matchFunc *ast.FunctionCall) (ast.Expression,
 //   - SHOW COLUMNS FROM name
 //   - SHOW INDEX FROM name
 func (p *Parser) parseShowStatement() (ast.Statement, error) {
-	show := &ast.ShowStatement{}
+	show := ast.GetShowStatement()
 
 	upper := strings.ToUpper(p.currentToken.Token.Value)
 
@@ -159,14 +159,18 @@ func (p *Parser) parseDescribeStatement() (ast.Statement, error) {
 		}
 		// Wrap in a describe
 		_ = stmt
-		return &ast.DescribeStatement{TableName: "SELECT"}, nil
+		desc := ast.GetDescribeStatement()
+		desc.TableName = "SELECT"
+		return desc, nil
 	}
 
 	name, err := p.parseQualifiedName()
 	if err != nil {
 		return nil, p.expectedError("table name")
 	}
-	return &ast.DescribeStatement{TableName: name}, nil
+	desc := ast.GetDescribeStatement()
+	desc.TableName = name
+	return desc, nil
 }
 
 // parseReplaceStatement parses MySQL REPLACE INTO statement
@@ -244,9 +248,9 @@ func (p *Parser) parseReplaceStatement() (ast.Statement, error) {
 		p.advance()
 	}
 
-	return &ast.ReplaceStatement{
-		TableName: tableName,
-		Columns:   columns,
-		Values:    values,
-	}, nil
+	replStmt := ast.GetReplaceStatement()
+	replStmt.TableName = tableName
+	replStmt.Columns = append(replStmt.Columns, columns...)
+	replStmt.Values = append(replStmt.Values, values...)
+	return replStmt, nil
 }

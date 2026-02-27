@@ -21,7 +21,7 @@ import (
 
 // parseAlterStatement parses ALTER statements
 func (p *Parser) parseAlterStatement() (*ast.AlterStatement, error) {
-	stmt := &ast.AlterStatement{}
+	stmt := ast.GetAlterStatement()
 
 	// Parse the type of object being altered
 	switch {

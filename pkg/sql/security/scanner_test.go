@@ -700,7 +700,8 @@ func TestScanSQL_UnionInjection(t *testing.T) {
 			result := scanner.ScanSQL(tc.sql)
 			hasUnionPattern := false
 			for _, f := range result.Findings {
-				if f.Pattern == PatternUnionBased {
+				// ScanSQL now emits PatternUnionInjection (CRITICAL) or PatternUnionGeneric (HIGH)
+				if f.Pattern == PatternUnionInjection || f.Pattern == PatternUnionGeneric {
 					hasUnionPattern = true
 					break
 				}
@@ -915,7 +916,8 @@ func TestScanSQL_InformationSchemaAccess(t *testing.T) {
 			result := scanner.ScanSQL(tc.sql)
 			hasUnionPattern := false
 			for _, f := range result.Findings {
-				if f.Pattern == PatternUnionBased {
+				// ScanSQL now emits PatternUnionInjection (CRITICAL) or PatternUnionGeneric (HIGH)
+				if f.Pattern == PatternUnionInjection || f.Pattern == PatternUnionGeneric {
 					hasUnionPattern = true
 					break
 				}
@@ -936,7 +938,8 @@ func TestScanSQL_CombinedAttacks(t *testing.T) {
 	result := scanner.ScanSQL(complexAttack)
 
 	expectedPatterns := map[PatternType]bool{
-		PatternUnionBased:   true,
+		// ScanSQL now emits PatternUnionGeneric (HIGH) for generic UNION SELECT
+		PatternUnionGeneric: true,
 		PatternStackedQuery: true,
 		PatternComment:      true,
 	}

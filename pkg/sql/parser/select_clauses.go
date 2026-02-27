@@ -164,6 +164,7 @@ func (p *Parser) parseJoinClauses(firstRef ast.TableReference) ([]ast.JoinClause
 func (p *Parser) parseJoinType() (string, bool, error) {
 	joinType := "INNER"
 	isNatural := false
+	explicitType := false // tracks whether a join-type keyword was explicitly given
 
 	if p.isType(models.TokenTypeNatural) {
 		isNatural = true
@@ -173,27 +174,32 @@ func (p *Parser) parseJoinType() (string, bool, error) {
 	switch {
 	case p.isType(models.TokenTypeLeft):
 		joinType = "LEFT"
+		explicitType = true
 		p.advance()
 		if p.isType(models.TokenTypeOuter) {
 			p.advance()
 		}
 	case p.isType(models.TokenTypeRight):
 		joinType = "RIGHT"
+		explicitType = true
 		p.advance()
 		if p.isType(models.TokenTypeOuter) {
 			p.advance()
 		}
 	case p.isType(models.TokenTypeFull):
 		joinType = "FULL"
+		explicitType = true
 		p.advance()
 		if p.isType(models.TokenTypeOuter) {
 			p.advance()
 		}
 	case p.isType(models.TokenTypeInner):
 		joinType = "INNER"
+		explicitType = true
 		p.advance()
 	case p.isType(models.TokenTypeCross):
 		joinType = "CROSS"
+		explicitType = true
 		p.advance()
 		if p.dialect == string(keywords.DialectSQLServer) &&
 			p.currentToken.Token.Type == models.TokenTypeIdentifier &&
@@ -213,7 +219,13 @@ func (p *Parser) parseJoinType() (string, bool, error) {
 	}
 
 	if isNatural {
-		joinType = "NATURAL " + joinType
+		// NATURAL JOIN without an explicit type keyword → just "NATURAL" (SQL standard).
+		// NATURAL with an explicit keyword → "NATURAL LEFT", "NATURAL INNER", etc.
+		if explicitType {
+			joinType = "NATURAL " + joinType
+		} else {
+			joinType = "NATURAL"
+		}
 	}
 	return joinType, isNatural, nil
 }

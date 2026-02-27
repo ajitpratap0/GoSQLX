@@ -41,6 +41,15 @@ func UnterminatedStringError(location models.Location, sql string) *Error {
 	).WithContext(sql, 1).WithHint(GenerateHint(ErrCodeUnterminatedString, "", ""))
 }
 
+// UnterminatedBlockCommentError creates an error for an unclosed block comment.
+func UnterminatedBlockCommentError(location models.Location, sql string) *Error {
+	return NewError(
+		ErrCodeUnterminatedBlockComment,
+		"unterminated block comment (missing */)",
+		location,
+	).WithContext(sql, 2).WithHint("Close the comment with */ or check for unmatched /*")
+}
+
 // InvalidNumberError creates an error for invalid numeric literal
 func InvalidNumberError(value string, location models.Location, sql string) *Error {
 	return NewError(

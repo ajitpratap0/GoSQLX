@@ -100,7 +100,7 @@ func (a *Analyzer) Analyze(input string) (*AnalyzerResult, error) {
 
 	// Use AST-based analyzer for deep analysis
 	analyzer := NewSQLAnalyzer()
-	report, err := analyzer.Analyze(astObj)
+	report, err := analyzer.Analyze(astObj, string(inputResult.Content))
 	if err != nil {
 		// AST will be released by defer above
 		result.Error = fmt.Errorf("analysis failed: %w", err)

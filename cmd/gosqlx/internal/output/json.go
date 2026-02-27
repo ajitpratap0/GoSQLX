@@ -325,7 +325,7 @@ func FormatValidationJSON(result *ValidationResult, inputFiles []string, include
 }
 
 // FormatParseJSON converts parse results to JSON format
-func FormatParseJSON(astObj *ast.AST, inputSource string, showTokens bool, tokens interface{}) ([]byte, error) {
+func FormatParseJSON(astObj *ast.AST, inputSource string, showTokens bool, tokens interface{}, tokenCount int) ([]byte, error) {
 	output := &JSONParseOutput{
 		Command: "parse",
 		Input: JSONInputInfo{
@@ -335,6 +335,7 @@ func FormatParseJSON(astObj *ast.AST, inputSource string, showTokens bool, token
 		},
 		Status: "success",
 		Results: &JSONParseResult{
+			TokenCount: tokenCount,
 			Metadata: JSONParseMetadata{
 				ParserVersion: "2.0.0-alpha",
 				SQLCompliance: "~80-85% SQL-99",
@@ -361,7 +362,6 @@ func FormatParseJSON(astObj *ast.AST, inputSource string, showTokens bool, token
 	if showTokens && tokens != nil {
 		// Token handling will be added based on the token type
 		output.Results.Tokens = []JSONToken{} // Placeholder
-		output.Results.TokenCount = 0
 	}
 
 	// Marshal to JSON with indentation
@@ -512,6 +512,10 @@ func convertStatementToJSON(stmt ast.Statement) JSONStatement {
 		result.Details["has_order_by"] = len(s.OrderBy) > 0
 		result.Details["has_limit"] = s.Limit != nil
 		result.Details["has_distinct"] = s.Distinct
+		if s.With != nil {
+			result.Details["has_with"] = true
+			result.Details["cte_count"] = len(s.With.CTEs)
+		}
 	case *ast.InsertStatement:
 		result.Details["has_table"] = s.TableName != ""
 		result.Details["has_values"] = s.Values != nil

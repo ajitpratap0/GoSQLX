@@ -229,6 +229,13 @@ var (
 		severity    Severity
 	}
 	commentPatternsOnce sync.Once
+
+	// tautologyCapturePatterns are used by detectTautologyInSQL to find candidate
+	// equality pairs. Each pattern captures a left-hand value; the caller verifies
+	// that the right-hand value matches. Go RE2 does not support backreferences so
+	// the two-step approach is used instead.
+	tautologyCapturePatterns []*regexp.Regexp
+	tautologyCaptureOnce     sync.Once
 )
 
 // initCompiledPatterns initializes all regex patterns once at package level.
@@ -264,10 +271,31 @@ func initCompiledPatterns() {
 		regexp.MustCompile(`(?i)\bPREPARE\s+\w+\s+FROM\b`),
 	}
 
-	// UNION-based injection patterns
-	compiledPatterns[PatternUnionBased] = []*regexp.Regexp{
-		regexp.MustCompile(`(?i)\bUNION\s+(ALL\s+)?SELECT\b`),
+	// Tautology patterns (always-true conditions used in SQL injection).
+	// Note: Go's RE2 engine does not support backreferences, so equality of the
+	// two sides is verified in detectTautologyInSQL (called separately from ScanSQL).
+	// These patterns are intentionally left empty; tautology detection in raw SQL
+	// is handled by the dedicated detectTautologyInSQL helper.
+	compiledPatterns[PatternTautology] = []*regexp.Regexp{
+		// OR TRUE
+		regexp.MustCompile(`(?i)\bOR\s+TRUE\b`),
+	}
+
+	// UNION injection fingerprints (CRITICAL): system table access or NULL-padding.
+	// Also detects bare references to system catalogs, which are injection fingerprints
+	// regardless of whether a UNION is present.
+	compiledPatterns[PatternUnionInjection] = []*regexp.Regexp{
+		// System table access via UNION (injection fingerprint)
+		regexp.MustCompile(`(?i)UNION\s+(ALL\s+)?SELECT.*\b(information_schema|pg_catalog|mysql\b|sys\.)\b`),
+		// NULL-padded columns (classic injection to match column count)
+		regexp.MustCompile(`(?i)UNION\s+(ALL\s+)?SELECT\s+(?:NULL,?\s*){2,}`),
+		// Bare system catalog references (schema enumeration fingerprint)
 		regexp.MustCompile(`(?i)\binformation_schema\b`),
+	}
+
+	// Generic UNION SELECT (HIGH): may be legitimate or injection
+	compiledPatterns[PatternUnionGeneric] = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)\bUNION\s+(ALL\s+)?SELECT\b`),
 	}
 
 	// Stacked query injection patterns (destructive statements after semicolon)
@@ -303,6 +331,21 @@ func safeRegexMatch(re *regexp.Regexp, s string) bool {
 		s = s[:maxRegexInputLen]
 	}
 	return re.MatchString(s)
+}
+
+// initTautologyCapturePatterns initializes patterns used to detect raw-SQL tautologies.
+// Because Go's RE2 engine does not support backreferences, each pattern captures both
+// sides of an equality; detectTautologyInSQL then verifies the two captured groups
+// are equal before reporting a finding.
+func initTautologyCapturePatterns() {
+	tautologyCapturePatterns = []*regexp.Regexp{
+		// Numeric: two identical digit sequences around '=' (bounded to prevent ReDoS)
+		regexp.MustCompile(`(?i)\b(\d{1,6})\s*=\s*(\d{1,6})\b`),
+		// String literal: 'value' = 'value' (max 50 chars per side, no backtracking risk)
+		regexp.MustCompile(`(?i)('[^']{0,50}')\s*=\s*('[^']{0,50}')`),
+		// Identifier: col = col (bounded length, word chars + dots)
+		regexp.MustCompile(`(?i)\b([a-z_][a-z0-9_.]{0,50})\s*=\s*([a-z_][a-z0-9_.]{0,50})\b`),
+	}
 }
 
 // System table prefixes for precise matching (avoids false positives)
@@ -341,6 +384,14 @@ const (
 
 	// PatternUnionBased detects UNION SELECT patterns for data extraction and schema enumeration
 	PatternUnionBased PatternType = "UNION_BASED"
+
+	// PatternUnionInjection detects UNION SELECT patterns with injection fingerprints (system
+	// table access or NULL-column padding). This is a CRITICAL severity signal used by ScanSQL.
+	PatternUnionInjection PatternType = "UNION_INJECTION"
+
+	// PatternUnionGeneric detects any UNION SELECT pattern. HIGH severity — may be legitimate.
+	// Used by ScanSQL to flag generic UNION SELECT for review.
+	PatternUnionGeneric PatternType = "UNION_GENERIC"
 
 	// PatternTimeBased detects time delay functions (SLEEP, WAITFOR, pg_sleep) for blind injection
 	PatternTimeBased PatternType = "TIME_BASED"
@@ -441,6 +492,7 @@ func NewScanner() *Scanner {
 	// Initialize package-level patterns once
 	compiledPatternsOnce.Do(initCompiledPatterns)
 	commentPatternsOnce.Do(initCommentPatterns)
+	tautologyCaptureOnce.Do(initTautologyCapturePatterns)
 
 	return &Scanner{
 		MinSeverity: SeverityLow,
@@ -556,6 +608,13 @@ func (s *Scanner) ScanSQL(sql string) *ScanResult {
 	// Check for comment-based bypass patterns in raw SQL
 	s.detectCommentPatterns(sql, result)
 
+	// Check for tautology patterns (OR 1=1, 'a'='a', etc.)
+	// detectRegexPatterns handles the simple OR TRUE pattern; detectTautologyInSQL
+	// handles equality-based tautologies using a two-step capture approach (RE2
+	// does not support backreferences, so equality is verified programmatically).
+	s.detectRegexPatterns(sql, PatternTautology, result)
+	s.detectTautologyInSQL(sql, result)
+
 	// Check for time-based patterns
 	s.detectRegexPatterns(sql, PatternTimeBased, result)
 
@@ -565,8 +624,11 @@ func (s *Scanner) ScanSQL(sql string) *ScanResult {
 	// Check for dangerous function patterns
 	s.detectRegexPatterns(sql, PatternDangerousFunc, result)
 
-	// Check for UNION-based injection patterns
-	s.detectRegexPatterns(sql, PatternUnionBased, result)
+	// Check for UNION injection fingerprints (CRITICAL: system tables, NULL-padding)
+	s.detectRegexPatterns(sql, PatternUnionInjection, result)
+
+	// Check for generic UNION SELECT (HIGH: may be legitimate, but warrants review)
+	s.detectRegexPatterns(sql, PatternUnionGeneric, result)
 
 	// Check for stacked query patterns
 	s.detectRegexPatterns(sql, PatternStackedQuery, result)
@@ -945,6 +1007,40 @@ func (s *Scanner) detectCommentPatterns(sql string, result *ScanResult) {
 	}
 }
 
+// detectTautologyInSQL checks raw SQL for tautology patterns (e.g. OR 1=1, 'a'='a').
+// Because Go's RE2 engine does not support backreferences, equality of the two sides
+// is verified programmatically after the regex captures both groups.
+func (s *Scanner) detectTautologyInSQL(sql string, result *ScanResult) {
+	// Ensure patterns are initialized
+	tautologyCaptureOnce.Do(initTautologyCapturePatterns)
+
+	// Guard against very long inputs (ReDoS mitigation)
+	input := sql
+	if len(input) > maxRegexInputLen {
+		input = input[:maxRegexInputLen]
+	}
+
+	for _, re := range tautologyCapturePatterns {
+		matches := re.FindAllStringSubmatch(input, -1)
+		for _, m := range matches {
+			if len(m) == 3 && strings.EqualFold(m[1], m[2]) {
+				finding := Finding{
+					Severity:    SeverityCritical,
+					Pattern:     PatternTautology,
+					Description: "Always-true condition detected (tautology): " + m[0],
+					Risk:        "Authentication bypass via always-true condition",
+					Suggestion:  "Use parameterized queries to prevent tautology injection",
+				}
+				if s.shouldInclude(finding.Severity) {
+					result.Findings = append(result.Findings, finding)
+				}
+				// Report at most one tautology finding per pattern to avoid noise
+				break
+			}
+		}
+	}
+}
+
 // detectRegexPatterns checks SQL against compiled regex patterns.
 func (s *Scanner) detectRegexPatterns(sql string, patternType PatternType, result *ScanResult) {
 	// Ensure patterns are initialized
@@ -956,27 +1052,36 @@ func (s *Scanner) detectRegexPatterns(sql string, patternType PatternType, resul
 	}
 
 	severityMap := map[PatternType]Severity{
-		PatternTimeBased:     SeverityHigh,
-		PatternOutOfBand:     SeverityCritical,
-		PatternDangerousFunc: SeverityMedium,
-		PatternUnionBased:    SeverityCritical,
-		PatternStackedQuery:  SeverityCritical,
+		PatternTautology:      SeverityCritical,
+		PatternTimeBased:      SeverityHigh,
+		PatternOutOfBand:      SeverityCritical,
+		PatternDangerousFunc:  SeverityMedium,
+		PatternUnionBased:     SeverityCritical,
+		PatternUnionInjection: SeverityCritical,
+		PatternUnionGeneric:   SeverityHigh,
+		PatternStackedQuery:   SeverityCritical,
 	}
 
 	riskMap := map[PatternType]string{
-		PatternTimeBased:     "Time-based blind SQL injection",
-		PatternOutOfBand:     "Out-of-band data exfiltration or command execution",
-		PatternDangerousFunc: "Dynamic SQL execution vulnerability",
-		PatternUnionBased:    "UNION-based SQL injection for data extraction",
-		PatternStackedQuery:  "Stacked query injection with destructive operations",
+		PatternTautology:      "Authentication bypass via always-true condition",
+		PatternTimeBased:      "Time-based blind SQL injection",
+		PatternOutOfBand:      "Out-of-band data exfiltration or command execution",
+		PatternDangerousFunc:  "Dynamic SQL execution vulnerability",
+		PatternUnionBased:     "UNION-based SQL injection for data extraction",
+		PatternUnionInjection: "UNION-based SQL injection with injection fingerprint (system table or NULL padding)",
+		PatternUnionGeneric:   "Possible UNION-based data extraction; review for legitimacy",
+		PatternStackedQuery:   "Stacked query injection with destructive operations",
 	}
 
 	suggestionMap := map[PatternType]string{
-		PatternTimeBased:     "Review and sanitize SQL input",
-		PatternOutOfBand:     "Review and sanitize SQL input",
-		PatternDangerousFunc: "Review and sanitize SQL input",
-		PatternUnionBased:    "Use parameterized queries and validate input",
-		PatternStackedQuery:  "Block semicolons in user input or use parameterized queries",
+		PatternTautology:      "Use parameterized queries to prevent tautology injection",
+		PatternTimeBased:      "Review and sanitize SQL input",
+		PatternOutOfBand:      "Review and sanitize SQL input",
+		PatternDangerousFunc:  "Review and sanitize SQL input",
+		PatternUnionBased:     "Use parameterized queries and validate input",
+		PatternUnionInjection: "Use parameterized queries and block system table access",
+		PatternUnionGeneric:   "Verify UNION is intentional and all inputs are parameterized",
+		PatternStackedQuery:   "Block semicolons in user input or use parameterized queries",
 	}
 
 	severity := severityMap[patternType]

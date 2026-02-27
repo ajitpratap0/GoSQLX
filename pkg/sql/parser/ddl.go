@@ -204,6 +204,16 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 		stmt.Options = append(stmt.Options, opt)
 	}
 
+	// SQLite: optional WITHOUT ROWID clause
+	if p.isTokenMatch("WITHOUT") {
+		p.advance() // Consume WITHOUT
+		if !p.isTokenMatch("ROWID") {
+			return nil, p.expectedError("ROWID after WITHOUT")
+		}
+		p.advance() // Consume ROWID
+		stmt.WithoutRowID = true
+	}
+
 	return stmt, nil
 }
 

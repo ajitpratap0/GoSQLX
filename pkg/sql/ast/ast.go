@@ -1292,15 +1292,16 @@ func (u UpdateStatement) Children() []Node {
 
 // CreateTableStatement represents a CREATE TABLE statement
 type CreateTableStatement struct {
-	IfNotExists bool
-	Temporary   bool
-	Name        string
-	Columns     []ColumnDef
-	Constraints []TableConstraint
-	Inherits    []string
-	PartitionBy *PartitionBy
-	Partitions  []PartitionDefinition // Individual partition definitions
-	Options     []TableOption
+	IfNotExists  bool
+	Temporary    bool
+	Name         string
+	Columns      []ColumnDef
+	Constraints  []TableConstraint
+	Inherits     []string
+	PartitionBy  *PartitionBy
+	Partitions   []PartitionDefinition // Individual partition definitions
+	Options      []TableOption
+	WithoutRowID bool // SQLite: CREATE TABLE ... WITHOUT ROWID
 }
 
 func (c *CreateTableStatement) statementNode()      {}
@@ -1464,7 +1465,25 @@ func (d DeleteStatement) Children() []Node {
 	return children
 }
 
-// AlterTableStatement represents an ALTER TABLE statement
+// AlterTableStatement represents an ALTER TABLE statement.
+//
+// Deprecated: AlterTableStatement is not produced by the parser. Use
+// AlterStatement (defined in alter.go) with Type == AlterTypeTable instead.
+// AlterStatement is the canonical ALTER representation returned by all
+// Parser.Parse* methods.
+//
+// Migration guide:
+//
+//	// Old (type-asserting to the wrong type — will always fail):
+//	stmt := tree.Statements[0].(*ast.AlterTableStatement)
+//	tableName := stmt.Table
+//
+//	// New (correct):
+//	stmt := tree.Statements[0].(*ast.AlterStatement)
+//	tableName := stmt.Name // AlterStatement.Name holds the table name
+//
+// AlterTableStatement is retained to avoid breaking existing code that
+// constructs it directly for testing or comparison purposes.
 type AlterTableStatement struct {
 	Table   string
 	Actions []AlterTableAction
@@ -1757,6 +1776,18 @@ func (a AST) Children() []Node {
 	}
 	return children
 }
+
+// PragmaStatement represents a SQLite PRAGMA statement.
+// Examples: PRAGMA table_info(users), PRAGMA journal_mode = WAL, PRAGMA integrity_check
+type PragmaStatement struct {
+	Name  string // Pragma name, e.g. "table_info"
+	Arg   string // Optional: parenthesized arg, e.g. "users"
+	Value string // Optional: assigned value, e.g. "WAL"
+}
+
+func (p *PragmaStatement) statementNode()      {}
+func (p PragmaStatement) TokenLiteral() string { return "PRAGMA" }
+func (p PragmaStatement) Children() []Node     { return nil }
 
 // ShowStatement represents MySQL SHOW commands (SHOW TABLES, SHOW DATABASES, SHOW CREATE TABLE x, etc.)
 type ShowStatement struct {

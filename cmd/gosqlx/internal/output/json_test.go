@@ -155,7 +155,7 @@ func TestFormatParseJSON_Success(t *testing.T) {
 	}
 	defer ast.ReleaseAST(astObj)
 
-	jsonData, err := FormatParseJSON(astObj, sqlQuery, false, nil)
+	jsonData, err := FormatParseJSON(astObj, sqlQuery, false, nil, len(tokens))
 	if err != nil {
 		t.Fatalf("FormatParseJSON failed: %v", err)
 	}

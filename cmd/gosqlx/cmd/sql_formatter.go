@@ -137,6 +137,7 @@ func (f *SQLFormatter) formatSelect(stmt *ast.SelectStatement) error {
 	} else {
 		f.writeNewline()
 		f.increaseIndent()
+		f.builder.WriteString(f.currentIndent())
 		f.formatExpressionList(stmt.Columns, ",\n"+f.currentIndent())
 		f.decreaseIndent()
 	}

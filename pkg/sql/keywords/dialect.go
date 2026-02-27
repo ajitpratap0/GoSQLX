@@ -213,7 +213,7 @@ var POSTGRESQL_SPECIFIC = []Keyword{
 // SQLITE_SPECIFIC contains SQLite-specific keywords and extensions.
 // These keywords are recognized when using DialectSQLite.
 //
-// Examples: AUTOINCREMENT, VACUUM, ATTACH, DETACH
+// Examples: AUTOINCREMENT, VACUUM, ATTACH, DETACH, PRAGMA
 var SQLITE_SPECIFIC = []Keyword{
 	{Word: "ABORT", Type: models.TokenTypeKeyword},
 	{Word: "ACTION", Type: models.TokenTypeKeyword},
@@ -227,13 +227,16 @@ var SQLITE_SPECIFIC = []Keyword{
 	{Word: "INDEXED", Type: models.TokenTypeKeyword},
 	{Word: "INSTEAD", Type: models.TokenTypeKeyword},
 	{Word: "PLAN", Type: models.TokenTypeKeyword},
+	{Word: "PRAGMA", Type: models.TokenTypeKeyword},
 	{Word: "QUERY", Type: models.TokenTypeKeyword},
 	{Word: "RAISE", Type: models.TokenTypeKeyword},
 	{Word: "REPLACE", Type: models.TokenTypeKeyword},
+	{Word: "ROWID", Type: models.TokenTypeKeyword},
 	{Word: "TEMP", Type: models.TokenTypeKeyword},
 	{Word: "TEMPORARY", Type: models.TokenTypeKeyword},
 	{Word: "VACUUM", Type: models.TokenTypeKeyword},
 	{Word: "VIRTUAL", Type: models.TokenTypeKeyword},
+	{Word: "WITHOUT", Type: models.TokenTypeKeyword},
 }
 
 // SQLSERVER_SPECIFIC contains SQL Server (T-SQL) specific keywords and extensions.

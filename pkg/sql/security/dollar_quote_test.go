@@ -62,7 +62,8 @@ func TestScanSQL_DollarQuotedUnionBypass(t *testing.T) {
 	// UNION SELECT hidden inside dollar-quoted string
 	result := scanner.ScanSQL(`SELECT $body$UNION SELECT password FROM users$body$ FROM t`)
 	for _, f := range result.Findings {
-		if f.Pattern == PatternUnionBased {
+		// ScanSQL now emits PatternUnionInjection or PatternUnionGeneric instead of PatternUnionBased
+		if f.Pattern == PatternUnionInjection || f.Pattern == PatternUnionGeneric {
 			t.Error("should not detect UNION injection inside dollar-quoted string")
 		}
 	}

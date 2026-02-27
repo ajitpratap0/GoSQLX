@@ -383,7 +383,7 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 	// Parse target table
 	tableRef, err := p.parseTableReference()
 	if err != nil {
-		return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing MERGE target table", models.Location{}, "", err)
+		return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing MERGE target table", p.currentLocation(), "", err)
 	}
 	stmt.TargetTable = *tableRef
 
@@ -409,7 +409,7 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 	// Parse source table (could be a table or subquery)
 	sourceRef, err := p.parseTableReference()
 	if err != nil {
-		return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing MERGE source", models.Location{}, "", err)
+		return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing MERGE source", p.currentLocation(), "", err)
 	}
 	stmt.SourceTable = *sourceRef
 
@@ -434,7 +434,7 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 
 	onCondition, err := p.parseExpression()
 	if err != nil {
-		return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing MERGE ON condition", models.Location{}, "", err)
+		return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing MERGE ON condition", p.currentLocation(), "", err)
 	}
 	stmt.OnCondition = onCondition
 
@@ -448,7 +448,7 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 	}
 
 	if len(stmt.WhenClauses) == 0 {
-		return nil, goerrors.MissingClauseError("WHEN", models.Location{}, "")
+		return nil, goerrors.MissingClauseError("WHEN", p.currentLocation(), "")
 	}
 
 	// Parse optional OUTPUT clause (SQL Server)
@@ -501,7 +501,7 @@ func (p *Parser) parseMergeWhenClause() (*ast.MergeWhenClause, error) {
 		p.advance() // Consume AND
 		condition, err := p.parseExpression()
 		if err != nil {
-			return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing WHEN condition", models.Location{}, "", err)
+			return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing WHEN condition", p.currentLocation(), "", err)
 		}
 		clause.Condition = condition
 	}
@@ -564,7 +564,7 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 
 			value, err := p.parseExpression()
 			if err != nil {
-				return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing SET value", models.Location{}, "", err)
+				return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing SET value", p.currentLocation(), "", err)
 			}
 			setClause.Value = value
 			action.SetClauses = append(action.SetClauses, setClause)
@@ -576,7 +576,7 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 		}
 	} else if p.isType(models.TokenTypeInsert) {
 		if clauseType == "MATCHED" || clauseType == "NOT_MATCHED_BY_SOURCE" {
-			return nil, goerrors.InvalidSyntaxError(fmt.Sprintf("INSERT not allowed in WHEN %s clause", clauseType), models.Location{}, "")
+			return nil, goerrors.InvalidSyntaxError(fmt.Sprintf("INSERT not allowed in WHEN %s clause", clauseType), p.currentLocation(), "")
 		}
 		action.ActionType = "INSERT"
 		p.advance() // Consume INSERT
@@ -620,7 +620,7 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 			for {
 				value, err := p.parseExpression()
 				if err != nil {
-					return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing INSERT value", models.Location{}, "", err)
+					return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing INSERT value", p.currentLocation(), "", err)
 				}
 				action.Values = append(action.Values, value)
 
@@ -639,7 +639,7 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 		}
 	} else if p.isType(models.TokenTypeDelete) {
 		if clauseType == "NOT_MATCHED" {
-			return nil, goerrors.InvalidSyntaxError("DELETE not allowed in WHEN NOT MATCHED clause", models.Location{}, "")
+			return nil, goerrors.InvalidSyntaxError("DELETE not allowed in WHEN NOT MATCHED clause", p.currentLocation(), "")
 		}
 		action.ActionType = "DELETE"
 		p.advance() // Consume DELETE

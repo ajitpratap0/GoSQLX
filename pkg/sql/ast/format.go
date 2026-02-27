@@ -80,3 +80,29 @@ func ReadableStyle() FormatOptions {
 		AddSemicolon:     true,
 	}
 }
+
+// ─── Backward-compatibility hooks ────────────────────────────────────────────
+//
+// pkg/formatter registers these hooks via its init() function so that the
+// deprecated Format() shim methods below can delegate to the new renderer
+// without creating an import cycle (ast ← formatter ← ast is forbidden).
+//
+// If pkg/formatter is not imported, the shims fall back to SQL() output.
+
+// FormatStatementFunc is set by pkg/formatter.init() to enable deprecated
+// Statement.Format() wrappers.
+//
+// Deprecated: internal bridge — use pkg/formatter.FormatStatement() directly.
+var FormatStatementFunc func(Statement, FormatOptions) string
+
+// FormatExpressionFunc is set by pkg/formatter.init() to enable deprecated
+// Expression.Format() wrappers.
+//
+// Deprecated: internal bridge — use pkg/formatter.FormatExpression() directly.
+var FormatExpressionFunc func(Expression, FormatOptions) string
+
+// FormatASTFunc is set by pkg/formatter.init() to enable the deprecated
+// AST.Format() wrapper.
+//
+// Deprecated: internal bridge — use pkg/formatter.FormatAST() directly.
+var FormatASTFunc func(*AST, FormatOptions) string

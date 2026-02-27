@@ -1467,23 +1467,21 @@ func (d DeleteStatement) Children() []Node {
 
 // AlterTableStatement represents an ALTER TABLE statement.
 //
-// Deprecated: AlterTableStatement is not produced by the parser. Use
-// AlterStatement (defined in alter.go) with Type == AlterTypeTable instead.
-// AlterStatement is the canonical ALTER representation returned by all
-// Parser.Parse* methods.
+// # Maintenance note
 //
-// Migration guide:
+// AlterTableStatement is NOT produced by the parser. Parser.Parse* methods
+// return [AlterStatement] (defined in alter.go) with Type == AlterTypeTable.
+// AlterTableStatement is retained only so that existing code that constructs
+// it directly (e.g. in tests or manual AST construction) continues to compile.
 //
-//	// Old (type-asserting to the wrong type — will always fail):
+// Migration guide — prefer AlterStatement for all new code:
+//
+//	// Wrong (type assertion will never succeed at runtime):
 //	stmt := tree.Statements[0].(*ast.AlterTableStatement)
-//	tableName := stmt.Table
 //
-//	// New (correct):
+//	// Correct:
 //	stmt := tree.Statements[0].(*ast.AlterStatement)
 //	tableName := stmt.Name // AlterStatement.Name holds the table name
-//
-// AlterTableStatement is retained to avoid breaking existing code that
-// constructs it directly for testing or comparison purposes.
 type AlterTableStatement struct {
 	Table   string
 	Actions []AlterTableAction

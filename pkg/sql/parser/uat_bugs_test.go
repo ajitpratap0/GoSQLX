@@ -272,3 +272,260 @@ func TestBug3_HintGrammarExpectedFormat(t *testing.T) {
 	}
 	t.Logf("hint: %s", hint)
 }
+
+// ---------------------------------------------------------------------------
+// Bug 2 (extended) — MySQL VALUES() helper: nested expressions & multi-column
+//
+// VALUES(col) must compose correctly when used inside larger expressions:
+//   - arithmetic:  price = VALUES(price) * 0.9
+//   - additive:    total = VALUES(col1) + VALUES(col2)
+//   - coalesce:    col   = COALESCE(VALUES(col), 'default')
+//   - three-col:   a=VALUES(a), b=VALUES(b), c=VALUES(c)
+// ---------------------------------------------------------------------------
+
+// TestBug2_ValuesNestedArithmetic verifies that VALUES(col) can appear as the
+// left operand of an arithmetic expression, e.g. VALUES(price) * 0.9.
+func TestBug2_ValuesNestedArithmetic(t *testing.T) {
+	sql := "INSERT INTO products (id, price) VALUES (1, 9.99) " +
+		"ON DUPLICATE KEY UPDATE price = VALUES(price) * 0.9"
+
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectMySQL)
+	if err != nil {
+		t.Fatalf("nested arithmetic VALUES(): parse failed: %v", err)
+	}
+	if len(tree.Statements) != 1 {
+		t.Fatalf("expected 1 statement, got %d", len(tree.Statements))
+	}
+
+	ins, ok := tree.Statements[0].(*ast.InsertStatement)
+	if !ok {
+		t.Fatalf("expected *ast.InsertStatement, got %T", tree.Statements[0])
+	}
+	if ins.OnDuplicateKey == nil || len(ins.OnDuplicateKey.Updates) != 1 {
+		t.Fatal("expected exactly 1 ON DUPLICATE KEY UPDATE assignment")
+	}
+
+	// RHS must be a binary expression: VALUES(price) * 0.9
+	binExpr, ok := ins.OnDuplicateKey.Updates[0].Value.(*ast.BinaryExpression)
+	if !ok {
+		t.Fatalf("expected *ast.BinaryExpression for VALUES(price)*0.9, got %T",
+			ins.OnDuplicateKey.Updates[0].Value)
+	}
+	if binExpr.Operator != "*" {
+		t.Errorf("expected operator *, got %q", binExpr.Operator)
+	}
+
+	// Left side must be VALUES(price)
+	fn, ok := binExpr.Left.(*ast.FunctionCall)
+	if !ok {
+		t.Fatalf("expected *ast.FunctionCall on left of *, got %T", binExpr.Left)
+	}
+	if !strings.EqualFold(fn.Name, "VALUES") {
+		t.Errorf("expected function name VALUES, got %q", fn.Name)
+	}
+	if len(fn.Arguments) != 1 {
+		t.Fatalf("expected 1 argument to VALUES(), got %d", len(fn.Arguments))
+	}
+
+	arg, ok := fn.Arguments[0].(*ast.Identifier)
+	if !ok {
+		t.Fatalf("expected *ast.Identifier argument to VALUES(), got %T", fn.Arguments[0])
+	}
+	if !strings.EqualFold(arg.Name, "price") {
+		t.Errorf("expected argument 'price', got %q", arg.Name)
+	}
+}
+
+// TestBug2_ValuesMultiColumnAdditive verifies that two VALUES() calls can be
+// composed with an arithmetic operator: total = VALUES(col1) + VALUES(col2).
+func TestBug2_ValuesMultiColumnAdditive(t *testing.T) {
+	sql := "INSERT INTO stats (id, a, b) VALUES (1, 10, 20) " +
+		"ON DUPLICATE KEY UPDATE total = VALUES(a) + VALUES(b)"
+
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectMySQL)
+	if err != nil {
+		t.Fatalf("multi-column additive VALUES(): parse failed: %v", err)
+	}
+	if len(tree.Statements) != 1 {
+		t.Fatalf("expected 1 statement, got %d", len(tree.Statements))
+	}
+
+	ins, ok := tree.Statements[0].(*ast.InsertStatement)
+	if !ok {
+		t.Fatalf("expected *ast.InsertStatement, got %T", tree.Statements[0])
+	}
+	if ins.OnDuplicateKey == nil || len(ins.OnDuplicateKey.Updates) != 1 {
+		t.Fatal("expected exactly 1 ON DUPLICATE KEY UPDATE assignment")
+	}
+
+	// RHS must be: VALUES(a) + VALUES(b)
+	binExpr, ok := ins.OnDuplicateKey.Updates[0].Value.(*ast.BinaryExpression)
+	if !ok {
+		t.Fatalf("expected *ast.BinaryExpression for VALUES(a)+VALUES(b), got %T",
+			ins.OnDuplicateKey.Updates[0].Value)
+	}
+	if binExpr.Operator != "+" {
+		t.Errorf("expected operator +, got %q", binExpr.Operator)
+	}
+
+	leftFn, ok := binExpr.Left.(*ast.FunctionCall)
+	if !ok {
+		t.Fatalf("expected *ast.FunctionCall on left of +, got %T", binExpr.Left)
+	}
+	if !strings.EqualFold(leftFn.Name, "VALUES") {
+		t.Errorf("expected left function VALUES, got %q", leftFn.Name)
+	}
+	if len(leftFn.Arguments) != 1 {
+		t.Fatalf("expected 1 arg in left VALUES(), got %d", len(leftFn.Arguments))
+	}
+	leftArg, ok := leftFn.Arguments[0].(*ast.Identifier)
+	if !ok {
+		t.Fatalf("expected *ast.Identifier for left VALUES() arg, got %T", leftFn.Arguments[0])
+	}
+	if !strings.EqualFold(leftArg.Name, "a") {
+		t.Errorf("expected left VALUES(a), got VALUES(%s)", leftArg.Name)
+	}
+
+	rightFn, ok := binExpr.Right.(*ast.FunctionCall)
+	if !ok {
+		t.Fatalf("expected *ast.FunctionCall on right of +, got %T", binExpr.Right)
+	}
+	if !strings.EqualFold(rightFn.Name, "VALUES") {
+		t.Errorf("expected right function VALUES, got %q", rightFn.Name)
+	}
+	if len(rightFn.Arguments) != 1 {
+		t.Fatalf("expected 1 arg in right VALUES(), got %d", len(rightFn.Arguments))
+	}
+	rightArg, ok := rightFn.Arguments[0].(*ast.Identifier)
+	if !ok {
+		t.Fatalf("expected *ast.Identifier for right VALUES() arg, got %T", rightFn.Arguments[0])
+	}
+	if !strings.EqualFold(rightArg.Name, "b") {
+		t.Errorf("expected right VALUES(b), got VALUES(%s)", rightArg.Name)
+	}
+}
+
+// TestBug2_ValuesNestedInCoalesce verifies that VALUES() can appear as an
+// argument to another function call, e.g. COALESCE(VALUES(col), 'default').
+func TestBug2_ValuesNestedInCoalesce(t *testing.T) {
+	sql := "INSERT INTO items (id, description) VALUES (1, NULL) " +
+		"ON DUPLICATE KEY UPDATE description = COALESCE(VALUES(description), 'unknown')"
+
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectMySQL)
+	if err != nil {
+		t.Fatalf("COALESCE(VALUES()) parse failed: %v", err)
+	}
+	if len(tree.Statements) != 1 {
+		t.Fatalf("expected 1 statement, got %d", len(tree.Statements))
+	}
+
+	ins, ok := tree.Statements[0].(*ast.InsertStatement)
+	if !ok {
+		t.Fatalf("expected *ast.InsertStatement, got %T", tree.Statements[0])
+	}
+	if ins.OnDuplicateKey == nil || len(ins.OnDuplicateKey.Updates) != 1 {
+		t.Fatal("expected exactly 1 ON DUPLICATE KEY UPDATE assignment")
+	}
+
+	// RHS must be COALESCE(...)
+	coalesce, ok := ins.OnDuplicateKey.Updates[0].Value.(*ast.FunctionCall)
+	if !ok {
+		t.Fatalf("expected *ast.FunctionCall for COALESCE(...), got %T",
+			ins.OnDuplicateKey.Updates[0].Value)
+	}
+	if !strings.EqualFold(coalesce.Name, "COALESCE") {
+		t.Errorf("expected outer function COALESCE, got %q", coalesce.Name)
+	}
+	if len(coalesce.Arguments) != 2 {
+		t.Fatalf("expected COALESCE to have 2 arguments, got %d", len(coalesce.Arguments))
+	}
+
+	// First argument must be VALUES(description)
+	innerFn, ok := coalesce.Arguments[0].(*ast.FunctionCall)
+	if !ok {
+		t.Fatalf("expected *ast.FunctionCall as first COALESCE arg, got %T", coalesce.Arguments[0])
+	}
+	if !strings.EqualFold(innerFn.Name, "VALUES") {
+		t.Errorf("expected first COALESCE arg to be VALUES(), got %q", innerFn.Name)
+	}
+	if len(innerFn.Arguments) != 1 {
+		t.Fatalf("expected 1 argument to inner VALUES(), got %d", len(innerFn.Arguments))
+	}
+	innerArg, ok := innerFn.Arguments[0].(*ast.Identifier)
+	if !ok {
+		t.Fatalf("expected *ast.Identifier inside VALUES(), got %T", innerFn.Arguments[0])
+	}
+	if !strings.EqualFold(innerArg.Name, "description") {
+		t.Errorf("expected VALUES(description), got VALUES(%s)", innerArg.Name)
+	}
+}
+
+// TestBug2_ValuesThreeColumnUpdate verifies that three separate VALUES() helpers
+// in the same ON DUPLICATE KEY UPDATE clause all parse correctly.
+func TestBug2_ValuesThreeColumnUpdate(t *testing.T) {
+	sql := "INSERT INTO records (a, b, c) VALUES (1, 2, 3) " +
+		"ON DUPLICATE KEY UPDATE a = VALUES(a), b = VALUES(b), c = VALUES(c)"
+
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectMySQL)
+	if err != nil {
+		t.Fatalf("three-column VALUES() parse failed: %v", err)
+	}
+	if len(tree.Statements) != 1 {
+		t.Fatalf("expected 1 statement, got %d", len(tree.Statements))
+	}
+
+	ins, ok := tree.Statements[0].(*ast.InsertStatement)
+	if !ok {
+		t.Fatalf("expected *ast.InsertStatement, got %T", tree.Statements[0])
+	}
+	if ins.OnDuplicateKey == nil {
+		t.Fatal("expected OnDuplicateKey to be non-nil")
+	}
+	if len(ins.OnDuplicateKey.Updates) != 3 {
+		t.Fatalf("expected 3 update assignments, got %d", len(ins.OnDuplicateKey.Updates))
+	}
+
+	wantCols := []string{"a", "b", "c"}
+	for i, upd := range ins.OnDuplicateKey.Updates {
+		fn, ok := upd.Value.(*ast.FunctionCall)
+		if !ok {
+			t.Errorf("update[%d]: expected *ast.FunctionCall, got %T", i, upd.Value)
+			continue
+		}
+		if !strings.EqualFold(fn.Name, "VALUES") {
+			t.Errorf("update[%d]: expected VALUES(), got %q", i, fn.Name)
+			continue
+		}
+		if len(fn.Arguments) != 1 {
+			t.Errorf("update[%d]: expected 1 arg, got %d", i, len(fn.Arguments))
+			continue
+		}
+		arg, ok := fn.Arguments[0].(*ast.Identifier)
+		if !ok {
+			t.Errorf("update[%d]: expected *ast.Identifier arg, got %T", i, fn.Arguments[0])
+			continue
+		}
+		if !strings.EqualFold(arg.Name, wantCols[i]) {
+			t.Errorf("update[%d]: expected VALUES(%s), got VALUES(%s)", i, wantCols[i], arg.Name)
+		}
+	}
+}
+
+// TestBug2_ValuesMixedExpressions is an integration test that exercises all
+// the complex VALUES() patterns in a single INSERT statement.
+func TestBug2_ValuesMixedExpressions(t *testing.T) {
+	// All three patterns in one statement:
+	//   col1 = VALUES(a) * 0.9     (arithmetic)
+	//   col2 = VALUES(b) + VALUES(c)  (multi-column additive)
+	//   col3 = COALESCE(VALUES(d), 0) (nested function)
+	sql := "INSERT INTO t (a, b, c, d) VALUES (10, 20, 30, NULL) " +
+		"ON DUPLICATE KEY UPDATE " +
+		"col1 = VALUES(a) * 0.9, " +
+		"col2 = VALUES(b) + VALUES(c), " +
+		"col3 = COALESCE(VALUES(d), 0)"
+
+	_, err := parser.ParseWithDialect(sql, keywords.DialectMySQL)
+	if err != nil {
+		t.Fatalf("mixed VALUES() expressions parse failed: %v", err)
+	}
+}

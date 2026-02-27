@@ -57,7 +57,10 @@ func putBuffer(buf *bytes.Buffer) {
 //   - Zero-allocation instance reuse when pool is warm
 var tokenizerPool = sync.Pool{
 	New: func() interface{} {
-		t, _ := New() // Error ignored as New() only errors on keyword initialization
+		t, err := New()
+		if err != nil {
+			panic("gosqlx: failed to initialize tokenizer pool: " + err.Error())
+		}
 		return t
 	},
 }

@@ -34,6 +34,30 @@ import (
 func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReference, joins []ast.JoinClause, err error) {
 	// FROM is optional (e.g. SELECT 1).  Validate that the next token makes sense.
 	if !p.isType(models.TokenTypeFrom) {
+		// advance() sets a zero-value sentinel (TokenType == TokenTypeEOF == 0) when
+		// currentPos goes past the end of the token slice.  A real EOF token produced by
+		// the tokenizer is also TokenTypeEOF but is still within the slice.
+		// To replicate the correct behaviour we need to know what the last consumed token
+		// was: e.g. SELECT (1,2,3) ends with ')' (FROM is optional) while SELECT *
+		// ends with '*' (FROM is required).  When currentPos is past the slice end,
+		// inspect the last real token directly instead of relying on currentToken.
+		if p.currentPos >= len(p.tokens) {
+			// Past end of token stream — check whether the last real token implies
+			// that FROM can legitimately be omitted.
+			if len(p.tokens) > 0 {
+				lastTokType := p.tokens[len(p.tokens)-1].Token.Type
+				if lastTokType == models.TokenTypeSemicolon ||
+					lastTokType == models.TokenTypeRParen ||
+					lastTokType == models.TokenTypeEOF ||
+					lastTokType == models.TokenTypeUnion ||
+					lastTokType == models.TokenTypeExcept ||
+					lastTokType == models.TokenTypeIntersect {
+					return "", nil, nil, nil
+				}
+			}
+			return "", nil, nil, p.expectedError("FROM, semicolon, or end of statement")
+		}
+		// Current token is still within the slice — use the normal token-type check.
 		if !p.isType(models.TokenTypeEOF) &&
 			!p.isType(models.TokenTypeSemicolon) &&
 			!p.isType(models.TokenTypeRParen) &&

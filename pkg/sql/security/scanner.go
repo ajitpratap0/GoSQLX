@@ -294,6 +294,17 @@ func initCommentPatterns() {
 	}
 }
 
+// maxRegexInputLen guards against ReDoS by limiting the input length
+// fed to regexes with nested quantifiers (e.g. the block-comment pattern).
+const maxRegexInputLen = 10_000
+
+func safeRegexMatch(re *regexp.Regexp, s string) bool {
+	if len(s) > maxRegexInputLen {
+		s = s[:maxRegexInputLen]
+	}
+	return re.MatchString(s)
+}
+
 // System table prefixes for precise matching (avoids false positives)
 var systemTablePrefixes = []string{
 	"information_schema.",
@@ -919,7 +930,7 @@ func (s *Scanner) detectCommentPatterns(sql string, result *ScanResult) {
 	commentPatternsOnce.Do(initCommentPatterns)
 
 	for _, p := range commentPatterns {
-		if p.re.MatchString(sql) {
+		if safeRegexMatch(p.re, sql) {
 			finding := Finding{
 				Severity:    p.severity,
 				Pattern:     PatternComment,

@@ -65,8 +65,18 @@ func (c *keywordSuggestionCache) set(input, suggestion string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Partial eviction: keep half the entries when max size is reached
-	// This prevents cache thrashing while maintaining performance
+	// Partial eviction: keep half the entries when max size is reached.
+	// This prevents cache thrashing while maintaining performance.
+	//
+	// Note on non-determinism: Go map iteration order is intentionally randomised
+	// by the runtime, so the specific entries copied into newCache are
+	// unpredictable — the eviction effectively removes a random ~50% of entries
+	// rather than the least-recently-used ones.  For a keyword suggestion cache
+	// this is perfectly acceptable: all retained entries are equally valid
+	// suggestions, and the cost of a cache miss is only a Levenshtein distance
+	// calculation.  Adding a true LRU eviction policy (e.g., via a doubly-linked
+	// list or separate access-order map) would substantially increase complexity
+	// and lock contention for negligible practical benefit.
 	if len(c.cache) >= c.maxSize {
 		newCache := make(map[string]string, c.maxSize/2)
 		count := 0

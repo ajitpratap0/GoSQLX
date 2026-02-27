@@ -71,7 +71,8 @@ func (f *Formatter) Format(sql string) (string, error) {
 	// Capture comments from tokenizer before parsing
 	comments := tkz.Comments
 
-	p := parser.NewParser()
+	p := parser.GetParser()
+	defer parser.PutParser(p)
 	parsedAST, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
 		return "", fmt.Errorf("parsing failed: %w", err)

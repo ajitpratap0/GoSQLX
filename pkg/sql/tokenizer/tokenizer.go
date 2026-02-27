@@ -1366,6 +1366,7 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 				commentStartPos := t.toSQLPosition(Position{Index: commentStartIdx})
 				t.pos.AdvanceRune(nxtR, nxtSize)
 				// Skip until */ or EOF
+				closed := false
 				for t.pos.Index < len(t.input) {
 					cr, csize := utf8.DecodeRune(t.input[t.pos.Index:])
 					if cr == '*' {
@@ -1374,12 +1375,19 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 							nr, ns := utf8.DecodeRune(t.input[t.pos.Index:])
 							if nr == '/' {
 								t.pos.AdvanceRune(nr, ns) // End of block comment
+								closed = true
 								break
 							}
 						}
 					} else {
 						t.pos.AdvanceRune(cr, csize)
 					}
+				}
+				if !closed {
+					return models.Token{}, errors.UnterminatedStringError(
+						commentStartPos,
+						string(t.input),
+					)
 				}
 				t.Comments = append(t.Comments, models.Comment{
 					Text:   string(t.input[commentStartIdx:t.pos.Index]),

@@ -1,0 +1,15 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: 💬 Ask a question (GitHub Discussions)
+    url: https://github.com/ajitpratap0/GoSQLX/discussions/new?category=q-a
+    about: Usage questions, "how do I…" and general help
+  - name: 💡 Propose a feature idea (Discussions)
+    url: https://github.com/ajitpratap0/GoSQLX/discussions/new?category=ideas
+    about: Discuss a new feature before filing an issue
+  - name: 📖 Documentation (pkg.go.dev)
+    url: https://pkg.go.dev/github.com/ajitpratap0/GoSQLX
+    about: API reference and generated docs
+  - name: 🔒 Security vulnerability
+    url: https://github.com/ajitpratap0/GoSQLX/security/advisories/new
+    about: Report a security issue privately — do NOT use public issues

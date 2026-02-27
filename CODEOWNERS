@@ -1,0 +1,30 @@
+# CODEOWNERS — automatic review requests for PRs
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global default — maintainer reviews everything
+* @ajitpratap0
+
+# Core parsing pipeline
+/pkg/sql/tokenizer/ @ajitpratap0
+/pkg/sql/parser/    @ajitpratap0
+/pkg/sql/ast/       @ajitpratap0
+/pkg/models/        @ajitpratap0
+
+# Security-sensitive code — extra scrutiny
+/pkg/sql/security/               @ajitpratap0
+/cmd/gosqlx/internal/validate/   @ajitpratap0
+
+# CLI commands
+/cmd/gosqlx/ @ajitpratap0
+
+# Public high-level API (semver-sensitive)
+/pkg/gosqlx/ @ajitpratap0
+
+# Release infrastructure
+/.github/workflows/release.yml @ajitpratap0
+/CHANGELOG.md                  @ajitpratap0
+
+# Community health files
+/CODE_OF_CONDUCT.md @ajitpratap0
+/GOVERNANCE.md      @ajitpratap0
+/CONTRIBUTING.md    @ajitpratap0

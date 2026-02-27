@@ -1,0 +1,49 @@
+name: Mark stale issues and PRs
+
+on:
+  schedule:
+    - cron: '30 1 * * *'   # 01:30 UTC daily
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    name: Stale
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          days-before-stale: 60
+          days-before-close: 14
+          stale-issue-label: stale
+          exempt-issue-labels: 'pinned,security,P0,P1,bug,good first issue,help wanted'
+          stale-issue-message: >
+            This issue has been automatically marked as stale because it has not had
+            activity for 60 days. It will be closed in 14 days unless there is new
+            activity or it is labelled `pinned`, `bug`, or `help wanted`.
+
+            If this issue is still relevant, please leave a comment explaining the
+            current status or add context so a maintainer can re-prioritize it.
+
+            Thank you for contributing to GoSQLX!
+          close-issue-message: >
+            This issue has been automatically closed due to 14 days of inactivity
+            after being marked stale. It can be re-opened if it becomes relevant again.
+          stale-pr-message: >
+            This pull request has been automatically marked as stale because it has
+            not had activity for 60 days. It will be closed in 14 days unless there
+            is new activity.
+
+            If you are still working on this PR, please leave a comment or push a
+            new commit. If you need help getting it over the finish line, mention
+            @ajitpratap0 and we will assist.
+          close-pr-message: >
+            This pull request has been automatically closed due to 14 days of
+            inactivity after being marked stale. Please reopen it if you want
+            to continue the work.
+          days-before-issue-stale: 60
+          days-before-pr-stale: 60

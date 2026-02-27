@@ -85,10 +85,9 @@ func (p *Parser) parseCreateStatement() (ast.Statement, error) {
 
 // parseCreateView parses CREATE [OR REPLACE] [TEMPORARY] VIEW statement
 func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStatement, error) {
-	stmt := &ast.CreateViewStatement{
-		OrReplace: orReplace,
-		Temporary: temporary,
-	}
+	stmt := ast.GetCreateViewStatement()
+	stmt.OrReplace = orReplace
+	stmt.Temporary = temporary
 
 	// Check for IF NOT EXISTS
 	if p.isType(models.TokenTypeIf) {
@@ -192,7 +191,7 @@ func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStat
 
 // parseCreateMaterializedView parses CREATE MATERIALIZED VIEW statement
 func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewStatement, error) {
-	stmt := &ast.CreateMaterializedViewStatement{}
+	stmt := ast.GetCreateMaterializedViewStatement()
 
 	// Check for IF NOT EXISTS
 	if p.isType(models.TokenTypeIf) {
@@ -295,9 +294,8 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 
 // parseCreateTable parses CREATE TABLE statement with partitioning support
 func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, error) {
-	stmt := &ast.CreateTableStatement{
-		Temporary: temporary,
-	}
+	stmt := ast.GetCreateTableStatement()
+	stmt.Temporary = temporary
 
 	// Check for IF NOT EXISTS
 	if p.isType(models.TokenTypeIf) {
@@ -599,9 +597,8 @@ func (p *Parser) parsePartitionDefinition() (*ast.PartitionDefinition, error) {
 
 // parseCreateIndex parses CREATE [UNIQUE] INDEX statement
 func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error) {
-	stmt := &ast.CreateIndexStatement{
-		Unique: unique,
-	}
+	stmt := ast.GetCreateIndexStatement()
+	stmt.Unique = unique
 
 	// Check for IF NOT EXISTS
 	if p.isType(models.TokenTypeIf) {
@@ -712,7 +709,7 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 
 // parseDropStatement parses DROP statements (TABLE, VIEW, MATERIALIZED VIEW, INDEX)
 func (p *Parser) parseDropStatement() (*ast.DropStatement, error) {
-	stmt := &ast.DropStatement{}
+	stmt := ast.GetDropStatement()
 
 	// Determine object type
 	if p.isType(models.TokenTypeMaterialized) {
@@ -786,7 +783,7 @@ func (p *Parser) parseRefreshStatement() (*ast.RefreshMaterializedViewStatement,
 	}
 	p.advance() // Consume VIEW
 
-	stmt := &ast.RefreshMaterializedViewStatement{}
+	stmt := ast.GetRefreshMaterializedViewStatement()
 
 	// Check for CONCURRENTLY
 	if p.isTokenMatch("CONCURRENTLY") {
@@ -826,7 +823,7 @@ func (p *Parser) parseRefreshStatement() (*ast.RefreshMaterializedViewStatement,
 // parseTruncateStatement parses TRUNCATE TABLE statement
 // Syntax: TRUNCATE [TABLE] table_name [, table_name ...] [RESTART IDENTITY | CONTINUE IDENTITY] [CASCADE | RESTRICT]
 func (p *Parser) parseTruncateStatement() (*ast.TruncateStatement, error) {
-	stmt := &ast.TruncateStatement{}
+	stmt := ast.GetTruncateStatement()
 
 	// Optional TABLE keyword
 	if p.isType(models.TokenTypeTable) {

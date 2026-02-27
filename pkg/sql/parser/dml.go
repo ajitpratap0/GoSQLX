@@ -373,7 +373,7 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 //	WHEN NOT MATCHED [AND condition] THEN INSERT
 //	WHEN NOT MATCHED BY SOURCE [AND condition] THEN UPDATE/DELETE
 func (p *Parser) parseMergeStatement() (ast.Statement, error) {
-	stmt := &ast.MergeStatement{}
+	stmt := ast.GetMergeStatement()
 
 	// Parse INTO (optional)
 	if p.isType(models.TokenTypeInto) {

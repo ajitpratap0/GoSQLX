@@ -1,7 +1,7 @@
 # GoSQLX CLI Guide
 
-**Version**: v1.6.0
-**Last Updated**: December 2025
+**Version**: v1.9.0
+**Last Updated**: 2026-02-28
 
 The GoSQLX Command Line Interface (CLI) provides high-performance SQL parsing, validation, formatting, and analysis capabilities directly from your terminal.
 
@@ -530,8 +530,11 @@ gosqlx lint -
 
 | Code | Meaning |
 |------|---------|
-| 0 | No violations found (or info only) |
-| 1 | Errors or warnings found (warnings only if --fail-on-warn is set) |
+| 0 | No violations found |
+| 1 | Any violation found (error, warning, or info) — usable as CI gate |
+
+> **v1.9.0**: `gosqlx lint` now exits 1 whenever any violation is found (error, warning, or info).
+> Previous behavior required `--fail-on-warn` to exit 1 on warnings; that flag is now redundant.
 
 ---
 

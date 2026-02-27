@@ -2,12 +2,13 @@
 
 Welcome! This guide will get you parsing SQL in under 5 minutes. No prior experience with GoSQLX required.
 
-**What's New in v1.6.0:**
-- PostgreSQL extensions (LATERAL JOIN, JSON operators, DISTINCT ON, FILTER clause)
-- LSP server for IDE integration with real-time diagnostics
-- Built-in SQL security scanner for injection detection
-- 10 comprehensive linter rules (L001-L010) for style enforcement
-- Advanced aggregate features (ORDER BY in aggregates, FILTER clauses)
+**What's New in v1.9.0:**
+- SQLite PRAGMA fully parsed (bare, arg, and assignment forms)
+- Tautology injection detection (`1=1`, `'a'='a'`, `OR TRUE`) → CRITICAL severity
+- UNION false-positive fix: `PatternUnionInjection` (CRITICAL) vs `PatternUnionGeneric` (HIGH)
+- `gosqlx lint` exits 1 on any violation — usable as CI gate without extra flags
+- `E1009` dedicated error code for unterminated `/* ... */` block comments
+- 19 post-UAT fixes: parser, CLI output, security scanner (see CHANGELOG for full list)
 - Enhanced SQL-99 compliance with NULLS FIRST/LAST ordering
 
 ---
@@ -60,7 +61,7 @@ echo "select * from users where age>18" | gosqlx format
 echo "SELECT COUNT(*) FROM orders GROUP BY status" | gosqlx analyze
 ```
 
-**Available CLI Commands (v1.6.0):**
+**Available CLI Commands (v1.9.0):**
 - `validate` - Ultra-fast SQL validation with security scanning
 - `format` - High-performance SQL formatting with style options
 - `analyze` - Advanced SQL analysis with complexity metrics

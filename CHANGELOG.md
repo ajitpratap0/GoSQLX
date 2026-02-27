@@ -5,6 +5,46 @@ All notable changes to GoSQLX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-02-28 - SQLite PRAGMA, Tautology Detection & 19 Post-UAT Fixes
+
+19 actionable bugs fixed (PR #348) — 3 new capabilities, 8 parser fixes,
+5 CLI output bugs, 3 CLI UX improvements, 2 security scanner improvements.
+
+### Highlights
+- SQLite PRAGMA statement fully implemented (bare, arg, and assignment forms)
+- WITHOUT ROWID support in CREATE TABLE
+- Tautology injection detection (1=1, 'a'='a', OR TRUE) → CRITICAL
+- UNION false-positive eliminated: generic UNION is now HIGH, not CRITICAL
+- lint command usable as CI gate (exits 1 on any violation)
+- token_count, Query Size, CTE output, and SELECT indentation all fixed
+
+### ✨ Features
+[DIALECT-3] SQLite PRAGMA parsing — PragmaStatement AST node + pragma.go parser
+[DIALECT-4] SQLite WITHOUT ROWID on CREATE TABLE; reserved keywords as DDL column names
+[SEC-1]     Tautology detection in ScanSQL(): numeric/string/identifier/OR TRUE patterns
+
+### 🐛 Bug Fixes
+[ERR-1]     E1009 ErrCodeUnterminatedBlockComment replaces generic E1002 for /* ... */
+[DIALECT-1] MySQL backtick-quoted reserved words now parsed as identifiers
+[DIALECT-2] SQL Server bracket-quoted reserved words now parsed as identifiers
+[CORE-1]    KEY/INDEX/VIEW reserved keywords now valid in qualified identifiers (a.key)
+[CORE-2]    NATURAL JOIN stores type "NATURAL" not "NATURAL INNER"
+[CORE-3]    OVER <window_name> (bare name, no parens) now supported per SQL:2003 §7.11
+[CLI-1/2]   token_count uses actual tokenizer output count
+[CLI-3]     analyze Query Size shows real character and line counts
+[CLI-4]     format first SELECT column is now correctly indented
+[CLI-5]     parse output includes has_with/cte_count for CTE queries
+[CLI-6]     validate no longer prints usage block on domain errors
+[CLI-7]     lint exits 1 when any violation found (usable as CI gate)
+[CLI-8]     validate output standardized to ✅/❌
+
+### 🔒 Security
+[SEC-2]     UNION detection split: PatternUnionInjection (CRITICAL, system tables +
+            NULL padding) and PatternUnionGeneric (HIGH, generic UNION SELECT)
+            — eliminates false-positive CRITICAL on legitimate application queries
+
+---
+
 ## [1.8.0] - 2026-02-24 - Multi-Dialect Engine, Query Transform API, WASM Playground & Token Type Overhaul
 
 This release represents the largest update since v1.0.0 with **74 commits** across 30+ PRs. It introduces a dialect-aware parsing engine with full MySQL syntax support, a programmatic Query Transform API, WebAssembly browser playground, comment-preserving formatter, AST-to-SQL serialization, and completes a multi-phase token type refactor that delivers ~50% faster parsing.
@@ -1382,7 +1422,8 @@ This substantial test coverage increase provides strong confidence in the AST pa
 
 | Version | Release Date | Status | Key Features |
 |---------|--------------|--------|--------------|
-| 1.8.0 | 2026-02-24 | Current | Dialect engine, MySQL support, Query Transform API, WASM, Token type overhaul |
+| 1.9.0 | 2026-02-28 | Current | SQLite PRAGMA, tautology detection, 19 post-UAT fixes, lint CI-gate |
+| 1.8.0 | 2026-02-24 | Previous | Dialect engine, MySQL support, Query Transform API, WASM, Token type overhaul |
 | 1.7.0 | 2026-02-12 | Previous | Schema-qualified names, Parser Batches 5-8, quoted identifiers fix |
 | 1.6.0 | 2025-12-09 | Previous | PostgreSQL Extensions, LSP Server, VSCode Extension, 14x faster tokens |
 | 1.5.0 | 2025-11-15 | Stable | Phase 1 Test Coverage: CLI 63.3%, Parser 75%, Tokenizer 76.5% |

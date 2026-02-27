@@ -1,4 +1,24 @@
-# Migration Guide: v1.7.0 to v1.8.0
+# Migration Guide
+
+## v1.8.0 → v1.9.0 (2026-02-28)
+
+No breaking changes. No API changes. Drop-in upgrade.
+
+### Behavioral changes to be aware of
+
+**`lint` exit codes** (CLI-7):
+Previously: exits 0 unless errors present or `--fail-on-warn` set
+Now: exits 1 whenever any violation (error, warning, or info) is found
+Impact: CI pipelines using `gosqlx lint` as a gate will now correctly fail on warnings
+
+**`E1009` for unterminated block comments** (ERR-1):
+Previously: unterminated `/* ... */` emitted `E1002` (generic string error code)
+Now: emits `E1009 ErrCodeUnterminatedBlockComment`
+Impact: code catching specific error codes for `/*` handling should update to `E1009`
+
+---
+
+## v1.7.0 → v1.8.0
 
 **Last Updated**: 2026-02-24
 

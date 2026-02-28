@@ -12,38 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package ast provides Abstract Syntax Tree (AST) node definitions for SQL statements.
-//
-// This package implements a comprehensive AST representation for SQL with support for
-// multiple SQL dialects (PostgreSQL, MySQL, SQL Server, Oracle, SQLite). It includes
-// extensive object pooling for memory efficiency and high-performance SQL parsing.
-//
-// For complete documentation including architecture overview, usage examples, visitor
-// pattern, and feature support matrix, see the package-level documentation in doc.go.
-//
-// Key features:
-//   - Complete SQL-99/SQL:2003 statement support (DDL, DML, CTEs, window functions)
-//   - PostgreSQL extensions (LATERAL, DISTINCT ON, FILTER, RETURNING, JSON operators)
-//   - Advanced grouping (GROUPING SETS, ROLLUP, CUBE)
-//   - MERGE statements (SQL:2003 F312)
-//   - Object pooling for 60-80% memory reduction
-//   - Thread-safe with zero race conditions
-//   - Visitor pattern for AST traversal
-//
-// Quick Start Example:
-//
-//	// Get AST from pool
-//	astObj := ast.NewAST()
-//	defer ast.ReleaseAST(astObj)  // Always use defer
-//
-//	// Get SELECT statement from pool
-//	stmt := ast.GetSelectStatement()
-//	defer ast.PutSelectStatement(stmt)
-//
-//	// Build and use AST nodes...
-//
-// Version 1.6.0 adds PostgreSQL extensions including LATERAL JOIN, DISTINCT ON,
-// FILTER clause, RETURNING clause, JSON/JSONB operators, and FETCH FIRST/NEXT.
 package ast
 
 import (
@@ -1759,14 +1727,32 @@ func (p PartitionDefinition) Children() []Node {
 	return children
 }
 
-// AST represents the root of the Abstract Syntax Tree
+// AST represents the root of the Abstract Syntax Tree produced by parsing one or
+// more SQL statements.
+//
+// AST is obtained from the pool via NewAST and must be returned via ReleaseAST
+// when the caller no longer needs it:
+//
+//	tree, err := p.ParseFromModelTokens(tokens)
+//	if err != nil { return err }
+//	defer ast.ReleaseAST(tree)
+//
+// The Statements slice contains one entry per SQL statement separated by
+// semicolons. Comments captured during tokenization are preserved in Comments
+// for formatters that wish to round-trip them.
+//
+// SQL() returns the canonical SQL string for all statements joined by ";\n".
+// Span() returns the union of all statement spans for source-location tracking.
 type AST struct {
 	Statements []Statement
 	Comments   []models.Comment // Comments captured during tokenization, preserved during formatting
 }
 
+// TokenLiteral implements Node. Returns an empty string — the AST root has no
+// representative keyword.
 func (a AST) TokenLiteral() string { return "" }
 
+// Children implements Node and returns all top-level statements as a slice of Node.
 func (a AST) Children() []Node {
 	children := make([]Node, len(a.Statements))
 	for i, stmt := range a.Statements {

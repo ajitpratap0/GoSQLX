@@ -20,8 +20,22 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
-// ReplaceTable returns a Rule that replaces a table name everywhere it appears
-// (FROM, JOIN, WHERE column qualifiers) in a SELECT, UPDATE, or DELETE statement.
+// ReplaceTable returns a Rule that replaces all occurrences of a table name
+// throughout a SELECT, UPDATE, or DELETE statement. The replacement covers:
+//   - FROM clause table references
+//   - JOIN clause left and right table references
+//   - Column qualifiers (table.column identifiers in SELECT list, WHERE, ORDER BY)
+//   - The table name field of UPDATE and DELETE statements
+//   - Subquery FROM/JOIN references (recursively)
+//
+// Matching is case-insensitive. This is useful for renaming tables, routing
+// queries to shards, or switching between environments.
+//
+// Parameters:
+//   - oldName: The table name to replace (case-insensitive)
+//   - newName: The replacement table name
+//
+// Returns ErrUnsupportedStatement for INSERT or DDL statements.
 func ReplaceTable(oldName, newName string) Rule {
 	return RuleFunc(func(stmt ast.Statement) error {
 		switch s := stmt.(type) {
@@ -54,7 +68,16 @@ func ReplaceTable(oldName, newName string) Rule {
 	})
 }
 
-// AddTableAlias returns a Rule that adds an alias to a table in the FROM clause.
+// AddTableAlias returns a Rule that assigns an alias to a specific table in a
+// SELECT, UPDATE, or DELETE statement. For SELECT statements the alias is applied
+// to the matching entry in the FROM clause; for UPDATE and DELETE it sets the
+// statement-level alias field.
+//
+// Parameters:
+//   - tableName: The table to alias (case-insensitive match)
+//   - alias: The alias to assign
+//
+// Returns ErrUnsupportedStatement for INSERT or DDL statements.
 func AddTableAlias(tableName, alias string) Rule {
 	return RuleFunc(func(stmt ast.Statement) error {
 		switch s := stmt.(type) {
@@ -81,8 +104,18 @@ func AddTableAlias(tableName, alias string) Rule {
 	})
 }
 
-// QualifyColumns returns a Rule that prefixes unqualified column references
-// with the given table name in a SELECT statement.
+// QualifyColumns returns a Rule that prefixes every unqualified column reference
+// in a SELECT statement's column list and WHERE clause with tableName. Only
+// identifiers that have no existing table qualifier and whose name is not the
+// wildcard "*" are modified.
+//
+// This is useful when merging standalone column lists into multi-table queries to
+// avoid ambiguous column reference errors.
+//
+// Parameters:
+//   - tableName: The qualifier to prepend to unqualified identifiers
+//
+// Returns ErrUnsupportedStatement for non-SELECT statements.
 func QualifyColumns(tableName string) Rule {
 	return RuleFunc(func(stmt ast.Statement) error {
 		sel, err := getSelect(stmt, "QualifyColumns")

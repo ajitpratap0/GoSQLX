@@ -20,7 +20,14 @@ import (
 	"strings"
 )
 
-// ErrorPattern represents a common SQL error pattern with suggestions
+// ErrorPattern represents a common SQL error pattern with an associated suggestion.
+// Each pattern matches error messages (not raw SQL) and provides a human-readable
+// hint for fixing the underlying mistake.
+//
+// Fields:
+//   - Pattern: Compiled regular expression matched against error message text
+//   - Description: Short label for the pattern (used in documentation)
+//   - Suggestion: Actionable fix advice to show to the user
 type ErrorPattern struct {
 	Pattern     *regexp.Regexp
 	Description string
@@ -71,7 +78,16 @@ var errorPatterns = []ErrorPattern{
 	},
 }
 
-// MistakePattern represents common SQL mistakes with explanations
+// MistakePattern represents a catalogued SQL coding mistake together with a
+// corrected example and a plain-language explanation. The catalogue covers 20+
+// common mistakes including aggregate misuse, window function syntax, CTE problems,
+// and set operation mismatches.
+//
+// Fields:
+//   - Name: Machine-readable key used to look up the pattern (e.g., "missing_group_by")
+//   - Example: A minimal SQL fragment that demonstrates the mistake
+//   - Correct: The corrected version of the same fragment
+//   - Explanation: Human-readable explanation of why Example is wrong and Correct is right
 type MistakePattern struct {
 	Name        string
 	Example     string // Example of the mistake
@@ -203,7 +219,12 @@ var commonMistakes = []MistakePattern{
 	},
 }
 
-// SuggestFromPattern tries to match error message against known patterns
+// SuggestFromPattern tries to match an error message string against the built-in
+// errorPatterns catalogue and returns the associated suggestion. This is useful for
+// augmenting generic error messages with actionable advice without re-parsing the
+// original SQL.
+//
+// Returns the suggestion string if a pattern matches, or empty string if none match.
 func SuggestFromPattern(errorMessage string) string {
 	for _, pattern := range errorPatterns {
 		if pattern.Pattern.MatchString(errorMessage) {
@@ -213,7 +234,13 @@ func SuggestFromPattern(errorMessage string) string {
 	return ""
 }
 
-// GetMistakeExplanation returns explanation for a common mistake
+// GetMistakeExplanation looks up a MistakePattern by its machine-readable name.
+// Use this to retrieve full before/after examples and explanations for known SQL
+// anti-patterns. The name must exactly match one of the keys in the commonMistakes
+// catalogue (e.g., "missing_group_by", "window_function_without_over").
+//
+// Returns the matching MistakePattern and true, or a zero value and false when
+// the name is not found.
 func GetMistakeExplanation(mistakeName string) (MistakePattern, bool) {
 	for _, mistake := range commonMistakes {
 		if mistake.Name == mistakeName {
@@ -223,7 +250,17 @@ func GetMistakeExplanation(mistakeName string) (MistakePattern, bool) {
 	return MistakePattern{}, false
 }
 
-// AnalyzeTokenError analyzes token-based errors and provides context-aware suggestions
+// AnalyzeTokenError produces a context-aware suggestion string for token-level
+// parse errors. It inspects the actual and expected token types to provide specific
+// guidance — for example, detecting when a quoted string is used where a number is
+// expected, or when an unknown identifier looks like a misspelled keyword.
+//
+// Parameters:
+//   - tokenType: Type of the unexpected token (e.g., "STRING", "NUMBER", "IDENT")
+//   - tokenValue: Raw text value of the unexpected token
+//   - expectedType: Token type the parser was expecting (e.g., "NUMBER", "RPAREN")
+//
+// Returns a human-readable suggestion string; never returns empty string.
 func AnalyzeTokenError(tokenType, tokenValue, expectedType string) string {
 	// String literal where number expected
 	if tokenType == "STRING" && (expectedType == "NUMBER" || expectedType == "INTEGER") {
@@ -257,7 +294,14 @@ func AnalyzeTokenError(tokenType, tokenValue, expectedType string) string {
 	return fmt.Sprintf("Expected %s but found %s. Review the SQL syntax at this position.", expectedType, tokenType)
 }
 
-// SuggestForIncompleteStatement provides suggestions for incomplete SQL statements
+// SuggestForIncompleteStatement returns a suggestion string explaining what tokens
+// or clauses are expected to follow the given SQL keyword. This is used when the
+// parser encounters an unexpected end-of-input after a keyword.
+//
+// Parameters:
+//   - lastKeyword: The last SQL keyword seen before end-of-input (e.g., "SELECT", "FROM")
+//
+// Returns the context-appropriate completion hint, or a generic fallback message.
 func SuggestForIncompleteStatement(lastKeyword string) string {
 	suggestions := map[string]string{
 		"SELECT": "Add columns to select and FROM clause: SELECT columns FROM table",
@@ -285,7 +329,15 @@ func SuggestForIncompleteStatement(lastKeyword string) string {
 	return "Complete the SQL statement with required clauses and syntax."
 }
 
-// SuggestForSyntaxError provides context-aware suggestions for syntax errors
+// SuggestForSyntaxError returns a context-aware suggestion string for a syntax error.
+// It inspects the surrounding SQL context (e.g., whether a SELECT or JOIN keyword
+// is present) and the expected token to provide targeted guidance.
+//
+// Parameters:
+//   - context: A snippet of the SQL surrounding the error (used for keyword detection)
+//   - expectedToken: The token or clause that was expected (e.g., "FROM", ",", "ON")
+//
+// Returns a human-readable hint specific to the context, or a generic fallback.
 func SuggestForSyntaxError(context, expectedToken string) string {
 	contextUpper := strings.ToUpper(context)
 
@@ -333,7 +385,16 @@ func SuggestForSyntaxError(context, expectedToken string) string {
 	return fmt.Sprintf("Check SQL syntax. Expected %s in this context.", expectedToken)
 }
 
-// GenerateDidYouMean generates "Did you mean?" suggestions for typos
+// GenerateDidYouMean generates a "Did you mean?" suggestion by finding the closest
+// match(es) to actual in possibleValues using Levenshtein distance. It only returns
+// a suggestion when the edit distance is within half the length of actual (minimum
+// threshold of 2), preventing spurious suggestions for completely unrelated words.
+//
+// Parameters:
+//   - actual: The misspelled or unrecognised word entered by the user
+//   - possibleValues: Candidate correct values to compare against
+//
+// Returns a suggestion string, or empty string if no close match is found.
 func GenerateDidYouMean(actual string, possibleValues []string) string {
 	if len(possibleValues) == 0 {
 		return ""
@@ -370,7 +431,17 @@ func GenerateDidYouMean(actual string, possibleValues []string) string {
 	return ""
 }
 
-// FormatMistakeExample formats a mistake pattern for display
+// FormatMistakeExample formats a MistakePattern into a human-readable multi-line
+// block suitable for displaying in error messages, documentation, or interactive
+// tutorials. The output includes the mistake name, the wrong SQL snippet, the
+// corrected SQL snippet, and an explanation.
+//
+// Example output:
+//
+//	Common Mistake: missing_group_by
+//	  Wrong: SELECT dept, COUNT(*) FROM employees
+//	  Right: SELECT dept, COUNT(*) FROM employees GROUP BY dept
+//	  Explanation: Non-aggregated columns in SELECT must appear in GROUP BY
 func FormatMistakeExample(mistake MistakePattern) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Common Mistake: %s\n", mistake.Name))
@@ -380,7 +451,15 @@ func FormatMistakeExample(mistake MistakePattern) string {
 	return sb.String()
 }
 
-// SuggestForWindowFunction provides suggestions for window function errors
+// SuggestForWindowFunction provides targeted suggestions for window function syntax
+// errors. It inspects the SQL context to detect common mistakes such as a missing
+// OVER clause, PARTITION BY outside OVER, or a window frame without ORDER BY.
+//
+// Parameters:
+//   - context: A SQL snippet containing the window function usage
+//   - functionName: The name of the window function (e.g., "ROW_NUMBER", "SUM")
+//
+// Returns a specific remediation hint for the detected problem.
 func SuggestForWindowFunction(context, functionName string) string {
 	contextUpper := strings.ToUpper(context)
 
@@ -403,7 +482,15 @@ func SuggestForWindowFunction(context, functionName string) string {
 	return "Check window function syntax: function_name OVER ([PARTITION BY ...] [ORDER BY ...] [frame_clause])"
 }
 
-// SuggestForCTE provides suggestions for Common Table Expression errors
+// SuggestForCTE provides targeted suggestions for Common Table Expression (WITH
+// clause) syntax errors. It detects problems such as a WITH clause not followed by
+// a DML statement, a RECURSIVE CTE missing UNION, or multiple CTEs not separated
+// by commas.
+//
+// Parameters:
+//   - context: A SQL snippet containing the WITH clause and surrounding context
+//
+// Returns a specific remediation hint for the detected problem.
 func SuggestForCTE(context string) string {
 	contextUpper := strings.ToUpper(context)
 
@@ -426,7 +513,15 @@ func SuggestForCTE(context string) string {
 	return "Check CTE syntax: WITH cte_name AS (query) SELECT ... or WITH RECURSIVE cte AS (base UNION ALL recursive) ..."
 }
 
-// SuggestForSetOperation provides suggestions for UNION/INTERSECT/EXCEPT errors
+// SuggestForSetOperation provides targeted suggestions for UNION, INTERSECT, and
+// EXCEPT syntax errors. It detects ORDER BY inside a subquery (which should be
+// after the full set operation) and column count/type mismatches.
+//
+// Parameters:
+//   - operation: The set operation keyword (e.g., "UNION", "INTERSECT", "EXCEPT")
+//   - context: A SQL snippet containing the set operation
+//
+// Returns a specific remediation hint for the detected problem.
 func SuggestForSetOperation(operation, context string) string {
 	contextUpper := strings.ToUpper(context)
 
@@ -443,7 +538,15 @@ func SuggestForSetOperation(operation, context string) string {
 	return fmt.Sprintf("Check %s syntax: SELECT ... %s SELECT ... [ORDER BY ...]", operation, operation)
 }
 
-// SuggestForJoinError provides enhanced suggestions for JOIN-related errors
+// SuggestForJoinError provides targeted suggestions for JOIN syntax errors. It
+// detects missing ON or USING conditions (noting that CROSS JOIN is the sole
+// exception) and ambiguous column references in join conditions.
+//
+// Parameters:
+//   - joinType: The JOIN type keyword (e.g., "INNER", "LEFT", "CROSS")
+//   - context: A SQL snippet containing the JOIN clause
+//
+// Returns a specific remediation hint for the detected problem.
 func SuggestForJoinError(joinType, context string) string {
 	contextUpper := strings.ToUpper(context)
 
@@ -464,7 +567,13 @@ func SuggestForJoinError(joinType, context string) string {
 	return fmt.Sprintf("Check %s JOIN syntax: FROM table1 %s JOIN table2 ON condition", joinType, joinType)
 }
 
-// GetAdvancedFeatureHint returns hints for advanced SQL features
+// GetAdvancedFeatureHint returns a brief description and usage hint for an advanced
+// SQL feature. Supported feature keys include: "window_functions", "cte",
+// "recursive_cte", "set_operations", "window_frames", "partition_by",
+// "lateral_join", and "grouping_sets".
+//
+// The feature name is normalised to lowercase with spaces replaced by underscores
+// before lookup. Returns a generic documentation link if the feature is not found.
 func GetAdvancedFeatureHint(feature string) string {
 	hints := map[string]string{
 		"window_functions": "Window functions: ROW_NUMBER(), RANK(), DENSE_RANK(), LAG(), LEAD(), SUM() OVER (), etc.",

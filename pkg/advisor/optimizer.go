@@ -12,16 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package advisor provides SQL query optimization suggestions by analyzing parsed ASTs.
+// Package advisor provides SQL query optimization analysis by walking parsed ASTs and
+// applying configurable rules that detect common performance anti-patterns.
 //
-// The optimizer walks the Abstract Syntax Tree produced by the GoSQLX parser and
-// applies configurable rules to detect common performance anti-patterns. Each rule
-// produces zero or more Suggestions with severity levels, human-readable messages,
-// and (where possible) suggested SQL rewrites.
+// The central type is Optimizer, created with New() (all built-in rules) or
+// NewWithRules(...Rule) for a custom rule set. Optimizer.AnalyzeSQL is a convenience
+// method that parses a SQL string and returns an OptimizationResult containing a slice
+// of Suggestion values, a query complexity classification (simple / moderate / complex),
+// and an optimization score from 0 (worst) to 100 (no issues). Each Suggestion carries
+// a rule ID, severity (info / warning / error), a human-readable message and detail, the
+// source location, and where possible a suggested SQL rewrite.
+//
+// Eight built-in rules are registered by DefaultRules:
+//
+//	OPT-001  SELECT * Detection         — recommend listing columns explicitly
+//	OPT-002  Missing WHERE Clause       — UPDATE/DELETE without WHERE affects all rows
+//	OPT-003  Cartesian Product          — implicit cross join from multiple FROM tables
+//	OPT-004  SELECT DISTINCT Overuse    — DISTINCT may mask incorrect join conditions
+//	OPT-005  Subquery in WHERE          — suggest converting correlated subqueries to JOINs
+//	OPT-006  OR in WHERE Clause         — OR on different columns may prevent index usage
+//	OPT-007  Leading Wildcard in LIKE   — LIKE '%...' forces a full table scan
+//	OPT-008  Function on Indexed Column — wrapping a column in a function defeats B-tree indexes
+//
+// Custom rules implement the Rule interface (ID, Name, Description, Analyze) and are
+// passed to NewWithRules. All built-in rules are stateless and safe for concurrent use.
 //
 // Quick Start:
 //
-//	opt := optimizer.New()
+//	opt := advisor.New()
 //	result, err := opt.AnalyzeSQL("SELECT * FROM users")
 //	if err != nil {
 //	    log.Fatal(err)

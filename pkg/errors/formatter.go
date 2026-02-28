@@ -21,8 +21,16 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
-// FormatErrorWithContext formats an error with SQL context and visual indicators
-// This is a convenience function that wraps the Error.Error() method
+// FormatErrorWithContext formats an error with SQL context and visual indicators.
+// For *Error values it delegates to the structured Error.Error() method, which
+// includes code, location, SQL context highlighting, hint, and help URL. For all
+// other error types it falls back to a plain "Error: <message>" string.
+//
+// Parameters:
+//   - err: The error to format (may be *Error or a generic error)
+//   - sql: The SQL source; currently unused for *Error (context is already attached)
+//
+// Returns the formatted error string ready for display to end users.
 func FormatErrorWithContext(err error, sql string) string {
 	// If it's already a structured error, just return its formatted string
 	if structErr, ok := err.(*Error); ok {
@@ -33,7 +41,19 @@ func FormatErrorWithContext(err error, sql string) string {
 	return fmt.Sprintf("Error: %v", err)
 }
 
-// FormatErrorWithContextAt formats an error at a specific location with SQL context
+// FormatErrorWithContextAt creates a structured error for the given code and location,
+// attaches the SQL context window, and auto-generates a hint. It then returns the
+// fully-formatted error string. This is useful for one-shot error formatting without
+// retaining the *Error value.
+//
+// Parameters:
+//   - code: ErrorCode classifying the error category (e.g., ErrCodeExpectedToken)
+//   - message: Human-readable description of the error
+//   - location: Precise line/column where the error occurred
+//   - sql: Full SQL source used to generate the context window
+//   - highlightLen: Number of characters to highlight at the error column
+//
+// Returns the complete formatted error string including context highlighting.
 func FormatErrorWithContextAt(code ErrorCode, message string, location models.Location, sql string, highlightLen int) string {
 	err := NewError(code, message, location)
 	err = err.WithContext(sql, highlightLen)
@@ -46,8 +66,17 @@ func FormatErrorWithContextAt(code ErrorCode, message string, location models.Lo
 	return err.Error()
 }
 
-// FormatMultiLineContext formats error context for multi-line SQL with extended context
-// Shows up to 3 lines (1 before, error line, 1 after) with proper indentation
+// FormatMultiLineContext formats an SQL context window around a specific error location.
+// It shows up to three lines: one before the error, the error line itself, and one
+// after. A caret indicator (^) is rendered below the error column, with optional
+// multi-character highlighting when highlightLen > 1.
+//
+// Parameters:
+//   - sql: The full SQL source string (may contain newlines)
+//   - location: The line/column of the error (1-based)
+//   - highlightLen: Number of characters to highlight; 1 renders a single caret
+//
+// Returns the formatted context block, or an empty string if location is invalid.
 func FormatMultiLineContext(sql string, location models.Location, highlightLen int) string {
 	if sql == "" || location.Line <= 0 {
 		return ""
@@ -107,8 +136,18 @@ func FormatMultiLineContext(sql string, location models.Location, highlightLen i
 	return sb.String()
 }
 
-// FormatErrorSummary provides a brief summary of an error without full context
-// Useful for logging or when SQL context is not needed
+// FormatErrorSummary provides a concise one-line error summary suitable for
+// structured logging and monitoring systems where a full context window would
+// be too verbose. For *Error values the output format is:
+//
+//	[E2001] unexpected token: COMMA at line 5, column 20
+//
+// For other error types the output is "Error: <message>".
+//
+// Parameters:
+//   - err: The error to summarise
+//
+// Returns the one-line summary string.
 func FormatErrorSummary(err error) string {
 	if structErr, ok := err.(*Error); ok {
 		return fmt.Sprintf("[%s] %s at line %d, column %d",
@@ -120,7 +159,20 @@ func FormatErrorSummary(err error) string {
 	return fmt.Sprintf("Error: %v", err)
 }
 
-// FormatErrorWithSuggestion formats an error with an intelligent suggestion
+// FormatErrorWithSuggestion creates and formats a structured error that includes a
+// manually provided hint. When suggestion is empty, the function falls back to
+// auto-generating a hint via GenerateHint. This is the preferred formatter when
+// the caller already knows the correct fix.
+//
+// Parameters:
+//   - code: ErrorCode classifying the error category
+//   - message: Human-readable description of the error
+//   - location: Precise line/column where the error occurred
+//   - sql: Full SQL source used to generate the context window
+//   - highlightLen: Number of characters to highlight at the error column
+//   - suggestion: Custom hint text; empty string triggers auto-generation
+//
+// Returns the complete formatted error string.
 func FormatErrorWithSuggestion(code ErrorCode, message string, location models.Location, sql string, highlightLen int, suggestion string) string {
 	err := NewError(code, message, location)
 	err = err.WithContext(sql, highlightLen)
@@ -137,7 +189,16 @@ func FormatErrorWithSuggestion(code ErrorCode, message string, location models.L
 	return err.Error()
 }
 
-// FormatErrorList formats multiple errors in a readable list
+// FormatErrorList formats a slice of structured errors into a numbered list with
+// full context for each entry. The output begins with a count line and separates
+// each error with a blank line.
+//
+// Returns "No errors" when the slice is empty.
+//
+// Parameters:
+//   - errors: Slice of *Error values to format
+//
+// Returns the multi-error report string.
 func FormatErrorList(errors []*Error) string {
 	if len(errors) == 0 {
 		return "No errors"
@@ -155,7 +216,21 @@ func FormatErrorList(errors []*Error) string {
 	return sb.String()
 }
 
-// FormatErrorWithExample formats an error with a corrected example
+// FormatErrorWithExample formats an error and appends a side-by-side "Wrong / Correct"
+// example to the hint. This is particularly useful for educational error messages
+// (e.g., in linters or IDEs) where showing the correct pattern helps users learn
+// the expected SQL syntax.
+//
+// Parameters:
+//   - code: ErrorCode classifying the error category
+//   - message: Human-readable description of the error
+//   - location: Precise line/column where the error occurred
+//   - sql: Full SQL source used to generate the context window
+//   - highlightLen: Number of characters to highlight at the error column
+//   - wrongExample: The erroneous SQL fragment (e.g., "SELECT * FORM users")
+//   - correctExample: The corrected SQL fragment (e.g., "SELECT * FROM users")
+//
+// Returns the complete formatted error string including the before/after example.
 func FormatErrorWithExample(code ErrorCode, message string, location models.Location, sql string, highlightLen int, wrongExample, correctExample string) string {
 	err := NewError(code, message, location)
 	err = err.WithContext(sql, highlightLen)
@@ -167,7 +242,19 @@ func FormatErrorWithExample(code ErrorCode, message string, location models.Loca
 	return err.Error()
 }
 
-// FormatContextWindow formats a larger context window (up to N lines before and after)
+// FormatContextWindow formats a configurable SQL context window of up to linesBefore
+// lines before and linesAfter lines after the error line. Prefer this over
+// FormatMultiLineContext when more surrounding context is needed (e.g., in IDE
+// hover messages or verbose diagnostic reports).
+//
+// Parameters:
+//   - sql: The full SQL source string
+//   - location: The line/column of the error (1-based)
+//   - highlightLen: Number of characters to highlight at the error column
+//   - linesBefore: Number of source lines to display before the error line
+//   - linesAfter: Number of source lines to display after the error line
+//
+// Returns the formatted context block, or an empty string if location is invalid.
 func FormatContextWindow(sql string, location models.Location, highlightLen int, linesBefore, linesAfter int) string {
 	if sql == "" || location.Line <= 0 {
 		return ""
@@ -231,13 +318,27 @@ func FormatContextWindow(sql string, location models.Location, highlightLen int,
 	return sb.String()
 }
 
-// IsStructuredError checks if an error is a structured GoSQLX error
+// IsStructuredError reports whether err is a GoSQLX *Error value.
+// Use this to distinguish GoSQLX structured errors from generic Go errors
+// before calling functions that require *Error (e.g., ExtractLocation).
+//
+// Example:
+//
+//	if errors.IsStructuredError(err) {
+//	    loc, _ := errors.ExtractLocation(err)
+//	    // use loc for IDE diagnostics
+//	}
 func IsStructuredError(err error) bool {
 	_, ok := err.(*Error)
 	return ok
 }
 
-// ExtractLocation extracts location information from an error
+// ExtractLocation extracts the line/column location from a GoSQLX *Error.
+// This is the preferred way to obtain location data for IDE integrations such as
+// LSP diagnostics, since it handles the type assertion safely.
+//
+// Returns the Location and true when err is a *Error; returns a zero Location
+// and false for all other error types.
 func ExtractLocation(err error) (models.Location, bool) {
 	if structErr, ok := err.(*Error); ok {
 		return structErr.Location, true
@@ -245,7 +346,12 @@ func ExtractLocation(err error) (models.Location, bool) {
 	return models.Location{}, false
 }
 
-// ExtractErrorCode extracts the error code from an error
+// ExtractErrorCode extracts the ErrorCode from a GoSQLX *Error.
+// Unlike GetCode, this function returns a boolean indicating whether the extraction
+// succeeded, making it suitable for use in type-switch–style handling.
+//
+// Returns the ErrorCode and true when err is a *Error; returns an empty string
+// and false for all other error types.
 func ExtractErrorCode(err error) (ErrorCode, bool) {
 	if structErr, ok := err.(*Error); ok {
 		return structErr.Code, true

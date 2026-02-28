@@ -40,6 +40,8 @@ type EnumMember struct {
 	Value Expression
 }
 
+// String returns the SQL representation of this enum member, e.g. "'label'"
+// or "'label' = expr".
 func (e *EnumMember) String() string {
 	if e.Value != nil {
 		return fmt.Sprintf("'%s' = %s", escapeString(e.Name), e.Value.TokenLiteral())
@@ -64,6 +66,8 @@ type CharacterLength struct {
 	Unit   *CharLengthUnits
 }
 
+// String returns the SQL representation of this character length specification,
+// e.g. "10" or "10 CHARACTERS".
 func (c *CharacterLength) String() string {
 	if c.Unit != nil {
 		return fmt.Sprintf("%d %s", c.Length, c.Unit)
@@ -79,6 +83,7 @@ const (
 	Octets
 )
 
+// String returns the SQL keyword for this character length unit: "CHARACTERS" or "OCTETS".
 func (u CharLengthUnits) String() string {
 	switch u {
 	case Characters:
@@ -96,6 +101,8 @@ type BinaryLength struct {
 	IsMax  bool
 }
 
+// String returns the SQL representation of this binary length: "MAX" when
+// IsMax is true, otherwise the numeric length as a string.
 func (b *BinaryLength) String() string {
 	if b.IsMax {
 		return "MAX"
@@ -113,6 +120,8 @@ const (
 	Tz
 )
 
+// String returns the SQL timezone clause for this timezone info, e.g.
+// " WITH TIME ZONE", " WITHOUT TIME ZONE", or "" for NoTimezone.
 func (t TimezoneInfo) String() string {
 	switch t {
 	case NoTimezone:
@@ -134,6 +143,8 @@ type ExactNumberInfo struct {
 	Scale     *uint64
 }
 
+// String returns the SQL precision/scale clause, e.g. "(10)", "(10,2)", or ""
+// when no precision is specified.
 func (e *ExactNumberInfo) String() string {
 	if e.Precision == nil {
 		return ""
@@ -151,15 +162,22 @@ type ArrayElemTypeDef struct {
 	Brackets ArrayBracketType
 }
 
+// ArrayBracketType identifies the bracket style used to express an array type.
 type ArrayBracketType int
 
 const (
+	// NoBrackets represents a bare ARRAY keyword with no type argument.
 	NoBrackets ArrayBracketType = iota
+	// AngleBrackets represents the ARRAY<T> syntax (e.g. BigQuery).
 	AngleBrackets
+	// SquareBrackets represents the T[] or T[N] syntax (e.g. PostgreSQL).
 	SquareBrackets
+	// Parentheses represents the Array(T) syntax.
 	Parentheses
 )
 
+// String returns the SQL representation of this array element type definition,
+// e.g. "ARRAY<INT>", "INT[]", "INT[10]", or "Array(INT)".
 func (a *ArrayElemTypeDef) String() string {
 	if a.Type == nil {
 		return "ARRAY"
@@ -277,7 +295,8 @@ func (*JsonType) isDataType()      {}
 func (*BinaryType) isDataType()    {}
 func (*CustomType) isDataType()    {}
 
-// String implementations for data types
+// String returns the SQL representation of this TABLE type, listing all column
+// definitions inside parentheses, e.g. "TABLE(id INT, name VARCHAR(255))".
 func (t *TableType) String() string {
 	var cols []string
 	for _, col := range t.Columns {
@@ -286,6 +305,8 @@ func (t *TableType) String() string {
 	return fmt.Sprintf("TABLE(%s)", strings.Join(cols, ", "))
 }
 
+// String returns the SQL representation of this CHARACTER type, e.g.
+// "CHARACTER" or "CHARACTER(10)".
 func (t *CharacterType) String() string {
 	if t.Length == nil {
 		return "CHARACTER"
@@ -293,6 +314,8 @@ func (t *CharacterType) String() string {
 	return fmt.Sprintf("CHARACTER(%s)", t.Length)
 }
 
+// String returns the SQL representation of this VARCHAR type, e.g.
+// "VARCHAR" or "VARCHAR(255)".
 func (t *VarcharType) String() string {
 	if t.Length == nil {
 		return "VARCHAR"
@@ -300,6 +323,8 @@ func (t *VarcharType) String() string {
 	return fmt.Sprintf("VARCHAR(%s)", t.Length)
 }
 
+// String returns the SQL representation of this NUMERIC type, e.g.
+// "NUMERIC", "NUMERIC(10)", or "NUMERIC(10,2)".
 func (t *NumericType) String() string {
 	if t.Info == nil {
 		return "NUMERIC"
@@ -307,6 +332,8 @@ func (t *NumericType) String() string {
 	return fmt.Sprintf("NUMERIC%s", t.Info)
 }
 
+// String returns the SQL representation of this INTEGER type, e.g.
+// "INTEGER", "INTEGER(11)", or "INTEGER UNSIGNED".
 func (t *IntegerType) String() string {
 	var result string
 	if t.Length == nil {
@@ -320,6 +347,8 @@ func (t *IntegerType) String() string {
 	return result
 }
 
+// String returns the SQL representation of this FLOAT type, e.g.
+// "FLOAT" or "FLOAT(24)".
 func (t *FloatType) String() string {
 	if t.Length == nil {
 		return "FLOAT"
@@ -327,9 +356,14 @@ func (t *FloatType) String() string {
 	return fmt.Sprintf("FLOAT(%d)", *t.Length)
 }
 
+// String returns "BOOLEAN".
 func (*BooleanType) String() string { return "BOOLEAN" }
-func (*DateType) String() string    { return "DATE" }
 
+// String returns "DATE".
+func (*DateType) String() string { return "DATE" }
+
+// String returns the SQL representation of this TIME type, e.g.
+// "TIME", "TIME(3)", "TIME WITH TIME ZONE", or "TIME(6) WITHOUT TIME ZONE".
 func (t *TimeType) String() string {
 	var result string
 	if t.Precision == nil {
@@ -343,6 +377,8 @@ func (t *TimeType) String() string {
 	return result
 }
 
+// String returns the SQL representation of this TIMESTAMP type, e.g.
+// "TIMESTAMP", "TIMESTAMP(3)", or "TIMESTAMP WITH TIME ZONE".
 func (t *TimestampType) String() string {
 	var result string
 	if t.Precision == nil {
@@ -356,6 +392,8 @@ func (t *TimestampType) String() string {
 	return result
 }
 
+// String returns the SQL representation of this ARRAY type by delegating to the
+// element type definition, or "ARRAY" when no element type is specified.
 func (t *ArrayType) String() string {
 	if t.ElementType == nil {
 		return "ARRAY"
@@ -363,6 +401,8 @@ func (t *ArrayType) String() string {
 	return t.ElementType.String()
 }
 
+// String returns the SQL representation of this ENUM type listing all values,
+// e.g. "ENUM('red', 'green', 'blue')" or "ENUM8('a', 'b')".
 func (t *EnumType) String() string {
 	var values []string
 	for _, v := range t.Values {
@@ -377,6 +417,8 @@ func (t *EnumType) String() string {
 	return fmt.Sprintf("%s(%s)", result, strings.Join(values, ", "))
 }
 
+// String returns the SQL representation of this SET type listing all values,
+// e.g. "SET('a', 'b', 'c')".
 func (t *SetType) String() string {
 	var values []string
 	for _, v := range t.Values {
@@ -385,8 +427,11 @@ func (t *SetType) String() string {
 	return fmt.Sprintf("SET(%s)", strings.Join(values, ", "))
 }
 
+// String returns "JSON".
 func (*JsonType) String() string { return "JSON" }
 
+// String returns the SQL representation of this BINARY type, e.g.
+// "BINARY", "BINARY(16)", or "BINARY(MAX)".
 func (t *BinaryType) String() string {
 	if t.Length == nil {
 		return "BINARY"
@@ -394,6 +439,8 @@ func (t *BinaryType) String() string {
 	return fmt.Sprintf("BINARY(%s)", t.Length)
 }
 
+// String returns the SQL representation of this custom/user-defined type,
+// e.g. "my_type" or "my_type(arg1, arg2)".
 func (t *CustomType) String() string {
 	if len(t.Modifiers) == 0 {
 		return t.Name.String()

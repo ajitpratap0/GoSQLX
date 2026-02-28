@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package ast provides operator definitions for SQL expressions.
-//
-// This file defines unary and binary operators supported in SQL expressions,
+// This file defines unary and binary operator types for SQL expressions,
 // including standard SQL operators and PostgreSQL-specific extensions.
 package ast
 

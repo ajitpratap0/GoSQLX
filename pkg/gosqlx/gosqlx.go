@@ -12,56 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package gosqlx provides high-level convenience functions for SQL parsing, validation,
-// and metadata extraction with automatic object pool management.
-//
-// This package is the primary entry point for most applications using GoSQLX.
-// It wraps the lower-level tokenizer and parser APIs to provide a simple, ergonomic
-// interface for common SQL operations. All object pool management is handled internally.
-//
-// # Performance Characteristics (v1.6.0)
-//
-//   - Throughput: 1.38M+ operations/second sustained, 1.5M+ peak
-//   - Latency: <1μs for complex queries with window functions
-//   - Memory: 60-80% reduction through intelligent object pooling
-//   - Thread Safety: Race-free, validated with 20,000+ concurrent operations
-//
-// # Quick Start
-//
-// Parse SQL and get AST:
-//
-//	sql := "SELECT u.name, o.total FROM users u JOIN orders o ON u.id = o.user_id"
-//	ast, err := gosqlx.Parse(sql)
-//	if err != nil {
-//	    log.Fatal(err)
-//	}
-//
-// Extract metadata from SQL:
-//
-//	metadata := gosqlx.ExtractMetadata(ast)
-//	fmt.Printf("Tables: %v, Columns: %v\n", metadata.Tables, metadata.Columns)
-//
-// # For Performance-Critical Applications
-//
-// For batch processing or performance-critical code that needs fine-grained control
-// over object lifecycle and pooling, use the lower-level APIs in pkg/sql/tokenizer
-// and pkg/sql/parser directly:
-//
-//	// Manual object pool management
-//	tkz := tokenizer.GetTokenizer()
-//	defer tokenizer.PutTokenizer(tkz)
-//
-//	p := parser.GetParser()
-//	defer parser.PutParser(p)
-//
-//	// Reuse objects for multiple queries
-//	for _, sql := range queries {
-//	    tkz.Reset()
-//	    tokens, _ := tkz.Tokenize([]byte(sql))
-//	    ast, _ := p.Parse(tokens)
-//	}
-//
-// See package documentation (doc.go) for complete feature list and usage examples.
 package gosqlx
 
 import (
@@ -559,7 +509,21 @@ type FormatOptions struct {
 	SingleLineLimit int
 }
 
-// DefaultFormatOptions returns the default formatting options.
+// DefaultFormatOptions returns a FormatOptions value with sensible defaults.
+//
+// The defaults are:
+//   - IndentSize: 2 spaces per indent level
+//   - UppercaseKeywords: false (preserve original case)
+//   - AddSemicolon: false (preserve original termination)
+//   - SingleLineLimit: 80 characters
+//
+// Use the returned value as a starting point and override individual fields
+// to match your project's SQL style guide:
+//
+//	opts := gosqlx.DefaultFormatOptions()
+//	opts.UppercaseKeywords = true  // enforce UPPERCASE keywords
+//	opts.AddSemicolon = true       // always terminate with ;
+//	formatted, err := gosqlx.Format(sql, opts)
 func DefaultFormatOptions() FormatOptions {
 	return FormatOptions{
 		IndentSize:        2,

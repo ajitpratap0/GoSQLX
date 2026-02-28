@@ -18,8 +18,14 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
-// AddOrderBy returns a Rule that adds an ORDER BY expression to a SELECT statement.
-// If desc is true, the order is descending; otherwise ascending.
+// AddOrderBy returns a Rule that appends an ORDER BY expression to a SELECT
+// statement. Multiple calls append additional sort keys in the order they are applied.
+//
+// Parameters:
+//   - column: Name of the column (or expression alias) to sort by
+//   - desc: When true the sort direction is DESC; when false it is ASC
+//
+// Returns ErrUnsupportedStatement for non-SELECT statements.
 func AddOrderBy(column string, desc bool) Rule {
 	return RuleFunc(func(stmt ast.Statement) error {
 		sel, err := getSelect(stmt, "AddOrderBy")
@@ -34,7 +40,13 @@ func AddOrderBy(column string, desc bool) Rule {
 	})
 }
 
-// RemoveOrderBy returns a Rule that removes the ORDER BY clause entirely from a SELECT statement.
+// RemoveOrderBy returns a Rule that removes the ORDER BY clause entirely from a
+// SELECT statement, leaving the result set in an unspecified (engine-dependent)
+// order. This is useful when rewriting queries for intermediate stages in a
+// pipeline where ordering should be deferred to the final step, or when
+// performance is preferred over a stable row order.
+//
+// Returns ErrUnsupportedStatement for non-SELECT statements.
 func RemoveOrderBy() Rule {
 	return RuleFunc(func(stmt ast.Statement) error {
 		sel, err := getSelect(stmt, "RemoveOrderBy")

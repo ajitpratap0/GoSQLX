@@ -15,6 +15,12 @@
 // Package parser provides a high-performance, production-ready recursive descent SQL parser
 // that converts tokenized SQL into a comprehensive Abstract Syntax Tree (AST).
 //
+// The primary entry points are GetParser (pool-based instantiation), ParseFromModelTokens
+// (converts []models.TokenWithSpan from the tokenizer into parser tokens), and
+// ParseWithPositions (produces an *ast.AST with full position information).
+// For dialect-aware parsing, use ParseWithDialect. For concurrent use, always obtain a
+// parser instance via GetParser and return it with PutParser (or defer parser.PutParser(p)).
+//
 // # Overview
 //
 // The parser implements a predictive recursive descent parser with one-token lookahead,

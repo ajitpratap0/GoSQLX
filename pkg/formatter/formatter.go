@@ -12,12 +12,81 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package formatter provides a public API for formatting SQL strings.
+// Package formatter provides a public API for formatting and pretty-printing SQL strings.
 //
-// Usage:
+// The formatter parses SQL using the GoSQLX tokenizer and parser, then renders
+// the resulting AST back to text using a visitor-based renderer. This approach
+// guarantees that output is syntactically valid and consistently styled. The
+// package follows the same separation of concerns as go/ast and go/printer:
+// AST nodes carry no formatting logic; all rendering is handled here.
 //
-//	f := formatter.New(formatter.Options{IndentSize: 2, Uppercase: true})
-//	formatted, err := f.Format("select id,name from users where id=1")
+// # Key Types and Functions
+//
+// The primary entry point is the Formatter type, configured with Options:
+//
+//   - Formatter — stateful formatter created with New(Options); call Format(sql) to reformat a query.
+//   - Options — controls IndentSize (spaces per level), Uppercase (keyword case), and Compact (single-line output).
+//   - FormatString — convenience function for one-shot formatting with default options (2-space indent, lowercase keywords, readable multi-line output).
+//   - FormatAST — low-level renderer that accepts a parsed *ast.AST and ast.FormatOptions directly.
+//   - FormatStatement / FormatExpression — render individual AST nodes; used by the LSP formatter and linter auto-fix.
+//
+// # Formatting Styles
+//
+// Two preset styles from the ast package drive the renderer:
+//
+//   - ast.ReadableStyle() — multi-line output with uppercase keywords, 2-space indentation, and a trailing semicolon per statement. This is the default style used by Formatter when Compact is false.
+//   - ast.CompactStyle() — single-line output with no indentation, suitable for logging or wire transmission.
+//
+// Custom styles can be built by constructing an ast.FormatOptions value directly
+// and calling FormatAST.
+//
+// # Basic Usage
+//
+//	import "github.com/ajitpratap0/GoSQLX/pkg/formatter"
+//
+//	// One-shot formatting with default options
+//	out, err := formatter.FormatString("select id,name from users where id=1")
+//	// out: "select id, name\nfrom users\nwhere id = 1"
+//
+//	// Configurable formatting
+//	f := formatter.New(formatter.Options{IndentSize: 4, Uppercase: true})
+//	out, err := f.Format("select id,name from users where id=1")
+//	// out: "SELECT id, name\nFROM users\nWHERE id = 1"
+//
+//	// Compact single-line output
+//	f := formatter.New(formatter.Options{Compact: true, Uppercase: true})
+//	out, err := f.Format("SELECT id, name FROM users WHERE id = 1")
+//	// out: "SELECT id, name FROM users WHERE id = 1"
+//
+// # Supported Statement Types
+//
+// The renderer handles all GoSQLX-supported statement types:
+//
+//   - DML: SELECT (including CTEs, window functions, set operations), INSERT, UPDATE, DELETE
+//   - DDL: CREATE TABLE, CREATE INDEX, CREATE VIEW, CREATE MATERIALIZED VIEW, ALTER TABLE, DROP, TRUNCATE
+//   - Advanced: MERGE, REFRESH MATERIALIZED VIEW
+//
+// # Comment Preservation
+//
+// Comments captured by the tokenizer are attached to the AST and re-emitted
+// by FormatAST. Leading (non-inline) comments appear before the query; inline
+// comments are appended after the last statement.
+//
+// # Backward Compatibility
+//
+// Importing this package automatically wires the visitor-based renderer into
+// the ast package's FormatStatementFunc, FormatExpressionFunc, and FormatASTFunc
+// variables via an init() function in compat.go. This allows deprecated
+// Format(FormatOptions) methods on AST nodes to delegate here without creating
+// an import cycle. Callers that import only pkg/sql/ast receive a fallback
+// SQL() string output from those deprecated shims.
+//
+// # Object Pool Usage
+//
+// Format internally uses the GoSQLX tokenizer and parser object pools for
+// efficient memory reuse. The Formatter type is safe for reuse but not for
+// concurrent use from multiple goroutines; create one Formatter per goroutine
+// or protect shared access with a mutex.
 package formatter
 
 import (

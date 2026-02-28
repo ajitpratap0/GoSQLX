@@ -27,8 +27,12 @@ type Select struct {
 	Offset   *int64
 }
 
-func (s *Select) statementNode()      {}
+func (s *Select) statementNode() {}
+
+// TokenLiteral implements Node and returns "SELECT".
 func (s Select) TokenLiteral() string { return "SELECT" }
+
+// Children implements Node and returns all child nodes of this Select statement.
 func (s Select) Children() []Node {
 	children := make([]Node, 0)
 	children = append(children, nodifyExpressions(s.Columns)...)
@@ -58,8 +62,12 @@ type Insert struct {
 	ReturningClause []Expression
 }
 
-func (i *Insert) statementNode()      {}
+func (i *Insert) statementNode() {}
+
+// TokenLiteral implements Node and returns "INSERT".
 func (i Insert) TokenLiteral() string { return "INSERT" }
+
+// Children implements Node and returns all child nodes of this Insert statement.
 func (i Insert) Children() []Node {
 	children := make([]Node, 0)
 	children = append(children, &i.Table)
@@ -78,8 +86,12 @@ type Delete struct {
 	ReturningClause []Expression
 }
 
-func (d *Delete) statementNode()      {}
+func (d *Delete) statementNode() {}
+
+// TokenLiteral implements Node and returns "DELETE".
 func (d Delete) TokenLiteral() string { return "DELETE" }
+
+// Children implements Node and returns all child nodes of this Delete statement.
 func (d Delete) Children() []Node {
 	children := make([]Node, 0)
 	children = append(children, &d.Table)
@@ -98,8 +110,12 @@ type Update struct {
 	ReturningClause []Expression
 }
 
-func (u *Update) statementNode()      {}
+func (u *Update) statementNode() {}
+
+// TokenLiteral implements Node and returns "UPDATE".
 func (u Update) TokenLiteral() string { return "UPDATE" }
+
+// Children implements Node and returns all child nodes of this Update statement.
 func (u Update) Children() []Node {
 	children := make([]Node, 0)
 	children = append(children, &u.Table)

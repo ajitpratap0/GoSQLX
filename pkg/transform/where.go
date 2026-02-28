@@ -32,8 +32,18 @@ func getWhere(stmt ast.Statement) (*ast.Expression, error) {
 	}
 }
 
-// AddWhere returns a Rule that adds an AND condition to the existing WHERE clause.
-// If no WHERE clause exists, the condition becomes the WHERE clause.
+// AddWhere returns a Rule that appends a condition to the WHERE clause of a
+// SELECT, UPDATE, or DELETE statement. If the statement already has a WHERE clause,
+// the new condition is combined with AND. If there is no WHERE clause, the condition
+// becomes the sole WHERE predicate.
+//
+// Use this when you have a pre-built AST expression. For raw SQL strings use
+// AddWhereFromSQL instead.
+//
+// Parameters:
+//   - condition: An AST expression node representing the filter predicate
+//
+// Returns ErrUnsupportedStatement for INSERT or DDL statements.
 func AddWhere(condition ast.Expression) Rule {
 	return RuleFunc(func(stmt ast.Statement) error {
 		where, err := getWhere(stmt)
@@ -53,7 +63,12 @@ func AddWhere(condition ast.Expression) Rule {
 	})
 }
 
-// RemoveWhere returns a Rule that removes the WHERE clause entirely.
+// RemoveWhere returns a Rule that removes the WHERE clause from a SELECT, UPDATE,
+// or DELETE statement. After the rule is applied, the statement will match all rows
+// in the target table(s). Use with care in production to avoid unintentional full
+// table scans or mass updates.
+//
+// Returns ErrUnsupportedStatement for INSERT or DDL statements.
 func RemoveWhere() Rule {
 	return RuleFunc(func(stmt ast.Statement) error {
 		where, err := getWhere(stmt)
@@ -65,7 +80,14 @@ func RemoveWhere() Rule {
 	})
 }
 
-// ReplaceWhere returns a Rule that replaces the WHERE clause with the given condition.
+// ReplaceWhere returns a Rule that unconditionally replaces the WHERE clause of a
+// SELECT, UPDATE, or DELETE statement with the given condition. Unlike AddWhere,
+// this discards any existing WHERE predicate instead of combining with AND.
+//
+// Parameters:
+//   - condition: The new AST expression to use as the WHERE predicate
+//
+// Returns ErrUnsupportedStatement for INSERT or DDL statements.
 func ReplaceWhere(condition ast.Expression) Rule {
 	return RuleFunc(func(stmt ast.Statement) error {
 		where, err := getWhere(stmt)

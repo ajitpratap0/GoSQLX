@@ -12,16 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package token defines the Token struct and token pooling system for SQL lexical analysis.
+// Package token defines the Token struct and object pool for SQL lexical analysis.
 //
-// As of #215, the token system uses a unified integer-based type system (models.TokenType).
-// The legacy string-based token.Type has been removed.
+// A Token is the fundamental unit produced by the GoSQLX tokenizer: it pairs a
+// models.TokenType integer constant (e.g., models.TokenTypeSelect, models.TokenTypeIdent)
+// with the raw literal string from the source SQL. The integer-based TokenType taxonomy
+// covers all SQL token categories — DML keywords (SELECT, INSERT, UPDATE, DELETE),
+// DDL keywords (CREATE, ALTER, DROP), punctuation, operators, literals, and identifiers.
+// The legacy string-based token.Type was removed in #215; all code should use models.TokenType.
+//
+// The package also provides an object pool (Get / Put) for zero-allocation token reuse in
+// hot paths such as batch parsing or high-throughput server workloads. Every token obtained
+// with Get must be returned with a deferred Put to avoid memory leaks.
 //
 // # Token Structure
 //
 //	type Token struct {
-//	    Type    models.TokenType // Int-based type (primary, for performance)
-//	    Literal string           // The literal value of the token
+//	    Type    models.TokenType // Integer token type constant (primary, O(1) comparison)
+//	    Literal string           // Raw literal value from the SQL source
 //	}
 //
 // # Basic Usage
@@ -46,14 +54,15 @@
 // The package provides an object pool for zero-allocation token reuse:
 //
 //	tok := token.Get()
-//	defer token.Put(tok)  // MANDATORY - return to pool when done
+//	defer token.Put(tok)  // MANDATORY — return to pool when done
 //
 //	tok.Type = models.TokenTypeSelect
 //	tok.Literal = "SELECT"
 //
 // # See Also
 //
-//   - pkg/models: Core token type definitions (models.TokenType)
-//   - pkg/sql/tokenizer: SQL lexical analysis producing tokens
-//   - pkg/sql/parser: Parser consuming tokens
+//   - pkg/models: Core TokenType constants and the TokenTypeUnknown sentinel
+//   - pkg/sql/keywords: Keyword-to-TokenType mapping for all SQL dialects
+//   - pkg/sql/tokenizer: SQL lexical analysis that produces Token values
+//   - pkg/sql/parser: Recursive descent parser that consumes Token values
 package token

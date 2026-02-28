@@ -26,6 +26,7 @@ const (
 	Hash
 )
 
+// String returns the SQL keyword for this index type: "BTREE" or "HASH".
 func (t IndexType) String() string {
 	switch t {
 	case BTree:
@@ -44,13 +45,18 @@ type IndexOption struct {
 	Comment string     // Used for Comment
 }
 
+// IndexOptionType identifies which kind of index option is represented.
 type IndexOptionType int
 
 const (
+	// UsingIndex specifies the index access method (e.g. USING BTREE).
 	UsingIndex IndexOptionType = iota
+	// CommentIndex attaches a comment string to the index.
 	CommentIndex
 )
 
+// String returns the SQL representation of this index option (e.g. "USING BTREE"
+// or "COMMENT 'text'").
 func (opt *IndexOption) String() string {
 	switch opt.Type {
 	case UsingIndex:
@@ -71,6 +77,8 @@ const (
 	NullsNotDistinct
 )
 
+// String returns the SQL keyword phrase for this nulls-distinct option:
+// "NULLS DISTINCT", "NULLS NOT DISTINCT", or an empty string for the default.
 func (opt NullsDistinctOption) String() string {
 	switch opt {
 	case NullsDistinct:
@@ -89,8 +97,13 @@ type AlterStatement struct {
 	Operation AlterOperation
 }
 
-func (a *AlterStatement) statementNode()      {}
+func (a *AlterStatement) statementNode() {}
+
+// TokenLiteral implements Node and returns "ALTER".
 func (a AlterStatement) TokenLiteral() string { return "ALTER" }
+
+// Children implements Node and returns the alter operation as a single child,
+// or nil if no operation is set.
 func (a AlterStatement) Children() []Node {
 	if a.Operation != nil {
 		return []Node{a.Operation}
@@ -143,7 +156,13 @@ type AlterTableOperation struct {
 }
 
 func (a *AlterTableOperation) alterOperationNode() {}
+
+// TokenLiteral implements Node and returns "ALTER TABLE".
 func (a AlterTableOperation) TokenLiteral() string { return "ALTER TABLE" }
+
+// Children implements Node and returns the child nodes involved in this
+// ALTER TABLE operation: the column definition, constraint, projection select,
+// and/or alter column operation, depending on the operation type.
 func (a AlterTableOperation) Children() []Node {
 	var children []Node
 	if a.ColumnDef != nil {
@@ -190,21 +209,34 @@ type RoleOption struct {
 	Value interface{} // Can be bool or Expression depending on Type
 }
 
+// RoleOptionType identifies which role attribute is being set.
 type RoleOptionType int
 
 const (
+	// BypassRLS controls whether the role bypasses row-level security policies.
 	BypassRLS RoleOptionType = iota
+	// ConnectionLimit sets the maximum number of concurrent connections for the role.
 	ConnectionLimit
+	// CreateDB allows or prevents the role from creating new databases.
 	CreateDB
+	// CreateRole allows or prevents the role from creating new roles.
 	CreateRole
+	// Inherit controls whether the role inherits privileges of roles it is a member of.
 	Inherit
+	// Login allows or prevents the role from logging in.
 	Login
+	// Password sets the password for the role.
 	Password
+	// Replication controls whether the role can initiate streaming replication.
 	Replication
+	// SuperUser grants or revokes superuser privileges.
 	SuperUser
+	// ValidUntil sets the date and time after which the role's password is no longer valid.
 	ValidUntil
 )
 
+// String returns the SQL keyword phrase for this role option (e.g. "SUPERUSER",
+// "NOSUPERUSER", "LOGIN", "CONNECTION LIMIT 10", "PASSWORD NULL", etc.).
 func (opt *RoleOption) String() string {
 	switch opt.Type {
 	case BypassRLS:
@@ -268,7 +300,12 @@ type AlterRoleOperation struct {
 }
 
 func (a *AlterRoleOperation) alterOperationNode() {}
+
+// TokenLiteral implements Node and returns "ALTER ROLE".
 func (a AlterRoleOperation) TokenLiteral() string { return "ALTER ROLE" }
+
+// Children implements Node and returns the ConfigValue expression as a child,
+// or nil if no config value is set.
 func (a AlterRoleOperation) Children() []Node {
 	var children []Node
 	if a.ConfigValue != nil {
@@ -299,7 +336,12 @@ type AlterPolicyOperation struct {
 }
 
 func (a *AlterPolicyOperation) alterOperationNode() {}
+
+// TokenLiteral implements Node and returns "ALTER POLICY".
 func (a AlterPolicyOperation) TokenLiteral() string { return "ALTER POLICY" }
+
+// Children implements Node and returns the USING and WITH CHECK expressions
+// as child nodes (any nil expressions are omitted).
 func (a AlterPolicyOperation) Children() []Node {
 	var children []Node
 	if a.Using != nil {
@@ -327,8 +369,12 @@ type AlterConnectorOperation struct {
 }
 
 func (a *AlterConnectorOperation) alterOperationNode() {}
+
+// TokenLiteral implements Node and returns "ALTER CONNECTOR".
 func (a AlterConnectorOperation) TokenLiteral() string { return "ALTER CONNECTOR" }
-func (a AlterConnectorOperation) Children() []Node     { return nil }
+
+// Children implements Node and returns nil — AlterConnectorOperation has no child nodes.
+func (a AlterConnectorOperation) Children() []Node { return nil }
 
 // AlterConnectorOwner represents the new owner of a connector
 type AlterConnectorOwner struct {

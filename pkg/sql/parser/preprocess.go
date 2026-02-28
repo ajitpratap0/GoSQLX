@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package parser — token preprocessing (normalization) for the parser.
-//
-// preprocessTokens replaces the old token_conversion.go conversion layer.
+// preprocessTokens implements token preprocessing (normalization) for the parser.
+// It replaces the old token_conversion.go conversion layer.
 // Instead of converting models.TokenWithSpan → token.Token (which stripped span
-// information), it now normalises a []models.TokenWithSpan in-place so the parser
+// information), it normalises a []models.TokenWithSpan in-place so the parser
 // can consume it directly.
 //
 // The two responsibilities of the old layer are preserved here:

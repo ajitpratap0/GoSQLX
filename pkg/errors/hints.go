@@ -29,8 +29,17 @@ var commonKeywords = []string{
 	"DISTINCT", "ALL", "ANY", "SOME", "EXISTS", "ASC", "DESC",
 }
 
-// SuggestKeyword uses Levenshtein distance to suggest the closest matching keyword.
-// Results are cached to improve performance in repeated error scenarios.
+// SuggestKeyword uses Levenshtein distance to suggest the closest SQL keyword
+// matching the given input token. The suggestion is only returned when the edit
+// distance is within half the length of the input (minimum threshold of 2), which
+// prevents semantically unrelated tokens from being suggested.
+//
+// Results are stored in a bounded LRU-style cache shared across all calls to
+// improve performance during repeated error-reporting scenarios where the same
+// misspelled token appears many times (e.g., in batch query validation).
+//
+// Returns the matching keyword in uppercase, or an empty string if no sufficiently
+// close match is found.
 func SuggestKeyword(input string) string {
 	input = strings.ToUpper(input)
 	if input == "" {
@@ -122,7 +131,18 @@ func min(a, b, c int) int {
 	return c
 }
 
-// GenerateHint generates an intelligent hint based on the error type and context
+// GenerateHint generates an actionable hint message tailored to the error code
+// and the tokens involved. For token-mismatch errors it applies SuggestKeyword to
+// detect typos and produces a "Did you mean?" message. For structural errors such
+// as missing clauses or unsupported features it returns a generic guidance string.
+//
+// Parameters:
+//   - code: The ErrorCode that identifies the class of error (e.g., ErrCodeExpectedToken)
+//   - expected: The token or keyword that was required (used for ErrCodeExpectedToken
+//     and ErrCodeMissingClause messages)
+//   - found: The token that was actually present (used for typo detection)
+//
+// Returns an empty string for error codes that have no pre-defined hint.
 func GenerateHint(code ErrorCode, expected, found string) string {
 	switch code {
 	case ErrCodeExpectedToken:
@@ -162,7 +182,22 @@ func GenerateHint(code ErrorCode, expected, found string) string {
 	}
 }
 
-// Common error scenarios with pre-built hints
+// CommonHints is a pre-built map of human-readable hint messages keyed by a
+// short scenario identifier. The map covers the most frequent SQL authoring
+// mistakes and is intended for use in error formatters that want to attach a
+// contextual hint without invoking the full suggestion pipeline.
+//
+// The available keys are:
+//
+//	"missing_from"     — SELECT without a FROM clause
+//	"missing_where"    — reminder to add a WHERE filter
+//	"unclosed_paren"   — unbalanced parentheses
+//	"missing_comma"    — list items not separated by commas
+//	"invalid_join"     — JOIN clause missing ON or USING
+//	"duplicate_alias"  — non-unique table alias
+//	"ambiguous_column" — unqualified column reference in multi-table query
+//
+// Use GetCommonHint for safe lookup with a zero-value fallback.
 var CommonHints = map[string]string{
 	"missing_from":     "SELECT statements require a FROM clause unless selecting constants",
 	"missing_where":    "Add a WHERE clause to filter the results",
@@ -173,7 +208,12 @@ var CommonHints = map[string]string{
 	"ambiguous_column": "Qualify the column name with the table name or alias (e.g., table.column)",
 }
 
-// GetCommonHint retrieves a pre-defined hint by key
+// GetCommonHint retrieves a pre-defined hint message from CommonHints by its
+// scenario key. This is the safe alternative to indexing the map directly; it
+// returns an empty string instead of the zero value when the key is absent,
+// making nil-check patterns unnecessary in callers.
+//
+// See CommonHints for the full list of valid keys.
 func GetCommonHint(key string) string {
 	if hint, ok := CommonHints[key]; ok {
 		return hint

@@ -12,7 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package models provides core data structures for SQL tokenization and parsing in GoSQLX v1.6.0.
+// Package models provides the core data structures for SQL tokenization and parsing in GoSQLX.
+//
+// The fundamental types are Token (a single lexical unit with Type and Value), TokenWithSpan
+// (a Token paired with Start/End Location for precise source positions), Location (1-based
+// line/column coordinates), Span (a source range from one Location to another), and
+// TokenizerError (structured error with position information). TokenType is an integer
+// enumeration that covers all SQL keywords, operators, literals, and punctuation, enabling
+// O(1) switch-based dispatch throughout the tokenizer and parser.
 //
 // This package contains the fundamental types used throughout the GoSQLX library for representing
 // SQL tokens, their locations in source code, and tokenization errors. All types are designed with

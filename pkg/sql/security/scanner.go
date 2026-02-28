@@ -12,9 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package security provides SQL injection pattern detection and security scanning
-// capabilities for GoSQLX. It analyzes both parsed SQL ASTs and raw SQL strings
-// to identify common SQL injection patterns and security vulnerabilities.
+// Package security provides SQL injection detection and security scanning for GoSQLX.
+//
+// The primary entry points are NewScanner (creates a scanner that reports all severity
+// levels), NewScannerWithSeverity (creates a scanner filtered to a minimum severity),
+// Scanner.Scan (analyzes a parsed *ast.AST via deep tree traversal), and Scanner.ScanSQL
+// (analyzes a raw SQL string using pre-compiled regex patterns). Both methods return a
+// *ScanResult containing all Findings with severity, pattern type, risk description, and
+// remediation suggestions, plus summary counts accessible via HasCritical(),
+// HasHighOrAbove(), and IsClean().
 //
 // # Overview
 //

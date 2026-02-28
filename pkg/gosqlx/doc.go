@@ -13,10 +13,11 @@
 // limitations under the License.
 
 // Package gosqlx provides high-level convenience functions for SQL parsing, validation,
-// and metadata extraction.
+// formatting, and metadata extraction, with automatic object pool management.
 //
 // GoSQLX is a production-ready, high-performance SQL parsing SDK for Go that supports
 // multiple SQL dialects with comprehensive SQL-99 and SQL:2003 feature support.
+// The primary entry points are Parse, Validate, Format, and ParseWithDialect.
 //
 // # Overview
 //
@@ -24,6 +25,14 @@
 // ergonomic interface for common SQL operations. All object pool management is handled
 // internally, making it ideal for applications that prioritize ease of use over
 // fine-grained performance control.
+//
+// Key functions:
+//   - Parse: tokenizes and parses SQL, returning an *ast.AST
+//   - Validate: checks whether SQL is syntactically valid without building a full AST
+//   - Format: formats SQL text according to configurable style options
+//   - ParseWithDialect: parses SQL using dialect-specific rules (PostgreSQL, MySQL, etc.)
+//   - ParseMultiple: efficiently parses a batch of SQL statements by reusing pooled objects
+//   - ParseWithContext: parse with context support for cancellation and timeouts
 //
 // For performance-critical applications requiring fine-grained control over object
 // lifecycle and pooling, use the lower-level APIs in pkg/sql/tokenizer and pkg/sql/parser

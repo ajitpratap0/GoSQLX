@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package ast provides SQL formatting option types shared between the AST and
+// This file provides SQL formatting option types shared between the AST and
 // the formatter package.
 //
 // Rendering logic lives in pkg/formatter — AST nodes are pure data structures

@@ -109,19 +109,31 @@ func (c *keywordSuggestionCache) size() int {
 	return len(c.cache)
 }
 
-// ClearSuggestionCache clears the keyword suggestion cache.
-// Useful for testing or when keyword list changes.
+// ClearSuggestionCache removes all entries from the keyword suggestion cache.
+// Call this in tests to ensure a clean state between test cases, or after
+// modifying the keyword list so that stale suggestions are not served.
 func ClearSuggestionCache() {
 	suggestionCache.clear()
 }
 
-// SuggestionCacheSize returns the current size of the suggestion cache.
-// Useful for monitoring and debugging.
+// SuggestionCacheSize returns the number of entries currently held in the keyword
+// suggestion cache. Use this for monitoring cache growth and deciding whether to
+// adjust the maximum size.
 func SuggestionCacheSize() int {
 	return suggestionCache.size()
 }
 
-// SuggestionCacheStats returns cache statistics
+// SuggestionCacheStats holds observability metrics for the keyword suggestion cache.
+// Retrieve an instance via GetSuggestionCacheStats and reset counters via
+// ResetSuggestionCacheStats.
+//
+// Fields:
+//   - Size: Current number of entries in the cache
+//   - MaxSize: Configured maximum capacity (default 1000)
+//   - Hits: Number of cache lookups that returned a cached value
+//   - Misses: Number of cache lookups that required computing a new suggestion
+//   - Evictions: Total number of entries removed during partial eviction sweeps
+//   - HitRate: Ratio of Hits to (Hits + Misses); 0.0 when no lookups have occurred
 type SuggestionCacheStats struct {
 	Size      int
 	MaxSize   int
@@ -131,7 +143,14 @@ type SuggestionCacheStats struct {
 	HitRate   float64
 }
 
-// GetSuggestionCacheStats returns current cache statistics
+// GetSuggestionCacheStats returns a snapshot of the current keyword suggestion cache
+// metrics. The returned struct is safe to read without any additional locking.
+// Use this in observability dashboards or benchmarks to track cache efficiency.
+//
+// Example:
+//
+//	stats := errors.GetSuggestionCacheStats()
+//	fmt.Printf("Cache hit rate: %.1f%%\n", stats.HitRate*100)
 func GetSuggestionCacheStats() SuggestionCacheStats {
 	hits := atomic.LoadUint64(&suggestionCache.hits)
 	misses := atomic.LoadUint64(&suggestionCache.misses)
@@ -153,8 +172,9 @@ func GetSuggestionCacheStats() SuggestionCacheStats {
 	}
 }
 
-// ResetSuggestionCacheStats resets the cache statistics counters.
-// Useful for testing and monitoring.
+// ResetSuggestionCacheStats zeroes all hit, miss, and eviction counters in the
+// keyword suggestion cache without clearing cached entries. Call this at the start
+// of a benchmark or monitoring interval to obtain a clean measurement window.
 func ResetSuggestionCacheStats() {
 	atomic.StoreUint64(&suggestionCache.hits, 0)
 	atomic.StoreUint64(&suggestionCache.misses, 0)

@@ -13,7 +13,13 @@
 // limitations under the License.
 
 // Package tokenizer provides high-performance SQL tokenization with zero-copy operations
-// and comprehensive Unicode support for GoSQLX v1.6.0.
+// and comprehensive Unicode support.
+//
+// The primary entry points are Tokenize (convert raw SQL bytes to []models.TokenWithSpan),
+// GetTokenizer and PutTokenizer (pool-based instance management for optimal memory
+// efficiency), and TokenizeContext (tokenization with context cancellation support).
+// The tokenizer operates directly on input byte slices without allocating intermediate
+// strings, achieving 8M+ tokens/sec throughput with full UTF-8 support.
 //
 // # Overview
 //

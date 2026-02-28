@@ -12,26 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package testing provides helper functions for testing SQL parsing in Go tests.
-//
-// This package offers convenient assertion and requirement functions for validating
-// SQL parsing, formatting, and metadata extraction in your test suites. It integrates
-// seamlessly with Go's standard testing package and follows similar patterns to
-// testify/assert.
-//
-// Example usage:
-//
-//	func TestMySQL(t *testing.T) {
-//	    testing.AssertValidSQL(t, "SELECT * FROM users")
-//	    testing.AssertInvalidSQL(t, "SELECT FROM")
-//	    testing.AssertTables(t, "SELECT * FROM users u JOIN orders o", []string{"users", "orders"})
-//	}
-//
-// Key features:
-//   - Clear, descriptive error messages with SQL context
-//   - Proper test failure reporting with t.Helper()
-//   - Support for both assertion (test continues) and requirement (test stops) styles
-//   - Metadata extraction helpers (tables, columns)
+// Package testing provides SQL parsing test helpers; see doc.go for full documentation.
 package testing
 
 import (

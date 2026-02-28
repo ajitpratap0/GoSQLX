@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package formatter provides visitor-based SQL rendering for AST nodes.
-//
+// render.go — visitor-based SQL rendering for AST nodes.
 // All formatting logic lives here; AST nodes are pure data (no Format methods).
 // This follows the go/ast + go/printer separation pattern.
+
 package formatter
 
 import (

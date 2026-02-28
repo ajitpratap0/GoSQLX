@@ -12,6 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package main is compiled as a C-shared library (libgosqlx) that exposes the GoSQLX
+// SQL parsing engine to non-Go languages via a plain C FFI.
+//
+// The library is built with "go build -buildmode=c-shared" (see build.sh) and produces
+// a platform-native shared object — libgosqlx.so on Linux, libgosqlx.dylib on macOS,
+// and libgosqlx.dll on Windows — together with a generated C header (libgosqlx.h).
+// The primary consumer is the Python package pygosqlx, which loads the library at
+// runtime via ctypes, but any language with a C FFI (Ruby, Node.js via N-API, Rust FFI,
+// etc.) can call the exported symbols directly.
+//
+// All exported functions follow the same contract: they accept C strings (null-terminated
+// UTF-8) and return a newly allocated C string containing a JSON-encoded result object.
+// Callers must free every returned string with gosqlx_free to avoid memory leaks.
+//
+// Exported symbols:
+//
+//	gosqlx_parse(sql)             — parse SQL, return ParseResult JSON
+//	gosqlx_validate(sql)          — validate SQL syntax, return ValidationResult JSON
+//	gosqlx_format(sql)            — format SQL, return FormatResult JSON
+//	gosqlx_extract_tables(sql)    — extract referenced table names as JSON array
+//	gosqlx_extract_columns(sql)   — extract referenced column names as JSON array
+//	gosqlx_extract_functions(sql) — extract referenced function names as JSON array
+//	gosqlx_extract_metadata(sql)  — extract tables, columns, functions with schema qualification
+//	gosqlx_version()              — return the library version string (e.g. "1.9.0")
+//	gosqlx_free(ptr)              — free a string previously returned by any gosqlx_* function
 package main
 
 // #include <stdlib.h>

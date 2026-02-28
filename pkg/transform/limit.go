@@ -20,8 +20,13 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
-// SetLimit returns a Rule that sets or replaces the LIMIT clause on a SELECT statement.
-// n must be non-negative.
+// SetLimit returns a Rule that sets (or replaces) the LIMIT clause of a SELECT
+// statement. Any existing LIMIT value is overwritten.
+//
+// Parameters:
+//   - n: Number of rows to return; must be >= 0. Returns an error for negative values.
+//
+// Returns ErrUnsupportedStatement for non-SELECT statements.
 func SetLimit(n int) Rule {
 	return RuleFunc(func(stmt ast.Statement) error {
 		if n < 0 {
@@ -36,8 +41,13 @@ func SetLimit(n int) Rule {
 	})
 }
 
-// SetOffset returns a Rule that sets or replaces the OFFSET clause on a SELECT statement.
-// n must be non-negative.
+// SetOffset returns a Rule that sets (or replaces) the OFFSET clause of a SELECT
+// statement. Use together with SetLimit to implement pagination.
+//
+// Parameters:
+//   - n: Number of rows to skip; must be >= 0. Returns an error for negative values.
+//
+// Returns ErrUnsupportedStatement for non-SELECT statements.
 func SetOffset(n int) Rule {
 	return RuleFunc(func(stmt ast.Statement) error {
 		if n < 0 {
@@ -52,7 +62,10 @@ func SetOffset(n int) Rule {
 	})
 }
 
-// RemoveLimit returns a Rule that removes the LIMIT clause from a SELECT statement.
+// RemoveLimit returns a Rule that removes the LIMIT clause from a SELECT statement,
+// allowing the query to return an unbounded number of rows.
+//
+// Returns ErrUnsupportedStatement for non-SELECT statements.
 func RemoveLimit() Rule {
 	return RuleFunc(func(stmt ast.Statement) error {
 		sel, err := getSelect(stmt, "RemoveLimit")
@@ -64,7 +77,10 @@ func RemoveLimit() Rule {
 	})
 }
 
-// RemoveOffset returns a Rule that removes the OFFSET clause from a SELECT statement.
+// RemoveOffset returns a Rule that removes the OFFSET clause from a SELECT statement,
+// resetting pagination to start from the first row.
+//
+// Returns ErrUnsupportedStatement for non-SELECT statements.
 func RemoveOffset() Rule {
 	return RuleFunc(func(stmt ast.Statement) error {
 		sel, err := getSelect(stmt, "RemoveOffset")

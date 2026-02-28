@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package parser — Validate() fast path for SQL validation without full AST construction.
+// Validate() implements a fast path for SQL validation without full AST construction.
 // See issue #274.
 package parser
 

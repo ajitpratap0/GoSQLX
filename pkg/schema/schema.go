@@ -14,13 +14,15 @@
 
 // Package schema provides schema-aware SQL validation for GoSQLX.
 //
-// This package allows users to define database schemas (tables, columns,
-// constraints) and validate SQL queries against them. It can detect
-// references to non-existent tables or columns, ambiguous column references,
-// and INSERT column count mismatches.
-//
-// Schemas can be built programmatically or loaded from DDL (CREATE TABLE)
-// statements using GoSQLX's own parser.
+// The package defines a hierarchy of Schema, Table, Column, and Catalog types that
+// represent a relational database schema. A Validator created from a Schema (or Catalog)
+// walks the AST produced by the GoSQLX parser and reports semantic errors such as
+// references to non-existent tables or columns, ambiguous cross-schema column references,
+// and INSERT column-count mismatches. Schemas can be built programmatically or loaded
+// from DDL (CREATE TABLE) statements using GoSQLX's own parser via LoadFromDDL.
+// All table and column lookups are case-insensitive to match SQL standard behaviour.
+// For multi-schema environments the Catalog type resolves table references across schemas
+// and returns a clear error when the same table name exists in more than one schema.
 //
 // Example - Programmatic schema building:
 //

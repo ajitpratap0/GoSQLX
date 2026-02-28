@@ -14,19 +14,32 @@
 
 // Package transform provides composable SQL query rewriting via AST manipulation.
 //
-// This is GoSQLX's key differentiator — enabling safe, programmatic SQL modification.
-// All transforms operate on AST nodes from pkg/sql/ast and preserve AST validity,
-// meaning roundtrip (parse → transform → format/SQL) always produces valid SQL.
+// This is GoSQLX's key differentiator — enabling safe, programmatic SQL modification
+// without string concatenation. All transforms operate on AST nodes from pkg/sql/ast
+// and preserve structural validity, meaning a roundtrip (parse -> transform -> format)
+// always produces well-formed SQL. Transforms are defined by the Rule interface and
+// applied individually or composed using Apply.
 //
-// # Design
+// # Available Transforms
 //
-// Transforms are implemented as [Rule] values that can be applied individually
-// or composed via [Apply]. Each rule modifies the AST in-place (since Go uses
-// pointers) and returns an error if the transform cannot be applied.
+// WHERE clause: AddWhere, AddWhereFromSQL, ReplaceWhere, RemoveWhere
+// Columns:      AddColumn, RemoveColumn
+// JOINs:        AddJoin, AddJoinFromSQL
+// ORDER BY:     AddOrderBy
+// LIMIT/OFFSET: SetLimit, SetOffset (for pagination)
+// Tables:       RenameTable, AddTableAlias
 //
 // # WHERE Clause Transforms
 //
-//	// Add a filter condition
+//	// Add a filter condition using an AST node (safe for untrusted column values)
+//	rule := transform.AddWhere(&ast.BinaryExpression{
+//	    Left:     &ast.Identifier{Name: "status"},
+//	    Operator: "=",
+//	    Right:    &ast.LiteralValue{Value: "active"},
+//	})
+//	transform.Apply(stmt, rule)
+//
+//	// Add a filter from a trusted SQL string
 //	rule := transform.AddWhereFromSQL("status = 'active'")
 //	transform.Apply(stmt, rule)
 //
@@ -42,6 +55,14 @@
 //	rule := transform.AddJoinFromSQL("LEFT JOIN orders ON orders.user_id = users.id")
 //	transform.Apply(stmt, rule)
 //
+// # Pagination
+//
+//	// Set LIMIT and OFFSET for pagination
+//	transform.Apply(stmt,
+//	    transform.SetLimit(20),
+//	    transform.SetOffset(40),
+//	)
+//
 // # Security
 //
 // WARNING: Functions that accept raw SQL strings (AddWhereFromSQL, AddJoinFromSQL)
@@ -51,7 +72,7 @@
 //
 // # Composability
 //
-// Multiple transforms can be chained:
+// Multiple transforms can be chained in a single Apply call:
 //
 //	transform.Apply(stmt,
 //	    transform.AddWhereFromSQL("active = true"),

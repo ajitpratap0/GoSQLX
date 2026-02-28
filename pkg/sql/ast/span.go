@@ -162,6 +162,9 @@ func (e *BinaryExpression) Span() models.Span {
 	return UnionSpans(spans)
 }
 
+// Span returns the source location span for this unary expression.
+// It delegates to the inner expression's span, or returns an empty span
+// if the inner expression does not implement Spanned.
 func (e *UnaryExpression) Span() models.Span {
 	if e.Expr != nil {
 		if spanned, ok := e.Expr.(Spanned); ok {
@@ -171,6 +174,9 @@ func (e *UnaryExpression) Span() models.Span {
 	return models.EmptySpan()
 }
 
+// Span returns the source location span for this CAST expression.
+// It delegates to the inner expression's span, or returns an empty span
+// if the inner expression does not implement Spanned.
 func (e *CastExpression) Span() models.Span {
 	if e.Expr != nil {
 		if spanned, ok := e.Expr.(Spanned); ok {
@@ -180,11 +186,15 @@ func (e *CastExpression) Span() models.Span {
 	return models.EmptySpan()
 }
 
+// Span returns an empty source location span for this interval expression.
+// IntervalExpression stores no child expressions, so no span can be derived.
 func (i *IntervalExpression) Span() models.Span {
 	// IntervalExpression has no child expressions, return empty span
 	return models.EmptySpan()
 }
 
+// Span returns the union of source location spans for all arguments of this
+// function call. Returns an empty span if no arguments implement Spanned.
 func (e *FunctionCall) Span() models.Span {
 	spans := make([]models.Span, 0)
 

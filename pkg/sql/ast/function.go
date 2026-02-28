@@ -38,6 +38,8 @@ type FunctionDesc struct {
 	Arguments []string
 }
 
+// String returns the SQL representation of this function descriptor, including
+// the optional schema qualifier and argument list (e.g. "schema.func(arg1, arg2)").
 func (f FunctionDesc) String() string {
 	if len(f.Arguments) == 0 {
 		if f.Schema != "" {
@@ -52,6 +54,9 @@ func (f FunctionDesc) String() string {
 	return fmt.Sprintf("%s(%s)", f.Name, f.Arguments)
 }
 
-// Implement Node interface
-func (f FunctionDesc) Children() []Node     { return nil }
+// Children implements Node and returns nil — FunctionDesc has no child nodes.
+func (f FunctionDesc) Children() []Node { return nil }
+
+// TokenLiteral implements Node and returns the SQL representation of this
+// function descriptor (delegates to String).
 func (f FunctionDesc) TokenLiteral() string { return f.String() }

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package formatter — backward-compatibility hook registration.
+// compat.go — backward-compatibility hook registration.
 //
 // This init() function registers the pkg/formatter rendering functions into the
 // ast package's FormatStatementFunc / FormatExpressionFunc / FormatASTFunc
@@ -24,6 +24,7 @@
 // which is the common case for any application that uses the formatter. Callers
 // that only import pkg/sql/ast (without pkg/formatter) will receive SQL()
 // fallback output from the deprecated shims.
+
 package formatter
 
 import (

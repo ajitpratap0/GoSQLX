@@ -44,26 +44,47 @@ type Value struct {
 type ValueType int
 
 const (
+	// NumberValue represents a numeric literal.
 	NumberValue ValueType = iota
+	// SingleQuotedStringValue represents a single-quoted string literal.
 	SingleQuotedStringValue
+	// DollarQuotedStringValue represents a PostgreSQL dollar-quoted string literal.
 	DollarQuotedStringValue
+	// TripleSingleQuotedStringValue represents a triple-single-quoted string literal.
 	TripleSingleQuotedStringValue
+	// TripleDoubleQuotedStringValue represents a triple-double-quoted string literal.
 	TripleDoubleQuotedStringValue
+	// EscapedStringLiteralValue represents a C-style escaped string (E'...').
 	EscapedStringLiteralValue
+	// UnicodeStringLiteralValue represents a Unicode string literal (U&'...').
 	UnicodeStringLiteralValue
+	// SingleQuotedByteStringLiteralValue represents a byte string with single quotes (B'...').
 	SingleQuotedByteStringLiteralValue
+	// DoubleQuotedByteStringLiteralValue represents a byte string with double quotes (B"...").
 	DoubleQuotedByteStringLiteralValue
+	// TripleSingleQuotedByteStringLiteralValue represents a byte string with triple single quotes.
 	TripleSingleQuotedByteStringLiteralValue
+	// TripleDoubleQuotedByteStringLiteralValue represents a byte string with triple double quotes.
 	TripleDoubleQuotedByteStringLiteralValue
+	// SingleQuotedRawStringLiteralValue represents a raw string with single quotes (R'...').
 	SingleQuotedRawStringLiteralValue
+	// DoubleQuotedRawStringLiteralValue represents a raw string with double quotes (R"...").
 	DoubleQuotedRawStringLiteralValue
+	// TripleSingleQuotedRawStringLiteralValue represents a raw string with triple single quotes.
 	TripleSingleQuotedRawStringLiteralValue
+	// TripleDoubleQuotedRawStringLiteralValue represents a raw string with triple double quotes.
 	TripleDoubleQuotedRawStringLiteralValue
+	// NationalStringLiteralValue represents a national character string literal (N'...').
 	NationalStringLiteralValue
+	// HexStringLiteralValue represents a hexadecimal string literal (X'...').
 	HexStringLiteralValue
+	// DoubleQuotedStringValue represents a double-quoted string literal.
 	DoubleQuotedStringValue
+	// BooleanValue represents a boolean literal (TRUE or FALSE).
 	BooleanValue
+	// NullValue represents the SQL NULL literal.
 	NullValue
+	// PlaceholderValue represents a query parameter placeholder (e.g. $1, ?, :name).
 	PlaceholderValue
 )
 
@@ -73,6 +94,9 @@ type DollarQuotedString struct {
 	Tag   string
 }
 
+// String returns the SQL literal representation of this value, including
+// appropriate quoting and escaping for each ValueType (e.g. single-quoted
+// strings, dollar-quoted strings, hex strings, boolean literals, NULL, etc.).
 func (v Value) String() string {
 	switch v.Type {
 	case NumberValue:
@@ -155,10 +179,13 @@ type Number struct {
 	Long  bool
 }
 
+// Children implements Node and returns nil — Value has no child nodes.
 func (v Value) Children() []Node {
 	return nil
 }
 
+// TokenLiteral implements Node and returns the SQL literal representation of
+// this value (delegates to String).
 func (v Value) TokenLiteral() string {
 	return v.String()
 }
@@ -287,6 +314,8 @@ const (
 	CustomDateTime
 )
 
+// String returns the SQL keyword for this date/time field (e.g. "YEAR",
+// "MONTH", "DAY", "HOUR", "MINUTE", "SECOND", etc.).
 func (d DateTimeField) String() string {
 	switch d {
 	case Year:
@@ -391,6 +420,7 @@ const (
 	NFKD
 )
 
+// String returns the Unicode normalization form name ("NFC", "NFD", "NFKC", or "NFKD").
 func (n NormalizationForm) String() string {
 	switch n {
 	case NFC:
@@ -415,6 +445,7 @@ const (
 	Trailing
 )
 
+// String returns the SQL keyword for this trim direction: "BOTH", "LEADING", or "TRAILING".
 func (t TrimWhereField) String() string {
 	switch t {
 	case Both:

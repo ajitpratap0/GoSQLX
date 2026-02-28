@@ -12,57 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package parser provides a high-performance recursive descent SQL parser that converts
-// tokenized SQL into a comprehensive Abstract Syntax Tree (AST).
-//
-// The parser supports enterprise-grade SQL parsing with 1.38M+ ops/sec throughput,
-// comprehensive multi-dialect support (PostgreSQL, MySQL, SQL Server, Oracle, SQLite),
-// and production-ready features including DoS protection, context cancellation, and
-// object pooling for optimal memory efficiency.
-//
-// # Quick Start
-//
-//	// Get parser from pool
-//	parser := parser.GetParser()
-//	defer parser.PutParser(parser)
-//
-//	// Parse tokens to AST
-//	result := parser.ParseFromModelTokens(tokens)
-//	astObj, err := parser.ParseWithPositions(result)
-//	defer ast.ReleaseAST(astObj)
-//
-// # v1.6.0 PostgreSQL Extensions
-//
-//   - LATERAL JOIN: Correlated subqueries in FROM clause
-//   - JSON/JSONB Operators: All 10 operators (->/->>/#>/#>>/@>/<@/?/?|/?&/#-)
-//   - DISTINCT ON: PostgreSQL-specific row deduplication
-//   - FILTER Clause: Conditional aggregation (SQL:2003 T612)
-//   - RETURNING Clause: Return modified rows from DML statements
-//   - Aggregate ORDER BY: ORDER BY inside STRING_AGG, ARRAY_AGG
-//
-// # v1.5.0 Features (SQL-99 Compliance)
-//
-//   - GROUPING SETS, ROLLUP, CUBE: Advanced grouping (SQL-99 T431)
-//   - MERGE Statements: SQL:2003 MERGE with MATCHED/NOT MATCHED
-//   - Materialized Views: CREATE/REFRESH/DROP with CONCURRENTLY
-//   - FETCH Clause: SQL-99 F861/F862 with PERCENT, ONLY, WITH TIES
-//   - TRUNCATE: Enhanced with RESTART/CONTINUE IDENTITY
-//
-// # v1.3.0 Window Functions (Phase 2.5)
-//
-//   - Window Functions: OVER clause with PARTITION BY, ORDER BY
-//   - Ranking: ROW_NUMBER(), RANK(), DENSE_RANK(), NTILE()
-//   - Analytic: LAG(), LEAD(), FIRST_VALUE(), LAST_VALUE()
-//   - Frame Clauses: ROWS/RANGE with PRECEDING/FOLLOWING/CURRENT ROW
-//
-// # v1.2.0 CTEs and Set Operations (Phase 2)
-//
-//   - Common Table Expressions: WITH clause with recursive support
-//   - Set Operations: UNION, UNION ALL, EXCEPT, INTERSECT
-//   - Multiple CTEs: Comma-separated CTE definitions in single query
-//   - CTE Column Lists: Optional column specifications
-//
-// For comprehensive documentation, see doc.go in this package.
 package parser
 
 import (
@@ -261,6 +210,18 @@ func (p *Parser) Dialect() string {
 	return p.dialect
 }
 
+// Parser is a recursive-descent SQL parser that converts a token stream into an
+// Abstract Syntax Tree (AST).
+//
+// Parser instances are not thread-safe. Each goroutine must use its own instance,
+// obtained from the pool via GetParser and returned with PutParser:
+//
+//	p := parser.GetParser()
+//	defer parser.PutParser(p)
+//	tree, err := p.ParseFromModelTokens(tokens)
+//
+// For dialect-aware parsing or strict mode, use NewParser with options, or call
+// ApplyOptions on a pooled instance before parsing.
 type Parser struct {
 	tokens       []models.TokenWithSpan
 	currentPos   int

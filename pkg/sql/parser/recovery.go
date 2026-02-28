@@ -34,6 +34,8 @@ type ParseError struct {
 	Cause     error // original error, accessible via Unwrap()
 }
 
+// Error implements the error interface and returns a human-readable description
+// of the parse error with position information when available.
 func (e *ParseError) Error() string {
 	if e.Line > 0 {
 		return fmt.Sprintf("parse error at line %d, column %d (token %d): %s", e.Line, e.Column, e.TokenIdx, e.Msg)

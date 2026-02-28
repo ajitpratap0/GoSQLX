@@ -31,8 +31,17 @@ var validJoinTypes = map[string]bool{
 	"NATURAL": true,
 }
 
-// AddJoin returns a Rule that adds a JOIN clause to a SELECT statement.
-// joinType must be one of: INNER, LEFT, RIGHT, FULL, CROSS, NATURAL.
+// AddJoin returns a Rule that appends a JOIN clause to the SELECT statement. The
+// join type is validated against the set of supported types; an error is returned
+// for any unrecognised value.
+//
+// Parameters:
+//   - joinType: One of INNER, LEFT, RIGHT, FULL, CROSS, or NATURAL (case-insensitive)
+//   - table: Name of the table to join
+//   - condition: AST expression for the ON condition (may be nil for CROSS/NATURAL joins)
+//
+// Returns an error for unrecognised join types or ErrUnsupportedStatement for
+// non-SELECT statements.
 func AddJoin(joinType string, table string, condition ast.Expression) Rule {
 	return RuleFunc(func(stmt ast.Statement) error {
 		upper := strings.ToUpper(joinType)
@@ -52,7 +61,14 @@ func AddJoin(joinType string, table string, condition ast.Expression) Rule {
 	})
 }
 
-// RemoveJoin returns a Rule that removes a JOIN by table name from a SELECT statement.
+// RemoveJoin returns a Rule that removes all JOIN clauses whose right-hand table name
+// or alias matches tableName (case-insensitive). If no matching JOIN exists the
+// statement is returned unmodified without an error.
+//
+// Parameters:
+//   - tableName: Name or alias of the table to remove from the JOIN list
+//
+// Returns ErrUnsupportedStatement for non-SELECT statements.
 func RemoveJoin(tableName string) Rule {
 	return RuleFunc(func(stmt ast.Statement) error {
 		sel, err := getSelect(stmt, "RemoveJoin")

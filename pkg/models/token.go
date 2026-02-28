@@ -12,13 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package models provides core data structures for SQL tokenization and parsing,
-// including tokens, spans, locations, and error types.
-//
-// This package is the foundation of GoSQLX v1.6.0, providing high-performance,
-// zero-copy token types with comprehensive PostgreSQL and SQL standard support.
-//
-// See doc.go for complete package documentation and examples.
 package models
 
 // Token represents a SQL token with its value and metadata.
@@ -52,11 +45,21 @@ package models
 // Performance: Tokens are stack-allocated value types with minimal memory overhead.
 // Used extensively with sync.Pool for zero-allocation parsing in hot paths.
 type Token struct {
-	Type  TokenType
+	// Type is the TokenType classification of this token (e.g., TokenTypeSelect,
+	// TokenTypeNumber, TokenTypeArrow). Use Type for all category checks.
+	Type TokenType
+	// Value is the raw string representation of the token as it appeared in the
+	// SQL source (e.g., "SELECT", "42", "'hello'", "->").
 	Value string
-	Word  *Word // For TokenTypeWord
-	Long  bool  // For TokenTypeNumber to indicate if it's a long number
-	Quote rune  // For quoted strings and identifiers
+	// Word holds keyword or identifier metadata for TokenTypeWord tokens.
+	// It is nil for all other token types.
+	Word *Word
+	// Long is true for TokenTypeNumber tokens whose value exceeds the range of
+	// a 32-bit integer and must be interpreted as int64.
+	Long bool
+	// Quote is the quote character used to delimit the token, for quoted string
+	// literals (') and quoted identifiers (", `, [). Zero for unquoted tokens.
+	Quote rune
 }
 
 // Word represents a keyword or identifier with its properties.
@@ -84,9 +87,14 @@ type Token struct {
 //	    QuoteStyle: '"',
 //	}
 type Word struct {
-	Value      string   // The actual text value
-	QuoteStyle rune     // The quote character used (if quoted)
-	Keyword    *Keyword // If this word is a keyword
+	// Value is the actual text of the word in its original case (e.g., "SELECT", "users").
+	Value string
+	// QuoteStyle is the quote character used to delimit a quoted identifier (", `, [).
+	// Zero for unquoted words.
+	QuoteStyle rune
+	// Keyword holds SQL keyword metadata when this word is a recognized SQL keyword.
+	// It is nil for plain identifiers (table names, column names, aliases).
+	Keyword *Keyword
 }
 
 // Keyword represents a lexical keyword with its properties.
@@ -112,8 +120,12 @@ type Word struct {
 //   - RETURNING: Return modified rows from INSERT/UPDATE/DELETE
 //   - FILTER: Conditional aggregation in window functions
 type Keyword struct {
-	Word     string // The actual keyword text
-	Reserved bool   // Whether this is a reserved keyword
+	// Word is the keyword text in its canonical uppercase form (e.g., "SELECT", "LATERAL").
+	Word string
+	// Reserved is true for keywords that cannot be used as unquoted identifiers
+	// (e.g., SELECT, FROM, WHERE) and false for non-reserved keywords
+	// (e.g., RETURNING, LATERAL, FILTER) that are valid as identifiers in some dialects.
+	Reserved bool
 }
 
 // Whitespace represents different types of whitespace tokens.
@@ -142,9 +154,14 @@ type Keyword struct {
 //	    Content: "/* Block comment */",
 //	}
 type Whitespace struct {
-	Type    WhitespaceType
-	Content string // For comments
-	Prefix  string // For single line comments
+	// Type identifies whether this is a space, newline, tab, or comment.
+	Type WhitespaceType
+	// Content holds the text of a comment, including its delimiters.
+	// Empty for non-comment whitespace (spaces, newlines, tabs).
+	Content string
+	// Prefix holds the comment introducer for single-line comments ("--" or "#").
+	// Empty for block comments and non-comment whitespace.
+	Prefix string
 }
 
 // WhitespaceType represents the type of whitespace.

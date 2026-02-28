@@ -29,7 +29,14 @@ func getSelect(stmt ast.Statement, transform string) (*ast.SelectStatement, erro
 	return sel, nil
 }
 
-// AddColumn returns a Rule that adds a column expression to a SELECT statement.
+// AddColumn returns a Rule that appends a column expression to the SELECT list of
+// a SELECT statement. The expression may be any valid AST expression node such as
+// *ast.Identifier, *ast.AliasedExpression, or *ast.FunctionCall.
+//
+// Parameters:
+//   - expr: The column expression to append to the SELECT list
+//
+// Returns ErrUnsupportedStatement for non-SELECT statements.
 func AddColumn(expr ast.Expression) Rule {
 	return RuleFunc(func(stmt ast.Statement) error {
 		sel, err := getSelect(stmt, "AddColumn")
@@ -41,7 +48,12 @@ func AddColumn(expr ast.Expression) Rule {
 	})
 }
 
-// RemoveColumn returns a Rule that removes a column by name or alias from a SELECT statement.
+// RemoveColumn returns a Rule that removes the first column in the SELECT list that
+// matches name. Matching is case-insensitive and checks both identifier names and
+// expression aliases.
+//
+// Returns an error if no column matching name is found, or ErrUnsupportedStatement
+// for non-SELECT statements.
 func RemoveColumn(name string) Rule {
 	return RuleFunc(func(stmt ast.Statement) error {
 		sel, err := getSelect(stmt, "RemoveColumn")
@@ -65,8 +77,15 @@ func RemoveColumn(name string) Rule {
 	})
 }
 
-// ReplaceColumn returns a Rule that replaces a column identified by oldName
-// with a new column identified by newName.
+// ReplaceColumn returns a Rule that replaces every column in the SELECT list that
+// matches oldName with a bare *ast.Identifier for newName. Matching is
+// case-insensitive against both identifier names and aliases.
+//
+// Parameters:
+//   - oldName: Name or alias of the column to replace
+//   - newName: Replacement identifier name
+//
+// Returns ErrUnsupportedStatement for non-SELECT statements.
 func ReplaceColumn(oldName, newName string) Rule {
 	return RuleFunc(func(stmt ast.Statement) error {
 		sel, err := getSelect(stmt, "ReplaceColumn")
@@ -82,7 +101,11 @@ func ReplaceColumn(oldName, newName string) Rule {
 	})
 }
 
-// AddSelectStar returns a Rule that adds * to the SELECT columns.
+// AddSelectStar returns a Rule that appends a wildcard * column to the SELECT list
+// of a SELECT statement. This is a convenience wrapper around AddColumn with an
+// *ast.Identifier{Name: "*"} argument.
+//
+// Returns ErrUnsupportedStatement for non-SELECT statements.
 func AddSelectStar() Rule {
 	return AddColumn(&ast.Identifier{Name: "*"})
 }

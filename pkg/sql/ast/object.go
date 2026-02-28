@@ -19,6 +19,11 @@ type ObjectName struct {
 	Name string
 }
 
+// TokenLiteral implements Node and returns the object name string.
 func (o ObjectName) TokenLiteral() string { return o.Name }
-func (o ObjectName) Children() []Node     { return nil }
-func (o ObjectName) String() string       { return o.Name }
+
+// Children implements Node and returns nil — ObjectName has no child nodes.
+func (o ObjectName) Children() []Node { return nil }
+
+// String returns the object name as a plain string.
+func (o ObjectName) String() string { return o.Name }

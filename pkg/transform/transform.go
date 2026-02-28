@@ -23,21 +23,63 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
-// Rule represents a rewrite rule that can be applied to a statement.
+// Rule represents an AST rewrite rule that can be applied to a single SQL statement.
+// Rules modify the AST in-place and return an error if the transform cannot be
+// applied (e.g., applying a SELECT-only rule to an INSERT statement).
+//
+// Implement this interface to create custom transform rules:
+//
+//	type MyRule struct{}
+//
+//	func (r MyRule) Apply(stmt ast.Statement) error {
+//	    sel, ok := stmt.(*ast.SelectStatement)
+//	    if !ok {
+//	        return nil // skip non-SELECT statements
+//	    }
+//	    // modify sel in-place
+//	    return nil
+//	}
+//
+// Built-in rules are created by the constructor functions in this package (AddWhere,
+// AddColumn, AddJoin, SetLimit, etc.). Use Apply (the package-level function) to
+// chain multiple rules together.
 type Rule interface {
 	Apply(stmt ast.Statement) error
 }
 
-// RuleFunc adapts a function to the Rule interface.
+// RuleFunc is a function type that implements the Rule interface. It allows
+// anonymous functions and closures to be used directly as transform rules without
+// defining a named type. All built-in rule constructors (AddWhere, AddColumn, etc.)
+// return a RuleFunc internally.
+//
+// Example:
+//
+//	rule := transform.RuleFunc(func(stmt ast.Statement) error {
+//	    sel, ok := stmt.(*ast.SelectStatement)
+//	    if !ok {
+//	        return nil
+//	    }
+//	    sel.Distinct = true
+//	    return nil
+//	})
 type RuleFunc func(stmt ast.Statement) error
 
-// Apply implements Rule.
+// Apply implements the Rule interface by invoking the underlying function.
 func (f RuleFunc) Apply(stmt ast.Statement) error {
 	return f(stmt)
 }
 
-// Apply applies multiple rules to a statement in order.
-// If any rule returns an error, Apply stops and returns that error.
+// Apply executes one or more rules against an AST statement in the order they are
+// provided. If any rule returns a non-nil error the function stops immediately and
+// returns that error without applying subsequent rules.
+//
+// This is the primary entry point for composing transforms:
+//
+//	err := transform.Apply(stmt,
+//	    transform.AddWhereFromSQL("active = true"),
+//	    transform.SetLimit(100),
+//	    transform.AddOrderBy("created_at", true),
+//	)
 func Apply(stmt ast.Statement, rules ...Rule) error {
 	for _, rule := range rules {
 		if err := rule.Apply(stmt); err != nil {
@@ -47,7 +89,13 @@ func Apply(stmt ast.Statement, rules ...Rule) error {
 	return nil
 }
 
-// ErrUnsupportedStatement is returned when a transform is applied to an unsupported statement type.
+// ErrUnsupportedStatement is returned when a transform rule is applied to a statement
+// type it does not support. For example, AddColumn only supports SelectStatement; applying
+// it to an InsertStatement will produce this error.
+//
+// Fields:
+//   - Transform: Name of the transform function that produced the error (e.g., "AddColumn")
+//   - Got: Human-readable name of the statement type that was rejected (e.g., "INSERT")
 type ErrUnsupportedStatement struct {
 	Transform string
 	Got       string
@@ -128,8 +176,22 @@ func stmtTypeName(stmt ast.Statement) string {
 	}
 }
 
-// ParseSQL parses a SQL string into an AST. This is a convenience function
-// for use with transform functions.
+// ParseSQL parses a SQL string into a full AST containing all statements. This is
+// a convenience wrapper around the tokenizer and parser pipeline that handles
+// resource pooling automatically.
+//
+// Use this function when you need an AST for subsequent Apply calls:
+//
+//	tree, err := transform.ParseSQL("SELECT id, name FROM users WHERE active = true")
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	stmt := tree.Statements[0]
+//	transform.Apply(stmt, transform.SetLimit(10))
+//	fmt.Println(transform.FormatSQL(stmt))
+//
+// Returns a *ast.AST containing all parsed statements, or an error if tokenization
+// or parsing fails.
 func ParseSQL(sql string) (*ast.AST, error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
@@ -150,7 +212,17 @@ func ParseSQL(sql string) (*ast.AST, error) {
 	return tree, nil
 }
 
-// FormatSQL formats an AST statement back to SQL using compact style.
+// FormatSQL converts an AST statement back into a compact SQL string using the
+// GoSQLX formatter. It is the inverse of ParseSQL and completes the
+// parse-transform-format round-trip.
+//
+// The output uses compact style with minimal whitespace. Use this after applying
+// transforms to obtain the final SQL to execute or log.
+//
+// Example:
+//
+//	sql := transform.FormatSQL(stmt)
+//	// "SELECT id, name FROM users WHERE active = true LIMIT 10"
 func FormatSQL(stmt ast.Statement) string {
 	return formatter.FormatStatement(stmt, ast.CompactStyle())
 }

@@ -12,18 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package ast provides object pooling for AST nodes to minimize allocations.
-//
 // This file implements comprehensive object pooling for all major AST node types
-// using sync.Pool. The pooling system provides:
-//   - 60-80% memory reduction in production workloads
-//   - 95%+ pool hit rates with proper usage patterns
-//   - Thread-safe operations (zero race conditions)
-//   - Iterative cleanup to prevent stack overflow
+// using sync.Pool. The pooling system provides 60-80% memory reduction in production
+// workloads and 95%+ pool hit rates with proper usage patterns.
 //
 // IMPORTANT: Always use defer when returning pooled objects to prevent leaks.
-//
-// See also: doc.go for complete pooling documentation and usage examples
+// See doc.go for complete pooling documentation and usage examples.
 package ast
 
 import (

@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package tokenizer provides high-performance SQL tokenization with zero-copy operations.
-// See doc.go for comprehensive package documentation.
 package tokenizer
 
 import (

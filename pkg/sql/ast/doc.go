@@ -12,7 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package ast provides Abstract Syntax Tree (AST) node definitions for SQL statements.
+// Package ast provides Abstract Syntax Tree (AST) node definitions, visitor-based
+// traversal, and SQL() serialization for SQL statements parsed by GoSQLX.
+//
+// Key types include AST (the root container), Statement (SelectStatement,
+// InsertStatement, UpdateStatement, DeleteStatement, MergeStatement, etc.),
+// Expression (Identifier, BinaryExpression, FunctionCall, CaseExpression, etc.),
+// and WindowSpec for window-function specifications. Use NewAST/ReleaseAST,
+// GetSelectStatement/PutSelectStatement, and analogous pool helpers to minimize
+// allocations. Traverse any AST with Walk (Visitor interface) or Inspect
+// (function-based). Call SQL() on any node to serialize it back to a SQL string.
 //
 // This package implements a comprehensive AST representation for SQL with support for
 // multiple SQL dialects (PostgreSQL, MySQL, SQL Server, Oracle, SQLite). It includes

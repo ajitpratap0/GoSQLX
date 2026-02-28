@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package ast provides SQL serialization for AST nodes.
-//
 // This file implements SQL() string methods on all AST node types,
-// enabling AST→SQL roundtrip support (Issue #221).
+// enabling AST→SQL roundtrip serialization.
 package ast
 
 import (
@@ -125,6 +123,9 @@ func escapeStringLiteral(s string) string {
 	return b.String()
 }
 
+// SQL returns the SQL literal representation of this value.
+// Strings are single-quoted with proper escaping; NULLs are returned as "NULL";
+// booleans are returned in uppercase (TRUE/FALSE); numbers are returned as-is.
 func (l *LiteralValue) SQL() string {
 	if l == nil {
 		return ""
@@ -142,6 +143,7 @@ func (l *LiteralValue) SQL() string {
 	}
 }
 
+// SQL returns the unquoted identifier name. Used for round-trip serialization.
 func (i *Ident) SQL() string {
 	if i == nil {
 		return ""
@@ -149,6 +151,9 @@ func (i *Ident) SQL() string {
 	return i.Name
 }
 
+// SQL returns the SQL representation of this binary expression.
+// The operator, left, and right sub-expressions are serialized in infix notation.
+// NOT-qualified operators (LIKE, ILIKE, SIMILAR TO) are rendered as "x NOT OP y".
 func (b *BinaryExpression) SQL() string {
 	if b == nil {
 		return ""
@@ -180,6 +185,9 @@ func (b *BinaryExpression) SQL() string {
 	return fmt.Sprintf("%s %s %s", left, op, right)
 }
 
+// SQL returns the SQL representation of this unary expression.
+// Prefix operators (NOT, +, -, etc.) are prepended; the PostgreSQL
+// postfix factorial operator (!) is appended.
 func (u *UnaryExpression) SQL() string {
 	if u == nil {
 		return ""
@@ -199,6 +207,8 @@ func (u *UnaryExpression) SQL() string {
 	}
 }
 
+// SQL returns the SQL representation of this aliased expression in the form
+// "expr AS alias".
 func (a *AliasedExpression) SQL() string {
 	if a == nil {
 		return ""
@@ -206,6 +216,8 @@ func (a *AliasedExpression) SQL() string {
 	return exprSQL(a.Expr) + " AS " + a.Alias
 }
 
+// SQL returns the SQL representation of this CAST expression in the form
+// "CAST(expr AS type)".
 func (c *CastExpression) SQL() string {
 	if c == nil {
 		return ""
@@ -213,6 +225,8 @@ func (c *CastExpression) SQL() string {
 	return fmt.Sprintf("CAST(%s AS %s)", exprSQL(c.Expr), c.Type)
 }
 
+// SQL returns the SQL representation of this CASE expression including all
+// WHEN/THEN clauses and an optional ELSE clause.
 func (c *CaseExpression) SQL() string {
 	if c == nil {
 		return ""
@@ -238,6 +252,8 @@ func (c *CaseExpression) SQL() string {
 	return sb.String()
 }
 
+// SQL returns the SQL representation of this WHEN clause in the form
+// "WHEN condition THEN result".
 func (w *WhenClause) SQL() string {
 	if w == nil {
 		return ""
@@ -245,6 +261,8 @@ func (w *WhenClause) SQL() string {
 	return fmt.Sprintf("WHEN %s THEN %s", exprSQL(w.Condition), exprSQL(w.Result))
 }
 
+// SQL returns the SQL representation of this BETWEEN expression.
+// The NOT modifier is included when BetweenExpression.Not is true.
 func (b *BetweenExpression) SQL() string {
 	if b == nil {
 		return ""
@@ -256,6 +274,9 @@ func (b *BetweenExpression) SQL() string {
 	return fmt.Sprintf("%s %sBETWEEN %s AND %s", exprSQL(b.Expr), not, exprSQL(b.Lower), exprSQL(b.Upper))
 }
 
+// SQL returns the SQL representation of this IN expression.
+// The NOT modifier is included when InExpression.Not is true.
+// Supports both value lists "x IN (1, 2, 3)" and subqueries "x IN (SELECT ...)".
 func (i *InExpression) SQL() string {
 	if i == nil {
 		return ""
@@ -274,6 +295,7 @@ func (i *InExpression) SQL() string {
 	return fmt.Sprintf("%s %sIN (%s)", exprSQL(i.Expr), not, strings.Join(vals, ", "))
 }
 
+// SQL returns the SQL representation of this EXISTS expression as "EXISTS (subquery)".
 func (e *ExistsExpression) SQL() string {
 	if e == nil {
 		return ""
@@ -281,6 +303,7 @@ func (e *ExistsExpression) SQL() string {
 	return fmt.Sprintf("EXISTS (%s)", stmtSQL(e.Subquery))
 }
 
+// SQL returns the SQL representation of this scalar subquery as "(SELECT ...)".
 func (s *SubqueryExpression) SQL() string {
 	if s == nil {
 		return ""
@@ -288,6 +311,7 @@ func (s *SubqueryExpression) SQL() string {
 	return fmt.Sprintf("(%s)", stmtSQL(s.Subquery))
 }
 
+// SQL returns the SQL representation of this ANY expression as "expr op ANY (subquery)".
 func (a *AnyExpression) SQL() string {
 	if a == nil {
 		return ""
@@ -295,6 +319,7 @@ func (a *AnyExpression) SQL() string {
 	return fmt.Sprintf("%s %s ANY (%s)", exprSQL(a.Expr), a.Operator, stmtSQL(a.Subquery))
 }
 
+// SQL returns the SQL representation of this ALL expression as "expr op ALL (subquery)".
 func (a *AllExpression) SQL() string {
 	if a == nil {
 		return ""
@@ -302,6 +327,10 @@ func (a *AllExpression) SQL() string {
 	return fmt.Sprintf("%s %s ALL (%s)", exprSQL(a.Expr), a.Operator, stmtSQL(a.Subquery))
 }
 
+// SQL returns the SQL representation of this function call including arguments,
+// optional DISTINCT modifier, ORDER BY clause (for aggregates like STRING_AGG),
+// WITHIN GROUP (for ordered-set aggregates), FILTER (WHERE ...) clause, and
+// OVER (...) window specification.
 func (f *FunctionCall) SQL() string {
 	if f == nil {
 		return ""
@@ -341,6 +370,7 @@ func (f *FunctionCall) SQL() string {
 	return sb.String()
 }
 
+// SQL returns "EXTRACT(field FROM source)" as a SQL string.
 func (e *ExtractExpression) SQL() string {
 	if e == nil {
 		return ""
@@ -348,6 +378,7 @@ func (e *ExtractExpression) SQL() string {
 	return fmt.Sprintf("EXTRACT(%s FROM %s)", e.Field, exprSQL(e.Source))
 }
 
+// SQL returns "POSITION(substr IN str)" as a SQL string.
 func (p *PositionExpression) SQL() string {
 	if p == nil {
 		return ""
@@ -355,6 +386,9 @@ func (p *PositionExpression) SQL() string {
 	return fmt.Sprintf("POSITION(%s IN %s)", exprSQL(p.Substr), exprSQL(p.Str))
 }
 
+// SQL returns the SQL representation of this SUBSTRING expression.
+// With a length: "SUBSTRING(str FROM start FOR length)".
+// Without a length: "SUBSTRING(str FROM start)".
 func (s *SubstringExpression) SQL() string {
 	if s == nil {
 		return ""
@@ -365,6 +399,7 @@ func (s *SubstringExpression) SQL() string {
 	return fmt.Sprintf("SUBSTRING(%s FROM %s)", exprSQL(s.Str), exprSQL(s.Start))
 }
 
+// SQL returns the SQL representation of this interval as "INTERVAL 'value'".
 func (i *IntervalExpression) SQL() string {
 	if i == nil {
 		return ""
@@ -372,6 +407,8 @@ func (i *IntervalExpression) SQL() string {
 	return fmt.Sprintf("INTERVAL '%s'", i.Value)
 }
 
+// SQL returns the SQL representation of this list expression as a
+// comma-separated parenthesized list: "(v1, v2, v3)".
 func (l *ListExpression) SQL() string {
 	if l == nil {
 		return ""
@@ -383,6 +420,8 @@ func (l *ListExpression) SQL() string {
 	return strings.Join(vals, ", ")
 }
 
+// SQL returns the SQL representation of this tuple expression as a
+// parenthesized comma-separated list: "(v1, v2, v3)".
 func (t *TupleExpression) SQL() string {
 	if t == nil {
 		return ""
@@ -394,6 +433,9 @@ func (t *TupleExpression) SQL() string {
 	return "(" + strings.Join(vals, ", ") + ")"
 }
 
+// SQL returns the SQL representation of this ARRAY constructor.
+// From a subquery: "ARRAY(SELECT ...)".
+// From an element list: "ARRAY[e1, e2, e3]".
 func (a *ArrayConstructorExpression) SQL() string {
 	if a == nil {
 		return ""
@@ -408,6 +450,8 @@ func (a *ArrayConstructorExpression) SQL() string {
 	return "ARRAY[" + strings.Join(vals, ", ") + "]"
 }
 
+// SQL returns the SQL representation of this array subscript expression,
+// e.g. "arr[1]" or "matrix[i][j]" for multi-dimensional subscripts.
 func (a *ArraySubscriptExpression) SQL() string {
 	if a == nil {
 		return ""
@@ -419,6 +463,8 @@ func (a *ArraySubscriptExpression) SQL() string {
 	return s
 }
 
+// SQL returns the SQL representation of this array slice expression,
+// e.g. "arr[1:3]", "arr[2:]", "arr[:5]", or "arr[:]".
 func (a *ArraySliceExpression) SQL() string {
 	if a == nil {
 		return ""
@@ -436,6 +482,8 @@ func (a *ArraySliceExpression) SQL() string {
 
 // GROUP BY advanced expressions
 
+// SQL returns the SQL representation of this ROLLUP expression as
+// "ROLLUP(col1, col2, ...)".
 func (r *RollupExpression) SQL() string {
 	if r == nil {
 		return ""
@@ -443,6 +491,8 @@ func (r *RollupExpression) SQL() string {
 	return "ROLLUP(" + exprListSQL(r.Expressions) + ")"
 }
 
+// SQL returns the SQL representation of this CUBE expression as
+// "CUBE(col1, col2, ...)".
 func (c *CubeExpression) SQL() string {
 	if c == nil {
 		return ""
@@ -450,6 +500,8 @@ func (c *CubeExpression) SQL() string {
 	return "CUBE(" + exprListSQL(c.Expressions) + ")"
 }
 
+// SQL returns the SQL representation of this GROUPING SETS expression as
+// "GROUPING SETS((a, b), (a), ())".
 func (g *GroupingSetsExpression) SQL() string {
 	if g == nil {
 		return ""
@@ -465,6 +517,10 @@ func (g *GroupingSetsExpression) SQL() string {
 // Statements
 // ============================================================
 
+// SQL returns the full SQL string for this SELECT statement, including all
+// clauses: WITH, DISTINCT ON/DISTINCT, SELECT list, FROM, JOIN, WHERE,
+// GROUP BY, HAVING, WINDOW, ORDER BY, LIMIT, OFFSET, FETCH, and FOR.
+// This enables round-trip serialization of parsed queries.
 func (s *SelectStatement) SQL() string {
 	if s == nil {
 		return ""
@@ -552,6 +608,9 @@ func (s *SelectStatement) SQL() string {
 	return sb.String()
 }
 
+// SQL returns the full SQL string for this INSERT statement, including the
+// optional WITH clause, column list, VALUES rows or SELECT subquery, ON CONFLICT
+// clause, and RETURNING clause.
 func (i *InsertStatement) SQL() string {
 	if i == nil {
 		return ""
@@ -601,6 +660,9 @@ func (i *InsertStatement) SQL() string {
 	return sb.String()
 }
 
+// SQL returns the full SQL string for this UPDATE statement, including the
+// optional WITH clause, SET assignments, FROM clause, WHERE condition, and
+// RETURNING clause.
 func (u *UpdateStatement) SQL() string {
 	if u == nil {
 		return ""
@@ -650,6 +712,8 @@ func (u *UpdateStatement) SQL() string {
 	return sb.String()
 }
 
+// SQL returns the full SQL string for this DELETE statement, including the
+// optional WITH clause, USING clause, WHERE condition, and RETURNING clause.
 func (d *DeleteStatement) SQL() string {
 	if d == nil {
 		return ""
@@ -691,6 +755,8 @@ func (d *DeleteStatement) SQL() string {
 	return sb.String()
 }
 
+// SQL returns the full SQL string for this CREATE TABLE statement including
+// column definitions, table constraints, INHERITS, PARTITION BY, and table options.
 func (c *CreateTableStatement) SQL() string {
 	if c == nil {
 		return ""
@@ -737,6 +803,8 @@ func (c *CreateTableStatement) SQL() string {
 	return sb.String()
 }
 
+// SQL returns the full SQL string for this CREATE INDEX statement including
+// the UNIQUE modifier, IF NOT EXISTS, USING method, column list, and WHERE predicate.
 func (c *CreateIndexStatement) SQL() string {
 	if c == nil {
 		return ""
@@ -780,6 +848,9 @@ func (c *CreateIndexStatement) SQL() string {
 	return sb.String()
 }
 
+// SQL returns the SQL representation of this ALTER TABLE statement.
+// Note: the parser returns AlterStatement (in alter.go); this method
+// is for manually-constructed AlterTableStatement values.
 func (a *AlterTableStatement) SQL() string {
 	if a == nil {
 		return ""
@@ -796,6 +867,8 @@ func (a *AlterTableStatement) SQL() string {
 	return sb.String()
 }
 
+// SQL returns the SQL representation of this DROP statement, including the
+// object type, optional IF EXISTS, object names, and CASCADE/RESTRICT behavior.
 func (d *DropStatement) SQL() string {
 	if d == nil {
 		return ""
@@ -816,6 +889,8 @@ func (d *DropStatement) SQL() string {
 	return sb.String()
 }
 
+// SQL returns the SQL representation of this TRUNCATE statement, including
+// table names, RESTART/CONTINUE IDENTITY options, and CASCADE/RESTRICT behavior.
 func (t *TruncateStatement) SQL() string {
 	if t == nil {
 		return ""
@@ -836,6 +911,8 @@ func (t *TruncateStatement) SQL() string {
 	return sb.String()
 }
 
+// SQL returns the SQL representation of this WITH clause including any RECURSIVE
+// modifier and all CTE definitions.
 func (w *WithClause) SQL() string {
 	if w == nil {
 		return ""
@@ -854,6 +931,8 @@ func (w *WithClause) SQL() string {
 	return sb.String()
 }
 
+// SQL returns the SQL representation of this set operation as
+// "left UNION|EXCEPT|INTERSECT [ALL] right".
 func (s *SetOperation) SQL() string {
 	if s == nil {
 		return ""
@@ -867,6 +946,8 @@ func (s *SetOperation) SQL() string {
 	return fmt.Sprintf("%s %s %s", left, op, right)
 }
 
+// SQL returns the SQL representation of this VALUES clause as
+// "VALUES (v1, v2), (v3, v4), ...".
 func (v *Values) SQL() string {
 	if v == nil {
 		return ""
@@ -882,6 +963,9 @@ func (v *Values) SQL() string {
 	return "VALUES " + strings.Join(rows, ", ")
 }
 
+// SQL returns the full SQL string for this CREATE VIEW statement including the
+// optional OR REPLACE, TEMPORARY, IF NOT EXISTS, column list, SELECT query,
+// and WITH CHECK OPTION clause.
 func (c *CreateViewStatement) SQL() string {
 	if c == nil {
 		return ""
@@ -914,6 +998,7 @@ func (c *CreateViewStatement) SQL() string {
 	return sb.String()
 }
 
+// SQL returns the full SQL string for this CREATE MATERIALIZED VIEW statement.
 func (c *CreateMaterializedViewStatement) SQL() string {
 	if c == nil {
 		return ""
@@ -942,6 +1027,7 @@ func (c *CreateMaterializedViewStatement) SQL() string {
 	return sb.String()
 }
 
+// SQL returns the SQL string for this REFRESH MATERIALIZED VIEW statement.
 func (r *RefreshMaterializedViewStatement) SQL() string {
 	if r == nil {
 		return ""
@@ -963,6 +1049,8 @@ func (r *RefreshMaterializedViewStatement) SQL() string {
 	return sb.String()
 }
 
+// SQL returns the full SQL string for this MERGE statement including the target,
+// source, ON condition, and all WHEN MATCHED/NOT MATCHED clauses.
 func (m *MergeStatement) SQL() string {
 	if m == nil {
 		return ""
@@ -1011,6 +1099,9 @@ func (m *MergeStatement) SQL() string {
 
 // DML types from dml.go
 
+// SQL returns the SQL representation of this Select node (dml.go type), which
+// is a simplified SELECT structure used in compatibility code paths.
+// For full-featured SELECT parsing use SelectStatement.SQL() instead.
 func (s *Select) SQL() string {
 	if s == nil {
 		return ""
@@ -1055,6 +1146,8 @@ func (s *Select) SQL() string {
 	return sb.String()
 }
 
+// SQL returns the SQL representation of this Insert node (dml.go type).
+// For the full-featured INSERT use InsertStatement.SQL() instead.
 func (i *Insert) SQL() string {
 	if i == nil {
 		return ""
@@ -1087,6 +1180,8 @@ func (i *Insert) SQL() string {
 	return sb.String()
 }
 
+// SQL returns the SQL representation of this Update node (dml.go type).
+// For the full-featured UPDATE use UpdateStatement.SQL() instead.
 func (u *Update) SQL() string {
 	if u == nil {
 		return ""
@@ -1112,6 +1207,8 @@ func (u *Update) SQL() string {
 	return sb.String()
 }
 
+// SQL returns the SQL representation of this Delete node (dml.go type).
+// For the full-featured DELETE use DeleteStatement.SQL() instead.
 func (d *Delete) SQL() string {
 	if d == nil {
 		return ""

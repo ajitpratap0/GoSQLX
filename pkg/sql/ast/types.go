@@ -45,8 +45,11 @@ const (
 	AlterColumnDropNotNull
 )
 
-// Make AlterColumnOperation implement Node interface
+// Children implements Node and returns nil — AlterColumnOperation has no child nodes.
 func (a *AlterColumnOperation) Children() []Node { return nil }
+
+// TokenLiteral implements Node and returns the SQL keyword phrase for this
+// ALTER COLUMN operation (e.g. "SET DEFAULT", "DROP NOT NULL").
 func (a *AlterColumnOperation) TokenLiteral() string {
 	switch *a {
 	case AlterColumnSetDefault:
@@ -102,8 +105,11 @@ type Query struct {
 	Text string
 }
 
+// TokenLiteral implements Node and returns "QUERY".
 func (q *Query) TokenLiteral() string { return "QUERY" }
-func (q *Query) Children() []Node     { return nil }
+
+// Children implements Node and returns nil — Query has no child nodes.
+func (q *Query) Children() []Node { return nil }
 
 // Setting represents a SET clause in an UPDATE statement
 type Setting struct {
@@ -119,9 +125,13 @@ type Ident struct {
 func (i *Ident) String() string { return i.Name }
 
 // Make Ident implement Expression interface
-func (*Ident) expressionNode()        {}
+func (*Ident) expressionNode() {}
+
+// TokenLiteral implements Node and returns the identifier name.
 func (i *Ident) TokenLiteral() string { return i.Name }
-func (i *Ident) Children() []Node     { return nil }
+
+// Children implements Node and returns nil — Ident has no child nodes.
+func (i *Ident) Children() []Node { return nil }
 
 // InputFormatClause represents the format specification for input data
 type InputFormatClause struct {
@@ -137,8 +147,11 @@ type CommentDef struct {
 	Text string
 }
 
+// TokenLiteral implements Node and returns "COMMENT".
 func (c *CommentDef) TokenLiteral() string { return "COMMENT" }
-func (c *CommentDef) Children() []Node     { return nil }
+
+// Children implements Node and returns nil — CommentDef has no child nodes.
+func (c *CommentDef) Children() []Node { return nil }
 
 // OnCommit represents the ON COMMIT behavior for temporary tables
 type OnCommit int
@@ -160,7 +173,12 @@ type OneOrManyWithParens[T any] struct {
 	Items []T
 }
 
+// TokenLiteral implements Node and returns "(" to represent the opening
+// parenthesis of the parenthesized list.
 func (o *OneOrManyWithParens[T]) TokenLiteral() string { return "(" }
+
+// Children implements Node and returns all items as Node values (items that
+// do not implement Node are represented as nil slots).
 func (o *OneOrManyWithParens[T]) Children() []Node {
 	nodes := make([]Node, len(o.Items))
 	for i, item := range o.Items {
@@ -177,7 +195,12 @@ type WrappedCollection[T any] struct {
 	Wrapper string
 }
 
+// TokenLiteral implements Node and returns the wrapper keyword (e.g. the SQL
+// keyword that introduces the collection).
 func (w *WrappedCollection[T]) TokenLiteral() string { return w.Wrapper }
+
+// Children implements Node and returns all items as Node values (items that
+// do not implement Node are represented as nil slots).
 func (w *WrappedCollection[T]) Children() []Node {
 	nodes := make([]Node, len(w.Items))
 	for i, item := range w.Items {
@@ -194,8 +217,11 @@ type ClusteredBy struct {
 	Buckets int
 }
 
+// TokenLiteral implements Node and returns "CLUSTERED BY".
 func (c *ClusteredBy) TokenLiteral() string { return "CLUSTERED BY" }
-func (c *ClusteredBy) Children() []Node     { return c.Columns }
+
+// Children implements Node and returns the columns used in the CLUSTERED BY clause.
+func (c *ClusteredBy) Children() []Node { return c.Columns }
 
 // RowAccessPolicy represents row-level access policy
 type RowAccessPolicy struct {
@@ -204,7 +230,10 @@ type RowAccessPolicy struct {
 	Enabled bool
 }
 
+// TokenLiteral implements Node and returns "ROW ACCESS POLICY".
 func (r *RowAccessPolicy) TokenLiteral() string { return "ROW ACCESS POLICY" }
+
+// Children implements Node and returns the filter expression if present, or nil.
 func (r *RowAccessPolicy) Children() []Node {
 	if r.Filter != nil {
 		return []Node{r.Filter}
@@ -238,9 +267,13 @@ type StatementImpl struct {
 	Variant StatementVariant
 }
 
+// TokenLiteral implements Node by delegating to the wrapped StatementVariant.
 func (s *StatementImpl) TokenLiteral() string { return s.Variant.TokenLiteral() }
-func (s *StatementImpl) Children() []Node     { return []Node{s.Variant} }
-func (s *StatementImpl) statementNode()       {}
+
+// Children implements Node and returns the wrapped StatementVariant as a single child.
+func (s *StatementImpl) Children() []Node { return []Node{s.Variant} }
+
+func (s *StatementImpl) statementNode() {}
 
 // CreateTable represents a CREATE TABLE statement
 type CreateTable struct {
@@ -297,6 +330,10 @@ type CreateTable struct {
 }
 
 func (*CreateTable) statementNode() {}
+
+// Children implements Node and returns all child nodes: the table name, column
+// definitions, constraints, optional subquery, LIKE/CLONE targets, comment, and
+// CLUSTERED BY / ROW ACCESS POLICY clauses.
 func (c *CreateTable) Children() []Node {
 	nodes := []Node{c.Name}
 	for _, col := range c.Columns {
@@ -325,4 +362,6 @@ func (c *CreateTable) Children() []Node {
 	}
 	return nodes
 }
+
+// TokenLiteral implements Node and returns "CREATE TABLE".
 func (c *CreateTable) TokenLiteral() string { return "CREATE TABLE" }

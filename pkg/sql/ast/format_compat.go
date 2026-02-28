@@ -12,18 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package ast — backward-compatibility shims.
-//
-// This file re-adds Format(FormatOptions) string methods that were removed in
-// the refactor/move-formatting PR (#342). They now delegate to pkg/formatter
-// via the FormatStatementFunc / FormatExpressionFunc / FormatASTFunc hooks
-// that pkg/formatter sets in its init() function, avoiding the import cycle
+// This file contains backward-compatibility shims for the Format(FormatOptions)
+// string methods that were removed in the refactor/move-formatting PR (#342).
+// They now delegate to pkg/formatter via hooks (FormatStatementFunc, etc.) that
+// pkg/formatter sets in its init() function, avoiding the import cycle:
 //
 //	pkg/sql/ast → pkg/formatter → pkg/sql/ast
 //
-// If pkg/formatter has not been imported the methods fall back to SQL() output
-// so that existing code continues to compile and run (with unformatted output).
-//
+// If pkg/formatter has not been imported the methods fall back to SQL() output.
 // All methods are marked deprecated; callers should migrate to
 // pkg/formatter.FormatStatement(), FormatExpression() or FormatAST() directly.
 package ast

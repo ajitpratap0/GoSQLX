@@ -3,79 +3,79 @@
 
 parser:
   - changed-files:
-    - any-glob-to-any-file:
-      - 'pkg/sql/parser/**'
+      - any-glob-to-any-file:
+          - 'pkg/sql/parser/**'
 
 tokenizer:
   - changed-files:
-    - any-glob-to-any-file:
-      - 'pkg/sql/tokenizer/**'
+      - any-glob-to-any-file:
+          - 'pkg/sql/tokenizer/**'
 
 ast:
   - changed-files:
-    - any-glob-to-any-file:
-      - 'pkg/sql/ast/**'
+      - any-glob-to-any-file:
+          - 'pkg/sql/ast/**'
 
 security:
   - changed-files:
-    - any-glob-to-any-file:
-      - 'pkg/sql/security/**'
-      - 'cmd/gosqlx/internal/validate/**'
+      - any-glob-to-any-file:
+          - 'pkg/sql/security/**'
+          - 'cmd/gosqlx/internal/validate/**'
 
 linter:
   - changed-files:
-    - any-glob-to-any-file:
-      - 'pkg/linter/**'
+      - any-glob-to-any-file:
+          - 'pkg/linter/**'
 
 lsp:
   - changed-files:
-    - any-glob-to-any-file:
-      - 'pkg/lsp/**'
+      - any-glob-to-any-file:
+          - 'pkg/lsp/**'
 
 cli:
   - changed-files:
-    - any-glob-to-any-file:
-      - 'cmd/gosqlx/**'
+      - any-glob-to-any-file:
+          - 'cmd/gosqlx/**'
 
 documentation:
   - changed-files:
-    - any-glob-to-any-file:
-      - 'docs/**'
-      - '*.md'
-      - 'llms.txt'
+      - any-glob-to-any-file:
+          - 'docs/**'
+          - '*.md'
+          - 'llms.txt'
 
 performance:
   - changed-files:
-    - any-glob-to-any-file:
-      - 'pkg/metrics/**'
-      - 'performance_baselines.json'
-      - '**/*_bench_test.go'
-      - '**/*benchmark*'
+      - any-glob-to-any-file:
+          - 'pkg/metrics/**'
+          - 'performance_baselines.json'
+          - '**/*_bench_test.go'
+          - '**/*benchmark*'
 
 dialects:
   - changed-files:
-    - any-glob-to-any-file:
-      - 'pkg/sql/keywords/**'
+      - any-glob-to-any-file:
+          - 'pkg/sql/keywords/**'
 
 ci-cd:
   - changed-files:
-    - any-glob-to-any-file:
-      - '.github/workflows/**'
-      - 'Taskfile.yml'
-      - '.goreleaser.yml'
+      - any-glob-to-any-file:
+          - '.github/workflows/**'
+          - 'Taskfile.yml'
+          - '.goreleaser.yml'
 
 python:
   - changed-files:
-    - any-glob-to-any-file:
-      - 'python/**'
-      - 'pkg/cbinding/**'
+      - any-glob-to-any-file:
+          - 'python/**'
+          - 'pkg/cbinding/**'
 
 wasm:
   - changed-files:
-    - any-glob-to-any-file:
-      - 'wasm/**'
+      - any-glob-to-any-file:
+          - 'wasm/**'
 
 transform:
   - changed-files:
-    - any-glob-to-any-file:
-      - 'pkg/transform/**'
+      - any-glob-to-any-file:
+          - 'pkg/transform/**'

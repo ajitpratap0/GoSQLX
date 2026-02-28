@@ -1,0 +1,91 @@
+# GoSQLX
+
+> High-performance SQL parsing SDK for Go — 1.5M+ ops/sec, multi-dialect, zero-copy, race-free production library.
+
+GoSQLX is a production-ready SQL parsing library for Go that provides zero-copy tokenization,
+recursive-descent parsing, and AST generation with comprehensive object pooling. It supports
+PostgreSQL, MySQL, SQL Server, Oracle, SQLite, and Snowflake dialects, and ships a full-featured
+CLI tool (`gosqlx`) for validation, formatting, linting, and security analysis. Apache-2.0 licensed.
+
+Current stable version: v1.9.0 (2026-02-28)
+
+## Core API
+
+- [Package gosqlx](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/gosqlx): High-level entry point — `Parse()`, `Validate()`, `Format()`, `ParseWithDialect()`, `ParseWithRecovery()`
+- [Package parser](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/sql/parser): Recursive-descent parser with one-token lookahead and object pooling
+- [Package tokenizer](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer): Zero-copy SQL lexer with full UTF-8 support
+- [Package ast](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/sql/ast): AST node types and visitor pattern
+- [Package security](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/sql/security): SQL injection scanner — tautology, UNION, time-based, comment-bypass patterns
+- [Package linter](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/linter): 10 built-in lint rules (L001–L010)
+- [Package transform](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/transform): Programmatic SQL rewriting — add WHERE, columns, JOINs, pagination
+- [Package lsp](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/lsp): Language Server Protocol server for IDE integration
+
+## Documentation
+
+- [Getting Started](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/GETTING_STARTED.md): Install and first parse in 5 minutes
+- [Usage Guide](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/USAGE_GUIDE.md): Comprehensive patterns for all API surfaces
+- [CLI Guide](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/CLI_GUIDE.md): `gosqlx validate`, `format`, `parse`, `analyze`, `lint`, `lsp` commands
+- [API Reference](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/API_REFERENCE.md): Complete API documentation with examples
+- [SQL Compatibility](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/SQL_COMPATIBILITY.md): Feature support matrix across 6 SQL dialects
+- [Error Codes](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md): E1xxx tokenizer, E2xxx parser, E3xxx semantic, E4xxx unsupported
+- [Security](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/SECURITY.md): SQL injection detection API, tautology patterns, UNION split
+- [Architecture](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ARCHITECTURE.md): Tokenizer → Parser → AST pipeline, object pooling design
+- [Migration Guide](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/MIGRATION.md): Breaking change notes per version
+- [Performance Tuning](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/PERFORMANCE_TUNING.md): Pool configuration, batch parsing, profiling tips
+- [Linting Rules](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/LINTING_RULES.md): L001–L010 rule reference
+
+## Key Capabilities
+
+- **SQL dialects**: PostgreSQL (default), MySQL, SQL Server (T-SQL), Oracle, SQLite, Snowflake
+- **DML**: SELECT (window functions, CTEs, set ops, LATERAL, DISTINCT ON), INSERT, UPDATE, DELETE, MERGE
+- **DDL**: CREATE/ALTER/DROP TABLE, INDEX, VIEW, MATERIALIZED VIEW; SQLite PRAGMA and WITHOUT ROWID
+- **Security scanner**: Tautology (1=1), UNION injection, time-based blind, comment bypass, stacked queries, dangerous functions — 4 severity levels (CRITICAL/HIGH/MEDIUM/LOW)
+- **Object pooling**: sync.Pool throughout; 60-80% memory reduction vs naive allocation
+- **Thread safety**: race-free, validated with 20,000+ concurrent operations
+- **CLI**: `gosqlx validate/format/parse/analyze/lint/lsp` with SARIF output for GitHub Code Scanning
+- **LSP server**: real-time diagnostics, completion, hover, formatting for VS Code and any LSP client
+- **Query transforms**: add WHERE filters, column projections, JOINs, pagination via composable rules
+- **WASM**: browser-based SQL parsing/formatting/linting playground
+- **Python bindings**: PyGoSQLX via ctypes FFI
+
+## Quick Start
+
+```go
+import "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+
+// Parse — returns *ast.AST
+tree, err := gosqlx.Parse("SELECT u.name, COUNT(o.id) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name")
+
+// Validate
+err = gosqlx.Validate("SELECT * FROM users WHERE active = true")
+
+// Format
+formatted, err := gosqlx.Format(sql, gosqlx.DefaultFormatOptions())
+
+// Dialect-aware
+tree, err = gosqlx.ParseWithDialect("SHOW TABLES", keywords.DialectMySQL)
+
+// Batch (reuses pool objects)
+trees, err := gosqlx.ParseMultiple([]string{sql1, sql2, sql3})
+```
+
+## Repository Layout
+
+- `pkg/gosqlx/` — high-level API (start here)
+- `pkg/sql/tokenizer/` — zero-copy lexer
+- `pkg/sql/parser/` — recursive-descent parser
+- `pkg/sql/ast/` — AST node definitions + visitor
+- `pkg/sql/security/` — injection scanner
+- `pkg/linter/` — lint rules engine
+- `pkg/transform/` — query rewriting
+- `pkg/lsp/` — LSP server
+- `cmd/gosqlx/` — CLI implementation
+- `examples/` — runnable code examples
+- `docs/` — comprehensive documentation (25+ guides)
+
+## Optional
+
+- [CHANGELOG](https://github.com/ajitpratap0/GoSQLX/blob/main/CHANGELOG.md): Full version history
+- [Contributing](https://github.com/ajitpratap0/GoSQLX/blob/main/CONTRIBUTING.md): How to contribute
+- [GitHub Action](https://github.com/marketplace/actions/gosqlx-sql-validator): GoSQLX SQL Validator CI action
+- [Python Bindings](https://github.com/ajitpratap0/GoSQLX/blob/main/python/README.md): PyGoSQLX

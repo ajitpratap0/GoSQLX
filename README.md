@@ -1043,10 +1043,19 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed system design and [CHAN
 
 <div align="center">
 
+### Community Health
+
+[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg?style=flat-square)](CODE_OF_CONDUCT.md)
+[![Contributing Guide](https://img.shields.io/badge/Contributing-Guide-brightgreen?style=flat-square)](CONTRIBUTING.md)
+[![Governance](https://img.shields.io/badge/Governance-Model-blue?style=flat-square)](GOVERNANCE.md)
+[![Support](https://img.shields.io/badge/Support-Channels-orange?style=flat-square)](SUPPORT.md)
+[![Good First Issues](https://img.shields.io/github/issues/ajitpratap0/GoSQLX/good%20first%20issue?style=flat-square&label=Good%20First%20Issues&color=7057ff)](https://github.com/ajitpratap0/GoSQLX/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)
+
 ### Join Our Community
 
 <a href="https://github.com/ajitpratap0/GoSQLX/discussions"><img src="https://img.shields.io/badge/GitHub-Discussions-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Discussions"></a>
 <a href="https://github.com/ajitpratap0/GoSQLX/issues"><img src="https://img.shields.io/badge/GitHub-Issues-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Issues"></a>
+<a href="https://github.com/ajitpratap0/GoSQLX/discussions/new?category=q-a"><img src="https://img.shields.io/badge/Ask%20a-Question-purple?style=for-the-badge&logo=github" alt="Ask a Question"></a>
 
 ### Get Help
 
@@ -1054,8 +1063,11 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed system design and [CHAN
 |---------|---------|---------------|
 | [🐛 Bug Reports](https://github.com/ajitpratap0/GoSQLX/issues/new?template=bug_report.md) | Report issues | Community-driven |
 | [💡 Feature Requests](https://github.com/ajitpratap0/GoSQLX/issues/new?template=feature_request.md) | Suggest improvements | Community-driven |
-| [💬 Discussions](https://github.com/ajitpratap0/GoSQLX/discussions) | Q&A, ideas, showcase | Community-driven |
-| [🔒 Security](docs/SECURITY.md) | Report vulnerabilities | Best effort |
+| [📖 Docs Issues](https://github.com/ajitpratap0/GoSQLX/issues/new?template=documentation.md) | Fix docs | Community-driven |
+| [💬 Q&A](https://github.com/ajitpratap0/GoSQLX/discussions/new?category=q-a) | Questions & help | Community-driven |
+| [💡 Ideas](https://github.com/ajitpratap0/GoSQLX/discussions/new?category=ideas) | Propose features | Community-driven |
+| [🎤 Show & Tell](https://github.com/ajitpratap0/GoSQLX/discussions/new?category=show-and-tell) | Share your project | Community-driven |
+| [🔒 Security](https://github.com/ajitpratap0/GoSQLX/security/advisories/new) | Report vulnerabilities privately | Best effort |
 
 </div>
 
@@ -1074,15 +1086,16 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed system design and [CHAN
 We love your input! We want to make contributing as easy and transparent as possible.
 
 <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/📝_Contributing_Guide-blue?style=for-the-badge" alt="Contributing Guide"></a>
-<a href="https://github.com/ajitpratap0/GoSQLX/issues/new/choose"><img src="https://img.shields.io/badge/🚀_Start_Contributing-orange?style=for-the-badge" alt="Start Contributing"></a>
+<a href="https://github.com/ajitpratap0/GoSQLX/issues?q=is%3Aopen+label%3A%22good+first+issue%22"><img src="https://img.shields.io/badge/🟣_Good_First_Issues-7057ff?style=for-the-badge" alt="Good First Issues"></a>
+<a href="https://github.com/ajitpratap0/GoSQLX/issues?q=is%3Aopen+label%3A%22help+wanted%22"><img src="https://img.shields.io/badge/🙏_Help_Wanted-008672?style=for-the-badge" alt="Help Wanted"></a>
 
 #### Quick Contribution Guide
 
-1. 🍴 Fork the repo
-2. 🔨 Make your changes
-3. ✅ Ensure tests pass (`go test -race ./...`)
-4. 📝 Update documentation
-5. 🚀 Submit a PR
+1. 🍴 Fork the repo and create a feature branch
+2. 🔨 Make your changes following the [patterns in CLAUDE.md](CLAUDE.md)
+3. ✅ Ensure tests pass with race detection (`go test -race ./...`)
+4. 📝 Update CHANGELOG.md and relevant docs
+5. 🚀 Submit a PR — CI runs automatically
 
 </div>
 

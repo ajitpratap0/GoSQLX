@@ -1,0 +1,3 @@
+# CODEOWNERS uses # for comments, which markdownlint mistakes for H1 headings.
+# It is not a Markdown file.
+CODEOWNERS

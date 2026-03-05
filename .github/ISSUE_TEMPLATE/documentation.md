@@ -31,4 +31,4 @@ assignees: ''
 
 ---
 
-**GoSQLX version**: <!-- e.g. v1.9.0 or `gosqlx --version` output -->
+**GoSQLX version**: <!-- e.g. v1.9.2 or `gosqlx --version` output -->

@@ -28,7 +28,7 @@ import (
 // This version tracks feature releases and compatibility.
 // Format: MAJOR.MINOR.PATCH (Semantic Versioning 2.0.0)
 //
-// Version 1.9.0 includes:
+// Version 1.9.2 includes:
 //   - SQLite PRAGMA fully parsed (bare, arg, and assignment forms)
 //   - WITHOUT ROWID support in CREATE TABLE
 //   - Tautology injection detection (1=1, 'a'='a', OR TRUE) → CRITICAL
@@ -41,7 +41,7 @@ import (
 //   - token_count, Query Size, CTE output, SELECT indentation fixes
 //   - lint exits 1 on any violation (usable as CI gate)
 //   - validate output standardized to ✅/❌
-var Version = "1.9.0"
+var Version = "1.9.2"
 
 var (
 	// verbose enables detailed output for debugging and troubleshooting.
@@ -129,7 +129,7 @@ Key features:
 • CI/CD integration with proper exit codes
 
 Performance: 1.5M+ operations/second sustained, 1.97M peak. 100-1000x faster than competitors.`,
-	Version: "1.9.0",
+	Version: "1.9.2",
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

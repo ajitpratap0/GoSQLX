@@ -1,5 +1,14 @@
 # Migration Guide
 
+## v1.9.0 → v1.9.2 (2026-03-05)
+
+No breaking changes. No API changes. Drop-in upgrade.
+
+Two patch releases (v1.9.1 and v1.9.2) fixed leading blank lines in LICENSE
+files to resolve "License: UNKNOWN" on pkg.go.dev. No code or behavior changes.
+
+---
+
 ## v1.8.0 → v1.9.0 (2026-02-28)
 
 No breaking changes. No API changes. Drop-in upgrade.

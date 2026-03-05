@@ -67,7 +67,7 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 - **Python Bindings**: [PyGoSQLX](python/README.md) — use GoSQLX from Python via ctypes FFI, 100x+ faster than pure Python parsers
 - **Production Ready**: Battle-tested with 0 race conditions detected, ~85% SQL-99 compliance, Apache-2.0 licensed
 
-### Performance & Quality Highlights (v1.9.0)
+### Performance & Quality Highlights (v1.9.2)
 
 <div align="center">
 
@@ -75,7 +75,18 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 |:---------:|:-------:|:----------:|:----------:|:-------:|:---------:|
 | Faster Parsing | Peak Ops/sec | Latency | SQL Dialects | Parser Coverage | New Commits |
 
-**v1.9.0 Released** • **SQLite PRAGMA** • **Tautology Detection** • **19 Post-UAT Fixes** • **lint CI-gate** • **UNION false-positive fix**
+**v1.9.2 Released** • **License fix** • **pkg.go.dev docs restored** • **SQLite PRAGMA** • **Tautology Detection** • **19 Post-UAT Fixes**
+
+</div>
+
+### What's New in v1.9.2
+
+<div align="center">
+
+| Release | Description |
+|---------|-------------|
+| **v1.9.2** | Fix `vscode-extension/LICENSE` blank line — restores Apache-2.0 detection on pkg.go.dev |
+| **v1.9.1** | Fix root `LICENSE` blank line — eliminates "License: UNKNOWN" on pkg.go.dev |
 
 </div>
 

@@ -5,6 +5,31 @@ All notable changes to GoSQLX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.2] - 2026-03-05 - Fix pkg.go.dev License Detection (vscode-extension)
+
+Patch release to complete the pkg.go.dev license detection fix started in v1.9.1.
+
+### Fixed
+- Remove leading blank line from `vscode-extension/LICENSE` that prevented
+  `google/licensecheck` from identifying Apache-2.0 in the vscode-extension
+  subdirectory. pkg.go.dev scans **all** `LICENSE` files in the module tree;
+  an undetectable license in any subdirectory can suppress documentation
+  display for the entire module. (PR #352)
+
+---
+
+## [1.9.1] - 2026-02-28 - Fix pkg.go.dev License Detection (root LICENSE)
+
+Patch release to fix the "License: UNKNOWN" display on pkg.go.dev.
+
+### Fixed
+- Remove leading blank line from root `LICENSE` file that prevented
+  `google/licensecheck` from identifying Apache-2.0. pkg.go.dev was
+  displaying "Documentation not displayed due to license restrictions."
+  (PR #351)
+
+---
+
 ## [1.9.0] - 2026-02-28 - SQLite PRAGMA, Tautology Detection & 19 Post-UAT Fixes
 
 19 actionable bugs fixed (PR #348) — 3 new capabilities, 8 parser fixes,
@@ -1422,7 +1447,9 @@ This substantial test coverage increase provides strong confidence in the AST pa
 
 | Version | Release Date | Status | Key Features |
 |---------|--------------|--------|--------------|
-| 1.9.0 | 2026-02-28 | Current | SQLite PRAGMA, tautology detection, 19 post-UAT fixes, lint CI-gate |
+| 1.9.2 | 2026-03-05 | Current | License detection fix (vscode-extension/LICENSE blank line) |
+| 1.9.1 | 2026-02-28 | Previous | License detection fix (root LICENSE blank line) |
+| 1.9.0 | 2026-02-28 | Previous | SQLite PRAGMA, tautology detection, 19 post-UAT fixes, lint CI-gate |
 | 1.8.0 | 2026-02-24 | Previous | Dialect engine, MySQL support, Query Transform API, WASM, Token type overhaul |
 | 1.7.0 | 2026-02-12 | Previous | Schema-qualified names, Parser Batches 5-8, quoted identifiers fix |
 | 1.6.0 | 2025-12-09 | Previous | PostgreSQL Extensions, LSP Server, VSCode Extension, 14x faster tokens |

@@ -22,6 +22,6 @@ labels: ["question"]
 
 ## Environment
 
-- **GoSQLX version**: <!-- e.g. v1.9.0 -->
+- **GoSQLX version**: <!-- e.g. v1.9.2 -->
 - **Go version**: <!-- e.g. go1.21.0 -->
 - **OS**: <!-- e.g. Linux, macOS, Windows -->

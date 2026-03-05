@@ -1,7 +1,7 @@
 # GoSQLX Error Codes Reference
 
-**Version**: v1.9.0
-**Last Updated**: 2026-02-28
+**Version**: v1.9.2
+**Last Updated**: 2026-03-05
 
 Comprehensive reference for all error codes in GoSQLX with examples and solutions.
 

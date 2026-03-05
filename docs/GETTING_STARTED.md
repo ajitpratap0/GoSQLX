@@ -2,7 +2,7 @@
 
 Welcome! This guide will get you parsing SQL in under 5 minutes. No prior experience with GoSQLX required.
 
-**What's New in v1.9.0:**
+**What's New in v1.9.0 (current: v1.9.2):**
 - SQLite PRAGMA fully parsed (bare, arg, and assignment forms)
 - Tautology injection detection (`1=1`, `'a'='a'`, `OR TRUE`) → CRITICAL severity
 - UNION false-positive fix: `PatternUnionInjection` (CRITICAL) vs `PatternUnionGeneric` (HIGH)
@@ -61,7 +61,7 @@ echo "select * from users where age>18" | gosqlx format
 echo "SELECT COUNT(*) FROM orders GROUP BY status" | gosqlx analyze
 ```
 
-**Available CLI Commands (v1.9.0):**
+**Available CLI Commands (v1.9.2):**
 - `validate` - Ultra-fast SQL validation with security scanning
 - `format` - High-performance SQL formatting with style options
 - `analyze` - Advanced SQL analysis with complexity metrics

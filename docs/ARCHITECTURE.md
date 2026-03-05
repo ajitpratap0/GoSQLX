@@ -1,7 +1,7 @@
 # GoSQLX Architecture Documentation
 
-**Version**: v1.9.0
-**Last Updated**: 2026-02-28
+**Version**: v1.9.2
+**Last Updated**: 2026-03-05
 
 ## Table of Contents
 - [System Overview](#system-overview)

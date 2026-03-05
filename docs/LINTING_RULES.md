@@ -464,5 +464,5 @@ jobs:
 
 ---
 
-**Last Updated**: December 2025
-**Version**: v1.6.0
+**Last Updated**: 2026-03-05
+**Version**: v1.9.2

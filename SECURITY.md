@@ -6,12 +6,15 @@
 
 We release patches for security vulnerabilities. Currently supported versions:
 
-| Version | Supported          | Security Updates |
-| ------- | ------------------ | ---------------- |
-| 1.5.x   | :white_check_mark: | Active           |
-| 1.4.x   | :white_check_mark: | Active           |
-| 1.0-1.3 | :x:                | Upgrade Required |
-| < 1.0   | :x:                | Not Supported    |
+| Version    | Supported          | Security Updates |
+| ---------- | ------------------ | ---------------- |
+| 1.9.x      | :white_check_mark: | Active (latest)  |
+| 1.8.x      | :white_check_mark: | Active           |
+| 1.7.x      | :white_check_mark: | Active           |
+| 1.6.x      | :white_check_mark: | Active           |
+| 1.5.x      | :x:                | Upgrade Required |
+| 1.0-1.4    | :x:                | Upgrade Required |
+| < 1.0      | :x:                | Not Supported    |
 
 **Upgrade Policy**: We recommend always using the latest version for optimal security and performance.
 

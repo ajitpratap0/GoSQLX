@@ -18,7 +18,7 @@
 
 ## Package Overview
 
-GoSQLX v1.6.0 is organized into the following packages:
+GoSQLX v1.9.2 is organized into the following packages:
 
 ```
 github.com/ajitpratap0/GoSQLX/
@@ -59,7 +59,7 @@ astNode, err := gosqlx.Parse("SELECT * FROM users WHERE active = true")
 if err != nil {
     log.Fatal(err)
 }
-defer ast.ReleaseAST(astNode)
+// No manual cleanup needed — GC handles AST lifecycle
 ```
 
 #### `ParseWithContext(ctx context.Context, sql string) (*ast.AST, error)`
@@ -73,7 +73,7 @@ astNode, err := gosqlx.ParseWithContext(ctx, sql)
 if err == context.DeadlineExceeded {
     log.Println("Parsing timed out")
 }
-defer ast.ReleaseAST(astNode)
+// No manual cleanup needed — GC handles AST lifecycle
 ```
 
 #### `ParseWithTimeout(sql string, timeout time.Duration) (*ast.AST, error)`
@@ -81,7 +81,7 @@ Convenience wrapper with automatic timeout.
 
 ```go
 astNode, err := gosqlx.ParseWithTimeout(sql, 10*time.Second)
-defer ast.ReleaseAST(astNode)
+// No manual cleanup needed — GC handles AST lifecycle
 ```
 
 #### `ParseBytes(sql []byte) (*ast.AST, error)`
@@ -90,7 +90,7 @@ Parse from byte slice (zero-copy when already in bytes).
 ```go
 sqlBytes, _ := os.ReadFile("query.sql")
 astNode, err := gosqlx.ParseBytes(sqlBytes)
-defer ast.ReleaseAST(astNode)
+// No manual cleanup needed — GC handles AST lifecycle
 ```
 
 #### `MustParse(sql string) *ast.AST`
@@ -98,7 +98,7 @@ Parse SQL, panicking on error (for tests and initialization).
 
 ```go
 ast := gosqlx.MustParse("SELECT 1")
-defer ast.ReleaseAST(ast)
+// No manual cleanup needed — GC handles AST lifecycle
 ```
 
 #### `ParseMultiple(queries []string) ([]*ast.AST, error)`
@@ -111,8 +111,42 @@ queries := []string{
 }
 asts, err := gosqlx.ParseMultiple(queries)
 for _, ast := range asts {
-    defer ast.ReleaseAST(ast)
+    // No manual cleanup needed — GC handles AST lifecycle
 }
+```
+
+#### `ParseWithDialect(sql string, dialect keywords.SQLDialect) (*ast.AST, error)`
+Parse SQL using a specific SQL dialect for dialect-aware tokenization and parsing. Added in v1.8.0.
+
+```go
+import "github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
+
+// MySQL dialect — enables backtick identifiers, SHOW, REPLACE INTO, ON DUPLICATE KEY UPDATE, etc.
+ast, err := gosqlx.ParseWithDialect("SHOW TABLES", keywords.DialectMySQL)
+
+// PostgreSQL dialect — enables $1/$2 parameters, ::cast, dollar-quoted strings
+ast, err = gosqlx.ParseWithDialect("SELECT $1::int", keywords.DialectPostgreSQL)
+
+// SQL Server dialect — enables bracket identifiers, TOP clause
+ast, err = gosqlx.ParseWithDialect("SELECT TOP 10 * FROM [users]", keywords.DialectSQLServer)
+
+// SQLite dialect — enables PRAGMA, WITHOUT ROWID
+ast, err = gosqlx.ParseWithDialect("PRAGMA journal_mode", keywords.DialectSQLite)
+
+// Available dialects: DialectGeneric, DialectPostgreSQL, DialectMySQL,
+//                     DialectSQLServer, DialectOracle, DialectSQLite
+```
+
+#### `ParseWithRecovery(sql string) ([]ast.Statement, []error)`
+Parse SQL with error recovery, returning as many statements as possible along with any errors encountered. Useful for IDE-quality diagnostics where partial results are valuable. Added in v1.8.0.
+
+```go
+stmts, errs := gosqlx.ParseWithRecovery("SELECT * FROM users; INVALID SQL; SELECT 1")
+fmt.Printf("Parsed %d statements with %d errors\n", len(stmts), len(errs))
+for _, err := range errs {
+    fmt.Println("Error:", err)
+}
+// Processes all statements; returns valid ones even when some fail
 ```
 
 ### Validation Functions
@@ -2080,7 +2114,7 @@ func main() {
     if err != nil {
         log.Fatal("Parse error:", err)
     }
-    defer ast.ReleaseAST(astNode)
+    // No manual cleanup needed — GC handles AST lifecycle
 
     // Security scan
     scanner := security.NewScanner()
@@ -2184,7 +2218,7 @@ Processed 1 queries with 100.00% success rate
 
 ---
 
-## Test Coverage Summary (v1.6.0)
+## Test Coverage Summary (v1.9.2)
 
 | Package | Coverage | Status |
 |---------|----------|--------|
@@ -2212,7 +2246,7 @@ Processed 1 queries with 100.00% success rate
 
 ---
 
-## SQL Standards Compliance (v1.6.0)
+## SQL Standards Compliance (v1.9.2)
 
 GoSQLX achieves **~80-85% SQL-99 compliance** with comprehensive support for:
 

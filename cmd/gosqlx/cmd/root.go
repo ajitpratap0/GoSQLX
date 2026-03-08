@@ -28,20 +28,14 @@ import (
 // This version tracks feature releases and compatibility.
 // Format: MAJOR.MINOR.PATCH (Semantic Versioning 2.0.0)
 //
-// Version 1.9.0 includes:
-//   - SQLite PRAGMA fully parsed (bare, arg, and assignment forms)
-//   - WITHOUT ROWID support in CREATE TABLE
-//   - Tautology injection detection (1=1, 'a'='a', OR TRUE) → CRITICAL
-//   - UNION false-positive fix: PatternUnionInjection (CRITICAL) / PatternUnionGeneric (HIGH)
-//   - E1009 ErrCodeUnterminatedBlockComment for /* ... */ errors
-//   - MySQL backtick and SQL Server bracket reserved-word identifiers
-//   - KEY/INDEX/VIEW reserved keywords valid in qualified identifiers
-//   - NATURAL JOIN type stored correctly
-//   - OVER <window_name> (bare name, no parens) per SQL:2003 §7.11
-//   - token_count, Query Size, CTE output, SELECT indentation fixes
-//   - lint exits 1 on any violation (usable as CI gate)
-//   - validate output standardized to ✅/❌
-var Version = "1.9.0"
+// Version 1.9.2 includes:
+//   - Fix pkg.go.dev license detection (Apache-2.0 now properly detected)
+//   - Comprehensive doc improvements across the project (PR #351)
+//   - Open-source health files (CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md)
+//   - LLM discovery metadata (llms.txt, llms-full.txt) (PR #350)
+//   - SEO improvements for project discoverability
+//   - Fix leading blank line in vscode-extension/LICENSE (PR #352)
+var Version = "1.9.2"
 
 var (
 	// verbose enables detailed output for debugging and troubleshooting.

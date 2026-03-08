@@ -495,5 +495,38 @@ git commit -m "config: update GoSQLX settings"
 
 ---
 
+## MCP Server Environment Variables
+
+The `gosqlx-mcp` server is configured exclusively via environment variables. No YAML config file is used or read. All variables are optional with safe defaults for local development.
+
+| Variable | Default | Type | Validation |
+|----------|---------|------|-----------|
+| `GOSQLX_MCP_HOST` | `127.0.0.1` | string | Any valid bind address |
+| `GOSQLX_MCP_PORT` | `8080` | integer | 1–65535 |
+| `GOSQLX_MCP_AUTH_TOKEN` | *(empty)* | string | Empty = auth disabled; whitespace-trimmed |
+
+### Examples
+
+```bash
+# Local development (all defaults)
+gosqlx-mcp
+
+# Custom port
+GOSQLX_MCP_PORT=9090 gosqlx-mcp
+
+# Expose to network with auth
+GOSQLX_MCP_HOST=0.0.0.0 GOSQLX_MCP_PORT=8080 GOSQLX_MCP_AUTH_TOKEN=my-secret gosqlx-mcp
+```
+
+### Notes
+
+- `GOSQLX_MCP_AUTH_TOKEN` enables bearer token authentication. When set, all requests must include `Authorization: Bearer <token>`.
+- `GOSQLX_MCP_PORT` rejects out-of-range or non-integer values at startup with a descriptive error.
+- MCP server configuration is independent of `.gosqlx.yml` — the YAML config file is not read by `gosqlx-mcp`.
+
+See [MCP Server Guide](MCP_GUIDE.md) for the full startup and auth reference.
+
+---
+
 **Last Updated**: December 2025
 **Version**: v1.6.0

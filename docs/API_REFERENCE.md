@@ -37,6 +37,7 @@ github.com/ajitpratap0/GoSQLX/
 │   ├── metrics/         # Performance monitoring (73.9% coverage)
 │   ├── linter/          # SQL linting rules engine (96.7% coverage)
 │   ├── lsp/             # Language Server Protocol (70.2% coverage)
+│   ├── mcp/             # MCP server — 7 SQL tools over streamable HTTP
 │   ├── config/          # Configuration management (81.8% coverage)
 │   └── gosqlx/testing/  # Testing utilities (95.0% coverage)
 ```
@@ -1844,6 +1845,56 @@ func main() {
 
 ---
 
+## MCP Package
+
+### Package: `github.com/ajitpratap0/GoSQLX/pkg/mcp`
+
+MCP server exposing all GoSQLX capabilities as Model Context Protocol tools over streamable HTTP.
+
+### Types
+
+#### `Config`
+```go
+type Config struct {
+    Host      string // GOSQLX_MCP_HOST (default "127.0.0.1")
+    Port      int    // GOSQLX_MCP_PORT (default 8080, range 1–65535)
+    AuthToken string // GOSQLX_MCP_AUTH_TOKEN (default "" = auth disabled)
+}
+```
+
+### Functions
+
+#### `LoadConfig() (*Config, error)`
+Load from env vars. Returns error only if `GOSQLX_MCP_PORT` is non-integer or out of range.
+
+#### `DefaultConfig() *Config`
+Returns `Config{Host: "127.0.0.1", Port: 8080}` with auth disabled.
+
+#### `New(cfg *Config) *Server`
+Create server with all 7 tools registered. Registers tools once at construction — no dynamic registration.
+
+#### `(s *Server) Start(ctx context.Context) error`
+Bind to `cfg.Addr()`, serve streamable HTTP. Blocks until ctx cancelled or fatal error. Graceful shutdown on context cancellation.
+
+#### `BearerAuthMiddleware(cfg *Config, next http.Handler) http.Handler`
+Returns `next` unchanged when `cfg.AuthEnabled()` is false. When enabled, enforces `Authorization: Bearer <token>` on all requests; returns HTTP 401 on failure.
+
+### Registered Tools
+
+| Tool | Description |
+|------|-------------|
+| `validate_sql` | SQL syntax validation with optional dialect |
+| `format_sql` | SQL formatting (indent, keyword case, semicolon) |
+| `parse_sql` | AST summary — statement count and types |
+| `extract_metadata` | Tables, columns, functions referenced |
+| `security_scan` | Injection pattern detection with severity |
+| `lint_sql` | Style rule enforcement (L001–L010) |
+| `analyze_sql` | Concurrent composite of all 6 above |
+
+See [MCP Server Guide](MCP_GUIDE.md) for complete tool schemas and JSON response formats.
+
+---
+
 ## Configuration Package
 
 ### Package: `github.com/ajitpratap0/GoSQLX/pkg/config`
@@ -2267,6 +2318,7 @@ GoSQLX achieves **~80-85% SQL-99 compliance** with comprehensive support for:
 - **GitHub Repository**: https://github.com/ajitpratap0/GoSQLX
 - **Documentation**: See `/docs` directory
   - `GETTING_STARTED.md` - Quick start guide
+  - `MCP_GUIDE.md` - MCP server and AI assistant integration
   - `USAGE_GUIDE.md` - Comprehensive usage guide
   - `LSP_GUIDE.md` - LSP server and IDE integration
   - `LINTING_RULES.md` - All 10 linting rules reference

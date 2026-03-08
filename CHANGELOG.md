@@ -5,6 +5,20 @@ All notable changes to GoSQLX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.3] - 2026-03-08 — License Detection Fix
+
+### 🐛 Bug Fixes
+- Replace LICENSE files with exact official Apache 2.0 text for pkg.go.dev detection (PR #356)
+- Fix cobra command version string consistency (PR #354)
+- Fix remaining 1.9.0 version references in doc comments (PR #355)
+
+### 📝 Note
+v1.9.2 was cached by the Go module proxy before the LICENSE fix landed,
+so pkg.go.dev could not detect the license. This release ensures the
+corrected LICENSE is served for `go get` users.
+
+---
+
 ## [1.9.2] - 2026-03-08 — Documentation, Community Health & License Fixes
 
 ### 📚 Documentation (PR #351)

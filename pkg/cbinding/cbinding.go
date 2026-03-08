@@ -35,7 +35,7 @@
 //	gosqlx_extract_columns(sql)   — extract referenced column names as JSON array
 //	gosqlx_extract_functions(sql) — extract referenced function names as JSON array
 //	gosqlx_extract_metadata(sql)  — extract tables, columns, functions with schema qualification
-//	gosqlx_version()              — return the library version string (e.g. "1.9.2")
+//	gosqlx_version()              — return the library version string (e.g. "1.9.3")
 //	gosqlx_free(ptr)              — free a string previously returned by any gosqlx_* function
 package main
 

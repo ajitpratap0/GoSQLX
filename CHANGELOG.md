@@ -5,6 +5,22 @@ All notable changes to GoSQLX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.2] - 2026-03-08 — Documentation, Community Health & License Fixes
+
+### 📚 Documentation (PR #351)
+- Fix pkg.go.dev license detection (Apache-2.0 now properly detected)
+- Comprehensive doc improvements across the project
+
+### 🌍 Community (PR #350)
+- Open-source health files (CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md, etc.)
+- LLM discovery metadata (llms.txt, llms-full.txt)
+- SEO improvements for project discoverability
+
+### 🐛 Bug Fixes (PR #352)
+- Fix leading blank line in vscode-extension/LICENSE
+
+---
+
 ## [1.9.0] - 2026-02-28 - SQLite PRAGMA, Tautology Detection & 19 Post-UAT Fixes
 
 19 actionable bugs fixed (PR #348) — 3 new capabilities, 8 parser fixes,

@@ -10,6 +10,7 @@
 
 # Built binary executables (only in root directory)
 /gosqlx
+/gosqlx-mcp
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out

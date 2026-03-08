@@ -41,18 +41,20 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "gosqlx-mcp: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	cfg, err := gosqlxmcp.LoadConfig()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "gosqlx-mcp: configuration error: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("configuration error: %w", err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	srv := gosqlxmcp.New(cfg)
-	if err := srv.Start(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "gosqlx-mcp: %v\n", err)
-		os.Exit(1)
-	}
+	return gosqlxmcp.New(cfg).Start(ctx)
 }

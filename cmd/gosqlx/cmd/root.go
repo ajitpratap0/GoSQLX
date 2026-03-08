@@ -123,7 +123,7 @@ Key features:
 • CI/CD integration with proper exit codes
 
 Performance: 1.5M+ operations/second sustained, 1.97M peak. 100-1000x faster than competitors.`,
-	Version: "1.9.0",
+	Version: "1.9.2",
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

@@ -5,6 +5,29 @@ All notable changes to GoSQLX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — MCP Server
+
+### ✨ New Features
+- **MCP Server** (`pkg/mcp/`, `cmd/gosqlx-mcp/`): All GoSQLX SQL capabilities as Model Context Protocol tools over streamable HTTP
+  - 7 tools: `validate_sql`, `format_sql`, `parse_sql`, `extract_metadata`, `security_scan`, `lint_sql`, `analyze_sql`
+  - Optional bearer token auth via `GOSQLX_MCP_AUTH_TOKEN`
+  - `analyze_sql` fans out all 6 tools concurrently via `sync.WaitGroup`
+  - Multi-dialect validation: postgresql, mysql, sqlite, sqlserver, oracle, snowflake, generic
+
+### 📝 Documentation
+- `docs/MCP_GUIDE.md` — comprehensive MCP server guide
+- `README.md` — MCP feature bullet, installation block, docs table entry
+- `docs/ARCHITECTURE.md` — MCP in application layer diagram, new MCP Architecture section
+- `docs/API_REFERENCE.md` — pkg/mcp package docs
+- `docs/CONFIGURATION.md` — MCP env vars reference
+- Go version references updated from 1.21+ to 1.23+ (required by mark3labs/mcp-go)
+
+### 🔧 Build
+- Go minimum bumped to 1.23.0 (required by `github.com/mark3labs/mcp-go v0.45.0`)
+- Taskfile: `mcp`, `mcp:build`, `mcp:test`, `mcp:install` tasks added
+
+---
+
 ## [1.9.3] - 2026-03-08 — License Detection Fix
 
 ### 🐛 Bug Fixes

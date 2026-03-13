@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
         include:
           - target: linux-x64
@@ -67,7 +68,7 @@ jobs:
         if: matrix.target == 'linux-x64'
         run: |
           chmod +x vscode-extension/bin/${{ matrix.binary }}
-          ./vscode-extension/bin/${{ matrix.binary }} version
+          ./vscode-extension/bin/${{ matrix.binary }} --version
 
       - name: Setup Node
         uses: actions/setup-node@v4

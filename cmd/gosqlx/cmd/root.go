@@ -28,14 +28,12 @@ import (
 // This version tracks feature releases and compatibility.
 // Format: MAJOR.MINOR.PATCH (Semantic Versioning 2.0.0)
 //
-// Version 1.9.3 includes:
-//   - Fix pkg.go.dev license detection (Apache-2.0 now properly detected)
-//   - Comprehensive doc improvements across the project (PR #351)
-//   - Open-source health files (CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md)
-//   - LLM discovery metadata (llms.txt, llms-full.txt) (PR #350)
-//   - SEO improvements for project discoverability
-//   - Fix leading blank line in vscode-extension/LICENSE (PR #352)
-var Version = "1.9.3"
+// Version 1.10.0 includes:
+//   - MCP Server: All GoSQLX SQL capabilities as Model Context Protocol tools over streamable HTTP
+//   - 7 MCP tools: validate_sql, format_sql, parse_sql, extract_metadata, security_scan, lint_sql, analyze_sql
+//   - Optional bearer token auth via GOSQLX_MCP_AUTH_TOKEN
+//   - Go minimum bumped to 1.23.0 (required by mark3labs/mcp-go)
+var Version = "1.10.0"
 
 var (
 	// verbose enables detailed output for debugging and troubleshooting.
@@ -123,7 +121,7 @@ Key features:
 • CI/CD integration with proper exit codes
 
 Performance: 1.5M+ operations/second sustained, 1.97M peak. 100-1000x faster than competitors.`,
-	Version: "1.9.3",
+	Version: "1.10.0",
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

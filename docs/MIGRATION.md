@@ -1,5 +1,18 @@
 # Migration Guide
 
+## v1.9.x → v1.10.0 (2026-03-13)
+
+**Go version requirement changed**: Go 1.23+ is now required (was 1.21+). This is due to the `mark3labs/mcp-go` dependency used by the new MCP server. If you only use the parsing SDK (not the MCP server), Go 1.21+ still works, but `go.mod` declares 1.23.
+
+No breaking API changes. Drop-in upgrade for existing code.
+
+### New: MCP Server
+- `pkg/mcp/` — MCP server package with 7 SQL tools
+- `cmd/gosqlx-mcp/` — Standalone MCP server binary
+- See `docs/MCP_GUIDE.md` for usage
+
+---
+
 ## v1.8.0 → v1.9.0 (2026-02-28)
 
 No breaking changes. No API changes. Drop-in upgrade.

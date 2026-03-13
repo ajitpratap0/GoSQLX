@@ -1,4 +1,11 @@
 name: Publish VSCode Extension
+# Publishes platform-specific VSIXs to the VS Code Marketplace on tag push.
+# Runs in parallel with release.yml (GoReleaser).
+#
+# Required secret:
+#   VSCE_PAT - Azure DevOps Personal Access Token with "Marketplace (Manage)" scope.
+#              Create at: https://dev.azure.com → User Settings → Personal Access Tokens
+#              Scope: "Marketplace (Manage)", Organization: "All accessible organizations"
 
 on:
   push:

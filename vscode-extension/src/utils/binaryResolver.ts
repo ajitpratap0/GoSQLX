@@ -34,7 +34,7 @@ export interface BinaryResolverDeps {
  */
 export async function getBinaryPath(deps: BinaryResolverDeps): Promise<string> {
     // 1. Explicit user setting (non-empty means user override)
-    const userPath = deps.getConfig('executablePath', '');
+    const userPath = deps.getConfig('executablePath', '')?.trim();
     if (userPath) {
         return userPath;
     }

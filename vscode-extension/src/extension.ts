@@ -57,7 +57,8 @@ async function getBinaryPath(): Promise<string> {
             await fs.promises.access(bundledPath, process.platform === 'win32' ? fs.constants.F_OK : fs.constants.X_OK);
             return bundledPath;
         } catch {
-            // Bundled binary not found or not executable, fall through
+            // Bundled binary not found or not executable, fall through to PATH lookup
+            outputChannel?.appendLine(`Bundled binary not found at ${bundledPath}, falling back to PATH`);
         }
     }
 

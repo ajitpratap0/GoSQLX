@@ -12,6 +12,7 @@ jobs:
   build:
     name: Build VSIX (${{ matrix.target }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       matrix:
         include:
@@ -90,6 +91,7 @@ jobs:
     name: Publish to Marketplace
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Setup Node
         uses: actions/setup-node@v4

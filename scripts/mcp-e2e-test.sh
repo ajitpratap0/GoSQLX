@@ -32,7 +32,40 @@ if [ "$READY" != "true" ]; then
   exit 1
 fi
 
-# Helper: send a JSON-RPC request and extract the result field.
+# --- Step 1: Initialize session and capture Mcp-Session-Id ---
+echo "=== Initializing MCP session ==="
+INIT_HEADERS=$(mktemp)
+INIT=$(curl -sf -X POST "$ADDR" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -D "$INIT_HEADERS" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"e2e-test","version":"0.1"},"capabilities":{}}}')
+
+SESSION_ID=$(grep -i 'Mcp-Session-Id' "$INIT_HEADERS" | tr -d '\r' | awk '{print $2}')
+rm -f "$INIT_HEADERS"
+
+if [ -z "$SESSION_ID" ]; then
+  echo "FAIL: initialize did not return Mcp-Session-Id header"
+  echo "Response: $INIT"
+  exit 1
+fi
+
+SERVER_NAME=$(echo "$INIT" | jq -r '.result.serverInfo.name // empty')
+if [ -z "$SERVER_NAME" ]; then
+  echo "FAIL: initialize did not return serverInfo.name"
+  echo "Response: $INIT"
+  exit 1
+fi
+echo "PASS: initialized — server=$SERVER_NAME, session=$SESSION_ID"
+
+# Send initialized notification (requires session ID)
+curl -sf -X POST "$ADDR" \
+  -H "Content-Type: application/json" \
+  -H "Mcp-Session-Id: $SESSION_ID" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+  -o /dev/null 2>/dev/null || true
+
+# Helper: send a JSON-RPC request with session ID.
 rpc() {
   local id="$1"
   local method="$2"
@@ -40,25 +73,9 @@ rpc() {
   curl -sf -X POST "$ADDR" \
     -H "Content-Type: application/json" \
     -H "Accept: application/json" \
+    -H "Mcp-Session-Id: $SESSION_ID" \
     -d "{\"jsonrpc\":\"2.0\",\"id\":${id},\"method\":\"${method}\",\"params\":${params}}"
 }
-
-# --- Step 1: Initialize session ---
-echo "=== Initializing MCP session ==="
-INIT=$(rpc 1 "initialize" '{"protocolVersion":"2025-11-25","clientInfo":{"name":"e2e-test","version":"0.1"},"capabilities":{}}')
-SERVER_NAME=$(echo "$INIT" | jq -r '.result.serverInfo.name // empty')
-if [ -z "$SERVER_NAME" ]; then
-  echo "FAIL: initialize did not return serverInfo.name"
-  echo "Response: $INIT"
-  exit 1
-fi
-echo "PASS: initialized — server=$SERVER_NAME"
-
-# Send initialized notification (no id, no response expected)
-curl -sf -X POST "$ADDR" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
-  -o /dev/null 2>/dev/null || true
 
 # --- Step 2: List tools ---
 echo "=== Listing tools ==="

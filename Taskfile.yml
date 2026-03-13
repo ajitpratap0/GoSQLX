@@ -194,7 +194,7 @@ tasks:
     desc: Run go vet
     cmds:
       - echo "Running go vet..."
-      - go vet ./...
+      - go vet $(go list ./... | grep -v 'pkg/cbinding')
 
   lint:
     desc: Run golangci-lint

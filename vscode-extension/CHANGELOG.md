@@ -2,6 +2,12 @@
 
 All notable changes to the "GoSQLX" extension will be documented in this file.
 
+## [1.10.3] - 2026-03-14
+
+### Fixed
+- LSP server now accepts --stdio flag from vscode-languageclient
+- Empty executablePath no longer triggers validation warning
+
 ## [1.10.2] - 2026-03-14
 
 ### Fixed

@@ -357,8 +357,8 @@ function validateDialect(dialect: string): ValidationResult {
 }
 
 function validateExecutablePath(path: string): ValidationResult {
-    if (!path || path.trim().length === 0) {
-        return { valid: false, message: 'Executable path cannot be empty' };
+    if (typeof path !== 'string') {
+        return { valid: false, message: 'Executable path must be a string' };
     }
     return { valid: true };
 }

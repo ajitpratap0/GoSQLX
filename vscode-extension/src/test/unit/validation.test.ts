@@ -226,10 +226,9 @@ suite('Executable Path Validation Edge Cases', () => {
         assert.strictEqual(result.valid, true);
     });
 
-    test('should reject empty string', () => {
+    test('should accept empty string (uses bundled binary or PATH fallback)', () => {
         const result = validateExecutablePath('');
-        assert.strictEqual(result.valid, false);
-        assert.ok(result.message?.includes('empty'));
+        assert.strictEqual(result.valid, true);
     });
 
     test('should reject whitespace-only string', () => {
@@ -637,12 +636,9 @@ function validateExecutablePath(execPath: unknown): ValidationResult {
 
     const trimmed = execPath.trim();
 
+    // Empty string is valid — means "use bundled binary or PATH fallback"
     if (trimmed.length === 0) {
-        return {
-            valid: false,
-            message: 'Executable path cannot be empty',
-            suggestion: 'Set to "gosqlx" to use PATH lookup'
-        };
+        return { valid: true };
     }
 
     if (trimmed.includes('  ') || trimmed.includes('\n') || trimmed.includes('\t')) {

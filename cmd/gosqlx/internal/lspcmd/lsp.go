@@ -28,6 +28,7 @@ import (
 
 var (
 	lspLogFile string
+	lspStdio   bool
 )
 
 // NewCmd returns the lsp cobra.Command.
@@ -77,6 +78,7 @@ Emacs Integration (lsp-mode):
 	}
 
 	cmd.Flags().StringVar(&lspLogFile, "log", "", "Log file path (optional, for debugging)")
+	cmd.Flags().BoolVar(&lspStdio, "stdio", false, "Use stdio transport (default, accepted for compatibility with vscode-languageclient)")
 
 	return cmd
 }

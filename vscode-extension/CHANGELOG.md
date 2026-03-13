@@ -2,6 +2,11 @@
 
 All notable changes to the "GoSQLX" extension will be documented in this file.
 
+## [1.10.4] - 2026-03-14
+
+### Fixed
+- SQL formatting in VS Code now uses the full AST-based formatter
+
 ## [1.10.3] - 2026-03-14
 
 ### Fixed

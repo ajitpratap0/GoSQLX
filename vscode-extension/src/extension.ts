@@ -40,12 +40,12 @@ let metrics: MetricsCollector;
  * 2. Bundled binary at <extensionPath>/bin/gosqlx[.exe]
  * 3. PATH lookup ("gosqlx" — the old default behavior)
  */
-async function getBinaryPath(): Promise<string | undefined> {
+async function getBinaryPath(): Promise<string> {
     const config = vscode.workspace.getConfiguration('gosqlx');
     const userPath = config.get<string>('executablePath', '');
 
     // 1. Explicit user setting (non-empty means user override)
-    if (userPath && userPath !== '') {
+    if (userPath) {
         return userPath;
     }
 
@@ -54,7 +54,7 @@ async function getBinaryPath(): Promise<string | undefined> {
         const binaryName = process.platform === 'win32' ? 'gosqlx.exe' : 'gosqlx';
         const bundledPath = path.join(extensionContext.extensionPath, 'bin', binaryName);
         try {
-            await fs.promises.access(bundledPath, fs.constants.X_OK);
+            await fs.promises.access(bundledPath, process.platform === 'win32' ? fs.constants.F_OK : fs.constants.X_OK);
             return bundledPath;
         } catch {
             // Bundled binary not found or not executable, fall through
@@ -235,7 +235,7 @@ async function validateExecutable(executablePath: string): Promise<boolean> {
 
 async function startLanguageServer(context: vscode.ExtensionContext, retryCount: number = 0): Promise<void> {
     const config = vscode.workspace.getConfiguration('gosqlx');
-    const executablePath = await getBinaryPath() || 'gosqlx';
+    const executablePath = await getBinaryPath();
     const maxRetries = 3;
 
     const timer = new PerformanceTimer();
@@ -585,7 +585,7 @@ async function analyzeCommand(): Promise<void> {
 
     const text = editor.document.getText();
     const config = vscode.workspace.getConfiguration('gosqlx');
-    const executablePath = await getBinaryPath() || 'gosqlx';
+    const executablePath = await getBinaryPath();
     const analysisTimeout = config.get<number>('timeouts.analysis', 30000);
 
     // Show progress indicator

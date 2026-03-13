@@ -23,7 +23,8 @@ import {
     PerformanceTimer,
     showMetricsReport,
     createPerformanceStatusBarItem,
-    updatePerformanceStatusBar
+    updatePerformanceStatusBar,
+    resolveBinaryPath
 } from './utils';
 
 let client: LanguageClient | undefined;
@@ -39,31 +40,19 @@ let metrics: MetricsCollector;
  * 1. User-configured explicit path (gosqlx.executablePath setting, if non-empty)
  * 2. Bundled binary at <extensionPath>/bin/gosqlx[.exe]
  * 3. PATH lookup ("gosqlx" — the old default behavior)
+ *
+ * Delegates to the extracted resolveBinaryPath() utility for testability.
  */
 async function getBinaryPath(): Promise<string> {
     const config = vscode.workspace.getConfiguration('gosqlx');
-    const userPath = config.get<string>('executablePath', '');
-
-    // 1. Explicit user setting (non-empty means user override)
-    if (userPath) {
-        return userPath;
-    }
-
-    // 2. Bundled binary
-    if (extensionContext) {
-        const binaryName = process.platform === 'win32' ? 'gosqlx.exe' : 'gosqlx';
-        const bundledPath = path.join(extensionContext.extensionPath, 'bin', binaryName);
-        try {
-            await fs.promises.access(bundledPath, process.platform === 'win32' ? fs.constants.F_OK : fs.constants.X_OK);
-            return bundledPath;
-        } catch {
-            // Bundled binary not found or not executable, fall through to PATH lookup
-            outputChannel?.appendLine(`Bundled binary not found at ${bundledPath}, falling back to PATH`);
-        }
-    }
-
-    // 3. Fall back to PATH lookup
-    return 'gosqlx';
+    return resolveBinaryPath({
+        extensionPath: extensionContext?.extensionPath,
+        platform: process.platform,
+        getConfig: (key: string, defaultValue: string) =>
+            config.get<string>(key, defaultValue),
+        checkAccess: (filePath: string, mode: number) =>
+            fs.promises.access(filePath, mode)
+    });
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {

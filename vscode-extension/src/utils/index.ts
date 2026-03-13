@@ -49,6 +49,12 @@ export {
     withTelemetry
 } from './telemetry';
 
+// Binary resolution utilities
+export {
+    BinaryResolverDeps,
+    getBinaryPath as resolveBinaryPath
+} from './binaryResolver';
+
 // Performance metrics utilities
 export {
     OperationType,

@@ -24,7 +24,9 @@ import {
     showMetricsReport,
     createPerformanceStatusBarItem,
     updatePerformanceStatusBar,
-    resolveBinaryPath
+    resolveBinaryPath,
+    resolveBinaryPathFull,
+    clearBinaryPathCache
 } from './utils';
 
 let client: LanguageClient | undefined;
@@ -38,21 +40,42 @@ let metrics: MetricsCollector;
 /**
  * Resolves the gosqlx binary path using a fallback chain:
  * 1. User-configured explicit path (gosqlx.executablePath setting, if non-empty)
- * 2. Bundled binary at <extensionPath>/bin/gosqlx[.exe]
- * 3. PATH lookup ("gosqlx" — the old default behavior)
+ * 2. Bundled binary at <extensionPath>/bin/gosqlx[.exe] (with checksum verification)
+ * 3. PATH lookup ("gosqlx" — the old default behavior, or forced via forcePathLookup)
  *
+ * Results are cached until configuration changes or server restart.
  * Delegates to the extracted resolveBinaryPath() utility for testability.
  */
 async function getBinaryPath(): Promise<string> {
     const config = vscode.workspace.getConfiguration('gosqlx');
-    return resolveBinaryPath({
+    const deps = {
         extensionPath: extensionContext?.extensionPath,
         platform: process.platform,
         getConfig: (key: string, defaultValue: string) =>
             config.get<string>(key, defaultValue),
+        getBoolConfig: (key: string, defaultValue: boolean) =>
+            config.get<boolean>(key, defaultValue),
         checkAccess: (filePath: string, mode: number) =>
-            fs.promises.access(filePath, mode)
+            fs.promises.access(filePath, mode),
+        readFile: (filePath: string) =>
+            fs.promises.readFile(filePath)
+    };
+
+    const result = await resolveBinaryPathFull(deps);
+
+    // Record telemetry for binary resolution source
+    telemetry?.recordEvent('extension.activated', {
+        binarySource: result.source,
+        ...(result.checksumValid !== undefined && { checksumValid: result.checksumValid })
     });
+
+    if (result.checksumValid === false) {
+        outputChannel?.appendLine(`WARNING: Bundled binary checksum mismatch at ${result.binaryPath}`);
+    }
+
+    outputChannel?.appendLine(`Binary resolved via ${result.source}: ${result.binaryPath}`);
+
+    return resolveBinaryPath(deps);
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -105,6 +128,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         vscode.workspace.onDidChangeConfiguration(async (e) => {
             if (e.affectsConfiguration('gosqlx')) {
                 telemetry.recordEvent('config.changed');
+
+                // Invalidate cached binary path on config change
+                clearBinaryPathCache();
 
                 // Re-validate configuration
                 await validateAndWarnConfiguration();
@@ -395,6 +421,7 @@ async function stopLanguageServer(): Promise<void> {
 
 async function restartServerCommand(): Promise<void> {
     outputChannel.appendLine('Restarting GoSQLX Language Server...');
+    clearBinaryPathCache(); // Re-resolve binary on restart
     await stopLanguageServer();
 
     const context = getExtensionContext();

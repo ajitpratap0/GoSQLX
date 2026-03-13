@@ -52,7 +52,11 @@ export {
 // Binary resolution utilities
 export {
     BinaryResolverDeps,
-    getBinaryPath as resolveBinaryPath
+    BinaryResolutionSource,
+    BinaryResolutionResult,
+    getBinaryPath as resolveBinaryPath,
+    resolveBinaryPath as resolveBinaryPathFull,
+    clearBinaryPathCache
 } from './binaryResolver';
 
 // Performance metrics utilities

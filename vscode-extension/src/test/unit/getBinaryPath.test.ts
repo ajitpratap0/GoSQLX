@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as path from 'path';
 import * as fs from 'fs';
-import { getBinaryPath, BinaryResolverDeps } from '../../utils/binaryResolver';
+import { getBinaryPath, resolveBinaryPath, BinaryResolverDeps, clearBinaryPathCache } from '../../utils/binaryResolver';
 
 /**
  * Unit tests for getBinaryPath() binary resolution logic.
@@ -22,10 +22,17 @@ function makeDeps(overrides: Partial<BinaryResolverDeps> = {}): BinaryResolverDe
         extensionPath: '/mock/extension',
         platform: 'linux',
         getConfig: (_key: string, defaultValue: string) => defaultValue,
+        getBoolConfig: (_key: string, defaultValue: boolean) => defaultValue,
         checkAccess: () => Promise.reject(new Error('ENOENT')),
+        readFile: () => Promise.reject(new Error('ENOENT')),
         ...overrides,
     };
 }
+
+/** Clear cache before each test suite to avoid cross-test pollution. */
+setup(() => {
+    clearBinaryPathCache();
+});
 
 // ---------------------------------------------------------------------------
 // 1. User-configured path
@@ -262,5 +269,195 @@ suite('getBinaryPath — fallback chain precedence', () => {
         });
         const result = await getBinaryPath(deps);
         assert.strictEqual(result, 'gosqlx');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// 6. Caching
+// ---------------------------------------------------------------------------
+
+suite('getBinaryPath — caching', () => {
+
+    test('returns cached result on subsequent calls', async () => {
+        let callCount = 0;
+        const deps = makeDeps({
+            checkAccess: () => {
+                callCount++;
+                return Promise.resolve();
+            },
+        });
+        await getBinaryPath(deps);
+        await getBinaryPath(deps);
+        await getBinaryPath(deps);
+        assert.strictEqual(callCount, 1, 'checkAccess should only be called once');
+    });
+
+    test('clearBinaryPathCache forces re-resolution', async () => {
+        let callCount = 0;
+        const deps = makeDeps({
+            checkAccess: () => {
+                callCount++;
+                return Promise.resolve();
+            },
+        });
+        await getBinaryPath(deps);
+        clearBinaryPathCache();
+        await getBinaryPath(deps);
+        assert.strictEqual(callCount, 2, 'checkAccess should be called twice after cache clear');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// 7. Force PATH lookup
+// ---------------------------------------------------------------------------
+
+suite('getBinaryPath — forcePathLookup setting', () => {
+
+    test('returns gosqlx when forcePathLookup is true', async () => {
+        const deps = makeDeps({
+            extensionPath: '/ext',
+            getBoolConfig: (key: string, defaultValue: boolean) =>
+                key === 'forcePathLookup' ? true : defaultValue,
+            checkAccess: () => Promise.resolve(), // bundled exists but should be skipped
+        });
+        const result = await getBinaryPath(deps);
+        assert.strictEqual(result, 'gosqlx');
+    });
+
+    test('uses bundled binary when forcePathLookup is false', async () => {
+        const deps = makeDeps({
+            extensionPath: '/ext',
+            getBoolConfig: (key: string, defaultValue: boolean) =>
+                key === 'forcePathLookup' ? false : defaultValue,
+            checkAccess: () => Promise.resolve(),
+        });
+        const result = await getBinaryPath(deps);
+        assert.strictEqual(result, path.join('/ext', 'bin', 'gosqlx'));
+    });
+
+    test('forcePathLookup takes precedence over user setting', async () => {
+        const deps = makeDeps({
+            getBoolConfig: (key: string, defaultValue: boolean) =>
+                key === 'forcePathLookup' ? true : defaultValue,
+            getConfig: (key: string, defaultValue: string) =>
+                key === 'executablePath' ? '/custom/path' : defaultValue,
+        });
+        const result = await getBinaryPath(deps);
+        assert.strictEqual(result, 'gosqlx');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// 8. Resolution source tracking
+// ---------------------------------------------------------------------------
+
+suite('resolveBinaryPath — resolution source', () => {
+
+    test('reports user-setting source', async () => {
+        const deps = makeDeps({
+            getConfig: (key: string, defaultValue: string) =>
+                key === 'executablePath' ? '/custom/gosqlx' : defaultValue,
+        });
+        const result = await resolveBinaryPath(deps);
+        assert.strictEqual(result.source, 'user-setting');
+        assert.strictEqual(result.binaryPath, '/custom/gosqlx');
+    });
+
+    test('reports bundled source', async () => {
+        const deps = makeDeps({
+            extensionPath: '/ext',
+            checkAccess: () => Promise.resolve(),
+        });
+        const result = await resolveBinaryPath(deps);
+        assert.strictEqual(result.source, 'bundled');
+    });
+
+    test('reports path-lookup source on fallback', async () => {
+        const deps = makeDeps({
+            extensionPath: '/ext',
+            checkAccess: () => Promise.reject(new Error('ENOENT')),
+        });
+        const result = await resolveBinaryPath(deps);
+        assert.strictEqual(result.source, 'path-lookup');
+    });
+
+    test('reports path-lookup source when forcePathLookup is true', async () => {
+        const deps = makeDeps({
+            getBoolConfig: (key: string, defaultValue: boolean) =>
+                key === 'forcePathLookup' ? true : defaultValue,
+        });
+        const result = await resolveBinaryPath(deps);
+        assert.strictEqual(result.source, 'path-lookup');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// 9. Checksum verification
+// ---------------------------------------------------------------------------
+
+suite('resolveBinaryPath — checksum verification', () => {
+
+    test('checksumValid is true when sidecar matches', async () => {
+        const binaryContent = Buffer.from('fake binary content');
+        const crypto = require('crypto');
+        const expectedHash = crypto.createHash('sha256').update(binaryContent).digest('hex');
+
+        const deps = makeDeps({
+            extensionPath: '/ext',
+            checkAccess: () => Promise.resolve(),
+            readFile: (filePath: string) => {
+                if (filePath.endsWith('.sha256')) {
+                    return Promise.resolve(Buffer.from(expectedHash));
+                }
+                return Promise.resolve(binaryContent);
+            },
+        });
+        const result = await resolveBinaryPath(deps);
+        assert.strictEqual(result.source, 'bundled');
+        assert.strictEqual(result.checksumValid, true);
+    });
+
+    test('checksumValid is false when sidecar mismatches', async () => {
+        const deps = makeDeps({
+            extensionPath: '/ext',
+            checkAccess: () => Promise.resolve(),
+            readFile: (filePath: string) => {
+                if (filePath.endsWith('.sha256')) {
+                    return Promise.resolve(Buffer.from('deadbeef'));
+                }
+                return Promise.resolve(Buffer.from('binary content'));
+            },
+        });
+        const result = await resolveBinaryPath(deps);
+        assert.strictEqual(result.source, 'bundled');
+        assert.strictEqual(result.checksumValid, false);
+    });
+
+    test('checksumValid is true when sidecar file is missing (skip verification)', async () => {
+        const deps = makeDeps({
+            extensionPath: '/ext',
+            checkAccess: () => Promise.resolve(),
+            readFile: () => Promise.reject(new Error('ENOENT')),
+        });
+        const result = await resolveBinaryPath(deps);
+        assert.strictEqual(result.source, 'bundled');
+        assert.strictEqual(result.checksumValid, true);
+    });
+
+    test('checksum not checked for user-setting source', async () => {
+        const deps = makeDeps({
+            getConfig: (key: string, defaultValue: string) =>
+                key === 'executablePath' ? '/custom/gosqlx' : defaultValue,
+        });
+        const result = await resolveBinaryPath(deps);
+        assert.strictEqual(result.checksumValid, undefined);
+    });
+
+    test('checksum not checked for path-lookup source', async () => {
+        const deps = makeDeps({
+            checkAccess: () => Promise.reject(new Error('ENOENT')),
+        });
+        const result = await resolveBinaryPath(deps);
+        assert.strictEqual(result.checksumValid, undefined);
     });
 });

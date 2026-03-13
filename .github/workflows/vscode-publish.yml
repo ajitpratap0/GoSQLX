@@ -59,6 +59,10 @@ jobs:
           mkdir -p vscode-extension/bin
           go build -ldflags="-s -w" -o "vscode-extension/bin/${{ matrix.binary }}" ./cmd/gosqlx
 
+      - name: Generate binary checksum
+        run: |
+          sha256sum "vscode-extension/bin/${{ matrix.binary }}" | awk '{print $1}' > "vscode-extension/bin/${{ matrix.binary }}.sha256"
+
       - name: Smoke test binary
         if: matrix.target == 'linux-x64'
         run: |

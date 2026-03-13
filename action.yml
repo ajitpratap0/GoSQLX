@@ -1,5 +1,5 @@
 name: 'GoSQLX Lint Action'
-description: 'Ultra-fast SQL validation, linting, and formatting for your CI pipeline — 100x faster than SQLFluff. Supports PR annotations, SARIF output, and multi-dialect SQL.'
+description: 'Ultra-fast SQL validation, linting, and formatting for CI — 100x faster than SQLFluff, multi-dialect.'
 author: 'GoSQLX Team'
 
 branding:

@@ -1,0 +1,138 @@
+name: Publish VSCode Extension
+# Publishes platform-specific VSIXs to the VS Code Marketplace on tag push.
+# Runs in parallel with release.yml (GoReleaser).
+#
+# Required secret:
+#   VSCE_PAT - Azure DevOps Personal Access Token with "Marketplace (Manage)" scope.
+#              Create at: https://dev.azure.com → User Settings → Personal Access Tokens
+#              Scope: "Marketplace (Manage)", Organization: "All accessible organizations"
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build VSIX (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        include:
+          - target: linux-x64
+            goos: linux
+            goarch: amd64
+            binary: gosqlx
+          - target: linux-arm64
+            goos: linux
+            goarch: arm64
+            binary: gosqlx
+          - target: darwin-x64
+            goos: darwin
+            goarch: amd64
+            binary: gosqlx
+          - target: darwin-arm64
+            goos: darwin
+            goarch: arm64
+            binary: gosqlx
+          - target: win32-x64
+            goos: windows
+            goarch: amd64
+            binary: gosqlx.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Cross-compile binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p vscode-extension/bin
+          go build -ldflags="-s -w" -o "vscode-extension/bin/${{ matrix.binary }}" ./cmd/gosqlx
+
+      - name: Generate binary checksum
+        run: |
+          sha256sum "vscode-extension/bin/${{ matrix.binary }}" | awk '{print $1}' > "vscode-extension/bin/${{ matrix.binary }}.sha256"
+
+      - name: Smoke test binary
+        if: matrix.target == 'linux-x64'
+        run: |
+          chmod +x vscode-extension/bin/${{ matrix.binary }}
+          ./vscode-extension/bin/${{ matrix.binary }} version
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: vscode-extension
+        run: npm ci
+
+      - name: Patch version from tag
+        working-directory: vscode-extension
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag '$GITHUB_REF_NAME' does not produce a valid semver: '$VERSION'"
+            exit 1
+          fi
+          npm version "$VERSION" --no-git-tag-version
+
+      - name: Package VSIX
+        working-directory: vscode-extension
+        run: npx vsce package --target ${{ matrix.target }}
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix-${{ matrix.target }}
+          path: vscode-extension/*.vsix
+
+  publish:
+    name: Publish to Marketplace
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install vsce
+        run: npm install -g @vscode/vsce
+
+      - name: Download all VSIX artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: vsix-*
+          merge-multiple: true
+          path: vsix
+
+      - name: Verify VSCE_PAT is set
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "Error: VSCE_PAT secret is not configured"
+            exit 1
+          fi
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Publish all platforms
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          for vsix in vsix/*.vsix; do
+            echo "Publishing $vsix..."
+            vsce publish --packagePath "$vsix"
+          done

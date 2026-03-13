@@ -2,7 +2,7 @@
   "name": "gosqlx",
   "displayName": "GoSQLX",
   "description": "High-performance SQL parsing, validation, formatting, and analysis powered by GoSQLX",
-  "version": "0.1.0",
+  "version": "1.10.1",
   "publisher": "ajitpratap0",
   "license": "Apache-2.0",
   "repository": {
@@ -74,9 +74,15 @@
         },
         "gosqlx.executablePath": {
           "type": "string",
-          "default": "gosqlx",
+          "default": "",
           "scope": "machine-overridable",
-          "description": "Path to the gosqlx executable"
+          "description": "Path to the gosqlx executable. Leave empty to use the bundled binary."
+        },
+        "gosqlx.forcePathLookup": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine-overridable",
+          "description": "Skip the bundled binary and always use gosqlx from PATH. Useful for development when testing a locally built binary."
         },
         "gosqlx.trace.server": {
           "type": "string",
@@ -259,13 +265,10 @@
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
     "@vscode/test-electron": "^2.3.8",
-    "@vscode/vsce": "^2.22.0",
+    "@vscode/vsce": "^3.7.1",
     "eslint": "^8.54.0",
     "glob": "^10.3.10",
     "mocha": "^10.2.0",
     "typescript": "^5.3.2"
-  },
-  "overrides": {
-    "minimatch": "10.2.3"
   }
 }

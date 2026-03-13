@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as os from 'os';
+import * as fs from 'fs';
 import { spawn } from 'child_process';
 import {
     LanguageClient,
@@ -22,7 +23,10 @@ import {
     PerformanceTimer,
     showMetricsReport,
     createPerformanceStatusBarItem,
-    updatePerformanceStatusBar
+    updatePerformanceStatusBar,
+    resolveBinaryPath,
+    resolveBinaryPathFull,
+    clearBinaryPathCache
 } from './utils';
 
 let client: LanguageClient | undefined;
@@ -32,6 +36,47 @@ let performanceStatusBarItem: vscode.StatusBarItem | undefined;
 let extensionContext: vscode.ExtensionContext | undefined;
 let telemetry: TelemetryManager;
 let metrics: MetricsCollector;
+
+/**
+ * Resolves the gosqlx binary path using a fallback chain:
+ * 1. User-configured explicit path (gosqlx.executablePath setting, if non-empty)
+ * 2. Bundled binary at <extensionPath>/bin/gosqlx[.exe] (with checksum verification)
+ * 3. PATH lookup ("gosqlx" — the old default behavior, or forced via forcePathLookup)
+ *
+ * Results are cached until configuration changes or server restart.
+ * Delegates to the extracted resolveBinaryPath() utility for testability.
+ */
+async function getBinaryPath(): Promise<string> {
+    const config = vscode.workspace.getConfiguration('gosqlx');
+    const deps = {
+        extensionPath: extensionContext?.extensionPath,
+        platform: process.platform,
+        getConfig: (key: string, defaultValue: string) =>
+            config.get<string>(key, defaultValue),
+        getBoolConfig: (key: string, defaultValue: boolean) =>
+            config.get<boolean>(key, defaultValue),
+        checkAccess: (filePath: string, mode: number) =>
+            fs.promises.access(filePath, mode),
+        readFile: (filePath: string) =>
+            fs.promises.readFile(filePath)
+    };
+
+    const result = await resolveBinaryPathFull(deps);
+
+    // Record telemetry for binary resolution source
+    telemetry?.recordEvent('extension.activated', {
+        binarySource: result.source,
+        ...(result.checksumValid !== undefined && { checksumValid: result.checksumValid })
+    });
+
+    if (result.checksumValid === false) {
+        outputChannel?.appendLine(`WARNING: Bundled binary checksum mismatch at ${result.binaryPath}`);
+    }
+
+    outputChannel?.appendLine(`Binary resolved via ${result.source}: ${result.binaryPath}`);
+
+    return resolveBinaryPath(deps);
+}
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
     // Store context for restart functionality
@@ -83,6 +128,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         vscode.workspace.onDidChangeConfiguration(async (e) => {
             if (e.affectsConfiguration('gosqlx')) {
                 telemetry.recordEvent('config.changed');
+
+                // Invalidate cached binary path on config change
+                clearBinaryPathCache();
 
                 // Re-validate configuration
                 await validateAndWarnConfiguration();
@@ -203,7 +251,7 @@ async function validateExecutable(executablePath: string): Promise<boolean> {
 
 async function startLanguageServer(context: vscode.ExtensionContext, retryCount: number = 0): Promise<void> {
     const config = vscode.workspace.getConfiguration('gosqlx');
-    const executablePath = config.get<string>('executablePath', 'gosqlx');
+    const executablePath = await getBinaryPath();
     const maxRetries = 3;
 
     const timer = new PerformanceTimer();
@@ -373,6 +421,7 @@ async function stopLanguageServer(): Promise<void> {
 
 async function restartServerCommand(): Promise<void> {
     outputChannel.appendLine('Restarting GoSQLX Language Server...');
+    clearBinaryPathCache(); // Re-resolve binary on restart
     await stopLanguageServer();
 
     const context = getExtensionContext();
@@ -553,7 +602,7 @@ async function analyzeCommand(): Promise<void> {
 
     const text = editor.document.getText();
     const config = vscode.workspace.getConfiguration('gosqlx');
-    const executablePath = config.get<string>('executablePath', 'gosqlx');
+    const executablePath = await getBinaryPath();
     const analysisTimeout = config.get<number>('timeouts.analysis', 30000);
 
     // Show progress indicator

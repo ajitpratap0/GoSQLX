@@ -11,6 +11,7 @@
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg?style=for-the-badge)](https://www.apache.org/licenses/LICENSE-2.0)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge)](http://makeapullrequest.com)
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-GoSQLX%20Lint-blue?style=for-the-badge&logo=github)](https://github.com/marketplace/actions/gosqlx-lint-action)
+[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/ajitpratap0.gosqlx?style=for-the-badge&logo=visual-studio-code&label=VS%20Code)](https://marketplace.visualstudio.com/items?itemName=ajitpratap0.gosqlx)
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/ajitpratap0/GoSQLX/test.yml?branch=main&label=Tests&style=flat-square)](https://github.com/ajitpratap0/GoSQLX/actions)
 [![Go Report Card](https://goreportcard.com/badge/github.com/ajitpratap0/GoSQLX?style=flat-square)](https://goreportcard.com/report/github.com/ajitpratap0/GoSQLX)
@@ -116,6 +117,16 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete release details. See [MCP_GUID
 ```bash
 go get github.com/ajitpratap0/GoSQLX
 ```
+
+### VS Code Extension
+
+Install the [GoSQLX extension](https://marketplace.visualstudio.com/items?itemName=ajitpratap0.gosqlx) for real-time SQL validation, formatting, linting, and analysis directly in your editor:
+
+```bash
+code --install-extension ajitpratap0.gosqlx
+```
+
+Or search **"GoSQLX"** in the VS Code Extensions panel. The extension bundles the `gosqlx` binary — no separate installation needed.
 
 ### CLI Installation
 ```bash

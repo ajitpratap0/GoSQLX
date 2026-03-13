@@ -70,6 +70,10 @@ jobs:
         working-directory: vscode-extension
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag '$GITHUB_REF_NAME' does not produce a valid semver: '$VERSION'"
+            exit 1
+          fi
           npm version "$VERSION" --no-git-tag-version
 
       - name: Package VSIX
@@ -102,7 +106,20 @@ jobs:
           merge-multiple: true
           path: vsix
 
+      - name: Verify VSCE_PAT is set
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "Error: VSCE_PAT secret is not configured"
+            exit 1
+          fi
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
       - name: Publish all platforms
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: vsce publish --packagePath vsix/*.vsix
+        run: |
+          for vsix in vsix/*.vsix; do
+            echo "Publishing $vsix..."
+            vsce publish --packagePath "$vsix"
+          done

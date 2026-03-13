@@ -1,0 +1,147 @@
+---
+const examples = [
+  {
+    id: "parse",
+    label: "Parse",
+    code: `package main
+
+import "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+
+func main() {
+    ast, err := gosqlx.Parse("SELECT * FROM users WHERE active = true")
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Printf("Statements: %d\\n", len(ast.Statements))
+}`,
+  },
+  {
+    id: "format",
+    label: "Format",
+    code: `package main
+
+import "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+
+func main() {
+    formatted, err := gosqlx.Format("select id,name from users where id=1")
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(formatted)
+    // SELECT id, name FROM users WHERE id = 1
+}`,
+  },
+  {
+    id: "validate",
+    label: "Validate",
+    code: `package main
+
+import "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+
+func main() {
+    err := gosqlx.Validate("SELECT * FROM users")
+    if err != nil {
+        fmt.Println("Invalid SQL:", err)
+    } else {
+        fmt.Println("Valid SQL!")
+    }
+}`,
+  },
+  {
+    id: "lint",
+    label: "Lint",
+    code: `package main
+
+import "github.com/ajitpratap0/GoSQLX/pkg/linter"
+
+func main() {
+    l := linter.New()
+    results, err := l.Lint("SELECT * FROM users")
+    if err != nil {
+        log.Fatal(err)
+    }
+    for _, r := range results {
+        fmt.Printf("[%s] %s\\n", r.Rule, r.Message)
+    }
+}`,
+  },
+];
+---
+
+<section class="py-20 bg-[#0c1322]">
+  <div class="container mx-auto px-4">
+    <h2 class="text-3xl font-bold text-white text-center mb-12">
+      Simple, Powerful API
+    </h2>
+
+    <div class="max-w-3xl mx-auto">
+      <!-- Tabs -->
+      <div class="flex border-b border-slate-700 mb-0">
+        {examples.map((ex, i) => (
+          <button
+            class={`code-tab px-5 py-2.5 text-sm font-medium transition-colors relative ${
+              i === 0 ? "text-blue-400 active" : "text-slate-400 hover:text-slate-200"
+            }`}
+            data-tab={ex.id}
+          >
+            {ex.label}
+          </button>
+        ))}
+      </div>
+
+      <!-- Code panels -->
+      {examples.map((ex, i) => (
+        <div
+          class={`code-panel ${i === 0 ? "" : "hidden"}`}
+          data-panel={ex.id}
+        >
+          <pre class="bg-[#0d1117] rounded-b-xl p-5 overflow-x-auto border border-t-0 border-slate-700"><code class="text-sm font-mono text-slate-300 leading-relaxed" set:text={ex.code} /></pre>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+
+<script>
+  function initCodeTabs() {
+    const tabs = document.querySelectorAll('.code-tab');
+    const panels = document.querySelectorAll('.code-panel');
+
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const target = (tab as HTMLElement).dataset.tab;
+
+        tabs.forEach((t) => {
+          t.classList.remove('text-blue-400', 'active');
+          t.classList.add('text-slate-400');
+        });
+        tab.classList.remove('text-slate-400');
+        tab.classList.add('text-blue-400', 'active');
+
+        panels.forEach((p) => {
+          const panel = p as HTMLElement;
+          if (panel.dataset.panel === target) {
+            panel.classList.remove('hidden');
+          } else {
+            panel.classList.add('hidden');
+          }
+        });
+      });
+    });
+  }
+
+  initCodeTabs();
+  document.addEventListener('astro:page-load', initCodeTabs);
+</script>
+
+<style>
+  .code-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #3b82f6;
+  }
+</style>

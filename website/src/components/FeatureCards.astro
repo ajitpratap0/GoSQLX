@@ -1,0 +1,51 @@
+---
+const features = [
+  {
+    icon: "🌐",
+    title: "Multi-Dialect",
+    description: "PostgreSQL, MySQL, SQLite, SQL Server, Oracle — one parser, all dialects.",
+  },
+  {
+    icon: "🔒",
+    title: "Thread-Safe",
+    description: "Zero race conditions validated with 20,000+ concurrent operations.",
+  },
+  {
+    icon: "⚡",
+    title: "Zero-Copy",
+    description: "Optimized tokenizer processes SQL bytes without unnecessary allocations.",
+  },
+  {
+    icon: "♻️",
+    title: "Object Pooling",
+    description: "sync.Pool-based recycling for ASTs, tokenizers, and expressions.",
+  },
+  {
+    icon: "🛡️",
+    title: "Security Scanner",
+    description: "Built-in SQL injection detection with severity classification.",
+  },
+  {
+    icon: "🤖",
+    title: "MCP Server",
+    description: "Model Context Protocol server for AI-powered SQL tooling.",
+  },
+];
+---
+
+<section class="py-20">
+  <div class="container mx-auto px-4">
+    <h2 class="text-3xl font-bold text-white text-center mb-12">
+      Built for Production
+    </h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
+      {features.map((feature) => (
+        <div class="bg-[#1e293b] rounded-xl p-6 border border-slate-700 hover:border-blue-500/50 transition-colors duration-200">
+          <div class="text-2xl mb-3">{feature.icon}</div>
+          <h3 class="text-lg font-semibold text-white mb-1">{feature.title}</h3>
+          <p class="text-slate-400 text-sm">{feature.description}</p>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

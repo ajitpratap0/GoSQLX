@@ -1,10 +1,17 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import HeroPlayground from '../components/HeroPlayground';
+import StatsBar from '../components/StatsBar.astro';
+import FeatureCards from '../components/FeatureCards.astro';
+import CodeExamples from '../components/CodeExamples.astro';
+import VscodeSection from '../components/VscodeSection.astro';
+import SocialProof from '../components/SocialProof.astro';
 ---
 <BaseLayout title="GoSQLX - High-Performance SQL Parser for Go" description="Production-ready, zero-copy SQL parsing SDK for Go with multi-dialect support">
-  <main class="container mx-auto px-4 py-20 text-center">
-    <h1 class="text-5xl font-extrabold mb-4">GoSQLX</h1>
-    <p class="text-xl text-slate-400">High-Performance SQL Parser for Go</p>
-    <p class="text-slate-500 mt-8">Website under construction...</p>
-  </main>
+  <HeroPlayground client:only="react" />
+  <StatsBar />
+  <FeatureCards />
+  <CodeExamples />
+  <VscodeSection />
+  <SocialProof />
 </BaseLayout>

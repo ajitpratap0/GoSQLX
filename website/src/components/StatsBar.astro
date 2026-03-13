@@ -1,0 +1,81 @@
+---
+const stats = [
+  { value: "1.25M+", label: "ops/sec", color: "text-orange-400", target: 1.25 },
+  { value: "<1μs", label: "latency", color: "text-blue-400", target: 1 },
+  { value: "85%", label: "SQL-99", color: "text-green-400", target: 85 },
+  { value: "6", label: "Dialects", color: "text-purple-400", target: 6 },
+];
+---
+
+<section class="py-16 border-y border-slate-800">
+  <div class="container mx-auto px-4">
+    <div class="flex flex-wrap justify-center gap-12 md:gap-20">
+      {stats.map((stat) => (
+        <div class="text-center stat-item" data-target={stat.target} data-display={stat.value}>
+          <div class={`text-4xl font-extrabold ${stat.color} stat-value`}>
+            {stat.value}
+          </div>
+          <div class="text-sm text-slate-400 mt-1">{stat.label}</div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+
+<script>
+  function animateStats() {
+    const items = document.querySelectorAll('.stat-item');
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const el = entry.target as HTMLElement;
+            const valueEl = el.querySelector('.stat-value') as HTMLElement;
+            const display = el.dataset.display || '';
+            const target = parseFloat(el.dataset.target || '0');
+
+            // Start from 0 and count up
+            let start = 0;
+            const duration = 1200;
+            const startTime = performance.now();
+
+            function tick(now: number) {
+              const elapsed = now - startTime;
+              const progress = Math.min(elapsed / duration, 1);
+              // Ease out cubic
+              const eased = 1 - Math.pow(1 - progress, 3);
+              const current = start + (target - start) * eased;
+
+              if (progress < 1) {
+                // Show intermediate number
+                if (display.includes('M')) {
+                  valueEl.textContent = current.toFixed(2) + 'M+';
+                } else if (display.includes('%')) {
+                  valueEl.textContent = Math.round(current) + '%';
+                } else if (display.includes('μ')) {
+                  valueEl.textContent = '<' + Math.max(1, Math.round(current)) + 'μs';
+                } else {
+                  valueEl.textContent = String(Math.round(current));
+                }
+                requestAnimationFrame(tick);
+              } else {
+                valueEl.textContent = display;
+              }
+            }
+
+            requestAnimationFrame(tick);
+            observer.unobserve(el);
+          }
+        });
+      },
+      { threshold: 0.3 }
+    );
+
+    items.forEach((item) => observer.observe(item));
+  }
+
+  // Run on load and on Astro page transitions
+  animateStats();
+  document.addEventListener('astro:page-load', animateStats);
+</script>

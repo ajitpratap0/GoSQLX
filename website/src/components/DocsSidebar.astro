@@ -1,0 +1,186 @@
+---
+const currentPath = Astro.url.pathname;
+
+interface NavItem {
+  label: string;
+  slug: string;
+}
+
+interface NavCategory {
+  title: string;
+  items: NavItem[];
+}
+
+const categories: NavCategory[] = [
+  {
+    title: 'Getting Started',
+    items: [
+      { label: 'Getting Started', slug: 'getting_started' },
+      { label: 'CLI Guide', slug: 'cli_guide' },
+    ],
+  },
+  {
+    title: 'Core',
+    items: [
+      { label: 'Usage Guide', slug: 'usage_guide' },
+      { label: 'API Reference', slug: 'api_reference' },
+      { label: 'Architecture', slug: 'architecture' },
+      { label: 'Configuration', slug: 'configuration' },
+    ],
+  },
+  {
+    title: 'Reference',
+    items: [
+      { label: 'Error Codes', slug: 'error_codes' },
+      { label: 'SQL Compatibility', slug: 'sql_compatibility' },
+      { label: 'Linting Rules', slug: 'linting_rules' },
+    ],
+  },
+  {
+    title: 'Advanced',
+    items: [
+      { label: 'LSP Guide', slug: 'lsp_guide' },
+      { label: 'MCP Guide', slug: 'mcp_guide' },
+      { label: 'Security', slug: 'security' },
+      { label: 'Production Guide', slug: 'production_guide' },
+      { label: 'Performance Tuning', slug: 'performance_tuning' },
+    ],
+  },
+  {
+    title: 'Tutorials',
+    items: [
+      { label: 'SQL Validator CI/CD', slug: 'tutorials/01-sql-validator-cicd' },
+      { label: 'Custom SQL Formatter', slug: 'tutorials/02-custom-sql-formatter' },
+    ],
+  },
+  {
+    title: 'Migration',
+    items: [
+      { label: 'From JSQLParser', slug: 'migration/from_jsqlparser' },
+      { label: 'From pg_query', slug: 'migration/from_pg_query' },
+      { label: 'From SQLFluff', slug: 'migration/from_sqlfluff' },
+    ],
+  },
+  {
+    title: 'Editors',
+    items: [
+      { label: 'VS Code', slug: 'editors/vscode' },
+      { label: 'Neovim', slug: 'editors/neovim' },
+      { label: 'JetBrains', slug: 'editors/jetbrains' },
+    ],
+  },
+];
+
+function isActive(slug: string): boolean {
+  const docPath = `/GoSQLX/docs/${slug}`;
+  const normalized = currentPath.replace(/\/$/, '');
+  return normalized === docPath || normalized === docPath + '/';
+}
+---
+
+<aside id="docs-sidebar" class="w-64 shrink-0 hidden lg:block">
+  <div class="sticky top-20 h-[calc(100vh-5rem)] overflow-y-auto pb-8 pr-4 scrollbar-thin">
+    <nav class="space-y-6">
+      {categories.map((category) => (
+        <div class="sidebar-category">
+          <button
+            class="flex items-center justify-between w-full text-left text-sm font-semibold text-slate-300 uppercase tracking-wider hover:text-white transition-colors"
+            data-collapse-toggle
+          >
+            <span>{category.title}</span>
+            <svg class="w-4 h-4 transition-transform rotate-0 collapse-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <ul class="mt-2 space-y-1 collapse-content">
+            {category.items.map((item) => (
+              <li>
+                <a
+                  href={`/GoSQLX/docs/${item.slug}/`}
+                  class:list={[
+                    'block text-sm py-1 pl-3 border-l-2 transition-colors',
+                    isActive(item.slug)
+                      ? 'border-accent-orange text-accent-orange font-medium'
+                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500',
+                  ]}
+                >
+                  {item.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </nav>
+  </div>
+</aside>
+
+<!-- Mobile sidebar overlay -->
+<div id="docs-sidebar-overlay" class="fixed inset-0 bg-black/50 z-40 hidden lg:hidden"></div>
+<aside id="docs-sidebar-mobile" class="fixed top-0 left-0 w-72 h-full bg-[#0f172a] z-50 transform -translate-x-full transition-transform lg:hidden overflow-y-auto">
+  <div class="p-4">
+    <button id="close-sidebar-btn" class="mb-4 text-slate-400 hover:text-white">
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+    <nav class="space-y-6">
+      {categories.map((category) => (
+        <div>
+          <h3 class="text-sm font-semibold text-slate-300 uppercase tracking-wider">{category.title}</h3>
+          <ul class="mt-2 space-y-1">
+            {category.items.map((item) => (
+              <li>
+                <a
+                  href={`/GoSQLX/docs/${item.slug}/`}
+                  class:list={[
+                    'block text-sm py-1 pl-3 border-l-2 transition-colors',
+                    isActive(item.slug)
+                      ? 'border-accent-orange text-accent-orange font-medium'
+                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500',
+                  ]}
+                >
+                  {item.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </nav>
+  </div>
+</aside>
+
+<script>
+  // Desktop sidebar collapse
+  document.querySelectorAll('[data-collapse-toggle]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const content = btn.nextElementSibling;
+      const icon = btn.querySelector('.collapse-icon');
+      if (content && icon) {
+        content.classList.toggle('hidden');
+        icon.classList.toggle('rotate-180');
+      }
+    });
+  });
+
+  // Mobile sidebar
+  const openBtn = document.getElementById('open-sidebar-btn');
+  const closeBtn = document.getElementById('close-sidebar-btn');
+  const overlay = document.getElementById('docs-sidebar-overlay');
+  const mobileSidebar = document.getElementById('docs-sidebar-mobile');
+
+  function openSidebar() {
+    mobileSidebar?.classList.remove('-translate-x-full');
+    overlay?.classList.remove('hidden');
+  }
+
+  function closeSidebar() {
+    mobileSidebar?.classList.add('-translate-x-full');
+    overlay?.classList.add('hidden');
+  }
+
+  openBtn?.addEventListener('click', openSidebar);
+  closeBtn?.addEventListener('click', closeSidebar);
+  overlay?.addEventListener('click', closeSidebar);
+</script>

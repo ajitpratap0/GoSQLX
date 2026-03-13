@@ -1,0 +1,157 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import DocsSidebar from '../../components/DocsSidebar.astro';
+
+interface DocLink {
+  label: string;
+  slug: string;
+  description: string;
+}
+
+interface DocCategory {
+  title: string;
+  icon: string;
+  docs: DocLink[];
+}
+
+const categories: DocCategory[] = [
+  {
+    title: 'Getting Started',
+    icon: '🚀',
+    docs: [
+      { label: 'Getting Started', slug: 'getting_started', description: 'Quick start guide to install and use GoSQLX' },
+      { label: 'CLI Guide', slug: 'cli_guide', description: 'Command-line tool for parsing, formatting, and linting SQL' },
+    ],
+  },
+  {
+    title: 'Core Documentation',
+    icon: '📖',
+    docs: [
+      { label: 'Usage Guide', slug: 'usage_guide', description: 'Comprehensive guide to all GoSQLX features and patterns' },
+      { label: 'API Reference', slug: 'api_reference', description: 'Complete API documentation for all packages' },
+      { label: 'Architecture', slug: 'architecture', description: 'System design, module structure, and data flow' },
+      { label: 'Configuration', slug: 'configuration', description: 'Configuration options and customization' },
+    ],
+  },
+  {
+    title: 'Reference',
+    icon: '📋',
+    docs: [
+      { label: 'Error Codes', slug: 'error_codes', description: 'Complete listing of error codes with explanations' },
+      { label: 'SQL Compatibility', slug: 'sql_compatibility', description: 'SQL dialect support matrix across PostgreSQL, MySQL, and more' },
+      { label: 'Linting Rules', slug: 'linting_rules', description: 'Built-in linting rules (L001-L010) reference' },
+    ],
+  },
+  {
+    title: 'Advanced Topics',
+    icon: '⚡',
+    docs: [
+      { label: 'LSP Guide', slug: 'lsp_guide', description: 'Language Server Protocol integration for IDEs' },
+      { label: 'MCP Guide', slug: 'mcp_guide', description: 'Model Context Protocol server for AI assistants' },
+      { label: 'Security', slug: 'security', description: 'SQL injection detection and security features' },
+      { label: 'Production Guide', slug: 'production_guide', description: 'Deploying GoSQLX in production environments' },
+      { label: 'Performance Tuning', slug: 'performance_tuning', description: 'Optimization techniques for high-throughput workloads' },
+    ],
+  },
+  {
+    title: 'Tutorials',
+    icon: '🎓',
+    docs: [
+      { label: 'SQL Validator CI/CD', slug: 'tutorials/01-sql-validator-cicd', description: 'Build a SQL validator for your CI/CD pipeline' },
+      { label: 'Custom SQL Formatter', slug: 'tutorials/02-custom-sql-formatter', description: 'Create a custom SQL formatting tool' },
+    ],
+  },
+  {
+    title: 'Migration Guides',
+    icon: '🔄',
+    docs: [
+      { label: 'From JSQLParser', slug: 'migration/from_jsqlparser', description: 'Migrate from Java-based JSQLParser' },
+      { label: 'From pg_query', slug: 'migration/from_pg_query', description: 'Migrate from PostgreSQL pg_query bindings' },
+      { label: 'From SQLFluff', slug: 'migration/from_sqlfluff', description: 'Migrate from Python-based SQLFluff' },
+    ],
+  },
+  {
+    title: 'Editor Integration',
+    icon: '🛠',
+    docs: [
+      { label: 'VS Code', slug: 'editors/vscode', description: 'GoSQLX extension for Visual Studio Code' },
+      { label: 'Neovim', slug: 'editors/neovim', description: 'Neovim integration via LSP' },
+      { label: 'JetBrains', slug: 'editors/jetbrains', description: 'JetBrains IDE integration' },
+    ],
+  },
+];
+---
+
+<BaseLayout title="Documentation - GoSQLX">
+  <div class="container mx-auto px-4 py-8">
+    <!-- Mobile sidebar toggle -->
+    <div class="lg:hidden mb-4">
+      <button
+        id="open-sidebar-btn"
+        class="flex items-center gap-2 text-slate-300 hover:text-white text-sm font-medium bg-surface px-3 py-2 rounded-lg"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+        Documentation Menu
+      </button>
+    </div>
+
+    <div class="flex gap-8">
+      <DocsSidebar />
+
+      <main class="min-w-0 flex-1 max-w-4xl">
+        <!-- Hero -->
+        <div class="mb-12">
+          <h1 class="text-4xl font-bold text-white mb-4">GoSQLX Documentation</h1>
+          <p class="text-lg text-slate-400 max-w-2xl">
+            Everything you need to parse, analyze, format, and lint SQL with Go.
+            From quick start to production deployment.
+          </p>
+        </div>
+
+        <!-- Getting Started highlight -->
+        <div class="bg-gradient-to-r from-accent-orange/10 to-accent-blue/10 border border-accent-orange/30 rounded-xl p-6 mb-12">
+          <h2 class="text-xl font-bold text-white mb-2">New to GoSQLX?</h2>
+          <p class="text-slate-300 mb-4">Start with the Getting Started guide to install GoSQLX and parse your first SQL query in under 5 minutes.</p>
+          <a
+            href="/GoSQLX/docs/getting_started/"
+            class="inline-flex items-center gap-2 bg-accent-orange hover:bg-orange-600 text-white font-medium px-5 py-2.5 rounded-lg transition-colors"
+          >
+            Get Started
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </a>
+        </div>
+
+        <!-- Categories grid -->
+        <div class="grid gap-8 md:grid-cols-2">
+          {categories.map((category) => (
+            <div class="bg-surface/50 border border-slate-700 rounded-xl p-6">
+              <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <span>{category.icon}</span>
+                {category.title}
+              </h2>
+              <ul class="space-y-3">
+                {category.docs.map((doc) => (
+                  <li>
+                    <a
+                      href={`/GoSQLX/docs/${doc.slug}/`}
+                      class="group block"
+                    >
+                      <span class="text-accent-orange group-hover:underline font-medium text-sm">
+                        {doc.label}
+                      </span>
+                      <p class="text-slate-500 text-xs mt-0.5">{doc.description}</p>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </main>
+    </div>
+  </div>
+</BaseLayout>

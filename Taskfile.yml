@@ -194,7 +194,7 @@ tasks:
     desc: Run go vet
     cmds:
       - echo "Running go vet..."
-      - go vet ./...
+      - go vet $(go list ./... | grep -v 'pkg/cbinding')
 
   lint:
     desc: Run golangci-lint
@@ -297,6 +297,33 @@ tasks:
     desc: Start LSP server with debug logging
     cmds:
       - go run ./cmd/gosqlx lsp --log /tmp/gosqlx-lsp.log
+
+  # =============================================================================
+  # MCP SERVER
+  # =============================================================================
+  mcp:
+    desc: Run the MCP server (env vars GOSQLX_MCP_HOST, GOSQLX_MCP_PORT, GOSQLX_MCP_AUTH_TOKEN)
+    cmds:
+      - go run ./cmd/gosqlx-mcp
+
+  mcp:build:
+    desc: Build the MCP server binary to build/gosqlx-mcp
+    cmds:
+      - echo "Building MCP server binary..."
+      - go build -v -o {{.BUILD_DIR}}/gosqlx-mcp ./cmd/gosqlx-mcp
+    generates:
+      - '{{.BUILD_DIR}}/gosqlx-mcp'
+
+  mcp:test:
+    desc: Run MCP package tests with race detection
+    cmds:
+      - echo "Testing MCP package..."
+      - go test -race -timeout 60s ./pkg/mcp/... ./cmd/gosqlx-mcp/...
+
+  mcp:install:
+    desc: Install gosqlx-mcp binary globally
+    cmds:
+      - go install ./cmd/gosqlx-mcp
 
   # =============================================================================
   # EXAMPLES

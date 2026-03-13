@@ -10,6 +10,7 @@
 
 # Built binary executables (only in root directory)
 /gosqlx
+/gosqlx-mcp
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
@@ -54,3 +55,6 @@ build/
 # Python version files (not needed for Go project)
 .python-version
 sql-validator
+
+# Git worktrees
+.worktrees/

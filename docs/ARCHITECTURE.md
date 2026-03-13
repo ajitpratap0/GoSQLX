@@ -16,6 +16,7 @@
 - [LSP Architecture](#lsp-architecture)
 - [Linter Architecture](#linter-architecture)
 - [Security Scanner Architecture](#security-scanner-architecture)
+- [MCP Architecture](#mcp-architecture)
 
 ## System Overview
 
@@ -35,16 +36,16 @@ GoSQLX is a production-ready, high-performance SQL parsing library with comprehe
 ### High-Level Architecture (v1.6.0)
 
 ```
-┌───────────────────────────────────────────────────────────────────┐
-│                    Application Layer & Tools                      │
-│  ┌─────────────┬──────────────┬──────────────┬─────────────────┐ │
-│  │ CLI Tool    │ LSP Server   │  Linter      │  Security       │ │
-│  │ (validate,  │ (JSON-RPC    │  (10 rules:  │  Scanner        │ │
-│  │  format,    │  handler,    │   L001-L010, │  (8 patterns,   │ │
-│  │  analyze,   │  rate limit, │   whitespace,│   injection     │ │
-│  │  parse)     │  doc mgmt)   │   style)     │   detection)    │ │
-│  └─────────────┴──────────────┴──────────────┴─────────────────┘ │
-└───────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                          Application Layer & Tools                             │
+│  ┌─────────────┬──────────────┬──────────────┬─────────────┬───────────────┐  │
+│  │ CLI Tool    │ LSP Server   │  Linter      │  Security   │  MCP Server   │  │
+│  │ (validate,  │ (JSON-RPC    │  (10 rules:  │  Scanner    │  (7 tools,    │  │
+│  │  format,    │  handler,    │   L001-L010, │  (injection │   HTTP,       │  │
+│  │  analyze,   │  rate limit, │   whitespace,│   detection)│   bearer auth,│  │
+│  │  parse)     │  doc mgmt)   │   style)     │             │   streaming)  │  │
+│  └─────────────┴──────────────┴──────────────┴─────────────┴───────────────┘  │
+└────────────────────────────────────────────────────────────────────────────────┘
                                 ▼
 ┌───────────────────────────────────────────────────────────────────┐
 │                    GoSQLX API (pkg/gosqlx)                        │
@@ -171,6 +172,8 @@ The codebase is organized into focused packages with clear responsibilities and 
   - **protocol.go**: LSP type definitions (requests, responses, diagnostics)
   - **Features**: Rate limiting (100 req/sec), content limits (10MB messages, 5MB documents), UTF-8 safe position handling
   - **Integration**: Used by VSCode extension and other LSP clients
+
+- **pkg/mcp**: MCP server — Config, BearerAuthMiddleware, 7 tool handlers, Server (thin adapter over pkg/gosqlx, pkg/linter, pkg/sql/security)
 
 - **pkg/linter** (96.7% coverage): SQL linting and style checking
   - **Architecture**: Linter → Rules → Context
@@ -1512,3 +1515,43 @@ This architecture has been validated for production use with comprehensive testi
 - **Load Testing**: Extended runs with stable memory profiles
 - **LSP Stress**: 1000+ requests/min sustained (rate limited to 100/sec)
 - **Security**: 50+ injection patterns tested across 8 attack categories
+
+---
+
+## MCP Architecture
+
+The MCP server (`pkg/mcp/`) is a thin HTTP adapter with no business logic — every tool handler delegates to existing GoSQLX packages.
+
+### Component Overview
+
+```
+cmd/gosqlx-mcp/main.go
+  └─ LoadConfig() + New() + Start()
+       └─ pkg/mcp.Server
+            ├─ BearerAuthMiddleware (optional, wraps next http.Handler)
+            └─ StreamableHTTPServer (mark3labs/mcp-go)
+                 └─ 7 registered tool handlers
+                      ├─ validate_sql    → pkg/gosqlx.Validate / ParseWithDialect
+                      ├─ format_sql      → pkg/gosqlx.Format
+                      ├─ parse_sql       → pkg/gosqlx.Parse
+                      ├─ extract_metadata→ pkg/gosqlx.Parse + ExtractMetadata
+                      ├─ security_scan   → pkg/sql/security.NewScanner().ScanSQL
+                      ├─ lint_sql        → pkg/linter.New(10 rules).LintString
+                      └─ analyze_sql     → concurrent fan-out of all 6 above
+```
+
+### Tool → Package Mapping
+
+| MCP Tool | Package | Key Functions |
+|----------|---------|--------------|
+| `validate_sql` | `pkg/gosqlx` | `Validate()`, `ParseWithDialect()` |
+| `format_sql` | `pkg/gosqlx` | `Format()`, `FormatOptions{}` |
+| `parse_sql` | `pkg/gosqlx` | `Parse()` |
+| `extract_metadata` | `pkg/gosqlx` | `Parse()`, `ExtractMetadata()` |
+| `security_scan` | `pkg/sql/security` | `NewScanner()`, `ScanSQL()` |
+| `lint_sql` | `pkg/linter` | `New(rules...)`, `LintString()` |
+| `analyze_sql` | all above | `sync.WaitGroup` concurrent fan-out |
+
+### Concurrency
+
+`analyze_sql` launches 6 goroutines via `sync.WaitGroup`, one per tool, collecting results through a buffered channel. Partial failures are surfaced under an `"errors"` key; successful results are always returned.

@@ -6,7 +6,7 @@
 
 <h3>⚡ High-Performance SQL Parser for Go ⚡</h3>
 
-[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go)](https://go.dev)
+[![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?style=for-the-badge&logo=go)](https://go.dev)
 [![Release](https://img.shields.io/github/v/release/ajitpratap0/GoSQLX?style=for-the-badge&color=orange)](https://github.com/ajitpratap0/GoSQLX/releases)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg?style=for-the-badge)](https://www.apache.org/licenses/LICENSE-2.0)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge)](http://makeapullrequest.com)
@@ -65,6 +65,7 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 - **Zero-Copy**: Direct byte slice operations, <1μs latency
 - **Intelligent Errors**: Structured error codes with typo detection, context highlighting, and helpful hints
 - **Python Bindings**: [PyGoSQLX](python/README.md) — use GoSQLX from Python via ctypes FFI, 100x+ faster than pure Python parsers
+- **MCP Server** (v1.10.0): `gosqlx-mcp` exposes all 7 SQL tools as [Model Context Protocol](https://modelcontextprotocol.io) tools over streamable HTTP — integrate GoSQLX into Claude, Cursor, and any MCP-compatible AI assistant
 - **Production Ready**: Battle-tested with 0 race conditions detected, ~85% SQL-99 compliance, Apache-2.0 licensed
 
 ### Performance & Quality Highlights (v1.9.0)
@@ -153,8 +154,19 @@ print(tables)  # ['users', 'orders']
 
 See the full [PyGoSQLX documentation](python/README.md) for the complete API.
 
+### MCP Server
+
+Use GoSQLX SQL tools from any MCP-compatible AI assistant (Claude, Cursor, etc.):
+
+```bash
+go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx-mcp@latest
+gosqlx-mcp   # starts on 127.0.0.1:8080
+```
+
+See the full [MCP Server Guide](docs/MCP_GUIDE.md) for configuration, authentication, and AI assistant integration.
+
 **Requirements:**
-- Go 1.21 or higher
+- Go 1.23 or higher
 - Python 3.8+ (for Python bindings)
 - No external dependencies for the Go library
 
@@ -402,6 +414,7 @@ func main() {
 | [**Usage Guide**](docs/USAGE_GUIDE.md) | Detailed patterns and best practices |
 | [**Architecture**](docs/ARCHITECTURE.md) | System design and internal architecture |
 | [**Python Bindings**](python/README.md) | PyGoSQLX — Python API, installation, and examples |
+| [**MCP Server Guide**](docs/MCP_GUIDE.md) | `gosqlx-mcp` — 7 SQL tools for AI assistant integration |
 | [**Troubleshooting**](docs/TROUBLESHOOTING.md) | Common issues and solutions |
 
 ### Getting Started

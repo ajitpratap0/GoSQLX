@@ -2,6 +2,11 @@
 
 All notable changes to the "GoSQLX" extension will be documented in this file.
 
+## [1.10.2] - 2026-03-14
+
+### Fixed
+- Include vscode-languageclient in VSIX package (extension failed to activate)
+
 ## [1.10.1] - 2026-03-13
 
 ### Added

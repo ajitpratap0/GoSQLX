@@ -2,7 +2,7 @@
   "name": "gosqlx",
   "displayName": "GoSQLX",
   "description": "High-performance SQL parsing, validation, formatting, and analysis powered by GoSQLX",
-  "version": "0.1.0",
+  "version": "1.10.1",
   "publisher": "ajitpratap0",
   "license": "Apache-2.0",
   "repository": {
@@ -74,9 +74,9 @@
         },
         "gosqlx.executablePath": {
           "type": "string",
-          "default": "gosqlx",
+          "default": "",
           "scope": "machine-overridable",
-          "description": "Path to the gosqlx executable"
+          "description": "Path to the gosqlx executable. Leave empty to use the bundled binary."
         },
         "gosqlx.trace.server": {
           "type": "string",

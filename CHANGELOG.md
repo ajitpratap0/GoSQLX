@@ -5,6 +5,16 @@ All notable changes to GoSQLX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.1] - 2026-03-13 — VS Code Marketplace Publishing
+
+### ✨ New Features
+- **VS Code Extension on Marketplace**: Extension now published with bundled platform-specific binaries
+  - 5 platforms: linux-x64, linux-arm64, darwin-x64, darwin-arm64, win32-x64
+  - Smart binary resolution: bundled → user setting → PATH fallback
+  - Automated CI publishing on every GoSQLX release tag
+
+---
+
 ## [1.10.0] - 2026-03-13 — MCP Server
 
 ### ✨ New Features

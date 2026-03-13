@@ -87,7 +87,12 @@ jobs:
             echo "Tag '$GITHUB_REF_NAME' does not produce a valid semver: '$VERSION'"
             exit 1
           fi
-          npm version "$VERSION" --no-git-tag-version
+          CURRENT=$(node -p "require('./package.json').version")
+          if [ "$CURRENT" != "$VERSION" ]; then
+            npm version "$VERSION" --no-git-tag-version
+          else
+            echo "Version already $VERSION, skipping patch"
+          fi
 
       - name: Package VSIX
         working-directory: vscode-extension

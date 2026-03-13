@@ -68,7 +68,7 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 - **MCP Server** (v1.10.0): `gosqlx-mcp` exposes all 7 SQL tools as [Model Context Protocol](https://modelcontextprotocol.io) tools over streamable HTTP — integrate GoSQLX into Claude, Cursor, and any MCP-compatible AI assistant
 - **Production Ready**: Battle-tested with 0 race conditions detected, ~85% SQL-99 compliance, Apache-2.0 licensed
 
-### Performance & Quality Highlights (v1.9.0)
+### Performance & Quality Highlights (v1.10.0)
 
 <div align="center">
 
@@ -76,26 +76,24 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 |:---------:|:-------:|:----------:|:----------:|:-------:|:---------:|
 | Faster Parsing | Peak Ops/sec | Latency | SQL Dialects | Parser Coverage | New Commits |
 
-**v1.9.0 Released** • **SQLite PRAGMA** • **Tautology Detection** • **19 Post-UAT Fixes** • **lint CI-gate** • **UNION false-positive fix**
+**v1.10.0 Released** • **MCP Server** • **7 AI-Ready SQL Tools** • **Streamable HTTP** • **Bearer Auth** • **Go 1.23+**
 
 </div>
 
-### What's New in v1.9.0
+### What's New in v1.10.0
 
 <div align="center">
 
 | Feature | Description |
 |---------|-------------|
-| **SQLite PRAGMA** | Fully parsed: bare (`PRAGMA x`), arg (`PRAGMA x(n)`), assignment (`PRAGMA x=v`) forms |
-| **WITHOUT ROWID** | SQLite `CREATE TABLE ... WITHOUT ROWID`; reserved keywords valid as DDL column names |
-| **Tautology Detection** | `ScanSQL()` detects `1=1`, `'a'='a'`, `col=col`, `OR TRUE` → CRITICAL severity |
-| **UNION False-positive Fix** | `PatternUnionInjection` (CRITICAL, system tables) vs `PatternUnionGeneric` (HIGH) |
-| **lint CI-gate** | `gosqlx lint` now exits 1 on any violation — usable in CI pipelines without `--fail-on-warn` |
-| **CLI Output Fixes** | token_count, Query Size, CTE output, SELECT indentation, ✅/❌ validate output all corrected |
-| **Parser Fixes** | KEY/INDEX in qualified names, NATURAL JOIN type, OVER window_name, backtick/bracket identifiers |
-| **E1009** | Dedicated error code `ErrCodeUnterminatedBlockComment` for unterminated `/* ... */` comments |
+| **MCP Server** | All GoSQLX SQL capabilities as [Model Context Protocol](https://modelcontextprotocol.io) tools over streamable HTTP |
+| **7 MCP Tools** | `validate_sql`, `format_sql`, `parse_sql`, `extract_metadata`, `security_scan`, `lint_sql`, `analyze_sql` |
+| **Bearer Auth** | Optional authentication via `GOSQLX_MCP_AUTH_TOKEN` environment variable |
+| **Concurrent Analysis** | `analyze_sql` fans out all 6 tools concurrently via `sync.WaitGroup` |
+| **Multi-Dialect MCP** | Validate against postgresql, mysql, sqlite, sqlserver, oracle, snowflake, or generic |
+| **Go 1.23+** | Minimum Go version bumped to 1.23.0 (required by `mark3labs/mcp-go`) |
 
-See [CHANGELOG.md](CHANGELOG.md) for the complete list of 19 fixes in this release.
+See [CHANGELOG.md](CHANGELOG.md) for the complete release details. See [MCP_GUIDE.md](docs/MCP_GUIDE.md) for setup instructions.
 
 </div>
 

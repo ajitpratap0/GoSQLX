@@ -1,0 +1,108 @@
+name: Publish VSCode Extension
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build VSIX (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: linux-x64
+            goos: linux
+            goarch: amd64
+            binary: gosqlx
+          - target: linux-arm64
+            goos: linux
+            goarch: arm64
+            binary: gosqlx
+          - target: darwin-x64
+            goos: darwin
+            goarch: amd64
+            binary: gosqlx
+          - target: darwin-arm64
+            goos: darwin
+            goarch: arm64
+            binary: gosqlx
+          - target: win32-x64
+            goos: windows
+            goarch: amd64
+            binary: gosqlx.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Cross-compile binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p vscode-extension/bin
+          go build -ldflags="-s -w" -o "vscode-extension/bin/${{ matrix.binary }}" ./cmd/gosqlx
+
+      - name: Smoke test binary
+        if: matrix.target == 'linux-x64'
+        run: |
+          chmod +x vscode-extension/bin/${{ matrix.binary }}
+          ./vscode-extension/bin/${{ matrix.binary }} version
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: vscode-extension
+        run: npm ci
+
+      - name: Patch version from tag
+        working-directory: vscode-extension
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm version "$VERSION" --no-git-tag-version
+
+      - name: Package VSIX
+        working-directory: vscode-extension
+        run: npx vsce package --target ${{ matrix.target }}
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix-${{ matrix.target }}
+          path: vscode-extension/*.vsix
+
+  publish:
+    name: Publish to Marketplace
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install vsce
+        run: npm install -g @vscode/vsce
+
+      - name: Download all VSIX artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: vsix-*
+          merge-multiple: true
+          path: vsix
+
+      - name: Publish all platforms
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: vsce publish --packagePath vsix/*.vsix

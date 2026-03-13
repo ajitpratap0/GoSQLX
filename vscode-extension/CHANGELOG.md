@@ -2,6 +2,18 @@
 
 All notable changes to the "GoSQLX" extension will be documented in this file.
 
+## [1.10.1] - 2026-03-13
+
+### Added
+- **Bundled binary** — GoSQLX binary is now included in the extension package; no separate installation needed
+- **Platform-specific packages** — optimized downloads for linux-x64, linux-arm64, darwin-x64, darwin-arm64, win32-x64
+- **Smart binary resolution** — automatically uses bundled binary, falls back to user setting or PATH
+
+### Changed
+- Version aligned with GoSQLX core (1.10.1)
+- `gosqlx.executablePath` default changed from `"gosqlx"` to `""` (empty = use bundled binary)
+- Automated CI publishing via GitHub Actions on every GoSQLX release tag
+
 ## [0.1.0] - 2025-11-27
 
 ### Added

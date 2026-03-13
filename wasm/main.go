@@ -20,19 +20,56 @@ import (
 	"encoding/json"
 	"syscall/js"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/advisor"
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/whitespace"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/security"
+
+	sqlkeywords "github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
+
+// dialectMap maps JS-friendly dialect strings to keywords.SQLDialect constants.
+var dialectMap = map[string]sqlkeywords.SQLDialect{
+	"generic":    sqlkeywords.DialectGeneric,
+	"postgresql": sqlkeywords.DialectPostgreSQL,
+	"mysql":      sqlkeywords.DialectMySQL,
+	"sqlite":     sqlkeywords.DialectSQLite,
+	"sqlserver":  sqlkeywords.DialectSQLServer,
+	"oracle":     sqlkeywords.DialectOracle,
+	"snowflake":  sqlkeywords.DialectSnowflake,
+}
+
+// getDialect extracts an optional dialect from the second JS argument.
+// Returns empty string if not provided or unrecognized.
+func getDialect(args []js.Value) sqlkeywords.SQLDialect {
+	if len(args) > 1 && args[1].Type() == js.TypeString {
+		d := args[1].String()
+		if mapped, ok := dialectMap[d]; ok {
+			return mapped
+		}
+	}
+	return ""
+}
 
 func parse(_ js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return jsonError("no SQL provided")
 	}
 	sql := args[0].String()
-	astObj, err := gosqlx.Parse(sql)
+	dialect := getDialect(args)
+
+	var (
+		astObj any
+		err    error
+	)
+	if dialect != "" {
+		astObj, err = gosqlx.ParseWithDialect(sql, dialect)
+	} else {
+		astObj, err = gosqlx.Parse(sql)
+	}
 	if err != nil {
 		return jsonError(err.Error())
 	}
@@ -48,6 +85,9 @@ func format(_ js.Value, args []js.Value) any {
 		return jsonError("no SQL provided")
 	}
 	sql := args[0].String()
+	// dialect is accepted but formatter currently uses generic formatting
+	_ = getDialect(args)
+
 	result, err := formatter.FormatString(sql)
 	if err != nil {
 		return jsonError(err.Error())
@@ -60,6 +100,8 @@ func lint(_ js.Value, args []js.Value) any {
 		return jsonError("no SQL provided")
 	}
 	sql := args[0].String()
+	// dialect is accepted for API consistency
+	_ = getDialect(args)
 
 	l := linter.New(
 		whitespace.NewTrailingWhitespaceRule(),
@@ -80,11 +122,45 @@ func validate(_ js.Value, args []js.Value) any {
 		return jsonError("no SQL provided")
 	}
 	sql := args[0].String()
+	// dialect is accepted for API consistency
+	_ = getDialect(args)
+
 	err := gosqlx.Validate(sql)
 	if err != nil {
 		return jsonResult(map[string]any{"valid": false, "error": err.Error()})
 	}
 	return jsonResult(map[string]any{"valid": true})
+}
+
+func analyze(_ js.Value, args []js.Value) any {
+	if len(args) == 0 {
+		return jsonError("no SQL provided")
+	}
+	sql := args[0].String()
+	// dialect is accepted for API consistency
+	_ = getDialect(args)
+
+	// Run security scan
+	scanner := security.NewScanner()
+	securityResult := scanner.ScanSQL(sql)
+
+	// Run optimization analysis
+	opt := advisor.New()
+	optResult, err := opt.AnalyzeSQL(sql)
+	if err != nil {
+		// If parsing fails, still return security results with an optimization error
+		combined := map[string]any{
+			"security":     securityResult,
+			"optimization": map[string]any{"error": err.Error()},
+		}
+		return jsonResult(combined)
+	}
+
+	combined := map[string]any{
+		"security":     securityResult,
+		"optimization": optResult,
+	}
+	return jsonResult(combined)
 }
 
 func jsonError(msg string) string {
@@ -102,6 +178,7 @@ func main() {
 	js.Global().Set("gosqlxFormat", js.FuncOf(format))
 	js.Global().Set("gosqlxLint", js.FuncOf(lint))
 	js.Global().Set("gosqlxValidate", js.FuncOf(validate))
+	js.Global().Set("gosqlxAnalyze", js.FuncOf(analyze))
 
 	// Keep the Go program running
 	select {}

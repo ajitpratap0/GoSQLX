@@ -89,12 +89,9 @@ export function validateExecutablePath(execPath: unknown): ValidationResult {
 
     const trimmed = execPath.trim();
 
+    // Empty string is valid — means "use bundled binary or PATH fallback"
     if (trimmed.length === 0) {
-        return {
-            valid: false,
-            message: 'Executable path cannot be empty',
-            suggestion: 'Set to "gosqlx" to use PATH lookup, or provide full path'
-        };
+        return { valid: true };
     }
 
     // Check for suspicious characters that might indicate a typo

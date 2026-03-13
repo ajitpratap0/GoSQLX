@@ -688,8 +688,16 @@ func (h *Handler) handleFormatting(params json.RawMessage) ([]TextEdit, error) {
 		return nil, nil
 	}
 
-	// Format the SQL using a simple formatter
-	formatted := formatSQL(content, p.Options)
+	// Format the SQL using the full AST-based formatter
+	opts := gosqlx.DefaultFormatOptions()
+	if p.Options.InsertSpaces {
+		opts.IndentSize = p.Options.TabSize
+	}
+	formatted, err := gosqlx.Format(content, opts)
+	if err != nil {
+		// If parsing fails, fall back to basic formatting
+		formatted = formatSQL(content, p.Options)
+	}
 	if formatted == content {
 		return []TextEdit{}, nil
 	}

@@ -3,65 +3,65 @@ const examples = [
   {
     id: "parse",
     label: "Parse",
-    code: `package main
+    code: `<span class="text-blue-400">package</span> main
 
-import "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+<span class="text-blue-400">import</span> <span class="text-green-400">"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"</span>
 
-func main() {
-    ast, err := gosqlx.Parse("SELECT * FROM users WHERE active = true")
-    if err != nil {
-        log.Fatal(err)
+<span class="text-blue-400">func</span> <span class="text-yellow-300">main</span>() {
+    ast, err := gosqlx.<span class="text-yellow-300">Parse</span>(<span class="text-green-400">"SELECT * FROM users WHERE active = true"</span>)
+    <span class="text-blue-400">if</span> err != <span class="text-orange-400">nil</span> {
+        log.<span class="text-yellow-300">Fatal</span>(err)
     }
-    fmt.Printf("Statements: %d\\n", len(ast.Statements))
+    fmt.<span class="text-yellow-300">Printf</span>(<span class="text-green-400">"Statements: %d\\n"</span>, <span class="text-yellow-300">len</span>(ast.Statements))
 }`,
   },
   {
     id: "format",
     label: "Format",
-    code: `package main
+    code: `<span class="text-blue-400">package</span> main
 
-import "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+<span class="text-blue-400">import</span> <span class="text-green-400">"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"</span>
 
-func main() {
-    formatted, err := gosqlx.Format("select id,name from users where id=1")
-    if err != nil {
-        log.Fatal(err)
+<span class="text-blue-400">func</span> <span class="text-yellow-300">main</span>() {
+    formatted, err := gosqlx.<span class="text-yellow-300">Format</span>(<span class="text-green-400">"select id,name from users where id=1"</span>)
+    <span class="text-blue-400">if</span> err != <span class="text-orange-400">nil</span> {
+        log.<span class="text-yellow-300">Fatal</span>(err)
     }
-    fmt.Println(formatted)
-    // SELECT id, name FROM users WHERE id = 1
+    fmt.<span class="text-yellow-300">Println</span>(formatted)
+    <span class="text-slate-500">// SELECT id, name FROM users WHERE id = 1</span>
 }`,
   },
   {
     id: "validate",
     label: "Validate",
-    code: `package main
+    code: `<span class="text-blue-400">package</span> main
 
-import "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+<span class="text-blue-400">import</span> <span class="text-green-400">"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"</span>
 
-func main() {
-    err := gosqlx.Validate("SELECT * FROM users")
-    if err != nil {
-        fmt.Println("Invalid SQL:", err)
-    } else {
-        fmt.Println("Valid SQL!")
+<span class="text-blue-400">func</span> <span class="text-yellow-300">main</span>() {
+    err := gosqlx.<span class="text-yellow-300">Validate</span>(<span class="text-green-400">"SELECT * FROM users"</span>)
+    <span class="text-blue-400">if</span> err != <span class="text-orange-400">nil</span> {
+        fmt.<span class="text-yellow-300">Println</span>(<span class="text-green-400">"Invalid SQL:"</span>, err)
+    } <span class="text-blue-400">else</span> {
+        fmt.<span class="text-yellow-300">Println</span>(<span class="text-green-400">"Valid SQL!"</span>)
     }
 }`,
   },
   {
     id: "lint",
     label: "Lint",
-    code: `package main
+    code: `<span class="text-blue-400">package</span> main
 
-import "github.com/ajitpratap0/GoSQLX/pkg/linter"
+<span class="text-blue-400">import</span> <span class="text-green-400">"github.com/ajitpratap0/GoSQLX/pkg/linter"</span>
 
-func main() {
-    l := linter.New()
-    results, err := l.Lint("SELECT * FROM users")
-    if err != nil {
-        log.Fatal(err)
+<span class="text-blue-400">func</span> <span class="text-yellow-300">main</span>() {
+    l := linter.<span class="text-yellow-300">New</span>()
+    results, err := l.<span class="text-yellow-300">Lint</span>(<span class="text-green-400">"SELECT * FROM users"</span>)
+    <span class="text-blue-400">if</span> err != <span class="text-orange-400">nil</span> {
+        log.<span class="text-yellow-300">Fatal</span>(err)
     }
-    for _, r := range results {
-        fmt.Printf("[%s] %s\\n", r.Rule, r.Message)
+    <span class="text-blue-400">for</span> _, r := <span class="text-blue-400">range</span> results {
+        fmt.<span class="text-yellow-300">Printf</span>(<span class="text-green-400">"[%s] %s\\n"</span>, r.Rule, r.Message)
     }
 }`,
   },
@@ -95,7 +95,7 @@ func main() {
           class={`code-panel ${i === 0 ? "" : "hidden"}`}
           data-panel={ex.id}
         >
-          <pre class="bg-[#0d1117] rounded-b-xl p-5 overflow-x-auto border border-t-0 border-slate-700"><code class="text-sm font-mono text-slate-300 leading-relaxed" set:text={ex.code} /></pre>
+          <pre class="bg-[#0d1117] rounded-b-xl p-5 overflow-x-auto border border-t-0 border-slate-700"><code class="text-sm font-mono text-slate-300 leading-relaxed" set:html={ex.code} /></pre>
         </div>
       ))}
     </div>

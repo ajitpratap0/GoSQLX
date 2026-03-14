@@ -13,8 +13,9 @@ export default {
         'accent-purple': '#a78bfa',
       },
       fontFamily: {
-        code: ['"JetBrains Mono"', '"Fira Code"', 'monospace'],
-        body: ['Inter', 'system-ui', 'sans-serif'],
+        code: ['"JetBrains Mono"', 'monospace'],
+        body: ['"Instrument Sans"', 'system-ui', 'sans-serif'],
+        heading: ['"IBM Plex Mono"', 'monospace'],
       },
     },
   },

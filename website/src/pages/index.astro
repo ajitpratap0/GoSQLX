@@ -9,6 +9,12 @@ import SocialProof from '../components/SocialProof.astro';
 ---
 <BaseLayout title="GoSQLX - High-Performance SQL Parser for Go" description="Production-ready, zero-copy SQL parsing SDK for Go with multi-dialect support">
   <HeroPlayground client:only="react" />
+  <!-- Angled divider -->
+  <div class="relative h-16 -mt-1">
+    <svg class="absolute bottom-0 w-full h-16" viewBox="0 0 1440 64" preserveAspectRatio="none">
+      <path d="M0,0 L1440,40 L1440,64 L0,64 Z" fill="#0f172a" opacity="0.5"/>
+    </svg>
+  </div>
   <StatsBar />
   <FeatureCards />
   <CodeExamples />

@@ -2,6 +2,11 @@
 
 All notable changes to the "GoSQLX" extension will be documented in this file.
 
+## [1.11.1] - 2026-03-15
+
+### Fixed
+- Version aligned with GoSQLX core (1.11.1)
+
 ## [1.10.4] - 2026-03-14
 
 ### Fixed

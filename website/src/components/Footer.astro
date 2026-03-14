@@ -1,0 +1,58 @@
+---
+const columns = [
+  {
+    title: 'Product',
+    links: [
+      { label: 'Playground', href: '/GoSQLX/playground/' },
+      { label: 'VS Code Extension', href: '/GoSQLX/vscode/' },
+      { label: 'CLI', href: '/GoSQLX/docs/' },
+    ],
+  },
+  {
+    title: 'Resources',
+    links: [
+      { label: 'Docs', href: '/GoSQLX/docs/' },
+      { label: 'Getting Started', href: '/GoSQLX/docs/' },
+      { label: 'API Reference', href: '/GoSQLX/docs/' },
+    ],
+  },
+  {
+    title: 'Community',
+    links: [
+      { label: 'GitHub', href: 'https://github.com/ajitpratap0/GoSQLX' },
+      { label: 'Discussions', href: 'https://github.com/ajitpratap0/GoSQLX/discussions' },
+      { label: 'Contributing', href: 'https://github.com/ajitpratap0/GoSQLX/blob/main/CONTRIBUTING.md' },
+    ],
+  },
+];
+---
+
+<footer class="bg-surface border-t border-elevated">
+  <div class="container mx-auto px-4 py-12">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+      {columns.map((col) => (
+        <div>
+          <h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wider mb-4">
+            {col.title}
+          </h3>
+          <ul class="space-y-2">
+            {col.links.map((link) => (
+              <li>
+                <a
+                  href={link.href}
+                  class="text-slate-400 hover:text-slate-200 transition-colors text-sm"
+                  {...(link.href.startsWith('http') ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                >
+                  {link.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+    <div class="mt-10 pt-6 border-t border-elevated text-center text-sm text-slate-500">
+      &copy; 2026 GoSQLX Authors. Apache-2.0 License.
+    </div>
+  </div>
+</footer>

@@ -58,3 +58,4 @@ sql-validator
 
 # Git worktrees
 .worktrees/
+.superpowers/

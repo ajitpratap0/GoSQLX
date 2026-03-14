@@ -96,15 +96,22 @@ export default function HeroPlayground() {
         className="absolute inset-0 pointer-events-none"
         style={{
           backgroundImage:
-            "linear-gradient(rgba(148,163,184,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.05) 1px, transparent 1px)",
+            "linear-gradient(rgba(148,163,184,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.08) 1px, transparent 1px)",
           backgroundSize: "40px 40px",
+        }}
+      />
+
+      {/* Radial glow effects */}
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[800px] h-[600px] pointer-events-none"
+        style={{
+          background: 'radial-gradient(ellipse at center, rgba(59,130,246,0.08) 0%, rgba(249,115,22,0.04) 40%, transparent 70%)',
         }}
       />
 
       <div className="relative container mx-auto px-4 pt-20 pb-16">
         {/* Headlines */}
         <div className="text-center mb-10">
-          <h1 className="text-5xl font-extrabold text-white mb-4">
+          <h1 className="text-5xl md:text-6xl font-extrabold mb-4 bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
             Parse SQL at the speed of Go
           </h1>
           <p className="text-lg text-slate-400">
@@ -113,7 +120,7 @@ export default function HeroPlayground() {
         </div>
 
         {/* Compact playground */}
-        <div className="max-w-5xl mx-auto rounded-xl border border-slate-700 overflow-hidden bg-slate-900 shadow-2xl shadow-blue-500/5">
+        <div className="max-w-5xl mx-auto rounded-xl border border-slate-700 overflow-hidden bg-slate-900 shadow-2xl shadow-blue-500/10">
           {loading && (
             <div className="flex items-center justify-center h-64">
               <div className="text-center space-y-3">

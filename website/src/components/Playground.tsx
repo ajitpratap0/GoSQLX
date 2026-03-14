@@ -161,9 +161,9 @@ export default function Playground() {
       </div>
 
       {/* Main content */}
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-col md:flex-row flex-1 min-h-0">
         {/* Left panel - Editor */}
-        <div className="w-1/2 border-r border-slate-700 flex flex-col min-h-0">
+        <div className="w-full md:w-1/2 border-r border-slate-700 flex flex-col min-h-0">
           <div className="px-4 py-2 border-b border-slate-700 bg-slate-800/30">
             <span className="text-xs text-slate-500 uppercase tracking-wider font-medium">Input</span>
           </div>
@@ -178,12 +178,14 @@ export default function Playground() {
         </div>
 
         {/* Right panel - Tabs + Content */}
-        <div className="w-1/2 flex flex-col min-h-0">
+        <div className="w-full md:w-1/2 flex flex-col min-h-0">
           {/* Tab bar */}
-          <div className="flex border-b border-slate-700 bg-slate-800/30">
+          <div className="flex border-b border-slate-700 bg-slate-800/30" role="tablist">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
+                role="tab"
+                aria-selected={activeTab === tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`px-4 py-2 text-sm font-medium transition-colors relative ${
                   activeTab === tab.id
@@ -200,7 +202,7 @@ export default function Playground() {
           </div>
 
           {/* Tab content */}
-          <div className="flex-1 overflow-auto min-h-0">
+          <div className="flex-1 overflow-auto min-h-0" role="tabpanel">
             {activeTab === "ast" && <AstTab data={results.ast} />}
             {activeTab === "format" && <FormatTab data={results.format} />}
             {activeTab === "lint" && <LintTab data={results.lint} />}

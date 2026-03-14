@@ -159,10 +159,12 @@ export default function HeroPlayground() {
 
               {/* Output */}
               <div className="md:w-1/2 flex flex-col min-h-0">
-                <div className="flex border-b border-slate-700 bg-slate-800/30">
+                <div className="flex border-b border-slate-700 bg-slate-800/30" role="tablist">
                   {TABS.map((tab) => (
                     <button
                       key={tab.id}
+                      role="tab"
+                      aria-selected={activeTab === tab.id}
                       onClick={() => setActiveTab(tab.id)}
                       className={`px-3 py-1.5 text-xs font-medium transition-colors relative ${
                         activeTab === tab.id
@@ -177,7 +179,7 @@ export default function HeroPlayground() {
                     </button>
                   ))}
                 </div>
-                <div className="overflow-auto" style={{ height: "210px" }}>
+                <div className="overflow-auto" style={{ minHeight: "180px", maxHeight: "300px" }} role="tabpanel">
                   {activeTab === "ast" && <AstTab data={results.ast} />}
                   {activeTab === "format" && <FormatTab data={results.format} />}
                   {activeTab === "lint" && <LintTab data={results.lint} />}

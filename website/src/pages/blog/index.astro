@@ -20,20 +20,20 @@ const posts = (await getCollection('blog')).sort((a, b) => {
 <BaseLayout title="Release Notes - GoSQLX">
   <main class="max-w-4xl mx-auto px-4 py-16">
     <h1 class="text-4xl font-bold text-white mb-2">Release Notes</h1>
-    <p class="text-gray-400 mb-10">All notable changes to GoSQLX, generated from the changelog.</p>
+    <p class="text-slate-400 mb-10">All notable changes to GoSQLX, generated from the changelog.</p>
 
     <div class="space-y-4">
       {posts.map((post) => (
         <a
           href={`/GoSQLX/blog/${post.id}/`}
-          class="block p-5 rounded-lg border border-gray-700 bg-gray-800/50 hover:bg-gray-800 hover:border-blue-500/50 transition-colors"
+          class="block p-5 rounded-lg border border-slate-700 bg-surface/50 hover:bg-surface hover:border-blue-500/50 transition-colors"
         >
           <div class="flex items-center gap-3 mb-1">
             <span class="inline-block px-2.5 py-0.5 text-xs font-semibold rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
               v{post.data.version}
             </span>
             {post.data.date && (
-              <span class="text-sm text-gray-500">{post.data.date}</span>
+              <span class="text-sm text-slate-500">{post.data.date}</span>
             )}
           </div>
           <h2 class="text-lg font-medium text-white mt-2">{post.data.title}</h2>

@@ -4,7 +4,7 @@ import tailwind from '@astrojs/tailwind';
 
 export default defineConfig({
   site: 'https://ajitpratap0.github.io',
-  base: '/GoSQLX',
+  base: '/GoSQLX/',
   integrations: [react(), tailwind()],
   output: 'static',
 });

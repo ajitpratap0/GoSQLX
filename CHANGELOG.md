@@ -5,6 +5,19 @@ All notable changes to GoSQLX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2026-03-14 — Product Website with WASM Playground
+
+### Added
+- Full product website built with Astro, React, and Tailwind CSS
+- Interactive WASM-powered SQL playground with 4 tabs (AST, Format, Lint, Analyze)
+- Documentation hub rendering 32+ existing markdown docs with sidebar navigation
+- Blog/release notes auto-generated from CHANGELOG.md
+- VS Code extension page with install instructions
+- Benchmarks page with performance data
+- GitHub Actions deployment to GitHub Pages
+- gosqlxAnalyze WASM function for security + optimization analysis
+- Dialect parameter support for all WASM functions
+
 ## [1.10.4] - 2026-03-14 — AST-based LSP Formatting
 
 ### Fixed

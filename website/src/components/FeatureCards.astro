@@ -52,7 +52,7 @@ const features = [
     </h2>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
       {features.map((feature) => (
-        <div class="group bg-[#1e293b] rounded-xl p-6 border border-slate-700 hover:border-blue-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/5">
+        <div class="group bg-surface rounded-xl p-6 border border-slate-700 hover:border-blue-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/5">
           <div class={`w-10 h-10 rounded-lg ${feature.bgClass} flex items-center justify-center mb-4`}>
             <Fragment set:html={feature.icon} />
           </div>

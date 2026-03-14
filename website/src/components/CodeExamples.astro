@@ -68,7 +68,7 @@ const examples = [
 ];
 ---
 
-<section class="py-20 bg-[#0c1322]">
+<section class="py-20 bg-deeper">
   <div class="container mx-auto px-4">
     <h2 class="text-3xl font-bold text-white text-center mb-12">
       Simple, Powerful API
@@ -76,12 +76,14 @@ const examples = [
 
     <div class="max-w-3xl mx-auto">
       <!-- Tabs -->
-      <div class="flex border-b border-slate-700 mb-0">
+      <div class="flex border-b border-slate-700 mb-0" role="tablist">
         {examples.map((ex, i) => (
           <button
             class={`code-tab px-5 py-2.5 text-sm font-medium transition-colors relative ${
               i === 0 ? "text-blue-400 active" : "text-slate-400 hover:text-slate-200"
             }`}
+            role="tab"
+            aria-selected={i === 0 ? "true" : "false"}
             data-tab={ex.id}
           >
             {ex.label}
@@ -93,9 +95,10 @@ const examples = [
       {examples.map((ex, i) => (
         <div
           class={`code-panel ${i === 0 ? "" : "hidden"}`}
+          role="tabpanel"
           data-panel={ex.id}
         >
-          <pre class="bg-[#0d1117] rounded-b-xl p-5 overflow-x-auto border border-t-0 border-slate-700"><code class="text-sm font-mono text-slate-300 leading-relaxed" set:html={ex.code} /></pre>
+          <pre class="bg-code rounded-b-xl p-5 overflow-x-auto border border-t-0 border-slate-700"><code class="text-sm font-mono text-slate-300 leading-relaxed" set:html={ex.code} /></pre>
         </div>
       ))}
     </div>

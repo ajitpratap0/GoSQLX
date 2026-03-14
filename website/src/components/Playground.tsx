@@ -41,7 +41,7 @@ interface Results {
 }
 
 export default function Playground() {
-  const { loading, ready, error, api } = useWasm();
+  const { loading, ready, error, api, progress } = useWasm();
   const [sql, setSql] = useState(DEFAULT_SQL);
   const [dialect, setDialect] = useState("generic");
   const [activeTab, setActiveTab] = useState<TabId>("ast");
@@ -108,9 +108,21 @@ export default function Playground() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full bg-slate-900">
-        <div className="text-center space-y-4">
+        <div className="text-center space-y-4 max-w-xs">
           <div className="inline-block w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-slate-400 text-sm">Loading SQL parser...</p>
+          <p className="text-slate-400 text-sm">
+            {progress < 1
+              ? `Downloading SQL parser... ${Math.round(progress * 100)}%`
+              : "Initializing..."}
+          </p>
+          {progress > 0 && progress < 1 && (
+            <div className="w-full bg-slate-700 rounded-full h-1.5">
+              <div
+                className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+                style={{ width: `${progress * 100}%` }}
+              />
+            </div>
+          )}
         </div>
       </div>
     );

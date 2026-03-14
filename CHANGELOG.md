@@ -5,6 +5,26 @@ All notable changes to GoSQLX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.1] - 2026-03-15 — Website Polish & SEO
+
+### Fixed
+- WASM loading race condition and format parsing in playground
+- CSP blocking Astro inline scripts (added unsafe-inline to script-src)
+- Base path trailing slash for WASM asset loading
+- 19 website audit fixes: broken doc links, mobile layout, accessibility, design tokens
+- Hero playground output height and AnalyzeTab CSS conflict
+
+### Improved
+- Lazy WASM loading: homepage shows static preview, loads WASM only on user interaction
+- Download progress bar for WASM in playground
+- Typography: IBM Plex Mono headings, Instrument Sans body
+- Hero section: gradient glow effects, gradient headline text
+- Feature cards: SVG icons replacing emojis, hover glow effects
+- Code examples: Go syntax highlighting with colored spans
+- SEO: sitemap, robots.txt, JSON-LD structured data, Twitter cards, RSS feed
+- Accessibility: ARIA tab roles, keyboard focus styles, semantic landmarks
+- Design tokens: consistent color system replacing raw hex values
+
 ## [1.11.0] - 2026-03-14 — Product Website with WASM Playground
 
 ### Added

@@ -24,7 +24,7 @@
 //
 // # Version
 //
-// Current version: 1.11.0
+// Current version: 1.11.1
 //
 // # Architecture
 //

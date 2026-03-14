@@ -2,7 +2,7 @@
   "name": "gosqlx",
   "displayName": "GoSQLX",
   "description": "High-performance SQL parsing, validation, formatting, and analysis powered by GoSQLX",
-  "version": "1.11.0",
+  "version": "1.11.1",
   "publisher": "ajitpratap0",
   "license": "Apache-2.0",
   "repository": {

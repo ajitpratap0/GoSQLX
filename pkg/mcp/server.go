@@ -42,6 +42,19 @@ func New(cfg *Config) *Server {
 	return s
 }
 
+// Handler returns the HTTP handler chain (MCP server + auth middleware)
+// without starting an HTTP server. Use this when you need to wrap
+// the handler with additional middleware (e.g., rate limiting).
+func (s *Server) Handler() http.Handler {
+	streamSrv := mcpserver.NewStreamableHTTPServer(s.mcpSrv)
+	return BearerAuthMiddleware(s.cfg, streamSrv)
+}
+
+// Cfg returns the server configuration.
+func (s *Server) Cfg() *Config {
+	return s.cfg
+}
+
 // Start binds to cfg.Addr() and serves using streamable HTTP transport.
 // It blocks until ctx is cancelled or a fatal error occurs.
 func (s *Server) Start(ctx context.Context) error {

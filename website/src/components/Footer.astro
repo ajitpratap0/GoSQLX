@@ -27,8 +27,13 @@ const columns = [
 ];
 ---
 
-<footer class="bg-surface border-t border-elevated">
+<footer class="bg-surface border-t border-elevated relative">
+  <!-- Gradient accent line -->
+  <div class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-orange-500 via-blue-500 to-green-500"></div>
   <div class="container mx-auto px-4 py-12">
+    <a href="/GoSQLX/" class="block mb-8">
+      <img src="/GoSQLX/images/logo.png" alt="GoSQLX" class="h-8" />
+    </a>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
       {columns.map((col) => (
         <div>

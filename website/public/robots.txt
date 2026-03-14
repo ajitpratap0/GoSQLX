@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://ajitpratap0.github.io/GoSQLX/sitemap-index.xml

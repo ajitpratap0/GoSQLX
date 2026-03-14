@@ -24,7 +24,7 @@ const baseTheme = EditorView.theme({
     overflow: "hidden",
   },
   "&.cm-focused": {
-    outline: "none",
+    outline: "2px solid #3b82f6",
   },
   ".cm-scroller": {
     fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",

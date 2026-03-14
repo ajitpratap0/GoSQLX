@@ -117,9 +117,11 @@ const examples = [
         tabs.forEach((t) => {
           t.classList.remove('text-blue-400', 'active');
           t.classList.add('text-slate-400');
+          t.setAttribute('aria-selected', 'false');
         });
         tab.classList.remove('text-slate-400');
         tab.classList.add('text-blue-400', 'active');
+        tab.setAttribute('aria-selected', 'true');
 
         panels.forEach((p) => {
           const panel = p as HTMLElement;

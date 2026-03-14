@@ -1,0 +1,9 @@
+website/
+.git/
+*.wasm
+wasm/playground/
+.superpowers/
+.playwright-mcp/
+dist/
+node_modules/
+.claude/

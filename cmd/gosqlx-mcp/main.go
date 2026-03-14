@@ -40,6 +40,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	gosqlxmcp "github.com/ajitpratap0/GoSQLX/pkg/mcp"
 )
 
@@ -69,7 +70,7 @@ func run() error {
 	mux.Handle("/mcp/", handler)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"status":"ok","version":"%s","tools":7}`, "1.11.1")
+		fmt.Fprintf(w, `{"status":"ok","version":"%s","tools":7}`, gosqlx.Version)
 	})
 
 	httpSrv := &http.Server{

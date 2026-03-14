@@ -40,6 +40,77 @@ The GoSQLX MCP server (`gosqlx-mcp`) exposes all GoSQLX SQL capabilities as [Mod
 
 ---
 
+## Remote Server (Public)
+
+A public GoSQLX MCP server is available at `https://gosqlx-mcp.fly.dev/mcp` — no installation, no API key, no signup required.
+
+### Claude Code
+
+```bash
+claude mcp add --transport http gosqlx https://gosqlx-mcp.fly.dev/mcp
+```
+
+### Claude Desktop
+
+Add to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "gosqlx": {
+      "url": "https://gosqlx-mcp.fly.dev/mcp"
+    }
+  }
+}
+```
+
+### Cursor
+
+Add remote MCP server URL: `https://gosqlx-mcp.fly.dev/mcp`
+
+### Available Tools
+
+All 7 GoSQLX SQL tools are available instantly:
+- `validate_sql` — Check SQL syntax validity
+- `format_sql` — Format SQL with configurable options
+- `parse_sql` — Parse SQL into AST statement types
+- `extract_metadata` — Extract tables, columns, and functions
+- `security_scan` — Detect SQL injection patterns
+- `lint_sql` — Lint against 10 rules (L001–L010)
+- `analyze_sql` — Run all 6 tools in one concurrent request
+
+### Rate Limits
+
+The public server has smart rate limiting to ensure fair usage:
+- **Burst**: 10 requests/second per IP
+- **Sustained**: 120 weighted-requests/minute per IP
+- Heavier tools (`analyze_sql`) consume more budget than simple ones (`validate_sql`)
+- Limits tighten automatically under high server load
+
+### Health Check
+
+```bash
+curl https://gosqlx-mcp.fly.dev/health
+```
+
+### Self-Hosting
+
+To run your own instance, use Docker:
+
+```bash
+docker build -t gosqlx-mcp .
+docker run -p 8080:8080 -e GOSQLX_MCP_HOST=0.0.0.0 gosqlx-mcp
+```
+
+Or deploy to Fly.io:
+
+```bash
+fly launch --copy-config
+fly deploy
+```
+
+---
+
 ## Installation
 
 ### Install via go install (Recommended)

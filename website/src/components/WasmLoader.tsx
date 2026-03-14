@@ -32,11 +32,18 @@ export interface UseWasmResult {
 
 function callAndParse(fn: (sql: string, dialect?: string) => string, sql: string, dialect?: string): unknown {
   const raw = dialect ? fn(sql, dialect) : fn(sql);
-  const result = JSON.parse(raw);
-  if (result && typeof result === "object" && "error" in result && result.error) {
-    throw new Error(result.error);
+  // Try to parse as JSON first; if it fails, return as raw string
+  // (e.g., format() returns plain SQL text, not JSON)
+  try {
+    const result = JSON.parse(raw);
+    if (result && typeof result === "object" && "error" in result && result.error) {
+      throw new Error(result.error);
+    }
+    return result;
+  } catch {
+    // Not JSON — return as-is (raw string result)
+    return raw;
   }
-  return result;
 }
 
 function loadScript(src: string): Promise<void> {
@@ -70,8 +77,23 @@ export async function initWasm(): Promise<GoSQLXApi> {
     const wasmPath = base + "wasm/gosqlx.wasm";
     const result = await WebAssembly.instantiateStreaming(fetch(wasmPath), go.importObject);
 
-    // Run the Go program (registers global functions)
+    // Run the Go program (registers global functions).
+    // go.run() never resolves (Go blocks with select{}), so don't await it.
+    // The global functions are registered synchronously in main(), but we
+    // need to yield to let the Go runtime initialize.
     go.run(result.instance);
+
+    // Wait for the Go runtime to register the global functions
+    await new Promise<void>((resolve) => {
+      const check = () => {
+        if (typeof window.gosqlxParse === "function") {
+          resolve();
+        } else {
+          setTimeout(check, 10);
+        }
+      };
+      check();
+    });
 
     const api: GoSQLXApi = {
       parse(sql: string, dialect?: string) {

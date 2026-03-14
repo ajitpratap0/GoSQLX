@@ -1,0 +1,86 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const benchmarks = [
+  { name: 'Simple SELECT', desc: 'SELECT id, name FROM users', nsPerOp: 700, m4: '~470 ns/op' },
+  { name: 'Complex Query', desc: 'JOIN + WHERE + ORDER BY + LIMIT', nsPerOp: 3000, m4: '~2000 ns/op' },
+  { name: 'Window Function', desc: 'ROW_NUMBER() OVER (PARTITION BY ...)', nsPerOp: 1300, m4: '~860 ns/op' },
+  { name: 'CTE', desc: 'WITH clause query', nsPerOp: 1200, m4: '~800 ns/op' },
+  { name: 'INSERT', desc: 'Simple INSERT statement', nsPerOp: 1000, m4: '~670 ns/op' },
+];
+---
+<BaseLayout title="Benchmarks - GoSQLX" description="GoSQLX performance benchmarks — parse throughput, memory efficiency, and concurrency data">
+  <!-- Hero -->
+  <section class="bg-slate-900 pt-24 pb-16 text-center">
+    <div class="max-w-4xl mx-auto px-6">
+      <h1 class="text-4xl md:text-5xl font-bold text-white mb-4">Performance Benchmarks</h1>
+      <p class="text-xl text-slate-300">Real numbers from production-validated parsing infrastructure</p>
+    </div>
+  </section>
+
+  <!-- Key Metrics -->
+  <section class="bg-slate-800 py-16">
+    <div class="max-w-5xl mx-auto px-6">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-slate-900 rounded-lg p-8 border border-slate-700 text-center">
+          <div class="text-4xl font-bold text-blue-400 mb-2">1.38M+</div>
+          <div class="text-lg text-white font-semibold mb-1">ops/sec sustained</div>
+          <p class="text-slate-400 text-sm">End-to-end parse throughput under continuous load</p>
+        </div>
+        <div class="bg-slate-900 rounded-lg p-8 border border-slate-700 text-center">
+          <div class="text-4xl font-bold text-green-400 mb-2">8M+</div>
+          <div class="text-lg text-white font-semibold mb-1">tokens/sec</div>
+          <p class="text-slate-400 text-sm">Zero-copy tokenizer throughput</p>
+        </div>
+        <div class="bg-slate-900 rounded-lg p-8 border border-slate-700 text-center">
+          <div class="text-4xl font-bold text-purple-400 mb-2">20K+</div>
+          <div class="text-lg text-white font-semibold mb-1">concurrent ops</div>
+          <p class="text-slate-400 text-sm">Thread-safe with zero race conditions</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Benchmark Table -->
+  <section class="bg-slate-900 py-16">
+    <div class="max-w-5xl mx-auto px-6">
+      <h2 class="text-2xl font-bold text-white mb-8 text-center">Parse Benchmarks</h2>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="border-b border-slate-700">
+              <th class="py-3 px-4 text-slate-300 font-semibold text-sm">Benchmark</th>
+              <th class="py-3 px-4 text-slate-300 font-semibold text-sm">Query Type</th>
+              <th class="py-3 px-4 text-slate-300 font-semibold text-sm text-right">Apple M4</th>
+              <th class="py-3 px-4 text-slate-300 font-semibold text-sm text-right">Baseline (CI)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {benchmarks.map((b) => (
+              <tr class="border-b border-slate-800 hover:bg-slate-800/50">
+                <td class="py-3 px-4 text-white font-medium">{b.name}</td>
+                <td class="py-3 px-4 text-slate-400 text-sm font-mono">{b.desc}</td>
+                <td class="py-3 px-4 text-green-400 text-right font-mono text-sm">{b.m4}</td>
+                <td class="py-3 px-4 text-slate-300 text-right font-mono text-sm">{b.nsPerOp} ns/op</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Methodology -->
+  <section class="bg-slate-800 py-12">
+    <div class="max-w-3xl mx-auto px-6">
+      <h2 class="text-xl font-bold text-white mb-4">Methodology</h2>
+      <ul class="text-slate-300 text-sm space-y-2 list-disc list-inside">
+        <li>All benchmarks use <code class="text-blue-300">ParseFromModelTokens</code> — the production code path with zero-copy tokenization.</li>
+        <li>Apple M4 numbers are measured locally; CI baselines include tolerance (60-65%) for shared runner variability.</li>
+        <li>Memory efficiency achieved via <code class="text-blue-300">sync.Pool</code> object pooling for AST nodes, tokenizers, and statements.</li>
+        <li>Concurrency tested with 20,000+ goroutines under race detection — zero races found.</li>
+        <li>Data sourced from <code class="text-blue-300">performance_baselines.json</code> (v1.10.4, updated 2026-03-13).</li>
+      </ul>
+    </div>
+  </section>
+</BaseLayout>

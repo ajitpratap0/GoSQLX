@@ -232,3 +232,5 @@ Install with: `task hooks:install`
 - `docs/LINTING_RULES.md` - All 10 linting rules reference
 - `docs/SQL_COMPATIBILITY.md` - SQL dialect compatibility matrix
 - `docs/ARCHITECTURE.md` - Detailed system design
+- `https://ajitpratap0.github.io/GoSQLX/` - Official website with interactive playground
+- `https://ajitpratap0.github.io/GoSQLX/playground/` - WASM-powered SQL playground

@@ -12,6 +12,7 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge)](http://makeapullrequest.com)
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-GoSQLX%20Lint-blue?style=for-the-badge&logo=github)](https://github.com/marketplace/actions/gosqlx-lint-action)
 [![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/ajitpratap0.gosqlx?style=for-the-badge&logo=visual-studio-code&label=VS%20Code)](https://marketplace.visualstudio.com/items?itemName=ajitpratap0.gosqlx)
+[![Website](https://img.shields.io/badge/Website-GoSQLX-blue?style=for-the-badge&logo=google-chrome)](https://ajitpratap0.github.io/GoSQLX/)
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/ajitpratap0/GoSQLX/test.yml?branch=main&label=Tests&style=flat-square)](https://github.com/ajitpratap0/GoSQLX/actions)
 [![Go Report Card](https://goreportcard.com/badge/github.com/ajitpratap0/GoSQLX?style=flat-square)](https://goreportcard.com/report/github.com/ajitpratap0/GoSQLX)
@@ -25,6 +26,8 @@
 *Zero-copy tokenization • Object pooling • Multi-dialect engine • Query transforms • WASM playground • [Python bindings](python/README.md)*
 
 ### 🚀 **New to GoSQLX? [Get Started in 5 Minutes →](docs/GETTING_STARTED.md)**
+
+### 🌐 **[Try the Interactive Playground →](https://ajitpratap0.github.io/GoSQLX/playground/)**
 
 [📖 Installation](#-installation) • [⚡ Quick Start](#-quick-start) • [📚 Documentation](#-documentation) • [💡 Examples](#-examples) • [📊 Benchmarks](#-performance)
 

@@ -1106,7 +1106,7 @@ Add documentation link.
 ```go
 err := errors.NewSyntaxError("Missing WHERE clause", &loc).
     WithHint("Consider adding a WHERE clause to filter results").
-    WithDocURL("https://gosqlx.dev/docs/where-clause")
+    WithDocURL("https://ajitpratap0.github.io/GoSQLX/docs/where-clause")
 ```
 
 ---

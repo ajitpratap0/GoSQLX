@@ -28,6 +28,7 @@ export interface UseWasmResult {
   ready: boolean;
   error: Error | null;
   api: GoSQLXApi | null;
+  progress: number;
 }
 
 function callAndParse(fn: (sql: string, dialect?: string) => string, sql: string, dialect?: string): unknown {
@@ -62,6 +63,13 @@ function loadScript(src: string): Promise<void> {
 }
 
 let wasmPromise: Promise<GoSQLXApi> | null = null;
+let progressListeners: Array<(progress: number) => void> = [];
+
+function notifyProgress(progress: number) {
+  for (const listener of progressListeners) {
+    listener(progress);
+  }
+}
 
 export async function initWasm(): Promise<GoSQLXApi> {
   if (wasmPromise) return wasmPromise;
@@ -75,7 +83,42 @@ export async function initWasm(): Promise<GoSQLXApi> {
     const go = new window.Go();
 
     const wasmPath = base + "wasm/gosqlx.wasm";
-    const result = await WebAssembly.instantiateStreaming(fetch(wasmPath), go.importObject);
+
+    // Fetch with progress tracking
+    const response = await fetch(wasmPath);
+    const contentLength = response.headers.get("content-length");
+    const total = contentLength ? parseInt(contentLength, 10) : 0;
+
+    let result: WebAssembly.WebAssemblyInstantiatedSource;
+
+    if (total > 0 && response.body) {
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.length;
+        notifyProgress(received / total);
+      }
+
+      const wasmBytes = new Uint8Array(received);
+      let offset = 0;
+      for (const chunk of chunks) {
+        wasmBytes.set(chunk, offset);
+        offset += chunk.length;
+      }
+
+      notifyProgress(1);
+      result = await WebAssembly.instantiate(wasmBytes, go.importObject);
+    } else {
+      // Fallback: no content-length header, can't track progress
+      const buffer = await response.arrayBuffer();
+      notifyProgress(1);
+      result = await WebAssembly.instantiate(buffer, go.importObject);
+    }
 
     // Run the Go program (registers global functions).
     // go.run() never resolves (Go blocks with select{}), so don't await it.
@@ -127,11 +170,14 @@ export function useWasm(): UseWasmResult {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [api, setApi] = useState<GoSQLXApi | null>(null);
+  const [progress, setProgress] = useState(0);
   const initialized = useRef(false);
 
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
+
+    progressListeners.push(setProgress);
 
     initWasm()
       .then((wasmApi) => {
@@ -142,8 +188,11 @@ export function useWasm(): UseWasmResult {
       .catch((err) => {
         setError(err instanceof Error ? err : new Error(String(err)));
         setLoading(false);
+      })
+      .finally(() => {
+        progressListeners = progressListeners.filter((l) => l !== setProgress);
       });
   }, []);
 
-  return { loading, ready, error, api };
+  return { loading, ready, error, api, progress };
 }

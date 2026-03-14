@@ -16,7 +16,7 @@
 // zero-copy tokenization and comprehensive object pooling. It offers enterprise-grade SQL lexing,
 // parsing, and AST generation with support for multiple SQL dialects and advanced SQL features.
 //
-// GoSQLX v1.11.0 includes both a powerful Go SDK and a high-performance CLI tool for SQL processing,
+// GoSQLX v1.11.1 includes both a powerful Go SDK and a high-performance CLI tool for SQL processing,
 // validated for production deployment with race-free concurrent operation and extensive real-world testing.
 //
 // Production Status: VALIDATED FOR PRODUCTION DEPLOYMENT (v1.6.0+)
@@ -278,6 +278,7 @@
 //
 // # Version History
 //
+// v1.11.1: Website audit fixes, SEO, lazy WASM, design polish
 // v1.11.0: VS Code Marketplace publishing with bundled platform-specific binaries
 // v1.10.0: MCP Server — all SQL tools as Model Context Protocol tools over streamable HTTP
 // v1.9.0: SQLite PRAGMA, tautology detection, 19 post-UAT fixes

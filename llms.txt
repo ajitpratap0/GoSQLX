@@ -7,7 +7,7 @@ recursive-descent parsing, and AST generation with comprehensive object pooling.
 PostgreSQL, MySQL, SQL Server, Oracle, SQLite, and Snowflake dialects, and ships a full-featured
 CLI tool (`gosqlx`) for validation, formatting, linting, and security analysis. Apache-2.0 licensed.
 
-Current stable version: v1.11.0 (2026-03-13)
+Current stable version: v1.11.1 (2026-03-13)
 Website: https://ajitpratap0.github.io/GoSQLX/
 Interactive Playground: https://ajitpratap0.github.io/GoSQLX/playground/
 

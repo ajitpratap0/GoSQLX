@@ -84,10 +84,13 @@ export async function initWasm(): Promise<GoSQLXApi> {
     go.run(result.instance);
 
     // Wait for the Go runtime to register the global functions
-    await new Promise<void>((resolve) => {
+    await new Promise<void>((resolve, reject) => {
+      const startTime = Date.now();
       const check = () => {
         if (typeof window.gosqlxParse === "function") {
           resolve();
+        } else if (Date.now() - startTime > 15000) {
+          reject(new Error("WASM initialization timed out after 15 seconds"));
         } else {
           setTimeout(check, 10);
         }

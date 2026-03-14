@@ -29,7 +29,7 @@ function ScoreCard({ title, score, subtitle }: { title: string; score: number | 
     <div className={`rounded-lg border p-4 text-center ${isNumeric ? scoreBg(numScore) : "bg-slate-800/50 border-slate-700"}`}>
       <div className="text-xs uppercase tracking-wider text-slate-400 mb-2">{title}</div>
       <div
-        className={`text-3xl font-bold mb-1 ${isNumeric ? scoreColor(numScore) : "text-purple-400"} ${isNumeric ? `ring-2 ${scoreRing(numScore)}` : ""} inline-block rounded-full w-16 h-16 flex items-center justify-center mx-auto`}
+        className={`text-3xl font-bold mb-1 ${isNumeric ? scoreColor(numScore) : "text-purple-400"} ${isNumeric ? `ring-2 ${scoreRing(numScore)}` : ""} rounded-full w-16 h-16 flex items-center justify-center mx-auto`}
       >
         {displayScore}
       </div>

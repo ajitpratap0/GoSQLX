@@ -177,7 +177,7 @@ export default function HeroPlayground() {
                     </button>
                   ))}
                 </div>
-                <div className="overflow-auto" style={{ height: "210px" }}>
+                <div className="overflow-auto" style={{ minHeight: "180px", maxHeight: "300px" }}>
                   {activeTab === "ast" && <AstTab data={results.ast} />}
                   {activeTab === "format" && <FormatTab data={results.format} />}
                   {activeTab === "lint" && <LintTab data={results.lint} />}

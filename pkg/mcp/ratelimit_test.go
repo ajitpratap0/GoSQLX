@@ -45,7 +45,7 @@ func TestRateLimitBlocksBurst(t *testing.T) {
 	defer rl.Close()
 
 	ip := "10.0.0.1"
-	// Send burstLimit requests — all should be allowed.
+	// Send burstLimit requests - all should be allowed.
 	for i := 0; i < burstLimit; i++ {
 		allowed, _, _, _ := rl.allow(ip, 1)
 		if !allowed {

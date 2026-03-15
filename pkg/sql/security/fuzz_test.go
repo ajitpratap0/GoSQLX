@@ -19,7 +19,7 @@ import (
 )
 
 // FuzzScanSQL fuzzes the security scanner's ScanSQL method with arbitrary SQL input.
-// The scanner must never panic — only return results gracefully.
+// The scanner must never panic - only return results gracefully.
 func FuzzScanSQL(f *testing.F) {
 	// Valid SQL seeds
 	validSQL := []string{

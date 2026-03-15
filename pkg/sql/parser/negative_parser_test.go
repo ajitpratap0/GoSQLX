@@ -535,7 +535,7 @@ func TestPoolContamination(t *testing.T) {
 	astC, errC := p3.Parse(tokensC)
 	PutParser(p3)
 
-	// Round 4: Parse A again — must produce identical results to Round 1
+	// Round 4: Parse A again - must produce identical results to Round 1
 	p4 := GetParser()
 	astA2, errA2 := p4.Parse(tokensA)
 	PutParser(p4)
@@ -611,7 +611,7 @@ func TestPoolContamination_ErrorThenSuccess(t *testing.T) {
 	_, _ = p1.Parse(badTokens)
 	PutParser(p1)
 
-	// Now parse good SQL — must succeed
+	// Now parse good SQL - must succeed
 	p2 := GetParser()
 	ast2, err := p2.Parse(goodTokens)
 	PutParser(p2)
@@ -717,7 +717,7 @@ func TestContextCancellation_MidParse(t *testing.T) {
 
 	_, err := p.ParseContext(ctx, tokens)
 	// Either context.Canceled/DeadlineExceeded error, or it was fast enough to succeed.
-	// Both are acceptable — the key invariant is no panic.
+	// Both are acceptable - the key invariant is no panic.
 	if err != nil {
 		if !strings.Contains(err.Error(), "context") &&
 			!strings.Contains(err.Error(), "cancel") &&

@@ -54,7 +54,7 @@ func (f FunctionDesc) String() string {
 	return fmt.Sprintf("%s(%s)", f.Name, f.Arguments)
 }
 
-// Children implements Node and returns nil — FunctionDesc has no child nodes.
+// Children implements Node and returns nil - FunctionDesc has no child nodes.
 func (f FunctionDesc) Children() []Node { return nil }
 
 // TokenLiteral implements Node and returns the SQL representation of this

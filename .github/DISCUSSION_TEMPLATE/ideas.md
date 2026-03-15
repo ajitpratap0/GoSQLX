@@ -30,4 +30,4 @@ labels: ["enhancement"]
 
 - [ ] I can open an issue and submit a PR after community discussion
 - [ ] I'd love help from maintainers / other contributors
-- [ ] I'm just sharing an idea — no commitment
+- [ ] I'm just sharing an idea - no commitment

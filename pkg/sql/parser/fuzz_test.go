@@ -24,7 +24,7 @@ import (
 )
 
 // FuzzParse fuzzes the full parse pipeline (tokenizer + token conversion + parser)
-// with arbitrary SQL input. The parser must never panic — only return errors gracefully.
+// with arbitrary SQL input. The parser must never panic - only return errors gracefully.
 func FuzzParse(f *testing.F) {
 	// Seed from existing test fixture files
 	seedDirs := []string{
@@ -88,7 +88,7 @@ func FuzzParse(f *testing.F) {
 	}
 
 	f.Fuzz(func(t *testing.T, sql string) {
-		// Step 1: Tokenize — must not panic
+		// Step 1: Tokenize - must not panic
 		tkz := tokenizer.GetTokenizer()
 		defer tokenizer.PutTokenizer(tkz)
 
@@ -97,9 +97,9 @@ func FuzzParse(f *testing.F) {
 			return // tokenizer errors are expected
 		}
 
-		// Step 2: Convert tokens — must not panic
+		// Step 2: Convert tokens - must not panic
 
-		// Step 3: Parse — must not panic
+		// Step 3: Parse - must not panic
 		p := NewParser()
 		defer p.Release()
 		_, _ = p.ParseFromModelTokensWithPositions(tokens)

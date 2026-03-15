@@ -146,7 +146,7 @@ func TestPostgreSQLKeywordsRecognized(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Dialect gate tests — reject invalid cross-dialect syntax
+// Dialect gate tests - reject invalid cross-dialect syntax
 // ---------------------------------------------------------------------------
 
 // TestRejectUnknownDialect ensures that ParseWithDialect and ValidateWithDialect

@@ -395,7 +395,7 @@ const (
 	// table access or NULL-column padding). This is a CRITICAL severity signal used by ScanSQL.
 	PatternUnionInjection PatternType = "UNION_INJECTION"
 
-	// PatternUnionGeneric detects any UNION SELECT pattern. HIGH severity — may be legitimate.
+	// PatternUnionGeneric detects any UNION SELECT pattern. HIGH severity - may be legitimate.
 	// Used by ScanSQL to flag generic UNION SELECT for review.
 	PatternUnionGeneric PatternType = "UNION_GENERIC"
 

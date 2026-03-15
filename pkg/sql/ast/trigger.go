@@ -194,34 +194,34 @@ func (t TriggerExecBody) String() string {
 	return fmt.Sprintf("%s %s", t.ExecType, t.FuncDesc)
 }
 
-// Children implements Node and returns nil — TriggerObject has no child nodes.
+// Children implements Node and returns nil - TriggerObject has no child nodes.
 func (t TriggerObject) Children() []Node { return nil }
 
 // TokenLiteral implements Node and returns the SQL keyword for this trigger object.
 func (t TriggerObject) TokenLiteral() string { return t.String() }
 
-// Children implements Node and returns nil — TriggerReferencing has no child nodes.
+// Children implements Node and returns nil - TriggerReferencing has no child nodes.
 func (t TriggerReferencing) Children() []Node { return nil }
 
 // TokenLiteral implements Node and returns the SQL representation of this
 // transition relation declaration.
 func (t TriggerReferencing) TokenLiteral() string { return t.String() }
 
-// Children implements Node and returns nil — TriggerEvent has no child nodes.
+// Children implements Node and returns nil - TriggerEvent has no child nodes.
 func (t TriggerEvent) Children() []Node { return nil }
 
 // TokenLiteral implements Node and returns the SQL representation of this
 // trigger event (e.g. "INSERT", "UPDATE OF col", "DELETE").
 func (t TriggerEvent) TokenLiteral() string { return t.String() }
 
-// Children implements Node and returns nil — TriggerPeriod has no child nodes.
+// Children implements Node and returns nil - TriggerPeriod has no child nodes.
 func (t TriggerPeriod) Children() []Node { return nil }
 
 // TokenLiteral implements Node and returns the SQL keyword for this trigger
 // period ("AFTER", "BEFORE", or "INSTEAD OF").
 func (t TriggerPeriod) TokenLiteral() string { return t.String() }
 
-// Children implements Node and returns nil — TriggerExecBody has no child nodes.
+// Children implements Node and returns nil - TriggerExecBody has no child nodes.
 func (t TriggerExecBody) Children() []Node { return nil }
 
 // TokenLiteral implements Node and returns the SQL representation of this

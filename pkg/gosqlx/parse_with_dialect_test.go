@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package gosqlx — tests for the ParseWithDialect top-level wrapper (UX fix).
+// Package gosqlx - tests for the ParseWithDialect top-level wrapper (UX fix).
 package gosqlx_test
 
 import (
@@ -24,7 +24,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// UX Fix — ParseWithDialect top-level wrapper
+// UX Fix - ParseWithDialect top-level wrapper
 // ---------------------------------------------------------------------------
 
 func TestParseWithDialect_MySQLBasic(t *testing.T) {

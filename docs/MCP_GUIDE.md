@@ -35,14 +35,14 @@ The GoSQLX MCP server (`gosqlx-mcp`) exposes all GoSQLX SQL capabilities as [Mod
 - **Streamable HTTP**: Compatible with any MCP client that supports the streamable HTTP transport
 - **Optional Bearer Auth**: Protect the server with a token when exposing to a network
 - **Multi-Dialect Validation**: postgresql, mysql, sqlite, sqlserver, oracle, snowflake, generic
-- **Concurrent Analysis**: `analyze_sql` fans out all 6 tools via `sync.WaitGroup` — one round trip for a full SQL health report
+- **Concurrent Analysis**: `analyze_sql` fans out all 6 tools via `sync.WaitGroup` - one round trip for a full SQL health report
 - **Zero Business Logic Duplication**: Every tool delegates to the existing `pkg/gosqlx`, `pkg/linter`, and `pkg/sql/security` packages
 
 ---
 
 ## Remote Server (Public)
 
-A public GoSQLX MCP server is available at `https://mcp.gosqlx.dev/mcp` — no installation, no API key, no signup required.
+A public GoSQLX MCP server is available at `https://mcp.gosqlx.dev/mcp` - no installation, no API key, no signup required.
 
 ### Claude Code
 
@@ -71,13 +71,13 @@ Add remote MCP server URL: `https://mcp.gosqlx.dev/mcp`
 ### Available Tools
 
 All 7 GoSQLX SQL tools are available instantly:
-- `validate_sql` — Check SQL syntax validity
-- `format_sql` — Format SQL with configurable options
-- `parse_sql` — Parse SQL into AST statement types
-- `extract_metadata` — Extract tables, columns, and functions
-- `security_scan` — Detect SQL injection patterns
-- `lint_sql` — Lint against 10 rules (L001–L010)
-- `analyze_sql` — Run all 6 tools in one concurrent request
+- `validate_sql` - Check SQL syntax validity
+- `format_sql` - Format SQL with configurable options
+- `parse_sql` - Parse SQL into AST statement types
+- `extract_metadata` - Extract tables, columns, and functions
+- `security_scan` - Detect SQL injection patterns
+- `lint_sql` - Lint against 10 rules (L001–L010)
+- `analyze_sql` - Run all 6 tools in one concurrent request
 
 ### Rate Limits
 
@@ -205,7 +205,7 @@ The server listens for context cancellation. When the process receives `SIGINT` 
 
 ## Configuration
 
-The `gosqlx-mcp` server is configured exclusively via environment variables. No YAML file is read. All variables are optional — safe defaults are applied for local development.
+The `gosqlx-mcp` server is configured exclusively via environment variables. No YAML file is read. All variables are optional - safe defaults are applied for local development.
 
 | Variable | Default | Type | Validation |
 |----------|---------|------|-----------|
@@ -217,7 +217,7 @@ The `gosqlx-mcp` server is configured exclusively via environment variables. No 
 
 - `GOSQLX_MCP_PORT` fails fast at startup with a descriptive error if the value is not a valid port number.
 - `GOSQLX_MCP_AUTH_TOKEN` enables bearer token auth for all requests when set to a non-empty string.
-- MCP server configuration is independent of `.gosqlx.yml` — the YAML config is not read by `gosqlx-mcp`.
+- MCP server configuration is independent of `.gosqlx.yml` - the YAML config is not read by `gosqlx-mcp`.
 
 ---
 
@@ -257,7 +257,7 @@ All tools accept a required `sql` string parameter. The server returns tool-sema
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `sql` | string | yes | — | The SQL string to validate |
+| `sql` | string | yes | - | The SQL string to validate |
 | `dialect` | string | no | *(generic)* | One of: `generic`, `mysql`, `postgresql`, `sqlite`, `sqlserver`, `oracle`, `snowflake` |
 
 #### Response
@@ -302,7 +302,7 @@ Invalid SQL:
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `sql` | string | yes | — | The SQL string to format |
+| `sql` | string | yes | - | The SQL string to format |
 | `indent_size` | integer | no | `2` | Spaces per indent level |
 | `uppercase_keywords` | boolean | no | `false` | Uppercase SQL keywords |
 | `add_semicolon` | boolean | no | `false` | Append a trailing semicolon |
@@ -716,7 +716,7 @@ log.Fatal(srv.Start(ctx))
 
 ## Troubleshooting
 
-### Server Won't Start — "address already in use"
+### Server Won't Start - "address already in use"
 
 Another process is using port 8080. Change the port:
 
@@ -730,7 +730,7 @@ Or find and stop the conflicting process:
 lsof -i :8080
 ```
 
-### Server Won't Start — "GOSQLX_MCP_PORT: expected integer"
+### Server Won't Start - "GOSQLX_MCP_PORT: expected integer"
 
 The port value is not a valid integer:
 

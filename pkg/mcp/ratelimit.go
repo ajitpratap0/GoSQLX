@@ -215,7 +215,7 @@ func (rl *rateLimiter) cleanupLoop() {
 }
 
 // cleanup removes stale bucket entries from all shards.
-// Collects stale IPs first, then deletes — avoids holding bucket mutex
+// Collects stale IPs first, then deletes - avoids holding bucket mutex
 // while modifying the shard map.
 func (rl *rateLimiter) cleanup() {
 	now := time.Now()

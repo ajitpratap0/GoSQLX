@@ -55,7 +55,7 @@ func (v *Validator) validateInsertNotNull(s *ast.InsertStatement) []ValidationEr
 
 	table, ok := v.Schema.GetTable(s.TableName)
 	if !ok {
-		return nil // table doesn't exist — already caught by basic validation
+		return nil // table doesn't exist - already caught by basic validation
 	}
 
 	// If no explicit columns, we can't check individual column assignments

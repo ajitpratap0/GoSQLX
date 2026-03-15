@@ -24,18 +24,18 @@
 //
 // The primary entry point is the Formatter type, configured with Options:
 //
-//   - Formatter — stateful formatter created with New(Options); call Format(sql) to reformat a query.
-//   - Options — controls IndentSize (spaces per level), Uppercase (keyword case), and Compact (single-line output).
-//   - FormatString — convenience function for one-shot formatting with default options (2-space indent, lowercase keywords, readable multi-line output).
-//   - FormatAST — low-level renderer that accepts a parsed *ast.AST and ast.FormatOptions directly.
-//   - FormatStatement / FormatExpression — render individual AST nodes; used by the LSP formatter and linter auto-fix.
+//   - Formatter - stateful formatter created with New(Options); call Format(sql) to reformat a query.
+//   - Options - controls IndentSize (spaces per level), Uppercase (keyword case), and Compact (single-line output).
+//   - FormatString - convenience function for one-shot formatting with default options (2-space indent, lowercase keywords, readable multi-line output).
+//   - FormatAST - low-level renderer that accepts a parsed *ast.AST and ast.FormatOptions directly.
+//   - FormatStatement / FormatExpression - render individual AST nodes; used by the LSP formatter and linter auto-fix.
 //
 // # Formatting Styles
 //
 // Two preset styles from the ast package drive the renderer:
 //
-//   - ast.ReadableStyle() — multi-line output with uppercase keywords, 2-space indentation, and a trailing semicolon per statement. This is the default style used by Formatter when Compact is false.
-//   - ast.CompactStyle() — single-line output with no indentation, suitable for logging or wire transmission.
+//   - ast.ReadableStyle() - multi-line output with uppercase keywords, 2-space indentation, and a trailing semicolon per statement. This is the default style used by Formatter when Compact is false.
+//   - ast.CompactStyle() - single-line output with no indentation, suitable for logging or wire transmission.
 //
 // Custom styles can be built by constructing an ast.FormatOptions value directly
 // and calling FormatAST.

@@ -178,7 +178,7 @@ func TestCatalog_ResolveTable_Ambiguous(t *testing.T) {
 	s2.AddTable(t2)
 	c.AddSchema(s2)
 
-	// No DefaultSchema — resolution should be flagged as ambiguous.
+	// No DefaultSchema - resolution should be flagged as ambiguous.
 	_, _, err := c.ResolveTable("users")
 	if err == nil {
 		t.Fatal("expected ambiguity error when same table name exists in multiple schemas with no default")
@@ -568,7 +568,7 @@ func TestCatalogValidator_OrderByInvalidColumn(t *testing.T) {
 
 func TestGroupBy_ValidAggregateWithGroupBy(t *testing.T) {
 	v := NewValidator(helperSchema())
-	// SELECT name, COUNT(id) FROM users GROUP BY name — valid
+	// SELECT name, COUNT(id) FROM users GROUP BY name - valid
 	errs, err := v.ValidateSelectFull("SELECT name, COUNT(id) FROM users GROUP BY name")
 	if err != nil {
 		t.Fatalf("ValidateSelectFull failed: %v", err)
@@ -583,7 +583,7 @@ func TestGroupBy_ValidAggregateWithGroupBy(t *testing.T) {
 
 func TestGroupBy_MixedColumnsNoGroupBy(t *testing.T) {
 	v := NewValidator(helperSchema())
-	// SELECT name, COUNT(id) FROM users — invalid (non-aggregate with aggregate, no GROUP BY)
+	// SELECT name, COUNT(id) FROM users - invalid (non-aggregate with aggregate, no GROUP BY)
 	errs, err := v.ValidateSelectFull("SELECT name, COUNT(id) FROM users")
 	if err != nil {
 		t.Fatalf("ValidateSelectFull failed: %v", err)
@@ -601,7 +601,7 @@ func TestGroupBy_MixedColumnsNoGroupBy(t *testing.T) {
 
 func TestGroupBy_NonAggColNotInGroupBy(t *testing.T) {
 	v := NewValidator(helperSchema())
-	// SELECT name, email, COUNT(*) FROM users GROUP BY name — email not in GROUP BY
+	// SELECT name, email, COUNT(*) FROM users GROUP BY name - email not in GROUP BY
 	errs, err := v.ValidateSelectFull("SELECT name, email, COUNT(*) FROM users GROUP BY name")
 	if err != nil {
 		t.Fatalf("ValidateSelectFull failed: %v", err)
@@ -619,7 +619,7 @@ func TestGroupBy_NonAggColNotInGroupBy(t *testing.T) {
 
 func TestGroupBy_AllColumnsInGroupBy(t *testing.T) {
 	v := NewValidator(helperSchema())
-	// SELECT name, email FROM users GROUP BY name, email — valid
+	// SELECT name, email FROM users GROUP BY name, email - valid
 	errs, err := v.ValidateSelectFull("SELECT name, email FROM users GROUP BY name, email")
 	if err != nil {
 		t.Fatalf("ValidateSelectFull failed: %v", err)
@@ -633,7 +633,7 @@ func TestGroupBy_AllColumnsInGroupBy(t *testing.T) {
 
 func TestGroupBy_PureAggregate(t *testing.T) {
 	v := NewValidator(helperSchema())
-	// SELECT COUNT(*) FROM users — valid, no GROUP BY needed for pure aggregate
+	// SELECT COUNT(*) FROM users - valid, no GROUP BY needed for pure aggregate
 	errs, err := v.ValidateSelectFull("SELECT COUNT(*) FROM users")
 	if err != nil {
 		t.Fatalf("ValidateSelectFull failed: %v", err)
@@ -647,7 +647,7 @@ func TestGroupBy_PureAggregate(t *testing.T) {
 
 func TestGroupBy_SelectStar(t *testing.T) {
 	v := NewValidator(helperSchema())
-	// SELECT * FROM users — skip GROUP BY check
+	// SELECT * FROM users - skip GROUP BY check
 	errs, err := v.ValidateSelectFull("SELECT * FROM users")
 	if err != nil {
 		t.Fatalf("ValidateSelectFull failed: %v", err)

@@ -92,7 +92,7 @@ func RemoveJoin(tableName string) Rule {
 // e.g. "LEFT JOIN orders ON orders.user_id = users.id".
 //
 // WARNING: sql parameter must not contain untrusted user input.
-// This function parses raw SQL — passing unsanitized input could
+// This function parses raw SQL - passing unsanitized input could
 // produce unintended query modifications. Use parameterized queries
 // or construct AST nodes directly for untrusted input.
 func AddJoinFromSQL(sql string) Rule {

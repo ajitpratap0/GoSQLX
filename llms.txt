@@ -1,6 +1,6 @@
 # GoSQLX
 
-> High-performance SQL parsing SDK for Go — 1.5M+ ops/sec, multi-dialect, zero-copy, race-free production library.
+> High-performance SQL parsing SDK for Go - 1.5M+ ops/sec, multi-dialect, zero-copy, race-free production library.
 
 GoSQLX is a production-ready SQL parsing library for Go that provides zero-copy tokenization,
 recursive-descent parsing, and AST generation with comprehensive object pooling. It supports
@@ -13,13 +13,13 @@ Interactive Playground: https://gosqlx.dev/playground/
 
 ## Core API
 
-- [Package gosqlx](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/gosqlx): High-level entry point — `Parse()`, `Validate()`, `Format()`, `ParseWithDialect()`, `ParseWithRecovery()`
+- [Package gosqlx](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/gosqlx): High-level entry point - `Parse()`, `Validate()`, `Format()`, `ParseWithDialect()`, `ParseWithRecovery()`
 - [Package parser](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/sql/parser): Recursive-descent parser with one-token lookahead and object pooling
 - [Package tokenizer](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer): Zero-copy SQL lexer with full UTF-8 support
 - [Package ast](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/sql/ast): AST node types and visitor pattern
-- [Package security](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/sql/security): SQL injection scanner — tautology, UNION, time-based, comment-bypass patterns
+- [Package security](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/sql/security): SQL injection scanner - tautology, UNION, time-based, comment-bypass patterns
 - [Package linter](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/linter): 10 built-in lint rules (L001–L010)
-- [Package transform](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/transform): Programmatic SQL rewriting — add WHERE, columns, JOINs, pagination
+- [Package transform](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/transform): Programmatic SQL rewriting - add WHERE, columns, JOINs, pagination
 - [Package lsp](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/lsp): Language Server Protocol server for IDE integration
 
 ## Documentation
@@ -41,7 +41,7 @@ Interactive Playground: https://gosqlx.dev/playground/
 - **SQL dialects**: PostgreSQL (default), MySQL, SQL Server (T-SQL), Oracle, SQLite, Snowflake
 - **DML**: SELECT (window functions, CTEs, set ops, LATERAL, DISTINCT ON), INSERT, UPDATE, DELETE, MERGE
 - **DDL**: CREATE/ALTER/DROP TABLE, INDEX, VIEW, MATERIALIZED VIEW; SQLite PRAGMA and WITHOUT ROWID
-- **Security scanner**: Tautology (1=1), UNION injection, time-based blind, comment bypass, stacked queries, dangerous functions — 4 severity levels (CRITICAL/HIGH/MEDIUM/LOW)
+- **Security scanner**: Tautology (1=1), UNION injection, time-based blind, comment bypass, stacked queries, dangerous functions - 4 severity levels (CRITICAL/HIGH/MEDIUM/LOW)
 - **Object pooling**: sync.Pool throughout; 60-80% memory reduction vs naive allocation
 - **Thread safety**: race-free, validated with 20,000+ concurrent operations
 - **CLI**: `gosqlx validate/format/parse/analyze/lint/lsp` with SARIF output for GitHub Code Scanning
@@ -55,7 +55,7 @@ Interactive Playground: https://gosqlx.dev/playground/
 ```go
 import "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 
-// Parse — returns *ast.AST
+// Parse - returns *ast.AST
 tree, err := gosqlx.Parse("SELECT u.name, COUNT(o.id) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name")
 
 // Validate
@@ -73,17 +73,17 @@ trees, err := gosqlx.ParseMultiple([]string{sql1, sql2, sql3})
 
 ## Repository Layout
 
-- `pkg/gosqlx/` — high-level API (start here)
-- `pkg/sql/tokenizer/` — zero-copy lexer
-- `pkg/sql/parser/` — recursive-descent parser
-- `pkg/sql/ast/` — AST node definitions + visitor
-- `pkg/sql/security/` — injection scanner
-- `pkg/linter/` — lint rules engine
-- `pkg/transform/` — query rewriting
-- `pkg/lsp/` — LSP server
-- `cmd/gosqlx/` — CLI implementation
-- `examples/` — runnable code examples
-- `docs/` — comprehensive documentation (25+ guides)
+- `pkg/gosqlx/` - high-level API (start here)
+- `pkg/sql/tokenizer/` - zero-copy lexer
+- `pkg/sql/parser/` - recursive-descent parser
+- `pkg/sql/ast/` - AST node definitions + visitor
+- `pkg/sql/security/` - injection scanner
+- `pkg/linter/` - lint rules engine
+- `pkg/transform/` - query rewriting
+- `pkg/lsp/` - LSP server
+- `cmd/gosqlx/` - CLI implementation
+- `examples/` - runnable code examples
+- `docs/` - comprehensive documentation (25+ guides)
 
 ## Optional
 

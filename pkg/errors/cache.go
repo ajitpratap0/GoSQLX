@@ -70,7 +70,7 @@ func (c *keywordSuggestionCache) set(input, suggestion string) {
 	//
 	// Note on non-determinism: Go map iteration order is intentionally randomised
 	// by the runtime, so the specific entries copied into newCache are
-	// unpredictable — the eviction effectively removes a random ~50% of entries
+	// unpredictable - the eviction effectively removes a random ~50% of entries
 	// rather than the least-recently-used ones.  For a keyword suggestion cache
 	// this is perfectly acceptable: all retained entries are equally valid
 	// suggestions, and the cost of a cache miss is only a Levenshtein distance

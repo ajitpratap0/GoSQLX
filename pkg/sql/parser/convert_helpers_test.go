@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package parser — test-only conversion helpers retained for backward-compat
+// Package parser - test-only conversion helpers retained for backward-compat
 // tests that verify the old Parse([]token.Token) path produces the same result
 // as the modern ParseFromModelTokens([]models.TokenWithSpan) path.
 

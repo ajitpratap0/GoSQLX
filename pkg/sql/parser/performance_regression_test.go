@@ -102,7 +102,7 @@ func calculateDegradation(actual, baseline int64) float64 {
 
 // TestPerformanceRegression tests for performance regressions against baselines
 func TestPerformanceRegression(t *testing.T) {
-	// Skip on older Go versions — perf baselines are calibrated for Go 1.24+
+	// Skip on older Go versions - perf baselines are calibrated for Go 1.24+
 	// Older compilers produce slower code, causing false regression failures
 	if !goVersionAtLeast(1, 24) {
 		t.Skip("Skipping performance regression tests on Go < 1.24 (baselines calibrated for 1.24+)")

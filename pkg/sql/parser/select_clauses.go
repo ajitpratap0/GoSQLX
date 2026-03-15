@@ -42,7 +42,7 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 		// ends with '*' (FROM is required).  When currentPos is past the slice end,
 		// inspect the last real token directly instead of relying on currentToken.
 		if p.currentPos >= len(p.tokens) {
-			// Past end of token stream — check whether the last real token implies
+			// Past end of token stream - check whether the last real token implies
 			// that FROM can legitimately be omitted.
 			if len(p.tokens) > 0 {
 				lastTokType := p.tokens[len(p.tokens)-1].Token.Type
@@ -57,7 +57,7 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 			}
 			return "", nil, nil, p.expectedError("FROM, semicolon, or end of statement")
 		}
-		// Current token is still within the slice — use the normal token-type check.
+		// Current token is still within the slice - use the normal token-type check.
 		if !p.isType(models.TokenTypeEOF) &&
 			!p.isType(models.TokenTypeSemicolon) &&
 			!p.isType(models.TokenTypeRParen) &&
@@ -439,7 +439,7 @@ func (p *Parser) parseOrderByClause() ([]ast.OrderByExpression, error) {
 func (p *Parser) parseLimitOffsetClause() (limit *int, offset *int, err error) {
 	// LIMIT clause
 	if p.isType(models.TokenTypeLimit) {
-		// Reject LIMIT in SQL Server and Oracle — these dialects use TOP/OFFSET-FETCH or ROWNUM/FETCH FIRST.
+		// Reject LIMIT in SQL Server and Oracle - these dialects use TOP/OFFSET-FETCH or ROWNUM/FETCH FIRST.
 		if p.dialect == string(keywords.DialectSQLServer) || p.dialect == string(keywords.DialectOracle) {
 			msg := "LIMIT clause is not supported in SQL Server; use TOP or OFFSET/FETCH NEXT instead"
 			if p.dialect == string(keywords.DialectOracle) {

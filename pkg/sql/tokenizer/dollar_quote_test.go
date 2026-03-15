@@ -206,7 +206,7 @@ func TestDollarQuotedString_InContext(t *testing.T) {
 func TestDollarQuotedString_MismatchedTags(t *testing.T) {
 	tkz, _ := New()
 
-	// $a$content$b$ — $a$ opens, looks for $a$ to close, won't find it
+	// $a$content$b$ - $a$ opens, looks for $a$ to close, won't find it
 	_, err := tkz.Tokenize([]byte(`$a$content$b$`))
 	if err == nil {
 		t.Fatal("expected error for mismatched dollar-quote tags")

@@ -1442,7 +1442,7 @@ func (d DeleteStatement) Children() []Node {
 // AlterTableStatement is retained only so that existing code that constructs
 // it directly (e.g. in tests or manual AST construction) continues to compile.
 //
-// Migration guide — prefer AlterStatement for all new code:
+// Migration guide - prefer AlterStatement for all new code:
 //
 //	// Wrong (type assertion will never succeed at runtime):
 //	stmt := tree.Statements[0].(*ast.AlterTableStatement)
@@ -1748,7 +1748,7 @@ type AST struct {
 	Comments   []models.Comment // Comments captured during tokenization, preserved during formatting
 }
 
-// TokenLiteral implements Node. Returns an empty string — the AST root has no
+// TokenLiteral implements Node. Returns an empty string - the AST root has no
 // representative keyword.
 func (a AST) TokenLiteral() string { return "" }
 

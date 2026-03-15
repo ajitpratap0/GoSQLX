@@ -146,9 +146,9 @@ func (cv *CatalogValidator) validateSelectExtended(s *ast.SelectStatement, sv *V
 
 // validateOrderBy checks that ORDER BY expressions reference valid columns.
 // ORDER BY items can be:
-//   - An integer position (1-based) — always valid
-//   - An alias defined in SELECT — valid
-//   - A qualified/unqualified column in scope — validated against schema
+//   - An integer position (1-based) - always valid
+//   - An alias defined in SELECT - valid
+//   - A qualified/unqualified column in scope - validated against schema
 func validateOrderBy(sv *Validator, orderBy []ast.OrderByExpression, tableMap map[string]string, selectCols []ast.Expression) []ValidationError {
 	if len(orderBy) == 0 {
 		return nil
@@ -174,7 +174,7 @@ func validateOrderBy(sv *Validator, orderBy []ast.OrderByExpression, tableMap ma
 				continue
 			}
 		}
-		// Column alias from SELECT — valid
+		// Column alias from SELECT - valid
 		if ident, ok := ob.Expression.(*ast.Identifier); ok && ident.Table == "" {
 			if selectAliases[strings.ToLower(ident.Name)] {
 				continue
@@ -367,10 +367,10 @@ func validateGroupByAggregates(sv *Validator, s *ast.SelectStatement, tableMap m
 		})
 	}
 
-	// Rule 2: GROUP BY present — every non-aggregate SELECT column must be in GROUP BY
+	// Rule 2: GROUP BY present - every non-aggregate SELECT column must be in GROUP BY
 	if hasGroupBy {
 		for _, colRef := range nonAggCols {
-			// colRef may be "table.col" or just "col" — check both
+			// colRef may be "table.col" or just "col" - check both
 			inGroupBy := groupByCols[colRef]
 			if !inGroupBy {
 				// Try just the column part (strip table qualifier)
@@ -395,7 +395,7 @@ func validateGroupByAggregates(sv *Validator, s *ast.SelectStatement, tableMap m
 }
 
 // ---------------------------------------------------------------------------
-// Validator enhancements — ORDER BY & GROUP BY plumbed into existing Validator
+// Validator enhancements - ORDER BY & GROUP BY plumbed into existing Validator
 // ---------------------------------------------------------------------------
 
 // ValidateSelectFull performs full SELECT validation including ORDER BY and

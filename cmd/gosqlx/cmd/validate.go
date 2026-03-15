@@ -81,7 +81,7 @@ func validateRun(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// In quiet/check mode, silence all cobra output — only exit code matters
+	// In quiet/check mode, silence all cobra output - only exit code matters
 	if validateQuiet {
 		cmd.SilenceErrors = true
 		cmd.SilenceUsage = true

@@ -7,7 +7,7 @@
       "tolerance_percent": 60,
       "description": "Basic SELECT query: SELECT id, name FROM users",
       "current_performance": "~470 ns/op on Apple M4; ~550-900 ns/op on CI (shared runners)",
-      "note": "Benchmarks now use ParseFromModelTokens (production path) directly — eliminates the legacy token-wrapping overhead. Baseline set at 1.5x M4 measurement to accommodate CI runner variability."
+      "note": "Benchmarks now use ParseFromModelTokens (production path) directly - eliminates the legacy token-wrapping overhead. Baseline set at 1.5x M4 measurement to accommodate CI runner variability."
     },
     "ComplexQuery": {
       "ns_per_op": 3000,

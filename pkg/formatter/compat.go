@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// compat.go — backward-compatibility hook registration.
+// compat.go - backward-compatibility hook registration.
 //
 // This init() function registers the pkg/formatter rendering functions into the
 // ast package's FormatStatementFunc / FormatExpressionFunc / FormatASTFunc
@@ -20,7 +20,7 @@
 // statement and expression types (added in format_compat.go) to delegate to the
 // new visitor-based renderer without creating an import cycle.
 //
-// The registration happens automatically whenever pkg/formatter is imported —
+// The registration happens automatically whenever pkg/formatter is imported -
 // which is the common case for any application that uses the formatter. Callers
 // that only import pkg/sql/ast (without pkg/formatter) will receive SQL()
 // fallback output from the deprecated shims.
@@ -32,10 +32,10 @@ import (
 )
 
 func init() {
-	//lint:ignore SA1019 intentional bridge — pkg/formatter wires itself into the ast shim variables
+	//lint:ignore SA1019 intentional bridge - pkg/formatter wires itself into the ast shim variables
 	ast.FormatStatementFunc = FormatStatement //nolint:staticcheck
-	//lint:ignore SA1019 intentional bridge — pkg/formatter wires itself into the ast shim variables
+	//lint:ignore SA1019 intentional bridge - pkg/formatter wires itself into the ast shim variables
 	ast.FormatExpressionFunc = FormatExpression //nolint:staticcheck
-	//lint:ignore SA1019 intentional bridge — pkg/formatter wires itself into the ast shim variables
+	//lint:ignore SA1019 intentional bridge - pkg/formatter wires itself into the ast shim variables
 	ast.FormatASTFunc = FormatAST //nolint:staticcheck
 }

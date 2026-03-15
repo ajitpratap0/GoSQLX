@@ -123,7 +123,7 @@ func (p *Parser) synchronize() {
 // The caller MUST call Release() on the returned RecoveryResult to return the
 // parser to the pool.
 //
-// Thread Safety: This function is safe for concurrent use — each call obtains its
+// Thread Safety: This function is safe for concurrent use - each call obtains its
 // own parser instance from the pool.
 //
 // Example:

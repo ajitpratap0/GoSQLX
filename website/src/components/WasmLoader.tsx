@@ -42,7 +42,7 @@ function callAndParse(fn: (sql: string, dialect?: string) => string, sql: string
     }
     return result;
   } catch {
-    // Not JSON — return as-is (raw string result)
+    // Not JSON - return as-is (raw string result)
     return raw;
   }
 }

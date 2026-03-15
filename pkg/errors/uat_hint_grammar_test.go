@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package errors — UAT Bug 3: hint grammar regression tests.
+// Package errors - UAT Bug 3: hint grammar regression tests.
 //
 // The old hint said "Expected 'table name' keyword here" which is grammatically
 // incorrect ("table name" is not a keyword). The fix changes it to

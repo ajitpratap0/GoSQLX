@@ -69,7 +69,7 @@ func (a AST) SQL() string {
 
 // SQL returns the SQL representation of the identifier.
 // Identifiers are emitted unescaped because they have already been validated
-// during parsing — the tokenizer and parser only accept syntactically valid
+// during parsing - the tokenizer and parser only accept syntactically valid
 // identifiers (or quoted identifiers whose quotes are preserved in the AST).
 // Re-escaping here would be redundant and could introduce double-quoting bugs.
 func (i *Identifier) SQL() string {
@@ -109,7 +109,7 @@ func escapeStringLiteral(s string) string {
 		case '\\':
 			b.WriteString(`\\`)
 		case '\x00':
-			// Drop null bytes — invalid in SQL string literals.
+			// Drop null bytes - invalid in SQL string literals.
 		case '\n':
 			b.WriteString(`\n`)
 		case '\r':

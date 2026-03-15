@@ -1581,7 +1581,7 @@ func PutMergeStatement(stmt *MergeStatement) {
 	}
 	stmt.Output = stmt.Output[:0]
 
-	// Reset TargetTable / SourceTable (value types — zero them out)
+	// Reset TargetTable / SourceTable (value types - zero them out)
 	stmt.TargetTable = TableReference{}
 	stmt.SourceTable = TableReference{}
 	stmt.TargetAlias = ""

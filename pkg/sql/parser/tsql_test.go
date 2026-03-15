@@ -351,7 +351,7 @@ func TestTSQL_TestdataFiles(t *testing.T) {
 		"04_offset_fetch.sql":    true,
 		"05_merge_statement.sql": true,
 		"06_cte_basic.sql":       true,
-		// "07_recursive_cte.sql" uses OPTION (MAXRECURSION) — not yet supported
+		// "07_recursive_cte.sql" uses OPTION (MAXRECURSION) - not yet supported
 		"08_window_row_number.sql": true,
 		"09_window_rank.sql":       true,
 		"10_window_lag_lead.sql":   true,

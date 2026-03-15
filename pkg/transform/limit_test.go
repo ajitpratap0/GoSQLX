@@ -95,7 +95,7 @@ func TestSetLimit_NegativeLarge(t *testing.T) {
 }
 
 func TestSetLimit_Zero(t *testing.T) {
-	// LIMIT 0 is valid SQL — returns an empty result set.
+	// LIMIT 0 is valid SQL - returns an empty result set.
 	stmt := mustParse(t, "SELECT * FROM users")
 	err := Apply(stmt, SetLimit(0))
 	if err != nil {
@@ -107,7 +107,7 @@ func TestSetLimit_Zero(t *testing.T) {
 }
 
 func TestSetOffset_Zero(t *testing.T) {
-	// OFFSET 0 is valid SQL — no offset applied.
+	// OFFSET 0 is valid SQL - no offset applied.
 	stmt := mustParse(t, "SELECT * FROM users")
 	err := Apply(stmt, SetOffset(0))
 	if err != nil {

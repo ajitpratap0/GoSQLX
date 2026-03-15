@@ -145,7 +145,7 @@ func (c *Catalog) ResolveTable(tableName string) (*Schema, *Table, error) {
 		return matches[0].schema, matches[0].table, nil
 	default:
 		// More than one schema owns a table with this name and there is no
-		// default schema to resolve the tie — surface an actionable error.
+		// default schema to resolve the tie - surface an actionable error.
 		schemaNames := make([]string, 0, len(matches))
 		for _, m := range matches {
 			schemaNames = append(schemaNames, m.schema.Name)

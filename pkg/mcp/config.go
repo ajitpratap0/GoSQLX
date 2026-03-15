@@ -52,7 +52,7 @@ type Config struct {
 
 	// AuthToken is the optional bearer token for request authentication.
 	// When non-empty every request must carry "Authorization: Bearer <token>".
-	// Source: GOSQLX_MCP_AUTH_TOKEN (default: "" — auth disabled)
+	// Source: GOSQLX_MCP_AUTH_TOKEN (default: "" - auth disabled)
 	AuthToken string
 }
 

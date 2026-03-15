@@ -139,7 +139,7 @@ func TestParseContext_Timeout(t *testing.T) {
 
 	ast, err := p.ParseContext(ctx, tokens)
 
-	// Use errors.Is for proper unwrapping — ParseContext may wrap the context error
+	// Use errors.Is for proper unwrapping - ParseContext may wrap the context error
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("Expected context.DeadlineExceeded error, got: %v", err)
 	}

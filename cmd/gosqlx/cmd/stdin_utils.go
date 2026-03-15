@@ -213,7 +213,7 @@ func ReadInputWithFallback(args []string) (*InputResult, error) {
 // Returns true only when stdin actually has piped data available.
 // When stdin is a TTY (interactive terminal), returns false to avoid blocking.
 func ShouldReadFromStdin(args []string) bool {
-	// Explicit stdin marker — only honor if stdin is actually piped
+	// Explicit stdin marker - only honor if stdin is actually piped
 	if len(args) > 0 && args[0] == "-" {
 		return IsStdinPipe()
 	}

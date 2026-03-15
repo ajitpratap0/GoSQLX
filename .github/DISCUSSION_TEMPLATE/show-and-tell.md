@@ -2,7 +2,7 @@
 labels: ["showcase"]
 ---
 
-<!-- Share how you're using GoSQLX! Projects, integrations, benchmarks, blog posts — all welcome. -->
+<!-- Share how you're using GoSQLX! Projects, integrations, benchmarks, blog posts - all welcome. -->
 
 ## What did you build?
 
@@ -18,7 +18,7 @@ labels: ["showcase"]
 
 ## Benchmark / impact (optional)
 
-<!-- Query volume, performance gains, team size — anything that shows real-world impact. -->
+<!-- Query volume, performance gains, team size - anything that shows real-world impact. -->
 
 ---
 

@@ -23,7 +23,7 @@ import (
 )
 
 // FuzzFormat fuzzes the AST formatter by parsing arbitrary SQL then formatting.
-// Neither parse nor format should panic — errors are fine, panics are bugs.
+// Neither parse nor format should panic - errors are fine, panics are bugs.
 func FuzzFormat(f *testing.F) {
 	seeds := []string{
 		"SELECT 1",
@@ -79,7 +79,7 @@ func FuzzFormat(f *testing.F) {
 		}
 		defer ast.ReleaseAST(parsed)
 
-		// Format with multiple styles — must not panic
+		// Format with multiple styles - must not panic
 		for _, style := range formatStyles {
 			_ = formatter.FormatAST(parsed, style)
 		}

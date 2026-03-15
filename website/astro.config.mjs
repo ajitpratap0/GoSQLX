@@ -5,8 +5,7 @@ import sitemap from '@astrojs/sitemap';
 import { remarkFixLinks } from './src/plugins/remark-fix-links.mjs';
 
 export default defineConfig({
-  site: 'https://ajitpratap0.github.io',
-  base: '/GoSQLX/',
+  site: 'https://gosqlx.dev',
   integrations: [react(), tailwind(), sitemap()],
   output: 'static',
   markdown: {

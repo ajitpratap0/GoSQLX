@@ -72,7 +72,7 @@ const categories: NavCategory[] = [
 ];
 
 function isActive(slug: string): boolean {
-  const docPath = `/GoSQLX/docs/${slug}`;
+  const docPath = `/docs/${slug}`;
   const normalized = currentPath.replace(/\/$/, '');
   return normalized === docPath || normalized === docPath + '/';
 }
@@ -96,7 +96,7 @@ function isActive(slug: string): boolean {
             {category.items.map((item) => (
               <li>
                 <a
-                  href={`/GoSQLX/docs/${item.slug}/`}
+                  href={`/docs/${item.slug}/`}
                   class:list={[
                     'block text-sm py-1 pl-3 border-l-2 transition-colors',
                     isActive(item.slug)
@@ -132,7 +132,7 @@ function isActive(slug: string): boolean {
             {category.items.map((item) => (
               <li>
                 <a
-                  href={`/GoSQLX/docs/${item.slug}/`}
+                  href={`/docs/${item.slug}/`}
                   class:list={[
                     'block text-sm py-1 pl-3 border-l-2 transition-colors',
                     isActive(item.slug)

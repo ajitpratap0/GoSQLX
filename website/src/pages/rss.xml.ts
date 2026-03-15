@@ -17,7 +17,7 @@ export async function GET(context: APIContext) {
     items: sortedPosts.map((post) => ({
       title: post.data?.title || post.id,
       pubDate: post.data?.date ? new Date(post.data.date) : new Date(),
-      link: `/GoSQLX/blog/${post.id}/`,
+      link: `/blog/${post.id}/`,
     })),
   });
 }

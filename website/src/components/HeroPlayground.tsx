@@ -178,7 +178,7 @@ function InteractiveHero() {
                       role="tab"
                       aria-selected={activeTab === tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`px-3 py-1.5 text-xs font-medium transition-colors relative ${
+                      className={`px-3 py-2.5 text-xs font-medium transition-colors relative ${
                         activeTab === tab.id
                           ? "text-blue-400"
                           : "text-slate-400 hover:text-slate-200"

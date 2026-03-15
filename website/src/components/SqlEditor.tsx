@@ -34,6 +34,12 @@ const baseTheme = EditorView.theme({
   ".cm-gutters": {
     borderRight: "none",
   },
+  ".cm-content": {
+    maxWidth: "100%",
+  },
+  ".cm-line": {
+    wordBreak: "break-all" as any,
+  },
 });
 
 export default function SqlEditor({
@@ -137,5 +143,5 @@ export default function SqlEditor({
     }
   }, [value]);
 
-  return <div ref={containerRef} />;
+  return <div ref={containerRef} style={{ maxWidth: "100%", overflow: "hidden" }} />;
 }

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Deploy the existing GoSQLX MCP server as a public, no-auth remote service on Fly.io. Any MCP client (Claude Code, Claude Desktop, Cursor) can connect instantly with a single URL. Smart three-layer rate limiting prevents abuse while keeping the service open.
+Deploy the existing GoSQLX MCP server as a public, no-auth remote service on Render. Any MCP client (Claude Code, Claude Desktop, Cursor) can connect instantly with a single URL. Smart three-layer rate limiting prevents abuse while keeping the service open.
 
 **Goal**: Zero-friction access to 7 SQL tools for any MCP client — no installation, no API key, no signup.
 
@@ -10,20 +10,20 @@ Deploy the existing GoSQLX MCP server as a public, no-auth remote service on Fly
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Hosting | Fly.io (requires credit card, but free allowance) | Runs Go binary directly, auto-stop when idle, HTTPS included |
+| Hosting | Render (free tier, no credit card required) | 750 hrs/month free, Docker support, auto-deploy from GitHub |
 | Auth | None (public) | Maximum adoption, no friction. SQL parsing is read-only and safe. |
 | Rate limiting | Tiered + adaptive + tool-aware | Prevents abuse without punishing normal use |
-| URL | `gosqlx-mcp.fly.dev/mcp` | Free subdomain, custom domain can be added later |
+| URL | `gosqlx.onrender.com/mcp` | Free Render subdomain, custom domain can be added later |
 | Container | Distroless static | Minimal attack surface, ~12-15MB final image (Go binary + base) |
-| CI/CD | GitHub Actions → Fly.io | Auto-deploy on MCP-related code changes |
-| Region | `iad` (US East) | Free tier single region, lowest latency to US users |
+| CI/CD | Render auto-deploy from GitHub | Auto-deploy on MCP-related code changes |
+| Region | `iad` (US East) | Render free tier, Oregon region |
 
 ## Architecture
 
 ```
 MCP Client (Claude Code / Desktop / Cursor)
     ↓ HTTPS (Streamable HTTP)
-Fly.io Edge (DDoS protection, TLS termination)
+Render Edge (DDoS protection, TLS termination)
     ↓ HTTP
 Rate Limiter Middleware (3 layers)
     ↓
@@ -38,13 +38,13 @@ The existing `pkg/mcp/server.go` `Server.Start()` method creates the HTTP server
 
 ### Cold Start Behavior
 
-With `min_machines_running = 0`, the Fly.io VM stops when idle. On the first request after idle, Fly.io boots the machine (~1-3 seconds) + Go binary starts (~100ms). Total cold start: **2-4 seconds**. MCP clients handle this gracefully as the HTTP connection stays open during boot. Subsequent requests have no delay.
+With `min_machines_running = 0`, the Render VM stops when idle. On the first request after idle, Render boots the machine (~1-3 seconds) + Go binary starts (~100ms). Total cold start: **2-4 seconds**. MCP clients handle this gracefully as the HTTP connection stays open during boot. Subsequent requests have no delay.
 
 ## Rate Limiting Design
 
-### Layer 1: Fly.io Edge
+### Layer 1: Render Edge
 
-Fly.io provides built-in L3/L4 DDoS protection and connection limiting at the proxy level. Configuration via `fly.toml`:
+Render provides built-in L3/L4 DDoS protection and connection limiting at the proxy level. Configuration via `render.yaml`:
 
 - `auto_stop_machines = "stop"` — stops VM when no traffic (saves resources)
 - `auto_start_machines = true` — starts VM on incoming request
@@ -63,7 +63,7 @@ In-process middleware using token bucket algorithm per IP address.
 **Implementation:**
 - Sharded map (`[16]struct{ sync.RWMutex; m map[string]*rateBucket }`) for concurrent write performance, sharded by IP hash. Avoids `sync.Map` which is optimized for read-heavy workloads, not the frequent-write pattern of rate limiting.
 - Each bucket tracks: tokens remaining, last refill time, weighted request count per minute
-- IP extracted from `X-Forwarded-For` header (set by Fly.io proxy) with fallback to `RemoteAddr`
+- IP extracted from `X-Forwarded-For` header (set by Render proxy) with fallback to `RemoteAddr`
 - Background goroutine cleans up stale entries (no activity for 10 minutes) every 5 minutes
 
 ### Layer 3: Tool-Aware Cost Weighting
@@ -120,7 +120,7 @@ Additional HTTP headers for observability:
 
 A simple `/health` endpoint registered directly in `cmd/gosqlx-mcp/main.go` (not in the MCP server package). Returns server status for monitoring and uptime checks.
 
-`GET https://gosqlx-mcp.fly.dev/health` returns:
+`GET https://gosqlx.onrender.com/health` returns:
 ```json
 {
   "status": "ok",
@@ -147,7 +147,7 @@ Stage 2 (runtime): gcr.io/distroless/static
 
 Final image: ~12-15MB (Go static binary ~10-12MB + distroless base ~2MB).
 
-### fly.toml
+### render.yaml
 
 ```toml
 app = "gosqlx-mcp"
@@ -174,21 +174,21 @@ primary_region = "iad"
 ### CI/CD Workflow
 
 `.github/workflows/deploy-mcp.yml`:
-- **Trigger**: Push to `main` when paths match `cmd/gosqlx-mcp/**`, `pkg/mcp/**`, `Dockerfile`, `fly.toml`
-- **Steps**: Checkout → Setup flyctl → Deploy with `fly deploy --remote-only`
-- **Secret**: `FLY_API_TOKEN` (added to GitHub repo secrets)
+- **Trigger**: Push to `main` when paths match `cmd/gosqlx-mcp/**`, `pkg/mcp/**`, `Dockerfile`, `render.yaml`
+- **Steps**: Checkout → Setup render CLI → Deploy with `curl $RENDER_DEPLOY_HOOK_URL`
+- **Secret**: `RENDER_DEPLOY_HOOK_URL` (added to GitHub repo secrets)
 
 ## Files
 
 | File | Action | Purpose |
 |---|---|---|
 | `Dockerfile` | Create | Multi-stage Go build for gosqlx-mcp |
-| `fly.toml` | Create | Fly.io deployment configuration |
+| `render.yaml` | Create | Render deployment configuration |
 | `pkg/mcp/ratelimit.go` | Create | Smart rate limiter middleware (3 layers) |
 | `pkg/mcp/ratelimit_test.go` | Create | Unit tests for rate limiter |
 | `pkg/mcp/server.go` | Modify | Add `Handler()` method to expose the HTTP handler chain |
 | `cmd/gosqlx-mcp/main.go` | Modify | Wrap handler with rate limiter, add `/health` endpoint |
-| `.github/workflows/deploy-mcp.yml` | Create | CI/CD workflow for Fly.io |
+| `.github/workflows/deploy-mcp.yml` | Create | CI/CD workflow for Render |
 | `docs/MCP_GUIDE.md` | Modify | Add "Remote Server" section with connection instructions |
 | `README.md` | Modify | Add remote MCP server badge/link |
 
@@ -198,19 +198,19 @@ primary_region = "iad"
 
 ```bash
 # Claude Code
-claude mcp add --transport http gosqlx https://gosqlx-mcp.fly.dev/mcp
+claude mcp add --transport http gosqlx https://gosqlx.onrender.com/mcp
 
 # Claude Desktop (claude_desktop_config.json)
 {
   "mcpServers": {
     "gosqlx": {
-      "url": "https://gosqlx-mcp.fly.dev/mcp"
+      "url": "https://gosqlx.onrender.com/mcp"
     }
   }
 }
 
 # Cursor
-Add remote MCP server URL: https://gosqlx-mcp.fly.dev/mcp
+Add remote MCP server URL: https://gosqlx.onrender.com/mcp
 ```
 
 ### Available Tools (after connecting)

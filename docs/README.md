@@ -2,9 +2,9 @@
 
 Comprehensive documentation for the GoSQLX SQL parsing SDK.
 
-**Current Version**: v1.10.0 | **Last Updated**: 2026-03-13
+**Current Version**: v1.12.0 | **Last Updated**: 2026-03-15
 
-## Feature Overview (v1.10.0)
+## Feature Overview (v1.12.0)
 
 GoSQLX is a production-ready, high-performance SQL parsing SDK for Go with comprehensive feature support:
 

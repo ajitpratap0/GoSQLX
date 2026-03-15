@@ -73,7 +73,7 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 - **MCP Server** (v1.10.0): `gosqlx-mcp` exposes all 7 SQL tools as [Model Context Protocol](https://modelcontextprotocol.io) tools over streamable HTTP — integrate GoSQLX into Claude, Cursor, and any MCP-compatible AI assistant. **[Public remote server available](https://mcp.gosqlx.dev/health)** — no install required
 - **Production Ready**: Battle-tested with 0 race conditions detected, ~85% SQL-99 compliance, Apache-2.0 licensed
 
-### Performance & Quality Highlights (v1.10.0)
+### Performance & Quality Highlights (v1.12.0)
 
 <div align="center">
 
@@ -81,22 +81,22 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 |:---------:|:-------:|:----------:|:----------:|:-------:|:---------:|
 | Faster Parsing | Peak Ops/sec | Latency | SQL Dialects | Parser Coverage | New Commits |
 
-**v1.10.0 Released** • **MCP Server** • **7 AI-Ready SQL Tools** • **Streamable HTTP** • **Bearer Auth** • **Go 1.23+**
+**v1.12.0 Released** • **MCP Server** • **7 AI-Ready SQL Tools** • **Streamable HTTP** • **Bearer Auth** • **Go 1.23+**
 
 </div>
 
-### What's New in v1.10.0
+### What's New in v1.12.0
 
 <div align="center">
 
 | Feature | Description |
 |---------|-------------|
+| **Custom Domain** | [gosqlx.dev](https://gosqlx.dev) — official project domain with product website |
+| **Remote MCP Server** | [mcp.gosqlx.dev](https://mcp.gosqlx.dev/health) — public remote MCP server, no install required |
+| **WASM Playground** | Interactive SQL playground powered by WebAssembly at [gosqlx.dev/playground](https://gosqlx.dev/playground) |
+| **Product Website** | Full product website with docs, playground, and getting started guides |
 | **MCP Server** | All GoSQLX SQL capabilities as [Model Context Protocol](https://modelcontextprotocol.io) tools over streamable HTTP |
 | **7 MCP Tools** | `validate_sql`, `format_sql`, `parse_sql`, `extract_metadata`, `security_scan`, `lint_sql`, `analyze_sql` |
-| **Bearer Auth** | Optional authentication via `GOSQLX_MCP_AUTH_TOKEN` environment variable |
-| **Concurrent Analysis** | `analyze_sql` fans out all 6 tools concurrently via `sync.WaitGroup` |
-| **Multi-Dialect MCP** | Validate against postgresql, mysql, sqlite, sqlserver, oracle, snowflake, or generic |
-| **Go 1.23+** | Minimum Go version bumped to 1.23.0 (required by `mark3labs/mcp-go`) |
 
 See [CHANGELOG.md](CHANGELOG.md) for the complete release details. See [MCP_GUIDE.md](docs/MCP_GUIDE.md) for setup instructions.
 

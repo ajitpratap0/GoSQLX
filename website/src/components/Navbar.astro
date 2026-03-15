@@ -12,7 +12,10 @@ const navLinks = [
   <div class="container mx-auto px-4 flex items-center justify-between h-16">
     <!-- Logo -->
     <a href="/" class="flex items-center gap-2">
-      <img src="/images/logo.png" alt="GoSQLX" class="h-10" />
+      <picture>
+        <source srcset="/images/logo.webp" type="image/webp">
+        <img src="/images/logo.png" alt="GoSQLX" class="h-10" />
+      </picture>
     </a>
 
     <!-- Desktop Nav -->
@@ -41,10 +44,10 @@ const navLinks = [
     <!-- Mobile Hamburger -->
     <button
       id="mobile-menu-btn"
-      class="md:hidden text-slate-300 hover:text-white"
+      class="md:hidden text-slate-300 hover:text-white p-2"
       aria-label="Toggle menu"
     >
-      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
       </svg>
     </button>

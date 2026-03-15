@@ -46,7 +46,7 @@ func main() {
 	fmt.Println(transform.FormatSQL(stmt))
 	fmt.Println()
 
-	// Example 2: Column projection — remove sensitive columns
+	// Example 2: Column projection - remove sensitive columns
 	fmt.Println("=== Example 2: Column Projection ===")
 	tree, err = transform.ParseSQL("SELECT id, name, ssn, email, password FROM users")
 	if err != nil {
@@ -83,7 +83,7 @@ func main() {
 	fmt.Println(transform.FormatSQL(stmt))
 	fmt.Println()
 
-	// Example 4: Pagination — add LIMIT, OFFSET, ORDER BY
+	// Example 4: Pagination - add LIMIT, OFFSET, ORDER BY
 	fmt.Println("=== Example 4: Pagination ===")
 	tree, err = transform.ParseSQL("SELECT * FROM products WHERE category = 'electronics'")
 	if err != nil {
@@ -101,7 +101,7 @@ func main() {
 	fmt.Println(transform.FormatSQL(stmt))
 	fmt.Println()
 
-	// Example 5: Table migration — rename table references
+	// Example 5: Table migration - rename table references
 	fmt.Println("=== Example 5: Table Migration ===")
 	tree, err = transform.ParseSQL("SELECT users.id, users.name FROM users WHERE users.active = true")
 	if err != nil {

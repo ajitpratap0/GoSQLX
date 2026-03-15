@@ -179,7 +179,7 @@ type Number struct {
 	Long  bool
 }
 
-// Children implements Node and returns nil — Value has no child nodes.
+// Children implements Node and returns nil - Value has no child nodes.
 func (v Value) Children() []Node {
 	return nil
 }

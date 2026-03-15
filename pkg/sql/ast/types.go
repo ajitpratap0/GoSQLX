@@ -45,7 +45,7 @@ const (
 	AlterColumnDropNotNull
 )
 
-// Children implements Node and returns nil — AlterColumnOperation has no child nodes.
+// Children implements Node and returns nil - AlterColumnOperation has no child nodes.
 func (a *AlterColumnOperation) Children() []Node { return nil }
 
 // TokenLiteral implements Node and returns the SQL keyword phrase for this
@@ -108,7 +108,7 @@ type Query struct {
 // TokenLiteral implements Node and returns "QUERY".
 func (q *Query) TokenLiteral() string { return "QUERY" }
 
-// Children implements Node and returns nil — Query has no child nodes.
+// Children implements Node and returns nil - Query has no child nodes.
 func (q *Query) Children() []Node { return nil }
 
 // Setting represents a SET clause in an UPDATE statement
@@ -130,7 +130,7 @@ func (*Ident) expressionNode() {}
 // TokenLiteral implements Node and returns the identifier name.
 func (i *Ident) TokenLiteral() string { return i.Name }
 
-// Children implements Node and returns nil — Ident has no child nodes.
+// Children implements Node and returns nil - Ident has no child nodes.
 func (i *Ident) Children() []Node { return nil }
 
 // InputFormatClause represents the format specification for input data
@@ -150,7 +150,7 @@ type CommentDef struct {
 // TokenLiteral implements Node and returns "COMMENT".
 func (c *CommentDef) TokenLiteral() string { return "COMMENT" }
 
-// Children implements Node and returns nil — CommentDef has no child nodes.
+// Children implements Node and returns nil - CommentDef has no child nodes.
 func (c *CommentDef) Children() []Node { return nil }
 
 // OnCommit represents the ON COMMIT behavior for temporary tables

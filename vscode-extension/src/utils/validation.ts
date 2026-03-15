@@ -89,7 +89,7 @@ export function validateExecutablePath(execPath: unknown): ValidationResult {
 
     const trimmed = execPath.trim();
 
-    // Empty string is valid — means "use bundled binary or PATH fallback"
+    // Empty string is valid - means "use bundled binary or PATH fallback"
     if (trimmed.length === 0) {
         return { valid: true };
     }

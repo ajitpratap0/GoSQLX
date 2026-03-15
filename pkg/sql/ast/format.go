@@ -15,7 +15,7 @@
 // This file provides SQL formatting option types shared between the AST and
 // the formatter package.
 //
-// Rendering logic lives in pkg/formatter — AST nodes are pure data structures
+// Rendering logic lives in pkg/formatter - AST nodes are pure data structures
 // (no Format() methods). This separation mirrors the go/ast + go/printer split.
 package ast
 
@@ -92,17 +92,17 @@ func ReadableStyle() FormatOptions {
 // FormatStatementFunc is set by pkg/formatter.init() to enable deprecated
 // Statement.Format() wrappers.
 //
-// Deprecated: internal bridge — use pkg/formatter.FormatStatement() directly.
+// Deprecated: internal bridge - use pkg/formatter.FormatStatement() directly.
 var FormatStatementFunc func(Statement, FormatOptions) string
 
 // FormatExpressionFunc is set by pkg/formatter.init() to enable deprecated
 // Expression.Format() wrappers.
 //
-// Deprecated: internal bridge — use pkg/formatter.FormatExpression() directly.
+// Deprecated: internal bridge - use pkg/formatter.FormatExpression() directly.
 var FormatExpressionFunc func(Expression, FormatOptions) string
 
 // FormatASTFunc is set by pkg/formatter.init() to enable the deprecated
 // AST.Format() wrapper.
 //
-// Deprecated: internal bridge — use pkg/formatter.FormatAST() directly.
+// Deprecated: internal bridge - use pkg/formatter.FormatAST() directly.
 var FormatASTFunc func(*AST, FormatOptions) string

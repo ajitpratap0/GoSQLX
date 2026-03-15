@@ -15,9 +15,9 @@
 // Package parser - expressions.go
 // Core expression parsing: precedence-climbing hierarchy from OR down to JSON/cast operators.
 // Related modules:
-//   - expressions_literal.go   — literals, identifiers, qualified names, parsePrimaryExpression
-//   - expressions_operators.go — comparison, BETWEEN, IN, LIKE, IS NULL, array subscripts
-//   - expressions_complex.go   — CASE, CAST, INTERVAL, ARRAY constructors
+//   - expressions_literal.go   - literals, identifiers, qualified names, parsePrimaryExpression
+//   - expressions_operators.go - comparison, BETWEEN, IN, LIKE, IS NULL, array subscripts
+//   - expressions_complex.go   - CASE, CAST, INTERVAL, ARRAY constructors
 
 package parser
 

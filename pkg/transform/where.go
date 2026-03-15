@@ -103,7 +103,7 @@ func ReplaceWhere(condition ast.Expression) Rule {
 // as an AND condition to the existing WHERE clause.
 //
 // WARNING: sql parameter must not contain untrusted user input.
-// This function parses raw SQL — passing unsanitized input could
+// This function parses raw SQL - passing unsanitized input could
 // produce unintended query modifications. Use parameterized queries
 // or construct AST nodes directly for untrusted input.
 func AddWhereFromSQL(sql string) Rule {

@@ -260,7 +260,7 @@ func TestParseMultiple_StateIsolation(t *testing.T) {
 	queries := []string{
 		// Complex nested query that exercises recursion depth
 		"SELECT * FROM (SELECT id, name FROM (SELECT * FROM users) AS inner_t) AS outer_t WHERE id > 1",
-		// Simple query — must parse cleanly with no leftover depth/state
+		// Simple query - must parse cleanly with no leftover depth/state
 		"SELECT 1",
 		// INSERT to confirm different statement types work after SELECT
 		"INSERT INTO logs (msg) VALUES ('ok')",

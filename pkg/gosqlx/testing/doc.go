@@ -15,9 +15,9 @@
 /*
 Package testing provides comprehensive SQL parsing test helpers for use in Go test suites.
 
-This package offers assertion and requirement functions — including AssertValidSQL,
+This package offers assertion and requirement functions - including AssertValidSQL,
 AssertInvalidSQL, RequireParse, AssertTables, AssertColumns, AssertParsesTo, and
-AssertErrorContains — for validating SQL parsing, formatting, and metadata extraction.
+AssertErrorContains - for validating SQL parsing, formatting, and metadata extraction.
 It integrates seamlessly with Go's standard testing package and follows patterns similar to
 testify/assert and testify/require.
 

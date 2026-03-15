@@ -15,9 +15,9 @@
 // Package parser - select.go
 // Core SELECT statement parsing.
 // Related modules:
-//   - select_clauses.go  — FROM, WHERE, GROUP BY, HAVING, ORDER BY, LIMIT, FETCH, FOR
-//   - select_set_ops.go  — UNION, INTERSECT, EXCEPT
-//   - select_subquery.go — derived tables, JOIN table references, table hints
+//   - select_clauses.go  - FROM, WHERE, GROUP BY, HAVING, ORDER BY, LIMIT, FETCH, FOR
+//   - select_set_ops.go  - UNION, INTERSECT, EXCEPT
+//   - select_subquery.go - derived tables, JOIN table references, table hints
 
 package parser
 
@@ -172,7 +172,7 @@ func (p *Parser) parseDistinctModifier() (isDistinct bool, distinctOnColumns []a
 // Returns nil when the current dialect is not SQL Server or TOP is absent.
 //
 // Note: "TOP" is detected via a string comparison rather than a dedicated token-type
-// constant because the lexer does not define a TokenTypeTOP — it tokenises TOP as a
+// constant because the lexer does not define a TokenTypeTOP - it tokenises TOP as a
 // plain identifier/keyword literal.  A future lexer enhancement could introduce
 // models.TokenTypeTop and replace the strings.ToUpper check below.
 func (p *Parser) parseTopClause() (*ast.TopClause, error) {

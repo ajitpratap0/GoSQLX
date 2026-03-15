@@ -9,7 +9,7 @@ const benchmarks = [
   { name: 'INSERT', desc: 'Simple INSERT statement', nsPerOp: 1000, m4: '~670 ns/op' },
 ];
 ---
-<BaseLayout title="Benchmarks - GoSQLX" description="GoSQLX performance benchmarks — parse throughput, memory efficiency, and concurrency data">
+<BaseLayout title="Benchmarks - GoSQLX" description="GoSQLX performance benchmarks - parse throughput, memory efficiency, and concurrency data">
   <main>
   <!-- Hero -->
   <section class="bg-slate-900 pt-24 pb-16 text-center">
@@ -76,10 +76,10 @@ const benchmarks = [
     <div class="max-w-3xl mx-auto px-6">
       <h2 class="text-xl font-bold text-white mb-4">Methodology</h2>
       <ul class="text-slate-300 text-sm space-y-2 list-disc list-inside">
-        <li>All benchmarks use <code class="text-blue-300">ParseFromModelTokens</code> — the production code path with zero-copy tokenization.</li>
+        <li>All benchmarks use <code class="text-blue-300">ParseFromModelTokens</code> - the production code path with zero-copy tokenization.</li>
         <li>Apple M4 numbers are measured locally; CI baselines include tolerance (60-65%) for shared runner variability.</li>
         <li>Memory efficiency achieved via <code class="text-blue-300">sync.Pool</code> object pooling for AST nodes, tokenizers, and statements.</li>
-        <li>Concurrency tested with 20,000+ goroutines under race detection — zero races found.</li>
+        <li>Concurrency tested with 20,000+ goroutines under race detection - zero races found.</li>
         <li>Data sourced from <code class="text-blue-300">performance_baselines.json</code> (v1.10.4, updated 2026-03-13).</li>
       </ul>
     </div>

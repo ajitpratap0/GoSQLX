@@ -14,9 +14,9 @@
 
 // Package parser - dml.go
 // DML statement parsing has been decomposed into focused modules:
-//   - dml_insert.go  — INSERT, ON CONFLICT, ON DUPLICATE KEY UPDATE, RETURNING, OUTPUT
-//   - dml_update.go  — UPDATE
-//   - dml_delete.go  — DELETE
-//   - dml_merge.go   — MERGE (SQL:2003 F312)
+//   - dml_insert.go  - INSERT, ON CONFLICT, ON DUPLICATE KEY UPDATE, RETURNING, OUTPUT
+//   - dml_update.go  - UPDATE
+//   - dml_delete.go  - DELETE
+//   - dml_merge.go   - MERGE (SQL:2003 F312)
 
 package parser

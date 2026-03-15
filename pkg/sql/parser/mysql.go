@@ -30,7 +30,7 @@ func (p *Parser) parseMatchAgainst(matchFunc *ast.FunctionCall) (ast.Expression,
 	}
 	p.advance() // Consume (
 
-	// Parse search expression (just the primary — not full expression, to avoid IN being eaten)
+	// Parse search expression (just the primary - not full expression, to avoid IN being eaten)
 	searchExpr, err := p.parsePrimaryExpression()
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse AGAINST expression: %w", err)
@@ -150,7 +150,7 @@ func (p *Parser) parseDescribeStatement() (ast.Statement, error) {
 	// For EXPLAIN SELECT ..., defer to parseStatement for the SELECT
 	// For DESCRIBE table_name, just parse the table name
 	if p.isType(models.TokenTypeSelect) {
-		// EXPLAIN SELECT ... — treat as describe with the query text
+		// EXPLAIN SELECT ... - treat as describe with the query text
 		// For now, just skip to parse the select
 		p.advance()
 		stmt, err := p.parseSelectWithSetOperations()

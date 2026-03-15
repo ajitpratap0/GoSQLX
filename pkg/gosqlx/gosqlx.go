@@ -574,7 +574,7 @@ func Format(sql string, options FormatOptions) (string, error) {
 
 // ParseWithRecovery tokenizes and parses SQL with error recovery, returning
 // partial AST statements and all collected errors. Unlike Parse, it does not
-// stop at the first error — it synchronises and continues, collecting every
+// stop at the first error - it synchronises and continues, collecting every
 // error it can find. This is ideal for IDE / LSP use-cases where the user
 // wants to see all diagnostics at once.
 //
@@ -602,15 +602,15 @@ func ParseWithRecovery(sql string) ([]ast.Statement, []error) {
 // apply dialect-specific rules (e.g., MySQL-specific syntax, PostgreSQL extensions).
 //
 // Supported dialects:
-//   - keywords.DialectGeneric    — generic SQL (default fallback)
-//   - keywords.DialectMySQL      — MySQL / MariaDB
-//   - keywords.DialectPostgreSQL — PostgreSQL
-//   - keywords.DialectSQLite     — SQLite
-//   - keywords.DialectSQLServer  — Microsoft SQL Server (T-SQL)
-//   - keywords.DialectOracle     — Oracle Database (PL/SQL)
-//   - keywords.DialectSnowflake  — Snowflake SQL
+//   - keywords.DialectGeneric    - generic SQL (default fallback)
+//   - keywords.DialectMySQL      - MySQL / MariaDB
+//   - keywords.DialectPostgreSQL - PostgreSQL
+//   - keywords.DialectSQLite     - SQLite
+//   - keywords.DialectSQLServer  - Microsoft SQL Server (T-SQL)
+//   - keywords.DialectOracle     - Oracle Database (PL/SQL)
+//   - keywords.DialectSnowflake  - Snowflake SQL
 //
-// Example — parse MySQL-specific syntax:
+// Example - parse MySQL-specific syntax:
 //
 //	sql := "INSERT INTO t (id, name) VALUES (1, 'Alice') ON DUPLICATE KEY UPDATE name=VALUES(name)"
 //	ast, err := gosqlx.ParseWithDialect(sql, keywords.DialectMySQL)
@@ -618,7 +618,7 @@ func ParseWithRecovery(sql string) ([]ast.Statement, []error) {
 //	    log.Fatal(err)
 //	}
 //
-// Example — parse PostgreSQL JSON operators:
+// Example - parse PostgreSQL JSON operators:
 //
 //	sql := "SELECT data->>'name' FROM users"
 //	ast, err := gosqlx.ParseWithDialect(sql, keywords.DialectPostgreSQL)

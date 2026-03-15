@@ -281,7 +281,7 @@
 // v1.12.0: Custom domain gosqlx.dev, remote MCP server at mcp.gosqlx.dev
 // v1.11.1: Website audit fixes, SEO, lazy WASM, design polish
 // v1.11.0: VS Code Marketplace publishing with bundled platform-specific binaries
-// v1.10.0: MCP Server — all SQL tools as Model Context Protocol tools over streamable HTTP
+// v1.10.0: MCP Server - all SQL tools as Model Context Protocol tools over streamable HTTP
 // v1.9.0: SQLite PRAGMA, tautology detection, 19 post-UAT fixes
 // v1.8.0: Multi-dialect engine, query transforms, WASM playground, AST-to-SQL roundtrip
 // v1.6.0: PostgreSQL extensions (LATERAL, JSON operators, DISTINCT ON, FILTER, RETURNING)

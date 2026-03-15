@@ -173,7 +173,7 @@ The codebase is organized into focused packages with clear responsibilities and 
   - **Features**: Rate limiting (100 req/sec), content limits (10MB messages, 5MB documents), UTF-8 safe position handling
   - **Integration**: Used by VSCode extension and other LSP clients
 
-- **pkg/mcp**: MCP server — Config, BearerAuthMiddleware, 7 tool handlers, Server (thin adapter over pkg/gosqlx, pkg/linter, pkg/sql/security)
+- **pkg/mcp**: MCP server - Config, BearerAuthMiddleware, 7 tool handlers, Server (thin adapter over pkg/gosqlx, pkg/linter, pkg/sql/security)
 
 - **pkg/linter** (96.7% coverage): SQL linting and style checking
   - **Architecture**: Linter → Rules → Context
@@ -1520,7 +1520,7 @@ This architecture has been validated for production use with comprehensive testi
 
 ## MCP Architecture
 
-The MCP server (`pkg/mcp/`) is a thin HTTP adapter with no business logic — every tool handler delegates to existing GoSQLX packages.
+The MCP server (`pkg/mcp/`) is a thin HTTP adapter with no business logic - every tool handler delegates to existing GoSQLX packages.
 
 ### Component Overview
 

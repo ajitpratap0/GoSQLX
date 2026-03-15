@@ -362,9 +362,9 @@ Apache License 2.0 - see [LICENSE](https://github.com/ajitpratap0/GoSQLX/blob/ma
 
 ### 1.10.1
 
-- **Bundled binary** — GoSQLX binary included in the extension; no separate installation needed
-- **Platform-specific packages** — optimized downloads for linux-x64, linux-arm64, darwin-x64, darwin-arm64, win32-x64
-- **Smart binary resolution** — uses bundled binary, falls back to user setting or PATH
+- **Bundled binary** - GoSQLX binary included in the extension; no separate installation needed
+- **Platform-specific packages** - optimized downloads for linux-x64, linux-arm64, darwin-x64, darwin-arm64, win32-x64
+- **Smart binary resolution** - uses bundled binary, falls back to user setting or PATH
 - **Automated publishing** via GitHub Actions on every GoSQLX release tag
 
 ### 0.1.0

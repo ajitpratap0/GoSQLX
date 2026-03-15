@@ -4,7 +4,7 @@
  * Resolves via a four-step fallback chain:
  *   1. User-configured explicit path (gosqlx.executablePath setting)
  *   2. Bundled binary at <extensionPath>/bin/gosqlx[.exe] (with optional checksum verification)
- *   3. PATH lookup ("gosqlx") — can be forced via gosqlx.forcePathLookup setting
+ *   3. PATH lookup ("gosqlx") - can be forced via gosqlx.forcePathLookup setting
  *   4. 'gosqlx' as last resort
  *
  * Dependencies are injected so the logic is testable without VS Code or the filesystem.
@@ -87,7 +87,7 @@ async function verifyChecksum(
 
         return expectedHash === actualHash;
     } catch {
-        // Sidecar file missing or unreadable — skip verification
+        // Sidecar file missing or unreadable - skip verification
         return true;
     }
 }
@@ -114,7 +114,7 @@ export async function getBinaryPath(deps: BinaryResolverDeps): Promise<string> {
 
 /**
  * Resolves the gosqlx binary path and returns the full result with source info.
- * Does NOT use the cache — always performs fresh resolution.
+ * Does NOT use the cache - always performs fresh resolution.
  *
  * @param deps  Injected dependencies.
  * @returns     Resolution result with path, source, and checksum status.

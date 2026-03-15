@@ -893,7 +893,7 @@ func TestReleaseASTMixedDMLAndDDL(t *testing.T) {
 		alt.Name = "my_role"
 		a.Statements = append(a.Statements, alt)
 
-		// Release everything — must not panic and must clean up
+		// Release everything - must not panic and must clean up
 		ReleaseAST(a)
 
 		if len(a.Statements) != 0 {

@@ -50,7 +50,7 @@ func parseSQLStrict(t *testing.T, sql string) error {
 }
 
 // =============================================================================
-// Issue #296 — Parser rejects malformed SQL with descriptive errors
+// Issue #296 - Parser rejects malformed SQL with descriptive errors
 // =============================================================================
 
 func TestMalformedSQL_SelectFromWithoutColumns(t *testing.T) {
@@ -114,7 +114,7 @@ func TestMalformedSQL_WhereFollowedByOrderBy(t *testing.T) {
 }
 
 // =============================================================================
-// Regression tests — valid SQL must still parse correctly
+// Regression tests - valid SQL must still parse correctly
 // =============================================================================
 
 func TestValidSQL_SelectStar(t *testing.T) {
@@ -190,7 +190,7 @@ func TestValidSQL_TrailingSemicolon(t *testing.T) {
 }
 
 // =============================================================================
-// Issue #300 — Strict mode for empty statements
+// Issue #300 - Strict mode for empty statements
 // =============================================================================
 
 func TestStrictMode_RejectsLeadingSemicolons(t *testing.T) {
@@ -255,7 +255,7 @@ func TestStrictMode_WithApplyOptions(t *testing.T) {
 }
 
 // =============================================================================
-// Issue #306 — ParseWithPositions strict mode trailing semicolon
+// Issue #306 - ParseWithPositions strict mode trailing semicolon
 // =============================================================================
 
 func parseSQLStrictWithPositions(t *testing.T, sql string) error {
@@ -297,7 +297,7 @@ func TestStrictMode_ParseWithPositions_MultipleStatements(t *testing.T) {
 }
 
 // =============================================================================
-// Issue #306 — WHERE clause guard keywords (FETCH, FOR)
+// Issue #306 - WHERE clause guard keywords (FETCH, FOR)
 // =============================================================================
 
 func TestMalformedSQL_WhereFollowedByFetch(t *testing.T) {

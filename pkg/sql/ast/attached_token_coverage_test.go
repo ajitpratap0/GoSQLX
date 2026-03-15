@@ -59,7 +59,7 @@ func TestAttachedToken_Equal(t *testing.T) {
 	a := NewAttachedToken(NewTokenWithSpan(Token{Type: Comma}, Span{}))
 	b := NewAttachedToken(NewTokenWithSpan(Token{Type: Period}, Span{Start: Location{5, 5}}))
 	// AttachedToken.Equal() intentionally returns true for all comparisons
-	// (see attached_token.go) — tokens are compared by AST structure, not position
+	// (see attached_token.go) - tokens are compared by AST structure, not position
 	if !a.Equal(b) {
 		t.Error("ALL AttachedTokens should be equal (by design)")
 	}

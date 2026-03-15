@@ -373,7 +373,7 @@ func (a *AlterConnectorOperation) alterOperationNode() {}
 // TokenLiteral implements Node and returns "ALTER CONNECTOR".
 func (a AlterConnectorOperation) TokenLiteral() string { return "ALTER CONNECTOR" }
 
-// Children implements Node and returns nil — AlterConnectorOperation has no child nodes.
+// Children implements Node and returns nil - AlterConnectorOperation has no child nodes.
 func (a AlterConnectorOperation) Children() []Node { return nil }
 
 // AlterConnectorOwner represents the new owner of a connector

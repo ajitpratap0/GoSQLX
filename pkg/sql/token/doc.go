@@ -17,7 +17,7 @@
 // A Token is the fundamental unit produced by the GoSQLX tokenizer: it pairs a
 // models.TokenType integer constant (e.g., models.TokenTypeSelect, models.TokenTypeIdent)
 // with the raw literal string from the source SQL. The integer-based TokenType taxonomy
-// covers all SQL token categories — DML keywords (SELECT, INSERT, UPDATE, DELETE),
+// covers all SQL token categories - DML keywords (SELECT, INSERT, UPDATE, DELETE),
 // DDL keywords (CREATE, ALTER, DROP), punctuation, operators, literals, and identifiers.
 // The legacy string-based token.Type was removed in #215; all code should use models.TokenType.
 //
@@ -54,7 +54,7 @@
 // The package provides an object pool for zero-allocation token reuse:
 //
 //	tok := token.Get()
-//	defer token.Put(tok)  // MANDATORY — return to pool when done
+//	defer token.Put(tok)  // MANDATORY - return to pool when done
 //
 //	tok.Type = models.TokenTypeSelect
 //	tok.Literal = "SELECT"

@@ -10,7 +10,7 @@ assignees: ''
 
 <!-- Which file, section, or topic is affected? Link to the specific page if possible. -->
 
-**File / section**: <!-- e.g. docs/CLI_GUIDE.md — gosqlx analyze section -->
+**File / section**: <!-- e.g. docs/CLI_GUIDE.md - gosqlx analyze section -->
 
 ## What is wrong or missing?
 

@@ -1100,7 +1100,7 @@ For each feature implementation:
 
 ## References
 
-1. **SQL-99 Standard**: ISO/IEC 9075:1999 Information technology — Database languages — SQL
+1. **SQL-99 Standard**: ISO/IEC 9075:1999 Information technology - Database languages - SQL
 2. **GoSQLX Codebase**: Version 1.5.1 (commit 0531c33)
 3. **SQL Compatibility Matrix**: `docs/SQL_COMPATIBILITY.md`
 4. **Test Data**: `testdata/postgresql/`, `testdata/oracle/`, `testdata/mssql/`

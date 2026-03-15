@@ -389,7 +389,7 @@ func runSecurityScan(sql string, filename string, outWriter io.Writer) int {
 	scanner := sqlsecurity.NewScanner()
 	result := scanner.Scan(tree)
 	for _, f := range result.Findings {
-		fmt.Fprintf(outWriter, "  [%s] %s:%d:%d — %s (%s)\n",
+		fmt.Fprintf(outWriter, "  [%s] %s:%d:%d - %s (%s)\n",
 			f.Severity, filename, f.Line, f.Column, f.Description, f.Pattern)
 	}
 	return result.TotalCount

@@ -522,7 +522,7 @@ GOSQLX_MCP_HOST=0.0.0.0 GOSQLX_MCP_PORT=8080 GOSQLX_MCP_AUTH_TOKEN=my-secret gos
 
 - `GOSQLX_MCP_AUTH_TOKEN` enables bearer token authentication. When set, all requests must include `Authorization: Bearer <token>`.
 - `GOSQLX_MCP_PORT` rejects out-of-range or non-integer values at startup with a descriptive error.
-- MCP server configuration is independent of `.gosqlx.yml` — the YAML config file is not read by `gosqlx-mcp`.
+- MCP server configuration is independent of `.gosqlx.yml` - the YAML config file is not read by `gosqlx-mcp`.
 
 See [MCP Server Guide](MCP_GUIDE.md) for the full startup and auth reference.
 

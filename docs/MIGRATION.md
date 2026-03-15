@@ -7,8 +7,8 @@
 No breaking API changes. Drop-in upgrade for existing code.
 
 ### New: MCP Server
-- `pkg/mcp/` — MCP server package with 7 SQL tools
-- `cmd/gosqlx-mcp/` — Standalone MCP server binary
+- `pkg/mcp/` - MCP server package with 7 SQL tools
+- `cmd/gosqlx-mcp/` - Standalone MCP server binary
 - See `docs/MCP_GUIDE.md` for usage
 
 ---
@@ -48,7 +48,7 @@ This guide covers breaking changes in GoSQLX v1.8.0 and how to update your code.
 | Direct `token.Token` struct field access | **Yes** | See below |
 | String-based token constants (`token.SELECT`, etc.) | **Yes** | See below |
 | `token.Token.ModelType` field | **Yes** | Renamed to `Type` |
-| `ConvertTokensForParser()` function | **Yes** | Removed — use `ParseFromModelTokens()` |
+| `ConvertTokensForParser()` function | **Yes** | Removed - use `ParseFromModelTokens()` |
 
 **If you only use the high-level `gosqlx` package or the CLI tool, v1.8.0 is fully backward compatible and no changes are needed.**
 
@@ -60,12 +60,12 @@ The legacy string-based `token.Type` system has been completely removed. All tok
 
 ### What Was Removed
 
-1. **`type Type string`** from `pkg/sql/token` — the string-based type definition
-2. **`Type` (string) field** from `token.Token` struct — replaced by the renamed `ModelType` → `Type`
-3. **All string-based token constants** — `token.SELECT`, `token.FROM`, `token.WHERE`, etc.
-4. **`stringTypeToModelType` map** — the bridge between old and new type systems
-5. **`normalizeTokens()` function** — no longer needed with unified types
-6. **`ConvertTokensForParser()` function** — replaced by `ParseFromModelTokens()`
+1. **`type Type string`** from `pkg/sql/token` - the string-based type definition
+2. **`Type` (string) field** from `token.Token` struct - replaced by the renamed `ModelType` → `Type`
+3. **All string-based token constants** - `token.SELECT`, `token.FROM`, `token.WHERE`, etc.
+4. **`stringTypeToModelType` map** - the bridge between old and new type systems
+5. **`normalizeTokens()` function** - no longer needed with unified types
+6. **`ConvertTokensForParser()` function** - replaced by `ParseFromModelTokens()`
 
 ### Migration Steps
 
@@ -94,7 +94,7 @@ tok := token.Token{
 #### Step 2: Update Token Type Comparisons
 
 ```go
-// BEFORE (v1.7.0) — string comparison
+// BEFORE (v1.7.0) - string comparison
 if tok.Type == token.SELECT {
     // handle SELECT
 }
@@ -103,7 +103,7 @@ if tok.Type == "SELECT" {
     // also worked
 }
 
-// AFTER (v1.8.0) — integer comparison (faster)
+// AFTER (v1.8.0) - integer comparison (faster)
 if tok.Type == models.TokenTypeSelect {
     // handle SELECT
 }
@@ -187,10 +187,10 @@ fmt.Println(tok.Type.String()) // "SELECT"
 
 ### New Dialect API
 
-v1.8.0 adds dialect-aware parsing. No migration needed — existing code defaults to PostgreSQL:
+v1.8.0 adds dialect-aware parsing. No migration needed - existing code defaults to PostgreSQL:
 
 ```go
-// New (optional) — parse with explicit dialect
+// New (optional) - parse with explicit dialect
 ast, err := parser.ParseWithDialect(sql, "mysql")
 err = parser.ValidateWithDialect(sql, "mysql")
 ```
@@ -250,12 +250,12 @@ GoSQLX was relicensed from AGPL-3.0 to **Apache License 2.0** in this release cy
 
 ## Quick Checklist
 
-- [ ] Search your code for `token.SELECT`, `token.FROM`, etc. — replace with `models.TokenType*`
-- [ ] Search for `tok.ModelType` — rename to `tok.Type`
-- [ ] Search for `tok.Type == "..."` (string comparison) — replace with `tok.Type == models.TokenType*`
-- [ ] Search for `ConvertTokensForParser` — replace with `ParseFromModelTokens`
-- [ ] Search for `SetDebugLogger` — replace with `SetLogger`
-- [ ] Search for `pkg/optimizer` imports — replace with `pkg/advisor`
+- [ ] Search your code for `token.SELECT`, `token.FROM`, etc. - replace with `models.TokenType*`
+- [ ] Search for `tok.ModelType` - rename to `tok.Type`
+- [ ] Search for `tok.Type == "..."` (string comparison) - replace with `tok.Type == models.TokenType*`
+- [ ] Search for `ConvertTokensForParser` - replace with `ParseFromModelTokens`
+- [ ] Search for `SetDebugLogger` - replace with `SetLogger`
+- [ ] Search for `pkg/optimizer` imports - replace with `pkg/advisor`
 - [ ] Run `go build ./...` to verify
 - [ ] Run `go test -race ./...` to validate
 

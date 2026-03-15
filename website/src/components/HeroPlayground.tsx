@@ -115,7 +115,7 @@ function InteractiveHero() {
             Parse SQL at the speed of Go
           </h1>
           <p className="text-lg text-slate-400">
-            Try it now — paste SQL and see results in real time
+            Try it now - paste SQL and see results in real time
           </p>
         </div>
 
@@ -254,7 +254,7 @@ export default function HeroPlayground() {
             Parse SQL at the speed of Go
           </h1>
           <p className="text-lg text-slate-400">
-            Try it now — paste SQL and see results in real time
+            Try it now - paste SQL and see results in real time
           </p>
         </div>
 

@@ -189,13 +189,13 @@ func GenerateHint(code ErrorCode, expected, found string) string {
 //
 // The available keys are:
 //
-//	"missing_from"     — SELECT without a FROM clause
-//	"missing_where"    — reminder to add a WHERE filter
-//	"unclosed_paren"   — unbalanced parentheses
-//	"missing_comma"    — list items not separated by commas
-//	"invalid_join"     — JOIN clause missing ON or USING
-//	"duplicate_alias"  — non-unique table alias
-//	"ambiguous_column" — unqualified column reference in multi-table query
+//	"missing_from"     - SELECT without a FROM clause
+//	"missing_where"    - reminder to add a WHERE filter
+//	"unclosed_paren"   - unbalanced parentheses
+//	"missing_comma"    - list items not separated by commas
+//	"invalid_join"     - JOIN clause missing ON or USING
+//	"duplicate_alias"  - non-unique table alias
+//	"ambiguous_column" - unqualified column reference in multi-table query
 //
 // Use GetCommonHint for safe lookup with a zero-value fallback.
 var CommonHints = map[string]string{

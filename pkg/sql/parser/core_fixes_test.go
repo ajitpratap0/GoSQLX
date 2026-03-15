@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package parser — regression tests for CORE-1, CORE-2, CORE-3 bug fixes.
+// Package parser - regression tests for CORE-1, CORE-2, CORE-3 bug fixes.
 package parser
 
 import (
@@ -128,7 +128,7 @@ func TestParser_NaturalJoin(t *testing.T) {
 }
 
 // TestParser_NaturalJoinExplicit tests NATURAL INNER JOIN, NATURAL LEFT JOIN, etc.
-// — these should still produce "NATURAL INNER", "NATURAL LEFT", etc.
+// - these should still produce "NATURAL INNER", "NATURAL LEFT", etc.
 func TestParser_NaturalJoinExplicit(t *testing.T) {
 	cases := []struct {
 		sql      string
@@ -171,7 +171,7 @@ func TestParser_NaturalJoinExplicit(t *testing.T) {
 // is parsed correctly. The WINDOW clause definition (WINDOW w AS (...)) is a
 // separate parser feature; here we focus only on the OVER <name> syntax.
 func TestParser_OverWindowName(t *testing.T) {
-	// Using a bare OVER w without an inline WINDOW clause definition — the
+	// Using a bare OVER w without an inline WINDOW clause definition - the
 	// parser accepts the reference even if no corresponding WINDOW clause is
 	// present (the semantic check would be a linting concern, not a parse error).
 	sql := "SELECT SUM(amount) OVER w FROM orders"

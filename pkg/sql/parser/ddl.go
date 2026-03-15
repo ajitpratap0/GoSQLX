@@ -15,9 +15,9 @@
 // Package parser - ddl.go
 // DDL statement parsing: CREATE TABLE core, DROP, TRUNCATE.
 // Related modules:
-//   - ddl_columns.go  — column definitions and table constraints
-//   - ddl_index.go    — CREATE INDEX
-//   - ddl_view.go     — CREATE VIEW, CREATE MATERIALIZED VIEW, REFRESH
+//   - ddl_columns.go  - column definitions and table constraints
+//   - ddl_index.go    - CREATE INDEX
+//   - ddl_view.go     - CREATE VIEW, CREATE MATERIALIZED VIEW, REFRESH
 
 package parser
 

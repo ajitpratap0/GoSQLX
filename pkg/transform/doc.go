@@ -14,7 +14,7 @@
 
 // Package transform provides composable SQL query rewriting via AST manipulation.
 //
-// This is GoSQLX's key differentiator — enabling safe, programmatic SQL modification
+// This is GoSQLX's key differentiator - enabling safe, programmatic SQL modification
 // without string concatenation. All transforms operate on AST nodes from pkg/sql/ast
 // and preserve structural validity, meaning a roundtrip (parse -> transform -> format)
 // always produces well-formed SQL. Transforms are defined by the Rule interface and

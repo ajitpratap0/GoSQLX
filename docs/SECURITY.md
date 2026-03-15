@@ -39,8 +39,8 @@ GoSQLX now includes a dedicated **SQL Injection Detection** package (`pkg/sql/se
 
 UNION-based injection detection is now split into two patterns to eliminate false positives:
 
-- **`PatternUnionInjection`** (CRITICAL): UNION combined with system table access (e.g., `information_schema`, `sqlite_master`) or NULL-padding — strongly indicates injection
-- **`PatternUnionGeneric`** (HIGH): Any `UNION SELECT` not matching the above — may be legitimate application code, requires review
+- **`PatternUnionInjection`** (CRITICAL): UNION combined with system table access (e.g., `information_schema`, `sqlite_master`) or NULL-padding - strongly indicates injection
+- **`PatternUnionGeneric`** (HIGH): Any `UNION SELECT` not matching the above - may be legitimate application code, requires review
 
 This split eliminates false-positive CRITICAL alerts on legitimate multi-query application code using `UNION`.
 

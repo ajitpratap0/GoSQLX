@@ -36,19 +36,19 @@
 
 ## What is GoSQLX?
 
-GoSQLX is a **production-ready SQL parsing SDK** for Go. It tokenizes, parses, and generates ASTs from SQL with zero-copy optimizations and intelligent object pooling — handling **1.25M+ operations per second** with sub-microsecond latency.
+GoSQLX is a **production-ready SQL parsing SDK** for Go. It tokenizes, parses, and generates ASTs from SQL with zero-copy optimizations and intelligent object pooling - handling **1.25M+ operations per second** with sub-microsecond latency.
 
 ```go
 ast, _ := gosqlx.Parse("SELECT u.name, COUNT(*) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name")
-// → Full AST with statements, columns, joins, grouping — ready for analysis, transformation, or formatting
+// → Full AST with statements, columns, joins, grouping - ready for analysis, transformation, or formatting
 ```
 
 ### Why GoSQLX?
 
-- **Not an ORM** — a parser. You get the AST, you decide what to do with it.
-- **Not slow** — zero-copy tokenization, sync.Pool recycling, no allocations on hot paths.
-- **Not limited** — PostgreSQL, MySQL, SQL Server, Oracle, SQLite, Snowflake. CTEs, window functions, MERGE, set operations.
-- **Not just a library** — CLI, VS Code extension, GitHub Action, MCP server, WASM playground, Python bindings.
+- **Not an ORM** - a parser. You get the AST, you decide what to do with it.
+- **Not slow** - zero-copy tokenization, sync.Pool recycling, no allocations on hot paths.
+- **Not limited** - PostgreSQL, MySQL, SQL Server, Oracle, SQLite, Snowflake. CTEs, window functions, MERGE, set operations.
+- **Not just a library** - CLI, VS Code extension, GitHub Action, MCP server, WASM playground, Python bindings.
 
 <br/>
 
@@ -115,7 +115,7 @@ gosqlx lint query.sql
 ```bash
 code --install-extension ajitpratap0.gosqlx
 ```
-Bundles the binary — zero setup. [Learn more →](https://gosqlx.dev/vscode/)
+Bundles the binary - zero setup. [Learn more →](https://gosqlx.dev/vscode/)
 
 ### 🤖 MCP Server (AI Integration)
 ```bash
@@ -166,7 +166,7 @@ claude mcp add --transport http gosqlx \
 
 ## Contributing
 
-GoSQLX is built by contributors like you. Whether it's a bug fix, new feature, documentation improvement, or just a typo — every contribution matters.
+GoSQLX is built by contributors like you. Whether it's a bug fix, new feature, documentation improvement, or just a typo - every contribution matters.
 
 ```bash
 git clone https://github.com/ajitpratap0/GoSQLX.git && cd GoSQLX
@@ -174,9 +174,9 @@ task check    # fmt → vet → lint → test (with race detection)
 ```
 
 1. **Fork & branch** from `main`
-2. **Write tests** — we use TDD and require race-free code
-3. **Run `task check`** — must pass before PR
-4. **Open a PR** — we review within 24 hours
+2. **Write tests** - we use TDD and require race-free code
+3. **Run `task check`** - must pass before PR
+4. **Open a PR** - we review within 24 hours
 
 📋 [Contributing Guide](CONTRIBUTING.md) · 📜 [Code of Conduct](CODE_OF_CONDUCT.md) · 🏛️ [Governance](GOVERNANCE.md)
 
@@ -198,7 +198,7 @@ task check    # fmt → vet → lint → test (with race detection)
 
 ## License
 
-Apache License 2.0 — see [LICENSE](LICENSE) for details.
+Apache License 2.0 - see [LICENSE](LICENSE) for details.
 
 ---
 

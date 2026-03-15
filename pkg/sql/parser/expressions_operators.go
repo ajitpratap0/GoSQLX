@@ -92,7 +92,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	// Check for LIKE/ILIKE operator
 	if p.isType(models.TokenTypeLike) || strings.EqualFold(p.currentToken.Token.Value, "ILIKE") {
 		operator := p.currentToken.Token.Value
-		// Reject ILIKE in non-PostgreSQL dialects — it is a PostgreSQL extension.
+		// Reject ILIKE in non-PostgreSQL dialects - it is a PostgreSQL extension.
 		if strings.EqualFold(operator, "ILIKE") &&
 			p.dialect != "" &&
 			p.dialect != string(keywords.DialectPostgreSQL) {

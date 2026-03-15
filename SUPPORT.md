@@ -64,6 +64,6 @@ This is an open source project maintained in spare time. Typical response times:
 |---------|--------|----------------|
 | v1.9.x | ✅ Active (current) | Go 1.21+ |
 | v1.8.x | ⚠️ Security fixes only | Go 1.21+ |
-| < v1.8 | ❌ End of life | — |
+| < v1.8 | ❌ End of life | - |
 
 Upgrade with: `go get github.com/ajitpratap0/GoSQLX@latest`

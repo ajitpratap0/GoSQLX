@@ -417,7 +417,7 @@ gosqlx lsp --log /tmp/lsp.log
 - **[Usage Guide](USAGE_GUIDE.md)** - Comprehensive patterns and examples
 - **[CLI Guide](CLI_GUIDE.md)** - Full CLI documentation and all commands
 - **[LSP Guide](LSP_GUIDE.md)** - Complete LSP server documentation for IDE integration
-- **[MCP Server Guide](MCP_GUIDE.md)** — Use GoSQLX as MCP tools inside Claude, Cursor, and other AI assistants
+- **[MCP Server Guide](MCP_GUIDE.md)** - Use GoSQLX as MCP tools inside Claude, Cursor, and other AI assistants
 - **[Linting Rules](LINTING_RULES.md)** - All 10 linting rules (L001-L010) reference
 - **[Configuration](CONFIGURATION.md)** - Configuration file (.gosqlx.yml) guide
 - **[API Reference](API_REFERENCE.md)** - Complete API documentation

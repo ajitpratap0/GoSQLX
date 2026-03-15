@@ -373,7 +373,7 @@ func TestMultipleStatementPositions(t *testing.T) {
 
 func TestPositionsWithoutPositionTracking(t *testing.T) {
 	// Bug 1 fix: ParseFromModelTokens now uses convertModelTokensWithPositions
-	// internally, so positions are always populated — even when the caller
+	// internally, so positions are always populated - even when the caller
 	// does not explicitly call ParseFromModelTokensWithPositions.
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package parser — UAT bug regression tests.
+// Package parser - UAT bug regression tests.
 //
 // Covers the four fixes from the UAT review:
 //  1. Error positions: parser errors must include correct line/column from token spans.
@@ -33,7 +33,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Bug 1 — Error positions (HIGH)
+// Bug 1 - Error positions (HIGH)
 // Every parser error used to say "line 0, column 0" regardless of position.
 // ParseFromModelTokens now uses convertModelTokensWithPositions internally.
 // ---------------------------------------------------------------------------
@@ -67,7 +67,7 @@ func TestBug1_ErrorPositionNonZeroOnSimpleSyntaxError(t *testing.T) {
 	sErr, ok := err.(*goerrors.Error)
 	if !ok {
 		// Error may be wrapped; try to unwrap one level
-		t.Logf("error type: %T — checking string for line info", err)
+		t.Logf("error type: %T - checking string for line info", err)
 		if !strings.Contains(err.Error(), "line 1") {
 			t.Errorf("expected error message to contain 'line 1', got: %v", err)
 		}
@@ -75,7 +75,7 @@ func TestBug1_ErrorPositionNonZeroOnSimpleSyntaxError(t *testing.T) {
 	}
 
 	if sErr.Location.Line == 0 && sErr.Location.Column == 0 {
-		t.Errorf("Bug 1 regression: error location is still 0,0 — got %+v", sErr.Location)
+		t.Errorf("Bug 1 regression: error location is still 0,0 - got %+v", sErr.Location)
 	}
 	t.Logf("error location: line=%d col=%d", sErr.Location.Line, sErr.Location.Column)
 }
@@ -92,7 +92,7 @@ func TestBug1_ErrorPositionOnSecondLine(t *testing.T) {
 }
 
 func TestBug1_ErrorPositionColumnNonZero(t *testing.T) {
-	// "SELECT id, FROM users" — the stray comma/FROM creates a parser error.
+	// "SELECT id, FROM users" - the stray comma/FROM creates a parser error.
 	// Column should be non-zero.
 	err := parseExpectError(t, "SELECT id, FROM users")
 
@@ -142,7 +142,7 @@ func TestBug1_SuccessfulParseDoesNotIntroducePositionRegression(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Bug 2 — MySQL VALUES() helper (MEDIUM)
+// Bug 2 - MySQL VALUES() helper (MEDIUM)
 // INSERT INTO t (id, name) VALUES (1,'Alice') ON DUPLICATE KEY UPDATE name=VALUES(name)
 // used to fail with E2001. VALUES(col) is MySQL's way of referencing the
 // attempted-to-insert value inside ON DUPLICATE KEY UPDATE.
@@ -218,15 +218,15 @@ func TestBug2_ValuesHelperFailsWithoutParens(t *testing.T) {
 	p := parser.GetParser()
 	defer parser.PutParser(p)
 
-	// "SELECT VALUES FROM t" is not valid SQL — expect an error.
+	// "SELECT VALUES FROM t" is not valid SQL - expect an error.
 	_, parseErr := p.ParseFromModelTokens(tokens)
 	if parseErr == nil {
-		t.Log("SELECT VALUES FROM t parsed without error (may be treated as alias) — acceptable")
+		t.Log("SELECT VALUES FROM t parsed without error (may be treated as alias) - acceptable")
 	}
 }
 
 // ---------------------------------------------------------------------------
-// Bug 3 — Error hint grammar (LOW)
+// Bug 3 - Error hint grammar (LOW)
 // Hints used to say "Expected 'table name' keyword here" when "table name"
 // is not a keyword. Fixed to "expected <description> here".
 // ---------------------------------------------------------------------------
@@ -274,7 +274,7 @@ func TestBug3_HintGrammarExpectedFormat(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Bug 2 (extended) — MySQL VALUES() helper: nested expressions & multi-column
+// Bug 2 (extended) - MySQL VALUES() helper: nested expressions & multi-column
 //
 // VALUES(col) must compose correctly when used inside larger expressions:
 //   - arithmetic:  price = VALUES(price) * 0.9

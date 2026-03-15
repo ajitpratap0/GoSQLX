@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package parser — select_helpers_test.go
+// Package parser - select_helpers_test.go
 // Focused unit tests for the decomposed SELECT clause helper methods:
 //   - parseDistinctModifier
 //   - parseTopClause

@@ -246,7 +246,7 @@ func walkExpr(expr ast.Expression, fn func(ast.Expression) ast.Expression) ast.E
 		e.Array = walkExpr(e.Array, fn)
 		e.Start = walkExpr(e.Start, fn)
 		e.End = walkExpr(e.End, fn)
-		// Leaf nodes: *ast.Identifier, *ast.LiteralValue, *ast.IntervalExpression — no children
+		// Leaf nodes: *ast.Identifier, *ast.LiteralValue, *ast.IntervalExpression - no children
 	}
 	return expr
 }

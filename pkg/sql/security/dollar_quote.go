@@ -56,7 +56,7 @@ func stripDollarQuotedStrings(sql string) string {
 		// Find the matching closing tag
 		closeIdx := strings.Index(sql[openEnd:], openTag)
 		if closeIdx == -1 {
-			// No closing tag — write the rest as-is (unterminated)
+			// No closing tag - write the rest as-is (unterminated)
 			result.WriteString(sql[openStart:])
 			break
 		}

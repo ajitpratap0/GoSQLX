@@ -41,7 +41,7 @@ let metrics: MetricsCollector;
  * Resolves the gosqlx binary path using a fallback chain:
  * 1. User-configured explicit path (gosqlx.executablePath setting, if non-empty)
  * 2. Bundled binary at <extensionPath>/bin/gosqlx[.exe] (with checksum verification)
- * 3. PATH lookup ("gosqlx" — the old default behavior, or forced via forcePathLookup)
+ * 3. PATH lookup ("gosqlx" - the old default behavior, or forced via forcePathLookup)
  *
  * Results are cached until configuration changes or server restart.
  * Delegates to the extracted resolveBinaryPath() utility for testability.

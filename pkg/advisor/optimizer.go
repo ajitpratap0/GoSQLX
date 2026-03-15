@@ -25,14 +25,14 @@
 //
 // Eight built-in rules are registered by DefaultRules:
 //
-//	OPT-001  SELECT * Detection         — recommend listing columns explicitly
-//	OPT-002  Missing WHERE Clause       — UPDATE/DELETE without WHERE affects all rows
-//	OPT-003  Cartesian Product          — implicit cross join from multiple FROM tables
-//	OPT-004  SELECT DISTINCT Overuse    — DISTINCT may mask incorrect join conditions
-//	OPT-005  Subquery in WHERE          — suggest converting correlated subqueries to JOINs
-//	OPT-006  OR in WHERE Clause         — OR on different columns may prevent index usage
-//	OPT-007  Leading Wildcard in LIKE   — LIKE '%...' forces a full table scan
-//	OPT-008  Function on Indexed Column — wrapping a column in a function defeats B-tree indexes
+//	OPT-001  SELECT * Detection         - recommend listing columns explicitly
+//	OPT-002  Missing WHERE Clause       - UPDATE/DELETE without WHERE affects all rows
+//	OPT-003  Cartesian Product          - implicit cross join from multiple FROM tables
+//	OPT-004  SELECT DISTINCT Overuse    - DISTINCT may mask incorrect join conditions
+//	OPT-005  Subquery in WHERE          - suggest converting correlated subqueries to JOINs
+//	OPT-006  OR in WHERE Clause         - OR on different columns may prevent index usage
+//	OPT-007  Leading Wildcard in LIKE   - LIKE '%...' forces a full table scan
+//	OPT-008  Function on Indexed Column - wrapping a column in a function defeats B-tree indexes
 //
 // Custom rules implement the Rule interface (ID, Name, Description, Analyze) and are
 // passed to NewWithRules. All built-in rules are stateless and safe for concurrent use.

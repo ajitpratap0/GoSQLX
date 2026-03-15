@@ -37,7 +37,7 @@ github.com/ajitpratap0/GoSQLX/
 │   ├── metrics/         # Performance monitoring (73.9% coverage)
 │   ├── linter/          # SQL linting rules engine (96.7% coverage)
 │   ├── lsp/             # Language Server Protocol (70.2% coverage)
-│   ├── mcp/             # MCP server — 7 SQL tools over streamable HTTP
+│   ├── mcp/             # MCP server - 7 SQL tools over streamable HTTP
 │   ├── config/          # Configuration management (81.8% coverage)
 │   └── gosqlx/testing/  # Testing utilities (95.0% coverage)
 ```
@@ -1871,7 +1871,7 @@ Load from env vars. Returns error only if `GOSQLX_MCP_PORT` is non-integer or ou
 Returns `Config{Host: "127.0.0.1", Port: 8080}` with auth disabled.
 
 #### `New(cfg *Config) *Server`
-Create server with all 7 tools registered. Registers tools once at construction — no dynamic registration.
+Create server with all 7 tools registered. Registers tools once at construction - no dynamic registration.
 
 #### `(s *Server) Start(ctx context.Context) error`
 Bind to `cfg.Addr()`, serve streamable HTTP. Blocks until ctx cancelled or fatal error. Graceful shutdown on context cancellation.
@@ -1885,7 +1885,7 @@ Returns `next` unchanged when `cfg.AuthEnabled()` is false. When enabled, enforc
 |------|-------------|
 | `validate_sql` | SQL syntax validation with optional dialect |
 | `format_sql` | SQL formatting (indent, keyword case, semicolon) |
-| `parse_sql` | AST summary — statement count and types |
+| `parse_sql` | AST summary - statement count and types |
 | `extract_metadata` | Tables, columns, functions referenced |
 | `security_scan` | Injection pattern detection with severity |
 | `lint_sql` | Style rule enforcement (L001–L010) |

@@ -98,7 +98,7 @@ func TestCorpus(t *testing.T) {
 }
 
 // splitStatements splits SQL content by semicolons, respecting comments.
-// This is a simple splitter — not a full tokenizer-aware one.
+// This is a simple splitter - not a full tokenizer-aware one.
 func splitStatements(content string) []string {
 	var statements []string
 	var current strings.Builder

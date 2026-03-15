@@ -35,7 +35,7 @@ import (
 // []models.TokenWithSpan directly; span information is no longer stripped.
 type ConversionResult struct {
 	Tokens          []models.TokenWithSpan
-	PositionMapping []TokenPosition // Deprecated: always nil — positions are now embedded in TokenWithSpan.Start/End fields
+	PositionMapping []TokenPosition // Deprecated: always nil - positions are now embedded in TokenWithSpan.Start/End fields
 }
 
 // TokenPosition maps a parser token back to its original source position.
@@ -342,7 +342,7 @@ func (p *Parser) ParseContextFromModelTokens(ctx context.Context, tokens []model
 //
 // ParseWithPositions parses a ConversionResult into an AST.
 // Since models.TokenWithSpan already embeds span/position information,
-// this is now a thin wrapper around parseTokens — no separate conversion step needed.
+// this is now a thin wrapper around parseTokens - no separate conversion step needed.
 //
 // Thread Safety: NOT thread-safe - use separate parser instances per goroutine.
 func (p *Parser) ParseWithPositions(result *ConversionResult) (*ast.AST, error) {
@@ -740,7 +740,7 @@ func (p *Parser) peekToken() models.TokenWithSpan {
 // with tests that create tokens directly without setting Type.
 
 // isType checks if the current token's Type matches the expected type.
-// Pure integer comparison — no string fallback.
+// Pure integer comparison - no string fallback.
 func (p *Parser) isType(expected models.TokenType) bool {
 	return p.currentToken.Token.Type == expected
 }

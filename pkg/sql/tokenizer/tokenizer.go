@@ -1574,7 +1574,7 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 					}, nil
 				}
 			}
-			// Not followed by identifier — fall through to standalone #
+			// Not followed by identifier - fall through to standalone #
 			return models.Token{Type: models.TokenTypeSharp, Value: string(t.input[start:t.pos.Index])}, nil
 		}
 		t.pos.AdvanceRune(r, size)

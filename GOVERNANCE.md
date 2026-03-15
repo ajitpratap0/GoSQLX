@@ -7,7 +7,7 @@ GoSQLX is an open source project. This document describes how the project is gov
 ## Roles
 
 ### Users
-Anyone who uses GoSQLX. Users are the most important people in the project — feedback through issues, questions in Discussions, and bug reports directly shapes development priorities.
+Anyone who uses GoSQLX. Users are the most important people in the project - feedback through issues, questions in Discussions, and bug reports directly shapes development priorities.
 
 ### Contributors
 Anyone who has submitted a merged pull request, a bug report that led to a fix, or substantive documentation improvements. Contributors are credited in release notes and the CHANGELOG.
@@ -39,7 +39,7 @@ Open a PR. If CI passes and a committer reviews it positively, it can be merged.
 4. Proceed with implementation PR
 
 ### Breaking changes
-1. Open an issue tagged `breaking-change` — mandatory minimum 14-day comment period
+1. Open an issue tagged `breaking-change` - mandatory minimum 14-day comment period
 2. Document the migration path in `docs/MIGRATION.md` before merge
 3. Requires explicit maintainer approval
 4. Semantic versioning: breaking changes increment the minor version (v1.x.0)
@@ -50,9 +50,9 @@ Changes to this document require a GitHub Discussion open for at least 7 days wi
 ## Release Process
 
 GoSQLX follows [Semantic Versioning](https://semver.org/):
-- **Patch** (v1.9.x): bug fixes, security patches, documentation — no API changes
-- **Minor** (v1.x.0): new features, new dialect support, new AST nodes — backward compatible
-- **Major** (vX.0.0): breaking API changes — rare, requires 14-day notice
+- **Patch** (v1.9.x): bug fixes, security patches, documentation - no API changes
+- **Minor** (v1.x.0): new features, new dialect support, new AST nodes - backward compatible
+- **Major** (vX.0.0): breaking API changes - rare, requires 14-day notice
 
 Release cadence: ad-hoc driven by feature readiness and bug severity, roughly monthly.
 
@@ -65,7 +65,7 @@ Disagreements on technical direction are resolved by:
 2. A GitHub Discussion for broader input
 3. Maintainer decision as a tiebreaker
 
-The goal is always rough consensus — not unanimity, but no strong unaddressed objections.
+The goal is always rough consensus - not unanimity, but no strong unaddressed objections.
 
 ## Code of Conduct
 

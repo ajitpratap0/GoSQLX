@@ -38,7 +38,7 @@ setup(() => {
 // 1. User-configured path
 // ---------------------------------------------------------------------------
 
-suite('getBinaryPath — user-configured path', () => {
+suite('getBinaryPath - user-configured path', () => {
 
     test('returns user-configured path when setting is non-empty', async () => {
         const deps = makeDeps({
@@ -75,7 +75,7 @@ suite('getBinaryPath — user-configured path', () => {
 // 2. Bundled binary detection
 // ---------------------------------------------------------------------------
 
-suite('getBinaryPath — bundled binary', () => {
+suite('getBinaryPath - bundled binary', () => {
 
     test('returns bundled binary path when it exists and is executable', async () => {
         const deps = makeDeps({
@@ -127,7 +127,7 @@ suite('getBinaryPath — bundled binary', () => {
 // 3. PATH fallback
 // ---------------------------------------------------------------------------
 
-suite('getBinaryPath — PATH fallback', () => {
+suite('getBinaryPath - PATH fallback', () => {
 
     test('returns "gosqlx" when no user path and no bundled binary', async () => {
         const deps = makeDeps({
@@ -153,7 +153,7 @@ suite('getBinaryPath — PATH fallback', () => {
 // 4. Windows-specific behavior
 // ---------------------------------------------------------------------------
 
-suite('getBinaryPath — Windows platform handling', () => {
+suite('getBinaryPath - Windows platform handling', () => {
 
     test('appends .exe on win32 platform', async () => {
         let checkedPath = '';
@@ -237,10 +237,10 @@ suite('getBinaryPath — Windows platform handling', () => {
 // 5. Priority / precedence
 // ---------------------------------------------------------------------------
 
-suite('getBinaryPath — fallback chain precedence', () => {
+suite('getBinaryPath - fallback chain precedence', () => {
 
     test('user setting > bundled binary > PATH (full chain)', async () => {
-        // All three options available — user setting wins
+        // All three options available - user setting wins
         const deps = makeDeps({
             extensionPath: '/ext',
             getConfig: (key: string, defaultValue: string) =>
@@ -276,7 +276,7 @@ suite('getBinaryPath — fallback chain precedence', () => {
 // 6. Caching
 // ---------------------------------------------------------------------------
 
-suite('getBinaryPath — caching', () => {
+suite('getBinaryPath - caching', () => {
 
     test('returns cached result on subsequent calls', async () => {
         let callCount = 0;
@@ -311,7 +311,7 @@ suite('getBinaryPath — caching', () => {
 // 7. Force PATH lookup
 // ---------------------------------------------------------------------------
 
-suite('getBinaryPath — forcePathLookup setting', () => {
+suite('getBinaryPath - forcePathLookup setting', () => {
 
     test('returns gosqlx when forcePathLookup is true', async () => {
         const deps = makeDeps({
@@ -351,7 +351,7 @@ suite('getBinaryPath — forcePathLookup setting', () => {
 // 8. Resolution source tracking
 // ---------------------------------------------------------------------------
 
-suite('resolveBinaryPath — resolution source', () => {
+suite('resolveBinaryPath - resolution source', () => {
 
     test('reports user-setting source', async () => {
         const deps = makeDeps({
@@ -395,7 +395,7 @@ suite('resolveBinaryPath — resolution source', () => {
 // 9. Checksum verification
 // ---------------------------------------------------------------------------
 
-suite('resolveBinaryPath — checksum verification', () => {
+suite('resolveBinaryPath - checksum verification', () => {
 
     test('checksumValid is true when sidecar matches', async () => {
         const binaryContent = Buffer.from('fake binary content');

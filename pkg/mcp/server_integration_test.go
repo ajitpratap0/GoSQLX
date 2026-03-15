@@ -76,7 +76,7 @@ func TestIntegration_AuthRequired_ValidToken(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized {
-		t.Errorf("got 401 with valid token — middleware should have passed through")
+		t.Errorf("got 401 with valid token - middleware should have passed through")
 	}
 }
 

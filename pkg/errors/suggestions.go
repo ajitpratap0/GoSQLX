@@ -252,7 +252,7 @@ func GetMistakeExplanation(mistakeName string) (MistakePattern, bool) {
 
 // AnalyzeTokenError produces a context-aware suggestion string for token-level
 // parse errors. It inspects the actual and expected token types to provide specific
-// guidance — for example, detecting when a quoted string is used where a number is
+// guidance - for example, detecting when a quoted string is used where a number is
 // expected, or when an unknown identifier looks like a misspelled keyword.
 //
 // Parameters:

@@ -15,7 +15,7 @@ Examples of behavior that contributes to a positive environment:
 - Gracefully accepting constructive criticism
 - Focusing on what is best for the community
 - Showing empathy towards other community members
-- Helping newcomers learn — we were all beginners once
+- Helping newcomers learn - we were all beginners once
 
 Examples of unacceptable behavior:
 
@@ -33,7 +33,7 @@ Project maintainers have the right and responsibility to remove, edit, or reject
 
 ## Scope
 
-This Code of Conduct applies within all community spaces — GitHub issues, pull requests, discussions, code review comments — and also applies when an individual is officially representing the project in public spaces.
+This Code of Conduct applies within all community spaces - GitHub issues, pull requests, discussions, code review comments - and also applies when an individual is officially representing the project in public spaces.
 
 ## Enforcement
 

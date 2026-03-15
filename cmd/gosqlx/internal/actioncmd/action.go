@@ -34,7 +34,7 @@ import (
 )
 
 // builtinRules returns all built-in lint rules. This is the single source of
-// truth — both defaultLinter() and allRules() derive from it.
+// truth - both defaultLinter() and allRules() derive from it.
 func builtinRules() []linter.Rule {
 	return []linter.Rule{
 		whitespace.NewTrailingWhitespaceRule(),           // L001

@@ -375,9 +375,11 @@ func TestServer_RateLimit_ResetTiming(t *testing.T) {
 		t.Error("should be blocked after hitting limit")
 	}
 
-	// Record time and wait just under the window
+	// Record time and wait just under the window.
+	// Use a larger margin (200ms) to account for coarse timer resolution on
+	// Windows (≈15ms tick) and slow CI runners where a 50ms sleep may overshoot.
 	startTime := time.Now()
-	time.Sleep(RateLimitWindow - 50*time.Millisecond)
+	time.Sleep(RateLimitWindow - 200*time.Millisecond)
 
 	// Should still be blocked
 	if server.checkRateLimit() {
@@ -386,7 +388,7 @@ func TestServer_RateLimit_ResetTiming(t *testing.T) {
 
 	// Wait for remaining time plus buffer
 	elapsed := time.Since(startTime)
-	remaining := RateLimitWindow - elapsed + 20*time.Millisecond
+	remaining := RateLimitWindow - elapsed + 50*time.Millisecond
 	if remaining > 0 {
 		time.Sleep(remaining)
 	}

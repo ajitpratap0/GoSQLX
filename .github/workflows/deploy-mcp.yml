@@ -1,0 +1,28 @@
+name: Deploy MCP Server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cmd/gosqlx-mcp/**'
+      - 'pkg/mcp/**'
+      - 'Dockerfile'
+      - 'render.yaml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    steps:
+      - name: Trigger Render deploy
+        run: |
+          if [ -n "$RENDER_DEPLOY_HOOK_URL" ]; then
+            curl -s "$RENDER_DEPLOY_HOOK_URL"
+            echo "Deploy triggered"
+          else
+            echo "RENDER_DEPLOY_HOOK_URL not configured — Render auto-deploys from GitHub"
+          fi
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}

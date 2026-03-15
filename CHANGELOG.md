@@ -5,6 +5,30 @@ All notable changes to GoSQLX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.1] - 2026-03-15 - Website Performance & Mobile Optimization
+
+### Improved
+- Lighthouse Desktop: 100 Performance, 100 Accessibility, 100 SEO
+- Lighthouse Mobile: 94 Performance, 100 Accessibility, 100 SEO
+- CLS reduced from 0.382 to 0 (removed stats animation, added image dimensions, font-size-adjust)
+- FCP improved from 2.7s to 2.0s on mobile (self-hosted fonts via @fontsource)
+- LCP improved from 3.0s to 2.4s on mobile
+- Self-hosted fonts eliminate external Google Fonts request
+- AnalyzeTab lazy-loaded via React.lazy() (328KB -> 3.4KB initial chunk)
+- WebP logo (7KB vs 134KB PNG)
+- Non-blocking font loading with preload/swap pattern
+
+### Fixed
+- 20 mobile responsiveness fixes (touch targets, overflow, responsive layout)
+- Design consistency (unified cards, buttons, code blocks, padding across all pages)
+- WCAG contrast (text-slate-500 -> text-slate-400 for readable text)
+- Navbar backdrop-blur for visual separation from hero
+- OFL-1.1 license added to CI allow-list for fontsource packages
+
+### Changed
+- README redesigned from 1,209 to 215 lines with visual feature grid
+- Emdashes replaced with hyphens across 122 files
+
 ## [1.12.0] - 2026-03-15 — Custom Domain & Remote MCP Server
 
 ### Added

@@ -23,17 +23,18 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site);
     <meta property="og:type" content="website" />
     <meta property="og:url" content={canonicalURL} />
     <link rel="canonical" href={canonicalURL} />
-    <meta property="og:image" content="https://gosqlx.dev/images/logo.png">
+    <meta property="og:image" content="https://gosqlx.dev/images/og-image.png">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content={title}>
     <meta name="twitter:description" content={description}>
-    <meta name="twitter:image" content="https://gosqlx.dev/images/logo.png">
+    <meta name="twitter:image" content="https://gosqlx.dev/images/og-image.png">
     <meta name="keywords" content="SQL parser, Go, Golang, AST, tokenizer, SQL formatter, SQL linter, SQL validator">
     <meta name="author" content="GoSQLX Authors">
     <link rel="alternate" type="application/rss+xml" title="GoSQLX Release Notes" href="/rss.xml">
     <link rel="alternate" hreflang="en" href={canonicalURL}>
     <link rel="alternate" hreflang="x-default" href={canonicalURL}>
-    <link rel="icon" type="image/png" href="/images/logo.png" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/images/logo.png" />
     <link rel="preconnect" href="https://gosqlx.dev" crossorigin>
     <link rel="preconnect" href="https://img.shields.io" crossorigin>
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' https://img.shields.io https://goreportcard.com https://*.shields.io data:; connect-src 'self'">

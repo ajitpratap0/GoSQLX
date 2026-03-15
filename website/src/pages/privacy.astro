@@ -1,0 +1,96 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+<BaseLayout title="Privacy Policy - GoSQLX" description="GoSQLX privacy policy. We respect your privacy and collect no personal data.">
+  <main class="container mx-auto px-4 py-16 max-w-3xl">
+    <h1 class="text-3xl font-bold text-white mb-8">Privacy Policy</h1>
+    <div class="prose prose-invert prose-slate max-w-none space-y-8">
+
+      <section>
+        <h2 class="text-xl font-semibold text-white mb-3">Overview</h2>
+        <p class="text-slate-300 leading-relaxed">
+          GoSQLX is an open-source SQL parsing SDK for Go, licensed under Apache 2.0.
+          We respect your privacy. This policy explains what data is (and is not) collected
+          across GoSQLX services.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-white mb-3">Website (gosqlx.dev)</h2>
+        <p class="text-slate-300 leading-relaxed">
+          This website is a static site hosted on GitHub Pages. We do not use analytics,
+          tracking scripts, or cookies. No personal data is collected by us when you visit
+          this site. GitHub Pages may collect basic server logs as described in
+          <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:text-orange-300 underline">GitHub's Privacy Statement</a>.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-white mb-3">WASM Playground</h2>
+        <p class="text-slate-300 leading-relaxed">
+          The interactive SQL playground at <a href="/playground/" class="text-orange-400 hover:text-orange-300 underline">/playground/</a>
+          runs entirely in your browser via WebAssembly. Your SQL queries are parsed locally
+          and are never sent to any server.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-white mb-3">Remote MCP Server (mcp.gosqlx.dev)</h2>
+        <p class="text-slate-300 leading-relaxed">
+          The GoSQLX MCP server is stateless. SQL queries sent to the server are processed
+          and immediately discarded &mdash; they are not logged or stored. No authentication
+          or user accounts are required. The server uses in-memory IP-based rate limiting;
+          IP addresses are held only in memory and cleared after 10 minutes of inactivity.
+          They are never written to disk or shared with third parties.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-white mb-3">VS Code Extension</h2>
+        <p class="text-slate-300 leading-relaxed">
+          The GoSQLX VS Code extension runs locally on your machine. It does not send
+          telemetry, analytics, or any data to GoSQLX servers.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-white mb-3">Third-Party Services</h2>
+        <p class="text-slate-300 leading-relaxed">
+          GoSQLX relies on the following third-party services, each with their own privacy policies:
+        </p>
+        <ul class="list-disc list-inside text-slate-300 mt-2 space-y-1">
+          <li>
+            <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:text-orange-300 underline">GitHub</a>
+            &mdash; website hosting (GitHub Pages) and source code hosting
+          </li>
+          <li>
+            <a href="https://render.com/privacy" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:text-orange-300 underline">Render</a>
+            &mdash; MCP server hosting
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-white mb-3">Open Source</h2>
+        <p class="text-slate-300 leading-relaxed">
+          All GoSQLX code is open source under the
+          <a href="https://github.com/ajitpratap0/GoSQLX/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:text-orange-300 underline">Apache 2.0 license</a>.
+          You can verify any claim in this policy by reviewing the
+          <a href="https://github.com/ajitpratap0/GoSQLX" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:text-orange-300 underline">source code on GitHub</a>.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-white mb-3">Contact</h2>
+        <p class="text-slate-300 leading-relaxed">
+          If you have questions about this privacy policy, please open an issue on
+          <a href="https://github.com/ajitpratap0/GoSQLX/issues" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:text-orange-300 underline">GitHub Issues</a>.
+        </p>
+      </section>
+
+      <p class="text-slate-500 text-sm pt-4 border-t border-elevated">
+        Last updated: March 15, 2026
+      </p>
+    </div>
+  </main>
+</BaseLayout>

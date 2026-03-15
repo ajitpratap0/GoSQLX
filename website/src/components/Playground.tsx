@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useWasm } from "./WasmLoader";
 import SqlEditor from "./SqlEditor";
 import AstTab from "./playground/AstTab";
 import FormatTab from "./playground/FormatTab";
 import LintTab from "./playground/LintTab";
-import AnalyzeTab from "./playground/AnalyzeTab";
+const AnalyzeTab = React.lazy(() => import("./playground/AnalyzeTab"));
 
 const DEFAULT_SQL = `SELECT u.id, u.name, COUNT(o.id) AS order_count
 FROM users u
@@ -218,7 +218,11 @@ export default function Playground() {
             {activeTab === "ast" && <AstTab data={results.ast} />}
             {activeTab === "format" && <FormatTab data={results.format} />}
             {activeTab === "lint" && <LintTab data={results.lint} />}
-            {activeTab === "analyze" && <AnalyzeTab data={results.analyze} />}
+            {activeTab === "analyze" && (
+              <Suspense fallback={<div className="p-4 text-slate-400">Loading...</div>}>
+                <AnalyzeTab data={results.analyze} />
+              </Suspense>
+            )}
           </div>
         </div>
       </div>

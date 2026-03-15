@@ -42,12 +42,12 @@ The GoSQLX MCP server (`gosqlx-mcp`) exposes all GoSQLX SQL capabilities as [Mod
 
 ## Remote Server (Public)
 
-A public GoSQLX MCP server is available at `https://gosqlx.onrender.com/mcp` — no installation, no API key, no signup required.
+A public GoSQLX MCP server is available at `https://mcp.gosqlx.dev/mcp` — no installation, no API key, no signup required.
 
 ### Claude Code
 
 ```bash
-claude mcp add --transport http gosqlx https://gosqlx.onrender.com/mcp
+claude mcp add --transport http gosqlx https://mcp.gosqlx.dev/mcp
 ```
 
 ### Claude Desktop
@@ -58,7 +58,7 @@ Add to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "gosqlx": {
-      "url": "https://gosqlx.onrender.com/mcp"
+      "url": "https://mcp.gosqlx.dev/mcp"
     }
   }
 }
@@ -66,7 +66,7 @@ Add to your `claude_desktop_config.json`:
 
 ### Cursor
 
-Add remote MCP server URL: `https://gosqlx.onrender.com/mcp`
+Add remote MCP server URL: `https://mcp.gosqlx.dev/mcp`
 
 ### Available Tools
 
@@ -90,7 +90,7 @@ The public server has smart rate limiting to ensure fair usage:
 ### Health Check
 
 ```bash
-curl https://gosqlx.onrender.com/health
+curl https://mcp.gosqlx.dev/health
 ```
 
 ### Self-Hosting

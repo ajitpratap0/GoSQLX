@@ -25,7 +25,7 @@ const posts = (await getCollection('blog')).sort((a, b) => {
     <div class="space-y-4">
       {posts.map((post) => (
         <a
-          href={`/GoSQLX/blog/${post.id}/`}
+          href={`/blog/${post.id}/`}
           class="block p-5 rounded-lg border border-slate-700 bg-surface/50 hover:bg-surface hover:border-blue-500/50 transition-colors"
         >
           <div class="flex items-center gap-3 mb-1">

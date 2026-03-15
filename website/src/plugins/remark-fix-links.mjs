@@ -5,8 +5,8 @@ export function remarkFixLinks() {
     visit(tree, 'link', (node) => {
       if (node.url && node.url.endsWith('.md') && !node.url.startsWith('http')) {
         // Convert relative .md links to website routes
-        // e.g., "USAGE_GUIDE.md" -> "/GoSQLX/docs/usage_guide/"
-        // e.g., "../tutorials/01-foo.md" -> "/GoSQLX/docs/tutorials/01-foo/"
+        // e.g., "USAGE_GUIDE.md" -> "/docs/usage_guide/"
+        // e.g., "../tutorials/01-foo.md" -> "/docs/tutorials/01-foo/"
         let url = node.url;
 
         // Remove leading ../ or ./
@@ -19,7 +19,7 @@ export function remarkFixLinks() {
         url = url.toLowerCase();
 
         // Prefix with base path
-        node.url = `/GoSQLX/docs/${url}/`;
+        node.url = `/docs/${url}/`;
       }
     });
   };

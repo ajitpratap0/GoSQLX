@@ -12,7 +12,7 @@
   "bugs": {
     "url": "https://github.com/ajitpratap0/GoSQLX/issues"
   },
-  "homepage": "https://ajitpratap0.github.io/GoSQLX/",
+  "homepage": "https://gosqlx.dev",
   "icon": "images/icon.png",
   "engines": {
     "vscode": "^1.85.0"

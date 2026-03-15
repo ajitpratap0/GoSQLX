@@ -207,7 +207,7 @@ function InteractiveHero() {
         {/* Link to full playground */}
         <div className="text-center mt-6">
           <a
-            href="/GoSQLX/playground/"
+            href="/playground/"
             className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors text-sm font-medium"
           >
             Open Full Playground
@@ -340,7 +340,7 @@ ORDER BY orders DESC;`}
         {/* Link to full playground */}
         <div className="text-center mt-6">
           <a
-            href="/GoSQLX/playground/"
+            href="/playground/"
             className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors text-sm font-medium"
           >
             Open Full Playground

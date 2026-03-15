@@ -5,6 +5,29 @@ All notable changes to GoSQLX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0] - 2026-03-15 — Custom Domain & Remote MCP Server
+
+### Added
+- Custom domain `gosqlx.dev` for the product website
+- Custom domain `mcp.gosqlx.dev` for the remote MCP server
+- Remote MCP server deployed on Render with smart 3-layer rate limiting
+- Rate limiter: tiered IP limits, adaptive load scaling, tool-aware cost weighting
+- Handler() and Cfg() methods on MCP Server for middleware composition
+- Health endpoint at `/health` with version info
+- Dockerfile for containerized MCP server deployment
+- render.yaml blueprint for Render deployment
+- GitHub Actions workflow for MCP server deployment
+
+### Changed
+- Website migrated from `ajitpratap0.github.io/GoSQLX/` to `gosqlx.dev`
+- MCP server accessible at `mcp.gosqlx.dev` (previously local-only)
+- All documentation URLs updated to use custom domains
+
+### Fixed
+- Website audit: 19 fixes across performance, security, accessibility, design, QA
+- Lazy WASM loading on homepage (static preview, load on interaction)
+- SEO: sitemap, robots.txt, structured data, Twitter cards, RSS feed
+
 ## [1.11.1] - 2026-03-15 — Website Polish & SEO
 
 ### Fixed

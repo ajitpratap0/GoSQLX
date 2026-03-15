@@ -1,6 +1,6 @@
 # GoSQLX MCP Server Guide
 
-**Version**: v1.10.0
+**Version**: v1.12.0
 **Last Updated**: 2026-03-09
 
 ## Table of Contents
@@ -795,4 +795,4 @@ The format, security scan, and lint tools operate on the raw SQL string independ
 ---
 
 **Last Updated**: 2026-03-09
-**Version**: v1.10.0
+**Version**: v1.12.0

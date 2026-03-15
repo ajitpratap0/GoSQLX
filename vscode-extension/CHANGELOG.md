@@ -2,6 +2,11 @@
 
 All notable changes to the "GoSQLX" extension will be documented in this file.
 
+## [1.12.0] - 2026-03-15
+
+### Changed
+- Homepage URL updated to `https://gosqlx.dev`
+
 ## [1.11.1] - 2026-03-15
 
 ### Fixed

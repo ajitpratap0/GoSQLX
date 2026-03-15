@@ -1,6 +1,6 @@
 # GoSQLX Usage Guide
 
-**Version**: v1.10.0 | **Last Updated**: 2026-03-13
+**Version**: v1.12.0 | **Last Updated**: 2026-03-15
 
 ## Table of Contents
 - [Getting Started](#getting-started)

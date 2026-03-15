@@ -1,6 +1,6 @@
 # GoSQLX SQL Feature Compatibility Matrix
 
-**Version**: v1.10.0 | **Last Updated**: 2026-03-13
+**Version**: v1.12.0 | **Last Updated**: 2026-03-15
 
 ## Overview
 
@@ -599,7 +599,7 @@ gosqlx format --dialect mysql query.sql
 
 ## SQL Standards Compliance Summary
 
-### Overall Compliance (v1.10.0)
+### Overall Compliance (v1.12.0)
 
 | Standard | Compliance % | Status | Notes |
 |----------|--------------|--------|-------|
@@ -790,8 +790,8 @@ gosqlx format --dialect mysql query.sql
 ---
 
 **Last Updated**: 2026-03-13
-**GoSQLX Version**: 1.10.0
-**Test Suite Version**: 1.10.0
+**GoSQLX Version**: 1.12.0
+**Test Suite Version**: 1.12.0
 **Total Test Cases**: 800+
 **Coverage Percentage**: 95%+
 **SQL-99 Compliance**: ~85%

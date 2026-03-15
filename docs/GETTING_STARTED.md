@@ -2,7 +2,7 @@
 
 Welcome! This guide will get you parsing SQL in under 5 minutes. No prior experience with GoSQLX required.
 
-**What's New in v1.10.0:**
+**What's New in v1.12.0:**
 - **MCP Server**: All GoSQLX SQL capabilities as Model Context Protocol tools over streamable HTTP
 - 7 MCP tools: `validate_sql`, `format_sql`, `parse_sql`, `extract_metadata`, `security_scan`, `lint_sql`, `analyze_sql`
 - Optional bearer token auth via `GOSQLX_MCP_AUTH_TOKEN`
@@ -60,7 +60,7 @@ echo "select * from users where age>18" | gosqlx format
 echo "SELECT COUNT(*) FROM orders GROUP BY status" | gosqlx analyze
 ```
 
-**Available CLI Commands (v1.10.0):**
+**Available CLI Commands (v1.12.0):**
 - `validate` - Ultra-fast SQL validation with security scanning
 - `format` - High-performance SQL formatting with style options
 - `analyze` - Advanced SQL analysis with complexity metrics

@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useWasm } from "./WasmLoader";
 import SqlEditor from "./SqlEditor";
 import AstTab from "./playground/AstTab";
 import FormatTab from "./playground/FormatTab";
 import LintTab from "./playground/LintTab";
-import AnalyzeTab from "./playground/AnalyzeTab";
+const AnalyzeTab = React.lazy(() => import("./playground/AnalyzeTab"));
 
 const HERO_SQL = `SELECT u.name, COUNT(o.id) AS orders
 FROM users u
@@ -196,7 +196,9 @@ function InteractiveHero() {
                   {activeTab === "format" && <FormatTab data={results.format} />}
                   {activeTab === "lint" && <LintTab data={results.lint} />}
                   {activeTab === "analyze" && (
-                    <AnalyzeTab data={results.analyze} />
+                    <Suspense fallback={<div className="p-4 text-slate-400">Loading...</div>}>
+                      <AnalyzeTab data={results.analyze} />
+                    </Suspense>
                   )}
                 </div>
               </div>

@@ -1,4 +1,5 @@
-import SqlEditor from "../SqlEditor";
+'use client';
+import SqlEditor from "./SqlEditor";
 
 interface FormatTabProps {
   data: any;

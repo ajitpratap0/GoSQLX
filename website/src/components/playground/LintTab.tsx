@@ -1,3 +1,5 @@
+'use client';
+
 interface LintTabProps {
   data: any;
 }

@@ -1,3 +1,5 @@
+'use client';
+
 interface AnalyzeTabProps {
   data: any;
 }

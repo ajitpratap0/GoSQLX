@@ -1,0 +1,50 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme inline {
+  --color-primary: #09090b;
+  --color-surface: #18181b;
+  --color-elevated: #27272a;
+  --color-accent-indigo: #6366f1;
+  --color-accent-orange: #f97316;
+  --color-accent-green: #22c55e;
+  --color-accent-purple: #a78bfa;
+
+  --font-sans: var(--font-instrument), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), monospace;
+}
+
+body {
+  background-color: var(--color-primary);
+  color: #fafafa;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Glass morphism utility */
+.glass {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+  border-radius: 0.75rem;
+}
+
+.glass-hover:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 30px rgba(99, 102, 241, 0.05);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* Prose dark theme overrides */
+.prose-dark {
+  --tw-prose-body: rgba(255,255,255,0.7);
+  --tw-prose-headings: #fafafa;
+  --tw-prose-links: #6366f1;
+  --tw-prose-code: #fafafa;
+  --tw-prose-pre-bg: #18181b;
+}

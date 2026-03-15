@@ -42,12 +42,12 @@ The GoSQLX MCP server (`gosqlx-mcp`) exposes all GoSQLX SQL capabilities as [Mod
 
 ## Remote Server (Public)
 
-A public GoSQLX MCP server is available at `https://gosqlx-mcp.fly.dev/mcp` — no installation, no API key, no signup required.
+A public GoSQLX MCP server is available at `https://gosqlx-mcp.onrender.com/mcp` — no installation, no API key, no signup required.
 
 ### Claude Code
 
 ```bash
-claude mcp add --transport http gosqlx https://gosqlx-mcp.fly.dev/mcp
+claude mcp add --transport http gosqlx https://gosqlx-mcp.onrender.com/mcp
 ```
 
 ### Claude Desktop
@@ -58,7 +58,7 @@ Add to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "gosqlx": {
-      "url": "https://gosqlx-mcp.fly.dev/mcp"
+      "url": "https://gosqlx-mcp.onrender.com/mcp"
     }
   }
 }
@@ -66,7 +66,7 @@ Add to your `claude_desktop_config.json`:
 
 ### Cursor
 
-Add remote MCP server URL: `https://gosqlx-mcp.fly.dev/mcp`
+Add remote MCP server URL: `https://gosqlx-mcp.onrender.com/mcp`
 
 ### Available Tools
 
@@ -90,7 +90,7 @@ The public server has smart rate limiting to ensure fair usage:
 ### Health Check
 
 ```bash
-curl https://gosqlx-mcp.fly.dev/health
+curl https://gosqlx-mcp.onrender.com/health
 ```
 
 ### Self-Hosting
@@ -102,11 +102,11 @@ docker build -t gosqlx-mcp .
 docker run -p 8080:8080 -e GOSQLX_MCP_HOST=0.0.0.0 gosqlx-mcp
 ```
 
-Or deploy to Fly.io:
+Or deploy to Render:
 
 ```bash
-fly launch --copy-config
-fly deploy
+# Connect repo on render.com, it auto-deploys
+# Or use render.yaml blueprint
 ```
 
 ---

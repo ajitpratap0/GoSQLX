@@ -13,7 +13,7 @@
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-GoSQLX%20Lint-blue?style=for-the-badge&logo=github)](https://github.com/marketplace/actions/gosqlx-lint-action)
 [![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/ajitpratap0.gosqlx?style=for-the-badge&logo=visual-studio-code&label=VS%20Code)](https://marketplace.visualstudio.com/items?itemName=ajitpratap0.gosqlx)
 [![Website](https://img.shields.io/badge/Website-GoSQLX-blue?style=for-the-badge&logo=google-chrome)](https://ajitpratap0.github.io/GoSQLX/)
-[![MCP Server](https://img.shields.io/badge/MCP-Remote%20Server-blue?style=for-the-badge&logo=cloud)](https://gosqlx-mcp.fly.dev/health)
+[![MCP Server](https://img.shields.io/badge/MCP-Remote%20Server-blue?style=for-the-badge&logo=cloud)](https://gosqlx-mcp.onrender.com/health)
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/ajitpratap0/GoSQLX/test.yml?branch=main&label=Tests&style=flat-square)](https://github.com/ajitpratap0/GoSQLX/actions)
 [![Go Report Card](https://goreportcard.com/badge/github.com/ajitpratap0/GoSQLX?style=flat-square)](https://goreportcard.com/report/github.com/ajitpratap0/GoSQLX)
@@ -70,7 +70,7 @@ GoSQLX is a high-performance SQL parsing library designed for production use. It
 - **Zero-Copy**: Direct byte slice operations, <1μs latency
 - **Intelligent Errors**: Structured error codes with typo detection, context highlighting, and helpful hints
 - **Python Bindings**: [PyGoSQLX](python/README.md) — use GoSQLX from Python via ctypes FFI, 100x+ faster than pure Python parsers
-- **MCP Server** (v1.10.0): `gosqlx-mcp` exposes all 7 SQL tools as [Model Context Protocol](https://modelcontextprotocol.io) tools over streamable HTTP — integrate GoSQLX into Claude, Cursor, and any MCP-compatible AI assistant. **[Public remote server available](https://gosqlx-mcp.fly.dev/health)** — no install required
+- **MCP Server** (v1.10.0): `gosqlx-mcp` exposes all 7 SQL tools as [Model Context Protocol](https://modelcontextprotocol.io) tools over streamable HTTP — integrate GoSQLX into Claude, Cursor, and any MCP-compatible AI assistant. **[Public remote server available](https://gosqlx-mcp.onrender.com/health)** — no install required
 - **Production Ready**: Battle-tested with 0 race conditions detected, ~85% SQL-99 compliance, Apache-2.0 licensed
 
 ### Performance & Quality Highlights (v1.10.0)

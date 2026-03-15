@@ -7,22 +7,22 @@ on:
       - 'cmd/gosqlx-mcp/**'
       - 'pkg/mcp/**'
       - 'Dockerfile'
-      - 'fly.toml'
+      - 'render.yaml'
   workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Only deploy if FLY_API_TOKEN is configured
     if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup flyctl
-        uses: superfly/flyctl-actions/setup-flyctl@master
-
-      - name: Deploy to Fly.io
-        run: flyctl deploy --remote-only
+      - name: Trigger Render deploy
+        run: |
+          if [ -n "$RENDER_DEPLOY_HOOK_URL" ]; then
+            curl -s "$RENDER_DEPLOY_HOOK_URL"
+            echo "Deploy triggered"
+          else
+            echo "RENDER_DEPLOY_HOOK_URL not configured — Render auto-deploys from GitHub"
+          fi
         env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}

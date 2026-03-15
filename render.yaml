@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: gosqlx-mcp
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    envVars:
+      - key: GOSQLX_MCP_HOST
+        value: "0.0.0.0"
+      - key: GOSQLX_MCP_PORT
+        value: "8080"
+    healthCheckPath: /health

@@ -69,7 +69,7 @@ function AstNode({ data, depth = 0, label }: AstNodeProps) {
       <div>
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="flex items-center gap-1 hover:bg-slate-700/50 rounded px-1 -ml-1 text-sm"
+          className="flex items-center gap-1 hover:bg-slate-700/50 rounded px-1 -ml-1 text-sm min-h-[44px] py-2"
         >
           <span className="text-slate-500 w-4 text-center">
             {collapsed ? "+" : "-"}
@@ -111,7 +111,7 @@ function AstNode({ data, depth = 0, label }: AstNodeProps) {
       <div>
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="flex items-center gap-1.5 hover:bg-slate-700/50 rounded px-1 -ml-1 text-sm"
+          className="flex items-center gap-1.5 hover:bg-slate-700/50 rounded px-1 -ml-1 text-sm min-h-[44px] py-2"
         >
           <span className="text-slate-500 w-4 text-center">
             {collapsed ? "+" : "-"}

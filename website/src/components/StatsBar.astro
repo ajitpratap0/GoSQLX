@@ -12,7 +12,7 @@ const stats = [
     <div class="flex flex-wrap justify-center gap-12 md:gap-20">
       {stats.map((stat) => (
         <div class="text-center stat-item" data-target={stat.target} data-display={stat.value}>
-          <div class={`text-4xl font-extrabold ${stat.color} stat-value`}>
+          <div class={`text-4xl font-extrabold ${stat.color} stat-value`} style="font-variant-numeric: tabular-nums; min-width: 5ch;">
             {stat.value}
           </div>
           <div class="text-sm text-slate-400 mt-1">{stat.label}</div>

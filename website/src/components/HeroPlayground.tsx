@@ -155,7 +155,7 @@ function InteractiveHero() {
               {/* Editor */}
               <div className="md:w-1/2 border-b md:border-b-0 md:border-r border-slate-700">
                 <div className="px-3 py-1.5 border-b border-slate-700 bg-slate-800/30">
-                  <span className="text-xs text-slate-500 uppercase tracking-wider font-medium">
+                  <span className="text-xs text-slate-400 uppercase tracking-wider font-medium">
                     SQL Input
                   </span>
                 </div>
@@ -178,7 +178,7 @@ function InteractiveHero() {
                       role="tab"
                       aria-selected={activeTab === tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`px-3 py-1.5 text-xs font-medium transition-colors relative ${
+                      className={`px-3 py-2.5 text-xs font-medium transition-colors relative ${
                         activeTab === tab.id
                           ? "text-blue-400"
                           : "text-slate-400 hover:text-slate-200"
@@ -264,7 +264,7 @@ export default function HeroPlayground() {
             {/* Left: static SQL */}
             <div className="md:w-1/2 border-b md:border-b-0 md:border-r border-slate-700">
               <div className="px-3 py-1.5 border-b border-slate-700 bg-slate-800/30">
-                <span className="text-xs text-slate-500 uppercase tracking-wider font-medium">
+                <span className="text-xs text-slate-400 uppercase tracking-wider font-medium">
                   SQL Input
                 </span>
               </div>
@@ -309,7 +309,7 @@ ORDER BY orders DESC;`}
 
           {/* Overlay button */}
           <div
-            className="absolute inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm cursor-pointer"
+            className="absolute inset-0 flex items-center justify-center bg-slate-900/40 backdrop-blur-[1px] cursor-pointer"
             onClick={() => setInteractive(true)}
           >
             <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-lg shadow-blue-500/20">

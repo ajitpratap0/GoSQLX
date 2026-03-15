@@ -32,7 +32,10 @@ const columns = [
   <div class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-orange-500 via-blue-500 to-green-500"></div>
   <div class="container mx-auto px-4 py-12">
     <a href="/" class="block mb-8">
-      <img src="/images/logo.png" alt="GoSQLX" class="h-8" />
+      <picture>
+        <source srcset="/images/logo.webp" type="image/webp">
+        <img src="/images/logo.png" alt="GoSQLX" class="h-8" />
+      </picture>
     </a>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
       {columns.map((col) => (
@@ -40,12 +43,12 @@ const columns = [
           <h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wider mb-4">
             {col.title}
           </h3>
-          <ul class="space-y-2">
+          <ul class="space-y-3">
             {col.links.map((link) => (
               <li>
                 <a
                   href={link.href}
-                  class="text-slate-400 hover:text-slate-200 transition-colors text-sm"
+                  class="text-slate-400 hover:text-slate-200 transition-colors text-sm py-1 block"
                   {...(link.href.startsWith('http') ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
                 >
                   {link.label}
@@ -56,7 +59,7 @@ const columns = [
         </div>
       ))}
     </div>
-    <div class="mt-10 pt-6 border-t border-elevated text-center text-sm text-slate-500">
+    <div class="mt-10 pt-6 border-t border-elevated text-center text-sm text-slate-400">
       &copy; 2026 GoSQLX Authors. Apache-2.0 License.
     </div>
   </div>

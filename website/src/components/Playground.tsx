@@ -199,7 +199,7 @@ export default function Playground() {
                 role="tab"
                 aria-selected={activeTab === tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+                className={`px-4 py-3 text-sm font-medium transition-colors relative ${
                   activeTab === tab.id
                     ? "text-blue-400"
                     : "text-slate-400 hover:text-slate-200"

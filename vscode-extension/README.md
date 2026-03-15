@@ -1,6 +1,6 @@
 # GoSQLX - SQL Parser & Linter for VS Code
 
-High-performance SQL parsing, validation, formatting, and analysis powered by [GoSQLX](https://github.com/ajitpratap0/GoSQLX).
+High-performance SQL parsing, validation, formatting, and analysis powered by [GoSQLX](https://gosqlx.dev).
 
 ## Features
 
@@ -343,18 +343,37 @@ Apache License 2.0 - see [LICENSE](https://github.com/ajitpratap0/GoSQLX/blob/ma
 
 ## Release Notes
 
+### 1.12.0
+
+- Homepage updated to [gosqlx.dev](https://gosqlx.dev)
+
+### 1.10.4
+
+- SQL formatting now uses the full AST-based formatter (matches CLI output)
+
+### 1.10.3
+
+- LSP server accepts `--stdio` flag for vscode-languageclient compatibility
+- Empty `executablePath` no longer triggers validation warning
+
+### 1.10.2
+
+- Fixed: vscode-languageclient now bundled in VSIX (extension failed to activate)
+
+### 1.10.1
+
+- **Bundled binary** — GoSQLX binary included in the extension; no separate installation needed
+- **Platform-specific packages** — optimized downloads for linux-x64, linux-arm64, darwin-x64, darwin-arm64, win32-x64
+- **Smart binary resolution** — uses bundled binary, falls back to user setting or PATH
+- **Automated publishing** via GitHub Actions on every GoSQLX release tag
+
 ### 0.1.0
 
 Initial release:
-- Real-time SQL validation
+- Real-time SQL validation via Language Server Protocol
 - SQL formatting with customizable options
-- Syntax highlighting for SQL with multi-dialect support
-- Intelligent autocomplete
+- Syntax highlighting with multi-dialect support
+- Intelligent autocomplete for SQL keywords and functions
 - Hover documentation
 - SQL analysis command
 - Multi-dialect support (PostgreSQL, MySQL, SQL Server, Oracle, SQLite)
-- Configurable timeouts
-- Performance metrics
-- Configuration validation
-- Enhanced error messaging with actionable suggestions
-- Workspace settings support

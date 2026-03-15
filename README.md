@@ -141,15 +141,39 @@ See detailed benchmarks at [gosqlx.dev/benchmarks](https://gosqlx.dev/benchmarks
 
 ## Contributing
 
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+We welcome contributions of all kinds! Here's how to get started:
+
+1. **Fork** the repo and create your branch from `main`
+2. **Write tests** for any new functionality
+3. **Run the checks**: `task check` (fmt, vet, lint, test with race detection)
+4. **Submit a PR** — we review promptly
 
 ```bash
 git clone https://github.com/ajitpratap0/GoSQLX.git
 cd GoSQLX
-go test -race ./...      # Run tests
-task check               # Full CI suite (fmt, vet, lint, test)
+task check               # Full CI suite
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines, [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community standards, and [GOVERNANCE.md](GOVERNANCE.md) for project governance.
+
+## Community & Support
+
+- **[GitHub Discussions](https://github.com/ajitpratap0/GoSQLX/discussions)** — Questions, ideas, show & tell
+- **[Issue Tracker](https://github.com/ajitpratap0/GoSQLX/issues)** — Bug reports and feature requests
+- **[Website](https://gosqlx.dev)** — Docs, playground, benchmarks
+- **[Release Notes](https://gosqlx.dev/blog/)** — What's new in each version
 
 ## License
 
 Apache License 2.0 — see [LICENSE](LICENSE).
+
+---
+
+<div align="center">
+
+[![GitHub Stars](https://img.shields.io/github/stars/ajitpratap0/GoSQLX?style=social)](https://github.com/ajitpratap0/GoSQLX/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/ajitpratap0/GoSQLX?style=social)](https://github.com/ajitpratap0/GoSQLX/network/members)
+
+**[gosqlx.dev](https://gosqlx.dev)** · **[Playground](https://gosqlx.dev/playground/)** · **[Docs](https://gosqlx.dev/docs/)** · **[MCP Server](https://mcp.gosqlx.dev/mcp)**
+
+</div>

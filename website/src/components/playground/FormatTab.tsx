@@ -2,7 +2,7 @@
 import SqlEditor from "./SqlEditor";
 
 interface FormatTabProps {
-  data: any;
+  data: string | { result?: string; formatted?: string; error?: string } | null;
 }
 
 export default function FormatTab({ data }: FormatTabProps) {
@@ -14,7 +14,7 @@ export default function FormatTab({ data }: FormatTabProps) {
     );
   }
 
-  if (data.error) {
+  if (typeof data !== "string" && data.error) {
     return (
       <div className="p-4">
         <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">

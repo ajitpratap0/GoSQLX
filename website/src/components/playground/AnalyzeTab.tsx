@@ -1,7 +1,42 @@
 'use client';
 
+interface SecurityAnalysis {
+  critical?: number;
+  high?: number;
+  medium?: number;
+  low?: number;
+}
+
+interface OptimizationResult {
+  score?: number;
+}
+
+interface ComplexityResult {
+  level?: string;
+  rating?: string;
+}
+
+interface Suggestion {
+  message?: string;
+  description?: string;
+  text?: string;
+}
+
+export interface AnalysisData {
+  error?: string;
+  security?: SecurityAnalysis;
+  security_analysis?: SecurityAnalysis;
+  optimization?: number | OptimizationResult;
+  optimization_score?: number;
+  performance?: OptimizationResult;
+  query_complexity?: string | ComplexityResult;
+  complexity?: string | ComplexityResult;
+  suggestions?: (string | Suggestion)[];
+  recommendations?: (string | Suggestion)[];
+}
+
 interface AnalyzeTabProps {
-  data: any;
+  data: AnalysisData | null;
 }
 
 function scoreColor(score: number): string {
@@ -117,7 +152,7 @@ export default function AnalyzeTab({ data }: AnalyzeTabProps) {
         <div>
           <h3 className="text-sm font-medium text-slate-300 mb-3">Suggestions</h3>
           <div className="space-y-2">
-            {allSuggestions.map((s: any, i: number) => {
+            {allSuggestions.map((s: string | Suggestion, i: number) => {
               const text = typeof s === "string" ? s : s.message || s.description || s.text || JSON.stringify(s);
               return (
                 <div

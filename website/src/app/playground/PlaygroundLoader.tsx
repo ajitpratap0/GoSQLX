@@ -1,5 +1,6 @@
 'use client';
 import dynamic from 'next/dynamic';
+import { WasmErrorBoundary } from '@/components/playground/WasmErrorBoundary';
 
 const Playground = dynamic(
   () => import('@/components/playground/Playground'),
@@ -7,5 +8,9 @@ const Playground = dynamic(
 );
 
 export default function PlaygroundLoader() {
-  return <Playground />;
+  return (
+    <WasmErrorBoundary>
+      <Playground />
+    </WasmErrorBoundary>
+  );
 }

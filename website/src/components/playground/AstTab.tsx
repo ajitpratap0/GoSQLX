@@ -138,7 +138,7 @@ function AstNode({ data, depth = 0, label }: AstNodeProps) {
 }
 
 interface AstTabProps {
-  data: any;
+  data: (Record<string, unknown> & { error?: string }) | null;
 }
 
 export default function AstTab({ data }: AstTabProps) {

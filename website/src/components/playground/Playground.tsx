@@ -5,7 +5,8 @@ import { useWasm } from "./WasmLoader";
 import SqlEditor from "./SqlEditor";
 import AstTab from "./AstTab";
 import FormatTab from "./FormatTab";
-import LintTab from "./LintTab";
+import LintTab, { type LintViolation } from "./LintTab";
+import type { AnalysisData } from "./AnalyzeTab";
 const AnalyzeTab = React.lazy(() => import("./AnalyzeTab"));
 
 const DEFAULT_SQL = `SELECT u.id, u.name, COUNT(o.id) AS order_count
@@ -36,10 +37,10 @@ const TABS: { id: TabId; label: string }[] = [
 ];
 
 interface Results {
-  ast: any;
-  format: any;
-  lint: any;
-  analyze: any;
+  ast: (Record<string, unknown> & { error?: string }) | null;
+  format: string | { result?: string; formatted?: string; error?: string } | null;
+  lint: { error?: string; violations?: LintViolation[]; results?: LintViolation[] } | LintViolation[] | null;
+  analyze: AnalysisData | null;
 }
 
 export default function Playground() {
@@ -67,18 +68,19 @@ export default function Playground() {
       const safeCall = (fn: () => unknown) => {
         try {
           return fn();
-        } catch (e: any) {
-          return { error: e.message || String(e) };
+        } catch (e: unknown) {
+          const message = e instanceof Error ? e.message : String(e);
+          return { error: message };
         }
       };
 
       Promise.resolve().then(() => {
         if (runId !== runIdRef.current) return;
 
-        const astResult = safeCall(() => api.parse(query, dial));
-        const formatResult = safeCall(() => api.format(query, dial));
-        const lintResult = safeCall(() => api.lint(query, dial));
-        const analyzeResult = safeCall(() => api.analyze(query, dial));
+        const astResult = safeCall(() => api.parse(query, dial)) as Results['ast'];
+        const formatResult = safeCall(() => api.format(query, dial)) as Results['format'];
+        const lintResult = safeCall(() => api.lint(query, dial)) as Results['lint'];
+        const analyzeResult = safeCall(() => api.analyze(query, dial)) as Results['analyze'];
 
         if (runId === runIdRef.current) {
           setResults({

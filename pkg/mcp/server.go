@@ -55,6 +55,12 @@ func (s *Server) Cfg() *Config {
 	return s.cfg
 }
 
+// MCPServer returns the underlying MCPServer for use with alternative transports
+// such as stdio (mcpserver.NewStdioServer).
+func (s *Server) MCPServer() *mcpserver.MCPServer {
+	return s.mcpSrv
+}
+
 // Start binds to cfg.Addr() and serves using streamable HTTP transport.
 // It blocks until ctx is cancelled or a fatal error occurs.
 func (s *Server) Start(ctx context.Context) error {

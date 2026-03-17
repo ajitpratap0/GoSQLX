@@ -68,7 +68,11 @@ export const mdxComponents = {
     return (
       <div className="group relative">
         <CopyButton text={codeText} />
-        <pre {...props} className="overflow-x-auto rounded-lg border border-white/5 bg-surface p-4 text-sm">
+        <pre
+          {...props}
+          tabIndex={0}
+          className="overflow-x-auto rounded-lg border border-white/5 bg-surface p-4 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-1 focus:ring-offset-zinc-900"
+        >
           {children}
         </pre>
       </div>

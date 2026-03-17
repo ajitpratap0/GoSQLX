@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { FadeIn } from '@/components/ui/FadeIn';
 
 const FOOTER_LINKS = {
@@ -37,10 +38,7 @@ export function Footer() {
             {/* Logo column */}
             <div className="col-span-2 md:col-span-1">
               <Link href="/" className="flex items-center gap-2.5">
-                <picture>
-                  <source srcSet="/images/logo.webp" type="image/webp" />
-                  <img src="/images/logo.png" alt="GoSQLX" width={28} height={28} className="w-7 h-7" />
-                </picture>
+                <Image src="/images/logo.webp" alt="GoSQLX" width={28} height={28} />
                 <span className="text-lg font-semibold text-white">GoSQLX</span>
               </Link>
               <p className="mt-3 text-sm text-zinc-500 max-w-xs">

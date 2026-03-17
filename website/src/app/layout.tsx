@@ -3,6 +3,7 @@ import { instrumentSans, jetbrainsMono } from '@/lib/fonts';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Analytics } from '@vercel/analytics/next';
+import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -47,6 +48,7 @@ export default function RootLayout({
         <Navbar />
         <div className="pt-16">{children}</div>
         <Footer />
+        <ServiceWorkerRegister />
         <Analytics />
       </body>
     </html>

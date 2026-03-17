@@ -6,7 +6,8 @@
     "dev": "next dev",
     "prebuild": "node scripts/split-changelog.js",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "analyze": "ANALYZE=true next build"
   },
   "dependencies": {
     "@codemirror/lang-sql": "^6.10.0",
@@ -31,6 +32,7 @@
     "unist-util-visit": "^5.1.0"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^16.1.7",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

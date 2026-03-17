@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { NAV_LINKS } from '@/lib/constants';
@@ -59,10 +60,7 @@ export function Navbar() {
       <nav className="mx-auto max-w-7xl flex items-center justify-between px-4 sm:px-6 lg:px-8 h-16">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 shrink-0">
-          <picture>
-            <source srcSet="/images/logo.webp" type="image/webp" />
-            <img src="/images/logo.png" alt="GoSQLX" width={32} height={32} className="w-8 h-8" />
-          </picture>
+          <Image src="/images/logo.webp" alt="GoSQLX" width={32} height={32} priority />
           <span className="text-lg font-semibold text-white">GoSQLX</span>
         </Link>
 

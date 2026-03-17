@@ -6,8 +6,10 @@
     "dev": "next dev",
     "prebuild": "node scripts/split-changelog.js",
     "build": "next build",
+    "postbuild": "npm run update-sw-hash",
     "start": "next start",
-    "analyze": "ANALYZE=true next build"
+    "analyze": "ANALYZE=true next build",
+    "update-sw-hash": "node -e \"const {createHash} = require('crypto'); const fs = require('fs'); const hash = createHash('sha256').update(fs.readFileSync('public/wasm/gosqlx.wasm')).digest('hex').slice(0,8); const sw = fs.readFileSync('public/wasm-sw.js','utf8').replace(/gosqlx-wasm-[a-f0-9-]+/, 'gosqlx-wasm-' + hash); fs.writeFileSync('public/wasm-sw.js', sw); console.log('SW cache key updated to: gosqlx-wasm-' + hash);\""
   },
   "dependencies": {
     "@codemirror/lang-sql": "^6.10.0",

@@ -8,8 +8,17 @@ export const metadata: Metadata = {
 
 export default function PlaygroundPage() {
   return (
-    <div className="h-[calc(100vh-64px)]">
-      <PlaygroundLoader />
-    </div>
+    <>
+      {/* Preload WASM binary to start download before JS hydration */}
+      <link
+        rel="preload"
+        href="/wasm/gosqlx.wasm"
+        as="fetch"
+        crossOrigin="anonymous"
+      />
+      <div className="h-[calc(100vh-64px)]">
+        <PlaygroundLoader />
+      </div>
+    </>
   );
 }

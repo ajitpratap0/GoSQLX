@@ -1,4 +1,4 @@
-const WASM_CACHE = 'gosqlx-wasm-v1';
+const WASM_CACHE = 'gosqlx-wasm-7fe84bbe';
 const WASM_URL = '/wasm/gosqlx.wasm';
 
 self.addEventListener('install', (event) => {

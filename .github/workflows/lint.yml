@@ -17,12 +17,12 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.24'
+        go-version: '1.26'
 
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v7
       with:
-        version: v2.6.2
+        version: v2.11.3
         args: --timeout=10m --config=.golangci.yml
         verify: false
     

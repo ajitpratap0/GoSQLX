@@ -30,7 +30,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'  # Match project requirements in go.mod
+          go-version: '1.26'  # Match project requirements in go.mod
           cache: true
 
       - name: Run GoSec Security Scanner
@@ -168,7 +168,7 @@ jobs:
           # to handle golang.org/x packages which report as compound license
           allow-licenses: >-
             MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC,
-            BlueOak-1.0.0, OFL-1.1,
+            BlueOak-1.0.0, OFL-1.1, CC-BY-4.0, MPL-2.0,
             LicenseRef-scancode-google-patent-license-golang,
             BSD-3-Clause AND LicenseRef-scancode-google-patent-license-golang
 
@@ -182,7 +182,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'  # Match project requirements in go.mod
+          go-version: '1.26'  # Match project requirements in go.mod
           cache: true
 
       - name: Install govulncheck

@@ -1,5 +1,24 @@
+'use client';
+
+export interface LintViolation {
+  severity?: string;
+  level?: string;
+  rule?: string;
+  code?: string;
+  rule_code?: string;
+  line?: number;
+  column?: number;
+  location?: { line: number; column: number };
+  message?: string;
+  description?: string;
+  msg?: string;
+  suggestion?: string;
+  fix?: string;
+  hint?: string;
+}
+
 interface LintTabProps {
-  data: any;
+  data: { error?: string; violations?: LintViolation[]; results?: LintViolation[] } | LintViolation[] | null;
 }
 
 function SeverityBadge({ severity }: { severity: string }) {
@@ -27,7 +46,7 @@ export default function LintTab({ data }: LintTabProps) {
     );
   }
 
-  if (data.error) {
+  if (!Array.isArray(data) && data.error) {
     return (
       <div className="p-4">
         <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
@@ -70,7 +89,7 @@ export default function LintTab({ data }: LintTabProps) {
       <div className="text-sm text-slate-400 mb-2">
         {violations.length} violation{violations.length !== 1 ? "s" : ""} found
       </div>
-      {violations.map((v: any, i: number) => (
+      {violations.map((v: LintViolation, i: number) => (
         <div
           key={i}
           className="bg-slate-800/50 border border-slate-700 rounded-lg p-3 space-y-2"

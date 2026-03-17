@@ -65,8 +65,34 @@ export default async function DocPage({ params }: PageProps) {
     g.items.some((i) => i.slug === slugStr)
   );
 
+  const breadcrumbItems: Array<{ '@type': string; position: number; name: string; item: string }> = [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://gosqlx.dev/' },
+    { '@type': 'ListItem', position: 2, name: 'Documentation', item: 'https://gosqlx.dev/docs/' },
+    ...(categoryItem
+      ? [{ '@type': 'ListItem', position: 3, name: categoryItem.category, item: 'https://gosqlx.dev/docs/' }]
+      : []),
+    {
+      '@type': 'ListItem',
+      position: categoryItem ? 4 : 3,
+      name: doc.title,
+      item: `https://gosqlx.dev/docs/${slugStr}/`,
+    },
+  ];
+
+  const breadcrumbJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: breadcrumbItems,
+  };
+
   return (
-    <div className="mx-auto flex max-w-[90rem]">
+    <>
+      <script
+        type="application/ld+json"
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+      />
+      <div className="mx-auto flex max-w-[90rem]">
       {/* Sidebar */}
       <div className="hidden lg:block w-64 shrink-0">
         <Sidebar />
@@ -129,6 +155,7 @@ export default async function DocPage({ params }: PageProps) {
       <div className="hidden xl:block w-48 shrink-0 py-10 pr-6">
         <Toc headings={headings} />
       </div>
-    </div>
+      </div>
+    </>
   );
 }

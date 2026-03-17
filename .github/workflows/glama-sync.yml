@@ -1,0 +1,139 @@
+name: Glama MCP Server Sync
+
+# Runs on every GitHub release to:
+#   1. Keep glama.json version in sync with the release tag
+#   2. Trigger a fresh Glama Docker build pinned to the exact release commit
+#
+# Required secret: GLAMA_SESSION_COOKIE
+#   Glama's admin API is session-authenticated (no public API key).
+#   To obtain the cookie value:
+#     1. Log in at https://glama.ai
+#     2. Open DevTools (F12) → Network tab
+#     3. Navigate to https://glama.ai/mcp/servers/ajitpratap0/GoSQLX/admin/dockerfile
+#     4. Select any request to glama.ai → Headers → copy the full Cookie header value
+#     5. Add it as a repo secret: Settings → Secrets and variables → Actions → New secret
+#        Name: GLAMA_SESSION_COOKIE
+#   The cookie expires periodically. When builds start failing with "auth failed",
+#   repeat the steps above to refresh the secret.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  bump-glama-version:
+    name: Bump glama.json version
+    runs-on: ubuntu-latest
+    # Best-effort: branch protection may reject the push.
+    # In that case, update glama.json manually in the release PR.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.target_commitish }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bump version in glama.json
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Updating glama.json → $VERSION"
+          jq --arg v "$VERSION" '.version = $v' glama.json > /tmp/glama.json
+          mv /tmp/glama.json glama.json
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add glama.json
+          if git diff --staged --quiet; then
+            echo "glama.json already at ${GITHUB_REF_NAME#v} — no commit needed"
+          else
+            git commit -m "chore(glama): sync version to ${GITHUB_REF_NAME#v} [skip ci]"
+            git push
+          fi
+
+  trigger-glama-build:
+    name: Trigger Glama Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger build
+        env:
+          GLAMA_SESSION_COOKIE: ${{ secrets.GLAMA_SESSION_COOKIE }}
+          COMMIT_SHA: ${{ github.sha }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if [ -z "$GLAMA_SESSION_COOKIE" ]; then
+            echo "::warning::GLAMA_SESSION_COOKIE not set — skipping Glama build trigger."
+            echo ""
+            echo "One-time setup to enable automatic Glama builds on each release:"
+            echo "  1. Log in at https://glama.ai"
+            echo "  2. Open DevTools (F12) → Network tab"
+            echo "  3. Navigate to https://glama.ai/mcp/servers/ajitpratap0/GoSQLX/admin/dockerfile"
+            echo "  4. Select any request to glama.ai → Headers → copy the Cookie header value"
+            echo "  5. Go to repo Settings → Secrets and variables → Actions → New secret"
+            echo "     Name: GLAMA_SESSION_COOKIE"
+            echo ""
+            echo "Refresh the secret when builds start failing with auth errors."
+            exit 0
+          fi
+
+          python3 - <<'PYEOF'
+import os, sys, urllib.request, urllib.parse, json
+
+cookie = os.environ["GLAMA_SESSION_COOKIE"]
+sha    = os.environ["COMMIT_SHA"]
+tag    = os.environ["RELEASE_TAG"]
+
+# Build steps run inside Glama's debian:bookworm-slim container.
+# Update the Go version below when go.mod bumps the minimum Go requirement.
+build_steps = json.dumps([
+    "curl -fsSL -o /tmp/go.tar.gz https://go.dev/dl/go1.26.1.linux-amd64.tar.gz",
+    "tar -C /usr/local -xzf /tmp/go.tar.gz",
+    "PATH=/usr/local/go/bin:$PATH /usr/local/go/bin/go build -ldflags='-s -w' -o /app/gosqlx-mcp ./cmd/gosqlx-mcp",
+])
+cmd_args    = json.dumps(["mcp-proxy", "--", "/app/gosqlx-mcp", "--stdio"])
+arg_schema  = json.dumps({"properties": {}, "required": [], "type": "object"})
+placeholder = json.dumps({"GOSQLX_MCP_HOST": "0.0.0.0"})
+
+payload = urllib.parse.urlencode({
+    "intent":               "build",
+    "nodeVersion":          "25",
+    "pythonVersion":        "3.14",
+    "pinnedCommitSha":      sha,
+    "buildSteps":           build_steps,
+    "cmdArguments":         cmd_args,
+    "argumentsJsonSchema":  arg_schema,
+    "placeholderArguments": placeholder,
+}).encode()
+
+req = urllib.request.Request(
+    "https://glama.ai/mcp/servers/ajitpratap0/GoSQLX/admin/dockerfile?index",
+    data=payload,
+    headers={
+        "Cookie":       cookie,
+        "Content-Type": "application/x-www-form-urlencoded",
+    },
+)
+
+# Disable auto-redirect to inspect the Location header.
+class NoRedirect(urllib.request.HTTPErrorProcessor):
+    def http_response(self, request, response): return response
+    https_response = http_response
+
+opener   = urllib.request.build_opener(NoRedirect)
+resp     = opener.open(req)
+status   = resp.status
+location = resp.headers.get("Location", "")
+
+print(f"HTTP {status}  Location: {location}")
+
+if any(x in location for x in ("sign-up", "sign_up", "login", "auth")):
+    print("::error::Glama auth failed — GLAMA_SESSION_COOKIE is expired or invalid.")
+    print("Refresh: DevTools → Network → copy Cookie header → update GLAMA_SESSION_COOKIE secret.")
+    sys.exit(1)
+
+print(f"Glama build triggered for {tag} (pinned to {sha[:8]})")
+PYEOF

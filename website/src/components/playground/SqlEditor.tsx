@@ -146,5 +146,5 @@ export default function SqlEditor({
     }
   }, [value]);
 
-  return <div ref={containerRef} style={{ maxWidth: "100%", overflow: "hidden" }} aria-label={ariaLabel || placeholder || "SQL editor"} />;
+  return <div ref={containerRef} style={{ maxWidth: "100%", overflow: "hidden" }} aria-label={ariaLabel} />;
 }

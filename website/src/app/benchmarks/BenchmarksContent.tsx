@@ -183,60 +183,6 @@ export function BenchmarksContent() {
         </div>
       </section>
 
-      {/* Competitor Comparison */}
-      <section className="section-padding pb-16">
-        <div className="container-width">
-          <FadeIn>
-            <h2 className="text-2xl font-bold text-white mb-6">Competitor Comparison</h2>
-            <GlassCard className="p-0 overflow-hidden" hover={false}>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                  <thead>
-                    <tr className="border-b border-white/[0.06]">
-                      <th className="px-6 py-4 font-medium text-zinc-400">Library</th>
-                      <th className="px-6 py-4 font-medium text-zinc-400">Language</th>
-                      <th className="px-6 py-4 font-medium text-zinc-400">Ops/sec</th>
-                      <th className="px-6 py-4 font-medium text-zinc-400">Memory/op</th>
-                      <th className="px-6 py-4 font-medium text-zinc-400">Zero-copy</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors">
-                      <td className="px-6 py-4 text-white font-medium">GoSQLX</td>
-                      <td className="px-6 py-4 text-zinc-400">Go</td>
-                      <td className="px-6 py-4 text-zinc-300 font-mono">1.38M+</td>
-                      <td className="px-6 py-4 text-zinc-300">Low</td>
-                      <td className="px-6 py-4 text-accent-green font-medium">✓</td>
-                    </tr>
-                    <tr className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors">
-                      <td className="px-6 py-4 text-zinc-300 font-medium">xwb1989/sqlparser</td>
-                      <td className="px-6 py-4 text-zinc-400">Go</td>
-                      <td className="px-6 py-4 text-zinc-400 font-mono">~380K</td>
-                      <td className="px-6 py-4 text-zinc-400">Higher</td>
-                      <td className="px-6 py-4 text-zinc-500">✗</td>
-                    </tr>
-                    <tr className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors">
-                      <td className="px-6 py-4 text-zinc-300 font-medium">pg_query_go</td>
-                      <td className="px-6 py-4 text-zinc-400">Go</td>
-                      <td className="px-6 py-4 text-zinc-400 font-mono">~220K</td>
-                      <td className="px-6 py-4 text-zinc-400">Higher (CGo)</td>
-                      <td className="px-6 py-4 text-zinc-500">✗</td>
-                    </tr>
-                    <tr className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors">
-                      <td className="px-6 py-4 text-zinc-300 font-medium">blastrain/sqlparser</td>
-                      <td className="px-6 py-4 text-zinc-400">Go</td>
-                      <td className="px-6 py-4 text-zinc-400 font-mono">~290K</td>
-                      <td className="px-6 py-4 text-zinc-400">Medium</td>
-                      <td className="px-6 py-4 text-zinc-500">✗</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </GlassCard>
-          </FadeIn>
-        </div>
-      </section>
-
       {/* Methodology */}
       <section className="section-padding pb-24">
         <div className="container-width max-w-2xl">

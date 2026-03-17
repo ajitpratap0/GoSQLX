@@ -8,7 +8,7 @@ interface FormatTabProps {
 export default function FormatTab({ data }: FormatTabProps) {
   if (!data) {
     return (
-      <div className="flex items-center justify-center h-full text-slate-500 text-sm">
+      <div className="flex items-center justify-center h-full text-slate-400 text-sm">
         No data available. Enter a SQL query to see formatted output.
       </div>
     );

@@ -148,8 +148,8 @@ export default function Playground() {
             </svg>
           </div>
           <p className="text-red-400 font-medium">Failed to load SQL parser</p>
-          <p className="text-slate-500 text-sm">{error.message}</p>
-          <p className="text-slate-600 text-xs">Try refreshing the page to retry.</p>
+          <p className="text-slate-400 text-sm">{error.message}</p>
+          <p className="text-slate-400 text-xs">Try refreshing the page to retry.</p>
         </div>
       </div>
     );
@@ -179,7 +179,7 @@ export default function Playground() {
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-green-500" aria-hidden="true" />
-          <span className="text-xs text-slate-500">WASM Ready</span>
+          <span className="text-xs text-slate-400">WASM Ready</span>
         </div>
       </div>
 
@@ -188,7 +188,7 @@ export default function Playground() {
         {/* Left panel - SQL Editor */}
         <div className="w-full md:w-1/2 border-r border-slate-800 flex flex-col min-h-0">
           <div className="px-4 py-2 border-b border-slate-800 bg-slate-900/30">
-            <span className="text-xs text-slate-500 uppercase tracking-wider font-medium">Input</span>
+            <span className="text-xs text-slate-400 uppercase tracking-wider font-medium">Input</span>
           </div>
           <div className="flex-1 overflow-auto p-2">
             <SqlEditor
@@ -210,7 +210,6 @@ export default function Playground() {
                 id={`tab-${tab.id}`}
                 role="tab"
                 aria-selected={activeTab === tab.id}
-                aria-controls={`tabpanel-${tab.id}`}
                 onClick={() => setActiveTab(tab.id)}
                 className={`px-4 py-3 text-sm font-medium transition-colors relative ${
                   activeTab === tab.id

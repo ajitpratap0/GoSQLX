@@ -1,0 +1,51 @@
+name: Lighthouse CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+  pull_request:
+    paths:
+      - 'website/**'
+  workflow_dispatch:
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install and build website
+        run: |
+          cd website
+          npm ci
+          npm run build
+
+      - name: Start local server
+        run: |
+          cd website
+          npx serve out -l 3000 &
+          sleep 3
+
+      - name: Run Lighthouse
+        uses: treosh/lighthouse-ci-action@v12
+        with:
+          urls: |
+            http://localhost:3000/
+            http://localhost:3000/playground
+            http://localhost:3000/docs
+          configPath: '.github/lighthouse/lighthouserc.json'
+          uploadArtifacts: true
+
+      - name: Check scores
+        run: |
+          echo "Lighthouse audit complete. Check artifacts for detailed results."

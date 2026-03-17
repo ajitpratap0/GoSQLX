@@ -42,6 +42,7 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	gosqlxmcp "github.com/ajitpratap0/GoSQLX/pkg/mcp"
+	mcpserver "github.com/mark3labs/mcp-go/server"
 )
 
 func main() {
@@ -52,6 +53,31 @@ func main() {
 }
 
 func run() error {
+	// Check for --stdio flag (used when spawned by mcp-proxy as a subprocess).
+	for _, arg := range os.Args[1:] {
+		if arg == "--stdio" {
+			return runStdio()
+		}
+	}
+	return runHTTP()
+}
+
+// runStdio serves the MCP protocol over stdin/stdout.
+// This mode is used when the binary is spawned by mcp-proxy.
+func runStdio() error {
+	cfg := gosqlxmcp.DefaultConfig()
+	srv := gosqlxmcp.New(cfg)
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	stdioSrv := mcpserver.NewStdioServer(srv.MCPServer())
+	stdioSrv.SetErrorLogger(log.New(os.Stderr, "gosqlx-mcp: ", log.LstdFlags))
+	return stdioSrv.Listen(ctx, os.Stdin, os.Stdout)
+}
+
+// runHTTP serves the MCP protocol over streamable HTTP transport.
+func runHTTP() error {
 	cfg, err := gosqlxmcp.LoadConfig()
 	if err != nil {
 		return fmt.Errorf("configuration error: %w", err)

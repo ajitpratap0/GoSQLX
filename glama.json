@@ -1,0 +1,108 @@
+{
+  "$schema": "https://glama.ai/mcp/schemas/server.json",
+  "maintainers": ["ajitpratap0"],
+  "name": "gosqlx-mcp",
+  "display_name": "GoSQLX — SQL Intelligence MCP Server",
+  "description": "Production-ready SQL parsing, formatting, linting, security scanning, and metadata extraction for Go. 7 MCP tools covering the full SQL analysis pipeline: validate_sql, format_sql, parse_sql, extract_metadata, security_scan, lint_sql, and analyze_sql. Supports PostgreSQL, MySQL, SQL Server, Oracle, SQLite, and Snowflake dialects. 1.38M+ ops/sec, zero-copy, race-free.",
+  "repository": "https://github.com/ajitpratap0/GoSQLX",
+  "homepage": "https://gosqlx.dev",
+  "version": "1.12.1",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Ajit Pratap Singh",
+    "url": "https://github.com/ajitpratap0"
+  },
+  "url": "https://mcp.gosqlx.dev/mcp",
+  "transport": "streamable-http",
+  "runtime": "go",
+  "categories": [
+    "developer-tools",
+    "databases",
+    "security",
+    "code-quality"
+  ],
+  "keywords": [
+    "sql",
+    "sql-parser",
+    "sql-formatter",
+    "sql-linter",
+    "sql-security",
+    "sql-injection",
+    "ast",
+    "go",
+    "golang",
+    "postgresql",
+    "mysql",
+    "sqlite",
+    "sql-server",
+    "oracle",
+    "snowflake",
+    "mcp",
+    "code-analysis"
+  ],
+  "tools": [
+    {
+      "name": "validate_sql",
+      "description": "Validate SQL syntax against generic or dialect-specific rules. Accepts optional dialect parameter (generic, mysql, postgresql, sqlite, sqlserver, oracle, snowflake). Returns {valid: bool, error?: string, dialect?: string}."
+    },
+    {
+      "name": "format_sql",
+      "description": "Format SQL with configurable indentation size, keyword casing (uppercase/lowercase), and optional trailing semicolon. Returns the formatted SQL string and the options applied."
+    },
+    {
+      "name": "parse_sql",
+      "description": "Parse SQL into an AST and return a summary: total statement count and fully-qualified AST node types for each statement."
+    },
+    {
+      "name": "extract_metadata",
+      "description": "Extract all tables, columns, and functions referenced in a SQL query. Useful for schema dependency analysis, query auditing, and impact analysis."
+    },
+    {
+      "name": "security_scan",
+      "description": "Scan SQL for injection attack patterns: tautologies (1=1), UNION-based attacks, stacked queries, comment bypasses, blind injection probes. Returns severity-classified findings (critical/high/medium/low) with descriptions and remediation suggestions."
+    },
+    {
+      "name": "lint_sql",
+      "description": "Lint SQL against all 10 GoSQLX style rules (L001–L010): trailing whitespace, mixed indentation, consecutive blank lines, indentation depth, line length, column alignment, keyword case, comma placement, aliasing consistency, redundant whitespace. Returns violations with line/column positions and fix suggestions."
+    },
+    {
+      "name": "analyze_sql",
+      "description": "Run all 6 analysis tools concurrently (validate_sql, parse_sql, extract_metadata, security_scan, lint_sql, format_sql) and return a single composite report. The most efficient way to get full SQL intelligence in one call."
+    }
+  ],
+  "capabilities": {
+    "tools": true,
+    "prompts": false,
+    "resources": false
+  },
+  "features": {
+    "dialects": [
+      "generic",
+      "mysql",
+      "postgresql",
+      "sqlite",
+      "sqlserver",
+      "oracle",
+      "snowflake"
+    ],
+    "security": {
+      "injection_detection": true,
+      "severity_levels": ["critical", "high", "medium", "low"],
+      "patterns": ["tautology", "union-attack", "stacked-queries", "comment-bypass", "blind-injection"]
+    },
+    "linting": {
+      "rules": 10,
+      "rule_ids": ["L001", "L002", "L003", "L004", "L005", "L006", "L007", "L008", "L009", "L010"]
+    },
+    "performance": {
+      "ops_per_sec": "1380000+",
+      "concurrency": "race-free",
+      "memory": "zero-copy object pooling"
+    }
+  },
+  "related_servers": [
+    "designcomputer/mysql_mcp_server",
+    "ktanaka101/mcp-server-duckdb",
+    "ClickHouse/mcp-clickhouse"
+  ]
+}

@@ -168,9 +168,11 @@ jobs:
           # to handle golang.org/x packages which report as compound license
           allow-licenses: >-
             MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC,
-            BlueOak-1.0.0, OFL-1.1, CC-BY-4.0, MPL-2.0,
+            BlueOak-1.0.0, OFL-1.1, CC-BY-4.0, MPL-2.0, 0BSD,
             LicenseRef-scancode-google-patent-license-golang,
-            BSD-3-Clause AND LicenseRef-scancode-google-patent-license-golang
+            BSD-3-Clause AND LicenseRef-scancode-google-patent-license-golang,
+            LicenseRef-bad-fsl-1.1-mit,
+            0BSD AND ISC AND MIT
 
   govulncheck:
     name: Go Vulnerability Check

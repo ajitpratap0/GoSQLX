@@ -1,24 +1,23 @@
-'use client';
-
-import { FadeIn } from '@/components/ui/FadeIn';
-import { Button } from '@/components/ui/Button';
+import Link from 'next/link';
 
 export default function NotFound() {
   return (
-    <main className="min-h-screen flex items-center justify-center">
-      <FadeIn className="text-center">
-        <h1 className="text-4xl font-bold tracking-tight text-white">
+    <main id="main-content" className="min-h-screen flex items-center justify-center">
+      <div className="text-center">
+        <p className="text-sm font-semibold text-emerald-400 uppercase tracking-wider mb-4">404</p>
+        <h1 className="text-4xl font-bold tracking-tight text-white mb-4">
           Page not found
         </h1>
-        <p className="mt-4 text-lg text-zinc-400">
+        <p className="text-lg text-zinc-400 mb-8">
           The page you&apos;re looking for doesn&apos;t exist.
         </p>
-        <div className="mt-8">
-          <Button variant="primary" href="/">
-            Back to Home
-          </Button>
-        </div>
-      </FadeIn>
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-400 transition-colors"
+        >
+          Back to Home
+        </Link>
+      </div>
     </main>
   );
 }

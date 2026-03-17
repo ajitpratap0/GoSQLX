@@ -38,7 +38,7 @@ function AstNode({ data, depth = 0, label }: AstNodeProps) {
 
   if (data === null || data === undefined) {
     return (
-      <span className="text-slate-500 italic text-sm">
+      <span className="text-slate-400 italic text-sm">
         {label && <span className="text-slate-400 mr-1">{label}:</span>}
         null
       </span>
@@ -61,7 +61,7 @@ function AstNode({ data, depth = 0, label }: AstNodeProps) {
       return (
         <span className="text-sm">
           {label && <span className="text-slate-400 mr-1">{label}:</span>}
-          <span className="text-slate-500">[]</span>
+          <span className="text-slate-400">[]</span>
         </span>
       );
     }
@@ -72,11 +72,11 @@ function AstNode({ data, depth = 0, label }: AstNodeProps) {
           onClick={() => setCollapsed(!collapsed)}
           className="flex items-center gap-1 hover:bg-slate-700/50 rounded px-1 -ml-1 text-sm min-h-[44px] py-2"
         >
-          <span className="text-slate-500 w-4 text-center">
+          <span className="text-slate-400 w-4 text-center">
             {collapsed ? "+" : "-"}
           </span>
           {label && <span className="text-slate-400">{label}:</span>}
-          <span className="text-slate-500">[{data.length}]</span>
+          <span className="text-slate-400">[{data.length}]</span>
         </button>
         {!collapsed && (
           <div className="ml-4 border-l border-slate-700 pl-3 mt-0.5 space-y-1">
@@ -103,7 +103,7 @@ function AstNode({ data, depth = 0, label }: AstNodeProps) {
       return (
         <span className="text-sm">
           {label && <span className="text-slate-400 mr-1">{label}:</span>}
-          <span className="text-slate-500">{"{}"}</span>
+          <span className="text-slate-400">{"{}"}</span>
         </span>
       );
     }
@@ -114,13 +114,13 @@ function AstNode({ data, depth = 0, label }: AstNodeProps) {
           onClick={() => setCollapsed(!collapsed)}
           className="flex items-center gap-1.5 hover:bg-slate-700/50 rounded px-1 -ml-1 text-sm min-h-[44px] py-2"
         >
-          <span className="text-slate-500 w-4 text-center">
+          <span className="text-slate-400 w-4 text-center">
             {collapsed ? "+" : "-"}
           </span>
           {label && <span className="text-slate-400">{label}:</span>}
           {nodeType && <TypeBadge type={nodeType} />}
           {collapsed && (
-            <span className="text-slate-600">{`{${keys.length} keys}`}</span>
+            <span className="text-slate-400">{`{${keys.length} keys}`}</span>
           )}
         </button>
         {!collapsed && (
@@ -144,7 +144,7 @@ interface AstTabProps {
 export default function AstTab({ data }: AstTabProps) {
   if (!data) {
     return (
-      <div className="flex items-center justify-center h-full text-slate-500 text-sm">
+      <div className="flex items-center justify-center h-full text-slate-400 text-sm">
         No data available. Enter a SQL query to see the AST.
       </div>
     );

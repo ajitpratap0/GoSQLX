@@ -40,7 +40,7 @@ function SeverityBadge({ severity }: { severity: string }) {
 export default function LintTab({ data }: LintTabProps) {
   if (!data) {
     return (
-      <div className="flex items-center justify-center h-full text-slate-500 text-sm">
+      <div className="flex items-center justify-center h-full text-slate-400 text-sm">
         No data available. Enter a SQL query to run the linter.
       </div>
     );
@@ -79,7 +79,7 @@ export default function LintTab({ data }: LintTabProps) {
           </svg>
         </div>
         <p className="text-green-400 font-medium">No violations found</p>
-        <p className="text-slate-500 text-sm">Your SQL looks clean!</p>
+        <p className="text-slate-400 text-sm">Your SQL looks clean!</p>
       </div>
     );
   }
@@ -102,7 +102,7 @@ export default function LintTab({ data }: LintTabProps) {
               </span>
             )}
             {(v.line !== undefined || v.location) && (
-              <span className="text-xs text-slate-500 font-mono">
+              <span className="text-xs text-slate-400 font-mono">
                 {v.location
                   ? `${v.location.line}:${v.location.column}`
                   : `${v.line}:${v.column ?? 0}`}

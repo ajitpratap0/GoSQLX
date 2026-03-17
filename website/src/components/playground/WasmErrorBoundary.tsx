@@ -22,7 +22,7 @@ export class WasmErrorBoundary extends Component<Props, State> {
               </svg>
             </div>
             <p className="text-red-400 font-medium">Something went wrong</p>
-            <p className="text-zinc-500 text-sm">{this.state.error?.message}</p>
+            <p className="text-zinc-400 text-sm">{this.state.error?.message}</p>
             <button
               onClick={() => this.setState({ hasError: false, error: null })}
               className="px-4 py-2 bg-white/[0.06] border border-white/[0.1] rounded-lg text-sm text-zinc-300 hover:bg-white/[0.1] transition-colors"

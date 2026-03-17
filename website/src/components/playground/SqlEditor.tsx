@@ -9,7 +9,15 @@ import {
   syntaxHighlighting,
   defaultHighlightStyle,
   bracketMatching,
+  HighlightStyle,
 } from "@codemirror/language";
+import { tags } from "@lezer/highlight";
+
+// Override oneDark's coral (#e06c75) which fails WCAG AA (4.38:1 on #282c34).
+// #e87980 achieves ~5.07:1 contrast against #282c34.
+const accessibleHighlight = HighlightStyle.define([
+  { tag: [tags.name, tags.deleted, tags.character, tags.propertyName, tags.macroName], color: "#e87980" },
+]);
 
 interface SqlEditorProps {
   value: string;
@@ -17,6 +25,7 @@ interface SqlEditorProps {
   placeholder?: string;
   readOnly?: boolean;
   minHeight?: string;
+  ariaLabel?: string;
 }
 
 const baseTheme = EditorView.theme({
@@ -49,6 +58,7 @@ export default function SqlEditor({
   placeholder = "",
   readOnly = false,
   minHeight = "200px",
+  ariaLabel = "SQL editor",
 }: SqlEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -86,12 +96,14 @@ export default function SqlEditor({
     const extensions = [
       baseTheme,
       minHeightTheme,
+      syntaxHighlighting(accessibleHighlight),
       oneDark,
       sql(),
       syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
       bracketMatching(),
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
+      EditorView.contentAttributes.of({ "aria-label": ariaLabel }),
       updateListener,
     ];
 
@@ -144,5 +156,5 @@ export default function SqlEditor({
     }
   }, [value]);
 
-  return <div ref={containerRef} style={{ maxWidth: "100%", overflow: "hidden" }} />;
+  return <div ref={containerRef} style={{ maxWidth: "100%", overflow: "hidden" }} aria-label={ariaLabel} />;
 }

@@ -15,14 +15,14 @@ const FOOTER_LINKS = {
     { label: 'Getting Started', href: '/docs/getting-started' },
     { label: 'API Reference', href: '/docs/api-reference' },
     { label: 'Blog', href: '/blog' },
-    { label: 'Changelog', href: 'https://github.com/ajitpsingh/GoSQLX/blob/main/CHANGELOG.md', external: true },
+    { label: 'Changelog', href: 'https://github.com/ajitpratap0/GoSQLX/blob/main/CHANGELOG.md', external: true },
     { label: 'Privacy Policy', href: '/privacy' },
   ],
   Community: [
-    { label: 'GitHub', href: 'https://github.com/ajitpsingh/GoSQLX', external: true },
-    { label: 'Issues', href: 'https://github.com/ajitpsingh/GoSQLX/issues', external: true },
-    { label: 'Discussions', href: 'https://github.com/ajitpsingh/GoSQLX/discussions', external: true },
-    { label: 'Releases', href: 'https://github.com/ajitpsingh/GoSQLX/releases', external: true },
+    { label: 'GitHub', href: 'https://github.com/ajitpratap0/GoSQLX', external: true },
+    { label: 'Issues', href: 'https://github.com/ajitpratap0/GoSQLX/issues', external: true },
+    { label: 'Discussions', href: 'https://github.com/ajitpratap0/GoSQLX/discussions', external: true },
+    { label: 'Releases', href: 'https://github.com/ajitpratap0/GoSQLX/releases', external: true },
   ],
 };
 
@@ -38,10 +38,10 @@ export function Footer() {
             {/* Logo column */}
             <div className="col-span-2 md:col-span-1">
               <Link href="/" className="flex items-center gap-2.5">
-                <Image src="/images/logo.webp" alt="GoSQLX" width={28} height={28} />
+                <Image src="/images/logo.webp" alt="" width={28} height={28} />
                 <span className="text-lg font-semibold text-white">GoSQLX</span>
               </Link>
-              <p className="mt-3 text-sm text-zinc-500 max-w-xs">
+              <p className="mt-3 text-sm text-zinc-400 max-w-xs">
                 Production-ready SQL parsing SDK for Go. Zero-copy, thread-safe, multi-dialect.
               </p>
             </div>
@@ -49,7 +49,7 @@ export function Footer() {
             {/* Link columns */}
             {Object.entries(FOOTER_LINKS).map(([category, links]) => (
               <div key={category}>
-                <h3 className="text-sm font-medium text-zinc-300 mb-3">{category}</h3>
+                <h2 className="text-sm font-medium text-zinc-300 mb-3">{category}</h2>
                 <ul className="space-y-2">
                   {links.map((link) => (
                     <li key={link.label}>
@@ -58,14 +58,14 @@ export function Footer() {
                           href={link.href}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors duration-200"
+                          className="text-sm text-zinc-400 hover:text-zinc-100 transition-colors duration-200"
                         >
                           {link.label}
                         </a>
                       ) : (
                         <Link
                           href={link.href}
-                          className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors duration-200"
+                          className="text-sm text-zinc-400 hover:text-zinc-100 transition-colors duration-200"
                         >
                           {link.label}
                         </Link>
@@ -78,7 +78,7 @@ export function Footer() {
           </div>
 
           <div className="mt-12 pt-8 border-t border-white/[0.06] text-center">
-            <p className="text-sm text-zinc-600">
+            <p className="text-sm text-zinc-400">
               Built with love by the GoSQLX community &middot; &copy; {new Date().getFullYear()} GoSQLX
             </p>
           </div>

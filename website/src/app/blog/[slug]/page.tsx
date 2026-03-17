@@ -21,11 +21,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: post.title,
     description: `GoSQLX ${post.title} release notes.`,
+    alternates: {
+      canonical: `https://gosqlx.dev/blog/${slug}/`,
+    },
     openGraph: {
       title: `GoSQLX ${post.title}`,
       description: `GoSQLX ${post.title} release notes.`,
       type: 'article',
       publishedTime: post.date ? `${post.date}T00:00:00Z` : undefined,
+      url: `https://gosqlx.dev/blog/${slug}/`,
     },
   };
 }
@@ -51,9 +55,49 @@ export default async function BlogPostPage({ params }: Props) {
   const prevPost = currentIndex < allPosts.length - 1 ? allPosts[currentIndex + 1] : null;
   const nextPost = currentIndex > 0 ? allPosts[currentIndex - 1] : null;
 
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'TechArticle',
+    headline: post.title,
+    description: `GoSQLX ${post.title} release notes.`,
+    datePublished: post.date ? `${post.date}T00:00:00Z` : undefined,
+    dateModified: post.date ? `${post.date}T00:00:00Z` : undefined,
+    url: `https://gosqlx.dev/blog/${slug}/`,
+    author: {
+      '@type': 'Organization',
+      name: 'GoSQLX',
+      url: 'https://gosqlx.dev',
+    },
+    publisher: {
+      '@type': 'Organization',
+      name: 'GoSQLX',
+      url: 'https://gosqlx.dev',
+      logo: {
+        '@type': 'ImageObject',
+        url: 'https://gosqlx.dev/images/logo.webp',
+      },
+    },
+    image: {
+      '@type': 'ImageObject',
+      url: 'https://gosqlx.dev/images/og-image.png',
+      width: 1200,
+      height: 630,
+    },
+    mainEntityOfPage: {
+      '@type': 'WebPage',
+      '@id': `https://gosqlx.dev/blog/${slug}/`,
+    },
+  };
+
   return (
-    <main className="min-h-screen py-20 px-4">
-      <article className="max-w-3xl mx-auto">
+    <>
+      <script
+        type="application/ld+json"
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <main className="min-h-screen py-20 px-4">
+        <article className="max-w-3xl mx-auto">
         {/* Back link */}
         <Link
           href="/blog"
@@ -114,8 +158,9 @@ export default async function BlogPostPage({ params }: Props) {
             <div />
           )}
         </nav>
-      </article>
-    </main>
+        </article>
+      </main>
+    </>
   );
 }
 

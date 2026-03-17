@@ -60,7 +60,7 @@ export function Navbar() {
       <nav className="mx-auto max-w-7xl flex items-center justify-between px-4 sm:px-6 lg:px-8 h-16">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 shrink-0">
-          <Image src="/images/logo.webp" alt="GoSQLX" width={32} height={32} priority />
+          <Image src="/images/logo.webp" alt="" width={32} height={32} priority />
           <span className="text-lg font-semibold text-white">GoSQLX</span>
         </Link>
 
@@ -70,7 +70,7 @@ export function Navbar() {
             <Link
               key={link.href}
               href={link.href}
-              className="px-3 py-2 text-sm text-zinc-400 hover:text-white transition-colors duration-200 rounded-lg hover:bg-white/[0.04]"
+              className="px-3 py-2 text-sm text-zinc-300 hover:text-white transition-colors duration-200 rounded-lg hover:bg-white/[0.04]"
             >
               {link.label}
             </Link>
@@ -80,10 +80,10 @@ export function Navbar() {
         {/* Desktop right side */}
         <div className="hidden md:flex items-center gap-3">
           <a
-            href="https://github.com/ajitpsingh/GoSQLX"
+            href="https://github.com/ajitpratap0/GoSQLX"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-zinc-400 hover:text-white transition-colors duration-200 p-2 rounded-lg hover:bg-white/[0.04]"
+            className="text-zinc-300 hover:text-white transition-colors duration-200 p-2 rounded-lg hover:bg-white/[0.04]"
             aria-label="GitHub"
           >
             <GitHubIcon className="w-5 h-5" />
@@ -120,17 +120,17 @@ export function Navbar() {
                   key={link.href}
                   href={link.href}
                   onClick={() => setMobileOpen(false)}
-                  className="block px-3 py-2.5 text-sm text-zinc-400 hover:text-white hover:bg-white/[0.04] rounded-lg transition-colors"
+                  className="block px-3 py-2.5 text-sm text-zinc-300 hover:text-white hover:bg-white/[0.04] rounded-lg transition-colors"
                 >
                   {link.label}
                 </Link>
               ))}
               <div className="pt-3 border-t border-white/[0.06] flex items-center gap-3">
                 <a
-                  href="https://github.com/ajitpsingh/GoSQLX"
+                  href="https://github.com/ajitpratap0/GoSQLX"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-zinc-400 hover:text-white transition-colors p-2"
+                  className="text-zinc-300 hover:text-white transition-colors p-2"
                   aria-label="GitHub"
                 >
                   <GitHubIcon className="w-5 h-5" />

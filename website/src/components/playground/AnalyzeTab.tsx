@@ -70,7 +70,7 @@ function ScoreCard({ title, score, subtitle }: { title: string; score: number | 
       >
         {displayScore}
       </div>
-      {subtitle && <div className="text-xs text-slate-500 mt-1">{subtitle}</div>}
+      {subtitle && <div className="text-xs text-slate-400 mt-1">{subtitle}</div>}
     </div>
   );
 }
@@ -78,7 +78,7 @@ function ScoreCard({ title, score, subtitle }: { title: string; score: number | 
 export default function AnalyzeTab({ data }: AnalyzeTabProps) {
   if (!data) {
     return (
-      <div className="flex items-center justify-center h-full text-slate-500 text-sm">
+      <div className="flex items-center justify-center h-full text-slate-400 text-sm">
         No data available. Enter a SQL query to analyze it.
       </div>
     );

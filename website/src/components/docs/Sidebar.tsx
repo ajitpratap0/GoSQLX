@@ -22,7 +22,7 @@ export function Sidebar() {
         <div key={group.category}>
           <button
             onClick={() => toggleCategory(group.category)}
-            className="flex w-full items-center justify-between px-3 text-xs font-semibold uppercase tracking-wider text-zinc-500 hover:text-zinc-300 transition-colors"
+            className="flex w-full items-center justify-between px-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 hover:text-zinc-200 transition-colors"
           >
             {group.category}
             <svg

@@ -5,7 +5,7 @@ import { FadeIn } from '@/components/ui/FadeIn';
 const badges = [
   {
     alt: 'GitHub Stars',
-    src: 'https://img.shields.io/github/stars/gosqlx/gosqlx?style=flat-square&color=6366f1&labelColor=18181b',
+    src: 'https://img.shields.io/github/stars/ajitpratap0/GoSQLX?style=flat-square&color=6366f1&labelColor=18181b',
     width: 100,
     height: 20,
   },

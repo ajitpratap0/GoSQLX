@@ -184,9 +184,9 @@ export default function Playground() {
       </div>
 
       {/* Main content: split panels */}
-      <div className="flex flex-col md:flex-row flex-1 min-h-0">
+      <div className="flex flex-col lg:flex-row flex-1 min-h-0">
         {/* Left panel - SQL Editor */}
-        <div className="w-full md:w-1/2 border-r border-slate-800 flex flex-col min-h-0">
+        <div className="w-full lg:w-1/2 border-r border-slate-800 flex flex-col min-h-0">
           <div className="px-4 py-2 border-b border-slate-800 bg-slate-900/30">
             <span className="text-xs text-slate-400 uppercase tracking-wider font-medium">Input</span>
           </div>
@@ -201,7 +201,7 @@ export default function Playground() {
         </div>
 
         {/* Right panel - Tabs + Content */}
-        <div className="w-full md:w-1/2 flex flex-col min-h-0">
+        <div className="w-full lg:w-1/2 flex flex-col min-h-0">
           {/* Tab bar with animated underline */}
           <div className="flex border-b border-slate-800 bg-slate-900/30" role="tablist" aria-label="Output format">
             {TABS.map((tab) => (

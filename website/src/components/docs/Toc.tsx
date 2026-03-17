@@ -43,13 +43,18 @@ export function Toc({ headings }: TocProps) {
       </h4>
       <ul className="space-y-1.5 text-sm">
         {headings.map((heading) => (
-          <li key={heading.id} style={{ paddingLeft: heading.level === 3 ? '0.75rem' : 0 }}>
+          <li key={heading.id} className={heading.level === 3 ? 'pl-3' : ''}>
             <a
               href={`#${heading.id}`}
-              className={`block py-0.5 transition-colors ${
+              title={heading.text}
+              className={`block overflow-hidden text-ellipsis whitespace-nowrap py-0.5 transition-colors ${
+                heading.level === 3 ? 'text-xs' : 'font-medium'
+              } ${
                 activeId === heading.id
                   ? 'text-white font-medium'
-                  : 'text-zinc-500 hover:text-zinc-300'
+                  : heading.level === 3
+                  ? 'text-zinc-500 hover:text-zinc-300'
+                  : 'text-zinc-400 hover:text-zinc-300'
               }`}
             >
               {heading.text}

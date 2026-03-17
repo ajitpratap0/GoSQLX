@@ -1,19 +1,18 @@
 'use client';
 
 interface SecurityAnalysis {
-  critical?: number;
-  high?: number;
-  medium?: number;
-  low?: number;
+  critical_count?: number;
+  high_count?: number;
+  medium_count?: number;
+  low_count?: number;
+  total_count?: number;
+  findings?: unknown[];
 }
 
 interface OptimizationResult {
-  score?: number;
-}
-
-interface ComplexityResult {
-  level?: string;
-  rating?: string;
+  Score?: number;
+  QueryComplexity?: string;
+  Suggestions?: unknown[];
 }
 
 interface Suggestion {
@@ -25,14 +24,7 @@ interface Suggestion {
 export interface AnalysisData {
   error?: string;
   security?: SecurityAnalysis;
-  security_analysis?: SecurityAnalysis;
-  optimization?: number | OptimizationResult;
-  optimization_score?: number;
-  performance?: OptimizationResult;
-  query_complexity?: string | ComplexityResult;
-  complexity?: string | ComplexityResult;
-  suggestions?: (string | Suggestion)[];
-  recommendations?: (string | Suggestion)[];
+  optimization?: OptimizationResult | number;
 }
 
 interface AnalyzeTabProps {
@@ -101,32 +93,32 @@ export default function AnalyzeTab({ data }: AnalyzeTabProps) {
   }
 
   // Derive security score
-  const security = data.security || data.security_analysis || {};
-  const critical = security.critical || 0;
-  const high = security.high || 0;
-  const medium = security.medium || 0;
-  const low = security.low || 0;
+  const security = (data.security || {}) as SecurityAnalysis;
+  const critical = security.critical_count || 0;
+  const high = security.high_count || 0;
+  const medium = security.medium_count || 0;
+  const low = security.low_count || 0;
   const securityScore = Math.max(0, 100 - (critical * 25 + high * 10 + medium * 5 + low * 1));
 
   // Optimization score
-  const optimization = data.optimization || data.optimization_score || data.performance || {};
+  const optimization = data.optimization;
   const optimizationScore = typeof optimization === "number"
     ? optimization
-    : typeof optimization.score === "number"
-      ? optimization.score
-      : typeof data.optimization_score === "number"
-        ? data.optimization_score
-        : 100;
+    : typeof (optimization as OptimizationResult)?.Score === "number"
+      ? (optimization as OptimizationResult).Score!
+      : 100;
 
-  // Complexity
-  const complexity = data.query_complexity || data.complexity || {};
-  const complexityLevel = typeof complexity === "string"
-    ? complexity
-    : complexity.level || complexity.rating || "N/A";
+  // Complexity (nested inside optimization object)
+  const complexityRaw = typeof optimization === "object" && optimization !== null
+    ? (optimization as OptimizationResult).QueryComplexity
+    : undefined;
+  const complexityLevel = complexityRaw || "N/A";
 
-  // Suggestions
-  const suggestions = data.suggestions || data.recommendations || [];
-  const allSuggestions = Array.isArray(suggestions) ? suggestions : [];
+  // Suggestions (nested inside optimization object)
+  const rawSuggestions = typeof optimization === "object" && optimization !== null
+    ? (optimization as OptimizationResult).Suggestions
+    : undefined;
+  const allSuggestions = Array.isArray(rawSuggestions) ? rawSuggestions : [];
 
   return (
     <div className="p-4 overflow-auto h-full space-y-6">
@@ -152,8 +144,9 @@ export default function AnalyzeTab({ data }: AnalyzeTabProps) {
         <div>
           <h3 className="text-sm font-medium text-slate-300 mb-3">Suggestions</h3>
           <div className="space-y-2">
-            {allSuggestions.map((s: string | Suggestion, i: number) => {
-              const text = typeof s === "string" ? s : s.message || s.description || s.text || JSON.stringify(s);
+            {allSuggestions.map((s: unknown, i: number) => {
+              const suggestion = s as string | Suggestion;
+              const text = typeof suggestion === "string" ? suggestion : suggestion.message || suggestion.description || suggestion.text || JSON.stringify(suggestion);
               return (
                 <div
                   key={i}

@@ -19,7 +19,7 @@ export function VscodeSection() {
                 Real-time SQL validation, formatting, and linting in VS Code. Catch errors as you type with full multi-dialect support.
               </p>
               <Button
-                href="https://marketplace.visualstudio.com/items?itemName=gosqlx.gosqlx"
+                href="https://marketplace.visualstudio.com/items?itemName=ajitpratap0.gosqlx"
                 variant="primary"
                 external
               >

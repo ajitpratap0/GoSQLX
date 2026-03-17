@@ -14,7 +14,6 @@ self.addEventListener('activate', (event) => {
       Promise.all(keys.filter((k) => k !== WASM_CACHE).map((k) => caches.delete(k)))
     )
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {

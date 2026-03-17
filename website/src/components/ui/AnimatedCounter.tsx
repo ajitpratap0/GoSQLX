@@ -6,9 +6,14 @@ export function AnimatedCounter({ value, suffix = '', color = 'text-white' }: { 
   const ref = useRef(null);
   const motionValue = useMotionValue(0);
   const spring = useSpring(motionValue, { stiffness: 100, damping: 30 });
-  const [display, setDisplay] = useState('0');
+  const [display, setDisplay] = useState(() => value.toLocaleString());
 
   useEffect(() => {
+    // Respect prefers-reduced-motion
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setDisplay(value.toLocaleString());
+      return;
+    }
     // Start animation after a short delay to ensure mount has completed
     const timer = setTimeout(() => {
       motionValue.set(value);

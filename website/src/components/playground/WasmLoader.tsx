@@ -34,18 +34,18 @@ export interface UseWasmResult {
 
 function callAndParse(fn: (sql: string, dialect?: string) => string, sql: string, dialect?: string): unknown {
   const raw = dialect ? fn(sql, dialect) : fn(sql);
-  // Try to parse as JSON first; if it fails, return as raw string
-  // (e.g., format() returns plain SQL text, not JSON)
+  let result: unknown;
   try {
-    const result = JSON.parse(raw);
-    if (result && typeof result === "object" && "error" in result && result.error) {
-      throw new Error(result.error);
-    }
-    return result;
+    result = JSON.parse(raw);
   } catch {
-    // Not JSON - return as-is (raw string result)
+    // Not JSON — plain text result (e.g., format() returns SQL text)
     return raw;
   }
+  // Check for error objects OUTSIDE the try/catch so they propagate correctly
+  if (result && typeof result === "object" && "error" in result && (result as Record<string, unknown>).error) {
+    throw new Error(String((result as Record<string, unknown>).error));
+  }
+  return result;
 }
 
 function loadScript(src: string): Promise<void> {

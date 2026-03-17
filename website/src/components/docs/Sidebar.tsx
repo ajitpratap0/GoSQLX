@@ -14,7 +14,11 @@ export function Sidebar() {
     setCollapsed((prev) => ({ ...prev, [category]: !prev[category] }));
   };
 
-  const isActive = (slug: string) => pathname === `/docs/${slug}`;
+  const isActive = (slug: string) => {
+    const normalizedPathname = pathname.replace(/\/$/, '');
+    const normalizedHref = `/docs/${slug}`.replace(/\/$/, '');
+    return normalizedPathname === normalizedHref;
+  };
 
   const sidebarContent = (
     <nav className="space-y-6 py-4">
@@ -42,10 +46,11 @@ export function Sidebar() {
                   <Link
                     href={`/docs/${item.slug}`}
                     onClick={() => setMobileOpen(false)}
+                    aria-current={isActive(item.slug) ? 'page' : undefined}
                     className={`block rounded-md px-3 py-1.5 text-sm transition-colors ${
                       isActive(item.slug)
-                        ? 'bg-accent-indigo/10 text-white font-medium'
-                        : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                        ? 'border-l-2 border-accent-indigo bg-accent-indigo/10 pl-[10px] text-white font-medium'
+                        : 'border-l-2 border-transparent pl-[10px] text-zinc-400 hover:text-white hover:bg-white/5'
                     }`}
                   >
                     {item.label}

@@ -70,7 +70,7 @@ echo "SELECT COUNT(*) FROM orders GROUP BY status" | gosqlx analyze
 - `config` - Manage configuration files (.gosqlx.yml)
 - `completion` - Shell autocompletion for bash/zsh/fish
 
-**New in v1.6.0:**
+**New in v1.12.0:**
 ```bash
 # Security scanning for SQL injection
 gosqlx validate --security query.sql
@@ -85,7 +85,7 @@ gosqlx lsp --log /tmp/lsp.log
 gosqlx format --config .gosqlx.yml query.sql
 ```
 
-See [CLI Guide](CLI_GUIDE.md) for complete documentation.
+See [CLI Guide](/docs/cli-guide) for complete documentation.
 
 ---
 
@@ -137,7 +137,7 @@ go run main.go
 
 ---
 
-## Step 4: v1.6.0 Feature Examples (2 minutes)
+## Step 4: v1.12.0 Feature Examples (2 minutes)
 
 ### PostgreSQL Extensions
 
@@ -414,16 +414,16 @@ gosqlx lsp --log /tmp/lsp.log
 ## What's Next?
 
 ### Essential Guides:
-- **[Usage Guide](USAGE_GUIDE.md)** - Comprehensive patterns and examples
-- **[CLI Guide](CLI_GUIDE.md)** - Full CLI documentation and all commands
-- **[LSP Guide](LSP_GUIDE.md)** - Complete LSP server documentation for IDE integration
-- **[MCP Server Guide](MCP_GUIDE.md)** - Use GoSQLX as MCP tools inside Claude, Cursor, and other AI assistants
-- **[Linting Rules](LINTING_RULES.md)** - All 10 linting rules (L001-L010) reference
-- **[Configuration](CONFIGURATION.md)** - Configuration file (.gosqlx.yml) guide
-- **[API Reference](API_REFERENCE.md)** - Complete API documentation
+- **[Usage Guide](/docs/usage-guide)** - Comprehensive patterns and examples
+- **[CLI Guide](/docs/cli-guide)** - Full CLI documentation and all commands
+- **[LSP Guide](/docs/lsp-guide)** - Complete LSP server documentation for IDE integration
+- **[MCP Server Guide](/docs/mcp-guide)** - Use GoSQLX as MCP tools inside Claude, Cursor, and other AI assistants
+- **[Linting Rules](/docs/linting-rules)** - All 10 linting rules (L001-L010) reference
+- **[Configuration](/docs/configuration)** - Configuration file (.gosqlx.yml) guide
+- **[API Reference](/docs/api-reference)** - Complete API documentation
 - **[Examples](../examples/)** - Real-world code examples
 
-### v1.6.0 Feature Guides:
+### v1.12.0 Feature Guides:
 - **PostgreSQL Extensions:**
   - LATERAL JOIN for correlated subqueries
   - JSON/JSONB operators (->/->>/#>/@>/?/etc.)
@@ -436,28 +436,28 @@ gosqlx lsp --log /tmp/lsp.log
   - Hover information and documentation
   - Code completion for SQL keywords
   - Auto-formatting on save
-  - See [LSP Guide](LSP_GUIDE.md) for setup instructions
+  - See [LSP Guide](/docs/lsp-guide) for setup instructions
 
 - **Security Features:**
   - SQL injection pattern detection
   - Severity classification (HIGH/MEDIUM/LOW)
   - Integration with validation pipeline
-  - See [Usage Guide](USAGE_GUIDE.md) for security scanning patterns
+  - See [Usage Guide](/docs/usage-guide) for security scanning patterns
 
 - **Code Quality:**
   - 10 built-in linter rules for style enforcement
   - Auto-fix capabilities for common issues
   - Configurable rule severity and exclusions
-  - See [Linting Rules](LINTING_RULES.md) for complete reference
+  - See [Linting Rules](/docs/linting-rules) for complete reference
 
 ### Advanced Topics:
 - **Low-Level API** - For performance-critical applications (>100K queries/sec)
 - **Object Pooling** - Manual resource management for fine-grained control
 - **Multi-Dialect Support** - PostgreSQL, MySQL, SQL Server, Oracle, SQLite
 - **Unicode Support** - Full international character support
-- **SQL Compatibility** - See [SQL_COMPATIBILITY.md](SQL_COMPATIBILITY.md) for dialect matrix
+- **SQL Compatibility** - See [SQL Compatibility](/docs/sql-compatibility) for dialect matrix
 
-See [Usage Guide](USAGE_GUIDE.md) for advanced patterns.
+See [Usage Guide](/docs/usage-guide) for advanced patterns.
 
 ---
 
@@ -484,13 +484,13 @@ gosqlx validate "your SQL here"
 ```
 
 ### Need Help?
-- **[Troubleshooting Guide](TROUBLESHOOTING.md)** - Common issues and solutions
+- **[Troubleshooting Guide](/docs/troubleshooting)** - Common issues and solutions
 - **[GitHub Issues](https://github.com/ajitpratap0/GoSQLX/issues)** - Report bugs or ask questions
 - **[Discussions](https://github.com/ajitpratap0/GoSQLX/discussions)** - Community Q&A
 
 ---
 
-## v1.6.0 Feature Highlights
+## v1.12.0 Feature Highlights
 
 ### Production-Ready Performance
 - **1.38M+ operations/second** sustained throughput
@@ -518,7 +518,7 @@ gosqlx validate "your SQL here"
 - ✓ Installing GoSQLX (library and CLI)
 - ✓ Validating and formatting SQL with CLI
 - ✓ Parsing SQL in Go applications with simple API
-- ✓ Using v1.6.0 features (PostgreSQL extensions, security, linting, LSP)
+- ✓ Using v1.12.0 features (PostgreSQL extensions, security, linting, LSP)
 - ✓ Common use cases and patterns
 - ✓ Where to find more help
 
@@ -530,4 +530,4 @@ gosqlx validate "your SQL here"
 
 ---
 
-*Built by the GoSQLX community - Production-ready since v1.6.0*
+*Built by the GoSQLX community - Production-ready since v1.12.0*

@@ -44,7 +44,7 @@ export function Navbar() {
 
   // Close mobile menu on resize
   useEffect(() => {
-    const handler = () => { if (window.innerWidth >= 768) setMobileOpen(false); };
+    const handler = () => { if (window.innerWidth >= 1024) setMobileOpen(false); };
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
   }, []);
@@ -65,7 +65,7 @@ export function Navbar() {
         </Link>
 
         {/* Desktop nav links */}
-        <div className="hidden md:flex items-center gap-1">
+        <div className="hidden lg:flex items-center gap-1">
           {NAV_LINKS.map((link) => (
             <Link
               key={link.href}
@@ -78,7 +78,7 @@ export function Navbar() {
         </div>
 
         {/* Desktop right side */}
-        <div className="hidden md:flex items-center gap-3">
+        <div className="hidden lg:flex items-center gap-3">
           <a
             href="https://github.com/ajitpratap0/GoSQLX"
             target="_blank"
@@ -95,7 +95,8 @@ export function Navbar() {
 
         {/* Mobile hamburger */}
         <button
-          className="md:hidden p-2 rounded-lg hover:bg-white/[0.04] transition-colors"
+          type="button"
+          className="lg:hidden p-2 rounded-lg hover:bg-white/[0.04] transition-colors"
           onClick={() => setMobileOpen(!mobileOpen)}
           aria-label="Toggle menu"
           aria-expanded={mobileOpen}
@@ -108,11 +109,11 @@ export function Navbar() {
       <AnimatePresence>
         {mobileOpen && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
+            initial={{ height: 0, opacity: 0, pointerEvents: 'none' }}
+            animate={{ height: 'auto', opacity: 1, pointerEvents: 'auto' }}
+            exit={{ height: 0, opacity: 0, pointerEvents: 'none' }}
             transition={{ duration: 0.25, ease: 'easeInOut' }}
-            className="md:hidden overflow-hidden border-t border-white/[0.06] bg-primary/95 backdrop-blur-xl"
+            className="lg:hidden overflow-hidden border-t border-white/[0.06] bg-primary/95 backdrop-blur-xl"
           >
             <div className="px-4 py-4 space-y-1">
               {NAV_LINKS.map((link) => (

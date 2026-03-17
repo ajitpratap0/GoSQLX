@@ -34,7 +34,7 @@ const features = [
 
 export function VscodeContent() {
   return (
-    <main className="min-h-screen">
+    <div className="min-h-screen">
       {/* Hero */}
       <section className="section-padding pt-24 pb-16 text-center">
         <div className="container-width">
@@ -51,6 +51,7 @@ export function VscodeContent() {
                 variant="primary"
                 href="https://marketplace.visualstudio.com/items?itemName=ajitpratap0.gosqlx"
                 external
+                aria-label="Install Extension (opens in new tab)"
               >
                 Install Extension
               </Button>
@@ -60,8 +61,9 @@ export function VscodeContent() {
       </section>
 
       {/* Feature Grid */}
-      <section className="section-padding pb-16">
+      <section className="section-padding pb-16" aria-label="Features">
         <div className="container-width">
+          <h2 className="sr-only">Features</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {features.map((f, i) => (
               <FadeIn key={f.title} delay={i * 0.08}>
@@ -95,7 +97,12 @@ export function VscodeContent() {
               Key Settings
             </h2>
             <GlassCard className="p-6" hover={false}>
-              <pre className="font-mono text-sm text-zinc-300 whitespace-pre overflow-x-auto">
+              <pre
+                role="region"
+                aria-label="Key Settings JSON"
+                tabIndex={0}
+                className="font-mono text-sm text-zinc-300 whitespace-pre overflow-x-auto"
+              >
 {`{
   "gosqlx.executablePath": "/usr/local/bin/gosqlx",
   "gosqlx.forcePathLookup": false
@@ -105,6 +112,6 @@ export function VscodeContent() {
           </FadeIn>
         </div>
       </section>
-    </main>
+    </div>
   );
 }

@@ -5,7 +5,7 @@ All notable changes to GoSQLX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.12.1] - 2026-03-15 - Website Performance & Mobile Optimization
+## [1.12.1] - 2026-03-15 — Website Performance & Mobile Optimization
 
 ### Improved
 - Lighthouse Desktop: 100 Performance, 100 Accessibility, 100 SEO
@@ -508,7 +508,7 @@ if tok.Type == models.TokenTypeSelect { ... }
 
 **Who is affected:** Only users who directly access `token.Token` fields or use string-based token constants from `pkg/sql/token`. Users of the high-level `gosqlx.Parse()` / `gosqlx.Validate()` API are **not affected**.
 
-See [docs/MIGRATION.md](docs/MIGRATION.md) for detailed migration instructions.
+See [Migration Guide](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/MIGRATION.md) for detailed migration instructions.
 
 ---
 

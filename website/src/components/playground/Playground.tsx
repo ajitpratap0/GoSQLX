@@ -112,14 +112,21 @@ export default function Playground() {
     return (
       <div className="flex items-center justify-center h-full bg-[#09090b]">
         <div className="text-center space-y-4 max-w-xs">
-          <div className="inline-block w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <div className="inline-block w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" role="status" aria-label="Loading SQL parser" />
           <p className="text-slate-400 text-sm">
             {progress < 1
               ? `Downloading SQL parser... ${Math.round(progress * 100)}%`
               : "Initializing..."}
           </p>
           {progress > 0 && progress < 1 && (
-            <div className="w-full bg-slate-700 rounded-full h-1.5">
+            <div
+              className="w-full bg-slate-700 rounded-full h-1.5"
+              role="progressbar"
+              aria-valuenow={Math.round(progress * 100)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="Download progress"
+            >
               <div
                 className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
                 style={{ width: `${progress * 100}%` }}
@@ -171,7 +178,7 @@ export default function Playground() {
           </label>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-green-500" />
+          <span className="w-2 h-2 rounded-full bg-green-500" aria-hidden="true" />
           <span className="text-xs text-slate-500">WASM Ready</span>
         </div>
       </div>
@@ -196,12 +203,14 @@ export default function Playground() {
         {/* Right panel - Tabs + Content */}
         <div className="w-full md:w-1/2 flex flex-col min-h-0">
           {/* Tab bar with animated underline */}
-          <div className="flex border-b border-slate-800 bg-slate-900/30" role="tablist">
+          <div className="flex border-b border-slate-800 bg-slate-900/30" role="tablist" aria-label="Output format">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
+                id={`tab-${tab.id}`}
                 role="tab"
                 aria-selected={activeTab === tab.id}
+                aria-controls={`tabpanel-${tab.id}`}
                 onClick={() => setActiveTab(tab.id)}
                 className={`px-4 py-3 text-sm font-medium transition-colors relative ${
                   activeTab === tab.id
@@ -222,7 +231,7 @@ export default function Playground() {
           </div>
 
           {/* Tab content */}
-          <div className="flex-1 overflow-auto min-h-0" role="tabpanel">
+          <div className="flex-1 overflow-auto min-h-0" role="tabpanel" id={`tabpanel-${activeTab}`} aria-labelledby={`tab-${activeTab}`}>
             {activeTab === "ast" && <AstTab data={results.ast} />}
             {activeTab === "format" && <FormatTab data={results.format} />}
             {activeTab === "lint" && <LintTab data={results.lint} />}

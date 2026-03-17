@@ -6,6 +6,7 @@ const withAnalyzer = withBundleAnalyzer({
 });
 
 const nextConfig: NextConfig = {
+  trailingSlash: true,
   async headers() {
     return [
       {

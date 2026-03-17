@@ -53,7 +53,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: website/dist
+          path: website/out
 
   deploy:
     needs: build

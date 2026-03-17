@@ -47,7 +47,7 @@ const SAMPLE_AST = `{
 
 export function Hero() {
   return (
-    <section className="relative min-h-screen flex items-center justify-center">
+    <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
       {/* Background gradient mesh */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
         {/* Top-right indigo glow */}
@@ -89,7 +89,7 @@ export function Hero() {
         {/* Headline */}
         <FadeIn delay={0.1}>
           <h1
-            className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 break-words hyphens-auto"
+            className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 break-words hyphens-auto w-full max-w-full px-4 sm:px-0"
             style={{ letterSpacing: '-0.03em' }}
           >
             <GradientText>Parse SQL at the speed of Go</GradientText>
@@ -165,7 +165,7 @@ export function Hero() {
           <div className="mt-6">
             <Link
               href="/playground"
-              className="text-sm text-zinc-300 hover:text-zinc-300 transition-colors inline-flex items-center gap-1.5"
+              className="text-sm text-zinc-300 hover:text-white transition-colors inline-flex items-center gap-1.5"
             >
               Open Full Playground
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

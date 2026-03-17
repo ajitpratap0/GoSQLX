@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     'High-performance, zero-copy SQL parsing SDK for Go. Thread-safe with multi-dialect support for PostgreSQL, MySQL, SQLite, SQL Server, Oracle, and Snowflake.',
   metadataBase: new URL('https://gosqlx.dev'),
   alternates: {
-    canonical: 'https://gosqlx.dev',
+    canonical: '/',
   },
   openGraph: {
     type: 'website',
@@ -83,7 +83,7 @@ export default function RootLayout({
           }}
         />
         <Navbar />
-        <main id="main-content" className="pt-16">{children}</main>
+        <div id="main-content" className="pt-16">{children}</div>
         <Footer />
         <ServiceWorkerRegister />
       </body>

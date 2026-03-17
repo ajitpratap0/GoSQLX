@@ -33,12 +33,12 @@ export default function FormatTab({ data }: FormatTabProps) {
   const formatted = typeof data === "string" ? data : data.result || data.formatted || JSON.stringify(data, null, 2);
 
   return (
-    <div className="p-4 h-full overflow-auto">
+    <div className="p-2 h-full overflow-hidden">
       <SqlEditor
         value={formatted}
         onChange={() => {}}
         readOnly={true}
-        minHeight="300px"
+        minHeight="200px"
         placeholder="Formatted SQL will appear here..."
       />
     </div>

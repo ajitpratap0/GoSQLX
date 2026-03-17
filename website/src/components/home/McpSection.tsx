@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { FadeIn } from '@/components/ui/FadeIn';
 import { TerminalMockup } from '@/components/ui/TerminalMockup';
 
@@ -36,11 +37,21 @@ export function McpSection() {
             {tools.map((tool) => (
               <span
                 key={tool}
-                className="text-xs font-mono text-zinc-500 bg-white/[0.03] border border-white/[0.06] rounded-md px-2.5 py-1"
+                className="text-xs font-mono text-zinc-300 bg-white/[0.03] border border-white/[0.06] rounded-md px-2.5 py-1"
               >
                 {tool}
               </span>
             ))}
+          </div>
+        </FadeIn>
+        <FadeIn delay={0.35}>
+          <div className="mt-8">
+            <Link
+              href="/docs/mcp-guide"
+              className="text-sm text-accent-indigo hover:underline inline-flex items-center gap-1"
+            >
+              Learn more →
+            </Link>
           </div>
         </FadeIn>
       </div>

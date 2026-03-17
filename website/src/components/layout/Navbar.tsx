@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { NAV_LINKS } from '@/lib/constants';
 import { Button } from '@/components/ui/Button';
@@ -38,6 +39,7 @@ function HamburgerIcon({ open }: { open: boolean }) {
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const pathname = usePathname();
   const { scrollY } = useScroll();
   const bgOpacity = useTransform(scrollY, [0, 100], [0.6, 0.9]);
   const blurAmount = useTransform(scrollY, [0, 100], [8, 16]);
@@ -57,7 +59,7 @@ export function Navbar() {
         backdropFilter: useTransform(blurAmount, (v) => `blur(${v}px)`),
       }}
     >
-      <nav className="mx-auto max-w-7xl flex items-center justify-between px-4 sm:px-6 lg:px-8 h-16">
+      <nav aria-label="Main navigation" className="mx-auto max-w-7xl flex items-center justify-between px-4 sm:px-6 lg:px-8 h-16">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 shrink-0">
           <Image src="/images/logo.webp" alt="" width={32} height={32} priority />
@@ -66,15 +68,19 @@ export function Navbar() {
 
         {/* Desktop nav links */}
         <div className="hidden lg:flex items-center gap-1">
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="px-3 py-2 text-sm text-zinc-300 hover:text-white transition-colors duration-200 rounded-lg hover:bg-white/[0.04]"
-            >
-              {link.label}
-            </Link>
-          ))}
+          {NAV_LINKS.map((link) => {
+            const isActive = pathname === link.href || pathname.startsWith(link.href + '/');
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                aria-current={isActive ? 'page' : undefined}
+                className={`px-3 py-2 text-sm transition-colors duration-200 rounded-lg hover:bg-white/[0.04] ${isActive ? 'text-white' : 'text-zinc-300 hover:text-white'}`}
+              >
+                {link.label}
+              </Link>
+            );
+          })}
         </div>
 
         {/* Desktop right side */}
@@ -116,16 +122,20 @@ export function Navbar() {
             className="lg:hidden overflow-hidden border-t border-white/[0.06] bg-primary/95 backdrop-blur-xl"
           >
             <div className="px-4 py-4 space-y-1">
-              {NAV_LINKS.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setMobileOpen(false)}
-                  className="block px-3 py-2.5 text-sm text-zinc-300 hover:text-white hover:bg-white/[0.04] rounded-lg transition-colors"
-                >
-                  {link.label}
-                </Link>
-              ))}
+              {NAV_LINKS.map((link) => {
+                const isActive = pathname === link.href || pathname.startsWith(link.href + '/');
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    onClick={() => setMobileOpen(false)}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={`block px-3 py-2.5 text-sm hover:bg-white/[0.04] rounded-lg transition-colors ${isActive ? 'text-white' : 'text-zinc-300 hover:text-white'}`}
+                  >
+                    {link.label}
+                  </Link>
+                );
+              })}
               <div className="pt-3 border-t border-white/[0.06] flex items-center gap-3">
                 <a
                   href="https://github.com/ajitpratap0/GoSQLX"

@@ -49,7 +49,7 @@ function scoreRing(score: number): string {
   return "ring-red-500/30";
 }
 
-function ScoreCard({ title, score, subtitle }: { title: string; score: number | string; subtitle?: string }) {
+function ScoreCard({ title, score, subtitle, subtitleTitle }: { title: string; score: number | string; subtitle?: string; subtitleTitle?: string }) {
   const numScore = typeof score === "number" ? score : NaN;
   const displayScore = typeof score === "string" ? score : String(score);
   const isNumeric = !isNaN(numScore);
@@ -62,7 +62,7 @@ function ScoreCard({ title, score, subtitle }: { title: string; score: number | 
       >
         {displayScore}
       </div>
-      {subtitle && <div className="text-xs text-slate-400 mt-1">{subtitle}</div>}
+      {subtitle && <div className="text-xs text-slate-400 mt-1" title={subtitleTitle}>{subtitle}</div>}
     </div>
   );
 }
@@ -126,7 +126,8 @@ export default function AnalyzeTab({ data }: AnalyzeTabProps) {
         <ScoreCard
           title="Security"
           score={securityScore}
-          subtitle={`${critical}C ${high}H ${medium}M ${low}L`}
+          subtitle={`C:${critical} H:${high} M:${medium} L:${low}`}
+          subtitleTitle="Critical / High / Medium / Low severity findings"
         />
         <ScoreCard
           title="Optimization"
@@ -136,7 +137,7 @@ export default function AnalyzeTab({ data }: AnalyzeTabProps) {
         <ScoreCard
           title="Complexity"
           score={complexityLevel}
-          subtitle="Query complexity"
+          subtitle="simple → moderate → complex"
         />
       </div>
 

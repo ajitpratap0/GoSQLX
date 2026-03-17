@@ -5,7 +5,7 @@ import { FadeIn } from '@/components/ui/FadeIn';
 import { AnimatedCounter } from '@/components/ui/AnimatedCounter';
 
 const stats = [
-  { value: 1250000, suffix: '+', label: 'ops/sec', color: 'text-accent-orange' },
+  { value: 1380000, suffix: '+', label: 'ops/sec', color: 'text-accent-orange' },
   { value: 1, suffix: 'μs', label: 'latency', color: 'text-accent-indigo', prefix: '<' },
   { value: 85, suffix: '%', label: 'SQL-99', color: 'text-accent-green' },
   { value: 6, suffix: '', label: 'Dialects', color: 'text-accent-purple' },
@@ -15,7 +15,7 @@ export function StatsBar() {
   return (
     <section className="py-20">
       <div className="max-w-6xl mx-auto px-4">
-        <div className="flex flex-wrap justify-center gap-4 md:gap-8">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 md:gap-8 justify-items-center">
           {stats.map((stat, i) => (
             <FadeIn key={stat.label} delay={i * 0.1}>
               <GlassCard className="p-6 text-center min-w-[140px]">

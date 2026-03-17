@@ -30,6 +30,7 @@ interface SqlEditorProps {
 
 const baseTheme = EditorView.theme({
   "&": {
+    height: "100%",
     borderRadius: "0.5rem",
     overflow: "hidden",
   },
@@ -37,6 +38,7 @@ const baseTheme = EditorView.theme({
     outline: "2px solid #3b82f6",
   },
   ".cm-scroller": {
+    overflow: "auto",
     fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
     fontSize: "14px",
     lineHeight: "1.6",
@@ -156,5 +158,5 @@ export default function SqlEditor({
     }
   }, [value]);
 
-  return <div ref={containerRef} style={{ maxWidth: "100%", overflow: "hidden" }} aria-label={ariaLabel} />;
+  return <div ref={containerRef} className="h-full" style={{ maxWidth: "100%", overflow: "hidden" }} aria-label={ariaLabel} />;
 }

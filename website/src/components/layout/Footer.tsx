@@ -38,7 +38,7 @@ export function Footer() {
             {/* Logo column */}
             <div className="col-span-2 md:col-span-1">
               <Link href="/" className="flex items-center gap-2.5">
-                <Image src="/images/logo.webp" alt="GoSQLX" width={28} height={28} />
+                <Image src="/images/logo.webp" alt="" width={28} height={28} />
                 <span className="text-lg font-semibold text-white">GoSQLX</span>
               </Link>
               <p className="mt-3 text-sm text-zinc-400 max-w-xs">
@@ -49,7 +49,7 @@ export function Footer() {
             {/* Link columns */}
             {Object.entries(FOOTER_LINKS).map(([category, links]) => (
               <div key={category}>
-                <h3 className="text-sm font-medium text-zinc-300 mb-3">{category}</h3>
+                <h2 className="text-sm font-medium text-zinc-300 mb-3">{category}</h2>
                 <ul className="space-y-2">
                   {links.map((link) => (
                     <li key={link.label}>

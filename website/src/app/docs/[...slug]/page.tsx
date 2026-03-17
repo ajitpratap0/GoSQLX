@@ -152,7 +152,7 @@ export default async function DocPage({ params }: PageProps) {
       </main>
 
       {/* Table of Contents */}
-      <div className="hidden xl:block w-48 shrink-0 py-10 pr-6">
+      <div className="hidden xl:block w-56 shrink-0 py-10 pr-6">
         <Toc headings={headings} />
       </div>
       </div>

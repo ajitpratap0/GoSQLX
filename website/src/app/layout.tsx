@@ -83,7 +83,7 @@ export default function RootLayout({
           }}
         />
         <Navbar />
-        <main id="main-content" className="pt-16">{children}</main>
+        <div id="main-content" className="pt-16">{children}</div>
         <Footer />
         <ServiceWorkerRegister />
       </body>

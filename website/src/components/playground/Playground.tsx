@@ -110,17 +110,51 @@ export default function Playground() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full bg-[#09090b]">
-        <div className="text-center space-y-4 max-w-xs">
-          <div className="inline-block w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" role="status" aria-label="Loading SQL parser" />
-          <p className="text-slate-400 text-sm">
+      <div className="flex flex-col h-full bg-[#09090b]" aria-busy="true" aria-label="Loading SQL parser">
+        {/* Skeleton toolbar */}
+        <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800 bg-slate-900/50">
+          <div className="flex items-center gap-3">
+            <div className="animate-pulse bg-zinc-800 rounded h-4 w-28" />
+            <div className="h-4 w-px bg-slate-700" />
+            <div className="animate-pulse bg-zinc-800 rounded h-6 w-36" />
+          </div>
+          <div className="animate-pulse bg-zinc-800 rounded h-4 w-20" />
+        </div>
+        {/* Skeleton panels */}
+        <div className="flex flex-col lg:flex-row flex-1 min-h-0">
+          {/* Left: editor skeleton */}
+          <div className="w-full lg:w-1/2 border-r border-slate-800 flex flex-col min-h-0 p-4 gap-3">
+            <div className="animate-pulse bg-zinc-800 rounded h-3 w-3/4" />
+            <div className="animate-pulse bg-zinc-800 rounded h-3 w-full" />
+            <div className="animate-pulse bg-zinc-800 rounded h-3 w-5/6" />
+            <div className="animate-pulse bg-zinc-800 rounded h-3 w-2/3" />
+            <div className="animate-pulse bg-zinc-800 rounded h-3 w-4/5" />
+          </div>
+          {/* Right: tab + content skeleton */}
+          <div className="w-full lg:w-1/2 flex flex-col min-h-0">
+            <div className="flex border-b border-slate-800 bg-slate-900/30 gap-2 px-2 py-1">
+              {[80, 72, 60, 88].map((w, i) => (
+                <div key={i} className={`animate-pulse bg-zinc-800 rounded h-6`} style={{ width: w }} />
+              ))}
+            </div>
+            <div className="flex-1 p-4 flex flex-col gap-3">
+              <div className="animate-pulse bg-zinc-800 rounded h-3 w-1/2" />
+              <div className="animate-pulse bg-zinc-800 rounded h-3 w-3/4" />
+              <div className="animate-pulse bg-zinc-800 rounded h-3 w-2/3" />
+            </div>
+          </div>
+        </div>
+        {/* Progress overlay at bottom */}
+        <div className="px-4 py-2 border-t border-slate-800 bg-slate-900/50 flex items-center gap-3">
+          <div className="inline-block w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0" role="status" />
+          <p className="text-slate-400 text-xs">
             {progress < 1
-              ? `Downloading SQL parser... ${Math.round(progress * 100)}%`
-              : "Initializing..."}
+              ? `Downloading SQL parser… ${Math.round(progress * 100)}%`
+              : "Initializing…"}
           </p>
           {progress > 0 && progress < 1 && (
             <div
-              className="w-full bg-slate-700 rounded-full h-1.5"
+              className="flex-1 bg-slate-700 rounded-full h-1"
               role="progressbar"
               aria-valuenow={Math.round(progress * 100)}
               aria-valuemin={0}
@@ -128,7 +162,7 @@ export default function Playground() {
               aria-label="Download progress"
             >
               <div
-                className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+                className="bg-blue-500 h-1 rounded-full transition-all duration-300"
                 style={{ width: `${progress * 100}%` }}
               />
             </div>
@@ -190,12 +224,12 @@ export default function Playground() {
           <div className="px-4 py-2 border-b border-slate-800 bg-slate-900/30">
             <span className="text-xs text-slate-400 uppercase tracking-wider font-medium">Input</span>
           </div>
-          <div className="flex-1 overflow-auto p-2">
+          <div className="flex-1 overflow-hidden p-2">
             <SqlEditor
               value={sql}
               onChange={handleSqlChange}
               placeholder="Enter your SQL query here..."
-              minHeight="100%"
+              minHeight="200px"
             />
           </div>
         </div>

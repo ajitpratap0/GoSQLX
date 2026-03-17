@@ -13,9 +13,21 @@ on:
 jobs:
   lighthouse:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Build WASM
+        run: |
+          cd wasm && make build
+          mkdir -p ../website/public/wasm
+          cp playground/gosqlx.wasm ../website/public/wasm/
+          cp playground/wasm_exec.js ../website/public/wasm/
 
       - name: Setup Node
         uses: actions/setup-node@v4

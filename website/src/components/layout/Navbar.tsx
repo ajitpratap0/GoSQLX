@@ -80,7 +80,7 @@ export function Navbar() {
         {/* Desktop right side */}
         <div className="hidden md:flex items-center gap-3">
           <a
-            href="https://github.com/ajitpsingh/GoSQLX"
+            href="https://github.com/ajitpratap0/GoSQLX"
             target="_blank"
             rel="noopener noreferrer"
             className="text-zinc-400 hover:text-white transition-colors duration-200 p-2 rounded-lg hover:bg-white/[0.04]"
@@ -127,7 +127,7 @@ export function Navbar() {
               ))}
               <div className="pt-3 border-t border-white/[0.06] flex items-center gap-3">
                 <a
-                  href="https://github.com/ajitpsingh/GoSQLX"
+                  href="https://github.com/ajitpratap0/GoSQLX"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-zinc-400 hover:text-white transition-colors p-2"

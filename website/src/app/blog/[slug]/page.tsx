@@ -21,11 +21,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: post.title,
     description: `GoSQLX ${post.title} release notes.`,
+    alternates: {
+      canonical: `https://gosqlx.dev/blog/${slug}/`,
+    },
     openGraph: {
       title: `GoSQLX ${post.title}`,
       description: `GoSQLX ${post.title} release notes.`,
       type: 'article',
       publishedTime: post.date ? `${post.date}T00:00:00Z` : undefined,
+      url: `https://gosqlx.dev/blog/${slug}/`,
     },
   };
 }

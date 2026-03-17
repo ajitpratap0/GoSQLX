@@ -15,14 +15,14 @@ const FOOTER_LINKS = {
     { label: 'Getting Started', href: '/docs/getting-started' },
     { label: 'API Reference', href: '/docs/api-reference' },
     { label: 'Blog', href: '/blog' },
-    { label: 'Changelog', href: 'https://github.com/ajitpsingh/GoSQLX/blob/main/CHANGELOG.md', external: true },
+    { label: 'Changelog', href: 'https://github.com/ajitpratap0/GoSQLX/blob/main/CHANGELOG.md', external: true },
     { label: 'Privacy Policy', href: '/privacy' },
   ],
   Community: [
-    { label: 'GitHub', href: 'https://github.com/ajitpsingh/GoSQLX', external: true },
-    { label: 'Issues', href: 'https://github.com/ajitpsingh/GoSQLX/issues', external: true },
-    { label: 'Discussions', href: 'https://github.com/ajitpsingh/GoSQLX/discussions', external: true },
-    { label: 'Releases', href: 'https://github.com/ajitpsingh/GoSQLX/releases', external: true },
+    { label: 'GitHub', href: 'https://github.com/ajitpratap0/GoSQLX', external: true },
+    { label: 'Issues', href: 'https://github.com/ajitpratap0/GoSQLX/issues', external: true },
+    { label: 'Discussions', href: 'https://github.com/ajitpratap0/GoSQLX/discussions', external: true },
+    { label: 'Releases', href: 'https://github.com/ajitpratap0/GoSQLX/releases', external: true },
   ],
 };
 

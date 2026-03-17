@@ -29,6 +29,12 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return {
     title: doc.title,
     description: `GoSQLX documentation - ${doc.title}`,
+    alternates: {
+      canonical: `https://gosqlx.dev/docs/${slugStr}/`,
+    },
+    openGraph: {
+      url: `https://gosqlx.dev/docs/${slugStr}/`,
+    },
   };
 }
 

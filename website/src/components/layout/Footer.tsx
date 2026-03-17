@@ -41,7 +41,7 @@ export function Footer() {
                 <Image src="/images/logo.webp" alt="GoSQLX" width={28} height={28} />
                 <span className="text-lg font-semibold text-white">GoSQLX</span>
               </Link>
-              <p className="mt-3 text-sm text-zinc-500 max-w-xs">
+              <p className="mt-3 text-sm text-zinc-400 max-w-xs">
                 Production-ready SQL parsing SDK for Go. Zero-copy, thread-safe, multi-dialect.
               </p>
             </div>
@@ -58,14 +58,14 @@ export function Footer() {
                           href={link.href}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors duration-200"
+                          className="text-sm text-zinc-400 hover:text-zinc-100 transition-colors duration-200"
                         >
                           {link.label}
                         </a>
                       ) : (
                         <Link
                           href={link.href}
-                          className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors duration-200"
+                          className="text-sm text-zinc-400 hover:text-zinc-100 transition-colors duration-200"
                         >
                           {link.label}
                         </Link>
@@ -78,7 +78,7 @@ export function Footer() {
           </div>
 
           <div className="mt-12 pt-8 border-t border-white/[0.06] text-center">
-            <p className="text-sm text-zinc-600">
+            <p className="text-sm text-zinc-400">
               Built with love by the GoSQLX community &middot; &copy; {new Date().getFullYear()} GoSQLX
             </p>
           </div>

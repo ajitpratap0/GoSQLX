@@ -89,7 +89,7 @@ export function Hero() {
         {/* Headline */}
         <FadeIn delay={0.1}>
           <h1
-            className="text-5xl md:text-6xl lg:text-7xl font-bold mb-6"
+            className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6"
             style={{ letterSpacing: '-0.03em' }}
           >
             <GradientText>Parse SQL at the speed of Go</GradientText>
@@ -105,7 +105,7 @@ export function Hero() {
 
         {/* Buttons */}
         <FadeIn delay={0.3}>
-          <div className="flex items-center justify-center gap-3 mb-14">
+          <div className="flex flex-wrap items-center justify-center gap-3 mb-14">
             <Button variant="primary" href="/docs/getting-started">
               Get Started
             </Button>
@@ -119,7 +119,7 @@ export function Hero() {
         <FadeIn delay={0.4}>
           <div className="relative group">
             <GlassCard hover={false} className="p-0 overflow-hidden shadow-2xl shadow-indigo-500/5">
-              <div className="grid md:grid-cols-2 divide-x divide-white/[0.06]">
+              <div className="grid md:grid-cols-2 divide-y md:divide-y-0 divide-x-0 md:divide-x divide-white/[0.06]">
                 {/* SQL Input side */}
                 <div className="text-left">
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/[0.06]">

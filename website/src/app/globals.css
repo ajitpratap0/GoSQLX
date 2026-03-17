@@ -14,11 +14,16 @@
   --font-mono: var(--font-jetbrains), monospace;
 }
 
+html {
+  overflow-x: hidden;
+}
+
 body {
   background-color: var(--color-primary);
   color: #fafafa;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
 /* Glass morphism utility */

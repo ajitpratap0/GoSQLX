@@ -105,18 +105,22 @@ export default async function DocPage({ params }: PageProps) {
       {/* Main content */}
       <main className="min-w-0 flex-1 px-6 py-10 lg:px-12">
         {/* Breadcrumbs */}
-        <nav className="mb-6 flex items-center gap-2 text-sm text-zinc-500">
-          <Link href="/docs" className="hover:text-white transition-colors">
-            Docs
-          </Link>
-          {categoryItem && (
-            <>
-              <span>/</span>
-              <span>{categoryItem.category}</span>
-            </>
-          )}
-          <span>/</span>
-          <span className="text-zinc-300">{doc.title}</span>
+        <nav aria-label="Breadcrumb" className="mb-6 text-sm text-zinc-500">
+          <ol className="flex items-center gap-2">
+            <li>
+              <Link href="/docs" className="hover:text-white transition-colors">
+                Docs
+              </Link>
+            </li>
+            {categoryItem && (
+              <>
+                <li aria-hidden="true">/</li>
+                <li>{categoryItem.category}</li>
+              </>
+            )}
+            <li aria-hidden="true">/</li>
+            <li className="text-zinc-300">{doc.title}</li>
+          </ol>
         </nav>
 
         {/* Content */}

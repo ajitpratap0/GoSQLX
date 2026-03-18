@@ -75,6 +75,11 @@ export const mdxComponents = {
         >
           {children}
         </pre>
+        {/* Mobile scroll hint: right-edge fade gradient, hidden on md+ where scrollbar is visible */}
+        <div
+          className="pointer-events-none absolute bottom-0 right-0 top-0 w-8 rounded-r-lg bg-gradient-to-l from-zinc-900/80 to-transparent md:hidden"
+          aria-hidden="true"
+        />
       </div>
     );
   },

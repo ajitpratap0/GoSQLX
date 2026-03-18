@@ -37,6 +37,11 @@ export const metadata: Metadata = {
     icon: '/favicon.png',
     apple: '/apple-touch-icon.png',
   },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true },
+  },
 };
 
 export default function RootLayout({
@@ -83,7 +88,7 @@ export default function RootLayout({
           }}
         />
         <Navbar />
-        <div id="main-content" className="pt-16">{children}</div>
+        <main id="main-content" className="pt-16">{children}</main>
         <Footer />
         <ServiceWorkerRegister />
       </body>

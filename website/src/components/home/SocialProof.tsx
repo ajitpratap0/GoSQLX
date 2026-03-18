@@ -31,7 +31,7 @@ const badges = [
 
 export function SocialProof() {
   return (
-    <section className="py-16 border-t border-white/[0.06]">
+    <section className="py-8 border-t border-white/[0.06]">
       <div className="max-w-6xl mx-auto px-4">
         <FadeIn>
           <div className="flex flex-wrap items-center justify-center gap-4">

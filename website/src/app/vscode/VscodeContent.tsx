@@ -39,7 +39,7 @@ export function VscodeContent() {
       <section className="section-padding pt-24 pb-16 text-center">
         <div className="container-width">
           <FadeIn>
-            <h1 className="text-4xl font-bold tracking-tight text-white">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-white">
               GoSQLX for VS Code
             </h1>
             <p className="mt-4 text-lg text-zinc-400 max-w-2xl mx-auto">
@@ -79,7 +79,7 @@ export function VscodeContent() {
 
       {/* Install via CLI */}
       <section className="section-padding pb-16">
-        <div className="container-width max-w-2xl">
+        <div className="container-width max-w-2xl mx-auto">
           <FadeIn>
             <h2 className="text-2xl font-bold text-white mb-6 text-center">
               Install via CLI
@@ -91,7 +91,7 @@ export function VscodeContent() {
 
       {/* Key Settings */}
       <section className="section-padding pb-24">
-        <div className="container-width max-w-2xl">
+        <div className="container-width max-w-2xl mx-auto">
           <FadeIn>
             <h2 className="text-2xl font-bold text-white mb-6 text-center">
               Key Settings

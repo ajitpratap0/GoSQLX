@@ -132,7 +132,7 @@ export function BenchmarksContent() {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="border-b border-white/[0.04] transition-colors bg-indigo-500/5 border-l-2 border-l-indigo-500">
+                    <tr className="border-b border-white/[0.04] transition-colors bg-indigo-500/10 border-l-2 border-l-indigo-500">
                       <td className="px-6 py-4 text-white font-medium">
                         GoSQLX{' '}
                         <span className="ml-2 inline-block rounded-full bg-indigo-500/20 px-2 py-0.5 text-xs font-medium text-indigo-300">
@@ -184,7 +184,7 @@ export function BenchmarksContent() {
       </section>
 
       {/* Methodology */}
-      <section className="section-padding pb-24">
+      <section className="section-padding pb-8">
         <div className="container-width max-w-2xl">
           <FadeIn>
             <h2 className="text-2xl font-bold text-white mb-6">Methodology</h2>

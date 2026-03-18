@@ -4,7 +4,15 @@ import { BlogList } from './BlogList';
 
 export const metadata: Metadata = {
   title: 'Changelog',
-  description: 'GoSQLX changelog. Track new features, improvements, and bug fixes across all versions.',
+  description: 'GoSQLX changelog — new features, improvements, and bug fixes across all versions of the SQL parsing SDK.',
+  alternates: {
+    canonical: '/blog/',
+  },
+  openGraph: {
+    title: 'GoSQLX Changelog',
+    description: 'New features, improvements, and bug fixes across all GoSQLX versions.',
+    url: '/blog/',
+  },
 };
 
 export default function BlogPage() {

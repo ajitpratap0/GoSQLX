@@ -82,14 +82,14 @@ export function Hero() {
         {/* Version badge */}
         <FadeIn delay={0}>
           <div className="mb-6">
-            <VersionBadge version="v1.12.1 - Remote MCP Server" />
+            <VersionBadge version="v1.12.0 - Remote MCP Server" />
           </div>
         </FadeIn>
 
         {/* Headline */}
         <FadeIn delay={0.1}>
           <h1
-            className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 break-words hyphens-auto w-full max-w-full px-4 sm:px-0"
+            className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 break-words hyphens-auto"
             style={{ letterSpacing: '-0.03em' }}
           >
             <GradientText>Parse SQL at the speed of Go</GradientText>
@@ -98,7 +98,7 @@ export function Hero() {
 
         {/* Subtitle */}
         <FadeIn delay={0.2}>
-          <p className="text-lg md:text-xl max-w-2xl mx-auto mb-10" style={{ color: 'rgba(255,255,255,0.5)' }}>
+          <p className="text-lg md:text-xl max-w-2xl mx-auto mb-10 text-zinc-300">
             Production-ready SQL parsing with zero-copy tokenization, object pooling, and multi-dialect support
           </p>
         </FadeIn>
@@ -130,9 +130,12 @@ export function Hero() {
                     </div>
                     <span className="text-xs text-zinc-500 font-mono ml-2">query.sql</span>
                   </div>
-                  <pre className="p-4 text-[13px] leading-relaxed font-mono text-zinc-300 overflow-x-auto max-h-[320px]">
-                    <code>{SAMPLE_SQL}</code>
-                  </pre>
+                  <div className="relative">
+                    <pre className="p-4 text-[13px] leading-relaxed font-mono text-zinc-300 overflow-x-auto max-h-[320px]">
+                      <code>{SAMPLE_SQL}</code>
+                    </pre>
+                    <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-zinc-950/60 to-transparent pointer-events-none md:hidden" aria-hidden="true" />
+                  </div>
                 </div>
 
                 {/* AST Output side */}
@@ -160,20 +163,6 @@ export function Hero() {
           </div>
         </FadeIn>
 
-        {/* Link below playground */}
-        <FadeIn delay={0.4}>
-          <div className="mt-6">
-            <Link
-              href="/playground"
-              className="text-sm text-zinc-300 hover:text-white transition-colors inline-flex items-center gap-1.5"
-            >
-              Open Full Playground
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </Link>
-          </div>
-        </FadeIn>
       </div>
     </section>
   );

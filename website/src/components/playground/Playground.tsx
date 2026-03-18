@@ -194,11 +194,13 @@ export default function Playground() {
       {/* Top toolbar */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800 bg-slate-900/50">
         <div className="flex items-center gap-3">
-          <h1 className="text-sm font-semibold text-slate-200">SQL Playground</h1>
+          <h1 className="sr-only">SQL Playground</h1>
+          <span className="text-sm font-semibold text-slate-200" aria-hidden="true">SQL Playground</span>
           <div className="h-4 w-px bg-slate-700" />
-          <label className="flex items-center gap-2 text-sm text-slate-400">
+          <label htmlFor="dialect-select" className="flex items-center gap-2 text-sm text-slate-400">
             Dialect:
             <select
+              id="dialect-select"
               value={dialect}
               onChange={(e) => setDialect(e.target.value)}
               className="bg-slate-800 text-slate-200 text-sm rounded px-2 py-1 border border-slate-700 focus:outline-none focus:border-blue-500 appearance-none cursor-pointer"
@@ -213,7 +215,7 @@ export default function Playground() {
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-green-500" aria-hidden="true" />
-          <span className="text-xs text-slate-400">WASM Ready</span>
+          <span className="text-xs text-slate-400">Parser ready</span>
         </div>
       </div>
 
@@ -264,7 +266,7 @@ export default function Playground() {
           </div>
 
           {/* Tab content */}
-          <div className="flex-1 overflow-auto min-h-0" role="tabpanel" id={`tabpanel-${activeTab}`} aria-labelledby={`tab-${activeTab}`}>
+          <div className="flex-1 overflow-auto min-h-0" role="tabpanel" id={`tabpanel-${activeTab}`} aria-labelledby={`tab-${activeTab}`} aria-live="polite">
             {activeTab === "ast" && <AstTab data={results.ast} />}
             {activeTab === "format" && <FormatTab data={results.format} />}
             {activeTab === "lint" && <LintTab data={results.lint} />}

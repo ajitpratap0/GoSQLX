@@ -2,15 +2,8 @@ name: Claude Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize]
-    paths:
-      - "**/*.go"
-      - "**/*.ts"
-      - "**/*.tsx"
-      - "**/*.js"
-      - "**/*.jsx"
-      - "go.mod"
-      - "go.sum"
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 jobs:
   claude-review:

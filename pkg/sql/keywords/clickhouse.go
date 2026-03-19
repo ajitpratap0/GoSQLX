@@ -16,34 +16,49 @@ package keywords
 
 import "github.com/ajitpratap0/GoSQLX/pkg/models"
 
-// CLICKHOUSE_SPECIFIC contains ClickHouse-specific SQL keywords not in the base set.
+// CLICKHOUSE_SPECIFIC contains ClickHouse-specific SQL keywords and extensions.
 // These keywords are recognized when using DialectClickHouse.
 //
-// Keywords that already exist in the base keyword set (RESERVED_FOR_TABLE_ALIAS or
-// ADDITIONAL_KEYWORDS) are NOT duplicated here. The following base keywords overlap
-// with ClickHouse features but are already defined in the base set:
-//   - PREWHERE (Reserved, ReservedForTableAlias)
-//   - FINAL  — not in base set, included here
-//   - SAMPLE (Reserved, ReservedForTableAlias)
-//   - SETTINGS (Reserved, ReservedForTableAlias)
-//   - FORMAT (Reserved, ReservedForTableAlias)
-//   - GLOBAL (Reserved, ReservedForTableAlias)
-//   - MATERIALIZED — added by DialectPostgreSQL; safe to include as addKeywordsWithCategory
-//     skips duplicates, but omitted here to keep CLICKHOUSE_SPECIFIC self-contained.
+// Several of these (PREWHERE, FINAL, SAMPLE, SETTINGS, FORMAT, GLOBAL, ASOF) are
+// also present in the base keyword set because they were introduced specifically for
+// ClickHouse support. They are listed here explicitly so that DialectKeywords() returns
+// a complete, self-contained list for ClickHouse consumers.
 //
-// Examples: ENGINE, CODEC, TTL, REPLICATED, DISTRIBUTED, FIXEDSTRING, LOWCARDINALITY
+// Examples: PREWHERE, FINAL, ENGINE, MERGETREE, CODEC, TTL, DISTRIBUTED, GLOBAL, ASOF
 var CLICKHOUSE_SPECIFIC = []Keyword{
-	// ClickHouse-specific clauses (not in base set)
+	// ClickHouse-specific query clauses
+	{Word: "PREWHERE", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
 	{Word: "FINAL", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "SAMPLE", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "GLOBAL", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "ASOF", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
 
-	// DDL extensions
+	// ClickHouse DDL — table engine and column options
 	{Word: "ENGINE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "CODEC", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "TTL", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
-	{Word: "REPLICATED", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
-	{Word: "DISTRIBUTED", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
-	{Word: "MATERIALIZED", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "GRANULARITY", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "SETTINGS", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "FORMAT", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "ALIAS", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "MATERIALIZED", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "TUPLE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+
+	// MergeTree engine family
+	{Word: "MERGETREE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "REPLACINGMERGETREE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "AGGREGATINGMERGETREE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "COLLAPSINGMERGETREE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "SUMMINGMERGETREE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "REPLICATEDMERGETREE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "REPLICATED", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+
+	// Other table engines
+	{Word: "DISTRIBUTED", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "MEMORY", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "LOG", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "TINYLOG", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "STRIPELOG", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 
 	// ClickHouse data types (as keywords)
 	{Word: "FIXEDSTRING", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
@@ -53,6 +68,6 @@ var CLICKHOUSE_SPECIFIC = []Keyword{
 	{Word: "IPV4", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "IPV6", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 
-	// Replication/cluster (ON CLUSTER and PASTE are multi-token; register single-token variants)
+	// JOIN modifiers
 	{Word: "PASTE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 }

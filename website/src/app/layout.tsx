@@ -88,7 +88,7 @@ export default function RootLayout({
           }}
         />
         <Navbar />
-        <div id="main-content" className="pt-16">{children}</div>
+        <main id="main-content" className="pt-16">{children}</main>
         <Footer />
         <ServiceWorkerRegister />
       </body>

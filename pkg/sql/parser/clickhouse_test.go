@@ -115,3 +115,93 @@ func TestClickHouseGlobalIn(t *testing.T) {
 		t.Fatalf("unexpected error parsing GLOBAL IN: %v", err)
 	}
 }
+
+func TestClickHouseFinalWithWhere(t *testing.T) {
+	sql := `SELECT * FROM orders FINAL WHERE id > 5`
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectClickHouse)
+	if err != nil {
+		t.Fatalf("unexpected error parsing FINAL with WHERE: %v", err)
+	}
+	if len(tree.Statements) == 0 {
+		t.Fatal("expected at least one statement")
+	}
+	sel, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", tree.Statements[0])
+	}
+	if len(sel.From) == 0 || !sel.From[0].Final {
+		t.Error("expected FINAL=true on first TableReference")
+	}
+	if sel.Where == nil {
+		t.Error("expected WHERE clause to be set")
+	}
+}
+
+func TestClickHouseFinalWithAlias(t *testing.T) {
+	t.Run("ExplicitAlias", func(t *testing.T) {
+		sql := `SELECT * FROM orders AS o FINAL`
+		tree, err := parser.ParseWithDialect(sql, keywords.DialectClickHouse)
+		if err != nil {
+			t.Fatalf("unexpected error parsing FINAL with AS alias: %v", err)
+		}
+		if len(tree.Statements) == 0 {
+			t.Fatal("expected at least one statement")
+		}
+		sel, ok := tree.Statements[0].(*ast.SelectStatement)
+		if !ok {
+			t.Fatalf("expected SelectStatement, got %T", tree.Statements[0])
+		}
+		if len(sel.From) == 0 || !sel.From[0].Final {
+			t.Error("expected FINAL=true on first TableReference")
+		}
+	})
+
+	t.Run("ImplicitAlias", func(t *testing.T) {
+		sql := `SELECT * FROM orders o FINAL`
+		tree, err := parser.ParseWithDialect(sql, keywords.DialectClickHouse)
+		if err != nil {
+			t.Fatalf("unexpected error parsing FINAL with implicit alias: %v", err)
+		}
+		if len(tree.Statements) == 0 {
+			t.Fatal("expected at least one statement")
+		}
+		sel, ok := tree.Statements[0].(*ast.SelectStatement)
+		if !ok {
+			t.Fatalf("expected SelectStatement, got %T", tree.Statements[0])
+		}
+		if len(sel.From) == 0 || !sel.From[0].Final {
+			t.Error("expected FINAL=true on first TableReference")
+		}
+	})
+}
+
+func TestClickHouseFinalWithJoin(t *testing.T) {
+	sql := `SELECT * FROM orders FINAL JOIN users ON orders.user_id = users.id`
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectClickHouse)
+	if err != nil {
+		t.Fatalf("unexpected error parsing FINAL with JOIN: %v", err)
+	}
+	if len(tree.Statements) == 0 {
+		t.Fatal("expected at least one statement")
+	}
+	sel, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", tree.Statements[0])
+	}
+	if len(sel.From) == 0 || !sel.From[0].Final {
+		t.Error("expected FINAL=true on first TableReference")
+	}
+	if len(sel.Joins) == 0 {
+		t.Error("expected at least one JOIN clause")
+	}
+}
+
+func TestClickHouseFinalNotParsedInOtherDialects(t *testing.T) {
+	// FINAL is a ClickHouse-specific modifier; in generic dialect it is an
+	// unknown token that causes a parse error.
+	sql := `SELECT * FROM orders FINAL`
+	_, err := parser.ParseWithDialect(sql, keywords.DialectGeneric)
+	if err == nil {
+		t.Error("expected parse error for FINAL in generic dialect, but got none")
+	}
+}

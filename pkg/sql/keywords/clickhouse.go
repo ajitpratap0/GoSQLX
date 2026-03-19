@@ -19,10 +19,10 @@ import "github.com/ajitpratap0/GoSQLX/pkg/models"
 // CLICKHOUSE_SPECIFIC contains ClickHouse-specific SQL keywords and extensions.
 // These keywords are recognized when using DialectClickHouse.
 //
-// Several of these (PREWHERE, FINAL, SAMPLE, SETTINGS, FORMAT, GLOBAL, ASOF) are
-// also present in the base keyword set because they were introduced specifically for
-// ClickHouse support. They are listed here explicitly so that DialectKeywords() returns
-// a complete, self-contained list for ClickHouse consumers.
+// Note: PREWHERE and FINAL also appear in the tokenizer's hardcoded keywordTokenTypes
+// map (tokenizer.go) to ensure they are emitted as TokenTypeKeyword rather than
+// TokenTypeIdentifier. This is required for correct clause boundary detection during
+// FROM clause parsing. All other keywords here are dialect-scoped only.
 //
 // Examples: PREWHERE, FINAL, ENGINE, MERGETREE, CODEC, TTL, DISTRIBUTED, GLOBAL, ASOF
 var CLICKHOUSE_SPECIFIC = []Keyword{

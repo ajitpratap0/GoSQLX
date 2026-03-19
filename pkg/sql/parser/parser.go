@@ -970,6 +970,10 @@ func (p *Parser) isJoinKeyword() bool {
 	if p.dialect == string(keywords.DialectSQLServer) && p.isType(models.TokenTypeOuter) {
 		return true
 	}
+	// ClickHouse: GLOBAL JOIN — GLOBAL is TokenTypeKeyword, not a dedicated join token
+	if p.dialect == string(keywords.DialectClickHouse) && p.isTokenMatch("GLOBAL") {
+		return true
+	}
 	return false
 }
 

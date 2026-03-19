@@ -85,7 +85,10 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 	}
 	tableName = firstRef.Name
 
-	// ClickHouse FINAL modifier — consumed after table reference, before JOINs
+	// ClickHouse FINAL modifier — consumed after table reference, before JOINs.
+	// NOTE: FINAL only applies to the first (primary) table reference. In ClickHouse,
+	// FINAL is a per-table modifier; multi-table FROM with FINAL on a non-first
+	// table (e.g. "FROM t1, t2 FINAL") is not supported by this parser.
 	if p.dialect == string(keywords.DialectClickHouse) && p.isTokenMatch("FINAL") {
 		firstRef.Final = true
 		p.advance() // consume FINAL
@@ -172,6 +175,12 @@ func (p *Parser) parseJoinType() (string, bool, error) {
 	joinType := "INNER"
 	isNatural := false
 	explicitType := false // tracks whether a join-type keyword was explicitly given
+
+	// ClickHouse GLOBAL JOIN — consume the GLOBAL modifier before the join type.
+	// GLOBAL semantics (distributed join) are not preserved in the AST.
+	if p.dialect == string(keywords.DialectClickHouse) && p.isTokenMatch("GLOBAL") {
+		p.advance() // consume GLOBAL; fall through to standard join parsing
+	}
 
 	if p.isType(models.TokenTypeNatural) {
 		isNatural = true

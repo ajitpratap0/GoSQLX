@@ -99,3 +99,19 @@ func TestClickHousePrewhereNotParsedForOtherDialects(t *testing.T) {
 		t.Errorf("unexpected error for generic dialect: %v", err)
 	}
 }
+
+func TestClickHouseGlobalJoin(t *testing.T) {
+	sql := `SELECT t1.id, t2.name FROM t1 GLOBAL JOIN t2 ON t1.id = t2.id`
+	_, err := parser.ParseWithDialect(sql, keywords.DialectClickHouse)
+	if err != nil {
+		t.Fatalf("unexpected error parsing GLOBAL JOIN: %v", err)
+	}
+}
+
+func TestClickHouseGlobalIn(t *testing.T) {
+	sql := `SELECT id FROM orders WHERE id GLOBAL IN (SELECT id FROM users)`
+	_, err := parser.ParseWithDialect(sql, keywords.DialectClickHouse)
+	if err != nil {
+		t.Fatalf("unexpected error parsing GLOBAL IN: %v", err)
+	}
+}

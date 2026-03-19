@@ -1325,7 +1325,7 @@ The LSP server provides:
 - Helpful error messages
 - Suggested fixes
 
-For complete LSP documentation, see [LSP_GUIDE.md](./LSP_GUIDE.md).
+For complete LSP documentation, see [LSP Guide](/docs/lsp-guide).
 
 ## CLI Tool Usage (v1.6.0)
 
@@ -1519,7 +1519,7 @@ lsp:
   hover_enabled: true
 ```
 
-For complete configuration documentation, see [CONFIGURATION.md](./CONFIGURATION.md).
+For complete configuration documentation, see [Configuration](/docs/configuration).
 
 ### CLI Examples
 

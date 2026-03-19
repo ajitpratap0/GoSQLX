@@ -480,7 +480,7 @@ gosqlx lint [file...] [flags]
 | L009 | Aliasing Consistency | No | Detects mixed table aliasing |
 | L010 | Redundant Whitespace | Yes | Finds multiple consecutive spaces |
 
-See [LINTING_RULES.md](LINTING_RULES.md) for complete rule documentation.
+See [Linting Rules](/docs/linting-rules) for complete rule documentation.
 
 #### Examples
 
@@ -617,7 +617,7 @@ require('lspconfig').gosqlx.setup{}
     :server-id 'gosqlx))
 ```
 
-See [LSP_GUIDE.md](LSP_GUIDE.md) for complete LSP documentation.
+See [LSP Guide](/docs/lsp-guide) for complete LSP documentation.
 
 ---
 
@@ -715,7 +715,7 @@ linter:
     L010: enabled              # Redundant whitespace
 ```
 
-See [CONFIGURATION.md](CONFIGURATION.md) for complete configuration guide.
+See [Configuration](/docs/configuration) for complete configuration guide.
 
 ---
 
@@ -1005,7 +1005,7 @@ $ gosqlx validate /dev/null
 Error: not a regular file: /dev/null
 ```
 
-For more details, see the [Security Validation Package](../cmd/gosqlx/internal/validate/README.md).
+For more details, see the [Security Validation Package](https://github.com/ajitpratap0/GoSQLX/tree/main/cmd/gosqlx/internal/validate).
 
 ---
 
@@ -1388,18 +1388,18 @@ To contribute to the GoSQLX CLI:
 3. Add tests for new CLI features
 4. Submit a pull request
 
-See [CONTRIBUTING.md](../CONTRIBUTING.md) for detailed guidelines.
+See [CONTRIBUTING.md](https://github.com/ajitpratap0/GoSQLX/blob/main/CONTRIBUTING.md) for detailed guidelines.
 
 ---
 
 ## Related Documentation
 
-- [LSP Guide](LSP_GUIDE.md) - Complete LSP server documentation and IDE integration
-- [Linting Rules](LINTING_RULES.md) - All 10 linting rules (L001-L010) reference
-- [Configuration Guide](CONFIGURATION.md) - Configuration file (.gosqlx.yml) guide
-- [Getting Started](GETTING_STARTED.md) - Quick start guide for new users
-- [Usage Guide](USAGE_GUIDE.md) - Comprehensive usage guide
-- [SQL Compatibility](SQL_COMPATIBILITY.md) - SQL dialect compatibility matrix
+- [LSP Guide](/docs/lsp-guide) - Complete LSP server documentation and IDE integration
+- [Linting Rules](/docs/linting-rules) - All 10 linting rules (L001-L010) reference
+- [Configuration Guide](/docs/configuration) - Configuration file (.gosqlx.yml) guide
+- [Getting Started](/docs/getting-started) - Quick start guide for new users
+- [Usage Guide](/docs/usage-guide) - Comprehensive usage guide
+- [SQL Compatibility](/docs/sql-compatibility) - SQL dialect compatibility matrix
 
 ---
 

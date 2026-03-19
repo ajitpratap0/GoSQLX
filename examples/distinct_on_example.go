@@ -19,10 +19,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/ajitpratap0/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
 
 func main() {
@@ -30,86 +28,34 @@ func main() {
 	fmt.Println("=====================================")
 
 	// Example 1: Basic DISTINCT ON with single column
-	example1 := []token.Token{
-		{Type: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: models.TokenTypeDistinct, Literal: "DISTINCT"},
-		{Type: models.TokenTypeOn, Literal: "ON"},
-		{Type: models.TokenTypeLParen, Literal: "("},
-		{Type: models.TokenTypeIdentifier, Literal: "dept_id"},
-		{Type: models.TokenTypeRParen, Literal: ")"},
-		{Type: models.TokenTypeIdentifier, Literal: "dept_id"},
-		{Type: models.TokenTypeComma, Literal: ","},
-		{Type: models.TokenTypeIdentifier, Literal: "name"},
-		{Type: models.TokenTypeComma, Literal: ","},
-		{Type: models.TokenTypeIdentifier, Literal: "salary"},
-		{Type: models.TokenTypeFrom, Literal: "FROM"},
-		{Type: models.TokenTypeIdentifier, Literal: "employees"},
-		{Type: models.TokenTypeOrder, Literal: "ORDER"},
-		{Type: models.TokenTypeBy, Literal: "BY"},
-		{Type: models.TokenTypeIdentifier, Literal: "dept_id"},
-		{Type: models.TokenTypeComma, Literal: ","},
-		{Type: models.TokenTypeIdentifier, Literal: "salary"},
-		{Type: models.TokenTypeDesc, Literal: "DESC"},
-	}
-
+	sql1 := "SELECT DISTINCT ON (dept_id) dept_id, name, salary FROM employees ORDER BY dept_id, salary DESC"
 	fmt.Println("Example 1: Basic DISTINCT ON")
-	fmt.Println("SQL: SELECT DISTINCT ON (dept_id) dept_id, name, salary FROM employees ORDER BY dept_id, salary DESC")
-	parseAndDisplay(example1)
+	fmt.Printf("SQL: %s\n", sql1)
+	parseAndDisplay(sql1)
 
 	// Example 2: DISTINCT ON with multiple columns
-	example2 := []token.Token{
-		{Type: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: models.TokenTypeDistinct, Literal: "DISTINCT"},
-		{Type: models.TokenTypeOn, Literal: "ON"},
-		{Type: models.TokenTypeLParen, Literal: "("},
-		{Type: models.TokenTypeIdentifier, Literal: "user_id"},
-		{Type: models.TokenTypeComma, Literal: ","},
-		{Type: models.TokenTypeIdentifier, Literal: "category"},
-		{Type: models.TokenTypeRParen, Literal: ")"},
-		{Type: models.TokenTypeAsterisk, Literal: "*"},
-		{Type: models.TokenTypeFrom, Literal: "FROM"},
-		{Type: models.TokenTypeIdentifier, Literal: "purchases"},
-		{Type: models.TokenTypeOrder, Literal: "ORDER"},
-		{Type: models.TokenTypeBy, Literal: "BY"},
-		{Type: models.TokenTypeIdentifier, Literal: "user_id"},
-		{Type: models.TokenTypeComma, Literal: ","},
-		{Type: models.TokenTypeIdentifier, Literal: "category"},
-	}
-
+	sql2 := "SELECT DISTINCT ON (user_id, category) * FROM purchases ORDER BY user_id, category"
 	fmt.Println("\nExample 2: DISTINCT ON with Multiple Columns")
-	fmt.Println("SQL: SELECT DISTINCT ON (user_id, category) * FROM purchases ORDER BY user_id, category")
-	parseAndDisplay(example2)
+	fmt.Printf("SQL: %s\n", sql2)
+	parseAndDisplay(sql2)
 
 	// Example 3: Regular DISTINCT (should still work)
-	example3 := []token.Token{
-		{Type: models.TokenTypeSelect, Literal: "SELECT"},
-		{Type: models.TokenTypeDistinct, Literal: "DISTINCT"},
-		{Type: models.TokenTypeIdentifier, Literal: "country"},
-		{Type: models.TokenTypeFrom, Literal: "FROM"},
-		{Type: models.TokenTypeIdentifier, Literal: "customers"},
-	}
-
+	sql3 := "SELECT DISTINCT country FROM customers"
 	fmt.Println("\nExample 3: Regular DISTINCT (backward compatibility)")
-	fmt.Println("SQL: SELECT DISTINCT country FROM customers")
-	parseAndDisplay(example3)
+	fmt.Printf("SQL: %s\n", sql3)
+	parseAndDisplay(sql3)
 }
 
-func parseAndDisplay(tokens []token.Token) {
-	p := parser.NewParser()
-
-	astObj, err := p.Parse(tokens)
+func parseAndDisplay(sql string) {
+	astObj, err := gosqlx.Parse(sql)
 	if err != nil {
-		p.Release()
 		log.Fatalf("Parse error: %v", err)
 	}
 
-	displayAST(p, astObj)
+	displayAST(astObj)
 }
 
-func displayAST(p *parser.Parser, astObj *ast.AST) {
-	defer p.Release()
-	defer ast.ReleaseAST(astObj)
-
+func displayAST(astObj *ast.AST) {
 	if len(astObj.Statements) == 0 {
 		fmt.Println("No statements parsed")
 		return

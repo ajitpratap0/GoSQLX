@@ -58,6 +58,12 @@ const (
 
 	// DialectRedshift represents Amazon Redshift-specific keywords and extensions
 	DialectRedshift SQLDialect = "redshift"
+
+	// DialectClickHouse represents ClickHouse-specific keywords and extensions.
+	// Includes ClickHouse-specific clauses (PREWHERE, FINAL, SAMPLE), engine
+	// definitions (ENGINE, CODEC, TTL), ClickHouse data types (FixedString,
+	// LowCardinality, Nullable, DateTime64), and replication keywords (ON CLUSTER, GLOBAL).
+	DialectClickHouse SQLDialect = "clickhouse"
 )
 
 // DialectKeywords returns the additional keywords for a specific dialect.
@@ -86,6 +92,8 @@ func DialectKeywords(dialect SQLDialect) []Keyword {
 		return SQLSERVER_SPECIFIC
 	case DialectOracle:
 		return ORACLE_SPECIFIC
+	case DialectClickHouse:
+		return CLICKHOUSE_SPECIFIC
 	default:
 		return nil
 	}
@@ -131,6 +139,7 @@ func AllDialects() []SQLDialect {
 		DialectSnowflake,
 		DialectBigQuery,
 		DialectRedshift,
+		DialectClickHouse,
 	}
 }
 

@@ -15,7 +15,7 @@ export function VscodeSection() {
               <h2 className="text-3xl font-bold text-white mb-4">
                 IDE Integration
               </h2>
-              <p className="text-zinc-400 mb-6 max-w-md">
+              <p className="text-zinc-300 mb-6 max-w-md">
                 Real-time SQL validation, formatting, and linting in VS Code. Catch errors as you type with full multi-dialect support.
               </p>
               <Button

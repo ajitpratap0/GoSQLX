@@ -227,6 +227,7 @@ type TableReference struct {
 	Subquery   *SelectStatement // For derived tables: (SELECT ...) AS alias
 	Lateral    bool             // LATERAL keyword for correlated subqueries (PostgreSQL)
 	TableHints []string         // SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
+	Final      bool             // ClickHouse FINAL modifier: forces MergeTree part merge
 }
 
 func (t *TableReference) statementNode() {}
@@ -392,6 +393,7 @@ type SelectStatement struct {
 	From              []TableReference
 	TableName         string // Added for pool operations
 	Joins             []JoinClause
+	PrewhereClause    Expression // ClickHouse PREWHERE clause (applied before WHERE, before reading data)
 	Where             Expression
 	GroupBy           []Expression
 	Having            Expression
@@ -491,6 +493,9 @@ func (s SelectStatement) Children() []Node {
 	for _, join := range s.Joins {
 		join := join // G601: Create local copy to avoid memory aliasing
 		children = append(children, &join)
+	}
+	if s.PrewhereClause != nil {
+		children = append(children, s.PrewhereClause)
 	}
 	if s.Where != nil {
 		children = append(children, s.Where)

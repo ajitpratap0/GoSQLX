@@ -560,6 +560,11 @@ func (s *SelectStatement) SQL() string {
 		sb.WriteString(joinSQL(&j))
 	}
 
+	if s.PrewhereClause != nil {
+		sb.WriteString(" PREWHERE ")
+		sb.WriteString(exprSQL(s.PrewhereClause))
+	}
+
 	if s.Where != nil {
 		sb.WriteString(" WHERE ")
 		sb.WriteString(exprSQL(s.Where))
@@ -1297,6 +1302,9 @@ func tableRefSQL(t *TableReference) string {
 	if t.Alias != "" {
 		sb.WriteString(" ")
 		sb.WriteString(t.Alias)
+	}
+	if t.Final {
+		sb.WriteString(" FINAL")
 	}
 	return sb.String()
 }

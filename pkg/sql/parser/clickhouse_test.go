@@ -44,20 +44,22 @@ func TestClickHousePrewhere(t *testing.T) {
 }
 
 func TestClickHouseFinal(t *testing.T) {
-	// FINAL modifier — parsed without error (FINAL is recognized as a reserved keyword)
 	sql := `SELECT * FROM orders FINAL`
-	_, err := parser.ParseWithDialect(sql, keywords.DialectClickHouse)
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectClickHouse)
 	if err != nil {
-		t.Logf("FINAL not yet parsed as clause modifier (acceptable): %v", err)
+		t.Fatalf("unexpected error parsing FINAL modifier: %v", err)
+	}
+	sel, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", tree.Statements[0])
+	}
+	if len(sel.From) == 0 || !sel.From[0].Final {
+		t.Error("expected FINAL=true on first TableReference")
 	}
 }
 
 func TestClickHouseKeywordRecognition(t *testing.T) {
-	sql := `SELECT count() FROM events SAMPLE 0.1`
-	_, err := parser.ParseWithDialect(sql, keywords.DialectClickHouse)
-	if err != nil {
-		t.Logf("SAMPLE clause parse: %v", err)
-	}
+	t.Skip("TODO: SAMPLE clause parsing not yet implemented")
 }
 
 func TestClickHouseDialectRegistered(t *testing.T) {

@@ -227,6 +227,7 @@ type TableReference struct {
 	Subquery   *SelectStatement // For derived tables: (SELECT ...) AS alias
 	Lateral    bool             // LATERAL keyword for correlated subqueries (PostgreSQL)
 	TableHints []string         // SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
+	Final      bool             // ClickHouse FINAL modifier: forces MergeTree part merge
 }
 
 func (t *TableReference) statementNode() {}

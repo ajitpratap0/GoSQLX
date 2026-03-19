@@ -84,6 +84,13 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 		return "", nil, nil, e
 	}
 	tableName = firstRef.Name
+
+	// ClickHouse FINAL modifier — consumed after table reference, before JOINs
+	if p.dialect == string(keywords.DialectClickHouse) && p.isTokenMatch("FINAL") {
+		firstRef.Final = true
+		p.advance() // consume FINAL
+	}
+
 	tables = []ast.TableReference{firstRef}
 
 	// Additional comma-separated table references (implicit cross joins)

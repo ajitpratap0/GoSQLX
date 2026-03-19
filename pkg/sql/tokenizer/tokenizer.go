@@ -223,11 +223,11 @@ var keywordTokenTypes = map[string]models.TokenType{
 	"EXPLAIN":   models.TokenTypeExplain,
 	"DATABASES": models.TokenTypeKeyword,
 	"TABLES":    models.TokenTypeKeyword,
-	// ClickHouse-specific clause keywords (reserved in base keyword set)
+	// ClickHouse-specific clause keywords — must be in this map so the tokenizer
+	// emits TokenTypeKeyword (not TokenTypeIdentifier), enabling correct clause
+	// boundary detection. SETTINGS/FORMAT are common words and must NOT be here.
 	"PREWHERE": models.TokenTypeKeyword,
 	"FINAL":    models.TokenTypeKeyword,
-	"SETTINGS": models.TokenTypeKeyword,
-	"FORMAT":   models.TokenTypeKeyword,
 }
 
 // Tokenizer provides high-performance SQL tokenization with zero-copy operations.

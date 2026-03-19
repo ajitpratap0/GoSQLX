@@ -588,7 +588,6 @@ gosqlx format --dialect mysql query.sql
 - Pipelined table functions not supported
 
 #### SQLite
-- PRAGMA statements not parsed (keyword reserved)
 - ATTACH/DETACH not parsed (keywords reserved)
 - VACUUM not supported
 - Virtual tables (FTS5, rtree) not supported

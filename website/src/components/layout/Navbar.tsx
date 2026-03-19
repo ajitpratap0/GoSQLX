@@ -106,6 +106,7 @@ export function Navbar() {
           onClick={() => setMobileOpen(!mobileOpen)}
           aria-label="Toggle menu"
           aria-expanded={mobileOpen}
+          aria-controls="mobile-menu"
         >
           <HamburgerIcon open={mobileOpen} />
         </button>
@@ -115,6 +116,7 @@ export function Navbar() {
       <AnimatePresence>
         {mobileOpen && (
           <motion.div
+            id="mobile-menu"
             initial={{ height: 0, opacity: 0, pointerEvents: 'none' }}
             animate={{ height: 'auto', opacity: 1, pointerEvents: 'auto' }}
             exit={{ height: 0, opacity: 0, pointerEvents: 'none' }}

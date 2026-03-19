@@ -49,9 +49,6 @@ const baseTheme = EditorView.theme({
   ".cm-content": {
     maxWidth: "100%",
   },
-  ".cm-line": {
-    wordBreak: "break-all" as any,
-  },
 });
 
 export default function SqlEditor({

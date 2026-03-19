@@ -21,7 +21,7 @@ export class WasmErrorBoundary extends Component<Props, State> {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <p className="text-red-400 font-medium">Something went wrong</p>
+            <p className="text-red-400 font-medium">Failed to load SQL parser</p>
             <p className="text-zinc-400 text-sm">{this.state.error?.message}</p>
             <button
               onClick={() => this.setState({ hasError: false, error: null })}

@@ -4,20 +4,26 @@ import React, { useState, type ReactNode, type ComponentPropsWithoutRef } from '
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
 
   const copy = () => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      setCopyFailed(true);
+      setTimeout(() => setCopyFailed(false), 2000);
+    });
   };
 
   return (
     <button
       onClick={copy}
       className="absolute right-2 top-2 rounded bg-white/10 px-2 py-1 text-xs text-zinc-400 opacity-0 transition-opacity hover:text-white group-hover:opacity-100"
-      aria-label="Copy code"
+      aria-label={copyFailed ? 'Copy failed — try Ctrl+C' : 'Copy code'}
+      title={copyFailed ? 'Clipboard access denied. Try Ctrl+C to copy.' : undefined}
     >
-      {copied ? 'Copied!' : 'Copy'}
+      {copied ? 'Copied!' : copyFailed ? 'Failed!' : 'Copy'}
     </button>
   );
 }
@@ -75,6 +81,11 @@ export const mdxComponents = {
         >
           {children}
         </pre>
+        {/* Mobile scroll hint: right-edge fade gradient, hidden on md+ where scrollbar is visible */}
+        <div
+          className="pointer-events-none absolute bottom-0 right-0 top-0 w-8 rounded-r-lg bg-gradient-to-l from-zinc-900/80 to-transparent md:hidden"
+          aria-hidden="true"
+        />
       </div>
     );
   },

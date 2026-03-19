@@ -6,12 +6,12 @@ export function AnimatedCounter({ value, suffix = '', color = 'text-white' }: { 
   const ref = useRef(null);
   const motionValue = useMotionValue(0);
   const spring = useSpring(motionValue, { stiffness: 100, damping: 30 });
-  const [display, setDisplay] = useState(() => value.toLocaleString());
+  const [display, setDisplay] = useState(() => value.toLocaleString('en-US'));
 
   useEffect(() => {
     // Respect prefers-reduced-motion
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setDisplay(value.toLocaleString());
+      setDisplay(value.toLocaleString('en-US'));
       return;
     }
     // Start animation after a short delay to ensure mount has completed
@@ -23,7 +23,7 @@ export function AnimatedCounter({ value, suffix = '', color = 'text-white' }: { 
 
   useEffect(() => {
     const unsubscribe = spring.on('change', (v: number) => {
-      setDisplay(Math.round(v).toLocaleString());
+      setDisplay(Math.round(v).toLocaleString('en-US'));
     });
     return unsubscribe;
   }, [spring]);

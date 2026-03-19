@@ -1,6 +1,6 @@
 # GoSQLX SQL Feature Compatibility Matrix
 
-**Version**: v1.12.0 | **Last Updated**: 2026-03-15
+**Version**: v1.13.0 | **Last Updated**: 2026-03-20
 
 ## Overview
 
@@ -597,9 +597,17 @@ gosqlx format --dialect mysql query.sql
 - No Snowflake-specific parsing (stages, COPY INTO, VARIANT operations)
 - QUALIFY clause not supported
 
+#### ClickHouse
+- PREWHERE clause for pre-filter optimization before primary key scan
+- FINAL modifier on table references (forces MergeTree part merge)
+- GLOBAL IN / GLOBAL NOT IN for distributed query execution
+- ClickHouse data types: FixedString(N), LowCardinality(T), Nullable(T), DateTime64, IPv4, IPv6
+- MergeTree engine family keywords: MERGETREE, REPLACINGMERGETREE, AGGREGATINGMERGETREE, SUMMINGMERGETREE, COLLAPSINGMERGETREE, VERSIONEDCOLLAPSINGMERGETREE
+- 30+ ClickHouse-specific keywords: TTL, CODEC, FORMAT, SETTINGS, DISTRIBUTED, etc.
+
 ## SQL Standards Compliance Summary
 
-### Overall Compliance (v1.12.0)
+### Overall Compliance (v1.13.0)
 
 | Standard | Compliance % | Status | Notes |
 |----------|--------------|--------|-------|
@@ -789,9 +797,9 @@ gosqlx format --dialect mysql query.sql
 
 ---
 
-**Last Updated**: 2026-03-13
-**GoSQLX Version**: 1.12.0
-**Test Suite Version**: 1.12.0
+**Last Updated**: 2026-03-20
+**GoSQLX Version**: 1.13.0
+**Test Suite Version**: 1.13.0
 **Total Test Cases**: 800+
 **Coverage Percentage**: 95%+
 **SQL-99 Compliance**: ~85%

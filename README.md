@@ -6,7 +6,7 @@
 
 ### Parse SQL at the speed of Go
 
-[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=for-the-badge&logo=go)](https://go.dev)
+[![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?style=for-the-badge&logo=go)](https://go.dev)
 [![Release](https://img.shields.io/github/v/release/ajitpratap0/GoSQLX?style=for-the-badge&color=orange)](https://github.com/ajitpratap0/GoSQLX/releases)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg?style=for-the-badge)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge)](http://makeapullrequest.com)
@@ -28,7 +28,7 @@
 
 <br/>
 
-| **1.25M+ ops/sec** | **<1μs latency** | **85% SQL-99** | **6 dialects** | **0 race conditions** |
+| **1.38M+ ops/sec** | **<1μs latency** | **85% SQL-99** | **7 dialects** | **0 race conditions** |
 |:---:|:---:|:---:|:---:|:---:|
 
 </div>
@@ -37,7 +37,7 @@
 
 ## What is GoSQLX?
 
-GoSQLX is a **production-ready SQL parsing SDK** for Go. It tokenizes, parses, and generates ASTs from SQL with zero-copy optimizations and intelligent object pooling - handling **1.25M+ operations per second** with sub-microsecond latency.
+GoSQLX is a **production-ready SQL parsing SDK** for Go. It tokenizes, parses, and generates ASTs from SQL with zero-copy optimizations and intelligent object pooling - handling **1.38M+ operations per second** with sub-microsecond latency.
 
 ```go
 ast, _ := gosqlx.Parse("SELECT u.name, COUNT(*) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name")

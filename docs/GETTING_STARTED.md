@@ -2,19 +2,19 @@
 
 Welcome! This guide will get you parsing SQL in under 5 minutes. No prior experience with GoSQLX required.
 
-**What's New in v1.12.0:**
-- **MCP Server**: All GoSQLX SQL capabilities as Model Context Protocol tools over streamable HTTP
-- 7 MCP tools: `validate_sql`, `format_sql`, `parse_sql`, `extract_metadata`, `security_scan`, `lint_sql`, `analyze_sql`
-- Optional bearer token auth via `GOSQLX_MCP_AUTH_TOKEN`
-- Go minimum bumped to 1.23.0 (required by `mark3labs/mcp-go`)
-- 19 post-UAT fixes: parser, CLI output, security scanner (see CHANGELOG for full list)
-- Enhanced SQL-99 compliance with NULLS FIRST/LAST ordering
+**What's New in v1.13.0:**
+- **ClickHouse Dialect**: Parse ClickHouse SQL including PREWHERE, FINAL, GLOBAL IN, and 30+ ClickHouse keywords
+- **LSP Semantic Tokens**: `textDocument/semanticTokens/full` with 6-type legend for richer IDE highlighting
+- **LSP Debouncing**: 300ms diagnostic debounce prevents excessive re-parsing on rapid typing
+- **Parser API Consolidation**: `ParseFromModelTokens` is now the canonical entry point (positions always populated)
+- **Security**: Next.js 16.1.7 (3 CVE fixes), Docker Go 1.26 base image
+- **Website**: Comprehensive a11y + SEO audit, Sentry monitoring, Glama MCP registry
 
 ---
 
 ## Step 1: Install GoSQLX (30 seconds)
 
-**Requirements**: Go 1.23+
+**Requirements**: Go 1.26+
 
 ### Option A: Install CLI Tool (Recommended)
 ```bash
@@ -29,7 +29,7 @@ go get github.com/ajitpratap0/GoSQLX
 **Verify installation:**
 ```bash
 # Check Go version
-go version  # Should show Go 1.21+
+go version  # Should show Go 1.26+
 
 # If you installed CLI:
 gosqlx --version
@@ -60,7 +60,7 @@ echo "select * from users where age>18" | gosqlx format
 echo "SELECT COUNT(*) FROM orders GROUP BY status" | gosqlx analyze
 ```
 
-**Available CLI Commands (v1.12.0):**
+**Available CLI Commands (v1.13.0):**
 - `validate` - Ultra-fast SQL validation with security scanning
 - `format` - High-performance SQL formatting with style options
 - `analyze` - Advanced SQL analysis with complexity metrics
@@ -70,7 +70,7 @@ echo "SELECT COUNT(*) FROM orders GROUP BY status" | gosqlx analyze
 - `config` - Manage configuration files (.gosqlx.yml)
 - `completion` - Shell autocompletion for bash/zsh/fish
 
-**New in v1.12.0:**
+**New in v1.13.0:**
 ```bash
 # Security scanning for SQL injection
 gosqlx validate --security query.sql
@@ -137,7 +137,7 @@ go run main.go
 
 ---
 
-## Step 4: v1.12.0 Feature Examples (2 minutes)
+## Step 4: v1.13.0 Feature Examples (2 minutes)
 
 ### PostgreSQL Extensions
 
@@ -423,7 +423,7 @@ gosqlx lsp --log /tmp/lsp.log
 - **[API Reference](/docs/api-reference)** - Complete API documentation
 - **[Examples](https://github.com/ajitpratap0/GoSQLX/tree/main/examples)** - Real-world code examples
 
-### v1.12.0 Feature Guides:
+### v1.13.0 Feature Guides:
 - **PostgreSQL Extensions:**
   - LATERAL JOIN for correlated subqueries
   - JSON/JSONB operators (->/->>/#>/@>/?/etc.)
@@ -490,7 +490,7 @@ gosqlx validate "your SQL here"
 
 ---
 
-## v1.12.0 Feature Highlights
+## v1.13.0 Feature Highlights
 
 ### Production-Ready Performance
 - **1.38M+ operations/second** sustained throughput
@@ -501,7 +501,7 @@ gosqlx validate "your SQL here"
 ### SQL Compliance
 - **~80-85% SQL-99 compliance** including window functions, CTEs, set operations
 - **95%+ success rate** on real-world SQL queries
-- **Multi-dialect support** - PostgreSQL, MySQL, SQL Server, Oracle, SQLite
+- **Multi-dialect support** - PostgreSQL, MySQL, SQL Server, Oracle, SQLite, ClickHouse
 - **Full Unicode support** for international SQL processing
 
 ### Enterprise Features
@@ -518,7 +518,7 @@ gosqlx validate "your SQL here"
 - ✓ Installing GoSQLX (library and CLI)
 - ✓ Validating and formatting SQL with CLI
 - ✓ Parsing SQL in Go applications with simple API
-- ✓ Using v1.12.0 features (PostgreSQL extensions, security, linting, LSP)
+- ✓ Using v1.13.0 features (PostgreSQL extensions, security, linting, LSP)
 - ✓ Common use cases and patterns
 - ✓ Where to find more help
 
@@ -530,4 +530,4 @@ gosqlx validate "your SQL here"
 
 ---
 
-*Built by the GoSQLX community - Production-ready since v1.12.0*
+*Built by the GoSQLX community - Production-ready since v1.12.0, ClickHouse dialect since v1.13.0*

@@ -852,6 +852,6 @@ gosqlx format --dialect mysql query.sql
 
 ### Migration Notes
 - **From v1.7.0**: High-level API (`gosqlx.Parse()`, `gosqlx.Validate()`) is fully backward compatible
-- **Breaking**: `token.Token.ModelType` renamed to `Type`; string-based `token.Type` removed. See [MIGRATION.md](MIGRATION.md)
+- **Breaking**: `token.Token.ModelType` renamed to `Type`; string-based `token.Type` removed. See [MIGRATION.md](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/MIGRATION.md)
 - **MySQL Users**: Use `parser.ParseWithDialect(sql, "mysql")` for MySQL-specific syntax
 - **Performance**: ~50% faster parsing from token type overhaul

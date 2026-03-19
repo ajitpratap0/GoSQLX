@@ -164,7 +164,7 @@ func (l *Linter) LintString(sql string, filename string) FileResult {
 		// Attempt parsing with position tracking (best effort - some rules are token-only)
 		p := parser.NewParser()
 		defer p.Release()
-		astObj, parseErr := p.ParseFromModelTokensWithPositions(tokens)
+		astObj, parseErr := p.ParseFromModelTokens(tokens)
 		ctx.WithAST(astObj, parseErr)
 	}
 

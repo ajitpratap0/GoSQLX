@@ -105,7 +105,7 @@ export default async function DocPage({ params }: PageProps) {
       {/* Main content */}
       <main className="min-w-0 flex-1 px-6 py-10 lg:px-12">
         {/* Breadcrumbs */}
-        <nav aria-label="Breadcrumb" className="mb-6 text-sm text-zinc-500">
+        <nav aria-label="Breadcrumb" className="mb-6 text-sm text-zinc-300">
           <ol className="flex items-center gap-2">
             <li>
               <Link href="/docs" className="hover:text-white transition-colors">

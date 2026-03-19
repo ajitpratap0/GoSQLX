@@ -131,7 +131,12 @@ export function Hero() {
                     <span className="text-xs text-zinc-500 font-mono ml-2">query.sql</span>
                   </div>
                   <div className="relative">
-                    <pre className="p-4 text-[13px] leading-relaxed font-mono text-zinc-300 overflow-x-auto max-h-[320px]">
+                    <pre
+                      tabIndex={0}
+                      role="region"
+                      aria-label="SQL query input"
+                      className="p-4 text-[13px] leading-relaxed font-mono text-zinc-300 overflow-x-auto max-h-[320px] focus:outline-none focus:ring-2 focus:ring-accent-indigo/50"
+                    >
                       <code>{SAMPLE_SQL}</code>
                     </pre>
                     <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-zinc-950/60 to-transparent pointer-events-none md:hidden" aria-hidden="true" />
@@ -144,7 +149,12 @@ export function Hero() {
                     <span className="text-xs text-zinc-500 font-mono">AST Output</span>
                     <span className="ml-auto text-[10px] text-emerald-400/70 font-mono">parsed in &lt;1ms</span>
                   </div>
-                  <pre className="p-4 text-[13px] leading-relaxed font-mono text-zinc-400 overflow-x-auto max-h-[320px]">
+                  <pre
+                    tabIndex={0}
+                    role="region"
+                    aria-label="AST output"
+                    className="p-4 text-[13px] leading-relaxed font-mono text-zinc-400 overflow-x-auto max-h-[320px] focus:outline-none focus:ring-2 focus:ring-accent-indigo/50"
+                  >
                     <code>{SAMPLE_AST}</code>
                   </pre>
                 </div>

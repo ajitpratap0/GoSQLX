@@ -89,7 +89,7 @@ export function Hero() {
         {/* Headline */}
         <FadeIn delay={0.1}>
           <h1
-            className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 break-words hyphens-auto"
+            className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 break-words hyphens-auto w-full max-w-full px-4 sm:px-0"
             style={{ letterSpacing: '-0.03em' }}
           >
             <GradientText>Parse SQL at the speed of Go</GradientText>

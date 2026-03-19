@@ -548,6 +548,7 @@ GoSQLX v1.8.0 introduces a first-class dialect mode engine that threads the SQL 
 | **Oracle** | `"oracle"` | Oracle keywords | DUAL table, basic PL/SQL keywords | ⚠️ Keywords + basic parsing |
 | **SQLite** | `"sqlite"` | SQLite keywords | Flexible typing, simplified syntax | ⚠️ Keywords + basic parsing |
 | **Snowflake** | `"snowflake"` | Snowflake keywords | Stage operations, VARIANT type | ⚠️ Keyword detection only |
+| **ClickHouse** | `"clickhouse"` | ClickHouse keywords | PREWHERE, FINAL, GLOBAL IN/NOT IN, MergeTree keywords | ✅ v1.13.0 |
 
 ### Usage
 
@@ -739,7 +740,7 @@ gosqlx format --dialect mysql query.sql
 - **OFFSET-FETCH** - Standard row limiting
 - **Multi-dialect basic syntax**
 - **Unicode and international text**
-- **High-performance scenarios** (1.25M ops/sec peak)
+- **High-performance scenarios** (1.38M+ ops/sec, 1.5M peak)
 
 ### Suitable with Considerations
 
@@ -756,7 +757,6 @@ gosqlx format --dialect mysql query.sql
 - **Full XML function support**
 - **Row pattern recognition (MATCH_RECOGNIZE)**
 - **Complete temporal table support**
-- **SQLite PRAGMA statements** (keywords reserved)
 - **Advanced array operations**
 
 ## Recommendations

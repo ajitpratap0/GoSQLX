@@ -453,7 +453,7 @@ gosqlx lsp --log /tmp/lsp.log
 ### Advanced Topics:
 - **Low-Level API** - For performance-critical applications (>100K queries/sec)
 - **Object Pooling** - Manual resource management for fine-grained control
-- **Multi-Dialect Support** - PostgreSQL, MySQL, SQL Server, Oracle, SQLite
+- **Multi-Dialect Support** - PostgreSQL, MySQL, SQL Server, Oracle, SQLite, ClickHouse
 - **Unicode Support** - Full international character support
 - **SQL Compatibility** - See [SQL Compatibility](/docs/sql-compatibility) for dialect matrix
 

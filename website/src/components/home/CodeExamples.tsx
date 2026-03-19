@@ -5,177 +5,96 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { FadeIn } from '@/components/ui/FadeIn';
 
-const tabs = [
+type Segment = { text: string; cls: string };
+type CodeLine = Segment[];
+
+const tabs: { label: string; lines: CodeLine[] }[] = [
   {
     label: 'Parse',
     lines: [
-      { text: 'package', cls: 'text-accent-indigo' },
-      { text: ' main', cls: 'text-white' },
-      { text: '', cls: '' },
-      { text: 'import', cls: 'text-accent-indigo' },
-      { text: ' ', cls: '' },
-      { text: '"github.com/gosqlx/gosqlx/pkg/gosqlx"', cls: 'text-accent-green' },
-      { text: '', cls: '' },
-      { text: 'func', cls: 'text-accent-indigo' },
-      { text: ' main', cls: 'text-accent-orange' },
-      { text: '() {', cls: 'text-zinc-300' },
-      { text: '    ', cls: '' },
-      { text: '// Parse SQL into an AST', cls: 'text-zinc-500' },
-      { text: '    ast, err := gosqlx.', cls: 'text-zinc-300' },
-      { text: 'Parse', cls: 'text-accent-orange' },
-      { text: '(', cls: 'text-zinc-300' },
-      { text: '"SELECT * FROM users WHERE active = true"', cls: 'text-accent-green' },
-      { text: ')', cls: 'text-zinc-300' },
-      { text: '    ', cls: '' },
-      { text: 'if', cls: 'text-accent-indigo' },
-      { text: ' err != nil {', cls: 'text-zinc-300' },
-      { text: '        log.Fatal(err)', cls: 'text-zinc-300' },
-      { text: '    }', cls: 'text-zinc-300' },
-      { text: '    fmt.Println(ast.Statements)', cls: 'text-zinc-300' },
-      { text: '}', cls: 'text-zinc-300' },
+      [{ text: 'package', cls: 'text-accent-indigo' }, { text: ' main', cls: 'text-white' }],
+      [],
+      [{ text: 'import', cls: 'text-accent-indigo' }, { text: ' ', cls: '' }, { text: '"github.com/gosqlx/gosqlx/pkg/gosqlx"', cls: 'text-accent-green' }],
+      [],
+      [{ text: 'func', cls: 'text-accent-indigo' }, { text: ' main', cls: 'text-accent-orange' }, { text: '() {', cls: 'text-zinc-300' }],
+      [{ text: '    ', cls: '' }, { text: '// Parse SQL into an AST', cls: 'text-zinc-500' }],
+      [{ text: '    ast, err := gosqlx.', cls: 'text-zinc-300' }, { text: 'Parse', cls: 'text-accent-orange' }, { text: '(', cls: 'text-zinc-300' }, { text: '"SELECT * FROM users WHERE active = true"', cls: 'text-accent-green' }, { text: ')', cls: 'text-zinc-300' }],
+      [{ text: '    ', cls: '' }, { text: 'if', cls: 'text-accent-indigo' }, { text: ' err != nil {', cls: 'text-zinc-300' }],
+      [{ text: '        log.Fatal(err)', cls: 'text-zinc-300' }],
+      [{ text: '    }', cls: 'text-zinc-300' }],
+      [{ text: '    fmt.Println(ast.Statements)', cls: 'text-zinc-300' }],
+      [{ text: '}', cls: 'text-zinc-300' }],
     ],
   },
   {
     label: 'Format',
     lines: [
-      { text: 'package', cls: 'text-accent-indigo' },
-      { text: ' main', cls: 'text-white' },
-      { text: '', cls: '' },
-      { text: 'import', cls: 'text-accent-indigo' },
-      { text: ' ', cls: '' },
-      { text: '"github.com/gosqlx/gosqlx/pkg/gosqlx"', cls: 'text-accent-green' },
-      { text: '', cls: '' },
-      { text: 'func', cls: 'text-accent-indigo' },
-      { text: ' main', cls: 'text-accent-orange' },
-      { text: '() {', cls: 'text-zinc-300' },
-      { text: '    ', cls: '' },
-      { text: '// Format messy SQL', cls: 'text-zinc-500' },
-      { text: '    formatted, err := gosqlx.', cls: 'text-zinc-300' },
-      { text: 'Format', cls: 'text-accent-orange' },
-      { text: '(', cls: 'text-zinc-300' },
-      { text: '"select id,name from users where id>5"', cls: 'text-accent-green' },
-      { text: ')', cls: 'text-zinc-300' },
-      { text: '    ', cls: '' },
-      { text: 'if', cls: 'text-accent-indigo' },
-      { text: ' err != nil {', cls: 'text-zinc-300' },
-      { text: '        log.Fatal(err)', cls: 'text-zinc-300' },
-      { text: '    }', cls: 'text-zinc-300' },
-      { text: '    fmt.Println(formatted)', cls: 'text-zinc-300' },
-      { text: '}', cls: 'text-zinc-300' },
+      [{ text: 'package', cls: 'text-accent-indigo' }, { text: ' main', cls: 'text-white' }],
+      [],
+      [{ text: 'import', cls: 'text-accent-indigo' }, { text: ' ', cls: '' }, { text: '"github.com/gosqlx/gosqlx/pkg/gosqlx"', cls: 'text-accent-green' }],
+      [],
+      [{ text: 'func', cls: 'text-accent-indigo' }, { text: ' main', cls: 'text-accent-orange' }, { text: '() {', cls: 'text-zinc-300' }],
+      [{ text: '    ', cls: '' }, { text: '// Format messy SQL', cls: 'text-zinc-500' }],
+      [{ text: '    formatted, err := gosqlx.', cls: 'text-zinc-300' }, { text: 'Format', cls: 'text-accent-orange' }, { text: '(', cls: 'text-zinc-300' }, { text: '"select id,name from users where id>5"', cls: 'text-accent-green' }, { text: ')', cls: 'text-zinc-300' }],
+      [{ text: '    ', cls: '' }, { text: 'if', cls: 'text-accent-indigo' }, { text: ' err != nil {', cls: 'text-zinc-300' }],
+      [{ text: '        log.Fatal(err)', cls: 'text-zinc-300' }],
+      [{ text: '    }', cls: 'text-zinc-300' }],
+      [{ text: '    fmt.Println(formatted)', cls: 'text-zinc-300' }],
+      [{ text: '}', cls: 'text-zinc-300' }],
     ],
   },
   {
     label: 'Validate',
     lines: [
-      { text: 'package', cls: 'text-accent-indigo' },
-      { text: ' main', cls: 'text-white' },
-      { text: '', cls: '' },
-      { text: 'import', cls: 'text-accent-indigo' },
-      { text: ' ', cls: '' },
-      { text: '"github.com/gosqlx/gosqlx/pkg/gosqlx"', cls: 'text-accent-green' },
-      { text: '', cls: '' },
-      { text: 'func', cls: 'text-accent-indigo' },
-      { text: ' main', cls: 'text-accent-orange' },
-      { text: '() {', cls: 'text-zinc-300' },
-      { text: '    ', cls: '' },
-      { text: '// Validate SQL syntax', cls: 'text-zinc-500' },
-      { text: '    result := gosqlx.', cls: 'text-zinc-300' },
-      { text: 'Validate', cls: 'text-accent-orange' },
-      { text: '(', cls: 'text-zinc-300' },
-      { text: '"SELECT * FROM users"', cls: 'text-accent-green' },
-      { text: ')', cls: 'text-zinc-300' },
-      { text: '    ', cls: '' },
-      { text: 'if', cls: 'text-accent-indigo' },
-      { text: ' result.Valid {', cls: 'text-zinc-300' },
-      { text: '        fmt.Println(', cls: 'text-zinc-300' },
-      { text: '"SQL is valid!"', cls: 'text-accent-green' },
-      { text: ')', cls: 'text-zinc-300' },
-      { text: '    }', cls: 'text-zinc-300' },
-      { text: '}', cls: 'text-zinc-300' },
+      [{ text: 'package', cls: 'text-accent-indigo' }, { text: ' main', cls: 'text-white' }],
+      [],
+      [{ text: 'import', cls: 'text-accent-indigo' }, { text: ' ', cls: '' }, { text: '"github.com/gosqlx/gosqlx/pkg/gosqlx"', cls: 'text-accent-green' }],
+      [],
+      [{ text: 'func', cls: 'text-accent-indigo' }, { text: ' main', cls: 'text-accent-orange' }, { text: '() {', cls: 'text-zinc-300' }],
+      [{ text: '    ', cls: '' }, { text: '// Validate SQL syntax', cls: 'text-zinc-500' }],
+      [{ text: '    result := gosqlx.', cls: 'text-zinc-300' }, { text: 'Validate', cls: 'text-accent-orange' }, { text: '(', cls: 'text-zinc-300' }, { text: '"SELECT * FROM users"', cls: 'text-accent-green' }, { text: ')', cls: 'text-zinc-300' }],
+      [{ text: '    ', cls: '' }, { text: 'if', cls: 'text-accent-indigo' }, { text: ' result.Valid {', cls: 'text-zinc-300' }],
+      [{ text: '        fmt.Println(', cls: 'text-zinc-300' }, { text: '"SQL is valid!"', cls: 'text-accent-green' }, { text: ')', cls: 'text-zinc-300' }],
+      [{ text: '    }', cls: 'text-zinc-300' }],
+      [{ text: '}', cls: 'text-zinc-300' }],
     ],
   },
   {
     label: 'Lint',
     lines: [
-      { text: 'package', cls: 'text-accent-indigo' },
-      { text: ' main', cls: 'text-white' },
-      { text: '', cls: '' },
-      { text: 'import', cls: 'text-accent-indigo' },
-      { text: ' ', cls: '' },
-      { text: '"github.com/gosqlx/gosqlx/pkg/gosqlx"', cls: 'text-accent-green' },
-      { text: '', cls: '' },
-      { text: 'func', cls: 'text-accent-indigo' },
-      { text: ' main', cls: 'text-accent-orange' },
-      { text: '() {', cls: 'text-zinc-300' },
-      { text: '    ', cls: '' },
-      { text: '// Lint SQL for best practices', cls: 'text-zinc-500' },
-      { text: '    issues, err := gosqlx.', cls: 'text-zinc-300' },
-      { text: 'Lint', cls: 'text-accent-orange' },
-      { text: '(', cls: 'text-zinc-300' },
-      { text: '"SELECT * FROM orders"', cls: 'text-accent-green' },
-      { text: ')', cls: 'text-zinc-300' },
-      { text: '    ', cls: '' },
-      { text: 'if', cls: 'text-accent-indigo' },
-      { text: ' err != nil {', cls: 'text-zinc-300' },
-      { text: '        log.Fatal(err)', cls: 'text-zinc-300' },
-      { text: '    }', cls: 'text-zinc-300' },
-      { text: '    ', cls: '' },
-      { text: 'for', cls: 'text-accent-indigo' },
-      { text: ' _, issue := ', cls: 'text-zinc-300' },
-      { text: 'range', cls: 'text-accent-indigo' },
-      { text: ' issues {', cls: 'text-zinc-300' },
-      { text: '        fmt.Printf(', cls: 'text-zinc-300' },
-      { text: '"%s: %s\\n"', cls: 'text-accent-green' },
-      { text: ', issue.Code, issue.Message)', cls: 'text-zinc-300' },
-      { text: '    }', cls: 'text-zinc-300' },
-      { text: '}', cls: 'text-zinc-300' },
+      [{ text: 'package', cls: 'text-accent-indigo' }, { text: ' main', cls: 'text-white' }],
+      [],
+      [{ text: 'import', cls: 'text-accent-indigo' }, { text: ' ', cls: '' }, { text: '"github.com/gosqlx/gosqlx/pkg/gosqlx"', cls: 'text-accent-green' }],
+      [],
+      [{ text: 'func', cls: 'text-accent-indigo' }, { text: ' main', cls: 'text-accent-orange' }, { text: '() {', cls: 'text-zinc-300' }],
+      [{ text: '    ', cls: '' }, { text: '// Lint SQL for best practices', cls: 'text-zinc-500' }],
+      [{ text: '    issues, err := gosqlx.', cls: 'text-zinc-300' }, { text: 'Lint', cls: 'text-accent-orange' }, { text: '(', cls: 'text-zinc-300' }, { text: '"SELECT * FROM orders"', cls: 'text-accent-green' }, { text: ')', cls: 'text-zinc-300' }],
+      [{ text: '    ', cls: '' }, { text: 'if', cls: 'text-accent-indigo' }, { text: ' err != nil {', cls: 'text-zinc-300' }],
+      [{ text: '        log.Fatal(err)', cls: 'text-zinc-300' }],
+      [{ text: '    }', cls: 'text-zinc-300' }],
+      [],
+      [{ text: '    ', cls: '' }, { text: 'for', cls: 'text-accent-indigo' }, { text: ' _, issue := ', cls: 'text-zinc-300' }, { text: 'range', cls: 'text-accent-indigo' }, { text: ' issues {', cls: 'text-zinc-300' }],
+      [{ text: '        fmt.Printf(', cls: 'text-zinc-300' }, { text: '"%s: %s\\n"', cls: 'text-accent-green' }, { text: ', issue.Code, issue.Message)', cls: 'text-zinc-300' }],
+      [{ text: '    }', cls: 'text-zinc-300' }],
+      [{ text: '}', cls: 'text-zinc-300' }],
     ],
   },
 ];
 
-function renderCode(lines: { text: string; cls: string }[]) {
-  const result: React.ReactNode[] = [];
-  let lineNum = 1;
-  let currentLine: React.ReactNode[] = [];
-
-  lines.forEach((segment, i) => {
-    if (segment.text === '' && segment.cls === '') {
-      // Empty line
-      if (currentLine.length > 0) {
-        result.push(
-          <div key={`line-${lineNum}`} className="flex">
-            <span className="w-8 text-right text-zinc-600 select-none mr-4">{lineNum}</span>
-            <span>{currentLine}</span>
-          </div>
-        );
-        currentLine = [];
-        lineNum++;
-      }
-      result.push(
-        <div key={`line-${lineNum}`} className="flex">
-          <span className="w-8 text-right text-zinc-600 select-none mr-4">{lineNum}</span>
-          <span>&nbsp;</span>
-        </div>
-      );
-      lineNum++;
-    } else if (segment.text.includes('\n')) {
-      // Shouldn't happen but handle gracefully
-      currentLine.push(<span key={i} className={segment.cls}>{segment.text}</span>);
-    } else {
-      currentLine.push(<span key={i} className={segment.cls}>{segment.text}</span>);
-    }
-  });
-
-  if (currentLine.length > 0) {
-    result.push(
-      <div key={`line-${lineNum}`} className="flex">
-        <span className="w-8 text-right text-zinc-600 select-none mr-4">{lineNum}</span>
-        <span>{currentLine}</span>
-      </div>
-    );
-  }
-
-  return result;
+function renderCode(lines: CodeLine[]) {
+  return lines.map((line, idx) => (
+    <div key={idx} className="flex">
+      <span className="w-8 text-right text-zinc-600 select-none mr-4 shrink-0">{idx + 1}</span>
+      <span className="flex-1">
+        {line.length === 0
+          ? <>&nbsp;</>
+          : line.map((seg, i) => (
+              <span key={i} className={seg.cls}>{seg.text}</span>
+            ))
+        }
+      </span>
+    </div>
+  ));
 }
 
 export function CodeExamples() {

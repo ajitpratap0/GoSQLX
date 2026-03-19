@@ -87,6 +87,13 @@ export async function initWasm(): Promise<GoSQLXApi> {
 
     // Fetch with progress tracking
     const response = await fetch(wasmPath);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch WASM binary: HTTP ${response.status}`);
+    }
+    const contentType = response.headers.get('content-type') ?? '';
+    if (contentType.includes('text/html')) {
+      throw new Error('SQL parser not available in preview deployments — visit gosqlx.dev for the live playground');
+    }
     const contentLength = response.headers.get("content-length");
     const total = contentLength ? parseInt(contentLength, 10) : 0;
 

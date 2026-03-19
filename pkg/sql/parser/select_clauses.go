@@ -285,6 +285,34 @@ func (p *Parser) parseJoinCondition(joinType string, isNatural, isApply bool) (a
 	return nil, p.expectedError("ON or USING")
 }
 
+// parsePrewhereClause parses "PREWHERE <expr>" if present (ClickHouse-specific).
+// PREWHERE is a ClickHouse optimisation that filters data blocks before reading
+// all columns. It is semantically similar to WHERE but executed earlier in the
+// query pipeline. Returns nil (no error) when PREWHERE is absent.
+func (p *Parser) parsePrewhereClause() (ast.Expression, error) {
+	if !p.isTokenMatch("PREWHERE") {
+		return nil, nil
+	}
+	p.advance() // Consume PREWHERE
+
+	// Guard against a PREWHERE keyword with no following expression.
+	if p.isType(models.TokenTypeEOF) || p.isType(models.TokenTypeSemicolon) ||
+		p.isType(models.TokenTypeWhere) || p.isType(models.TokenTypeGroup) ||
+		p.isType(models.TokenTypeOrder) || p.isType(models.TokenTypeLimit) ||
+		p.isType(models.TokenTypeHaving) || p.isType(models.TokenTypeUnion) ||
+		p.isType(models.TokenTypeExcept) || p.isType(models.TokenTypeIntersect) ||
+		p.isType(models.TokenTypeRParen) {
+		return nil, goerrors.ExpectedTokenError(
+			"expression after PREWHERE",
+			p.currentToken.Token.Type.String(),
+			p.currentLocation(),
+			"PREWHERE clause requires a boolean expression",
+		)
+	}
+
+	return p.parseExpression()
+}
+
 // parseWhereClause parses "WHERE <expr>" if present.
 // Returns nil (no error) when WHERE is absent.
 func (p *Parser) parseWhereClause() (ast.Expression, error) {

@@ -560,6 +560,11 @@ func (s *SelectStatement) SQL() string {
 		sb.WriteString(joinSQL(&j))
 	}
 
+	if s.PrewhereClause != nil {
+		sb.WriteString(" PREWHERE ")
+		sb.WriteString(exprSQL(s.PrewhereClause))
+	}
+
 	if s.Where != nil {
 		sb.WriteString(" WHERE ")
 		sb.WriteString(exprSQL(s.Where))

@@ -223,6 +223,11 @@ var keywordTokenTypes = map[string]models.TokenType{
 	"EXPLAIN":   models.TokenTypeExplain,
 	"DATABASES": models.TokenTypeKeyword,
 	"TABLES":    models.TokenTypeKeyword,
+	// ClickHouse-specific clause keywords (reserved in base keyword set)
+	"PREWHERE": models.TokenTypeKeyword,
+	"FINAL":    models.TokenTypeKeyword,
+	"SETTINGS": models.TokenTypeKeyword,
+	"FORMAT":   models.TokenTypeKeyword,
 }
 
 // Tokenizer provides high-performance SQL tokenization with zero-copy operations.

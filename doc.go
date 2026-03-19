@@ -16,7 +16,7 @@
 // zero-copy tokenization and comprehensive object pooling. It offers enterprise-grade SQL lexing,
 // parsing, and AST generation with support for multiple SQL dialects and advanced SQL features.
 //
-// GoSQLX v1.12.1 includes both a powerful Go SDK and a high-performance CLI tool for SQL processing,
+// GoSQLX v1.13.0 includes both a powerful Go SDK and a high-performance CLI tool for SQL processing,
 // validated for production deployment with race-free concurrent operation and extensive real-world testing.
 //
 // Production Status: VALIDATED FOR PRODUCTION DEPLOYMENT (v1.6.0+)
@@ -278,6 +278,7 @@
 //
 // # Version History
 //
+// v1.13.0: ClickHouse dialect, LSP semantic tokens, parser API consolidation
 // v1.12.1: Website performance - mobile 94, desktop 100, self-hosted fonts, CLS 0
 // v1.12.0: Custom domain gosqlx.dev, remote MCP server at mcp.gosqlx.dev
 // v1.11.1: Website audit fixes, SEO, lazy WASM, design polish

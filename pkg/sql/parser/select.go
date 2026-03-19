@@ -87,6 +87,13 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		TableName:         tableName,
 	}
 
+	// PREWHERE (ClickHouse-specific, applied before WHERE for early data filtering)
+	if p.dialect == string(keywords.DialectClickHouse) {
+		if selectStmt.PrewhereClause, err = p.parsePrewhereClause(); err != nil {
+			return nil, err
+		}
+	}
+
 	// WHERE
 	if selectStmt.Where, err = p.parseWhereClause(); err != nil {
 		return nil, err

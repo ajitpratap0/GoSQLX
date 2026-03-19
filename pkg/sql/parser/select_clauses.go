@@ -84,6 +84,16 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 		return "", nil, nil, e
 	}
 	tableName = firstRef.Name
+
+	// ClickHouse FINAL modifier — consumed after table reference, before JOINs.
+	// NOTE: FINAL only applies to the first (primary) table reference. In ClickHouse,
+	// FINAL is a per-table modifier; multi-table FROM with FINAL on a non-first
+	// table (e.g. "FROM t1, t2 FINAL") is not supported by this parser.
+	if p.dialect == string(keywords.DialectClickHouse) && p.isTokenMatch("FINAL") {
+		firstRef.Final = true
+		p.advance() // consume FINAL
+	}
+
 	tables = []ast.TableReference{firstRef}
 
 	// Additional comma-separated table references (implicit cross joins)
@@ -165,6 +175,12 @@ func (p *Parser) parseJoinType() (string, bool, error) {
 	joinType := "INNER"
 	isNatural := false
 	explicitType := false // tracks whether a join-type keyword was explicitly given
+
+	// ClickHouse GLOBAL JOIN — consume the GLOBAL modifier before the join type.
+	// GLOBAL semantics (distributed join) are not preserved in the AST.
+	if p.dialect == string(keywords.DialectClickHouse) && p.isTokenMatch("GLOBAL") {
+		p.advance() // consume GLOBAL; fall through to standard join parsing
+	}
 
 	if p.isType(models.TokenTypeNatural) {
 		isNatural = true
@@ -283,6 +299,34 @@ func (p *Parser) parseJoinCondition(joinType string, isNatural, isApply bool) (a
 	}
 
 	return nil, p.expectedError("ON or USING")
+}
+
+// parsePrewhereClause parses "PREWHERE <expr>" if present (ClickHouse-specific).
+// PREWHERE is a ClickHouse optimisation that filters data blocks before reading
+// all columns. It is semantically similar to WHERE but executed earlier in the
+// query pipeline. Returns nil (no error) when PREWHERE is absent.
+func (p *Parser) parsePrewhereClause() (ast.Expression, error) {
+	if !p.isTokenMatch("PREWHERE") {
+		return nil, nil
+	}
+	p.advance() // Consume PREWHERE
+
+	// Guard against a PREWHERE keyword with no following expression.
+	if p.isType(models.TokenTypeEOF) || p.isType(models.TokenTypeSemicolon) ||
+		p.isType(models.TokenTypeWhere) || p.isType(models.TokenTypeGroup) ||
+		p.isType(models.TokenTypeOrder) || p.isType(models.TokenTypeLimit) ||
+		p.isType(models.TokenTypeHaving) || p.isType(models.TokenTypeUnion) ||
+		p.isType(models.TokenTypeExcept) || p.isType(models.TokenTypeIntersect) ||
+		p.isType(models.TokenTypeRParen) {
+		return nil, goerrors.ExpectedTokenError(
+			"expression after PREWHERE",
+			p.currentToken.Token.Type.String(),
+			p.currentLocation(),
+			"PREWHERE clause requires a boolean expression",
+		)
+	}
+
+	return p.parseExpression()
 }
 
 // parseWhereClause parses "WHERE <expr>" if present.

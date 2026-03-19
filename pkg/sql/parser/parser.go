@@ -34,8 +34,10 @@ import (
 // After the token-type unification (#322) the Tokens field holds
 // []models.TokenWithSpan directly; span information is no longer stripped.
 type ConversionResult struct {
-	Tokens          []models.TokenWithSpan
-	PositionMapping []TokenPosition // Deprecated: always nil - positions are now embedded in TokenWithSpan.Start/End fields
+	Tokens []models.TokenWithSpan
+	// Deprecated: PositionMapping is always nil. Position information is now embedded
+	// directly in models.TokenWithSpan.Start and .End fields.
+	PositionMapping []TokenPosition
 }
 
 // TokenPosition maps a parser token back to its original source position.
@@ -232,6 +234,10 @@ type Parser struct {
 	dialect      string          // SQL dialect for dialect-aware parsing (default: "postgresql")
 }
 
+// Deprecated: Parse is provided for backward compatibility only. Use ParseFromModelTokens
+// with a []models.TokenWithSpan slice from the tokenizer instead. This shim wraps each
+// token.Token into a zero-span models.TokenWithSpan and has no position information.
+//
 // Parse parses a slice of token.Token into an AST.
 //
 // This API is preserved for backward compatibility. Prefer ParseFromModelTokens
@@ -323,13 +329,12 @@ func (p *Parser) ParseFromModelTokens(tokens []models.TokenWithSpan) (*ast.AST, 
 	return p.parseTokens(preprocessed)
 }
 
-// ParseFromModelTokensWithPositions parses tokenizer output with position tracking
-// for enhanced error reporting. Since models.TokenWithSpan already carries span
-// information, this is now equivalent to ParseFromModelTokens but also populates
-// the ConversionResult position mapping for callers that need it.
+// ParseFromModelTokensWithPositions is identical to ParseFromModelTokens.
+// Position information is embedded in every models.TokenWithSpan.
+//
+// Deprecated: Use ParseFromModelTokens directly.
 func (p *Parser) ParseFromModelTokensWithPositions(tokens []models.TokenWithSpan) (*ast.AST, error) {
-	preprocessed := preprocessTokens(tokens)
-	return p.parseTokens(preprocessed)
+	return p.ParseFromModelTokens(tokens)
 }
 
 // ParseContextFromModelTokens parses tokenizer output with context support for cancellation.
@@ -963,6 +968,10 @@ func (p *Parser) isJoinKeyword() bool {
 	}
 	// SQL Server: OUTER APPLY starts with OUTER
 	if p.dialect == string(keywords.DialectSQLServer) && p.isType(models.TokenTypeOuter) {
+		return true
+	}
+	// ClickHouse: GLOBAL JOIN — GLOBAL is TokenTypeKeyword, not a dedicated join token
+	if p.dialect == string(keywords.DialectClickHouse) && p.isTokenMatch("GLOBAL") {
 		return true
 	}
 	return false

@@ -231,6 +231,30 @@ type ServerCapabilities struct {
 	DocumentSymbolProvider     bool                     `json:"documentSymbolProvider,omitempty"`
 	SignatureHelpProvider      *SignatureHelpOptions    `json:"signatureHelpProvider,omitempty"`
 	CodeActionProvider         interface{}              `json:"codeActionProvider,omitempty"` // bool or CodeActionOptions
+	SemanticTokensProvider     *SemanticTokensOptions   `json:"semanticTokensProvider,omitempty"`
+}
+
+// SemanticTokensLegend defines the token type and modifier vocabularies
+type SemanticTokensLegend struct {
+	TokenTypes     []string `json:"tokenTypes"`
+	TokenModifiers []string `json:"tokenModifiers"`
+}
+
+// SemanticTokensOptions is the server capability for semantic tokens
+type SemanticTokensOptions struct {
+	Legend SemanticTokensLegend `json:"legend"`
+	Full   bool                 `json:"full"`
+	Range  bool                 `json:"range"`
+}
+
+// SemanticTokensParams is sent by client to request full semantic tokens
+type SemanticTokensParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+// SemanticTokens is the response containing encoded token data
+type SemanticTokens struct {
+	Data []uint32 `json:"data"`
 }
 
 // TextDocumentSyncOptions describes how documents are synced

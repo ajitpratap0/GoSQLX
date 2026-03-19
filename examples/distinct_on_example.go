@@ -97,7 +97,7 @@ func main() {
 func parseAndDisplay(tokens []token.Token) {
 	p := parser.NewParser()
 
-	astObj, err := p.Parse(tokens)
+	astObj, err := p.Parse(tokens) //nolint:staticcheck // intentional: backward-compat example
 	if err != nil {
 		p.Release()
 		log.Fatalf("Parse error: %v", err)

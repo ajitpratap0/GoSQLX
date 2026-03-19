@@ -48,7 +48,7 @@ ast, _ := gosqlx.Parse("SELECT u.name, COUNT(*) FROM users u JOIN orders o ON u.
 
 - **Not an ORM** - a parser. You get the AST, you decide what to do with it.
 - **Not slow** - zero-copy tokenization, sync.Pool recycling, no allocations on hot paths.
-- **Not limited** - PostgreSQL, MySQL, SQL Server, Oracle, SQLite, Snowflake. CTEs, window functions, MERGE, set operations.
+- **Not limited** - PostgreSQL, MySQL, SQL Server, Oracle, SQLite, Snowflake, ClickHouse. CTEs, window functions, MERGE, set operations.
 - **Not just a library** - CLI, VS Code extension, GitHub Action, MCP server, WASM playground, Python bindings.
 
 <br/>

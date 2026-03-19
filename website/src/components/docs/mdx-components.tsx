@@ -20,7 +20,8 @@ function CopyButton({ text }: { text: string }) {
     <button
       onClick={copy}
       className="absolute right-2 top-2 rounded bg-white/10 px-2 py-1 text-xs text-zinc-400 opacity-0 transition-opacity hover:text-white group-hover:opacity-100"
-      aria-label="Copy code"
+      aria-label={copyFailed ? 'Copy failed — try Ctrl+C' : 'Copy code'}
+      title={copyFailed ? 'Clipboard access denied. Try Ctrl+C to copy.' : undefined}
     >
       {copied ? 'Copied!' : copyFailed ? 'Failed!' : 'Copy'}
     </button>

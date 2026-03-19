@@ -458,9 +458,9 @@ jobs:
 
 ## Related Documentation
 
-- [CLI Guide](CLI_GUIDE.md) - Complete CLI reference
-- [Configuration Guide](CONFIGURATION.md) - Configuration options
-- [API Reference](API_REFERENCE.md) - Full API documentation
+- [CLI Guide](/docs/cli-guide) - Complete CLI reference
+- [Configuration Guide](/docs/configuration) - Configuration options
+- [API Reference](/docs/api-reference) - Full API documentation
 
 ---
 

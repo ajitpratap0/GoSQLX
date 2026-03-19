@@ -421,7 +421,7 @@ gosqlx lsp --log /tmp/lsp.log
 - **[Linting Rules](/docs/linting-rules)** - All 10 linting rules (L001-L010) reference
 - **[Configuration](/docs/configuration)** - Configuration file (.gosqlx.yml) guide
 - **[API Reference](/docs/api-reference)** - Complete API documentation
-- **[Examples](../examples/)** - Real-world code examples
+- **[Examples](https://github.com/ajitpratap0/GoSQLX/tree/main/examples)** - Real-world code examples
 
 ### v1.12.0 Feature Guides:
 - **PostgreSQL Extensions:**

@@ -63,7 +63,7 @@ export function FeatureGrid() {
                   {icons[feature.icon]}
                 </div>
                 <h3 className="text-lg font-semibold text-white mb-1">{feature.title}</h3>
-                <p className="text-sm text-zinc-400">{feature.description}</p>
+                <p className="text-sm text-zinc-300">{feature.description}</p>
               </GlassCard>
             </FadeIn>
           ))}

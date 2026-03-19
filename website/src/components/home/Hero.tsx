@@ -82,7 +82,7 @@ export function Hero() {
         {/* Version badge */}
         <FadeIn delay={0}>
           <div className="mb-6">
-            <VersionBadge version="v1.12.0 - Remote MCP Server" />
+            <VersionBadge version="v1.13.0 - ClickHouse Dialect" />
           </div>
         </FadeIn>
 

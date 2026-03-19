@@ -8,7 +8,7 @@ const stats = [
   { value: 1380000, suffix: '+', label: 'ops/sec', color: 'text-accent-orange' },
   { value: 1, suffix: 'μs', label: 'latency', color: 'text-accent-indigo', prefix: '<' },
   { value: 85, suffix: '%', label: 'SQL-99', color: 'text-accent-green' },
-  { value: 6, suffix: '', label: 'Dialects', color: 'text-accent-purple' },
+  { value: 7, suffix: '', label: 'Dialects', color: 'text-accent-purple' },
 ];
 
 export function StatsBar() {

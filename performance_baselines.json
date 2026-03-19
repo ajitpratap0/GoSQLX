@@ -1,40 +1,40 @@
 {
-  "version": "1.12.1",
-  "updated": "2026-03-13",
+  "version": "1.13.0",
+  "updated": "2026-03-20",
   "baselines": {
     "SimpleSelect": {
       "ns_per_op": 700,
       "tolerance_percent": 60,
       "description": "Basic SELECT query: SELECT id, name FROM users",
-      "current_performance": "~470 ns/op on Apple M4; ~550-900 ns/op on CI (shared runners)",
+      "current_performance": "~712 ns/op on Apple Silicon; ~800-1200 ns/op on CI (shared runners)",
       "note": "Benchmarks now use ParseFromModelTokens (production path) directly - eliminates the legacy token-wrapping overhead. Baseline set at 1.5x M4 measurement to accommodate CI runner variability."
     },
     "ComplexQuery": {
-      "ns_per_op": 3000,
+      "ns_per_op": 2660,
       "tolerance_percent": 65,
       "description": "Complex SELECT with JOIN, WHERE, ORDER BY, LIMIT",
-      "current_performance": "~2000 ns/op on Apple M4; ~2500-4000 ns/op on CI (shared runners)",
+      "current_performance": "~2660 ns/op on Apple Silicon; ~3000-4500 ns/op on CI (shared runners)",
       "note": "Benchmarks now use ParseFromModelTokens (production path) directly. Baseline set at 1.5x M4 measurement; wide tolerance for CI runner variability."
     },
     "WindowFunction": {
-      "ns_per_op": 1300,
+      "ns_per_op": 1180,
       "tolerance_percent": 60,
       "description": "Window function query: ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...)",
-      "current_performance": "~860 ns/op on Apple M4; ~1000-1500 ns/op on CI (shared runners)",
+      "current_performance": "~1180 ns/op on Apple Silicon; ~1300-2000 ns/op on CI (shared runners)",
       "note": "Benchmarks now use ParseFromModelTokens (production path) directly. Baseline set at 1.5x M4 measurement."
     },
     "CTE": {
       "ns_per_op": 1200,
       "tolerance_percent": 60,
       "description": "Common Table Expression with WITH clause",
-      "current_performance": "~800 ns/op on Apple M4; ~1000-1400 ns/op on CI (shared runners)",
+      "current_performance": "~1200 ns/op on Apple Silicon; ~1300-2000 ns/op on CI (shared runners)",
       "note": "Benchmarks now use ParseFromModelTokens (production path) directly. Baseline set at 1.5x M4 measurement."
     },
     "INSERT": {
       "ns_per_op": 1000,
       "tolerance_percent": 60,
       "description": "Simple INSERT statement",
-      "current_performance": "~670 ns/op on Apple M4; ~750-1200 ns/op on CI (shared runners)",
+      "current_performance": "~1008 ns/op on Apple Silicon; ~1100-1600 ns/op on CI (shared runners)",
       "note": "Benchmarks now use ParseFromModelTokens (production path) directly. Baseline set at 1.5x M4 measurement."
     },
     "TokenizationThroughput": {

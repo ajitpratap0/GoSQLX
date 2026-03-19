@@ -690,6 +690,7 @@ func PutSelectStatement(stmt *SelectStatement) {
 	stmt.OrderBy = stmt.OrderBy[:0]
 
 	stmt.TableName = ""
+	stmt.PrewhereClause = nil
 	stmt.Where = nil
 	stmt.Limit = nil
 	stmt.Offset = nil

@@ -141,6 +141,16 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 		}, nil
 	}
 
+	// ClickHouse GLOBAL IN / GLOBAL NOT IN — GLOBAL is a distributed query modifier
+	// before IN. Consume it and fall through to standard IN parsing below.
+	if p.dialect == string(keywords.DialectClickHouse) && p.isTokenMatch("GLOBAL") {
+		p.advance() // consume GLOBAL
+		if p.isType(models.TokenTypeNot) {
+			notPrefix = true
+			p.advance() // consume NOT
+		}
+	}
+
 	// Check for IN operator
 	if p.isType(models.TokenTypeIn) {
 		inPos := p.currentLocation()

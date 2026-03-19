@@ -472,6 +472,7 @@ func TestDialectRegistry(t *testing.T) {
 			DialectSnowflake:  false,
 			DialectBigQuery:   false,
 			DialectRedshift:   false,
+			DialectClickHouse: false,
 		}
 
 		for _, d := range dialects {

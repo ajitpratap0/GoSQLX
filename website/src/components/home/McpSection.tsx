@@ -22,7 +22,7 @@ export function McpSection() {
           <h2 className="text-3xl font-bold text-white mb-4">
             AI-Ready SQL Tools
           </h2>
-          <p className="text-zinc-400 mb-10 max-w-xl mx-auto">
+          <p className="text-zinc-300 mb-10 max-w-xl mx-auto">
             Connect 7 SQL tools to Claude, Cursor, or any MCP client — no installation, no API key.
           </p>
         </FadeIn>

@@ -85,7 +85,7 @@ function renderCode(lines: CodeLine[]) {
   return lines.map((line, idx) => (
     <div key={idx} className="flex">
       <span className="w-8 text-right text-zinc-600 select-none mr-4 shrink-0">{idx + 1}</span>
-      <span className="flex-1">
+      <span className="flex-1 whitespace-pre">
         {line.length === 0
           ? <>&nbsp;</>
           : line.map((seg, i) => (

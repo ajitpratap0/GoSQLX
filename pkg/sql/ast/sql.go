@@ -1303,6 +1303,9 @@ func tableRefSQL(t *TableReference) string {
 		sb.WriteString(" ")
 		sb.WriteString(t.Alias)
 	}
+	if t.Final {
+		sb.WriteString(" FINAL")
+	}
 	return sb.String()
 }
 

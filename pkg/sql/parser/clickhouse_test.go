@@ -15,6 +15,7 @@
 package parser_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -204,4 +205,30 @@ func TestClickHouseFinalNotParsedInOtherDialects(t *testing.T) {
 	if err == nil {
 		t.Error("expected parse error for FINAL in generic dialect, but got none")
 	}
+}
+
+func TestClickHouseFinalRoundtrip(t *testing.T) {
+	input := `SELECT * FROM orders FINAL`
+	tree, err := parser.ParseWithDialect(input, keywords.DialectClickHouse)
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	if len(tree.Statements) == 0 {
+		t.Fatal("expected at least one statement")
+	}
+	sel, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", tree.Statements[0])
+	}
+	got := sel.SQL()
+	if !containsFINAL(got) {
+		t.Errorf("SQL() round-trip output does not contain FINAL; got: %q", got)
+	}
+}
+
+// containsFINAL reports whether s contains the uppercase keyword FINAL as a
+// whole word. A simple strings.Contains is sufficient because SQL() always
+// emits keywords in uppercase.
+func containsFINAL(s string) bool {
+	return strings.Contains(s, "FINAL")
 }

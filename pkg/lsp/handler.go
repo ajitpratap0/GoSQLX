@@ -20,11 +20,15 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
 // Handler processes LSP requests and notifications.
@@ -107,8 +111,10 @@ import (
 //   - Immutable keyword and snippet data structures
 //   - No shared mutable state between requests
 type Handler struct {
-	server   *Server
-	keywords *keywords.Keywords
+	server         *Server
+	keywords       *keywords.Keywords
+	debounceMu     sync.Mutex
+	debounceTimers map[string]*time.Timer
 }
 
 // NewHandler creates a new LSP request handler.
@@ -125,8 +131,9 @@ type Handler struct {
 // Returns a fully initialized Handler ready to process LSP requests.
 func NewHandler(server *Server) *Handler {
 	return &Handler{
-		server:   server,
-		keywords: keywords.New(keywords.DialectGeneric, true),
+		server:         server,
+		keywords:       keywords.New(keywords.DialectGeneric, true),
+		debounceTimers: make(map[string]*time.Timer),
 	}
 }
 
@@ -149,6 +156,12 @@ func (h *Handler) HandleRequest(method string, params json.RawMessage) (interfac
 		return h.handleSignatureHelp(params)
 	case "textDocument/codeAction":
 		return h.handleCodeAction(params)
+	case "textDocument/semanticTokens/full":
+		var semParams SemanticTokensParams
+		if err := json.Unmarshal(params, &semParams); err != nil {
+			return nil, err
+		}
+		return h.handleSemanticTokensFull(semParams)
 	default:
 		return nil, fmt.Errorf("method not found: %s", method)
 	}
@@ -203,6 +216,16 @@ func (h *Handler) handleInitialize(params json.RawMessage) (*InitializeResult, e
 			},
 			CodeActionProvider: &CodeActionOptions{
 				CodeActionKinds: []CodeActionKind{CodeActionQuickFix},
+			},
+			SemanticTokensProvider: &SemanticTokensOptions{
+				Legend: SemanticTokensLegend{
+					TokenTypes: []string{
+						"keyword", "identifier", "number", "string", "operator", "comment",
+					},
+					TokenModifiers: []string{},
+				},
+				Full:  true,
+				Range: false,
 			},
 		},
 		ServerInfo: &ServerInfo{
@@ -285,21 +308,38 @@ func (h *Handler) handleDidChange(params json.RawMessage) {
 		p.ContentChanges,
 	)
 
-	// Get updated content and validate
-	if content, ok := h.server.Documents().GetContent(p.TextDocument.URI); ok {
-		// Check document size limit after update
-		if len(content) > h.server.MaxDocumentSizeBytes() {
-			h.server.Logger().Printf("Document too large after change: %d bytes (max: %d)", len(content), h.server.MaxDocumentSizeBytes())
-			// Clear diagnostics but don't validate
-			h.server.SendNotification("textDocument/publishDiagnostics", PublishDiagnosticsParams{
-				URI:         p.TextDocument.URI,
-				Version:     p.TextDocument.Version,
-				Diagnostics: []Diagnostic{},
-			})
-			return
-		}
-		h.validateDocument(p.TextDocument.URI, content, p.TextDocument.Version)
+	// Get updated content for size check and debounced validation
+	content, ok := h.server.Documents().GetContent(p.TextDocument.URI)
+	if !ok {
+		return
 	}
+
+	// Check document size limit after update
+	if len(content) > h.server.MaxDocumentSizeBytes() {
+		h.server.Logger().Printf("Document too large after change: %d bytes (max: %d)", len(content), h.server.MaxDocumentSizeBytes())
+		// Clear diagnostics but don't validate
+		h.server.SendNotification("textDocument/publishDiagnostics", PublishDiagnosticsParams{
+			URI:         p.TextDocument.URI,
+			Version:     p.TextDocument.Version,
+			Diagnostics: []Diagnostic{},
+		})
+		return
+	}
+
+	// Debounce diagnostics — cancel existing timer and schedule new one
+	uri := p.TextDocument.URI
+	version := p.TextDocument.Version
+	h.debounceMu.Lock()
+	if t, ok := h.debounceTimers[uri]; ok {
+		t.Stop()
+	}
+	h.debounceTimers[uri] = time.AfterFunc(300*time.Millisecond, func() {
+		h.debounceMu.Lock()
+		delete(h.debounceTimers, uri)
+		h.debounceMu.Unlock()
+		h.validateDocument(uri, content, version)
+	})
+	h.debounceMu.Unlock()
 }
 
 // handleDidClose handles document close notifications
@@ -312,6 +352,15 @@ func (h *Handler) handleDidClose(params json.RawMessage) {
 	}
 
 	h.server.Logger().Printf("Document closed: %s", p.TextDocument.URI)
+
+	// Cancel any pending debounce timer for this document
+	h.debounceMu.Lock()
+	if t, ok := h.debounceTimers[p.TextDocument.URI]; ok {
+		t.Stop()
+		delete(h.debounceTimers, p.TextDocument.URI)
+	}
+	h.debounceMu.Unlock()
+
 	h.server.Documents().Close(p.TextDocument.URI)
 
 	// Clear diagnostics for closed document
@@ -1648,4 +1697,122 @@ func truncateForLog(data json.RawMessage) string {
 		return s[:maxLen] + "..."
 	}
 	return s
+}
+
+// handleSemanticTokensFull handles textDocument/semanticTokens/full requests.
+// It tokenizes the document and returns LSP-encoded semantic token data.
+func (h *Handler) handleSemanticTokensFull(params SemanticTokensParams) (*SemanticTokens, error) {
+	doc, ok := h.server.Documents().Get(params.TextDocument.URI)
+	if !ok {
+		return &SemanticTokens{Data: []uint32{}}, nil
+	}
+
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+	tokens, err := tkz.Tokenize([]byte(doc.Content))
+	if err != nil {
+		return &SemanticTokens{Data: []uint32{}}, nil
+	}
+
+	return &SemanticTokens{Data: encodeSemanticTokens(tokens)}, nil
+}
+
+// encodeSemanticTokens converts token positions to LSP semantic token encoding.
+// Each token is encoded as 5 uint32 values:
+//
+//	[deltaLine, deltaStartChar, length, tokenType, tokenModifiers]
+func encodeSemanticTokens(tokens []models.TokenWithSpan) []uint32 {
+	data := make([]uint32, 0, len(tokens)*5)
+	prevLine := uint32(0)
+	prevStartChar := uint32(0)
+
+	for _, tok := range tokens {
+		tokenType := classifyToken(tok)
+		if tokenType < 0 {
+			continue // skip tokens we don't classify
+		}
+
+		// Location is 1-based; convert to 0-based for LSP
+		line := uint32(tok.Start.Line - 1)
+		startChar := uint32(tok.Start.Column - 1)
+		length := uint32(tok.End.Column - tok.Start.Column)
+		if length == 0 {
+			// Fallback: use text length
+			length = uint32(len(tok.Token.Value))
+		}
+
+		deltaLine := line - prevLine
+		deltaStartChar := startChar
+		if deltaLine == 0 {
+			deltaStartChar = startChar - prevStartChar
+		}
+
+		data = append(data, deltaLine, deltaStartChar, length, uint32(tokenType), 0)
+		prevLine = line
+		prevStartChar = startChar
+	}
+	return data
+}
+
+// Token type indices matching the legend declared in handleInitialize:
+//
+//	"keyword", "identifier", "number", "string", "operator", "comment"
+const (
+	semTokKeyword    = 0
+	semTokIdentifier = 1
+	semTokNumber     = 2
+	semTokString     = 3
+	semTokOperator   = 4
+	semTokComment    = 5
+)
+
+// classifyToken maps a TokenWithSpan to a semantic token type index.
+// Returns -1 for tokens that should not be included in the semantic token stream.
+func classifyToken(tok models.TokenWithSpan) int {
+	switch tok.Token.Type {
+	case models.TokenTypeKeyword,
+		models.TokenTypeSelect, models.TokenTypeFrom, models.TokenTypeWhere,
+		models.TokenTypeInsert, models.TokenTypeUpdate, models.TokenTypeDelete,
+		models.TokenTypeCreate, models.TokenTypeDrop, models.TokenTypeAlter,
+		models.TokenTypeTable, models.TokenTypeIndex,
+		models.TokenTypeJoin, models.TokenTypeLeft, models.TokenTypeRight,
+		models.TokenTypeInner, models.TokenTypeOuter,
+		models.TokenTypeOn, models.TokenTypeAs,
+		models.TokenTypeAnd, models.TokenTypeOr, models.TokenTypeNot,
+		models.TokenTypeIn, models.TokenTypeIs, models.TokenTypeNull,
+		models.TokenTypeLike,
+		models.TokenTypeOrder, models.TokenTypeGroup, models.TokenTypeBy,
+		models.TokenTypeHaving, models.TokenTypeLimit, models.TokenTypeOffset,
+		models.TokenTypeWith, models.TokenTypeUnion,
+		models.TokenTypeIntersect, models.TokenTypeExcept,
+		models.TokenTypeDistinct,
+		models.TokenTypeCase, models.TokenTypeWhen, models.TokenTypeThen,
+		models.TokenTypeElse, models.TokenTypeEnd:
+		return semTokKeyword
+	case models.TokenTypeWord, models.TokenTypeIdentifier:
+		return semTokIdentifier
+	case models.TokenTypeNumber:
+		return semTokNumber
+	case models.TokenTypeString,
+		models.TokenTypeSingleQuotedString, models.TokenTypeDoubleQuotedString,
+		models.TokenTypeDollarQuotedString, models.TokenTypeEscapedStringLiteral,
+		models.TokenTypeNationalStringLiteral, models.TokenTypeUnicodeStringLiteral,
+		models.TokenTypeHexStringLiteral:
+		return semTokString
+	case models.TokenTypeWhitespace:
+		// Whitespace tokens that are comments
+		if tok.Token.Word == nil {
+			return -1
+		}
+		return semTokComment
+	case models.TokenTypeEq, models.TokenTypeNeq,
+		models.TokenTypeLt, models.TokenTypeGt,
+		models.TokenTypeLtEq, models.TokenTypeGtEq,
+		models.TokenTypePlus, models.TokenTypeMinus,
+		models.TokenTypeMul, models.TokenTypeDiv,
+		models.TokenTypeMod:
+		return semTokOperator
+	default:
+		return -1 // don't classify
+	}
 }

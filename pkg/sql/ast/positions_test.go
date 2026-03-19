@@ -44,7 +44,7 @@ func parseWithPositions(t *testing.T, sql string) *ast.AST {
 	p := parser.GetParser()
 	defer parser.PutParser(p)
 
-	result, err := p.ParseFromModelTokensWithPositions(tokens)
+	result, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)
 	}

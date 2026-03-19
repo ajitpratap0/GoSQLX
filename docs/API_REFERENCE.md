@@ -1891,7 +1891,7 @@ Returns `next` unchanged when `cfg.AuthEnabled()` is false. When enabled, enforc
 | `lint_sql` | Style rule enforcement (L001–L010) |
 | `analyze_sql` | Concurrent composite of all 6 above |
 
-See [MCP Server Guide](MCP_GUIDE.md) for complete tool schemas and JSON response formats.
+See [MCP Server Guide](/docs/mcp-guide) for complete tool schemas and JSON response formats.
 
 ---
 
@@ -2317,14 +2317,14 @@ GoSQLX achieves **~80-85% SQL-99 compliance** with comprehensive support for:
 
 - **GitHub Repository**: https://github.com/ajitpratap0/GoSQLX
 - **Documentation**: See `/docs` directory
-  - `GETTING_STARTED.md` - Quick start guide
-  - `MCP_GUIDE.md` - MCP server and AI assistant integration
-  - `USAGE_GUIDE.md` - Comprehensive usage guide
-  - `LSP_GUIDE.md` - LSP server and IDE integration
-  - `LINTING_RULES.md` - All 10 linting rules reference
-  - `CONFIGURATION.md` - Configuration file guide
-  - `SQL_COMPATIBILITY.md` - SQL dialect compatibility matrix
-  - `ERROR_CODES.md` - Complete error code reference
+  - [Getting Started](/docs/getting-started) - Quick start guide
+  - [MCP Server Guide](/docs/mcp-guide) - MCP server and AI assistant integration
+  - [Usage Guide](/docs/usage-guide) - Comprehensive usage guide
+  - [LSP Guide](/docs/lsp-guide) - LSP server and IDE integration
+  - [Linting Rules](/docs/linting-rules) - All 10 linting rules reference
+  - [Configuration](/docs/configuration) - Configuration file guide
+  - [SQL Compatibility](/docs/sql-compatibility) - SQL dialect compatibility matrix
+  - [Error Codes](/docs/error-codes) - Complete error code reference
 - **Examples**: See `/examples` directory
 - **Issue Tracker**: GitHub Issues
 - **License**: Apache-2.0

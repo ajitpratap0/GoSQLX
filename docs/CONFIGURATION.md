@@ -489,9 +489,9 @@ git commit -m "config: update GoSQLX settings"
 
 ## Related Documentation
 
-- [CLI Guide](CLI_GUIDE.md) - Complete CLI reference
-- [Linting Rules](LINTING_RULES.md) - Linting rules reference
-- [API Reference](API_REFERENCE.md) - Full API documentation
+- [CLI Guide](/docs/cli-guide) - Complete CLI reference
+- [Linting Rules](/docs/linting-rules) - Linting rules reference
+- [API Reference](/docs/api-reference) - Full API documentation
 
 ---
 
@@ -524,7 +524,7 @@ GOSQLX_MCP_HOST=0.0.0.0 GOSQLX_MCP_PORT=8080 GOSQLX_MCP_AUTH_TOKEN=my-secret gos
 - `GOSQLX_MCP_PORT` rejects out-of-range or non-integer values at startup with a descriptive error.
 - MCP server configuration is independent of `.gosqlx.yml` - the YAML config file is not read by `gosqlx-mcp`.
 
-See [MCP Server Guide](MCP_GUIDE.md) for the full startup and auth reference.
+See [MCP Server Guide](/docs/mcp-guide) for the full startup and auth reference.
 
 ---
 

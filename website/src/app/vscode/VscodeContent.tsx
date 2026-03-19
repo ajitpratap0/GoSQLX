@@ -20,7 +20,7 @@ const features = [
   },
   {
     title: 'Multi-dialect',
-    description: 'Supports PostgreSQL, MySQL, SQLite, SQL Server, Oracle, and Snowflake out of the box.',
+    description: 'Supports PostgreSQL, MySQL, SQLite, SQL Server, Oracle, Snowflake, and ClickHouse out of the box.',
   },
   {
     title: 'Bundled Binary',

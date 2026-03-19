@@ -6,7 +6,7 @@
   "description": "Production-ready SQL parsing, formatting, linting, security scanning, and metadata extraction for Go. 7 MCP tools covering the full SQL analysis pipeline: validate_sql, format_sql, parse_sql, extract_metadata, security_scan, lint_sql, and analyze_sql. Supports PostgreSQL, MySQL, SQL Server, Oracle, SQLite, and Snowflake dialects. 1.38M+ ops/sec, zero-copy, race-free.",
   "repository": "https://github.com/ajitpratap0/GoSQLX",
   "homepage": "https://gosqlx.dev",
-  "version": "1.12.1",
+  "version": "1.13.0",
   "license": "Apache-2.0",
   "author": {
     "name": "Ajit Pratap Singh",

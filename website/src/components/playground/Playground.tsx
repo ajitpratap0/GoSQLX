@@ -25,6 +25,7 @@ const DIALECTS = [
   { value: "sqlite", label: "SQLite" },
   { value: "sqlserver", label: "SQL Server" },
   { value: "oracle", label: "Oracle" },
+  { value: "clickhouse", label: "ClickHouse" },
 ];
 
 type TabId = "ast" | "format" | "lint" | "analyze";

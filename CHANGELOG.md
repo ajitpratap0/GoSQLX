@@ -7,13 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-03-20
+
 ### Added
-- ClickHouse SQL dialect (`DialectClickHouse = "clickhouse"`) with 30+ keywords: PREWHERE, FINAL, ENGINE, GLOBAL, ASOF, TTL, CODEC, FORMAT, SETTINGS, DISTRIBUTED, MergeTree family engines, ClickHouse-specific data types (FixedString, LowCardinality, Nullable, DateTime64, IPv4, IPv6)
-- `PrewhereClause` field on `SelectStatement` AST node for ClickHouse's pre-filter optimization clause
-- `Final` field on `TableReference` for ClickHouse's FINAL table modifier (forces MergeTree part merge before read)
+- ClickHouse SQL dialect support (`DialectClickHouse = "clickhouse"`) with 30+ keywords
+- `PrewhereClause` field on `SelectStatement` AST for ClickHouse PREWHERE optimization
+- `Final` field on `TableReference` for ClickHouse MergeTree FINAL modifier
 - PREWHERE clause parsing in ClickHouse dialect mode
 - FINAL modifier parsing in ClickHouse dialect mode
-- GLOBAL IN / GLOBAL NOT IN expression parsing in ClickHouse dialect mode
+- GLOBAL IN / GLOBAL NOT IN expression parsing (ClickHouse)
+- ClickHouse data types: FixedString, LowCardinality, Nullable, DateTime64, IPv4, IPv6
+- MergeTree engine family keywords (MERGETREE, REPLACINGMERGETREE, AGGREGATINGMERGETREE, etc.)
+- LSP semantic token provider (`textDocument/semanticTokens/full`) with 6-type legend: keyword, identifier, number, string, operator, comment
+- LSP diagnostic debouncing (300ms) — prevents excessive re-parsing on rapid typing
+- LSP document cleanup on `textDocument/didClose`
+- Glama MCP registry integration with stdio transport support
+- Auto-trigger Glama build on GitHub release via CI (`glama-sync.yml`)
+- Sentry error monitoring, tracing, and session replay on website
+
+### Changed
+- `ParseFromModelTokens` is now the canonical parse entry point (positions always populated)
+- Docker base image Go 1.25 → 1.26 to match go.mod requirement
+- Next.js 16.1.6 → 16.1.7 (CVE-2026-27979, CVE-2026-27980, CVE-2026-29057)
+- Website rebuilt on Next.js 16 App Router with comprehensive a11y, SEO, and performance audit
+- Lighthouse Desktop: 100 Performance / 100 Accessibility / 100 SEO (maintained)
+- CI: Vercel deployment working-directory bug fixed (doubled path `website/website/`)
+
+### Deprecated
+- `parser.Parse([]token.Token)` — use `ParseFromModelTokens` instead
+- `ParseFromModelTokensWithPositions` — consolidated into `ParseFromModelTokens`
+- `ConversionResult.PositionMapping` — always nil, will be removed in v2
+
+### Fixed
+- Production playground WASM 404 (CI working-directory path doubling)
+- WASM service worker cache versioning
+- Broken `.md` relative links in docs → `/docs/` URL paths
+- JSON-LD BreadcrumbList and Article markup on docs pages
+- Horizontal overflow at 320–390px viewport
+- Keyboard accessibility (tabIndex) on scrollable code blocks
 
 ## [1.12.1] - 2026-03-15 — Website Performance & Mobile Optimization
 
@@ -1626,7 +1657,10 @@ For questions about upgrading or changelog entries:
 - Open an issue: https://github.com/ajitpratap0/GoSQLX/issues
 - Join discussions: https://github.com/ajitpratap0/GoSQLX/discussions
 
-[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.12.1...HEAD
+[1.13.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.12.1...v1.13.0
+[1.12.1]: https://github.com/ajitpratap0/GoSQLX/compare/v1.12.0...v1.12.1
+[1.12.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.10.2...v1.12.0
 [1.8.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.5.1...v1.6.0

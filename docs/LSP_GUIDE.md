@@ -1,7 +1,7 @@
 # GoSQLX Language Server Protocol (LSP) Guide
 
-**Version**: v1.6.0
-**Last Updated**: December 2025
+**Version**: v1.13.0
+**Last Updated**: 2026-03-20
 
 ## Table of Contents
 
@@ -190,6 +190,28 @@ Function documentation for:
 Quick fixes for common issues:
 - Add missing semicolon
 - Keyword case conversion
+
+### Semantic Tokens
+
+GoSQLX v1.13.0 adds `textDocument/semanticTokens/full` support with a 6-type legend:
+
+| Token Type | Applies To |
+|------------|-----------|
+| `keyword` | SQL keywords (SELECT, FROM, WHERE, etc.) |
+| `identifier` | Table names, column names, aliases |
+| `number` | Integer and float literals |
+| `string` | String literals and quoted identifiers |
+| `operator` | Operators (=, >, <, AND, OR, NOT, etc.) |
+| `comment` | SQL line and block comments |
+
+Editors that support semantic tokens (VS Code, Neovim with nvim-lspconfig) will use these
+types to apply richer syntax highlighting beyond what TextMate grammars provide.
+
+### Diagnostic Debouncing
+
+Diagnostics are debounced 300ms per document URI. Rapid keystrokes no longer trigger
+a full parse on every keystroke — the parser fires 300ms after the last change.
+This improves performance in large SQL files and reduces flicker in the editor.
 
 ---
 
@@ -423,5 +445,5 @@ tail -f /tmp/gosqlx-lsp.log | grep -E "Initialize|Document|Diagnostic"
 
 ---
 
-**Last Updated**: December 2025
-**Version**: v1.6.0
+**Last Updated**: 2026-03-20
+**Version**: v1.13.0

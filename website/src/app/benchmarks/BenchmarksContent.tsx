@@ -11,15 +11,15 @@ const metrics = [
 ];
 
 const benchmarks = [
-  { name: 'Simple SELECT', query: 'SELECT *', m4: '1.52M ops/sec', baseline: '1.38M ops/sec' },
-  { name: 'Complex Query', query: 'Multi-JOIN', m4: '412K ops/sec', baseline: '380K ops/sec' },
-  { name: 'Window Function', query: 'ROW_NUMBER OVER', m4: '385K ops/sec', baseline: '350K ops/sec' },
-  { name: 'CTE', query: 'WITH RECURSIVE', m4: '340K ops/sec', baseline: '310K ops/sec' },
-  { name: 'INSERT', query: 'Multi-row', m4: '890K ops/sec', baseline: '820K ops/sec' },
+  { name: 'Simple SELECT', query: 'SELECT *', m4: '1.40M ops/sec', baseline: '1.38M ops/sec' },
+  { name: 'Complex Query', query: 'Multi-JOIN', m4: '376K ops/sec', baseline: '380K ops/sec' },
+  { name: 'Window Function', query: 'ROW_NUMBER OVER', m4: '848K ops/sec', baseline: '350K ops/sec' },
+  { name: 'CTE', query: 'WITH RECURSIVE', m4: '833K ops/sec', baseline: '310K ops/sec' },
+  { name: 'INSERT', query: 'Multi-row', m4: '992K ops/sec', baseline: '820K ops/sec' },
 ];
 
 const methodology = [
-  'Go 1.23+ on Apple M4 (local) and GitHub Actions runners (CI baseline)',
+  'Go 1.26+ on Apple Silicon (local) and GitHub Actions runners (CI baseline)',
   'Each benchmark runs for a minimum of 1 second with -benchmem',
   'Race detector disabled during benchmarks (adds 3\u20135x overhead)',
   'Object pooling enabled for all runs (production configuration)',
@@ -53,7 +53,7 @@ export function BenchmarksContent() {
               Real-world performance data from the GoSQLX parser, measured on production-grade hardware.
             </p>
             <p className="mt-3 text-xs text-zinc-500">
-              Last updated: March 2026 &middot; Based on v1.12.0
+              Last updated: March 2026 &middot; Based on v1.13.0
             </p>
           </FadeIn>
         </div>

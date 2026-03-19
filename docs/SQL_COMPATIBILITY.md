@@ -1,6 +1,6 @@
 # GoSQLX SQL Feature Compatibility Matrix
 
-**Version**: v1.12.0 | **Last Updated**: 2026-03-15
+**Version**: v1.13.0 | **Last Updated**: 2026-03-20
 
 ## Overview
 
@@ -548,6 +548,7 @@ GoSQLX v1.8.0 introduces a first-class dialect mode engine that threads the SQL 
 | **Oracle** | `"oracle"` | Oracle keywords | DUAL table, basic PL/SQL keywords | ⚠️ Keywords + basic parsing |
 | **SQLite** | `"sqlite"` | SQLite keywords | Flexible typing, simplified syntax | ⚠️ Keywords + basic parsing |
 | **Snowflake** | `"snowflake"` | Snowflake keywords | Stage operations, VARIANT type | ⚠️ Keyword detection only |
+| **ClickHouse** | `"clickhouse"` | ClickHouse keywords | PREWHERE, FINAL, GLOBAL IN/NOT IN, MergeTree keywords | ✅ v1.13.0 |
 
 ### Usage
 
@@ -587,7 +588,6 @@ gosqlx format --dialect mysql query.sql
 - Pipelined table functions not supported
 
 #### SQLite
-- PRAGMA statements not parsed (keyword reserved)
 - ATTACH/DETACH not parsed (keywords reserved)
 - VACUUM not supported
 - Virtual tables (FTS5, rtree) not supported
@@ -597,9 +597,17 @@ gosqlx format --dialect mysql query.sql
 - No Snowflake-specific parsing (stages, COPY INTO, VARIANT operations)
 - QUALIFY clause not supported
 
+#### ClickHouse
+- PREWHERE clause for pre-filter optimization before primary key scan
+- FINAL modifier on table references (forces MergeTree part merge)
+- GLOBAL IN / GLOBAL NOT IN for distributed query execution
+- ClickHouse data types: FixedString(N), LowCardinality(T), Nullable(T), DateTime64, IPv4, IPv6
+- MergeTree engine family keywords: MERGETREE, REPLACINGMERGETREE, AGGREGATINGMERGETREE, SUMMINGMERGETREE, COLLAPSINGMERGETREE, VERSIONEDCOLLAPSINGMERGETREE
+- 30+ ClickHouse-specific keywords: TTL, CODEC, FORMAT, SETTINGS, DISTRIBUTED, etc.
+
 ## SQL Standards Compliance Summary
 
-### Overall Compliance (v1.12.0)
+### Overall Compliance (v1.13.0)
 
 | Standard | Compliance % | Status | Notes |
 |----------|--------------|--------|-------|
@@ -731,7 +739,7 @@ gosqlx format --dialect mysql query.sql
 - **OFFSET-FETCH** - Standard row limiting
 - **Multi-dialect basic syntax**
 - **Unicode and international text**
-- **High-performance scenarios** (1.25M ops/sec peak)
+- **High-performance scenarios** (1.38M+ ops/sec, 1.5M peak)
 
 ### Suitable with Considerations
 
@@ -748,7 +756,6 @@ gosqlx format --dialect mysql query.sql
 - **Full XML function support**
 - **Row pattern recognition (MATCH_RECOGNIZE)**
 - **Complete temporal table support**
-- **SQLite PRAGMA statements** (keywords reserved)
 - **Advanced array operations**
 
 ## Recommendations
@@ -789,9 +796,9 @@ gosqlx format --dialect mysql query.sql
 
 ---
 
-**Last Updated**: 2026-03-13
-**GoSQLX Version**: 1.12.0
-**Test Suite Version**: 1.12.0
+**Last Updated**: 2026-03-20
+**GoSQLX Version**: 1.13.0
+**Test Suite Version**: 1.13.0
 **Total Test Cases**: 800+
 **Coverage Percentage**: 95%+
 **SQL-99 Compliance**: ~85%

@@ -610,6 +610,15 @@ func (s *SelectStatement) SQL() string {
 		sb.WriteString(forSQL(s.For))
 	}
 
+	if s.StartWith != nil {
+		sb.WriteString(" START WITH ")
+		sb.WriteString(exprSQL(s.StartWith))
+	}
+	if s.ConnectBy != nil {
+		sb.WriteString(" ")
+		sb.WriteString(s.ConnectBy.ToSQL())
+	}
+
 	return sb.String()
 }
 
@@ -1306,6 +1315,10 @@ func tableRefSQL(t *TableReference) string {
 	if t.Final {
 		sb.WriteString(" FINAL")
 	}
+	if t.ForSystemTime != nil {
+		sb.WriteString(" ")
+		sb.WriteString(t.ForSystemTime.ToSQL())
+	}
 	return sb.String()
 }
 
@@ -1664,4 +1677,39 @@ func writeSequenceOptions(b *strings.Builder, opts SequenceOptions) {
 	} else if opts.Restart {
 		b.WriteString(" RESTART")
 	}
+}
+
+// ToSQL returns the SQL string for a FOR SYSTEM_TIME clause (MariaDB 10.3.4+).
+func (c *ForSystemTimeClause) ToSQL() string {
+	var b strings.Builder
+	b.WriteString("FOR SYSTEM_TIME ")
+	switch c.Type {
+	case SystemTimeAsOf:
+		b.WriteString("AS OF ")
+		b.WriteString(exprSQL(c.Point))
+	case SystemTimeBetween:
+		b.WriteString("BETWEEN ")
+		b.WriteString(exprSQL(c.Start))
+		b.WriteString(" AND ")
+		b.WriteString(exprSQL(c.End))
+	case SystemTimeFromTo:
+		b.WriteString("FROM ")
+		b.WriteString(exprSQL(c.Start))
+		b.WriteString(" TO ")
+		b.WriteString(exprSQL(c.End))
+	case SystemTimeAll:
+		b.WriteString("ALL")
+	}
+	return b.String()
+}
+
+// ToSQL returns the SQL string for a CONNECT BY clause (MariaDB 10.2+).
+func (c *ConnectByClause) ToSQL() string {
+	var b strings.Builder
+	b.WriteString("CONNECT BY ")
+	if c.NoCycle {
+		b.WriteString("NOCYCLE ")
+	}
+	b.WriteString(exprSQL(c.Condition))
+	return b.String()
 }

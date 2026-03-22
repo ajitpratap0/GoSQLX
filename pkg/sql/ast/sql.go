@@ -1679,6 +1679,9 @@ func writeSequenceOptions(b *strings.Builder, opts SequenceOptions) {
 	}
 }
 
+// SQL implements the Expression interface for ForSystemTimeClause.
+func (c *ForSystemTimeClause) SQL() string { return c.ToSQL() }
+
 // ToSQL returns the SQL string for a FOR SYSTEM_TIME clause (MariaDB 10.3.4+).
 func (c *ForSystemTimeClause) ToSQL() string {
 	var b strings.Builder
@@ -1702,6 +1705,12 @@ func (c *ForSystemTimeClause) ToSQL() string {
 	}
 	return b.String()
 }
+
+// SQL implements the Expression interface for ConnectByClause.
+func (c *ConnectByClause) SQL() string { return c.ToSQL() }
+
+// SQL implements the Expression interface for PeriodDefinition (stub; not used as a standalone expression).
+func (p *PeriodDefinition) SQL() string { return "" }
 
 // ToSQL returns the SQL string for a CONNECT BY clause (MariaDB 10.2+).
 func (c *ConnectByClause) ToSQL() string {

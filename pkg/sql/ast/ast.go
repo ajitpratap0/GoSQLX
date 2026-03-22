@@ -400,21 +400,19 @@ type SelectStatement struct {
 	Where             Expression
 	GroupBy           []Expression
 	Having            Expression
-	Windows           []WindowSpec
-	OrderBy           []OrderByExpression
-	Limit             *int
-	Offset            *int
-	Fetch             *FetchClause    // SQL-99 FETCH FIRST/NEXT clause (F861, F862)
-	For               *ForClause      // Row-level locking clause (SQL:2003, PostgreSQL, MySQL)
-	Pos               models.Location // Source position of the SELECT keyword (1-based line and column)
-
 	// StartWith is the optional seed condition for CONNECT BY (MariaDB 10.2+).
 	// Example: START WITH parent_id IS NULL
 	StartWith Expression // MariaDB hierarchical query seed
-
 	// ConnectBy holds the hierarchy traversal condition (MariaDB 10.2+).
 	// Example: CONNECT BY PRIOR id = parent_id
 	ConnectBy *ConnectByClause // MariaDB hierarchical query
+	Windows   []WindowSpec
+	OrderBy   []OrderByExpression
+	Limit     *int
+	Offset    *int
+	Fetch     *FetchClause    // SQL-99 FETCH FIRST/NEXT clause (F861, F862)
+	For       *ForClause      // Row-level locking clause (SQL:2003, PostgreSQL, MySQL)
+	Pos       models.Location // Source position of the SELECT keyword (1-based line and column)
 }
 
 // TopClause represents SQL Server's TOP N [PERCENT] clause

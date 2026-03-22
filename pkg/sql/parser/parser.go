@@ -630,6 +630,11 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		return stmt, nil
 	case models.TokenTypeAlter:
 		p.advance()
+		// MariaDB: ALTER SEQUENCE [IF EXISTS] name [options...]
+		if p.isMariaDB() && p.isTokenMatch("SEQUENCE") {
+			p.advance() // Consume SEQUENCE
+			return p.parseAlterSequenceStatement()
+		}
 		return p.parseAlterTableStmt()
 	case models.TokenTypeMerge:
 		p.advance()
@@ -639,6 +644,11 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		return p.parseCreateStatement()
 	case models.TokenTypeDrop:
 		p.advance()
+		// MariaDB: DROP SEQUENCE [IF EXISTS] name
+		if p.isMariaDB() && p.isTokenMatch("SEQUENCE") {
+			p.advance() // Consume SEQUENCE
+			return p.parseDropSequenceStatement()
+		}
 		return p.parseDropStatement()
 	case models.TokenTypeRefresh:
 		p.advance()

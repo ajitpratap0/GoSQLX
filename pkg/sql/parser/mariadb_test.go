@@ -1,0 +1,206 @@
+package parser_test
+
+import (
+	"testing"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
+)
+
+// ── Task 7: SEQUENCE Tests ────────────────────────────────────────────────────
+
+func TestMariaDB_CreateSequence_Basic(t *testing.T) {
+	sql := "CREATE SEQUENCE seq_orders START WITH 1 INCREMENT BY 1"
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectMariaDB)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(tree.Statements) != 1 {
+		t.Fatalf("expected 1 statement, got %d", len(tree.Statements))
+	}
+	stmt, ok := tree.Statements[0].(*ast.CreateSequenceStatement)
+	if !ok {
+		t.Fatalf("expected CreateSequenceStatement, got %T", tree.Statements[0])
+	}
+	if stmt.Name.Name != "seq_orders" {
+		t.Errorf("expected name %q, got %q", "seq_orders", stmt.Name.Name)
+	}
+	if stmt.Options.StartWith == nil {
+		t.Error("expected StartWith to be set")
+	}
+}
+
+func TestMariaDB_CreateSequence_AllOptions(t *testing.T) {
+	sql := `CREATE SEQUENCE s START WITH 100 INCREMENT BY 5 MINVALUE 1 MAXVALUE 9999 CYCLE CACHE 20`
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectMariaDB)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	stmt := tree.Statements[0].(*ast.CreateSequenceStatement)
+	if !stmt.Options.Cycle {
+		t.Error("expected Cycle = true")
+	}
+	if stmt.Options.Cache == nil {
+		t.Error("expected Cache to be set")
+	}
+}
+
+func TestMariaDB_CreateSequence_IfNotExists(t *testing.T) {
+	sql := "CREATE SEQUENCE IF NOT EXISTS my_seq"
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectMariaDB)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	stmt := tree.Statements[0].(*ast.CreateSequenceStatement)
+	if !stmt.IfNotExists {
+		t.Error("expected IfNotExists = true")
+	}
+}
+
+func TestMariaDB_DropSequence(t *testing.T) {
+	sql := "DROP SEQUENCE IF EXISTS seq_orders"
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectMariaDB)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	stmt, ok := tree.Statements[0].(*ast.DropSequenceStatement)
+	if !ok {
+		t.Fatalf("expected DropSequenceStatement, got %T", tree.Statements[0])
+	}
+	if !stmt.IfExists {
+		t.Error("expected IfExists = true")
+	}
+}
+
+func TestMariaDB_AlterSequence_Restart(t *testing.T) {
+	sql := "ALTER SEQUENCE seq_orders RESTART WITH 500"
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectMariaDB)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	stmt, ok := tree.Statements[0].(*ast.AlterSequenceStatement)
+	if !ok {
+		t.Fatalf("expected AlterSequenceStatement, got %T", tree.Statements[0])
+	}
+	if stmt.Options.RestartWith == nil {
+		t.Error("expected RestartWith to be set")
+	}
+}
+
+func TestMariaDB_SequenceNotRecognizedInMySQL(t *testing.T) {
+	sql := "CREATE SEQUENCE seq1 START WITH 1"
+	_, err := parser.ParseWithDialect(sql, keywords.DialectMySQL)
+	if err == nil {
+		t.Error("expected error when parsing CREATE SEQUENCE in MySQL dialect")
+	}
+}
+
+// ── Task 8: Temporal Table Tests ──────────────────────────────────────────────
+
+func TestMariaDB_CreateTable_WithSystemVersioning(t *testing.T) {
+	sql := "CREATE TABLE orders (id INT PRIMARY KEY, total DECIMAL(10,2)) WITH SYSTEM VERSIONING"
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectMariaDB)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	stmt, ok := tree.Statements[0].(*ast.CreateTableStatement)
+	if !ok {
+		t.Fatalf("expected CreateTableStatement, got %T", tree.Statements[0])
+	}
+	if !stmt.WithSystemVersioning {
+		t.Error("expected WithSystemVersioning = true")
+	}
+}
+
+func TestMariaDB_SelectForSystemTime_AsOf(t *testing.T) {
+	sql := "SELECT id FROM orders FOR SYSTEM_TIME AS OF TIMESTAMP '2024-01-15 10:00:00'"
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectMariaDB)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	sel := tree.Statements[0].(*ast.SelectStatement)
+	if len(sel.From) == 0 {
+		t.Fatal("expected FROM clause")
+	}
+	ref := &sel.From[0]
+	if ref.ForSystemTime == nil {
+		t.Error("expected ForSystemTime to be set")
+	}
+	if ref.ForSystemTime.Type != ast.SystemTimeAsOf {
+		t.Errorf("expected AS OF, got %v", ref.ForSystemTime.Type)
+	}
+}
+
+func TestMariaDB_SelectForSystemTime_All(t *testing.T) {
+	sql := "SELECT * FROM orders FOR SYSTEM_TIME ALL"
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectMariaDB)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	sel := tree.Statements[0].(*ast.SelectStatement)
+	ref := &sel.From[0]
+	if ref.ForSystemTime == nil || ref.ForSystemTime.Type != ast.SystemTimeAll {
+		t.Error("expected SystemTimeAll")
+	}
+}
+
+func TestMariaDB_SelectForSystemTime_Between(t *testing.T) {
+	sql := "SELECT * FROM orders FOR SYSTEM_TIME BETWEEN '2020-01-01' AND '2024-01-01'"
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectMariaDB)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	sel := tree.Statements[0].(*ast.SelectStatement)
+	ref := &sel.From[0]
+	if ref.ForSystemTime == nil || ref.ForSystemTime.Type != ast.SystemTimeBetween {
+		t.Error("expected SystemTimeBetween")
+	}
+}
+
+// ── Task 9: CONNECT BY Tests ──────────────────────────────────────────────────
+
+func TestMariaDB_ConnectBy_Basic(t *testing.T) {
+	sql := `SELECT id, name FROM category START WITH parent_id IS NULL CONNECT BY PRIOR id = parent_id`
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectMariaDB)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	sel, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", tree.Statements[0])
+	}
+	if sel.StartWith == nil {
+		t.Error("expected StartWith to be set")
+	}
+	if sel.ConnectBy == nil {
+		t.Error("expected ConnectBy to be set")
+	}
+	if sel.ConnectBy.NoCycle {
+		t.Error("expected NoCycle = false")
+	}
+}
+
+func TestMariaDB_ConnectBy_NoCycle(t *testing.T) {
+	sql := `SELECT id FROM t CONNECT BY NOCYCLE PRIOR id = parent_id`
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectMariaDB)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	sel := tree.Statements[0].(*ast.SelectStatement)
+	if sel.ConnectBy == nil || !sel.ConnectBy.NoCycle {
+		t.Error("expected NoCycle = true")
+	}
+}
+
+func TestMariaDB_ConnectBy_NoStartWith(t *testing.T) {
+	sql := `SELECT id FROM t CONNECT BY PRIOR id = parent_id`
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectMariaDB)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	sel := tree.Statements[0].(*ast.SelectStatement)
+	if sel.ConnectBy == nil {
+		t.Error("expected ConnectBy to be set")
+	}
+}

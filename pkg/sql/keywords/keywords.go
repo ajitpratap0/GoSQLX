@@ -266,8 +266,9 @@ func New(dialect SQLDialect, ignoreCase bool) *Keywords {
 	case DialectMySQL:
 		k.addKeywordsWithCategory(MYSQL_SPECIFIC)
 	case DialectMariaDB:
+		// MariaDB is a superset of MySQL — load MySQL base first, then MariaDB extras
 		k.addKeywordsWithCategory(MYSQL_SPECIFIC)
-		// MARIADB_SPECIFIC added in Task 2
+		k.addKeywordsWithCategory(MARIADB_SPECIFIC)
 	case DialectPostgreSQL:
 		k.addKeywordsWithCategory(POSTGRESQL_SPECIFIC)
 	case DialectSQLite:

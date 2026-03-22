@@ -39,3 +39,46 @@ func TestDialectMariaDB_InheritsMySQL(t *testing.T) {
 		}
 	}
 }
+
+func TestMariaDBKeywords_Recognized(t *testing.T) {
+	kw := keywords.New(keywords.DialectMariaDB, true)
+
+	mariadbOnly := []string{
+		// Sequence DDL
+		"SEQUENCE", "NEXTVAL", "LASTVAL", "SETVAL",
+		// Temporal tables
+		"VERSIONING", "PERIOD", "OVERLAPS",
+		// Hierarchical queries
+		"PRIOR", "NOCYCLE",
+		// Index visibility
+		"INVISIBLE", "VISIBLE",
+	}
+	for _, word := range mariadbOnly {
+		if !kw.IsKeyword(word) {
+			t.Errorf("expected %q to be a keyword in DialectMariaDB", word)
+		}
+	}
+}
+
+func TestMariaDBKeywords_InheritsMySQLKeywords(t *testing.T) {
+	kw := keywords.New(keywords.DialectMariaDB, true)
+
+	// These are MySQL-specific keywords that MariaDB must also recognize
+	mysqlKeywords := []string{"UNSIGNED", "ZEROFILL", "KILL", "PURGE", "STATUS", "VARIABLES"}
+	for _, word := range mysqlKeywords {
+		if !kw.IsKeyword(word) {
+			t.Errorf("MariaDB dialect must inherit MySQL keyword %q", word)
+		}
+	}
+}
+
+func TestMariaDBKeywords_NotRecognizedInMySQLDialect(t *testing.T) {
+	kw := keywords.New(keywords.DialectMySQL, true)
+
+	mariadbOnlyKeywords := []string{"VERSIONING", "PRIOR", "NOCYCLE", "INVISIBLE"}
+	for _, word := range mariadbOnlyKeywords {
+		if kw.IsKeyword(word) {
+			t.Errorf("keyword %q should NOT be recognized in pure MySQL dialect", word)
+		}
+	}
+}

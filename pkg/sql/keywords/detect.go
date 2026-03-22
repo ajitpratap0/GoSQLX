@@ -85,6 +85,7 @@ var dialectHints = []dialectHint{
 	{pattern: "SYSTEM VERSIONING", dialect: DialectMariaDB, weight: 5},
 	{pattern: "FOR SYSTEM_TIME", dialect: DialectMariaDB, weight: 5},
 	{pattern: "VERSIONING", dialect: DialectMariaDB, weight: 4},
+	{pattern: "CONNECT BY", dialect: DialectMariaDB, weight: 3},
 	{pattern: "CREATE SEQUENCE", dialect: DialectMariaDB, weight: 5},
 	{pattern: "DROP SEQUENCE", dialect: DialectMariaDB, weight: 5},
 
@@ -109,7 +110,7 @@ var dialectHints = []dialectHint{
 //   - MySQL: ZEROFILL, UNSIGNED, AUTO_INCREMENT, FORCE INDEX
 //   - SQL Server: NOLOCK, TOP, NVARCHAR, GETDATE
 //   - Oracle: ROWNUM, CONNECT BY, SYSDATE, DECODE
-//   - MariaDB: NEXTVAL, LASTVAL, SETVAL, NEXT VALUE FOR, SYSTEM VERSIONING, FOR SYSTEM_TIME, VERSIONING, CREATE SEQUENCE, DROP SEQUENCE
+//   - MariaDB: NEXTVAL, LASTVAL, SETVAL, NEXT VALUE FOR, SYSTEM VERSIONING, FOR SYSTEM_TIME, VERSIONING, CONNECT BY, CREATE SEQUENCE, DROP SEQUENCE
 //   - SQLite: AUTOINCREMENT, GLOB, VACUUM
 //
 // The function also performs syntactic checks for identifier quoting styles:

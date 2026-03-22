@@ -108,6 +108,10 @@ func TestDetectDialect_MariaDB(t *testing.T) {
 			name: "NEXTVAL",
 			sql:  "SELECT NEXTVAL(seq_orders)",
 		},
+		{
+			name: "CONNECT BY with NEXTVAL (MariaDB wins on accumulation)",
+			sql:  "SELECT NEXTVAL(s) FROM t CONNECT BY PRIOR id = parent_id",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

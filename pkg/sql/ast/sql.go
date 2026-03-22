@@ -1597,7 +1597,9 @@ func (s *CreateSequenceStatement) ToSQL() string {
 	if s.IfNotExists {
 		b.WriteString("IF NOT EXISTS ")
 	}
-	b.WriteString(s.Name.Name)
+	if s.Name != nil {
+		b.WriteString(s.Name.Name)
+	}
 	writeSequenceOptions(&b, s.Options)
 	return b.String()
 }
@@ -1609,7 +1611,9 @@ func (s *DropSequenceStatement) ToSQL() string {
 	if s.IfExists {
 		b.WriteString("IF EXISTS ")
 	}
-	b.WriteString(s.Name.Name)
+	if s.Name != nil {
+		b.WriteString(s.Name.Name)
+	}
 	return b.String()
 }
 
@@ -1620,7 +1624,9 @@ func (s *AlterSequenceStatement) ToSQL() string {
 	if s.IfExists {
 		b.WriteString("IF EXISTS ")
 	}
-	b.WriteString(s.Name.Name)
+	if s.Name != nil {
+		b.WriteString(s.Name.Name)
+	}
 	writeSequenceOptions(&b, s.Options)
 	return b.String()
 }
@@ -1652,8 +1658,10 @@ func writeSequenceOptions(b *strings.Builder, opts SequenceOptions) {
 	} else if opts.NoCycle {
 		b.WriteString(" NOCYCLE")
 	}
-	if opts.Restart != nil {
+	if opts.RestartWith != nil {
 		b.WriteString(" RESTART WITH ")
-		b.WriteString(opts.Restart.TokenLiteral())
+		b.WriteString(opts.RestartWith.TokenLiteral())
+	} else if opts.Restart {
+		b.WriteString(" RESTART")
 	}
 }

@@ -1828,7 +1828,8 @@ type SequenceOptions struct {
 	Cache       *LiteralValue // CACHE n or nil when NO CACHE / NOCACHE
 	Cycle       bool          // CYCLE
 	NoCycle     bool          // NO CYCLE / NOCYCLE (explicit; default is NO CYCLE)
-	Restart     *LiteralValue // RESTART [WITH n] — only for ALTER SEQUENCE
+	Restart     bool          // bare RESTART (reset to start value)
+	RestartWith *LiteralValue // RESTART WITH n (explicit restart value)
 }
 
 // CreateSequenceStatement represents:

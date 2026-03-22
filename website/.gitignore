@@ -40,5 +40,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# WASM binary (built in CI)
-public/wasm/gosqlx.wasm
+# WASM binary — committed to git so Vercel auto-deploy includes it.
+# website.yml CI rebuilds and recommits when wasm/ source changes.

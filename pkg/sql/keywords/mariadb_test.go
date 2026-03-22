@@ -101,8 +101,8 @@ func TestDetectDialect_MariaDB(t *testing.T) {
 			sql:  "SELECT * FROM orders FOR SYSTEM_TIME AS OF TIMESTAMP '2024-01-01'",
 		},
 		{
-			name: "CONNECT BY",
-			sql:  "SELECT id FROM t START WITH parent_id IS NULL CONNECT BY PRIOR id = parent_id",
+			name: "DROP SEQUENCE",
+			sql:  "DROP SEQUENCE seq_orders",
 		},
 		{
 			name: "NEXTVAL",

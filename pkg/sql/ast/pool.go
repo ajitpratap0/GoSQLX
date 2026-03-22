@@ -351,6 +351,14 @@ var (
 			return &s
 		},
 	}
+
+	createSequencePool = sync.Pool{
+		New: func() interface{} { return &CreateSequenceStatement{} },
+	}
+
+	alterSequencePool = sync.Pool{
+		New: func() interface{} { return &AlterSequenceStatement{} },
+	}
 )
 
 // NewAST retrieves a new AST container from the pool.
@@ -1793,4 +1801,26 @@ func PutAlterStatement(stmt *AlterStatement) {
 	stmt.Operation = nil
 
 	alterStmtPool.Put(stmt)
+}
+
+// NewCreateSequenceStatement retrieves a CreateSequenceStatement from the pool.
+func NewCreateSequenceStatement() *CreateSequenceStatement {
+	return createSequencePool.Get().(*CreateSequenceStatement)
+}
+
+// ReleaseCreateSequenceStatement returns a CreateSequenceStatement to the pool.
+func ReleaseCreateSequenceStatement(s *CreateSequenceStatement) {
+	*s = CreateSequenceStatement{}
+	createSequencePool.Put(s)
+}
+
+// NewAlterSequenceStatement retrieves an AlterSequenceStatement from the pool.
+func NewAlterSequenceStatement() *AlterSequenceStatement {
+	return alterSequencePool.Get().(*AlterSequenceStatement)
+}
+
+// ReleaseAlterSequenceStatement returns an AlterSequenceStatement to the pool.
+func ReleaseAlterSequenceStatement(s *AlterSequenceStatement) {
+	*s = AlterSequenceStatement{}
+	alterSequencePool.Put(s)
 }

@@ -1585,3 +1585,75 @@ func mergeActionSQL(a *MergeAction) string {
 		return a.ActionType
 	}
 }
+
+// ToSQL returns the SQL string for CREATE SEQUENCE.
+func (s *CreateSequenceStatement) ToSQL() string {
+	var b strings.Builder
+	b.WriteString("CREATE ")
+	if s.OrReplace {
+		b.WriteString("OR REPLACE ")
+	}
+	b.WriteString("SEQUENCE ")
+	if s.IfNotExists {
+		b.WriteString("IF NOT EXISTS ")
+	}
+	b.WriteString(s.Name.Name)
+	writeSequenceOptions(&b, s.Options)
+	return b.String()
+}
+
+// ToSQL returns the SQL string for DROP SEQUENCE.
+func (s *DropSequenceStatement) ToSQL() string {
+	var b strings.Builder
+	b.WriteString("DROP SEQUENCE ")
+	if s.IfExists {
+		b.WriteString("IF EXISTS ")
+	}
+	b.WriteString(s.Name.Name)
+	return b.String()
+}
+
+// ToSQL returns the SQL string for ALTER SEQUENCE.
+func (s *AlterSequenceStatement) ToSQL() string {
+	var b strings.Builder
+	b.WriteString("ALTER SEQUENCE ")
+	if s.IfExists {
+		b.WriteString("IF EXISTS ")
+	}
+	b.WriteString(s.Name.Name)
+	writeSequenceOptions(&b, s.Options)
+	return b.String()
+}
+
+// writeSequenceOptions is a shared helper for CREATE/ALTER SEQUENCE serialization.
+func writeSequenceOptions(b *strings.Builder, opts SequenceOptions) {
+	if opts.StartWith != nil {
+		b.WriteString(" START WITH ")
+		b.WriteString(opts.StartWith.TokenLiteral())
+	}
+	if opts.IncrementBy != nil {
+		b.WriteString(" INCREMENT BY ")
+		b.WriteString(opts.IncrementBy.TokenLiteral())
+	}
+	if opts.MinValue != nil {
+		b.WriteString(" MINVALUE ")
+		b.WriteString(opts.MinValue.TokenLiteral())
+	}
+	if opts.MaxValue != nil {
+		b.WriteString(" MAXVALUE ")
+		b.WriteString(opts.MaxValue.TokenLiteral())
+	}
+	if opts.Cache != nil {
+		b.WriteString(" CACHE ")
+		b.WriteString(opts.Cache.TokenLiteral())
+	}
+	if opts.Cycle {
+		b.WriteString(" CYCLE")
+	} else if opts.NoCycle {
+		b.WriteString(" NOCYCLE")
+	}
+	if opts.Restart != nil {
+		b.WriteString(" RESTART WITH ")
+		b.WriteString(opts.Restart.TokenLiteral())
+	}
+}

@@ -1815,3 +1815,72 @@ func (r ReplaceStatement) Children() []Node {
 	}
 	return children
 }
+
+// ── MariaDB SEQUENCE DDL (10.3+) ───────────────────────────────────────────
+
+// SequenceOptions holds configuration for CREATE SEQUENCE and ALTER SEQUENCE.
+// Fields are pointers so that unspecified options are distinguishable from zero values.
+type SequenceOptions struct {
+	StartWith   *LiteralValue // START WITH n
+	IncrementBy *LiteralValue // INCREMENT BY n (default 1)
+	MinValue    *LiteralValue // MINVALUE n or nil when NO MINVALUE
+	MaxValue    *LiteralValue // MAXVALUE n or nil when NO MAXVALUE
+	Cache       *LiteralValue // CACHE n or nil when NO CACHE / NOCACHE
+	Cycle       bool          // CYCLE
+	NoCycle     bool          // NO CYCLE / NOCYCLE (explicit; default is NO CYCLE)
+	Restart     *LiteralValue // RESTART [WITH n] — only for ALTER SEQUENCE
+}
+
+// CreateSequenceStatement represents:
+//
+//	CREATE [OR REPLACE] SEQUENCE [IF NOT EXISTS] name [options...]
+type CreateSequenceStatement struct {
+	Name        *Identifier
+	OrReplace   bool
+	IfNotExists bool
+	Options     SequenceOptions
+}
+
+func (s *CreateSequenceStatement) statementNode()       {}
+func (s *CreateSequenceStatement) TokenLiteral() string { return "CREATE" }
+func (s *CreateSequenceStatement) Children() []Node {
+	if s.Name != nil {
+		return []Node{s.Name}
+	}
+	return nil
+}
+
+// DropSequenceStatement represents:
+//
+//	DROP SEQUENCE [IF EXISTS] name
+type DropSequenceStatement struct {
+	Name     *Identifier
+	IfExists bool
+}
+
+func (s *DropSequenceStatement) statementNode()       {}
+func (s *DropSequenceStatement) TokenLiteral() string { return "DROP" }
+func (s *DropSequenceStatement) Children() []Node {
+	if s.Name != nil {
+		return []Node{s.Name}
+	}
+	return nil
+}
+
+// AlterSequenceStatement represents:
+//
+//	ALTER SEQUENCE [IF EXISTS] name [options...]
+type AlterSequenceStatement struct {
+	Name     *Identifier
+	IfExists bool
+	Options  SequenceOptions
+}
+
+func (s *AlterSequenceStatement) statementNode()       {}
+func (s *AlterSequenceStatement) TokenLiteral() string { return "ALTER" }
+func (s *AlterSequenceStatement) Children() []Node {
+	if s.Name != nil {
+		return []Node{s.Name}
+	}
+	return nil
+}

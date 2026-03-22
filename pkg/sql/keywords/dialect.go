@@ -92,7 +92,7 @@ func DialectKeywords(dialect SQLDialect) []Keyword {
 	case DialectMySQL:
 		return MYSQL_SPECIFIC
 	case DialectMariaDB:
-		return nil // populated in Task 2 when MARIADB_SPECIFIC is added
+		return MYSQL_SPECIFIC // MariaDB is a MySQL superset; MARIADB_SPECIFIC added in Task 2
 	case DialectPostgreSQL:
 		return POSTGRESQL_SPECIFIC
 	case DialectSQLite:

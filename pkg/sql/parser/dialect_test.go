@@ -177,7 +177,7 @@ func TestIsValidDialect(t *testing.T) {
 			t.Errorf("IsValidDialect(%q) should return true", d)
 		}
 	}
-	invalidDialects := []string{"fakesql", "postgres", "mssql", "pg", "mariadb", "db2"}
+	invalidDialects := []string{"fakesql", "postgres", "mssql", "pg", "db2"}
 	for _, d := range invalidDialects {
 		if keywords.IsValidDialect(d) {
 			t.Errorf("IsValidDialect(%q) should return false", d)

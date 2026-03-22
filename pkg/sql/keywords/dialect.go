@@ -64,6 +64,13 @@ const (
 	// definitions (ENGINE, CODEC, TTL), ClickHouse data types (FixedString,
 	// LowCardinality, Nullable, DateTime64), and replication keywords (ON CLUSTER, GLOBAL).
 	DialectClickHouse SQLDialect = "clickhouse"
+
+	// DialectMariaDB represents MariaDB-specific keywords and extensions.
+	// MariaDB is a superset of MySQL; this dialect includes all MySQL keywords
+	// (UNSIGNED, ZEROFILL, ON DUPLICATE KEY UPDATE, etc.) plus MariaDB-specific
+	// features: SEQUENCE DDL (10.3+), system-versioned temporal tables (10.3.4+),
+	// CONNECT BY hierarchical queries (10.2+), and index visibility (10.6+).
+	DialectMariaDB SQLDialect = "mariadb"
 )
 
 // DialectKeywords returns the additional keywords for a specific dialect.
@@ -84,6 +91,8 @@ func DialectKeywords(dialect SQLDialect) []Keyword {
 		return SNOWFLAKE_SPECIFIC
 	case DialectMySQL:
 		return MYSQL_SPECIFIC
+	case DialectMariaDB:
+		return nil // populated in Task 2 when MARIADB_SPECIFIC is added
 	case DialectPostgreSQL:
 		return POSTGRESQL_SPECIFIC
 	case DialectSQLite:
@@ -133,6 +142,7 @@ func AllDialects() []SQLDialect {
 		DialectGeneric,
 		DialectPostgreSQL,
 		DialectMySQL,
+		DialectMariaDB,
 		DialectSQLServer,
 		DialectOracle,
 		DialectSQLite,

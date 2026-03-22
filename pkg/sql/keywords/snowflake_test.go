@@ -466,6 +466,7 @@ func TestDialectRegistry(t *testing.T) {
 			DialectGeneric:    false,
 			DialectPostgreSQL: false,
 			DialectMySQL:      false,
+			DialectMariaDB:    false,
 			DialectSQLServer:  false,
 			DialectOracle:     false,
 			DialectSQLite:     false,

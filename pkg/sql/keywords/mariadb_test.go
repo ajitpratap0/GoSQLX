@@ -82,3 +82,39 @@ func TestMariaDBKeywords_NotRecognizedInMySQLDialect(t *testing.T) {
 		}
 	}
 }
+
+func TestDetectDialect_MariaDB(t *testing.T) {
+	tests := []struct {
+		name string
+		sql  string
+	}{
+		{
+			name: "CREATE SEQUENCE",
+			sql:  "CREATE SEQUENCE seq_orders START WITH 1 INCREMENT BY 1",
+		},
+		{
+			name: "WITH SYSTEM VERSIONING",
+			sql:  "CREATE TABLE orders (id INT) WITH SYSTEM VERSIONING",
+		},
+		{
+			name: "FOR SYSTEM_TIME",
+			sql:  "SELECT * FROM orders FOR SYSTEM_TIME AS OF TIMESTAMP '2024-01-01'",
+		},
+		{
+			name: "CONNECT BY",
+			sql:  "SELECT id FROM t START WITH parent_id IS NULL CONNECT BY PRIOR id = parent_id",
+		},
+		{
+			name: "NEXTVAL",
+			sql:  "SELECT NEXTVAL(seq_orders)",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := keywords.DetectDialect(tt.sql)
+			if got != keywords.DialectMariaDB {
+				t.Errorf("DetectDialect(%q) = %q, want %q", tt.sql, got, keywords.DialectMariaDB)
+			}
+		})
+	}
+}

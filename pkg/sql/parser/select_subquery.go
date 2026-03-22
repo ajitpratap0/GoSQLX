@@ -84,8 +84,25 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		}
 	}
 
-	// Check for table alias (required for derived tables, optional for regular tables)
-	if p.isIdentifier() || p.isType(models.TokenTypeAs) {
+	// Check for table alias (required for derived tables, optional for regular tables).
+	// Guard: in MariaDB, CONNECT followed by BY is a hierarchical query clause, not an alias.
+	// Similarly, START followed by WITH is a hierarchical query seed, not an alias.
+	isMariaDBClauseKeyword := func() bool {
+		if !p.isMariaDB() {
+			return false
+		}
+		val := strings.ToUpper(p.currentToken.Token.Value)
+		if val == "CONNECT" {
+			next := p.peekToken()
+			return strings.EqualFold(next.Token.Value, "BY")
+		}
+		if val == "START" {
+			next := p.peekToken()
+			return strings.EqualFold(next.Token.Value, "WITH")
+		}
+		return false
+	}
+	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !isMariaDBClauseKeyword() {
 		if p.isType(models.TokenTypeAs) {
 			p.advance() // Consume AS
 			if !p.isIdentifier() {
@@ -95,6 +112,20 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		if p.isIdentifier() {
 			tableRef.Alias = p.currentToken.Token.Value
 			p.advance()
+		}
+	}
+
+	// MariaDB FOR SYSTEM_TIME temporal query (10.3.4+)
+	if p.isMariaDB() && p.isType(models.TokenTypeFor) {
+		// Only parse as FOR SYSTEM_TIME if next token is SYSTEM_TIME
+		next := p.peekToken()
+		if strings.EqualFold(next.Token.Value, "SYSTEM_TIME") {
+			p.advance() // Consume FOR
+			sysTime, err := p.parseForSystemTimeClause()
+			if err != nil {
+				return tableRef, err
+			}
+			tableRef.ForSystemTime = sysTime
 		}
 	}
 

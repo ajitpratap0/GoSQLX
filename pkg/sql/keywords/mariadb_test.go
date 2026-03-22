@@ -30,3 +30,12 @@ func TestDialectMariaDB_IsValidDialect(t *testing.T) {
 		t.Error("IsValidDialect(\"mariadb\") returned false")
 	}
 }
+
+func TestDialectMariaDB_InheritsMySQL(t *testing.T) {
+	kw := keywords.New(keywords.DialectMariaDB, true)
+	for _, word := range []string{"UNSIGNED", "ZEROFILL", "DATETIME"} {
+		if !kw.IsKeyword(word) {
+			t.Errorf("expected MariaDB to inherit MySQL keyword %q", word)
+		}
+	}
+}

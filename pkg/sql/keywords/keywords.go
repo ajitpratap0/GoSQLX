@@ -265,6 +265,9 @@ func New(dialect SQLDialect, ignoreCase bool) *Keywords {
 	switch dialect {
 	case DialectMySQL:
 		k.addKeywordsWithCategory(MYSQL_SPECIFIC)
+	case DialectMariaDB:
+		k.addKeywordsWithCategory(MYSQL_SPECIFIC)
+		// MARIADB_SPECIFIC added in Task 2
 	case DialectPostgreSQL:
 		k.addKeywordsWithCategory(POSTGRESQL_SPECIFIC)
 	case DialectSQLite:

@@ -138,6 +138,9 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			if condErr != nil {
 				return nil, condErr
 			}
+			if cond == nil {
+				return nil, fmt.Errorf("expected condition after CONNECT BY")
+			}
 			cb.Condition = cond
 			selectStmt.ConnectBy = cb
 		}

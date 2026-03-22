@@ -23,6 +23,7 @@ const FOOTER_LINKS = {
     { label: 'Issues', href: 'https://github.com/ajitpratap0/GoSQLX/issues', external: true },
     { label: 'Discussions', href: 'https://github.com/ajitpratap0/GoSQLX/discussions', external: true },
     { label: 'Releases', href: 'https://github.com/ajitpratap0/GoSQLX/releases', external: true },
+    { label: 'Release RSS', href: 'https://github.com/ajitpratap0/GoSQLX/releases.atom', external: true },
   ],
 };
 

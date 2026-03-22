@@ -190,6 +190,16 @@ export default function Playground() {
     );
   }
 
+  const [copied, setCopied] = useState(false);
+  const hasResults = results.ast !== null;
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText('go get github.com/ajitpratap0/GoSQLX').then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, []);
+
   return (
     <div className="flex flex-col h-full bg-[#09090b]">
       {/* Top toolbar */}
@@ -279,6 +289,32 @@ export default function Playground() {
           </div>
         </div>
       </div>
+      {/* Post-use CTA — appears after first successful parse */}
+      {hasResults && (
+        <div className="flex items-center justify-between gap-4 px-4 py-2.5 border-t border-slate-800 bg-slate-900/50">
+          <span className="text-xs text-slate-400 hidden sm:block">Ready to use this in your project?</span>
+          <div className="flex items-center gap-2 flex-1 sm:flex-none">
+            <code className="text-xs font-mono text-emerald-400 bg-slate-800 px-2.5 py-1 rounded">
+              go get github.com/ajitpratap0/GoSQLX
+            </code>
+            <button
+              onClick={handleCopy}
+              className="text-xs text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded px-2 py-1 transition-colors flex-shrink-0"
+              aria-label="Copy install command"
+            >
+              {copied ? '✓ Copied' : 'Copy'}
+            </button>
+          </div>
+          <a
+            href="https://github.com/ajitpratap0/GoSQLX"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-slate-400 hover:text-white transition-colors flex-shrink-0"
+          >
+            GitHub →
+          </a>
+        </div>
+      )}
     </div>
   );
 }

@@ -109,6 +109,15 @@ export default function Playground() {
     []
   );
 
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText('go get github.com/ajitpratap0/GoSQLX').then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, []);
+
   if (loading) {
     return (
       <div className="flex flex-col h-full bg-[#09090b]" aria-busy="true" aria-label="Loading SQL parser">
@@ -190,15 +199,7 @@ export default function Playground() {
     );
   }
 
-  const [copied, setCopied] = useState(false);
   const hasResults = results.ast !== null;
-
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText('go get github.com/ajitpratap0/GoSQLX').then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }, []);
 
   return (
     <div className="flex flex-col h-full bg-[#09090b]">

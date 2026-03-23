@@ -85,7 +85,7 @@ var dialectHints = []dialectHint{
 	{pattern: "SYSTEM VERSIONING", dialect: DialectMariaDB, weight: 5},
 	{pattern: "FOR SYSTEM_TIME", dialect: DialectMariaDB, weight: 5},
 	{pattern: "VERSIONING", dialect: DialectMariaDB, weight: 4},
-	{pattern: "CONNECT BY", dialect: DialectMariaDB, weight: 3},
+	{pattern: "CONNECT BY", dialect: DialectMariaDB, weight: 2},
 	{pattern: "CREATE SEQUENCE", dialect: DialectMariaDB, weight: 5},
 	{pattern: "DROP SEQUENCE", dialect: DialectMariaDB, weight: 5},
 

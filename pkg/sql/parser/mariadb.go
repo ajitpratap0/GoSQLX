@@ -28,6 +28,25 @@ func (p *Parser) isMariaDB() bool {
 	return p.dialect == string(keywords.DialectMariaDB)
 }
 
+// isMariaDBClauseStart returns true when the current token is the start of a
+// MariaDB hierarchical-query clause (CONNECT BY or START WITH) rather than a
+// table alias. Used to guard alias parsing in FROM and JOIN table references.
+func (p *Parser) isMariaDBClauseStart() bool {
+	if !p.isMariaDB() {
+		return false
+	}
+	val := strings.ToUpper(p.currentToken.Token.Value)
+	if val == "CONNECT" {
+		next := p.peekToken()
+		return strings.EqualFold(next.Token.Value, "BY")
+	}
+	if val == "START" {
+		next := p.peekToken()
+		return strings.EqualFold(next.Token.Value, "WITH")
+	}
+	return false
+}
+
 // parseCreateSequenceStatement parses:
 //
 //	CREATE [OR REPLACE] SEQUENCE [IF NOT EXISTS] name [options...]
@@ -73,7 +92,9 @@ func (p *Parser) parseDropSequenceStatement() (*ast.DropSequenceStatement, error
 	if strings.EqualFold(p.currentToken.Token.Value, "IF") {
 		p.advance()
 		if strings.EqualFold(p.currentToken.Token.Value, "NOT") {
-			// IF NOT EXISTS — treated as "no error if absent" (same semantics as IF EXISTS)
+			// IF NOT EXISTS is a non-standard permissive extension (MariaDB only supports
+			// IF EXISTS natively). We accept it and reuse the IfExists flag since both
+			// forms mean "suppress the error if the sequence is absent".
 			p.advance()
 			if !strings.EqualFold(p.currentToken.Token.Value, "EXISTS") {
 				return nil, p.expectedError("EXISTS")
@@ -181,6 +202,7 @@ func (p *Parser) parseSequenceOptions() (ast.SequenceOptions, error) {
 				opts.NoCycle = true
 			case "CACHE":
 				opts.Cache = nil
+				opts.NoCache = true
 			default:
 				return opts, fmt.Errorf("unexpected token after NO in SEQUENCE options: %s", sub)
 			}
@@ -239,9 +261,11 @@ func (p *Parser) parseForSystemTimeClause() (*ast.ForSystemTimeClause, error) {
 	if !strings.EqualFold(p.currentToken.Token.Value, "SYSTEM_TIME") {
 		return nil, fmt.Errorf("expected SYSTEM_TIME after FOR, got %q", p.currentToken.Token.Value)
 	}
+	sysTimePos := p.currentLocation() // position of SYSTEM_TIME token
 	p.advance()
 
 	clause := &ast.ForSystemTimeClause{}
+	clause.Pos = sysTimePos
 	word := strings.ToUpper(p.currentToken.Token.Value)
 
 	switch word {
@@ -327,12 +351,15 @@ func (p *Parser) parseTemporalPointExpression() (ast.Expression, error) {
 // parseConnectByCondition parses the condition expression for CONNECT BY.
 // It handles the PRIOR prefix operator in either position:
 //
-//	CONNECT BY PRIOR id = parent_id   (PRIOR on left)
-//	CONNECT BY id = PRIOR parent_id   (PRIOR on right)
+//	CONNECT BY PRIOR id = parent_id           (PRIOR on left)
+//	CONNECT BY id = PRIOR parent_id           (PRIOR on right)
+//	CONNECT BY PRIOR id = parent_id AND active = 1  (complex with AND/OR)
 //
 // PRIOR references the value from the parent row in the hierarchy.
 // It is modeled as UnaryExpression{Operator: ast.Prior, Expr: <column>}.
 func (p *Parser) parseConnectByCondition() (ast.Expression, error) {
+	var base ast.Expression
+
 	// Case 1: PRIOR col op col
 	if strings.EqualFold(p.currentToken.Token.Value, "PRIOR") {
 		p.advance()
@@ -351,38 +378,57 @@ func (p *Parser) parseConnectByCondition() (ast.Expression, error) {
 			if err != nil {
 				return nil, err
 			}
-			return &ast.BinaryExpression{Left: priorExpr, Operator: op, Right: right}, nil
+			base = &ast.BinaryExpression{Left: priorExpr, Operator: op, Right: right}
+		} else {
+			base = priorExpr
 		}
-		return priorExpr, nil
-	}
-
-	// Case 2: col op PRIOR col  (PRIOR on the right-hand side)
-	left, err := p.parsePrimaryExpression()
-	if err != nil {
-		return nil, err
-	}
-	if p.isType(models.TokenTypeEq) || p.isType(models.TokenTypeNeq) ||
-		p.isType(models.TokenTypeLt) || p.isType(models.TokenTypeGt) ||
-		p.isType(models.TokenTypeLtEq) || p.isType(models.TokenTypeGtEq) {
-		op := p.currentToken.Token.Value
-		p.advance()
-		// Check for PRIOR on the right side
-		if strings.EqualFold(p.currentToken.Token.Value, "PRIOR") {
-			p.advance()
-			priorIdent := p.parseIdent()
-			if priorIdent == nil || priorIdent.Name == "" {
-				return nil, p.expectedError("column name after PRIOR")
-			}
-			priorExpr := &ast.UnaryExpression{Operator: ast.Prior, Expr: priorIdent}
-			return &ast.BinaryExpression{Left: left, Operator: op, Right: priorExpr}, nil
-		}
-		right, err := p.parsePrimaryExpression()
+	} else {
+		// Case 2: col op PRIOR col  (PRIOR on the right-hand side)
+		// or plain expression (no PRIOR)
+		left, err := p.parsePrimaryExpression()
 		if err != nil {
 			return nil, err
 		}
-		return &ast.BinaryExpression{Left: left, Operator: op, Right: right}, nil
+		if p.isType(models.TokenTypeEq) || p.isType(models.TokenTypeNeq) ||
+			p.isType(models.TokenTypeLt) || p.isType(models.TokenTypeGt) ||
+			p.isType(models.TokenTypeLtEq) || p.isType(models.TokenTypeGtEq) {
+			op := p.currentToken.Token.Value
+			p.advance()
+			// Check for PRIOR on the right side
+			if strings.EqualFold(p.currentToken.Token.Value, "PRIOR") {
+				p.advance()
+				priorIdent := p.parseIdent()
+				if priorIdent == nil || priorIdent.Name == "" {
+					return nil, p.expectedError("column name after PRIOR")
+				}
+				priorExpr := &ast.UnaryExpression{Operator: ast.Prior, Expr: priorIdent}
+				base = &ast.BinaryExpression{Left: left, Operator: op, Right: priorExpr}
+			} else {
+				right, err := p.parsePrimaryExpression()
+				if err != nil {
+					return nil, err
+				}
+				base = &ast.BinaryExpression{Left: left, Operator: op, Right: right}
+			}
+		} else {
+			base = left
+		}
 	}
-	return left, nil
+
+	// Handle AND/OR chaining for complex conditions like:
+	//   PRIOR id = parent_id AND active = 1
+	for strings.EqualFold(p.currentToken.Token.Value, "AND") ||
+		strings.EqualFold(p.currentToken.Token.Value, "OR") {
+		logicOp := p.currentToken.Token.Value
+		p.advance()
+		rest, err := p.parseConnectByCondition()
+		if err != nil {
+			return nil, err
+		}
+		base = &ast.BinaryExpression{Left: base, Operator: logicOp, Right: rest}
+	}
+
+	return base, nil
 }
 
 // parsePeriodDefinition parses: PERIOD FOR name (start_col, end_col)

@@ -124,12 +124,14 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			selectStmt.StartWith = startExpr
 		}
 		if strings.EqualFold(p.currentToken.Token.Value, "CONNECT") {
-			p.advance() // Consume CONNECT
+			connectPos := p.currentLocation() // position of CONNECT keyword
+			p.advance()                       // Consume CONNECT
 			if !strings.EqualFold(p.currentToken.Token.Value, "BY") {
 				return nil, fmt.Errorf("expected BY after CONNECT, got %q", p.currentToken.Token.Value)
 			}
 			p.advance() // Consume BY
 			cb := &ast.ConnectByClause{}
+			cb.Pos = connectPos
 			if strings.EqualFold(p.currentToken.Token.Value, "NOCYCLE") {
 				cb.NoCycle = true
 				p.advance() // Consume NOCYCLE

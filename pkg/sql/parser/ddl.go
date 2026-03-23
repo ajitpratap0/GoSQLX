@@ -83,8 +83,16 @@ func (p *Parser) parseCreateStatement() (ast.Statement, error) {
 		p.advance()                     // Consume INDEX
 		return p.parseCreateIndex(true) // Unique
 	} else if p.isMariaDB() && p.isTokenMatch("SEQUENCE") {
-		p.advance() // Consume SEQUENCE
-		return p.parseCreateSequenceStatement(orReplace)
+		seqPos := p.currentLocation() // position of SEQUENCE token
+		p.advance()                   // Consume SEQUENCE
+		stmt, err := p.parseCreateSequenceStatement(orReplace)
+		if err != nil {
+			return nil, err
+		}
+		if stmt.Pos.IsZero() {
+			stmt.Pos = seqPos
+		}
+		return stmt, nil
 	}
 	return nil, p.expectedError("TABLE, VIEW, MATERIALIZED VIEW, or INDEX after CREATE")
 }
@@ -126,10 +134,12 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 	for {
 		// MariaDB: PERIOD FOR name (start_col, end_col) — application-time or system-time period
 		if p.isMariaDB() && p.isTokenMatch("PERIOD") {
+			periodPos := p.currentLocation() // position of PERIOD keyword
 			pd, err := p.parsePeriodDefinition()
 			if err != nil {
 				return nil, err
 			}
+			pd.Pos = periodPos
 			stmt.PeriodDefinitions = append(stmt.PeriodDefinitions, pd)
 		} else if p.isAnyType(models.TokenTypePrimary, models.TokenTypeForeign,
 			models.TokenTypeUnique, models.TokenTypeCheck, models.TokenTypeConstraint) {

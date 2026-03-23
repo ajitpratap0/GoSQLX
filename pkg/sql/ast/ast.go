@@ -1878,7 +1878,7 @@ func (s *CreateSequenceStatement) Children() []Node {
 
 // DropSequenceStatement represents:
 //
-//	DROP SEQUENCE [IF EXISTS] name
+//	DROP SEQUENCE [IF EXISTS | IF NOT EXISTS] name
 type DropSequenceStatement struct {
 	Name     *Identifier
 	IfExists bool

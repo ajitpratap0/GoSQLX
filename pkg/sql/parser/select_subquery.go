@@ -87,22 +87,7 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 	// Check for table alias (required for derived tables, optional for regular tables).
 	// Guard: in MariaDB, CONNECT followed by BY is a hierarchical query clause, not an alias.
 	// Similarly, START followed by WITH is a hierarchical query seed, not an alias.
-	isMariaDBClauseKeyword := func() bool {
-		if !p.isMariaDB() {
-			return false
-		}
-		val := strings.ToUpper(p.currentToken.Token.Value)
-		if val == "CONNECT" {
-			next := p.peekToken()
-			return strings.EqualFold(next.Token.Value, "BY")
-		}
-		if val == "START" {
-			next := p.peekToken()
-			return strings.EqualFold(next.Token.Value, "WITH")
-		}
-		return false
-	}
-	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !isMariaDBClauseKeyword() {
+	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() {
 		if p.isType(models.TokenTypeAs) {
 			p.advance() // Consume AS
 			if !p.isIdentifier() {
@@ -194,22 +179,7 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 	// Optional alias.
 	// Guard: in MariaDB, CONNECT followed by BY is a hierarchical query clause, not an alias.
 	// Similarly, START followed by WITH is a hierarchical query seed, not an alias.
-	isMariaDBClauseKeyword := func() bool {
-		if !p.isMariaDB() {
-			return false
-		}
-		val := strings.ToUpper(p.currentToken.Token.Value)
-		if val == "CONNECT" {
-			next := p.peekToken()
-			return strings.EqualFold(next.Token.Value, "BY")
-		}
-		if val == "START" {
-			next := p.peekToken()
-			return strings.EqualFold(next.Token.Value, "WITH")
-		}
-		return false
-	}
-	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !isMariaDBClauseKeyword() {
+	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() {
 		if p.isType(models.TokenTypeAs) {
 			p.advance()
 			if !p.isIdentifier() {

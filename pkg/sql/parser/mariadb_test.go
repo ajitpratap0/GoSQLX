@@ -318,3 +318,39 @@ func TestMariaDB_SQLFiles(t *testing.T) {
 		})
 	}
 }
+
+func TestMariaDB_CreateTable_PeriodForSystemTime(t *testing.T) {
+	sql := `CREATE TABLE t (
+		id INT,
+		row_start DATETIME(6) GENERATED ALWAYS AS ROW START,
+		row_end   DATETIME(6) GENERATED ALWAYS AS ROW END,
+		PERIOD FOR SYSTEM_TIME(row_start, row_end)
+	) WITH SYSTEM VERSIONING`
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectMariaDB)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(tree.Statements) != 1 {
+		t.Fatalf("expected 1 statement, got %d", len(tree.Statements))
+	}
+	stmt, ok := tree.Statements[0].(*ast.CreateTableStatement)
+	if !ok {
+		t.Fatalf("expected CreateTableStatement, got %T", tree.Statements[0])
+	}
+	if len(stmt.PeriodDefinitions) == 0 {
+		t.Fatal("expected at least one PeriodDefinition")
+	}
+	pd := stmt.PeriodDefinitions[0]
+	if pd.Name == nil || !strings.EqualFold(pd.Name.Name, "SYSTEM_TIME") {
+		t.Errorf("expected period name SYSTEM_TIME, got %v", pd.Name)
+	}
+	if pd.StartCol == nil || pd.StartCol.Name != "row_start" {
+		t.Errorf("expected StartCol=row_start, got %v", pd.StartCol)
+	}
+	if pd.EndCol == nil || pd.EndCol.Name != "row_end" {
+		t.Errorf("expected EndCol=row_end, got %v", pd.EndCol)
+	}
+	if !stmt.WithSystemVersioning {
+		t.Error("expected WithSystemVersioning = true")
+	}
+}

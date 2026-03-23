@@ -1938,6 +1938,9 @@ type ForSystemTimeClause struct {
 	Pos   models.Location // Source position of the FOR keyword (1-based line and column)
 }
 
+// expressionNode satisfies the Expression interface so ForSystemTimeClause can be
+// stored in TableReference.ForSystemTime without a separate interface type.
+// Semantically it is a table-level clause, not a scalar expression.
 func (c *ForSystemTimeClause) expressionNode()     {}
 func (c ForSystemTimeClause) TokenLiteral() string { return "FOR SYSTEM_TIME" }
 func (c ForSystemTimeClause) Children() []Node {
@@ -1965,6 +1968,9 @@ type PeriodDefinition struct {
 	Pos      models.Location // Source position of the PERIOD FOR keyword (1-based line and column)
 }
 
+// expressionNode satisfies the Expression interface so PeriodDefinition can be
+// stored in CreateTableStatement.PeriodDefinitions without a separate interface type.
+// Semantically it is a table column constraint, not a scalar expression.
 func (p *PeriodDefinition) expressionNode()     {}
 func (p PeriodDefinition) TokenLiteral() string { return "PERIOD FOR" }
 func (p PeriodDefinition) Children() []Node {
@@ -1994,6 +2000,9 @@ type ConnectByClause struct {
 	Pos       models.Location // Source position of the CONNECT BY keyword (1-based line and column)
 }
 
+// expressionNode satisfies the Expression interface so ConnectByClause can be
+// stored in SelectStatement.ConnectBy without a separate interface type.
+// Semantically it is a query-level clause, not a scalar expression.
 func (c *ConnectByClause) expressionNode()     {}
 func (c ConnectByClause) TokenLiteral() string { return "CONNECT BY" }
 func (c ConnectByClause) Children() []Node {

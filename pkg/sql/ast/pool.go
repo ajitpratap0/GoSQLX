@@ -1814,7 +1814,7 @@ func NewCreateSequenceStatement() *CreateSequenceStatement {
 
 // ReleaseCreateSequenceStatement returns a CreateSequenceStatement to the pool.
 func ReleaseCreateSequenceStatement(s *CreateSequenceStatement) {
-	*s = CreateSequenceStatement{}
+	*s = CreateSequenceStatement{} // zero all fields
 	createSequencePool.Put(s)
 }
 
@@ -1837,6 +1837,6 @@ func NewAlterSequenceStatement() *AlterSequenceStatement {
 
 // ReleaseAlterSequenceStatement returns an AlterSequenceStatement to the pool.
 func ReleaseAlterSequenceStatement(s *AlterSequenceStatement) {
-	*s = AlterSequenceStatement{}
+	*s = AlterSequenceStatement{} // zero all fields
 	alterSequencePool.Put(s)
 }

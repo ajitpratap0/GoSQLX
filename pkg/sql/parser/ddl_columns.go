@@ -18,6 +18,8 @@
 package parser
 
 import (
+	"strings"
+
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -244,6 +246,34 @@ func (p *Parser) parseColumnConstraint() (*ast.ColumnConstraint, bool, error) {
 		p.advance() // Consume AUTO_INCREMENT
 		constraint.Type = "AUTO_INCREMENT"
 		constraint.AutoIncrement = true
+		return constraint, true, nil
+	}
+
+	// GENERATED ALWAYS AS ROW START / ROW END (MariaDB system-versioned columns)
+	// Syntax: GENERATED ALWAYS AS ROW START | ROW END
+	if strings.EqualFold(p.currentToken.Token.Value, "GENERATED") {
+		p.advance() // Consume GENERATED
+		// Optional ALWAYS
+		if strings.EqualFold(p.currentToken.Token.Value, "ALWAYS") {
+			p.advance() // Consume ALWAYS
+		}
+		// Expect AS
+		if !p.isType(models.TokenTypeAs) {
+			return nil, false, p.expectedError("AS after GENERATED [ALWAYS]")
+		}
+		p.advance() // Consume AS
+		// Expect ROW
+		if !p.isType(models.TokenTypeRow) {
+			return nil, false, p.expectedError("ROW after GENERATED [ALWAYS] AS")
+		}
+		p.advance() // Consume ROW
+		// Expect START or END
+		rowRole := strings.ToUpper(p.currentToken.Token.Value)
+		if rowRole != "START" && rowRole != "END" {
+			return nil, false, p.expectedError("START or END after GENERATED [ALWAYS] AS ROW")
+		}
+		p.advance() // Consume START or END
+		constraint.Type = "GENERATED ALWAYS AS ROW " + rowRole
 		return constraint, true, nil
 	}
 

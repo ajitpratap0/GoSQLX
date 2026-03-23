@@ -441,7 +441,8 @@ func (p *Parser) parsePeriodDefinition() (*ast.PeriodDefinition, error) {
 	}
 	p.advance()
 
-	name := p.parseIdent()
+	// Use parseColumnName so that reserved-keyword period names like SYSTEM_TIME are accepted.
+	name := p.parseColumnName()
 	if name == nil || name.Name == "" {
 		return nil, p.expectedError("period name")
 	}

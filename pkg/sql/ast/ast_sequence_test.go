@@ -1,6 +1,7 @@
 package ast_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -170,4 +171,69 @@ func TestSequencePool_RoundTrip(t *testing.T) {
 		t.Error("expected Name to be nil after release (pool zero-reset)")
 	}
 	ast.ReleaseCreateSequenceStatement(s2)
+}
+
+func TestSelectStatement_ConnectBy_SQLOrder(t *testing.T) {
+	limit := 10
+	stmt := &ast.SelectStatement{
+		Columns: []ast.Expression{&ast.Identifier{Name: "*"}},
+		From: []ast.TableReference{
+			{Name: "employees"},
+		},
+		StartWith: &ast.BinaryExpression{
+			Left:     &ast.Identifier{Name: "parent_id"},
+			Operator: "IS",
+			Right:    &ast.Identifier{Name: "NULL"},
+		},
+		ConnectBy: &ast.ConnectByClause{
+			NoCycle: true,
+			Condition: &ast.BinaryExpression{
+				Left:     &ast.UnaryExpression{Operator: ast.Prior, Expr: &ast.Identifier{Name: "id"}},
+				Operator: "=",
+				Right:    &ast.Identifier{Name: "parent_id"},
+			},
+		},
+		OrderBy: []ast.OrderByExpression{
+			{Expression: &ast.Identifier{Name: "id"}},
+		},
+		Limit: &limit,
+	}
+	got := stmt.SQL()
+	startIdx := strings.Index(got, "START WITH")
+	orderIdx := strings.Index(got, "ORDER BY")
+	if startIdx == -1 {
+		t.Fatal("SQL() missing START WITH")
+	}
+	if orderIdx == -1 {
+		t.Fatal("SQL() missing ORDER BY")
+	}
+	if startIdx > orderIdx {
+		t.Errorf("START WITH appears after ORDER BY in SQL():\n  %s", got)
+	}
+}
+
+func TestPeriodDefinition_SQL(t *testing.T) {
+	pd := &ast.PeriodDefinition{
+		Name:     &ast.Identifier{Name: "app_time"},
+		StartCol: &ast.Identifier{Name: "valid_from"},
+		EndCol:   &ast.Identifier{Name: "valid_to"},
+	}
+	got := pd.SQL()
+	want := "PERIOD FOR app_time (valid_from, valid_to)"
+	if got != want {
+		t.Errorf("PeriodDefinition.SQL() = %q, want %q", got, want)
+	}
+}
+
+func TestPeriodDefinition_SQL_SystemTime(t *testing.T) {
+	pd := &ast.PeriodDefinition{
+		Name:     &ast.Identifier{Name: "SYSTEM_TIME"},
+		StartCol: &ast.Identifier{Name: "row_start"},
+		EndCol:   &ast.Identifier{Name: "row_end"},
+	}
+	got := pd.SQL()
+	want := "PERIOD FOR SYSTEM_TIME (row_start, row_end)"
+	if got != want {
+		t.Errorf("PeriodDefinition.SQL() = %q, want %q", got, want)
+	}
 }

@@ -582,6 +582,17 @@ func (s *SelectStatement) SQL() string {
 		sb.WriteString(exprSQL(s.Having))
 	}
 
+	// MariaDB hierarchical query clauses (10.2+): START WITH ... CONNECT BY ...
+	// These must appear after HAVING and before ORDER BY per MariaDB grammar.
+	if s.StartWith != nil {
+		sb.WriteString(" START WITH ")
+		sb.WriteString(exprSQL(s.StartWith))
+	}
+	if s.ConnectBy != nil {
+		sb.WriteString(" ")
+		sb.WriteString(s.ConnectBy.ToSQL())
+	}
+
 	if len(s.Windows) > 0 {
 		sb.WriteString(" WINDOW ")
 		wins := make([]string, len(s.Windows))
@@ -610,15 +621,6 @@ func (s *SelectStatement) SQL() string {
 
 	if s.For != nil {
 		sb.WriteString(forSQL(s.For))
-	}
-
-	if s.StartWith != nil {
-		sb.WriteString(" START WITH ")
-		sb.WriteString(exprSQL(s.StartWith))
-	}
-	if s.ConnectBy != nil {
-		sb.WriteString(" ")
-		sb.WriteString(s.ConnectBy.ToSQL())
 	}
 
 	return sb.String()
@@ -1714,7 +1716,28 @@ func (c *ForSystemTimeClause) ToSQL() string {
 func (c *ConnectByClause) SQL() string { return c.ToSQL() }
 
 // SQL implements the Expression interface for PeriodDefinition (stub; not used as a standalone expression).
-func (p *PeriodDefinition) SQL() string { return "" }
+// SQL returns the SQL string for a PERIOD FOR clause in CREATE TABLE.
+// Example: PERIOD FOR app_time (valid_from, valid_to)
+func (p *PeriodDefinition) SQL() string {
+	if p == nil {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("PERIOD FOR ")
+	if p.Name != nil {
+		b.WriteString(p.Name.Name)
+	}
+	b.WriteString(" (")
+	if p.StartCol != nil {
+		b.WriteString(p.StartCol.Name)
+	}
+	b.WriteString(", ")
+	if p.EndCol != nil {
+		b.WriteString(p.EndCol.Name)
+	}
+	b.WriteString(")")
+	return b.String()
+}
 
 // ToSQL returns the SQL string for a CONNECT BY clause (MariaDB 10.2+).
 func (c *ConnectByClause) ToSQL() string {

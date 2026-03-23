@@ -40,8 +40,8 @@ func TestMariaDB_CreateSequence_AllOptions(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	stmt := tree.Statements[0].(*ast.CreateSequenceStatement)
-	if !stmt.Options.Cycle {
-		t.Error("expected Cycle = true")
+	if stmt.Options.CycleMode != ast.CycleBehavior {
+		t.Error("expected CycleMode = CycleBehavior")
 	}
 	if stmt.Options.Cache == nil {
 		t.Error("expected Cache to be set")

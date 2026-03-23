@@ -1672,9 +1672,10 @@ func writeSequenceOptions(b *strings.Builder, opts SequenceOptions) {
 	} else if opts.NoCache {
 		b.WriteString(" NOCACHE")
 	}
-	if opts.Cycle {
+	switch opts.CycleMode {
+	case CycleBehavior:
 		b.WriteString(" CYCLE")
-	} else if opts.NoCycle {
+	case NoCycleBehavior:
 		b.WriteString(" NOCYCLE")
 	}
 	if opts.RestartWith != nil {

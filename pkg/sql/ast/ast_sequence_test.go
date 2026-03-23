@@ -46,7 +46,7 @@ func TestCreateSequenceStatement_ToSQL(t *testing.T) {
 					MinValue:    &ast.LiteralValue{Value: "1"},
 					MaxValue:    &ast.LiteralValue{Value: "9999"},
 					Cache:       &ast.LiteralValue{Value: "100"},
-					Cycle:       true,
+					CycleMode:   ast.CycleBehavior,
 				},
 			},
 			want: "CREATE SEQUENCE s START WITH 1 INCREMENT BY 1 MINVALUE 1 MAXVALUE 9999 CACHE 100 CYCLE",
@@ -55,7 +55,7 @@ func TestCreateSequenceStatement_ToSQL(t *testing.T) {
 			name: "nocycle",
 			stmt: &ast.CreateSequenceStatement{
 				Name:    &ast.Identifier{Name: "s"},
-				Options: ast.SequenceOptions{NoCycle: true},
+				Options: ast.SequenceOptions{CycleMode: ast.NoCycleBehavior},
 			},
 			want: "CREATE SEQUENCE s NOCYCLE",
 		},

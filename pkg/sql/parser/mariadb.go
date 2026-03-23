@@ -199,19 +199,19 @@ func (p *Parser) parseSequenceOptions() (ast.SequenceOptions, error) {
 			case "MAXVALUE":
 				opts.MaxValue = nil
 			case "CYCLE":
-				opts.NoCycle = true
+				opts.CycleMode = ast.NoCycleBehavior
 			case "CACHE":
 				opts.Cache = nil
 				opts.NoCache = true
 			default:
-				return opts, fmt.Errorf("unexpected token after NO in SEQUENCE options: %s", sub)
+				return opts, p.expectedError("MINVALUE, MAXVALUE, CYCLE, or CACHE after NO")
 			}
 		case "CYCLE":
 			p.advance()
-			opts.Cycle = true
+			opts.CycleMode = ast.CycleBehavior
 		case "NOCYCLE":
 			p.advance()
-			opts.NoCycle = true
+			opts.CycleMode = ast.NoCycleBehavior
 		case "CACHE":
 			p.advance()
 			lit, err := p.parseNumericLit()
@@ -237,6 +237,10 @@ func (p *Parser) parseSequenceOptions() (ast.SequenceOptions, error) {
 		default:
 			return opts, nil
 		}
+	}
+	// Validate: CACHE n and NOCACHE are mutually exclusive.
+	if opts.Cache != nil && opts.NoCache {
+		return opts, fmt.Errorf("contradictory sequence options: CACHE and NOCACHE cannot both be specified")
 	}
 	return opts, nil
 }

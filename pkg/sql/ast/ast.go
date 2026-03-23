@@ -1841,6 +1841,18 @@ func (r ReplaceStatement) Children() []Node {
 
 // ── MariaDB SEQUENCE DDL (10.3+) ───────────────────────────────────────────
 
+// CycleOption represents the CYCLE behavior for a sequence.
+type CycleOption int
+
+const (
+	// CycleUnspecified means no CYCLE or NOCYCLE clause was given (database default applies).
+	CycleUnspecified CycleOption = iota
+	// CycleBehavior means CYCLE — sequence wraps around when it reaches min/max.
+	CycleBehavior
+	// NoCycleBehavior means NOCYCLE / NO CYCLE — sequence errors on overflow.
+	NoCycleBehavior
+)
+
 // SequenceOptions holds configuration for CREATE SEQUENCE and ALTER SEQUENCE.
 // Fields are pointers so that unspecified options are distinguishable from zero values.
 type SequenceOptions struct {
@@ -1849,8 +1861,7 @@ type SequenceOptions struct {
 	MinValue    *LiteralValue // MINVALUE n or nil when NO MINVALUE
 	MaxValue    *LiteralValue // MAXVALUE n or nil when NO MAXVALUE
 	Cache       *LiteralValue // CACHE n or nil when NO CACHE / NOCACHE
-	Cycle       bool          // CYCLE
-	NoCycle     bool          // NO CYCLE / NOCYCLE (explicit; default is NO CYCLE)
+	CycleMode   CycleOption   // CYCLE / NOCYCLE / NO CYCLE (CycleUnspecified if not specified)
 	NoCache     bool          // NOCACHE (explicit; Cache=nil alone is ambiguous)
 	Restart     bool          // bare RESTART (reset to start value)
 	RestartWith *LiteralValue // RESTART WITH n (explicit restart value)

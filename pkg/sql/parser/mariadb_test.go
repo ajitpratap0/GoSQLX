@@ -1,6 +1,8 @@
 package parser_test
 
 import (
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -220,5 +222,36 @@ func TestMariaDB_ConnectBy_NoStartWith(t *testing.T) {
 	sel := tree.Statements[0].(*ast.SelectStatement)
 	if sel.ConnectBy == nil {
 		t.Error("expected ConnectBy to be set")
+	}
+}
+
+// ── Task 10: File-based Integration Tests ─────────────────────────────────────
+
+func TestMariaDB_SQLFiles(t *testing.T) {
+	files := []string{
+		"testdata/mariadb/sequences.sql",
+		"testdata/mariadb/temporal.sql",
+		"testdata/mariadb/connect_by.sql",
+		"testdata/mariadb/mixed.sql",
+	}
+	for _, f := range files {
+		t.Run(f, func(t *testing.T) {
+			data, err := os.ReadFile(f)
+			if err != nil {
+				t.Fatalf("failed to read %s: %v", f, err)
+			}
+			// Split on semicolons to get individual statements
+			stmts := strings.Split(string(data), ";")
+			for _, raw := range stmts {
+				sql := strings.TrimSpace(raw)
+				if sql == "" {
+					continue
+				}
+				_, err := parser.ParseWithDialect(sql, keywords.DialectMariaDB)
+				if err != nil {
+					t.Errorf("failed to parse %q: %v", sql, err)
+				}
+			}
+		})
 	}
 }

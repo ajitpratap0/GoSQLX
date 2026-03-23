@@ -65,18 +65,27 @@ func (p *Parser) parseCreateSequenceStatement(orReplace bool) (*ast.CreateSequen
 	return stmt, nil
 }
 
-// parseDropSequenceStatement parses: DROP SEQUENCE [IF EXISTS] name
+// parseDropSequenceStatement parses: DROP SEQUENCE [IF EXISTS | IF NOT EXISTS] name
 // The caller has already consumed DROP and SEQUENCE.
 func (p *Parser) parseDropSequenceStatement() (*ast.DropSequenceStatement, error) {
-	stmt := &ast.DropSequenceStatement{}
+	stmt := ast.NewDropSequenceStatement()
 
 	if strings.EqualFold(p.currentToken.Token.Value, "IF") {
 		p.advance()
-		if !strings.EqualFold(p.currentToken.Token.Value, "EXISTS") {
-			return nil, p.expectedError("EXISTS")
+		if strings.EqualFold(p.currentToken.Token.Value, "NOT") {
+			// IF NOT EXISTS — treated as "no error if absent" (same semantics as IF EXISTS)
+			p.advance()
+			if !strings.EqualFold(p.currentToken.Token.Value, "EXISTS") {
+				return nil, p.expectedError("EXISTS")
+			}
+			p.advance()
+			stmt.IfExists = true
+		} else if strings.EqualFold(p.currentToken.Token.Value, "EXISTS") {
+			p.advance()
+			stmt.IfExists = true
+		} else {
+			return nil, p.expectedError("EXISTS or NOT EXISTS")
 		}
-		p.advance()
-		stmt.IfExists = true
 	}
 
 	name := p.parseIdent()
@@ -190,6 +199,7 @@ func (p *Parser) parseSequenceOptions() (ast.SequenceOptions, error) {
 			opts.Cache = lit
 		case "NOCACHE":
 			p.advance()
+			opts.NoCache = true
 		case "RESTART":
 			p.advance()
 			if strings.EqualFold(p.currentToken.Token.Value, "WITH") {
@@ -303,6 +313,9 @@ func (p *Parser) parseTemporalPointExpression() (ast.Expression, error) {
 		if !p.isStringLiteral() {
 			return nil, fmt.Errorf("expected string literal after %s, got %q", typeKeyword, p.currentToken.Token.Value)
 		}
+		// The tokenizer strips surrounding single quotes from string literal tokens,
+		// so p.currentToken.Token.Value is the raw string content (e.g. "2023-01-01 00:00:00").
+		// We reconstruct the canonical form: TYPE 'value'.
 		value := typeKeyword + " '" + p.currentToken.Token.Value + "'"
 		p.advance()
 		return &ast.LiteralValue{Value: value, Type: "timestamp"}, nil
@@ -312,26 +325,23 @@ func (p *Parser) parseTemporalPointExpression() (ast.Expression, error) {
 }
 
 // parseConnectByCondition parses the condition expression for CONNECT BY.
-// It handles the PRIOR prefix operator which MariaDB uses for hierarchical queries:
+// It handles the PRIOR prefix operator in either position:
 //
-//	CONNECT BY PRIOR id = parent_id
+//	CONNECT BY PRIOR id = parent_id   (PRIOR on left)
+//	CONNECT BY id = PRIOR parent_id   (PRIOR on right)
 //
-// PRIOR is treated as a unary prefix operator whose result is the referenced column in the
-// parent row. The overall condition PRIOR id = parent_id is a binary equality test.
+// PRIOR references the value from the parent row in the hierarchy.
+// It is modeled as UnaryExpression{Operator: ast.Prior, Expr: <column>}.
 func (p *Parser) parseConnectByCondition() (ast.Expression, error) {
-	// Handle PRIOR <ident> = <ident> pattern explicitly since the standard
-	// expression parser treats PRIOR as a plain identifier and stops before '='.
+	// Case 1: PRIOR col op col
 	if strings.EqualFold(p.currentToken.Token.Value, "PRIOR") {
-		p.advance() // Consume PRIOR
-		// Parse the column name that PRIOR applies to.
+		p.advance()
 		priorIdent := p.parseIdent()
 		if priorIdent == nil || priorIdent.Name == "" {
 			return nil, p.expectedError("column name after PRIOR")
 		}
-		// Wrap as a function-call-style node so the AST carries PRIOR semantics.
-		priorExpr := &ast.FunctionCall{Name: "PRIOR", Arguments: []ast.Expression{priorIdent}}
+		priorExpr := &ast.UnaryExpression{Operator: ast.Prior, Expr: priorIdent}
 
-		// If followed by a comparison operator, parse the right-hand side.
 		if p.isType(models.TokenTypeEq) || p.isType(models.TokenTypeNeq) ||
 			p.isType(models.TokenTypeLt) || p.isType(models.TokenTypeGt) ||
 			p.isType(models.TokenTypeLtEq) || p.isType(models.TokenTypeGtEq) {
@@ -345,8 +355,34 @@ func (p *Parser) parseConnectByCondition() (ast.Expression, error) {
 		}
 		return priorExpr, nil
 	}
-	// No PRIOR prefix — parse as a regular expression.
-	return p.parseExpression()
+
+	// Case 2: col op PRIOR col  (PRIOR on the right-hand side)
+	left, err := p.parsePrimaryExpression()
+	if err != nil {
+		return nil, err
+	}
+	if p.isType(models.TokenTypeEq) || p.isType(models.TokenTypeNeq) ||
+		p.isType(models.TokenTypeLt) || p.isType(models.TokenTypeGt) ||
+		p.isType(models.TokenTypeLtEq) || p.isType(models.TokenTypeGtEq) {
+		op := p.currentToken.Token.Value
+		p.advance()
+		// Check for PRIOR on the right side
+		if strings.EqualFold(p.currentToken.Token.Value, "PRIOR") {
+			p.advance()
+			priorIdent := p.parseIdent()
+			if priorIdent == nil || priorIdent.Name == "" {
+				return nil, p.expectedError("column name after PRIOR")
+			}
+			priorExpr := &ast.UnaryExpression{Operator: ast.Prior, Expr: priorIdent}
+			return &ast.BinaryExpression{Left: left, Operator: op, Right: priorExpr}, nil
+		}
+		right, err := p.parsePrimaryExpression()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.BinaryExpression{Left: left, Operator: op, Right: right}, nil
+	}
+	return left, nil
 }
 
 // parsePeriodDefinition parses: PERIOD FOR name (start_col, end_col)

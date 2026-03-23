@@ -81,6 +81,8 @@ const (
 	PGAbs
 	// BangNot represents Hive-specific logical NOT operator, e.g. ! false
 	BangNot
+	// Prior represents MariaDB CONNECT BY parent reference operator, e.g. PRIOR id
+	Prior
 )
 
 // String returns the string representation of the unary operator
@@ -106,6 +108,8 @@ func (op UnaryOperator) String() string {
 		return "@"
 	case BangNot:
 		return "!"
+	case Prior:
+		return "PRIOR"
 	default:
 		return "UNKNOWN"
 	}

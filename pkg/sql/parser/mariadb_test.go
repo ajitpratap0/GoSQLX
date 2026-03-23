@@ -225,6 +225,69 @@ func TestMariaDB_ConnectBy_NoStartWith(t *testing.T) {
 	}
 }
 
+// TestMariaDB_ConnectBy_PriorOnRight verifies PRIOR on the right-hand side of the condition.
+func TestMariaDB_ConnectBy_PriorOnRight(t *testing.T) {
+	sql := "SELECT id FROM employees CONNECT BY id = PRIOR parent_id"
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectMariaDB)
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	sel, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement")
+	}
+	if sel.ConnectBy == nil {
+		t.Fatal("expected ConnectBy clause")
+	}
+	bin, ok := sel.ConnectBy.Condition.(*ast.BinaryExpression)
+	if !ok {
+		t.Fatalf("expected BinaryExpression, got %T", sel.ConnectBy.Condition)
+	}
+	// Right side should be PRIOR parent_id
+	unary, ok := bin.Right.(*ast.UnaryExpression)
+	if !ok {
+		t.Fatalf("expected UnaryExpression on right, got %T", bin.Right)
+	}
+	if unary.Operator != ast.Prior {
+		t.Errorf("expected Prior operator, got %v", unary.Operator)
+	}
+}
+
+// TestMariaDB_DropSequence_IfNotExists verifies DROP SEQUENCE IF NOT EXISTS is accepted.
+func TestMariaDB_DropSequence_IfNotExists(t *testing.T) {
+	sql := "DROP SEQUENCE IF NOT EXISTS my_seq"
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectMariaDB)
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	stmt, ok := tree.Statements[0].(*ast.DropSequenceStatement)
+	if !ok {
+		t.Fatalf("expected DropSequenceStatement, got %T", tree.Statements[0])
+	}
+	if !stmt.IfExists {
+		t.Error("expected IfExists=true")
+	}
+	if stmt.Name == nil || stmt.Name.Name != "my_seq" {
+		t.Errorf("expected name my_seq, got %v", stmt.Name)
+	}
+}
+
+// TestMariaDB_Sequence_NoCache verifies NOCACHE sets the NoCache field.
+func TestMariaDB_Sequence_NoCache(t *testing.T) {
+	sql := "CREATE SEQUENCE s NOCACHE"
+	tree, err := parser.ParseWithDialect(sql, keywords.DialectMariaDB)
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	stmt, ok := tree.Statements[0].(*ast.CreateSequenceStatement)
+	if !ok {
+		t.Fatalf("expected CreateSequenceStatement")
+	}
+	if !stmt.Options.NoCache {
+		t.Error("expected NoCache=true")
+	}
+}
+
 // ── Task 10: File-based Integration Tests ─────────────────────────────────────
 
 func TestMariaDB_SQLFiles(t *testing.T) {

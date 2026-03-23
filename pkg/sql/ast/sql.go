@@ -202,6 +202,8 @@ func (u *UnaryExpression) SQL() string {
 		return "+" + inner
 	case Minus:
 		return "-" + inner
+	case Prior:
+		return "PRIOR " + inner
 	default:
 		return u.Operator.String() + inner
 	}
@@ -1665,6 +1667,8 @@ func writeSequenceOptions(b *strings.Builder, opts SequenceOptions) {
 	if opts.Cache != nil {
 		b.WriteString(" CACHE ")
 		b.WriteString(opts.Cache.TokenLiteral())
+	} else if opts.NoCache {
+		b.WriteString(" NOCACHE")
 	}
 	if opts.Cycle {
 		b.WriteString(" CYCLE")

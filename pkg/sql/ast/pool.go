@@ -356,6 +356,10 @@ var (
 		New: func() interface{} { return &CreateSequenceStatement{} },
 	}
 
+	dropSequencePool = sync.Pool{
+		New: func() interface{} { return &DropSequenceStatement{} },
+	}
+
 	alterSequencePool = sync.Pool{
 		New: func() interface{} { return &AlterSequenceStatement{} },
 	}
@@ -1812,6 +1816,18 @@ func NewCreateSequenceStatement() *CreateSequenceStatement {
 func ReleaseCreateSequenceStatement(s *CreateSequenceStatement) {
 	*s = CreateSequenceStatement{}
 	createSequencePool.Put(s)
+}
+
+// NewDropSequenceStatement retrieves a DropSequenceStatement from the pool.
+func NewDropSequenceStatement() *DropSequenceStatement {
+	return dropSequencePool.Get().(*DropSequenceStatement)
+}
+
+// ReleaseDropSequenceStatement returns a DropSequenceStatement to the pool.
+// Always call this with defer after parsing is complete.
+func ReleaseDropSequenceStatement(s *DropSequenceStatement) {
+	*s = DropSequenceStatement{} // zero all fields
+	dropSequencePool.Put(s)
 }
 
 // NewAlterSequenceStatement retrieves an AlterSequenceStatement from the pool.

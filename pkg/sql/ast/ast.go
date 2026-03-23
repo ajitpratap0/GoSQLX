@@ -1851,6 +1851,7 @@ type SequenceOptions struct {
 	Cache       *LiteralValue // CACHE n or nil when NO CACHE / NOCACHE
 	Cycle       bool          // CYCLE
 	NoCycle     bool          // NO CYCLE / NOCYCLE (explicit; default is NO CYCLE)
+	NoCache     bool          // NOCACHE (explicit; Cache=nil alone is ambiguous)
 	Restart     bool          // bare RESTART (reset to start value)
 	RestartWith *LiteralValue // RESTART WITH n (explicit restart value)
 }
@@ -1863,6 +1864,7 @@ type CreateSequenceStatement struct {
 	OrReplace   bool
 	IfNotExists bool
 	Options     SequenceOptions
+	Pos         models.Location // Source position of the CREATE keyword (1-based line and column)
 }
 
 func (s *CreateSequenceStatement) statementNode()       {}
@@ -1880,6 +1882,7 @@ func (s *CreateSequenceStatement) Children() []Node {
 type DropSequenceStatement struct {
 	Name     *Identifier
 	IfExists bool
+	Pos      models.Location // Source position of the DROP keyword (1-based line and column)
 }
 
 func (s *DropSequenceStatement) statementNode()       {}
@@ -1898,6 +1901,7 @@ type AlterSequenceStatement struct {
 	Name     *Identifier
 	IfExists bool
 	Options  SequenceOptions
+	Pos      models.Location // Source position of the ALTER keyword (1-based line and column)
 }
 
 func (s *AlterSequenceStatement) statementNode()       {}
@@ -1928,9 +1932,10 @@ const (
 //	SELECT * FROM t FOR SYSTEM_TIME ALL;
 type ForSystemTimeClause struct {
 	Type  SystemTimeClauseType
-	Point Expression // used for AS OF
-	Start Expression // used for BETWEEN, FROM
-	End   Expression // used for BETWEEN (AND), TO
+	Point Expression      // used for AS OF
+	Start Expression      // used for BETWEEN, FROM
+	End   Expression      // used for BETWEEN (AND), TO
+	Pos   models.Location // Source position of the FOR keyword (1-based line and column)
 }
 
 func (c *ForSystemTimeClause) expressionNode()     {}
@@ -1957,6 +1962,7 @@ type PeriodDefinition struct {
 	Name     *Identifier // period name (e.g., "app_time") or SYSTEM_TIME
 	StartCol *Identifier
 	EndCol   *Identifier
+	Pos      models.Location // Source position of the PERIOD FOR keyword (1-based line and column)
 }
 
 func (p *PeriodDefinition) expressionNode()     {}
@@ -1983,8 +1989,9 @@ func (p PeriodDefinition) Children() []Node {
 //	  START WITH parent_id IS NULL
 //	  CONNECT BY NOCYCLE PRIOR id = parent_id;
 type ConnectByClause struct {
-	NoCycle   bool       // NOCYCLE modifier — prevents loops in cyclic graphs
-	Condition Expression // the PRIOR expression (e.g., PRIOR id = parent_id)
+	NoCycle   bool            // NOCYCLE modifier — prevents loops in cyclic graphs
+	Condition Expression      // the PRIOR expression (e.g., PRIOR id = parent_id)
+	Pos       models.Location // Source position of the CONNECT BY keyword (1-based line and column)
 }
 
 func (c *ConnectByClause) expressionNode()     {}

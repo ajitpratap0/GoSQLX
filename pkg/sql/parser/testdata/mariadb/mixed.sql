@@ -4,3 +4,4 @@ CREATE TABLE orders (
     customer_id INT NOT NULL,
     total DECIMAL(12,2)
 ) WITH SYSTEM VERSIONING;
+DROP SEQUENCE IF NOT EXISTS order_seq;

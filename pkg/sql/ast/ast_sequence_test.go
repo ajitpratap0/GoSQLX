@@ -59,6 +59,14 @@ func TestCreateSequenceStatement_ToSQL(t *testing.T) {
 			want: "CREATE SEQUENCE s NOCYCLE",
 		},
 		{
+			name: "nocache",
+			stmt: &ast.CreateSequenceStatement{
+				Name:    &ast.Identifier{Name: "s"},
+				Options: ast.SequenceOptions{NoCache: true},
+			},
+			want: "CREATE SEQUENCE s NOCACHE",
+		},
+		{
 			name: "nil name does not panic",
 			stmt: &ast.CreateSequenceStatement{},
 			want: "CREATE SEQUENCE ",

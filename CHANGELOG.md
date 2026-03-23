@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **MariaDB dialect** (`--dialect mariadb`): New SQL dialect extending MySQL with support for SEQUENCE DDL (`CREATE/DROP/ALTER SEQUENCE` with full option set), temporal tables (`FOR SYSTEM_TIME`, `WITH SYSTEM VERSIONING`, `PERIOD FOR`), and `CONNECT BY` hierarchical queries with `PRIOR`, `START WITH`, and `NOCYCLE`
+
 ## [1.13.0] - 2026-03-20
 
 ### Added

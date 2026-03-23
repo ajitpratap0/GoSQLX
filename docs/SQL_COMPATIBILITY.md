@@ -317,6 +317,27 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 | **AUTO_INCREMENT** | ✅ Full | ✅ Full | 95% | Column property |
 | **Backtick identifiers** | ✅ Full | ✅ Full | 100% | `` `table`.`column` `` syntax |
 
+### MariaDB-Specific Features (v1.14.0+)
+
+MariaDB inherits all MySQL features (SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE KEY UPDATE, GROUP_CONCAT, MATCH/AGAINST, REGEXP/RLIKE, backtick identifiers, etc.) and adds the following extensions:
+
+| Feature | Support Level | GoSQLX Parser | Test Coverage | Notes |
+|---------|---------------|---------------|---------------|-------|
+| **CREATE SEQUENCE** | ✅ Full | ✅ Full | 95% | Full DDL with all sequence options |
+| **DROP SEQUENCE** | ✅ Full | ✅ Full | 95% | DROP SEQUENCE [IF EXISTS] |
+| **ALTER SEQUENCE** | ✅ Full | ✅ Full | 90% | RESTART, RESTART WITH, and all options |
+| **Sequence options** | ✅ Full | ✅ Full | 95% | START WITH, INCREMENT BY, MINVALUE, MAXVALUE, CACHE, CYCLE, NOCACHE, NOCYCLE, RESTART, RESTART WITH |
+| **FOR SYSTEM_TIME AS OF** | ✅ Full | ✅ Full | 95% | Point-in-time query on system-versioned tables |
+| **FOR SYSTEM_TIME BETWEEN** | ✅ Full | ✅ Full | 95% | Range query on system-versioned tables |
+| **FOR SYSTEM_TIME FROM/TO** | ✅ Full | ✅ Full | 95% | Range query (inclusive/exclusive) |
+| **FOR SYSTEM_TIME ALL** | ✅ Full | ✅ Full | 95% | All rows including historical |
+| **WITH SYSTEM VERSIONING** | ✅ Full | ✅ Full | 90% | CREATE TABLE ... WITH SYSTEM VERSIONING |
+| **PERIOD FOR** | ✅ Full | ✅ Full | 85% | Application-time period definitions |
+| **CONNECT BY** | ✅ Full | ✅ Full | 90% | Hierarchical queries with PRIOR and NOCYCLE |
+| **START WITH (CONNECT BY)** | ✅ Full | ✅ Full | 90% | Root condition for hierarchical traversal |
+| **PRIOR operator** | ✅ Full | ✅ Full | 90% | Reference parent row in CONNECT BY |
+| **NOCYCLE** | ✅ Full | ✅ Full | 85% | Prevent infinite loops in cyclic graphs |
+
 ### SQL Server-Specific Features
 
 | Feature | Support Level | GoSQLX Parser | Test Coverage | Notes |
@@ -549,6 +570,7 @@ GoSQLX v1.8.0 introduces a first-class dialect mode engine that threads the SQL 
 | **SQLite** | `"sqlite"` | SQLite keywords | Flexible typing, simplified syntax | ⚠️ Keywords + basic parsing |
 | **Snowflake** | `"snowflake"` | Snowflake keywords | Stage operations, VARIANT type | ⚠️ Keyword detection only |
 | **ClickHouse** | `"clickhouse"` | ClickHouse keywords | PREWHERE, FINAL, GLOBAL IN/NOT IN, MergeTree keywords | ✅ v1.13.0 |
+| **MariaDB** | `"mariadb"` | MariaDB keywords (superset of MySQL) | All MySQL features + SEQUENCE DDL, FOR SYSTEM_TIME, WITH SYSTEM VERSIONING, PERIOD FOR, CONNECT BY | ✅ v1.14.0 |
 
 ### Usage
 
@@ -597,6 +619,12 @@ gosqlx format --dialect mysql query.sql
 - No Snowflake-specific parsing (stages, COPY INTO, VARIANT operations)
 - QUALIFY clause not supported
 
+#### MariaDB
+- Inherits all MySQL known gaps (stored procedures, HANDLER, XA transactions, CREATE EVENT)
+- JSON_TABLE not supported
+- Spider storage engine syntax not parsed
+- ColumnStore-specific syntax not supported
+
 #### ClickHouse
 - PREWHERE clause for pre-filter optimization before primary key scan
 - FINAL modifier on table references (forces MergeTree part merge)
@@ -644,6 +672,7 @@ gosqlx format --dialect mysql query.sql
 | **SQL Server** | 85% | 65% | ⭐⭐⭐⭐ Very Good | Keywords + MERGE |
 | **Oracle** | 80% | 60% | ⭐⭐⭐⭐ Good | Keywords + basic features |
 | **SQLite** | 85% | 50% | ⭐⭐⭐⭐ Good | Keywords + basic features |
+| **MariaDB** | 95% | 90% | ⭐⭐⭐⭐⭐ Excellent | MySQL superset + SEQUENCE DDL, temporal tables, CONNECT BY (v1.14.0) |
 | **Snowflake** | 80% | 30% | ⭐⭐⭐ Good | Keyword detection only |
 
 ## Performance Characteristics by Feature

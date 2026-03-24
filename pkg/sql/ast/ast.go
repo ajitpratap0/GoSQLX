@@ -228,6 +228,9 @@ type TableReference struct {
 	Lateral    bool             // LATERAL keyword for correlated subqueries (PostgreSQL)
 	TableHints []string         // SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
 	Final      bool             // ClickHouse FINAL modifier: forces MergeTree part merge
+	// ForSystemTime is the MariaDB temporal table clause (10.3.4+).
+	// Example: SELECT * FROM t FOR SYSTEM_TIME AS OF '2024-01-01'
+	ForSystemTime *ForSystemTimeClause // MariaDB temporal query
 }
 
 func (t *TableReference) statementNode() {}
@@ -397,13 +400,19 @@ type SelectStatement struct {
 	Where             Expression
 	GroupBy           []Expression
 	Having            Expression
-	Windows           []WindowSpec
-	OrderBy           []OrderByExpression
-	Limit             *int
-	Offset            *int
-	Fetch             *FetchClause    // SQL-99 FETCH FIRST/NEXT clause (F861, F862)
-	For               *ForClause      // Row-level locking clause (SQL:2003, PostgreSQL, MySQL)
-	Pos               models.Location // Source position of the SELECT keyword (1-based line and column)
+	// StartWith is the optional seed condition for CONNECT BY (MariaDB 10.2+).
+	// Example: START WITH parent_id IS NULL
+	StartWith Expression // MariaDB hierarchical query seed
+	// ConnectBy holds the hierarchy traversal condition (MariaDB 10.2+).
+	// Example: CONNECT BY PRIOR id = parent_id
+	ConnectBy *ConnectByClause // MariaDB hierarchical query
+	Windows   []WindowSpec
+	OrderBy   []OrderByExpression
+	Limit     *int
+	Offset    *int
+	Fetch     *FetchClause    // SQL-99 FETCH FIRST/NEXT clause (F861, F862)
+	For       *ForClause      // Row-level locking clause (SQL:2003, PostgreSQL, MySQL)
+	Pos       models.Location // Source position of the SELECT keyword (1-based line and column)
 }
 
 // TopClause represents SQL Server's TOP N [PERCENT] clause
@@ -517,6 +526,12 @@ func (s SelectStatement) Children() []Node {
 	}
 	if s.For != nil {
 		children = append(children, s.For)
+	}
+	if s.StartWith != nil {
+		children = append(children, s.StartWith)
+	}
+	if s.ConnectBy != nil {
+		children = append(children, s.ConnectBy)
 	}
 	return children
 }
@@ -1275,6 +1290,14 @@ type CreateTableStatement struct {
 	Partitions   []PartitionDefinition // Individual partition definitions
 	Options      []TableOption
 	WithoutRowID bool // SQLite: CREATE TABLE ... WITHOUT ROWID
+
+	// WithSystemVersioning enables system-versioned temporal history (MariaDB 10.3.4+).
+	// Example: CREATE TABLE t (...) WITH SYSTEM VERSIONING
+	WithSystemVersioning bool
+
+	// PeriodDefinitions holds PERIOD FOR clauses for application-time or system-time periods.
+	// Example: PERIOD FOR app_time (start_col, end_col)
+	PeriodDefinitions []*PeriodDefinition
 }
 
 func (c *CreateTableStatement) statementNode()      {}
@@ -1814,4 +1837,188 @@ func (r ReplaceStatement) Children() []Node {
 		children = append(children, nodifyExpressions(row)...)
 	}
 	return children
+}
+
+// ── MariaDB SEQUENCE DDL (10.3+) ───────────────────────────────────────────
+
+// CycleOption represents the CYCLE behavior for a sequence.
+type CycleOption int
+
+const (
+	// CycleUnspecified means no CYCLE or NOCYCLE clause was given (database default applies).
+	CycleUnspecified CycleOption = iota
+	// CycleBehavior means CYCLE — sequence wraps around when it reaches min/max.
+	CycleBehavior
+	// NoCycleBehavior means NOCYCLE / NO CYCLE — sequence errors on overflow.
+	NoCycleBehavior
+)
+
+// SequenceOptions holds configuration for CREATE SEQUENCE and ALTER SEQUENCE.
+// Fields are pointers so that unspecified options are distinguishable from zero values.
+type SequenceOptions struct {
+	StartWith   *LiteralValue // START WITH n
+	IncrementBy *LiteralValue // INCREMENT BY n (default 1)
+	MinValue    *LiteralValue // MINVALUE n or nil when NO MINVALUE
+	MaxValue    *LiteralValue // MAXVALUE n or nil when NO MAXVALUE
+	Cache       *LiteralValue // CACHE n or nil when NO CACHE / NOCACHE
+	CycleMode   CycleOption   // CYCLE / NOCYCLE / NO CYCLE (CycleUnspecified if not specified)
+	NoCache     bool          // NOCACHE (explicit; Cache=nil alone is ambiguous)
+	Restart     bool          // bare RESTART (reset to start value)
+	RestartWith *LiteralValue // RESTART WITH n (explicit restart value)
+}
+
+// CreateSequenceStatement represents:
+//
+//	CREATE [OR REPLACE] SEQUENCE [IF NOT EXISTS] name [options...]
+type CreateSequenceStatement struct {
+	Name        *Identifier
+	OrReplace   bool
+	IfNotExists bool
+	Options     SequenceOptions
+	Pos         models.Location // Source position of the CREATE keyword (1-based line and column)
+}
+
+func (s *CreateSequenceStatement) statementNode()       {}
+func (s *CreateSequenceStatement) TokenLiteral() string { return "CREATE" }
+func (s *CreateSequenceStatement) Children() []Node {
+	if s.Name != nil {
+		return []Node{s.Name}
+	}
+	return nil
+}
+
+// DropSequenceStatement represents:
+//
+//	DROP SEQUENCE [IF EXISTS | IF NOT EXISTS] name
+type DropSequenceStatement struct {
+	Name     *Identifier
+	IfExists bool
+	Pos      models.Location // Source position of the DROP keyword (1-based line and column)
+}
+
+func (s *DropSequenceStatement) statementNode()       {}
+func (s *DropSequenceStatement) TokenLiteral() string { return "DROP" }
+func (s *DropSequenceStatement) Children() []Node {
+	if s.Name != nil {
+		return []Node{s.Name}
+	}
+	return nil
+}
+
+// AlterSequenceStatement represents:
+//
+//	ALTER SEQUENCE [IF EXISTS] name [options...]
+type AlterSequenceStatement struct {
+	Name     *Identifier
+	IfExists bool
+	Options  SequenceOptions
+	Pos      models.Location // Source position of the ALTER keyword (1-based line and column)
+}
+
+func (s *AlterSequenceStatement) statementNode()       {}
+func (s *AlterSequenceStatement) TokenLiteral() string { return "ALTER" }
+func (s *AlterSequenceStatement) Children() []Node {
+	if s.Name != nil {
+		return []Node{s.Name}
+	}
+	return nil
+}
+
+// ── MariaDB Temporal Table Types (10.3.4+) ────────────────────────────────
+
+// SystemTimeClauseType identifies the kind of FOR SYSTEM_TIME clause.
+type SystemTimeClauseType int
+
+const (
+	SystemTimeAsOf    SystemTimeClauseType = iota // FOR SYSTEM_TIME AS OF <point>
+	SystemTimeBetween                             // FOR SYSTEM_TIME BETWEEN <start> AND <end>
+	SystemTimeFromTo                              // FOR SYSTEM_TIME FROM <start> TO <end>
+	SystemTimeAll                                 // FOR SYSTEM_TIME ALL
+)
+
+// ForSystemTimeClause represents a temporal query on a system-versioned table.
+//
+//	SELECT * FROM t FOR SYSTEM_TIME AS OF TIMESTAMP '2024-01-01';
+//	SELECT * FROM t FOR SYSTEM_TIME BETWEEN '2020-01-01' AND '2024-01-01';
+//	SELECT * FROM t FOR SYSTEM_TIME ALL;
+type ForSystemTimeClause struct {
+	Type  SystemTimeClauseType
+	Point Expression      // used for AS OF
+	Start Expression      // used for BETWEEN, FROM
+	End   Expression      // used for BETWEEN (AND), TO
+	Pos   models.Location // Source position of the FOR keyword (1-based line and column)
+}
+
+// expressionNode satisfies the Expression interface so ForSystemTimeClause can be
+// stored in TableReference.ForSystemTime without a separate interface type.
+// Semantically it is a table-level clause, not a scalar expression.
+func (c *ForSystemTimeClause) expressionNode()     {}
+func (c ForSystemTimeClause) TokenLiteral() string { return "FOR SYSTEM_TIME" }
+func (c ForSystemTimeClause) Children() []Node {
+	var nodes []Node
+	if c.Point != nil {
+		nodes = append(nodes, c.Point)
+	}
+	if c.Start != nil {
+		nodes = append(nodes, c.Start)
+	}
+	if c.End != nil {
+		nodes = append(nodes, c.End)
+	}
+	return nodes
+}
+
+// PeriodDefinition represents a PERIOD FOR clause in CREATE TABLE.
+//
+//	PERIOD FOR app_time (start_col, end_col)
+//	PERIOD FOR SYSTEM_TIME (row_start, row_end)
+type PeriodDefinition struct {
+	Name     *Identifier // period name (e.g., "app_time") or SYSTEM_TIME
+	StartCol *Identifier
+	EndCol   *Identifier
+	Pos      models.Location // Source position of the PERIOD FOR keyword (1-based line and column)
+}
+
+// expressionNode satisfies the Expression interface so PeriodDefinition can be
+// stored in CreateTableStatement.PeriodDefinitions without a separate interface type.
+// Semantically it is a table column constraint, not a scalar expression.
+func (p *PeriodDefinition) expressionNode()     {}
+func (p PeriodDefinition) TokenLiteral() string { return "PERIOD FOR" }
+func (p PeriodDefinition) Children() []Node {
+	var nodes []Node
+	if p.Name != nil {
+		nodes = append(nodes, p.Name)
+	}
+	if p.StartCol != nil {
+		nodes = append(nodes, p.StartCol)
+	}
+	if p.EndCol != nil {
+		nodes = append(nodes, p.EndCol)
+	}
+	return nodes
+}
+
+// ── MariaDB Hierarchical Query / CONNECT BY (10.2+) ───────────────────────
+
+// ConnectByClause represents the CONNECT BY hierarchical query clause (MariaDB 10.2+).
+//
+//	SELECT id, name FROM t
+//	  START WITH parent_id IS NULL
+//	  CONNECT BY NOCYCLE PRIOR id = parent_id;
+type ConnectByClause struct {
+	NoCycle   bool            // NOCYCLE modifier — prevents loops in cyclic graphs
+	Condition Expression      // the PRIOR expression (e.g., PRIOR id = parent_id)
+	Pos       models.Location // Source position of the CONNECT BY keyword (1-based line and column)
+}
+
+// expressionNode satisfies the Expression interface so ConnectByClause can be
+// stored in SelectStatement.ConnectBy without a separate interface type.
+// Semantically it is a query-level clause, not a scalar expression.
+func (c *ConnectByClause) expressionNode()     {}
+func (c ConnectByClause) TokenLiteral() string { return "CONNECT BY" }
+func (c ConnectByClause) Children() []Node {
+	if c.Condition != nil {
+		return []Node{c.Condition}
+	}
+	return nil
 }

@@ -202,6 +202,8 @@ func (u *UnaryExpression) SQL() string {
 		return "+" + inner
 	case Minus:
 		return "-" + inner
+	case Prior:
+		return "PRIOR " + inner
 	default:
 		return u.Operator.String() + inner
 	}
@@ -578,6 +580,17 @@ func (s *SelectStatement) SQL() string {
 	if s.Having != nil {
 		sb.WriteString(" HAVING ")
 		sb.WriteString(exprSQL(s.Having))
+	}
+
+	// MariaDB hierarchical query clauses (10.2+): START WITH ... CONNECT BY ...
+	// These must appear after HAVING and before ORDER BY per MariaDB grammar.
+	if s.StartWith != nil {
+		sb.WriteString(" START WITH ")
+		sb.WriteString(exprSQL(s.StartWith))
+	}
+	if s.ConnectBy != nil {
+		sb.WriteString(" ")
+		sb.WriteString(s.ConnectBy.ToSQL())
 	}
 
 	if len(s.Windows) > 0 {
@@ -1306,6 +1319,10 @@ func tableRefSQL(t *TableReference) string {
 	if t.Final {
 		sb.WriteString(" FINAL")
 	}
+	if t.ForSystemTime != nil {
+		sb.WriteString(" ")
+		sb.WriteString(t.ForSystemTime.ToSQL())
+	}
 	return sb.String()
 }
 
@@ -1584,4 +1601,152 @@ func mergeActionSQL(a *MergeAction) string {
 	default:
 		return a.ActionType
 	}
+}
+
+// ToSQL returns the SQL string for CREATE SEQUENCE.
+func (s *CreateSequenceStatement) ToSQL() string {
+	var b strings.Builder
+	b.WriteString("CREATE ")
+	if s.OrReplace {
+		b.WriteString("OR REPLACE ")
+	}
+	b.WriteString("SEQUENCE ")
+	if s.IfNotExists {
+		b.WriteString("IF NOT EXISTS ")
+	}
+	if s.Name != nil {
+		b.WriteString(s.Name.Name)
+	}
+	writeSequenceOptions(&b, s.Options)
+	return b.String()
+}
+
+// ToSQL returns the SQL string for DROP SEQUENCE.
+func (s *DropSequenceStatement) ToSQL() string {
+	var b strings.Builder
+	b.WriteString("DROP SEQUENCE ")
+	if s.IfExists {
+		b.WriteString("IF EXISTS ")
+	}
+	if s.Name != nil {
+		b.WriteString(s.Name.Name)
+	}
+	return b.String()
+}
+
+// ToSQL returns the SQL string for ALTER SEQUENCE.
+func (s *AlterSequenceStatement) ToSQL() string {
+	var b strings.Builder
+	b.WriteString("ALTER SEQUENCE ")
+	if s.IfExists {
+		b.WriteString("IF EXISTS ")
+	}
+	if s.Name != nil {
+		b.WriteString(s.Name.Name)
+	}
+	writeSequenceOptions(&b, s.Options)
+	return b.String()
+}
+
+// writeSequenceOptions is a shared helper for CREATE/ALTER SEQUENCE serialization.
+func writeSequenceOptions(b *strings.Builder, opts SequenceOptions) {
+	if opts.StartWith != nil {
+		b.WriteString(" START WITH ")
+		b.WriteString(opts.StartWith.TokenLiteral())
+	}
+	if opts.IncrementBy != nil {
+		b.WriteString(" INCREMENT BY ")
+		b.WriteString(opts.IncrementBy.TokenLiteral())
+	}
+	if opts.MinValue != nil {
+		b.WriteString(" MINVALUE ")
+		b.WriteString(opts.MinValue.TokenLiteral())
+	}
+	if opts.MaxValue != nil {
+		b.WriteString(" MAXVALUE ")
+		b.WriteString(opts.MaxValue.TokenLiteral())
+	}
+	if opts.Cache != nil {
+		b.WriteString(" CACHE ")
+		b.WriteString(opts.Cache.TokenLiteral())
+	} else if opts.NoCache {
+		b.WriteString(" NOCACHE")
+	}
+	switch opts.CycleMode {
+	case CycleBehavior:
+		b.WriteString(" CYCLE")
+	case NoCycleBehavior:
+		b.WriteString(" NOCYCLE")
+	}
+	if opts.RestartWith != nil {
+		b.WriteString(" RESTART WITH ")
+		b.WriteString(opts.RestartWith.TokenLiteral())
+	} else if opts.Restart {
+		b.WriteString(" RESTART")
+	}
+}
+
+// SQL implements the Expression interface for ForSystemTimeClause.
+func (c *ForSystemTimeClause) SQL() string { return c.ToSQL() }
+
+// ToSQL returns the SQL string for a FOR SYSTEM_TIME clause (MariaDB 10.3.4+).
+func (c *ForSystemTimeClause) ToSQL() string {
+	var b strings.Builder
+	b.WriteString("FOR SYSTEM_TIME ")
+	switch c.Type {
+	case SystemTimeAsOf:
+		b.WriteString("AS OF ")
+		b.WriteString(exprSQL(c.Point))
+	case SystemTimeBetween:
+		b.WriteString("BETWEEN ")
+		b.WriteString(exprSQL(c.Start))
+		b.WriteString(" AND ")
+		b.WriteString(exprSQL(c.End))
+	case SystemTimeFromTo:
+		b.WriteString("FROM ")
+		b.WriteString(exprSQL(c.Start))
+		b.WriteString(" TO ")
+		b.WriteString(exprSQL(c.End))
+	case SystemTimeAll:
+		b.WriteString("ALL")
+	}
+	return b.String()
+}
+
+// SQL implements the Expression interface for ConnectByClause.
+func (c *ConnectByClause) SQL() string { return c.ToSQL() }
+
+// SQL implements the Expression interface for PeriodDefinition (stub; not used as a standalone expression).
+// SQL returns the SQL string for a PERIOD FOR clause in CREATE TABLE.
+// Example: PERIOD FOR app_time (valid_from, valid_to)
+func (p *PeriodDefinition) SQL() string {
+	if p == nil {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("PERIOD FOR ")
+	if p.Name != nil {
+		b.WriteString(p.Name.Name)
+	}
+	b.WriteString(" (")
+	if p.StartCol != nil {
+		b.WriteString(p.StartCol.Name)
+	}
+	b.WriteString(", ")
+	if p.EndCol != nil {
+		b.WriteString(p.EndCol.Name)
+	}
+	b.WriteString(")")
+	return b.String()
+}
+
+// ToSQL returns the SQL string for a CONNECT BY clause (MariaDB 10.2+).
+func (c *ConnectByClause) ToSQL() string {
+	var b strings.Builder
+	b.WriteString("CONNECT BY ")
+	if c.NoCycle {
+		b.WriteString("NOCYCLE ")
+	}
+	b.WriteString(exprSQL(c.Condition))
+	return b.String()
 }

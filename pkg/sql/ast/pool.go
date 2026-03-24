@@ -351,6 +351,18 @@ var (
 			return &s
 		},
 	}
+
+	createSequencePool = sync.Pool{
+		New: func() interface{} { return &CreateSequenceStatement{} },
+	}
+
+	dropSequencePool = sync.Pool{
+		New: func() interface{} { return &DropSequenceStatement{} },
+	}
+
+	alterSequencePool = sync.Pool{
+		New: func() interface{} { return &AlterSequenceStatement{} },
+	}
 )
 
 // NewAST retrieves a new AST container from the pool.
@@ -1793,4 +1805,38 @@ func PutAlterStatement(stmt *AlterStatement) {
 	stmt.Operation = nil
 
 	alterStmtPool.Put(stmt)
+}
+
+// NewCreateSequenceStatement retrieves a CreateSequenceStatement from the pool.
+func NewCreateSequenceStatement() *CreateSequenceStatement {
+	return createSequencePool.Get().(*CreateSequenceStatement)
+}
+
+// ReleaseCreateSequenceStatement returns a CreateSequenceStatement to the pool.
+func ReleaseCreateSequenceStatement(s *CreateSequenceStatement) {
+	*s = CreateSequenceStatement{} // zero all fields
+	createSequencePool.Put(s)
+}
+
+// NewDropSequenceStatement retrieves a DropSequenceStatement from the pool.
+func NewDropSequenceStatement() *DropSequenceStatement {
+	return dropSequencePool.Get().(*DropSequenceStatement)
+}
+
+// ReleaseDropSequenceStatement returns a DropSequenceStatement to the pool.
+// Always call this with defer after parsing is complete.
+func ReleaseDropSequenceStatement(s *DropSequenceStatement) {
+	*s = DropSequenceStatement{} // zero all fields
+	dropSequencePool.Put(s)
+}
+
+// NewAlterSequenceStatement retrieves an AlterSequenceStatement from the pool.
+func NewAlterSequenceStatement() *AlterSequenceStatement {
+	return alterSequencePool.Get().(*AlterSequenceStatement)
+}
+
+// ReleaseAlterSequenceStatement returns an AlterSequenceStatement to the pool.
+func ReleaseAlterSequenceStatement(s *AlterSequenceStatement) {
+	*s = AlterSequenceStatement{} // zero all fields
+	alterSequencePool.Put(s)
 }

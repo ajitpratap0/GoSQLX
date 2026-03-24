@@ -170,14 +170,14 @@ func TestRejectUnknownDialect(t *testing.T) {
 func TestIsValidDialect(t *testing.T) {
 	validDialects := []string{
 		"postgresql", "mysql", "sqlserver", "oracle", "sqlite",
-		"snowflake", "bigquery", "redshift", "generic", "",
+		"snowflake", "bigquery", "redshift", "generic", "mariadb", "",
 	}
 	for _, d := range validDialects {
 		if !keywords.IsValidDialect(d) {
 			t.Errorf("IsValidDialect(%q) should return true", d)
 		}
 	}
-	invalidDialects := []string{"fakesql", "postgres", "mssql", "pg", "mariadb", "db2"}
+	invalidDialects := []string{"fakesql", "postgres", "mssql", "pg", "db2"}
 	for _, d := range invalidDialects {
 		if keywords.IsValidDialect(d) {
 			t.Errorf("IsValidDialect(%q) should return false", d)

@@ -82,6 +82,17 @@ func (p *Parser) parseCreateStatement() (ast.Statement, error) {
 		}
 		p.advance()                     // Consume INDEX
 		return p.parseCreateIndex(true) // Unique
+	} else if p.isMariaDB() && p.isTokenMatch("SEQUENCE") {
+		seqPos := p.currentLocation() // position of SEQUENCE token
+		p.advance()                   // Consume SEQUENCE
+		stmt, err := p.parseCreateSequenceStatement(orReplace)
+		if err != nil {
+			return nil, err
+		}
+		if stmt.Pos.IsZero() {
+			stmt.Pos = seqPos
+		}
+		return stmt, nil
 	}
 	return nil, p.expectedError("TABLE, VIEW, MATERIALIZED VIEW, or INDEX after CREATE")
 }
@@ -121,9 +132,18 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 
 	// Parse column definitions and constraints
 	for {
-		// Check for table-level constraints
-		if p.isAnyType(models.TokenTypePrimary, models.TokenTypeForeign,
+		// MariaDB: PERIOD FOR name (start_col, end_col) — application-time or system-time period
+		if p.isMariaDB() && p.isTokenMatch("PERIOD") {
+			periodPos := p.currentLocation() // position of PERIOD keyword
+			pd, err := p.parsePeriodDefinition()
+			if err != nil {
+				return nil, err
+			}
+			pd.Pos = periodPos
+			stmt.PeriodDefinitions = append(stmt.PeriodDefinitions, pd)
+		} else if p.isAnyType(models.TokenTypePrimary, models.TokenTypeForeign,
 			models.TokenTypeUnique, models.TokenTypeCheck, models.TokenTypeConstraint) {
+			// Check for table-level constraints
 			constraint, err := p.parseTableConstraint()
 			if err != nil {
 				return nil, err
@@ -151,6 +171,21 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 		return nil, p.expectedError(")")
 	}
 	p.advance() // Consume )
+
+	// MariaDB: WITH SYSTEM VERSIONING — enables system-versioned temporal history
+	if p.isMariaDB() && p.isType(models.TokenTypeWith) {
+		// peek ahead to check for SYSTEM VERSIONING (not WITH TIES or WITH CHECK etc.)
+		next := p.peekToken()
+		if strings.EqualFold(next.Token.Value, "SYSTEM") {
+			p.advance() // Consume WITH
+			p.advance() // Consume SYSTEM
+			if !strings.EqualFold(p.currentToken.Token.Value, "VERSIONING") {
+				return nil, p.expectedError("VERSIONING after WITH SYSTEM")
+			}
+			p.advance() // Consume VERSIONING
+			stmt.WithSystemVersioning = true
+		}
+	}
 
 	// Parse optional PARTITION BY clause
 	if p.isType(models.TokenTypePartition) {

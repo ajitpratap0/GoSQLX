@@ -629,7 +629,20 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		}
 		return stmt, nil
 	case models.TokenTypeAlter:
+		stmtPos := p.currentLocation()
 		p.advance()
+		// MariaDB: ALTER SEQUENCE [IF EXISTS] name [options...]
+		if p.isMariaDB() && p.isTokenMatch("SEQUENCE") {
+			p.advance() // Consume SEQUENCE
+			stmt, err := p.parseAlterSequenceStatement()
+			if err != nil {
+				return nil, err
+			}
+			if stmt.Pos.IsZero() {
+				stmt.Pos = stmtPos
+			}
+			return stmt, nil
+		}
 		return p.parseAlterTableStmt()
 	case models.TokenTypeMerge:
 		p.advance()
@@ -638,7 +651,20 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		p.advance()
 		return p.parseCreateStatement()
 	case models.TokenTypeDrop:
+		stmtPos := p.currentLocation()
 		p.advance()
+		// MariaDB: DROP SEQUENCE [IF EXISTS | IF NOT EXISTS] name
+		if p.isMariaDB() && p.isTokenMatch("SEQUENCE") {
+			p.advance() // Consume SEQUENCE
+			stmt, err := p.parseDropSequenceStatement()
+			if err != nil {
+				return nil, err
+			}
+			if stmt.Pos.IsZero() {
+				stmt.Pos = stmtPos
+			}
+			return stmt, nil
+		}
 		return p.parseDropStatement()
 	case models.TokenTypeRefresh:
 		p.advance()

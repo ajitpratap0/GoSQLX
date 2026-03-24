@@ -109,6 +109,45 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		return nil, err
 	}
 
+	// MariaDB: START WITH ... CONNECT BY hierarchical queries (10.2+)
+	if p.isMariaDB() {
+		if strings.EqualFold(p.currentToken.Token.Value, "START") {
+			p.advance() // Consume START
+			if !strings.EqualFold(p.currentToken.Token.Value, "WITH") {
+				return nil, fmt.Errorf("expected WITH after START, got %q", p.currentToken.Token.Value)
+			}
+			p.advance() // Consume WITH
+			startExpr, startErr := p.parseExpression()
+			if startErr != nil {
+				return nil, startErr
+			}
+			selectStmt.StartWith = startExpr
+		}
+		if strings.EqualFold(p.currentToken.Token.Value, "CONNECT") {
+			connectPos := p.currentLocation() // position of CONNECT keyword
+			p.advance()                       // Consume CONNECT
+			if !strings.EqualFold(p.currentToken.Token.Value, "BY") {
+				return nil, fmt.Errorf("expected BY after CONNECT, got %q", p.currentToken.Token.Value)
+			}
+			p.advance() // Consume BY
+			cb := &ast.ConnectByClause{}
+			cb.Pos = connectPos
+			if strings.EqualFold(p.currentToken.Token.Value, "NOCYCLE") {
+				cb.NoCycle = true
+				p.advance() // Consume NOCYCLE
+			}
+			cond, condErr := p.parseConnectByCondition()
+			if condErr != nil {
+				return nil, condErr
+			}
+			if cond == nil {
+				return nil, fmt.Errorf("expected condition after CONNECT BY")
+			}
+			cb.Condition = cond
+			selectStmt.ConnectBy = cb
+		}
+	}
+
 	// ORDER BY
 	if selectStmt.OrderBy, err = p.parseOrderByClause(); err != nil {
 		return nil, err

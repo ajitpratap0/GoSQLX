@@ -73,9 +73,21 @@ var dialectHints = []dialectHint{
 
 	// Oracle-specific (high confidence)
 	{pattern: "ROWNUM", dialect: DialectOracle, weight: 5},
-	{pattern: "CONNECT BY", dialect: DialectOracle, weight: 5},
+	{pattern: "CONNECT BY", dialect: DialectOracle, weight: 3},
 	{pattern: "SYSDATE", dialect: DialectOracle, weight: 5},
 	{pattern: "DECODE", dialect: DialectOracle, weight: 3},
+
+	// MariaDB-specific (high confidence — these features don't appear in MySQL or Oracle)
+	{pattern: "NEXTVAL", dialect: DialectMariaDB, weight: 5},
+	{pattern: "LASTVAL", dialect: DialectMariaDB, weight: 5},
+	{pattern: "SETVAL", dialect: DialectMariaDB, weight: 5},
+	{pattern: "NEXT VALUE FOR", dialect: DialectMariaDB, weight: 5},
+	{pattern: "SYSTEM VERSIONING", dialect: DialectMariaDB, weight: 5},
+	{pattern: "FOR SYSTEM_TIME", dialect: DialectMariaDB, weight: 5},
+	{pattern: "VERSIONING", dialect: DialectMariaDB, weight: 4},
+	{pattern: "CONNECT BY", dialect: DialectMariaDB, weight: 2},
+	{pattern: "CREATE SEQUENCE", dialect: DialectMariaDB, weight: 5},
+	{pattern: "DROP SEQUENCE", dialect: DialectMariaDB, weight: 5},
 
 	// SQLite-specific (high confidence)
 	{pattern: "AUTOINCREMENT", dialect: DialectSQLite, weight: 5},
@@ -98,6 +110,7 @@ var dialectHints = []dialectHint{
 //   - MySQL: ZEROFILL, UNSIGNED, AUTO_INCREMENT, FORCE INDEX
 //   - SQL Server: NOLOCK, TOP, NVARCHAR, GETDATE
 //   - Oracle: ROWNUM, CONNECT BY, SYSDATE, DECODE
+//   - MariaDB: NEXTVAL, LASTVAL, SETVAL, NEXT VALUE FOR, SYSTEM VERSIONING, FOR SYSTEM_TIME, VERSIONING, CONNECT BY, CREATE SEQUENCE, DROP SEQUENCE
 //   - SQLite: AUTOINCREMENT, GLOB, VACUUM
 //
 // The function also performs syntactic checks for identifier quoting styles:
@@ -112,6 +125,9 @@ var dialectHints = []dialectHint{
 //
 //	dialect = keywords.DetectDialect("SELECT DISTINCT ON (dept) * FROM emp")
 //	// dialect == DialectPostgreSQL
+//
+//	dialect = keywords.DetectDialect("SELECT NEXTVAL(seq_orders)")
+//	// dialect == DialectMariaDB
 //
 //	dialect = keywords.DetectDialect("SELECT * FROM users")
 //	// dialect == DialectGeneric

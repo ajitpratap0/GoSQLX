@@ -84,8 +84,10 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		}
 	}
 
-	// Check for table alias (required for derived tables, optional for regular tables)
-	if p.isIdentifier() || p.isType(models.TokenTypeAs) {
+	// Check for table alias (required for derived tables, optional for regular tables).
+	// Guard: in MariaDB, CONNECT followed by BY is a hierarchical query clause, not an alias.
+	// Similarly, START followed by WITH is a hierarchical query seed, not an alias.
+	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() {
 		if p.isType(models.TokenTypeAs) {
 			p.advance() // Consume AS
 			if !p.isIdentifier() {
@@ -95,6 +97,20 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		if p.isIdentifier() {
 			tableRef.Alias = p.currentToken.Token.Value
 			p.advance()
+		}
+	}
+
+	// MariaDB FOR SYSTEM_TIME temporal query (10.3.4+)
+	if p.isMariaDB() && p.isType(models.TokenTypeFor) {
+		// Only parse as FOR SYSTEM_TIME if next token is SYSTEM_TIME
+		next := p.peekToken()
+		if strings.EqualFold(next.Token.Value, "SYSTEM_TIME") {
+			p.advance() // Consume FOR
+			sysTime, err := p.parseForSystemTimeClause()
+			if err != nil {
+				return tableRef, err
+			}
+			tableRef.ForSystemTime = sysTime
 		}
 	}
 
@@ -160,8 +176,10 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 		ref = ast.TableReference{Name: joinedName, Lateral: isLateral}
 	}
 
-	// Optional alias
-	if p.isIdentifier() || p.isType(models.TokenTypeAs) {
+	// Optional alias.
+	// Guard: in MariaDB, CONNECT followed by BY is a hierarchical query clause, not an alias.
+	// Similarly, START followed by WITH is a hierarchical query seed, not an alias.
+	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() {
 		if p.isType(models.TokenTypeAs) {
 			p.advance()
 			if !p.isIdentifier() {
@@ -171,6 +189,20 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 		if p.isIdentifier() {
 			ref.Alias = p.currentToken.Token.Value
 			p.advance()
+		}
+	}
+
+	// MariaDB FOR SYSTEM_TIME temporal query (10.3.4+)
+	if p.isMariaDB() && p.isType(models.TokenTypeFor) {
+		// Only parse as FOR SYSTEM_TIME if next token is SYSTEM_TIME
+		next := p.peekToken()
+		if strings.EqualFold(next.Token.Value, "SYSTEM_TIME") {
+			p.advance() // Consume FOR
+			sysTime, err := p.parseForSystemTimeClause()
+			if err != nil {
+				return ref, err
+			}
+			ref.ForSystemTime = sysTime
 		}
 	}
 

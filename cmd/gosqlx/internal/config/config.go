@@ -84,7 +84,7 @@ type FormatConfig struct {
 // Controls validation behavior including dialect selection and security limits.
 //
 // Fields:
-//   - Dialect: SQL dialect for validation (postgresql, mysql, sqlserver, oracle, sqlite, generic)
+//   - Dialect: SQL dialect for validation (postgresql, mysql, mariadb, snowflake, sqlserver, oracle, sqlite, generic)
 //   - StrictMode: Enable strict validation rules (default: false)
 //   - Recursive: Recursively process directories (default: false)
 //   - Pattern: File pattern for recursive processing (default: "*.sql")
@@ -345,7 +345,7 @@ func (c *Config) Validate() error {
 
 	// Validate dialect (empty string means permissive/no dialect gates)
 	if c.Validation.Dialect != "" {
-		validDialects := []string{"postgresql", "mysql", "sqlserver", "oracle", "sqlite", "generic"}
+		validDialects := []string{"postgresql", "mysql", "mariadb", "snowflake", "sqlserver", "oracle", "sqlite", "generic"}
 		dialectValid := false
 		for _, d := range validDialects {
 			if c.Validation.Dialect == d {

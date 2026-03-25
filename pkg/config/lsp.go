@@ -335,7 +335,7 @@ func GetLSPConfigSections() []LSPConfigSection {
 			Description:  "SQL validation options",
 			DefaultValue: ToLSPSettings(defaults)["validation"],
 			Properties: map[string]interface{}{
-				"dialect":    "SQL dialect (postgresql, mysql, sqlserver, oracle, sqlite)",
+				"dialect":    "SQL dialect (postgresql, mysql, mariadb, snowflake, sqlserver, oracle, sqlite)",
 				"strictMode": "Enable strict validation mode",
 			},
 		},

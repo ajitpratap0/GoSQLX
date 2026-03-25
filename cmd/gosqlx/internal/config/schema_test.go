@@ -26,6 +26,8 @@ func TestValidateDialect(t *testing.T) {
 	}{
 		{"valid postgresql", "postgresql", false},
 		{"valid mysql", "mysql", false},
+		{"valid mariadb", "mariadb", false},
+		{"valid snowflake", "snowflake", false},
 		{"valid sqlserver", "sqlserver", false},
 		{"valid oracle", "oracle", false},
 		{"valid sqlite", "sqlite", false},
@@ -225,7 +227,7 @@ func TestGetSchema(t *testing.T) {
 }
 
 func TestValidDialects(t *testing.T) {
-	expectedDialects := []string{"postgresql", "mysql", "sqlserver", "oracle", "sqlite", "generic"}
+	expectedDialects := []string{"postgresql", "mysql", "mariadb", "snowflake", "sqlserver", "oracle", "sqlite", "generic"}
 
 	if len(ValidDialects) != len(expectedDialects) {
 		t.Errorf("expected %d dialects, got %d", len(expectedDialects), len(ValidDialects))

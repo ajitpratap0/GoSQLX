@@ -77,12 +77,12 @@ type FormatConfig struct {
 // ValidationConfig holds SQL validation options for the parser and validator.
 //
 // The Dialect field determines which SQL keywords and syntax are recognized.
-// Supported values: "postgresql", "mysql", "sqlserver", "oracle", "sqlite".
+// Supported values: "postgresql", "mysql", "mariadb", "snowflake", "sqlserver", "oracle", "sqlite".
 //
 // The Pattern field is used for recursive file validation and supports standard
 // glob patterns like "*.sql", "queries/**/*.sql", etc.
 type ValidationConfig struct {
-	Dialect    string         `yaml:"dialect" json:"dialect"`        // SQL dialect: postgresql, mysql, sqlserver, oracle, sqlite (default: "postgresql")
+	Dialect    string         `yaml:"dialect" json:"dialect"`        // SQL dialect: postgresql, mysql, mariadb, snowflake, sqlserver, oracle, sqlite (default: "postgresql")
 	StrictMode *bool          `yaml:"strict_mode" json:"strictMode"` // Enable strict validation mode (default: false)
 	Recursive  *bool          `yaml:"recursive" json:"recursive"`    // Recursively validate files in directories (default: false)
 	Pattern    string         `yaml:"pattern" json:"pattern"`        // File pattern for recursive validation (default: "*.sql")
@@ -215,12 +215,14 @@ func (c *Config) Validate() error {
 	validDialects := map[string]bool{
 		"postgresql": true,
 		"mysql":      true,
+		"mariadb":    true,
+		"snowflake":  true,
 		"sqlserver":  true,
 		"oracle":     true,
 		"sqlite":     true,
 	}
 	if c.Validation.Dialect != "" && !validDialects[c.Validation.Dialect] {
-		return fmt.Errorf("validation.dialect must be one of: postgresql, mysql, sqlserver, oracle, sqlite; got %q", c.Validation.Dialect)
+		return fmt.Errorf("validation.dialect must be one of: postgresql, mysql, mariadb, snowflake, sqlserver, oracle, sqlite; got %q", c.Validation.Dialect)
 	}
 	if c.Validation.Security.MaxFileSize < 0 {
 		return fmt.Errorf("validation.security.max_file_size must be non-negative, got %d", c.Validation.Security.MaxFileSize)

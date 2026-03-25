@@ -36,6 +36,8 @@ var dialectMap = map[string]sqlkeywords.SQLDialect{
 	"generic":    sqlkeywords.DialectGeneric,
 	"postgresql": sqlkeywords.DialectPostgreSQL,
 	"mysql":      sqlkeywords.DialectMySQL,
+	"mariadb":    sqlkeywords.DialectMariaDB,
+	"clickhouse": sqlkeywords.DialectClickHouse,
 	"sqlite":     sqlkeywords.DialectSQLite,
 	"sqlserver":  sqlkeywords.DialectSQLServer,
 	"oracle":     sqlkeywords.DialectOracle,

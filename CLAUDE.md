@@ -12,7 +12,7 @@ GoSQLX is a **production-ready**, **race-free**, high-performance SQL parsing SD
 - Thread-safe with zero race conditions (20,000+ concurrent operations tested)
 - 1.38M+ ops/sec sustained, 1.5M peak with memory-efficient object pooling
 - ~80-85% SQL-99 compliance (window functions, CTEs, set operations, MERGE, etc.)
-- Multi-dialect support: PostgreSQL, MySQL, SQL Server, Oracle, SQLite, ClickHouse
+- Multi-dialect support: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse (8 dialects)
 
 ## Architecture
 

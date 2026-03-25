@@ -152,7 +152,7 @@
 //	    max_file_size: 10485760    # Maximum file size in bytes
 //
 // Fields:
-//   - Dialect: SQL dialect (postgresql, mysql, sqlserver, oracle, sqlite, generic)
+//   - Dialect: SQL dialect (postgresql, mysql, mariadb, snowflake, sqlserver, oracle, sqlite, generic)
 //   - StrictMode: Enable strict validation rules (default: false)
 //   - Recursive: Recursively process directories (default: false)
 //   - Pattern: File pattern for recursive processing (default: "*.sql")
@@ -195,7 +195,7 @@
 //   - MaxLineLength: 0-500 characters
 //
 // Validation validation:
-//   - Dialect: Must be one of: postgresql, mysql, sqlserver, oracle, sqlite, generic
+//   - Dialect: Must be one of: postgresql, mysql, mariadb, snowflake, sqlserver, oracle, sqlite, generic
 //
 // Output validation:
 //   - Format: Must be one of: json, yaml, table, tree, auto

@@ -231,7 +231,7 @@ func TestConfigMerge(t *testing.T) {
 }
 
 func TestConfigDialects(t *testing.T) {
-	validDialects := []string{"postgresql", "mysql", "sqlserver", "oracle", "sqlite"}
+	validDialects := []string{"postgresql", "mysql", "mariadb", "snowflake", "sqlserver", "oracle", "sqlite"}
 
 	for _, dialect := range validDialects {
 		t.Run(dialect, func(t *testing.T) {

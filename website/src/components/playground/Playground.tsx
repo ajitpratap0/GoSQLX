@@ -22,9 +22,11 @@ const DIALECTS = [
   { value: "generic", label: "Generic" },
   { value: "postgresql", label: "PostgreSQL" },
   { value: "mysql", label: "MySQL" },
+  { value: "mariadb", label: "MariaDB" },
   { value: "sqlite", label: "SQLite" },
   { value: "sqlserver", label: "SQL Server" },
   { value: "oracle", label: "Oracle" },
+  { value: "snowflake", label: "Snowflake" },
   { value: "clickhouse", label: "ClickHouse" },
 ];
 

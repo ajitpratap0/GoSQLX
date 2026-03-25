@@ -28,7 +28,7 @@
 
 <br/>
 
-| **1.38M+ ops/sec** | **<1μs latency** | **85% SQL-99** | **7 dialects** | **0 race conditions** |
+| **1.38M+ ops/sec** | **<1μs latency** | **85% SQL-99** | **8 dialects** | **0 race conditions** |
 |:---:|:---:|:---:|:---:|:---:|
 
 </div>
@@ -48,7 +48,7 @@ ast, _ := gosqlx.Parse("SELECT u.name, COUNT(*) FROM users u JOIN orders o ON u.
 
 - **Not an ORM** - a parser. You get the AST, you decide what to do with it.
 - **Not slow** - zero-copy tokenization, sync.Pool recycling, no allocations on hot paths.
-- **Not limited** - PostgreSQL, MySQL, SQL Server, Oracle, SQLite, Snowflake, ClickHouse. CTEs, window functions, MERGE, set operations.
+- **Not limited** - PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse. CTEs, window functions, MERGE, set operations.
 - **Not just a library** - CLI, VS Code extension, GitHub Action, MCP server, WASM playground, Python bindings.
 
 <br/>
@@ -140,7 +140,7 @@ claude mcp add --transport http gosqlx \
 <td align="center" width="33%"><h3>🔧 Tooling</h3>AST-based formatter<br/>Query transforms API<br/>VS Code extension<br/>GitHub Action</td>
 </tr>
 <tr>
-<td align="center"><h3>🌐 Multi-Dialect</h3>PostgreSQL · MySQL<br/>SQL Server · Oracle<br/>SQLite · Snowflake</td>
+<td align="center"><h3>🌐 Multi-Dialect</h3>PostgreSQL · MySQL · MariaDB<br/>SQL Server · Oracle<br/>SQLite · Snowflake · ClickHouse</td>
 <td align="center"><h3>🤖 AI-Ready</h3>MCP server (7 tools)<br/>Public remote endpoint<br/>Streamable HTTP</td>
 <td align="center"><h3>🧪 Battle-Tested</h3>20K+ concurrent ops<br/>Zero race conditions<br/>~85% SQL-99 compliance</td>
 </tr>

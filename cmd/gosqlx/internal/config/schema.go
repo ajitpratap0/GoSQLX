@@ -23,6 +23,8 @@ import (
 var ValidDialects = []string{
 	"postgresql",
 	"mysql",
+	"mariadb",
+	"snowflake",
 	"sqlserver",
 	"oracle",
 	"sqlite",

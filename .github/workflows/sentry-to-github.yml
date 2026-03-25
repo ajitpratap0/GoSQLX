@@ -32,5 +32,7 @@ jobs:
           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
+          # 31 min (not 30) to overlap slightly with the previous run window,
+          # absorbing GitHub Actions scheduling jitter (~1-2 min on busy runners).
           POLLING_MINUTES: '31'
         run: python .github/scripts/sentry_issues.py

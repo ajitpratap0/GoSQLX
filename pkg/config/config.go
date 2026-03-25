@@ -77,7 +77,7 @@ type FormatConfig struct {
 // ValidationConfig holds SQL validation options for the parser and validator.
 //
 // The Dialect field determines which SQL keywords and syntax are recognized.
-// Supported values: "postgresql", "mysql", "mariadb", "sqlserver", "oracle", "sqlite".
+// Supported values: "postgresql", "mysql", "mariadb", "snowflake", "sqlserver", "oracle", "sqlite".
 //
 // The Pattern field is used for recursive file validation and supports standard
 // glob patterns like "*.sql", "queries/**/*.sql", etc.

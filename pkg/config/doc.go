@@ -47,7 +47,7 @@
 //
 // Validation: SQL validation and dialect settings
 //
-//   - dialect: Target SQL dialect - postgresql, mysql, sqlserver, oracle, sqlite (default: postgresql)
+//   - dialect: Target SQL dialect - postgresql, mysql, mariadb, snowflake, sqlserver, oracle, sqlite (default: postgresql)
 //   - strict_mode: Enable strict validation mode (default: false)
 //   - recursive: Recursively validate files in directories (default: false)
 //   - pattern: File pattern for recursive validation (default: "*.sql")
@@ -246,7 +246,7 @@
 // Validation checks:
 //
 //   - Format: Non-negative indent and max_line_length
-//   - Validation: Valid dialect (postgresql, mysql, sqlserver, oracle, sqlite)
+//   - Validation: Valid dialect (postgresql, mysql, mariadb, snowflake, sqlserver, oracle, sqlite)
 //   - Output: Valid format (text, json, yaml)
 //   - LSP: Non-negative rate limits, timeouts, and size limits
 //   - LSP: Valid trace server level (off, messages, verbose)

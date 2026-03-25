@@ -345,7 +345,7 @@ func (c *Config) Validate() error {
 
 	// Validate dialect (empty string means permissive/no dialect gates)
 	if c.Validation.Dialect != "" {
-		validDialects := []string{"postgresql", "mysql", "sqlserver", "oracle", "sqlite", "generic"}
+		validDialects := []string{"postgresql", "mysql", "mariadb", "snowflake", "sqlserver", "oracle", "sqlite", "generic"}
 		dialectValid := false
 		for _, d := range validDialects {
 			if c.Validation.Dialect == d {

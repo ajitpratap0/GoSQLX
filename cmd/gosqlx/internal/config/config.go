@@ -84,7 +84,7 @@ type FormatConfig struct {
 // Controls validation behavior including dialect selection and security limits.
 //
 // Fields:
-//   - Dialect: SQL dialect for validation (postgresql, mysql, sqlserver, oracle, sqlite, generic)
+//   - Dialect: SQL dialect for validation (postgresql, mysql, mariadb, snowflake, sqlserver, oracle, sqlite, generic)
 //   - StrictMode: Enable strict validation rules (default: false)
 //   - Recursive: Recursively process directories (default: false)
 //   - Pattern: File pattern for recursive processing (default: "*.sql")

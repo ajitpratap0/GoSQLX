@@ -82,7 +82,7 @@ type FormatConfig struct {
 // The Pattern field is used for recursive file validation and supports standard
 // glob patterns like "*.sql", "queries/**/*.sql", etc.
 type ValidationConfig struct {
-	Dialect    string         `yaml:"dialect" json:"dialect"`        // SQL dialect: postgresql, mysql, mariadb, sqlserver, oracle, sqlite (default: "postgresql")
+	Dialect    string         `yaml:"dialect" json:"dialect"`        // SQL dialect: postgresql, mysql, mariadb, snowflake, sqlserver, oracle, sqlite (default: "postgresql")
 	StrictMode *bool          `yaml:"strict_mode" json:"strictMode"` // Enable strict validation mode (default: false)
 	Recursive  *bool          `yaml:"recursive" json:"recursive"`    // Recursively validate files in directories (default: false)
 	Pattern    string         `yaml:"pattern" json:"pattern"`        // File pattern for recursive validation (default: "*.sql")

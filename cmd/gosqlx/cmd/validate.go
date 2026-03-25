@@ -89,7 +89,7 @@ func validateRun(cmd *cobra.Command, args []string) error {
 
 	// Reject unknown dialect names early before any parsing.
 	if validateDialect != "" && !keywords.IsValidDialect(validateDialect) {
-		return fmt.Errorf("unknown SQL dialect %q; valid dialects: postgresql, mysql, sqlserver, oracle, sqlite, snowflake, bigquery, redshift", validateDialect)
+		return fmt.Errorf("unknown SQL dialect %q; valid dialects: postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift", validateDialect)
 	}
 
 	// Handle stdin input
@@ -334,7 +334,7 @@ func init() {
 	validateCmd.Flags().BoolVarP(&validateQuiet, "quiet", "q", false, "quiet mode (exit code only)")
 	validateCmd.Flags().BoolVar(&validateQuiet, "check", false, "check mode (alias for --quiet): exit code only, no output")
 	validateCmd.Flags().BoolVarP(&validateStats, "stats", "s", false, "show performance statistics")
-	validateCmd.Flags().StringVar(&validateDialect, "dialect", "", "SQL dialect: postgresql, mysql, sqlserver, oracle, sqlite (config: validate.dialect)")
+	validateCmd.Flags().StringVar(&validateDialect, "dialect", "", "SQL dialect: postgresql, mysql, mariadb, snowflake, sqlserver, oracle, sqlite (config: validate.dialect)")
 	validateCmd.Flags().BoolVar(&validateStrict, "strict", false, "enable strict validation mode (config: validate.strict_mode)")
 	validateCmd.Flags().StringVar(&validateOutputFormat, "output-format", "text", "output format: text, json, sarif")
 	validateCmd.Flags().StringVar(&validateOutputFile, "output-file", "", "output file path (default: stdout)")

@@ -862,7 +862,7 @@ gosqlx format --dialect mysql query.sql
 1. **ParseWithDialect()** - Parse SQL with dialect-specific syntax
 2. **ValidateWithDialect()** - Validate with dialect awareness
 3. **--dialect CLI flag** - Specify dialect for CLI commands
-4. **6 Supported Dialects** - PostgreSQL, MySQL, SQL Server, Oracle, SQLite, Snowflake
+4. **8 Supported Dialects** - PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse
 
 ### MySQL Syntax (11 Features)
 1. **SHOW statements** - SHOW TABLES, DATABASES, CREATE TABLE

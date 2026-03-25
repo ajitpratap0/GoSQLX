@@ -9,7 +9,6 @@ and creates corresponding GitHub issues, skipping duplicates.
 import os
 import sys
 import time
-import json
 from datetime import datetime, timezone, timedelta
 
 import requests
@@ -63,11 +62,16 @@ def ensure_label(name: str, color: str, description: str) -> None:
         url,
         headers=GITHUB_HEADERS,
         json={"name": name, "color": color, "description": description},
+        timeout=30,
     )
     if resp.status_code == 201:
         print(f"  Created label: {name}")
     elif resp.status_code == 422:
-        pass  # Already exists
+        data = resp.json()
+        errors = data.get("errors", [])
+        # Only swallow "already_exists" — surface other validation errors
+        if not all(e.get("code") == "already_exists" for e in errors):
+            print(f"  Warning: label creation validation error for '{name}': {resp.text}")
     else:
         print(f"  Warning: unexpected status {resp.status_code} creating label '{name}': {resp.text}")
 
@@ -81,28 +85,29 @@ def fetch_sentry_issues(cutoff: datetime) -> list[dict]:
     """Return all unresolved Sentry issues first seen after cutoff."""
     url = f"{SENTRY_API}/projects/{SENTRY_ORG}/{SENTRY_PROJECT}/issues/"
     params = {"query": "is:unresolved", "limit": 100, "sort": "date"}
-    resp = requests.get(url, headers=SENTRY_HEADERS, params=params)
+    resp = requests.get(url, headers=SENTRY_HEADERS, params=params, timeout=30)
     if resp.status_code != 200:
         print(f"ERROR: Sentry API returned {resp.status_code}: {resp.text}", file=sys.stderr)
         sys.exit(1)
 
-    issues = resp.json()
-    new_issues = []
-    for issue in issues:
-        first_seen = datetime.fromisoformat(issue["firstSeen"].replace("Z", "+00:00"))
-        if first_seen >= cutoff:
-            new_issues.append(issue)
-    return new_issues
+    # Python 3.11+ fromisoformat handles Z natively; we target 3.12 in the workflow
+    return [
+        issue for issue in resp.json()
+        if datetime.fromisoformat(issue["firstSeen"]) >= cutoff
+    ]
 
 
 def github_issue_exists(sentry_id: str) -> bool:
-    """Return True if a GitHub issue with this Sentry ID already exists."""
+    """Return True if a GitHub issue with this Sentry ID already exists.
+
+    Raises SystemExit on API errors to prevent silently creating duplicates.
+    """
     url = f"{GITHUB_API}/search/issues"
     query = f'repo:{GITHUB_REPO} label:sentry in:body "SENTRY_ID:{sentry_id}"'
-    resp = requests.get(url, headers=GITHUB_HEADERS, params={"q": query, "per_page": 1})
+    resp = requests.get(url, headers=GITHUB_HEADERS, params={"q": query, "per_page": 1}, timeout=30)
     if resp.status_code != 200:
-        print(f"  Warning: GitHub search returned {resp.status_code}: {resp.text}")
-        return False
+        print(f"ERROR: GitHub search failed ({resp.status_code}): {resp.text}", file=sys.stderr)
+        sys.exit(1)
     return resp.json().get("total_count", 0) > 0
 
 
@@ -156,6 +161,7 @@ def create_github_issue(issue: dict) -> None:
         url,
         headers=GITHUB_HEADERS,
         json={"title": title, "body": body, "labels": labels},
+        timeout=30,
     )
     if resp.status_code == 201:
         data = resp.json()

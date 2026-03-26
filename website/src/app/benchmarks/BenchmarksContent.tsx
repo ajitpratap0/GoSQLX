@@ -1,8 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import { FadeIn } from '@/components/ui/FadeIn';
 import { GlassCard } from '@/components/ui/GlassCard';
+import { Button } from '@/components/ui/Button';
 
 const metrics = [
   { label: 'Sustained Ops/sec', value: '1.38M+' },
@@ -207,18 +207,12 @@ export function BenchmarksContent() {
             <div className="text-center">
               <p className="text-zinc-400 mb-4">Ready to use GoSQLX in your project?</p>
               <div className="flex gap-3 justify-center">
-                <Link
-                  href="/docs/getting-started/"
-                  className="inline-flex items-center rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-500 transition-colors"
-                >
+                <Button href="/docs/getting-started/" variant="primary">
                   Get Started
-                </Link>
-                <Link
-                  href="/playground/"
-                  className="inline-flex items-center rounded-lg border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-medium text-zinc-300 hover:bg-white/10 hover:text-white transition-colors"
-                >
+                </Button>
+                <Button href="/playground/" variant="ghost">
                   Try Playground
-                </Link>
+                </Button>
               </div>
             </div>
           </FadeIn>

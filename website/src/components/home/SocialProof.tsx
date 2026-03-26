@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { FadeIn } from '@/components/ui/FadeIn';
 
 const badges = [
@@ -36,14 +37,15 @@ export function SocialProof() {
         <FadeIn>
           <div className="flex flex-wrap items-center justify-center gap-4">
             {badges.map((badge) => (
-              <img
+              <Image
                 key={badge.alt}
                 src={badge.src}
                 alt={badge.alt}
                 width={badge.width}
                 height={badge.height}
-                className="h-5"
+                className="h-5 w-auto"
                 loading="lazy"
+                unoptimized
               />
             ))}
           </div>

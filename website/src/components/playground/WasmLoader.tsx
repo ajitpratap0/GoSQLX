@@ -196,10 +196,11 @@ export function useWasm(): UseWasmResult {
       .catch((err) => {
         setError(err instanceof Error ? err : new Error(String(err)));
         setLoading(false);
-      })
-      .finally(() => {
-        progressListeners = progressListeners.filter((l) => l !== setProgress);
       });
+
+    return () => {
+      progressListeners = progressListeners.filter((l) => l !== setProgress);
+    };
   }, []);
 
   return { loading, ready, error, api, progress };

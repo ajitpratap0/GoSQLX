@@ -24,10 +24,14 @@ Sentry.init({
     // 2. "Object Not Found Matching Id:N, MethodName:update" — Chrome DevTools
     //    Protocol messages from extensions interacting with CodeMirror/Monaco.
     //    The error originates outside our code and only affects a single session.
-    if (
+    const isExtensionNoise =
       msg.includes("Cannot assign to read only property 'pushState'") ||
-      msg.includes("Object Not Found Matching Id:")
-    ) {
+      msg.includes("Object Not Found Matching Id:");
+
+    if (isExtensionNoise) {
+      if (process.env.NODE_ENV === "development") {
+        console.debug("[Sentry] Suppressed extension noise:", msg);
+      }
       return null;
     }
 

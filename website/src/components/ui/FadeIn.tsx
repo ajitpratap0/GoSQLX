@@ -1,8 +1,8 @@
 'use client';
 import { motion, useReducedMotion } from 'framer-motion';
-import { ReactNode, useState, useEffect } from 'react';
+import { ReactNode, useState, useEffect, memo } from 'react';
 
-export function FadeIn({ children, delay = 0, className = '' }: { children: ReactNode; delay?: number; className?: string }) {
+export const FadeIn = memo(function FadeIn({ children, delay = 0, className = '' }: { children: ReactNode; delay?: number; className?: string }) {
   const shouldReduce = useReducedMotion();
   const [isMounted, setIsMounted] = useState(false);
 
@@ -29,4 +29,4 @@ export function FadeIn({ children, delay = 0, className = '' }: { children: Reac
       {children}
     </motion.div>
   );
-}
+});

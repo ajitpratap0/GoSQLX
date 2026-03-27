@@ -12,10 +12,12 @@ function GitHubStarButton() {
   const [stars, setStars] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch('https://api.github.com/repos/ajitpratap0/GoSQLX')
+    const controller = new AbortController();
+    fetch('https://api.github.com/repos/ajitpratap0/GoSQLX', { signal: controller.signal })
       .then((r) => r.json())
       .then((d) => { if (typeof d.stargazers_count === 'number') setStars(d.stargazers_count); })
       .catch(() => {});
+    return () => controller.abort();
   }, []);
 
   return (

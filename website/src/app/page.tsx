@@ -9,7 +9,7 @@ import { CtaBanner } from '@/components/home/CtaBanner';
 
 export default function Home() {
   return (
-    <main>
+    <>
       <Hero />
       <StatsBar />
       <FeatureGrid />
@@ -18,6 +18,6 @@ export default function Home() {
       <VscodeSection />
       <SocialProof />
       <CtaBanner />
-    </main>
+    </>
   );
 }

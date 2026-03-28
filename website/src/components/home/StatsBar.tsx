@@ -21,7 +21,7 @@ export function StatsBar() {
               <GlassCard className="p-6 text-center w-full">
                 <div className="flex items-baseline justify-center gap-0.5">
                   {stat.prefix && (
-                    <span className={`text-4xl font-bold ${stat.color}`}>{stat.prefix}</span>
+                    <span className={`text-3xl sm:text-4xl font-bold ${stat.color}`}>{stat.prefix}</span>
                   )}
                   <AnimatedCounter value={stat.value} suffix={stat.suffix} color={stat.color} />
                 </div>

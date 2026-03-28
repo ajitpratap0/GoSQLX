@@ -29,7 +29,7 @@ export function AnimatedCounter({ value, suffix = '', color = 'text-white' }: { 
   }, [spring]);
 
   return (
-    <span ref={ref} className={`text-4xl font-bold tabular-nums ${color}`}>
+    <span ref={ref} className={`text-3xl sm:text-4xl font-bold tabular-nums ${color}`}>
       {display}{suffix}
     </span>
   );

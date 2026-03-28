@@ -8,6 +8,11 @@ const withAnalyzer = withBundleAnalyzer({
 
 const nextConfig: NextConfig = {
   trailingSlash: true,
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: 'img.shields.io' },
+    ],
+  },
   async headers() {
     return [
       {
@@ -24,7 +29,7 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' https://img.shields.io https://goreportcard.com https://*.shields.io data:; connect-src 'self' https://*.sentry.io https://vitals.vercel-insights.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://va.vercel-scripts.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' https://img.shields.io https://goreportcard.com https://*.shields.io data:; connect-src 'self' https://*.sentry.io https://vitals.vercel-insights.com https://va.vercel-scripts.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
           },
           {
             key: 'Strict-Transport-Security',

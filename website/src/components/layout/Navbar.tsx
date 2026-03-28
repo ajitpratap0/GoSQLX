@@ -43,6 +43,8 @@ export function Navbar() {
   const { scrollY } = useScroll();
   const bgOpacity = useTransform(scrollY, [0, 100], [0.6, 0.9]);
   const blurAmount = useTransform(scrollY, [0, 100], [8, 16]);
+  const bgColor = useTransform(bgOpacity, (v) => `rgba(9, 9, 11, ${v})`);
+  const blur = useTransform(blurAmount, (v) => `blur(${v}px)`);
 
   // Close mobile menu on resize
   useEffect(() => {
@@ -55,8 +57,8 @@ export function Navbar() {
     <motion.header
       className="fixed top-0 left-0 right-0 z-50 border-b border-white/[0.06]"
       style={{
-        backgroundColor: useTransform(bgOpacity, (v) => `rgba(9, 9, 11, ${v})`),
-        backdropFilter: useTransform(blurAmount, (v) => `blur(${v}px)`),
+        backgroundColor: bgColor,
+        backdropFilter: blur,
       }}
     >
       <nav aria-label="Main navigation" className="mx-auto max-w-7xl flex items-center justify-between px-4 sm:px-6 lg:px-8 h-16">

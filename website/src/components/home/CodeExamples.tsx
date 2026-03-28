@@ -14,7 +14,7 @@ const tabs: { label: string; lines: CodeLine[] }[] = [
     lines: [
       [{ text: 'package', cls: 'text-accent-indigo' }, { text: ' main', cls: 'text-white' }],
       [],
-      [{ text: 'import', cls: 'text-accent-indigo' }, { text: ' ', cls: '' }, { text: '"github.com/gosqlx/gosqlx/pkg/gosqlx"', cls: 'text-accent-green' }],
+      [{ text: 'import', cls: 'text-accent-indigo' }, { text: ' ', cls: '' }, { text: '"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"', cls: 'text-accent-green' }],
       [],
       [{ text: 'func', cls: 'text-accent-indigo' }, { text: ' main', cls: 'text-accent-orange' }, { text: '() {', cls: 'text-zinc-300' }],
       [{ text: '    ', cls: '' }, { text: '// Parse SQL into an AST', cls: 'text-zinc-500' }],
@@ -31,7 +31,7 @@ const tabs: { label: string; lines: CodeLine[] }[] = [
     lines: [
       [{ text: 'package', cls: 'text-accent-indigo' }, { text: ' main', cls: 'text-white' }],
       [],
-      [{ text: 'import', cls: 'text-accent-indigo' }, { text: ' ', cls: '' }, { text: '"github.com/gosqlx/gosqlx/pkg/gosqlx"', cls: 'text-accent-green' }],
+      [{ text: 'import', cls: 'text-accent-indigo' }, { text: ' ', cls: '' }, { text: '"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"', cls: 'text-accent-green' }],
       [],
       [{ text: 'func', cls: 'text-accent-indigo' }, { text: ' main', cls: 'text-accent-orange' }, { text: '() {', cls: 'text-zinc-300' }],
       [{ text: '    ', cls: '' }, { text: '// Format messy SQL', cls: 'text-zinc-500' }],
@@ -48,7 +48,7 @@ const tabs: { label: string; lines: CodeLine[] }[] = [
     lines: [
       [{ text: 'package', cls: 'text-accent-indigo' }, { text: ' main', cls: 'text-white' }],
       [],
-      [{ text: 'import', cls: 'text-accent-indigo' }, { text: ' ', cls: '' }, { text: '"github.com/gosqlx/gosqlx/pkg/gosqlx"', cls: 'text-accent-green' }],
+      [{ text: 'import', cls: 'text-accent-indigo' }, { text: ' ', cls: '' }, { text: '"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"', cls: 'text-accent-green' }],
       [],
       [{ text: 'func', cls: 'text-accent-indigo' }, { text: ' main', cls: 'text-accent-orange' }, { text: '() {', cls: 'text-zinc-300' }],
       [{ text: '    ', cls: '' }, { text: '// Validate SQL syntax', cls: 'text-zinc-500' }],
@@ -64,7 +64,7 @@ const tabs: { label: string; lines: CodeLine[] }[] = [
     lines: [
       [{ text: 'package', cls: 'text-accent-indigo' }, { text: ' main', cls: 'text-white' }],
       [],
-      [{ text: 'import', cls: 'text-accent-indigo' }, { text: ' ', cls: '' }, { text: '"github.com/gosqlx/gosqlx/pkg/gosqlx"', cls: 'text-accent-green' }],
+      [{ text: 'import', cls: 'text-accent-indigo' }, { text: ' ', cls: '' }, { text: '"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"', cls: 'text-accent-green' }],
       [],
       [{ text: 'func', cls: 'text-accent-indigo' }, { text: ' main', cls: 'text-accent-orange' }, { text: '() {', cls: 'text-zinc-300' }],
       [{ text: '    ', cls: '' }, { text: '// Lint SQL for best practices', cls: 'text-zinc-500' }],

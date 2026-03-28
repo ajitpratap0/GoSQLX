@@ -158,7 +158,7 @@ export function Hero() {
             <GlassCard hover={false} className="p-0 overflow-hidden shadow-2xl shadow-indigo-500/5">
               <div className="grid md:grid-cols-2 divide-y md:divide-y-0 divide-x-0 md:divide-x divide-white/[0.06]">
                 {/* SQL Input side */}
-                <div className="text-left">
+                <div className="text-left min-w-0">
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/[0.06]">
                     <div className="flex gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
@@ -181,10 +181,10 @@ export function Hero() {
                 </div>
 
                 {/* AST Output side */}
-                <div className="text-left">
+                <div className="text-left min-w-0">
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/[0.06]">
                     <span className="text-xs text-zinc-400 font-mono">AST Output</span>
-                    <span className="ml-auto text-[10px] text-emerald-400 font-mono">parsed in &lt;1ms</span>
+                    <span className="ml-auto text-xs text-emerald-400 font-mono">parsed in &lt;1ms</span>
                   </div>
                   <pre
                     tabIndex={0}

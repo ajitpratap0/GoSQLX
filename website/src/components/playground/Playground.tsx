@@ -135,7 +135,7 @@ export default function Playground() {
         {/* Skeleton panels */}
         <div className="flex flex-col lg:flex-row flex-1 min-h-0">
           {/* Left: editor skeleton */}
-          <div className="w-full lg:w-1/2 border-r border-slate-800 flex flex-col min-h-0 p-4 gap-3">
+          <div className="w-full lg:w-1/2 border-r border-slate-800 flex flex-col min-h-[240px] lg:min-h-0 p-4 gap-3">
             <div className="animate-pulse bg-zinc-800 rounded h-3 w-3/4" />
             <div className="animate-pulse bg-zinc-800 rounded h-3 w-full" />
             <div className="animate-pulse bg-zinc-800 rounded h-3 w-5/6" />
@@ -206,11 +206,11 @@ export default function Playground() {
   return (
     <div className="flex flex-col h-full bg-[#09090b]">
       {/* Top toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800 bg-slate-900/50">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800 bg-slate-900/50 min-h-[44px]">
         <div className="flex items-center gap-3">
           <h1 className="sr-only">SQL Playground</h1>
-          <span className="text-sm font-semibold text-slate-200" aria-hidden="true">SQL Playground</span>
-          <div className="h-4 w-px bg-slate-700" />
+          <span className="hidden sm:block text-sm font-semibold text-slate-200" aria-hidden="true">SQL Playground</span>
+          <div className="hidden sm:block h-4 w-px bg-slate-700" />
           <label htmlFor="dialect-select" className="flex items-center gap-2 text-sm text-slate-400">
             Dialect:
             <select
@@ -236,7 +236,7 @@ export default function Playground() {
       {/* Main content: split panels */}
       <div className="flex flex-col lg:flex-row flex-1 min-h-0">
         {/* Left panel - SQL Editor */}
-        <div className="w-full lg:w-1/2 border-r border-slate-800 flex flex-col min-h-0">
+        <div className="w-full lg:w-1/2 border-r border-slate-800 flex flex-col min-h-[240px] lg:min-h-0">
           <div className="px-4 py-2 border-b border-slate-800 bg-slate-900/30">
             <span className="text-xs text-slate-400 uppercase tracking-wider font-medium">Input</span>
           </div>
@@ -251,7 +251,7 @@ export default function Playground() {
         </div>
 
         {/* Right panel - Tabs + Content */}
-        <div className="w-full lg:w-1/2 flex flex-col min-h-0">
+        <div className="w-full lg:w-1/2 flex flex-col min-h-[240px] lg:min-h-0">
           {/* Tab bar with animated underline */}
           <div className="flex border-b border-slate-800 bg-slate-900/30" role="tablist" aria-label="Output format">
             {TABS.map((tab) => (
@@ -302,7 +302,7 @@ export default function Playground() {
             </code>
             <button
               onClick={handleCopy}
-              className="text-xs text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded px-2 py-1 transition-colors flex-shrink-0"
+              className="text-xs text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded px-3 py-2 transition-colors flex-shrink-0 min-h-[36px]"
               aria-label="Copy install command"
             >
               {copied ? '✓ Copied' : 'Copy'}

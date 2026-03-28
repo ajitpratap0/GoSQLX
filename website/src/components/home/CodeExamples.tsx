@@ -109,7 +109,7 @@ export function CodeExamples() {
           </h2>
         </FadeIn>
         <FadeIn delay={0.1}>
-          <div className="flex gap-1 mb-4">
+          <div className="flex flex-wrap gap-1 mb-4">
             {tabs.map((tab, i) => (
               <button
                 key={tab.label}

@@ -8,7 +8,7 @@ export function VscodeSection() {
   return (
     <section className="py-20 border-t border-white/[0.06]">
       <div className="max-w-6xl mx-auto px-4">
-        <div className="flex flex-col md:flex-row items-center gap-10">
+        <div className="flex flex-col md:flex-row items-center gap-6 md:gap-10">
           {/* Left: Copy */}
           <div className="md:w-1/2">
             <FadeIn>

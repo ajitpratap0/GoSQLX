@@ -976,8 +976,8 @@ func TestFormatResult(t *testing.T) {
 
 func TestDefaultRules(t *testing.T) {
 	rules := DefaultRules()
-	if len(rules) != 8 {
-		t.Errorf("expected 8 default rules, got %d", len(rules))
+	if len(rules) != 20 {
+		t.Errorf("expected 20 default rules, got %d", len(rules))
 	}
 
 	ids := make(map[string]bool)
@@ -1006,6 +1006,9 @@ func TestRuleMetadata(t *testing.T) {
 	expectedIDs := []string{
 		"OPT-001", "OPT-002", "OPT-003", "OPT-004",
 		"OPT-005", "OPT-006", "OPT-007", "OPT-008",
+		"OPT-009", "OPT-010", "OPT-011", "OPT-012",
+		"OPT-013", "OPT-014", "OPT-015", "OPT-016",
+		"OPT-017", "OPT-018", "OPT-019", "OPT-020",
 	}
 
 	for i, rule := range rules {

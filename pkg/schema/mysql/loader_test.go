@@ -18,6 +18,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -28,10 +29,22 @@ import (
 	myschema "github.com/ajitpratap0/GoSQLX/pkg/schema/mysql"
 )
 
+// isDockerAvailable checks whether the Docker daemon is reachable.
+// Returns false on macOS CI runners that have no Docker installed.
+func isDockerAvailable() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "docker", "info")
+	return cmd.Run() == nil
+}
+
 func startMySQL(t *testing.T) *sql.DB {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("skipping testcontainers test in -short mode")
+	}
+	if !isDockerAvailable() {
+		t.Skip("Docker not available, skipping integration test")
 	}
 	ctx := context.Background()
 	req := testcontainers.ContainerRequest{

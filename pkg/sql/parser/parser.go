@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
+	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
@@ -83,6 +84,7 @@ var parserPool = sync.Pool{
 //
 // Thread Safety: Safe for concurrent calls - each goroutine gets its own instance.
 func GetParser() *Parser {
+	metrics.RecordNamedPoolGet("parser")
 	return parserPool.Get().(*Parser)
 }
 
@@ -104,6 +106,7 @@ func PutParser(p *Parser) {
 	if p != nil {
 		p.Reset()
 		parserPool.Put(p)
+		metrics.RecordNamedPoolPut("parser")
 	}
 }
 

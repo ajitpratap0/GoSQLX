@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"fmt"
 	"testing"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/testcontainers/testcontainers-go"
@@ -29,6 +30,9 @@ import (
 
 func startMySQL(t *testing.T) *sql.DB {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("skipping testcontainers test in -short mode")
+	}
 	ctx := context.Background()
 	req := testcontainers.ContainerRequest{
 		Image:        "mysql:8.0",
@@ -56,6 +60,17 @@ func startMySQL(t *testing.T) *sql.DB {
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
+
+	// Wait for MySQL to be fully ready to accept queries.
+	for i := 0; i < 30; i++ {
+		if err := db.PingContext(ctx); err == nil {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	if err := db.PingContext(ctx); err != nil {
+		t.Fatalf("ping db after retries: %v", err)
+	}
 
 	_, err = db.Exec(`
 		CREATE TABLE products (

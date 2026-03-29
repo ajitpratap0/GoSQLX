@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"fmt"
 	"testing"
+	"time"
 
 	_ "github.com/lib/pq"
 	"github.com/testcontainers/testcontainers-go"
@@ -29,6 +30,9 @@ import (
 
 func startPostgres(t *testing.T) *sql.DB {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("skipping testcontainers test in -short mode")
+	}
 	ctx := context.Background()
 	req := testcontainers.ContainerRequest{
 		Image:        "postgres:16-alpine",
@@ -38,7 +42,7 @@ func startPostgres(t *testing.T) *sql.DB {
 			"POSTGRES_PASSWORD": "test",
 			"POSTGRES_DB":       "testdb",
 		},
-		WaitingFor: wait.ForListeningPort("5432/tcp"),
+		WaitingFor: wait.ForLog("database system is ready to accept connections").WithOccurrence(2),
 	}
 	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: req,
@@ -57,6 +61,17 @@ func startPostgres(t *testing.T) *sql.DB {
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
+
+	// Wait for the database to be fully ready to accept queries.
+	for i := 0; i < 30; i++ {
+		if err := db.PingContext(ctx); err == nil {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	if err := db.PingContext(ctx); err != nil {
+		t.Fatalf("ping db after retries: %v", err)
+	}
 
 	_, err = db.Exec(`
 		CREATE TABLE users (

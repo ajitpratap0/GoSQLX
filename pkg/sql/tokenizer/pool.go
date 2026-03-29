@@ -96,6 +96,7 @@ func GetTokenizer() *Tokenizer {
 
 	// Record pool metrics
 	metrics.RecordPoolGet(true) // Assume from pool (New() creates if empty)
+	metrics.RecordNamedPoolGet("tokenizer")
 
 	return t
 }
@@ -132,6 +133,7 @@ func PutTokenizer(t *Tokenizer) {
 
 		// Record pool return
 		metrics.RecordPoolPut()
+		metrics.RecordNamedPoolPut("tokenizer")
 	}
 }
 

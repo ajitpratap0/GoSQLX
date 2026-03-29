@@ -26,6 +26,7 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
+	"github.com/ajitpratap0/GoSQLX/pkg/transpiler"
 )
 
 // Version is the current GoSQLX library version.
@@ -656,4 +657,26 @@ func Normalize(sql string) (string, error) {
 //	// fp1 == fp2
 func Fingerprint(sql string) (string, error) {
 	return fingerprint.Fingerprint(sql)
+}
+
+// Transpile converts SQL from one dialect to another.
+//
+// Supported dialect pairs:
+//   - MySQL → PostgreSQL  (AUTO_INCREMENT→SERIAL, TINYINT(1)→BOOLEAN)
+//   - PostgreSQL → MySQL  (SERIAL→AUTO_INCREMENT, ILIKE→LOWER() LIKE LOWER())
+//   - PostgreSQL → SQLite (SERIAL→INTEGER, array types→TEXT)
+//
+// For unsupported dialect pairs the SQL is parsed and reformatted without any
+// dialect-specific rewrites (passthrough with normalisation).
+//
+// Example:
+//
+//	result, err := gosqlx.Transpile(
+//	    "CREATE TABLE t (id INT AUTO_INCREMENT PRIMARY KEY)",
+//	    keywords.DialectMySQL,
+//	    keywords.DialectPostgreSQL,
+//	)
+//	// result: "CREATE TABLE t (id SERIAL PRIMARY KEY)"
+func Transpile(sql string, from, to keywords.SQLDialect) (string, error) {
+	return transpiler.Transpile(sql, from, to)
 }

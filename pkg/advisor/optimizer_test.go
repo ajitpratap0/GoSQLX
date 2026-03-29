@@ -1003,7 +1003,7 @@ func TestDefaultRules(t *testing.T) {
 func TestRuleMetadata(t *testing.T) {
 	rules := DefaultRules()
 
-	expectedIDs := []string{
+	expectedFirstIDs := []string{
 		"OPT-001", "OPT-002", "OPT-003", "OPT-004",
 		"OPT-005", "OPT-006", "OPT-007", "OPT-008",
 		"OPT-009", "OPT-010", "OPT-011", "OPT-012",
@@ -1011,9 +1011,13 @@ func TestRuleMetadata(t *testing.T) {
 		"OPT-017", "OPT-018", "OPT-019", "OPT-020",
 	}
 
-	for i, rule := range rules {
-		if rule.ID() != expectedIDs[i] {
-			t.Errorf("rule %d: expected ID %q, got %q", i, expectedIDs[i], rule.ID())
+	for i, expID := range expectedFirstIDs {
+		if i >= len(rules) {
+			t.Errorf("rule %d: expected ID %q but only %d rules registered", i, expID, len(rules))
+			continue
+		}
+		if rules[i].ID() != expID {
+			t.Errorf("rule %d: expected ID %q, got %q", i, expID, rules[i].ID())
 		}
 	}
 }

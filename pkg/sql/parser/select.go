@@ -109,8 +109,8 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		return nil, err
 	}
 
-	// MariaDB: START WITH ... CONNECT BY hierarchical queries (10.2+)
-	if p.isMariaDB() {
+	// Oracle/MariaDB: START WITH ... CONNECT BY hierarchical queries
+	if p.isMariaDB() || p.dialect == string(keywords.DialectOracle) {
 		if strings.EqualFold(p.currentToken.Token.Value, "START") {
 			p.advance() // Consume START
 			if !strings.EqualFold(p.currentToken.Token.Value, "WITH") {

@@ -22,6 +22,8 @@ package ast
 
 import (
 	"sync"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
 )
 
 // Pool configuration constants control cleanup behavior to prevent resource exhaustion.
@@ -407,6 +409,7 @@ var (
 //
 // See also: ReleaseAST(), GetSelectStatement(), GetInsertStatement()
 func NewAST() *AST {
+	metrics.RecordNamedPoolGet("ast")
 	return astPool.Get().(*AST)
 }
 
@@ -472,6 +475,7 @@ func ReleaseAST(ast *AST) {
 	}
 
 	// Return to pool
+	metrics.RecordNamedPoolPut("ast")
 	astPool.Put(ast)
 }
 

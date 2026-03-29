@@ -41,7 +41,7 @@ func (l *Loader) Load(db *sql.DB, schemaName string) (*dbschema.DatabaseSchema, 
 	if err != nil {
 		return nil, fmt.Errorf("list tables: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	ds := &dbschema.DatabaseSchema{Name: schemaName}
 	for rows.Next() {
@@ -96,7 +96,7 @@ func (l *Loader) loadColumns(db *sql.DB, schemaName, tableName string) ([]dbsche
 	if err != nil {
 		return nil, fmt.Errorf("load columns: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var cols []dbschema.Column
 	for rows.Next() {
@@ -128,7 +128,7 @@ func (l *Loader) loadIndexes(db *sql.DB, schemaName, tableName string) ([]dbsche
 	if err != nil {
 		return nil, fmt.Errorf("load indexes: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	idxMap := make(map[string]*dbschema.Index)
 	var order []string
@@ -176,7 +176,7 @@ func (l *Loader) loadForeignKeys(db *sql.DB, schemaName, tableName string) ([]db
 	if err != nil {
 		return nil, fmt.Errorf("load fks: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	fkMap := make(map[string]*dbschema.ForeignKey)
 	var order []string

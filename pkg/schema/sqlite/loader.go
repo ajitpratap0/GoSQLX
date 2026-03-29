@@ -40,7 +40,7 @@ func (l *Loader) Load(db *sql.DB, schemaName string) (*dbschema.DatabaseSchema, 
 	if err != nil {
 		return nil, fmt.Errorf("list tables: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	ds := &dbschema.DatabaseSchema{Name: schemaName}
 	for rows.Next() {
@@ -81,7 +81,7 @@ func (l *Loader) loadColumns(db *sql.DB, tableName string) ([]dbschema.Column, e
 	if err != nil {
 		return nil, fmt.Errorf("pragma table_info: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var cols []dbschema.Column
 	for rows.Next() {
@@ -112,7 +112,7 @@ func (l *Loader) loadIndexes(db *sql.DB, tableName string) ([]dbschema.Index, er
 	if err != nil {
 		return nil, fmt.Errorf("pragma index_list: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var indexes []dbschema.Index
 	for rows.Next() {
@@ -155,7 +155,7 @@ func (l *Loader) loadForeignKeys(db *sql.DB, tableName string) ([]dbschema.Forei
 	if err != nil {
 		return nil, fmt.Errorf("pragma foreign_key_list: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	fkMap := make(map[int]*dbschema.ForeignKey)
 	var order []int

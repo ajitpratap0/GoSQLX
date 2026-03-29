@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - PostgreSQL → SQLite: `SERIAL`/`BIGSERIAL` → `INTEGER`, array types → `TEXT`
   - `gosqlx.Transpile()` top-level convenience wrapper
   - `gosqlx transpile --from <dialect> --to <dialect>` CLI subcommand
+- **Live schema introspection** (`pkg/schema/db`): New `Loader` interface and `DatabaseSchema`/`Table`/`Column`/`Index`/`ForeignKey` types for querying live database metadata
+- **PostgreSQL schema loader** (`pkg/schema/postgres`): Introspects tables, columns (with primary/unique flags), indexes, and foreign keys via `information_schema` and `pg_catalog`
+- **MySQL schema loader** (`pkg/schema/mysql`): Introspects tables, columns, indexes, and foreign keys via `information_schema`
+- **SQLite schema loader** (`pkg/schema/sqlite`): Introspects tables, columns, indexes, and foreign keys via PRAGMA commands (pure Go, no cgo required)
+- **`gosqlx.LoadSchema()`** top-level convenience wrapper for dialect-agnostic schema loading
+- Integration tests using `testcontainers-go` v0.32.0 for PostgreSQL and MySQL loaders
 - **MariaDB dialect** (`--dialect mariadb`): New SQL dialect extending MySQL with support for SEQUENCE DDL (`CREATE/DROP/ALTER SEQUENCE` with full option set), temporal tables (`FOR SYSTEM_TIME`, `WITH SYSTEM VERSIONING`, `PERIOD FOR`), and `CONNECT BY` hierarchical queries with `PRIOR`, `START WITH`, and `NOCYCLE`
 - `integrations/opentelemetry/` sub-module: `InstrumentedParse()` wraps `gosqlx.Parse()` with OpenTelemetry spans including `db.system`, `db.statement.type`, `db.sql.tables`, `db.sql.columns` attributes
 - `integrations/gorm/` sub-module: GORM plugin that records executed query metadata (tables, columns, statement type) via GoSQLX parsing with GORM SQL normalization (backtick identifiers, `?` placeholders); exposes `Stats()` and `Reset()` APIs

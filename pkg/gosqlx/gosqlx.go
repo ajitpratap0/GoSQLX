@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/fingerprint"
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
@@ -626,4 +627,33 @@ func ParseWithRecovery(sql string) ([]ast.Statement, []error) {
 // Returns an error if the dialect is unknown or if SQL is syntactically invalid.
 func ParseWithDialect(sql string, dialect keywords.SQLDialect) (*ast.AST, error) {
 	return parser.ParseWithDialect(sql, dialect)
+}
+
+// Normalize parses sql, replaces all literal values (strings, numbers, booleans,
+// NULLs) with "?" placeholders, and returns the re-formatted SQL.
+//
+// Two queries that differ only in literal values (e.g., WHERE id = 1 vs WHERE id = 42)
+// produce identical output. Existing parameter placeholders ($1, ?, :name) are preserved.
+//
+// Returns an error if the SQL cannot be parsed.
+//
+// Example:
+//
+//	norm, err := gosqlx.Normalize("SELECT * FROM users WHERE id = 42")
+//	// norm == "SELECT * FROM users WHERE id = ?"
+func Normalize(sql string) (string, error) {
+	return fingerprint.Normalize(sql)
+}
+
+// Fingerprint returns a stable 64-character SHA-256 hex digest for the given SQL.
+// Structurally identical queries with different literal values produce the same fingerprint,
+// making this suitable for query deduplication, caching, and slow-query grouping.
+//
+// Example:
+//
+//	fp1, _ := gosqlx.Fingerprint("SELECT * FROM users WHERE id = 1")
+//	fp2, _ := gosqlx.Fingerprint("SELECT * FROM users WHERE id = 999")
+//	// fp1 == fp2
+func Fingerprint(sql string) (string, error) {
+	return fingerprint.Fingerprint(sql)
 }

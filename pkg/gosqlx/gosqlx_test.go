@@ -588,3 +588,59 @@ func ExampleFormat() {
 	_ = formatted
 	// Output:
 }
+
+func TestGosqlx_Normalize(t *testing.T) {
+	sql := "SELECT * FROM users WHERE id = 42 AND name = 'bob'"
+	got, err := Normalize(sql)
+	if err != nil {
+		t.Fatalf("Normalize() error: %v", err)
+	}
+	if strings.Contains(got, "42") || strings.Contains(got, "'bob'") {
+		t.Errorf("Normalize() did not replace literals; got: %s", got)
+	}
+	if !strings.Contains(got, "?") {
+		t.Errorf("Normalize() missing ? placeholder; got: %s", got)
+	}
+}
+
+func TestGosqlx_Normalize_PreservesPlaceholder(t *testing.T) {
+	sql := "SELECT * FROM users WHERE id = $1"
+	got, err := Normalize(sql)
+	if err != nil {
+		t.Fatalf("Normalize() error: %v", err)
+	}
+	if !strings.Contains(got, "$1") {
+		t.Errorf("Normalize() must preserve existing parameter placeholders; got: %s", got)
+	}
+}
+
+func TestGosqlx_Fingerprint_CrossVersion(t *testing.T) {
+	fp, err := Fingerprint("SELECT 1")
+	if err != nil {
+		t.Fatalf("Fingerprint() error: %v", err)
+	}
+	if len(fp) != 64 {
+		t.Errorf("expected 64-char hex fingerprint, got %d chars: %s", len(fp), fp)
+	}
+}
+
+func TestGosqlx_Fingerprint_SameStructureDifferentLiterals(t *testing.T) {
+	fp1, err := Fingerprint("SELECT * FROM orders WHERE amount > 100")
+	if err != nil {
+		t.Fatalf("Fingerprint(q1) error: %v", err)
+	}
+	fp2, err := Fingerprint("SELECT * FROM orders WHERE amount > 9999")
+	if err != nil {
+		t.Fatalf("Fingerprint(q2) error: %v", err)
+	}
+	if fp1 != fp2 {
+		t.Errorf("same-structure queries must have equal fingerprints: fp1=%s fp2=%s", fp1, fp2)
+	}
+}
+
+func TestGosqlx_Fingerprint_InvalidSQL_ReturnsError(t *testing.T) {
+	_, err := Fingerprint("NOT VALID SQL @@##")
+	if err == nil {
+		t.Error("Fingerprint() should return error for invalid SQL")
+	}
+}

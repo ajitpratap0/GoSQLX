@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `gosqlx.Transpile()` top-level convenience wrapper
   - `gosqlx transpile --from <dialect> --to <dialect>` CLI subcommand
 - **MariaDB dialect** (`--dialect mariadb`): New SQL dialect extending MySQL with support for SEQUENCE DDL (`CREATE/DROP/ALTER SEQUENCE` with full option set), temporal tables (`FOR SYSTEM_TIME`, `WITH SYSTEM VERSIONING`, `PERIOD FOR`), and `CONNECT BY` hierarchical queries with `PRIOR`, `START WITH`, and `NOCYCLE`
+- `integrations/opentelemetry/` sub-module: `InstrumentedParse()` wraps `gosqlx.Parse()` with OpenTelemetry spans including `db.system`, `db.statement.type`, `db.sql.tables`, `db.sql.columns` attributes
+- `integrations/gorm/` sub-module: GORM plugin that records executed query metadata (tables, columns, statement type) via GoSQLX parsing with GORM SQL normalization (backtick identifiers, `?` placeholders); exposes `Stats()` and `Reset()` APIs
+- CI workflow for integration sub-modules (`.github/workflows/integrations.yml`)
 
 ## [1.13.0] - 2026-03-20
 

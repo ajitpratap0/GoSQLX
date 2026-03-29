@@ -2,6 +2,10 @@ import * as Sentry from "@sentry/nextjs";
 
 const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
 
+// Shared regex for pushState read-only errors caused by browser extensions
+// (Vue/Redux DevTools, privacy tools) wrapping history.pushState before our app loads.
+const PUSHSTATE_REGEX = /Cannot assign to read only property ['"]?pushState['"]?/i;
+
 Sentry.init({
   dsn,
   sendDefaultPii: true,
@@ -12,25 +16,53 @@ Sentry.init({
   integrations: [
     Sentry.replayIntegration(),
   ],
+  // Suppress known-noisy error patterns that are not actionable app bugs.
+  // These originate from browser extensions, React hydration with Replay,
+  // and Chrome DevTools Protocol messages.
+  ignoreErrors: [
+    // pushState read-only — covers all TypeError variants (#434).
+    PUSHSTATE_REGEX,
+    // React hydration mismatches triggered by Sentry Replay injecting DOM attributes.
+    "Text content does not match server-rendered HTML",
+    "Hydration failed because the server rendered HTML didn't match the client",
+    "There was an error while hydrating",
+    "Minified React error #418",
+    "Minified React error #423",
+    "Minified React error #425",
+    // Chrome DevTools Protocol messages from extensions interacting with CodeMirror/Monaco.
+    /Object Not Found Matching Id:\d+/,
+  ],
   beforeSend(event) {
     const msg = event.exception?.values?.[0]?.value ?? "";
 
-    // Drop known browser-extension noise that cannot be fixed in app code:
+    // Belt-and-suspenders: also filter in beforeSend for events that bypass
+    // ignoreErrors (e.g. unhandledrejection events, events with no exception value).
     //
-    // 1. "Cannot assign to read only property 'pushState'" — extensions
-    //    (Vue/Redux DevTools, privacy tools) wrap history.pushState before our
-    //    app loads, making it read-only. Not reproducible without the extension.
+    // 1. pushState read-only — extensions (Vue/Redux DevTools, privacy tools) wrap
+    //    history.pushState before our app loads, making it read-only. Not
+    //    reproducible without the extension. Covers all TypeError variants (#434).
     //
-    // 2. "Object Not Found Matching Id:N, MethodName:update" — Chrome DevTools
-    //    Protocol messages from extensions interacting with CodeMirror/Monaco.
-    //    The error originates outside our code and only affects a single session.
+    // 2. React hydration errors — triggered by Sentry Replay injecting data-*
+    //    attributes into the DOM. React compares server HTML (no attrs) with client
+    //    HTML (Sentry attrs) → mismatch. Not a real app bug (#437).
+    //
+    // 3. "Object Not Found Matching Id:N" — Chrome DevTools Protocol messages from
+    //    extensions interacting with CodeMirror/Monaco. Outside our code.
     const isExtensionNoise =
-      msg.includes("Cannot assign to read only property 'pushState'") ||
+      PUSHSTATE_REGEX.test(msg) ||
       msg.includes("Object Not Found Matching Id:");
 
-    if (isExtensionNoise) {
+    const isHydrationNoise =
+      msg.includes("Text content does not match") ||
+      msg.includes("Hydration failed") ||
+      msg.includes("There was an error while hydrating") ||
+      msg.includes("Minified React error #418") ||
+      msg.includes("Minified React error #423") ||
+      msg.includes("Minified React error #425");
+
+    if (isExtensionNoise || isHydrationNoise) {
       if (process.env.NODE_ENV === "development") {
-        console.debug("[Sentry] Suppressed extension noise:", msg);
+        console.debug("[Sentry] Suppressed noise:", msg);
       }
       return null;
     }

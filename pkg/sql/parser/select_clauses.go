@@ -301,6 +301,88 @@ func (p *Parser) parseJoinCondition(joinType string, isNatural, isApply bool) (a
 	return nil, p.expectedError("ON or USING")
 }
 
+// parseSampleClause parses the ClickHouse SAMPLE clause that specifies data sampling.
+// It is called when the current token is SAMPLE (already verified by caller).
+//
+// Supported forms:
+//
+//	SAMPLE 0.1              — ratio (floating-point fraction, e.g., 10%)
+//	SAMPLE 1000             — approximate row count (integer)
+//	SAMPLE 1/10             — fractional form (numerator/denominator)
+//	SAMPLE 1/10 OFFSET 2/10 — fractional with an offset fraction
+func (p *Parser) parseSampleClause() (*ast.SampleClause, error) {
+	samplePos := p.currentLocation()
+	p.advance() // Consume SAMPLE
+
+	if p.isType(models.TokenTypeEOF) || p.isType(models.TokenTypeSemicolon) {
+		return nil, goerrors.ExpectedTokenError(
+			"sampling size after SAMPLE",
+			p.currentToken.Token.Type.String(),
+			p.currentLocation(),
+			"SAMPLE clause requires a numeric argument",
+		)
+	}
+
+	clause := &ast.SampleClause{Pos: samplePos}
+
+	// Read the primary sampling value (numerator / whole number / float)
+	if !p.isNumericLiteral() {
+		return nil, goerrors.ExpectedTokenError(
+			"numeric literal after SAMPLE",
+			p.currentToken.Token.Type.String(),
+			p.currentLocation(),
+			"SAMPLE clause requires a numeric argument (ratio, row count, or N/D fraction)",
+		)
+	}
+	clause.Value = p.currentToken.Token.Value
+	p.advance()
+
+	// Check for fractional form: SAMPLE N / D
+	if p.isType(models.TokenTypeDiv) {
+		p.advance() // consume /
+		if !p.isNumericLiteral() {
+			return nil, goerrors.ExpectedTokenError(
+				"denominator after /",
+				p.currentToken.Token.Type.String(),
+				p.currentLocation(),
+				"SAMPLE N/D fraction requires an integer denominator",
+			)
+		}
+		clause.Denominator = p.currentToken.Token.Value
+		p.advance()
+	}
+
+	// Optional OFFSET N/D
+	if p.isTokenMatch("OFFSET") {
+		p.advance() // Consume OFFSET
+		if !p.isNumericLiteral() {
+			return nil, goerrors.ExpectedTokenError(
+				"numeric literal after SAMPLE ... OFFSET",
+				p.currentToken.Token.Type.String(),
+				p.currentLocation(),
+				"SAMPLE OFFSET requires a numeric argument",
+			)
+		}
+		clause.Offset = p.currentToken.Token.Value
+		p.advance()
+		if p.isType(models.TokenTypeDiv) {
+			p.advance() // consume /
+			if !p.isNumericLiteral() {
+				return nil, goerrors.ExpectedTokenError(
+					"denominator after OFFSET /",
+					p.currentToken.Token.Type.String(),
+					p.currentLocation(),
+					"SAMPLE OFFSET N/D fraction requires an integer denominator",
+				)
+			}
+			clause.OffsetDenominator = p.currentToken.Token.Value
+			p.advance()
+		}
+	}
+
+	return clause, nil
+}
+
 // parsePrewhereClause parses "PREWHERE <expr>" if present (ClickHouse-specific).
 // PREWHERE is a ClickHouse optimisation that filters data blocks before reading
 // all columns. It is semantically similar to WHERE but executed earlier in the

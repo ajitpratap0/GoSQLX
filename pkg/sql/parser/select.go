@@ -87,6 +87,13 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		TableName:         tableName,
 	}
 
+	// SAMPLE (ClickHouse-specific, specifies sampling rate/size; comes after FROM/FINAL)
+	if p.dialect == string(keywords.DialectClickHouse) && p.isTokenMatch("SAMPLE") {
+		if selectStmt.Sample, err = p.parseSampleClause(); err != nil {
+			return nil, err
+		}
+	}
+
 	// PREWHERE (ClickHouse-specific, applied before WHERE for early data filtering)
 	if p.dialect == string(keywords.DialectClickHouse) {
 		if selectStmt.PrewhereClause, err = p.parsePrewhereClause(); err != nil {
@@ -109,8 +116,8 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		return nil, err
 	}
 
-	// MariaDB: START WITH ... CONNECT BY hierarchical queries (10.2+)
-	if p.isMariaDB() {
+	// Oracle/MariaDB: START WITH ... CONNECT BY hierarchical queries
+	if p.isMariaDB() || p.dialect == string(keywords.DialectOracle) {
 		if strings.EqualFold(p.currentToken.Token.Value, "START") {
 			p.advance() // Consume START
 			if !strings.EqualFold(p.currentToken.Token.Value, "WITH") {

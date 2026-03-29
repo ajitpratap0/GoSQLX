@@ -154,6 +154,16 @@ func FormatStatement(s ast.Statement, opts ast.FormatOptions) string {
 		return renderTruncate(v, opts)
 	case *ast.MergeStatement:
 		return renderMerge(v, opts)
+	case *ast.CreateSequenceStatement:
+		return renderCreateSequence(v, opts)
+	case *ast.AlterSequenceStatement:
+		return renderAlterSequence(v, opts)
+	case *ast.DropSequenceStatement:
+		return renderDropSequence(v, opts)
+	case *ast.ShowStatement:
+		return renderShow(v, opts)
+	case *ast.DescribeStatement:
+		return renderDescribe(v, opts)
 	default:
 		// Fallback to SQL() for unrecognized statement types
 		return stmtSQL(s)

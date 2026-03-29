@@ -86,30 +86,45 @@ func (v *functionOnColVisitor) Visit(node ast.Node) (ast.Visitor, error) {
 	if node == nil {
 		return nil, nil
 	}
-	// Track that we're inside a WHERE clause
+	// Track that we're inside a WHERE or HAVING clause
 	if sel, ok := node.(*ast.SelectStatement); ok {
+		child := &functionOnColVisitor{rule: v.rule, violations: v.violations, inWhere: false}
+		filterVisitor := &functionOnColVisitor{rule: v.rule, violations: v.violations, inWhere: true}
+
+		// Walk WHERE with inWhere=true
 		if sel.Where != nil {
-			child := &functionOnColVisitor{rule: v.rule, violations: v.violations, inWhere: false}
-			// Walk WHERE separately with inWhere=true
-			whereVisitor := &functionOnColVisitor{rule: v.rule, violations: v.violations, inWhere: true}
-			if err := ast.Walk(whereVisitor, sel.Where); err != nil {
+			if err := ast.Walk(filterVisitor, sel.Where); err != nil {
 				return nil, err
 			}
-			// Walk the rest normally (not in WHERE)
-			for _, col := range sel.Columns {
-				if err := ast.Walk(child, col); err != nil {
-					return nil, err
-				}
-			}
-			for _, join := range sel.Joins {
-				join := join
-				if err := ast.Walk(child, &join); err != nil {
-					return nil, err
-				}
-			}
-			return nil, nil // We've handled children manually
 		}
-		return v, nil
+		// Walk HAVING with inWhere=true (same index-breaking concern)
+		if sel.Having != nil {
+			if err := ast.Walk(filterVisitor, sel.Having); err != nil {
+				return nil, err
+			}
+		}
+		// Walk CTEs to catch nested queries
+		if sel.With != nil {
+			for i := range sel.With.CTEs {
+				if sel.With.CTEs[i].Statement != nil {
+					if err := ast.Walk(v, sel.With.CTEs[i].Statement); err != nil {
+						return nil, err
+					}
+				}
+			}
+		}
+		// Walk the rest normally (not in WHERE/HAVING)
+		for _, col := range sel.Columns {
+			if err := ast.Walk(child, col); err != nil {
+				return nil, err
+			}
+		}
+		for i := range sel.Joins {
+			if err := ast.Walk(child, &sel.Joins[i]); err != nil {
+				return nil, err
+			}
+		}
+		return nil, nil // We've handled children manually
 	}
 
 	if !v.inWhere {

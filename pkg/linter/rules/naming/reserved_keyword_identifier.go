@@ -86,7 +86,7 @@ func (r *ReservedKeywordIdentifierRule) Check(ctx *linter.Context) ([]linter.Vio
 					RuleName:   r.Name(),
 					Severity:   r.Severity(),
 					Message:    "Table name '" + ref.Name + "' is a SQL reserved keyword",
-					Location:   models.Location{Line: sel.Pos.Line, Column: sel.Pos.Column},
+					Location:   models.Location{Line: 1, Column: 1},
 					Suggestion: "Quote the identifier: FROM \"" + ref.Name + "\" or rename the table",
 				})
 			}
@@ -96,7 +96,7 @@ func (r *ReservedKeywordIdentifierRule) Check(ctx *linter.Context) ([]linter.Vio
 					RuleName:   r.Name(),
 					Severity:   r.Severity(),
 					Message:    "Table alias '" + ref.Alias + "' is a SQL reserved keyword",
-					Location:   models.Location{Line: sel.Pos.Line, Column: sel.Pos.Column},
+					Location:   models.Location{Line: 1, Column: 1},
 					Suggestion: "Use a non-reserved alias instead of '" + ref.Alias + "'",
 				})
 			}

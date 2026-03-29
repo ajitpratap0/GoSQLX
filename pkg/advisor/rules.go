@@ -24,6 +24,7 @@ import (
 // DefaultRules returns the default set of all built-in optimization rules.
 func DefaultRules() []Rule {
 	return []Rule{
+		// OPT-001 through OPT-008: original rules
 		&SelectStarRule{},
 		&MissingWhereRule{},
 		&CartesianProductRule{},
@@ -32,6 +33,19 @@ func DefaultRules() []Rule {
 		&OrInWhereRule{},
 		&LeadingWildcardLikeRule{},
 		&FunctionOnColumnRule{},
+		// OPT-009 through OPT-020: advanced rules
+		&CorrelatedSubqueryInSelectRule{},
+		&HavingWithoutGroupByRule{},
+		&RedundantOrderByInCTERule{},
+		&ImplicitTypeConversionRule{},
+		&OrToInConversionRule{},
+		&NotInSubqueryNullRule{},
+		&MissingLimitRule{},
+		&UnusedAliasRule{},
+		&UnionDeduplicationRule{},
+		&CountStarRule{},
+		&DeepSubqueryNestingRule{},
+		&ExplicitCrossJoinRule{},
 	}
 }
 

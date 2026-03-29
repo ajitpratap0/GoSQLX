@@ -396,7 +396,8 @@ type SelectStatement struct {
 	From              []TableReference
 	TableName         string // Added for pool operations
 	Joins             []JoinClause
-	PrewhereClause    Expression // ClickHouse PREWHERE clause (applied before WHERE, before reading data)
+	PrewhereClause    Expression    // ClickHouse PREWHERE clause (applied before WHERE, before reading data)
+	Sample            *SampleClause // ClickHouse SAMPLE clause (comes after FROM/FINAL, before PREWHERE)
 	Where             Expression
 	GroupBy           []Expression
 	Having            Expression
@@ -2022,3 +2023,32 @@ func (c ConnectByClause) Children() []Node {
 	}
 	return nil
 }
+
+// SampleClause represents a ClickHouse SAMPLE clause on a SELECT statement.
+//
+// ClickHouse supports three sampling forms:
+//
+//	SAMPLE 0.1         — ratio (10% of data)
+//	SAMPLE 1000        — approximate row count
+//	SAMPLE 1/10        — fraction (1 part out of 10)
+//	SAMPLE 1/10 OFFSET 2/10 — fraction with offset
+//
+// The clause is dialect-specific to ClickHouse (and partly Snowflake/Redshift
+// via TABLESAMPLE, but this implementation targets SAMPLE).
+// Value is stored as a raw string to preserve the original representation
+// (e.g., "0.1", "1000", "1/10").
+type SampleClause struct {
+	// Value is the sampling size/ratio as a raw token string (e.g., "0.1", "1000", "1/10").
+	Value string
+	// Denominator is set when the fraction form "N/D" is used (denominator part).
+	Denominator string
+	// Offset is the optional OFFSET fraction (e.g., "2/10" in SAMPLE 1/10 OFFSET 2/10).
+	Offset string
+	// OffsetDenominator is set for fractional offsets.
+	OffsetDenominator string
+	Pos               models.Location
+}
+
+func (s *SampleClause) expressionNode()     {}
+func (s SampleClause) TokenLiteral() string { return "SAMPLE" }
+func (s SampleClause) Children() []Node     { return nil }

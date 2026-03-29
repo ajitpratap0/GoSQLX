@@ -154,6 +154,16 @@ func FormatStatement(s ast.Statement, opts ast.FormatOptions) string {
 		return renderTruncate(v, opts)
 	case *ast.MergeStatement:
 		return renderMerge(v, opts)
+	case *ast.CreateSequenceStatement:
+		return renderCreateSequence(v, opts)
+	case *ast.AlterSequenceStatement:
+		return renderAlterSequence(v, opts)
+	case *ast.DropSequenceStatement:
+		return renderDropSequence(v, opts)
+	case *ast.ShowStatement:
+		return renderShow(v, opts)
+	case *ast.DescribeStatement:
+		return renderDescribe(v, opts)
 	default:
 		// Fallback to SQL() for unrecognized statement types
 		return stmtSQL(s)
@@ -226,6 +236,11 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		j := j
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(joinSQL(&j))
+	}
+
+	if s.Sample != nil {
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(sampleSQL(s.Sample, f))
 	}
 
 	if s.Where != nil {
@@ -1174,6 +1189,29 @@ func tableRefSQL(t *ast.TableReference) string {
 	if t.Alias != "" {
 		sb.WriteString(" ")
 		sb.WriteString(t.Alias)
+	}
+	return sb.String()
+}
+
+// sampleSQL renders a ClickHouse SAMPLE clause.
+func sampleSQL(s *ast.SampleClause, f *nodeFormatter) string {
+	var sb strings.Builder
+	sb.WriteString(f.kw("SAMPLE"))
+	sb.WriteString(" ")
+	sb.WriteString(s.Value)
+	if s.Denominator != "" {
+		sb.WriteString("/")
+		sb.WriteString(s.Denominator)
+	}
+	if s.Offset != "" {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("OFFSET"))
+		sb.WriteString(" ")
+		sb.WriteString(s.Offset)
+		if s.OffsetDenominator != "" {
+			sb.WriteString("/")
+			sb.WriteString(s.OffsetDenominator)
+		}
 	}
 	return sb.String()
 }

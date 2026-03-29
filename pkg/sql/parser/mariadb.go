@@ -29,10 +29,10 @@ func (p *Parser) isMariaDB() bool {
 }
 
 // isMariaDBClauseStart returns true when the current token is the start of a
-// MariaDB hierarchical-query clause (CONNECT BY or START WITH) rather than a
-// table alias. Used to guard alias parsing in FROM and JOIN table references.
+// MariaDB or Oracle hierarchical-query clause (CONNECT BY or START WITH) rather
+// than a table alias. Used to guard alias parsing in FROM and JOIN table references.
 func (p *Parser) isMariaDBClauseStart() bool {
-	if !p.isMariaDB() {
+	if !p.isMariaDB() && p.dialect != string(keywords.DialectOracle) {
 		return false
 	}
 	val := strings.ToUpper(p.currentToken.Token.Value)

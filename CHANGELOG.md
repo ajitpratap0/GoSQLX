@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **SQL Transpilation** (`pkg/transpiler`): New `Transpile(sql, from, to)` function converts SQL between dialects with a composable rewrite-rule pipeline
+  - MySQL → PostgreSQL: `AUTO_INCREMENT` → `SERIAL`/`BIGSERIAL`, `TINYINT(1)` → `BOOLEAN`
+  - PostgreSQL → MySQL: `SERIAL` → `INT AUTO_INCREMENT`, `ILIKE` → `LOWER() LIKE LOWER()`
+  - PostgreSQL → SQLite: `SERIAL`/`BIGSERIAL` → `INTEGER`, array types → `TEXT`
+  - `gosqlx.Transpile()` top-level convenience wrapper
+  - `gosqlx transpile --from <dialect> --to <dialect>` CLI subcommand
 - **MariaDB dialect** (`--dialect mariadb`): New SQL dialect extending MySQL with support for SEQUENCE DDL (`CREATE/DROP/ALTER SEQUENCE` with full option set), temporal tables (`FOR SYSTEM_TIME`, `WITH SYSTEM VERSIONING`, `PERIOD FOR`), and `CONNECT BY` hierarchical queries with `PRIOR`, `START WITH`, and `NOCYCLE`
 
 ## [1.13.0] - 2026-03-20

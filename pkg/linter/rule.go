@@ -229,16 +229,41 @@ func (r BaseRule) CanAutoFix() bool {
 // Use this to validate that user-specified rule names in configuration
 // files (e.g., .gosqlx.yml) reference actual rules.
 var ValidRuleIDs = map[string]string{
+	// Whitespace rules
 	"L001": "Trailing Whitespace",
 	"L002": "Mixed Indentation",
 	"L003": "Consecutive Blank Lines",
 	"L004": "Indentation Depth",
 	"L005": "Long Lines",
 	"L006": "Column Alignment",
+	// Style rules
 	"L007": "Keyword Case Consistency",
 	"L008": "Comma Placement",
 	"L009": "Aliasing Consistency",
 	"L010": "Redundant Whitespace",
+	// Safety rules
+	"L011": "Delete Without WHERE",
+	"L012": "Update Without WHERE",
+	"L013": "Drop Without IF EXISTS",
+	"L014": "Truncate Table",
+	"L015": "Select Into Outfile",
+	// Performance rules
+	"L016": "Select Star",
+	"L017": "Missing WHERE on Full Scan",
+	"L018": "Leading Wildcard LIKE",
+	"L019": "NOT IN With NULL Risk",
+	"L020": "Correlated Subquery in SELECT",
+	"L021": "OR Instead of IN",
+	"L022": "Function on Indexed Column",
+	"L023": "Implicit Cross Join",
+	// Naming/style rules
+	"L024": "Table Alias Required",
+	"L025": "Reserved Keyword Identifier",
+	"L026": "Implicit Column List in INSERT",
+	"L027": "UNION Instead of UNION ALL",
+	"L028": "Missing ORDER BY with LIMIT",
+	"L029": "Subquery Can Be JOIN",
+	"L030": "Distinct on Many Columns",
 }
 
 // IsValidRuleID checks whether a rule ID corresponds to an implemented rule.

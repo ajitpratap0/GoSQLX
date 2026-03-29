@@ -238,6 +238,11 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		sb.WriteString(joinSQL(&j))
 	}
 
+	if s.Sample != nil {
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(sampleSQL(s.Sample, f))
+	}
+
 	if s.Where != nil {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("WHERE"))
@@ -1184,6 +1189,29 @@ func tableRefSQL(t *ast.TableReference) string {
 	if t.Alias != "" {
 		sb.WriteString(" ")
 		sb.WriteString(t.Alias)
+	}
+	return sb.String()
+}
+
+// sampleSQL renders a ClickHouse SAMPLE clause.
+func sampleSQL(s *ast.SampleClause, f *nodeFormatter) string {
+	var sb strings.Builder
+	sb.WriteString(f.kw("SAMPLE"))
+	sb.WriteString(" ")
+	sb.WriteString(s.Value)
+	if s.Denominator != "" {
+		sb.WriteString("/")
+		sb.WriteString(s.Denominator)
+	}
+	if s.Offset != "" {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("OFFSET"))
+		sb.WriteString(" ")
+		sb.WriteString(s.Offset)
+		if s.OffsetDenominator != "" {
+			sb.WriteString("/")
+			sb.WriteString(s.OffsetDenominator)
+		}
 	}
 	return sb.String()
 }

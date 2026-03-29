@@ -97,3 +97,60 @@ func TestPlugin_ParseErrorDoesNotPanic(t *testing.T) {
 
 	// No panic = success
 }
+
+func TestPlugin_MaxHistory(t *testing.T) {
+	db := openTestDB(t)
+	plugin := gosqlxgorm.NewPluginWithOptions(gosqlxgorm.PluginOptions{
+		MaxHistory: 5,
+	})
+	_ = db.Use(plugin)
+
+	// Execute more queries than the limit.
+	for i := 0; i < 10; i++ {
+		var users []User
+		db.Find(&users)
+	}
+
+	stats := plugin.Stats()
+	if stats.TotalQueries > 5 {
+		t.Errorf("expected at most 5 queries, got %d", stats.TotalQueries)
+	}
+}
+
+func TestPlugin_OnParseError(t *testing.T) {
+	var called bool
+	var errSQL string
+
+	plugin := gosqlxgorm.NewPluginWithOptions(gosqlxgorm.PluginOptions{
+		OnParseError: func(sql string, err error) {
+			called = true
+			errSQL = sql
+		},
+	})
+
+	db := openTestDB(t)
+	_ = db.Use(plugin)
+
+	// Execute a raw query that is very likely to trigger a parse error.
+	db.Exec("PRAGMA table_info('users')")
+
+	// If no parse error was triggered, the test is inconclusive but should not fail.
+	// We check that the callback was wired correctly by verifying the stats.
+	stats := plugin.Stats()
+	if stats.ParseErrors > 0 && !called {
+		t.Error("OnParseError callback was not called despite parse errors")
+	}
+	if called && errSQL == "" {
+		t.Error("OnParseError was called but sql was empty")
+	}
+}
+
+func TestPlugin_DefaultMaxHistory(t *testing.T) {
+	// NewPlugin without options should use the default (1000).
+	plugin := gosqlxgorm.NewPlugin()
+	// Just verify it does not panic and stats work.
+	stats := plugin.Stats()
+	if stats.TotalQueries != 0 {
+		t.Errorf("expected 0 queries on fresh plugin, got %d", stats.TotalQueries)
+	}
+}

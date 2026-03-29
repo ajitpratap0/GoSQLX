@@ -33,15 +33,42 @@ type PluginStats struct {
 	Queries      []QueryRecord
 }
 
+// defaultMaxHistory is the default maximum number of query records kept.
+const defaultMaxHistory = 1000
+
+// PluginOptions configures the GORM plugin behavior.
+type PluginOptions struct {
+	// MaxHistory limits the number of query records kept. Zero uses the default (1000).
+	MaxHistory int
+	// OnParseError is called when GoSQLX fails to parse a query. Optional.
+	OnParseError func(sql string, err error)
+}
+
 // Plugin is a GORM plugin that parses each executed query with GoSQLX
 // and records extracted metadata (tables, columns, statement type).
 type Plugin struct {
-	mu      sync.Mutex
-	queries []QueryRecord
+	mu           sync.Mutex
+	queries      []QueryRecord
+	maxHistory   int
+	onParseError func(sql string, err error)
 }
 
-// NewPlugin returns a new GoSQLX GORM plugin.
-func NewPlugin() *Plugin { return &Plugin{} }
+// NewPlugin returns a new GoSQLX GORM plugin with default options.
+func NewPlugin() *Plugin {
+	return &Plugin{maxHistory: defaultMaxHistory}
+}
+
+// NewPluginWithOptions returns a new GoSQLX GORM plugin configured with opts.
+func NewPluginWithOptions(opts PluginOptions) *Plugin {
+	mh := opts.MaxHistory
+	if mh <= 0 {
+		mh = defaultMaxHistory
+	}
+	return &Plugin{
+		maxHistory:   mh,
+		onParseError: opts.OnParseError,
+	}
+}
 
 // Name implements gorm.Plugin.
 func (p *Plugin) Name() string { return "gosqlx" }
@@ -82,6 +109,9 @@ func (p *Plugin) afterStatement(db *gorm.DB) {
 	}
 	if err != nil {
 		rec.ParseOK = false
+		if p.onParseError != nil {
+			p.onParseError(sql, err)
+		}
 	} else {
 		rec.ParseOK = true
 		rec.Tables = gosqlx.ExtractTables(tree)
@@ -93,6 +123,12 @@ func (p *Plugin) afterStatement(db *gorm.DB) {
 
 	p.mu.Lock()
 	p.queries = append(p.queries, rec)
+	if len(p.queries) > p.maxHistory {
+		// Trim oldest entries to stay within the limit.
+		excess := len(p.queries) - p.maxHistory
+		copy(p.queries, p.queries[excess:])
+		p.queries = p.queries[:p.maxHistory]
+	}
 	p.mu.Unlock()
 }
 

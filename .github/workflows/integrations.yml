@@ -1,0 +1,40 @@
+name: Integrations
+
+on:
+  push:
+    paths:
+      - 'integrations/**'
+      - '.github/workflows/integrations.yml'
+  pull_request:
+    paths:
+      - 'integrations/**'
+      - '.github/workflows/integrations.yml'
+
+jobs:
+  opentelemetry:
+    name: OpenTelemetry Integration
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: integrations/opentelemetry
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - run: go mod tidy
+      - run: go test -race -timeout 60s ./...
+
+  gorm:
+    name: GORM Integration
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: integrations/gorm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - run: go mod tidy
+      - run: go test -race -timeout 60s ./...

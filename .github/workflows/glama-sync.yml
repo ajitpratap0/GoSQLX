@@ -58,6 +58,7 @@ jobs:
   trigger-glama-build:
     name: Trigger Glama Docker build
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - name: Trigger build
         env:

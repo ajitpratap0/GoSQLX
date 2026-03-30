@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os/exec"
+	"runtime"
 	"testing"
 	"time"
 
@@ -43,6 +44,9 @@ func startMySQL(t *testing.T) *sql.DB {
 	if testing.Short() {
 		t.Skip("skipping testcontainers test in -short mode")
 	}
+	if runtime.GOOS == "windows" {
+		t.Skip("Testcontainers not supported on Windows CI")
+	}
 	if !isDockerAvailable() {
 		t.Skip("Docker not available, skipping integration test")
 	}
@@ -56,10 +60,21 @@ func startMySQL(t *testing.T) *sql.DB {
 		},
 		WaitingFor: wait.ForLog("port: 3306  MySQL Community Server"),
 	}
-	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: req,
-		Started:          true,
-	})
+
+	// Recover from testcontainers panics (e.g. rootless Docker on Windows).
+	var c testcontainers.Container
+	var err error
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Skipf("testcontainers panicked: %v", r)
+			}
+		}()
+		c, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+			ContainerRequest: req,
+			Started:          true,
+		})
+	}()
 	if err != nil {
 		t.Skipf("testcontainers unavailable: %v", err)
 	}

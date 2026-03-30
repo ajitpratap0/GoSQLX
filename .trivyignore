@@ -20,3 +20,14 @@ CVE-2026-33997
 # Severity: HIGH | No fixed version available
 # Transitive dependency in website/package-lock.json. Not in Go code.
 CVE-2026-33750
+
+# CVE-2026-33671, CVE-2026-33672 — picomatch (npm, website)
+# Severity: HIGH | No fixed version available
+# Transitive dependency in website npm deps. Not in Go code.
+CVE-2026-33671
+CVE-2026-33672
+
+# CVE-2026-33532 — yaml (npm, website)
+# Severity: HIGH | No fixed version available
+# Transitive dependency in website npm deps. Not in Go code.
+CVE-2026-33532

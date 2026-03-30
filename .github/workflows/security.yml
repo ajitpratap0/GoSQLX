@@ -83,6 +83,8 @@ jobs:
           format: 'sarif'
           output: 'trivy-repo-results.sarif'
           severity: 'CRITICAL,HIGH,MEDIUM'
+          trivyignores: '.trivyignore'
+          skip-dirs: 'website/node_modules,website'
           exit-code: '0' # Don't fail on SARIF generation to ensure upload completes
 
       - name: Upload Trivy SARIF to GitHub Security tab

@@ -8,3 +8,15 @@
 # Not called directly by any GoSQLX code. Risk is scoped to MCP JSON schema generation.
 # Re-evaluate when buger/jsonparser releases a patched version or when mcp-go updates its dependency.
 GHSA-6g7g-w4f8-9c9x
+
+# CVE-2026-34040, CVE-2026-33997 — github.com/docker/docker v28.5.2+incompatible
+# Severity: HIGH | No fixed version available (latest is v28.5.2)
+# Transitive dependency: testcontainers-go → docker/docker
+# Only used in integration tests, not in production code. Docker daemon internals, not Go client.
+CVE-2026-34040
+CVE-2026-33997
+
+# CVE-2026-33750 — brace-expansion (npm, website)
+# Severity: HIGH | No fixed version available
+# Transitive dependency in website/package-lock.json. Not in Go code.
+CVE-2026-33750

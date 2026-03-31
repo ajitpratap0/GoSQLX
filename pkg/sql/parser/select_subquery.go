@@ -125,6 +125,46 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		}
 	}
 
+	// SQL Server / Oracle PIVOT clause
+	if p.isPivotKeyword() {
+		pivot, err := p.parsePivotClause()
+		if err != nil {
+			return tableRef, err
+		}
+		tableRef.Pivot = pivot
+		// PIVOT result often has its own alias: PIVOT (...) AS pvt
+		if p.isType(models.TokenTypeAs) {
+			p.advance() // consume AS
+			if p.isIdentifier() {
+				tableRef.Alias = p.currentToken.Token.Value
+				p.advance()
+			}
+		} else if p.isIdentifier() {
+			tableRef.Alias = p.currentToken.Token.Value
+			p.advance()
+		}
+	}
+
+	// SQL Server / Oracle UNPIVOT clause
+	if p.isUnpivotKeyword() {
+		unpivot, err := p.parseUnpivotClause()
+		if err != nil {
+			return tableRef, err
+		}
+		tableRef.Unpivot = unpivot
+		// UNPIVOT result alias: UNPIVOT (...) AS unpvt
+		if p.isType(models.TokenTypeAs) {
+			p.advance() // consume AS
+			if p.isIdentifier() {
+				tableRef.Alias = p.currentToken.Token.Value
+				p.advance()
+			}
+		} else if p.isIdentifier() {
+			tableRef.Alias = p.currentToken.Token.Value
+			p.advance()
+		}
+	}
+
 	return tableRef, nil
 }
 
@@ -214,6 +254,44 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 				return ref, err
 			}
 			ref.TableHints = hints
+		}
+	}
+
+	// SQL Server / Oracle PIVOT clause
+	if p.isPivotKeyword() {
+		pivot, err := p.parsePivotClause()
+		if err != nil {
+			return ref, err
+		}
+		ref.Pivot = pivot
+		if p.isType(models.TokenTypeAs) {
+			p.advance()
+			if p.isIdentifier() {
+				ref.Alias = p.currentToken.Token.Value
+				p.advance()
+			}
+		} else if p.isIdentifier() {
+			ref.Alias = p.currentToken.Token.Value
+			p.advance()
+		}
+	}
+
+	// SQL Server / Oracle UNPIVOT clause
+	if p.isUnpivotKeyword() {
+		unpivot, err := p.parseUnpivotClause()
+		if err != nil {
+			return ref, err
+		}
+		ref.Unpivot = unpivot
+		if p.isType(models.TokenTypeAs) {
+			p.advance()
+			if p.isIdentifier() {
+				ref.Alias = p.currentToken.Token.Value
+				p.advance()
+			}
+		} else if p.isIdentifier() {
+			ref.Alias = p.currentToken.Token.Value
+			p.advance()
 		}
 	}
 

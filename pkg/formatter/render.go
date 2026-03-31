@@ -1186,6 +1186,24 @@ func tableRefSQL(t *ast.TableReference) string {
 	} else {
 		sb.WriteString(t.Name)
 	}
+	if t.Pivot != nil {
+		sb.WriteString(" PIVOT (")
+		sb.WriteString(exprSQL(t.Pivot.AggregateFunction))
+		sb.WriteString(" FOR ")
+		sb.WriteString(t.Pivot.PivotColumn)
+		sb.WriteString(" IN (")
+		sb.WriteString(strings.Join(t.Pivot.InValues, ", "))
+		sb.WriteString("))")
+	}
+	if t.Unpivot != nil {
+		sb.WriteString(" UNPIVOT (")
+		sb.WriteString(t.Unpivot.ValueColumn)
+		sb.WriteString(" FOR ")
+		sb.WriteString(t.Unpivot.NameColumn)
+		sb.WriteString(" IN (")
+		sb.WriteString(strings.Join(t.Unpivot.InColumns, ", "))
+		sb.WriteString("))")
+	}
 	if t.Alias != "" {
 		sb.WriteString(" ")
 		sb.WriteString(t.Alias)

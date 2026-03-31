@@ -2,6 +2,13 @@
 # Format: <advisory-id> [expiry-date] [comment]
 # See: https://aquasecurity.github.io/trivy/latest/docs/configuration/filtering/#trivyignore
 
+# CVE-2026-32285 — github.com/buger/jsonparser v1.1.1
+# Severity: HIGH/MEDIUM | No fixed version available (latest is v1.1.1, released 2021-01-08)
+# Transitive dependency: mark3labs/mcp-go → invopop/jsonschema → wk8/go-ordered-map → buger/jsonparser
+# Not called directly by any GoSQLX code. Risk is scoped to MCP JSON schema generation.
+# Re-evaluate when buger/jsonparser releases a patched version or when mcp-go updates its dependency.
+CVE-2026-32285
+
 # GHSA-6g7g-w4f8-9c9x — buger/jsonparser v1.1.1
 # Severity: MEDIUM | No fixed version available (latest is v1.1.1, released 2021-01-08)
 # Transitive dependency: mark3labs/mcp-go → invopop/jsonschema → wk8/go-ordered-map → buger/jsonparser

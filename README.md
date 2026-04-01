@@ -184,6 +184,18 @@ task check    # fmt → vet → lint → test (with race detection)
 
 <br/>
 
+## Who's Using GoSQLX?
+
+GoSQLX is downloaded and cloned by developers worldwide -- 595 unique cloners in just 14 days. If you're using GoSQLX in your project or organization, we'd love to hear about it!
+
+| Project / Company | Use Case |
+|---|---|
+| *Your project here* | [Add yourself via PR](https://github.com/ajitpratap0/GoSQLX/edit/main/README.md) or [tell us in Discussions](https://github.com/ajitpratap0/GoSQLX/discussions) |
+
+Using GoSQLX at work? Building something cool with it? Share your story in [GitHub Discussions](https://github.com/ajitpratap0/GoSQLX/discussions) -- it helps the community grow and motivates continued development.
+
+<br/>
+
 ## Community
 
 <div align="center">

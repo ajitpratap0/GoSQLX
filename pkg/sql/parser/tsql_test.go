@@ -355,6 +355,8 @@ func TestTSQL_TestdataFiles(t *testing.T) {
 		"08_window_row_number.sql": true,
 		"09_window_rank.sql":       true,
 		"10_window_lag_lead.sql":   true,
+		"11_pivot.sql":             true,
+		"12_unpivot.sql":           true,
 		"13_cross_apply.sql":       true,
 		"14_outer_apply.sql":       true,
 		"15_try_convert.sql":       true,
@@ -391,8 +393,218 @@ func TestTSQL_TestdataFiles(t *testing.T) {
 					t.Errorf("expected %s to parse, got: %v", name, parseErr)
 				}
 			} else {
-				// These are known to not yet be supported (PIVOT, UNPIVOT, OPTION)
+				// These are known to not yet be supported (OPTION)
 				t.Logf("%s: %v (not yet supported)", name, parseErr)
+			}
+		})
+	}
+}
+
+func TestTSQL_PivotBasic(t *testing.T) {
+	sql := `SELECT * FROM (
+    SELECT product, region, sales
+    FROM sales_data
+) AS SourceTable
+PIVOT (
+    SUM(sales) FOR region IN ([North], [South], [East], [West])
+) AS PivotTable`
+
+	result, err := ParseWithDialect(sql, keywords.DialectSQLServer)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Statements) != 1 {
+		t.Fatalf("expected 1 statement, got %d", len(result.Statements))
+	}
+	stmt, ok := result.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", result.Statements[0])
+	}
+	if len(stmt.From) == 0 {
+		t.Fatal("expected at least one FROM reference")
+	}
+	ref := stmt.From[0]
+	if ref.Pivot == nil {
+		t.Fatal("expected Pivot clause on table reference")
+	}
+	if ref.Pivot.PivotColumn != "region" {
+		t.Errorf("expected pivot column 'region', got %q", ref.Pivot.PivotColumn)
+	}
+	if len(ref.Pivot.InValues) != 4 {
+		t.Errorf("expected 4 IN values, got %d", len(ref.Pivot.InValues))
+	}
+	expected := []string{"[North]", "[South]", "[East]", "[West]"}
+	for i, v := range expected {
+		if i < len(ref.Pivot.InValues) && ref.Pivot.InValues[i] != v {
+			t.Errorf("IN value [%d]: expected %q, got %q", i, v, ref.Pivot.InValues[i])
+		}
+	}
+	if ref.Pivot.AggregateFunction == nil {
+		t.Error("expected aggregate function in PIVOT")
+	}
+	if ref.Alias != "PivotTable" {
+		t.Errorf("expected alias 'PivotTable', got %q", ref.Alias)
+	}
+}
+
+func TestTSQL_UnpivotBasic(t *testing.T) {
+	sql := `SELECT product, region, sales FROM (
+    SELECT product, north_sales, south_sales, east_sales, west_sales
+    FROM regional_sales
+) AS SourceTable
+UNPIVOT (
+    sales FOR region IN (north_sales, south_sales, east_sales, west_sales)
+) AS UnpivotTable`
+
+	result, err := ParseWithDialect(sql, keywords.DialectSQLServer)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Statements) != 1 {
+		t.Fatalf("expected 1 statement, got %d", len(result.Statements))
+	}
+	stmt, ok := result.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", result.Statements[0])
+	}
+	if len(stmt.From) == 0 {
+		t.Fatal("expected at least one FROM reference")
+	}
+	ref := stmt.From[0]
+	if ref.Unpivot == nil {
+		t.Fatal("expected Unpivot clause on table reference")
+	}
+	if ref.Unpivot.ValueColumn != "sales" {
+		t.Errorf("expected value column 'sales', got %q", ref.Unpivot.ValueColumn)
+	}
+	if ref.Unpivot.NameColumn != "region" {
+		t.Errorf("expected name column 'region', got %q", ref.Unpivot.NameColumn)
+	}
+	if len(ref.Unpivot.InColumns) != 4 {
+		t.Errorf("expected 4 IN columns, got %d", len(ref.Unpivot.InColumns))
+	}
+	expected := []string{"north_sales", "south_sales", "east_sales", "west_sales"}
+	for i, v := range expected {
+		if i < len(ref.Unpivot.InColumns) && ref.Unpivot.InColumns[i] != v {
+			t.Errorf("IN column [%d]: expected %q, got %q", i, v, ref.Unpivot.InColumns[i])
+		}
+	}
+	if ref.Alias != "UnpivotTable" {
+		t.Errorf("expected alias 'UnpivotTable', got %q", ref.Alias)
+	}
+}
+
+func TestTSQL_PivotWithoutAlias(t *testing.T) {
+	sql := `SELECT * FROM sales_data PIVOT (SUM(amount) FOR quarter IN (Q1, Q2, Q3, Q4))`
+
+	result, err := ParseWithDialect(sql, keywords.DialectSQLServer)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	stmt, ok := result.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", result.Statements[0])
+	}
+	ref := stmt.From[0]
+	if ref.Pivot == nil {
+		t.Fatal("expected Pivot clause")
+	}
+	if ref.Name != "sales_data" {
+		t.Errorf("expected table name 'sales_data', got %q", ref.Name)
+	}
+	if ref.Pivot.PivotColumn != "quarter" {
+		t.Errorf("expected pivot column 'quarter', got %q", ref.Pivot.PivotColumn)
+	}
+	if len(ref.Pivot.InValues) != 4 {
+		t.Errorf("expected 4 IN values, got %d", len(ref.Pivot.InValues))
+	}
+}
+
+func TestTSQL_PivotWithASAlias(t *testing.T) {
+	sql := `SELECT * FROM t PIVOT (COUNT(id) FOR status IN (active, inactive)) AS pvt`
+
+	result, err := ParseWithDialect(sql, keywords.DialectSQLServer)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	stmt, ok := result.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", result.Statements[0])
+	}
+	ref := stmt.From[0]
+	if ref.Pivot == nil {
+		t.Fatal("expected Pivot clause")
+	}
+	if ref.Alias != "pvt" {
+		t.Errorf("expected alias 'pvt', got %q", ref.Alias)
+	}
+}
+
+// TestPivotNegativeCases covers parser error paths for malformed PIVOT/UNPIVOT.
+func TestPivotNegativeCases(t *testing.T) {
+	cases := []struct {
+		name string
+		sql  string
+	}{
+		{"missing_lparen", "SELECT * FROM t PIVOT SUM(x) FOR c IN (a))"},
+		{"missing_for", "SELECT * FROM t PIVOT (SUM(x) c IN (a))"},
+		{"missing_in", "SELECT * FROM t PIVOT (SUM(x) FOR c (a))"},
+		{"missing_in_lparen", "SELECT * FROM t PIVOT (SUM(x) FOR c IN a)"},
+		{"empty_in_list", "SELECT * FROM t PIVOT (SUM(x) FOR c IN ())"},
+		{"unpivot_missing_for", "SELECT * FROM t UNPIVOT (v c IN (a))"},
+		{"unpivot_empty_in_list", "SELECT * FROM t UNPIVOT (v FOR n IN ())"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseWithDialect(tc.sql, keywords.DialectSQLServer)
+			if err == nil {
+				t.Fatalf("expected parse error, got nil for: %s", tc.sql)
+			}
+		})
+	}
+}
+
+// TestPivotBracketedInValuesPreserved verifies SQL Server bracket-quoted IN
+// values survive parsing so the formatter can re-emit them.
+func TestPivotBracketedInValuesPreserved(t *testing.T) {
+	sql := `SELECT * FROM sales PIVOT (SUM(amt) FOR region IN ([North], [South])) AS p`
+	result, err := ParseWithDialect(sql, keywords.DialectSQLServer)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	stmt, ok := result.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", result.Statements[0])
+	}
+	got := stmt.From[0].Pivot.InValues
+	want := []string{"[North]", "[South]"}
+	if len(got) != len(want) {
+		t.Fatalf("expected %d values, got %d (%v)", len(want), len(got), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("InValues[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// TestPivotIdentifierInNonTSQLDialects verifies PIVOT/UNPIVOT remain valid
+// identifiers in dialects that don't recognize the contextual clause.
+// Regression for global-tokenizer-keyword leak.
+func TestPivotIdentifierInNonTSQLDialects(t *testing.T) {
+	cases := []struct {
+		dialect keywords.SQLDialect
+		sql     string
+	}{
+		{keywords.DialectPostgreSQL, "SELECT pivot FROM users"},
+		{keywords.DialectPostgreSQL, "SELECT unpivot FROM users"},
+		{keywords.DialectMySQL, "SELECT pivot, unpivot FROM t"},
+		{keywords.DialectSQLite, "SELECT pivot FROM t AS pivot"},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.dialect)+"_"+tc.sql, func(t *testing.T) {
+			if _, err := ParseWithDialect(tc.sql, tc.dialect); err != nil {
+				t.Fatalf("expected pivot/unpivot to parse as identifier in %s, got: %v", tc.dialect, err)
 			}
 		})
 	}

@@ -87,7 +87,9 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 	// Check for table alias (required for derived tables, optional for regular tables).
 	// Guard: in MariaDB, CONNECT followed by BY is a hierarchical query clause, not an alias.
 	// Similarly, START followed by WITH is a hierarchical query seed, not an alias.
-	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() {
+	// Don't consume PIVOT/UNPIVOT as a table alias — they are contextual
+	// keywords in SQL Server/Oracle and must reach the pivot-clause parser below.
+	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() {
 		if p.isType(models.TokenTypeAs) {
 			p.advance() // Consume AS
 			if !p.isIdentifier() {
@@ -123,6 +125,26 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 			}
 			tableRef.TableHints = hints
 		}
+	}
+
+	// SQL Server / Oracle PIVOT clause
+	if p.isPivotKeyword() {
+		pivot, err := p.parsePivotClause()
+		if err != nil {
+			return tableRef, err
+		}
+		tableRef.Pivot = pivot
+		p.parsePivotAlias(&tableRef)
+	}
+
+	// SQL Server / Oracle UNPIVOT clause
+	if p.isUnpivotKeyword() {
+		unpivot, err := p.parseUnpivotClause()
+		if err != nil {
+			return tableRef, err
+		}
+		tableRef.Unpivot = unpivot
+		p.parsePivotAlias(&tableRef)
 	}
 
 	return tableRef, nil
@@ -179,7 +201,9 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 	// Optional alias.
 	// Guard: in MariaDB, CONNECT followed by BY is a hierarchical query clause, not an alias.
 	// Similarly, START followed by WITH is a hierarchical query seed, not an alias.
-	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() {
+	// Don't consume PIVOT/UNPIVOT as a table alias — they are contextual
+	// keywords in SQL Server/Oracle and must reach the pivot-clause parser below.
+	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() {
 		if p.isType(models.TokenTypeAs) {
 			p.advance()
 			if !p.isIdentifier() {
@@ -215,6 +239,26 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 			}
 			ref.TableHints = hints
 		}
+	}
+
+	// SQL Server / Oracle PIVOT clause
+	if p.isPivotKeyword() {
+		pivot, err := p.parsePivotClause()
+		if err != nil {
+			return ref, err
+		}
+		ref.Pivot = pivot
+		p.parsePivotAlias(&ref)
+	}
+
+	// SQL Server / Oracle UNPIVOT clause
+	if p.isUnpivotKeyword() {
+		unpivot, err := p.parseUnpivotClause()
+		if err != nil {
+			return ref, err
+		}
+		ref.Unpivot = unpivot
+		p.parsePivotAlias(&ref)
 	}
 
 	return ref, nil

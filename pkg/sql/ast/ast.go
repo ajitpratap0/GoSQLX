@@ -231,6 +231,12 @@ type TableReference struct {
 	// ForSystemTime is the MariaDB temporal table clause (10.3.4+).
 	// Example: SELECT * FROM t FOR SYSTEM_TIME AS OF '2024-01-01'
 	ForSystemTime *ForSystemTimeClause // MariaDB temporal query
+	// Pivot is the SQL Server / Oracle PIVOT clause for row-to-column transformation.
+	// Example: SELECT * FROM t PIVOT (SUM(sales) FOR region IN ([North], [South])) AS pvt
+	Pivot *PivotClause
+	// Unpivot is the SQL Server / Oracle UNPIVOT clause for column-to-row transformation.
+	// Example: SELECT * FROM t UNPIVOT (sales FOR region IN (north_sales, south_sales)) AS unpvt
+	Unpivot *UnpivotClause
 }
 
 func (t *TableReference) statementNode() {}
@@ -244,10 +250,17 @@ func (t TableReference) TokenLiteral() string {
 	return "subquery"
 }
 func (t TableReference) Children() []Node {
+	var nodes []Node
 	if t.Subquery != nil {
-		return []Node{t.Subquery}
+		nodes = append(nodes, t.Subquery)
 	}
-	return nil
+	if t.Pivot != nil {
+		nodes = append(nodes, t.Pivot)
+	}
+	if t.Unpivot != nil {
+		nodes = append(nodes, t.Unpivot)
+	}
+	return nodes
 }
 
 // OrderByExpression represents an ORDER BY clause element with direction and NULL ordering
@@ -1968,6 +1981,41 @@ func (c ForSystemTimeClause) Children() []Node {
 	}
 	return nodes
 }
+
+// PivotClause represents the SQL Server / Oracle PIVOT operator for row-to-column
+// transformation in a FROM clause.
+//
+//	PIVOT (SUM(sales) FOR region IN ([North], [South], [East], [West])) AS pvt
+type PivotClause struct {
+	AggregateFunction Expression      // The aggregate function, e.g. SUM(sales)
+	PivotColumn       string          // The column used for pivoting, e.g. region
+	InValues          []string        // The values to pivot on, e.g. [North], [South]
+	Pos               models.Location // Source position of the PIVOT keyword
+}
+
+func (p *PivotClause) expressionNode()     {}
+func (p PivotClause) TokenLiteral() string { return "PIVOT" }
+func (p PivotClause) Children() []Node {
+	if p.AggregateFunction != nil {
+		return []Node{p.AggregateFunction}
+	}
+	return nil
+}
+
+// UnpivotClause represents the SQL Server / Oracle UNPIVOT operator for column-to-row
+// transformation in a FROM clause.
+//
+//	UNPIVOT (sales FOR region IN (north_sales, south_sales, east_sales)) AS unpvt
+type UnpivotClause struct {
+	ValueColumn string          // The target value column, e.g. sales
+	NameColumn  string          // The target name column, e.g. region
+	InColumns   []string        // The source columns to unpivot, e.g. north_sales, south_sales
+	Pos         models.Location // Source position of the UNPIVOT keyword
+}
+
+func (u *UnpivotClause) expressionNode()     {}
+func (u UnpivotClause) TokenLiteral() string { return "UNPIVOT" }
+func (u UnpivotClause) Children() []Node     { return nil }
 
 // PeriodDefinition represents a PERIOD FOR clause in CREATE TABLE.
 //

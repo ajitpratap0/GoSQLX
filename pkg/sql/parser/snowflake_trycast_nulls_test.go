@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
@@ -43,6 +44,54 @@ func TestWindowNullTreatment(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			if _, err := gosqlx.ParseWithDialect(q, keywords.DialectSnowflake); err != nil {
 				t.Fatalf("parse failed: %v", err)
+			}
+		})
+	}
+}
+
+// TestTryCastASTShape verifies that a TRY_CAST expression has Try=true and
+// TokenLiteral() returns "TRY_CAST", while a plain CAST returns "CAST".
+func TestTryCastASTShape(t *testing.T) {
+	tcs := map[string]struct {
+		query   string
+		wantTry bool
+		wantLit string
+	}{
+		"try_cast": {`SELECT TRY_CAST(value AS INT) FROM events`, true, "TRY_CAST"},
+		"cast":     {`SELECT CAST(value AS INT) FROM events`, false, "CAST"},
+	}
+	for name, tc := range tcs {
+		tc := tc
+		t.Run(name, func(t *testing.T) {
+			tree, err := gosqlx.ParseWithDialect(tc.query, keywords.DialectSnowflake)
+			if err != nil {
+				t.Fatalf("parse failed: %v", err)
+			}
+			var found bool
+			var visit func(n ast.Node)
+			visit = func(n ast.Node) {
+				if n == nil || found {
+					return
+				}
+				if c, ok := n.(*ast.CastExpression); ok {
+					if c.Try != tc.wantTry {
+						t.Fatalf("Try: want %v, got %v", tc.wantTry, c.Try)
+					}
+					if c.TokenLiteral() != tc.wantLit {
+						t.Fatalf("TokenLiteral: want %q, got %q", tc.wantLit, c.TokenLiteral())
+					}
+					found = true
+					return
+				}
+				for _, ch := range n.Children() {
+					visit(ch)
+				}
+			}
+			for _, stmt := range tree.Statements {
+				visit(stmt)
+			}
+			if !found {
+				t.Fatal("CastExpression not found in AST")
 			}
 		})
 	}

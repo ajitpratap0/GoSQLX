@@ -1044,9 +1044,14 @@ type CastExpression struct {
 	Try  bool
 }
 
-func (c *CastExpression) expressionNode()     {}
-func (c CastExpression) TokenLiteral() string { return "CAST" }
-func (c CastExpression) Children() []Node     { return []Node{c.Expr} }
+func (c *CastExpression) expressionNode() {}
+func (c CastExpression) TokenLiteral() string {
+	if c.Try {
+		return "TRY_CAST"
+	}
+	return "CAST"
+}
+func (c CastExpression) Children() []Node { return []Node{c.Expr} }
 
 // AliasedExpression represents an expression with an alias (expr AS alias)
 type AliasedExpression struct {

@@ -346,3 +346,36 @@ func (p *Parser) parseArrayConstructor() (*ast.ArrayConstructorExpression, error
 
 	return nil, p.expectedError("[ or (")
 }
+
+// parseBracketArrayLiteral parses a ClickHouse-style bare bracket array
+// literal: [expr, expr, ...]. The opening '[' is the current token.
+func (p *Parser) parseBracketArrayLiteral() (*ast.ArrayConstructorExpression, error) {
+	p.advance() // Consume [
+
+	arrayExpr := ast.GetArrayConstructor()
+
+	if !p.isType(models.TokenTypeRBracket) {
+		for {
+			elem, err := p.parseExpression()
+			if err != nil {
+				return nil, err
+			}
+			arrayExpr.Elements = append(arrayExpr.Elements, elem)
+
+			if p.isType(models.TokenTypeComma) {
+				p.advance()
+			} else if p.isType(models.TokenTypeRBracket) {
+				break
+			} else {
+				return nil, p.expectedError(", or ]")
+			}
+		}
+	}
+
+	if !p.isType(models.TokenTypeRBracket) {
+		return nil, p.expectedError("]")
+	}
+	p.advance() // Consume ]
+
+	return arrayExpr, nil
+}

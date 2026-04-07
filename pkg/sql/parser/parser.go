@@ -958,14 +958,18 @@ func (p *Parser) isNonReservedKeyword() bool {
 	case models.TokenTypeTarget, models.TokenTypeSource, models.TokenTypeMatched:
 		return true
 	case models.TokenTypeTable, models.TokenTypeIndex, models.TokenTypeView,
-		models.TokenTypeKey, models.TokenTypeColumn, models.TokenTypeDatabase:
+		models.TokenTypeKey, models.TokenTypeColumn, models.TokenTypeDatabase,
+		models.TokenTypePartition, models.TokenTypeRows:
 		// DDL keywords that are commonly used as quoted identifiers in MySQL (backtick)
-		// and SQL Server (bracket) dialects.
+		// and SQL Server (bracket) dialects, and as plain column names in ClickHouse
+		// system tables (system.parts.partition, system.replicas.table,
+		// system.tables.rows, etc).
 		return true
 	case models.TokenTypeKeyword:
 		// Token may have generic Type; check value for specific keywords
 		switch strings.ToUpper(p.currentToken.Token.Value) {
-		case "TARGET", "SOURCE", "MATCHED", "VALUE", "NAME", "TYPE", "STATUS":
+		case "TARGET", "SOURCE", "MATCHED", "VALUE", "NAME", "TYPE", "STATUS",
+			"TABLES":
 			return true
 		}
 	}

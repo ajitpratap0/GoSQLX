@@ -65,11 +65,13 @@ func (p *Parser) parsePivotAlias(ref *ast.TableReference) {
 }
 
 // pivotDialectAllowed reports whether PIVOT/UNPIVOT is a recognized clause
-// for the parser's current dialect. PIVOT/UNPIVOT are SQL Server / Oracle
-// extensions; in other dialects the words must remain valid identifiers.
+// for the parser's current dialect. PIVOT/UNPIVOT are SQL Server, Oracle,
+// and Snowflake extensions; in other dialects the words must remain valid
+// identifiers.
 func (p *Parser) pivotDialectAllowed() bool {
 	return p.dialect == string(keywords.DialectSQLServer) ||
-		p.dialect == string(keywords.DialectOracle)
+		p.dialect == string(keywords.DialectOracle) ||
+		p.dialect == string(keywords.DialectSnowflake)
 }
 
 // isPivotKeyword returns true if the current token is the contextual PIVOT

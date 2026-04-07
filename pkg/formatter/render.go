@@ -1205,7 +1205,13 @@ func tableRefSQL(t *ast.TableReference) string {
 		sb.WriteString("))")
 	}
 	if t.Alias != "" {
-		sb.WriteString(" ")
+		// PIVOT/UNPIVOT aliases conventionally use AS to avoid ambiguity
+		// with the closing paren of the clause.
+		if t.Pivot != nil || t.Unpivot != nil {
+			sb.WriteString(" AS ")
+		} else {
+			sb.WriteString(" ")
+		}
 		sb.WriteString(t.Alias)
 	}
 	return sb.String()

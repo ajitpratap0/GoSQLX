@@ -25,6 +25,43 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
+// renderQuotedIdent reproduces the original delimiters of a quoted identifier
+// token so the parsed value round-trips through the formatter. The tokenizer
+// strips delimiters but records them in QuoteStyle.
+func renderQuotedIdent(tok models.Token) string {
+	q := tok.Quote
+	if q == 0 && tok.Word != nil {
+		q = tok.Word.QuoteStyle
+	}
+	switch q {
+	case '[':
+		return "[" + tok.Value + "]"
+	case '"':
+		return "\"" + tok.Value + "\""
+	case '`':
+		return "`" + tok.Value + "`"
+	}
+	return tok.Value
+}
+
+// parsePivotAlias consumes an optional alias (with or without AS) following a
+// PIVOT/UNPIVOT clause. Extracted to avoid four copies of the same logic in
+// the table-reference and join paths.
+func (p *Parser) parsePivotAlias(ref *ast.TableReference) {
+	if p.isType(models.TokenTypeAs) {
+		p.advance() // consume AS
+		if p.isIdentifier() {
+			ref.Alias = p.currentToken.Token.Value
+			p.advance()
+		}
+		return
+	}
+	if p.isIdentifier() {
+		ref.Alias = p.currentToken.Token.Value
+		p.advance()
+	}
+}
+
 // pivotDialectAllowed reports whether PIVOT/UNPIVOT is a recognized clause
 // for the parser's current dialect. PIVOT/UNPIVOT are SQL Server / Oracle
 // extensions; in other dialects the words must remain valid identifiers.
@@ -107,7 +144,7 @@ func (p *Parser) parsePivotClause() (*ast.PivotClause, error) {
 		if !p.isIdentifier() && !p.isType(models.TokenTypeNumber) && !p.isStringLiteral() {
 			return nil, p.expectedError("value in PIVOT IN list")
 		}
-		inValues = append(inValues, p.currentToken.Token.Value)
+		inValues = append(inValues, renderQuotedIdent(p.currentToken.Token))
 		p.advance()
 		if p.isType(models.TokenTypeComma) {
 			p.advance()
@@ -116,6 +153,9 @@ func (p *Parser) parsePivotClause() (*ast.PivotClause, error) {
 
 	if !p.isType(models.TokenTypeRParen) {
 		return nil, p.expectedError(") to close PIVOT IN list")
+	}
+	if len(inValues) == 0 {
+		return nil, p.expectedError("at least one value in PIVOT IN list")
 	}
 	p.advance() // close IN list )
 
@@ -181,7 +221,7 @@ func (p *Parser) parseUnpivotClause() (*ast.UnpivotClause, error) {
 		if !p.isIdentifier() {
 			return nil, p.expectedError("column name in UNPIVOT IN list")
 		}
-		cols = append(cols, p.currentToken.Token.Value)
+		cols = append(cols, renderQuotedIdent(p.currentToken.Token))
 		p.advance()
 		if p.isType(models.TokenTypeComma) {
 			p.advance()
@@ -190,6 +230,9 @@ func (p *Parser) parseUnpivotClause() (*ast.UnpivotClause, error) {
 
 	if !p.isType(models.TokenTypeRParen) {
 		return nil, p.expectedError(") to close UNPIVOT IN list")
+	}
+	if len(cols) == 0 {
+		return nil, p.expectedError("at least one column in UNPIVOT IN list")
 	}
 	p.advance() // close IN list )
 

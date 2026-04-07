@@ -433,7 +433,7 @@ PIVOT (
 	if len(ref.Pivot.InValues) != 4 {
 		t.Errorf("expected 4 IN values, got %d", len(ref.Pivot.InValues))
 	}
-	expected := []string{"North", "South", "East", "West"}
+	expected := []string{"[North]", "[South]", "[East]", "[West]"}
 	for i, v := range expected {
 		if i < len(ref.Pivot.InValues) && ref.Pivot.InValues[i] != v {
 			t.Errorf("IN value [%d]: expected %q, got %q", i, v, ref.Pivot.InValues[i])
@@ -537,6 +537,54 @@ func TestTSQL_PivotWithASAlias(t *testing.T) {
 	}
 	if ref.Alias != "pvt" {
 		t.Errorf("expected alias 'pvt', got %q", ref.Alias)
+	}
+}
+
+// TestPivotNegativeCases covers parser error paths for malformed PIVOT/UNPIVOT.
+func TestPivotNegativeCases(t *testing.T) {
+	cases := []struct {
+		name string
+		sql  string
+	}{
+		{"missing_lparen", "SELECT * FROM t PIVOT SUM(x) FOR c IN (a))"},
+		{"missing_for", "SELECT * FROM t PIVOT (SUM(x) c IN (a))"},
+		{"missing_in", "SELECT * FROM t PIVOT (SUM(x) FOR c (a))"},
+		{"missing_in_lparen", "SELECT * FROM t PIVOT (SUM(x) FOR c IN a)"},
+		{"empty_in_list", "SELECT * FROM t PIVOT (SUM(x) FOR c IN ())"},
+		{"unpivot_missing_for", "SELECT * FROM t UNPIVOT (v c IN (a))"},
+		{"unpivot_empty_in_list", "SELECT * FROM t UNPIVOT (v FOR n IN ())"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseWithDialect(tc.sql, keywords.DialectSQLServer)
+			if err == nil {
+				t.Fatalf("expected parse error, got nil for: %s", tc.sql)
+			}
+		})
+	}
+}
+
+// TestPivotBracketedInValuesPreserved verifies SQL Server bracket-quoted IN
+// values survive parsing so the formatter can re-emit them.
+func TestPivotBracketedInValuesPreserved(t *testing.T) {
+	sql := `SELECT * FROM sales PIVOT (SUM(amt) FOR region IN ([North], [South])) AS p`
+	result, err := ParseWithDialect(sql, keywords.DialectSQLServer)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	stmt, ok := result.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", result.Statements[0])
+	}
+	got := stmt.From[0].Pivot.InValues
+	want := []string{"[North]", "[South]"}
+	if len(got) != len(want) {
+		t.Fatalf("expected %d values, got %d (%v)", len(want), len(got), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("InValues[%d] = %q, want %q", i, got[i], want[i])
+		}
 	}
 }
 

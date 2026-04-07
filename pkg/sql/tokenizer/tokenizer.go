@@ -1283,7 +1283,7 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 				ch, chSize := utf8.DecodeRune(t.input[t.pos.Index:])
 				if ch == ']' {
 					t.pos.AdvanceRune(ch, chSize) // Consume ]
-					return models.Token{Type: models.TokenTypeIdentifier, Value: string(ident)}, nil
+					return models.Token{Type: models.TokenTypeIdentifier, Value: string(ident), Quote: '['}, nil
 				}
 				ident = append(ident, t.input[t.pos.Index:t.pos.Index+chSize]...)
 				t.pos.AdvanceRune(ch, chSize)

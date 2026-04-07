@@ -134,17 +134,7 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 			return tableRef, err
 		}
 		tableRef.Pivot = pivot
-		// PIVOT result often has its own alias: PIVOT (...) AS pvt
-		if p.isType(models.TokenTypeAs) {
-			p.advance() // consume AS
-			if p.isIdentifier() {
-				tableRef.Alias = p.currentToken.Token.Value
-				p.advance()
-			}
-		} else if p.isIdentifier() {
-			tableRef.Alias = p.currentToken.Token.Value
-			p.advance()
-		}
+		p.parsePivotAlias(&tableRef)
 	}
 
 	// SQL Server / Oracle UNPIVOT clause
@@ -154,17 +144,7 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 			return tableRef, err
 		}
 		tableRef.Unpivot = unpivot
-		// UNPIVOT result alias: UNPIVOT (...) AS unpvt
-		if p.isType(models.TokenTypeAs) {
-			p.advance() // consume AS
-			if p.isIdentifier() {
-				tableRef.Alias = p.currentToken.Token.Value
-				p.advance()
-			}
-		} else if p.isIdentifier() {
-			tableRef.Alias = p.currentToken.Token.Value
-			p.advance()
-		}
+		p.parsePivotAlias(&tableRef)
 	}
 
 	return tableRef, nil
@@ -268,16 +248,7 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 			return ref, err
 		}
 		ref.Pivot = pivot
-		if p.isType(models.TokenTypeAs) {
-			p.advance()
-			if p.isIdentifier() {
-				ref.Alias = p.currentToken.Token.Value
-				p.advance()
-			}
-		} else if p.isIdentifier() {
-			ref.Alias = p.currentToken.Token.Value
-			p.advance()
-		}
+		p.parsePivotAlias(&ref)
 	}
 
 	// SQL Server / Oracle UNPIVOT clause
@@ -287,16 +258,7 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 			return ref, err
 		}
 		ref.Unpivot = unpivot
-		if p.isType(models.TokenTypeAs) {
-			p.advance()
-			if p.isIdentifier() {
-				ref.Alias = p.currentToken.Token.Value
-				p.advance()
-			}
-		} else if p.isIdentifier() {
-			ref.Alias = p.currentToken.Token.Value
-			p.advance()
-		}
+		p.parsePivotAlias(&ref)
 	}
 
 	return ref, nil

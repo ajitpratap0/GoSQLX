@@ -153,6 +153,22 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 		OrderBy:   orderByExprs,
 	}
 
+	// Check for IGNORE NULLS / RESPECT NULLS (SQL:2016 null treatment).
+	// Used by LAG, LEAD, FIRST_VALUE, LAST_VALUE, NTH_VALUE in Snowflake,
+	// Oracle, BigQuery, etc. IGNORE arrives as TokenTypeKeyword; RESPECT is
+	// not in any keyword list and arrives as TokenTypeIdentifier. NULLS has
+	// its own token type.
+	if p.currentToken.Token.Type == models.TokenTypeKeyword ||
+		p.currentToken.Token.Type == models.TokenTypeIdentifier {
+		upper := strings.ToUpper(p.currentToken.Token.Value)
+		if (upper == "IGNORE" || upper == "RESPECT") &&
+			p.peekToken().Token.Type == models.TokenTypeNulls {
+			funcCall.NullTreatment = upper + " NULLS"
+			p.advance() // IGNORE / RESPECT
+			p.advance() // NULLS
+		}
+	}
+
 	// Check for WITHIN GROUP clause (SQL:2003 ordered-set aggregates)
 	// Syntax: WITHIN GROUP (ORDER BY expression [ASC|DESC] [NULLS FIRST|LAST])
 	// Used with: PERCENTILE_CONT, PERCENTILE_DISC, MODE, LISTAGG, etc.

@@ -690,14 +690,15 @@ func (i Identifier) Children() []Node     { return nil }
 //   - OrderBy: ORDER BY clause for order-sensitive aggregates (STRING_AGG, ARRAY_AGG, etc.)
 //   - WithinGroup: ORDER BY clause for ordered-set aggregates (PERCENTILE_CONT, PERCENTILE_DISC, MODE, etc.)
 type FunctionCall struct {
-	Name        string
-	Arguments   []Expression // Renamed from Args for consistency
-	Over        *WindowSpec  // For window functions
-	Distinct    bool
-	Filter      Expression          // WHERE clause for aggregate functions
-	OrderBy     []OrderByExpression // ORDER BY clause for aggregate functions (STRING_AGG, ARRAY_AGG, etc.)
-	WithinGroup []OrderByExpression // ORDER BY clause for ordered-set aggregates (PERCENTILE_CONT, etc.)
-	Pos         models.Location     // Source position of the function name (1-based line and column)
+	Name          string
+	Arguments     []Expression // Renamed from Args for consistency
+	Over          *WindowSpec  // For window functions
+	Distinct      bool
+	Filter        Expression          // WHERE clause for aggregate functions
+	OrderBy       []OrderByExpression // ORDER BY clause for aggregate functions (STRING_AGG, ARRAY_AGG, etc.)
+	WithinGroup   []OrderByExpression // ORDER BY clause for ordered-set aggregates (PERCENTILE_CONT, etc.)
+	NullTreatment string              // "IGNORE NULLS" or "RESPECT NULLS" on window functions (Snowflake, Oracle, BigQuery, SQL:2016)
+	Pos           models.Location     // Source position of the function name (1-based line and column)
 }
 
 func (f *FunctionCall) expressionNode()     {}
@@ -1033,15 +1034,24 @@ func (u *UnaryExpression) TokenLiteral() string {
 
 func (u UnaryExpression) Children() []Node { return []Node{u.Expr} }
 
-// CastExpression represents CAST(expr AS type)
+// CastExpression represents CAST(expr AS type) or TRY_CAST(expr AS type).
+// Try is set when the expression originated from TRY_CAST (Snowflake / SQL
+// Server / BigQuery), which returns NULL on conversion failure instead of
+// raising an error.
 type CastExpression struct {
 	Expr Expression
 	Type string
+	Try  bool
 }
 
-func (c *CastExpression) expressionNode()     {}
-func (c CastExpression) TokenLiteral() string { return "CAST" }
-func (c CastExpression) Children() []Node     { return []Node{c.Expr} }
+func (c *CastExpression) expressionNode() {}
+func (c CastExpression) TokenLiteral() string {
+	if c.Try {
+		return "TRY_CAST"
+	}
+	return "CAST"
+}
+func (c CastExpression) Children() []Node { return []Node{c.Expr} }
 
 // AliasedExpression represents an expression with an alias (expr AS alias)
 type AliasedExpression struct {

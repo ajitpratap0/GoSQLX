@@ -227,7 +227,7 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 		froms := make([]string, len(s.From))
 		for i := range s.From {
-			froms[i] = tableRefSQL(&s.From[i])
+			froms[i] = tableRefSQL(&s.From[i], f)
 		}
 		sb.WriteString(strings.Join(froms, ", "))
 	}
@@ -235,7 +235,7 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 	for _, j := range s.Joins {
 		j := j
 		sb.WriteString(f.clauseSep())
-		sb.WriteString(joinSQL(&j))
+		sb.WriteString(joinSQL(&j, f))
 	}
 
 	if s.Sample != nil {
@@ -400,7 +400,7 @@ func renderUpdate(u *ast.UpdateStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 		froms := make([]string, len(u.From))
 		for i := range u.From {
-			froms[i] = tableRefSQL(&u.From[i])
+			froms[i] = tableRefSQL(&u.From[i], f)
 		}
 		sb.WriteString(strings.Join(froms, ", "))
 	}
@@ -452,7 +452,7 @@ func renderDelete(d *ast.DeleteStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 		usings := make([]string, len(d.Using))
 		for i := range d.Using {
-			usings[i] = tableRefSQL(&d.Using[i])
+			usings[i] = tableRefSQL(&d.Using[i], f)
 		}
 		sb.WriteString(strings.Join(usings, ", "))
 	}
@@ -883,7 +883,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 
 	sb.WriteString(f.kw("MERGE INTO"))
 	sb.WriteString(" ")
-	sb.WriteString(tableRefSQL(&m.TargetTable))
+	sb.WriteString(tableRefSQL(&m.TargetTable, f))
 	if m.TargetAlias != "" {
 		sb.WriteString(" ")
 		sb.WriteString(m.TargetAlias)
@@ -892,7 +892,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 	sb.WriteString(f.clauseSep())
 	sb.WriteString(f.kw("USING"))
 	sb.WriteString(" ")
-	sb.WriteString(tableRefSQL(&m.SourceTable))
+	sb.WriteString(tableRefSQL(&m.SourceTable, f))
 	if m.SourceAlias != "" {
 		sb.WriteString(" ")
 		sb.WriteString(m.SourceAlias)
@@ -1173,11 +1173,13 @@ func orderBySQL(orders []ast.OrderByExpression) string {
 	return strings.Join(parts, ", ")
 }
 
-// tableRefSQL renders a TableReference.
-func tableRefSQL(t *ast.TableReference) string {
+// tableRefSQL renders a TableReference. The formatter is threaded through
+// so PIVOT/UNPIVOT/FOR/IN/AS/LATERAL keywords honor the caller's case policy.
+func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 	var sb strings.Builder
 	if t.Lateral {
-		sb.WriteString("LATERAL ")
+		sb.WriteString(f.kw("LATERAL"))
+		sb.WriteString(" ")
 	}
 	if t.Subquery != nil {
 		sb.WriteString("(")
@@ -1186,8 +1188,46 @@ func tableRefSQL(t *ast.TableReference) string {
 	} else {
 		sb.WriteString(t.Name)
 	}
-	if t.Alias != "" {
+	if t.Pivot != nil {
 		sb.WriteString(" ")
+		sb.WriteString(f.kw("PIVOT"))
+		sb.WriteString(" (")
+		sb.WriteString(exprSQL(t.Pivot.AggregateFunction))
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("FOR"))
+		sb.WriteString(" ")
+		sb.WriteString(t.Pivot.PivotColumn)
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("IN"))
+		sb.WriteString(" (")
+		sb.WriteString(strings.Join(t.Pivot.InValues, ", "))
+		sb.WriteString("))")
+	}
+	if t.Unpivot != nil {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("UNPIVOT"))
+		sb.WriteString(" (")
+		sb.WriteString(t.Unpivot.ValueColumn)
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("FOR"))
+		sb.WriteString(" ")
+		sb.WriteString(t.Unpivot.NameColumn)
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("IN"))
+		sb.WriteString(" (")
+		sb.WriteString(strings.Join(t.Unpivot.InColumns, ", "))
+		sb.WriteString("))")
+	}
+	if t.Alias != "" {
+		// PIVOT/UNPIVOT aliases conventionally use AS to avoid ambiguity
+		// with the closing paren of the clause.
+		if t.Pivot != nil || t.Unpivot != nil {
+			sb.WriteString(" ")
+			sb.WriteString(f.kw("AS"))
+			sb.WriteString(" ")
+		} else {
+			sb.WriteString(" ")
+		}
 		sb.WriteString(t.Alias)
 	}
 	return sb.String()
@@ -1217,13 +1257,17 @@ func sampleSQL(s *ast.SampleClause, f *nodeFormatter) string {
 }
 
 // joinSQL renders a JOIN clause.
-func joinSQL(j *ast.JoinClause) string {
+func joinSQL(j *ast.JoinClause, f *nodeFormatter) string {
 	var sb strings.Builder
-	sb.WriteString(j.Type)
-	sb.WriteString(" JOIN ")
-	sb.WriteString(tableRefSQL(&j.Right))
+	sb.WriteString(f.kw(j.Type))
+	sb.WriteString(" ")
+	sb.WriteString(f.kw("JOIN"))
+	sb.WriteString(" ")
+	sb.WriteString(tableRefSQL(&j.Right, f))
 	if j.Condition != nil {
-		sb.WriteString(" ON ")
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("ON"))
+		sb.WriteString(" ")
 		sb.WriteString(exprSQL(j.Condition))
 	}
 	return sb.String()

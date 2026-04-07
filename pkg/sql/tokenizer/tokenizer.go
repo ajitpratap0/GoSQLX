@@ -228,6 +228,10 @@ var keywordTokenTypes = map[string]models.TokenType{
 	// boundary detection. SETTINGS/FORMAT are common words and must NOT be here.
 	"PREWHERE": models.TokenTypeKeyword,
 	"FINAL":    models.TokenTypeKeyword,
+	// NOTE: PIVOT/UNPIVOT are intentionally NOT in this global map.
+	// They are non-reserved contextual keywords (legal identifiers in
+	// PostgreSQL/MySQL/SQLite/ClickHouse), so the parser matches them
+	// by value+dialect via isPivotKeyword/isUnpivotKeyword instead.
 }
 
 // Tokenizer provides high-performance SQL tokenization with zero-copy operations.
@@ -1279,7 +1283,7 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 				ch, chSize := utf8.DecodeRune(t.input[t.pos.Index:])
 				if ch == ']' {
 					t.pos.AdvanceRune(ch, chSize) // Consume ]
-					return models.Token{Type: models.TokenTypeIdentifier, Value: string(ident)}, nil
+					return models.Token{Type: models.TokenTypeIdentifier, Value: string(ident), Quote: '['}, nil
 				}
 				ident = append(ident, t.input[t.pos.Index:t.pos.Index+chSize]...)
 				t.pos.AdvanceRune(ch, chSize)

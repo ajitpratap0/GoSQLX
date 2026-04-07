@@ -959,10 +959,11 @@ func (p *Parser) isNonReservedKeyword() bool {
 		return true
 	case models.TokenTypeTable, models.TokenTypeIndex, models.TokenTypeView,
 		models.TokenTypeKey, models.TokenTypeColumn, models.TokenTypeDatabase,
-		models.TokenTypePartition:
+		models.TokenTypePartition, models.TokenTypeRows:
 		// DDL keywords that are commonly used as quoted identifiers in MySQL (backtick)
 		// and SQL Server (bracket) dialects, and as plain column names in ClickHouse
-		// system tables (system.parts.partition, system.replicas.table, etc).
+		// system tables (system.parts.partition, system.replicas.table,
+		// system.tables.rows, etc).
 		return true
 	case models.TokenTypeKeyword:
 		// Token may have generic Type; check value for specific keywords

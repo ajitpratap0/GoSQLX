@@ -87,6 +87,18 @@ WHERE active = 1
 GROUP BY database, table
 HAVING parts > 300
 ORDER BY parts DESC`,
+
+		// system.tables exposes a `rows` column. ROWS is a reserved keyword
+		// (used in window frames: ROWS BETWEEN ...), but in ClickHouse it is
+		// a valid column name in system tables.
+		"tables_with_rows_column": `SELECT
+    database,
+    table,
+    rows,
+    total_bytes
+FROM system.tables
+WHERE database = 'default'
+ORDER BY rows DESC`,
 	}
 
 	for name, query := range queries {

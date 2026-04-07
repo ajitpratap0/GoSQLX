@@ -27,7 +27,9 @@ import (
 
 // renderQuotedIdent reproduces the original delimiters of a quoted identifier
 // token so the parsed value round-trips through the formatter. The tokenizer
-// strips delimiters but records them in QuoteStyle.
+// strips delimiters but records the style in Token.Quote (or, for word
+// tokens, Word.QuoteStyle). Embedded delimiters are escaped per dialect:
+// SQL Server doubles `]`, ANSI doubles `"`, MySQL doubles “ ` “.
 func renderQuotedIdent(tok models.Token) string {
 	q := tok.Quote
 	if q == 0 && tok.Word != nil {
@@ -35,11 +37,11 @@ func renderQuotedIdent(tok models.Token) string {
 	}
 	switch q {
 	case '[':
-		return "[" + tok.Value + "]"
+		return "[" + strings.ReplaceAll(tok.Value, "]", "]]") + "]"
 	case '"':
-		return "\"" + tok.Value + "\""
+		return "\"" + strings.ReplaceAll(tok.Value, "\"", "\"\"") + "\""
 	case '`':
-		return "`" + tok.Value + "`"
+		return "`" + strings.ReplaceAll(tok.Value, "`", "``") + "`"
 	}
 	return tok.Value
 }
@@ -151,11 +153,11 @@ func (p *Parser) parsePivotClause() (*ast.PivotClause, error) {
 		}
 	}
 
-	if !p.isType(models.TokenTypeRParen) {
-		return nil, p.expectedError(") to close PIVOT IN list")
-	}
 	if len(inValues) == 0 {
 		return nil, p.expectedError("at least one value in PIVOT IN list")
+	}
+	if !p.isType(models.TokenTypeRParen) {
+		return nil, p.expectedError(") to close PIVOT IN list")
 	}
 	p.advance() // close IN list )
 
@@ -228,11 +230,11 @@ func (p *Parser) parseUnpivotClause() (*ast.UnpivotClause, error) {
 		}
 	}
 
-	if !p.isType(models.TokenTypeRParen) {
-		return nil, p.expectedError(") to close UNPIVOT IN list")
-	}
 	if len(cols) == 0 {
 		return nil, p.expectedError("at least one column in UNPIVOT IN list")
+	}
+	if !p.isType(models.TokenTypeRParen) {
+		return nil, p.expectedError(") to close UNPIVOT IN list")
 	}
 	p.advance() // close IN list )
 

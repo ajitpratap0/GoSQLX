@@ -26,6 +26,7 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // isTokenMatch checks if the current token matches the given keyword
@@ -236,7 +237,67 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 			opt.Value = p.currentToken.Token.Value
 			p.advance()
 		}
+		// ClickHouse engine values may carry their own argument list:
+		//   ENGINE = MergeTree()
+		//   ENGINE = ReplicatedMergeTree('/path', '{replica}')
+		//   ENGINE = Distributed('cluster', 'db', 'local_t', sharding_key)
+		// Consume them as a balanced block appended to the option value.
+		if p.isType(models.TokenTypeLParen) {
+			args, err := p.parseTypeArgsString()
+			if err != nil {
+				return nil, err
+			}
+			opt.Value += args
+		}
 		stmt.Options = append(stmt.Options, opt)
+	}
+
+	// ClickHouse CREATE TABLE trailing clauses: ORDER BY, PARTITION BY,
+	// PRIMARY KEY, SAMPLE BY, SETTINGS. These appear after ENGINE = ... and
+	// are required for MergeTree-family engines. Parse permissively:
+	// each consumes a parenthesised expression list or a single column ref.
+	for p.dialect == string(keywords.DialectClickHouse) {
+		if p.isType(models.TokenTypeOrder) {
+			p.advance() // ORDER
+			if p.isType(models.TokenTypeBy) {
+				p.advance()
+			}
+			if err := p.skipClickHouseClauseExpr(); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if p.isTokenMatch("PARTITION") {
+			p.advance()
+			if p.isType(models.TokenTypeBy) {
+				p.advance()
+			}
+			if err := p.skipClickHouseClauseExpr(); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if p.isType(models.TokenTypePrimary) {
+			p.advance()
+			if p.isType(models.TokenTypeKey) {
+				p.advance()
+			}
+			if err := p.skipClickHouseClauseExpr(); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if p.isTokenMatch("SAMPLE") {
+			p.advance()
+			if p.isType(models.TokenTypeBy) {
+				p.advance()
+			}
+			if err := p.skipClickHouseClauseExpr(); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		break
 	}
 
 	// SQLite: optional WITHOUT ROWID clause
@@ -549,4 +610,50 @@ func (p *Parser) parseTruncateStatement() (*ast.TruncateStatement, error) {
 	}
 
 	return stmt, nil
+}
+
+// skipClickHouseClauseExpr consumes the expression following a ClickHouse
+// CREATE TABLE trailing clause (ORDER BY, PARTITION BY, PRIMARY KEY, SAMPLE BY).
+// We do not currently model these clauses on the AST; this just walks the
+// tokens until the start of the next clause, EOF, or ';'. Supports both
+// parenthesised lists and bare expressions.
+func (p *Parser) skipClickHouseClauseExpr() error {
+	if p.isType(models.TokenTypeLParen) {
+		// Balanced paren block.
+		depth := 0
+		for {
+			switch p.currentToken.Token.Type {
+			case models.TokenTypeEOF:
+				return p.expectedError(") to close clause expression")
+			case models.TokenTypeLParen:
+				depth++
+				p.advance()
+			case models.TokenTypeRParen:
+				depth--
+				p.advance()
+				if depth == 0 {
+					return nil
+				}
+			default:
+				p.advance()
+			}
+		}
+	}
+
+	// Bare expression: consume until next clause/EOF/;.
+	for {
+		t := p.currentToken.Token.Type
+		if t == models.TokenTypeEOF || t == models.TokenTypeSemicolon {
+			return nil
+		}
+		// Stop at next CH trailing-clause keyword.
+		if t == models.TokenTypeOrder || t == models.TokenTypePrimary {
+			return nil
+		}
+		val := strings.ToUpper(p.currentToken.Token.Value)
+		if val == "PARTITION" || val == "SAMPLE" || val == "SETTINGS" || val == "TTL" {
+			return nil
+		}
+		p.advance()
+	}
 }

@@ -73,32 +73,18 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 
 	dataTypeStr := dataType.Name
 
-	// Check for type parameters like VARCHAR(100) or DECIMAL(10,2)
+	// Check for type parameters. The simple form is VARCHAR(100) or
+	// DECIMAL(10,2), but ClickHouse also has nested/parameterised types like
+	// Array(Nullable(String)), Map(String, Array(UInt32)), Tuple(a UInt8, b String),
+	// FixedString(16), DateTime64(3, 'UTC'), LowCardinality(String), Decimal(38, 18),
+	// and engines like ReplicatedMergeTree('/path', '{replica}'). Use a depth-tracking
+	// token collector that round-trips the type string.
 	if p.isType(models.TokenTypeLParen) {
-		dataTypeStr += "("
-		p.advance() // Consume (
-
-		// Parse first parameter (can be number or identifier like MAX)
-		if p.isType(models.TokenTypeNumber) || p.isType(models.TokenTypeIdentifier) {
-			dataTypeStr += p.currentToken.Token.Value
-			p.advance()
+		args, err := p.parseTypeArgsString()
+		if err != nil {
+			return nil, err
 		}
-
-		// Check for second parameter (e.g., DECIMAL(10,2))
-		if p.isType(models.TokenTypeComma) {
-			dataTypeStr += ","
-			p.advance()
-			if p.isType(models.TokenTypeNumber) || p.isType(models.TokenTypeIdentifier) {
-				dataTypeStr += p.currentToken.Token.Value
-				p.advance()
-			}
-		}
-
-		if !p.isType(models.TokenTypeRParen) {
-			return nil, p.expectedError(") after type parameters")
-		}
-		dataTypeStr += ")"
-		p.advance() // Consume )
+		dataTypeStr += args
 	}
 
 	colDef := &ast.ColumnDef{
@@ -479,4 +465,74 @@ func (p *Parser) parseConstraintColumnList() ([]string, error) {
 	p.advance() // Consume )
 
 	return columns, nil
+}
+
+// parseTypeArgsString consumes a balanced parenthesised type-argument list
+// and returns it as a string (including the outer parens). Supports nested
+// types like Array(Nullable(String)), Map(String, Array(UInt32)),
+// Tuple(a UInt8, b String), DateTime64(3, 'UTC'), and engine arguments like
+// ReplicatedMergeTree('/path', '{replica}'). The current token must be '('.
+func (p *Parser) parseTypeArgsString() (string, error) {
+	if !p.isType(models.TokenTypeLParen) {
+		return "", p.expectedError("(")
+	}
+
+	var buf strings.Builder
+	depth := 0
+	prevWasIdent := false // for inserting spaces between adjacent tokens (e.g. "a UInt8")
+
+	for {
+		tok := p.currentToken.Token
+		switch tok.Type {
+		case models.TokenTypeEOF:
+			return "", p.expectedError(") to close type arguments")
+		case models.TokenTypeLParen:
+			buf.WriteByte('(')
+			depth++
+			prevWasIdent = false
+			p.advance()
+			continue
+		case models.TokenTypeRParen:
+			buf.WriteByte(')')
+			depth--
+			p.advance()
+			if depth == 0 {
+				return buf.String(), nil
+			}
+			prevWasIdent = false
+			continue
+		case models.TokenTypeComma:
+			buf.WriteString(", ")
+			prevWasIdent = false
+			p.advance()
+			continue
+		}
+
+		// Render leaf token. Quote string literals; everything else is rendered
+		// by its raw value (numbers, identifiers, keywords like Nullable / Array).
+		val := tok.Value
+		if val == "" {
+			return "", p.expectedError("type argument")
+		}
+
+		// Insert a space when two adjacent leaf tokens both look like identifiers
+		// or numbers — this preserves "name Type" pairs in named tuple elements.
+		if prevWasIdent {
+			buf.WriteByte(' ')
+		}
+
+		switch tok.Type {
+		case models.TokenTypeString, models.TokenTypeSingleQuotedString,
+			models.TokenTypeDoubleQuotedString:
+			buf.WriteByte('\'')
+			buf.WriteString(val)
+			buf.WriteByte('\'')
+			prevWasIdent = false
+		default:
+			buf.WriteString(val)
+			prevWasIdent = true
+		}
+
+		p.advance()
+	}
 }

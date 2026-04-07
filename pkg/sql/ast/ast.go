@@ -692,6 +692,7 @@ func (i Identifier) Children() []Node     { return nil }
 type FunctionCall struct {
 	Name        string
 	Arguments   []Expression // Renamed from Args for consistency
+	Parameters  []Expression // ClickHouse parametric aggregates: quantile(0.5)(x) — params before args
 	Over        *WindowSpec  // For window functions
 	Distinct    bool
 	Filter      Expression          // WHERE clause for aggregate functions

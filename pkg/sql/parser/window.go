@@ -23,6 +23,7 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // SUM(salary) OVER (PARTITION BY dept ORDER BY date ROWS UNBOUNDED PRECEDING) -> window function with frame
@@ -151,6 +152,36 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 		Arguments: arguments,
 		Distinct:  distinct,
 		OrderBy:   orderByExprs,
+	}
+
+	// ClickHouse parametric aggregates: funcName(params)(args).
+	// e.g. quantileTDigest(0.95)(value), topK(10)(name).
+	// What we just parsed becomes Parameters; the next paren group is the
+	// real arguments. Gated to ClickHouse to avoid false positives.
+	if p.dialect == string(keywords.DialectClickHouse) && p.isType(models.TokenTypeLParen) {
+		funcCall.Parameters = funcCall.Arguments
+		funcCall.Arguments = nil
+		p.advance() // Consume second (
+		if !p.isType(models.TokenTypeRParen) {
+			for {
+				arg, err := p.parseExpression()
+				if err != nil {
+					return nil, err
+				}
+				funcCall.Arguments = append(funcCall.Arguments, arg)
+				if p.isType(models.TokenTypeComma) {
+					p.advance()
+				} else if p.isType(models.TokenTypeRParen) {
+					break
+				} else {
+					return nil, p.expectedError(", or )")
+				}
+			}
+		}
+		if !p.isType(models.TokenTypeRParen) {
+			return nil, p.expectedError(")")
+		}
+		p.advance() // Consume second )
 	}
 
 	// Check for WITHIN GROUP clause (SQL:2003 ordered-set aggregates)

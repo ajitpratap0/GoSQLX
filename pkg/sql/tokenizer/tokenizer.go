@@ -228,9 +228,10 @@ var keywordTokenTypes = map[string]models.TokenType{
 	// boundary detection. SETTINGS/FORMAT are common words and must NOT be here.
 	"PREWHERE": models.TokenTypeKeyword,
 	"FINAL":    models.TokenTypeKeyword,
-	// SQL Server / Oracle PIVOT/UNPIVOT clause keywords
-	"PIVOT":   models.TokenTypeKeyword,
-	"UNPIVOT": models.TokenTypeKeyword,
+	// NOTE: PIVOT/UNPIVOT are intentionally NOT in this global map.
+	// They are non-reserved contextual keywords (legal identifiers in
+	// PostgreSQL/MySQL/SQLite/ClickHouse), so the parser matches them
+	// by value+dialect via isPivotKeyword/isUnpivotKeyword instead.
 }
 
 // Tokenizer provides high-performance SQL tokenization with zero-copy operations.

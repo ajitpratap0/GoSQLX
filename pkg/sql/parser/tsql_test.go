@@ -527,12 +527,37 @@ func TestTSQL_PivotWithASAlias(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	stmt := result.Statements[0].(*ast.SelectStatement)
+	stmt, ok := result.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", result.Statements[0])
+	}
 	ref := stmt.From[0]
 	if ref.Pivot == nil {
 		t.Fatal("expected Pivot clause")
 	}
 	if ref.Alias != "pvt" {
 		t.Errorf("expected alias 'pvt', got %q", ref.Alias)
+	}
+}
+
+// TestPivotIdentifierInNonTSQLDialects verifies PIVOT/UNPIVOT remain valid
+// identifiers in dialects that don't recognize the contextual clause.
+// Regression for global-tokenizer-keyword leak.
+func TestPivotIdentifierInNonTSQLDialects(t *testing.T) {
+	cases := []struct {
+		dialect keywords.SQLDialect
+		sql     string
+	}{
+		{keywords.DialectPostgreSQL, "SELECT pivot FROM users"},
+		{keywords.DialectPostgreSQL, "SELECT unpivot FROM users"},
+		{keywords.DialectMySQL, "SELECT pivot, unpivot FROM t"},
+		{keywords.DialectSQLite, "SELECT pivot FROM t AS pivot"},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.dialect)+"_"+tc.sql, func(t *testing.T) {
+			if _, err := ParseWithDialect(tc.sql, tc.dialect); err != nil {
+				t.Fatalf("expected pivot/unpivot to parse as identifier in %s, got: %v", tc.dialect, err)
+			}
+		})
 	}
 }

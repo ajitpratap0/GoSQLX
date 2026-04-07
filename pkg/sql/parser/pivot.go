@@ -22,18 +22,41 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
-// isPivotKeyword returns true if the current token is the PIVOT keyword.
-func (p *Parser) isPivotKeyword() bool {
-	return p.isType(models.TokenTypeKeyword) &&
-		strings.EqualFold(p.currentToken.Token.Value, "PIVOT")
+// pivotDialectAllowed reports whether PIVOT/UNPIVOT is a recognized clause
+// for the parser's current dialect. PIVOT/UNPIVOT are SQL Server / Oracle
+// extensions; in other dialects the words must remain valid identifiers.
+func (p *Parser) pivotDialectAllowed() bool {
+	return p.dialect == string(keywords.DialectSQLServer) ||
+		p.dialect == string(keywords.DialectOracle)
 }
 
-// isUnpivotKeyword returns true if the current token is the UNPIVOT keyword.
+// isPivotKeyword returns true if the current token is the contextual PIVOT
+// keyword in a dialect that supports it. PIVOT is non-reserved, so it may
+// arrive as either an identifier or a keyword token.
+func (p *Parser) isPivotKeyword() bool {
+	if !p.pivotDialectAllowed() {
+		return false
+	}
+	t := p.currentToken.Token.Type
+	if t != models.TokenTypeKeyword && t != models.TokenTypeIdentifier {
+		return false
+	}
+	return strings.EqualFold(p.currentToken.Token.Value, "PIVOT")
+}
+
+// isUnpivotKeyword mirrors isPivotKeyword for UNPIVOT.
 func (p *Parser) isUnpivotKeyword() bool {
-	return p.isType(models.TokenTypeKeyword) &&
-		strings.EqualFold(p.currentToken.Token.Value, "UNPIVOT")
+	if !p.pivotDialectAllowed() {
+		return false
+	}
+	t := p.currentToken.Token.Type
+	if t != models.TokenTypeKeyword && t != models.TokenTypeIdentifier {
+		return false
+	}
+	return strings.EqualFold(p.currentToken.Token.Value, "UNPIVOT")
 }
 
 // parsePivotClause parses PIVOT (aggregate FOR column IN (values)).

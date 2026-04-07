@@ -87,7 +87,9 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 	// Check for table alias (required for derived tables, optional for regular tables).
 	// Guard: in MariaDB, CONNECT followed by BY is a hierarchical query clause, not an alias.
 	// Similarly, START followed by WITH is a hierarchical query seed, not an alias.
-	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() {
+	// Don't consume PIVOT/UNPIVOT as a table alias — they are contextual
+	// keywords in SQL Server/Oracle and must reach the pivot-clause parser below.
+	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() {
 		if p.isType(models.TokenTypeAs) {
 			p.advance() // Consume AS
 			if !p.isIdentifier() {
@@ -219,7 +221,9 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 	// Optional alias.
 	// Guard: in MariaDB, CONNECT followed by BY is a hierarchical query clause, not an alias.
 	// Similarly, START followed by WITH is a hierarchical query seed, not an alias.
-	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() {
+	// Don't consume PIVOT/UNPIVOT as a table alias — they are contextual
+	// keywords in SQL Server/Oracle and must reach the pivot-clause parser below.
+	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() {
 		if p.isType(models.TokenTypeAs) {
 			p.advance()
 			if !p.isIdentifier() {

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
@@ -27,5 +28,47 @@ func TestClickHouseParametricAggregates(t *testing.T) {
 				t.Fatalf("parse failed: %v", err)
 			}
 		})
+	}
+}
+
+// TestClickHouseParametricAggregates_ASTShape verifies that the Parameters
+// field is populated and reachable via the visitor pattern.
+func TestClickHouseParametricAggregates_ASTShape(t *testing.T) {
+	q := `SELECT quantileTDigest(0.95)(value) FROM events`
+	tree, err := gosqlx.ParseWithDialect(q, keywords.DialectClickHouse)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	// Walk the tree until we find a FunctionCall node and verify both
+	// Parameters and Arguments are populated, and Children() exposes both.
+	var found bool
+	var visit func(n ast.Node)
+	visit = func(n ast.Node) {
+		if n == nil || found {
+			return
+		}
+		if fc, ok := n.(*ast.FunctionCall); ok && fc.Name == "quantileTDigest" {
+			if len(fc.Parameters) != 1 {
+				t.Fatalf("Parameters: want 1, got %d", len(fc.Parameters))
+			}
+			if len(fc.Arguments) != 1 {
+				t.Fatalf("Arguments: want 1, got %d", len(fc.Arguments))
+			}
+			// Children() must include both the argument and the parameter.
+			if len(fc.Children()) < 2 {
+				t.Fatalf("Children(): want >=2 (args + params), got %d", len(fc.Children()))
+			}
+			found = true
+			return
+		}
+		for _, c := range n.Children() {
+			visit(c)
+		}
+	}
+	for _, stmt := range tree.Statements {
+		visit(stmt)
+	}
+	if !found {
+		t.Fatal("did not find quantileTDigest FunctionCall in AST")
 	}
 }

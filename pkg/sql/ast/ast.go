@@ -705,6 +705,9 @@ func (f *FunctionCall) expressionNode()     {}
 func (f FunctionCall) TokenLiteral() string { return f.Name }
 func (f FunctionCall) Children() []Node {
 	children := nodifyExpressions(f.Arguments)
+	if len(f.Parameters) > 0 {
+		children = append(children, nodifyExpressions(f.Parameters)...)
+	}
 	if f.Over != nil {
 		children = append(children, f.Over)
 	}

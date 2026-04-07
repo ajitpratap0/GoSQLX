@@ -134,7 +134,20 @@ func (p *Parser) parseCaseExpression() (*ast.CaseExpression, error) {
 //	CAST(price AS DECIMAL(10,2))
 //	CAST(name AS VARCHAR(100))
 func (p *Parser) parseCastExpression() (*ast.CastExpression, error) {
-	// Consume CAST keyword
+	return p.parseCastLike(false)
+}
+
+// parseTryCastExpression parses a TRY_CAST expression with the same shape as
+// CAST. Snowflake, SQL Server, and BigQuery return NULL on conversion failure
+// instead of raising an error.
+func (p *Parser) parseTryCastExpression() (*ast.CastExpression, error) {
+	return p.parseCastLike(true)
+}
+
+// parseCastLike implements the body shared between CAST and TRY_CAST. The
+// caller is responsible for ensuring the current token is the leading keyword.
+func (p *Parser) parseCastLike(try bool) (*ast.CastExpression, error) {
+	// Consume CAST / TRY_CAST keyword
 	p.advance()
 
 	// Expect opening parenthesis
@@ -215,6 +228,7 @@ func (p *Parser) parseCastExpression() (*ast.CastExpression, error) {
 	return &ast.CastExpression{
 		Expr: expr,
 		Type: dataType,
+		Try:  try,
 	}, nil
 }
 

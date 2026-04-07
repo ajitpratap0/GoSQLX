@@ -61,6 +61,15 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return p.parseCastExpression()
 	}
 
+	// TRY_CAST(expr AS type) — Snowflake, SQL Server, BigQuery. Tokenized as
+	// an identifier (the snowflake keyword table is not wired into the
+	// tokenizer); detect by name when followed by '('.
+	if (p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeKeyword)) &&
+		strings.EqualFold(p.currentToken.Token.Value, "TRY_CAST") &&
+		p.peekToken().Token.Type == models.TokenTypeLParen {
+		return p.parseTryCastExpression()
+	}
+
 	if p.isType(models.TokenTypeInterval) {
 		// Handle INTERVAL 'value' expressions
 		return p.parseIntervalExpression()

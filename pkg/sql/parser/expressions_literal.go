@@ -71,6 +71,13 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return p.parseArrayConstructor()
 	}
 
+	// ClickHouse array literal: [expr, expr, ...] without the ARRAY keyword.
+	// Gated to ClickHouse to avoid colliding with subscript-style usage in other
+	// dialects.
+	if p.isType(models.TokenTypeLBracket) && p.dialect == string(keywords.DialectClickHouse) {
+		return p.parseBracketArrayLiteral()
+	}
+
 	// Handle MySQL VALUES(column) helper in ON DUPLICATE KEY UPDATE.
 	// VALUES is normally a DML keyword, but inside ON DUPLICATE KEY UPDATE it acts
 	// as a scalar function that returns the value that was attempted for insertion.

@@ -278,3 +278,99 @@ func (p *Parser) supportsTableFunction() bool {
 	}
 	return false
 }
+
+// parseSnowflakeTimeTravel parses the Snowflake time-travel / change-tracking
+// modifier attached to a table reference. The current token must be one of
+// AT / BEFORE / CHANGES. Returns the head clause with any additional clauses
+// appended to Chained (e.g. CHANGES (...) AT (...)).
+func (p *Parser) parseSnowflakeTimeTravel() (*ast.TimeTravelClause, error) {
+	head, err := p.parseOneTimeTravelClause()
+	if err != nil {
+		return nil, err
+	}
+	// Allow additional clauses: CHANGES (...) AT (...) is legal.
+	for p.isSnowflakeTimeTravelStart() {
+		next, err := p.parseOneTimeTravelClause()
+		if err != nil {
+			return nil, err
+		}
+		head.Chained = append(head.Chained, next)
+	}
+	return head, nil
+}
+
+func (p *Parser) parseOneTimeTravelClause() (*ast.TimeTravelClause, error) {
+	pos := p.currentLocation()
+	kind := strings.ToUpper(p.currentToken.Token.Value)
+	p.advance() // Consume AT / BEFORE / CHANGES
+	if !p.isType(models.TokenTypeLParen) {
+		return nil, p.expectedError("( after " + kind)
+	}
+	p.advance() // Consume (
+
+	clause := &ast.TimeTravelClause{
+		Kind:  kind,
+		Named: map[string]ast.Expression{},
+		Pos:   pos,
+	}
+
+	// Parse comma-separated named arguments: name => expr [, name => expr]...
+	// Snowflake uses TIMESTAMP, OFFSET, STATEMENT, INFORMATION as argument
+	// names; these tokenize as dedicated keyword types, not identifiers.
+	// Accept any non-punctuation token with a non-empty value as the name.
+	for {
+		argName := strings.ToUpper(p.currentToken.Token.Value)
+		if argName == "" || p.isType(models.TokenTypeRParen) ||
+			p.isType(models.TokenTypeComma) || p.isType(models.TokenTypeLParen) {
+			return nil, p.expectedError("argument name in " + kind)
+		}
+		p.advance()
+		if p.currentToken.Token.Type != models.TokenTypeRArrow {
+			return nil, p.expectedError("=> after " + argName)
+		}
+		p.advance() // =>
+		// Values are typically literal expressions, but may also be bare
+		// keywords like DEFAULT or APPEND_ONLY for CHANGES (INFORMATION => …).
+		var value ast.Expression
+		if v, err := p.parseExpression(); err == nil {
+			value = v
+		} else if p.currentToken.Token.Value != "" &&
+			!p.isType(models.TokenTypeRParen) && !p.isType(models.TokenTypeComma) {
+			value = &ast.Identifier{Name: p.currentToken.Token.Value}
+			p.advance()
+		} else {
+			return nil, err
+		}
+		clause.Named[argName] = value
+		if p.isType(models.TokenTypeComma) {
+			p.advance()
+			continue
+		}
+		break
+	}
+
+	if !p.isType(models.TokenTypeRParen) {
+		return nil, p.expectedError(")")
+	}
+	p.advance() // Consume )
+	return clause, nil
+}
+
+// isSnowflakeTimeTravelStart returns true when the current token begins an
+// AT / BEFORE / CHANGES time-travel clause in the Snowflake dialect.
+func (p *Parser) isSnowflakeTimeTravelStart() bool {
+	if p.dialect != string(keywords.DialectSnowflake) {
+		return false
+	}
+	// BEFORE / CHANGES: plain identifier or keyword
+	val := strings.ToUpper(p.currentToken.Token.Value)
+	if val == "BEFORE" || val == "CHANGES" {
+		// Must be followed by '(' to disambiguate from other uses.
+		return p.peekToken().Token.Type == models.TokenTypeLParen
+	}
+	// AT: either TokenTypeAt (@) or an identifier-token "AT" followed by '('.
+	if val == "AT" && p.peekToken().Token.Type == models.TokenTypeLParen {
+		return true
+	}
+	return false
+}

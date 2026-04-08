@@ -779,8 +779,6 @@ func (p *Parser) parseSnowflakeUseStatement() (ast.Statement, error) {
 // ';' or EOF and returned as a DescribeStatement placeholder tagged with the
 // operation kind. No AST modeling yet; follow-up work.
 func (p *Parser) parseSnowflakeStageStatement(kind string) (ast.Statement, error) {
-	startPos := p.currentLocation()
-	_ = startPos
 	p.advance() // Consume leading kind token
 
 	// COPY INTO: consume the INTO keyword if present.

@@ -28,6 +28,8 @@ func TestSnowflakeStageOps(t *testing.T) {
 		"list_stage": `LIST @my_stage`,
 
 		"remove_from_stage": `REMOVE @my_stage/old_files`,
+
+		"ls_alias": `LS @my_stage`,
 	}
 	for name, q := range queries {
 		q := q

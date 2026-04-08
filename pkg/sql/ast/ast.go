@@ -692,6 +692,7 @@ func (i Identifier) Children() []Node     { return nil }
 type FunctionCall struct {
 	Name          string
 	Arguments     []Expression // Renamed from Args for consistency
+	Parameters    []Expression // ClickHouse parametric aggregates: quantile(0.5)(x) — params before args
 	Over          *WindowSpec  // For window functions
 	Distinct      bool
 	Filter        Expression          // WHERE clause for aggregate functions
@@ -705,6 +706,9 @@ func (f *FunctionCall) expressionNode()     {}
 func (f FunctionCall) TokenLiteral() string { return f.Name }
 func (f FunctionCall) Children() []Node {
 	children := nodifyExpressions(f.Arguments)
+	if len(f.Parameters) > 0 {
+		children = append(children, nodifyExpressions(f.Parameters)...)
+	}
 	if f.Over != nil {
 		children = append(children, f.Over)
 	}

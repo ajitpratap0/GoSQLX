@@ -591,6 +591,19 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 				ss.Pos = stmtPos
 			}
 		}
+		// ClickHouse trailing SETTINGS k=v [, k=v]... on SELECT. Parse-only;
+		// the settings are consumed but not modeled on the AST.
+		if p.dialect == string(keywords.DialectClickHouse) && p.isTokenMatch("SETTINGS") {
+			p.advance() // SETTINGS
+			for {
+				t := p.currentToken.Token.Type
+				if t == models.TokenTypeEOF || t == models.TokenTypeSemicolon ||
+					t == models.TokenTypeRParen {
+					break
+				}
+				p.advance()
+			}
+		}
 		return stmt, nil
 	case models.TokenTypeInsert:
 		stmtPos := p.currentLocation()

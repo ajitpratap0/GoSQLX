@@ -297,6 +297,31 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 			}
 			continue
 		}
+		if p.isTokenMatch("TTL") {
+			p.advance()
+			if err := p.skipClickHouseClauseExpr(); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if p.isTokenMatch("SETTINGS") {
+			p.advance()
+			// SETTINGS is a comma-separated list of name=value assignments.
+			// Consume each k=v pair until the next clause, EOF, or ';'.
+			for {
+				t := p.currentToken.Token.Type
+				val := strings.ToUpper(p.currentToken.Token.Value)
+				if t == models.TokenTypeEOF || t == models.TokenTypeSemicolon {
+					break
+				}
+				if val == "ORDER" || val == "PARTITION" || val == "PRIMARY" ||
+					val == "SAMPLE" || val == "TTL" {
+					break
+				}
+				p.advance()
+			}
+			continue
+		}
 		break
 	}
 

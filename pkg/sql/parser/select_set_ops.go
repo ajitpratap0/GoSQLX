@@ -19,10 +19,12 @@ package parser
 
 import (
 	"fmt"
+	"strings"
 
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // parseSelectWithSetOperations parses SELECT statements that may have set operations.
@@ -41,10 +43,16 @@ func (p *Parser) parseSelectWithSetOperations() (ast.Statement, error) {
 		return nil, err
 	}
 
-	// Check for set operations (UNION, EXCEPT, INTERSECT)
-	for p.isAnyType(models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect) {
+	// Check for set operations (UNION, EXCEPT, INTERSECT). MINUS is a
+	// Snowflake / Oracle synonym for EXCEPT; it tokenizes as a plain
+	// identifier, so match it by value.
+	for p.isAnyType(models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect) ||
+		p.isMinusSetOp() {
 		// Parse the set operation type
 		operationLiteral := p.currentToken.Token.Value
+		if p.isMinusSetOp() {
+			operationLiteral = "EXCEPT" // normalize to canonical name
+		}
 		p.advance()
 
 		// Check for ALL keyword
@@ -82,4 +90,19 @@ func (p *Parser) parseSelectWithSetOperations() (ast.Statement, error) {
 	}
 
 	return leftStmt, nil
+}
+
+// isMinusSetOp returns true if the current token is the Snowflake / Oracle
+// MINUS keyword used as a set operator (synonym for EXCEPT). MINUS tokenizes
+// as an identifier; gate by dialect so that MINUS as a legitimate column
+// alias in other dialects is not hijacked.
+func (p *Parser) isMinusSetOp() bool {
+	if p.dialect != string(keywords.DialectSnowflake) &&
+		p.dialect != string(keywords.DialectOracle) {
+		return false
+	}
+	if !p.isIdentifier() {
+		return false
+	}
+	return strings.EqualFold(p.currentToken.Token.Value, "MINUS")
 }

@@ -75,6 +75,18 @@ func (p *Parser) pivotDialectAllowed() bool {
 }
 
 // isPivotKeyword returns true if the current token is the contextual PIVOT
+// isQualifyKeyword returns true if the current token is the Snowflake /
+// BigQuery QUALIFY clause keyword. QUALIFY tokenizes as an identifier, so
+// detect by value and gate by dialect to avoid consuming a legitimate
+// table alias named "qualify" in other dialects.
+func (p *Parser) isQualifyKeyword() bool {
+	if p.dialect != string(keywords.DialectSnowflake) &&
+		p.dialect != string(keywords.DialectBigQuery) {
+		return false
+	}
+	return strings.EqualFold(p.currentToken.Token.Value, "QUALIFY")
+}
+
 // keyword in a dialect that supports it. PIVOT is non-reserved, so it may
 // arrive as either an identifier or a keyword token.
 func (p *Parser) isPivotKeyword() bool {

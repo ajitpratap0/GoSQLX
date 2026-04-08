@@ -116,6 +116,20 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		return nil, err
 	}
 
+	// Snowflake / BigQuery QUALIFY: filters rows after window functions.
+	// Appears between HAVING and ORDER BY. Tokenizes as identifier or
+	// keyword depending on dialect tables; detect by value.
+	if (p.dialect == string(keywords.DialectSnowflake) ||
+		p.dialect == string(keywords.DialectBigQuery)) &&
+		strings.EqualFold(p.currentToken.Token.Value, "QUALIFY") {
+		p.advance() // Consume QUALIFY
+		qexpr, qerr := p.parseExpression()
+		if qerr != nil {
+			return nil, qerr
+		}
+		selectStmt.Qualify = qexpr
+	}
+
 	// Oracle/MariaDB: START WITH ... CONNECT BY hierarchical queries
 	if p.isMariaDB() || p.dialect == string(keywords.DialectOracle) {
 		if strings.EqualFold(p.currentToken.Token.Value, "START") {

@@ -414,6 +414,7 @@ type SelectStatement struct {
 	Where             Expression
 	GroupBy           []Expression
 	Having            Expression
+	Qualify           Expression // Snowflake / BigQuery QUALIFY clause (filters after window functions)
 	// StartWith is the optional seed condition for CONNECT BY (MariaDB 10.2+).
 	// Example: START WITH parent_id IS NULL
 	StartWith Expression // MariaDB hierarchical query seed
@@ -526,6 +527,9 @@ func (s SelectStatement) Children() []Node {
 	children = append(children, nodifyExpressions(s.GroupBy)...)
 	if s.Having != nil {
 		children = append(children, s.Having)
+	}
+	if s.Qualify != nil {
+		children = append(children, s.Qualify)
 	}
 	for _, window := range s.Windows {
 		window := window // G601: Create local copy to avoid memory aliasing

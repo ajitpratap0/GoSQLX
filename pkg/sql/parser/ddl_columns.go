@@ -23,6 +23,7 @@ import (
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // parseColumnName parses a column name in DDL context, accepting reserved keywords
@@ -90,6 +91,27 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 	colDef := &ast.ColumnDef{
 		Name: name.Name,
 		Type: dataTypeStr,
+	}
+
+	// ClickHouse column options that may appear between the type and the
+	// standard constraint list: CODEC(...), DEFAULT expr, MATERIALIZED expr,
+	// ALIAS expr, EPHEMERAL expr, TTL expr. Consume permissively; they are
+	// appended to the type string for now so formatters can round-trip, and
+	// not yet modeled on the AST.
+	if p.dialect == string(keywords.DialectClickHouse) {
+		for {
+			upper := strings.ToUpper(p.currentToken.Token.Value)
+			if upper == "CODEC" && p.peekToken().Token.Type == models.TokenTypeLParen {
+				p.advance() // CODEC
+				args, err := p.parseTypeArgsString()
+				if err != nil {
+					return nil, err
+				}
+				colDef.Type += " CODEC" + args
+				continue
+			}
+			break
+		}
 	}
 
 	// Parse column constraints

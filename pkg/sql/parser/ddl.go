@@ -95,6 +95,60 @@ func (p *Parser) parseCreateStatement() (ast.Statement, error) {
 		}
 		return stmt, nil
 	}
+
+	// Snowflake object-type extensions: STAGE, STREAM, TASK, PIPE, FILE FORMAT,
+	// WAREHOUSE, DATABASE, SCHEMA, ROLE, FUNCTION, PROCEDURE, SEQUENCE.
+	// Parse-only: record the object kind and name on a DescribeStatement
+	// placeholder, then consume the rest of the statement body permissively
+	// until ';' or EOF (tracking balanced parens so embedded expressions with
+	// semicolons inside string literals round-trip).
+	if p.dialect == string(keywords.DialectSnowflake) {
+		kind := strings.ToUpper(p.currentToken.Token.Value)
+		if kind == "FILE" && strings.EqualFold(p.peekToken().Token.Value, "FORMAT") {
+			p.advance() // FILE
+			kind = "FILE FORMAT"
+		}
+		switch kind {
+		case "STAGE", "STREAM", "TASK", "PIPE", "FILE FORMAT",
+			"WAREHOUSE", "DATABASE", "SCHEMA", "ROLE", "SEQUENCE",
+			"FUNCTION", "PROCEDURE":
+			p.advance() // Consume object-kind keyword
+			// Optional IF NOT EXISTS
+			if p.isType(models.TokenTypeIf) {
+				p.advance()
+				if p.isType(models.TokenTypeNot) {
+					p.advance()
+				}
+				if p.isType(models.TokenTypeExists) {
+					p.advance()
+				}
+			}
+			// Object name (qualified identifier)
+			name, _ := p.parseQualifiedName()
+			// Consume the rest of the statement body until ';' or EOF,
+			// tracking balanced parens.
+			depth := 0
+			for {
+				t := p.currentToken.Token.Type
+				if t == models.TokenTypeEOF {
+					break
+				}
+				if t == models.TokenTypeSemicolon && depth == 0 {
+					break
+				}
+				if t == models.TokenTypeLParen {
+					depth++
+				} else if t == models.TokenTypeRParen {
+					depth--
+				}
+				p.advance()
+			}
+			stub := ast.GetDescribeStatement()
+			stub.TableName = "CREATE " + kind + " " + name
+			return stub, nil
+		}
+	}
+
 	return nil, p.expectedError("TABLE, VIEW, MATERIALIZED VIEW, or INDEX after CREATE")
 }
 

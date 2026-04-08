@@ -94,6 +94,18 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 			}
 			tableRef.TableFunc = funcCall
 		}
+
+		// Snowflake time-travel / change-tracking clauses:
+		//   AT (TIMESTAMP => ...)
+		//   BEFORE (STATEMENT => ...)
+		//   CHANGES (INFORMATION => DEFAULT) AT (...)
+		if p.isSnowflakeTimeTravelStart() {
+			tt, err := p.parseSnowflakeTimeTravel()
+			if err != nil {
+				return tableRef, err
+			}
+			tableRef.TimeTravel = tt
+		}
 	}
 
 	// Check for table alias (required for derived tables, optional for regular tables).
@@ -101,7 +113,7 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 	// Similarly, START followed by WITH is a hierarchical query seed, not an alias.
 	// Don't consume PIVOT/UNPIVOT as a table alias — they are contextual
 	// keywords in SQL Server/Oracle and must reach the pivot-clause parser below.
-	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() && !p.isQualifyKeyword() {
+	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() && !p.isQualifyKeyword() && !p.isSnowflakeTimeTravelStart() {
 		if p.isType(models.TokenTypeAs) {
 			p.advance() // Consume AS
 			if !p.isIdentifier() {
@@ -215,7 +227,7 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 	// Similarly, START followed by WITH is a hierarchical query seed, not an alias.
 	// Don't consume PIVOT/UNPIVOT as a table alias — they are contextual
 	// keywords in SQL Server/Oracle and must reach the pivot-clause parser below.
-	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() && !p.isQualifyKeyword() {
+	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() && !p.isQualifyKeyword() && !p.isSnowflakeTimeTravelStart() {
 		if p.isType(models.TokenTypeAs) {
 			p.advance()
 			if !p.isIdentifier() {

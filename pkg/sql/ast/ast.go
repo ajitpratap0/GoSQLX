@@ -233,6 +233,10 @@ type TableReference struct {
 	// IDENTIFIER('t'), or PostgreSQL unnest(array_col). When set, Name
 	// holds the function name and TableFunc carries the call itself.
 	TableFunc *FunctionCall
+	// TimeTravel is the Snowflake time-travel clause applied to this table
+	// reference: AT / BEFORE (TIMESTAMP|OFFSET|STATEMENT => expr) or
+	// CHANGES (INFORMATION => DEFAULT|APPEND_ONLY).
+	TimeTravel *TimeTravelClause
 	// ForSystemTime is the MariaDB temporal table clause (10.3.4+).
 	// Example: SELECT * FROM t FOR SYSTEM_TIME AS OF '2024-01-01'
 	ForSystemTime *ForSystemTimeClause // MariaDB temporal query
@@ -261,6 +265,9 @@ func (t TableReference) Children() []Node {
 	}
 	if t.TableFunc != nil {
 		nodes = append(nodes, t.TableFunc)
+	}
+	if t.TimeTravel != nil {
+		nodes = append(nodes, t.TimeTravel)
 	}
 	if t.Pivot != nil {
 		nodes = append(nodes, t.Pivot)
@@ -2022,6 +2029,41 @@ func (c ForSystemTimeClause) Children() []Node {
 	}
 	if c.End != nil {
 		nodes = append(nodes, c.End)
+	}
+	return nodes
+}
+
+// TimeTravelClause represents the Snowflake time-travel / change-tracking
+// modifier on a table reference:
+//
+//	SELECT ... FROM t AT (TIMESTAMP => '2024-01-01'::TIMESTAMP)
+//	SELECT ... FROM t BEFORE (STATEMENT => '...uuid...')
+//	SELECT ... FROM t CHANGES (INFORMATION => DEFAULT) AT (...)
+//
+// Kind is one of "AT", "BEFORE", "CHANGES". Named holds the
+// `name => expr` arguments keyed by upper-cased name (e.g. TIMESTAMP,
+// OFFSET, STATEMENT, INFORMATION). Multiple clauses may chain (CHANGES
+// plus AT); extra clauses are appended to Chained.
+type TimeTravelClause struct {
+	Kind    string // "AT" | "BEFORE" | "CHANGES"
+	Named   map[string]Expression
+	Chained []*TimeTravelClause
+	Pos     models.Location
+}
+
+func (c *TimeTravelClause) expressionNode()     {}
+func (c TimeTravelClause) TokenLiteral() string { return c.Kind }
+func (c TimeTravelClause) Children() []Node {
+	var nodes []Node
+	for _, v := range c.Named {
+		if v != nil {
+			nodes = append(nodes, v)
+		}
+	}
+	for _, ch := range c.Chained {
+		if ch != nil {
+			nodes = append(nodes, ch)
+		}
 	}
 	return nodes
 }

@@ -47,6 +47,34 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 	// Parse arguments if not empty
 	if !p.isType(models.TokenTypeRParen) {
 		for !p.isType(models.TokenTypeOrder) {
+			// Named argument form: `name => expr` (Snowflake FLATTEN,
+			// BigQuery, Oracle, PostgreSQL procedural calls). Detect by a
+			// bare identifier immediately followed by =>.
+			if p.isIdentifier() &&
+				p.peekToken().Token.Type == models.TokenTypeRArrow {
+				namePos := p.currentLocation()
+				argName := p.currentToken.Token.Value
+				p.advance() // name
+				p.advance() // =>
+				value, err := p.parseExpression()
+				if err != nil {
+					return nil, err
+				}
+				arguments = append(arguments, &ast.NamedArgument{
+					Name:  argName,
+					Value: value,
+					Pos:   namePos,
+				})
+				if p.isType(models.TokenTypeComma) {
+					p.advance()
+					continue
+				}
+				if p.isType(models.TokenTypeRParen) {
+					break
+				}
+				return nil, p.expectedError(", or )")
+			}
+
 			arg, err := p.parseExpression()
 			if err != nil {
 				return nil, err

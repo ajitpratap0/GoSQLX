@@ -252,3 +252,17 @@ func (p *Parser) parseUnpivotClause() (*ast.UnpivotClause, error) {
 		Pos:         pos,
 	}, nil
 }
+
+// supportsTableFunction reports whether the current dialect allows
+// function-call style table references in the FROM list — Snowflake
+// (FLATTEN, TABLE, IDENTIFIER, GENERATOR), BigQuery (UNNEST), and
+// PostgreSQL (unnest, generate_series, json_each, ...).
+func (p *Parser) supportsTableFunction() bool {
+	switch p.dialect {
+	case string(keywords.DialectSnowflake),
+		string(keywords.DialectBigQuery),
+		string(keywords.DialectPostgreSQL):
+		return true
+	}
+	return false
+}

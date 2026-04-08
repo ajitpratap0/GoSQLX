@@ -82,6 +82,18 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 			Name:    qualifiedName,
 			Lateral: isLateral,
 		}
+
+		// Function-call table reference (Snowflake FLATTEN, TABLE(...),
+		// IDENTIFIER(...), PostgreSQL unnest(...), BigQuery UNNEST(...)).
+		// If the parsed name is followed by '(' at FROM position, reparse
+		// it as a function call. Gated to dialects that actually use this.
+		if p.isType(models.TokenTypeLParen) && p.supportsTableFunction() {
+			funcCall, ferr := p.parseFunctionCall(qualifiedName)
+			if ferr != nil {
+				return tableRef, ferr
+			}
+			tableRef.TableFunc = funcCall
+		}
 	}
 
 	// Check for table alias (required for derived tables, optional for regular tables).

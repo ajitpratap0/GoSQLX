@@ -707,6 +707,15 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 			p.advance()
 			return p.parsePragmaStatement()
 		}
+		// Snowflake stage operations may arrive as keyword tokens depending on
+		// the active keyword table (LIST, COPY, etc. can be registered).
+		if p.dialect == string(keywords.DialectSnowflake) {
+			upper := strings.ToUpper(p.currentToken.Token.Value)
+			switch upper {
+			case "COPY", "PUT", "GET", "LIST", "REMOVE", "LS":
+				return p.parseSnowflakeStageStatement(upper)
+			}
+		}
 	case models.TokenTypeIdentifier:
 		// PRAGMA may be tokenized as IDENTIFIER when no dialect-specific keyword
 		// set is active (e.g. when using the default PostgreSQL tokenizer dialect).
@@ -720,6 +729,16 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		if p.dialect == string(keywords.DialectSnowflake) &&
 			strings.EqualFold(p.currentToken.Token.Value, "USE") {
 			return p.parseSnowflakeUseStatement()
+		}
+		// Snowflake stage operations: COPY INTO, PUT, GET, LIST, REMOVE.
+		// All tokenize as identifiers; parse-only stubs that consume the
+		// rest of the statement body.
+		if p.dialect == string(keywords.DialectSnowflake) {
+			upper := strings.ToUpper(p.currentToken.Token.Value)
+			switch upper {
+			case "COPY", "PUT", "GET", "LIST", "REMOVE", "LS":
+				return p.parseSnowflakeStageStatement(upper)
+			}
 		}
 	}
 	return nil, p.expectedError("statement")
@@ -746,6 +765,47 @@ func (p *Parser) parseSnowflakeUseStatement() (ast.Statement, error) {
 	stmt := ast.GetDescribeStatement()
 	stmt.TableName = "USE " + name
 	return stmt, nil
+}
+
+// parseSnowflakeStageStatement parses Snowflake stage operations as stubs:
+//
+//	COPY INTO <target> FROM <source> [options]
+//	PUT file://<path> @<stage>
+//	GET @<stage> file://<path>
+//	LIST @<stage>   (or LS)
+//	REMOVE @<stage>/<path>
+//
+// The statement is consumed token-by-token (tracking balanced parens) until
+// ';' or EOF and returned as a DescribeStatement placeholder tagged with the
+// operation kind. No AST modeling yet; follow-up work.
+func (p *Parser) parseSnowflakeStageStatement(kind string) (ast.Statement, error) {
+	p.advance() // Consume leading kind token
+
+	// COPY INTO: consume the INTO keyword if present.
+	if kind == "COPY" && p.isType(models.TokenTypeInto) {
+		p.advance()
+	}
+
+	// Consume the rest of the statement body.
+	depth := 0
+	for {
+		t := p.currentToken.Token.Type
+		if t == models.TokenTypeEOF {
+			break
+		}
+		if t == models.TokenTypeSemicolon && depth == 0 {
+			break
+		}
+		if t == models.TokenTypeLParen {
+			depth++
+		} else if t == models.TokenTypeRParen {
+			depth--
+		}
+		p.advance()
+	}
+	stub := ast.GetDescribeStatement()
+	stub.TableName = kind
+	return stub, nil
 }
 
 // NewParser creates a new parser with optional configuration.

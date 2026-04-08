@@ -83,6 +83,21 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 	var values [][]ast.Expression
 	var query ast.QueryExpression
 
+	// ClickHouse-only: INSERT INTO t [(cols)] FORMAT <name> with the data
+	// payload being external (network / file). Short-circuit here — there is
+	// no VALUES or SELECT to follow.
+	if p.dialect == string(keywords.DialectClickHouse) &&
+		strings.EqualFold(p.currentToken.Token.Value, "FORMAT") {
+		p.advance() // Consume FORMAT
+		if p.isIdentifier() || p.isType(models.TokenTypeKeyword) {
+			p.advance() // Consume format name
+		}
+		return &ast.InsertStatement{
+			TableName: tableName,
+			Columns:   columns,
+		}, nil
+	}
+
 	switch {
 	case p.isType(models.TokenTypeSelect):
 		// INSERT ... SELECT syntax
@@ -187,6 +202,17 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 		returning, err = p.parseReturningColumns()
 		if err != nil {
 			return nil, err
+		}
+	}
+
+	// ClickHouse INSERT ... VALUES (...) FORMAT <name> trailing format hint.
+	// Parse-only; the trailing payload is not consumed.
+	if p.dialect == string(keywords.DialectClickHouse) &&
+		strings.EqualFold(p.currentToken.Token.Value, "FORMAT") {
+		p.advance() // Consume FORMAT
+		if p.isIdentifier() || p.isType(models.TokenTypeKeyword) ||
+			p.isType(models.TokenTypeValues) {
+			p.advance() // Consume format name (may tokenize as VALUES keyword)
 		}
 	}
 

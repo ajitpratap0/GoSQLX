@@ -164,6 +164,23 @@ func (p *Parser) parseDescribeStatement() (ast.Statement, error) {
 		return desc, nil
 	}
 
+	// Snowflake: DESCRIBE TABLE <name>, DESCRIBE VIEW <name>, DESCRIBE STAGE
+	// <name>, etc. Also MySQL's DESCRIBE <db>.<table>. Accept and consume a
+	// leading object-kind keyword (TABLE, VIEW, DATABASE, SCHEMA) before the
+	// name so we don't fail on "DESCRIBE TABLE users".
+	if p.isType(models.TokenTypeTable) || p.isType(models.TokenTypeView) ||
+		p.isType(models.TokenTypeDatabase) ||
+		strings.EqualFold(p.currentToken.Token.Value, "SCHEMA") ||
+		strings.EqualFold(p.currentToken.Token.Value, "STAGE") ||
+		strings.EqualFold(p.currentToken.Token.Value, "STREAM") ||
+		strings.EqualFold(p.currentToken.Token.Value, "TASK") ||
+		strings.EqualFold(p.currentToken.Token.Value, "PIPE") ||
+		strings.EqualFold(p.currentToken.Token.Value, "FUNCTION") ||
+		strings.EqualFold(p.currentToken.Token.Value, "PROCEDURE") ||
+		strings.EqualFold(p.currentToken.Token.Value, "WAREHOUSE") {
+		p.advance()
+	}
+
 	name, err := p.parseQualifiedName()
 	if err != nil {
 		return nil, p.expectedError("table name")

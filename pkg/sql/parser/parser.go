@@ -678,7 +678,9 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 	case models.TokenTypeShow:
 		p.advance()
 		return p.parseShowStatement()
-	case models.TokenTypeDescribe, models.TokenTypeExplain:
+	case models.TokenTypeDescribe, models.TokenTypeExplain, models.TokenTypeDesc:
+		// DESC is the ORDER-BY sort-direction token but also a synonym for
+		// DESCRIBE at statement position (Oracle, Snowflake, MySQL).
 		p.advance()
 		return p.parseDescribeStatement()
 	case models.TokenTypeReplace:
@@ -700,8 +702,37 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 			p.advance()
 			return p.parsePragmaStatement()
 		}
+		// Snowflake session-context switches: USE [WAREHOUSE|DATABASE|SCHEMA|ROLE] <name>.
+		// USE is not tokenized as a keyword; dispatch by value in the Snowflake dialect.
+		if p.dialect == string(keywords.DialectSnowflake) &&
+			strings.EqualFold(p.currentToken.Token.Value, "USE") {
+			return p.parseSnowflakeUseStatement()
+		}
 	}
 	return nil, p.expectedError("statement")
+}
+
+// parseSnowflakeUseStatement parses:
+//
+//	USE [WAREHOUSE | DATABASE | SCHEMA | ROLE] <name>
+//
+// The object-kind keyword is optional (plain "USE <name>" switches the current
+// database). We parse-only; the statement is represented as a DescribeStatement
+// placeholder until a dedicated UseStatement node is introduced.
+func (p *Parser) parseSnowflakeUseStatement() (ast.Statement, error) {
+	p.advance() // Consume USE
+	// Optional object kind.
+	switch strings.ToUpper(p.currentToken.Token.Value) {
+	case "WAREHOUSE", "DATABASE", "SCHEMA", "ROLE":
+		p.advance()
+	}
+	name, err := p.parseQualifiedName()
+	if err != nil {
+		return nil, p.expectedError("name after USE")
+	}
+	stmt := ast.GetDescribeStatement()
+	stmt.TableName = "USE " + name
+	return stmt, nil
 }
 
 // NewParser creates a new parser with optional configuration.

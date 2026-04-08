@@ -228,6 +228,11 @@ type TableReference struct {
 	Lateral    bool             // LATERAL keyword for correlated subqueries (PostgreSQL)
 	TableHints []string         // SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
 	Final      bool             // ClickHouse FINAL modifier: forces MergeTree part merge
+	// TableFunc is a function-call table reference such as
+	// Snowflake LATERAL FLATTEN(input => col), TABLE(my_func(1,2)),
+	// IDENTIFIER('t'), or PostgreSQL unnest(array_col). When set, Name
+	// holds the function name and TableFunc carries the call itself.
+	TableFunc *FunctionCall
 	// ForSystemTime is the MariaDB temporal table clause (10.3.4+).
 	// Example: SELECT * FROM t FOR SYSTEM_TIME AS OF '2024-01-01'
 	ForSystemTime *ForSystemTimeClause // MariaDB temporal query
@@ -253,6 +258,9 @@ func (t TableReference) Children() []Node {
 	var nodes []Node
 	if t.Subquery != nil {
 		nodes = append(nodes, t.Subquery)
+	}
+	if t.TableFunc != nil {
+		nodes = append(nodes, t.TableFunc)
 	}
 	if t.Pivot != nil {
 		nodes = append(nodes, t.Pivot)
@@ -1041,6 +1049,24 @@ func (u *UnaryExpression) TokenLiteral() string {
 }
 
 func (u UnaryExpression) Children() []Node { return []Node{u.Expr} }
+
+// NamedArgument represents a function argument of the form `name => expr`,
+// used by Snowflake (FLATTEN(input => col), GENERATOR(rowcount => 100)),
+// BigQuery, Oracle, and PostgreSQL procedural calls.
+type NamedArgument struct {
+	Name  string
+	Value Expression
+	Pos   models.Location
+}
+
+func (n *NamedArgument) expressionNode()     {}
+func (n NamedArgument) TokenLiteral() string { return n.Name }
+func (n NamedArgument) Children() []Node {
+	if n.Value == nil {
+		return nil
+	}
+	return []Node{n.Value}
+}
 
 // CastExpression represents CAST(expr AS type) or TRY_CAST(expr AS type).
 // Try is set when the expression originated from TRY_CAST (Snowflake / SQL

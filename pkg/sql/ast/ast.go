@@ -1050,6 +1050,39 @@ func (u *UnaryExpression) TokenLiteral() string {
 
 func (u UnaryExpression) Children() []Node { return []Node{u.Expr} }
 
+// VariantPath represents a Snowflake VARIANT path expression:
+//
+//	col:field.sub[0]::string
+//
+// The Root is the base expression (typically an Identifier or FunctionCall
+// like PARSE_JSON(raw)). Segments is the chain of path steps that follow
+// the leading `:`. Each segment is either a field name (Name set) or a
+// bracketed index expression (Index set).
+type VariantPath struct {
+	Root     Expression
+	Segments []VariantPathSegment
+	Pos      models.Location
+}
+
+// VariantPathSegment is one step in a VARIANT path: either a field name
+// reached via `:` or `.`, or a bracketed index expression.
+type VariantPathSegment struct {
+	Name  string     // field name (`:field` or `.field`), empty when Index is set
+	Index Expression // bracket subscript (`[expr]`), nil when Name is set
+}
+
+func (v *VariantPath) expressionNode()     {}
+func (v VariantPath) TokenLiteral() string { return ":" }
+func (v VariantPath) Children() []Node {
+	nodes := []Node{v.Root}
+	for _, seg := range v.Segments {
+		if seg.Index != nil {
+			nodes = append(nodes, seg.Index)
+		}
+	}
+	return nodes
+}
+
 // NamedArgument represents a function argument of the form `name => expr`,
 // used by Snowflake (FLATTEN(input => col), GENERATOR(rowcount => 100)),
 // BigQuery, Oracle, and PostgreSQL procedural calls.

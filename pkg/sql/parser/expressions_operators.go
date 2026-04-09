@@ -110,6 +110,30 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 		}
 		p.advance() // Consume LIKE/ILIKE
 
+		// Snowflake LIKE ANY / LIKE ALL / ILIKE ANY / ILIKE ALL:
+		//   expr [NOT] LIKE ANY ('pattern1', 'pattern2', ...)
+		//   expr [NOT] ILIKE ALL ('%a%', '%b%')
+		// The ANY/ALL quantifier is followed by a parenthesised tuple.
+		if p.isType(models.TokenTypeAny) || p.isType(models.TokenTypeAll) {
+			quantifier := strings.ToUpper(p.currentToken.Token.Value)
+			operator = strings.ToUpper(operator) + " " + quantifier
+			p.advance() // Consume ANY/ALL
+			// Expect a tuple: (pattern, pattern, ...)
+			if !p.isType(models.TokenTypeLParen) {
+				return nil, p.expectedError("( after " + quantifier)
+			}
+			tuple, err := p.parsePrimaryExpression()
+			if err != nil {
+				return nil, err
+			}
+			return &ast.BinaryExpression{
+				Left:     left,
+				Operator: operator,
+				Right:    tuple,
+				Not:      notPrefix,
+			}, nil
+		}
+
 		// Parse pattern
 		pattern, err := p.parsePrimaryExpression()
 		if err != nil {

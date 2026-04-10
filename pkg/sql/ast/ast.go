@@ -228,6 +228,15 @@ type TableReference struct {
 	Lateral    bool             // LATERAL keyword for correlated subqueries (PostgreSQL)
 	TableHints []string         // SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
 	Final      bool             // ClickHouse FINAL modifier: forces MergeTree part merge
+	// TableFunc is a function-call table reference such as
+	// Snowflake LATERAL FLATTEN(input => col), TABLE(my_func(1,2)),
+	// IDENTIFIER('t'), or PostgreSQL unnest(array_col). When set, Name
+	// holds the function name and TableFunc carries the call itself.
+	TableFunc *FunctionCall
+	// TimeTravel is the Snowflake time-travel clause applied to this table
+	// reference: AT / BEFORE (TIMESTAMP|OFFSET|STATEMENT => expr) or
+	// CHANGES (INFORMATION => DEFAULT|APPEND_ONLY).
+	TimeTravel *TimeTravelClause
 	// ForSystemTime is the MariaDB temporal table clause (10.3.4+).
 	// Example: SELECT * FROM t FOR SYSTEM_TIME AS OF '2024-01-01'
 	ForSystemTime *ForSystemTimeClause // MariaDB temporal query
@@ -253,6 +262,12 @@ func (t TableReference) Children() []Node {
 	var nodes []Node
 	if t.Subquery != nil {
 		nodes = append(nodes, t.Subquery)
+	}
+	if t.TableFunc != nil {
+		nodes = append(nodes, t.TableFunc)
+	}
+	if t.TimeTravel != nil {
+		nodes = append(nodes, t.TimeTravel)
 	}
 	if t.Pivot != nil {
 		nodes = append(nodes, t.Pivot)
@@ -414,6 +429,7 @@ type SelectStatement struct {
 	Where             Expression
 	GroupBy           []Expression
 	Having            Expression
+	Qualify           Expression // Snowflake / BigQuery QUALIFY clause (filters after window functions)
 	// StartWith is the optional seed condition for CONNECT BY (MariaDB 10.2+).
 	// Example: START WITH parent_id IS NULL
 	StartWith Expression // MariaDB hierarchical query seed
@@ -526,6 +542,9 @@ func (s SelectStatement) Children() []Node {
 	children = append(children, nodifyExpressions(s.GroupBy)...)
 	if s.Having != nil {
 		children = append(children, s.Having)
+	}
+	if s.Qualify != nil {
+		children = append(children, s.Qualify)
 	}
 	for _, window := range s.Windows {
 		window := window // G601: Create local copy to avoid memory aliasing
@@ -690,20 +709,25 @@ func (i Identifier) Children() []Node     { return nil }
 //   - OrderBy: ORDER BY clause for order-sensitive aggregates (STRING_AGG, ARRAY_AGG, etc.)
 //   - WithinGroup: ORDER BY clause for ordered-set aggregates (PERCENTILE_CONT, PERCENTILE_DISC, MODE, etc.)
 type FunctionCall struct {
-	Name        string
-	Arguments   []Expression // Renamed from Args for consistency
-	Over        *WindowSpec  // For window functions
-	Distinct    bool
-	Filter      Expression          // WHERE clause for aggregate functions
-	OrderBy     []OrderByExpression // ORDER BY clause for aggregate functions (STRING_AGG, ARRAY_AGG, etc.)
-	WithinGroup []OrderByExpression // ORDER BY clause for ordered-set aggregates (PERCENTILE_CONT, etc.)
-	Pos         models.Location     // Source position of the function name (1-based line and column)
+	Name          string
+	Arguments     []Expression // Renamed from Args for consistency
+	Parameters    []Expression // ClickHouse parametric aggregates: quantile(0.5)(x) — params before args
+	Over          *WindowSpec  // For window functions
+	Distinct      bool
+	Filter        Expression          // WHERE clause for aggregate functions
+	OrderBy       []OrderByExpression // ORDER BY clause for aggregate functions (STRING_AGG, ARRAY_AGG, etc.)
+	WithinGroup   []OrderByExpression // ORDER BY clause for ordered-set aggregates (PERCENTILE_CONT, etc.)
+	NullTreatment string              // "IGNORE NULLS" or "RESPECT NULLS" on window functions (Snowflake, Oracle, BigQuery, SQL:2016)
+	Pos           models.Location     // Source position of the function name (1-based line and column)
 }
 
 func (f *FunctionCall) expressionNode()     {}
 func (f FunctionCall) TokenLiteral() string { return f.Name }
 func (f FunctionCall) Children() []Node {
 	children := nodifyExpressions(f.Arguments)
+	if len(f.Parameters) > 0 {
+		children = append(children, nodifyExpressions(f.Parameters)...)
+	}
 	if f.Over != nil {
 		children = append(children, f.Over)
 	}
@@ -1033,15 +1057,75 @@ func (u *UnaryExpression) TokenLiteral() string {
 
 func (u UnaryExpression) Children() []Node { return []Node{u.Expr} }
 
-// CastExpression represents CAST(expr AS type)
+// VariantPath represents a Snowflake VARIANT path expression:
+//
+//	col:field.sub[0]::string
+//
+// The Root is the base expression (typically an Identifier or FunctionCall
+// like PARSE_JSON(raw)). Segments is the chain of path steps that follow
+// the leading `:`. Each segment is either a field name (Name set) or a
+// bracketed index expression (Index set).
+type VariantPath struct {
+	Root     Expression
+	Segments []VariantPathSegment
+	Pos      models.Location
+}
+
+// VariantPathSegment is one step in a VARIANT path: either a field name
+// reached via `:` or `.`, or a bracketed index expression.
+type VariantPathSegment struct {
+	Name  string     // field name (`:field` or `.field`), empty when Index is set
+	Index Expression // bracket subscript (`[expr]`), nil when Name is set
+}
+
+func (v *VariantPath) expressionNode()     {}
+func (v VariantPath) TokenLiteral() string { return ":" }
+func (v VariantPath) Children() []Node {
+	nodes := []Node{v.Root}
+	for _, seg := range v.Segments {
+		if seg.Index != nil {
+			nodes = append(nodes, seg.Index)
+		}
+	}
+	return nodes
+}
+
+// NamedArgument represents a function argument of the form `name => expr`,
+// used by Snowflake (FLATTEN(input => col), GENERATOR(rowcount => 100)),
+// BigQuery, Oracle, and PostgreSQL procedural calls.
+type NamedArgument struct {
+	Name  string
+	Value Expression
+	Pos   models.Location
+}
+
+func (n *NamedArgument) expressionNode()     {}
+func (n NamedArgument) TokenLiteral() string { return n.Name }
+func (n NamedArgument) Children() []Node {
+	if n.Value == nil {
+		return nil
+	}
+	return []Node{n.Value}
+}
+
+// CastExpression represents CAST(expr AS type) or TRY_CAST(expr AS type).
+// Try is set when the expression originated from TRY_CAST (Snowflake / SQL
+// Server / BigQuery), which returns NULL on conversion failure instead of
+// raising an error.
 type CastExpression struct {
 	Expr Expression
 	Type string
+	Try  bool
 }
 
-func (c *CastExpression) expressionNode()     {}
-func (c CastExpression) TokenLiteral() string { return "CAST" }
-func (c CastExpression) Children() []Node     { return []Node{c.Expr} }
+func (c *CastExpression) expressionNode() {}
+func (c CastExpression) TokenLiteral() string {
+	if c.Try {
+		return "TRY_CAST"
+	}
+	return "CAST"
+}
+func (c CastExpression) Children() []Node { return []Node{c.Expr} }
 
 // AliasedExpression represents an expression with an alias (expr AS alias)
 type AliasedExpression struct {
@@ -1978,6 +2062,41 @@ func (c ForSystemTimeClause) Children() []Node {
 	}
 	if c.End != nil {
 		nodes = append(nodes, c.End)
+	}
+	return nodes
+}
+
+// TimeTravelClause represents the Snowflake time-travel / change-tracking
+// modifier on a table reference:
+//
+//	SELECT ... FROM t AT (TIMESTAMP => '2024-01-01'::TIMESTAMP)
+//	SELECT ... FROM t BEFORE (STATEMENT => '...uuid...')
+//	SELECT ... FROM t CHANGES (INFORMATION => DEFAULT) AT (...)
+//
+// Kind is one of "AT", "BEFORE", "CHANGES". Named holds the
+// `name => expr` arguments keyed by upper-cased name (e.g. TIMESTAMP,
+// OFFSET, STATEMENT, INFORMATION). Multiple clauses may chain (CHANGES
+// plus AT); extra clauses are appended to Chained.
+type TimeTravelClause struct {
+	Kind    string // "AT" | "BEFORE" | "CHANGES"
+	Named   map[string]Expression
+	Chained []*TimeTravelClause
+	Pos     models.Location
+}
+
+func (c *TimeTravelClause) expressionNode()     {}
+func (c TimeTravelClause) TokenLiteral() string { return c.Kind }
+func (c TimeTravelClause) Children() []Node {
+	var nodes []Node
+	for _, v := range c.Named {
+		if v != nil {
+			nodes = append(nodes, v)
+		}
+	}
+	for _, ch := range c.Chained {
+		if ch != nil {
+			nodes = append(nodes, ch)
+		}
 	}
 	return nodes
 }

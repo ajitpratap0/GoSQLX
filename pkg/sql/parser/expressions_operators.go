@@ -92,16 +92,47 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	// Check for LIKE/ILIKE operator
 	if p.isType(models.TokenTypeLike) || strings.EqualFold(p.currentToken.Token.Value, "ILIKE") {
 		operator := p.currentToken.Token.Value
-		// Reject ILIKE in non-PostgreSQL dialects - it is a PostgreSQL extension.
-		if strings.EqualFold(operator, "ILIKE") &&
-			p.dialect != "" &&
-			p.dialect != string(keywords.DialectPostgreSQL) {
-			return nil, fmt.Errorf(
-				"ILIKE is a PostgreSQL-specific operator and is not supported in %s; "+
-					"use LIKE or LOWER() for case-insensitive matching", p.dialect,
-			)
+		// ILIKE is supported by PostgreSQL, Snowflake, and ClickHouse natively.
+		// Reject in other dialects (e.g. MySQL, SQL Server, SQLite, Oracle) where
+		// it is not a recognized operator.
+		if strings.EqualFold(operator, "ILIKE") && p.dialect != "" {
+			switch p.dialect {
+			case string(keywords.DialectPostgreSQL),
+				string(keywords.DialectSnowflake),
+				string(keywords.DialectClickHouse):
+				// supported
+			default:
+				return nil, fmt.Errorf(
+					"ILIKE is not supported in %s; "+
+						"use LIKE or LOWER() for case-insensitive matching", p.dialect,
+				)
+			}
 		}
 		p.advance() // Consume LIKE/ILIKE
+
+		// Snowflake LIKE ANY / LIKE ALL / ILIKE ANY / ILIKE ALL:
+		//   expr [NOT] LIKE ANY ('pattern1', 'pattern2', ...)
+		//   expr [NOT] ILIKE ALL ('%a%', '%b%')
+		// The ANY/ALL quantifier is followed by a parenthesised tuple.
+		if p.isType(models.TokenTypeAny) || p.isType(models.TokenTypeAll) {
+			quantifier := strings.ToUpper(p.currentToken.Token.Value)
+			operator = strings.ToUpper(operator) + " " + quantifier
+			p.advance() // Consume ANY/ALL
+			// Expect a tuple: (pattern, pattern, ...)
+			if !p.isType(models.TokenTypeLParen) {
+				return nil, p.expectedError("( after " + quantifier)
+			}
+			tuple, err := p.parsePrimaryExpression()
+			if err != nil {
+				return nil, err
+			}
+			return &ast.BinaryExpression{
+				Left:     left,
+				Operator: operator,
+				Right:    tuple,
+				Not:      notPrefix,
+			}, nil
+		}
 
 		// Parse pattern
 		pattern, err := p.parsePrimaryExpression()

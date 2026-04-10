@@ -591,6 +591,19 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 				ss.Pos = stmtPos
 			}
 		}
+		// ClickHouse trailing SETTINGS k=v [, k=v]... on SELECT. Parse-only;
+		// the settings are consumed but not modeled on the AST.
+		if p.dialect == string(keywords.DialectClickHouse) && p.isTokenMatch("SETTINGS") {
+			p.advance() // SETTINGS
+			for {
+				t := p.currentToken.Token.Type
+				if t == models.TokenTypeEOF || t == models.TokenTypeSemicolon ||
+					t == models.TokenTypeRParen {
+					break
+				}
+				p.advance()
+			}
+		}
 		return stmt, nil
 	case models.TokenTypeInsert:
 		stmtPos := p.currentLocation()
@@ -678,7 +691,9 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 	case models.TokenTypeShow:
 		p.advance()
 		return p.parseShowStatement()
-	case models.TokenTypeDescribe, models.TokenTypeExplain:
+	case models.TokenTypeDescribe, models.TokenTypeExplain, models.TokenTypeDesc:
+		// DESC is the ORDER-BY sort-direction token but also a synonym for
+		// DESCRIBE at statement position (Oracle, Snowflake, MySQL).
 		p.advance()
 		return p.parseDescribeStatement()
 	case models.TokenTypeReplace:
@@ -692,6 +707,15 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 			p.advance()
 			return p.parsePragmaStatement()
 		}
+		// Snowflake stage operations may arrive as keyword tokens depending on
+		// the active keyword table (LIST, COPY, etc. can be registered).
+		if p.dialect == string(keywords.DialectSnowflake) {
+			upper := strings.ToUpper(p.currentToken.Token.Value)
+			switch upper {
+			case "COPY", "PUT", "GET", "LIST", "REMOVE", "LS":
+				return p.parseSnowflakeStageStatement(upper)
+			}
+		}
 	case models.TokenTypeIdentifier:
 		// PRAGMA may be tokenized as IDENTIFIER when no dialect-specific keyword
 		// set is active (e.g. when using the default PostgreSQL tokenizer dialect).
@@ -700,8 +724,88 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 			p.advance()
 			return p.parsePragmaStatement()
 		}
+		// Snowflake session-context switches: USE [WAREHOUSE|DATABASE|SCHEMA|ROLE] <name>.
+		// USE is not tokenized as a keyword; dispatch by value in the Snowflake dialect.
+		if p.dialect == string(keywords.DialectSnowflake) &&
+			strings.EqualFold(p.currentToken.Token.Value, "USE") {
+			return p.parseSnowflakeUseStatement()
+		}
+		// Snowflake stage operations: COPY INTO, PUT, GET, LIST, REMOVE.
+		// All tokenize as identifiers; parse-only stubs that consume the
+		// rest of the statement body.
+		if p.dialect == string(keywords.DialectSnowflake) {
+			upper := strings.ToUpper(p.currentToken.Token.Value)
+			switch upper {
+			case "COPY", "PUT", "GET", "LIST", "REMOVE", "LS":
+				return p.parseSnowflakeStageStatement(upper)
+			}
+		}
 	}
 	return nil, p.expectedError("statement")
+}
+
+// parseSnowflakeUseStatement parses:
+//
+//	USE [WAREHOUSE | DATABASE | SCHEMA | ROLE] <name>
+//
+// The object-kind keyword is optional (plain "USE <name>" switches the current
+// database). We parse-only; the statement is represented as a DescribeStatement
+// placeholder until a dedicated UseStatement node is introduced.
+func (p *Parser) parseSnowflakeUseStatement() (ast.Statement, error) {
+	p.advance() // Consume USE
+	// Optional object kind.
+	switch strings.ToUpper(p.currentToken.Token.Value) {
+	case "WAREHOUSE", "DATABASE", "SCHEMA", "ROLE":
+		p.advance()
+	}
+	name, err := p.parseQualifiedName()
+	if err != nil {
+		return nil, p.expectedError("name after USE")
+	}
+	stmt := ast.GetDescribeStatement()
+	stmt.TableName = "USE " + name
+	return stmt, nil
+}
+
+// parseSnowflakeStageStatement parses Snowflake stage operations as stubs:
+//
+//	COPY INTO <target> FROM <source> [options]
+//	PUT file://<path> @<stage>
+//	GET @<stage> file://<path>
+//	LIST @<stage>   (or LS)
+//	REMOVE @<stage>/<path>
+//
+// The statement is consumed token-by-token (tracking balanced parens) until
+// ';' or EOF and returned as a DescribeStatement placeholder tagged with the
+// operation kind. No AST modeling yet; follow-up work.
+func (p *Parser) parseSnowflakeStageStatement(kind string) (ast.Statement, error) {
+	p.advance() // Consume leading kind token
+
+	// COPY INTO: consume the INTO keyword if present.
+	if kind == "COPY" && p.isType(models.TokenTypeInto) {
+		p.advance()
+	}
+
+	// Consume the rest of the statement body.
+	depth := 0
+	for {
+		t := p.currentToken.Token.Type
+		if t == models.TokenTypeEOF {
+			break
+		}
+		if t == models.TokenTypeSemicolon && depth == 0 {
+			break
+		}
+		if t == models.TokenTypeLParen {
+			depth++
+		} else if t == models.TokenTypeRParen {
+			depth--
+		}
+		p.advance()
+	}
+	stub := ast.GetDescribeStatement()
+	stub.TableName = kind
+	return stub, nil
 }
 
 // NewParser creates a new parser with optional configuration.
@@ -958,14 +1062,18 @@ func (p *Parser) isNonReservedKeyword() bool {
 	case models.TokenTypeTarget, models.TokenTypeSource, models.TokenTypeMatched:
 		return true
 	case models.TokenTypeTable, models.TokenTypeIndex, models.TokenTypeView,
-		models.TokenTypeKey, models.TokenTypeColumn, models.TokenTypeDatabase:
+		models.TokenTypeKey, models.TokenTypeColumn, models.TokenTypeDatabase,
+		models.TokenTypePartition, models.TokenTypeRows:
 		// DDL keywords that are commonly used as quoted identifiers in MySQL (backtick)
-		// and SQL Server (bracket) dialects.
+		// and SQL Server (bracket) dialects, and as plain column names in ClickHouse
+		// system tables (system.parts.partition, system.replicas.table,
+		// system.tables.rows, etc).
 		return true
 	case models.TokenTypeKeyword:
 		// Token may have generic Type; check value for specific keywords
 		switch strings.ToUpper(p.currentToken.Token.Value) {
-		case "TARGET", "SOURCE", "MATCHED", "VALUE", "NAME", "TYPE", "STATUS":
+		case "TARGET", "SOURCE", "MATCHED", "VALUE", "NAME", "TYPE", "STATUS",
+			"TABLES":
 			return true
 		}
 	}

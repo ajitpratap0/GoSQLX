@@ -61,6 +61,15 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return p.parseCastExpression()
 	}
 
+	// TRY_CAST(expr AS type) — Snowflake, SQL Server, BigQuery. Tokenized as
+	// an identifier (the snowflake keyword table is not wired into the
+	// tokenizer); detect by name when followed by '('.
+	if (p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeKeyword)) &&
+		strings.EqualFold(p.currentToken.Token.Value, "TRY_CAST") &&
+		p.peekToken().Token.Type == models.TokenTypeLParen {
+		return p.parseTryCastExpression()
+	}
+
 	if p.isType(models.TokenTypeInterval) {
 		// Handle INTERVAL 'value' expressions
 		return p.parseIntervalExpression()
@@ -69,6 +78,13 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 	if p.isType(models.TokenTypeArray) {
 		// Handle ARRAY[...] or ARRAY(SELECT ...) constructor
 		return p.parseArrayConstructor()
+	}
+
+	// ClickHouse array literal: [expr, expr, ...] without the ARRAY keyword.
+	// Gated to ClickHouse to avoid colliding with subscript-style usage in other
+	// dialects.
+	if p.isType(models.TokenTypeLBracket) && p.dialect == string(keywords.DialectClickHouse) {
+		return p.parseBracketArrayLiteral()
 	}
 
 	// Handle MySQL VALUES(column) helper in ON DUPLICATE KEY UPDATE.
@@ -103,7 +119,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return funcCall, nil
 	}
 
-	if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeDoubleQuotedString) || (p.dialect == string(keywords.DialectSQLServer) && p.isNonReservedKeyword()) {
+	if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeDoubleQuotedString) || ((p.dialect == string(keywords.DialectSQLServer) || p.dialect == string(keywords.DialectClickHouse)) && p.isNonReservedKeyword()) {
 		// Handle identifiers and function calls
 		// Double-quoted strings are treated as identifiers in SQL (e.g., "column_name")
 		// Non-reserved keywords (TARGET, SOURCE, etc.) can also be used as identifiers

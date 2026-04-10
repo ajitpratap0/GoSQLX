@@ -28,6 +28,7 @@ import (
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // parseExpression parses an expression with OR operators (lowest precedence)
@@ -213,6 +214,17 @@ func (p *Parser) parseJSONExpression() (ast.Expression, error) {
 		return nil, err
 	}
 
+	// Snowflake VARIANT path: `expr:field[.field|[idx]]*`. Must run before
+	// the `::` cast loop so that `col:a.b::int` casts the full path rather
+	// than treating the path as a bare expression.
+	if p.dialect == string(keywords.DialectSnowflake) && p.isType(models.TokenTypeColon) {
+		vp, err := p.parseSnowflakeVariantPath(left)
+		if err != nil {
+			return nil, err
+		}
+		left = vp
+	}
+
 	// Handle type casting (::) with highest precedence
 	// PostgreSQL: expr::type (e.g., '123'::integer, column::text)
 	for p.isType(models.TokenTypeDoubleColon) {
@@ -379,4 +391,82 @@ func (p *Parser) isJSONOperator() bool {
 		return true
 	}
 	return false
+}
+
+// parseSnowflakeVariantPath parses the tail of a Snowflake VARIANT path
+// expression. The current token must be `:`. Returns a VariantPath with
+// the given root and the parsed segments.
+//
+// Grammar:
+//
+//	path      := ':' step ( '.' field | '[' expr ']' )*
+//	step      := field | '"' quoted '"'
+//	field     := identifier
+func (p *Parser) parseSnowflakeVariantPath(root ast.Expression) (*ast.VariantPath, error) {
+	pos := p.currentLocation()
+	if !p.isType(models.TokenTypeColon) {
+		return nil, p.expectedError(":")
+	}
+	p.advance() // Consume leading :
+
+	vp := &ast.VariantPath{Root: root, Pos: pos}
+
+	// First segment must be a field name (identifier or string literal).
+	name, err := p.parseVariantFieldName()
+	if err != nil {
+		return nil, err
+	}
+	vp.Segments = append(vp.Segments, ast.VariantPathSegment{Name: name})
+
+	// Subsequent segments: `.field` | `[expr]` | `:field` (rare).
+	for {
+		switch {
+		case p.isType(models.TokenTypePeriod):
+			p.advance()
+			n, err := p.parseVariantFieldName()
+			if err != nil {
+				return nil, err
+			}
+			vp.Segments = append(vp.Segments, ast.VariantPathSegment{Name: n})
+		case p.isType(models.TokenTypeColon):
+			p.advance()
+			n, err := p.parseVariantFieldName()
+			if err != nil {
+				return nil, err
+			}
+			vp.Segments = append(vp.Segments, ast.VariantPathSegment{Name: n})
+		case p.isType(models.TokenTypeLBracket):
+			p.advance() // Consume [
+			idx, err := p.parseExpression()
+			if err != nil {
+				return nil, err
+			}
+			if !p.isType(models.TokenTypeRBracket) {
+				return nil, p.expectedError("]")
+			}
+			p.advance() // Consume ]
+			vp.Segments = append(vp.Segments, ast.VariantPathSegment{Index: idx})
+		default:
+			return vp, nil
+		}
+	}
+}
+
+// parseVariantFieldName consumes one VARIANT path field name, which may be
+// a bare identifier or a double-quoted string. Returns the name and
+// advances past it.
+func (p *Parser) parseVariantFieldName() (string, error) {
+	tok := p.currentToken.Token
+	switch {
+	case p.isIdentifier(), p.isType(models.TokenTypeDoubleQuotedString):
+		name := tok.Value
+		p.advance()
+		return name, nil
+	case p.isType(models.TokenTypeKeyword):
+		// Keywords may appear as field names (e.g. TYPE, VALUE, STATUS).
+		name := tok.Value
+		p.advance()
+		return name, nil
+	}
+	return "", p.expectedError("field name after `:` or `.`")
 }

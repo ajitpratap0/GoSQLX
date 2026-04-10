@@ -548,6 +548,17 @@ func (p *Parser) parseOrderByClause() ([]ast.OrderByExpression, error) {
 		}
 		entry.NullsFirst = nullsFirst
 
+		// ClickHouse WITH FILL per-entry tail:
+		//   ORDER BY expr [ASC|DESC] WITH FILL [FROM x] [TO y] [STEP z]
+		// Consume permissively; the clause is not modeled on the AST yet.
+		if p.dialect == string(keywords.DialectClickHouse) &&
+			p.isType(models.TokenTypeWith) &&
+			strings.EqualFold(p.peekToken().Token.Value, "FILL") {
+			p.advance() // WITH
+			p.advance() // FILL
+			p.skipClickHouseWithFillTail()
+		}
+
 		orderByExprs = append(orderByExprs, entry)
 
 		if !p.isType(models.TokenTypeComma) {
@@ -556,6 +567,26 @@ func (p *Parser) parseOrderByClause() ([]ast.OrderByExpression, error) {
 		p.advance()
 	}
 	return orderByExprs, nil
+}
+
+// skipClickHouseWithFillTail consumes the optional FROM / TO / STEP arguments
+// of a ClickHouse "ORDER BY expr WITH FILL" modifier. Each argument is a
+// single expression (possibly an INTERVAL). The tail ends at the next comma
+// (more ORDER BY items), next clause keyword, ';', or EOF.
+func (p *Parser) skipClickHouseWithFillTail() {
+	for {
+		val := strings.ToUpper(p.currentToken.Token.Value)
+		if val != "FROM" && val != "TO" && val != "STEP" {
+			return
+		}
+		p.advance() // FROM / TO / STEP
+		// Consume one expression; ignore parse errors so unusual forms
+		// (INTERVAL '1 day', expressions with function calls, etc.) don't
+		// surface as parser errors for this permissive skip.
+		if _, err := p.parseExpression(); err != nil {
+			return
+		}
+	}
 }
 
 // parseLimitOffsetClause parses optional LIMIT and/or OFFSET clauses.

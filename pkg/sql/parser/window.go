@@ -23,6 +23,7 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // SUM(salary) OVER (PARTITION BY dept ORDER BY date ROWS UNBOUNDED PRECEDING) -> window function with frame
@@ -46,6 +47,34 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 	// Parse arguments if not empty
 	if !p.isType(models.TokenTypeRParen) {
 		for !p.isType(models.TokenTypeOrder) {
+			// Named argument form: `name => expr` (Snowflake FLATTEN,
+			// BigQuery, Oracle, PostgreSQL procedural calls). Detect by a
+			// bare identifier immediately followed by =>.
+			if p.isIdentifier() &&
+				p.peekToken().Token.Type == models.TokenTypeRArrow {
+				namePos := p.currentLocation()
+				argName := p.currentToken.Token.Value
+				p.advance() // name
+				p.advance() // =>
+				value, err := p.parseExpression()
+				if err != nil {
+					return nil, err
+				}
+				arguments = append(arguments, &ast.NamedArgument{
+					Name:  argName,
+					Value: value,
+					Pos:   namePos,
+				})
+				if p.isType(models.TokenTypeComma) {
+					p.advance()
+					continue
+				}
+				if p.isType(models.TokenTypeRParen) {
+					break
+				}
+				return nil, p.expectedError(", or )")
+			}
+
 			arg, err := p.parseExpression()
 			if err != nil {
 				return nil, err
@@ -151,6 +180,52 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 		Arguments: arguments,
 		Distinct:  distinct,
 		OrderBy:   orderByExprs,
+	}
+
+	// ClickHouse parametric aggregates: funcName(params)(args).
+	// e.g. quantileTDigest(0.95)(value), topK(10)(name).
+	// What we just parsed becomes Parameters; the next paren group is the
+	// real arguments. Gated to ClickHouse to avoid false positives.
+	if p.dialect == string(keywords.DialectClickHouse) && p.isType(models.TokenTypeLParen) {
+		funcCall.Parameters = funcCall.Arguments
+		funcCall.Arguments = nil
+		p.advance() // Consume second (
+		if !p.isType(models.TokenTypeRParen) {
+			for {
+				arg, err := p.parseExpression()
+				if err != nil {
+					return nil, err
+				}
+				funcCall.Arguments = append(funcCall.Arguments, arg)
+				if p.isType(models.TokenTypeComma) {
+					p.advance()
+				} else if p.isType(models.TokenTypeRParen) {
+					break
+				} else {
+					return nil, p.expectedError(", or )")
+				}
+			}
+		}
+		if !p.isType(models.TokenTypeRParen) {
+			return nil, p.expectedError(")")
+		}
+		p.advance() // Consume second )
+	}
+
+	// Check for IGNORE NULLS / RESPECT NULLS (SQL:2016 null treatment).
+	// Used by LAG, LEAD, FIRST_VALUE, LAST_VALUE, NTH_VALUE in Snowflake,
+	// Oracle, BigQuery, etc. IGNORE arrives as TokenTypeKeyword; RESPECT is
+	// not in any keyword list and arrives as TokenTypeIdentifier. NULLS has
+	// its own token type.
+	if p.currentToken.Token.Type == models.TokenTypeKeyword ||
+		p.currentToken.Token.Type == models.TokenTypeIdentifier {
+		upper := strings.ToUpper(p.currentToken.Token.Value)
+		if (upper == "IGNORE" || upper == "RESPECT") &&
+			p.peekToken().Token.Type == models.TokenTypeNulls {
+			funcCall.NullTreatment = upper + " NULLS"
+			p.advance() // IGNORE / RESPECT
+			p.advance() // NULLS
+		}
 	}
 
 	// Check for WITHIN GROUP clause (SQL:2003 ordered-set aggregates)

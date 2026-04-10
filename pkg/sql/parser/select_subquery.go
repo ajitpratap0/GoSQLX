@@ -95,6 +95,41 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 			tableRef.TableFunc = funcCall
 		}
 
+		// Snowflake / ANSI SAMPLE or TABLESAMPLE clause on a table reference:
+		//   SAMPLE [BERNOULLI | SYSTEM | BLOCK | ROW] (N [ROWS])
+		//   TABLESAMPLE [method] (N [ROWS])
+		// Consume permissively — the method and paren block are consumed
+		// but not yet modeled on the AST.
+		if strings.EqualFold(p.currentToken.Token.Value, "SAMPLE") ||
+			strings.EqualFold(p.currentToken.Token.Value, "TABLESAMPLE") {
+			p.advance() // SAMPLE / TABLESAMPLE
+			// Optional method name
+			upper := strings.ToUpper(p.currentToken.Token.Value)
+			if upper == "BERNOULLI" || upper == "SYSTEM" || upper == "BLOCK" || upper == "ROW" {
+				p.advance()
+			}
+			// (N [ROWS]) block
+			if p.isType(models.TokenTypeLParen) {
+				depth := 0
+				for {
+					t := p.currentToken.Token.Type
+					if t == models.TokenTypeEOF {
+						break
+					}
+					if t == models.TokenTypeLParen {
+						depth++
+					} else if t == models.TokenTypeRParen {
+						depth--
+						if depth == 0 {
+							p.advance()
+							break
+						}
+					}
+					p.advance()
+				}
+			}
+		}
+
 		// Snowflake time-travel / change-tracking clauses:
 		//   AT (TIMESTAMP => ...)
 		//   BEFORE (STATEMENT => ...)
@@ -113,7 +148,7 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 	// Similarly, START followed by WITH is a hierarchical query seed, not an alias.
 	// Don't consume PIVOT/UNPIVOT as a table alias — they are contextual
 	// keywords in SQL Server/Oracle and must reach the pivot-clause parser below.
-	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() && !p.isQualifyKeyword() && !p.isMinusSetOp() && !p.isSnowflakeTimeTravelStart() {
+	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() && !p.isQualifyKeyword() && !p.isMinusSetOp() && !p.isSnowflakeTimeTravelStart() && !p.isSampleKeyword() {
 		if p.isType(models.TokenTypeAs) {
 			p.advance() // Consume AS
 			if !p.isIdentifier() {
@@ -227,7 +262,7 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 	// Similarly, START followed by WITH is a hierarchical query seed, not an alias.
 	// Don't consume PIVOT/UNPIVOT as a table alias — they are contextual
 	// keywords in SQL Server/Oracle and must reach the pivot-clause parser below.
-	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() && !p.isQualifyKeyword() && !p.isMinusSetOp() && !p.isSnowflakeTimeTravelStart() {
+	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() && !p.isQualifyKeyword() && !p.isMinusSetOp() && !p.isSnowflakeTimeTravelStart() && !p.isSampleKeyword() {
 		if p.isType(models.TokenTypeAs) {
 			p.advance()
 			if !p.isIdentifier() {

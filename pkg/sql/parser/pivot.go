@@ -374,3 +374,22 @@ func (p *Parser) isSnowflakeTimeTravelStart() bool {
 	}
 	return false
 }
+
+// isSampleKeyword returns true if the current token is SAMPLE or TABLESAMPLE
+// followed by '(' or a sampling-method keyword, indicating a sampling clause
+// rather than a table alias. Used to prevent the FROM-alias parser from
+// consuming these tokens.
+func (p *Parser) isSampleKeyword() bool {
+	upper := strings.ToUpper(p.currentToken.Token.Value)
+	if upper != "SAMPLE" && upper != "TABLESAMPLE" {
+		return false
+	}
+	// Require '(' or a method keyword as lookahead to disambiguate from
+	// a table actually named "sample".
+	next := p.peekToken().Token
+	if next.Type == models.TokenTypeLParen {
+		return true
+	}
+	nextUpper := strings.ToUpper(next.Value)
+	return nextUpper == "BERNOULLI" || nextUpper == "SYSTEM" || nextUpper == "BLOCK" || nextUpper == "ROW"
+}

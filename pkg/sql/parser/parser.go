@@ -1063,7 +1063,7 @@ func (p *Parser) isNonReservedKeyword() bool {
 		return true
 	case models.TokenTypeTable, models.TokenTypeIndex, models.TokenTypeView,
 		models.TokenTypeKey, models.TokenTypeColumn, models.TokenTypeDatabase,
-		models.TokenTypePartition, models.TokenTypeRows:
+		models.TokenTypePartition, models.TokenTypeRows, models.TokenTypeDefault:
 		// DDL keywords that are commonly used as quoted identifiers in MySQL (backtick)
 		// and SQL Server (bracket) dialects, and as plain column names in ClickHouse
 		// system tables (system.parts.partition, system.replicas.table,
@@ -1073,7 +1073,7 @@ func (p *Parser) isNonReservedKeyword() bool {
 		// Token may have generic Type; check value for specific keywords
 		switch strings.ToUpper(p.currentToken.Token.Value) {
 		case "TARGET", "SOURCE", "MATCHED", "VALUE", "NAME", "TYPE", "STATUS",
-			"TABLES":
+			"TABLES", "DATABASES":
 			return true
 		}
 	}
@@ -1109,6 +1109,11 @@ func (p *Parser) isJoinKeyword() bool {
 	}
 	// ClickHouse: GLOBAL JOIN — GLOBAL is TokenTypeKeyword, not a dedicated join token
 	if p.dialect == string(keywords.DialectClickHouse) && p.isTokenMatch("GLOBAL") {
+		return true
+	}
+	// ClickHouse: ANY / ALL as join strictness prefix (ANY LEFT JOIN, ALL INNER JOIN)
+	if p.dialect == string(keywords.DialectClickHouse) &&
+		(p.isType(models.TokenTypeAny) || p.isType(models.TokenTypeAll)) {
 		return true
 	}
 	return false

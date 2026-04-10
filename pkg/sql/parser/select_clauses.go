@@ -182,6 +182,13 @@ func (p *Parser) parseJoinType() (string, bool, error) {
 		p.advance() // consume GLOBAL; fall through to standard join parsing
 	}
 
+	// ClickHouse ANY/ALL join strictness prefix — e.g. ANY LEFT JOIN, ALL INNER JOIN.
+	// The strictness modifier is consumed but not modeled on the AST.
+	if p.dialect == string(keywords.DialectClickHouse) &&
+		(p.isType(models.TokenTypeAny) || p.isType(models.TokenTypeAll)) {
+		p.advance()
+	}
+
 	if p.isType(models.TokenTypeNatural) {
 		isNatural = true
 		p.advance()
@@ -481,7 +488,7 @@ func (p *Parser) parseGroupByClause() ([]ast.Expression, error) {
 		p.advance()
 	}
 
-	// MySQL: GROUP BY col1 WITH ROLLUP / WITH CUBE
+	// MySQL / ClickHouse: GROUP BY col1 WITH ROLLUP / WITH CUBE / WITH TOTALS
 	if p.isType(models.TokenTypeWith) {
 		switch strings.ToUpper(p.peekToken().Token.Value) {
 		case "ROLLUP":
@@ -492,6 +499,11 @@ func (p *Parser) parseGroupByClause() ([]ast.Expression, error) {
 			p.advance() // Consume WITH
 			p.advance() // Consume CUBE
 			groupByExprs = []ast.Expression{&ast.CubeExpression{Expressions: groupByExprs}}
+		case "TOTALS":
+			// ClickHouse WITH TOTALS: adds a summary row with aggregate totals.
+			// Consumed but not modeled on the AST (follow-up).
+			p.advance() // Consume WITH
+			p.advance() // Consume TOTALS
 		}
 	}
 

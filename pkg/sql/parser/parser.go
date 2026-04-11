@@ -1080,9 +1080,14 @@ func (p *Parser) isNonReservedKeyword() bool {
 	return false
 }
 
-// canBeAlias checks if current token can be used as an alias
-// Aliases can be IDENT, double-quoted identifiers, or certain non-reserved keywords
+// canBeAlias checks if current token can be used as an alias.
+// Aliases can be IDENT, double-quoted identifiers, or certain non-reserved keywords,
+// but NOT contextual clause keywords that would be consumed as aliases by mistake
+// (e.g. MINUS in Snowflake/Oracle, QUALIFY in Snowflake/BigQuery).
 func (p *Parser) canBeAlias() bool {
+	if p.isMinusSetOp() || p.isQualifyKeyword() {
+		return false
+	}
 	return p.isIdentifier() || p.isNonReservedKeyword()
 }
 

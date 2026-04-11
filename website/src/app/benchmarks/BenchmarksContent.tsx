@@ -53,7 +53,7 @@ export function BenchmarksContent() {
               Real-world performance data from the GoSQLX parser, measured on production-grade hardware.
             </p>
             <p className="mt-3 text-xs text-zinc-500">
-              Last updated: March 2026 &middot; Based on v1.13.0
+              Last updated: April 2026 &middot; Based on v1.14.0
             </p>
           </FadeIn>
         </div>

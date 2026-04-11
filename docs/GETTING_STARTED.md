@@ -2,13 +2,16 @@
 
 Welcome! This guide will get you parsing SQL in under 5 minutes. No prior experience with GoSQLX required.
 
-**What's New in v1.13.0:**
-- **ClickHouse Dialect**: Parse ClickHouse SQL including PREWHERE, FINAL, GLOBAL IN, and 30+ ClickHouse keywords
-- **LSP Semantic Tokens**: `textDocument/semanticTokens/full` with 6-type legend for richer IDE highlighting
-- **LSP Debouncing**: 300ms diagnostic debounce prevents excessive re-parsing on rapid typing
-- **Parser API Consolidation**: `ParseFromModelTokens` is now the canonical entry point (positions always populated)
-- **Security**: Next.js 16.1.7 (3 CVE fixes), Docker Go 1.26 base image
-- **Website**: Comprehensive a11y + SEO audit, Sentry monitoring, Glama MCP registry
+**What's New in v1.14.0:**
+- **Dialect-Aware Formatting**: `transform.FormatSQLWithDialect(stmt, dialect)` renders TOP / FETCH FIRST / LIMIT per dialect (closes #479)
+- **Snowflake Dialect at 100%** (87/87 QA corpus): MATCH_RECOGNIZE, @stage references, SAMPLE/TABLESAMPLE, QUALIFY, VARIANT colon-paths, time-travel (AT/BEFORE), MINUS, LATERAL FLATTEN, TRY_CAST, IGNORE/RESPECT NULLS, LIKE ANY/ALL, CREATE STAGE/STREAM/TASK/PIPE stubs
+- **ClickHouse Dialect 83%** (69/83 QA corpus, up from 53%): nested column types (Nullable, Array, Map, LowCardinality), parametric aggregates, bare-bracket arrays, ORDER BY WITH FILL, CODEC, WITH TOTALS, LIMIT BY, ANY/ALL JOIN, SETTINGS/TTL, INSERT FORMAT, `table`/`partition` as identifiers (closes #480)
+- **MariaDB Dialect**: SEQUENCE DDL, temporal tables, CONNECT BY hierarchical queries
+- **SQL Transpilation**: MySQL↔PostgreSQL and PostgreSQL→SQLite dialect conversion + `gosqlx transpile` CLI subcommand
+- **Live Schema Introspection**: `pkg/schema/db` with PostgreSQL, MySQL, and SQLite loaders
+- **30 Linter Rules**: expanded from 10 to 30 (safety, performance, naming categories)
+- **Integrations**: `integrations/opentelemetry` (OTel spans) and `integrations/gorm` (query metadata plugin)
+- **New CLI Subcommands**: `transpile`, `optimize`, `stats`, `watch`, `action`
 
 ---
 
@@ -60,17 +63,22 @@ echo "select * from users where age>18" | gosqlx format
 echo "SELECT COUNT(*) FROM orders GROUP BY status" | gosqlx analyze
 ```
 
-**Available CLI Commands (v1.13.0):**
+**Available CLI Commands (v1.14.0):**
 - `validate` - Ultra-fast SQL validation with security scanning
 - `format` - High-performance SQL formatting with style options
 - `analyze` - Advanced SQL analysis with complexity metrics
 - `parse` - AST structure inspection (JSON/text output)
-- `lint` - Check SQL code for style issues (10 built-in rules)
+- `lint` - Check SQL code for style issues (30 built-in rules)
+- `transpile` - Convert SQL between dialects (MySQL ↔ PostgreSQL, PostgreSQL → SQLite)
+- `optimize` - Run optimization advisor (OPT-001 through OPT-020)
+- `action` - GitHub Actions integration with annotations
+- `stats` - Object pool utilization metrics
+- `watch` - Watch mode for continuous validation
 - `lsp` - Start Language Server Protocol server for IDE integration
 - `config` - Manage configuration files (.gosqlx.yml)
 - `completion` - Shell autocompletion for bash/zsh/fish
 
-**New in v1.13.0:**
+**New in v1.14.0:**
 ```bash
 # Security scanning for SQL injection
 gosqlx validate --security query.sql
@@ -137,7 +145,7 @@ go run main.go
 
 ---
 
-## Step 4: v1.13.0 Feature Examples (2 minutes)
+## Step 4: v1.14.0 Feature Examples (2 minutes)
 
 ### PostgreSQL Extensions
 
@@ -418,22 +426,35 @@ gosqlx lsp --log /tmp/lsp.log
 - **[CLI Guide](/docs/cli-guide)** - Full CLI documentation and all commands
 - **[LSP Guide](/docs/lsp-guide)** - Complete LSP server documentation for IDE integration
 - **[MCP Server Guide](/docs/mcp-guide)** - Use GoSQLX as MCP tools inside Claude, Cursor, and other AI assistants
-- **[Linting Rules](/docs/linting-rules)** - All 10 linting rules (L001-L010) reference
+- **[Linting Rules](/docs/linting-rules)** - All 30 linting rules reference
 - **[Configuration](/docs/configuration)** - Configuration file (.gosqlx.yml) guide
 - **[API Reference](/docs/api-reference)** - Complete API documentation
 - **[Examples](https://github.com/ajitpratap0/GoSQLX/tree/main/examples)** - Real-world code examples
 
-### v1.13.0 Feature Guides:
-- **PostgreSQL Extensions:**
-  - LATERAL JOIN for correlated subqueries
-  - JSON/JSONB operators (->/->>/#>/@>/?/etc.)
-  - DISTINCT ON for row selection
-  - FILTER clause for conditional aggregation
-  - RETURNING clause for DML operations
+### v1.14.0 Feature Guides:
+- **Dialect-Aware Transforms:**
+  - `transform.FormatSQLWithDialect(stmt, dialect)` for dialect-specific SQL output
+  - `transform.ParseSQLWithDialect(sql, dialect)` for dialect-aware parsing
+  - TOP (SQL Server) / FETCH FIRST (Oracle) / LIMIT (PostgreSQL, MySQL, SQLite, Snowflake, ClickHouse)
+
+- **SQL Transpilation:**
+  - MySQL ↔ PostgreSQL (AUTO_INCREMENT ↔ SERIAL, TINYINT(1) ↔ BOOLEAN)
+  - PostgreSQL → SQLite (SERIAL → INTEGER, arrays → TEXT)
+  - `gosqlx transpile --from <dialect> --to <dialect>` CLI subcommand
+
+- **Live Schema Introspection:**
+  - `gosqlx.LoadSchema(ctx, loader)` for dialect-agnostic metadata querying
+  - PostgreSQL, MySQL, and SQLite loaders in `pkg/schema/db`
+  - Tables, columns, indexes, foreign keys
+
+- **Expanded Dialects:**
+  - Snowflake at 100% QA pass (87/87: MATCH_RECOGNIZE, @stage, SAMPLE, QUALIFY, VARIANT, time-travel)
+  - ClickHouse 83% QA pass (69/83, up from 53%: nested types, parametric aggregates, WITH FILL, CODEC)
+  - MariaDB with SEQUENCE, temporal tables, CONNECT BY
 
 - **IDE Integration:**
   - LSP server with real-time diagnostics
-  - Hover information and documentation
+  - Semantic tokens + diagnostic debouncing
   - Code completion for SQL keywords
   - Auto-formatting on save
   - See [LSP Guide](/docs/lsp-guide) for setup instructions
@@ -441,19 +462,20 @@ gosqlx lsp --log /tmp/lsp.log
 - **Security Features:**
   - SQL injection pattern detection
   - Severity classification (HIGH/MEDIUM/LOW)
-  - Integration with validation pipeline
+  - OpenSSF Scorecard workflow
   - See [Usage Guide](/docs/usage-guide) for security scanning patterns
 
 - **Code Quality:**
-  - 10 built-in linter rules for style enforcement
+  - 30 built-in linter rules (safety, performance, naming, style)
   - Auto-fix capabilities for common issues
-  - Configurable rule severity and exclusions
+  - OPT-001 through OPT-020 optimization advisor
+  - Query fingerprinting + normalization
   - See [Linting Rules](/docs/linting-rules) for complete reference
 
 ### Advanced Topics:
 - **Low-Level API** - For performance-critical applications (>100K queries/sec)
 - **Object Pooling** - Manual resource management for fine-grained control
-- **Multi-Dialect Support** - PostgreSQL, MySQL, SQL Server, Oracle, SQLite, ClickHouse
+- **Multi-Dialect Support** - PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse
 - **Unicode Support** - Full international character support
 - **SQL Compatibility** - See [SQL Compatibility](/docs/sql-compatibility) for dialect matrix
 
@@ -490,7 +512,7 @@ gosqlx validate "your SQL here"
 
 ---
 
-## v1.13.0 Feature Highlights
+## v1.14.0 Feature Highlights
 
 ### Production-Ready Performance
 - **1.38M+ operations/second** sustained throughput
@@ -500,8 +522,8 @@ gosqlx validate "your SQL here"
 
 ### SQL Compliance
 - **~80-85% SQL-99 compliance** including window functions, CTEs, set operations
-- **95%+ success rate** on real-world SQL queries
-- **Multi-dialect support** - PostgreSQL, MySQL, SQL Server, Oracle, SQLite, ClickHouse
+- **Snowflake at 100%** of the QA corpus (87/87); **ClickHouse at 83%** (69/83, up from 53%)
+- **Multi-dialect support** - PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse
 - **Full Unicode support** for international SQL processing
 
 ### Enterprise Features
@@ -509,7 +531,10 @@ gosqlx validate "your SQL here"
 - **Memory efficient** - 60-80% memory reduction with object pooling
 - **Security scanning** - Built-in SQL injection detection
 - **IDE integration** - LSP server for VSCode, Neovim, and other editors
-- **Code quality** - 10 linter rules for consistent SQL style
+- **Code quality** - 30 linter rules for consistent SQL style
+- **Dialect-aware transforms** - Round-trip SQL with dialect-specific syntax
+- **Live schema introspection** - Query Postgres/MySQL/SQLite metadata at runtime
+- **SQL transpilation** - Convert between MySQL, PostgreSQL, and SQLite
 
 ---
 
@@ -518,7 +543,7 @@ gosqlx validate "your SQL here"
 - ✓ Installing GoSQLX (library and CLI)
 - ✓ Validating and formatting SQL with CLI
 - ✓ Parsing SQL in Go applications with simple API
-- ✓ Using v1.13.0 features (PostgreSQL extensions, security, linting, LSP)
+- ✓ Using v1.14.0 features (dialect-aware transforms, transpilation, schema introspection, 30 linter rules)
 - ✓ Common use cases and patterns
 - ✓ Where to find more help
 
@@ -530,4 +555,4 @@ gosqlx validate "your SQL here"
 
 ---
 
-*Built by the GoSQLX community - Production-ready since v1.12.0, ClickHouse dialect since v1.13.0*
+*Built by the GoSQLX community - Production-ready since v1.12.0, ClickHouse dialect since v1.13.0, dialect-aware transforms since v1.14.0*

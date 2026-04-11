@@ -1,6 +1,6 @@
 # GoSQLX Examples
 
-**Version**: v1.6.0
+**Version**: v1.14.0
 
 This directory contains various examples demonstrating how to use the GoSQLX SQL parsing SDK.
 
@@ -14,9 +14,9 @@ go run example.go
 go test -v example_test.go
 ```
 
-### `/postgresql` - PostgreSQL Feature Examples (v1.6.0)
+### `/postgresql` - PostgreSQL Feature Examples (since v1.6.0)
 
-GoSQLX v1.6.0 adds comprehensive PostgreSQL-specific feature support. Run these examples to see the new capabilities:
+GoSQLX provides comprehensive PostgreSQL-specific feature support. Run these examples to see the capabilities:
 
 #### `postgresql/lateral-join/` - LATERAL JOIN Support
 Demonstrates PostgreSQL LATERAL subquery parsing:

@@ -28,16 +28,22 @@ import (
 // This version tracks feature releases and compatibility.
 // Format: MAJOR.MINOR.PATCH (Semantic Versioning 2.0.0)
 //
+// Version 1.14.0 includes:
+//   - Dialect-aware SQL formatting (TOP/FETCH FIRST/LIMIT per dialect)
+//   - Snowflake dialect: 87/87 QA pass (MATCH_RECOGNIZE, @stage, SAMPLE, QUALIFY, VARIANT, time-travel, MINUS, LATERAL FLATTEN, TRY_CAST)
+//   - ClickHouse dialect: 69/83 QA pass, up from 53% (nested types, parametric aggregates, WITH FILL, CODEC, SETTINGS/TTL, INSERT FORMAT)
+//   - MariaDB dialect (SEQUENCE DDL, temporal tables, CONNECT BY)
+//   - SQL transpilation (MySQL↔PostgreSQL, PostgreSQL→SQLite) + CLI subcommand
+//   - Live schema introspection (Postgres/MySQL/SQLite loaders)
+//   - DML transform API (SET clause, RETURNING clause)
+//   - Linter expanded from 10 to 30 rules
+//   - Integrations: OpenTelemetry + GORM sub-modules
+//
 // Version 1.13.0 includes:
-// - ClickHouse SQL dialect support (PREWHERE, FINAL, GLOBAL IN)
-// - LSP semantic tokens + diagnostic debouncing
-// - Parser API consolidation (ParseFromModelTokens canonical)
-// Version 1.12.1 includes:
-//   - MCP Server: All GoSQLX SQL capabilities as Model Context Protocol tools over streamable HTTP
-//   - 7 MCP tools: validate_sql, format_sql, parse_sql, extract_metadata, security_scan, lint_sql, analyze_sql
-//   - Optional bearer token auth via GOSQLX_MCP_AUTH_TOKEN
-//   - Go minimum bumped to 1.23.0 (required by mark3labs/mcp-go)
-var Version = "1.13.0"
+//   - ClickHouse SQL dialect support (PREWHERE, FINAL, GLOBAL IN)
+//   - LSP semantic tokens + diagnostic debouncing
+//   - Parser API consolidation (ParseFromModelTokens canonical)
+var Version = "1.14.0"
 
 var (
 	// verbose enables detailed output for debugging and troubleshooting.
@@ -120,12 +126,12 @@ Key features:
 • High-performance formatting with intelligent indentation
 • AST structure inspection and analysis
 • Security vulnerability detection
-• Multi-dialect SQL support (PostgreSQL, MySQL, SQL Server, Oracle, SQLite)
+• Multi-dialect SQL support (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse)
 • Batch processing with directory/glob patterns
 • CI/CD integration with proper exit codes
 
 Performance: 1.5M+ operations/second sustained, 1.97M peak. 100-1000x faster than competitors.`,
-	Version: "1.13.0",
+	Version: "1.14.0",
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

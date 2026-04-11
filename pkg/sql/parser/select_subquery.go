@@ -71,9 +71,11 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 			Subquery: selectStmt,
 			Lateral:  isLateral,
 		}
-	} else if p.isType(models.TokenTypePlaceholder) && strings.HasPrefix(p.currentToken.Token.Value, "@") {
+	} else if p.dialect == string(keywords.DialectSnowflake) &&
+		p.isType(models.TokenTypePlaceholder) && strings.HasPrefix(p.currentToken.Token.Value, "@") {
 		// Snowflake stage reference: @stage_name or @db.schema.stage/path.
 		// Tokenized as PLACEHOLDER; consume as a table name.
+		// Gated to Snowflake to avoid misinterpreting @variable in other dialects.
 		stageName := p.currentToken.Token.Value
 		p.advance()
 		// Optional /path suffix — consume tokens joined by / until a space boundary.

@@ -101,9 +101,10 @@ import (
 
 // Options configures SQL formatting behaviour.
 type Options struct {
-	IndentSize int  // spaces per indent level (default 2)
-	Uppercase  bool // uppercase SQL keywords
-	Compact    bool // single-line output
+	IndentSize int    // spaces per indent level (default 2)
+	Uppercase  bool   // uppercase SQL keywords
+	Compact    bool   // single-line output
+	Dialect    string // target SQL dialect (empty = generic)
 }
 
 // Formatter formats SQL strings.
@@ -165,6 +166,7 @@ func (f *Formatter) Format(sql string) (string, error) {
 	if f.opts.Uppercase {
 		style.KeywordCase = ast.KeywordUpper
 	}
+	style.Dialect = f.opts.Dialect
 
 	return FormatAST(parsedAST, style), nil
 }

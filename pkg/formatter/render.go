@@ -198,6 +198,12 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 	if s == nil {
 		return ""
 	}
+
+	// Dialect normalization: work on a shallow copy so the original AST is not mutated.
+	stmt := *s
+	s = &stmt
+	normalizeSelectForDialect(s, opts.Dialect)
+
 	f := newNodeFormatter(opts)
 	sb := f.sb
 
@@ -216,6 +222,22 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		sb.WriteString(") ")
 	} else if s.Distinct {
 		sb.WriteString(f.kw("DISTINCT"))
+		sb.WriteString(" ")
+	}
+
+	// Render TOP clause (SQL Server). Emitted between SELECT [DISTINCT] and columns.
+	if s.Top != nil {
+		sb.WriteString(f.kw("TOP"))
+		sb.WriteString(" ")
+		sb.WriteString(FormatExpression(s.Top.Count, opts))
+		if s.Top.IsPercent {
+			sb.WriteString(" ")
+			sb.WriteString(f.kw("PERCENT"))
+		}
+		if s.Top.WithTies {
+			sb.WriteString(" ")
+			sb.WriteString(f.kw("WITH TIES"))
+		}
 		sb.WriteString(" ")
 	}
 
@@ -293,7 +315,7 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 	}
 
 	if s.Fetch != nil {
-		sb.WriteString(fetchSQL(s.Fetch))
+		sb.WriteString(fetchSQL(s.Fetch, f))
 	}
 
 	if s.For != nil {
@@ -305,6 +327,55 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 	}
 
 	return f.result()
+}
+
+// normalizeSelectForDialect converts generic LIMIT/OFFSET fields into
+// dialect-specific AST fields (TOP for SQL Server, FETCH for Oracle) on a
+// shallow copy of the statement. This keeps the rendering code simple —
+// each clause renderer only handles its own field.
+func normalizeSelectForDialect(s *ast.SelectStatement, dialect string) {
+	switch dialect {
+	case "sqlserver":
+		if s.Top == nil && s.Limit != nil {
+			if s.Offset != nil || len(s.OrderBy) > 0 {
+				// SQL Server 2012+ OFFSET/FETCH syntax (requires ORDER BY in practice,
+				// but we emit it faithfully and let the database validate).
+				fetchVal := int64(*s.Limit)
+				s.Fetch = &ast.FetchClause{
+					FetchValue: &fetchVal,
+					FetchType:  "NEXT",
+				}
+				offsetVal := int64(0)
+				if s.Offset != nil {
+					offsetVal = int64(*s.Offset)
+				}
+				s.Fetch.OffsetValue = &offsetVal
+				s.Limit = nil
+				s.Offset = nil
+			} else {
+				// Simple TOP N
+				s.Top = &ast.TopClause{
+					Count: &ast.LiteralValue{Value: *s.Limit, Type: "int"},
+				}
+				s.Limit = nil
+			}
+		}
+
+	case "oracle":
+		if s.Fetch == nil && s.Limit != nil {
+			fetchVal := int64(*s.Limit)
+			s.Fetch = &ast.FetchClause{
+				FetchValue: &fetchVal,
+				FetchType:  "FIRST",
+			}
+			if s.Offset != nil {
+				offsetVal := int64(*s.Offset)
+				s.Fetch.OffsetValue = &offsetVal
+				s.Offset = nil
+			}
+			s.Limit = nil
+		}
+	}
 }
 
 func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
@@ -1299,24 +1370,32 @@ func windowFrameSQL(f *ast.WindowFrame) string {
 	return fmt.Sprintf("%s %s", f.Type, f.Start.Type)
 }
 
-// fetchSQL renders a FETCH clause.
-func fetchSQL(f *ast.FetchClause) string {
+// fetchSQL renders a FETCH clause, respecting keyword casing from the nodeFormatter.
+func fetchSQL(fc *ast.FetchClause, f *nodeFormatter) string {
 	var sb strings.Builder
-	if f.OffsetValue != nil {
-		fmt.Fprintf(&sb, " OFFSET %d ROWS", *f.OffsetValue)
+	if fc.OffsetValue != nil {
+		fmt.Fprintf(&sb, " %s %d %s", f.kw("OFFSET"), *fc.OffsetValue, f.kw("ROWS"))
 	}
-	fmt.Fprintf(&sb, " FETCH %s", f.FetchType)
-	if f.FetchValue != nil {
-		fmt.Fprintf(&sb, " %d", *f.FetchValue)
+	fetchType := fc.FetchType
+	if fetchType == "" {
+		fetchType = "FIRST"
 	}
-	if f.IsPercent {
-		sb.WriteString(" PERCENT")
+	fmt.Fprintf(&sb, " %s %s", f.kw("FETCH"), f.kw(fetchType))
+	if fc.FetchValue != nil {
+		fmt.Fprintf(&sb, " %d", *fc.FetchValue)
 	}
-	sb.WriteString(" ROWS")
-	if f.WithTies {
-		sb.WriteString(" WITH TIES")
+	if fc.IsPercent {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("PERCENT"))
+	}
+	sb.WriteString(" ")
+	sb.WriteString(f.kw("ROWS"))
+	if fc.WithTies {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("WITH TIES"))
 	} else {
-		sb.WriteString(" ONLY")
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("ONLY"))
 	}
 	return sb.String()
 }

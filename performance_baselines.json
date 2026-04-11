@@ -1,6 +1,6 @@
 {
-  "version": "1.13.0",
-  "updated": "2026-03-20",
+  "version": "1.14.0",
+  "updated": "2026-04-12",
   "baselines": {
     "SimpleSelect": {
       "ns_per_op": 700,

@@ -1,5 +1,146 @@
 # Migration Guide
 
+## v1.13.0 → v1.14.0 (2026-04-12)
+
+**Drop-in upgrade** — no breaking API changes. Anything that compiled against v1.13.0 will still compile and run identically against v1.14.0.
+
+### Why upgrade
+
+v1.14.0 is the largest dialect-coverage release in the project's history. Headline reasons to upgrade:
+
+- **Dialect-aware formatting** — `transform.FormatSQLWithDialect()` renders SQL in the target dialect's row-limiting syntax (TOP for SQL Server, FETCH FIRST for Oracle, LIMIT everywhere else). Closes #479.
+- **Snowflake at 100%** of the QA corpus (87/87) — MATCH_RECOGNIZE, @stage, SAMPLE, QUALIFY, VARIANT paths, time-travel, MINUS, LATERAL FLATTEN, TRY_CAST, IGNORE/RESPECT NULLS, LIKE ANY/ALL, CREATE STAGE/STREAM/TASK/PIPE stubs
+- **ClickHouse dialect significantly expanded** (69/83 of the QA corpus, up from 53% in v1.13.0) — nested column types, parametric aggregates, bare-bracket arrays, ORDER BY WITH FILL, CODEC, WITH TOTALS, LIMIT BY, ANY/ALL JOIN, SETTINGS/TTL, INSERT FORMAT, `table`/`partition` as identifiers (#480). Known gaps tracked for v1.15: ARRAY JOIN, named windows, scalar CTE subqueries, materialized views
+- **MariaDB dialect** — SEQUENCE DDL, temporal tables, CONNECT BY
+- **Live schema introspection** — `gosqlx.LoadSchema()` queries Postgres, MySQL, and SQLite at runtime
+- **SQL transpilation** — `gosqlx.Transpile()` converts between MySQL, PostgreSQL, and SQLite
+- **30 linter rules** (up from 10) covering safety, performance, and naming
+- **CVE-2026-39883** (OpenTelemetry SDK) fixed
+
+### New APIs to adopt
+
+#### Dialect-aware formatting
+
+```go
+import (
+    "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+    "github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
+    "github.com/ajitpratap0/GoSQLX/pkg/transform"
+)
+
+tree, _ := gosqlx.ParseWithDialect("SELECT * FROM users u", keywords.DialectPostgreSQL)
+stmt := tree.Statements[0]
+transform.Apply(stmt, transform.SetLimit(100))
+
+// Dialect-specific output
+sqlserver := transform.FormatSQLWithDialect(stmt, keywords.DialectSQLServer)
+// -> SELECT TOP 100 * FROM users u
+
+oracle := transform.FormatSQLWithDialect(stmt, keywords.DialectOracle)
+// -> SELECT * FROM users u FETCH FIRST 100 ROWS ONLY
+
+postgres := transform.FormatSQLWithDialect(stmt, keywords.DialectPostgreSQL)
+// -> SELECT * FROM users u LIMIT 100
+```
+
+`transform.FormatSQL(stmt)` (generic, no dialect) continues to work unchanged.
+
+#### SQL transpilation
+
+```go
+import (
+    "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+    "github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
+)
+
+result, err := gosqlx.Transpile(
+    "CREATE TABLE t (id INT AUTO_INCREMENT PRIMARY KEY)",
+    keywords.DialectMySQL,
+    keywords.DialectPostgreSQL,
+)
+// result: "CREATE TABLE t (id SERIAL PRIMARY KEY)"
+```
+
+Or from the CLI:
+
+```bash
+gosqlx transpile --from postgresql --to sqlite "SELECT * FROM users WHERE id = ANY(ARRAY[1,2,3])"
+```
+
+#### Live schema introspection
+
+```go
+import (
+    "context"
+    "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+    "github.com/ajitpratap0/GoSQLX/pkg/schema/postgres"
+)
+
+loader, _ := postgres.New("postgres://user:pw@host/db")
+defer loader.Close()
+
+schema, _ := gosqlx.LoadSchema(context.Background(), loader)
+for _, table := range schema.Tables {
+    fmt.Printf("%s.%s (%d columns)\n", table.Schema, table.Name, len(table.Columns))
+}
+```
+
+Also available: `pkg/schema/mysql` and `pkg/schema/sqlite`.
+
+#### Query fingerprinting
+
+```go
+import "github.com/ajitpratap0/GoSQLX/pkg/fingerprint"
+
+norm := fingerprint.Normalize("SELECT * FROM users WHERE id = 123")
+// norm: "SELECT * FROM users WHERE id = ?"
+
+hash := fingerprint.Fingerprint("SELECT * FROM users WHERE id = 123")
+// hash: deterministic SHA-256 of the normalized form
+```
+
+Use for query deduplication, caching, or aggregating metrics by query shape.
+
+### New CLI subcommands
+
+```bash
+gosqlx transpile --from <dialect> --to <dialect> "<sql>"   # Cross-dialect conversion
+gosqlx optimize query.sql                                  # Run OPT-001 through OPT-020 advisor
+gosqlx stats                                               # Object pool utilization
+gosqlx watch queries/*.sql                                 # Continuous validation on file change
+gosqlx action --fail-on warn queries/                      # GitHub Actions integration
+```
+
+### Behavioral change worth noting
+
+**SQL Server TOP clauses now render.** If you were parsing `SELECT TOP 10 * FROM users` and round-tripping through `formatter.FormatStatement()` (or `transform.FormatSQL()`), the `TOP 10` was being silently dropped from the output. This was a bug. In v1.14.0, parsed `TopClause` values correctly render.
+
+If your code relied on the broken behavior (unlikely — it would have produced queries that returned the wrong row count), you'll now see `TOP N` in formatted output. For dialect-specific control, use `FormatSQLWithDialect()` and it will normalize based on the target.
+
+### Deprecations (carried over from v1.13.0 — no new deprecations)
+
+- `parser.Parse([]token.Token)` — use `ParseFromModelTokens` instead
+- `ParseFromModelTokensWithPositions` — consolidated into `ParseFromModelTokens`
+- `ConversionResult.PositionMapping` — always nil, will be removed in v2
+
+### Security
+
+- **CVE-2026-39883** (HIGH severity, `go.opentelemetry.io/otel/sdk`): fixed by upgrading to v1.43.0. No action required for consumers — `go get github.com/ajitpratap0/GoSQLX@v1.14.0 && go mod tidy` picks up the fix transitively.
+
+### Companion release versions
+
+| Component | v1.13.0 | v1.14.0 |
+|-----------|---------|---------|
+| Library (`github.com/ajitpratap0/GoSQLX`) | 1.13.0 | **1.14.0** |
+| CLI (`cmd/gosqlx`) | 1.13.0 | **1.14.0** |
+| MCP server (`cmd/gosqlx-mcp`) | 1.13.0 | **1.14.0** |
+| VS Code extension (`ajitpratap0.gosqlx`) | 1.13.0 | **1.14.0** |
+| OpenTelemetry integration (`integrations/opentelemetry`) | v1.13.0 | **v1.14.0** |
+| GORM integration (`integrations/gorm`) | v1.13.0 | **v1.14.0** |
+| Python bindings (`pygosqlx`) | 0.1.0 (alpha) | **0.2.0 (alpha)** — independent semver track |
+
+---
+
 ## v1.9.x → v1.10.0 (2026-03-13)
 
 **Go version requirement changed**: Go 1.23+ is now required (was 1.21+). This is due to the `mark3labs/mcp-go` dependency used by the new MCP server. If you only use the parsing SDK (not the MCP server), Go 1.21+ still works, but `go.mod` declares 1.23.

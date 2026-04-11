@@ -11,7 +11,7 @@ if os.path.exists(readme_path):
 
 setup(
     name="pygosqlx",
-    version="0.1.0",
+    version="0.2.0",
     description="Python bindings for GoSQLX - High-performance SQL parser",
     long_description=long_description,
     long_description_content_type="text/markdown",

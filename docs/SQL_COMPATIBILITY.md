@@ -1,6 +1,6 @@
 # GoSQLX SQL Feature Compatibility Matrix
 
-**Version**: v1.13.0 | **Last Updated**: 2026-03-20
+**Version**: v1.14.0 | **Last Updated**: 2026-04-12
 
 ## Overview
 
@@ -565,11 +565,11 @@ GoSQLX v1.8.0 introduces a first-class dialect mode engine that threads the SQL 
 |---------|---------------|-------------|--------------------------|--------|
 | **PostgreSQL** | `"postgresql"` | Full PG keywords | `::`, `ON CONFLICT`, `$$`, JSONB ops, LATERAL, DISTINCT ON | ✅ Default dialect |
 | **MySQL** | `"mysql"` | MySQL keywords | SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE KEY, LIMIT n,m, GROUP_CONCAT, MATCH AGAINST, REGEXP | ✅ Full support |
-| **SQL Server** | `"sqlserver"` | T-SQL keywords | MERGE, bracket identifiers `[col]` | ⚠️ Keywords + basic parsing |
-| **Oracle** | `"oracle"` | Oracle keywords | DUAL table, basic PL/SQL keywords | ⚠️ Keywords + basic parsing |
+| **SQL Server** | `"sqlserver"` | T-SQL keywords | MERGE, bracket identifiers `[col]`, PIVOT/UNPIVOT | ✅ v1.14.0 PIVOT/UNPIVOT added |
+| **Oracle** | `"oracle"` | Oracle keywords | DUAL table, basic PL/SQL keywords, MINUS as EXCEPT | ⚠️ Keywords + basic parsing |
 | **SQLite** | `"sqlite"` | SQLite keywords | Flexible typing, simplified syntax | ⚠️ Keywords + basic parsing |
-| **Snowflake** | `"snowflake"` | Snowflake keywords | Stage operations, VARIANT type | ⚠️ Keyword detection only |
-| **ClickHouse** | `"clickhouse"` | ClickHouse keywords | PREWHERE, FINAL, GLOBAL IN/NOT IN, MergeTree keywords | ✅ v1.13.0 |
+| **Snowflake** | `"snowflake"` | Snowflake keywords | MATCH_RECOGNIZE, @stage, SAMPLE, QUALIFY, VARIANT paths, time-travel, MINUS, LATERAL FLATTEN, TRY_CAST, IGNORE/RESPECT NULLS, LIKE ANY/ALL, CREATE STAGE/STREAM/TASK/PIPE stubs | ✅ v1.14.0 — 87/87 QA pass |
+| **ClickHouse** | `"clickhouse"` | ClickHouse keywords | PREWHERE, FINAL, GLOBAL IN/NOT IN, nested types, parametric aggregates, bare-bracket arrays, ORDER BY WITH FILL, CODEC, WITH TOTALS, LIMIT BY, ANY/ALL JOIN, SETTINGS, TTL, INSERT FORMAT | ✅ v1.14.0 — 69/83 QA pass (was 53%) |
 | **MariaDB** | `"mariadb"` | MariaDB keywords (superset of MySQL) | All MySQL features + SEQUENCE DDL, FOR SYSTEM_TIME, WITH SYSTEM VERSIONING, PERIOD FOR, CONNECT BY | ✅ v1.14.0 |
 
 ### Usage
@@ -598,7 +598,7 @@ gosqlx format --dialect mysql query.sql
 - CREATE EVENT not supported
 
 #### SQL Server (T-SQL)
-- PIVOT/UNPIVOT keywords reserved but no parsing logic
+- PIVOT/UNPIVOT parsed (v1.14.0)
 - CROSS/OUTER APPLY keywords reserved but no parsing logic
 - TRY/CATCH blocks not supported
 - OPENROWSET / OPENQUERY not supported
@@ -614,10 +614,16 @@ gosqlx format --dialect mysql query.sql
 - VACUUM not supported
 - Virtual tables (FTS5, rtree) not supported
 
-#### Snowflake
-- Keyword detection and dialect scoring only
-- No Snowflake-specific parsing (stages, COPY INTO, VARIANT operations)
-- QUALIFY clause not supported
+#### Snowflake (v1.14.0 — 87/87 QA pass, 100%)
+- MATCH_RECOGNIZE (SQL:2016 R010), @stage references, SAMPLE/TABLESAMPLE, QUALIFY
+- VARIANT colon-path expressions (`expr:field.sub[0]`)
+- Time-travel: AT/BEFORE/CHANGES
+- MINUS as EXCEPT synonym, LATERAL FLATTEN, named arguments (`name => expr`)
+- TRY_CAST, IGNORE NULLS / RESPECT NULLS
+- LIKE ANY/ALL and ILIKE ANY/ALL
+- CREATE STAGE/STREAM/TASK/PIPE stubs (parsed but not semantically validated)
+- USE [WAREHOUSE|DATABASE|SCHEMA|ROLE], DESCRIBE with object-kind prefixes
+- COPY INTO / PUT / GET / LIST / REMOVE stubs
 
 #### MariaDB
 - Inherits all MySQL known gaps (stored procedures, HANDLER, XA transactions, CREATE EVENT)
@@ -625,17 +631,22 @@ gosqlx format --dialect mysql query.sql
 - Spider storage engine syntax not parsed
 - ColumnStore-specific syntax not supported
 
-#### ClickHouse
+#### ClickHouse (v1.14.0 — 69/83 QA pass, 83%)
 - PREWHERE clause for pre-filter optimization before primary key scan
 - FINAL modifier on table references (forces MergeTree part merge)
 - GLOBAL IN / GLOBAL NOT IN for distributed query execution
-- ClickHouse data types: FixedString(N), LowCardinality(T), Nullable(T), DateTime64, IPv4, IPv6
+- ClickHouse data types: FixedString(N), LowCardinality(T), Nullable(T), Array(T), Map(K,V), DateTime64, IPv4, IPv6
 - MergeTree engine family keywords: MERGETREE, REPLACINGMERGETREE, AGGREGATINGMERGETREE, SUMMINGMERGETREE, COLLAPSINGMERGETREE, VERSIONEDCOLLAPSINGMERGETREE
+- Nested column types, parametric aggregates (`quantile(0.95)(duration)`)
+- Bare-bracket array literals `[1,2,3]`, ORDER BY WITH FILL, CODEC(...)
+- WITH TOTALS in GROUP BY, LIMIT BY clause, ANY/ALL JOIN strictness
+- SETTINGS, TTL, INSERT FORMAT (JSONEachRow, CSV, etc.)
+- `table`, `partition`, `tables`, `databases` as identifiers
 - 30+ ClickHouse-specific keywords: TTL, CODEC, FORMAT, SETTINGS, DISTRIBUTED, etc.
 
 ## SQL Standards Compliance Summary
 
-### Overall Compliance (v1.13.0)
+### Overall Compliance (v1.14.0)
 
 | Standard | Compliance % | Status | Notes |
 |----------|--------------|--------|-------|
@@ -825,9 +836,9 @@ gosqlx format --dialect mysql query.sql
 
 ---
 
-**Last Updated**: 2026-03-20
-**GoSQLX Version**: 1.13.0
-**Test Suite Version**: 1.13.0
+**Last Updated**: 2026-04-12
+**GoSQLX Version**: 1.14.0
+**Test Suite Version**: 1.14.0
 **Total Test Cases**: 800+
 **Coverage Percentage**: 95%+
 **SQL-99 Compliance**: ~85%

@@ -35,7 +35,7 @@ func New(cfg *Config) *Server {
 	s := &Server{cfg: cfg}
 	s.mcpSrv = mcpserver.NewMCPServer(
 		"gosqlx-mcp",
-		"1.13.0",
+		"1.14.0",
 		mcpserver.WithToolCapabilities(false),
 	)
 	s.registerTools()

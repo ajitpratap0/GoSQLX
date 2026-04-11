@@ -30,7 +30,7 @@ import (
 )
 
 // Version is the current GoSQLX library version.
-const Version = "1.13.0"
+const Version = "1.14.0"
 
 // Parse tokenizes and parses SQL in one call, returning an Abstract Syntax Tree (AST).
 //

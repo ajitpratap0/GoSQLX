@@ -179,6 +179,29 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 	}
 	stmt.Name = createTableName
 
+	// Snowflake: COPY GRANTS modifier before the column list or AS SELECT.
+	// Consumed but not modeled on the AST.
+	if strings.EqualFold(p.currentToken.Token.Value, "COPY") &&
+		strings.EqualFold(p.peekToken().Token.Value, "GRANTS") {
+		p.advance() // COPY
+		p.advance() // GRANTS
+	}
+
+	// CREATE TABLE ... AS SELECT — no column list, just a query.
+	if p.isType(models.TokenTypeAs) {
+		p.advance() // AS
+		if p.isType(models.TokenTypeSelect) || p.isType(models.TokenTypeWith) {
+			p.advance() // SELECT / WITH
+			query, err := p.parseSelectWithSetOperations()
+			if err != nil {
+				return nil, err
+			}
+			_ = query // CTAS query not modeled on CreateTableStatement yet
+			return stmt, nil
+		}
+		return nil, p.expectedError("SELECT after AS")
+	}
+
 	// Expect opening parenthesis for column definitions
 	if !p.isType(models.TokenTypeLParen) {
 		return nil, p.expectedError("(")
@@ -377,6 +400,19 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 			continue
 		}
 		break
+	}
+
+	// Snowflake: CLUSTER BY (expr, ...) — defines the clustering key.
+	if strings.EqualFold(p.currentToken.Token.Value, "CLUSTER") {
+		p.advance() // CLUSTER
+		if p.isType(models.TokenTypeBy) {
+			p.advance() // BY
+		}
+		if p.isType(models.TokenTypeLParen) {
+			if err := p.skipClickHouseClauseExpr(); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	// SQLite: optional WITHOUT ROWID clause

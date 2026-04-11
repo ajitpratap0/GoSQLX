@@ -104,8 +104,9 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return funcCall, nil
 	}
 
-	// Handle keywords that can be used as function names in MySQL (IF, REPLACE, etc.)
-	if (p.isType(models.TokenTypeIf) || p.isType(models.TokenTypeReplace)) && p.peekToken().Token.Type == models.TokenTypeLParen {
+	// Handle keywords that can be used as function names (IF, REPLACE, FIRST, LAST, etc.)
+	if (p.isType(models.TokenTypeIf) || p.isType(models.TokenTypeReplace) ||
+		p.isType(models.TokenTypeFirst) || p.isType(models.TokenTypeLast)) && p.peekToken().Token.Type == models.TokenTypeLParen {
 		kwPos := p.currentLocation()
 		identName := p.currentToken.Token.Value
 		p.advance()

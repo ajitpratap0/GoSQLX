@@ -246,6 +246,8 @@ type TableReference struct {
 	// Unpivot is the SQL Server / Oracle UNPIVOT clause for column-to-row transformation.
 	// Example: SELECT * FROM t UNPIVOT (sales FOR region IN (north_sales, south_sales)) AS unpvt
 	Unpivot *UnpivotClause
+	// MatchRecognize is the SQL:2016 row-pattern recognition clause (Snowflake, Oracle).
+	MatchRecognize *MatchRecognizeClause
 }
 
 func (t *TableReference) statementNode() {}
@@ -274,6 +276,9 @@ func (t TableReference) Children() []Node {
 	}
 	if t.Unpivot != nil {
 		nodes = append(nodes, t.Unpivot)
+	}
+	if t.MatchRecognize != nil {
+		nodes = append(nodes, t.MatchRecognize)
 	}
 	return nodes
 }
@@ -2145,6 +2150,62 @@ type PeriodDefinition struct {
 	StartCol *Identifier
 	EndCol   *Identifier
 	Pos      models.Location // Source position of the PERIOD FOR keyword (1-based line and column)
+}
+
+// MatchRecognizeClause represents the SQL:2016 MATCH_RECOGNIZE clause for
+// row-pattern recognition in a FROM clause (Snowflake, Oracle, Databricks).
+//
+//	MATCH_RECOGNIZE (
+//	  PARTITION BY symbol
+//	  ORDER BY ts
+//	  MEASURES MATCH_NUMBER() AS m
+//	  ALL ROWS PER MATCH
+//	  PATTERN (UP+ DOWN+)
+//	  DEFINE UP AS price > PREV(price), DOWN AS price < PREV(price)
+//	)
+type MatchRecognizeClause struct {
+	PartitionBy  []Expression
+	OrderBy      []OrderByExpression
+	Measures     []MeasureDef
+	RowsPerMatch string // "ONE ROW PER MATCH" or "ALL ROWS PER MATCH" (empty = default)
+	AfterMatch   string // raw text: "SKIP TO NEXT ROW", "SKIP PAST LAST ROW", etc.
+	Pattern      string // raw pattern text: "UP+ DOWN+"
+	Definitions  []PatternDef
+	Pos          models.Location
+}
+
+// MeasureDef is one MEASURES entry: expr AS alias.
+type MeasureDef struct {
+	Expr  Expression
+	Alias string
+}
+
+// PatternDef is one DEFINE entry: variable_name AS boolean_condition.
+type PatternDef struct {
+	Name      string
+	Condition Expression
+}
+
+func (m *MatchRecognizeClause) expressionNode()     {}
+func (m MatchRecognizeClause) TokenLiteral() string { return "MATCH_RECOGNIZE" }
+func (m MatchRecognizeClause) Children() []Node {
+	var nodes []Node
+	nodes = append(nodes, nodifyExpressions(m.PartitionBy)...)
+	for _, ob := range m.OrderBy {
+		ob := ob
+		nodes = append(nodes, &ob)
+	}
+	for _, md := range m.Measures {
+		if md.Expr != nil {
+			nodes = append(nodes, md.Expr)
+		}
+	}
+	for _, pd := range m.Definitions {
+		if pd.Condition != nil {
+			nodes = append(nodes, pd.Condition)
+		}
+	}
+	return nodes
 }
 
 // expressionNode satisfies the Expression interface so PeriodDefinition can be

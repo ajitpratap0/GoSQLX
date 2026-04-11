@@ -179,6 +179,22 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		return nil, err
 	}
 
+	// ClickHouse LIMIT BY: `LIMIT N [OFFSET M] BY expr [, expr]...`
+	// The LIMIT and OFFSET values were already consumed above; if the next
+	// token is BY, consume the BY-expression list (permissive, not modeled).
+	if p.dialect == string(keywords.DialectClickHouse) && p.isType(models.TokenTypeBy) {
+		p.advance() // Consume BY
+		for {
+			if _, err := p.parseExpression(); err != nil {
+				return nil, err
+			}
+			if !p.isType(models.TokenTypeComma) {
+				break
+			}
+			p.advance()
+		}
+	}
+
 	// FETCH FIRST / NEXT
 	if p.isType(models.TokenTypeFetch) {
 		if selectStmt.Fetch, err = p.parseFetchClause(); err != nil {

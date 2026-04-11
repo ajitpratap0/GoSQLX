@@ -71,6 +71,35 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 			Subquery: selectStmt,
 			Lateral:  isLateral,
 		}
+	} else if p.isType(models.TokenTypePlaceholder) && strings.HasPrefix(p.currentToken.Token.Value, "@") {
+		// Snowflake stage reference: @stage_name or @db.schema.stage/path.
+		// Tokenized as PLACEHOLDER; consume as a table name.
+		stageName := p.currentToken.Token.Value
+		p.advance()
+		// Optional /path suffix — consume tokens joined by / until a space boundary.
+		// Slash tokenizes as TokenTypeDiv.
+		for p.isType(models.TokenTypeDiv) {
+			stageName += "/"
+			p.advance()
+			if p.isIdentifier() || p.isType(models.TokenTypeKeyword) {
+				stageName += p.currentToken.Token.Value
+				p.advance()
+			}
+		}
+		tableRef = ast.TableReference{
+			Name:    stageName,
+			Lateral: isLateral,
+		}
+
+		// Stage may be followed by (FILE_FORMAT => ...) args — use the same
+		// function-call path as FLATTEN/TABLE(...).
+		if p.isType(models.TokenTypeLParen) {
+			funcCall, ferr := p.parseFunctionCall(stageName)
+			if ferr != nil {
+				return tableRef, ferr
+			}
+			tableRef.TableFunc = funcCall
+		}
 	} else {
 		// Parse regular table name (supports schema.table qualification)
 		qualifiedName, err := p.parseQualifiedName()

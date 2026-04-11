@@ -19,6 +19,7 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
@@ -225,4 +226,55 @@ func ParseSQL(sql string) (*ast.AST, error) {
 //	// "SELECT id, name FROM users WHERE active = true LIMIT 10"
 func FormatSQL(stmt ast.Statement) string {
 	return formatter.FormatStatement(stmt, ast.CompactStyle())
+}
+
+// FormatSQLWithDialect converts an AST statement back into a compact SQL string
+// using dialect-specific syntax for row-limiting clauses (TOP for SQL Server,
+// FETCH FIRST for Oracle, LIMIT for PostgreSQL/MySQL/etc.).
+//
+// Pass keywords.DialectGeneric or an empty SQLDialect for generic behavior
+// identical to FormatSQL.
+//
+// Example:
+//
+//	sql := transform.FormatSQLWithDialect(stmt, keywords.DialectSQLServer)
+//	// "SELECT TOP 100 * FROM users"
+func FormatSQLWithDialect(stmt ast.Statement, dialect keywords.SQLDialect) string {
+	opts := ast.CompactStyle()
+	opts.Dialect = string(dialect)
+	return formatter.FormatStatement(stmt, opts)
+}
+
+// ParseSQLWithDialect parses a SQL string using dialect-specific tokenization and
+// parsing rules. This enables correct handling of dialect-specific syntax such as
+// SQL Server TOP, MySQL backtick identifiers, and Snowflake QUALIFY.
+//
+// Use this when the input SQL uses dialect-specific constructs that the generic
+// parser would reject or misinterpret.
+//
+// Example:
+//
+//	tree, err := transform.ParseSQLWithDialect("SELECT TOP 10 * FROM users", keywords.DialectSQLServer)
+func ParseSQLWithDialect(sql string, dialect keywords.SQLDialect) (*ast.AST, error) {
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+
+	if dialect != "" {
+		tkz.SetDialect(dialect)
+	}
+
+	tokens, err := tkz.Tokenize([]byte(sql))
+	if err != nil {
+		return nil, fmt.Errorf("tokenize: %w", err)
+	}
+
+	p := parser.NewParser(parser.WithDialect(string(dialect)))
+	defer p.Release()
+
+	tree, err := p.ParseFromModelTokens(tokens)
+	if err != nil {
+		return nil, fmt.Errorf("parse: %w", err)
+	}
+
+	return tree, nil
 }

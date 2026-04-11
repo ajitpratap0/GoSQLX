@@ -55,6 +55,11 @@ type FormatOptions struct {
 	NewlinePerClause bool
 	// AddSemicolon appends a semicolon to each statement.
 	AddSemicolon bool
+	// Dialect specifies the target SQL dialect for rendering. When empty,
+	// the formatter emits whatever AST fields are set (generic behavior).
+	// Valid values match keywords.SQLDialect constants: "postgresql", "mysql",
+	// "sqlserver", "oracle", "sqlite", "snowflake", "clickhouse", "mariadb".
+	Dialect string
 }
 
 // CompactStyle returns formatting options for minimal whitespace output.

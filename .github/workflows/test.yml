@@ -95,3 +95,38 @@ jobs:
         go test -run=^$ -bench=. -benchmem -timeout=5m ./pkg/sql/tokenizer/
         go test -run=^$ -bench=. -benchmem -timeout=5m ./pkg/sql/parser/
         go test -run=^$ -bench=. -benchmem -timeout=5m ./pkg/sql/ast/
+
+  perf-regression:
+    name: Performance Regression
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.26'
+        cache: true
+
+    - name: Run performance regression tests
+      continue-on-error: true
+      run: go test -run TestPerformanceRegression -timeout=5m ./pkg/sql/parser/
+
+  fuzz-regression:
+    name: Fuzz Regression
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.26'
+        cache: true
+
+    - name: Run fuzz regression (corpus only)
+      run: |
+        go test -fuzz=FuzzTokenizer -fuzztime=10s -timeout=2m ./pkg/sql/tokenizer/ || true
+        go test -fuzz=FuzzScanSQL -fuzztime=10s -timeout=2m ./pkg/sql/security/ || true

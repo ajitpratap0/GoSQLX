@@ -128,6 +128,29 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return p.parseExtractExpression()
 	}
 
+	// Oracle/MariaDB pseudo-columns: ROWNUM, ROWID, LEVEL, SYSDATE, SYSTIMESTAMP.
+	// These are tokenized as keywords but act as column-like expressions.
+	// We return them as zero-argument FunctionCall nodes so that implicit
+	// aliasing works naturally (SELECT ROWNUM rn → AliasedExpression) and
+	// they don't collide with the bare-Identifier alias guard.
+	if p.isType(models.TokenTypeKeyword) && p.isOraclePseudoColumn() {
+		identPos := p.currentLocation()
+		identName := p.currentToken.Token.Value
+		p.advance()
+		// SYSDATE() / SYSTIMESTAMP() — some drivers allow parens
+		if p.isType(models.TokenTypeLParen) {
+			funcCall, err := p.parseFunctionCall(identName)
+			if err != nil {
+				return nil, err
+			}
+			if funcCall.Pos.IsZero() {
+				funcCall.Pos = identPos
+			}
+			return funcCall, nil
+		}
+		return &ast.FunctionCall{Name: identName, Pos: identPos}, nil
+	}
+
 	if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeDoubleQuotedString) || ((p.dialect == string(keywords.DialectSQLServer) || p.dialect == string(keywords.DialectClickHouse)) && p.isNonReservedKeyword()) {
 		// Handle identifiers and function calls
 		// Double-quoted strings are treated as identifiers in SQL (e.g., "column_name")

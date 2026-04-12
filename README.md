@@ -137,7 +137,7 @@ claude mcp add --transport http gosqlx \
 <table>
 <tr>
 <td align="center" width="33%"><h3>⚡ Parser</h3>Zero-copy tokenizer<br/>Recursive descent parser<br/>Full AST generation<br/>Multi-dialect engine</td>
-<td align="center" width="33%"><h3>🛡️ Analysis</h3>SQL injection scanner<br/>10 lint rules (L001–L010)<br/>Query complexity scoring<br/>Metadata extraction</td>
+<td align="center" width="33%"><h3>🛡️ Analysis</h3>SQL injection scanner<br/>30 lint rules (L001–L030)<br/>20 optimizer rules<br/>Metadata extraction</td>
 <td align="center" width="33%"><h3>🔧 Tooling</h3>AST-based formatter<br/>Query transforms API<br/>VS Code extension<br/>GitHub Action</td>
 </tr>
 <tr>

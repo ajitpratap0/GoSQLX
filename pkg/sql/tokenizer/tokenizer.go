@@ -1041,14 +1041,25 @@ func (t *Tokenizer) readQuotedString(quote rune) (models.Token, error) {
 		}
 
 		if r == '\\' {
-			// Handle escape sequences
-			if err := t.handleEscapeSequence(&buf); err != nil {
-				return models.Token{}, errors.InvalidSyntaxError(
-					fmt.Sprintf("invalid escape sequence: %v", err),
-					models.Location{Line: t.pos.Line, Column: t.pos.Column},
-					string(t.input),
-				)
+			// Dialects that don't use C-style backslash escapes (Oracle,
+			// SQL Server, SQLite, Snowflake, ClickHouse) treat '\' as a
+			// literal character inside string literals. Only MySQL and
+			// PostgreSQL (and their derivatives) use backslash escaping.
+			if t.dialect == keywords.DialectMySQL || t.dialect == keywords.DialectMariaDB ||
+				t.dialect == keywords.DialectPostgreSQL || t.dialect == "" {
+				if err := t.handleEscapeSequence(&buf); err != nil {
+					return models.Token{}, errors.InvalidSyntaxError(
+						fmt.Sprintf("invalid escape sequence: %v", err),
+						models.Location{Line: t.pos.Line, Column: t.pos.Column},
+						string(t.input),
+					)
+				}
+				continue
 			}
+			// For other dialects, treat backslash as a literal character.
+			buf.WriteRune(r)
+			t.pos.Index += size
+			t.pos.Column++
 			continue
 		}
 

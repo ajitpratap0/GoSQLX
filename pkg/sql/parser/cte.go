@@ -23,6 +23,7 @@ import (
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // WITH summary(region, total) AS (SELECT region, SUM(amount) FROM sales GROUP BY region) SELECT * FROM summary
@@ -122,6 +123,31 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 			p.currentLocation(),
 			"",
 		)
+	}
+
+	// ClickHouse scalar CTE: WITH <expr> AS <name>, ...
+	// Detected when the token after WITH is not an identifier, or is an
+	// identifier not followed by AS/( (which would be a standard CTE).
+	if p.dialect == string(keywords.DialectClickHouse) && !p.isIdentifier() {
+		scalarExpr, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+		if !p.isType(models.TokenTypeAs) {
+			return nil, p.expectedError("AS after scalar CTE expression")
+		}
+		p.advance() // Consume AS
+		if !p.isIdentifier() {
+			return nil, p.expectedError("name after AS in scalar CTE")
+		}
+		scalarName := p.currentToken.Token.Value
+		scalarPos := p.currentLocation()
+		p.advance()
+		return &ast.CommonTableExpr{
+			Name:       scalarName,
+			ScalarExpr: scalarExpr,
+			Pos:        scalarPos,
+		}, nil
 	}
 
 	// Parse CTE name (supports double-quoted identifiers)

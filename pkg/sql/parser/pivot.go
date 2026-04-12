@@ -154,14 +154,24 @@ func (p *Parser) parsePivotClause() (*ast.PivotClause, error) {
 	}
 	p.advance() // consume (
 
-	// Parse IN values — identifiers (possibly bracket-quoted in SQL Server)
+	// Parse IN values — identifiers, numbers, or string literals, each with
+	// an optional AS alias (Oracle syntax: 'North' AS north).
 	var inValues []string
 	for !p.isType(models.TokenTypeRParen) && !p.isType(models.TokenTypeEOF) {
 		if !p.isIdentifier() && !p.isType(models.TokenTypeNumber) && !p.isStringLiteral() {
 			return nil, p.expectedError("value in PIVOT IN list")
 		}
-		inValues = append(inValues, renderQuotedIdent(p.currentToken.Token))
+		val := renderQuotedIdent(p.currentToken.Token)
 		p.advance()
+		// Optional alias: AS <name>
+		if p.isType(models.TokenTypeAs) {
+			p.advance() // consume AS
+			if p.isIdentifier() || p.isNonReservedKeyword() {
+				val += " AS " + p.currentToken.Token.Value
+				p.advance()
+			}
+		}
+		inValues = append(inValues, val)
 		if p.isType(models.TokenTypeComma) {
 			p.advance()
 		}
@@ -231,14 +241,24 @@ func (p *Parser) parseUnpivotClause() (*ast.UnpivotClause, error) {
 	}
 	p.advance() // consume (
 
-	// Parse IN columns
+	// Parse IN columns — each may have an optional AS alias (Oracle:
+	// north_sales AS 'North').
 	var cols []string
 	for !p.isType(models.TokenTypeRParen) && !p.isType(models.TokenTypeEOF) {
 		if !p.isIdentifier() {
 			return nil, p.expectedError("column name in UNPIVOT IN list")
 		}
-		cols = append(cols, renderQuotedIdent(p.currentToken.Token))
+		col := renderQuotedIdent(p.currentToken.Token)
 		p.advance()
+		// Optional alias: AS <string_literal_or_identifier>
+		if p.isType(models.TokenTypeAs) {
+			p.advance() // consume AS
+			if p.isStringLiteral() || p.isIdentifier() || p.isNonReservedKeyword() {
+				col += " AS " + renderQuotedIdent(p.currentToken.Token)
+				p.advance()
+			}
+		}
+		cols = append(cols, col)
 		if p.isType(models.TokenTypeComma) {
 			p.advance()
 		}
@@ -391,5 +411,12 @@ func (p *Parser) isSampleKeyword() bool {
 		return true
 	}
 	nextUpper := strings.ToUpper(next.Value)
-	return nextUpper == "BERNOULLI" || nextUpper == "SYSTEM" || nextUpper == "BLOCK" || nextUpper == "ROW"
+	if nextUpper == "BERNOULLI" || nextUpper == "SYSTEM" || nextUpper == "BLOCK" || nextUpper == "ROW" {
+		return true
+	}
+	// ClickHouse: SAMPLE followed by a number (SAMPLE 0.1, SAMPLE 10000, SAMPLE 1/10)
+	if p.dialect == string(keywords.DialectClickHouse) && next.Type == models.TokenTypeNumber {
+		return true
+	}
+	return false
 }

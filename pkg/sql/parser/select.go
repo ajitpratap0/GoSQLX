@@ -87,6 +87,13 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		TableName:         tableName,
 	}
 
+	// ClickHouse ARRAY JOIN / LEFT ARRAY JOIN
+	if p.dialect == string(keywords.DialectClickHouse) {
+		if selectStmt.ArrayJoin, err = p.parseArrayJoinClause(); err != nil {
+			return nil, err
+		}
+	}
+
 	// SAMPLE (ClickHouse-specific, specifies sampling rate/size; comes after FROM/FINAL)
 	if p.dialect == string(keywords.DialectClickHouse) && p.isTokenMatch("SAMPLE") {
 		if selectStmt.Sample, err = p.parseSampleClause(); err != nil {
@@ -166,6 +173,33 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			}
 			cb.Condition = cond
 			selectStmt.ConnectBy = cb
+		}
+	}
+
+	// SQL:2003 WINDOW clause: WINDOW w AS (spec), w2 AS (spec2), ...
+	// Named window definitions that can be referenced by OVER w.
+	if strings.EqualFold(p.currentToken.Token.Value, "WINDOW") {
+		p.advance() // Consume WINDOW
+		for {
+			if !p.isIdentifier() {
+				return nil, p.expectedError("window name after WINDOW")
+			}
+			winName := p.currentToken.Token.Value
+			p.advance()
+			if !p.isType(models.TokenTypeAs) {
+				return nil, p.expectedError("AS after window name")
+			}
+			p.advance() // Consume AS
+			winSpec, winErr := p.parseWindowSpec()
+			if winErr != nil {
+				return nil, winErr
+			}
+			winSpec.Name = winName
+			selectStmt.Windows = append(selectStmt.Windows, *winSpec)
+			if !p.isType(models.TokenTypeComma) {
+				break
+			}
+			p.advance() // Consume comma
 		}
 	}
 
@@ -339,7 +373,13 @@ func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
 				p.advance()
 				expr = &ast.AliasedExpression{Expr: expr, Alias: alias}
 			} else if p.canBeAlias() {
-				if _, ok := expr.(*ast.Identifier); !ok {
+				// Implicit aliasing (SELECT expr alias) is allowed for non-identifier
+				// expressions (functions, literals, casts, etc.) and for bare identifiers
+				// that are known pseudo-columns (ROWNUM, SYSDATE, LEVEL, etc.) where
+				// the alias pattern is idiomatic: SELECT ROWNUM rn FROM ...
+				ident, isIdent := expr.(*ast.Identifier)
+				allowAlias := !isIdent || (isIdent && ident.Table == "" && p.isOraclePseudoColumn2(ident.Name))
+				if allowAlias {
 					alias := p.currentToken.Token.Value
 					p.advance()
 					expr = &ast.AliasedExpression{Expr: expr, Alias: alias}

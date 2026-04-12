@@ -199,6 +199,7 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 	}
 
 	// CREATE TABLE ... AS SELECT — no column list, just a query.
+	// ClickHouse also: CREATE TABLE t AS source_table ENGINE = ...
 	if p.isType(models.TokenTypeAs) {
 		p.advance() // AS
 		if p.isType(models.TokenTypeSelect) || p.isType(models.TokenTypeWith) {
@@ -208,6 +209,16 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 				return nil, err
 			}
 			_ = query // CTAS query not modeled on CreateTableStatement yet
+			return stmt, nil
+		}
+		// ClickHouse: CREATE TABLE t AS <source_table> ENGINE = ...
+		// The identifier is the source table; consume remaining clauses.
+		if p.dialect == string(keywords.DialectClickHouse) && p.isIdentifier() {
+			p.advance() // Consume source table name
+			// Consume ENGINE and trailing clauses
+			for !p.isType(models.TokenTypeEOF) && !p.isType(models.TokenTypeSemicolon) {
+				p.advance()
+			}
 			return stmt, nil
 		}
 		return nil, p.expectedError("SELECT after AS")

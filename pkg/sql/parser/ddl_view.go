@@ -21,6 +21,7 @@ import (
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // parseCreateView parses CREATE [OR REPLACE] [TEMPORARY] VIEW statement
@@ -185,6 +186,26 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 		}
 		stmt.Tablespace = p.currentToken.Token.Value
 		p.advance()
+	}
+
+	// ClickHouse: optional TO <table> before ENGINE/AS
+	if p.dialect == string(keywords.DialectClickHouse) && p.isType(models.TokenTypeTo) {
+		p.advance() // Consume TO
+		toName, toErr := p.parseQualifiedName()
+		if toErr != nil {
+			return nil, p.expectedError("target table after TO")
+		}
+		stmt.Tablespace = toName // reuse Tablespace for ClickHouse TO
+	}
+
+	// ClickHouse: optional ENGINE = ... ORDER BY ... before AS SELECT
+	if p.dialect == string(keywords.DialectClickHouse) {
+		for p.isTokenMatch("ENGINE") || p.isType(models.TokenTypeOrder) || p.isTokenMatch("PRIMARY") || p.isTokenMatch("PARTITION") || p.isTokenMatch("SETTINGS") {
+			// Consume all engine clauses token-by-token until AS
+			for !p.isType(models.TokenTypeAs) && !p.isType(models.TokenTypeEOF) && !p.isType(models.TokenTypeSemicolon) {
+				p.advance()
+			}
+		}
 	}
 
 	// Expect AS

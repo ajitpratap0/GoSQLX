@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.14.0] - 2026-04-12
+## [1.14.0] - 2026-04-12 — Dialect-Aware Transforms, Snowflake 100%, Schema Introspection
 
 Headline themes: dialect-aware transforms, Snowflake at 100% of the QA corpus, ClickHouse significantly expanded (83% of the QA corpus, up from 53%), live schema introspection, SQL transpilation, and first-class integration sub-modules (OpenTelemetry and GORM). Drop-in upgrade from v1.13.0 — no breaking changes.
 
@@ -146,7 +146,7 @@ Carried over from v1.13.0 (no new deprecations in v1.14.0):
 - **MCP server**: bumped to **1.14.0** — glama.json updated with MariaDB and ClickHouse in dialect list
 - **`pygosqlx` Python bindings**: bumped to **0.2.0** — Python bindings follow an independent semver track (alpha) since they have not yet received the same QA sweep as the core library
 
-## [1.13.0] - 2026-03-20
+## [1.13.0] - 2026-03-20 — ClickHouse Dialect & LSP Semantic Tokens
 
 ### Added
 - ClickHouse SQL dialect support (`DialectClickHouse = "clickhouse"`) with 30+ keywords

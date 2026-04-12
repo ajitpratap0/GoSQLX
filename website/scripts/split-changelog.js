@@ -63,11 +63,18 @@ for (const release of releases) {
   if (subtitle) titleParts.push(`\u2014 ${subtitle}`);
   const title = titleParts.join(' ');
 
+  // Extract first non-empty, non-heading, non-list line as description
+  const descLine = release.body.find(l => l.trim() && !l.startsWith('#') && !l.startsWith('---') && !l.startsWith('- '));
+  const rawDesc = (descLine || subtitle || `GoSQLX v${version} release`).replace(/\*\*/g, '').replace(/`/g, '').trim();
+  // YAML-safe: escape quotes, strip trailing truncated quotes, limit length
+  const description = rawDesc.slice(0, 160).replace(/"/g, "'").replace(/'$/, '');
+
   const frontmatter = [
     '---',
     `title: "${title}"`,
     `date: "${date}"`,
     `version: "${version}"`,
+    `description: "${description}"`,
     '---',
   ].join('\n');
 

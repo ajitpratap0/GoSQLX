@@ -7,6 +7,7 @@ export interface BlogPost {
   title: string;
   date: string;
   version: string;
+  description: string;
   content: string;
 }
 
@@ -32,6 +33,7 @@ export function getPostBySlug(slug: string): BlogPost | null {
     title: data.title ?? '',
     date: data.date ?? '',
     version: data.version ?? '',
+    description: data.description ?? '',
     content,
   };
 }

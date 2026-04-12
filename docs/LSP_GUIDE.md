@@ -1,6 +1,6 @@
 # GoSQLX Language Server Protocol (LSP) Guide
 
-**Version**: v1.13.0
+**Version**: v1.14.0
 **Last Updated**: 2026-03-20
 
 ## Table of Contents
@@ -446,4 +446,4 @@ tail -f /tmp/gosqlx-lsp.log | grep -E "Initialize|Document|Diagnostic"
 ---
 
 **Last Updated**: 2026-03-20
-**Version**: v1.13.0
+**Version**: v1.14.0

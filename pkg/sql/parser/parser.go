@@ -1095,12 +1095,41 @@ func (p *Parser) isNonReservedKeyword() bool {
 	return false
 }
 
+// isOraclePseudoColumn returns true when the current keyword token is an
+// Oracle/MariaDB pseudo-column that should be parsed as an expression.
+func (p *Parser) isOraclePseudoColumn() bool {
+	return p.isOraclePseudoColumn2(p.currentToken.Token.Value)
+}
+
+// isOraclePseudoColumn2 checks if a given name is an Oracle pseudo-column.
+func (p *Parser) isOraclePseudoColumn2(name string) bool {
+	switch strings.ToUpper(name) {
+	case "ROWNUM", "ROWID", "LEVEL", "SYSDATE", "SYSTIMESTAMP":
+		return true
+	}
+	return false
+}
+
+// isWindowClauseKeyword returns true if the current token is the WINDOW
+// keyword that starts a named window clause (SQL:2003). Must not be consumed
+// as a table alias.
+func (p *Parser) isWindowClauseKeyword() bool {
+	return p.isIdentifier() && strings.EqualFold(p.currentToken.Token.Value, "WINDOW")
+}
+
+// isSettingsKeyword returns true if the current token is the ClickHouse
+// SETTINGS keyword. Must not be consumed as a table alias.
+func (p *Parser) isSettingsKeyword() bool {
+	return p.dialect == string(keywords.DialectClickHouse) &&
+		p.isTokenMatch("SETTINGS")
+}
+
 // canBeAlias checks if current token can be used as an alias.
 // Aliases can be IDENT, double-quoted identifiers, or certain non-reserved keywords,
 // but NOT contextual clause keywords that would be consumed as aliases by mistake
-// (e.g. MINUS in Snowflake/Oracle, QUALIFY in Snowflake/BigQuery).
+// (e.g. MINUS in Snowflake/Oracle, QUALIFY in Snowflake/BigQuery, WINDOW).
 func (p *Parser) canBeAlias() bool {
-	if p.isMinusSetOp() || p.isQualifyKeyword() {
+	if p.isMinusSetOp() || p.isQualifyKeyword() || p.isWindowClauseKeyword() || p.isSettingsKeyword() {
 		return false
 	}
 	return p.isIdentifier() || p.isNonReservedKeyword()
@@ -1116,6 +1145,13 @@ func (p *Parser) parseAlterTableStmt() (ast.Statement, error) {
 
 // isJoinKeyword checks if current token is a JOIN-related keyword
 func (p *Parser) isJoinKeyword() bool {
+	// ClickHouse: LEFT ARRAY JOIN is not a regular JOIN — exclude it so
+	// the ARRAY JOIN parser handles it separately.
+	if p.dialect == string(keywords.DialectClickHouse) &&
+		p.isType(models.TokenTypeLeft) &&
+		p.peekToken().Token.Type == models.TokenTypeArray {
+		return false
+	}
 	if p.isAnyType(
 		models.TokenTypeJoin, models.TokenTypeInner, models.TokenTypeLeft,
 		models.TokenTypeRight, models.TokenTypeFull, models.TokenTypeCross,

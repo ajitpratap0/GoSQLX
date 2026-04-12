@@ -128,6 +128,7 @@ type CommonTableExpr struct {
 	Name         string
 	Columns      []string
 	Statement    Statement
+	ScalarExpr   Expression      // ClickHouse: WITH <expr> AS <name> (scalar CTE, no subquery)
 	Materialized *bool           // nil = default, true = MATERIALIZED, false = NOT MATERIALIZED
 	Pos          models.Location // Source position of the CTE name (1-based line and column)
 }
@@ -429,8 +430,9 @@ type SelectStatement struct {
 	From              []TableReference
 	TableName         string // Added for pool operations
 	Joins             []JoinClause
-	PrewhereClause    Expression    // ClickHouse PREWHERE clause (applied before WHERE, before reading data)
-	Sample            *SampleClause // ClickHouse SAMPLE clause (comes after FROM/FINAL, before PREWHERE)
+	ArrayJoin         *ArrayJoinClause // ClickHouse ARRAY JOIN / LEFT ARRAY JOIN clause
+	PrewhereClause    Expression       // ClickHouse PREWHERE clause (applied before WHERE, before reading data)
+	Sample            *SampleClause    // ClickHouse SAMPLE clause (comes after FROM/FINAL, before PREWHERE)
 	Where             Expression
 	GroupBy           []Expression
 	Having            Expression
@@ -2294,6 +2296,20 @@ func (c ConnectByClause) Children() []Node {
 // via TABLESAMPLE, but this implementation targets SAMPLE).
 // Value is stored as a raw string to preserve the original representation
 // (e.g., "0.1", "1000", "1/10").
+// ArrayJoinClause represents a ClickHouse ARRAY JOIN or LEFT ARRAY JOIN clause.
+// Syntax: [LEFT] ARRAY JOIN expr [AS alias], expr [AS alias], ...
+type ArrayJoinClause struct {
+	Left     bool                 // true for LEFT ARRAY JOIN
+	Elements []ArrayJoinElement   // One or more join elements
+	Pos      models.Location
+}
+
+// ArrayJoinElement is a single expression in an ARRAY JOIN clause with an optional alias.
+type ArrayJoinElement struct {
+	Expr  Expression
+	Alias string
+}
+
 type SampleClause struct {
 	// Value is the sampling size/ratio as a raw token string (e.g., "0.1", "1000", "1/10").
 	Value string

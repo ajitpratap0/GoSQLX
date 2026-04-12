@@ -626,8 +626,8 @@ func (p *Parser) parseLimitOffsetClause() (limit *int, offset *int, err error) {
 		_, _ = fmt.Sscanf(p.currentToken.Token.Value, "%d", &firstVal)
 		p.advance()
 
-		// MySQL: LIMIT offset, count
-		if p.dialect == "mysql" && p.isType(models.TokenTypeComma) {
+		// MySQL / ClickHouse: LIMIT offset, count
+		if (p.dialect == "mysql" || p.dialect == string(keywords.DialectMariaDB) || p.dialect == string(keywords.DialectClickHouse)) && p.isType(models.TokenTypeComma) {
 			p.advance()
 			if !p.isNumericLiteral() {
 				return nil, nil, p.expectedError("integer for LIMIT count")
@@ -814,4 +814,63 @@ func (p *Parser) parseForClause() (*ast.ForClause, error) {
 	}
 
 	return forClause, nil
+}
+
+// parseArrayJoinClause parses ClickHouse [LEFT] ARRAY JOIN expr [AS alias], ...
+// Returns nil if the current token is not ARRAY (or LEFT ARRAY).
+func (p *Parser) parseArrayJoinClause() (*ast.ArrayJoinClause, error) {
+	isLeft := false
+
+	// Detect LEFT ARRAY JOIN
+	if p.isType(models.TokenTypeLeft) && p.peekToken().Token.Type == models.TokenTypeArray {
+		isLeft = true
+	}
+
+	if !p.isType(models.TokenTypeArray) && !isLeft {
+		return nil, nil
+	}
+
+	pos := p.currentLocation()
+	if isLeft {
+		p.advance() // Consume LEFT
+	}
+
+	// Must be ARRAY
+	if !p.isType(models.TokenTypeArray) {
+		return nil, nil
+	}
+	p.advance() // Consume ARRAY
+
+	// Must be JOIN
+	if !p.isType(models.TokenTypeJoin) {
+		return nil, p.expectedError("JOIN after ARRAY")
+	}
+	p.advance() // Consume JOIN
+
+	clause := &ast.ArrayJoinClause{Left: isLeft, Pos: pos}
+	for {
+		expr, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+		elem := ast.ArrayJoinElement{Expr: expr}
+		// Optional alias: AS name or bare name
+		if p.isType(models.TokenTypeAs) {
+			p.advance() // Consume AS
+			if !p.isIdentifier() {
+				return nil, p.expectedError("alias after AS in ARRAY JOIN")
+			}
+			elem.Alias = p.currentToken.Token.Value
+			p.advance()
+		} else if p.canBeAlias() {
+			elem.Alias = p.currentToken.Token.Value
+			p.advance()
+		}
+		clause.Elements = append(clause.Elements, elem)
+		if !p.isType(models.TokenTypeComma) {
+			break
+		}
+		p.advance() // Consume comma
+	}
+	return clause, nil
 }

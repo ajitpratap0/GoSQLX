@@ -562,6 +562,23 @@ func (s *SelectStatement) SQL() string {
 		sb.WriteString(joinSQL(&j))
 	}
 
+	if s.ArrayJoin != nil {
+		if s.ArrayJoin.Left {
+			sb.WriteString(" LEFT ARRAY JOIN ")
+		} else {
+			sb.WriteString(" ARRAY JOIN ")
+		}
+		elems := make([]string, len(s.ArrayJoin.Elements))
+		for i, e := range s.ArrayJoin.Elements {
+			s := exprSQL(e.Expr)
+			if e.Alias != "" {
+				s += " AS " + e.Alias
+			}
+			elems[i] = s
+		}
+		sb.WriteString(strings.Join(elems, ", "))
+	}
+
 	if s.PrewhereClause != nil {
 		sb.WriteString(" PREWHERE ")
 		sb.WriteString(exprSQL(s.PrewhereClause))
@@ -1406,6 +1423,13 @@ func forSQL(f *ForClause) string {
 func cteSQL(cte *CommonTableExpr) string {
 	sb := getBuilder()
 	defer putBuilder(sb)
+	// ClickHouse scalar CTE: WITH <expr> AS <name>
+	if cte.ScalarExpr != nil {
+		sb.WriteString(exprSQL(cte.ScalarExpr))
+		sb.WriteString(" AS ")
+		sb.WriteString(cte.Name)
+		return sb.String()
+	}
 	sb.WriteString(cte.Name)
 	if len(cte.Columns) > 0 {
 		sb.WriteString(" (")
@@ -1738,6 +1762,83 @@ func (p *PeriodDefinition) SQL() string {
 	}
 	b.WriteString(")")
 	return b.String()
+}
+
+// SQL returns the SQL string for a PRAGMA statement (SQLite).
+func (p *PragmaStatement) SQL() string {
+	if p == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
+	sb.WriteString("PRAGMA ")
+	sb.WriteString(p.Name)
+	if p.Arg != "" {
+		sb.WriteString("(")
+		sb.WriteString(p.Arg)
+		sb.WriteString(")")
+	} else if p.Value != "" {
+		sb.WriteString(" = ")
+		sb.WriteString(p.Value)
+	}
+	return sb.String()
+}
+
+// SQL returns the SQL string for a SHOW statement (MySQL).
+func (s *ShowStatement) SQL() string {
+	if s == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
+	sb.WriteString("SHOW ")
+	sb.WriteString(s.ShowType)
+	if s.ObjectName != "" {
+		sb.WriteString(" ")
+		sb.WriteString(s.ObjectName)
+	}
+	if s.From != "" {
+		sb.WriteString(" FROM ")
+		sb.WriteString(s.From)
+	}
+	return sb.String()
+}
+
+// SQL returns the SQL string for a DESCRIBE statement (MySQL).
+func (d *DescribeStatement) SQL() string {
+	if d == nil {
+		return ""
+	}
+	return "DESCRIBE " + d.TableName
+}
+
+// SQL returns the SQL string for a REPLACE statement (MySQL).
+func (r *ReplaceStatement) SQL() string {
+	if r == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
+	sb.WriteString("REPLACE INTO ")
+	sb.WriteString(r.TableName)
+	if len(r.Columns) > 0 {
+		sb.WriteString(" (")
+		sb.WriteString(exprListSQL(r.Columns))
+		sb.WriteString(")")
+	}
+	if len(r.Values) > 0 {
+		sb.WriteString(" VALUES ")
+		rows := make([]string, len(r.Values))
+		for idx, row := range r.Values {
+			vals := make([]string, len(row))
+			for j, v := range row {
+				vals[j] = exprSQL(v)
+			}
+			rows[idx] = "(" + strings.Join(vals, ", ") + ")"
+		}
+		sb.WriteString(strings.Join(rows, ", "))
+	}
+	return sb.String()
 }
 
 // ToSQL returns the SQL string for a CONNECT BY clause (MariaDB 10.2+).

@@ -79,7 +79,15 @@ tasks:
     desc: Run tests with race detection (CRITICAL for production)
     cmds:
       - echo "Running tests with race detection..."
-      - go test -race -timeout 60s ./...
+      - go test -race -timeout 60s $(go list ./... | grep -v /cbinding)
+
+  test:cbinding:
+    desc: Test C binding package (requires CGO)
+    env:
+      CGO_ENABLED: '1'
+    cmds:
+      - echo "Running cbinding tests with CGO enabled..."
+      - go test -race -timeout 60s ./pkg/cbinding/...
 
   test:pkg:
     desc: Run tests for a specific package (use PKG=./pkg/sql/parser)

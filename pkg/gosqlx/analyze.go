@@ -42,15 +42,6 @@ type AnalysisSuggestion struct {
 	Detail   string // Detailed explanation
 }
 
-// analyzeRule is the interface for analysis rules, kept internal to avoid
-// the import cycle with pkg/advisor. The actual rules live in pkg/advisor
-// and are accessed via AnalyzeWithFunc.
-type analyzeRule interface {
-	ID() string
-	Name() string
-	Analyze(stmt ast.Statement) []AnalysisSuggestion
-}
-
 // Analyze runs basic optimization analysis on the given SQL, checking for
 // common anti-patterns such as SELECT *, missing WHERE clauses, and cartesian
 // products.

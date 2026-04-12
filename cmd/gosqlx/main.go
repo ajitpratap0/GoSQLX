@@ -28,7 +28,7 @@ import (
 //   - Intelligent formatting with AST-based transformations
 //   - AST structure inspection and analysis
 //   - Security vulnerability detection
-//   - Style and quality linting (L001-L010 rules)
+//   - Style and quality linting (30 rules: L001-L030)
 //   - LSP server for IDE integration
 //   - Configuration management
 //

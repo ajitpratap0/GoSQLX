@@ -62,10 +62,10 @@ func allRules() []linter.Rule {
 		// Whitespace rules (L001-L005, L010)
 		whitespace.NewTrailingWhitespaceRule(),     // L001
 		whitespace.NewMixedIndentationRule(),       // L002
-		whitespace.NewConsecutiveBlankLinesRule(1),  // L003
+		whitespace.NewConsecutiveBlankLinesRule(1), // L003
 		whitespace.NewIndentationDepthRule(4, 4),   // L004
-		whitespace.NewLongLinesRule(120),            // L005
-		whitespace.NewRedundantWhitespaceRule(),     // L010
+		whitespace.NewLongLinesRule(120),           // L005
+		whitespace.NewRedundantWhitespaceRule(),    // L010
 
 		// Style rules (L006, L008, L009)
 		style.NewColumnAlignmentRule(),                   // L006
@@ -76,11 +76,11 @@ func allRules() []linter.Rule {
 		keywords.NewKeywordCaseRule(keywords.CaseUpper), // L007
 
 		// Safety rules (L011-L015)
-		safety.NewDeleteWithoutWhereRule(),  // L011
-		safety.NewUpdateWithoutWhereRule(),  // L012
+		safety.NewDeleteWithoutWhereRule(),   // L011
+		safety.NewUpdateWithoutWhereRule(),   // L012
 		safety.NewDropWithoutConditionRule(), // L013
-		safety.NewTruncateTableRule(),       // L014
-		safety.NewSelectIntoOutfileRule(),   // L015
+		safety.NewTruncateTableRule(),        // L014
+		safety.NewSelectIntoOutfileRule(),    // L015
 
 		// Performance rules (L016-L023)
 		performance.NewSelectStarRule(),        // L016
@@ -93,12 +93,12 @@ func allRules() []linter.Rule {
 		performance.NewImplicitCrossJoinRule(), // L023
 
 		// Naming rules (L024-L030)
-		naming.NewTableAliasRequiredRule(),       // L024
+		naming.NewTableAliasRequiredRule(),        // L024
 		naming.NewReservedKeywordIdentifierRule(), // L025
-		naming.NewImplicitColumnListRule(),       // L026
-		naming.NewUnionAllPreferredRule(),        // L027
-		naming.NewMissingOrderByLimitRule(),      // L028
-		naming.NewSubqueryCanBeJoinRule(),        // L029
-		naming.NewDistinctOnManyColumnsRule(),    // L030
+		naming.NewImplicitColumnListRule(),        // L026
+		naming.NewUnionAllPreferredRule(),         // L027
+		naming.NewMissingOrderByLimitRule(),       // L028
+		naming.NewSubqueryCanBeJoinRule(),         // L029
+		naming.NewDistinctOnManyColumnsRule(),     // L030
 	}
 }

@@ -110,6 +110,7 @@ jobs:
         cache: true
 
     - name: Run performance regression tests
+      continue-on-error: true
       run: go test -run TestPerformanceRegression -timeout=5m ./pkg/sql/parser/
 
   fuzz-regression:

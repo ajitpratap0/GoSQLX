@@ -2299,8 +2299,8 @@ func (c ConnectByClause) Children() []Node {
 // ArrayJoinClause represents a ClickHouse ARRAY JOIN or LEFT ARRAY JOIN clause.
 // Syntax: [LEFT] ARRAY JOIN expr [AS alias], expr [AS alias], ...
 type ArrayJoinClause struct {
-	Left     bool                 // true for LEFT ARRAY JOIN
-	Elements []ArrayJoinElement   // One or more join elements
+	Left     bool               // true for LEFT ARRAY JOIN
+	Elements []ArrayJoinElement // One or more join elements
 	Pos      models.Location
 }
 

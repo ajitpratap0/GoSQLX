@@ -36,10 +36,10 @@ func Validate(sql string) error {
 }
 
 // ValidateBytes is like Validate but accepts []byte to avoid a string copy.
+// Empty or whitespace-only input is rejected as invalid SQL.
 func ValidateBytes(input []byte) error {
-	// Fast path: empty/whitespace-only input is valid
 	if len(trimBytes(input)) == 0 {
-		return nil
+		return fmt.Errorf("invalid SQL: empty input")
 	}
 
 	tkz := tokenizer.GetTokenizer()

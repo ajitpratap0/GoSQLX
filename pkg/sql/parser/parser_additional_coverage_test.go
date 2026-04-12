@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// TODO(v2-cleanup): Coverage-push file with significant overlap against
+// operators_test.go, parser_test.go, and ddl_test.go. Consolidate and remove.
+
 package parser
 
 import (

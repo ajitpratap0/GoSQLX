@@ -21,8 +21,10 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
 
-// NOTE: CREATE TABLE is not yet implemented in parseStatement()
-// Tests for CREATE TABLE are skipped until the feature is implemented
+// TODO(v2-cleanup): This file contains coverage-push tests that overlap with
+// feature-specific test files (ddl_test.go, window_functions_test.go,
+// cte_test.go, operators_test.go, set_operations_test.go). Tests should be
+// consolidated into those files and this file removed. See #coverage-consolidation.
 
 // TestParser_AlterTable tests ALTER TABLE DDL statement
 // This covers parseAlterTableStmt, matchToken

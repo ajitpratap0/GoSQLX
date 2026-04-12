@@ -164,6 +164,8 @@ func FormatStatement(s ast.Statement, opts ast.FormatOptions) string {
 		return renderShow(v, opts)
 	case *ast.DescribeStatement:
 		return renderDescribe(v, opts)
+	case *ast.UnsupportedStatement:
+		return renderUnsupported(v, opts)
 	default:
 		// Fallback to SQL() for unrecognized statement types
 		return stmtSQL(s)

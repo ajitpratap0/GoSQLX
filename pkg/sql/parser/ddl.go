@@ -98,10 +98,8 @@ func (p *Parser) parseCreateStatement() (ast.Statement, error) {
 
 	// Snowflake object-type extensions: STAGE, STREAM, TASK, PIPE, FILE FORMAT,
 	// WAREHOUSE, DATABASE, SCHEMA, ROLE, FUNCTION, PROCEDURE, SEQUENCE.
-	// Parse-only: record the object kind and name on a DescribeStatement
-	// placeholder, then consume the rest of the statement body permissively
-	// until ';' or EOF (tracking balanced parens so embedded expressions with
-	// semicolons inside string literals round-trip).
+	// Parse-only: consumed permissively and returned as UnsupportedStatement
+	// until dedicated AST nodes are introduced.
 	if p.dialect == string(keywords.DialectSnowflake) {
 		kind := strings.ToUpper(p.currentToken.Token.Value)
 		if kind == "FILE" && strings.EqualFold(p.peekToken().Token.Value, "FORMAT") {
@@ -112,19 +110,28 @@ func (p *Parser) parseCreateStatement() (ast.Statement, error) {
 		case "STAGE", "STREAM", "TASK", "PIPE", "FILE FORMAT",
 			"WAREHOUSE", "DATABASE", "SCHEMA", "ROLE", "SEQUENCE",
 			"FUNCTION", "PROCEDURE":
+			stmtKind := "CREATE " + kind
 			p.advance() // Consume object-kind keyword
+			var rawParts []string
+			rawParts = append(rawParts, "CREATE", kind)
 			// Optional IF NOT EXISTS
 			if p.isType(models.TokenTypeIf) {
+				rawParts = append(rawParts, "IF")
 				p.advance()
 				if p.isType(models.TokenTypeNot) {
+					rawParts = append(rawParts, "NOT")
 					p.advance()
 				}
 				if p.isType(models.TokenTypeExists) {
+					rawParts = append(rawParts, "EXISTS")
 					p.advance()
 				}
 			}
 			// Object name (qualified identifier)
 			name, _ := p.parseQualifiedName()
+			if name != "" {
+				rawParts = append(rawParts, name)
+			}
 			// Consume the rest of the statement body until ';' or EOF,
 			// tracking balanced parens.
 			depth := 0
@@ -136,6 +143,9 @@ func (p *Parser) parseCreateStatement() (ast.Statement, error) {
 				if t == models.TokenTypeSemicolon && depth == 0 {
 					break
 				}
+				if p.currentToken.Token.Value != "" {
+					rawParts = append(rawParts, p.currentToken.Token.Value)
+				}
 				if t == models.TokenTypeLParen {
 					depth++
 				} else if t == models.TokenTypeRParen {
@@ -143,8 +153,9 @@ func (p *Parser) parseCreateStatement() (ast.Statement, error) {
 				}
 				p.advance()
 			}
-			stub := ast.GetDescribeStatement()
-			stub.TableName = "CREATE " + kind + " " + name
+			stub := ast.GetUnsupportedStatement()
+			stub.Kind = stmtKind
+			stub.RawSQL = strings.Join(rawParts, " ")
 			return stub, nil
 		}
 	}

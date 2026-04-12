@@ -38,6 +38,7 @@ type ConversionResult struct {
 	Tokens []models.TokenWithSpan
 	// Deprecated: PositionMapping is always nil. Position information is now embedded
 	// directly in models.TokenWithSpan.Start and .End fields.
+	// Scheduled for removal in v2.0.
 	PositionMapping []TokenPosition
 }
 
@@ -237,9 +238,10 @@ type Parser struct {
 	dialect      string          // SQL dialect for dialect-aware parsing (default: "postgresql")
 }
 
-// Deprecated: Parse is provided for backward compatibility only. Use ParseFromModelTokens
-// with a []models.TokenWithSpan slice from the tokenizer instead. This shim wraps each
-// token.Token into a zero-span models.TokenWithSpan and has no position information.
+// Deprecated: Parse is provided for backward compatibility only and is scheduled for
+// removal in v2.0. Use ParseFromModelTokens with a []models.TokenWithSpan slice from
+// the tokenizer instead. This shim wraps each token.Token into a zero-span
+// models.TokenWithSpan and has no position information.
 //
 // Parse parses a slice of token.Token into an AST.
 //
@@ -335,7 +337,7 @@ func (p *Parser) ParseFromModelTokens(tokens []models.TokenWithSpan) (*ast.AST, 
 // ParseFromModelTokensWithPositions is identical to ParseFromModelTokens.
 // Position information is embedded in every models.TokenWithSpan.
 //
-// Deprecated: Use ParseFromModelTokens directly.
+// Deprecated: Use ParseFromModelTokens directly. Scheduled for removal in v2.0.
 func (p *Parser) ParseFromModelTokensWithPositions(tokens []models.TokenWithSpan) (*ast.AST, error) {
 	return p.ParseFromModelTokens(tokens)
 }
@@ -749,21 +751,26 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 //	USE [WAREHOUSE | DATABASE | SCHEMA | ROLE] <name>
 //
 // The object-kind keyword is optional (plain "USE <name>" switches the current
-// database). We parse-only; the statement is represented as a DescribeStatement
-// placeholder until a dedicated UseStatement node is introduced.
+// database). Returned as an UnsupportedStatement until a dedicated UseStatement
+// node is introduced.
 func (p *Parser) parseSnowflakeUseStatement() (ast.Statement, error) {
 	p.advance() // Consume USE
+	var rawParts []string
+	rawParts = append(rawParts, "USE")
 	// Optional object kind.
 	switch strings.ToUpper(p.currentToken.Token.Value) {
 	case "WAREHOUSE", "DATABASE", "SCHEMA", "ROLE":
+		rawParts = append(rawParts, strings.ToUpper(p.currentToken.Token.Value))
 		p.advance()
 	}
 	name, err := p.parseQualifiedName()
 	if err != nil {
 		return nil, p.expectedError("name after USE")
 	}
-	stmt := ast.GetDescribeStatement()
-	stmt.TableName = "USE " + name
+	rawParts = append(rawParts, name)
+	stmt := ast.GetUnsupportedStatement()
+	stmt.Kind = "USE"
+	stmt.RawSQL = strings.Join(rawParts, " ")
 	return stmt, nil
 }
 
@@ -776,17 +783,21 @@ func (p *Parser) parseSnowflakeUseStatement() (ast.Statement, error) {
 //	REMOVE @<stage>/<path>
 //
 // The statement is consumed token-by-token (tracking balanced parens) until
-// ';' or EOF and returned as a DescribeStatement placeholder tagged with the
-// operation kind. No AST modeling yet; follow-up work.
+// ';' or EOF and returned as an UnsupportedStatement tagged with the
+// operation kind. No full AST modeling yet; follow-up work.
 func (p *Parser) parseSnowflakeStageStatement(kind string) (ast.Statement, error) {
 	p.advance() // Consume leading kind token
 
+	var rawParts []string
+	rawParts = append(rawParts, kind)
+
 	// COPY INTO: consume the INTO keyword if present.
 	if kind == "COPY" && p.isType(models.TokenTypeInto) {
+		rawParts = append(rawParts, "INTO")
 		p.advance()
 	}
 
-	// Consume the rest of the statement body.
+	// Consume the rest of the statement body, capturing tokens for RawSQL.
 	depth := 0
 	for {
 		t := p.currentToken.Token.Type
@@ -796,6 +807,9 @@ func (p *Parser) parseSnowflakeStageStatement(kind string) (ast.Statement, error
 		if t == models.TokenTypeSemicolon && depth == 0 {
 			break
 		}
+		if p.currentToken.Token.Value != "" {
+			rawParts = append(rawParts, p.currentToken.Token.Value)
+		}
 		if t == models.TokenTypeLParen {
 			depth++
 		} else if t == models.TokenTypeRParen {
@@ -803,8 +817,9 @@ func (p *Parser) parseSnowflakeStageStatement(kind string) (ast.Statement, error
 		}
 		p.advance()
 	}
-	stub := ast.GetDescribeStatement()
-	stub.TableName = kind
+	stub := ast.GetUnsupportedStatement()
+	stub.Kind = kind
+	stub.RawSQL = strings.Join(rawParts, " ")
 	return stub, nil
 }
 

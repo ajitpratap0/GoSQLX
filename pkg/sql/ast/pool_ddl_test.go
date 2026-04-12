@@ -709,6 +709,55 @@ func TestDescribeStatementPool(t *testing.T) {
 }
 
 // ============================================================
+// UnsupportedStatement pool tests
+// ============================================================
+
+func TestUnsupportedStatementPool(t *testing.T) {
+	t.Run("Get returns non-nil", func(t *testing.T) {
+		stmt := GetUnsupportedStatement()
+		if stmt == nil {
+			t.Fatal("GetUnsupportedStatement() returned nil")
+		}
+		PutUnsupportedStatement(stmt)
+	})
+
+	t.Run("Put nil is safe", func(t *testing.T) {
+		PutUnsupportedStatement(nil)
+	})
+
+	t.Run("Fields zeroed after Put", func(t *testing.T) {
+		stmt := GetUnsupportedStatement()
+		stmt.Kind = "COPY"
+		stmt.RawSQL = "COPY INTO my_table FROM @stage"
+
+		PutUnsupportedStatement(stmt)
+
+		if stmt.Kind != "" {
+			t.Errorf("Kind not cleared, got %q", stmt.Kind)
+		}
+		if stmt.RawSQL != "" {
+			t.Errorf("RawSQL not cleared, got %q", stmt.RawSQL)
+		}
+	})
+
+	t.Run("Pool roundtrip reuse", func(t *testing.T) {
+		stmt1 := GetUnsupportedStatement()
+		stmt1.Kind = "PUT"
+		stmt1.RawSQL = "PUT file:///tmp/data.csv @stage"
+		PutUnsupportedStatement(stmt1)
+
+		stmt2 := GetUnsupportedStatement()
+		if stmt2.Kind != "" {
+			t.Errorf("Reused statement not clean, Kind=%q", stmt2.Kind)
+		}
+		if stmt2.RawSQL != "" {
+			t.Errorf("Reused statement not clean, RawSQL=%q", stmt2.RawSQL)
+		}
+		PutUnsupportedStatement(stmt2)
+	})
+}
+
+// ============================================================
 // ReplaceStatement pool tests
 // ============================================================
 
@@ -885,6 +934,11 @@ func TestReleaseASTMixedDMLAndDDL(t *testing.T) {
 		desc.TableName = "users"
 		a.Statements = append(a.Statements, desc)
 
+		unsup := GetUnsupportedStatement()
+		unsup.Kind = "COPY"
+		unsup.RawSQL = "COPY INTO my_table FROM @stage"
+		a.Statements = append(a.Statements, unsup)
+
 		repl := GetReplaceStatement()
 		repl.TableName = "cache"
 		a.Statements = append(a.Statements, repl)
@@ -919,6 +973,7 @@ func TestReleaseStatementsMixedDDL(t *testing.T) {
 		&TruncateStatement{Tables: []string{"t1"}},
 		&ShowStatement{ShowType: "TABLES"},
 		&DescribeStatement{TableName: "users"},
+		&UnsupportedStatement{Kind: "COPY", RawSQL: "COPY INTO my_table"},
 		&ReplaceStatement{TableName: "cache"},
 		&AlterStatement{Name: "r1"},
 		// DML
@@ -1071,6 +1126,7 @@ func BenchmarkMixedDDLReleaseAST(b *testing.B) {
 				GetTruncateStatement(),
 				GetShowStatement(),
 				GetDescribeStatement(),
+				GetUnsupportedStatement(),
 				GetReplaceStatement(),
 				GetAlterStatement(),
 			)

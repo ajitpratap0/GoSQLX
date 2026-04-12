@@ -127,6 +127,12 @@ var (
 		},
 	}
 
+	unsupportedStmtPool = sync.Pool{
+		New: func() interface{} {
+			return &UnsupportedStatement{}
+		},
+	}
+
 	replaceStmtPool = sync.Pool{
 		New: func() interface{} {
 			return &ReplaceStatement{
@@ -535,6 +541,8 @@ func releaseStatement(stmt Statement) {
 		PutShowStatement(s)
 	case *DescribeStatement:
 		PutDescribeStatement(s)
+	case *UnsupportedStatement:
+		PutUnsupportedStatement(s)
 	case *ReplaceStatement:
 		PutReplaceStatement(s)
 	case *AlterStatement:
@@ -1754,6 +1762,23 @@ func PutDescribeStatement(stmt *DescribeStatement) {
 	stmt.TableName = ""
 
 	describeStmtPool.Put(stmt)
+}
+
+// GetUnsupportedStatement gets an UnsupportedStatement from the pool.
+func GetUnsupportedStatement() *UnsupportedStatement {
+	return unsupportedStmtPool.Get().(*UnsupportedStatement)
+}
+
+// PutUnsupportedStatement returns an UnsupportedStatement to the pool.
+func PutUnsupportedStatement(stmt *UnsupportedStatement) {
+	if stmt == nil {
+		return
+	}
+
+	stmt.Kind = ""
+	stmt.RawSQL = ""
+
+	unsupportedStmtPool.Put(stmt)
 }
 
 // GetReplaceStatement gets a ReplaceStatement from the pool.

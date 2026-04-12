@@ -379,3 +379,52 @@ func (p *Parser) parseBracketArrayLiteral() (*ast.ArrayConstructorExpression, er
 
 	return arrayExpr, nil
 }
+
+// parseExtractExpression parses EXTRACT(field FROM source).
+//
+// SQL standard syntax:
+//
+//	EXTRACT(YEAR FROM created_at)
+//	EXTRACT(MONTH FROM order_date)
+//	EXTRACT(DOW FROM timestamp_col)
+//
+// The field is a date/time part keyword (YEAR, MONTH, DAY, HOUR, MINUTE,
+// SECOND, DOW, DOY, EPOCH, QUARTER, WEEK, etc.). It is captured as a
+// plain string rather than an enum to accommodate dialect extensions.
+func (p *Parser) parseExtractExpression() (*ast.ExtractExpression, error) {
+	p.advance() // Consume EXTRACT
+
+	if !p.isType(models.TokenTypeLParen) {
+		return nil, p.expectedError("( after EXTRACT")
+	}
+	p.advance() // Consume (
+
+	// Field: typically a keyword like YEAR, MONTH, DAY, etc.
+	field := strings.ToUpper(p.currentToken.Token.Value)
+	if field == "" {
+		return nil, p.expectedError("date/time field (YEAR, MONTH, DAY, etc.)")
+	}
+	p.advance() // Consume field
+
+	// FROM keyword
+	if !p.isType(models.TokenTypeFrom) {
+		return nil, p.expectedError("FROM after EXTRACT field")
+	}
+	p.advance() // Consume FROM
+
+	// Source expression
+	source, err := p.parseExpression()
+	if err != nil {
+		return nil, fmt.Errorf("EXTRACT source: %w", err)
+	}
+
+	if !p.isType(models.TokenTypeRParen) {
+		return nil, p.expectedError(") after EXTRACT expression")
+	}
+	p.advance() // Consume )
+
+	return &ast.ExtractExpression{
+		Field:  field,
+		Source: source,
+	}, nil
+}

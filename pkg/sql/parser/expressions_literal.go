@@ -120,6 +120,14 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return funcCall, nil
 	}
 
+	// EXTRACT(field FROM source) — SQL standard date/time extraction.
+	// Tokenized as an identifier; detect by name when followed by '('.
+	if (p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeKeyword)) &&
+		strings.EqualFold(p.currentToken.Token.Value, "EXTRACT") &&
+		p.peekToken().Token.Type == models.TokenTypeLParen {
+		return p.parseExtractExpression()
+	}
+
 	if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeDoubleQuotedString) || ((p.dialect == string(keywords.DialectSQLServer) || p.dialect == string(keywords.DialectClickHouse)) && p.isNonReservedKeyword()) {
 		// Handle identifiers and function calls
 		// Double-quoted strings are treated as identifiers in SQL (e.g., "column_name")

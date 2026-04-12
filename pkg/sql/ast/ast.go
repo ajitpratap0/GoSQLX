@@ -1892,6 +1892,18 @@ func (a AST) Children() []Node {
 	return children
 }
 
+// HasUnsupportedStatements returns true if the AST contains any
+// UnsupportedStatement nodes — statements the parser consumed but
+// could not fully model.
+func (a AST) HasUnsupportedStatements() bool {
+	for _, stmt := range a.Statements {
+		if _, ok := stmt.(*UnsupportedStatement); ok {
+			return true
+		}
+	}
+	return false
+}
+
 // PragmaStatement represents a SQLite PRAGMA statement.
 // Examples: PRAGMA table_info(users), PRAGMA journal_mode = WAL, PRAGMA integrity_check
 type PragmaStatement struct {
@@ -1923,6 +1935,23 @@ type DescribeStatement struct {
 func (d *DescribeStatement) statementNode()      {}
 func (d DescribeStatement) TokenLiteral() string { return "DESCRIBE" }
 func (d DescribeStatement) Children() []Node     { return nil }
+
+// UnsupportedStatement represents a SQL statement that was parsed but not
+// fully modeled in the AST. The parser consumed and validated the tokens
+// but no dedicated AST node exists yet for this statement kind.
+//
+// Consumers should use Kind to identify the operation (e.g., "USE", "COPY",
+// "CREATE STAGE") and RawSQL for the original text. Tools that do
+// switch stmt.(type) should handle this case explicitly rather than
+// falling through to a default that assumes the statement is well-structured.
+type UnsupportedStatement struct {
+	Kind   string // Operation kind: "USE", "COPY", "PUT", "GET", "LIST", "REMOVE", "CREATE STAGE", etc.
+	RawSQL string // Original SQL fragment for round-trip fidelity
+}
+
+func (u *UnsupportedStatement) statementNode()      {}
+func (u UnsupportedStatement) TokenLiteral() string { return u.Kind }
+func (u UnsupportedStatement) Children() []Node     { return nil }
 
 // ReplaceStatement represents MySQL REPLACE INTO statement
 type ReplaceStatement struct {

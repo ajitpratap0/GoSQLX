@@ -119,6 +119,16 @@ func renderDescribe(s *ast.DescribeStatement, opts ast.FormatOptions) string {
 	return sb.String()
 }
 
+// renderUnsupported renders an UnsupportedStatement as a SQL comment
+// preserving the original SQL fragment. This prevents silently producing
+// corrupt SQL for statement types the formatter cannot handle.
+func renderUnsupported(s *ast.UnsupportedStatement, _ ast.FormatOptions) string {
+	if s.RawSQL != "" {
+		return "-- UNSUPPORTED: " + s.RawSQL
+	}
+	return "-- UNSUPPORTED: " + s.Kind
+}
+
 // writeSequenceOptionsFormatted appends formatted sequence options to the builder.
 // It mirrors the logic in ast/sql.go writeSequenceOptions but uses the nodeFormatter
 // for keyword casing.

@@ -13,6 +13,8 @@ linters:
     - staticcheck
     - misspell
     - gocritic
+    - bodyclose
+    - noctx
   settings:
     errcheck:
       exclude-functions:

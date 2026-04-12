@@ -517,14 +517,11 @@ type FormatOptions struct {
 	// When false: "SELECT * FROM users"  -> "SELECT * FROM users"
 	AddSemicolon bool
 
-	// SingleLineLimit is the maximum line length in characters before the formatter
-	// attempts to break the line into multiple lines for better readability.
+	// SingleLineLimit is the maximum line length in characters.
 	//
-	// Default: 80 characters
-	// Recommended range: 80-120 characters
-	//
-	// Deprecated: This field is reserved for future implementation and currently has no effect.
-	// It will be functional in a future release with intelligent line breaking support.
+	// Deprecated: This field currently has no effect on formatting output.
+	// Line-breaking support is planned for a future release. The value is
+	// still accepted to avoid breaking existing callers that set it.
 	SingleLineLimit int
 }
 
@@ -552,11 +549,9 @@ func DefaultFormatOptions() FormatOptions {
 	}
 }
 
-// Format formats SQL according to the specified options.
-//
-// This is a placeholder implementation that currently validates the SQL
-// and returns it with basic formatting. Full AST-based formatting will
-// be implemented in a future version.
+// Format parses SQL into an AST and renders it back to text using the
+// AST-based formatting engine. The result is syntactically valid, consistently
+// styled SQL controlled by the provided FormatOptions.
 //
 // Example:
 //

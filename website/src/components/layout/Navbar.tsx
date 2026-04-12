@@ -44,9 +44,18 @@ export function Navbar() {
   const pathname = usePathname();
   const { open: searchOpen, setOpen: setSearchOpen } = useSearchShortcut();
   const { scrollY } = useScroll();
+  const [isLight, setIsLight] = useState(false);
+  useEffect(() => {
+    const check = () => setIsLight(document.documentElement.classList.contains('light'));
+    check();
+    const observer = new MutationObserver(check);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+
   const bgOpacity = useTransform(scrollY, [0, 100], [0.6, 0.9]);
   const blurAmount = useTransform(scrollY, [0, 100], [8, 16]);
-  const bgColor = useTransform(bgOpacity, (v) => `rgba(9, 9, 11, ${v})`);
+  const bgColor = useTransform(bgOpacity, (v) => isLight ? `rgba(250, 251, 252, ${v})` : `rgba(9, 9, 11, ${v})`);
   const blur = useTransform(blurAmount, (v) => `blur(${v}px)`);
 
   // Close mobile menu on resize

@@ -107,54 +107,254 @@ body {
   --tw-prose-pre-bg: #12121A;
 }
 
-/* Light mode overrides */
+/* ==========================================================================
+   LIGHT MODE — Comprehensive override layer
+   All components use hardcoded dark-mode Tailwind classes (text-white,
+   text-zinc-300, bg-white/[0.06], border-white/[0.06], etc.).
+   We override them here to avoid touching 300+ JSX class strings.
+   ========================================================================== */
+
+/* --- Design token overrides --- */
+html.light {
+  --color-primary: #FAFBFC;
+  --color-surface: #FFFFFF;
+  --color-elevated: #F3F4F6;
+  --color-bg-deep: #FAFBFC;
+  --color-bg-surface: #FFFFFF;
+  --color-bg-elevated: #F3F4F6;
+  --color-bg-hover: #E5E7EB;
+  --color-text-primary: #1A1A2E;
+  --color-text-secondary: #4B5563;
+  --color-text-muted: #9CA3AF;
+  --color-border-default: rgba(0, 0, 0, 0.08);
+  --color-border-hover: rgba(0, 0, 0, 0.15);
+}
+
+/* --- Body --- */
 html.light body {
   background-color: #FAFBFC;
   color: #1A1A2E;
 }
 
+/* --- Global text color overrides --- */
+html.light .text-white { color: #1A1A2E; }
+html.light .text-zinc-100 { color: #1F2937; }
+html.light .text-zinc-200 { color: #374151; }
+html.light .text-zinc-300 { color: #4B5563; }
+html.light .text-zinc-400 { color: #6B7280; }
+html.light .text-zinc-500 { color: #6B7280; }
+html.light .text-indigo-300 { color: #4338CA; }
+html.light .text-emerald-400 { color: #059669; }
+
+/* --- Heading gradient: dark-to-dark on light bg --- */
+html.light .bg-gradient-to-r.from-white.via-zinc-200.to-zinc-400 {
+  --tw-gradient-from: #0F172A;
+  --tw-gradient-via: #1E293B;
+  --tw-gradient-to: #475569;
+}
+
+/* --- Glass cards --- */
 html.light .glass {
   background: rgba(255, 255, 255, 0.80);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
-
 html.light .glass-hover:hover {
-  background: rgba(255, 255, 255, 0.90);
-  border-color: rgba(0, 0, 0, 0.12);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08),
-              inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
-html.light ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); }
-html.light ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
+/* --- Borders (white/opacity → black/opacity) --- */
+html.light [class*="border-white\\/"] { border-color: rgba(0, 0, 0, 0.10); }
+html.light [class*="divide-white\\/"] { --tw-divide-opacity: 1; border-color: rgba(0, 0, 0, 0.08); }
 
+/* --- Backgrounds (white/opacity → light surface) --- */
+html.light [class*="bg-white\\/\\[0\\.0"] { background-color: rgba(0, 0, 0, 0.03); }
+html.light [class*="bg-white\\/\\[0\\.1"] { background-color: rgba(0, 0, 0, 0.06); }
+html.light [class*="bg-white\\/5"] { background-color: rgba(0, 0, 0, 0.03); }
+html.light [class*="bg-white\\/10"] { background-color: rgba(0, 0, 0, 0.05); }
+
+/* --- Primary bg (used as bg-primary on mobile menu, etc.) --- */
+html.light .bg-primary { background-color: #FAFBFC; }
+
+/* --- Navbar --- */
+html.light header[class*="border-b"] { border-color: rgba(0, 0, 0, 0.08); }
+html.light nav .text-lg.font-semibold { color: #1A1A2E; }
+
+/* Navbar link hover */
+html.light [class*="hover\\:bg-white\\/\\[0\\.04\\]"]:hover { background-color: rgba(0, 0, 0, 0.04); }
+
+/* Search button */
+html.light button[aria-label="Search documentation"],
+html.light button[aria-label="Search documentation"]:hover {
+  background-color: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: #6B7280;
+}
+html.light button[aria-label="Search documentation"] kbd {
+  color: #9CA3AF;
+  border-color: rgba(0, 0, 0, 0.10);
+  background-color: rgba(0, 0, 0, 0.03);
+}
+
+/* GitHub icon */
+html.light a[aria-label="GitHub"],
+html.light a[aria-label="GitHub"]:hover { color: #374151; }
+
+/* Hamburger bars */
+html.light .bg-zinc-300 { background-color: #4B5563; }
+
+/* --- Buttons --- */
+/* Primary button stays the same (white bg dark text) — but invert for light mode */
+html.light .bg-white.text-zinc-950 {
+  background-color: #1A1A2E;
+  color: #FFFFFF;
+}
+html.light .bg-white.text-zinc-950:hover {
+  background-color: #2D2D44;
+}
+
+/* Ghost button */
+html.light [class*="bg-white\\/\\[0\\.06\\]"][class*="border"][class*="text-zinc-300"] {
+  background-color: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: #374151;
+}
+html.light [class*="bg-white\\/\\[0\\.06\\]"][class*="border"][class*="text-zinc-300"]:hover {
+  background-color: rgba(0, 0, 0, 0.08);
+  color: #1A1A2E;
+}
+
+/* GitHub star button */
+html.light a[class*="bg-white\\/5"][class*="border-white\\/10"] {
+  background-color: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.10);
+  color: #374151;
+}
+html.light a[class*="bg-white\\/5"][class*="border-white\\/10"]:hover {
+  background-color: rgba(0, 0, 0, 0.06);
+}
+
+/* --- Version badge --- */
+html.light .bg-accent-indigo\\/10 {
+  background-color: rgba(99, 102, 241, 0.08);
+}
+html.light .border-accent-indigo\\/30 {
+  border-color: rgba(99, 102, 241, 0.25);
+}
+
+/* --- Hero background gradients: hide on light mode --- */
+html.light section > [aria-hidden="true"] { opacity: 0.3; }
+
+/* --- Code blocks / pre elements --- */
+html.light pre[class*="font-mono"] {
+  background-color: #1E1E2E;
+  color: #D4D4D8;
+}
+html.light code { color: inherit; }
+
+/* Code in MiniPlayground, hero, etc. — keep dark code blocks */
+html.light .font-mono[class*="text-zinc-300"],
+html.light .font-mono[class*="text-zinc-400"] {
+  color: #D4D4D8;
+}
+
+/* Keep code blocks dark in light mode (standard convention) */
+html.light pre, html.light textarea[class*="font-mono"] {
+  background-color: #1E1E2E !important;
+  color: #D4D4D8 !important;
+}
+
+/* Accent colors on code stay vivid */
+html.light pre .text-accent-green,
+html.light pre .text-accent-orange,
+html.light textarea .text-accent-green,
+html.light textarea .text-accent-orange {
+  color: inherit;
+}
+
+/* --- Stats / accent-colored numbers --- */
+html.light .text-accent-orange { color: #EA580C; }
+html.light .text-accent-green { color: #16A34A; }
+html.light .text-accent-indigo { color: #4F46E5; }
+html.light .text-accent-purple { color: #7C3AED; }
+
+/* --- Section borders --- */
+html.light section[class*="border-t"] { border-color: rgba(0, 0, 0, 0.06); }
+html.light [class*="border-b"][class*="border-white"] { border-color: rgba(0, 0, 0, 0.06); }
+
+/* --- Feature card icon tinted backgrounds --- */
+html.light [class*="bg-accent-purple\\/10"] { background-color: rgba(124, 58, 237, 0.08); }
+html.light [class*="bg-accent-green\\/10"] { background-color: rgba(22, 163, 74, 0.08); }
+html.light [class*="bg-accent-orange\\/10"] { background-color: rgba(234, 88, 12, 0.08); }
+html.light [class*="bg-accent-indigo\\/10"] { background-color: rgba(79, 70, 229, 0.08); }
+html.light [class*="bg-red-500\\/10"] { background-color: rgba(220, 38, 38, 0.08); }
+html.light [class*="bg-cyan-500\\/10"] { background-color: rgba(6, 182, 212, 0.08); }
+
+/* --- Footer --- */
+html.light footer { border-color: rgba(0, 0, 0, 0.06); }
+html.light footer .text-white { color: #1A1A2E; }
+html.light footer .text-zinc-300 { color: #4B5563; }
+html.light footer .text-zinc-300:hover { color: #1F2937; }
+html.light footer .text-sm.text-zinc-300 { color: #6B7280; }
+
+/* --- Scrollbar --- */
+html.light ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.12); }
+html.light ::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.2); }
+
+/* --- Prose / docs --- */
 html.light .prose-dark {
-  --tw-prose-body: rgba(0,0,0,0.75);
+  --tw-prose-body: rgba(0, 0, 0, 0.75);
   --tw-prose-headings: #1A1A2E;
   --tw-prose-links: #4F46E5;
   --tw-prose-code: #1A1A2E;
-  --tw-prose-pre-bg: #F3F4F6;
+  --tw-prose-pre-bg: #1E1E2E;
 }
 
-/* Light mode design token overrides */
-html.light {
-  --color-primary: #FAFBFC;
-  --color-surface: #FFFFFF;
-  --color-elevated: #F3F4F6;
-
-  --color-bg-deep: #FAFBFC;
-  --color-bg-surface: #FFFFFF;
-  --color-bg-elevated: #F3F4F6;
-  --color-bg-hover: #E5E7EB;
-
-  --color-text-primary: #1A1A2E;
-  --color-text-secondary: #4B5563;
-  --color-text-muted: #9CA3AF;
-
-  --color-border-default: rgba(0, 0, 0, 0.08);
-  --color-border-hover: rgba(0, 0, 0, 0.15);
+/* --- ThemeToggle button --- */
+html.light button[aria-label*="Switch to"] {
+  color: #4B5563;
 }
+html.light button[aria-label*="Switch to"]:hover {
+  color: #1A1A2E;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+/* --- Comparison page / bar charts --- */
+html.light .bg-zinc-700 { background-color: #D1D5DB; }
+html.light .from-green-500 { --tw-gradient-from: #22C55E; }
+html.light .to-emerald-400 { --tw-gradient-to: #10B981; }
+
+/* --- Benchmarks / Compare table highlights --- */
+html.light [class*="bg-accent-indigo\\/5"],
+html.light [class*="bg-indigo-500\\/5"] {
+  background-color: rgba(79, 70, 229, 0.05);
+}
+
+/* --- Dialects badge colors remain vibrant --- */
+html.light .bg-green-500\\/10 { background-color: rgba(22, 163, 74, 0.10); }
+html.light .text-green-400 { color: #16A34A; }
+html.light .bg-blue-500\\/10 { background-color: rgba(59, 130, 246, 0.10); }
+html.light .text-blue-400 { color: #2563EB; }
+html.light .bg-yellow-500\\/10 { background-color: rgba(234, 179, 8, 0.10); }
+html.light .text-yellow-400 { color: #B45309; }
+html.light .bg-zinc-500\\/10 { background-color: rgba(107, 114, 128, 0.10); }
+
+/* --- Search modal --- */
+html.light [class*="bg-zinc-950\\/"] {
+  background-color: rgba(0, 0, 0, 0.4);
+}
+html.light [class*="bg-zinc-900"] {
+  background-color: #FFFFFF;
+}
+
+/* --- Shadow adjustments --- */
+html.light .shadow-2xl { --tw-shadow-color: rgba(0, 0, 0, 0.08); }
+html.light [class*="shadow-indigo-500\\/"] { --tw-shadow-color: rgba(99, 102, 241, 0.06); }
+
+/* --- Gradient accent line in footer --- */
+html.light .opacity-40[class*="bg-gradient"] { opacity: 0.2; }
 
 /* Respect prefers-reduced-motion for all animations */
 @media (prefers-reduced-motion: reduce) {

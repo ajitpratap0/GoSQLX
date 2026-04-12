@@ -570,11 +570,11 @@ func (s *SelectStatement) SQL() string {
 		}
 		elems := make([]string, len(s.ArrayJoin.Elements))
 		for i, e := range s.ArrayJoin.Elements {
-			s := exprSQL(e.Expr)
+			elemStr := exprSQL(e.Expr)
 			if e.Alias != "" {
-				s += " AS " + e.Alias
+				elemStr += " AS " + e.Alias
 			}
-			elems[i] = s
+			elems[i] = elemStr
 		}
 		sb.WriteString(strings.Join(elems, ", "))
 	}

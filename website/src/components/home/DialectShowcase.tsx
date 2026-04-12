@@ -44,7 +44,7 @@ export function DialectShowcase() {
           <h2 className="text-3xl font-bold text-white text-center mb-2">
             8 SQL Dialects, One Parser
           </h2>
-          <p className="text-zinc-400 text-center mb-12 text-lg">
+          <p className="text-zinc-300 text-center mb-12 text-lg">
             From PostgreSQL to ClickHouse — parse them all
           </p>
         </FadeInCSS>

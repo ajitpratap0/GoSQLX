@@ -50,7 +50,7 @@ export function PerformanceSection() {
         <FadeInCSS delay={0.5}>
           <GlassCard className="mt-12 p-6 sm:p-8" hover={false}>
             <AnimatedBars benchmarks={benchmarks} maxOps={maxOps} />
-            <p className="text-xs text-zinc-500 mt-6 text-center">
+            <p className="text-xs text-zinc-400 mt-6 text-center">
               Based on BenchmarkParse, Apple M4, Go 1.26
             </p>
           </GlassCard>

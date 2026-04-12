@@ -130,7 +130,7 @@ export function MiniPlayground() {
             <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
             <span className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
           </div>
-          <span className="text-xs text-zinc-400 font-mono ml-2">query.sql</span>
+          <span className="text-xs text-zinc-300 font-mono ml-2">query.sql</span>
           <label htmlFor="mini-dialect" className="ml-auto flex items-center gap-1.5">
             <select
               id="mini-dialect"
@@ -173,7 +173,7 @@ export function MiniPlayground() {
                 className={`px-2 py-0.5 text-xs font-mono rounded transition-colors ${
                   activeTab === tab
                     ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
-                    : 'text-zinc-500 hover:text-zinc-300'
+                    : 'text-zinc-400 hover:text-zinc-200'
                 }`}
               >
                 {tab === 'ast' ? 'AST' : tab === 'format' ? 'Format' : 'Lint'}
@@ -200,7 +200,7 @@ export function MiniPlayground() {
               {parseError}
             </pre>
           ) : (
-            <pre className="p-4 text-[14px] leading-relaxed font-mono text-zinc-400 whitespace-pre-wrap">
+            <pre className="p-4 text-[14px] leading-relaxed font-mono text-zinc-300 whitespace-pre-wrap">
               <code>{output || (loading ? SAMPLE_AST_PLACEHOLDER : '')}</code>
             </pre>
           )}

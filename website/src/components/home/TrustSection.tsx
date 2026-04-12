@@ -95,7 +95,7 @@ export function TrustSection() {
       <div className="max-w-5xl mx-auto px-4">
         {/* Heading */}
         <FadeInCSS>
-          <h2 className="text-center text-sm font-semibold uppercase tracking-widest text-zinc-400 mb-10">
+          <h2 className="text-center text-sm font-semibold uppercase tracking-widest text-zinc-300 mb-10">
             Trusted by Developers
           </h2>
         </FadeInCSS>
@@ -109,7 +109,7 @@ export function TrustSection() {
                 <span className="text-lg font-bold text-zinc-100">
                   {m.id === 'stars' ? <GitHubStarCount /> : m.value}
                 </span>
-                <span className="text-xs text-zinc-400">{m.label}</span>
+                <span className="text-xs text-zinc-300">{m.label}</span>
               </div>
             </FadeInCSS>
           ))}
@@ -117,7 +117,7 @@ export function TrustSection() {
 
         {/* Integrations */}
         <FadeInCSS delay={0.4}>
-          <p className="text-center text-sm font-medium text-zinc-500 mt-12 mb-5">
+          <p className="text-center text-sm font-medium text-zinc-300 mt-12 mb-5">
             Integrates with
           </p>
         </FadeInCSS>
@@ -129,7 +129,7 @@ export function TrustSection() {
                 <span className="block text-base font-semibold text-zinc-100">
                   {item.name}
                 </span>
-                <span className="block text-xs text-zinc-400 mt-1">
+                <span className="block text-xs text-zinc-300 mt-1">
                   {item.detail}
                 </span>
               </div>

@@ -58,7 +58,7 @@ export function AnimatedBars({ benchmarks, maxOps }: { benchmarks: Benchmark[]; 
                 }}
               />
             </div>
-            <span className="w-28 sm:w-32 text-sm text-zinc-400 shrink-0 font-mono">
+            <span className="w-28 sm:w-32 text-sm text-zinc-300 shrink-0 font-mono">
               {b.label}
             </span>
           </div>

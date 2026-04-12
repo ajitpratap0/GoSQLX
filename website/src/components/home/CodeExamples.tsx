@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GlassCard } from '@/components/ui/GlassCard';
-import { FadeIn } from '@/components/ui/FadeIn';
+import { FadeInCSS } from '@/components/ui/FadeInCSS';
 
 type Segment = { text: string; cls: string };
 type CodeLine = Segment[];
@@ -103,12 +103,12 @@ export function CodeExamples() {
   return (
     <section className="py-20 border-t border-white/[0.06]">
       <div className="max-w-3xl mx-auto px-4">
-        <FadeIn>
+        <FadeInCSS>
           <h2 className="text-3xl font-bold text-white text-center mb-10">
             Simple, Powerful API
           </h2>
-        </FadeIn>
-        <FadeIn delay={0.1}>
+        </FadeInCSS>
+        <FadeInCSS delay={0.1}>
           <div className="flex flex-wrap gap-1 mb-4">
             {tabs.map((tab, i) => (
               <button
@@ -150,7 +150,7 @@ export function CodeExamples() {
               </AnimatePresence>
             </div>
           </GlassCard>
-        </FadeIn>
+        </FadeInCSS>
       </div>
     </section>
   );

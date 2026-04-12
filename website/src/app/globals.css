@@ -2,6 +2,7 @@
 @plugin "@tailwindcss/typography";
 
 @theme inline {
+  /* Existing tokens (backward compat) */
   --color-primary: #09090b;
   --color-surface: #18181b;
   --color-elevated: #27272a;
@@ -10,12 +11,34 @@
   --color-accent-green: #22c55e;
   --color-accent-purple: #a78bfa;
 
-  --font-sans: var(--font-instrument), system-ui, sans-serif;
+  /* Semantic design tokens */
+  --color-bg-deep: #0A0A0F;
+  --color-bg-surface: #12121A;
+  --color-bg-elevated: #1A1A25;
+  --color-bg-hover: #22222F;
+
+  --color-brand: #22C55E;
+  --color-brand-hover: #16A34A;
+
+  --color-text-primary: #F0F0F5;
+  --color-text-secondary: #9494A8;
+  --color-text-muted: #6B6B80;
+  --color-link: #6366F1;
+
+  --color-border-default: rgba(255, 255, 255, 0.08);
+  --color-border-hover: rgba(255, 255, 255, 0.15);
+
+  --font-sans: var(--font-body), system-ui, sans-serif;
+  --font-heading: var(--font-heading), system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), monospace;
 }
 
 html {
   overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading), system-ui, sans-serif;
 }
 
 body {
@@ -28,15 +51,18 @@ body {
 
 /* Glass morphism utility */
 .glass {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
   border-radius: 0.75rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .glass-hover:hover {
+  background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.12);
-  box-shadow: 0 0 30px rgba(99, 102, 241, 0.05);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3),
+              inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 /* Layout utilities */
@@ -74,11 +100,60 @@ body {
 
 /* Prose dark theme overrides */
 .prose-dark {
-  --tw-prose-body: rgba(255,255,255,0.7);
-  --tw-prose-headings: #fafafa;
+  --tw-prose-body: rgba(255,255,255,0.8);
+  --tw-prose-headings: #F0F0F5;
   --tw-prose-links: #6366f1;
-  --tw-prose-code: #fafafa;
-  --tw-prose-pre-bg: #18181b;
+  --tw-prose-code: #F0F0F5;
+  --tw-prose-pre-bg: #12121A;
+}
+
+/* Light mode overrides */
+html.light body {
+  background-color: #FAFBFC;
+  color: #1A1A2E;
+}
+
+html.light .glass {
+  background: rgba(255, 255, 255, 0.80);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+html.light .glass-hover:hover {
+  background: rgba(255, 255, 255, 0.90);
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08),
+              inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+html.light ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); }
+html.light ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
+
+html.light .prose-dark {
+  --tw-prose-body: rgba(0,0,0,0.75);
+  --tw-prose-headings: #1A1A2E;
+  --tw-prose-links: #4F46E5;
+  --tw-prose-code: #1A1A2E;
+  --tw-prose-pre-bg: #F3F4F6;
+}
+
+/* Light mode design token overrides */
+html.light {
+  --color-primary: #FAFBFC;
+  --color-surface: #FFFFFF;
+  --color-elevated: #F3F4F6;
+
+  --color-bg-deep: #FAFBFC;
+  --color-bg-surface: #FFFFFF;
+  --color-bg-elevated: #F3F4F6;
+  --color-bg-hover: #E5E7EB;
+
+  --color-text-primary: #1A1A2E;
+  --color-text-secondary: #4B5563;
+  --color-text-muted: #9CA3AF;
+
+  --color-border-default: rgba(0, 0, 0, 0.08);
+  --color-border-hover: rgba(0, 0, 0, 0.15);
 }
 
 /* Respect prefers-reduced-motion for all animations */

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { DOCS_SIDEBAR } from '@/lib/constants';
+import { DocsSearchTrigger } from '@/components/docs/DocsSearchTrigger';
 
 export const metadata: Metadata = {
   title: 'Documentation',
@@ -38,6 +39,8 @@ export default function DocsPage() {
           </svg>
         </Link>
       </div>
+
+      <DocsSearchTrigger />
 
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {DOCS_SIDEBAR.map((group) => (

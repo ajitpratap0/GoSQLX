@@ -1,6 +1,4 @@
-'use client';
-
-import { FadeIn } from '@/components/ui/FadeIn';
+import { FadeInCSS } from '@/components/ui/FadeInCSS';
 import { Button } from '@/components/ui/Button';
 
 export function CtaBanner() {
@@ -14,7 +12,7 @@ export function CtaBanner() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 text-center">
-        <FadeIn>
+        <FadeInCSS>
           <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">
             Ready to parse SQL at the speed of Go?
           </h2>
@@ -26,7 +24,7 @@ export function CtaBanner() {
               Try Playground
             </Button>
           </div>
-        </FadeIn>
+        </FadeInCSS>
       </div>
     </section>
   );

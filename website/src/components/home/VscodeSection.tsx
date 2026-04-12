@@ -1,6 +1,4 @@
-'use client';
-
-import { FadeIn } from '@/components/ui/FadeIn';
+import { FadeInCSS } from '@/components/ui/FadeInCSS';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
 
@@ -11,7 +9,7 @@ export function VscodeSection() {
         <div className="flex flex-col md:flex-row items-center gap-6 md:gap-10">
           {/* Left: Copy */}
           <div className="md:w-1/2">
-            <FadeIn>
+            <FadeInCSS>
               <h2 className="text-3xl font-bold text-white mb-4">
                 IDE Integration
               </h2>
@@ -28,12 +26,12 @@ export function VscodeSection() {
                 </svg>
                 Install Extension
               </Button>
-            </FadeIn>
+            </FadeInCSS>
           </div>
 
           {/* Right: VS Code Mockup */}
           <div className="md:w-1/2 w-full">
-            <FadeIn delay={0.2}>
+            <FadeInCSS delay={0.2}>
               <GlassCard hover={false} className="p-0 overflow-hidden">
                 {/* Title bar */}
                 <div className="flex items-center gap-2 px-4 py-3 border-b border-white/[0.06] bg-white/[0.02]">
@@ -102,7 +100,7 @@ export function VscodeSection() {
                   <span className="text-zinc-500">0 issues</span>
                 </div>
               </GlassCard>
-            </FadeIn>
+            </FadeInCSS>
           </div>
         </div>
       </div>

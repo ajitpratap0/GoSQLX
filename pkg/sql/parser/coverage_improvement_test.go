@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// TODO(v2-cleanup): Coverage-push file. Tests should be moved to ddl_test.go,
+// merge_test.go, error_recovery_test.go, and new alter_role/policy/connector
+// test files. Then this file should be removed.
+
 package parser
 
 import (

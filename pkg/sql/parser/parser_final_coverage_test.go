@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// TODO(v2-cleanup): Coverage-push file. Tests should be consolidated into
+// parser_test.go and error_recovery_test.go, then this file removed.
+
 package parser
 
 import (

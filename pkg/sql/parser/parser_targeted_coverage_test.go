@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// TODO(v2-cleanup): Coverage-push file. Tests should be consolidated into
+// feature-specific files (ddl_test.go, window_functions_test.go, etc.)
+// and this file removed. See #coverage-consolidation.
+
 package parser
 
 import (

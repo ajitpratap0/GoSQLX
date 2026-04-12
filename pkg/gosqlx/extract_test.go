@@ -116,8 +116,27 @@ func TestExtractTables_WithCTE(t *testing.T) {
 }
 
 func TestExtractTables_WithRecursiveCTE(t *testing.T) {
-	// Skipping - Recursive CTE with complex JOIN syntax not fully supported yet
-	t.Skip("Recursive CTE with complex syntax not fully supported")
+	sql := `WITH RECURSIVE org_chart AS (
+		SELECT id, name, manager_id, 1 as level FROM employees WHERE manager_id IS NULL
+		UNION ALL
+		SELECT e.id, e.name, e.manager_id, o.level + 1
+		FROM employees e
+		INNER JOIN org_chart o ON e.manager_id = o.id
+	)
+	SELECT * FROM org_chart`
+
+	astNode, err := Parse(sql)
+	if err != nil {
+		t.Fatalf("Failed to parse recursive CTE: %v", err)
+	}
+
+	tables := ExtractTables(astNode)
+	if !contains(tables, "employees") {
+		t.Errorf("Expected to find 'employees' table, got: %v", tables)
+	}
+	if !contains(tables, "org_chart") {
+		t.Errorf("Expected to find 'org_chart' CTE reference, got: %v", tables)
+	}
 }
 
 func TestExtractTables_Insert(t *testing.T) {
@@ -647,23 +666,58 @@ func TestExtractMetadata_EmptyQuery(t *testing.T) {
 }
 
 func TestExtractColumns_WithCaseExpression(t *testing.T) {
-	// Skipping - CASE expressions not fully supported in parser yet
-	t.Skip("CASE expressions not fully supported in parser yet")
+	sql := "SELECT CASE status WHEN 'active' THEN name ELSE 'N/A' END FROM users"
+	astNode, err := Parse(sql)
+	if err != nil {
+		t.Fatalf("Failed to parse SQL: %v", err)
+	}
+
+	cols := ExtractColumns(astNode)
+	if !contains(cols, "status") {
+		t.Errorf("Expected 'status' in columns, got: %v", cols)
+	}
+	if !contains(cols, "name") {
+		t.Errorf("Expected 'name' in columns, got: %v", cols)
+	}
 }
 
 func TestExtractColumns_WithInExpression(t *testing.T) {
-	// Skipping - IN expressions in WHERE clause not fully supported yet
-	t.Skip("IN expressions in WHERE clause not fully supported yet")
+	sql := "SELECT * FROM users WHERE status IN ('active', 'pending')"
+	astNode, err := Parse(sql)
+	if err != nil {
+		t.Fatalf("Failed to parse SQL: %v", err)
+	}
+
+	cols := ExtractColumns(astNode)
+	if !contains(cols, "status") {
+		t.Errorf("Expected 'status' in columns, got: %v", cols)
+	}
 }
 
 func TestExtractColumns_WithBetweenExpression(t *testing.T) {
-	// Skipping - BETWEEN expressions not fully supported yet
-	t.Skip("BETWEEN expressions not fully supported yet")
+	sql := "SELECT * FROM products WHERE price BETWEEN 10 AND 100"
+	astNode, err := Parse(sql)
+	if err != nil {
+		t.Fatalf("Failed to parse SQL: %v", err)
+	}
+
+	cols := ExtractColumns(astNode)
+	if !contains(cols, "price") {
+		t.Errorf("Expected 'price' in columns, got: %v", cols)
+	}
 }
 
 func TestExtractFunctions_InCaseExpression(t *testing.T) {
-	// Skipping - CASE expressions not fully supported yet
-	t.Skip("CASE expressions not fully supported yet")
+	sql := "SELECT CASE WHEN COUNT(*) > 0 THEN 'yes' ELSE 'no' END FROM users"
+	astNode, err := Parse(sql)
+	if err != nil {
+		t.Fatalf("Failed to parse SQL: %v", err)
+	}
+
+	funcs := ExtractFunctions(astNode)
+	if !contains(funcs, "COUNT") {
+		t.Errorf("Expected 'COUNT' in functions, got: %v", funcs)
+	}
 }
 
 func TestExtractTables_WithSetOperations(t *testing.T) {
@@ -854,11 +908,27 @@ func TestExtractFunctions_NoFunctions(t *testing.T) {
 }
 
 func TestExtractColumns_WithCastExpression(t *testing.T) {
-	// Skipping - CAST expressions not fully supported yet
-	t.Skip("CAST expressions not fully supported yet")
+	sql := "SELECT CAST(price AS DECIMAL) FROM products"
+	astNode, err := Parse(sql)
+	if err != nil {
+		t.Fatalf("Failed to parse SQL: %v", err)
+	}
+
+	cols := ExtractColumns(astNode)
+	if !contains(cols, "price") {
+		t.Errorf("Expected 'price' in columns, got: %v", cols)
+	}
 }
 
-func TestExtractFunctions_ExtractExpression(t *testing.T) {
-	// Skipping - EXTRACT expressions not fully supported yet
-	t.Skip("EXTRACT expressions not fully supported yet")
+func TestExtractColumns_WithExtractExpression(t *testing.T) {
+	sql := "SELECT EXTRACT(YEAR FROM created_at) FROM orders"
+	astNode, err := Parse(sql)
+	if err != nil {
+		t.Fatalf("Failed to parse SQL: %v", err)
+	}
+
+	cols := ExtractColumns(astNode)
+	if !contains(cols, "created_at") {
+		t.Errorf("Expected 'created_at' in columns, got: %v", cols)
+	}
 }

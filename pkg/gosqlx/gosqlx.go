@@ -256,15 +256,32 @@ func Validate(sql string) error {
 
 // ParseBytes is like Parse but accepts a byte slice.
 //
-// This is useful when you already have SQL as bytes (e.g., from file I/O)
-// and want to avoid the string → []byte conversion overhead.
+// This avoids the string-to-byte conversion that Parse performs internally,
+// making it more efficient when you already have SQL as bytes (e.g., from
+// file I/O or network reads).
 //
 // Example:
 //
 //	sqlBytes := []byte("SELECT * FROM users")
 //	astNode, err := gosqlx.ParseBytes(sqlBytes)
 func ParseBytes(sql []byte) (*ast.AST, error) {
-	return Parse(string(sql))
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+
+	tokens, err := tkz.Tokenize(sql)
+	if err != nil {
+		return nil, fmt.Errorf("tokenization failed: %w", err)
+	}
+
+	p := parser.GetParser()
+	defer parser.PutParser(p)
+
+	astNode, err := p.ParseFromModelTokens(tokens)
+	if err != nil {
+		return nil, fmt.Errorf("parsing failed: %w", err)
+	}
+
+	return astNode, nil
 }
 
 // MustParse is like Parse but panics on error.

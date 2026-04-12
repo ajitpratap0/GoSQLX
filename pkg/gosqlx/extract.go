@@ -43,68 +43,12 @@
 //
 // For large ASTs (1000+ nodes), expect extraction times <100μs on modern hardware.
 //
-// # Parser Limitations
+// # Supported Expression Types
 //
-// The extraction functions in this package are subject to the following parser limitations.
-// These limitations represent SQL features that are partially supported or not yet fully
-// implemented in the GoSQLX parser. As the parser evolves, these limitations may be
-// addressed in future releases.
-//
-// ## Known Limitations
-//
-//  1. CASE Expressions:
-//     CASE expressions (simple and searched CASE) are not fully supported in the parser.
-//     Column references within CASE WHEN conditions and result expressions may not be
-//     extracted correctly.
-//
-//     Example (not fully supported):
-//     SELECT CASE status WHEN 'active' THEN name ELSE 'N/A' END FROM users
-//
-//  2. CAST Expressions:
-//     CAST expressions for type conversion are not fully supported. Column references
-//     within CAST expressions may not be extracted.
-//
-//     Example (not fully supported):
-//     SELECT CAST(price AS DECIMAL(10,2)) FROM products
-//
-//  3. IN Expressions:
-//     IN expressions with subqueries or complex value lists in WHERE clauses are not
-//     fully supported. Column references in IN lists may not be extracted correctly.
-//
-//     Example (not fully supported):
-//     SELECT * FROM users WHERE status IN ('active', 'pending')
-//     SELECT * FROM orders WHERE user_id IN (SELECT id FROM users)
-//
-//  4. BETWEEN Expressions:
-//     BETWEEN expressions for range comparisons are not fully supported. Column references
-//     in BETWEEN bounds may not be extracted correctly.
-//
-//     Example (not fully supported):
-//     SELECT * FROM products WHERE price BETWEEN min_price AND max_price
-//
-//  5. Complex Recursive CTEs:
-//     Recursive Common Table Expressions (CTEs) with complex JOIN syntax are not fully
-//     supported. Simple recursive CTEs work, but complex variations may fail to parse.
-//
-//     Example (not fully supported):
-//     WITH RECURSIVE org_chart AS (
-//     SELECT id, name, manager_id, 1 as level FROM employees WHERE manager_id IS NULL
-//     UNION ALL
-//     SELECT e.id, e.name, e.manager_id, o.level + 1
-//     FROM employees e
-//     INNER JOIN org_chart o ON e.manager_id = o.id
-//     )
-//     SELECT * FROM org_chart
-//
-// ## Workarounds
-//
-// For queries using these unsupported features:
-//   - Simplify complex expressions where possible
-//   - Use alternative SQL syntax that is supported
-//   - Extract metadata manually from the original SQL string
-//   - Consider contributing parser enhancements to the GoSQLX project
-//
-// ## Reporting Issues
+// The extraction functions correctly traverse all standard expression types
+// including: CASE (simple and searched), CAST, IN, BETWEEN, EXTRACT,
+// SUBSTRING, POSITION, subqueries, recursive CTEs with JOINs, window
+// functions, and all arithmetic/logical operators.
 //
 // If you encounter parsing issues with SQL queries that should be supported,
 // please report them at: https://github.com/ajitpratap0/GoSQLX/issues

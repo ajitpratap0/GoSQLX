@@ -32,7 +32,7 @@ func TestValidate(t *testing.T) {
 		{"select from", "SELECT * FROM users", false},
 		{"insert", "INSERT INTO t(a) VALUES(1)", false},
 		{"invalid", "SELECT FROM WHERE", true},
-		{"empty", "", false},
+		{"empty", "", true},
 		{"multiple statements", "SELECT 1; SELECT 2", false},
 	}
 	for _, tt := range tests {

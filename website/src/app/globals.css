@@ -140,6 +140,13 @@ html.light body {
    !important needed because Tailwind v4 compiles utilities inside @layer
    which wins the CSS cascade over unlayered selectors. */
 html.light .text-white { color: #1A1A2E !important; }
+/* Keep text-white truly white inside accent-colored containers */
+html.light .bg-accent-indigo .text-white,
+html.light .bg-accent-green .text-white,
+html.light .bg-brand .text-white,
+html.light [class*="bg-accent-indigo"].text-white,
+html.light [class*="bg-green-"].text-white,
+html.light [class*="bg-indigo-"].text-white { color: #FFFFFF !important; }
 html.light .text-zinc-100 { color: #1F2937 !important; }
 html.light .text-zinc-200 { color: #374151 !important; }
 html.light .text-zinc-300 { color: #4B5563 !important; }
@@ -274,22 +281,6 @@ html.light .border-accent-indigo\\/30 {
 
 /* --- Hero background gradients: reduce on light mode --- */
 html.light section > [aria-hidden="true"] { opacity: 0.15; }
-
-/* --- Playground: keep dark editor theme in light mode --- */
-html.light .h-\\[calc\\(100vh-64px\\)] {
-  background-color: #0F172A;
-}
-html.light .h-\\[calc\\(100vh-64px\\)] .text-white { color: #F8FAFC !important; }
-html.light .h-\\[calc\\(100vh-64px\\)] .text-zinc-300 { color: #D4D4D8 !important; }
-html.light .h-\\[calc\\(100vh-64px\\)] .text-zinc-400 { color: #A1A1AA !important; }
-html.light .h-\\[calc\\(100vh-64px\\)] .text-slate-400 { color: #94A3B8 !important; }
-html.light .h-\\[calc\\(100vh-64px\\)] .text-slate-300 { color: #CBD5E1 !important; }
-html.light .h-\\[calc\\(100vh-64px\\)] .bg-slate-900 { background-color: #0F172A !important; }
-html.light .h-\\[calc\\(100vh-64px\\)] .bg-slate-800 { background-color: #1E293B !important; }
-html.light .h-\\[calc\\(100vh-64px\\)] .bg-zinc-900 { background-color: #18181B !important; }
-html.light .h-\\[calc\\(100vh-64px\\)] .border-slate-700 { border-color: rgba(255, 255, 255, 0.08) !important; }
-html.light .h-\\[calc\\(100vh-64px\\)] .border-slate-800 { border-color: rgba(255, 255, 255, 0.06) !important; }
-html.light .h-\\[calc\\(100vh-64px\\)] [class*="border-white\\/"] { border-color: rgba(255, 255, 255, 0.08) !important; }
 
 /* --- Code blocks / pre elements --- */
 html.light pre[class*="font-mono"] {

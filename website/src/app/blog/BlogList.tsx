@@ -37,6 +37,11 @@ export function BlogList({ posts }: { posts: BlogPost[] }) {
                 <h2 className="text-lg font-semibold text-zinc-100 group-hover:text-white transition-colors truncate">
                   {post.title}
                 </h2>
+                {post.description && (
+                  <p className="mt-1 text-sm text-zinc-400 line-clamp-2">
+                    {post.description}
+                  </p>
+                )}
               </div>
 
               {/* Arrow */}

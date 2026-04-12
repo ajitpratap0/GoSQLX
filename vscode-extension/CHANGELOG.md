@@ -2,6 +2,52 @@
 
 All notable changes to the "GoSQLX" extension will be documented in this file.
 
+## [1.14.0] - 2026-04-12
+
+### Added
+- **Dialect-aware SQL formatting**: `transform.FormatSQLWithDialect()` renders TOP (SQL Server), FETCH FIRST (Oracle), or LIMIT per dialect
+- **Snowflake dialect at 100%** of QA corpus (87/87): MATCH_RECOGNIZE, @stage, SAMPLE, QUALIFY, VARIANT colon-paths, time-travel, LATERAL FLATTEN, TRY_CAST, LIKE ANY/ALL
+- **ClickHouse dialect at 83%** of QA corpus (69/83, up from 53%): nested column types, parametric aggregates, bare-bracket arrays, ORDER BY WITH FILL, CODEC, WITH TOTALS, LIMIT BY, SETTINGS/TTL
+- **MariaDB dialect**: SEQUENCE DDL, temporal tables, CONNECT BY hierarchical queries
+- **SQL transpilation**: MySQL to PostgreSQL, PostgreSQL to MySQL, PostgreSQL to SQLite via `gosqlx transpile` CLI
+- **Live schema introspection**: PostgreSQL, MySQL, and SQLite loaders via `gosqlx.LoadSchema()`
+- **DML Transform API**: SET clause and RETURNING clause transforms
+- **30 linter rules** (expanded from 10): safety (L011-L015), performance (L016-L023), naming (L024-L030)
+- **Optimization advisor**: OPT-009 through OPT-020 rules via `gosqlx optimize`
+- **Query fingerprinting**: Normalize and SHA-256 hash SQL for deduplication
+- **OpenTelemetry integration** sub-module with span instrumentation
+- **GORM integration** sub-module with query metadata plugin
+- New CLI subcommands: `transpile`, `optimize`, `stats`, `watch`, `action`
+- SQL Server PIVOT/UNPIVOT parsing
+- C binding coverage hardened from 18% to 93%
+
+### Fixed
+- Parsed SQL Server `TOP` clauses now render correctly in formatted output (previously silently dropped)
+- MINUS consumed as alias fixed for Snowflake/Oracle set operations
+
+### Security
+- OpenTelemetry SDK upgraded to v1.43.0 (CVE-2026-39883)
+
+## [1.13.0] - 2026-03-20
+
+### Added
+- **ClickHouse SQL dialect support** with 30+ keywords: PREWHERE, FINAL, GLOBAL IN/NOT IN
+- **LSP semantic token provider** (`textDocument/semanticTokens/full`) with 6-type legend: keyword, identifier, number, string, operator, comment
+- **LSP diagnostic debouncing** (300ms) prevents excessive re-parsing on rapid typing
+- LSP document cleanup on `textDocument/didClose`
+- Glama MCP registry integration with stdio transport support
+- Sentry error monitoring on the website
+
+### Changed
+- `ParseFromModelTokens` is now the canonical parse entry point (positions always populated)
+- Docker base image Go 1.25 to 1.26
+- Next.js 16.1.6 to 16.1.7 (3 CVE fixes)
+- Lighthouse Desktop: 100 Performance / 100 Accessibility / 100 SEO
+
+### Deprecated
+- `parser.Parse([]token.Token)` -- use `ParseFromModelTokens` instead
+- `ParseFromModelTokensWithPositions` -- consolidated into `ParseFromModelTokens`
+
 ## [1.12.1] - 2026-03-15
 
 ### Changed

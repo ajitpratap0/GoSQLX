@@ -4,10 +4,10 @@
 
 GoSQLX is a production-ready SQL parsing library for Go that provides zero-copy tokenization,
 recursive-descent parsing, and AST generation with comprehensive object pooling. It supports
-PostgreSQL, MySQL, SQL Server, Oracle, SQLite, and Snowflake dialects, and ships a full-featured
-CLI tool (`gosqlx`) for validation, formatting, linting, and security analysis. Apache-2.0 licensed.
+PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, and ClickHouse dialects (8 total), and ships a full-featured
+CLI tool (`gosqlx`) for validation, formatting, linting, transpilation, and security analysis. Apache-2.0 licensed.
 
-Current stable version: v1.12.1 (2026-03-13)
+Current stable version: v1.14.0 (2026-04-12)
 Website: https://gosqlx.dev
 Interactive Playground: https://gosqlx.dev/playground/
 

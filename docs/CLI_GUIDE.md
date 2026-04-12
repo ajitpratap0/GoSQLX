@@ -1,7 +1,7 @@
 # GoSQLX CLI Guide
 
-**Version**: v1.12.0
-**Last Updated**: 2026-03-13
+**Version**: v1.14.0
+**Last Updated**: 2026-04-12
 
 The GoSQLX Command Line Interface (CLI) provides high-performance SQL parsing, validation, formatting, and analysis capabilities directly from your terminal.
 

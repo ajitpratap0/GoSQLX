@@ -63,11 +63,16 @@ for (const release of releases) {
   if (subtitle) titleParts.push(`\u2014 ${subtitle}`);
   const title = titleParts.join(' ');
 
+  // Extract first non-empty, non-heading line as description
+  const descLine = release.body.find(l => l.trim() && !l.startsWith('#') && !l.startsWith('---'));
+  const description = (descLine || '').replace(/\*\*/g, '').replace(/`/g, '').trim().slice(0, 200);
+
   const frontmatter = [
     '---',
     `title: "${title}"`,
     `date: "${date}"`,
     `version: "${version}"`,
+    `description: "${description}"`,
     '---',
   ].join('\n');
 

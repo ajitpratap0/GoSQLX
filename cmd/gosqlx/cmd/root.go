@@ -89,7 +89,7 @@ var (
 //   - format: Intelligent SQL formatting with AST-based transformations
 //   - parse: AST structure inspection with multiple output formats
 //   - analyze: Security and complexity analysis with grading
-//   - lint: Style and quality checking with L001-L010 rules
+//   - lint: Style and quality checking with L001-L030 rules
 //   - lsp: Language Server Protocol server for IDE integration
 //   - config: Configuration file management
 //   - completion: Shell autocompletion setup

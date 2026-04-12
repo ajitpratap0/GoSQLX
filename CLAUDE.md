@@ -8,7 +8,7 @@ GoSQLX is a **production-ready**, **race-free**, high-performance SQL parsing SD
 
 **Requirements**: Go 1.26+ (upgraded from 1.23 to fix stdlib vulnerabilities; `mark3labs/mcp-go` requires 1.23)
 
-**Production Status**: ✅ Validated for production deployment (v1.6.0+, current: v1.13.0)
+**Production Status**: ✅ Validated for production deployment (v1.6.0+, current: v1.14.0)
 - Thread-safe with zero race conditions (20,000+ concurrent operations tested)
 - 1.38M+ ops/sec sustained, 1.5M peak with memory-efficient object pooling
 - ~80-85% SQL-99 compliance (window functions, CTEs, set operations, MERGE, etc.)
@@ -26,7 +26,7 @@ GoSQLX is a **production-ready**, **race-free**, high-performance SQL parsing SD
 - **Errors** (`pkg/errors/`): Structured error handling with position tracking
 - **Metrics** (`pkg/metrics/`): Production performance monitoring
 - **Security** (`pkg/sql/security/`): SQL injection detection with severity classification
-- **Linter** (`pkg/linter/`): SQL linting engine with 10 built-in rules (L001-L010)
+- **Linter** (`pkg/linter/`): SQL linting engine with 30 built-in rules (L001-L030)
 - **LSP** (`pkg/lsp/`): Language Server Protocol for IDE integration
 - **GoSQLX** (`pkg/gosqlx/`): High-level simple API (recommended for most users)
 - **Compatibility** (`pkg/compatibility/`): API stability testing
@@ -229,7 +229,7 @@ Install with: `task hooks:install`
 - `docs/GETTING_STARTED.md` - Quick start guide
 - `docs/USAGE_GUIDE.md` - Comprehensive usage patterns
 - `docs/LSP_GUIDE.md` - LSP server and IDE integration
-- `docs/LINTING_RULES.md` - All 10 linting rules reference
+- `docs/LINTING_RULES.md` - All 30 linting rules reference
 - `docs/SQL_COMPATIBILITY.md` - SQL dialect compatibility matrix
 - `docs/ARCHITECTURE.md` - Detailed system design
 - `https://gosqlx.dev` - Official website with interactive playground

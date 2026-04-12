@@ -65,7 +65,7 @@
     },
     {
       "name": "lint_sql",
-      "description": "Lint SQL against all 10 GoSQLX style rules (L001–L010): trailing whitespace, mixed indentation, consecutive blank lines, indentation depth, line length, column alignment, keyword case, comma placement, aliasing consistency, redundant whitespace. Returns violations with line/column positions and fix suggestions."
+      "description": "Lint SQL against all 30 GoSQLX style rules (L001–L030): whitespace, keywords, safety, performance, and naming. Returns violations with line/column positions and fix suggestions."
     },
     {
       "name": "analyze_sql",
@@ -95,8 +95,8 @@
       "patterns": ["tautology", "union-attack", "stacked-queries", "comment-bypass", "blind-injection"]
     },
     "linting": {
-      "rules": 10,
-      "rule_ids": ["L001", "L002", "L003", "L004", "L005", "L006", "L007", "L008", "L009", "L010"]
+      "rules": 30,
+      "rule_ids": ["L001", "L002", "L003", "L004", "L005", "L006", "L007", "L008", "L009", "L010", "L011", "L012", "L013", "L014", "L015", "L016", "L017", "L018", "L019", "L020", "L021", "L022", "L023", "L024", "L025", "L026", "L027", "L028", "L029", "L030"]
     },
     "performance": {
       "ops_per_sec": "1380000+",

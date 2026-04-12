@@ -4,7 +4,7 @@
 
 The `linter` package provides a comprehensive SQL linting rules engine similar to SQLFluff. It offers code style checking, auto-fix capabilities, and extensible rule system for SQL quality enforcement.
 
-**Status**: Phase 1a Complete (3/10 rules implemented)
+**Status**: 30 rules implemented (L001-L030)
 **Test Coverage**: 98.1% (exceeded 70% target by +28%)
 
 ## Key Features
@@ -411,7 +411,7 @@ FROM users;
 
 ## Roadmap
 
-### Phase 1 (10 basic rules)
+### Phase 1 (30 rules — complete)
 - [x] L001: Trailing Whitespace
 - [x] L002: Mixed Indentation
 - [x] L005: Long Lines

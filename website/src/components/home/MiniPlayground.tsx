@@ -131,18 +131,20 @@ export function MiniPlayground() {
             <span className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
           </div>
           <span className="text-xs text-zinc-300 font-mono ml-2">query.sql</span>
-          <label htmlFor="mini-dialect" className="ml-auto flex items-center gap-1.5">
+          <div className="ml-auto flex items-center gap-1.5">
+            <label htmlFor="mini-dialect" className="text-xs text-zinc-300 font-mono">Dialect:</label>
             <select
               id="mini-dialect"
               value={dialect}
               onChange={(e) => setDialect(e.target.value)}
+              aria-label="SQL dialect"
               className="bg-zinc-800/80 text-zinc-300 text-xs rounded px-1.5 py-0.5 border border-white/[0.06] focus:outline-none focus:border-indigo-500/50 appearance-none cursor-pointer"
             >
               {DIALECTS.map((d) => (
                 <option key={d.value} value={d.value}>{d.label}</option>
               ))}
             </select>
-          </label>
+          </div>
         </div>
         <div className="relative">
           <textarea
@@ -150,7 +152,8 @@ export function MiniPlayground() {
             onChange={handleSqlChange}
             spellCheck={false}
             aria-label="SQL query input"
-            className="w-full p-4 text-[14px] leading-relaxed font-mono text-zinc-300 bg-transparent resize-none max-h-[320px] min-h-[200px] focus:outline-none focus:ring-2 focus:ring-accent-indigo/50 overflow-auto"
+            className="w-full p-4 text-[14px] leading-relaxed font-mono bg-transparent resize-none max-h-[320px] min-h-[200px] focus:outline-none focus:ring-2 focus:ring-accent-indigo/50 overflow-auto"
+            style={{ color: '#D4D4D8' }}
             rows={12}
           />
           <div
@@ -196,11 +199,11 @@ export function MiniPlayground() {
           className="flex-1 overflow-auto max-h-[320px]"
         >
           {parseError ? (
-            <pre className="p-4 text-[14px] leading-relaxed font-mono text-red-400 whitespace-pre-wrap">
+            <pre className="p-4 text-[14px] leading-relaxed font-mono whitespace-pre-wrap" style={{ color: '#F87171' }}>
               {parseError}
             </pre>
           ) : (
-            <pre className="p-4 text-[14px] leading-relaxed font-mono text-zinc-300 whitespace-pre-wrap">
+            <pre className="p-4 text-[14px] leading-relaxed font-mono whitespace-pre-wrap" style={{ color: '#D4D4D8' }}>
               <code>{output || (loading ? SAMPLE_AST_PLACEHOLDER : '')}</code>
             </pre>
           )}

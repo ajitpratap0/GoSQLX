@@ -4,6 +4,7 @@ export const NAV_LINKS = [
   { href: '/blog', label: 'Changelog' },
   { href: '/vscode', label: 'VS Code' },
   { href: '/benchmarks', label: 'Benchmarks' },
+  { href: '/compare', label: 'Compare' },
 ];
 
 export const FEATURES = [

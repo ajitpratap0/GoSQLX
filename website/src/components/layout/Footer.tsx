@@ -14,6 +14,7 @@ const FOOTER_LINKS = {
   Resources: [
     { label: 'Getting Started', href: '/docs/getting-started' },
     { label: 'API Reference', href: '/docs/api-reference' },
+    { label: 'Compare Parsers', href: '/compare' },
     { label: 'Blog', href: '/blog' },
     { label: 'Changelog', href: 'https://github.com/ajitpratap0/GoSQLX/blob/main/CHANGELOG.md', external: true },
     { label: 'Privacy Policy', href: '/privacy' },

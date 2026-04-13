@@ -1,8 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import { FadeIn } from '@/components/ui/FadeIn';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
+import { ParseChart } from '@/components/benchmarks/ParseChart';
+import { CompetitorChart } from '@/components/benchmarks/CompetitorChart';
 
 const metrics = [
   { label: 'Sustained Ops/sec', value: '1.38M+' },
@@ -25,6 +28,38 @@ const methodology = [
   'Object pooling enabled for all runs (production configuration)',
   'Results averaged over 5 consecutive runs to reduce variance',
 ];
+
+function RawDataToggle({ id, children }: { id: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="mt-4">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1"
+        aria-expanded={open}
+        aria-controls={`raw-data-${id}`}
+      >
+        <svg
+          className={`w-3 h-3 transition-transform duration-200 ${open ? 'rotate-90' : ''}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+        {open ? 'Hide' : 'View'} raw data
+      </button>
+      {open && (
+        <div id={`raw-data-${id}`} className="mt-3">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function renderMethodologyItem(item: string) {
   const FLAG = '-benchmem';
@@ -75,110 +110,121 @@ export function BenchmarksContent() {
         </div>
       </section>
 
-      {/* Benchmark Table */}
+      {/* Parse Benchmarks Chart + Table */}
       <section className="section-padding pb-16">
         <div className="container-width">
           <FadeIn>
             <h2 className="text-2xl font-bold text-white mb-4">Parse Benchmarks</h2>
-            <GlassCard className="p-0 overflow-hidden" hover={false}>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                  <caption className="sr-only">GoSQLX Parse Benchmarks</caption>
-                  <thead>
-                    <tr className="border-b border-white/[0.06]">
-                      <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">Benchmark</th>
-                      <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">Query Type</th>
-                      <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">Apple M4</th>
-                      <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">Baseline (CI)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {benchmarks.map((b) => (
-                      <tr
-                        key={b.name}
-                        className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors"
-                      >
-                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-white font-medium">{b.name}</td>
-                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400">{b.query}</td>
-                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-300 font-mono">{b.m4}</td>
-                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400 font-mono">{b.baseline}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            <GlassCard className="p-6" hover={false}>
+              <ParseChart />
             </GlassCard>
-            <p className="text-xs text-zinc-500 mt-2 md:hidden">&larr; Swipe to see all columns &rarr;</p>
+
+            <RawDataToggle id="parse">
+              <GlassCard className="p-0 overflow-hidden" hover={false}>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <caption className="sr-only">GoSQLX Parse Benchmarks</caption>
+                    <thead>
+                      <tr className="border-b border-white/[0.06]">
+                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">Benchmark</th>
+                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">Query Type</th>
+                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">Apple M4</th>
+                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">Baseline (CI)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {benchmarks.map((b) => (
+                        <tr
+                          key={b.name}
+                          className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors"
+                        >
+                          <td className="px-3 py-3 sm:px-6 sm:py-4 text-white font-medium">{b.name}</td>
+                          <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400">{b.query}</td>
+                          <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-300 font-mono">{b.m4}</td>
+                          <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400 font-mono">{b.baseline}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </GlassCard>
+              <p className="text-xs text-zinc-500 mt-2 md:hidden">&larr; Swipe to see all columns &rarr;</p>
+            </RawDataToggle>
           </FadeIn>
         </div>
       </section>
 
-      {/* Competitor Comparison */}
+      {/* Competitor Comparison Chart + Table */}
       <section className="section-padding pb-16">
         <div className="container-width">
           <FadeIn>
             <h2 className="text-2xl font-bold text-white mb-6">Competitor Comparison</h2>
-            <GlassCard className="p-0 overflow-hidden" hover={false}>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                  <caption className="sr-only">Competitor Library Comparison</caption>
-                  <thead>
-                    <tr className="border-b border-white/[0.06]">
-                      <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">Library</th>
-                      <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">Language</th>
-                      <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">Ops/sec</th>
-                      <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">Memory/op</th>
-                      <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">Zero-copy</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-white/[0.04] transition-colors bg-indigo-500/10 border-l-2 border-l-indigo-500">
-                      <td className="px-3 py-3 sm:px-6 sm:py-4 text-white font-medium">
-                        GoSQLX{' '}
-                        <span className="ml-2 inline-block rounded-full bg-indigo-500/20 px-2 py-0.5 text-xs font-medium text-indigo-300">
-                          This Library
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400">Go</td>
-                      <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-300 font-mono">1.38M+</td>
-                      <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-300">Low</td>
-                      <td className="px-3 py-3 sm:px-6 sm:py-4 text-accent-green font-medium">
-                        <span aria-label="Yes">✓</span>
-                      </td>
-                    </tr>
-                    <tr className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors">
-                      <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-300 font-medium">xwb1989/sqlparser</td>
-                      <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400">Go</td>
-                      <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400 font-mono">~380K</td>
-                      <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400">Higher</td>
-                      <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-500">
-                        <span aria-label="No">✗</span>
-                      </td>
-                    </tr>
-                    <tr className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors">
-                      <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-300 font-medium">pg_query_go</td>
-                      <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400">Go</td>
-                      <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400 font-mono">~220K</td>
-                      <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400">Higher (CGo)</td>
-                      <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-500">
-                        <span aria-label="No">✗</span>
-                      </td>
-                    </tr>
-                    <tr className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors">
-                      <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-300 font-medium">blastrain/sqlparser</td>
-                      <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400">Go</td>
-                      <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400 font-mono">~290K</td>
-                      <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400">Medium</td>
-                      <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-500">
-                        <span aria-label="No">✗</span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+            <GlassCard className="p-6" hover={false}>
+              <CompetitorChart />
             </GlassCard>
-            <p className="text-xs text-zinc-500 mt-2 md:hidden">&larr; Swipe to see all columns &rarr;</p>
-            <p className="text-xs text-zinc-500 mt-2">* Competitor figures estimated from published benchmarks on equivalent hardware. Results may vary by query complexity.</p>
+
+            <RawDataToggle id="competitor">
+              <GlassCard className="p-0 overflow-hidden" hover={false}>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <caption className="sr-only">Competitor Library Comparison</caption>
+                    <thead>
+                      <tr className="border-b border-white/[0.06]">
+                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">Library</th>
+                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">Language</th>
+                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">Ops/sec</th>
+                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">Memory/op</th>
+                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">Zero-copy</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b border-white/[0.04] transition-colors bg-indigo-500/10 border-l-2 border-l-indigo-500">
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-white font-medium">
+                          GoSQLX{' '}
+                          <span className="ml-2 inline-block rounded-full bg-indigo-500/20 px-2 py-0.5 text-xs font-medium text-indigo-300">
+                            This Library
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400">Go</td>
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-300 font-mono">1.38M+</td>
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-300">Low</td>
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-accent-green font-medium">
+                          <span aria-label="Yes">{'\u2713'}</span>
+                        </td>
+                      </tr>
+                      <tr className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors">
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-300 font-medium">xwb1989/sqlparser</td>
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400">Go</td>
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400 font-mono">~380K</td>
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400">Higher</td>
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-500">
+                          <span aria-label="No">{'\u2717'}</span>
+                        </td>
+                      </tr>
+                      <tr className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors">
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-300 font-medium">pg_query_go</td>
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400">Go</td>
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400 font-mono">~220K</td>
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400">Higher (CGo)</td>
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-500">
+                          <span aria-label="No">{'\u2717'}</span>
+                        </td>
+                      </tr>
+                      <tr className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors">
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-300 font-medium">blastrain/sqlparser</td>
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400">Go</td>
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400 font-mono">~290K</td>
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400">Medium</td>
+                        <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-500">
+                          <span aria-label="No">{'\u2717'}</span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </GlassCard>
+              <p className="text-xs text-zinc-500 mt-2 md:hidden">&larr; Swipe to see all columns &rarr;</p>
+            </RawDataToggle>
           </FadeIn>
         </div>
       </section>

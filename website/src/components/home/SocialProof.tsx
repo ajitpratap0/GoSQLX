@@ -1,7 +1,5 @@
-'use client';
-
 import Image from 'next/image';
-import { FadeIn } from '@/components/ui/FadeIn';
+import { FadeInCSS } from '@/components/ui/FadeInCSS';
 
 const badges = [
   {
@@ -34,7 +32,7 @@ export function SocialProof() {
   return (
     <section className="py-8 border-t border-white/[0.06]">
       <div className="max-w-6xl mx-auto px-4">
-        <FadeIn>
+        <FadeInCSS>
           <div className="flex flex-wrap items-center justify-center gap-4">
             {badges.map((badge) => (
               <Image
@@ -49,7 +47,7 @@ export function SocialProof() {
               />
             ))}
           </div>
-        </FadeIn>
+        </FadeInCSS>
       </div>
     </section>
   );

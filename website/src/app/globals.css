@@ -290,10 +290,10 @@ html.light .bg-white\/10 {
   background-color: rgba(0, 0, 0, 0.06) !important;
 }
 
-/* MiniPlayground dialect select */
-html.light .bg-zinc-800\/80 {
+/* All select elements in light mode */
+html.light select {
   background-color: #F3F4F6 !important;
-  color: #374151 !important;
+  color: #1E293B !important;
   border-color: rgba(0, 0, 0, 0.12) !important;
 }
 html.light select option {
@@ -311,6 +311,39 @@ html.light .border-accent-indigo\\/30 {
 
 /* --- Hero background gradients: reduce on light mode --- */
 html.light section > [aria-hidden="true"] { opacity: 0.15; }
+
+/* --- Playground: override hardcoded arbitrary bg --- */
+html.light .bg-\[\#09090b\] { background-color: #FAFBFC !important; }
+html.light .bg-\[\#0F172A\] { background-color: #FAFBFC !important; }
+
+/* Playground select element */
+html.light .bg-slate-800.text-slate-200 {
+  background-color: #F3F4F6 !important;
+  color: #1E293B !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Playground active tab */
+html.light .text-blue-400 { color: #2563EB !important; }
+html.light .bg-blue-500 { background-color: #3B82F6 !important; }
+
+/* Playground emerald code */
+html.light code .text-emerald-400,
+html.light code.text-emerald-400 { color: #059669 !important; }
+html.light .bg-slate-800.rounded { background-color: #E5E7EB !important; }
+
+/* Playground divider */
+html.light .bg-slate-700 { background-color: #D1D5DB !important; }
+
+/* Playground copy/bottom bar hover */
+html.light .hover\:text-white:hover { color: #1A1A2E !important; }
+html.light .hover\:border-slate-500:hover { border-color: rgba(0, 0, 0, 0.2) !important; }
+
+/* Loading skeleton in playground */
+html.light .animate-pulse.bg-zinc-800 { background-color: #E5E7EB !important; }
+
+/* Green dot (parser ready) — keep green */
+html.light .bg-green-500 { background-color: #22C55E !important; }
 
 /* --- Code blocks / pre elements --- */
 html.light pre[class*="font-mono"] {

@@ -156,11 +156,11 @@ html.light .text-zinc-600 { color: #4B5563 !important; }
 html.light .text-indigo-300 { color: #4338CA !important; }
 html.light .text-emerald-400 { color: #059669 !important; }
 /* Slate palette (used in playground components) */
-html.light .text-slate-200 { color: #374151 !important; }
-html.light .text-slate-300 { color: #4B5563 !important; }
-html.light .text-slate-400 { color: #4B5563 !important; }
-html.light .text-slate-500 { color: #6B7280 !important; }
-html.light .text-slate-600 { color: #4B5563 !important; }
+html.light .text-slate-200 { color: #1E293B !important; }
+html.light .text-slate-300 { color: #334155 !important; }
+html.light .text-slate-400 { color: #475569 !important; }
+html.light .text-slate-500 { color: #475569 !important; }
+html.light .text-slate-600 { color: #334155 !important; }
 
 /* --- Heading gradient: dark gradient on light bg --- */
 html.light .from-white { --tw-gradient-from: #0F172A !important; }
@@ -180,6 +180,12 @@ html.light .glass-hover:hover {
 }
 
 /* --- Borders (white/opacity → black/opacity) --- */
+html.light .border-white\/\[0\.06\] { border-color: rgba(0, 0, 0, 0.08) !important; }
+html.light .border-white\/\[0\.08\] { border-color: rgba(0, 0, 0, 0.08) !important; }
+html.light .border-white\/\[0\.1\] { border-color: rgba(0, 0, 0, 0.12) !important; }
+html.light .border-white\/\[0\.12\] { border-color: rgba(0, 0, 0, 0.12) !important; }
+html.light .border-white\/5 { border-color: rgba(0, 0, 0, 0.06) !important; }
+html.light .border-white\/10 { border-color: rgba(0, 0, 0, 0.10) !important; }
 html.light [class*="border-white\\/"] { border-color: rgba(0, 0, 0, 0.10) !important; }
 html.light [class*="divide-white\\/"] { border-color: rgba(0, 0, 0, 0.08) !important; }
 
@@ -197,19 +203,30 @@ html.light .bg-surface { background-color: #FFFFFF !important; }
 html.light .bg-slate-800 { background-color: #E5E7EB !important; }
 html.light .bg-slate-900 { background-color: #F3F4F6 !important; }
 html.light .bg-slate-950 { background-color: #F9FAFB !important; }
+html.light .bg-slate-800\/80 { background-color: #E5E7EB !important; }
+html.light .bg-slate-900\/50 { background-color: rgba(0, 0, 0, 0.03) !important; }
+html.light .bg-slate-900\/30 { background-color: rgba(0, 0, 0, 0.02) !important; }
+html.light .bg-slate-700\/50 { background-color: rgba(0, 0, 0, 0.05) !important; }
+html.light .bg-slate-500\/20 { background-color: rgba(0, 0, 0, 0.06) !important; }
+html.light .bg-slate-500\/30 { background-color: rgba(0, 0, 0, 0.06) !important; }
+/* Fallback attribute selectors */
 html.light [class*="bg-slate-800\\/"] { background-color: rgba(0, 0, 0, 0.04) !important; }
 html.light [class*="bg-slate-900\\/"] { background-color: rgba(0, 0, 0, 0.03) !important; }
 html.light [class*="bg-slate-700\\/"] { background-color: rgba(0, 0, 0, 0.05) !important; }
 html.light [class*="bg-slate-500\\/"] { background-color: rgba(0, 0, 0, 0.06) !important; }
 
 /* Slate borders */
-html.light .border-slate-700 { border-color: rgba(0, 0, 0, 0.10) !important; }
+html.light .border-slate-700 { border-color: rgba(0, 0, 0, 0.12) !important; }
 html.light .border-slate-800 { border-color: rgba(0, 0, 0, 0.08) !important; }
+html.light .border-slate-500\/30 { border-color: rgba(0, 0, 0, 0.12) !important; }
+html.light .border-slate-500\/20 { border-color: rgba(0, 0, 0, 0.10) !important; }
 html.light [class*="border-slate-500\\/"] { border-color: rgba(0, 0, 0, 0.12) !important; }
 html.light [class*="border-slate-700\\/"] { border-color: rgba(0, 0, 0, 0.08) !important; }
 
 /* Zinc backgrounds */
+html.light .bg-zinc-700 { background-color: #D1D5DB !important; }
 html.light .bg-zinc-800 { background-color: #E5E7EB !important; }
+html.light .bg-zinc-800\/80 { background-color: #E5E7EB !important; }
 html.light .bg-zinc-900 { background-color: #F3F4F6 !important; }
 html.light .bg-zinc-950 { background-color: #F9FAFB !important; }
 
@@ -250,25 +267,38 @@ html.light .bg-white.text-zinc-950:hover {
   background-color: #2D2D44 !important;
 }
 
-/* Ghost button */
-html.light [class*="bg-white\\/\\[0\\.06\\]"][class*="border"][class*="text-zinc-300"] {
-  background-color: rgba(0, 0, 0, 0.04);
-  border-color: rgba(0, 0, 0, 0.12);
-  color: #374151;
+/* Ghost button + hover states for transparent white backgrounds */
+html.light .bg-white\/\[0\.06\] {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+  border-color: rgba(0, 0, 0, 0.15) !important;
 }
-html.light [class*="bg-white\\/\\[0\\.06\\]"][class*="border"][class*="text-zinc-300"]:hover {
-  background-color: rgba(0, 0, 0, 0.08);
-  color: #1A1A2E;
+html.light .bg-white\/\[0\.1\] {
+  background-color: rgba(0, 0, 0, 0.08) !important;
+}
+html.light .bg-white\/\[0\.04\] {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+html.light .bg-white\/\[0\.03\] {
+  background-color: rgba(0, 0, 0, 0.03) !important;
 }
 
 /* GitHub star button */
-html.light a[class*="bg-white\\/5"][class*="border-white\\/10"] {
-  background-color: rgba(0, 0, 0, 0.03);
-  border-color: rgba(0, 0, 0, 0.10);
-  color: #374151;
+html.light .bg-white\/5 {
+  background-color: rgba(0, 0, 0, 0.04) !important;
 }
-html.light a[class*="bg-white\\/5"][class*="border-white\\/10"]:hover {
-  background-color: rgba(0, 0, 0, 0.06);
+html.light .bg-white\/10 {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+/* All select elements in light mode */
+html.light select {
+  background-color: #F3F4F6 !important;
+  color: #1E293B !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+html.light select option {
+  background-color: #FFFFFF;
+  color: #1A1A2E;
 }
 
 /* --- Version badge --- */
@@ -281,6 +311,39 @@ html.light .border-accent-indigo\\/30 {
 
 /* --- Hero background gradients: reduce on light mode --- */
 html.light section > [aria-hidden="true"] { opacity: 0.15; }
+
+/* --- Playground: override hardcoded arbitrary bg --- */
+html.light .bg-\[\#09090b\] { background-color: #FAFBFC !important; }
+html.light .bg-\[\#0F172A\] { background-color: #FAFBFC !important; }
+
+/* Playground select element */
+html.light .bg-slate-800.text-slate-200 {
+  background-color: #F3F4F6 !important;
+  color: #1E293B !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Playground active tab */
+html.light .text-blue-400 { color: #2563EB !important; }
+html.light .bg-blue-500 { background-color: #3B82F6 !important; }
+
+/* Playground emerald code */
+html.light code .text-emerald-400,
+html.light code.text-emerald-400 { color: #059669 !important; }
+html.light .bg-slate-800.rounded { background-color: #E5E7EB !important; }
+
+/* Playground divider */
+html.light .bg-slate-700 { background-color: #D1D5DB !important; }
+
+/* Playground copy/bottom bar hover */
+html.light .hover\:text-white:hover { color: #1A1A2E !important; }
+html.light .hover\:border-slate-500:hover { border-color: rgba(0, 0, 0, 0.2) !important; }
+
+/* Loading skeleton in playground */
+html.light .animate-pulse.bg-zinc-800 { background-color: #E5E7EB !important; }
+
+/* Green dot (parser ready) — keep green */
+html.light .bg-green-500 { background-color: #22C55E !important; }
 
 /* --- Code blocks / pre elements --- */
 html.light pre[class*="font-mono"] {

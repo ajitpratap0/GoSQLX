@@ -1,5 +1,5 @@
 import { GlassCard } from '@/components/ui/GlassCard';
-import { FadeInCSS } from '@/components/ui/FadeInCSS';
+import { FadeIn } from '@/components/ui/FadeIn';
 import { FEATURES } from '@/lib/constants';
 
 const icons: Record<string, React.ReactNode> = {
@@ -48,14 +48,14 @@ export function FeatureGrid() {
   return (
     <section className="py-20 border-t border-white/[0.06]">
       <div className="max-w-6xl mx-auto px-4">
-        <FadeInCSS>
+        <FadeIn viewport>
           <h2 className="text-3xl font-bold text-white text-center mb-12">
             Built for Production
           </h2>
-        </FadeInCSS>
+        </FadeIn>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {FEATURES.map((feature, i) => (
-            <FadeInCSS key={feature.title} delay={i * 0.1}>
+            <FadeIn viewport key={feature.title} delay={i * 0.1}>
               <GlassCard className="p-6 h-full">
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-4 ${colorMap[feature.color] || 'bg-white/10 text-white'}`}>
                   {icons[feature.icon]}
@@ -63,7 +63,7 @@ export function FeatureGrid() {
                 <h3 className="text-lg font-semibold text-white mb-1">{feature.title}</h3>
                 <p className="text-sm text-zinc-200">{feature.description}</p>
               </GlassCard>
-            </FadeInCSS>
+            </FadeIn>
           ))}
         </div>
       </div>

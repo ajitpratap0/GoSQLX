@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 
 function SunIcon({ className = '' }: { className?: string }) {
   return (
@@ -65,17 +66,39 @@ export function ThemeToggle() {
   }
 
   return (
-    <button
+    <motion.button
       type="button"
       onClick={toggle}
-      className="text-zinc-400 hover:text-white transition-colors duration-200 p-2 rounded-lg hover:bg-white/[0.04]"
+      className="text-zinc-400 hover:text-white transition-colors duration-200 p-2 rounded-lg hover:bg-white/[0.04] relative overflow-hidden"
       aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+      whileTap={{ scale: 0.9 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 17 }}
     >
-      {theme === 'dark' ? (
-        <SunIcon className="w-5 h-5" />
-      ) : (
-        <MoonIcon className="w-5 h-5" />
-      )}
-    </button>
+      <AnimatePresence mode="wait" initial={false}>
+        {theme === 'dark' ? (
+          <motion.span
+            key="sun"
+            initial={{ rotate: -90, opacity: 0 }}
+            animate={{ rotate: 0, opacity: 1 }}
+            exit={{ rotate: 90, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="block"
+          >
+            <SunIcon className="w-5 h-5" />
+          </motion.span>
+        ) : (
+          <motion.span
+            key="moon"
+            initial={{ rotate: 90, opacity: 0 }}
+            animate={{ rotate: 0, opacity: 1 }}
+            exit={{ rotate: -90, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="block"
+          >
+            <MoonIcon className="w-5 h-5" />
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </motion.button>
   );
 }

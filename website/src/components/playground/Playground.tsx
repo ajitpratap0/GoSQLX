@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback, useRef, Suspense } from "react";
-import { motion } from "framer-motion";
+import { motion } from 'motion/react';
 import { useWasm } from "./WasmLoader";
 import SqlEditor from "./SqlEditor";
 import AstTab from "./AstTab";

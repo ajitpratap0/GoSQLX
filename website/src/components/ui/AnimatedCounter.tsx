@@ -1,5 +1,5 @@
 'use client';
-import { useMotionValue, useSpring } from 'framer-motion';
+import { useMotionValue, useSpring } from 'motion/react';
 import { useRef, useEffect, useState } from 'react';
 
 export function AnimatedCounter({ value, suffix = '', color = 'text-white' }: { value: number; suffix?: string; color?: string }) {

@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { GlassCard } from '@/components/ui/GlassCard';
-import { FadeInCSS } from '@/components/ui/FadeInCSS';
+import { FadeIn } from '@/components/ui/FadeIn';
 
 type Segment = { text: string; cls: string };
 type CodeLine = Segment[];
@@ -103,12 +103,12 @@ export function CodeExamples() {
   return (
     <section className="py-20 border-t border-white/[0.06]">
       <div className="max-w-3xl mx-auto px-4">
-        <FadeInCSS>
+        <FadeIn viewport>
           <h2 className="text-3xl font-bold text-white text-center mb-10">
             Simple, Powerful API
           </h2>
-        </FadeInCSS>
-        <FadeInCSS delay={0.1}>
+        </FadeIn>
+        <FadeIn viewport delay={0.1}>
           <div className="flex flex-wrap gap-1 mb-4">
             {tabs.map((tab, i) => (
               <button
@@ -150,7 +150,7 @@ export function CodeExamples() {
               </AnimatePresence>
             </div>
           </GlassCard>
-        </FadeInCSS>
+        </FadeIn>
       </div>
     </section>
   );

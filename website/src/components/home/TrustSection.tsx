@@ -1,4 +1,4 @@
-import { FadeInCSS } from '@/components/ui/FadeInCSS';
+import { FadeIn } from '@/components/ui/FadeIn';
 import { GitHubStarCount } from './GitHubStarCount';
 
 /* ── Inline SVG icons (Heroicons-style, 20x20) ────────────────────────── */
@@ -94,16 +94,16 @@ export function TrustSection() {
     <section className="py-16 border-t border-white/[0.06]">
       <div className="max-w-5xl mx-auto px-4">
         {/* Heading */}
-        <FadeInCSS>
+        <FadeIn viewport>
           <h2 className="text-center text-sm font-semibold uppercase tracking-widest text-zinc-300 mb-10">
             Trusted by Developers
           </h2>
-        </FadeInCSS>
+        </FadeIn>
 
         {/* Metric cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {metrics.map((m, i) => (
-            <FadeInCSS key={m.id} delay={i * 0.07}>
+            <FadeIn viewport key={m.id} delay={i * 0.07}>
               <div className="glass text-center px-4 py-5 flex flex-col items-center gap-2">
                 {m.icon}
                 <span className="text-lg font-bold text-zinc-100">
@@ -111,20 +111,20 @@ export function TrustSection() {
                 </span>
                 <span className="text-xs text-zinc-300">{m.label}</span>
               </div>
-            </FadeInCSS>
+            </FadeIn>
           ))}
         </div>
 
         {/* Integrations */}
-        <FadeInCSS delay={0.4}>
+        <FadeIn viewport delay={0.4}>
           <p className="text-center text-sm font-medium text-zinc-300 mt-12 mb-5">
             Integrates with
           </p>
-        </FadeInCSS>
+        </FadeIn>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-xl mx-auto">
           {integrations.map((item, i) => (
-            <FadeInCSS key={item.name} delay={0.5 + i * 0.07}>
+            <FadeIn viewport key={item.name} delay={0.5 + i * 0.07}>
               <div className="glass text-center px-5 py-4">
                 <span className="block text-base font-semibold text-zinc-100">
                   {item.name}
@@ -133,7 +133,7 @@ export function TrustSection() {
                   {item.detail}
                 </span>
               </div>
-            </FadeInCSS>
+            </FadeIn>
           ))}
         </div>
       </div>

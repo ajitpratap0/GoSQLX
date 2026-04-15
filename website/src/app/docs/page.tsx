@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { DOCS_SIDEBAR } from '@/lib/constants';
 import { DocsSearchTrigger } from '@/components/docs/DocsSearchTrigger';
+import { FadeIn } from '@/components/ui/FadeIn';
 
 export const metadata: Metadata = {
   title: 'Documentation',
@@ -43,30 +44,31 @@ export default function DocsPage() {
       <DocsSearchTrigger />
 
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {DOCS_SIDEBAR.map((group) => (
-          <Link
-            key={group.category}
-            href={`/docs/${group.items[0].slug}`}
-            className="glass glass-hover block rounded-xl p-6 transition-colors"
-          >
-            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-accent-indigo/10">
-              <svg className="h-5 w-5 text-accent-indigo" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d={CATEGORY_ICONS[group.category] || CATEGORY_ICONS['Core']} />
-              </svg>
-            </div>
-            <h2 className="text-lg font-semibold text-white">{group.category}</h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              {group.items.length} {group.items.length === 1 ? 'article' : 'articles'}
-            </p>
-            <ul className="mt-3 space-y-1">
-              {group.items.slice(0, 3).map((item) => (
-                <li key={item.slug} className="text-sm text-zinc-400">{item.label}</li>
-              ))}
-              {group.items.length > 3 && (
-                <li className="text-sm text-zinc-600">+{group.items.length - 3} more</li>
-              )}
-            </ul>
-          </Link>
+        {DOCS_SIDEBAR.map((group, i) => (
+          <FadeIn viewport key={group.category} delay={i * 0.06}>
+            <Link
+              href={`/docs/${group.items[0].slug}`}
+              className="glass glass-hover block rounded-xl p-6 transition-colors h-full"
+            >
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-accent-indigo/10">
+                <svg className="h-5 w-5 text-accent-indigo" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d={CATEGORY_ICONS[group.category] || CATEGORY_ICONS['Core']} />
+                </svg>
+              </div>
+              <h2 className="text-lg font-semibold text-white">{group.category}</h2>
+              <p className="mt-1 text-sm text-zinc-500">
+                {group.items.length} {group.items.length === 1 ? 'article' : 'articles'}
+              </p>
+              <ul className="mt-3 space-y-1">
+                {group.items.slice(0, 3).map((item) => (
+                  <li key={item.slug} className="text-sm text-zinc-400">{item.label}</li>
+                ))}
+                {group.items.length > 3 && (
+                  <li className="text-sm text-zinc-600">+{group.items.length - 3} more</li>
+                )}
+              </ul>
+            </Link>
+          </FadeIn>
         ))}
       </div>
     </main>

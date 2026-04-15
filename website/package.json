@@ -22,7 +22,7 @@
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "codemirror": "^6.0.2",
-    "framer-motion": "^12.36.0",
+    "motion": "^12.36.0",
     "fuse.js": "^7.1.0",
     "gray-matter": "^4.0.3",
     "next": "16.1.7",

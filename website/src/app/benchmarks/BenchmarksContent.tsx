@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { FadeIn } from '@/components/ui/FadeIn';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
@@ -41,22 +42,33 @@ function RawDataToggle({ id, children }: { id: string; children: React.ReactNode
         aria-expanded={open}
         aria-controls={`raw-data-${id}`}
       >
-        <svg
-          className={`w-3 h-3 transition-transform duration-200 ${open ? 'rotate-90' : ''}`}
+        <motion.svg
+          className="w-3 h-3"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
           strokeWidth={2}
+          animate={{ rotate: open ? 90 : 0 }}
+          transition={{ duration: 0.2 }}
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
+        </motion.svg>
         {open ? 'Hide' : 'View'} raw data
       </button>
-      {open && (
-        <div id={`raw-data-${id}`} className="mt-3">
-          {children}
-        </div>
-      )}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            id={`raw-data-${id}`}
+            className="mt-3 overflow-hidden"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
+          >
+            {children}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

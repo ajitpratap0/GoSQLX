@@ -1,4 +1,4 @@
-import { GlassCard } from '@/components/ui/GlassCard';
+import { GlowCard } from '@/components/ui/GlowCard';
 import { FadeIn } from '@/components/ui/FadeIn';
 import { FEATURES } from '@/lib/constants';
 
@@ -56,13 +56,13 @@ export function FeatureGrid() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {FEATURES.map((feature, i) => (
             <FadeIn viewport key={feature.title} delay={i * 0.1}>
-              <GlassCard className="p-6 h-full">
+              <GlowCard className="p-6 h-full">
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-4 ${colorMap[feature.color] || 'bg-white/10 text-white'}`}>
                   {icons[feature.icon]}
                 </div>
                 <h3 className="text-lg font-semibold text-white mb-1">{feature.title}</h3>
                 <p className="text-sm text-zinc-200">{feature.description}</p>
-              </GlassCard>
+              </GlowCard>
             </FadeIn>
           ))}
         </div>

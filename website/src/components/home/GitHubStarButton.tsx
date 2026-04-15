@@ -1,6 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
+
+const spring = { type: 'spring' as const, stiffness: 400, damping: 17 };
 
 export function GitHubStarButton() {
   const [stars, setStars] = useState<number | null>(null);
@@ -15,11 +18,14 @@ export function GitHubStarButton() {
   }, []);
 
   return (
-    <a
+    <motion.a
       href="https://github.com/ajitpratap0/GoSQLX"
       target="_blank"
       rel="noopener noreferrer"
       className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors text-sm font-medium text-zinc-200"
+      whileHover={{ scale: 1.03 }}
+      whileTap={{ scale: 0.97 }}
+      transition={spring}
     >
       <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
         <path d="M8 .25a7.75 7.75 0 1 0 0 15.5A7.75 7.75 0 0 0 8 .25ZM6.5 13.5v-2.1a2.9 2.9 0 0 1-.8.1c-.6 0-1-.3-1.2-.8-.2-.4-.5-.8-.9-.9l-.1-.1c-.1-.1-.1-.2 0-.2l.1-.1c.5-.2.9.1 1.2.6.2.4.5.6.8.6.3 0 .5-.1.7-.2.1-.6.4-1 .8-1.3-2-.2-3.3-1-3.3-3.1 0-.7.3-1.4.7-1.9-.1-.3-.3-1 0-2 0 0 .6-.2 2 .7a6.8 6.8 0 0 1 3.6 0c1.4-.9 2-.7 2-.7.3 1 .1 1.7 0 2 .4.5.7 1.2.7 1.9 0 2.1-1.3 2.9-3.3 3.1.4.4.7 1 .7 1.9v2.5c0 .1 0 .2.1.2C10.7 14.9 12.5 12 12.5 8A4.5 4.5 0 0 0 8 3.5" />
@@ -33,6 +39,6 @@ export function GitHubStarButton() {
           {stars >= 1000 ? `${(stars / 1000).toFixed(1)}k` : stars}
         </span>
       )}
-    </a>
+    </motion.a>
   );
 }

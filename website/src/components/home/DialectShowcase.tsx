@@ -1,5 +1,5 @@
 import { GlassCard } from '@/components/ui/GlassCard';
-import { FadeInCSS } from '@/components/ui/FadeInCSS';
+import { FadeIn } from '@/components/ui/FadeIn';
 
 interface Dialect {
   name: string;
@@ -40,17 +40,17 @@ export function DialectShowcase() {
   return (
     <section className="py-20 border-t border-white/[0.06]">
       <div className="max-w-6xl mx-auto px-4">
-        <FadeInCSS>
+        <FadeIn viewport>
           <h2 className="text-3xl font-bold text-white text-center mb-2">
             8 SQL Dialects, One Parser
           </h2>
           <p className="text-zinc-300 text-center mb-12 text-lg">
             From PostgreSQL to ClickHouse — parse them all
           </p>
-        </FadeInCSS>
+        </FadeIn>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {DIALECTS.map((dialect, i) => (
-            <FadeInCSS key={dialect.name} delay={i * 0.08}>
+            <FadeIn viewport key={dialect.name} delay={i * 0.08}>
               <GlassCard className="p-5 h-full text-center">
                 <div
                   className={`w-11 h-11 rounded-full ${dialect.bgColor} ${dialect.color} flex items-center justify-center mx-auto mb-3 text-sm font-bold`}
@@ -72,7 +72,7 @@ export function DialectShowcase() {
                   {dialect.status}
                 </span>
               </GlassCard>
-            </FadeInCSS>
+            </FadeIn>
           ))}
         </div>
       </div>

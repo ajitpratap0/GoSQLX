@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'motion/react';
 import Fuse from 'fuse.js';
 import { buildSearchIndex, type SearchEntry } from '@/lib/search-index';
 
@@ -93,9 +94,9 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
     setSelectedIndex(0);
   }, [results]);
 
-  if (!open) return null;
-
   return (
+    <AnimatePresence>
+    {open && (
     <div
       ref={overlayRef}
       className="fixed inset-0 z-[100] flex items-start justify-center pt-[min(20vh,10rem)] px-4"
@@ -107,10 +108,23 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
       aria-label="Search documentation"
     >
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" />
+      <motion.div
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+        aria-hidden="true"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.15 }}
+      />
 
       {/* Modal */}
-      <div className="relative w-full max-w-lg glass overflow-hidden shadow-2xl shadow-black/40">
+      <motion.div
+        className="relative w-full max-w-lg glass overflow-hidden shadow-2xl shadow-black/40"
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+        transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
+      >
         {/* Search input */}
         <div className="flex items-center gap-3 border-b border-white/[0.08] px-4">
           <svg
@@ -210,8 +224,10 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
             close
           </span>
         </div>
-      </div>
+      </motion.div>
     </div>
+    )}
+    </AnimatePresence>
   );
 }
 

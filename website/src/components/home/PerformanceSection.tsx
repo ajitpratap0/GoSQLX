@@ -1,5 +1,5 @@
 import { GlassCard } from '@/components/ui/GlassCard';
-import { FadeInCSS } from '@/components/ui/FadeInCSS';
+import { FadeIn } from '@/components/ui/FadeIn';
 import { AnimatedCounter } from '@/components/ui/AnimatedCounter';
 import { AnimatedBars } from './AnimatedBars';
 
@@ -23,16 +23,16 @@ export function PerformanceSection() {
   return (
     <section className="py-20">
       <div className="max-w-6xl mx-auto px-4">
-        <FadeInCSS>
+        <FadeIn viewport>
           <h2 className="text-2xl sm:text-3xl font-bold text-center text-white mb-12">
             Performance That Speaks for Itself
           </h2>
-        </FadeInCSS>
+        </FadeIn>
 
         {/* Stat cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 md:gap-8">
           {stats.map((stat, i) => (
-            <FadeInCSS key={stat.label} delay={i * 0.1}>
+            <FadeIn viewport key={stat.label} delay={i * 0.1}>
               <GlassCard className="p-6 text-center w-full">
                 <div className="flex items-baseline justify-center gap-0.5">
                   {stat.prefix && (
@@ -42,19 +42,19 @@ export function PerformanceSection() {
                 </div>
                 <p className="text-sm text-zinc-200 mt-1">{stat.label}</p>
               </GlassCard>
-            </FadeInCSS>
+            </FadeIn>
           ))}
         </div>
 
         {/* Bar chart */}
-        <FadeInCSS delay={0.5}>
+        <FadeIn viewport delay={0.5}>
           <GlassCard className="mt-12 p-6 sm:p-8" hover={false}>
             <AnimatedBars benchmarks={benchmarks} maxOps={maxOps} />
             <p className="text-xs text-zinc-400 mt-6 text-center">
               Based on BenchmarkParse, Apple M4, Go 1.26
             </p>
           </GlassCard>
-        </FadeInCSS>
+        </FadeIn>
       </div>
     </section>
   );

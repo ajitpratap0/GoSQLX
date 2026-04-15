@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { FadeInCSS } from '@/components/ui/FadeInCSS';
+import { FadeIn } from '@/components/ui/FadeIn';
 import { TerminalMockup } from '@/components/ui/TerminalMockup';
 
 const tools = [
@@ -16,21 +16,21 @@ export function McpSection() {
   return (
     <section className="py-20 border-t border-white/[0.06]">
       <div className="max-w-3xl mx-auto px-4 text-center">
-        <FadeInCSS>
+        <FadeIn viewport>
           <h2 className="text-3xl font-bold text-white mb-4">
             AI-Ready SQL Tools
           </h2>
           <p className="text-zinc-300 mb-10 max-w-xl mx-auto">
             Connect 7 SQL tools to Claude, Cursor, or any MCP client — no installation, no API key.
           </p>
-        </FadeInCSS>
-        <FadeInCSS delay={0.15}>
+        </FadeIn>
+        <FadeIn viewport delay={0.15}>
           <TerminalMockup
             command="claude mcp add --transport http gosqlx https://mcp.gosqlx.dev/mcp"
             output="✓ Added gosqlx (7 tools available)"
           />
-        </FadeInCSS>
-        <FadeInCSS delay={0.25}>
+        </FadeIn>
+        <FadeIn viewport delay={0.25}>
           <div className="mt-6 flex flex-wrap justify-center gap-2">
             {tools.map((tool) => (
               <span
@@ -41,8 +41,8 @@ export function McpSection() {
               </span>
             ))}
           </div>
-        </FadeInCSS>
-        <FadeInCSS delay={0.35}>
+        </FadeIn>
+        <FadeIn viewport delay={0.35}>
           <div className="mt-8">
             <Link
               href="/docs/mcp-guide"
@@ -51,7 +51,7 @@ export function McpSection() {
               Learn more →
             </Link>
           </div>
-        </FadeInCSS>
+        </FadeIn>
       </div>
     </section>
   );

@@ -1,4 +1,4 @@
-import { FadeInCSS } from '@/components/ui/FadeInCSS';
+import { FadeIn } from '@/components/ui/FadeIn';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { GradientText } from '@/components/ui/GradientText';
 import { VersionBadge } from '@/components/ui/VersionBadge';
@@ -41,31 +41,31 @@ export function Hero() {
       {/* Content */}
       <div className="relative z-10 max-w-5xl mx-auto px-6 py-24 text-center">
         {/* Version badge */}
-        <FadeInCSS delay={0}>
+        <FadeIn viewport delay={0}>
           <div className="mb-6">
             <VersionBadge version="v1.14.0 - Multi-Dialect SQL Parser" />
           </div>
-        </FadeInCSS>
+        </FadeIn>
 
         {/* Headline */}
-        <FadeInCSS delay={0.1}>
+        <FadeIn viewport delay={0.1}>
           <h1
             className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 break-words hyphens-auto w-full max-w-full px-4 sm:px-0"
             style={{ letterSpacing: '-0.03em' }}
           >
             <GradientText>Parse SQL at the speed of Go</GradientText>
           </h1>
-        </FadeInCSS>
+        </FadeIn>
 
         {/* Subtitle */}
-        <FadeInCSS delay={0.2}>
+        <FadeIn viewport delay={0.2}>
           <p className="text-lg md:text-xl max-w-2xl mx-auto mb-10 text-zinc-300">
             Production-ready SQL parsing with zero-copy tokenization, object pooling, and multi-dialect support
           </p>
-        </FadeInCSS>
+        </FadeIn>
 
         {/* Buttons */}
-        <FadeInCSS delay={0.3}>
+        <FadeIn viewport delay={0.3}>
           <div className="flex flex-wrap items-center justify-center gap-3 mb-14">
             <Button variant="primary" href="/docs/getting-started">
               Get Started
@@ -75,14 +75,14 @@ export function Hero() {
             </Button>
             <GitHubStarButton />
           </div>
-        </FadeInCSS>
+        </FadeIn>
 
         {/* Live mini playground */}
-        <FadeInCSS delay={0.4}>
+        <FadeIn viewport delay={0.4}>
           <GlassCard hover={false} className="p-0 overflow-hidden shadow-2xl shadow-indigo-500/5">
             <MiniPlayground />
           </GlassCard>
-        </FadeInCSS>
+        </FadeIn>
 
       </div>
     </section>

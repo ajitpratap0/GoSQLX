@@ -3,7 +3,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
+import { motion, AnimatePresence, useScroll, useTransform } from 'motion/react';
 import { NAV_LINKS } from '@/lib/constants';
 import { Button } from '@/components/ui/Button';
 import { SearchModal, useSearchShortcut } from '@/components/ui/SearchModal';

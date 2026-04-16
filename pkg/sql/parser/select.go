@@ -53,9 +53,17 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 	if nonTopDialects[p.dialect] && strings.ToUpper(p.currentToken.Token.Value) == "TOP" {
 		if p.dialect == string(keywords.DialectOracle) {
-			return nil, fmt.Errorf("TOP clause is not supported in Oracle; use ROWNUM or FETCH FIRST … ROWS ONLY instead")
+			return nil, goerrors.UnsupportedFeatureError(
+				"TOP clause is not supported in Oracle; use ROWNUM or FETCH FIRST … ROWS ONLY instead",
+				p.currentLocation(),
+				"",
+			)
 		}
-		return nil, fmt.Errorf("TOP clause is not supported in %s; use LIMIT/OFFSET instead", p.dialect)
+		return nil, goerrors.UnsupportedFeatureError(
+			fmt.Sprintf("TOP clause is not supported in %s; use LIMIT/OFFSET instead", p.dialect),
+			p.currentLocation(),
+			"",
+		)
 	}
 
 	// SQL Server TOP clause
@@ -142,7 +150,12 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		if strings.EqualFold(p.currentToken.Token.Value, "START") {
 			p.advance() // Consume START
 			if !strings.EqualFold(p.currentToken.Token.Value, "WITH") {
-				return nil, fmt.Errorf("expected WITH after START, got %q", p.currentToken.Token.Value)
+				return nil, goerrors.ExpectedTokenError(
+					"WITH after START",
+					p.currentToken.Token.Value,
+					p.currentLocation(),
+					"",
+				)
 			}
 			p.advance() // Consume WITH
 			startExpr, startErr := p.parseExpression()
@@ -155,7 +168,12 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			connectPos := p.currentLocation() // position of CONNECT keyword
 			p.advance()                       // Consume CONNECT
 			if !strings.EqualFold(p.currentToken.Token.Value, "BY") {
-				return nil, fmt.Errorf("expected BY after CONNECT, got %q", p.currentToken.Token.Value)
+				return nil, goerrors.ExpectedTokenError(
+					"BY after CONNECT",
+					p.currentToken.Token.Value,
+					p.currentLocation(),
+					"",
+				)
 			}
 			p.advance() // Consume BY
 			cb := &ast.ConnectByClause{}
@@ -169,7 +187,11 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 				return nil, condErr
 			}
 			if cond == nil {
-				return nil, fmt.Errorf("expected condition after CONNECT BY")
+				return nil, goerrors.InvalidSyntaxError(
+					"expected condition after CONNECT BY",
+					p.currentLocation(),
+					"",
+				)
 			}
 			cb.Condition = cond
 			selectStmt.ConnectBy = cb
@@ -305,7 +327,11 @@ func (p *Parser) parseTopClause() (*ast.TopClause, error) {
 
 	countExpr, err := p.parsePrimaryExpression()
 	if err != nil {
-		return nil, fmt.Errorf("expected expression after TOP: %w", err)
+		return nil, goerrors.InvalidSyntaxError(
+			fmt.Sprintf("expected expression after TOP: %v", err),
+			p.currentLocation(),
+			"",
+		).WithCause(err)
 	}
 
 	if hasParen {

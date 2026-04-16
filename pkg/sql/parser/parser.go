@@ -16,7 +16,6 @@ package parser
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 
@@ -235,7 +234,15 @@ type Parser struct {
 	depth        int             // Current recursion depth
 	ctx          context.Context // Optional context for cancellation support
 	strict       bool            // Strict mode rejects empty statements
-	dialect      string          // SQL dialect for dialect-aware parsing (default: "postgresql")
+	// dialect holds the SQL dialect for dialect-aware parsing as a raw
+	// string (default: "" which the string-returning Dialect() method
+	// reports as "postgresql" for v1.x backward compatibility).
+	//
+	// Deprecated: prefer Parser.DialectTyped() / Parser.Capabilities() for
+	// new parser code. The string field is retained for v1.x backward
+	// compatibility and will be removed in v2.0 in favour of a typed
+	// dialect.Dialect field.
+	dialect string
 }
 
 // Deprecated: Parse is provided for backward compatibility only and is scheduled for
@@ -477,8 +484,9 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 		if err := ctx.Err(); err != nil {
 			// Clean up the AST on error
 			ast.ReleaseAST(result)
-			// Context cancellation is not a parsing error, return the context error directly
-			return nil, fmt.Errorf("parsing cancelled: %w", err)
+			// Context cancellation is not a parsing error; return the context error
+			// directly so callers can use errors.Is(err, context.Canceled/DeadlineExceeded).
+			return nil, err
 		}
 
 		// Skip semicolons between statements
@@ -571,8 +579,9 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 	// Check context if available
 	if p.ctx != nil {
 		if err := p.ctx.Err(); err != nil {
-			// Context cancellation is not a parsing error, return the context error directly
-			return nil, fmt.Errorf("parsing cancelled: %w", err)
+			// Context cancellation is not a parsing error; return the context error
+			// directly so callers can use errors.Is(err, context.Canceled/DeadlineExceeded).
+			return nil, err
 		}
 	}
 

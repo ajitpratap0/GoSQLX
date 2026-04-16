@@ -102,9 +102,10 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 				string(keywords.DialectClickHouse):
 				// supported
 			default:
-				return nil, fmt.Errorf(
-					"ILIKE is not supported in %s; "+
-						"use LIKE or LOWER() for case-insensitive matching", p.dialect,
+				return nil, goerrors.UnsupportedFeatureError(
+					fmt.Sprintf("ILIKE is not supported in %s; use LIKE or LOWER() for case-insensitive matching", p.dialect),
+					p.currentLocation(),
+					"",
 				)
 			}
 		}

@@ -1,0 +1,21 @@
+# Valid configuration covering rule overrides, params, ignores, and default severity.
+rules:
+  L001:
+    enabled: true
+    severity: error
+  L005:
+    enabled: true
+    severity: info
+    params:
+      max_length: 120
+  L011:
+    enabled: false
+  L016:
+    severity: warning
+
+ignore:
+  - "migrations/*.sql"
+  - "vendor/**"
+  - "**/generated/**"
+
+default_severity: warning

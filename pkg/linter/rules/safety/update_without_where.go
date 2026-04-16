@@ -36,27 +36,32 @@ func NewUpdateWithoutWhereRule() *UpdateWithoutWhereRule {
 	}
 }
 
-// Check inspects the AST for UPDATE statements without a WHERE clause.
+// Check walks the AST for UPDATE statements without a WHERE clause. Fires at
+// any nesting level — an UPDATE in a CTE body (data-modifying CTE) without a
+// WHERE clause is just as dangerous as a top-level UPDATE.
 func (r *UpdateWithoutWhereRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 	if ctx.AST == nil {
 		return nil, nil
 	}
 	var violations []linter.Violation
 	for _, stmt := range ctx.AST.Statements {
-		upd, ok := stmt.(*ast.UpdateStatement)
-		if !ok {
-			continue
-		}
-		if upd.Where == nil {
-			violations = append(violations, linter.Violation{
-				Rule:       r.ID(),
-				RuleName:   r.Name(),
-				Severity:   r.Severity(),
-				Message:    "UPDATE statement has no WHERE clause",
-				Location:   upd.Pos,
-				Suggestion: "Add a WHERE clause to restrict which rows are updated",
-			})
-		}
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			upd, ok := n.(*ast.UpdateStatement)
+			if !ok {
+				return true
+			}
+			if upd.Where == nil {
+				violations = append(violations, linter.Violation{
+					Rule:       r.ID(),
+					RuleName:   r.Name(),
+					Severity:   r.Severity(),
+					Message:    "UPDATE statement has no WHERE clause",
+					Location:   upd.Pos,
+					Suggestion: "Add a WHERE clause to restrict which rows are updated",
+				})
+			}
+			return true
+		})
 	}
 	return violations, nil
 }

@@ -68,39 +68,44 @@ func NewReservedKeywordIdentifierRule() *ReservedKeywordIdentifierRule {
 	}
 }
 
-// Check inspects table names, aliases, and column names for reserved keyword conflicts.
+// Check walks the AST for table names and aliases that collide with SQL
+// reserved keywords at any nesting level. Reserved-word collisions in
+// subqueries or CTE bodies are just as problematic as at the top level.
 func (r *ReservedKeywordIdentifierRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 	if ctx.AST == nil {
 		return nil, nil
 	}
 	var violations []linter.Violation
 	for _, stmt := range ctx.AST.Statements {
-		sel, ok := stmt.(*ast.SelectStatement)
-		if !ok {
-			continue
-		}
-		for _, ref := range sel.From {
-			if ref.Name != "" && sqlReservedKeywords[strings.ToUpper(ref.Name)] {
-				violations = append(violations, linter.Violation{
-					Rule:       r.ID(),
-					RuleName:   r.Name(),
-					Severity:   r.Severity(),
-					Message:    "Table name '" + ref.Name + "' is a SQL reserved keyword",
-					Location:   models.Location{Line: 1, Column: 1},
-					Suggestion: "Quote the identifier: FROM \"" + ref.Name + "\" or rename the table",
-				})
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectStatement)
+			if !ok {
+				return true
 			}
-			if ref.Alias != "" && sqlReservedKeywords[strings.ToUpper(ref.Alias)] {
-				violations = append(violations, linter.Violation{
-					Rule:       r.ID(),
-					RuleName:   r.Name(),
-					Severity:   r.Severity(),
-					Message:    "Table alias '" + ref.Alias + "' is a SQL reserved keyword",
-					Location:   models.Location{Line: 1, Column: 1},
-					Suggestion: "Use a non-reserved alias instead of '" + ref.Alias + "'",
-				})
+			for _, ref := range sel.From {
+				if ref.Name != "" && sqlReservedKeywords[strings.ToUpper(ref.Name)] {
+					violations = append(violations, linter.Violation{
+						Rule:       r.ID(),
+						RuleName:   r.Name(),
+						Severity:   r.Severity(),
+						Message:    "Table name '" + ref.Name + "' is a SQL reserved keyword",
+						Location:   models.Location{Line: 1, Column: 1},
+						Suggestion: "Quote the identifier: FROM \"" + ref.Name + "\" or rename the table",
+					})
+				}
+				if ref.Alias != "" && sqlReservedKeywords[strings.ToUpper(ref.Alias)] {
+					violations = append(violations, linter.Violation{
+						Rule:       r.ID(),
+						RuleName:   r.Name(),
+						Severity:   r.Severity(),
+						Message:    "Table alias '" + ref.Alias + "' is a SQL reserved keyword",
+						Location:   models.Location{Line: 1, Column: 1},
+						Suggestion: "Use a non-reserved alias instead of '" + ref.Alias + "'",
+					})
+				}
 			}
-		}
+			return true
+		})
 	}
 	return violations, nil
 }

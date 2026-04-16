@@ -113,6 +113,13 @@ func (v *functionOnColVisitor) Visit(node ast.Node) (ast.Visitor, error) {
 				}
 			}
 		}
+		// Walk FROM table references so that derived-table subqueries are
+		// traversed (e.g. FROM (SELECT ... WHERE fn(col) = X)).
+		for i := range sel.From {
+			if err := ast.Walk(child, &sel.From[i]); err != nil {
+				return nil, err
+			}
+		}
 		// Walk the rest normally (not in WHERE/HAVING)
 		for _, col := range sel.Columns {
 			if err := ast.Walk(child, col); err != nil {

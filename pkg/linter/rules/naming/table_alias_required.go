@@ -36,48 +36,53 @@ func NewTableAliasRequiredRule() *TableAliasRequiredRule {
 	}
 }
 
-// Check inspects SELECT statements with multiple tables for missing aliases.
+// Check walks the AST for SELECT statements with multiple tables and missing
+// aliases at any nesting level. Subqueries and CTE bodies are equally affected
+// by ambiguous unaliased tables.
 func (r *TableAliasRequiredRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 	if ctx.AST == nil {
 		return nil, nil
 	}
 	var violations []linter.Violation
 	for _, stmt := range ctx.AST.Statements {
-		sel, ok := stmt.(*ast.SelectStatement)
-		if !ok {
-			continue
-		}
-		// Only apply when there are multiple tables (FROM + JOINs, or multiple FROM)
-		totalTables := len(sel.From) + len(sel.Joins)
-		if totalTables < 2 {
-			continue
-		}
-		// Check FROM tables
-		for _, ref := range sel.From {
-			if ref.Name != "" && ref.Alias == "" {
-				violations = append(violations, linter.Violation{
-					Rule:       r.ID(),
-					RuleName:   r.Name(),
-					Severity:   r.Severity(),
-					Message:    "Table '" + ref.Name + "' has no alias in a multi-table query",
-					Location:   sel.Pos,
-					Suggestion: "Add an alias: FROM " + ref.Name + " AS " + abbreviate(ref.Name),
-				})
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectStatement)
+			if !ok {
+				return true
 			}
-		}
-		// Check JOIN tables
-		for _, join := range sel.Joins {
-			if join.Right.Name != "" && join.Right.Alias == "" {
-				violations = append(violations, linter.Violation{
-					Rule:       r.ID(),
-					RuleName:   r.Name(),
-					Severity:   r.Severity(),
-					Message:    "Table '" + join.Right.Name + "' has no alias in a JOIN",
-					Location:   join.Pos,
-					Suggestion: "Add an alias: JOIN " + join.Right.Name + " AS " + abbreviate(join.Right.Name),
-				})
+			// Only apply when there are multiple tables (FROM + JOINs, or multiple FROM)
+			totalTables := len(sel.From) + len(sel.Joins)
+			if totalTables < 2 {
+				return true
 			}
-		}
+			// Check FROM tables
+			for _, ref := range sel.From {
+				if ref.Name != "" && ref.Alias == "" {
+					violations = append(violations, linter.Violation{
+						Rule:       r.ID(),
+						RuleName:   r.Name(),
+						Severity:   r.Severity(),
+						Message:    "Table '" + ref.Name + "' has no alias in a multi-table query",
+						Location:   sel.Pos,
+						Suggestion: "Add an alias: FROM " + ref.Name + " AS " + abbreviate(ref.Name),
+					})
+				}
+			}
+			// Check JOIN tables
+			for _, join := range sel.Joins {
+				if join.Right.Name != "" && join.Right.Alias == "" {
+					violations = append(violations, linter.Violation{
+						Rule:       r.ID(),
+						RuleName:   r.Name(),
+						Severity:   r.Severity(),
+						Message:    "Table '" + join.Right.Name + "' has no alias in a JOIN",
+						Location:   join.Pos,
+						Suggestion: "Add an alias: JOIN " + join.Right.Name + " AS " + abbreviate(join.Right.Name),
+					})
+				}
+			}
+			return true
+		})
 	}
 	return violations, nil
 }

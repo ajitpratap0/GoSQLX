@@ -37,37 +37,42 @@ func NewMissingOrderByLimitRule() *MissingOrderByLimitRule {
 	}
 }
 
-// Check inspects SELECT statements for LIMIT/OFFSET without ORDER BY.
+// Check walks the AST for SELECT statements with LIMIT/OFFSET but no ORDER BY
+// at any nesting level. A subquery like (SELECT ... LIMIT 10) without ORDER BY
+// is non-deterministic just like at the top level.
 func (r *MissingOrderByLimitRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 	if ctx.AST == nil {
 		return nil, nil
 	}
 	var violations []linter.Violation
 	for _, stmt := range ctx.AST.Statements {
-		sel, ok := stmt.(*ast.SelectStatement)
-		if !ok {
-			continue
-		}
-		hasLimit := sel.Limit != nil || sel.Fetch != nil
-		if !hasLimit {
-			continue
-		}
-		hasOffset := sel.Offset != nil || (sel.Fetch != nil && sel.Fetch.OffsetValue != nil)
-		hasOrderBy := len(sel.OrderBy) > 0
-		if !hasOrderBy {
-			msg := "LIMIT without ORDER BY produces non-deterministic results"
-			if hasOffset {
-				msg = "LIMIT/OFFSET without ORDER BY produces non-deterministic pagination"
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectStatement)
+			if !ok {
+				return true
 			}
-			violations = append(violations, linter.Violation{
-				Rule:       r.ID(),
-				RuleName:   r.Name(),
-				Severity:   r.Severity(),
-				Message:    msg,
-				Location:   sel.Pos,
-				Suggestion: "Add ORDER BY to ensure deterministic row selection with LIMIT",
-			})
-		}
+			hasLimit := sel.Limit != nil || sel.Fetch != nil
+			if !hasLimit {
+				return true
+			}
+			hasOffset := sel.Offset != nil || (sel.Fetch != nil && sel.Fetch.OffsetValue != nil)
+			hasOrderBy := len(sel.OrderBy) > 0
+			if !hasOrderBy {
+				msg := "LIMIT without ORDER BY produces non-deterministic results"
+				if hasOffset {
+					msg = "LIMIT/OFFSET without ORDER BY produces non-deterministic pagination"
+				}
+				violations = append(violations, linter.Violation{
+					Rule:       r.ID(),
+					RuleName:   r.Name(),
+					Severity:   r.Severity(),
+					Message:    msg,
+					Location:   sel.Pos,
+					Suggestion: "Add ORDER BY to ensure deterministic row selection with LIMIT",
+				})
+			}
+			return true
+		})
 	}
 	return violations, nil
 }

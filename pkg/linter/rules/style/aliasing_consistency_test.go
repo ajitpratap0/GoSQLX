@@ -18,7 +18,28 @@ import (
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/linter"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
+
+// makeASTCtx produces a Context with tokens and AST populated, so AST-based
+// analysis paths (checkASTBased) are exercised instead of the text fallback.
+func makeASTCtx(t *testing.T, sql string) *linter.Context {
+	t.Helper()
+	ctx := linter.NewContext(sql, "<test>")
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+	tokens, err := tkz.Tokenize([]byte(sql))
+	if err != nil {
+		t.Fatalf("tokenize: %v", err)
+	}
+	ctx.WithTokens(tokens)
+	p := parser.NewParser()
+	defer p.Release()
+	astObj, parseErr := p.ParseFromModelTokens(tokens)
+	ctx.WithAST(astObj, parseErr)
+	return ctx
+}
 
 func TestAliasingConsistencyRule_Check_TextBased(t *testing.T) {
 	tests := []struct {
@@ -349,6 +370,41 @@ func TestTokenizeForAliases(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// L009 nested-traversal tests (C5: ast.Walk migration)
+//
+// With ast.Walk traversal, the rule now inspects SELECT statements inside
+// subqueries and CTE bodies, not just top-level SELECTs.
+
+// TestAliasingConsistency_Nested_DerivedTable ensures that mixed aliasing
+// (aliased + unaliased tables) inside a derived table (subquery in FROM) is
+// flagged after the walk migration.
+func TestAliasingConsistency_Nested_DerivedTable(t *testing.T) {
+	rule := NewAliasingConsistencyRule(true)
+	// Inner SELECT mixes an aliased table 'users u' with an unaliased 'orders'.
+	ctx := makeASTCtx(t, "SELECT x.id FROM (SELECT u.id FROM users u JOIN orders ON u.id = orders.user_id) x")
+	violations, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(violations) == 0 {
+		t.Error("expected violation for mixed aliasing inside a derived table (inner SELECT)")
+	}
+}
+
+// TestAliasingConsistency_Nested_CTE ensures mixed aliasing inside a CTE body
+// is flagged after the walk migration.
+func TestAliasingConsistency_Nested_CTE(t *testing.T) {
+	rule := NewAliasingConsistencyRule(true)
+	ctx := makeASTCtx(t, "WITH c AS (SELECT u.id FROM users u JOIN orders ON u.id = orders.user_id) SELECT * FROM c")
+	violations, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(violations) == 0 {
+		t.Error("expected violation for mixed aliasing inside a CTE body")
 	}
 }
 

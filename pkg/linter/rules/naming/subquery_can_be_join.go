@@ -50,15 +50,48 @@ func (v *subqueryJoinVisitor) Visit(node ast.Node) (ast.Visitor, error) {
 	if node == nil {
 		return nil, nil
 	}
-	// Track WHERE context manually for SelectStatement
+	// SelectStatement: manually dispatch so we can track which children are in
+	// "WHERE context" (flag EXISTS/IN here) vs "non-WHERE context" (recurse
+	// for nested SELECTs but do not flag). Returning nil tells Walk to skip
+	// default child traversal; we walk every child ourselves to preserve
+	// full nested coverage across CTEs, FROM subqueries, JOINs, etc.
 	if sel, ok := node.(*ast.SelectStatement); ok {
+		whereV := &subqueryJoinVisitor{rule: v.rule, violations: v.violations, inWhere: true}
+		nonWhereV := &subqueryJoinVisitor{rule: v.rule, violations: v.violations, inWhere: false}
+
 		if sel.Where != nil {
-			whereV := &subqueryJoinVisitor{rule: v.rule, violations: v.violations, inWhere: true}
 			if err := ast.Walk(whereV, sel.Where); err != nil {
 				return nil, err
 			}
 		}
-		return nil, nil // Don't auto-descend (we handled WHERE manually)
+		if sel.With != nil {
+			if err := ast.Walk(nonWhereV, sel.With); err != nil {
+				return nil, err
+			}
+		}
+		for _, col := range sel.Columns {
+			if err := ast.Walk(nonWhereV, col); err != nil {
+				return nil, err
+			}
+		}
+		for i := range sel.From {
+			if err := ast.Walk(nonWhereV, &sel.From[i]); err != nil {
+				return nil, err
+			}
+		}
+		for i := range sel.Joins {
+			if err := ast.Walk(nonWhereV, &sel.Joins[i]); err != nil {
+				return nil, err
+			}
+		}
+		if sel.Having != nil {
+			// HAVING is also a filter context, but this rule intentionally
+			// only applies to WHERE — keep behavior, recurse as non-WHERE.
+			if err := ast.Walk(nonWhereV, sel.Having); err != nil {
+				return nil, err
+			}
+		}
+		return nil, nil
 	}
 
 	if !v.inWhere {

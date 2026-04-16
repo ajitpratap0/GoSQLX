@@ -38,36 +38,41 @@ func NewImplicitCrossJoinRule() *ImplicitCrossJoinRule {
 	}
 }
 
-// Check inspects the AST for SELECT statements with multiple FROM tables and no JOINs.
+// Check walks the AST for SELECT statements with multiple FROM tables and no
+// JOINs at any nesting level. Implicit cross joins buried in subqueries or CTE
+// bodies are just as dangerous as top-level ones.
 func (r *ImplicitCrossJoinRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 	if ctx.AST == nil {
 		return nil, nil
 	}
 	var violations []linter.Violation
 	for _, stmt := range ctx.AST.Statements {
-		sel, ok := stmt.(*ast.SelectStatement)
-		if !ok {
-			continue
-		}
-		// Multiple tables in FROM without any JOIN clause = implicit cross join
-		if len(sel.From) >= 2 && len(sel.Joins) == 0 {
-			tableNames := make([]string, 0, len(sel.From))
-			for _, ref := range sel.From {
-				if ref.Name != "" {
-					tableNames = append(tableNames, ref.Name)
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectStatement)
+			if !ok {
+				return true
+			}
+			// Multiple tables in FROM without any JOIN clause = implicit cross join
+			if len(sel.From) >= 2 && len(sel.Joins) == 0 {
+				tableNames := make([]string, 0, len(sel.From))
+				for _, ref := range sel.From {
+					if ref.Name != "" {
+						tableNames = append(tableNames, ref.Name)
+					}
+				}
+				if len(tableNames) >= 2 {
+					violations = append(violations, linter.Violation{
+						Rule:       r.ID(),
+						RuleName:   r.Name(),
+						Severity:   r.Severity(),
+						Message:    "Comma-separated tables in FROM clause create an implicit cross join",
+						Location:   sel.Pos,
+						Suggestion: "Use explicit JOIN syntax with an ON condition instead of comma-separated tables",
+					})
 				}
 			}
-			if len(tableNames) >= 2 {
-				violations = append(violations, linter.Violation{
-					Rule:       r.ID(),
-					RuleName:   r.Name(),
-					Severity:   r.Severity(),
-					Message:    "Comma-separated tables in FROM clause create an implicit cross join",
-					Location:   sel.Pos,
-					Suggestion: "Use explicit JOIN syntax with an ON condition instead of comma-separated tables",
-				})
-			}
-		}
+			return true
+		})
 	}
 	return violations, nil
 }

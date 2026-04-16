@@ -70,7 +70,17 @@ type FileResult struct {
 //	)
 //	result := linter.LintFile("query.sql")
 type Linter struct {
-	rules []Rule
+	rules  []Rule
+	ignore IgnoreMatcher
+}
+
+// IgnoreMatcher reports whether a given filename should be skipped during
+// linting. It is implemented by *config.Config (which honors .gosqlx.yml
+// ignore globs) and may be implemented by callers that want custom policies.
+//
+// A nil IgnoreMatcher is treated as "match nothing" (no files ignored).
+type IgnoreMatcher interface {
+	ShouldIgnore(filename string) bool
 }
 
 // New creates a new linter with the given rules.
@@ -88,6 +98,24 @@ type Linter struct {
 func New(rules ...Rule) *Linter {
 	return &Linter{
 		rules: rules,
+	}
+}
+
+// NewWithIgnore creates a new linter with the given rules and an ignore
+// matcher. Files that match the matcher are skipped by LintFile/LintDirectory
+// (LintString always runs — it's for explicit content).
+//
+// This is the low-level constructor. For the common case of wiring up a
+// .gosqlx.yml config, use pkg/linter/config.Config.Apply plus this
+// constructor:
+//
+//	cfg, _ := config.LoadDefault()
+//	rules := cfg.Apply(allRules)
+//	l := linter.NewWithIgnore(cfg, rules...)
+func NewWithIgnore(ignore IgnoreMatcher, rules ...Rule) *Linter {
+	return &Linter{
+		rules:  rules,
+		ignore: ignore,
 	}
 }
 
@@ -114,6 +142,14 @@ func (l *Linter) Rules() []Rule {
 //	    fmt.Println(linter.FormatViolation(v))
 //	}
 func (l *Linter) LintFile(filename string) FileResult {
+	// Respect configured ignore patterns (if any) before touching disk.
+	if l.ignore != nil && l.ignore.ShouldIgnore(filename) {
+		return FileResult{
+			Filename:   filename,
+			Violations: []Violation{},
+		}
+	}
+
 	// Read file
 	content, err := os.ReadFile(filepath.Clean(filename)) // #nosec G304 // #nosec G304
 	if err != nil {

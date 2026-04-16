@@ -615,7 +615,7 @@ func (p *Parser) parseLimitOffsetClause() (limit *int, offset *int, err error) {
 			if p.dialect == string(keywords.DialectOracle) {
 				msg = "LIMIT clause is not supported in Oracle; use ROWNUM or FETCH FIRST … ROWS ONLY instead"
 			}
-			return nil, nil, fmt.Errorf("%s", msg)
+			return nil, nil, goerrors.UnsupportedFeatureError(msg, p.currentLocation(), "")
 		}
 		p.advance() // Consume LIMIT
 

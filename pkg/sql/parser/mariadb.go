@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
@@ -240,7 +241,11 @@ func (p *Parser) parseSequenceOptions() (ast.SequenceOptions, error) {
 	}
 	// Validate: CACHE n and NOCACHE are mutually exclusive.
 	if opts.Cache != nil && opts.NoCache {
-		return opts, fmt.Errorf("contradictory sequence options: CACHE and NOCACHE cannot both be specified")
+		return opts, goerrors.InvalidSyntaxError(
+			"contradictory sequence options: CACHE and NOCACHE cannot both be specified",
+			p.currentLocation(),
+			"",
+		)
 	}
 	return opts, nil
 }
@@ -263,7 +268,12 @@ func (p *Parser) parseNumericLit() (*ast.LiteralValue, error) {
 // The caller has already consumed FOR.
 func (p *Parser) parseForSystemTimeClause() (*ast.ForSystemTimeClause, error) {
 	if !strings.EqualFold(p.currentToken.Token.Value, "SYSTEM_TIME") {
-		return nil, fmt.Errorf("expected SYSTEM_TIME after FOR, got %q", p.currentToken.Token.Value)
+		return nil, goerrors.ExpectedTokenError(
+			"SYSTEM_TIME after FOR",
+			p.currentToken.Token.Value,
+			p.currentLocation(),
+			"",
+		)
 	}
 	sysTimePos := p.currentLocation() // position of SYSTEM_TIME token
 	p.advance()
@@ -276,7 +286,12 @@ func (p *Parser) parseForSystemTimeClause() (*ast.ForSystemTimeClause, error) {
 	case "AS":
 		p.advance()
 		if !strings.EqualFold(p.currentToken.Token.Value, "OF") {
-			return nil, fmt.Errorf("expected OF after AS, got %q", p.currentToken.Token.Value)
+			return nil, goerrors.ExpectedTokenError(
+				"OF after AS",
+				p.currentToken.Token.Value,
+				p.currentLocation(),
+				"",
+			)
 		}
 		p.advance()
 		expr, err := p.parseTemporalPointExpression()
@@ -293,7 +308,12 @@ func (p *Parser) parseForSystemTimeClause() (*ast.ForSystemTimeClause, error) {
 			return nil, err
 		}
 		if !strings.EqualFold(p.currentToken.Token.Value, "AND") {
-			return nil, fmt.Errorf("expected AND in FOR SYSTEM_TIME BETWEEN, got %q", p.currentToken.Token.Value)
+			return nil, goerrors.ExpectedTokenError(
+				"AND in FOR SYSTEM_TIME BETWEEN",
+				p.currentToken.Token.Value,
+				p.currentLocation(),
+				"",
+			)
 		}
 		p.advance()
 		end, err := p.parseTemporalPointExpression()
@@ -310,7 +330,12 @@ func (p *Parser) parseForSystemTimeClause() (*ast.ForSystemTimeClause, error) {
 			return nil, err
 		}
 		if !strings.EqualFold(p.currentToken.Token.Value, "TO") {
-			return nil, fmt.Errorf("expected TO in FOR SYSTEM_TIME FROM, got %q", p.currentToken.Token.Value)
+			return nil, goerrors.ExpectedTokenError(
+				"TO in FOR SYSTEM_TIME FROM",
+				p.currentToken.Token.Value,
+				p.currentLocation(),
+				"",
+			)
 		}
 		p.advance()
 		end, err := p.parseTemporalPointExpression()
@@ -324,7 +349,12 @@ func (p *Parser) parseForSystemTimeClause() (*ast.ForSystemTimeClause, error) {
 		p.advance()
 		clause.Type = ast.SystemTimeAll
 	default:
-		return nil, fmt.Errorf("expected AS OF, BETWEEN, FROM, or ALL after FOR SYSTEM_TIME, got %q", word)
+		return nil, goerrors.ExpectedTokenError(
+			"AS OF, BETWEEN, FROM, or ALL after FOR SYSTEM_TIME",
+			word,
+			p.currentLocation(),
+			"",
+		)
 	}
 	return clause, nil
 }
@@ -339,7 +369,12 @@ func (p *Parser) parseTemporalPointExpression() (ast.Expression, error) {
 		typeKeyword := p.currentToken.Token.Value
 		p.advance()
 		if !p.isStringLiteral() {
-			return nil, fmt.Errorf("expected string literal after %s, got %q", typeKeyword, p.currentToken.Token.Value)
+			return nil, goerrors.ExpectedTokenError(
+				fmt.Sprintf("string literal after %s", typeKeyword),
+				p.currentToken.Token.Value,
+				p.currentLocation(),
+				"",
+			)
 		}
 		// The tokenizer strips surrounding single quotes from string literal tokens,
 		// so p.currentToken.Token.Value is the raw string content (e.g. "2023-01-01 00:00:00").

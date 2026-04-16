@@ -271,7 +271,13 @@ type StatementImpl struct {
 func (s *StatementImpl) TokenLiteral() string { return s.Variant.TokenLiteral() }
 
 // Children implements Node and returns the wrapped StatementVariant as a single child.
-func (s *StatementImpl) Children() []Node { return []Node{s.Variant} }
+// Returns nil if the Variant field has not been set.
+func (s *StatementImpl) Children() []Node {
+	if s.Variant == nil {
+		return nil
+	}
+	return []Node{s.Variant}
+}
 
 func (s *StatementImpl) statementNode() {}
 

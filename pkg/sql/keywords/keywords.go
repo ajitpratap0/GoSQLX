@@ -21,10 +21,74 @@
 package keywords
 
 import (
+	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
+
+// KeywordConflict describes a collision recorded during keyword registration.
+// When addKeywordsWithCategory encounters a word that is already registered,
+// it keeps the existing (first-wins) entry and records the attempted
+// registration here so callers and tests can surface the ambiguity.
+//
+// Fields:
+//   - Word:     the keyword (uppercased) that collided
+//   - Existing: the Keyword already present in the map at collision time
+//   - Attempted: the Keyword that was skipped
+//   - Dialect:  the dialect of the Keywords instance being built when the
+//     conflict occurred (may be empty if built outside New())
+type KeywordConflict struct {
+	Word      string
+	Existing  Keyword
+	Attempted Keyword
+	Dialect   SQLDialect
+}
+
+// String renders a conflict in a form suitable for t.Errorf output.
+func (c KeywordConflict) String() string {
+	return fmt.Sprintf(
+		"%q: existing{type=%v,reserved=%v,tableAlias=%v} vs attempted{type=%v,reserved=%v,tableAlias=%v} (dialect=%s)",
+		c.Word,
+		c.Existing.Type, c.Existing.Reserved, c.Existing.ReservedForTableAlias,
+		c.Attempted.Type, c.Attempted.Reserved, c.Attempted.ReservedForTableAlias,
+		c.Dialect,
+	)
+}
+
+// conflictsMu guards the package-level conflict list.
+// The list captures the conflicts observed during the most recent New() call.
+// It is reset at the start of each New() invocation.
+var (
+	conflictsMu   sync.Mutex
+	lastConflicts []KeywordConflict
+)
+
+// Conflicts returns a snapshot of the keyword conflicts recorded during
+// the most recent New() invocation. A non-empty slice means two different
+// keyword sources (e.g. ADDITIONAL_KEYWORDS and SQLITE_SPECIFIC) each
+// defined the same word with a different Type/Reserved signature, and the
+// first-registered definition won.
+//
+// The returned slice is a copy and safe to iterate without holding any
+// package lock.
+func Conflicts() []KeywordConflict {
+	conflictsMu.Lock()
+	defer conflictsMu.Unlock()
+	out := make([]KeywordConflict, len(lastConflicts))
+	copy(out, lastConflicts)
+	return out
+}
+
+// ResetConflicts clears the package-level conflict list.
+// Mostly useful for tests that want to establish a clean baseline before
+// constructing a Keywords instance.
+func ResetConflicts() {
+	conflictsMu.Lock()
+	lastConflicts = nil
+	conflictsMu.Unlock()
+}
 
 // RESERVED_FOR_TABLE_ALIAS contains keywords that cannot be used as table aliases.
 // These keywords are reserved in the context of table aliasing and will cause
@@ -128,13 +192,18 @@ var ADDITIONAL_KEYWORDS = []Keyword{
 	{Word: "NULL", Type: models.TokenTypeNull, Reserved: true, ReservedForTableAlias: false},
 	{Word: "TRUE", Type: models.TokenTypeTrue, Reserved: true, ReservedForTableAlias: false},
 	{Word: "FALSE", Type: models.TokenTypeFalse, Reserved: true, ReservedForTableAlias: false},
-	{Word: "ASC", Type: models.TokenTypeAsc, Reserved: true, ReservedForTableAlias: false},
+	// ASC is already registered in RESERVED_FOR_TABLE_ALIAS with the same
+	// TokenTypeAsc; duplicating it here previously produced a silent conflict
+	// with a weaker ReservedForTableAlias value.
 	{Word: "DESC", Type: models.TokenTypeDesc, Reserved: true, ReservedForTableAlias: false},
 	{Word: "CASE", Type: models.TokenTypeCase, Reserved: true, ReservedForTableAlias: false},
 	{Word: "WHEN", Type: models.TokenTypeWhen, Reserved: true, ReservedForTableAlias: false},
 	{Word: "THEN", Type: models.TokenTypeThen, Reserved: true, ReservedForTableAlias: false},
 	{Word: "ELSE", Type: models.TokenTypeElse, Reserved: true, ReservedForTableAlias: false},
-	{Word: "END", Type: models.TokenTypeEnd, Reserved: true, ReservedForTableAlias: false},
+	// END is already registered in RESERVED_FOR_TABLE_ALIAS with TokenTypeKeyword
+	// and ReservedForTableAlias=true. First-wins runtime behavior means callers
+	// see TokenTypeKeyword for "END"; the previous duplicate entry here claimed
+	// TokenTypeEnd but was never reachable.
 	{Word: "CAST", Type: models.TokenTypeCast, Reserved: true, ReservedForTableAlias: false},
 	{Word: "INTERVAL", Type: models.TokenTypeInterval, Reserved: true, ReservedForTableAlias: false},
 	// Window function names (Phase 2.5)
@@ -229,12 +298,17 @@ var ADDITIONAL_KEYWORDS = []Keyword{
 //	    fmt.Println("LATERAL is a PostgreSQL keyword")
 //	}
 func New(dialect SQLDialect, ignoreCase bool) *Keywords {
+	// Reset the package-level conflict buffer so the next call to Conflicts()
+	// reflects only the conflicts from this construction.
+	ResetConflicts()
+
 	k := &Keywords{
 		reservedKeywords: make(map[string]bool),
 		keywordMap:       make(map[string]Keyword),
 		dialect:          dialect,
 		ignoreCase:       true, // Always use case-insensitive comparison for SQL keywords
 		CompoundKeywords: make(map[string]models.TokenType),
+		trackConflicts:   true,
 	}
 
 	// Initialize compound keywords
@@ -287,6 +361,14 @@ func New(dialect SQLDialect, ignoreCase bool) *Keywords {
 		}
 	}
 
+	// Publish any conflicts observed during construction to the package-level
+	// buffer so Conflicts() returns them.
+	if len(k.conflicts) > 0 {
+		conflictsMu.Lock()
+		lastConflicts = append(lastConflicts, k.conflicts...)
+		conflictsMu.Unlock()
+	}
+
 	return k
 }
 
@@ -304,8 +386,52 @@ func (k *Keywords) addKeywordsWithCategory(keywords []Keyword) {
 					k.reservedKeywords[kw.Word] = true
 				}
 			}
+			continue
 		}
+
+		// Duplicate: first-wins is preserved, but if the attempted registration
+		// differs from the existing one (different Type, Reserved, or
+		// ReservedForTableAlias) we record the collision for diagnostics.
+		if !k.trackConflicts {
+			continue
+		}
+		var key string
+		if k.ignoreCase {
+			key = strings.ToUpper(kw.Word)
+		} else {
+			key = kw.Word
+		}
+		existing := k.keywordMap[key]
+		if keywordsEquivalent(existing, kw) {
+			continue
+		}
+		k.conflicts = append(k.conflicts, KeywordConflict{
+			Word:      key,
+			Existing:  existing,
+			Attempted: kw,
+			Dialect:   k.dialect,
+		})
 	}
+}
+
+// keywordsEquivalent reports whether two Keyword records describe the same
+// semantic registration. Only the fields that affect tokenization/parsing
+// are compared; Word is compared case-insensitively because the map keys
+// are already normalized.
+func keywordsEquivalent(a, b Keyword) bool {
+	if !strings.EqualFold(a.Word, b.Word) {
+		return false
+	}
+	if a.Type != b.Type {
+		return false
+	}
+	if a.Reserved != b.Reserved {
+		return false
+	}
+	if a.ReservedForTableAlias != b.ReservedForTableAlias {
+		return false
+	}
+	return true
 }
 
 // containsKeyword checks if a keyword already exists in the collection

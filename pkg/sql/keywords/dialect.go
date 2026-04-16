@@ -191,6 +191,14 @@ func (k *Keywords) IsCompoundKeywordStart(word string) bool {
 // These keywords are recognized when using DialectMySQL.
 //
 // Examples: ZEROFILL, UNSIGNED, FORCE, IGNORE
+// Keywords marked with "(in base)" below are already in ADDITIONAL_KEYWORDS
+// with reserved=true/alias=true for DDL usage. Registering a second,
+// weaker copy here would be silently dropped by the first-wins registration.
+//
+//	(in base) INDEX  - ADDITIONAL_KEYWORDS (TokenTypeKeyword, reserved=true, alias=true)
+//
+// OPTION appears in both lists with equivalent signatures and therefore
+// does not create a conflict; we keep it in both for clarity.
 var MYSQL_SPECIFIC = []Keyword{
 	{Word: "BINARY", Type: models.TokenTypeKeyword},
 	{Word: "CHAR", Type: models.TokenTypeKeyword},
@@ -200,7 +208,6 @@ var MYSQL_SPECIFIC = []Keyword{
 	{Word: "ZEROFILL", Type: models.TokenTypeKeyword},
 	{Word: "FORCE", Type: models.TokenTypeKeyword},
 	{Word: "IGNORE", Type: models.TokenTypeKeyword},
-	{Word: "INDEX", Type: models.TokenTypeKeyword},
 	{Word: "KEY", Type: models.TokenTypeKeyword},
 	{Word: "KEYS", Type: models.TokenTypeKeyword},
 	{Word: "KILL", Type: models.TokenTypeKeyword},
@@ -217,25 +224,39 @@ var MYSQL_SPECIFIC = []Keyword{
 //
 // v1.6.0 additions: MATERIALIZED, LATERAL (already in base keywords), RETURNING (in base)
 // Examples: ILIKE, MATERIALIZED, SIMILAR, FREEZE, RECURSIVE, RETURNING
+// Keywords marked with "(in base)" below are also present in the base
+// keyword set (RESERVED_FOR_TABLE_ALIAS or ADDITIONAL_KEYWORDS) with a more
+// specific TokenType. They are NOT duplicated here because the first-wins
+// registration would otherwise silently replace the richer classification
+// with TokenTypeKeyword.
+//
+//	(in base) ANALYZE      - RESERVED_FOR_TABLE_ALIAS (TokenTypeKeyword, alias=true)
+//	(in base) CONCURRENTLY - ADDITIONAL_KEYWORDS      (TokenTypeKeyword, reserved=true)
+//	(in base) NOWAIT       - ADDITIONAL_KEYWORDS      (TokenTypeNoWait,  reserved=true)
+//	(in base) RETURNING    - RESERVED_FOR_TABLE_ALIAS (TokenTypeReturning, reserved=true)
 var POSTGRESQL_SPECIFIC = []Keyword{
 	{Word: "MATERIALIZED", Type: models.TokenTypeKeyword},
 	{Word: "ILIKE", Type: models.TokenTypeKeyword},
 	{Word: "SIMILAR", Type: models.TokenTypeKeyword},
 	{Word: "FREEZE", Type: models.TokenTypeKeyword},
 	{Word: "ANALYSE", Type: models.TokenTypeKeyword},
-	{Word: "ANALYZE", Type: models.TokenTypeKeyword},
-	{Word: "CONCURRENTLY", Type: models.TokenTypeKeyword},
 	{Word: "REINDEX", Type: models.TokenTypeKeyword},
 	{Word: "TOAST", Type: models.TokenTypeKeyword},
-	{Word: "NOWAIT", Type: models.TokenTypeKeyword},
 	{Word: "RECURSIVE", Type: models.TokenTypeKeyword},
-	{Word: "RETURNING", Type: models.TokenTypeKeyword},
 }
 
 // SQLITE_SPECIFIC contains SQLite-specific keywords and extensions.
 // These keywords are recognized when using DialectSQLite.
 //
 // Examples: AUTOINCREMENT, VACUUM, ATTACH, DETACH, PRAGMA
+// Keywords marked with "(in base)" below are already present in
+// ADDITIONAL_KEYWORDS with reserved=true. Registering a second, weaker copy
+// here would be silently dropped by the first-wins registration, but the
+// intent is that these words behave identically in SQLite and other
+// dialects, so we rely on the base entry.
+//
+//	(in base) REPLACE   - ADDITIONAL_KEYWORDS (TokenTypeKeyword, reserved=true)
+//	(in base) TEMPORARY - ADDITIONAL_KEYWORDS (TokenTypeKeyword, reserved=true)
 var SQLITE_SPECIFIC = []Keyword{
 	{Word: "ABORT", Type: models.TokenTypeKeyword},
 	{Word: "ACTION", Type: models.TokenTypeKeyword},
@@ -252,10 +273,8 @@ var SQLITE_SPECIFIC = []Keyword{
 	{Word: "PRAGMA", Type: models.TokenTypeKeyword},
 	{Word: "QUERY", Type: models.TokenTypeKeyword},
 	{Word: "RAISE", Type: models.TokenTypeKeyword},
-	{Word: "REPLACE", Type: models.TokenTypeKeyword},
 	{Word: "ROWID", Type: models.TokenTypeKeyword},
 	{Word: "TEMP", Type: models.TokenTypeKeyword},
-	{Word: "TEMPORARY", Type: models.TokenTypeKeyword},
 	{Word: "VACUUM", Type: models.TokenTypeKeyword},
 	{Word: "VIRTUAL", Type: models.TokenTypeKeyword},
 	{Word: "WITHOUT", Type: models.TokenTypeKeyword},

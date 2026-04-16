@@ -54,8 +54,11 @@ func (f FunctionDesc) String() string {
 	return fmt.Sprintf("%s(%s)", f.Name, f.Arguments)
 }
 
-// Children implements Node and returns nil - FunctionDesc has no child nodes.
-func (f FunctionDesc) Children() []Node { return nil }
+// Children implements Node and returns the function's ObjectName as its sole
+// child node, enabling visitor traversal to reach qualified names.
+func (f FunctionDesc) Children() []Node {
+	return []Node{f.Name}
+}
 
 // TokenLiteral implements Node and returns the SQL representation of this
 // function descriptor (delegates to String).

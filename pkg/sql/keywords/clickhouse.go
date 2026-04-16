@@ -33,13 +33,20 @@ var CLICKHOUSE_SPECIFIC = []Keyword{
 	{Word: "GLOBAL", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
 	{Word: "ASOF", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
 
-	// ClickHouse DDL — table engine and column options
+	// ClickHouse DDL — table engine and column options.
+	//
+	// SETTINGS and FORMAT are already defined in RESERVED_FOR_TABLE_ALIAS
+	// (reserved=true, alias=true) because they act as clause boundaries in
+	// ClickHouse queries (e.g. "SELECT ... SETTINGS ..." / "... FORMAT ...").
+	// We redeclare them here with the same signature to keep them visible in
+	// DialectKeywords(DialectClickHouse) without triggering a registration
+	// conflict.
 	{Word: "ENGINE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "CODEC", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "TTL", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "GRANULARITY", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
-	{Word: "SETTINGS", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
-	{Word: "FORMAT", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
+	{Word: "SETTINGS", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
+	{Word: "FORMAT", Type: models.TokenTypeKeyword, Reserved: true, ReservedForTableAlias: true},
 	{Word: "ALIAS", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "MATERIALIZED", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},
 	{Word: "TUPLE", Type: models.TokenTypeKeyword, Reserved: false, ReservedForTableAlias: false},

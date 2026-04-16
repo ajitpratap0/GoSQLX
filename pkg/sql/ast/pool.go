@@ -22,9 +22,30 @@ package ast
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
 )
+
+// poolLeakCount counts expressions that exceeded PutExpression's iterative
+// work-queue cap and were drained via the recursive fallback. Non-zero values
+// mean the AST is pathologically large (>MaxWorkQueueSize nodes in a single
+// cleanup) or the queue algorithm needs tuning. Exposed via PoolLeakCount().
+var poolLeakCount uint64
+
+// PoolLeakCount returns the number of times PutExpression's iterative cleanup
+// exceeded MaxWorkQueueSize and fell back to recursive drain. A non-zero
+// return does NOT indicate a leak — the recursive drain still releases every
+// node — but it flags that the work-queue cap was hit. Used for diagnostics
+// and by leak tests.
+func PoolLeakCount() uint64 {
+	return atomic.LoadUint64(&poolLeakCount)
+}
+
+// ResetPoolLeakCount zeroes the pool-leak counter. Test-only helper.
+func ResetPoolLeakCount() {
+	atomic.StoreUint64(&poolLeakCount, 0)
+}
 
 // Pool configuration constants control cleanup behavior to prevent resource exhaustion.
 const (
@@ -33,10 +54,21 @@ const (
 	// use iterative cleanup instead of recursion.
 	MaxCleanupDepth = 100
 
-	// MaxWorkQueueSize limits the work queue for iterative cleanup operations.
-	// This prevents excessive memory usage when cleaning up extremely large ASTs
-	// with thousands of nested expressions. Set to 1000 based on production workloads.
-	MaxWorkQueueSize = 1000
+	// MaxWorkQueueSize limits the total number of nodes that the iterative
+	// PutExpression cleanup loop will process before resizing protection kicks in.
+	// Historically this was 1000 and cleanup silently stopped after that,
+	// leaking every remaining node (hundreds per parse for large IN lists).
+	//
+	// The value is now 100_000, large enough to drain every realistic SQL AST
+	// (even a 10k-element IN list or deeply nested CTE forest) in a single
+	// pass. The work queue itself is bounded by the live AST size — nodes
+	// are pointers already allocated — so this does not materially increase
+	// peak memory vs. the AST that already exists.
+	//
+	// If the cap is ever hit, PutExpression falls back to a depth-limited
+	// recursive drain (bounded by MaxCleanupDepth) for the remaining queue
+	// so no pooled nodes are silently leaked. See PutExpression for details.
+	MaxWorkQueueSize = 100_000
 )
 
 var (
@@ -555,18 +587,52 @@ func GetInsertStatement() *InsertStatement {
 	return insertStmtPool.Get().(*InsertStatement)
 }
 
-// PutInsertStatement returns an InsertStatement to the pool
+// PutInsertStatement returns an InsertStatement to the pool.
+//
+// Releases every pooled Expression/Statement reachable from the InsertStatement:
+//   - With (CTEs + nested statements + scalar CTE expressions)
+//   - Columns
+//   - Output (SQL Server OUTPUT clause)
+//   - Values (all rows, all cells)
+//   - Query (INSERT ... SELECT — the nested QueryExpression)
+//   - Returning
+//   - OnConflict.Target, OnConflict.Action.DoUpdate (Column, Value), OnConflict.Action.Where
+//   - OnDuplicateKey.Updates (Column, Value)
 func PutInsertStatement(stmt *InsertStatement) {
 	if stmt == nil {
 		return
 	}
 
-	// Clean up expressions
+	// ── WITH clause / CTEs ────────────────────────────────────────────
+	if stmt.With != nil {
+		for _, cte := range stmt.With.CTEs {
+			if cte == nil {
+				continue
+			}
+			releaseStatement(cte.Statement)
+			cte.Statement = nil
+			PutExpression(cte.ScalarExpr)
+			cte.ScalarExpr = nil
+		}
+		stmt.With.CTEs = nil
+		stmt.With = nil
+	}
+
+	// ── Column list ───────────────────────────────────────────────────
 	for i := range stmt.Columns {
 		PutExpression(stmt.Columns[i])
 		stmt.Columns[i] = nil
 	}
-	// Clean up multi-row values
+	stmt.Columns = stmt.Columns[:0]
+
+	// ── OUTPUT clause (SQL Server) ────────────────────────────────────
+	for i := range stmt.Output {
+		PutExpression(stmt.Output[i])
+		stmt.Output[i] = nil
+	}
+	stmt.Output = stmt.Output[:0]
+
+	// ── VALUES (multi-row) ────────────────────────────────────────────
 	for i := range stmt.Values {
 		for j := range stmt.Values[i] {
 			PutExpression(stmt.Values[i][j])
@@ -574,10 +640,53 @@ func PutInsertStatement(stmt *InsertStatement) {
 		}
 		stmt.Values[i] = stmt.Values[i][:0]
 	}
-
-	// Reset slices but keep capacity
-	stmt.Columns = stmt.Columns[:0]
 	stmt.Values = stmt.Values[:0]
+
+	// ── Query (INSERT ... SELECT) ─────────────────────────────────────
+	if stmt.Query != nil {
+		// Query is a QueryExpression (Statement); dispatch via releaseStatement.
+		releaseStatement(stmt.Query)
+		stmt.Query = nil
+	}
+
+	// ── RETURNING ──────────────────────────────────────────────────────
+	for i := range stmt.Returning {
+		PutExpression(stmt.Returning[i])
+		stmt.Returning[i] = nil
+	}
+	stmt.Returning = stmt.Returning[:0]
+
+	// ── ON CONFLICT (PostgreSQL) ──────────────────────────────────────
+	if stmt.OnConflict != nil {
+		for i := range stmt.OnConflict.Target {
+			PutExpression(stmt.OnConflict.Target[i])
+			stmt.OnConflict.Target[i] = nil
+		}
+		stmt.OnConflict.Target = nil
+		for i := range stmt.OnConflict.Action.DoUpdate {
+			PutExpression(stmt.OnConflict.Action.DoUpdate[i].Column)
+			PutExpression(stmt.OnConflict.Action.DoUpdate[i].Value)
+			stmt.OnConflict.Action.DoUpdate[i].Column = nil
+			stmt.OnConflict.Action.DoUpdate[i].Value = nil
+		}
+		stmt.OnConflict.Action.DoUpdate = nil
+		PutExpression(stmt.OnConflict.Action.Where)
+		stmt.OnConflict.Action.Where = nil
+		stmt.OnConflict = nil
+	}
+
+	// ── ON DUPLICATE KEY UPDATE (MySQL) ───────────────────────────────
+	if stmt.OnDuplicateKey != nil {
+		for i := range stmt.OnDuplicateKey.Updates {
+			PutExpression(stmt.OnDuplicateKey.Updates[i].Column)
+			PutExpression(stmt.OnDuplicateKey.Updates[i].Value)
+			stmt.OnDuplicateKey.Updates[i].Column = nil
+			stmt.OnDuplicateKey.Updates[i].Value = nil
+		}
+		stmt.OnDuplicateKey.Updates = nil
+		stmt.OnDuplicateKey = nil
+	}
+
 	stmt.TableName = ""
 
 	// Return to pool
@@ -589,25 +698,63 @@ func GetUpdateStatement() *UpdateStatement {
 	return updateStmtPool.Get().(*UpdateStatement)
 }
 
-// PutUpdateStatement returns an UpdateStatement to the pool
+// PutUpdateStatement returns an UpdateStatement to the pool.
+//
+// Releases every pooled Expression/Statement reachable from the UpdateStatement:
+//   - With (CTEs + nested statements + scalar CTE expressions)
+//   - Assignments (Column, Value)
+//   - From (TableReference.Subquery, TableFunc, Pivot, MatchRecognize, TimeTravel, ForSystemTime)
+//   - Where
+//   - Returning
 func PutUpdateStatement(stmt *UpdateStatement) {
 	if stmt == nil {
 		return
 	}
 
-	// Clean up expressions
+	// ── WITH clause / CTEs ────────────────────────────────────────────
+	if stmt.With != nil {
+		for _, cte := range stmt.With.CTEs {
+			if cte == nil {
+				continue
+			}
+			releaseStatement(cte.Statement)
+			cte.Statement = nil
+			PutExpression(cte.ScalarExpr)
+			cte.ScalarExpr = nil
+		}
+		stmt.With.CTEs = nil
+		stmt.With = nil
+	}
+
+	// ── SET assignments ───────────────────────────────────────────────
 	for i := range stmt.Assignments {
 		PutExpression(stmt.Assignments[i].Column)
 		PutExpression(stmt.Assignments[i].Value)
 		stmt.Assignments[i].Column = nil
 		stmt.Assignments[i].Value = nil
 	}
-	PutExpression(stmt.Where)
-
-	// Reset fields
 	stmt.Assignments = stmt.Assignments[:0]
+
+	// ── FROM table references ─────────────────────────────────────────
+	for i := range stmt.From {
+		releaseTableReference(&stmt.From[i])
+	}
+	stmt.From = stmt.From[:0]
+
+	// ── WHERE ──────────────────────────────────────────────────────────
+	PutExpression(stmt.Where)
 	stmt.Where = nil
+
+	// ── RETURNING ──────────────────────────────────────────────────────
+	for i := range stmt.Returning {
+		PutExpression(stmt.Returning[i])
+		stmt.Returning[i] = nil
+	}
+	stmt.Returning = stmt.Returning[:0]
+
+	// ── Scalars ────────────────────────────────────────────────────────
 	stmt.TableName = ""
+	stmt.Alias = ""
 
 	// Return to pool
 	updateStmtPool.Put(stmt)
@@ -618,18 +765,53 @@ func GetDeleteStatement() *DeleteStatement {
 	return deleteStmtPool.Get().(*DeleteStatement)
 }
 
-// PutDeleteStatement returns a DeleteStatement to the pool
+// PutDeleteStatement returns a DeleteStatement to the pool.
+//
+// Releases every pooled Expression/Statement reachable from the DeleteStatement:
+//   - With (CTEs + nested statements + scalar CTE expressions)
+//   - Using (TableReference subqueries, TableFunc, Pivot, MatchRecognize, TimeTravel, ForSystemTime)
+//   - Where
+//   - Returning
 func PutDeleteStatement(stmt *DeleteStatement) {
 	if stmt == nil {
 		return
 	}
 
-	// Clean up expressions
-	PutExpression(stmt.Where)
+	// ── WITH clause / CTEs ────────────────────────────────────────────
+	if stmt.With != nil {
+		for _, cte := range stmt.With.CTEs {
+			if cte == nil {
+				continue
+			}
+			releaseStatement(cte.Statement)
+			cte.Statement = nil
+			PutExpression(cte.ScalarExpr)
+			cte.ScalarExpr = nil
+		}
+		stmt.With.CTEs = nil
+		stmt.With = nil
+	}
 
-	// Reset fields
+	// ── USING table references (PostgreSQL) ───────────────────────────
+	for i := range stmt.Using {
+		releaseTableReference(&stmt.Using[i])
+	}
+	stmt.Using = stmt.Using[:0]
+
+	// ── WHERE ──────────────────────────────────────────────────────────
+	PutExpression(stmt.Where)
 	stmt.Where = nil
+
+	// ── RETURNING ──────────────────────────────────────────────────────
+	for i := range stmt.Returning {
+		PutExpression(stmt.Returning[i])
+		stmt.Returning[i] = nil
+	}
+	stmt.Returning = stmt.Returning[:0]
+
+	// ── Scalars ────────────────────────────────────────────────────────
 	stmt.TableName = ""
+	stmt.Alias = ""
 
 	// Return to pool
 	deleteStmtPool.Put(stmt)
@@ -666,63 +848,252 @@ func GetSelectStatement() *SelectStatement {
 	return stmt
 }
 
-// PutSelectStatement returns a SelectStatement to the pool
-// Uses iterative cleanup via PutExpression to handle deeply nested expressions
+// PutSelectStatement returns a SelectStatement to the pool.
+//
+// Uses iterative cleanup via PutExpression to handle deeply nested expressions.
+// This function MUST release every pooled Expression/Node reachable from the
+// SelectStatement; missing fields cause silent pool leaks that defeat the
+// 60-80% memory reduction target and degrade hit-rate below 95%.
+//
+// Coverage (v1.14.0+ — comprehensive audit):
+//   - With (CTEs + their nested statements + scalar CTE expressions)
+//   - Top.Count
+//   - DistinctOnColumns
+//   - Columns
+//   - From (TableReference.Subquery, TableFunc, Pivot.AggregateFunction, MatchRecognize)
+//   - Joins (Left/Right TableRefs, Condition)
+//   - ArrayJoin (element Exprs)
+//   - PrewhereClause
+//   - Sample (no Expressions, but zeroed for hygiene)
+//   - Where
+//   - GroupBy
+//   - Having
+//   - Qualify
+//   - StartWith / ConnectBy.Condition
+//   - Windows (PartitionBy + OrderBy expressions + FrameClause bounds)
+//   - OrderBy
+//   - Fetch / For (no Expression children, just zero)
+//   - Limit / Offset (*int — no release needed)
 func PutSelectStatement(stmt *SelectStatement) {
 	if stmt == nil {
 		return
 	}
 
-	// Collect all expressions to clean up
-	expressions := make([]Expression, 0, len(stmt.Columns)+len(stmt.OrderBy)+3)
-
-	// Collect column expressions
-	for _, col := range stmt.Columns {
-		if col != nil {
-			expressions = append(expressions, col)
+	// ── WITH clause / CTEs ────────────────────────────────────────────
+	if stmt.With != nil {
+		for _, cte := range stmt.With.CTEs {
+			if cte == nil {
+				continue
+			}
+			releaseStatement(cte.Statement)
+			cte.Statement = nil
+			PutExpression(cte.ScalarExpr)
+			cte.ScalarExpr = nil
 		}
+		stmt.With.CTEs = nil
+		stmt.With = nil
 	}
 
-	// Collect ORDER BY expressions
-	for _, orderBy := range stmt.OrderBy {
-		if orderBy.Expression != nil {
-			expressions = append(expressions, orderBy.Expression)
-		}
+	// ── TOP clause ─────────────────────────────────────────────────────
+	if stmt.Top != nil {
+		PutExpression(stmt.Top.Count)
+		stmt.Top.Count = nil
+		stmt.Top = nil
 	}
 
-	// Collect WHERE expression
-	if stmt.Where != nil {
-		expressions = append(expressions, stmt.Where)
+	// ── DISTINCT ON columns ────────────────────────────────────────────
+	for i := range stmt.DistinctOnColumns {
+		PutExpression(stmt.DistinctOnColumns[i])
+		stmt.DistinctOnColumns[i] = nil
 	}
+	stmt.DistinctOnColumns = stmt.DistinctOnColumns[:0]
 
-	// Note: Limit and Offset are *int, not Expression, so no cleanup needed
-
-	// Clean up all expressions using iterative approach
-	for _, expr := range expressions {
-		PutExpression(expr)
-	}
-
-	// Reset fields
+	// ── SELECT list columns ────────────────────────────────────────────
 	for i := range stmt.Columns {
+		PutExpression(stmt.Columns[i])
 		stmt.Columns[i] = nil
 	}
 	stmt.Columns = stmt.Columns[:0]
 
+	// ── FROM table references (Subquery, TableFunc, Pivot, MatchRecognize) ─
+	for i := range stmt.From {
+		releaseTableReference(&stmt.From[i])
+	}
+	stmt.From = stmt.From[:0]
+
+	// ── JOINs ──────────────────────────────────────────────────────────
+	for i := range stmt.Joins {
+		releaseTableReference(&stmt.Joins[i].Left)
+		releaseTableReference(&stmt.Joins[i].Right)
+		PutExpression(stmt.Joins[i].Condition)
+		stmt.Joins[i].Condition = nil
+		stmt.Joins[i].Type = ""
+	}
+	stmt.Joins = stmt.Joins[:0]
+
+	// ── ARRAY JOIN (ClickHouse) ────────────────────────────────────────
+	if stmt.ArrayJoin != nil {
+		for i := range stmt.ArrayJoin.Elements {
+			PutExpression(stmt.ArrayJoin.Elements[i].Expr)
+			stmt.ArrayJoin.Elements[i].Expr = nil
+			stmt.ArrayJoin.Elements[i].Alias = ""
+		}
+		stmt.ArrayJoin.Elements = nil
+		stmt.ArrayJoin = nil
+	}
+
+	// ── PREWHERE / WHERE / HAVING / QUALIFY / START WITH ───────────────
+	PutExpression(stmt.PrewhereClause)
+	stmt.PrewhereClause = nil
+	PutExpression(stmt.Where)
+	stmt.Where = nil
+	PutExpression(stmt.Having)
+	stmt.Having = nil
+	PutExpression(stmt.Qualify)
+	stmt.Qualify = nil
+	PutExpression(stmt.StartWith)
+	stmt.StartWith = nil
+
+	// ── CONNECT BY ─────────────────────────────────────────────────────
+	if stmt.ConnectBy != nil {
+		PutExpression(stmt.ConnectBy.Condition)
+		stmt.ConnectBy.Condition = nil
+		stmt.ConnectBy = nil
+	}
+
+	// ── SAMPLE (no expression children, just drop) ─────────────────────
+	stmt.Sample = nil
+
+	// ── GROUP BY ───────────────────────────────────────────────────────
+	for i := range stmt.GroupBy {
+		PutExpression(stmt.GroupBy[i])
+		stmt.GroupBy[i] = nil
+	}
+	stmt.GroupBy = stmt.GroupBy[:0]
+
+	// ── WINDOWS (PartitionBy, OrderBy, FrameClause bounds) ─────────────
+	for i := range stmt.Windows {
+		w := &stmt.Windows[i]
+		for j := range w.PartitionBy {
+			PutExpression(w.PartitionBy[j])
+			w.PartitionBy[j] = nil
+		}
+		w.PartitionBy = w.PartitionBy[:0]
+		for j := range w.OrderBy {
+			PutExpression(w.OrderBy[j].Expression)
+			w.OrderBy[j].Expression = nil
+		}
+		w.OrderBy = w.OrderBy[:0]
+		if w.FrameClause != nil {
+			PutExpression(w.FrameClause.Start.Value)
+			w.FrameClause.Start.Value = nil
+			if w.FrameClause.End != nil {
+				PutExpression(w.FrameClause.End.Value)
+				w.FrameClause.End.Value = nil
+				w.FrameClause.End = nil
+			}
+			w.FrameClause = nil
+		}
+		w.Name = ""
+	}
+	stmt.Windows = stmt.Windows[:0]
+
+	// ── ORDER BY ───────────────────────────────────────────────────────
 	for i := range stmt.OrderBy {
+		PutExpression(stmt.OrderBy[i].Expression)
 		stmt.OrderBy[i].Expression = nil
 	}
 	stmt.OrderBy = stmt.OrderBy[:0]
 
-	stmt.TableName = ""
-	stmt.PrewhereClause = nil
-	stmt.Where = nil
+	// ── LIMIT / OFFSET (*int - no Expression) ──────────────────────────
 	stmt.Limit = nil
 	stmt.Offset = nil
+
+	// ── FETCH / FOR (no Expression children) ───────────────────────────
 	stmt.Fetch = nil
 	stmt.For = nil
 
+	// ── Scalars ────────────────────────────────────────────────────────
+	stmt.TableName = ""
+	stmt.Distinct = false
+
 	// Return to pool
 	selectStmtPool.Put(stmt)
+}
+
+// releaseTableReference releases all pooled Expression/Statement references
+// reachable from a TableReference. Zero-copies the TableReference back to a
+// clean state suitable for pool reuse.
+func releaseTableReference(tr *TableReference) {
+	if tr == nil {
+		return
+	}
+	// Subquery is itself a *SelectStatement — recurse through the statement
+	// dispatcher to release every nested pool reference.
+	if tr.Subquery != nil {
+		PutSelectStatement(tr.Subquery)
+		tr.Subquery = nil
+	}
+	// TableFunc is a *FunctionCall — release as expression.
+	if tr.TableFunc != nil {
+		PutExpression(tr.TableFunc)
+		tr.TableFunc = nil
+	}
+	// Pivot.AggregateFunction is an Expression.
+	if tr.Pivot != nil {
+		PutExpression(tr.Pivot.AggregateFunction)
+		tr.Pivot.AggregateFunction = nil
+		tr.Pivot = nil
+	}
+	// Unpivot holds only strings — drop the struct.
+	tr.Unpivot = nil
+	// MatchRecognize carries PartitionBy / OrderBy / Measures / Definitions.
+	if tr.MatchRecognize != nil {
+		mr := tr.MatchRecognize
+		for i := range mr.PartitionBy {
+			PutExpression(mr.PartitionBy[i])
+			mr.PartitionBy[i] = nil
+		}
+		mr.PartitionBy = mr.PartitionBy[:0]
+		for i := range mr.OrderBy {
+			PutExpression(mr.OrderBy[i].Expression)
+			mr.OrderBy[i].Expression = nil
+		}
+		mr.OrderBy = mr.OrderBy[:0]
+		for i := range mr.Measures {
+			PutExpression(mr.Measures[i].Expr)
+			mr.Measures[i].Expr = nil
+			mr.Measures[i].Alias = ""
+		}
+		mr.Measures = mr.Measures[:0]
+		for i := range mr.Definitions {
+			PutExpression(mr.Definitions[i].Condition)
+			mr.Definitions[i].Condition = nil
+			mr.Definitions[i].Name = ""
+		}
+		mr.Definitions = mr.Definitions[:0]
+		tr.MatchRecognize = nil
+	}
+	// TimeTravel carries Named map of Expressions + Chained clauses.
+	if tr.TimeTravel != nil {
+		releaseTimeTravelClause(tr.TimeTravel)
+		tr.TimeTravel = nil
+	}
+	// ForSystemTime carries Point/Start/End expressions.
+	if tr.ForSystemTime != nil {
+		PutExpression(tr.ForSystemTime.Point)
+		PutExpression(tr.ForSystemTime.Start)
+		PutExpression(tr.ForSystemTime.End)
+		tr.ForSystemTime.Point = nil
+		tr.ForSystemTime.Start = nil
+		tr.ForSystemTime.End = nil
+		tr.ForSystemTime = nil
+	}
+	tr.Name = ""
+	tr.Alias = ""
+	tr.Lateral = false
+	tr.Final = false
+	tr.TableHints = nil
 }
 
 // GetIdentifier gets an Identifier from the pool
@@ -868,6 +1239,16 @@ func PutLiteralValue(lit *LiteralValue) {
 //
 // See also: GetBinaryExpression(), GetFunctionCall(), GetIdentifier()
 func PutExpression(expr Expression) {
+	if expr == nil {
+		return
+	}
+	putExpressionImpl(expr, 0)
+}
+
+// putExpressionImpl is the internal driver for PutExpression. The depth
+// parameter tracks recursive re-entries from the work-queue overflow path
+// to prevent stack overflow on pathologically deep ASTs.
+func putExpressionImpl(expr Expression, depth int) {
 	if expr == nil {
 		return
 	}
@@ -1127,6 +1508,24 @@ func PutExpression(expr Expression) {
 		default:
 			// Unknown expression type - no pool available
 		}
+	}
+
+	// OVERFLOW DRAIN: if we hit the work-queue cap, there are still pooled
+	// nodes in workQueue that would otherwise leak. Fall back to a recursive
+	// drain, depth-limited to prevent stack overflow on deeply nested trees.
+	// Each recursive call starts its own fresh work queue of up to
+	// MaxWorkQueueSize, so the recursion depth is effectively
+	// ceil(total_nodes / MaxWorkQueueSize). MaxCleanupDepth = 100 bounds this
+	// at ~10_000_000 total nodes in an AST — far beyond any real SQL query.
+	if len(workQueue) > 0 {
+		atomic.AddUint64(&poolLeakCount, uint64(len(workQueue)))
+		if depth < MaxCleanupDepth {
+			for _, remaining := range workQueue {
+				putExpressionImpl(remaining, depth+1)
+			}
+		}
+		// If depth exceeded MaxCleanupDepth we accept the leak rather than
+		// blow the stack; poolLeakCount records the truncation for diagnostics.
 	}
 }
 
@@ -1868,4 +2267,24 @@ func NewAlterSequenceStatement() *AlterSequenceStatement {
 func ReleaseAlterSequenceStatement(s *AlterSequenceStatement) {
 	*s = AlterSequenceStatement{} // zero all fields
 	alterSequencePool.Put(s)
+}
+
+// releaseTimeTravelClause walks a TimeTravelClause graph, releasing every
+// Expression stored in Named maps and every chained sub-clause. Chained
+// cycles are not possible because the parser builds a tree, but we still
+// guard against nil to be defensive.
+func releaseTimeTravelClause(c *TimeTravelClause) {
+	if c == nil {
+		return
+	}
+	for k, v := range c.Named {
+		PutExpression(v)
+		delete(c.Named, k)
+	}
+	for _, ch := range c.Chained {
+		releaseTimeTravelClause(ch)
+	}
+	c.Chained = nil
+	c.Named = nil
+	c.Kind = ""
 }

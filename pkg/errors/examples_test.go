@@ -210,9 +210,9 @@ func Example_customHintsEnhanced() {
 		errors.ErrCodeInvalidSyntax,
 		"type mismatch in comparison",
 		location,
-	)
-	err.WithContext(sql, 4) // Highlight '18'
-	err.WithHint("Age comparisons should use numeric values without quotes. Change '18' to 18")
+	).
+		WithContext(sql, 4). // Highlight '18'
+		WithHint("Age comparisons should use numeric values without quotes. Change '18' to 18")
 
 	fmt.Println("Custom Hint Example:")
 	fmt.Println(err.Error())

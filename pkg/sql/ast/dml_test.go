@@ -485,9 +485,14 @@ func TestFunctionDesc(t *testing.T) {
 				t.Errorf("FunctionDesc.TokenLiteral() = %v, want %v", got, tt.wantString)
 			}
 
-			// Test Children (should be nil)
-			if children := tt.funcDesc.Children(); children != nil {
-				t.Errorf("FunctionDesc.Children() = %v, want nil", children)
+			// Test Children: C6 fix — Name is exposed as a child node so
+			// Walk/Inspect can reach qualified ObjectName references.
+			children := tt.funcDesc.Children()
+			if len(children) != 1 {
+				t.Fatalf("FunctionDesc.Children() = %v (len %d), want 1 child (Name)", children, len(children))
+			}
+			if on, ok := children[0].(ObjectName); !ok || on != tt.funcDesc.Name {
+				t.Errorf("FunctionDesc.Children()[0] = %v, want %v", children[0], tt.funcDesc.Name)
 			}
 		})
 	}

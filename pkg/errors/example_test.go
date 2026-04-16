@@ -144,9 +144,9 @@ func Example_customHints() {
 		errors.ErrCodeIncompleteStatement,
 		"incomplete WHERE clause",
 		location,
-	)
-	err.WithContext(sql, 5)
-	err.WithHint("Add a condition after WHERE, e.g., WHERE age > 18")
+	).
+		WithContext(sql, 5).
+		WithHint("Add a condition after WHERE, e.g., WHERE age > 18")
 
 	// Error now includes custom context and hint
 	_ = err

@@ -788,10 +788,11 @@ func TestKeywords_CaseExpressionKeywords(t *testing.T) {
 		{"WHEN", models.TokenTypeWhen},
 		{"THEN", models.TokenTypeThen},
 		{"ELSE", models.TokenTypeElse},
-		// Note: END is defined twice in keywords.go - once in RESERVED_FOR_TABLE_ALIAS (line 56)
-		// with TokenTypeKeyword, and once in ADDITIONAL_KEYWORDS (line 103) with TokenTypeEnd.
-		// Since RESERVED_FOR_TABLE_ALIAS is added first, it takes precedence.
-		{"END", models.TokenTypeKeyword}, // First definition wins
+		// END is registered in RESERVED_FOR_TABLE_ALIAS as TokenTypeKeyword
+		// (alias=true). A previously-duplicated TokenTypeEnd entry in
+		// ADDITIONAL_KEYWORDS was unreachable (first-wins) and was removed
+		// as part of H11 keyword-conflict cleanup.
+		{"END", models.TokenTypeKeyword},
 	}
 
 	for _, ck := range caseKeywords {

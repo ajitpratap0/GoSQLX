@@ -48,16 +48,39 @@ The codebase uses extensive sync.Pool for all major data structures:
 
 ### Module Dependencies
 
-Clean hierarchy with minimal coupling:
+Clean hierarchy with minimal coupling (verified against production imports):
 ```
-models → (no deps)
-errors → models
-keywords → models
-tokenizer → models, keywords, metrics
-ast → token
-parser → tokenizer, ast, token, errors
-gosqlx → all (high-level wrapper)
+# Core parsing chain
+models     → (no deps)
+errors     → models
+metrics    → (no deps)
+keywords   → (no deps)
+token      → (no deps)
+tokenizer  → models, errors, metrics, keywords
+ast        → models, metrics
+parser     → models, errors, keywords, token, tokenizer, ast
+
+# Higher-level / product packages
+formatter  → models, sql/ast, sql/parser, sql/tokenizer
+transform  → formatter, sql/ast, sql/keywords, sql/parser, sql/tokenizer
+fingerprint→ formatter, sql/ast, sql/parser, sql/tokenizer
+security   → sql/ast            (scanner; tests also pull parser, tokenizer)
+linter     → sql/parser, sql/tokenizer
+           # rule sub-packages additionally import: linter, models, sql/ast
+lsp        → errors, models, gosqlx, sql/keywords, sql/parser, sql/tokenizer
+cbinding   → gosqlx, sql/ast    (requires CGO; excluded from task test:race)
+
+# High-level wrapper
+gosqlx     → all of the above (top-level convenience API)
 ```
+
+Notes:
+- `pkg/cbinding` requires `CGO_ENABLED=1`. The Taskfile splits this out: `task test:race`
+  runs everything except cbinding, and `task test:cbinding` runs cbinding with CGO on.
+  CI workflows must follow the same split or cbinding is silently skipped.
+- `keywords` has no intra-module deps — it's a pure keyword table.
+- `ast` depends on `models` (spans, locations) and `metrics` (pool instrumentation),
+  NOT on `token` in production code.
 
 ## Development Commands
 

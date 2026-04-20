@@ -229,7 +229,7 @@ func childrenCoverageCases() []childrenCoverageCase {
 // Each exemption must have a justification comment; add new entries only
 // when the type truly cannot produce children.
 //
-//nolint:unused // referenced by documentation in this file
+//lint:ignore U1000 // used for documentation reference
 var childrenCoverageAllowlist = map[string]string{
 	// Leaf / atomic value types — stored fields are strings / numbers /
 	// raw tokens, not AST subtrees.
@@ -409,9 +409,14 @@ var (
 	statementInterface = reflect.TypeOf((*Statement)(nil)).Elem()
 )
 
-func implementsNode(t reflect.Type) bool       { return t != nodeInterface && t.Implements(nodeInterface) }
+//lint:ignore U1000 // helper for future use
+func implementsNode(t reflect.Type) bool { return t != nodeInterface && t.Implements(nodeInterface) }
+
+//lint:ignore U1000 // helper for future use
 func implementsExpression(t reflect.Type) bool { return t.Implements(expressionIface) }
-func implementsStatement(t reflect.Type) bool  { return t.Implements(statementInterface) }
+
+//lint:ignore U1000 // helper for future use
+func implementsStatement(t reflect.Type) bool { return t.Implements(statementInterface) }
 
 // ---- Mock nodes -------------------------------------------------------------
 

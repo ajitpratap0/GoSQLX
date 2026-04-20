@@ -38,7 +38,7 @@ func TestParseReader_Happy(t *testing.T) {
 
 func TestParseReader_NilContext(t *testing.T) {
 	r := strings.NewReader("SELECT 1")
-	_, err := ParseReader(nil, r) //nolint:staticcheck // intentional nil-ctx test
+	_, err := ParseReader(context.TODO(), r)
 	if err != nil {
 		t.Fatalf("ParseReader(nil ctx): %v", err)
 	}

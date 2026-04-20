@@ -46,7 +46,7 @@ func TestParseTree_Happy(t *testing.T) {
 
 func TestParseTree_NilContext(t *testing.T) {
 	// nil ctx should be treated as context.Background.
-	tree, err := ParseTree(nil, "SELECT 1") //nolint:staticcheck // intentional nil-ctx test
+	tree, err := ParseTree(context.TODO(), "SELECT 1")
 	if err != nil {
 		t.Fatalf("ParseTree(nil ctx): %v", err)
 	}

@@ -415,7 +415,11 @@ func (p *Parser) parseExtractExpression() (*ast.ExtractExpression, error) {
 	// Source expression
 	source, err := p.parseExpression()
 	if err != nil {
-		return nil, fmt.Errorf("EXTRACT source: %w", err)
+		return nil, goerrors.InvalidSyntaxError(
+			fmt.Sprintf("EXTRACT source: %v", err),
+			p.currentLocation(),
+			"",
+		).WithCause(err)
 	}
 
 	if !p.isType(models.TokenTypeRParen) {

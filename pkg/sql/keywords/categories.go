@@ -47,6 +47,13 @@ type Keywords struct {
 	compoundKeywordStarts map[string]bool // O(1) lookup for first words of compound keywords
 	dialect               SQLDialect
 	ignoreCase            bool
+
+	// Conflict tracking. When trackConflicts is true, addKeywordsWithCategory
+	// records any keyword collision into conflicts. New() sets this to true
+	// and, once construction is complete, publishes the conflict slice to the
+	// package-level lastConflicts so callers can inspect it via Conflicts().
+	trackConflicts bool
+	conflicts      []KeywordConflict
 }
 
 // NewKeywords creates a new Keywords instance

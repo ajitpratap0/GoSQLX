@@ -22,10 +22,21 @@ jobs:
       uses: actions/setup-go@v5
       with:
         go-version: '1.26'
-    
-    - name: Run tests
-      run: go test -race ./...
-    
+
+    - name: Install Task
+      run: go install github.com/go-task/task/v3/cmd/task@latest
+
+    # Runs the pure-Go test suite via Taskfile (test:race excludes pkg/cbinding
+    # because it requires CGO). We run cbinding tests separately below with
+    # CGO_ENABLED=1 so the tagged release is validated against both build modes.
+    - name: Run tests (race, no CGO)
+      run: task test:race
+
+    - name: Run cbinding tests (CGO)
+      env:
+        CGO_ENABLED: '1'
+      run: task test:cbinding
+
     - name: Run GoReleaser
       uses: goreleaser/goreleaser-action@v6
       with:

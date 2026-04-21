@@ -36,8 +36,9 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 	// Check context if available
 	if p.ctx != nil {
 		if err := p.ctx.Err(); err != nil {
-			// Context cancellation is not a syntax error, wrap it directly
-			return nil, fmt.Errorf("parsing cancelled: %w", err)
+			// Context cancellation is not a syntax error; return it directly so
+			// callers can use errors.Is(err, context.Canceled/DeadlineExceeded).
+			return nil, err
 		}
 	}
 

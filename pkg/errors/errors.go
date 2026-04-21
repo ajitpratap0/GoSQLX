@@ -341,7 +341,7 @@ func NewError(code ErrorCode, message string, location models.Location) *Error {
 	}
 }
 
-// WithContext adds SQL context to the error.
+// WithContext returns a copy of the error with SQL context attached.
 //
 // Attaches SQL source code context with highlighting information for
 // visual error display. The context shows surrounding lines and highlights
@@ -351,7 +351,9 @@ func NewError(code ErrorCode, message string, location models.Location) *Error {
 //   - sql: Original SQL source code
 //   - highlightLen: Number of characters to highlight (starting at error column)
 //
-// Returns the same Error instance with context added (for method chaining).
+// Returns a new Error instance with context added; the receiver is not
+// modified. Callers MUST use the return value (e.g. `err = err.WithContext(...)`)
+// for the change to take effect.
 //
 // Example:
 //
@@ -363,19 +365,22 @@ func NewError(code ErrorCode, message string, location models.Location) *Error {
 //	1 | SELECT * FORM users
 //	           ^^^^
 //
-// Note: WithContext modifies the error in-place and returns it for chaining.
+// Immutability: WithContext is non-mutating — it returns a shallow copy
+// with the new field set. This makes *Error safe to share across goroutines
+// and call sites without observer effects.
 func (e *Error) WithContext(sql string, highlightLen int) *Error {
-	e.Context = &ErrorContext{
+	cp := *e
+	cp.Context = &ErrorContext{
 		SQL:          sql,
 		StartLine:    e.Location.Line,
 		EndLine:      e.Location.Line,
 		HighlightCol: e.Location.Column,
 		HighlightLen: highlightLen,
 	}
-	return e
+	return &cp
 }
 
-// WithHint adds a suggestion hint to the error.
+// WithHint returns a copy of the error with a suggestion hint attached.
 //
 // Attaches a helpful suggestion for fixing the error. Hints are generated
 // automatically by builder functions or can be added manually.
@@ -383,7 +388,9 @@ func (e *Error) WithContext(sql string, highlightLen int) *Error {
 // Parameters:
 //   - hint: Suggestion text (e.g., "Did you mean 'FROM' instead of 'FORM'?")
 //
-// Returns the same Error instance with hint added (for method chaining).
+// Returns a new Error instance with hint added; the receiver is not modified.
+// Callers MUST use the return value (e.g. `err = err.WithHint(...)`) for the
+// change to take effect.
 //
 // Example:
 //
@@ -395,13 +402,16 @@ func (e *Error) WithContext(sql string, highlightLen int) *Error {
 //	err := errors.ExpectedTokenError("FROM", "FORM", location, sql)
 //	// Automatically includes: "Did you mean 'FROM' instead of 'FORM'?"
 //
-// Note: WithHint modifies the error in-place and returns it for chaining.
+// Immutability: WithHint is non-mutating — it returns a shallow copy with
+// the Hint field set. This makes *Error safe to share across goroutines
+// and call sites without observer effects.
 func (e *Error) WithHint(hint string) *Error {
-	e.Hint = hint
-	return e
+	cp := *e
+	cp.Hint = hint
+	return &cp
 }
 
-// WithCause adds an underlying cause error.
+// WithCause returns a copy of the error with an underlying cause attached.
 //
 // Wraps another error as the cause of this error, enabling error chaining
 // and unwrapping with errors.Is and errors.As.
@@ -409,7 +419,9 @@ func (e *Error) WithHint(hint string) *Error {
 // Parameters:
 //   - cause: The underlying error that caused this error
 //
-// Returns the same Error instance with cause added (for method chaining).
+// Returns a new Error instance with cause added; the receiver is not
+// modified. Callers MUST use the return value (e.g. `err = err.WithCause(...)`)
+// for the change to take effect.
 //
 // Example:
 //
@@ -425,10 +437,13 @@ func (e *Error) WithHint(hint string) *Error {
 //	    // Handle file not found
 //	}
 //
-// Note: WithCause modifies the error in-place and returns it for chaining.
+// Immutability: WithCause is non-mutating — it returns a shallow copy with
+// the Cause field set. This makes *Error safe to share across goroutines
+// and call sites without observer effects.
 func (e *Error) WithCause(cause error) *Error {
-	e.Cause = cause
-	return e
+	cp := *e
+	cp.Cause = cause
+	return &cp
 }
 
 // IsCode checks if an error has a specific error code.

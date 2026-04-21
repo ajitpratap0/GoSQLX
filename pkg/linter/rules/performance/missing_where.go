@@ -36,37 +36,42 @@ func NewMissingWhereRule() *MissingWhereRule {
 	}
 }
 
-// Check inspects the AST for SELECT statements without WHERE/LIMIT on tables.
+// Check walks the AST for SELECT statements without WHERE/LIMIT on tables.
+// Fires at any nesting level — subqueries and CTE bodies that scan a table
+// without filtering are just as expensive as top-level scans.
 func (r *MissingWhereRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 	if ctx.AST == nil {
 		return nil, nil
 	}
 	var violations []linter.Violation
 	for _, stmt := range ctx.AST.Statements {
-		sel, ok := stmt.(*ast.SelectStatement)
-		if !ok {
-			continue
-		}
-		// Only flag if there is at least one table reference and no WHERE or LIMIT
-		if len(sel.From) == 0 {
-			continue
-		}
-		if sel.Where != nil {
-			continue
-		}
-		if sel.Limit != nil {
-			continue
-		}
-		if sel.Fetch != nil {
-			continue
-		}
-		violations = append(violations, linter.Violation{
-			Rule:       r.ID(),
-			RuleName:   r.Name(),
-			Severity:   r.Severity(),
-			Message:    "SELECT has no WHERE clause and no LIMIT — may cause a full table scan",
-			Location:   sel.Pos,
-			Suggestion: "Add a WHERE clause to filter rows, or add LIMIT to bound the result set",
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectStatement)
+			if !ok {
+				return true
+			}
+			// Only flag if there is at least one table reference and no WHERE or LIMIT
+			if len(sel.From) == 0 {
+				return true
+			}
+			if sel.Where != nil {
+				return true
+			}
+			if sel.Limit != nil {
+				return true
+			}
+			if sel.Fetch != nil {
+				return true
+			}
+			violations = append(violations, linter.Violation{
+				Rule:       r.ID(),
+				RuleName:   r.Name(),
+				Severity:   r.Severity(),
+				Message:    "SELECT has no WHERE clause and no LIMIT — may cause a full table scan",
+				Location:   sel.Pos,
+				Suggestion: "Add a WHERE clause to filter rows, or add LIMIT to bound the result set",
+			})
+			return true
 		})
 	}
 	return violations, nil

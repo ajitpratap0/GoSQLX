@@ -1,0 +1,9 @@
+# Config referencing a rule ID that doesn't exist in this build.
+# Expected behaviour: parse succeeds, Warnings contains a forward-compat
+# notice, the unknown rule has no effect on Apply.
+rules:
+  L999:
+    enabled: true
+    severity: error
+  L001:
+    severity: info

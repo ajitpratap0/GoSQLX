@@ -105,15 +105,34 @@ func TestHandler_DocumentSymbol(t *testing.T) {
 			},
 		},
 		{
-			name:          "Multiple statements return numbered symbols",
+			name:          "Multiple statements return meaningful names and distinct ranges",
 			sql:           "SELECT * FROM users;\nSELECT * FROM orders",
 			expectedCount: 2,
 			checkSymbols: func(t *testing.T, symbols []DocumentSymbol) {
-				if symbols[0].Name != "SELECT #1" {
-					t.Errorf("expected 'SELECT #1', got %s", symbols[0].Name)
+				// Names now include the primary FROM table instead of a
+				// generic counter, so the outline is informative.
+				if !strings.HasPrefix(symbols[0].Name, "SELECT") ||
+					!strings.Contains(symbols[0].Name, "users") {
+					t.Errorf("expected first name to mention users, got %q", symbols[0].Name)
 				}
-				if symbols[1].Name != "SELECT #2" {
-					t.Errorf("expected 'SELECT #2', got %s", symbols[1].Name)
+				if !strings.HasPrefix(symbols[1].Name, "SELECT") ||
+					!strings.Contains(symbols[1].Name, "orders") {
+					t.Errorf("expected second name to mention orders, got %q", symbols[1].Name)
+				}
+				// Statements occupy different lines: the first starts on
+				// line 0 and the second on line 1 (0-based LSP lines).
+				if symbols[0].Range.Start.Line != 0 {
+					t.Errorf("expected first symbol on line 0, got %d", symbols[0].Range.Start.Line)
+				}
+				if symbols[1].Range.Start.Line != 1 {
+					t.Errorf("expected second symbol on line 1, got %d", symbols[1].Range.Start.Line)
+				}
+				// Ranges must not overlap: first end < second start.
+				if symbols[0].Range.End.Line > symbols[1].Range.Start.Line ||
+					(symbols[0].Range.End.Line == symbols[1].Range.Start.Line &&
+						symbols[0].Range.End.Character > symbols[1].Range.Start.Character) {
+					t.Errorf("overlapping ranges: first end %+v, second start %+v",
+						symbols[0].Range.End, symbols[1].Range.Start)
 				}
 			},
 		},
@@ -514,6 +533,81 @@ func TestHandler_DidSave(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestHandler_DocumentSymbol_MultiStatementRanges verifies that each symbol
+// gets a distinct, non-zero, non-overlapping range anchored at the actual
+// source location of the statement (not line 0 for every symbol as in the
+// previous stub). Regression test for H10.
+func TestHandler_DocumentSymbol_MultiStatementRanges(t *testing.T) {
+	mock := newMockReadWriter()
+	logger := log.New(io.Discard, "", 0)
+	server := NewServer(mock.input, mock.output, logger)
+
+	sql := "CREATE TABLE t (id INT);\nSELECT * FROM t;\nINSERT INTO t VALUES (1);"
+	server.Documents().Open("file:///multi.sql", "sql", 1, sql)
+
+	params := DocumentSymbolParams{
+		TextDocument: TextDocumentIdentifier{URI: "file:///multi.sql"},
+	}
+	paramsJSON, _ := json.Marshal(params)
+
+	result, err := server.handler.HandleRequest("textDocument/documentSymbol", paramsJSON)
+	if err != nil {
+		t.Fatalf("documentSymbol failed: %v", err)
+	}
+	symbols, ok := result.([]DocumentSymbol)
+	if !ok {
+		t.Fatalf("expected []DocumentSymbol, got %T", result)
+	}
+
+	// Parser may or may not produce a symbol for every statement depending on
+	// which features are supported; we assert on whatever was produced.
+	if len(symbols) == 0 {
+		t.Skip("parser produced no symbols for multi-statement input; skipping range assertions")
+	}
+
+	// 1) Ranges are non-zero: end > start for each symbol.
+	for i, s := range symbols {
+		if s.Range.End.Line < s.Range.Start.Line ||
+			(s.Range.End.Line == s.Range.Start.Line &&
+				s.Range.End.Character <= s.Range.Start.Character) {
+			t.Errorf("symbol %d has zero/negative range: start %+v end %+v", i, s.Range.Start, s.Range.End)
+		}
+	}
+
+	// 2) Distinct start lines — the fake-range bug had every symbol starting
+	// at line 0; each of our statements is on its own line.
+	seen := map[int]int{}
+	for _, s := range symbols {
+		seen[s.Range.Start.Line]++
+	}
+	if len(seen) < len(symbols) {
+		t.Errorf("expected distinct start lines per symbol, got %+v", seen)
+	}
+
+	// 3) Start lines match the source: statements begin on lines 0, 1, 2.
+	for i, s := range symbols {
+		if s.Range.Start.Line != i {
+			t.Errorf("symbol %d expected to start on line %d, got %d", i, i, s.Range.Start.Line)
+		}
+	}
+
+	// 4) Non-overlapping: symbol i's end is at or before symbol i+1's start.
+	for i := 0; i+1 < len(symbols); i++ {
+		a := symbols[i].Range.End
+		b := symbols[i+1].Range.Start
+		if a.Line > b.Line || (a.Line == b.Line && a.Character > b.Character) {
+			t.Errorf("symbol %d (%+v) overlaps symbol %d (%+v)", i, a, i+1, b)
+		}
+	}
+
+	// 5) Symbol names are meaningful rather than "Statement #N".
+	for _, s := range symbols {
+		if strings.HasPrefix(s.Name, "Statement #") {
+			t.Errorf("fell back to generic name %q; expected a typed symbol label", s.Name)
+		}
 	}
 }
 

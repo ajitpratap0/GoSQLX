@@ -39,28 +39,32 @@ func NewTruncateTableRule() *TruncateTableRule {
 	}
 }
 
-// Check inspects the AST for TRUNCATE TABLE statements.
+// Check walks the AST for TRUNCATE TABLE statements at any nesting level.
+// TRUNCATE almost never appears nested, but walking makes the rule consistent.
 func (r *TruncateTableRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 	if ctx.AST == nil {
 		return nil, nil
 	}
 	var violations []linter.Violation
 	for _, stmt := range ctx.AST.Statements {
-		trunc, ok := stmt.(*ast.TruncateStatement)
-		if !ok {
-			continue
-		}
-		tableName := ""
-		if len(trunc.Tables) > 0 {
-			tableName = strings.Join(trunc.Tables, ", ")
-		}
-		violations = append(violations, linter.Violation{
-			Rule:       r.ID(),
-			RuleName:   r.Name(),
-			Severity:   r.Severity(),
-			Message:    "TRUNCATE TABLE " + tableName + " is irreversible and bypasses triggers",
-			Location:   models.Location{Line: 1, Column: 1},
-			Suggestion: "Prefer DELETE FROM " + tableName + " WHERE ... for reversible partial deletes, or ensure TRUNCATE is intentional in migration scripts",
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			trunc, ok := n.(*ast.TruncateStatement)
+			if !ok {
+				return true
+			}
+			tableName := ""
+			if len(trunc.Tables) > 0 {
+				tableName = strings.Join(trunc.Tables, ", ")
+			}
+			violations = append(violations, linter.Violation{
+				Rule:       r.ID(),
+				RuleName:   r.Name(),
+				Severity:   r.Severity(),
+				Message:    "TRUNCATE TABLE " + tableName + " is irreversible and bypasses triggers",
+				Location:   models.Location{Line: 1, Column: 1},
+				Suggestion: "Prefer DELETE FROM " + tableName + " WHERE ... for reversible partial deletes, or ensure TRUNCATE is intentional in migration scripts",
+			})
+			return true
 		})
 	}
 	return violations, nil

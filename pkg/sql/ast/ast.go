@@ -136,7 +136,14 @@ type CommonTableExpr struct {
 func (c *CommonTableExpr) statementNode()      {}
 func (c CommonTableExpr) TokenLiteral() string { return c.Name }
 func (c CommonTableExpr) Children() []Node {
-	return []Node{c.Statement}
+	var nodes []Node
+	if c.Statement != nil {
+		nodes = append(nodes, c.Statement)
+	}
+	if c.ScalarExpr != nil {
+		nodes = append(nodes, c.ScalarExpr)
+	}
+	return nodes
 }
 
 // QueryExpression is a Statement that can appear as the source of INSERT ... SELECT.
@@ -160,7 +167,14 @@ func (s *SetOperation) statementNode()       {}
 func (s *SetOperation) queryExpressionNode() {}
 func (s SetOperation) TokenLiteral() string  { return s.Operator }
 func (s SetOperation) Children() []Node {
-	return []Node{s.Left, s.Right}
+	var nodes []Node
+	if s.Left != nil {
+		nodes = append(nodes, s.Left)
+	}
+	if s.Right != nil {
+		nodes = append(nodes, s.Right)
+	}
+	return nodes
 }
 
 // JoinClause represents a JOIN clause in SQL
@@ -332,7 +346,14 @@ type WindowFrame struct {
 
 func (w *WindowFrame) statementNode()      {}
 func (w WindowFrame) TokenLiteral() string { return w.Type }
-func (w WindowFrame) Children() []Node     { return nil }
+func (w WindowFrame) Children() []Node {
+	// Start is a value type, always include it to support visitor traversal.
+	children := []Node{&w.Start}
+	if w.End != nil {
+		children = append(children, w.End)
+	}
+	return children
+}
 
 // WindowFrameBound represents window frame bound
 type WindowFrameBound struct {
@@ -539,6 +560,9 @@ func (s SelectStatement) Children() []Node {
 	for _, join := range s.Joins {
 		join := join // G601: Create local copy to avoid memory aliasing
 		children = append(children, &join)
+	}
+	if s.Sample != nil {
+		children = append(children, s.Sample)
 	}
 	if s.PrewhereClause != nil {
 		children = append(children, s.PrewhereClause)
@@ -787,7 +811,14 @@ type WhenClause struct {
 func (w *WhenClause) expressionNode()     {}
 func (w WhenClause) TokenLiteral() string { return "WHEN" }
 func (w WhenClause) Children() []Node {
-	return []Node{w.Condition, w.Result}
+	var nodes []Node
+	if w.Condition != nil {
+		nodes = append(nodes, w.Condition)
+	}
+	if w.Result != nil {
+		nodes = append(nodes, w.Result)
+	}
+	return nodes
 }
 
 // ExistsExpression represents EXISTS (subquery)
@@ -798,6 +829,9 @@ type ExistsExpression struct {
 func (e *ExistsExpression) expressionNode()     {}
 func (e ExistsExpression) TokenLiteral() string { return "EXISTS" }
 func (e ExistsExpression) Children() []Node {
+	if e.Subquery == nil {
+		return nil
+	}
 	return []Node{e.Subquery}
 }
 
@@ -813,12 +847,14 @@ type InExpression struct {
 func (i *InExpression) expressionNode()     {}
 func (i InExpression) TokenLiteral() string { return "IN" }
 func (i InExpression) Children() []Node {
-	children := []Node{i.Expr}
+	var children []Node
+	if i.Expr != nil {
+		children = append(children, i.Expr)
+	}
 	if i.Subquery != nil {
 		children = append(children, i.Subquery)
-	} else {
-		children = append(children, nodifyExpressions(i.List)...)
 	}
+	children = append(children, nodifyExpressions(i.List)...)
 	return children
 }
 
@@ -830,7 +866,12 @@ type SubqueryExpression struct {
 
 func (s *SubqueryExpression) expressionNode()     {}
 func (s SubqueryExpression) TokenLiteral() string { return "SUBQUERY" }
-func (s SubqueryExpression) Children() []Node     { return []Node{s.Subquery} }
+func (s SubqueryExpression) Children() []Node {
+	if s.Subquery == nil {
+		return nil
+	}
+	return []Node{s.Subquery}
+}
 
 // AnyExpression represents expr op ANY (subquery)
 type AnyExpression struct {
@@ -841,7 +882,16 @@ type AnyExpression struct {
 
 func (a *AnyExpression) expressionNode()     {}
 func (a AnyExpression) TokenLiteral() string { return "ANY" }
-func (a AnyExpression) Children() []Node     { return []Node{a.Expr, a.Subquery} }
+func (a AnyExpression) Children() []Node {
+	var nodes []Node
+	if a.Expr != nil {
+		nodes = append(nodes, a.Expr)
+	}
+	if a.Subquery != nil {
+		nodes = append(nodes, a.Subquery)
+	}
+	return nodes
+}
 
 // AllExpression represents expr op ALL (subquery)
 type AllExpression struct {
@@ -852,7 +902,16 @@ type AllExpression struct {
 
 func (al *AllExpression) expressionNode()     {}
 func (al AllExpression) TokenLiteral() string { return "ALL" }
-func (al AllExpression) Children() []Node     { return []Node{al.Expr, al.Subquery} }
+func (al AllExpression) Children() []Node {
+	var nodes []Node
+	if al.Expr != nil {
+		nodes = append(nodes, al.Expr)
+	}
+	if al.Subquery != nil {
+		nodes = append(nodes, al.Subquery)
+	}
+	return nodes
+}
 
 // BetweenExpression represents expr BETWEEN lower AND upper
 type BetweenExpression struct {
@@ -866,7 +925,17 @@ type BetweenExpression struct {
 func (b *BetweenExpression) expressionNode()     {}
 func (b BetweenExpression) TokenLiteral() string { return "BETWEEN" }
 func (b BetweenExpression) Children() []Node {
-	return []Node{b.Expr, b.Lower, b.Upper}
+	var nodes []Node
+	if b.Expr != nil {
+		nodes = append(nodes, b.Expr)
+	}
+	if b.Lower != nil {
+		nodes = append(nodes, b.Lower)
+	}
+	if b.Upper != nil {
+		nodes = append(nodes, b.Upper)
+	}
+	return nodes
 }
 
 // BinaryExpression represents binary operations between two expressions.
@@ -996,7 +1065,16 @@ func (b *BinaryExpression) TokenLiteral() string {
 	return b.Operator
 }
 
-func (b BinaryExpression) Children() []Node { return []Node{b.Left, b.Right} }
+func (b BinaryExpression) Children() []Node {
+	var nodes []Node
+	if b.Left != nil {
+		nodes = append(nodes, b.Left)
+	}
+	if b.Right != nil {
+		nodes = append(nodes, b.Right)
+	}
+	return nodes
+}
 
 // LiteralValue represents a literal value in SQL
 type LiteralValue struct {
@@ -1062,7 +1140,12 @@ func (u *UnaryExpression) TokenLiteral() string {
 	return u.Operator.String()
 }
 
-func (u UnaryExpression) Children() []Node { return []Node{u.Expr} }
+func (u UnaryExpression) Children() []Node {
+	if u.Expr == nil {
+		return nil
+	}
+	return []Node{u.Expr}
+}
 
 // VariantPath represents a Snowflake VARIANT path expression:
 //
@@ -1088,7 +1171,10 @@ type VariantPathSegment struct {
 func (v *VariantPath) expressionNode()     {}
 func (v VariantPath) TokenLiteral() string { return ":" }
 func (v VariantPath) Children() []Node {
-	nodes := []Node{v.Root}
+	var nodes []Node
+	if v.Root != nil {
+		nodes = append(nodes, v.Root)
+	}
 	for _, seg := range v.Segments {
 		if seg.Index != nil {
 			nodes = append(nodes, seg.Index)
@@ -1132,7 +1218,12 @@ func (c CastExpression) TokenLiteral() string {
 	}
 	return "CAST"
 }
-func (c CastExpression) Children() []Node { return []Node{c.Expr} }
+func (c CastExpression) Children() []Node {
+	if c.Expr == nil {
+		return nil
+	}
+	return []Node{c.Expr}
+}
 
 // AliasedExpression represents an expression with an alias (expr AS alias)
 type AliasedExpression struct {
@@ -1142,7 +1233,12 @@ type AliasedExpression struct {
 
 func (a *AliasedExpression) expressionNode()     {}
 func (a AliasedExpression) TokenLiteral() string { return a.Alias }
-func (a AliasedExpression) Children() []Node     { return []Node{a.Expr} }
+func (a AliasedExpression) Children() []Node {
+	if a.Expr == nil {
+		return nil
+	}
+	return []Node{a.Expr}
+}
 
 // ExtractExpression represents EXTRACT(field FROM source)
 type ExtractExpression struct {
@@ -1152,7 +1248,12 @@ type ExtractExpression struct {
 
 func (e *ExtractExpression) expressionNode()     {}
 func (e ExtractExpression) TokenLiteral() string { return "EXTRACT" }
-func (e ExtractExpression) Children() []Node     { return []Node{e.Source} }
+func (e ExtractExpression) Children() []Node {
+	if e.Source == nil {
+		return nil
+	}
+	return []Node{e.Source}
+}
 
 // PositionExpression represents POSITION(substr IN str)
 type PositionExpression struct {
@@ -1162,7 +1263,16 @@ type PositionExpression struct {
 
 func (p *PositionExpression) expressionNode()     {}
 func (p PositionExpression) TokenLiteral() string { return "POSITION" }
-func (p PositionExpression) Children() []Node     { return []Node{p.Substr, p.Str} }
+func (p PositionExpression) Children() []Node {
+	var nodes []Node
+	if p.Substr != nil {
+		nodes = append(nodes, p.Substr)
+	}
+	if p.Str != nil {
+		nodes = append(nodes, p.Str)
+	}
+	return nodes
+}
 
 // SubstringExpression represents SUBSTRING(str FROM start [FOR length])
 type SubstringExpression struct {
@@ -1189,7 +1299,11 @@ type IntervalExpression struct {
 
 func (i *IntervalExpression) expressionNode()     {}
 func (i IntervalExpression) TokenLiteral() string { return "INTERVAL" }
-func (i IntervalExpression) Children() []Node     { return []Node{} }
+
+// Children implements Node. IntervalExpression stores its value as a raw
+// string (not an Expression), so it has no child nodes. Returns nil for
+// consistency with other leaf nodes.
+func (i IntervalExpression) Children() []Node { return nil }
 
 // ArraySubscriptExpression represents array element access syntax.
 // Supports single and multi-dimensional array subscripting.
@@ -1208,9 +1322,14 @@ type ArraySubscriptExpression struct {
 func (a *ArraySubscriptExpression) expressionNode()     {}
 func (a ArraySubscriptExpression) TokenLiteral() string { return "[]" }
 func (a ArraySubscriptExpression) Children() []Node {
-	children := []Node{a.Array}
+	var children []Node
+	if a.Array != nil {
+		children = append(children, a.Array)
+	}
 	for _, idx := range a.Indices {
-		children = append(children, idx)
+		if idx != nil {
+			children = append(children, idx)
+		}
 	}
 	return children
 }
@@ -1233,7 +1352,10 @@ type ArraySliceExpression struct {
 func (a *ArraySliceExpression) expressionNode()     {}
 func (a ArraySliceExpression) TokenLiteral() string { return "[:]" }
 func (a ArraySliceExpression) Children() []Node {
-	children := []Node{a.Array}
+	var children []Node
+	if a.Array != nil {
+		children = append(children, a.Array)
+	}
 	if a.Start != nil {
 		children = append(children, a.Start)
 	}
@@ -1266,6 +1388,7 @@ func (i InsertStatement) Children() []Node {
 		children = append(children, i.With)
 	}
 	children = append(children, nodifyExpressions(i.Columns)...)
+	children = append(children, nodifyExpressions(i.Output)...)
 	// Flatten multi-row values for Children()
 	for _, row := range i.Values {
 		children = append(children, nodifyExpressions(row)...)
@@ -1299,6 +1422,9 @@ func (o OnConflict) Children() []Node {
 			update := update // G601: Create local copy to avoid memory aliasing
 			children = append(children, &update)
 		}
+	}
+	if o.Action.Where != nil {
+		children = append(children, o.Action.Where)
 	}
 	return children
 }
@@ -1534,7 +1660,16 @@ type UpdateExpression struct {
 
 func (u *UpdateExpression) expressionNode()     {}
 func (u UpdateExpression) TokenLiteral() string { return "=" }
-func (u UpdateExpression) Children() []Node     { return []Node{u.Column, u.Value} }
+func (u UpdateExpression) Children() []Node {
+	var nodes []Node
+	if u.Column != nil {
+		nodes = append(nodes, u.Column)
+	}
+	if u.Value != nil {
+		nodes = append(nodes, u.Value)
+	}
+	return nodes
+}
 
 // DeleteStatement represents a DELETE SQL statement
 type DeleteStatement struct {
@@ -1683,6 +1818,7 @@ func (m MergeStatement) Children() []Node {
 	for _, when := range m.WhenClauses {
 		children = append(children, when)
 	}
+	children = append(children, nodifyExpressions(m.Output)...)
 	return children
 }
 

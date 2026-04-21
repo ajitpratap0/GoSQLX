@@ -392,6 +392,131 @@ func TestImplicitCrossJoin_NilAST(t *testing.T) {
 	}
 }
 
+// Nested-traversal tests (C5: ast.Walk migration)
+//
+// These tests verify that rules fire on nested SELECT/subquery/CTE bodies,
+// not just top-level statements. Top-level-only traversal would miss all
+// of these cases.
+
+// L016: SELECT * in a subquery (derived table) must be flagged.
+func TestSelectStar_Nested_DerivedTable(t *testing.T) {
+	rule := performance.NewSelectStarRule()
+	ctx := makeCtx(t, "SELECT id FROM (SELECT * FROM users) t")
+	v, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(v) == 0 {
+		t.Error("expected violation for SELECT * inside a derived table subquery")
+	}
+}
+
+// L016: SELECT * inside a CTE body must be flagged.
+func TestSelectStar_Nested_CTE(t *testing.T) {
+	rule := performance.NewSelectStarRule()
+	ctx := makeCtx(t, "WITH c AS (SELECT * FROM big_table) SELECT id FROM c")
+	v, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(v) == 0 {
+		t.Error("expected violation for SELECT * inside a CTE body")
+	}
+}
+
+// L017: Missing WHERE inside a derived table must be flagged.
+func TestMissingWhere_Nested_DerivedTable(t *testing.T) {
+	rule := performance.NewMissingWhereRule()
+	ctx := makeCtx(t, "SELECT id FROM (SELECT id, name FROM users) t WHERE id = 1")
+	v, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	// The outer SELECT has a WHERE; the inner one doesn't — migration exposes this.
+	if len(v) == 0 {
+		t.Error("expected violation for nested SELECT without WHERE/LIMIT")
+	}
+}
+
+// L018: Leading wildcard LIKE inside a CTE body must be flagged.
+func TestLeadingWildcard_Nested_CTE(t *testing.T) {
+	rule := performance.NewLeadingWildcardRule()
+	ctx := makeCtx(t, "WITH c AS (SELECT id FROM users WHERE name LIKE '%alice') SELECT * FROM c")
+	v, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(v) == 0 {
+		t.Error("expected violation for leading wildcard LIKE inside a CTE body")
+	}
+}
+
+// L019: NOT IN (subquery) inside a nested SELECT must be flagged.
+func TestNotInWithNull_Nested(t *testing.T) {
+	rule := performance.NewNotInWithNullRule()
+	ctx := makeCtx(t, "SELECT id FROM (SELECT id FROM orders WHERE user_id NOT IN (SELECT id FROM users)) t")
+	v, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(v) == 0 {
+		t.Error("expected violation for NOT IN (subquery) inside a derived table")
+	}
+}
+
+// L020: Subquery in SELECT list inside a derived table must be flagged.
+func TestSubqueryInSelect_Nested_DerivedTable(t *testing.T) {
+	rule := performance.NewSubqueryInSelectRule()
+	ctx := makeCtx(t, "SELECT x FROM (SELECT id, (SELECT name FROM departments WHERE id = u.dept_id) AS dn FROM users u) x")
+	v, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(v) == 0 {
+		t.Error("expected violation for scalar subquery in inner SELECT column list")
+	}
+}
+
+// L021: OR-chain on same column inside a CTE body must be flagged.
+func TestOrInsteadOfIn_Nested_CTE(t *testing.T) {
+	rule := performance.NewOrInsteadOfInRule()
+	ctx := makeCtx(t, "WITH c AS (SELECT id FROM users WHERE status = 1 OR status = 2 OR status = 3) SELECT * FROM c")
+	v, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(v) == 0 {
+		t.Error("expected violation for OR-chain inside a CTE body")
+	}
+}
+
+// L022: Function-on-column inside a nested SELECT must be flagged. The existing
+// FunctionOnColumnRule already walks CTEs explicitly; this test locks that in.
+func TestFunctionOnColumn_Nested_CTE(t *testing.T) {
+	rule := performance.NewFunctionOnColumnRule()
+	ctx := makeCtx(t, "WITH c AS (SELECT id FROM orders WHERE YEAR(created_at) = 2024) SELECT * FROM c")
+	v, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(v) == 0 {
+		t.Error("expected violation for function on indexed column inside a CTE body")
+	}
+}
+
+// L023: Implicit cross join inside a subquery must be flagged.
+func TestImplicitCrossJoin_Nested_Subquery(t *testing.T) {
+	rule := performance.NewImplicitCrossJoinRule()
+	ctx := makeCtx(t, "SELECT id FROM (SELECT u.id FROM users u, orders o) t")
+	v, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(v) == 0 {
+		t.Error("expected violation for implicit cross join inside a derived table")
+	}
+}
+
 // Fix methods
 
 func TestSelectStar_Fix(t *testing.T) {

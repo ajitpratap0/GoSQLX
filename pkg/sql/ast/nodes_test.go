@@ -430,10 +430,13 @@ func TestWindowFrame(t *testing.T) {
 				t.Errorf("WindowFrame.TokenLiteral() = %v, want %v", got, tt.wantLiteral)
 			}
 
-			// Test Children
+			// Test Children: C6 fix — the Start bound is always surfaced so
+			// Walk/Inspect can descend into its Value expression. End is
+			// added when set. None of the test cases set End, so we expect
+			// a single-child slice.
 			children := tt.frame.Children()
-			if children != nil {
-				t.Errorf("WindowFrame.Children() = %v, want nil", children)
+			if len(children) != 1 {
+				t.Errorf("WindowFrame.Children() len = %d, want 1 (Start bound)", len(children))
 			}
 
 			// Test that it implements Statement interface

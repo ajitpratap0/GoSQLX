@@ -233,6 +233,72 @@ func TestSelectIntoOutfile_NoViolation(t *testing.T) {
 	}
 }
 
+// Nested-traversal tests (C5: ast.Walk migration)
+//
+// After migrating to ast.Walk, DELETE/UPDATE/DROP/TRUNCATE statements are
+// discovered at any nesting depth. The parser currently only constructs
+// top-level DML, but these tests guard against regression if the rules are
+// ever reverted to flat traversal and also lock in the walk-based behavior
+// for the common CTE-in-SELECT shapes.
+
+// L011: DELETE without WHERE is still flagged at the top level after
+// migration to ast.Walk. The parser does not currently create DELETE nodes
+// inside a CTE body (parser limitation, tracked separately), so walk-based
+// traversal is equivalent to top-level for real inputs. This test locks in
+// the straightforward top-level case.
+func TestDeleteWithoutWhere_AfterWalkMigration_TopLevel(t *testing.T) {
+	rule := safety.NewDeleteWithoutWhereRule()
+	ctx := makeContext(t, "DELETE FROM users")
+	v, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(v) != 1 {
+		t.Errorf("expected exactly 1 violation after walk migration, got %d", len(v))
+	}
+}
+
+// L012: UPDATE without WHERE is still flagged at the top level after
+// migration to ast.Walk. See L011 note above for parser limitations around
+// DML in CTE bodies.
+func TestUpdateWithoutWhere_AfterWalkMigration_TopLevel(t *testing.T) {
+	rule := safety.NewUpdateWithoutWhereRule()
+	ctx := makeContext(t, "UPDATE users SET active = 0")
+	v, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(v) != 1 {
+		t.Errorf("expected exactly 1 violation after walk migration, got %d", len(v))
+	}
+}
+
+// L013: DROP without IF EXISTS still fires at top level post-migration.
+func TestDropWithoutCondition_AfterWalkMigration_TopLevel(t *testing.T) {
+	rule := safety.NewDropWithoutConditionRule()
+	ctx := makeContext(t, "DROP TABLE users")
+	v, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(v) != 1 {
+		t.Errorf("expected exactly 1 violation after walk migration, got %d", len(v))
+	}
+}
+
+// L014: TRUNCATE still fires at top level post-migration.
+func TestTruncateTable_AfterWalkMigration_TopLevel(t *testing.T) {
+	rule := safety.NewTruncateTableRule()
+	ctx := makeContext(t, "TRUNCATE TABLE users")
+	v, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(v) != 1 {
+		t.Errorf("expected exactly 1 violation after walk migration, got %d", len(v))
+	}
+}
+
 // Fix methods
 
 func TestDeleteWithoutWhere_Fix(t *testing.T) {

@@ -26,6 +26,7 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
@@ -1199,7 +1200,7 @@ func (h *Handler) handleDocumentSymbol(params json.RawMessage) ([]DocumentSymbol
 	}
 
 	// Parse the SQL to extract symbols
-	ast, err := gosqlx.Parse(content)
+	parsed, err := gosqlx.Parse(content)
 	if err != nil {
 		// Return empty symbols on parse error
 		return []DocumentSymbol{}, nil
@@ -1208,9 +1209,12 @@ func (h *Handler) handleDocumentSymbol(params json.RawMessage) ([]DocumentSymbol
 	symbols := []DocumentSymbol{}
 	lines := strings.Split(content, "\n")
 
-	// Extract symbols from each statement
-	for i, stmt := range ast.Statements {
-		symbol := h.extractStatementSymbol(stmt, i, lines, content)
+	// Extract symbols from each statement. Compute actual source ranges from
+	// AST position info and the raw content, so outline ranges no longer point
+	// at the whole file.
+	starts := computeStatementStarts(parsed.Statements, lines)
+	for i, stmt := range parsed.Statements {
+		symbol := h.extractStatementSymbol(stmt, i, lines, content, starts)
 		if symbol != nil {
 			symbols = append(symbols, *symbol)
 		}
@@ -1219,72 +1223,72 @@ func (h *Handler) handleDocumentSymbol(params json.RawMessage) ([]DocumentSymbol
 	return symbols, nil
 }
 
-// extractStatementSymbol extracts a document symbol from a SQL statement
-func (h *Handler) extractStatementSymbol(stmt interface{}, index int, lines []string, content string) *DocumentSymbol {
-	// Determine statement type and name
-	var name string
-	var detail string
-	var kind SymbolKind
+// extractStatementSymbol extracts a document symbol from a SQL statement.
+//
+// Name, Detail, and Kind are derived from the concrete Statement type using a
+// proper two-value type switch (no reflection-via-strings). The Range is
+// computed from AST position info (Pos fields on statements and children),
+// falling back to semicolon boundaries in the source content for statement
+// kinds that do not carry positions.
+func (h *Handler) extractStatementSymbol(stmt ast.Statement, index int, lines []string, content string, starts []models.Location) *DocumentSymbol {
+	name, detail, kind := statementSymbolInfo(stmt, index)
 
-	// Use type switch to determine statement type
-	typeName := fmt.Sprintf("%T", stmt)
-	switch {
-	case strings.Contains(typeName, "SelectStatement"):
-		name = fmt.Sprintf("SELECT #%d", index+1)
-		detail = "SELECT statement"
-		kind = SymbolMethod
-	case strings.Contains(typeName, "InsertStatement"):
-		name = fmt.Sprintf("INSERT #%d", index+1)
-		detail = "INSERT statement"
-		kind = SymbolMethod
-	case strings.Contains(typeName, "UpdateStatement"):
-		name = fmt.Sprintf("UPDATE #%d", index+1)
-		detail = "UPDATE statement"
-		kind = SymbolMethod
-	case strings.Contains(typeName, "DeleteStatement"):
-		name = fmt.Sprintf("DELETE #%d", index+1)
-		detail = "DELETE statement"
-		kind = SymbolMethod
-	case strings.Contains(typeName, "CreateTableStatement"):
-		name = fmt.Sprintf("CREATE TABLE #%d", index+1)
-		detail = "DDL statement"
-		kind = SymbolStruct
-	case strings.Contains(typeName, "CreateIndexStatement"):
-		name = fmt.Sprintf("CREATE INDEX #%d", index+1)
-		detail = "DDL statement"
-		kind = SymbolStruct
-	case strings.Contains(typeName, "DropStatement"):
-		name = fmt.Sprintf("DROP #%d", index+1)
-		detail = "DDL statement"
-		kind = SymbolStruct
-	case strings.Contains(typeName, "AlterStatement"):
-		name = fmt.Sprintf("ALTER #%d", index+1)
-		detail = "DDL statement"
-		kind = SymbolStruct
-	case strings.Contains(typeName, "TruncateStatement"):
-		name = fmt.Sprintf("TRUNCATE #%d", index+1)
-		detail = "DDL statement"
-		kind = SymbolStruct
-	case strings.Contains(typeName, "MergeStatement"):
-		name = fmt.Sprintf("MERGE #%d", index+1)
-		detail = "DML statement"
-		kind = SymbolMethod
-	default:
-		name = fmt.Sprintf("Statement #%d", index+1)
-		detail = typeName
-		kind = SymbolVariable
+	// Compute the start location. Prefer an explicit Pos on the statement;
+	// otherwise walk the children to find the earliest position; finally fall
+	// back to the statement's tracked start location (set by the parser) or
+	// line 1, column 1.
+	start := statementStartLocation(stmt)
+	if start.IsZero() && index < len(starts) {
+		start = starts[index]
+	}
+	if start.IsZero() {
+		start = models.Location{Line: 1, Column: 1}
 	}
 
-	// For now, use a simple range based on statement index
-	// A more sophisticated implementation would track actual positions
-	startLine := 0
-	endLine := len(lines) - 1
+	// Derive the end location by walking all descendants and taking the latest
+	// position. For kinds with no child Pos info (e.g., DropStatement with no
+	// positioned children), fall back to the next statement's start - 1 or the
+	// final semicolon after the start position.
+	end := statementEndLocation(stmt, start, content, lines)
+	// If this statement does not fully account for its extent, bound the end
+	// at the next statement's start (exclusive) to avoid overlap.
+	if index+1 < len(starts) {
+		next := starts[index+1]
+		if !next.IsZero() && locBefore(next, end) {
+			end = stepBack(next, lines)
+		}
+	}
+	if locBefore(end, start) {
+		end = start
+	}
+
+	startLine := start.Line - 1
+	if startLine < 0 {
+		startLine = 0
+	}
+	startChar := start.Column - 1
+	if startChar < 0 {
+		startChar = 0
+	}
+	endLine := end.Line - 1
 	if endLine < 0 {
 		endLine = 0
 	}
-	endChar := 0
-	if endLine < len(lines) {
+	endChar := end.Column - 1
+	if endChar < 0 {
+		endChar = 0
+	}
+	// Clamp to actual line lengths so IDEs don't render past the buffer.
+	if startLine < len(lines) && startChar > len(lines[startLine]) {
+		startChar = len(lines[startLine])
+	}
+	if endLine < len(lines) && endChar > len(lines[endLine]) {
 		endChar = len(lines[endLine])
+	}
+
+	selEndChar := startChar + len(name)
+	if startLine < len(lines) && selEndChar > len(lines[startLine]) {
+		selEndChar = len(lines[startLine])
 	}
 
 	return &DocumentSymbol{
@@ -1292,14 +1296,429 @@ func (h *Handler) extractStatementSymbol(stmt interface{}, index int, lines []st
 		Detail: detail,
 		Kind:   kind,
 		Range: Range{
-			Start: Position{Line: startLine, Character: 0},
+			Start: Position{Line: startLine, Character: startChar},
 			End:   Position{Line: endLine, Character: endChar},
 		},
 		SelectionRange: Range{
-			Start: Position{Line: startLine, Character: 0},
-			End:   Position{Line: startLine, Character: len(name)},
+			Start: Position{Line: startLine, Character: startChar},
+			End:   Position{Line: startLine, Character: selEndChar},
 		},
 	}
+}
+
+// statementSymbolInfo maps a concrete Statement to its LSP symbol metadata
+// using a proper two-value type switch. This replaces the prior
+// fmt.Sprintf("%T", stmt) + strings.Contains dispatch.
+func statementSymbolInfo(stmt ast.Statement, index int) (name, detail string, kind SymbolKind) {
+	n := index + 1
+	switch s := stmt.(type) {
+	case *ast.SelectStatement:
+		detail = "SELECT statement"
+		if t := selectPrimaryTable(s); t != "" {
+			name = fmt.Sprintf("SELECT from %s", t)
+		} else {
+			name = fmt.Sprintf("SELECT #%d", n)
+		}
+		kind = SymbolMethod
+	case *ast.InsertStatement:
+		detail = "INSERT statement"
+		if s.TableName != "" {
+			name = fmt.Sprintf("INSERT into %s", s.TableName)
+		} else {
+			name = fmt.Sprintf("INSERT #%d", n)
+		}
+		kind = SymbolMethod
+	case *ast.UpdateStatement:
+		detail = "UPDATE statement"
+		if s.TableName != "" {
+			name = fmt.Sprintf("UPDATE %s", s.TableName)
+		} else {
+			name = fmt.Sprintf("UPDATE #%d", n)
+		}
+		kind = SymbolMethod
+	case *ast.DeleteStatement:
+		detail = "DELETE statement"
+		if s.TableName != "" {
+			name = fmt.Sprintf("DELETE from %s", s.TableName)
+		} else {
+			name = fmt.Sprintf("DELETE #%d", n)
+		}
+		kind = SymbolMethod
+	case *ast.MergeStatement:
+		detail = "DML statement"
+		if s.TargetTable.Name != "" {
+			name = fmt.Sprintf("MERGE into %s", s.TargetTable.Name)
+		} else {
+			name = fmt.Sprintf("MERGE #%d", n)
+		}
+		kind = SymbolMethod
+	case *ast.CreateTableStatement:
+		detail = "DDL statement"
+		if s.Name != "" {
+			name = fmt.Sprintf("CREATE TABLE %s", s.Name)
+		} else {
+			name = fmt.Sprintf("CREATE TABLE #%d", n)
+		}
+		kind = SymbolStruct
+	case *ast.CreateViewStatement:
+		detail = "DDL statement"
+		if s.Name != "" {
+			name = fmt.Sprintf("CREATE VIEW %s", s.Name)
+		} else {
+			name = fmt.Sprintf("CREATE VIEW #%d", n)
+		}
+		kind = SymbolStruct
+	case *ast.CreateIndexStatement:
+		detail = "DDL statement"
+		if s.Name != "" {
+			name = fmt.Sprintf("CREATE INDEX %s", s.Name)
+		} else {
+			name = fmt.Sprintf("CREATE INDEX #%d", n)
+		}
+		kind = SymbolStruct
+	case *ast.CreateMaterializedViewStatement:
+		detail = "DDL statement"
+		if s.Name != "" {
+			name = fmt.Sprintf("CREATE MATERIALIZED VIEW %s", s.Name)
+		} else {
+			name = fmt.Sprintf("CREATE MATERIALIZED VIEW #%d", n)
+		}
+		kind = SymbolStruct
+	case *ast.CreateSequenceStatement:
+		detail = "DDL statement"
+		if s.Name != nil && s.Name.Name != "" {
+			name = fmt.Sprintf("CREATE SEQUENCE %s", s.Name.Name)
+		} else {
+			name = fmt.Sprintf("CREATE SEQUENCE #%d", n)
+		}
+		kind = SymbolStruct
+	case *ast.DropStatement:
+		detail = "DDL statement"
+		obj := s.ObjectType
+		if obj == "" {
+			obj = "object"
+		}
+		if len(s.Names) > 0 {
+			name = fmt.Sprintf("DROP %s %s", obj, s.Names[0])
+		} else {
+			name = fmt.Sprintf("DROP %s #%d", obj, n)
+		}
+		kind = SymbolStruct
+	case *ast.DropSequenceStatement:
+		detail = "DDL statement"
+		if s.Name != nil && s.Name.Name != "" {
+			name = fmt.Sprintf("DROP SEQUENCE %s", s.Name.Name)
+		} else {
+			name = fmt.Sprintf("DROP SEQUENCE #%d", n)
+		}
+		kind = SymbolStruct
+	case *ast.AlterStatement:
+		detail = "DDL statement"
+		if s.Name != "" {
+			name = fmt.Sprintf("ALTER %s", s.Name)
+		} else {
+			name = fmt.Sprintf("ALTER #%d", n)
+		}
+		kind = SymbolStruct
+	case *ast.AlterTableStatement:
+		detail = "DDL statement"
+		if s.Table != "" {
+			name = fmt.Sprintf("ALTER TABLE %s", s.Table)
+		} else {
+			name = fmt.Sprintf("ALTER TABLE #%d", n)
+		}
+		kind = SymbolStruct
+	case *ast.AlterSequenceStatement:
+		detail = "DDL statement"
+		if s.Name != nil && s.Name.Name != "" {
+			name = fmt.Sprintf("ALTER SEQUENCE %s", s.Name.Name)
+		} else {
+			name = fmt.Sprintf("ALTER SEQUENCE #%d", n)
+		}
+		kind = SymbolStruct
+	case *ast.TruncateStatement:
+		detail = "DDL statement"
+		if len(s.Tables) > 0 {
+			name = fmt.Sprintf("TRUNCATE %s", s.Tables[0])
+		} else {
+			name = fmt.Sprintf("TRUNCATE #%d", n)
+		}
+		kind = SymbolStruct
+	case *ast.WithClause:
+		detail = "WITH (CTE) statement"
+		name = fmt.Sprintf("WITH #%d", n)
+		kind = SymbolMethod
+	default:
+		detail = fmt.Sprintf("%T", stmt)
+		name = fmt.Sprintf("Statement #%d", n)
+		kind = SymbolVariable
+	}
+	return name, detail, kind
+}
+
+// selectPrimaryTable returns the first FROM table of a SELECT statement, if
+// present, for use in the outline label. Empty string if no identifiable
+// table (e.g., SELECT with only subqueries).
+func selectPrimaryTable(s *ast.SelectStatement) string {
+	if s == nil || len(s.From) == 0 {
+		return ""
+	}
+	return s.From[0].Name
+}
+
+// statementStartLocation returns the declared start Pos for a statement if it
+// exposes one via a known field; otherwise returns a zero Location.
+func statementStartLocation(stmt ast.Statement) models.Location {
+	switch s := stmt.(type) {
+	case *ast.SelectStatement:
+		return s.Pos
+	case *ast.InsertStatement:
+		return s.Pos
+	case *ast.UpdateStatement:
+		return s.Pos
+	case *ast.DeleteStatement:
+		return s.Pos
+	case *ast.WithClause:
+		return s.Pos
+	case *ast.CreateSequenceStatement:
+		return s.Pos
+	case *ast.DropSequenceStatement:
+		return s.Pos
+	case *ast.AlterSequenceStatement:
+		return s.Pos
+	}
+	// Statement has no declared Pos; fall back to first child position.
+	if n, ok := stmt.(ast.Node); ok {
+		return earliestChildLocation(n)
+	}
+	return models.Location{}
+}
+
+// earliestChildLocation walks descendants via Children() and returns the
+// earliest non-zero Location it can find. This is a best-effort for
+// statement kinds that don't carry a Pos field (CREATE TABLE, DROP, ALTER
+// TABLE, TRUNCATE, MERGE, CREATE VIEW/INDEX).
+func earliestChildLocation(n ast.Node) models.Location {
+	var best models.Location
+	visit := func(loc models.Location) {
+		if loc.IsZero() {
+			return
+		}
+		if best.IsZero() || locBefore(loc, best) {
+			best = loc
+		}
+	}
+	walkNode(n, func(child ast.Node) {
+		visit(nodeLocation(child))
+	})
+	return best
+}
+
+// statementEndLocation derives an end Location for the statement by walking
+// descendants for the latest Pos. If no child has Pos, falls back to the
+// next semicolon in the source after the start location, or end-of-file.
+func statementEndLocation(stmt ast.Statement, start models.Location, content string, lines []string) models.Location {
+	var latest models.Location
+	if n, ok := stmt.(ast.Node); ok {
+		walkNode(n, func(child ast.Node) {
+			loc := nodeLocation(child)
+			if loc.IsZero() {
+				return
+			}
+			if locBefore(latest, loc) {
+				latest = loc
+			}
+		})
+	}
+	// If statement has no descendants with Pos info, or the latest found is
+	// before the start (shouldn't happen but guard anyway), use the next
+	// semicolon as the end. Otherwise extend to the end of the final token's
+	// line (we only know token start positions, not lengths).
+	if latest.IsZero() || locBefore(latest, start) {
+		return semicolonOrEOF(start, content, lines)
+	}
+	// Extend the end to cover the rest of the statement on its final line —
+	// typically there's trailing punctuation (semicolon, closing paren, etc.)
+	// after the last positioned token. Use the line length as an upper bound;
+	// callers will clamp at the next statement's start.
+	if latest.Line-1 < len(lines) {
+		return models.Location{Line: latest.Line, Column: len(lines[latest.Line-1]) + 1}
+	}
+	return latest
+}
+
+// semicolonOrEOF returns the location of the next ';' after start in content,
+// or the end-of-file location if no semicolon exists. This is a fallback for
+// statements without position-bearing children.
+func semicolonOrEOF(start models.Location, content string, lines []string) models.Location {
+	// Convert 1-based (line, column) to a byte offset in content.
+	offset := lineColToOffset(content, start.Line, start.Column)
+	if offset < 0 {
+		offset = 0
+	}
+	idx := strings.IndexByte(content[offset:], ';')
+	if idx < 0 {
+		// No semicolon; end at EOF.
+		if len(lines) == 0 {
+			return models.Location{Line: 1, Column: 1}
+		}
+		return models.Location{Line: len(lines), Column: len(lines[len(lines)-1]) + 1}
+	}
+	return offsetToLineCol(content, offset+idx+1)
+}
+
+// computeStatementStarts returns a best-effort start Location for every
+// statement in the slice, used to bound end positions at the next statement's
+// start. Where a statement has no declared Pos and no positioned children,
+// returns a zero Location.
+func computeStatementStarts(stmts []ast.Statement, lines []string) []models.Location {
+	out := make([]models.Location, len(stmts))
+	for i, s := range stmts {
+		out[i] = statementStartLocation(s)
+	}
+	_ = lines
+	return out
+}
+
+// walkNode performs a depth-first traversal of the node and its descendants
+// via Children(), invoking fn on each visited node (including the root).
+// It guards against nil children and cycles via a bounded visit counter.
+func walkNode(n ast.Node, fn func(ast.Node)) {
+	if n == nil {
+		return
+	}
+	const maxVisits = 10000
+	visited := 0
+	var walk func(ast.Node)
+	walk = func(cur ast.Node) {
+		if cur == nil || visited >= maxVisits {
+			return
+		}
+		visited++
+		fn(cur)
+		for _, c := range cur.Children() {
+			if c == nil {
+				continue
+			}
+			walk(c)
+		}
+	}
+	walk(n)
+}
+
+// nodeLocation returns the Location for a node if it carries one via a known
+// Pos field. This is an explicit dispatch (no reflection) for the concrete
+// types known to carry positions.
+func nodeLocation(n ast.Node) models.Location {
+	switch v := n.(type) {
+	case *ast.SelectStatement:
+		return v.Pos
+	case *ast.InsertStatement:
+		return v.Pos
+	case *ast.UpdateStatement:
+		return v.Pos
+	case *ast.DeleteStatement:
+		return v.Pos
+	case *ast.WithClause:
+		return v.Pos
+	case *ast.CreateSequenceStatement:
+		return v.Pos
+	case *ast.DropSequenceStatement:
+		return v.Pos
+	case *ast.AlterSequenceStatement:
+		return v.Pos
+	case *ast.Identifier:
+		return v.Pos
+	case *ast.FunctionCall:
+		return v.Pos
+	case *ast.CaseExpression:
+		return v.Pos
+	case *ast.WhenClause:
+		return v.Pos
+	case *ast.InExpression:
+		return v.Pos
+	case *ast.SubqueryExpression:
+		return v.Pos
+	case *ast.BetweenExpression:
+		return v.Pos
+	}
+	return models.Location{}
+}
+
+// locBefore reports whether a comes strictly before b in (line, column) order.
+// A zero Location is treated as "unset" and returns false when on either side
+// (caller handles the zero case explicitly).
+func locBefore(a, b models.Location) bool {
+	if a.IsZero() || b.IsZero() {
+		return false
+	}
+	if a.Line != b.Line {
+		return a.Line < b.Line
+	}
+	return a.Column < b.Column
+}
+
+// stepBack returns the location one character before loc, clamped to the
+// start of the document. Used to trim an end bound so it doesn't overlap
+// with the following statement.
+func stepBack(loc models.Location, lines []string) models.Location {
+	if loc.Column > 1 {
+		return models.Location{Line: loc.Line, Column: loc.Column - 1}
+	}
+	if loc.Line > 1 {
+		prev := loc.Line - 1
+		col := 1
+		if prev-1 >= 0 && prev-1 < len(lines) {
+			col = len(lines[prev-1]) + 1
+		}
+		return models.Location{Line: prev, Column: col}
+	}
+	return loc
+}
+
+// lineColToOffset converts a 1-based (line, column) Location to a 0-based
+// byte offset into content. Returns -1 if the location is out of range.
+func lineColToOffset(content string, line, col int) int {
+	if line < 1 || col < 1 {
+		return -1
+	}
+	off := 0
+	curLine := 1
+	for off < len(content) && curLine < line {
+		if content[off] == '\n' {
+			curLine++
+		}
+		off++
+	}
+	if curLine != line {
+		return -1
+	}
+	off += col - 1
+	if off > len(content) {
+		off = len(content)
+	}
+	return off
+}
+
+// offsetToLineCol converts a 0-based byte offset into a 1-based (line,
+// column) Location. Bounds are clamped to the content length.
+func offsetToLineCol(content string, offset int) models.Location {
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > len(content) {
+		offset = len(content)
+	}
+	line, col := 1, 1
+	for i := 0; i < offset; i++ {
+		if content[i] == '\n' {
+			line++
+			col = 1
+		} else {
+			col++
+		}
+	}
+	return models.Location{Line: line, Column: col}
 }
 
 // handleSignatureHelp provides signature help for SQL functions.

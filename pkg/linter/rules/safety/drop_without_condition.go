@@ -39,46 +39,51 @@ func NewDropWithoutConditionRule() *DropWithoutConditionRule {
 	}
 }
 
-// Check inspects the AST for DROP statements without IF EXISTS.
+// Check walks the AST for DROP statements without IF EXISTS at any nesting
+// level. DROP rarely appears nested, but walking makes the rule consistent and
+// catches edge cases like nested script blocks.
 func (r *DropWithoutConditionRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 	if ctx.AST == nil {
 		return nil, nil
 	}
 	var violations []linter.Violation
 	for _, stmt := range ctx.AST.Statements {
-		switch drop := stmt.(type) {
-		case *ast.DropStatement:
-			if !drop.IfExists {
-				objType := strings.ToUpper(drop.ObjectType)
-				name := ""
-				if len(drop.Names) > 0 {
-					name = drop.Names[0]
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			switch drop := n.(type) {
+			case *ast.DropStatement:
+				if !drop.IfExists {
+					objType := strings.ToUpper(drop.ObjectType)
+					name := ""
+					if len(drop.Names) > 0 {
+						name = drop.Names[0]
+					}
+					violations = append(violations, linter.Violation{
+						Rule:       r.ID(),
+						RuleName:   r.Name(),
+						Severity:   r.Severity(),
+						Message:    "DROP " + objType + " " + name + " is missing IF EXISTS",
+						Location:   models.Location{Line: 1, Column: 1},
+						Suggestion: "Use DROP " + objType + " IF EXISTS " + name,
+					})
 				}
-				violations = append(violations, linter.Violation{
-					Rule:       r.ID(),
-					RuleName:   r.Name(),
-					Severity:   r.Severity(),
-					Message:    "DROP " + objType + " " + name + " is missing IF EXISTS",
-					Location:   models.Location{Line: 1, Column: 1},
-					Suggestion: "Use DROP " + objType + " IF EXISTS " + name,
-				})
-			}
-		case *ast.DropSequenceStatement:
-			if !drop.IfExists {
-				name := ""
-				if drop.Name != nil {
-					name = drop.Name.Name
+			case *ast.DropSequenceStatement:
+				if !drop.IfExists {
+					name := ""
+					if drop.Name != nil {
+						name = drop.Name.Name
+					}
+					violations = append(violations, linter.Violation{
+						Rule:       r.ID(),
+						RuleName:   r.Name(),
+						Severity:   r.Severity(),
+						Message:    "DROP SEQUENCE " + name + " is missing IF EXISTS",
+						Location:   drop.Pos,
+						Suggestion: "Use DROP SEQUENCE IF EXISTS " + name,
+					})
 				}
-				violations = append(violations, linter.Violation{
-					Rule:       r.ID(),
-					RuleName:   r.Name(),
-					Severity:   r.Severity(),
-					Message:    "DROP SEQUENCE " + name + " is missing IF EXISTS",
-					Location:   drop.Pos,
-					Suggestion: "Use DROP SEQUENCE IF EXISTS " + name,
-				})
 			}
-		}
+			return true
+		})
 	}
 	return violations, nil
 }

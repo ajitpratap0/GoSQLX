@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 
+	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
@@ -110,7 +111,11 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 		}
 		qe, ok := stmt.(ast.QueryExpression)
 		if !ok {
-			return nil, fmt.Errorf("expected SELECT or set operation in INSERT ... SELECT, got %T: %w", stmt, ErrUnexpectedStatement)
+			return nil, goerrors.InvalidSyntaxError(
+				fmt.Sprintf("expected SELECT or set operation in INSERT ... SELECT, got %T", stmt),
+				p.currentLocation(),
+				"",
+			).WithCause(ErrUnexpectedStatement)
 		}
 		query = qe
 	case p.isType(models.TokenTypeValues):
@@ -134,7 +139,11 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 				// including function calls like NOW(), UUID(), etc.
 				expr, err := p.parseExpression()
 				if err != nil {
-					return nil, fmt.Errorf("failed to parse value at position %d in VALUES row %d: %w", len(row)+1, len(values)+1, err)
+					return nil, goerrors.InvalidSyntaxError(
+						fmt.Sprintf("failed to parse value at position %d in VALUES row %d: %v", len(row)+1, len(values)+1, err),
+						p.currentLocation(),
+						"",
+					).WithCause(err)
 				}
 				row = append(row, expr)
 
@@ -245,7 +254,11 @@ func (p *Parser) parseReturningColumns() ([]ast.Expression, error) {
 			// Parse expression (can be column name, qualified name, or expression)
 			expr, err := p.parseExpression()
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse RETURNING column: %w", err)
+				return nil, goerrors.InvalidSyntaxError(
+					fmt.Sprintf("failed to parse RETURNING column: %v", err),
+					p.currentLocation(),
+					"",
+				).WithCause(err)
 			}
 			columns = append(columns, expr)
 		}
@@ -335,7 +348,11 @@ func (p *Parser) parseOnConflictClause() (*ast.OnConflict, error) {
 			// Parse value expression (supports EXCLUDED.column references)
 			value, err := p.parseExpression()
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse ON CONFLICT UPDATE value: %w", err)
+				return nil, goerrors.InvalidSyntaxError(
+					fmt.Sprintf("failed to parse ON CONFLICT UPDATE value: %v", err),
+					p.currentLocation(),
+					"",
+				).WithCause(err)
 			}
 
 			updates = append(updates, ast.UpdateExpression{
@@ -355,7 +372,11 @@ func (p *Parser) parseOnConflictClause() (*ast.OnConflict, error) {
 			p.advance() // Consume WHERE
 			where, err := p.parseExpression()
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse ON CONFLICT WHERE clause: %w", err)
+				return nil, goerrors.InvalidSyntaxError(
+					fmt.Sprintf("failed to parse ON CONFLICT WHERE clause: %v", err),
+					p.currentLocation(),
+					"",
+				).WithCause(err)
 			}
 			onConflict.Action.Where = where
 		}
@@ -401,7 +422,11 @@ func (p *Parser) parseOnDuplicateKeyUpdateClause() (*ast.UpsertClause, error) {
 
 		value, err := p.parseExpression()
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse ON DUPLICATE KEY UPDATE value: %w", err)
+			return nil, goerrors.InvalidSyntaxError(
+				fmt.Sprintf("failed to parse ON DUPLICATE KEY UPDATE value: %v", err),
+				p.currentLocation(),
+				"",
+			).WithCause(err)
 		}
 
 		upsert.Updates = append(upsert.Updates, ast.UpdateExpression{

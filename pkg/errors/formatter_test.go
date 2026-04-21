@@ -553,8 +553,8 @@ WHERE 年龄 > 18`,
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := NewError(ErrCodeUnexpectedToken, "test error", tt.location)
-			err.WithContext(tt.sql, 1)
+			err := NewError(ErrCodeUnexpectedToken, "test error", tt.location).
+				WithContext(tt.sql, 1)
 
 			got := err.Error()
 

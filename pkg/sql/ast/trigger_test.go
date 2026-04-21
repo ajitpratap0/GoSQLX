@@ -132,9 +132,14 @@ func TestTriggerReferencing(t *testing.T) {
 				t.Errorf("TriggerReferencing.TokenLiteral() = %v, want %v", got, tt.wantString)
 			}
 
-			// Test Children (should be nil)
-			if children := tt.trigRef.Children(); children != nil {
-				t.Errorf("TriggerReferencing.Children() = %v, want nil", children)
+			// Test Children: visitor contract (C6) — TransitionRelationName
+			// is exposed as the single child so Walk/Inspect reach it.
+			children := tt.trigRef.Children()
+			if len(children) != 1 {
+				t.Fatalf("TriggerReferencing.Children() = %v (len %d), want 1 child", children, len(children))
+			}
+			if on, ok := children[0].(ObjectName); !ok || on != tt.trigRef.TransitionRelationName {
+				t.Errorf("TriggerReferencing.Children()[0] = %v, want %v", children[0], tt.trigRef.TransitionRelationName)
 			}
 		})
 	}
@@ -207,9 +212,18 @@ func TestTriggerEvent(t *testing.T) {
 				t.Errorf("TriggerEvent.TokenLiteral() = %v, want %v", got, tt.wantString)
 			}
 
-			// Test Children (should be nil)
-			if children := tt.trigEvent.Children(); children != nil {
-				t.Errorf("TriggerEvent.Children() = %v, want nil", children)
+			// Test Children: visitor contract (C6) — UPDATE OF ... columns
+			// are exposed for Walk/Inspect traversal. Other event types have
+			// no child nodes.
+			children := tt.trigEvent.Children()
+			if len(tt.trigEvent.Columns) == 0 {
+				if children != nil {
+					t.Errorf("TriggerEvent.Children() = %v, want nil", children)
+				}
+			} else {
+				if len(children) != len(tt.trigEvent.Columns) {
+					t.Errorf("TriggerEvent.Children() len = %d, want %d", len(children), len(tt.trigEvent.Columns))
+				}
 			}
 		})
 	}
@@ -339,9 +353,17 @@ func TestTriggerExecBody(t *testing.T) {
 				t.Errorf("TriggerExecBody.TokenLiteral() = %v, want %v", got, tt.wantString)
 			}
 
-			// Test Children (should be nil)
-			if children := tt.execBody.Children(); children != nil {
-				t.Errorf("TriggerExecBody.Children() = %v, want nil", children)
+			// Test Children: visitor contract (C6) — FuncDesc exposed as a child.
+			children := tt.execBody.Children()
+			if len(children) != 1 {
+				t.Fatalf("TriggerExecBody.Children() = %v (len %d), want 1 child", children, len(children))
+			}
+			fd, ok := children[0].(FunctionDesc)
+			if !ok {
+				t.Fatalf("TriggerExecBody.Children()[0] type = %T, want FunctionDesc", children[0])
+			}
+			if fd.String() != tt.execBody.FuncDesc.String() {
+				t.Errorf("FuncDesc child = %v, want %v", fd, tt.execBody.FuncDesc)
 			}
 		})
 	}

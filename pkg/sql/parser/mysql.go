@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
@@ -33,7 +34,11 @@ func (p *Parser) parseMatchAgainst(matchFunc *ast.FunctionCall) (ast.Expression,
 	// Parse search expression (just the primary - not full expression, to avoid IN being eaten)
 	searchExpr, err := p.parsePrimaryExpression()
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse AGAINST expression: %w", err)
+		return nil, goerrors.InvalidSyntaxError(
+			fmt.Sprintf("failed to parse AGAINST expression: %v", err),
+			p.currentLocation(),
+			"",
+		).WithCause(err)
 	}
 
 	// Consume optional mode keywords until we hit )
@@ -245,7 +250,11 @@ func (p *Parser) parseReplaceStatement() (ast.Statement, error) {
 		for {
 			expr, err := p.parseExpression()
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse value in REPLACE: %w", err)
+				return nil, goerrors.InvalidSyntaxError(
+					fmt.Sprintf("failed to parse value in REPLACE: %v", err),
+					p.currentLocation(),
+					"",
+				).WithCause(err)
 			}
 			row = append(row, expr)
 			if !p.isType(models.TokenTypeComma) {

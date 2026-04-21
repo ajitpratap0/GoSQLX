@@ -208,20 +208,24 @@ func (r *AliasingConsistencyRule) checkTextBased(ctx *linter.Context) ([]linter.
 
 // checkASTBased performs AST-based alias checking using parsed query structure.
 //
-// Walks the AST to extract table references from SELECT statements, identifying
-// which tables have aliases and which don't. Reports violations when aliasing is
-// inconsistent within a query.
+// Walks the AST to extract table references from every SELECT statement
+// (including nested ones in subqueries, derived tables, and CTE bodies),
+// identifying which tables have aliases and which don't. Reports violations
+// when aliasing is inconsistent within a query.
 //
 // Returns violations for queries with mixed aliased/non-aliased tables.
 func (r *AliasingConsistencyRule) checkASTBased(ctx *linter.Context) ([]linter.Violation, error) {
 	astViolations := []linter.Violation{}
 
-	// Walk the AST to find aliasing patterns
+	// Walk the AST to find aliasing patterns at every nesting level
 	for _, stmt := range ctx.AST.Statements {
-		if selectStmt, ok := stmt.(*ast.SelectStatement); ok {
-			stmtViolations := r.checkSelectStatement(selectStmt, ctx)
-			astViolations = append(astViolations, stmtViolations...)
-		}
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			if selectStmt, ok := n.(*ast.SelectStatement); ok {
+				stmtViolations := r.checkSelectStatement(selectStmt, ctx)
+				astViolations = append(astViolations, stmtViolations...)
+			}
+			return true
+		})
 	}
 
 	return astViolations, nil

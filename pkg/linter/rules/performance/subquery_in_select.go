@@ -36,31 +36,22 @@ func NewSubqueryInSelectRule() *SubqueryInSelectRule {
 	}
 }
 
-// Check inspects the AST for subqueries used as SELECT column expressions.
+// Check walks the AST for subqueries used as SELECT column expressions at any
+// nesting level (including nested SELECTs and CTE bodies). Every SELECT
+// encountered has its column list examined for scalar subqueries.
 func (r *SubqueryInSelectRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 	if ctx.AST == nil {
 		return nil, nil
 	}
 	var violations []linter.Violation
 	for _, stmt := range ctx.AST.Statements {
-		sel, ok := stmt.(*ast.SelectStatement)
-		if !ok {
-			continue
-		}
-		for _, col := range sel.Columns {
-			if sub, ok := col.(*ast.SubqueryExpression); ok {
-				violations = append(violations, linter.Violation{
-					Rule:       r.ID(),
-					RuleName:   r.Name(),
-					Severity:   r.Severity(),
-					Message:    "Scalar subquery in SELECT column list executes once per row",
-					Location:   sub.Pos,
-					Suggestion: "Rewrite as a JOIN or use a lateral join to avoid per-row execution",
-				})
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectStatement)
+			if !ok {
+				return true
 			}
-			// Also check aliased subqueries: (SELECT ...) AS col
-			if alias, ok := col.(*ast.AliasedExpression); ok {
-				if sub, ok := alias.Expr.(*ast.SubqueryExpression); ok {
+			for _, col := range sel.Columns {
+				if sub, ok := col.(*ast.SubqueryExpression); ok {
 					violations = append(violations, linter.Violation{
 						Rule:       r.ID(),
 						RuleName:   r.Name(),
@@ -70,8 +61,22 @@ func (r *SubqueryInSelectRule) Check(ctx *linter.Context) ([]linter.Violation, e
 						Suggestion: "Rewrite as a JOIN or use a lateral join to avoid per-row execution",
 					})
 				}
+				// Also check aliased subqueries: (SELECT ...) AS col
+				if alias, ok := col.(*ast.AliasedExpression); ok {
+					if sub, ok := alias.Expr.(*ast.SubqueryExpression); ok {
+						violations = append(violations, linter.Violation{
+							Rule:       r.ID(),
+							RuleName:   r.Name(),
+							Severity:   r.Severity(),
+							Message:    "Scalar subquery in SELECT column list executes once per row",
+							Location:   sub.Pos,
+							Suggestion: "Rewrite as a JOIN or use a lateral join to avoid per-row execution",
+						})
+					}
+				}
 			}
-		}
+			return true
+		})
 	}
 	return violations, nil
 }

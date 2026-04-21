@@ -302,10 +302,18 @@ func TestChildrenMethods(t *testing.T) {
 	})
 
 	t.Run("WindowFrame", func(t *testing.T) {
+		// C6 fix: WindowFrame surfaces its Start bound (always) and End bound
+		// (when present) so Walk/Inspect can traverse them.
 		node := WindowFrame{}
 		children := node.Children()
-		if children != nil {
-			t.Errorf("Children() should be nil for WindowFrame")
+		if len(children) != 1 {
+			t.Errorf("Children() returned %d, want 1 (the Start bound)", len(children))
+		}
+
+		endBound := WindowFrameBound{Type: "CURRENT ROW"}
+		node2 := WindowFrame{End: &endBound}
+		if got := node2.Children(); len(got) != 2 {
+			t.Errorf("Children() with End set returned %d, want 2 (Start + End)", len(got))
 		}
 	})
 

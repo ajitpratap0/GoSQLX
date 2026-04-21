@@ -1,0 +1,6 @@
+# Unknown severity string — should produce a warning, not an error, and the
+# override should be dropped.
+rules:
+  L001:
+    severity: critical
+default_severity: fatal

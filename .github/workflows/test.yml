@@ -74,8 +74,33 @@ jobs:
         go-version: '1.26'
         cache: true
 
+    - name: Install Task
+      run: go install github.com/go-task/task/v3/cmd/task@latest
+
+    # Use Taskfile so CI matches local `task test:race` (pkg/cbinding excluded -
+    # it requires CGO and is exercised separately in the cbinding-race job).
     - name: Run tests with race detector
-      run: go test -race -short ./...
+      run: task test:race
+
+  cbinding-race:
+    name: Race Detector (CGO / cbinding)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.26'
+        cache: true
+
+    - name: Install Task
+      run: go install github.com/go-task/task/v3/cmd/task@latest
+
+    - name: Run cbinding tests (CGO + race)
+      env:
+        CGO_ENABLED: '1'
+      run: task test:cbinding
 
   benchmark:
     name: Benchmark

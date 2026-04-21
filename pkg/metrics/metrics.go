@@ -222,7 +222,142 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	sqlerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 )
+
+// errorBucket is the fallback key used when an error has no structured
+// ErrorCode. It ensures the cardinality of ErrorsByType is bounded and
+// prevents unique err.Error() strings from inflating memory usage.
+const errorBucketUnknown sqlerrors.ErrorCode = "E_UNKNOWN"
+
+// knownErrorCodes is the fixed set of ErrorCode buckets tracked by the
+// metrics package. Tracking by ErrorCode instead of err.Error() bounds the
+// cardinality of the error map to a small, known set — closing a memory
+// DoS vector where pathological inputs produced unique error strings.
+//
+// Any structured error whose Code is present in this slice goes into its
+// own bucket; all other errors are aggregated into errorBucketUnknown.
+var knownErrorCodes = []sqlerrors.ErrorCode{
+	// E1xxx: Tokenizer errors
+	sqlerrors.ErrCodeUnexpectedChar,
+	sqlerrors.ErrCodeUnterminatedString,
+	sqlerrors.ErrCodeInvalidNumber,
+	sqlerrors.ErrCodeInvalidOperator,
+	sqlerrors.ErrCodeInvalidIdentifier,
+	sqlerrors.ErrCodeInputTooLarge,
+	sqlerrors.ErrCodeTokenLimitReached,
+	sqlerrors.ErrCodeTokenizerPanic,
+	sqlerrors.ErrCodeUnterminatedBlockComment,
+
+	// E2xxx: Parser syntax errors
+	sqlerrors.ErrCodeUnexpectedToken,
+	sqlerrors.ErrCodeExpectedToken,
+	sqlerrors.ErrCodeMissingClause,
+	sqlerrors.ErrCodeInvalidSyntax,
+	sqlerrors.ErrCodeIncompleteStatement,
+	sqlerrors.ErrCodeInvalidExpression,
+	sqlerrors.ErrCodeRecursionDepthLimit,
+	sqlerrors.ErrCodeUnsupportedDataType,
+	sqlerrors.ErrCodeUnsupportedConstraint,
+	sqlerrors.ErrCodeUnsupportedJoin,
+	sqlerrors.ErrCodeInvalidCTE,
+	sqlerrors.ErrCodeInvalidSetOperation,
+
+	// E3xxx: Semantic errors
+	sqlerrors.ErrCodeUndefinedTable,
+	sqlerrors.ErrCodeUndefinedColumn,
+	sqlerrors.ErrCodeTypeMismatch,
+	sqlerrors.ErrCodeAmbiguousColumn,
+
+	// E4xxx: Unsupported features
+	sqlerrors.ErrCodeUnsupportedFeature,
+	sqlerrors.ErrCodeUnsupportedDialect,
+}
+
+// errorCodeCounters holds per-bucket atomic counters for structured error
+// codes. Buckets are fixed at init time from knownErrorCodes; a single
+// additional bucket (errorBucketUnknown) captures any unstructured error
+// (e.g. fmt.Errorf, stdlib errors). This design:
+//   - Bounds memory growth to O(len(knownErrorCodes)+1) regardless of input
+//   - Eliminates write-lock contention on hot error paths
+//   - Removes the deep map copy from GetStats()
+type errorCodeCounters struct {
+	// tokenizeByCode and parseByCode are keyed by ErrorCode string. The
+	// underlying map is allocated once at package init and never mutated
+	// after that — values are *atomic.Int64 and updated lock-free.
+	tokenizeByCode map[sqlerrors.ErrorCode]*atomic.Int64
+	parseByCode    map[sqlerrors.ErrorCode]*atomic.Int64
+}
+
+// newErrorCodeCounters constructs the fixed bucket table. Called exactly
+// once during package initialization.
+func newErrorCodeCounters() *errorCodeCounters {
+	tc := make(map[sqlerrors.ErrorCode]*atomic.Int64, len(knownErrorCodes)+1)
+	pc := make(map[sqlerrors.ErrorCode]*atomic.Int64, len(knownErrorCodes)+1)
+	for _, code := range knownErrorCodes {
+		tc[code] = new(atomic.Int64)
+		pc[code] = new(atomic.Int64)
+	}
+	tc[errorBucketUnknown] = new(atomic.Int64)
+	pc[errorBucketUnknown] = new(atomic.Int64)
+	return &errorCodeCounters{
+		tokenizeByCode: tc,
+		parseByCode:    pc,
+	}
+}
+
+// recordTokenizeError increments the bucket for the given error. If the
+// error is not a structured *sqlerrors.Error, it falls back to the
+// errorBucketUnknown bucket. Lock-free.
+func (c *errorCodeCounters) recordTokenizeError(err error) {
+	code := sqlerrors.GetCode(err)
+	if counter, ok := c.tokenizeByCode[code]; ok {
+		counter.Add(1)
+		return
+	}
+	c.tokenizeByCode[errorBucketUnknown].Add(1)
+}
+
+// recordParseError increments the bucket for the given error. See
+// recordTokenizeError for details.
+func (c *errorCodeCounters) recordParseError(err error) {
+	code := sqlerrors.GetCode(err)
+	if counter, ok := c.parseByCode[code]; ok {
+		counter.Add(1)
+		return
+	}
+	c.parseByCode[errorBucketUnknown].Add(1)
+}
+
+// snapshot returns a map[string]int64 of non-zero counters, preserving
+// the legacy Stats.ErrorsByType shape. Parser errors are prefixed with
+// "parse:" to match the historical key format.
+func (c *errorCodeCounters) snapshot() map[string]int64 {
+	// Pre-size for worst case: every bucket has a non-zero value.
+	out := make(map[string]int64, 2*(len(knownErrorCodes)+1))
+	for code, counter := range c.tokenizeByCode {
+		if v := counter.Load(); v > 0 {
+			out[string(code)] = v
+		}
+	}
+	for code, counter := range c.parseByCode {
+		if v := counter.Load(); v > 0 {
+			out["parse:"+string(code)] = v
+		}
+	}
+	return out
+}
+
+// reset zeros every bucket without reallocating the map.
+func (c *errorCodeCounters) reset() {
+	for _, counter := range c.tokenizeByCode {
+		counter.Store(0)
+	}
+	for _, counter := range c.parseByCode {
+		counter.Store(0)
+	}
+}
 
 // Metrics collects runtime performance data for GoSQLX operations.
 // It uses atomic operations for all counters to ensure thread-safe,
@@ -262,9 +397,15 @@ type Metrics struct {
 	maxQuerySize    int64 // Maximum query size processed
 	totalQueryBytes int64 // Total bytes of SQL processed
 
-	// Error tracking
-	errorsByType map[string]int64
-	errorsMutex  sync.RWMutex
+	// Error tracking — buckets are keyed by ErrorCode (bounded cardinality)
+	// to eliminate the memory-DoS vector present in prior map[string]int64
+	// keyed by err.Error().
+	errorCounters *errorCodeCounters
+
+	// errorsMutex is retained only to serialize rare reset paths that
+	// swap counter state together with other atomic fields. Hot error
+	// recording paths do NOT take this lock.
+	errorsMutex sync.RWMutex
 
 	// Configuration - use atomic for thread safety
 	enabled   int32        // 0 = disabled, 1 = enabled (atomic)
@@ -273,9 +414,9 @@ type Metrics struct {
 
 // Global metrics instance
 var globalMetrics = &Metrics{
-	enabled:      0, // 0 = disabled
-	errorsByType: make(map[string]int64),
-	minQuerySize: -1, // -1 means not set yet
+	enabled:       0, // 0 = disabled
+	errorCounters: newErrorCodeCounters(),
+	minQuerySize:  -1, // -1 means not set yet
 }
 
 func init() {
@@ -365,15 +506,12 @@ func RecordTokenization(duration time.Duration, querySize int, err error) {
 		atomic.StoreInt64(&globalMetrics.maxQuerySize, int64(querySize))
 	}
 
-	// Record errors
+	// Record errors — bucket by structured ErrorCode to bound memory.
+	// Unique err.Error() strings previously grew the map without limit,
+	// creating a memory-DoS vector for fuzz or pathological inputs.
 	if err != nil {
 		atomic.AddInt64(&globalMetrics.tokenizeErrors, 1)
-
-		// Record error by type
-		errorType := err.Error()
-		globalMetrics.errorsMutex.Lock()
-		globalMetrics.errorsByType[errorType]++
-		globalMetrics.errorsMutex.Unlock()
+		globalMetrics.errorCounters.recordTokenizeError(err)
 	}
 }
 
@@ -451,15 +589,11 @@ func RecordParse(duration time.Duration, statementCount int, err error) {
 	atomic.StoreInt64(&globalMetrics.lastParseTime, time.Now().UnixNano())
 	atomic.AddInt64(&globalMetrics.statementsCreated, int64(statementCount))
 
-	// Record errors
+	// Record errors — bucket by structured ErrorCode to bound memory.
+	// See RecordTokenization for the DoS rationale.
 	if err != nil {
 		atomic.AddInt64(&globalMetrics.parseErrors, 1)
-
-		// Record error by type
-		errorType := "parse:" + err.Error()
-		globalMetrics.errorsMutex.Lock()
-		globalMetrics.errorsByType[errorType]++
-		globalMetrics.errorsMutex.Unlock()
+		globalMetrics.errorCounters.recordParseError(err)
 	}
 }
 
@@ -735,13 +869,10 @@ func GetStats() Stats {
 		stats.LastOperationTime = time.Unix(0, lastOpTime)
 	}
 
-	// Copy error breakdown
-	globalMetrics.errorsMutex.RLock()
-	stats.ErrorsByType = make(map[string]int64)
-	for errorType, count := range globalMetrics.errorsByType {
-		stats.ErrorsByType[errorType] = count
-	}
-	globalMetrics.errorsMutex.RUnlock()
+	// Snapshot error breakdown from the bounded-cardinality bucket table.
+	// Unlike the prior map[string]int64 copy, this walks a fixed-size
+	// counter table (no write lock on the hot path, no unbounded growth).
+	stats.ErrorsByType = globalMetrics.errorCounters.snapshot()
 
 	return stats
 }
@@ -804,9 +935,10 @@ func Reset() {
 	atomic.StoreInt64(&globalMetrics.maxQuerySize, 0)
 	atomic.StoreInt64(&globalMetrics.totalQueryBytes, 0)
 
-	// Error tracking
+	// Error tracking — zero the bucketed counters in place. The bucket
+	// table itself is not reallocated; it was sized once at init.
 	globalMetrics.errorsMutex.Lock()
-	globalMetrics.errorsByType = make(map[string]int64)
+	globalMetrics.errorCounters.reset()
 	globalMetrics.errorsMutex.Unlock()
 
 	globalMetrics.startTime.Store(time.Now())

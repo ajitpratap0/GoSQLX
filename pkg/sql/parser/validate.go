@@ -39,7 +39,7 @@ func Validate(sql string) error {
 // Empty or whitespace-only input is rejected as invalid SQL.
 func ValidateBytes(input []byte) error {
 	if len(trimBytes(input)) == 0 {
-		return fmt.Errorf("invalid SQL: empty input")
+		return goerrors.IncompleteStatementError(models.Location{}, "")
 	}
 
 	tkz := tokenizer.GetTokenizer()
@@ -47,7 +47,13 @@ func ValidateBytes(input []byte) error {
 
 	tokens, err := tkz.Tokenize(input)
 	if err != nil {
-		return fmt.Errorf("tokenization error: %w", err)
+		return goerrors.WrapError(
+			goerrors.ErrCodeInvalidSyntax,
+			fmt.Sprintf("tokenization error: %v", err),
+			models.Location{},
+			string(input),
+			err,
+		)
 	}
 
 	if len(tokens) == 0 {
@@ -101,7 +107,13 @@ func ParseBytes(input []byte) (*ast.AST, error) {
 
 	tokens, err := tkz.Tokenize(input)
 	if err != nil {
-		return nil, fmt.Errorf("tokenization error: %w", err)
+		return nil, goerrors.WrapError(
+			goerrors.ErrCodeInvalidSyntax,
+			fmt.Sprintf("tokenization error: %v", err),
+			models.Location{},
+			string(input),
+			err,
+		)
 	}
 
 	if len(tokens) == 0 {
@@ -122,7 +134,13 @@ func ParseBytesWithTokens(input []byte) (*ast.AST, []models.TokenWithSpan, error
 
 	tokens, err := tkz.Tokenize(input)
 	if err != nil {
-		return nil, nil, fmt.Errorf("tokenization error: %w", err)
+		return nil, nil, goerrors.WrapError(
+			goerrors.ErrCodeInvalidSyntax,
+			fmt.Sprintf("tokenization error: %v", err),
+			models.Location{},
+			string(input),
+			err,
+		)
 	}
 
 	if len(tokens) == 0 {
@@ -154,18 +172,33 @@ func ValidateBytesWithDialect(input []byte, dialect keywords.SQLDialect) error {
 	}
 
 	if !keywords.IsValidDialect(string(dialect)) {
-		return fmt.Errorf("unknown SQL dialect %q; valid dialects: %s",
-			dialect, validDialectList())
+		return goerrors.InvalidSyntaxError(
+			fmt.Sprintf("unknown SQL dialect %q; valid dialects: %s", dialect, validDialectList()),
+			models.Location{},
+			"",
+		)
 	}
 
 	tkz, err := tokenizer.NewWithDialect(dialect)
 	if err != nil {
-		return fmt.Errorf("tokenizer initialization: %w", err)
+		return goerrors.WrapError(
+			goerrors.ErrCodeInvalidSyntax,
+			fmt.Sprintf("tokenizer initialization: %v", err),
+			models.Location{},
+			"",
+			err,
+		)
 	}
 
 	tokens, err := tkz.Tokenize(input)
 	if err != nil {
-		return fmt.Errorf("tokenization error: %w", err)
+		return goerrors.WrapError(
+			goerrors.ErrCodeInvalidSyntax,
+			fmt.Sprintf("tokenization error: %v", err),
+			models.Location{},
+			string(input),
+			err,
+		)
 	}
 
 	if len(tokens) == 0 {
@@ -192,18 +225,33 @@ func ParseWithDialect(sql string, dialect keywords.SQLDialect) (*ast.AST, error)
 // ParseBytesWithDialect is like ParseWithDialect but accepts []byte.
 func ParseBytesWithDialect(input []byte, dialect keywords.SQLDialect) (*ast.AST, error) {
 	if !keywords.IsValidDialect(string(dialect)) {
-		return nil, fmt.Errorf("unknown SQL dialect %q; valid dialects: %s",
-			dialect, validDialectList())
+		return nil, goerrors.InvalidSyntaxError(
+			fmt.Sprintf("unknown SQL dialect %q; valid dialects: %s", dialect, validDialectList()),
+			models.Location{},
+			"",
+		)
 	}
 
 	tkz, err := tokenizer.NewWithDialect(dialect)
 	if err != nil {
-		return nil, fmt.Errorf("tokenizer initialization: %w", err)
+		return nil, goerrors.WrapError(
+			goerrors.ErrCodeInvalidSyntax,
+			fmt.Sprintf("tokenizer initialization: %v", err),
+			models.Location{},
+			"",
+			err,
+		)
 	}
 
 	tokens, err := tkz.Tokenize(input)
 	if err != nil {
-		return nil, fmt.Errorf("tokenization error: %w", err)
+		return nil, goerrors.WrapError(
+			goerrors.ErrCodeInvalidSyntax,
+			fmt.Sprintf("tokenization error: %v", err),
+			models.Location{},
+			string(input),
+			err,
+		)
 	}
 
 	if len(tokens) == 0 {

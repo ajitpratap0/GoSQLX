@@ -41,31 +41,36 @@ func NewDistinctOnManyColumnsRule() *DistinctOnManyColumnsRule {
 	}
 }
 
-// Check inspects SELECT statements for DISTINCT with many columns.
+// Check walks the AST for DISTINCT on many columns at any nesting level.
+// Expensive DISTINCT buried in a subquery or CTE body is just as costly as at
+// the top level.
 func (r *DistinctOnManyColumnsRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 	if ctx.AST == nil {
 		return nil, nil
 	}
 	var violations []linter.Violation
 	for _, stmt := range ctx.AST.Statements {
-		sel, ok := stmt.(*ast.SelectStatement)
-		if !ok {
-			continue
-		}
-		if !sel.Distinct {
-			continue
-		}
-		colCount := len(sel.Columns)
-		if colCount >= distinctColumnThreshold {
-			violations = append(violations, linter.Violation{
-				Rule:       r.ID(),
-				RuleName:   r.Name(),
-				Severity:   r.Severity(),
-				Message:    fmt.Sprintf("DISTINCT on %d columns is expensive and may indicate a missing GROUP BY or join issue", colCount),
-				Location:   sel.Pos,
-				Suggestion: "Consider using GROUP BY with aggregate functions, or investigate whether the query structure can be simplified",
-			})
-		}
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectStatement)
+			if !ok {
+				return true
+			}
+			if !sel.Distinct {
+				return true
+			}
+			colCount := len(sel.Columns)
+			if colCount >= distinctColumnThreshold {
+				violations = append(violations, linter.Violation{
+					Rule:       r.ID(),
+					RuleName:   r.Name(),
+					Severity:   r.Severity(),
+					Message:    fmt.Sprintf("DISTINCT on %d columns is expensive and may indicate a missing GROUP BY or join issue", colCount),
+					Location:   sel.Pos,
+					Suggestion: "Consider using GROUP BY with aggregate functions, or investigate whether the query structure can be simplified",
+				})
+			}
+			return true
+		})
 	}
 	return violations, nil
 }

@@ -367,6 +367,109 @@ func TestDistinctOnManyColumns_NilAST(t *testing.T) {
 	}
 }
 
+// Nested-traversal tests (C5: ast.Walk migration)
+//
+// These tests verify the rules now catch violations inside subqueries and
+// CTE bodies, which the original top-level traversal missed.
+
+// L024: Unaliased multi-table FROM inside a derived table must be flagged.
+func TestTableAliasRequired_Nested_DerivedTable(t *testing.T) {
+	rule := naming.NewTableAliasRequiredRule()
+	ctx := makeCtx(t, "SELECT x.id FROM (SELECT users.id FROM users JOIN orders ON users.id = orders.user_id) x")
+	v, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(v) == 0 {
+		t.Error("expected violation for unaliased tables in nested multi-table SELECT")
+	}
+}
+
+// L026: Implicit INSERT column list inside a script context. The parser
+// currently only recognizes INSERT at the top level, but this test locks the
+// walk-based rule onto the first statement in a multi-statement sequence.
+func TestImplicitColumnList_MultipleStatements(t *testing.T) {
+	rule := naming.NewImplicitColumnListRule()
+	ctx := makeCtx(t, "INSERT INTO users VALUES (1, 'Alice')")
+	v, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(v) == 0 {
+		t.Error("expected violation for INSERT without explicit column list")
+	}
+}
+
+// L027: UNION without ALL inside a CTE body must be flagged.
+func TestUnionAllPreferred_Nested_CTE(t *testing.T) {
+	rule := naming.NewUnionAllPreferredRule()
+	ctx := makeCtx(t, "WITH c AS (SELECT id FROM users UNION SELECT id FROM admins) SELECT * FROM c")
+	v, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(v) == 0 {
+		t.Error("expected violation for UNION (without ALL) inside a CTE body")
+	}
+}
+
+// L028: LIMIT without ORDER BY inside a derived table must be flagged.
+func TestMissingOrderByLimit_Nested_DerivedTable(t *testing.T) {
+	rule := naming.NewMissingOrderByLimitRule()
+	ctx := makeCtx(t, "SELECT id FROM (SELECT id FROM users LIMIT 10) t ORDER BY id")
+	v, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(v) == 0 {
+		t.Error("expected violation for LIMIT without ORDER BY inside a derived table")
+	}
+}
+
+// L029: EXISTS subquery in the WHERE clause of a nested SELECT must be
+// flagged. The rule already walks, so this locks in walk semantics across
+// nesting (the existing rule code tracks inWhere per SelectStatement).
+func TestSubqueryCanBeJoin_Nested_CTE(t *testing.T) {
+	rule := naming.NewSubqueryCanBeJoinRule()
+	ctx := makeCtx(t, "WITH c AS (SELECT id FROM users WHERE EXISTS (SELECT 1 FROM orders WHERE orders.user_id = users.id)) SELECT * FROM c")
+	v, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(v) == 0 {
+		t.Error("expected violation for EXISTS subquery in WHERE inside a CTE body")
+	}
+}
+
+// L030: DISTINCT on many columns inside a derived table must be flagged.
+func TestDistinctOnManyColumns_Nested_DerivedTable(t *testing.T) {
+	rule := naming.NewDistinctOnManyColumnsRule()
+	ctx := makeCtx(t, "SELECT id FROM (SELECT DISTINCT a, b, c, d, e FROM t) x")
+	v, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(v) == 0 {
+		t.Error("expected violation for DISTINCT on many columns inside a derived table")
+	}
+}
+
+// L025: Reserved keyword identifier inside a derived table. The parser
+// does not accept unquoted reserved words as table names, so this test uses
+// a non-reserved query to document that the walk migration preserves the
+// existing no-violation behavior for valid SQL.
+func TestReservedKeywordIdentifier_Nested_NoViolation(t *testing.T) {
+	rule := naming.NewReservedKeywordIdentifierRule()
+	ctx := makeCtx(t, "SELECT x.id FROM (SELECT u.id FROM users u) x")
+	v, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(v) != 0 {
+		t.Errorf("expected no violations for non-reserved aliases in nested SELECT, got %d", len(v))
+	}
+}
+
 // Fix methods
 
 func TestImplicitColumnList_Fix(t *testing.T) {

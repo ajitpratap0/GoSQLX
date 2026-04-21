@@ -200,15 +200,29 @@ func (t TriggerObject) Children() []Node { return nil }
 // TokenLiteral implements Node and returns the SQL keyword for this trigger object.
 func (t TriggerObject) TokenLiteral() string { return t.String() }
 
-// Children implements Node and returns nil - TriggerReferencing has no child nodes.
-func (t TriggerReferencing) Children() []Node { return nil }
+// Children implements Node and returns the transition relation name as a child
+// node for visitor traversal.
+func (t TriggerReferencing) Children() []Node {
+	return []Node{t.TransitionRelationName}
+}
 
 // TokenLiteral implements Node and returns the SQL representation of this
 // transition relation declaration.
 func (t TriggerReferencing) TokenLiteral() string { return t.String() }
 
-// Children implements Node and returns nil - TriggerEvent has no child nodes.
-func (t TriggerEvent) Children() []Node { return nil }
+// Children implements Node and returns the UPDATE OF column list, enabling
+// visitor traversal of identifier references.
+func (t TriggerEvent) Children() []Node {
+	if len(t.Columns) == 0 {
+		return nil
+	}
+	nodes := make([]Node, len(t.Columns))
+	for i, col := range t.Columns {
+		col := col // G601: avoid memory aliasing
+		nodes[i] = &col
+	}
+	return nodes
+}
 
 // TokenLiteral implements Node and returns the SQL representation of this
 // trigger event (e.g. "INSERT", "UPDATE OF col", "DELETE").
@@ -221,8 +235,11 @@ func (t TriggerPeriod) Children() []Node { return nil }
 // period ("AFTER", "BEFORE", or "INSTEAD OF").
 func (t TriggerPeriod) TokenLiteral() string { return t.String() }
 
-// Children implements Node and returns nil - TriggerExecBody has no child nodes.
-func (t TriggerExecBody) Children() []Node { return nil }
+// Children implements Node and returns the function descriptor as a child
+// node for visitor traversal.
+func (t TriggerExecBody) Children() []Node {
+	return []Node{t.FuncDesc}
+}
 
 // TokenLiteral implements Node and returns the SQL representation of this
 // trigger execution body.

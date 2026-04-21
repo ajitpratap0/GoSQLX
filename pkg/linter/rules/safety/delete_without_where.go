@@ -36,27 +36,32 @@ func NewDeleteWithoutWhereRule() *DeleteWithoutWhereRule {
 	}
 }
 
-// Check inspects the AST for DELETE statements without a WHERE clause.
+// Check walks the AST for DELETE statements without a WHERE clause. Fires at
+// any nesting level — a DELETE in a CTE body (data-modifying CTE) without a
+// WHERE clause is just as dangerous as a top-level DELETE.
 func (r *DeleteWithoutWhereRule) Check(ctx *linter.Context) ([]linter.Violation, error) {
 	if ctx.AST == nil {
 		return nil, nil
 	}
 	var violations []linter.Violation
 	for _, stmt := range ctx.AST.Statements {
-		del, ok := stmt.(*ast.DeleteStatement)
-		if !ok {
-			continue
-		}
-		if del.Where == nil {
-			violations = append(violations, linter.Violation{
-				Rule:       r.ID(),
-				RuleName:   r.Name(),
-				Severity:   r.Severity(),
-				Message:    "DELETE statement has no WHERE clause",
-				Location:   del.Pos,
-				Suggestion: "Add a WHERE clause to restrict which rows are deleted, or use TRUNCATE TABLE for full-table removal",
-			})
-		}
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			del, ok := n.(*ast.DeleteStatement)
+			if !ok {
+				return true
+			}
+			if del.Where == nil {
+				violations = append(violations, linter.Violation{
+					Rule:       r.ID(),
+					RuleName:   r.Name(),
+					Severity:   r.Severity(),
+					Message:    "DELETE statement has no WHERE clause",
+					Location:   del.Pos,
+					Suggestion: "Add a WHERE clause to restrict which rows are deleted, or use TRUNCATE TABLE for full-table removal",
+				})
+			}
+			return true
+		})
 	}
 	return violations, nil
 }

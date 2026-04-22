@@ -147,6 +147,133 @@ func TestParseReaderMultiple_NilReader(t *testing.T) {
 	}
 }
 
+func TestParseReader_MaxBytes_Blocks(t *testing.T) {
+	// 1 KiB of SQL-ish content, cap at 64 bytes.
+	big := strings.Repeat("SELECT 1; ", 128)
+	_, err := ParseReader(
+		context.Background(),
+		strings.NewReader(big),
+		WithMaxBytes(64),
+	)
+	if err == nil {
+		t.Fatal("expected ErrTooLarge, got nil")
+	}
+	if !errors.Is(err, ErrTooLarge) {
+		t.Errorf("errors.Is(err, ErrTooLarge) = false; err = %v", err)
+	}
+}
+
+func TestParseReader_MaxBytes_Allows(t *testing.T) {
+	src := "SELECT 1"
+	tree, err := ParseReader(
+		context.Background(),
+		strings.NewReader(src),
+		WithMaxBytes(int64(len(src))),
+	)
+	if err != nil {
+		t.Fatalf("ParseReader within cap: %v", err)
+	}
+	if tree == nil {
+		t.Fatal("tree is nil")
+	}
+}
+
+func TestParseReader_MaxBytes_ExactlyAtCap(t *testing.T) {
+	// Boundary case: len(src) == maxBytes should succeed (inclusive cap).
+	src := "SELECT 42"
+	tree, err := ParseReader(
+		context.Background(),
+		strings.NewReader(src),
+		WithMaxBytes(int64(len(src))),
+	)
+	if err != nil {
+		t.Fatalf("expected success at exact cap, got: %v", err)
+	}
+	if tree == nil {
+		t.Fatal("tree is nil")
+	}
+}
+
+func TestParseReader_MaxBytes_OneByteOver(t *testing.T) {
+	src := "SELECT 42" // 9 bytes
+	_, err := ParseReader(
+		context.Background(),
+		strings.NewReader(src),
+		WithMaxBytes(int64(len(src)-1)),
+	)
+	if err == nil {
+		t.Fatal("expected ErrTooLarge for src one byte over cap")
+	}
+	if !errors.Is(err, ErrTooLarge) {
+		t.Errorf("errors.Is(err, ErrTooLarge) = false; err = %v", err)
+	}
+}
+
+func TestParseReader_UnboundedDefault(t *testing.T) {
+	// No WithMaxBytes — behaves exactly like pre-bounded-reads.
+	src := strings.Repeat("SELECT 1; ", 256)
+	trees, err := ParseReaderMultiple(
+		context.Background(),
+		strings.NewReader(src),
+	)
+	if err != nil {
+		t.Fatalf("unbounded default: %v", err)
+	}
+	if len(trees) != 256 {
+		t.Errorf("got %d trees, want 256", len(trees))
+	}
+}
+
+func TestParseReaderMultiple_MaxBytes_Blocks(t *testing.T) {
+	src := strings.Repeat("SELECT 1; ", 32)
+	_, err := ParseReaderMultiple(
+		context.Background(),
+		strings.NewReader(src),
+		WithMaxBytes(16),
+	)
+	if !errors.Is(err, ErrTooLarge) {
+		t.Errorf("expected ErrTooLarge, got %v", err)
+	}
+}
+
+func TestParseReaderMultiple_DollarQuoting(t *testing.T) {
+	// Semicolons inside a $$-delimited body must NOT split the statement.
+	// Two valid PG SELECTs are separated by an explicit top-level `;`.
+	//
+	// We deliberately avoid the CREATE FUNCTION ... plpgsql example from
+	// the task brief because the parser does not yet handle procedural
+	// bodies; the splitter's correctness is what matters here, and this
+	// input exercises the same state transitions.
+	src := "SELECT $$a; b; c$$; SELECT $tag$x; y$tag$"
+	trees, err := ParseReaderMultiple(
+		context.Background(),
+		strings.NewReader(src),
+		WithDialect("postgresql"),
+	)
+	if err != nil {
+		t.Fatalf("ParseReaderMultiple(pg): %v", err)
+	}
+	if len(trees) != 2 {
+		t.Fatalf("got %d trees, want 2", len(trees))
+	}
+}
+
+// TestParseReaderMultiple_DollarQuoting_WouldMisBehaveWithoutDialect confirms
+// that the same input, parsed without the postgresql dialect, fails to parse
+// because the conservative splitter splits mid-body and hands fragments to
+// the parser. This pins the regression we just fixed.
+func TestParseReaderMultiple_DollarQuoting_WouldMisBehaveWithoutDialect(t *testing.T) {
+	src := "SELECT $$a; b; c$$; SELECT 1"
+	_, err := ParseReaderMultiple(
+		context.Background(),
+		strings.NewReader(src),
+		// No WithDialect — ANSI default.
+	)
+	if err == nil {
+		t.Fatal("expected parse failure without postgresql dialect (splitter should over-split the $$…$$ body)")
+	}
+}
+
 func TestSplitSQLStatements(t *testing.T) {
 	cases := []struct {
 		name string

@@ -36,8 +36,20 @@ import (
 //
 // Callers that need the string form should continue to use Dialect(); new
 // feature-gated parser logic should use Capabilities() below.
+//
+// Performance: O(1). The typed dialect is cached on the Parser struct at
+// WithDialect-time, so this accessor is a direct field read with no
+// dialect.Parse call per invocation. See the dialectTyped field comment
+// and the INVARIANT on Parser.
+//
+// Strangler-fig migration: the long-term plan is to replace scattered
+// `p.dialect == "snowflake"` string comparisons with Capabilities() gates
+// and typed Is*() predicates. Migration happens incrementally (a handful
+// of sites per release) rather than in a single bulk commit, so the
+// string field remains the source of truth for v1.x back-compat while
+// dialectTyped acts as the typed cache.
 func (p *Parser) DialectTyped() dialect.Dialect {
-	return dialect.Parse(p.dialect)
+	return p.dialectTyped
 }
 
 // Capabilities returns the capability matrix for the parser's active

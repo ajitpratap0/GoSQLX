@@ -276,3 +276,108 @@ func TestPoolLeak_PutExpression_OverflowDrain(t *testing.T) {
 		t.Errorf("PoolLeakCount=%d unreasonably high for %d-node chain", leaks, nodes)
 	}
 }
+
+// measureHeapDelta runs fn for `iterations` cycles between two memory
+// snapshots and returns the heap-in-use growth. It warms the pool with a
+// short lead-in so JIT/pool priming costs don't bias the measurement.
+func measureHeapDelta(t *testing.T, iterations int, warmups int, fn func() error) int64 {
+	t.Helper()
+	for i := 0; i < warmups; i++ {
+		if err := fn(); err != nil {
+			t.Fatalf("warmup %d: %v", i, err)
+		}
+	}
+	runtime.GC()
+	runtime.GC()
+	var before runtime.MemStats
+	runtime.ReadMemStats(&before)
+
+	for i := 0; i < iterations; i++ {
+		if err := fn(); err != nil {
+			t.Fatalf("iteration %d: %v", i, err)
+		}
+	}
+	runtime.GC()
+	runtime.GC()
+	var after runtime.MemStats
+	runtime.ReadMemStats(&after)
+
+	delta := int64(after.HeapInuse) - int64(before.HeapInuse)
+	t.Logf("HeapInuse: before=%d, after=%d, delta=%+d bytes over %d iterations (%.1f bytes/iter)",
+		before.HeapInuse, after.HeapInuse, delta, iterations,
+		float64(delta)/float64(iterations))
+	return delta
+}
+
+// TestPoolLeak_SubqueryInExpression verifies that an IN-subquery
+// (IN (SELECT ...)) releases its nested SelectStatement back to the pool
+// rather than leaking it. Pre-fix, pool.go set e.Subquery = nil inside
+// putExpressionImpl without calling releaseStatement, so every nested
+// SelectStatement reachable via InExpression.Subquery leaked on every
+// parse. This test parses 1000 such queries and asserts stable heap.
+func TestPoolLeak_SubqueryInExpression(t *testing.T) {
+	const iterations = 1000
+	const heapGrowthLimit = 10 * 1024 * 1024 // 10 MiB
+
+	sql := `SELECT x FROM t WHERE id IN (SELECT y FROM u WHERE z = 1)`
+
+	delta := measureHeapDelta(t, iterations, 10, func() error {
+		return parseAndRelease(t, sql)
+	})
+
+	if delta > heapGrowthLimit {
+		t.Errorf("IN-subquery pool leak detected: HeapInuse grew by %d bytes over %d iterations (>%d limit)",
+			delta, iterations, heapGrowthLimit)
+	}
+}
+
+// TestPoolLeak_ExistsSubquery verifies that EXISTS (SELECT ...) releases
+// its nested SelectStatement back to the pool. Pre-fix, ExistsExpression's
+// Subquery field was niled without dispatch, leaking every correlated
+// SELECT body on every parse.
+func TestPoolLeak_ExistsSubquery(t *testing.T) {
+	const iterations = 1000
+	const heapGrowthLimit = 10 * 1024 * 1024 // 10 MiB
+
+	sql := `SELECT x FROM t WHERE EXISTS (SELECT 1 FROM u WHERE u.id = t.id)`
+
+	delta := measureHeapDelta(t, iterations, 10, func() error {
+		return parseAndRelease(t, sql)
+	})
+
+	if delta > heapGrowthLimit {
+		t.Errorf("EXISTS-subquery pool leak detected: HeapInuse grew by %d bytes over %d iterations (>%d limit)",
+			delta, iterations, heapGrowthLimit)
+	}
+}
+
+// TestPoolLeak_AnyAllSubquery verifies that ANY(SELECT ...) and
+// ALL(SELECT ...) release their nested SelectStatement. Pre-fix, both
+// AnyExpression.Subquery and AllExpression.Subquery were niled without
+// dispatch, leaking one SelectStatement per parse for each construct.
+func TestPoolLeak_AnyAllSubquery(t *testing.T) {
+	const iterations = 1000
+	const heapGrowthLimit = 10 * 1024 * 1024 // 10 MiB
+
+	// Parse both ANY and ALL on each iteration so we exercise both code
+	// paths in a single test. We alternate rather than concatenating so
+	// the parser sees one statement at a time (matching production shape).
+	sqls := []string{
+		`SELECT x FROM t WHERE val = ANY (SELECT v FROM u)`,
+		`SELECT x FROM t WHERE val = ALL (SELECT v FROM u WHERE u.active = true)`,
+	}
+
+	delta := measureHeapDelta(t, iterations, 10, func() error {
+		for _, sql := range sqls {
+			if err := parseAndRelease(t, sql); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	if delta > heapGrowthLimit {
+		t.Errorf("ANY/ALL-subquery pool leak detected: HeapInuse grew by %d bytes over %d iterations (>%d limit)",
+			delta, iterations, heapGrowthLimit)
+	}
+}

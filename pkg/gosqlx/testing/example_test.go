@@ -157,7 +157,7 @@ func ExampleAssertErrorContains() {
 	// Test that specific error messages are produced
 	gosqlxtesting.AssertErrorContains(t,
 		"SELECT FROM WHERE",
-		"parsing")
+		"syntax error")
 
 	// Test for tokenization errors
 	gosqlxtesting.AssertErrorContains(t,
@@ -206,7 +206,7 @@ func Example_comprehensiveTest() {
 
 	// Test invalid query variations
 	gosqlxtesting.AssertInvalidSQL(t, "SELECT FROM users WHERE")
-	gosqlxtesting.AssertErrorContains(t, "SELECT * FROM", "parsing")
+	gosqlxtesting.AssertErrorContains(t, "SELECT * FROM", "syntax error")
 }
 
 // Example_windowFunctions demonstrates testing window function queries.

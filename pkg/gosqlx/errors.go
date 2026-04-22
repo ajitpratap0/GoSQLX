@@ -46,4 +46,8 @@ var (
 	// ErrUnsupportedDialect indicates the dialect supplied via WithDialect is
 	// not recognized by the underlying keywords package.
 	ErrUnsupportedDialect = errors.New("gosqlx: unsupported dialect")
+	// ErrTooLarge is returned when input exceeds the configured maximum byte
+	// size (see WithMaxBytes). Callers can test errors.Is(err, ErrTooLarge) to
+	// distinguish cap-enforcement failures from read/parse errors.
+	ErrTooLarge = errors.New("gosqlx: input too large")
 )

@@ -79,9 +79,12 @@ func (p *Parser) pivotDialectAllowed() bool {
 // BigQuery QUALIFY clause keyword. QUALIFY tokenizes as an identifier, so
 // detect by value and gate by dialect to avoid consuming a legitimate
 // table alias named "qualify" in other dialects.
+//
+// Migrated from p.dialect == "snowflake"/"bigquery" to Capabilities in
+// Sprint 2. SupportsQualify is true only for Snowflake and BigQuery in
+// dialect.Capabilities, preserving the exact previous behaviour.
 func (p *Parser) isQualifyKeyword() bool {
-	if p.dialect != string(keywords.DialectSnowflake) &&
-		p.dialect != string(keywords.DialectBigQuery) {
+	if !p.Capabilities().SupportsQualify {
 		return false
 	}
 	return strings.EqualFold(p.currentToken.Token.Value, "QUALIFY")

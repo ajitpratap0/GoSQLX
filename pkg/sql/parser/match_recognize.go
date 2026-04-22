@@ -16,14 +16,16 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // isMatchRecognizeKeyword returns true if the current token is the contextual
 // MATCH_RECOGNIZE keyword in a dialect that supports it.
+//
+// Migrated from p.dialect == "snowflake"/"oracle" to Capabilities in
+// Sprint 2. SupportsMatchRecognize is true only for Oracle and Snowflake
+// in dialect.Capabilities, preserving the exact previous behaviour.
 func (p *Parser) isMatchRecognizeKeyword() bool {
-	if p.dialect != string(keywords.DialectSnowflake) &&
-		p.dialect != string(keywords.DialectOracle) {
+	if !p.Capabilities().SupportsMatchRecognize {
 		return false
 	}
 	return strings.EqualFold(p.currentToken.Token.Value, "MATCH_RECOGNIZE")

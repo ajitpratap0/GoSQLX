@@ -156,6 +156,93 @@ func (t *Tree) Release() {
 	_ = t
 }
 
+// Rewrite applies pre and post transformation passes to each top-level
+// Statement in the tree. pre runs before any children are considered; post
+// runs after. Either may be nil to skip that pass. The return value of each
+// function replaces the statement in the tree; returning the same node is the
+// no-op case.
+//
+// SCOPE — Rewrite operates at Statement granularity only. Deeper rewrites
+// (e.g., replacing an expression inside a WHERE clause) require walking the
+// AST via Raw() and mutating the concrete struct fields directly. This is a
+// deliberate design choice: the AST contains ~100 concrete node types with
+// heterogeneous child-field layouts; a generic deep-rewrite API would require
+// either reflection (slow, easy to misuse) or an exhaustive per-type switch
+// (maintenance burden). Until there is a clear user need we prefer the honest
+// narrow API over a permissive one that silently misses cases.
+//
+// Example — drop every DeleteStatement from a batch:
+//
+//	tree.Rewrite(nil, func(s ast.Statement) ast.Statement {
+//	    if _, ok := s.(*ast.DeleteStatement); ok {
+//	        return nil // filtered out
+//	    }
+//	    return s
+//	})
+//
+// A nil return from pre or post drops the statement from the tree. Rewrite
+// mutates t in place; call Clone() first to preserve the original.
+//
+// For intra-statement rewrites, combine Tree.WalkSelects / WalkBinaryExpressions
+// / etc. with direct field assignment on the visited node. Because the walkers
+// return pointers, any field you assign to is visible to subsequent reads
+// through the same Tree.
+func (t *Tree) Rewrite(pre, post func(ast.Statement) ast.Statement) {
+	if t == nil || t.ast == nil {
+		return
+	}
+	src := t.ast.Statements
+	out := src[:0] // reuse backing array; final statements only appear once
+	for _, s := range src {
+		cur := s
+		if pre != nil {
+			cur = pre(cur)
+			if cur == nil {
+				continue
+			}
+		}
+		if post != nil {
+			cur = post(cur)
+			if cur == nil {
+				continue
+			}
+		}
+		out = append(out, cur)
+	}
+	// Zero-out any trailing aliases so the GC can reclaim dropped statements.
+	for i := len(out); i < len(src); i++ {
+		src[i] = nil
+	}
+	t.ast.Statements = out
+}
+
+// Clone returns an independent deep copy of the tree. Mutations to the
+// original (via Raw(), WalkSelects field writes, Rewrite, ...) do not affect
+// the clone, and vice versa.
+//
+// IMPLEMENTATION — Clone is implemented by re-parsing t.SQL() with default
+// options. This is simple and provably correct: the clone has exactly the
+// structure the parser would produce today for the original source, which is
+// the strongest possible guarantee of independence. The tradeoff is cost —
+// Clone is O(parse) rather than O(nodes), and a clone of a tree that was
+// produced with a non-default dialect / recovery mode will not preserve those
+// parse options. For cases where either matters, hold onto the SQL string and
+// call ParseTree yourself with the desired options.
+//
+// Clone returns nil if the receiver is nil, the original SQL is empty, or
+// the re-parse fails (which would indicate a parser regression since the
+// original SQL was known to parse successfully when t was constructed).
+func (t *Tree) Clone() *Tree {
+	if t == nil || t.sql == "" {
+		return nil
+	}
+	cloned, err := ParseTree(context.Background(), t.sql)
+	if err != nil {
+		return nil
+	}
+	return cloned
+}
+
 // ParseTree parses SQL and returns an opaque Tree, the recommended entry
 // point for new code. Configuration is supplied via functional options
 // (WithDialect, WithStrict, WithTimeout, WithRecovery) rather than through

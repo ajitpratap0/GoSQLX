@@ -41,8 +41,12 @@
 GoSQLX is a **production-ready SQL parsing SDK** for Go. It tokenizes, parses, and generates ASTs from SQL with zero-copy optimizations and intelligent object pooling - handling **1.38M+ operations per second** with sub-microsecond latency.
 
 ```go
-ast, _ := gosqlx.Parse("SELECT u.name, COUNT(*) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name")
-// → Full AST with statements, columns, joins, grouping - ready for analysis, transformation, or formatting
+// v1.15+ recommended entry point: ParseTree returns an opaque Tree,
+// so you don't need to import pkg/sql/ast just to get started.
+tree, _ := gosqlx.ParseTree(ctx, "SELECT u.name, COUNT(*) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name",
+    gosqlx.WithDialect("postgresql"))
+fmt.Println("Tables:", tree.Tables())
+fmt.Println(tree.Format(gosqlx.WithIndent(2), gosqlx.WithUppercaseKeywords(true)))
 ```
 
 ### Why GoSQLX?
@@ -69,23 +73,30 @@ import (
 )
 
 func main() {
-    // Parse any SQL dialect
-    ast, _ := gosqlx.Parse("SELECT * FROM users WHERE active = true")
-    fmt.Printf("%d statement(s)\n", len(ast.Statements))
+    ctx := context.Background()
 
-    // Format messy SQL
-    clean, _ := gosqlx.Format("select id,name from users where id=1", gosqlx.DefaultFormatOptions())
-    fmt.Println(clean)
-    // SELECT
-    //   id,
-    //   name
-    // FROM users
-    // WHERE id = 1
-
-    // Catch errors before production
-    if err := gosqlx.Validate("SELECT * FROM"); err != nil {
-        fmt.Println(err) // → expected table name
+    // ParseTree (v1.15+) is the recommended entry point. It returns an
+    // opaque handle with built-in helpers — no need to import pkg/sql/ast.
+    tree, err := gosqlx.ParseTree(ctx, "SELECT id, name FROM users WHERE active = true",
+        gosqlx.WithDialect("postgresql"))
+    if err != nil {
+        // Sentinel errors work with errors.Is
+        if errors.Is(err, gosqlx.ErrSyntax) {
+            log.Fatalf("syntax error: %v", err)
+        }
+        log.Fatal(err)
     }
+    fmt.Println("Tables:", tree.Tables())
+    fmt.Println(tree.Format(gosqlx.WithIndent(2), gosqlx.WithUppercaseKeywords(true)))
+
+    // Walk the AST — typed walkers avoid the type-assertion dance:
+    tree.WalkSelects(func(s *ast.SelectStatement) bool {
+        fmt.Printf("  SELECT with %d columns\n", len(s.Columns))
+        return true
+    })
+
+    // The legacy Parse/Format/Validate API still works for v1.x code.
+    // See docs/MIGRATION.md for the Tree migration guide.
 }
 ```
 

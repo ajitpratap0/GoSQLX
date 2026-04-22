@@ -95,8 +95,11 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		TableName:         tableName,
 	}
 
-	// ClickHouse ARRAY JOIN / LEFT ARRAY JOIN
-	if p.dialect == string(keywords.DialectClickHouse) {
+	// ClickHouse ARRAY JOIN / LEFT ARRAY JOIN.
+	// Migrated from p.dialect == "clickhouse" to Capabilities in Sprint 2.
+	// SupportsArrayJoin is true only for ClickHouse in dialect.Capabilities,
+	// preserving the exact previous behaviour.
+	if p.Capabilities().SupportsArrayJoin {
 		if selectStmt.ArrayJoin, err = p.parseArrayJoinClause(); err != nil {
 			return nil, err
 		}
@@ -109,8 +112,11 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		}
 	}
 
-	// PREWHERE (ClickHouse-specific, applied before WHERE for early data filtering)
-	if p.dialect == string(keywords.DialectClickHouse) {
+	// PREWHERE (ClickHouse-specific, applied before WHERE for early data filtering).
+	// Migrated from p.dialect == "clickhouse" to Capabilities in Sprint 2.
+	// SupportsPrewhere is true only for ClickHouse in dialect.Capabilities,
+	// preserving the exact previous behaviour.
+	if p.Capabilities().SupportsPrewhere {
 		if selectStmt.PrewhereClause, err = p.parsePrewhereClause(); err != nil {
 			return nil, err
 		}
@@ -134,8 +140,10 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	// Snowflake / BigQuery QUALIFY: filters rows after window functions.
 	// Appears between HAVING and ORDER BY. Tokenizes as identifier or
 	// keyword depending on dialect tables; detect by value.
-	if (p.dialect == string(keywords.DialectSnowflake) ||
-		p.dialect == string(keywords.DialectBigQuery)) &&
+	// Migrated from p.dialect == "snowflake"/"bigquery" to Capabilities in
+	// Sprint 2. SupportsQualify is true only for Snowflake and BigQuery in
+	// dialect.Capabilities, preserving the exact previous behaviour.
+	if p.Capabilities().SupportsQualify &&
 		strings.EqualFold(p.currentToken.Token.Value, "QUALIFY") {
 		p.advance() // Consume QUALIFY
 		qexpr, qerr := p.parseExpression()

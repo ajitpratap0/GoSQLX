@@ -23,6 +23,7 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/dialect"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/token"
 )
@@ -119,6 +120,9 @@ func (p *Parser) Reset() {
 	p.ctx = nil
 	p.strict = false
 	p.dialect = ""
+	// INVARIANT: p.dialectTyped must always equal dialect.Parse(p.dialect).
+	// Reset clears both fields in lockstep; see WithDialect for the active path.
+	p.dialectTyped = dialect.Unknown
 }
 
 // currentLocation returns the source location of the current token.
@@ -200,9 +204,15 @@ func WithStrictMode() ParserOption {
 // WithDialect sets the SQL dialect for dialect-aware parsing.
 // Supported values: "postgresql", "mysql", "sqlserver", "oracle", "sqlite", etc.
 // If not set, defaults to "postgresql" for backward compatibility.
-func WithDialect(dialect string) ParserOption {
+//
+// INVARIANT: p.dialectTyped must always equal dialect.Parse(p.dialect).
+// This option is the sole supported mutator of the parser's active
+// dialect; it assigns both fields in lockstep so Parser.DialectTyped()
+// and Parser.Capabilities() remain O(1) for the parser's lifetime.
+func WithDialect(newDialect string) ParserOption {
 	return func(p *Parser) {
-		p.dialect = dialect
+		p.dialect = newDialect
+		p.dialectTyped = dialect.Parse(newDialect)
 	}
 }
 
@@ -243,6 +253,15 @@ type Parser struct {
 	// compatibility and will be removed in v2.0 in favour of a typed
 	// dialect.Dialect field.
 	dialect string
+	// dialectTyped is the typed mirror of dialect, parsed once at
+	// configuration time so that DialectTyped() and Capabilities() are
+	// O(1) on the hot path rather than re-running dialect.Parse on every
+	// invocation.
+	//
+	// INVARIANT: dialectTyped must always equal dialect.Parse(dialect).
+	// Maintained by WithDialect (the sole mutator) and Reset. Do not set
+	// dialect directly; funnel all changes through WithDialect.
+	dialectTyped dialect.Dialect
 }
 
 // Deprecated: Parse is provided for backward compatibility only and is scheduled for

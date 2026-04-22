@@ -399,7 +399,7 @@ func TestAssertErrorContains_Matching(t *testing.T) {
 	mockT := &mockTestingT{}
 
 	sql := "SELECT FROM WHERE"
-	result := AssertErrorContains(mockT, sql, "parsing")
+	result := AssertErrorContains(mockT, sql, "syntax error")
 
 	if !result {
 		t.Error("AssertErrorContains should return true for matching error")

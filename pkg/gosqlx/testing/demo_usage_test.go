@@ -109,14 +109,16 @@ func TestDemo_StatementTypes(t *testing.T) {
 
 // Demo: Testing error conditions
 func TestDemo_ErrorTesting(t *testing.T) {
-	// Test that specific errors are produced
+	// Test that specific errors are produced.
+	// Post-v1.15 errors are wrapped with the gosqlx.ErrSyntax sentinel, which
+	// renders as "syntax error" in the message chain.
 	gosqlxtesting.AssertErrorContains(t,
 		"SELECT FROM WHERE",
-		"parsing")
+		"syntax error")
 
 	gosqlxtesting.AssertErrorContains(t,
 		"INVALID SYNTAX HERE",
-		"parsing")
+		"syntax error")
 }
 
 // Demo: Using RequireParse for custom assertions

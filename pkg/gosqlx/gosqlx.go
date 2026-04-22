@@ -107,7 +107,7 @@ func Parse(sql string) (*ast.AST, error) {
 	// Step 2: Tokenize SQL
 	tokens, err := tkz.Tokenize([]byte(sql))
 	if err != nil {
-		return nil, fmt.Errorf("tokenization failed: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrTokenize, err)
 	}
 
 	// Step 3: Parse to AST directly from model tokens
@@ -116,7 +116,7 @@ func Parse(sql string) (*ast.AST, error) {
 
 	astNode, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
-		return nil, fmt.Errorf("parsing failed: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrSyntax, err)
 	}
 
 	return astNode, nil
@@ -184,7 +184,7 @@ func Parse(sql string) (*ast.AST, error) {
 func ParseWithContext(ctx context.Context, sql string) (*ast.AST, error) {
 	// Check context before starting
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", ErrTimeout, err)
 	}
 
 	// Step 1: Get tokenizer from pool
@@ -194,7 +194,10 @@ func ParseWithContext(ctx context.Context, sql string) (*ast.AST, error) {
 	// Step 2: Tokenize SQL with context support
 	tokens, err := tkz.TokenizeContext(ctx, []byte(sql))
 	if err != nil {
-		return nil, fmt.Errorf("tokenization failed: %w", err)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, fmt.Errorf("%w: %w", ErrTimeout, ctxErr)
+		}
+		return nil, fmt.Errorf("%w: %w", ErrTokenize, err)
 	}
 
 	// Step 3: Parse to AST with context support
@@ -203,7 +206,10 @@ func ParseWithContext(ctx context.Context, sql string) (*ast.AST, error) {
 
 	astNode, err := p.ParseContextFromModelTokens(ctx, tokens)
 	if err != nil {
-		return nil, fmt.Errorf("parsing failed: %w", err)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, fmt.Errorf("%w: %w", ErrTimeout, ctxErr)
+		}
+		return nil, fmt.Errorf("%w: %w", ErrSyntax, err)
 	}
 
 	return astNode, nil
@@ -242,13 +248,13 @@ func ParseWithTimeout(sql string, timeout time.Duration) (*ast.AST, error) {
 func Validate(sql string) error {
 	// Reject empty/whitespace-only input
 	if len(strings.TrimSpace(sql)) == 0 {
-		return fmt.Errorf("invalid SQL: empty input")
+		return fmt.Errorf("%w: empty input", ErrSyntax)
 	}
 
 	// Use the dedicated validation fast-path that avoids building a full AST
 	err := parser.ValidateBytes([]byte(sql))
 	if err != nil {
-		return fmt.Errorf("invalid SQL: %w", err)
+		return fmt.Errorf("%w: %w", ErrSyntax, err)
 	}
 
 	return nil
@@ -270,7 +276,7 @@ func ParseBytes(sql []byte) (*ast.AST, error) {
 
 	tokens, err := tkz.Tokenize(sql)
 	if err != nil {
-		return nil, fmt.Errorf("tokenization failed: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrTokenize, err)
 	}
 
 	p := parser.GetParser()
@@ -278,7 +284,7 @@ func ParseBytes(sql []byte) (*ast.AST, error) {
 
 	astNode, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
-		return nil, fmt.Errorf("parsing failed: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrSyntax, err)
 	}
 
 	return astNode, nil
@@ -296,7 +302,7 @@ func ParseBytes(sql []byte) (*ast.AST, error) {
 func MustParse(sql string) *ast.AST {
 	astNode, err := Parse(sql)
 	if err != nil {
-		panic(fmt.Sprintf("gosqlx.MustParse: %v", err))
+		panic(fmt.Errorf("gosqlx.MustParse: %w", err))
 	}
 	return astNode
 }
@@ -393,13 +399,13 @@ func ParseMultiple(queries []string) ([]*ast.AST, error) {
 		// Tokenize
 		tokens, err := tkz.Tokenize([]byte(sql))
 		if err != nil {
-			return nil, fmt.Errorf("query %d: tokenization failed: %w", i, err)
+			return nil, fmt.Errorf("query %d: %w: %w", i, ErrTokenize, err)
 		}
 
 		// Parse directly from model tokens
 		astNode, err := p.ParseFromModelTokens(tokens)
 		if err != nil {
-			return nil, fmt.Errorf("query %d: parsing failed: %w", i, err)
+			return nil, fmt.Errorf("query %d: %w: %w", i, ErrSyntax, err)
 		}
 
 		results = append(results, astNode)
@@ -436,13 +442,13 @@ func ValidateMultiple(queries []string) error {
 		// Tokenize
 		tokens, err := tkz.Tokenize([]byte(sql))
 		if err != nil {
-			return fmt.Errorf("query %d: %w", i, err)
+			return fmt.Errorf("query %d: %w: %w", i, ErrTokenize, err)
 		}
 
 		// Parse directly from model tokens
 		_, err = p.ParseFromModelTokens(tokens)
 		if err != nil {
-			return fmt.Errorf("query %d: %w", i, err)
+			return fmt.Errorf("query %d: %w: %w", i, ErrSyntax, err)
 		}
 	}
 
@@ -599,13 +605,21 @@ func ParseWithRecovery(sql string) ([]ast.Statement, []error) {
 
 	tokens, err := tkz.Tokenize([]byte(sql))
 	if err != nil {
-		return nil, []error{fmt.Errorf("tokenization failed: %w", err)}
+		return nil, []error{fmt.Errorf("%w: %w", ErrTokenize, err)}
 	}
 
 	p := parser.GetParser()
 	defer parser.PutParser(p)
 
-	return p.ParseWithRecoveryFromModelTokens(tokens)
+	stmts, recoveryErrs := p.ParseWithRecoveryFromModelTokens(tokens)
+	if len(recoveryErrs) > 0 {
+		wrapped := make([]error, len(recoveryErrs))
+		for i, e := range recoveryErrs {
+			wrapped[i] = fmt.Errorf("%w: %w", ErrSyntax, e)
+		}
+		return stmts, wrapped
+	}
+	return stmts, nil
 }
 
 // ParseWithDialect tokenizes and parses SQL using a specific SQL dialect for
@@ -638,8 +652,17 @@ func ParseWithRecovery(sql string) ([]ast.Statement, []error) {
 //	ast, err := gosqlx.ParseWithDialect(sql, keywords.DialectPostgreSQL)
 //
 // Returns an error if the dialect is unknown or if SQL is syntactically invalid.
+// Errors are wrapped with gosqlx sentinel errors (ErrUnsupportedDialect, ErrSyntax,
+// ErrTokenize) so callers can match via errors.Is.
 func ParseWithDialect(sql string, dialect keywords.SQLDialect) (*ast.AST, error) {
-	return parser.ParseWithDialect(sql, dialect)
+	if !keywords.IsValidDialect(string(dialect)) {
+		return nil, fmt.Errorf("%w: %q", ErrUnsupportedDialect, dialect)
+	}
+	astNode, err := parser.ParseWithDialect(sql, dialect)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrSyntax, err)
+	}
+	return astNode, nil
 }
 
 // Normalize parses sql, replaces all literal values (strings, numbers, booleans,

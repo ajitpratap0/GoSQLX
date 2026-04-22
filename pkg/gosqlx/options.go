@@ -55,6 +55,12 @@ type parseOptions struct {
 	// recover enables error-recovery parsing — returns partial results and all
 	// collected diagnostics rather than stopping at the first error.
 	recover bool
+
+	// maxBytes caps the number of bytes ParseReader / ParseReaderMultiple will
+	// read from an io.Reader. Zero means unbounded (backward-compatible default).
+	// Inputs that exceed the cap are rejected with ErrTooLarge before any
+	// parsing work begins.
+	maxBytes int64
 }
 
 // defaultParseOptions returns the baseline configuration used when no options
@@ -129,6 +135,27 @@ func WithStrict() Option {
 func WithTimeout(d time.Duration) Option {
 	return func(o *parseOptions) {
 		o.timeout = d
+	}
+}
+
+// WithMaxBytes caps the number of bytes ParseReader and ParseReaderMultiple
+// will read from an io.Reader. A zero or negative value disables the cap and
+// preserves the original unbounded behaviour (the default).
+//
+// When the cap is exceeded the reader entry points abort before any parsing
+// work is attempted and return an error that satisfies
+// errors.Is(err, ErrTooLarge). The reader is drained only up to maxBytes+1
+// bytes, so hostile 100 MB inputs will not cause a ~2x allocation spike.
+//
+// Example — reject inputs larger than 1 MiB:
+//
+//	tree, err := gosqlx.ParseReader(ctx, r, gosqlx.WithMaxBytes(1<<20))
+//	if errors.Is(err, gosqlx.ErrTooLarge) {
+//	    // surface a 413-style error to the caller
+//	}
+func WithMaxBytes(n int64) Option {
+	return func(o *parseOptions) {
+		o.maxBytes = n
 	}
 }
 

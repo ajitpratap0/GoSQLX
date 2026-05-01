@@ -222,10 +222,3 @@ func (c *ctxReader) Read(p []byte) (int, error) {
 	return c.r.Read(p)
 }
 
-// splitSQLStatements is retained as a thin shim over SplitStatements so
-// existing tests and internal callers that use the ANSI default keep working
-// unchanged. New code should call SplitStatements directly with an explicit
-// dialect.
-func splitSQLStatements(src string) []string {
-	return SplitStatements(src, "")
-}

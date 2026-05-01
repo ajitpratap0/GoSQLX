@@ -438,10 +438,12 @@ func putExpressionImpl(expr Expression, depth int) {
 				e.Elements[i] = nil
 			}
 			e.Elements = e.Elements[:0]
-			// Subquery is *SelectStatement — release through the
-			// statement pool, not a bare nil-assign (leak before fix).
+			// Subquery is a Statement (typically *SelectStatement); route
+			// through the statement dispatcher to keep dispatch consistent
+			// with InExpression / SubqueryExpression / Exists / Any / All
+			// and to handle non-SELECT statement types correctly.
 			if e.Subquery != nil {
-				PutSelectStatement(e.Subquery)
+				releaseStatement(e.Subquery)
 				e.Subquery = nil
 			}
 			arrayConstructorPool.Put(e)
@@ -656,9 +658,10 @@ func PutArrayConstructor(ac *ArrayConstructorExpression) {
 		ac.Elements[i] = nil
 	}
 	ac.Elements = ac.Elements[:0]
-	// Subquery is *SelectStatement — release through the statement pool.
+	// Subquery is a Statement; route through releaseStatement so non-SELECT
+	// statement types (sequence ops etc.) dispatch correctly.
 	if ac.Subquery != nil {
-		PutSelectStatement(ac.Subquery)
+		releaseStatement(ac.Subquery)
 		ac.Subquery = nil
 	}
 	arrayConstructorPool.Put(ac)

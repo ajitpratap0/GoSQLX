@@ -168,8 +168,11 @@ func TestLegacy_ErrTimeout_Wrapping(t *testing.T) {
 			return err
 		}},
 		{"ParseWithTimeout", func() error {
-			// Nanosecond timeout effectively expires immediately.
-			_, err := ParseWithTimeout("SELECT 1", time.Nanosecond)
+			// A zero-duration timeout guarantees the context is already
+			// expired when ParseWithTimeout checks ctx.Err() after a
+			// fast parse.  This avoids the nanosecond-race on platforms
+			// with coarse timer resolution (e.g. Windows).
+			_, err := ParseWithTimeout("SELECT 1", 0)
 			return err
 		}},
 	}

@@ -240,6 +240,14 @@ func ParseWithTimeout(sql string, timeout time.Duration) (*ast.AST, error) {
 		}
 		return nil, err
 	}
+	// Even on success, check whether the context deadline already expired.
+	// On platforms with coarse timer resolution (e.g. Windows) a very short
+	// timeout may elapse before or during the parse, but the parse still
+	// completes. Callers relying on errors.Is(err, ErrTimeout) must see the
+	// timeout in that case.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, fmt.Errorf("%w: %w", ErrTimeout, ctxErr)
+	}
 	return astNode, nil
 }
 

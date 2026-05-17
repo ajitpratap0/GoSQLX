@@ -69,7 +69,7 @@ func (p *Parser) DialectTyped() dialect.Dialect {
 // permissive default suitable for "parse anything widely supported" use
 // cases. See dialect.Capabilities for the full flag set.
 func (p *Parser) Capabilities() dialect.Capabilities {
-	return p.DialectTyped().Capabilities()
+	return p.capabilitiesCache
 }
 
 // --- Convenience predicates ---

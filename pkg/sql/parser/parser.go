@@ -123,6 +123,7 @@ func (p *Parser) Reset() {
 	// INVARIANT: p.dialectTyped must always equal dialect.Parse(p.dialect).
 	// Reset clears both fields in lockstep; see WithDialect for the active path.
 	p.dialectTyped = dialect.Unknown
+	p.capabilitiesCache = dialect.Capabilities{}
 }
 
 // currentLocation returns the source location of the current token.
@@ -213,6 +214,7 @@ func WithDialect(newDialect string) ParserOption {
 	return func(p *Parser) {
 		p.dialect = newDialect
 		p.dialectTyped = dialect.Parse(newDialect)
+		p.capabilitiesCache = p.dialectTyped.Capabilities()
 	}
 }
 
@@ -262,6 +264,10 @@ type Parser struct {
 	// Maintained by WithDialect (the sole mutator) and Reset. Do not set
 	// dialect directly; funnel all changes through WithDialect.
 	dialectTyped dialect.Dialect
+	// capabilitiesCache is the pre-computed capability matrix for
+	// dialectTyped. It is refreshed alongside dialectTyped in WithDialect
+	// and Reset so that Capabilities() is a single struct-field read.
+	capabilitiesCache dialect.Capabilities
 }
 
 // Deprecated: Parse is provided for backward compatibility only and is scheduled for
@@ -853,7 +859,9 @@ func (p *Parser) parseSnowflakeStageStatement(kind string) (ast.Statement, error
 
 // NewParser creates a new parser with optional configuration.
 func NewParser(opts ...ParserOption) *Parser {
-	p := &Parser{}
+	p := &Parser{
+		capabilitiesCache: dialect.Unknown.Capabilities(),
+	}
 	for _, opt := range opts {
 		opt(p)
 	}

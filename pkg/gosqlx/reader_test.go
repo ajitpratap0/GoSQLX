@@ -292,7 +292,7 @@ func TestSplitSQLStatements(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			segs := splitSQLStatements(tc.in)
+			segs := SplitStatements(tc.in, "")
 			count := 0
 			for _, s := range segs {
 				if strings.TrimSpace(s) != "" {

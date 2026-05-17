@@ -230,7 +230,17 @@ func ParseWithContext(ctx context.Context, sql string) (*ast.AST, error) {
 func ParseWithTimeout(sql string, timeout time.Duration) (*ast.AST, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	return ParseWithContext(ctx, sql)
+	astNode, err := ParseWithContext(ctx, sql)
+	if err != nil {
+		// If the context timed out but ParseWithContext didn't catch it
+		// (e.g., parsing completed just before the deadline on fast
+		// machines), wrap with ErrTimeout so callers can rely on errors.Is.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, fmt.Errorf("%w: %w", ErrTimeout, ctxErr)
+		}
+		return nil, err
+	}
+	return astNode, nil
 }
 
 // Validate checks if the given SQL is syntactically valid.

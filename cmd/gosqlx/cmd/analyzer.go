@@ -24,8 +24,6 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
 // CLIAnalyzerOptions contains configuration for the SQL analyzer CLI
@@ -36,6 +34,7 @@ type CLIAnalyzerOptions struct {
 	All         bool
 	Format      string // Output format: json, yaml, table
 	Verbose     bool
+	Dialect     string
 }
 
 // Analyzer provides SQL analysis functionality with injectable output
@@ -71,9 +70,13 @@ func (a *Analyzer) Analyze(input string) (*AnalyzerResult, error) {
 		return result, result.Error
 	}
 
-	// Use pooled tokenizer
-	tkz := tokenizer.GetTokenizer()
-	defer tokenizer.PutTokenizer(tkz)
+	// Acquire a tokenizer for the configured dialect (pooled for the default)
+	tkz, releaseTkz, err := tokenizerForDialect(a.Opts.Dialect)
+	if err != nil {
+		result.Error = fmt.Errorf("tokenizer setup failed: %w", err)
+		return result, result.Error
+	}
+	defer releaseTkz()
 
 	// Tokenize
 	tokens, err := tkz.Tokenize(inputResult.Content)
@@ -85,7 +88,7 @@ func (a *Analyzer) Analyze(input string) (*AnalyzerResult, error) {
 	// Convert TokenWithSpan to Token using centralized converter
 
 	// Parse with proper error handling for memory management
-	p := parser.NewParser()
+	p := parserForDialect(a.Opts.Dialect)
 	astObj, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
 		// Parser failed, no AST to release
@@ -232,6 +235,7 @@ type AnalyzerFlags struct {
 	All         bool
 	Format      string
 	Verbose     bool
+	Dialect     string
 }
 
 // AnalyzerOptionsFromConfig creates CLIAnalyzerOptions from config and CLI flags
@@ -263,6 +267,9 @@ func AnalyzerOptionsFromConfig(cfg *config.Config, flagsChanged map[string]bool,
 	}
 	if flagsChanged["verbose"] {
 		opts.Verbose = flags.Verbose
+	}
+	if flagsChanged["dialect"] {
+		opts.Dialect = flags.Dialect
 	}
 
 	return opts

@@ -28,6 +28,7 @@ var (
 	parseShowAST    bool
 	parseShowTokens bool
 	parseTreeView   bool
+	parseDialect    string
 )
 
 // parseCmd represents the parse command
@@ -58,6 +59,11 @@ Performance: Direct AST inspection without intermediate representations`,
 }
 
 func parseRun(cmd *cobra.Command, args []string) error {
+	// Reject unknown dialect names early before any parsing.
+	if err := validateDialectName(parseDialect); err != nil {
+		return err
+	}
+
 	// Handle stdin input
 	if len(args) == 0 || (len(args) == 1 && args[0] == "-") {
 		if ShouldReadFromStdin(args) {
@@ -91,6 +97,7 @@ func parseRun(cmd *cobra.Command, args []string) error {
 		TreeView:   parseTreeView,
 		Format:     format,
 		Verbose:    verbose,
+		Dialect:    parseDialect,
 	})
 
 	// Create parser with injectable output writers
@@ -148,6 +155,7 @@ func parseFromStdin(cmd *cobra.Command) error {
 		TreeView:   parseTreeView,
 		Format:     format,
 		Verbose:    verbose,
+		Dialect:    parseDialect,
 	})
 
 	// Create parser
@@ -174,4 +182,5 @@ func init() {
 	parseCmd.Flags().BoolVar(&parseShowAST, "ast", false, "show detailed AST structure")
 	parseCmd.Flags().BoolVar(&parseShowTokens, "tokens", false, "show tokenization output")
 	parseCmd.Flags().BoolVar(&parseTreeView, "tree", false, "show tree visualization")
+	parseCmd.Flags().StringVar(&parseDialect, "dialect", "", "SQL dialect: postgresql, mysql, mariadb, snowflake, sqlserver, oracle, sqlite (default: postgresql)")
 }

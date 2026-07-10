@@ -26,8 +26,6 @@ import (
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/output"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
 // CLIParserOptions contains configuration for the SQL parser CLI
@@ -37,6 +35,7 @@ type CLIParserOptions struct {
 	TreeView   bool
 	Format     string
 	Verbose    bool
+	Dialect    string
 }
 
 // Parser provides SQL parsing functionality with injectable output
@@ -73,9 +72,13 @@ func (p *Parser) Parse(input string) (*ParserResult, error) {
 		return result, result.Error
 	}
 
-	// Use pooled tokenizer
-	tkz := tokenizer.GetTokenizer()
-	defer tokenizer.PutTokenizer(tkz)
+	// Acquire a tokenizer for the configured dialect (pooled for the default)
+	tkz, releaseTkz, err := tokenizerForDialect(p.Opts.Dialect)
+	if err != nil {
+		result.Error = fmt.Errorf("tokenizer setup failed: %w", err)
+		return result, result.Error
+	}
+	defer releaseTkz()
 
 	// Tokenize
 	tokens, err := tkz.Tokenize(inputResult.Content)
@@ -92,7 +95,7 @@ func (p *Parser) Parse(input string) (*ParserResult, error) {
 	}
 
 	// Parse to AST with proper error handling for memory management
-	pr := parser.NewParser()
+	pr := parserForDialect(p.Opts.Dialect)
 	defer pr.Release()
 	astObj, err := pr.ParseFromModelTokens(result.Tokens)
 	if err != nil {
@@ -370,6 +373,7 @@ type ParserFlags struct {
 	TreeView   bool
 	Format     string
 	Verbose    bool
+	Dialect    string
 }
 
 // ParserOptionsFromConfig creates CLIParserOptions from config and CLI flags
@@ -394,6 +398,9 @@ func ParserOptionsFromConfig(cfg *config.Config, flagsChanged map[string]bool, f
 	}
 	if flagsChanged["verbose"] {
 		opts.Verbose = flags.Verbose
+	}
+	if flagsChanged["dialect"] {
+		opts.Dialect = flags.Dialect
 	}
 
 	return opts

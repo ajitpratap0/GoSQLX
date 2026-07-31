@@ -28,19 +28,21 @@ GHSA-6g7g-w4f8-9c9x
 # Severity: HIGH | No fixed version available (latest is v28.5.2)
 # Transitive dependency: testcontainers-go → docker/docker
 # Only used in integration tests, not in production code. Docker daemon internals, not Go client.
+# Re-evaluate when docker/docker releases a patched version or when testcontainers-go updates its dependency.
 CVE-2026-34040
 CVE-2026-33997
 CVE-2026-41567
 CVE-2026-42306
 CVE-2026-41568
-# NOTE: CVE-2026-13149 and CVE-2026-14257 (brace-expansion DoS, npm) are FIXED
-# by upgrading brace-expansion to v5.0.8 in vscode-extension/package.json (see that
-# package.json overrides).  Re-evaluate when the npm ecosystem catches up.
 
 # CVE-2026-33750 — brace-expansion (npm, website)
 # FIXED by upgrading brace-expansion to v5.0.8 in vscode-extension/package.json overrides.
 # CVE-2026-13149 and CVE-2026-14257 also fixed by the same pin.
 # CVE-2026-33750 retained for reference only (website excluded from Trivy scan).
+
+# NOTE: CVE-2026-13149 and CVE-2026-14257 (brace-expansion DoS, npm) are FIXED
+# by upgrading brace-expansion to v5.0.8 in website/package.json (see that
+# commit). No ignore entry needed/added for these two IDs.
 
 # CVE-2026-33671, CVE-2026-33672 — picomatch (npm, website)
 # Severity: HIGH | No fixed version available

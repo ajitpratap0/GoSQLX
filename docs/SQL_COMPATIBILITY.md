@@ -41,7 +41,7 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 - ✅ **PostgreSQL Enhancements**:
   - **Type Casting** - `::` operator for PostgreSQL-style casts (`SELECT 1::int`)
   - **UPSERT** - `INSERT ... ON CONFLICT DO UPDATE/NOTHING`
-  - **Positional Parameters** - `$1`, `$2` style parameter placeholders
+  - **Positional Parameters** - `$1`, `$2` style parameter placeholders (PostgreSQL); `?` placeholders for MySQL/MariaDB/SQLite (dialect-gated)
   - **JSONB Operators** - Additional `@?` and `@@` operators
   - **Regex Operators** - `~`, `~*`, `!~`, `!~*` for pattern matching
 - ✅ **ARRAY Constructors**: `ARRAY[1, 2, 3]` expressions with subscript/slice operations

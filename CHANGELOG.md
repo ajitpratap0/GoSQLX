@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **MySQL/MariaDB/SQLite `?` positional parameter placeholders**: a bare `?` is
+  now tokenized as a parameter placeholder (`TokenTypePlaceholder`) when parsing
+  with `DialectMySQL`, `DialectMariaDB`, or `DialectSQLite` (e.g.
+  `SELECT * FROM users WHERE id = ?`). This matches the placeholder style used by
+  the standard MySQL and SQLite `database/sql` drivers. Dialect-gated: PostgreSQL
+  (the default dialect) continues to treat `?`, `?|`, and `?&` as JSON
+  key-existence operators.
+
 ## [1.14.0] - 2026-04-12 — Dialect-Aware Transforms, Snowflake 100%, Schema Introspection
 
 Headline themes: dialect-aware transforms, Snowflake at 100% of the QA corpus, ClickHouse significantly expanded (83% of the QA corpus, up from 53%), live schema introspection, SQL transpilation, and first-class integration sub-modules (OpenTelemetry and GORM). Drop-in upgrade from v1.13.0 — no breaking changes.

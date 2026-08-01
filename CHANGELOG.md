@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`--dialect` flag for the `parse`, `format`, `analyze`, and `lint` CLI
+  commands**: dialect-specific SQL (e.g. MySQL `LIMIT offset, count`) can now be
+  parsed by these commands, matching the existing `validate --dialect`. Unknown
+  dialect names are rejected up front. The default remains PostgreSQL.
+  `pkg/linter.Linter` gains a `SetDialect(keywords.SQLDialect)` method so the
+  linter can tokenize/parse dialect-specific syntax, and `lint --security` now
+  parses with the selected dialect.
+
 ## [1.14.0] - 2026-04-12 — Dialect-Aware Transforms, Snowflake 100%, Schema Introspection
 
 Headline themes: dialect-aware transforms, Snowflake at 100% of the QA corpus, ClickHouse significantly expanded (83% of the QA corpus, up from 53%), live schema introspection, SQL transpilation, and first-class integration sub-modules (OpenTelemetry and GORM). Drop-in upgrade from v1.13.0 — no breaking changes.

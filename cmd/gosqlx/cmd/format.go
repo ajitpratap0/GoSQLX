@@ -31,6 +31,7 @@ var (
 	formatCompact    bool
 	formatCheck      bool
 	formatMaxLine    int
+	formatDialect    string
 )
 
 // formatCmd represents the format command
@@ -62,6 +63,11 @@ Performance: 100x faster than SQLFluff for equivalent operations`,
 }
 
 func formatRun(cmd *cobra.Command, args []string) error {
+	// Reject unknown dialect names early before any parsing.
+	if err := validateDialectName(formatDialect); err != nil {
+		return err
+	}
+
 	// Handle stdin input
 	if ShouldReadFromStdin(args) {
 		return formatFromStdin(cmd)
@@ -99,6 +105,7 @@ func formatRun(cmd *cobra.Command, args []string) error {
 		MaxLine:    formatMaxLine,
 		Verbose:    verbose,
 		Output:     outputFile,
+		Dialect:    formatDialect,
 	})
 
 	// Create formatter with injectable output writers
@@ -160,6 +167,7 @@ func formatFromStdin(cmd *cobra.Command) error {
 		MaxLine:    formatMaxLine,
 		Verbose:    verbose,
 		Output:     outputFile,
+		Dialect:    formatDialect,
 	})
 
 	// Create formatter
@@ -215,6 +223,7 @@ func formatInlineSQL(cmd *cobra.Command, sql string) error {
 		MaxLine:    formatMaxLine,
 		Verbose:    verbose,
 		Output:     outputFile,
+		Dialect:    formatDialect,
 	})
 
 	formatter := NewFormatter(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
@@ -240,6 +249,7 @@ func init() {
 	formatCmd.Flags().BoolVar(&formatCompact, "compact", false, "compact format (config: format.compact)")
 	formatCmd.Flags().BoolVar(&formatCheck, "check", false, "check if files need formatting (CI mode)")
 	formatCmd.Flags().IntVar(&formatMaxLine, "max-line", 80, "maximum line length (config: format.max_line_length)")
+	formatCmd.Flags().StringVar(&formatDialect, "dialect", "", "SQL dialect: postgresql, mysql, mariadb, snowflake, sqlserver, oracle, sqlite (default: postgresql)")
 
 	// Add negation flags
 	formatCmd.Flags().BoolVar(&formatUppercase, "no-uppercase", false, "keep original keyword case")

@@ -270,5 +270,8 @@
     "glob": "^10.3.10",
     "mocha": "^10.2.0",
     "typescript": "^5.3.2"
+  },
+  "overrides": {
+    "brace-expansion": "^5.0.8"
   }
 }

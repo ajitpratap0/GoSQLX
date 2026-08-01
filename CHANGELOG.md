@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Tokenizer pool no longer leaks dialect state**: a tokenizer whose dialect was
+  changed via `SetDialect` (e.g. by `validate --dialect mysql`) is now restored to
+  the default (PostgreSQL) dialect when returned to the pool via `PutTokenizer`.
+  Previously `Reset` did not clear the dialect/keywords, so a later
+  `GetTokenizer` caller could receive a tokenizer configured for the wrong
+  dialect and silently mis-parse. The restore lives in `PutTokenizer` (the pool
+  boundary), not `Reset`, because `Reset` also runs at the start of every
+  `Tokenize` call where the configured dialect must persist. The keyword table is
+  rebuilt only when a non-default dialect was configured, so the common path is
+  unaffected.
+
 ## [1.14.0] - 2026-04-12 — Dialect-Aware Transforms, Snowflake 100%, Schema Introspection
 
 Headline themes: dialect-aware transforms, Snowflake at 100% of the QA corpus, ClickHouse significantly expanded (83% of the QA corpus, up from 53%), live schema introspection, SQL transpilation, and first-class integration sub-modules (OpenTelemetry and GORM). Drop-in upgrade from v1.13.0 — no breaking changes.

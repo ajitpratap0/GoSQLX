@@ -339,6 +339,14 @@ func putExpressionImpl(expr Expression, depth int) {
 			}
 			subqueryExprPool.Put(e)
 
+		case *ParenthesizedExpression:
+			if e.Expr != nil {
+				workQueue = append(workQueue, e.Expr)
+			}
+			e.Expr = nil
+			// ParenthesizedExpression has no dedicated pool; children are freed above
+			// and the node itself is left to the garbage collector.
+
 		case *CastExpression:
 			if e.Expr != nil {
 				workQueue = append(workQueue, e.Expr)

@@ -331,7 +331,10 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			return p.parseArrayAccessExpression(expr)
 		}
 
-		return expr, nil
+		// Preserve grouping for a single parenthesized expression. Without this
+		// node the parentheses are dropped and AND/OR precedence changes on
+		// re-render, e.g. `(a OR b) AND c` → `a OR b AND c` (see #519).
+		return &ast.ParenthesizedExpression{Expr: expr, Pos: parenPos}, nil
 	}
 
 	if p.isType(models.TokenTypeExists) {

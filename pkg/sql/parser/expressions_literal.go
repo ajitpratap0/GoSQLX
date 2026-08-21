@@ -254,9 +254,14 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return &ast.LiteralValue{Value: value, Type: "bool"}, nil
 	}
 
-	if p.isType(models.TokenTypePlaceholder) {
-		// Handle SQL placeholders (e.g., $1, $2 for PostgreSQL; @param for SQL Server)
+	if p.isType(models.TokenTypePlaceholder) || p.isType(models.TokenTypeQuestion) {
+		// Handle SQL placeholders: $1, ? (JDBC), @param. `?` is also a JSON key
+		// existence operator in PostgreSQL (data ? 'key'); that case is parsed in
+		// binary-operator position, so a bare `?` at operand position is a placeholder.
 		value := p.currentToken.Token.Value
+		if value == "" {
+			value = "?"
+		}
 		p.advance()
 		return &ast.LiteralValue{Value: value, Type: "placeholder"}, nil
 	}

@@ -167,9 +167,14 @@ func (b *BinaryExpression) SQL() string {
 
 	upperOp := strings.ToUpper(op)
 
-	// Handle IS NULL / IS NOT NULL (right side is NULL literal)
-	if upperOp == "IS NULL" || upperOp == "IS NOT NULL" {
-		return fmt.Sprintf("%s %s", left, upperOp)
+	// Handle IS NULL / IS NOT NULL (right side is NULL literal).
+	// The parser stores the operator as "IS NULL" and uses the Not flag to
+	// disambiguate `IS NOT NULL`, so honour it here to avoid dropping NOT.
+	if upperOp == "IS NULL" {
+		if b.Not {
+			return fmt.Sprintf("%s IS NOT NULL", left)
+		}
+		return fmt.Sprintf("%s IS NULL", left)
 	}
 
 	// Handle special operators like LIKE, ILIKE, SIMILAR TO
@@ -340,6 +345,17 @@ func (f *FunctionCall) SQL() string {
 	sb := getBuilder()
 	defer putBuilder(sb)
 	sb.WriteString(f.Name)
+	if len(f.Parameters) > 0 {
+		// ClickHouse parametric aggregates: quantile(0.5)(x).
+		// Parameters are rendered in their own parenthesis group before args.
+		params := make([]string, len(f.Parameters))
+		for i, p := range f.Parameters {
+			params[i] = exprSQL(p)
+		}
+		sb.WriteString("(")
+		sb.WriteString(strings.Join(params, ", "))
+		sb.WriteString(")")
+	}
 	sb.WriteString("(")
 	if f.Distinct {
 		sb.WriteString("DISTINCT ")

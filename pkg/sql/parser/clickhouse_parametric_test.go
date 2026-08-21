@@ -72,3 +72,30 @@ func TestClickHouseParametricAggregates_ASTShape(t *testing.T) {
 		t.Fatal("did not find quantileTDigest FunctionCall in AST")
 	}
 }
+
+// TestClickHouseParametricAggregates_Render is a regression for the renderer:
+// FunctionCall.SQL() must emit ClickHouse parametric aggregates as
+// `funcName(params)(args)`, preserving the params group. Previously the
+// Parameters group was silently dropped, yielding `funcName(args)`.
+func TestClickHouseParametricAggregates_Render(t *testing.T) {
+	tests := []struct {
+		name string
+		sql  string
+	}{
+		{"quantile_tdigest", `SELECT quantileTDigest(0.95)(value) FROM events`},
+		{"top_k", `SELECT topK(10)(name) FROM users`},
+		{"quantiles_multi", `SELECT quantiles(0.5, 0.9, 0.99)(latency_ms) FROM requests`},
+		{"with_group_by", `SELECT category, quantileTDigest(0.99)(price) FROM products GROUP BY category`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tree, err := gosqlx.ParseWithDialect(tt.sql, keywords.DialectClickHouse)
+			if err != nil {
+				t.Fatalf("parse failed: %v", err)
+			}
+			if got := tree.SQL(); got != tt.sql {
+				t.Errorf("SQL() = %q, want %q", got, tt.sql)
+			}
+		})
+	}
+}

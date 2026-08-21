@@ -189,6 +189,33 @@ type OrderByExpression struct {
 	Expression Expression // The expression to order by
 	Ascending  bool       // true for ASC (default), false for DESC
 	NullsFirst *bool      // nil = default behavior, true = NULLS FIRST, false = NULLS LAST
+	// WithFill — ClickHouse "WITH FILL FROM x TO y STEP z" modifier.
+	// Fields are nil when the corresponding part is absent.
+	WithFill *WithFillClause
+}
+
+// WithFillClause — ClickHouse "WITH FILL [FROM x] [TO y] [STEP z]".
+type WithFillClause struct {
+	From Expression
+	To   Expression
+	Step Expression
+	Pos  models.Location
+}
+
+func (w *WithFillClause) expressionNode()     {}
+func (w WithFillClause) TokenLiteral() string { return "WITH FILL" }
+func (w WithFillClause) Children() []Node {
+	var out []Node
+	if w.From != nil {
+		out = append(out, w.From)
+	}
+	if w.To != nil {
+		out = append(out, w.To)
+	}
+	if w.Step != nil {
+		out = append(out, w.Step)
+	}
+	return out
 }
 
 func (*OrderByExpression) expressionNode()        {}

@@ -31,6 +31,8 @@ func TestRoundtrip(t *testing.T) {
 		{"select where", "SELECT id FROM users WHERE active = TRUE"},
 		{"select and", "SELECT id FROM users WHERE active = TRUE AND age > 18"},
 		{"select or", "SELECT id FROM users WHERE a = 1 OR b = 2"},
+		{"select or grouped", "SELECT id FROM users WHERE (a = 1 OR b = 2) AND c = 3"},
+		{"select nested parens", "SELECT id FROM users WHERE ((a AND b) OR c) AND d"},
 		{"select distinct", "SELECT DISTINCT status FROM orders"},
 		{"select limit offset", "SELECT * FROM users LIMIT 10 OFFSET 20"},
 		{"select order by", "SELECT * FROM users ORDER BY name"},

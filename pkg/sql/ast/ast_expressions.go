@@ -271,6 +271,24 @@ func (s SubqueryExpression) Children() []Node {
 	return []Node{s.Subquery}
 }
 
+// ParenthesizedExpression represents an expression wrapped in parentheses to
+// preserve grouping/operator-precedence, e.g. `WHERE (a OR b) AND c`.
+// SQL requires them to round-trip unchanged; discarding the node would silently
+// change AND/OR precedence on re-render.
+type ParenthesizedExpression struct {
+	Expr Expression
+	Pos  models.Location // Source position of the opening parenthesis
+}
+
+func (p *ParenthesizedExpression) expressionNode()     {}
+func (p ParenthesizedExpression) TokenLiteral() string { return "PAREN" }
+func (p ParenthesizedExpression) Children() []Node {
+	if p.Expr == nil {
+		return nil
+	}
+	return []Node{p.Expr}
+}
+
 // AnyExpression represents expr op ANY (subquery)
 type AnyExpression struct {
 	Expr     Expression

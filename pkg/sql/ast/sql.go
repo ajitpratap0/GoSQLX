@@ -313,6 +313,15 @@ func (s *SubqueryExpression) SQL() string {
 	return fmt.Sprintf("(%s)", stmtSQL(s.Subquery))
 }
 
+// SQL returns the parenthesized expression as "(expr)". The parentheses are
+// preserved so that AND/OR grouping survives a round-trip (see #519).
+func (p *ParenthesizedExpression) SQL() string {
+	if p == nil {
+		return ""
+	}
+	return fmt.Sprintf("(%s)", exprSQL(p.Expr))
+}
+
 // SQL returns the SQL representation of this ANY expression as "expr op ANY (subquery)".
 func (a *AnyExpression) SQL() string {
 	if a == nil {

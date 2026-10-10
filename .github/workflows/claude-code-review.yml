@@ -7,12 +7,11 @@ on:
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
-    
+    # Fork PRs get a read-only GITHUB_TOKEN and no secrets, so the action fails
+    # with 403 when posting its comment. Skip them; maintainers can still
+    # request a review with an @claude comment.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -33,8 +32,8 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-          # Optional: Specify model (defaults to Claude Sonnet 4, uncomment for Claude Opus 4.1)
-          # model: "claude-opus-4-1-20250805"
+          # Pin the model: the action's built-in default (claude-sonnet-4-20250514) is retired and returns 404
+          model: "claude-sonnet-5-5"
 
           # Direct prompt for automated review (no @claude mention needed)
           direct_prompt: |

@@ -267,6 +267,13 @@ func putExpressionImpl(expr Expression, depth int) {
 				}
 				e.Arguments[i] = nil
 			}
+			for i := range e.Parameters {
+				if e.Parameters[i] != nil {
+					workQueue = append(workQueue, e.Parameters[i])
+				}
+				e.Parameters[i] = nil
+			}
+			e.Parameters = e.Parameters[:0]
 			e.Arguments = e.Arguments[:0]
 			e.Name = ""
 			e.Over = nil
@@ -532,6 +539,7 @@ func putExpressionImpl(expr Expression, depth int) {
 // GetFunctionCall gets a FunctionCall from the pool
 func GetFunctionCall() *FunctionCall {
 	fc := functionCallPool.Get().(*FunctionCall)
+	fc.Parameters = fc.Parameters[:0]
 	fc.Arguments = fc.Arguments[:0]
 	return fc
 }
@@ -541,6 +549,11 @@ func PutFunctionCall(fc *FunctionCall) {
 	if fc == nil {
 		return
 	}
+	for i := range fc.Parameters {
+		PutExpression(fc.Parameters[i])
+		fc.Parameters[i] = nil
+	}
+	fc.Parameters = fc.Parameters[:0]
 	for i := range fc.Arguments {
 		PutExpression(fc.Arguments[i])
 		fc.Arguments[i] = nil

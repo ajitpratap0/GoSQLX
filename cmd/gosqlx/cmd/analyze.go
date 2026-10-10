@@ -29,6 +29,7 @@ var (
 	analyzePerformance bool
 	analyzeComplexity  bool
 	analyzeAll         bool
+	analyzeDialect     string
 )
 
 // analyzeCmd represents the analyze command
@@ -65,6 +66,11 @@ This is a basic implementation for CLI foundation.`,
 }
 
 func analyzeRun(cmd *cobra.Command, args []string) error {
+	// Reject unknown dialect names early before any parsing.
+	if err := validateDialectName(analyzeDialect); err != nil {
+		return err
+	}
+
 	// Handle stdin input
 	if len(args) == 0 || (len(args) == 1 && args[0] == "-") {
 		if ShouldReadFromStdin(args) {
@@ -99,6 +105,7 @@ func analyzeRun(cmd *cobra.Command, args []string) error {
 		All:         analyzeAll,
 		Format:      format,
 		Verbose:     verbose,
+		Dialect:     analyzeDialect,
 	})
 
 	// Use a buffer to capture output when writing to file
@@ -167,6 +174,7 @@ func analyzeFromStdin(cmd *cobra.Command) error {
 		All:         analyzeAll,
 		Format:      format,
 		Verbose:     verbose,
+		Dialect:     analyzeDialect,
 	})
 
 	// Use a buffer to capture output when writing to file
@@ -204,4 +212,5 @@ func init() {
 	analyzeCmd.Flags().BoolVar(&analyzePerformance, "performance", false, "focus on performance optimization analysis (config: analyze.performance)")
 	analyzeCmd.Flags().BoolVar(&analyzeComplexity, "complexity", false, "focus on complexity metrics (config: analyze.complexity)")
 	analyzeCmd.Flags().BoolVar(&analyzeAll, "all", false, "comprehensive analysis (config: analyze.all)")
+	analyzeCmd.Flags().StringVar(&analyzeDialect, "dialect", "", "SQL dialect: postgresql, mysql, mariadb, snowflake, sqlserver, oracle, sqlite (default: postgresql)")
 }

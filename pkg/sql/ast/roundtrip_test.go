@@ -44,6 +44,7 @@ func TestRoundtrip(t *testing.T) {
 		{"select in list", "SELECT * FROM users WHERE id IN (1, 2, 3)"},
 		{"select between", "SELECT * FROM users WHERE age BETWEEN 18 AND 65"},
 		{"select is null", "SELECT * FROM users WHERE email IS NULL"},
+		{"select is not null", "SELECT * FROM users WHERE email IS NOT NULL"},
 		{"select like", "SELECT * FROM users WHERE name LIKE '%alice%'"},
 		{"select subquery", "SELECT * FROM users WHERE id IN (SELECT user_id FROM orders)"},
 		{"select exists", "SELECT * FROM users WHERE EXISTS (SELECT 1 FROM orders WHERE orders.user_id = users.id)"},

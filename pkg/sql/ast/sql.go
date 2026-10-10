@@ -595,6 +595,11 @@ func (s *SelectStatement) SQL() string {
 		sb.WriteString(strings.Join(elems, ", "))
 	}
 
+	if s.Sample != nil {
+		sb.WriteString(" ")
+		sb.WriteString(s.Sample.SQL())
+	}
+
 	if s.PrewhereClause != nil {
 		sb.WriteString(" PREWHERE ")
 		sb.WriteString(exprSQL(s.PrewhereClause))
@@ -1327,9 +1332,34 @@ func orderBySQL(orders []OrderByExpression) string {
 				s += " NULLS LAST"
 			}
 		}
+		if o.WithFill != nil {
+			s += withFillSQL(o.WithFill)
+		}
 		parts[i] = s
 	}
 	return strings.Join(parts, ", ")
+}
+
+// withFillSQL renders a ClickHouse "WITH FILL [FROM x] [TO y] [STEP z]" modifier.
+func withFillSQL(w *WithFillClause) string {
+	if w == nil {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(" WITH FILL")
+	if w.From != nil {
+		b.WriteString(" FROM ")
+		b.WriteString(exprSQL(w.From))
+	}
+	if w.To != nil {
+		b.WriteString(" TO ")
+		b.WriteString(exprSQL(w.To))
+	}
+	if w.Step != nil {
+		b.WriteString(" STEP ")
+		b.WriteString(exprSQL(w.Step))
+	}
+	return b.String()
 }
 
 func tableRefSQL(t *TableReference) string {
@@ -1866,4 +1896,29 @@ func (c *ConnectByClause) ToSQL() string {
 	}
 	b.WriteString(exprSQL(c.Condition))
 	return b.String()
+}
+
+// SQL renders a ClickHouse SAMPLE clause, e.g. "SAMPLE 0.1" or
+// "SAMPLE 1/10 OFFSET 2/10".
+func (s *SampleClause) SQL() string {
+	if s == nil {
+		return ""
+	}
+	sb := getBuilder()
+	defer putBuilder(sb)
+	sb.WriteString("SAMPLE ")
+	v := s.Value
+	if s.Value != "" && s.Denominator != "" {
+		v = s.Value + "/" + s.Denominator
+	}
+	sb.WriteString(v)
+	if s.Offset != "" {
+		sb.WriteString(" OFFSET ")
+		o := s.Offset
+		if s.OffsetDenominator != "" {
+			o = s.Offset + "/" + s.OffsetDenominator
+		}
+		sb.WriteString(o)
+	}
+	return sb.String()
 }

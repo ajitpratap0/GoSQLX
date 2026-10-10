@@ -932,3 +932,21 @@ func TestExtractColumns_WithExtractExpression(t *testing.T) {
 		t.Errorf("Expected 'created_at' in columns, got: %v", cols)
 	}
 }
+
+// Regression for #519: metadata extraction must descend through grouping
+// parentheses (ast.ParenthesizedExpression).
+func TestExtractFunctions_ThroughParentheses(t *testing.T) {
+	tree, err := Parse("SELECT (count(a)) FROM t WHERE (lower(b) = 'x')")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	got := map[string]bool{}
+	for _, f := range ExtractFunctions(tree) {
+		got[f] = true
+	}
+	for _, want := range []string{"count", "lower"} {
+		if !got[want] {
+			t.Errorf("ExtractFunctions missing %q, got %v", want, got)
+		}
+	}
+}

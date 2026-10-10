@@ -867,6 +867,13 @@ func (f *SQLFormatter) formatExpression(expr ast.Expression) error {
 		if err := f.formatExpression(e.Expr); err != nil {
 			return err
 		}
+	case *ast.ParenthesizedExpression:
+		// Preserve grouping parentheses, e.g. (a OR b) AND c (see #519)
+		f.builder.WriteString("(")
+		if err := f.formatExpression(e.Expr); err != nil {
+			return err
+		}
+		f.builder.WriteString(")")
 	case *ast.AliasedExpression:
 		// Handle expr AS alias
 		if err := f.formatExpression(e.Expr); err != nil {

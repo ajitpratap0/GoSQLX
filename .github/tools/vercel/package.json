@@ -1,0 +1,8 @@
+{
+  "name": "gosqlx-ci-vercel-cli",
+  "private": true,
+  "description": "Pinned Vercel CLI for .github/workflows/website.yml (installed with npm ci)",
+  "dependencies": {
+    "vercel": "60.1.3"
+  }
+}

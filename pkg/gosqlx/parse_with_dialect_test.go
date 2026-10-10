@@ -66,6 +66,26 @@ func TestParseWithDialect_MySQLOnDuplicateKeyUpdate(t *testing.T) {
 	}
 }
 
+func TestParseWithDialect_QuestionMarkPlaceholder(t *testing.T) {
+	// MySQL, MariaDB, and SQLite use a bare ? as a positional bind parameter.
+	for _, dialect := range []keywords.SQLDialect{
+		keywords.DialectMySQL,
+		keywords.DialectMariaDB,
+		keywords.DialectSQLite,
+	} {
+		t.Run(string(dialect), func(t *testing.T) {
+			sql := "SELECT * FROM users WHERE id = ? AND status = ?"
+			tree, err := gosqlx.ParseWithDialect(sql, dialect)
+			if err != nil {
+				t.Fatalf("ParseWithDialect(%s) unexpected error: %v", dialect, err)
+			}
+			if len(tree.Statements) != 1 {
+				t.Fatalf("expected 1 statement, got %d", len(tree.Statements))
+			}
+		})
+	}
+}
+
 func TestParseWithDialect_UnknownDialectReturnsError(t *testing.T) {
 	_, err := gosqlx.ParseWithDialect("SELECT 1", "totally-unknown-dialect")
 	if err == nil {

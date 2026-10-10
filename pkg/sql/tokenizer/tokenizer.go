@@ -1626,6 +1626,15 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		return models.Token{Type: models.TokenTypeSharp, Value: "#"}, nil
 	case '?':
 		t.pos.AdvanceRune(r, size)
+		// MySQL, MariaDB, and SQLite use a bare ? as a positional parameter
+		// placeholder (e.g. WHERE id = ?). These dialects have no JSON ?
+		// existence operator, so emit a placeholder token before the JSON
+		// operator lookahead below.
+		if t.dialect == keywords.DialectMySQL ||
+			t.dialect == keywords.DialectMariaDB ||
+			t.dialect == keywords.DialectSQLite {
+			return models.Token{Type: models.TokenTypePlaceholder, Value: "?"}, nil
+		}
 		// Check for PostgreSQL JSON operators
 		if t.pos.Index < len(t.input) {
 			nextR, nextSize := utf8.DecodeRune(t.input[t.pos.Index:])

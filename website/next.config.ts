@@ -16,11 +16,13 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // Fixed, unversioned URLs: always revalidate (ETag makes it a cheap 304) so a
+        // new deploy's gosqlx.wasm and its matching wasm_exec.js are never pinned stale.
         source: '/wasm/:path*',
         headers: [
           {
             key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
+            value: 'public, max-age=0, must-revalidate',
           },
         ],
       },

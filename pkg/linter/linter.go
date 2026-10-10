@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
@@ -72,6 +73,11 @@ type FileResult struct {
 type Linter struct {
 	rules  []Rule
 	ignore IgnoreMatcher
+
+	// dialect selects the SQL dialect used when tokenizing and parsing SQL for
+	// AST- and token-based rules. The zero value (empty string / DialectUnknown)
+	// uses the default dialect (PostgreSQL). Set via SetDialect.
+	dialect keywords.SQLDialect
 }
 
 // IgnoreMatcher reports whether a given filename should be skipped during
@@ -123,6 +129,37 @@ func NewWithIgnore(ignore IgnoreMatcher, rules ...Rule) *Linter {
 // The returned slice should not be modified.
 func (l *Linter) Rules() []Rule {
 	return l.rules
+}
+
+// SetDialect selects the SQL dialect used when tokenizing and parsing SQL for
+// rules that inspect tokens or the AST. An empty string or DialectUnknown
+// restores the default dialect (PostgreSQL).
+//
+// This affects dialect-specific syntax such as the MySQL/SQLite `?` positional
+// parameter placeholder or MySQL `LIMIT offset, count`.
+func (l *Linter) SetDialect(dialect keywords.SQLDialect) {
+	l.dialect = dialect
+}
+
+// acquireTokenizerAndParser returns a tokenizer, a release function for it, and
+// a parser configured for the linter's dialect.
+//
+// For the default dialect a pooled tokenizer is used (and returned to the pool
+// via the release function). For an explicit dialect a fresh, non-pooled
+// tokenizer is created so dialect-specific keyword state can't leak into pooled
+// tokenizers used by other callers. The caller owns releasing the parser via
+// (*parser.Parser).Release.
+func (l *Linter) acquireTokenizerAndParser() (*tokenizer.Tokenizer, func(), *parser.Parser) {
+	if l.dialect == "" || l.dialect == keywords.DialectUnknown {
+		tkz := tokenizer.GetTokenizer()
+		return tkz, func() { tokenizer.PutTokenizer(tkz) }, parser.NewParser()
+	}
+	if tkz, err := tokenizer.NewWithDialect(l.dialect); err == nil {
+		return tkz, func() {}, parser.NewParser(parser.WithDialect(string(l.dialect)))
+	}
+	// Fall back to the pooled default if the dialect tokenizer can't be built.
+	tkz := tokenizer.GetTokenizer()
+	return tkz, func() { tokenizer.PutTokenizer(tkz) }, parser.NewParser()
 }
 
 // LintFile lints a single SQL file.
@@ -189,19 +226,24 @@ func (l *Linter) LintString(sql string, filename string) FileResult {
 	// Create linting context
 	ctx := NewContext(sql, filename)
 
-	// Attempt tokenization (best effort - some rules don't need it)
-	tkz := tokenizer.GetTokenizer()
-	defer tokenizer.PutTokenizer(tkz)
+	// Attempt tokenization (best effort - some rules don't need it).
+	//
+	// For a non-default dialect use a fresh tokenizer/parser: the tokenizer
+	// pool's Reset does not clear dialect/keyword state, so a pooled tokenizer
+	// configured for a dialect would leak that state to later callers.
+	tkz, releaseTkz, p := l.acquireTokenizerAndParser()
+	defer releaseTkz()
 
 	tokens, tokenErr := tkz.Tokenize([]byte(sql))
 	if tokenErr == nil {
 		ctx.WithTokens(tokens)
 
 		// Attempt parsing with position tracking (best effort - some rules are token-only)
-		p := parser.NewParser()
 		defer p.Release()
 		astObj, parseErr := p.ParseFromModelTokens(tokens)
 		ctx.WithAST(astObj, parseErr)
+	} else {
+		p.Release()
 	}
 
 	// Run all rules

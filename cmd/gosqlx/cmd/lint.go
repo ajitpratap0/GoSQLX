@@ -28,6 +28,8 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/style"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/whitespace"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	sqlkeywords "github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	sqlsecurity "github.com/ajitpratap0/GoSQLX/pkg/sql/security"
 )
 
@@ -38,6 +40,7 @@ var (
 	lintMaxLength  int
 	lintFailOnWarn bool
 	lintSecurity   bool
+	lintDialect    string
 )
 
 // lintCmd represents the lint command
@@ -81,6 +84,11 @@ Exit Codes:
 
 func lintRun(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
+
+	// Reject unknown dialect names early before any parsing.
+	if err := validateDialectName(lintDialect); err != nil {
+		return err
+	}
 
 	// Handle stdin input
 	if ShouldReadFromStdin(args) {
@@ -381,7 +389,15 @@ func lintInlineSQL(cmd *cobra.Command, sql string) error {
 // runSecurityScan runs the security scanner on the given SQL and prints findings.
 // Returns the number of security findings.
 func runSecurityScan(sql string, filename string, outWriter io.Writer) int {
-	tree, err := gosqlx.Parse(sql)
+	var (
+		tree *ast.AST
+		err  error
+	)
+	if lintDialect != "" {
+		tree, err = gosqlx.ParseWithDialect(sql, sqlkeywords.SQLDialect(lintDialect))
+	} else {
+		tree, err = gosqlx.Parse(sql)
+	}
 	if err != nil {
 		fmt.Fprintf(outWriter, "  [WARN] %s: could not parse for security scan: %v\n", filename, err)
 		return 0
@@ -397,7 +413,7 @@ func runSecurityScan(sql string, filename string, outWriter io.Writer) int {
 
 // createLinter creates a new linter instance with configured rules
 func createLinter() *linter.Linter {
-	return linter.New(
+	l := linter.New(
 		// Whitespace rules (L001, L002, L003, L004, L005, L010)
 		whitespace.NewTrailingWhitespaceRule(),     // L001
 		whitespace.NewMixedIndentationRule(),       // L002
@@ -414,6 +430,10 @@ func createLinter() *linter.Linter {
 		// Keyword rules (L007)
 		keywords.NewKeywordCaseRule(keywords.CaseUpper), // L007
 	)
+	if lintDialect != "" {
+		l.SetDialect(sqlkeywords.SQLDialect(lintDialect))
+	}
+	return l
 }
 
 func init() {
@@ -425,4 +445,5 @@ func init() {
 	lintCmd.Flags().IntVar(&lintMaxLength, "max-length", 100, "maximum line length (L005 rule)")
 	lintCmd.Flags().BoolVar(&lintFailOnWarn, "fail-on-warn", false, "exit with error code on warnings")
 	lintCmd.Flags().BoolVar(&lintSecurity, "security", false, "run security scanner (LIKE injection, tautology, UNION injection)")
+	lintCmd.Flags().StringVar(&lintDialect, "dialect", "", "SQL dialect: postgresql, mysql, mariadb, snowflake, sqlserver, oracle, sqlite (default: postgresql)")
 }

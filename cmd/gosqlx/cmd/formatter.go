@@ -23,8 +23,6 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
 // CLIFormatterOptions contains configuration for the SQL formatter CLI
@@ -37,6 +35,7 @@ type CLIFormatterOptions struct {
 	MaxLine    int
 	Verbose    bool
 	Output     string // Output file path
+	Dialect    string
 }
 
 // Formatter provides SQL formatting functionality with injectable output
@@ -203,9 +202,12 @@ func (f *Formatter) formatFile(filename string) FileFormatterResult {
 
 // formatSQL formats a SQL string
 func (f *Formatter) formatSQL(sql string) (string, error) {
-	// Use pooled tokenizer for performance
-	tkz := tokenizer.GetTokenizer()
-	defer tokenizer.PutTokenizer(tkz)
+	// Acquire a tokenizer for the configured dialect (pooled for the default)
+	tkz, releaseTkz, err := tokenizerForDialect(f.Opts.Dialect)
+	if err != nil {
+		return "", fmt.Errorf("tokenizer setup failed: %w", err)
+	}
+	defer releaseTkz()
 
 	// Tokenize the SQL
 	tokens, err := tkz.Tokenize([]byte(sql))
@@ -220,7 +222,7 @@ func (f *Formatter) formatSQL(sql string) (string, error) {
 	// Convert tokens for parser using centralized converter
 
 	// Parse to AST with proper error handling for memory management
-	p := parser.NewParser()
+	p := parserForDialect(f.Opts.Dialect)
 	parsedAST, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
 		// Parser failed, no AST to release
@@ -261,6 +263,7 @@ type FormatterFlags struct {
 	MaxLine    int
 	Verbose    bool
 	Output     string
+	Dialect    string
 }
 
 // FormatterOptionsFromConfig creates CLIFormatterOptions from config and CLI flags
@@ -297,6 +300,9 @@ func FormatterOptionsFromConfig(cfg *config.Config, flagsChanged map[string]bool
 	}
 	if flagsChanged["output"] {
 		opts.Output = flags.Output
+	}
+	if flagsChanged["dialect"] {
+		opts.Dialect = flags.Dialect
 	}
 
 	return opts

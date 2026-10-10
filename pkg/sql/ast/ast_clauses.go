@@ -221,10 +221,14 @@ func (w WithFillClause) Children() []Node {
 func (*OrderByExpression) expressionNode()        {}
 func (o *OrderByExpression) TokenLiteral() string { return "ORDER BY" }
 func (o *OrderByExpression) Children() []Node {
+	var children []Node
 	if o.Expression != nil {
-		return []Node{o.Expression}
+		children = append(children, o.Expression)
 	}
-	return nil
+	if o.WithFill != nil {
+		children = append(children, o.WithFill)
+	}
+	return children
 }
 
 // WindowSpec represents a window specification

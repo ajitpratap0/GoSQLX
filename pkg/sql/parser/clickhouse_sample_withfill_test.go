@@ -17,7 +17,9 @@ package parser_test
 import (
 	"testing"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
@@ -45,5 +47,37 @@ func TestClickHouseSampleAndWithFillRoundtrip(t *testing.T) {
 				t.Errorf("SQL() = %q, want %q", got, tt.sql)
 			}
 		})
+	}
+}
+
+// The formatter renderer must not silently drop WITH FILL, and AST traversal
+// must reach the FROM/TO/STEP expressions.
+func TestClickHouseWithFillFormatterAndChildren(t *testing.T) {
+	const sql = `SELECT d FROM t ORDER BY d WITH FILL FROM 1 TO 10 STEP 2`
+	tree, err := gosqlx.ParseWithDialect(sql, keywords.DialectClickHouse)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if got := formatter.FormatAST(tree, ast.CompactStyle()); got != sql {
+		t.Errorf("FormatAST() = %q, want %q", got, sql)
+	}
+
+	sel, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected *ast.SelectStatement, got %T", tree.Statements[0])
+	}
+	if len(sel.OrderBy) != 1 || sel.OrderBy[0].WithFill == nil {
+		t.Fatalf("expected one ORDER BY entry with WITH FILL, got %+v", sel.OrderBy)
+	}
+	children := sel.OrderBy[0].Children()
+	if len(children) != 2 {
+		t.Fatalf("OrderByExpression.Children() len = %d, want 2", len(children))
+	}
+	fill, ok := children[1].(*ast.WithFillClause)
+	if !ok {
+		t.Fatalf("expected *ast.WithFillClause child, got %T", children[1])
+	}
+	if n := len(fill.Children()); n != 3 {
+		t.Errorf("WithFillClause.Children() len = %d, want 3", n)
 	}
 }

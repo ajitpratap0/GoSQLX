@@ -1241,6 +1241,18 @@ func orderBySQL(orders []ast.OrderByExpression) string {
 				s += " NULLS LAST"
 			}
 		}
+		if w := o.WithFill; w != nil {
+			s += " WITH FILL"
+			if w.From != nil {
+				s += " FROM " + exprSQL(w.From)
+			}
+			if w.To != nil {
+				s += " TO " + exprSQL(w.To)
+			}
+			if w.Step != nil {
+				s += " STEP " + exprSQL(w.Step)
+			}
+		}
 		parts[i] = s
 	}
 	return strings.Join(parts, ", ")

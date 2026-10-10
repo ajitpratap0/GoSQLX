@@ -1324,7 +1324,7 @@ func orderBySQL(orders []OrderByExpression) string {
 	return strings.Join(parts, ", ")
 }
 
-// withFillSQL рендерит ClickHouse "WITH FILL [FROM x] [TO y] [STEP z]".
+// withFillSQL renders a ClickHouse "WITH FILL [FROM x] [TO y] [STEP z]" modifier.
 func withFillSQL(w *WithFillClause) string {
 	if w == nil {
 		return ""
@@ -1882,7 +1882,7 @@ func (c *ConnectByClause) ToSQL() string {
 	return b.String()
 }
 
-// SQL возвращает ClickHouse SAMPLE-секцию, например "SAMPLE 0.1" или
+// SQL renders a ClickHouse SAMPLE clause, e.g. "SAMPLE 0.1" or
 // "SAMPLE 1/10 OFFSET 2/10".
 func (s *SampleClause) SQL() string {
 	if s == nil {

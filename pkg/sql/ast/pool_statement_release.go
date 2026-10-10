@@ -411,6 +411,12 @@ func PutSelectStatement(stmt *SelectStatement) {
 	for i := range stmt.OrderBy {
 		PutExpression(stmt.OrderBy[i].Expression)
 		stmt.OrderBy[i].Expression = nil
+		if wf := stmt.OrderBy[i].WithFill; wf != nil {
+			PutExpression(wf.From)
+			PutExpression(wf.To)
+			PutExpression(wf.Step)
+			stmt.OrderBy[i].WithFill = nil
+		}
 	}
 	stmt.OrderBy = stmt.OrderBy[:0]
 

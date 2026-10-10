@@ -39,3 +39,33 @@ func TestClickHouseArrayElementAccess(t *testing.T) {
 		}
 	}
 }
+
+// Numeric element access after '.' is ClickHouse-only; other dialects must
+// keep rejecting it, and float literals / qualified identifiers must be
+// unaffected in ClickHouse.
+func TestClickHouseArrayElementAccess_DialectGating(t *testing.T) {
+	for _, d := range []keywords.SQLDialect{
+		keywords.DialectGeneric,
+		keywords.DialectPostgreSQL,
+		keywords.DialectMySQL,
+		keywords.DialectSQLServer,
+		keywords.DialectSnowflake,
+	} {
+		if _, err := gosqlx.ParseWithDialect(`SELECT d.1 FROM t`, d); err == nil {
+			t.Errorf("dialect %s: expected error for numeric qualifier d.1, got nil", d)
+		}
+	}
+
+	for _, sql := range []string{
+		`SELECT 1.5, 2.0e3 FROM t`,
+		`SELECT t.a, t.b + 1.5 FROM t`,
+	} {
+		tree, err := gosqlx.ParseWithDialect(sql, keywords.DialectClickHouse)
+		if err != nil {
+			t.Fatalf("parse %q failed: %v", sql, err)
+		}
+		if got := tree.SQL(); got != sql {
+			t.Errorf("SQL() = %q, want %q", got, sql)
+		}
+	}
+}

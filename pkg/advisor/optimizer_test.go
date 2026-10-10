@@ -596,6 +596,24 @@ func TestFunctionOnColumnRule(t *testing.T) {
 		}
 	})
 
+	t.Run("parenthesized (UPPER(column)) = value triggers", func(t *testing.T) {
+		stmt := &ast.SelectStatement{
+			Columns: []ast.Expression{&ast.Identifier{Name: "id"}},
+			From:    []ast.TableReference{{Name: "users"}},
+			Where: &ast.BinaryExpression{
+				Left: &ast.ParenthesizedExpression{Expr: &ast.FunctionCall{
+					Name:      "UPPER",
+					Arguments: []ast.Expression{&ast.Identifier{Name: "name"}},
+				}},
+				Operator: "=",
+				Right:    &ast.LiteralValue{Value: "JOHN", Type: "STRING"},
+			},
+		}
+		if suggestions := rule.Analyze(stmt); len(suggestions) == 0 {
+			t.Error("expected suggestion for parenthesized function wrapping column")
+		}
+	})
+
 	t.Run("column = value does not trigger", func(t *testing.T) {
 		stmt := &ast.SelectStatement{
 			Columns: []ast.Expression{&ast.Identifier{Name: "id"}},

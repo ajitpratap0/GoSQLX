@@ -635,6 +635,13 @@ func findFunctionOnColumn(expr ast.Expression, ruleID string) []Suggestion {
 
 // extractFunctionOnColumn returns a FunctionCall if the expression is a function wrapping a column.
 func extractFunctionOnColumn(expr ast.Expression) *ast.FunctionCall {
+	for {
+		p, isParen := expr.(*ast.ParenthesizedExpression)
+		if !isParen || p == nil {
+			break
+		}
+		expr = p.Expr
+	}
 	fn, ok := expr.(*ast.FunctionCall)
 	if !ok {
 		return nil

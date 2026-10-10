@@ -352,6 +352,8 @@ func findWhereSubqueries(expr ast.Expression, ruleID string) []Suggestion {
 		suggestions = append(suggestions, findWhereSubqueries(e.Right, ruleID)...)
 	case *ast.UnaryExpression:
 		suggestions = append(suggestions, findWhereSubqueries(e.Expr, ruleID)...)
+	case *ast.ParenthesizedExpression:
+		suggestions = append(suggestions, findWhereSubqueries(e.Expr, ruleID)...)
 	}
 
 	return suggestions
@@ -440,6 +442,8 @@ func collectColumnNames(expr ast.Expression) []string {
 		names = append(names, collectColumnNames(e.Right)...)
 	case *ast.UnaryExpression:
 		names = append(names, collectColumnNames(e.Expr)...)
+	case *ast.ParenthesizedExpression:
+		names = append(names, collectColumnNames(e.Expr)...)
 	}
 
 	return names
@@ -517,6 +521,8 @@ func findLeadingWildcardLike(expr ast.Expression, ruleID string) []Suggestion {
 		suggestions = append(suggestions, findLeadingWildcardLike(e.Left, ruleID)...)
 		suggestions = append(suggestions, findLeadingWildcardLike(e.Right, ruleID)...)
 	case *ast.UnaryExpression:
+		suggestions = append(suggestions, findLeadingWildcardLike(e.Expr, ruleID)...)
+	case *ast.ParenthesizedExpression:
 		suggestions = append(suggestions, findLeadingWildcardLike(e.Expr, ruleID)...)
 	}
 
@@ -619,6 +625,8 @@ func findFunctionOnColumn(expr ast.Expression, ruleID string) []Suggestion {
 			suggestions = append(suggestions, findFunctionOnColumn(e.Right, ruleID)...)
 		}
 	case *ast.UnaryExpression:
+		suggestions = append(suggestions, findFunctionOnColumn(e.Expr, ruleID)...)
+	case *ast.ParenthesizedExpression:
 		suggestions = append(suggestions, findFunctionOnColumn(e.Expr, ruleID)...)
 	}
 

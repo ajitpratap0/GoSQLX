@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Parenthesized expressions are preserved** (#519): the parser now emits `ast.ParenthesizedExpression` for a single grouped expression, so `SQL()` and the formatters keep grouping such as `(a OR b) AND c` and `(a + b) * c` instead of silently changing operator precedence. The security scanner, advisor, metadata extraction, schema validator, transform rules, LSP and CLI formatter look through the new node. Code with its own type switches over `ast.Expression` should add a `*ast.ParenthesizedExpression` case (unwrap `.Expr`).
+
 ## [1.14.0] - 2026-04-12 — Dialect-Aware Transforms, Snowflake 100%, Schema Introspection
 
 Headline themes: dialect-aware transforms, Snowflake at 100% of the QA corpus, ClickHouse significantly expanded (83% of the QA corpus, up from 53%), live schema introspection, SQL transpilation, and first-class integration sub-modules (OpenTelemetry and GORM). Drop-in upgrade from v1.13.0 — no breaking changes.

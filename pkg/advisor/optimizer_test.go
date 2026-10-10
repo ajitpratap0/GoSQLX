@@ -1100,3 +1100,23 @@ func containsSubstring(s, sub string) bool {
 	}
 	return false
 }
+
+// Regression for #519: advisor rules must look through grouping parentheses
+// (ast.ParenthesizedExpression) when inspecting WHERE predicates.
+func TestRules_SeeThroughParentheses(t *testing.T) {
+	opt := New()
+	tests := []struct {
+		sql    string
+		ruleID string
+	}{
+		{"SELECT id FROM users WHERE (name LIKE '%smith')", "OPT-007"},
+		{"SELECT id FROM users WHERE (lower(email) = 'a@b.c')", "OPT-008"},
+		{"SELECT id FROM users WHERE (id IN (SELECT user_id FROM orders))", "OPT-005"},
+	}
+	for _, tt := range tests {
+		res := mustAnalyze(t, opt, tt.sql)
+		if !hasSuggestion(res, tt.ruleID) {
+			t.Errorf("expected %s for %q, got %+v", tt.ruleID, tt.sql, res.Suggestions)
+		}
+	}
+}

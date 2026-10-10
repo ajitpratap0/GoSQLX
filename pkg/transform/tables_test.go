@@ -111,3 +111,15 @@ func TestReplaceTable_UnsupportedStatement(t *testing.T) {
 		t.Fatal("expected error for INSERT")
 	}
 }
+
+// Regression for #519: ReplaceTable must descend through grouping parentheses
+// (ast.ParenthesizedExpression) to reach subqueries nested inside them.
+func TestReplaceTable_ThroughParentheses(t *testing.T) {
+	stmt := mustParse(t, "SELECT a FROM t WHERE (EXISTS (SELECT 1 FROM users WHERE users.id = t.id))")
+	if err := Apply(stmt, ReplaceTable("users", "accounts")); err != nil {
+		t.Fatal(err)
+	}
+	out := format(stmt)
+	assertContains(t, out, "accounts")
+	assertNotContains(t, out, "users")
+}

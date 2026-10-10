@@ -24,7 +24,8 @@ import (
 // Regression for #519: parenthesized expressions must round-trip unchanged.
 // Previously the `ParenthesizedExpression` node did not exist, so parentheses
 // were dropped during parsing and AND/OR precedence silently changed on render:
-//   (a OR b) AND c  →  a OR b AND c
+//
+//	(a OR b) AND c  →  a OR b AND c
 func TestParenthesizedExpressionRoundtrip(t *testing.T) {
 	tests := []struct {
 		name string

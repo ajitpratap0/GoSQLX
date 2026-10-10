@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // bufferPool is used to reuse bytes.Buffer instances during tokenization.
@@ -125,10 +126,22 @@ func GetTokenizer() *Tokenizer {
 //   - Position tracking reset to initial state
 //   - Line tracking cleared but capacity preserved
 //   - Debug logger cleared
-//   - Keywords preserved (immutable configuration)
+//   - Dialect restored to the default (PostgreSQL) so dialect-specific keyword
+//     state does not leak to the next caller
 func PutTokenizer(t *Tokenizer) {
 	if t != nil {
 		t.Reset()
+
+		// Restore the default dialect so a pooled tokenizer never leaks
+		// dialect-specific keyword state to a later caller. This is done here
+		// (at the pool boundary) rather than in Reset, which also runs at the
+		// start of every Tokenize call where the configured dialect must
+		// persist. SetDialect rebuilds the keyword table, so only pay that cost
+		// when a non-default dialect was configured.
+		if t.dialect != keywords.DialectPostgreSQL {
+			t.SetDialect(keywords.DialectPostgreSQL)
+		}
+
 		tokenizerPool.Put(t)
 
 		// Record pool return
@@ -153,7 +166,9 @@ func PutTokenizer(t *Tokenizer) {
 //   - pos: Line 1, Column 0, Index 0
 //   - lineStarts: Empty slice with preserved capacity (contains [0])
 //   - input: nil (ready for new input)
-//   - keywords: Preserved (immutable, no need to reset)
+//   - dialect/keywords: preserved (Reset also runs at the start of every
+//     Tokenize call, so the configured dialect must persist; the pool restores
+//     the default dialect in PutTokenizer instead)
 //   - logger: nil (must be set again if needed)
 //
 // Performance: By preserving slice capacity, subsequent Tokenize() calls
@@ -178,7 +193,9 @@ func (t *Tokenizer) Reset() {
 
 	t.line = 0
 
-	// Don't reset keywords as they're constant
+	// Don't reset keywords/dialect here: Reset also runs at the start of every
+	// Tokenize call, where the configured dialect must persist across calls.
+	// Dialect is restored to the default in PutTokenizer, at the pool boundary.
 	t.logger = nil
 
 	// Preserve Comments slice capacity but reset length

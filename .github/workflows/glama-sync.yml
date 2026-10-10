@@ -82,59 +82,59 @@ jobs:
           fi
 
           python3 - <<'PYEOF'
-import os, sys, urllib.request, urllib.parse, json
+          import os, sys, urllib.request, urllib.parse, json
 
-cookie = os.environ["GLAMA_SESSION_COOKIE"]
-sha    = os.environ["COMMIT_SHA"]
-tag    = os.environ["RELEASE_TAG"]
+          cookie = os.environ["GLAMA_SESSION_COOKIE"]
+          sha    = os.environ["COMMIT_SHA"]
+          tag    = os.environ["RELEASE_TAG"]
 
-# Build steps run inside Glama's debian:bookworm-slim container.
-# Update the Go version below when go.mod bumps the minimum Go requirement.
-build_steps = json.dumps([
-    "curl -fsSL -o /tmp/go.tar.gz https://go.dev/dl/go1.26.1.linux-amd64.tar.gz",
-    "tar -C /usr/local -xzf /tmp/go.tar.gz",
-    "PATH=/usr/local/go/bin:$PATH /usr/local/go/bin/go build -ldflags='-s -w' -o /app/gosqlx-mcp ./cmd/gosqlx-mcp",
-])
-cmd_args    = json.dumps(["mcp-proxy", "--", "/app/gosqlx-mcp", "--stdio"])
-arg_schema  = json.dumps({"properties": {}, "required": [], "type": "object"})
-placeholder = json.dumps({"GOSQLX_MCP_HOST": "0.0.0.0"})
+          # Build steps run inside Glama's debian:bookworm-slim container.
+          # Update the Go version below when go.mod bumps the minimum Go requirement.
+          build_steps = json.dumps([
+              "curl -fsSL -o /tmp/go.tar.gz https://go.dev/dl/go1.26.1.linux-amd64.tar.gz",
+              "tar -C /usr/local -xzf /tmp/go.tar.gz",
+              "PATH=/usr/local/go/bin:$PATH /usr/local/go/bin/go build -ldflags='-s -w' -o /app/gosqlx-mcp ./cmd/gosqlx-mcp",
+          ])
+          cmd_args    = json.dumps(["mcp-proxy", "--", "/app/gosqlx-mcp", "--stdio"])
+          arg_schema  = json.dumps({"properties": {}, "required": [], "type": "object"})
+          placeholder = json.dumps({"GOSQLX_MCP_HOST": "0.0.0.0"})
 
-payload = urllib.parse.urlencode({
-    "intent":               "build",
-    "nodeVersion":          "25",
-    "pythonVersion":        "3.14",
-    "pinnedCommitSha":      sha,
-    "buildSteps":           build_steps,
-    "cmdArguments":         cmd_args,
-    "argumentsJsonSchema":  arg_schema,
-    "placeholderArguments": placeholder,
-}).encode()
+          payload = urllib.parse.urlencode({
+              "intent":               "build",
+              "nodeVersion":          "25",
+              "pythonVersion":        "3.14",
+              "pinnedCommitSha":      sha,
+              "buildSteps":           build_steps,
+              "cmdArguments":         cmd_args,
+              "argumentsJsonSchema":  arg_schema,
+              "placeholderArguments": placeholder,
+          }).encode()
 
-req = urllib.request.Request(
-    "https://glama.ai/mcp/servers/ajitpratap0/GoSQLX/admin/dockerfile?index",
-    data=payload,
-    headers={
-        "Cookie":       cookie,
-        "Content-Type": "application/x-www-form-urlencoded",
-    },
-)
+          req = urllib.request.Request(
+              "https://glama.ai/mcp/servers/ajitpratap0/GoSQLX/admin/dockerfile?index",
+              data=payload,
+              headers={
+                  "Cookie":       cookie,
+                  "Content-Type": "application/x-www-form-urlencoded",
+              },
+          )
 
-# Disable auto-redirect to inspect the Location header.
-class NoRedirect(urllib.request.HTTPErrorProcessor):
-    def http_response(self, request, response): return response
-    https_response = http_response
+          # Disable auto-redirect to inspect the Location header.
+          class NoRedirect(urllib.request.HTTPErrorProcessor):
+              def http_response(self, request, response): return response
+              https_response = http_response
 
-opener   = urllib.request.build_opener(NoRedirect)
-resp     = opener.open(req)
-status   = resp.status
-location = resp.headers.get("Location", "")
+          opener   = urllib.request.build_opener(NoRedirect)
+          resp     = opener.open(req)
+          status   = resp.status
+          location = resp.headers.get("Location", "")
 
-print(f"HTTP {status}  Location: {location}")
+          print(f"HTTP {status}  Location: {location}")
 
-if any(x in location for x in ("sign-up", "sign_up", "login", "auth")):
-    print("::error::Glama auth failed — GLAMA_SESSION_COOKIE is expired or invalid.")
-    print("Refresh: DevTools → Network → copy Cookie header → update GLAMA_SESSION_COOKIE secret.")
-    sys.exit(1)
+          if any(x in location for x in ("sign-up", "sign_up", "login", "auth")):
+              print("::error::Glama auth failed — GLAMA_SESSION_COOKIE is expired or invalid.")
+              print("Refresh: DevTools → Network → copy Cookie header → update GLAMA_SESSION_COOKIE secret.")
+              sys.exit(1)
 
-print(f"Glama build triggered for {tag} (pinned to {sha[:8]})")
-PYEOF
+          print(f"Glama build triggered for {tag} (pinned to {sha[:8]})")
+          PYEOF

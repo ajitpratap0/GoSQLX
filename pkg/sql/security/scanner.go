@@ -743,6 +743,8 @@ func (s *Scanner) scanExpression(expr ast.Expression, result *ScanResult, contex
 		if e.Expr != nil {
 			s.scanExpression(e.Expr, result, context)
 		}
+	case *ast.ParenthesizedExpression:
+		s.scanExpression(e.Expr, result, context)
 	}
 }
 
@@ -788,8 +790,9 @@ func (s *Scanner) isTautology(expr *ast.BinaryExpression) bool {
 	}
 
 	// Check for LiteralValue tautologies: 1=1, 2=2, 'a'='a', etc.
-	leftLit, leftIsLit := expr.Left.(*ast.LiteralValue)
-	rightLit, rightIsLit := expr.Right.(*ast.LiteralValue)
+	left, right := unwrapParens(expr.Left), unwrapParens(expr.Right)
+	leftLit, leftIsLit := left.(*ast.LiteralValue)
+	rightLit, rightIsLit := right.(*ast.LiteralValue)
 
 	if leftIsLit && rightIsLit {
 		// Same literal values
@@ -801,8 +804,8 @@ func (s *Scanner) isTautology(expr *ast.BinaryExpression) bool {
 	}
 
 	// Check for identifier tautologies: col=col
-	leftIdent, leftIsIdent := expr.Left.(*ast.Identifier)
-	rightIdent, rightIsIdent := expr.Right.(*ast.Identifier)
+	leftIdent, leftIsIdent := left.(*ast.Identifier)
+	rightIdent, rightIsIdent := right.(*ast.Identifier)
 
 	if leftIsIdent && rightIsIdent {
 		if leftIdent.Name == rightIdent.Name {
@@ -816,7 +819,7 @@ func (s *Scanner) isTautology(expr *ast.BinaryExpression) bool {
 // checkOrInjection checks for OR-based injection patterns.
 func (s *Scanner) checkOrInjection(expr *ast.BinaryExpression, result *ScanResult) {
 	// Check if the OR condition contains a tautology
-	if rightBin, ok := expr.Right.(*ast.BinaryExpression); ok {
+	if rightBin, ok := unwrapParens(expr.Right).(*ast.BinaryExpression); ok {
 		if s.isTautology(rightBin) {
 			finding := Finding{
 				Severity:    SeverityCritical,
@@ -831,7 +834,7 @@ func (s *Scanner) checkOrInjection(expr *ast.BinaryExpression, result *ScanResul
 		}
 	}
 
-	if leftBin, ok := expr.Left.(*ast.BinaryExpression); ok {
+	if leftBin, ok := unwrapParens(expr.Left).(*ast.BinaryExpression); ok {
 		if s.isTautology(leftBin) {
 			finding := Finding{
 				Severity:    SeverityCritical,
@@ -844,6 +847,18 @@ func (s *Scanner) checkOrInjection(expr *ast.BinaryExpression, result *ScanResul
 				result.Findings = append(result.Findings, finding)
 			}
 		}
+	}
+}
+
+// unwrapParens strips any number of enclosing ParenthesizedExpression nodes so
+// that grouping parentheses, e.g. `OR (1 = 1)`, do not hide injection patterns.
+func unwrapParens(expr ast.Expression) ast.Expression {
+	for {
+		p, ok := expr.(*ast.ParenthesizedExpression)
+		if !ok || p == nil {
+			return expr
+		}
+		expr = p.Expr
 	}
 }
 
@@ -988,6 +1003,8 @@ func (s *Scanner) scanExpressionForDangerousFunctions(expr ast.Expression, resul
 		s.scanExpressionForDangerousFunctions(e.Left, result)
 		s.scanExpressionForDangerousFunctions(e.Right, result)
 	case *ast.UnaryExpression:
+		s.scanExpressionForDangerousFunctions(e.Expr, result)
+	case *ast.ParenthesizedExpression:
 		s.scanExpressionForDangerousFunctions(e.Expr, result)
 	}
 }

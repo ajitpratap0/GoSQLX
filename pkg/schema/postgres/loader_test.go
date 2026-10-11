@@ -115,6 +115,47 @@ func startPostgres(t *testing.T) *sql.DB {
 			total   NUMERIC(10,2)
 		);
 		CREATE INDEX idx_orders_user ON orders(user_id);
+
+		-- Composite FK whose referenced column order differs from the PK order.
+		CREATE TABLE accounts (tenant_id INT, account_no INT, PRIMARY KEY (tenant_id, account_no));
+		CREATE TABLE ledger (
+			id     SERIAL PRIMARY KEY,
+			acct   INT NOT NULL,
+			tenant INT NOT NULL,
+			CONSTRAINT fk_ledger_account FOREIGN KEY (acct, tenant)
+				REFERENCES accounts (account_no, tenant_id) ON DELETE CASCADE ON UPDATE CASCADE
+		);
+
+		-- Same FK name on two different tables with different targets and rules.
+		CREATE TABLE invoices (
+			id       SERIAL PRIMARY KEY,
+			buyer_id INT,
+			CONSTRAINT fk_parent FOREIGN KEY (buyer_id) REFERENCES users(id) ON DELETE SET NULL
+		);
+		CREATE TABLE shipments (
+			id        SERIAL PRIMARY KEY,
+			order_ref INT,
+			CONSTRAINT fk_parent FOREIGN KEY (order_ref) REFERENCES orders(id) ON DELETE RESTRICT
+		);
+
+		-- FK that references a partitioned table (Postgres clones it per partition).
+		CREATE TABLE events (id INT, region TEXT, PRIMARY KEY (id, region)) PARTITION BY LIST (region);
+		CREATE TABLE events_eu PARTITION OF events FOR VALUES IN ('eu');
+		CREATE TABLE events_us PARTITION OF events FOR VALUES IN ('us');
+		CREATE TABLE event_refs (
+			id       SERIAL PRIMARY KEY,
+			event_id INT,
+			region   TEXT,
+			CONSTRAINT fk_event FOREIGN KEY (event_id, region) REFERENCES events (id, region)
+		);
+
+		-- FK declared on a partitioned table (same constraint name on parent and partition).
+		CREATE TABLE prefs (user_id INT REFERENCES users(id), region TEXT) PARTITION BY LIST (region);
+		CREATE TABLE prefs_eu PARTITION OF prefs FOR VALUES IN ('eu');
+
+		-- Index over quoted identifiers containing commas, quotes, braces and spaces.
+		CREATE TABLE odd ("a,b" INT, "q""x" INT, "{br}" INT, "sp ace" INT);
+		CREATE INDEX idx_odd ON odd ("a,b", "q""x", "{br}", "sp ace");
 	`)
 	if err != nil {
 		t.Fatalf("create tables: %v", err)
@@ -304,6 +345,115 @@ func TestPostgresLoader_LoadTable_ForeignKeys(t *testing.T) {
 	}
 	if fk.OnDelete != "CASCADE" {
 		t.Errorf("fk on delete: got %q want CASCADE", fk.OnDelete)
+	}
+}
+
+// TestPostgresLoader_ForeignKeyJoinKeys is a regression test for #579: foreign
+// keys must be keyed by (table, constraint) and composite keys must pair each
+// local column with its referenced column by position.
+func TestPostgresLoader_ForeignKeyJoinKeys(t *testing.T) {
+	db := startPostgres(t)
+	loader := pgschema.NewLoader()
+	s, err := loader.Load(db, "public")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	cases := []struct {
+		name  string
+		table string
+		want  []dbschema.ForeignKey
+	}{
+		{"composite", "ledger", []dbschema.ForeignKey{{
+			Name: "fk_ledger_account", TableName: "ledger",
+			Columns: []string{"acct", "tenant"}, RefTable: "accounts",
+			RefColumns: []string{"account_no", "tenant_id"},
+			OnDelete:   "CASCADE", OnUpdate: "CASCADE",
+		}}},
+		{"shared_name_set_null", "invoices", []dbschema.ForeignKey{{
+			Name: "fk_parent", TableName: "invoices",
+			Columns: []string{"buyer_id"}, RefTable: "users", RefColumns: []string{"id"},
+			OnDelete: "SET NULL", OnUpdate: "NO ACTION",
+		}}},
+		{"shared_name_restrict", "shipments", []dbschema.ForeignKey{{
+			Name: "fk_parent", TableName: "shipments",
+			Columns: []string{"order_ref"}, RefTable: "orders", RefColumns: []string{"id"},
+			OnDelete: "RESTRICT", OnUpdate: "NO ACTION",
+		}}},
+		{"references_partitioned", "event_refs", []dbschema.ForeignKey{{
+			Name: "fk_event", TableName: "event_refs",
+			Columns: []string{"event_id", "region"}, RefTable: "events",
+			RefColumns: []string{"id", "region"},
+			OnDelete:   "NO ACTION", OnUpdate: "NO ACTION",
+		}}},
+		{"partitioned_parent", "prefs", []dbschema.ForeignKey{{
+			Name: "prefs_user_id_fkey", TableName: "prefs",
+			Columns: []string{"user_id"}, RefTable: "users", RefColumns: []string{"id"},
+			OnDelete: "NO ACTION", OnUpdate: "NO ACTION",
+		}}},
+		{"partition", "prefs_eu", []dbschema.ForeignKey{{
+			Name: "prefs_user_id_fkey", TableName: "prefs_eu",
+			Columns: []string{"user_id"}, RefTable: "users", RefColumns: []string{"id"},
+			OnDelete: "NO ACTION", OnUpdate: "NO ACTION",
+		}}},
+		{"single_column_cascade", "orders", []dbschema.ForeignKey{{
+			Name: "orders_user_id_fkey", TableName: "orders",
+			Columns: []string{"user_id"}, RefTable: "users", RefColumns: []string{"id"},
+			OnDelete: "CASCADE", OnUpdate: "NO ACTION",
+		}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			full := findTable(s, tc.table)
+			if full == nil {
+				t.Fatalf("Load: table %q missing", tc.table)
+			}
+			if !reflect.DeepEqual(full.ForeignKeys, tc.want) {
+				t.Errorf("Load %s foreign keys:\n got: %+v\nwant: %+v", tc.table, full.ForeignKeys, tc.want)
+			}
+			one, err := loader.LoadTable(db, "public", tc.table)
+			if err != nil {
+				t.Fatalf("LoadTable(%q): %v", tc.table, err)
+			}
+			if one == nil {
+				t.Fatalf("LoadTable(%q) returned nil", tc.table)
+			}
+			if !reflect.DeepEqual(one.ForeignKeys, tc.want) {
+				t.Errorf("LoadTable %s foreign keys:\n got: %+v\nwant: %+v", tc.table, one.ForeignKeys, tc.want)
+			}
+		})
+	}
+}
+
+// TestPostgresLoader_QuotedIndexColumns is a regression test for #579: index
+// columns whose quoted names contain commas, quotes, braces or spaces must
+// decode exactly.
+func TestPostgresLoader_QuotedIndexColumns(t *testing.T) {
+	db := startPostgres(t)
+	s, err := pgschema.NewLoader().Load(db, "public")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	odd := findTable(s, "odd")
+	if odd == nil {
+		t.Fatal("table odd missing")
+	}
+	var found bool
+	for _, idx := range odd.Indexes {
+		if idx.Name != "idx_odd" {
+			continue
+		}
+		found = true
+		want := []string{"a,b", `q"x`, "{br}", "sp ace"}
+		if !reflect.DeepEqual(idx.Columns, want) {
+			t.Errorf("idx_odd columns: got %q want %q", idx.Columns, want)
+		}
+		if idx.IsUnique || idx.IsPrimary {
+			t.Errorf("idx_odd: unique=%v primary=%v, want neither", idx.IsUnique, idx.IsPrimary)
+		}
+	}
+	if !found {
+		t.Error("idx_odd not found")
 	}
 }
 

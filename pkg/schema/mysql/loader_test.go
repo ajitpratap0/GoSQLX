@@ -123,6 +123,31 @@ func startMySQL(t *testing.T) *sql.DB {
 	if err != nil {
 		t.Fatalf("create line_items table: %v", err)
 	}
+	// Composite FK: the referenced columns must lead an index in the same
+	// order (InnoDB), hence the extra UNIQUE KEY (code, region).
+	_, err = db.Exec(`
+		CREATE TABLE warehouses (
+			region VARCHAR(10) NOT NULL,
+			code   INT NOT NULL,
+			PRIMARY KEY (region, code),
+			UNIQUE KEY uq_wh_code_region (code, region)
+		)
+	`)
+	if err != nil {
+		t.Fatalf("create warehouses table: %v", err)
+	}
+	_, err = db.Exec(`
+		CREATE TABLE bins (
+			id         INT AUTO_INCREMENT PRIMARY KEY,
+			wh_code    INT NOT NULL,
+			wh_region  VARCHAR(10) NOT NULL,
+			CONSTRAINT fk_bins_wh FOREIGN KEY (wh_code, wh_region)
+				REFERENCES warehouses (code, region) ON DELETE CASCADE ON UPDATE CASCADE
+		)
+	`)
+	if err != nil {
+		t.Fatalf("create bins table: %v", err)
+	}
 	return db
 }
 
@@ -286,6 +311,45 @@ func TestMySQLLoader_LoadTable_ForeignKeys(t *testing.T) {
 }
 
 // The name is validated before any query, so no database is needed.
+// TestMySQLLoader_CompositeForeignKey is a regression test for #579: a
+// composite foreign key pairs local and referenced columns by position and
+// carries its own ON DELETE/ON UPDATE rules.
+func TestMySQLLoader_CompositeForeignKey(t *testing.T) {
+	db := startMySQL(t)
+	loader := myschema.NewLoader()
+	want := []dbschema.ForeignKey{{
+		Name: "fk_bins_wh", TableName: "bins",
+		Columns: []string{"wh_code", "wh_region"}, RefTable: "warehouses",
+		RefColumns: []string{"code", "region"},
+		OnDelete:   "CASCADE", OnUpdate: "CASCADE",
+	}}
+
+	s, err := loader.Load(db, "testdb")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	var bins *dbschema.Table
+	for i := range s.Tables {
+		if s.Tables[i].Name == "bins" {
+			bins = &s.Tables[i]
+		}
+	}
+	if bins == nil {
+		t.Fatal("Load: table bins missing")
+	}
+	if !reflect.DeepEqual(bins.ForeignKeys, want) {
+		t.Errorf("Load bins foreign keys:\n got: %+v\nwant: %+v", bins.ForeignKeys, want)
+	}
+
+	one, err := loader.LoadTable(db, "testdb", "bins")
+	if err != nil {
+		t.Fatalf("LoadTable: %v", err)
+	}
+	if !reflect.DeepEqual(one.ForeignKeys, want) {
+		t.Errorf("LoadTable bins foreign keys:\n got: %+v\nwant: %+v", one.ForeignKeys, want)
+	}
+}
+
 func TestMySQLLoader_LoadTable_EmptyName(t *testing.T) {
 	if _, err := myschema.NewLoader().LoadTable(nil, "db", ""); err == nil {
 		t.Fatal("expected error for empty table name")

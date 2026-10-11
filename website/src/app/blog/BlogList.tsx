@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { motion } from 'motion/react';
 import type { BlogPost } from '@/lib/blog';
+import { blogPostHref } from '@/lib/blog-slug';
 
 export function BlogList({ posts }: { posts: BlogPost[] }) {
   return (
@@ -19,7 +20,7 @@ export function BlogList({ posts }: { posts: BlogPost[] }) {
             transition={{ duration: 0.4, delay: i * 0.05, ease: 'easeOut' }}
           >
             <Link
-              href={`/blog/${post.slug}`}
+              href={blogPostHref(post.slug)}
               className="group flex gap-6 py-5 pl-0 relative"
             >
               {/* Timeline dot */}

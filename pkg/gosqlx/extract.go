@@ -493,6 +493,8 @@ func (c *metadataCollector) collectFromExpression(expr ast.Expression, want extr
 		}
 	case *ast.UnaryExpression:
 		c.collectFromExpression(e.Expr, want)
+	case *ast.ParenthesizedExpression:
+		c.collectFromExpression(e.Expr, want)
 	case *ast.InExpression:
 		c.collectFromExpression(e.Expr, want)
 		for _, item := range e.List {

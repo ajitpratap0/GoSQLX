@@ -769,15 +769,31 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 		Value: ident,
 	}
 
-	// Determine token type based on whether it's a keyword
-	upperIdent := strings.ToUpper(ident)
-	tokenType, isKeyword := keywordTokenTypes[upperIdent]
+	// Determine the token type from a case-folded view of the identifier.
+	// ASCII identifiers are upper-cased into a stack buffer and the keyword
+	// maps are indexed with string(upperBuf[:upperLen]); a string used
+	// directly as a map key is not heap-allocated, so lowercase words no
+	// longer allocate a per-word strings.ToUpper here. Words longer than any
+	// keyword or compound-keyword start cannot match and skip the lookup, and
+	// non-ASCII identifiers keep the previous strings.ToUpper behaviour.
+	var upperBuf [upperKeywordBufLen]byte
+	upperLen, upperASCII := upperASCIIBytes(upperBuf[:], ident)
+	var tokenType models.TokenType
+	var isKeyword, isCompoundStart bool
+	if upperASCII {
+		tokenType, isKeyword = keywordTokenTypes[string(upperBuf[:upperLen])]
+		isCompoundStart = compoundKeywordStarts[string(upperBuf[:upperLen])]
+	} else {
+		upperIdent := strings.ToUpper(ident)
+		tokenType, isKeyword = keywordTokenTypes[upperIdent]
+		isCompoundStart = compoundKeywordStarts[upperIdent]
+	}
 	if !isKeyword {
 		tokenType = models.TokenTypeIdentifier
 	}
 
 	// Check if this could be the start of a compound keyword
-	if isCompoundKeywordStart(upperIdent) {
+	if isCompoundStart {
 		// Save current position
 		savePos := t.pos.Clone()
 
@@ -802,16 +818,45 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 				}
 
 				nextIdent := string(t.input[nextStart:t.pos.Index])
-				compoundKeyword := ident + " " + nextIdent
-				upperCompound := strings.ToUpper(compoundKeyword)
 
-				// Check if it's a valid compound keyword
-				if compoundType, ok := compoundKeywordTypes[upperCompound]; ok {
-					return models.Token{
-						Type:  compoundType,
-						Word:  word,
-						Value: compoundKeyword,
-					}, nil
+				// Fold "ident nextIdent" into a stack buffer so the compound-keyword
+				// lookup does not allocate for the common ASCII case; the string
+				// used directly as a map key is not heap-allocated. Non-ASCII or
+				// over-long words keep the previous allocating path.
+				var comboBuf [upperCompoundBufLen]byte
+				comboOK := false
+				comboLen := 0
+				if upperASCII {
+					comboLen = copy(comboBuf[:], upperBuf[:upperLen])
+					comboBuf[comboLen] = ' '
+					comboLen++
+					if nextLen, ok := upperASCIIBytes(comboBuf[comboLen:], nextIdent); ok {
+						comboLen += nextLen
+						comboOK = true
+					}
+				}
+
+				if comboOK {
+					// Check if it's a valid compound keyword
+					if compoundType, ok := compoundKeywordTypes[string(comboBuf[:comboLen])]; ok {
+						return models.Token{
+							Type:  compoundType,
+							Word:  word,
+							Value: ident + " " + nextIdent,
+						}, nil
+					}
+				} else {
+					compoundKeyword := ident + " " + nextIdent
+					upperCompound := strings.ToUpper(compoundKeyword)
+
+					// Check if it's a valid compound keyword
+					if compoundType, ok := compoundKeywordTypes[upperCompound]; ok {
+						return models.Token{
+							Type:  compoundType,
+							Word:  word,
+							Value: compoundKeyword,
+						}, nil
+					}
 				}
 			}
 		}
@@ -857,9 +902,37 @@ var compoundKeywordTypes = map[string]models.TokenType{
 	"GROUPING SETS":    models.TokenTypeKeyword, // SQL-99 grouping operation
 }
 
-// Helper function to check if a word can start a compound keyword
-func isCompoundKeywordStart(word string) bool {
-	return compoundKeywordStarts[word]
+// upperKeywordBufLen holds the longest key in keywordTokenTypes (12) and in
+// compoundKeywordStarts (8). Identifiers longer than this cannot be a keyword,
+// so the maps are skipped for them.
+const upperKeywordBufLen = 32
+
+// upperCompoundBufLen holds "ident nextIdent" for every compound keyword, the
+// longest of which is "RIGHT OUTER JOIN" (16 bytes). Pairs that do not fit fall
+// back to the allocating path.
+const upperCompoundBufLen = 64
+
+// upperASCIIBytes copies s into dst, upper-casing ASCII "a"-"z" (identical to
+// strings.ToUpper for ASCII input), and reports the number of bytes written plus
+// whether s was pure ASCII and fit in dst. It allocates nothing: callers pass the
+// result to string(dst[:n]) directly as a map key, a conversion the compiler does
+// not heap-allocate. A non-ASCII byte or an overflow returns ok == false so the
+// caller can fall back to strings.ToUpper and preserve behaviour exactly.
+func upperASCIIBytes(dst []byte, s string) (int, bool) {
+	if len(s) > len(dst) {
+		return 0, false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= utf8.RuneSelf {
+			return 0, false
+		}
+		if 'a' <= c && c <= 'z' {
+			c -= 'a' - 'A'
+		}
+		dst[i] = c
+	}
+	return len(s), true
 }
 
 // readQuotedIdentifier reads something like "MyColumn" with support for Unicode quotes

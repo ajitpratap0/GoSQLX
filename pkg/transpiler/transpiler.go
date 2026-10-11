@@ -61,6 +61,9 @@ func Transpile(sql string, from, to keywords.SQLDialect) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("parse: %w", err)
 	}
+	// The tree is pooled on return: rewrite rules must not retain node
+	// references beyond this call.
+	defer ast.ReleaseAST(tree)
 
 	// Apply rules for this dialect pair.
 	rules := rulesFor(from, to)

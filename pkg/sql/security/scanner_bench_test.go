@@ -67,6 +67,31 @@ func BenchmarkScanner_CleanSQL_Raw(b *testing.B) {
 	}
 }
 
+// BenchmarkScanner_AllGroups_Raw benchmarks ScanSQL on an input that triggers
+// every regex group, so every literal prefilter passes (worst case).
+func BenchmarkScanner_AllGroups_Raw(b *testing.B) {
+	sql := "SELECT * FROM users WHERE id = 1 OR 1=1 OR TRUE UNION SELECT NULL, NULL FROM information_schema.tables; DROP TABLE users; EXEC master..xp_cmdshell 'dir'; EXECUTE IMMEDIATE 'x' AND SLEEP(5) AND BENCHMARK(1,1) INTO OUTFILE '/tmp/x' --"
+	scanner := NewScanner()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		scanner.ScanSQL(sql)
+	}
+}
+
+// BenchmarkScanner_LargeClean_Raw benchmarks ScanSQL on a large clean query.
+func BenchmarkScanner_LargeClean_Raw(b *testing.B) {
+	sql := generateLargeSelectQuery(100)
+	scanner := NewScanner()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		scanner.ScanSQL(sql)
+	}
+}
+
 // BenchmarkScanner_TautologyDetection benchmarks tautology pattern detection
 func BenchmarkScanner_TautologyDetection(b *testing.B) {
 	sqls := []string{

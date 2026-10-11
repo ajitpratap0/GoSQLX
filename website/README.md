@@ -16,6 +16,17 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+### Playground WASM
+
+The playground runs the GoSQLX parser compiled to WebAssembly. `scripts/build-wasm.sh`
+builds `public/wasm/gosqlx.wasm` and `wasm_exec.js` from the Go sources in this repo:
+
+- `npm run build` always rebuilds it (prebuild), so every deploy ships the current parser.
+- `npm run dev` builds it only if it is missing; run `npm run wasm` after changing Go code.
+- Requires Go 1.26+ locally. On Vercel, a pinned, checksum-verified Go toolchain is downloaded.
+
+The WASM files are build output and are not committed.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

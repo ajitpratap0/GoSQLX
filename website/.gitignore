@@ -40,5 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# WASM binary — committed to git so Vercel auto-deploy includes it.
-# website.yml CI rebuilds and recommits when wasm/ source changes.
+# Playground WASM is built from the Go sources by scripts/build-wasm.sh
+# (prebuild), so every deploy ships the current parser. Never commit it.
+/public/wasm/gosqlx.wasm
+/public/wasm/wasm_exec.js

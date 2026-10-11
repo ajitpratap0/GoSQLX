@@ -72,3 +72,6 @@ audit-*.png
 03-*.png
 04-*.png
 api-reference-*.png
+
+# Accidentally built example binary (go build in examples/cmd)
+/examples/cmd/cmd

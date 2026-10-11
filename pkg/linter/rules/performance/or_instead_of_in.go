@@ -84,7 +84,7 @@ func (v *orInsteadOfInVisitor) Visit(node ast.Node) (ast.Visitor, error) {
 
 // collectEqColumns extracts the left-hand column names from an OR chain of = comparisons.
 func collectEqColumns(expr ast.Expression) []string {
-	binExpr, ok := expr.(*ast.BinaryExpression)
+	binExpr, ok := unwrapParens(expr).(*ast.BinaryExpression)
 	if !ok {
 		return nil
 	}
@@ -95,11 +95,23 @@ func collectEqColumns(expr ast.Expression) []string {
 		return append(left, right...)
 	}
 	if op == "=" {
-		if ident, ok := binExpr.Left.(*ast.Identifier); ok {
+		if ident, ok := unwrapParens(binExpr.Left).(*ast.Identifier); ok {
 			return []string{ident.Name}
 		}
 	}
 	return nil
+}
+
+// unwrapParens strips enclosing ParenthesizedExpression nodes so that
+// grouping parentheses, e.g. `(a = 1) OR (a = 2)`, do not hide an OR chain.
+func unwrapParens(expr ast.Expression) ast.Expression {
+	for {
+		p, ok := expr.(*ast.ParenthesizedExpression)
+		if !ok || p == nil {
+			return expr
+		}
+		expr = p.Expr
+	}
 }
 
 // Check walks the AST looking for OR-based equality chains on the same column.

@@ -98,3 +98,36 @@ func BenchmarkSQL_Micro(b *testing.B) {
 		}
 	})
 }
+
+// TestSQL_AllocationBudget guards the single-buffer rendering path: a whole
+// statement renders into one pooled buffer and pays one final copy. The
+// bounds are deliberately loose (baseline before #558 was 57 and 122 allocs)
+// so a pool refill after GC, or sync.Pool's random drops under -race, cannot
+// make the test flaky.
+func TestSQL_AllocationBudget(t *testing.T) {
+	tests := []struct {
+		name string
+		sql  string
+		max  float64
+	}{
+		{"7line", benchSQL7, 4},
+		{"15line", benchSQL15, 8},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			tree, err := gosqlx.Parse(tt.sql)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			want := tree.SQL()
+			var got string
+			if n := testing.AllocsPerRun(200, func() { got = tree.SQL() }); n > tt.max {
+				t.Errorf("SQL() allocs = %v, want <= %v", n, tt.max)
+			}
+			if got != want {
+				t.Errorf("SQL() changed between calls: %q vs %q", got, want)
+			}
+		})
+	}
+}

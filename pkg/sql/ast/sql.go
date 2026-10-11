@@ -67,13 +67,20 @@ func putBuf(b *bytes.Buffer) {
 
 // SQL returns the SQL string representation of the AST.
 func (a AST) SQL() string {
-	parts := make([]string, 0, len(a.Statements))
+	buf := getBuf()
+	defer putBuf(buf)
+	first := true
 	for _, stmt := range a.Statements {
-		if s, ok := stmt.(interface{ SQL() string }); ok {
-			parts = append(parts, s.SQL())
+		if _, ok := stmt.(interface{ SQL() string }); !ok {
+			continue
 		}
+		if !first {
+			buf.WriteString(";\n")
+		}
+		first = false
+		writeStmt(buf, stmt)
 	}
-	return strings.Join(parts, ";\n")
+	return buf.String()
 }
 
 // ============================================================
@@ -259,6 +266,13 @@ func (i *Ident) SQL() string {
 	return i.Name
 }
 
+func (i *Ident) writeSQL(buf *bytes.Buffer) {
+	if i == nil {
+		return
+	}
+	buf.WriteString(i.Name)
+}
+
 // SQL returns the SQL representation of this binary expression.
 // The operator, left, and right sub-expressions are serialized in infix notation.
 // NOT-qualified operators (LIKE, ILIKE, SIMILAR TO) are rendered as "x NOT OP y".
@@ -342,20 +356,35 @@ func (u *UnaryExpression) SQL() string {
 	if u == nil {
 		return ""
 	}
-	inner := exprSQL(u.Expr)
+	buf := getBuf()
+	defer putBuf(buf)
+	u.writeSQL(buf)
+	return buf.String()
+}
+
+func (u *UnaryExpression) writeSQL(buf *bytes.Buffer) {
+	if u == nil {
+		return
+	}
 	switch u.Operator {
 	case Not:
-		return "NOT " + inner
+		buf.WriteString("NOT ")
+		writeExpr(buf, u.Expr)
 	case PGPostfixFactorial:
-		return inner + "!"
+		writeExpr(buf, u.Expr)
+		buf.WriteByte('!')
 	case Plus:
-		return "+" + inner
+		buf.WriteByte('+')
+		writeExpr(buf, u.Expr)
 	case Minus:
-		return "-" + inner
+		buf.WriteByte('-')
+		writeExpr(buf, u.Expr)
 	case Prior:
-		return "PRIOR " + inner
+		buf.WriteString("PRIOR ")
+		writeExpr(buf, u.Expr)
 	default:
-		return u.Operator.String() + inner
+		buf.WriteString(u.Operator.String())
+		writeExpr(buf, u.Expr)
 	}
 }
 
@@ -365,7 +394,19 @@ func (a *AliasedExpression) SQL() string {
 	if a == nil {
 		return ""
 	}
-	return exprSQL(a.Expr) + " AS " + a.Alias
+	buf := getBuf()
+	defer putBuf(buf)
+	a.writeSQL(buf)
+	return buf.String()
+}
+
+func (a *AliasedExpression) writeSQL(buf *bytes.Buffer) {
+	if a == nil {
+		return
+	}
+	writeExpr(buf, a.Expr)
+	buf.WriteString(" AS ")
+	buf.WriteString(a.Alias)
 }
 
 // SQL returns the SQL representation of this CAST expression in the form
@@ -374,7 +415,21 @@ func (c *CastExpression) SQL() string {
 	if c == nil {
 		return ""
 	}
-	return fmt.Sprintf("CAST(%s AS %s)", exprSQL(c.Expr), c.Type)
+	buf := getBuf()
+	defer putBuf(buf)
+	c.writeSQL(buf)
+	return buf.String()
+}
+
+func (c *CastExpression) writeSQL(buf *bytes.Buffer) {
+	if c == nil {
+		return
+	}
+	buf.WriteString("CAST(")
+	writeExpr(buf, c.Expr)
+	buf.WriteString(" AS ")
+	buf.WriteString(c.Type)
+	buf.WriteByte(')')
 }
 
 // SQL returns the SQL representation of this CASE expression including all
@@ -383,25 +438,30 @@ func (c *CaseExpression) SQL() string {
 	if c == nil {
 		return ""
 	}
-	sb := getBuf()
-	defer putBuf(sb)
-	sb.WriteString("CASE")
-	if c.Value != nil {
-		sb.WriteString(" ")
-		sb.WriteString(exprSQL(c.Value))
+	buf := getBuf()
+	defer putBuf(buf)
+	c.writeSQL(buf)
+	return buf.String()
+}
+
+func (c *CaseExpression) writeSQL(buf *bytes.Buffer) {
+	if c == nil {
+		return
 	}
-	for _, w := range c.WhenClauses {
-		sb.WriteString(" WHEN ")
-		sb.WriteString(exprSQL(w.Condition))
-		sb.WriteString(" THEN ")
-		sb.WriteString(exprSQL(w.Result))
+	buf.WriteString("CASE")
+	if c.Value != nil {
+		buf.WriteByte(' ')
+		writeExpr(buf, c.Value)
+	}
+	for i := range c.WhenClauses {
+		buf.WriteByte(' ')
+		c.WhenClauses[i].writeSQL(buf)
 	}
 	if c.ElseClause != nil {
-		sb.WriteString(" ELSE ")
-		sb.WriteString(exprSQL(c.ElseClause))
+		buf.WriteString(" ELSE ")
+		writeExpr(buf, c.ElseClause)
 	}
-	sb.WriteString(" END")
-	return sb.String()
+	buf.WriteString(" END")
 }
 
 // SQL returns the SQL representation of this WHEN clause in the form
@@ -410,7 +470,20 @@ func (w *WhenClause) SQL() string {
 	if w == nil {
 		return ""
 	}
-	return fmt.Sprintf("WHEN %s THEN %s", exprSQL(w.Condition), exprSQL(w.Result))
+	buf := getBuf()
+	defer putBuf(buf)
+	w.writeSQL(buf)
+	return buf.String()
+}
+
+func (w *WhenClause) writeSQL(buf *bytes.Buffer) {
+	if w == nil {
+		return
+	}
+	buf.WriteString("WHEN ")
+	writeExpr(buf, w.Condition)
+	buf.WriteString(" THEN ")
+	writeExpr(buf, w.Result)
 }
 
 // SQL returns the SQL representation of this BETWEEN expression.
@@ -419,11 +492,25 @@ func (b *BetweenExpression) SQL() string {
 	if b == nil {
 		return ""
 	}
-	not := ""
-	if b.Not {
-		not = "NOT "
+	buf := getBuf()
+	defer putBuf(buf)
+	b.writeSQL(buf)
+	return buf.String()
+}
+
+func (b *BetweenExpression) writeSQL(buf *bytes.Buffer) {
+	if b == nil {
+		return
 	}
-	return fmt.Sprintf("%s %sBETWEEN %s AND %s", exprSQL(b.Expr), not, exprSQL(b.Lower), exprSQL(b.Upper))
+	writeExpr(buf, b.Expr)
+	if b.Not {
+		buf.WriteString(" NOT BETWEEN ")
+	} else {
+		buf.WriteString(" BETWEEN ")
+	}
+	writeExpr(buf, b.Lower)
+	buf.WriteString(" AND ")
+	writeExpr(buf, b.Upper)
 }
 
 // SQL returns the SQL representation of this IN expression.
@@ -433,18 +520,28 @@ func (i *InExpression) SQL() string {
 	if i == nil {
 		return ""
 	}
-	not := ""
+	buf := getBuf()
+	defer putBuf(buf)
+	i.writeSQL(buf)
+	return buf.String()
+}
+
+func (i *InExpression) writeSQL(buf *bytes.Buffer) {
+	if i == nil {
+		return
+	}
+	writeExpr(buf, i.Expr)
 	if i.Not {
-		not = "NOT "
+		buf.WriteString(" NOT IN (")
+	} else {
+		buf.WriteString(" IN (")
 	}
 	if i.Subquery != nil {
-		return fmt.Sprintf("%s %sIN (%s)", exprSQL(i.Expr), not, stmtSQL(i.Subquery))
+		writeStmt(buf, i.Subquery)
+	} else {
+		writeExprList(buf, i.List)
 	}
-	vals := make([]string, len(i.List))
-	for idx, v := range i.List {
-		vals[idx] = exprSQL(v)
-	}
-	return fmt.Sprintf("%s %sIN (%s)", exprSQL(i.Expr), not, strings.Join(vals, ", "))
+	buf.WriteByte(')')
 }
 
 // SQL returns the SQL representation of this EXISTS expression as "EXISTS (subquery)".
@@ -452,7 +549,19 @@ func (e *ExistsExpression) SQL() string {
 	if e == nil {
 		return ""
 	}
-	return fmt.Sprintf("EXISTS (%s)", stmtSQL(e.Subquery))
+	buf := getBuf()
+	defer putBuf(buf)
+	e.writeSQL(buf)
+	return buf.String()
+}
+
+func (e *ExistsExpression) writeSQL(buf *bytes.Buffer) {
+	if e == nil {
+		return
+	}
+	buf.WriteString("EXISTS (")
+	writeStmt(buf, e.Subquery)
+	buf.WriteByte(')')
 }
 
 // SQL returns the SQL representation of this scalar subquery as "(SELECT ...)".
@@ -460,7 +569,19 @@ func (s *SubqueryExpression) SQL() string {
 	if s == nil {
 		return ""
 	}
-	return fmt.Sprintf("(%s)", stmtSQL(s.Subquery))
+	buf := getBuf()
+	defer putBuf(buf)
+	s.writeSQL(buf)
+	return buf.String()
+}
+
+func (s *SubqueryExpression) writeSQL(buf *bytes.Buffer) {
+	if s == nil {
+		return
+	}
+	buf.WriteByte('(')
+	writeStmt(buf, s.Subquery)
+	buf.WriteByte(')')
 }
 
 // SQL returns the SQL representation of this ANY expression as "expr op ANY (subquery)".
@@ -468,7 +589,22 @@ func (a *AnyExpression) SQL() string {
 	if a == nil {
 		return ""
 	}
-	return fmt.Sprintf("%s %s ANY (%s)", exprSQL(a.Expr), a.Operator, stmtSQL(a.Subquery))
+	buf := getBuf()
+	defer putBuf(buf)
+	a.writeSQL(buf)
+	return buf.String()
+}
+
+func (a *AnyExpression) writeSQL(buf *bytes.Buffer) {
+	if a == nil {
+		return
+	}
+	writeExpr(buf, a.Expr)
+	buf.WriteByte(' ')
+	buf.WriteString(a.Operator)
+	buf.WriteString(" ANY (")
+	writeStmt(buf, a.Subquery)
+	buf.WriteByte(')')
 }
 
 // SQL returns the SQL representation of this ALL expression as "expr op ALL (subquery)".
@@ -476,7 +612,22 @@ func (a *AllExpression) SQL() string {
 	if a == nil {
 		return ""
 	}
-	return fmt.Sprintf("%s %s ALL (%s)", exprSQL(a.Expr), a.Operator, stmtSQL(a.Subquery))
+	buf := getBuf()
+	defer putBuf(buf)
+	a.writeSQL(buf)
+	return buf.String()
+}
+
+func (a *AllExpression) writeSQL(buf *bytes.Buffer) {
+	if a == nil {
+		return
+	}
+	writeExpr(buf, a.Expr)
+	buf.WriteByte(' ')
+	buf.WriteString(a.Operator)
+	buf.WriteString(" ALL (")
+	writeStmt(buf, a.Subquery)
+	buf.WriteByte(')')
 }
 
 // SQL returns the SQL representation of this function call including arguments,
@@ -487,50 +638,49 @@ func (f *FunctionCall) SQL() string {
 	if f == nil {
 		return ""
 	}
-	sb := getBuf()
-	defer putBuf(sb)
-	sb.WriteString(f.Name)
+	buf := getBuf()
+	defer putBuf(buf)
+	f.writeSQL(buf)
+	return buf.String()
+}
+
+func (f *FunctionCall) writeSQL(buf *bytes.Buffer) {
+	if f == nil {
+		return
+	}
+	buf.WriteString(f.Name)
 	if len(f.Parameters) > 0 {
 		// ClickHouse parametric aggregates: quantile(0.5)(x).
 		// Parameters are rendered in their own parenthesis group before args.
-		params := make([]string, len(f.Parameters))
-		for i, p := range f.Parameters {
-			params[i] = exprSQL(p)
-		}
-		sb.WriteString("(")
-		sb.WriteString(strings.Join(params, ", "))
-		sb.WriteString(")")
+		buf.WriteByte('(')
+		writeExprList(buf, f.Parameters)
+		buf.WriteByte(')')
 	}
-	sb.WriteString("(")
+	buf.WriteByte('(')
 	if f.Distinct {
-		sb.WriteString("DISTINCT ")
+		buf.WriteString("DISTINCT ")
 	}
-	args := make([]string, len(f.Arguments))
-	for i, arg := range f.Arguments {
-		args[i] = exprSQL(arg)
-	}
-	sb.WriteString(strings.Join(args, ", "))
+	writeExprList(buf, f.Arguments)
 	if len(f.OrderBy) > 0 {
-		sb.WriteString(" ORDER BY ")
-		sb.WriteString(orderBySQL(f.OrderBy))
+		buf.WriteString(" ORDER BY ")
+		writeOrderBy(buf, f.OrderBy)
 	}
-	sb.WriteString(")")
+	buf.WriteByte(')')
 	if len(f.WithinGroup) > 0 {
-		sb.WriteString(" WITHIN GROUP (ORDER BY ")
-		sb.WriteString(orderBySQL(f.WithinGroup))
-		sb.WriteString(")")
+		buf.WriteString(" WITHIN GROUP (ORDER BY ")
+		writeOrderBy(buf, f.WithinGroup)
+		buf.WriteByte(')')
 	}
 	if f.Filter != nil {
-		sb.WriteString(" FILTER (WHERE ")
-		sb.WriteString(exprSQL(f.Filter))
-		sb.WriteString(")")
+		buf.WriteString(" FILTER (WHERE ")
+		writeExpr(buf, f.Filter)
+		buf.WriteByte(')')
 	}
 	if f.Over != nil {
-		sb.WriteString(" OVER (")
-		sb.WriteString(windowSpecSQL(f.Over))
-		sb.WriteString(")")
+		buf.WriteString(" OVER (")
+		writeWindowSpec(buf, f.Over)
+		buf.WriteByte(')')
 	}
-	return sb.String()
 }
 
 // SQL returns "EXTRACT(field FROM source)" as a SQL string.
@@ -538,7 +688,21 @@ func (e *ExtractExpression) SQL() string {
 	if e == nil {
 		return ""
 	}
-	return fmt.Sprintf("EXTRACT(%s FROM %s)", e.Field, exprSQL(e.Source))
+	buf := getBuf()
+	defer putBuf(buf)
+	e.writeSQL(buf)
+	return buf.String()
+}
+
+func (e *ExtractExpression) writeSQL(buf *bytes.Buffer) {
+	if e == nil {
+		return
+	}
+	buf.WriteString("EXTRACT(")
+	buf.WriteString(e.Field)
+	buf.WriteString(" FROM ")
+	writeExpr(buf, e.Source)
+	buf.WriteByte(')')
 }
 
 // SQL returns "POSITION(substr IN str)" as a SQL string.
@@ -546,7 +710,21 @@ func (p *PositionExpression) SQL() string {
 	if p == nil {
 		return ""
 	}
-	return fmt.Sprintf("POSITION(%s IN %s)", exprSQL(p.Substr), exprSQL(p.Str))
+	buf := getBuf()
+	defer putBuf(buf)
+	p.writeSQL(buf)
+	return buf.String()
+}
+
+func (p *PositionExpression) writeSQL(buf *bytes.Buffer) {
+	if p == nil {
+		return
+	}
+	buf.WriteString("POSITION(")
+	writeExpr(buf, p.Substr)
+	buf.WriteString(" IN ")
+	writeExpr(buf, p.Str)
+	buf.WriteByte(')')
 }
 
 // SQL returns the SQL representation of this SUBSTRING expression.
@@ -556,10 +734,25 @@ func (s *SubstringExpression) SQL() string {
 	if s == nil {
 		return ""
 	}
-	if s.Length != nil {
-		return fmt.Sprintf("SUBSTRING(%s FROM %s FOR %s)", exprSQL(s.Str), exprSQL(s.Start), exprSQL(s.Length))
+	buf := getBuf()
+	defer putBuf(buf)
+	s.writeSQL(buf)
+	return buf.String()
+}
+
+func (s *SubstringExpression) writeSQL(buf *bytes.Buffer) {
+	if s == nil {
+		return
 	}
-	return fmt.Sprintf("SUBSTRING(%s FROM %s)", exprSQL(s.Str), exprSQL(s.Start))
+	buf.WriteString("SUBSTRING(")
+	writeExpr(buf, s.Str)
+	buf.WriteString(" FROM ")
+	writeExpr(buf, s.Start)
+	if s.Length != nil {
+		buf.WriteString(" FOR ")
+		writeExpr(buf, s.Length)
+	}
+	buf.WriteByte(')')
 }
 
 // SQL returns the SQL representation of this interval as "INTERVAL 'value'".
@@ -567,7 +760,16 @@ func (i *IntervalExpression) SQL() string {
 	if i == nil {
 		return ""
 	}
-	return fmt.Sprintf("INTERVAL '%s'", i.Value)
+	return "INTERVAL '" + i.Value + "'"
+}
+
+func (i *IntervalExpression) writeSQL(buf *bytes.Buffer) {
+	if i == nil {
+		return
+	}
+	buf.WriteString("INTERVAL '")
+	buf.WriteString(i.Value)
+	buf.WriteByte('\'')
 }
 
 // SQL returns the SQL representation of this list expression as a
@@ -576,11 +778,17 @@ func (l *ListExpression) SQL() string {
 	if l == nil {
 		return ""
 	}
-	vals := make([]string, len(l.Values))
-	for i, v := range l.Values {
-		vals[i] = exprSQL(v)
+	buf := getBuf()
+	defer putBuf(buf)
+	l.writeSQL(buf)
+	return buf.String()
+}
+
+func (l *ListExpression) writeSQL(buf *bytes.Buffer) {
+	if l == nil {
+		return
 	}
-	return strings.Join(vals, ", ")
+	writeExprList(buf, l.Values)
 }
 
 // SQL returns the SQL representation of this tuple expression as a
@@ -589,11 +797,19 @@ func (t *TupleExpression) SQL() string {
 	if t == nil {
 		return ""
 	}
-	vals := make([]string, len(t.Expressions))
-	for i, e := range t.Expressions {
-		vals[i] = exprSQL(e)
+	buf := getBuf()
+	defer putBuf(buf)
+	t.writeSQL(buf)
+	return buf.String()
+}
+
+func (t *TupleExpression) writeSQL(buf *bytes.Buffer) {
+	if t == nil {
+		return
 	}
-	return "(" + strings.Join(vals, ", ") + ")"
+	buf.WriteByte('(')
+	writeExprList(buf, t.Expressions)
+	buf.WriteByte(')')
 }
 
 // SQL returns the SQL representation of this ARRAY constructor.
@@ -603,14 +819,25 @@ func (a *ArrayConstructorExpression) SQL() string {
 	if a == nil {
 		return ""
 	}
+	buf := getBuf()
+	defer putBuf(buf)
+	a.writeSQL(buf)
+	return buf.String()
+}
+
+func (a *ArrayConstructorExpression) writeSQL(buf *bytes.Buffer) {
+	if a == nil {
+		return
+	}
 	if a.Subquery != nil {
-		return fmt.Sprintf("ARRAY(%s)", stmtSQL(a.Subquery))
+		buf.WriteString("ARRAY(")
+		writeStmt(buf, a.Subquery)
+		buf.WriteByte(')')
+		return
 	}
-	vals := make([]string, len(a.Elements))
-	for i, e := range a.Elements {
-		vals[i] = exprSQL(e)
-	}
-	return "ARRAY[" + strings.Join(vals, ", ") + "]"
+	buf.WriteString("ARRAY[")
+	writeExprList(buf, a.Elements)
+	buf.WriteByte(']')
 }
 
 // SQL returns the SQL representation of this array subscript expression,
@@ -619,11 +846,22 @@ func (a *ArraySubscriptExpression) SQL() string {
 	if a == nil {
 		return ""
 	}
-	s := exprSQL(a.Array)
-	for _, idx := range a.Indices {
-		s += "[" + exprSQL(idx) + "]"
+	buf := getBuf()
+	defer putBuf(buf)
+	a.writeSQL(buf)
+	return buf.String()
+}
+
+func (a *ArraySubscriptExpression) writeSQL(buf *bytes.Buffer) {
+	if a == nil {
+		return
 	}
-	return s
+	writeExpr(buf, a.Array)
+	for _, idx := range a.Indices {
+		buf.WriteByte('[')
+		writeExpr(buf, idx)
+		buf.WriteByte(']')
+	}
 }
 
 // SQL returns the SQL representation of this array slice expression,
@@ -632,15 +870,22 @@ func (a *ArraySliceExpression) SQL() string {
 	if a == nil {
 		return ""
 	}
-	start := ""
-	end := ""
-	if a.Start != nil {
-		start = exprSQL(a.Start)
+	buf := getBuf()
+	defer putBuf(buf)
+	a.writeSQL(buf)
+	return buf.String()
+}
+
+func (a *ArraySliceExpression) writeSQL(buf *bytes.Buffer) {
+	if a == nil {
+		return
 	}
-	if a.End != nil {
-		end = exprSQL(a.End)
-	}
-	return fmt.Sprintf("%s[%s:%s]", exprSQL(a.Array), start, end)
+	writeExpr(buf, a.Array)
+	buf.WriteByte('[')
+	writeExpr(buf, a.Start)
+	buf.WriteByte(':')
+	writeExpr(buf, a.End)
+	buf.WriteByte(']')
 }
 
 // GROUP BY advanced expressions
@@ -651,7 +896,19 @@ func (r *RollupExpression) SQL() string {
 	if r == nil {
 		return ""
 	}
-	return "ROLLUP(" + exprListSQL(r.Expressions) + ")"
+	buf := getBuf()
+	defer putBuf(buf)
+	r.writeSQL(buf)
+	return buf.String()
+}
+
+func (r *RollupExpression) writeSQL(buf *bytes.Buffer) {
+	if r == nil {
+		return
+	}
+	buf.WriteString("ROLLUP(")
+	writeExprList(buf, r.Expressions)
+	buf.WriteByte(')')
 }
 
 // SQL returns the SQL representation of this CUBE expression as
@@ -660,7 +917,19 @@ func (c *CubeExpression) SQL() string {
 	if c == nil {
 		return ""
 	}
-	return "CUBE(" + exprListSQL(c.Expressions) + ")"
+	buf := getBuf()
+	defer putBuf(buf)
+	c.writeSQL(buf)
+	return buf.String()
+}
+
+func (c *CubeExpression) writeSQL(buf *bytes.Buffer) {
+	if c == nil {
+		return
+	}
+	buf.WriteString("CUBE(")
+	writeExprList(buf, c.Expressions)
+	buf.WriteByte(')')
 }
 
 // SQL returns the SQL representation of this GROUPING SETS expression as
@@ -669,11 +938,26 @@ func (g *GroupingSetsExpression) SQL() string {
 	if g == nil {
 		return ""
 	}
-	sets := make([]string, len(g.Sets))
-	for i, set := range g.Sets {
-		sets[i] = "(" + exprListSQL(set) + ")"
+	buf := getBuf()
+	defer putBuf(buf)
+	g.writeSQL(buf)
+	return buf.String()
+}
+
+func (g *GroupingSetsExpression) writeSQL(buf *bytes.Buffer) {
+	if g == nil {
+		return
 	}
-	return "GROUPING SETS(" + strings.Join(sets, ", ") + ")"
+	buf.WriteString("GROUPING SETS(")
+	for i, set := range g.Sets {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteByte('(')
+		writeExprList(buf, set)
+		buf.WriteByte(')')
+	}
+	buf.WriteByte(')')
 }
 
 // ============================================================
@@ -688,125 +972,133 @@ func (s *SelectStatement) SQL() string {
 	if s == nil {
 		return ""
 	}
-	sb := getBuf()
-	defer putBuf(sb)
+	buf := getBuf()
+	defer putBuf(buf)
+	s.writeSQL(buf)
+	return buf.String()
+}
+
+func (s *SelectStatement) writeSQL(buf *bytes.Buffer) {
+	if s == nil {
+		return
+	}
 
 	if s.With != nil {
-		sb.WriteString(s.With.SQL())
-		sb.WriteString(" ")
+		s.With.writeSQL(buf)
+		buf.WriteByte(' ')
 	}
 
-	sb.WriteString("SELECT ")
+	buf.WriteString("SELECT ")
 
 	if len(s.DistinctOnColumns) > 0 {
-		sb.WriteString("DISTINCT ON (")
-		sb.WriteString(exprListSQL(s.DistinctOnColumns))
-		sb.WriteString(") ")
+		buf.WriteString("DISTINCT ON (")
+		writeExprList(buf, s.DistinctOnColumns)
+		buf.WriteString(") ")
 	} else if s.Distinct {
-		sb.WriteString("DISTINCT ")
+		buf.WriteString("DISTINCT ")
 	}
 
-	sb.WriteString(exprListSQL(s.Columns))
+	writeExprList(buf, s.Columns)
 
 	if len(s.From) > 0 {
-		sb.WriteString(" FROM ")
-		froms := make([]string, len(s.From))
-		for i := range s.From {
-			froms[i] = tableRefSQL(&s.From[i])
-		}
-		sb.WriteString(strings.Join(froms, ", "))
+		buf.WriteString(" FROM ")
+		writeTableRefList(buf, s.From)
 	}
 
-	for _, j := range s.Joins {
-		j := j // G601: Create local copy to avoid memory aliasing
-		sb.WriteString(" ")
-		sb.WriteString(joinSQL(&j))
+	for i := range s.Joins {
+		buf.WriteByte(' ')
+		writeJoin(buf, &s.Joins[i])
 	}
 
 	if s.ArrayJoin != nil {
 		if s.ArrayJoin.Left {
-			sb.WriteString(" LEFT ARRAY JOIN ")
+			buf.WriteString(" LEFT ARRAY JOIN ")
 		} else {
-			sb.WriteString(" ARRAY JOIN ")
+			buf.WriteString(" ARRAY JOIN ")
 		}
-		elems := make([]string, len(s.ArrayJoin.Elements))
 		for i, e := range s.ArrayJoin.Elements {
-			elemStr := exprSQL(e.Expr)
-			if e.Alias != "" {
-				elemStr += " AS " + e.Alias
+			if i > 0 {
+				buf.WriteString(", ")
 			}
-			elems[i] = elemStr
+			writeExpr(buf, e.Expr)
+			if e.Alias != "" {
+				buf.WriteString(" AS ")
+				buf.WriteString(e.Alias)
+			}
 		}
-		sb.WriteString(strings.Join(elems, ", "))
 	}
 
 	if s.Sample != nil {
-		sb.WriteString(" ")
-		sb.WriteString(s.Sample.SQL())
+		buf.WriteByte(' ')
+		buf.WriteString(s.Sample.SQL())
 	}
 
 	if s.PrewhereClause != nil {
-		sb.WriteString(" PREWHERE ")
-		sb.WriteString(exprSQL(s.PrewhereClause))
+		buf.WriteString(" PREWHERE ")
+		writeExpr(buf, s.PrewhereClause)
 	}
 
 	if s.Where != nil {
-		sb.WriteString(" WHERE ")
-		sb.WriteString(exprSQL(s.Where))
+		buf.WriteString(" WHERE ")
+		writeExpr(buf, s.Where)
 	}
 
 	if len(s.GroupBy) > 0 {
-		sb.WriteString(" GROUP BY ")
-		sb.WriteString(exprListSQL(s.GroupBy))
+		buf.WriteString(" GROUP BY ")
+		writeExprList(buf, s.GroupBy)
 	}
 
 	if s.Having != nil {
-		sb.WriteString(" HAVING ")
-		sb.WriteString(exprSQL(s.Having))
+		buf.WriteString(" HAVING ")
+		writeExpr(buf, s.Having)
 	}
 
 	// MariaDB hierarchical query clauses (10.2+): START WITH ... CONNECT BY ...
 	// These must appear after HAVING and before ORDER BY per MariaDB grammar.
 	if s.StartWith != nil {
-		sb.WriteString(" START WITH ")
-		sb.WriteString(exprSQL(s.StartWith))
+		buf.WriteString(" START WITH ")
+		writeExpr(buf, s.StartWith)
 	}
 	if s.ConnectBy != nil {
-		sb.WriteString(" ")
-		sb.WriteString(s.ConnectBy.ToSQL())
+		buf.WriteByte(' ')
+		buf.WriteString(s.ConnectBy.ToSQL())
 	}
 
 	if len(s.Windows) > 0 {
-		sb.WriteString(" WINDOW ")
-		wins := make([]string, len(s.Windows))
+		buf.WriteString(" WINDOW ")
 		for i := range s.Windows {
-			wins[i] = s.Windows[i].Name + " AS (" + windowSpecSQL(&s.Windows[i]) + ")"
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(s.Windows[i].Name)
+			buf.WriteString(" AS (")
+			writeWindowSpec(buf, &s.Windows[i])
+			buf.WriteByte(')')
 		}
-		sb.WriteString(strings.Join(wins, ", "))
 	}
 
 	if len(s.OrderBy) > 0 {
-		sb.WriteString(" ORDER BY ")
-		sb.WriteString(orderBySQL(s.OrderBy))
+		buf.WriteString(" ORDER BY ")
+		writeOrderBy(buf, s.OrderBy)
 	}
 
 	if s.Limit != nil {
-		fmt.Fprintf(sb, " LIMIT %d", *s.Limit)
+		buf.WriteString(" LIMIT ")
+		writeInt(buf, int64(*s.Limit))
 	}
 
 	if s.Offset != nil {
-		fmt.Fprintf(sb, " OFFSET %d", *s.Offset)
+		buf.WriteString(" OFFSET ")
+		writeInt(buf, int64(*s.Offset))
 	}
 
 	if s.Fetch != nil {
-		sb.WriteString(fetchSQL(s.Fetch))
+		writeFetch(buf, s.Fetch)
 	}
 
 	if s.For != nil {
-		sb.WriteString(forSQL(s.For))
+		writeFor(buf, s.For)
 	}
-
-	return sb.String()
 }
 
 // SQL returns the full SQL string for this INSERT statement, including the
@@ -816,49 +1108,47 @@ func (i *InsertStatement) SQL() string {
 	if i == nil {
 		return ""
 	}
-	sb := getBuf()
-	defer putBuf(sb)
+	buf := getBuf()
+	defer putBuf(buf)
+	i.writeSQL(buf)
+	return buf.String()
+}
 
-	if i.With != nil {
-		sb.WriteString(i.With.SQL())
-		sb.WriteString(" ")
+func (i *InsertStatement) writeSQL(buf *bytes.Buffer) {
+	if i == nil {
+		return
 	}
 
-	sb.WriteString("INSERT INTO ")
-	sb.WriteString(i.TableName)
+	if i.With != nil {
+		i.With.writeSQL(buf)
+		buf.WriteByte(' ')
+	}
+
+	buf.WriteString("INSERT INTO ")
+	buf.WriteString(i.TableName)
 
 	if len(i.Columns) > 0 {
-		sb.WriteString(" (")
-		sb.WriteString(exprListSQL(i.Columns))
-		sb.WriteString(")")
+		buf.WriteString(" (")
+		writeExprList(buf, i.Columns)
+		buf.WriteByte(')')
 	}
 
 	if i.Query != nil {
-		sb.WriteString(" ")
-		sb.WriteString(stmtSQL(i.Query))
+		buf.WriteByte(' ')
+		writeStmt(buf, i.Query)
 	} else if len(i.Values) > 0 {
-		sb.WriteString(" VALUES ")
-		rows := make([]string, len(i.Values))
-		for idx, row := range i.Values {
-			vals := make([]string, len(row))
-			for j, v := range row {
-				vals[j] = exprSQL(v)
-			}
-			rows[idx] = "(" + strings.Join(vals, ", ") + ")"
-		}
-		sb.WriteString(strings.Join(rows, ", "))
+		buf.WriteString(" VALUES ")
+		writeValueRows(buf, i.Values)
 	}
 
 	if i.OnConflict != nil {
-		sb.WriteString(onConflictSQL(i.OnConflict))
+		writeOnConflict(buf, i.OnConflict)
 	}
 
 	if len(i.Returning) > 0 {
-		sb.WriteString(" RETURNING ")
-		sb.WriteString(exprListSQL(i.Returning))
+		buf.WriteString(" RETURNING ")
+		writeExprList(buf, i.Returning)
 	}
-
-	return sb.String()
 }
 
 // SQL returns the full SQL string for this UPDATE statement, including the
@@ -868,49 +1158,46 @@ func (u *UpdateStatement) SQL() string {
 	if u == nil {
 		return ""
 	}
-	sb := getBuf()
-	defer putBuf(sb)
+	buf := getBuf()
+	defer putBuf(buf)
+	u.writeSQL(buf)
+	return buf.String()
+}
+
+func (u *UpdateStatement) writeSQL(buf *bytes.Buffer) {
+	if u == nil {
+		return
+	}
 
 	if u.With != nil {
-		sb.WriteString(u.With.SQL())
-		sb.WriteString(" ")
+		u.With.writeSQL(buf)
+		buf.WriteByte(' ')
 	}
 
-	sb.WriteString("UPDATE ")
-	sb.WriteString(u.TableName)
+	buf.WriteString("UPDATE ")
+	buf.WriteString(u.TableName)
 	if u.Alias != "" {
-		sb.WriteString(" ")
-		sb.WriteString(u.Alias)
+		buf.WriteByte(' ')
+		buf.WriteString(u.Alias)
 	}
 
-	sb.WriteString(" SET ")
-	updates := u.Assignments
-	upds := make([]string, len(updates))
-	for i, upd := range updates {
-		upds[i] = exprSQL(upd.Column) + " = " + exprSQL(upd.Value)
-	}
-	sb.WriteString(strings.Join(upds, ", "))
+	buf.WriteString(" SET ")
+	writeAssignments(buf, u.Assignments)
 
 	if len(u.From) > 0 {
-		sb.WriteString(" FROM ")
-		froms := make([]string, len(u.From))
-		for i := range u.From {
-			froms[i] = tableRefSQL(&u.From[i])
-		}
-		sb.WriteString(strings.Join(froms, ", "))
+		buf.WriteString(" FROM ")
+		writeTableRefList(buf, u.From)
 	}
 
 	if u.Where != nil {
-		sb.WriteString(" WHERE ")
-		sb.WriteString(exprSQL(u.Where))
+		buf.WriteString(" WHERE ")
+		writeExpr(buf, u.Where)
 	}
 
 	if len(u.Returning) > 0 {
-		sb.WriteString(" RETURNING ")
-		sb.WriteString(exprListSQL(u.Returning))
+		buf.WriteString(" RETURNING ")
+		writeExprList(buf, u.Returning)
 	}
-
-	return sb.String()
 }
 
 // SQL returns the full SQL string for this DELETE statement, including the
@@ -919,41 +1206,43 @@ func (d *DeleteStatement) SQL() string {
 	if d == nil {
 		return ""
 	}
-	sb := getBuf()
-	defer putBuf(sb)
+	buf := getBuf()
+	defer putBuf(buf)
+	d.writeSQL(buf)
+	return buf.String()
+}
 
-	if d.With != nil {
-		sb.WriteString(d.With.SQL())
-		sb.WriteString(" ")
+func (d *DeleteStatement) writeSQL(buf *bytes.Buffer) {
+	if d == nil {
+		return
 	}
 
-	sb.WriteString("DELETE FROM ")
-	sb.WriteString(d.TableName)
+	if d.With != nil {
+		d.With.writeSQL(buf)
+		buf.WriteByte(' ')
+	}
+
+	buf.WriteString("DELETE FROM ")
+	buf.WriteString(d.TableName)
 	if d.Alias != "" {
-		sb.WriteString(" ")
-		sb.WriteString(d.Alias)
+		buf.WriteByte(' ')
+		buf.WriteString(d.Alias)
 	}
 
 	if len(d.Using) > 0 {
-		sb.WriteString(" USING ")
-		usings := make([]string, len(d.Using))
-		for i := range d.Using {
-			usings[i] = tableRefSQL(&d.Using[i])
-		}
-		sb.WriteString(strings.Join(usings, ", "))
+		buf.WriteString(" USING ")
+		writeTableRefList(buf, d.Using)
 	}
 
 	if d.Where != nil {
-		sb.WriteString(" WHERE ")
-		sb.WriteString(exprSQL(d.Where))
+		buf.WriteString(" WHERE ")
+		writeExpr(buf, d.Where)
 	}
 
 	if len(d.Returning) > 0 {
-		sb.WriteString(" RETURNING ")
-		sb.WriteString(exprListSQL(d.Returning))
+		buf.WriteString(" RETURNING ")
+		writeExprList(buf, d.Returning)
 	}
-
-	return sb.String()
 }
 
 // SQL returns the full SQL string for this CREATE TABLE statement including
@@ -1118,18 +1407,26 @@ func (w *WithClause) SQL() string {
 	if w == nil {
 		return ""
 	}
-	sb := getBuf()
-	defer putBuf(sb)
-	sb.WriteString("WITH ")
+	buf := getBuf()
+	defer putBuf(buf)
+	w.writeSQL(buf)
+	return buf.String()
+}
+
+func (w *WithClause) writeSQL(buf *bytes.Buffer) {
+	if w == nil {
+		return
+	}
+	buf.WriteString("WITH ")
 	if w.Recursive {
-		sb.WriteString("RECURSIVE ")
+		buf.WriteString("RECURSIVE ")
 	}
-	ctes := make([]string, len(w.CTEs))
 	for i, cte := range w.CTEs {
-		ctes[i] = cteSQL(cte)
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		writeCTE(buf, cte)
 	}
-	sb.WriteString(strings.Join(ctes, ", "))
-	return sb.String()
 }
 
 // SQL returns the SQL representation of this set operation as
@@ -1138,13 +1435,24 @@ func (s *SetOperation) SQL() string {
 	if s == nil {
 		return ""
 	}
-	left := stmtSQL(s.Left)
-	right := stmtSQL(s.Right)
-	op := s.Operator
-	if s.All {
-		op += " ALL"
+	buf := getBuf()
+	defer putBuf(buf)
+	s.writeSQL(buf)
+	return buf.String()
+}
+
+func (s *SetOperation) writeSQL(buf *bytes.Buffer) {
+	if s == nil {
+		return
 	}
-	return fmt.Sprintf("%s %s %s", left, op, right)
+	writeStmt(buf, s.Left)
+	buf.WriteByte(' ')
+	buf.WriteString(s.Operator)
+	if s.All {
+		buf.WriteString(" ALL")
+	}
+	buf.WriteByte(' ')
+	writeStmt(buf, s.Right)
 }
 
 // SQL returns the SQL representation of this VALUES clause as
@@ -1153,15 +1461,18 @@ func (v *Values) SQL() string {
 	if v == nil {
 		return ""
 	}
-	rows := make([]string, len(v.Rows))
-	for i, row := range v.Rows {
-		vals := make([]string, len(row))
-		for j, val := range row {
-			vals[j] = exprSQL(val)
-		}
-		rows[i] = "(" + strings.Join(vals, ", ") + ")"
+	buf := getBuf()
+	defer putBuf(buf)
+	v.writeSQL(buf)
+	return buf.String()
+}
+
+func (v *Values) writeSQL(buf *bytes.Buffer) {
+	if v == nil {
+		return
 	}
-	return "VALUES " + strings.Join(rows, ", ")
+	buf.WriteString("VALUES ")
+	writeValueRows(buf, v.Rows)
 }
 
 // SQL returns the full SQL string for this CREATE VIEW statement including the
@@ -1456,6 +1767,23 @@ func writeExpr(buf *bytes.Buffer, e Expression) {
 	buf.WriteString(e.TokenLiteral())
 }
 
+// writeStmt renders s into buf, using writeSQL when available and falling
+// back to SQL() and then TokenLiteral(), mirroring stmtSQL.
+func writeStmt(buf *bytes.Buffer, s Statement) {
+	if s == nil {
+		return
+	}
+	if w, ok := s.(sqlWriter); ok {
+		w.writeSQL(buf)
+		return
+	}
+	if sq, ok := s.(interface{ SQL() string }); ok {
+		buf.WriteString(sq.SQL())
+		return
+	}
+	buf.WriteString(s.TokenLiteral())
+}
+
 // exprSQL dispatches to the SQL() method of any expression
 func exprSQL(e Expression) string {
 	if e == nil {
@@ -1479,219 +1807,287 @@ func stmtSQL(s Statement) string {
 }
 
 func exprListSQL(exprs []Expression) string {
-	parts := make([]string, len(exprs))
+	buf := getBuf()
+	defer putBuf(buf)
+	writeExprList(buf, exprs)
+	return buf.String()
+}
+
+// writeExprList writes exprs separated by ", " (strings.Join semantics: a
+// separator is written between every pair, even around empty renderings).
+func writeExprList(buf *bytes.Buffer, exprs []Expression) {
 	for i, e := range exprs {
-		parts[i] = exprSQL(e)
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		writeExpr(buf, e)
 	}
-	return strings.Join(parts, ", ")
+}
+
+// writeValueRows writes "(v1, v2), (v3, v4)" for VALUES rows.
+func writeValueRows(buf *bytes.Buffer, rows [][]Expression) {
+	for i, row := range rows {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteByte('(')
+		writeExprList(buf, row)
+		buf.WriteByte(')')
+	}
+}
+
+// writeAssignments writes "col = value, ..." for SET clauses.
+func writeAssignments(buf *bytes.Buffer, upds []UpdateExpression) {
+	for i := range upds {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		writeExpr(buf, upds[i].Column)
+		buf.WriteString(" = ")
+		writeExpr(buf, upds[i].Value)
+	}
+}
+
+// writeStringList writes items separated by sep.
+func writeStringList(buf *bytes.Buffer, items []string, sep string) {
+	for i, s := range items {
+		if i > 0 {
+			buf.WriteString(sep)
+		}
+		buf.WriteString(s)
+	}
 }
 
 func orderBySQL(orders []OrderByExpression) string {
-	parts := make([]string, len(orders))
-	for i, o := range orders {
-		s := exprSQL(o.Expression)
+	buf := getBuf()
+	defer putBuf(buf)
+	writeOrderBy(buf, orders)
+	return buf.String()
+}
+
+func writeOrderBy(buf *bytes.Buffer, orders []OrderByExpression) {
+	for i := range orders {
+		o := &orders[i]
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		writeExpr(buf, o.Expression)
 		if !o.Ascending {
-			s += " DESC"
+			buf.WriteString(" DESC")
 		}
 		if o.NullsFirst != nil {
 			if *o.NullsFirst {
-				s += " NULLS FIRST"
+				buf.WriteString(" NULLS FIRST")
 			} else {
-				s += " NULLS LAST"
+				buf.WriteString(" NULLS LAST")
 			}
 		}
 		if o.WithFill != nil {
-			s += withFillSQL(o.WithFill)
+			writeWithFill(buf, o.WithFill)
 		}
-		parts[i] = s
 	}
-	return strings.Join(parts, ", ")
 }
 
-// withFillSQL renders a ClickHouse "WITH FILL [FROM x] [TO y] [STEP z]" modifier.
-func withFillSQL(w *WithFillClause) string {
+// writeWithFill renders a ClickHouse "WITH FILL [FROM x] [TO y] [STEP z]" modifier.
+func writeWithFill(buf *bytes.Buffer, w *WithFillClause) {
 	if w == nil {
-		return ""
+		return
 	}
-	var b strings.Builder
-	b.WriteString(" WITH FILL")
+	buf.WriteString(" WITH FILL")
 	if w.From != nil {
-		b.WriteString(" FROM ")
-		b.WriteString(exprSQL(w.From))
+		buf.WriteString(" FROM ")
+		writeExpr(buf, w.From)
 	}
 	if w.To != nil {
-		b.WriteString(" TO ")
-		b.WriteString(exprSQL(w.To))
+		buf.WriteString(" TO ")
+		writeExpr(buf, w.To)
 	}
 	if w.Step != nil {
-		b.WriteString(" STEP ")
-		b.WriteString(exprSQL(w.Step))
+		buf.WriteString(" STEP ")
+		writeExpr(buf, w.Step)
 	}
-	return b.String()
 }
 
 func tableRefSQL(t *TableReference) string {
-	sb := getBuf()
-	defer putBuf(sb)
+	buf := getBuf()
+	defer putBuf(buf)
+	writeTableRef(buf, t)
+	return buf.String()
+}
+
+func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 	if t.Lateral {
-		sb.WriteString("LATERAL ")
+		buf.WriteString("LATERAL ")
 	}
 	if t.Subquery != nil {
-		sb.WriteString("(")
-		sb.WriteString(t.Subquery.SQL())
-		sb.WriteString(")")
+		buf.WriteByte('(')
+		t.Subquery.writeSQL(buf)
+		buf.WriteByte(')')
 	} else {
-		sb.WriteString(t.Name)
+		buf.WriteString(t.Name)
 	}
 	if t.Alias != "" {
-		sb.WriteString(" ")
-		sb.WriteString(t.Alias)
+		buf.WriteByte(' ')
+		buf.WriteString(t.Alias)
 	}
 	if t.Final {
-		sb.WriteString(" FINAL")
+		buf.WriteString(" FINAL")
 	}
 	if t.ForSystemTime != nil {
-		sb.WriteString(" ")
-		sb.WriteString(t.ForSystemTime.ToSQL())
+		buf.WriteByte(' ')
+		buf.WriteString(t.ForSystemTime.ToSQL())
 	}
-	return sb.String()
 }
 
-func joinSQL(j *JoinClause) string {
-	sb := getBuf()
-	defer putBuf(sb)
-	sb.WriteString(j.Type)
-	sb.WriteString(" JOIN ")
-	sb.WriteString(tableRefSQL(&j.Right))
+// writeTableRefList writes refs separated by ", ".
+func writeTableRefList(buf *bytes.Buffer, refs []TableReference) {
+	for i := range refs {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		writeTableRef(buf, &refs[i])
+	}
+}
+
+func writeJoin(buf *bytes.Buffer, j *JoinClause) {
+	buf.WriteString(j.Type)
+	buf.WriteString(" JOIN ")
+	writeTableRef(buf, &j.Right)
 	if j.Condition != nil {
-		sb.WriteString(" ON ")
-		sb.WriteString(exprSQL(j.Condition))
+		buf.WriteString(" ON ")
+		writeExpr(buf, j.Condition)
 	}
-	return sb.String()
 }
 
-func windowSpecSQL(w *WindowSpec) string {
-	var parts []string
+// writeWindowSpec writes the space-separated window name, PARTITION BY,
+// ORDER BY and frame parts that are present.
+func writeWindowSpec(buf *bytes.Buffer, w *WindowSpec) {
+	first := true
+	sep := func() {
+		if !first {
+			buf.WriteByte(' ')
+		}
+		first = false
+	}
 	if w.Name != "" {
-		parts = append(parts, w.Name)
+		sep()
+		buf.WriteString(w.Name)
 	}
 	if len(w.PartitionBy) > 0 {
-		parts = append(parts, "PARTITION BY "+exprListSQL(w.PartitionBy))
+		sep()
+		buf.WriteString("PARTITION BY ")
+		writeExprList(buf, w.PartitionBy)
 	}
 	if len(w.OrderBy) > 0 {
-		parts = append(parts, "ORDER BY "+orderBySQL(w.OrderBy))
+		sep()
+		buf.WriteString("ORDER BY ")
+		writeOrderBy(buf, w.OrderBy)
 	}
 	if w.FrameClause != nil {
-		parts = append(parts, windowFrameSQL(w.FrameClause))
+		sep()
+		writeWindowFrame(buf, w.FrameClause)
 	}
-	return strings.Join(parts, " ")
 }
 
-func windowFrameSQL(f *WindowFrame) string {
+func writeWindowFrame(buf *bytes.Buffer, f *WindowFrame) {
+	buf.WriteString(f.Type)
 	if f.End != nil {
-		return fmt.Sprintf("%s BETWEEN %s AND %s", f.Type, f.Start.Type, f.End.Type)
+		buf.WriteString(" BETWEEN ")
+		buf.WriteString(f.Start.Type)
+		buf.WriteString(" AND ")
+		buf.WriteString(f.End.Type)
+		return
 	}
-	return fmt.Sprintf("%s %s", f.Type, f.Start.Type)
+	buf.WriteByte(' ')
+	buf.WriteString(f.Start.Type)
 }
 
-func fetchSQL(f *FetchClause) string {
-	sb := getBuf()
-	defer putBuf(sb)
+func writeFetch(buf *bytes.Buffer, f *FetchClause) {
 	if f.OffsetValue != nil {
-		fmt.Fprintf(sb, " OFFSET %d ROWS", *f.OffsetValue)
+		buf.WriteString(" OFFSET ")
+		writeInt(buf, *f.OffsetValue)
+		buf.WriteString(" ROWS")
 	}
-	fmt.Fprintf(sb, " FETCH %s", f.FetchType)
+	buf.WriteString(" FETCH ")
+	buf.WriteString(f.FetchType)
 	if f.FetchValue != nil {
-		fmt.Fprintf(sb, " %d", *f.FetchValue)
+		buf.WriteByte(' ')
+		writeInt(buf, *f.FetchValue)
 	}
 	if f.IsPercent {
-		sb.WriteString(" PERCENT")
+		buf.WriteString(" PERCENT")
 	}
-	sb.WriteString(" ROWS")
+	buf.WriteString(" ROWS")
 	if f.WithTies {
-		sb.WriteString(" WITH TIES")
+		buf.WriteString(" WITH TIES")
 	} else {
-		sb.WriteString(" ONLY")
+		buf.WriteString(" ONLY")
 	}
-	return sb.String()
 }
 
-func forSQL(f *ForClause) string {
-	sb := getBuf()
-	defer putBuf(sb)
-	sb.WriteString(" FOR ")
-	sb.WriteString(f.LockType)
+func writeFor(buf *bytes.Buffer, f *ForClause) {
+	buf.WriteString(" FOR ")
+	buf.WriteString(f.LockType)
 	if len(f.Tables) > 0 {
-		sb.WriteString(" OF ")
-		sb.WriteString(strings.Join(f.Tables, ", "))
+		buf.WriteString(" OF ")
+		writeStringList(buf, f.Tables, ", ")
 	}
 	if f.NoWait {
-		sb.WriteString(" NOWAIT")
+		buf.WriteString(" NOWAIT")
 	}
 	if f.SkipLocked {
-		sb.WriteString(" SKIP LOCKED")
+		buf.WriteString(" SKIP LOCKED")
 	}
-	return sb.String()
 }
 
-func cteSQL(cte *CommonTableExpr) string {
-	sb := getBuf()
-	defer putBuf(sb)
+func writeCTE(buf *bytes.Buffer, cte *CommonTableExpr) {
 	// ClickHouse scalar CTE: WITH <expr> AS <name>
 	if cte.ScalarExpr != nil {
-		sb.WriteString(exprSQL(cte.ScalarExpr))
-		sb.WriteString(" AS ")
-		sb.WriteString(cte.Name)
-		return sb.String()
+		writeExpr(buf, cte.ScalarExpr)
+		buf.WriteString(" AS ")
+		buf.WriteString(cte.Name)
+		return
 	}
-	sb.WriteString(cte.Name)
+	buf.WriteString(cte.Name)
 	if len(cte.Columns) > 0 {
-		sb.WriteString(" (")
-		sb.WriteString(strings.Join(cte.Columns, ", "))
-		sb.WriteString(")")
+		buf.WriteString(" (")
+		writeStringList(buf, cte.Columns, ", ")
+		buf.WriteByte(')')
 	}
-	sb.WriteString(" AS ")
+	buf.WriteString(" AS ")
 	if cte.Materialized != nil {
 		if *cte.Materialized {
-			sb.WriteString("MATERIALIZED ")
+			buf.WriteString("MATERIALIZED ")
 		} else {
-			sb.WriteString("NOT MATERIALIZED ")
+			buf.WriteString("NOT MATERIALIZED ")
 		}
 	}
-	sb.WriteString("(")
-	sb.WriteString(stmtSQL(cte.Statement))
-	sb.WriteString(")")
-	return sb.String()
+	buf.WriteByte('(')
+	writeStmt(buf, cte.Statement)
+	buf.WriteByte(')')
 }
 
-func onConflictSQL(oc *OnConflict) string {
-	sb := getBuf()
-	defer putBuf(sb)
-	sb.WriteString(" ON CONFLICT")
+func writeOnConflict(buf *bytes.Buffer, oc *OnConflict) {
+	buf.WriteString(" ON CONFLICT")
 	if len(oc.Target) > 0 {
-		sb.WriteString(" (")
-		sb.WriteString(exprListSQL(oc.Target))
-		sb.WriteString(")")
+		buf.WriteString(" (")
+		writeExprList(buf, oc.Target)
+		buf.WriteByte(')')
 	}
 	if oc.Constraint != "" {
-		sb.WriteString(" ON CONSTRAINT ")
-		sb.WriteString(oc.Constraint)
+		buf.WriteString(" ON CONSTRAINT ")
+		buf.WriteString(oc.Constraint)
 	}
 	if oc.Action.DoNothing {
-		sb.WriteString(" DO NOTHING")
+		buf.WriteString(" DO NOTHING")
 	} else if len(oc.Action.DoUpdate) > 0 {
-		sb.WriteString(" DO UPDATE SET ")
-		upds := make([]string, len(oc.Action.DoUpdate))
-		for i, u := range oc.Action.DoUpdate {
-			upds[i] = exprSQL(u.Column) + " = " + exprSQL(u.Value)
-		}
-		sb.WriteString(strings.Join(upds, ", "))
+		buf.WriteString(" DO UPDATE SET ")
+		writeAssignments(buf, oc.Action.DoUpdate)
 		if oc.Action.Where != nil {
-			sb.WriteString(" WHERE ")
-			sb.WriteString(exprSQL(oc.Action.Where))
+			buf.WriteString(" WHERE ")
+			writeExpr(buf, oc.Action.Where)
 		}
 	}
-	return sb.String()
 }
 
 func columnDefSQL(c *ColumnDef) string {

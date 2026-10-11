@@ -180,6 +180,82 @@ func TestWriteExpr_Dispatch(t *testing.T) {
 	}
 }
 
+func TestWriteExprList_JoinParity(t *testing.T) {
+	lists := [][]Expression{
+		nil,
+		{},
+		{&Identifier{Name: "a"}},
+		{&LiteralValue{Value: "1", Type: "int"}, nil, &LiteralValue{Value: "3", Type: "int"}},
+		{nil, nil},
+		{sqlOnlyExpr{}, tokenOnlyExpr{}, &Ident{Name: "x"}},
+	}
+	for _, list := range lists {
+		parts := make([]string, len(list))
+		for i, e := range list {
+			parts[i] = exprSQL(e)
+		}
+		want := strings.Join(parts, ", ")
+		var buf bytes.Buffer
+		writeExprList(&buf, list)
+		if got := buf.String(); got != want {
+			t.Errorf("writeExprList(%d items) = %q, want %q", len(list), got, want)
+		}
+		if got := exprListSQL(list); got != want {
+			t.Errorf("exprListSQL(%d items) = %q, want %q", len(list), got, want)
+		}
+	}
+}
+
+func TestWriteStmt_Dispatch(t *testing.T) {
+	var nilSel *SelectStatement
+	tests := []struct {
+		name string
+		stmt Statement
+		want string
+	}{
+		{"nil interface", nil, ""},
+		{"typed nil select", nilSel, ""},
+		{"writer", &Values{Rows: [][]Expression{{&LiteralValue{Value: "1", Type: "int"}}}}, "VALUES (1)"},
+		{"SQL() fallback", &DropStatement{ObjectType: "TABLE", Names: []string{"t"}}, "DROP TABLE t"},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			writeStmt(&buf, tt.stmt)
+			if got := buf.String(); got != tt.want {
+				t.Errorf("writeStmt() = %q, want %q", got, tt.want)
+			}
+			if got := stmtSQL(tt.stmt); got != tt.want {
+				t.Errorf("stmtSQL() = %q, want %q (writeStmt must mirror stmtSQL)", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAST_SQL_Separators(t *testing.T) {
+	var nilSel *SelectStatement
+	one := &Values{Rows: [][]Expression{{&LiteralValue{Value: "1", Type: "int"}}}}
+	tests := []struct {
+		name string
+		tree AST
+		want string
+	}{
+		{"empty", AST{}, ""},
+		{"single", AST{Statements: []Statement{one}}, "VALUES (1)"},
+		{"nil statement skipped", AST{Statements: []Statement{one, nil, one}}, "VALUES (1);\nVALUES (1)"},
+		{"typed nil kept as empty part", AST{Statements: []Statement{one, nilSel, one}}, "VALUES (1);\n;\nVALUES (1)"},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.tree.SQL(); got != tt.want {
+				t.Errorf("AST.SQL() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // poolTestSelect builds the AST of the 7-line benchmark query by hand
 // (the parser cannot be imported from an internal test).
 func poolTestSelect() *SelectStatement {
@@ -321,6 +397,10 @@ func TestSQL_LeafAllocationBudget(t *testing.T) {
 	}
 	if n := testing.AllocsPerRun(200, func() { sink = bin.SQL() }); n > 1 {
 		t.Errorf("BinaryExpression.SQL() allocs = %v, want <= 1", n)
+	}
+	sel := poolTestSelect()
+	if n := testing.AllocsPerRun(200, func() { sink = sel.SQL() }); n > 1 {
+		t.Errorf("SelectStatement.SQL() allocs = %v, want <= 1", n)
 	}
 	_ = sink
 }

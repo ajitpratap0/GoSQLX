@@ -188,22 +188,20 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			if p.isType(models.TokenTypeAsterisk) || p.isType(models.TokenTypeMul) {
 				// Handle table.* (qualified asterisk).
 				// Both TokenTypeAsterisk and TokenTypeMul represent '*'.
-				ident = &ast.Identifier{
-					Table: ident.Name,
-					Name:  "*",
-					Pos:   identPos,
-				}
+				// ident has not escaped yet, so promote it in place
+				// (one allocation per qualified reference). Pos is already identPos.
+				ident.Table = ident.Name
+				ident.Name = "*"
 				p.advance()
 			} else if p.isIdentifier() || p.isNonReservedKeyword() || (p.dialect == string(keywords.DialectClickHouse) && p.isNumericLiteral()) {
 				// Handle table.column (qualified identifier).
 				// isNonReservedKeyword covers reserved words valid as column
 				// names after a dot, e.g. table.KEY, schema.INDEX, alias.VIEW.
 				// ClickHouse also allows numeric element access: d.1, tuple.2.
-				ident = &ast.Identifier{
-					Table: ident.Name,
-					Name:  p.currentToken.Token.Value,
-					Pos:   identPos,
-				}
+				// ident has not escaped yet, so promote it in place; Table must
+				// be copied from Name before Name is overwritten.
+				ident.Table = ident.Name
+				ident.Name = p.currentToken.Token.Value
 				p.advance()
 			} else {
 				return nil, goerrors.InvalidSyntaxError(

@@ -20,6 +20,7 @@ package parser
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
@@ -154,10 +155,13 @@ func (p *Parser) parseJoinClauses(firstRef ast.TableReference) ([]ast.JoinClause
 			leftTable = firstRef
 		} else {
 			leftTable = ast.TableReference{
-				Name: fmt.Sprintf("(%s_with_%d_joins)", firstRef.Name, len(joins)),
+				Name: "(" + firstRef.Name + "_with_" + strconv.Itoa(len(joins)) + "_joins)",
 			}
 		}
 
+		if cap(joins) == 0 {
+			joins = make([]ast.JoinClause, 0, 2)
+		}
 		joins = append(joins, ast.JoinClause{
 			Type:      joinType,
 			Left:      leftTable,
@@ -591,23 +595,23 @@ func (p *Parser) parseClickHouseWithFill() (*ast.WithFillClause, error) {
 	p.advance() // FILL
 	fill := &ast.WithFillClause{Pos: pos}
 	for {
-		val := strings.ToUpper(p.currentToken.Token.Value)
-		switch val {
-		case "FROM":
+		v := p.currentToken.Token.Value
+		switch {
+		case equalsUpper(v, "FROM"):
 			p.advance()
 			e, err := p.parseExpression()
 			if err != nil {
 				return nil, err
 			}
 			fill.From = e
-		case "TO":
+		case equalsUpper(v, "TO"):
 			p.advance()
 			e, err := p.parseExpression()
 			if err != nil {
 				return nil, err
 			}
 			fill.To = e
-		case "STEP":
+		case equalsUpper(v, "STEP"):
 			p.advance()
 			e, err := p.parseExpression()
 			if err != nil {
@@ -640,8 +644,7 @@ func (p *Parser) parseLimitOffsetClause() (limit *int, offset *int, err error) {
 		if !p.isNumericLiteral() {
 			return nil, nil, p.expectedError("integer for LIMIT")
 		}
-		firstVal := 0
-		_, _ = fmt.Sscanf(p.currentToken.Token.Value, "%d", &firstVal)
+		firstVal := int(parseLeadingInt(p.currentToken.Token.Value, strconv.IntSize))
 		p.advance()
 
 		// MySQL / ClickHouse: LIMIT offset, count
@@ -650,8 +653,7 @@ func (p *Parser) parseLimitOffsetClause() (limit *int, offset *int, err error) {
 			if !p.isNumericLiteral() {
 				return nil, nil, p.expectedError("integer for LIMIT count")
 			}
-			secondVal := 0
-			_, _ = fmt.Sscanf(p.currentToken.Token.Value, "%d", &secondVal)
+			secondVal := int(parseLeadingInt(p.currentToken.Token.Value, strconv.IntSize))
 			p.advance()
 			offset = &firstVal
 			limit = &secondVal
@@ -667,8 +669,7 @@ func (p *Parser) parseLimitOffsetClause() (limit *int, offset *int, err error) {
 		if !p.isNumericLiteral() {
 			return nil, nil, p.expectedError("integer for OFFSET")
 		}
-		offsetVal := 0
-		_, _ = fmt.Sscanf(p.currentToken.Token.Value, "%d", &offsetVal)
+		offsetVal := int(parseLeadingInt(p.currentToken.Token.Value, strconv.IntSize))
 		offset = &offsetVal
 		p.advance()
 
@@ -713,8 +714,7 @@ func (p *Parser) parseFetchClause() (*ast.FetchClause, error) {
 	}
 
 	// Convert string to int64
-	var fetchVal int64
-	_, _ = fmt.Sscanf(p.currentToken.Token.Value, "%d", &fetchVal)
+	fetchVal := parseLeadingInt(p.currentToken.Token.Value, 64)
 	fetchClause.FetchValue = &fetchVal
 	p.advance()
 
@@ -891,4 +891,30 @@ func (p *Parser) parseArrayJoinClause() (*ast.ArrayJoinClause, error) {
 		p.advance() // Consume comma
 	}
 	return clause, nil
+}
+
+// parseLeadingInt parses an optional sign followed by leading ASCII digits of
+// s and ignores any trailing characters. It reproduces fmt.Sscanf(s, "%d", &v)
+// for tokenizer Number values without the reflection and allocation cost:
+// "10.5" yields 10, "1e2" yields 1, and empty, non-numeric or out-of-range
+// input yields 0. Unlike Sscanf it does not skip leading whitespace, which a
+// Number token never carries. bitSize is the target integer width (0, 8, 16,
+// 32 or 64 as accepted by strconv.ParseInt).
+func parseLeadingInt(s string, bitSize int) int64 {
+	i := 0
+	if i < len(s) && (s[i] == '+' || s[i] == '-') {
+		i++
+	}
+	start := i
+	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+		i++
+	}
+	if i == start {
+		return 0
+	}
+	v, err := strconv.ParseInt(s[:i], 10, bitSize)
+	if err != nil {
+		return 0
+	}
+	return v
 }

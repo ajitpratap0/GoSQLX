@@ -29,19 +29,14 @@
 package parser
 
 import (
-	"sync"
-
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
-// kwBufPool is a small byte-buffer pool used to avoid allocations during
-// upper-case conversion of short keyword strings.
-var kwBufPool = sync.Pool{
-	New: func() interface{} {
-		buf := make([]byte, 32)
-		return &buf
-	},
-}
+// maxKeywordLen is the size of the stack buffer used to upper-case a value
+// before matching it against the keyword tables. The longest remapped keyword
+// is AUTO_INCREMENT (14 bytes); TestKeywordTypeCaseInsensitive asserts every
+// table entry fits. Longer values cannot be keywords and are rejected early.
+const maxKeywordLen = 16
 
 // preprocessTokens normalises a token stream for the parser.
 // It expands compound tokens and remaps identifier/keyword types, returning a
@@ -49,82 +44,100 @@ var kwBufPool = sync.Pool{
 func preprocessTokens(tokens []models.TokenWithSpan) []models.TokenWithSpan {
 	result := make([]models.TokenWithSpan, 0, len(tokens)+4)
 	for i := range tokens {
-		t := tokens[i]
-		if expanded := expandCompoundToken(t); len(expanded) > 0 {
-			result = append(result, expanded...)
+		var ok bool
+		if result, ok = appendCompound(result, &tokens[i]); ok {
 			continue
 		}
-		result = append(result, normalizeToken(t))
+		result = append(result, normalizeToken(tokens[i]))
 	}
 	return result
 }
 
-// expandCompoundToken returns the expansion of a compound token such as
-// INNER_JOIN → [INNER, JOIN]. Returns nil if the token is not compound.
-func expandCompoundToken(t models.TokenWithSpan) []models.TokenWithSpan {
-	makeTwo := func(t1Type models.TokenType, t1Val, t2Val string, t2Type models.TokenType) []models.TokenWithSpan {
-		return []models.TokenWithSpan{
-			{Token: models.Token{Type: t1Type, Value: t1Val}, Start: t.Start, End: t.End},
-			{Token: models.Token{Type: t2Type, Value: t2Val}, Start: t.Start, End: t.End},
-		}
-	}
-	makeThree := func(t1Type models.TokenType, t1Val string, t2Type models.TokenType, t2Val string, t3Type models.TokenType, t3Val string) []models.TokenWithSpan {
-		return []models.TokenWithSpan{
-			{Token: models.Token{Type: t1Type, Value: t1Val}, Start: t.Start, End: t.End},
-			{Token: models.Token{Type: t2Type, Value: t2Val}, Start: t.Start, End: t.End},
-			{Token: models.Token{Type: t3Type, Value: t3Val}, Start: t.Start, End: t.End},
-		}
-	}
+// Compound token expansion tables. These slices are shared, read-only package
+// data and must never be mutated: appendCompound copies each element into a
+// fresh TokenWithSpan, so callers never alias them.
+var (
+	compoundInnerJoin      = []models.Token{{Type: models.TokenTypeInner, Value: "INNER"}, {Type: models.TokenTypeJoin, Value: "JOIN"}}
+	compoundLeftJoin       = []models.Token{{Type: models.TokenTypeLeft, Value: "LEFT"}, {Type: models.TokenTypeJoin, Value: "JOIN"}}
+	compoundRightJoin      = []models.Token{{Type: models.TokenTypeRight, Value: "RIGHT"}, {Type: models.TokenTypeJoin, Value: "JOIN"}}
+	compoundOuterJoin      = []models.Token{{Type: models.TokenTypeOuter, Value: "OUTER"}, {Type: models.TokenTypeJoin, Value: "JOIN"}}
+	compoundFullJoin       = []models.Token{{Type: models.TokenTypeFull, Value: "FULL"}, {Type: models.TokenTypeJoin, Value: "JOIN"}}
+	compoundCrossJoin      = []models.Token{{Type: models.TokenTypeCross, Value: "CROSS"}, {Type: models.TokenTypeJoin, Value: "JOIN"}}
+	compoundOrderBy        = []models.Token{{Type: models.TokenTypeOrder, Value: "ORDER"}, {Type: models.TokenTypeBy, Value: "BY"}}
+	compoundGroupBy        = []models.Token{{Type: models.TokenTypeGroup, Value: "GROUP"}, {Type: models.TokenTypeBy, Value: "BY"}}
+	compoundGroupingSets   = []models.Token{{Type: models.TokenTypeGrouping, Value: "GROUPING"}, {Type: models.TokenTypeSets, Value: "SETS"}}
+	compoundLeftOuterJoin  = []models.Token{{Type: models.TokenTypeLeft, Value: "LEFT"}, {Type: models.TokenTypeOuter, Value: "OUTER"}, {Type: models.TokenTypeJoin, Value: "JOIN"}}
+	compoundRightOuterJoin = []models.Token{{Type: models.TokenTypeRight, Value: "RIGHT"}, {Type: models.TokenTypeOuter, Value: "OUTER"}, {Type: models.TokenTypeJoin, Value: "JOIN"}}
+	compoundFullOuterJoin  = []models.Token{{Type: models.TokenTypeFull, Value: "FULL"}, {Type: models.TokenTypeOuter, Value: "OUTER"}, {Type: models.TokenTypeJoin, Value: "JOIN"}}
+)
 
+// compoundParts returns the read-only sub-token table for a compound token such
+// as INNER_JOIN → [INNER, JOIN], or nil if the token is not compound.
+// The returned slice is shared package data and must not be modified.
+func compoundParts(t *models.TokenWithSpan) []models.Token {
 	switch t.Token.Type {
 	case models.TokenTypeInnerJoin:
-		return makeTwo(models.TokenTypeInner, "INNER", "JOIN", models.TokenTypeJoin)
+		return compoundInnerJoin
 	case models.TokenTypeLeftJoin:
-		return makeTwo(models.TokenTypeLeft, "LEFT", "JOIN", models.TokenTypeJoin)
+		return compoundLeftJoin
 	case models.TokenTypeRightJoin:
-		return makeTwo(models.TokenTypeRight, "RIGHT", "JOIN", models.TokenTypeJoin)
+		return compoundRightJoin
 	case models.TokenTypeOuterJoin:
-		return makeTwo(models.TokenTypeOuter, "OUTER", "JOIN", models.TokenTypeJoin)
+		return compoundOuterJoin
 	case models.TokenTypeFullJoin:
-		return makeTwo(models.TokenTypeFull, "FULL", "JOIN", models.TokenTypeJoin)
+		return compoundFullJoin
 	case models.TokenTypeCrossJoin:
-		return makeTwo(models.TokenTypeCross, "CROSS", "JOIN", models.TokenTypeJoin)
+		return compoundCrossJoin
 	case models.TokenTypeOrderBy:
-		return makeTwo(models.TokenTypeOrder, "ORDER", "BY", models.TokenTypeBy)
+		return compoundOrderBy
 	case models.TokenTypeGroupBy:
-		return makeTwo(models.TokenTypeGroup, "GROUP", "BY", models.TokenTypeBy)
+		return compoundGroupBy
 	case models.TokenTypeGroupingSets:
-		return makeTwo(models.TokenTypeGrouping, "GROUPING", "SETS", models.TokenTypeSets)
+		return compoundGroupingSets
 	}
 
 	// Value-based compound token matching (tokenizer may produce these as
 	// TokenTypeKeyword with a multi-word value).
 	switch t.Token.Value {
 	case "INNER JOIN":
-		return makeTwo(models.TokenTypeInner, "INNER", "JOIN", models.TokenTypeJoin)
+		return compoundInnerJoin
 	case "LEFT JOIN":
-		return makeTwo(models.TokenTypeLeft, "LEFT", "JOIN", models.TokenTypeJoin)
+		return compoundLeftJoin
 	case "RIGHT JOIN":
-		return makeTwo(models.TokenTypeRight, "RIGHT", "JOIN", models.TokenTypeJoin)
+		return compoundRightJoin
 	case "FULL JOIN":
-		return makeTwo(models.TokenTypeFull, "FULL", "JOIN", models.TokenTypeJoin)
+		return compoundFullJoin
 	case "CROSS JOIN":
-		return makeTwo(models.TokenTypeCross, "CROSS", "JOIN", models.TokenTypeJoin)
+		return compoundCrossJoin
 	case "LEFT OUTER JOIN":
-		return makeThree(models.TokenTypeLeft, "LEFT", models.TokenTypeOuter, "OUTER", models.TokenTypeJoin, "JOIN")
+		return compoundLeftOuterJoin
 	case "RIGHT OUTER JOIN":
-		return makeThree(models.TokenTypeRight, "RIGHT", models.TokenTypeOuter, "OUTER", models.TokenTypeJoin, "JOIN")
+		return compoundRightOuterJoin
 	case "FULL OUTER JOIN":
-		return makeThree(models.TokenTypeFull, "FULL", models.TokenTypeOuter, "OUTER", models.TokenTypeJoin, "JOIN")
+		return compoundFullOuterJoin
 	case "ORDER BY":
-		return makeTwo(models.TokenTypeOrder, "ORDER", "BY", models.TokenTypeBy)
+		return compoundOrderBy
 	case "GROUP BY":
-		return makeTwo(models.TokenTypeGroup, "GROUP", "BY", models.TokenTypeBy)
+		return compoundGroupBy
 	case "GROUPING SETS":
-		return makeTwo(models.TokenTypeGrouping, "GROUPING", "SETS", models.TokenTypeSets)
+		return compoundGroupingSets
 	}
 
 	return nil
+}
+
+// appendCompound appends the expansion of compound token t to dst, copying
+// t's span onto every sub-token. It reports false (leaving dst unchanged) if t
+// is not a compound token. It performs no allocation beyond growing dst.
+func appendCompound(dst []models.TokenWithSpan, t *models.TokenWithSpan) ([]models.TokenWithSpan, bool) {
+	parts := compoundParts(t)
+	if parts == nil {
+		return dst, false
+	}
+	for i := range parts {
+		dst = append(dst, models.TokenWithSpan{Token: parts[i], Start: t.Start, End: t.End})
+	}
+	return dst, true
 }
 
 // normalizeToken maps a TokenWithSpan to a canonical form expected by the
@@ -164,33 +177,25 @@ func normalizeToken(t models.TokenWithSpan) models.TokenWithSpan {
 	return t
 }
 
-// toUpper converts s to uppercase using a pooled byte buffer for short strings.
-func toUpper(s string) string {
-	n := len(s)
-	var upper []byte
-	if n <= 32 {
-		bufPtr := kwBufPool.Get().(*[]byte)
-		upper = (*bufPtr)[:n]
-		defer kwBufPool.Put(bufPtr)
-	} else {
-		upper = make([]byte, n)
-	}
-	for i := 0; i < n; i++ {
-		c := s[i]
-		if c >= 'a' && c <= 'z' {
-			upper[i] = c - 32
-		} else {
-			upper[i] = c
-		}
-	}
-	return string(upper)
-}
-
 // identifierKeywordType remaps identifiers that carry SQL keyword values to
 // their specific models.TokenType. This is conservative: only keywords that
 // the parser dispatches on by type are included.
 func identifierKeywordType(value string) models.TokenType {
-	switch toUpper(value) {
+	if len(value) > maxKeywordLen {
+		return models.TokenTypeUnknown
+	}
+	// ASCII upper-case into a local buffer. The loop is intentionally inline
+	// (no helper, no &buf): taking the array's address is ~2.4x slower, and
+	// switch string(buf[:n]) does not allocate.
+	var buf [maxKeywordLen]byte
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		if c >= 'a' && c <= 'z' {
+			c -= 'a' - 'A'
+		}
+		buf[i] = c
+	}
+	switch string(buf[:len(value)]) {
 	case "INSERT":
 		return models.TokenTypeInsert
 	case "UPDATE":
@@ -320,7 +325,21 @@ func identifierKeywordType(value string) models.TokenType {
 
 // keywordType maps generic TokenTypeKeyword strings to specific token types.
 func keywordType(value string) models.TokenType {
-	switch toUpper(value) {
+	if len(value) > maxKeywordLen {
+		return models.TokenTypeUnknown
+	}
+	// ASCII upper-case into a local buffer. The loop is intentionally inline
+	// (no helper, no &buf): taking the array's address is ~2.4x slower, and
+	// switch string(buf[:n]) does not allocate.
+	var buf [maxKeywordLen]byte
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		if c >= 'a' && c <= 'z' {
+			c -= 'a' - 'A'
+		}
+		buf[i] = c
+	}
+	switch string(buf[:len(value)]) {
 	case "INSERT":
 		return models.TokenTypeInsert
 	case "UPDATE":

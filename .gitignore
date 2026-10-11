@@ -75,3 +75,6 @@ api-reference-*.png
 
 # Accidentally built example binary (go build in examples/cmd)
 /examples/cmd/cmd
+
+# Built by `make -C wasm build`; not used by the website (see website/scripts/build-wasm.sh)
+/wasm/playground/gosqlx.wasm

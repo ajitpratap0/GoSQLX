@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os/exec"
+	"reflect"
 	"runtime"
 	"testing"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	dbschema "github.com/ajitpratap0/GoSQLX/pkg/schema/db"
 	pgschema "github.com/ajitpratap0/GoSQLX/pkg/schema/postgres"
 )
 
@@ -139,6 +141,123 @@ func TestPostgresLoader_Load(t *testing.T) {
 	}
 	if !tableNames["orders"] {
 		t.Error("expected orders table")
+	}
+	assertPostgresDetail(t, s)
+}
+
+func findTable(s *dbschema.DatabaseSchema, name string) *dbschema.Table {
+	for i := range s.Tables {
+		if s.Tables[i].Name == name {
+			return &s.Tables[i]
+		}
+	}
+	return nil
+}
+
+// assertPostgresDetail checks per-table columns, PK/UNIQUE flags, indexes and
+// foreign keys of the fixture loaded via Load.
+func assertPostgresDetail(t *testing.T, s *dbschema.DatabaseSchema) {
+	t.Helper()
+	users := findTable(s, "users")
+	orders := findTable(s, "orders")
+	if users == nil || orders == nil {
+		t.Fatalf("missing users/orders tables: %+v", s.Tables)
+	}
+	if len(users.Columns) != 3 {
+		t.Fatalf("users columns: got %d want 3", len(users.Columns))
+	}
+	for _, c := range users.Columns {
+		switch c.Name {
+		case "id":
+			if !c.IsPrimary || c.IsUnique {
+				t.Errorf("users.id: primary=%v unique=%v, want primary only", c.IsPrimary, c.IsUnique)
+			}
+		case "email":
+			if !c.IsUnique || c.IsPrimary {
+				t.Errorf("users.email: primary=%v unique=%v, want unique only", c.IsPrimary, c.IsUnique)
+			}
+		case "name":
+			if c.IsUnique || c.IsPrimary {
+				t.Errorf("users.name: primary=%v unique=%v, want neither", c.IsPrimary, c.IsUnique)
+			}
+		}
+	}
+	if len(orders.Columns) != 3 {
+		t.Errorf("orders columns: got %d want 3", len(orders.Columns))
+	}
+	for _, c := range orders.Columns {
+		// PK/UNIQUE flags must not leak across tables that share column names.
+		if c.IsUnique {
+			t.Errorf("orders.%s unexpectedly unique", c.Name)
+		}
+		if c.IsPrimary != (c.Name == "id") {
+			t.Errorf("orders.%s primary=%v", c.Name, c.IsPrimary)
+		}
+	}
+	if len(orders.ForeignKeys) != 1 {
+		t.Fatalf("orders foreign keys: got %d want 1", len(orders.ForeignKeys))
+	}
+	fk := orders.ForeignKeys[0]
+	if fk.RefTable != "users" || fk.OnDelete != "CASCADE" ||
+		!reflect.DeepEqual(fk.Columns, []string{"user_id"}) {
+		t.Errorf("orders fk: got %+v", fk)
+	}
+	var found bool
+	for _, idx := range orders.Indexes {
+		if idx.Name == "idx_orders_user" {
+			found = true
+			if !reflect.DeepEqual(idx.Columns, []string{"user_id"}) || idx.TableName != "orders" {
+				t.Errorf("idx_orders_user: got %+v", idx)
+			}
+		}
+	}
+	if !found {
+		t.Error("idx_orders_user not found")
+	}
+}
+
+func TestPostgresLoader_Load_MaxOpenConns1(t *testing.T) {
+	db := startPostgres(t)
+	db.SetMaxOpenConns(1)
+	type result struct {
+		s   *dbschema.DatabaseSchema
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		s, err := pgschema.NewLoader().Load(db, "public")
+		done <- result{s, err}
+	}()
+	select {
+	case r := <-done:
+		if r.err != nil {
+			t.Fatalf("Load: %v", r.err)
+		}
+		assertPostgresDetail(t, r.s)
+	case <-time.After(30 * time.Second):
+		t.Fatal("Load deadlocked with MaxOpenConns=1")
+	}
+}
+
+func TestPostgresLoader_LoadMatchesLoadTable(t *testing.T) {
+	db := startPostgres(t)
+	loader := pgschema.NewLoader()
+	s, err := loader.Load(db, "public")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(s.Tables) == 0 {
+		t.Fatal("Load returned no tables")
+	}
+	for i := range s.Tables {
+		want := s.Tables[i]
+		got, err := loader.LoadTable(db, "public", want.Name)
+		if err != nil {
+			t.Fatalf("LoadTable(%q): %v", want.Name, err)
+		}
+		if !reflect.DeepEqual(*got, want) {
+			t.Errorf("LoadTable(%q) differs from Load:\n got: %+v\nwant: %+v", want.Name, *got, want)
+		}
 	}
 }
 

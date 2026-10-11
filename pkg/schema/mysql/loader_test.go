@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os/exec"
+	"reflect"
 	"runtime"
 	"testing"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	dbschema "github.com/ajitpratap0/GoSQLX/pkg/schema/db"
 	myschema "github.com/ajitpratap0/GoSQLX/pkg/schema/mysql"
 )
 
@@ -140,6 +142,107 @@ func TestMySQLLoader_Load(t *testing.T) {
 	}
 	if !names["products"] || !names["line_items"] {
 		t.Errorf("missing tables in schema: %v", names)
+	}
+	assertMySQLDetail(t, s)
+}
+
+func findTable(s *dbschema.DatabaseSchema, name string) *dbschema.Table {
+	for i := range s.Tables {
+		if s.Tables[i].Name == name {
+			return &s.Tables[i]
+		}
+	}
+	return nil
+}
+
+// assertMySQLDetail checks per-table columns, key flags, indexes and foreign
+// keys of the fixture loaded via Load.
+func assertMySQLDetail(t *testing.T, s *dbschema.DatabaseSchema) {
+	t.Helper()
+	products := findTable(s, "products")
+	lineItems := findTable(s, "line_items")
+	if products == nil || lineItems == nil {
+		t.Fatalf("missing products/line_items tables: %+v", s.Tables)
+	}
+	if len(products.Columns) != 3 {
+		t.Fatalf("products columns: got %d want 3", len(products.Columns))
+	}
+	for _, c := range products.Columns {
+		switch c.Name {
+		case "id":
+			if !c.IsPrimary {
+				t.Error("products.id: expected primary key")
+			}
+		case "sku":
+			if !c.IsUnique {
+				t.Error("products.sku: expected unique")
+			}
+		}
+	}
+	if len(lineItems.Columns) != 3 {
+		t.Errorf("line_items columns: got %d want 3", len(lineItems.Columns))
+	}
+	if len(lineItems.ForeignKeys) != 1 {
+		t.Fatalf("line_items foreign keys: got %d want 1", len(lineItems.ForeignKeys))
+	}
+	fk := lineItems.ForeignKeys[0]
+	if fk.RefTable != "products" || fk.OnDelete != "RESTRICT" ||
+		!reflect.DeepEqual(fk.Columns, []string{"product_id"}) ||
+		!reflect.DeepEqual(fk.RefColumns, []string{"id"}) {
+		t.Errorf("line_items fk: got %+v", fk)
+	}
+	if len(products.Indexes) == 0 {
+		t.Error("products: expected indexes")
+	}
+	for _, idx := range products.Indexes {
+		if len(idx.Columns) == 0 || idx.TableName != "products" {
+			t.Errorf("products index: got %+v", idx)
+		}
+	}
+}
+
+func TestMySQLLoader_Load_MaxOpenConns1(t *testing.T) {
+	db := startMySQL(t)
+	db.SetMaxOpenConns(1)
+	type result struct {
+		s   *dbschema.DatabaseSchema
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		s, err := myschema.NewLoader().Load(db, "testdb")
+		done <- result{s, err}
+	}()
+	select {
+	case r := <-done:
+		if r.err != nil {
+			t.Fatalf("Load: %v", r.err)
+		}
+		assertMySQLDetail(t, r.s)
+	case <-time.After(30 * time.Second):
+		t.Fatal("Load deadlocked with MaxOpenConns=1")
+	}
+}
+
+func TestMySQLLoader_LoadMatchesLoadTable(t *testing.T) {
+	db := startMySQL(t)
+	loader := myschema.NewLoader()
+	s, err := loader.Load(db, "testdb")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(s.Tables) == 0 {
+		t.Fatal("Load returned no tables")
+	}
+	for i := range s.Tables {
+		want := s.Tables[i]
+		got, err := loader.LoadTable(db, "testdb", want.Name)
+		if err != nil {
+			t.Fatalf("LoadTable(%q): %v", want.Name, err)
+		}
+		if !reflect.DeepEqual(*got, want) {
+			t.Errorf("LoadTable(%q) differs from Load:\n got: %+v\nwant: %+v", want.Name, *got, want)
+		}
 	}
 }
 

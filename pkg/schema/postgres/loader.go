@@ -33,10 +33,76 @@ func NewLoader() *Loader { return &Loader{} }
 
 // Load returns the full schema for all user tables in the given schemaName.
 // If schemaName is empty, "public" is used.
+//
+// Load issues four statements (tables, columns, indexes, foreign keys) for the
+// whole schema and drains each cursor before running the next, so it works
+// with a single-connection pool.
 func (l *Loader) Load(db *sql.DB, schemaName string) (*dbschema.DatabaseSchema, error) {
 	if schemaName == "" {
 		schemaName = "public"
 	}
+	names, err := l.listTables(db, schemaName)
+	if err != nil {
+		return nil, err
+	}
+	cols, err := l.loadColumns(db, schemaName, "")
+	if err != nil {
+		return nil, err
+	}
+	idxs, err := l.loadIndexes(db, schemaName, "")
+	if err != nil {
+		return nil, err
+	}
+	fks, err := l.loadForeignKeys(db, schemaName, "")
+	if err != nil {
+		return nil, err
+	}
+
+	ds := &dbschema.DatabaseSchema{Name: schemaName}
+	if len(names) > 0 {
+		ds.Tables = make([]dbschema.Table, 0, len(names))
+	}
+	for _, n := range names {
+		ds.Tables = append(ds.Tables, dbschema.Table{
+			Schema:      schemaName,
+			Name:        n,
+			Columns:     cols[n],
+			Indexes:     idxs[n],
+			ForeignKeys: fks[n],
+		})
+	}
+	return ds, nil
+}
+
+// LoadTable returns schema for a single named table.
+// If schemaName is empty, "public" is used.
+func (l *Loader) LoadTable(db *sql.DB, schemaName, tableName string) (*dbschema.Table, error) {
+	if schemaName == "" {
+		schemaName = "public"
+	}
+	cols, err := l.loadColumns(db, schemaName, tableName)
+	if err != nil {
+		return nil, err
+	}
+	idxs, err := l.loadIndexes(db, schemaName, tableName)
+	if err != nil {
+		return nil, err
+	}
+	fks, err := l.loadForeignKeys(db, schemaName, tableName)
+	if err != nil {
+		return nil, err
+	}
+	return &dbschema.Table{
+		Schema:      schemaName,
+		Name:        tableName,
+		Columns:     cols[tableName],
+		Indexes:     idxs[tableName],
+		ForeignKeys: fks[tableName],
+	}, nil
+}
+
+// listTables returns the base tables in schemaName, ordered by name.
+func (l *Loader) listTables(db *sql.DB, schemaName string) ([]string, error) {
 	rows, err := db.Query(`
 		SELECT table_name
 		FROM information_schema.tables
@@ -49,47 +115,26 @@ func (l *Loader) Load(db *sql.DB, schemaName string) (*dbschema.DatabaseSchema, 
 	}
 	defer func() { _ = rows.Close() }()
 
-	ds := &dbschema.DatabaseSchema{Name: schemaName}
+	var names []string
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("list tables: scan: %w", err)
 		}
-		tbl, err := l.LoadTable(db, schemaName, name)
-		if err != nil {
-			return nil, err
-		}
-		ds.Tables = append(ds.Tables, *tbl)
+		names = append(names, name)
 	}
-	return ds, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list tables: %w", err)
+	}
+	return names, nil
 }
 
-// LoadTable returns schema for a single named table.
-// If schemaName is empty, "public" is used.
-func (l *Loader) LoadTable(db *sql.DB, schemaName, tableName string) (*dbschema.Table, error) {
-	if schemaName == "" {
-		schemaName = "public"
-	}
-	tbl := &dbschema.Table{Schema: schemaName, Name: tableName}
-	var err error
-	tbl.Columns, err = l.loadColumns(db, schemaName, tableName)
-	if err != nil {
-		return nil, err
-	}
-	tbl.Indexes, err = l.loadIndexes(db, schemaName, tableName)
-	if err != nil {
-		return nil, err
-	}
-	tbl.ForeignKeys, err = l.loadForeignKeys(db, schemaName, tableName)
-	if err != nil {
-		return nil, err
-	}
-	return tbl, nil
-}
-
-func (l *Loader) loadColumns(db *sql.DB, schemaName, tableName string) ([]dbschema.Column, error) {
+// loadColumns returns columns grouped by table name, in ordinal order.
+// An empty tableName loads every table in schemaName.
+func (l *Loader) loadColumns(db *sql.DB, schemaName, tableName string) (map[string][]dbschema.Column, error) {
 	rows, err := db.Query(`
 		SELECT
+			c.table_name,
 			c.column_name,
 			c.ordinal_position,
 			c.data_type,
@@ -102,52 +147,60 @@ func (l *Loader) loadColumns(db *sql.DB, schemaName, tableName string) ([]dbsche
 			COALESCE(uq.is_unique, false)
 		FROM information_schema.columns c
 		LEFT JOIN (
-			SELECT kcu.column_name, true AS is_primary
+			SELECT kcu.table_name, kcu.column_name, true AS is_primary
 			FROM information_schema.table_constraints tc
 			JOIN information_schema.key_column_usage kcu
 				ON tc.constraint_name = kcu.constraint_name
 				AND tc.table_schema = kcu.table_schema
-			WHERE tc.table_schema = $1 AND tc.table_name = $2
+			WHERE tc.table_schema = $1 AND ($2::text = '' OR tc.table_name = $2)
 			  AND tc.constraint_type = 'PRIMARY KEY'
-		) pk ON pk.column_name = c.column_name
+		) pk ON pk.table_name = c.table_name AND pk.column_name = c.column_name
 		LEFT JOIN (
-			SELECT kcu.column_name, true AS is_unique
+			SELECT kcu.table_name, kcu.column_name, true AS is_unique
 			FROM information_schema.table_constraints tc
 			JOIN information_schema.key_column_usage kcu
 				ON tc.constraint_name = kcu.constraint_name
 				AND tc.table_schema = kcu.table_schema
-			WHERE tc.table_schema = $1 AND tc.table_name = $2
+			WHERE tc.table_schema = $1 AND ($2::text = '' OR tc.table_name = $2)
 			  AND tc.constraint_type = 'UNIQUE'
-		) uq ON uq.column_name = c.column_name
-		WHERE c.table_schema = $1 AND c.table_name = $2
-		ORDER BY c.ordinal_position
+		) uq ON uq.table_name = c.table_name AND uq.column_name = c.column_name
+		WHERE c.table_schema = $1 AND ($2::text = '' OR c.table_name = $2)
+		ORDER BY c.table_name, c.ordinal_position
 	`, schemaName, tableName)
 	if err != nil {
 		return nil, fmt.Errorf("load columns: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var cols []dbschema.Column
+	out := make(map[string][]dbschema.Column)
 	for rows.Next() {
+		var tbl string
 		var col dbschema.Column
 		var isNullable string
 		err := rows.Scan(
+			&tbl,
 			&col.Name, &col.OrdinalPos, &col.DataType, &isNullable,
 			&col.DefaultValue, &col.MaxLength, &col.Precision, &col.Scale,
 			&col.IsPrimary, &col.IsUnique,
 		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("load columns: scan: %w", err)
 		}
 		col.IsNullable = isNullable == "YES"
-		cols = append(cols, col)
+		out[tbl] = append(out[tbl], col)
 	}
-	return cols, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("load columns: %w", err)
+	}
+	return out, nil
 }
 
-func (l *Loader) loadIndexes(db *sql.DB, schemaName, tableName string) ([]dbschema.Index, error) {
+// loadIndexes returns indexes grouped by table name, ordered by index name.
+// An empty tableName loads every table in schemaName.
+func (l *Loader) loadIndexes(db *sql.DB, schemaName, tableName string) (map[string][]dbschema.Index, error) {
 	rows, err := db.Query(`
 		SELECT
+			t.relname AS table_name,
 			i.relname AS index_name,
 			ix.indisunique,
 			ix.indisprimary,
@@ -157,32 +210,37 @@ func (l *Loader) loadIndexes(db *sql.DB, schemaName, tableName string) ([]dbsche
 		JOIN pg_class i ON i.oid = ix.indexrelid
 		JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
 		JOIN pg_namespace n ON n.oid = t.relnamespace
-		WHERE n.nspname = $1 AND t.relname = $2 AND t.relkind = 'r'
-		GROUP BY i.relname, ix.indisunique, ix.indisprimary
-		ORDER BY i.relname
+		WHERE n.nspname = $1 AND ($2::text = '' OR t.relname = $2) AND t.relkind = 'r'
+		GROUP BY t.relname, i.relname, ix.indisunique, ix.indisprimary
+		ORDER BY t.relname, i.relname
 	`, schemaName, tableName)
 	if err != nil {
 		return nil, fmt.Errorf("load indexes: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var indexes []dbschema.Index
+	out := make(map[string][]dbschema.Index)
 	for rows.Next() {
 		var idx dbschema.Index
 		var colArray string
-		if err := rows.Scan(&idx.Name, &idx.IsUnique, &idx.IsPrimary, &colArray); err != nil {
-			return nil, err
+		if err := rows.Scan(&idx.TableName, &idx.Name, &idx.IsUnique, &idx.IsPrimary, &colArray); err != nil {
+			return nil, fmt.Errorf("load indexes: scan: %w", err)
 		}
-		idx.TableName = tableName
 		idx.Columns = parseArrayAgg(colArray)
-		indexes = append(indexes, idx)
+		out[idx.TableName] = append(out[idx.TableName], idx)
 	}
-	return indexes, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("load indexes: %w", err)
+	}
+	return out, nil
 }
 
-func (l *Loader) loadForeignKeys(db *sql.DB, schemaName, tableName string) ([]dbschema.ForeignKey, error) {
+// loadForeignKeys returns foreign keys grouped by table name, ordered by
+// constraint name. An empty tableName loads every table in schemaName.
+func (l *Loader) loadForeignKeys(db *sql.DB, schemaName, tableName string) (map[string][]dbschema.ForeignKey, error) {
 	rows, err := db.Query(`
 		SELECT
+			tc.table_name,
 			tc.constraint_name,
 			kcu.column_name,
 			ccu.table_name AS foreign_table_name,
@@ -199,39 +257,42 @@ func (l *Loader) loadForeignKeys(db *sql.DB, schemaName, tableName string) ([]db
 		JOIN information_schema.referential_constraints AS rc
 			ON rc.constraint_name = tc.constraint_name
 		WHERE tc.constraint_type = 'FOREIGN KEY'
-		  AND tc.table_schema = $1 AND tc.table_name = $2
-		ORDER BY tc.constraint_name, kcu.ordinal_position
+		  AND tc.table_schema = $1 AND ($2::text = '' OR tc.table_name = $2)
+		ORDER BY tc.table_name, tc.constraint_name, kcu.ordinal_position
 	`, schemaName, tableName)
 	if err != nil {
 		return nil, fmt.Errorf("load fks: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	fkMap := make(map[string]*dbschema.ForeignKey)
-	var order []string
+	out := make(map[string][]dbschema.ForeignKey)
 	for rows.Next() {
-		var name, col, refTable, refCol, onDelete, onUpdate string
-		if err := rows.Scan(&name, &col, &refTable, &refCol, &onDelete, &onUpdate); err != nil {
-			return nil, err
+		var tbl, name, col, refTable, refCol, onDelete, onUpdate string
+		if err := rows.Scan(&tbl, &name, &col, &refTable, &refCol, &onDelete, &onUpdate); err != nil {
+			return nil, fmt.Errorf("load fks: scan: %w", err)
 		}
-		if _, ok := fkMap[name]; !ok {
-			fkMap[name] = &dbschema.ForeignKey{
-				Name:      name,
-				TableName: tableName,
-				RefTable:  refTable,
-				OnDelete:  onDelete,
-				OnUpdate:  onUpdate,
-			}
-			order = append(order, name)
+		// Rows are ordered by (table, constraint), so a constraint's rows are
+		// contiguous and the last entry is the one to extend.
+		fks := out[tbl]
+		if n := len(fks); n > 0 && fks[n-1].Name == name {
+			fks[n-1].Columns = append(fks[n-1].Columns, col)
+			fks[n-1].RefColumns = append(fks[n-1].RefColumns, refCol)
+			continue
 		}
-		fkMap[name].Columns = append(fkMap[name].Columns, col)
-		fkMap[name].RefColumns = append(fkMap[name].RefColumns, refCol)
+		out[tbl] = append(fks, dbschema.ForeignKey{
+			Name:       name,
+			TableName:  tbl,
+			Columns:    []string{col},
+			RefTable:   refTable,
+			RefColumns: []string{refCol},
+			OnDelete:   onDelete,
+			OnUpdate:   onUpdate,
+		})
 	}
-	fks := make([]dbschema.ForeignKey, 0, len(order))
-	for _, n := range order {
-		fks = append(fks, *fkMap[n])
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("load fks: %w", err)
 	}
-	return fks, rows.Err()
+	return out, nil
 }
 
 // parseArrayAgg parses a Postgres array literal "{a,b,c}" into []string{"a","b","c"}.

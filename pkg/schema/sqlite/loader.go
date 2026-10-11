@@ -13,9 +13,12 @@
 // limitations under the License.
 
 // Package sqlite provides a live schema Loader for SQLite databases.
-// It uses PRAGMA commands (table_info, index_list, index_info, foreign_key_list)
-// to retrieve tables, columns, indexes, and foreign keys. No CGO is required
-// when using modernc.org/sqlite.
+// It uses the pragma_table_info, pragma_index_list, pragma_index_info and
+// pragma_foreign_key_list table-valued functions to retrieve tables, columns,
+// indexes, and foreign keys with bound parameters. Load issues one query per
+// kind for the whole database, and every cursor is drained and closed before
+// the next statement runs, so a single connection is sufficient. No CGO is
+// required when using modernc.org/sqlite.
 package sqlite
 
 import (
@@ -36,61 +39,115 @@ func NewLoader() *Loader { return &Loader{} }
 // schemaName is recorded in the returned DatabaseSchema but otherwise unused
 // (SQLite does not have named schemas in the PostgreSQL sense; use "main").
 func (l *Loader) Load(db *sql.DB, schemaName string) (*dbschema.DatabaseSchema, error) {
+	names, err := l.listTables(db)
+	if err != nil {
+		return nil, err
+	}
+	cols, err := l.loadColumns(db, "")
+	if err != nil {
+		return nil, err
+	}
+	idxs, err := l.loadIndexes(db, "")
+	if err != nil {
+		return nil, err
+	}
+	fks, err := l.loadForeignKeys(db, "")
+	if err != nil {
+		return nil, err
+	}
+
+	ds := &dbschema.DatabaseSchema{Name: schemaName}
+	if len(names) > 0 {
+		ds.Tables = make([]dbschema.Table, 0, len(names))
+	}
+	for _, n := range names {
+		ds.Tables = append(ds.Tables, dbschema.Table{
+			Schema:      schemaName,
+			Name:        n,
+			Columns:     cols[n],
+			Indexes:     idxs[n],
+			ForeignKeys: fks[n],
+		})
+	}
+	return ds, nil
+}
+
+// LoadTable returns schema for a single named table.
+func (l *Loader) LoadTable(db *sql.DB, schemaName, tableName string) (*dbschema.Table, error) {
+	cols, err := l.loadColumns(db, tableName)
+	if err != nil {
+		return nil, err
+	}
+	idxs, err := l.loadIndexes(db, tableName)
+	if err != nil {
+		return nil, err
+	}
+	fks, err := l.loadForeignKeys(db, tableName)
+	if err != nil {
+		return nil, err
+	}
+	return &dbschema.Table{
+		Schema:      schemaName,
+		Name:        tableName,
+		Columns:     cols[tableName],
+		Indexes:     idxs[tableName],
+		ForeignKeys: fks[tableName],
+	}, nil
+}
+
+// listTables returns the names of all user tables, ordered by name.
+func (l *Loader) listTables(db *sql.DB) ([]string, error) {
 	rows, err := db.Query(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("list tables: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	ds := &dbschema.DatabaseSchema{Name: schemaName}
+	var names []string
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("list tables: scan: %w", err)
 		}
-		tbl, err := l.LoadTable(db, schemaName, name)
-		if err != nil {
-			return nil, err
-		}
-		ds.Tables = append(ds.Tables, *tbl)
+		names = append(names, name)
 	}
-	return ds, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list tables: %w", err)
+	}
+	return names, nil
 }
 
-// LoadTable returns schema for a single named table.
-func (l *Loader) LoadTable(db *sql.DB, schemaName, tableName string) (*dbschema.Table, error) {
-	tbl := &dbschema.Table{Schema: schemaName, Name: tableName}
-	var err error
-	tbl.Columns, err = l.loadColumns(db, tableName)
-	if err != nil {
-		return nil, err
+// tableSource returns the FROM-clause source of table names for the pragma
+// table-valued functions: the single table tableName (as a bound parameter),
+// or every user table when tableName is empty. The returned SQL is constant.
+func tableSource(tableName string) (string, []any) {
+	if tableName != "" {
+		return `(SELECT ? AS name)`, []any{tableName}
 	}
-	tbl.Indexes, err = l.loadIndexes(db, tableName)
-	if err != nil {
-		return nil, err
-	}
-	tbl.ForeignKeys, err = l.loadForeignKeys(db, tableName)
-	if err != nil {
-		return nil, err
-	}
-	return tbl, nil
+	return `(SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%')`, nil
 }
 
-func (l *Loader) loadColumns(db *sql.DB, tableName string) ([]dbschema.Column, error) {
-	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%q)", tableName))
+// loadColumns returns columns grouped by table name, in ordinal order.
+// An empty tableName loads every user table.
+func (l *Loader) loadColumns(db *sql.DB, tableName string) (map[string][]dbschema.Column, error) {
+	src, args := tableSource(tableName)
+	rows, err := db.Query(`
+		SELECT m.name, p.cid, p.name, p.type, p."notnull", p.dflt_value, p.pk
+		FROM `+src+` m
+		JOIN pragma_table_info(m.name) p
+		ORDER BY m.name, p.cid`, args...)
 	if err != nil {
-		return nil, fmt.Errorf("pragma table_info: %w", err)
+		return nil, fmt.Errorf("load columns: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var cols []dbschema.Column
+	out := make(map[string][]dbschema.Column)
 	for rows.Next() {
-		// cid, name, type, notnull, dflt_value, pk
+		var tbl, name, typ string
 		var cid, notNull, pk int
-		var name, typ string
 		var dflt sql.NullString
-		if err := rows.Scan(&cid, &name, &typ, &notNull, &dflt, &pk); err != nil {
-			return nil, err
+		if err := rows.Scan(&tbl, &cid, &name, &typ, &notNull, &dflt, &pk); err != nil {
+			return nil, fmt.Errorf("load columns: scan: %w", err)
 		}
 		col := dbschema.Column{
 			Name:       name,
@@ -102,88 +159,97 @@ func (l *Loader) loadColumns(db *sql.DB, tableName string) ([]dbschema.Column, e
 		if dflt.Valid {
 			col.DefaultValue = &dflt.String
 		}
-		cols = append(cols, col)
+		out[tbl] = append(out[tbl], col)
 	}
-	return cols, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("load columns: %w", err)
+	}
+	return out, nil
 }
 
-func (l *Loader) loadIndexes(db *sql.DB, tableName string) ([]dbschema.Index, error) {
-	rows, err := db.Query(fmt.Sprintf("PRAGMA index_list(%q)", tableName))
+// loadIndexes returns indexes grouped by table name, in index_list order, with
+// each index's columns in key order. An empty tableName loads every user table.
+func (l *Loader) loadIndexes(db *sql.DB, tableName string) (map[string][]dbschema.Index, error) {
+	src, args := tableSource(tableName)
+	rows, err := db.Query(`
+		SELECT m.name, il.name, il."unique", ii.name
+		FROM `+src+` m
+		JOIN pragma_index_list(m.name) il
+		JOIN pragma_index_info(il.name) ii
+		ORDER BY m.name, il.seq, ii.seqno`, args...)
 	if err != nil {
-		return nil, fmt.Errorf("pragma index_list: %w", err)
+		return nil, fmt.Errorf("load indexes: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var indexes []dbschema.Index
+	out := make(map[string][]dbschema.Index)
 	for rows.Next() {
-		// seq, name, unique, origin, partial
-		var seq, unique, partial int
-		var name, origin string
-		if err := rows.Scan(&seq, &name, &unique, &origin, &partial); err != nil {
-			return nil, err
+		var tbl, name, colName string
+		var unique int
+		if err := rows.Scan(&tbl, &name, &unique, &colName); err != nil {
+			return nil, fmt.Errorf("load indexes: scan: %w", err)
 		}
-		idx := dbschema.Index{
+		idxs := out[tbl]
+		if n := len(idxs); n > 0 && idxs[n-1].Name == name {
+			idxs[n-1].Columns = append(idxs[n-1].Columns, colName)
+			continue
+		}
+		out[tbl] = append(idxs, dbschema.Index{
 			Name:      name,
-			TableName: tableName,
+			TableName: tbl,
+			Columns:   []string{colName},
 			IsUnique:  unique == 1,
-		}
-		// get columns in this index
-		icols, err := db.Query(fmt.Sprintf("PRAGMA index_info(%q)", name))
-		if err != nil {
-			return nil, err
-		}
-		for icols.Next() {
-			var seqno, cid int
-			var colName string
-			if err := icols.Scan(&seqno, &cid, &colName); err != nil {
-				_ = icols.Close()
-				return nil, err
-			}
-			idx.Columns = append(idx.Columns, colName)
-		}
-		_ = icols.Close()
-		if err := icols.Err(); err != nil {
-			return nil, err
-		}
-		indexes = append(indexes, idx)
+		})
 	}
-	return indexes, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("load indexes: %w", err)
+	}
+	return out, nil
 }
 
-func (l *Loader) loadForeignKeys(db *sql.DB, tableName string) ([]dbschema.ForeignKey, error) {
-	rows, err := db.Query(fmt.Sprintf("PRAGMA foreign_key_list(%q)", tableName))
+// loadForeignKeys returns foreign keys grouped by table name, in id order,
+// with columns in sequence order. An empty tableName loads every user table.
+func (l *Loader) loadForeignKeys(db *sql.DB, tableName string) (map[string][]dbschema.ForeignKey, error) {
+	src, args := tableSource(tableName)
+	rows, err := db.Query(`
+		SELECT m.name, f.id, f."table", f."from", f."to", f.on_update, f.on_delete
+		FROM `+src+` m
+		JOIN pragma_foreign_key_list(m.name) f
+		ORDER BY m.name, f.id, f.seq`, args...)
 	if err != nil {
-		return nil, fmt.Errorf("pragma foreign_key_list: %w", err)
+		return nil, fmt.Errorf("load fks: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	fkMap := make(map[int]*dbschema.ForeignKey)
-	var order []int
+	out := make(map[string][]dbschema.ForeignKey)
+	lastTable, lastID := "", -1
 	for rows.Next() {
-		// id, seq, table, from, to, on_update, on_delete, match
-		var id, seq int
-		var refTable, fromCol, toCol, onUpdate, onDelete, match string
-		if err := rows.Scan(&id, &seq, &refTable, &fromCol, &toCol, &onUpdate, &onDelete, &match); err != nil {
-			return nil, err
+		var tbl, refTable, fromCol, toCol, onUpdate, onDelete string
+		var id int
+		if err := rows.Scan(&tbl, &id, &refTable, &fromCol, &toCol, &onUpdate, &onDelete); err != nil {
+			return nil, fmt.Errorf("load fks: scan: %w", err)
 		}
-		if _, ok := fkMap[id]; !ok {
-			fkMap[id] = &dbschema.ForeignKey{
-				Name:      fmt.Sprintf("fk_%s_%d", strings.ToLower(tableName), id),
-				TableName: tableName,
-				RefTable:  refTable,
-				OnDelete:  onDelete,
-				OnUpdate:  onUpdate,
-			}
-			order = append(order, id)
+		fks := out[tbl]
+		if n := len(fks); n > 0 && tbl == lastTable && id == lastID {
+			fks[n-1].Columns = append(fks[n-1].Columns, fromCol)
+			fks[n-1].RefColumns = append(fks[n-1].RefColumns, toCol)
+			continue
 		}
-		fkMap[id].Columns = append(fkMap[id].Columns, fromCol)
-		fkMap[id].RefColumns = append(fkMap[id].RefColumns, toCol)
+		lastTable, lastID = tbl, id
+		out[tbl] = append(fks, dbschema.ForeignKey{
+			Name:       fmt.Sprintf("fk_%s_%d", strings.ToLower(tbl), id),
+			TableName:  tbl,
+			Columns:    []string{fromCol},
+			RefTable:   refTable,
+			RefColumns: []string{toCol},
+			OnDelete:   onDelete,
+			OnUpdate:   onUpdate,
+		})
 	}
-	fks := make([]dbschema.ForeignKey, 0, len(order))
-	for _, id := range order {
-		fks = append(fks, *fkMap[id])
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("load fks: %w", err)
 	}
-	return fks, rows.Err()
+	return out, nil
 }
 
 // ensure Loader satisfies the interface (compile-time check).

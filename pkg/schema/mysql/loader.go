@@ -19,6 +19,7 @@ package mysql
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 
 	dbschema "github.com/ajitpratap0/GoSQLX/pkg/schema/db"
@@ -31,7 +32,87 @@ type Loader struct{}
 func NewLoader() *Loader { return &Loader{} }
 
 // Load returns the full schema for all user tables in the given schemaName.
+//
+// Load issues four statements (tables, columns, indexes, foreign keys) for the
+// whole schema and drains each cursor before running the next, so it works
+// with a single-connection pool.
 func (l *Loader) Load(db *sql.DB, schemaName string) (*dbschema.DatabaseSchema, error) {
+	names, err := l.listTables(db, schemaName)
+	if err != nil {
+		return nil, err
+	}
+	cols, err := l.loadColumns(db, schemaName, "")
+	if err != nil {
+		return nil, err
+	}
+	idxs, err := l.loadIndexes(db, schemaName, "")
+	if err != nil {
+		return nil, err
+	}
+	fks, err := l.loadForeignKeys(db, schemaName, "")
+	if err != nil {
+		return nil, err
+	}
+
+	ds := &dbschema.DatabaseSchema{Name: schemaName}
+	if len(names) > 0 {
+		ds.Tables = make([]dbschema.Table, 0, len(names))
+	}
+	for _, n := range names {
+		ds.Tables = append(ds.Tables, dbschema.Table{
+			Schema:      schemaName,
+			Name:        n,
+			Columns:     cols[n],
+			Indexes:     idxs[n],
+			ForeignKeys: fks[n],
+		})
+	}
+	return ds, nil
+}
+
+// LoadTable returns schema for a single named table.
+func (l *Loader) LoadTable(db *sql.DB, schemaName, tableName string) (*dbschema.Table, error) {
+	if tableName == "" {
+		return nil, errors.New("load table: table name must not be empty")
+	}
+	cols, err := l.loadColumns(db, schemaName, tableName)
+	if err != nil {
+		return nil, err
+	}
+	idxs, err := l.loadIndexes(db, schemaName, tableName)
+	if err != nil {
+		return nil, err
+	}
+	fks, err := l.loadForeignKeys(db, schemaName, tableName)
+	if err != nil {
+		return nil, err
+	}
+	return &dbschema.Table{
+		Schema:      schemaName,
+		Name:        tableName,
+		Columns:     forTable(cols, tableName),
+		Indexes:     forTable(idxs, tableName),
+		ForeignKeys: forTable(fks, tableName),
+	}, nil
+}
+
+// forTable returns the entry for tableName from the result of a query filtered
+// to that one table. MySQL may match table names case-insensitively (see
+// lower_case_table_names), in which case the key is the stored spelling rather
+// than tableName; since every row of a filtered query belongs to the same
+// table, any single entry is the answer.
+func forTable[T any](m map[string][]T, tableName string) []T {
+	if v, ok := m[tableName]; ok {
+		return v
+	}
+	for _, v := range m {
+		return v
+	}
+	return nil
+}
+
+// listTables returns the base tables in schemaName, ordered by name.
+func (l *Loader) listTables(db *sql.DB, schemaName string) ([]string, error) {
 	rows, err := db.Query(`
 		SELECT table_name
 		FROM information_schema.tables
@@ -43,43 +124,26 @@ func (l *Loader) Load(db *sql.DB, schemaName string) (*dbschema.DatabaseSchema, 
 	}
 	defer func() { _ = rows.Close() }()
 
-	ds := &dbschema.DatabaseSchema{Name: schemaName}
+	var names []string
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("list tables: scan: %w", err)
 		}
-		tbl, err := l.LoadTable(db, schemaName, name)
-		if err != nil {
-			return nil, err
-		}
-		ds.Tables = append(ds.Tables, *tbl)
+		names = append(names, name)
 	}
-	return ds, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list tables: %w", err)
+	}
+	return names, nil
 }
 
-// LoadTable returns schema for a single named table.
-func (l *Loader) LoadTable(db *sql.DB, schemaName, tableName string) (*dbschema.Table, error) {
-	tbl := &dbschema.Table{Schema: schemaName, Name: tableName}
-	var err error
-	tbl.Columns, err = l.loadColumns(db, schemaName, tableName)
-	if err != nil {
-		return nil, err
-	}
-	tbl.Indexes, err = l.loadIndexes(db, schemaName, tableName)
-	if err != nil {
-		return nil, err
-	}
-	tbl.ForeignKeys, err = l.loadForeignKeys(db, schemaName, tableName)
-	if err != nil {
-		return nil, err
-	}
-	return tbl, nil
-}
-
-func (l *Loader) loadColumns(db *sql.DB, schemaName, tableName string) ([]dbschema.Column, error) {
+// loadColumns returns columns grouped by table name, in ordinal order.
+// An empty tableName loads every table in schemaName.
+func (l *Loader) loadColumns(db *sql.DB, schemaName, tableName string) (map[string][]dbschema.Column, error) {
 	rows, err := db.Query(`
 		SELECT
+			c.table_name,
 			c.column_name,
 			c.ordinal_position,
 			c.data_type,
@@ -90,75 +154,87 @@ func (l *Loader) loadColumns(db *sql.DB, schemaName, tableName string) ([]dbsche
 			c.numeric_scale,
 			c.column_key
 		FROM information_schema.columns c
-		WHERE c.table_schema = ? AND c.table_name = ?
-		ORDER BY c.ordinal_position
-	`, schemaName, tableName)
+		WHERE c.table_schema = ? AND (? = '' OR c.table_name = ?)
+		ORDER BY c.table_name, c.ordinal_position
+	`, schemaName, tableName, tableName)
 	if err != nil {
 		return nil, fmt.Errorf("load columns: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var cols []dbschema.Column
+	out := make(map[string][]dbschema.Column)
 	for rows.Next() {
+		var tbl string
 		var col dbschema.Column
 		var isNullable, columnKey string
 		err := rows.Scan(
+			&tbl,
 			&col.Name, &col.OrdinalPos, &col.DataType, &isNullable,
 			&col.DefaultValue, &col.MaxLength, &col.Precision, &col.Scale,
 			&columnKey,
 		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("load columns: scan: %w", err)
 		}
 		col.IsNullable = isNullable == "YES"
 		col.IsPrimary = columnKey == "PRI"
 		col.IsUnique = columnKey == "UNI"
-		cols = append(cols, col)
+		out[tbl] = append(out[tbl], col)
 	}
-	return cols, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("load columns: %w", err)
+	}
+	return out, nil
 }
 
-func (l *Loader) loadIndexes(db *sql.DB, schemaName, tableName string) ([]dbschema.Index, error) {
+// loadIndexes returns indexes grouped by table name, ordered by index name,
+// with columns in key order. An empty tableName loads every table in schemaName.
+func (l *Loader) loadIndexes(db *sql.DB, schemaName, tableName string) (map[string][]dbschema.Index, error) {
 	rows, err := db.Query(`
-		SELECT index_name, non_unique, column_name
+		SELECT table_name, index_name, non_unique, column_name
 		FROM information_schema.statistics
-		WHERE table_schema = ? AND table_name = ?
-		ORDER BY index_name, seq_in_index
-	`, schemaName, tableName)
+		WHERE table_schema = ? AND (? = '' OR table_name = ?)
+		ORDER BY table_name, index_name, seq_in_index
+	`, schemaName, tableName, tableName)
 	if err != nil {
 		return nil, fmt.Errorf("load indexes: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	idxMap := make(map[string]*dbschema.Index)
-	var order []string
+	out := make(map[string][]dbschema.Index)
 	for rows.Next() {
-		var name, col string
+		var tbl, name, col string
 		var nonUnique int
-		if err := rows.Scan(&name, &nonUnique, &col); err != nil {
-			return nil, err
+		if err := rows.Scan(&tbl, &name, &nonUnique, &col); err != nil {
+			return nil, fmt.Errorf("load indexes: scan: %w", err)
 		}
-		if _, ok := idxMap[name]; !ok {
-			idxMap[name] = &dbschema.Index{
-				Name:      name,
-				TableName: tableName,
-				IsUnique:  nonUnique == 0,
-				IsPrimary: name == "PRIMARY",
-			}
-			order = append(order, name)
+		// Rows are ordered by (table, index), so an index's rows are
+		// contiguous and the last entry is the one to extend.
+		idxs := out[tbl]
+		if n := len(idxs); n > 0 && idxs[n-1].Name == name {
+			idxs[n-1].Columns = append(idxs[n-1].Columns, col)
+			continue
 		}
-		idxMap[name].Columns = append(idxMap[name].Columns, col)
+		out[tbl] = append(idxs, dbschema.Index{
+			Name:      name,
+			TableName: tbl,
+			Columns:   []string{col},
+			IsUnique:  nonUnique == 0,
+			IsPrimary: name == "PRIMARY",
+		})
 	}
-	result := make([]dbschema.Index, 0, len(order))
-	for _, n := range order {
-		result = append(result, *idxMap[n])
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("load indexes: %w", err)
 	}
-	return result, rows.Err()
+	return out, nil
 }
 
-func (l *Loader) loadForeignKeys(db *sql.DB, schemaName, tableName string) ([]dbschema.ForeignKey, error) {
+// loadForeignKeys returns foreign keys grouped by table name, ordered by
+// constraint name. An empty tableName loads every table in schemaName.
+func (l *Loader) loadForeignKeys(db *sql.DB, schemaName, tableName string) (map[string][]dbschema.ForeignKey, error) {
 	rows, err := db.Query(`
 		SELECT
+			kcu.table_name,
 			kcu.constraint_name,
 			kcu.column_name,
 			kcu.referenced_table_name,
@@ -169,40 +245,43 @@ func (l *Loader) loadForeignKeys(db *sql.DB, schemaName, tableName string) ([]db
 		JOIN information_schema.referential_constraints rc
 			ON rc.constraint_name = kcu.constraint_name
 			AND rc.constraint_schema = kcu.table_schema
-		WHERE kcu.table_schema = ? AND kcu.table_name = ?
+		WHERE kcu.table_schema = ? AND (? = '' OR kcu.table_name = ?)
 		  AND kcu.referenced_table_name IS NOT NULL
-		ORDER BY kcu.constraint_name, kcu.ordinal_position
-	`, schemaName, tableName)
+		ORDER BY kcu.table_name, kcu.constraint_name, kcu.ordinal_position
+	`, schemaName, tableName, tableName)
 	if err != nil {
 		return nil, fmt.Errorf("load fks: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	fkMap := make(map[string]*dbschema.ForeignKey)
-	var order []string
+	out := make(map[string][]dbschema.ForeignKey)
 	for rows.Next() {
-		var name, col, refTable, refCol, onDelete, onUpdate string
-		if err := rows.Scan(&name, &col, &refTable, &refCol, &onDelete, &onUpdate); err != nil {
-			return nil, err
+		var tbl, name, col, refTable, refCol, onDelete, onUpdate string
+		if err := rows.Scan(&tbl, &name, &col, &refTable, &refCol, &onDelete, &onUpdate); err != nil {
+			return nil, fmt.Errorf("load fks: scan: %w", err)
 		}
-		if _, ok := fkMap[name]; !ok {
-			fkMap[name] = &dbschema.ForeignKey{
-				Name:      name,
-				TableName: tableName,
-				RefTable:  refTable,
-				OnDelete:  onDelete,
-				OnUpdate:  onUpdate,
-			}
-			order = append(order, name)
+		// Rows are ordered by (table, constraint), so a constraint's rows are
+		// contiguous and the last entry is the one to extend.
+		fks := out[tbl]
+		if n := len(fks); n > 0 && fks[n-1].Name == name {
+			fks[n-1].Columns = append(fks[n-1].Columns, col)
+			fks[n-1].RefColumns = append(fks[n-1].RefColumns, refCol)
+			continue
 		}
-		fkMap[name].Columns = append(fkMap[name].Columns, col)
-		fkMap[name].RefColumns = append(fkMap[name].RefColumns, refCol)
+		out[tbl] = append(fks, dbschema.ForeignKey{
+			Name:       name,
+			TableName:  tbl,
+			Columns:    []string{col},
+			RefTable:   refTable,
+			RefColumns: []string{refCol},
+			OnDelete:   onDelete,
+			OnUpdate:   onUpdate,
+		})
 	}
-	fks := make([]dbschema.ForeignKey, 0, len(order))
-	for _, n := range order {
-		fks = append(fks, *fkMap[n])
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("load fks: %w", err)
 	}
-	return fks, rows.Err()
+	return out, nil
 }
 
 // ensure Loader satisfies the interface (compile-time check).

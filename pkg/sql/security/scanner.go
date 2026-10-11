@@ -145,6 +145,8 @@
 //
 // The scanner uses pre-compiled regex patterns (initialized once at package load)
 // for optimal performance. Scanning is thread-safe and suitable for concurrent use.
+// Regex groups are guarded by case-fold-aware literal prefilters derived from each
+// pattern at init, so clean input rarely reaches the regex engine.
 //
 // # Production Integration
 //
@@ -223,113 +225,164 @@ var severityOrder = map[Severity]int{
 	SeverityCritical: 3,
 }
 
+// patternGroup is the set of regexes for one PatternType together with the
+// severity, risk and suggestion reported for any of them.
+type patternGroup struct {
+	patterns   []compiledPattern
+	severity   Severity
+	risk       string
+	suggestion string
+}
+
+// commentPattern is a comment-bypass regex with its description and severity.
+type commentPattern struct {
+	compiledPattern
+	description string
+	severity    Severity
+}
+
 // Pre-compiled regex patterns for performance (compiled once at package init)
 var (
-	compiledPatterns     map[PatternType][]*regexp.Regexp
+	// regexGroups is built once by initCompiledPatterns under compiledPatternsOnce
+	// and is read-only afterwards, so it is safe for concurrent use.
+	regexGroups          map[PatternType]*patternGroup
 	compiledPatternsOnce sync.Once
 
 	// Comment detection patterns (pre-compiled)
-	commentPatterns []struct {
-		re          *regexp.Regexp
-		description string
-		severity    Severity
-	}
+	commentPatterns     []commentPattern
 	commentPatternsOnce sync.Once
 
 	// tautologyCapturePatterns are used by detectTautologyInSQL to find candidate
 	// equality pairs. Each pattern captures a left-hand value; the caller verifies
 	// that the right-hand value matches. Go RE2 does not support backreferences so
 	// the two-step approach is used instead.
-	tautologyCapturePatterns []*regexp.Regexp
+	tautologyCapturePatterns []compiledPattern
 	tautologyCaptureOnce     sync.Once
 )
 
 // initCompiledPatterns initializes all regex patterns once at package level.
 func initCompiledPatterns() {
-	compiledPatterns = make(map[PatternType][]*regexp.Regexp)
+	regexGroups = map[PatternType]*patternGroup{
+		// Time-based blind injection functions
+		PatternTimeBased: {
+			patterns: []compiledPattern{
+				compilePattern(`(?i)\bSLEEP\s*\(`),
+				compilePattern(`(?i)\bWAITFOR\s+DELAY\b`),
+				compilePattern(`(?i)\bpg_sleep\s*\(`),
+				compilePattern(`(?i)\bBENCHMARK\s*\(`),
+				compilePattern(`(?i)\bDBMS_LOCK\.SLEEP\s*\(`),
+			},
+			severity:   SeverityHigh,
+			risk:       "Time-based blind SQL injection",
+			suggestion: "Review and sanitize SQL input",
+		},
 
-	// Time-based blind injection functions
-	compiledPatterns[PatternTimeBased] = []*regexp.Regexp{
-		regexp.MustCompile(`(?i)\bSLEEP\s*\(`),
-		regexp.MustCompile(`(?i)\bWAITFOR\s+DELAY\b`),
-		regexp.MustCompile(`(?i)\bpg_sleep\s*\(`),
-		regexp.MustCompile(`(?i)\bBENCHMARK\s*\(`),
-		regexp.MustCompile(`(?i)\bDBMS_LOCK\.SLEEP\s*\(`),
-	}
+		// Out-of-band / dangerous functions
+		PatternOutOfBand: {
+			patterns: []compiledPattern{
+				compilePattern(`(?i)\bxp_cmdshell\b`),
+				compilePattern(`(?i)\bLOAD_FILE\s*\(`),
+				compilePattern(`(?i)\bINTO\s+OUTFILE\b`),
+				compilePattern(`(?i)\bINTO\s+DUMPFILE\b`),
+				compilePattern(`(?i)\bUTL_HTTP\b`),
+				compilePattern(`(?i)\bDBMS_LDAP\b`),
+				compilePattern(`(?i)\bEXEC\s+master\b`),
+				compilePattern(`(?i)\bsp_oacreate\b`),
+			},
+			severity:   SeverityCritical,
+			risk:       "Out-of-band data exfiltration or command execution",
+			suggestion: "Review and sanitize SQL input",
+		},
 
-	// Out-of-band / dangerous functions
-	compiledPatterns[PatternOutOfBand] = []*regexp.Regexp{
-		regexp.MustCompile(`(?i)\bxp_cmdshell\b`),
-		regexp.MustCompile(`(?i)\bLOAD_FILE\s*\(`),
-		regexp.MustCompile(`(?i)\bINTO\s+OUTFILE\b`),
-		regexp.MustCompile(`(?i)\bINTO\s+DUMPFILE\b`),
-		regexp.MustCompile(`(?i)\bUTL_HTTP\b`),
-		regexp.MustCompile(`(?i)\bDBMS_LDAP\b`),
-		regexp.MustCompile(`(?i)\bEXEC\s+master\b`),
-		regexp.MustCompile(`(?i)\bsp_oacreate\b`),
-	}
+		// Dangerous functions that might indicate injection
+		PatternDangerousFunc: {
+			patterns: []compiledPattern{
+				compilePattern(`(?i)\bEXEC\s*\(`),
+				compilePattern(`(?i)\bEXECUTE\s+IMMEDIATE\b`),
+				compilePattern(`(?i)\bsp_executesql\b`),
+				compilePattern(`(?i)\bPREPARE\s+\w+\s+FROM\b`),
+			},
+			severity:   SeverityMedium,
+			risk:       "Dynamic SQL execution vulnerability",
+			suggestion: "Review and sanitize SQL input",
+		},
 
-	// Dangerous functions that might indicate injection
-	compiledPatterns[PatternDangerousFunc] = []*regexp.Regexp{
-		regexp.MustCompile(`(?i)\bEXEC\s*\(`),
-		regexp.MustCompile(`(?i)\bEXECUTE\s+IMMEDIATE\b`),
-		regexp.MustCompile(`(?i)\bsp_executesql\b`),
-		regexp.MustCompile(`(?i)\bPREPARE\s+\w+\s+FROM\b`),
-	}
+		// Tautology patterns (always-true conditions used in SQL injection).
+		// Note: Go's RE2 engine does not support backreferences, so equality-based
+		// tautologies (1=1, 'a'='a') are handled by detectTautologyInSQL; only the
+		// simple OR TRUE form is matched here.
+		PatternTautology: {
+			patterns: []compiledPattern{
+				// OR TRUE
+				compilePattern(`(?i)\bOR\s+TRUE\b`),
+			},
+			severity:   SeverityCritical,
+			risk:       "Authentication bypass via always-true condition",
+			suggestion: "Use parameterized queries to prevent tautology injection",
+		},
 
-	// Tautology patterns (always-true conditions used in SQL injection).
-	// Note: Go's RE2 engine does not support backreferences, so equality of the
-	// two sides is verified in detectTautologyInSQL (called separately from ScanSQL).
-	// These patterns are intentionally left empty; tautology detection in raw SQL
-	// is handled by the dedicated detectTautologyInSQL helper.
-	compiledPatterns[PatternTautology] = []*regexp.Regexp{
-		// OR TRUE
-		regexp.MustCompile(`(?i)\bOR\s+TRUE\b`),
-	}
+		// UNION injection fingerprints (CRITICAL): system table access or NULL-padding.
+		// Also detects bare references to system catalogs, which are injection fingerprints
+		// regardless of whether a UNION is present.
+		PatternUnionInjection: {
+			patterns: []compiledPattern{
+				// System table access via UNION (injection fingerprint)
+				compilePattern(`(?i)UNION\s+(ALL\s+)?SELECT.*\b(information_schema|pg_catalog|mysql\b|sys\.)\b`),
+				// NULL-padded columns (classic injection to match column count)
+				compilePattern(`(?i)UNION\s+(ALL\s+)?SELECT\s+(?:NULL,?\s*){2,}`),
+				// Bare system catalog references (schema enumeration fingerprint)
+				compilePattern(`(?i)\binformation_schema\b`),
+			},
+			severity:   SeverityCritical,
+			risk:       "UNION-based SQL injection with injection fingerprint (system table or NULL padding)",
+			suggestion: "Use parameterized queries and block system table access",
+		},
 
-	// UNION injection fingerprints (CRITICAL): system table access or NULL-padding.
-	// Also detects bare references to system catalogs, which are injection fingerprints
-	// regardless of whether a UNION is present.
-	compiledPatterns[PatternUnionInjection] = []*regexp.Regexp{
-		// System table access via UNION (injection fingerprint)
-		regexp.MustCompile(`(?i)UNION\s+(ALL\s+)?SELECT.*\b(information_schema|pg_catalog|mysql\b|sys\.)\b`),
-		// NULL-padded columns (classic injection to match column count)
-		regexp.MustCompile(`(?i)UNION\s+(ALL\s+)?SELECT\s+(?:NULL,?\s*){2,}`),
-		// Bare system catalog references (schema enumeration fingerprint)
-		regexp.MustCompile(`(?i)\binformation_schema\b`),
-	}
+		// Generic UNION SELECT (HIGH): may be legitimate or injection
+		PatternUnionGeneric: {
+			patterns: []compiledPattern{
+				compilePattern(`(?i)\bUNION\s+(ALL\s+)?SELECT\b`),
+			},
+			severity:   SeverityHigh,
+			risk:       "Possible UNION-based data extraction; review for legitimacy",
+			suggestion: "Verify UNION is intentional and all inputs are parameterized",
+		},
 
-	// Generic UNION SELECT (HIGH): may be legitimate or injection
-	compiledPatterns[PatternUnionGeneric] = []*regexp.Regexp{
-		regexp.MustCompile(`(?i)\bUNION\s+(ALL\s+)?SELECT\b`),
-	}
-
-	// Stacked query injection patterns (destructive statements after semicolon)
-	compiledPatterns[PatternStackedQuery] = []*regexp.Regexp{
-		regexp.MustCompile(`;\s*(?i)(DROP|DELETE|TRUNCATE|UPDATE|INSERT|ALTER)\b`),
-		regexp.MustCompile(`;\s*(?i)EXEC\b`),
-		regexp.MustCompile(`;\s*(?i)EXECUTE\b`),
+		// Stacked query injection patterns (destructive statements after semicolon)
+		PatternStackedQuery: {
+			patterns: []compiledPattern{
+				compilePattern(`;\s*(?i)(DROP|DELETE|TRUNCATE|UPDATE|INSERT|ALTER)\b`),
+				compilePattern(`;\s*(?i)EXEC\b`),
+				compilePattern(`;\s*(?i)EXECUTE\b`),
+			},
+			severity:   SeverityCritical,
+			risk:       "Stacked query injection with destructive operations",
+			suggestion: "Block semicolons in user input or use parameterized queries",
+		},
 	}
 }
 
 // initCommentPatterns initializes comment detection patterns once.
 func initCommentPatterns() {
-	commentPatterns = []struct {
-		re          *regexp.Regexp
-		description string
-		severity    Severity
-	}{
-		{regexp.MustCompile(`--\s*$`), "Trailing SQL comment may indicate injection", SeverityMedium},
-		{regexp.MustCompile(`--\s*['")\]]`), "Comment after quote/bracket (potential bypass)", SeverityHigh},
-		{regexp.MustCompile(`/\*[^*]*\*+(?:[^/*][^*]*\*+)*/\s*$`), "Unclosed or trailing block comment may indicate injection", SeverityMedium},
-		{regexp.MustCompile(`/\*!.*\*/`), "MySQL conditional comment (version-specific execution)", SeverityMedium},
-		{regexp.MustCompile(`#\s*$`), "Hash comment at end (MySQL)", SeverityMedium},
-		{regexp.MustCompile(`;\s*--`), "Statement terminator followed by comment", SeverityHigh},
+	commentPatterns = []commentPattern{
+		{compilePattern(`--\s*$`), "Trailing SQL comment may indicate injection", SeverityMedium},
+		{compilePattern(`--\s*['")\]]`), "Comment after quote/bracket (potential bypass)", SeverityHigh},
+		{compilePattern(`/\*[^*]*\*+(?:[^/*][^*]*\*+)*/\s*$`), "Unclosed or trailing block comment may indicate injection", SeverityMedium},
+		{compilePattern(`/\*!.*\*/`), "MySQL conditional comment (version-specific execution)", SeverityMedium},
+		{compilePattern(`#\s*$`), "Hash comment at end (MySQL)", SeverityMedium},
+		{compilePattern(`;\s*--`), "Statement terminator followed by comment", SeverityHigh},
 	}
 }
 
 // maxRegexInputLen guards against ReDoS by limiting the input length
 // fed to regexes with nested quantifiers (e.g. the block-comment pattern).
+//
+// The cap applies to the comment and tautology groups only; the other regex
+// groups remain uncapped exactly as before, so findings on inputs longer than
+// 10_000 bytes are unchanged. The literal prefilters always see the whole
+// (dollar-quote-stripped) input, so a prefilter can never hide a match that lies
+// beyond byte 10_000. Go's RE2 engine is linear-time, so this cap is a
+// constant-factor guard rather than a catastrophic-backtracking fix.
 const maxRegexInputLen = 10_000
 
 func safeRegexMatch(re *regexp.Regexp, s string) bool {
@@ -344,13 +397,13 @@ func safeRegexMatch(re *regexp.Regexp, s string) bool {
 // sides of an equality; detectTautologyInSQL then verifies the two captured groups
 // are equal before reporting a finding.
 func initTautologyCapturePatterns() {
-	tautologyCapturePatterns = []*regexp.Regexp{
+	tautologyCapturePatterns = []compiledPattern{
 		// Numeric: two identical digit sequences around '=' (bounded to prevent ReDoS)
-		regexp.MustCompile(`(?i)\b(\d{1,6})\s*=\s*(\d{1,6})\b`),
+		compilePattern(`(?i)\b(\d{1,6})\s*=\s*(\d{1,6})\b`),
 		// String literal: 'value' = 'value' (max 50 chars per side, no backtracking risk)
-		regexp.MustCompile(`(?i)('[^']{0,50}')\s*=\s*('[^']{0,50}')`),
+		compilePattern(`(?i)('[^']{0,50}')\s*=\s*('[^']{0,50}')`),
 		// Identifier: col = col (bounded length, word chars + dots)
-		regexp.MustCompile(`(?i)\b([a-z_][a-z0-9_.]{0,50})\s*=\s*([a-z_][a-z0-9_.]{0,50})\b`),
+		compilePattern(`(?i)\b([a-z_][a-z0-9_.]{0,50})\s*=\s*([a-z_][a-z0-9_.]{0,50})\b`),
 	}
 }
 
@@ -604,6 +657,14 @@ func (s *Scanner) Scan(tree *ast.AST) *ScanResult {
 //	    }
 //	}
 func (s *Scanner) ScanSQL(sql string) *ScanResult {
+	return s.scanSQL(sql, true)
+}
+
+// scanSQL implements ScanSQL. With prefilter set, each regex is skipped when the
+// case-folded input lacks one of the literals every match must contain. With
+// prefilter unset every regex runs; tests use that path as the reference
+// implementation to prove the prefilters never change findings.
+func (s *Scanner) scanSQL(sql string, prefilter bool) *ScanResult {
 	result := &ScanResult{
 		Findings: make([]Finding, 0),
 	}
@@ -611,33 +672,43 @@ func (s *Scanner) ScanSQL(sql string) *ScanResult {
 	// Strip dollar-quoted string content to prevent false positives
 	sql = stripDollarQuotedStrings(sql)
 
+	// Case-fold the whole stripped input once for the literal prefilters. A nil
+	// folded slice disables prefiltering.
+	var folded []byte
+	if prefilter {
+		bp := getFoldBuf()
+		defer putFoldBuf(bp)
+		folded = foldASCII((*bp)[:0], sql)
+		*bp = folded
+	}
+
 	// Check for comment-based bypass patterns in raw SQL
-	s.detectCommentPatterns(sql, result)
+	s.detectCommentPatterns(sql, folded, result)
 
 	// Check for tautology patterns (OR 1=1, 'a'='a', etc.)
 	// detectRegexPatterns handles the simple OR TRUE pattern; detectTautologyInSQL
 	// handles equality-based tautologies using a two-step capture approach (RE2
 	// does not support backreferences, so equality is verified programmatically).
-	s.detectRegexPatterns(sql, PatternTautology, result)
-	s.detectTautologyInSQL(sql, result)
+	s.detectRegexPatterns(sql, folded, PatternTautology, result)
+	s.detectTautologyInSQL(sql, folded, result)
 
 	// Check for time-based patterns
-	s.detectRegexPatterns(sql, PatternTimeBased, result)
+	s.detectRegexPatterns(sql, folded, PatternTimeBased, result)
 
 	// Check for out-of-band patterns
-	s.detectRegexPatterns(sql, PatternOutOfBand, result)
+	s.detectRegexPatterns(sql, folded, PatternOutOfBand, result)
 
 	// Check for dangerous function patterns
-	s.detectRegexPatterns(sql, PatternDangerousFunc, result)
+	s.detectRegexPatterns(sql, folded, PatternDangerousFunc, result)
 
 	// Check for UNION injection fingerprints (CRITICAL: system tables, NULL-padding)
-	s.detectRegexPatterns(sql, PatternUnionInjection, result)
+	s.detectRegexPatterns(sql, folded, PatternUnionInjection, result)
 
 	// Check for generic UNION SELECT (HIGH: may be legitimate, but warrants review)
-	s.detectRegexPatterns(sql, PatternUnionGeneric, result)
+	s.detectRegexPatterns(sql, folded, PatternUnionGeneric, result)
 
 	// Check for stacked query patterns
-	s.detectRegexPatterns(sql, PatternStackedQuery, result)
+	s.detectRegexPatterns(sql, folded, PatternStackedQuery, result)
 
 	// Update counts
 	s.updateCounts(result)
@@ -915,6 +986,28 @@ func (s *Scanner) isSystemTable(tableName string) bool {
 	return false
 }
 
+// timeBasedFuncNames lists time-based blind injection functions (upper case).
+// Read-only after package init; safe for concurrent use.
+var timeBasedFuncNames = map[string]bool{
+	"SLEEP":     true,
+	"PG_SLEEP":  true,
+	"BENCHMARK": true,
+	"WAITFOR":   true,
+}
+
+// dangerousFuncNames maps out-of-band / dangerous functions (upper case) to their
+// risk. Read-only after package init; safe for concurrent use.
+var dangerousFuncNames = map[string]string{
+	"LOAD_FILE":     "File system access",
+	"LOAD DATA":     "File system access",
+	"XP_CMDSHELL":   "Command execution",
+	"SP_OACREATE":   "OLE automation",
+	"UTL_HTTP":      "Network access",
+	"DBMS_LDAP":     "LDAP access",
+	"EXEC":          "Dynamic SQL execution",
+	"SP_EXECUTESQL": "Dynamic SQL execution",
+}
+
 // scanFunctionCall checks for dangerous function usage.
 func (s *Scanner) scanFunctionCall(fn *ast.FunctionCall, result *ScanResult) {
 	if fn == nil {
@@ -923,15 +1016,7 @@ func (s *Scanner) scanFunctionCall(fn *ast.FunctionCall, result *ScanResult) {
 
 	funcName := strings.ToUpper(fn.Name)
 
-	// Time-based blind injection functions
-	timeBasedFuncs := map[string]bool{
-		"SLEEP":     true,
-		"PG_SLEEP":  true,
-		"BENCHMARK": true,
-		"WAITFOR":   true,
-	}
-
-	if timeBasedFuncs[funcName] {
+	if timeBasedFuncNames[funcName] {
 		finding := Finding{
 			Severity:    SeverityHigh,
 			Pattern:     PatternTimeBased,
@@ -944,19 +1029,7 @@ func (s *Scanner) scanFunctionCall(fn *ast.FunctionCall, result *ScanResult) {
 		}
 	}
 
-	// Out-of-band / dangerous functions
-	dangerousFuncs := map[string]string{
-		"LOAD_FILE":     "File system access",
-		"LOAD DATA":     "File system access",
-		"XP_CMDSHELL":   "Command execution",
-		"SP_OACREATE":   "OLE automation",
-		"UTL_HTTP":      "Network access",
-		"DBMS_LDAP":     "LDAP access",
-		"EXEC":          "Dynamic SQL execution",
-		"SP_EXECUTESQL": "Dynamic SQL execution",
-	}
-
-	if risk, found := dangerousFuncs[funcName]; found {
+	if risk, found := dangerousFuncNames[funcName]; found {
 		finding := Finding{
 			Severity:    SeverityCritical,
 			Pattern:     PatternOutOfBand,
@@ -992,12 +1065,16 @@ func (s *Scanner) scanExpressionForDangerousFunctions(expr ast.Expression, resul
 	}
 }
 
-// detectCommentPatterns checks raw SQL for comment-based injection.
-func (s *Scanner) detectCommentPatterns(sql string, result *ScanResult) {
+// detectCommentPatterns checks raw SQL for comment-based injection. folded is the
+// case-folded input used for literal prefiltering; nil disables prefiltering.
+func (s *Scanner) detectCommentPatterns(sql string, folded []byte, result *ScanResult) {
 	// Ensure patterns are initialized
 	commentPatternsOnce.Do(initCommentPatterns)
 
 	for _, p := range commentPatterns {
+		if folded != nil && !containsAll(folded, p.lits) {
+			continue
+		}
 		if safeRegexMatch(p.re, sql) {
 			finding := Finding{
 				Severity:    p.severity,
@@ -1015,8 +1092,9 @@ func (s *Scanner) detectCommentPatterns(sql string, result *ScanResult) {
 
 // detectTautologyInSQL checks raw SQL for tautology patterns (e.g. OR 1=1, 'a'='a').
 // Because Go's RE2 engine does not support backreferences, equality of the two sides
-// is verified programmatically after the regex captures both groups.
-func (s *Scanner) detectTautologyInSQL(sql string, result *ScanResult) {
+// is verified programmatically after the regex captures both groups. folded is the
+// case-folded input used for literal prefiltering; nil disables prefiltering.
+func (s *Scanner) detectTautologyInSQL(sql string, folded []byte, result *ScanResult) {
 	// Ensure patterns are initialized
 	tautologyCaptureOnce.Do(initTautologyCapturePatterns)
 
@@ -1026,8 +1104,11 @@ func (s *Scanner) detectTautologyInSQL(sql string, result *ScanResult) {
 		input = input[:maxRegexInputLen]
 	}
 
-	for _, re := range tautologyCapturePatterns {
-		matches := re.FindAllStringSubmatch(input, -1)
+	for _, p := range tautologyCapturePatterns {
+		if folded != nil && !containsAll(folded, p.lits) {
+			continue
+		}
+		matches := p.re.FindAllStringSubmatch(input, -1)
 		for _, m := range matches {
 			if len(m) == 3 && strings.EqualFold(m[1], m[2]) {
 				finding := Finding{
@@ -1047,61 +1128,33 @@ func (s *Scanner) detectTautologyInSQL(sql string, result *ScanResult) {
 	}
 }
 
-// detectRegexPatterns checks SQL against compiled regex patterns.
-func (s *Scanner) detectRegexPatterns(sql string, patternType PatternType, result *ScanResult) {
+// detectRegexPatterns checks SQL against the compiled regex group for patternType.
+// folded is the case-folded input used for literal prefiltering; nil disables
+// prefiltering.
+func (s *Scanner) detectRegexPatterns(sql string, folded []byte, patternType PatternType, result *ScanResult) {
 	// Ensure patterns are initialized
 	compiledPatternsOnce.Do(initCompiledPatterns)
 
-	patterns, ok := compiledPatterns[patternType]
+	group, ok := regexGroups[patternType]
 	if !ok {
 		return
 	}
 
-	severityMap := map[PatternType]Severity{
-		PatternTautology:      SeverityCritical,
-		PatternTimeBased:      SeverityHigh,
-		PatternOutOfBand:      SeverityCritical,
-		PatternDangerousFunc:  SeverityMedium,
-		PatternUnionBased:     SeverityCritical,
-		PatternUnionInjection: SeverityCritical,
-		PatternUnionGeneric:   SeverityHigh,
-		PatternStackedQuery:   SeverityCritical,
-	}
-
-	riskMap := map[PatternType]string{
-		PatternTautology:      "Authentication bypass via always-true condition",
-		PatternTimeBased:      "Time-based blind SQL injection",
-		PatternOutOfBand:      "Out-of-band data exfiltration or command execution",
-		PatternDangerousFunc:  "Dynamic SQL execution vulnerability",
-		PatternUnionBased:     "UNION-based SQL injection for data extraction",
-		PatternUnionInjection: "UNION-based SQL injection with injection fingerprint (system table or NULL padding)",
-		PatternUnionGeneric:   "Possible UNION-based data extraction; review for legitimacy",
-		PatternStackedQuery:   "Stacked query injection with destructive operations",
-	}
-
-	suggestionMap := map[PatternType]string{
-		PatternTautology:      "Use parameterized queries to prevent tautology injection",
-		PatternTimeBased:      "Review and sanitize SQL input",
-		PatternOutOfBand:      "Review and sanitize SQL input",
-		PatternDangerousFunc:  "Review and sanitize SQL input",
-		PatternUnionBased:     "Use parameterized queries and validate input",
-		PatternUnionInjection: "Use parameterized queries and block system table access",
-		PatternUnionGeneric:   "Verify UNION is intentional and all inputs are parameterized",
-		PatternStackedQuery:   "Block semicolons in user input or use parameterized queries",
-	}
-
-	severity := severityMap[patternType]
-	risk := riskMap[patternType]
-	suggestion := suggestionMap[patternType]
-
-	for _, re := range patterns {
-		if matches := re.FindStringSubmatch(sql); len(matches) > 0 {
+	for _, p := range group.patterns {
+		if folded != nil && !containsAll(folded, p.lits) {
+			continue
+		}
+		// Every pattern requires a non-empty literal (asserted by
+		// TestCompiledPatterns_AllHaveLiterals), so FindString returning "" means
+		// no match, and a non-empty result is the same leftmost-first match that
+		// FindStringSubmatch(sql)[0] would return.
+		if m := p.re.FindString(sql); m != "" {
 			finding := Finding{
-				Severity:    severity,
+				Severity:    group.severity,
 				Pattern:     patternType,
-				Description: "Pattern detected: " + matches[0],
-				Risk:        risk,
-				Suggestion:  suggestion,
+				Description: "Pattern detected: " + m,
+				Risk:        group.risk,
+				Suggestion:  group.suggestion,
 			}
 			if s.shouldInclude(finding.Severity) {
 				result.Findings = append(result.Findings, finding)

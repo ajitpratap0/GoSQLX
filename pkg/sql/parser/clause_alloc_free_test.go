@@ -261,8 +261,9 @@ func TestParse_PaginatedJoinAllocs(t *testing.T) {
 	if parseErr != nil {
 		t.Fatalf("parse: %v", parseErr)
 	}
-	// Baseline before removing Sscanf, Sprintf and ToUpper was 37 allocs; 26 after.
-	const maxAllocs = 28
+	// Measured with AllocsPerRun: 35 allocs before removing Sscanf, Sprintf and
+	// ToUpper, 24 after (benchmarks report 37 and 26 respectively).
+	const maxAllocs = 26
 	if n > maxAllocs {
 		t.Errorf("AllocsPerRun = %v, want <= %d", n, maxAllocs)
 	}

@@ -387,12 +387,12 @@ func (p *Parser) isSnowflakeTimeTravelStart() bool {
 	}
 	// BEFORE / CHANGES: plain identifier or keyword
 	val := p.currentToken.Token.Value
-	if strings.EqualFold(val, "BEFORE") || strings.EqualFold(val, "CHANGES") {
+	if equalsUpper(val, "BEFORE") || equalsUpper(val, "CHANGES") {
 		// Must be followed by '(' to disambiguate from other uses.
 		return p.peekToken().Token.Type == models.TokenTypeLParen
 	}
 	// AT: either TokenTypeAt (@) or an identifier-token "AT" followed by '('.
-	if strings.EqualFold(val, "AT") && p.peekToken().Token.Type == models.TokenTypeLParen {
+	if equalsUpper(val, "AT") && p.peekToken().Token.Type == models.TokenTypeLParen {
 		return true
 	}
 	return false
@@ -404,7 +404,7 @@ func (p *Parser) isSnowflakeTimeTravelStart() bool {
 // consuming these tokens.
 func (p *Parser) isSampleKeyword() bool {
 	v := p.currentToken.Token.Value
-	if !strings.EqualFold(v, "SAMPLE") && !strings.EqualFold(v, "TABLESAMPLE") {
+	if !equalsUpper(v, "SAMPLE") && !equalsUpper(v, "TABLESAMPLE") {
 		return false
 	}
 	// Require '(' or a method keyword as lookahead to disambiguate from
@@ -414,7 +414,7 @@ func (p *Parser) isSampleKeyword() bool {
 		return true
 	}
 	nv := next.Value
-	if strings.EqualFold(nv, "BERNOULLI") || strings.EqualFold(nv, "SYSTEM") || strings.EqualFold(nv, "BLOCK") || strings.EqualFold(nv, "ROW") {
+	if equalsUpper(nv, "BERNOULLI") || equalsUpper(nv, "SYSTEM") || equalsUpper(nv, "BLOCK") || equalsUpper(nv, "ROW") {
 		return true
 	}
 	// ClickHouse: SAMPLE followed by a number (SAMPLE 0.1, SAMPLE 10000, SAMPLE 1/10)

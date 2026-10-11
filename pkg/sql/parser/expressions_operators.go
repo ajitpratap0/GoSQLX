@@ -42,7 +42,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	if p.isType(models.TokenTypeNot) {
 		nextToken := p.peekToken()
 		nv := nextToken.Token.Value
-		if strings.EqualFold(nv, "BETWEEN") || strings.EqualFold(nv, "LIKE") || strings.EqualFold(nv, "ILIKE") || strings.EqualFold(nv, "IN") {
+		if equalsUpper(nv, "BETWEEN") || equalsUpper(nv, "LIKE") || equalsUpper(nv, "ILIKE") || equalsUpper(nv, "IN") {
 			notPrefix = true
 			p.advance() // Consume NOT only if followed by valid operator
 		}

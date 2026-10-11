@@ -37,11 +37,11 @@ func (p *Parser) isMariaDBClauseStart() bool {
 		return false
 	}
 	val := p.currentToken.Token.Value
-	if strings.EqualFold(val, "CONNECT") {
+	if equalsUpper(val, "CONNECT") {
 		next := p.peekToken()
 		return strings.EqualFold(next.Token.Value, "BY")
 	}
-	if strings.EqualFold(val, "START") {
+	if equalsUpper(val, "START") {
 		next := p.peekToken()
 		return strings.EqualFold(next.Token.Value, "WITH")
 	}

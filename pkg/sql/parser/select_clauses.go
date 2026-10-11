@@ -597,21 +597,21 @@ func (p *Parser) parseClickHouseWithFill() (*ast.WithFillClause, error) {
 	for {
 		v := p.currentToken.Token.Value
 		switch {
-		case strings.EqualFold(v, "FROM"):
+		case equalsUpper(v, "FROM"):
 			p.advance()
 			e, err := p.parseExpression()
 			if err != nil {
 				return nil, err
 			}
 			fill.From = e
-		case strings.EqualFold(v, "TO"):
+		case equalsUpper(v, "TO"):
 			p.advance()
 			e, err := p.parseExpression()
 			if err != nil {
 				return nil, err
 			}
 			fill.To = e
-		case strings.EqualFold(v, "STEP"):
+		case equalsUpper(v, "STEP"):
 			p.advance()
 			e, err := p.parseExpression()
 			if err != nil {
@@ -644,8 +644,7 @@ func (p *Parser) parseLimitOffsetClause() (limit *int, offset *int, err error) {
 		if !p.isNumericLiteral() {
 			return nil, nil, p.expectedError("integer for LIMIT")
 		}
-		firstVal := 0
-		firstVal = int(parseLeadingInt(p.currentToken.Token.Value, strconv.IntSize))
+		firstVal := int(parseLeadingInt(p.currentToken.Token.Value, strconv.IntSize))
 		p.advance()
 
 		// MySQL / ClickHouse: LIMIT offset, count
@@ -654,8 +653,7 @@ func (p *Parser) parseLimitOffsetClause() (limit *int, offset *int, err error) {
 			if !p.isNumericLiteral() {
 				return nil, nil, p.expectedError("integer for LIMIT count")
 			}
-			secondVal := 0
-			secondVal = int(parseLeadingInt(p.currentToken.Token.Value, strconv.IntSize))
+			secondVal := int(parseLeadingInt(p.currentToken.Token.Value, strconv.IntSize))
 			p.advance()
 			offset = &firstVal
 			limit = &secondVal
@@ -671,8 +669,7 @@ func (p *Parser) parseLimitOffsetClause() (limit *int, offset *int, err error) {
 		if !p.isNumericLiteral() {
 			return nil, nil, p.expectedError("integer for OFFSET")
 		}
-		offsetVal := 0
-		offsetVal = int(parseLeadingInt(p.currentToken.Token.Value, strconv.IntSize))
+		offsetVal := int(parseLeadingInt(p.currentToken.Token.Value, strconv.IntSize))
 		offset = &offsetVal
 		p.advance()
 

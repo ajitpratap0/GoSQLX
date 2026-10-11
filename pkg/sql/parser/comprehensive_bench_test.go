@@ -147,6 +147,47 @@ func BenchmarkParserComplexity(b *testing.B) {
 		benchmarkParserWithTokens(b, tokens)
 	})
 
+	// ThreeTableJoin_Qualified exercises 11 qualified column references
+	// (table.column) across SELECT, ON and WHERE. Each qualified reference
+	// should cost a single Identifier allocation.
+	b.Run("ThreeTableJoin_Qualified", func(b *testing.B) {
+		qual := func(table, col string) []models.TokenWithSpan {
+			return []models.TokenWithSpan{
+				tw(models.TokenTypeIdentifier, table),
+				tw(models.TokenTypePeriod, "."),
+				tw(models.TokenTypeIdentifier, col),
+			}
+		}
+		var tokens []models.TokenWithSpan
+		add := func(t ...models.TokenWithSpan) { tokens = append(tokens, t...) }
+		add(tw(models.TokenTypeSelect, "SELECT"))
+		add(qual("u", "id")...)
+		add(tw(models.TokenTypeComma, ","))
+		add(qual("u", "name")...)
+		add(tw(models.TokenTypeComma, ","))
+		add(qual("o", "id")...)
+		add(tw(models.TokenTypeComma, ","))
+		add(qual("o", "total")...)
+		add(tw(models.TokenTypeComma, ","))
+		add(qual("p", "sku")...)
+		add(tw(models.TokenTypeFrom, "FROM"), tw(models.TokenTypeIdentifier, "users"), tw(models.TokenTypeIdentifier, "u"))
+		add(tw(models.TokenTypeJoin, "JOIN"), tw(models.TokenTypeIdentifier, "orders"), tw(models.TokenTypeIdentifier, "o"), tw(models.TokenTypeOn, "ON"))
+		add(qual("u", "id")...)
+		add(tw(models.TokenTypeEq, "="))
+		add(qual("o", "user_id")...)
+		add(tw(models.TokenTypeJoin, "JOIN"), tw(models.TokenTypeIdentifier, "products"), tw(models.TokenTypeIdentifier, "p"), tw(models.TokenTypeOn, "ON"))
+		add(qual("o", "product_id")...)
+		add(tw(models.TokenTypeEq, "="))
+		add(qual("p", "id")...)
+		add(tw(models.TokenTypeWhere, "WHERE"))
+		add(qual("u", "active")...)
+		add(tw(models.TokenTypeEq, "="), tw(models.TokenTypeNumber, "1"), tw(models.TokenTypeAnd, "AND"))
+		add(qual("o", "total")...)
+		add(tw(models.TokenTypeGt, ">"), tw(models.TokenTypeNumber, "100"))
+		add(tw(models.TokenTypeEOF, ""))
+		benchmarkParserWithTokens(b, tokens)
+	})
+
 	b.Run("SimpleWhere", func(b *testing.B) {
 		tokens := []models.TokenWithSpan{
 			tw(models.TokenTypeSelect, "SELECT"),

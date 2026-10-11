@@ -274,6 +274,26 @@ func TestOrInsteadOfIn_Violation(t *testing.T) {
 	}
 }
 
+func TestOrInsteadOfIn_Violation_Parenthesized(t *testing.T) {
+	queries := []string{
+		"SELECT id FROM users WHERE (status = 1) OR (status = 2) OR (status = 3)",
+		"SELECT id FROM users WHERE status = 1 OR (status = 2 OR status = 3)",
+		"SELECT id FROM users WHERE ((status) = 1) OR status = 2 OR status = 3",
+	}
+	rule := performance.NewOrInsteadOfInRule()
+	for _, sql := range queries {
+		t.Run(sql, func(t *testing.T) {
+			v, err := rule.Check(makeCtx(t, sql))
+			if err != nil {
+				t.Fatalf("Check() error: %v", err)
+			}
+			if len(v) == 0 {
+				t.Error("expected violation for parenthesized OR chain on same column")
+			}
+		})
+	}
+}
+
 func TestOrInsteadOfIn_NoViolation_TwoOr(t *testing.T) {
 	rule := performance.NewOrInsteadOfInRule()
 	ctx := makeCtx(t, "SELECT id FROM users WHERE status = 1 OR status = 2")
@@ -312,6 +332,17 @@ func TestFunctionOnColumn_Violation(t *testing.T) {
 	}
 	if v[0].Rule != "L022" {
 		t.Errorf("expected rule L022, got %s", v[0].Rule)
+	}
+}
+
+func TestFunctionOnColumn_Violation_Parenthesized(t *testing.T) {
+	rule := performance.NewFunctionOnColumnRule()
+	v, err := rule.Check(makeCtx(t, "SELECT id FROM orders WHERE (YEAR(created_at)) = 2024"))
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(v) == 0 {
+		t.Error("expected violation for parenthesized function on indexed column")
 	}
 }
 

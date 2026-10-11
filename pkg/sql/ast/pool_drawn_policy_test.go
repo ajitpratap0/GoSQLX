@@ -26,6 +26,28 @@ import (
 	"testing"
 )
 
+// releaseDrawnConstructors lists the pool constructors in this package that
+// pkg/sql/parser calls, i.e. the node types releaseDrawn must return to their
+// pools. It mirrors the unconditional Put cases of putExpressionImpl and
+// releaseStatement. It lives in this test file because it has no production
+// use: TestReleaseDrawnPolicy_MatchesParser compares that policy with the parser's actual ast.Get*/ast.New* calls.
+// When the parser starts drawing a new type, add its constructor here and
+// make sure the matching Put case runs in releaseDrawn mode.
+var releaseDrawnConstructors = []string{
+	"GetTupleExpression",
+	"GetArrayConstructor",
+	"GetArraySubscriptExpression",
+	"GetArraySliceExpression",
+	"GetUnsupportedStatement",
+	"GetAlterStatement",
+	"GetShowStatement",
+	"GetDescribeStatement",
+	"GetReplaceStatement",
+	"NewCreateSequenceStatement",
+	"NewDropSequenceStatement",
+	"NewAlterSequenceStatement",
+}
+
 // This file guards the hand-maintained releaseDrawn policy (issue #556)
 // against drift from pkg/sql/parser. ReleaseAST only recycles node types the
 // parser draws from pools, so a pool constructor the parser starts calling
@@ -170,7 +192,7 @@ func TestReleaseDrawnPolicy_MatchesParser(t *testing.T) {
 	for _, name := range sortedKeys(parser) {
 		if !policy[name] {
 			t.Errorf("pkg/sql/parser draws ast.%s from a pool but it is MISSING from the release policy "+
-				"(releaseDrawnConstructors in pool_expression_release.go). Add it there and make sure "+
+				"(releaseDrawnConstructors in pool_drawn_policy_test.go). Add it there and make sure "+
 				"putExpressionImpl / releaseStatement Puts that type in releaseDrawn mode, "+
 				"otherwise ReleaseAST will never recycle it", name)
 		}

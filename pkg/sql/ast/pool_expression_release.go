@@ -202,31 +202,10 @@ const (
 	// other DDL statements are also still Put through their Put* functions.
 	// This list must be kept in sync with the parser's ast.Get* (and
 	// ast.NewXxxStatement) calls: a type the parser starts drawing must be
-	// Put unconditionally in putExpressionImpl / releaseStatement.
+	// Put unconditionally in putExpressionImpl / releaseStatement, and its
+	// constructor added to releaseDrawnConstructors in pool_drawn_policy_test.go.
 	releaseDrawn
 )
-
-// releaseDrawnConstructors lists the pool constructors in this package that
-// pkg/sql/parser calls, i.e. the node types releaseDrawn must return to their
-// pools. It mirrors the unconditional Put cases of putExpressionImpl and
-// releaseStatement and exists so TestReleaseDrawnPolicy_MatchesParser can
-// compare that policy with the parser's actual ast.Get*/ast.New* calls.
-// When the parser starts drawing a new type, add its constructor here and
-// make sure the matching Put case runs in releaseDrawn mode.
-var releaseDrawnConstructors = []string{
-	"GetTupleExpression",
-	"GetArrayConstructor",
-	"GetArraySubscriptExpression",
-	"GetArraySliceExpression",
-	"GetUnsupportedStatement",
-	"GetAlterStatement",
-	"GetShowStatement",
-	"GetDescribeStatement",
-	"GetReplaceStatement",
-	"NewCreateSequenceStatement",
-	"NewDropSequenceStatement",
-	"NewAlterSequenceStatement",
-}
 
 // releaseExpression releases expr and its subtree according to mode.
 func releaseExpression(expr Expression, mode releaseMode) {

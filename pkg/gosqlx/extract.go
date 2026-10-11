@@ -184,15 +184,9 @@ func ExtractTables(astNode *ast.AST) []string {
 		return nil
 	}
 
-	collector := &tableCollector{
-		tables: make(map[string]bool),
-	}
-
-	for _, stmt := range astNode.Statements {
-		collector.collectFromNode(stmt)
-	}
-
-	return collector.toSlice()
+	c := &metadataCollector{want: extractTables, tables: make(map[string]struct{})}
+	c.collect(astNode)
+	return stringSetToSlice(c.tables)
 }
 
 // ExtractTablesQualified extracts all table names with their qualifiers (schema.table).
@@ -214,15 +208,9 @@ func ExtractTablesQualified(astNode *ast.AST) []QualifiedName {
 		return nil
 	}
 
-	collector := &qualifiedTableCollector{
-		tables: make(map[string]QualifiedName),
-	}
-
-	for _, stmt := range astNode.Statements {
-		collector.collectFromNode(stmt)
-	}
-
-	return collector.toSlice()
+	c := &metadataCollector{want: extractTablesQualified, tablesQualified: make(map[QualifiedName]struct{})}
+	c.collect(astNode)
+	return qualifiedSetToSlice(c.tablesQualified)
 }
 
 // ExtractColumns extracts all column references from an AST.
@@ -248,15 +236,9 @@ func ExtractColumns(astNode *ast.AST) []string {
 		return nil
 	}
 
-	collector := &columnCollector{
-		columns: make(map[string]bool),
-	}
-
-	for _, stmt := range astNode.Statements {
-		collector.collectFromNode(stmt)
-	}
-
-	return collector.toSlice()
+	c := &metadataCollector{want: extractColumns, columns: make(map[string]struct{})}
+	c.collect(astNode)
+	return stringSetToSlice(c.columns)
 }
 
 // ExtractColumnsQualified extracts all column references with their table qualifiers.
@@ -284,15 +266,9 @@ func ExtractColumnsQualified(astNode *ast.AST) []QualifiedName {
 		return nil
 	}
 
-	collector := &qualifiedColumnCollector{
-		columns: make(map[string]QualifiedName),
-	}
-
-	for _, stmt := range astNode.Statements {
-		collector.collectFromNode(stmt)
-	}
-
-	return collector.toSlice()
+	c := &metadataCollector{want: extractColumnsQualified, columnsQualified: make(map[QualifiedName]struct{})}
+	c.collect(astNode)
+	return qualifiedSetToSlice(c.columnsQualified)
 }
 
 // ExtractFunctions extracts all function calls from an AST.
@@ -315,678 +291,263 @@ func ExtractFunctions(astNode *ast.AST) []string {
 		return nil
 	}
 
-	collector := &functionCollector{
-		functions: make(map[string]bool),
-	}
+	c := &metadataCollector{want: extractFunctions, functions: make(map[string]struct{})}
+	c.collect(astNode)
+	return stringSetToSlice(c.functions)
+}
 
+// extractKind is a bitmask selecting which outputs a metadataCollector gathers.
+type extractKind uint8
+
+const (
+	extractTables extractKind = 1 << iota
+	extractTablesQualified
+	extractColumns
+	extractColumnsQualified
+	extractFunctions
+
+	extractAll = extractTables | extractTablesQualified | extractColumns |
+		extractColumnsQualified | extractFunctions
+
+	// extractExprKinds is the subset of kinds that require walking expressions.
+	extractExprKinds = extractColumns | extractColumnsQualified | extractFunctions
+)
+
+// parseQualifiedTableName splits a dotted table name into a QualifiedName.
+//
+// Semantics: 1 part -> Name; 2 parts -> Schema.Name; 3 parts -> Schema.Table.Name;
+// 4 or more parts -> the whole string as Name. Empty parts are preserved.
+// It does not allocate; the returned strings alias name.
+func parseQualifiedTableName(name string) QualifiedName {
+	schema, rest, ok := strings.Cut(name, ".")
+	if !ok {
+		return QualifiedName{Name: name}
+	}
+	table, last, ok := strings.Cut(rest, ".")
+	if !ok {
+		return QualifiedName{Schema: schema, Name: rest}
+	}
+	if strings.IndexByte(last, '.') >= 0 {
+		return QualifiedName{Name: name}
+	}
+	return QualifiedName{Schema: schema, Table: table, Name: last}
+}
+
+// metadataCollector gathers any combination of tables, columns and functions
+// in a single AST traversal. Maps for kinds that were not requested stay nil
+// and are never written to.
+type metadataCollector struct {
+	want             extractKind
+	tables           map[string]struct{}
+	tablesQualified  map[QualifiedName]struct{}
+	columns          map[string]struct{}
+	columnsQualified map[QualifiedName]struct{}
+	functions        map[string]struct{}
+}
+
+func (c *metadataCollector) collect(astNode *ast.AST) {
 	for _, stmt := range astNode.Statements {
-		collector.collectFromNode(stmt)
+		c.collectFromNode(stmt)
 	}
-
-	return collector.toSlice()
 }
 
-// tableCollector collects table names from AST nodes
-type tableCollector struct {
-	tables map[string]bool
+func (c *metadataCollector) addTable(name string) {
+	if name == "" {
+		return
+	}
+	if c.want&extractTables != 0 {
+		c.tables[name] = struct{}{}
+	}
+	if c.want&extractTablesQualified != 0 {
+		c.tablesQualified[parseQualifiedTableName(name)] = struct{}{}
+	}
 }
 
-func (tc *tableCollector) collectFromNode(node ast.Node) {
+func (c *metadataCollector) addColumn(table, name string, want extractKind) {
+	if name == "" || name == "*" {
+		return
+	}
+	if want&extractColumns != 0 {
+		c.columns[name] = struct{}{}
+	}
+	if want&extractColumnsQualified != 0 {
+		c.columnsQualified[QualifiedName{Table: table, Name: name}] = struct{}{}
+	}
+}
+
+func (c *metadataCollector) addFunction(name string) {
+	if name != "" {
+		c.functions[name] = struct{}{}
+	}
+}
+
+func (c *metadataCollector) collectFromNode(node ast.Node) {
 	if node == nil {
 		return
 	}
 
 	switch n := node.(type) {
+	case *ast.Identifier:
+		c.addColumn(n.Table, n.Name, c.want)
 	case *ast.SelectStatement:
 		for _, from := range n.From {
-			if from.Name != "" {
-				tc.tables[from.Name] = true
-			}
+			c.addTable(from.Name)
 		}
 		for _, join := range n.Joins {
-			if join.Right.Name != "" {
-				tc.tables[join.Right.Name] = true
-			}
+			c.addTable(join.Right.Name)
 		}
-		if n.With != nil {
-			tc.collectFromNode(n.With)
-		}
-	case *ast.InsertStatement:
-		if n.TableName != "" {
-			tc.tables[n.TableName] = true
-		}
-		if n.Query != nil {
-			tc.collectFromNode(n.Query)
-		}
-		if n.With != nil {
-			tc.collectFromNode(n.With)
-		}
-	case *ast.UpdateStatement:
-		if n.TableName != "" {
-			tc.tables[n.TableName] = true
-		}
-		for _, from := range n.From {
-			if from.Name != "" {
-				tc.tables[from.Name] = true
-			}
-		}
-		if n.With != nil {
-			tc.collectFromNode(n.With)
-		}
-	case *ast.DeleteStatement:
-		if n.TableName != "" {
-			tc.tables[n.TableName] = true
-		}
-		for _, using := range n.Using {
-			if using.Name != "" {
-				tc.tables[using.Name] = true
-			}
-		}
-		if n.With != nil {
-			tc.collectFromNode(n.With)
-		}
-	case *ast.WithClause:
-		for _, cte := range n.CTEs {
-			tc.collectFromNode(cte)
-		}
-	case *ast.CommonTableExpr:
-		tc.collectFromNode(n.Statement)
-	case *ast.SetOperation:
-		tc.collectFromNode(n.Left)
-		tc.collectFromNode(n.Right)
-	}
-
-	// Recursively collect from children
-	for _, child := range node.Children() {
-		tc.collectFromNode(child)
-	}
-}
-
-func (tc *tableCollector) toSlice() []string {
-	result := make([]string, 0, len(tc.tables))
-	for table := range tc.tables {
-		result = append(result, table)
-	}
-	return result
-}
-
-// qualifiedTableCollector collects qualified table names
-type qualifiedTableCollector struct {
-	tables map[string]QualifiedName
-}
-
-func (qtc *qualifiedTableCollector) collectFromNode(node ast.Node) {
-	if node == nil {
-		return
-	}
-
-	switch n := node.(type) {
-	case *ast.SelectStatement:
-		for _, from := range n.From {
-			if from.Name != "" {
-				qtc.addTable(from.Name)
-			}
-		}
-		for _, join := range n.Joins {
-			if join.Right.Name != "" {
-				qtc.addTable(join.Right.Name)
-			}
-		}
-		if n.With != nil {
-			qtc.collectFromNode(n.With)
-		}
-	case *ast.InsertStatement:
-		if n.TableName != "" {
-			qtc.addTable(n.TableName)
-		}
-		if n.Query != nil {
-			qtc.collectFromNode(n.Query)
-		}
-		if n.With != nil {
-			qtc.collectFromNode(n.With)
-		}
-	case *ast.UpdateStatement:
-		if n.TableName != "" {
-			qtc.addTable(n.TableName)
-		}
-		for _, from := range n.From {
-			if from.Name != "" {
-				qtc.addTable(from.Name)
-			}
-		}
-		if n.With != nil {
-			qtc.collectFromNode(n.With)
-		}
-	case *ast.DeleteStatement:
-		if n.TableName != "" {
-			qtc.addTable(n.TableName)
-		}
-		for _, using := range n.Using {
-			if using.Name != "" {
-				qtc.addTable(using.Name)
-			}
-		}
-		if n.With != nil {
-			qtc.collectFromNode(n.With)
-		}
-	case *ast.WithClause:
-		for _, cte := range n.CTEs {
-			qtc.collectFromNode(cte)
-		}
-	case *ast.CommonTableExpr:
-		qtc.collectFromNode(n.Statement)
-	case *ast.SetOperation:
-		qtc.collectFromNode(n.Left)
-		qtc.collectFromNode(n.Right)
-	}
-
-	// Recursively collect from children
-	for _, child := range node.Children() {
-		qtc.collectFromNode(child)
-	}
-}
-
-func (qtc *qualifiedTableCollector) addTable(name string) {
-	// Parse the table name to extract schema if present
-	parts := strings.Split(name, ".")
-	var qn QualifiedName
-
-	switch len(parts) {
-	case 1:
-		qn = QualifiedName{Name: parts[0]}
-	case 2:
-		qn = QualifiedName{Schema: parts[0], Name: parts[1]}
-	case 3:
-		qn = QualifiedName{Schema: parts[0], Table: parts[1], Name: parts[2]}
-	default:
-		qn = QualifiedName{Name: name}
-	}
-
-	qtc.tables[qn.String()] = qn
-}
-
-func (qtc *qualifiedTableCollector) toSlice() []QualifiedName {
-	result := make([]QualifiedName, 0, len(qtc.tables))
-	for _, table := range qtc.tables {
-		result = append(result, table)
-	}
-	return result
-}
-
-// columnCollector collects column names from AST nodes
-type columnCollector struct {
-	columns map[string]bool
-}
-
-func (cc *columnCollector) collectFromNode(node ast.Node) {
-	if node == nil {
-		return
-	}
-
-	switch n := node.(type) {
-	case *ast.Identifier:
-		if n.Name != "" && n.Name != "*" {
-			cc.columns[n.Name] = true
-		}
-	case *ast.SelectStatement:
 		for _, col := range n.Columns {
-			cc.collectFromExpression(col)
+			c.collectFromExpression(col, c.want)
 		}
-		if n.Where != nil {
-			cc.collectFromExpression(n.Where)
-		}
+		c.collectFromExpression(n.Where, c.want)
 		for _, gb := range n.GroupBy {
-			cc.collectFromExpression(gb)
+			c.collectFromExpression(gb, c.want)
 		}
-		if n.Having != nil {
-			cc.collectFromExpression(n.Having)
-		}
+		c.collectFromExpression(n.Having, c.want)
 		for _, ob := range n.OrderBy {
-			if ob.Expression != nil {
-				cc.collectFromExpression(ob.Expression)
-			}
+			c.collectFromExpression(ob.Expression, c.want)
 		}
 		if n.With != nil {
-			cc.collectFromNode(n.With)
+			c.collectFromNode(n.With)
 		}
 	case *ast.InsertStatement:
+		c.addTable(n.TableName)
 		for _, col := range n.Columns {
-			cc.collectFromExpression(col)
+			c.collectFromExpression(col, c.want&^extractFunctions)
 		}
-		if n.Query != nil {
-			cc.collectFromNode(n.Query)
-		}
-		if n.With != nil {
-			cc.collectFromNode(n.With)
-		}
-	case *ast.UpdateStatement:
-		for _, assignment := range n.Assignments {
-			assignment := assignment // G601: Create local copy to avoid memory aliasing
-			cc.collectFromNode(&assignment)
-		}
-		if n.Where != nil {
-			cc.collectFromExpression(n.Where)
-		}
-		if n.With != nil {
-			cc.collectFromNode(n.With)
-		}
-	case *ast.DeleteStatement:
-		if n.Where != nil {
-			cc.collectFromExpression(n.Where)
-		}
-		if n.With != nil {
-			cc.collectFromNode(n.With)
-		}
-	case *ast.UpdateExpression:
-		cc.collectFromExpression(n.Column)
-		cc.collectFromExpression(n.Value)
-	case *ast.WithClause:
-		for _, cte := range n.CTEs {
-			cc.collectFromNode(cte)
-		}
-	case *ast.CommonTableExpr:
-		cc.collectFromNode(n.Statement)
-	case *ast.SetOperation:
-		cc.collectFromNode(n.Left)
-		cc.collectFromNode(n.Right)
-	}
-
-	// Recursively collect from children
-	for _, child := range node.Children() {
-		cc.collectFromNode(child)
-	}
-}
-
-func (cc *columnCollector) collectFromExpression(expr ast.Expression) {
-	if expr == nil {
-		return
-	}
-
-	switch e := expr.(type) {
-	case *ast.Identifier:
-		if e.Name != "" && e.Name != "*" {
-			cc.columns[e.Name] = true
-		}
-	case *ast.BinaryExpression:
-		cc.collectFromExpression(e.Left)
-		cc.collectFromExpression(e.Right)
-	case *ast.FunctionCall:
-		for _, arg := range e.Arguments {
-			cc.collectFromExpression(arg)
-		}
-		if e.Filter != nil {
-			cc.collectFromExpression(e.Filter)
-		}
-	case *ast.UnaryExpression:
-		cc.collectFromExpression(e.Expr)
-	case *ast.InExpression:
-		cc.collectFromExpression(e.Expr)
-		for _, item := range e.List {
-			cc.collectFromExpression(item)
-		}
-	case *ast.BetweenExpression:
-		cc.collectFromExpression(e.Expr)
-		cc.collectFromExpression(e.Lower)
-		cc.collectFromExpression(e.Upper)
-	case *ast.CaseExpression:
-		if e.Value != nil {
-			cc.collectFromExpression(e.Value)
-		}
-		for _, when := range e.WhenClauses {
-			cc.collectFromExpression(when.Condition)
-			cc.collectFromExpression(when.Result)
-		}
-		if e.ElseClause != nil {
-			cc.collectFromExpression(e.ElseClause)
-		}
-	case *ast.CastExpression:
-		cc.collectFromExpression(e.Expr)
-	case *ast.SubstringExpression:
-		cc.collectFromExpression(e.Str)
-		cc.collectFromExpression(e.Start)
-		if e.Length != nil {
-			cc.collectFromExpression(e.Length)
-		}
-	case *ast.ExtractExpression:
-		cc.collectFromExpression(e.Source)
-	case *ast.PositionExpression:
-		cc.collectFromExpression(e.Substr)
-		cc.collectFromExpression(e.Str)
-	case *ast.ListExpression:
-		for _, v := range e.Values {
-			cc.collectFromExpression(v)
-		}
-	case *ast.AliasedExpression:
-		// Unwrap the aliased expression and collect from inner expression
-		cc.collectFromExpression(e.Expr)
-	}
-}
-
-func (cc *columnCollector) toSlice() []string {
-	result := make([]string, 0, len(cc.columns))
-	for column := range cc.columns {
-		result = append(result, column)
-	}
-	return result
-}
-
-// qualifiedColumnCollector collects qualified column names from AST nodes
-type qualifiedColumnCollector struct {
-	columns map[string]QualifiedName
-}
-
-func (qcc *qualifiedColumnCollector) collectFromNode(node ast.Node) {
-	if node == nil {
-		return
-	}
-
-	switch n := node.(type) {
-	case *ast.Identifier:
-		if n.Name != "" && n.Name != "*" {
-			qcc.addColumn(n.Table, n.Name)
-		}
-	case *ast.SelectStatement:
-		for _, col := range n.Columns {
-			qcc.collectFromExpression(col)
-		}
-		if n.Where != nil {
-			qcc.collectFromExpression(n.Where)
-		}
-		for _, gb := range n.GroupBy {
-			qcc.collectFromExpression(gb)
-		}
-		if n.Having != nil {
-			qcc.collectFromExpression(n.Having)
-		}
-		for _, ob := range n.OrderBy {
-			if ob.Expression != nil {
-				qcc.collectFromExpression(ob.Expression)
-			}
-		}
-		if n.With != nil {
-			qcc.collectFromNode(n.With)
-		}
-	case *ast.InsertStatement:
-		for _, col := range n.Columns {
-			qcc.collectFromExpression(col)
-		}
-		if n.Query != nil {
-			qcc.collectFromNode(n.Query)
-		}
-		if n.With != nil {
-			qcc.collectFromNode(n.With)
-		}
-	case *ast.UpdateStatement:
-		for _, assignment := range n.Assignments {
-			assignment := assignment // G601: Create local copy to avoid memory aliasing
-			qcc.collectFromNode(&assignment)
-		}
-		if n.Where != nil {
-			qcc.collectFromExpression(n.Where)
-		}
-		if n.With != nil {
-			qcc.collectFromNode(n.With)
-		}
-	case *ast.DeleteStatement:
-		if n.Where != nil {
-			qcc.collectFromExpression(n.Where)
-		}
-		if n.With != nil {
-			qcc.collectFromNode(n.With)
-		}
-	case *ast.UpdateExpression:
-		qcc.collectFromExpression(n.Column)
-		qcc.collectFromExpression(n.Value)
-	case *ast.WithClause:
-		for _, cte := range n.CTEs {
-			qcc.collectFromNode(cte)
-		}
-	case *ast.CommonTableExpr:
-		qcc.collectFromNode(n.Statement)
-	case *ast.SetOperation:
-		qcc.collectFromNode(n.Left)
-		qcc.collectFromNode(n.Right)
-	}
-
-	// Recursively collect from children
-	for _, child := range node.Children() {
-		qcc.collectFromNode(child)
-	}
-}
-
-func (qcc *qualifiedColumnCollector) collectFromExpression(expr ast.Expression) {
-	if expr == nil {
-		return
-	}
-
-	switch e := expr.(type) {
-	case *ast.Identifier:
-		if e.Name != "" && e.Name != "*" {
-			qcc.addColumn(e.Table, e.Name)
-		}
-	case *ast.BinaryExpression:
-		qcc.collectFromExpression(e.Left)
-		qcc.collectFromExpression(e.Right)
-	case *ast.FunctionCall:
-		for _, arg := range e.Arguments {
-			qcc.collectFromExpression(arg)
-		}
-		if e.Filter != nil {
-			qcc.collectFromExpression(e.Filter)
-		}
-	case *ast.UnaryExpression:
-		qcc.collectFromExpression(e.Expr)
-	case *ast.InExpression:
-		qcc.collectFromExpression(e.Expr)
-		for _, item := range e.List {
-			qcc.collectFromExpression(item)
-		}
-	case *ast.BetweenExpression:
-		qcc.collectFromExpression(e.Expr)
-		qcc.collectFromExpression(e.Lower)
-		qcc.collectFromExpression(e.Upper)
-	case *ast.CaseExpression:
-		if e.Value != nil {
-			qcc.collectFromExpression(e.Value)
-		}
-		for _, when := range e.WhenClauses {
-			qcc.collectFromExpression(when.Condition)
-			qcc.collectFromExpression(when.Result)
-		}
-		if e.ElseClause != nil {
-			qcc.collectFromExpression(e.ElseClause)
-		}
-	case *ast.CastExpression:
-		qcc.collectFromExpression(e.Expr)
-	case *ast.SubstringExpression:
-		qcc.collectFromExpression(e.Str)
-		qcc.collectFromExpression(e.Start)
-		if e.Length != nil {
-			qcc.collectFromExpression(e.Length)
-		}
-	case *ast.ExtractExpression:
-		qcc.collectFromExpression(e.Source)
-	case *ast.PositionExpression:
-		qcc.collectFromExpression(e.Substr)
-		qcc.collectFromExpression(e.Str)
-	case *ast.ListExpression:
-		for _, v := range e.Values {
-			qcc.collectFromExpression(v)
-		}
-	case *ast.AliasedExpression:
-		// Unwrap the aliased expression and collect from inner expression
-		qcc.collectFromExpression(e.Expr)
-	}
-}
-
-func (qcc *qualifiedColumnCollector) addColumn(table, name string) {
-	// Parse qualified column name (table.column)
-	var qn QualifiedName
-	if table != "" {
-		qn = QualifiedName{Table: table, Name: name}
-	} else {
-		qn = QualifiedName{Name: name}
-	}
-	qcc.columns[qn.String()] = qn
-}
-
-func (qcc *qualifiedColumnCollector) toSlice() []QualifiedName {
-	result := make([]QualifiedName, 0, len(qcc.columns))
-	for _, column := range qcc.columns {
-		result = append(result, column)
-	}
-	return result
-}
-
-// functionCollector collects function names from AST nodes
-type functionCollector struct {
-	functions map[string]bool
-}
-
-func (fc *functionCollector) collectFromNode(node ast.Node) {
-	if node == nil {
-		return
-	}
-
-	switch n := node.(type) {
-	case *ast.SelectStatement:
-		for _, col := range n.Columns {
-			fc.collectFromExpression(col)
-		}
-		if n.Where != nil {
-			fc.collectFromExpression(n.Where)
-		}
-		for _, gb := range n.GroupBy {
-			fc.collectFromExpression(gb)
-		}
-		if n.Having != nil {
-			fc.collectFromExpression(n.Having)
-		}
-		for _, ob := range n.OrderBy {
-			if ob.Expression != nil {
-				fc.collectFromExpression(ob.Expression)
-			}
-		}
-		if n.With != nil {
-			fc.collectFromNode(n.With)
-		}
-	case *ast.InsertStatement:
 		for _, row := range n.Values {
 			for _, val := range row {
-				fc.collectFromExpression(val)
+				c.collectFromExpression(val, c.want&extractFunctions)
 			}
 		}
 		if n.Query != nil {
-			fc.collectFromNode(n.Query)
+			c.collectFromNode(n.Query)
 		}
 		if n.With != nil {
-			fc.collectFromNode(n.With)
+			c.collectFromNode(n.With)
 		}
 	case *ast.UpdateStatement:
-		for _, assignment := range n.Assignments {
-			assignment := assignment // G601: Create local copy to avoid memory aliasing
-			fc.collectFromNode(&assignment)
+		c.addTable(n.TableName)
+		for _, from := range n.From {
+			c.addTable(from.Name)
 		}
-		if n.Where != nil {
-			fc.collectFromExpression(n.Where)
+		for i := range n.Assignments {
+			c.collectFromNode(&n.Assignments[i])
 		}
+		c.collectFromExpression(n.Where, c.want)
 		if n.With != nil {
-			fc.collectFromNode(n.With)
+			c.collectFromNode(n.With)
 		}
 	case *ast.DeleteStatement:
-		if n.Where != nil {
-			fc.collectFromExpression(n.Where)
+		c.addTable(n.TableName)
+		for _, using := range n.Using {
+			c.addTable(using.Name)
 		}
+		c.collectFromExpression(n.Where, c.want)
 		if n.With != nil {
-			fc.collectFromNode(n.With)
+			c.collectFromNode(n.With)
 		}
 	case *ast.UpdateExpression:
-		fc.collectFromExpression(n.Value)
+		c.collectFromExpression(n.Column, c.want&^extractFunctions)
+		c.collectFromExpression(n.Value, c.want)
 	case *ast.WithClause:
 		for _, cte := range n.CTEs {
-			fc.collectFromNode(cte)
+			c.collectFromNode(cte)
 		}
 	case *ast.CommonTableExpr:
-		fc.collectFromNode(n.Statement)
+		c.collectFromNode(n.Statement)
 	case *ast.SetOperation:
-		fc.collectFromNode(n.Left)
-		fc.collectFromNode(n.Right)
+		c.collectFromNode(n.Left)
+		c.collectFromNode(n.Right)
 	}
 
 	// Recursively collect from children
 	for _, child := range node.Children() {
-		fc.collectFromNode(child)
+		c.collectFromNode(child)
 	}
 }
 
-func (fc *functionCollector) collectFromExpression(expr ast.Expression) {
-	if expr == nil {
+// collectFromExpression walks an expression tree collecting the kinds in want
+// (restricted to the expression-level kinds).
+func (c *metadataCollector) collectFromExpression(expr ast.Expression, want extractKind) {
+	want &= extractExprKinds
+	if expr == nil || want == 0 {
 		return
 	}
 
 	switch e := expr.(type) {
+	case *ast.Identifier:
+		c.addColumn(e.Table, e.Name, want)
+	case *ast.BinaryExpression:
+		c.collectFromExpression(e.Left, want)
+		c.collectFromExpression(e.Right, want)
 	case *ast.FunctionCall:
-		if e.Name != "" {
-			fc.functions[e.Name] = true
+		if want&extractFunctions != 0 {
+			c.addFunction(e.Name)
 		}
 		for _, arg := range e.Arguments {
-			fc.collectFromExpression(arg)
+			c.collectFromExpression(arg, want)
 		}
 		if e.Filter != nil {
-			fc.collectFromExpression(e.Filter)
+			c.collectFromExpression(e.Filter, want)
 		}
-	case *ast.BinaryExpression:
-		fc.collectFromExpression(e.Left)
-		fc.collectFromExpression(e.Right)
 	case *ast.UnaryExpression:
-		fc.collectFromExpression(e.Expr)
+		c.collectFromExpression(e.Expr, want)
 	case *ast.InExpression:
-		fc.collectFromExpression(e.Expr)
+		c.collectFromExpression(e.Expr, want)
 		for _, item := range e.List {
-			fc.collectFromExpression(item)
+			c.collectFromExpression(item, want)
 		}
 	case *ast.BetweenExpression:
-		fc.collectFromExpression(e.Expr)
-		fc.collectFromExpression(e.Lower)
-		fc.collectFromExpression(e.Upper)
+		c.collectFromExpression(e.Expr, want)
+		c.collectFromExpression(e.Lower, want)
+		c.collectFromExpression(e.Upper, want)
 	case *ast.CaseExpression:
 		if e.Value != nil {
-			fc.collectFromExpression(e.Value)
+			c.collectFromExpression(e.Value, want)
 		}
 		for _, when := range e.WhenClauses {
-			fc.collectFromExpression(when.Condition)
-			fc.collectFromExpression(when.Result)
+			c.collectFromExpression(when.Condition, want)
+			c.collectFromExpression(when.Result, want)
 		}
 		if e.ElseClause != nil {
-			fc.collectFromExpression(e.ElseClause)
+			c.collectFromExpression(e.ElseClause, want)
 		}
 	case *ast.CastExpression:
-		fc.collectFromExpression(e.Expr)
+		c.collectFromExpression(e.Expr, want)
 	case *ast.SubstringExpression:
-		fc.collectFromExpression(e.Str)
-		fc.collectFromExpression(e.Start)
+		c.collectFromExpression(e.Str, want)
+		c.collectFromExpression(e.Start, want)
 		if e.Length != nil {
-			fc.collectFromExpression(e.Length)
+			c.collectFromExpression(e.Length, want)
 		}
 	case *ast.ExtractExpression:
-		fc.collectFromExpression(e.Source)
+		c.collectFromExpression(e.Source, want)
 	case *ast.PositionExpression:
-		fc.collectFromExpression(e.Substr)
-		fc.collectFromExpression(e.Str)
+		c.collectFromExpression(e.Substr, want)
+		c.collectFromExpression(e.Str, want)
 	case *ast.ListExpression:
 		for _, v := range e.Values {
-			fc.collectFromExpression(v)
+			c.collectFromExpression(v, want)
 		}
 	case *ast.AliasedExpression:
 		// Unwrap the aliased expression and collect from inner expression
-		fc.collectFromExpression(e.Expr)
+		c.collectFromExpression(e.Expr, want)
 	}
 }
 
-func (fc *functionCollector) toSlice() []string {
-	result := make([]string, 0, len(fc.functions))
-	for function := range fc.functions {
-		result = append(result, function)
+func stringSetToSlice(m map[string]struct{}) []string {
+	result := make([]string, 0, len(m))
+	for k := range m {
+		result = append(result, k)
+	}
+	return result
+}
+
+func qualifiedSetToSlice(m map[QualifiedName]struct{}) []QualifiedName {
+	result := make([]QualifiedName, 0, len(m))
+	for k := range m {
+		result = append(result, k)
 	}
 	return result
 }
@@ -997,9 +558,9 @@ func (fc *functionCollector) toSlice() []string {
 // ExtractTablesQualified, ExtractColumns, ExtractColumnsQualified, ExtractFunctions)
 // and returns the results in a structured Metadata object.
 //
-// Performance: This function performs multiple AST traversals (one per extraction type).
-// For better performance when you only need specific metadata, call the individual
-// extraction functions directly instead of using ExtractMetadata.
+// Performance: This function performs a single AST traversal that gathers every
+// metadata kind at once. Calling the individual extraction functions is only
+// useful when you need fewer outputs.
 //
 // Thread Safety: This function is thread-safe and can be called concurrently on
 // different AST instances.
@@ -1058,12 +619,26 @@ func (fc *functionCollector) toSlice() []string {
 //
 // See also: Individual extraction functions for targeted metadata retrieval.
 func ExtractMetadata(astNode *ast.AST) *Metadata {
+	if astNode == nil {
+		return &Metadata{}
+	}
+
+	c := &metadataCollector{
+		want:             extractAll,
+		tables:           make(map[string]struct{}),
+		tablesQualified:  make(map[QualifiedName]struct{}),
+		columns:          make(map[string]struct{}),
+		columnsQualified: make(map[QualifiedName]struct{}),
+		functions:        make(map[string]struct{}),
+	}
+	c.collect(astNode)
+
 	return &Metadata{
-		Tables:           ExtractTables(astNode),
-		TablesQualified:  ExtractTablesQualified(astNode),
-		Columns:          ExtractColumns(astNode),
-		ColumnsQualified: ExtractColumnsQualified(astNode),
-		Functions:        ExtractFunctions(astNode),
+		Tables:           stringSetToSlice(c.tables),
+		TablesQualified:  qualifiedSetToSlice(c.tablesQualified),
+		Columns:          stringSetToSlice(c.columns),
+		ColumnsQualified: qualifiedSetToSlice(c.columnsQualified),
+		Functions:        stringSetToSlice(c.functions),
 	}
 }
 

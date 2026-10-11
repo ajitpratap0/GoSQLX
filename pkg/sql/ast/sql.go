@@ -17,39 +17,52 @@
 package ast
 
 import (
+	"bytes"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"unicode"
+	"unicode/utf8"
 )
 
-// builderPool reuses strings.Builder instances for SQL serialization,
-// following the project's existing pooling patterns (sync.Pool for tokenizer
-// buffers, token objects, etc.) to reduce allocations in hot paths.
-var builderPool = sync.Pool{
+// bufPool reuses bytes.Buffer instances for SQL serialization.
+//
+// bytes.Buffer is used instead of strings.Builder because Reset() truncates
+// the buffer to length 0 but keeps its backing array, so a pooled buffer
+// actually carries its grown capacity into the next call. strings.Builder's
+// Reset() sets its slice to nil, which meant the previous pool only reused
+// the 32-byte header. buf.String() copies the bytes, so a returned string
+// never aliases the pooled array; a pooled buffer carries capacity only,
+// never content, and no AST node retains one.
+var bufPool = sync.Pool{
 	New: func() interface{} {
-		return &strings.Builder{}
+		return new(bytes.Buffer)
 	},
 }
 
-// getBuilder retrieves a strings.Builder from the pool, ready for use.
-// Always pair with putBuilder to return it.
-func getBuilder() *strings.Builder {
-	sb := builderPool.Get().(*strings.Builder)
-	sb.Reset()
-	return sb
+// getBuf retrieves an empty bytes.Buffer from the pool.
+// Always pair with putBuf (normally via defer).
+func getBuf() *bytes.Buffer {
+	b, ok := bufPool.Get().(*bytes.Buffer)
+	if !ok {
+		b = new(bytes.Buffer)
+	}
+	b.Reset()
+	return b
 }
 
-// putBuilder returns a strings.Builder to the pool.
-func putBuilder(sb *strings.Builder) {
-	if sb == nil {
+// putBuf resets b and returns it to the pool. Buffers that grew beyond
+// 64 KiB are dropped to avoid pinning excess memory.
+func putBuf(b *bytes.Buffer) {
+	if b == nil {
 		return
 	}
-	// Don't pool very large builders to avoid holding excess memory.
-	if sb.Cap() > 64*1024 {
+	if b.Cap() > 64*1024 {
 		return
 	}
-	builderPool.Put(sb)
+	b.Reset()
+	bufPool.Put(b)
 }
 
 // SQL returns the SQL string representation of the AST.
@@ -76,51 +89,117 @@ func (i *Identifier) SQL() string {
 	if i == nil {
 		return ""
 	}
-	if i.Table != "" {
-		return safeIdentifier(i.Table) + "." + safeIdentifier(i.Name)
+	if !identifierNeedsQuoting(i.Name) && (i.Table == "" || !identifierNeedsQuoting(i.Table)) {
+		if i.Table == "" {
+			return i.Name
+		}
+		return i.Table + "." + i.Name
 	}
-	return safeIdentifier(i.Name)
+	buf := getBuf()
+	defer putBuf(buf)
+	i.writeSQL(buf)
+	return buf.String()
 }
 
-// safeIdentifier returns the identifier unchanged if it contains only safe
-// characters (letters, digits, underscores, dots, *). Otherwise it double-
-// quotes it with proper escaping to prevent SQL identifier injection.
-func safeIdentifier(name string) string {
+func (i *Identifier) writeSQL(buf *bytes.Buffer) {
+	if i == nil {
+		return
+	}
+	if i.Table != "" {
+		writeSafeIdentifier(buf, i.Table)
+		buf.WriteByte('.')
+	}
+	writeSafeIdentifier(buf, i.Name)
+}
+
+// identifierNeedsQuoting reports whether name must be double-quoted: it is
+// empty or contains a character other than letters, digits, '_', '*' and '.'.
+func identifierNeedsQuoting(name string) bool {
 	if name == "" {
-		return `""`
+		return true
 	}
 	for _, r := range name {
 		if r != '_' && r != '*' && r != '.' && !unicode.IsLetter(r) && !unicode.IsDigit(r) {
-			return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
+			return true
 		}
 	}
-	return name
+	return false
 }
 
-// escapeStringLiteral escapes a string for safe inclusion in a single-quoted
+// writeSafeIdentifier writes name unchanged if it contains only safe
+// characters (letters, digits, underscores, dots, *). Otherwise it writes it
+// double-quoted with embedded quotes doubled, to prevent SQL identifier
+// injection. An empty name is written as "".
+func writeSafeIdentifier(buf *bytes.Buffer, name string) {
+	if !identifierNeedsQuoting(name) {
+		buf.WriteString(name)
+		return
+	}
+	buf.WriteByte('"')
+	for i := 0; i < len(name); i++ {
+		if name[i] == '"' {
+			buf.WriteString(`""`)
+		} else {
+			buf.WriteByte(name[i])
+		}
+	}
+	buf.WriteByte('"')
+}
+
+// stringLiteralNeedsEscape reports whether s contains a byte that
+// writeEscapedStringLiteral would rewrite: a quote, backslash, NUL, CR, LF,
+// Ctrl-Z, or any non-ASCII byte (which goes through the rune loop so invalid
+// UTF-8 is replaced with U+FFFD).
+func stringLiteralNeedsEscape(s string) bool {
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; {
+		case c >= utf8.RuneSelf, c == '\'', c == '\\', c == 0, c == '\n', c == '\r', c == 0x1a:
+			return true
+		}
+	}
+	return false
+}
+
+// writeEscapedStringLiteral escapes s for safe inclusion in a single-quoted
 // SQL literal, handling characters that can lead to SQL injection.
-func escapeStringLiteral(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
+func writeEscapedStringLiteral(buf *bytes.Buffer, s string) {
+	if !stringLiteralNeedsEscape(s) {
+		buf.WriteString(s)
+		return
+	}
 	for _, r := range s {
 		switch r {
 		case '\'':
-			b.WriteString("''")
+			buf.WriteString("''")
 		case '\\':
-			b.WriteString(`\\`)
+			buf.WriteString(`\\`)
 		case '\x00':
 			// Drop null bytes - invalid in SQL string literals.
 		case '\n':
-			b.WriteString(`\n`)
+			buf.WriteString(`\n`)
 		case '\r':
-			b.WriteString(`\r`)
+			buf.WriteString(`\r`)
 		case '\x1a': // Ctrl-Z (EOF on Windows)
-			b.WriteString(`\Z`)
+			buf.WriteString(`\Z`)
 		default:
-			b.WriteRune(r)
+			buf.WriteRune(r)
 		}
 	}
-	return b.String()
+}
+
+// literalText renders a literal's Value as text; string Values are returned
+// as-is (no allocation), anything else is formatted with %v.
+func literalText(v interface{}) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return fmt.Sprintf("%v", v)
+}
+
+// writeInt writes n in base 10, byte-identical to fmt's %d.
+func writeInt(buf *bytes.Buffer, n int64) {
+	var tmp [20]byte
+	buf.Write(strconv.AppendInt(tmp[:0], n, 10))
 }
 
 // SQL returns the SQL literal representation of this value.
@@ -133,13 +212,42 @@ func (l *LiteralValue) SQL() string {
 	if l.Value == nil || strings.EqualFold(l.Type, "NULL") {
 		return "NULL"
 	}
-	switch strings.ToUpper(l.Type) {
-	case "STRING":
-		return "'" + escapeStringLiteral(fmt.Sprintf("%v", l.Value)) + "'"
-	case "BOOLEAN":
-		return strings.ToUpper(fmt.Sprintf("%v", l.Value))
+	switch {
+	case strings.EqualFold(l.Type, "STRING"):
+		text := literalText(l.Value)
+		if !stringLiteralNeedsEscape(text) {
+			return "'" + text + "'"
+		}
+		buf := getBuf()
+		defer putBuf(buf)
+		buf.WriteByte('\'')
+		writeEscapedStringLiteral(buf, text)
+		buf.WriteByte('\'')
+		return buf.String()
+	case strings.EqualFold(l.Type, "BOOLEAN"):
+		return strings.ToUpper(literalText(l.Value))
 	default:
-		return fmt.Sprintf("%v", l.Value)
+		return literalText(l.Value)
+	}
+}
+
+func (l *LiteralValue) writeSQL(buf *bytes.Buffer) {
+	if l == nil {
+		return
+	}
+	if l.Value == nil || strings.EqualFold(l.Type, "NULL") {
+		buf.WriteString("NULL")
+		return
+	}
+	switch {
+	case strings.EqualFold(l.Type, "STRING"):
+		buf.WriteByte('\'')
+		writeEscapedStringLiteral(buf, literalText(l.Value))
+		buf.WriteByte('\'')
+	case strings.EqualFold(l.Type, "BOOLEAN"):
+		buf.WriteString(strings.ToUpper(literalText(l.Value)))
+	default:
+		buf.WriteString(literalText(l.Value))
 	}
 }
 
@@ -158,36 +266,73 @@ func (b *BinaryExpression) SQL() string {
 	if b == nil {
 		return ""
 	}
-	left := exprSQL(b.Left)
-	right := exprSQL(b.Right)
+	buf := getBuf()
+	defer putBuf(buf)
+	b.writeSQL(buf)
+	return buf.String()
+}
+
+func (b *BinaryExpression) writeSQL(buf *bytes.Buffer) {
+	if b == nil {
+		return
+	}
 	op := b.Operator
 	if b.CustomOp != nil {
 		op = b.CustomOp.String()
 	}
 
-	upperOp := strings.ToUpper(op)
-
 	// Handle IS NULL / IS NOT NULL (right side is NULL literal).
 	// The parser stores the operator as "IS NULL" and uses the Not flag to
 	// disambiguate `IS NOT NULL`, so honour it here to avoid dropping NOT.
-	if upperOp == "IS NULL" {
+	if strings.EqualFold(op, "IS NULL") {
+		writeExpr(buf, b.Left)
 		if b.Not {
-			return fmt.Sprintf("%s IS NOT NULL", left)
+			buf.WriteString(" IS NOT NULL")
+		} else {
+			buf.WriteString(" IS NULL")
 		}
-		return fmt.Sprintf("%s IS NULL", left)
+		return
 	}
 
 	// Handle special operators like LIKE, ILIKE, SIMILAR TO
 	if b.Not {
-		switch upperOp {
-		case "LIKE", "ILIKE", "SIMILAR TO":
-			return fmt.Sprintf("%s NOT %s %s", left, upperOp, right)
-		default:
-			return fmt.Sprintf("NOT (%s %s %s)", left, op, right)
+		if canon, ok := notQualifiedOperator(op); ok {
+			writeExpr(buf, b.Left)
+			buf.WriteString(" NOT ")
+			buf.WriteString(canon)
+			buf.WriteByte(' ')
+			writeExpr(buf, b.Right)
+			return
 		}
+		buf.WriteString("NOT (")
+		writeExpr(buf, b.Left)
+		buf.WriteByte(' ')
+		buf.WriteString(op)
+		buf.WriteByte(' ')
+		writeExpr(buf, b.Right)
+		buf.WriteByte(')')
+		return
 	}
 
-	return fmt.Sprintf("%s %s %s", left, op, right)
+	writeExpr(buf, b.Left)
+	buf.WriteByte(' ')
+	buf.WriteString(op)
+	buf.WriteByte(' ')
+	writeExpr(buf, b.Right)
+}
+
+// notQualifiedOperator reports whether op (case-insensitively) is one of the
+// operators rendered as "x NOT OP y", returning its upper-case spelling.
+func notQualifiedOperator(op string) (string, bool) {
+	switch {
+	case strings.EqualFold(op, "LIKE"):
+		return "LIKE", true
+	case strings.EqualFold(op, "ILIKE"):
+		return "ILIKE", true
+	case strings.EqualFold(op, "SIMILAR TO"):
+		return "SIMILAR TO", true
+	}
+	return "", false
 }
 
 // SQL returns the SQL representation of this unary expression.
@@ -238,8 +383,8 @@ func (c *CaseExpression) SQL() string {
 	if c == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString("CASE")
 	if c.Value != nil {
 		sb.WriteString(" ")
@@ -342,8 +487,8 @@ func (f *FunctionCall) SQL() string {
 	if f == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString(f.Name)
 	if len(f.Parameters) > 0 {
 		// ClickHouse parametric aggregates: quantile(0.5)(x).
@@ -543,8 +688,8 @@ func (s *SelectStatement) SQL() string {
 	if s == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 
 	if s.With != nil {
 		sb.WriteString(s.With.SQL())
@@ -671,8 +816,8 @@ func (i *InsertStatement) SQL() string {
 	if i == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 
 	if i.With != nil {
 		sb.WriteString(i.With.SQL())
@@ -723,8 +868,8 @@ func (u *UpdateStatement) SQL() string {
 	if u == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 
 	if u.With != nil {
 		sb.WriteString(u.With.SQL())
@@ -774,8 +919,8 @@ func (d *DeleteStatement) SQL() string {
 	if d == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 
 	if d.With != nil {
 		sb.WriteString(d.With.SQL())
@@ -817,8 +962,8 @@ func (c *CreateTableStatement) SQL() string {
 	if c == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString("CREATE ")
 	if c.Temporary {
 		sb.WriteString("TEMPORARY ")
@@ -865,8 +1010,8 @@ func (c *CreateIndexStatement) SQL() string {
 	if c == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString("CREATE ")
 	if c.Unique {
 		sb.WriteString("UNIQUE ")
@@ -911,8 +1056,8 @@ func (a *AlterTableStatement) SQL() string {
 	if a == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString("ALTER TABLE ")
 	sb.WriteString(a.Table)
 	for _, action := range a.Actions {
@@ -929,8 +1074,8 @@ func (d *DropStatement) SQL() string {
 	if d == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString("DROP ")
 	sb.WriteString(d.ObjectType)
 	sb.WriteString(" ")
@@ -951,8 +1096,8 @@ func (t *TruncateStatement) SQL() string {
 	if t == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString("TRUNCATE TABLE ")
 	sb.WriteString(strings.Join(t.Tables, ", "))
 	if t.RestartIdentity {
@@ -973,8 +1118,8 @@ func (w *WithClause) SQL() string {
 	if w == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString("WITH ")
 	if w.Recursive {
 		sb.WriteString("RECURSIVE ")
@@ -1026,8 +1171,8 @@ func (c *CreateViewStatement) SQL() string {
 	if c == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString("CREATE ")
 	if c.OrReplace {
 		sb.WriteString("OR REPLACE ")
@@ -1059,8 +1204,8 @@ func (c *CreateMaterializedViewStatement) SQL() string {
 	if c == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString("CREATE MATERIALIZED VIEW ")
 	if c.IfNotExists {
 		sb.WriteString("IF NOT EXISTS ")
@@ -1088,8 +1233,8 @@ func (r *RefreshMaterializedViewStatement) SQL() string {
 	if r == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString("REFRESH MATERIALIZED VIEW ")
 	if r.Concurrently {
 		sb.WriteString("CONCURRENTLY ")
@@ -1111,8 +1256,8 @@ func (m *MergeStatement) SQL() string {
 	if m == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString("MERGE INTO ")
 	sb.WriteString(tableRefSQL(&m.TargetTable))
 	if m.TargetAlias != "" {
@@ -1162,8 +1307,8 @@ func (s *Select) SQL() string {
 	if s == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString("SELECT ")
 	if s.Distinct {
 		sb.WriteString("DISTINCT ")
@@ -1208,8 +1353,8 @@ func (i *Insert) SQL() string {
 	if i == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString("INSERT INTO ")
 	sb.WriteString(tableRefSQL(&i.Table))
 	if len(i.Columns) > 0 {
@@ -1242,8 +1387,8 @@ func (u *Update) SQL() string {
 	if u == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString("UPDATE ")
 	sb.WriteString(tableRefSQL(&u.Table))
 	sb.WriteString(" SET ")
@@ -1269,8 +1414,8 @@ func (d *Delete) SQL() string {
 	if d == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString("DELETE FROM ")
 	sb.WriteString(tableRefSQL(&d.Table))
 	if d.Where != nil {
@@ -1287,6 +1432,29 @@ func (d *Delete) SQL() string {
 // ============================================================
 // Helper functions
 // ============================================================
+
+// sqlWriter is implemented by nodes that can render themselves directly into
+// a shared buffer, avoiding an intermediate string per node.
+type sqlWriter interface {
+	writeSQL(buf *bytes.Buffer)
+}
+
+// writeExpr renders e into buf, using writeSQL when available and falling
+// back to SQL() and then TokenLiteral(), mirroring exprSQL.
+func writeExpr(buf *bytes.Buffer, e Expression) {
+	if e == nil {
+		return
+	}
+	if w, ok := e.(sqlWriter); ok {
+		w.writeSQL(buf)
+		return
+	}
+	if s, ok := e.(interface{ SQL() string }); ok {
+		buf.WriteString(s.SQL())
+		return
+	}
+	buf.WriteString(e.TokenLiteral())
+}
 
 // exprSQL dispatches to the SQL() method of any expression
 func exprSQL(e Expression) string {
@@ -1363,8 +1531,8 @@ func withFillSQL(w *WithFillClause) string {
 }
 
 func tableRefSQL(t *TableReference) string {
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	if t.Lateral {
 		sb.WriteString("LATERAL ")
 	}
@@ -1390,8 +1558,8 @@ func tableRefSQL(t *TableReference) string {
 }
 
 func joinSQL(j *JoinClause) string {
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString(j.Type)
 	sb.WriteString(" JOIN ")
 	sb.WriteString(tableRefSQL(&j.Right))
@@ -1427,8 +1595,8 @@ func windowFrameSQL(f *WindowFrame) string {
 }
 
 func fetchSQL(f *FetchClause) string {
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	if f.OffsetValue != nil {
 		fmt.Fprintf(sb, " OFFSET %d ROWS", *f.OffsetValue)
 	}
@@ -1449,8 +1617,8 @@ func fetchSQL(f *FetchClause) string {
 }
 
 func forSQL(f *ForClause) string {
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString(" FOR ")
 	sb.WriteString(f.LockType)
 	if len(f.Tables) > 0 {
@@ -1467,8 +1635,8 @@ func forSQL(f *ForClause) string {
 }
 
 func cteSQL(cte *CommonTableExpr) string {
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	// ClickHouse scalar CTE: WITH <expr> AS <name>
 	if cte.ScalarExpr != nil {
 		sb.WriteString(exprSQL(cte.ScalarExpr))
@@ -1497,8 +1665,8 @@ func cteSQL(cte *CommonTableExpr) string {
 }
 
 func onConflictSQL(oc *OnConflict) string {
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString(" ON CONFLICT")
 	if len(oc.Target) > 0 {
 		sb.WriteString(" (")
@@ -1527,8 +1695,8 @@ func onConflictSQL(oc *OnConflict) string {
 }
 
 func columnDefSQL(c *ColumnDef) string {
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString(c.Name)
 	sb.WriteString(" ")
 	sb.WriteString(c.Type)
@@ -1562,8 +1730,8 @@ func columnConstraintSQL(c *ColumnConstraint) string {
 }
 
 func tableConstraintSQL(tc *TableConstraint) string {
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	if tc.Name != "" {
 		sb.WriteString("CONSTRAINT ")
 		sb.WriteString(tc.Name)
@@ -1596,8 +1764,8 @@ func tableConstraintSQL(tc *TableConstraint) string {
 }
 
 func referenceSQL(r *ReferenceDefinition) string {
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString("REFERENCES ")
 	sb.WriteString(r.Table)
 	if len(r.Columns) > 0 {
@@ -1815,8 +1983,8 @@ func (p *PragmaStatement) SQL() string {
 	if p == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString("PRAGMA ")
 	sb.WriteString(p.Name)
 	if p.Arg != "" {
@@ -1835,8 +2003,8 @@ func (s *ShowStatement) SQL() string {
 	if s == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString("SHOW ")
 	sb.WriteString(s.ShowType)
 	if s.ObjectName != "" {
@@ -1863,8 +2031,8 @@ func (r *ReplaceStatement) SQL() string {
 	if r == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString("REPLACE INTO ")
 	sb.WriteString(r.TableName)
 	if len(r.Columns) > 0 {
@@ -1904,8 +2072,8 @@ func (s *SampleClause) SQL() string {
 	if s == nil {
 		return ""
 	}
-	sb := getBuilder()
-	defer putBuilder(sb)
+	sb := getBuf()
+	defer putBuf(sb)
 	sb.WriteString("SAMPLE ")
 	v := s.Value
 	if s.Value != "" && s.Denominator != "" {

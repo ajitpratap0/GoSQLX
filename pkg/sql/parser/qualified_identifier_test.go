@@ -55,6 +55,11 @@ func TestParser_QualifiedIdentifier_Shape(t *testing.T) {
 		{"unqualified column", "SELECT col FROM t", "", "col", 1, 8, true},
 		{"bare asterisk", "SELECT * FROM t", "", "*", 0, 0, false},
 		{"multi-line", "SELECT\n  t.col FROM t", "t", "col", 2, 3, true},
+		{"three-part column", "SELECT db.t.col FROM db.t", "db.t", "col", 1, 8, true},
+		{"backtick three-part", "SELECT `sakila`.`city`.`city` FROM t", "sakila.city", "city", 1, 8, true},
+		{"three-part asterisk", "SELECT db.t.* FROM db.t", "db.t", "*", 1, 8, true},
+		{"four-part column", "SELECT c.s.t.col FROM t", "c.s.t", "col", 1, 8, true},
+		{"reserved word as later part", "SELECT db.t.key FROM t", "db.t", "key", 1, 8, true},
 	}
 
 	for _, tt := range tests {
@@ -118,11 +123,22 @@ func TestParser_QualifiedIdentifier_Shape(t *testing.T) {
 }
 
 func TestParser_QualifiedIdentifier_MultiPartUnchanged(t *testing.T) {
-	t.Run("three-part name still errors", func(t *testing.T) {
+	t.Run("three-part name folds qualifiers into Table", func(t *testing.T) {
 		tree, err := parseQualifiedSQL(t, "SELECT a.b.c FROM t")
-		if err == nil {
-			ast.ReleaseAST(tree)
-			t.Fatal("expected a parse error for a.b.c in expression position")
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		defer ast.ReleaseAST(tree)
+		sel, ok := tree.Statements[0].(*ast.SelectStatement)
+		if !ok {
+			t.Fatalf("expected *ast.SelectStatement, got %T", tree.Statements[0])
+		}
+		id, ok := sel.Columns[0].(*ast.Identifier)
+		if !ok {
+			t.Fatalf("expected *ast.Identifier, got %T", sel.Columns[0])
+		}
+		if id.Table != "a.b" || id.Name != "c" {
+			t.Errorf("got Table=%q Name=%q, want Table=\"a.b\" Name=\"c\"", id.Table, id.Name)
 		}
 	})
 

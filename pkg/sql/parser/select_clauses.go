@@ -80,8 +80,9 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 		)
 	}
 
-	// First table reference
-	firstRef, e := p.parseFromTableReference()
+	// First table reference. A leading parenthesized joined table
+	// ("FROM ((a JOIN b ON ...) JOIN c ON ...)") contributes its joins here.
+	firstRef, joins, e := p.parseFromItem()
 	if e != nil {
 		return "", nil, nil, e
 	}
@@ -100,6 +101,15 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 
 	// Additional comma-separated table references (implicit cross joins)
 	for p.isType(models.TokenTypeComma) {
+		if len(joins) > 0 {
+			// Hoisting the parenthesized joins past a comma would re-bind them
+			// to the last comma-separated table and change the query's meaning.
+			return "", nil, nil, goerrors.UnsupportedFeatureError(
+				"comma-separated table list after a parenthesized join",
+				p.currentLocation(),
+				"",
+			)
+		}
 		p.advance()
 		ref, e2 := p.parseFromTableReference()
 		if e2 != nil {
@@ -109,14 +119,87 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 	}
 
 	// JOIN clauses
-	joins, err = p.parseJoinClauses(firstRef)
+	joins, err = p.parseJoinClauses(firstRef, joins)
 	return tableName, tables, joins, err
 }
 
-// parseJoinClauses parses zero or more JOIN clauses that follow the FROM table list.
-// firstRef is the primary (left-most) table, used for building JoinClause.Left.
-func (p *Parser) parseJoinClauses(firstRef ast.TableReference) ([]ast.JoinClause, error) {
-	joins := []ast.JoinClause{}
+// parseFromItem parses the first item of a FROM clause: either a plain table
+// reference (table, derived table, table function, ...) or a parenthesized
+// joined table. Joins found inside the parentheses are returned in source
+// order so the caller can continue the join chain after them.
+func (p *Parser) parseFromItem() (ast.TableReference, []ast.JoinClause, error) {
+	if p.isParenthesizedJoinStart() {
+		return p.parseParenthesizedJoin()
+	}
+	ref, err := p.parseFromTableReference()
+	return ref, nil, err
+}
+
+// isParenthesizedJoinStart reports whether the current '(' opens a
+// parenthesized joined table, i.e. "( table_reference [JOIN ...] )" or a
+// further nested "((", rather than a derived table "(SELECT ...)".
+// Other tokens after '(' keep the derived-table path and its error message.
+func (p *Parser) isParenthesizedJoinStart() bool {
+	if !p.isType(models.TokenTypeLParen) {
+		return false
+	}
+	switch p.peekToken().Token.Type {
+	case models.TokenTypeIdentifier, models.TokenTypeDoubleQuotedString, models.TokenTypeLParen:
+		return true
+	}
+	return false
+}
+
+// parseParenthesizedJoin parses "( from_item [join_clause ...] )" as used by
+// MySQL view definitions and allowed by SQL-92 <joined table>:
+//
+//	FROM ((a JOIN b ON ...) JOIN c ON ...) JOIN d ON ...
+//
+// Only the left-most position may be parenthesized here, and a left-nested
+// join group has exactly the meaning of the same joins written without
+// parentheses (joins associate to the left), so the group is flattened into
+// the enclosing join chain. The returned reference is the group's left-most
+// table and the joins are in source order.
+func (p *Parser) parseParenthesizedJoin() (ast.TableReference, []ast.JoinClause, error) {
+	p.depth++
+	defer func() { p.depth-- }()
+	if p.depth > MaxRecursionDepth {
+		return ast.TableReference{}, nil, goerrors.RecursionDepthLimitError(
+			p.depth, MaxRecursionDepth, p.currentLocation(), "")
+	}
+
+	p.advance() // Consume (
+
+	first, joins, err := p.parseFromItem()
+	if err != nil {
+		return ast.TableReference{}, nil, err
+	}
+	if p.isType(models.TokenTypeComma) {
+		return ast.TableReference{}, nil, goerrors.UnsupportedFeatureError(
+			"comma-separated table list inside a parenthesized join",
+			p.currentLocation(),
+			"",
+		)
+	}
+	joins, err = p.parseJoinClauses(first, joins)
+	if err != nil {
+		return ast.TableReference{}, nil, err
+	}
+	if !p.isType(models.TokenTypeRParen) {
+		return ast.TableReference{}, nil, p.expectedError(") or JOIN")
+	}
+	p.advance() // Consume )
+	return first, joins, nil
+}
+
+// parseJoinClauses parses zero or more JOIN clauses that follow the FROM table list
+// and appends them to joins (the joins already parsed from a parenthesized
+// group, or nil). firstRef is the primary (left-most) table, used for building
+// JoinClause.Left.
+func (p *Parser) parseJoinClauses(firstRef ast.TableReference, joins []ast.JoinClause) ([]ast.JoinClause, error) {
+	if joins == nil {
+		joins = []ast.JoinClause{}
+	}
 
 	for p.isJoinKeyword() {
 		joinPos := p.currentLocation()

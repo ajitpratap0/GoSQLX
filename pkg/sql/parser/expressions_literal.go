@@ -193,7 +193,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				ident.Table = ident.Name
 				ident.Name = "*"
 				p.advance()
-			} else if p.isIdentifier() || p.isNonReservedKeyword() || (p.dialect == string(keywords.DialectClickHouse) && p.isNumericLiteral()) {
+			} else if p.isQualifiedNamePart() {
 				// Handle table.column (qualified identifier).
 				// isNonReservedKeyword covers reserved words valid as column
 				// names after a dot, e.g. table.KEY, schema.INDEX, alias.VIEW.
@@ -203,6 +203,35 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				ident.Table = ident.Name
 				ident.Name = p.currentToken.Token.Value
 				p.advance()
+
+				// Multi-part reference: db.table.column (MySQL/MariaDB),
+				// catalog.schema.table.column (PostgreSQL, SQL Server, Snowflake).
+				// Every qualifier is folded into Table as a dotted string, mirroring
+				// TableReference.Name ("db.table"), so Table + "." + Name always
+				// reproduces the source reference. Only reached with 3+ parts, so the
+				// two-part path stays single-allocation.
+				for p.isType(models.TokenTypePeriod) {
+					p.advance() // Consume .
+					switch {
+					case p.isType(models.TokenTypeAsterisk) || p.isType(models.TokenTypeMul):
+						ident.Table = ident.Table + "." + ident.Name
+						ident.Name = "*"
+						p.advance()
+						if p.isType(models.TokenTypePeriod) {
+							return nil, p.expectedError("end of qualified name after *")
+						}
+					case p.isQualifiedNamePart():
+						ident.Table = ident.Table + "." + ident.Name
+						ident.Name = p.currentToken.Token.Value
+						p.advance()
+					default:
+						return nil, goerrors.InvalidSyntaxError(
+							"expected column name or * after table qualifier",
+							p.currentLocation(),
+							"Use db.table.column or db.table.* syntax",
+						)
+					}
+				}
 			} else {
 				return nil, goerrors.InvalidSyntaxError(
 					"expected column name or * after table qualifier",
@@ -444,4 +473,12 @@ func (p *Parser) parseSubquery() (ast.Statement, error) {
 		p.currentLocation(),
 		"",
 	)
+}
+
+// isQualifiedNamePart reports whether the current token can follow a '.' in a
+// qualified column reference: an identifier, a non-reserved keyword (t.KEY,
+// schema.INDEX), or - in ClickHouse - a numeric tuple element (d.1).
+func (p *Parser) isQualifiedNamePart() bool {
+	return p.isIdentifier() || p.isNonReservedKeyword() ||
+		(p.dialect == string(keywords.DialectClickHouse) && p.isNumericLiteral())
 }

@@ -15,6 +15,7 @@
 package lsp
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/errors"
@@ -24,7 +25,6 @@ import (
 // TestCreateDiagnosticFromError_WithStructuredError tests that error codes
 // are extracted from structured errors
 func TestCreateDiagnosticFromError_WithStructuredError(t *testing.T) {
-	h := &Handler{}
 
 	// Create a structured error with error code and location
 	structuredErr := &errors.Error{
@@ -38,7 +38,7 @@ func TestCreateDiagnosticFromError_WithStructuredError(t *testing.T) {
 
 	content := "SELECT * FROM users\nWHERE id = 1\nAND name = 'test'\nORDER BY created_at\nSELECT invalid syntax"
 
-	diag := h.createDiagnosticFromError(content, structuredErr, 0)
+	diag := createDiagnosticFromError(content, strings.Split(content, "\n"), structuredErr, 0)
 
 	// Verify error code is included
 	if diag.Code == nil {
@@ -84,14 +84,13 @@ func TestCreateDiagnosticFromError_WithStructuredError(t *testing.T) {
 // TestCreateDiagnosticFromError_WithPlainError tests that plain errors
 // without structured error codes still work
 func TestCreateDiagnosticFromError_WithPlainError(t *testing.T) {
-	h := &Handler{}
 
 	// Create a plain error (simulating wrapped error or non-GoSQLX error)
 	plainErr := errors.NewError(errors.ErrCodeInvalidSyntax, "syntax error near FROM", models.Location{Line: 1, Column: 8})
 
 	content := "SELECT FROM users"
 
-	diag := h.createDiagnosticFromError(content, plainErr, 0)
+	diag := createDiagnosticFromError(content, strings.Split(content, "\n"), plainErr, 0)
 
 	// Verify error code is included for plain structured errors
 	if diag.Code == nil {
@@ -110,7 +109,6 @@ func TestCreateDiagnosticFromError_WithPlainError(t *testing.T) {
 
 // TestCreateDiagnosticFromError_EdgeCases tests edge cases
 func TestCreateDiagnosticFromError_EdgeCases(t *testing.T) {
-	h := &Handler{}
 
 	tests := []struct {
 		name        string
@@ -145,7 +143,7 @@ func TestCreateDiagnosticFromError_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			diag := h.createDiagnosticFromError(tt.content, tt.err, tt.defaultLine)
+			diag := createDiagnosticFromError(tt.content, strings.Split(tt.content, "\n"), tt.err, tt.defaultLine)
 
 			if tt.expectCode {
 				if diag.Code == nil {

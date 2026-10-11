@@ -14,7 +14,27 @@
 
 package tokenizer
 
-import "unicode"
+import (
+	"unicode"
+	"unicode/utf8"
+)
+
+// asciiIdentStart and asciiIdentPart classify single-byte (ASCII) runes for
+// identifier scanning. They are derived once at package init from the Unicode
+// predicates, so the table and the predicates cannot disagree. The tables are
+// immutable after init and are shared read-only by all tokenizers, so they are
+// safe for concurrent use. They are [256]bool (not [128]) so that indexing by a
+// byte needs no bounds check; entries 128..255 are always false and are never
+// consulted for multi-byte runes.
+var asciiIdentStart, asciiIdentPart = buildASCIIIdentTables()
+
+func buildASCIIIdentTables() (start, part [256]bool) {
+	for r := rune(0); r < utf8.RuneSelf; r++ {
+		start[r] = unicodeIdentifierStartSlow(r)
+		part[r] = unicodeIdentifierPartSlow(r)
+	}
+	return start, part
+}
 
 // isUnicodeIdentifierStart checks if a rune can start a Unicode identifier.
 //
@@ -33,6 +53,16 @@ import "unicode"
 //
 // Returns true if the rune can start an identifier, false otherwise.
 func isUnicodeIdentifierStart(r rune) bool {
+	// uint32 cast: negative runes must take the slow path, not index the table.
+	if uint32(r) < utf8.RuneSelf {
+		return asciiIdentStart[r]
+	}
+	return unicodeIdentifierStartSlow(r)
+}
+
+// unicodeIdentifierStartSlow is the full Unicode implementation of
+// isUnicodeIdentifierStart. It is the source of truth for asciiIdentStart.
+func unicodeIdentifierStartSlow(r rune) bool {
 	return unicode.IsLetter(r) || r == '_'
 }
 
@@ -57,6 +87,16 @@ func isUnicodeIdentifierStart(r rune) bool {
 //
 // Returns true if the rune can be part of an identifier, false otherwise.
 func isUnicodeIdentifierPart(r rune) bool {
+	// uint32 cast: negative runes must take the slow path, not index the table.
+	if uint32(r) < utf8.RuneSelf {
+		return asciiIdentPart[r]
+	}
+	return unicodeIdentifierPartSlow(r)
+}
+
+// unicodeIdentifierPartSlow is the full Unicode implementation of
+// isUnicodeIdentifierPart. It is the source of truth for asciiIdentPart.
+func unicodeIdentifierPartSlow(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' ||
 		unicode.Is(unicode.Mn, r) || // Non-spacing marks
 		unicode.Is(unicode.Mc, r) || // Spacing combining marks

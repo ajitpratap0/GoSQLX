@@ -15,6 +15,8 @@
 package gosqlx
 
 import (
+	"sync"
+
 	"github.com/ajitpratap0/GoSQLX/pkg/linter"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/naming"
@@ -29,12 +31,25 @@ type LintResult struct {
 	Violations []linter.Violation
 }
 
+// defaultLinter returns the process-wide linter used by Lint, built once on
+// first use. Sharing is safe because the Linter and every built-in rule are
+// stateless after construction: rule Check methods read only immutable
+// configuration set in their constructors and allocate all per-call state
+// (visitors, violation slices) locally; LintString keeps its Context,
+// tokenizer, parser and AST local to the call. Never call SetDialect (or
+// otherwise mutate) the returned Linter; Lint has no dialect option. Any rule
+// added to allRules must preserve this invariant.
+var defaultLinter = sync.OnceValue(func() *linter.Linter {
+	return linter.New(allRules()...)
+})
+
 // Lint checks SQL for style, safety, and performance issues using all 30 built-in
 // lint rules (L001-L030). Returns violations found and any error encountered.
 //
-// This is a convenience wrapper around the pkg/linter package that creates a
-// linter with all rules enabled using sensible defaults. For fine-grained control
-// over which rules to enable or their configuration, use pkg/linter directly.
+// This is a convenience wrapper around the pkg/linter package that uses a
+// shared, lazily-built linter with all rules enabled using sensible defaults.
+// For fine-grained control over which rules to enable or their configuration,
+// use pkg/linter directly.
 //
 // Thread Safety: safe for concurrent use.
 //
@@ -48,7 +63,7 @@ type LintResult struct {
 //	    fmt.Printf("[%s] %s: %s\n", v.Rule, v.RuleName, v.Message)
 //	}
 func Lint(sql string) (*LintResult, error) {
-	l := linter.New(allRules()...)
+	l := defaultLinter()
 	fileResult := l.LintString(sql, "<input>")
 	if fileResult.Error != nil {
 		return nil, fileResult.Error

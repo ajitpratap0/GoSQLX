@@ -176,6 +176,8 @@ func containsCastExprInWhere(expr ast.Expression) bool {
 		return containsCastExprInWhere(v.Left) || containsCastExprInWhere(v.Right)
 	case *ast.UnaryExpression:
 		return containsCastExprInWhere(v.Expr)
+	case *ast.ParenthesizedExpression:
+		return containsCastExprInWhere(v.Expr)
 	}
 	return false
 }
@@ -216,6 +218,9 @@ func (r *OrToInConversionRule) Analyze(stmt ast.Statement) []Suggestion {
 // if all equality conditions in the OR chain reference the same column.
 // Returns ("", 0) if conditions are on different columns or the pattern is not matched.
 func collectOrEqualityColumn(expr ast.Expression) (string, int) {
+	if paren, ok := expr.(*ast.ParenthesizedExpression); ok {
+		return collectOrEqualityColumn(paren.Expr)
+	}
 	bin, ok := expr.(*ast.BinaryExpression)
 	if !ok {
 		return "", 0
@@ -288,6 +293,8 @@ func containsNotInSubquery(expr ast.Expression) bool {
 	case *ast.BinaryExpression:
 		return containsNotInSubquery(v.Left) || containsNotInSubquery(v.Right)
 	case *ast.UnaryExpression:
+		return containsNotInSubquery(v.Expr)
+	case *ast.ParenthesizedExpression:
 		return containsNotInSubquery(v.Expr)
 	}
 	return false
@@ -395,6 +402,8 @@ func markAliasUsed(expr ast.Expression, aliases map[string]bool) {
 		markAliasUsed(v.Left, aliases)
 		markAliasUsed(v.Right, aliases)
 	case *ast.UnaryExpression:
+		markAliasUsed(v.Expr, aliases)
+	case *ast.ParenthesizedExpression:
 		markAliasUsed(v.Expr, aliases)
 	case *ast.FunctionCall:
 		for _, arg := range v.Arguments {

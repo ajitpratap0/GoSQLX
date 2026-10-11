@@ -169,6 +169,8 @@ func walkExpr(expr ast.Expression, fn func(ast.Expression) ast.Expression) ast.E
 		e.Expr = walkExpr(e.Expr, fn)
 	case *ast.UnaryExpression:
 		e.Expr = walkExpr(e.Expr, fn)
+	case *ast.ParenthesizedExpression:
+		e.Expr = walkExpr(e.Expr, fn)
 	case *ast.CastExpression:
 		e.Expr = walkExpr(e.Expr, fn)
 	case *ast.BetweenExpression:
@@ -294,6 +296,11 @@ func replaceTableInExpr(expr ast.Expression, old, new string) ast.Expression {
 	// For subquery-containing expressions, recurse into the full statement
 	// so that FROM/JOIN table names are also replaced.
 	switch e := expr.(type) {
+	case *ast.ParenthesizedExpression:
+		// Grouping parentheses are transparent: recurse so a wrapped subquery
+		// still gets its FROM/JOIN tables replaced.
+		e.Expr = replaceTableInExpr(e.Expr, old, new)
+		return e
 	case *ast.SubqueryExpression:
 		replaceTableInStmt(e.Subquery, old, new)
 		return e

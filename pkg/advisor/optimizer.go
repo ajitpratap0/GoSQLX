@@ -282,6 +282,8 @@ func countSubqueries(expr ast.Expression) int {
 	case *ast.BinaryExpression:
 		count += countSubqueries(e.Left)
 		count += countSubqueries(e.Right)
+	case *ast.ParenthesizedExpression:
+		count += countSubqueries(e.Expr)
 	}
 
 	return count

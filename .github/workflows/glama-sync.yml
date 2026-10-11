@@ -21,7 +21,7 @@ on:
     types: [published]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   bump-glama-version:
@@ -30,8 +30,10 @@ jobs:
     # Best-effort: branch protection may reject the push.
     # In that case, update glama.json manually in the release PR.
     continue-on-error: true
+    permissions:
+      contents: write # push the glama.json version bump
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event.release.target_commitish }}
           token: ${{ secrets.GITHUB_TOKEN }}

@@ -272,6 +272,16 @@
     "typescript": "^5.3.2"
   },
   "overrides": {
-    "brace-expansion": "^5.0.9"
+    "brace-expansion": "^5.0.9",
+    "serialize-javascript": "^7.0.5",
+    "eslint": {
+      "minimatch": "^9.0.9"
+    },
+    "@eslint/eslintrc": {
+      "minimatch": "^9.0.9"
+    },
+    "@humanwhocodes/config-array": {
+      "minimatch": "^9.0.9"
+    }
   }
 }

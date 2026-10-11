@@ -78,6 +78,10 @@ func Analyze(sql string) (*AnalysisResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parsing failed: %w", err)
 	}
+	// The tree is pooled on return, so analyzeStatement and
+	// classifyQueryComplexity must not retain AST node references (they copy
+	// strings and ints only).
+	defer ast.ReleaseAST(tree)
 
 	var suggestions []AnalysisSuggestion
 

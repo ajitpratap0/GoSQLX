@@ -248,6 +248,8 @@ func isAggregateExpr(expr ast.Expression) bool {
 		return isAggregateExpr(e.Left) || isAggregateExpr(e.Right)
 	case *ast.UnaryExpression:
 		return isAggregateExpr(e.Expr)
+	case *ast.ParenthesizedExpression:
+		return isAggregateExpr(e.Expr)
 	case *ast.CaseExpression:
 		for _, when := range e.WhenClauses {
 			if isAggregateExpr(when.Result) {
@@ -283,6 +285,8 @@ func collectColumnRefs(expr ast.Expression) []string {
 		refs = append(refs, collectColumnRefs(e.Left)...)
 		refs = append(refs, collectColumnRefs(e.Right)...)
 	case *ast.UnaryExpression:
+		refs = append(refs, collectColumnRefs(e.Expr)...)
+	case *ast.ParenthesizedExpression:
 		refs = append(refs, collectColumnRefs(e.Expr)...)
 	case *ast.FunctionCall:
 		for _, arg := range e.Arguments {

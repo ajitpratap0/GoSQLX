@@ -569,3 +569,34 @@ func TestSQLFormatter_Options(t *testing.T) {
 		}
 	})
 }
+
+// Regression for #519: the CLI formatter must render grouping parentheses
+// instead of falling back to the node's TokenLiteral ("PAREN").
+func TestSQLFormatter_ParenthesizedExpression(t *testing.T) {
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+	tokens, err := tkz.Tokenize([]byte("SELECT (a + b) * c FROM t WHERE (a = 1 OR b = 2) AND c = 3"))
+	if err != nil {
+		t.Fatalf("tokenize: %v", err)
+	}
+	p := parser.NewParser()
+	defer p.Release()
+	tree, err := p.ParseFromModelTokens(tokens)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	defer ast.ReleaseAST(tree)
+
+	out, err := NewSQLFormatter(FormatterOptions{Indent: "  ", UppercaseKw: true}).Format(tree)
+	if err != nil {
+		t.Fatalf("format: %v", err)
+	}
+	if strings.Contains(out, "PAREN") {
+		t.Fatalf("formatter emitted placeholder PAREN:\n%s", out)
+	}
+	for _, want := range []string{"(a + b) * c", "(a = 1 OR b = 2) AND c = 3"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in output:\n%s", want, out)
+		}
+	}
+}

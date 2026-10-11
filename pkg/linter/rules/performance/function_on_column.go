@@ -144,7 +144,7 @@ func (v *functionOnColVisitor) Visit(node ast.Node) (ast.Visitor, error) {
 		return v, nil
 	}
 
-	fn, isFn := binExpr.Left.(*ast.FunctionCall)
+	fn, isFn := unwrapParens(binExpr.Left).(*ast.FunctionCall)
 	if !isFn {
 		return v, nil
 	}

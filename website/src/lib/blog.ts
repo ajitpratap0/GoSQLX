@@ -1,6 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
+import { isValidSlug } from './blog-slug';
+
+export { isValidSlug, blogPostHref } from './blog-slug';
 
 export interface BlogPost {
   slug: string;
@@ -18,10 +21,12 @@ export function getPostSlugs(): string[] {
   return fs
     .readdirSync(BLOG_DIR)
     .filter((f) => f.endsWith('.md'))
-    .map((f) => f.replace(/\.md$/, ''));
+    .map((f) => f.replace(/\.md$/, ''))
+    .filter(isValidSlug);
 }
 
 export function getPostBySlug(slug: string): BlogPost | null {
+  if (!isValidSlug(slug)) return null;
   const filePath = path.join(BLOG_DIR, `${slug}.md`);
   if (!fs.existsSync(filePath)) return null;
 
@@ -40,8 +45,8 @@ export function getPostBySlug(slug: string): BlogPost | null {
 
 export function getAllPosts(): BlogPost[] {
   return getPostSlugs()
-    .map((slug) => getPostBySlug(slug)!)
-    .filter(Boolean)
+    .map((slug) => getPostBySlug(slug))
+    .filter((post): post is BlogPost => post !== null)
     .sort((a, b) => {
       // Sort by date descending, then by version descending as tiebreaker
       if (a.date && b.date && a.date !== b.date) {

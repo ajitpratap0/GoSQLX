@@ -755,14 +755,7 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 	t.pos.AdvanceRune(r, size)
 
 	// Read until we hit a non-identifier character
-	for t.pos.Index < len(t.input) {
-		r, size = utf8.DecodeRune(t.input[t.pos.Index:])
-		if !isIdentifierChar(r) {
-			_ = size // Mark as intentionally unused
-			break
-		}
-		t.pos.AdvanceRune(r, size)
-	}
+	t.scanIdentifierTail()
 
 	ident := string(t.input[start:t.pos.Index])
 
@@ -828,14 +821,7 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 				t.pos.AdvanceRune(r, size)
 
 				// Read until we hit a non-identifier character
-				for t.pos.Index < len(t.input) {
-					r, size = utf8.DecodeRune(t.input[t.pos.Index:])
-					if !isIdentifierChar(r) {
-						_ = size // Mark as intentionally unused
-						break
-					}
-					t.pos.AdvanceRune(r, size)
-				}
+				t.scanIdentifierTail()
 
 				nextIdent := string(t.input[nextStart:t.pos.Index])
 
@@ -1947,6 +1933,31 @@ func (t *Tokenizer) getLocation(pos int) models.Location {
 
 func isIdentifierChar(r rune) bool {
 	return isUnicodeIdentifierPart(r)
+}
+
+// scanIdentifierTail advances the cursor over identifier-part characters.
+//
+// ASCII bytes are classified directly from the input without decoding. For
+// them, Index++/Column++ is exactly equivalent to Position.AdvanceRune because
+// no ASCII identifier byte is '\n' (so Line and LastNL never change). Multi-byte
+// runes fall back to utf8.DecodeRune. Do not reuse this for any character class
+// that can contain a newline.
+func (t *Tokenizer) scanIdentifierTail() {
+	for t.pos.Index < len(t.input) {
+		if c := t.input[t.pos.Index]; c < utf8.RuneSelf {
+			if !asciiIdentPart[c] {
+				return
+			}
+			t.pos.Index++
+			t.pos.Column++
+			continue
+		}
+		r, size := utf8.DecodeRune(t.input[t.pos.Index:])
+		if !isIdentifierChar(r) {
+			return
+		}
+		t.pos.AdvanceRune(r, size)
+	}
 }
 
 // hasCodeBeforeOnLine checks if there are non-whitespace characters on the same

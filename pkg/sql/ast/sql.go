@@ -590,7 +590,19 @@ func (p *ParenthesizedExpression) SQL() string {
 	if p == nil {
 		return ""
 	}
-	return fmt.Sprintf("(%s)", exprSQL(p.Expr))
+	buf := getBuf()
+	defer putBuf(buf)
+	p.writeSQL(buf)
+	return buf.String()
+}
+
+func (p *ParenthesizedExpression) writeSQL(buf *bytes.Buffer) {
+	if p == nil {
+		return
+	}
+	buf.WriteByte('(')
+	writeExpr(buf, p.Expr)
+	buf.WriteByte(')')
 }
 
 // SQL returns the SQL representation of this ANY expression as "expr op ANY (subquery)".

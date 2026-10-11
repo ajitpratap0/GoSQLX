@@ -88,7 +88,7 @@ var goldenParseCases = []goldenParseCase{
 	{"extra/not like lowercase", "", "SELECT * FROM t WHERE name not like 'a%'", "SELECT * FROM t WHERE name NOT LIKE 'a%'", true},
 	{"extra/not ilike", "", "SELECT * FROM t WHERE name NOT ILIKE 'a%'", "SELECT * FROM t WHERE name NOT ILIKE 'a%'", true},
 	{"extra/lowercase bool", "", "SELECT * FROM t WHERE active = true", "SELECT * FROM t WHERE active = true", true},
-	{"extra/is not null and not", "", "SELECT * FROM t WHERE x IS NOT NULL AND NOT (a = b)", "SELECT * FROM t WHERE x IS NOT NULL AND NOT a = b", true},
+	{"extra/is not null and not", "", "SELECT * FROM t WHERE x IS NOT NULL AND NOT (a = b)", "SELECT * FROM t WHERE x IS NOT NULL AND NOT (a = b)", true},
 	{"extra/extract", "", "SELECT EXTRACT(YEAR FROM d) FROM t", "SELECT EXTRACT(YEAR FROM d) FROM t", true},
 	{"extra/interval", "", "SELECT INTERVAL '1 day' FROM t", "SELECT INTERVAL '1 day' FROM t", true},
 	{"extra/arrays", "", "SELECT ARRAY[1, 2], arr[1], arr[1:3], arr[2:], arr[:5], m[1][2] FROM t", "SELECT ARRAY[1, 2], arr[1], arr[1:3], arr[2:], arr[:5], m[1][2] FROM t", true},

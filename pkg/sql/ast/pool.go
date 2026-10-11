@@ -482,10 +482,22 @@ func NewAST() *AST {
 // and performance.
 //
 // Cleanup Process:
-//  1. Returns all statement objects to their respective pools
-//  2. Clears all statement references
-//  3. Resets the Statements slice (preserves capacity)
+//  1. Walks every statement and returns the node types the parser draws
+//     from pools: TupleExpression, ArrayConstructorExpression,
+//     ArraySubscriptExpression and ArraySliceExpression nested anywhere in
+//     the tree, and Unsupported/Alter/Show/Describe/Replace/sequence (and
+//     other DDL) statements
+//  2. Leaves every other node (Identifier, LiteralValue, BinaryExpression,
+//     FunctionCall, Select/Insert/Update/DeleteStatement, ...) to the GC:
+//     the parser builds those as heap literals, so putting them would only
+//     grow pools nobody reads from
+//  3. Clears all statement references and resets the Statements slice
+//     (preserves capacity)
 //  4. Returns the AST container to astPool
+//
+// Trees built by hand from Get* nodes should be returned with the matching
+// Put* function (PutSelectStatement, PutExpression, ...), which still
+// recycles every pooled node type. No node may be used after ReleaseAST.
 //
 // Usage Pattern (MANDATORY):
 //
@@ -501,9 +513,8 @@ func NewAST() *AST {
 // Use defer immediately after NewAST() to ensure cleanup even on error paths.
 //
 // Performance Impact:
-//   - Prevents memory leaks by returning objects to pools
-//   - Maintains 95%+ pool hit rates
-//   - Reduces GC overhead by reusing allocations
+//   - Returns the AST container and parser-drawn nodes for reuse
+//   - Does no pool work for node types the parser never draws
 //   - Essential for sustained high throughput (1.38M+ ops/sec)
 //
 // Example - Correct usage:
@@ -524,7 +535,7 @@ func ReleaseAST(ast *AST) {
 
 	// Clean up all statements
 	for i := range ast.Statements {
-		releaseStatement(ast.Statements[i])
+		releaseStatement(ast.Statements[i], releaseDrawn)
 		ast.Statements[i] = nil
 	}
 
@@ -543,7 +554,8 @@ func ReleaseAST(ast *AST) {
 
 // ReleaseStatements returns a slice of statements back to their respective pools.
 // Use this to clean up statements returned by ParseWithRecovery, which returns
-// []Statement rather than an *AST.
+// []Statement rather than an *AST. It applies the same release policy as
+// ReleaseAST: only node types the parser draws from pools are recycled.
 //
 // Example:
 //
@@ -555,26 +567,29 @@ func ReleaseStatements(stmts []Statement) {
 		if stmts[i] == nil {
 			continue
 		}
-		releaseStatement(stmts[i])
+		releaseStatement(stmts[i], releaseDrawn)
 		stmts[i] = nil
 	}
 }
 
 // releaseStatement returns a single Statement to its pool.
-// This is the central dispatch used by both ReleaseAST and ReleaseStatements.
-func releaseStatement(stmt Statement) {
+// This is the central dispatch used by both ReleaseAST and ReleaseStatements
+// (mode releaseDrawn) and by PutCreateView/MaterializedViewStatement
+// (mode releaseAll). Only Select/Insert/Update/Delete honour mode; every other
+// pooled statement is always Put.
+func releaseStatement(stmt Statement, mode releaseMode) {
 	if stmt == nil {
 		return
 	}
 	switch s := stmt.(type) {
 	case *SelectStatement:
-		PutSelectStatement(s)
+		releaseSelectStatement(s, mode)
 	case *InsertStatement:
-		PutInsertStatement(s)
+		releaseInsertStatement(s, mode)
 	case *UpdateStatement:
-		PutUpdateStatement(s)
+		releaseUpdateStatement(s, mode)
 	case *DeleteStatement:
-		PutDeleteStatement(s)
+		releaseDeleteStatement(s, mode)
 	case *CreateTableStatement:
 		PutCreateTableStatement(s)
 	case *AlterTableStatement:
@@ -669,7 +684,7 @@ func PutCreateViewStatement(stmt *CreateViewStatement) {
 	}
 
 	// Recursively release the nested SELECT query
-	releaseStatement(stmt.Query)
+	releaseStatement(stmt.Query, releaseAll)
 
 	stmt.OrReplace = false
 	stmt.Temporary = false
@@ -697,7 +712,7 @@ func PutCreateMaterializedViewStatement(stmt *CreateMaterializedViewStatement) {
 	}
 
 	// Recursively release the nested SELECT query
-	releaseStatement(stmt.Query)
+	releaseStatement(stmt.Query, releaseAll)
 
 	stmt.IfNotExists = false
 	stmt.Name = ""

@@ -170,8 +170,53 @@ func PutLiteralValue(lit *LiteralValue) {
 // Direct pool returns (e.g., binaryExprPool.Put()) bypass the iterative
 // cleanup and may leave child expressions unreleased.
 //
+// PutExpression always returns every pooled node it reaches. ReleaseAST and
+// ReleaseStatements use a narrower policy and only recycle the node types the
+// parser draws from pools; see ReleaseAST. Trees built by hand from Get*
+// nodes should be released with PutExpression or the matching Put* function.
+//
 // See also: GetBinaryExpression(), GetFunctionCall(), GetIdentifier()
 func PutExpression(expr Expression) {
+	releaseExpression(expr, releaseAll)
+}
+
+// releaseMode selects which pooled node types a release walk returns to
+// their pools. The walk itself is the same in both modes, so pooled nodes
+// nested under any parent are always reached.
+type releaseMode uint8
+
+const (
+	// releaseAll returns every pooled node reachable from the root. It is
+	// used by the exported Put* functions, whose contract is unchanged.
+	releaseAll releaseMode = iota
+
+	// releaseDrawn returns only the node types the parser draws from pools
+	// and leaves every other node to the GC. It is used by ReleaseAST and
+	// ReleaseStatements (issue #556): putting nodes the parser never Gets
+	// only grows pools nobody reads from.
+	//
+	// Drawn expression types: TupleExpression, ArrayConstructorExpression,
+	// ArraySubscriptExpression and ArraySliceExpression. Drawn statement
+	// types: UnsupportedStatement, AlterStatement, ShowStatement,
+	// DescribeStatement, ReplaceStatement and the sequence statements; the
+	// other DDL statements are also still Put through their Put* functions.
+	// This list must be kept in sync with the parser's ast.Get* (and
+	// ast.NewXxxStatement) calls: a type the parser starts drawing must be
+	// Put unconditionally in putExpressionImpl / releaseStatement.
+	releaseDrawn
+)
+
+// releaseExpression releases expr and its subtree according to mode.
+func releaseExpression(expr Expression, mode releaseMode) {
+	if mode == releaseDrawn {
+		switch expr.(type) {
+		case nil, *Identifier, *LiteralValue:
+			// Leaves the parser never draws from a pool: nothing to do.
+			return
+		}
+		putExpressionImpl(expr, 0, mode)
+		return
+	}
 	// Leaf fast path: Identifier and LiteralValue have no children, so they
 	// never need the work queue. These are by far the most common nodes.
 	switch e := expr.(type) {
@@ -190,7 +235,7 @@ func PutExpression(expr Expression) {
 		}
 		return
 	}
-	putExpressionImpl(expr, 0)
+	putExpressionImpl(expr, 0, mode)
 }
 
 // putExpressionImpl is the internal driver for PutExpression. The depth
@@ -207,7 +252,7 @@ func PutExpression(expr Expression) {
 // Every pooled node is reset by assigning the zero value of its type,
 // keeping only the backing arrays of its hot child slices (Arguments, List,
 // WhenClauses, ...), so Get* never hands out a node with stale fields.
-func putExpressionImpl(expr Expression, depth int) {
+func putExpressionImpl(expr Expression, depth int, mode releaseMode) {
 	if expr == nil {
 		return
 	}
@@ -252,8 +297,10 @@ func putExpressionImpl(expr Expression, depth int) {
 		// Process and collect child expressions
 		switch e := current.(type) {
 		case *Identifier:
-			*e = Identifier{}
-			identifierPool.Put(e)
+			if mode == releaseAll {
+				*e = Identifier{}
+				identifierPool.Put(e)
+			}
 
 		case *BinaryExpression:
 			if e.Left != nil {
@@ -262,13 +309,17 @@ func putExpressionImpl(expr Expression, depth int) {
 			if e.Right != nil {
 				workQueue = append(workQueue, e.Right)
 			}
-			// CustomOp is not pooled; the reset drops it for the GC.
-			*e = BinaryExpression{}
-			binaryExprPool.Put(e)
+			if mode == releaseAll {
+				// CustomOp is not pooled; the reset drops it for the GC.
+				*e = BinaryExpression{}
+				binaryExprPool.Put(e)
+			}
 
 		case *LiteralValue:
-			*e = LiteralValue{}
-			literalValuePool.Put(e)
+			if mode == releaseAll {
+				*e = LiteralValue{}
+				literalValuePool.Put(e)
+			}
 
 		case *FunctionCall:
 			for _, arg := range e.Arguments {
@@ -287,13 +338,15 @@ func putExpressionImpl(expr Expression, depth int) {
 			workQueue = appendOrderByExprs(workQueue, e.OrderBy)
 			workQueue = appendOrderByExprs(workQueue, e.WithinGroup)
 			workQueue = appendWindowSpecExprs(workQueue, e.Over)
-			// Keep Arguments/Parameters capacity; OrderBy, WithinGroup and
-			// Over are rare and left to the GC.
-			args, params := e.Arguments, e.Parameters
-			clear(args)
-			clear(params)
-			*e = FunctionCall{Arguments: args[:0], Parameters: params[:0]}
-			functionCallPool.Put(e)
+			if mode == releaseAll {
+				// Keep Arguments/Parameters capacity; OrderBy, WithinGroup and
+				// Over are rare and left to the GC.
+				args, params := e.Arguments, e.Parameters
+				clear(args)
+				clear(params)
+				*e = FunctionCall{Arguments: args[:0], Parameters: params[:0]}
+				functionCallPool.Put(e)
+			}
 
 		case *CaseExpression:
 			if e.Value != nil {
@@ -310,10 +363,12 @@ func putExpressionImpl(expr Expression, depth int) {
 			if e.ElseClause != nil {
 				workQueue = append(workQueue, e.ElseClause)
 			}
-			wc := e.WhenClauses
-			clear(wc)
-			*e = CaseExpression{WhenClauses: wc[:0]}
-			caseExprPool.Put(e)
+			if mode == releaseAll {
+				wc := e.WhenClauses
+				clear(wc)
+				*e = CaseExpression{WhenClauses: wc[:0]}
+				caseExprPool.Put(e)
+			}
 
 		case *BetweenExpression:
 			if e.Expr != nil {
@@ -325,8 +380,10 @@ func putExpressionImpl(expr Expression, depth int) {
 			if e.Upper != nil {
 				workQueue = append(workQueue, e.Upper)
 			}
-			*e = BetweenExpression{}
-			betweenExprPool.Put(e)
+			if mode == releaseAll {
+				*e = BetweenExpression{}
+				betweenExprPool.Put(e)
+			}
 
 		case *InExpression:
 			if e.Expr != nil {
@@ -341,30 +398,38 @@ func putExpressionImpl(expr Expression, depth int) {
 			// it through the statement dispatcher so every nested pooled
 			// node is returned. Silently setting to nil was a leak.
 			if e.Subquery != nil {
-				releaseStatement(e.Subquery)
+				releaseStatement(e.Subquery, mode)
 			}
-			l := e.List
-			clear(l)
-			*e = InExpression{List: l[:0]}
-			inExprPool.Put(e)
+			if mode == releaseAll {
+				l := e.List
+				clear(l)
+				*e = InExpression{List: l[:0]}
+				inExprPool.Put(e)
+			}
 
 		case *SubqueryExpression:
 			if e.Subquery != nil {
-				releaseStatement(e.Subquery)
+				releaseStatement(e.Subquery, mode)
 			}
-			*e = SubqueryExpression{}
-			subqueryExprPool.Put(e)
+			if mode == releaseAll {
+				*e = SubqueryExpression{}
+				subqueryExprPool.Put(e)
+			}
 
 		case *CastExpression:
 			if e.Expr != nil {
 				workQueue = append(workQueue, e.Expr)
 			}
-			*e = CastExpression{}
-			castExprPool.Put(e)
+			if mode == releaseAll {
+				*e = CastExpression{}
+				castExprPool.Put(e)
+			}
 
 		case *IntervalExpression:
-			*e = IntervalExpression{}
-			intervalExprPool.Put(e)
+			if mode == releaseAll {
+				*e = IntervalExpression{}
+				intervalExprPool.Put(e)
+			}
 
 		case *ArraySubscriptExpression:
 			if e.Array != nil {
@@ -395,30 +460,36 @@ func putExpressionImpl(expr Expression, depth int) {
 
 		case *ExistsExpression:
 			if e.Subquery != nil {
-				releaseStatement(e.Subquery)
+				releaseStatement(e.Subquery, mode)
 			}
-			*e = ExistsExpression{}
-			existsExprPool.Put(e)
+			if mode == releaseAll {
+				*e = ExistsExpression{}
+				existsExprPool.Put(e)
+			}
 
 		case *AnyExpression:
 			if e.Expr != nil {
 				workQueue = append(workQueue, e.Expr)
 			}
 			if e.Subquery != nil {
-				releaseStatement(e.Subquery)
+				releaseStatement(e.Subquery, mode)
 			}
-			*e = AnyExpression{}
-			anyExprPool.Put(e)
+			if mode == releaseAll {
+				*e = AnyExpression{}
+				anyExprPool.Put(e)
+			}
 
 		case *AllExpression:
 			if e.Expr != nil {
 				workQueue = append(workQueue, e.Expr)
 			}
 			if e.Subquery != nil {
-				releaseStatement(e.Subquery)
+				releaseStatement(e.Subquery, mode)
 			}
-			*e = AllExpression{}
-			allExprPool.Put(e)
+			if mode == releaseAll {
+				*e = AllExpression{}
+				allExprPool.Put(e)
+			}
 
 		case *ListExpression:
 			for _, v := range e.Values {
@@ -426,10 +497,12 @@ func putExpressionImpl(expr Expression, depth int) {
 					workQueue = append(workQueue, v)
 				}
 			}
-			vals := e.Values
-			clear(vals)
-			*e = ListExpression{Values: vals[:0]}
-			listExprPool.Put(e)
+			if mode == releaseAll {
+				vals := e.Values
+				clear(vals)
+				*e = ListExpression{Values: vals[:0]}
+				listExprPool.Put(e)
+			}
 
 		case *TupleExpression:
 			for _, x := range e.Expressions {
@@ -451,7 +524,7 @@ func putExpressionImpl(expr Expression, depth int) {
 			// Subquery is *SelectStatement — release through the
 			// statement pool, not a bare nil-assign (leak before fix).
 			if e.Subquery != nil {
-				PutSelectStatement(e.Subquery)
+				releaseSelectStatement(e.Subquery, mode)
 			}
 			elems := e.Elements
 			clear(elems)
@@ -462,15 +535,19 @@ func putExpressionImpl(expr Expression, depth int) {
 			if e.Expr != nil {
 				workQueue = append(workQueue, e.Expr)
 			}
-			*e = UnaryExpression{}
-			unaryExprPool.Put(e)
+			if mode == releaseAll {
+				*e = UnaryExpression{}
+				unaryExprPool.Put(e)
+			}
 
 		case *ExtractExpression:
 			if e.Source != nil {
 				workQueue = append(workQueue, e.Source)
 			}
-			*e = ExtractExpression{}
-			extractExprPool.Put(e)
+			if mode == releaseAll {
+				*e = ExtractExpression{}
+				extractExprPool.Put(e)
+			}
 
 		case *PositionExpression:
 			if e.Substr != nil {
@@ -479,8 +556,10 @@ func putExpressionImpl(expr Expression, depth int) {
 			if e.Str != nil {
 				workQueue = append(workQueue, e.Str)
 			}
-			*e = PositionExpression{}
-			positionExprPool.Put(e)
+			if mode == releaseAll {
+				*e = PositionExpression{}
+				positionExprPool.Put(e)
+			}
 
 		case *SubstringExpression:
 			if e.Str != nil {
@@ -492,15 +571,19 @@ func putExpressionImpl(expr Expression, depth int) {
 			if e.Length != nil {
 				workQueue = append(workQueue, e.Length)
 			}
-			*e = SubstringExpression{}
-			substringExprPool.Put(e)
+			if mode == releaseAll {
+				*e = SubstringExpression{}
+				substringExprPool.Put(e)
+			}
 
 		case *AliasedExpression:
 			if e.Expr != nil {
 				workQueue = append(workQueue, e.Expr)
 			}
-			*e = AliasedExpression{}
-			aliasedExprPool.Put(e)
+			if mode == releaseAll {
+				*e = AliasedExpression{}
+				aliasedExprPool.Put(e)
+			}
 
 		// Pass-through cases: these expression types have no sync.Pool by
 		// design (the parent stays GC-owned), but their children may be
@@ -574,7 +657,7 @@ func putExpressionImpl(expr Expression, depth int) {
 		atomic.AddUint64(&poolLeakCount, uint64(len(workQueue)))
 		if depth < MaxCleanupDepth {
 			for _, remaining := range workQueue {
-				putExpressionImpl(remaining, depth+1)
+				putExpressionImpl(remaining, depth+1, mode)
 			}
 		}
 		// If depth exceeded MaxCleanupDepth we accept the leak rather than

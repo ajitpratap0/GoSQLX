@@ -33,6 +33,13 @@ func GetInsertStatement() *InsertStatement {
 //   - OnConflict.Target, OnConflict.Action.DoUpdate (Column, Value), OnConflict.Action.Where
 //   - OnDuplicateKey.Updates (Column, Value)
 func PutInsertStatement(stmt *InsertStatement) {
+	releaseInsertStatement(stmt, releaseAll)
+}
+
+// releaseInsertStatement implements PutInsertStatement. With releaseDrawn
+// (ReleaseAST) the walk and field reset are the same, but the statement
+// itself, which the parser never draws from the pool, is left to the GC.
+func releaseInsertStatement(stmt *InsertStatement, mode releaseMode) {
 	if stmt == nil {
 		return
 	}
@@ -43,9 +50,9 @@ func PutInsertStatement(stmt *InsertStatement) {
 			if cte == nil {
 				continue
 			}
-			releaseStatement(cte.Statement)
+			releaseStatement(cte.Statement, mode)
 			cte.Statement = nil
-			PutExpression(cte.ScalarExpr)
+			releaseExpression(cte.ScalarExpr, mode)
 			cte.ScalarExpr = nil
 		}
 		stmt.With.CTEs = nil
@@ -54,14 +61,14 @@ func PutInsertStatement(stmt *InsertStatement) {
 
 	// ── Column list ───────────────────────────────────────────────────
 	for i := range stmt.Columns {
-		PutExpression(stmt.Columns[i])
+		releaseExpression(stmt.Columns[i], mode)
 		stmt.Columns[i] = nil
 	}
 	stmt.Columns = stmt.Columns[:0]
 
 	// ── OUTPUT clause (SQL Server) ────────────────────────────────────
 	for i := range stmt.Output {
-		PutExpression(stmt.Output[i])
+		releaseExpression(stmt.Output[i], mode)
 		stmt.Output[i] = nil
 	}
 	stmt.Output = stmt.Output[:0]
@@ -69,7 +76,7 @@ func PutInsertStatement(stmt *InsertStatement) {
 	// ── VALUES (multi-row) ────────────────────────────────────────────
 	for i := range stmt.Values {
 		for j := range stmt.Values[i] {
-			PutExpression(stmt.Values[i][j])
+			releaseExpression(stmt.Values[i][j], mode)
 			stmt.Values[i][j] = nil
 		}
 		stmt.Values[i] = stmt.Values[i][:0]
@@ -79,13 +86,13 @@ func PutInsertStatement(stmt *InsertStatement) {
 	// ── Query (INSERT ... SELECT) ─────────────────────────────────────
 	if stmt.Query != nil {
 		// Query is a QueryExpression (Statement); dispatch via releaseStatement.
-		releaseStatement(stmt.Query)
+		releaseStatement(stmt.Query, mode)
 		stmt.Query = nil
 	}
 
 	// ── RETURNING ──────────────────────────────────────────────────────
 	for i := range stmt.Returning {
-		PutExpression(stmt.Returning[i])
+		releaseExpression(stmt.Returning[i], mode)
 		stmt.Returning[i] = nil
 	}
 	stmt.Returning = stmt.Returning[:0]
@@ -93,18 +100,18 @@ func PutInsertStatement(stmt *InsertStatement) {
 	// ── ON CONFLICT (PostgreSQL) ──────────────────────────────────────
 	if stmt.OnConflict != nil {
 		for i := range stmt.OnConflict.Target {
-			PutExpression(stmt.OnConflict.Target[i])
+			releaseExpression(stmt.OnConflict.Target[i], mode)
 			stmt.OnConflict.Target[i] = nil
 		}
 		stmt.OnConflict.Target = nil
 		for i := range stmt.OnConflict.Action.DoUpdate {
-			PutExpression(stmt.OnConflict.Action.DoUpdate[i].Column)
-			PutExpression(stmt.OnConflict.Action.DoUpdate[i].Value)
+			releaseExpression(stmt.OnConflict.Action.DoUpdate[i].Column, mode)
+			releaseExpression(stmt.OnConflict.Action.DoUpdate[i].Value, mode)
 			stmt.OnConflict.Action.DoUpdate[i].Column = nil
 			stmt.OnConflict.Action.DoUpdate[i].Value = nil
 		}
 		stmt.OnConflict.Action.DoUpdate = nil
-		PutExpression(stmt.OnConflict.Action.Where)
+		releaseExpression(stmt.OnConflict.Action.Where, mode)
 		stmt.OnConflict.Action.Where = nil
 		stmt.OnConflict = nil
 	}
@@ -112,8 +119,8 @@ func PutInsertStatement(stmt *InsertStatement) {
 	// ── ON DUPLICATE KEY UPDATE (MySQL) ───────────────────────────────
 	if stmt.OnDuplicateKey != nil {
 		for i := range stmt.OnDuplicateKey.Updates {
-			PutExpression(stmt.OnDuplicateKey.Updates[i].Column)
-			PutExpression(stmt.OnDuplicateKey.Updates[i].Value)
+			releaseExpression(stmt.OnDuplicateKey.Updates[i].Column, mode)
+			releaseExpression(stmt.OnDuplicateKey.Updates[i].Value, mode)
 			stmt.OnDuplicateKey.Updates[i].Column = nil
 			stmt.OnDuplicateKey.Updates[i].Value = nil
 		}
@@ -125,7 +132,9 @@ func PutInsertStatement(stmt *InsertStatement) {
 	stmt.Pos = models.Location{}
 
 	// Return to pool
-	insertStmtPool.Put(stmt)
+	if mode == releaseAll {
+		insertStmtPool.Put(stmt)
+	}
 }
 
 // GetUpdateStatement gets an UpdateStatement from the pool
@@ -142,6 +151,13 @@ func GetUpdateStatement() *UpdateStatement {
 //   - Where
 //   - Returning
 func PutUpdateStatement(stmt *UpdateStatement) {
+	releaseUpdateStatement(stmt, releaseAll)
+}
+
+// releaseUpdateStatement implements PutUpdateStatement. With releaseDrawn
+// (ReleaseAST) the walk and field reset are the same, but the statement
+// itself, which the parser never draws from the pool, is left to the GC.
+func releaseUpdateStatement(stmt *UpdateStatement, mode releaseMode) {
 	if stmt == nil {
 		return
 	}
@@ -152,9 +168,9 @@ func PutUpdateStatement(stmt *UpdateStatement) {
 			if cte == nil {
 				continue
 			}
-			releaseStatement(cte.Statement)
+			releaseStatement(cte.Statement, mode)
 			cte.Statement = nil
-			PutExpression(cte.ScalarExpr)
+			releaseExpression(cte.ScalarExpr, mode)
 			cte.ScalarExpr = nil
 		}
 		stmt.With.CTEs = nil
@@ -163,8 +179,8 @@ func PutUpdateStatement(stmt *UpdateStatement) {
 
 	// ── SET assignments ───────────────────────────────────────────────
 	for i := range stmt.Assignments {
-		PutExpression(stmt.Assignments[i].Column)
-		PutExpression(stmt.Assignments[i].Value)
+		releaseExpression(stmt.Assignments[i].Column, mode)
+		releaseExpression(stmt.Assignments[i].Value, mode)
 		stmt.Assignments[i].Column = nil
 		stmt.Assignments[i].Value = nil
 	}
@@ -172,17 +188,17 @@ func PutUpdateStatement(stmt *UpdateStatement) {
 
 	// ── FROM table references ─────────────────────────────────────────
 	for i := range stmt.From {
-		releaseTableReference(&stmt.From[i])
+		releaseTableReference(&stmt.From[i], mode)
 	}
 	stmt.From = stmt.From[:0]
 
 	// ── WHERE ──────────────────────────────────────────────────────────
-	PutExpression(stmt.Where)
+	releaseExpression(stmt.Where, mode)
 	stmt.Where = nil
 
 	// ── RETURNING ──────────────────────────────────────────────────────
 	for i := range stmt.Returning {
-		PutExpression(stmt.Returning[i])
+		releaseExpression(stmt.Returning[i], mode)
 		stmt.Returning[i] = nil
 	}
 	stmt.Returning = stmt.Returning[:0]
@@ -193,7 +209,9 @@ func PutUpdateStatement(stmt *UpdateStatement) {
 	stmt.Pos = models.Location{}
 
 	// Return to pool
-	updateStmtPool.Put(stmt)
+	if mode == releaseAll {
+		updateStmtPool.Put(stmt)
+	}
 }
 
 // GetDeleteStatement gets a DeleteStatement from the pool
@@ -209,6 +227,13 @@ func GetDeleteStatement() *DeleteStatement {
 //   - Where
 //   - Returning
 func PutDeleteStatement(stmt *DeleteStatement) {
+	releaseDeleteStatement(stmt, releaseAll)
+}
+
+// releaseDeleteStatement implements PutDeleteStatement. With releaseDrawn
+// (ReleaseAST) the walk and field reset are the same, but the statement
+// itself, which the parser never draws from the pool, is left to the GC.
+func releaseDeleteStatement(stmt *DeleteStatement, mode releaseMode) {
 	if stmt == nil {
 		return
 	}
@@ -219,9 +244,9 @@ func PutDeleteStatement(stmt *DeleteStatement) {
 			if cte == nil {
 				continue
 			}
-			releaseStatement(cte.Statement)
+			releaseStatement(cte.Statement, mode)
 			cte.Statement = nil
-			PutExpression(cte.ScalarExpr)
+			releaseExpression(cte.ScalarExpr, mode)
 			cte.ScalarExpr = nil
 		}
 		stmt.With.CTEs = nil
@@ -230,17 +255,17 @@ func PutDeleteStatement(stmt *DeleteStatement) {
 
 	// ── USING table references (PostgreSQL) ───────────────────────────
 	for i := range stmt.Using {
-		releaseTableReference(&stmt.Using[i])
+		releaseTableReference(&stmt.Using[i], mode)
 	}
 	stmt.Using = stmt.Using[:0]
 
 	// ── WHERE ──────────────────────────────────────────────────────────
-	PutExpression(stmt.Where)
+	releaseExpression(stmt.Where, mode)
 	stmt.Where = nil
 
 	// ── RETURNING ──────────────────────────────────────────────────────
 	for i := range stmt.Returning {
-		PutExpression(stmt.Returning[i])
+		releaseExpression(stmt.Returning[i], mode)
 		stmt.Returning[i] = nil
 	}
 	stmt.Returning = stmt.Returning[:0]
@@ -251,7 +276,9 @@ func PutDeleteStatement(stmt *DeleteStatement) {
 	stmt.Pos = models.Location{}
 
 	// Return to pool
-	deleteStmtPool.Put(stmt)
+	if mode == releaseAll {
+		deleteStmtPool.Put(stmt)
+	}
 }
 
 // GetSelectStatement gets a SelectStatement from the pool
@@ -289,6 +316,13 @@ func GetSelectStatement() *SelectStatement {
 //   - Fetch / For (no Expression children, just zero)
 //   - Limit / Offset (*int — no release needed)
 func PutSelectStatement(stmt *SelectStatement) {
+	releaseSelectStatement(stmt, releaseAll)
+}
+
+// releaseSelectStatement implements PutSelectStatement. With releaseDrawn
+// (ReleaseAST) the walk and field reset are the same, but the statement
+// itself, which the parser never draws from the pool, is left to the GC.
+func releaseSelectStatement(stmt *SelectStatement, mode releaseMode) {
 	if stmt == nil {
 		return
 	}
@@ -299,9 +333,9 @@ func PutSelectStatement(stmt *SelectStatement) {
 			if cte == nil {
 				continue
 			}
-			releaseStatement(cte.Statement)
+			releaseStatement(cte.Statement, mode)
 			cte.Statement = nil
-			PutExpression(cte.ScalarExpr)
+			releaseExpression(cte.ScalarExpr, mode)
 			cte.ScalarExpr = nil
 		}
 		stmt.With.CTEs = nil
@@ -310,28 +344,28 @@ func PutSelectStatement(stmt *SelectStatement) {
 
 	// ── TOP clause ─────────────────────────────────────────────────────
 	if stmt.Top != nil {
-		PutExpression(stmt.Top.Count)
+		releaseExpression(stmt.Top.Count, mode)
 		stmt.Top.Count = nil
 		stmt.Top = nil
 	}
 
 	// ── DISTINCT ON columns ────────────────────────────────────────────
 	for i := range stmt.DistinctOnColumns {
-		PutExpression(stmt.DistinctOnColumns[i])
+		releaseExpression(stmt.DistinctOnColumns[i], mode)
 		stmt.DistinctOnColumns[i] = nil
 	}
 	stmt.DistinctOnColumns = stmt.DistinctOnColumns[:0]
 
 	// ── SELECT list columns ────────────────────────────────────────────
 	for i := range stmt.Columns {
-		PutExpression(stmt.Columns[i])
+		releaseExpression(stmt.Columns[i], mode)
 		stmt.Columns[i] = nil
 	}
 	stmt.Columns = stmt.Columns[:0]
 
 	// ── FROM table references (Subquery, TableFunc, Pivot, MatchRecognize) ─
 	for i := range stmt.From {
-		releaseTableReference(&stmt.From[i])
+		releaseTableReference(&stmt.From[i], mode)
 	}
 	stmt.From = stmt.From[:0]
 
@@ -344,8 +378,8 @@ func PutSelectStatement(stmt *SelectStatement) {
 	// JoinClause also clears Pos and drops the Left copy's pointers so the
 	// pooled statement does not retain them.
 	for i := range stmt.Joins {
-		releaseTableReference(&stmt.Joins[i].Right)
-		PutExpression(stmt.Joins[i].Condition)
+		releaseTableReference(&stmt.Joins[i].Right, mode)
+		releaseExpression(stmt.Joins[i].Condition, mode)
 		stmt.Joins[i] = JoinClause{}
 	}
 	stmt.Joins = stmt.Joins[:0]
@@ -353,7 +387,7 @@ func PutSelectStatement(stmt *SelectStatement) {
 	// ── ARRAY JOIN (ClickHouse) ────────────────────────────────────────
 	if stmt.ArrayJoin != nil {
 		for i := range stmt.ArrayJoin.Elements {
-			PutExpression(stmt.ArrayJoin.Elements[i].Expr)
+			releaseExpression(stmt.ArrayJoin.Elements[i].Expr, mode)
 			stmt.ArrayJoin.Elements[i].Expr = nil
 			stmt.ArrayJoin.Elements[i].Alias = ""
 		}
@@ -362,20 +396,20 @@ func PutSelectStatement(stmt *SelectStatement) {
 	}
 
 	// ── PREWHERE / WHERE / HAVING / QUALIFY / START WITH ───────────────
-	PutExpression(stmt.PrewhereClause)
+	releaseExpression(stmt.PrewhereClause, mode)
 	stmt.PrewhereClause = nil
-	PutExpression(stmt.Where)
+	releaseExpression(stmt.Where, mode)
 	stmt.Where = nil
-	PutExpression(stmt.Having)
+	releaseExpression(stmt.Having, mode)
 	stmt.Having = nil
-	PutExpression(stmt.Qualify)
+	releaseExpression(stmt.Qualify, mode)
 	stmt.Qualify = nil
-	PutExpression(stmt.StartWith)
+	releaseExpression(stmt.StartWith, mode)
 	stmt.StartWith = nil
 
 	// ── CONNECT BY ─────────────────────────────────────────────────────
 	if stmt.ConnectBy != nil {
-		PutExpression(stmt.ConnectBy.Condition)
+		releaseExpression(stmt.ConnectBy.Condition, mode)
 		stmt.ConnectBy.Condition = nil
 		stmt.ConnectBy = nil
 	}
@@ -385,7 +419,7 @@ func PutSelectStatement(stmt *SelectStatement) {
 
 	// ── GROUP BY ───────────────────────────────────────────────────────
 	for i := range stmt.GroupBy {
-		PutExpression(stmt.GroupBy[i])
+		releaseExpression(stmt.GroupBy[i], mode)
 		stmt.GroupBy[i] = nil
 	}
 	stmt.GroupBy = stmt.GroupBy[:0]
@@ -394,20 +428,20 @@ func PutSelectStatement(stmt *SelectStatement) {
 	for i := range stmt.Windows {
 		w := &stmt.Windows[i]
 		for j := range w.PartitionBy {
-			PutExpression(w.PartitionBy[j])
+			releaseExpression(w.PartitionBy[j], mode)
 			w.PartitionBy[j] = nil
 		}
 		w.PartitionBy = w.PartitionBy[:0]
 		for j := range w.OrderBy {
-			PutExpression(w.OrderBy[j].Expression)
+			releaseExpression(w.OrderBy[j].Expression, mode)
 			w.OrderBy[j].Expression = nil
 		}
 		w.OrderBy = w.OrderBy[:0]
 		if w.FrameClause != nil {
-			PutExpression(w.FrameClause.Start.Value)
+			releaseExpression(w.FrameClause.Start.Value, mode)
 			w.FrameClause.Start.Value = nil
 			if w.FrameClause.End != nil {
-				PutExpression(w.FrameClause.End.Value)
+				releaseExpression(w.FrameClause.End.Value, mode)
 				w.FrameClause.End.Value = nil
 				w.FrameClause.End = nil
 			}
@@ -419,12 +453,12 @@ func PutSelectStatement(stmt *SelectStatement) {
 
 	// ── ORDER BY ───────────────────────────────────────────────────────
 	for i := range stmt.OrderBy {
-		PutExpression(stmt.OrderBy[i].Expression)
+		releaseExpression(stmt.OrderBy[i].Expression, mode)
 		stmt.OrderBy[i].Expression = nil
 		if wf := stmt.OrderBy[i].WithFill; wf != nil {
-			PutExpression(wf.From)
-			PutExpression(wf.To)
-			PutExpression(wf.Step)
+			releaseExpression(wf.From, mode)
+			releaseExpression(wf.To, mode)
+			releaseExpression(wf.Step, mode)
 			stmt.OrderBy[i].WithFill = nil
 		}
 	}
@@ -444,30 +478,32 @@ func PutSelectStatement(stmt *SelectStatement) {
 	stmt.Pos = models.Location{}
 
 	// Return to pool
-	selectStmtPool.Put(stmt)
+	if mode == releaseAll {
+		selectStmtPool.Put(stmt)
+	}
 }
 
 // releaseTableReference releases all pooled Expression/Statement references
 // reachable from a TableReference. Zero-copies the TableReference back to a
 // clean state suitable for pool reuse.
-func releaseTableReference(tr *TableReference) {
+func releaseTableReference(tr *TableReference, mode releaseMode) {
 	if tr == nil {
 		return
 	}
 	// Subquery is itself a *SelectStatement — recurse through the statement
 	// dispatcher to release every nested pool reference.
 	if tr.Subquery != nil {
-		PutSelectStatement(tr.Subquery)
+		releaseSelectStatement(tr.Subquery, mode)
 		tr.Subquery = nil
 	}
 	// TableFunc is a *FunctionCall — release as expression.
 	if tr.TableFunc != nil {
-		PutExpression(tr.TableFunc)
+		releaseExpression(tr.TableFunc, mode)
 		tr.TableFunc = nil
 	}
 	// Pivot.AggregateFunction is an Expression.
 	if tr.Pivot != nil {
-		PutExpression(tr.Pivot.AggregateFunction)
+		releaseExpression(tr.Pivot.AggregateFunction, mode)
 		tr.Pivot.AggregateFunction = nil
 		tr.Pivot = nil
 	}
@@ -477,23 +513,23 @@ func releaseTableReference(tr *TableReference) {
 	if tr.MatchRecognize != nil {
 		mr := tr.MatchRecognize
 		for i := range mr.PartitionBy {
-			PutExpression(mr.PartitionBy[i])
+			releaseExpression(mr.PartitionBy[i], mode)
 			mr.PartitionBy[i] = nil
 		}
 		mr.PartitionBy = mr.PartitionBy[:0]
 		for i := range mr.OrderBy {
-			PutExpression(mr.OrderBy[i].Expression)
+			releaseExpression(mr.OrderBy[i].Expression, mode)
 			mr.OrderBy[i].Expression = nil
 		}
 		mr.OrderBy = mr.OrderBy[:0]
 		for i := range mr.Measures {
-			PutExpression(mr.Measures[i].Expr)
+			releaseExpression(mr.Measures[i].Expr, mode)
 			mr.Measures[i].Expr = nil
 			mr.Measures[i].Alias = ""
 		}
 		mr.Measures = mr.Measures[:0]
 		for i := range mr.Definitions {
-			PutExpression(mr.Definitions[i].Condition)
+			releaseExpression(mr.Definitions[i].Condition, mode)
 			mr.Definitions[i].Condition = nil
 			mr.Definitions[i].Name = ""
 		}
@@ -502,14 +538,14 @@ func releaseTableReference(tr *TableReference) {
 	}
 	// TimeTravel carries Named map of Expressions + Chained clauses.
 	if tr.TimeTravel != nil {
-		releaseTimeTravelClause(tr.TimeTravel)
+		releaseTimeTravelClause(tr.TimeTravel, mode)
 		tr.TimeTravel = nil
 	}
 	// ForSystemTime carries Point/Start/End expressions.
 	if tr.ForSystemTime != nil {
-		PutExpression(tr.ForSystemTime.Point)
-		PutExpression(tr.ForSystemTime.Start)
-		PutExpression(tr.ForSystemTime.End)
+		releaseExpression(tr.ForSystemTime.Point, mode)
+		releaseExpression(tr.ForSystemTime.Start, mode)
+		releaseExpression(tr.ForSystemTime.End, mode)
 		tr.ForSystemTime.Point = nil
 		tr.ForSystemTime.Start = nil
 		tr.ForSystemTime.End = nil
@@ -766,16 +802,16 @@ func PutReplaceStatement(stmt *ReplaceStatement) {
 // Expression stored in Named maps and every chained sub-clause. Chained
 // cycles are not possible because the parser builds a tree, but we still
 // guard against nil to be defensive.
-func releaseTimeTravelClause(c *TimeTravelClause) {
+func releaseTimeTravelClause(c *TimeTravelClause, mode releaseMode) {
 	if c == nil {
 		return
 	}
 	for k, v := range c.Named {
-		PutExpression(v)
+		releaseExpression(v, mode)
 		delete(c.Named, k)
 	}
 	for _, ch := range c.Chained {
-		releaseTimeTravelClause(ch)
+		releaseTimeTravelClause(ch, mode)
 	}
 	c.Chained = nil
 	c.Named = nil

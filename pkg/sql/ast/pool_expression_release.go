@@ -206,6 +206,28 @@ const (
 	releaseDrawn
 )
 
+// releaseDrawnConstructors lists the pool constructors in this package that
+// pkg/sql/parser calls, i.e. the node types releaseDrawn must return to their
+// pools. It mirrors the unconditional Put cases of putExpressionImpl and
+// releaseStatement and exists so TestReleaseDrawnPolicy_MatchesParser can
+// compare that policy with the parser's actual ast.Get*/ast.New* calls.
+// When the parser starts drawing a new type, add its constructor here and
+// make sure the matching Put case runs in releaseDrawn mode.
+var releaseDrawnConstructors = []string{
+	"GetTupleExpression",
+	"GetArrayConstructor",
+	"GetArraySubscriptExpression",
+	"GetArraySliceExpression",
+	"GetUnsupportedStatement",
+	"GetAlterStatement",
+	"GetShowStatement",
+	"GetDescribeStatement",
+	"GetReplaceStatement",
+	"NewCreateSequenceStatement",
+	"NewDropSequenceStatement",
+	"NewAlterSequenceStatement",
+}
+
 // releaseExpression releases expr and its subtree according to mode.
 func releaseExpression(expr Expression, mode releaseMode) {
 	if mode == releaseDrawn {
@@ -259,6 +281,14 @@ func releaseExpression(expr Expression, mode releaseMode) {
 // keeping only the backing arrays of its hot child slices (Arguments, List,
 // WhenClauses, ...), so Get* never hands out a node with stale fields.
 func putExpressionImpl(expr Expression, depth int, mode releaseMode) {
+	putExpressionBounded(expr, depth, mode, MaxWorkQueueSize, MaxCleanupDepth)
+}
+
+// putExpressionBounded is putExpressionImpl with the work budget and the
+// overflow-recursion limit passed in, so tests can exercise the overflow
+// path with small trees. Production callers always pass MaxWorkQueueSize
+// and MaxCleanupDepth.
+func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork, maxDepth int) {
 	if expr == nil {
 		return
 	}
@@ -290,7 +320,7 @@ func putExpressionImpl(expr Expression, depth int, mode releaseMode) {
 	hw = 1
 
 	processed := 0
-	for len(workQueue) > 0 && processed < MaxWorkQueueSize {
+	for len(workQueue) > 0 && processed < maxWork {
 		// Pop from queue
 		current := workQueue[len(workQueue)-1]
 		workQueue = workQueue[:len(workQueue)-1]
@@ -669,9 +699,9 @@ func putExpressionImpl(expr Expression, depth int, mode releaseMode) {
 	// at ~10_000_000 total nodes in an AST — far beyond any real SQL query.
 	if len(workQueue) > 0 {
 		atomic.AddUint64(&poolLeakCount, uint64(len(workQueue)))
-		if depth < MaxCleanupDepth {
+		if depth < maxDepth {
 			for _, remaining := range workQueue {
-				putExpressionImpl(remaining, depth+1, mode)
+				putExpressionBounded(remaining, depth+1, mode, maxWork, maxDepth)
 			}
 		}
 		// If depth exceeded MaxCleanupDepth we accept the leak rather than

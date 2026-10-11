@@ -19,6 +19,7 @@ package mysql
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 
 	dbschema "github.com/ajitpratap0/GoSQLX/pkg/schema/db"
@@ -71,6 +72,9 @@ func (l *Loader) Load(db *sql.DB, schemaName string) (*dbschema.DatabaseSchema, 
 
 // LoadTable returns schema for a single named table.
 func (l *Loader) LoadTable(db *sql.DB, schemaName, tableName string) (*dbschema.Table, error) {
+	if tableName == "" {
+		return nil, errors.New("load table: table name must not be empty")
+	}
 	cols, err := l.loadColumns(db, schemaName, tableName)
 	if err != nil {
 		return nil, err

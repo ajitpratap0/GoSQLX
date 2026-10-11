@@ -23,6 +23,7 @@ package sqlite
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -74,6 +75,9 @@ func (l *Loader) Load(db *sql.DB, schemaName string) (*dbschema.DatabaseSchema, 
 
 // LoadTable returns schema for a single named table.
 func (l *Loader) LoadTable(db *sql.DB, schemaName, tableName string) (*dbschema.Table, error) {
+	if tableName == "" {
+		return nil, errors.New("load table: table name must not be empty")
+	}
 	cols, err := l.loadColumns(db, tableName)
 	if err != nil {
 		return nil, err
@@ -172,7 +176,7 @@ func (l *Loader) loadColumns(db *sql.DB, tableName string) (map[string][]dbschem
 func (l *Loader) loadIndexes(db *sql.DB, tableName string) (map[string][]dbschema.Index, error) {
 	src, args := tableSource(tableName)
 	rows, err := db.Query(`
-		SELECT m.name, il.name, il."unique", ii.name
+		SELECT m.name, il.name, il."unique", ii.name -- NULL for expression columns
 		FROM `+src+` m
 		JOIN pragma_index_list(m.name) il
 		JOIN pragma_index_info(il.name) ii
@@ -184,22 +188,27 @@ func (l *Loader) loadIndexes(db *sql.DB, tableName string) (map[string][]dbschem
 
 	out := make(map[string][]dbschema.Index)
 	for rows.Next() {
-		var tbl, name, colName string
+		var tbl, name string
+		var colName sql.NullString
 		var unique int
 		if err := rows.Scan(&tbl, &name, &unique, &colName); err != nil {
 			return nil, fmt.Errorf("load indexes: scan: %w", err)
 		}
 		idxs := out[tbl]
-		if n := len(idxs); n > 0 && idxs[n-1].Name == name {
-			idxs[n-1].Columns = append(idxs[n-1].Columns, colName)
-			continue
+		if n := len(idxs); n == 0 || idxs[n-1].Name != name {
+			out[tbl] = append(idxs, dbschema.Index{
+				Name:      name,
+				TableName: tbl,
+				IsUnique:  unique == 1,
+			})
+			idxs = out[tbl]
 		}
-		out[tbl] = append(idxs, dbschema.Index{
-			Name:      name,
-			TableName: tbl,
-			Columns:   []string{colName},
-			IsUnique:  unique == 1,
-		})
+		// Expression index columns (e.g. lower(x)) have a NULL name; they
+		// cannot be represented as a column name, so they are skipped.
+		if colName.Valid {
+			last := &idxs[len(idxs)-1]
+			last.Columns = append(last.Columns, colName.String)
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("load indexes: %w", err)
@@ -212,7 +221,9 @@ func (l *Loader) loadIndexes(db *sql.DB, tableName string) (map[string][]dbschem
 func (l *Loader) loadForeignKeys(db *sql.DB, tableName string) (map[string][]dbschema.ForeignKey, error) {
 	src, args := tableSource(tableName)
 	rows, err := db.Query(`
-		SELECT m.name, f.id, f."table", f."from", f."to", f.on_update, f.on_delete
+		SELECT m.name, f.id, f."table", f."from",
+			COALESCE(f."to", (SELECT p.name FROM pragma_table_info(f."table") p WHERE p.pk = f.seq + 1)),
+			f.on_update, f.on_delete
 		FROM `+src+` m
 		JOIN pragma_foreign_key_list(m.name) f
 		ORDER BY m.name, f.id, f.seq`, args...)
@@ -224,11 +235,16 @@ func (l *Loader) loadForeignKeys(db *sql.DB, tableName string) (map[string][]dbs
 	out := make(map[string][]dbschema.ForeignKey)
 	lastTable, lastID := "", -1
 	for rows.Next() {
-		var tbl, refTable, fromCol, toCol, onUpdate, onDelete string
+		var tbl, refTable, fromCol, onUpdate, onDelete string
+		var toNull sql.NullString
 		var id int
-		if err := rows.Scan(&tbl, &id, &refTable, &fromCol, &toCol, &onUpdate, &onDelete); err != nil {
+		if err := rows.Scan(&tbl, &id, &refTable, &fromCol, &toNull, &onUpdate, &onDelete); err != nil {
 			return nil, fmt.Errorf("load fks: scan: %w", err)
 		}
+		// "to" is NULL when REFERENCES omits the column list; the COALESCE
+		// above resolves it to the parent's primary key column at the same
+		// position. It stays empty only if the parent or its PK is missing.
+		toCol := toNull.String
 		fks := out[tbl]
 		if n := len(fks); n > 0 && tbl == lastTable && id == lastID {
 			fks[n-1].Columns = append(fks[n-1].Columns, fromCol)

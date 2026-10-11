@@ -504,3 +504,63 @@ func BenchmarkSQLiteLoader_Load(b *testing.B) {
 		})
 	}
 }
+
+func TestSQLiteLoader_ExpressionIndex(t *testing.T) {
+	db := openSQLite(t)
+	if _, err := db.Exec(`
+		CREATE INDEX idx_items_lower ON items(lower(name));
+		CREATE INDEX idx_items_mixed ON items(qty, lower(name));
+	`); err != nil {
+		t.Fatalf("create indexes: %v", err)
+	}
+	s, err := sqschema.NewLoader().Load(db, "main")
+	if err != nil {
+		t.Fatalf("Load with expression index: %v", err)
+	}
+	items := findTable(s, "items")
+	if items == nil {
+		t.Fatal("items table missing")
+	}
+	if idx := findIndex(items, "idx_items_lower"); idx == nil || len(idx.Columns) != 0 {
+		t.Errorf("idx_items_lower: got %+v, want present with no columns", idx)
+	}
+	if idx := findIndex(items, "idx_items_mixed"); idx == nil || !reflect.DeepEqual(idx.Columns, []string{"qty"}) {
+		t.Errorf("idx_items_mixed: got %+v, want columns [qty]", idx)
+	}
+}
+
+func TestSQLiteLoader_ForeignKey_ImplicitParentKey(t *testing.T) {
+	db := openSQLite(t)
+	if _, err := db.Exec(`
+		CREATE TABLE pair (a INTEGER, b INTEGER, PRIMARY KEY (a, b));
+		CREATE TABLE child1 (item_id INTEGER REFERENCES items);
+		CREATE TABLE child2 (x INTEGER, y INTEGER, FOREIGN KEY (x, y) REFERENCES pair);
+		CREATE TABLE child3 (z INTEGER REFERENCES missing_parent);
+	`); err != nil {
+		t.Fatalf("create tables: %v", err)
+	}
+	s, err := sqschema.NewLoader().Load(db, "main")
+	if err != nil {
+		t.Fatalf("Load with implicit FK target: %v", err)
+	}
+	check := func(table string, wantCols, wantRef []string) {
+		t.Helper()
+		tbl := findTable(s, table)
+		if tbl == nil || len(tbl.ForeignKeys) != 1 {
+			t.Fatalf("%s: expected one FK, got %+v", table, tbl)
+		}
+		fk := tbl.ForeignKeys[0]
+		if !reflect.DeepEqual(fk.Columns, wantCols) || !reflect.DeepEqual(fk.RefColumns, wantRef) {
+			t.Errorf("%s: got %v -> %v, want %v -> %v", table, fk.Columns, fk.RefColumns, wantCols, wantRef)
+		}
+	}
+	check("child1", []string{"item_id"}, []string{"id"})
+	check("child2", []string{"x", "y"}, []string{"a", "b"})
+	check("child3", []string{"z"}, []string{""})
+}
+
+func TestSQLiteLoader_LoadTable_EmptyName(t *testing.T) {
+	if _, err := sqschema.NewLoader().LoadTable(openSQLite(t), "main", ""); err == nil {
+		t.Fatal("expected error for empty table name")
+	}
+}

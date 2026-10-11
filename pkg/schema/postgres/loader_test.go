@@ -306,3 +306,10 @@ func TestPostgresLoader_LoadTable_ForeignKeys(t *testing.T) {
 		t.Errorf("fk on delete: got %q want CASCADE", fk.OnDelete)
 	}
 }
+
+// The name is validated before any query, so no database is needed.
+func TestPostgresLoader_LoadTable_EmptyName(t *testing.T) {
+	if _, err := pgschema.NewLoader().LoadTable(nil, "public", ""); err == nil {
+		t.Fatal("expected error for empty table name")
+	}
+}

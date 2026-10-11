@@ -19,6 +19,7 @@ package postgres
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -77,6 +78,9 @@ func (l *Loader) Load(db *sql.DB, schemaName string) (*dbschema.DatabaseSchema, 
 // LoadTable returns schema for a single named table.
 // If schemaName is empty, "public" is used.
 func (l *Loader) LoadTable(db *sql.DB, schemaName, tableName string) (*dbschema.Table, error) {
+	if tableName == "" {
+		return nil, errors.New("load table: table name must not be empty")
+	}
 	if schemaName == "" {
 		schemaName = "public"
 	}

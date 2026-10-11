@@ -284,3 +284,10 @@ func TestMySQLLoader_LoadTable_ForeignKeys(t *testing.T) {
 		t.Errorf("fk ref table: got %q want products", tbl.ForeignKeys[0].RefTable)
 	}
 }
+
+// The name is validated before any query, so no database is needed.
+func TestMySQLLoader_LoadTable_EmptyName(t *testing.T) {
+	if _, err := myschema.NewLoader().LoadTable(nil, "db", ""); err == nil {
+		t.Fatal("expected error for empty table name")
+	}
+}

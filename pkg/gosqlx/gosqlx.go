@@ -346,11 +346,12 @@ func MustParse(sql string) *ast.AST {
 //   - 1000 queries: ~50% faster than 1000x Parse() calls
 //
 // Error Handling: Returns an error for the first query that fails to parse. The error
-// includes the query index (0-based) to identify which query failed. Already-parsed
-// ASTs are not returned on error.
+// includes the query index (0-based) to identify which query failed. No ASTs are
+// returned on error: the already-parsed ASTs are released back to the pool.
 //
-// Memory Management: All pooled objects are properly returned to pools via defer,
-// even if an error occurs during parsing.
+// Memory Management: The tokenizer and parser are returned to their pools via defer,
+// even if an error occurs during parsing. On success the caller owns every returned
+// *ast.AST and may return each one to the pool with ast.ReleaseAST when done.
 //
 // Example - Batch parsing:
 //
@@ -417,12 +418,14 @@ func ParseMultiple(queries []string) ([]*ast.AST, error) {
 		// Tokenize
 		tokens, err := tkz.Tokenize([]byte(sql))
 		if err != nil {
+			releaseASTs(results)
 			return nil, fmt.Errorf("query %d: %w: %w", i, ErrTokenize, err)
 		}
 
 		// Parse directly from model tokens
 		astNode, err := p.ParseFromModelTokens(tokens)
 		if err != nil {
+			releaseASTs(results)
 			return nil, fmt.Errorf("query %d: %w: %w", i, ErrSyntax, err)
 		}
 
@@ -463,14 +466,24 @@ func ValidateMultiple(queries []string) error {
 			return fmt.Errorf("query %d: %w: %w", i, ErrTokenize, err)
 		}
 
-		// Parse directly from model tokens
-		_, err = p.ParseFromModelTokens(tokens)
+		// Parse directly from model tokens. The AST is only needed for
+		// validation, so it is returned to the pool immediately.
+		tree, err := p.ParseFromModelTokens(tokens)
 		if err != nil {
 			return fmt.Errorf("query %d: %w: %w", i, ErrSyntax, err)
 		}
+		ast.ReleaseAST(tree)
 	}
 
 	return nil
+}
+
+// releaseASTs returns every AST in results to the pool. It is used to clean up
+// the partial results of a batch operation that failed part-way through.
+func releaseASTs(results []*ast.AST) {
+	for _, r := range results {
+		ast.ReleaseAST(r)
+	}
 }
 
 // FormatOptions controls SQL formatting behavior for the Format function.

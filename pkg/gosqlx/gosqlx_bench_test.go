@@ -320,3 +320,32 @@ func BenchmarkHighLevel_ParseBytes(b *testing.B) {
 		}
 	}
 }
+
+// BenchmarkHighLevel_ValidateMultiple benchmarks batch validation
+func BenchmarkHighLevel_ValidateMultiple(b *testing.B) {
+	queries := []string{
+		"SELECT id, name FROM users WHERE id = 1",
+		"SELECT count(*) FROM orders",
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := ValidateMultiple(queries); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkHighLevel_Analyze benchmarks query analysis
+func BenchmarkHighLevel_Analyze(b *testing.B) {
+	sql := "SELECT * FROM users u JOIN orders o ON o.uid = u.id WHERE u.id = 1"
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := Analyze(sql); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

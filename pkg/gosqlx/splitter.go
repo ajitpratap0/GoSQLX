@@ -38,11 +38,16 @@ import "strings"
 // skip them. This mirrors the long-standing behaviour of the splitter that
 // this function replaces.
 //
+// The returned segments are substrings of sql: no bytes are copied, so
+// retaining any one segment keeps the whole input string reachable. Callers
+// that keep a single small statement from a very large script and want the
+// script to be garbage collected should strings.Clone that segment.
+//
 // The splitter is intentionally a hand-written state machine rather than a
 // full tokenizer: it only needs to know what it is inside of, not what the
-// tokens mean. That keeps it fast, allocation-free on the hot path, and
-// robust against partial or syntactically invalid SQL (the parser still gets
-// a chance to report those problems downstream).
+// tokens mean. That keeps it fast, robust against partial or syntactically
+// invalid SQL (the parser still gets a chance to report those problems
+// downstream), and its only allocation is the result slice.
 func SplitStatements(sql, dialect string) []string {
 	p := profileForDialect(dialect)
 	return splitWithProfile(sql, p)
@@ -85,14 +90,27 @@ func profileForDialect(dialect string) dialectProfile {
 // which lexical context the cursor is inside (quoted string, comment,
 // dollar-quote, etc.) and only emits a split when it sees a top-level ';'.
 //
+// Segments are emitted as src[start:i] slices of the input rather than being
+// copied into a builder, and the result slice is presized from the number of
+// ';' bytes in src (an upper bound on the segment count), so the function
+// performs a single allocation. Empty input returns nil.
+//
 // The function is deliberately monolithic — extracting helpers would require
 // sharing a lot of index state and would obscure the invariants. Each branch
 // documents the transitions it performs so future readers do not have to
 // reconstruct the logic from a stack trace.
 func splitWithProfile(src string, p dialectProfile) []string {
-	var out []string
-	var cur strings.Builder
-	cur.Grow(len(src))
+	if len(src) == 0 {
+		return nil
+	}
+	// Every ';' that terminates a segment is a literal ';' in src, so the
+	// count is an upper bound on the number of emitted segments (semicolons
+	// inside strings/comments are counted too). Presizing means the result
+	// slice is the only allocation and never regrows.
+	out := make([]string, 0, strings.Count(src, ";")+1)
+	// start is the index in src where the current segment begins. Every
+	// segment is the contiguous substring src[start:i], so no bytes are copied.
+	start := 0
 
 	// Mutually-exclusive context flags. At most one of (inSingle, inDouble,
 	// inBacktick, inBracket, inLine, dollarTag != "") is ever true at a time.
@@ -118,7 +136,6 @@ func splitWithProfile(src string, p dialectProfile) []string {
 		// ─── Inside a context: consume until we exit ──────────────────────
 		switch {
 		case inLine:
-			cur.WriteByte(c)
 			if c == '\n' {
 				inLine = false
 			}
@@ -126,16 +143,13 @@ func splitWithProfile(src string, p dialectProfile) []string {
 			continue
 
 		case blockCommentDepth > 0:
-			cur.WriteByte(c)
 			if p.supportsNestedBlockComments &&
 				c == '/' && i+1 < len(src) && src[i+1] == '*' {
-				cur.WriteByte(src[i+1])
 				blockCommentDepth++
 				i += 2
 				continue
 			}
 			if c == '*' && i+1 < len(src) && src[i+1] == '/' {
-				cur.WriteByte(src[i+1])
 				blockCommentDepth--
 				i += 2
 				continue
@@ -146,22 +160,18 @@ func splitWithProfile(src string, p dialectProfile) []string {
 		case dollarTag != "":
 			// Closing tag must match exactly, including the surrounding '$'.
 			if c == '$' && matchDollarTag(src, i, dollarTag) {
-				cur.WriteString(src[i : i+len(dollarTag)])
 				i += len(dollarTag)
 				dollarTag = ""
 				continue
 			}
-			cur.WriteByte(c)
 			i++
 			continue
 
 		case inSingle:
-			cur.WriteByte(c)
 			// PG E-strings: `\` escapes the next byte (commonly \' for a
 			// literal apostrophe). The quote we are escaping must not close
 			// the string.
 			if eStringActive && c == '\\' && i+1 < len(src) {
-				cur.WriteByte(src[i+1])
 				i += 2
 				continue
 			}
@@ -169,7 +179,6 @@ func splitWithProfile(src string, p dialectProfile) []string {
 				// Standard SQL doubled-quote escape `''` (works in every
 				// dialect, including PG E-strings).
 				if i+1 < len(src) && src[i+1] == '\'' {
-					cur.WriteByte(src[i+1])
 					i += 2
 					continue
 				}
@@ -180,7 +189,6 @@ func splitWithProfile(src string, p dialectProfile) []string {
 			continue
 
 		case inDouble:
-			cur.WriteByte(c)
 			if c == '"' {
 				inDouble = false
 			}
@@ -188,7 +196,6 @@ func splitWithProfile(src string, p dialectProfile) []string {
 			continue
 
 		case inBacktick:
-			cur.WriteByte(c)
 			if c == '`' {
 				inBacktick = false
 			}
@@ -196,7 +203,6 @@ func splitWithProfile(src string, p dialectProfile) []string {
 			continue
 
 		case inBracket:
-			cur.WriteByte(c)
 			if c == ']' {
 				inBracket = false
 			}
@@ -208,14 +214,10 @@ func splitWithProfile(src string, p dialectProfile) []string {
 		switch {
 		case c == '-' && i+1 < len(src) && src[i+1] == '-':
 			inLine = true
-			cur.WriteByte(c)
-			cur.WriteByte(src[i+1])
 			i += 2
 
 		case c == '/' && i+1 < len(src) && src[i+1] == '*':
 			blockCommentDepth = 1
-			cur.WriteByte(c)
-			cur.WriteByte(src[i+1])
 			i += 2
 
 		case p.supportsEStrings && (c == 'E' || c == 'e') &&
@@ -223,24 +225,19 @@ func splitWithProfile(src string, p dialectProfile) []string {
 			// PG E'...'
 			inSingle = true
 			eStringActive = true
-			cur.WriteByte(c)
-			cur.WriteByte(src[i+1])
 			i += 2
 
 		case c == '\'':
 			inSingle = true
 			eStringActive = false
-			cur.WriteByte(c)
 			i++
 
 		case c == '"':
 			inDouble = true
-			cur.WriteByte(c)
 			i++
 
 		case p.supportsBackticks && c == '`':
 			inBacktick = true
-			cur.WriteByte(c)
 			i++
 
 		case p.supportsBrackets && c == '[':
@@ -248,32 +245,28 @@ func splitWithProfile(src string, p dialectProfile) []string {
 			// inside string literals, which we never reach here, so the guard
 			// above is sufficient.
 			inBracket = true
-			cur.WriteByte(c)
 			i++
 
 		case p.supportsDollarQuoting && c == '$':
 			if tag, ok := readDollarTag(src, i); ok {
 				dollarTag = tag
-				cur.WriteString(tag)
 				i += len(tag)
 				continue
 			}
-			cur.WriteByte(c)
 			i++
 
 		case c == ';':
-			out = append(out, cur.String())
-			cur.Reset()
+			out = append(out, src[start:i])
 			i++
+			start = i
 
 		default:
-			cur.WriteByte(c)
 			i++
 		}
 	}
 
-	if cur.Len() > 0 {
-		out = append(out, cur.String())
+	if start < len(src) {
+		out = append(out, src[start:])
 	}
 	return out
 }

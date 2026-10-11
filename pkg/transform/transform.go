@@ -107,6 +107,10 @@ func (e *ErrUnsupportedStatement) Error() string {
 }
 
 // parseSQL parses a full SQL statement and returns the first statement's AST.
+//
+// The returned Statement (and any Where/Join nodes that parseCondition and
+// parseJoinClause carve out of it) is owned by the caller and is never released
+// here; only the emptied *ast.AST container is returned to the pool.
 func parseSQL(sql string) (ast.Statement, error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
@@ -116,8 +120,8 @@ func parseSQL(sql string) (ast.Statement, error) {
 		return nil, fmt.Errorf("tokenize: %w", err)
 	}
 
-	p := parser.NewParser()
-	defer p.Release()
+	p := parser.GetParser()
+	defer parser.PutParser(p)
 
 	tree, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
@@ -125,10 +129,18 @@ func parseSQL(sql string) (ast.Statement, error) {
 	}
 
 	if tree == nil || len(tree.Statements) == 0 {
+		ast.ReleaseAST(tree) // nil-safe
 		return nil, fmt.Errorf("no statements parsed")
 	}
 
-	return tree.Statements[0], nil
+	// Detach the first statement before releasing the container so the
+	// returned statement is not released. Any extra statements (never handed to
+	// the caller) are released along with the container.
+	stmt := tree.Statements[0]
+	tree.Statements[0] = nil
+	ast.ReleaseAST(tree)
+
+	return stmt, nil
 }
 
 // parseCondition parses a SQL condition expression by wrapping it in a SELECT.
@@ -192,7 +204,8 @@ func stmtTypeName(stmt ast.Statement) string {
 //	fmt.Println(transform.FormatSQL(stmt))
 //
 // Returns a *ast.AST containing all parsed statements, or an error if tokenization
-// or parsing fails.
+// or parsing fails. The caller owns the returned AST and should call
+// ast.ReleaseAST(tree) when finished with it and every node derived from it.
 func ParseSQL(sql string) (*ast.AST, error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
@@ -202,8 +215,8 @@ func ParseSQL(sql string) (*ast.AST, error) {
 		return nil, fmt.Errorf("tokenize: %w", err)
 	}
 
-	p := parser.NewParser()
-	defer p.Release()
+	p := parser.GetParser()
+	defer parser.PutParser(p)
 
 	tree, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
@@ -255,6 +268,9 @@ func FormatSQLWithDialect(stmt ast.Statement, dialect keywords.SQLDialect) strin
 // Example:
 //
 //	tree, err := transform.ParseSQLWithDialect("SELECT TOP 10 * FROM users", keywords.DialectSQLServer)
+//
+// The caller owns the returned AST and should call ast.ReleaseAST(tree) when
+// finished with it and every node derived from it.
 func ParseSQLWithDialect(sql string, dialect keywords.SQLDialect) (*ast.AST, error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
@@ -268,8 +284,9 @@ func ParseSQLWithDialect(sql string, dialect keywords.SQLDialect) (*ast.AST, err
 		return nil, fmt.Errorf("tokenize: %w", err)
 	}
 
-	p := parser.NewParser(parser.WithDialect(string(dialect)))
-	defer p.Release()
+	p := parser.GetParser()
+	defer parser.PutParser(p)
+	p.ApplyOptions(parser.WithDialect(string(dialect)))
 
 	tree, err := p.ParseFromModelTokens(tokens)
 	if err != nil {

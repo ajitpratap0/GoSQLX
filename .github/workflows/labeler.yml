@@ -6,14 +6,16 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   label:
     name: Apply labels
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # apply labels
     steps:
-      - uses: actions/labeler@v5
+      - uses: actions/labeler@8558fd74291d67161a8a78ce36a881fa63b766a9 # v5.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           configuration-path: .github/labeler.yml

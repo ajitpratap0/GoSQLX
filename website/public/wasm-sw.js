@@ -1,11 +1,10 @@
-const CACHE_VERSION = 'v2'; // Bump this when deploying new WASM binary
-const CACHE_NAME = `gosqlx-wasm-${CACHE_VERSION}`;
-const WASM_URL = '/wasm/gosqlx.wasm';
+// Caches the playground WASM for offline use without ever pinning a stale binary.
+// The binary lives at a fixed URL, so requests are network-first and revalidated
+// (ETag, usually a cheap 304); the cached copy is only a fallback when offline.
+const CACHE_NAME = 'gosqlx-wasm-v3';
+const WASM_PATH = '/wasm/gosqlx.wasm';
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.add(WASM_URL))
-  );
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
@@ -23,16 +22,17 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.url.includes('/wasm/gosqlx.wasm')) {
-    event.respondWith(
-      caches.open(CACHE_NAME).then((cache) =>
-        cache.match(event.request).then(
-          (cached) => cached || fetch(event.request).then((response) => {
-            if (response.ok) cache.put(event.request, response.clone());
-            return response;
-          })
+  if (new URL(event.request.url).pathname !== WASM_PATH) return;
+  event.respondWith(
+    caches.open(CACHE_NAME).then((cache) =>
+      fetch(event.request, { cache: 'no-cache' })
+        .then((response) => {
+          if (response.ok) cache.put(WASM_PATH, response.clone());
+          return response;
+        })
+        .catch(() =>
+          cache.match(WASM_PATH).then((cached) => cached || Response.error())
         )
-      )
-    );
-  }
+    )
+  );
 });

@@ -15,6 +15,8 @@
 package safety_test
 
 import (
+	"math/rand"
+	"strings"
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/linter"
@@ -322,5 +324,127 @@ func TestUpdateWithoutWhere_Fix(t *testing.T) {
 	}
 	if result != content {
 		t.Errorf("Fix() should return content unchanged, got %q", result)
+	}
+}
+
+func TestSelectIntoOutfile_CaseAndWhitespace(t *testing.T) {
+	tests := []struct {
+		name string
+		sql  string
+		want bool
+	}{
+		{"upper outfile", "SELECT * FROM t INTO OUTFILE '/tmp/x'", true},
+		{"lower outfile", "select * from t into outfile '/tmp/x'", true},
+		{"mixed outfile", "Select * From t Into OutFile '/tmp/x'", true},
+		{"lower dumpfile", "select * from t into dumpfile '/tmp/x'", true},
+		{"mixed dumpfile", "Select * From t Into DumpFile '/tmp/x'", true},
+		{"surrounding whitespace", "\n  into outfile\t'/tmp/x'\n", true},
+		{"two spaces", "SELECT * FROM t INTO  OUTFILE '/tmp/x'", false},
+		{"tab between", "SELECT * FROM t INTO\tOUTFILE '/tmp/x'", false},
+		{"inside comment", "SELECT 1 -- into outfile", true},
+		{"no separator", "SELECT 1 INTOOUTFILE", false},
+		{"truncated", "SELECT 1 INTO OUTFIL", false},
+		{"dotless i", "select * from t \u0131nto outfile '/x'", true},
+		{"dotless i in outfile", "select * from t into outf\u0131le '/x'", true},
+		{"invalid utf8", "into outfil\xffe", false},
+		{"empty", "", false},
+	}
+	rule := safety.NewSelectIntoOutfileRule()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			legacy := strings.Contains(strings.ToUpper(tc.sql), "INTO OUTFILE") ||
+				strings.Contains(strings.ToUpper(tc.sql), "INTO DUMPFILE")
+			for label, ctx := range map[string]*linter.Context{
+				"text-only":   linter.NewContext(tc.sql, "<test>"),
+				"with-tokens": makeContextLenient(tc.sql),
+			} {
+				violations, err := rule.Check(ctx)
+				if err != nil {
+					t.Fatalf("%s: Check() error: %v", label, err)
+				}
+				got := len(violations) > 0
+				if got != tc.want {
+					t.Errorf("%s: flagged=%v, want %v", label, got, tc.want)
+				}
+				if got != legacy {
+					t.Errorf("%s: flagged=%v differs from ToUpper+Contains result %v", label, got, legacy)
+				}
+			}
+		})
+	}
+}
+
+// makeContextLenient builds a context with tokens and AST when the SQL
+// tokenizes, and falls back to a text-only context otherwise.
+func makeContextLenient(sql string) *linter.Context {
+	ctx := linter.NewContext(sql, "<test>")
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+	tokens, err := tkz.Tokenize([]byte(sql))
+	if err != nil {
+		return ctx
+	}
+	ctx.WithTokens(tokens)
+	p := parser.NewParser()
+	defer p.Release()
+	astObj, parseErr := p.ParseFromModelTokens(tokens)
+	ctx.WithAST(astObj, parseErr)
+	return ctx
+}
+
+func TestSelectIntoOutfile_WithTokensAndAST(t *testing.T) {
+	rule := safety.NewSelectIntoOutfileRule()
+	ctx := makeContext(t, "select id from users into outfile '/tmp/x'")
+	violations, err := rule.Check(ctx)
+	if err != nil {
+		t.Fatalf("Check() error: %v", err)
+	}
+	if len(violations) != 1 || violations[0].Rule != "L015" {
+		t.Errorf("expected one L015 violation, got %+v", violations)
+	}
+}
+
+func TestSelectIntoOutfile_RandomEquivalence(t *testing.T) {
+	pieces := []string{"into", "INTO", "Into", " ", "  ", "\t", "outfile", "OUTFILE", "OutFile",
+		"dumpfile", "DUMPFILE", "\u0131", "\u017f", "\xff", "x", "\u00e9", ";", "'"}
+	rng := rand.New(rand.NewSource(562))
+	rule := safety.NewSelectIntoOutfileRule()
+	for n := 0; n < 20000; n++ {
+		var sb strings.Builder
+		for k := rng.Intn(8) + 1; k > 0; k-- {
+			sb.WriteString(pieces[rng.Intn(len(pieces))])
+		}
+		sql := sb.String()
+		upper := strings.ToUpper(sql)
+		want := strings.Contains(upper, "INTO OUTFILE") || strings.Contains(upper, "INTO DUMPFILE")
+		violations, err := rule.Check(linter.NewContext(sql, "<rand>"))
+		if err != nil {
+			t.Fatalf("Check(%q): %v", sql, err)
+		}
+		if got := len(violations) > 0; got != want {
+			t.Fatalf("Check(%q) flagged=%v, ToUpper+Contains=%v", sql, got, want)
+		}
+	}
+}
+
+func TestSelectIntoOutfile_NoAllocOnClean(t *testing.T) {
+	rule := safety.NewSelectIntoOutfileRule()
+	ctx := linter.NewContext(strings.Repeat("select id from users;\n", 500), "<t>")
+	allocs := testing.AllocsPerRun(50, func() { _, _ = rule.Check(ctx) })
+	if allocs != 0 {
+		t.Errorf("expected 0 allocs on clean input, got %v", allocs)
+	}
+}
+
+func BenchmarkSelectIntoOutfile_LargeLowercase(b *testing.B) {
+	sql := strings.Repeat("select id, name from users where active = true;\n", 2000)
+	rule := safety.NewSelectIntoOutfileRule()
+	ctx := linter.NewContext(sql, "<bench>")
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := rule.Check(ctx); err != nil {
+			b.Fatalf("Check: %v", err)
+		}
 	}
 }

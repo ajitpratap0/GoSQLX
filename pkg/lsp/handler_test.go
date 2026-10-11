@@ -16,10 +16,16 @@ package lsp
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"strings"
 	"testing"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/errors"
+	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 )
 
 // TestHandler_DocumentSymbol tests document symbol extraction
@@ -668,11 +674,6 @@ func TestHandler_SignatureHelp_NoDocument(t *testing.T) {
 
 // TestGetFunctionAtPosition tests the internal function position detection
 func TestGetFunctionAtPosition(t *testing.T) {
-	mock := newMockReadWriter()
-	logger := log.New(io.Discard, "", 0)
-	server := NewServer(mock.input, mock.output, logger)
-	handler := server.handler
-
 	tests := []struct {
 		name          string
 		content       string
@@ -726,7 +727,7 @@ func TestGetFunctionAtPosition(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			funcName, paramIdx := handler.getFunctionAtPosition(tt.content, tt.position)
+			funcName, paramIdx := functionAtPosition(strings.Split(tt.content, "\n"), tt.position)
 			if funcName != tt.expectedFunc {
 				t.Errorf("expected function %q, got %q", tt.expectedFunc, funcName)
 			}
@@ -764,5 +765,178 @@ func TestGetSQLFunctionSignature(t *testing.T) {
 	sig := getSQLFunctionSignature("UNKNOWN_FUNCTION")
 	if sig != nil {
 		t.Error("expected nil for unknown function")
+	}
+}
+
+// diagGolden is the comparable projection of a Diagnostic used by the
+// buildDiagnostics golden test.
+type diagGolden struct {
+	SL, SC, EL, EC int
+	Code           string
+	Msg            string
+}
+
+func projectDiagnostics(diags []Diagnostic) []diagGolden {
+	out := make([]diagGolden, 0, len(diags))
+	for _, d := range diags {
+		code := ""
+		if s, ok := d.Code.(string); ok {
+			code = s
+		}
+		out = append(out, diagGolden{
+			SL: d.Range.Start.Line, SC: d.Range.Start.Character,
+			EL: d.Range.End.Line, EC: d.Range.End.Character,
+			Code: code, Msg: d.Message,
+		})
+	}
+	return out
+}
+
+// TestBuildDiagnostics_RangesGolden pins the diagnostic ranges, codes and
+// messages produced for a variety of error shapes so that refactors of the
+// diagnostic construction path cannot silently change them.
+func TestBuildDiagnostics_RangesGolden(t *testing.T) {
+	parsed := func(content string) []error {
+		_, errs := gosqlx.ParseWithRecovery(content)
+		return errs
+	}
+
+	tests := []struct {
+		name    string
+		content string
+		errs    []error
+		want    []diagGolden
+	}{
+		{name: "single broken statement", content: "SELECT FROM WHERE;", errs: parsed("SELECT FROM WHERE;"), want: []diagGolden{{0, 7, 0, 11, "", "@err"}}},
+		{name: "five broken statements", content: "SELECT a FROM WHERE id = 1;\nSELECT b FROM t;\nSELECT c FROM WHERE id = 3;\nINSERT INTO;\nSELECT d FROM WHERE x = 5;\n", errs: parsed("SELECT a FROM WHERE id = 1;\nSELECT b FROM t;\nSELECT c FROM WHERE id = 3;\nINSERT INTO;\nSELECT d FROM WHERE x = 5;\n"), want: []diagGolden{{0, 14, 0, 19, "", "@err"}, {2, 14, 2, 19, "", "@err"}, {3, 11, 3, 12, "", "@err"}, {4, 14, 4, 19, "", "@err"}}},
+		{name: "last line no trailing newline", content: "SELECT 1;\nSELECT x FROM WHERE", errs: parsed("SELECT 1;\nSELECT x FROM WHERE"), want: []diagGolden{{1, 14, 1, 19, "", "@err"}}},
+		{name: "crlf content", content: "SELECT a FROM WHERE id = 1;\r\nSELECT b FROM WHERE id = 2;\r\n", errs: parsed("SELECT a FROM WHERE id = 1;\r\nSELECT b FROM WHERE id = 2;\r\n"), want: []diagGolden{{0, 14, 0, 19, "", "@err"}, {1, 14, 1, 19, "", "@err"}}},
+		{name: "column past end of line", content: "SELECT 1\nFROM t", errs: []error{&errors.Error{Code: errors.ErrCodeUnexpectedToken, Message: "boom", Location: models.Location{Line: 1, Column: 99}}}, want: []diagGolden{{0, 98, 0, 8, "E2001", "boom"}}},
+		{name: "line past end of content", content: "SELECT 1", errs: []error{&errors.Error{Code: errors.ErrCodeUnexpectedToken, Message: "boom", Location: models.Location{Line: 9, Column: 3}}}, want: []diagGolden{{8, 2, 8, 3, "E2001", "boom"}}},
+		{name: "structured error with location", content: "SELECT * FROM users\nWHERE id = 1\nAND name = 'test'", errs: []error{&errors.Error{Code: errors.ErrCodeUnexpectedToken, Message: "unexpected token", Location: models.Location{Line: 2, Column: 7}}}, want: []diagGolden{{1, 6, 1, 8, "E2001", "unexpected token"}}},
+		{name: "raw parse error", content: "SELECT * FROM users\nWHERE id = 1", errs: []error{&parser.ParseError{Msg: "bad thing", Line: 2, Column: 3}}, want: []diagGolden{{1, 2, 1, 5, "", "bad thing"}}},
+		{name: "plain error position pattern", content: "SELECT * FROM users\nWHERE id = 1", errs: []error{fmt.Errorf("syntax error at position 25")}, want: []diagGolden{{1, 5, 1, 12, "", "syntax error at position 25"}}},
+		{name: "plain error line column pattern", content: "SELECT * FROM users\nWHERE id = 1", errs: []error{fmt.Errorf("oops at line 2, column 7")}, want: []diagGolden{{1, 6, 1, 8, "", "oops at line 2, column 7"}}},
+		{name: "plain error default line", content: "SELECT 1\nSELECT 2\nSELECT 3", errs: []error{fmt.Errorf("a"), fmt.Errorf("b"), fmt.Errorf("c")}, want: []diagGolden{{0, 0, 0, 6, "", "a"}, {1, 0, 1, 6, "", "b"}, {2, 0, 2, 6, "", "c"}}},
+		{name: "empty errs", content: "SELECT 1", errs: nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := tt.errs
+			got := projectDiagnostics(buildDiagnostics(tt.content, errs))
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %d diagnostics, want %d: %#v", len(got), len(tt.want), got)
+			}
+			for i := range got {
+				want := tt.want[i]
+				if want.Msg == "@err" {
+					// Messages of recovered parse errors pass through verbatim.
+					want.Msg = tt.errs[i].Error()
+				}
+				if got[i] != want {
+					t.Errorf("diagnostic %d: got %#v, want %#v", i, got[i], want)
+				}
+			}
+		})
+	}
+}
+
+// TestHandleFormatting_FullDocumentRange verifies that the replacement range
+// returned by textDocument/formatting always spans the entire document: from
+// 0:0 to the last line and the byte length of that last line.
+func TestHandleFormatting_FullDocumentRange(t *testing.T) {
+	tests := []struct {
+		name        string
+		content     string
+		expectEdits bool
+	}{
+		{"empty", "", false},
+		{"single token", "  a", true},
+		{"single token trailing newline", "  a\n", true},
+		{"two lines", "  a\nb", true},
+		{"two lines trailing newline", "  a\nb\n", true},
+		{"crlf", "  a\r\nb\r\n", true},
+		{"blank trailing lines", "  a\n\n\n", true},
+		{"three line query", "select 1\nfrom t\nwhere x = 1", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := setupTestServer()
+			const uri = "file:///fmt.sql"
+			server.Documents().Open(uri, "sql", 1, tt.content)
+
+			params, err := json.Marshal(DocumentFormattingParams{
+				TextDocument: TextDocumentIdentifier{URI: uri},
+				Options:      FormattingOptions{TabSize: 2, InsertSpaces: true},
+			})
+			if err != nil {
+				t.Fatalf("marshal params: %v", err)
+			}
+			edits, err := server.handler.handleFormatting(params)
+			if err != nil {
+				t.Fatalf("handleFormatting: %v", err)
+			}
+			if !tt.expectEdits {
+				if len(edits) != 0 {
+					t.Fatalf("expected no edits, got %d", len(edits))
+				}
+				return
+			}
+			if len(edits) != 1 {
+				t.Fatalf("expected exactly 1 edit, got %d", len(edits))
+			}
+
+			split := strings.Split(tt.content, "\n")
+			want := Position{Line: len(split) - 1, Character: len(split[len(split)-1])}
+			if got := edits[0].Range.Start; got != (Position{}) {
+				t.Errorf("range start = %+v, want 0:0", got)
+			}
+			if got := edits[0].Range.End; got != want {
+				t.Errorf("range end = %+v, want %+v", got, want)
+			}
+		})
+	}
+}
+
+// TestHoistedMaps_Stable guards the package-level keyword documentation and
+// function signature tables: lookups are stable across calls, unknown keys
+// return the zero value, and no entries were lost when the literals were
+// hoisted out of the lookup functions.
+func TestHoistedMaps_Stable(t *testing.T) {
+	const wantKeywordDocs = 58
+	const wantSignatures = 22
+
+	if got := len(keywordDocs); got != wantKeywordDocs {
+		t.Errorf("len(keywordDocs) = %d, want %d", got, wantKeywordDocs)
+	}
+	if got := len(sqlFunctionSignatures); got != wantSignatures {
+		t.Errorf("len(sqlFunctionSignatures) = %d, want %d", got, wantSignatures)
+	}
+
+	for k, v := range keywordDocs {
+		if v == "" {
+			t.Errorf("keywordDocs[%q] is empty", k)
+		}
+		if got := getKeywordDocumentation(k); got != v {
+			t.Errorf("getKeywordDocumentation(%q) unstable", k)
+		}
+	}
+	for k, v := range sqlFunctionSignatures {
+		if v == nil || v.Label == "" {
+			t.Errorf("sqlFunctionSignatures[%q] is empty", k)
+			continue
+		}
+		if got := getSQLFunctionSignature(k); got != v {
+			t.Errorf("getSQLFunctionSignature(%q) unstable", k)
+		}
+	}
+
+	if got := getKeywordDocumentation("NOT_A_KEYWORD"); got != "" {
+		t.Errorf("unknown keyword returned %q", got)
+	}
+	if got := getSQLFunctionSignature("NOT_A_FUNCTION"); got != nil {
+		t.Errorf("unknown function returned %+v", got)
 	}
 }

@@ -397,14 +397,13 @@ func (h *Handler) handleDidSave(params json.RawMessage) {
 
 // validateDocument parses the SQL and publishes diagnostics
 func (h *Handler) validateDocument(uri, content string, version int) {
-	var diagnostics []Diagnostic
-
 	// Use ParseWithRecovery for multi-error diagnostics so the user sees
 	// every problem at once instead of fixing them one-by-one.
 	_, errs := gosqlx.ParseWithRecovery(content)
-	for i, err := range errs {
-		diag := h.createDiagnosticFromError(content, err, i)
-		diagnostics = append(diagnostics, diag)
+	diagnostics := buildDiagnostics(content, errs)
+	if diagnostics == nil {
+		// Publish an empty (non-nil) slice so the JSON stays "diagnostics":[].
+		diagnostics = []Diagnostic{}
 	}
 
 	// Publish diagnostics
@@ -435,8 +434,25 @@ var (
 	bracketPattern = regexp.MustCompile(`\[(\d+):(\d+)\]`)
 )
 
-// createDiagnosticFromError creates a diagnostic from an error
-func (h *Handler) createDiagnosticFromError(content string, err error, defaultLine int) Diagnostic {
+// buildDiagnostics converts recovery errors into diagnostics. The document is
+// split into lines exactly once, regardless of how many errors there are, so
+// the cost is O(len(content) + len(errs)) rather than O(len(content) * len(errs)).
+// It returns nil when errs is empty.
+func buildDiagnostics(content string, errs []error) []Diagnostic {
+	if len(errs) == 0 {
+		return nil
+	}
+	lines := strings.Split(content, "\n")
+	diagnostics := make([]Diagnostic, 0, len(errs))
+	for i, err := range errs {
+		diagnostics = append(diagnostics, createDiagnosticFromError(content, lines, err, i))
+	}
+	return diagnostics
+}
+
+// createDiagnosticFromError creates a diagnostic from an error. lines must be
+// strings.Split(content, "\n"); callers converting many errors share one split.
+func createDiagnosticFromError(content string, lines []string, err error, defaultLine int) Diagnostic {
 	var line, char int
 	var code interface{}
 	errMsg := err.Error()
@@ -472,7 +488,6 @@ func (h *Handler) createDiagnosticFromError(content string, err error, defaultLi
 	}
 
 	// Calculate end position (end of line or reasonable span)
-	lines := strings.Split(content, "\n")
 	endChar := char + 1
 	if line < len(lines) {
 		// Extend to end of word or reasonable span
@@ -753,12 +768,8 @@ func (h *Handler) handleFormatting(params json.RawMessage) ([]TextEdit, error) {
 	}
 
 	// Calculate the full document range
-	lines := strings.Split(content, "\n")
-	endLine := len(lines) - 1
-	endChar := 0
-	if endLine >= 0 && endLine < len(lines) {
-		endChar = len(lines[endLine])
-	}
+	endLine := strings.Count(content, "\n")
+	endChar := len(content) - (strings.LastIndexByte(content, '\n') + 1)
 
 	return []TextEdit{
 		{
@@ -837,70 +848,72 @@ func formatSQL(sql string, opts FormattingOptions) string {
 	return formatted
 }
 
+// keywordDocs maps SQL keywords to their hover documentation. It is built once
+// at package init and is read-only afterwards; never mutate it.
+var keywordDocs = map[string]string{
+	"SELECT":     "**SELECT** - Retrieves data from one or more tables.\n\n```sql\nSELECT column1, column2 FROM table_name;\n```",
+	"FROM":       "**FROM** - Specifies the table(s) to retrieve data from.\n\n```sql\nSELECT * FROM users;\n```",
+	"WHERE":      "**WHERE** - Filters rows based on a condition.\n\n```sql\nSELECT * FROM users WHERE active = true;\n```",
+	"JOIN":       "**JOIN** - Combines rows from two or more tables based on a related column.\n\n```sql\nSELECT * FROM orders JOIN customers ON orders.customer_id = customers.id;\n```",
+	"LEFT":       "**LEFT JOIN** - Returns all rows from the left table and matched rows from the right table.\n\n```sql\nSELECT * FROM orders LEFT JOIN customers ON orders.customer_id = customers.id;\n```",
+	"RIGHT":      "**RIGHT JOIN** - Returns all rows from the right table and matched rows from the left table.\n\n```sql\nSELECT * FROM orders RIGHT JOIN customers ON orders.customer_id = customers.id;\n```",
+	"INNER":      "**INNER JOIN** - Returns rows that have matching values in both tables.\n\n```sql\nSELECT * FROM orders INNER JOIN customers ON orders.customer_id = customers.id;\n```",
+	"OUTER":      "**OUTER JOIN** - Returns all rows when there is a match in either table.\n\n```sql\nSELECT * FROM orders FULL OUTER JOIN customers ON orders.customer_id = customers.id;\n```",
+	"GROUP":      "**GROUP BY** - Groups rows that have the same values in specified columns.\n\n```sql\nSELECT department, COUNT(*) FROM employees GROUP BY department;\n```",
+	"ORDER":      "**ORDER BY** - Sorts the result set by specified columns.\n\n```sql\nSELECT * FROM users ORDER BY name ASC;\n```",
+	"HAVING":     "**HAVING** - Filters groups based on a condition (used with GROUP BY).\n\n```sql\nSELECT department, COUNT(*) FROM employees GROUP BY department HAVING COUNT(*) > 5;\n```",
+	"LIMIT":      "**LIMIT** - Restricts the number of rows returned.\n\n```sql\nSELECT * FROM users LIMIT 10;\n```",
+	"OFFSET":     "**OFFSET** - Skips a specified number of rows before returning results.\n\n```sql\nSELECT * FROM users LIMIT 10 OFFSET 20;\n```",
+	"INSERT":     "**INSERT** - Adds new rows to a table.\n\n```sql\nINSERT INTO users (name, email) VALUES ('John', 'john@example.com');\n```",
+	"UPDATE":     "**UPDATE** - Modifies existing rows in a table.\n\n```sql\nUPDATE users SET name = 'Jane' WHERE id = 1;\n```",
+	"DELETE":     "**DELETE** - Removes rows from a table.\n\n```sql\nDELETE FROM users WHERE id = 1;\n```",
+	"CREATE":     "**CREATE** - Creates database objects (tables, indexes, views, etc.).\n\n```sql\nCREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(100));\n```",
+	"DROP":       "**DROP** - Removes database objects.\n\n```sql\nDROP TABLE users;\n```",
+	"ALTER":      "**ALTER** - Modifies database objects.\n\n```sql\nALTER TABLE users ADD COLUMN age INT;\n```",
+	"TRUNCATE":   "**TRUNCATE** - Removes all rows from a table quickly.\n\n```sql\nTRUNCATE TABLE logs;\n```",
+	"WITH":       "**WITH** - Defines a Common Table Expression (CTE).\n\n```sql\nWITH active_users AS (SELECT * FROM users WHERE active = true)\nSELECT * FROM active_users;\n```",
+	"UNION":      "**UNION** - Combines result sets of two queries (removes duplicates).\n\n```sql\nSELECT name FROM employees UNION SELECT name FROM contractors;\n```",
+	"EXCEPT":     "**EXCEPT** - Returns rows from the first query that are not in the second.\n\n```sql\nSELECT name FROM employees EXCEPT SELECT name FROM managers;\n```",
+	"INTERSECT":  "**INTERSECT** - Returns rows that appear in both queries.\n\n```sql\nSELECT name FROM employees INTERSECT SELECT name FROM managers;\n```",
+	"CASE":       "**CASE** - Provides conditional logic in SQL.\n\n```sql\nSELECT name, CASE WHEN age >= 18 THEN 'Adult' ELSE 'Minor' END FROM users;\n```",
+	"WHEN":       "**WHEN** - Specifies a condition in a CASE expression.\n\n```sql\nCASE WHEN status = 'active' THEN 'Yes' ELSE 'No' END\n```",
+	"THEN":       "**THEN** - Specifies the result when a CASE condition is true.\n\n```sql\nCASE WHEN status = 'active' THEN 'Yes' END\n```",
+	"ELSE":       "**ELSE** - Specifies the default result in a CASE expression.\n\n```sql\nCASE WHEN x > 0 THEN 'Positive' ELSE 'Non-positive' END\n```",
+	"END":        "**END** - Ends a CASE expression or block.\n\n```sql\nCASE WHEN x > 0 THEN 'Positive' ELSE 'Non-positive' END\n```",
+	"AND":        "**AND** - Combines conditions (all must be true).\n\n```sql\nSELECT * FROM users WHERE active = true AND age >= 18;\n```",
+	"OR":         "**OR** - Combines conditions (at least one must be true).\n\n```sql\nSELECT * FROM users WHERE status = 'active' OR status = 'pending';\n```",
+	"NOT":        "**NOT** - Negates a condition.\n\n```sql\nSELECT * FROM users WHERE NOT deleted;\n```",
+	"IN":         "**IN** - Checks if a value matches any value in a list.\n\n```sql\nSELECT * FROM users WHERE status IN ('active', 'pending');\n```",
+	"BETWEEN":    "**BETWEEN** - Checks if a value is within a range.\n\n```sql\nSELECT * FROM orders WHERE amount BETWEEN 100 AND 500;\n```",
+	"LIKE":       "**LIKE** - Pattern matching with wildcards (% and _).\n\n```sql\nSELECT * FROM users WHERE name LIKE 'John%';\n```",
+	"IS":         "**IS** - Tests for NULL values.\n\n```sql\nSELECT * FROM users WHERE deleted_at IS NULL;\n```",
+	"NULL":       "**NULL** - Represents a missing or unknown value.\n\n```sql\nSELECT * FROM users WHERE email IS NOT NULL;\n```",
+	"AS":         "**AS** - Creates an alias for a column or table.\n\n```sql\nSELECT name AS user_name FROM users u;\n```",
+	"DISTINCT":   "**DISTINCT** - Returns only unique values.\n\n```sql\nSELECT DISTINCT status FROM orders;\n```",
+	"COUNT":      "**COUNT** - Counts the number of rows.\n\n```sql\nSELECT COUNT(*) FROM users;\n```",
+	"SUM":        "**SUM** - Calculates the sum of values.\n\n```sql\nSELECT SUM(amount) FROM orders;\n```",
+	"AVG":        "**AVG** - Calculates the average of values.\n\n```sql\nSELECT AVG(salary) FROM employees;\n```",
+	"MIN":        "**MIN** - Returns the minimum value.\n\n```sql\nSELECT MIN(price) FROM products;\n```",
+	"MAX":        "**MAX** - Returns the maximum value.\n\n```sql\nSELECT MAX(price) FROM products;\n```",
+	"OVER":       "**OVER** - Defines a window for window functions.\n\n```sql\nSELECT name, salary, ROW_NUMBER() OVER (ORDER BY salary DESC) FROM employees;\n```",
+	"PARTITION":  "**PARTITION BY** - Divides rows into partitions for window functions.\n\n```sql\nSELECT dept, name, RANK() OVER (PARTITION BY dept ORDER BY salary) FROM employees;\n```",
+	"ROW_NUMBER": "**ROW_NUMBER()** - Assigns unique sequential numbers to rows.\n\n```sql\nSELECT name, ROW_NUMBER() OVER (ORDER BY name) FROM users;\n```",
+	"RANK":       "**RANK()** - Assigns ranks with gaps for ties.\n\n```sql\nSELECT name, RANK() OVER (ORDER BY score DESC) FROM players;\n```",
+	"DENSE_RANK": "**DENSE_RANK()** - Assigns ranks without gaps for ties.\n\n```sql\nSELECT name, DENSE_RANK() OVER (ORDER BY score DESC) FROM players;\n```",
+	"LAG":        "**LAG()** - Accesses data from a previous row.\n\n```sql\nSELECT date, value, LAG(value) OVER (ORDER BY date) AS prev_value FROM metrics;\n```",
+	"LEAD":       "**LEAD()** - Accesses data from a following row.\n\n```sql\nSELECT date, value, LEAD(value) OVER (ORDER BY date) AS next_value FROM metrics;\n```",
+	"MERGE":      "**MERGE** - Performs INSERT, UPDATE, or DELETE based on conditions.\n\n```sql\nMERGE INTO target USING source ON target.id = source.id\nWHEN MATCHED THEN UPDATE SET target.value = source.value\nWHEN NOT MATCHED THEN INSERT (id, value) VALUES (source.id, source.value);\n```",
+	"ROLLUP":     "**ROLLUP** - Creates subtotals and grand totals in GROUP BY.\n\n```sql\nSELECT region, product, SUM(sales) FROM orders GROUP BY ROLLUP(region, product);\n```",
+	"CUBE":       "**CUBE** - Creates all possible subtotal combinations in GROUP BY.\n\n```sql\nSELECT region, product, SUM(sales) FROM orders GROUP BY CUBE(region, product);\n```",
+	"GROUPING":   "**GROUPING SETS** - Specifies multiple grouping sets in one query.\n\n```sql\nSELECT region, product, SUM(sales) FROM orders GROUP BY GROUPING SETS((region), (product), ());\n```",
+	"FETCH":      "**FETCH** - Limits rows returned (SQL standard alternative to LIMIT).\n\n```sql\nSELECT * FROM users ORDER BY id FETCH FIRST 10 ROWS ONLY;\n```",
+	"ROWS":       "**ROWS** - Defines window frame in terms of physical rows.\n\n```sql\nSUM(amount) OVER (ORDER BY date ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)\n```",
+	"RANGE":      "**RANGE** - Defines window frame in terms of value range.\n\n```sql\nSUM(amount) OVER (ORDER BY date RANGE UNBOUNDED PRECEDING)\n```",
+}
+
 // SQL keyword documentation
 func getKeywordDocumentation(keyword string) string {
-	docs := map[string]string{
-		"SELECT":     "**SELECT** - Retrieves data from one or more tables.\n\n```sql\nSELECT column1, column2 FROM table_name;\n```",
-		"FROM":       "**FROM** - Specifies the table(s) to retrieve data from.\n\n```sql\nSELECT * FROM users;\n```",
-		"WHERE":      "**WHERE** - Filters rows based on a condition.\n\n```sql\nSELECT * FROM users WHERE active = true;\n```",
-		"JOIN":       "**JOIN** - Combines rows from two or more tables based on a related column.\n\n```sql\nSELECT * FROM orders JOIN customers ON orders.customer_id = customers.id;\n```",
-		"LEFT":       "**LEFT JOIN** - Returns all rows from the left table and matched rows from the right table.\n\n```sql\nSELECT * FROM orders LEFT JOIN customers ON orders.customer_id = customers.id;\n```",
-		"RIGHT":      "**RIGHT JOIN** - Returns all rows from the right table and matched rows from the left table.\n\n```sql\nSELECT * FROM orders RIGHT JOIN customers ON orders.customer_id = customers.id;\n```",
-		"INNER":      "**INNER JOIN** - Returns rows that have matching values in both tables.\n\n```sql\nSELECT * FROM orders INNER JOIN customers ON orders.customer_id = customers.id;\n```",
-		"OUTER":      "**OUTER JOIN** - Returns all rows when there is a match in either table.\n\n```sql\nSELECT * FROM orders FULL OUTER JOIN customers ON orders.customer_id = customers.id;\n```",
-		"GROUP":      "**GROUP BY** - Groups rows that have the same values in specified columns.\n\n```sql\nSELECT department, COUNT(*) FROM employees GROUP BY department;\n```",
-		"ORDER":      "**ORDER BY** - Sorts the result set by specified columns.\n\n```sql\nSELECT * FROM users ORDER BY name ASC;\n```",
-		"HAVING":     "**HAVING** - Filters groups based on a condition (used with GROUP BY).\n\n```sql\nSELECT department, COUNT(*) FROM employees GROUP BY department HAVING COUNT(*) > 5;\n```",
-		"LIMIT":      "**LIMIT** - Restricts the number of rows returned.\n\n```sql\nSELECT * FROM users LIMIT 10;\n```",
-		"OFFSET":     "**OFFSET** - Skips a specified number of rows before returning results.\n\n```sql\nSELECT * FROM users LIMIT 10 OFFSET 20;\n```",
-		"INSERT":     "**INSERT** - Adds new rows to a table.\n\n```sql\nINSERT INTO users (name, email) VALUES ('John', 'john@example.com');\n```",
-		"UPDATE":     "**UPDATE** - Modifies existing rows in a table.\n\n```sql\nUPDATE users SET name = 'Jane' WHERE id = 1;\n```",
-		"DELETE":     "**DELETE** - Removes rows from a table.\n\n```sql\nDELETE FROM users WHERE id = 1;\n```",
-		"CREATE":     "**CREATE** - Creates database objects (tables, indexes, views, etc.).\n\n```sql\nCREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(100));\n```",
-		"DROP":       "**DROP** - Removes database objects.\n\n```sql\nDROP TABLE users;\n```",
-		"ALTER":      "**ALTER** - Modifies database objects.\n\n```sql\nALTER TABLE users ADD COLUMN age INT;\n```",
-		"TRUNCATE":   "**TRUNCATE** - Removes all rows from a table quickly.\n\n```sql\nTRUNCATE TABLE logs;\n```",
-		"WITH":       "**WITH** - Defines a Common Table Expression (CTE).\n\n```sql\nWITH active_users AS (SELECT * FROM users WHERE active = true)\nSELECT * FROM active_users;\n```",
-		"UNION":      "**UNION** - Combines result sets of two queries (removes duplicates).\n\n```sql\nSELECT name FROM employees UNION SELECT name FROM contractors;\n```",
-		"EXCEPT":     "**EXCEPT** - Returns rows from the first query that are not in the second.\n\n```sql\nSELECT name FROM employees EXCEPT SELECT name FROM managers;\n```",
-		"INTERSECT":  "**INTERSECT** - Returns rows that appear in both queries.\n\n```sql\nSELECT name FROM employees INTERSECT SELECT name FROM managers;\n```",
-		"CASE":       "**CASE** - Provides conditional logic in SQL.\n\n```sql\nSELECT name, CASE WHEN age >= 18 THEN 'Adult' ELSE 'Minor' END FROM users;\n```",
-		"WHEN":       "**WHEN** - Specifies a condition in a CASE expression.\n\n```sql\nCASE WHEN status = 'active' THEN 'Yes' ELSE 'No' END\n```",
-		"THEN":       "**THEN** - Specifies the result when a CASE condition is true.\n\n```sql\nCASE WHEN status = 'active' THEN 'Yes' END\n```",
-		"ELSE":       "**ELSE** - Specifies the default result in a CASE expression.\n\n```sql\nCASE WHEN x > 0 THEN 'Positive' ELSE 'Non-positive' END\n```",
-		"END":        "**END** - Ends a CASE expression or block.\n\n```sql\nCASE WHEN x > 0 THEN 'Positive' ELSE 'Non-positive' END\n```",
-		"AND":        "**AND** - Combines conditions (all must be true).\n\n```sql\nSELECT * FROM users WHERE active = true AND age >= 18;\n```",
-		"OR":         "**OR** - Combines conditions (at least one must be true).\n\n```sql\nSELECT * FROM users WHERE status = 'active' OR status = 'pending';\n```",
-		"NOT":        "**NOT** - Negates a condition.\n\n```sql\nSELECT * FROM users WHERE NOT deleted;\n```",
-		"IN":         "**IN** - Checks if a value matches any value in a list.\n\n```sql\nSELECT * FROM users WHERE status IN ('active', 'pending');\n```",
-		"BETWEEN":    "**BETWEEN** - Checks if a value is within a range.\n\n```sql\nSELECT * FROM orders WHERE amount BETWEEN 100 AND 500;\n```",
-		"LIKE":       "**LIKE** - Pattern matching with wildcards (% and _).\n\n```sql\nSELECT * FROM users WHERE name LIKE 'John%';\n```",
-		"IS":         "**IS** - Tests for NULL values.\n\n```sql\nSELECT * FROM users WHERE deleted_at IS NULL;\n```",
-		"NULL":       "**NULL** - Represents a missing or unknown value.\n\n```sql\nSELECT * FROM users WHERE email IS NOT NULL;\n```",
-		"AS":         "**AS** - Creates an alias for a column or table.\n\n```sql\nSELECT name AS user_name FROM users u;\n```",
-		"DISTINCT":   "**DISTINCT** - Returns only unique values.\n\n```sql\nSELECT DISTINCT status FROM orders;\n```",
-		"COUNT":      "**COUNT** - Counts the number of rows.\n\n```sql\nSELECT COUNT(*) FROM users;\n```",
-		"SUM":        "**SUM** - Calculates the sum of values.\n\n```sql\nSELECT SUM(amount) FROM orders;\n```",
-		"AVG":        "**AVG** - Calculates the average of values.\n\n```sql\nSELECT AVG(salary) FROM employees;\n```",
-		"MIN":        "**MIN** - Returns the minimum value.\n\n```sql\nSELECT MIN(price) FROM products;\n```",
-		"MAX":        "**MAX** - Returns the maximum value.\n\n```sql\nSELECT MAX(price) FROM products;\n```",
-		"OVER":       "**OVER** - Defines a window for window functions.\n\n```sql\nSELECT name, salary, ROW_NUMBER() OVER (ORDER BY salary DESC) FROM employees;\n```",
-		"PARTITION":  "**PARTITION BY** - Divides rows into partitions for window functions.\n\n```sql\nSELECT dept, name, RANK() OVER (PARTITION BY dept ORDER BY salary) FROM employees;\n```",
-		"ROW_NUMBER": "**ROW_NUMBER()** - Assigns unique sequential numbers to rows.\n\n```sql\nSELECT name, ROW_NUMBER() OVER (ORDER BY name) FROM users;\n```",
-		"RANK":       "**RANK()** - Assigns ranks with gaps for ties.\n\n```sql\nSELECT name, RANK() OVER (ORDER BY score DESC) FROM players;\n```",
-		"DENSE_RANK": "**DENSE_RANK()** - Assigns ranks without gaps for ties.\n\n```sql\nSELECT name, DENSE_RANK() OVER (ORDER BY score DESC) FROM players;\n```",
-		"LAG":        "**LAG()** - Accesses data from a previous row.\n\n```sql\nSELECT date, value, LAG(value) OVER (ORDER BY date) AS prev_value FROM metrics;\n```",
-		"LEAD":       "**LEAD()** - Accesses data from a following row.\n\n```sql\nSELECT date, value, LEAD(value) OVER (ORDER BY date) AS next_value FROM metrics;\n```",
-		"MERGE":      "**MERGE** - Performs INSERT, UPDATE, or DELETE based on conditions.\n\n```sql\nMERGE INTO target USING source ON target.id = source.id\nWHEN MATCHED THEN UPDATE SET target.value = source.value\nWHEN NOT MATCHED THEN INSERT (id, value) VALUES (source.id, source.value);\n```",
-		"ROLLUP":     "**ROLLUP** - Creates subtotals and grand totals in GROUP BY.\n\n```sql\nSELECT region, product, SUM(sales) FROM orders GROUP BY ROLLUP(region, product);\n```",
-		"CUBE":       "**CUBE** - Creates all possible subtotal combinations in GROUP BY.\n\n```sql\nSELECT region, product, SUM(sales) FROM orders GROUP BY CUBE(region, product);\n```",
-		"GROUPING":   "**GROUPING SETS** - Specifies multiple grouping sets in one query.\n\n```sql\nSELECT region, product, SUM(sales) FROM orders GROUP BY GROUPING SETS((region), (product), ());\n```",
-		"FETCH":      "**FETCH** - Limits rows returned (SQL standard alternative to LIMIT).\n\n```sql\nSELECT * FROM users ORDER BY id FETCH FIRST 10 ROWS ONLY;\n```",
-		"ROWS":       "**ROWS** - Defines window frame in terms of physical rows.\n\n```sql\nSUM(amount) OVER (ORDER BY date ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)\n```",
-		"RANGE":      "**RANGE** - Defines window frame in terms of value range.\n\n```sql\nSUM(amount) OVER (ORDER BY date RANGE UNBOUNDED PRECEDING)\n```",
-	}
-
-	return docs[keyword]
+	return keywordDocs[keyword]
 }
 
 // sqlKeywords provides completion items for SQL keywords
@@ -1194,10 +1207,13 @@ func (h *Handler) handleDocumentSymbol(params json.RawMessage) ([]DocumentSymbol
 		return nil, err
 	}
 
-	content, ok := h.server.Documents().GetContent(p.TextDocument.URI)
+	doc, ok := h.server.Documents().Get(p.TextDocument.URI)
 	if !ok {
 		return []DocumentSymbol{}, nil
 	}
+	content := doc.Content
+	// doc.Lines is strings.Split(content, "\n"); it is shared and read-only.
+	lines := doc.Lines
 
 	// Parse the SQL to extract symbols
 	parsed, err := gosqlx.Parse(content)
@@ -1207,7 +1223,6 @@ func (h *Handler) handleDocumentSymbol(params json.RawMessage) ([]DocumentSymbol
 	}
 
 	symbols := []DocumentSymbol{}
-	lines := strings.Split(content, "\n")
 
 	// Extract symbols from each statement. Compute actual source ranges from
 	// AST position info and the raw content, so outline ranges no longer point
@@ -1639,6 +1654,8 @@ func nodeLocation(n ast.Node) models.Location {
 		return v.Pos
 	case *ast.SubqueryExpression:
 		return v.Pos
+	case *ast.ParenthesizedExpression:
+		return v.Pos
 	case *ast.BetweenExpression:
 		return v.Pos
 	}
@@ -1758,9 +1775,8 @@ func (h *Handler) handleSignatureHelp(params json.RawMessage) (*SignatureHelp, e
 		return &SignatureHelp{}, nil
 	}
 
-	// Get the function name at position
-	content := doc.Content
-	funcName, paramIndex := h.getFunctionAtPosition(content, p.Position)
+	// Get the function name at position (doc.Lines is shared and read-only)
+	funcName, paramIndex := functionAtPosition(doc.Lines, p.Position)
 	if funcName == "" {
 		return &SignatureHelp{}, nil
 	}
@@ -1778,9 +1794,9 @@ func (h *Handler) handleSignatureHelp(params json.RawMessage) (*SignatureHelp, e
 	}, nil
 }
 
-// getFunctionAtPosition finds the function name and parameter index at a position
-func (h *Handler) getFunctionAtPosition(content string, pos Position) (string, int) {
-	lines := strings.Split(content, "\n")
+// functionAtPosition finds the function name and parameter index at a position.
+// lines is the document split on "\n" (Document.Lines) and is not modified.
+func functionAtPosition(lines []string, pos Position) (string, int) {
 	if pos.Line >= len(lines) {
 		return "", 0
 	}
@@ -1833,170 +1849,174 @@ func isAlphanumeric(c byte) bool {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }
 
-// getSQLFunctionSignature returns the signature for a SQL function
-func getSQLFunctionSignature(funcName string) *SignatureInformation {
-	signatures := map[string]*SignatureInformation{
-		"COUNT": {
-			Label:         "COUNT(expression)",
-			Documentation: "Returns the number of rows that match a specified condition.",
-			Parameters: []ParameterInformation{
-				{Label: "expression", Documentation: "Column or expression to count. Use * for all rows."},
-			},
+// sqlFunctionSignatures maps upper-case SQL function names to their signature
+// help. It is built once at package init and is read-only afterwards; never
+// mutate it or the values it points to.
+var sqlFunctionSignatures = map[string]*SignatureInformation{
+	"COUNT": {
+		Label:         "COUNT(expression)",
+		Documentation: "Returns the number of rows that match a specified condition.",
+		Parameters: []ParameterInformation{
+			{Label: "expression", Documentation: "Column or expression to count. Use * for all rows."},
 		},
-		"SUM": {
-			Label:         "SUM(expression)",
-			Documentation: "Returns the sum of all values in the expression.",
-			Parameters: []ParameterInformation{
-				{Label: "expression", Documentation: "Numeric column or expression to sum."},
-			},
+	},
+	"SUM": {
+		Label:         "SUM(expression)",
+		Documentation: "Returns the sum of all values in the expression.",
+		Parameters: []ParameterInformation{
+			{Label: "expression", Documentation: "Numeric column or expression to sum."},
 		},
-		"AVG": {
-			Label:         "AVG(expression)",
-			Documentation: "Returns the average value of the expression.",
-			Parameters: []ParameterInformation{
-				{Label: "expression", Documentation: "Numeric column or expression to average."},
-			},
+	},
+	"AVG": {
+		Label:         "AVG(expression)",
+		Documentation: "Returns the average value of the expression.",
+		Parameters: []ParameterInformation{
+			{Label: "expression", Documentation: "Numeric column or expression to average."},
 		},
-		"MIN": {
-			Label:         "MIN(expression)",
-			Documentation: "Returns the minimum value in the expression.",
-			Parameters: []ParameterInformation{
-				{Label: "expression", Documentation: "Column or expression to find minimum value."},
-			},
+	},
+	"MIN": {
+		Label:         "MIN(expression)",
+		Documentation: "Returns the minimum value in the expression.",
+		Parameters: []ParameterInformation{
+			{Label: "expression", Documentation: "Column or expression to find minimum value."},
 		},
-		"MAX": {
-			Label:         "MAX(expression)",
-			Documentation: "Returns the maximum value in the expression.",
-			Parameters: []ParameterInformation{
-				{Label: "expression", Documentation: "Column or expression to find maximum value."},
-			},
+	},
+	"MAX": {
+		Label:         "MAX(expression)",
+		Documentation: "Returns the maximum value in the expression.",
+		Parameters: []ParameterInformation{
+			{Label: "expression", Documentation: "Column or expression to find maximum value."},
 		},
-		"COALESCE": {
-			Label:         "COALESCE(value1, value2, ...)",
-			Documentation: "Returns the first non-null value in the list.",
-			Parameters: []ParameterInformation{
-				{Label: "value1", Documentation: "First value to check."},
-				{Label: "value2, ...", Documentation: "Additional values to check."},
-			},
+	},
+	"COALESCE": {
+		Label:         "COALESCE(value1, value2, ...)",
+		Documentation: "Returns the first non-null value in the list.",
+		Parameters: []ParameterInformation{
+			{Label: "value1", Documentation: "First value to check."},
+			{Label: "value2, ...", Documentation: "Additional values to check."},
 		},
-		"NULLIF": {
-			Label:         "NULLIF(expression1, expression2)",
-			Documentation: "Returns NULL if expression1 equals expression2, otherwise returns expression1.",
-			Parameters: []ParameterInformation{
-				{Label: "expression1", Documentation: "Value to return if not equal."},
-				{Label: "expression2", Documentation: "Value to compare against."},
-			},
+	},
+	"NULLIF": {
+		Label:         "NULLIF(expression1, expression2)",
+		Documentation: "Returns NULL if expression1 equals expression2, otherwise returns expression1.",
+		Parameters: []ParameterInformation{
+			{Label: "expression1", Documentation: "Value to return if not equal."},
+			{Label: "expression2", Documentation: "Value to compare against."},
 		},
-		"CAST": {
-			Label:         "CAST(expression AS type)",
-			Documentation: "Converts an expression to a specified data type.",
-			Parameters: []ParameterInformation{
-				{Label: "expression", Documentation: "Value to convert."},
-				{Label: "type", Documentation: "Target data type."},
-			},
+	},
+	"CAST": {
+		Label:         "CAST(expression AS type)",
+		Documentation: "Converts an expression to a specified data type.",
+		Parameters: []ParameterInformation{
+			{Label: "expression", Documentation: "Value to convert."},
+			{Label: "type", Documentation: "Target data type."},
 		},
-		"SUBSTRING": {
-			Label:         "SUBSTRING(string, start, length)",
-			Documentation: "Extracts a substring from a string.",
-			Parameters: []ParameterInformation{
-				{Label: "string", Documentation: "Source string."},
-				{Label: "start", Documentation: "Starting position (1-based)."},
-				{Label: "length", Documentation: "Number of characters to extract."},
-			},
+	},
+	"SUBSTRING": {
+		Label:         "SUBSTRING(string, start, length)",
+		Documentation: "Extracts a substring from a string.",
+		Parameters: []ParameterInformation{
+			{Label: "string", Documentation: "Source string."},
+			{Label: "start", Documentation: "Starting position (1-based)."},
+			{Label: "length", Documentation: "Number of characters to extract."},
 		},
-		"TRIM": {
-			Label:         "TRIM([LEADING|TRAILING|BOTH] [characters] FROM string)",
-			Documentation: "Removes leading/trailing characters from a string.",
-			Parameters: []ParameterInformation{
-				{Label: "string", Documentation: "String to trim."},
-			},
+	},
+	"TRIM": {
+		Label:         "TRIM([LEADING|TRAILING|BOTH] [characters] FROM string)",
+		Documentation: "Removes leading/trailing characters from a string.",
+		Parameters: []ParameterInformation{
+			{Label: "string", Documentation: "String to trim."},
 		},
-		"UPPER": {
-			Label:         "UPPER(string)",
-			Documentation: "Converts a string to uppercase.",
-			Parameters: []ParameterInformation{
-				{Label: "string", Documentation: "String to convert."},
-			},
+	},
+	"UPPER": {
+		Label:         "UPPER(string)",
+		Documentation: "Converts a string to uppercase.",
+		Parameters: []ParameterInformation{
+			{Label: "string", Documentation: "String to convert."},
 		},
-		"LOWER": {
-			Label:         "LOWER(string)",
-			Documentation: "Converts a string to lowercase.",
-			Parameters: []ParameterInformation{
-				{Label: "string", Documentation: "String to convert."},
-			},
+	},
+	"LOWER": {
+		Label:         "LOWER(string)",
+		Documentation: "Converts a string to lowercase.",
+		Parameters: []ParameterInformation{
+			{Label: "string", Documentation: "String to convert."},
 		},
-		"LENGTH": {
-			Label:         "LENGTH(string)",
-			Documentation: "Returns the length of a string.",
-			Parameters: []ParameterInformation{
-				{Label: "string", Documentation: "String to measure."},
-			},
+	},
+	"LENGTH": {
+		Label:         "LENGTH(string)",
+		Documentation: "Returns the length of a string.",
+		Parameters: []ParameterInformation{
+			{Label: "string", Documentation: "String to measure."},
 		},
-		"CONCAT": {
-			Label:         "CONCAT(string1, string2, ...)",
-			Documentation: "Concatenates two or more strings.",
-			Parameters: []ParameterInformation{
-				{Label: "string1", Documentation: "First string."},
-				{Label: "string2, ...", Documentation: "Additional strings to concatenate."},
-			},
+	},
+	"CONCAT": {
+		Label:         "CONCAT(string1, string2, ...)",
+		Documentation: "Concatenates two or more strings.",
+		Parameters: []ParameterInformation{
+			{Label: "string1", Documentation: "First string."},
+			{Label: "string2, ...", Documentation: "Additional strings to concatenate."},
 		},
-		"ROW_NUMBER": {
-			Label:         "ROW_NUMBER() OVER (ORDER BY column)",
-			Documentation: "Assigns unique sequential integers to rows within a partition.",
-			Parameters:    []ParameterInformation{},
+	},
+	"ROW_NUMBER": {
+		Label:         "ROW_NUMBER() OVER (ORDER BY column)",
+		Documentation: "Assigns unique sequential integers to rows within a partition.",
+		Parameters:    []ParameterInformation{},
+	},
+	"RANK": {
+		Label:         "RANK() OVER (ORDER BY column)",
+		Documentation: "Assigns a rank to each row with gaps for ties.",
+		Parameters:    []ParameterInformation{},
+	},
+	"DENSE_RANK": {
+		Label:         "DENSE_RANK() OVER (ORDER BY column)",
+		Documentation: "Assigns a rank to each row without gaps for ties.",
+		Parameters:    []ParameterInformation{},
+	},
+	"LAG": {
+		Label:         "LAG(expression, offset, default) OVER (...)",
+		Documentation: "Accesses data from a previous row in the same result set.",
+		Parameters: []ParameterInformation{
+			{Label: "expression", Documentation: "Column or expression to return."},
+			{Label: "offset", Documentation: "Number of rows back (default 1)."},
+			{Label: "default", Documentation: "Value to return if offset goes beyond partition."},
 		},
-		"RANK": {
-			Label:         "RANK() OVER (ORDER BY column)",
-			Documentation: "Assigns a rank to each row with gaps for ties.",
-			Parameters:    []ParameterInformation{},
+	},
+	"LEAD": {
+		Label:         "LEAD(expression, offset, default) OVER (...)",
+		Documentation: "Accesses data from a following row in the same result set.",
+		Parameters: []ParameterInformation{
+			{Label: "expression", Documentation: "Column or expression to return."},
+			{Label: "offset", Documentation: "Number of rows forward (default 1)."},
+			{Label: "default", Documentation: "Value to return if offset goes beyond partition."},
 		},
-		"DENSE_RANK": {
-			Label:         "DENSE_RANK() OVER (ORDER BY column)",
-			Documentation: "Assigns a rank to each row without gaps for ties.",
-			Parameters:    []ParameterInformation{},
+	},
+	"FIRST_VALUE": {
+		Label:         "FIRST_VALUE(expression) OVER (...)",
+		Documentation: "Returns the first value in an ordered set of values.",
+		Parameters: []ParameterInformation{
+			{Label: "expression", Documentation: "Column or expression to return."},
 		},
-		"LAG": {
-			Label:         "LAG(expression, offset, default) OVER (...)",
-			Documentation: "Accesses data from a previous row in the same result set.",
-			Parameters: []ParameterInformation{
-				{Label: "expression", Documentation: "Column or expression to return."},
-				{Label: "offset", Documentation: "Number of rows back (default 1)."},
-				{Label: "default", Documentation: "Value to return if offset goes beyond partition."},
-			},
+	},
+	"LAST_VALUE": {
+		Label:         "LAST_VALUE(expression) OVER (...)",
+		Documentation: "Returns the last value in an ordered set of values.",
+		Parameters: []ParameterInformation{
+			{Label: "expression", Documentation: "Column or expression to return."},
 		},
-		"LEAD": {
-			Label:         "LEAD(expression, offset, default) OVER (...)",
-			Documentation: "Accesses data from a following row in the same result set.",
-			Parameters: []ParameterInformation{
-				{Label: "expression", Documentation: "Column or expression to return."},
-				{Label: "offset", Documentation: "Number of rows forward (default 1)."},
-				{Label: "default", Documentation: "Value to return if offset goes beyond partition."},
-			},
+	},
+	"NTILE": {
+		Label:         "NTILE(num_buckets) OVER (...)",
+		Documentation: "Divides rows into a specified number of groups.",
+		Parameters: []ParameterInformation{
+			{Label: "num_buckets", Documentation: "Number of groups to create."},
 		},
-		"FIRST_VALUE": {
-			Label:         "FIRST_VALUE(expression) OVER (...)",
-			Documentation: "Returns the first value in an ordered set of values.",
-			Parameters: []ParameterInformation{
-				{Label: "expression", Documentation: "Column or expression to return."},
-			},
-		},
-		"LAST_VALUE": {
-			Label:         "LAST_VALUE(expression) OVER (...)",
-			Documentation: "Returns the last value in an ordered set of values.",
-			Parameters: []ParameterInformation{
-				{Label: "expression", Documentation: "Column or expression to return."},
-			},
-		},
-		"NTILE": {
-			Label:         "NTILE(num_buckets) OVER (...)",
-			Documentation: "Divides rows into a specified number of groups.",
-			Parameters: []ParameterInformation{
-				{Label: "num_buckets", Documentation: "Number of groups to create."},
-			},
-		},
-	}
+	},
+}
 
-	return signatures[funcName]
+// getSQLFunctionSignature returns the signature for a SQL function.
+// The result is shared: callers must not mutate the pointee or its Parameters slice.
+func getSQLFunctionSignature(funcName string) *SignatureInformation {
+	return sqlFunctionSignatures[funcName]
 }
 
 // handleCodeAction provides code actions (quick fixes) for diagnostics.
@@ -2073,9 +2093,9 @@ func (h *Handler) getCodeActionsForDiagnostic(uri string, diag Diagnostic) []Cod
 
 	// Suggest uppercase for keywords
 	if strings.Contains(msg, "keyword") {
-		content, ok := h.server.Documents().GetContent(uri)
+		doc, ok := h.server.Documents().Get(uri)
 		if ok {
-			lines := strings.Split(content, "\n")
+			lines := doc.Lines
 			if diag.Range.Start.Line < len(lines) {
 				line := lines[diag.Range.Start.Line]
 				start := diag.Range.Start.Character
@@ -2121,14 +2141,14 @@ func truncateForLog(data json.RawMessage) string {
 // handleSemanticTokensFull handles textDocument/semanticTokens/full requests.
 // It tokenizes the document and returns LSP-encoded semantic token data.
 func (h *Handler) handleSemanticTokensFull(params SemanticTokensParams) (*SemanticTokens, error) {
-	doc, ok := h.server.Documents().Get(params.TextDocument.URI)
+	content, ok := h.server.Documents().GetContent(params.TextDocument.URI)
 	if !ok {
 		return &SemanticTokens{Data: []uint32{}}, nil
 	}
 
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
-	tokens, err := tkz.Tokenize([]byte(doc.Content))
+	tokens, err := tkz.Tokenize([]byte(content))
 	if err != nil {
 		return &SemanticTokens{Data: []uint32{}}, nil
 	}

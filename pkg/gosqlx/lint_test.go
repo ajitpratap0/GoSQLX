@@ -15,7 +15,13 @@
 package gosqlx
 
 import (
+	"fmt"
+	"reflect"
+	"strings"
+	"sync"
 	"testing"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/linter"
 )
 
 func TestLint_SelectStar(t *testing.T) {
@@ -73,5 +79,96 @@ func TestLint_AllRulesCreated(t *testing.T) {
 	rules := allRules()
 	if len(rules) != 30 {
 		t.Errorf("expected 30 rules, got %d", len(rules))
+	}
+}
+
+func TestLint_DefaultLinterShared(t *testing.T) {
+	a, b := defaultLinter(), defaultLinter()
+	if a != b {
+		t.Fatal("defaultLinter() returned different instances")
+	}
+	if got := len(a.Rules()); got != 30 {
+		t.Errorf("expected 30 rules on shared linter, got %d", got)
+	}
+}
+
+func TestLint_ConcurrentMatchesSerial(t *testing.T) {
+	inputs := []string{
+		"SELECT * FROM users",
+		"DELETE FROM users",
+		"select * from t into outfile '/tmp/x'",
+		"select id,name from users where id in (1,2) or id = 3",
+		"SELECT " + strings.Repeat("column_name, ", 11) + "last_col FROM some_table WHERE x = 1",
+		"SELECT id FROM t  \n\n\n\tWHERE x = 1",
+		"SELECT FROM WHERE (",
+		"UPDATE t SET a = 1",
+	}
+	want := make([][]linter.Violation, len(inputs))
+	for i, in := range inputs {
+		res, err := Lint(in)
+		if err != nil {
+			t.Fatalf("serial Lint(%q): %v", in, err)
+		}
+		want[i] = res.Violations
+	}
+
+	const goroutines, iterations = 32, 50
+	var (
+		wg   sync.WaitGroup
+		mu   sync.Mutex
+		errs []string
+	)
+	for g := 0; g < goroutines; g++ {
+		wg.Add(1)
+		go func(g int) {
+			defer wg.Done()
+			for i := 0; i < iterations; i++ {
+				idx := (g + i) % len(inputs)
+				res, err := Lint(inputs[idx])
+				if err != nil {
+					mu.Lock()
+					errs = append(errs, fmt.Sprintf("Lint(%q): %v", inputs[idx], err))
+					mu.Unlock()
+					continue
+				}
+				if !reflect.DeepEqual(res.Violations, want[idx]) {
+					mu.Lock()
+					errs = append(errs, fmt.Sprintf("Lint(%q): concurrent result differs from serial", inputs[idx]))
+					mu.Unlock()
+				}
+			}
+		}(g)
+	}
+	wg.Wait()
+	for _, e := range errs {
+		t.Error(e)
+	}
+}
+
+func BenchmarkLint(b *testing.B) {
+	cases := []struct {
+		name string
+		sql  string
+	}{
+		{"Tiny", "SELECT a FROM t"},
+		{"Realistic", "select u.id, u.name, count(o.id) as order_count\n" +
+			"from users u\n" +
+			"join orders o on o.user_id = u.id\n" +
+			"where u.active = true\n" +
+			"  and o.created_at > '2024-01-01'\n" +
+			"group by u.id, u.name\n" +
+			"having count(o.id) > 5\n" +
+			"order by order_count desc\n" +
+			"limit 100"},
+	}
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				if _, err := Lint(tc.sql); err != nil {
+					b.Fatalf("Lint: %v", err)
+				}
+			}
+		})
 	}
 }

@@ -422,6 +422,8 @@ func extractColumnNames(expr ast.Expression, columns map[string]bool) {
 	case *ast.BinaryExpression:
 		extractColumnNames(e.Left, columns)
 		extractColumnNames(e.Right, columns)
+	case *ast.ParenthesizedExpression:
+		extractColumnNames(e.Expr, columns)
 	}
 }
 

@@ -138,7 +138,7 @@ func ParseMultiWithRecovery(tokens []token.Token) *RecoveryResult {
 		wrapped[i] = models.WrapToken(models.Token{Type: t.Type, Value: t.Literal})
 	}
 	p := GetParser()
-	stmts, errs := p.parseWithRecovery(preprocessTokens(wrapped))
+	stmts, errs := p.parseWithRecovery(p.preprocess(wrapped))
 	return &RecoveryResult{
 		Statements: stmts,
 		Errors:     errs,
@@ -166,12 +166,12 @@ func (p *Parser) ParseWithRecovery(tokens []token.Token) ([]ast.Statement, []err
 	for i, t := range tokens {
 		wrapped[i] = models.WrapToken(models.Token{Type: t.Type, Value: t.Literal})
 	}
-	return p.parseWithRecovery(preprocessTokens(wrapped))
+	return p.parseWithRecovery(p.preprocess(wrapped))
 }
 
 // ParseWithRecoveryFromModelTokens parses tokenizer output with error recovery.
 func (p *Parser) ParseWithRecoveryFromModelTokens(tokens []models.TokenWithSpan) ([]ast.Statement, []error) {
-	return p.parseWithRecovery(preprocessTokens(tokens))
+	return p.parseWithRecovery(p.preprocess(tokens))
 }
 
 // parseWithRecovery is the internal implementation shared by both public APIs.

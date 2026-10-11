@@ -22,6 +22,8 @@ import (
 	"log"
 	"strings"
 	"testing"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 )
 
 // BenchmarkHandler_Hover benchmarks hover operation
@@ -546,4 +548,68 @@ func generateMultipleStatements(count int) string {
 		builder.WriteString("\n")
 	}
 	return builder.String()
+}
+
+// generateBrokenSQLDocument generates n lines of SQL in which every odd
+// statement is syntactically broken, yielding roughly n/2 recovery errors.
+func generateBrokenSQLDocument(n int) string {
+	var builder strings.Builder
+	for i := 0; i < n; i++ {
+		if i%2 == 1 {
+			fmt.Fprintf(&builder, "SELECT col%d FROM WHERE id = %d;\n", i, i)
+		} else {
+			fmt.Fprintf(&builder, "SELECT col%d FROM table%d WHERE id = %d;\n", i, i%10, i)
+		}
+	}
+	return builder.String()
+}
+
+var diagnosticBenchSizes = []int{1000, 5000, 10000}
+
+// BenchmarkBuildDiagnostics measures only the diagnostic construction for a
+// document with ~n/2 recovery errors. Parsing is done once outside the timed
+// loop so the number reflects the per-error cost the LSP adds on top.
+func BenchmarkBuildDiagnostics(b *testing.B) {
+	for _, n := range diagnosticBenchSizes {
+		b.Run(fmt.Sprintf("%dlines", n), func(b *testing.B) {
+			content := generateBrokenSQLDocument(n)
+			_, errs := gosqlx.ParseWithRecovery(content)
+			if len(errs) == 0 {
+				b.Fatal("expected recovery errors")
+			}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_ = buildDiagnostics(content, errs)
+			}
+		})
+	}
+}
+
+// BenchmarkHandler_ValidateDocument benchmarks the end-to-end validation path
+// (parse with recovery, build diagnostics, publish). It is directional only:
+// ParseWithRecovery dominates and is superlinear in document size.
+func BenchmarkHandler_ValidateDocument(b *testing.B) {
+	for _, n := range diagnosticBenchSizes {
+		b.Run(fmt.Sprintf("%dlines", n), func(b *testing.B) {
+			content := generateBrokenSQLDocument(n)
+			server := NewServer(bytes.NewBuffer(nil), io.Discard, nil)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				server.handler.validateDocument("file:///bench.sql", content, i)
+			}
+		})
+	}
+}
+
+// BenchmarkServer_SendMessage benchmarks framing and writing a ~1KB message.
+func BenchmarkServer_SendMessage(b *testing.B) {
+	server := NewServer(bytes.NewBuffer(nil), io.Discard, nil)
+	params := map[string]string{"message": strings.Repeat("0123456789abcdef", 64)}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		server.SendNotification("window/logMessage", params)
+	}
 }

@@ -79,12 +79,18 @@ type DocumentManager struct {
 //
 // The Lines field is automatically synchronized with Content to avoid
 // repeated string splitting operations.
+//
+// Lines is shared with the manager's current snapshot and must be treated as
+// read-only. Update never mutates the slice in place; it replaces doc.Lines
+// with a freshly split slice, so a snapshot stays internally consistent
+// (Content and Lines were captured under the same lock) and remains valid
+// after later Updates.
 type Document struct {
 	URI        string
 	LanguageID string
 	Version    int
 	Content    string
-	Lines      []string // Cached line splits
+	Lines      []string // Cached line splits; shared, read-only
 }
 
 // NewDocumentManager creates a new document manager.
@@ -244,8 +250,15 @@ func (dm *DocumentManager) Close(uri string) {
 	delete(dm.documents, uri)
 }
 
-// Get retrieves a copy of a document to avoid race conditions
-// The returned document is a snapshot and modifications won't affect the original
+// Get retrieves a snapshot of a document.
+//
+// The returned Document header is a fresh value, and Content and Lines were
+// captured together under the same lock, so they are consistent with each
+// other. Lines is shared with the manager's current snapshot and must be
+// treated as read-only: Update never mutates it in place (it replaces
+// doc.Lines with a freshly split slice), so the snapshot stays valid and
+// unchanged after later Updates. Callers that only need the text should use
+// GetContent.
 func (dm *DocumentManager) Get(uri string) (*Document, bool) {
 	dm.mu.RLock()
 	defer dm.mu.RUnlock()
@@ -253,16 +266,15 @@ func (dm *DocumentManager) Get(uri string) (*Document, bool) {
 	if !ok {
 		return nil, false
 	}
-	// Return a copy to prevent race conditions when accessing fields after lock release
-	docCopy := &Document{
+	// Copy the header under the lock. Content is an immutable string and Lines
+	// is replaced (never mutated) by Update, so sharing the slice is race-free.
+	return &Document{
 		URI:        doc.URI,
 		LanguageID: doc.LanguageID,
 		Version:    doc.Version,
 		Content:    doc.Content,
-		Lines:      make([]string, len(doc.Lines)),
-	}
-	copy(docCopy.Lines, doc.Lines)
-	return docCopy, true
+		Lines:      doc.Lines,
+	}, true
 }
 
 // GetContent retrieves a document's content

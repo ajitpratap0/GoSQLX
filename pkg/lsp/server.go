@@ -16,6 +16,7 @@ package lsp
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -151,6 +152,11 @@ type Server struct {
 	logger    *log.Logger
 	shutdown  bool
 
+	// verboseLog is true when the logger writes somewhere other than
+	// io.Discard; it gates per-message logging that would otherwise format
+	// strings only to throw them away. Set once in NewServer.
+	verboseLog bool
+
 	// Rate limiting
 	requestCount int64
 	lastReset    time.Time
@@ -190,6 +196,8 @@ func NewServer(reader io.Reader, writer io.Writer, logger *log.Logger) *Server {
 		documents: NewDocumentManager(),
 		logger:    logger,
 		lastReset: time.Now(),
+
+		verboseLog: logger.Writer() != io.Discard,
 	}
 	s.handler = NewHandler(s)
 	return s
@@ -466,31 +474,52 @@ func (s *Server) SendNotification(method string, params interface{}) {
 	s.sendMessage(notif)
 }
 
-// sendMessage sends a message to the client
-func (s *Server) sendMessage(msg interface{}) {
-	s.writeMu.Lock()
-	defer s.writeMu.Unlock()
+// msgBufPool recycles the buffers used to frame outgoing messages. A buffer is
+// Reset before use and returned only after the Write that used it has
+// completed, so no aliasing escapes (io.Writer implementations must not retain
+// the slice they are given).
+var msgBufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
 
+// maxPooledMsgBuf is the largest buffer retained by msgBufPool; bigger ones
+// (MaxContentLength is 10MB) are left to the GC instead of being pinned.
+const maxPooledMsgBuf = 1 << 20
+
+// sendMessage sends a message to the client as a single framed write.
+func (s *Server) sendMessage(msg interface{}) {
+	// Marshal outside the lock: it touches no shared state.
 	content, err := json.Marshal(msg)
 	if err != nil {
 		s.logger.Printf("Failed to marshal response: %v", err)
 		return
 	}
 
-	// Write headers
-	header := fmt.Sprintf("Content-Length: %d\r\n\r\n", len(content))
-	if _, err := s.writer.Write([]byte(header)); err != nil {
-		s.logger.Printf("Failed to write header: %v", err)
+	buf, ok := msgBufPool.Get().(*bytes.Buffer)
+	if !ok {
+		buf = new(bytes.Buffer)
+	}
+	buf.Reset()
+	buf.Grow(len(content) + 32)
+	buf.WriteString("Content-Length: ")
+	buf.Write(strconv.AppendInt(buf.AvailableBuffer(), int64(len(content)), 10))
+	buf.WriteString("\r\n\r\n")
+	buf.Write(content)
+
+	s.writeMu.Lock()
+	_, werr := s.writer.Write(buf.Bytes())
+	s.writeMu.Unlock()
+
+	if buf.Cap() <= maxPooledMsgBuf {
+		msgBufPool.Put(buf)
+	}
+
+	if werr != nil {
+		s.logger.Printf("Failed to write message: %v", werr)
 		return
 	}
 
-	// Write content
-	if _, err := s.writer.Write(content); err != nil {
-		s.logger.Printf("Failed to write content: %v", err)
-		return
+	if s.verboseLog {
+		s.logger.Printf("Sent response: %d bytes", len(content))
 	}
-
-	s.logger.Printf("Sent response: %d bytes", len(content))
 }
 
 // Documents returns the server's document manager.

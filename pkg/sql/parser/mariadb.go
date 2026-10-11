@@ -36,12 +36,12 @@ func (p *Parser) isMariaDBClauseStart() bool {
 	if !p.isMariaDB() && p.dialect != string(keywords.DialectOracle) {
 		return false
 	}
-	val := strings.ToUpper(p.currentToken.Token.Value)
-	if val == "CONNECT" {
+	val := p.currentToken.Token.Value
+	if equalsUpper(val, "CONNECT") {
 		next := p.peekToken()
 		return strings.EqualFold(next.Token.Value, "BY")
 	}
-	if val == "START" {
+	if equalsUpper(val, "START") {
 		next := p.peekToken()
 		return strings.EqualFold(next.Token.Value, "WITH")
 	}

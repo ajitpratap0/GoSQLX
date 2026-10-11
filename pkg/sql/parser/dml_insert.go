@@ -73,7 +73,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 	// Accept OUTPUT regardless of dialect — the keyword is unambiguous here
 	// and allows dialect-agnostic parsing of T-SQL INSERT statements.
 	var outputCols []ast.Expression
-	if strings.ToUpper(p.currentToken.Token.Value) == "OUTPUT" {
+	if equalsUpper(p.currentToken.Token.Value, "OUTPUT") {
 		p.advance() // Consume OUTPUT
 		var err error
 		outputCols, err = p.parseOutputColumns()

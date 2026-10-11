@@ -729,7 +729,15 @@ func (f *SQLFormatter) formatExpression(expr ast.Expression) error {
 			return err
 		}
 	case *ast.FunctionCall:
-		f.builder.WriteString(e.Name + "(")
+		f.builder.WriteString(e.Name)
+		if len(e.Parameters) > 0 {
+			// ClickHouse parametric aggregates: quantile(0.5)(x).
+			// Parameters render in their own parenthesis group before args.
+			f.builder.WriteString("(")
+			f.formatExpressionList(e.Parameters, ", ")
+			f.builder.WriteString(")")
+		}
+		f.builder.WriteString("(")
 		if e.Distinct {
 			f.writeKeyword("DISTINCT")
 			f.builder.WriteString(" ")

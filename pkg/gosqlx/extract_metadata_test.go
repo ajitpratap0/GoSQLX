@@ -397,3 +397,47 @@ func BenchmarkExtractMetadataLarge(b *testing.B) {
 		_ = ExtractMetadata(tree)
 	}
 }
+
+func TestExtractMetadata_ParenthesizedExpressions(t *testing.T) {
+	sqls := []string{
+		`SELECT (a.x + b.y) FROM a JOIN b ON (a.id = b.id) WHERE (UPPER(a.name) = 'X')`,
+		`SELECT ((a.x)) FROM a WHERE ((a.y > 1) OR (LOWER(a.z) = 'q')) AND (b.k IN (1, 2))`,
+	}
+	for _, sql := range sqls {
+		tree, err := Parse(sql)
+		if err != nil {
+			t.Fatalf("Parse(%q): %v", sql, err)
+		}
+		assertMetadataMatchesExtractors(t, tree)
+	}
+
+	tree, err := Parse(sqls[0])
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	md := ExtractMetadata(tree)
+
+	if got, want := strings.Join(sortedCopy(md.Tables), ","), "a,b"; got != want {
+		t.Errorf("Tables = %q, want %q", got, want)
+	}
+	if got, want := strings.Join(sortedCopy(md.Columns), ","), "id,name,x,y"; got != want {
+		t.Errorf("Columns = %q, want %q", got, want)
+	}
+	if got, want := strings.Join(sortedCopy(md.Functions), ","), "UPPER"; got != want {
+		t.Errorf("Functions = %q, want %q", got, want)
+	}
+	wantQ := []string{
+		fmt.Sprintf("%q/%q/%q", "", "a", "id"), fmt.Sprintf("%q/%q/%q", "", "a", "name"),
+		fmt.Sprintf("%q/%q/%q", "", "a", "x"), fmt.Sprintf("%q/%q/%q", "", "b", "id"),
+		fmt.Sprintf("%q/%q/%q", "", "b", "y"),
+	}
+	if got := qualifiedKeys(md.ColumnsQualified); strings.Join(got, "|") != strings.Join(wantQ, "|") {
+		t.Errorf("ColumnsQualified = %v, want %v", got, wantQ)
+	}
+}
+
+func sortedCopy(in []string) []string {
+	out := append([]string(nil), in...)
+	sort.Strings(out)
+	return out
+}

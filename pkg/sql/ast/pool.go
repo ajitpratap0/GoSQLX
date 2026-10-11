@@ -423,6 +423,12 @@ var (
 	}
 )
 
+// maxPooledWorkQueueCap is the largest work-queue capacity that
+// putExpressionImpl returns to putExpressionWorkQueuePool. Queues that grew
+// beyond this (one wide IN/VALUES list) are dropped instead of returned, so
+// the pool never pins a large backing array nor makes later Puts pay for it.
+const maxPooledWorkQueueCap = 1024
+
 // NewAST retrieves a new AST container from the pool.
 //
 // NewAST returns a pooled AST container with pre-allocated statement capacity.
@@ -525,10 +531,10 @@ func ReleaseAST(ast *AST) {
 	// Reset slice but keep capacity
 	ast.Statements = ast.Statements[:0]
 
-	// Reset comments but keep capacity
-	if cap(ast.Comments) > 0 {
-		ast.Comments = ast.Comments[:0]
-	}
+	// Reset comments but keep capacity; clear drops the Text strings so the
+	// pooled AST does not retain them (clear on nil is a no-op).
+	clear(ast.Comments)
+	ast.Comments = ast.Comments[:0]
 
 	// Return to pool
 	metrics.RecordNamedPoolPut("ast")

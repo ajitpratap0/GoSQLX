@@ -14,6 +14,8 @@
 
 package ast
 
+import "github.com/ajitpratap0/GoSQLX/pkg/models"
+
 // GetInsertStatement gets an InsertStatement from the pool
 func GetInsertStatement() *InsertStatement {
 	return insertStmtPool.Get().(*InsertStatement)
@@ -120,6 +122,7 @@ func PutInsertStatement(stmt *InsertStatement) {
 	}
 
 	stmt.TableName = ""
+	stmt.Pos = models.Location{}
 
 	// Return to pool
 	insertStmtPool.Put(stmt)
@@ -187,6 +190,7 @@ func PutUpdateStatement(stmt *UpdateStatement) {
 	// ── Scalars ────────────────────────────────────────────────────────
 	stmt.TableName = ""
 	stmt.Alias = ""
+	stmt.Pos = models.Location{}
 
 	// Return to pool
 	updateStmtPool.Put(stmt)
@@ -244,6 +248,7 @@ func PutDeleteStatement(stmt *DeleteStatement) {
 	// ── Scalars ────────────────────────────────────────────────────────
 	stmt.TableName = ""
 	stmt.Alias = ""
+	stmt.Pos = models.Location{}
 
 	// Return to pool
 	deleteStmtPool.Put(stmt)
@@ -270,7 +275,7 @@ func GetSelectStatement() *SelectStatement {
 //   - DistinctOnColumns
 //   - Columns
 //   - From (TableReference.Subquery, TableFunc, Pivot.AggregateFunction, MatchRecognize)
-//   - Joins (Left/Right TableRefs, Condition)
+//   - Joins (Right TableRef, Condition; Left is a non-owning copy, never released)
 //   - ArrayJoin (element Exprs)
 //   - PrewhereClause
 //   - Sample (no Expressions, but zeroed for hygiene)
@@ -331,12 +336,17 @@ func PutSelectStatement(stmt *SelectStatement) {
 	stmt.From = stmt.From[:0]
 
 	// ── JOINs ──────────────────────────────────────────────────────────
+	// Left is never released: the parser builds Joins[0].Left as a value
+	// copy of From[0] (sharing its Subquery/TableFunc/Pivot/TimeTravel/
+	// MatchRecognize pointers) and later Lefts as synthetic name-only
+	// references, so releasing it would Put the derived-table subquery
+	// twice. Right and Condition are uniquely owned. Zeroing the whole
+	// JoinClause also clears Pos and drops the Left copy's pointers so the
+	// pooled statement does not retain them.
 	for i := range stmt.Joins {
-		releaseTableReference(&stmt.Joins[i].Left)
 		releaseTableReference(&stmt.Joins[i].Right)
 		PutExpression(stmt.Joins[i].Condition)
-		stmt.Joins[i].Condition = nil
-		stmt.Joins[i].Type = ""
+		stmt.Joins[i] = JoinClause{}
 	}
 	stmt.Joins = stmt.Joins[:0]
 
@@ -431,6 +441,7 @@ func PutSelectStatement(stmt *SelectStatement) {
 	// ── Scalars ────────────────────────────────────────────────────────
 	stmt.TableName = ""
 	stmt.Distinct = false
+	stmt.Pos = models.Location{}
 
 	// Return to pool
 	selectStmtPool.Put(stmt)

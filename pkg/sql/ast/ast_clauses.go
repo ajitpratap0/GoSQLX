@@ -64,6 +64,10 @@ func (c CommonTableExpr) Children() []Node {
 }
 
 // JoinClause represents a JOIN clause in SQL
+//
+// Left is a non-owning copy: the parser sets Joins[0].Left to a value copy
+// of From[0] (sharing its pointers) and later Lefts to name-only references.
+// Release code must not Put through Left; From owns those nodes.
 type JoinClause struct {
 	Type      string // INNER, LEFT, RIGHT, FULL
 	Left      TableReference

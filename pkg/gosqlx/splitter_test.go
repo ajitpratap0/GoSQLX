@@ -15,6 +15,10 @@
 package gosqlx
 
 import (
+	"io/fs"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -190,5 +194,116 @@ func TestSplitStatements_OnlyWhitespace(t *testing.T) {
 	segs := SplitStatements("   \n\t  ", "")
 	if nonEmpty(segs) != 0 {
 		t.Errorf("whitespace-only input produced %d non-empty segments", nonEmpty(segs))
+	}
+}
+
+// splitterDialects lists every dialect string the splitter resolves to a
+// distinct profile, plus aliases and an unknown value that falls back to ANSI.
+var splitterDialects = []string{
+	"", "postgresql", "postgres", "pg", "mysql", "mariadb",
+	"clickhouse", "sqlserver", "mssql", "tsql", "oracle", "unknown",
+}
+
+// checkTiling asserts the structural invariants of a split: the segments are
+// the exact byte ranges of src between top-level semicolons, so joining them
+// with ';' reproduces src (a single trailing top-level ';' is consumed and not
+// represented), and the segment count never exceeds the number of ';' bytes
+// plus one.
+func checkTiling(src string, segs []string) (string, bool) {
+	joined := strings.Join(segs, ";")
+	if joined != src && !(strings.HasSuffix(src, ";") && joined == src[:len(src)-1]) {
+		return "segments do not tile the source", false
+	}
+	if len(segs) > strings.Count(src, ";")+1 {
+		return "more segments than semicolons+1", false
+	}
+	return "", true
+}
+
+func TestSplitStatements_ExactSegments(t *testing.T) {
+	cases := []struct {
+		name    string
+		sql     string
+		dialect string
+		want    []string
+	}{
+		{"empty", "", "", nil},
+		{"lone semicolon", ";", "", []string{""}},
+		{"three semicolons", ";;;", "", []string{"", "", ""}},
+		{"trailing semicolon", "SELECT 1;", "", []string{"SELECT 1"}},
+		{"trailing whitespace segment", "SELECT 1;  \n", "", []string{"SELECT 1", "  \n"}},
+		{"no trailing semicolon", "SELECT 1; SELECT 2", "", []string{"SELECT 1", " SELECT 2"}},
+		{"no semicolon at all", "SELECT 1", "", []string{"SELECT 1"}},
+		{"quoted semicolon", "SELECT 'a;b'; SELECT 1", "", []string{"SELECT 'a;b'", " SELECT 1"}},
+		{"doubled quote escape", "SELECT 'it''s;x'; SELECT 1", "", []string{"SELECT 'it''s;x'", " SELECT 1"}},
+		{"double-quoted semicolon", `SELECT "a;b"; SELECT 1`, "", []string{`SELECT "a;b"`, " SELECT 1"}},
+		{"line comment", "-- c ; c\nSELECT 1", "", []string{"-- c ; c\nSELECT 1"}},
+		{"block comment", "/* ; */ SELECT 1; SELECT 2", "", []string{"/* ; */ SELECT 1", " SELECT 2"}},
+		{"ansi block comment not nested", "/* /* a; */ b; */ SELECT 1", "", []string{"/* /* a; */ b", " */ SELECT 1"}},
+		{"pg nested block comment", "/* /* a; */ ; */ SELECT 1; SELECT 2", "postgresql", []string{"/* /* a; */ ; */ SELECT 1", " SELECT 2"}},
+		{"pg dollar body", "DO $body$ BEGIN PERFORM 'a;b'; END $body$; SELECT 1", "postgresql",
+			[]string{"DO $body$ BEGIN PERFORM 'a;b'; END $body$", " SELECT 1"}},
+		{"pg anonymous dollar body", "SELECT $$a;b$$; SELECT 2", "pg", []string{"SELECT $$a;b$$", " SELECT 2"}},
+		{"pg E-string escape", `SELECT E'\''; SELECT 1`, "postgresql", []string{`SELECT E'\''`, " SELECT 1"}},
+		{"pg E-string escaped quote then semicolon", `SELECT E'\'a;b'; SELECT 1`, "postgresql", []string{`SELECT E'\'a;b'`, " SELECT 1"}},
+		{"mysql backtick", "SELECT `c;n` FROM t; SELECT 1", "mysql", []string{"SELECT `c;n` FROM t", " SELECT 1"}},
+		{"sqlserver bracket", "SELECT [c;n] FROM t; SELECT 1", "sqlserver", []string{"SELECT [c;n] FROM t", " SELECT 1"}},
+		{"unterminated string", "SELECT 'open ; SELECT 2", "", []string{"SELECT 'open ; SELECT 2"}},
+		{"unterminated block comment", "/* open ; SELECT 2", "", []string{"/* open ; SELECT 2"}},
+		{"unterminated dollar", "SELECT $$open ; SELECT 2", "postgresql", []string{"SELECT $$open ; SELECT 2"}},
+		{"unterminated backtick", "SELECT `open ; x", "mysql", []string{"SELECT `open ; x"}},
+		{"unterminated bracket", "SELECT [open ; x", "mssql", []string{"SELECT [open ; x"}},
+		{"bare dollar", "SELECT $", "postgresql", []string{"SELECT $"}},
+		{"bare E quote", "E'", "postgresql", []string{"E'"}},
+		{"bare quote", "'", "", []string{"'"}},
+		{"bare line comment opener", "--", "", []string{"--"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := SplitStatements(tc.sql, tc.dialect)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("SplitStatements(%q, %q) = %q, want %q", tc.sql, tc.dialect, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSplitStatements_NilOnEmpty(t *testing.T) {
+	for _, d := range splitterDialects {
+		if got := SplitStatements("", d); got != nil {
+			t.Errorf("SplitStatements(\"\", %q) = %#v, want nil", d, got)
+		}
+	}
+}
+
+func TestSplitStatements_TilesSource(t *testing.T) {
+	root := filepath.Join("..", "..", "testdata")
+	files := 0
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		files++
+		src := string(data)
+		for _, dialect := range splitterDialects {
+			segs := SplitStatements(src, dialect)
+			if msg, ok := checkTiling(src, segs); !ok {
+				t.Errorf("%s (dialect %q): %s", path, dialect, msg)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walking %s: %v", root, err)
+	}
+	if files == 0 {
+		t.Fatalf("no files found under %s", root)
 	}
 }

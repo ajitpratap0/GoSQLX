@@ -55,3 +55,14 @@ func TestTranspile_MySQLToPostgres_BasicSelect(t *testing.T) {
 		t.Error("expected non-empty result")
 	}
 }
+
+func BenchmarkTranspile(b *testing.B) {
+	sql := "CREATE TABLE t (id INT AUTO_INCREMENT PRIMARY KEY, flag TINYINT(1))"
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := transpiler.Transpile(sql, keywords.DialectMySQL, keywords.DialectPostgreSQL); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

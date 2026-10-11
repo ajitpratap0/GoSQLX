@@ -78,6 +78,9 @@ func FuzzScanSQL(f *testing.F) {
 		"1' AND '1'='1",
 		"admin' OR '1'='1' /*",
 		string(make([]byte, 10000)), // large input
+		// Unicode case-fold evasion (U+017F folds to 's' under (?i))
+		"ſleep(1)",
+		"BENCHMARK(1,1)",
 	}
 
 	for _, s := range validSQL {

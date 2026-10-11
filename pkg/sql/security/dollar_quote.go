@@ -28,6 +28,11 @@ var dollarQuotePattern = regexp.MustCompile(`\$([A-Za-z_][A-Za-z0-9_]*)?\$`)
 // don't cause false positives, and injection patterns that use dollar-quoting to evade
 // detection are neutralized.
 func stripDollarQuotedStrings(sql string) string {
+	// Every dollar-quote starts with '$'; skip the regex on the common path.
+	if strings.IndexByte(sql, '$') < 0 {
+		return sql
+	}
+
 	// Find all potential opening dollar-quote tags
 	matches := dollarQuotePattern.FindAllStringIndex(sql, -1)
 	if len(matches) == 0 {

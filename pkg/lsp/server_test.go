@@ -17,9 +17,12 @@ package lsp
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -542,5 +545,159 @@ func TestIncrementalSync(t *testing.T) {
 
 	if initResult.Capabilities.TextDocumentSync.Change != SyncIncremental {
 		t.Errorf("expected SyncIncremental, got %v", initResult.Capabilities.TextDocumentSync.Change)
+	}
+}
+
+// countingWriter records every Write call made against it.
+type countingWriter struct {
+	mu     sync.Mutex
+	buf    bytes.Buffer
+	writes int
+}
+
+func (c *countingWriter) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.writes++
+	return c.buf.Write(p)
+}
+
+func (c *countingWriter) snapshot() ([]byte, int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]byte(nil), c.buf.Bytes()...), c.writes
+}
+
+// parseStrictFrames parses a stream of LSP frames and fails the test on any
+// framing violation (missing header, wrong length, trailing garbage).
+func parseStrictFrames(t *testing.T, data []byte) [][]byte {
+	t.Helper()
+	const prefix = "Content-Length: "
+	var frames [][]byte
+	for len(data) > 0 {
+		if !bytes.HasPrefix(data, []byte(prefix)) {
+			t.Fatalf("frame does not start with %q: %.40q", prefix, data)
+		}
+		data = data[len(prefix):]
+		end := bytes.Index(data, []byte("\r\n\r\n"))
+		if end < 0 {
+			t.Fatalf("missing header terminator")
+		}
+		n, err := strconv.Atoi(string(data[:end]))
+		if err != nil {
+			t.Fatalf("bad Content-Length %q: %v", data[:end], err)
+		}
+		data = data[end+4:]
+		if n > len(data) {
+			t.Fatalf("Content-Length %d exceeds remaining %d bytes", n, len(data))
+		}
+		frames = append(frames, data[:n])
+		data = data[n:]
+	}
+	return frames
+}
+
+func TestSendMessage_WireFormat(t *testing.T) {
+	out := &countingWriter{}
+	server := NewServer(bytes.NewBuffer(nil), out, nil)
+
+	params := map[string]any{"uri": "file:///a.sql", "text": "SELECT \"é\" FROM t"}
+	server.SendNotification("window/logMessage", params)
+
+	paramsJSON, err := json.Marshal(params)
+	if err != nil {
+		t.Fatalf("marshal params: %v", err)
+	}
+	body, err := json.Marshal(Notification{JSONRPC: "2.0", Method: "window/logMessage", Params: paramsJSON})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	want := "Content-Length: " + strconv.Itoa(len(body)) + "\r\n\r\n" + string(body)
+
+	got, _ := out.snapshot()
+	if string(got) != want {
+		t.Fatalf("wire mismatch\n got: %q\nwant: %q", got, want)
+	}
+}
+
+func TestSendMessage_SingleWrite(t *testing.T) {
+	out := &countingWriter{}
+	server := NewServer(bytes.NewBuffer(nil), out, nil)
+
+	server.SendNotification("window/logMessage", map[string]string{"message": "hi"})
+	if _, writes := out.snapshot(); writes != 1 {
+		t.Fatalf("expected exactly 1 Write per message, got %d", writes)
+	}
+
+	// A message larger than the pool retention cap must still frame correctly.
+	big := strings.Repeat("x", 2<<20)
+	server.SendNotification("window/logMessage", map[string]string{"message": big})
+	data, writes := out.snapshot()
+	if writes != 2 {
+		t.Fatalf("expected 2 Writes after second message, got %d", writes)
+	}
+	frames := parseStrictFrames(t, data)
+	if len(frames) != 2 {
+		t.Fatalf("expected 2 frames, got %d", len(frames))
+	}
+	var n Notification
+	if err := json.Unmarshal(frames[1], &n); err != nil {
+		t.Fatalf("large frame is not valid JSON: %v", err)
+	}
+	if !bytes.Contains(n.Params, []byte(big)) {
+		t.Fatal("large frame lost payload")
+	}
+
+	// Small messages after a large one must not be corrupted by buffer reuse.
+	server.SendNotification("window/logMessage", map[string]string{"message": "after"})
+	data, _ = out.snapshot()
+	frames = parseStrictFrames(t, data)
+	if len(frames) != 3 || !bytes.Contains(frames[2], []byte(`"after"`)) {
+		t.Fatalf("third frame wrong: %d frames", len(frames))
+	}
+}
+
+func TestSendMessage_ConcurrentFramesNotInterleaved(t *testing.T) {
+	const workers = 50
+	out := &countingWriter{}
+	server := NewServer(bytes.NewBuffer(nil), out, nil)
+
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			payload := fmt.Sprintf("payload-%d-%s", i, strings.Repeat("z", i*37))
+			server.SendNotification("window/logMessage", map[string]string{"message": payload})
+		}(i)
+	}
+	wg.Wait()
+
+	data, _ := out.snapshot()
+	frames := parseStrictFrames(t, data)
+	if len(frames) != workers {
+		t.Fatalf("expected %d frames, got %d", workers, len(frames))
+	}
+	seen := make(map[int]bool, workers)
+	for _, f := range frames {
+		var n struct {
+			Params struct {
+				Message string `json:"message"`
+			} `json:"params"`
+		}
+		if err := json.Unmarshal(f, &n); err != nil {
+			t.Fatalf("frame is not valid JSON: %v", err)
+		}
+		var idx int
+		if _, err := fmt.Sscanf(n.Params.Message, "payload-%d-", &idx); err != nil {
+			t.Fatalf("unexpected payload %.40q: %v", n.Params.Message, err)
+		}
+		if want := fmt.Sprintf("payload-%d-%s", idx, strings.Repeat("z", idx*37)); n.Params.Message != want {
+			t.Fatalf("payload %d corrupted", idx)
+		}
+		seen[idx] = true
+	}
+	if len(seen) != workers {
+		t.Fatalf("expected %d distinct payloads, got %d", workers, len(seen))
 	}
 }

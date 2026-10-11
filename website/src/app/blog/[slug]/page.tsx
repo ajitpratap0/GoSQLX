@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { compileMDX } from 'next-mdx-remote/rsc';
 import remarkGfm from 'remark-gfm';
-import { getAllPosts, getPostBySlug, getPostSlugs } from '@/lib/blog';
+import { blogPostHref, getAllPosts, getPostBySlug, getPostSlugs } from '@/lib/blog';
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -172,7 +172,7 @@ export default async function BlogPostPage({ params }: Props) {
         <nav className="mt-16 pt-8 border-t border-zinc-800 flex justify-between gap-4">
           {prevPost ? (
             <Link
-              href={`/blog/${prevPost.slug}`}
+              href={blogPostHref(prevPost.slug)}
               className="group flex flex-col text-sm"
             >
               <span className="text-zinc-500 mb-1">Older</span>
@@ -185,7 +185,7 @@ export default async function BlogPostPage({ params }: Props) {
           )}
           {nextPost ? (
             <Link
-              href={`/blog/${nextPost.slug}`}
+              href={blogPostHref(nextPost.slug)}
               className="group flex flex-col text-sm text-right ml-auto"
             >
               <span className="text-zinc-500 mb-1">Newer</span>

@@ -170,6 +170,7 @@ func PutTokenizer(t *Tokenizer) {
 //     Tokenize call, so the configured dialect must persist; the pool restores
 //     the default dialect in PutTokenizer instead)
 //   - logger: nil (must be set again if needed)
+//   - position column cursor: invalidated
 //
 // Performance: By preserving slice capacity, subsequent Tokenize() calls
 // avoid reallocation of lineStarts for similarly-sized inputs.
@@ -192,6 +193,10 @@ func (t *Tokenizer) Reset() {
 	}
 
 	t.line = 0
+
+	// Invalidate the toSQLPosition column cursor: it is only valid for the
+	// input and lineStarts it was built on.
+	t.posCacheLine, t.posCacheIdx, t.posCacheCol = 0, 0, 0
 
 	// Don't reset keywords/dialect here: Reset also runs at the start of every
 	// Tokenize call, where the configured dialect must persist across calls.

@@ -386,6 +386,8 @@ func (v *Validator) validateExpressionColumns(expr ast.Expression, tableMap map[
 
 	case *ast.UnaryExpression:
 		errors = append(errors, v.validateExpressionColumns(e.Expr, tableMap)...)
+	case *ast.ParenthesizedExpression:
+		errors = append(errors, v.validateExpressionColumns(e.Expr, tableMap)...)
 
 	case *ast.FunctionCall:
 		for _, arg := range e.Arguments {
@@ -626,6 +628,8 @@ func extractExprPos(expr ast.Expression) (line, column int) {
 	case *ast.BinaryExpression:
 		return e.Pos.Line, e.Pos.Column
 	case *ast.UnaryExpression:
+		return e.Pos.Line, e.Pos.Column
+	case *ast.ParenthesizedExpression:
 		return e.Pos.Line, e.Pos.Column
 	default:
 		return 0, 0

@@ -785,15 +785,35 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 		Value: ident,
 	}
 
-	// Determine token type based on whether it's a keyword
-	upperIdent := strings.ToUpper(ident)
-	tokenType, isKeyword := keywordTokenTypes[upperIdent]
+	// Determine token type based on whether it's a keyword. Pure-ASCII words
+	// are upper-cased into a stack buffer and the maps are indexed with
+	// m[string(b)], which the compiler performs without allocating. The
+	// string(kbuf[:n]) conversions below must stay inline in the index
+	// expressions; assigning them to a variable would force an allocation.
+	var kbuf [keywordKeyBufLen]byte
+	var tokenType models.TokenType
+	isKeyword, compoundStart := false, false
+	switch {
+	case len(ident) <= keywordKeyBufLen && asciiUpper(kbuf[:len(ident)], ident):
+		key := kbuf[:len(ident)]
+		tokenType, isKeyword = keywordTokenTypes[string(key)]
+		compoundStart = compoundKeywordStarts[string(key)]
+	case isASCII(ident):
+		// Pure-ASCII word longer than any keyword: cannot match.
+	default:
+		// Non-ASCII word: keep Unicode case mapping so that, for example,
+		// U+017F (long s) folds to 'S' and U+0131 (dotless i) folds to 'I'
+		// exactly as strings.ToUpper does.
+		upper := strings.ToUpper(ident)
+		tokenType, isKeyword = keywordTokenTypes[upper]
+		compoundStart = compoundKeywordStarts[upper]
+	}
 	if !isKeyword {
 		tokenType = models.TokenTypeIdentifier
 	}
 
 	// Check if this could be the start of a compound keyword
-	if isCompoundKeywordStart(upperIdent) {
+	if compoundStart {
 		// Save current position
 		savePos := t.pos.Clone()
 
@@ -818,15 +838,28 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 				}
 
 				nextIdent := string(t.input[nextStart:t.pos.Index])
-				compoundKeyword := ident + " " + nextIdent
-				upperCompound := strings.ToUpper(compoundKeyword)
 
-				// Check if it's a valid compound keyword
-				if compoundType, ok := compoundKeywordTypes[upperCompound]; ok {
+				// Check if it's a valid compound keyword. The key is built in
+				// the stack buffer; the joined Value string is only allocated
+				// on a hit.
+				var compoundType models.TokenType
+				matched := false
+				n := len(ident) + 1 + len(nextIdent)
+				if n <= keywordKeyBufLen &&
+					asciiUpper(kbuf[:len(ident)], ident) &&
+					asciiUpper(kbuf[len(ident)+1:n], nextIdent) {
+					kbuf[len(ident)] = ' '
+					compoundType, matched = compoundKeywordTypes[string(kbuf[:n])]
+				} else if !isASCII(ident) || !isASCII(nextIdent) {
+					compoundType, matched = compoundKeywordTypes[strings.ToUpper(ident+" "+nextIdent)]
+				}
+				// Otherwise: pure-ASCII pair longer than any compound key, no match.
+
+				if matched {
 					return models.Token{
 						Type:  compoundType,
 						Word:  word,
-						Value: compoundKeyword,
+						Value: ident + " " + nextIdent,
 					}, nil
 				}
 			}
@@ -873,9 +906,40 @@ var compoundKeywordTypes = map[string]models.TokenType{
 	"GROUPING SETS":    models.TokenTypeKeyword, // SQL-99 grouping operation
 }
 
-// Helper function to check if a word can start a compound keyword
-func isCompoundKeywordStart(word string) bool {
-	return compoundKeywordStarts[word]
+// keywordKeyBufLen is the size of the stack buffer used to build upper-cased
+// keyword lookup keys. It relies on these invariants: the longest key in
+// keywordTokenTypes is 12 bytes, the longest in compoundKeywordStarts is 8,
+// the longest in compoundKeywordTypes is 16, and all keys are ASCII. ASCII
+// upper-casing preserves length, so a pure-ASCII word (or compound pair)
+// longer than the buffer can never match a key.
+const keywordKeyBufLen = 32
+
+// asciiUpper writes the ASCII upper-case form of s into dst and reports
+// whether s was pure ASCII. The caller guarantees len(dst) >= len(s). dst is
+// not retained, so the caller's array can stay on the stack. If it returns
+// false, dst contents are unspecified.
+func asciiUpper(dst []byte, s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= utf8.RuneSelf {
+			return false
+		}
+		if 'a' <= c && c <= 'z' {
+			c -= 'a' - 'A'
+		}
+		dst[i] = c
+	}
+	return true
+}
+
+// isASCII reports whether s contains only ASCII bytes.
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= utf8.RuneSelf {
+			return false
+		}
+	}
+	return true
 }
 
 // readQuotedIdentifier reads something like "MyColumn" with support for Unicode quotes

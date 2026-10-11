@@ -131,3 +131,31 @@ func BenchmarkTokenizerAllocations(b *testing.B) {
 		}
 	})
 }
+
+// unicodeIdentSQL uses non-ASCII identifiers throughout, so every identifier
+// byte takes the multi-byte (Unicode) path. It guards against the ASCII fast
+// path for identifier classification regressing non-ASCII input.
+var unicodeIdentSQL = []byte(`SELECT 用户.名前, пользователи.имя, مستخدم.اسم, café.naïve, ユーザー.メール
+FROM 用户 JOIN пользователи ON 用户.id = пользователи.id
+JOIN مستخدم ON مستخدم.id = 用户.id JOIN café ON café.id = 用户.id
+WHERE 用户.状態 = 'active' AND пользователи.возраст > 18 AND ユーザー.名前 LIKE '%山田%'
+ORDER BY 用户.名前, пользователи.имя`)
+
+// BenchmarkTokenizerUnicodeIdentifiers measures tokenizing a query whose
+// identifiers are all non-ASCII.
+func BenchmarkTokenizerUnicodeIdentifiers(b *testing.B) {
+	tkz := GetTokenizer()
+	defer PutTokenizer(tkz)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		toks, err := tkz.Tokenize(unicodeIdentSQL)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(toks) == 0 {
+			b.Fatal("no tokens")
+		}
+	}
+}

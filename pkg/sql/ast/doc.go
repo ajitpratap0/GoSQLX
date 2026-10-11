@@ -98,6 +98,16 @@
 //   - Expression Pools: GetIdentifier(), GetBinaryExpression(), GetLiteralValue(), GetFunctionCall(), etc.
 //   - Slice Pools: GetExpressionSlice() / PutExpressionSlice()
 //
+// Release policy: ReleaseAST and ReleaseStatements recycle the AST container
+// and only these node types: Tuple, ArrayConstructor, ArraySubscript and
+// ArraySlice expressions; Unsupported, Alter, Show, Describe, Replace and the
+// three sequence statements. Select/Insert/Update/Delete statements and all
+// other expressions are left to the GC. DDL statements, and the query inside
+// CREATE VIEW / CREATE MATERIALIZED VIEW, are still fully recycled by their
+// Put* functions (a possible follow-up). The exported Put* functions
+// (PutSelectStatement, PutExpression, ...) keep recycling every pooled node
+// they reach, so release hand-built trees with them.
+//
 // Performance Impact: Object pooling provides 60-80% memory reduction and significantly
 // reduces GC pressure in production workloads with 95%+ pool hit rates.
 //

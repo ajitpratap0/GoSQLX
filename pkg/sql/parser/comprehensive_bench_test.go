@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
 // Generate complex token sets for comprehensive testing
@@ -146,6 +147,68 @@ func BenchmarkParserComplexity(b *testing.B) {
 		}
 		benchmarkParserWithTokens(b, tokens)
 	})
+
+	// ThreeTableJoin_Qualified exercises 11 qualified column references
+	// (table.column) across SELECT, ON and WHERE. Each qualified reference
+	// should cost a single Identifier allocation.
+	b.Run("ThreeTableJoin_Qualified", func(b *testing.B) {
+		qual := func(table, col string) []models.TokenWithSpan {
+			return []models.TokenWithSpan{
+				tw(models.TokenTypeIdentifier, table),
+				tw(models.TokenTypePeriod, "."),
+				tw(models.TokenTypeIdentifier, col),
+			}
+		}
+		var tokens []models.TokenWithSpan
+		add := func(t ...models.TokenWithSpan) { tokens = append(tokens, t...) }
+		add(tw(models.TokenTypeSelect, "SELECT"))
+		add(qual("u", "id")...)
+		add(tw(models.TokenTypeComma, ","))
+		add(qual("u", "name")...)
+		add(tw(models.TokenTypeComma, ","))
+		add(qual("o", "id")...)
+		add(tw(models.TokenTypeComma, ","))
+		add(qual("o", "total")...)
+		add(tw(models.TokenTypeComma, ","))
+		add(qual("p", "sku")...)
+		add(tw(models.TokenTypeFrom, "FROM"), tw(models.TokenTypeIdentifier, "users"), tw(models.TokenTypeIdentifier, "u"))
+		add(tw(models.TokenTypeJoin, "JOIN"), tw(models.TokenTypeIdentifier, "orders"), tw(models.TokenTypeIdentifier, "o"), tw(models.TokenTypeOn, "ON"))
+		add(qual("u", "id")...)
+		add(tw(models.TokenTypeEq, "="))
+		add(qual("o", "user_id")...)
+		add(tw(models.TokenTypeJoin, "JOIN"), tw(models.TokenTypeIdentifier, "products"), tw(models.TokenTypeIdentifier, "p"), tw(models.TokenTypeOn, "ON"))
+		add(qual("o", "product_id")...)
+		add(tw(models.TokenTypeEq, "="))
+		add(qual("p", "id")...)
+		add(tw(models.TokenTypeWhere, "WHERE"))
+		add(qual("u", "active")...)
+		add(tw(models.TokenTypeEq, "="), tw(models.TokenTypeNumber, "1"), tw(models.TokenTypeAnd, "AND"))
+		add(qual("o", "total")...)
+		add(tw(models.TokenTypeGt, ">"), tw(models.TokenTypeNumber, "100"))
+		add(tw(models.TokenTypeEOF, ""))
+		benchmarkParserWithTokens(b, tokens)
+	})
+
+	// Paginated join queries exercise LIMIT/OFFSET/FETCH number parsing and
+	// the synthetic left-side names of chained joins.
+	for _, pj := range []struct{ name, sql string }{
+		{"PaginatedJoin_LimitOffset", "SELECT u.id, u.name, o.total FROM users u JOIN orders o ON u.id = o.user_id JOIN items i ON o.id = i.order_id WHERE u.active = 1 ORDER BY o.created_at DESC LIMIT 10 OFFSET 20"},
+		{"PaginatedJoin_FetchFirst", "SELECT u.id, u.name, o.total FROM users u JOIN orders o ON u.id = o.user_id JOIN items i ON o.id = i.order_id WHERE u.active = 1 ORDER BY o.created_at DESC OFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY"},
+	} {
+		pj := pj
+		b.Run(pj.name, func(b *testing.B) {
+			tkz := tokenizer.GetTokenizer()
+			toks, err := tkz.Tokenize([]byte(pj.sql))
+			if err != nil {
+				tokenizer.PutTokenizer(tkz)
+				b.Fatalf("tokenize: %v", err)
+			}
+			// Copy: the tokenizer may recycle its internal buffer.
+			tokens := append([]models.TokenWithSpan(nil), toks...)
+			tokenizer.PutTokenizer(tkz)
+			benchmarkParserWithTokens(b, tokens)
+		})
+	}
 
 	b.Run("SimpleWhere", func(b *testing.B) {
 		tokens := []models.TokenWithSpan{

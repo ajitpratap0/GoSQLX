@@ -619,6 +619,8 @@ func (cc *columnCollector) collectFromExpression(expr ast.Expression) {
 		}
 	case *ast.UnaryExpression:
 		cc.collectFromExpression(e.Expr)
+	case *ast.ParenthesizedExpression:
+		cc.collectFromExpression(e.Expr)
 	case *ast.InExpression:
 		cc.collectFromExpression(e.Expr)
 		for _, item := range e.List {
@@ -775,6 +777,8 @@ func (qcc *qualifiedColumnCollector) collectFromExpression(expr ast.Expression) 
 			qcc.collectFromExpression(e.Filter)
 		}
 	case *ast.UnaryExpression:
+		qcc.collectFromExpression(e.Expr)
+	case *ast.ParenthesizedExpression:
 		qcc.collectFromExpression(e.Expr)
 	case *ast.InExpression:
 		qcc.collectFromExpression(e.Expr)
@@ -939,6 +943,8 @@ func (fc *functionCollector) collectFromExpression(expr ast.Expression) {
 		fc.collectFromExpression(e.Left)
 		fc.collectFromExpression(e.Right)
 	case *ast.UnaryExpression:
+		fc.collectFromExpression(e.Expr)
+	case *ast.ParenthesizedExpression:
 		fc.collectFromExpression(e.Expr)
 	case *ast.InExpression:
 		fc.collectFromExpression(e.Expr)

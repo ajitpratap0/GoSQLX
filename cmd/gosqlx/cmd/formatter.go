@@ -210,7 +210,7 @@ func (f *Formatter) formatSQL(sql string) (string, error) {
 	defer releaseTkz()
 
 	// Tokenize the SQL
-	tokens, err := tkz.Tokenize([]byte(sql))
+	tokens, err := tkz.TokenizeString(sql)
 	if err != nil {
 		return "", fmt.Errorf("tokenization failed: %w", err)
 	}

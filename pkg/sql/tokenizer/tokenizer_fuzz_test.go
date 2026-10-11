@@ -20,6 +20,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // FuzzTokenizer performs comprehensive fuzz testing on the tokenizer to detect:
@@ -451,4 +452,23 @@ func TestFuzzCrashRegression(t *testing.T) {
 			_, _ = tkz.Tokenize(tc.input)
 		})
 	}
+}
+
+// FuzzTokenizeStringEquivalence checks that TokenizeString(s) and
+// Tokenize([]byte(s)) agree on tokens, comments and error text (#546).
+func FuzzTokenizeStringEquivalence(f *testing.F) {
+	for _, s := range zeroCopyEquivalenceInputs {
+		f.Add(s)
+	}
+	for _, tc := range zeroCopyInvalidInputs {
+		f.Add(tc.sql)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		if len(s) > MaxInputSize {
+			t.Skip("input exceeds MaxInputSize")
+		}
+		for _, dialect := range []keywords.SQLDialect{keywords.DialectPostgreSQL, keywords.DialectSQLServer, keywords.DialectOracle} {
+			assertSameResult(t, string(dialect), runTokenize(t, dialect, s, false), runTokenize(t, dialect, s, true))
+		}
+	})
 }

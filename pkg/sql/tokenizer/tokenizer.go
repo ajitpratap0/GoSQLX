@@ -234,11 +234,15 @@ var keywordTokenTypes = map[string]models.TokenType{
 	// by value+dialect via isPivotKeyword/isUnpivotKeyword instead.
 }
 
-// Tokenizer provides high-performance SQL tokenization with zero-copy operations.
-// It converts raw SQL bytes into a stream of tokens with precise position tracking.
+// Tokenizer provides high-performance SQL tokenization with zero-copy token values.
+// It converts raw SQL into a stream of tokens with precise position tracking.
 //
 // Features:
-//   - Zero-copy operations on input byte slices (no string allocations)
+//   - Token values and comment text are substrings of one string per call:
+//     a single copy of the []byte passed to Tokenize/TokenizeContext, or the
+//     caller's own string with TokenizeString/TokenizeStringContext (no copy)
+//   - Word values for bare identifiers and keywords are allocated in per-call
+//     chunks rather than one allocation per token
 //   - Precise line/column tracking for error reporting (1-based indexing)
 //   - Unicode support for international SQL queries
 //   - PostgreSQL operator support (JSON, array, text search operators)
@@ -253,6 +257,10 @@ var keywordTokenTypes = map[string]models.TokenType{
 //   - Reuses internal buffers to minimize allocations
 //   - Preserves slice capacity across Reset() calls
 //   - Integrates with sync.Pool for instance reuse
+//   - Retaining any token Value, Word, comment Text or AST identifier keeps
+//     that call's whole input string (up to MaxInputSize) and its Word chunk
+//     alive. Callers that cache such values long-term should strings.Clone
+//     them.
 //
 // Usage:
 //
@@ -261,11 +269,32 @@ var keywordTokenTypes = map[string]models.TokenType{
 //	defer PutTokenizer(tkz)
 //	tokens, err := tkz.Tokenize([]byte(sql))
 //
+//	// When the SQL is already a string, avoid the []byte round trip
+//	tokens, err = tkz.TokenizeString(sql)
+//
 //	// Without pooling (simple usage)
 //	tkz, _ := New()
 //	tokens, err := tkz.Tokenize([]byte(sql))
 type Tokenizer struct {
-	input      []byte              // Input SQL bytes (zero-copy reference)
+	// input is the SQL being scanned. For TokenizeString it is a read-only
+	// view of the caller's string (see stringBytes), so the tokenizer must
+	// never write to, append to or hand out input or any sub-slice of it;
+	// every value it returns is a substring of src or a fresh copy.
+	input []byte
+	// src holds the same bytes as input, as a string, set once per call.
+	// Every token Value and Comment Text is a substring of it. It is either a
+	// private copy of the []byte passed to Tokenize/TokenizeContext or the
+	// caller's own string for TokenizeString. Cleared by Reset.
+	src string
+	// wordChunk is the current slab chunk that bare-word Words are handed out
+	// from (see newWord). Elements handed out are owned by the returned
+	// tokens, so a chunk is never reused once Reset runs: Reset sets it to nil
+	// and it is never truncated to [:0].
+	wordChunk []models.Word
+	// wordHint is prescan's identifier-start count, less the Word slots
+	// already allocated this call. It sizes the next word chunk.
+	wordHint int
+
 	pos        Position            // Current scanning position
 	lineStart  Position            // Start of current line
 	lineStarts []int               // Byte offsets of line starts (for position tracking)
@@ -372,10 +401,12 @@ func NewWithKeywords(kw *keywords.Keywords) (*Tokenizer, error) {
 
 // Tokenize converts raw SQL bytes into a slice of tokens with position information.
 //
-// This is the main entry point for tokenization. It performs zero-copy tokenization
-// directly on the input byte slice and returns tokens with precise start/end positions.
+// This is the main entry point for tokenization. It copies input once into an
+// internal string and returns tokens, with precise start/end positions, whose
+// values are substrings of that copy. Callers that already hold the SQL as a
+// string should use TokenizeString, which skips the copy.
 //
-// Performance: 8M+ tokens/sec sustained throughput with zero-copy operations.
+// Performance: 8M+ tokens/sec sustained throughput; token values do not allocate.
 //
 // DoS Protection:
 //   - Input size limited to MaxInputSize (10MB default)
@@ -393,7 +424,9 @@ func NewWithKeywords(kw *keywords.Keywords) (*Tokenizer, error) {
 //   - Errors include line/column location and context
 //
 // Parameters:
-//   - input: Raw SQL bytes to tokenize (not modified, zero-copy reference)
+//   - input: Raw SQL bytes to tokenize. Not modified; copied once into an
+//     internal string. Returned tokens never alias input, so the caller may
+//     reuse the buffer.
 //
 // Returns:
 //   - []models.TokenWithSpan: Slice of tokens with position spans (includes EOF token)
@@ -430,107 +463,7 @@ func NewWithKeywords(kw *keywords.Keywords) (*Tokenizer, error) {
 //	tokens, _ := tkz.Tokenize([]byte(sql))
 //	// Correctly tokenizes Unicode identifiers and string literals
 func (t *Tokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) {
-	// Record start time for metrics
-	startTime := time.Now()
-
-	// Validate input size to prevent DoS attacks
-	if len(input) > MaxInputSize {
-		err := errors.InputTooLargeError(int64(len(input)), MaxInputSize, models.Location{Line: 1, Column: 0})
-		metrics.RecordTokenization(time.Since(startTime), len(input), err)
-		return nil, err
-	}
-
-	// Reset state
-	t.Reset()
-	t.input = input
-
-	// Pre-allocate line starts slice - reuse if possible
-	estimatedLines := len(input)/50 + 1 // Estimate 50 chars per line + 1 for initial 0
-	if cap(t.lineStarts) < estimatedLines {
-		t.lineStarts = make([]int, 0, estimatedLines)
-	} else {
-		t.lineStarts = t.lineStarts[:0]
-	}
-	t.lineStarts = append(t.lineStarts, 0)
-
-	// Pre-scan input to build line start indices and estimate token count
-	estimatedTokens := t.prescan()
-
-	tokens := make([]models.TokenWithSpan, 0, estimatedTokens)
-
-	// Get a buffer from the pool for string operations
-	buf := getBuffer()
-	defer putBuffer(buf)
-
-	var tokenErr error
-	func() {
-		// Ensure proper cleanup even if we panic
-		defer func() {
-			if r := recover(); r != nil {
-				tokenErr = errors.TokenizerPanicError(r, t.getCurrentPosition())
-			}
-		}()
-
-		for t.pos.Index < len(t.input) {
-			t.skipWhitespace()
-
-			if t.pos.Index >= len(t.input) {
-				break
-			}
-
-			// Check token count limit to prevent DoS attacks
-			if len(tokens) >= MaxTokens {
-				tokenErr = errors.TokenLimitReachedError(len(tokens)+1, MaxTokens, t.getCurrentPosition(), string(t.input))
-				return
-			}
-
-			// Compute the start location before scanning so position requests
-			// stay monotone (nextToken may record comment positions past it).
-			startPos := t.pos
-			startLoc := t.toSQLPosition(startPos)
-
-			token, err := t.nextToken()
-			if err != nil {
-				// nextToken returns structured errors, pass through directly
-				tokenErr = err
-				return
-			}
-
-			tw := models.TokenWithSpan{
-				Token: token,
-				Start: startLoc,
-				End:   t.getCurrentPosition(),
-			}
-			if t.logger != nil && t.logger.Enabled(context.Background(), slog.LevelDebug) {
-				t.logger.LogAttrs(context.Background(), slog.LevelDebug, "token",
-					slog.String("type", fmt.Sprintf("%T", token)),
-					slog.Int("start_line", int(tw.Start.Line)),
-					slog.Int("start_col", int(tw.Start.Column)),
-				)
-			}
-			tokens = append(tokens, tw)
-		}
-	}()
-
-	if tokenErr != nil {
-		// Record metrics for failed tokenization
-		duration := time.Since(startTime)
-		metrics.RecordTokenization(duration, len(input), tokenErr)
-		return nil, tokenErr
-	}
-
-	// Add EOF token
-	tokens = append(tokens, models.TokenWithSpan{
-		Token: models.Token{Type: models.TokenTypeEOF},
-		Start: t.getCurrentPosition(),
-		End:   t.getCurrentPosition(),
-	})
-
-	// Record metrics for successful tokenization
-	duration := time.Since(startTime)
-	metrics.RecordTokenization(duration, len(input), nil)
-
-	return tokens, nil
+	return t.tokenize(context.Background(), input, "", false)
 }
 
 // TokenizeContext processes the input and returns tokens with context support for cancellation.
@@ -555,20 +488,42 @@ func (t *Tokenizer) TokenizeContext(ctx context.Context, input []byte) ([]models
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	return t.tokenize(ctx, input, "", false)
+}
 
-	// Record start time for metrics
-	startTime := time.Now()
+// TokenizeString is Tokenize for SQL that is already held as a string.
+//
+// It has the same contract, limits, errors and output as Tokenize([]byte(s)),
+// but s is not copied: the scanner reads s in place and every returned token
+// Value, Word.Value and Comment.Text is a substring of s. Retaining any of them
+// keeps s alive; strings.Clone values that must outlive s's other uses.
+//
+// Example:
+//
+//	tkz := GetTokenizer()
+//	defer PutTokenizer(tkz)
+//	tokens, err := tkz.TokenizeString("SELECT id FROM users")
+func (t *Tokenizer) TokenizeString(s string) ([]models.TokenWithSpan, error) {
+	return t.tokenize(context.Background(), stringBytes(s), s, true)
+}
 
-	// Validate input size to prevent DoS attacks
-	if len(input) > MaxInputSize {
-		err := errors.InputTooLargeError(int64(len(input)), MaxInputSize, models.Location{Line: 1, Column: 0})
-		metrics.RecordTokenization(time.Since(startTime), len(input), err)
+// TokenizeStringContext is TokenizeContext for SQL that is already held as a
+// string. It checks ctx before starting and every 100 tokens, returning
+// ctx.Err() when the context is done. As with TokenizeString, s is not copied
+// and every returned Value, Word.Value and Comment.Text aliases s.
+func (t *Tokenizer) TokenizeStringContext(ctx context.Context, s string) ([]models.TokenWithSpan, error) {
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	return t.tokenize(ctx, stringBytes(s), s, true)
+}
 
-	// Reset state
+// load resets t and installs the input for one call. Invariant: t.src and
+// t.input hold the same bytes for the whole call.
+func (t *Tokenizer) load(input []byte, src string) {
 	t.Reset()
 	t.input = input
+	t.src = src
 
 	// Pre-allocate line starts slice - reuse if possible
 	estimatedLines := len(input)/50 + 1 // Estimate 50 chars per line + 1 for initial 0
@@ -578,6 +533,32 @@ func (t *Tokenizer) TokenizeContext(ctx context.Context, input []byte) ([]models
 		t.lineStarts = t.lineStarts[:0]
 	}
 	t.lineStarts = append(t.lineStarts, 0)
+}
+
+// tokenize is the shared core of Tokenize, TokenizeContext, TokenizeString
+// and TokenizeStringContext. When haveSrc is false, src is ignored and input
+// is copied once into a string after the size check, so returned tokens never
+// alias the caller's buffer. When haveSrc is true, input must be a read-only
+// view of src.
+//
+// ctx is checked every 100 tokens unless ctx.Done() is nil (as for
+// context.Background()), in which case no per-token check is made.
+func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, haveSrc bool) ([]models.TokenWithSpan, error) {
+	// Record start time for metrics
+	startTime := time.Now()
+
+	// Validate input size to prevent DoS attacks. This must stay ahead of the
+	// string copy below so an oversized input is rejected before it is copied.
+	if len(input) > MaxInputSize {
+		err := errors.InputTooLargeError(int64(len(input)), MaxInputSize, models.Location{Line: 1, Column: 0})
+		metrics.RecordTokenization(time.Since(startTime), len(input), err)
+		return nil, err
+	}
+
+	if !haveSrc {
+		src = string(input)
+	}
+	t.load(input, src)
 
 	// Pre-scan input to build line start indices and estimate token count
 	estimatedTokens := t.prescan()
@@ -587,6 +568,8 @@ func (t *Tokenizer) TokenizeContext(ctx context.Context, input []byte) ([]models
 	// Get a buffer from the pool for string operations
 	buf := getBuffer()
 	defer putBuffer(buf)
+
+	done := ctx.Done()
 
 	var tokenErr error
 	func() {
@@ -599,7 +582,7 @@ func (t *Tokenizer) TokenizeContext(ctx context.Context, input []byte) ([]models
 
 		for t.pos.Index < len(t.input) {
 			// Check context every 100 tokens for cancellation
-			if len(tokens)%100 == 0 {
+			if done != nil && len(tokens)%100 == 0 {
 				if err := ctx.Err(); err != nil {
 					tokenErr = err
 					return
@@ -614,7 +597,7 @@ func (t *Tokenizer) TokenizeContext(ctx context.Context, input []byte) ([]models
 
 			// Check token count limit to prevent DoS attacks
 			if len(tokens) >= MaxTokens {
-				tokenErr = errors.TokenLimitReachedError(len(tokens)+1, MaxTokens, t.getCurrentPosition(), string(t.input))
+				tokenErr = errors.TokenLimitReachedError(len(tokens)+1, MaxTokens, t.getCurrentPosition(), t.src)
 				return
 			}
 
@@ -695,12 +678,21 @@ const minTokenCapacity = 16
 // against 1.25-2x regrowth (dense) or ~1.9x over-allocation (typical) for the
 // previous len/4 guess. The estimate is capped at MaxTokens+1 so a pathological
 // input cannot pre-allocate more than the scanner would have grown to anyway.
+//
+// prescan also counts words that start like an identifier (an ASCII letter,
+// '_' or a non-ASCII byte) into t.wordHint, which sizes the Word chunks (see
+// nextWordChunk). Words inside comments and string literals are counted too,
+// so the hint can run high; nextWordChunk caps how much of it is trusted.
 func (t *Tokenizer) prescan() int {
 	est := 1 // EOF token
+	words := 0
 	inWord := false
 	for i := 0; i < len(t.input); i++ {
 		b := t.input[i]
 		if !tokenBoundary[b] {
+			if !inWord && (b >= utf8.RuneSelf || b == '_' || (b|0x20 >= 'a' && b|0x20 <= 'z')) {
+				words++
+			}
 			inWord = true
 			continue
 		}
@@ -719,6 +711,7 @@ func (t *Tokenizer) prescan() int {
 	if inWord {
 		est++
 	}
+	t.wordHint = words
 	if est < minTokenCapacity {
 		est = minTokenCapacity
 	}
@@ -726,6 +719,48 @@ func (t *Tokenizer) prescan() int {
 		est = MaxTokens + 1
 	}
 	return est
+}
+
+// Word chunk sizing for newWord.
+const (
+	// minWordChunk is the smallest chunk allocated.
+	minWordChunk = 4
+	// firstWordChunkMax caps the first chunk of a call. The prescan hint also
+	// counts words inside comments and string literals, so this bounds the
+	// waste (64 Words, about 2 KB) when the hint over-counts.
+	firstWordChunkMax = 64
+	// maxWordChunk caps later chunks.
+	maxWordChunk = 4096
+)
+
+// newWord returns a Word for a bare identifier or keyword, carved from the
+// current per-call chunk. The append below never reallocates (len < cap), so
+// pointers already handed out stay valid; a full chunk is replaced, never
+// reused, and Reset drops the reference without truncating it.
+func (t *Tokenizer) newWord(v string) *models.Word {
+	if len(t.wordChunk) == cap(t.wordChunk) {
+		t.nextWordChunk()
+	}
+	t.wordChunk = append(t.wordChunk, models.Word{Value: v})
+	return &t.wordChunk[len(t.wordChunk)-1]
+}
+
+// nextWordChunk replaces the full current chunk with a new one sized from
+// t.wordHint, the number of words prescan expects that have not yet been
+// given chunk space. A chunk is at most twice the previous one, so an
+// over-counted hint wastes at most about as many Words as were handed out;
+// when the hint runs out (an under-count), chunks keep doubling.
+func (t *Tokenizer) nextWordChunk() {
+	prev := cap(t.wordChunk)
+	n := t.wordHint
+	if prev == 0 {
+		n = min(n, firstWordChunkMax)
+	} else if n <= 0 || n > 2*prev {
+		n = 2 * prev
+	}
+	n = max(minWordChunk, min(n, maxWordChunk))
+	t.wordHint = max(0, t.wordHint-n)
+	t.wordChunk = make([]models.Word, 0, n)
 }
 
 // skipWhitespace advances past any whitespace
@@ -799,7 +834,7 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 	// Read until we hit a non-identifier character
 	t.scanIdentifierTail()
 
-	ident := string(t.input[start:t.pos.Index])
+	ident := t.src[start:t.pos.Index]
 
 	// SQL Server dialect: N'...' national string literal
 	if t.dialect == keywords.DialectSQLServer && (ident == "N" || ident == "n") {
@@ -816,9 +851,7 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 		}
 	}
 
-	word := &models.Word{
-		Value: ident,
-	}
+	word := t.newWord(ident)
 
 	// Determine token type based on whether it's a keyword. Pure-ASCII words
 	// are upper-cased into a stack buffer and the maps are indexed with
@@ -865,7 +898,7 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 				// Read until we hit a non-identifier character
 				t.scanIdentifierTail()
 
-				nextIdent := string(t.input[nextStart:t.pos.Index])
+				nextIdent := t.src[nextStart:t.pos.Index]
 
 				// Check if it's a valid compound keyword. The key is built in
 				// the stack buffer; the joined Value string is only allocated
@@ -884,10 +917,17 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 				// Otherwise: pure-ASCII pair longer than any compound key, no match.
 
 				if matched {
+					// Exactly one ASCII space between the words: the joined
+					// Value is already a substring of the input. Otherwise
+					// normalize the separator to a single space.
+					value := ident + " " + nextIdent
+					if sep := start + len(ident); nextStart == sep+1 && t.input[sep] == ' ' {
+						value = t.src[start:t.pos.Index]
+					}
 					return models.Token{
 						Type:  compoundType,
 						Word:  word,
-						Value: ident + " " + nextIdent,
+						Value: value,
 					}, nil
 				}
 			}
@@ -1020,7 +1060,7 @@ func (t *Tokenizer) readQuotedIdentifier() (models.Token, error) {
 		if r == '\n' {
 			return models.Token{}, errors.UnterminatedStringError(
 				models.Location{Line: startPos.Line, Column: startPos.Column},
-				string(t.input),
+				t.src,
 			)
 		}
 
@@ -1032,7 +1072,7 @@ func (t *Tokenizer) readQuotedIdentifier() (models.Token, error) {
 
 	return models.Token{}, errors.UnterminatedStringError(
 		t.toSQLPosition(startPos),
-		string(t.input),
+		t.src,
 	)
 }
 
@@ -1081,7 +1121,7 @@ func (t *Tokenizer) readBacktickIdentifier() (models.Token, error) {
 
 	return models.Token{}, errors.UnterminatedStringError(
 		t.toSQLPosition(startPos),
-		string(t.input),
+		t.src,
 	)
 }
 
@@ -1159,7 +1199,7 @@ func (t *Tokenizer) readQuotedString(quote rune) (models.Token, error) {
 					return models.Token{}, errors.InvalidSyntaxError(
 						fmt.Sprintf("invalid escape sequence: %v", err),
 						models.Location{Line: t.pos.Line, Column: t.pos.Column},
-						string(t.input),
+						t.src,
 					)
 				}
 				continue
@@ -1187,7 +1227,7 @@ func (t *Tokenizer) readQuotedString(quote rune) (models.Token, error) {
 
 	return models.Token{}, errors.UnterminatedStringError(
 		t.toSQLPosition(startPos),
-		string(t.input),
+		t.src,
 	)
 }
 
@@ -1247,7 +1287,7 @@ func (t *Tokenizer) readTripleQuotedString(quote rune) (models.Token, error) {
 
 	return models.Token{}, errors.UnterminatedStringError(
 		t.toSQLPosition(startPos),
-		string(t.input),
+		t.src,
 	)
 }
 
@@ -1257,7 +1297,7 @@ func (t *Tokenizer) handleEscapeSequence(buf *bytes.Buffer) error {
 	t.pos.Column++
 
 	if t.pos.Index >= len(t.input) {
-		return errors.IncompleteStatementError(t.getCurrentPosition(), string(t.input))
+		return errors.IncompleteStatementError(t.getCurrentPosition(), t.src)
 	}
 
 	r, size := utf8.DecodeRune(t.input[t.pos.Index:])
@@ -1274,7 +1314,7 @@ func (t *Tokenizer) handleEscapeSequence(buf *bytes.Buffer) error {
 		return errors.InvalidSyntaxError(
 			fmt.Sprintf("invalid escape sequence '\\%c'", r),
 			t.getCurrentPosition(),
-			string(t.input),
+			t.src,
 		)
 	}
 
@@ -1304,7 +1344,7 @@ func (t *Tokenizer) readNumber(buf []byte) (models.Token, error) {
 	if t.pos.Index >= len(t.input) {
 		return models.Token{
 			Type:  models.TokenTypeNumber,
-			Value: string(t.input[start:t.pos.Index]),
+			Value: t.src[start:t.pos.Index],
 		}, nil
 	}
 
@@ -1315,14 +1355,14 @@ func (t *Tokenizer) readNumber(buf []byte) (models.Token, error) {
 
 		// Must have at least one digit after decimal
 		if t.pos.Index >= len(t.input) {
-			value := string(t.input[start:t.pos.Index])
-			return models.Token{}, errors.InvalidNumberError(value+" (expected digit after decimal point)", t.getCurrentPosition(), string(t.input))
+			value := t.src[start:t.pos.Index]
+			return models.Token{}, errors.InvalidNumberError(value+" (expected digit after decimal point)", t.getCurrentPosition(), t.src)
 		}
 
 		r, _ = utf8.DecodeRune(t.input[t.pos.Index:])
 		if r < '0' || r > '9' {
-			value := string(t.input[start:t.pos.Index])
-			return models.Token{}, errors.InvalidNumberError(value+" (expected digit after decimal point)", t.getCurrentPosition(), string(t.input))
+			value := t.src[start:t.pos.Index]
+			return models.Token{}, errors.InvalidNumberError(value+" (expected digit after decimal point)", t.getCurrentPosition(), t.src)
 		}
 
 		// Read fractional part
@@ -1352,14 +1392,14 @@ func (t *Tokenizer) readNumber(buf []byte) (models.Token, error) {
 
 			// Must have at least one digit
 			if t.pos.Index >= len(t.input) {
-				value := string(t.input[start:t.pos.Index])
-				return models.Token{}, errors.InvalidNumberError(value+" (expected digit in exponent)", t.getCurrentPosition(), string(t.input))
+				value := t.src[start:t.pos.Index]
+				return models.Token{}, errors.InvalidNumberError(value+" (expected digit in exponent)", t.getCurrentPosition(), t.src)
 			}
 
 			r, _ = utf8.DecodeRune(t.input[t.pos.Index:])
 			if r < '0' || r > '9' {
-				value := string(t.input[start:t.pos.Index])
-				return models.Token{}, errors.InvalidNumberError(value+" (expected digit in exponent)", t.getCurrentPosition(), string(t.input))
+				value := t.src[start:t.pos.Index]
+				return models.Token{}, errors.InvalidNumberError(value+" (expected digit in exponent)", t.getCurrentPosition(), t.src)
 			}
 
 			// Read exponent part
@@ -1376,14 +1416,14 @@ func (t *Tokenizer) readNumber(buf []byte) (models.Token, error) {
 
 	return models.Token{
 		Type:  models.TokenTypeNumber,
-		Value: string(t.input[start:t.pos.Index]),
+		Value: t.src[start:t.pos.Index],
 	}, nil
 }
 
 // readPunctuation picks out punctuation or operator tokens
 func (t *Tokenizer) readPunctuation() (models.Token, error) {
 	if t.pos.Index >= len(t.input) {
-		return models.Token{}, errors.IncompleteStatementError(t.getCurrentPosition(), string(t.input))
+		return models.Token{}, errors.IncompleteStatementError(t.getCurrentPosition(), t.src)
 	}
 	r, size := utf8.DecodeRune(t.input[t.pos.Index:])
 	switch r {
@@ -1397,20 +1437,20 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		// SQL Server dialect: [identifier] is a quoted identifier
 		if t.dialect == keywords.DialectSQLServer {
 			t.pos.AdvanceRune(r, size) // Consume [
-			var ident []byte
+			contentStart := t.pos.Index
 			for t.pos.Index < len(t.input) {
 				ch, chSize := utf8.DecodeRune(t.input[t.pos.Index:])
 				if ch == ']' {
+					v := t.src[contentStart:t.pos.Index]
 					t.pos.AdvanceRune(ch, chSize) // Consume ]
-					return models.Token{Type: models.TokenTypeIdentifier, Value: string(ident), Quote: '['}, nil
+					return models.Token{Type: models.TokenTypeIdentifier, Value: v, Quote: '['}, nil
 				}
-				ident = append(ident, t.input[t.pos.Index:t.pos.Index+chSize]...)
 				t.pos.AdvanceRune(ch, chSize)
 			}
 			return models.Token{}, errors.InvalidSyntaxError(
 				"unterminated bracket identifier",
 				t.getCurrentPosition(),
-				string(t.input),
+				t.src,
 			)
 		}
 		t.pos.AdvanceRune(r, size)
@@ -1467,7 +1507,7 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 					textEnd--
 				}
 				t.Comments = append(t.Comments, models.Comment{
-					Text:   string(t.input[commentStartIdx:textEnd]),
+					Text:   t.src[commentStartIdx:textEnd],
 					Style:  models.LineComment,
 					Start:  commentStartPos,
 					End:    t.toSQLPosition(t.pos),
@@ -1512,11 +1552,11 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 				if !closed {
 					return models.Token{}, errors.UnterminatedBlockCommentError(
 						commentStartPos,
-						string(t.input),
+						t.src,
 					)
 				}
 				t.Comments = append(t.Comments, models.Comment{
-					Text:   string(t.input[commentStartIdx:t.pos.Index]),
+					Text:   t.src[commentStartIdx:t.pos.Index],
 					Style:  models.BlockComment,
 					Start:  commentStartPos,
 					End:    t.toSQLPosition(t.pos),
@@ -1610,12 +1650,12 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 						}
 						t.pos.AdvanceRune(rune(c), 1)
 					}
-					return models.Token{Type: models.TokenTypePlaceholder, Value: string(t.input[bindStart:t.pos.Index])}, nil
+					return models.Token{Type: models.TokenTypePlaceholder, Value: t.src[bindStart:t.pos.Index]}, nil
 				}
 				if isIdentifierStart(nxtR) {
 					t.pos.AdvanceRune(nxtR, nxtSize)
 					t.scanIdentifierTail()
-					return models.Token{Type: models.TokenTypePlaceholder, Value: string(t.input[bindStart:t.pos.Index])}, nil
+					return models.Token{Type: models.TokenTypePlaceholder, Value: t.src[bindStart:t.pos.Index]}, nil
 				}
 			}
 		}
@@ -1719,12 +1759,12 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 					}
 					return models.Token{
 						Type:  models.TokenTypeIdentifier,
-						Value: string(t.input[start:t.pos.Index]),
+						Value: t.src[start:t.pos.Index],
 					}, nil
 				}
 			}
 			// Not followed by identifier - fall through to standalone #
-			return models.Token{Type: models.TokenTypeSharp, Value: string(t.input[start:t.pos.Index])}, nil
+			return models.Token{Type: models.TokenTypeSharp, Value: t.src[start:t.pos.Index]}, nil
 		}
 		t.pos.AdvanceRune(r, size)
 		// Check for PostgreSQL JSON operators
@@ -1798,8 +1838,8 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 					}
 					t.pos.AdvanceRune(digitR, digitSize)
 				}
-				paramNum := string(t.input[start:t.pos.Index])
-				return models.Token{Type: models.TokenTypePlaceholder, Value: "$" + paramNum}, nil
+				// The '$' is the single byte just before start.
+				return models.Token{Type: models.TokenTypePlaceholder, Value: t.src[start-1 : t.pos.Index]}, nil
 			}
 		}
 		// PostgreSQL dollar-quoted strings: $$...$$ or $tag$...$tag$
@@ -1833,20 +1873,21 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 				if closingR != '$' {
 					return models.Token{Type: models.TokenTypePlaceholder, Value: "$"}, nil
 				}
-				tag := string(t.input[tagStart:t.pos.Index])
+				// The opening tag "$tag$" runs from the '$' just before
+				// tagStart through the '$' at t.pos.Index.
+				closingTag := t.src[tagStart-1 : t.pos.Index+1]
 				t.pos.AdvanceRune(closingR, closingSize) // consume closing $ of opening tag
 
 				// Now read content until we find $tag$
-				closingTag := "$" + tag + "$"
 				contentStart := t.pos.Index
 				for t.pos.Index < len(t.input) {
 					if t.input[t.pos.Index] == '$' && t.pos.Index+len(closingTag) <= len(t.input) {
-						candidate := string(t.input[t.pos.Index : t.pos.Index+len(closingTag)])
+						candidate := t.src[t.pos.Index : t.pos.Index+len(closingTag)]
 						if candidate == closingTag {
-							content := string(t.input[contentStart:t.pos.Index])
+							content := t.src[contentStart:t.pos.Index]
 							// Advance past the closing tag
 							for i := 0; i < len(closingTag); {
-								cr, cs := utf8.DecodeRune([]byte(closingTag[i:]))
+								cr, cs := utf8.DecodeRuneInString(closingTag[i:])
 								t.pos.AdvanceRune(cr, cs)
 								i += cs
 							}
@@ -1859,7 +1900,7 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 				// Unterminated dollar-quoted string
 				return models.Token{}, errors.UnterminatedStringError(
 					models.Location{Line: t.pos.Line, Column: t.pos.Column},
-					string(t.input),
+					t.src,
 				)
 			}
 		}
@@ -1884,7 +1925,7 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		return t.readIdentifier()
 	}
 
-	return models.Token{}, errors.UnexpectedCharError(r, t.getCurrentPosition(), string(t.input))
+	return models.Token{}, errors.UnexpectedCharError(r, t.getCurrentPosition(), t.src)
 }
 
 // lineIndexAt returns the index into t.lineStarts of the line containing the

@@ -105,7 +105,7 @@ func Parse(sql string) (*ast.AST, error) {
 	defer tokenizer.PutTokenizer(tkz)
 
 	// Step 2: Tokenize SQL
-	tokens, err := tkz.Tokenize([]byte(sql))
+	tokens, err := tkz.TokenizeString(sql)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrTokenize, err)
 	}
@@ -192,7 +192,7 @@ func ParseWithContext(ctx context.Context, sql string) (*ast.AST, error) {
 	defer tokenizer.PutTokenizer(tkz)
 
 	// Step 2: Tokenize SQL with context support
-	tokens, err := tkz.TokenizeContext(ctx, []byte(sql))
+	tokens, err := tkz.TokenizeStringContext(ctx, sql)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, fmt.Errorf("%w: %w", ErrTimeout, ctxErr)
@@ -416,7 +416,7 @@ func ParseMultiple(queries []string) ([]*ast.AST, error) {
 		p.Reset()
 
 		// Tokenize
-		tokens, err := tkz.Tokenize([]byte(sql))
+		tokens, err := tkz.TokenizeString(sql)
 		if err != nil {
 			releaseASTs(results)
 			return nil, fmt.Errorf("query %d: %w: %w", i, ErrTokenize, err)
@@ -461,7 +461,7 @@ func ValidateMultiple(queries []string) error {
 		p.Reset()
 
 		// Tokenize
-		tokens, err := tkz.Tokenize([]byte(sql))
+		tokens, err := tkz.TokenizeString(sql)
 		if err != nil {
 			return fmt.Errorf("query %d: %w: %w", i, ErrTokenize, err)
 		}
@@ -634,7 +634,7 @@ func ParseWithRecovery(sql string) ([]ast.Statement, []error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 
-	tokens, err := tkz.Tokenize([]byte(sql))
+	tokens, err := tkz.TokenizeString(sql)
 	if err != nil {
 		return nil, []error{fmt.Errorf("%w: %w", ErrTokenize, err)}
 	}

@@ -157,7 +157,11 @@ func PutTokenizer(t *Tokenizer) {
 // you want to reuse a tokenizer instance without going through the pool.
 //
 // Memory Optimization:
-//   - Clears input reference (allows GC of SQL bytes)
+//   - Clears input references (input, src and the current Word chunk), so a
+//     pooled tokenizer does not keep the previous SQL alive
+//   - Zeroes the used Comments entries and truncates the slice (capacity is
+//     preserved). Comments is therefore valid only until the next Tokenize,
+//     Reset or PutTokenizer; copy it first if it must outlive those
 //   - Resets position tracking to initial values
 //   - Preserves lineStarts slice capacity (avoids reallocation)
 //   - Clears debug logger reference
@@ -165,7 +169,9 @@ func PutTokenizer(t *Tokenizer) {
 // State After Reset:
 //   - pos: Line 1, Column 0, Index 0
 //   - lineStarts: Empty slice with preserved capacity (contains [0])
-//   - input: nil (ready for new input)
+//   - input: nil, src: "" (ready for new input)
+//   - Word chunk: nil (Words already returned stay valid; the chunk is never reused)
+//   - Comments: length 0, previously used entries zeroed
 //   - dialect/keywords: preserved (Reset also runs at the start of every
 //     Tokenize call, so the configured dialect must persist; the pool restores
 //     the default dialect in PutTokenizer instead)
@@ -175,8 +181,13 @@ func PutTokenizer(t *Tokenizer) {
 // Performance: By preserving slice capacity, subsequent Tokenize() calls
 // avoid reallocation of lineStarts for similarly-sized inputs.
 func (t *Tokenizer) Reset() {
-	// Clear input reference to allow garbage collection
+	// Clear input references to allow garbage collection. The Word chunk is
+	// dropped, never truncated: its elements belong to tokens already
+	// returned to callers.
 	t.input = nil
+	t.src = ""
+	t.wordChunk = nil
+	t.wordHint = 0
 
 	// Reset position tracking
 	t.pos = NewPosition(1, 0)
@@ -203,8 +214,10 @@ func (t *Tokenizer) Reset() {
 	// Dialect is restored to the default in PutTokenizer, at the pool boundary.
 	t.logger = nil
 
-	// Preserve Comments slice capacity but reset length
-	if cap(t.Comments) > 0 {
-		t.Comments = t.Comments[:0]
-	}
+	// Zero the used Comments (their Text is a substring of the previous
+	// input, which would otherwise stay pinned by the pooled tokenizer) and
+	// reset the length, preserving capacity. Elements beyond len are already
+	// zero from earlier Resets.
+	clear(t.Comments)
+	t.Comments = t.Comments[:0]
 }

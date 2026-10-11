@@ -115,7 +115,7 @@ func parseSQL(sql string) (ast.Statement, error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 
-	tokens, err := tkz.Tokenize([]byte(sql))
+	tokens, err := tkz.TokenizeString(sql)
 	if err != nil {
 		return nil, fmt.Errorf("tokenize: %w", err)
 	}
@@ -210,7 +210,7 @@ func ParseSQL(sql string) (*ast.AST, error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 
-	tokens, err := tkz.Tokenize([]byte(sql))
+	tokens, err := tkz.TokenizeString(sql)
 	if err != nil {
 		return nil, fmt.Errorf("tokenize: %w", err)
 	}
@@ -279,7 +279,7 @@ func ParseSQLWithDialect(sql string, dialect keywords.SQLDialect) (*ast.AST, err
 		tkz.SetDialect(dialect)
 	}
 
-	tokens, err := tkz.Tokenize([]byte(sql))
+	tokens, err := tkz.TokenizeString(sql)
 	if err != nil {
 		return nil, fmt.Errorf("tokenize: %w", err)
 	}

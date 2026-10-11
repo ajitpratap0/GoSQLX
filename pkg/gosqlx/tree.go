@@ -319,11 +319,11 @@ func parseWithConfig(ctx context.Context, sql string, cfg parseOptions) (*ast.AS
 		if err != nil {
 			return nil, fmt.Errorf("%w: tokenizer init: %v", ErrTokenize, err)
 		}
-		tokens, tokErr = tkz.TokenizeContext(ctx, []byte(sql))
+		tokens, tokErr = tkz.TokenizeStringContext(ctx, sql)
 	} else {
 		tkz := tokenizer.GetTokenizer()
 		defer tokenizer.PutTokenizer(tkz)
-		tokens, tokErr = tkz.TokenizeContext(ctx, []byte(sql))
+		tokens, tokErr = tkz.TokenizeStringContext(ctx, sql)
 	}
 	if tokErr != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {

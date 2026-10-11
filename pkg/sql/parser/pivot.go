@@ -386,13 +386,13 @@ func (p *Parser) isSnowflakeTimeTravelStart() bool {
 		return false
 	}
 	// BEFORE / CHANGES: plain identifier or keyword
-	val := strings.ToUpper(p.currentToken.Token.Value)
-	if val == "BEFORE" || val == "CHANGES" {
+	val := p.currentToken.Token.Value
+	if strings.EqualFold(val, "BEFORE") || strings.EqualFold(val, "CHANGES") {
 		// Must be followed by '(' to disambiguate from other uses.
 		return p.peekToken().Token.Type == models.TokenTypeLParen
 	}
 	// AT: either TokenTypeAt (@) or an identifier-token "AT" followed by '('.
-	if val == "AT" && p.peekToken().Token.Type == models.TokenTypeLParen {
+	if strings.EqualFold(val, "AT") && p.peekToken().Token.Type == models.TokenTypeLParen {
 		return true
 	}
 	return false
@@ -403,8 +403,8 @@ func (p *Parser) isSnowflakeTimeTravelStart() bool {
 // rather than a table alias. Used to prevent the FROM-alias parser from
 // consuming these tokens.
 func (p *Parser) isSampleKeyword() bool {
-	upper := strings.ToUpper(p.currentToken.Token.Value)
-	if upper != "SAMPLE" && upper != "TABLESAMPLE" {
+	v := p.currentToken.Token.Value
+	if !strings.EqualFold(v, "SAMPLE") && !strings.EqualFold(v, "TABLESAMPLE") {
 		return false
 	}
 	// Require '(' or a method keyword as lookahead to disambiguate from
@@ -413,8 +413,8 @@ func (p *Parser) isSampleKeyword() bool {
 	if next.Type == models.TokenTypeLParen {
 		return true
 	}
-	nextUpper := strings.ToUpper(next.Value)
-	if nextUpper == "BERNOULLI" || nextUpper == "SYSTEM" || nextUpper == "BLOCK" || nextUpper == "ROW" {
+	nv := next.Value
+	if strings.EqualFold(nv, "BERNOULLI") || strings.EqualFold(nv, "SYSTEM") || strings.EqualFold(nv, "BLOCK") || strings.EqualFold(nv, "ROW") {
 		return true
 	}
 	// ClickHouse: SAMPLE followed by a number (SAMPLE 0.1, SAMPLE 10000, SAMPLE 1/10)

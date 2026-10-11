@@ -45,13 +45,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	// Reject TOP in dialects that use LIMIT/OFFSET or ROWNUM/FETCH FIRST instead.
 	// String comparison is used here because the lexer has no TokenTypeTOP constant;
 	// TOP is emitted as an identifier literal (see parseTopClause comment).
-	nonTopDialects := map[string]bool{
-		string(keywords.DialectMySQL):      true,
-		string(keywords.DialectPostgreSQL): true,
-		string(keywords.DialectSQLite):     true,
-		string(keywords.DialectOracle):     true,
-	}
-	if nonTopDialects[p.dialect] && strings.ToUpper(p.currentToken.Token.Value) == "TOP" {
+	if p.isNonTopDialect() && strings.EqualFold(p.currentToken.Token.Value, "TOP") {
 		if p.dialect == string(keywords.DialectOracle) {
 			return nil, goerrors.UnsupportedFeatureError(
 				"TOP clause is not supported in Oracle; use ROWNUM or FETCH FIRST … ROWS ONLY instead",
@@ -315,15 +309,26 @@ func (p *Parser) parseDistinctModifier() (isDistinct bool, distinctOnColumns []a
 	return isDistinct, distinctOnColumns, nil
 }
 
+// isNonTopDialect reports whether the active dialect uses LIMIT/OFFSET or
+// ROWNUM/FETCH FIRST instead of the SQL Server TOP clause.
+func (p *Parser) isNonTopDialect() bool {
+	switch p.dialect {
+	case string(keywords.DialectMySQL), string(keywords.DialectPostgreSQL),
+		string(keywords.DialectSQLite), string(keywords.DialectOracle):
+		return true
+	}
+	return false
+}
+
 // parseTopClause parses SQL Server's TOP n [PERCENT] [WITH TIES] clause.
 // Returns nil when the current dialect is not SQL Server or TOP is absent.
 //
 // Note: "TOP" is detected via a string comparison rather than a dedicated token-type
 // constant because the lexer does not define a TokenTypeTOP - it tokenises TOP as a
 // plain identifier/keyword literal.  A future lexer enhancement could introduce
-// models.TokenTypeTop and replace the strings.ToUpper check below.
+// models.TokenTypeTop and replace the strings.EqualFold check below.
 func (p *Parser) parseTopClause() (*ast.TopClause, error) {
-	if p.dialect != string(keywords.DialectSQLServer) || strings.ToUpper(p.currentToken.Token.Value) != "TOP" {
+	if p.dialect != string(keywords.DialectSQLServer) || !strings.EqualFold(p.currentToken.Token.Value, "TOP") {
 		return nil, nil
 	}
 	p.advance() // Consume TOP
@@ -353,7 +358,7 @@ func (p *Parser) parseTopClause() (*ast.TopClause, error) {
 
 	// Optional PERCENT
 	if p.isType(models.TokenTypePercent) ||
-		(p.currentToken.Token.Type == models.TokenTypeKeyword && strings.ToUpper(p.currentToken.Token.Value) == "PERCENT") {
+		(p.currentToken.Token.Type == models.TokenTypeKeyword && strings.EqualFold(p.currentToken.Token.Value, "PERCENT")) {
 		topClause.IsPercent = true
 		p.advance()
 	}

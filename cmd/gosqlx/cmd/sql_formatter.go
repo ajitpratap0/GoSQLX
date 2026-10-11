@@ -259,6 +259,14 @@ func (f *SQLFormatter) formatSetOperation(stmt *ast.SetOperation) error {
 
 // formatInsert formats INSERT statements
 func (f *SQLFormatter) formatInsert(stmt *ast.InsertStatement) error {
+	// Leading WITH clause: WITH c AS (...) INSERT INTO ... (#537)
+	if stmt.With != nil {
+		if err := f.formatWithClause(stmt.With); err != nil {
+			return err
+		}
+		f.writeNewline()
+	}
+
 	f.writeKeyword("INSERT INTO")
 	f.builder.WriteString(" " + stmt.TableName)
 

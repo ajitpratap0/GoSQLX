@@ -92,3 +92,44 @@ func TestFormat_CompactOutput(t *testing.T) {
 		t.Errorf("Compact mode should not contain newlines, got: %s", result)
 	}
 }
+
+// TestFormat_InsertWithCTE_Issue537 checks that the compact formatter keeps
+// the WITH clause of INSERT ... SELECT in both positions and is idempotent.
+func TestFormat_InsertWithCTE_Issue537(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "inner WITH after column list",
+			input: "INSERT INTO test(a, b) WITH main AS (SELECT a, b FROM src) SELECT a, b FROM main",
+			want:  "INSERT INTO test (a, b) WITH main AS (SELECT a, b FROM src) SELECT a, b FROM main",
+		},
+		{
+			name:  "leading WITH before INSERT",
+			input: "WITH main AS (SELECT a, b FROM src) INSERT INTO test(a, b) SELECT a, b FROM main",
+			want:  "WITH main AS (SELECT a, b FROM src) INSERT INTO test (a, b) SELECT a, b FROM main",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := New(Options{Compact: true})
+			out, err := f.Format(tt.input)
+			if err != nil {
+				t.Fatalf("Format(%q): %v", tt.input, err)
+			}
+			if out != tt.want {
+				t.Fatalf("Format(%q):\n got: %s\nwant: %s", tt.input, out, tt.want)
+			}
+			again, err := f.Format(out)
+			if err != nil {
+				t.Fatalf("Format(%q) second pass: %v", out, err)
+			}
+			if again != out {
+				t.Errorf("Format not idempotent:\n first: %s\nsecond: %s", out, again)
+			}
+		})
+	}
+}

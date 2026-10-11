@@ -201,6 +201,7 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 | **Basic CTE** (WITH clause) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
 | **Multiple CTEs** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
 | **Recursive CTE** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
+| **CTE in INSERT ... SELECT** (`INSERT INTO t WITH c AS (...) SELECT ...`) | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ Full | 95% |
 | **Nested CTEs** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 95% |
 | **Materialized CTE Hints** | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ Full | 90% |
 | WITH...AS MATERIALIZED | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ Full | 90% |

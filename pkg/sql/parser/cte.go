@@ -161,6 +161,11 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 	// Parse optional column list
 	var columns []string
 	if p.isType(models.TokenTypeLParen) {
+		// "name (SELECT ...)" is a CTE missing its AS keyword, not a column
+		// list; report the missing AS instead of "expected column name" (#537).
+		if next := p.peekToken().Token.Type; next == models.TokenTypeSelect || next == models.TokenTypeWith {
+			return nil, p.expectedError("AS")
+		}
 		p.advance() // Consume (
 
 		for {

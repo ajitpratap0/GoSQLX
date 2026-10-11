@@ -102,10 +102,12 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 	}
 
 	switch {
-	case p.isType(models.TokenTypeSelect):
-		// INSERT ... SELECT syntax
-		p.advance() // Consume SELECT
-		stmt, err := p.parseSelectWithSetOperations()
+	case p.isType(models.TokenTypeSelect), p.isType(models.TokenTypeWith):
+		// INSERT ... SELECT, or INSERT ... WITH cte AS (...) SELECT (#537).
+		// parseSubquery consumes SELECT itself, or delegates WITH to
+		// parseWithStatement, which attaches the WITH clause to the query
+		// (SelectStatement.With, or SetOperation.Left.With).
+		stmt, err := p.parseSubquery()
 		if err != nil {
 			return nil, err
 		}
@@ -168,7 +170,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 			p.advance() // Consume comma between rows
 		}
 	default:
-		return nil, p.expectedError("VALUES or SELECT")
+		return nil, p.expectedError("VALUES, SELECT, or WITH")
 	}
 
 	// Parse ON CONFLICT clause (PostgreSQL) or ON DUPLICATE KEY UPDATE (MySQL)

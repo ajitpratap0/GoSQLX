@@ -249,6 +249,12 @@ func releaseExpression(expr Expression, mode releaseMode) {
 // returned to their own pools), and a queue that grew beyond
 // maxPooledWorkQueueCap is dropped instead of returned.
 //
+// Hazard: in releaseDrawn mode un-drawn parents are not reset, so if a parent
+// were ever reachable twice the walk would push its drawn children twice and
+// they would be Put twice. The parser never shares parents today
+// (JoinClause.Left is skipped; named windows and ClickHouse parametric
+// aggregates allocate fresh nodes).
+//
 // Every pooled node is reset by assigning the zero value of its type,
 // keeping only the backing arrays of its hot child slices (Arguments, List,
 // WhenClauses, ...), so Get* never hands out a node with stale fields.

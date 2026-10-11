@@ -482,15 +482,17 @@ func NewAST() *AST {
 // and performance.
 //
 // Cleanup Process:
-//  1. Walks every statement and returns the node types the parser draws
-//     from pools: TupleExpression, ArrayConstructorExpression,
-//     ArraySubscriptExpression and ArraySliceExpression nested anywhere in
-//     the tree, and Unsupported/Alter/Show/Describe/Replace/sequence (and
-//     other DDL) statements
+//  1. Walks every statement and Puts only these node types: TupleExpression,
+//     ArrayConstructorExpression, ArraySubscriptExpression and
+//     ArraySliceExpression nested anywhere in the tree, and Unsupported,
+//     Alter, Show, Describe, Replace and the three sequence statements
 //  2. Leaves every other node (Identifier, LiteralValue, BinaryExpression,
 //     FunctionCall, Select/Insert/Update/DeleteStatement, ...) to the GC:
 //     the parser builds those as heap literals, so putting them would only
-//     grow pools nobody reads from
+//     grow pools nobody reads from. DDL statements (CREATE TABLE/INDEX/VIEW,
+//     DROP, ...) are not drawn from pools either, but their Put* functions
+//     still recycle everything they reach, and so does the query inside
+//     CREATE VIEW / CREATE MATERIALIZED VIEW (possible follow-up)
 //  3. Clears all statement references and resets the Statements slice
 //     (preserves capacity)
 //  4. Returns the AST container to astPool

@@ -82,6 +82,7 @@ func TestReleaseAST_DerivedTableJoin_NoDoublePut(t *testing.T) {
 	}{
 		{"single join", "SELECT * FROM (SELECT a FROM x) t JOIN u ON t.a = u.a"},
 		{"two joins", "SELECT * FROM (SELECT a FROM x) t JOIN u ON t.a = u.a JOIN v ON v.a = u.a"},
+		{"array and tuple in subquery", "SELECT * FROM (SELECT ARRAY[1] AS arr, (1, 2) AS tup FROM x) t JOIN u ON t.a = u.a"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -111,7 +112,35 @@ func TestReleaseAST_DerivedTableJoin_NoDoublePut(t *testing.T) {
 
 			ast.ReleaseAST(tree)
 			putSelects(assertDistinctSelectGets(t))
+			assertDistinctDrawnExprGets(t)
 		})
+	}
+}
+
+// assertDistinctDrawnExprGets fails if the ArrayConstructor or Tuple pools
+// hand out one pointer twice, which guards the node types ReleaseAST still
+// Puts. The nodes are returned to their pools afterwards.
+func assertDistinctDrawnExprGets(t *testing.T) {
+	t.Helper()
+	arrs := make([]*ast.ArrayConstructorExpression, 4)
+	tups := make([]*ast.TupleExpression, 4)
+	for i := range arrs {
+		arrs[i] = ast.GetArrayConstructor()
+		tups[i] = ast.GetTupleExpression()
+	}
+	for i := 0; i < len(arrs); i++ {
+		for j := i + 1; j < len(arrs); j++ {
+			if arrs[i] == arrs[j] {
+				t.Errorf("GetArrayConstructor #%d and #%d returned the same pointer %p: Put twice", i, j, arrs[i])
+			}
+			if tups[i] == tups[j] {
+				t.Errorf("GetTupleExpression #%d and #%d returned the same pointer %p: Put twice", i, j, tups[i])
+			}
+		}
+	}
+	for i := range arrs {
+		ast.PutExpression(arrs[i])
+		ast.PutExpression(tups[i])
 	}
 }
 

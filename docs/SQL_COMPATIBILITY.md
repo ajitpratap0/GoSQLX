@@ -41,7 +41,7 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 - ✅ **PostgreSQL Enhancements**:
   - **Type Casting** - `::` operator for PostgreSQL-style casts (`SELECT 1::int`)
   - **UPSERT** - `INSERT ... ON CONFLICT DO UPDATE/NOTHING`
-  - **Positional Parameters** - `$1`, `$2` style parameter placeholders (PostgreSQL); `?` placeholders for MySQL/MariaDB/SQLite (dialect-gated)
+  - **Positional Parameters** - `$1`, `$2` style parameter placeholders (PostgreSQL); `?` placeholders for MySQL/MariaDB/SQLite (dialect-gated); `:1`/`:name` bind variables for Oracle (dialect-gated)
   - **JSONB Operators** - Additional `@?` and `@@` operators
   - **Regex Operators** - `~`, `~*`, `!~`, `!~*` for pattern matching
 - ✅ **ARRAY Constructors**: `ARRAY[1, 2, 3]` expressions with subscript/slice operations
@@ -357,6 +357,7 @@ MariaDB inherits all MySQL features (SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE 
 | **DECODE function** | ✅ Full | ⚠️ Partial | 40% | Recognized as function, no special handling |
 | **NVL/NVL2** | ✅ Full | ⚠️ Partial | 40% | Recognized as function, no special handling |
 | **Dual table** | ✅ Full | ✅ Full | 100% | Standard table reference |
+| **Bind variables** (`:1`, `:name`) | ✅ Full | ✅ Full | 90% | Positional and named binds tokenized as placeholders (dialect-gated) |
 | **Analytic functions** | ✅ Full | ⚠️ Partial | 60% | Subset via window functions |
 
 ### SQLite-Specific Features

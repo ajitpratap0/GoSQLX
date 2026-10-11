@@ -1590,12 +1590,33 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		}
 		return models.Token{Type: models.TokenTypeExclamationMark, Value: "!"}, nil
 	case ':':
+		bindStart := t.pos.Index
 		t.pos.AdvanceRune(r, size)
 		if t.pos.Index < len(t.input) {
 			nxtR, nxtSize := utf8.DecodeRune(t.input[t.pos.Index:])
 			if nxtR == ':' {
 				t.pos.AdvanceRune(nxtR, nxtSize)
 				return models.Token{Type: models.TokenTypeDoubleColon, Value: "::"}, nil
+			}
+			// Oracle bind variables: positional :1, :2 and named :name (#520).
+			// Gated to Oracle because other dialects use ':' for array slices
+			// (arr[1:n]) and Snowflake VARIANT paths (col:field).
+			if t.dialect == keywords.DialectOracle {
+				if nxtR >= '0' && nxtR <= '9' {
+					for t.pos.Index < len(t.input) {
+						c := t.input[t.pos.Index]
+						if c < '0' || c > '9' {
+							break
+						}
+						t.pos.AdvanceRune(rune(c), 1)
+					}
+					return models.Token{Type: models.TokenTypePlaceholder, Value: string(t.input[bindStart:t.pos.Index])}, nil
+				}
+				if isIdentifierStart(nxtR) {
+					t.pos.AdvanceRune(nxtR, nxtSize)
+					t.scanIdentifierTail()
+					return models.Token{Type: models.TokenTypePlaceholder, Value: string(t.input[bindStart:t.pos.Index])}, nil
+				}
 			}
 		}
 		return models.Token{Type: models.TokenTypeColon, Value: ":"}, nil

@@ -255,7 +255,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 
 	if p.isType(models.TokenTypePlaceholder) {
 		// Handle SQL placeholders (e.g., $1, $2 for PostgreSQL; @param for
-		// SQL Server; ? for MySQL/MariaDB/SQLite)
+		// SQL Server; ? for MySQL/MariaDB/SQLite; :1, :name for Oracle)
 		value := p.currentToken.Token.Value
 		p.advance()
 		return &ast.LiteralValue{Value: value, Type: "placeholder"}, nil

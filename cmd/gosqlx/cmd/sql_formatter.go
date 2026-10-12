@@ -934,19 +934,39 @@ func (f *SQLFormatter) formatWindowSpec(spec *ast.WindowSpec) error {
 		}
 	}
 
-	if spec.FrameClause != nil {
+	if fc := spec.FrameClause; fc != nil {
 		if len(spec.PartitionBy) > 0 || len(spec.OrderBy) > 0 {
 			f.builder.WriteString(" ")
 		}
-		f.writeKeyword(spec.FrameClause.Type)
+		f.writeKeyword(fc.Type)
 		f.builder.WriteString(" ")
-		f.writeKeyword("BETWEEN")
-		f.builder.WriteString(" ")
-		f.builder.WriteString(spec.FrameClause.Start.Type)
-		if spec.FrameClause.End != nil {
+		// A numeric bound keeps its offset in Value (e.g. Value=2,
+		// Type="PRECEDING"); CURRENT ROW and the UNBOUNDED forms carry no
+		// Value. BETWEEN is only emitted when there are two bounds.
+		writeBound := func(b *ast.WindowFrameBound) error {
+			if b.Value != nil {
+				if err := f.formatExpression(b.Value); err != nil {
+					return err
+				}
+				f.builder.WriteString(" ")
+			}
+			f.writeKeyword(b.Type)
+			return nil
+		}
+		if fc.End != nil {
+			f.writeKeyword("BETWEEN")
+			f.builder.WriteString(" ")
+			if err := writeBound(&fc.Start); err != nil {
+				return err
+			}
 			f.builder.WriteString(" ")
 			f.writeKeyword("AND")
-			f.builder.WriteString(" " + spec.FrameClause.End.Type)
+			f.builder.WriteString(" ")
+			if err := writeBound(fc.End); err != nil {
+				return err
+			}
+		} else if err := writeBound(&fc.Start); err != nil {
+			return err
 		}
 	}
 

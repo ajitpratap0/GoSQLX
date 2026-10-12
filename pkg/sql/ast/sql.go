@@ -2038,13 +2038,24 @@ func writeWindowFrame(buf *bytes.Buffer, f *WindowFrame) {
 	buf.WriteString(f.Type)
 	if f.End != nil {
 		buf.WriteString(" BETWEEN ")
-		buf.WriteString(f.Start.Type)
+		writeFrameBound(buf, &f.Start)
 		buf.WriteString(" AND ")
-		buf.WriteString(f.End.Type)
+		writeFrameBound(buf, f.End)
 		return
 	}
 	buf.WriteByte(' ')
-	buf.WriteString(f.Start.Type)
+	writeFrameBound(buf, &f.Start)
+}
+
+// writeFrameBound renders a single window frame bound. A numeric bound keeps
+// its offset in Value (e.g. Value=2, Type="PRECEDING"); CURRENT ROW and the
+// UNBOUNDED forms carry no Value.
+func writeFrameBound(buf *bytes.Buffer, b *WindowFrameBound) {
+	if b.Value != nil {
+		writeExpr(buf, b.Value)
+		buf.WriteByte(' ')
+	}
+	buf.WriteString(b.Type)
 }
 
 func writeFetch(buf *bytes.Buffer, f *FetchClause) {

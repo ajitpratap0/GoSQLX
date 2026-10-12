@@ -600,3 +600,33 @@ func TestSQLFormatter_ParenthesizedExpression(t *testing.T) {
 		}
 	}
 }
+
+// TestSQLFormatter_NotExistsDoesNotPanic covers NOT EXISTS (subquery), which the parser
+// represents as a NOT with the EXISTS on the left and no right operand.
+func TestSQLFormatter_NotExistsDoesNotPanic(t *testing.T) {
+	sql := "SELECT a FROM t WHERE NOT EXISTS (SELECT 1 FROM u WHERE u.id = t.id)"
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+	tokens, err := tkz.Tokenize([]byte(sql))
+	if err != nil {
+		t.Fatalf("Tokenization failed: %v", err)
+	}
+
+	p := parser.NewParser()
+	astObj := ast.NewAST()
+	defer ast.ReleaseAST(astObj)
+	result, err := p.ParseFromModelTokens(tokens)
+	if err != nil {
+		t.Fatalf("Parsing failed: %v", err)
+	}
+	astObj.Statements = result.Statements
+
+	formatter := NewSQLFormatter(FormatterOptions{Indent: "  ", UppercaseKw: true})
+	output, err := formatter.Format(astObj)
+	if err != nil {
+		t.Fatalf("Formatting failed: %v", err)
+	}
+	if !strings.Contains(output, "NOT EXISTS (") {
+		t.Errorf("expected NOT EXISTS in output, got:\n%s", output)
+	}
+}

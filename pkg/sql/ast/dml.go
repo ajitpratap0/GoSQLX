@@ -36,9 +36,8 @@ func (s Select) TokenLiteral() string { return "SELECT" }
 func (s Select) Children() []Node {
 	children := make([]Node, 0)
 	children = append(children, nodifyExpressions(s.Columns)...)
-	for _, from := range s.From {
-		from := from // G601: Create local copy to avoid memory aliasing
-		children = append(children, &from)
+	for i := range s.From {
+		children = append(children, &s.From[i])
 	}
 	if s.Where != nil {
 		children = append(children, s.Where)
@@ -47,9 +46,8 @@ func (s Select) Children() []Node {
 	if s.Having != nil {
 		children = append(children, s.Having)
 	}
-	for _, orderBy := range s.OrderBy {
-		orderBy := orderBy // G601: Create local copy to avoid memory aliasing
-		children = append(children, &orderBy)
+	for i := range s.OrderBy {
+		children = append(children, &s.OrderBy[i])
 	}
 	return children
 }
@@ -119,9 +117,8 @@ func (u Update) TokenLiteral() string { return "UPDATE" }
 func (u Update) Children() []Node {
 	children := make([]Node, 0)
 	children = append(children, &u.Table)
-	for _, update := range u.Updates {
-		update := update // G601: Create local copy to avoid memory aliasing
-		children = append(children, &update)
+	for i := range u.Updates {
+		children = append(children, &u.Updates[i])
 	}
 	if u.Where != nil {
 		children = append(children, u.Where)

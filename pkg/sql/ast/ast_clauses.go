@@ -78,12 +78,22 @@ type JoinClause struct {
 
 func (j *JoinClause) expressionNode()     {}
 func (j JoinClause) TokenLiteral() string { return j.Type + " JOIN" }
-func (j JoinClause) Children() []Node {
-	children := []Node{&j.Left, &j.Right}
+
+// Children returns Left, Right and, when present, Condition.
+//
+// The value receiver is kept for API compatibility. Called on a value it
+// returns addresses into the receiver copy (one heap copy per call), while
+// Walk and Inspect use childrenInPlace and visit the stored fields in place
+// (#557).
+func (j JoinClause) Children() []Node { return j.childrenInPlace() }
+
+// childrenInPlace is Children for a JoinClause reached through a pointer:
+// Left and Right are returned as pointers into *j itself.
+func (j *JoinClause) childrenInPlace() []Node {
 	if j.Condition != nil {
-		children = append(children, j.Condition)
+		return []Node{&j.Left, &j.Right, j.Condition}
 	}
-	return children
+	return []Node{&j.Left, &j.Right}
 }
 
 // TableReference represents a table reference in a FROM clause.
@@ -246,11 +256,16 @@ type WindowSpec struct {
 func (w *WindowSpec) statementNode()      {}
 func (w WindowSpec) TokenLiteral() string { return "WINDOW" }
 func (w WindowSpec) Children() []Node {
-	children := make([]Node, 0)
-	children = append(children, nodifyExpressions(w.PartitionBy)...)
-	for _, orderBy := range w.OrderBy {
-		orderBy := orderBy // G601: Create local copy to avoid memory aliasing
-		children = append(children, &orderBy)
+	n := len(w.PartitionBy) + len(w.OrderBy)
+	if w.FrameClause != nil {
+		n++
+	}
+	children := make([]Node, 0, n)
+	for _, e := range w.PartitionBy {
+		children = append(children, e)
+	}
+	for i := range w.OrderBy {
+		children = append(children, &w.OrderBy[i])
 	}
 	if w.FrameClause != nil {
 		children = append(children, w.FrameClause)
@@ -267,13 +282,22 @@ type WindowFrame struct {
 
 func (w *WindowFrame) statementNode()      {}
 func (w WindowFrame) TokenLiteral() string { return w.Type }
-func (w WindowFrame) Children() []Node {
-	// Start is a value type, always include it to support visitor traversal.
-	children := []Node{&w.Start}
+
+// Children returns Start and, when present, End.
+//
+// The value receiver is kept for API compatibility. Called on a value it
+// returns addresses into the receiver copy (one heap copy per call), while
+// Walk and Inspect use childrenInPlace and visit the stored fields in place
+// (#557).
+func (w WindowFrame) Children() []Node { return w.childrenInPlace() }
+
+// childrenInPlace is Children for a WindowFrame reached through a pointer:
+// Start is a value type, always included, and returned as a pointer into *w.
+func (w *WindowFrame) childrenInPlace() []Node {
 	if w.End != nil {
-		children = append(children, w.End)
+		return []Node{&w.Start, w.End}
 	}
-	return children
+	return []Node{&w.Start}
 }
 
 // WindowFrameBound represents window frame bound
@@ -377,9 +401,8 @@ func (o OnConflict) TokenLiteral() string { return "ON CONFLICT" }
 func (o OnConflict) Children() []Node {
 	children := nodifyExpressions(o.Target)
 	if o.Action.DoUpdate != nil {
-		for _, update := range o.Action.DoUpdate {
-			update := update // G601: Create local copy to avoid memory aliasing
-			children = append(children, &update)
+		for i := range o.Action.DoUpdate {
+			children = append(children, &o.Action.DoUpdate[i])
 		}
 	}
 	if o.Action.Where != nil {
@@ -404,9 +427,8 @@ func (u *UpsertClause) expressionNode()     {}
 func (u UpsertClause) TokenLiteral() string { return "ON DUPLICATE KEY UPDATE" }
 func (u UpsertClause) Children() []Node {
 	children := make([]Node, len(u.Updates))
-	for i, update := range u.Updates {
-		update := update // G601: Create local copy to avoid memory aliasing
-		children[i] = &update
+	for i := range u.Updates {
+		children[i] = &u.Updates[i]
 	}
 	return children
 }
@@ -422,9 +444,8 @@ func (c *ColumnDef) expressionNode()     {}
 func (c ColumnDef) TokenLiteral() string { return c.Name }
 func (c ColumnDef) Children() []Node {
 	children := make([]Node, len(c.Constraints))
-	for i, constraint := range c.Constraints {
-		constraint := constraint // G601: Create local copy to avoid memory aliasing
-		children[i] = &constraint
+	for i := range c.Constraints {
+		children[i] = &c.Constraints[i]
 	}
 	return children
 }
@@ -721,9 +742,8 @@ func (m MatchRecognizeClause) TokenLiteral() string { return "MATCH_RECOGNIZE" }
 func (m MatchRecognizeClause) Children() []Node {
 	var nodes []Node
 	nodes = append(nodes, nodifyExpressions(m.PartitionBy)...)
-	for _, ob := range m.OrderBy {
-		ob := ob
-		nodes = append(nodes, &ob)
+	for i := range m.OrderBy {
+		nodes = append(nodes, &m.OrderBy[i])
 	}
 	for _, md := range m.Measures {
 		if md.Expr != nil {

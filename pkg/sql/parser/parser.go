@@ -16,6 +16,7 @@ package parser
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -1139,26 +1140,45 @@ func (p *Parser) parseStringLiteral() string {
 	return value
 }
 
-// parseQualifiedName parses a potentially schema-qualified name (e.g., schema.table or db.schema.table).
-// Returns the full dotted name as a string. Supports up to 3-part names.
+// maxQualifiedNameParts caps the number of dot-separated parts in a qualified
+// object (table, view, index, schema) name. Four parts cover the longest form
+// any supported dialect accepts (SQL Server server.database.schema.table); the
+// limit matches maxColumnRefParts so object and column references agree.
+const maxQualifiedNameParts = maxColumnRefParts
+
+// parseQualifiedName parses a possibly qualified object name (table,
+// schema.table, db.schema.table, server.db.schema.table) and returns it as a
+// dotted string. The parts are collected and joined once, so the cost is
+// linear in the input, and names with more than maxQualifiedNameParts parts
+// are rejected with E2004.
 func (p *Parser) parseQualifiedName() (string, error) {
 	if !p.isIdentifier() && !p.isNonReservedKeyword() {
 		return "", p.expectedError("identifier")
 	}
-	name := p.currentToken.Token.Value
+	var parts [maxQualifiedNameParts]string
+	parts[0] = p.currentToken.Token.Value
+	n := 1
 	p.advance()
 
 	// Check for schema.table or db.schema.table
 	for p.isType(models.TokenTypePeriod) {
 		p.advance() // Consume .
+		if n == maxQualifiedNameParts {
+			return "", goerrors.InvalidSyntaxError(
+				fmt.Sprintf("qualified name has more than %d parts", maxQualifiedNameParts),
+				p.currentLocation(),
+				"",
+			)
+		}
 		if !p.isIdentifier() && !p.isNonReservedKeyword() {
 			return "", p.expectedError("identifier after .")
 		}
-		name = name + "." + p.currentToken.Token.Value
+		parts[n] = p.currentToken.Token.Value
+		n++
 		p.advance()
 	}
 
-	return name, nil
+	return strings.Join(parts[:n], "."), nil
 }
 
 // Accepts IDENT or non-reserved keywords that can be used as table names

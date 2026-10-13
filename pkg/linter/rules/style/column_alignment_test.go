@@ -376,3 +376,44 @@ FROM ユーザー`,
 		})
 	}
 }
+
+// TestColumnAlignmentRule_TieBreakDeterministic verifies that when several
+// indents tie for most common, the earliest continuation-column indent wins and
+// the result is identical on every call (issue #618).
+func TestColumnAlignmentRule_TieBreakDeterministic(t *testing.T) {
+	type pos struct{ line, col int }
+	tests := []struct {
+		name string
+		sql  string
+		want []pos
+	}{
+		{"issue repro tie", "SELECT a,\n  b,\n    c\nFROM t", []pos{{3, 5}}},
+		{"reversed tie", "SELECT a,\n    b,\n  c\nFROM t", []pos{{3, 3}}},
+		{"three-way tie", "SELECT a,\n  b,\n    c,\n      d\nFROM t", []pos{{3, 5}, {4, 7}}},
+		{"untied mode wins when later", "SELECT a,\n  b,\n    c,\n    d\nFROM t", []pos{{2, 3}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := NewColumnAlignmentRule()
+			for i := 0; i < 200; i++ {
+				ctx := linter.NewContext(tt.sql, "<test>")
+				vs, err := rule.Check(ctx)
+				if err != nil {
+					t.Fatalf("iteration %d: Check error: %v", i, err)
+				}
+				got := make([]pos, 0, len(vs))
+				for _, v := range vs {
+					got = append(got, pos{v.Location.Line, v.Location.Column})
+				}
+				if len(got) != len(tt.want) {
+					t.Fatalf("iteration %d: got %v, want %v", i, got, tt.want)
+				}
+				for j := range got {
+					if got[j] != tt.want[j] {
+						t.Fatalf("iteration %d: got %v, want %v", i, got, tt.want)
+					}
+				}
+			}
+		})
+	}
+}

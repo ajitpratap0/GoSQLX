@@ -15,6 +15,7 @@
 package style
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/linter"
@@ -443,6 +444,54 @@ func TestAliasingConsistencyRule_ExplicitVsImplicit(t *testing.T) {
 			if hasViolations != tt.expectsViolations {
 				t.Errorf("Expected violations: %v, got violations: %v (count: %d)",
 					tt.expectsViolations, hasViolations, len(violations))
+			}
+		})
+	}
+}
+
+// TestAliasingConsistencyRule_TextBasedOrderDeterministic verifies the text
+// fallback reports violations in first-seen table order on every call
+// (issue #618).
+func TestAliasingConsistencyRule_TextBasedOrderDeterministic(t *testing.T) {
+	type want struct {
+		line  int
+		table string
+	}
+	tests := []struct {
+		name string
+		sql  string
+		want []want
+	}{
+		{
+			name: "issue repro",
+			sql:  "SELECT users.id, orders.total\nFROM users u\nJOIN orders ON users.id = orders.uid\nWHERE (",
+			want: []want{{2, "users"}, {3, "orders"}},
+		},
+		{
+			name: "three tables in source order",
+			sql:  "SELECT alpha.x, beta.y, gamma.z\nFROM alpha t1\nJOIN beta ON alpha.x = beta.y\nJOIN gamma ON gamma.z = alpha.x\nWHERE (",
+			want: []want{{2, "alpha"}, {3, "beta"}, {4, "gamma"}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := NewAliasingConsistencyRule(true)
+			for i := 0; i < 200; i++ {
+				ctx := linter.NewContext(tt.sql, "<test>") // no AST: text fallback
+				vs, err := rule.Check(ctx)
+				if err != nil {
+					t.Fatalf("iteration %d: Check error: %v", i, err)
+				}
+				if len(vs) != len(tt.want) {
+					t.Fatalf("iteration %d: got %d violations, want %d: %+v", i, len(vs), len(tt.want), vs)
+				}
+				for j, w := range tt.want {
+					v := vs[j]
+					if v.Location.Line != w.line || v.Location.Column != 1 || !strings.Contains(v.Message, "'"+w.table+"'") {
+						t.Fatalf("iteration %d: violation %d = %d:%d %q, want line %d table %q",
+							i, j, v.Location.Line, v.Location.Column, v.Message, w.line, w.table)
+					}
+				}
 			}
 		})
 	}

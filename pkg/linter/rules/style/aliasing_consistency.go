@@ -122,6 +122,7 @@ func (r *AliasingConsistencyRule) checkTextBased(ctx *linter.Context) ([]linter.
 	definedAliases := make(map[string]int)     // alias -> line defined
 	fullTableNames := make(map[string]int)     // table name -> line defined
 	usedQualifiedRefs := make(map[string]bool) // table.column references
+	tableOrder := make([]string, 0, 4)         // table names in first-seen source order
 
 	// First pass: find alias definitions
 	for lineNum, line := range ctx.Lines {
@@ -137,6 +138,9 @@ func (r *AliasingConsistencyRule) checkTextBased(ctx *linter.Context) ([]linter.
 					// Next word is table name, word after might be alias
 					if i+1 < len(parts) {
 						tableName := parts[i+1]
+						if _, seen := fullTableNames[tableName]; !seen {
+							tableOrder = append(tableOrder, tableName)
+						}
 						fullTableNames[tableName] = lineNum + 1
 
 						// Check if there's an AS keyword or implicit alias
@@ -177,7 +181,9 @@ func (r *AliasingConsistencyRule) checkTextBased(ctx *linter.Context) ([]linter.
 	}
 
 	// Check for inconsistency: using full table names and aliases mixed
-	for tableName, definedLine := range fullTableNames {
+	// Iterate in first-seen source order so violations are deterministic.
+	for _, tableName := range tableOrder {
+		definedLine := fullTableNames[tableName]
 		// Check if this table has an alias
 		hasAlias := false
 		for alias := range definedAliases {

@@ -152,8 +152,9 @@ func (r *ColumnAlignmentRule) Check(ctx *linter.Context) ([]linter.Violation, er
 // checkColumnAlignment checks if columns in a SELECT are properly aligned.
 //
 // Calculates the most common indentation level (mode) among columns and reports
-// columns that don't match this level. The first column is skipped as it may
-// appear on the SELECT line with different indentation.
+// columns that don't match this level. When several indents tie for most common,
+// the one belonging to the earliest continuation column wins. The first column
+// is skipped as it may appear on the SELECT line with different indentation.
 //
 // Returns a slice of violations for misaligned columns.
 func (r *ColumnAlignmentRule) checkColumnAlignment(indents []int, lines []int, _ int, ctx *linter.Context) []linter.Violation {
@@ -169,10 +170,12 @@ func (r *ColumnAlignmentRule) checkColumnAlignment(indents []int, lines []int, _
 		indentCounts[indent]++
 	}
 
+	// Scan in source order (not map order) so ties between equally common
+	// indents resolve to the earliest continuation column deterministically.
 	var expectedIndent int
 	maxCount := 0
-	for indent, count := range indentCounts {
-		if count > maxCount {
+	for _, indent := range indents[1:] {
+		if count := indentCounts[indent]; count > maxCount {
 			maxCount = count
 			expectedIndent = indent
 		}

@@ -111,9 +111,25 @@ func PutParser(p *Parser) {
 	}
 }
 
+// maxPooledTokenBuf is the largest Parser.tokenBuf capacity (in tokens, about
+// 288 KiB at 72 B per token) that Reset keeps for reuse. Larger buffers are
+// dropped so one huge query does not pin memory in the parser pool.
+const maxPooledTokenBuf = 4096
+
 // Reset clears the parser state for reuse from the pool.
 func (p *Parser) Reset() {
-	p.tokens = p.tokens[:0]
+	// p.tokens may alias a caller-owned slice (ParseWithPositions) or
+	// tokenBuf; drop the reference rather than keeping either alive.
+	p.tokens = nil
+	if cap(p.tokenBuf) > maxPooledTokenBuf {
+		p.tokenBuf = nil
+	} else {
+		// Drop the string/Word references into the previous query text.
+		// Only [0:len) needs clearing: tokenBuf[len:cap] is always zero
+		// (see preprocess).
+		clear(p.tokenBuf)
+		p.tokenBuf = p.tokenBuf[:0]
+	}
 	p.currentPos = 0
 	p.currentToken = models.TokenWithSpan{}
 	p.depth = 0
@@ -165,6 +181,8 @@ const MaxRecursionDepth = 100
 //
 // Internal State:
 //   - tokens: Token stream from the tokenizer (converted to parser tokens)
+//   - tokenBuf: Parser-owned scratch buffer holding the preprocessed stream,
+//     reused across parses and scrubbed (or dropped when large) by Reset
 //   - currentPos: Current position in token stream
 //   - currentToken: Current token being examined
 //   - depth: Recursion depth counter (DoS protection via MaxRecursionDepth)
@@ -240,7 +258,11 @@ func (p *Parser) Dialect() string {
 // For dialect-aware parsing or strict mode, use NewParser with options, or call
 // ApplyOptions on a pooled instance before parsing.
 type Parser struct {
-	tokens       []models.TokenWithSpan
+	tokens []models.TokenWithSpan
+	// tokenBuf is parser-owned scratch holding the preprocessed token stream
+	// (see preprocess). It is reused across parses and never exposed to
+	// callers. INVARIANT: tokenBuf[len:cap] is always zeroed.
+	tokenBuf     []models.TokenWithSpan
 	currentPos   int
 	currentToken models.TokenWithSpan
 	depth        int             // Current recursion depth
@@ -291,12 +313,23 @@ func (p *Parser) Parse(tokens []token.Token) (*ast.AST, error) {
 		wrapped[i] = models.WrapToken(models.Token{Type: t.Type, Value: t.Literal})
 	}
 	// Preprocessing still normalises compound tokens and keyword types.
-	preprocessed := preprocessTokens(wrapped)
-	return p.parseTokens(preprocessed)
+	return p.parseTokens(p.preprocess(wrapped))
+}
+
+// preprocess normalises tokens into the parser-owned tokenBuf and returns it.
+// The result is only valid until the next preprocess or Reset on p, so it must
+// never be handed to a caller; parse methods are not re-entrant on one Parser.
+func (p *Parser) preprocess(tokens []models.TokenWithSpan) []models.TokenWithSpan {
+	// Keep tokenBuf[len:cap] zeroed. After Reset len == 0, so this is a no-op
+	// on the pooled path; on a parser reused without Reset it scrubs the
+	// previous stream so a shorter one cannot leave stale strings in the tail.
+	clear(p.tokenBuf)
+	p.tokenBuf = preprocessTokensInto(p.tokenBuf, tokens)
+	return p.tokenBuf
 }
 
 // parseTokens is the core parsing routine. It takes a preprocessed
-// []models.TokenWithSpan (already normalised by preprocessTokens) and returns
+// []models.TokenWithSpan (already normalised by preprocessTokens or p.preprocess) and returns
 // the parsed AST.
 func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 	p.tokens = tokens
@@ -313,7 +346,11 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 	if len(tokens) > 100 {
 		estimatedStmts = 2 // For larger inputs, allocate more
 	}
-	result.Statements = make([]ast.Statement, 0, estimatedStmts)
+	if cap(result.Statements) < estimatedStmts {
+		result.Statements = make([]ast.Statement, 0, estimatedStmts)
+	} else {
+		result.Statements = result.Statements[:0]
+	}
 
 	// Parse statements using Type (int) comparisons for speed
 	for p.currentPos < len(tokens) && !p.isType(models.TokenTypeEOF) {
@@ -362,8 +399,7 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 // Issue #322: token_conversion.go has been removed; preprocessing is now a
 // lightweight normalisation step that works entirely with models.TokenWithSpan.
 func (p *Parser) ParseFromModelTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
-	preprocessed := preprocessTokens(tokens)
-	return p.parseTokens(preprocessed)
+	return p.parseTokens(p.preprocess(tokens))
 }
 
 // ParseFromModelTokensWithPositions is identical to ParseFromModelTokens.
@@ -376,8 +412,7 @@ func (p *Parser) ParseFromModelTokensWithPositions(tokens []models.TokenWithSpan
 
 // ParseContextFromModelTokens parses tokenizer output with context support for cancellation.
 func (p *Parser) ParseContextFromModelTokens(ctx context.Context, tokens []models.TokenWithSpan) (*ast.AST, error) {
-	preprocessed := preprocessTokens(tokens)
-	return p.parseContextTokens(ctx, preprocessed)
+	return p.parseContextTokens(ctx, p.preprocess(tokens))
 }
 
 // ParseWithPositions parses tokens with position tracking for enhanced error reporting.
@@ -471,8 +506,7 @@ func (p *Parser) ParseContext(ctx context.Context, tokens []token.Token) (*ast.A
 	for i, t := range tokens {
 		wrapped[i] = models.WrapToken(models.Token{Type: t.Type, Value: t.Literal})
 	}
-	preprocessed := preprocessTokens(wrapped)
-	return p.parseContextTokens(ctx, preprocessed)
+	return p.parseContextTokens(ctx, p.preprocess(wrapped))
 }
 
 // parseContextTokens is the core context-aware parsing routine. It takes
@@ -501,7 +535,11 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 	if len(tokens) > 100 {
 		estimatedStmts = 2 // For larger inputs, allocate more
 	}
-	result.Statements = make([]ast.Statement, 0, estimatedStmts)
+	if cap(result.Statements) < estimatedStmts {
+		result.Statements = make([]ast.Statement, 0, estimatedStmts)
+	} else {
+		result.Statements = result.Statements[:0]
+	}
 
 	// Parse statements using Type (int) comparisons for speed
 	for p.currentPos < len(tokens) && !p.isType(models.TokenTypeEOF) {
@@ -547,6 +585,7 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 func (p *Parser) Release() {
 	// Reset internal state to avoid memory leaks
 	p.tokens = nil
+	p.tokenBuf = nil
 	p.currentPos = 0
 	p.currentToken = models.TokenWithSpan{}
 	p.depth = 0

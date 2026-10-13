@@ -41,16 +41,34 @@ const maxKeywordLen = 16
 // preprocessTokens normalises a token stream for the parser.
 // It expands compound tokens and remaps identifier/keyword types, returning a
 // new slice of models.TokenWithSpan that the parser consumes directly.
+//
+// The returned slice is freshly allocated and owned by the caller; use it when
+// the preprocessed stream outlives the parse (e.g. ParseBytesWithTokens).
 func preprocessTokens(tokens []models.TokenWithSpan) []models.TokenWithSpan {
-	result := make([]models.TokenWithSpan, 0, len(tokens)+4)
+	return preprocessTokensInto(nil, tokens)
+}
+
+// preprocessTokensInto is preprocessTokens appending into dst[:0], so a caller
+// that owns a scratch buffer (Parser.tokenBuf) can reuse it across parses.
+// It allocates only when cap(dst) < len(tokens)+4 (the headroom covers the
+// common compound-token expansions).
+//
+// dst must not alias tokens. The returned slice may share dst's backing array,
+// so it must not be handed to anyone who could outlive the next call with the
+// same dst.
+func preprocessTokensInto(dst, tokens []models.TokenWithSpan) []models.TokenWithSpan {
+	dst = dst[:0]
+	if need := len(tokens) + 4; cap(dst) < need {
+		dst = make([]models.TokenWithSpan, 0, need)
+	}
 	for i := range tokens {
 		var ok bool
-		if result, ok = appendCompound(result, &tokens[i]); ok {
+		if dst, ok = appendCompound(dst, &tokens[i]); ok {
 			continue
 		}
-		result = append(result, normalizeToken(tokens[i]))
+		dst = append(dst, normalizeToken(tokens[i]))
 	}
-	return result
+	return dst
 }
 
 // Compound token expansion tables. These slices are shared, read-only package

@@ -184,7 +184,9 @@ var (
 	astPool = sync.Pool{
 		New: func() interface{} {
 			return &AST{
-				Statements: make([]Statement, 0, 8), // Increased initial capacity
+				// Covers the parser's 1-2 statement estimate so a fresh AST
+				// needs no second allocation; ReleaseAST keeps any grown capacity.
+				Statements: make([]Statement, 0, 2),
 			}
 		},
 	}

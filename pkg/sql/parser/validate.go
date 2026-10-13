@@ -150,6 +150,8 @@ func ParseBytesWithTokens(input []byte) (*ast.AST, []models.TokenWithSpan, error
 	p := GetParser()
 	defer PutParser(p)
 
+	// Not p.preprocess: the slice is returned to the caller, so it must be a
+	// fresh allocation rather than the pooled parser's reusable buffer.
 	preprocessed := preprocessTokens(tokens)
 	astResult, parseErr := p.parseTokens(preprocessed)
 	if parseErr != nil {

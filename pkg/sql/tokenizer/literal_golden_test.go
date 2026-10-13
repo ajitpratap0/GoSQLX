@@ -15,6 +15,7 @@
 package tokenizer
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -244,7 +245,7 @@ func TestLiteralGolden(t *testing.T) {
 			input = string(e.InputBytes)
 		}
 		if strings.HasPrefix(e.ID, "file:") {
-			data, err := os.ReadFile(filepath.FromSlash(strings.TrimPrefix(e.ID, "file:")))
+			data, err := readCorpusFile(filepath.FromSlash(strings.TrimPrefix(e.ID, "file:")))
 			if err != nil {
 				t.Errorf("%s: cannot read corpus file: %v; regenerate the golden on the reference tree with -args -update-literal-golden", e.ID, err)
 				continue
@@ -333,6 +334,20 @@ func serializeLiteralResult(sb *strings.Builder, tokens []models.TokenWithSpan, 
 	}
 }
 
+// readCorpusFile reads a corpus .sql file with CRLF normalized to LF. Git on
+// the windows-latest CI runner checks text files out with CRLF
+// (core.autocrlf; the repo has no .gitattributes), which would otherwise
+// change both the content hash and the tokenizer output for every file
+// entry. None of the corpus files contain carriage returns, so this is
+// lossless on LF checkouts.
+func readCorpusFile(path string) ([]byte, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n")), nil
+}
+
 func sha256Hex(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
@@ -358,7 +373,7 @@ func writeLiteralGolden(t *testing.T) {
 	}
 
 	for _, path := range literalGoldenSQLFiles(t) {
-		data, err := os.ReadFile(path)
+		data, err := readCorpusFile(path)
 		if err != nil {
 			t.Fatalf("read %s: %v", path, err)
 		}

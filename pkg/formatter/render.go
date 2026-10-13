@@ -1379,9 +1379,19 @@ func windowSpecSQL(w *ast.WindowSpec) string {
 // windowFrameSQL renders a window frame clause.
 func windowFrameSQL(f *ast.WindowFrame) string {
 	if f.End != nil {
-		return fmt.Sprintf("%s BETWEEN %s AND %s", f.Type, f.Start.Type, f.End.Type)
+		return fmt.Sprintf("%s BETWEEN %s AND %s", f.Type, frameBoundSQL(&f.Start), frameBoundSQL(f.End))
 	}
-	return fmt.Sprintf("%s %s", f.Type, f.Start.Type)
+	return fmt.Sprintf("%s %s", f.Type, frameBoundSQL(&f.Start))
+}
+
+// frameBoundSQL renders a window frame bound. A numeric bound keeps its offset
+// in Value (e.g. Value=2, Type="PRECEDING"); CURRENT ROW and the UNBOUNDED
+// forms carry no Value.
+func frameBoundSQL(b *ast.WindowFrameBound) string {
+	if b.Value != nil {
+		return exprSQL(b.Value) + " " + b.Type
+	}
+	return b.Type
 }
 
 // fetchSQL renders a FETCH clause, respecting keyword casing from the nodeFormatter.

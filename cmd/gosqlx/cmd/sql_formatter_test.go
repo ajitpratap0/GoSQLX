@@ -238,6 +238,7 @@ func TestSQLFormatter_WindowFunctions(t *testing.T) {
 		name        string
 		sql         string
 		expectWords []string
+		rejectWords []string
 	}{
 		{
 			name:        "ROW_NUMBER with OVER",
@@ -252,7 +253,13 @@ func TestSQLFormatter_WindowFunctions(t *testing.T) {
 		{
 			name:        "Window frame",
 			sql:         "SELECT date, SUM(amount) OVER (ORDER BY date ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) FROM transactions",
-			expectWords: []string{"select", "over", "order by", "rows", "between"},
+			expectWords: []string{"select", "over", "order by", "rows", "between", "2 preceding", "current row"},
+		},
+		{
+			name:        "Window frame single bound",
+			sql:         "SELECT date, SUM(amount) OVER (ORDER BY date ROWS 3 PRECEDING) FROM transactions",
+			expectWords: []string{"select", "over", "order by", "rows", "3 preceding"},
+			rejectWords: []string{"between"},
 		},
 	}
 
@@ -287,9 +294,15 @@ func TestSQLFormatter_WindowFunctions(t *testing.T) {
 				t.Fatalf("Formatting failed: %v", err)
 			}
 
+			lower := strings.ToLower(output)
 			for _, word := range tt.expectWords {
-				if !strings.Contains(strings.ToLower(output), word) {
+				if !strings.Contains(lower, word) {
 					t.Errorf("Expected '%s' in output:\n%s", word, output)
+				}
+			}
+			for _, word := range tt.rejectWords {
+				if strings.Contains(lower, word) {
+					t.Errorf("Did not expect '%s' in output:\n%s", word, output)
 				}
 			}
 		})

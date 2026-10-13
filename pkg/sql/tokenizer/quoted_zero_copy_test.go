@@ -333,6 +333,48 @@ func TestReset_DropsLargeLitBuf(t *testing.T) {
 	}
 }
 
+// TestReset_ZeroesLitBuf checks that no decoded literal text survives in a
+// reset or pooled tokenizer's litBuf, including bytes past its length: the
+// first literal is longer than the second, so its tail lies beyond the
+// buffer's final length.
+func TestReset_ZeroesLitBuf(t *testing.T) {
+	const sentinel = "SENTINEL_SECRET_9f3a"
+	sql := "SELECT '" + sentinel + "''" + sentinel + "', 'a''b' FROM t"
+	hasSentinel := func(tkz *Tokenizer) bool {
+		b := tkz.litBuf.Bytes()
+		return strings.Contains(string(b[:cap(b)]), sentinel[:8])
+	}
+
+	tkz, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tkz.TokenizeString(sql); err != nil {
+		t.Fatal(err)
+	}
+	if !hasSentinel(tkz) {
+		t.Fatal("test setup: sentinel did not go through litBuf")
+	}
+	tkz.Reset()
+	if tkz.litBuf.Cap() == 0 {
+		t.Fatal("small litBuf dropped; expected it kept for reuse")
+	}
+	if hasSentinel(tkz) {
+		t.Fatal("litBuf backing array still holds literal text after Reset")
+	}
+
+	pooled := GetTokenizer()
+	if _, err := pooled.TokenizeString(sql); err != nil {
+		t.Fatal(err)
+	}
+	PutTokenizer(pooled)
+	next := GetTokenizer()
+	defer PutTokenizer(next)
+	if hasSentinel(next) {
+		t.Fatal("pooled tokenizer's litBuf holds a previous request's literal text")
+	}
+}
+
 // quotedReaderKind classifies the reader that nextToken would dispatch to
 // at t.pos, or "" for none of the quoted readers.
 func quotedReaderKind(tkz *Tokenizer) string {

@@ -298,7 +298,8 @@ type Tokenizer struct {
 	// only for literals that need rewriting (escapes, doubled quotes,
 	// normalized quotes, invalid UTF-8). Its contents are valid only inside
 	// one reader call: every slow path ends with litBuf.String(), which
-	// copies. Reset truncates it and drops it when it has grown large.
+	// copies. Reset zeroes and truncates it, and drops it when it has grown
+	// large.
 	litBuf bytes.Buffer
 
 	pos        Position            // Current scanning position

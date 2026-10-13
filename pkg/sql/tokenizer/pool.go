@@ -146,7 +146,8 @@ func PutTokenizer(t *Tokenizer) {
 //   - lineStarts: Empty slice with preserved capacity (contains [0])
 //   - input: nil, src: "" (ready for new input)
 //   - Word chunk: nil (Words already returned stay valid; the chunk is never reused)
-//   - litBuf (slow-path literal scratch): truncated, or dropped above 64 KiB
+//   - litBuf (slow-path literal scratch): zeroed and truncated, or dropped
+//     above 64 KiB
 //   - Comments: length 0, previously used entries zeroed
 //   - dialect: preserved (Reset also runs at the start of every
 //     Tokenize call, so the configured dialect must persist; the pool restores
@@ -165,12 +166,18 @@ func (t *Tokenizer) Reset() {
 	t.wordChunk = nil
 	t.wordHint = 0
 
-	// litBuf contents never escape (slow paths copy them out with String), so
-	// truncating is enough; drop an oversized buffer.
+	// litBuf contents never escape (slow paths copy them out with String),
+	// but truncating alone would leave the previous request's decoded
+	// literal text in pooled memory. Zero the whole backing array (every
+	// slow reader restarts at offset 0, so earlier literals of the same call
+	// may lie beyond the current length); drop an oversized buffer. The
+	// clear is free for tokenizers that never took a slow path (cap 0).
 	if t.litBuf.Cap() > maxRetainedLitBuf {
 		t.litBuf = bytes.Buffer{}
 	} else {
 		t.litBuf.Reset()
+		b := t.litBuf.Bytes()
+		clear(b[:cap(b)])
 	}
 
 	// Reset position tracking

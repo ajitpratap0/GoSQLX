@@ -746,3 +746,59 @@ func TestSQLFormatter_WithCTEChainedSetOperations(t *testing.T) {
 		})
 	}
 }
+
+// TestSQLFormatter_UpdateDeleteWithCTE checks that the CLI formatter keeps a
+// leading WITH clause on UPDATE and DELETE, as it does for INSERT (#537).
+func TestSQLFormatter_UpdateDeleteWithCTE(t *testing.T) {
+	tests := []struct {
+		name string
+		sql  string
+		kw   string
+	}{
+		{
+			name: "update",
+			sql:  "WITH c AS (SELECT id FROM s) UPDATE t SET a = 1 WHERE id IN (SELECT id FROM c)",
+			kw:   "UPDATE t",
+		},
+		{
+			name: "delete",
+			sql:  "WITH c AS (SELECT id FROM s) DELETE FROM t WHERE id IN (SELECT id FROM c)",
+			kw:   "DELETE FROM t",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tkz := tokenizer.GetTokenizer()
+			defer tokenizer.PutTokenizer(tkz)
+			tokens, err := tkz.Tokenize([]byte(tt.sql))
+			if err != nil {
+				t.Fatalf("tokenize(%q): %v", tt.sql, err)
+			}
+			p := parser.NewParser()
+			defer p.Release()
+			tree, err := p.ParseFromModelTokens(tokens)
+			if err != nil {
+				t.Fatalf("parse(%q): %v", tt.sql, err)
+			}
+			defer ast.ReleaseAST(tree)
+
+			compact, err := NewSQLFormatter(FormatterOptions{Compact: true, UppercaseKw: true}).Format(tree)
+			if err != nil {
+				t.Fatalf("compact format: %v", err)
+			}
+			if compact != tt.sql {
+				t.Errorf("compact output:\n got: %s\nwant: %s", compact, tt.sql)
+			}
+
+			readable, err := NewSQLFormatter(FormatterOptions{Indent: "  ", UppercaseKw: true}).Format(tree)
+			if err != nil {
+				t.Fatalf("readable format: %v", err)
+			}
+			w, k := strings.Index(readable, "WITH c AS"), strings.Index(readable, tt.kw)
+			if w < 0 || k < 0 || w > k {
+				t.Errorf("expected WITH c AS before %q in readable output:\n%s", tt.kw, readable)
+			}
+		})
+	}
+}

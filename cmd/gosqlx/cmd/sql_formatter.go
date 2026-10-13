@@ -307,6 +307,14 @@ func (f *SQLFormatter) formatInsert(stmt *ast.InsertStatement) error {
 
 // formatUpdate formats UPDATE statements
 func (f *SQLFormatter) formatUpdate(stmt *ast.UpdateStatement) error {
+	// Leading WITH clause: WITH c AS (...) UPDATE ... (#537)
+	if stmt.With != nil {
+		if err := f.formatWithClause(stmt.With); err != nil {
+			return err
+		}
+		f.writeNewline()
+	}
+
 	f.writeKeyword("UPDATE")
 	f.builder.WriteString(" " + stmt.TableName)
 
@@ -344,6 +352,14 @@ func (f *SQLFormatter) formatUpdate(stmt *ast.UpdateStatement) error {
 
 // formatDelete formats DELETE statements
 func (f *SQLFormatter) formatDelete(stmt *ast.DeleteStatement) error {
+	// Leading WITH clause: WITH c AS (...) DELETE ... (#537)
+	if stmt.With != nil {
+		if err := f.formatWithClause(stmt.With); err != nil {
+			return err
+		}
+		f.writeNewline()
+	}
+
 	f.writeKeyword("DELETE FROM")
 	f.builder.WriteString(" " + stmt.TableName)
 

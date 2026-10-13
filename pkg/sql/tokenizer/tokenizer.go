@@ -65,6 +65,10 @@ const (
 	//   - Complex query with joins: ~100-500 tokens
 	//   - Large IN clause with 1000 values: ~3000-4000 tokens
 	//
+	// Collected comments count toward this limit as well: the number of
+	// tokens plus the number of comments may not exceed MaxTokens, so an
+	// input made only of comments is bounded like one made of tokens.
+	//
 	// If this limit is hit on a legitimate query, the query should likely
 	// be redesigned for better performance and maintainability.
 	MaxTokens = 1000000 // 1M tokens
@@ -310,6 +314,10 @@ type Tokenizer struct {
 	logger     *slog.Logger        // Optional structured logger for verbose tracing
 	Comments   []models.Comment    // Comments captured during tokenization
 
+	// emitted is the number of tokens produced so far by the current call.
+	// Together with len(Comments) it is checked against MaxTokens.
+	emitted int
+
 	// Forward column cursor used by toSQLPosition so that the mostly
 	// monotone position requests made during tokenization cost O(1)
 	// amortized instead of re-counting the whole line prefix each time.
@@ -319,6 +327,13 @@ type Tokenizer struct {
 	posCacheLine int // index into lineStarts of the line the cursor is on
 	posCacheIdx  int // byte offset the cursor has counted up to (<= len(input))
 	posCacheCol  int // 1-based column at posCacheIdx; 0 means the cursor is invalid
+
+	// Forward cursor used by hasCodeBeforeOnLine so that a run of comments
+	// on one line costs time linear in the line length instead of
+	// rescanning the line prefix for every comment. Invalidated by Reset().
+	inlLine int  // index into lineStarts of the cursor's line, plus one; 0 means unset
+	inlScan int  // byte offset the line has been scanned up to
+	inlCode bool // whether a non-whitespace byte was seen in [lineStart, inlScan)
 }
 
 // New creates a new Tokenizer with default configuration and keyword support.
@@ -605,11 +620,13 @@ func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, have
 				break
 			}
 
-			// Check token count limit to prevent DoS attacks
-			if len(tokens) >= MaxTokens {
-				tokenErr = errors.TokenLimitReachedError(len(tokens)+1, MaxTokens, t.getCurrentPosition(), t.src)
+			// Check token count limit to prevent DoS attacks. Collected
+			// comments count toward the same limit.
+			if n := len(tokens) + len(t.Comments); n >= MaxTokens {
+				tokenErr = errors.TokenLimitReachedError(n+1, MaxTokens, t.getCurrentPosition(), t.src)
 				return
 			}
+			t.emitted = len(tokens)
 
 			// Compute the start location before scanning so position requests
 			// stay monotone (nextToken may record comment positions past it).
@@ -804,30 +821,136 @@ func (t *Tokenizer) skipWhitespace() {
 	}
 }
 
-// nextToken picks out the next token from the input
+// nextToken picks out the next token from the input.
+//
+// Comments are recorded in t.Comments and skipped, together with the
+// whitespace after them, in a loop until a token or the end of input is
+// reached. Skipping iteratively keeps stack usage constant however many
+// comments appear in a row.
 func (t *Tokenizer) nextToken() (models.Token, error) {
-	if t.pos.Index >= len(t.input) {
-		return models.Token{Type: models.TokenTypeEOF}, nil
-	}
+	for {
+		if t.pos.Index >= len(t.input) {
+			return models.Token{Type: models.TokenTypeEOF}, nil
+		}
 
-	// Fast path for common cases
-	r, _ := utf8.DecodeRune(t.input[t.pos.Index:])
-	switch {
-	case isIdentifierStart(r):
-		return t.readIdentifier()
-	case r >= '0' && r <= '9':
-		return t.readNumber(nil)
-	case r == '"' || isUnicodeQuote(r):
-		return t.readQuotedIdentifier()
-	case r == '`':
-		// MySQL-style backtick identifier
-		return t.readBacktickIdentifier()
-	case r == '\'' || r == '\u2018' || r == '\u2019' || r == '\u00AB' || r == '\u00BB':
-		return t.readQuotedString(r)
-	}
+		// Fast path for common cases
+		r, _ := utf8.DecodeRune(t.input[t.pos.Index:])
+		switch {
+		case isIdentifierStart(r):
+			return t.readIdentifier()
+		case r >= '0' && r <= '9':
+			return t.readNumber(nil)
+		case r == '"' || isUnicodeQuote(r):
+			return t.readQuotedIdentifier()
+		case r == '`':
+			// MySQL-style backtick identifier
+			return t.readBacktickIdentifier()
+		case r == '\'' || r == '\u2018' || r == '\u2019' || r == '\u00AB' || r == '\u00BB':
+			return t.readQuotedString(r)
+		}
 
-	// Slower path for punctuation and operators
-	return t.readPunctuation()
+		// Comments: "--" up to end of line, "/*" up to "*/".
+		if (r == '-' || r == '/') && t.pos.Index+1 < len(t.input) {
+			next := t.input[t.pos.Index+1]
+			if r == '-' && next == '-' {
+				if err := t.skipLineComment(); err != nil {
+					return models.Token{}, err
+				}
+				t.skipWhitespace()
+				continue
+			}
+			if r == '/' && next == '*' {
+				if err := t.skipBlockComment(); err != nil {
+					return models.Token{}, err
+				}
+				t.skipWhitespace()
+				continue
+			}
+		}
+
+		// Slower path for punctuation and operators
+		return t.readPunctuation()
+	}
+}
+
+// skipLineComment consumes a "--" comment starting at t.pos, up to and
+// including the next newline (or to the end of input), and records it in
+// t.Comments. The recorded text excludes the trailing newline. It returns a
+// token-limit error when the comment would exceed MaxTokens.
+func (t *Tokenizer) skipLineComment() error {
+	if err := t.commentLimitError(); err != nil {
+		return err
+	}
+	commentStartIdx := t.pos.Index
+	commentStartPos := t.toSQLPosition(t.pos)
+	t.pos.Index += 2 // "--"
+	t.pos.Column += 2
+	// Skip until end of line or EOF
+	for t.pos.Index < len(t.input) {
+		cr, csize := utf8.DecodeRune(t.input[t.pos.Index:])
+		t.pos.AdvanceRune(cr, csize)
+		if cr == '\n' {
+			break // the newline is consumed too
+		}
+	}
+	textEnd := t.pos.Index
+	if textEnd > 0 && t.input[textEnd-1] == '\n' {
+		textEnd--
+	}
+	t.Comments = append(t.Comments, models.Comment{
+		Text:   t.src[commentStartIdx:textEnd],
+		Style:  models.LineComment,
+		Start:  commentStartPos,
+		End:    t.toSQLPosition(t.pos),
+		Inline: t.hasCodeBeforeOnLine(commentStartIdx),
+	})
+	return nil
+}
+
+// commentLimitError returns a token-limit error, located at the current
+// position, when recording one more comment would bring the number of tokens
+// plus comments of the current call past MaxTokens; otherwise nil.
+func (t *Tokenizer) commentLimitError() error {
+	if n := t.emitted + len(t.Comments); n >= MaxTokens {
+		return errors.TokenLimitReachedError(n+1, MaxTokens, t.getCurrentPosition(), t.src)
+	}
+	return nil
+}
+
+// skipBlockComment consumes a "/* ... */" comment starting at t.pos and
+// records it in t.Comments. Block comments do not nest. It returns an
+// unterminated-comment error when no closing "*/" follows, and a token-limit
+// error when the comment would exceed MaxTokens.
+func (t *Tokenizer) skipBlockComment() error {
+	if err := t.commentLimitError(); err != nil {
+		return err
+	}
+	commentStartIdx := t.pos.Index
+	commentStartPos := t.toSQLPosition(t.pos)
+	t.pos.Index += 2 // "/*"
+	t.pos.Column += 2
+	// Skip until */ or EOF
+	closed := false
+	for t.pos.Index < len(t.input) {
+		cr, csize := utf8.DecodeRune(t.input[t.pos.Index:])
+		t.pos.AdvanceRune(cr, csize)
+		if cr == '*' && t.pos.Index < len(t.input) && t.input[t.pos.Index] == '/' {
+			t.pos.AdvanceRune('/', 1) // End of block comment
+			closed = true
+			break
+		}
+	}
+	if !closed {
+		return errors.UnterminatedBlockCommentError(commentStartPos, t.src)
+	}
+	t.Comments = append(t.Comments, models.Comment{
+		Text:   t.src[commentStartIdx:t.pos.Index],
+		Style:  models.BlockComment,
+		Start:  commentStartPos,
+		End:    t.toSQLPosition(t.pos),
+		Inline: t.hasCodeBeforeOnLine(commentStartIdx),
+	})
+	return nil
 }
 
 // isIdentifierStart checks if a rune can start an identifier
@@ -1759,87 +1882,15 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 				}
 				return models.Token{Type: models.TokenTypeArrow, Value: "->"}, nil
 			}
-			// Check for line comment: --
-			if nxtR == '-' {
-				commentStartIdx := t.pos.Index - size // back to first '-'
-				commentStartPos := t.toSQLPosition(Position{Index: commentStartIdx})
-				t.pos.AdvanceRune(nxtR, nxtSize)
-				// Skip until end of line or EOF
-				for t.pos.Index < len(t.input) {
-					cr, csize := utf8.DecodeRune(t.input[t.pos.Index:])
-					if cr == '\n' {
-						t.pos.AdvanceRune(cr, csize) // Skip the newline too
-						break
-					}
-					t.pos.AdvanceRune(cr, csize)
-				}
-				commentEndIdx := t.pos.Index
-				// Trim trailing newline from comment text
-				textEnd := commentEndIdx
-				if textEnd > 0 && t.input[textEnd-1] == '\n' {
-					textEnd--
-				}
-				t.Comments = append(t.Comments, models.Comment{
-					Text:   t.src[commentStartIdx:textEnd],
-					Style:  models.LineComment,
-					Start:  commentStartPos,
-					End:    t.toSQLPosition(t.pos),
-					Inline: t.hasCodeBeforeOnLine(commentStartIdx),
-				})
-				// Return the next token (skip the comment)
-				t.skipWhitespace()
-				return t.nextToken()
-			}
+			// "--" line comments are handled by nextToken.
 		}
 		return models.Token{Type: models.TokenTypeMinus, Value: "-"}, nil
 	case '*':
 		t.pos.AdvanceRune(r, size)
 		return models.Token{Type: models.TokenTypeMul, Value: "*"}, nil
 	case '/':
+		// "/*" block comments are handled by nextToken.
 		t.pos.AdvanceRune(r, size)
-		if t.pos.Index < len(t.input) {
-			nxtR, nxtSize := utf8.DecodeRune(t.input[t.pos.Index:])
-			// Check for block comment: /*
-			if nxtR == '*' {
-				commentStartIdx := t.pos.Index - size // back to '/'
-				commentStartPos := t.toSQLPosition(Position{Index: commentStartIdx})
-				t.pos.AdvanceRune(nxtR, nxtSize)
-				// Skip until */ or EOF
-				closed := false
-				for t.pos.Index < len(t.input) {
-					cr, csize := utf8.DecodeRune(t.input[t.pos.Index:])
-					if cr == '*' {
-						t.pos.AdvanceRune(cr, csize)
-						if t.pos.Index < len(t.input) {
-							nr, ns := utf8.DecodeRune(t.input[t.pos.Index:])
-							if nr == '/' {
-								t.pos.AdvanceRune(nr, ns) // End of block comment
-								closed = true
-								break
-							}
-						}
-					} else {
-						t.pos.AdvanceRune(cr, csize)
-					}
-				}
-				if !closed {
-					return models.Token{}, errors.UnterminatedBlockCommentError(
-						commentStartPos,
-						t.src,
-					)
-				}
-				t.Comments = append(t.Comments, models.Comment{
-					Text:   t.src[commentStartIdx:t.pos.Index],
-					Style:  models.BlockComment,
-					Start:  commentStartPos,
-					End:    t.toSQLPosition(t.pos),
-					Inline: t.hasCodeBeforeOnLine(commentStartIdx),
-				})
-				// Return the next token (skip the comment)
-				t.skipWhitespace()
-				return t.nextToken()
-			}
-		}
 		return models.Token{Type: models.TokenTypeDiv, Value: "/"}, nil
 	case '=':
 		t.pos.AdvanceRune(r, size)
@@ -2128,28 +2179,23 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 					// $tag$ case - read identifier
 					for t.pos.Index < len(t.input) {
 						cr, cs := utf8.DecodeRune(t.input[t.pos.Index:])
-						if cr == '$' {
+						if cr == '$' || !isIdentifierChar(cr) {
 							break
-						}
-						if !isIdentifierChar(cr) {
-							// Not a valid tag, treat as standalone $
-							return models.Token{Type: models.TokenTypePlaceholder, Value: "$"}, nil
 						}
 						t.pos.AdvanceRune(cr, cs)
 					}
 				}
-				// Check for closing $ of the tag
-				if t.pos.Index >= len(t.input) {
-					return models.Token{Type: models.TokenTypePlaceholder, Value: "$"}, nil
-				}
-				closingR, closingSize := utf8.DecodeRune(t.input[t.pos.Index:])
-				if closingR != '$' {
-					return models.Token{Type: models.TokenTypePlaceholder, Value: "$"}, nil
+				// Without a closing '$' this is not a dollar-quote opener but a
+				// named parameter or variable such as $name (Snowflake session
+				// variables, SQL Server $action). Emit it as one placeholder
+				// token that keeps the name, like @name and Oracle :name.
+				if t.pos.Index >= len(t.input) || t.input[t.pos.Index] != '$' {
+					return models.Token{Type: models.TokenTypePlaceholder, Value: t.src[tagStart-1 : t.pos.Index]}, nil
 				}
 				// The opening tag "$tag$" runs from the '$' just before
 				// tagStart through the '$' at t.pos.Index.
 				closingTag := t.src[tagStart-1 : t.pos.Index+1]
-				t.pos.AdvanceRune(closingR, closingSize) // consume closing $ of opening tag
+				t.pos.AdvanceRune('$', 1) // consume closing $ of opening tag
 
 				// Now read content until we find $tag$
 				contentStart := t.pos.Index
@@ -2339,17 +2385,27 @@ func (t *Tokenizer) scanIdentifierTail() {
 
 // hasCodeBeforeOnLine checks if there are non-whitespace characters on the same
 // line before the given byte index. Used to determine if a comment is inline.
+//
+// Comment starts are requested in increasing order, so the scan of a line is
+// resumed from where the previous request on the same line stopped (and stops
+// for good once non-whitespace is seen). Each byte of a line is therefore
+// examined at most once per line, however many comments it holds.
 func (t *Tokenizer) hasCodeBeforeOnLine(idx int) bool {
 	// Find the start of the line containing idx
-	lineStart := 0
+	lineStart, li := 0, 0
 	if len(t.lineStarts) > 0 && t.lineStarts[0] <= idx {
-		lineStart = t.lineStarts[t.lineIndexAt(idx)]
+		li = t.lineIndexAt(idx)
+		lineStart = t.lineStarts[li]
 	}
-	// Check for non-whitespace between lineStart and idx
-	for i := lineStart; i < idx && i < len(t.input); i++ {
-		if t.input[i] != ' ' && t.input[i] != '\t' && t.input[i] != '\r' {
-			return true
+	// Restart the cursor on a new line or on a backwards request.
+	if t.inlLine != li+1 || t.inlScan > idx {
+		t.inlLine, t.inlScan, t.inlCode = li+1, lineStart, false
+	}
+	// Check for non-whitespace between the cursor and idx
+	for ; !t.inlCode && t.inlScan < idx && t.inlScan < len(t.input); t.inlScan++ {
+		if c := t.input[t.inlScan]; c != ' ' && c != '\t' && c != '\r' {
+			t.inlCode = true
 		}
 	}
-	return false
+	return t.inlCode
 }

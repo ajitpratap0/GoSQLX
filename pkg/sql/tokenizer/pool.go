@@ -27,6 +27,11 @@ import (
 // holding it for later callers.
 const maxRetainedLitBuf = 64 << 10
 
+// maxRetainedComments is the largest Comments capacity (in entries, 64 bytes
+// each, so 64 KiB) Reset keeps. A pooled tokenizer that collected more
+// comments drops the slice instead of holding it for later callers.
+const maxRetainedComments = 1024
+
 // tokenizerPool provides object pooling for Tokenizer instances.
 // This dramatically reduces allocations in high-throughput scenarios.
 //
@@ -135,8 +140,9 @@ func PutTokenizer(t *Tokenizer) {
 //   - Clears input references (input, src and the current Word chunk), so a
 //     pooled tokenizer does not keep the previous SQL alive
 //   - Zeroes the used Comments entries and truncates the slice (capacity is
-//     preserved). Comments is therefore valid only until the next Tokenize,
-//     Reset or PutTokenizer; copy it first if it must outlive those
+//     preserved up to 1024 entries; a larger slice is dropped). Comments is
+//     therefore valid only until the next Tokenize, Reset or PutTokenizer;
+//     copy it first if it must outlive those
 //   - Resets position tracking to initial values
 //   - Preserves lineStarts slice capacity (avoids reallocation)
 //   - Clears debug logger reference
@@ -148,7 +154,8 @@ func PutTokenizer(t *Tokenizer) {
 //   - Word chunk: nil (Words already returned stay valid; the chunk is never reused)
 //   - litBuf (slow-path literal scratch): zeroed and truncated, or dropped
 //     above 64 KiB
-//   - Comments: length 0, previously used entries zeroed
+//   - Comments: length 0, previously used entries zeroed, or nil when its
+//     capacity exceeded 1024 entries
 //   - dialect: preserved (Reset also runs at the start of every
 //     Tokenize call, so the configured dialect must persist; the pool restores
 //     the default dialect in PutTokenizer instead)
@@ -199,6 +206,7 @@ func (t *Tokenizer) Reset() {
 	// Invalidate the toSQLPosition column cursor: it is only valid for the
 	// input and lineStarts it was built on.
 	t.posCacheLine, t.posCacheIdx, t.posCacheCol = 0, 0, 0
+	t.inlLine, t.inlScan, t.inlCode = 0, 0, false
 
 	// Don't reset the dialect here: Reset also runs at the start of every
 	// Tokenize call, where the configured dialect must persist across calls.
@@ -208,7 +216,14 @@ func (t *Tokenizer) Reset() {
 	// Zero the used Comments (their Text is a substring of the previous
 	// input, which would otherwise stay pinned by the pooled tokenizer) and
 	// reset the length, preserving capacity. Elements beyond len are already
-	// zero from earlier Resets.
-	clear(t.Comments)
-	t.Comments = t.Comments[:0]
+	// zero from earlier Resets. A slice grown past maxRetainedComments is
+	// dropped instead, so a pooled tokenizer does not hold a large backing
+	// array for later callers.
+	if cap(t.Comments) > maxRetainedComments {
+		t.Comments = nil
+	} else {
+		clear(t.Comments)
+		t.Comments = t.Comments[:0]
+	}
+	t.emitted = 0
 }

@@ -83,6 +83,35 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 	return left, nil
 }
 
+// enterRecursion increments the recursion depth counter and returns a
+// RecursionDepthLimitError (E2007) when it exceeds MaxRecursionDepth. It is for
+// recursive parse paths that do not pass through parseExpression. The caller
+// must always undo the increment with a deferred leaveRecursion, whether or not
+// an error is returned:
+//
+//	err := p.enterRecursion()
+//	defer p.leaveRecursion()
+//	if err != nil {
+//		return nil, err
+//	}
+func (p *Parser) enterRecursion() error {
+	p.depth++
+	if p.depth > MaxRecursionDepth {
+		return goerrors.RecursionDepthLimitError(
+			p.depth,
+			MaxRecursionDepth,
+			p.currentLocation(),
+			"",
+		)
+	}
+	return nil
+}
+
+// leaveRecursion undoes one enterRecursion.
+func (p *Parser) leaveRecursion() {
+	p.depth--
+}
+
 // parseAndExpression parses an expression with AND operators (middle precedence)
 func (p *Parser) parseAndExpression() (ast.Expression, error) {
 	// Parse comparison expressions (higher precedence)

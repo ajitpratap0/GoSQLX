@@ -636,22 +636,40 @@ func renderSetOperation(s *ast.SetOperation, opts ast.FormatOptions) string {
 	f := newNodeFormatter(opts)
 	sb := f.sb
 
-	if s.Left != nil {
-		sb.WriteString(FormatStatement(s.Left, opts))
-	}
-	sb.WriteString(f.clauseSep())
-	op := s.Operator
-	if s.All {
-		op += " ALL"
-	}
-	sb.WriteString(f.kw(op))
-	sb.WriteString(f.clauseSep())
-	if s.Right != nil {
-		sb.WriteString(FormatStatement(s.Right, opts))
+	// A chain such as a UNION b UNION c parses into a left-deep tree. Walk
+	// down the left spine and render the levels innermost first into one
+	// builder, so the output is produced in time linear in its length
+	// rather than re-copying the rendered left side at every level. The
+	// result is identical to rendering each level as
+	// render(Left) + sep + op + sep + render(Right) [+ ";"].
+	spine := []*ast.SetOperation{s}
+	for {
+		left, ok := spine[len(spine)-1].Left.(*ast.SetOperation)
+		if !ok || left == nil {
+			break
+		}
+		spine = append(spine, left)
 	}
 
-	if opts.AddSemicolon {
-		sb.WriteString(";")
+	if innermost := spine[len(spine)-1]; innermost.Left != nil {
+		sb.WriteString(FormatStatement(innermost.Left, opts))
+	}
+	for i := len(spine) - 1; i >= 0; i-- {
+		level := spine[i]
+		sb.WriteString(f.clauseSep())
+		op := level.Operator
+		if level.All {
+			op += " ALL"
+		}
+		sb.WriteString(f.kw(op))
+		sb.WriteString(f.clauseSep())
+		if level.Right != nil {
+			sb.WriteString(FormatStatement(level.Right, opts))
+		}
+
+		if opts.AddSemicolon {
+			sb.WriteString(";")
+		}
 	}
 
 	return f.result()

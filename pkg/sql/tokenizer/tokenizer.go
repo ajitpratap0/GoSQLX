@@ -2141,28 +2141,23 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 					// $tag$ case - read identifier
 					for t.pos.Index < len(t.input) {
 						cr, cs := utf8.DecodeRune(t.input[t.pos.Index:])
-						if cr == '$' {
+						if cr == '$' || !isIdentifierChar(cr) {
 							break
-						}
-						if !isIdentifierChar(cr) {
-							// Not a valid tag, treat as standalone $
-							return models.Token{Type: models.TokenTypePlaceholder, Value: "$"}, nil
 						}
 						t.pos.AdvanceRune(cr, cs)
 					}
 				}
-				// Check for closing $ of the tag
-				if t.pos.Index >= len(t.input) {
-					return models.Token{Type: models.TokenTypePlaceholder, Value: "$"}, nil
-				}
-				closingR, closingSize := utf8.DecodeRune(t.input[t.pos.Index:])
-				if closingR != '$' {
-					return models.Token{Type: models.TokenTypePlaceholder, Value: "$"}, nil
+				// Without a closing '$' this is not a dollar-quote opener but a
+				// named parameter or variable such as $name (Snowflake session
+				// variables, SQL Server $action). Emit it as one placeholder
+				// token that keeps the name, like @name and Oracle :name.
+				if t.pos.Index >= len(t.input) || t.input[t.pos.Index] != '$' {
+					return models.Token{Type: models.TokenTypePlaceholder, Value: t.src[tagStart-1 : t.pos.Index]}, nil
 				}
 				// The opening tag "$tag$" runs from the '$' just before
 				// tagStart through the '$' at t.pos.Index.
 				closingTag := t.src[tagStart-1 : t.pos.Index+1]
-				t.pos.AdvanceRune(closingR, closingSize) // consume closing $ of opening tag
+				t.pos.AdvanceRune('$', 1) // consume closing $ of opening tag
 
 				// Now read content until we find $tag$
 				contentStart := t.pos.Index

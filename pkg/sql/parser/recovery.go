@@ -175,7 +175,8 @@ func (p *Parser) ParseWithRecoveryFromModelTokens(tokens []models.TokenWithSpan)
 }
 
 // parseWithRecovery is the internal implementation shared by both public APIs.
-// It expects a preprocessed []models.TokenWithSpan (output of preprocessTokens).
+// It expects a preprocessed []models.TokenWithSpan (output of preprocessTokens or the parser-owned preprocess buffer;
+// nothing may retain p.tokens beyond the call).
 func (p *Parser) parseWithRecovery(tokens []models.TokenWithSpan) ([]ast.Statement, []error) {
 	p.tokens = tokens
 	p.currentPos = 0

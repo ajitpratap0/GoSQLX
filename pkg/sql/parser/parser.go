@@ -329,7 +329,7 @@ func (p *Parser) preprocess(tokens []models.TokenWithSpan) []models.TokenWithSpa
 }
 
 // parseTokens is the core parsing routine. It takes a preprocessed
-// []models.TokenWithSpan (already normalised by preprocessTokens) and returns
+// []models.TokenWithSpan (already normalised by preprocessTokens or p.preprocess) and returns
 // the parsed AST.
 func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 	p.tokens = tokens

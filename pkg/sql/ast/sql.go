@@ -96,7 +96,7 @@ func (i *Identifier) SQL() string {
 	if i == nil {
 		return ""
 	}
-	if !identifierNeedsQuoting(i.Name) && (i.Table == "" || !identifierNeedsQuoting(i.Table)) {
+	if !identifierNeedsQuoting(i.Name) && (i.Table == "" || !qualifierNeedsQuoting(i.Table)) {
 		if i.Table == "" {
 			return i.Name
 		}
@@ -113,10 +113,34 @@ func (i *Identifier) writeSQL(buf *bytes.Buffer) {
 		return
 	}
 	if i.Table != "" {
-		writeSafeIdentifier(buf, i.Table)
+		writeDottedIdentifier(buf, i.Table)
 		buf.WriteByte('.')
 	}
 	writeSafeIdentifier(buf, i.Name)
+}
+
+// qualifierNeedsQuoting reports whether some dot-separated part of the
+// non-empty qualifier name would be quoted by writeDottedIdentifier.
+func qualifierNeedsQuoting(name string) bool {
+	return identifierNeedsQuoting(name) || name[0] == '.' || name[len(name)-1] == '.' ||
+		strings.Contains(name, "..")
+}
+
+// writeDottedIdentifier writes a possibly multi-part qualifier such as
+// "db.t" or "c.s.t", quoting each dot-separated part on its own so that
+// "my-db.t" renders as "my-db".t (two identifiers) rather than "my-db.t"
+// (one). A dot is always treated as a part separator; see Identifier.Table.
+func writeDottedIdentifier(buf *bytes.Buffer, name string) {
+	for {
+		dot := strings.IndexByte(name, '.')
+		if dot < 0 {
+			writeSafeIdentifier(buf, name)
+			return
+		}
+		writeSafeIdentifier(buf, name[:dot])
+		buf.WriteByte('.')
+		name = name[dot+1:]
+	}
 }
 
 // identifierNeedsQuoting reports whether name must be double-quoted: it is

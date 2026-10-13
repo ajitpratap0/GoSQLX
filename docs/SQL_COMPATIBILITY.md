@@ -157,6 +157,7 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 | **NATURAL JOIN** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ Full | 95% |
 | Multiple table JOINs | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
 | Self JOINs | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
+| Parenthesized JOIN groups (left-nested, e.g. MySQL view output) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 90% |
 | **LATERAL JOIN** (PostgreSQL) | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ Full | 95% |
 | LATERAL with LEFT JOIN | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ Full | 95% |
 | LATERAL with INNER JOIN | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ Full | 95% |
@@ -316,6 +317,7 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 | **Partitioning** | ✅ Full | 🔧 Syntax | 70% | PARTITION BY syntax |
 | **AUTO_INCREMENT** | ✅ Full | ✅ Full | 95% | Column property |
 | **Backtick identifiers** | ✅ Full | ✅ Full | 100% | `` `table`.`column` `` syntax |
+| **Multi-part column references** | ✅ Full | ✅ Full | 95% | `` `db`.`table`.`column` `` and `db.table.*` (#521) |
 
 ### MariaDB-Specific Features (v1.14.0+)
 

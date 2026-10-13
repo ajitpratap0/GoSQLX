@@ -193,7 +193,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				ident.Table = ident.Name
 				ident.Name = "*"
 				p.advance()
-			} else if p.isIdentifier() || p.isNonReservedKeyword() || (p.dialect == string(keywords.DialectClickHouse) && p.isNumericLiteral()) {
+			} else if p.isQualifiedNamePart() {
 				// Handle table.column (qualified identifier).
 				// isNonReservedKeyword covers reserved words valid as column
 				// names after a dot, e.g. table.KEY, schema.INDEX, alias.VIEW.
@@ -203,11 +203,23 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				ident.Table = ident.Name
 				ident.Name = p.currentToken.Token.Value
 				p.advance()
+
+				// Multi-part reference: db.table.column (MySQL/MariaDB),
+				// catalog.schema.table.column (PostgreSQL, SQL Server, Snowflake).
+				// Every qualifier is folded into Table as a dotted string, mirroring
+				// TableReference.Name ("db.table"), so Table + "." + Name always
+				// reproduces the source reference. Only reached with 3+ parts, so the
+				// two-part path stays single-allocation.
+				if p.isType(models.TokenTypePeriod) {
+					if err := p.parseMultiPartColumnRef(ident); err != nil {
+						return nil, err
+					}
+				}
 			} else {
 				return nil, goerrors.InvalidSyntaxError(
-					"expected column name or * after table qualifier",
+					"expected column name or * after table qualifier (use table.column or table.*)",
 					p.currentLocation(),
-					"Use table.column or table.* syntax",
+					"",
 				)
 			}
 		}
@@ -444,4 +456,59 @@ func (p *Parser) parseSubquery() (ast.Statement, error) {
 		p.currentLocation(),
 		"",
 	)
+}
+
+// maxColumnRefParts caps the number of dot-separated parts in a column
+// reference. Five covers the longest form any supported dialect accepts
+// (SQL Server server.database.schema.table.column).
+const maxColumnRefParts = 5
+
+// parseMultiPartColumnRef continues a qualified column reference whose first
+// two parts are already in ident (Table, Name) and whose current token is the
+// third '.'. The parts are collected and joined once, so the cost is linear in
+// the input, and references longer than maxColumnRefParts are rejected.
+func (p *Parser) parseMultiPartColumnRef(ident *ast.Identifier) error {
+	var parts [maxColumnRefParts]string
+	parts[0], parts[1] = ident.Table, ident.Name
+	n := 2
+	for p.isType(models.TokenTypePeriod) {
+		p.advance() // Consume .
+		if n == maxColumnRefParts {
+			return goerrors.InvalidSyntaxError(
+				fmt.Sprintf("qualified column reference has more than %d parts", maxColumnRefParts),
+				p.currentLocation(),
+				"",
+			)
+		}
+		switch {
+		case p.isType(models.TokenTypeAsterisk) || p.isType(models.TokenTypeMul):
+			parts[n] = "*"
+			n++
+			p.advance()
+			if p.isType(models.TokenTypePeriod) {
+				return p.expectedError("end of qualified name after *")
+			}
+		case p.isQualifiedNamePart():
+			parts[n] = p.currentToken.Token.Value
+			n++
+			p.advance()
+		default:
+			return goerrors.InvalidSyntaxError(
+				"expected column name or * after table qualifier (use db.table.column or db.table.*)",
+				p.currentLocation(),
+				"",
+			)
+		}
+	}
+	ident.Table = strings.Join(parts[:n-1], ".")
+	ident.Name = parts[n-1]
+	return nil
+}
+
+// isQualifiedNamePart reports whether the current token can follow a '.' in a
+// qualified column reference: an identifier, a non-reserved keyword (t.KEY,
+// schema.INDEX), or - in ClickHouse - a numeric tuple element (d.1).
+func (p *Parser) isQualifiedNamePart() bool {
+	return p.isIdentifier() || p.isNonReservedKeyword() ||
+		(p.dialect == string(keywords.DialectClickHouse) && p.isNumericLiteral())
 }

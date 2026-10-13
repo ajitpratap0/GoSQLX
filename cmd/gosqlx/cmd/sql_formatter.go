@@ -663,6 +663,12 @@ func (f *SQLFormatter) formatExpression(expr ast.Expression) error {
 			}
 		}
 	case *ast.BinaryExpression:
+		// NOT EXISTS (subquery) is parsed as a NOT with the EXISTS on the left and no right operand.
+		if e.Operator == "NOT" && e.Right == nil {
+			f.writeKeyword("NOT")
+			f.builder.WriteString(" ")
+			return f.formatExpression(e.Left)
+		}
 		// Handle IS NULL / IS NOT NULL specially
 		if e.Operator == "IS NULL" {
 			if err := f.formatExpression(e.Left); err != nil {

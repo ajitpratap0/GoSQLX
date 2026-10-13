@@ -148,9 +148,12 @@ func TestWalk_VisitOrderGolden(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read golden (regenerate with -update-visit-order): %v", err)
 	}
-	if got != string(want) {
+	// Git on Windows may check the golden out with CRLF line endings
+	// (core.autocrlf); the comparison is about visit order, not line endings.
+	wantStr := strings.ReplaceAll(string(want), "\r\n", "\n")
+	if got != wantStr {
 		gotLines := strings.Split(got, "\n")
-		wantLines := strings.Split(string(want), "\n")
+		wantLines := strings.Split(wantStr, "\n")
 		for i := 0; i < len(gotLines) && i < len(wantLines); i++ {
 			if gotLines[i] != wantLines[i] {
 				t.Fatalf("visit order differs at line %d:\n got: %s\nwant: %s", i+1, gotLines[i], wantLines[i])

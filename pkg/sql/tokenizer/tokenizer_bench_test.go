@@ -98,23 +98,6 @@ func BenchmarkTokenizerPool(b *testing.B) {
 	})
 }
 
-func BenchmarkBufferPool(b *testing.B) {
-	b.Run("GetPut", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			buf := getBuffer()
-			putBuffer(buf)
-		}
-	})
-
-	b.Run("WithWrite", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			buf := getBuffer()
-			buf.WriteString("test string with some content")
-			putBuffer(buf)
-		}
-	})
-}
-
 // Benchmark memory allocations
 func BenchmarkTokenizerAllocations(b *testing.B) {
 	b.Run("SimpleSQL", func(b *testing.B) {

@@ -98,6 +98,13 @@ const Version = "1.14.0"
 // For batch processing or performance-critical code, use the lower-level tokenizer
 // and parser APIs directly to reuse objects across multiple queries.
 //
+// Retention: strings in the returned AST (identifiers, literals, names) are
+// substrings of sql, so keeping any of them keeps the whole sql string alive.
+// strings.Clone values you retain long-term. The results of ExtractTables,
+// ExtractColumns, ExtractFunctions, ExtractMetadata and their Qualified
+// variants are already independent copies. The same applies to every Parse*
+// entry point in this package.
+//
 // See also: ParseWithContext, ParseWithTimeout, ParseMultiple for specialized use cases.
 func Parse(sql string) (*ast.AST, error) {
 	// Step 1: Get tokenizer from pool
@@ -105,7 +112,7 @@ func Parse(sql string) (*ast.AST, error) {
 	defer tokenizer.PutTokenizer(tkz)
 
 	// Step 2: Tokenize SQL
-	tokens, err := tkz.Tokenize([]byte(sql))
+	tokens, err := tkz.TokenizeString(sql)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrTokenize, err)
 	}
@@ -192,7 +199,7 @@ func ParseWithContext(ctx context.Context, sql string) (*ast.AST, error) {
 	defer tokenizer.PutTokenizer(tkz)
 
 	// Step 2: Tokenize SQL with context support
-	tokens, err := tkz.TokenizeContext(ctx, []byte(sql))
+	tokens, err := tkz.TokenizeStringContext(ctx, sql)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, fmt.Errorf("%w: %w", ErrTimeout, ctxErr)
@@ -288,6 +295,10 @@ func Validate(sql string) error {
 //
 //	sqlBytes := []byte("SELECT * FROM users")
 //	astNode, err := gosqlx.ParseBytes(sqlBytes)
+//
+// Retention: the AST does not alias sql (it may be reused after the call),
+// but its strings are substrings of one internal copy of it; keeping any of
+// them keeps that copy alive. See Parse.
 func ParseBytes(sql []byte) (*ast.AST, error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
@@ -416,7 +427,7 @@ func ParseMultiple(queries []string) ([]*ast.AST, error) {
 		p.Reset()
 
 		// Tokenize
-		tokens, err := tkz.Tokenize([]byte(sql))
+		tokens, err := tkz.TokenizeString(sql)
 		if err != nil {
 			releaseASTs(results)
 			return nil, fmt.Errorf("query %d: %w: %w", i, ErrTokenize, err)
@@ -461,7 +472,7 @@ func ValidateMultiple(queries []string) error {
 		p.Reset()
 
 		// Tokenize
-		tokens, err := tkz.Tokenize([]byte(sql))
+		tokens, err := tkz.TokenizeString(sql)
 		if err != nil {
 			return fmt.Errorf("query %d: %w: %w", i, ErrTokenize, err)
 		}
@@ -634,7 +645,7 @@ func ParseWithRecovery(sql string) ([]ast.Statement, []error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 
-	tokens, err := tkz.Tokenize([]byte(sql))
+	tokens, err := tkz.TokenizeString(sql)
 	if err != nil {
 		return nil, []error{fmt.Errorf("%w: %w", ErrTokenize, err)}
 	}

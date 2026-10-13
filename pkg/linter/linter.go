@@ -234,7 +234,7 @@ func (l *Linter) LintString(sql string, filename string) FileResult {
 	tkz, releaseTkz, p := l.acquireTokenizerAndParser()
 	defer releaseTkz()
 
-	tokens, tokenErr := tkz.Tokenize([]byte(sql))
+	tokens, tokenErr := tkz.TokenizeString(sql)
 	if tokenErr == nil {
 		ctx.WithTokens(tokens)
 

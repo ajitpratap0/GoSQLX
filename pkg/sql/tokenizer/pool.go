@@ -22,32 +22,10 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
-// bufferPool is used to reuse bytes.Buffer instances during tokenization.
-// This reduces allocations for string building operations (identifiers, literals).
-// Initial capacity is set to 256 bytes to handle typical SQL token sizes.
-var bufferPool = sync.Pool{
-	New: func() interface{} {
-		// Increase initial capacity for better performance with typical SQL queries
-		return bytes.NewBuffer(make([]byte, 0, 256))
-	},
-}
-
-// getBuffer retrieves a buffer from the pool for internal use.
-// The buffer is pre-allocated and ready for writing operations.
-// Always pair with putBuffer() to return the buffer to the pool.
-func getBuffer() *bytes.Buffer {
-	return bufferPool.Get().(*bytes.Buffer)
-}
-
-// putBuffer returns a buffer to the pool after use.
-// The buffer is reset (cleared) before being returned to the pool.
-// Nil buffers are safely ignored.
-func putBuffer(buf *bytes.Buffer) {
-	if buf != nil {
-		buf.Reset()
-		bufferPool.Put(buf)
-	}
-}
+// maxRetainedLitBuf is the largest litBuf capacity Reset keeps. A pooled
+// tokenizer that scanned a huge escaped literal drops the buffer instead of
+// holding it for later callers.
+const maxRetainedLitBuf = 64 << 10
 
 // tokenizerPool provides object pooling for Tokenizer instances.
 // This dramatically reduces allocations in high-throughput scenarios.
@@ -126,21 +104,18 @@ func GetTokenizer() *Tokenizer {
 //   - Position tracking reset to initial state
 //   - Line tracking cleared but capacity preserved
 //   - Debug logger cleared
-//   - Dialect restored to the default (PostgreSQL) so dialect-specific keyword
-//     state does not leak to the next caller
+//   - Dialect restored to the default (PostgreSQL) so a configured dialect
+//     does not leak to the next caller
 func PutTokenizer(t *Tokenizer) {
 	if t != nil {
 		t.Reset()
 
-		// Restore the default dialect so a pooled tokenizer never leaks
-		// dialect-specific keyword state to a later caller. This is done here
-		// (at the pool boundary) rather than in Reset, which also runs at the
-		// start of every Tokenize call where the configured dialect must
-		// persist. SetDialect rebuilds the keyword table, so only pay that cost
-		// when a non-default dialect was configured.
-		if t.dialect != keywords.DialectPostgreSQL {
-			t.SetDialect(keywords.DialectPostgreSQL)
-		}
+		// Restore the default dialect so a pooled tokenizer never leaks a
+		// configured dialect to a later caller. This is done here (at the pool
+		// boundary) rather than in Reset, which also runs at the start of every
+		// Tokenize call where the configured dialect must persist. The dialect
+		// is a plain field, so restoring it is a single assignment.
+		t.dialect = keywords.DialectPostgreSQL
 
 		tokenizerPool.Put(t)
 
@@ -157,7 +132,11 @@ func PutTokenizer(t *Tokenizer) {
 // you want to reuse a tokenizer instance without going through the pool.
 //
 // Memory Optimization:
-//   - Clears input reference (allows GC of SQL bytes)
+//   - Clears input references (input, src and the current Word chunk), so a
+//     pooled tokenizer does not keep the previous SQL alive
+//   - Zeroes the used Comments entries and truncates the slice (capacity is
+//     preserved). Comments is therefore valid only until the next Tokenize,
+//     Reset or PutTokenizer; copy it first if it must outlive those
 //   - Resets position tracking to initial values
 //   - Preserves lineStarts slice capacity (avoids reallocation)
 //   - Clears debug logger reference
@@ -165,8 +144,12 @@ func PutTokenizer(t *Tokenizer) {
 // State After Reset:
 //   - pos: Line 1, Column 0, Index 0
 //   - lineStarts: Empty slice with preserved capacity (contains [0])
-//   - input: nil (ready for new input)
-//   - dialect/keywords: preserved (Reset also runs at the start of every
+//   - input: nil, src: "" (ready for new input)
+//   - Word chunk: nil (Words already returned stay valid; the chunk is never reused)
+//   - litBuf (slow-path literal scratch): zeroed and truncated, or dropped
+//     above 64 KiB
+//   - Comments: length 0, previously used entries zeroed
+//   - dialect: preserved (Reset also runs at the start of every
 //     Tokenize call, so the configured dialect must persist; the pool restores
 //     the default dialect in PutTokenizer instead)
 //   - logger: nil (must be set again if needed)
@@ -175,8 +158,27 @@ func PutTokenizer(t *Tokenizer) {
 // Performance: By preserving slice capacity, subsequent Tokenize() calls
 // avoid reallocation of lineStarts for similarly-sized inputs.
 func (t *Tokenizer) Reset() {
-	// Clear input reference to allow garbage collection
+	// Clear input references to allow garbage collection. The Word chunk is
+	// dropped, never truncated: its elements belong to tokens already
+	// returned to callers.
 	t.input = nil
+	t.src = ""
+	t.wordChunk = nil
+	t.wordHint = 0
+
+	// litBuf contents never escape (slow paths copy them out with String),
+	// but truncating alone would leave the previous request's decoded
+	// literal text in pooled memory. Zero the whole backing array (every
+	// slow reader restarts at offset 0, so earlier literals of the same call
+	// may lie beyond the current length); drop an oversized buffer. The
+	// clear is free for tokenizers that never took a slow path (cap 0).
+	if t.litBuf.Cap() > maxRetainedLitBuf {
+		t.litBuf = bytes.Buffer{}
+	} else {
+		t.litBuf.Reset()
+		b := t.litBuf.Bytes()
+		clear(b[:cap(b)])
+	}
 
 	// Reset position tracking
 	t.pos = NewPosition(1, 0)
@@ -198,13 +200,15 @@ func (t *Tokenizer) Reset() {
 	// input and lineStarts it was built on.
 	t.posCacheLine, t.posCacheIdx, t.posCacheCol = 0, 0, 0
 
-	// Don't reset keywords/dialect here: Reset also runs at the start of every
+	// Don't reset the dialect here: Reset also runs at the start of every
 	// Tokenize call, where the configured dialect must persist across calls.
 	// Dialect is restored to the default in PutTokenizer, at the pool boundary.
 	t.logger = nil
 
-	// Preserve Comments slice capacity but reset length
-	if cap(t.Comments) > 0 {
-		t.Comments = t.Comments[:0]
-	}
+	// Zero the used Comments (their Text is a substring of the previous
+	// input, which would otherwise stay pinned by the pooled tokenizer) and
+	// reset the length, preserving capacity. Elements beyond len are already
+	// zero from earlier Resets.
+	clear(t.Comments)
+	t.Comments = t.Comments[:0]
 }

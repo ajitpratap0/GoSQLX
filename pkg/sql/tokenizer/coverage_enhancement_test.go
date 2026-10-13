@@ -207,7 +207,7 @@ func TestPosition_Location(t *testing.T) {
 		pos := NewPosition(1, 7) // Line 1, index 7 (after "SELECT ")
 
 		// Set up tokenizer with input
-		tkz.input = input
+		tkz.load(input, string(input))
 
 		loc := pos.Location(tkz)
 		if loc.Line <= 0 {

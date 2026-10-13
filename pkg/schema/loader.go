@@ -94,7 +94,12 @@ func LoadCatalogFromDDLFile(path string) (*Catalog, error) {
 
 // splitSchemaTable splits "schema.table" into ("schema", "table").
 // If there is no dot prefix, it returns ("", name).
+//
+// The results are stored in the returned schema, so they are split from a
+// copy of name: AST values are substrings of the DDL text, and keeping them
+// would keep the whole input alive for as long as the schema lives.
 func splitSchemaTable(name string) (schemaName, tableName string) {
+	name = strings.Clone(name)
 	if idx := strings.Index(name, "."); idx != -1 {
 		return name[:idx], name[idx+1:]
 	}
@@ -157,7 +162,7 @@ func applyAlterStatement(cat *Catalog, defaultSchema *Schema, stmt *ast.AlterSta
 		if op.ColumnName != nil && op.NewColumnName != nil {
 			oldKey := strings.ToLower(op.ColumnName.Name)
 			if col, ok := table.Columns[oldKey]; ok {
-				col.Name = op.NewColumnName.Name
+				col.Name = strings.Clone(op.NewColumnName.Name)
 				delete(table.Columns, oldKey)
 				table.Columns[strings.ToLower(col.Name)] = col
 			}
@@ -174,11 +179,26 @@ func applyAlterStatement(cat *Catalog, defaultSchema *Schema, stmt *ast.AlterSta
 	return nil
 }
 
-// extractColumnFromDef builds a Column from an AST ColumnDef.
+// cloneStrings returns a copy of s whose elements are independent of the
+// DDL text (see splitSchemaTable). It also detaches the result from the
+// AST's backing array.
+func cloneStrings(s []string) []string {
+	if s == nil {
+		return nil
+	}
+	out := make([]string, len(s))
+	for i, v := range s {
+		out[i] = strings.Clone(v)
+	}
+	return out
+}
+
+// extractColumnFromDef builds a Column from an AST ColumnDef. Every string
+// is cloned so the Column does not keep the DDL text alive.
 func extractColumnFromDef(colDef *ast.ColumnDef) *Column {
 	col := &Column{
-		Name:     colDef.Name,
-		DataType: colDef.Type,
+		Name:     strings.Clone(colDef.Name),
+		DataType: strings.Clone(colDef.Type),
 		Nullable: true,
 	}
 	for _, constraint := range colDef.Constraints {
@@ -189,15 +209,15 @@ func extractColumnFromDef(colDef *ast.ColumnDef) *Column {
 			col.Nullable = false
 		case "DEFAULT":
 			if constraint.Default != nil {
-				col.Default = constraint.Default.TokenLiteral()
+				col.Default = strings.Clone(constraint.Default.TokenLiteral())
 			}
 		case "REFERENCES":
 			if constraint.References != nil {
 				col.References = &ForeignKeyRef{
-					Table: constraint.References.Table,
+					Table: strings.Clone(constraint.References.Table),
 				}
 				if len(constraint.References.Columns) > 0 {
-					col.References.Column = constraint.References.Columns[0]
+					col.References.Column = strings.Clone(constraint.References.Columns[0])
 				}
 			}
 		}
@@ -265,8 +285,10 @@ func LoadFromDDLFile(path string) (*Schema, error) {
 }
 
 // extractTable converts a CreateTableStatement AST node into a schema Table.
+// Every stored string is cloned, so the Table does not keep the DDL text
+// alive (see splitSchemaTable); column names reuse the Column's copy.
 func extractTable(ct *ast.CreateTableStatement) (*Table, error) {
-	table := NewTable(ct.Name)
+	table := NewTable(strings.Clone(ct.Name))
 
 	// Extract columns
 	for i := range ct.Columns {
@@ -277,19 +299,19 @@ func extractTable(ct *ast.CreateTableStatement) (*Table, error) {
 		for _, constraint := range colDef.Constraints {
 			switch strings.ToUpper(constraint.Type) {
 			case "PRIMARY KEY":
-				table.PrimaryKey = append(table.PrimaryKey, colDef.Name)
+				table.PrimaryKey = append(table.PrimaryKey, col.Name)
 			case "REFERENCES":
 				if constraint.References != nil {
 					fk := ForeignKey{
-						Columns:    []string{colDef.Name},
-						RefTable:   constraint.References.Table,
-						RefColumns: constraint.References.Columns,
+						Columns:    []string{col.Name},
+						RefTable:   strings.Clone(constraint.References.Table),
+						RefColumns: cloneStrings(constraint.References.Columns),
 					}
 					table.ForeignKeys = append(table.ForeignKeys, fk)
 				}
 			case "UNIQUE":
 				table.Indexes = append(table.Indexes, Index{
-					Columns: []string{colDef.Name},
+					Columns: []string{col.Name},
 					Unique:  true,
 				})
 			}
@@ -303,7 +325,7 @@ func extractTable(ct *ast.CreateTableStatement) (*Table, error) {
 		constraintType := strings.ToUpper(constraint.Type)
 		switch constraintType {
 		case "PRIMARY KEY":
-			table.PrimaryKey = constraint.Columns
+			table.PrimaryKey = cloneStrings(constraint.Columns)
 			// Mark PK columns as NOT NULL
 			for _, colName := range constraint.Columns {
 				if col, ok := table.GetColumn(colName); ok {
@@ -313,17 +335,17 @@ func extractTable(ct *ast.CreateTableStatement) (*Table, error) {
 		case "FOREIGN KEY":
 			if constraint.References != nil {
 				fk := ForeignKey{
-					Name:       constraint.Name,
-					Columns:    constraint.Columns,
-					RefTable:   constraint.References.Table,
-					RefColumns: constraint.References.Columns,
+					Name:       strings.Clone(constraint.Name),
+					Columns:    cloneStrings(constraint.Columns),
+					RefTable:   strings.Clone(constraint.References.Table),
+					RefColumns: cloneStrings(constraint.References.Columns),
 				}
 				table.ForeignKeys = append(table.ForeignKeys, fk)
 			}
 		case "UNIQUE":
 			table.Indexes = append(table.Indexes, Index{
-				Name:    constraint.Name,
-				Columns: constraint.Columns,
+				Name:    strings.Clone(constraint.Name),
+				Columns: cloneStrings(constraint.Columns),
 				Unique:  true,
 			})
 		}

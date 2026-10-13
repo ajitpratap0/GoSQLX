@@ -67,8 +67,7 @@ func positionTestInputs() map[string]string {
 // toSQLPosition's result values.
 func tokenByteBounds(t *testing.T, tkz *Tokenizer, input []byte) [][2]int {
 	t.Helper()
-	tkz.Reset()
-	tkz.input = input
+	tkz.load(input, string(input))
 	for i := 0; i < len(input); i++ {
 		if input[i] == '\n' {
 			tkz.lineStarts = append(tkz.lineStarts, i+1)

@@ -317,7 +317,8 @@ const (
 //
 // Semantics: 1 part -> Name; 2 parts -> Schema.Name; 3 parts -> Schema.Table.Name;
 // 4 or more parts -> the whole string as Name. Empty parts are preserved.
-// It does not allocate; the returned strings alias name.
+// It does not allocate; the returned strings alias name (qualifiedSetToSlice
+// copies them before they reach the caller).
 func parseQualifiedTableName(name string) QualifiedName {
 	schema, rest, ok := strings.Cut(name, ".")
 	if !ok {
@@ -538,20 +539,70 @@ func (c *metadataCollector) collectFromExpression(expr ast.Expression, want extr
 	}
 }
 
+// stringSetToSlice returns the keys of m as independent strings. AST values
+// are substrings of the parsed SQL, so returning them as-is would let a
+// caller that keeps only a table name keep the whole input alive. Each
+// distinct value is copied once, into a single allocation shared by the
+// result (see detachStrings).
 func stringSetToSlice(m map[string]struct{}) []string {
 	result := make([]string, 0, len(m))
 	for k := range m {
 		result = append(result, k)
 	}
+	detachStrings(result)
 	return result
 }
 
+// qualifiedSetToSlice returns the keys of m with every part copied; see
+// stringSetToSlice.
 func qualifiedSetToSlice(m map[QualifiedName]struct{}) []QualifiedName {
 	result := make([]QualifiedName, 0, len(m))
+	parts := 0
 	for k := range m {
 		result = append(result, k)
+		parts += len(k.Schema) + len(k.Table) + len(k.Name)
+	}
+	if parts == 0 {
+		return result
+	}
+	var b strings.Builder
+	b.Grow(parts)
+	for _, q := range result {
+		b.WriteString(q.Schema)
+		b.WriteString(q.Table)
+		b.WriteString(q.Name)
+	}
+	arena, off := b.String(), 0
+	next := func(s string) string {
+		s, off = arena[off:off+len(s)], off+len(s)
+		return s
+	}
+	for i := range result {
+		q := &result[i]
+		q.Schema, q.Table, q.Name = next(q.Schema), next(q.Table), next(q.Name)
 	}
 	return result
+}
+
+// detachStrings rewrites each element of ss to an equal string backed by one
+// fresh allocation holding all of them, so none aliases the parsed SQL.
+func detachStrings(ss []string) {
+	n := 0
+	for _, s := range ss {
+		n += len(s)
+	}
+	if n == 0 {
+		return
+	}
+	var b strings.Builder
+	b.Grow(n)
+	for _, s := range ss {
+		b.WriteString(s)
+	}
+	arena, off := b.String(), 0
+	for i, s := range ss {
+		ss[i], off = arena[off:off+len(s)], off+len(s)
+	}
 }
 
 // ExtractMetadata extracts comprehensive metadata from an AST in a single call.

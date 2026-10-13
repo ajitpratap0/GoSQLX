@@ -129,7 +129,7 @@ func (f *Formatter) Format(sql string) (string, error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 
-	tokens, err := tkz.Tokenize([]byte(sql))
+	tokens, err := tkz.TokenizeString(sql)
 	if err != nil {
 		return "", fmt.Errorf("tokenization failed: %w", err)
 	}

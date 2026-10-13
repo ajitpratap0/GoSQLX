@@ -181,16 +181,11 @@ func ValidateBytesWithDialect(input []byte, dialect keywords.SQLDialect) error {
 		)
 	}
 
-	tkz, err := tokenizer.NewWithDialect(dialect)
-	if err != nil {
-		return goerrors.WrapError(
-			goerrors.ErrCodeInvalidSyntax,
-			fmt.Sprintf("tokenizer initialization: %v", err),
-			models.Location{},
-			"",
-			err,
-		)
-	}
+	// Pooled tokenizer: PutTokenizer restores the default dialect, so the
+	// configured dialect never leaks to a later pool user.
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+	tkz.SetDialect(dialect)
 
 	tokens, err := tkz.Tokenize(input)
 	if err != nil {
@@ -207,8 +202,11 @@ func ValidateBytesWithDialect(input []byte, dialect keywords.SQLDialect) error {
 		return nil
 	}
 
-	p := NewParser(WithDialect(string(dialect)))
-	defer p.Release()
+	// Pooled parser: PutParser -> Reset clears dialect, typed dialect,
+	// capabilities and strict mode.
+	p := GetParser()
+	defer PutParser(p)
+	p.ApplyOptions(WithDialect(string(dialect)))
 
 	astResult, parseErr := p.ParseFromModelTokens(tokens)
 	if parseErr != nil {
@@ -234,16 +232,9 @@ func ParseBytesWithDialect(input []byte, dialect keywords.SQLDialect) (*ast.AST,
 		)
 	}
 
-	tkz, err := tokenizer.NewWithDialect(dialect)
-	if err != nil {
-		return nil, goerrors.WrapError(
-			goerrors.ErrCodeInvalidSyntax,
-			fmt.Sprintf("tokenizer initialization: %v", err),
-			models.Location{},
-			"",
-			err,
-		)
-	}
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+	tkz.SetDialect(dialect)
 
 	tokens, err := tkz.Tokenize(input)
 	if err != nil {
@@ -260,7 +251,11 @@ func ParseBytesWithDialect(input []byte, dialect keywords.SQLDialect) (*ast.AST,
 		return nil, goerrors.IncompleteStatementError(models.Location{}, "")
 	}
 
-	p := NewParser(WithDialect(string(dialect)))
+	// The returned AST does not alias parser or tokenizer pooled state, so it
+	// is owned by the caller exactly as with the pooled default ParseBytes.
+	p := GetParser()
+	defer PutParser(p)
+	p.ApplyOptions(WithDialect(string(dialect)))
 
 	return p.ParseFromModelTokens(tokens)
 }

@@ -2148,7 +2148,7 @@ func (h *Handler) handleSemanticTokensFull(params SemanticTokensParams) (*Semant
 
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
-	tokens, err := tkz.Tokenize([]byte(content))
+	tokens, err := tkz.TokenizeString(content)
 	if err != nil {
 		return &SemanticTokens{Data: []uint32{}}, nil
 	}

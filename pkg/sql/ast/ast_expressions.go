@@ -153,9 +153,19 @@ type FunctionCall struct {
 func (f *FunctionCall) expressionNode()     {}
 func (f FunctionCall) TokenLiteral() string { return f.Name }
 func (f FunctionCall) Children() []Node {
-	children := nodifyExpressions(f.Arguments)
-	if len(f.Parameters) > 0 {
-		children = append(children, nodifyExpressions(f.Parameters)...)
+	n := len(f.Arguments) + len(f.Parameters) + len(f.OrderBy) + len(f.WithinGroup)
+	if f.Over != nil {
+		n++
+	}
+	if f.Filter != nil {
+		n++
+	}
+	children := make([]Node, 0, n)
+	for _, e := range f.Arguments {
+		children = append(children, e)
+	}
+	for _, e := range f.Parameters {
+		children = append(children, e)
 	}
 	if f.Over != nil {
 		children = append(children, f.Over)
@@ -163,13 +173,11 @@ func (f FunctionCall) Children() []Node {
 	if f.Filter != nil {
 		children = append(children, f.Filter)
 	}
-	for _, orderBy := range f.OrderBy {
-		orderBy := orderBy // G601: Create local copy to avoid memory aliasing
-		children = append(children, &orderBy)
+	for i := range f.OrderBy {
+		children = append(children, &f.OrderBy[i])
 	}
-	for _, orderBy := range f.WithinGroup {
-		orderBy := orderBy // G601: Create local copy to avoid memory aliasing
-		children = append(children, &orderBy)
+	for i := range f.WithinGroup {
+		children = append(children, &f.WithinGroup[i])
 	}
 	return children
 }
@@ -185,13 +193,19 @@ type CaseExpression struct {
 func (c *CaseExpression) expressionNode()     {}
 func (c CaseExpression) TokenLiteral() string { return "CASE" }
 func (c CaseExpression) Children() []Node {
-	children := make([]Node, 0)
+	n := len(c.WhenClauses)
+	if c.Value != nil {
+		n++
+	}
+	if c.ElseClause != nil {
+		n++
+	}
+	children := make([]Node, 0, n)
 	if c.Value != nil {
 		children = append(children, c.Value)
 	}
-	for _, when := range c.WhenClauses {
-		when := when // G601: Create local copy to avoid memory aliasing
-		children = append(children, &when)
+	for i := range c.WhenClauses {
+		children = append(children, &c.WhenClauses[i])
 	}
 	if c.ElseClause != nil {
 		children = append(children, c.ElseClause)

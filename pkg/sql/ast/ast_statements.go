@@ -151,20 +151,59 @@ func (s *SelectStatement) statementNode()       {}
 func (s *SelectStatement) queryExpressionNode() {}
 func (s SelectStatement) TokenLiteral() string  { return "SELECT" }
 
+// Children returns the statement's child nodes in source order. The slice is
+// sized up front, and value-typed children (From, Joins, Windows, OrderBy) are
+// returned as pointers into this statement's slices: the receiver is a copy,
+// but its slice headers share the parser-owned backing arrays, so mutations
+// through these pointers reach the AST and nothing is heap-copied (#557).
 func (s SelectStatement) Children() []Node {
-	children := make([]Node, 0)
+	n := len(s.DistinctOnColumns) + len(s.Columns) + len(s.From) + len(s.Joins) +
+		len(s.GroupBy) + len(s.Windows) + len(s.OrderBy)
+	if s.With != nil {
+		n++
+	}
+	if s.Sample != nil {
+		n++
+	}
+	if s.PrewhereClause != nil {
+		n++
+	}
+	if s.Where != nil {
+		n++
+	}
+	if s.Having != nil {
+		n++
+	}
+	if s.Qualify != nil {
+		n++
+	}
+	if s.Fetch != nil {
+		n++
+	}
+	if s.For != nil {
+		n++
+	}
+	if s.StartWith != nil {
+		n++
+	}
+	if s.ConnectBy != nil {
+		n++
+	}
+	children := make([]Node, 0, n)
 	if s.With != nil {
 		children = append(children, s.With)
 	}
-	children = append(children, nodifyExpressions(s.DistinctOnColumns)...)
-	children = append(children, nodifyExpressions(s.Columns)...)
-	for _, from := range s.From {
-		from := from // G601: Create local copy to avoid memory aliasing
-		children = append(children, &from)
+	for _, e := range s.DistinctOnColumns {
+		children = append(children, e)
 	}
-	for _, join := range s.Joins {
-		join := join // G601: Create local copy to avoid memory aliasing
-		children = append(children, &join)
+	for _, e := range s.Columns {
+		children = append(children, e)
+	}
+	for i := range s.From {
+		children = append(children, &s.From[i])
+	}
+	for i := range s.Joins {
+		children = append(children, &s.Joins[i])
 	}
 	if s.Sample != nil {
 		children = append(children, s.Sample)
@@ -175,20 +214,20 @@ func (s SelectStatement) Children() []Node {
 	if s.Where != nil {
 		children = append(children, s.Where)
 	}
-	children = append(children, nodifyExpressions(s.GroupBy)...)
+	for _, e := range s.GroupBy {
+		children = append(children, e)
+	}
 	if s.Having != nil {
 		children = append(children, s.Having)
 	}
 	if s.Qualify != nil {
 		children = append(children, s.Qualify)
 	}
-	for _, window := range s.Windows {
-		window := window // G601: Create local copy to avoid memory aliasing
-		children = append(children, &window)
+	for i := range s.Windows {
+		children = append(children, &s.Windows[i])
 	}
-	for _, orderBy := range s.OrderBy {
-		orderBy := orderBy // G601: Create local copy to avoid memory aliasing
-		children = append(children, &orderBy)
+	for i := range s.OrderBy {
+		children = append(children, &s.OrderBy[i])
 	}
 	if s.Fetch != nil {
 		children = append(children, s.Fetch)
@@ -223,20 +262,44 @@ func (i *InsertStatement) statementNode()      {}
 func (i InsertStatement) TokenLiteral() string { return "INSERT" }
 
 func (i InsertStatement) Children() []Node {
-	children := make([]Node, 0)
+	n := len(i.Columns) + len(i.Output) + len(i.Returning)
+	for _, row := range i.Values {
+		n += len(row)
+	}
+	if i.With != nil {
+		n++
+	}
+	if i.Query != nil {
+		n++
+	}
+	if i.OnConflict != nil {
+		n++
+	}
+	if i.OnDuplicateKey != nil {
+		n++
+	}
+	children := make([]Node, 0, n)
 	if i.With != nil {
 		children = append(children, i.With)
 	}
-	children = append(children, nodifyExpressions(i.Columns)...)
-	children = append(children, nodifyExpressions(i.Output)...)
+	for _, e := range i.Columns {
+		children = append(children, e)
+	}
+	for _, e := range i.Output {
+		children = append(children, e)
+	}
 	// Flatten multi-row values for Children()
 	for _, row := range i.Values {
-		children = append(children, nodifyExpressions(row)...)
+		for _, e := range row {
+			children = append(children, e)
+		}
 	}
 	if i.Query != nil {
 		children = append(children, i.Query)
 	}
-	children = append(children, nodifyExpressions(i.Returning)...)
+	for _, e := range i.Returning {
+		children = append(children, e)
+	}
 	if i.OnConflict != nil {
 		children = append(children, i.OnConflict)
 	}
@@ -288,13 +351,11 @@ func (u UpdateStatement) Children() []Node {
 	if u.With != nil {
 		children = append(children, u.With)
 	}
-	for _, assignment := range u.Assignments {
-		assignment := assignment // G601: Create local copy to avoid memory aliasing
-		children = append(children, &assignment)
+	for i := range u.Assignments {
+		children = append(children, &u.Assignments[i])
 	}
-	for _, from := range u.From {
-		from := from // G601: Create local copy to avoid memory aliasing
-		children = append(children, &from)
+	for i := range u.From {
+		children = append(children, &u.From[i])
 	}
 	if u.Where != nil {
 		children = append(children, u.Where)
@@ -329,20 +390,17 @@ func (c *CreateTableStatement) statementNode()      {}
 func (c CreateTableStatement) TokenLiteral() string { return "CREATE TABLE" }
 func (c CreateTableStatement) Children() []Node {
 	children := make([]Node, 0)
-	for _, col := range c.Columns {
-		col := col // G601: Create local copy to avoid memory aliasing
-		children = append(children, &col)
+	for i := range c.Columns {
+		children = append(children, &c.Columns[i])
 	}
-	for _, constraint := range c.Constraints {
-		constraint := constraint // G601: Create local copy to avoid memory aliasing
-		children = append(children, &constraint)
+	for i := range c.Constraints {
+		children = append(children, &c.Constraints[i])
 	}
 	if c.PartitionBy != nil {
 		children = append(children, c.PartitionBy)
 	}
-	for _, p := range c.Partitions {
-		p := p // G601: Create local copy
-		children = append(children, &p)
+	for i := range c.Partitions {
+		children = append(children, &c.Partitions[i])
 	}
 	return children
 }
@@ -366,9 +424,8 @@ func (d DeleteStatement) Children() []Node {
 	if d.With != nil {
 		children = append(children, d.With)
 	}
-	for _, using := range d.Using {
-		using := using // G601: Create local copy to avoid memory aliasing
-		children = append(children, &using)
+	for i := range d.Using {
+		children = append(children, &d.Using[i])
 	}
 	if d.Where != nil {
 		children = append(children, d.Where)
@@ -403,9 +460,8 @@ func (a *AlterTableStatement) statementNode()      {}
 func (a AlterTableStatement) TokenLiteral() string { return "ALTER TABLE" }
 func (a AlterTableStatement) Children() []Node {
 	children := make([]Node, len(a.Actions))
-	for i, action := range a.Actions {
-		action := action // G601: Create local copy to avoid memory aliasing
-		children[i] = &action
+	for i := range a.Actions {
+		children[i] = &a.Actions[i]
 	}
 	return children
 }
@@ -446,9 +502,8 @@ func (c *CreateIndexStatement) statementNode()      {}
 func (c CreateIndexStatement) TokenLiteral() string { return "CREATE INDEX" }
 func (c CreateIndexStatement) Children() []Node {
 	children := make([]Node, 0)
-	for _, col := range c.Columns {
-		col := col // G601: Create local copy to avoid memory aliasing
-		children = append(children, &col)
+	for i := range c.Columns {
+		children = append(children, &c.Columns[i])
 	}
 	if c.Where != nil {
 		children = append(children, c.Where)
@@ -474,15 +529,34 @@ type MergeStatement struct {
 
 func (m *MergeStatement) statementNode()      {}
 func (m MergeStatement) TokenLiteral() string { return "MERGE" }
-func (m MergeStatement) Children() []Node {
-	children := []Node{&m.TargetTable, &m.SourceTable}
+
+// Children returns TargetTable, SourceTable, OnCondition, the WHEN clauses and
+// the OUTPUT columns, in that order.
+//
+// The value receiver is kept for API compatibility. Called on a value it
+// returns addresses into the receiver copy (one heap copy per call), while
+// Walk and Inspect use childrenInPlace and visit the stored fields in place
+// (#557).
+func (m MergeStatement) Children() []Node { return m.childrenInPlace() }
+
+// childrenInPlace is Children for a MergeStatement reached through a pointer:
+// TargetTable and SourceTable are returned as pointers into *m itself.
+func (m *MergeStatement) childrenInPlace() []Node {
+	n := 2 + len(m.WhenClauses) + len(m.Output)
+	if m.OnCondition != nil {
+		n++
+	}
+	children := make([]Node, 0, n)
+	children = append(children, &m.TargetTable, &m.SourceTable)
 	if m.OnCondition != nil {
 		children = append(children, m.OnCondition)
 	}
 	for _, when := range m.WhenClauses {
 		children = append(children, when)
 	}
-	children = append(children, nodifyExpressions(m.Output)...)
+	for _, e := range m.Output {
+		children = append(children, e)
+	}
 	return children
 }
 
@@ -521,9 +595,8 @@ func (a *MergeAction) expressionNode()     {}
 func (a MergeAction) TokenLiteral() string { return a.ActionType }
 func (a MergeAction) Children() []Node {
 	children := make([]Node, 0)
-	for _, set := range a.SetClauses {
-		set := set // G601: Create local copy
-		children = append(children, &set)
+	for i := range a.SetClauses {
+		children = append(children, &a.SetClauses[i])
 	}
 	for _, val := range a.Values {
 		children = append(children, val)

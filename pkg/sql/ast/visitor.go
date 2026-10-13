@@ -157,6 +157,17 @@ type Visitor interface {
 //	    fmt.Printf("Validation error: %v\n", err)
 //	}
 //
+// Aliasing and lifetime:
+//
+// Children stored by value in a parent (TableReference, JoinClause,
+// OrderByExpression, WindowSpec, WindowFrameBound, WhenClause,
+// UpdateExpression, ColumnDef and its constraints, SetClause, ...) are passed
+// to the visitor as pointers into the parent's storage, not as copies, as long
+// as the parent itself is reached through a pointer (always the case in a
+// parsed tree). A visitor that mutates them therefore changes the AST itself.
+// Like every other child pointer, they share the AST's lifetime and must not
+// be retained after ast.ReleaseAST.
+//
 // See also: Inspect(), Visitor, Inspector
 func Walk(v Visitor, node Node) error {
 	if node == nil {
@@ -172,7 +183,7 @@ func Walk(v Visitor, node Node) error {
 		return nil
 	}
 
-	for _, child := range node.Children() {
+	for _, child := range childrenOf(node) {
 		if err := Walk(visitor, child); err != nil {
 			return err
 		}
@@ -180,6 +191,29 @@ func Walk(v Visitor, node Node) error {
 
 	_, err = visitor.Visit(nil)
 	return err
+}
+
+// childrenOf returns n's children for Walk. For value-receiver nodes whose
+// Children() must address their own fields (JoinClause, WindowFrame,
+// MergeStatement, Insert, Delete, Update) it uses the pointer-receiver childrenInPlace so the stored
+// struct is neither heap-copied nor detached from the AST (#557). A concrete
+// type switch is used because it is a cheap type-word compare.
+func childrenOf(n Node) []Node {
+	switch t := n.(type) {
+	case *JoinClause:
+		return t.childrenInPlace()
+	case *WindowFrame:
+		return t.childrenInPlace()
+	case *MergeStatement:
+		return t.childrenInPlace()
+	case *Insert:
+		return t.childrenInPlace()
+	case *Delete:
+		return t.childrenInPlace()
+	case *Update:
+		return t.childrenInPlace()
+	}
+	return n.Children()
 }
 
 // Inspector represents a function-based AST visitor for simplified traversal.

@@ -36,9 +36,8 @@ func (s Select) TokenLiteral() string { return "SELECT" }
 func (s Select) Children() []Node {
 	children := make([]Node, 0)
 	children = append(children, nodifyExpressions(s.Columns)...)
-	for _, from := range s.From {
-		from := from // G601: Create local copy to avoid memory aliasing
-		children = append(children, &from)
+	for i := range s.From {
+		children = append(children, &s.From[i])
 	}
 	if s.Where != nil {
 		children = append(children, s.Where)
@@ -47,9 +46,8 @@ func (s Select) Children() []Node {
 	if s.Having != nil {
 		children = append(children, s.Having)
 	}
-	for _, orderBy := range s.OrderBy {
-		orderBy := orderBy // G601: Create local copy to avoid memory aliasing
-		children = append(children, &orderBy)
+	for i := range s.OrderBy {
+		children = append(children, &s.OrderBy[i])
 	}
 	return children
 }
@@ -68,7 +66,13 @@ func (i *Insert) statementNode() {}
 func (i Insert) TokenLiteral() string { return "INSERT" }
 
 // Children implements Node and returns all child nodes of this Insert statement.
-func (i Insert) Children() []Node {
+// Called on a value, Table is a pointer into a copy of the receiver; Walk and
+// Inspect use childrenInPlace and visit the stored Table in place (#557).
+func (i Insert) Children() []Node { return i.childrenInPlace() }
+
+// childrenInPlace is Children for an Insert reached through a pointer: Table
+// is returned as a pointer into *i itself.
+func (i *Insert) childrenInPlace() []Node {
 	children := make([]Node, 0)
 	children = append(children, &i.Table)
 	children = append(children, nodifyExpressions(i.Columns)...)
@@ -92,7 +96,13 @@ func (d *Delete) statementNode() {}
 func (d Delete) TokenLiteral() string { return "DELETE" }
 
 // Children implements Node and returns all child nodes of this Delete statement.
-func (d Delete) Children() []Node {
+// Called on a value, Table is a pointer into a copy of the receiver; Walk and
+// Inspect use childrenInPlace and visit the stored Table in place (#557).
+func (d Delete) Children() []Node { return d.childrenInPlace() }
+
+// childrenInPlace is Children for a Delete reached through a pointer: Table
+// is returned as a pointer into *d itself.
+func (d *Delete) childrenInPlace() []Node {
 	children := make([]Node, 0)
 	children = append(children, &d.Table)
 	if d.Where != nil {
@@ -116,12 +126,17 @@ func (u *Update) statementNode() {}
 func (u Update) TokenLiteral() string { return "UPDATE" }
 
 // Children implements Node and returns all child nodes of this Update statement.
-func (u Update) Children() []Node {
+// Called on a value, Table is a pointer into a copy of the receiver; Walk and
+// Inspect use childrenInPlace and visit the stored Table in place (#557).
+func (u Update) Children() []Node { return u.childrenInPlace() }
+
+// childrenInPlace is Children for an Update reached through a pointer: Table
+// and the Updates elements are returned as pointers into *u itself.
+func (u *Update) childrenInPlace() []Node {
 	children := make([]Node, 0)
 	children = append(children, &u.Table)
-	for _, update := range u.Updates {
-		update := update // G601: Create local copy to avoid memory aliasing
-		children = append(children, &update)
+	for i := range u.Updates {
+		children = append(children, &u.Updates[i])
 	}
 	if u.Where != nil {
 		children = append(children, u.Where)

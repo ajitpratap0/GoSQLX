@@ -31,6 +31,13 @@ import (
 // The Node interface enables the visitor pattern for AST traversal. Use the
 // Walk() and Inspect() functions from visitor.go to traverse the tree.
 //
+// Children stored by value in a parent (TableReference, JoinClause,
+// OrderByExpression, WindowSpec, WhenClause, UpdateExpression, ColumnDef and
+// its constraints, SetClause, ...) are returned by Children() as pointers into
+// the parent's storage rather than as fresh copies. Mutations through them
+// change the AST, and they share the AST's lifetime: do not retain them after
+// ast.ReleaseAST, just like every other child pointer.
+//
 // Example - Checking node type:
 //
 //	switch node := astNode.(type) {

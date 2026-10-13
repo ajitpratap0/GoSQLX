@@ -217,9 +217,8 @@ func (t TriggerEvent) Children() []Node {
 		return nil
 	}
 	nodes := make([]Node, len(t.Columns))
-	for i, col := range t.Columns {
-		col := col // G601: avoid memory aliasing
-		nodes[i] = &col
+	for i := range t.Columns {
+		nodes[i] = &t.Columns[i]
 	}
 	return nodes
 }

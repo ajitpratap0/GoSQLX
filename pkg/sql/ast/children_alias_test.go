@@ -156,6 +156,23 @@ func TestChildrenOf_InPlaceFastPath(t *testing.T) {
 		Output:      []Expression{output},
 	}
 
+	where := &BinaryExpression{Left: ident("w"), Operator: "=", Right: ident("v")}
+	ret := ident("ret")
+	insert := &Insert{
+		Table:           TableReference{Name: "t"},
+		Columns:         []Expression{ident("c")},
+		Values:          [][]Expression{{ident("v1")}, {ident("v2")}},
+		ReturningClause: []Expression{ret},
+	}
+	del := &Delete{Table: TableReference{Name: "t"}, Where: where, ReturningClause: []Expression{ret}}
+	delNoWhere := &Delete{Table: TableReference{Name: "t"}}
+	upd := &Update{
+		Table:           TableReference{Name: "t"},
+		Updates:         []UpdateExpression{{Column: ident("a"), Value: ident("b")}, {Column: ident("c"), Value: ident("d")}},
+		Where:           where,
+		ReturningClause: []Expression{ret},
+	}
+
 	cases := []struct {
 		name     string
 		node     Node
@@ -168,6 +185,10 @@ func TestChildrenOf_InPlaceFastPath(t *testing.T) {
 		{"WindowFrame", frame, frame.Children(), []Node{&frame.Start, end}, []int{1}},
 		{"WindowFrameNoEnd", frameNoEnd, frameNoEnd.Children(), []Node{&frameNoEnd.Start}, nil},
 		{"MergeStatement", merge, merge.Children(), []Node{&merge.TargetTable, &merge.SourceTable, cond, when, output}, []int{2, 3, 4}},
+		{"Insert", insert, insert.Children(), []Node{&insert.Table, insert.Columns[0], insert.Values[0][0], insert.Values[1][0], ret}, []int{1, 2, 3, 4}},
+		{"Delete", del, del.Children(), []Node{&del.Table, where, ret}, []int{1, 2}},
+		{"DeleteNoWhere", delNoWhere, delNoWhere.Children(), []Node{&delNoWhere.Table}, nil},
+		{"Update", upd, upd.Children(), []Node{&upd.Table, &upd.Updates[0], &upd.Updates[1], where, ret}, []int{3, 4}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

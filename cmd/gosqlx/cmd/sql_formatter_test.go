@@ -701,3 +701,48 @@ func TestSQLFormatter_InsertWithCTE_Issue537(t *testing.T) {
 		})
 	}
 }
+
+// TestSQLFormatter_WithCTEChainedSetOperations checks that the CLI formatter
+// keeps the WITH clause exactly once for CTE queries with chained set
+// operators, at top level and under INSERT.
+func TestSQLFormatter_WithCTEChainedSetOperations(t *testing.T) {
+	inputs := []string{
+		"WITH c AS (SELECT 1 AS a) SELECT a FROM c UNION SELECT 2 UNION SELECT 3",
+		"WITH c AS (SELECT 1 AS a) SELECT a FROM c INTERSECT SELECT 2 INTERSECT SELECT 3",
+		"WITH c AS (SELECT 1 AS a) SELECT a FROM c EXCEPT SELECT 2 EXCEPT SELECT 3",
+		"INSERT INTO t (a) WITH c AS (SELECT 1 AS a) SELECT a FROM c UNION ALL SELECT 2 UNION ALL SELECT 3",
+	}
+	for _, in := range inputs {
+		t.Run(in, func(t *testing.T) {
+			tkz := tokenizer.GetTokenizer()
+			defer tokenizer.PutTokenizer(tkz)
+			tokens, err := tkz.Tokenize([]byte(in))
+			if err != nil {
+				t.Fatalf("tokenize: %v", err)
+			}
+			p := parser.NewParser()
+			defer p.Release()
+			tree, err := p.ParseFromModelTokens(tokens)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			defer ast.ReleaseAST(tree)
+
+			for name, opts := range map[string]FormatterOptions{
+				"compact":  {Compact: true, UppercaseKw: true},
+				"readable": {Indent: "  ", UppercaseKw: true},
+			} {
+				out, err := NewSQLFormatter(opts).Format(tree)
+				if err != nil {
+					t.Fatalf("%s format: %v", name, err)
+				}
+				if n := strings.Count(out, "WITH "); n != 1 {
+					t.Errorf("%s output has %d WITH clauses, want 1:\n%s", name, n, out)
+				}
+				if !strings.Contains(out, "c AS (") {
+					t.Errorf("%s output lost the CTE:\n%s", name, out)
+				}
+			}
+		})
+	}
+}

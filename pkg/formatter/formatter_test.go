@@ -133,3 +133,39 @@ func TestFormat_InsertWithCTE_Issue537(t *testing.T) {
 		})
 	}
 }
+
+// TestFormat_WithCTEChainedSetOperations checks that the compact formatter
+// keeps the WITH clause (exactly once) for CTE queries with chained set
+// operators, at top level and under INSERT, and is idempotent.
+func TestFormat_WithCTEChainedSetOperations(t *testing.T) {
+	inputs := []string{
+		"WITH c AS (SELECT 1 AS a) SELECT a FROM c UNION SELECT 2 UNION SELECT 3",
+		"WITH c AS (SELECT 1 AS a) SELECT a FROM c UNION ALL SELECT 2 UNION ALL SELECT 3",
+		"WITH c AS (SELECT 1 AS a) SELECT a FROM c INTERSECT SELECT 2 INTERSECT SELECT 3",
+		"WITH c AS (SELECT 1 AS a) SELECT a FROM c EXCEPT SELECT 2 EXCEPT SELECT 3",
+		"INSERT INTO t (a) WITH c AS (SELECT 1 AS a) SELECT a FROM c UNION SELECT 2 UNION SELECT 3",
+		"INSERT INTO t (a) WITH c AS (SELECT 1 AS a) SELECT a FROM c EXCEPT SELECT 2 EXCEPT SELECT 3",
+	}
+	for _, in := range inputs {
+		t.Run(in, func(t *testing.T) {
+			f := New(Options{Compact: true})
+			out, err := f.Format(in)
+			if err != nil {
+				t.Fatalf("Format: %v", err)
+			}
+			if n := strings.Count(out, "WITH "); n != 1 {
+				t.Fatalf("output has %d WITH clauses, want 1: %s", n, out)
+			}
+			if !strings.Contains(out, "WITH c AS (SELECT 1 AS a)") {
+				t.Errorf("output lost the CTE: %s", out)
+			}
+			again, err := f.Format(out)
+			if err != nil {
+				t.Fatalf("second pass: %v", err)
+			}
+			if again != out {
+				t.Errorf("not idempotent:\n first: %s\nsecond: %s", out, again)
+			}
+		})
+	}
+}

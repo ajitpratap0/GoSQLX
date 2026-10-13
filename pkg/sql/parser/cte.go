@@ -84,8 +84,18 @@ func (p *Parser) parseWithStatement() (ast.Statement, error) {
 		stmt.With = withClause
 		return stmt, nil
 	case *ast.SetOperation:
-		// For set operations, attach WITH to the left statement if it's a SELECT
-		if leftSelect, ok := stmt.Left.(*ast.SelectStatement); ok {
+		// For set operations, attach WITH to the leftmost SELECT. Chained
+		// operators (A UNION B UNION C) nest as ((A UNION B) UNION C), so walk
+		// down the Left links to the first operand.
+		left := stmt.Left
+		for {
+			inner, ok := left.(*ast.SetOperation)
+			if !ok {
+				break
+			}
+			left = inner.Left
+		}
+		if leftSelect, ok := left.(*ast.SelectStatement); ok {
 			leftSelect.With = withClause
 		}
 		return stmt, nil

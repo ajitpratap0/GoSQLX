@@ -386,3 +386,88 @@ func TestInsertWithCTE_Issue537_Errors(t *testing.T) {
 		})
 	}
 }
+
+// leftmostSelect walks nested SetOperation.Left links to the first operand.
+func leftmostSelect(q ast.Statement) *ast.SelectStatement {
+	for {
+		switch v := q.(type) {
+		case *ast.SetOperation:
+			q = v.Left
+		case *ast.SelectStatement:
+			return v
+		default:
+			return nil
+		}
+	}
+}
+
+// TestWithCTE_ChainedSetOperations keeps the WITH clause when the CTE's main
+// query has two or more set operators, which nest as ((A op B) op C) with a
+// SetOperation (not a SelectStatement) on the left. Covers both a leading
+// top-level WITH and INSERT ... WITH (#537 review follow-up).
+func TestWithCTE_ChainedSetOperations(t *testing.T) {
+	const cte = "WITH c AS (SELECT 1 AS a) "
+	chains := []string{
+		"SELECT a FROM c UNION SELECT 2",
+		"SELECT a FROM c UNION SELECT 2 UNION SELECT 3",
+		"SELECT a FROM c UNION ALL SELECT 2 UNION ALL SELECT 3",
+		"SELECT a FROM c INTERSECT SELECT 2 INTERSECT SELECT 3",
+		"SELECT a FROM c EXCEPT SELECT 2 EXCEPT SELECT 3",
+		"SELECT a FROM c UNION SELECT 2 INTERSECT SELECT 3 EXCEPT SELECT 4",
+	}
+	dialects := []string{"", "postgresql", "mysql", "sqlite", "snowflake", "sqlserver"}
+
+	for _, d := range dialects {
+		for _, chain := range chains {
+			for _, insert := range []bool{false, true} {
+				sql := cte + chain
+				if insert {
+					sql = "INSERT INTO t (a) " + cte + chain
+				}
+				t.Run(d+"/"+sql, func(t *testing.T) {
+					tree, err := parseInsertCTEWithDialect(t, sql, d)
+					if err != nil {
+						t.Fatalf("parse: %v", err)
+					}
+					defer ast.ReleaseAST(tree)
+					if len(tree.Statements) != 1 {
+						t.Fatalf("expected 1 statement, got %d", len(tree.Statements))
+					}
+
+					var query ast.Statement = tree.Statements[0]
+					if insert {
+						ins, ok := tree.Statements[0].(*ast.InsertStatement)
+						if !ok {
+							t.Fatalf("expected *ast.InsertStatement, got %T", tree.Statements[0])
+						}
+						query = ins.Query
+					}
+					if _, ok := query.(*ast.SetOperation); !ok {
+						t.Fatalf("query: expected *ast.SetOperation, got %T", query)
+					}
+					sel := leftmostSelect(query)
+					if sel == nil || sel.With == nil || len(sel.With.CTEs) != 1 || sel.With.CTEs[0].Name != "c" {
+						t.Fatalf("leftmost SELECT lost its WITH clause: %+v", sel)
+					}
+
+					got := tree.SQL()
+					if n := strings.Count(got, "WITH "); n != 1 {
+						t.Fatalf("SQL() has %d WITH clauses, want 1: %s", n, got)
+					}
+					if !strings.Contains(got, "WITH c AS (SELECT 1 AS a)") {
+						t.Errorf("SQL() lost the CTE: %s", got)
+					}
+
+					tree2, err := parseInsertCTEWithDialect(t, got, d)
+					if err != nil {
+						t.Fatalf("re-parse %q: %v", got, err)
+					}
+					defer ast.ReleaseAST(tree2)
+					if again := tree2.SQL(); again != got {
+						t.Errorf("round-trip not stable:\n first: %s\nsecond: %s", got, again)
+					}
+				})
+			}
+		}
+	}
+}

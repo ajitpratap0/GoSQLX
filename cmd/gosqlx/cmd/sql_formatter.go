@@ -661,7 +661,20 @@ func (f *SQLFormatter) formatJoin(join *ast.JoinClause) error {
 	f.builder.WriteString(" ")
 	f.formatTableReference(&join.Right)
 
-	if join.Condition != nil {
+	if len(join.Using) > 0 {
+		f.builder.WriteString(" ")
+		f.writeKeyword("USING")
+		f.builder.WriteString(" (")
+		for i, u := range join.Using {
+			if i > 0 {
+				f.builder.WriteString(", ")
+			}
+			if err := f.formatExpression(u); err != nil {
+				return err
+			}
+		}
+		f.builder.WriteString(")")
+	} else if join.Condition != nil {
 		f.builder.WriteString(" ")
 		f.writeKeyword("ON")
 		f.builder.WriteString(" ")

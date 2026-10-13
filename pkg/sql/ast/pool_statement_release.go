@@ -376,12 +376,15 @@ func releaseSelectStatement(stmt *SelectStatement, mode releaseMode) {
 	// copy of From[0] (sharing its Subquery/TableFunc/Pivot/TimeTravel/
 	// MatchRecognize pointers) and later Lefts as synthetic name-only
 	// references, so releasing it would Put the derived-table subquery
-	// twice. Right and Condition are uniquely owned. Zeroing the whole
+	// twice. Right, Condition and Using are uniquely owned. Zeroing the whole
 	// JoinClause also clears Pos and drops the Left copy's pointers so the
 	// pooled statement does not retain them.
 	for i := range stmt.Joins {
 		releaseTableReference(&stmt.Joins[i].Right, mode)
 		releaseExpression(stmt.Joins[i].Condition, mode)
+		for _, u := range stmt.Joins[i].Using {
+			releaseExpression(u, mode)
+		}
 		stmt.Joins[i] = JoinClause{}
 	}
 	stmt.Joins = stmt.Joins[:0]

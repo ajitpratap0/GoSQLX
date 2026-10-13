@@ -68,18 +68,24 @@ func (c CommonTableExpr) Children() []Node {
 // Left is a non-owning copy: the parser sets Joins[0].Left to a value copy
 // of From[0] (sharing its pointers) and later Lefts to name-only references.
 // Release code must not Put through Left; From owns those nodes.
+//
+// Condition holds the ON expression. A JOIN ... USING (col, ...) clause is
+// stored in Using instead, one *Identifier per column, and leaves Condition
+// nil. CROSS, NATURAL and APPLY joins have neither.
 type JoinClause struct {
 	Type      string // INNER, LEFT, RIGHT, FULL
 	Left      TableReference
 	Right     TableReference
-	Condition Expression
+	Condition Expression      // ON condition (nil for USING / CROSS / NATURAL)
+	Using     []Expression    // USING (col, ...) columns; when set, Condition is nil and renderers emit USING
 	Pos       models.Location // Source position of the JOIN keyword (1-based line and column)
 }
 
 func (j *JoinClause) expressionNode()     {}
 func (j JoinClause) TokenLiteral() string { return j.Type + " JOIN" }
 
-// Children returns Left, Right and, when present, Condition.
+// Children returns Left, Right, Condition when present, and then the USING
+// columns in order.
 //
 // The value receiver is kept for API compatibility. Called on a value it
 // returns addresses into the receiver copy (one heap copy per call), while
@@ -90,10 +96,23 @@ func (j JoinClause) Children() []Node { return j.childrenInPlace() }
 // childrenInPlace is Children for a JoinClause reached through a pointer:
 // Left and Right are returned as pointers into *j itself.
 func (j *JoinClause) childrenInPlace() []Node {
-	if j.Condition != nil {
-		return []Node{&j.Left, &j.Right, j.Condition}
+	if len(j.Using) == 0 {
+		if j.Condition != nil {
+			return []Node{&j.Left, &j.Right, j.Condition}
+		}
+		return []Node{&j.Left, &j.Right}
 	}
-	return []Node{&j.Left, &j.Right}
+	nodes := make([]Node, 0, 3+len(j.Using))
+	nodes = append(nodes, &j.Left, &j.Right)
+	if j.Condition != nil {
+		nodes = append(nodes, j.Condition)
+	}
+	for _, u := range j.Using {
+		if u != nil {
+			nodes = append(nodes, u)
+		}
+	}
+	return nodes
 }
 
 // TableReference represents a table reference in a FROM clause.

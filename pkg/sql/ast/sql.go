@@ -2041,7 +2041,16 @@ func writeJoin(buf *bytes.Buffer, j *JoinClause) {
 	buf.WriteString(j.Type)
 	buf.WriteString(" JOIN ")
 	writeTableRef(buf, &j.Right)
-	if j.Condition != nil {
+	if len(j.Using) > 0 {
+		buf.WriteString(" USING (")
+		for i, u := range j.Using {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			writeExpr(buf, u)
+		}
+		buf.WriteByte(')')
+	} else if j.Condition != nil {
 		buf.WriteString(" ON ")
 		writeExpr(buf, j.Condition)
 	}

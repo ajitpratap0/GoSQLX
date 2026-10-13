@@ -752,8 +752,8 @@ type SubqueryExpression struct {
 type JoinClause struct {
     Type      string // INNER, LEFT, RIGHT, FULL, CROSS, NATURAL
     Table     TableReference
-    Condition Expression
-    Using     []string
+    Condition Expression   // ON condition (nil for USING / CROSS / NATURAL)
+    Using     []Expression // USING (col, ...) columns
 }
 ```
 

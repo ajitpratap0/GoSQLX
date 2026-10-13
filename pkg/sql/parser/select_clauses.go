@@ -246,7 +246,7 @@ func (p *Parser) parseJoinClauses(firstRef ast.TableReference, joins []ast.JoinC
 			return nil, err
 		}
 
-		joinCondition, err := p.parseJoinCondition(joinType, isNatural, isApply)
+		joinCondition, joinUsing, err := p.parseJoinCondition(joinType, isNatural, isApply)
 		if err != nil {
 			return nil, err
 		}
@@ -269,6 +269,7 @@ func (p *Parser) parseJoinClauses(firstRef ast.TableReference, joins []ast.JoinC
 			Left:      leftTable,
 			Right:     joinedTableRef,
 			Condition: joinCondition,
+			Using:     joinUsing,
 			Pos:       joinPos,
 		})
 	}
@@ -362,38 +363,40 @@ func (p *Parser) parseJoinType() (string, bool, error) {
 
 // parseJoinCondition parses the ON / USING clause that follows a joined table reference.
 // CROSS JOIN, APPLY, and NATURAL JOIN variants do not require a condition.
-func (p *Parser) parseJoinCondition(joinType string, isNatural, isApply bool) (ast.Expression, error) {
+// It returns the ON expression, or for USING (col, ...) a nil expression and
+// the column list, one *ast.Identifier per column.
+func (p *Parser) parseJoinCondition(joinType string, isNatural, isApply bool) (ast.Expression, []ast.Expression, error) {
 	isCrossJoin := joinType == "CROSS" || isApply
 	if isCrossJoin || isNatural {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	if p.isType(models.TokenTypeOn) {
 		p.advance() // Consume ON
 		cond, err := p.parseExpression()
 		if err != nil {
-			return nil, goerrors.InvalidSyntaxError(
+			return nil, nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("error parsing ON condition for %s JOIN: %v", joinType, err),
 				p.currentLocation(),
 				"",
 			)
 		}
-		return cond, nil
+		return cond, nil, nil
 	}
 
 	if p.isType(models.TokenTypeUsing) {
 		p.advance() // Consume USING
 		if !p.isType(models.TokenTypeLParen) {
-			return nil, p.expectedError("( after USING")
+			return nil, nil, p.expectedError("( after USING")
 		}
 		p.advance()
 
 		var usingColumns []ast.Expression
 		for {
 			if !p.isIdentifier() {
-				return nil, p.expectedError("column name in USING")
+				return nil, nil, p.expectedError("column name in USING")
 			}
-			usingColumns = append(usingColumns, &ast.Identifier{Name: p.currentToken.Token.Value})
+			usingColumns = append(usingColumns, &ast.Identifier{Name: p.currentToken.Token.Value, Pos: p.currentLocation()})
 			p.advance()
 			if !p.isType(models.TokenTypeComma) {
 				break
@@ -402,17 +405,14 @@ func (p *Parser) parseJoinCondition(joinType string, isNatural, isApply bool) (a
 		}
 
 		if !p.isType(models.TokenTypeRParen) {
-			return nil, p.expectedError(") after USING column list")
+			return nil, nil, p.expectedError(") after USING column list")
 		}
 		p.advance()
 
-		if len(usingColumns) == 1 {
-			return usingColumns[0], nil
-		}
-		return &ast.ListExpression{Values: usingColumns}, nil
+		return nil, usingColumns, nil
 	}
 
-	return nil, p.expectedError("ON or USING")
+	return nil, nil, p.expectedError("ON or USING")
 }
 
 // parseSampleClause parses the ClickHouse SAMPLE clause that specifies data sampling.

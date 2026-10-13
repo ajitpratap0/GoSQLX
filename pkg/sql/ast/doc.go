@@ -404,7 +404,8 @@
 //	    Type      string          // INNER, LEFT, RIGHT, FULL, CROSS, NATURAL
 //	    Left      TableReference  // Left table
 //	    Right     TableReference  // Right table
-//	    Condition Expression      // ON condition or USING clause
+//	    Condition Expression      // ON condition (nil for USING / CROSS / NATURAL)
+//	    Using     []Expression    // USING (col, ...) columns
 //	}
 //
 // TableReference: Table reference with subquery and LATERAL support

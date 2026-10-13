@@ -1385,7 +1385,18 @@ func joinSQL(j *ast.JoinClause, f *nodeFormatter) string {
 	sb.WriteString(f.kw("JOIN"))
 	sb.WriteString(" ")
 	sb.WriteString(tableRefSQL(&j.Right, f))
-	if j.Condition != nil {
+	if len(j.Using) > 0 {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("USING"))
+		sb.WriteString(" (")
+		for i, u := range j.Using {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(exprSQL(u))
+		}
+		sb.WriteString(")")
+	} else if j.Condition != nil {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("ON"))
 		sb.WriteString(" ")

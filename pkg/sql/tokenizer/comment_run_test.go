@@ -24,8 +24,9 @@ import (
 
 // longCommentRun is the number of consecutive comments used by the tests
 // below. It is large enough that skipping comments with one stack frame per
-// comment would exceed the stack limit set by limitStack.
-const longCommentRun = 1_000_000
+// comment would exceed the stack limit set by limitStack, and small enough
+// that the comments plus the tokens after them stay within MaxTokens.
+const longCommentRun = 900_000
 
 // limitStack lowers the maximum goroutine stack size for the duration of the
 // test so that per-comment stack growth fails quickly instead of first

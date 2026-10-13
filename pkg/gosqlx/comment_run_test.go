@@ -28,7 +28,8 @@ func TestParse_LongCommentRun(t *testing.T) {
 	prev := debug.SetMaxStack(64 << 20)
 	defer debug.SetMaxStack(prev)
 
-	const n = 1_000_000
+	// Comments count toward MaxTokens, so stay below it.
+	const n = 900_000
 	for _, unit := range []string{"--\n", "/**/"} {
 		tree, err := Parse(strings.Repeat(unit, n) + "SELECT 1")
 		if err != nil {

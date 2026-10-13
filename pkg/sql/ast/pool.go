@@ -431,6 +431,10 @@ var (
 // the pool never pins a large backing array nor makes later Puts pay for it.
 const maxPooledWorkQueueCap = 1024
 
+// maxPooledComments is the largest AST.Comments capacity ReleaseAST keeps
+// (64 KiB of models.Comment); larger slices are dropped.
+const maxPooledComments = 1024
+
 // NewAST retrieves a new AST container from the pool.
 //
 // NewAST returns a pooled AST container with pre-allocated statement capacity.
@@ -547,9 +551,14 @@ func ReleaseAST(ast *AST) {
 	ast.Statements = ast.Statements[:0]
 
 	// Reset comments but keep capacity; clear drops the Text strings so the
-	// pooled AST does not retain them (clear on nil is a no-op).
-	clear(ast.Comments)
-	ast.Comments = ast.Comments[:0]
+	// pooled AST does not retain them (clear on nil is a no-op). A slice
+	// grown past maxPooledComments is dropped instead of kept in the pool.
+	if cap(ast.Comments) > maxPooledComments {
+		ast.Comments = nil
+	} else {
+		clear(ast.Comments)
+		ast.Comments = ast.Comments[:0]
+	}
 
 	// Return to pool
 	metrics.RecordNamedPoolPut("ast")

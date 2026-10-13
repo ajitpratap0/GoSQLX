@@ -65,6 +65,10 @@ const (
 	//   - Complex query with joins: ~100-500 tokens
 	//   - Large IN clause with 1000 values: ~3000-4000 tokens
 	//
+	// Collected comments count toward this limit as well: the number of
+	// tokens plus the number of comments may not exceed MaxTokens, so an
+	// input made only of comments is bounded like one made of tokens.
+	//
 	// If this limit is hit on a legitimate query, the query should likely
 	// be redesigned for better performance and maintainability.
 	MaxTokens = 1000000 // 1M tokens
@@ -309,6 +313,10 @@ type Tokenizer struct {
 	dialect    keywords.SQLDialect // SQL dialect for dialect-specific keyword recognition
 	logger     *slog.Logger        // Optional structured logger for verbose tracing
 	Comments   []models.Comment    // Comments captured during tokenization
+
+	// emitted is the number of tokens produced so far by the current call.
+	// Together with len(Comments) it is checked against MaxTokens.
+	emitted int
 
 	// Forward column cursor used by toSQLPosition so that the mostly
 	// monotone position requests made during tokenization cost O(1)
@@ -612,11 +620,13 @@ func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, have
 				break
 			}
 
-			// Check token count limit to prevent DoS attacks
-			if len(tokens) >= MaxTokens {
-				tokenErr = errors.TokenLimitReachedError(len(tokens)+1, MaxTokens, t.getCurrentPosition(), t.src)
+			// Check token count limit to prevent DoS attacks. Collected
+			// comments count toward the same limit.
+			if n := len(tokens) + len(t.Comments); n >= MaxTokens {
+				tokenErr = errors.TokenLimitReachedError(n+1, MaxTokens, t.getCurrentPosition(), t.src)
 				return
 			}
+			t.emitted = len(tokens)
 
 			// Compute the start location before scanning so position requests
 			// stay monotone (nextToken may record comment positions past it).
@@ -843,7 +853,9 @@ func (t *Tokenizer) nextToken() (models.Token, error) {
 		if (r == '-' || r == '/') && t.pos.Index+1 < len(t.input) {
 			next := t.input[t.pos.Index+1]
 			if r == '-' && next == '-' {
-				t.skipLineComment()
+				if err := t.skipLineComment(); err != nil {
+					return models.Token{}, err
+				}
 				t.skipWhitespace()
 				continue
 			}
@@ -863,8 +875,12 @@ func (t *Tokenizer) nextToken() (models.Token, error) {
 
 // skipLineComment consumes a "--" comment starting at t.pos, up to and
 // including the next newline (or to the end of input), and records it in
-// t.Comments. The recorded text excludes the trailing newline.
-func (t *Tokenizer) skipLineComment() {
+// t.Comments. The recorded text excludes the trailing newline. It returns a
+// token-limit error when the comment would exceed MaxTokens.
+func (t *Tokenizer) skipLineComment() error {
+	if err := t.commentLimitError(); err != nil {
+		return err
+	}
 	commentStartIdx := t.pos.Index
 	commentStartPos := t.toSQLPosition(t.pos)
 	t.pos.Index += 2 // "--"
@@ -888,12 +904,27 @@ func (t *Tokenizer) skipLineComment() {
 		End:    t.toSQLPosition(t.pos),
 		Inline: t.hasCodeBeforeOnLine(commentStartIdx),
 	})
+	return nil
+}
+
+// commentLimitError returns a token-limit error, located at the current
+// position, when recording one more comment would bring the number of tokens
+// plus comments of the current call past MaxTokens; otherwise nil.
+func (t *Tokenizer) commentLimitError() error {
+	if n := t.emitted + len(t.Comments); n >= MaxTokens {
+		return errors.TokenLimitReachedError(n+1, MaxTokens, t.getCurrentPosition(), t.src)
+	}
+	return nil
 }
 
 // skipBlockComment consumes a "/* ... */" comment starting at t.pos and
 // records it in t.Comments. Block comments do not nest. It returns an
-// unterminated-comment error when no closing "*/" follows.
+// unterminated-comment error when no closing "*/" follows, and a token-limit
+// error when the comment would exceed MaxTokens.
 func (t *Tokenizer) skipBlockComment() error {
+	if err := t.commentLimitError(); err != nil {
+		return err
+	}
 	commentStartIdx := t.pos.Index
 	commentStartPos := t.toSQLPosition(t.pos)
 	t.pos.Index += 2 // "/*"

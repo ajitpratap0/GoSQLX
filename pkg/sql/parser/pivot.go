@@ -290,13 +290,31 @@ func (p *Parser) parseUnpivotClause() (*ast.UnpivotClause, error) {
 
 // supportsTableFunction reports whether the current dialect allows
 // function-call style table references in the FROM list — Snowflake
-// (FLATTEN, TABLE, IDENTIFIER, GENERATOR), BigQuery (UNNEST), and
-// PostgreSQL (unnest, generate_series, json_each, ...).
+// (FLATTEN, TABLE, IDENTIFIER, GENERATOR), BigQuery (UNNEST),
+// PostgreSQL (unnest, generate_series, json_each, ...), and ClickHouse
+// (numbers, remote, file, s3, url, ...).
 func (p *Parser) supportsTableFunction() bool {
 	switch p.dialect {
 	case string(keywords.DialectSnowflake),
 		string(keywords.DialectBigQuery),
-		string(keywords.DialectPostgreSQL):
+		string(keywords.DialectPostgreSQL),
+		string(keywords.DialectClickHouse):
+		return true
+	}
+	return false
+}
+
+// isClickHouseKeywordTableFunction reports whether the current token starts a
+// ClickHouse table function whose name the tokenizer classifies as a keyword
+// (url, merge, values, null) and is directly followed by '('.
+func (p *Parser) isClickHouseKeywordTableFunction() bool {
+	if p.dialect != string(keywords.DialectClickHouse) ||
+		p.peekToken().Token.Type != models.TokenTypeLParen {
+		return false
+	}
+	switch p.currentToken.Token.Type {
+	case models.TokenTypeUrl, models.TokenTypeMerge,
+		models.TokenTypeValues, models.TokenTypeNull:
 		return true
 	}
 	return false

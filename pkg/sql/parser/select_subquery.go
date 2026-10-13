@@ -102,6 +102,20 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 			}
 			tableRef.TableFunc = funcCall
 		}
+	} else if p.isClickHouseKeywordTableFunction() {
+		// ClickHouse table function named by a keyword token: url(...),
+		// merge(...), values(...), null(...).
+		funcName := p.currentToken.Token.Value
+		p.advance() // Consume the function name
+		funcCall, ferr := p.parseFunctionCall(funcName)
+		if ferr != nil {
+			return tableRef, ferr
+		}
+		tableRef = ast.TableReference{
+			Name:      funcName,
+			Lateral:   isLateral,
+			TableFunc: funcCall,
+		}
 	} else {
 		// Parse regular table name (supports schema.table qualification)
 		qualifiedName, err := p.parseQualifiedName()
@@ -115,7 +129,8 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		}
 
 		// Function-call table reference (Snowflake FLATTEN, TABLE(...),
-		// IDENTIFIER(...), PostgreSQL unnest(...), BigQuery UNNEST(...)).
+		// IDENTIFIER(...), PostgreSQL unnest(...), BigQuery UNNEST(...),
+		// ClickHouse numbers(...), remote(...)).
 		// If the parsed name is followed by '(' at FROM position, reparse
 		// it as a function call. Gated to dialects that actually use this.
 		if p.isType(models.TokenTypeLParen) && p.supportsTableFunction() {

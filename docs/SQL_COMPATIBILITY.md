@@ -648,6 +648,7 @@ gosqlx format --dialect mysql query.sql
 - WITH TOTALS in GROUP BY, LIMIT BY clause, ANY/ALL JOIN strictness
 - SETTINGS, TTL, INSERT FORMAT (JSONEachRow, CSV, etc.)
 - `table`, `partition`, `tables`, `databases` as identifiers
+- Table functions in FROM: `numbers(N)`, `remote(...)`, `file(...)`, `url(...)`, `merge(...)`, `s3(...)`, `values(...)`, etc.
 - 30+ ClickHouse-specific keywords: TTL, CODEC, FORMAT, SETTINGS, DISTRIBUTED, etc.
 
 ## SQL Standards Compliance Summary

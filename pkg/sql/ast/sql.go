@@ -300,6 +300,7 @@ func (i *Ident) writeSQL(buf *bytes.Buffer) {
 // SQL returns the SQL representation of this binary expression.
 // The operator, left, and right sub-expressions are serialized in infix notation.
 // NOT-qualified operators (LIKE, ILIKE, SIMILAR TO) are rendered as "x NOT OP y".
+// A unary NOT with no right operand (NOT EXISTS) is rendered as "NOT <left>".
 func (b *BinaryExpression) SQL() string {
 	if b == nil {
 		return ""
@@ -317,6 +318,15 @@ func (b *BinaryExpression) writeSQL(buf *bytes.Buffer) {
 	op := b.Operator
 	if b.CustomOp != nil {
 		op = b.CustomOp.String()
+	}
+
+	// NOT EXISTS (subquery) is parsed as a unary NOT: Operator "NOT" with the
+	// EXISTS on the left and no right operand (issue #601). Render it as a
+	// prefix NOT, matching UnaryExpression, instead of the infix NOT form.
+	if b.Right == nil && strings.EqualFold(op, "NOT") {
+		buf.WriteString("NOT ")
+		writeExpr(buf, b.Left)
+		return
 	}
 
 	// Handle IS NULL / IS NOT NULL (right side is NULL literal).

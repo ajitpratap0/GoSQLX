@@ -1179,6 +1179,13 @@ func (i *InsertStatement) SQL() string {
 	return buf.String()
 }
 
+// isSetForm reports whether the statement can be rendered in the MySQL
+// INSERT ... SET form recorded by SetSyntax.
+func (i *InsertStatement) isSetForm() bool {
+	return i.SetSyntax && i.Query == nil && len(i.Columns) > 0 &&
+		len(i.Values) == 1 && len(i.Values[0]) == len(i.Columns)
+}
+
 func (i *InsertStatement) writeSQL(buf *bytes.Buffer) {
 	if i == nil {
 		return
@@ -1192,18 +1199,32 @@ func (i *InsertStatement) writeSQL(buf *bytes.Buffer) {
 	buf.WriteString("INSERT INTO ")
 	buf.WriteString(i.TableName)
 
-	if len(i.Columns) > 0 {
-		buf.WriteString(" (")
-		writeExprList(buf, i.Columns)
-		buf.WriteByte(')')
-	}
+	if i.isSetForm() {
+		buf.WriteString(" SET ")
+		for idx, col := range i.Columns {
+			if idx > 0 {
+				buf.WriteString(", ")
+			}
+			writeExpr(buf, col)
+			buf.WriteString(" = ")
+			writeExpr(buf, i.Values[0][idx])
+		}
+	} else {
+		if len(i.Columns) > 0 {
+			buf.WriteString(" (")
+			writeExprList(buf, i.Columns)
+			buf.WriteByte(')')
+		}
 
-	if i.Query != nil {
-		buf.WriteByte(' ')
-		writeStmt(buf, i.Query)
-	} else if len(i.Values) > 0 {
-		buf.WriteString(" VALUES ")
-		writeValueRows(buf, i.Values)
+		if i.Query != nil {
+			buf.WriteByte(' ')
+			writeStmt(buf, i.Query)
+		} else if len(i.Values) > 0 {
+			buf.WriteString(" VALUES ")
+			writeValueRows(buf, i.Values)
+		} else if i.DefaultValues {
+			buf.WriteString(" DEFAULT VALUES")
+		}
 	}
 
 	if i.OnConflict != nil {

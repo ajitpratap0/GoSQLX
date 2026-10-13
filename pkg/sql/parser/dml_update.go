@@ -20,6 +20,7 @@ package parser
 import (
 	"strings"
 
+	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
@@ -93,6 +94,19 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 		p.advance() // Consume comma
 	}
 
+	// PostgreSQL / SQL Server / SQLite: UPDATE t SET ... FROM s [, ...] (#610).
+	var from []ast.TableReference
+	if p.isType(models.TokenTypeFrom) {
+		p.advance() // Consume FROM
+		prev := p.dmlReturning
+		p.dmlReturning = true
+		from, err = p.parseUpdateFromList()
+		p.dmlReturning = prev
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Parse WHERE clause if present
 	var whereClause ast.Expression
 	if p.isType(models.TokenTypeWhere) {
@@ -127,7 +141,29 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 	return &ast.UpdateStatement{
 		TableName:   tableName,
 		Assignments: updates,
+		From:        from,
 		Where:       whereClause,
 		Returning:   returning,
 	}, nil
+}
+
+// parseUpdateFromList parses the comma-separated table references of
+// UPDATE ... FROM. JOINs are rejected: UpdateStatement has no join list.
+func (p *Parser) parseUpdateFromList() ([]ast.TableReference, error) {
+	var refs []ast.TableReference
+	for {
+		ref, err := p.parseFromTableReference()
+		if err != nil {
+			return nil, err
+		}
+		refs = append(refs, ref)
+		if !p.isType(models.TokenTypeComma) {
+			break
+		}
+		p.advance() // Consume comma
+	}
+	if p.isJoinKeyword() {
+		return nil, goerrors.UnsupportedFeatureError("JOIN in UPDATE ... FROM", p.currentLocation(), "")
+	}
+	return refs, nil
 }

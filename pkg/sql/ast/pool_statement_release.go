@@ -130,6 +130,8 @@ func releaseInsertStatement(stmt *InsertStatement, mode releaseMode) {
 
 	stmt.TableName = ""
 	stmt.Pos = models.Location{}
+	stmt.DefaultValues = false
+	stmt.SetSyntax = false
 
 	// Return to pool
 	if mode == releaseAll {

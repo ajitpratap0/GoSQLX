@@ -45,7 +45,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 
 	// Parse column list if present
 	columns := make([]ast.Expression, 0)
-	if p.isType(models.TokenTypeLParen) {
+	if p.isType(models.TokenTypeLParen) && !p.isInsertQueryParenStart() {
 		p.advance() // Consume (
 
 		for {
@@ -85,6 +85,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 	// Parse VALUES or SELECT
 	var values [][]ast.Expression
 	var query ast.QueryExpression
+	var defaultValues, setSyntax bool
 
 	// ClickHouse-only: INSERT INTO t [(cols)] FORMAT <name> with the data
 	// payload being external (network / file). Short-circuit here — there is
@@ -102,12 +103,10 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 	}
 
 	switch {
-	case p.isType(models.TokenTypeSelect), p.isType(models.TokenTypeWith):
-		// INSERT ... SELECT, or INSERT ... WITH cte AS (...) SELECT (#537).
-		// parseSubquery consumes SELECT itself, or delegates WITH to
-		// parseWithStatement, which attaches the WITH clause to the query
-		// (SelectStatement.With, or SetOperation.Left.With).
-		stmt, err := p.parseSubquery()
+	case p.isType(models.TokenTypeSelect), p.isType(models.TokenTypeWith), p.isInsertQueryParenStart():
+		// INSERT ... SELECT, INSERT ... WITH cte AS (...) SELECT (#537), or a
+		// parenthesized query INSERT INTO t [(cols)] (SELECT ...) (#610).
+		stmt, err := p.parseInsertSourceQuery()
 		if err != nil {
 			return nil, err
 		}
@@ -169,6 +168,48 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 			}
 			p.advance() // Consume comma between rows
 		}
+	case p.isType(models.TokenTypeDefault) && p.peekToken().Token.Type == models.TokenTypeValues:
+		// INSERT INTO t DEFAULT VALUES (PostgreSQL, SQL Server, SQLite).
+		if len(columns) > 0 {
+			return nil, goerrors.InvalidSyntaxError(
+				"DEFAULT VALUES cannot follow a column list",
+				p.currentLocation(),
+				"",
+			)
+		}
+		p.advance() // Consume DEFAULT
+		p.advance() // Consume VALUES
+		defaultValues = true
+	case p.isType(models.TokenTypeSet) && (p.dialect == string(keywords.DialectMySQL) || p.isMariaDB()):
+		// MySQL/MariaDB INSERT INTO t SET col = expr, ... - stored as
+		// Columns plus one Values row; SetSyntax keeps the source form.
+		if len(columns) > 0 {
+			return nil, p.expectedError("VALUES or SELECT after a column list")
+		}
+		p.advance() // Consume SET
+		row := make([]ast.Expression, 0)
+		for {
+			if !p.isIdentifier() {
+				return nil, p.expectedError("column name")
+			}
+			columns = append(columns, &ast.Identifier{Name: p.currentToken.Token.Value})
+			p.advance()
+			if !p.isType(models.TokenTypeEq) {
+				return nil, p.expectedError("=")
+			}
+			p.advance() // Consume =
+			expr, err := p.parseExpression()
+			if err != nil {
+				return nil, err
+			}
+			row = append(row, expr)
+			if !p.isType(models.TokenTypeComma) {
+				break
+			}
+			p.advance() // Consume comma
+		}
+		values = [][]ast.Expression{row}
+		setSyntax = true
 	default:
 		return nil, p.expectedError("VALUES, SELECT, or WITH")
 	}
@@ -209,7 +250,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 
 	// Parse RETURNING clause if present (PostgreSQL)
 	var returning []ast.Expression
-	if p.isType(models.TokenTypeReturning) || p.currentToken.Token.Value == "RETURNING" {
+	if p.isReturningKeyword() {
 		p.advance() // Consume RETURNING
 		var err error
 		returning, err = p.parseReturningColumns()
@@ -239,7 +280,49 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 		OnConflict:     onConflict,
 		OnDuplicateKey: onDuplicateKey,
 		Returning:      returning,
+		DefaultValues:  defaultValues,
+		SetSyntax:      setSyntax,
 	}, nil
+}
+
+// isInsertQueryParenStart reports whether the current '(' opens a
+// parenthesized query source - INSERT INTO t [(cols)] (SELECT ...) - rather
+// than a column list. A column list never starts with SELECT, WITH or '('.
+func (p *Parser) isInsertQueryParenStart() bool {
+	if !p.isType(models.TokenTypeLParen) {
+		return false
+	}
+	switch p.peekToken().Token.Type {
+	case models.TokenTypeSelect, models.TokenTypeWith, models.TokenTypeLParen:
+		return true
+	}
+	return false
+}
+
+// parseInsertSourceQuery parses the query source of INSERT ... SELECT,
+// optionally wrapped in parentheses. RETURNING is not accepted as an implicit
+// alias inside the source, so INSERT ... SELECT ... FROM s RETURNING id keeps
+// its RETURNING clause (#610).
+func (p *Parser) parseInsertSourceQuery() (ast.Statement, error) {
+	open := 0
+	for p.isType(models.TokenTypeLParen) {
+		p.advance() // Consume (
+		open++
+	}
+	prev := p.dmlReturning
+	p.dmlReturning = true
+	stmt, err := p.parseSubquery()
+	p.dmlReturning = prev
+	if err != nil {
+		return nil, err
+	}
+	for ; open > 0; open-- {
+		if !p.isType(models.TokenTypeRParen) {
+			return nil, p.expectedError(")")
+		}
+		p.advance() // Consume )
+	}
+	return stmt, nil
 }
 
 // parseReturningColumns parses the columns in a RETURNING clause

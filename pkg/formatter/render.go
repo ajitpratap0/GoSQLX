@@ -396,13 +396,26 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 	sb.WriteString(" ")
 	sb.WriteString(i.TableName)
 
-	if len(i.Columns) > 0 {
+	// MySQL INSERT ... SET form: Columns[k] = Values[0][k].
+	setForm := i.SetSyntax && i.Query == nil && len(i.Columns) > 0 &&
+		len(i.Values) == 1 && len(i.Values[0]) == len(i.Columns)
+
+	if len(i.Columns) > 0 && !setForm {
 		sb.WriteString(" (")
 		sb.WriteString(exprListSQL(i.Columns))
 		sb.WriteString(")")
 	}
 
-	if i.Query != nil {
+	if setForm {
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(f.kw("SET"))
+		sb.WriteString(" ")
+		sets := make([]string, len(i.Columns))
+		for k, col := range i.Columns {
+			sets[k] = exprSQL(col) + " = " + exprSQL(i.Values[0][k])
+		}
+		sb.WriteString(strings.Join(sets, ", "))
+	} else if i.Query != nil {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(FormatStatement(i.Query, opts))
 	} else if len(i.Values) > 0 {
@@ -418,6 +431,9 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 			rows[idx] = "(" + strings.Join(vals, ", ") + ")"
 		}
 		sb.WriteString(strings.Join(rows, ", "))
+	} else if i.DefaultValues {
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(f.kw("DEFAULT VALUES"))
 	}
 
 	if i.OnConflict != nil {

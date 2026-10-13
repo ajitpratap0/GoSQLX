@@ -256,6 +256,12 @@ type InsertStatement struct {
 	OnConflict     *OnConflict
 	OnDuplicateKey *UpsertClause   // MySQL: ON DUPLICATE KEY UPDATE
 	Pos            models.Location // Source position of the INSERT keyword (1-based line and column)
+	// DefaultValues marks INSERT INTO t DEFAULT VALUES (no Columns, Values or Query).
+	DefaultValues bool
+	// SetSyntax marks the MySQL/MariaDB INSERT INTO t SET col = expr, ... form.
+	// The assignments are stored as Columns plus a single Values row
+	// (Columns[i] = Values[0][i]); renderers emit SET when the shapes match.
+	SetSyntax bool
 }
 
 func (i *InsertStatement) statementNode()      {}

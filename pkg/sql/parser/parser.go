@@ -143,6 +143,7 @@ func (p *Parser) Reset() {
 	// Reset clears both fields in lockstep; see WithDialect for the active path.
 	p.dialectTyped = dialect.Unknown
 	p.capabilitiesCache = dialect.Capabilities{}
+	p.dmlReturning = false
 }
 
 // currentLocation returns the source location of the current token.
@@ -298,6 +299,10 @@ type Parser struct {
 	// dialectTyped. It is refreshed alongside dialectTyped in WithDialect
 	// and Reset so that Capabilities() is a single struct-field read.
 	capabilitiesCache dialect.Capabilities
+	// dmlReturning is true while parsing an INSERT source query or an
+	// UPDATE ... FROM list, where an unquoted RETURNING starts the RETURNING
+	// clause and must not be taken as an implicit alias (#610).
+	dmlReturning bool
 }
 
 // Deprecated: Parse is provided for backward compatibility only and is scheduled for
@@ -1207,12 +1212,26 @@ func (p *Parser) isSettingsKeyword() bool {
 		p.isTokenMatch("SETTINGS")
 }
 
+// isReturningKeyword reports whether the current token is an unquoted
+// RETURNING keyword (any case).
+func (p *Parser) isReturningKeyword() bool {
+	return p.isType(models.TokenTypeReturning) ||
+		(p.isType(models.TokenTypeIdentifier) && strings.EqualFold(p.currentToken.Token.Value, "RETURNING"))
+}
+
+// isDMLReturningKeyword reports whether the current token is RETURNING inside
+// an INSERT source query or UPDATE ... FROM list, where it starts the
+// statement's RETURNING clause rather than naming an alias (#610).
+func (p *Parser) isDMLReturningKeyword() bool {
+	return p.dmlReturning && p.isReturningKeyword()
+}
+
 // canBeAlias checks if current token can be used as an alias.
 // Aliases can be IDENT, double-quoted identifiers, or certain non-reserved keywords,
 // but NOT contextual clause keywords that would be consumed as aliases by mistake
 // (e.g. MINUS in Snowflake/Oracle, QUALIFY in Snowflake/BigQuery, WINDOW).
 func (p *Parser) canBeAlias() bool {
-	if p.isMinusSetOp() || p.isQualifyKeyword() || p.isWindowClauseKeyword() || p.isSettingsKeyword() {
+	if p.isMinusSetOp() || p.isQualifyKeyword() || p.isWindowClauseKeyword() || p.isSettingsKeyword() || p.isDMLReturningKeyword() {
 		return false
 	}
 	return p.isIdentifier() || p.isNonReservedKeyword()

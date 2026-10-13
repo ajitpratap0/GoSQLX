@@ -13,6 +13,10 @@
 // limitations under the License.
 
 // Package postgres provides a live schema Loader for PostgreSQL databases.
+//
+// It requires PostgreSQL 11 or later: foreign keys are read from pg_constraint
+// and partition clones are filtered on pg_constraint.conparentid, which was
+// added in PostgreSQL 11.
 // It queries information_schema and pg_catalog to retrieve tables, columns,
 // indexes, and foreign keys.
 package postgres
@@ -253,6 +257,12 @@ func (l *Loader) loadIndexes(db *sql.DB, schemaName, tableName string) (map[stri
 // Postgres only requires constraint names to be unique per table. Constraints
 // that are internal per-partition clones of a key referencing a partitioned
 // table (their parent constraint lives on the same relation) are skipped.
+//
+// Requires PostgreSQL 11+ (pg_constraint.conparentid). Because pg_constraint is
+// readable by any role, foreign keys are returned even when the connecting role
+// only has SELECT on the tables (information_schema hid them from non-owners).
+// A foreign key into another schema is reported with the referenced table's
+// bare name; ForeignKey has no field for the referenced schema.
 func (l *Loader) loadForeignKeys(db *sql.DB, schemaName, tableName string) (map[string][]dbschema.ForeignKey, error) {
 	rows, err := db.Query(`
 		SELECT

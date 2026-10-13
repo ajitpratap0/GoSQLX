@@ -258,6 +258,10 @@ func (t *Tree) Clone() *Tree {
 // reachable via errors.As or the ErrorCode / ErrorLocation / ErrorHint
 // helpers in this package.
 //
+// Retention: strings reachable from the Tree (via Raw, Statements or Walk)
+// are substrings of sql and keep it alive; strings.Clone values you retain
+// long-term. Tables, Columns and Functions return independent copies.
+//
 // Example:
 //
 //	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

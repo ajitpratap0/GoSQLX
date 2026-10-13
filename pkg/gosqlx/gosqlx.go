@@ -98,6 +98,13 @@ const Version = "1.14.0"
 // For batch processing or performance-critical code, use the lower-level tokenizer
 // and parser APIs directly to reuse objects across multiple queries.
 //
+// Retention: strings in the returned AST (identifiers, literals, names) are
+// substrings of sql, so keeping any of them keeps the whole sql string alive.
+// strings.Clone values you retain long-term. The results of ExtractTables,
+// ExtractColumns, ExtractFunctions, ExtractMetadata and their Qualified
+// variants are already independent copies. The same applies to every Parse*
+// entry point in this package.
+//
 // See also: ParseWithContext, ParseWithTimeout, ParseMultiple for specialized use cases.
 func Parse(sql string) (*ast.AST, error) {
 	// Step 1: Get tokenizer from pool
@@ -288,6 +295,10 @@ func Validate(sql string) error {
 //
 //	sqlBytes := []byte("SELECT * FROM users")
 //	astNode, err := gosqlx.ParseBytes(sqlBytes)
+//
+// Retention: the AST does not alias sql (it may be reused after the call),
+// but its strings are substrings of one internal copy of it; keeping any of
+// them keeps that copy alive. See Parse.
 func ParseBytes(sql []byte) (*ast.AST, error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)

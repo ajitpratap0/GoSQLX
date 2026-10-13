@@ -36,16 +36,26 @@ type Column struct {
 type Index struct {
 	Name      string
 	TableName string
-	Columns   []string
-	IsUnique  bool
-	IsPrimary bool
+	// Columns are the key columns in index order. For an expression key
+	// (PostgreSQL) the entry is the expression text as printed by the server,
+	// for example lower(email).
+	Columns []string
+	// IncludeColumns are the non-key columns of a covering index (PostgreSQL
+	// INCLUDE). It is nil when there are none or the loader does not report
+	// them.
+	IncludeColumns []string
+	IsUnique       bool
+	IsPrimary      bool
 }
 
 // ForeignKey describes a foreign key constraint as read from a live database.
 type ForeignKey struct {
-	Name       string
-	TableName  string
-	Columns    []string
+	Name      string
+	TableName string
+	Columns   []string
+	// RefSchema is the schema of the referenced table. It is set by the
+	// PostgreSQL loader and empty when the loader does not report it.
+	RefSchema  string
 	RefTable   string
 	RefColumns []string
 	OnDelete   string

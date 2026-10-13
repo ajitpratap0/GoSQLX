@@ -13,11 +13,13 @@
 // limitations under the License.
 
 // Package postgres provides a live schema Loader for PostgreSQL databases.
-// Tables, columns and key flags come from information_schema; indexes and
-// foreign keys come from pg_catalog (pg_index, pg_constraint).
+// Tables and column metadata come from information_schema; key flags, indexes
+// and foreign keys come from pg_catalog (pg_constraint, pg_index), so they are
+// complete for roles that only have SELECT.
 //
 // It requires PostgreSQL 11 or later: partition clones of foreign keys are
-// filtered on pg_constraint.conparentid, which was added in PostgreSQL 11.
+// filtered on pg_constraint.conparentid, and index INCLUDE columns
+// (pg_index.indnkeyatts) were both added in PostgreSQL 11.
 package postgres
 
 import (
@@ -138,6 +140,14 @@ func (l *Loader) listTables(db *sql.DB, schemaName string) ([]string, error) {
 
 // loadColumns returns columns grouped by table name, in ordinal order.
 // An empty tableName loads every table in schemaName.
+//
+// Column metadata comes from information_schema.columns. The PRIMARY KEY and
+// UNIQUE flags come from pg_constraint, which any role can read, whereas the
+// information_schema constraint views hide constraints from roles that do not
+// own the table. IsPrimary means the column is a member of the primary key.
+// IsUnique means the column alone is a UNIQUE constraint; members of composite
+// UNIQUE constraints are not flagged, matching MySQL's COLUMN_KEY = 'UNI'.
+// Constraints are aggregated per column, so each column is emitted once.
 func (l *Loader) loadColumns(db *sql.DB, schemaName, tableName string) (map[string][]dbschema.Column, error) {
 	rows, err := db.Query(`
 		SELECT
@@ -150,27 +160,24 @@ func (l *Loader) loadColumns(db *sql.DB, schemaName, tableName string) (map[stri
 			c.character_maximum_length,
 			c.numeric_precision,
 			c.numeric_scale,
-			COALESCE(pk.is_primary, false),
-			COALESCE(uq.is_unique, false)
+			COALESCE(kf.is_primary, false),
+			COALESCE(kf.is_unique, false)
 		FROM information_schema.columns c
 		LEFT JOIN (
-			SELECT kcu.table_name, kcu.column_name, true AS is_primary
-			FROM information_schema.table_constraints tc
-			JOIN information_schema.key_column_usage kcu
-				ON tc.constraint_name = kcu.constraint_name
-				AND tc.table_schema = kcu.table_schema
-			WHERE tc.table_schema = $1 AND ($2::text = '' OR tc.table_name = $2)
-			  AND tc.constraint_type = 'PRIMARY KEY'
-		) pk ON pk.table_name = c.table_name AND pk.column_name = c.column_name
-		LEFT JOIN (
-			SELECT kcu.table_name, kcu.column_name, true AS is_unique
-			FROM information_schema.table_constraints tc
-			JOIN information_schema.key_column_usage kcu
-				ON tc.constraint_name = kcu.constraint_name
-				AND tc.table_schema = kcu.table_schema
-			WHERE tc.table_schema = $1 AND ($2::text = '' OR tc.table_name = $2)
-			  AND tc.constraint_type = 'UNIQUE'
-		) uq ON uq.table_name = c.table_name AND uq.column_name = c.column_name
+			SELECT
+				cl.relname AS table_name,
+				a.attname  AS column_name,
+				bool_or(con.contype = 'p') AS is_primary,
+				bool_or(con.contype = 'u' AND cardinality(con.conkey) = 1) AS is_unique
+			FROM pg_constraint con
+			JOIN pg_class cl ON cl.oid = con.conrelid
+			JOIN pg_namespace n ON n.oid = cl.relnamespace
+			CROSS JOIN LATERAL unnest(con.conkey) AS k(attnum)
+			JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.attnum
+			WHERE n.nspname = $1 AND ($2::text = '' OR cl.relname = $2)
+			  AND con.contype IN ('p', 'u')
+			GROUP BY cl.relname, a.attname
+		) kf ON kf.table_name = c.table_name AND kf.column_name = c.column_name
 		WHERE c.table_schema = $1 AND ($2::text = '' OR c.table_name = $2)
 		ORDER BY c.table_name, c.ordinal_position
 	`, schemaName, tableName)
@@ -204,6 +211,11 @@ func (l *Loader) loadColumns(db *sql.DB, schemaName, tableName string) (map[stri
 
 // loadIndexes returns indexes grouped by table name, ordered by index name.
 // An empty tableName loads every table in schemaName.
+//
+// Index.Columns lists the key columns in index order; INCLUDE columns are
+// reported separately in Index.IncludeColumns. An expression key is reported as
+// the expression text from pg_get_indexdef, for example lower(email). Ordinary
+// and partitioned tables (relkind 'r' and 'p') are covered.
 func (l *Loader) loadIndexes(db *sql.DB, schemaName, tableName string) (map[string][]dbschema.Index, error) {
 	rows, err := db.Query(`
 		SELECT
@@ -211,13 +223,16 @@ func (l *Loader) loadIndexes(db *sql.DB, schemaName, tableName string) (map[stri
 			i.relname AS index_name,
 			ix.indisunique,
 			ix.indisprimary,
-			json_agg(a.attname ORDER BY a.attnum)::text AS columns
+			json_agg(CASE WHEN k.attnum = 0 THEN pg_get_indexdef(ix.indexrelid, k.ord::int, true) ELSE a.attname END ORDER BY k.ord)
+				FILTER (WHERE k.ord <= ix.indnkeyatts)::text AS columns,
+			json_agg(a.attname ORDER BY k.ord) FILTER (WHERE k.ord > ix.indnkeyatts)::text AS include_columns
 		FROM pg_class t
 		JOIN pg_index ix ON t.oid = ix.indrelid
 		JOIN pg_class i ON i.oid = ix.indexrelid
-		JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
 		JOIN pg_namespace n ON n.oid = t.relnamespace
-		WHERE n.nspname = $1 AND ($2::text = '' OR t.relname = $2) AND t.relkind = 'r'
+		CROSS JOIN LATERAL unnest(ix.indkey) WITH ORDINALITY AS k(attnum, ord)
+		LEFT JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum AND k.attnum <> 0
+		WHERE n.nspname = $1 AND ($2::text = '' OR t.relname = $2) AND t.relkind IN ('r', 'p')
 		GROUP BY t.relname, i.relname, ix.indisunique, ix.indisprimary
 		ORDER BY t.relname, i.relname
 	`, schemaName, tableName)
@@ -232,12 +247,18 @@ func (l *Loader) loadIndexes(db *sql.DB, schemaName, tableName string) (map[stri
 		// Columns arrive as a JSON array (not a Postgres array literal) so that
 		// quoted identifiers containing commas, quotes or braces decode exactly,
 		// independent of the SQL driver in use.
-		var colJSON []byte
-		if err := rows.Scan(&idx.TableName, &idx.Name, &idx.IsUnique, &idx.IsPrimary, &colJSON); err != nil {
+		// include_columns is SQL NULL (a nil slice) when there are none.
+		var colJSON, inclJSON []byte
+		if err := rows.Scan(&idx.TableName, &idx.Name, &idx.IsUnique, &idx.IsPrimary, &colJSON, &inclJSON); err != nil {
 			return nil, fmt.Errorf("load indexes: scan: %w", err)
 		}
 		if err := json.Unmarshal(colJSON, &idx.Columns); err != nil {
 			return nil, fmt.Errorf("load indexes: decode columns of %s.%s: %w", idx.TableName, idx.Name, err)
+		}
+		if inclJSON != nil {
+			if err := json.Unmarshal(inclJSON, &idx.IncludeColumns); err != nil {
+				return nil, fmt.Errorf("load indexes: decode include columns of %s.%s: %w", idx.TableName, idx.Name, err)
+			}
 		}
 		out[idx.TableName] = append(out[idx.TableName], idx)
 	}
@@ -260,14 +281,15 @@ func (l *Loader) loadIndexes(db *sql.DB, schemaName, tableName string) (map[stri
 // Requires PostgreSQL 11+ (pg_constraint.conparentid). Because pg_constraint is
 // readable by any role, foreign keys are returned even when the connecting role
 // only has SELECT on the tables (information_schema hid them from non-owners).
-// A foreign key into another schema is reported with the referenced table's
-// bare name; ForeignKey has no field for the referenced schema.
+// ForeignKey.RefSchema carries the schema of the referenced table, so a foreign
+// key into another schema is not ambiguous.
 func (l *Loader) loadForeignKeys(db *sql.DB, schemaName, tableName string) (map[string][]dbschema.ForeignKey, error) {
 	rows, err := db.Query(`
 		SELECT
 			cl.relname  AS table_name,
 			con.conname AS constraint_name,
 			a.attname   AS column_name,
+			rn.nspname  AS foreign_table_schema,
 			rcl.relname AS foreign_table_name,
 			ra.attname  AS foreign_column_name,
 			CASE con.confdeltype WHEN 'a' THEN 'NO ACTION' WHEN 'r' THEN 'RESTRICT' WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL' WHEN 'd' THEN 'SET DEFAULT' ELSE con.confdeltype::text END AS delete_rule,
@@ -276,6 +298,7 @@ func (l *Loader) loadForeignKeys(db *sql.DB, schemaName, tableName string) (map[
 		JOIN pg_class cl ON cl.oid = con.conrelid
 		JOIN pg_namespace n ON n.oid = cl.relnamespace
 		JOIN pg_class rcl ON rcl.oid = con.confrelid
+		JOIN pg_namespace rn ON rn.oid = rcl.relnamespace
 		CROSS JOIN LATERAL unnest(con.conkey, con.confkey) WITH ORDINALITY AS k(attnum, ref_attnum, ord)
 		JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.attnum
 		JOIN pg_attribute ra ON ra.attrelid = con.confrelid AND ra.attnum = k.ref_attnum
@@ -293,8 +316,8 @@ func (l *Loader) loadForeignKeys(db *sql.DB, schemaName, tableName string) (map[
 
 	out := make(map[string][]dbschema.ForeignKey)
 	for rows.Next() {
-		var tbl, name, col, refTable, refCol, onDelete, onUpdate string
-		if err := rows.Scan(&tbl, &name, &col, &refTable, &refCol, &onDelete, &onUpdate); err != nil {
+		var tbl, name, col, refSchema, refTable, refCol, onDelete, onUpdate string
+		if err := rows.Scan(&tbl, &name, &col, &refSchema, &refTable, &refCol, &onDelete, &onUpdate); err != nil {
 			return nil, fmt.Errorf("load fks: scan: %w", err)
 		}
 		// Rows are ordered by (table, constraint), so a constraint's rows are
@@ -309,6 +332,7 @@ func (l *Loader) loadForeignKeys(db *sql.DB, schemaName, tableName string) (map[
 			Name:       name,
 			TableName:  tbl,
 			Columns:    []string{col},
+			RefSchema:  refSchema,
 			RefTable:   refTable,
 			RefColumns: []string{refCol},
 			OnDelete:   onDelete,

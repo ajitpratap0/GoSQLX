@@ -41,7 +41,30 @@ func isDockerAvailable() bool {
 	return cmd.Run() == nil
 }
 
+// startMySQL starts a MySQL 8.0 container loaded with the shared fixture.
 func startMySQL(t *testing.T) *sql.DB {
+	t.Helper()
+	return startMySQLImage(t, "mysql:8.0", map[string]string{
+		"MYSQL_ROOT_PASSWORD": "root",
+		"MYSQL_DATABASE":      "testdb",
+	}, wait.ForLog("port: 3306  MySQL Community Server"))
+}
+
+// startMariaDB starts a MariaDB container loaded with the same fixture. The
+// loader targets the MySQL information_schema layout, which MariaDB shares.
+func startMariaDB(t *testing.T) *sql.DB {
+	t.Helper()
+	// The init-phase temporary server logs "port: 0", so this matches only the
+	// real server.
+	return startMySQLImage(t, "mariadb:11.4", map[string]string{
+		"MARIADB_ROOT_PASSWORD": "root",
+		"MARIADB_DATABASE":      "testdb",
+	}, wait.ForLog("port: 3306  mariadb.org binary distribution"))
+}
+
+// startMySQLImage starts a MySQL-protocol container from image and loads the
+// shared fixture into its testdb database.
+func startMySQLImage(t *testing.T, image string, env map[string]string, waitFor wait.Strategy) *sql.DB {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("skipping testcontainers test in -short mode")
@@ -54,13 +77,10 @@ func startMySQL(t *testing.T) *sql.DB {
 	}
 	ctx := context.Background()
 	req := testcontainers.ContainerRequest{
-		Image:        "mysql:8.0",
+		Image:        image,
 		ExposedPorts: []string{"3306/tcp"},
-		Env: map[string]string{
-			"MYSQL_ROOT_PASSWORD": "root",
-			"MYSQL_DATABASE":      "testdb",
-		},
-		WaitingFor: wait.ForLog("port: 3306  MySQL Community Server"),
+		Env:          env,
+		WaitingFor:   waitFor,
 	}
 
 	// Recover from testcontainers panics (e.g. rootless Docker on Windows).
@@ -250,7 +270,13 @@ func TestMySQLLoader_Load_MaxOpenConns1(t *testing.T) {
 }
 
 func TestMySQLLoader_LoadMatchesLoadTable(t *testing.T) {
-	db := startMySQL(t)
+	assertLoadMatchesLoadTable(t, startMySQL(t))
+}
+
+// assertLoadMatchesLoadTable checks that LoadTable returns, for every table,
+// exactly what Load reports for it.
+func assertLoadMatchesLoadTable(t *testing.T, db *sql.DB) {
+	t.Helper()
 	loader := myschema.NewLoader()
 	s, err := loader.Load(db, "testdb")
 	if err != nil {
@@ -310,12 +336,16 @@ func TestMySQLLoader_LoadTable_ForeignKeys(t *testing.T) {
 	}
 }
 
-// The name is validated before any query, so no database is needed.
 // TestMySQLLoader_CompositeForeignKey is a regression test for #579: a
 // composite foreign key pairs local and referenced columns by position and
 // carries its own ON DELETE/ON UPDATE rules.
 func TestMySQLLoader_CompositeForeignKey(t *testing.T) {
-	db := startMySQL(t)
+	assertCompositeForeignKey(t, startMySQL(t))
+}
+
+// assertCompositeForeignKey checks the composite foreign key of the fixture.
+func assertCompositeForeignKey(t *testing.T, db *sql.DB) {
+	t.Helper()
 	loader := myschema.NewLoader()
 	want := []dbschema.ForeignKey{{
 		Name: "fk_bins_wh", TableName: "bins",
@@ -350,6 +380,22 @@ func TestMySQLLoader_CompositeForeignKey(t *testing.T) {
 	}
 }
 
+// TestMariaDBLoader runs the MySQL loader checks against MariaDB, which reports
+// the same information_schema layout, in a single container.
+func TestMariaDBLoader(t *testing.T) {
+	db := startMariaDB(t)
+	t.Run("load", func(t *testing.T) {
+		s, err := myschema.NewLoader().Load(db, "testdb")
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		assertMySQLDetail(t, s)
+	})
+	t.Run("load_matches_load_table", func(t *testing.T) { assertLoadMatchesLoadTable(t, db) })
+	t.Run("composite_foreign_key", func(t *testing.T) { assertCompositeForeignKey(t, db) })
+}
+
+// The name is validated before any query, so no database is needed.
 func TestMySQLLoader_LoadTable_EmptyName(t *testing.T) {
 	if _, err := myschema.NewLoader().LoadTable(nil, "db", ""); err == nil {
 		t.Fatal("expected error for empty table name")

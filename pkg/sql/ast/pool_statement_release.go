@@ -316,6 +316,7 @@ func GetSelectStatement() *SelectStatement {
 //   - Windows (PartitionBy + OrderBy expressions + FrameClause bounds)
 //   - OrderBy
 //   - Fetch / For (no Expression children, just zero)
+//   - Settings (QuerySetting.Value)
 //   - Limit / Offset (*int — no release needed)
 func PutSelectStatement(stmt *SelectStatement) {
 	releaseSelectStatement(stmt, releaseAll)
@@ -477,6 +478,13 @@ func releaseSelectStatement(stmt *SelectStatement, mode releaseMode) {
 	// ── FETCH / FOR (no Expression children) ───────────────────────────
 	stmt.Fetch = nil
 	stmt.For = nil
+
+	// ── ClickHouse SETTINGS ────────────────────────────────────────────
+	for i := range stmt.Settings {
+		releaseExpression(stmt.Settings[i].Value, mode)
+		stmt.Settings[i] = QuerySetting{}
+	}
+	stmt.Settings = stmt.Settings[:0]
 
 	// ── Scalars ────────────────────────────────────────────────────────
 	stmt.TableName = ""

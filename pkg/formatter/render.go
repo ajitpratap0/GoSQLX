@@ -324,6 +324,17 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		sb.WriteString(forSQL(s.For))
 	}
 
+	if len(s.Settings) > 0 {
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(f.kw("SETTINGS"))
+		sb.WriteString(" ")
+		parts := make([]string, len(s.Settings))
+		for i := range s.Settings {
+			parts[i] = s.Settings[i].SQL()
+		}
+		sb.WriteString(strings.Join(parts, ", "))
+	}
+
 	if opts.AddSemicolon {
 		sb.WriteString(";")
 	}
@@ -406,6 +417,13 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 		sb.WriteString(")")
 	}
 
+	if len(i.Output) > 0 && !setForm {
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(f.kw("OUTPUT"))
+		sb.WriteString(" ")
+		sb.WriteString(exprListSQL(i.Output))
+	}
+
 	if setForm {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("SET"))
@@ -438,6 +456,17 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 
 	if i.OnConflict != nil {
 		sb.WriteString(onConflictSQL(i.OnConflict))
+	}
+
+	if i.OnDuplicateKey != nil && len(i.OnDuplicateKey.Updates) > 0 {
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(f.kw("ON DUPLICATE KEY UPDATE"))
+		sb.WriteString(" ")
+		upds := make([]string, len(i.OnDuplicateKey.Updates))
+		for k, u := range i.OnDuplicateKey.Updates {
+			upds[k] = exprSQL(u.Column) + " = " + exprSQL(u.Value)
+		}
+		sb.WriteString(strings.Join(upds, ", "))
 	}
 
 	if len(i.Returning) > 0 {

@@ -156,6 +156,7 @@ type SelectStatement struct {
 	Offset    *int
 	Fetch     *FetchClause    // SQL-99 FETCH FIRST/NEXT clause (F861, F862)
 	For       *ForClause      // Row-level locking clause (SQL:2003, PostgreSQL, MySQL)
+	Settings  []QuerySetting  // ClickHouse trailing SETTINGS name = value, ... (query-level settings)
 	Pos       models.Location // Source position of the SELECT keyword (1-based line and column)
 }
 
@@ -201,6 +202,7 @@ func (s SelectStatement) Children() []Node {
 	if s.ConnectBy != nil {
 		n++
 	}
+	n += len(s.Settings)
 	children := make([]Node, 0, n)
 	if s.With != nil {
 		children = append(children, s.With)
@@ -252,6 +254,11 @@ func (s SelectStatement) Children() []Node {
 	}
 	if s.ConnectBy != nil {
 		children = append(children, s.ConnectBy)
+	}
+	for i := range s.Settings {
+		if v := s.Settings[i].Value; v != nil {
+			children = append(children, v)
+		}
 	}
 	return children
 }

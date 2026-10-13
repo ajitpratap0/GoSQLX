@@ -677,8 +677,8 @@ func (a *AllExpression) writeSQL(buf *bytes.Buffer) {
 
 // SQL returns the SQL representation of this function call including arguments,
 // optional DISTINCT modifier, ORDER BY clause (for aggregates like STRING_AGG),
-// WITHIN GROUP (for ordered-set aggregates), FILTER (WHERE ...) clause, and
-// OVER (...) window specification.
+// IGNORE/RESPECT NULLS null treatment, WITHIN GROUP (for ordered-set
+// aggregates), FILTER (WHERE ...) clause, and OVER (...) window specification.
 func (f *FunctionCall) SQL() string {
 	if f == nil {
 		return ""
@@ -711,6 +711,10 @@ func (f *FunctionCall) writeSQL(buf *bytes.Buffer) {
 		writeOrderBy(buf, f.OrderBy)
 	}
 	buf.WriteByte(')')
+	if f.NullTreatment != "" {
+		buf.WriteByte(' ')
+		buf.WriteString(f.NullTreatment)
+	}
 	if len(f.WithinGroup) > 0 {
 		buf.WriteString(" WITHIN GROUP (ORDER BY ")
 		writeOrderBy(buf, f.WithinGroup)
@@ -738,6 +742,26 @@ func (f *FunctionCall) writeSQL(buf *bytes.Buffer) {
 			buf.WriteByte(')')
 		}
 	}
+}
+
+// SQL returns "name => value" for a named function argument.
+func (n *NamedArgument) SQL() string {
+	if n == nil {
+		return ""
+	}
+	buf := getBuf()
+	defer putBuf(buf)
+	n.writeSQL(buf)
+	return buf.String()
+}
+
+func (n *NamedArgument) writeSQL(buf *bytes.Buffer) {
+	if n == nil {
+		return
+	}
+	writeSafeIdentifier(buf, n.Name)
+	buf.WriteString(" => ")
+	writeExpr(buf, n.Value)
 }
 
 // SQL returns "EXTRACT(field FROM source)" as a SQL string.
@@ -1164,11 +1188,17 @@ func (s *SelectStatement) writeSQL(buf *bytes.Buffer) {
 	if s.For != nil {
 		writeFor(buf, s.For)
 	}
+
+	if len(s.Settings) > 0 {
+		buf.WriteString(" SETTINGS ")
+		writeQuerySettings(buf, s.Settings)
+	}
 }
 
 // SQL returns the full SQL string for this INSERT statement, including the
-// optional WITH clause, column list, VALUES rows or SELECT subquery, ON CONFLICT
-// clause, and RETURNING clause.
+// optional WITH clause, column list, OUTPUT clause (SQL Server), VALUES rows or
+// SELECT subquery, ON CONFLICT or ON DUPLICATE KEY UPDATE clause, and RETURNING
+// clause.
 func (i *InsertStatement) SQL() string {
 	if i == nil {
 		return ""
@@ -1216,6 +1246,11 @@ func (i *InsertStatement) writeSQL(buf *bytes.Buffer) {
 			buf.WriteByte(')')
 		}
 
+		if len(i.Output) > 0 {
+			buf.WriteString(" OUTPUT ")
+			writeExprList(buf, i.Output)
+		}
+
 		if i.Query != nil {
 			buf.WriteByte(' ')
 			writeStmt(buf, i.Query)
@@ -1229,6 +1264,11 @@ func (i *InsertStatement) writeSQL(buf *bytes.Buffer) {
 
 	if i.OnConflict != nil {
 		writeOnConflict(buf, i.OnConflict)
+	}
+
+	if i.OnDuplicateKey != nil && len(i.OnDuplicateKey.Updates) > 0 {
+		buf.WriteString(" ON DUPLICATE KEY UPDATE ")
+		writeAssignments(buf, i.OnDuplicateKey.Updates)
 	}
 
 	if len(i.Returning) > 0 {
@@ -2217,6 +2257,34 @@ func writeOnConflict(buf *bytes.Buffer, oc *OnConflict) {
 			buf.WriteString(" WHERE ")
 			writeExpr(buf, oc.Action.Where)
 		}
+	}
+}
+
+// SQL returns "name = value" for one ClickHouse query-level setting.
+func (q *QuerySetting) SQL() string {
+	if q == nil {
+		return ""
+	}
+	buf := getBuf()
+	defer putBuf(buf)
+	q.writeSQL(buf)
+	return buf.String()
+}
+
+func (q *QuerySetting) writeSQL(buf *bytes.Buffer) {
+	writeSafeIdentifier(buf, q.Name)
+	buf.WriteString(" = ")
+	writeExpr(buf, q.Value)
+}
+
+// writeQuerySettings writes a comma-separated ClickHouse SETTINGS list
+// (without the SETTINGS keyword).
+func writeQuerySettings(buf *bytes.Buffer, settings []QuerySetting) {
+	for i := range settings {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		(&settings[i]).writeSQL(buf)
 	}
 }
 

@@ -28,11 +28,23 @@ type QueryExpression interface {
 // SetOperation represents set operations (UNION, EXCEPT, INTERSECT) between two statements.
 // It supports the ALL modifier (e.g., UNION ALL) and proper left-associative parsing.
 // Phase 2 Complete: Full parser support with left-associative precedence.
+//
+// LeftParenthesized and RightParenthesized record that an operand was written
+// in its own parentheses, as in (SELECT 1) UNION (SELECT 2). Renderers emit
+// those parentheses because they can change the meaning: A EXCEPT (B UNION C)
+// groups differently from A EXCEPT B UNION C, and in
+// A UNION (B ORDER BY x LIMIT n) the ORDER BY/LIMIT applies to B only.
+// Renderers also always parenthesize a Right operand that is itself a
+// *SetOperation, so hand-built trees render with their intended grouping.
 type SetOperation struct {
 	Left     Statement
 	Operator string // UNION, EXCEPT, INTERSECT
 	Right    Statement
 	All      bool // UNION ALL vs UNION
+	// LeftParenthesized reports that Left was written as "(query)".
+	LeftParenthesized bool
+	// RightParenthesized reports that Right was written as "(query)".
+	RightParenthesized bool
 }
 
 func (s *SetOperation) statementNode()       {}

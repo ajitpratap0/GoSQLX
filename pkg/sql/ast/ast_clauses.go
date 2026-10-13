@@ -124,6 +124,9 @@ func (j *JoinClause) childrenInPlace() []Node {
 //   - Name: Table name (empty if this is a derived table/subquery)
 //   - Alias: Optional table alias (AS alias)
 //   - Subquery: Subquery for derived tables: (SELECT ...) AS alias
+//   - SetSubquery: Derived table whose body is a set operation:
+//     (SELECT ... UNION SELECT ...) AS alias. At most one of Subquery and
+//     SetSubquery is set.
 //   - Lateral: LATERAL keyword for correlated subqueries (PostgreSQL v1.6.0)
 //
 // The Lateral field enables PostgreSQL's LATERAL JOIN feature, which allows
@@ -144,6 +147,14 @@ func (j *JoinClause) childrenInPlace() []Node {
 //	    Subquery: selectStmt,
 //	}
 //	// SQL: FROM (SELECT ...) AS recent_orders
+//
+// Example - Derived table whose body is a set operation:
+//
+//	TableReference{
+//	    Alias:       "u",
+//	    SetSubquery: &SetOperation{Left: s1, Operator: "UNION", Right: s2},
+//	}
+//	// SQL: FROM (SELECT ... UNION SELECT ...) u
 //
 // Example - LATERAL JOIN (PostgreSQL v1.6.0):
 //
@@ -182,6 +193,11 @@ type TableReference struct {
 	Unpivot *UnpivotClause
 	// MatchRecognize is the SQL:2016 row-pattern recognition clause (Snowflake, Oracle).
 	MatchRecognize *MatchRecognizeClause
+	// SetSubquery is a derived table whose body is a set operation:
+	// FROM (SELECT 1 UNION SELECT 2) t. At most one of Subquery and
+	// SetSubquery is set; a body that is a single SELECT (including one
+	// with a WITH clause or extra parentheses) is always held in Subquery.
+	SetSubquery *SetOperation
 }
 
 func (t *TableReference) statementNode() {}
@@ -198,6 +214,9 @@ func (t TableReference) Children() []Node {
 	var nodes []Node
 	if t.Subquery != nil {
 		nodes = append(nodes, t.Subquery)
+	}
+	if t.SetSubquery != nil {
+		nodes = append(nodes, t.SetSubquery)
 	}
 	if t.TableFunc != nil {
 		nodes = append(nodes, t.TableFunc)

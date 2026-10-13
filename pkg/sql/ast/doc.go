@@ -342,16 +342,25 @@
 // SetOperation: UNION, EXCEPT, INTERSECT operations
 //
 //	type SetOperation struct {
-//	    Left     Statement  // Left statement
-//	    Operator string     // UNION, EXCEPT, INTERSECT
-//	    Right    Statement  // Right statement
-//	    All      bool       // ALL modifier (UNION ALL vs UNION)
+//	    Left               Statement  // Left statement
+//	    Operator           string     // UNION, EXCEPT, INTERSECT
+//	    Right              Statement  // Right statement
+//	    All                bool       // ALL modifier (UNION ALL vs UNION)
+//	    LeftParenthesized  bool       // Left was written as "(query)"
+//	    RightParenthesized bool       // Right was written as "(query)"
 //	}
 //
 // Set operations support left-associative parsing for multiple operations:
 //
 //	SELECT * FROM t1 UNION SELECT * FROM t2 EXCEPT SELECT * FROM t3
 //	Parsed as: (t1 UNION t2) EXCEPT t3
+//
+// Operands may be written in parentheses to group them explicitly or to give
+// one operand its own ORDER BY/LIMIT. The parentheses are recorded in
+// LeftParenthesized/RightParenthesized and kept by the renderers:
+//
+//	SELECT a FROM t1 EXCEPT (SELECT a FROM t2 UNION SELECT a FROM t3)
+//	(SELECT a FROM t1 ORDER BY a LIMIT 5) UNION ALL (SELECT a FROM t2 LIMIT 5)
 //
 // # Window Functions
 //
@@ -411,11 +420,16 @@
 // TableReference: Table reference with subquery and LATERAL support
 //
 //	type TableReference struct {
-//	    Name     string           // Table name
-//	    Alias    string           // Optional alias
-//	    Subquery *SelectStatement // Derived table (subquery)
-//	    Lateral  bool             // LATERAL keyword (PostgreSQL v1.6.0)
+//	    Name        string           // Table name
+//	    Alias       string           // Optional alias
+//	    Subquery    *SelectStatement // Derived table (subquery)
+//	    SetSubquery *SetOperation    // Derived table whose body is a set operation
+//	    Lateral     bool             // LATERAL keyword (PostgreSQL v1.6.0)
 //	}
+//
+// A derived table whose body is a single SELECT (with or without WITH) is held
+// in Subquery; one whose body is a set operation, as in
+// FROM (SELECT a FROM t1 UNION SELECT a FROM t2) u, is held in SetSubquery.
 //
 // New in v1.6.0: Lateral field enables correlated subqueries in FROM clause
 //

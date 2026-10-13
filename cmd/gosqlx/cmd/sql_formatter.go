@@ -256,9 +256,15 @@ func (f *SQLFormatter) formatSelect(stmt *ast.SelectStatement) error {
 
 // formatSetOperation formats UNION, EXCEPT, INTERSECT statements
 func (f *SQLFormatter) formatSetOperation(stmt *ast.SetOperation) error {
-	// Format left statement
+	// Format left statement, in parentheses when it was written that way
+	if stmt.LeftParenthesized {
+		f.builder.WriteString("(")
+	}
 	if err := f.formatStatement(stmt.Left); err != nil {
 		return fmt.Errorf("failed to format left side of %s: %w", stmt.Operator, err)
+	}
+	if stmt.LeftParenthesized {
+		f.builder.WriteString(")")
 	}
 
 	// Add newline and operator
@@ -270,9 +276,18 @@ func (f *SQLFormatter) formatSetOperation(stmt *ast.SetOperation) error {
 	}
 	f.writeNewline()
 
-	// Format right statement
+	// Format right statement; a right-hand set operation always needs
+	// parentheses to keep its grouping
+	rightSetOp, ok := stmt.Right.(*ast.SetOperation)
+	rightParens := stmt.RightParenthesized || (ok && rightSetOp != nil)
+	if rightParens {
+		f.builder.WriteString("(")
+	}
 	if err := f.formatStatement(stmt.Right); err != nil {
 		return fmt.Errorf("failed to format right side of %s: %w", stmt.Operator, err)
+	}
+	if rightParens {
+		f.builder.WriteString(")")
 	}
 
 	return nil
@@ -1117,6 +1132,13 @@ func (f *SQLFormatter) formatTableReference(table *ast.TableReference) {
 		// Format derived table (subquery)
 		f.builder.WriteString("(")
 		if err := f.formatSelect(table.Subquery); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to format derived table: %v\n", err)
+		}
+		f.builder.WriteString(")")
+	} else if table.SetSubquery != nil {
+		// Format derived table whose body is a set operation
+		f.builder.WriteString("(")
+		if err := f.formatSetOperation(table.SetSubquery); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to format derived table: %v\n", err)
 		}
 		f.builder.WriteString(")")

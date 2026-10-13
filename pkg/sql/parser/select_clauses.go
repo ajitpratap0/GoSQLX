@@ -64,7 +64,8 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 			!p.isType(models.TokenTypeRParen) &&
 			!p.isAnyType(models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect) &&
 			!p.isMinusSetOp() &&
-			!p.isDMLReturningKeyword() {
+			!p.isDMLReturningKeyword() &&
+			!p.isAnyType(models.TokenTypeOrder, models.TokenTypeLimit, models.TokenTypeOffset, models.TokenTypeFetch) {
 			return "", nil, nil, p.expectedError("FROM, semicolon, or end of statement")
 		}
 		return "", nil, nil, nil
@@ -139,16 +140,92 @@ func (p *Parser) parseFromItem() (ast.TableReference, []ast.JoinClause, error) {
 // isParenthesizedJoinStart reports whether the current '(' opens a
 // parenthesized joined table, i.e. "( table_reference [JOIN ...] )" or a
 // further nested "((", rather than a derived table "(SELECT ...)".
+// A "((" that opens a parenthesized query expression such as
+// "((SELECT 1)) t" or "((SELECT 1) UNION (SELECT 2)) t" is a derived table.
 // Other tokens after '(' keep the derived-table path and its error message.
 func (p *Parser) isParenthesizedJoinStart() bool {
 	if !p.isType(models.TokenTypeLParen) {
 		return false
 	}
 	switch p.peekToken().Token.Type {
-	case models.TokenTypeIdentifier, models.TokenTypeDoubleQuotedString, models.TokenTypeLParen:
+	case models.TokenTypeIdentifier, models.TokenTypeDoubleQuotedString:
 		return true
+	case models.TokenTypeLParen:
+		return !p.parenOpensQueryExpression()
 	}
 	return false
+}
+
+// parenOpensQueryExpression reports whether the run of '(' starting at the
+// current token opens a parenthesized query expression rather than a
+// parenthesized join group. It only looks ahead in p.tokens and does not
+// change parser state or allocate.
+//
+// The run of n '(' must end at SELECT or WITH. Level n-1 (the innermost) is
+// then a query. Each enclosing level k is classified by the token after the
+// first ')' that closes level k+1: another ')' keeps the inner result (the
+// level only wraps it), a set operator or ORDER BY / LIMIT / OFFSET / FETCH
+// makes it a query, and anything else (an alias, AS, a JOIN keyword, a comma)
+// makes it a join group, as in "((SELECT 1) t JOIN u ON ...)".
+func (p *Parser) parenOpensQueryExpression() bool {
+	start := p.currentPos
+	n := 0
+	for start+n < len(p.tokens) && p.tokens[start+n].Token.Type == models.TokenTypeLParen {
+		n++
+		if n > MaxRecursionDepth {
+			// Deeper than the parser accepts: the join path reports E2007.
+			return false
+		}
+	}
+	first := start + n
+	if first >= len(p.tokens) {
+		return false
+	}
+	if t := p.tokens[first].Token.Type; t != models.TokenTypeSelect && t != models.TokenTypeWith {
+		return false
+	}
+
+	// Level d is the d-th '(' of the run (counting from 0, outermost first).
+	// closeAt[d] is the index of the ')' that closes level d, i.e. the first
+	// ')' that brings the depth down to d.
+	var closeAt [MaxRecursionDepth + 1]int
+	depth, minDepth := n, n
+	for j := first; depth > 0; j++ {
+		if j >= len(p.tokens) {
+			return false
+		}
+		switch p.tokens[j].Token.Type {
+		case models.TokenTypeEOF:
+			return false
+		case models.TokenTypeLParen:
+			depth++
+		case models.TokenTypeRParen:
+			depth--
+			if depth < minDepth {
+				minDepth = depth
+				closeAt[depth] = j
+			}
+		}
+	}
+
+	isQuery := true
+	for k := n - 2; k >= 0; k-- {
+		next := closeAt[k+1] + 1
+		if next >= len(p.tokens) {
+			return false
+		}
+		tok := p.tokens[next].Token
+		switch tok.Type {
+		case models.TokenTypeRParen:
+			// Level k only wraps level k+1: keep its classification.
+		case models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect,
+			models.TokenTypeOrder, models.TokenTypeLimit, models.TokenTypeOffset, models.TokenTypeFetch:
+			isQuery = true
+		default:
+			isQuery = p.isMinusSetOpToken(tok)
+		}
+	}
+	return isQuery
 }
 
 // parseParenthesizedJoin parses "( from_item [join_clause ...] )" as used by

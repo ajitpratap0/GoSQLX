@@ -502,6 +502,11 @@ func releaseTableReference(tr *TableReference, mode releaseMode) {
 		releaseSelectStatement(tr.Subquery, mode)
 		tr.Subquery = nil
 	}
+	// SetSubquery is a set-operation body: release its operands.
+	if tr.SetSubquery != nil {
+		releaseSetOperationOperands(tr.SetSubquery, mode)
+		tr.SetSubquery = nil
+	}
 	// TableFunc is a *FunctionCall — release as expression.
 	if tr.TableFunc != nil {
 		releaseExpression(tr.TableFunc, mode)
@@ -562,6 +567,32 @@ func releaseTableReference(tr *TableReference, mode releaseMode) {
 	tr.Lateral = false
 	tr.Final = false
 	tr.TableHints = nil
+}
+
+// releaseSetOperationOperands releases the operands of a set operation held by
+// a derived table (TableReference.SetSubquery) and clears its operand links.
+// SetOperation itself is not pooled. Long chains such as a UNION b UNION c are
+// left-deep, so the left spine is walked iteratively; recursion happens only
+// for a Right operand that is itself a set operation, which the parser
+// produces only for a parenthesized operand and so is bounded by
+// MaxRecursionDepth.
+func releaseSetOperationOperands(s *SetOperation, mode releaseMode) {
+	for s != nil {
+		if right, ok := s.Right.(*SetOperation); ok {
+			releaseSetOperationOperands(right, mode)
+		} else {
+			releaseStatement(s.Right, mode)
+		}
+		s.Right = nil
+		left := s.Left
+		s.Left = nil
+		next, ok := left.(*SetOperation)
+		if !ok {
+			releaseStatement(left, mode)
+			return
+		}
+		s = next
+	}
 }
 
 // ============================================================

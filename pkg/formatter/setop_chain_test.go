@@ -27,17 +27,29 @@ import (
 
 // setOpReference is the per-level definition of set operation rendering:
 // render(Left) + sep + op + sep + render(Right), plus ";" with AddSemicolon,
-// recursing on both sides.
+// recursing on both sides. An operand is wrapped in parentheses (and rendered
+// without ";") when its Parenthesized flag is set or, for Right, when it is a
+// non-nil *SetOperation (#612).
 func setOpReference(s *ast.SetOperation, opts ast.FormatOptions) string {
 	if s == nil {
 		return ""
 	}
-	render := func(st ast.Statement) string {
+	renderWith := func(st ast.Statement, o ast.FormatOptions) string {
 		if so, ok := st.(*ast.SetOperation); ok {
-			return setOpReference(so, opts)
+			return setOpReference(so, o)
 		}
-		return formatter.FormatStatement(st, opts)
+		return formatter.FormatStatement(st, o)
 	}
+	operand := func(st ast.Statement, parens bool) string {
+		if !parens {
+			return renderWith(st, opts)
+		}
+		inner := opts
+		inner.AddSemicolon = false
+		return "(" + renderWith(st, inner) + ")"
+	}
+	rightSetOp, ok := s.Right.(*ast.SetOperation)
+	rightParens := s.RightParenthesized || (ok && rightSetOp != nil)
 	sep := " "
 	if opts.NewlinePerClause {
 		sep = "\n"
@@ -54,11 +66,11 @@ func setOpReference(s *ast.SetOperation, opts ast.FormatOptions) string {
 	}
 	var sb strings.Builder
 	if s.Left != nil {
-		sb.WriteString(render(s.Left))
+		sb.WriteString(operand(s.Left, s.LeftParenthesized))
 	}
 	sb.WriteString(sep + op + sep)
 	if s.Right != nil {
-		sb.WriteString(render(s.Right))
+		sb.WriteString(operand(s.Right, rightParens))
 	}
 	if opts.AddSemicolon {
 		sb.WriteString(";")
@@ -81,7 +93,12 @@ func randSetOp(rng *rand.Rand, depth int) *ast.SetOperation {
 		}
 	}
 	ops := []string{"UNION", "Except", "intersect", "MINUS"}
-	s := &ast.SetOperation{Operator: ops[rng.Intn(len(ops))], All: rng.Intn(2) == 0}
+	s := &ast.SetOperation{
+		Operator:           ops[rng.Intn(len(ops))],
+		All:                rng.Intn(2) == 0,
+		LeftParenthesized:  rng.Intn(6) == 0,
+		RightParenthesized: rng.Intn(6) == 0,
+	}
 	if depth > 0 && rng.Intn(4) != 0 {
 		s.Left = randSetOp(rng, depth-1)
 	} else {
@@ -97,8 +114,8 @@ func randSetOp(rng *rand.Rand, depth int) *ast.SetOperation {
 
 // TestFormatStatement_SetOperationMatchesReference checks the iterative
 // rendering of set operation chains against setOpReference on generated
-// trees (left- and right-nested, nil and typed-nil operands) for several
-// option sets.
+// trees (left- and right-nested, nil and typed-nil operands, parenthesized
+// operands) for several option sets.
 func TestFormatStatement_SetOperationMatchesReference(t *testing.T) {
 	optSets := []ast.FormatOptions{
 		ast.CompactStyle(),

@@ -660,15 +660,31 @@ func renderSetOperation(s *ast.SetOperation, opts ast.FormatOptions) string {
 	// render(Left) + sep + op + sep + render(Right) [+ ";"].
 	spine := []*ast.SetOperation{s}
 	for {
-		left, ok := spine[len(spine)-1].Left.(*ast.SetOperation)
+		last := spine[len(spine)-1]
+		if last.LeftParenthesized {
+			// A parenthesized left operand is rendered whole, in parentheses.
+			break
+		}
+		left, ok := last.Left.(*ast.SetOperation)
 		if !ok || left == nil {
 			break
 		}
 		spine = append(spine, left)
 	}
 
+	// Parenthesized operands are rendered without a trailing ";" so none
+	// lands inside the parentheses.
+	inner := opts
+	inner.AddSemicolon = false
+
 	if innermost := spine[len(spine)-1]; innermost.Left != nil {
-		sb.WriteString(FormatStatement(innermost.Left, opts))
+		if innermost.LeftParenthesized {
+			sb.WriteString("(")
+			sb.WriteString(FormatStatement(innermost.Left, inner))
+			sb.WriteString(")")
+		} else {
+			sb.WriteString(FormatStatement(innermost.Left, opts))
+		}
 	}
 	for i := len(spine) - 1; i >= 0; i-- {
 		level := spine[i]
@@ -680,7 +696,13 @@ func renderSetOperation(s *ast.SetOperation, opts ast.FormatOptions) string {
 		sb.WriteString(f.kw(op))
 		sb.WriteString(f.clauseSep())
 		if level.Right != nil {
-			sb.WriteString(FormatStatement(level.Right, opts))
+			if rightSetOp, ok := level.Right.(*ast.SetOperation); level.RightParenthesized || (ok && rightSetOp != nil) {
+				sb.WriteString("(")
+				sb.WriteString(FormatStatement(level.Right, inner))
+				sb.WriteString(")")
+			} else {
+				sb.WriteString(FormatStatement(level.Right, opts))
+			}
 		}
 
 		if opts.AddSemicolon {
@@ -1306,6 +1328,10 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		sb.WriteString(")")
 	} else if t.TableFunc != nil {
 		sb.WriteString(t.TableFunc.SQL())
+	} else if t.SetSubquery != nil {
+		sb.WriteString("(")
+		sb.WriteString(stmtSQL(t.SetSubquery))
+		sb.WriteString(")")
 	} else {
 		sb.WriteString(t.Name)
 	}

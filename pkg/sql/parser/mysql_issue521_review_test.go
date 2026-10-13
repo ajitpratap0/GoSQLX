@@ -251,10 +251,9 @@ func TestIssue521_QualifierErrorHasNoBogusSnippet(t *testing.T) {
 
 // TestIssue521_DoubleParenFromShapes pins how FROM handles a "((" start after
 // parenthesized join groups were added. Shapes that are join groups (or a
-// derived table inside one) parse; a parenthesized set operation used as a
-// derived table was not supported before #521 either ("expected SELECT in
-// derived table") and still returns an error rather than a wrong tree. If
-// support for that shape is added later, move it to the parsing cases.
+// derived table inside one) parse as join groups. Since #612 a "((" that opens
+// a parenthesized query expression (a parenthesized set operation, or a
+// doubly-parenthesized subquery) parses as a derived table.
 func TestIssue521_DoubleParenFromShapes(t *testing.T) {
 	parses := []struct{ sql, want string }{
 		{"SELECT * FROM ((a JOIN b ON a.id = b.id))",
@@ -263,12 +262,14 @@ func TestIssue521_DoubleParenFromShapes(t *testing.T) {
 			"SELECT * FROM (SELECT a FROM x) t"},
 		{"SELECT * FROM ((SELECT a FROM x) t JOIN y ON t.a = y.a)",
 			"SELECT * FROM (SELECT a FROM x) t INNER JOIN y ON t.a = y.a"},
-	}
-	unsupported := []string{
-		"SELECT * FROM ((SELECT 1) UNION (SELECT 2)) t",
-		"SELECT * FROM ((SELECT 1 AS a) UNION ALL (SELECT 2)) AS t",
-		"SELECT * FROM ((SELECT 1) INTERSECT (SELECT 1)) q",
-		"SELECT * FROM ((SELECT a FROM x)) t",
+		{"SELECT * FROM ((SELECT 1) UNION (SELECT 2)) t",
+			"SELECT * FROM ((SELECT 1) UNION (SELECT 2)) t"},
+		{"SELECT * FROM ((SELECT 1 AS a) UNION ALL (SELECT 2)) AS t",
+			"SELECT * FROM ((SELECT 1 AS a) UNION ALL (SELECT 2)) t"},
+		{"SELECT * FROM ((SELECT 1) INTERSECT (SELECT 1)) q",
+			"SELECT * FROM ((SELECT 1) INTERSECT (SELECT 1)) q"},
+		{"SELECT * FROM ((SELECT a FROM x)) t",
+			"SELECT * FROM (SELECT a FROM x) t"},
 	}
 	for _, d := range []keywords.SQLDialect{keywords.DialectPostgreSQL, keywords.DialectMySQL} {
 		for _, tc := range parses {
@@ -279,11 +280,6 @@ func TestIssue521_DoubleParenFromShapes(t *testing.T) {
 			}
 			if got := tree.SQL(); got != tc.want {
 				t.Errorf("%s: %q: SQL() = %q, want %q", d, tc.sql, got, tc.want)
-			}
-		}
-		for _, sql := range unsupported {
-			if tree, err := gosqlx.ParseWithDialect(sql, d); err == nil {
-				t.Errorf("%s: %q: expected an error (unsupported shape), got SQL %q", d, sql, tree.SQL())
 			}
 		}
 	}

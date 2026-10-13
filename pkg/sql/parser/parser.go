@@ -693,6 +693,27 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 			}
 		}
 		return stmt, nil
+	case models.TokenTypeLParen:
+		// Parenthesized query expression: (SELECT 1) UNION (SELECT 2),
+		// (SELECT 1) ORDER BY 1. Any other "(" keeps the generic error.
+		switch p.peekToken().Token.Type {
+		case models.TokenTypeSelect, models.TokenTypeWith, models.TokenTypeLParen:
+		default:
+			return nil, p.expectedError("statement")
+		}
+		stmtPos := p.currentLocation()
+		q, err := p.parseParenthesizedQuery("SELECT in parenthesized query")
+		if err != nil {
+			return nil, err
+		}
+		stmt, err := p.parseSetOperationChain(q, true)
+		if err != nil {
+			return nil, err
+		}
+		if ss, ok := stmt.(*ast.SelectStatement); ok && ss.Pos.IsZero() {
+			ss.Pos = stmtPos
+		}
+		return stmt, nil
 	case models.TokenTypeInsert:
 		stmtPos := p.currentLocation()
 		p.advance()

@@ -463,12 +463,42 @@ func FuzzTokenizeStringEquivalence(f *testing.F) {
 	for _, tc := range zeroCopyInvalidInputs {
 		f.Add(tc.sql)
 	}
+	for _, s := range quotedLiteralEdgeInputs {
+		f.Add(s)
+	}
 	f.Fuzz(func(t *testing.T, s string) {
 		if len(s) > MaxInputSize {
 			t.Skip("input exceeds MaxInputSize")
 		}
 		for _, dialect := range []keywords.SQLDialect{keywords.DialectPostgreSQL, keywords.DialectSQLServer, keywords.DialectOracle} {
 			assertSameResult(t, string(dialect), runTokenize(t, dialect, s, false), runTokenize(t, dialect, s, true))
+		}
+	})
+}
+
+// FuzzQuotedFastSlowEquivalence checks that tokenizing with the substring
+// fast paths of the quoted readers gives exactly the tokens, errors and
+// positions of a run that forces every quoted literal through the slow
+// reference readers (#548). Each input is also tried behind every opening
+// quote so the fuzzer mostly explores literal content.
+func FuzzQuotedFastSlowEquivalence(f *testing.F) {
+	for _, s := range quotedLiteralEdgeInputs {
+		f.Add(s)
+	}
+	f.Add("abc' x")
+	f.Add("a''b' 'c\\'d'")
+	f.Add("a\"\"b\" \"c\nd\"")
+	f.Add("a``b` `c\nd`")
+	f.Add("a\nb''' x")
+	f.Fuzz(func(t *testing.T, s string) {
+		if len(s) > 1<<16 {
+			t.Skip("input too long for the lockstep driver")
+		}
+		dialects := []keywords.SQLDialect{"", keywords.DialectPostgreSQL, keywords.DialectMySQL, keywords.DialectSQLServer, keywords.DialectOracle}
+		for _, prefix := range []string{"", "'", "\"", "`", "'''", "“", "‘", "«", "N'", "x\n "} {
+			for _, d := range dialects {
+				assertQuotedFastMatchesSlow(t, d, prefix+s)
+			}
 		}
 	})
 }

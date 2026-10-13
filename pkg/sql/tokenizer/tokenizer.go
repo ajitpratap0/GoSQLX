@@ -294,6 +294,12 @@ type Tokenizer struct {
 	// wordHint is prescan's identifier-start count, less the Word slots
 	// already allocated this call. It sizes the next word chunk.
 	wordHint int
+	// litBuf is scratch space for the slow paths of the quoted readers, used
+	// only for literals that need rewriting (escapes, doubled quotes,
+	// normalized quotes, invalid UTF-8). Its contents are valid only inside
+	// one reader call: every slow path ends with litBuf.String(), which
+	// copies. Reset truncates it and drops it when it has grown large.
+	litBuf bytes.Buffer
 
 	pos        Position            // Current scanning position
 	lineStart  Position            // Start of current line
@@ -498,6 +504,10 @@ func (t *Tokenizer) TokenizeContext(ctx context.Context, input []byte) ([]models
 // Value, Word.Value and Comment.Text is a substring of s. Retaining any of them
 // keeps s alive; strings.Clone values that must outlive s's other uses.
 //
+// String literal and quoted identifier values are substrings of s too, unless
+// their content held an escape sequence, a doubled quote, a Unicode quote that
+// is normalized, or invalid UTF-8; those values are fresh strings.
+//
 // Example:
 //
 //	tkz := GetTokenizer()
@@ -510,7 +520,9 @@ func (t *Tokenizer) TokenizeString(s string) ([]models.TokenWithSpan, error) {
 // TokenizeStringContext is TokenizeContext for SQL that is already held as a
 // string. It checks ctx before starting and every 100 tokens, returning
 // ctx.Err() when the context is done. As with TokenizeString, s is not copied
-// and every returned Value, Word.Value and Comment.Text aliases s.
+// and every returned Value, Word.Value and Comment.Text aliases s, except
+// literal and quoted-identifier values that had to be rewritten (escapes,
+// doubled quotes, normalized Unicode quotes, invalid UTF-8).
 func (t *Tokenizer) TokenizeStringContext(ctx context.Context, s string) ([]models.TokenWithSpan, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -564,10 +576,6 @@ func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, have
 	estimatedTokens := t.prescan()
 
 	tokens := make([]models.TokenWithSpan, 0, estimatedTokens)
-
-	// Get a buffer from the pool for string operations
-	buf := getBuffer()
-	defer putBuffer(buf)
 
 	done := ctx.Done()
 
@@ -1010,7 +1018,40 @@ func isASCII(s string) bool {
 	return true
 }
 
-// readQuotedIdentifier reads something like "MyColumn" with support for Unicode quotes
+// backslashEscapes reports whether '\' starts an escape sequence inside a
+// quoted string in the configured dialect. Dialects that don't use C-style
+// backslash escapes (Oracle, SQL Server, SQLite, Snowflake, ClickHouse) treat
+// '\' as a literal character inside string literals. Only MySQL and
+// PostgreSQL (and their derivatives) use backslash escaping; the zero-value
+// dialect does too. Both the fast and slow string scanners use this
+// predicate so they cannot drift apart.
+func (t *Tokenizer) backslashEscapes() bool {
+	return t.dialect == keywords.DialectMySQL || t.dialect == keywords.DialectMariaDB ||
+		t.dialect == keywords.DialectPostgreSQL || t.dialect == ""
+}
+
+// needsRewrite reports whether the slow quoted readers would write a rune
+// other than the one decoded from the source: invalid UTF-8 (written as
+// U+FFFD) or a Unicode quote that normalizeQuote rewrites. Only non-ASCII
+// runes can need a rewrite.
+func needsRewrite(r rune, size int) bool {
+	return (r == utf8.RuneError && size == 1) || normalizeQuote(r) != r
+}
+
+// nextRuneIsQuote reports whether b starts with a rune that normalizes to
+// quote, i.e. whether a quote just scanned is the first half of a doubled
+// (escaped) quote.
+func nextRuneIsQuote(b []byte, quote rune) bool {
+	r, _ := utf8.DecodeRune(b)
+	return normalizeQuote(r) == quote
+}
+
+// readQuotedIdentifier reads something like "MyColumn" with support for Unicode quotes.
+//
+// An identifier whose content holds no doubled quote, rewritten Unicode
+// quote or invalid UTF-8 is returned as a substring of the input (#548).
+// Anything else, including every error, is handled by
+// readQuotedIdentifierSlow from the same position.
 func (t *Tokenizer) readQuotedIdentifier() (models.Token, error) {
 	// Get and normalize opening quote
 	r, size := utf8.DecodeRune(t.input[t.pos.Index:])
@@ -1020,7 +1061,65 @@ func (t *Tokenizer) readQuotedIdentifier() (models.Token, error) {
 	// Skip opening quote
 	t.pos.AdvanceRune(r, size)
 
-	var buf bytes.Buffer
+	if v, p, ok := t.scanQuotedIdentFast(quote); ok {
+		t.pos = p
+		word := t.newWord(v)
+		word.QuoteStyle = quote
+		// Double-quoted strings are identifiers in SQL
+		return models.Token{
+			Type:  models.TokenTypeDoubleQuotedString,
+			Word:  word,
+			Value: v,
+			Quote: quote,
+		}, nil
+	}
+	return t.readQuotedIdentifierSlow(startPos, quote)
+}
+
+// scanQuotedIdentFast scans a quoted identifier's content from t.pos on a
+// copy of the position. On a clean identifier it returns the content as a
+// substring of t.src and the position just past the closing quote, matching
+// readQuotedIdentifierSlow exactly. It returns ok=false, without touching
+// t.pos, at the first doubled quote, rewritten rune, newline or at EOF.
+func (t *Tokenizer) scanQuotedIdentFast(quote rune) (string, Position, bool) {
+	p := t.pos
+	in := t.input
+	start := p.Index
+	for p.Index < len(in) {
+		r, size := rune(in[p.Index]), 1
+		if r >= utf8.RuneSelf {
+			r, size = utf8.DecodeRune(in[p.Index:])
+			if needsRewrite(r, size) {
+				if normalizeQuote(r) != quote {
+					return "", p, false
+				}
+				r = quote
+			}
+		}
+		if r == quote {
+			if p.Index+size < len(in) && nextRuneIsQuote(in[p.Index+size:], quote) {
+				return "", p, false
+			}
+			end := p.Index
+			p.Index += size
+			p.Column++
+			return t.src[start:end], p, true
+		}
+		if r == '\n' {
+			return "", p, false
+		}
+		p.Index += size
+		p.Column++
+	}
+	return "", p, false
+}
+
+// readQuotedIdentifierSlow is the reference quoted-identifier reader. It
+// continues from t.pos (just past the opening quote) and builds the value in
+// t.litBuf, applying doubled-quote escapes and rune normalization.
+func (t *Tokenizer) readQuotedIdentifierSlow(startPos Position, quote rune) (models.Token, error) {
+	buf := &t.litBuf
+	buf.Reset()
 	for t.pos.Index < len(t.input) {
 		r, size := utf8.DecodeRune(t.input[t.pos.Index:])
 		r = normalizeQuote(r)
@@ -1043,16 +1142,15 @@ func (t *Tokenizer) readQuotedIdentifier() (models.Token, error) {
 			t.pos.Index += size
 			t.pos.Column++
 
-			word := &models.Word{
-				Value:      buf.String(),
-				QuoteStyle: quote,
-			}
+			value := buf.String()
+			word := t.newWord(value)
+			word.QuoteStyle = quote
 
 			// Double-quoted strings are identifiers in SQL
 			return models.Token{
 				Type:  models.TokenTypeDoubleQuotedString,
 				Word:  word,
-				Value: buf.String(),
+				Value: value,
 				Quote: quote,
 			}, nil
 		}
@@ -1076,7 +1174,11 @@ func (t *Tokenizer) readQuotedIdentifier() (models.Token, error) {
 	)
 }
 
-// readBacktickIdentifier reads MySQL-style backtick identifiers
+// readBacktickIdentifier reads MySQL-style backtick identifiers.
+//
+// An identifier with no doubled backtick is returned as a substring of the
+// input (#548); otherwise, and on every error, readBacktickIdentifierSlow
+// runs from the same position.
 func (t *Tokenizer) readBacktickIdentifier() (models.Token, error) {
 	startPos := t.pos.Clone()
 
@@ -1084,7 +1186,52 @@ func (t *Tokenizer) readBacktickIdentifier() (models.Token, error) {
 	t.pos.Index++
 	t.pos.Column++
 
-	var buf bytes.Buffer
+	if v, p, ok := t.scanBacktickFast(); ok {
+		t.pos = p
+		return models.Token{
+			Type:  models.TokenTypeIdentifier, // Backtick identifiers are identifiers
+			Value: v,
+		}, nil
+	}
+	return t.readBacktickIdentifierSlow(startPos)
+}
+
+// scanBacktickFast scans a backtick identifier's content byte by byte on a
+// copy of t.pos, with the same per-byte position accounting as
+// readBacktickIdentifierSlow (which copies bytes raw, so invalid UTF-8 needs
+// no fallback). It returns ok=false at a doubled backtick or at EOF.
+func (t *Tokenizer) scanBacktickFast() (string, Position, bool) {
+	p := t.pos
+	in := t.input
+	start := p.Index
+	for p.Index < len(in) {
+		ch := in[p.Index]
+		if ch == '`' {
+			if p.Index+1 < len(in) && in[p.Index+1] == '`' {
+				return "", p, false
+			}
+			end := p.Index
+			p.Index++
+			p.Column++
+			return t.src[start:end], p, true
+		}
+		if ch == '\n' {
+			p.Line++
+			p.Column = 1
+		} else {
+			p.Column++
+		}
+		p.Index++
+	}
+	return "", p, false
+}
+
+// readBacktickIdentifierSlow is the reference backtick reader. It continues
+// from t.pos (just past the opening backtick) and builds the value in
+// t.litBuf.
+func (t *Tokenizer) readBacktickIdentifierSlow(startPos Position) (models.Token, error) {
+	buf := &t.litBuf
+	buf.Reset()
 	for t.pos.Index < len(t.input) {
 		ch := t.input[t.pos.Index]
 
@@ -1125,7 +1272,12 @@ func (t *Tokenizer) readBacktickIdentifier() (models.Token, error) {
 	)
 }
 
-// readQuotedString handles the actual scanning of a single/double-quoted string
+// readQuotedString handles the actual scanning of a single/double-quoted string.
+//
+// A literal whose content holds no doubled quote, escaping backslash,
+// rewritten Unicode quote or invalid UTF-8 is returned as a substring of the
+// input (#548). Anything else, including every error, is handled by
+// readQuotedStringSlow from the same position.
 func (t *Tokenizer) readQuotedString(quote rune) (models.Token, error) {
 	// Store start position for error reporting
 	startPos := t.pos
@@ -1147,7 +1299,82 @@ func (t *Tokenizer) readQuotedString(quote rune) (models.Token, error) {
 	// Skip opening quote
 	t.pos.AdvanceRune(r, size)
 
-	var buf bytes.Buffer
+	if v, p, ok := t.scanQuotedStringFast(quote); ok {
+		t.pos = p
+		return models.Token{
+			Type:  quotedStringType(originalQuote),
+			Value: v,
+			Quote: originalQuote,
+		}, nil
+	}
+	return t.readQuotedStringSlow(startPos, originalQuote, quote)
+}
+
+// quotedStringType picks the token type of a quoted string literal from its
+// original (un-normalized) opening quote.
+func quotedStringType(originalQuote rune) models.TokenType {
+	// For test compatibility, use appropriate token types based on quote style
+	switch originalQuote {
+	case '\'', '‘', '’', '«', '»':
+		return models.TokenTypeSingleQuotedString // 124
+	case '"', '“', '”':
+		return models.TokenTypeDoubleQuotedString // 124
+	default:
+		return models.TokenTypeString // 20
+	}
+}
+
+// scanQuotedStringFast scans a quoted string's content from t.pos on a copy
+// of the position. On a clean literal it returns the content as a substring
+// of t.src and the position just past the closing quote, matching
+// readQuotedStringSlow exactly (a newline sets Column to 1 and leaves LastNL
+// alone). It returns ok=false, without touching t.pos, at the first doubled
+// quote, escaping backslash, rewritten rune or at EOF.
+func (t *Tokenizer) scanQuotedStringFast(quote rune) (string, Position, bool) {
+	p := t.pos
+	in := t.input
+	start := p.Index
+	escapes := t.backslashEscapes()
+	for p.Index < len(in) {
+		r, size := rune(in[p.Index]), 1
+		if r >= utf8.RuneSelf {
+			r, size = utf8.DecodeRune(in[p.Index:])
+			if needsRewrite(r, size) {
+				if normalizeQuote(r) != quote {
+					return "", p, false
+				}
+				r = quote
+			}
+		}
+		switch {
+		case r == quote:
+			if p.Index+size < len(in) && nextRuneIsQuote(in[p.Index+size:], quote) {
+				return "", p, false
+			}
+			end := p.Index
+			p.Index += size
+			p.Column++
+			return t.src[start:end], p, true
+		case r == '\\' && escapes:
+			return "", p, false
+		case r == '\n':
+			p.Index += size
+			p.Line++
+			p.Column = 1
+		default:
+			p.Index += size
+			p.Column++
+		}
+	}
+	return "", p, false
+}
+
+// readQuotedStringSlow is the reference quoted-string reader. It continues
+// from t.pos (just past the opening quote) and builds the value in t.litBuf,
+// applying doubled-quote and backslash escapes and rune normalization.
+func (t *Tokenizer) readQuotedStringSlow(startPos Position, originalQuote, quote rune) (models.Token, error) {
+	buf := &t.litBuf
+	buf.Reset()
 	for t.pos.Index < len(t.input) {
 		r, size := utf8.DecodeRune(t.input[t.pos.Index:])
 		r = normalizeQuote(r)
@@ -1170,32 +1397,18 @@ func (t *Tokenizer) readQuotedString(quote rune) (models.Token, error) {
 			t.pos.Index += size
 			t.pos.Column++
 
-			value := buf.String()
-			// For test compatibility, use appropriate token types based on quote style
-			var tokenType models.TokenType
-			if originalQuote == '\'' || originalQuote == '\u2018' || originalQuote == '\u2019' ||
-				originalQuote == '«' || originalQuote == '»' {
-				tokenType = models.TokenTypeSingleQuotedString // 124
-			} else if originalQuote == '"' || originalQuote == '\u201C' || originalQuote == '\u201D' {
-				tokenType = models.TokenTypeDoubleQuotedString // 124
-			} else {
-				tokenType = models.TokenTypeString // 20
-			}
 			return models.Token{
-				Type:  tokenType,
-				Value: value,
+				Type:  quotedStringType(originalQuote),
+				Value: buf.String(),
 				Quote: originalQuote,
 			}, nil
 		}
 
 		if r == '\\' {
-			// Dialects that don't use C-style backslash escapes (Oracle,
-			// SQL Server, SQLite, Snowflake, ClickHouse) treat '\' as a
-			// literal character inside string literals. Only MySQL and
-			// PostgreSQL (and their derivatives) use backslash escaping.
-			if t.dialect == keywords.DialectMySQL || t.dialect == keywords.DialectMariaDB ||
-				t.dialect == keywords.DialectPostgreSQL || t.dialect == "" {
-				if err := t.handleEscapeSequence(&buf); err != nil {
+			// Only backslash-escaping dialects treat '\' as an escape; the
+			// others keep it as a literal character (see backslashEscapes).
+			if t.backslashEscapes() {
+				if err := t.handleEscapeSequence(buf); err != nil {
 					return models.Token{}, errors.InvalidSyntaxError(
 						fmt.Sprintf("invalid escape sequence: %v", err),
 						models.Location{Line: t.pos.Line, Column: t.pos.Column},
@@ -1231,7 +1444,10 @@ func (t *Tokenizer) readQuotedString(quote rune) (models.Token, error) {
 	)
 }
 
-// readTripleQuotedString reads a triple-quoted string (e.g. "'abc"' or """abc""")
+// readTripleQuotedString reads a triple-quoted string (e.g. "'abc"' or """abc""").
+// Content without invalid UTF-8 is returned as a substring of the input
+// (#548); otherwise, and on every error, readTripleQuotedStringSlow runs from
+// the same position.
 func (t *Tokenizer) readTripleQuotedString(quote rune) (models.Token, error) {
 	// Store start position for error reporting
 	startPos := t.pos
@@ -1242,7 +1458,72 @@ func (t *Tokenizer) readTripleQuotedString(quote rune) (models.Token, error) {
 		t.pos.AdvanceRune(r, size)
 	}
 
-	var buf bytes.Buffer
+	if v, p, ok := t.scanTripleQuotedFast(quote); ok {
+		t.pos = p
+		return tripleQuotedToken(quote, v), nil
+	}
+	return t.readTripleQuotedStringSlow(startPos, quote)
+}
+
+// tripleQuotedToken builds the token for a triple-quoted string.
+func tripleQuotedToken(quote rune, value string) models.Token {
+	if quote == '\'' {
+		return models.Token{
+			Type:  models.TokenTypeTripleSingleQuotedString,
+			Value: value,
+			Quote: quote,
+		}
+	}
+	return models.Token{
+		Type:  models.TokenTypeTripleDoubleQuotedString,
+		Value: value,
+		Quote: quote,
+	}
+}
+
+// scanTripleQuotedFast scans a triple-quoted string's content from t.pos on
+// a copy of the position, mirroring readTripleQuotedStringSlow (which writes
+// raw runes, so only invalid UTF-8 differs from the source bytes). It returns
+// the content as a substring of t.src, or ok=false at invalid UTF-8 or EOF.
+func (t *Tokenizer) scanTripleQuotedFast(quote rune) (string, Position, bool) {
+	p := t.pos
+	in := t.input
+	start := p.Index
+	for p.Index < len(in) {
+		// Check for closing triple quotes
+		if p.Index+2 < len(in) {
+			r1, s1 := utf8.DecodeRune(in[p.Index:])
+			r2, s2 := utf8.DecodeRune(in[p.Index+s1:])
+			r3, s3 := utf8.DecodeRune(in[p.Index+s1+s2:])
+			if r1 == quote && r2 == quote && r3 == quote {
+				end := p.Index
+				p.Index += s1 + s2 + s3
+				p.Column += 3
+				return t.src[start:end], p, true
+			}
+		}
+
+		r, size := utf8.DecodeRune(in[p.Index:])
+		if r == utf8.RuneError && size == 1 {
+			return "", p, false
+		}
+		p.Index += size
+		if r == '\n' {
+			p.Line++
+			p.Column = 1
+		} else {
+			p.Column++
+		}
+	}
+	return "", p, false
+}
+
+// readTripleQuotedStringSlow is the reference triple-quoted reader. It
+// continues from t.pos (just past the opening quotes) and builds the value
+// in t.litBuf.
+func (t *Tokenizer) readTripleQuotedStringSlow(startPos Position, quote rune) (models.Token, error) {
+	buf := &t.litBuf
+	buf.Reset()
 	for t.pos.Index < len(t.input) {
 		// Check for closing triple quotes
 		if t.pos.Index+2 < len(t.input) {
@@ -1254,19 +1535,7 @@ func (t *Tokenizer) readTripleQuotedString(quote rune) (models.Token, error) {
 				t.pos.Index += s1 + s2 + s3
 				t.pos.Column += 3
 
-				value := buf.String()
-				if quote == '\'' {
-					return models.Token{
-						Type:  models.TokenTypeTripleSingleQuotedString,
-						Value: value,
-						Quote: quote,
-					}, nil
-				}
-				return models.Token{
-					Type:  models.TokenTypeTripleDoubleQuotedString,
-					Value: value,
-					Quote: quote,
-				}, nil
+				return tripleQuotedToken(quote, buf.String()), nil
 			}
 		}
 

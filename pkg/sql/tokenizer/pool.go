@@ -22,32 +22,10 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
-// bufferPool is used to reuse bytes.Buffer instances during tokenization.
-// This reduces allocations for string building operations (identifiers, literals).
-// Initial capacity is set to 256 bytes to handle typical SQL token sizes.
-var bufferPool = sync.Pool{
-	New: func() interface{} {
-		// Increase initial capacity for better performance with typical SQL queries
-		return bytes.NewBuffer(make([]byte, 0, 256))
-	},
-}
-
-// getBuffer retrieves a buffer from the pool for internal use.
-// The buffer is pre-allocated and ready for writing operations.
-// Always pair with putBuffer() to return the buffer to the pool.
-func getBuffer() *bytes.Buffer {
-	return bufferPool.Get().(*bytes.Buffer)
-}
-
-// putBuffer returns a buffer to the pool after use.
-// The buffer is reset (cleared) before being returned to the pool.
-// Nil buffers are safely ignored.
-func putBuffer(buf *bytes.Buffer) {
-	if buf != nil {
-		buf.Reset()
-		bufferPool.Put(buf)
-	}
-}
+// maxRetainedLitBuf is the largest litBuf capacity Reset keeps. A pooled
+// tokenizer that scanned a huge escaped literal drops the buffer instead of
+// holding it for later callers.
+const maxRetainedLitBuf = 64 << 10
 
 // tokenizerPool provides object pooling for Tokenizer instances.
 // This dramatically reduces allocations in high-throughput scenarios.
@@ -171,6 +149,7 @@ func PutTokenizer(t *Tokenizer) {
 //   - lineStarts: Empty slice with preserved capacity (contains [0])
 //   - input: nil, src: "" (ready for new input)
 //   - Word chunk: nil (Words already returned stay valid; the chunk is never reused)
+//   - litBuf (slow-path literal scratch): truncated, or dropped above 64 KiB
 //   - Comments: length 0, previously used entries zeroed
 //   - dialect/keywords: preserved (Reset also runs at the start of every
 //     Tokenize call, so the configured dialect must persist; the pool restores
@@ -188,6 +167,14 @@ func (t *Tokenizer) Reset() {
 	t.src = ""
 	t.wordChunk = nil
 	t.wordHint = 0
+
+	// litBuf contents never escape (slow paths copy them out with String), so
+	// truncating is enough; drop an oversized buffer.
+	if t.litBuf.Cap() > maxRetainedLitBuf {
+		t.litBuf = bytes.Buffer{}
+	} else {
+		t.litBuf.Reset()
+	}
 
 	// Reset position tracking
 	t.pos = NewPosition(1, 0)

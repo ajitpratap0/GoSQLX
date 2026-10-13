@@ -189,6 +189,24 @@ func (p *Parser) parseParenthesizedJoin() (ast.TableReference, []ast.JoinClause,
 		return ast.TableReference{}, nil, p.expectedError(") or JOIN")
 	}
 	p.advance() // Consume )
+
+	// The group is flattened into its left-most table, so a modifier written
+	// after ")" has nothing correct to attach to: FINAL would silently apply
+	// to the first table only, and an alias would name the first table.
+	if p.dialect == string(keywords.DialectClickHouse) && p.isTokenMatch("FINAL") {
+		return ast.TableReference{}, nil, goerrors.UnsupportedFeatureError(
+			"FINAL after a parenthesized join group",
+			p.currentLocation(),
+			"",
+		)
+	}
+	if p.isType(models.TokenTypeAs) || p.isIdentifier() {
+		return ast.TableReference{}, nil, goerrors.UnsupportedFeatureError(
+			"alias after a parenthesized join group",
+			p.currentLocation(),
+			"",
+		)
+	}
 	return first, joins, nil
 }
 

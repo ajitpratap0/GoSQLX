@@ -119,8 +119,13 @@ func nodifyExpressions(exprs []Expression) []Node {
 
 // Identifier represents a column or table name
 type Identifier struct {
-	Name  string
-	Table string          // Optional table qualifier
+	Name string
+	// Table is the optional qualifier. For a multi-part reference it holds
+	// every qualifier joined with dots, like TableReference.Name: "db.t" for
+	// db.t.col and "c.s.t" for c.s.t.col. SQL() treats each dot as a part
+	// separator, so a quoted qualifier that itself contains a dot ("a.b".col)
+	// is indistinguishable from a multi-part one.
+	Table string
 	Pos   models.Location // Source position of this identifier (1-based line and column)
 }
 

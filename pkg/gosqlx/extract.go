@@ -253,6 +253,9 @@ func ExtractColumns(astNode *ast.AST) []string {
 //   - HAVING clauses
 //
 // Returns a deduplicated slice of QualifiedName objects representing columns.
+// A multi-part reference is split at its last qualifier: db.t.col yields
+// QualifiedName{Schema: "db", Table: "t", Name: "col"}, and c.s.t.col yields
+// Schema "c.s".
 //
 // Example:
 //
@@ -372,7 +375,14 @@ func (c *metadataCollector) addColumn(table, name string, want extractKind) {
 		c.columns[name] = struct{}{}
 	}
 	if want&extractColumnsQualified != 0 {
-		c.columnsQualified[QualifiedName{Table: table, Name: name}] = struct{}{}
+		q := QualifiedName{Table: table, Name: name}
+		// A multi-part reference (db.t.col) carries "db.t" as its qualifier;
+		// split it at the last dot so the column's Schema/Table match
+		// ExtractTablesQualified's {Schema: "db", Name: "t"} for table db.t.
+		if dot := strings.LastIndexByte(table, '.'); dot >= 0 {
+			q.Schema, q.Table = table[:dot], table[dot+1:]
+		}
+		c.columnsQualified[q] = struct{}{}
 	}
 }
 

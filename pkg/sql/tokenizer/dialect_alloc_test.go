@@ -74,8 +74,8 @@ func TestPutTokenizer_DialectRestoreAllocationFree(t *testing.T) {
 		tkz.SetDialect(keywords.DialectClickHouse)
 		PutTokenizer(tkz)
 	})
-	// sync.Pool may occasionally drop an entry; allow at most a fractional
-	// average from a rare pool miss.
+	// AllocsPerRun returns the integer average; a steady-state
+	// Get+SetDialect+Put must not allocate at all.
 	if allocs >= 1 {
 		t.Errorf("Get+SetDialect+Put allocs = %v, want < 1", allocs)
 	}

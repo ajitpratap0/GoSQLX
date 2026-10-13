@@ -119,7 +119,10 @@ const maxPooledTokenBuf = 4096
 // Reset clears the parser state for reuse from the pool.
 func (p *Parser) Reset() {
 	// p.tokens may alias a caller-owned slice (ParseWithPositions) or
-	// tokenBuf; drop the reference rather than keeping either alive.
+	// tokenBuf; drop the reference rather than keeping either alive. Token
+	// values are substrings of the caller's input, so any retained token
+	// would keep the whole previous SQL string alive while the parser sits
+	// in the pool.
 	p.tokens = nil
 	if cap(p.tokenBuf) > maxPooledTokenBuf {
 		p.tokenBuf = nil

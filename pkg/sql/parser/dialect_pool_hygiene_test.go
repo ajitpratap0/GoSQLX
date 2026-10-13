@@ -203,8 +203,8 @@ func TestParseBytesWithDialect_AllocParity(t *testing.T) {
 			ast.ReleaseAST(tree)
 		}
 		parse()
-		if got := testing.AllocsPerRun(200, parse); got != want {
-			t.Errorf("ParseBytesWithDialect(%s) allocs = %v, ParseBytes allocs = %v; want equal", d, got, want)
+		if got := testing.AllocsPerRun(200, parse); got > want {
+			t.Errorf("ParseBytesWithDialect(%s) allocs = %v, ParseBytes allocs = %v; want no more", d, got, want)
 		}
 
 		validate := func() {

@@ -1444,7 +1444,9 @@ func (t *Tokenizer) readQuotedStringSlow(startPos Position, originalQuote, quote
 	)
 }
 
-// readTripleQuotedString reads a triple-quoted string (e.g. "'abc"' or """abc""").
+// readTripleQuotedString reads a triple-quoted string (e.g. """abc""", or abc wrapped in
+// three single quotes on each side; gofmt rewrites a literal run of
+// apostrophes in a doc comment, so that form is spelled out here).
 // Content without invalid UTF-8 is returned as a substring of the input
 // (#548); otherwise, and on every error, readTripleQuotedStringSlow runs from
 // the same position.

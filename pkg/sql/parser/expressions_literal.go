@@ -40,7 +40,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			op = ast.Plus
 		}
 		p.advance() // Consume -/+
-		expr, err := p.parsePrimaryExpression()
+		expr, err := p.parseUnaryOperand()
 		if err != nil {
 			return nil, err
 		}
@@ -418,7 +418,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 
 		// NOT followed by other expression (boolean negation)
 		// Parse at comparison level for proper precedence: NOT (a > b), NOT active
-		expr, err := p.parseComparisonExpression()
+		expr, err := p.parseNotOperand()
 		if err != nil {
 			return nil, err
 		}
@@ -435,6 +435,29 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		p.currentLocation(),
 		"",
 	)
+}
+
+// parseUnaryOperand parses the operand of a unary minus or plus one recursion
+// level deeper, so a long run of prefix operators is bounded by
+// MaxRecursionDepth like nested parentheses are.
+func (p *Parser) parseUnaryOperand() (ast.Expression, error) {
+	err := p.enterRecursion()
+	defer p.leaveRecursion()
+	if err != nil {
+		return nil, err
+	}
+	return p.parsePrimaryExpression()
+}
+
+// parseNotOperand parses the operand of a boolean NOT one recursion level
+// deeper, so a long run of NOT keywords is bounded by MaxRecursionDepth.
+func (p *Parser) parseNotOperand() (ast.Expression, error) {
+	err := p.enterRecursion()
+	defer p.leaveRecursion()
+	if err != nil {
+		return nil, err
+	}
+	return p.parseComparisonExpression()
 }
 
 // parseSubquery parses a subquery (SELECT or WITH statement).

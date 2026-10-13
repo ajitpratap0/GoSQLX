@@ -52,7 +52,7 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		p.advance() // Consume SELECT
 
 		// Parse the subquery
-		subquery, err := p.parseSelectStatement()
+		subquery, err := p.parseDerivedTableSelect()
 		if err != nil {
 			return tableRef, err
 		}
@@ -260,6 +260,19 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 	return tableRef, nil
 }
 
+// parseDerivedTableSelect parses the SELECT of a derived table (the SELECT
+// keyword already consumed) one recursion level deeper, so nested derived
+// tables are bounded by MaxRecursionDepth. This path does not pass through
+// parseExpression, which guards other nesting.
+func (p *Parser) parseDerivedTableSelect() (ast.Statement, error) {
+	err := p.enterRecursion()
+	defer p.leaveRecursion()
+	if err != nil {
+		return nil, err
+	}
+	return p.parseSelectStatement()
+}
+
 // parseJoinedTableRef parses the table reference on the right-hand side of a JOIN.
 func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error) {
 	var ref ast.TableReference
@@ -280,7 +293,7 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 		}
 		p.advance() // Consume SELECT
 
-		subquery, err := p.parseSelectStatement()
+		subquery, err := p.parseDerivedTableSelect()
 		if err != nil {
 			return ref, err
 		}

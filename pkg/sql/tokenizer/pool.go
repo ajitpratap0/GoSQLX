@@ -199,6 +199,7 @@ func (t *Tokenizer) Reset() {
 	// Invalidate the toSQLPosition column cursor: it is only valid for the
 	// input and lineStarts it was built on.
 	t.posCacheLine, t.posCacheIdx, t.posCacheCol = 0, 0, 0
+	t.inlLine, t.inlScan, t.inlCode = 0, 0, false
 
 	// Don't reset the dialect here: Reset also runs at the start of every
 	// Tokenize call, where the configured dialect must persist across calls.

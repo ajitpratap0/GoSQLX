@@ -319,6 +319,13 @@ type Tokenizer struct {
 	posCacheLine int // index into lineStarts of the line the cursor is on
 	posCacheIdx  int // byte offset the cursor has counted up to (<= len(input))
 	posCacheCol  int // 1-based column at posCacheIdx; 0 means the cursor is invalid
+
+	// Forward cursor used by hasCodeBeforeOnLine so that a run of comments
+	// on one line costs time linear in the line length instead of
+	// rescanning the line prefix for every comment. Invalidated by Reset().
+	inlLine int  // index into lineStarts of the cursor's line, plus one; 0 means unset
+	inlScan int  // byte offset the line has been scanned up to
+	inlCode bool // whether a non-whitespace byte was seen in [lineStart, inlScan)
 }
 
 // New creates a new Tokenizer with default configuration and keyword support.
@@ -2347,17 +2354,27 @@ func (t *Tokenizer) scanIdentifierTail() {
 
 // hasCodeBeforeOnLine checks if there are non-whitespace characters on the same
 // line before the given byte index. Used to determine if a comment is inline.
+//
+// Comment starts are requested in increasing order, so the scan of a line is
+// resumed from where the previous request on the same line stopped (and stops
+// for good once non-whitespace is seen). Each byte of a line is therefore
+// examined at most once per line, however many comments it holds.
 func (t *Tokenizer) hasCodeBeforeOnLine(idx int) bool {
 	// Find the start of the line containing idx
-	lineStart := 0
+	lineStart, li := 0, 0
 	if len(t.lineStarts) > 0 && t.lineStarts[0] <= idx {
-		lineStart = t.lineStarts[t.lineIndexAt(idx)]
+		li = t.lineIndexAt(idx)
+		lineStart = t.lineStarts[li]
 	}
-	// Check for non-whitespace between lineStart and idx
-	for i := lineStart; i < idx && i < len(t.input); i++ {
-		if t.input[i] != ' ' && t.input[i] != '\t' && t.input[i] != '\r' {
-			return true
+	// Restart the cursor on a new line or on a backwards request.
+	if t.inlLine != li+1 || t.inlScan > idx {
+		t.inlLine, t.inlScan, t.inlCode = li+1, lineStart, false
+	}
+	// Check for non-whitespace between the cursor and idx
+	for ; !t.inlCode && t.inlScan < idx && t.inlScan < len(t.input); t.inlScan++ {
+		if c := t.input[t.inlScan]; c != ' ' && c != '\t' && c != '\r' {
+			t.inlCode = true
 		}
 	}
-	return false
+	return t.inlCode
 }

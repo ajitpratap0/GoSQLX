@@ -26,27 +26,39 @@ import (
 )
 
 // setOpReference is the per-level definition of set operation rendering:
-// render(Left) + sep + op + sep + render(Right), plus ";" with AddSemicolon,
-// recursing on both sides. An operand is wrapped in parentheses (and rendered
-// without ";") when its Parenthesized flag is set or, for Right, when it is a
-// non-nil *SetOperation (#612).
+// render(Left) + sep + op + sep + render(Right), recursing on both sides with
+// operands rendered without ";", and a single trailing ";" after the whole
+// top-level set operation when AddSemicolon is set (#602). An operand is
+// wrapped in parentheses when its Parenthesized flag is set or, for Right,
+// when it is a non-nil *SetOperation (#612).
 func setOpReference(s *ast.SetOperation, opts ast.FormatOptions) string {
 	if s == nil {
 		return ""
 	}
-	renderWith := func(st ast.Statement, o ast.FormatOptions) string {
+	inner := opts
+	inner.AddSemicolon = false
+	out := setOpReferenceBody(s, inner)
+	if opts.AddSemicolon {
+		out += ";"
+	}
+	return out
+}
+
+func setOpReferenceBody(s *ast.SetOperation, opts ast.FormatOptions) string {
+	if s == nil {
+		return ""
+	}
+	render := func(st ast.Statement) string {
 		if so, ok := st.(*ast.SetOperation); ok {
-			return setOpReference(so, o)
+			return setOpReferenceBody(so, opts)
 		}
-		return formatter.FormatStatement(st, o)
+		return formatter.FormatStatement(st, opts)
 	}
 	operand := func(st ast.Statement, parens bool) string {
 		if !parens {
-			return renderWith(st, opts)
+			return render(st)
 		}
-		inner := opts
-		inner.AddSemicolon = false
-		return "(" + renderWith(st, inner) + ")"
+		return "(" + render(st) + ")"
 	}
 	rightSetOp, ok := s.Right.(*ast.SetOperation)
 	rightParens := s.RightParenthesized || (ok && rightSetOp != nil)
@@ -71,9 +83,6 @@ func setOpReference(s *ast.SetOperation, opts ast.FormatOptions) string {
 	sb.WriteString(sep + op + sep)
 	if s.Right != nil {
 		sb.WriteString(operand(s.Right, rightParens))
-	}
-	if opts.AddSemicolon {
-		sb.WriteString(";")
 	}
 	return sb.String()
 }

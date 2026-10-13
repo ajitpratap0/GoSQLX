@@ -417,7 +417,7 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 		sb.WriteString(strings.Join(sets, ", "))
 	} else if i.Query != nil {
 		sb.WriteString(f.clauseSep())
-		sb.WriteString(FormatStatement(i.Query, opts))
+		sb.WriteString(FormatStatement(i.Query, nestedOpts(opts)))
 	} else if len(i.Values) > 0 {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("VALUES"))
@@ -651,13 +651,16 @@ func renderSetOperation(s *ast.SetOperation, opts ast.FormatOptions) string {
 	}
 	f := newNodeFormatter(opts)
 	sb := f.sb
+	inner := nestedOpts(opts)
 
 	// A chain such as a UNION b UNION c parses into a left-deep tree. Walk
 	// down the left spine and render the levels innermost first into one
 	// builder, so the output is produced in time linear in its length
 	// rather than re-copying the rendered left side at every level. The
 	// result is identical to rendering each level as
-	// render(Left) + sep + op + sep + render(Right) [+ ";"].
+	// render(Left) + sep + op + sep + render(Right), with operands rendered
+	// without ";" and a single ";" after the whole chain when AddSemicolon
+	// is set.
 	spine := []*ast.SetOperation{s}
 	for {
 		last := spine[len(spine)-1]
@@ -672,18 +675,13 @@ func renderSetOperation(s *ast.SetOperation, opts ast.FormatOptions) string {
 		spine = append(spine, left)
 	}
 
-	// Parenthesized operands are rendered without a trailing ";" so none
-	// lands inside the parentheses.
-	inner := opts
-	inner.AddSemicolon = false
-
 	if innermost := spine[len(spine)-1]; innermost.Left != nil {
 		if innermost.LeftParenthesized {
 			sb.WriteString("(")
 			sb.WriteString(FormatStatement(innermost.Left, inner))
 			sb.WriteString(")")
 		} else {
-			sb.WriteString(FormatStatement(innermost.Left, opts))
+			sb.WriteString(FormatStatement(innermost.Left, inner))
 		}
 	}
 	for i := len(spine) - 1; i >= 0; i-- {
@@ -701,13 +699,12 @@ func renderSetOperation(s *ast.SetOperation, opts ast.FormatOptions) string {
 				sb.WriteString(FormatStatement(level.Right, inner))
 				sb.WriteString(")")
 			} else {
-				sb.WriteString(FormatStatement(level.Right, opts))
+				sb.WriteString(FormatStatement(level.Right, inner))
 			}
 		}
-
-		if opts.AddSemicolon {
-			sb.WriteString(";")
-		}
+	}
+	if opts.AddSemicolon {
+		sb.WriteString(";")
 	}
 
 	return f.result()
@@ -847,7 +844,7 @@ func renderCreateView(c *ast.CreateViewStatement, opts ast.FormatOptions) string
 	sb.WriteString(" ")
 	sb.WriteString(f.kw("AS"))
 	sb.WriteString(f.clauseSep())
-	sb.WriteString(FormatStatement(c.Query, opts))
+	sb.WriteString(FormatStatement(c.Query, nestedOpts(opts)))
 
 	if c.WithOption != "" {
 		sb.WriteString(f.clauseSep())
@@ -892,7 +889,7 @@ func renderCreateMaterializedView(c *ast.CreateMaterializedViewStatement, opts a
 	sb.WriteString(" ")
 	sb.WriteString(f.kw("AS"))
 	sb.WriteString(f.clauseSep())
-	sb.WriteString(FormatStatement(c.Query, opts))
+	sb.WriteString(FormatStatement(c.Query, nestedOpts(opts)))
 
 	if c.WithData != nil {
 		sb.WriteString(f.clauseSep())
@@ -1180,7 +1177,7 @@ func renderIn(i *ast.InExpression, opts ast.FormatOptions) string {
 	sb.WriteString(f.kw("IN"))
 	sb.WriteString(" (")
 	if i.Subquery != nil {
-		sb.WriteString(FormatStatement(i.Subquery, opts))
+		sb.WriteString(FormatStatement(i.Subquery, nestedOpts(opts)))
 	} else {
 		parts := make([]string, len(i.List))
 		for idx, e := range i.List {
@@ -1202,7 +1199,7 @@ func renderExists(e *ast.ExistsExpression, opts ast.FormatOptions) string {
 
 	sb.WriteString(f.kw("EXISTS"))
 	sb.WriteString(" (")
-	sb.WriteString(FormatStatement(e.Subquery, opts))
+	sb.WriteString(FormatStatement(e.Subquery, nestedOpts(opts)))
 	sb.WriteString(")")
 
 	return f.result()
@@ -1216,13 +1213,22 @@ func renderSubquery(s *ast.SubqueryExpression, opts ast.FormatOptions) string {
 	sb := f.sb
 
 	sb.WriteString("(")
-	sb.WriteString(FormatStatement(s.Subquery, opts))
+	sb.WriteString(FormatStatement(s.Subquery, nestedOpts(opts)))
 	sb.WriteString(")")
 
 	return f.result()
 }
 
 // ─── internal helpers ─────────────────────────────────────────────────────────
+
+// nestedOpts returns opts for rendering a statement nested inside another
+// one (CTE body, IN/EXISTS/scalar subquery, set-operation operand, or the
+// query of INSERT ... SELECT / CREATE [MATERIALIZED] VIEW). Only the
+// outermost statement is terminated, so AddSemicolon is cleared (#602).
+func nestedOpts(opts ast.FormatOptions) ast.FormatOptions {
+	opts.AddSemicolon = false
+	return opts
+}
 
 // renderWith renders a WITH clause using the given nodeFormatter context.
 func renderWith(w *ast.WithClause, f *nodeFormatter) string {
@@ -1243,7 +1249,7 @@ func renderWith(w *ast.WithClause, f *nodeFormatter) string {
 			s += "(" + strings.Join(cte.Columns, ", ") + ") "
 		}
 		s += f.kw("AS") + " ("
-		s += FormatStatement(cte.Statement, f.opts)
+		s += FormatStatement(cte.Statement, nestedOpts(f.opts))
 		s += ")"
 		ctes[i] = s
 	}

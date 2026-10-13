@@ -357,7 +357,7 @@ MariaDB inherits all MySQL features (SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE 
 | **DECODE function** | ✅ Full | ⚠️ Partial | 40% | Recognized as function, no special handling |
 | **NVL/NVL2** | ✅ Full | ⚠️ Partial | 40% | Recognized as function, no special handling |
 | **Dual table** | ✅ Full | ✅ Full | 100% | Standard table reference |
-| **Bind variables** (`:1`, `:name`) | ✅ Full | ✅ Full | 90% | Positional and named binds tokenized as placeholders (dialect-gated) |
+| **Bind variables** (`:1`, `:name`) | ✅ Full | ✅ Full | 90% | Positional and named binds tokenized as placeholders (dialect-gated). In Oracle mode `:` followed by a digit or identifier is always a bind, so array slices such as `arr[1:2]` and `arr[1:n]` do not parse (`expected ], got PLACEHOLDER`); Oracle has no array slices, and `arr[:2]` still parses |
 | **Analytic functions** | ✅ Full | ⚠️ Partial | 60% | Subset via window functions |
 
 ### SQLite-Specific Features

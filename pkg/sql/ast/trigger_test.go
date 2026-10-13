@@ -138,7 +138,7 @@ func TestTriggerReferencing(t *testing.T) {
 			if len(children) != 1 {
 				t.Fatalf("TriggerReferencing.Children() = %v (len %d), want 1 child", children, len(children))
 			}
-			if on, ok := children[0].(ObjectName); !ok || on != tt.trigRef.TransitionRelationName {
+			if on, ok := children[0].(*ObjectName); !ok || *on != tt.trigRef.TransitionRelationName {
 				t.Errorf("TriggerReferencing.Children()[0] = %v, want %v", children[0], tt.trigRef.TransitionRelationName)
 			}
 		})
@@ -358,9 +358,9 @@ func TestTriggerExecBody(t *testing.T) {
 			if len(children) != 1 {
 				t.Fatalf("TriggerExecBody.Children() = %v (len %d), want 1 child", children, len(children))
 			}
-			fd, ok := children[0].(FunctionDesc)
+			fd, ok := children[0].(*FunctionDesc)
 			if !ok {
-				t.Fatalf("TriggerExecBody.Children()[0] type = %T, want FunctionDesc", children[0])
+				t.Fatalf("TriggerExecBody.Children()[0] type = %T, want *FunctionDesc", children[0])
 			}
 			if fd.String() != tt.execBody.FuncDesc.String() {
 				t.Errorf("FuncDesc child = %v, want %v", fd, tt.execBody.FuncDesc)

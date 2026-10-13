@@ -339,14 +339,16 @@ func (*CreateTable) statementNode() {}
 
 // Children implements Node and returns all child nodes: the table name, column
 // definitions, constraints, optional subquery, LIKE/CLONE targets, comment, and
-// CLUSTERED BY / ROW ACCESS POLICY clauses.
+// CLUSTERED BY / ROW ACCESS POLICY clauses. Name, Columns and Constraints are
+// returned as pointers into c, so edits made through Walk/Inspect reach the
+// statement (#617).
 func (c *CreateTable) Children() []Node {
-	nodes := []Node{c.Name}
-	for _, col := range c.Columns {
-		nodes = append(nodes, col)
+	nodes := []Node{&c.Name}
+	for i := range c.Columns {
+		nodes = append(nodes, &c.Columns[i])
 	}
-	for _, con := range c.Constraints {
-		nodes = append(nodes, con)
+	for i := range c.Constraints {
+		nodes = append(nodes, &c.Constraints[i])
 	}
 	if c.Query != nil {
 		nodes = append(nodes, c.Query)

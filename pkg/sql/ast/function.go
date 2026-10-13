@@ -56,8 +56,14 @@ func (f FunctionDesc) String() string {
 
 // Children implements Node and returns the function's ObjectName as its sole
 // child node, enabling visitor traversal to reach qualified names.
-func (f FunctionDesc) Children() []Node {
-	return []Node{f.Name}
+// Called on a value, Name is a pointer into a copy of the receiver; Walk and
+// Inspect use childrenInPlace and visit the stored Name in place (#617).
+func (f FunctionDesc) Children() []Node { return f.childrenInPlace() }
+
+// childrenInPlace is Children for a FunctionDesc reached through a pointer:
+// Name is returned as a pointer into *f itself.
+func (f *FunctionDesc) childrenInPlace() []Node {
+	return []Node{&f.Name}
 }
 
 // TokenLiteral implements Node and returns the SQL representation of this

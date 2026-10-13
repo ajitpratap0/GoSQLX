@@ -201,9 +201,15 @@ func (t TriggerObject) Children() []Node { return nil }
 func (t TriggerObject) TokenLiteral() string { return t.String() }
 
 // Children implements Node and returns the transition relation name as a child
-// node for visitor traversal.
-func (t TriggerReferencing) Children() []Node {
-	return []Node{t.TransitionRelationName}
+// node for visitor traversal. Called on a value, the child is a pointer into a
+// copy of the receiver; Walk and Inspect use childrenInPlace and visit the
+// stored TransitionRelationName in place (#617).
+func (t TriggerReferencing) Children() []Node { return t.childrenInPlace() }
+
+// childrenInPlace is Children for a TriggerReferencing reached through a
+// pointer: TransitionRelationName is returned as a pointer into *t itself.
+func (t *TriggerReferencing) childrenInPlace() []Node {
+	return []Node{&t.TransitionRelationName}
 }
 
 // TokenLiteral implements Node and returns the SQL representation of this
@@ -235,9 +241,15 @@ func (t TriggerPeriod) Children() []Node { return nil }
 func (t TriggerPeriod) TokenLiteral() string { return t.String() }
 
 // Children implements Node and returns the function descriptor as a child
-// node for visitor traversal.
-func (t TriggerExecBody) Children() []Node {
-	return []Node{t.FuncDesc}
+// node for visitor traversal. Called on a value, the child is a pointer into a
+// copy of the receiver; Walk and Inspect use childrenInPlace and visit the
+// stored FuncDesc in place (#617).
+func (t TriggerExecBody) Children() []Node { return t.childrenInPlace() }
+
+// childrenInPlace is Children for a TriggerExecBody reached through a pointer:
+// FuncDesc is returned as a pointer into *t itself.
+func (t *TriggerExecBody) childrenInPlace() []Node {
+	return []Node{&t.FuncDesc}
 }
 
 // TokenLiteral implements Node and returns the SQL representation of this

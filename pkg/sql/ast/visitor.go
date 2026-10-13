@@ -195,8 +195,9 @@ func Walk(v Visitor, node Node) error {
 
 // childrenOf returns n's children for Walk. For value-receiver nodes whose
 // Children() must address their own fields (JoinClause, WindowFrame,
-// MergeStatement, Insert, Delete, Update) it uses the pointer-receiver childrenInPlace so the stored
-// struct is neither heap-copied nor detached from the AST (#557). A concrete
+// MergeStatement, Insert, Delete, Update, FunctionDesc, TriggerReferencing,
+// TriggerExecBody) it uses the pointer-receiver childrenInPlace so the stored
+// struct is neither heap-copied nor detached from the AST (#557, #617). A concrete
 // type switch is used because it is a cheap type-word compare.
 func childrenOf(n Node) []Node {
 	switch t := n.(type) {
@@ -211,6 +212,12 @@ func childrenOf(n Node) []Node {
 	case *Delete:
 		return t.childrenInPlace()
 	case *Update:
+		return t.childrenInPlace()
+	case *FunctionDesc:
+		return t.childrenInPlace()
+	case *TriggerReferencing:
+		return t.childrenInPlace()
+	case *TriggerExecBody:
 		return t.childrenInPlace()
 	}
 	return n.Children()

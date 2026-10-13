@@ -40,6 +40,10 @@ func TestFormatAST_ClickHouseParametricAggregates(t *testing.T) {
 		{"SELECT quantile(0.5)(x) AS p50 FROM t WHERE a = 1", "quantile(0.5)(x)"},
 		{"SELECT sequenceMatch('(?1)(?2)')(ts, e = 1, e = 2) FROM t", "sequenceMatch('(?1)(?2)')(ts, e = 1, e = 2)"},
 		{"SELECT quantile(0.9)(x) OVER (PARTITION BY k) FROM t", "quantile(0.9)(x) OVER (PARTITION BY k)"},
+		// #605: DISTINCT in the args group, subscripts on call results.
+		{"SELECT quantile(0.5)(DISTINCT x) FROM t", "quantile(0.5)(DISTINCT x)"},
+		{"SELECT quantiles(0.5, 0.9)(x)[1] FROM t", "quantiles(0.5, 0.9)(x)[1]"},
+		{"SELECT groupArray(x)[1] FROM t", "groupArray(x)[1]"},
 	}
 
 	for _, tc := range cases {

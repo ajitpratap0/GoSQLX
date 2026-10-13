@@ -37,10 +37,12 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 	// Parse function arguments
 	var arguments []ast.Expression
 	var distinct bool
+	var distinctPos models.Location
 
 	// Check for DISTINCT keyword
 	if p.isType(models.TokenTypeDistinct) {
 		distinct = true
+		distinctPos = p.currentLocation()
 		p.advance()
 	}
 
@@ -186,30 +188,11 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 	// e.g. quantileTDigest(0.95)(value), topK(10)(name).
 	// What we just parsed becomes Parameters; the next paren group is the
 	// real arguments. Gated to ClickHouse to avoid false positives.
+	// DISTINCT belongs to the argument group only: fn(p)(DISTINCT a) (#605).
 	if p.dialect == string(keywords.DialectClickHouse) && p.isType(models.TokenTypeLParen) {
-		funcCall.Parameters = funcCall.Arguments
-		funcCall.Arguments = nil
-		p.advance() // Consume second (
-		if !p.isType(models.TokenTypeRParen) {
-			for {
-				arg, err := p.parseExpression()
-				if err != nil {
-					return nil, err
-				}
-				funcCall.Arguments = append(funcCall.Arguments, arg)
-				if p.isType(models.TokenTypeComma) {
-					p.advance()
-				} else if p.isType(models.TokenTypeRParen) {
-					break
-				} else {
-					return nil, p.expectedError(", or )")
-				}
-			}
+		if err := p.parseClickHouseParametricArgs(funcCall, distinctPos); err != nil {
+			return nil, err
 		}
-		if !p.isType(models.TokenTypeRParen) {
-			return nil, p.expectedError(")")
-		}
-		p.advance() // Consume second )
 	}
 
 	// Check for IGNORE NULLS / RESPECT NULLS (SQL:2016 null treatment).

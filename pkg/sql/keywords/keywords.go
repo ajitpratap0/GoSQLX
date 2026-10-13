@@ -58,8 +58,9 @@ func (c KeywordConflict) String() string {
 }
 
 // conflictsMu guards the package-level conflict list.
-// The list captures the conflicts observed during the most recent New() call.
-// It is reset at the start of each New() invocation.
+// The list captures the conflicts observed during the most recent direct
+// New() call. It is reset at the start of each New() invocation. The
+// tokenizer and parser never construct Keywords, so parsing does not touch it.
 var (
 	conflictsMu   sync.Mutex
 	lastConflicts []KeywordConflict
@@ -70,6 +71,15 @@ var (
 // keyword sources (e.g. ADDITIONAL_KEYWORDS and SQLITE_SPECIFIC) each
 // defined the same word with a different Type/Reserved signature, and the
 // first-registered definition won.
+//
+// Only direct calls to New() record or reset conflicts. The tokenizer and
+// parser never construct Keywords (classification uses package-level tables
+// plus the configured dialect), so tokenizing or parsing in any dialect, at
+// any concurrency, never resets or alters what Conflicts reports.
+//
+// Concurrent New() calls race for the buffer: each reset and publish is
+// mutex-guarded, but the pair is not atomic. Call New and Conflicts from the
+// same goroutine, without concurrent New calls, when checking conflicts.
 //
 // The returned slice is a copy and safe to iterate without holding any
 // package lock.

@@ -104,21 +104,18 @@ func GetTokenizer() *Tokenizer {
 //   - Position tracking reset to initial state
 //   - Line tracking cleared but capacity preserved
 //   - Debug logger cleared
-//   - Dialect restored to the default (PostgreSQL) so dialect-specific keyword
-//     state does not leak to the next caller
+//   - Dialect restored to the default (PostgreSQL) so a configured dialect
+//     does not leak to the next caller
 func PutTokenizer(t *Tokenizer) {
 	if t != nil {
 		t.Reset()
 
-		// Restore the default dialect so a pooled tokenizer never leaks
-		// dialect-specific keyword state to a later caller. This is done here
-		// (at the pool boundary) rather than in Reset, which also runs at the
-		// start of every Tokenize call where the configured dialect must
-		// persist. SetDialect rebuilds the keyword table, so only pay that cost
-		// when a non-default dialect was configured.
-		if t.dialect != keywords.DialectPostgreSQL {
-			t.SetDialect(keywords.DialectPostgreSQL)
-		}
+		// Restore the default dialect so a pooled tokenizer never leaks a
+		// configured dialect to a later caller. This is done here (at the pool
+		// boundary) rather than in Reset, which also runs at the start of every
+		// Tokenize call where the configured dialect must persist. The dialect
+		// is a plain field, so restoring it is a single assignment.
+		t.dialect = keywords.DialectPostgreSQL
 
 		tokenizerPool.Put(t)
 
@@ -151,7 +148,7 @@ func PutTokenizer(t *Tokenizer) {
 //   - Word chunk: nil (Words already returned stay valid; the chunk is never reused)
 //   - litBuf (slow-path literal scratch): truncated, or dropped above 64 KiB
 //   - Comments: length 0, previously used entries zeroed
-//   - dialect/keywords: preserved (Reset also runs at the start of every
+//   - dialect: preserved (Reset also runs at the start of every
 //     Tokenize call, so the configured dialect must persist; the pool restores
 //     the default dialect in PutTokenizer instead)
 //   - logger: nil (must be set again if needed)
@@ -196,7 +193,7 @@ func (t *Tokenizer) Reset() {
 	// input and lineStarts it was built on.
 	t.posCacheLine, t.posCacheIdx, t.posCacheCol = 0, 0, 0
 
-	// Don't reset keywords/dialect here: Reset also runs at the start of every
+	// Don't reset the dialect here: Reset also runs at the start of every
 	// Tokenize call, where the configured dialect must persist across calls.
 	// Dialect is restored to the default in PutTokenizer, at the pool boundary.
 	t.logger = nil

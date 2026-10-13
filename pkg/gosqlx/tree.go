@@ -20,7 +20,6 @@ import (
 	"fmt"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
-	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
@@ -308,23 +307,14 @@ func parseWithConfig(ctx context.Context, sql string, cfg parseOptions) (*ast.AS
 		return nil, fmt.Errorf("%w: %q", ErrUnsupportedDialect, cfg.dialect)
 	}
 
-	var (
-		tokens []models.TokenWithSpan
-		tokErr error
-	)
+	// PutTokenizer restores the default dialect, so a dialect configured here
+	// never leaks to a later pool user.
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
 	if cfg.dialect != "" {
-		// Dialect-aware tokenizer cannot currently be obtained from the
-		// shared pool; this matches existing ParseBytesWithDialect behaviour.
-		tkz, err := tokenizer.NewWithDialect(keywords.SQLDialect(cfg.dialect))
-		if err != nil {
-			return nil, fmt.Errorf("%w: tokenizer init: %v", ErrTokenize, err)
-		}
-		tokens, tokErr = tkz.TokenizeStringContext(ctx, sql)
-	} else {
-		tkz := tokenizer.GetTokenizer()
-		defer tokenizer.PutTokenizer(tkz)
-		tokens, tokErr = tkz.TokenizeStringContext(ctx, sql)
+		tkz.SetDialect(keywords.SQLDialect(cfg.dialect))
 	}
+	tokens, tokErr := tkz.TokenizeStringContext(ctx, sql)
 	if tokErr != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, wrapContextErr(ctxErr)

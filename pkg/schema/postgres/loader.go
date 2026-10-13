@@ -13,12 +13,11 @@
 // limitations under the License.
 
 // Package postgres provides a live schema Loader for PostgreSQL databases.
+// Tables, columns and key flags come from information_schema; indexes and
+// foreign keys come from pg_catalog (pg_index, pg_constraint).
 //
-// It requires PostgreSQL 11 or later: foreign keys are read from pg_constraint
-// and partition clones are filtered on pg_constraint.conparentid, which was
-// added in PostgreSQL 11.
-// It queries information_schema and pg_catalog to retrieve tables, columns,
-// indexes, and foreign keys.
+// It requires PostgreSQL 11 or later: partition clones of foreign keys are
+// filtered on pg_constraint.conparentid, which was added in PostgreSQL 11.
 package postgres
 
 import (

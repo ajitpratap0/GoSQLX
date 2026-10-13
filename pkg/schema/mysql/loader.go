@@ -231,6 +231,9 @@ func (l *Loader) loadIndexes(db *sql.DB, schemaName, tableName string) (map[stri
 
 // loadForeignKeys returns foreign keys grouped by table name, ordered by
 // constraint name. An empty tableName loads every table in schemaName.
+//
+// The referential_constraints join is keyed by table as well as constraint
+// name, so same-named foreign keys on different tables can never mix rules.
 func (l *Loader) loadForeignKeys(db *sql.DB, schemaName, tableName string) (map[string][]dbschema.ForeignKey, error) {
 	rows, err := db.Query(`
 		SELECT
@@ -243,8 +246,9 @@ func (l *Loader) loadForeignKeys(db *sql.DB, schemaName, tableName string) (map[
 			rc.update_rule
 		FROM information_schema.key_column_usage kcu
 		JOIN information_schema.referential_constraints rc
-			ON rc.constraint_name = kcu.constraint_name
-			AND rc.constraint_schema = kcu.table_schema
+			ON rc.constraint_schema = kcu.table_schema
+			AND rc.table_name = kcu.table_name
+			AND rc.constraint_name = kcu.constraint_name
 		WHERE kcu.table_schema = ? AND (? = '' OR kcu.table_name = ?)
 		  AND kcu.referenced_table_name IS NOT NULL
 		ORDER BY kcu.table_name, kcu.constraint_name, kcu.ordinal_position

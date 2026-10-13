@@ -13,15 +13,18 @@
 // limitations under the License.
 
 // Package postgres provides a live schema Loader for PostgreSQL databases.
-// It queries information_schema and pg_catalog to retrieve tables, columns,
-// indexes, and foreign keys.
+// Tables, columns and key flags come from information_schema; indexes and
+// foreign keys come from pg_catalog (pg_index, pg_constraint).
+//
+// It requires PostgreSQL 11 or later: partition clones of foreign keys are
+// filtered on pg_constraint.conparentid, which was added in PostgreSQL 11.
 package postgres
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	dbschema "github.com/ajitpratap0/GoSQLX/pkg/schema/db"
 )
@@ -208,7 +211,7 @@ func (l *Loader) loadIndexes(db *sql.DB, schemaName, tableName string) (map[stri
 			i.relname AS index_name,
 			ix.indisunique,
 			ix.indisprimary,
-			array_agg(a.attname ORDER BY a.attnum) AS columns
+			json_agg(a.attname ORDER BY a.attnum)::text AS columns
 		FROM pg_class t
 		JOIN pg_index ix ON t.oid = ix.indrelid
 		JOIN pg_class i ON i.oid = ix.indexrelid
@@ -226,11 +229,16 @@ func (l *Loader) loadIndexes(db *sql.DB, schemaName, tableName string) (map[stri
 	out := make(map[string][]dbschema.Index)
 	for rows.Next() {
 		var idx dbschema.Index
-		var colArray string
-		if err := rows.Scan(&idx.TableName, &idx.Name, &idx.IsUnique, &idx.IsPrimary, &colArray); err != nil {
+		// Columns arrive as a JSON array (not a Postgres array literal) so that
+		// quoted identifiers containing commas, quotes or braces decode exactly,
+		// independent of the SQL driver in use.
+		var colJSON []byte
+		if err := rows.Scan(&idx.TableName, &idx.Name, &idx.IsUnique, &idx.IsPrimary, &colJSON); err != nil {
 			return nil, fmt.Errorf("load indexes: scan: %w", err)
 		}
-		idx.Columns = parseArrayAgg(colArray)
+		if err := json.Unmarshal(colJSON, &idx.Columns); err != nil {
+			return nil, fmt.Errorf("load indexes: decode columns of %s.%s: %w", idx.TableName, idx.Name, err)
+		}
 		out[idx.TableName] = append(out[idx.TableName], idx)
 	}
 	if err := rows.Err(); err != nil {
@@ -241,28 +249,42 @@ func (l *Loader) loadIndexes(db *sql.DB, schemaName, tableName string) (map[stri
 
 // loadForeignKeys returns foreign keys grouped by table name, ordered by
 // constraint name. An empty tableName loads every table in schemaName.
+//
+// It reads pg_constraint directly: unnest(conkey, confkey) pairs each local
+// column with its referenced column by position, so composite keys are not
+// cross-multiplied, and constraints are identified by (table, name) because
+// Postgres only requires constraint names to be unique per table. Constraints
+// that are internal per-partition clones of a key referencing a partitioned
+// table (their parent constraint lives on the same relation) are skipped.
+//
+// Requires PostgreSQL 11+ (pg_constraint.conparentid). Because pg_constraint is
+// readable by any role, foreign keys are returned even when the connecting role
+// only has SELECT on the tables (information_schema hid them from non-owners).
+// A foreign key into another schema is reported with the referenced table's
+// bare name; ForeignKey has no field for the referenced schema.
 func (l *Loader) loadForeignKeys(db *sql.DB, schemaName, tableName string) (map[string][]dbschema.ForeignKey, error) {
 	rows, err := db.Query(`
 		SELECT
-			tc.table_name,
-			tc.constraint_name,
-			kcu.column_name,
-			ccu.table_name AS foreign_table_name,
-			ccu.column_name AS foreign_column_name,
-			rc.delete_rule,
-			rc.update_rule
-		FROM information_schema.table_constraints AS tc
-		JOIN information_schema.key_column_usage AS kcu
-			ON tc.constraint_name = kcu.constraint_name
-			AND tc.table_schema = kcu.table_schema
-		JOIN information_schema.constraint_column_usage AS ccu
-			ON ccu.constraint_name = tc.constraint_name
-			AND ccu.table_schema = tc.table_schema
-		JOIN information_schema.referential_constraints AS rc
-			ON rc.constraint_name = tc.constraint_name
-		WHERE tc.constraint_type = 'FOREIGN KEY'
-		  AND tc.table_schema = $1 AND ($2::text = '' OR tc.table_name = $2)
-		ORDER BY tc.table_name, tc.constraint_name, kcu.ordinal_position
+			cl.relname  AS table_name,
+			con.conname AS constraint_name,
+			a.attname   AS column_name,
+			rcl.relname AS foreign_table_name,
+			ra.attname  AS foreign_column_name,
+			CASE con.confdeltype WHEN 'a' THEN 'NO ACTION' WHEN 'r' THEN 'RESTRICT' WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL' WHEN 'd' THEN 'SET DEFAULT' ELSE con.confdeltype::text END AS delete_rule,
+			CASE con.confupdtype WHEN 'a' THEN 'NO ACTION' WHEN 'r' THEN 'RESTRICT' WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL' WHEN 'd' THEN 'SET DEFAULT' ELSE con.confupdtype::text END AS update_rule
+		FROM pg_constraint con
+		JOIN pg_class cl ON cl.oid = con.conrelid
+		JOIN pg_namespace n ON n.oid = cl.relnamespace
+		JOIN pg_class rcl ON rcl.oid = con.confrelid
+		CROSS JOIN LATERAL unnest(con.conkey, con.confkey) WITH ORDINALITY AS k(attnum, ref_attnum, ord)
+		JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.attnum
+		JOIN pg_attribute ra ON ra.attrelid = con.confrelid AND ra.attnum = k.ref_attnum
+		WHERE con.contype = 'f'
+		  AND n.nspname = $1 AND ($2::text = '' OR cl.relname = $2)
+		  AND NOT EXISTS (
+			SELECT 1 FROM pg_constraint p
+			WHERE p.oid = con.conparentid AND p.conrelid = con.conrelid)
+		ORDER BY cl.relname, con.conname, k.ord
 	`, schemaName, tableName)
 	if err != nil {
 		return nil, fmt.Errorf("load fks: %w", err)
@@ -297,22 +319,6 @@ func (l *Loader) loadForeignKeys(db *sql.DB, schemaName, tableName string) (map[
 		return nil, fmt.Errorf("load fks: %w", err)
 	}
 	return out, nil
-}
-
-// parseArrayAgg parses a Postgres array literal "{a,b,c}" into []string{"a","b","c"}.
-func parseArrayAgg(s string) []string {
-	if len(s) < 2 {
-		return nil
-	}
-	s = s[1 : len(s)-1] // strip braces
-	if s == "" {
-		return nil
-	}
-	var result []string
-	for _, p := range strings.Split(s, ",") {
-		result = append(result, strings.TrimSpace(p))
-	}
-	return result
 }
 
 // ensure Loader satisfies the interface (compile-time check).

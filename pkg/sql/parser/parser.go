@@ -166,6 +166,11 @@ func (p *Parser) currentLocation() models.Location {
 //   - Legitimate queries rarely exceed depth of 10-15
 //   - Malicious queries can reach thousands without this limit
 //
+// What counts: every nested level of parentheses, subqueries (including
+// derived tables in FROM and JOIN), CTEs, and each prefix operator (unary +
+// and -, NOT) adds one level. Chains such as NOT NOT NOT x or - - - 1 are
+// therefore limited like nested parentheses.
+//
 // Error: Exceeding this depth returns goerrors.RecursionDepthLimitError
 const MaxRecursionDepth = 100
 

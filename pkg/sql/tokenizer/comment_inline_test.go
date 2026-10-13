@@ -77,7 +77,9 @@ func TestTokenizer_CommentInlineMatchesReference(t *testing.T) {
 // after a long whitespace prefix are tokenized in time linear in the input:
 // the inline check must not rescan the line prefix for every comment. With a
 // per-comment rescan this input takes on the order of 10 s; the linear scan
-// takes milliseconds, so the bound below is generous.
+// takes milliseconds. The bound is relative to tokenizing an input of the
+// same length without comments, so race and coverage instrumentation on CI
+// slow both runs alike instead of tripping a fixed wall-clock limit.
 func TestTokenizer_CommentRunLinearTime(t *testing.T) {
 	const (
 		spaces   = 1 << 20
@@ -108,7 +110,16 @@ func TestTokenizer_CommentRunLinearTime(t *testing.T) {
 			t.Errorf("comment %d after another comment on the same line not reported as inline", i)
 		}
 	}
-	if elapsed > 2*time.Second {
-		t.Fatalf("tokenizing %d comments after %d spaces took %v, want well under 2s", comments, spaces, elapsed)
+
+	baseInput := strings.Repeat(" ", spaces+4*comments) + "SELECT 1"
+	start = time.Now()
+	if _, err := tkz.TokenizeString(baseInput); err != nil {
+		t.Fatalf("TokenizeString(baseline): %v", err)
+	}
+	base := time.Since(start)
+	// Linear: a small multiple of the baseline. Quadratic: several hundred.
+	if limit := 50*base + 100*time.Millisecond; elapsed > limit {
+		t.Fatalf("tokenizing %d comments after %d spaces took %v, want under %v (50x the %v comment-free baseline)",
+			comments, spaces, elapsed, limit, base)
 	}
 }

@@ -25,15 +25,18 @@ import (
 // longCommentRun is the number of consecutive comments used by the tests
 // below. It is large enough that skipping comments with one stack frame per
 // comment would exceed the stack limit set by limitStack, and small enough
-// that the comments plus the tokens after them stay within MaxTokens.
-const longCommentRun = 900_000
+// that the comments plus the tokens after them stay within MaxTokens. With
+// the 4 MB limit, 100,000 comments overflow the stack under the old
+// recursive skip for every comment style tested here, while the run stays
+// short under the race detector.
+const longCommentRun = 100_000
 
 // limitStack lowers the maximum goroutine stack size for the duration of the
 // test so that per-comment stack growth fails quickly instead of first
 // growing towards the 1 GB default.
 func limitStack(t *testing.T) {
 	t.Helper()
-	prev := debug.SetMaxStack(64 << 20)
+	prev := debug.SetMaxStack(4 << 20)
 	t.Cleanup(func() { debug.SetMaxStack(prev) })
 }
 

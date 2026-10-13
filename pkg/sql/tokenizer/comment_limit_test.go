@@ -44,11 +44,28 @@ func wantTokenLimit(t *testing.T, err error, wantLine int) {
 // TestTokenizer_CommentCountLimit checks that collected comments count toward
 // MaxTokens together with tokens: the call fails with the token-limit error
 // exactly when tokens plus comments exceed MaxTokens.
+//
+// Each case tokenizes about a million comments, which takes well over ten
+// seconds per case under the race detector with coverage on CI. With race
+// enabled only the exact-boundary error case and the reuse case run; the
+// remaining cases run without -race. All cases are skipped with -short.
 func TestTokenizer_CommentCountLimit(t *testing.T) {
 	tkz := GetTokenizer()
 	defer PutTokenizer(tkz)
 
-	t.Run("comments_only_at_limit", func(t *testing.T) {
+	run := func(name string, underRace bool, f func(t *testing.T)) {
+		t.Run(name, func(t *testing.T) {
+			if testing.Short() {
+				t.Skip("million-comment input; skipped with -short")
+			}
+			if raceEnabled && !underRace {
+				t.Skip("million-comment input is too slow under the race detector; runs without -race")
+			}
+			f(t)
+		})
+	}
+
+	run("comments_only_at_limit", false, func(t *testing.T) {
 		if _, err := tkz.TokenizeString(strings.Repeat("--\n", MaxTokens)); err != nil {
 			t.Fatalf("%d comments: %v", MaxTokens, err)
 		}
@@ -56,13 +73,13 @@ func TestTokenizer_CommentCountLimit(t *testing.T) {
 			t.Fatalf("collected %d comments, want %d", len(tkz.Comments), MaxTokens)
 		}
 	})
-	t.Run("comments_only_over_limit", func(t *testing.T) {
+	run("comments_only_over_limit", false, func(t *testing.T) {
 		for _, unit := range []string{"--\n", "/**/\n"} {
 			_, err := tkz.TokenizeString(strings.Repeat(unit, MaxTokens+1))
 			wantTokenLimit(t, err, MaxTokens+1)
 		}
 	})
-	t.Run("comments_then_tokens_at_limit", func(t *testing.T) {
+	run("comments_then_tokens_at_limit", false, func(t *testing.T) {
 		// MaxTokens-2 comments + 2 tokens = MaxTokens.
 		toks, err := tkz.TokenizeString(strings.Repeat("--\n", MaxTokens-2) + "SELECT 1")
 		if err != nil {
@@ -72,23 +89,23 @@ func TestTokenizer_CommentCountLimit(t *testing.T) {
 			t.Fatalf("got %d tokens, want 3", len(toks))
 		}
 	})
-	t.Run("comments_then_tokens_over_limit", func(t *testing.T) {
+	run("comments_then_tokens_over_limit", true, func(t *testing.T) {
 		_, err := tkz.TokenizeString(strings.Repeat("--\n", MaxTokens-1) + "SELECT 1")
 		wantTokenLimit(t, err, MaxTokens)
 	})
-	t.Run("interleaved_over_limit", func(t *testing.T) {
+	run("interleaved_over_limit", false, func(t *testing.T) {
 		// Each line is one token and one comment; tokens alone stay at
 		// half the limit.
 		lines := MaxTokens/2 + 1
 		_, err := tkz.TokenizeString(strings.Repeat("a -- c\n", lines))
 		wantTokenLimit(t, err, 0)
 	})
-	t.Run("interleaved_at_limit", func(t *testing.T) {
+	run("interleaved_at_limit", false, func(t *testing.T) {
 		if _, err := tkz.TokenizeString(strings.Repeat("a -- c\n", MaxTokens/2)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
-	t.Run("reusable_after_limit", func(t *testing.T) {
+	run("reusable_after_limit", true, func(t *testing.T) {
 		_, err := tkz.TokenizeString(strings.Repeat("/**/", MaxTokens+1))
 		wantTokenLimit(t, err, 1)
 		toks, err := tkz.TokenizeString("SELECT /* c */ 1")

@@ -863,7 +863,7 @@ gosqlx format --dialect mysql query.sql
 ### Parser Fixes
 1. **KEY/INDEX/VIEW** in qualified identifiers (e.g., `a.key`)
 2. **NATURAL JOIN** - type stored as `"NATURAL"` not `"NATURAL INNER"`
-3. **OVER window_name** - bare window name reference (SQL:2003 §7.11)
+3. **OVER window_name** / **OVER (window_name ...)** - bare reference and refinement of an existing named window (SQL:2003 §7.11)
 4. **MySQL backtick** + **SQL Server bracket** reserved-word identifiers
 
 ### Error Codes

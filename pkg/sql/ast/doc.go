@@ -360,7 +360,8 @@
 // WindowSpec: Defines window for function evaluation
 //
 //	type WindowSpec struct {
-//	    Name        string                // Optional window name
+//	    Name        string                // OVER w reference or WINDOW w AS definition name
+//	    BaseWindow  string                // Existing window refined: OVER (w ORDER BY ...)
 //	    PartitionBy []Expression          // PARTITION BY clause
 //	    OrderBy     []OrderByExpression   // ORDER BY clause
 //	    FrameClause *WindowFrame          // Frame specification

@@ -374,6 +374,14 @@ func (p *Parser) parseWindowSpec() (*ast.WindowSpec, error) {
 
 	windowSpec := &ast.WindowSpec{}
 
+	// Existing window name refined by this spec: OVER (w ORDER BY z)
+	// (SQL:2003 §7.11 <existing window name>). PARTITION, ORDER, ROWS and RANGE
+	// have dedicated token types, so a leading identifier can only be a name.
+	if p.isIdentifier() {
+		windowSpec.BaseWindow = p.currentToken.Token.Value
+		p.advance()
+	}
+
 	// Parse PARTITION BY clause
 	if p.isType(models.TokenTypePartition) {
 		p.advance() // Consume PARTITION

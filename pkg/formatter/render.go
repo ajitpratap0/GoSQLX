@@ -1376,11 +1376,13 @@ func joinSQL(j *ast.JoinClause, f *nodeFormatter) string {
 	return sb.String()
 }
 
-// windowSpecSQL renders a window specification.
+// windowSpecSQL renders the inside of a WINDOW definition's parentheses. The
+// definition name (w.Name) is written by the caller as "name AS (...)"; only
+// the base window it refines (w.BaseWindow) is written here.
 func windowSpecSQL(w *ast.WindowSpec) string {
 	var parts []string
-	if w.Name != "" {
-		parts = append(parts, w.Name)
+	if w.BaseWindow != "" {
+		parts = append(parts, w.BaseWindow)
 	}
 	if len(w.PartitionBy) > 0 {
 		parts = append(parts, "PARTITION BY "+exprListSQL(w.PartitionBy))

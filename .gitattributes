@@ -1,0 +1,36 @@
+# Line-ending policy.
+#
+# Check out and commit every text file with LF on every platform. Without
+# this, git on the windows-latest CI runner (core.autocrlf=true) converts
+# text files to CRLF on checkout, so byte-exact golden comparisons and
+# content-hashed fixtures pass on macOS/Linux and fail only on Windows
+# (seen on PR #588 and the #548 golden corpus).
+* text=auto eol=lf
+
+# Go sources and module files are always LF; gofmt expects it.
+*.go     text eol=lf
+go.mod   text eol=lf
+go.sum   text eol=lf
+
+# Test fixtures that are compared or hashed byte-for-byte.
+*.golden text eol=lf
+*.sql    text eol=lf
+*.json   text eol=lf
+
+# Shell scripts must stay LF to be executable on Unix.
+*.sh     text eol=lf
+
+# Binary assets: never convert.
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.woff   binary
+*.woff2  binary
+*.ttf    binary
+*.otf    binary
+*.wasm   binary
+*.pdf    binary
+*.zip    binary
+*.gz     binary

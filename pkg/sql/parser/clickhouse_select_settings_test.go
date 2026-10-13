@@ -111,13 +111,25 @@ func TestClickHouseSelectSettings_Stored(t *testing.T) {
 	})
 
 	t.Run("format_suffix", func(t *testing.T) {
-		tree := parseClickHouseSelect(t, "SELECT a FROM t SETTINGS max_threads = 4 FORMAT JSON")
-		sel, ok := tree.Statements[0].(*ast.SelectStatement)
-		if !ok {
-			t.Fatalf("expected *ast.SelectStatement, got %T", tree.Statements[0])
+		// Format names may tokenize as identifiers, keywords (Values) or
+		// literals (Null); all must be accepted.
+		for _, format := range []string{"JSON", "JSONEachRow", "TabSeparated", "Values", "Null", "NULL", "null", "CSV"} {
+			sql := "SELECT a FROM t SETTINGS max_threads = 4 FORMAT " + format
+			tree := parseClickHouseSelect(t, sql)
+			sel, ok := tree.Statements[0].(*ast.SelectStatement)
+			if !ok {
+				t.Fatalf("%s: expected *ast.SelectStatement, got %T", format, tree.Statements[0])
+			}
+			if len(sel.Settings) != 1 {
+				t.Fatalf("%s: len(Settings) = %d, want 1", format, len(sel.Settings))
+			}
 		}
-		if len(sel.Settings) != 1 {
-			t.Fatalf("len(Settings) = %d, want 1", len(sel.Settings))
+	})
+
+	t.Run("format_suffix_then_statement", func(t *testing.T) {
+		tree := parseClickHouseSelect(t, "SELECT a FROM t SETTINGS max_threads = 4 FORMAT Null; SELECT 1")
+		if len(tree.Statements) != 2 {
+			t.Fatalf("got %d statements, want 2", len(tree.Statements))
 		}
 	})
 
@@ -145,6 +157,9 @@ func TestClickHouseSelectSettings_Errors(t *testing.T) {
 		"SELECT a FROM t SETTINGS max_threads =",
 		"SELECT a FROM t SETTINGS = 4",
 		"SELECT a FROM t SETTINGS max_threads = 4,",
+		"SELECT a FROM t SETTINGS max_threads = 4 FORMAT",
+		"SELECT a FROM t SETTINGS max_threads = 4 FORMAT;",
+		"SELECT a FROM t SETTINGS max_threads = 4 FORMAT 'JSON'",
 	}
 	for _, sql := range bad {
 		if _, err := gosqlx.ParseWithDialect(sql, keywords.DialectClickHouse); err == nil {

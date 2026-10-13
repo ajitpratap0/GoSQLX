@@ -101,3 +101,41 @@ func TestRender_Issue600_KeepsClauses(t *testing.T) {
 		})
 	}
 }
+
+// TestRender_Issue600_KeywordCase verifies that the clause keywords restored
+// for #600 (SETTINGS, OUTPUT, ON DUPLICATE KEY UPDATE) honour
+// FormatOptions.KeywordCase like every other clause keyword.
+func TestRender_Issue600_KeywordCase(t *testing.T) {
+	cases := []struct {
+		name    string
+		dialect keywords.SQLDialect
+		sql     string
+		lower   string
+	}{
+		{"settings", keywords.DialectClickHouse, "SELECT a FROM t SETTINGS max_threads = 4", "settings max_threads = 4"},
+		{"output", keywords.DialectSQLServer, "INSERT INTO t (a) OUTPUT INSERTED.id VALUES (1)", "output INSERTED.id"},
+		{"on_duplicate_key", keywords.DialectMySQL, "INSERT INTO t (a) VALUES (1) ON DUPLICATE KEY UPDATE a = 2", "on duplicate key update a = 2"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			tree, err := gosqlx.ParseWithDialect(tc.sql, tc.dialect)
+			if err != nil {
+				t.Fatalf("parse %q: %v", tc.sql, err)
+			}
+			for label, style := range map[string]ast.FormatOptions{
+				"compact":  ast.CompactStyle(),
+				"readable": ast.ReadableStyle(),
+			} {
+				style.KeywordCase = ast.KeywordLower
+				out := formatter.FormatAST(tree, style)
+				if !strings.Contains(out, tc.lower) {
+					t.Errorf("%s lowercase output missing %q:\n%s", label, tc.lower, out)
+				}
+				if _, err := gosqlx.ParseWithDialect(out, tc.dialect); err != nil {
+					t.Errorf("%s lowercase output does not re-parse: %v\n%s", label, err, out)
+				}
+			}
+		})
+	}
+}

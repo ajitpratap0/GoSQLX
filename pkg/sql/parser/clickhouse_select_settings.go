@@ -85,13 +85,15 @@ func (p *Parser) parseQuerySettingsList() ([]ast.QuerySetting, error) {
 
 	// Trailing ClickHouse output-format hint: SETTINGS ... FORMAT <name>.
 	// Parse-only; FORMAT is not modeled on the AST (pre-existing, see the
-	// INSERT ... FORMAT handling in dml_insert.go).
+	// INSERT ... FORMAT handling in dml_insert.go). Format names may tokenize
+	// as keywords or literals (Values, Null), so any word token is accepted,
+	// using the same rule as setting names. A name is required.
 	if !p.isStringLiteral() && strings.EqualFold(p.currentToken.Token.Value, "FORMAT") {
 		p.advance() // FORMAT
-		if p.isIdentifier() || p.isType(models.TokenTypeKeyword) ||
-			p.isType(models.TokenTypeValues) {
-			p.advance() // format name (may tokenize as VALUES keyword)
+		if !p.isQuerySettingName() {
+			return nil, p.expectedError("format name after FORMAT")
 		}
+		p.advance() // format name
 	}
 	return settings, nil
 }

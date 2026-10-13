@@ -643,3 +643,162 @@ func TestSQLFormatter_NotExistsDoesNotPanic(t *testing.T) {
 		t.Errorf("expected NOT EXISTS in output, got:\n%s", output)
 	}
 }
+
+// TestSQLFormatter_InsertWithCTE_Issue537 checks that the CLI formatter keeps
+// the WITH clause of INSERT ... SELECT, whether it is written after the column
+// list (#537) or before INSERT.
+func TestSQLFormatter_InsertWithCTE_Issue537(t *testing.T) {
+	tests := []struct {
+		name        string
+		sql         string
+		wantCompact string
+	}{
+		{
+			name:        "inner WITH after column list",
+			sql:         "INSERT INTO test(a, b) WITH main AS (SELECT a, b FROM src) SELECT a, b FROM main",
+			wantCompact: "INSERT INTO test (a, b) WITH main AS (SELECT a, b FROM src) SELECT a, b FROM main",
+		},
+		{
+			name:        "leading WITH before INSERT",
+			sql:         "WITH main AS (SELECT a, b FROM src) INSERT INTO test(a, b) SELECT a, b FROM main",
+			wantCompact: "WITH main AS (SELECT a, b FROM src) INSERT INTO test (a, b) SELECT a, b FROM main",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tkz := tokenizer.GetTokenizer()
+			defer tokenizer.PutTokenizer(tkz)
+			tokens, err := tkz.Tokenize([]byte(tt.sql))
+			if err != nil {
+				t.Fatalf("tokenize(%q): %v", tt.sql, err)
+			}
+			p := parser.NewParser()
+			defer p.Release()
+			tree, err := p.ParseFromModelTokens(tokens)
+			if err != nil {
+				t.Fatalf("parse(%q): %v", tt.sql, err)
+			}
+			defer ast.ReleaseAST(tree)
+
+			compact, err := NewSQLFormatter(FormatterOptions{Compact: true, UppercaseKw: true}).Format(tree)
+			if err != nil {
+				t.Fatalf("compact format: %v", err)
+			}
+			if compact != tt.wantCompact {
+				t.Errorf("compact output:\n got: %s\nwant: %s", compact, tt.wantCompact)
+			}
+
+			readable, err := NewSQLFormatter(FormatterOptions{Indent: "  ", UppercaseKw: true}).Format(tree)
+			if err != nil {
+				t.Fatalf("readable format: %v", err)
+			}
+			for _, want := range []string{"WITH main AS", "FROM src", "INSERT INTO test"} {
+				if !strings.Contains(readable, want) {
+					t.Errorf("expected %q in readable output:\n%s", want, readable)
+				}
+			}
+		})
+	}
+}
+
+// TestSQLFormatter_WithCTEChainedSetOperations checks that the CLI formatter
+// keeps the WITH clause exactly once for CTE queries with chained set
+// operators, at top level and under INSERT.
+func TestSQLFormatter_WithCTEChainedSetOperations(t *testing.T) {
+	inputs := []string{
+		"WITH c AS (SELECT 1 AS a) SELECT a FROM c UNION SELECT 2 UNION SELECT 3",
+		"WITH c AS (SELECT 1 AS a) SELECT a FROM c INTERSECT SELECT 2 INTERSECT SELECT 3",
+		"WITH c AS (SELECT 1 AS a) SELECT a FROM c EXCEPT SELECT 2 EXCEPT SELECT 3",
+		"INSERT INTO t (a) WITH c AS (SELECT 1 AS a) SELECT a FROM c UNION ALL SELECT 2 UNION ALL SELECT 3",
+	}
+	for _, in := range inputs {
+		t.Run(in, func(t *testing.T) {
+			tkz := tokenizer.GetTokenizer()
+			defer tokenizer.PutTokenizer(tkz)
+			tokens, err := tkz.Tokenize([]byte(in))
+			if err != nil {
+				t.Fatalf("tokenize: %v", err)
+			}
+			p := parser.NewParser()
+			defer p.Release()
+			tree, err := p.ParseFromModelTokens(tokens)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			defer ast.ReleaseAST(tree)
+
+			for name, opts := range map[string]FormatterOptions{
+				"compact":  {Compact: true, UppercaseKw: true},
+				"readable": {Indent: "  ", UppercaseKw: true},
+			} {
+				out, err := NewSQLFormatter(opts).Format(tree)
+				if err != nil {
+					t.Fatalf("%s format: %v", name, err)
+				}
+				if n := strings.Count(out, "WITH "); n != 1 {
+					t.Errorf("%s output has %d WITH clauses, want 1:\n%s", name, n, out)
+				}
+				if !strings.Contains(out, "c AS (") {
+					t.Errorf("%s output lost the CTE:\n%s", name, out)
+				}
+			}
+		})
+	}
+}
+
+// TestSQLFormatter_UpdateDeleteWithCTE checks that the CLI formatter keeps a
+// leading WITH clause on UPDATE and DELETE, as it does for INSERT (#537).
+func TestSQLFormatter_UpdateDeleteWithCTE(t *testing.T) {
+	tests := []struct {
+		name string
+		sql  string
+		kw   string
+	}{
+		{
+			name: "update",
+			sql:  "WITH c AS (SELECT id FROM s) UPDATE t SET a = 1 WHERE id IN (SELECT id FROM c)",
+			kw:   "UPDATE t",
+		},
+		{
+			name: "delete",
+			sql:  "WITH c AS (SELECT id FROM s) DELETE FROM t WHERE id IN (SELECT id FROM c)",
+			kw:   "DELETE FROM t",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tkz := tokenizer.GetTokenizer()
+			defer tokenizer.PutTokenizer(tkz)
+			tokens, err := tkz.Tokenize([]byte(tt.sql))
+			if err != nil {
+				t.Fatalf("tokenize(%q): %v", tt.sql, err)
+			}
+			p := parser.NewParser()
+			defer p.Release()
+			tree, err := p.ParseFromModelTokens(tokens)
+			if err != nil {
+				t.Fatalf("parse(%q): %v", tt.sql, err)
+			}
+			defer ast.ReleaseAST(tree)
+
+			compact, err := NewSQLFormatter(FormatterOptions{Compact: true, UppercaseKw: true}).Format(tree)
+			if err != nil {
+				t.Fatalf("compact format: %v", err)
+			}
+			if compact != tt.sql {
+				t.Errorf("compact output:\n got: %s\nwant: %s", compact, tt.sql)
+			}
+
+			readable, err := NewSQLFormatter(FormatterOptions{Indent: "  ", UppercaseKw: true}).Format(tree)
+			if err != nil {
+				t.Fatalf("readable format: %v", err)
+			}
+			w, k := strings.Index(readable, "WITH c AS"), strings.Index(readable, tt.kw)
+			if w < 0 || k < 0 || w > k {
+				t.Errorf("expected WITH c AS before %q in readable output:\n%s", tt.kw, readable)
+			}
+		})
+	}
+}

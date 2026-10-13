@@ -15,9 +15,12 @@
 package parser
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
 func TestInsertSelect(t *testing.T) {
@@ -87,5 +90,384 @@ func TestInsertNoValuesOrSelect(t *testing.T) {
 	_, err := p.Parse(tokens)
 	if err == nil {
 		t.Fatal("expected error for INSERT INTO t1 with no VALUES or SELECT")
+	}
+}
+
+// parseInsertCTEWithDialect tokenizes and parses sql with the given dialect
+// ("" means the parser default). The caller must release the returned AST.
+func parseInsertCTEWithDialect(t *testing.T, sql, dialect string) (*ast.AST, error) {
+	t.Helper()
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+	if dialect != "" {
+		tkz.SetDialect(keywords.SQLDialect(dialect))
+	}
+	tokens, err := tkz.Tokenize([]byte(sql))
+	if err != nil {
+		t.Fatalf("Tokenize(%q, %q): %v", sql, dialect, err)
+	}
+	p := NewParser(WithDialect(dialect))
+	defer p.Release()
+	return p.ParseFromModelTokens(tokens)
+}
+
+// mustParseInsertCTE parses sql and returns its single InsertStatement. The
+// caller must release the returned AST.
+func mustParseInsertCTE(t *testing.T, sql, dialect string) (*ast.InsertStatement, *ast.AST) {
+	t.Helper()
+	tree, err := parseInsertCTEWithDialect(t, sql, dialect)
+	if err != nil {
+		t.Fatalf("parse(%q, dialect %q): %v", sql, dialect, err)
+	}
+	if len(tree.Statements) != 1 {
+		n := len(tree.Statements)
+		ast.ReleaseAST(tree)
+		t.Fatalf("parse(%q, dialect %q): expected 1 statement, got %d", sql, dialect, n)
+	}
+	ins, ok := tree.Statements[0].(*ast.InsertStatement)
+	if !ok {
+		got := tree.Statements[0]
+		ast.ReleaseAST(tree)
+		t.Fatalf("parse(%q, dialect %q): expected *ast.InsertStatement, got %T", sql, dialect, got)
+	}
+	return ins, tree
+}
+
+// assertInsertCTERoundTrip re-parses rendered SQL and requires the re-rendered
+// SQL to be identical.
+func assertInsertCTERoundTrip(t *testing.T, rendered, dialect string) {
+	t.Helper()
+	ins, tree := mustParseInsertCTE(t, rendered, dialect)
+	defer ast.ReleaseAST(tree)
+	if again := ins.SQL(); again != rendered {
+		t.Errorf("round-trip not stable (dialect %q):\n first: %s\nsecond: %s", dialect, rendered, again)
+	}
+}
+
+// TestInsertWithCTE_Issue537_Dialects reproduces #537: a WITH clause after the
+// INSERT column list must parse in every dialect, with the CTE attached to the
+// query rather than to the INSERT.
+func TestInsertWithCTE_Issue537_Dialects(t *testing.T) {
+	const sql = "INSERT INTO test(a, b) WITH main AS (SELECT a, b FROM src) SELECT a, b FROM main"
+	const want = "INSERT INTO test (a, b) WITH main AS (SELECT a, b FROM src) SELECT a, b FROM main"
+
+	dialects := []string{"", "postgresql", "mysql", "mariadb", "sqlite", "oracle", "snowflake", "clickhouse", "sqlserver"}
+	for _, d := range dialects {
+		t.Run("dialect="+d, func(t *testing.T) {
+			ins, tree := mustParseInsertCTE(t, sql, d)
+			defer ast.ReleaseAST(tree)
+
+			if ins.TableName != "test" {
+				t.Errorf("TableName = %q, want %q", ins.TableName, "test")
+			}
+			if len(ins.Columns) != 2 {
+				t.Errorf("len(Columns) = %d, want 2", len(ins.Columns))
+			}
+			if ins.With != nil {
+				t.Errorf("InsertStatement.With = %+v, want nil (CTE belongs to the query)", ins.With)
+			}
+			if ins.Values != nil {
+				t.Errorf("Values = %v, want nil", ins.Values)
+			}
+			sel, ok := ins.Query.(*ast.SelectStatement)
+			if !ok {
+				t.Fatalf("Query: expected *ast.SelectStatement, got %T", ins.Query)
+			}
+			if sel.With == nil {
+				t.Fatal("Query.With is nil, want WITH clause")
+			}
+			if sel.With.Recursive {
+				t.Error("With.Recursive = true, want false")
+			}
+			if len(sel.With.CTEs) != 1 {
+				t.Fatalf("len(With.CTEs) = %d, want 1", len(sel.With.CTEs))
+			}
+			cte := sel.With.CTEs[0]
+			if cte.Name != "main" {
+				t.Errorf("CTE name = %q, want %q", cte.Name, "main")
+			}
+			if _, ok := cte.Statement.(*ast.SelectStatement); !ok {
+				t.Errorf("CTE statement: expected *ast.SelectStatement, got %T", cte.Statement)
+			}
+
+			got := ins.SQL()
+			if got != want {
+				t.Fatalf("SQL():\n got: %s\nwant: %s", got, want)
+			}
+			assertInsertCTERoundTrip(t, got, d)
+		})
+	}
+}
+
+// TestInsertWithCTE_Issue537_Shapes covers the variants of an inner WITH
+// clause on INSERT ... SELECT.
+func TestInsertWithCTE_Issue537_Shapes(t *testing.T) {
+	tests := []struct {
+		name    string
+		sql     string
+		wantSQL string
+		check   func(t *testing.T, ins *ast.InsertStatement)
+	}{
+		{
+			name:    "no column list",
+			sql:     "INSERT INTO test WITH main AS (SELECT a, b FROM src) SELECT a, b FROM main",
+			wantSQL: "INSERT INTO test WITH main AS (SELECT a, b FROM src) SELECT a, b FROM main",
+			check: func(t *testing.T, ins *ast.InsertStatement) {
+				if len(ins.Columns) != 0 {
+					t.Errorf("len(Columns) = %d, want 0", len(ins.Columns))
+				}
+				sel, ok := ins.Query.(*ast.SelectStatement)
+				if !ok {
+					t.Fatalf("Query: expected *ast.SelectStatement, got %T", ins.Query)
+				}
+				if sel.With == nil || len(sel.With.CTEs) != 1 {
+					t.Fatalf("Query.With = %+v, want 1 CTE", sel.With)
+				}
+			},
+		},
+		{
+			name:    "recursive with CTE column list",
+			sql:     "INSERT INTO test(a, b) WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r WHERE n < 5) SELECT n, n FROM r",
+			wantSQL: "INSERT INTO test (a, b) WITH RECURSIVE r (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 5) SELECT n, n FROM r",
+			check: func(t *testing.T, ins *ast.InsertStatement) {
+				sel, ok := ins.Query.(*ast.SelectStatement)
+				if !ok {
+					t.Fatalf("Query: expected *ast.SelectStatement, got %T", ins.Query)
+				}
+				if sel.With == nil || !sel.With.Recursive {
+					t.Fatalf("Query.With = %+v, want RECURSIVE", sel.With)
+				}
+				if len(sel.With.CTEs) != 1 {
+					t.Fatalf("len(CTEs) = %d, want 1", len(sel.With.CTEs))
+				}
+				cols := sel.With.CTEs[0].Columns
+				if len(cols) != 1 || cols[0] != "n" {
+					t.Errorf("CTE columns = %v, want [n]", cols)
+				}
+			},
+		},
+		{
+			name:    "multiple CTEs and UNION",
+			sql:     "INSERT INTO test(a, b) WITH x AS (SELECT 1), y AS (SELECT 2) SELECT a, b FROM x UNION SELECT a, b FROM y",
+			wantSQL: "INSERT INTO test (a, b) WITH x AS (SELECT 1), y AS (SELECT 2) SELECT a, b FROM x UNION SELECT a, b FROM y",
+			check: func(t *testing.T, ins *ast.InsertStatement) {
+				setOp, ok := ins.Query.(*ast.SetOperation)
+				if !ok {
+					t.Fatalf("Query: expected *ast.SetOperation, got %T", ins.Query)
+				}
+				left, ok := setOp.Left.(*ast.SelectStatement)
+				if !ok {
+					t.Fatalf("SetOperation.Left: expected *ast.SelectStatement, got %T", setOp.Left)
+				}
+				if left.With == nil || len(left.With.CTEs) != 2 {
+					t.Fatalf("Left.With = %+v, want 2 CTEs", left.With)
+				}
+			},
+		},
+		{
+			name:    "ON CONFLICT and RETURNING after CTE query",
+			sql:     "INSERT INTO test(a, b) WITH m AS (SELECT a, b FROM src) SELECT a, b FROM m ON CONFLICT (a) DO NOTHING RETURNING a",
+			wantSQL: "INSERT INTO test (a, b) WITH m AS (SELECT a, b FROM src) SELECT a, b FROM m ON CONFLICT (a) DO NOTHING RETURNING a",
+			check: func(t *testing.T, ins *ast.InsertStatement) {
+				if ins.OnConflict == nil {
+					t.Error("OnConflict is nil")
+				}
+				if len(ins.Returning) != 1 {
+					t.Errorf("len(Returning) = %d, want 1", len(ins.Returning))
+				}
+			},
+		},
+		{
+			name:    "MATERIALIZED CTE",
+			sql:     "INSERT INTO test(a, b) WITH m AS MATERIALIZED (SELECT a, b FROM src) SELECT a, b FROM m",
+			wantSQL: "INSERT INTO test (a, b) WITH m AS MATERIALIZED (SELECT a, b FROM src) SELECT a, b FROM m",
+		},
+		{
+			name:    "leading and inner WITH",
+			sql:     "WITH o AS (SELECT 1) INSERT INTO test(a, b) WITH m AS (SELECT a, b FROM src) SELECT a, b FROM m",
+			wantSQL: "WITH o AS (SELECT 1) INSERT INTO test (a, b) WITH m AS (SELECT a, b FROM src) SELECT a, b FROM m",
+			check: func(t *testing.T, ins *ast.InsertStatement) {
+				if ins.With == nil || len(ins.With.CTEs) != 1 || ins.With.CTEs[0].Name != "o" {
+					t.Fatalf("InsertStatement.With = %+v, want CTE o", ins.With)
+				}
+				sel, ok := ins.Query.(*ast.SelectStatement)
+				if !ok {
+					t.Fatalf("Query: expected *ast.SelectStatement, got %T", ins.Query)
+				}
+				if sel.With == nil || len(sel.With.CTEs) != 1 || sel.With.CTEs[0].Name != "m" {
+					t.Fatalf("Query.With = %+v, want CTE m", sel.With)
+				}
+			},
+		},
+		{
+			name:    "leading WITH unchanged",
+			sql:     "WITH main AS (SELECT a, b FROM src) INSERT INTO test(a, b) SELECT a, b FROM main",
+			wantSQL: "WITH main AS (SELECT a, b FROM src) INSERT INTO test (a, b) SELECT a, b FROM main",
+			check: func(t *testing.T, ins *ast.InsertStatement) {
+				if ins.With == nil {
+					t.Fatal("InsertStatement.With is nil, want leading WITH")
+				}
+				sel, ok := ins.Query.(*ast.SelectStatement)
+				if !ok {
+					t.Fatalf("Query: expected *ast.SelectStatement, got %T", ins.Query)
+				}
+				if sel.With != nil {
+					t.Errorf("Query.With = %+v, want nil", sel.With)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ins, tree := mustParseInsertCTE(t, tt.sql, "postgresql")
+			defer ast.ReleaseAST(tree)
+
+			if tt.check != nil {
+				tt.check(t, ins)
+			}
+			got := ins.SQL()
+			if got != tt.wantSQL {
+				t.Fatalf("SQL():\n got: %s\nwant: %s", got, tt.wantSQL)
+			}
+			assertInsertCTERoundTrip(t, got, "postgresql")
+		})
+	}
+}
+
+// TestInsertWithCTE_Issue537_Errors pins the rejected forms around #537.
+func TestInsertWithCTE_Issue537_Errors(t *testing.T) {
+	tests := []struct {
+		name    string
+		sql     string
+		wantErr string // substring; empty means any error
+	}{
+		{
+			name:    "issue literal SQL missing AS",
+			sql:     "INSERT INTO test(a, b) WITH main (SELECT a, b FROM src) SELECT a, b FROM main",
+			wantErr: "expected AS",
+		},
+		{
+			name:    "inner WITH followed by UPDATE",
+			sql:     "INSERT INTO test(a, b) WITH m AS (SELECT a, b FROM src) UPDATE x SET a = 1",
+			wantErr: "expected SELECT or set operation",
+		},
+		{
+			name: "inner WITH followed by INSERT",
+			sql:  "INSERT INTO test(a, b) WITH m AS (SELECT a, b FROM src) INSERT INTO x SELECT 1",
+		},
+		{
+			name: "inner WITH without main query",
+			sql:  "INSERT INTO test(a, b) WITH m AS (SELECT a, b FROM src)",
+		},
+		{
+			name: "dangling WITH",
+			sql:  "INSERT INTO test(a, b) WITH",
+		},
+		{
+			name:    "no source",
+			sql:     "INSERT INTO t1 (a) DEFAULT",
+			wantErr: "VALUES, SELECT, or WITH",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tree, err := parseInsertCTEWithDialect(t, tt.sql, "postgresql")
+			if tree != nil {
+				defer ast.ReleaseAST(tree)
+			}
+			if err == nil {
+				t.Fatalf("parse(%q): expected error, got nil", tt.sql)
+			}
+			if tt.wantErr != "" && !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("parse(%q) error = %q, want substring %q", tt.sql, err.Error(), tt.wantErr)
+			}
+		})
+	}
+}
+
+// leftmostSelect walks nested SetOperation.Left links to the first operand.
+func leftmostSelect(q ast.Statement) *ast.SelectStatement {
+	for {
+		switch v := q.(type) {
+		case *ast.SetOperation:
+			q = v.Left
+		case *ast.SelectStatement:
+			return v
+		default:
+			return nil
+		}
+	}
+}
+
+// TestWithCTE_ChainedSetOperations keeps the WITH clause when the CTE's main
+// query has two or more set operators, which nest as ((A op B) op C) with a
+// SetOperation (not a SelectStatement) on the left. Covers both a leading
+// top-level WITH and INSERT ... WITH (#537 review follow-up).
+func TestWithCTE_ChainedSetOperations(t *testing.T) {
+	const cte = "WITH c AS (SELECT 1 AS a) "
+	chains := []string{
+		"SELECT a FROM c UNION SELECT 2",
+		"SELECT a FROM c UNION SELECT 2 UNION SELECT 3",
+		"SELECT a FROM c UNION ALL SELECT 2 UNION ALL SELECT 3",
+		"SELECT a FROM c INTERSECT SELECT 2 INTERSECT SELECT 3",
+		"SELECT a FROM c EXCEPT SELECT 2 EXCEPT SELECT 3",
+		"SELECT a FROM c UNION SELECT 2 INTERSECT SELECT 3 EXCEPT SELECT 4",
+	}
+	dialects := []string{"", "postgresql", "mysql", "sqlite", "snowflake", "sqlserver"}
+
+	for _, d := range dialects {
+		for _, chain := range chains {
+			for _, insert := range []bool{false, true} {
+				sql := cte + chain
+				if insert {
+					sql = "INSERT INTO t (a) " + cte + chain
+				}
+				t.Run(d+"/"+sql, func(t *testing.T) {
+					tree, err := parseInsertCTEWithDialect(t, sql, d)
+					if err != nil {
+						t.Fatalf("parse: %v", err)
+					}
+					defer ast.ReleaseAST(tree)
+					if len(tree.Statements) != 1 {
+						t.Fatalf("expected 1 statement, got %d", len(tree.Statements))
+					}
+
+					var query ast.Statement = tree.Statements[0]
+					if insert {
+						ins, ok := tree.Statements[0].(*ast.InsertStatement)
+						if !ok {
+							t.Fatalf("expected *ast.InsertStatement, got %T", tree.Statements[0])
+						}
+						query = ins.Query
+					}
+					if _, ok := query.(*ast.SetOperation); !ok {
+						t.Fatalf("query: expected *ast.SetOperation, got %T", query)
+					}
+					sel := leftmostSelect(query)
+					if sel == nil || sel.With == nil || len(sel.With.CTEs) != 1 || sel.With.CTEs[0].Name != "c" {
+						t.Fatalf("leftmost SELECT lost its WITH clause: %+v", sel)
+					}
+
+					got := tree.SQL()
+					if n := strings.Count(got, "WITH "); n != 1 {
+						t.Fatalf("SQL() has %d WITH clauses, want 1: %s", n, got)
+					}
+					if !strings.Contains(got, "WITH c AS (SELECT 1 AS a)") {
+						t.Errorf("SQL() lost the CTE: %s", got)
+					}
+
+					tree2, err := parseInsertCTEWithDialect(t, got, d)
+					if err != nil {
+						t.Fatalf("re-parse %q: %v", got, err)
+					}
+					defer ast.ReleaseAST(tree2)
+					if again := tree2.SQL(); again != got {
+						t.Errorf("round-trip not stable:\n first: %s\nsecond: %s", got, again)
+					}
+				})
+			}
+		}
 	}
 }

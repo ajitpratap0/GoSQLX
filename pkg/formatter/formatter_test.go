@@ -92,3 +92,80 @@ func TestFormat_CompactOutput(t *testing.T) {
 		t.Errorf("Compact mode should not contain newlines, got: %s", result)
 	}
 }
+
+// TestFormat_InsertWithCTE_Issue537 checks that the compact formatter keeps
+// the WITH clause of INSERT ... SELECT in both positions and is idempotent.
+func TestFormat_InsertWithCTE_Issue537(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "inner WITH after column list",
+			input: "INSERT INTO test(a, b) WITH main AS (SELECT a, b FROM src) SELECT a, b FROM main",
+			want:  "INSERT INTO test (a, b) WITH main AS (SELECT a, b FROM src) SELECT a, b FROM main",
+		},
+		{
+			name:  "leading WITH before INSERT",
+			input: "WITH main AS (SELECT a, b FROM src) INSERT INTO test(a, b) SELECT a, b FROM main",
+			want:  "WITH main AS (SELECT a, b FROM src) INSERT INTO test (a, b) SELECT a, b FROM main",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := New(Options{Compact: true})
+			out, err := f.Format(tt.input)
+			if err != nil {
+				t.Fatalf("Format(%q): %v", tt.input, err)
+			}
+			if out != tt.want {
+				t.Fatalf("Format(%q):\n got: %s\nwant: %s", tt.input, out, tt.want)
+			}
+			again, err := f.Format(out)
+			if err != nil {
+				t.Fatalf("Format(%q) second pass: %v", out, err)
+			}
+			if again != out {
+				t.Errorf("Format not idempotent:\n first: %s\nsecond: %s", out, again)
+			}
+		})
+	}
+}
+
+// TestFormat_WithCTEChainedSetOperations checks that the compact formatter
+// keeps the WITH clause (exactly once) for CTE queries with chained set
+// operators, at top level and under INSERT, and is idempotent.
+func TestFormat_WithCTEChainedSetOperations(t *testing.T) {
+	inputs := []string{
+		"WITH c AS (SELECT 1 AS a) SELECT a FROM c UNION SELECT 2 UNION SELECT 3",
+		"WITH c AS (SELECT 1 AS a) SELECT a FROM c UNION ALL SELECT 2 UNION ALL SELECT 3",
+		"WITH c AS (SELECT 1 AS a) SELECT a FROM c INTERSECT SELECT 2 INTERSECT SELECT 3",
+		"WITH c AS (SELECT 1 AS a) SELECT a FROM c EXCEPT SELECT 2 EXCEPT SELECT 3",
+		"INSERT INTO t (a) WITH c AS (SELECT 1 AS a) SELECT a FROM c UNION SELECT 2 UNION SELECT 3",
+		"INSERT INTO t (a) WITH c AS (SELECT 1 AS a) SELECT a FROM c EXCEPT SELECT 2 EXCEPT SELECT 3",
+	}
+	for _, in := range inputs {
+		t.Run(in, func(t *testing.T) {
+			f := New(Options{Compact: true})
+			out, err := f.Format(in)
+			if err != nil {
+				t.Fatalf("Format: %v", err)
+			}
+			if n := strings.Count(out, "WITH "); n != 1 {
+				t.Fatalf("output has %d WITH clauses, want 1: %s", n, out)
+			}
+			if !strings.Contains(out, "WITH c AS (SELECT 1 AS a)") {
+				t.Errorf("output lost the CTE: %s", out)
+			}
+			again, err := f.Format(out)
+			if err != nil {
+				t.Fatalf("second pass: %v", err)
+			}
+			if again != out {
+				t.Errorf("not idempotent:\n first: %s\nsecond: %s", out, again)
+			}
+		})
+	}
+}

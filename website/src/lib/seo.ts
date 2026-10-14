@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { baseOpenGraph } from '@/lib/open-graph';
 
 const BRAND = 'GoSQLX';
-const OG_IMAGE = '/images/og-image.png';
 
 interface PageMetaInput {
   /** Page title without the brand. The layout template appends " | GoSQLX". */
@@ -15,6 +14,11 @@ interface PageMetaInput {
   absolute?: boolean;
   /** Extra Open Graph fields, e.g. publishedTime for articles. */
   openGraph?: Record<string, unknown>;
+  /**
+   * Explicit image for routes that cannot use an opengraph-image file
+   * (catch-all segments). Pages without it get the file-convention image.
+   */
+  image?: { url: string; alt: string };
 }
 
 /**
@@ -29,6 +33,7 @@ export function pageMeta({
   type = 'website',
   absolute = false,
   openGraph,
+  image,
 }: PageMetaInput): Metadata {
   const fullTitle = absolute || title.includes(BRAND) ? title : `${title} | ${BRAND}`;
   return {
@@ -42,12 +47,13 @@ export function pageMeta({
       title: fullTitle,
       description,
       url: path,
+      ...(image ? { images: [{ ...image, width: 1200, height: 630 }] } : {}),
     } as NonNullable<Metadata['openGraph']>,
     twitter: {
       card: 'summary_large_image',
       title: fullTitle,
       description,
-      images: [OG_IMAGE],
+      ...(image ? { images: [image.url] } : {}),
     },
   };
 }

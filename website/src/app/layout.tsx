@@ -23,7 +23,6 @@ export const metadata: Metadata = {
     title: 'GoSQLX: Go SQL Parser, Formatter & Linter',
     description:
       'High-performance, zero-copy SQL parser, formatter and linter for Go with 8-dialect support.',
-    images: ['/images/og-image.png'],
   },
   icons: {
     icon: '/favicon.png',

@@ -9,5 +9,4 @@ export const baseOpenGraph: NonNullable<Metadata['openGraph']> = {
   title: 'GoSQLX: Go SQL Parser, Formatter & Linter',
   description:
     'High-performance, zero-copy SQL parser, formatter and linter for Go with 8-dialect support.',
-  images: [{ url: '/images/og-image.png', width: 1200, height: 630, alt: 'GoSQLX' }],
 };

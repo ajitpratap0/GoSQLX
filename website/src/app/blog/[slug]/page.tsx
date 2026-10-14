@@ -1,4 +1,5 @@
 import { Metadata } from 'next';
+import { pageMeta } from '@/lib/seo';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { compileMDX } from 'next-mdx-remote/rsc';
@@ -18,20 +19,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const post = getPostBySlug(slug);
   if (!post) return {};
 
-  return {
-    title: post.title,
+  return pageMeta({
+    title: `${post.title} release notes`,
     description: `GoSQLX ${post.title} release notes.`,
-    alternates: {
-      canonical: `https://gosqlx.dev/blog/${slug}/`,
-    },
+    path: `/blog/${slug}/`,
+    type: 'article',
     openGraph: {
-      title: `GoSQLX ${post.title}`,
-      description: `GoSQLX ${post.title} release notes.`,
-      type: 'article',
       publishedTime: post.date ? `${post.date}T00:00:00Z` : undefined,
-      url: `https://gosqlx.dev/blog/${slug}/`,
     },
-  };
+  });
 }
 
 export default async function BlogPostPage({ params }: Props) {

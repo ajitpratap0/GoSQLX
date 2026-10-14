@@ -1,15 +1,16 @@
 import type { Metadata } from 'next';
+import { pageMeta } from '@/lib/seo';
 import Link from 'next/link';
 import { DOCS_SIDEBAR } from '@/lib/constants';
 import { DocsSearchTrigger } from '@/components/docs/DocsSearchTrigger';
 import { FadeIn } from '@/components/ui/FadeIn';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta({
   title: 'Documentation',
   description:
-    'GoSQLX documentation - everything you need to parse, analyze, and transform SQL with Go.',
-  alternates: { canonical: '/docs/' },
-};
+    'GoSQLX documentation: everything you need to parse, analyze, and transform SQL with Go.',
+  path: '/docs/',
+});
 
 const CATEGORY_ICONS: Record<string, string> = {
   'Getting Started': 'M13 10V3L4 14h7v7l9-11h-7z',

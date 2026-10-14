@@ -6,8 +6,8 @@ export const baseOpenGraph: NonNullable<Metadata['openGraph']> = {
   type: 'website',
   locale: 'en_US',
   siteName: 'GoSQLX',
-  title: 'GoSQLX - Production-Ready SQL Parsing SDK for Go',
+  title: 'GoSQLX: Go SQL Parser, Formatter & Linter',
   description:
-    'High-performance, zero-copy SQL parsing SDK for Go. Thread-safe with multi-dialect support.',
+    'High-performance, zero-copy SQL parser, formatter and linter for Go with 8-dialect support.',
   images: [{ url: '/images/og-image.png', width: 1200, height: 630, alt: 'GoSQLX' }],
 };

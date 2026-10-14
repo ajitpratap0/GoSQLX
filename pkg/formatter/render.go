@@ -1304,6 +1304,8 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		sb.WriteString("(")
 		sb.WriteString(stmtSQL(t.Subquery))
 		sb.WriteString(")")
+	} else if t.TableFunc != nil {
+		sb.WriteString(t.TableFunc.SQL())
 	} else {
 		sb.WriteString(t.Name)
 	}

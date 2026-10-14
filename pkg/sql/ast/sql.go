@@ -2009,6 +2009,8 @@ func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 		buf.WriteByte('(')
 		t.Subquery.writeSQL(buf)
 		buf.WriteByte(')')
+	} else if t.TableFunc != nil {
+		t.TableFunc.writeSQL(buf)
 	} else {
 		buf.WriteString(t.Name)
 	}

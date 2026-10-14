@@ -38,7 +38,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     title: `${doc.label} (Docs)`,
     description: doc.description,
     path: `/docs/${slugStr}/`,
-    image: { url: `/og/docs/${slugStr}`, alt: `${doc.label} (GoSQLX docs)` },
+    image: { url: `/og/docs/${slugStr}/`, alt: `${doc.label} (GoSQLX docs)` },
   });
 }
 

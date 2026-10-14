@@ -343,3 +343,121 @@ func TestContext_InvalidLocations(t *testing.T) {
 		t.Errorf("unexpected window for negative counts: %q", got)
 	}
 }
+
+// splitRows returns the rendered context block as rows without the leading and
+// trailing newline.
+func splitRows(out string) []string {
+	return strings.Split(strings.TrimSuffix(strings.TrimPrefix(out, "\n"), "\n"), "\n")
+}
+
+// TestContext_TabExpandedColumnLongLine guards against treating the
+// tab-expanded column reported by the tokenizer (each '\t' counts as 4) as a
+// byte offset when clipping: with many tabs before the error the window used to
+// miss the offending text entirely.
+func TestContext_TabExpandedColumnLongLine(t *testing.T) {
+	const tabs = 25
+	prefix := strings.Repeat("\t", tabs) + strings.Repeat("a ", 60)
+	line := prefix + "ZZTOP" + strings.Repeat(" b", 60)
+	if len(line) <= contextMaxLine {
+		t.Fatalf("test line must be longer than %d bytes", contextMaxLine)
+	}
+	// Column as computed by tokenizer.toSQLPosition: 1 + 4 per tab + 1 per other byte.
+	col := 1 + 4*tabs + (len(prefix) - tabs)
+	out := FormatMultiLineContext(line, models.Location{Line: 1, Column: col}, 5)
+	rows := splitRows(out)
+	if len(rows) != 2 {
+		t.Fatalf("expected source row and caret row, got %d rows: %q", len(rows), rows)
+	}
+	if !strings.Contains(rows[0], "ZZTOP") {
+		t.Fatalf("clipped window misses the error site: %q", rows[0])
+	}
+	idx := strings.IndexByte(rows[1], '^')
+	if idx < 0 || idx >= len(rows[0]) || !strings.HasPrefix(rows[0][idx:], "ZZTOP") {
+		t.Errorf("caret at %d does not point at ZZTOP in %q", idx, rows[0])
+	}
+
+	// Tabs interleaved inside the window: the error text must still be shown.
+	line2 := strings.Repeat("\ta", 40) + "ZZTOP" + strings.Repeat("b", 100)
+	col2 := 1 + 40*5
+	rows2 := splitRows(FormatMultiLineContext(line2, models.Location{Line: 1, Column: col2}, 5))
+	if len(rows2) != 2 || !strings.Contains(rows2[0], "ZZTOP") {
+		t.Errorf("interleaved tabs: window misses the error site: %q", rows2)
+	}
+}
+
+// TestContext_ClipNeverHidesErrorByte guards against the rune-boundary snap
+// moving the window start past the error byte when the line starts with an
+// invalid UTF-8 byte (the byte was cut and the caret pointed into the ellipsis).
+func TestContext_ClipNeverHidesErrorByte(t *testing.T) {
+	cases := []struct {
+		name string
+		line string
+	}{
+		{"continuation_then_digits", "\xbf" + strings.Repeat("0", 121)},
+		{"invalid_lead_sql", "\x80SELECT a FROM t WHERE " + strings.Repeat("b = 1 AND ", 20) + "c = 2"},
+		{"continuation_run", strings.Repeat("\x80", 3) + strings.Repeat("x", 200)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rows := splitRows(FormatMultiLineContext(tc.line, models.Location{Line: 1, Column: 1}, 1))
+			if len(rows) != 2 {
+				t.Fatalf("expected 2 rows, got %q", rows)
+			}
+			const gutter = "   1 | "
+			if !strings.HasPrefix(rows[0], gutter) {
+				t.Fatalf("unexpected gutter in %q", rows[0])
+			}
+			if strings.HasPrefix(rows[0][len(gutter):], contextEllipsis) {
+				t.Errorf("line starting at the error byte must not be prefixed with %q: %q", contextEllipsis, rows[0])
+			}
+			idx := strings.IndexByte(rows[1], '^')
+			if idx != len(gutter) || rows[0][idx] != tc.line[0] {
+				t.Errorf("caret at %d, want %d under byte %q; row %q", idx, len(gutter), tc.line[0], rows[0])
+			}
+		})
+	}
+}
+
+// FuzzClipLine checks that the clipped window always contains the byte the
+// column maps to, stays bounded, and that for tab-free lines the caret sits
+// directly under that byte. Without -fuzz it only runs the seed corpus.
+func FuzzClipLine(f *testing.F) {
+	f.Add("\xbf"+strings.Repeat("0", 121), 1)
+	f.Add("\x80SELECT a FROM t WHERE "+strings.Repeat("b = 1 AND ", 20)+"c = 2", 1)
+	f.Add(strings.Repeat("\t", 25)+strings.Repeat("a ", 60)+"ZZTOP", 221)
+	f.Add(strings.Repeat("é", 200), 150)
+	f.Add(strings.Repeat("\x80", 300), 100)
+	f.Add("SELECT 1", 3)
+	f.Fuzz(func(t *testing.T, line string, col int) {
+		if strings.IndexByte(line, '\n') >= 0 || col < 1 {
+			return
+		}
+		b := columnToByte(line, col-1)
+		if b < 0 || b > len(line) {
+			t.Fatalf("columnToByte(%d) = %d out of [0,%d]", col-1, b, len(line))
+		}
+		display, start, prefixLen := clipLine(line, b)
+		if len(display) > contextMaxLine+2*len(contextEllipsis) {
+			t.Fatalf("display too long: %d", len(display))
+		}
+		if len(line) > contextMaxLine && b < len(line) {
+			if start > b {
+				t.Fatalf("window start %d past error byte %d", start, b)
+			}
+			if i := prefixLen + b - start; i >= len(display) || display[i] != line[b] {
+				t.Fatalf("error byte %d not shown at %d in %q", b, i, display)
+			}
+		}
+		out := FormatMultiLineContext(line, models.Location{Line: 1, Column: col}, 1)
+		if len(out) > 4*(contextMaxLine+2*len(contextEllipsis)+16)+4*contextMaxLine {
+			t.Fatalf("output too long: %d", len(out))
+		}
+		if len(line) > contextMaxLine && b < len(line) && strings.IndexByte(line, '\t') < 0 {
+			rows := splitRows(out)
+			idx := strings.IndexByte(rows[1], '^')
+			if idx < 0 || idx >= len(rows[0]) || rows[0][idx] != line[b] {
+				t.Fatalf("caret at %d not under error byte %d in %q", idx, b, rows[0])
+			}
+		}
+	})
+}

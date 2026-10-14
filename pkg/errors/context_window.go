@@ -78,12 +78,49 @@ func lineRange(sql string, first, last int) []string {
 	return out
 }
 
+// tabWidth is the number of columns a '\t' occupies in models.Location.Column.
+// It mirrors tokenizer.toSQLPosition, which counts every byte as one column
+// except '\t', which counts as four.
+const tabWidth = 4
+
+// columnToByte maps the 0-based display column col (Column-1) to a byte offset in
+// line, using the tokenizer's column rule (see tabWidth). A column that falls
+// inside a tab's expansion maps to that tab. The result is clamped to
+// [0, len(line)]. Lines without tabs before col map col to itself.
+func columnToByte(line string, col int) int {
+	if col <= 0 {
+		return 0
+	}
+	c := 0
+	for i := 0; i < len(line); i++ {
+		if c >= col {
+			return i
+		}
+		w := 1
+		if line[i] == '\t' {
+			w = tabWidth
+		}
+		if c+w > col {
+			return i
+		}
+		c += w
+	}
+	return len(line)
+}
+
+// displayWidth returns the number of columns s occupies under the tokenizer's
+// column rule (see tabWidth).
+func displayWidth(s string) int {
+	return len(s) + (tabWidth-1)*strings.Count(s, "\t")
+}
+
 // clipLine returns the text to display for line, given the byte offset off of the
-// error column within it. Lines of at most contextMaxLine bytes are returned
-// verbatim. Longer lines are cut to about contextRadius bytes on either side of
-// off, on UTF-8 boundaries, with contextEllipsis marking each cut side. start is
-// the byte index in line where the displayed text begins and prefixLen is the
-// length of the leading ellipsis (0 or len(contextEllipsis)).
+// error within it (see columnToByte). Lines of at most contextMaxLine bytes are
+// returned verbatim. Longer lines are cut to about contextRadius bytes on either
+// side of off, on UTF-8 boundaries, with contextEllipsis marking each cut side;
+// the byte at off is always kept. start is the byte index in line where the
+// displayed text begins and prefixLen is the length of the leading ellipsis (0 or
+// len(contextEllipsis)).
 func clipLine(line string, off int) (display string, start, prefixLen int) {
 	if len(line) <= contextMaxLine {
 		return line, 0, 0
@@ -106,7 +143,9 @@ func clipLine(line string, off int) (display string, start, prefixLen int) {
 	// Snap both cuts to rune boundaries. Valid UTF-8 never needs more than
 	// utf8.UTFMax-1 steps; bounding the scans keeps start <= end (and the window
 	// size bounded) on invalid input such as a long run of continuation bytes.
-	for i := 0; i < utf8.UTFMax-1 && start < end && !utf8.RuneStart(line[start]); i++ {
+	// A start of 0 is not a cut and is left alone, and start never moves past
+	// the error byte, so an invalid byte at the error position stays visible.
+	for i := 0; i < utf8.UTFMax-1 && start > 0 && start < center && start < end && !utf8.RuneStart(line[start]); i++ {
 		start++
 	}
 	for i := 0; i < utf8.UTFMax-1 && end > start && end < len(line) && !utf8.RuneStart(line[end]); i++ {
@@ -127,24 +166,32 @@ func clipLine(line string, off int) (display string, start, prefixLen int) {
 }
 
 // caretPad returns the number of spaces to put between the gutter and the caret
-// line, for a line whose displayed text is display (see clipLine). It is never
-// larger than the displayed text, so the caret line is bounded too.
-func caretPad(off int, display string, start, prefixLen int, verbatim bool) int {
-	if off < 0 {
-		off = 0
+// line. col is the 0-based display column (Column-1) and off the byte offset it
+// maps to in line (see columnToByte); display, start and prefixLen come from
+// clipLine. Verbatim lines keep the historical Column-1 padding. For clipped
+// lines the padding is the display width (tabs counted as tabWidth, like col) of
+// the shown text before off, which for tab-free lines is off-start+prefixLen,
+// i.e. directly under the error byte. The padding is bounded by the display
+// width of the shown text, so the caret line is bounded too.
+func caretPad(line string, col, off int, display string, start, prefixLen int, verbatim bool) int {
+	if col < 0 {
+		col = 0
 	}
 	if verbatim {
-		if off > contextMaxLine {
+		if col > contextMaxLine {
 			return contextMaxLine
 		}
-		return off
+		return col
 	}
-	pad := off - start + prefixLen
-	if pad > len(display) {
-		pad = len(display)
+	if off < start {
+		off = start
 	}
-	if pad < 0 {
-		pad = 0
+	if off > len(line) {
+		off = len(line)
+	}
+	pad := prefixLen + displayWidth(line[start:off])
+	if w := displayWidth(display); pad > w {
+		pad = w
 	}
 	return pad
 }
@@ -202,12 +249,13 @@ func renderContext(sb *strings.Builder, sql string, loc models.Location, highlig
 	sb.WriteString("\n")
 	for i, line := range lines {
 		num := first + i
-		display, start, prefixLen := clipLine(line, off)
+		b := columnToByte(line, off)
+		display, start, prefixLen := clipLine(line, b)
 		fmt.Fprintf(sb, "  %*d | %s\n", width, num, display)
 
 		if i == errIdx && loc.Column > 0 {
 			gutter := len("  ") + width + len(" | ")
-			pad := caretPad(off, display, start, prefixLen, len(line) <= contextMaxLine)
+			pad := caretPad(line, off, b, display, start, prefixLen, len(line) <= contextMaxLine)
 			sb.WriteString(strings.Repeat(" ", gutter+pad))
 			sb.WriteString(strings.Repeat("^", clampHighlight(highlightLen)))
 			sb.WriteString("\n")

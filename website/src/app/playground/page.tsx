@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { pageMeta } from '@/lib/seo';
 import PlaygroundLoader from './PlaygroundLoader';
+import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 
 export const metadata: Metadata = pageMeta({
   title: 'SQL Playground',
@@ -19,6 +20,7 @@ export default function PlaygroundPage() {
         as="fetch"
         crossOrigin="anonymous"
       />
+      <ServiceWorkerRegister />
       <div className="border-b border-slate-800 bg-slate-900/50 px-4 py-3">
         <h1 className="text-lg font-semibold text-slate-100">
           Online Go SQL Parser Playground

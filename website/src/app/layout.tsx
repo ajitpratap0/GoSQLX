@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { spaceGrotesk, inter, jetbrainsMono } from '@/lib/fonts';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
-import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { Providers } from '@/components/Providers';
 import { ScrollProgressBar } from '@/components/ui/ScrollProgressBar';
 import { Analytics } from '@vercel/analytics/next';
@@ -63,7 +62,6 @@ export default function RootLayout({
           <main id="main-content" className="pt-16">{children}</main>
           <Footer />
         </Providers>
-        <ServiceWorkerRegister />
         <Analytics />
         <SpeedInsights />
       </body>

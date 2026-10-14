@@ -173,8 +173,8 @@ export async function initWasm(): Promise<GoSQLXApi> {
   return wasmPromise;
 }
 
-export function useWasm(): UseWasmResult {
-  const [loading, setLoading] = useState(true);
+export function useWasm(enabled = true): UseWasmResult {
+  const [loading, setLoading] = useState(enabled);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [api, setApi] = useState<GoSQLXApi | null>(null);
@@ -182,8 +182,9 @@ export function useWasm(): UseWasmResult {
   const initialized = useRef(false);
 
   useEffect(() => {
-    if (initialized.current) return;
+    if (!enabled || initialized.current) return;
     initialized.current = true;
+    setLoading(true);
 
     progressListeners.push(setProgress);
 
@@ -201,7 +202,7 @@ export function useWasm(): UseWasmResult {
     return () => {
       progressListeners = progressListeners.filter((l) => l !== setProgress);
     };
-  }, []);
+  }, [enabled]);
 
   return { loading, ready, error, api, progress };
 }

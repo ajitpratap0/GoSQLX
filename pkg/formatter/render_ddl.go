@@ -88,7 +88,7 @@ func renderShow(s *ast.ShowStatement, opts ast.FormatOptions) string {
 	f := newNodeFormatter(opts)
 	sb := f.sb
 
-	if s.ShowType != "" && !ast.IsPlainKeywordText(s.ShowType) {
+	if s.ShowType != "" && !ast.IsShowTypeText(s.ShowType) {
 		// A quoted kind (SHOW "x"): SQL() quotes it; keyword casing does
 		// not apply to it.
 		return s.SQL()

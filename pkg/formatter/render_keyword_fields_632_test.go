@@ -164,8 +164,8 @@ var keywordFieldPayloads = []string{
 // TestKeywordFieldsNeverWrittenRaw_PR632 sets each keyword-valued string
 // field of a parsed statement to hostile text and checks that no renderer
 // (SQL(), compact and readable FormatAST) writes it: keyword fields are
-// written only when they are plain keyword text (or, for small fixed sets,
-// one of the known keywords), so a hand-built AST cannot inject SQL.
+// written only when they are one of the field's known keywords, so a
+// hand-built AST cannot inject SQL.
 func TestKeywordFieldsNeverWrittenRaw_PR632(t *testing.T) {
 	for _, tc := range keywordFieldCases {
 		payloads := keywordFieldPayloads

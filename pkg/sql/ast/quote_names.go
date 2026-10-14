@@ -723,15 +723,16 @@ func customOperatorIsSafe(op *CustomBinaryOperator) bool {
 }
 
 // IsOperatorText reports whether op can be written verbatim as a binary
-// operator: it is keyword text (LIKE, IS DISTINCT FROM, see
-// IsPlainKeywordText) or a run of operator punctuation (=, <>, ->>, #>, @>,
-// ||) that contains no comment opener or closer ("--", "/*", "*/").
+// operator: it is a run of operator punctuation (=, <>, ->>, #>, @>, ||)
+// that contains no comment opener or closer ("--", "/*", "*/"), or exactly
+// one of the keyword operators (AND, LIKE, IS DISTINCT FROM, see
+// binaryWordOperators; any case).
 func IsOperatorText(op string) bool {
-	if IsPlainKeywordText(op) {
-		return true
-	}
 	if op == "" {
 		return false
+	}
+	if c := op[0]; c|0x20 >= 'a' && c|0x20 <= 'z' {
+		return keywordOneOf(op, binaryWordOperators) != ""
 	}
 	for i := 0; i < len(op); i++ {
 		switch op[i] {
@@ -765,6 +766,32 @@ func writeOperator(buf *bytes.Buffer, op string) {
 		return
 	}
 	writeQuotedIdentifier(buf, op)
+}
+
+// writeSetOperator writes a set operator: verbatim when it is one of the
+// known operators (SetOperatorText), and otherwise as UNION followed by the
+// double-quoted text. A quoted token alone would re-parse as an alias of the
+// left query, followed by the right query as a second statement; after UNION
+// the parser requires SELECT or "(", so the fallback fails to parse instead.
+func writeSetOperator(buf *bytes.Buffer, op string) {
+	if SetOperatorText(op) != "" {
+		buf.WriteString(op)
+		return
+	}
+	buf.WriteString("UNION ")
+	writeQuotedIdentifier(buf, op)
+}
+
+// SetOperatorSQL returns op as writeSetOperator writes it, and whether it is
+// a known set operator (in which case the result is op itself).
+func SetOperatorSQL(op string) (string, bool) {
+	if SetOperatorText(op) != "" {
+		return op, true
+	}
+	buf := getBuf()
+	defer putBuf(buf)
+	writeSetOperator(buf, op)
+	return buf.String(), false
 }
 
 // QuoteOperator returns op unchanged when it is operator or keyword text
@@ -841,37 +868,206 @@ func ColumnRefListSQL(exprs []Expression) string {
 	return buf.String()
 }
 
-// IsPlainKeywordText reports whether s is non-empty and made only of ASCII
-// letters, digits, '_' and single spaces between words, i.e. keyword text
-// such as "CREATE TABLE" that can be written bare.
-func IsPlainKeywordText(s string) bool {
-	if s == "" || s[0] == ' ' || s[len(s)-1] == ' ' {
+// Keyword-valued fields (join types, DROP object types, set operators, ...)
+// are written only when they are exactly one of a fixed set of keyword texts,
+// compared ignoring ASCII case with single spaces between words. A looser
+// gate such as "letters and spaces" is not enough: the parser accepts
+// consecutive statements without ';', so a hand-built join type "CROSS JOIN c
+// DROP TABLE pwn SELECT 1 FROM a INNER" would render as three statements.
+// Each set holds every value the parser stores for the field (pinned by
+// TestKeywordAllowListsCoverParserValues_PR632 over testdata/**/*.sql in
+// every dialect) plus a few equivalent spellings a hand-built AST may use.
+var (
+	// joinTypeKeywords: parseJoinType stores INNER, LEFT, RIGHT, FULL, CROSS,
+	// NATURAL [INNER|LEFT|RIGHT|FULL], CROSS APPLY and OUTER APPLY.
+	joinTypeKeywords = []string{
+		"INNER", "LEFT", "RIGHT", "FULL", "CROSS",
+		"LEFT OUTER", "RIGHT OUTER", "FULL OUTER",
+		"NATURAL", "NATURAL INNER", "NATURAL LEFT", "NATURAL RIGHT", "NATURAL FULL",
+		"NATURAL LEFT OUTER", "NATURAL RIGHT OUTER", "NATURAL FULL OUTER",
+		"CROSS APPLY", "OUTER APPLY",
+	}
+	// dropObjectTypeKeywords: the parser stores TABLE, VIEW, MATERIALIZED
+	// VIEW and INDEX; the rest are other DROP-able object kinds.
+	dropObjectTypeKeywords = []string{
+		"TABLE", "VIEW", "MATERIALIZED VIEW", "INDEX",
+		"SEQUENCE", "SCHEMA", "DATABASE", "FUNCTION", "PROCEDURE", "TRIGGER",
+		"TYPE", "DOMAIN", "EXTENSION", "ROLE", "USER",
+	}
+	nullTreatmentKeywords = []string{"IGNORE NULLS", "RESPECT NULLS"}
+	// intervalLeadingFields and intervalTrailingFields mirror the parser's
+	// parseIntervalQualifier: a leading field alone, or "<leading> TO
+	// <trailing>".
+	intervalLeadingFields = []string{
+		"YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND",
+		"WEEK", "QUARTER", "MICROSECOND", "MILLISECOND",
+		"SECOND_MICROSECOND", "MINUTE_MICROSECOND", "MINUTE_SECOND",
+		"HOUR_MICROSECOND", "HOUR_SECOND", "HOUR_MINUTE",
+		"DAY_MICROSECOND", "DAY_SECOND", "DAY_MINUTE", "DAY_HOUR",
+		"YEAR_MONTH",
+	}
+	intervalTrailingFields = []string{"MONTH", "HOUR", "MINUTE", "SECOND"}
+	// setOperatorKeywords: the parser stores the UNION / EXCEPT / INTERSECT
+	// token as written (MINUS is normalised to EXCEPT; ALL is a separate
+	// flag). MINUS itself is left out: outside Oracle and Snowflake it would
+	// re-parse as a table alias followed by a second statement.
+	setOperatorKeywords = []string{
+		"UNION", "EXCEPT", "INTERSECT",
+		"UNION ALL", "EXCEPT ALL", "INTERSECT ALL",
+		"UNION DISTINCT", "EXCEPT DISTINCT", "INTERSECT DISTINCT",
+	}
+	// binaryWordOperators are the keyword forms of binary operators: the
+	// parser stores AND, OR, NOT, LIKE / ILIKE [ANY|ALL], REGEXP, RLIKE,
+	// IS NULL and AGAINST; the rest are standard keyword operators.
+	binaryWordOperators = []string{
+		"AND", "OR", "XOR", "NOT",
+		"LIKE", "ILIKE", "NOT LIKE", "NOT ILIKE",
+		"LIKE ANY", "LIKE ALL", "ILIKE ANY", "ILIKE ALL",
+		"SIMILAR TO", "NOT SIMILAR TO",
+		"REGEXP", "RLIKE", "NOT REGEXP", "NOT RLIKE",
+		"IS NULL", "IS NOT NULL", "IS", "IS NOT",
+		"IS DISTINCT FROM", "IS NOT DISTINCT FROM",
+		"IN", "NOT IN", "AGAINST", "DIV", "MOD", "OVERLAPS", "GLOB",
+	}
+	// columnConstraintKeywords: the constraint kinds columnConstraintSQL
+	// writes as bare keyword text (the parser stores NULL, AUTO_INCREMENT and
+	// GENERATED ALWAYS AS ROW START / END; the others in any case).
+	columnConstraintKeywords = []string{
+		"NOT NULL", "NULL", "UNIQUE", "PRIMARY KEY", "AUTO_INCREMENT",
+		"GENERATED ALWAYS AS ROW START", "GENERATED ALWAYS AS ROW END",
+	}
+	partitionByKeywords = []string{"RANGE", "LIST", "HASH", "KEY", "LINEAR HASH", "LINEAR KEY"}
+	// alterTableActionKeywords: the legacy AlterTableStatement (never produced
+	// by the parser) writes an action other than its explicit cases as bare
+	// keyword text.
+	alterTableActionKeywords = []string{
+		"ADD COLUMN", "DROP COLUMN", "ADD CONSTRAINT", "DROP CONSTRAINT",
+		"ALTER COLUMN", "RENAME COLUMN", "RENAME TO",
+	}
+	// tableOptionNames: the parser stores ENGINE, CHARSET, COLLATE and
+	// COMMENT as written.
+	tableOptionNames = []string{
+		"ENGINE", "CHARSET", "DEFAULT CHARSET", "CHARACTER SET", "DEFAULT CHARACTER SET",
+		"COLLATE", "DEFAULT COLLATE", "COMMENT", "AUTO_INCREMENT", "ROW_FORMAT",
+	}
+	viewWithOptionKeywords = []string{"CHECK OPTION", "CASCADED CHECK OPTION", "LOCAL CHECK OPTION"}
+	// mergeWhenKeywords: the parser stores MATCHED, NOT_MATCHED and
+	// NOT_MATCHED_BY_SOURCE, which the renderers spell out; a hand-built AST
+	// may also use the spelled-out forms.
+	mergeWhenKeywords = []string{"MATCHED", "NOT MATCHED", "NOT MATCHED BY SOURCE", "NOT MATCHED BY TARGET"}
+	// mergeActionKeywords: the actions written as bare keyword text (UPDATE
+	// and INSERT carry their own clauses and are written by the renderers).
+	mergeActionKeywords = []string{"DELETE", "DO NOTHING"}
+)
+
+// JoinTypeText returns s when it is a join type (see joinTypeKeywords; any
+// case) and "" otherwise. Renderers write an unknown join type as a plain
+// JOIN: the type is an optional modifier, and dropping it keeps the join
+// inside the statement.
+func JoinTypeText(s string) string { return keywordOneOf(s, joinTypeKeywords) }
+
+// DropObjectTypeText returns s when it is a DROP object type (TABLE, VIEW,
+// MATERIALIZED VIEW, INDEX, ...; any case) and "" otherwise. Renderers then
+// write "DROP  name", which does not parse: guessing an object type would
+// silently change what is dropped.
+func DropObjectTypeText(s string) string { return keywordOneOf(s, dropObjectTypeKeywords) }
+
+// NullTreatmentText returns s when it is IGNORE NULLS or RESPECT NULLS (any
+// case) and "" otherwise; an unknown null treatment is dropped.
+func NullTreatmentText(s string) string { return keywordOneOf(s, nullTreatmentKeywords) }
+
+// IntervalQualifierText returns s when it is an interval qualifier the parser
+// produces (a datetime field or MySQL unit such as DAY or YEAR_MONTH, or
+// "<field> TO <field>" such as DAY TO SECOND; any case) and "" otherwise; an
+// unknown qualifier is dropped.
+func IntervalQualifierText(s string) string {
+	if keywordOneOf(s, intervalLeadingFields) != "" {
+		return s
+	}
+	lead, rest, ok := strings.Cut(s, " ")
+	if !ok || len(rest) < 3 || !strings.EqualFold(rest[:3], "TO ") {
+		return ""
+	}
+	if keywordOneOf(lead, intervalLeadingFields) == "" ||
+		keywordOneOf(rest[3:], intervalTrailingFields) == "" {
+		return ""
+	}
+	return s
+}
+
+// SetOperatorText returns s when it is a set operator (UNION, EXCEPT,
+// INTERSECT, optionally followed by ALL or DISTINCT; any case) and ""
+// otherwise. Dropping an unknown operator would merge the two queries into
+// consecutive statements, so renderers write it as UNION followed by the
+// double-quoted text (see writeSetOperator), which fails to parse.
+func SetOperatorText(s string) string { return keywordOneOf(s, setOperatorKeywords) }
+
+// ColumnConstraintText returns s when it is a column constraint kind written
+// as bare keyword text (see columnConstraintKeywords; any case) and ""
+// otherwise; an unknown constraint is dropped.
+func ColumnConstraintText(s string) string { return keywordOneOf(s, columnConstraintKeywords) }
+
+// PartitionByText returns s when it is a PARTITION BY method (RANGE, LIST,
+// HASH, KEY, LINEAR HASH, LINEAR KEY; any case) and "" otherwise. Renderers
+// then write "PARTITION BY  (cols)", which does not parse.
+func PartitionByText(s string) string { return keywordOneOf(s, partitionByKeywords) }
+
+// AlterTableActionText returns s when it is an ALTER TABLE action keyword
+// (see alterTableActionKeywords; any case) and "" otherwise; an unknown
+// action is dropped, leaving an ALTER TABLE that does not parse.
+func AlterTableActionText(s string) string { return keywordOneOf(s, alterTableActionKeywords) }
+
+// TableOptionNameText returns s when it is a table option name (ENGINE,
+// CHARSET, COLLATE, COMMENT, ...; any case) and "" otherwise; an option with
+// an unknown name is dropped.
+func TableOptionNameText(s string) string { return keywordOneOf(s, tableOptionNames) }
+
+// ViewWithOptionText returns s when it is a view WITH option (CHECK OPTION,
+// CASCADED CHECK OPTION, LOCAL CHECK OPTION; any case) and "" otherwise; an
+// unknown option is dropped.
+func ViewWithOptionText(s string) string { return keywordOneOf(s, viewWithOptionKeywords) }
+
+// MergeWhenText returns s when it is a spelled-out MERGE WHEN kind (MATCHED,
+// NOT MATCHED [BY SOURCE|BY TARGET]; any case) and "" otherwise. Renderers
+// write the parser's NOT_MATCHED forms themselves; for an unknown kind they
+// write "WHEN  THEN", which does not parse.
+func MergeWhenText(s string) string { return keywordOneOf(s, mergeWhenKeywords) }
+
+// MergeActionText returns s when it is a MERGE action written as bare
+// keyword text (DELETE, DO NOTHING; any case) and "" otherwise; renderers
+// write UPDATE and INSERT themselves, and for an unknown action leave "THEN"
+// without one, which does not parse.
+func MergeActionText(s string) string { return keywordOneOf(s, mergeActionKeywords) }
+
+// isShowWord reports whether s is one bare word: an ASCII letter or '_'
+// followed by letters, digits and '_'.
+func isShowWord(s string) bool {
+	if s == "" || (s[0] >= '0' && s[0] <= '9') {
 		return false
 	}
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-		if c == '_' || (c|0x20 >= 'a' && c|0x20 <= 'z') || (c >= '0' && c <= '9') {
-			continue
+		if c != '_' && (c|0x20 < 'a' || c|0x20 > 'z') && (c < '0' || c > '9') {
+			return false
 		}
-		if c == ' ' && s[i-1] != ' ' {
-			continue
-		}
-		return false
 	}
 	return true
 }
 
-// KeywordText returns s when it is plain keyword text (IsPlainKeywordText)
-// and "" otherwise. Renderers pass every free-text keyword field (a join
-// type, a constraint or table-option kind, a DROP object type, a MERGE WHEN
-// kind) through it: the parser only stores keyword text there, so anything
-// else can only come from a hand-built AST and is dropped rather than written
-// raw, where it could end the statement or open a comment or string.
-func KeywordText(s string) string {
-	if IsPlainKeywordText(s) {
-		return s
+// IsShowTypeText reports whether a SHOW statement kind can be written bare:
+// it is one word (TABLES, PROCESSLIST) or CREATE followed by one word (CREATE
+// TABLE). The parser stores the upper-cased text of any single token after
+// SHOW (or SHOW CREATE), so the kind is not a closed set, but it never holds
+// more than one word after the optional CREATE; SHOW and SHOW CREATE consume
+// exactly that word, so a bare word cannot start another statement.
+func IsShowTypeText(s string) bool {
+	if isShowWord(s) {
+		return true
 	}
-	return ""
+	if len(s) > 7 && strings.EqualFold(s[:7], "CREATE ") {
+		return isShowWord(s[7:])
+	}
+	return false
 }
 
 // keywordOneOf returns s when it equals one of allowed, ignoring ASCII case,
@@ -974,12 +1170,14 @@ func IsPlainNumberText(s string) bool {
 	return digits
 }
 
-// writeShowType writes the SHOW statement kind. Keyword text (TABLES,
-// CREATE TABLE) is written as is; the parser also stores the upper-cased
-// text of a quoted kind (SHOW "x", SHOW CREATE "x" name), which is quoted so
-// it re-parses to the same kind.
+// writeShowType writes the SHOW statement kind. A bare word or CREATE plus
+// a bare word (TABLES, CREATE TABLE, see IsShowTypeText) is written as is;
+// the parser also stores the upper-cased text of a quoted kind (SHOW "x",
+// SHOW CREATE "x" name), and any other text can only come from a hand-built
+// AST: both are written as one double-quoted token, which SHOW consumes as
+// the kind, so the text cannot start another statement.
 func writeShowType(buf *bytes.Buffer, t string) {
-	if t == "" || IsPlainKeywordText(t) {
+	if t == "" || IsShowTypeText(t) {
 		buf.WriteString(t)
 		return
 	}

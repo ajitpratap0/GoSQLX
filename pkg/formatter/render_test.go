@@ -582,7 +582,7 @@ func TestRenderCreateView_WithOption(t *testing.T) {
 	stmt := &ast.CreateViewStatement{
 		Name:       "v",
 		Query:      &ast.SelectStatement{Columns: []ast.Expression{&ast.Identifier{Name: "1"}}},
-		WithOption: "WITH CHECK OPTION",
+		WithOption: "CHECK OPTION",
 	}
 	result := fmtStmt(stmt, ast.ReadableStyle())
 	if !strings.Contains(result, "WITH CHECK OPTION") {

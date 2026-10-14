@@ -660,12 +660,13 @@ func renderCreateTable(c *ast.CreateTableStatement, opts ast.FormatOptions) stri
 	if c.PartitionBy != nil {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("PARTITION BY"))
-		fmt.Fprintf(sb, " %s (%s)", ast.KeywordText(c.PartitionBy.Type), quoteColumnNames(c.PartitionBy.Columns))
+		// An unknown method is left out: "PARTITION BY  (cols)" does not parse.
+		fmt.Fprintf(sb, " %s (%s)", ast.PartitionByText(c.PartitionBy.Type), quoteColumnNames(c.PartitionBy.Columns))
 	}
 
 	for _, opt := range c.Options {
-		// Only keyword-text option names (ENGINE, CHARSET) are written.
-		if !ast.IsPlainKeywordText(opt.Name) {
+		// Only known option names (ENGINE, CHARSET) are written.
+		if ast.TableOptionNameText(opt.Name) == "" {
 			continue
 		}
 		fmt.Fprintf(sb, " %s=%s", opt.Name, ast.QuoteTableOptionValue(opt.Value))
@@ -720,12 +721,11 @@ func renderSetOperation(s *ast.SetOperation, opts ast.FormatOptions) string {
 	for i := len(spine) - 1; i >= 0; i-- {
 		level := spine[i]
 		sb.WriteString(f.clauseSep())
-		// The operator is keyword text (UNION, EXCEPT); anything else can only
-		// come from a hand-built AST and is double-quoted, never written raw.
-		op := level.Operator
-		if !ast.IsPlainKeywordText(op) {
-			op = ast.QuoteOperator(op)
-		} else {
+		// The operator is UNION, EXCEPT or INTERSECT; anything else can only
+		// come from a hand-built AST and is written as UNION followed by the
+		// double-quoted text, which fails to parse (see ast.SetOperatorSQL).
+		op, known := ast.SetOperatorSQL(level.Operator)
+		if known {
 			op = f.kw(op)
 		}
 		if level.All {
@@ -766,7 +766,7 @@ func renderAlterTable(a *ast.AlterTableStatement, opts ast.FormatOptions) string
 			sb.WriteString(",")
 		}
 		sb.WriteString(f.clauseSep())
-		sb.WriteString(f.kw(ast.KeywordText(action.Type)))
+		sb.WriteString(f.kw(ast.AlterTableActionText(action.Type)))
 		if action.ColumnDef != nil {
 			sb.WriteString(" ")
 			sb.WriteString(columnDefSQL(action.ColumnDef))
@@ -886,10 +886,10 @@ func renderCreateView(c *ast.CreateViewStatement, opts ast.FormatOptions) string
 	sb.WriteString(f.clauseSep())
 	sb.WriteString(FormatStatement(c.Query, nestedOpts(opts)))
 
-	// WithOption is keyword text (CHECK OPTION, LOCAL CHECK OPTION) written
+	// WithOption is CHECK OPTION, CASCADED or LOCAL CHECK OPTION, written
 	// after WITH; anything else can only come from a hand-built AST and is
 	// dropped rather than written raw.
-	if c.WithOption != "" && ast.IsPlainKeywordText(c.WithOption) {
+	if ast.ViewWithOptionText(c.WithOption) != "" {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("WITH"))
 		sb.WriteString(" ")
@@ -992,7 +992,8 @@ func renderDrop(d *ast.DropStatement, opts ast.FormatOptions) string {
 
 	sb.WriteString(f.kw("DROP"))
 	sb.WriteString(" ")
-	sb.WriteString(f.kw(ast.KeywordText(d.ObjectType)))
+	// An unknown object type is left out: "DROP  name" does not parse.
+	sb.WriteString(f.kw(ast.DropObjectTypeText(d.ObjectType)))
 	sb.WriteString(" ")
 	if d.IfExists {
 		sb.WriteString(f.kw("IF EXISTS"))
@@ -1086,7 +1087,8 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 		case "NOT_MATCHED_BY_SOURCE":
 			sb.WriteString(f.kw("NOT MATCHED BY SOURCE"))
 		default:
-			sb.WriteString(f.kw(ast.KeywordText(when.Type)))
+			// An unknown kind is left out: "WHEN  THEN" does not parse.
+			sb.WriteString(f.kw(ast.MergeWhenText(when.Type)))
 		}
 		if when.Condition != nil {
 			sb.WriteString(" ")
@@ -1492,7 +1494,8 @@ func sampleSQL(s *ast.SampleClause, f *nodeFormatter) string {
 // joinSQL renders a JOIN clause.
 func joinSQL(j *ast.JoinClause, f *nodeFormatter) string {
 	var sb strings.Builder
-	if t := ast.KeywordText(j.Type); t != "" {
+	// An unknown join type is dropped, leaving a plain JOIN.
+	if t := ast.JoinTypeText(j.Type); t != "" {
 		sb.WriteString(f.kw(t))
 		sb.WriteString(" ")
 	}
@@ -1671,7 +1674,8 @@ func columnConstraintSQL(c *ast.ColumnConstraint) string {
 		if c.AutoIncrement {
 			return "AUTO_INCREMENT"
 		}
-		return ast.KeywordText(c.Type)
+		// An unknown constraint kind is dropped.
+		return ast.ColumnConstraintText(c.Type)
 	}
 }
 
@@ -1704,7 +1708,9 @@ func tableConstraintSQL(tc *ast.TableConstraint) string {
 		sb.WriteString(exprSQL(tc.Check))
 		sb.WriteString(")")
 	default:
-		sb.WriteString(ast.KeywordText(tc.Type))
+		// The parser only stores the kinds above; any other kind can only
+		// come from a hand-built AST and is dropped, leaving a constraint
+		// without a kind, which does not parse.
 	}
 	return sb.String()
 }

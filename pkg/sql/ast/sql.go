@@ -774,9 +774,9 @@ func (f *FunctionCall) writeSQL(buf *bytes.Buffer) {
 		writeOrderBy(buf, f.OrderBy)
 	}
 	buf.WriteByte(')')
-	// NullTreatment is keyword text (IGNORE NULLS); anything else can only
+	// NullTreatment is IGNORE NULLS or RESPECT NULLS; anything else can only
 	// come from a hand-built AST and is dropped rather than written raw.
-	if f.NullTreatment != "" && IsPlainKeywordText(f.NullTreatment) {
+	if NullTreatmentText(f.NullTreatment) != "" {
 		buf.WriteByte(' ')
 		buf.WriteString(f.NullTreatment)
 	}
@@ -912,7 +912,7 @@ func (i *IntervalExpression) SQL() string {
 	if i == nil {
 		return ""
 	}
-	if !stringLiteralNeedsEscape(i.Value) && (i.Qualifier == "" || IsPlainKeywordText(i.Qualifier)) {
+	if !stringLiteralNeedsEscape(i.Value) && (i.Qualifier == "" || IntervalQualifierText(i.Qualifier) != "") {
 		if i.Qualifier != "" {
 			return "INTERVAL '" + i.Value + "' " + i.Qualifier
 		}
@@ -930,9 +930,10 @@ func (i *IntervalExpression) writeSQL(buf *bytes.Buffer) {
 	}
 	buf.WriteString("INTERVAL ")
 	writeStringLiteral(buf, i.Value)
-	// The qualifier is keyword text (DAY, YEAR TO MONTH); anything else can
-	// only come from a hand-built AST and is dropped rather than written raw.
-	if i.Qualifier != "" && IsPlainKeywordText(i.Qualifier) {
+	// The qualifier is a known interval qualifier (DAY, YEAR TO MONTH, see
+	// IntervalQualifierText); anything else can only come from a hand-built
+	// AST and is dropped rather than written raw.
+	if IntervalQualifierText(i.Qualifier) != "" {
 		buf.WriteByte(' ')
 		buf.WriteString(i.Qualifier)
 	}
@@ -1492,16 +1493,18 @@ func (c *CreateTableStatement) SQL() string {
 
 	if c.PartitionBy != nil {
 		sb.WriteString(" PARTITION BY ")
-		sb.WriteString(KeywordText(c.PartitionBy.Type))
+		// An unknown method is left out: "PARTITION BY  (cols)" does not parse.
+		sb.WriteString(PartitionByText(c.PartitionBy.Type))
 		sb.WriteString(" (")
 		writeColumnNameList(sb, c.PartitionBy.Columns)
 		sb.WriteString(")")
 	}
 
 	for _, opt := range c.Options {
-		// The option name is keyword text (ENGINE, CHARSET); an option with
-		// any other name can only come from a hand-built AST and is dropped.
-		if !IsPlainKeywordText(opt.Name) {
+		// The option name is a known table option (ENGINE, CHARSET); an
+		// option with any other name can only come from a hand-built AST and
+		// is dropped.
+		if TableOptionNameText(opt.Name) == "" {
 			continue
 		}
 		sb.WriteByte(' ')
@@ -1587,7 +1590,8 @@ func (d *DropStatement) SQL() string {
 	sb := getBuf()
 	defer putBuf(sb)
 	sb.WriteString("DROP ")
-	sb.WriteString(KeywordText(d.ObjectType))
+	// An unknown object type is left out: "DROP  name" does not parse.
+	sb.WriteString(DropObjectTypeText(d.ObjectType))
 	sb.WriteString(" ")
 	if d.IfExists {
 		sb.WriteString("IF EXISTS ")
@@ -1674,7 +1678,7 @@ func (s *SetOperation) writeSQL(buf *bytes.Buffer) {
 		writeStmt(buf, s.Left)
 	}
 	buf.WriteByte(' ')
-	writeOperator(buf, s.Operator)
+	writeSetOperator(buf, s.Operator)
 	if s.All {
 		buf.WriteString(" ALL")
 	}
@@ -1736,9 +1740,9 @@ func (c *CreateViewStatement) SQL() string {
 	}
 	sb.WriteString(" AS ")
 	sb.WriteString(stmtSQL(c.Query))
-	// WithOption is keyword text (CHECK OPTION, LOCAL CHECK OPTION); anything
+	// WithOption is CHECK OPTION, CASCADED or LOCAL CHECK OPTION; anything
 	// else can only come from a hand-built AST and is dropped.
-	if c.WithOption != "" && IsPlainKeywordText(c.WithOption) {
+	if ViewWithOptionText(c.WithOption) != "" {
 		sb.WriteString(" WITH ")
 		sb.WriteString(c.WithOption)
 	}
@@ -1829,7 +1833,8 @@ func (m *MergeStatement) SQL() string {
 		case "NOT_MATCHED_BY_SOURCE":
 			sb.WriteString("NOT MATCHED BY SOURCE")
 		default:
-			sb.WriteString(KeywordText(when.Type))
+			// An unknown kind is left out: "WHEN  THEN" does not parse.
+			sb.WriteString(MergeWhenText(when.Type))
 		}
 		if when.Condition != nil {
 			sb.WriteString(" AND ")
@@ -2189,7 +2194,8 @@ func writeTableRefList(buf *bytes.Buffer, refs []TableReference) {
 }
 
 func writeJoin(buf *bytes.Buffer, j *JoinClause) {
-	if t := KeywordText(j.Type); t != "" {
+	// An unknown join type is dropped, leaving a plain JOIN.
+	if t := JoinTypeText(j.Type); t != "" {
 		buf.WriteString(t)
 		buf.WriteByte(' ')
 	}
@@ -2417,7 +2423,8 @@ func columnConstraintSQL(c *ColumnConstraint) string {
 		if c.AutoIncrement {
 			return "AUTO_INCREMENT"
 		}
-		return KeywordText(c.Type)
+		// An unknown constraint kind is dropped.
+		return ColumnConstraintText(c.Type)
 	}
 }
 
@@ -2450,7 +2457,9 @@ func tableConstraintSQL(tc *TableConstraint) string {
 		sb.WriteString(exprSQL(tc.Check))
 		sb.WriteString(")")
 	default:
-		sb.WriteString(KeywordText(tc.Type))
+		// The parser only stores the kinds above; any other kind can only
+		// come from a hand-built AST and is dropped, leaving a constraint
+		// without a kind, which does not parse.
 	}
 	return sb.String()
 }
@@ -2492,7 +2501,8 @@ func alterActionSQL(a *AlterTableAction) string {
 		}
 		return "ADD CONSTRAINT"
 	default:
-		return KeywordText(a.Type)
+		// An unknown action is dropped (see AlterTableActionText).
+		return AlterTableActionText(a.Type)
 	}
 }
 
@@ -2534,7 +2544,8 @@ func mergeActionSQL(a *MergeAction) string {
 	case "DELETE":
 		return "DELETE"
 	default:
-		return KeywordText(a.ActionType)
+		// An unknown action is dropped: "THEN" without one does not parse.
+		return MergeActionText(a.ActionType)
 	}
 }
 

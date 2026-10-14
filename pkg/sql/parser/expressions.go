@@ -348,8 +348,8 @@ func (p *Parser) parseDataType() (string, error) {
 				return "", goerrors.InvalidSyntaxError(
 					fmt.Sprintf("expected numeric type parameter, got '%s'", p.currentToken.Token.Value),
 					p.currentLocation(),
-					"Use TYPE(precision[, scale]) syntax",
-				)
+					"",
+				).WithHint("Use TYPE(precision[, scale]) syntax")
 			}
 
 			sb.WriteString(p.currentToken.Token.Value)

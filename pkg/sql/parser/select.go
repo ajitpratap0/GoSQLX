@@ -388,8 +388,8 @@ func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
 			"column expression",
 			"FROM",
 			p.currentLocation(),
-			"SELECT requires at least one column expression before FROM",
-		)
+			"",
+		).WithHint("SELECT requires at least one column expression before FROM")
 	}
 
 	columns := make([]ast.Expression, 0, 8)

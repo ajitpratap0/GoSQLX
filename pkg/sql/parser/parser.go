@@ -16,6 +16,8 @@ package parser
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -866,7 +868,7 @@ func (p *Parser) parseSnowflakeUseStatement() (ast.Statement, error) {
 	}
 	name, err := p.parseQualifiedName()
 	if err != nil {
-		return nil, p.expectedError("name after USE")
+		return nil, p.qualifiedNameError(err, "name after USE")
 	}
 	rawParts = append(rawParts, name)
 	stmt := ast.GetUnsupportedStatement()
@@ -949,8 +951,8 @@ func (p *Parser) checkStrictEmpty() error {
 		return goerrors.InvalidSyntaxError(
 			"empty statement not allowed in strict mode",
 			p.currentLocation(),
-			"provide at least one SQL statement",
-		)
+			"",
+		).WithHint("provide at least one SQL statement")
 	}
 	return nil
 }
@@ -961,8 +963,8 @@ func (p *Parser) checkStrictEmptySemicolon() error {
 		return goerrors.InvalidSyntaxError(
 			"empty statement not allowed in strict mode",
 			p.currentLocation(),
-			"remove extra semicolons or disable strict mode",
-		)
+			"",
+		).WithHint("remove extra semicolons or disable strict mode")
 	}
 	return nil
 }
@@ -1139,26 +1141,67 @@ func (p *Parser) parseStringLiteral() string {
 	return value
 }
 
-// parseQualifiedName parses a potentially schema-qualified name (e.g., schema.table or db.schema.table).
-// Returns the full dotted name as a string. Supports up to 3-part names.
+// maxQualifiedNameParts caps the number of dot-separated parts in a qualified
+// object (table, view, index, schema) name. Four parts cover the longest form
+// any supported dialect accepts (SQL Server server.database.schema.table); the
+// limit matches maxColumnRefParts so object and column references agree.
+const maxQualifiedNameParts = maxColumnRefParts
+
+// errQualifiedNameTooLong is the Cause of the E2004 that parseQualifiedName
+// returns for a name with more than maxQualifiedNameParts parts.
+var errQualifiedNameTooLong = errors.New("qualified name has too many parts")
+
+// isQualifiedNameTooLong reports whether err is the part-limit error from
+// parseQualifiedName. Callers that re-report a bad name in their own words
+// ("expected table name") must pass this error through unchanged: it is raised
+// after the extra '.' is consumed, so a generic message would point at a
+// valid identifier.
+func isQualifiedNameTooLong(err error) bool {
+	return errors.Is(err, errQualifiedNameTooLong)
+}
+
+// qualifiedNameError returns err when it is the part-limit error from
+// parseQualifiedName and p.expectedError(expected) otherwise.
+func (p *Parser) qualifiedNameError(err error, expected string) error {
+	if isQualifiedNameTooLong(err) {
+		return err
+	}
+	return p.expectedError(expected)
+}
+
+// parseQualifiedName parses a possibly qualified object name (table,
+// schema.table, db.schema.table, server.db.schema.table) and returns it as a
+// dotted string. The parts are collected and joined once, so the cost is
+// linear in the input, and names with more than maxQualifiedNameParts parts
+// are rejected with E2004.
 func (p *Parser) parseQualifiedName() (string, error) {
 	if !p.isIdentifier() && !p.isNonReservedKeyword() {
 		return "", p.expectedError("identifier")
 	}
-	name := p.currentToken.Token.Value
+	var parts [maxQualifiedNameParts]string
+	parts[0] = p.currentToken.Token.Value
+	n := 1
 	p.advance()
 
 	// Check for schema.table or db.schema.table
 	for p.isType(models.TokenTypePeriod) {
 		p.advance() // Consume .
+		if n == maxQualifiedNameParts {
+			return "", goerrors.InvalidSyntaxError(
+				fmt.Sprintf("qualified name has more than %d parts", maxQualifiedNameParts),
+				p.currentLocation(),
+				"",
+			).WithCause(errQualifiedNameTooLong)
+		}
 		if !p.isIdentifier() && !p.isNonReservedKeyword() {
 			return "", p.expectedError("identifier after .")
 		}
-		name = name + "." + p.currentToken.Token.Value
+		parts[n] = p.currentToken.Token.Value
+		n++
 		p.advance()
 	}
 
-	return name, nil
+	return strings.Join(parts[:n], "."), nil
 }
 
 // Accepts IDENT or non-reserved keywords that can be used as table names

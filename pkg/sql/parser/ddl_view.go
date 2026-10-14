@@ -48,7 +48,7 @@ func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStat
 	// Parse view name (supports schema.view qualification and double-quoted identifiers)
 	viewName, err := p.parseQualifiedName()
 	if err != nil {
-		return nil, p.expectedError("view name")
+		return nil, p.qualifiedNameError(err, "view name")
 	}
 	stmt.Name = viewName
 
@@ -152,7 +152,7 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 	// Parse view name (supports schema.view qualification and double-quoted identifiers)
 	matViewName, err := p.parseQualifiedName()
 	if err != nil {
-		return nil, p.expectedError("materialized view name")
+		return nil, p.qualifiedNameError(err, "materialized view name")
 	}
 	stmt.Name = matViewName
 
@@ -193,7 +193,7 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 		p.advance() // Consume TO
 		toName, toErr := p.parseQualifiedName()
 		if toErr != nil {
-			return nil, p.expectedError("target table after TO")
+			return nil, p.qualifiedNameError(toErr, "target table after TO")
 		}
 		stmt.Tablespace = toName // reuse Tablespace for ClickHouse TO
 	}
@@ -279,7 +279,7 @@ func (p *Parser) parseRefreshStatement() (*ast.RefreshMaterializedViewStatement,
 	// Parse view name (supports schema.view qualification and double-quoted identifiers)
 	refreshViewName, err := p.parseQualifiedName()
 	if err != nil {
-		return nil, p.expectedError("materialized view name")
+		return nil, p.qualifiedNameError(err, "materialized view name")
 	}
 	stmt.Name = refreshViewName
 

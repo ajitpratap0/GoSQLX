@@ -127,8 +127,14 @@ func (p *Parser) parseCreateStatement() (ast.Statement, error) {
 					p.advance()
 				}
 			}
-			// Object name (qualified identifier)
-			name, _ := p.parseQualifiedName()
+			// Object name (qualified identifier). Other name errors are
+			// tolerated by this permissive stub, but an over-long name is
+			// rejected: the limit fires mid-name, and scanning on would
+			// record only its tail in RawSQL.
+			name, err := p.parseQualifiedName()
+			if isQualifiedNameTooLong(err) {
+				return nil, err
+			}
 			if name != "" {
 				rawParts = append(rawParts, name)
 			}
@@ -186,7 +192,7 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 	// Parse table name (supports schema.table qualification and double-quoted identifiers)
 	createTableName, err := p.parseQualifiedName()
 	if err != nil {
-		return nil, p.expectedError("table name")
+		return nil, p.qualifiedNameError(err, "table name")
 	}
 	stmt.Name = createTableName
 
@@ -672,7 +678,7 @@ func (p *Parser) parseDropStatement() (*ast.DropStatement, error) {
 	for {
 		dropName, err := p.parseQualifiedName()
 		if err != nil {
-			return nil, p.expectedError("object name")
+			return nil, p.qualifiedNameError(err, "object name")
 		}
 		stmt.Names = append(stmt.Names, dropName)
 
@@ -709,7 +715,7 @@ func (p *Parser) parseTruncateStatement() (*ast.TruncateStatement, error) {
 	for {
 		truncTableName, err := p.parseQualifiedName()
 		if err != nil {
-			return nil, p.expectedError("table name")
+			return nil, p.qualifiedNameError(err, "table name")
 		}
 		stmt.Tables = append(stmt.Tables, truncTableName)
 

@@ -133,7 +133,7 @@
 //	}
 //	defer tree.Release()
 //	fmt.Println(tree.Tables())   // [users]
-//	fmt.Println(tree.Columns())  // [id name active]
+//	fmt.Println(tree.Columns())  // [active id name]
 //	fmt.Println(tree.Format())   // formatted SQL, no re-parse
 //
 // Tree also provides Walk, Functions, Statements, Rewrite, Clone and Raw (an

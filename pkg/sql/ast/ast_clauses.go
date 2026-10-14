@@ -284,9 +284,12 @@ func (w WindowSpec) Children() []Node {
 
 // WindowFrame represents window frame clause
 type WindowFrame struct {
-	Type  string // ROWS, RANGE
+	Type  string // ROWS, RANGE or GROUPS
 	Start WindowFrameBound
 	End   *WindowFrameBound
+	// Exclude is the optional frame exclusion (SQL:2011): "CURRENT ROW",
+	// "GROUP", "TIES" or "NO OTHERS". Empty when absent.
+	Exclude string
 }
 
 func (w *WindowFrame) statementNode()      {}

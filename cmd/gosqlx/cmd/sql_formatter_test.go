@@ -261,6 +261,11 @@ func TestSQLFormatter_WindowFunctions(t *testing.T) {
 			expectWords: []string{"select", "over", "order by", "rows", "3 preceding"},
 			rejectWords: []string{"between"},
 		},
+		{
+			name:        "Window frame GROUPS with EXCLUDE (#609)",
+			sql:         "SELECT date, SUM(amount) OVER (ORDER BY date GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW EXCLUDE TIES) FROM transactions",
+			expectWords: []string{"groups", "between", "1 preceding", "current row", "exclude ties"},
+		},
 	}
 
 	for _, tt := range tests {

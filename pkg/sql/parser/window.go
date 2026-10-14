@@ -454,10 +454,10 @@ func (p *Parser) parseWindowSpec() (*ast.WindowSpec, error) {
 		}
 	}
 
-	// Parse frame clause (ROWS/RANGE with bounds)
-	if p.isAnyType(models.TokenTypeRows, models.TokenTypeRange) {
+	// Parse frame clause (ROWS/RANGE/GROUPS with bounds)
+	if p.isAnyType(models.TokenTypeRows, models.TokenTypeRange, models.TokenTypeGroups) {
 		frameType := p.currentToken.Token.Value
-		p.advance() // Consume ROWS/RANGE
+		p.advance() // Consume ROWS/RANGE/GROUPS
 
 		frameClause, err := p.parseWindowFrame(frameType)
 		if err != nil {
@@ -514,7 +514,51 @@ func (p *Parser) parseWindowFrame(frameType string) (*ast.WindowFrame, error) {
 		// End is nil for single bound
 	}
 
+	// Optional frame exclusion (SQL:2011)
+	if p.isType(models.TokenTypeExclude) {
+		excl, err := p.parseFrameExclusion()
+		if err != nil {
+			return nil, err
+		}
+		frame.Exclude = excl
+	}
+
 	return frame, nil
+}
+
+// parseFrameExclusion parses the SQL:2011 frame exclusion that may follow the
+// frame bounds and returns its canonical upper-case text:
+//
+//	EXCLUDE CURRENT ROW | EXCLUDE GROUP | EXCLUDE TIES | EXCLUDE NO OTHERS
+//
+// The current token must be EXCLUDE.
+func (p *Parser) parseFrameExclusion() (string, error) {
+	p.advance() // Consume EXCLUDE
+
+	switch {
+	case p.isType(models.TokenTypeCurrent):
+		p.advance() // Consume CURRENT
+		if !p.isType(models.TokenTypeRow) {
+			return "", p.expectedError("ROW after EXCLUDE CURRENT")
+		}
+		p.advance() // Consume ROW
+		return "CURRENT ROW", nil
+	case p.isType(models.TokenTypeGroup):
+		p.advance() // Consume GROUP
+		return "GROUP", nil
+	case p.isType(models.TokenTypeTies):
+		p.advance() // Consume TIES
+		return "TIES", nil
+	case p.isType(models.TokenTypeIdentifier) && equalsUpper(p.currentToken.Token.Value, "NO"):
+		p.advance() // Consume NO
+		if !p.isType(models.TokenTypeIdentifier) || !equalsUpper(p.currentToken.Token.Value, "OTHERS") {
+			return "", p.expectedError("OTHERS after EXCLUDE NO")
+		}
+		p.advance() // Consume OTHERS
+		return "NO OTHERS", nil
+	default:
+		return "", p.expectedError("CURRENT ROW, GROUP, TIES or NO OTHERS after EXCLUDE")
+	}
 }
 
 // parseFrameBound parses a window frame bound

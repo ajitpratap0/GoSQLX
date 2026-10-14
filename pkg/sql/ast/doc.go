@@ -367,12 +367,13 @@
 //	    FrameClause *WindowFrame          // Frame specification
 //	}
 //
-// WindowFrame: Frame clause (ROWS/RANGE)
+// WindowFrame: Frame clause (ROWS/RANGE/GROUPS)
 //
 //	type WindowFrame struct {
-//	    Type  string            // ROWS or RANGE
-//	    Start WindowFrameBound  // Starting bound
-//	    End   *WindowFrameBound // Optional ending bound
+//	    Type    string            // ROWS, RANGE or GROUPS
+//	    Start   WindowFrameBound  // Starting bound
+//	    End     *WindowFrameBound // Optional ending bound
+//	    Exclude string            // EXCLUDE CURRENT ROW|GROUP|TIES|NO OTHERS
 //	}
 //
 // WindowFrameBound: Frame boundary specification

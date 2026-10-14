@@ -1000,6 +1000,12 @@ func (f *SQLFormatter) formatWindowSpec(spec *ast.WindowSpec) error {
 		} else if err := writeBound(&fc.Start); err != nil {
 			return err
 		}
+		if fc.Exclude != "" {
+			f.builder.WriteString(" ")
+			f.writeKeyword("EXCLUDE")
+			f.builder.WriteString(" ")
+			f.writeKeyword(fc.Exclude)
+		}
 	}
 
 	return nil

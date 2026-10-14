@@ -1398,10 +1398,16 @@ func windowSpecSQL(w *ast.WindowSpec) string {
 
 // windowFrameSQL renders a window frame clause.
 func windowFrameSQL(f *ast.WindowFrame) string {
+	var s string
 	if f.End != nil {
-		return fmt.Sprintf("%s BETWEEN %s AND %s", f.Type, frameBoundSQL(&f.Start), frameBoundSQL(f.End))
+		s = fmt.Sprintf("%s BETWEEN %s AND %s", f.Type, frameBoundSQL(&f.Start), frameBoundSQL(f.End))
+	} else {
+		s = fmt.Sprintf("%s %s", f.Type, frameBoundSQL(&f.Start))
 	}
-	return fmt.Sprintf("%s %s", f.Type, frameBoundSQL(&f.Start))
+	if f.Exclude != "" {
+		s += " EXCLUDE " + f.Exclude
+	}
+	return s
 }
 
 // frameBoundSQL renders a window frame bound. A numeric bound keeps its offset

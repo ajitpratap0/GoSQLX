@@ -46,7 +46,7 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
   - **Regex Operators** - `~`, `~*`, `!~`, `!~*` for pattern matching
 - ✅ **ARRAY Constructors**: `ARRAY[1, 2, 3]` expressions with subscript/slice operations
 - ✅ **WITHIN GROUP** - Ordered-set aggregate functions
-- ✅ **INTERVAL Expressions** - `INTERVAL '1 day'` temporal literals
+- ✅ **INTERVAL Expressions** - `INTERVAL '1 day'` temporal literals, plus the ANSI qualifier form `INTERVAL '1' DAY` / `INTERVAL '1-2' YEAR TO MONTH`
 - ✅ **FOR UPDATE/SHARE** - Row-level locking clauses
 - ✅ **Multi-row INSERT** - `INSERT INTO t VALUES (1), (2), (3)` batch inserts
 
@@ -226,6 +226,8 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 | Frame UNBOUNDED FOLLOWING | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 95% |
 | Frame CURRENT ROW | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 95% |
 | Frame N PRECEDING/FOLLOWING | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 90% |
+| **GROUPS frame** | ✅ | ❌ | ❌ | ✅ | ✅ | ✅ Full | 90% |
+| Frame EXCLUDE (CURRENT ROW/GROUP/TIES/NO OTHERS) | ✅ | ❌ | ❌ | ✅ | ✅ | ✅ Full | 90% |
 
 ### Set Operations
 

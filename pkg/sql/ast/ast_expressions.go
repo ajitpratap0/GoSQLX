@@ -126,7 +126,7 @@ func (g GroupingSetsExpression) Children() []Node {
 //	        OrderBy: []OrderByExpression{{Expression: &Identifier{Name: "date"}, Ascending: true}},
 //	        FrameClause: &WindowFrame{
 //	            Type:  "ROWS",
-//	            Start: WindowFrameBound{Type: "2 PRECEDING"},
+//	            Start: WindowFrameBound{Type: "PRECEDING", Value: &LiteralValue{Value: "2", Type: "int"}},
 //	            End:   &WindowFrameBound{Type: "CURRENT ROW"},
 //	        },
 //	    },
@@ -712,9 +712,15 @@ func (s SubstringExpression) Children() []Node {
 }
 
 // IntervalExpression represents INTERVAL 'value' for date/time arithmetic
-// Examples: INTERVAL '1 day', INTERVAL '2 hours', INTERVAL '1 year 2 months'
+// Examples: INTERVAL '1 day', INTERVAL '2 hours', INTERVAL '1 year 2 months',
+// and the ANSI qualified forms INTERVAL '1' DAY, INTERVAL '1-2' YEAR TO MONTH.
 type IntervalExpression struct {
 	Value string // The interval specification string (e.g., '1 day', '2 hours')
+	// Qualifier is the ANSI interval qualifier written after the quoted value,
+	// upper-cased, e.g. "DAY", "YEAR TO MONTH", or a MySQL unit such as
+	// "YEAR_MONTH". Empty for INTERVAL '1 day' and for the MySQL numeric form
+	// INTERVAL 30 DAY, whose unit stays in Value.
+	Qualifier string
 }
 
 func (i *IntervalExpression) expressionNode()     {}

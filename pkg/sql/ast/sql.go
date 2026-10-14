@@ -812,10 +812,14 @@ func (s *SubstringExpression) writeSQL(buf *bytes.Buffer) {
 	buf.WriteByte(')')
 }
 
-// SQL returns the SQL representation of this interval as "INTERVAL 'value'".
+// SQL returns the SQL representation of this interval as "INTERVAL 'value'",
+// followed by the interval qualifier when present ("INTERVAL '1' DAY").
 func (i *IntervalExpression) SQL() string {
 	if i == nil {
 		return ""
+	}
+	if i.Qualifier != "" {
+		return "INTERVAL '" + i.Value + "' " + i.Qualifier
 	}
 	return "INTERVAL '" + i.Value + "'"
 }
@@ -827,6 +831,10 @@ func (i *IntervalExpression) writeSQL(buf *bytes.Buffer) {
 	buf.WriteString("INTERVAL '")
 	buf.WriteString(i.Value)
 	buf.WriteByte('\'')
+	if i.Qualifier != "" {
+		buf.WriteByte(' ')
+		buf.WriteString(i.Qualifier)
+	}
 }
 
 // SQL returns the SQL representation of this list expression as a
@@ -2055,10 +2063,14 @@ func writeWindowFrame(buf *bytes.Buffer, f *WindowFrame) {
 		writeFrameBound(buf, &f.Start)
 		buf.WriteString(" AND ")
 		writeFrameBound(buf, f.End)
-		return
+	} else {
+		buf.WriteByte(' ')
+		writeFrameBound(buf, &f.Start)
 	}
-	buf.WriteByte(' ')
-	writeFrameBound(buf, &f.Start)
+	if f.Exclude != "" {
+		buf.WriteString(" EXCLUDE ")
+		buf.WriteString(f.Exclude)
+	}
 }
 
 // writeFrameBound renders a single window frame bound. A numeric bound keeps

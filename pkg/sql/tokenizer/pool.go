@@ -32,6 +32,12 @@ const maxRetainedLitBuf = 64 << 10
 // comments drops the slice instead of holding it for later callers.
 const maxRetainedComments = 1024
 
+// maxRetainedLineStarts is the largest lineStarts capacity (in entries, 8
+// bytes each on 64-bit platforms, so 64 KiB) Reset keeps. A pooled tokenizer
+// that scanned an input with many lines drops the slice instead of holding it
+// for later callers; load re-grows it for the next large input.
+const maxRetainedLineStarts = 8 << 10
+
 // tokenizerPool provides object pooling for Tokenizer instances.
 // This dramatically reduces allocations in high-throughput scenarios.
 //
@@ -107,7 +113,7 @@ func GetTokenizer() *Tokenizer {
 // State Reset:
 //   - Input reference cleared (enables GC of SQL bytes)
 //   - Position tracking reset to initial state
-//   - Line tracking cleared but capacity preserved
+//   - Line tracking cleared; capacity preserved up to 8192 entries (64 KiB), a larger slice is dropped
 //   - Debug logger cleared
 //   - Dialect restored to the default (PostgreSQL) so a configured dialect
 //     does not leak to the next caller
@@ -144,12 +150,12 @@ func PutTokenizer(t *Tokenizer) {
 //     therefore valid only until the next Tokenize, Reset or PutTokenizer;
 //     copy it first if it must outlive those
 //   - Resets position tracking to initial values
-//   - Preserves lineStarts slice capacity (avoids reallocation)
+//   - Preserves lineStarts capacity up to 8192 entries (avoids reallocation); a larger slice is dropped
 //   - Clears debug logger reference
 //
 // State After Reset:
 //   - pos: Line 1, Column 0, Index 0
-//   - lineStarts: Empty slice with preserved capacity (contains [0])
+//   - lineStarts: [0], capacity preserved up to 8192 entries, or a fresh 16-entry slice when it was larger
 //   - input: nil, src: "" (ready for new input)
 //   - Word chunk: nil (Words already returned stay valid; the chunk is never reused)
 //   - litBuf (slow-path literal scratch): zeroed and truncated, or dropped
@@ -163,7 +169,8 @@ func PutTokenizer(t *Tokenizer) {
 //   - position column cursor: invalidated
 //
 // Performance: By preserving slice capacity, subsequent Tokenize() calls
-// avoid reallocation of lineStarts for similarly-sized inputs.
+// avoid reallocation of lineStarts for similarly-sized inputs, up to the
+// retention caps above.
 func (t *Tokenizer) Reset() {
 	// Clear input references to allow garbage collection. The Word chunk is
 	// dropped, never truncated: its elements belong to tokens already
@@ -191,14 +198,13 @@ func (t *Tokenizer) Reset() {
 	t.pos = NewPosition(1, 0)
 	t.lineStart = Position{}
 
-	// Preserve lineStarts slice capacity but reset length
-	if cap(t.lineStarts) > 0 {
-		t.lineStarts = t.lineStarts[:0]
-		t.lineStarts = append(t.lineStarts, 0)
+	// Keep the lineStarts backing array for reuse up to maxRetainedLineStarts
+	// entries; a larger one (an input with many lines) is dropped so the pool
+	// does not hold it for later callers.
+	if c := cap(t.lineStarts); c > 0 && c <= maxRetainedLineStarts {
+		t.lineStarts = append(t.lineStarts[:0], 0)
 	} else {
-		// Initialize if not yet allocated
 		t.lineStarts = make([]int, 1, 16) // Start with reasonable capacity
-		t.lineStarts[0] = 0
 	}
 
 	t.line = 0

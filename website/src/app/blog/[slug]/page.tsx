@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   return pageMeta({
     title: `${post.title} release notes`,
-    description: `GoSQLX ${post.title} release notes.`,
+    description: post.description,
     path: `/blog/${slug}/`,
     type: 'article',
     openGraph: {
@@ -55,7 +55,7 @@ export default async function BlogPostPage({ params }: Props) {
     '@context': 'https://schema.org',
     '@type': 'TechArticle',
     headline: post.title,
-    description: `GoSQLX ${post.title} release notes.`,
+    description: post.description,
     datePublished: post.date ? `${post.date}T00:00:00Z` : undefined,
     dateModified: post.date ? `${post.date}T00:00:00Z` : undefined,
     url: `https://gosqlx.dev/blog/${slug}/`,

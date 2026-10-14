@@ -6,7 +6,7 @@ import { BlogList } from './BlogList';
 export const metadata: Metadata = pageMeta({
   title: 'Changelog',
   description:
-    'GoSQLX changelog: new features, improvements, and bug fixes across all versions of the SQL parsing SDK.',
+    'GoSQLX changelog: release notes covering new features, improvements and bug fixes across every version of the Go SQL parsing SDK and its CLI.',
   path: '/blog/',
 });
 

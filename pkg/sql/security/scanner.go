@@ -288,6 +288,9 @@ func initCompiledPatterns() {
 				compilePattern(`(?i)\bDBMS_LDAP\b`),
 				compilePattern(`(?i)\bEXEC\s+master\b`),
 				compilePattern(`(?i)\bsp_oacreate\b`),
+				// ClickHouse table functions that reach files, URLs, object
+				// stores, other servers or external programs.
+				compilePattern(`(?i)\b(?:FROM|JOIN)\s+(?:url|urlCluster|file|fileCluster|remote|remoteSecure|s3|s3Cluster|gcs|azureBlobStorage|hdfs|hdfsCluster|jdbc|odbc|mysql|postgresql|mongodb|redis|sqlite|executable)\s*\(`),
 			},
 			severity:   SeverityCritical,
 			risk:       "Out-of-band data exfiltration or command execution",
@@ -638,7 +641,8 @@ func (s *Scanner) Scan(tree *ast.AST) *ScanResult {
 // The method uses pre-compiled regex patterns to detect:
 //   - Comment-based injection (--, /**/, #)
 //   - Time-based blind injection (SLEEP, WAITFOR, pg_sleep, BENCHMARK)
-//   - Out-of-band data exfiltration (xp_cmdshell, LOAD_FILE, UTL_HTTP)
+//   - Out-of-band data exfiltration (xp_cmdshell, LOAD_FILE, UTL_HTTP,
+//     ClickHouse FROM url/file/remote/s3/... table functions)
 //   - Dangerous functions (EXEC, sp_executesql, PREPARE FROM)
 //   - UNION-based injection (UNION SELECT, information_schema)
 //   - Stacked query injection (semicolon-separated destructive statements)
@@ -748,6 +752,39 @@ func (s *Scanner) scanSelectStatement(stmt *ast.SelectStatement, result *ScanRes
 	for _, col := range stmt.Columns {
 		s.scanExpressionForDangerousFunctions(col, result)
 	}
+
+	// Check table-function references in FROM and JOIN. Joins[i].Left
+	// repeats a reference already in From or an earlier join, so only the
+	// right side is scanned.
+	for i := range stmt.From {
+		s.scanTableReference(&stmt.From[i], result)
+	}
+	for i := range stmt.Joins {
+		s.scanTableReference(&stmt.Joins[i].Right, result)
+	}
+}
+
+// scanTableReference checks a function-call table reference such as
+// ClickHouse FROM url(...) or PostgreSQL FROM generate_series(...): the
+// function name against the out-of-band table functions, and the call and
+// its arguments against the dangerous function lists.
+func (s *Scanner) scanTableReference(ref *ast.TableReference, result *ScanResult) {
+	if ref == nil || ref.TableFunc == nil {
+		return
+	}
+	if risk, found := outOfBandTableFuncNames[strings.ToUpper(ref.TableFunc.Name)]; found {
+		finding := Finding{
+			Severity:    SeverityCritical,
+			Pattern:     PatternOutOfBand,
+			Description: "Out-of-band table function detected: " + ref.TableFunc.Name,
+			Risk:        risk,
+			Suggestion:  "Block table functions that reach files, URLs or other servers, or use an allowlist",
+		}
+		if s.shouldInclude(finding.Severity) {
+			result.Findings = append(result.Findings, finding)
+		}
+	}
+	s.scanFunctionCall(ref.TableFunc, result)
 }
 
 // scanInsertStatement analyzes INSERT for injection patterns.
@@ -816,6 +853,9 @@ func (s *Scanner) scanExpression(expr ast.Expression, result *ScanResult, contex
 		}
 	case *ast.ParenthesizedExpression:
 		s.scanExpression(e.Expr, result, context)
+	case *ast.ArraySubscriptExpression, *ast.ArraySliceExpression:
+		// A subscript or slice on a call result, such as pg_sleep(5)[1].
+		s.scanExpressionForDangerousFunctions(e, result)
 	}
 }
 
@@ -1023,6 +1063,35 @@ var dangerousFuncNames = map[string]string{
 	"SP_EXECUTESQL": "Dynamic SQL execution",
 }
 
+// outOfBandTableFuncNames maps ClickHouse table functions (upper case) that
+// read from or write to files, URLs, object stores, other database servers or
+// external programs to their risk. They are only matched on table-function
+// references in FROM/JOIN, not on ordinary function calls, to avoid flagging
+// unrelated scalar functions that share a name. Read-only after package init;
+// safe for concurrent use.
+var outOfBandTableFuncNames = map[string]string{
+	"URL":              "Network access",
+	"URLCLUSTER":       "Network access",
+	"FILE":             "File system access",
+	"FILECLUSTER":      "File system access",
+	"REMOTE":           "Remote server access",
+	"REMOTESECURE":     "Remote server access",
+	"S3":               "Object storage access",
+	"S3CLUSTER":        "Object storage access",
+	"GCS":              "Object storage access",
+	"AZUREBLOBSTORAGE": "Object storage access",
+	"HDFS":             "Remote file system access",
+	"HDFSCLUSTER":      "Remote file system access",
+	"JDBC":             "Remote database access",
+	"ODBC":             "Remote database access",
+	"MYSQL":            "Remote database access",
+	"POSTGRESQL":       "Remote database access",
+	"MONGODB":          "Remote database access",
+	"REDIS":            "Remote database access",
+	"SQLITE":           "File system access",
+	"EXECUTABLE":       "Command execution",
+}
+
 // scanFunctionCall checks for dangerous function usage.
 func (s *Scanner) scanFunctionCall(fn *ast.FunctionCall, result *ScanResult) {
 	if fn == nil {
@@ -1079,6 +1148,15 @@ func (s *Scanner) scanExpressionForDangerousFunctions(expr ast.Expression, resul
 		s.scanExpressionForDangerousFunctions(e.Expr, result)
 	case *ast.ParenthesizedExpression:
 		s.scanExpressionForDangerousFunctions(e.Expr, result)
+	case *ast.ArraySubscriptExpression:
+		s.scanExpressionForDangerousFunctions(e.Array, result)
+		for _, idx := range e.Indices {
+			s.scanExpressionForDangerousFunctions(idx, result)
+		}
+	case *ast.ArraySliceExpression:
+		s.scanExpressionForDangerousFunctions(e.Array, result)
+		s.scanExpressionForDangerousFunctions(e.Start, result)
+		s.scanExpressionForDangerousFunctions(e.End, result)
 	}
 }
 

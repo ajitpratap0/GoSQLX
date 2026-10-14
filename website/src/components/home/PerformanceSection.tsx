@@ -1,15 +1,12 @@
 import { GlassCard } from '@/components/ui/GlassCard';
 import { FadeIn } from '@/components/ui/FadeIn';
-import { AnimatedCounter } from '@/components/ui/AnimatedCounter';
 import { BENCH_ENV, HEADLINE_OPS_PER_SEC, PARSE_BENCHMARKS, formatOps, opsPerSec } from '@/data/metrics';
 import { AnimatedBars } from './AnimatedBars';
 import { ReproduceSnippet } from './ReproduceSnippet';
 
 interface Stat {
-  /** Animated numeric value. */
-  value: number;
-  suffix?: string;
-  prefix?: string;
+  /** Compact display string, short enough to fit a narrow card. */
+  display: string;
   label: string;
 }
 
@@ -18,10 +15,10 @@ const complexQuery = PARSE_BENCHMARKS.find((b) => b.name === 'Complex Query') ??
 
 /* Every figure is parse stage only (pre-tokenized input -> AST); hardware and Go version are in the caption. */
 const stats: Stat[] = [
-  { value: HEADLINE_OPS_PER_SEC, prefix: '~', label: 'parses/sec, simple SELECT (parse stage)' },
-  { value: simpleSelect.nsPerOp, suffix: 'ns', label: 'latency, simple SELECT (parse stage)' },
-  { value: opsPerSec(complexQuery.nsPerOp), prefix: '~', label: 'parses/sec, complex query (parse stage)' },
-  { value: complexQuery.nsPerOp, suffix: 'ns', label: 'latency, complex query (parse stage)' },
+  { display: `~${formatOps(HEADLINE_OPS_PER_SEC)}`, label: 'parses/sec, simple SELECT (parse stage)' },
+  { display: `${simpleSelect.nsPerOp.toLocaleString('en-US')}ns`, label: 'latency, simple SELECT (parse stage)' },
+  { display: `~${formatOps(opsPerSec(complexQuery.nsPerOp))}`, label: 'parses/sec, complex query (parse stage)' },
+  { display: `${complexQuery.nsPerOp.toLocaleString('en-US')}ns`, label: 'latency, complex query (parse stage)' },
 ];
 
 const benchmarks = PARSE_BENCHMARKS.map((b) => ({
@@ -44,15 +41,12 @@ export function PerformanceSection() {
         </FadeIn>
 
         {/* Stat cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 md:gap-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
           {stats.map((stat, i) => (
             <FadeIn viewport key={stat.label} delay={i * 0.1} className="h-full">
-              <GlassCard className="p-6 text-center w-full h-full">
-                <div className="flex items-baseline justify-center gap-0.5">
-                  {stat.prefix && (
-                    <span className="text-3xl sm:text-4xl font-bold text-fg">{stat.prefix}</span>
-                  )}
-                  <AnimatedCounter value={stat.value} suffix={stat.suffix} color="text-fg" />
+              <GlassCard className="p-4 sm:p-6 text-center w-full h-full">
+                <div className="text-2xl sm:text-3xl xl:text-4xl font-bold tabular-nums text-fg whitespace-nowrap">
+                  {stat.display}
                 </div>
                 <p className="text-sm text-zinc-200 mt-1">{stat.label}</p>
               </GlassCard>

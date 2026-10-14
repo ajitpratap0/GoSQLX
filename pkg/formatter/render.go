@@ -140,6 +140,8 @@ func FormatStatement(s ast.Statement, opts ast.FormatOptions) string {
 		return renderSetOperation(v, opts)
 	case *ast.AlterTableStatement: //nolint:staticcheck // AlterTableStatement kept for backward compatibility
 		return renderAlterTable(v, opts)
+	case *ast.AlterStatement:
+		return renderAlterStatement(v, opts)
 	case *ast.CreateIndexStatement:
 		return renderCreateIndex(v, opts)
 	case *ast.CreateViewStatement:

@@ -15,6 +15,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -241,6 +242,7 @@ func (f *Formatter) formatSQL(sql string) (string, error) {
 		Compact:      f.Opts.Compact,
 		UppercaseKw:  f.Opts.Uppercase,
 		AlignColumns: !f.Opts.Compact, // Align columns unless in compact mode
+		Dialect:      f.Opts.Dialect,
 	}
 
 	// Create formatter and format the AST
@@ -250,7 +252,55 @@ func (f *Formatter) formatSQL(sql string) (string, error) {
 		return "", fmt.Errorf("formatting failed: %w", err)
 	}
 
+	// Refuse output that does not re-parse to the same query, so format,
+	// format -i and format -o never emit or write corrupted SQL (#599).
+	// Keyword case is semantically irrelevant, and the parser does not accept
+	// every lowercase keyword sequence, so lowercase output is verified via an
+	// uppercase-keyword rendering of the same tree.
+	verifyText := formatted
+	if !formatterOpts.UppercaseKw {
+		upperOpts := formatterOpts
+		upperOpts.UppercaseKw = true
+		verifyText, err = NewSQLFormatter(upperOpts).Format(parsedAST)
+		if err != nil {
+			return "", fmt.Errorf("formatting failed: %w", err)
+		}
+	}
+	if err := verifyFormattedSQL(parsedAST, verifyText, f.Opts.Dialect); err != nil {
+		return "", fmt.Errorf("formatting failed: %w", err)
+	}
+
 	return formatted, nil
+}
+
+// verifyFormattedSQL re-parses formatted with the same dialect and checks that
+// it yields the same number of statements and the same SQL() as original.
+// SQL() is compared case-insensitively because some nodes (e.g. set operation
+// operators) keep the source keyword case.
+func verifyFormattedSQL(original *ast.AST, formatted, dialect string) error {
+	tkz, release, err := tokenizerForDialect(dialect)
+	if err != nil {
+		return fmt.Errorf("tokenizer setup failed: %w", err)
+	}
+	defer release()
+
+	tokens, err := tkz.TokenizeString(formatted)
+	if err != nil {
+		return fmt.Errorf("formatted output does not re-tokenize (formatter bug; input left unchanged): %w", err)
+	}
+	reparsed, err := parserForDialect(dialect).ParseFromModelTokens(tokens)
+	if err != nil {
+		return fmt.Errorf("formatted output does not re-parse (formatter bug; input left unchanged): %w", err)
+	}
+	defer ast.ReleaseAST(reparsed)
+
+	if got, want := len(reparsed.Statements), len(original.Statements); got != want {
+		return fmt.Errorf("formatted output has %d statements, input has %d (formatter bug; input left unchanged)", got, want)
+	}
+	if !strings.EqualFold(original.SQL(), reparsed.SQL()) {
+		return errors.New("formatted output changes the query (formatter bug; input left unchanged)")
+	}
+	return nil
 }
 
 // FormatterFlags represents CLI flags for formatter command

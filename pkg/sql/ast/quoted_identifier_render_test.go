@@ -160,6 +160,7 @@ func TestQuotedIdentifierRender_DialectGuards_Issue611(t *testing.T) {
 		{"postgres_qualified_key", keywords.DialectPostgreSQL, `SELECT t.key FROM t`, `SELECT t.key FROM t`},
 		{"sqlserver_temp_table", keywords.DialectSQLServer, `SELECT * FROM #temp`, `SELECT * FROM #temp`},
 		{"snowflake_stage", keywords.DialectSnowflake, `SELECT * FROM @stage`, `SELECT * FROM @stage`},
+		{"snowflake_stage_path", keywords.DialectSnowflake, `SELECT $1 FROM @mystage/data`, `SELECT $1 FROM @mystage/data`},
 		{"clickhouse_tuple_access", keywords.DialectClickHouse, `SELECT d.1 FROM t`, `SELECT d.1 FROM t`},
 		{"oracle_dual", keywords.DialectOracle, `SELECT 1 FROM DUAL`, `SELECT 1 FROM DUAL`},
 		// Backtick-quoted names are not ANSI-quoted: Quoted stays false and

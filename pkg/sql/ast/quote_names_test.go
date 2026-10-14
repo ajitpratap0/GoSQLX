@@ -49,6 +49,8 @@ func TestQuoteQualifiedName(t *testing.T) {
 		{"my db.t", `"my db".t`},
 		{"#temp", "#temp"},
 		{"@stage", "@stage"},
+		{"@mystage/data", "@mystage/data"},
+		{"@db.sch.mystage/data", "@db.sch.mystage/data"},
 		{"DUAL", "DUAL"},
 		{"db..t", `db."".t`},
 	}

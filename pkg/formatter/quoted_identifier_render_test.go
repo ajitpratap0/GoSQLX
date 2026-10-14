@@ -107,3 +107,25 @@ func TestQuotedIdentifier_FormatAST_Issue611(t *testing.T) {
 		}
 	}
 }
+
+// TestQuotedIdentifier_FormatAST_SnowflakeStagePath_Issue611 guards that a
+// Snowflake stage reference with a /path suffix is not quoted by FormatAST:
+// "@mystage/data" would re-parse as a table name, not a stage.
+func TestQuotedIdentifier_FormatAST_SnowflakeStagePath_Issue611(t *testing.T) {
+	const sql = `SELECT $1 FROM @mystage/data`
+	tree, err := gosqlx.ParseWithDialect(sql, keywords.DialectSnowflake)
+	if err != nil {
+		t.Fatalf("parse %q: %v", sql, err)
+	}
+	defer ast.ReleaseAST(tree)
+
+	if got := formatter.FormatAST(tree, ast.CompactStyle()); got != sql {
+		t.Errorf("FormatAST(compact) mismatch\n got: %s\nwant: %s", got, sql)
+	}
+	readableOpts := ast.ReadableStyle()
+	readableOpts.AddSemicolon = false
+	const wantReadable = "SELECT $1\nFROM @mystage/data"
+	if got := formatter.FormatAST(tree, readableOpts); got != wantReadable {
+		t.Errorf("FormatAST(readable) mismatch\n got: %q\nwant: %q", got, wantReadable)
+	}
+}

@@ -153,9 +153,14 @@ func writeNameList(buf *bytes.Buffer, names []string) {
 // writeQualifiedName writes a possibly dotted table or view name, quoting
 // each dot-separated part on its own as needed. A dot is always treated as a
 // part separator (the same convention as writeDottedIdentifier). An empty
-// name writes nothing.
+// name writes nothing. A name starting with '@' is a Snowflake stage
+// reference, which may carry a /path suffix; it is written verbatim.
 func writeQualifiedName(buf *bytes.Buffer, name string) {
 	if name == "" {
+		return
+	}
+	if name[0] == '@' {
+		buf.WriteString(name)
 		return
 	}
 	for {
@@ -180,6 +185,9 @@ func writeQualifiedName(buf *bytes.Buffer, name string) {
 // qualifiedNameNeedsQuoting reports whether writeQualifiedName would quote
 // some part of the non-empty name.
 func qualifiedNameNeedsQuoting(name string) bool {
+	if name[0] == '@' {
+		return false
+	}
 	for {
 		dot := strings.IndexByte(name, '.')
 		part := name
@@ -215,7 +223,9 @@ func QuoteName(name string) string {
 // QuoteQualifiedName returns a dotted table or view name with each
 // dot-separated part double-quoted when a bare rendering would not re-parse
 // as the same name. '$', '#' and '@' are kept bare so forms such as SQL
-// Server #temp and Snowflake @stage are unchanged. When no part needs quoting
+// Server #temp and Snowflake @stage are unchanged, and a name starting with
+// '@' (a Snowflake stage, possibly with a /path suffix such as
+// @mystage/data) is returned as is. When no part needs quoting
 // name is returned unchanged without allocating. The output uses ANSI double
 // quotes regardless of dialect.
 func QuoteQualifiedName(name string) string {

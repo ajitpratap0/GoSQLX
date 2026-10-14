@@ -773,7 +773,10 @@ func writeOperator(buf *bytes.Buffer, op string) {
 // double-quoted text. A quoted token alone would re-parse as an alias of the
 // left query, followed by the right query as a second statement; after UNION
 // the parser requires SELECT or "(", so the fallback fails to parse instead.
+// A hand-built Oracle/Snowflake MINUS is written as its equivalent EXCEPT,
+// which every dialect parses (the parser itself stores MINUS as EXCEPT).
 func writeSetOperator(buf *bytes.Buffer, op string) {
+	op = minusAsExcept(op)
 	if SetOperatorText(op) != "" {
 		buf.WriteString(op)
 		return
@@ -782,9 +785,23 @@ func writeSetOperator(buf *bytes.Buffer, op string) {
 	writeQuotedIdentifier(buf, op)
 }
 
+// minusAsExcept returns EXCEPT (with the same ALL/DISTINCT suffix) for a
+// MINUS set operator in any case, and op unchanged otherwise.
+func minusAsExcept(op string) string {
+	if len(op) < 5 || !strings.EqualFold(op[:5], "MINUS") {
+		return op
+	}
+	switch rest := op[5:]; {
+	case rest == "", strings.EqualFold(rest, " ALL"), strings.EqualFold(rest, " DISTINCT"):
+		return "EXCEPT" + strings.ToUpper(rest)
+	}
+	return op
+}
+
 // SetOperatorSQL returns op as writeSetOperator writes it, and whether it is
-// a known set operator (in which case the result is op itself).
+// a known set operator (MINUS counts, written as EXCEPT).
 func SetOperatorSQL(op string) (string, bool) {
+	op = minusAsExcept(op)
 	if SetOperatorText(op) != "" {
 		return op, true
 	}

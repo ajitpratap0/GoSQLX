@@ -307,3 +307,28 @@ func TestKeywordFieldFallbacksFailToParse_PR632(t *testing.T) {
 		})
 	}
 }
+
+// TestHandBuiltMinusRendersExcept_PR632 pins that a hand-built MINUS set
+// operator renders as its equivalent EXCEPT and re-parses as one statement.
+func TestHandBuiltMinusRendersExcept_PR632(t *testing.T) {
+	for _, op := range []string{"MINUS", "minus", "MINUS ALL"} {
+		stmt := &ast.SetOperation{
+			Left:     &ast.SelectStatement{Columns: []ast.Expression{&ast.Identifier{Name: "a"}}, From: []ast.TableReference{{Name: "t"}}},
+			Operator: op,
+			Right:    &ast.SelectStatement{Columns: []ast.Expression{&ast.Identifier{Name: "b"}}, From: []ast.TableReference{{Name: "u"}}},
+		}
+		for name, out := range map[string]string{
+			"SQL":        stmt.SQL(),
+			"FmtCompact": formatter.FormatStatement(stmt, ast.CompactStyle()),
+		} {
+			if !strings.Contains(strings.ToUpper(out), "EXCEPT") || strings.Contains(strings.ToUpper(out), "MINUS") {
+				t.Errorf("%s(%q) = %q, want EXCEPT instead of MINUS", name, op, out)
+				continue
+			}
+			tree, err := gosqlx.Parse(out)
+			if err != nil || len(tree.Statements) != 1 {
+				t.Errorf("%s(%q) = %q does not re-parse as one statement: %v", name, op, out, err)
+			}
+		}
+	}
+}

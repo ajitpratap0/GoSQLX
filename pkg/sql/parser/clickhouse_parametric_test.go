@@ -281,3 +281,24 @@ func TestFunctionCallSubscript_605(t *testing.T) {
 		}
 	})
 }
+
+// TestFunctionCallSubscript_605_SQLiteBracketAlias: in SQLite, [name] after a
+// call is a bracket-quoted alias, not a subscript, so it must never be read
+// as count(*)[cnt] (which drops the alias and does not re-parse in SQLite).
+func TestFunctionCallSubscript_605_SQLiteBracketAlias(t *testing.T) {
+	tree, err := gosqlx.ParseWithDialect("SELECT count(*) [cnt] FROM t", keywords.DialectSQLite)
+	if err != nil {
+		return // rejected, as before #605: acceptable
+	}
+	stmt, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected *ast.SelectStatement, got %T", tree.Statements[0])
+	}
+	col := stmt.Columns[0]
+	if ae, ok := col.(*ast.AliasedExpression); ok {
+		col = ae.Expr
+	}
+	if _, ok := col.(*ast.ArraySubscriptExpression); ok {
+		t.Fatalf("SQLite [cnt] after a call parsed as a subscript: %s", tree.SQL())
+	}
+}

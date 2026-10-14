@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/Button';
 
 export function CtaBanner() {
   return (
-    <section className="py-20 relative overflow-hidden">
+    <section className="py-20 relative overflow-clip">
       {/* Gradient mesh background */}
       <div className="absolute inset-0 -z-10">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-accent-indigo/[0.07] rounded-full blur-[120px]" />

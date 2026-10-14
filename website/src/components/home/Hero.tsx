@@ -1,4 +1,3 @@
-import { FadeIn } from '@/components/ui/FadeIn';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { GradientText } from '@/components/ui/GradientText';
 import { VersionBadge } from '@/components/ui/VersionBadge';
@@ -8,7 +7,7 @@ import { MiniPlayground } from '@/components/home/MiniPlayground';
 
 export function Hero() {
   return (
-    <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
+    <section className="relative min-h-screen flex items-center justify-center overflow-clip">
       {/* Background gradient mesh */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
         {/* Top-right indigo glow */}
@@ -29,11 +28,10 @@ export function Hero() {
         />
         {/* Dot grid overlay */}
         <div
-          className="absolute inset-0"
+          className="absolute inset-0 opacity-5"
           style={{
             backgroundImage: 'radial-gradient(rgba(255,255,255,0.5) 1px, transparent 1px)',
             backgroundSize: '24px 24px',
-            opacity: 0.05,
           }}
         />
       </div>
@@ -41,48 +39,38 @@ export function Hero() {
       {/* Content */}
       <div className="relative z-10 max-w-5xl mx-auto px-6 py-24 text-center">
         {/* Version badge */}
-        <FadeIn viewport delay={0}>
-          <div className="mb-6">
-            <VersionBadge version="v1.14.0 - Multi-Dialect SQL Parser" />
-          </div>
-        </FadeIn>
+        <div className="mb-6">
+          <VersionBadge version="v1.14.0 - Multi-Dialect SQL Parser" />
+        </div>
 
         {/* Headline */}
-        <FadeIn viewport delay={0.1}>
-          <h1
-            className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 break-words hyphens-auto w-full max-w-full px-4 sm:px-0"
-            style={{ letterSpacing: '-0.03em' }}
-          >
-            <GradientText>Parse SQL at the speed of Go</GradientText>
-          </h1>
-        </FadeIn>
+        <h1
+          className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 break-words hyphens-auto w-full max-w-full px-4 sm:px-0"
+          style={{ letterSpacing: '-0.03em' }}
+        >
+          <GradientText>Parse SQL at the speed of Go</GradientText>
+        </h1>
 
         {/* Subtitle */}
-        <FadeIn viewport delay={0.2}>
-          <p className="text-lg md:text-xl max-w-2xl mx-auto mb-10 text-zinc-300">
-            Production-ready SQL parsing with zero-copy tokenization, object pooling, and multi-dialect support
-          </p>
-        </FadeIn>
+        <p className="text-base sm:text-lg md:text-xl max-w-2xl mx-auto mb-10 text-zinc-300">
+          Production-ready SQL parsing with zero-copy tokenization, object pooling, and multi-dialect support
+        </p>
 
         {/* Buttons */}
-        <FadeIn viewport delay={0.3}>
-          <div className="flex flex-wrap items-center justify-center gap-3 mb-14">
-            <Button variant="primary" href="/docs/getting-started">
-              Get Started
-            </Button>
-            <Button variant="ghost" href="/playground">
-              Try Playground
-            </Button>
-            <GitHubStarButton />
-          </div>
-        </FadeIn>
+        <div className="flex flex-wrap items-center justify-center gap-3 mb-14">
+          <Button variant="primary" href="/docs/getting-started">
+            Get Started
+          </Button>
+          <Button variant="ghost" href="/playground">
+            Try Playground
+          </Button>
+          <GitHubStarButton />
+        </div>
 
         {/* Live mini playground */}
-        <FadeIn viewport delay={0.4}>
-          <GlassCard hover={false} className="p-0 overflow-hidden shadow-2xl shadow-indigo-500/5">
-            <MiniPlayground />
-          </GlassCard>
-        </FadeIn>
+        <GlassCard hover={false} className="p-0 overflow-hidden shadow-2xl shadow-indigo-500/5">
+          <MiniPlayground />
+        </GlassCard>
 
       </div>
     </section>

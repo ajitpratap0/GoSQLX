@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { motion } from 'motion/react';
 import type { BlogPost } from '@/lib/blog';
 import { blogPostHref } from '@/lib/blog-slug';
 
@@ -12,13 +11,8 @@ export function BlogList({ posts }: { posts: BlogPost[] }) {
       <div className="absolute left-[7px] top-2 bottom-2 w-px bg-zinc-800" />
 
       <div className="space-y-0">
-        {posts.map((post, i) => (
-          <motion.div
-            key={post.slug}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: i * 0.05, ease: 'easeOut' }}
-          >
+        {posts.map((post) => (
+          <div key={post.slug}>
             <Link
               href={blogPostHref(post.slug)}
               className="group flex gap-6 py-5 pl-0 relative"
@@ -52,7 +46,7 @@ export function BlogList({ posts }: { posts: BlogPost[] }) {
                 </svg>
               </div>
             </Link>
-          </motion.div>
+          </div>
         ))}
       </div>
     </div>

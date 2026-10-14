@@ -137,7 +137,7 @@ export function CodeExamples() {
               <span className="text-xs text-zinc-500 ml-2">main.go</span>
             </div>
             <div className="p-4 font-mono text-sm leading-relaxed overflow-x-auto">
-              <AnimatePresence mode="wait">
+              <AnimatePresence mode="wait" initial={false}>
                 <motion.div
                   key={active}
                   initial={{ opacity: 0, y: 8 }}

@@ -1213,10 +1213,28 @@ func (p *Parser) isSettingsKeyword() bool {
 }
 
 // isReturningKeyword reports whether the current token is an unquoted
-// RETURNING keyword (any case).
+// RETURNING keyword (any case). Quoted identifiers named returning are names,
+// not the keyword: quoting is the only way to use a keyword as an identifier.
 func (p *Parser) isReturningKeyword() bool {
-	return p.isType(models.TokenTypeReturning) ||
-		(p.isType(models.TokenTypeIdentifier) && strings.EqualFold(p.currentToken.Token.Value, "RETURNING"))
+	if p.isType(models.TokenTypeReturning) {
+		return true
+	}
+	return p.isType(models.TokenTypeIdentifier) &&
+		strings.EqualFold(p.currentToken.Token.Value, "RETURNING") &&
+		!p.isQuotedIdentifierToken()
+}
+
+// isQuotedIdentifierToken reports whether the current identifier token was
+// written with delimiters. Bracket identifiers record Token.Quote = '['; the
+// tokenizer leaves Quote zero for backtick identifiers, so a source span wider
+// than the value also counts as quoted. Tokens without spans (Start == End)
+// are treated as unquoted.
+func (p *Parser) isQuotedIdentifierToken() bool {
+	tok := p.currentToken
+	if tok.Token.Quote != 0 {
+		return true
+	}
+	return tok.Start.Line == tok.End.Line && tok.End.Column-tok.Start.Column > len(tok.Token.Value)
 }
 
 // isDMLReturningKeyword reports whether the current token is RETURNING inside

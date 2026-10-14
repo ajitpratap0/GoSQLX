@@ -565,3 +565,74 @@ func TestDMLReturningFlagRestored(t *testing.T) {
 		}
 	})
 }
+
+// TestDMLReturningQuotedAlias pins that a backtick- or bracket-quoted alias
+// named returning stays an alias inside an INSERT source or UPDATE ... FROM
+// list. Quoting is the escape hatch for keyword-named identifiers, so only an
+// unquoted RETURNING may start the DML RETURNING clause (#610 review).
+func TestDMLReturningQuotedAlias(t *testing.T) {
+	insertFromAlias := func(wantReturning int) func(t *testing.T, stmt ast.Statement) {
+		return func(t *testing.T, stmt ast.Statement) {
+			t.Helper()
+			ins := asInsert(t, stmt)
+			sel := insertSelectSource(t, ins)
+			if len(sel.From) != 1 || sel.From[0].Name != "s" || sel.From[0].Alias != "returning" {
+				t.Fatalf("FROM = %+v, want s aliased returning", sel.From)
+			}
+			if len(ins.Returning) != wantReturning {
+				t.Fatalf("len(Returning) = %d, want %d", len(ins.Returning), wantReturning)
+			}
+		}
+	}
+	insertJoinAlias := func(t *testing.T, stmt ast.Statement) {
+		t.Helper()
+		sel := insertSelectSource(t, asInsert(t, stmt))
+		if len(sel.Joins) != 1 {
+			t.Fatalf("len(Joins) = %d, want 1", len(sel.Joins))
+		}
+		if got := sel.Joins[0].Right.Alias; got != "returning" {
+			t.Fatalf("join alias = %q, want %q", got, "returning")
+		}
+	}
+	updateFromAlias := func(t *testing.T, stmt ast.Statement) {
+		t.Helper()
+		upd := asUpdate(t, stmt)
+		if len(upd.From) != 1 || upd.From[0].Name != "s" || upd.From[0].Alias != "returning" {
+			t.Fatalf("From = %+v, want s aliased returning", upd.From)
+		}
+	}
+	nestedAlias := func(t *testing.T, stmt ast.Statement) {
+		t.Helper()
+		sel := insertSelectSource(t, asInsert(t, stmt))
+		if len(sel.From) != 1 || sel.From[0].Subquery == nil {
+			t.Fatalf("FROM = %+v, want one derived table", sel.From)
+		}
+		inner := sel.From[0].Subquery
+		if len(inner.From) != 1 || inner.From[0].Alias != "returning" {
+			t.Fatalf("inner FROM = %+v, want s aliased returning", inner.From)
+		}
+	}
+
+	cases := []struct {
+		name, dialect, sql string
+		check              func(t *testing.T, stmt ast.Statement)
+	}{
+		{"insert from alias where", "mysql", "INSERT INTO t SELECT * FROM s `returning` WHERE `returning`.a = 1", insertFromAlias(0)},
+		{"insert from alias where", "mariadb", "INSERT INTO t SELECT * FROM s `returning` WHERE `returning`.a = 1", insertFromAlias(0)},
+		{"insert from alias eof", "mysql", "INSERT INTO t SELECT * FROM s `returning`", insertFromAlias(0)},
+		{"insert from alias where", "sqlserver", "INSERT INTO t SELECT * FROM s [returning] WHERE [returning].id = 1", insertFromAlias(0)},
+		{"insert from alias then returning", "postgresql", "INSERT INTO t SELECT * FROM s `returning` RETURNING id", insertFromAlias(1)},
+		{"insert join alias", "mysql", "INSERT INTO t SELECT * FROM s JOIN r `returning` ON s.id = `returning`.id", insertJoinAlias},
+		{"insert join alias", "sqlserver", "INSERT INTO t SELECT * FROM s JOIN r [returning] ON s.id = [returning].id", insertJoinAlias},
+		{"insert nested subquery alias", "mysql", "INSERT INTO t SELECT * FROM (SELECT * FROM s `returning`) x", nestedAlias},
+		{"update from alias", "sqlserver", "UPDATE t SET a = 1 FROM s [returning] WHERE t.id = [returning].id", updateFromAlias},
+		{"update from alias", "postgresql", "UPDATE t SET a = 1 FROM s `returning` WHERE t.id = `returning`.id", updateFromAlias},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name+"/"+dialectLabel(tc.dialect), func(t *testing.T) {
+			stmt, tree := parseGapSingle(t, tc.sql, tc.dialect)
+			defer ast.ReleaseAST(tree)
+			tc.check(t, stmt)
+		})
+	}
+}

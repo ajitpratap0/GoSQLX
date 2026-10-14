@@ -5,7 +5,7 @@ import { pageMeta } from '@/lib/seo';
 import { compileMDX } from 'next-mdx-remote/rsc';
 import remarkGfm from 'remark-gfm';
 import rehypeSlug from 'rehype-slug';
-import { getDocBySlug, getDocSlugs, getAdjacentDocs, extractHeadings } from '@/lib/docs';
+import { getDocBySlug, getDocSlugs, getAdjacentDocs, extractHeadings, stripCodeFences } from '@/lib/docs';
 import { DOCS_SIDEBAR } from '@/lib/constants';
 import { Sidebar } from '@/components/docs/Sidebar';
 import { Toc } from '@/components/docs/Toc';
@@ -13,7 +13,7 @@ import { DocNavigation } from '@/components/docs/DocNavigation';
 import { mdxComponents } from '@/components/docs/mdx-components';
 
 function getReadingTime(text: string): number {
-  const words = text.trim().split(/\s+/).length;
+  const words = stripCodeFences(text).trim().split(/\s+/).length;
   return Math.max(1, Math.ceil(words / 200));
 }
 
@@ -135,7 +135,7 @@ export default async function DocPage({ params }: PageProps) {
         </div>
 
         {/* Content */}
-        <article className="prose prose-invert prose-dark max-w-none">
+        <article className="prose prose-invert prose-dark max-w-none prose-code:before:content-none prose-code:after:content-none">
           {content}
         </article>
 
@@ -144,7 +144,7 @@ export default async function DocPage({ params }: PageProps) {
       </main>
 
       {/* Table of Contents */}
-      <div className="hidden xl:block w-56 shrink-0 py-10 pr-6">
+      <div className="hidden xl:block w-64 shrink-0 py-10 pr-6">
         <Toc headings={headings} />
       </div>
       </div>

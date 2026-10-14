@@ -65,15 +65,6 @@ export const mdxComponents = {
     );
   },
 
-  code: (props: ComponentPropsWithoutRef<'code'>) => {
-    // Inline code (not inside pre)
-    const isInline = !props.className;
-    if (isInline) {
-      return <code {...props} className="rounded bg-white/10 px-1.5 py-0.5 text-sm font-mono text-zinc-200" />;
-    }
-    return <code {...props} />;
-  },
-
   blockquote: (props: ComponentPropsWithoutRef<'blockquote'>) => (
     <blockquote {...props} className="border-l-2 border-accent-indigo bg-surface/50 pl-4 py-2 italic text-zinc-400" />
   ),

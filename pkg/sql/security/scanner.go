@@ -819,20 +819,29 @@ func (s *Scanner) scanDeleteStatement(stmt *ast.DeleteStatement, result *ScanRes
 }
 
 // scanSetOperation analyzes UNION/EXCEPT/INTERSECT for injection patterns.
+//
+// Parenthesized operands produce nested SetOperation trees on either side
+// (e.g. "a UNION (b UNION c)"), so the whole tree is walked once for UNION
+// operands and once for the per-statement checks of each leaf.
 func (s *Scanner) scanSetOperation(stmt *ast.SetOperation, result *ScanResult) {
-	// UNION-based injection detection
-	if strings.ToUpper(stmt.Operator) == "UNION" {
-		// Check if UNION might be used for data extraction
-		s.checkUnionInjection(stmt, result)
-	}
+	// UNION-based injection detection over the whole set-operation tree.
+	s.checkUnionInjection(stmt, false, result)
 
-	// Recursively scan left and right statements
-	// Note: SetOperation.Left and .Right are already ast.Statement type
-	if stmt.Left != nil {
-		s.scanStatement(stmt.Left, result)
-	}
-	if stmt.Right != nil {
-		s.scanStatement(stmt.Right, result)
+	// Scan every leaf statement of the tree.
+	s.scanSetOperationLeaves(stmt, result)
+}
+
+// scanSetOperationLeaves runs the per-statement checks on each non-set-operation
+// operand of stmt, descending into nested set operations.
+func (s *Scanner) scanSetOperationLeaves(stmt *ast.SetOperation, result *ScanResult) {
+	for _, operand := range [2]ast.Statement{stmt.Left, stmt.Right} {
+		switch op := operand.(type) {
+		case nil:
+		case *ast.SetOperation:
+			s.scanSetOperationLeaves(op, result)
+		default:
+			s.scanStatement(op, result)
+		}
 	}
 }
 
@@ -973,47 +982,67 @@ func unwrapParens(expr ast.Expression) ast.Expression {
 	}
 }
 
-// checkUnionInjection analyzes UNION for potential data extraction.
-func (s *Scanner) checkUnionInjection(stmt *ast.SetOperation, result *ScanResult) {
-	// Check if right side SELECT has suspicious patterns
-	if rightSelect, ok := stmt.Right.(*ast.SelectStatement); ok {
-		// Check for NULL placeholders (common in UNION injection)
-		nullCount := 0
-		for _, col := range rightSelect.Columns {
-			if ident, ok := col.(*ast.Identifier); ok {
-				if strings.ToUpper(ident.Name) == "NULL" {
-					nullCount++
-				}
+// checkUnionInjection analyzes UNION for potential data extraction. It walks
+// the whole set-operation tree and checks every SELECT that appears anywhere in
+// the right-hand operand of a UNION (inUnionRight), including the leftmost
+// SELECT of a parenthesized group such as "x UNION (SELECT ... UNION ...)".
+// Each SELECT is visited exactly once, so no finding is reported twice.
+func (s *Scanner) checkUnionInjection(stmt *ast.SetOperation, inUnionRight bool, result *ScanResult) {
+	isUnion := strings.EqualFold(stmt.Operator, "UNION")
+	s.checkUnionOperand(stmt.Left, inUnionRight, result)
+	s.checkUnionOperand(stmt.Right, inUnionRight || isUnion, result)
+}
+
+// checkUnionOperand dispatches one set-operation operand for checkUnionInjection.
+func (s *Scanner) checkUnionOperand(operand ast.Statement, inUnionRight bool, result *ScanResult) {
+	switch op := operand.(type) {
+	case *ast.SetOperation:
+		s.checkUnionInjection(op, inUnionRight, result)
+	case *ast.SelectStatement:
+		if inUnionRight {
+			s.checkUnionSelect(op, result)
+		}
+	}
+}
+
+// checkUnionSelect checks a single SELECT used as a UNION operand.
+func (s *Scanner) checkUnionSelect(rightSelect *ast.SelectStatement, result *ScanResult) {
+	// Check for NULL placeholders (common in UNION injection)
+	nullCount := 0
+	for _, col := range rightSelect.Columns {
+		if ident, ok := col.(*ast.Identifier); ok {
+			if strings.ToUpper(ident.Name) == "NULL" {
+				nullCount++
 			}
 		}
+	}
 
-		// Multiple NULLs in UNION SELECT is suspicious
-		if nullCount >= 2 {
+	// Multiple NULLs in UNION SELECT is suspicious
+	if nullCount >= 2 {
+		finding := Finding{
+			Severity:    SeverityHigh,
+			Pattern:     PatternUnionBased,
+			Description: "UNION SELECT with multiple NULL columns detected",
+			Risk:        "Data extraction via UNION-based injection",
+			Suggestion:  "Verify UNION is intentional and inputs are sanitized",
+		}
+		if s.shouldInclude(finding.Severity) {
+			result.Findings = append(result.Findings, finding)
+		}
+	}
+
+	// Check for system table access using precise matching
+	if rightSelect.TableName != "" {
+		if s.isSystemTable(rightSelect.TableName) {
 			finding := Finding{
-				Severity:    SeverityHigh,
+				Severity:    SeverityCritical,
 				Pattern:     PatternUnionBased,
-				Description: "UNION SELECT with multiple NULL columns detected",
-				Risk:        "Data extraction via UNION-based injection",
-				Suggestion:  "Verify UNION is intentional and inputs are sanitized",
+				Description: "UNION SELECT accessing system tables detected",
+				Risk:        "Database schema enumeration, privilege escalation",
+				Suggestion:  "Block access to system tables from user queries",
 			}
 			if s.shouldInclude(finding.Severity) {
 				result.Findings = append(result.Findings, finding)
-			}
-		}
-
-		// Check for system table access using precise matching
-		if rightSelect.TableName != "" {
-			if s.isSystemTable(rightSelect.TableName) {
-				finding := Finding{
-					Severity:    SeverityCritical,
-					Pattern:     PatternUnionBased,
-					Description: "UNION SELECT accessing system tables detected",
-					Risk:        "Database schema enumeration, privilege escalation",
-					Suggestion:  "Block access to system tables from user queries",
-				}
-				if s.shouldInclude(finding.Severity) {
-					result.Findings = append(result.Findings, finding)
-				}
 			}
 		}
 	}

@@ -448,7 +448,7 @@
 //   - docs/GETTING_STARTED.md - Quick start guide for new users
 //   - docs/USAGE_GUIDE.md - Comprehensive usage guide
 //   - docs/LSP_GUIDE.md - LSP server and IDE integration
-//   - docs/LINTING_RULES.md - All 10 linting rules (L001-L010)
+//   - docs/LINTING_RULES.md - All 30 linting rules (L001-L030)
 //   - docs/CONFIGURATION.md - Configuration file reference
 //   - docs/SQL_COMPATIBILITY.md - SQL dialect compatibility matrix
 //
@@ -484,7 +484,7 @@
 //	├── models/          # Core data structures (100% test coverage)
 //	├── errors/          # Structured error handling
 //	├── metrics/         # Performance monitoring
-//	├── linter/          # SQL linting engine (10 rules)
+//	├── linter/          # SQL linting engine (30 rules)
 //	└── lsp/             # Language Server Protocol server
 //
 // For fine-grained control, use the lower-level packages directly.

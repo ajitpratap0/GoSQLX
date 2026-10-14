@@ -43,22 +43,17 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 	if p.isType(models.TokenTypeLParen) {
 		p.advance() // Consume (
 
-		// Check if this is a subquery (starts with SELECT or WITH)
-		if !p.isType(models.TokenTypeSelect) && !p.isType(models.TokenTypeWith) {
+		// Check if this is a subquery (starts with SELECT, WITH or a
+		// nested parenthesized query)
+		if !p.isType(models.TokenTypeSelect) && !p.isType(models.TokenTypeWith) && !p.isType(models.TokenTypeLParen) {
 			return tableRef, p.expectedError("SELECT in derived table")
 		}
 
-		// Consume SELECT token before calling parseSelectStatement
-		p.advance() // Consume SELECT
-
-		// Parse the subquery
-		subquery, err := p.parseDerivedTableSelect()
+		// Parse the subquery: a full query expression (set operations,
+		// WITH, nested parentheses)
+		subquery, err := p.parseDerivedTableQuery()
 		if err != nil {
 			return tableRef, err
-		}
-		selectStmt, ok := subquery.(*ast.SelectStatement)
-		if !ok {
-			return tableRef, p.expectedError("SELECT statement in derived table")
 		}
 
 		// Expect closing parenthesis
@@ -67,9 +62,9 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		}
 		p.advance() // Consume )
 
-		tableRef = ast.TableReference{
-			Subquery: selectStmt,
-			Lateral:  isLateral,
+		tableRef = ast.TableReference{Lateral: isLateral}
+		if err := p.setDerivedQuery(&tableRef, subquery); err != nil {
+			return tableRef, err
 		}
 	} else if p.dialect == string(keywords.DialectSnowflake) &&
 		p.isType(models.TokenTypePlaceholder) && strings.HasPrefix(p.currentToken.Token.Value, "@") {
@@ -275,11 +270,11 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 	return tableRef, nil
 }
 
-// parseDerivedTableSelect parses the SELECT of a derived table (the SELECT
-// keyword already consumed) one recursion level deeper, so nested derived
-// tables are bounded by MaxRecursionDepth. This path does not pass through
-// parseExpression, which guards other nesting.
-func (p *Parser) parseDerivedTableSelect() (ast.Statement, error) {
+// parseDerivedTableQuery parses the query of a derived table (the current
+// token is SELECT, WITH or a nested "(") one recursion level deeper, so
+// nested derived tables are bounded by MaxRecursionDepth. This path does not
+// pass through parseExpression, which guards other nesting.
+func (p *Parser) parseDerivedTableQuery() (ast.Statement, error) {
 	// A derived table is a nested scope: the INSERT-source RETURNING stop
 	// does not apply inside it (#610).
 	prev := p.dmlReturning
@@ -290,7 +285,21 @@ func (p *Parser) parseDerivedTableSelect() (ast.Statement, error) {
 	if err != nil {
 		return nil, err
 	}
-	return p.parseSelectStatement()
+	return p.parseQueryExpression("SELECT in derived table")
+}
+
+// setDerivedQuery stores a derived-table query on ref: a single SELECT in
+// Subquery, a set operation in SetSubquery.
+func (p *Parser) setDerivedQuery(ref *ast.TableReference, q ast.Statement) error {
+	switch s := q.(type) {
+	case *ast.SelectStatement:
+		ref.Subquery = s
+	case *ast.SetOperation:
+		ref.SetSubquery = s
+	default:
+		return p.expectedError("SELECT statement in derived table")
+	}
+	return nil
 }
 
 // parseJoinedTableRef parses the table reference on the right-hand side of a JOIN.
@@ -308,18 +317,13 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 		// Derived table (subquery)
 		p.advance() // Consume (
 
-		if !p.isType(models.TokenTypeSelect) && !p.isType(models.TokenTypeWith) {
+		if !p.isType(models.TokenTypeSelect) && !p.isType(models.TokenTypeWith) && !p.isType(models.TokenTypeLParen) {
 			return ref, p.expectedError("SELECT in derived table")
 		}
-		p.advance() // Consume SELECT
 
-		subquery, err := p.parseDerivedTableSelect()
+		subquery, err := p.parseDerivedTableQuery()
 		if err != nil {
 			return ref, err
-		}
-		selectStmt, ok := subquery.(*ast.SelectStatement)
-		if !ok {
-			return ref, p.expectedError("SELECT statement in derived table")
 		}
 
 		if !p.isType(models.TokenTypeRParen) {
@@ -327,7 +331,10 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 		}
 		p.advance() // Consume )
 
-		ref = ast.TableReference{Subquery: selectStmt, Lateral: isLateral}
+		ref = ast.TableReference{Lateral: isLateral}
+		if err := p.setDerivedQuery(&ref, subquery); err != nil {
+			return ref, err
+		}
 	} else {
 		joinedName, err := p.parseQualifiedName()
 		if err != nil {

@@ -222,7 +222,7 @@ func statementComplexity(stmt ast.Statement) int {
 
 		// Subqueries in FROM
 		for _, from := range s.From {
-			if from.Subquery != nil {
+			if from.Subquery != nil || from.SetSubquery != nil {
 				score += 2
 			}
 		}

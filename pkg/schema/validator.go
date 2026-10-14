@@ -194,6 +194,9 @@ func (v *Validator) validateSelect(s *ast.SelectStatement) []ValidationError {
 		if join.Condition != nil {
 			errors = append(errors, v.validateExpressionColumns(join.Condition, tableMap)...)
 		}
+		for _, u := range join.Using {
+			errors = append(errors, v.validateExpressionColumns(u, tableMap)...)
+		}
 	}
 
 	// Validate column references in GROUP BY

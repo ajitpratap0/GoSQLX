@@ -376,12 +376,15 @@ func releaseSelectStatement(stmt *SelectStatement, mode releaseMode) {
 	// copy of From[0] (sharing its Subquery/TableFunc/Pivot/TimeTravel/
 	// MatchRecognize pointers) and later Lefts as synthetic name-only
 	// references, so releasing it would Put the derived-table subquery
-	// twice. Right and Condition are uniquely owned. Zeroing the whole
+	// twice. Right, Condition and Using are uniquely owned. Zeroing the whole
 	// JoinClause also clears Pos and drops the Left copy's pointers so the
 	// pooled statement does not retain them.
 	for i := range stmt.Joins {
 		releaseTableReference(&stmt.Joins[i].Right, mode)
 		releaseExpression(stmt.Joins[i].Condition, mode)
+		for _, u := range stmt.Joins[i].Using {
+			releaseExpression(u, mode)
+		}
 		stmt.Joins[i] = JoinClause{}
 	}
 	stmt.Joins = stmt.Joins[:0]
@@ -499,6 +502,11 @@ func releaseTableReference(tr *TableReference, mode releaseMode) {
 		releaseSelectStatement(tr.Subquery, mode)
 		tr.Subquery = nil
 	}
+	// SetSubquery is a set-operation body: release its operands.
+	if tr.SetSubquery != nil {
+		releaseSetOperationOperands(tr.SetSubquery, mode)
+		tr.SetSubquery = nil
+	}
 	// TableFunc is a *FunctionCall — release as expression.
 	if tr.TableFunc != nil {
 		releaseExpression(tr.TableFunc, mode)
@@ -559,6 +567,32 @@ func releaseTableReference(tr *TableReference, mode releaseMode) {
 	tr.Lateral = false
 	tr.Final = false
 	tr.TableHints = nil
+}
+
+// releaseSetOperationOperands releases the operands of a set operation held by
+// a derived table (TableReference.SetSubquery) and clears its operand links.
+// SetOperation itself is not pooled. Long chains such as a UNION b UNION c are
+// left-deep, so the left spine is walked iteratively; recursion happens only
+// for a Right operand that is itself a set operation, which the parser
+// produces only for a parenthesized operand and so is bounded by
+// MaxRecursionDepth.
+func releaseSetOperationOperands(s *SetOperation, mode releaseMode) {
+	for s != nil {
+		if right, ok := s.Right.(*SetOperation); ok {
+			releaseSetOperationOperands(right, mode)
+		} else {
+			releaseStatement(s.Right, mode)
+		}
+		s.Right = nil
+		left := s.Left
+		s.Left = nil
+		next, ok := left.(*SetOperation)
+		if !ok {
+			releaseStatement(left, mode)
+			return
+		}
+		s = next
+	}
 }
 
 // ============================================================

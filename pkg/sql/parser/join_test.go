@@ -504,40 +504,22 @@ func TestParser_MultiColumnUSING(t *testing.T) {
 				}
 
 				join := selectStmt.Joins[0]
-				if join.Condition == nil {
-					t.Fatal("Expected JOIN condition (USING clause)")
+				// USING columns live in join.Using; Condition stays nil (#603).
+				if join.Condition != nil {
+					t.Fatalf("Expected nil Condition for USING join, got %T", join.Condition)
+				}
+				if len(join.Using) != len(tt.expectedColumns) {
+					t.Fatalf("Expected %d USING columns, got %d", len(tt.expectedColumns), len(join.Using))
 				}
 
-				// Verify the columns
-				if len(tt.expectedColumns) == 1 {
-					// Single column - should be stored as Identifier
-					ident, ok := join.Condition.(*ast.Identifier)
+				// Verify each column
+				for i, expectedCol := range tt.expectedColumns {
+					ident, ok := join.Using[i].(*ast.Identifier)
 					if !ok {
-						t.Fatalf("Expected Identifier for single column USING, got %T", join.Condition)
+						t.Fatalf("Column %d: expected Identifier, got %T", i, join.Using[i])
 					}
-					if ident.Name != tt.expectedColumns[0] {
-						t.Errorf("Expected column %s, got %s", tt.expectedColumns[0], ident.Name)
-					}
-				} else {
-					// Multiple columns - should be stored as ListExpression
-					listExpr, ok := join.Condition.(*ast.ListExpression)
-					if !ok {
-						t.Fatalf("Expected ListExpression for multi-column USING, got %T", join.Condition)
-					}
-
-					if len(listExpr.Values) != len(tt.expectedColumns) {
-						t.Fatalf("Expected %d columns, got %d", len(tt.expectedColumns), len(listExpr.Values))
-					}
-
-					// Verify each column
-					for i, expectedCol := range tt.expectedColumns {
-						ident, ok := listExpr.Values[i].(*ast.Identifier)
-						if !ok {
-							t.Fatalf("Column %d: expected Identifier, got %T", i, listExpr.Values[i])
-						}
-						if ident.Name != expectedCol {
-							t.Errorf("Column %d: expected %s, got %s", i, expectedCol, ident.Name)
-						}
+					if ident.Name != expectedCol {
+						t.Errorf("Column %d: expected %s, got %s", i, expectedCol, ident.Name)
 					}
 				}
 			}

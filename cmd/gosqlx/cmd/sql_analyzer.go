@@ -227,8 +227,8 @@ func (a *SQLAnalyzer) analyzeDeleteStatement(stmt *ast.DeleteStatement) {
 func (a *SQLAnalyzer) analyzeJoinClause(join *ast.JoinClause) {
 	a.joinCount++
 
-	// Check for JOIN without ON condition
-	if join.Condition == nil {
+	// Check for JOIN without ON condition (USING counts as a condition)
+	if join.Condition == nil && len(join.Using) == 0 {
 		a.hasCartesian = true
 		a.addPerformanceIssue("JOIN_WITHOUT_CONDITION", "HIGH",
 			"JOIN without ON condition creates cartesian product",

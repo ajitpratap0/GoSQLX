@@ -569,9 +569,16 @@ type SetOperation struct {
     Left     Statement // Can be SelectStatement or another SetOperation
     Operator string    // UNION, EXCEPT, INTERSECT
     All      bool
-    Right    Statement
+    Right    Statement // SelectStatement, or a SetOperation for "A EXCEPT (B UNION C)"
+
+    LeftParenthesized  bool // Left was written as "(query)"
+    RightParenthesized bool // Right was written as "(query)"
 }
 ```
+
+`LeftParenthesized` / `RightParenthesized` record operand parentheses, as in
+`(SELECT 1) UNION (SELECT 2)`. `SQL()` and the formatters emit them, and always
+parenthesize a `Right` operand that is itself a `SetOperation`.
 
 ### Grouping Set Types
 
@@ -752,8 +759,8 @@ type SubqueryExpression struct {
 type JoinClause struct {
     Type      string // INNER, LEFT, RIGHT, FULL, CROSS, NATURAL
     Table     TableReference
-    Condition Expression
-    Using     []string
+    Condition Expression   // ON condition (nil for USING / CROSS / NATURAL)
+    Using     []Expression // USING (col, ...) columns
 }
 ```
 
@@ -777,15 +784,21 @@ ast, _ := gosqlx.Parse(sql)
 #### `TableReference`
 ```go
 type TableReference struct {
-    Name    string
-    Alias   string
-    Lateral bool             // NEW v1.6.0: PostgreSQL LATERAL JOIN
-    Query   *SelectStatement // For derived tables
+    Name        string
+    Alias       string
+    Lateral     bool             // NEW v1.6.0: PostgreSQL LATERAL JOIN
+    Subquery    *SelectStatement // Derived table: (SELECT ...) alias
+    SetSubquery *SetOperation    // Derived table whose body is a set operation
 }
 ```
 
 **v1.6.0 Enhancement:**
 - `Lateral` - PostgreSQL LATERAL JOIN support
+
+At most one of `Subquery` and `SetSubquery` is set. A derived table whose body is a
+single `SELECT` (including one with a `WITH` clause or extra parentheses, as in
+`FROM ((SELECT 1)) t`) is held in `Subquery`; one whose body is a set operation, as in
+`FROM (SELECT a FROM t1 UNION SELECT a FROM t2) u`, is held in `SetSubquery`.
 
 **Example:**
 ```go

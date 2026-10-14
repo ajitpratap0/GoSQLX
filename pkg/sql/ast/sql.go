@@ -1531,14 +1531,26 @@ func (s *SetOperation) writeSQL(buf *bytes.Buffer) {
 	if s == nil {
 		return
 	}
-	writeStmt(buf, s.Left)
+	if s.LeftParenthesized {
+		buf.WriteByte('(')
+		writeStmt(buf, s.Left)
+		buf.WriteByte(')')
+	} else {
+		writeStmt(buf, s.Left)
+	}
 	buf.WriteByte(' ')
 	buf.WriteString(s.Operator)
 	if s.All {
 		buf.WriteString(" ALL")
 	}
 	buf.WriteByte(' ')
-	writeStmt(buf, s.Right)
+	if rightSetOp, ok := s.Right.(*SetOperation); s.RightParenthesized || (ok && rightSetOp != nil) {
+		buf.WriteByte('(')
+		writeStmt(buf, s.Right)
+		buf.WriteByte(')')
+	} else {
+		writeStmt(buf, s.Right)
+	}
 }
 
 // SQL returns the SQL representation of this VALUES clause as
@@ -2011,6 +2023,10 @@ func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 		buf.WriteByte(')')
 	} else if t.TableFunc != nil {
 		t.TableFunc.writeSQL(buf)
+	} else if t.SetSubquery != nil {
+		buf.WriteByte('(')
+		t.SetSubquery.writeSQL(buf)
+		buf.WriteByte(')')
 	} else {
 		buf.WriteString(t.Name)
 	}
@@ -2041,7 +2057,16 @@ func writeJoin(buf *bytes.Buffer, j *JoinClause) {
 	buf.WriteString(j.Type)
 	buf.WriteString(" JOIN ")
 	writeTableRef(buf, &j.Right)
-	if j.Condition != nil {
+	if len(j.Using) > 0 {
+		buf.WriteString(" USING (")
+		for i, u := range j.Using {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			writeExpr(buf, u)
+		}
+		buf.WriteByte(')')
+	} else if j.Condition != nil {
 		buf.WriteString(" ON ")
 		writeExpr(buf, j.Condition)
 	}

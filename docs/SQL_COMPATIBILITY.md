@@ -237,6 +237,15 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 | **UNION ALL** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 100% |
 | **INTERSECT** | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ Full | 90% |
 | **EXCEPT/MINUS** | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ Full | 90% |
+| Parenthesized set-operation operands | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ Full | 90% |
+| Set operation / WITH / double-parenthesized query as derived table | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full | 90% |
+
+Parenthesized operands such as `(SELECT ... ORDER BY a LIMIT 5) UNION ALL (SELECT ...)` and
+`SELECT ... EXCEPT (SELECT ... UNION SELECT ...)` keep their parentheses when rendered. An
+`ORDER BY`/`LIMIT` written after a parenthesized query is accepted when it can be represented
+without changing meaning (for example `(SELECT 1) ORDER BY 1`); a second `ORDER BY`/`LIMIT`
+level over a parenthesized query that already has one, such as
+`(SELECT a FROM t ORDER BY a LIMIT 10) ORDER BY b`, returns `E4001` (unsupported feature).
 
 ### Grouping Operations (SQL-99 T431)
 

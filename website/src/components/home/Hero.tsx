@@ -11,20 +11,12 @@ export function Hero({ stars }: { stars: number | null }) {
     <section className="relative min-h-screen flex items-center justify-center overflow-clip">
       {/* Background gradient mesh */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-        {/* Top-right indigo glow */}
+        {/* Glows: single gradient background, no blur filter */}
         <div
-          className="absolute top-[-20%] right-[-10%] w-[60%] h-[60%]"
+          className="absolute inset-0"
           style={{
-            background: 'radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 60%)',
-            filter: 'blur(80px)',
-          }}
-        />
-        {/* Bottom-left orange glow */}
-        <div
-          className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%]"
-          style={{
-            background: 'radial-gradient(circle, rgba(249,115,22,0.08) 0%, transparent 60%)',
-            filter: 'blur(60px)',
+            background:
+              'radial-gradient(circle at 90% 0%, rgba(99,102,241,0.15) 0%, transparent 45%), radial-gradient(circle at 5% 100%, rgba(249,115,22,0.08) 0%, transparent 40%)',
           }}
         />
         {/* Dot grid overlay */}

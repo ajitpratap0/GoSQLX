@@ -5,7 +5,7 @@ import PlaygroundLoader from './PlaygroundLoader';
 export const metadata: Metadata = pageMeta({
   title: 'SQL Playground',
   description:
-    'Interactive SQL playground: parse, format, lint, and analyze SQL in the browser.',
+    'Try GoSQLX in your browser: paste SQL to parse it into an AST, format, lint and analyze it across dialects, with no install and no server round trip.',
   path: '/playground/',
 });
 

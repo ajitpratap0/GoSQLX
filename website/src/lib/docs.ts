@@ -9,6 +9,8 @@ export interface Doc {
   title: string;
   /** Sidebar label, used for the page <title>. */
   label: string;
+  /** Hand-written meta description (120-155 chars) from DOCS_SIDEBAR. */
+  description: string;
   content: string;
   category: string;
 }
@@ -93,7 +95,7 @@ export function getAllDocs(): Doc[] {
 
 export function getDocBySlug(slug: string): Doc | null {
   // Find the item in sidebar config
-  let sidebarItem: { slug: string; file: string; label: string } | undefined;
+  let sidebarItem: { slug: string; file: string; label: string; description: string } | undefined;
   let categoryName = '';
 
   for (const category of DOCS_SIDEBAR) {
@@ -122,6 +124,7 @@ export function getDocBySlug(slug: string): Doc | null {
     slug: sidebarItem.slug,
     title,
     label: sidebarItem.label,
+    description: sidebarItem.description,
     content,
     category: categoryName,
   };

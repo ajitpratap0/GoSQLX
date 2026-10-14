@@ -448,6 +448,7 @@ func releaseSelectStatement(stmt *SelectStatement, mode releaseMode) {
 			w.FrameClause = nil
 		}
 		w.Name = ""
+		w.BaseWindow = ""
 	}
 	stmt.Windows = stmt.Windows[:0]
 

@@ -247,7 +247,16 @@ func (o *OrderByExpression) Children() []Node {
 
 // WindowSpec represents a window specification
 type WindowSpec struct {
-	Name        string
+	// Name is the window name outside the parentheses. In an OVER clause it is
+	// a bare named-window reference (OVER w); in SelectStatement.Windows it is
+	// the definition name (WINDOW w AS (...)). It is never rendered inside the
+	// parentheses of the spec it names.
+	Name string
+	// BaseWindow is the existing window name that a parenthesized spec refines,
+	// e.g. OVER (w ORDER BY z) or WINDOW w2 AS (w1 ORDER BY b)
+	// (SQL:2003 §7.11 <existing window name>). It is rendered first inside the
+	// parentheses.
+	BaseWindow  string
 	PartitionBy []Expression
 	OrderBy     []OrderByExpression
 	FrameClause *WindowFrame
@@ -275,9 +284,12 @@ func (w WindowSpec) Children() []Node {
 
 // WindowFrame represents window frame clause
 type WindowFrame struct {
-	Type  string // ROWS, RANGE
+	Type  string // ROWS, RANGE or GROUPS
 	Start WindowFrameBound
 	End   *WindowFrameBound
+	// Exclude is the optional frame exclusion (SQL:2011): "CURRENT ROW",
+	// "GROUP", "TIES" or "NO OTHERS". Empty when absent.
+	Exclude string
 }
 
 func (w *WindowFrame) statementNode()      {}

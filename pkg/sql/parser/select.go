@@ -218,6 +218,12 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			if winErr != nil {
 				return nil, winErr
 			}
+			// The non-standard bare form WINDOW w AS w2 yields a spec whose Name
+			// is w2; keep it as the base window instead of dropping it, so it
+			// renders as the standard w AS (w2).
+			if winSpec.Name != "" {
+				winSpec.BaseWindow = winSpec.Name
+			}
 			winSpec.Name = winName
 			selectStmt.Windows = append(selectStmt.Windows, *winSpec)
 			if !p.isType(models.TokenTypeComma) {

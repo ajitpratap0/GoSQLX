@@ -233,6 +233,7 @@ func (p *Parser) parseCastLike(try bool) (*ast.CastExpression, error) {
 }
 
 // parseIntervalExpression parses an INTERVAL expression: INTERVAL 'value'
+// with an optional ANSI interval qualifier, or the MySQL numeric form.
 //
 // Examples:
 //
@@ -240,6 +241,10 @@ func (p *Parser) parseCastLike(try bool) (*ast.CastExpression, error) {
 //	INTERVAL '2 hours'
 //	INTERVAL '1 year 2 months 3 days'
 //	INTERVAL '30 days'
+//	INTERVAL '1' DAY                (qualifier "DAY")
+//	INTERVAL '1-2' YEAR TO MONTH    (qualifier "YEAR TO MONTH")
+//	INTERVAL '1-2' YEAR_MONTH       (MySQL unit as qualifier)
+//	INTERVAL 30 DAY                 (MySQL; unit kept in Value)
 func (p *Parser) parseIntervalExpression() (*ast.IntervalExpression, error) {
 	// Consume INTERVAL keyword
 	p.advance()
@@ -249,7 +254,7 @@ func (p *Parser) parseIntervalExpression() (*ast.IntervalExpression, error) {
 	if p.isStringLiteral() {
 		value := p.currentToken.Token.Value
 		p.advance()
-		return &ast.IntervalExpression{Value: value}, nil
+		return &ast.IntervalExpression{Value: value, Qualifier: p.parseIntervalQualifier()}, nil
 	}
 
 	// MySQL style: INTERVAL <number> <unit>
@@ -267,6 +272,61 @@ func (p *Parser) parseIntervalExpression() (*ast.IntervalExpression, error) {
 		p.currentLocation(),
 		"Use INTERVAL '1 day' or INTERVAL 1 DAY syntax",
 	)
+}
+
+// parseIntervalQualifier parses the optional interval qualifier that follows
+// the quoted value of an INTERVAL literal and returns it upper-cased, or ""
+// when the next token is not a unit. Only unquoted identifiers are units, so a
+// quoted "day" stays a column alias, and plural words (DAYS) are not units. A
+// trailing "TO <field>" is consumed only when <field> is a valid end field.
+func (p *Parser) parseIntervalQualifier() string {
+	if !p.isType(models.TokenTypeIdentifier) {
+		return ""
+	}
+	q := strings.ToUpper(p.currentToken.Token.Value)
+	if !intervalLeadingField(q) {
+		return ""
+	}
+	p.advance() // Consume the leading field
+
+	if p.isType(models.TokenTypeTo) ||
+		(p.isType(models.TokenTypeKeyword) && equalsUpper(p.currentToken.Token.Value, "TO")) {
+		next := p.peekToken()
+		if next.Token.Type == models.TokenTypeIdentifier {
+			end := strings.ToUpper(next.Token.Value)
+			if intervalTrailingField(end) {
+				p.advance() // Consume TO
+				p.advance() // Consume the trailing field
+				q += " TO " + end
+			}
+		}
+	}
+	return q
+}
+
+// intervalLeadingField reports whether u (upper-case) can start an interval
+// qualifier: an ANSI datetime field or a MySQL interval unit.
+func intervalLeadingField(u string) bool {
+	switch u {
+	case "YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND",
+		"WEEK", "QUARTER", "MICROSECOND", "MILLISECOND",
+		"SECOND_MICROSECOND", "MINUTE_MICROSECOND", "MINUTE_SECOND",
+		"HOUR_MICROSECOND", "HOUR_SECOND", "HOUR_MINUTE",
+		"DAY_MICROSECOND", "DAY_SECOND", "DAY_MINUTE", "DAY_HOUR",
+		"YEAR_MONTH":
+		return true
+	}
+	return false
+}
+
+// intervalTrailingField reports whether u (upper-case) can end an ANSI
+// "<start> TO <end>" interval qualifier.
+func intervalTrailingField(u string) bool {
+	switch u {
+	case "MONTH", "HOUR", "MINUTE", "SECOND":
+		return true
+	}
+	return false
 }
 
 // parseArrayConstructor parses PostgreSQL ARRAY constructor syntax.

@@ -721,10 +721,22 @@ func (f *FunctionCall) writeSQL(buf *bytes.Buffer) {
 		writeExpr(buf, f.Filter)
 		buf.WriteByte(')')
 	}
-	if f.Over != nil {
-		buf.WriteString(" OVER (")
-		writeWindowSpec(buf, f.Over)
-		buf.WriteByte(')')
+	if o := f.Over; o != nil {
+		if o.Name != "" && o.BaseWindow == "" && len(o.PartitionBy) == 0 && len(o.OrderBy) == 0 && o.FrameClause == nil {
+			// Bare named-window reference: OVER w.
+			buf.WriteString(" OVER ")
+			buf.WriteString(o.Name)
+		} else {
+			// Hand-built specs may carry the referenced window in Name alongside
+			// other parts; render it as the base window, as before.
+			base := o.BaseWindow
+			if base == "" {
+				base = o.Name
+			}
+			buf.WriteString(" OVER (")
+			writeWindowSpec(buf, base, o)
+			buf.WriteByte(')')
+		}
 	}
 }
 
@@ -800,10 +812,14 @@ func (s *SubstringExpression) writeSQL(buf *bytes.Buffer) {
 	buf.WriteByte(')')
 }
 
-// SQL returns the SQL representation of this interval as "INTERVAL 'value'".
+// SQL returns the SQL representation of this interval as "INTERVAL 'value'",
+// followed by the interval qualifier when present ("INTERVAL '1' DAY").
 func (i *IntervalExpression) SQL() string {
 	if i == nil {
 		return ""
+	}
+	if i.Qualifier != "" {
+		return "INTERVAL '" + i.Value + "' " + i.Qualifier
 	}
 	return "INTERVAL '" + i.Value + "'"
 }
@@ -815,6 +831,10 @@ func (i *IntervalExpression) writeSQL(buf *bytes.Buffer) {
 	buf.WriteString("INTERVAL '")
 	buf.WriteString(i.Value)
 	buf.WriteByte('\'')
+	if i.Qualifier != "" {
+		buf.WriteByte(' ')
+		buf.WriteString(i.Qualifier)
+	}
 }
 
 // SQL returns the SQL representation of this list expression as a
@@ -1117,7 +1137,7 @@ func (s *SelectStatement) writeSQL(buf *bytes.Buffer) {
 			}
 			buf.WriteString(s.Windows[i].Name)
 			buf.WriteString(" AS (")
-			writeWindowSpec(buf, &s.Windows[i])
+			writeWindowSpec(buf, s.Windows[i].BaseWindow, &s.Windows[i])
 			buf.WriteByte(')')
 		}
 	}
@@ -2004,9 +2024,11 @@ func writeJoin(buf *bytes.Buffer, j *JoinClause) {
 	}
 }
 
-// writeWindowSpec writes the space-separated window name, PARTITION BY,
-// ORDER BY and frame parts that are present.
-func writeWindowSpec(buf *bytes.Buffer, w *WindowSpec) {
+// writeWindowSpec writes the inside of a window spec's parentheses: the
+// space-separated base (existing) window name, PARTITION BY, ORDER BY and
+// frame parts that are present. w.Name is never written here; callers write
+// it outside the parentheses (OVER w, WINDOW w AS (...)).
+func writeWindowSpec(buf *bytes.Buffer, base string, w *WindowSpec) {
 	first := true
 	sep := func() {
 		if !first {
@@ -2014,9 +2036,9 @@ func writeWindowSpec(buf *bytes.Buffer, w *WindowSpec) {
 		}
 		first = false
 	}
-	if w.Name != "" {
+	if base != "" {
 		sep()
-		buf.WriteString(w.Name)
+		buf.WriteString(base)
 	}
 	if len(w.PartitionBy) > 0 {
 		sep()
@@ -2041,10 +2063,14 @@ func writeWindowFrame(buf *bytes.Buffer, f *WindowFrame) {
 		writeFrameBound(buf, &f.Start)
 		buf.WriteString(" AND ")
 		writeFrameBound(buf, f.End)
-		return
+	} else {
+		buf.WriteByte(' ')
+		writeFrameBound(buf, &f.Start)
 	}
-	buf.WriteByte(' ')
-	writeFrameBound(buf, &f.Start)
+	if f.Exclude != "" {
+		buf.WriteString(" EXCLUDE ")
+		buf.WriteString(f.Exclude)
+	}
 }
 
 // writeFrameBound renders a single window frame bound. A numeric bound keeps

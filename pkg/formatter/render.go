@@ -1383,7 +1383,13 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
-			sb.WriteString(f.kw(h))
+			// Bare-word hints honor the keyword case policy; anything else
+			// (only possible in a hand-built AST) is double-quoted.
+			if q := ast.QuoteTableHint(h); q != h {
+				sb.WriteString(q)
+			} else {
+				sb.WriteString(f.kw(h))
+			}
 		}
 		sb.WriteString(")")
 	}
@@ -1395,26 +1401,26 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("FOR"))
 		sb.WriteString(" ")
-		sb.WriteString(t.Pivot.PivotColumn)
+		sb.WriteString(ast.QuotePivotColumn(t.Pivot.PivotColumn))
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("IN"))
 		sb.WriteString(" (")
-		sb.WriteString(strings.Join(t.Pivot.InValues, ", "))
+		writePivotItems(&sb, t.Pivot.InValues)
 		sb.WriteString("))")
 	}
 	if t.Unpivot != nil {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("UNPIVOT"))
 		sb.WriteString(" (")
-		sb.WriteString(t.Unpivot.ValueColumn)
+		sb.WriteString(ast.QuotePivotColumn(t.Unpivot.ValueColumn))
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("FOR"))
 		sb.WriteString(" ")
-		sb.WriteString(t.Unpivot.NameColumn)
+		sb.WriteString(ast.QuotePivotColumn(t.Unpivot.NameColumn))
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("IN"))
 		sb.WriteString(" (")
-		sb.WriteString(strings.Join(t.Unpivot.InColumns, ", "))
+		writePivotItems(&sb, t.Unpivot.InColumns)
 		sb.WriteString("))")
 	}
 	if t.Alias != "" && (t.Pivot != nil || t.Unpivot != nil) {
@@ -1426,6 +1432,18 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		sb.WriteString(t.Alias)
 	}
 	return sb.String()
+}
+
+// writePivotItems writes PIVOT IN values or UNPIVOT IN columns separated by
+// ", ", each in its stored source form when well formed and double-quoted
+// otherwise (see ast.QuotePivotItem).
+func writePivotItems(sb *strings.Builder, items []string) {
+	for i, item := range items {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(ast.QuotePivotItem(item))
+	}
 }
 
 // sampleSQL renders a ClickHouse SAMPLE clause.

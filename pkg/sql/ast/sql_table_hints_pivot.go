@@ -14,10 +14,48 @@
 
 package ast
 
-import "bytes"
+import (
+	"bytes"
+	"unicode"
+	"unicode/utf8"
+)
 
-// writeTableHints writes SQL Server table hints as " WITH (h1, h2)". Hints are
-// written verbatim (the parser has already upper-cased them).
+// isBareTableHint reports whether h is a bare word ([A-Za-z_][A-Za-z0-9_]*),
+// the only table-hint form the parser accepts and the only one written
+// verbatim.
+func isBareTableHint(h string) bool {
+	if h == "" {
+		return false
+	}
+	for i := 0; i < len(h); i++ {
+		c := h[i]
+		switch {
+		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c == '_':
+		case c >= '0' && c <= '9' && i > 0:
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// QuoteTableHint returns a SQL Server table hint ready to write inside
+// WITH (...): a bare word is returned unchanged, anything else (only possible
+// in a hand-built AST) is double-quoted with embedded quotes doubled so it
+// cannot end the hint list or the statement.
+func QuoteTableHint(h string) string {
+	if isBareTableHint(h) {
+		return h
+	}
+	buf := getBuf()
+	defer putBuf(buf)
+	writeQuotedIdentifier(buf, h)
+	return buf.String()
+}
+
+// writeTableHints writes SQL Server table hints as " WITH (h1, h2)". Bare-word
+// hints (the parser upper-cases them) are written verbatim; any other hint is
+// double-quoted (see QuoteTableHint).
 func writeTableHints(buf *bytes.Buffer, hints []string) {
 	if len(hints) == 0 {
 		return
@@ -27,13 +65,135 @@ func writeTableHints(buf *bytes.Buffer, hints []string) {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(h)
+		if isBareTableHint(h) {
+			buf.WriteString(h)
+		} else {
+			writeQuotedIdentifier(buf, h)
+		}
 	}
 	buf.WriteByte(')')
 }
 
-// writePivotClause writes " PIVOT (agg FOR col IN (v1, v2))". InValues already
-// carry their source delimiters (e.g. [Q1]) so they are written verbatim.
+// QuotePivotColumn returns a PIVOT/UNPIVOT column name (PivotColumn,
+// ValueColumn or NameColumn) ready to write: a name made only of letters,
+// digits, '_', '*' and '.' is returned unchanged, anything else is
+// double-quoted with embedded quotes doubled.
+func QuotePivotColumn(name string) string {
+	if !identifierNeedsQuoting(name) {
+		return name
+	}
+	buf := getBuf()
+	defer putBuf(buf)
+	writeQuotedIdentifier(buf, name)
+	return buf.String()
+}
+
+// QuotePivotItem returns a PIVOT IN value or UNPIVOT IN column ready to
+// write. The parser stores each entry in its source form, "atom" or
+// "atom AS atom", where an atom is a bare word or number, a 'string', or a
+// "double-quoted", [bracketed] or `backticked` identifier, with delimiters
+// escaped by doubling. Such an entry is returned unchanged. Anything else
+// (only possible in a hand-built AST) is double-quoted as a whole so it cannot
+// close the IN list, the clause or the statement.
+func QuotePivotItem(item string) string {
+	if isWellFormedPivotItem(item) {
+		return item
+	}
+	buf := getBuf()
+	defer putBuf(buf)
+	writeQuotedIdentifier(buf, item)
+	return buf.String()
+}
+
+func writePivotItem(buf *bytes.Buffer, item string) {
+	if isWellFormedPivotItem(item) {
+		buf.WriteString(item)
+		return
+	}
+	writeQuotedIdentifier(buf, item)
+}
+
+// isWellFormedPivotItem reports whether item is "atom" or "atom AS atom"
+// (see QuotePivotItem).
+func isWellFormedPivotItem(item string) bool {
+	n := pivotAtomLen(item)
+	if n == 0 {
+		return false
+	}
+	rest := item[n:]
+	if rest == "" {
+		return true
+	}
+	const as = " AS "
+	if len(rest) <= len(as) || rest[:len(as)] != as {
+		return false
+	}
+	rest = rest[len(as):]
+	return pivotAtomLen(rest) == len(rest)
+}
+
+// pivotAtomLen returns the length of the atom at the start of s, or 0 if s
+// does not start with a well-formed atom. A delimited atom must close with
+// its delimiter; a delimiter inside it must be doubled. In a 'string' a
+// backslash must not precede a quote, so the string ends at the same place
+// whether or not the reader treats backslash as an escape.
+func pivotAtomLen(s string) int {
+	if s == "" {
+		return 0
+	}
+	switch s[0] {
+	case '\'':
+		for i := 1; i < len(s); i++ {
+			switch s[i] {
+			case '\\':
+				if i+1 >= len(s) || s[i+1] == '\'' {
+					return 0
+				}
+				i++
+			case '\'':
+				if i+1 < len(s) && s[i+1] == '\'' {
+					i++
+					continue
+				}
+				return i + 1
+			}
+		}
+		return 0
+	case '"', '`', '[':
+		closer := s[0]
+		if closer == '[' {
+			closer = ']'
+		}
+		for i := 1; i < len(s); i++ {
+			if s[i] != closer {
+				continue
+			}
+			if i+1 < len(s) && s[i+1] == closer {
+				i++
+				continue
+			}
+			return i + 1
+		}
+		return 0
+	}
+	i := 0
+	for i < len(s) {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		ok := r == '_' || r == '.' || r == '$' || r == '#' || r == '@' ||
+			unicode.IsLetter(r) || unicode.IsDigit(r) ||
+			(i > 0 && r >= utf8.RuneSelf && (unicode.Is(unicode.Mn, r) || unicode.Is(unicode.Mc, r) || unicode.Is(unicode.Pc, r)))
+		if !ok || r == utf8.RuneError {
+			break
+		}
+		i += size
+	}
+	return i
+}
+
+// writePivotClause writes " PIVOT (agg FOR col IN (v1, v2))". The pivot
+// column is quoted when it is not a plain name, and each IN value is written
+// in its stored source form (e.g. [Q1], 'JAN', 1 AS one) when well formed,
+// otherwise double-quoted (see QuotePivotItem).
 func writePivotClause(buf *bytes.Buffer, p *PivotClause) {
 	if p == nil {
 		return
@@ -41,32 +201,33 @@ func writePivotClause(buf *bytes.Buffer, p *PivotClause) {
 	buf.WriteString(" PIVOT (")
 	writeExpr(buf, p.AggregateFunction)
 	buf.WriteString(" FOR ")
-	buf.WriteString(p.PivotColumn)
+	writeSafeIdentifier(buf, p.PivotColumn)
 	buf.WriteString(" IN (")
 	for i, v := range p.InValues {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(v)
+		writePivotItem(buf, v)
 	}
 	buf.WriteString("))")
 }
 
-// writeUnpivotClause writes " UNPIVOT (val FOR name IN (c1, c2))".
+// writeUnpivotClause writes " UNPIVOT (val FOR name IN (c1, c2))", quoting
+// names and IN columns the same way as writePivotClause.
 func writeUnpivotClause(buf *bytes.Buffer, u *UnpivotClause) {
 	if u == nil {
 		return
 	}
 	buf.WriteString(" UNPIVOT (")
-	buf.WriteString(u.ValueColumn)
+	writeSafeIdentifier(buf, u.ValueColumn)
 	buf.WriteString(" FOR ")
-	buf.WriteString(u.NameColumn)
+	writeSafeIdentifier(buf, u.NameColumn)
 	buf.WriteString(" IN (")
 	for i, c := range u.InColumns {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(c)
+		writePivotItem(buf, c)
 	}
 	buf.WriteString("))")
 }

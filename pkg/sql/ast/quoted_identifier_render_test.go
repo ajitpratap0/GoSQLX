@@ -40,7 +40,8 @@ var quotedRenderDialects = []keywords.SQLDialect{
 
 // nameSignature summarizes the names an AST carries in the positions issue
 // #611 is about: CTE names and column lists, view names and column lists,
-// table references and identifiers (with their Quoted flag).
+// table references and identifiers (with whether SQL() quotes the name; a
+// case-only quoted name renders bare, so its Quoted flag is not kept).
 func nameSignature(tree *ast.AST) string {
 	var parts []string
 	visit := func(n ast.Node) bool {
@@ -56,7 +57,7 @@ func nameSignature(tree *ast.AST) string {
 		case ast.TableReference:
 			parts = append(parts, "table:"+v.Name)
 		case *ast.Identifier:
-			parts = append(parts, fmt.Sprintf("id:%s/%s/%t", v.Table, v.Name, v.Quoted))
+			parts = append(parts, fmt.Sprintf("id:%s/%s/%t", v.Table, v.Name, strings.HasSuffix(v.SQL(), `"`)))
 		}
 		return true
 	}
@@ -94,8 +95,9 @@ func assertQuotedRoundTrip(t *testing.T, sql, want string, d keywords.SQLDialect
 }
 
 // TestQuotedIdentifierRender_Issue611 covers quoted identifiers that are
-// reserved words, contain spaces or are case-sensitive: SQL() must keep the
-// quotes so the output re-parses as the same names in every dialect.
+// reserved words or contain spaces: SQL() must keep the quotes so the output
+// re-parses as the same names in every dialect. A name quoted only for its
+// case renders bare, like the aliases and column lists it may refer to.
 func TestQuotedIdentifierRender_Issue611(t *testing.T) {
 	cases := []struct {
 		name string
@@ -106,7 +108,7 @@ func TestQuotedIdentifierRender_Issue611(t *testing.T) {
 		{"cte_column_space", `WITH c ("a b") AS (SELECT 1) SELECT * FROM c`, ""},
 		{"view_column_reserved", `CREATE VIEW v ("select") AS SELECT 1`, ""},
 		{"select_reserved", `SELECT "select" FROM t`, ""},
-		{"select_space_case_table_space", `SELECT "a b", "Mixed" FROM "my table"`, ""},
+		{"select_space_case_table_space", `SELECT "a b", "Mixed" FROM "my table"`, `SELECT "a b", Mixed FROM "my table"`},
 		{"cte_name_reserved", `WITH "select" AS (SELECT 1) SELECT * FROM "select"`, ""},
 		{"mview_column_reserved", `CREATE MATERIALIZED VIEW mv ("select") AS SELECT 1`, ""},
 		{"cte_column_key", `WITH c ("key") AS (SELECT 1) SELECT * FROM c`, ""},

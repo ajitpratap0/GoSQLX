@@ -88,15 +88,19 @@ func (a AST) SQL() string {
 // ============================================================
 
 // SQL returns the SQL representation of the identifier.
-// A Quoted name (written as a double-quoted identifier in the source) is
-// always re-quoted, so reserved words and case survive a round trip. Other
-// names, and each part of the Table qualifier, are double-quoted only when
-// they contain characters other than letters, digits, '_', '*' and '.'.
+// A Quoted name (written as a double-quoted identifier in the source) that is
+// a reserved word ("select", "key", "null") is re-quoted so it re-parses as a
+// name. Names, and each part of the Table qualifier, are otherwise
+// double-quoted only when they contain characters other than letters, digits,
+// '_', '*' and '.'. Case alone does not trigger quoting: aliases and CTE/view
+// column lists record no quoting and render bare, so a quoted "Total" that
+// refers to one must render bare as well to keep matching it after the
+// database folds case.
 func (i *Identifier) SQL() string {
 	if i == nil {
 		return ""
 	}
-	if !i.Quoted && !identifierNeedsQuoting(i.Name) && (i.Table == "" || !qualifierNeedsQuoting(i.Table)) {
+	if !i.quotedReserved() && !identifierNeedsQuoting(i.Name) && (i.Table == "" || !qualifierNeedsQuoting(i.Table)) {
 		if i.Table == "" {
 			return i.Name
 		}
@@ -116,11 +120,17 @@ func (i *Identifier) writeSQL(buf *bytes.Buffer) {
 		writeDottedIdentifier(buf, i.Table)
 		buf.WriteByte('.')
 	}
-	if i.Quoted {
+	if i.quotedReserved() {
 		writeQuotedIdentifier(buf, i.Name)
 		return
 	}
 	writeSafeIdentifier(buf, i.Name)
+}
+
+// quotedReserved reports whether i is a Quoted name that is a reserved word,
+// which must stay quoted to re-parse as a name.
+func (i *Identifier) quotedReserved() bool {
+	return i.Quoted && isReservedName(i.Name, false)
 }
 
 // qualifierNeedsQuoting reports whether some dot-separated part of the

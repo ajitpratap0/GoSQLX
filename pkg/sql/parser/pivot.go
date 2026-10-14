@@ -46,6 +46,19 @@ func renderQuotedIdent(tok models.Token) string {
 	return tok.Value
 }
 
+// renderPivotValue reproduces a PIVOT/UNPIVOT IN-list token in source form:
+// a string literal is re-quoted and escaped the same way LiteralValue.SQL()
+// writes strings, a quoted identifier keeps its delimiters
+// (renderQuotedIdent), and anything else (a bare name or number) is returned
+// as is.
+func (p *Parser) renderPivotValue() string {
+	if p.isStringLiteral() {
+		lit := ast.LiteralValue{Value: p.currentToken.Token.Value, Type: "STRING"}
+		return lit.SQL()
+	}
+	return renderQuotedIdent(p.currentToken.Token)
+}
+
 // parsePivotAlias consumes an optional alias (with or without AS) following a
 // PIVOT/UNPIVOT clause. Extracted to avoid four copies of the same logic in
 // the table-reference and join paths.
@@ -164,13 +177,13 @@ func (p *Parser) parsePivotClause() (*ast.PivotClause, error) {
 		if !p.isIdentifier() && !p.isType(models.TokenTypeNumber) && !p.isStringLiteral() {
 			return nil, p.expectedError("value in PIVOT IN list")
 		}
-		val := renderQuotedIdent(p.currentToken.Token)
+		val := p.renderPivotValue()
 		p.advance()
 		// Optional alias: AS <name>
 		if p.isType(models.TokenTypeAs) {
 			p.advance() // consume AS
 			if p.isIdentifier() || p.isNonReservedKeyword() {
-				val += " AS " + p.currentToken.Token.Value
+				val += " AS " + renderQuotedIdent(p.currentToken.Token)
 				p.advance()
 			}
 		}
@@ -257,7 +270,7 @@ func (p *Parser) parseUnpivotClause() (*ast.UnpivotClause, error) {
 		if p.isType(models.TokenTypeAs) {
 			p.advance() // consume AS
 			if p.isStringLiteral() || p.isIdentifier() || p.isNonReservedKeyword() {
-				col += " AS " + renderQuotedIdent(p.currentToken.Token)
+				col += " AS " + p.renderPivotValue()
 				p.advance()
 			}
 		}

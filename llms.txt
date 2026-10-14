@@ -1,93 +1,72 @@
 # GoSQLX
 
-> High-performance SQL parsing SDK for Go, multi-dialect, zero-copy, race-free production library.
+> High-performance SQL parsing SDK for Go: zero-copy tokenizer, recursive-descent parser, AST, formatter, linter and security scanner. Multi-dialect and race-free.
 
-GoSQLX is a production-ready SQL parsing library for Go that provides zero-copy tokenization,
-recursive-descent parsing, and AST generation with comprehensive object pooling. It supports
-PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, and ClickHouse dialects (8 total), and ships a full-featured
-CLI tool (`gosqlx`) for validation, formatting, linting, transpilation, and security analysis. Apache-2.0 licensed.
+GoSQLX is a production-ready SQL parsing library for Go with zero-copy tokenization, recursive-descent parsing and AST generation backed by object pooling. It supports 8 dialects (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse) and ships a CLI (`gosqlx`) for validation, formatting, linting, transpilation and security analysis. Apache-2.0 licensed. Requires Go 1.26+.
 
-Current stable version: v1.14.0 (2026-04-12)
+Current stable version: v1.15.0
 Website: https://gosqlx.dev
 Interactive Playground: https://gosqlx.dev/playground/
 
-## Core API
+## Key facts
 
-- [Package gosqlx](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/gosqlx): High-level entry point - `Parse()`, `Validate()`, `Format()`, `ParseWithDialect()`, `ParseWithRecovery()`
-- [Package parser](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/sql/parser): Recursive-descent parser with one-token lookahead and object pooling
-- [Package tokenizer](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer): Zero-copy SQL lexer with full UTF-8 support
-- [Package ast](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/sql/ast): AST node types and visitor pattern
-- [Package security](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/sql/security): SQL injection scanner - tautology, UNION, time-based, comment-bypass patterns
-- [Package linter](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/linter): 10 built-in lint rules (L001–L010)
-- [Package transform](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/transform): Programmatic SQL rewriting - add WHERE, columns, JOINs, pagination
-- [Package lsp](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/lsp): Language Server Protocol server for IDE integration
+- SQL dialects: 8
+- Built-in linter rules: 30 (L001-L030)
+- MCP server tools: 7
+- SQL-99 compliance: ~80–85% (estimated)
+- QA corpus (v1.14.0): Snowflake 87/87, ClickHouse 69/83
+- Performance: ~318 ns/op (~3.14M ops/sec) for a simple SELECT (parse stage) on Apple M4, Go 1.27. This is the parse stage only (pre-tokenized input), not tokenize or end-to-end. Source: BenchmarkPerformanceBaseline, median of 10 runs, re-measured 2026-10-13.
 
 ## Documentation
 
-- [Getting Started](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/GETTING_STARTED.md): Install and first parse in 5 minutes
-- [Usage Guide](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/USAGE_GUIDE.md): Comprehensive patterns for all API surfaces
-- [CLI Guide](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/CLI_GUIDE.md): `gosqlx validate`, `format`, `parse`, `analyze`, `lint`, `lsp` commands
-- [API Reference](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/API_REFERENCE.md): Complete API documentation with examples
-- [SQL Compatibility](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/SQL_COMPATIBILITY.md): Feature support matrix across 6 SQL dialects
-- [Error Codes](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ERROR_CODES.md): E1xxx tokenizer, E2xxx parser, E3xxx semantic, E4xxx unsupported
-- [Security](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/SECURITY.md): SQL injection detection API, tautology patterns, UNION split
-- [Architecture](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/ARCHITECTURE.md): Tokenizer → Parser → AST pipeline, object pooling design
-- [Migration Guide](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/MIGRATION.md): Breaking change notes per version
-- [Performance Tuning](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/PERFORMANCE_TUNING.md): Pool configuration, batch parsing, profiling tips
-- [Linting Rules](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/LINTING_RULES.md): L001–L010 rule reference
+### Getting Started
 
-## Key Capabilities
+- [Getting Started](https://gosqlx.dev/docs/getting-started/): Install GoSQLX, parse your first SQL statement in Go, and walk the AST in minutes, with copy-paste examples for the high-level API and the CLI.
+- [Feature Tour](https://gosqlx.dev/docs/feature-tour/): A guided tour of GoSQLX features: parsing, formatting, linting, security scanning, transforms, fingerprinting and transpilation, each with a short example.
+- [CLI Guide](https://gosqlx.dev/docs/cli-guide/): Reference for the gosqlx command line tool: validate, format, lint, parse, analyze and lsp commands, flags, output formats and CI usage with examples.
 
-- **SQL dialects**: PostgreSQL (default), MySQL, SQL Server (T-SQL), Oracle, SQLite, Snowflake
-- **DML**: SELECT (window functions, CTEs, set ops, LATERAL, DISTINCT ON), INSERT, UPDATE, DELETE, MERGE
-- **DDL**: CREATE/ALTER/DROP TABLE, INDEX, VIEW, MATERIALIZED VIEW; SQLite PRAGMA and WITHOUT ROWID
-- **Security scanner**: Tautology (1=1), UNION injection, time-based blind, comment bypass, stacked queries, dangerous functions - 4 severity levels (CRITICAL/HIGH/MEDIUM/LOW)
-- **Object pooling**: sync.Pool throughout; 60-80% memory reduction vs naive allocation
-- **Thread safety**: race-free (verified with the Go race detector in CI)
-- **CLI**: `gosqlx validate/format/parse/analyze/lint/lsp` with SARIF output for GitHub Code Scanning
-- **LSP server**: real-time diagnostics, completion, hover, formatting for VS Code and any LSP client
-- **Query transforms**: add WHERE filters, column projections, JOINs, pagination via composable rules
-- **WASM**: browser-based SQL parsing/formatting/linting playground
-- **Python bindings**: PyGoSQLX via ctypes FFI
+### Core
 
-## Quick Start
+- [Usage Guide](https://gosqlx.dev/docs/usage-guide/): Practical patterns for GoSQLX in Go: high-level and low-level APIs, object pooling, dialect selection, error handling and concurrent use in services.
+- [API Reference](https://gosqlx.dev/docs/api-reference/): Complete API reference for GoSQLX packages: gosqlx, tokenizer, parser, ast, errors and models, with function signatures, types and usage notes.
+- [Architecture](https://gosqlx.dev/docs/architecture/): How GoSQLX is built: the zero-copy tokenizer, recursive descent parser, AST and visitor pattern, object pools and package dependencies, explained.
+- [Configuration](https://gosqlx.dev/docs/configuration/): Configure GoSQLX with a .gosqlx.yml file: format, validation, output and analyze options, defaults, file locations, precedence and CLI overrides.
 
-```go
-import "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+### Reference
 
-// Parse - returns *ast.AST
-tree, err := gosqlx.Parse("SELECT u.name, COUNT(o.id) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name")
+- [Error Codes](https://gosqlx.dev/docs/error-codes/): Every GoSQLX error code from E1001 to E4002 covering tokenizer, parser, semantic and unsupported-feature failures, with causes and suggested fixes.
+- [SQL Compatibility](https://gosqlx.dev/docs/sql-compatibility/): Which SQL syntax GoSQLX supports across PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake and ClickHouse, with a dialect coverage matrix.
+- [Linting Rules](https://gosqlx.dev/docs/linting-rules/): All 30 built-in GoSQLX linter rules, L001 to L030, with what each checks, why it matters, example violations, fixes and auto-fix support.
 
-// Validate
-err = gosqlx.Validate("SELECT * FROM users WHERE active = true")
+### Advanced
 
-// Format
-formatted, err := gosqlx.Format(sql, gosqlx.DefaultFormatOptions())
+- [LSP Guide](https://gosqlx.dev/docs/lsp-guide/): Set up the GoSQLX Language Server for diagnostics, completion, hover, formatting and symbols in VS Code, Neovim, JetBrains and other LSP editors.
+- [MCP Guide](https://gosqlx.dev/docs/mcp-guide/): Expose GoSQLX to AI assistants through the Model Context Protocol: available tools for parsing, validating, formatting and analyzing SQL, plus setup steps.
+- [Security](https://gosqlx.dev/docs/security/): Detect SQL injection with the GoSQLX security scanner: finding severities, supported patterns, usage from Go and the CLI, and how to report issues.
+- [Production Guide](https://gosqlx.dev/docs/production-guide/): Run GoSQLX in production: sizing object pools, concurrency and race safety, metrics and monitoring, error handling, timeouts and deployment advice.
+- [Performance Tuning](https://gosqlx.dev/docs/performance-tuning/): Tune GoSQLX for throughput: reuse pooled tokenizers and ASTs, choose the right API, profile hot paths and read benchmark results for your workload.
 
-// Dialect-aware
-tree, err = gosqlx.ParseWithDialect("SHOW TABLES", keywords.DialectMySQL)
+### Tutorials
 
-// Batch (reuses pool objects)
-trees, err := gosqlx.ParseMultiple([]string{sql1, sql2, sql3})
-```
+- [SQL Validator CI/CD](https://gosqlx.dev/docs/tutorials/01-sql-validator-cicd/): Tutorial: build a SQL syntax validator with GoSQLX and wire it into a CI/CD pipeline so pull requests with invalid SQL files fail the build.
+- [Custom SQL Formatter](https://gosqlx.dev/docs/tutorials/02-custom-sql-formatter/): Tutorial: build a custom SQL formatter with GoSQLX by parsing queries into an AST, walking the nodes and controlling keyword case and indentation.
 
-## Repository Layout
+### Migration
 
-- `pkg/gosqlx/` - high-level API (start here)
-- `pkg/sql/tokenizer/` - zero-copy lexer
-- `pkg/sql/parser/` - recursive-descent parser
-- `pkg/sql/ast/` - AST node definitions + visitor
-- `pkg/sql/security/` - injection scanner
-- `pkg/linter/` - lint rules engine
-- `pkg/transform/` - query rewriting
-- `pkg/lsp/` - LSP server
-- `cmd/gosqlx/` - CLI implementation
-- `examples/` - runnable code examples
-- `docs/` - comprehensive documentation (25+ guides)
+- [From JSQLParser](https://gosqlx.dev/docs/migration/from-jsqlparser/): Migrate from JSqlParser to GoSQLX: how Java parsing concepts map to Go APIs, equivalent AST nodes, visitor usage and a step-by-step porting checklist.
+- [From pg_query](https://gosqlx.dev/docs/migration/from-pg-query/): Migrate from pg_query_go to GoSQLX: swap the cgo dependency for a pure Go parser, map AST nodes and functions, and handle multiple SQL dialects.
+- [From SQLFluff](https://gosqlx.dev/docs/migration/from-sqlfluff/): Migrate from SQLFluff to GoSQLX: map lint rules and configuration to GoSQLX equivalents, compare speed and dialects, and move CI checks over.
+
+### Editors
+
+- [VS Code](https://gosqlx.dev/docs/editors/vscode/): Install the GoSQLX VS Code extension for SQL diagnostics, formatting, completion and hover, and configure the language server for your project.
+- [Neovim](https://gosqlx.dev/docs/editors/neovim/): Configure Neovim to use the GoSQLX language server through nvim-lspconfig for SQL diagnostics, formatting, completion and hover, with a working example.
+- [JetBrains](https://gosqlx.dev/docs/editors/jetbrains/): Connect JetBrains IDEs such as GoLand, IntelliJ and DataGrip to the GoSQLX language server for SQL diagnostics, formatting and completion, step by step.
 
 ## Optional
 
-- [CHANGELOG](https://github.com/ajitpratap0/GoSQLX/blob/main/CHANGELOG.md): Full version history
-- [Contributing](https://github.com/ajitpratap0/GoSQLX/blob/main/CONTRIBUTING.md): How to contribute
-- [GitHub Action](https://github.com/marketplace/actions/gosqlx-sql-validator): GoSQLX SQL Validator CI action
-- [Python Bindings](https://github.com/ajitpratap0/GoSQLX/blob/main/python/README.md): PyGoSQLX
+- [Full documentation in one file](https://gosqlx.dev/llms-full.txt): Every docs page as plain text
+- [Changelog](https://gosqlx.dev/blog/): Release notes for every version
+- [Changelog feed](https://gosqlx.dev/blog/feed.xml): RSS 2.0
+- [Source code](https://github.com/ajitpratap0/GoSQLX): GitHub repository
+- [Go package docs](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/gosqlx): pkg.go.dev reference

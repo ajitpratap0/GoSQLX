@@ -1,10 +1,7 @@
-'use client';
-
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { FadeIn } from '@/components/ui/FadeIn';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
+import { RawDataToggle } from '@/components/benchmarks/RawDataToggle';
 import { ParseChart } from '@/components/benchmarks/ParseChart';
 import { BENCH_ENV, PARSE_BENCHMARKS, formatOps, opsPerSec } from '@/data/metrics';
 
@@ -25,49 +22,6 @@ const methodology = [
   'Object pooling enabled for all runs (production configuration)',
   'The CI regression baseline is a deliberately loose ceiling used with a tolerance on slower shared runners; it is not a measurement',
 ];
-
-function RawDataToggle({ id, children }: { id: string; children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="mt-4">
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1"
-        aria-expanded={open}
-        aria-controls={`raw-data-${id}`}
-      >
-        <motion.svg
-          className="w-3 h-3"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-          animate={{ rotate: open ? 90 : 0 }}
-          transition={{ duration: 0.2 }}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </motion.svg>
-        {open ? 'Hide' : 'View'} raw data
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            id={`raw-data-${id}`}
-            className="mt-3 overflow-hidden"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
-          >
-            {children}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
 
 function renderMethodologyItem(item: string) {
   const FLAG = '-benchmem';

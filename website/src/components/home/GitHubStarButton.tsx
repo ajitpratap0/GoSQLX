@@ -1,13 +1,13 @@
 'use client';
 
-import { motion } from 'motion/react';
+import { m } from 'motion/react';
 import { formatStars } from '@/lib/github';
 
 const spring = { type: 'spring' as const, stiffness: 400, damping: 17 };
 
 export function GitHubStarButton({ stars }: { stars: number | null }) {
   return (
-    <motion.a
+    <m.a
       href="https://github.com/ajitpratap0/GoSQLX"
       target="_blank"
       rel="noopener noreferrer"
@@ -28,6 +28,6 @@ export function GitHubStarButton({ stars }: { stars: number | null }) {
           {formatStars(stars)}
         </span>
       )}
-    </motion.a>
+    </m.a>
   );
 }

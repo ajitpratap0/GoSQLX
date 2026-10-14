@@ -3,7 +3,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { motion, AnimatePresence, useScroll, useTransform } from 'motion/react';
+import { m, AnimatePresence, useScroll, useTransform } from 'motion/react';
 import { NAV_LINKS } from '@/lib/constants';
 import { Button } from '@/components/ui/Button';
 import { SearchModal, useSearchShortcut } from '@/components/ui/SearchModal';
@@ -20,17 +20,17 @@ function GitHubIcon({ className = '' }: { className?: string }) {
 function HamburgerIcon({ open }: { open: boolean }) {
   return (
     <div className="w-5 h-4 relative flex flex-col justify-between">
-      <motion.span
+      <m.span
         className="block h-0.5 w-full bg-zinc-300 rounded-full origin-center"
         animate={open ? { rotate: 45, y: 7 } : { rotate: 0, y: 0 }}
         transition={{ duration: 0.2 }}
       />
-      <motion.span
+      <m.span
         className="block h-0.5 w-full bg-zinc-300 rounded-full"
         animate={open ? { opacity: 0 } : { opacity: 1 }}
         transition={{ duration: 0.15 }}
       />
-      <motion.span
+      <m.span
         className="block h-0.5 w-full bg-zinc-300 rounded-full origin-center"
         animate={open ? { rotate: -45, y: -7 } : { rotate: 0, y: 0 }}
         transition={{ duration: 0.2 }}
@@ -77,7 +77,7 @@ export function Navbar() {
 
   return (
     <>
-    <motion.header
+    <m.header
       className="fixed top-0 left-0 right-0 z-50 border-b border-white/[0.06]"
       style={{
         backgroundColor: bgColor,
@@ -153,7 +153,7 @@ export function Navbar() {
       {/* Mobile menu */}
       <AnimatePresence>
         {mobileOpen && (
-          <motion.div
+          <m.div
             id="mobile-menu"
             initial={{ height: 0, opacity: 0, pointerEvents: 'none' }}
             animate={{ height: 'auto', opacity: 1, pointerEvents: 'auto' }}
@@ -192,10 +192,10 @@ export function Navbar() {
                 </Button>
               </div>
             </div>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
-    </motion.header>
+    </m.header>
     <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
     </>
   );

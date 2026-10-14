@@ -1,5 +1,5 @@
 'use client';
-import { motion, useScroll, useReducedMotion } from 'motion/react';
+import { m, useScroll, useReducedMotion } from 'motion/react';
 
 export function ScrollProgressBar() {
   const { scrollYProgress } = useScroll();
@@ -8,7 +8,7 @@ export function ScrollProgressBar() {
   if (shouldReduce) return null;
 
   return (
-    <motion.div
+    <m.div
       style={{
         scaleX: scrollYProgress,
         position: 'fixed',

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { m } from 'motion/react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { FadeIn } from '@/components/ui/FadeIn';
 
@@ -99,6 +99,7 @@ function renderCode(lines: CodeLine[]) {
 
 export function CodeExamples() {
   const [active, setActive] = useState(0);
+  const [switched, setSwitched] = useState(false);
 
   return (
     <section className="py-20 border-t border-white/[0.06]">
@@ -113,19 +114,21 @@ export function CodeExamples() {
             {tabs.map((tab, i) => (
               <button
                 key={tab.label}
-                onClick={() => setActive(i)}
+                onClick={() => {
+                  setActive(i);
+                  setSwitched(true);
+                }}
                 className={`relative px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
                   active === i ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'
                 }`}
               >
                 {tab.label}
-                {active === i && (
-                  <motion.div
-                    layoutId="activeTab"
-                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-indigo"
-                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                  />
-                )}
+                <span
+                  aria-hidden="true"
+                  className={`absolute bottom-0 left-0 right-0 h-0.5 bg-accent-indigo origin-left transition-transform duration-300 ease-out ${
+                    active === i ? 'scale-x-100' : 'scale-x-0'
+                  }`}
+                />
               </button>
             ))}
           </div>
@@ -137,17 +140,14 @@ export function CodeExamples() {
               <span className="text-xs text-zinc-500 ml-2">main.go</span>
             </div>
             <div className="p-4 font-mono text-sm leading-relaxed overflow-x-auto">
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.div
-                  key={active}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  {renderCode(tabs[active].lines)}
-                </motion.div>
-              </AnimatePresence>
+              <m.div
+                key={active}
+                initial={switched ? { opacity: 0, y: 8 } : false}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                {renderCode(tabs[active].lines)}
+              </m.div>
             </div>
           </GlassCard>
         </FadeIn>

@@ -49,7 +49,7 @@ export function BenchmarksContent() {
             <p className="mt-4 text-lg text-zinc-400 max-w-2xl mx-auto">
               Parse-stage performance of the GoSQLX parser, re-measured with the in-repo benchmarks.
             </p>
-            <p className="mt-3 text-xs text-zinc-500">
+            <p className="mt-3 text-xs text-text-muted">
               Measured 2026-10-13 &middot; Apple M4 &middot; Go 1.27 &middot; parse stage only
             </p>
           </FadeIn>
@@ -110,7 +110,7 @@ export function BenchmarksContent() {
                   </table>
                 </div>
               </GlassCard>
-              <p className="text-xs text-zinc-500 mt-2 md:hidden">&larr; Swipe to see all columns &rarr;</p>
+              <p className="text-xs text-text-muted mt-2 md:hidden">&larr; Swipe to see all columns &rarr;</p>
             </RawDataToggle>
           </FadeIn>
         </div>

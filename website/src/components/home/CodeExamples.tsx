@@ -17,7 +17,7 @@ const tabs: { label: string; lines: CodeLine[] }[] = [
       [{ text: 'import', cls: 'text-accent-indigo' }, { text: ' ', cls: '' }, { text: '"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"', cls: 'text-accent-green' }],
       [],
       [{ text: 'func', cls: 'text-accent-indigo' }, { text: ' main', cls: 'text-accent-orange' }, { text: '() {', cls: 'text-zinc-300' }],
-      [{ text: '    ', cls: '' }, { text: '// Parse SQL into an AST', cls: 'text-zinc-500' }],
+      [{ text: '    ', cls: '' }, { text: '// Parse SQL into an AST', cls: 'text-text-muted' }],
       [{ text: '    ast, err := gosqlx.', cls: 'text-zinc-300' }, { text: 'Parse', cls: 'text-accent-orange' }, { text: '(', cls: 'text-zinc-300' }, { text: '"SELECT * FROM users WHERE active = true"', cls: 'text-accent-green' }, { text: ')', cls: 'text-zinc-300' }],
       [{ text: '    ', cls: '' }, { text: 'if', cls: 'text-accent-indigo' }, { text: ' err != nil {', cls: 'text-zinc-300' }],
       [{ text: '        log.Fatal(err)', cls: 'text-zinc-300' }],
@@ -34,7 +34,7 @@ const tabs: { label: string; lines: CodeLine[] }[] = [
       [{ text: 'import', cls: 'text-accent-indigo' }, { text: ' ', cls: '' }, { text: '"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"', cls: 'text-accent-green' }],
       [],
       [{ text: 'func', cls: 'text-accent-indigo' }, { text: ' main', cls: 'text-accent-orange' }, { text: '() {', cls: 'text-zinc-300' }],
-      [{ text: '    ', cls: '' }, { text: '// Format messy SQL', cls: 'text-zinc-500' }],
+      [{ text: '    ', cls: '' }, { text: '// Format messy SQL', cls: 'text-text-muted' }],
       [{ text: '    formatted, err := gosqlx.', cls: 'text-zinc-300' }, { text: 'Format', cls: 'text-accent-orange' }, { text: '(', cls: 'text-zinc-300' }, { text: '"select id,name from users where id>5"', cls: 'text-accent-green' }, { text: ')', cls: 'text-zinc-300' }],
       [{ text: '    ', cls: '' }, { text: 'if', cls: 'text-accent-indigo' }, { text: ' err != nil {', cls: 'text-zinc-300' }],
       [{ text: '        log.Fatal(err)', cls: 'text-zinc-300' }],
@@ -51,7 +51,7 @@ const tabs: { label: string; lines: CodeLine[] }[] = [
       [{ text: 'import', cls: 'text-accent-indigo' }, { text: ' ', cls: '' }, { text: '"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"', cls: 'text-accent-green' }],
       [],
       [{ text: 'func', cls: 'text-accent-indigo' }, { text: ' main', cls: 'text-accent-orange' }, { text: '() {', cls: 'text-zinc-300' }],
-      [{ text: '    ', cls: '' }, { text: '// Validate SQL syntax', cls: 'text-zinc-500' }],
+      [{ text: '    ', cls: '' }, { text: '// Validate SQL syntax', cls: 'text-text-muted' }],
       [{ text: '    result := gosqlx.', cls: 'text-zinc-300' }, { text: 'Validate', cls: 'text-accent-orange' }, { text: '(', cls: 'text-zinc-300' }, { text: '"SELECT * FROM users"', cls: 'text-accent-green' }, { text: ')', cls: 'text-zinc-300' }],
       [{ text: '    ', cls: '' }, { text: 'if', cls: 'text-accent-indigo' }, { text: ' result.Valid {', cls: 'text-zinc-300' }],
       [{ text: '        fmt.Println(', cls: 'text-zinc-300' }, { text: '"SQL is valid!"', cls: 'text-accent-green' }, { text: ')', cls: 'text-zinc-300' }],
@@ -67,7 +67,7 @@ const tabs: { label: string; lines: CodeLine[] }[] = [
       [{ text: 'import', cls: 'text-accent-indigo' }, { text: ' ', cls: '' }, { text: '"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"', cls: 'text-accent-green' }],
       [],
       [{ text: 'func', cls: 'text-accent-indigo' }, { text: ' main', cls: 'text-accent-orange' }, { text: '() {', cls: 'text-zinc-300' }],
-      [{ text: '    ', cls: '' }, { text: '// Lint SQL for best practices', cls: 'text-zinc-500' }],
+      [{ text: '    ', cls: '' }, { text: '// Lint SQL for best practices', cls: 'text-text-muted' }],
       [{ text: '    issues, err := gosqlx.', cls: 'text-zinc-300' }, { text: 'Lint', cls: 'text-accent-orange' }, { text: '(', cls: 'text-zinc-300' }, { text: '"SELECT * FROM orders"', cls: 'text-accent-green' }, { text: ')', cls: 'text-zinc-300' }],
       [{ text: '    ', cls: '' }, { text: 'if', cls: 'text-accent-indigo' }, { text: ' err != nil {', cls: 'text-zinc-300' }],
       [{ text: '        log.Fatal(err)', cls: 'text-zinc-300' }],
@@ -84,7 +84,7 @@ const tabs: { label: string; lines: CodeLine[] }[] = [
 function renderCode(lines: CodeLine[]) {
   return lines.map((line, idx) => (
     <div key={idx} className="flex">
-      <span className="w-8 text-right text-zinc-600 select-none mr-4 shrink-0">{idx + 1}</span>
+      <span className="w-8 text-right text-text-muted select-none mr-4 shrink-0">{idx + 1}</span>
       <span className="flex-1 whitespace-pre">
         {line.length === 0
           ? <>&nbsp;</>
@@ -119,7 +119,7 @@ export function CodeExamples() {
                   setSwitched(true);
                 }}
                 className={`relative px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-                  active === i ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'
+                  active === i ? 'text-white' : 'text-text-muted hover:text-zinc-300'
                 }`}
               >
                 {tab.label}
@@ -137,7 +137,7 @@ export function CodeExamples() {
               <div className="w-3 h-3 rounded-full bg-red-500/60" />
               <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
               <div className="w-3 h-3 rounded-full bg-green-500/60" />
-              <span className="text-xs text-zinc-500 ml-2">main.go</span>
+              <span className="text-xs text-text-muted ml-2">main.go</span>
             </div>
             <div className="p-4 font-mono text-sm leading-relaxed overflow-x-auto">
               <m.div

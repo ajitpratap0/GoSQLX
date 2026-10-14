@@ -136,22 +136,44 @@ func (i *Identifier) quotedReserved() bool {
 // qualifierNeedsQuoting reports whether some dot-separated part of the
 // non-empty qualifier name would be quoted by writeDottedIdentifier.
 func qualifierNeedsQuoting(name string) bool {
-	return identifierNeedsQuoting(name) || name[0] == '.' || name[len(name)-1] == '.' ||
-		strings.Contains(name, "..")
+	if identifierNeedsQuoting(name) || name[0] == '.' || name[len(name)-1] == '.' ||
+		strings.Contains(name, "..") {
+		return true
+	}
+	for {
+		dot := strings.IndexByte(name, '.')
+		if dot < 0 {
+			return isReservedName(name, true)
+		}
+		if isReservedName(name[:dot], true) {
+			return true
+		}
+		name = name[dot+1:]
+	}
 }
 
 // writeDottedIdentifier writes a possibly multi-part qualifier such as
 // "db.t" or "c.s.t", quoting each dot-separated part on its own so that
 // "my-db.t" renders as "my-db".t (two identifiers) rather than "my-db.t"
-// (one). A dot is always treated as a part separator; see Identifier.Table.
+// (one). A part that is a word the parser rejects bare in every name
+// position ("from", "select") is quoted too, matching the table alias it
+// refers to (see tableAliasNeedsQuoting). A dot is always treated as a part
+// separator; see Identifier.Table.
 func writeDottedIdentifier(buf *bytes.Buffer, name string) {
 	for {
 		dot := strings.IndexByte(name, '.')
+		part := name
+		if dot >= 0 {
+			part = name[:dot]
+		}
+		if isReservedName(part, true) {
+			writeQuotedIdentifier(buf, part)
+		} else {
+			writeSafeIdentifier(buf, part)
+		}
 		if dot < 0 {
-			writeSafeIdentifier(buf, name)
 			return
 		}
-		writeSafeIdentifier(buf, name[:dot])
 		buf.WriteByte('.')
 		name = name[dot+1:]
 	}
@@ -446,7 +468,7 @@ func (a *AliasedExpression) writeSQL(buf *bytes.Buffer) {
 	}
 	writeExpr(buf, a.Expr)
 	buf.WriteString(" AS ")
-	buf.WriteString(a.Alias)
+	writeName(buf, a.Alias)
 }
 
 // SQL returns the SQL representation of this CAST expression in the form
@@ -745,7 +767,7 @@ func (f *FunctionCall) writeSQL(buf *bytes.Buffer) {
 		if o.Name != "" && o.BaseWindow == "" && len(o.PartitionBy) == 0 && len(o.OrderBy) == 0 && o.FrameClause == nil {
 			// Bare named-window reference: OVER w.
 			buf.WriteString(" OVER ")
-			buf.WriteString(o.Name)
+			writeName(buf, o.Name)
 		} else {
 			// Hand-built specs may carry the referenced window in Name alongside
 			// other parts; render it as the base window, as before.
@@ -1128,7 +1150,7 @@ func (s *SelectStatement) writeSQL(buf *bytes.Buffer) {
 			writeExpr(buf, e.Expr)
 			if e.Alias != "" {
 				buf.WriteString(" AS ")
-				buf.WriteString(e.Alias)
+				writeName(buf, e.Alias)
 			}
 		}
 	}
@@ -1175,7 +1197,7 @@ func (s *SelectStatement) writeSQL(buf *bytes.Buffer) {
 			if i > 0 {
 				buf.WriteString(", ")
 			}
-			buf.WriteString(s.Windows[i].Name)
+			writeName(buf, s.Windows[i].Name)
 			buf.WriteString(" AS (")
 			writeWindowSpec(buf, s.Windows[i].BaseWindow, &s.Windows[i])
 			buf.WriteByte(')')
@@ -1243,7 +1265,7 @@ func (i *InsertStatement) writeSQL(buf *bytes.Buffer) {
 	}
 
 	buf.WriteString("INSERT INTO ")
-	buf.WriteString(i.TableName)
+	writeQualifiedName(buf, i.TableName)
 
 	if i.isSetForm() {
 		buf.WriteString(" SET ")
@@ -1317,10 +1339,10 @@ func (u *UpdateStatement) writeSQL(buf *bytes.Buffer) {
 	}
 
 	buf.WriteString("UPDATE ")
-	buf.WriteString(u.TableName)
+	writeQualifiedName(buf, u.TableName)
 	if u.Alias != "" {
 		buf.WriteByte(' ')
-		buf.WriteString(u.Alias)
+		writeTableAlias(buf, u.Alias)
 	}
 
 	buf.WriteString(" SET ")
@@ -1365,10 +1387,10 @@ func (d *DeleteStatement) writeSQL(buf *bytes.Buffer) {
 	}
 
 	buf.WriteString("DELETE FROM ")
-	buf.WriteString(d.TableName)
+	writeQualifiedName(buf, d.TableName)
 	if d.Alias != "" {
 		buf.WriteByte(' ')
-		buf.WriteString(d.Alias)
+		writeTableAlias(buf, d.Alias)
 	}
 
 	if len(d.Using) > 0 {
@@ -1727,13 +1749,13 @@ func (m *MergeStatement) SQL() string {
 	sb.WriteString(tableRefSQL(&m.TargetTable))
 	if m.TargetAlias != "" {
 		sb.WriteString(" ")
-		sb.WriteString(m.TargetAlias)
+		writeTableAlias(sb, m.TargetAlias)
 	}
 	sb.WriteString(" USING ")
 	sb.WriteString(tableRefSQL(&m.SourceTable))
 	if m.SourceAlias != "" {
 		sb.WriteString(" ")
-		sb.WriteString(m.SourceAlias)
+		writeTableAlias(sb, m.SourceAlias)
 	}
 	sb.WriteString(" ON ")
 	sb.WriteString(exprSQL(m.OnCondition))
@@ -2088,7 +2110,7 @@ func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 	}
 	if t.Alias != "" && t.Pivot == nil && t.Unpivot == nil {
 		buf.WriteByte(' ')
-		buf.WriteString(t.Alias)
+		writeTableAlias(buf, t.Alias)
 	}
 	if t.Final {
 		buf.WriteString(" FINAL")
@@ -2103,7 +2125,7 @@ func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 	writeUnpivotClause(buf, t.Unpivot)
 	if t.Alias != "" && (t.Pivot != nil || t.Unpivot != nil) {
 		buf.WriteString(" AS ")
-		buf.WriteString(t.Alias)
+		writeTableAlias(buf, t.Alias)
 	}
 }
 
@@ -2150,7 +2172,7 @@ func writeWindowSpec(buf *bytes.Buffer, base string, w *WindowSpec) {
 	}
 	if base != "" {
 		sep()
-		buf.WriteString(base)
+		writeName(buf, base)
 	}
 	if len(w.PartitionBy) > 0 {
 		sep()

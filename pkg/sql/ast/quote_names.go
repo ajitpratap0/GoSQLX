@@ -14,7 +14,9 @@
 
 // This file holds the quoting helpers for names the AST stores as plain
 // strings (CTE names and column lists, view names and column lists, table
-// references). Those positions record no quote information, so a name is
+// references and INSERT/UPDATE/DELETE targets, select-item, table and
+// ARRAY JOIN aliases, window names). Those positions record no quote
+// information, so a name is
 // quoted whenever a bare rendering could not re-parse as the same name.
 package ast
 
@@ -73,11 +75,25 @@ var reservedNameWords = map[string]bool{
 // it is at least the length of the longest word in reservedNameWords.
 const maxReservedNameLen = 16
 
+// reservedLenMask has bit n of entry c-'A' set when reservedNameWords holds
+// a word of length n starting with letter c. isReservedName consults it to
+// skip the map lookup for most ordinary names.
+var reservedLenMask = func() (m [26]uint32) {
+	for w := range reservedNameWords {
+		m[w[0]-'A'] |= 1 << len(w)
+	}
+	return m
+}()
+
 // isReservedName reports whether name is in reservedNameWords for the given
 // position: table is true for a FROM/JOIN table or view name part and false
 // for a CTE name or column-list entry. The lookup does not allocate.
 func isReservedName(name string, table bool) bool {
 	if len(name) < 2 || len(name) > maxReservedNameLen {
+		return false
+	}
+	first := name[0] | 0x20 // ASCII lower case; non-letters fail below
+	if first < 'a' || first > 'z' || reservedLenMask[first-'a']&(1<<len(name)) == 0 {
 		return false
 	}
 	var up [maxReservedNameLen]byte
@@ -104,25 +120,56 @@ func isReservedName(name string, table bool) bool {
 // '$', '#' and '@' are also allowed bare so SQL Server #temp tables and
 // Snowflake @stage references keep their form.
 func nameNeedsQuoting(name string, table bool) bool {
-	if name == "" {
+	return !isBareNameChars(name, table) || isReservedName(name, table)
+}
+
+// isBareNameChars reports whether every rune of name may appear in a bare
+// identifier (see nameNeedsQuoting); special additionally allows '$', '#'
+// and '@'. An empty name reports true.
+func isBareNameChars(name string, special bool) bool {
+	// ASCII fast path; the first non-ASCII byte hands over to the rune loop.
+	i := 0
+	for ; i < len(name); i++ {
+		c := name[i]
+		if c >= 0x80 {
+			break
+		}
+		if c == '_' || (c|0x20 >= 'a' && c|0x20 <= 'z') || (c >= '0' && c <= '9') ||
+			(special && (c == '$' || c == '#' || c == '@')) {
+			continue
+		}
 		return false
 	}
-	for i, r := range name {
+	if i == len(name) {
+		return true
+	}
+	for j, r := range name[i:] {
 		if r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r) {
 			continue
 		}
 		// Mirrors tokenizer.unicodeIdentifierPartSlow: Mn and Mc combining
 		// marks (Indic vowel signs, decomposed accents) and Pc connector
 		// punctuation are bare identifier parts, but never a first rune.
-		if i > 0 && r >= 0x80 && (unicode.Is(unicode.Mn, r) || unicode.Is(unicode.Mc, r) || unicode.Is(unicode.Pc, r)) {
+		if i+j > 0 && r >= 0x80 && (unicode.Is(unicode.Mn, r) || unicode.Is(unicode.Mc, r) || unicode.Is(unicode.Pc, r)) {
 			continue
 		}
-		if table && (r == '$' || r == '#' || r == '@') {
+		if special && (r == '$' || r == '#' || r == '@') {
 			continue
 		}
-		return true
+		return false
 	}
-	return isReservedName(name, table)
+	return true
+}
+
+// tableAliasNeedsQuoting reports whether a table alias (FROM/JOIN, derived
+// table, PIVOT/UNPIVOT, UPDATE/DELETE or MERGE target/source) must be
+// double-quoted: it contains a character a bare identifier cannot, or it is a
+// word the parser rejects bare in every name position. Position-only words
+// such as SOURCE, TARGET and KEY stay bare, the same rule as a qualifier
+// that refers to the alias (writeDottedIdentifier), so "source".x and
+// AS "source" keep matching after case folding.
+func tableAliasNeedsQuoting(name string) bool {
+	return !isBareNameChars(name, false) || isReservedName(name, true)
 }
 
 // writeQuotedIdentifier writes name as an ANSI double-quoted identifier,
@@ -142,6 +189,16 @@ func writeQuotedIdentifier(buf *bytes.Buffer, name string) {
 // writeName writes a CTE name or a column-list entry, quoting it if needed.
 func writeName(buf *bytes.Buffer, name string) {
 	if nameNeedsQuoting(name, false) {
+		writeQuotedIdentifier(buf, name)
+		return
+	}
+	buf.WriteString(name)
+}
+
+// writeTableAlias writes a table alias, quoting it if needed (see
+// tableAliasNeedsQuoting).
+func writeTableAlias(buf *bytes.Buffer, name string) {
+	if tableAliasNeedsQuoting(name) {
 		writeQuotedIdentifier(buf, name)
 		return
 	}
@@ -212,8 +269,9 @@ func qualifiedNameNeedsQuoting(name string) bool {
 	}
 }
 
-// QuoteName returns a single-part name, such as a CTE name or a CTE/view
-// column-list entry, double-quoted when a bare rendering would not re-parse
+// QuoteName returns a single-part name, such as a CTE name, a CTE/view
+// column-list entry, a select-item or ARRAY JOIN alias, or a window name,
+// double-quoted when a bare rendering would not re-parse
 // as the same name: it contains a character other than a letter, digit or
 // '_', or it is a word the parser rejects bare in those positions. Otherwise
 // name is returned unchanged without allocating. The output uses ANSI double
@@ -243,5 +301,24 @@ func QuoteQualifiedName(name string) string {
 	buf := getBuf()
 	defer putBuf(buf)
 	writeQualifiedName(buf, name)
+	return buf.String()
+}
+
+// QuoteTableAlias returns a table alias (FROM/JOIN, derived table,
+// PIVOT/UNPIVOT, UPDATE/DELETE or MERGE target/source) double-quoted when a
+// bare rendering would not re-parse as the same alias: it contains a
+// character other than a letter, digit or '_', or it is a word the parser
+// rejects bare in every name position. Position-only words such as SOURCE,
+// TARGET and KEY are returned unchanged, matching how a qualifier that
+// refers to the alias renders, as is any other name that needs no quoting,
+// without allocating. The output uses ANSI double quotes regardless of
+// dialect.
+func QuoteTableAlias(name string) string {
+	if !tableAliasNeedsQuoting(name) {
+		return name
+	}
+	buf := getBuf()
+	defer putBuf(buf)
+	writeQuotedIdentifier(buf, name)
 	return buf.String()
 }

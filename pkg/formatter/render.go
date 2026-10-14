@@ -294,7 +294,7 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 		wins := make([]string, len(s.Windows))
 		for i := range s.Windows {
-			wins[i] = s.Windows[i].Name + " AS (" + windowSpecSQL(&s.Windows[i]) + ")"
+			wins[i] = ast.QuoteName(s.Windows[i].Name) + " AS (" + windowSpecSQL(&s.Windows[i]) + ")"
 		}
 		sb.WriteString(strings.Join(wins, ", "))
 	}
@@ -405,7 +405,7 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 
 	sb.WriteString(f.kw("INSERT INTO"))
 	sb.WriteString(" ")
-	sb.WriteString(i.TableName)
+	sb.WriteString(ast.QuoteQualifiedName(i.TableName))
 
 	// MySQL INSERT ... SET form: Columns[k] = Values[0][k].
 	setForm := i.SetSyntax && i.Query == nil && len(i.Columns) > 0 &&
@@ -497,10 +497,10 @@ func renderUpdate(u *ast.UpdateStatement, opts ast.FormatOptions) string {
 
 	sb.WriteString(f.kw("UPDATE"))
 	sb.WriteString(" ")
-	sb.WriteString(u.TableName)
+	sb.WriteString(ast.QuoteQualifiedName(u.TableName))
 	if u.Alias != "" {
 		sb.WriteString(" ")
-		sb.WriteString(u.Alias)
+		sb.WriteString(ast.QuoteTableAlias(u.Alias))
 	}
 
 	sb.WriteString(f.clauseSep())
@@ -558,10 +558,10 @@ func renderDelete(d *ast.DeleteStatement, opts ast.FormatOptions) string {
 
 	sb.WriteString(f.kw("DELETE FROM"))
 	sb.WriteString(" ")
-	sb.WriteString(d.TableName)
+	sb.WriteString(ast.QuoteQualifiedName(d.TableName))
 	if d.Alias != "" {
 		sb.WriteString(" ")
-		sb.WriteString(d.Alias)
+		sb.WriteString(ast.QuoteTableAlias(d.Alias))
 	}
 
 	if len(d.Using) > 0 {
@@ -1041,7 +1041,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 	sb.WriteString(tableRefSQL(&m.TargetTable, f))
 	if m.TargetAlias != "" {
 		sb.WriteString(" ")
-		sb.WriteString(m.TargetAlias)
+		sb.WriteString(ast.QuoteTableAlias(m.TargetAlias))
 	}
 
 	sb.WriteString(f.clauseSep())
@@ -1050,7 +1050,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 	sb.WriteString(tableRefSQL(&m.SourceTable, f))
 	if m.SourceAlias != "" {
 		sb.WriteString(" ")
-		sb.WriteString(m.SourceAlias)
+		sb.WriteString(ast.QuoteTableAlias(m.SourceAlias))
 	}
 
 	sb.WriteString(f.clauseSep())
@@ -1372,7 +1372,7 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 	}
 	if t.Alias != "" && t.Pivot == nil && t.Unpivot == nil {
 		sb.WriteString(" ")
-		sb.WriteString(t.Alias)
+		sb.WriteString(ast.QuoteTableAlias(t.Alias))
 	}
 	// SQL Server table hints follow the alias and precede PIVOT/UNPIVOT (#604).
 	if len(t.TableHints) > 0 {
@@ -1429,7 +1429,7 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("AS"))
 		sb.WriteString(" ")
-		sb.WriteString(t.Alias)
+		sb.WriteString(ast.QuoteTableAlias(t.Alias))
 	}
 	return sb.String()
 }
@@ -1503,7 +1503,7 @@ func joinSQL(j *ast.JoinClause, f *nodeFormatter) string {
 func windowSpecSQL(w *ast.WindowSpec) string {
 	var parts []string
 	if w.BaseWindow != "" {
-		parts = append(parts, w.BaseWindow)
+		parts = append(parts, ast.QuoteName(w.BaseWindow))
 	}
 	if len(w.PartitionBy) > 0 {
 		parts = append(parts, "PARTITION BY "+exprListSQL(w.PartitionBy))

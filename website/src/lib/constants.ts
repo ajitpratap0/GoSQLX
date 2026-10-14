@@ -57,3 +57,8 @@ export const DOCS_SIDEBAR = [
     { slug: 'editors/jetbrains', file: 'editors/jetbrains.md', label: 'JetBrains', description: 'Connect JetBrains IDEs such as GoLand, IntelliJ and DataGrip to the GoSQLX language server for SQL diagnostics, formatting and completion, step by step.' },
   ]},
 ];
+
+/** Stable DOM id for a docs category card on /docs/ (breadcrumb anchor target). */
+export function docsCategoryAnchor(category: string): string {
+  return category.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}

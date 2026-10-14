@@ -121,7 +121,7 @@ export default function Playground() {
 
   if (loading) {
     return (
-      <div className="flex flex-col h-full bg-[#09090b]" aria-busy="true" aria-label="Loading SQL parser">
+      <div className="flex flex-col h-full bg-bg" aria-busy="true" aria-label="Loading SQL parser">
         {/* Skeleton toolbar */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800 bg-slate-900/50">
           <div className="flex items-center gap-3">
@@ -185,14 +185,14 @@ export default function Playground() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-full bg-[#09090b]">
+      <div className="flex items-center justify-center h-full bg-bg">
         <div className="max-w-md text-center space-y-4">
           <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center mx-auto">
-            <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-6 h-6 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <p className="text-red-400 font-medium">Failed to load SQL parser</p>
+          <p className="text-danger font-medium">Failed to load SQL parser</p>
           <p className="text-slate-400 text-sm">{error.message}</p>
           <p className="text-slate-400 text-xs">Try refreshing the page to retry.</p>
         </div>
@@ -203,7 +203,7 @@ export default function Playground() {
   const hasResults = results.ast !== null;
 
   return (
-    <div className="flex flex-col h-full bg-[#09090b]">
+    <div className="flex flex-col h-full bg-bg">
       {/* Top toolbar */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800 bg-slate-900/50 min-h-[44px]">
         <div className="flex items-center gap-3">
@@ -294,7 +294,7 @@ export default function Playground() {
         <div className="flex items-center justify-between gap-4 px-4 py-2.5 border-t border-slate-800 bg-slate-900/50">
           <span className="text-xs text-slate-400 hidden sm:block">Ready to use this in your project?</span>
           <div className="flex items-center gap-2 flex-1 sm:flex-none">
-            <code className="text-xs font-mono text-emerald-400 bg-slate-800 px-2.5 py-1 rounded">
+            <code className="text-xs font-mono text-brand bg-bg-overlay px-2.5 py-1 rounded">
               go get github.com/ajitpratap0/GoSQLX
             </code>
             <button

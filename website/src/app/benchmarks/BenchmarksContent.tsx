@@ -30,7 +30,7 @@ function renderMethodologyItem(item: string) {
   return (
     <>
       {item.slice(0, idx)}
-      <code className="font-mono text-xs bg-white/[0.06] px-1 py-0.5 rounded">{FLAG}</code>
+      <code className="font-mono text-xs text-fg bg-fg/[0.06] px-1 py-0.5 rounded">{FLAG}</code>
       {item.slice(idx + FLAG.length)}
     </>
   );
@@ -49,7 +49,7 @@ export function BenchmarksContent() {
             <p className="mt-4 text-lg text-zinc-400 max-w-2xl mx-auto">
               Parse-stage performance of the GoSQLX parser, re-measured with the in-repo benchmarks.
             </p>
-            <p className="mt-3 text-xs text-text-muted">
+            <p className="mt-3 text-xs text-fg-subtle">
               Measured 2026-10-13 &middot; Apple M4 &middot; Go 1.27 &middot; parse stage only
             </p>
           </FadeIn>
@@ -110,7 +110,7 @@ export function BenchmarksContent() {
                   </table>
                 </div>
               </GlassCard>
-              <p className="text-xs text-text-muted mt-2 md:hidden">&larr; Swipe to see all columns &rarr;</p>
+              <p className="text-xs text-fg-subtle mt-2 md:hidden">&larr; Swipe to see all columns &rarr;</p>
             </RawDataToggle>
           </FadeIn>
         </div>
@@ -126,7 +126,7 @@ export function BenchmarksContent() {
                 Head-to-head numbers against other Go SQL parsers are not published yet. They will
                 return once a reproducible benchmark harness is committed to the repository, so every
                 figure can be re-run by you. Until then, see the{' '}
-                <a href="/compare/" className="text-indigo-300 underline underline-offset-2">
+                <a href="/compare/" className="text-accent underline underline-offset-2">
                   qualitative feature comparison
                 </a>
                 .

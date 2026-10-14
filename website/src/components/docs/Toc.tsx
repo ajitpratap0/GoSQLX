@@ -38,7 +38,7 @@ export function Toc({ headings }: TocProps) {
 
   return (
     <nav className="sticky top-20 hidden xl:block">
-      <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+      <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-fg-subtle">
         On this page
       </h4>
       <ul className="space-y-1.5 text-sm">
@@ -53,7 +53,7 @@ export function Toc({ headings }: TocProps) {
                 activeId === heading.id
                   ? 'text-white font-medium'
                   : heading.level === 3
-                  ? 'text-text-muted hover:text-zinc-300'
+                  ? 'text-fg-subtle hover:text-zinc-300'
                   : 'text-zinc-400 hover:text-zinc-300'
               }`}
             >

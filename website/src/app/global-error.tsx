@@ -15,7 +15,7 @@ export default function GlobalError({
 
   return (
     <html lang="en">
-      <body className="bg-[#09090b] text-white">
+      <body className="bg-[#0A0A0F] text-[#F0F0F5]">
         <NextError statusCode={0} />
       </body>
     </html>

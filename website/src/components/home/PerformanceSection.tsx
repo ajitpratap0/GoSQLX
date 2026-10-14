@@ -16,10 +16,10 @@ interface Stat {
 }
 
 const stats: Stat[] = [
-  { value: HEADLINE_OPS_PER_SEC, suffix: '', label: `parses/sec (simple SELECT, parse stage, ${BENCH_ENV.hardware})`, color: 'text-accent-orange', prefix: '~' },
-  { value: PARSE_BENCHMARKS[0].nsPerOp, suffix: 'ns', label: 'parse latency (simple SELECT, parse stage)', color: 'text-accent-indigo' },
-  { text: PROJECT.sql99, label: 'SQL-99 compliance (estimated)', color: 'text-accent-green' },
-  { value: PROJECT.dialectCount, suffix: '', label: 'Dialects', color: 'text-accent-purple' },
+  { value: HEADLINE_OPS_PER_SEC, suffix: '', label: `parses/sec (simple SELECT, parse stage, ${BENCH_ENV.hardware})`, color: 'text-accent-warm', prefix: '~' },
+  { value: PARSE_BENCHMARKS[0].nsPerOp, suffix: 'ns', label: 'parse latency (simple SELECT, parse stage)', color: 'text-accent' },
+  { text: PROJECT.sql99, label: 'SQL-99 compliance (estimated)', color: 'text-brand' },
+  { value: PROJECT.dialectCount, suffix: '', label: 'Dialects', color: 'text-accent' },
 ];
 
 const benchmarks = PARSE_BENCHMARKS.map((b) => ({

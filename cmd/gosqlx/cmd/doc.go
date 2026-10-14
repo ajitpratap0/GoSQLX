@@ -285,11 +285,18 @@
 //
 // ## format Command
 //
-// Formats SQL with intelligent indentation.
+// Formats SQL with intelligent indentation. Rendering delegates to
+// pkg/formatter, and the output is checked by re-parsing it: it must re-parse
+// to the same number of statements with the same AST.SQL() and per-statement
+// rendering, and keep every string literal and the meaning of every quoted
+// identifier; otherwise the file is reported as an error and left unchanged.
+// The check compares the input's parse with the output's parse, so anything
+// the parser itself does not keep (comments, clauses it skips) is not
+// detected and is dropped from the output.
 //
 // Implementation: formatter.go, sql_formatter.go
 // Key types: Formatter, CLIFormatterOptions, SQLFormatter
-// Key functions: Format(), formatFile(), formatSQL()
+// Key functions: Format(), formatFile(), formatSQL(), verifyFormattedSQL()
 //
 // ## parse Command
 //

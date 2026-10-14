@@ -465,7 +465,16 @@ func (u *UnaryExpression) writeSQL(buf *bytes.Buffer) {
 		writeExpr(buf, u.Expr)
 	case Minus:
 		buf.WriteByte('-')
+		start := buf.Len()
 		writeExpr(buf, u.Expr)
+		// "--" starts a line comment: separate a nested unary minus or a
+		// negative literal from this operator ("- -1", not "--1").
+		if b := buf.Bytes(); len(b) > start && b[start] == '-' {
+			operand := append([]byte(nil), b[start:]...)
+			buf.Truncate(start)
+			buf.WriteByte(' ')
+			buf.Write(operand)
+		}
 	case Prior:
 		buf.WriteString("PRIOR ")
 		writeExpr(buf, u.Expr)

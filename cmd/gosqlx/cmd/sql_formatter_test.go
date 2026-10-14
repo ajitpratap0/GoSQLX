@@ -644,8 +644,11 @@ func TestSQLFormatter_NotExistsDoesNotPanic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Formatting failed: %v", err)
 	}
+	if output == "" {
+		t.Fatal("expected non-empty output")
+	}
 	if !strings.Contains(output, "NOT EXISTS (") {
-		t.Errorf("expected NOT EXISTS in output, got:\n%s", output)
+		t.Errorf("NOT EXISTS not rendered as a prefix NOT (#601): %s", output)
 	}
 }
 

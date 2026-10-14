@@ -37,13 +37,13 @@ func TestFormatCommand_JoinUsing_Issue603(t *testing.T) {
 		{
 			in:           "SELECT * FROM a JOIN b USING (id)",
 			wantCompact:  "SELECT * FROM a INNER JOIN b USING (id)",
-			wantReadable: "SELECT\n  *\nFROM a\nINNER JOIN b USING (id)",
+			wantReadable: "SELECT *\nFROM a\nINNER JOIN b USING (id)",
 			wantUsing:    []string{"id"},
 		},
 		{
 			in:           "SELECT * FROM a LEFT JOIN b USING (id, k)",
 			wantCompact:  "SELECT * FROM a LEFT JOIN b USING (id, k)",
-			wantReadable: "SELECT\n  *\nFROM a\nLEFT JOIN b USING (id, k)",
+			wantReadable: "SELECT *\nFROM a\nLEFT JOIN b USING (id, k)",
 			wantUsing:    []string{"id", "k"},
 		},
 	}

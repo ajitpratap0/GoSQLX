@@ -15,6 +15,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -22,7 +23,10 @@ import (
 	"time"
 
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
+	pkgformatter "github.com/ajitpratap0/GoSQLX/pkg/formatter"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
 // CLIFormatterOptions contains configuration for the SQL formatter CLI
@@ -157,7 +161,11 @@ func (f *Formatter) Format(args []string) (*FormatterResult, error) {
 			}
 			return result, fmt.Errorf("%d files need formatting", len(result.NeedsFormatting))
 		}
-		fmt.Fprintf(f.Out, "All %d files are properly formatted (%v)\n", result.TotalFiles, result.Duration)
+		// Failed files were already reported on stderr and fail the run; do
+		// not also claim they are properly formatted.
+		if result.FailedFiles == 0 {
+			fmt.Fprintf(f.Out, "All %d files are properly formatted (%v)\n", result.TotalFiles, result.Duration)
+		}
 	}
 
 	return result, nil
@@ -234,6 +242,10 @@ func (f *Formatter) formatSQL(sql string) (string, error) {
 		ast.ReleaseAST(parsedAST)
 	}()
 
+	if err := checkFormattable(parsedAST, tokens); err != nil {
+		return "", err
+	}
+
 	// Configure formatter options
 	indentStr := strings.Repeat(" ", f.Opts.IndentSize)
 	formatterOpts := FormatterOptions{
@@ -241,16 +253,314 @@ func (f *Formatter) formatSQL(sql string) (string, error) {
 		Compact:      f.Opts.Compact,
 		UppercaseKw:  f.Opts.Uppercase,
 		AlignColumns: !f.Opts.Compact, // Align columns unless in compact mode
+		Dialect:      f.Opts.Dialect,
 	}
 
 	// Create formatter and format the AST
 	formatter := NewSQLFormatter(formatterOpts)
 	formatted, err := formatter.Format(parsedAST)
 	if err != nil {
-		return "", fmt.Errorf("formatting failed: %w", err)
+		return "", fmt.Errorf("render: %w", err)
+	}
+
+	// Refuse output that fails verifyFormattedSQL, so format, format -i and
+	// format -o do not emit or write SQL the renderer got wrong (#599). The
+	// check cannot see what the parser itself drops; see verifyFormattedSQL.
+	// Keyword case is semantically irrelevant, and the parser does not accept
+	// every lowercase keyword sequence, so lowercase output is verified via an
+	// uppercase-keyword rendering of the same tree.
+	verifyText := formatted
+	if !formatterOpts.UppercaseKw {
+		upperOpts := formatterOpts
+		upperOpts.UppercaseKw = true
+		verifyText, err = NewSQLFormatter(upperOpts).Format(parsedAST)
+		if err != nil {
+			return "", fmt.Errorf("render for verification: %w", err)
+		}
+	}
+	// verifyFormattedSQL errors are self-describing; callers add the
+	// "formatting failed" prefix.
+	if err := verifyFormattedSQL(parsedAST, tokens, verifyText, f.Opts.Dialect); err != nil {
+		return "", err
 	}
 
 	return formatted, nil
+}
+
+// verifyFormattedSQL re-parses formatted with the same dialect and checks
+// that it yields the same number of statements, the same AST.SQL(), the same
+// canonical pkg/formatter rendering of each statement, and the same string
+// literal values and quoted identifiers as the input tokens.
+//
+// SQL() is compared case-insensitively because some nodes (e.g. set operation
+// operators) keep the source keyword case. The per-statement rendering covers
+// statements without a SQL() method (e.g. ALTER), which AST.SQL() skips. The
+// token comparison covers what neither can see: identifiers carry no quoting
+// in the AST, and string literals are re-escaped by the renderer.
+//
+// This is a consistency check between the input's parse and the output's
+// parse. Anything the parser itself drops (comments, clauses it skips) is
+// absent from both and is not detected.
+func verifyFormattedSQL(original *ast.AST, inputTokens []models.TokenWithSpan, formatted, dialect string) error {
+	tkz, release, err := tokenizerForDialect(dialect)
+	if err != nil {
+		return fmt.Errorf("tokenizer setup failed: %w", err)
+	}
+	defer release()
+
+	tokens, err := tkz.TokenizeString(formatted)
+	if err != nil {
+		return fmt.Errorf("formatted output does not re-tokenize (formatter bug; input left unchanged): %w", err)
+	}
+	if err := checkQuotedTokens(inputTokens, tokens, dialect); err != nil {
+		return err
+	}
+	if err := checkMySQLDoubleQuotes(inputTokens, tokens, dialect); err != nil {
+		return err
+	}
+	reparsed, err := parserForDialect(dialect).ParseFromModelTokens(tokens)
+	if err != nil {
+		return fmt.Errorf("formatted output does not re-parse (formatter bug; input left unchanged): %w", err)
+	}
+	defer ast.ReleaseAST(reparsed)
+
+	if got, want := len(reparsed.Statements), len(original.Statements); got != want {
+		return fmt.Errorf("formatted output has %d statements, input has %d (formatter bug; input left unchanged)", got, want)
+	}
+	if !strings.EqualFold(original.SQL(), reparsed.SQL()) {
+		return errors.New("formatted output changes the query (formatter bug; input left unchanged)")
+	}
+	canonical := NewSQLFormatter(FormatterOptions{Compact: true, UppercaseKw: true, Dialect: dialect}).style
+	for i, stmt := range original.Statements {
+		want := pkgformatter.FormatStatement(stmt, canonical)
+		got := pkgformatter.FormatStatement(reparsed.Statements[i], canonical)
+		if !strings.EqualFold(want, got) {
+			return fmt.Errorf("formatted output changes statement %d (formatter bug; input left unchanged)", i+1)
+		}
+	}
+	return nil
+}
+
+// checkQuotedTokens compares the quoted tokens of the input and of the
+// formatted output. Every string literal value of the input must appear in
+// the output, so a literal the renderer re-escapes for another dialect (e.g.
+// doubled backslashes where a backslash is not an escape) is refused. Every
+// quoted identifier of the input must either appear quoted in the output or
+// mean the same identifier bare (see bareWords.safe); the AST does not record
+// quoting, so the renderer writes most identifiers bare.
+func checkQuotedTokens(input, output []models.TokenWithSpan, dialect string) error {
+	bw, release, err := newBareWords(dialect)
+	if err != nil {
+		return fmt.Errorf("tokenizer setup failed: %w", err)
+	}
+	defer release()
+
+	pool := make(map[string]int)
+	for _, t := range output {
+		if isStringLiteralToken(t.Token) || bw.isQuotedIdent(t.Token) {
+			pool[t.Token.Value]++
+		}
+	}
+	for _, t := range input {
+		if !isStringLiteralToken(t.Token) {
+			continue
+		}
+		if pool[t.Token.Value] == 0 {
+			return fmt.Errorf("formatted output changes string literal %q (formatter bug; input left unchanged)", t.Token.Value)
+		}
+		pool[t.Token.Value]--
+	}
+	for _, t := range input {
+		if !bw.isQuotedIdent(t.Token) {
+			continue
+		}
+		v := t.Token.Value
+		if pool[v] > 0 {
+			pool[v]--
+			continue
+		}
+		if !bw.safe(v) {
+			return fmt.Errorf("formatted output drops the quotes of identifier %q (formatter bug; input left unchanged)", v)
+		}
+	}
+	return nil
+}
+
+// checkMySQLDoubleQuotes requires MySQL/MariaDB output to keep exactly the
+// input's double-quoted tokens. MySQL reads "..." as a string literal unless
+// ANSI_QUOTES is set, while the parser treats it as an identifier, so the
+// round-trip check alone misses two meaning changes: a string written bare
+// (WHERE name = "bob" -> WHERE name = bob, a column reference) and an
+// identifier newly written in ANSI quotes (`select` -> "select", a string).
+// Input that uses a double-quoted name where a string cannot appear (a
+// qualifier such as "users"."id", or a table after FROM/JOIN/INTO/UPDATE/
+// TABLE) is ANSI_QUOTES-style SQL, where "..." is an identifier, so it is
+// not checked.
+func checkMySQLDoubleQuotes(input, output []models.TokenWithSpan, dialect string) error {
+	if d := strings.ToLower(dialect); d != "mysql" && d != "mariadb" {
+		return nil
+	}
+	if usesANSIQuotes(input) {
+		return nil
+	}
+	pool := make(map[string]int)
+	for _, t := range output {
+		if t.Token.Quote == '"' {
+			pool[t.Token.Value]++
+		}
+	}
+	for _, t := range input {
+		if t.Token.Quote != '"' {
+			continue
+		}
+		if pool[t.Token.Value] == 0 {
+			return fmt.Errorf("formatted output drops the double quotes of %q, which %s reads as a string (formatter limitation; input left unchanged)", t.Token.Value, dialect)
+		}
+		pool[t.Token.Value]--
+	}
+	for v, n := range pool {
+		if n > 0 {
+			return fmt.Errorf("formatted output writes %q in ANSI double quotes, which %s reads as a string unless ANSI_QUOTES is set (formatter limitation; input left unchanged)", v, dialect)
+		}
+	}
+	return nil
+}
+
+// usesANSIQuotes reports whether toks use a double-quoted token as a name in
+// a position where MySQL cannot accept a string: next to a '.', or right
+// after FROM, JOIN, INTO, UPDATE or TABLE.
+func usesANSIQuotes(toks []models.TokenWithSpan) bool {
+	for i, t := range toks {
+		if t.Token.Quote != '"' {
+			continue
+		}
+		if i+1 < len(toks) && toks[i+1].Token.Value == "." {
+			return true
+		}
+		if i > 0 {
+			prev := toks[i-1].Token
+			if prev.Value == "." {
+				return true
+			}
+			switch strings.ToUpper(prev.Value) {
+			case "FROM", "JOIN", "INTO", "UPDATE", "TABLE":
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// isStringLiteralToken reports whether tok is a string literal of any form.
+// Double-quoted strings are treated as identifiers (see bareWords.isQuotedIdent).
+func isStringLiteralToken(tok models.Token) bool {
+	switch tok.Type {
+	case models.TokenTypeString, models.TokenTypeSingleQuotedString,
+		models.TokenTypeTripleSingleQuotedString, models.TokenTypeTripleDoubleQuotedString,
+		models.TokenTypeDollarQuotedString, models.TokenTypeByteStringLiteral,
+		models.TokenTypeNationalStringLiteral, models.TokenTypeEscapedStringLiteral,
+		models.TokenTypeUnicodeStringLiteral, models.TokenTypeHexStringLiteral:
+		return true
+	}
+	return tok.Quote == '\'' || tok.Quote == 'N'
+}
+
+// bareWords classifies identifiers for one dialect, memoizing the tokenizer
+// round trip that tells keywords from plain identifiers.
+type bareWords struct {
+	dialect string
+	tkz     *tokenizer.Tokenizer
+	memo    map[string]bool
+}
+
+func newBareWords(dialect string) (*bareWords, func(), error) {
+	tkz, release, err := tokenizerForDialect(dialect)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &bareWords{dialect: dialect, tkz: tkz, memo: make(map[string]bool)}, release, nil
+}
+
+// isQuotedIdent reports whether tok is a quoted identifier: a double-quoted
+// or bracketed token, or an identifier whose value cannot be a bare word. The
+// tokenizer does not record backtick quoting, so a backtick identifier is
+// recognized by the latter (e.g. `select`, `a b`); one that is a plain bare
+// word (`users`) is indistinguishable and harmless to unquote.
+func (b *bareWords) isQuotedIdent(tok models.Token) bool {
+	if tok.Type == models.TokenTypeDoubleQuotedString {
+		return true
+	}
+	switch tok.Quote {
+	case '"', '`', '[':
+		return true
+	}
+	if tok.Word != nil && tok.Word.QuoteStyle != 0 {
+		return true
+	}
+	return tok.Type == models.TokenTypeIdentifier && !b.isBareWord(tok.Value)
+}
+
+// safe reports whether the quoted identifier v names the same identifier when
+// written bare: it must be a bare word (see isBareWord) and survive the
+// dialect's case folding (PostgreSQL and the default dialect fold bare
+// identifiers to lowercase, Oracle and Snowflake to uppercase).
+func (b *bareWords) safe(v string) bool {
+	if !b.isBareWord(v) {
+		return false
+	}
+	switch b.dialect {
+	case "", "postgresql":
+		return v == strings.ToLower(v)
+	case "oracle", "snowflake":
+		return v == strings.ToUpper(v)
+	}
+	return true
+}
+
+// isBareWord reports whether v is an ASCII word ([A-Za-z_][A-Za-z0-9_]*) that
+// the dialect's tokenizer reads back as a plain identifier, i.e. not a
+// keyword.
+func (b *bareWords) isBareWord(v string) bool {
+	if ok, seen := b.memo[v]; seen {
+		return ok
+	}
+	ok := asciiWord(v) && b.tokenizesAsIdentifier(v)
+	b.memo[v] = ok
+	return ok
+}
+
+func asciiWord(v string) bool {
+	if v == "" {
+		return false
+	}
+	for i := 0; i < len(v); i++ {
+		c := v[i]
+		switch {
+		case c == '_', c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':
+		case c >= '0' && c <= '9' && i > 0:
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func (b *bareWords) tokenizesAsIdentifier(v string) bool {
+	toks, err := b.tkz.TokenizeString(v)
+	if err != nil {
+		return false
+	}
+	n := 0
+	for _, t := range toks {
+		if t.Token.Type == models.TokenTypeEOF {
+			continue
+		}
+		n++
+		if n > 1 || t.Token.Type != models.TokenTypeIdentifier || t.Token.Value != v {
+			return false
+		}
+	}
+	return n == 1
 }
 
 // FormatterFlags represents CLI flags for formatter command
@@ -306,4 +616,47 @@ func FormatterOptionsFromConfig(cfg *config.Config, flagsChanged map[string]bool
 	}
 
 	return opts
+}
+
+// checkFormattable refuses parse results the CLI cannot rewrite faithfully, so
+// format, format -i and format -o leave such input unchanged.
+//
+// DescribeStatement keeps only a name: it drops EXPLAIN options, the explained
+// query and DESCRIBE object kinds, and "EXPLAIN VERBOSE|ANALYZE <stmt>" parses
+// as a DescribeStatement followed by <stmt>, which would rewrite a
+// non-executing EXPLAIN into the executable statement. UnsupportedStatement is
+// rendered as a comment. Both are refused by type. As a general guard, a parse
+// with more statements than semicolon-separated segments in the input means
+// the parser split a statement, which re-parsing the output cannot detect.
+func checkFormattable(tree *ast.AST, tokens []models.TokenWithSpan) error {
+	for _, stmt := range tree.Statements {
+		switch stmt.(type) {
+		case *ast.DescribeStatement, *ast.UnsupportedStatement:
+			return fmt.Errorf("unsupported statement type: %T (input left unchanged)", stmt)
+		}
+	}
+	if got, segs := len(tree.Statements), statementSegments(tokens); got > segs {
+		return fmt.Errorf("input parses as %d statements but has %d semicolon-separated statements (input left unchanged)", got, segs)
+	}
+	return nil
+}
+
+// statementSegments counts the non-empty runs of tokens between semicolons,
+// ignoring EOF, i.e. the most statements the input can legitimately hold.
+func statementSegments(tokens []models.TokenWithSpan) int {
+	segs := 0
+	inSeg := false
+	for _, tok := range tokens {
+		switch tok.Token.Type {
+		case models.TokenTypeSemicolon:
+			inSeg = false
+		case models.TokenTypeEOF:
+		default:
+			if !inSeg {
+				segs++
+				inSeg = true
+			}
+		}
+	}
+	return segs
 }

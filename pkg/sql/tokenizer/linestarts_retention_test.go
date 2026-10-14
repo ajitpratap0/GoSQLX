@@ -108,7 +108,7 @@ func TestReset_LineStartsRetentionThreshold(t *testing.T) {
 			case tt.cap == 0:
 				tkz.lineStarts = nil
 			case tt.cap == 1:
-				tkz.lineStarts = make([]int, 1, 1)
+				tkz.lineStarts = make([]int, 1)
 			default:
 				tkz.lineStarts = make([]int, 3, tt.cap)
 			}

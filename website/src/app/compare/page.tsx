@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { pageMeta } from '@/lib/seo';
 import { CompareContent } from './CompareContent';
+import { PROJECT } from '@/data/metrics';
 
 export const metadata: Metadata = pageMeta({
   title: 'GoSQLX vs pg_query vs vitess-sqlparser: Go SQL Parser Comparison',
@@ -20,7 +21,7 @@ const structuredData = JSON.stringify({
   url: 'https://gosqlx.dev/compare/',
   programmingLanguage: 'Go',
   description:
-    'High-performance, zero-copy SQL parsing SDK for Go with 8-dialect support.',
+    `High-performance, zero-copy SQL parsing SDK for Go with ${PROJECT.dialectCount}-dialect support.`,
   offers: {
     '@type': 'Offer',
     price: '0',

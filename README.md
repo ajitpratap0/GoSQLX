@@ -29,7 +29,7 @@
 
 <br/>
 
-| **~3.1M parses/sec†** | **318 ns parse latency†** | **85% SQL-99** | **8 dialects** | **0 race conditions** |
+| **~3.1M parses/sec†** | **318 ns parse latency†** | **~80–85% SQL-99 (est.)** | **8 dialects** | **0 race conditions** |
 |:---:|:---:|:---:|:---:|:---:|
 
 <sub>† Parse stage only (pre-tokenized input to AST), `SELECT id, name FROM users`, Apple M4, Go 1.27, median of 10 runs of `BenchmarkPerformanceBaseline`. Complex queries take longer (see `performance_baselines.json`). Reproduce: `go test -run ^$ -bench BenchmarkPerformanceBaseline -benchmem -count=10 ./pkg/sql/parser/`.</sub>
@@ -173,7 +173,7 @@ claude mcp add --transport http gosqlx \
 <tr>
 <td align="center"><h3>🌐 Multi-Dialect</h3>PostgreSQL · MySQL · MariaDB<br/>SQL Server · Oracle<br/>SQLite · Snowflake · ClickHouse</td>
 <td align="center"><h3>🤖 AI-Ready</h3>MCP server (7 tools)<br/>Public remote endpoint<br/>Streamable HTTP</td>
-<td align="center"><h3>🧪 Battle-Tested</h3>20K+ concurrent ops<br/>Zero race conditions<br/>~85% SQL-99 compliance</td>
+<td align="center"><h3>🧪 Battle-Tested</h3>Race-detector clean in CI<br/>~80–85% SQL-99 (estimated)</td>
 </tr>
 </table>
 

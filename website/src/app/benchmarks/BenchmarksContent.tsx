@@ -6,7 +6,7 @@ import { FadeIn } from '@/components/ui/FadeIn';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
 import { ParseChart } from '@/components/benchmarks/ParseChart';
-import { BENCH_ENV, PARSE_BENCHMARKS, formatOps, opsPerSec } from '@/lib/benchmark-data';
+import { BENCH_ENV, PARSE_BENCHMARKS, formatOps, opsPerSec } from '@/data/metrics';
 
 const metrics = [
   {
@@ -14,7 +14,7 @@ const metrics = [
     value: `${formatOps(opsPerSec(PARSE_BENCHMARKS[0].nsPerOp))} ops/sec`,
   },
   { label: 'Simple SELECT parse latency', value: `${PARSE_BENCHMARKS[0].nsPerOp} ns/op` },
-  { label: 'Concurrent Ops Tested (race-free)', value: '20K+' },
+  { label: 'Race detector in CI', value: 'Clean' },
 ];
 
 const methodology = [

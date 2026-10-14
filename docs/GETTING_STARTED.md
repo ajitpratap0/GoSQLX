@@ -321,7 +321,7 @@ gosqlx validate "your SQL here"
 
 ### Production-Ready Performance
 - **1.38M+ operations/second** sustained throughput
-- **<1μs latency** for complex queries with window functions
+- **~0.6 µs** to parse a window-function query (parse stage only, Apple M4; see `performance_baselines.json`)
 - **Zero race conditions** - validated with comprehensive concurrent testing
 
 ### SQL Compliance

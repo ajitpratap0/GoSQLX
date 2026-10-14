@@ -1,3 +1,5 @@
+import { PROJECT } from '@/data/metrics';
+
 export const NAV_LINKS = [
   { href: '/docs', label: 'Docs' },
   { href: '/playground', label: 'Playground' },
@@ -9,11 +11,11 @@ export const NAV_LINKS = [
 
 export const FEATURES = [
   { icon: 'globe', title: 'Multi-Dialect', description: 'PostgreSQL, MySQL, MariaDB, SQLite, SQL Server, Oracle, Snowflake, ClickHouse.', color: 'accent-purple' },
-  { icon: 'lock', title: 'Thread-Safe', description: 'Zero race conditions. 20,000+ concurrent ops tested.', color: 'accent-green' },
+  { icon: 'lock', title: 'Thread-Safe', description: 'Race-detector clean in CI.', color: 'accent-green' },
   { icon: 'bolt', title: 'Zero-Copy', description: 'Direct byte slice operations. No unnecessary allocations.', color: 'accent-orange' },
   { icon: 'recycle', title: 'Object Pooling', description: 'sync.Pool recycling for ASTs, tokenizers, expressions.', color: 'accent-indigo' },
   { icon: 'shield', title: 'Security Scanner', description: 'SQL injection detection with severity classification.', color: 'red' },
-  { icon: 'cpu', title: 'MCP Server', description: '7 SQL tools for Claude, Cursor, and any MCP client.', color: 'cyan' },
+  { icon: 'cpu', title: 'MCP Server', description: `${PROJECT.mcpToolCount} SQL tools for Claude, Cursor, and any MCP client.`, color: 'cyan' },
 ];
 
 export const DOCS_SIDEBAR = [

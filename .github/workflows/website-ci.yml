@@ -6,10 +6,16 @@ on:
     paths:
       - 'website/**'
       - '.github/workflows/website-ci.yml'
+      - 'README.md'
+      - 'llms.txt'
+      - 'docs/GETTING_STARTED.md'
   pull_request:
     paths:
       - 'website/**'
       - '.github/workflows/website-ci.yml'
+      - 'README.md'
+      - 'llms.txt'
+      - 'docs/GETTING_STARTED.md'
   workflow_dispatch:
 
 permissions:
@@ -51,6 +57,11 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      - name: Metrics drift check
+        run: |
+          node scripts/check-metrics-drift.mjs --self-test
+          node scripts/check-metrics-drift.mjs
 
       - name: Build (prebuild compiles the playground WASM)
         run: npm run build

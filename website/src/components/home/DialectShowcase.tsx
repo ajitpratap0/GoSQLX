@@ -1,3 +1,4 @@
+import { PROJECT, QA_CORPUS } from '@/data/metrics';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { FadeIn } from '@/components/ui/FadeIn';
 
@@ -18,8 +19,8 @@ const DIALECTS: Dialect[] = [
   { name: 'SQL Server', abbr: 'MS', color: 'text-red-400', bgColor: 'bg-red-500/20', compliance: 85, status: 'Very Good' },
   { name: 'Oracle', abbr: 'Or', color: 'text-rose-400', bgColor: 'bg-rose-500/20', compliance: 80, status: 'Good' },
   { name: 'SQLite', abbr: 'SL', color: 'text-emerald-400', bgColor: 'bg-emerald-500/20', compliance: 85, status: 'Very Good' },
-  { name: 'Snowflake', abbr: 'SF', color: 'text-cyan-400', bgColor: 'bg-cyan-500/20', compliance: 100, detail: '87/87 QA', status: 'Excellent' },
-  { name: 'ClickHouse', abbr: 'CH', color: 'text-yellow-400', bgColor: 'bg-yellow-500/20', compliance: 83, detail: '69/83 QA', status: 'Good' },
+  { name: 'Snowflake', abbr: 'SF', color: 'text-cyan-400', bgColor: 'bg-cyan-500/20', compliance: Math.round((QA_CORPUS.snowflake.pass / QA_CORPUS.snowflake.total) * 100), detail: `${QA_CORPUS.snowflake.pass}/${QA_CORPUS.snowflake.total} QA`, status: 'Excellent' },
+  { name: 'ClickHouse', abbr: 'CH', color: 'text-yellow-400', bgColor: 'bg-yellow-500/20', compliance: Math.round((QA_CORPUS.clickhouse.pass / QA_CORPUS.clickhouse.total) * 100), detail: `${QA_CORPUS.clickhouse.pass}/${QA_CORPUS.clickhouse.total} QA`, status: 'Good' },
 ];
 
 const statusColors: Record<Dialect['status'], string> = {
@@ -42,7 +43,7 @@ export function DialectShowcase() {
       <div className="max-w-6xl mx-auto px-4">
         <FadeIn viewport>
           <h2 className="text-3xl font-bold text-white text-center mb-2">
-            8 SQL Dialects, One Parser
+            {PROJECT.dialectCount} SQL Dialects, One Parser
           </h2>
           <p className="text-zinc-300 text-center mb-12 text-lg">
             From PostgreSQL to ClickHouse — parse them all

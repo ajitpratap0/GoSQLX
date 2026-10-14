@@ -122,6 +122,9 @@ func TestFormatSQL_CorpusRoundTrip(t *testing.T) {
 				t.Errorf("%s [%s]: format failed: %v", rel, m.name, err)
 				continue
 			}
+			if reason, ok := corpusFormatKnownGaps[rel]; ok {
+				t.Errorf("%s [%s]: listed as a known gap (%s) but now formats; remove it from corpusFormatKnownGaps", rel, m.name, reason)
+			}
 			// The parser does not yet accept every lowercase keyword sequence
 			// (e.g. "returning", "cross join lateral"), so lowercase output is
 			// checked through its uppercase-keyword twin, mirroring the CLI's

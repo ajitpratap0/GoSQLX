@@ -386,28 +386,69 @@ func checkQuotedTokens(input, output []models.TokenWithSpan, dialect string) err
 	return nil
 }
 
-// checkMySQLDoubleQuotes refuses MySQL/MariaDB output that uses more
-// double-quoted tokens than the input. The renderer quotes identifiers with
-// ANSI double quotes, which MySQL reads as string literals unless ANSI_QUOTES
-// is set, so `select` rendered as "select" would not run. Input that already
-// used double quotes is assumed to target ANSI_QUOTES and is left alone.
+// checkMySQLDoubleQuotes requires MySQL/MariaDB output to keep exactly the
+// input's double-quoted tokens. MySQL reads "..." as a string literal unless
+// ANSI_QUOTES is set, while the parser treats it as an identifier, so the
+// round-trip check alone misses two meaning changes: a string written bare
+// (WHERE name = "bob" -> WHERE name = bob, a column reference) and an
+// identifier newly written in ANSI quotes (`select` -> "select", a string).
+// Input that uses a double-quoted name where a string cannot appear (a
+// qualifier such as "users"."id", or a table after FROM/JOIN/INTO/UPDATE/
+// TABLE) is ANSI_QUOTES-style SQL, where "..." is an identifier, so it is
+// not checked.
 func checkMySQLDoubleQuotes(input, output []models.TokenWithSpan, dialect string) error {
 	if d := strings.ToLower(dialect); d != "mysql" && d != "mariadb" {
 		return nil
 	}
-	count := func(toks []models.TokenWithSpan) int {
-		n := 0
-		for _, t := range toks {
-			if t.Token.Quote == '"' {
-				n++
-			}
-		}
-		return n
+	if usesANSIQuotes(input) {
+		return nil
 	}
-	if count(output) > count(input) {
-		return fmt.Errorf("formatted output uses ANSI double-quoted identifiers, which %s reads as strings unless ANSI_QUOTES is set (formatter limitation; input left unchanged)", dialect)
+	pool := make(map[string]int)
+	for _, t := range output {
+		if t.Token.Quote == '"' {
+			pool[t.Token.Value]++
+		}
+	}
+	for _, t := range input {
+		if t.Token.Quote != '"' {
+			continue
+		}
+		if pool[t.Token.Value] == 0 {
+			return fmt.Errorf("formatted output drops the double quotes of %q, which %s reads as a string (formatter limitation; input left unchanged)", t.Token.Value, dialect)
+		}
+		pool[t.Token.Value]--
+	}
+	for v, n := range pool {
+		if n > 0 {
+			return fmt.Errorf("formatted output writes %q in ANSI double quotes, which %s reads as a string unless ANSI_QUOTES is set (formatter limitation; input left unchanged)", v, dialect)
+		}
 	}
 	return nil
+}
+
+// usesANSIQuotes reports whether toks use a double-quoted token as a name in
+// a position where MySQL cannot accept a string: next to a '.', or right
+// after FROM, JOIN, INTO, UPDATE or TABLE.
+func usesANSIQuotes(toks []models.TokenWithSpan) bool {
+	for i, t := range toks {
+		if t.Token.Quote != '"' {
+			continue
+		}
+		if i+1 < len(toks) && toks[i+1].Token.Value == "." {
+			return true
+		}
+		if i > 0 {
+			prev := toks[i-1].Token
+			if prev.Value == "." {
+				return true
+			}
+			switch strings.ToUpper(prev.Value) {
+			case "FROM", "JOIN", "INTO", "UPDATE", "TABLE":
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // isStringLiteralToken reports whether tok is a string literal of any form.

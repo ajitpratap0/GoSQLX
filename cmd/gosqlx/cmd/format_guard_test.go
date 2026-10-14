@@ -34,7 +34,8 @@ func TestFormatSQL_RefusesLostQuotes(t *testing.T) {
 		in      string
 	}{
 		{name: "alter mixed case", in: `ALTER TABLE t ADD COLUMN "Mixed" INT`},
-		// Refused by checkMySQLDoubleQuotes: `select` would render as "select".
+		// Refused by checkMySQLDoubleQuotes: in ALTER, `select` would render as
+		// "select". (In a SELECT list checkQuotedTokens refuses it first.)
 		{name: "alter mysql backtick keyword", dialect: "mysql", in: "ALTER TABLE `Users` ADD COLUMN `select` INT"},
 		{name: "select mixed case", in: `SELECT "Mixed" FROM t`},
 		{name: "select mixed case table", in: `SELECT a FROM "Mixed"`},
@@ -151,24 +152,49 @@ func TestFormatSQL_RefusesDescribeObjectKinds(t *testing.T) {
 	}
 }
 
-// TestCheckMySQLDoubleQuotes checks that MySQL/MariaDB output may not add
-// double-quoted tokens the input did not have, while input that already
-// used ANSI double quotes, and other dialects, are left alone.
+// TestCheckMySQLDoubleQuotes checks that MySQL/MariaDB output keeps exactly
+// the input's double-quoted tokens, and that other dialects are not checked.
 func TestCheckMySQLDoubleQuotes(t *testing.T) {
-	dq := models.TokenWithSpan{Token: models.Token{Type: models.TokenTypeDoubleQuotedString, Value: "select", Quote: '"'}}
-	plain := models.TokenWithSpan{Token: models.Token{Type: models.TokenTypeIdentifier, Value: "select"}}
-	in, added := []models.TokenWithSpan{plain}, []models.TokenWithSpan{dq}
-	for _, d := range []string{"mysql", "MariaDB"} {
-		if err := checkMySQLDoubleQuotes(in, added, d); err == nil {
-			t.Errorf("%s: added double quotes accepted, want an error", d)
+	tok := func(v string, q rune) models.TokenWithSpan {
+		return models.TokenWithSpan{Token: models.Token{Type: models.TokenTypeIdentifier, Value: v, Quote: q}}
+	}
+	type toks = []models.TokenWithSpan
+	tests := []struct {
+		name    string
+		in, out toks
+		wantErr bool
+	}{
+		{"kept", toks{tok("bob", '"')}, toks{tok("bob", '"')}, false},
+		{"string written bare", toks{tok("bob", '"')}, toks{tok("bob", 0)}, true},
+		{"identifier newly double-quoted", toks{tok("select", '`')}, toks{tok("select", '"')}, true},
+		{"count bypass", toks{tok("abc", '"'), tok("my col", '`')}, toks{tok("abc", 0), tok("my col", '"')}, true},
+		{"no double quotes", toks{tok("a", '`')}, toks{tok("a", 0)}, false},
+		{"ANSI_QUOTES qualifier", toks{tok("users", '"'), tok(".", 0), tok("id", '"')}, toks{tok("users", 0), tok(".", 0), tok("id", 0)}, false},
+		{"ANSI_QUOTES table", toks{tok("FROM", 0), tok("users", '"')}, toks{tok("FROM", 0), tok("users", 0)}, false},
+	}
+	for _, tc := range tests {
+		for _, d := range []string{"mysql", "MariaDB"} {
+			if err := checkMySQLDoubleQuotes(tc.in, tc.out, d); (err != nil) != tc.wantErr {
+				t.Errorf("%s/%s: err = %v, wantErr %v", tc.name, d, err, tc.wantErr)
+			}
 		}
-		if err := checkMySQLDoubleQuotes(added, added, d); err != nil {
-			t.Errorf("%s: input already double-quoted: %v", d, err)
+		for _, d := range []string{"", "postgresql", "sqlserver"} {
+			if err := checkMySQLDoubleQuotes(tc.in, tc.out, d); err != nil {
+				t.Errorf("%s/%q: %v, want no check outside MySQL/MariaDB", tc.name, d, err)
+			}
 		}
 	}
-	for _, d := range []string{"", "postgresql", "sqlserver"} {
-		if err := checkMySQLDoubleQuotes(in, added, d); err != nil {
-			t.Errorf("%q: %v, want no check outside MySQL/MariaDB", d, err)
+}
+
+// TestFormatSQL_MySQLDoubleQuotedString checks the end-to-end refusal of a
+// MySQL double-quoted string that the renderer would write bare.
+func TestFormatSQL_MySQLDoubleQuotedString(t *testing.T) {
+	for _, in := range []string{
+		`SELECT a FROM t WHERE name = "bob"`,
+		"SELECT \"abc\", `my col` FROM t",
+	} {
+		if out, err := formatWith(in, CLIFormatterOptions{Compact: true, Dialect: "mysql"}); err == nil {
+			t.Errorf("formatSQL(%q, mysql) = %q, want an error", in, out)
 		}
 	}
 }

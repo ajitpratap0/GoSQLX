@@ -648,7 +648,7 @@ func TestSQLFormatter_NotExistsDoesNotPanic(t *testing.T) {
 		t.Fatal("expected non-empty output")
 	}
 	if !strings.Contains(output, "NOT EXISTS (") {
-		t.Skipf("blocked on #601 (library renders NOT EXISTS as NOT (... NOT )): %s", output)
+		t.Errorf("NOT EXISTS not rendered as a prefix NOT (#601): %s", output)
 	}
 }
 

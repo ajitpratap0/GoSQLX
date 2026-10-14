@@ -112,7 +112,6 @@ Read **Behavior changes** before upgrading.
 - **LSP `Document.Lines` is shared**: `DocumentManager.Get` returns a fresh
   `*Document` header, but its `Lines` now aliases the manager's immutable slice.
   Treat it as read-only. (#573, fixes #564)
-
 - **`gosqlx format` renders through `pkg/formatter` and refuses output that does
   not round-trip**: the CLI's private renderer is gone;
   `cmd/gosqlx/cmd/sql_formatter.go` is now a thin adapter over
@@ -170,7 +169,10 @@ Read **Behavior changes** before upgrading.
   unchanged, but `WITH (INDEX = ix)` and quoted or bracketed hints are now
   parse errors; they used to be accepted and the hint silently dropped. SQL
   Server now accepts double-quoted constraint names (`CONSTRAINT "x y"`), and
-  every dialect accepts `CAST(x AS "type")`. (#604, #632)
+  every dialect accepts `CAST(x AS "type")`. A non-ASCII spelling such as
+  `lıke` is stored as `LIKE`; the formatter keeps `WITH` in
+  `WITH CHECK OPTION`; and a hand-built `MINUS` set operator renders as the
+  equivalent `EXCEPT`. (#604, #632)
 - **Readable-style formatting emits one trailing `;`**: with `AddSemicolon`
   (readable style, `FormatString` default) only the outermost statement ends with
   `;`. CTE bodies, `IN`/`EXISTS`/scalar subqueries, set-operation operands and
@@ -181,8 +183,8 @@ Read **Behavior changes** before upgrading.
   SETTINGS clause is now parsed rather than skipped, so the trailing
   `INTO OUTFILE` that used to be swallowed returns a syntax error, matching
   `SELECT ... INTO OUTFILE` elsewhere. Malformed SETTINGS lists and a bare
-  `FORMAT` also return syntax errors; a trailing `FORMAT <name>` is still
-  accepted. (#600, #631)
+  `FORMAT` after SETTINGS also return syntax errors; a trailing
+  `FORMAT <name>` after SETTINGS is still accepted. (#600, #631)
 - **A bare `returning` alias inside an INSERT source or `UPDATE ... FROM` is
   treated as RETURNING**: while parsing an `INSERT` source query or an
   `UPDATE ... FROM` list, an unquoted `returning` is no longer taken as an
@@ -292,7 +294,6 @@ Read **Behavior changes** before upgrading.
   `ReplaceStatement`**. (#513)
 - **`ast.PoolLeakCount()`**: counts work-queue entries dropped while releasing
   expressions. (#517)
-
 - **`JOIN ... USING (cols)` is kept**: stored in the new `JoinClause.Using`
   (one `*ast.Identifier` per column, `Condition` left nil) and rendered as
   `USING (c1, c2)` by `SQL()`, `pkg/formatter` and `gosqlx format`, instead of
@@ -326,8 +327,9 @@ Read **Behavior changes** before upgrading.
   with the argument group; DISTINCT or ORDER BY in the parameter group and a
   third paren group return E2004. A `[...]` subscript or slice directly after a
   function call (`groupArray(x)[1]`, `array_agg(x)[1]`) parses as
-  `ArraySubscriptExpression` / `ArraySliceExpression`; SQL Server and SQLite
-  keep `count(*) [cnt]` as an alias. (#605, #606, #628)
+  `ArraySubscriptExpression` / `ArraySliceExpression`; SQL Server keeps
+  `count(*) [cnt]` as an alias, and SQLite behaves as before. (#605, #606,
+  #628)
 - **ClickHouse `SELECT ... SETTINGS` is kept**: parsed into the new
   `SelectStatement.Settings` (`[]ast.QuerySetting`, stored on the rightmost
   SELECT of a set operation) and rendered by `SQL()` and `pkg/formatter`.
@@ -427,7 +429,6 @@ Read **Behavior changes** before upgrading.
   recursive CTEs) are fixed. (#511)
 - **Long comment runs no longer grow the stack**: the tokenizer skips
   consecutive comments in a loop instead of recursing once per comment. (#597)
-
 - **`NOT EXISTS (subquery)` rendered as `NOT (EXISTS (...) NOT )`**, which failed
   to re-parse with E2002. `SQL()`, `FormatAST` and `FormatString` now render
   `NOT EXISTS (...)`; the AST shape is unchanged. (#601, #632)
@@ -516,7 +517,6 @@ Numbers are quoted from each PR (benchstat on an Apple M4 unless stated; the
   on 2026-10-13. Baselines are now about 2.5x the Apple M4 median, because
   GitHub's ubuntu-latest runners measure about 1.5-3.2x slower than M4 on these
   queries (up to ~3.2x), so a 1.5x baseline would fail CI's slowest runs. (#566)
-
 - **Qualified-name parsing is linear**: `parseQualifiedName` collects up to 5
   parts in a stack array and joins them once instead of concatenating per part.
   A 64 KB `a.a.a...` chain went from 66 ms and 1.17 GB (and parsed) to 8 ms and
@@ -525,6 +525,14 @@ Numbers are quoted from each PR (benchstat on an Apple M4 unless stated; the
 - **Long error lines are cheap to render**: error context uses a bounded line
   scan. Long-line `Error()` went from 49 us / 937 KiB to 1.4 us / 1.3 KiB per
   op, and the context-format benchmarks are about 20% faster. (#615, #626)
+- **Measured costs of batch-3 correctness fixes**: `ast.Identifier` grows from
+  48 to 64 bytes for the `Quoted` flag, raising parser B/op by about 4-6%, and
+  rendering with name quoting makes `SQL()` about 8% slower with unchanged
+  allocations (#611, #632). `TableReference` grows from 128 to 136 bytes for
+  parenthesized set operations: `BenchmarkParserSimpleSelect` +4.8% and
+  +16 B/op (#612, #630). Reallocating `lineStarts` per call on very large
+  inputs adds about 2.4% B/op above roughly 410 KB (#614, #626). Sorted
+  `Extract*` results cost 3-15% ns/op on the Extract benchmarks (#618, #625).
 
 ### Security
 - **Render-time SQL injection closed**: quoted names and some literal and
@@ -560,7 +568,6 @@ Numbers are quoted from each PR (benchstat on an Apple M4 unless stated; the
   (#567)
 - **Trivy findings**: `golang.org/x/crypto` raised to v0.54.0 and
   `brace-expansion` pinned to `^5.0.8` in the VS Code extension. (#528)
-
 - **Scanner descends into table-function arguments**: `url(...)`, `file(...)`
   and similar ClickHouse table functions are detected as out-of-band access
   (also via a `FROM|JOIN <fn>(` pattern), and the scanner descends into array
@@ -2372,7 +2379,8 @@ For questions about upgrading or changelog entries:
 - Open an issue: https://github.com/ajitpratap0/GoSQLX/issues
 - Join discussions: https://github.com/ajitpratap0/GoSQLX/discussions
 
-[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.12.1...HEAD
+[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.14.0...HEAD
+[1.14.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.12.1...v1.13.0
 [1.12.1]: https://github.com/ajitpratap0/GoSQLX/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.10.2...v1.12.0

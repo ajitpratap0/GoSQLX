@@ -13,7 +13,7 @@ function HeadingAnchor({ id, level, children }: { id?: string; level: number; ch
           'a',
           {
             href: `#${id}`,
-            className: 'ml-2 text-zinc-600 opacity-0 transition-opacity group-hover:opacity-100',
+            className: 'ml-2 text-text-muted opacity-0 transition-opacity group-hover:opacity-100',
             'aria-label': 'Link to heading',
           },
           '#'

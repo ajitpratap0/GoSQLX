@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { m, AnimatePresence } from 'motion/react';
 import Fuse from 'fuse.js';
@@ -18,6 +19,8 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const router = useRouter();
+  const triggerRef = useRef<HTMLElement | null>(null);
+  const portalRef = useRef<HTMLDivElement | null>(null);
 
   const index = useMemo(() => buildSearchIndex(), []);
 
@@ -48,6 +51,26 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
       // Small delay so the DOM is painted before we focus
       requestAnimationFrame(() => inputRef.current?.focus());
     }
+  }, [open]);
+
+  // Make the rest of the page inert while open, and restore focus to the
+  // element that opened the modal when it closes.
+  useEffect(() => {
+    if (!open) return;
+    triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const portal = portalRef.current;
+    const inerted: HTMLElement[] = [];
+    for (const el of Array.from(document.body.children)) {
+      if (el instanceof HTMLElement && el !== portal && !el.hasAttribute('inert') && el.tagName !== 'SCRIPT') {
+        el.setAttribute('inert', '');
+        inerted.push(el);
+      }
+    }
+    return () => {
+      for (const el of inerted) el.removeAttribute('inert');
+      const trigger = triggerRef.current;
+      if (trigger && trigger.isConnected) trigger.focus();
+    };
   }, [open]);
 
   // Scroll selected item into view
@@ -94,7 +117,12 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
     setSelectedIndex(0);
   }, [results]);
 
-  return (
+  const activeId = results[selectedIndex] ? `search-option-${results[selectedIndex].slug}` : undefined;
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div ref={portalRef}>
     <AnimatePresence>
     {open && (
     <div
@@ -128,7 +156,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
         {/* Search input */}
         <div className="flex items-center gap-3 border-b border-white/[0.08] px-4">
           <svg
-            className="h-4 w-4 shrink-0 text-zinc-500"
+            className="h-4 w-4 shrink-0 text-text-muted"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -143,16 +171,21 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
           <input
             ref={inputRef}
             type="text"
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="search-results"
+            aria-autocomplete="list"
+            aria-activedescendant={activeId}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search documentation..."
-            className="flex-1 bg-transparent py-3.5 text-sm text-white placeholder:text-zinc-500 outline-none"
+            className="flex-1 bg-transparent py-3.5 text-sm text-white placeholder:text-text-muted outline-none"
             aria-label="Search documentation"
             autoComplete="off"
             spellCheck={false}
           />
-          <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-white/[0.1] bg-white/[0.04] px-1.5 py-0.5 font-mono text-[10px] text-zinc-500">
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-white/[0.1] bg-white/[0.04] px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
             ESC
           </kbd>
         </div>
@@ -160,18 +193,20 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
         {/* Results */}
         <ul
           ref={listRef}
+          id="search-results"
           className="max-h-[min(50vh,24rem)] overflow-y-auto py-2"
           role="listbox"
           aria-label="Search results"
         >
           {results.length === 0 && (
-            <li className="px-4 py-8 text-center text-sm text-zinc-500">
+            <li className="px-4 py-8 text-center text-sm text-text-muted">
               No results found for &ldquo;{query}&rdquo;
             </li>
           )}
           {results.map((entry, i) => (
             <li
               key={entry.slug}
+              id={`search-option-${entry.slug}`}
               role="option"
               aria-selected={i === selectedIndex}
               className={`mx-2 flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
@@ -184,7 +219,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
             >
               {/* Icon */}
               <svg
-                className="h-4 w-4 shrink-0 text-zinc-600"
+                className="h-4 w-4 shrink-0 text-text-muted"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -198,10 +233,10 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
               </svg>
               <div className="min-w-0 flex-1">
                 <div className="truncate font-medium">{entry.title}</div>
-                <div className="truncate text-xs text-zinc-600">{entry.category}</div>
+                <div className="truncate text-xs text-text-muted">{entry.category}</div>
               </div>
               {i === selectedIndex && (
-                <kbd className="hidden sm:inline-flex shrink-0 items-center rounded border border-white/[0.1] bg-white/[0.04] px-1.5 py-0.5 font-mono text-[10px] text-zinc-500">
+                <kbd className="hidden sm:inline-flex shrink-0 items-center rounded border border-white/[0.1] bg-white/[0.04] px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
                   Enter
                 </kbd>
               )}
@@ -210,7 +245,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
         </ul>
 
         {/* Footer */}
-        <div className="flex items-center gap-4 border-t border-white/[0.08] px-4 py-2 text-[10px] text-zinc-600">
+        <div className="flex items-center gap-4 border-t border-white/[0.08] px-4 py-2 text-[10px] text-text-muted">
           <span className="inline-flex items-center gap-1">
             <kbd className="rounded border border-white/[0.08] bg-white/[0.03] px-1 py-0.5 font-mono">&uarr;&darr;</kbd>
             navigate
@@ -228,5 +263,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
     </div>
     )}
     </AnimatePresence>
+    </div>,
+    document.body,
   );
 }

@@ -52,7 +52,7 @@ export function Footer() {
             {Object.entries(FOOTER_LINKS).map(([category, links]) => (
               <div key={category}>
                 <h3 className="text-sm font-medium text-zinc-300 mb-3">{category}</h3>
-                <ul className="space-y-2">
+                <ul>
                   {links.map((link) => (
                     <li key={link.label}>
                       {'external' in link && link.external ? (
@@ -60,14 +60,14 @@ export function Footer() {
                           href={link.href}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-sm text-zinc-300 hover:text-zinc-100 transition-colors duration-200"
+                          className="inline-flex min-h-11 items-center text-sm text-zinc-300 hover:text-zinc-100 transition-colors duration-200"
                         >
                           {link.label}
                         </a>
                       ) : (
                         <Link
                           href={link.href}
-                          className="text-sm text-zinc-300 hover:text-zinc-100 transition-colors duration-200"
+                          className="inline-flex min-h-11 items-center text-sm text-zinc-300 hover:text-zinc-100 transition-colors duration-200"
                         >
                           {link.label}
                         </Link>

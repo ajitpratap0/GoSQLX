@@ -38,19 +38,19 @@ export function VscodeSection() {
                   <div className="w-3 h-3 rounded-full bg-red-500/60" />
                   <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
                   <div className="w-3 h-3 rounded-full bg-green-500/60" />
-                  <span className="text-xs text-zinc-500 ml-2">query.sql — GoSQLX</span>
+                  <span className="text-xs text-text-muted ml-2">query.sql — GoSQLX</span>
                 </div>
                 {/* Editor content */}
                 <div className="p-4 font-mono text-sm leading-relaxed">
                   <div className="flex">
-                    <span className="w-8 text-right text-zinc-600 select-none mr-4">1</span>
+                    <span className="w-8 text-right text-text-muted select-none mr-4">1</span>
                     <span>
                       <span className="text-accent-indigo">SELECT</span>
                       <span className="text-zinc-300"> u.id, u.name, u.email</span>
                     </span>
                   </div>
                   <div className="flex">
-                    <span className="w-8 text-right text-zinc-600 select-none mr-4">2</span>
+                    <span className="w-8 text-right text-text-muted select-none mr-4">2</span>
                     <span>
                       <span className="text-accent-indigo">FROM</span>
                       <span className="text-accent-orange"> users</span>
@@ -58,7 +58,7 @@ export function VscodeSection() {
                     </span>
                   </div>
                   <div className="flex">
-                    <span className="w-8 text-right text-zinc-600 select-none mr-4">3</span>
+                    <span className="w-8 text-right text-text-muted select-none mr-4">3</span>
                     <span>
                       <span className="text-accent-indigo">JOIN</span>
                       <span className="text-accent-orange"> orders</span>
@@ -68,7 +68,7 @@ export function VscodeSection() {
                     </span>
                   </div>
                   <div className="flex">
-                    <span className="w-8 text-right text-zinc-600 select-none mr-4">4</span>
+                    <span className="w-8 text-right text-text-muted select-none mr-4">4</span>
                     <span>
                       <span className="text-accent-indigo">WHERE</span>
                       <span className="text-zinc-300"> u.active = </span>
@@ -76,7 +76,7 @@ export function VscodeSection() {
                     </span>
                   </div>
                   <div className="flex">
-                    <span className="w-8 text-right text-zinc-600 select-none mr-4">5</span>
+                    <span className="w-8 text-right text-text-muted select-none mr-4">5</span>
                     <span>
                       <span className="text-accent-indigo">ORDER BY</span>
                       <span className="text-zinc-300"> u.name </span>
@@ -94,10 +94,10 @@ export function VscodeSection() {
                       </svg>
                       Valid SQL
                     </span>
-                    <span className="text-zinc-500">|</span>
-                    <span className="text-zinc-500">PostgreSQL</span>
+                    <span className="text-text-muted">|</span>
+                    <span className="text-text-muted">PostgreSQL</span>
                   </div>
-                  <span className="text-zinc-500">0 issues</span>
+                  <span className="text-text-muted">0 issues</span>
                 </div>
               </GlassCard>
             </FadeIn>

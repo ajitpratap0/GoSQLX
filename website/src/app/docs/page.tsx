@@ -58,7 +58,7 @@ export default function DocsPage() {
                 </svg>
               </div>
               <h2 className="text-lg font-semibold text-white">{group.category}</h2>
-              <p className="mt-1 text-sm text-zinc-500">
+              <p className="mt-1 text-sm text-text-muted">
                 {group.items.length} {group.items.length === 1 ? 'article' : 'articles'}
               </p>
               <ul className="mt-3 space-y-1">
@@ -66,7 +66,7 @@ export default function DocsPage() {
                   <li key={item.slug} className="text-sm text-zinc-400">{item.label}</li>
                 ))}
                 {group.items.length > 3 && (
-                  <li className="text-sm text-zinc-600">+{group.items.length - 3} more</li>
+                  <li className="text-sm text-text-muted">+{group.items.length - 3} more</li>
                 )}
               </ul>
             </Link>

@@ -96,7 +96,7 @@ export function Navbar() {
       <nav aria-label="Main navigation" className="mx-auto max-w-7xl flex items-center justify-between px-4 sm:px-6 lg:px-8 h-16">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 shrink-0">
-          <Image src="/images/logo.webp" alt="GoSQLX logo" width={32} height={32} priority />
+          <Image src="/images/logo.webp" alt="" width={32} height={32} priority />
           <span className="text-lg font-semibold text-white">GoSQLX</span>
         </Link>
 
@@ -122,20 +122,22 @@ export function Navbar() {
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
-            className="inline-flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-sm text-zinc-400 transition-colors hover:border-white/[0.12] hover:bg-white/[0.06] hover:text-zinc-300"
+            data-search-trigger=""
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-sm text-zinc-400 transition-colors hover:border-white/[0.12] hover:bg-white/[0.06] hover:text-zinc-300"
             aria-label="Search documentation"
           >
             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
             </svg>
             <span className="hidden xl:inline">Search</span>
-            <kbd className="font-mono text-[10px] text-zinc-600 border border-white/[0.08] rounded px-1 py-0.5 bg-white/[0.03]">&#8984;K</kbd>
+            <kbd className="font-mono text-[10px] text-text-muted border border-white/[0.08] rounded px-1 py-0.5 bg-white/[0.03]">&#8984;K</kbd>
           </button>
           <a
             href="https://github.com/ajitpratap0/GoSQLX"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-zinc-300 hover:text-white transition-colors duration-200 p-2 rounded-lg hover:bg-white/[0.04]"
+            data-link-repo=""
+            className="inline-flex min-h-11 min-w-11 items-center justify-center text-zinc-300 hover:text-white transition-colors duration-200 p-2 rounded-lg hover:bg-white/[0.04]"
             aria-label="GitHub"
           >
             <GitHubIcon className="w-5 h-5" />
@@ -179,7 +181,7 @@ export function Navbar() {
                     href={link.href}
                     onClick={() => setMobileOpen(false)}
                     aria-current={isActive ? 'page' : undefined}
-                    className={`block px-3 py-2.5 text-sm hover:bg-white/[0.04] rounded-lg transition-colors ${isActive ? 'text-white' : 'text-zinc-300 hover:text-white'}`}
+                    className={`flex min-h-11 items-center px-3 text-sm hover:bg-white/[0.04] rounded-lg transition-colors ${isActive ? 'text-white' : 'text-zinc-300 hover:text-white'}`}
                   >
                     {link.label}
                   </Link>
@@ -190,13 +192,14 @@ export function Navbar() {
                   href="https://github.com/ajitpratap0/GoSQLX"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-zinc-300 hover:text-white transition-colors p-2"
+                  data-link-repo=""
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center text-zinc-300 hover:text-white transition-colors p-2"
                   aria-label="GitHub"
                 >
                   <GitHubIcon className="w-5 h-5" />
                 </a>
                 <ThemeToggle />
-                <Button href="/docs/getting-started" variant="primary" className="text-xs px-4 py-2">
+                <Button href="/docs/getting-started" variant="primary" className="text-xs px-4 py-2 min-h-11">
                   Get Started
                 </Button>
               </div>

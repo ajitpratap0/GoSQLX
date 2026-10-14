@@ -2076,7 +2076,7 @@ func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 	} else {
 		writeQualifiedName(buf, t.Name)
 	}
-	if t.Alias != "" {
+	if t.Alias != "" && t.Pivot == nil && t.Unpivot == nil {
 		buf.WriteByte(' ')
 		buf.WriteString(t.Alias)
 	}
@@ -2086,6 +2086,14 @@ func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 	if t.ForSystemTime != nil {
 		buf.WriteByte(' ')
 		buf.WriteString(t.ForSystemTime.ToSQL())
+	}
+	// Parser order: table hints, then PIVOT/UNPIVOT, then its AS alias (#604).
+	writeTableHints(buf, t.TableHints)
+	writePivotClause(buf, t.Pivot)
+	writeUnpivotClause(buf, t.Unpivot)
+	if t.Alias != "" && (t.Pivot != nil || t.Unpivot != nil) {
+		buf.WriteString(" AS ")
+		buf.WriteString(t.Alias)
 	}
 }
 

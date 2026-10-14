@@ -1370,6 +1370,23 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 	} else {
 		sb.WriteString(ast.QuoteQualifiedName(t.Name))
 	}
+	if t.Alias != "" && t.Pivot == nil && t.Unpivot == nil {
+		sb.WriteString(" ")
+		sb.WriteString(t.Alias)
+	}
+	// SQL Server table hints follow the alias and precede PIVOT/UNPIVOT (#604).
+	if len(t.TableHints) > 0 {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("WITH"))
+		sb.WriteString(" (")
+		for i, h := range t.TableHints {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(f.kw(h))
+		}
+		sb.WriteString(")")
+	}
 	if t.Pivot != nil {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("PIVOT"))
@@ -1400,16 +1417,12 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		sb.WriteString(strings.Join(t.Unpivot.InColumns, ", "))
 		sb.WriteString("))")
 	}
-	if t.Alias != "" {
+	if t.Alias != "" && (t.Pivot != nil || t.Unpivot != nil) {
 		// PIVOT/UNPIVOT aliases conventionally use AS to avoid ambiguity
 		// with the closing paren of the clause.
-		if t.Pivot != nil || t.Unpivot != nil {
-			sb.WriteString(" ")
-			sb.WriteString(f.kw("AS"))
-			sb.WriteString(" ")
-		} else {
-			sb.WriteString(" ")
-		}
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("AS"))
+		sb.WriteString(" ")
 		sb.WriteString(t.Alias)
 	}
 	return sb.String()

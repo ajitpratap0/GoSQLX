@@ -1,20 +1,12 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import sample from '@/generated/sample-ast.json';
 import { useWasm, type GoSQLXApi } from '@/components/playground/WasmLoader';
 
-const SAMPLE_SQL = `SELECT
-  u.name,
-  u.email,
-  COUNT(o.id) AS order_count,
-  SUM(o.total) AS lifetime_value
-FROM users u
-LEFT JOIN orders o ON o.user_id = u.id
-WHERE u.created_at > '2024-01-01'
-GROUP BY u.name, u.email
-HAVING COUNT(o.id) > 5
-ORDER BY lifetime_value DESC
-LIMIT 20;`;
+// Query and AST are generated from sample.sql by the real parser (scripts/gen-sample-ast).
+const SAMPLE_SQL = sample.sql;
+const SAMPLE_AST = JSON.stringify(sample.ast, null, 2);
 
 const DIALECTS = [
   { value: 'generic', label: 'Generic' },
@@ -192,7 +184,7 @@ export function MiniPlayground() {
           </div>
           <span className="ml-auto text-xs font-mono text-emerald-400">
             {!wasmRequested
-              ? 'Sample output'
+              ? 'Precomputed sample output'
               : loading
               ? progress < 1
                 ? `Loading... ${Math.round(progress * 100)}%`
@@ -213,7 +205,7 @@ export function MiniPlayground() {
             </pre>
           ) : (
             <pre className="p-4 text-[14px] leading-relaxed font-mono whitespace-pre-wrap" style={{ color: '#D4D4D8' }}>
-              <code>{output || (activeTab === 'ast' && !ready ? SAMPLE_AST_PLACEHOLDER : '')}</code>
+              <code>{output || (activeTab === 'ast' && !ready ? SAMPLE_AST : '')}</code>
             </pre>
           )}
         </div>
@@ -229,21 +221,3 @@ export function MiniPlayground() {
     </div>
   );
 }
-
-// Static placeholder shown while WASM loads
-const SAMPLE_AST_PLACEHOLDER = `{
-  "type": "Query",
-  "body": {
-    "type": "Select",
-    "projection": [
-      { "type": "CompoundIdentifier", "value": "u.name" },
-      { "type": "CompoundIdentifier", "value": "u.email" },
-      { "type": "Function", "name": "COUNT", "alias": "order_count" },
-      { "type": "Function", "name": "SUM", "alias": "lifetime_value" }
-    ],
-    "from": { "type": "Join", "join_type": "LEFT" },
-    "group_by": ["u.name", "u.email"],
-    "order_by": [{ "expr": "lifetime_value", "asc": false }],
-    "limit": 20
-  }
-}`;

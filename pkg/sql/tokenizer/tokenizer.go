@@ -1165,10 +1165,28 @@ func needsRewrite(r rune, size int) bool {
 
 // nextRuneIsQuote reports whether b starts with a rune that normalizes to
 // quote, i.e. whether a quote just scanned is the first half of a doubled
-// (escaped) quote.
-func nextRuneIsQuote(b []byte, quote rune) bool {
+// (escaped) quote. In strict mode (a token opened with an ASCII quote) only
+// that ASCII quote counts.
+func nextRuneIsQuote(b []byte, quote rune, strict bool) bool {
+	if strict {
+		return len(b) > 0 && rune(b[0]) == quote
+	}
 	r, _ := utf8.DecodeRune(b)
 	return normalizeQuote(r) == quote
+}
+
+// quotedRune returns the rune a quoted reader acts on for the decoded rune r.
+// A token opened with a Unicode quote (strict false) normalizes every Unicode
+// quote to its ASCII form, so a smart quote may close or escape it. A token
+// opened with an ASCII quote (strict true) is closed and escaped only by that
+// ASCII quote: Unicode quotes inside it are ordinary content and kept as is,
+// so a value such as x”; DROP TABLE t; --“ written inside "..." re-reads as
+// one identifier (#632).
+func quotedRune(r rune, strict bool) rune {
+	if strict {
+		return r
+	}
+	return normalizeQuote(r)
 }
 
 // readQuotedIdentifier reads something like "MyColumn" with support for Unicode quotes.
@@ -1186,7 +1204,7 @@ func (t *Tokenizer) readQuotedIdentifier() (models.Token, error) {
 	// Skip opening quote
 	t.pos.AdvanceRune(r, size)
 
-	if v, p, ok := t.scanQuotedIdentFast(quote); ok {
+	if v, p, ok := t.scanQuotedIdentFast(quote, r == quote); ok {
 		t.pos = p
 		word := t.newWord(v)
 		word.QuoteStyle = quote
@@ -1198,7 +1216,7 @@ func (t *Tokenizer) readQuotedIdentifier() (models.Token, error) {
 			Quote: quote,
 		}, nil
 	}
-	return t.readQuotedIdentifierSlow(startPos, quote)
+	return t.readQuotedIdentifierSlow(startPos, r)
 }
 
 // scanQuotedIdentFast scans a quoted identifier's content from t.pos on a
@@ -1206,7 +1224,9 @@ func (t *Tokenizer) readQuotedIdentifier() (models.Token, error) {
 // substring of t.src and the position just past the closing quote, matching
 // readQuotedIdentifierSlow exactly. It returns ok=false, without touching
 // t.pos, at the first doubled quote, rewritten rune, newline or at EOF.
-func (t *Tokenizer) scanQuotedIdentFast(quote rune) (string, Position, bool) {
+// strict reports that the identifier was opened with an ASCII quote (see
+// quotedRune).
+func (t *Tokenizer) scanQuotedIdentFast(quote rune, strict bool) (string, Position, bool) {
 	p := t.pos
 	in := t.input
 	start := p.Index
@@ -1214,7 +1234,11 @@ func (t *Tokenizer) scanQuotedIdentFast(quote rune) (string, Position, bool) {
 		r, size := rune(in[p.Index]), 1
 		if r >= utf8.RuneSelf {
 			r, size = utf8.DecodeRune(in[p.Index:])
-			if needsRewrite(r, size) {
+			if strict {
+				if r == utf8.RuneError && size == 1 {
+					return "", p, false
+				}
+			} else if needsRewrite(r, size) {
 				if normalizeQuote(r) != quote {
 					return "", p, false
 				}
@@ -1222,7 +1246,7 @@ func (t *Tokenizer) scanQuotedIdentFast(quote rune) (string, Position, bool) {
 			}
 		}
 		if r == quote {
-			if p.Index+size < len(in) && nextRuneIsQuote(in[p.Index+size:], quote) {
+			if p.Index+size < len(in) && nextRuneIsQuote(in[p.Index+size:], quote, strict) {
 				return "", p, false
 			}
 			end := p.Index
@@ -1242,18 +1266,23 @@ func (t *Tokenizer) scanQuotedIdentFast(quote rune) (string, Position, bool) {
 // readQuotedIdentifierSlow is the reference quoted-identifier reader. It
 // continues from t.pos (just past the opening quote) and builds the value in
 // t.litBuf, applying doubled-quote escapes and rune normalization.
-func (t *Tokenizer) readQuotedIdentifierSlow(startPos Position, quote rune) (models.Token, error) {
+//
+// opener is the rune that opened the identifier; when it is the ASCII quote
+// itself the identifier is read in strict mode (see quotedRune).
+func (t *Tokenizer) readQuotedIdentifierSlow(startPos Position, opener rune) (models.Token, error) {
+	quote := normalizeQuote(opener)
+	strict := opener == quote
 	buf := &t.litBuf
 	buf.Reset()
 	for t.pos.Index < len(t.input) {
 		r, size := utf8.DecodeRune(t.input[t.pos.Index:])
-		r = normalizeQuote(r)
+		r = quotedRune(r, strict)
 
 		if r == quote {
 			// Check for escaped quote
 			if t.pos.Index+size < len(t.input) {
 				nextR, nextSize := utf8.DecodeRune(t.input[t.pos.Index+size:])
-				nextR = normalizeQuote(nextR)
+				nextR = quotedRune(nextR, strict)
 				if nextR == quote {
 					// Include one quote and skip the other
 					buf.WriteRune(r)
@@ -1424,7 +1453,7 @@ func (t *Tokenizer) readQuotedString(quote rune) (models.Token, error) {
 	// Skip opening quote
 	t.pos.AdvanceRune(r, size)
 
-	if v, p, ok := t.scanQuotedStringFast(quote); ok {
+	if v, p, ok := t.scanQuotedStringFast(quote, originalQuote == quote); ok {
 		t.pos = p
 		return models.Token{
 			Type:  quotedStringType(originalQuote),
@@ -1454,8 +1483,9 @@ func quotedStringType(originalQuote rune) models.TokenType {
 // of t.src and the position just past the closing quote, matching
 // readQuotedStringSlow exactly (a newline sets Column to 1 and leaves LastNL
 // alone). It returns ok=false, without touching t.pos, at the first doubled
-// quote, escaping backslash, rewritten rune or at EOF.
-func (t *Tokenizer) scanQuotedStringFast(quote rune) (string, Position, bool) {
+// quote, escaping backslash, rewritten rune or at EOF. strict reports that
+// the literal was opened with an ASCII quote (see quotedRune).
+func (t *Tokenizer) scanQuotedStringFast(quote rune, strict bool) (string, Position, bool) {
 	p := t.pos
 	in := t.input
 	start := p.Index
@@ -1464,7 +1494,11 @@ func (t *Tokenizer) scanQuotedStringFast(quote rune) (string, Position, bool) {
 		r, size := rune(in[p.Index]), 1
 		if r >= utf8.RuneSelf {
 			r, size = utf8.DecodeRune(in[p.Index:])
-			if needsRewrite(r, size) {
+			if strict {
+				if r == utf8.RuneError && size == 1 {
+					return "", p, false
+				}
+			} else if needsRewrite(r, size) {
 				if normalizeQuote(r) != quote {
 					return "", p, false
 				}
@@ -1473,7 +1507,7 @@ func (t *Tokenizer) scanQuotedStringFast(quote rune) (string, Position, bool) {
 		}
 		switch {
 		case r == quote:
-			if p.Index+size < len(in) && nextRuneIsQuote(in[p.Index+size:], quote) {
+			if p.Index+size < len(in) && nextRuneIsQuote(in[p.Index+size:], quote, strict) {
 				return "", p, false
 			}
 			end := p.Index
@@ -1497,18 +1531,22 @@ func (t *Tokenizer) scanQuotedStringFast(quote rune) (string, Position, bool) {
 // readQuotedStringSlow is the reference quoted-string reader. It continues
 // from t.pos (just past the opening quote) and builds the value in t.litBuf,
 // applying doubled-quote and backslash escapes and rune normalization.
+//
+// A literal opened with the ASCII quote itself (originalQuote == quote) is
+// read in strict mode (see quotedRune).
 func (t *Tokenizer) readQuotedStringSlow(startPos Position, originalQuote, quote rune) (models.Token, error) {
+	strict := originalQuote == quote
 	buf := &t.litBuf
 	buf.Reset()
 	for t.pos.Index < len(t.input) {
 		r, size := utf8.DecodeRune(t.input[t.pos.Index:])
-		r = normalizeQuote(r)
+		r = quotedRune(r, strict)
 
 		if r == quote {
 			// Check for escaped quote
 			if t.pos.Index+size < len(t.input) {
 				nextR, nextSize := utf8.DecodeRune(t.input[t.pos.Index+size:])
-				nextR = normalizeQuote(nextR)
+				nextR = quotedRune(nextR, strict)
 				if nextR == quote {
 					// Include one quote and skip the other
 					buf.WriteRune(r)

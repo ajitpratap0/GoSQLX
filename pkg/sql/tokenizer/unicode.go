@@ -135,7 +135,10 @@ func isUnicodeQuote(r rune) bool {
 //   - U+201D (") RIGHT DOUBLE QUOTATION MARK → "
 //
 // This allows SQL written with "smart quotes" from word processors or
-// copied from formatted documents to be processed correctly.
+// copied from formatted documents to be processed correctly. Normalization
+// applies to tokens opened with a Unicode quote: a token opened with an
+// ASCII quote is closed and escaped only by that ASCII quote, and Unicode
+// quotes inside it are kept as ordinary content (see quotedRune).
 //
 // Returns the normalized ASCII quote character, or the original rune if
 // it's not a Unicode quote.

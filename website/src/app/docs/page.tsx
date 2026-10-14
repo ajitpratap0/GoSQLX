@@ -8,6 +8,7 @@ export const metadata: Metadata = {
   title: 'Documentation',
   description:
     'GoSQLX documentation - everything you need to parse, analyze, and transform SQL with Go.',
+  alternates: { canonical: '/docs/' },
 };
 
 const CATEGORY_ICONS: Record<string, string> = {

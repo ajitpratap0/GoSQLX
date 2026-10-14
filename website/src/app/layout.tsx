@@ -16,13 +16,9 @@ export const metadata: Metadata = {
   description:
     'High-performance, zero-copy SQL parsing SDK for Go. Thread-safe with multi-dialect support for PostgreSQL, MySQL, SQLite, SQL Server, Oracle, Snowflake, and ClickHouse.',
   metadataBase: new URL('https://gosqlx.dev'),
-  alternates: {
-    canonical: '/',
-  },
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://gosqlx.dev',
     siteName: 'GoSQLX',
     title: 'GoSQLX - Production-Ready SQL Parsing SDK for Go',
     description:

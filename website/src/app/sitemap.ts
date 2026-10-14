@@ -1,33 +1,46 @@
+import fs from 'fs';
+import path from 'path';
 import { MetadataRoute } from 'next';
 import { DOCS_SIDEBAR } from '@/lib/constants';
 import { blogPostHref, getAllPosts } from '@/lib/blog';
 
+// Mirrors DOCS_DIR in lib/docs.ts (repo-level docs/ folder).
+const DOCS_DIR = path.join(process.cwd(), '..', 'docs');
+
+function fileMtime(file: string): Date | undefined {
+  try {
+    return fs.statSync(path.join(DOCS_DIR, file)).mtime;
+  } catch {
+    return undefined;
+  }
+}
+
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = 'https://gosqlx.dev';
 
-  const staticPages = [
-    '',
-    '/playground',
-    '/docs',
-    '/blog',
-    '/vscode',
-    '/benchmarks',
-    '/privacy',
-  ].map((path) => ({
-    url: `${baseUrl}${path}`,
-    lastModified: new Date(),
-  }));
+  // Every URL ends in "/" because next.config.ts sets trailingSlash: true;
+  // slash-less URLs would 308. Static pages have no reliable modified date, so omit it.
+  const staticPages: MetadataRoute.Sitemap = [
+    '/',
+    '/playground/',
+    '/docs/',
+    '/blog/',
+    '/vscode/',
+    '/benchmarks/',
+    '/compare/',
+    '/privacy/',
+  ].map((p) => ({ url: `${baseUrl}${p}` }));
 
-  const docPages = DOCS_SIDEBAR.flatMap((category) =>
+  const docPages: MetadataRoute.Sitemap = DOCS_SIDEBAR.flatMap((category) =>
     category.items.map((item) => ({
-      url: `${baseUrl}/docs/${item.slug}`,
-      lastModified: new Date(),
+      url: `${baseUrl}/docs/${item.slug}/`,
+      lastModified: fileMtime(item.file),
     }))
   );
 
-  const blogPages = getAllPosts().map((post) => ({
-    url: `${baseUrl}${blogPostHref(post.slug)}`,
-    lastModified: post.date ? new Date(post.date + 'T00:00:00') : new Date(),
+  const blogPages: MetadataRoute.Sitemap = getAllPosts().map((post) => ({
+    url: `${baseUrl}${blogPostHref(post.slug)}/`,
+    lastModified: post.date ? new Date(post.date + 'T00:00:00') : undefined,
   }));
 
   return [...staticPages, ...docPages, ...blogPages];

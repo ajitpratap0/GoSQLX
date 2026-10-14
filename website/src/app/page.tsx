@@ -8,6 +8,13 @@ import { McpSection } from '@/components/home/McpSection';
 import { VscodeSection } from '@/components/home/VscodeSection';
 import { CtaBanner } from '@/components/home/CtaBanner';
 
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  alternates: { canonical: '/' },
+  openGraph: { url: '/' },
+};
+
 export default function Home() {
   return (
     <>

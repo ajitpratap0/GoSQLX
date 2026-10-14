@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'Privacy Policy',
   description: 'GoSQLX privacy policy. No tracking, no telemetry, no query logging.',
+  alternates: { canonical: '/privacy/' },
 };
 
 export default function PrivacyPage() {

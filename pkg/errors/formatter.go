@@ -76,63 +76,16 @@ func FormatErrorWithContextAt(code ErrorCode, message string, location models.Lo
 //   - location: The line/column of the error (1-based)
 //   - highlightLen: Number of characters to highlight; 1 renders a single caret
 //
+// Lines longer than 120 bytes are clipped to a window of about 60 bytes either
+// side of the error column, marked with "...", so the output size is bounded
+// regardless of input size.
+//
 // Returns the formatted context block, or an empty string if location is invalid.
 func FormatMultiLineContext(sql string, location models.Location, highlightLen int) string {
-	if sql == "" || location.Line <= 0 {
-		return ""
-	}
-
 	var sb strings.Builder
-	lines := strings.Split(sql, "\n")
-
-	if location.Line > len(lines) {
+	if _, ok := renderContext(&sb, sql, location, highlightLen, 1, 1); !ok {
 		return ""
 	}
-
-	errorLineNum := location.Line
-
-	// Calculate line number width for alignment
-	maxLineNum := errorLineNum + 1
-	if maxLineNum > len(lines) {
-		maxLineNum = len(lines)
-	}
-	lineNumWidth := len(fmt.Sprintf("%d", maxLineNum))
-	if lineNumWidth < 2 {
-		lineNumWidth = 2
-	}
-
-	sb.WriteString("\n")
-
-	// Show line before (if exists)
-	if errorLineNum > 1 {
-		lineNum := errorLineNum - 1
-		line := lines[lineNum-1]
-		sb.WriteString(fmt.Sprintf("  %*d | %s\n", lineNumWidth, lineNum, line))
-	}
-
-	// Show error line
-	line := lines[errorLineNum-1]
-	sb.WriteString(fmt.Sprintf("  %*d | %s\n", lineNumWidth, errorLineNum, line))
-
-	// Add position indicator (^)
-	if location.Column > 0 {
-		// Account for line number prefix
-		prefix := fmt.Sprintf("  %*d | ", lineNumWidth, errorLineNum)
-		spaces := strings.Repeat(" ", len(prefix)+location.Column-1)
-		highlight := "^"
-		if highlightLen > 1 {
-			highlight = strings.Repeat("^", highlightLen)
-		}
-		sb.WriteString(spaces + highlight + "\n")
-	}
-
-	// Show line after (if exists)
-	if errorLineNum < len(lines) {
-		lineNum := errorLineNum + 1
-		line := lines[lineNum-1]
-		sb.WriteString(fmt.Sprintf("  %*d | %s\n", lineNumWidth, lineNum, line))
-	}
-
 	return sb.String()
 }
 
@@ -254,67 +207,16 @@ func FormatErrorWithExample(code ErrorCode, message string, location models.Loca
 //   - linesBefore: Number of source lines to display before the error line
 //   - linesAfter: Number of source lines to display after the error line
 //
+// Lines longer than 120 bytes are clipped to a window of about 60 bytes either
+// side of the error column, marked with "...", so the output size is bounded
+// regardless of input size.
+//
 // Returns the formatted context block, or an empty string if location is invalid.
 func FormatContextWindow(sql string, location models.Location, highlightLen int, linesBefore, linesAfter int) string {
-	if sql == "" || location.Line <= 0 {
-		return ""
-	}
-
 	var sb strings.Builder
-	lines := strings.Split(sql, "\n")
-
-	if location.Line > len(lines) {
+	if _, ok := renderContext(&sb, sql, location, highlightLen, linesBefore, linesAfter); !ok {
 		return ""
 	}
-
-	errorLineNum := location.Line
-
-	// Calculate line range
-	startLine := errorLineNum - linesBefore
-	if startLine < 1 {
-		startLine = 1
-	}
-
-	endLine := errorLineNum + linesAfter
-	if endLine > len(lines) {
-		endLine = len(lines)
-	}
-
-	// Calculate line number width for alignment
-	lineNumWidth := len(fmt.Sprintf("%d", endLine))
-	if lineNumWidth < 2 {
-		lineNumWidth = 2
-	}
-
-	sb.WriteString("\n")
-
-	// Show lines before error
-	for lineNum := startLine; lineNum < errorLineNum; lineNum++ {
-		line := lines[lineNum-1]
-		sb.WriteString(fmt.Sprintf("  %*d | %s\n", lineNumWidth, lineNum, line))
-	}
-
-	// Show error line
-	line := lines[errorLineNum-1]
-	sb.WriteString(fmt.Sprintf("  %*d | %s\n", lineNumWidth, errorLineNum, line))
-
-	// Add position indicator (^)
-	if location.Column > 0 {
-		prefix := fmt.Sprintf("  %*d | ", lineNumWidth, errorLineNum)
-		spaces := strings.Repeat(" ", len(prefix)+location.Column-1)
-		highlight := "^"
-		if highlightLen > 1 {
-			highlight = strings.Repeat("^", highlightLen)
-		}
-		sb.WriteString(spaces + highlight + "\n")
-	}
-
-	// Show lines after error
-	for lineNum := errorLineNum + 1; lineNum <= endLine; lineNum++ {
-		line := lines[lineNum-1]
-		sb.WriteString(fmt.Sprintf("  %*d | %s\n", lineNumWidth, lineNum, line))
-	}
-
 	return sb.String()
 }
 

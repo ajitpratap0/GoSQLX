@@ -53,18 +53,10 @@ export function Navbar() {
   const [searchLoaded, setSearchLoaded] = useState(false);
   if (searchOpen && !searchLoaded) setSearchLoaded(true);
   const { scrollY } = useScroll();
-  const [isLight, setIsLight] = useState(false);
-  useEffect(() => {
-    const check = () => setIsLight(document.documentElement.classList.contains('light'));
-    check();
-    const observer = new MutationObserver(check);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
-
   const bgOpacity = useTransform(scrollY, [0, 100], [0.6, 0.9]);
   const blurAmount = useTransform(scrollY, [0, 100], [8, 16]);
-  const bgColor = useTransform(bgOpacity, (v) => isLight ? `rgba(250, 251, 252, ${v})` : `rgba(9, 9, 11, ${v})`);
+  // Token-based so it follows the theme without tracking the html class.
+  const bgColor = useTransform(bgOpacity, (v) => `color-mix(in srgb, var(--bg) ${Math.round(v * 100)}%, transparent)`);
   const blur = useTransform(blurAmount, (v) => `blur(${v}px)`);
 
   // Close mobile menu on resize
@@ -97,7 +89,7 @@ export function Navbar() {
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 shrink-0">
           <Image src="/images/logo.webp" alt="" width={32} height={32} priority />
-          <span className="text-lg font-semibold text-white">GoSQLX</span>
+          <span className="text-lg font-semibold text-fg">GoSQLX</span>
         </Link>
 
         {/* Desktop nav links */}
@@ -130,7 +122,7 @@ export function Navbar() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
             </svg>
             <span className="hidden xl:inline">Search</span>
-            <kbd className="font-mono text-[10px] text-text-muted border border-white/[0.08] rounded px-1 py-0.5 bg-white/[0.03]">&#8984;K</kbd>
+            <kbd className="font-mono text-[10px] text-fg-subtle border border-white/[0.08] rounded px-1 py-0.5 bg-white/[0.03]">&#8984;K</kbd>
           </button>
           <a
             href="https://github.com/ajitpratap0/GoSQLX"
@@ -170,7 +162,7 @@ export function Navbar() {
             animate={{ height: 'auto', opacity: 1, pointerEvents: 'auto' }}
             exit={{ height: 0, opacity: 0, pointerEvents: 'none' }}
             transition={{ duration: 0.25, ease: 'easeInOut' }}
-            className="lg:hidden overflow-hidden border-t border-white/[0.06] bg-primary backdrop-blur-xl"
+            className="lg:hidden overflow-hidden border-t border-white/[0.06] bg-bg backdrop-blur-xl"
           >
             <div className="px-4 py-4 space-y-1">
               {NAV_LINKS.map((link) => {

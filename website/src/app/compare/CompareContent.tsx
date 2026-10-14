@@ -171,7 +171,7 @@ export function CompareContent() {
           <p className="text-sm text-zinc-400">
             Performance comparisons are withheld until a reproducible benchmark harness is published.
             For GoSQLX measurements, see the{' '}
-            <Link href="/benchmarks/" className="text-indigo-300 underline underline-offset-2">
+            <Link href="/benchmarks/" className="text-accent underline underline-offset-2">
               benchmarks page
             </Link>
             .
@@ -189,7 +189,7 @@ export function CompareContent() {
               </h2>
               <p className="mt-3 text-zinc-400 max-w-xl mx-auto">
                 Get started in under a minute with a single{' '}
-                <code className="font-mono text-xs bg-white/[0.06] px-1.5 py-0.5 rounded">
+                <code className="font-mono text-xs text-fg bg-fg/[0.06] px-1.5 py-0.5 rounded">
                   go get
                 </code>{' '}
                 command.

@@ -61,7 +61,7 @@ export function Sidebar() {
                     aria-current={isActive(item.slug) ? 'page' : undefined}
                     className={`flex items-center rounded-md px-3 py-1.5 max-lg:min-h-11 text-sm transition-colors ${
                       isActive(item.slug)
-                        ? 'border-l-2 border-accent-indigo bg-accent-indigo/10 pl-[10px] text-white font-medium'
+                        ? 'border-l-2 border-accent bg-accent/10 pl-[10px] text-white font-medium'
                         : 'border-l-2 border-transparent pl-[10px] text-zinc-400 hover:text-white hover:bg-white/5'
                     }`}
                   >
@@ -81,7 +81,7 @@ export function Sidebar() {
       {/* Mobile toggle */}
       <button
         onClick={() => setMobileOpen(!mobileOpen)}
-        className="fixed bottom-4 right-4 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-accent-indigo text-white shadow-lg lg:hidden"
+        className="fixed bottom-4 right-4 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-accent-fg shadow-lg lg:hidden"
         aria-label="Toggle docs sidebar"
       >
         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -100,7 +100,7 @@ export function Sidebar() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-16 z-40 h-[calc(100vh-4rem)] w-64 overflow-y-auto border-r border-white/5 bg-surface px-2 transition-transform lg:sticky lg:translate-x-0 lg:bg-transparent ${
+        className={`fixed top-16 z-40 h-[calc(100vh-4rem)] w-64 overflow-y-auto border-r border-white/5 bg-bg-raised px-2 transition-transform lg:sticky lg:translate-x-0 lg:bg-transparent ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >

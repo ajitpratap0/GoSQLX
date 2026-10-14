@@ -477,3 +477,20 @@ html.light .opacity-40[class*="bg-gradient"] { opacity: 0.2; }
     }
   }
 }
+
+/* Inline code in docs prose: no typography backticks, pill styling */
+.prose-dark :not(pre) > code {
+  border-radius: 0.25rem;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.125rem 0.375rem;
+  font-size: 0.875em;
+  color: #e4e4e7;
+}
+.prose-dark :not(pre) > code::before,
+.prose-dark :not(pre) > code::after {
+  content: none;
+}
+html.light .prose-dark :not(pre) > code {
+  background: rgba(0, 0, 0, 0.06);
+  color: #1f2937;
+}

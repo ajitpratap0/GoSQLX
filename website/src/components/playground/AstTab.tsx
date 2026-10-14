@@ -5,6 +5,14 @@ interface AstNodeProps {
   data: unknown;
   depth?: number;
   label?: string;
+  showEmpty?: boolean;
+}
+
+function isEmptyValue(v: unknown): boolean {
+  if (v === null || v === undefined || v === "") return true;
+  if (Array.isArray(v)) return v.length === 0;
+  if (typeof v === "object") return Object.keys(v as object).length === 0;
+  return false;
 }
 
 function TypeBadge({ type }: { type: string }) {
@@ -33,36 +41,36 @@ function TypeBadge({ type }: { type: string }) {
   );
 }
 
-function AstNode({ data, depth = 0, label }: AstNodeProps) {
+function AstNode({ data, depth = 0, label, showEmpty }: AstNodeProps) {
   const [collapsed, setCollapsed] = useState(depth > 3);
 
   if (data === null || data === undefined) {
     return (
-      <span className="text-slate-400 italic text-sm">
+      <div className="pl-5 text-slate-400 italic text-sm">
         {label && <span className="text-slate-400 mr-1">{label}:</span>}
         null
-      </span>
+      </div>
     );
   }
 
   if (typeof data === "string" || typeof data === "number" || typeof data === "boolean") {
     return (
-      <span className="text-sm">
+      <div className="pl-5 text-sm">
         {label && <span className="text-slate-400 mr-1">{label}:</span>}
         <span className="text-green-400 font-mono">
           {typeof data === "string" ? `"${data}"` : String(data)}
         </span>
-      </span>
+      </div>
     );
   }
 
   if (Array.isArray(data)) {
     if (data.length === 0) {
       return (
-        <span className="text-sm">
+        <div className="pl-5 text-sm">
           {label && <span className="text-slate-400 mr-1">{label}:</span>}
           <span className="text-slate-400">[]</span>
-        </span>
+        </div>
       );
     }
 
@@ -81,7 +89,7 @@ function AstNode({ data, depth = 0, label }: AstNodeProps) {
         {!collapsed && (
           <div className="ml-4 border-l border-slate-700 pl-3 mt-0.5 space-y-1">
             {data.map((item, i) => (
-              <AstNode key={i} data={item} depth={depth + 1} label={String(i)} />
+              <AstNode key={i} data={item} depth={depth + 1} label={String(i)} showEmpty={showEmpty} />
             ))}
           </div>
         )}
@@ -99,12 +107,14 @@ function AstNode({ data, depth = 0, label }: AstNodeProps) {
           ? obj.node_type
           : null;
 
+    const visibleKeys = showEmpty ? keys : keys.filter((k) => !isEmptyValue(obj[k]));
+
     if (keys.length === 0) {
       return (
-        <span className="text-sm">
+        <div className="pl-5 text-sm">
           {label && <span className="text-slate-400 mr-1">{label}:</span>}
           <span className="text-slate-400">{"{}"}</span>
-        </span>
+        </div>
       );
     }
 
@@ -120,13 +130,13 @@ function AstNode({ data, depth = 0, label }: AstNodeProps) {
           {label && <span className="text-slate-400">{label}:</span>}
           {nodeType && <TypeBadge type={nodeType} />}
           {collapsed && (
-            <span className="text-slate-400">{`{${keys.length} keys}`}</span>
+            <span className="text-slate-400">{`{${visibleKeys.length} keys}`}</span>
           )}
         </button>
         {!collapsed && (
           <div className="ml-4 border-l border-slate-700 pl-3 mt-0.5 space-y-1">
-            {keys.map((key) => (
-              <AstNode key={key} data={obj[key]} depth={depth + 1} label={key} />
+            {visibleKeys.map((key) => (
+              <AstNode key={key} data={obj[key]} depth={depth + 1} label={key} showEmpty={showEmpty} />
             ))}
           </div>
         )}
@@ -142,6 +152,7 @@ interface AstTabProps {
 }
 
 export default function AstTab({ data }: AstTabProps) {
+  const [showEmpty, setShowEmpty] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const handleCopy = useCallback(() => {
@@ -183,6 +194,14 @@ export default function AstTab({ data }: AstTabProps) {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800 bg-slate-900/30">
         <span className="text-xs text-slate-400 uppercase tracking-wider font-medium">AST</span>
+        <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer ml-auto mr-3">
+          <input
+            type="checkbox"
+            checked={showEmpty}
+            onChange={(e) => setShowEmpty(e.target.checked)}
+          />
+          Show empty fields
+        </label>
         <button
           onClick={handleCopy}
           className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors px-2 py-1 rounded hover:bg-slate-700/50"
@@ -204,7 +223,7 @@ export default function AstTab({ data }: AstTabProps) {
         </button>
       </div>
       <div className="flex-1 overflow-auto p-4">
-        <AstNode data={data} />
+        <AstNode data={data} showEmpty={showEmpty} />
       </div>
     </div>
   );

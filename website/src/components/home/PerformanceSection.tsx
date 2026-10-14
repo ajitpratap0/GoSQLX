@@ -1,21 +1,22 @@
 import { GlassCard } from '@/components/ui/GlassCard';
 import { FadeIn } from '@/components/ui/FadeIn';
 import { AnimatedCounter } from '@/components/ui/AnimatedCounter';
+import { BENCH_ENV, PARSE_BENCHMARKS, formatOps, opsPerSec } from '@/lib/benchmark-data';
 import { AnimatedBars } from './AnimatedBars';
 
 const stats = [
-  { value: 1380000, suffix: '+', label: 'ops/sec', color: 'text-accent-orange' },
-  { value: 1, suffix: '\u00B5s', label: 'latency', color: 'text-accent-indigo', prefix: '<' },
+  { value: 3140000, suffix: '', label: 'parses/sec (simple SELECT, M4)', color: 'text-accent-orange', prefix: '~' },
+  { value: 318, suffix: 'ns', label: 'parse latency (simple SELECT)', color: 'text-accent-indigo' },
   { value: 85, suffix: '%', label: 'SQL-99', color: 'text-accent-green' },
   { value: 8, suffix: '', label: 'Dialects', color: 'text-accent-purple' },
 ];
 
-const benchmarks = [
-  { name: 'GoSQLX', ops: 1380000, label: '1.38M ops/sec', highlight: true },
-  { name: 'vitess', ops: 560000, label: '560K ops/sec', highlight: false },
-  { name: 'pg_query', ops: 340000, label: '340K ops/sec', highlight: false },
-  { name: 'sqlparser', ops: 220000, label: '220K ops/sec', highlight: false },
-];
+const benchmarks = PARSE_BENCHMARKS.map((b) => ({
+  name: b.name,
+  ops: opsPerSec(b.nsPerOp),
+  label: `${formatOps(opsPerSec(b.nsPerOp))} ops/sec`,
+  highlight: true,
+}));
 
 const maxOps = Math.max(...benchmarks.map((b) => b.ops));
 
@@ -51,7 +52,8 @@ export function PerformanceSection() {
           <GlassCard className="mt-12 p-6 sm:p-8" hover={false}>
             <AnimatedBars benchmarks={benchmarks} maxOps={maxOps} />
             <p className="text-xs text-zinc-400 mt-6 text-center">
-              Based on BenchmarkParse, Apple M4, Go 1.26
+              Parse stage only (not tokenize or end-to-end), {BENCH_ENV.hardware}, {BENCH_ENV.goVersion}.
+              Source: BenchmarkPerformanceBaseline, median of 10 runs.
             </p>
           </GlassCard>
         </FadeIn>

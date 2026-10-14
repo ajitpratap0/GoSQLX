@@ -2,15 +2,15 @@ import type { Metadata } from 'next';
 import { BenchmarksContent } from './BenchmarksContent';
 
 export const metadata: Metadata = {
-  title: { absolute: 'GoSQLX Performance Benchmarks — 1.38M+ ops/sec SQL Parsing for Go' },
+  title: { absolute: 'GoSQLX Performance Benchmarks — Reproducible SQL Parser Numbers for Go' },
   description:
-    'Detailed performance benchmarks for GoSQLX: 1.38M+ ops/sec sustained throughput, 8M+ tokens/sec, zero race conditions across 20K+ concurrent operations. Compare against xwb1989/sqlparser, pg_query_go, and blastrain/sqlparser.',
+    'Detailed performance benchmarks for GoSQLX: parse-stage ns/op and ops/sec for common query shapes, with hardware, Go version and the command to reproduce them. Zero race conditions across 20K+ concurrent operations.',
   alternates: {
     canonical: '/benchmarks/',
   },
   openGraph: {
-    title: 'GoSQLX Performance Benchmarks — 1.38M+ ops/sec SQL Parsing for Go',
-    description: 'Detailed performance benchmarks for GoSQLX: 1.38M+ ops/sec sustained throughput, 8M+ tokens/sec, zero race conditions across 20K+ concurrent operations.',
+    title: 'GoSQLX Performance Benchmarks — Reproducible SQL Parser Numbers for Go',
+    description: 'Detailed performance benchmarks for GoSQLX: parse-stage ns/op and ops/sec for common query shapes, with hardware, Go version and the command to reproduce them.',
     url: '/benchmarks/',
   },
 };

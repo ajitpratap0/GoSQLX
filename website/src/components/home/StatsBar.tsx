@@ -3,8 +3,8 @@ import { FadeIn } from '@/components/ui/FadeIn';
 import { AnimatedCounter } from '@/components/ui/AnimatedCounter';
 
 const stats = [
-  { value: 1380000, suffix: '+', label: 'ops/sec', color: 'text-accent-orange' },
-  { value: 1, suffix: 'μs', label: 'latency', color: 'text-accent-indigo', prefix: '<' },
+  { value: 3140000, suffix: '', label: 'parses/sec (simple SELECT, M4)', color: 'text-accent-orange', prefix: '~' },
+  { value: 318, suffix: 'ns', label: 'parse latency (simple SELECT)', color: 'text-accent-indigo' },
   { value: 85, suffix: '%', label: 'SQL-99', color: 'text-accent-green' },
   { value: 8, suffix: '', label: 'Dialects', color: 'text-accent-purple' },
 ];

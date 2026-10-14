@@ -4,14 +4,14 @@ import { CompareContent } from './CompareContent';
 export const metadata: Metadata = {
   title: { absolute: 'GoSQLX vs pg_query vs vitess-sqlparser — Go SQL Parser Comparison' },
   description:
-    'Compare GoSQLX against pg_query_go, vitess-sqlparser, and xwb1989/sqlparser. Feature matrix, performance benchmarks, dialect support, and more for Go SQL parsing libraries.',
+    'Compare GoSQLX against pg_query_go, vitess-sqlparser, and xwb1989/sqlparser. Feature matrix, dialect support, and more for Go SQL parsing libraries.',
   alternates: {
     canonical: '/compare/',
   },
   openGraph: {
     title: 'GoSQLX vs pg_query vs vitess-sqlparser — Go SQL Parser Comparison',
     description:
-      'Compare GoSQLX against pg_query_go, vitess-sqlparser, and xwb1989/sqlparser. Feature matrix, performance benchmarks, and dialect support.',
+      'Compare GoSQLX against pg_query_go, vitess-sqlparser, and xwb1989/sqlparser. Feature matrix and dialect support.',
     url: '/compare/',
   },
 };
@@ -26,7 +26,7 @@ const structuredData = JSON.stringify({
   url: 'https://gosqlx.dev/compare/',
   programmingLanguage: 'Go',
   description:
-    'High-performance, zero-copy SQL parsing SDK for Go with 8-dialect support, 1.38M+ ops/sec.',
+    'High-performance, zero-copy SQL parsing SDK for Go with 8-dialect support.',
   offers: {
     '@type': 'Offer',
     price: '0',

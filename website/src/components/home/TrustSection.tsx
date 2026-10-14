@@ -62,8 +62,8 @@ const metrics = [
   {
     id: 'perf',
     icon: <BoltIcon />,
-    value: '1.38M',
-    label: 'ops/sec',
+    value: '~3.1M',
+    label: 'parses/sec (simple SELECT, Apple M4)',
   },
   {
     id: 'race',

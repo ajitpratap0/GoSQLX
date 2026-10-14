@@ -18,8 +18,6 @@ type FeatureRow = {
 
 const FEATURES: FeatureRow[] = [
   { feature: 'Language',              values: ['Go',     'Go (C via CGo)', 'Go',   'Go'] },
-  { feature: 'Ops/sec',              values: ['1.38M+', '~340K',          '~560K', '~220K'] },
-  { feature: 'Memory/op',            values: ['~800B',  '~12KB',          '~4KB',  '~2KB'] },
   { feature: 'Zero-copy',            values: [true,  false, false, false] },
   { feature: 'Dialects',             values: ['8',   '1 (PostgreSQL)', '1 (MySQL)', '1 (MySQL)'] },
   { feature: 'CGo required',         values: [false, true,  false, false] },
@@ -32,15 +30,6 @@ const FEATURES: FeatureRow[] = [
   { feature: 'Thread-safe',          values: [true,  true,  true,  true] },
   { feature: 'Active maintenance',   values: [true,  true,  true,  false] },
 ];
-
-const PERF_BARS = [
-  { name: 'GoSQLX',            ops: 1_380_000, label: '1.38M ops/sec', accent: true },
-  { name: 'vitess-sqlparser',  ops: 560_000,   label: '560K ops/sec',  accent: false },
-  { name: 'pg_query_go',       ops: 340_000,   label: '340K ops/sec',  accent: false },
-  { name: 'sqlparser (xwb1989)', ops: 220_000, label: '220K ops/sec',  accent: false },
-];
-
-const MAX_OPS = PERF_BARS[0].ops;
 
 /* ------------------------------------------------------------------ */
 /*  Icons                                                              */
@@ -177,56 +166,17 @@ export function CompareContent() {
         </div>
       </section>
 
-      {/* Performance Comparison */}
+      {/* Performance comparison withheld until the reproducible harness (#673) lands */}
       <section className="section-padding pb-16">
         <div className="container-width">
-          <FadeIn delay={0.2}>
-            <h2 className="text-2xl font-bold text-white mb-2">Performance Comparison</h2>
-            <p className="text-sm text-zinc-400 mb-8">
-              Operations per second parsing a standard SELECT query (higher is better)
-            </p>
-            <GlassCard className="p-6 sm:p-8" hover={false}>
-              <div className="space-y-6">
-                {PERF_BARS.map((bar) => {
-                  const pct = Math.round((bar.ops / MAX_OPS) * 100);
-                  return (
-                    <div key={bar.name}>
-                      <div className="flex items-baseline justify-between mb-2">
-                        <span
-                          className={`text-sm font-medium ${
-                            bar.accent ? 'text-white' : 'text-zinc-400'
-                          }`}
-                        >
-                          {bar.name}
-                        </span>
-                        <span
-                          className={`text-sm font-mono ${
-                            bar.accent ? 'text-green-400' : 'text-zinc-500'
-                          }`}
-                        >
-                          {bar.label}
-                        </span>
-                      </div>
-                      <div className="h-3 w-full rounded-full bg-white/[0.04]">
-                        <div
-                          className={`h-3 rounded-full transition-all duration-700 ${
-                            bar.accent
-                              ? 'bg-gradient-to-r from-green-500 to-emerald-400'
-                              : 'bg-zinc-600'
-                          }`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="mt-6 text-xs text-zinc-500">
-                Benchmarked on Apple Silicon with Go 1.26+, object pooling enabled, race detector off.
-                Results averaged over 5 runs.
-              </p>
-            </GlassCard>
-          </FadeIn>
+          <p className="text-sm text-zinc-400">
+            Performance comparisons are withheld until a reproducible benchmark harness is published.
+            For GoSQLX measurements, see the{' '}
+            <Link href="/benchmarks/" className="text-indigo-300 underline underline-offset-2">
+              benchmarks page
+            </Link>
+            .
+          </p>
         </div>
       </section>
 
@@ -236,7 +186,7 @@ export function CompareContent() {
           <FadeIn delay={0.3}>
             <GlassCard className="p-10" hover={false}>
               <h2 className="text-2xl font-bold text-white">
-                Ready to switch to the fastest Go SQL parser?
+                Ready to try GoSQLX?
               </h2>
               <p className="mt-3 text-zinc-400 max-w-xl mx-auto">
                 Get started in under a minute with a single{' '}

@@ -432,7 +432,7 @@ var goldenNodeWant = map[string]string{
 	"subquery":                          "(SELECT b FROM t)",
 	"any":                               "a <> ANY (SELECT b FROM t)",
 	"all":                               "a >= ALL (SELECT b FROM t)",
-	"function/full":                     "agg(1, 2)(DISTINCT x, y ORDER BY x DESC NULLS FIRST) WITHIN GROUP (ORDER BY y) FILTER (WHERE z = 1) OVER (w PARTITION BY p ORDER BY o NULLS LAST ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)",
+	"function/full":                     "agg(1, 2)(DISTINCT x, y ORDER BY x DESC NULLS FIRST) IGNORE NULLS WITHIN GROUP (ORDER BY y) FILTER (WHERE z = 1) OVER (w PARTITION BY p ORDER BY o NULLS LAST ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)",
 	"function/empty over":               "f() OVER ()",
 	"function/over name":                "f() OVER w",
 	"function/over base":                "f() OVER (w ORDER BY o)",

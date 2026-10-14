@@ -483,6 +483,16 @@ func (u UpsertClause) Children() []Node {
 	return children
 }
 
+// QuerySetting is one name = value pair of a ClickHouse query-level SETTINGS
+// clause (SELECT ... SETTINGS max_threads = 4). It is plain data, not a Node:
+// SelectStatement.Children exposes only Value, so setting names are never
+// mistaken for column references.
+type QuerySetting struct {
+	Name  string
+	Value Expression
+	Pos   models.Location
+}
+
 // ColumnDef represents a column definition in CREATE TABLE
 type ColumnDef struct {
 	Name        string

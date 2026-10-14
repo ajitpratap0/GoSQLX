@@ -496,7 +496,8 @@ Numbers are quoted from each PR (benchstat on an Apple M4 unless stated; the
 
 ### Internal
 - CI: claude-code-action v1, fork-PR review skip, Scorecard v2.4.4 and a valid
-  glama-sync workflow (#536, #538, #539, #540); `.gitattributes` enforcing LF line endings for golden fixtures (#594).
+  glama-sync workflow (#536, #538, #539, #540); `.gitattributes` enforcing LF
+  line endings for golden fixtures (#594).
 - Website and playground: the playground WASM is built during deployment,
   revalidated by browsers and no longer committed (#543, #580).
 - Docs: the CHANGELOG restored after the #526 merge emptied it (#593).

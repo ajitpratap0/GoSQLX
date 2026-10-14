@@ -1,41 +1,41 @@
 {
   "version": "1.14.0",
-  "updated": "2026-04-12",
+  "updated": "2026-10-13",
   "baselines": {
     "SimpleSelect": {
-      "ns_per_op": 700,
+      "ns_per_op": 800,
       "tolerance_percent": 60,
       "description": "Basic SELECT query: SELECT id, name FROM users",
-      "current_performance": "~712 ns/op on Apple Silicon; ~800-1200 ns/op on CI (shared runners)",
-      "note": "Benchmarks now use ParseFromModelTokens (production path) directly - eliminates the legacy token-wrapping overhead. Baseline set at 1.5x M4 measurement to accommodate CI runner variability."
+      "current_performance": "~318 ns/op on Apple M4 (median of 10 runs, re-measured 2026-10-13); ~467-918 ns/op typical on CI (GitHub ubuntu-latest Benchmark job, range over the last 9 Tests runs on main, 0715bb9..61ca6c8)",
+      "note": "Measured with BenchmarkPerformanceBaseline (ParseFromModelTokens production path), -count=10 -benchmem, median. Baseline set at ~2.5x the M4 median: GitHub ubuntu-latest runners measure about 1.5-3.2x slower than M4 on these queries (up to ~3.2x), so a 1.5x baseline (limit ~2.4x M4 at this tolerance) would fail CI's slowest runs."
     },
     "ComplexQuery": {
-      "ns_per_op": 2660,
+      "ns_per_op": 2900,
       "tolerance_percent": 65,
       "description": "Complex SELECT with JOIN, WHERE, ORDER BY, LIMIT",
-      "current_performance": "~2660 ns/op on Apple Silicon; ~3000-4500 ns/op on CI (shared runners)",
-      "note": "Benchmarks now use ParseFromModelTokens (production path) directly. Baseline set at 1.5x M4 measurement; wide tolerance for CI runner variability."
+      "current_performance": "~1165 ns/op on Apple M4 (median of 10 runs, re-measured 2026-10-13); ~1842-3386 ns/op typical on CI (GitHub ubuntu-latest Benchmark job, range over the last 9 Tests runs on main, 0715bb9..61ca6c8)",
+      "note": "Measured with BenchmarkPerformanceBaseline (ParseFromModelTokens production path), -count=10 -benchmem, median. Baseline set at ~2.5x the M4 median: GitHub ubuntu-latest runners measure about 1.5-3.2x slower than M4 on these queries (up to ~3.2x), so a 1.5x baseline (limit ~2.4x M4 at this tolerance) would fail CI's slowest runs."
     },
     "WindowFunction": {
-      "ns_per_op": 1180,
+      "ns_per_op": 1500,
       "tolerance_percent": 60,
       "description": "Window function query: ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...)",
-      "current_performance": "~1180 ns/op on Apple Silicon; ~1300-2000 ns/op on CI (shared runners)",
-      "note": "Benchmarks now use ParseFromModelTokens (production path) directly. Baseline set at 1.5x M4 measurement."
+      "current_performance": "~585 ns/op on Apple M4 (median of 10 runs, re-measured 2026-10-13); ~940-1876 ns/op typical on CI (GitHub ubuntu-latest Benchmark job, range over the last 9 Tests runs on main, 0715bb9..61ca6c8)",
+      "note": "Measured with BenchmarkPerformanceBaseline (ParseFromModelTokens production path), -count=10 -benchmem, median. Baseline set at ~2.5x the M4 median: GitHub ubuntu-latest runners measure about 1.5-3.2x slower than M4 on these queries (up to ~3.2x), so a 1.5x baseline (limit ~2.4x M4 at this tolerance) would fail CI's slowest runs."
     },
     "CTE": {
-      "ns_per_op": 1200,
+      "ns_per_op": 1400,
       "tolerance_percent": 60,
       "description": "Common Table Expression with WITH clause",
-      "current_performance": "~1200 ns/op on Apple Silicon; ~1300-2000 ns/op on CI (shared runners)",
-      "note": "Benchmarks now use ParseFromModelTokens (production path) directly. Baseline set at 1.5x M4 measurement."
+      "current_performance": "~561 ns/op on Apple M4 (median of 10 runs, re-measured 2026-10-13); ~824-1692 ns/op typical on CI (GitHub ubuntu-latest Benchmark job, range over the last 9 Tests runs on main, 0715bb9..61ca6c8)",
+      "note": "Measured with BenchmarkPerformanceBaseline (ParseFromModelTokens production path), -count=10 -benchmem, median. Baseline set at ~2.5x the M4 median: GitHub ubuntu-latest runners measure about 1.5-3.2x slower than M4 on these queries (up to ~3.2x), so a 1.5x baseline (limit ~2.4x M4 at this tolerance) would fail CI's slowest runs."
     },
     "INSERT": {
-      "ns_per_op": 1000,
+      "ns_per_op": 950,
       "tolerance_percent": 60,
       "description": "Simple INSERT statement",
-      "current_performance": "~1008 ns/op on Apple Silicon; ~1100-1600 ns/op on CI (shared runners)",
-      "note": "Benchmarks now use ParseFromModelTokens (production path) directly. Baseline set at 1.5x M4 measurement."
+      "current_performance": "~382 ns/op on Apple M4 (median of 10 runs, re-measured 2026-10-13); ~605-1169 ns/op typical on CI (GitHub ubuntu-latest Benchmark job, range over the last 9 Tests runs on main, 0715bb9..61ca6c8)",
+      "note": "Measured with BenchmarkPerformanceBaseline (ParseFromModelTokens production path), -count=10 -benchmem, median. Baseline set at ~2.5x the M4 median: GitHub ubuntu-latest runners measure about 1.5-3.2x slower than M4 on these queries (up to ~3.2x), so a 1.5x baseline (limit ~2.4x M4 at this tolerance) would fail CI's slowest runs."
     },
     "TokenizationThroughput": {
       "tokens_per_sec": 8000000,

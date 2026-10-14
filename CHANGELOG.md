@@ -7,6 +7,224 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Covers everything merged since v1.14.0: the October 2026 performance audit
+(tracking issue #566), the batch-2 and batch-3 bug fixes, two architect-review
+sprints, new dialect coverage and the high-level `Tree` API. The release is
+source-compatible: exported signatures are unchanged apart from additions.
+Runtime behaviour does change (rendered SQL, error codes and text, parse
+acceptance, CLI refusals), so read **Behavior changes** before upgrading.
+
+### Behavior changes
+- **Comments now count toward `MaxTokens`**: tokens plus collected comments may
+  not exceed `MaxTokens` (1,000,000). Past that the tokenizer returns the
+  existing E1007 token-limit error at the comment or token that crosses the
+  limit. Before, comment-only input was bounded only by `MaxInputSize`; 10 MB of
+  `--\n` collected 3.4M comments and peaked at about 960 MB RSS. Pooled
+  tokenizers drop a `Comments` slice whose capacity exceeds 1024 entries on
+  `Reset`, and
+  `ReleaseAST` does the same for `AST.Comments`. (#597, part of #566)
+- **`MaxRecursionDepth` (E2007) now covers unary `+`/`-`, `NOT` and derived
+  tables**: these three paths recursed outside `parseExpression`, so their
+  nesting was limited only by input size. They now share its depth counter and
+  `RecursionDepthLimitError` (limit 100): 99 nested unary operators or `NOT`s
+  in a select list or `WHERE` parse and 100 return E2007.
+  (#597, part of #566)
+- **`$name` placeholders keep their text**: `$` followed by a name with no
+  closing `$` used to produce a bare `"$"` placeholder and drop the name. It is
+  now one placeholder token whose value is `"$name"`, matching `@name` and Oracle
+  `:name`. Token counts, types and spans are unchanged, but formatter output and
+  fingerprints of such queries change. `$1`, `$$...$$` and `$tag$...$tag$` are
+  unaffected. (#597, part of #566)
+- **Set-operation chains render in linear time**: the formatter used to copy
+  the rendered left side at every level of a left-deep `UNION`/`INTERSECT`/
+  `EXCEPT` chain. It now writes the chain once. Output is byte-identical; only
+  time and memory change (80,000 `UNION`s: 4.1 s and 46 GB allocated -> 6 ms and
+  101 MB). `Format`, `Fingerprint`, `Normalize` and `Transpile` benefit too.
+  (#597, part of #566)
+- **Token values reference the input (zero-copy)**: identifiers, numbers,
+  comments, placeholders, bracket identifiers, dollar-quoted bodies and clean
+  quoted literals/identifiers are now substrings of the input rather than
+  per-token copies, and so are the AST strings built from them. Keeping any of
+  them keeps the whole input string alive, so callers that cache values should
+  `strings.Clone` them. `Tokenize([]byte)` copies the input once, so tokens never
+  alias the caller's mutable buffer. `ExtractTables`/`ExtractColumns`/
+  `ExtractFunctions`/`ExtractMetadata` (and the `Qualified` variants) and
+  `schema.LoadFromDDL`/`LoadCatalogFromDDL` clone their result strings so they
+  don't pin the input. `Tokenizer.Reset` and `Parser.Reset` now release the
+  previous input instead of keeping it reachable from the pool. (#595, fixes
+  #546 and #548; #586, fixes #552)
+- **Oracle `:1` / `:name` are bind variables**: under `DialectOracle`, `:`
+  followed by digits or an identifier is one `TokenTypePlaceholder` (value
+  includes the colon). As a consequence, Oracle-mode `arr[1:n]` (not valid
+  Oracle) now fails with "expected ], got PLACEHOLDER". Other dialects are
+  unchanged. (#595, fixes #520)
+- **`INSERT ... WITH ... SELECT` is accepted, and `gosqlx format` keeps leading
+  CTEs**: the INSERT error for a missing source now reads "expected VALUES,
+  SELECT, or WITH" instead of "expected VALUES or SELECT" (still E2002), and a
+  CTE written without `AS` now reports "expected AS, got LPAREN" instead of
+  "expected column name". The CLI formatter used to silently drop a leading
+  `WITH` on INSERT, UPDATE and DELETE, which changed the statement's meaning;
+  it now emits it. (#584, fixes #537)
+- **Multi-part names and parenthesized join groups**: column references with
+  three or more parts now parse in every dialect. The extra qualifiers are folded
+  into `Identifier.Table` as a dotted string (for example `Table: "db.t"`), and
+  `Identifier.SQL()` quotes each dotted part separately. More than five parts is
+  rejected with E2004. A leading parenthesized join group in FROM is flattened
+  into the statement's join chain, so its AST and `SQL()` match the flat query.
+  Shapes that flattening would get wrong (a comma list after or inside a group),
+  and an alias or ClickHouse `FINAL` after a group, are rejected with E4001.
+  `ExtractColumnsQualified` splits a dotted qualifier at its last dot
+  (`db.t.col` -> `{Schema: db, Table: t, Name: col}`). (#585, fixes #521)
+- **AST visitors see the tree's own nodes**: `Children()`, `Walk` and `Inspect`
+  now return pointers into the parent's slices for value-typed children (table
+  references, joins, ORDER BY items, WHEN clauses, update assignments, frame
+  bounds, MERGE source/target and similar) instead of heap copies. A visitor
+  that mutates them now changes the AST, and the change shows in `SQL()` and the
+  formatter. These pointers become invalid after `ReleaseAST`. (#588, fixes
+  #557)
+- **`ReleaseAST` only pools node types the parser draws from pools**:
+  `Identifier`, `LiteralValue`, `BinaryExpression`, `FunctionCall`, most other
+  expressions and the SELECT/INSERT/UPDATE/DELETE statements are no longer put
+  back by `ReleaseAST`/`ReleaseStatements`; they become garbage. The typed
+  `Put*` functions keep full semantics for hand-built trees. Nodes returned by
+  `Get*` are now fully zeroed, and typed `Put*` wrappers release nested subtrees
+  (for example `FunctionCall.Over`/`Filter`) instead of dropping them. (#581,
+  fixes #555 and #556)
+- **Schema loaders**: the PostgreSQL loader reads `pg_constraint` and now
+  requires PostgreSQL 11 or later. Read-only roles now see foreign keys, and
+  foreign keys into another schema are reported with the referenced table's bare
+  name. Tables with no foreign keys (and MySQL tables with no indexes) carry a
+  nil slice instead of an empty one, which serializes as JSON `null`. (#582,
+  fixes #579; #570, fixes #565)
+- **Linter rules inspect nested queries**: 14 built-in rules moved to `ast.Walk`
+  and 6 more were reinforced, so violations inside subqueries and CTEs are now
+  reported. Expect more findings on nested SQL. (#517)
+- **Structured parser errors**: 37 `fmt.Errorf` sites in the parser now return
+  structured `*errors.Error` values with position and code, and context
+  cancellation returns `ctx.Err()` directly so `errors.Is(err,
+  context.Canceled)` works. `*errors.Error.WithX` methods now copy instead of
+  mutating the receiver. Legacy `Parse`-family functions wrap the
+  `ErrSyntax`/`ErrTokenize`/`ErrTimeout`/`ErrUnsupportedDialect` sentinels.
+  (#517, #518)
+- **`parser.ValidateBytes("")` returns an error**, matching
+  `gosqlx.Validate("")`. Snowflake stub statements (`USE`, `COPY INTO`, `PUT`,
+  `GET`, `LIST`, `REMOVE`, `CREATE STAGE/STREAM/TASK/PIPE/...`) are now
+  `*ast.UnsupportedStatement` instead of `*ast.DescribeStatement`. (#511)
+- **LSP `Document.Lines` is shared**: `DocumentManager.Get` returns a fresh
+  `*Document` header, but its `Lines` now aliases the manager's immutable slice.
+  Treat it as read-only. (#573, fixes #564)
+- **`gosqlx format` renders through `pkg/formatter` and refuses output that does
+  not round-trip**: the CLI's private renderer is gone;
+  `cmd/gosqlx/cmd/sql_formatter.go` is now a thin adapter over
+  `formatter.FormatStatement`. `SQLFormatter`, `NewSQLFormatter` and `Format`
+  keep their signatures, `FormatterOptions` gains a `Dialect` field and
+  `AlignColumns` is now ignored. CAST, `::`, EXTRACT, INTERVAL, ANY/ALL, tuples,
+  subscripts, ARRAY, ROLLUP/CUBE/GROUPING SETS, WITHIN GROUP, set-operation
+  subqueries, ON CONFLICT, RETURNING, PIVOT and ALTER TABLE used to be
+  corrupted with exit 0 and now format correctly. Output layout follows
+  `pkg/formatter` (CLI separators `;\n\n` / `; `, no trailing semicolon). If the
+  formatted text does not re-parse, or re-parses to a different query, the
+  command exits non-zero with "formatted output does not re-parse" and
+  `format -i` leaves the file untouched. It also refuses output that would drop
+  meaningful identifier quotes or change a string literal. With
+  `--dialect mysql`/`mariadb` the output must keep exactly the input's
+  double-quoted tokens, because MySQL reads `"..."` as a string:
+  `WHERE name = "bob"` is refused rather than rewritten as `name = bob`, and
+  `` `select` `` rather than rewritten as `"select"`. ANSI_QUOTES-style input
+  (`"users"."id"`, `FROM "users"`) is formatted as before. (#599, #624)
+- **`Extract*` and `ExtractMetadata` return sorted results; L006/L009 are
+  deterministic**: `ExtractTables`, `ExtractTablesQualified`, `ExtractColumns`,
+  `ExtractColumnsQualified`, `ExtractFunctions` and `ExtractMetadata` (and the
+  MCP `extract_metadata` tool, the cbinding JSON and integrations built on them)
+  came out in random map order. Strings now sort in ascending byte order and
+  `QualifiedName` values by Schema, then Table, then Name. Costs about 3-15%
+  ns/op on the Extract benchmarks; allocs/op are unchanged. L006 now picks the
+  earliest continuation-column indent when counts tie, and the text-fallback
+  path of L009 lists violations in first-seen table order. Counts, messages and
+  lines are unchanged. (#618, #619, #625)
+- **`Children()` of `CreateTable`, `FunctionDesc`, `TriggerExecBody` and
+  `TriggerReferencing` returns pointers**: `CreateTable.Children()` returns
+  `&c.Name`, `&c.Columns[i]` and `&c.Constraints[i]` instead of value copies, so
+  type switches on `*ObjectName`, `*ColumnDef`, `*TableConstraint` and
+  `*FunctionDesc` match and edits made inside `Inspect` or `Walk` reach the
+  parent AST. Visit order is unchanged. (#617, #621)
+- **Quoted identifiers that need quotes keep them on render**: `ast.Identifier`
+  gains `Quoted`, set for ANSI double-quoted names. `SQL()`, `FormatAST`,
+  `Normalize`, `Fingerprint` and `Transpile` output now re-quotes such
+  identifiers, and CTE names and column lists, `CREATE [MATERIALIZED] VIEW` names
+  and column lists and FROM/JOIN table names that are reserved words or contain
+  non-identifier characters. New helpers `ast.QuoteName` and
+  `ast.QuoteQualifiedName`. `SELECT "select"` used to render as
+  `SELECT select`. A name quoted only for its case (`"Total"`, `"MixedCase"`)
+  renders bare, so it keeps matching the alias or column list it refers to;
+  the AST does not record quoting for those. Fingerprints of `"id"` and `id`
+  are unchanged and still equal; only names that need quotes (such as
+  `"select"`) now normalize with them. SQL Server `#temp`, Snowflake
+  `@stage/path` and names with Unicode combining marks stay bare. (#611, #632)
+- **Smart quotes inside ASCII-quoted tokens are content**: a string or
+  identifier opened with `'` or `"` now ends only at the same ASCII quote.
+  `“ ” ‘ ’ « »` inside it are kept as written instead of being read as the
+  closing quote. Tokens opened with a smart quote keep their previous rules.
+  (#632)
+- **SQL Server table hints must be bare words**: `WITH (NOLOCK, UPDLOCK)` is
+  unchanged, but `WITH (INDEX = ix)` and quoted or bracketed hints are now
+  parse errors; they used to be accepted and the hint silently dropped. SQL
+  Server now accepts double-quoted constraint names (`CONSTRAINT "x y"`), and
+  every dialect accepts `CAST(x AS "type")`. A non-ASCII spelling such as
+  `lıke` is stored as `LIKE`; the formatter keeps `WITH` in
+  `WITH CHECK OPTION`; and a hand-built `MINUS` set operator renders as the
+  equivalent `EXCEPT`. (#604, #632)
+- **Readable-style formatting emits one trailing `;`**: with `AddSemicolon`
+  (readable style, `FormatString` default) only the outermost statement ends with
+  `;`. CTE bodies, `IN`/`EXISTS`/scalar subqueries, set-operation operands and
+  the query of `INSERT ... SELECT` / `CREATE VIEW` no longer get an inner `;` or
+  `;;`, and a set-operation chain ends with a single `;`. Compact style is
+  unchanged. (#602, #631)
+- **ClickHouse `SELECT ... SETTINGS ... INTO OUTFILE` is rejected**: the
+  SETTINGS clause is now parsed rather than skipped, so the trailing
+  `INTO OUTFILE` that used to be swallowed returns a syntax error, matching
+  `SELECT ... INTO OUTFILE` elsewhere. Malformed SETTINGS lists and a bare
+  `FORMAT` after SETTINGS also return syntax errors; a trailing
+  `FORMAT <name>` after SETTINGS is still accepted. (#600, #631)
+- **A bare `returning` alias inside an INSERT source or `UPDATE ... FROM` is
+  treated as RETURNING**: while parsing an `INSERT` source query or an
+  `UPDATE ... FROM` list, an unquoted `returning` is no longer taken as an
+  implicit table or select alias. Quoted `returning` and aliases inside nested
+  derived tables, `IN`/`EXISTS`, CTE bodies and scalar subqueries are
+  unaffected. `RETURNING` is also matched case-insensitively. (#610, #623)
+- **Qualified names with more than 5 parts return E2004**: dotted object names
+  in FROM, DML targets and DDL (TABLE, VIEW, INDEX, USE and MySQL statements)
+  are capped at 5 parts, the limit already applied to column references.
+  Every caller (FROM, JOIN, INSERT/UPDATE/DELETE, CREATE, DROP, TRUNCATE,
+  REFRESH, SHOW/DESCRIBE/REPLACE, USE, ClickHouse MV `TO`) reports this E2004
+  rather than rewrapping it as E2002 "expected table name", and Snowflake's
+  permissive `CREATE STAGE/SEQUENCE/FILE FORMAT` path now rejects such names
+  instead of keeping a truncated `RawSQL`. Names of 1 to 5 parts render
+  byte-identically. (#613, #627)
+- **Error context windows are bounded on long lines**: `(*Error).Error()`,
+  `FormatMultiLineContext` and `FormatContextWindow` clip source lines over 120
+  bytes to about 60 bytes either side of the error column (UTF-8 safe, marked
+  with `...`) and cap caret padding. A 100 KB single-line query used to produce
+  a 205 KB E1002 string and now produces about 400 bytes. Lines of 120 bytes or
+  less render byte-identically. (#615, #626)
+- **Pooled tokenizers release oversized `lineStarts`**: `Tokenizer.Reset` keeps
+  the backing array only up to 8192 entries (64 KiB) and otherwise replaces it
+  with a 16-entry slice, so a pooled tokenizer no longer holds about 72 MB after
+  an input with millions of lines. Token output, positions and errors are
+  unchanged. (#614, #626)
+- **Postgres schema loader reports index columns and key flags correctly**:
+  `Index.Columns` is in index key order and excludes INCLUDE columns, which move
+  to the new `Index.IncludeColumns`. Expression keys appear as
+  `pg_get_indexdef` text instead of being dropped, and indexes on partitioned
+  parents are listed. PK/UNIQUE column flags come from `pg_constraint`, so each
+  column appears once, `IsUnique` is set only for a single-column UNIQUE and a
+  SELECT-only role sees the same schema as the owner. `ForeignKey` gains
+  `RefSchema` (empty for MySQL and SQLite). (#620, #622)
+- **Named windows round-trip**: `OVER w` now renders as `OVER w` instead of
+  `OVER (w)`, and `WINDOW w AS (...)` no longer repeats its name inside the
+  parentheses. The non-standard `WINDOW w AS w2` is normalized to
+  `WINDOW w AS (w2)`. (#608, #629)
+
 ### Added
 - **`--dialect` flag for the `parse`, `format`, `analyze`, and `lint` CLI
   commands**: dialect-specific SQL (e.g. MySQL `LIMIT offset, count`) can now be
@@ -15,6 +233,136 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `pkg/linter.Linter` gains a `SetDialect(keywords.SQLDialect)` method so the
   linter can tokenize/parse dialect-specific syntax, and `lint --security` now
   parses with the selected dialect. (#526)
+- **`?` positional placeholders for MySQL, MariaDB and SQLite**: under these
+  dialects a bare `?` is now a `TokenTypePlaceholder` (the bind parameter used
+  by their `database/sql` drivers) instead of the PostgreSQL JSON key-existence
+  operator. PostgreSQL and the other dialects keep `?`/`?|`/`?&` as JSON
+  operators, and the default dialect is unchanged. (#527, fixes #522)
+- **Oracle bind variables**: `:1`, `:10`, `:name` and `:new_a` parse under
+  `DialectOracle` and round-trip byte-for-byte through `SQL()` and the
+  formatter. Previously `WHERE id = :1` failed with "unexpected token: COLON".
+  (#595, fixes #520)
+- **`Tokenizer.TokenizeString(s string)` and
+  `Tokenizer.TokenizeStringContext(ctx, s string)`**: tokenize a string in place
+  without the `[]byte` round trip. Both return `[]models.TokenWithSpan`; token
+  values reference `s`. (#595, fixes #546)
+- **High-level `Tree` API in `pkg/gosqlx`**: `ParseTree(ctx, sql, opts...)`
+  returns an opaque `*Tree` with typed walkers (`WalkSelects`, `WalkInserts`,
+  `WalkUpdates`, `WalkDeletes`, `WalkCreateTables`, `WalkJoins`, `WalkCTEs`,
+  `WalkFunctionCalls`, `WalkIdentifiers`, `WalkBinaryExpressions`, generic
+  `WalkBy[T]`), `Tree.Rewrite` and `Tree.Clone`. `FormatTree`/`FormatAST` format
+  without re-parsing. Functional options `WithDialect`, `WithStrict`,
+  `WithTimeout`, `WithRecovery` and `WithMaxBytes` replace the combinatorial
+  `ParseWith*` helpers, which remain. `ParseReader`/`ParseReaderMultiple` read
+  from an `io.Reader`, bounded by `WithMaxBytes`; `errors.Is(err,
+  gosqlx.ErrTooLarge)` matches when the limit is exceeded. (#517, #518)
+- **Dialect-aware `gosqlx.SplitStatements(sql, dialect)`**: splits a script on
+  top-level `;`, honouring PostgreSQL dollar quoting and E-strings, nested block
+  comments, MySQL backticks and SQL Server brackets. Segments are substrings of
+  `sql`, so keeping one keeps the script alive. (#518, #569)
+- **One-call `gosqlx.Lint`, `gosqlx.Analyze` and error helpers**: `Lint(sql)`
+  runs all 30 built-in rules, `Analyze(sql)` reports basic optimization hints and
+  query complexity, and `ErrorCode`, `ErrorLocation` and `ErrorHint` unwrap
+  structured error details through `fmt.Errorf` wrapping. (#512)
+- **`pkg/sql/dialect`**: typed `Dialect` and a `Capabilities` struct with
+  feature flags, exposed through `Parser.DialectTyped()`,
+  `Parser.Capabilities()` and `Parser.Is<Dialect>()` helpers. (#517, #518)
+- **`.gosqlx.yml` linter configuration (`pkg/linter/config`)**: YAML loader
+  with rule enable/disable, severity overrides and ignore globs. (#517)
+- **`keywords.Conflicts()`**: reports keyword registrations that collide across
+  dialects; 11 silent conflicts were resolved. (#517)
+- **`ast.UnsupportedStatement` and `AST.HasUnsupportedStatements()`**: parse-only
+  Snowflake stubs are now their own node type, and the formatter emits
+  `-- UNSUPPORTED: <raw SQL>` for them instead of corrupt SQL. (#511)
+- **`EXTRACT(field FROM expr)`** parses. (#511)
+- **ClickHouse at 83/83 of the QA corpus**: `ARRAY JOIN` / `LEFT ARRAY JOIN`
+  (new `ArrayJoinClause`), scalar CTEs (`WITH <expr> AS <name>`),
+  `CREATE MATERIALIZED VIEW` with `ENGINE`/`TO`, `CREATE TABLE ... AS <source>
+  ENGINE = ...`, numeric `SAMPLE` arguments with `OFFSET`, and `LIMIT offset,
+  count`. (#513)
+- **Named `WINDOW` clause** (SQL:2003): `WINDOW w AS (PARTITION BY a ORDER BY
+  b)`. (#513)
+- **Oracle compatibility**: `ROWNUM`/`ROWID`/`LEVEL`/`SYSDATE` pseudo-columns
+  with implicit aliases, `PIVOT`/`UNPIVOT` `IN` lists with `AS` aliases, and
+  backslashes treated literally in string literals outside MySQL/PostgreSQL.
+  (#513)
+- **ClickHouse `SAMPLE` and `ORDER BY ... WITH FILL` round-trip**: `SAMPLE` now
+  renders, and `WITH FILL [FROM x] [TO y] [STEP z]` is stored in the new
+  `WithFillClause` instead of being skipped. (#534)
+- **ClickHouse tuple/array element access with a dot** (`d.1`, `tuple.2`).
+  (#535)
+- **`SQL()` for `PragmaStatement`, `ShowStatement`, `DescribeStatement` and
+  `ReplaceStatement`**. (#513)
+- **`ast.PoolLeakCount()`**: counts work-queue entries dropped while releasing
+  expressions. (#517)
+- **`JOIN ... USING (cols)` is kept**: stored in the new `JoinClause.Using`
+  (one `*ast.Identifier` per column, `Condition` left nil) and rendered as
+  `USING (c1, c2)` by `SQL()`, `pkg/formatter` and `gosqlx format`, instead of
+  `ON cols`. `Children()`, `Walk` and `ReleaseAST` cover the columns, and the
+  schema validator checks each one. (#603, #630)
+- **Parenthesized set operations**: a derived table in FROM, JOIN or a comma
+  list can be a set operation, a `WITH` query or a doubly parenthesized query,
+  and a statement or set-operation operand can be written as `(query)`, e.g.
+  `(SELECT 1) UNION (SELECT 2)`. New `TableReference.SetSubquery` and
+  `SetOperation.LeftParenthesized` / `RightParenthesized`; parentheses that
+  change meaning (`A EXCEPT (B UNION C)`) are kept on render. ORDER BY/LIMIT the
+  AST cannot represent returns E4001. (#612, #630)
+- **Window frame `GROUPS` unit, `EXCLUDE` clause, named-window refinement and
+  `INTERVAL` qualifiers**: `GROUPS` frames and `EXCLUDE CURRENT ROW | GROUP |
+  TIES | NO OTHERS` (new `WindowFrame.Exclude`) parse and render;
+  `OVER (w ORDER BY z)` refines an existing window via the new
+  `WindowSpec.BaseWindow`; `INTERVAL '1' DAY` and `INTERVAL '1-2' YEAR TO MONTH`
+  parse into the new `IntervalExpression.Qualifier`, which fixes
+  `d + INTERVAL '1' DAY` rendering as `INTERVAL '1' AS DAY`. `GROUPS` and
+  `EXCLUDE` are not gated by dialect. (#608, #609, #629)
+- **INSERT forms**: `RETURNING` after `INSERT ... SELECT`, `INSERT ... DEFAULT
+  VALUES` (new `InsertStatement.DefaultValues`), MySQL/MariaDB `INSERT ... SET`
+  (new `InsertStatement.SetSyntax`), parenthesized query sources
+  (`INSERT INTO t (SELECT ...)`) and `UPDATE ... FROM` with a comma-separated
+  table list. `SQL()` and `FormatAST` render `DEFAULT VALUES` and the SET form;
+  `UPDATE ... FROM ... JOIN` returns E4001. (#610, #623)
+- **ClickHouse table functions and parametric aggregates**: `numbers(10)`,
+  `remote(...)`, `file`, `s3`, `cluster`, `generateRandom` and the
+  keyword-named `url`, `merge`, `values` and `null` parse in FROM as a
+  `TableReference` with `TableFunc`. `quantile(0.5)(DISTINCT x)` keeps DISTINCT
+  with the argument group; DISTINCT or ORDER BY in the parameter group and a
+  third paren group return E2004. A `[...]` subscript or slice directly after a
+  function call (`groupArray(x)[1]`, `array_agg(x)[1]`) parses as
+  `ArraySubscriptExpression` / `ArraySliceExpression`; SQL Server keeps
+  `count(*) [cnt]` as an alias, and SQLite behaves as before. (#605, #606,
+  #628)
+- **ClickHouse `SELECT ... SETTINGS` is kept**: parsed into the new
+  `SelectStatement.Settings` (`[]ast.QuerySetting`, stored on the rightmost
+  SELECT of a set operation) and rendered by `SQL()` and `pkg/formatter`.
+  (#600, #631)
+- **Rendering of `IGNORE NULLS`, named arguments, `ON DUPLICATE KEY UPDATE` and
+  `INSERT ... OUTPUT`**: `SQL()` and `pkg/formatter` (compact and readable) used
+  to drop these; they now render, with `name => value` via the new
+  `(*ast.NamedArgument).SQL()`. (#600, #631)
+- **SQL Server table hints and PIVOT rendering**: `SQL()` renders
+  `WITH (NOLOCK)`-style hints and `PIVOT`/`UNPIVOT` with the alias as
+  `AS alias` (`FROM s PIVOT (...) AS p` used to render as `FROM s p`), and
+  `pkg/formatter` renders hints. (#604, #632)
+- **`ALTER TABLE` rendering in `pkg/formatter`**: `FormatStatement` and
+  `FormatAST` render ALTER TABLE operations (ADD/DROP COLUMN, RENAME,
+  ADD/DROP CONSTRAINT, ALTER COLUMN ...) instead of the bare token `ALTER`.
+  (#599, #624)
+- **New schema fields**: `db.Index.IncludeColumns` and `db.ForeignKey.RefSchema`
+  (see Behavior changes). (#620, #622)
+
+### Changed
+- **Deprecations**: `pkg/sql/monitor` is deprecated in favour of `pkg/metrics`.
+  The legacy parser APIs `Parse([]token.Token)`,
+  `ParseFromModelTokensWithPositions` and `ConversionResult.PositionMapping` are
+  scheduled for removal in v2.0. (#511)
+- **`tokenizer.NewWithKeywords` no longer consults its keyword table**: the
+  tokenizer's keyword field was never read, so it was removed. `NewWithKeywords`
+  keeps its signature and nil check. `keywords.Conflicts()` now reflects only
+  explicit `keywords.New` calls, because parsing no longer calls it. (#595,
+  fixes #550)
+- **`pkg/sql/ast` source split**: `ast.go` and `pool.go` were split into
+  statement, expression, clause and release files. No declarations changed.
+  (#518)
 
 ### Fixed
 - **Tokenizer pool no longer leaks dialect state**: a tokenizer whose dialect was
@@ -26,7 +374,222 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   boundary), not `Reset`, because `Reset` also runs at the start of every
   `Tokenize` call where the configured dialect must persist. The keyword table is
   rebuilt only when a non-default dialect was configured, so the common path is
-  unaffected.
+  unaffected. (#525)
+- **Parentheses in expressions are preserved**: `(a = 1 OR b = 2) AND c = 3`
+  used to re-render as `a = 1 OR b = 2 AND c = 3`, which changed the predicate.
+  The parser now keeps grouping in a new `ast.ParenthesizedExpression` node.
+  (#532, fixes #519)
+- **`IS NOT NULL` no longer renders as `IS NULL`**, and ClickHouse parametric
+  aggregates keep their parameter group in `SQL()`
+  (`quantileTDigest(0.95)(value)` stayed `quantileTDigest(value)`). (#529,
+  fixes #530; AST half of #531)
+- **`gosqlx format` keeps ClickHouse parametric aggregate parameters**: the CLI
+  renderer also dropped the `(params)` group. (#583, fixes #531)
+- **`gosqlx format` no longer panics on `NOT EXISTS (subquery)`**. (#591, fixes
+  #587)
+- **Numeric window-frame offsets are kept**: `ROWS BETWEEN 1 PRECEDING AND
+  CURRENT ROW` rendered as `ROWS BETWEEN PRECEDING AND CURRENT ROW` in `SQL()`,
+  `pkg/formatter` and the CLI. The CLI also stopped adding `BETWEEN` to a
+  single-bound frame. (#592, fixes #589)
+- **`INSERT INTO t (cols) WITH c AS (...) SELECT ...` parses** in every
+  dialect (it failed with E2002 "expected VALUES or SELECT, got WITH"). A `WITH`
+  is also no longer dropped from a CTE query whose body is a chain of two or more
+  set operations. (#584, fixes #537)
+- **MySQL three-part identifiers and parenthesized join groups parse**: SHOW
+  CREATE VIEW output such as `` `sakila`.`city`.`city` `` and `FROM ((a JOIN b
+  ON ...) JOIN c ON ...)` is accepted. (#585, fixes #521)
+- **Schema loaders**: PostgreSQL composite foreign keys are no longer
+  cross-multiplied, same-named constraints on different tables stay separate,
+  partition clone constraints are skipped, and quoted index column names decode
+  exactly. The MySQL foreign-key join also matches on table name. (#582, fixes
+  #579)
+- **Schema loaders no longer deadlock or return empty tables**: a `*sql.DB` with
+  `MaxOpenConns=1` used to deadlock and a pooled SQLite `:memory:` database
+  returned tables with no columns, because cursors were nested. SQLite table
+  names are passed as bound parameters, so names containing quotes or
+  backslashes load, and PostgreSQL PK/UNIQUE flags no longer leak between
+  tables that share a column name. (#570, fixes #565)
+- **AST release-path defects**: `PutSelectStatement` no longer releases a
+  derived-table subquery twice through `Joins[i].Left`, which could make two
+  later `GetSelectStatement` calls return the same object. Pooled expression
+  nodes no longer carry stale fields. (#581, fixes #555)
+- **Pool leaks**: `PutSelectStatement` released only some pooled fields, large
+  `IN` lists overflowed the `PutExpression` work queue, and subqueries inside
+  `IN`/`EXISTS`/`ANY`/`ALL`/array constructors were never released. (#517,
+  #518)
+- **`Children()` coverage**: 14 AST node types returned no children despite
+  holding nodes, so `Walk`/`Inspect` skipped them. (#517)
+- **LSP**: statement dispatch uses a type switch instead of `%T` string matching,
+  and `documentSymbol` returns real ranges instead of line 0 to EOF. (#517)
+- **Oracle and ClickHouse parsing**: `CONNECT BY` / `IS NULL` is no longer
+  misread as a CTE, `SETTINGS` and numeric `SAMPLE` are no longer consumed as
+  table aliases, and the SQL Server `OUTPUT` clause on INSERT parses in every
+  dialect. (#513)
+- **`gosqlx.ParseBytes`** passes bytes straight to the tokenizer, and seven
+  previously skipped extraction cases (CASE, CAST, IN, BETWEEN, EXTRACT,
+  recursive CTEs) are fixed. (#511)
+- **Long comment runs no longer grow the stack**: the tokenizer skips
+  consecutive comments in a loop instead of recursing once per comment. (#597)
+- **`NOT EXISTS (subquery)` rendered as `NOT (EXISTS (...) NOT )`**, which failed
+  to re-parse with E2002. `SQL()`, `FormatAST` and `FormatString` now render
+  `NOT EXISTS (...)`; the AST shape is unchanged. (#601, #632)
+- **Table-function arguments in FROM were dropped on render**:
+  `generate_series(1,10) AS g` came out as `generate_series g`. `SQL()` and
+  `pkg/formatter` now render the call for PostgreSQL, Snowflake, BigQuery and
+  ClickHouse table functions, and `transform.ReplaceTable` renames
+  table-function references. (#607, #628)
+- **Bogus context in 15 parser errors**: nine E2002 and six E2004 sites passed
+  an explanatory sentence as the SQL source, so `Error()` printed it as line 1
+  of the user's query. The context is now empty and the sentence is the
+  error's `Hint`; code, message and position are unchanged. The BETWEEN, LIKE,
+  REGEXP and IN-subquery operand wrappers likewise stop printing a fake
+  `1 | )` snippet and keep the inner error as `Cause`. (#616, #627)
+- **`gosqlx format` dropped or mangled constructs** (see Behavior changes):
+  `JOIN ... USING` printed `ON LIST`, and WINDOW, INTERVAL, `UPDATE ... FROM` and
+  `DEFAULT VALUES` were lost. (#599, #603, #608, #609, #610, #624)
+- **Readable-style output that did not re-parse**: inner `;` and `;;` removed
+  (#602, #631); readable-style re-parse failures over the testdata corpus fell
+  from 36 to 6.
+
+### Performance
+Numbers are quoted from each PR (benchstat on an Apple M4 unless stated; the
+#597 figures are single before/after measurements).
+- **Linear tokenizer position tracking**: line/column lookup no longer rescans
+  from the start of the line for every token, which made long single-line input
+  quadratic. `LargeSQL_100KB` 20.6 ms -> 1.96 ms, `VeryLargeSQL_1MB` 1755 ms ->
+  21.8 ms, `LargeInClause` 4.87 ms -> 136 us; allocs/op unchanged. Also adds
+  ASCII fast paths for keyword and identifier scanning and a counted token-slice
+  capacity. (#577, fixes #544, #545, #547, #549)
+- **Zero-copy token values**: tokenizer allocs/op drop 88-93%
+  (`Tokenizer/ComplexSQL` 120 -> 14, `MediumSQL_10KB` 2823 -> 203,
+  `LargeSQL_100KB` 28139 -> 1988) and gosqlx parse allocs/op drop 37-66%
+  (`Parse_ComplexQuery` 193 -> 74). B/op rises 1-6% on the tokenizer, and
+  `Tokenize_SimpleQuery` on the `[]byte` path is about 3% (11 ns) slower. (#595,
+  fixes #546)
+- **Escape-free quoted literals are substrings**: quote-heavy inputs go from
+  400+ to 2 allocs/op and run 31-56% faster; `TokenizeString/ComplexSQL` 13 -> 5
+  allocs/op. The unused global buffer pool is gone. (#595, fixes #548)
+- **Dialect-aware entry points use the pools**: `ParseBytesWithDialect`
+  21.8 us / 70 allocs -> 4.06 us / 28 allocs (the same as `ParseBytes`),
+  `ParseTree` with a dialect 22.0 us -> 1.25 us, `SetDialect` 35.6 us / 76
+  allocs -> 0 allocs, `transpiler.Transpile` 20.2 us -> 1.69 us and
+  `transform.ParseSQLWithDialect` 35.9 us -> 0.84 us. (#595, fixes #550)
+- **Allocation-free parser preprocessing**: keyword classification and
+  compound-token expansion no longer allocate. Parser allocs/op drop 20-50%
+  (`SimpleSelect_1000_Columns` 2020 -> 1018, `SELECT_Complex` 198 -> 114), and
+  qualified identifiers and clause parsing lose an allocation each. (#578, fixes
+  #551, #553, #554)
+- **Parser-owned preprocess buffer**: `ParserSimpleSelect` 9 -> 7 allocs/op and
+  1696 -> 816 B/op, `ParserComplexSelect` 22 -> 20 allocs/op (-64% B/op).
+  (#586, fixes #552)
+- **Writer-based `SQL()` serialization**: a statement renders into one pooled
+  buffer. `BenchmarkSQL/7line` 57 -> 1 allocs/op and `15line` 122 -> 1, about
+  3x faster; output is byte-identical. (#575, fixes #558)
+- **`Children()` stops heap-copying nodes**: `Inspect` 47 -> 26 allocs/op and
+  3216 -> 928 B/op, `Lint/Realistic` 728 -> 580 allocs/op, `Extract*` 20-45%
+  fewer allocations. (#588, fixes #557)
+- **Cheap `PutExpression` after large lists**: the work queue is cleared only to
+  its high-water mark. `PutLeafAfterBigList` 2995 ns -> 19 ns. (#581, fixes
+  #555)
+- **`ExtractMetadata` in one AST pass**: 114 -> 24 allocs/op, 8264 -> 2208 B/op,
+  about 2.4-2.8x faster. (#572, fixes #561)
+- **`SplitStatements` slices the source**: 855 -> 1 allocs/op, 49.3 -> 6.4 KiB/op
+  and 32-41% faster on a 200-statement script. (#569, fixes #559)
+- **`gosqlx.Lint` builds its rule set once**: `Lint/Tiny` 169 -> 137 allocs/op.
+  L015 no longer upper-cases the whole input (1 -> 0 allocs/op, 96 KiB -> 0 B on
+  ~100 KB of SQL). (#568, fixes #562)
+- **AST and parser release in batch helpers**: `ValidateMultiple`,
+  `ParseMultiple` (error paths), `Analyze`, `Transpile` and the `transform` parse
+  helpers return ASTs and parsers to their pools, so pool Get/Put counts balance.
+  (#571, fixes #560)
+- **`ScanSQL` literal prefilters**: regexes whose required literals are absent
+  are skipped. `ScanSQL` 26.9 us -> 4.7 us (-82%) and malicious-input benchmarks
+  56-90% faster, with identical findings. (#574, fixes #563)
+- **LSP splits each document once per request**: `BuildDiagnostics` on 10,000
+  lines 789 MiB / 512 ms -> 1.2 MiB / 6.8 ms, `Hover` 5296 B / 9 allocs -> 368 B
+  / 5 allocs, `SignatureHelp` 3535 B / 50 allocs -> 224 B / 4 allocs, and
+  `sendMessage` writes each frame once (11 -> 7 allocs). (#573, fixes #564)
+- **Schema loaders batch their queries**: `Load` runs 4 statements instead of
+  3N+1. SQLite at 100 tables: 16.7K -> 9.9K allocs/op, 679 -> 250 KiB/op,
+  3.59 -> 1.92 ms. (#570, fixes #565)
+- **Linear inline-comment detection**: 1 MiB of spaces followed by 20,000
+  comments tokenizes in 9.8 ms instead of 10.3 s. (#597)
+- **Performance baselines refreshed**: `performance_baselines.json` re-measured
+  on 2026-10-13. Baselines are now about 2.5x the Apple M4 median, because
+  GitHub's ubuntu-latest runners measure about 1.5-3.2x slower than M4 on these
+  queries (up to ~3.2x), so a 1.5x baseline would fail CI's slowest runs. (#566)
+- **Qualified-name parsing is linear**: `parseQualifiedName` collects up to 5
+  parts in a stack array and joins them once instead of concatenating per part.
+  A 64 KB `a.a.a...` chain went from 66 ms and 1.17 GB (and parsed) to 8 ms and
+  10.5 MB (E2004); `allocs/op` on 3- and 5-part names fell 10% and 25%. (#613,
+  #627)
+- **Long error lines are cheap to render**: error context uses a bounded line
+  scan. Long-line `Error()` went from 49 us / 937 KiB to 1.4 us / 1.3 KiB per
+  op, and the context-format benchmarks are about 20% faster. (#615, #626)
+- **Measured costs of batch-3 correctness fixes**: `ast.Identifier` grows from
+  48 to 64 bytes for the `Quoted` flag, raising parser B/op by about 4-6%, and
+  rendering with name quoting makes `SQL()` about 8% slower with unchanged
+  allocations (#611, #632). `TableReference` grows from 128 to 136 bytes for
+  parenthesized set operations: `BenchmarkParserSimpleSelect` +4.8% and
+  +16 B/op (#612, #630). Reallocating `lineStarts` per call on very large
+  inputs adds about 2.4% B/op above roughly 410 KB (#614, #626). Sorted
+  `Extract*` results cost 3-15% ns/op on the Extract benchmarks (#618, #625).
+
+### Security
+- **Render-time SQL injection closed**: quoted names and some literal and
+  keyword values were written into rendered SQL verbatim, so
+  `SELECT 1 AS "a; DROP TABLE x; --" FROM t` came back from `gosqlx.Format`,
+  `SQL()`, `Normalize` or `Transpile` as two statements. Every name position
+  (SELECT, table, derived-table, JOIN, PIVOT, UPDATE/DELETE and MERGE aliases,
+  window names, DML targets and column lists, DDL names, constraint and
+  function names, data types) is now quoted when it is not a plain
+  identifier or is reserved. INTERVAL, PRAGMA, table-hint and PIVOT values are
+  escaped, and the formatter's `-- UNSUPPORTED:` comment covers every line.
+  Keyword fields (join type, set operator, DROP object type, interval unit,
+  constraint, partition, ALTER, MERGE, frame and lock types, FK actions,
+  FETCH, SAMPLE, table options, view `WITH` option, SHOW kind) are checked
+  against exact allow-lists; a hand-built value outside its list is dropped
+  or rendered so that the output fails to parse, never as an extra statement.
+  Found by the batch-3 adversarial review and validated with hostile-name and
+  AST-mutation fuzzing across all dialects. (#632)
+- **Bounded input-driven work**: comment counts, nesting depth for unary
+  operators, `NOT` and derived tables, comment runs and set-operation rendering
+  are now bounded or linear (see **Behavior changes**). These were found by the
+  pre-merge security review. (#597)
+- **Tokenizer CPU-DoS on long single lines fixed** by linear position tracking.
+  (#577, fixes #544)
+- **Metrics error counters are bounded**: error statistics were keyed by
+  `err.Error()`, an unbounded map that could exhaust memory. They are now
+  counted per error code. (#517)
+- **Code-scanning and Dependabot alerts**: every GitHub Actions `uses:` is pinned
+  to a commit SHA, workflows default to read-only permissions, install commands
+  use pinned versions or lockfiles, blog slugs are validated (3 XSS alerts),
+  Docker base images are pinned by digest, and OpenTelemetry v1.47.0,
+  `filippo.io/edwards25519` v1.1.1 and `golang.org/x/sys` v0.49.0 are picked up.
+  (#567)
+- **Trivy findings**: `golang.org/x/crypto` raised to v0.54.0 and
+  `brace-expansion` pinned to `^5.0.8` in the VS Code extension. (#528)
+- **Scanner descends into table-function arguments**: `url(...)`, `file(...)`
+  and similar ClickHouse table functions are detected as out-of-band access
+  (also via a `FROM|JOIN <fn>(` pattern), and the scanner descends into array
+  subscripts and slices so `pg_sleep(5)[1]` is not a bypass. The check is
+  dialect-agnostic by design. (#605, #607, #628)
+- **Scanner walks nested set-operation trees**: `checkUnionInjection` handles
+  right-nested and parenthesized `UNION`/`EXCEPT` trees, so
+  `x UNION (SELECT ... FROM pg_user UNION ...)` is no longer missed after
+  parenthesized set operations became parseable. (#612, #630)
+
+### Internal
+- CI: performance-regression and fuzz-regression jobs, `codecov.yml` thresholds,
+  and the `bodyclose`/`noctx` linters (#512); a CI gate against new
+  `p.dialect ==` comparisons (#518); claude-code-action v1, fork-PR review skip,
+  Scorecard v2.4.4 and a valid glama-sync workflow (#536, #538, #539, #540);
+  `.gitattributes` enforcing LF line endings for golden fixtures (#594).
+- Website and playground: site revamp, light-mode fixes and animations (#514,
+  #515, #516); the playground WASM is built during deployment, revalidated by
+  browsers and no longer committed (#543, #580).
+- Docs: version and rule-count sweep (#510), integrations bumped to v1.14.0
+  (#509), and the CHANGELOG restored after the #526 merge emptied it (#593).
 
 ## [1.14.0] - 2026-04-12 — Dialect-Aware Transforms, Snowflake 100%, Schema Introspection
 
@@ -1817,7 +2380,8 @@ For questions about upgrading or changelog entries:
 - Open an issue: https://github.com/ajitpratap0/GoSQLX/issues
 - Join discussions: https://github.com/ajitpratap0/GoSQLX/discussions
 
-[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.12.1...HEAD
+[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.14.0...HEAD
+[1.14.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.12.1...v1.13.0
 [1.12.1]: https://github.com/ajitpratap0/GoSQLX/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.10.2...v1.12.0

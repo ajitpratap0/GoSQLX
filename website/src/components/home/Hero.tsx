@@ -7,7 +7,7 @@ import { MiniPlayground } from '@/components/home/MiniPlayground';
 
 export function Hero() {
   return (
-    <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
+    <section className="relative min-h-screen flex items-center justify-center overflow-clip">
       {/* Background gradient mesh */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
         {/* Top-right indigo glow */}

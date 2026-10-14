@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
+import { pageMeta } from '@/lib/seo';
 import { compileMDX } from 'next-mdx-remote/rsc';
 import remarkGfm from 'remark-gfm';
 import rehypeSlug from 'rehype-slug';
@@ -30,18 +31,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { slug } = await params;
   const slugStr = slug.join('/');
   const doc = getDocBySlug(slugStr);
-  if (!doc) return { title: 'Not Found' };
+  if (!doc) return { title: { absolute: 'Page not found | GoSQLX' } };
 
-  return {
-    title: doc.title,
-    description: `GoSQLX documentation - ${doc.title}`,
-    alternates: {
-      canonical: `https://gosqlx.dev/docs/${slugStr}/`,
-    },
-    openGraph: {
-      url: `https://gosqlx.dev/docs/${slugStr}/`,
-    },
-  };
+  return pageMeta({
+    title: `${doc.label} (Docs)`,
+    description: `GoSQLX documentation: ${doc.label}.`,
+    path: `/docs/${slugStr}/`,
+  });
 }
 
 export default async function DocPage({ params }: PageProps) {

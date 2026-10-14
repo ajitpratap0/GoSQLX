@@ -11,18 +11,18 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: 'GoSQLX - Production-Ready SQL Parsing SDK for Go',
-    template: 'GoSQLX - %s',
+    default: 'GoSQLX: Go SQL Parser, Formatter & Linter',
+    template: '%s | GoSQLX',
   },
   description:
-    'High-performance, zero-copy SQL parsing SDK for Go. Thread-safe with multi-dialect support for PostgreSQL, MySQL, SQLite, SQL Server, Oracle, Snowflake, and ClickHouse.',
+    'High-performance, zero-copy SQL parser, formatter and linter for Go. Thread-safe with 8-dialect support: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, and ClickHouse.',
   metadataBase: new URL('https://gosqlx.dev'),
   openGraph: baseOpenGraph,
   twitter: {
     card: 'summary_large_image',
-    title: 'GoSQLX - Production-Ready SQL Parsing SDK for Go',
+    title: 'GoSQLX: Go SQL Parser, Formatter & Linter',
     description:
-      'High-performance, zero-copy SQL parsing SDK for Go. Thread-safe with multi-dialect support.',
+      'High-performance, zero-copy SQL parser, formatter and linter for Go with 8-dialect support.',
     images: ['/images/og-image.png'],
   },
   icons: {

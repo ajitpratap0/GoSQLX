@@ -9,7 +9,8 @@ name: Publish VSCode Extension
 #     AZURE_CLIENT_ID - client ID of the user-assigned managed identity or app
 #                       registration that is a Contributor on the Marketplace publisher
 #     AZURE_TENANT_ID - its Entra tenant ID
-#   Federated credential subject: repo:ajitpratap0/GoSQLX:environment:vscode-marketplace
+#   Federated credential subject (repo uses immutable OIDC subjects):
+#     repo:ajitpratap0@18012955/GoSQLX@934030994:environment:vscode-marketplace
 #   Fallback (when AZURE_CLIENT_ID is unset): VSCE_PAT secret with
 #   "Marketplace (Manage)" scope and "All accessible organizations".
 #

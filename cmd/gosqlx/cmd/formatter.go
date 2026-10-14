@@ -249,7 +249,7 @@ func (f *Formatter) formatSQL(sql string) (string, error) {
 	formatter := NewSQLFormatter(formatterOpts)
 	formatted, err := formatter.Format(parsedAST)
 	if err != nil {
-		return "", fmt.Errorf("formatting failed: %w", err)
+		return "", fmt.Errorf("render: %w", err)
 	}
 
 	// Refuse output that does not re-parse to the same query, so format,
@@ -263,11 +263,13 @@ func (f *Formatter) formatSQL(sql string) (string, error) {
 		upperOpts.UppercaseKw = true
 		verifyText, err = NewSQLFormatter(upperOpts).Format(parsedAST)
 		if err != nil {
-			return "", fmt.Errorf("formatting failed: %w", err)
+			return "", fmt.Errorf("render for verification: %w", err)
 		}
 	}
+	// verifyFormattedSQL errors are self-describing; callers add the
+	// "formatting failed" prefix.
 	if err := verifyFormattedSQL(parsedAST, verifyText, f.Opts.Dialect); err != nil {
-		return "", fmt.Errorf("formatting failed: %w", err)
+		return "", err
 	}
 
 	return formatted, nil

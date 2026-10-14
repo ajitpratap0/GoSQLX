@@ -494,3 +494,10 @@ html.light .prose-dark :not(pre) > code {
   background: rgba(0, 0, 0, 0.06);
   color: #1f2937;
 }
+
+/* Skip rendering offscreen code blocks and tables on long docs pages. */
+.prose pre,
+.prose table {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 240px;
+}

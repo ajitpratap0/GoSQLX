@@ -6,8 +6,15 @@ import { usePathname } from 'next/navigation';
 import { m, AnimatePresence, useScroll, useTransform } from 'motion/react';
 import { NAV_LINKS } from '@/lib/constants';
 import { Button } from '@/components/ui/Button';
-import { SearchModal, useSearchShortcut } from '@/components/ui/SearchModal';
+import dynamic from 'next/dynamic';
+import { useSearchShortcut } from '@/components/ui/useSearchShortcut';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+
+// Search UI and the Fuse index load on first open, not with every page.
+const SearchModal = dynamic(
+  () => import('@/components/ui/SearchModal').then((mod) => mod.SearchModal),
+  { ssr: false },
+);
 
 function GitHubIcon({ className = '' }: { className?: string }) {
   return (
@@ -43,6 +50,8 @@ export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
   const { open: searchOpen, setOpen: setSearchOpen } = useSearchShortcut();
+  const [searchLoaded, setSearchLoaded] = useState(false);
+  if (searchOpen && !searchLoaded) setSearchLoaded(true);
   const { scrollY } = useScroll();
   const [isLight, setIsLight] = useState(false);
   useEffect(() => {
@@ -196,7 +205,7 @@ export function Navbar() {
         )}
       </AnimatePresence>
     </m.header>
-    <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+    {searchLoaded && <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />}
     </>
   );
 }

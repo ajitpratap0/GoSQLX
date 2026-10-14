@@ -86,7 +86,7 @@ export function Sidebar() {
   }, [mobileOpen]);
 
   return (
-    <div className="lg:w-64 lg:shrink-0">
+    <div className="contents lg:block lg:w-64 lg:shrink-0">
       {/* Mobile: inline menu bar under the navbar (no floating button) */}
       <div className="sticky top-16 z-30 border-b border-white/5 bg-surface/95 px-6 py-2 backdrop-blur lg:hidden">
         <button

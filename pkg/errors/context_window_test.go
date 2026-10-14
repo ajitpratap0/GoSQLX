@@ -251,6 +251,33 @@ func TestClipLine(t *testing.T) {
 	})
 }
 
+// TestContext_InvalidUTF8LongLine guards against clipLine scanning past the
+// window on a long run of UTF-8 continuation bytes (start > end panicked).
+func TestContext_InvalidUTF8LongLine(t *testing.T) {
+	line := strings.Repeat("\x80", 300)
+	maxLen := contextMaxLine + 2*len(contextEllipsis)
+	for off := 0; off <= len(line); off += 13 {
+		got, start, prefix := clipLine(line, off)
+		if len(got) > maxLen || start < 0 || start > len(line) || (prefix != 0 && prefix != len(contextEllipsis)) {
+			t.Fatalf("off=%d: unbounded clip len=%d start=%d prefix=%d", off, len(got), start, prefix)
+		}
+	}
+
+	loc := models.Location{Line: 1, Column: 100}
+	// Generous bound: gutter, clipped line, caret line and newlines.
+	const bound = 4 * (contextMaxLine + 2*len(contextEllipsis) + 16)
+	if got := FormatMultiLineContext(line, loc, 1); got == "" || len(got) > bound {
+		t.Errorf("FormatMultiLineContext: len=%d, want 1..%d", len(got), bound)
+	}
+	if got := FormatContextWindow(line, loc, 1, 1, 1); got == "" || len(got) > bound {
+		t.Errorf("FormatContextWindow: len=%d, want 1..%d", len(got), bound)
+	}
+	msg := NewError(ErrCodeUnexpectedToken, "unexpected", loc).WithContext(line, 1).Error()
+	if len(msg) > bound+512 {
+		t.Errorf("Error(): len=%d, want <= %d", len(msg), bound+512)
+	}
+}
+
 func TestContext_CaretAlignedUnderErrorByte(t *testing.T) {
 	sql, col := longLineQuery(100 * 1024)
 	loc := models.Location{Line: 1, Column: col}

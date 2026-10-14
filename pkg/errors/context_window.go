@@ -103,10 +103,13 @@ func clipLine(line string, off int) (display string, start, prefixLen int) {
 	if end > len(line) {
 		end = len(line)
 	}
-	for start < len(line) && !utf8.RuneStart(line[start]) {
+	// Snap both cuts to rune boundaries. Valid UTF-8 never needs more than
+	// utf8.UTFMax-1 steps; bounding the scans keeps start <= end (and the window
+	// size bounded) on invalid input such as a long run of continuation bytes.
+	for i := 0; i < utf8.UTFMax-1 && start < end && !utf8.RuneStart(line[start]); i++ {
 		start++
 	}
-	for end > start && end < len(line) && !utf8.RuneStart(line[end]) {
+	for i := 0; i < utf8.UTFMax-1 && end > start && end < len(line) && !utf8.RuneStart(line[end]); i++ {
 		end--
 	}
 

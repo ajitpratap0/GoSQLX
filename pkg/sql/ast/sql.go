@@ -88,15 +88,19 @@ func (a AST) SQL() string {
 // ============================================================
 
 // SQL returns the SQL representation of the identifier.
-// Identifiers are emitted unescaped because they have already been validated
-// during parsing - the tokenizer and parser only accept syntactically valid
-// identifiers (or quoted identifiers whose quotes are preserved in the AST).
-// Re-escaping here would be redundant and could introduce double-quoting bugs.
+// A Quoted name (written as a double-quoted identifier in the source) that is
+// a reserved word ("select", "key", "null") is re-quoted so it re-parses as a
+// name. Names, and each part of the Table qualifier, are otherwise
+// double-quoted only when they contain characters other than letters, digits,
+// '_', '*' and '.'. Case alone does not trigger quoting: aliases and CTE/view
+// column lists record no quoting and render bare, so a quoted "Total" that
+// refers to one must render bare as well to keep matching it after the
+// database folds case.
 func (i *Identifier) SQL() string {
 	if i == nil {
 		return ""
 	}
-	if !identifierNeedsQuoting(i.Name) && (i.Table == "" || !qualifierNeedsQuoting(i.Table)) {
+	if !i.quotedReserved() && !identifierNeedsQuoting(i.Name) && (i.Table == "" || !qualifierNeedsQuoting(i.Table)) {
 		if i.Table == "" {
 			return i.Name
 		}
@@ -116,43 +120,89 @@ func (i *Identifier) writeSQL(buf *bytes.Buffer) {
 		writeDottedIdentifier(buf, i.Table)
 		buf.WriteByte('.')
 	}
+	if i.quotedReserved() {
+		writeQuotedIdentifier(buf, i.Name)
+		return
+	}
 	writeSafeIdentifier(buf, i.Name)
+}
+
+// quotedReserved reports whether i is a Quoted name that is a reserved word,
+// which must stay quoted to re-parse as a name.
+func (i *Identifier) quotedReserved() bool {
+	return i.Quoted && isReservedName(i.Name, false)
 }
 
 // qualifierNeedsQuoting reports whether some dot-separated part of the
 // non-empty qualifier name would be quoted by writeDottedIdentifier.
 func qualifierNeedsQuoting(name string) bool {
-	return identifierNeedsQuoting(name) || name[0] == '.' || name[len(name)-1] == '.' ||
-		strings.Contains(name, "..")
+	if identifierNeedsQuoting(name) || name[0] == '.' || name[len(name)-1] == '.' ||
+		strings.Contains(name, "..") {
+		return true
+	}
+	for {
+		dot := strings.IndexByte(name, '.')
+		if dot < 0 {
+			return isReservedName(name, true)
+		}
+		if isReservedName(name[:dot], true) {
+			return true
+		}
+		name = name[dot+1:]
+	}
 }
 
 // writeDottedIdentifier writes a possibly multi-part qualifier such as
 // "db.t" or "c.s.t", quoting each dot-separated part on its own so that
 // "my-db.t" renders as "my-db".t (two identifiers) rather than "my-db.t"
-// (one). A dot is always treated as a part separator; see Identifier.Table.
+// (one). A part that is a word the parser rejects bare in every name
+// position ("from", "select") is quoted too, matching the table alias it
+// refers to (see tableAliasNeedsQuoting). A dot is always treated as a part
+// separator; see Identifier.Table.
 func writeDottedIdentifier(buf *bytes.Buffer, name string) {
 	for {
 		dot := strings.IndexByte(name, '.')
+		part := name
+		if dot >= 0 {
+			part = name[:dot]
+		}
+		if isReservedName(part, true) {
+			writeQuotedIdentifier(buf, part)
+		} else {
+			writeSafeIdentifier(buf, part)
+		}
 		if dot < 0 {
-			writeSafeIdentifier(buf, name)
 			return
 		}
-		writeSafeIdentifier(buf, name[:dot])
 		buf.WriteByte('.')
 		name = name[dot+1:]
 	}
 }
 
 // identifierNeedsQuoting reports whether name must be double-quoted: it is
-// empty or contains a character other than letters, digits, '_', '*' and '.'.
+// empty, contains a character other than letters, digits, '_', '*' and '.',
+// or has a dot-separated part that starts with a digit but is not all digits
+// (1abc would re-read as the number 1 followed by the alias abc). An
+// all-digit part stays bare: it is how the parser stores ClickHouse tuple
+// element access (d.1).
 func identifierNeedsQuoting(name string) bool {
 	if name == "" {
 		return true
 	}
+	digitLed, partStart := false, true
 	for _, r := range name {
-		if r != '_' && r != '*' && r != '.' && !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+		switch {
+		case r == '.':
+			digitLed, partStart = false, true
+			continue
+		case r != '_' && r != '*' && !unicode.IsLetter(r) && !unicode.IsDigit(r):
+			return true
+		case partStart:
+			digitLed = unicode.IsDigit(r)
+		case digitLed && !unicode.IsDigit(r):
 			return true
 		}
+		partStart = false
 	}
 	return false
 }
@@ -166,15 +216,7 @@ func writeSafeIdentifier(buf *bytes.Buffer, name string) {
 		buf.WriteString(name)
 		return
 	}
-	buf.WriteByte('"')
-	for i := 0; i < len(name); i++ {
-		if name[i] == '"' {
-			buf.WriteString(`""`)
-		} else {
-			buf.WriteByte(name[i])
-		}
-	}
-	buf.WriteByte('"')
+	writeQuotedIdentifier(buf, name)
 }
 
 // stringLiteralNeedsEscape reports whether s contains a byte that
@@ -282,24 +324,27 @@ func (l *LiteralValue) writeSQL(buf *bytes.Buffer) {
 	}
 }
 
-// SQL returns the unquoted identifier name. Used for round-trip serialization.
+// SQL returns the identifier name, possibly dotted, with each part
+// double-quoted when a bare rendering would not re-parse as the same name
+// (see QuoteQualifiedName). Used for round-trip serialization.
 func (i *Ident) SQL() string {
 	if i == nil {
 		return ""
 	}
-	return i.Name
+	return QuoteQualifiedName(i.Name)
 }
 
 func (i *Ident) writeSQL(buf *bytes.Buffer) {
 	if i == nil {
 		return
 	}
-	buf.WriteString(i.Name)
+	writeQualifiedName(buf, i.Name)
 }
 
 // SQL returns the SQL representation of this binary expression.
 // The operator, left, and right sub-expressions are serialized in infix notation.
 // NOT-qualified operators (LIKE, ILIKE, SIMILAR TO) are rendered as "x NOT OP y".
+// A unary NOT with no right operand (NOT EXISTS) is rendered as "NOT <left>".
 func (b *BinaryExpression) SQL() string {
 	if b == nil {
 		return ""
@@ -317,6 +362,24 @@ func (b *BinaryExpression) writeSQL(buf *bytes.Buffer) {
 	op := b.Operator
 	if b.CustomOp != nil {
 		op = b.CustomOp.String()
+	}
+	// writeOp writes the operator: a well-formed OPERATOR(schema.op) as is,
+	// anything else through writeOperator, which quotes non-operator text.
+	writeOp := func() {
+		if b.CustomOp != nil && customOperatorIsSafe(b.CustomOp) {
+			buf.WriteString(op)
+			return
+		}
+		writeOperator(buf, op)
+	}
+
+	// NOT EXISTS (subquery) is parsed as a unary NOT: Operator "NOT" with the
+	// EXISTS on the left and no right operand (issue #601). Render it as a
+	// prefix NOT, matching UnaryExpression, instead of the infix NOT form.
+	if b.Right == nil && strings.EqualFold(op, "NOT") {
+		buf.WriteString("NOT ")
+		writeExpr(buf, b.Left)
+		return
 	}
 
 	// Handle IS NULL / IS NOT NULL (right side is NULL literal).
@@ -345,7 +408,7 @@ func (b *BinaryExpression) writeSQL(buf *bytes.Buffer) {
 		buf.WriteString("NOT (")
 		writeExpr(buf, b.Left)
 		buf.WriteByte(' ')
-		buf.WriteString(op)
+		writeOp()
 		buf.WriteByte(' ')
 		writeExpr(buf, b.Right)
 		buf.WriteByte(')')
@@ -354,7 +417,7 @@ func (b *BinaryExpression) writeSQL(buf *bytes.Buffer) {
 
 	writeExpr(buf, b.Left)
 	buf.WriteByte(' ')
-	buf.WriteString(op)
+	writeOp()
 	buf.WriteByte(' ')
 	writeExpr(buf, b.Right)
 }
@@ -430,7 +493,7 @@ func (a *AliasedExpression) writeSQL(buf *bytes.Buffer) {
 	}
 	writeExpr(buf, a.Expr)
 	buf.WriteString(" AS ")
-	buf.WriteString(a.Alias)
+	writeName(buf, a.Alias)
 }
 
 // SQL returns the SQL representation of this CAST expression in the form
@@ -452,7 +515,7 @@ func (c *CastExpression) writeSQL(buf *bytes.Buffer) {
 	buf.WriteString("CAST(")
 	writeExpr(buf, c.Expr)
 	buf.WriteString(" AS ")
-	buf.WriteString(c.Type)
+	writeDataType(buf, c.Type)
 	buf.WriteByte(')')
 }
 
@@ -646,7 +709,7 @@ func (a *AnyExpression) writeSQL(buf *bytes.Buffer) {
 	}
 	writeExpr(buf, a.Expr)
 	buf.WriteByte(' ')
-	buf.WriteString(a.Operator)
+	writeOperator(buf, a.Operator)
 	buf.WriteString(" ANY (")
 	writeStmt(buf, a.Subquery)
 	buf.WriteByte(')')
@@ -669,7 +732,7 @@ func (a *AllExpression) writeSQL(buf *bytes.Buffer) {
 	}
 	writeExpr(buf, a.Expr)
 	buf.WriteByte(' ')
-	buf.WriteString(a.Operator)
+	writeOperator(buf, a.Operator)
 	buf.WriteString(" ALL (")
 	writeStmt(buf, a.Subquery)
 	buf.WriteByte(')')
@@ -693,7 +756,7 @@ func (f *FunctionCall) writeSQL(buf *bytes.Buffer) {
 	if f == nil {
 		return
 	}
-	buf.WriteString(f.Name)
+	writeFunctionName(buf, f.Name)
 	if len(f.Parameters) > 0 {
 		// ClickHouse parametric aggregates: quantile(0.5)(x).
 		// Parameters are rendered in their own parenthesis group before args.
@@ -711,7 +774,9 @@ func (f *FunctionCall) writeSQL(buf *bytes.Buffer) {
 		writeOrderBy(buf, f.OrderBy)
 	}
 	buf.WriteByte(')')
-	if f.NullTreatment != "" {
+	// NullTreatment is IGNORE NULLS or RESPECT NULLS; anything else can only
+	// come from a hand-built AST and is dropped rather than written raw.
+	if NullTreatmentText(f.NullTreatment) != "" {
 		buf.WriteByte(' ')
 		buf.WriteString(f.NullTreatment)
 	}
@@ -729,7 +794,7 @@ func (f *FunctionCall) writeSQL(buf *bytes.Buffer) {
 		if o.Name != "" && o.BaseWindow == "" && len(o.PartitionBy) == 0 && len(o.OrderBy) == 0 && o.FrameClause == nil {
 			// Bare named-window reference: OVER w.
 			buf.WriteString(" OVER ")
-			buf.WriteString(o.Name)
+			writeName(buf, o.Name)
 		} else {
 			// Hand-built specs may carry the referenced window in Name alongside
 			// other parts; render it as the base window, as before.
@@ -780,7 +845,11 @@ func (e *ExtractExpression) writeSQL(buf *bytes.Buffer) {
 		return
 	}
 	buf.WriteString("EXTRACT(")
-	buf.WriteString(e.Field)
+	if e.Field != "" && !isBareNameChars(e.Field, false) {
+		writeQuotedIdentifier(buf, e.Field)
+	} else {
+		buf.WriteString(e.Field)
+	}
 	buf.WriteString(" FROM ")
 	writeExpr(buf, e.Source)
 	buf.WriteByte(')')
@@ -837,25 +906,34 @@ func (s *SubstringExpression) writeSQL(buf *bytes.Buffer) {
 }
 
 // SQL returns the SQL representation of this interval as "INTERVAL 'value'",
-// followed by the interval qualifier when present ("INTERVAL '1' DAY").
+// with the value escaped as a string literal, followed by the interval
+// qualifier when present ("INTERVAL '1' DAY").
 func (i *IntervalExpression) SQL() string {
 	if i == nil {
 		return ""
 	}
-	if i.Qualifier != "" {
-		return "INTERVAL '" + i.Value + "' " + i.Qualifier
+	if !stringLiteralNeedsEscape(i.Value) && (i.Qualifier == "" || IntervalQualifierText(i.Qualifier) != "") {
+		if i.Qualifier != "" {
+			return "INTERVAL '" + i.Value + "' " + i.Qualifier
+		}
+		return "INTERVAL '" + i.Value + "'"
 	}
-	return "INTERVAL '" + i.Value + "'"
+	buf := getBuf()
+	defer putBuf(buf)
+	i.writeSQL(buf)
+	return buf.String()
 }
 
 func (i *IntervalExpression) writeSQL(buf *bytes.Buffer) {
 	if i == nil {
 		return
 	}
-	buf.WriteString("INTERVAL '")
-	buf.WriteString(i.Value)
-	buf.WriteByte('\'')
-	if i.Qualifier != "" {
+	buf.WriteString("INTERVAL ")
+	writeStringLiteral(buf, i.Value)
+	// The qualifier is a known interval qualifier (DAY, YEAR TO MONTH, see
+	// IntervalQualifierText); anything else can only come from a hand-built
+	// AST and is dropped rather than written raw.
+	if IntervalQualifierText(i.Qualifier) != "" {
 		buf.WriteByte(' ')
 		buf.WriteString(i.Qualifier)
 	}
@@ -1112,7 +1190,7 @@ func (s *SelectStatement) writeSQL(buf *bytes.Buffer) {
 			writeExpr(buf, e.Expr)
 			if e.Alias != "" {
 				buf.WriteString(" AS ")
-				buf.WriteString(e.Alias)
+				writeName(buf, e.Alias)
 			}
 		}
 	}
@@ -1159,7 +1237,7 @@ func (s *SelectStatement) writeSQL(buf *bytes.Buffer) {
 			if i > 0 {
 				buf.WriteString(", ")
 			}
-			buf.WriteString(s.Windows[i].Name)
+			writeName(buf, s.Windows[i].Name)
 			buf.WriteString(" AS (")
 			writeWindowSpec(buf, s.Windows[i].BaseWindow, &s.Windows[i])
 			buf.WriteByte(')')
@@ -1227,7 +1305,7 @@ func (i *InsertStatement) writeSQL(buf *bytes.Buffer) {
 	}
 
 	buf.WriteString("INSERT INTO ")
-	buf.WriteString(i.TableName)
+	writeQualifiedName(buf, i.TableName)
 
 	if i.isSetForm() {
 		buf.WriteString(" SET ")
@@ -1235,14 +1313,14 @@ func (i *InsertStatement) writeSQL(buf *bytes.Buffer) {
 			if idx > 0 {
 				buf.WriteString(", ")
 			}
-			writeExpr(buf, col)
+			writeColumnRef(buf, col)
 			buf.WriteString(" = ")
 			writeExpr(buf, i.Values[0][idx])
 		}
 	} else {
 		if len(i.Columns) > 0 {
 			buf.WriteString(" (")
-			writeExprList(buf, i.Columns)
+			writeColumnRefList(buf, i.Columns)
 			buf.WriteByte(')')
 		}
 
@@ -1301,10 +1379,10 @@ func (u *UpdateStatement) writeSQL(buf *bytes.Buffer) {
 	}
 
 	buf.WriteString("UPDATE ")
-	buf.WriteString(u.TableName)
+	writeQualifiedName(buf, u.TableName)
 	if u.Alias != "" {
 		buf.WriteByte(' ')
-		buf.WriteString(u.Alias)
+		writeTableAlias(buf, u.Alias)
 	}
 
 	buf.WriteString(" SET ")
@@ -1349,10 +1427,10 @@ func (d *DeleteStatement) writeSQL(buf *bytes.Buffer) {
 	}
 
 	buf.WriteString("DELETE FROM ")
-	buf.WriteString(d.TableName)
+	writeQualifiedName(buf, d.TableName)
 	if d.Alias != "" {
 		buf.WriteByte(' ')
-		buf.WriteString(d.Alias)
+		writeTableAlias(buf, d.Alias)
 	}
 
 	if len(d.Using) > 0 {
@@ -1387,7 +1465,7 @@ func (c *CreateTableStatement) SQL() string {
 	if c.IfNotExists {
 		sb.WriteString("IF NOT EXISTS ")
 	}
-	sb.WriteString(c.Name)
+	writeQualifiedName(sb, c.Name)
 	sb.WriteString(" (")
 
 	parts := make([]string, 0, len(c.Columns)+len(c.Constraints))
@@ -1404,16 +1482,35 @@ func (c *CreateTableStatement) SQL() string {
 
 	if len(c.Inherits) > 0 {
 		sb.WriteString(" INHERITS (")
-		sb.WriteString(strings.Join(c.Inherits, ", "))
+		for i, name := range c.Inherits {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			writeQualifiedName(sb, name)
+		}
 		sb.WriteString(")")
 	}
 
 	if c.PartitionBy != nil {
-		fmt.Fprintf(sb, " PARTITION BY %s (%s)", c.PartitionBy.Type, strings.Join(c.PartitionBy.Columns, ", "))
+		sb.WriteString(" PARTITION BY ")
+		// An unknown method is left out: "PARTITION BY  (cols)" does not parse.
+		sb.WriteString(PartitionByText(c.PartitionBy.Type))
+		sb.WriteString(" (")
+		writeColumnNameList(sb, c.PartitionBy.Columns)
+		sb.WriteString(")")
 	}
 
 	for _, opt := range c.Options {
-		fmt.Fprintf(sb, " %s=%s", opt.Name, opt.Value)
+		// The option name is a known table option (ENGINE, CHARSET); an
+		// option with any other name can only come from a hand-built AST and
+		// is dropped.
+		if TableOptionNameText(opt.Name) == "" {
+			continue
+		}
+		sb.WriteByte(' ')
+		sb.WriteString(opt.Name)
+		sb.WriteByte('=')
+		writeOptionValue(sb, opt.Value)
 	}
 
 	return sb.String()
@@ -1435,25 +1532,26 @@ func (c *CreateIndexStatement) SQL() string {
 	if c.IfNotExists {
 		sb.WriteString("IF NOT EXISTS ")
 	}
-	sb.WriteString(c.Name)
+	writeQualifiedName(sb, c.Name)
 	sb.WriteString(" ON ")
-	sb.WriteString(c.Table)
+	writeQualifiedName(sb, c.Table)
 
 	if c.Using != "" {
 		sb.WriteString(" USING ")
-		sb.WriteString(c.Using)
+		writeColumnName(sb, c.Using)
 	}
 
 	sb.WriteString(" (")
-	cols := make([]string, len(c.Columns))
 	for i, col := range c.Columns {
-		s := col.Column
-		if col.Direction != "" {
-			s += " " + col.Direction
+		if i > 0 {
+			sb.WriteString(", ")
 		}
-		cols[i] = s
+		writeColumnName(sb, col.Column)
+		if dir := SortDirectionText(col.Direction); dir != "" {
+			sb.WriteByte(' ')
+			sb.WriteString(dir)
+		}
 	}
-	sb.WriteString(strings.Join(cols, ", "))
 	sb.WriteString(")")
 
 	if c.Where != nil {
@@ -1474,7 +1572,7 @@ func (a *AlterTableStatement) SQL() string {
 	sb := getBuf()
 	defer putBuf(sb)
 	sb.WriteString("ALTER TABLE ")
-	sb.WriteString(a.Table)
+	writeQualifiedName(sb, a.Table)
 	for _, action := range a.Actions {
 		action := action // G601: Create local copy to avoid memory aliasing
 		sb.WriteString(" ")
@@ -1492,15 +1590,16 @@ func (d *DropStatement) SQL() string {
 	sb := getBuf()
 	defer putBuf(sb)
 	sb.WriteString("DROP ")
-	sb.WriteString(d.ObjectType)
+	// An unknown object type is left out: "DROP  name" does not parse.
+	sb.WriteString(DropObjectTypeText(d.ObjectType))
 	sb.WriteString(" ")
 	if d.IfExists {
 		sb.WriteString("IF EXISTS ")
 	}
-	sb.WriteString(strings.Join(d.Names, ", "))
-	if d.CascadeType != "" {
+	writeQualifiedNameList(sb, d.Names)
+	if c := CascadeText(d.CascadeType); c != "" {
 		sb.WriteString(" ")
-		sb.WriteString(d.CascadeType)
+		sb.WriteString(c)
 	}
 	return sb.String()
 }
@@ -1514,15 +1613,15 @@ func (t *TruncateStatement) SQL() string {
 	sb := getBuf()
 	defer putBuf(sb)
 	sb.WriteString("TRUNCATE TABLE ")
-	sb.WriteString(strings.Join(t.Tables, ", "))
+	writeQualifiedNameList(sb, t.Tables)
 	if t.RestartIdentity {
 		sb.WriteString(" RESTART IDENTITY")
 	} else if t.ContinueIdentity {
 		sb.WriteString(" CONTINUE IDENTITY")
 	}
-	if t.CascadeType != "" {
+	if c := CascadeText(t.CascadeType); c != "" {
 		sb.WriteString(" ")
-		sb.WriteString(t.CascadeType)
+		sb.WriteString(c)
 	}
 	return sb.String()
 }
@@ -1579,7 +1678,7 @@ func (s *SetOperation) writeSQL(buf *bytes.Buffer) {
 		writeStmt(buf, s.Left)
 	}
 	buf.WriteByte(' ')
-	buf.WriteString(s.Operator)
+	writeSetOperator(buf, s.Operator)
 	if s.All {
 		buf.WriteString(" ALL")
 	}
@@ -1633,15 +1732,17 @@ func (c *CreateViewStatement) SQL() string {
 	if c.IfNotExists {
 		sb.WriteString("IF NOT EXISTS ")
 	}
-	sb.WriteString(c.Name)
+	writeQualifiedName(sb, c.Name)
 	if len(c.Columns) > 0 {
 		sb.WriteString(" (")
-		sb.WriteString(strings.Join(c.Columns, ", "))
+		writeNameList(sb, c.Columns)
 		sb.WriteString(")")
 	}
 	sb.WriteString(" AS ")
 	sb.WriteString(stmtSQL(c.Query))
-	if c.WithOption != "" {
+	// WithOption is CHECK OPTION, CASCADED or LOCAL CHECK OPTION; anything
+	// else can only come from a hand-built AST and is dropped.
+	if ViewWithOptionText(c.WithOption) != "" {
 		sb.WriteString(" WITH ")
 		sb.WriteString(c.WithOption)
 	}
@@ -1659,10 +1760,10 @@ func (c *CreateMaterializedViewStatement) SQL() string {
 	if c.IfNotExists {
 		sb.WriteString("IF NOT EXISTS ")
 	}
-	sb.WriteString(c.Name)
+	writeQualifiedName(sb, c.Name)
 	if len(c.Columns) > 0 {
 		sb.WriteString(" (")
-		sb.WriteString(strings.Join(c.Columns, ", "))
+		writeNameList(sb, c.Columns)
 		sb.WriteString(")")
 	}
 	sb.WriteString(" AS ")
@@ -1688,7 +1789,7 @@ func (r *RefreshMaterializedViewStatement) SQL() string {
 	if r.Concurrently {
 		sb.WriteString("CONCURRENTLY ")
 	}
-	sb.WriteString(r.Name)
+	writeQualifiedName(sb, r.Name)
 	if r.WithData != nil {
 		if *r.WithData {
 			sb.WriteString(" WITH DATA")
@@ -1711,13 +1812,13 @@ func (m *MergeStatement) SQL() string {
 	sb.WriteString(tableRefSQL(&m.TargetTable))
 	if m.TargetAlias != "" {
 		sb.WriteString(" ")
-		sb.WriteString(m.TargetAlias)
+		writeTableAlias(sb, m.TargetAlias)
 	}
 	sb.WriteString(" USING ")
 	sb.WriteString(tableRefSQL(&m.SourceTable))
 	if m.SourceAlias != "" {
 		sb.WriteString(" ")
-		sb.WriteString(m.SourceAlias)
+		writeTableAlias(sb, m.SourceAlias)
 	}
 	sb.WriteString(" ON ")
 	sb.WriteString(exprSQL(m.OnCondition))
@@ -1732,7 +1833,8 @@ func (m *MergeStatement) SQL() string {
 		case "NOT_MATCHED_BY_SOURCE":
 			sb.WriteString("NOT MATCHED BY SOURCE")
 		default:
-			sb.WriteString(when.Type)
+			// An unknown kind is left out: "WHEN  THEN" does not parse.
+			sb.WriteString(MergeWhenText(when.Type))
 		}
 		if when.Condition != nil {
 			sb.WriteString(" AND ")
@@ -1808,7 +1910,7 @@ func (i *Insert) SQL() string {
 	sb.WriteString(tableRefSQL(&i.Table))
 	if len(i.Columns) > 0 {
 		sb.WriteString(" (")
-		sb.WriteString(exprListSQL(i.Columns))
+		sb.WriteString(ColumnRefListSQL(i.Columns))
 		sb.WriteString(")")
 	}
 	if len(i.Values) > 0 {
@@ -1843,7 +1945,7 @@ func (u *Update) SQL() string {
 	sb.WriteString(" SET ")
 	upds := make([]string, len(u.Updates))
 	for i, upd := range u.Updates {
-		upds[i] = exprSQL(upd.Column) + " = " + exprSQL(upd.Value)
+		upds[i] = ColumnRefSQL(upd.Column) + " = " + exprSQL(upd.Value)
 	}
 	sb.WriteString(strings.Join(upds, ", "))
 	if u.Where != nil {
@@ -1980,19 +2082,9 @@ func writeAssignments(buf *bytes.Buffer, upds []UpdateExpression) {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		writeExpr(buf, upds[i].Column)
+		writeColumnRef(buf, upds[i].Column)
 		buf.WriteString(" = ")
 		writeExpr(buf, upds[i].Value)
-	}
-}
-
-// writeStringList writes items separated by sep.
-func writeStringList(buf *bytes.Buffer, items []string, sep string) {
-	for i, s := range items {
-		if i > 0 {
-			buf.WriteString(sep)
-		}
-		buf.WriteString(s)
 	}
 }
 
@@ -2068,11 +2160,11 @@ func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 		t.SetSubquery.writeSQL(buf)
 		buf.WriteByte(')')
 	} else {
-		buf.WriteString(t.Name)
+		writeQualifiedName(buf, t.Name)
 	}
-	if t.Alias != "" {
+	if t.Alias != "" && t.Pivot == nil && t.Unpivot == nil {
 		buf.WriteByte(' ')
-		buf.WriteString(t.Alias)
+		writeTableAlias(buf, t.Alias)
 	}
 	if t.Final {
 		buf.WriteString(" FINAL")
@@ -2080,6 +2172,14 @@ func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 	if t.ForSystemTime != nil {
 		buf.WriteByte(' ')
 		buf.WriteString(t.ForSystemTime.ToSQL())
+	}
+	// Parser order: table hints, then PIVOT/UNPIVOT, then its AS alias (#604).
+	writeTableHints(buf, t.TableHints)
+	writePivotClause(buf, t.Pivot)
+	writeUnpivotClause(buf, t.Unpivot)
+	if t.Alias != "" && (t.Pivot != nil || t.Unpivot != nil) {
+		buf.WriteString(" AS ")
+		writeTableAlias(buf, t.Alias)
 	}
 }
 
@@ -2094,8 +2194,12 @@ func writeTableRefList(buf *bytes.Buffer, refs []TableReference) {
 }
 
 func writeJoin(buf *bytes.Buffer, j *JoinClause) {
-	buf.WriteString(j.Type)
-	buf.WriteString(" JOIN ")
+	// An unknown join type is dropped, leaving a plain JOIN.
+	if t := JoinTypeText(j.Type); t != "" {
+		buf.WriteString(t)
+		buf.WriteByte(' ')
+	}
+	buf.WriteString("JOIN ")
 	writeTableRef(buf, &j.Right)
 	if len(j.Using) > 0 {
 		buf.WriteString(" USING (")
@@ -2126,7 +2230,7 @@ func writeWindowSpec(buf *bytes.Buffer, base string, w *WindowSpec) {
 	}
 	if base != "" {
 		sep()
-		buf.WriteString(base)
+		writeName(buf, base)
 	}
 	if len(w.PartitionBy) > 0 {
 		sep()
@@ -2145,7 +2249,7 @@ func writeWindowSpec(buf *bytes.Buffer, base string, w *WindowSpec) {
 }
 
 func writeWindowFrame(buf *bytes.Buffer, f *WindowFrame) {
-	buf.WriteString(f.Type)
+	buf.WriteString(FrameUnitText(f.Type))
 	if f.End != nil {
 		buf.WriteString(" BETWEEN ")
 		writeFrameBound(buf, &f.Start)
@@ -2155,9 +2259,9 @@ func writeWindowFrame(buf *bytes.Buffer, f *WindowFrame) {
 		buf.WriteByte(' ')
 		writeFrameBound(buf, &f.Start)
 	}
-	if f.Exclude != "" {
+	if ex := FrameExcludeText(f.Exclude); ex != "" {
 		buf.WriteString(" EXCLUDE ")
-		buf.WriteString(f.Exclude)
+		buf.WriteString(ex)
 	}
 }
 
@@ -2169,7 +2273,7 @@ func writeFrameBound(buf *bytes.Buffer, b *WindowFrameBound) {
 		writeExpr(buf, b.Value)
 		buf.WriteByte(' ')
 	}
-	buf.WriteString(b.Type)
+	buf.WriteString(FrameBoundText(b.Type))
 }
 
 func writeFetch(buf *bytes.Buffer, f *FetchClause) {
@@ -2179,7 +2283,7 @@ func writeFetch(buf *bytes.Buffer, f *FetchClause) {
 		buf.WriteString(" ROWS")
 	}
 	buf.WriteString(" FETCH ")
-	buf.WriteString(f.FetchType)
+	buf.WriteString(FetchTypeText(f.FetchType))
 	if f.FetchValue != nil {
 		buf.WriteByte(' ')
 		writeInt(buf, *f.FetchValue)
@@ -2197,10 +2301,10 @@ func writeFetch(buf *bytes.Buffer, f *FetchClause) {
 
 func writeFor(buf *bytes.Buffer, f *ForClause) {
 	buf.WriteString(" FOR ")
-	buf.WriteString(f.LockType)
+	buf.WriteString(LockTypeText(f.LockType))
 	if len(f.Tables) > 0 {
 		buf.WriteString(" OF ")
-		writeStringList(buf, f.Tables, ", ")
+		writeQualifiedNameList(buf, f.Tables)
 	}
 	if f.NoWait {
 		buf.WriteString(" NOWAIT")
@@ -2215,13 +2319,13 @@ func writeCTE(buf *bytes.Buffer, cte *CommonTableExpr) {
 	if cte.ScalarExpr != nil {
 		writeExpr(buf, cte.ScalarExpr)
 		buf.WriteString(" AS ")
-		buf.WriteString(cte.Name)
+		writeName(buf, cte.Name)
 		return
 	}
-	buf.WriteString(cte.Name)
+	writeName(buf, cte.Name)
 	if len(cte.Columns) > 0 {
 		buf.WriteString(" (")
-		writeStringList(buf, cte.Columns, ", ")
+		writeNameList(buf, cte.Columns)
 		buf.WriteByte(')')
 	}
 	buf.WriteString(" AS ")
@@ -2241,12 +2345,12 @@ func writeOnConflict(buf *bytes.Buffer, oc *OnConflict) {
 	buf.WriteString(" ON CONFLICT")
 	if len(oc.Target) > 0 {
 		buf.WriteString(" (")
-		writeExprList(buf, oc.Target)
+		writeColumnRefList(buf, oc.Target)
 		buf.WriteByte(')')
 	}
 	if oc.Constraint != "" {
 		buf.WriteString(" ON CONSTRAINT ")
-		buf.WriteString(oc.Constraint)
+		writeColumnName(buf, oc.Constraint)
 	}
 	if oc.Action.DoNothing {
 		buf.WriteString(" DO NOTHING")
@@ -2291,9 +2395,9 @@ func writeQuerySettings(buf *bytes.Buffer, settings []QuerySetting) {
 func columnDefSQL(c *ColumnDef) string {
 	sb := getBuf()
 	defer putBuf(sb)
-	sb.WriteString(c.Name)
+	writeColumnName(sb, c.Name)
 	sb.WriteString(" ")
-	sb.WriteString(c.Type)
+	writeDataType(sb, c.Type)
 	for _, con := range c.Constraints {
 		con := con // G601: Create local copy to avoid memory aliasing
 		sb.WriteString(" ")
@@ -2319,7 +2423,8 @@ func columnConstraintSQL(c *ColumnConstraint) string {
 		if c.AutoIncrement {
 			return "AUTO_INCREMENT"
 		}
-		return c.Type
+		// An unknown constraint kind is dropped.
+		return ColumnConstraintText(c.Type)
 	}
 }
 
@@ -2328,21 +2433,21 @@ func tableConstraintSQL(tc *TableConstraint) string {
 	defer putBuf(sb)
 	if tc.Name != "" {
 		sb.WriteString("CONSTRAINT ")
-		sb.WriteString(tc.Name)
+		writeConstraintName(sb, tc.Name)
 		sb.WriteString(" ")
 	}
 	switch tc.Type {
 	case "PRIMARY KEY":
 		sb.WriteString("PRIMARY KEY (")
-		sb.WriteString(strings.Join(tc.Columns, ", "))
+		writeColumnNameList(sb, tc.Columns)
 		sb.WriteString(")")
 	case "UNIQUE":
 		sb.WriteString("UNIQUE (")
-		sb.WriteString(strings.Join(tc.Columns, ", "))
+		writeColumnNameList(sb, tc.Columns)
 		sb.WriteString(")")
 	case "FOREIGN KEY":
 		sb.WriteString("FOREIGN KEY (")
-		sb.WriteString(strings.Join(tc.Columns, ", "))
+		writeColumnNameList(sb, tc.Columns)
 		sb.WriteString(") ")
 		if tc.References != nil {
 			sb.WriteString(referenceSQL(tc.References))
@@ -2352,7 +2457,9 @@ func tableConstraintSQL(tc *TableConstraint) string {
 		sb.WriteString(exprSQL(tc.Check))
 		sb.WriteString(")")
 	default:
-		sb.WriteString(tc.Type)
+		// The parser only stores the kinds above; any other kind can only
+		// come from a hand-built AST and is dropped, leaving a constraint
+		// without a kind, which does not parse.
 	}
 	return sb.String()
 }
@@ -2361,19 +2468,19 @@ func referenceSQL(r *ReferenceDefinition) string {
 	sb := getBuf()
 	defer putBuf(sb)
 	sb.WriteString("REFERENCES ")
-	sb.WriteString(r.Table)
+	writeQualifiedName(sb, r.Table)
 	if len(r.Columns) > 0 {
 		sb.WriteString(" (")
-		sb.WriteString(strings.Join(r.Columns, ", "))
+		writeColumnNameList(sb, r.Columns)
 		sb.WriteString(")")
 	}
-	if r.OnDelete != "" {
+	if a := ReferentialActionText(r.OnDelete); a != "" {
 		sb.WriteString(" ON DELETE ")
-		sb.WriteString(r.OnDelete)
+		sb.WriteString(a)
 	}
-	if r.OnUpdate != "" {
+	if a := ReferentialActionText(r.OnUpdate); a != "" {
 		sb.WriteString(" ON UPDATE ")
-		sb.WriteString(r.OnUpdate)
+		sb.WriteString(a)
 	}
 	return sb.String()
 }
@@ -2387,14 +2494,15 @@ func alterActionSQL(a *AlterTableAction) string {
 		}
 		return s
 	case "DROP COLUMN":
-		return "DROP COLUMN " + a.ColumnName
+		return "DROP COLUMN " + QuoteColumnName(a.ColumnName)
 	case "ADD CONSTRAINT":
 		if a.Constraint != nil {
 			return "ADD " + tableConstraintSQL(a.Constraint)
 		}
 		return "ADD CONSTRAINT"
 	default:
-		return a.Type
+		// An unknown action is dropped (see AlterTableActionText).
+		return AlterTableActionText(a.Type)
 	}
 }
 
@@ -2403,7 +2511,7 @@ func mergeActionSQL(a *MergeAction) string {
 	case "UPDATE":
 		sets := make([]string, len(a.SetClauses))
 		for i, s := range a.SetClauses {
-			sets[i] = s.Column + " = " + exprSQL(s.Value)
+			sets[i] = QuoteQualifiedName(s.Column) + " = " + exprSQL(s.Value)
 		}
 		return "UPDATE SET " + strings.Join(sets, ", ")
 	case "INSERT":
@@ -2414,7 +2522,12 @@ func mergeActionSQL(a *MergeAction) string {
 		} else {
 			if len(a.Columns) > 0 {
 				sb.WriteString(" (")
-				sb.WriteString(strings.Join(a.Columns, ", "))
+				for i, c := range a.Columns {
+					if i > 0 {
+						sb.WriteString(", ")
+					}
+					sb.WriteString(QuoteColumnName(c))
+				}
 				sb.WriteString(")")
 			}
 			if len(a.Values) > 0 {
@@ -2431,7 +2544,8 @@ func mergeActionSQL(a *MergeAction) string {
 	case "DELETE":
 		return "DELETE"
 	default:
-		return a.ActionType
+		// An unknown action is dropped: "THEN" without one does not parse.
+		return MergeActionText(a.ActionType)
 	}
 }
 
@@ -2447,7 +2561,7 @@ func (s *CreateSequenceStatement) ToSQL() string {
 		b.WriteString("IF NOT EXISTS ")
 	}
 	if s.Name != nil {
-		b.WriteString(s.Name.Name)
+		b.WriteString(QuoteQualifiedName(s.Name.Name))
 	}
 	writeSequenceOptions(&b, s.Options)
 	return b.String()
@@ -2461,7 +2575,7 @@ func (s *DropSequenceStatement) ToSQL() string {
 		b.WriteString("IF EXISTS ")
 	}
 	if s.Name != nil {
-		b.WriteString(s.Name.Name)
+		b.WriteString(QuoteQualifiedName(s.Name.Name))
 	}
 	return b.String()
 }
@@ -2474,7 +2588,7 @@ func (s *AlterSequenceStatement) ToSQL() string {
 		b.WriteString("IF EXISTS ")
 	}
 	if s.Name != nil {
-		b.WriteString(s.Name.Name)
+		b.WriteString(QuoteQualifiedName(s.Name.Name))
 	}
 	writeSequenceOptions(&b, s.Options)
 	return b.String()
@@ -2558,15 +2672,15 @@ func (p *PeriodDefinition) SQL() string {
 	var b strings.Builder
 	b.WriteString("PERIOD FOR ")
 	if p.Name != nil {
-		b.WriteString(p.Name.Name)
+		b.WriteString(QuoteColumnName(p.Name.Name))
 	}
 	b.WriteString(" (")
 	if p.StartCol != nil {
-		b.WriteString(p.StartCol.Name)
+		b.WriteString(QuoteColumnName(p.StartCol.Name))
 	}
 	b.WriteString(", ")
 	if p.EndCol != nil {
-		b.WriteString(p.EndCol.Name)
+		b.WriteString(QuoteColumnName(p.EndCol.Name))
 	}
 	b.WriteString(")")
 	return b.String()
@@ -2580,14 +2694,18 @@ func (p *PragmaStatement) SQL() string {
 	sb := getBuf()
 	defer putBuf(sb)
 	sb.WriteString("PRAGMA ")
-	sb.WriteString(p.Name)
+	if p.Name != "" && !isBareNameChars(p.Name, false) {
+		writeQuotedIdentifier(sb, p.Name)
+	} else {
+		sb.WriteString(p.Name)
+	}
 	if p.Arg != "" {
 		sb.WriteString("(")
-		sb.WriteString(p.Arg)
+		writePragmaValue(sb, p.Arg)
 		sb.WriteString(")")
 	} else if p.Value != "" {
 		sb.WriteString(" = ")
-		sb.WriteString(p.Value)
+		writePragmaValue(sb, p.Value)
 	}
 	return sb.String()
 }
@@ -2600,14 +2718,17 @@ func (s *ShowStatement) SQL() string {
 	sb := getBuf()
 	defer putBuf(sb)
 	sb.WriteString("SHOW ")
-	sb.WriteString(s.ShowType)
+	writeShowType(sb, s.ShowType)
 	if s.ObjectName != "" {
 		sb.WriteString(" ")
-		sb.WriteString(s.ObjectName)
+		if ShowTakesFrom(s.ShowType) {
+			sb.WriteString("FROM ")
+		}
+		writeQualifiedName(sb, s.ObjectName)
 	}
 	if s.From != "" {
 		sb.WriteString(" FROM ")
-		sb.WriteString(s.From)
+		writeQualifiedName(sb, s.From)
 	}
 	return sb.String()
 }
@@ -2617,7 +2738,7 @@ func (d *DescribeStatement) SQL() string {
 	if d == nil {
 		return ""
 	}
-	return "DESCRIBE " + d.TableName
+	return "DESCRIBE " + QuoteQualifiedName(d.TableName)
 }
 
 // SQL returns the SQL string for a REPLACE statement (MySQL).
@@ -2628,7 +2749,7 @@ func (r *ReplaceStatement) SQL() string {
 	sb := getBuf()
 	defer putBuf(sb)
 	sb.WriteString("REPLACE INTO ")
-	sb.WriteString(r.TableName)
+	writeQualifiedName(sb, r.TableName)
 	if len(r.Columns) > 0 {
 		sb.WriteString(" (")
 		sb.WriteString(exprListSQL(r.Columns))
@@ -2660,6 +2781,19 @@ func (c *ConnectByClause) ToSQL() string {
 	return b.String()
 }
 
+// writeSampleRatio writes a SAMPLE ratio or offset, n or n/d, writing each
+// part only when it is a plain number (IsPlainNumberText).
+func writeSampleRatio(buf *bytes.Buffer, n, d string) {
+	if !IsPlainNumberText(n) {
+		return
+	}
+	buf.WriteString(n)
+	if IsPlainNumberText(d) {
+		buf.WriteByte('/')
+		buf.WriteString(d)
+	}
+}
+
 // SQL renders a ClickHouse SAMPLE clause, e.g. "SAMPLE 0.1" or
 // "SAMPLE 1/10 OFFSET 2/10".
 func (s *SampleClause) SQL() string {
@@ -2669,18 +2803,12 @@ func (s *SampleClause) SQL() string {
 	sb := getBuf()
 	defer putBuf(sb)
 	sb.WriteString("SAMPLE ")
-	v := s.Value
-	if s.Value != "" && s.Denominator != "" {
-		v = s.Value + "/" + s.Denominator
-	}
-	sb.WriteString(v)
-	if s.Offset != "" {
+	// The ratio and offset are numeric literals; any other text can only come
+	// from a hand-built AST and is dropped rather than written raw.
+	writeSampleRatio(sb, s.Value, s.Denominator)
+	if IsPlainNumberText(s.Offset) {
 		sb.WriteString(" OFFSET ")
-		o := s.Offset
-		if s.OffsetDenominator != "" {
-			o = s.Offset + "/" + s.OffsetDenominator
-		}
-		sb.WriteString(o)
+		writeSampleRatio(sb, s.Offset, s.OffsetDenominator)
 	}
 	return sb.String()
 }

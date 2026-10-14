@@ -84,7 +84,9 @@
 // Full Unicode support for international SQL processing:
 //
 //   - UTF-8 decoding with proper rune handling
-//   - Unicode quotes: " " ' ' « » (normalized to ASCII)
+//   - Unicode quotes: " " ' ' « » (normalized to ASCII when they open a
+//     quoted token; inside a token opened with an ASCII quote they are
+//     ordinary content, and only that ASCII quote closes it)
 //   - Unicode identifiers: letters, digits, combining marks
 //   - Multi-byte character support in strings and identifiers
 //   - Proper line/column tracking across Unicode boundaries
@@ -189,7 +191,8 @@
 //   - Double quotes: "identifier" (SQL identifiers, not strings)
 //   - Backticks: `identifier` (MySQL-style identifiers)
 //   - Triple quotes: ”'multiline”' """multiline"""
-//   - Unicode quotes: 'text' "text" «text» (normalized)
+//   - Unicode quotes: 'text' "text" «text» (normalized; a token opened
+//     with an ASCII quote is closed only by that ASCII quote)
 //   - Escape sequences: \n \r \t \\ \' \" \uXXXX
 //
 // # Number Formats

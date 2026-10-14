@@ -85,7 +85,21 @@ func quotedCases() []quotedCase {
 		{name: "unicode content", dialect: pg, sql: "'héllo 世界'", typ: str, value: "héllo 世界", quote: '\'', quoteStyle: noWord, alias: aliasYes},
 		{name: "smart single quotes", dialect: pg, sql: "‘abc’", typ: str, value: "abc", quote: '‘', quoteStyle: noWord, alias: aliasYes},
 		{name: "guillemets", dialect: pg, sql: "«abc»", typ: str, value: "abc", quote: '«', quoteStyle: noWord, alias: aliasYes},
-		{name: "normalized double quote inside", dialect: pg, sql: "'a“b'", typ: str, value: `a"b`, quote: '\'', quoteStyle: noWord, alias: aliasNo},
+		// A literal opened with an ASCII quote is closed only by that ASCII
+		// quote: Unicode quotes inside it are kept as content (#632).
+		{name: "smart double quote inside is content", dialect: pg, sql: "'a“b'", typ: str, value: "a“b", quote: '\'', quoteStyle: noWord, alias: aliasYes},
+		{name: "smart single quote does not close", dialect: pg, sql: "'a’; DROP TABLE pwn; --'", typ: str, value: "a’; DROP TABLE pwn; --", quote: '\'', quoteStyle: noWord, end: loc(1, 27), alias: aliasYes},
+		{name: "guillemet does not close", dialect: pg, sql: "'a»b«c'", typ: str, value: "a»b«c", quote: '\'', quoteStyle: noWord, alias: aliasYes},
+		{name: "doubled smart quote is content", dialect: pg, sql: "'x’’y'", typ: str, value: "x’’y", quote: '\'', quoteStyle: noWord, alias: aliasYes},
+		{name: "ascii then smart quote is no escape", dialect: pg, sql: "'x'’y'", typ: str, value: "x", quote: '\'', quoteStyle: noWord, end: loc(1, 4), alias: aliasYes},
+		{name: "smart quote only is unterminated", dialect: pg, sql: "'abc’", errCode: gerrors.ErrCodeUnterminatedString, errLoc: loc(1, 1)},
+		{name: "smart quote content with doubled quote", dialect: pg, sql: "'a’b''c'", typ: str, value: "a’b'c", quote: '\'', quoteStyle: noWord, alias: aliasNo},
+		{name: "smart quote content with invalid UTF-8", dialect: pg, sql: "'a’\xffb'", typ: str, value: "a’�b", quote: '\'', quoteStyle: noWord, alias: aliasNo},
+		// A literal opened with a Unicode quote keeps normalizing: any rune
+		// that normalizes to its quote closes or escapes it.
+		{name: "smart opened doubled ascii quote", dialect: pg, sql: "‘a''b’", typ: str, value: "a'b", quote: '‘', quoteStyle: noWord, alias: aliasNo},
+		{name: "smart opened closed by ascii", dialect: pg, sql: "‘abc' x", typ: str, value: "abc", quote: '‘', quoteStyle: noWord, end: loc(1, 8), alias: aliasYes},
+		{name: "smart opened normalizes double quote", dialect: pg, sql: "‘a“b’", typ: str, value: `a"b`, quote: '‘', quoteStyle: noWord, alias: aliasNo},
 		{name: "invalid UTF-8", dialect: pg, sql: "'a\xffb'", typ: str, value: "a�b", quote: '\'', quoteStyle: noWord, end: loc(1, 6), alias: aliasNo},
 		{name: "valid U+FFFD", dialect: pg, sql: "'a�b'", typ: str, value: "a�b", quote: '\'', quoteStyle: noWord, alias: aliasYes},
 
@@ -94,7 +108,14 @@ func quotedCases() []quotedCase {
 		{name: "ident empty", dialect: pg, sql: `""`, typ: ident, value: "", quote: '"', quoteStyle: '"'},
 		{name: "ident doubled quote", dialect: pg, sql: `"a""b"`, typ: ident, value: `a"b`, quote: '"', quoteStyle: '"', alias: aliasNo},
 		{name: "ident smart quotes", dialect: pg, sql: "“Smart”", typ: ident, value: "Smart", quote: '"', quoteStyle: '"', alias: aliasYes},
-		{name: "ident normalized single quote inside", dialect: pg, sql: "\"a‘b\"", typ: ident, value: "a'b", quote: '"', quoteStyle: '"', alias: aliasNo},
+		{name: "ident smart single quote inside is content", dialect: pg, sql: "\"a‘b\"", typ: ident, value: "a‘b", quote: '"', quoteStyle: '"', alias: aliasYes},
+		{name: "ident smart double quote does not close", dialect: pg, sql: "\"x”; DROP TABLE pwn; --“\"", typ: ident, value: "x”; DROP TABLE pwn; --“", quote: '"', quoteStyle: '"', end: loc(1, 30), alias: aliasYes},
+		{name: "ident doubled smart quote is content", dialect: pg, sql: "\"a””b\"", typ: ident, value: "a””b", quote: '"', quoteStyle: '"', alias: aliasYes},
+		{name: "ident smart quote only is unterminated", dialect: pg, sql: "x \"Smart”", errCode: gerrors.ErrCodeUnterminatedString, errLoc: loc(1, 3)},
+		{name: "ident smart quote content with doubled quote", dialect: pg, sql: "\"a”b\"\"c\"", typ: ident, value: "a”b\"c", quote: '"', quoteStyle: '"', alias: aliasNo},
+		{name: "ident smart opened closed by ascii", dialect: pg, sql: "“Smart\"", typ: ident, value: "Smart", quote: '"', quoteStyle: '"', alias: aliasYes},
+		{name: "ident smart opened normalizes single quote", dialect: pg, sql: "“a’b”", typ: ident, value: "a'b", quote: '"', quoteStyle: '"', alias: aliasNo},
+		{name: "ident smart opened doubled smart quote", dialect: pg, sql: "“a””b”", typ: ident, value: `a"b`, quote: '"', quoteStyle: '"', alias: aliasNo},
 		{name: "ident backslash is content", dialect: pg, sql: `"a\b"`, typ: ident, value: `a\b`, quote: '"', quoteStyle: '"', alias: aliasYes},
 		{name: "ident newline", dialect: pg, sql: "\"a\nb\"", errCode: gerrors.ErrCodeUnterminatedString, errLoc: loc(1, 1)},
 		{name: "ident unterminated", dialect: pg, sql: "x \"abc", errCode: gerrors.ErrCodeUnterminatedString, errLoc: loc(1, 3)},
@@ -120,6 +141,7 @@ func quotedCases() []quotedCase {
 		{name: "national clean", dialect: keywords.DialectSQLServer, sql: "N'abc'", typ: nat, value: "abc", quote: 'N', quoteStyle: noWord, end: loc(1, 7), alias: aliasYes},
 		{name: "national doubled quote", dialect: keywords.DialectSQLServer, sql: "N'it''s'", typ: nat, value: "it's", quote: 'N', quoteStyle: noWord, end: loc(1, 9), alias: aliasNo},
 		{name: "national empty", dialect: keywords.DialectSQLServer, sql: "N''", typ: nat, value: "", quote: 'N', quoteStyle: noWord},
+		{name: "national smart quote is content", dialect: keywords.DialectSQLServer, sql: "N'a’; DROP TABLE pwn; --'", typ: nat, value: "a’; DROP TABLE pwn; --", quote: 'N', quoteStyle: noWord, alias: aliasYes},
 	}
 	// A backslash escapes only in backslash-escaping dialects; elsewhere it
 	// is plain content and the value aliases the input.
@@ -403,10 +425,9 @@ func readQuotedSlowRef(tkz *Tokenizer, kind string) (models.Token, error) {
 	switch kind {
 	case "ident":
 		r, size := utf8.DecodeRune(tkz.input[tkz.pos.Index:])
-		quote := normalizeQuote(r)
 		startPos := tkz.pos.Clone()
 		tkz.pos.AdvanceRune(r, size)
-		return tkz.readQuotedIdentifierSlow(startPos, quote)
+		return tkz.readQuotedIdentifierSlow(startPos, r)
 	case "backtick":
 		startPos := tkz.pos.Clone()
 		tkz.pos.Index++

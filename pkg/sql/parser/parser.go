@@ -1084,7 +1084,7 @@ func (p *Parser) parseIdent() *ast.Identifier {
 		return nil
 	}
 	pos := p.currentLocation()
-	ident := &ast.Identifier{Name: p.currentToken.Token.Value, Pos: pos}
+	ident := &ast.Identifier{Name: p.currentToken.Token.Value, Pos: pos, Quoted: p.isType(models.TokenTypeDoubleQuotedString)}
 	p.advance()
 	return ident
 }

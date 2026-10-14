@@ -428,10 +428,15 @@ func (p *Parser) parseTableHints() ([]string, error) {
 		if p.isType(models.TokenTypeRParen) {
 			break
 		}
-		hint := strings.ToUpper(p.currentToken.Token.Value)
-		if hint == "" {
+		// Only bare-word hints (NOLOCK, ROWLOCK, ...) are accepted. Quoted,
+		// bracketed or string-literal tokens lose their delimiters in the
+		// token value, and operators such as INDEX = ix do not fit the
+		// []string representation, so rendering them back would not
+		// reproduce the source (and could inject SQL).
+		if !p.isBareTableHintToken() {
 			return nil, p.expectedError("table hint inside WITH (...)")
 		}
+		hint := strings.ToUpper(p.currentToken.Token.Value)
 		hints = append(hints, hint)
 		p.advance()
 		// Consume optional comma between hints
@@ -444,4 +449,30 @@ func (p *Parser) parseTableHints() ([]string, error) {
 	}
 	p.advance() // Consume )
 	return hints, nil
+}
+
+// isBareTableHintToken reports whether the current token is an unquoted
+// identifier or keyword spelled [A-Za-z_][A-Za-z0-9_]*.
+func (p *Parser) isBareTableHintToken() bool {
+	tok := p.currentToken.Token
+	if tok.Quote != 0 || (tok.Word != nil && tok.Word.QuoteStyle != 0) {
+		return false
+	}
+	if p.isStringLiteral() || p.isType(models.TokenTypeDoubleQuotedString) {
+		return false
+	}
+	v := tok.Value
+	if v == "" {
+		return false
+	}
+	for i := 0; i < len(v); i++ {
+		c := v[i]
+		switch {
+		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c == '_':
+		case c >= '0' && c <= '9' && i > 0:
+		default:
+			return false
+		}
+	}
+	return true
 }

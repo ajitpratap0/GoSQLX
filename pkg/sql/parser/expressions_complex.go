@@ -172,7 +172,9 @@ func (p *Parser) parseCastLike(try bool) (*ast.CastExpression, error) {
 	// The type can be:
 	// - Simple type: VARCHAR, INT, DECIMAL, etc.
 	// - Type with precision: VARCHAR(100), DECIMAL(10,2), etc.
-	if !p.isType(models.TokenTypeIdentifier) {
+	// - Quoted user-defined type: "my type", as :: accepts and SQL()
+	//   renders a type name that is not a plain word
+	if !p.isIdentifier() {
 		return nil, p.expectedError("data type")
 	}
 

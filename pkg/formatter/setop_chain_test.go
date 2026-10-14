@@ -101,7 +101,10 @@ func randSetOp(rng *rand.Rand, depth int) *ast.SetOperation {
 			}
 		}
 	}
-	ops := []string{"UNION", "Except", "intersect", "MINUS"}
+	// Hand-built operators in any case; MINUS is not one (the parser
+	// stores it as EXCEPT, and the renderers do not write it, see
+	// ast.SetOperatorText).
+	ops := []string{"UNION", "Except", "intersect", "union"}
 	s := &ast.SetOperation{
 		Operator:           ops[rng.Intn(len(ops))],
 		All:                rng.Intn(2) == 0,

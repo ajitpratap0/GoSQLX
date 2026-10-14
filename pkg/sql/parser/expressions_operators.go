@@ -20,6 +20,7 @@ package parser
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
@@ -92,6 +93,17 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 	// Check for LIKE/ILIKE operator
 	if p.isType(models.TokenTypeLike) || strings.EqualFold(p.currentToken.Token.Value, "ILIKE") {
 		operator := p.currentToken.Token.Value
+		// The tokenizer matches keywords after Unicode upper-casing, so LIKE
+		// also arrives as e.g. "lıke" (dotless ı). Store the canonical ASCII
+		// keyword for such a spelling so renderers see plain operator text;
+		// an ASCII spelling keeps its case.
+		if !isASCII(operator) {
+			if p.isType(models.TokenTypeLike) {
+				operator = "LIKE"
+			} else {
+				operator = "ILIKE"
+			}
+		}
 		// ILIKE is supported by PostgreSQL, Snowflake, and ClickHouse natively.
 		// Reject in other dialects (e.g. MySQL, SQL Server, SQLite, Oracle) where
 		// it is not a recognized operator.
@@ -155,7 +167,12 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 
 	// Check for REGEXP/RLIKE operator (MySQL)
 	if strings.EqualFold(p.currentToken.Token.Value, "REGEXP") || strings.EqualFold(p.currentToken.Token.Value, "RLIKE") {
-		operator := strings.ToUpper(p.currentToken.Token.Value)
+		// Canonical ASCII text even for a Unicode case-folded match (the
+		// Kelvin sign K folds to k in RLIKE).
+		operator := "REGEXP"
+		if strings.EqualFold(p.currentToken.Token.Value, "RLIKE") {
+			operator = "RLIKE"
+		}
 		p.advance()
 		pattern, err := p.parsePrimaryExpression()
 		if err != nil {
@@ -480,4 +497,14 @@ func (p *Parser) parseArrayAccessExpression(arrayExpr ast.Expression) (ast.Expre
 	}
 
 	return result, nil
+}
+
+// isASCII reports whether s holds only ASCII bytes.
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= utf8.RuneSelf {
+			return false
+		}
+	}
+	return true
 }

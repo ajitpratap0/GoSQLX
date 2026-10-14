@@ -41,7 +41,10 @@ func NewStringLiteralReader(input []byte, pos *Position, quote rune) *StringLite
 
 // ReadStringLiteral reads a string literal with proper escape sequence handling
 func (r *StringLiteralReader) ReadStringLiteral() (models.Token, error) {
-	// Normalize the quote character
+	// Normalize the quote character. A literal opened with an ASCII quote is
+	// read in strict mode: only that quote closes or escapes it, and Unicode
+	// quotes inside it are content (see quotedRune).
+	strict := normalizeQuote(r.quote) == r.quote
 	r.quote = normalizeQuote(r.quote)
 	var buf bytes.Buffer
 	startPos := r.pos.Clone()
@@ -52,7 +55,7 @@ func (r *StringLiteralReader) ReadStringLiteral() (models.Token, error) {
 
 	for r.pos.Index < len(r.input) {
 		ch, size := utf8.DecodeRune(r.input[r.pos.Index:])
-		ch = normalizeQuote(ch)
+		ch = quotedRune(ch, strict)
 
 		if ch == '\\' {
 			// Handle escape sequences
@@ -77,7 +80,7 @@ func (r *StringLiteralReader) ReadStringLiteral() (models.Token, error) {
 			// Check for double quotes (escaped quotes)
 			if r.pos.Index+size < len(r.input) {
 				nextR, nextSize := utf8.DecodeRune(r.input[r.pos.Index+size:])
-				nextR = normalizeQuote(nextR)
+				nextR = quotedRune(nextR, strict)
 				if nextR == r.quote {
 					// Include one quote and skip the other
 					buf.WriteRune(ch)

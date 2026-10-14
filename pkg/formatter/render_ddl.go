@@ -42,7 +42,7 @@ func renderCreateSequence(s *ast.CreateSequenceStatement, opts ast.FormatOptions
 	}
 	if s.Name != nil && s.Name.Name != "" {
 		sb.WriteString(" ")
-		sb.WriteString(s.Name.Name)
+		sb.WriteString(ast.QuoteQualifiedName(s.Name.Name))
 	}
 	writeSequenceOptionsFormatted(sb, s.Options, f)
 	return sb.String()
@@ -60,7 +60,7 @@ func renderAlterSequence(s *ast.AlterSequenceStatement, opts ast.FormatOptions) 
 	}
 	if s.Name != nil && s.Name.Name != "" {
 		sb.WriteString(" ")
-		sb.WriteString(s.Name.Name)
+		sb.WriteString(ast.QuoteQualifiedName(s.Name.Name))
 	}
 	writeSequenceOptionsFormatted(sb, s.Options, f)
 	return sb.String()
@@ -78,7 +78,7 @@ func renderDropSequence(s *ast.DropSequenceStatement, opts ast.FormatOptions) st
 	}
 	if s.Name != nil && s.Name.Name != "" {
 		sb.WriteString(" ")
-		sb.WriteString(s.Name.Name)
+		sb.WriteString(ast.QuoteQualifiedName(s.Name.Name))
 	}
 	return sb.String()
 }
@@ -88,6 +88,12 @@ func renderShow(s *ast.ShowStatement, opts ast.FormatOptions) string {
 	f := newNodeFormatter(opts)
 	sb := f.sb
 
+	if s.ShowType != "" && !ast.IsShowTypeText(s.ShowType) {
+		// A quoted kind (SHOW "x"): SQL() quotes it; keyword casing does
+		// not apply to it.
+		return s.SQL()
+	}
+
 	sb.WriteString(f.kw("SHOW"))
 	if s.ShowType != "" {
 		sb.WriteString(" ")
@@ -95,13 +101,17 @@ func renderShow(s *ast.ShowStatement, opts ast.FormatOptions) string {
 	}
 	if s.ObjectName != "" {
 		sb.WriteString(" ")
-		sb.WriteString(s.ObjectName)
+		if ast.ShowTakesFrom(s.ShowType) {
+			sb.WriteString(f.kw("FROM"))
+			sb.WriteString(" ")
+		}
+		sb.WriteString(ast.QuoteQualifiedName(s.ObjectName))
 	}
 	if s.From != "" {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("FROM"))
 		sb.WriteString(" ")
-		sb.WriteString(s.From)
+		sb.WriteString(ast.QuoteQualifiedName(s.From))
 	}
 	return sb.String()
 }
@@ -114,20 +124,28 @@ func renderDescribe(s *ast.DescribeStatement, opts ast.FormatOptions) string {
 	sb.WriteString(f.kw("DESCRIBE"))
 	if s.TableName != "" {
 		sb.WriteString(" ")
-		sb.WriteString(s.TableName)
+		sb.WriteString(ast.QuoteQualifiedName(s.TableName))
 	}
 	return sb.String()
 }
 
 // renderUnsupported renders an UnsupportedStatement as a SQL comment
 // preserving the original SQL fragment. This prevents silently producing
-// corrupt SQL for statement types the formatter cannot handle.
+// corrupt SQL for statement types the formatter cannot handle. The fragment
+// is rebuilt from token values, so a string literal or quoted identifier may
+// contribute a line break; every following line is commented too so no text
+// escapes the comment.
 func renderUnsupported(s *ast.UnsupportedStatement, _ ast.FormatOptions) string {
-	if s.RawSQL != "" {
-		return "-- UNSUPPORTED: " + s.RawSQL
+	text := s.RawSQL
+	if text == "" {
+		text = s.Kind
 	}
-	return "-- UNSUPPORTED: " + s.Kind
+	return "-- UNSUPPORTED: " + commentLineBreaks.Replace(text)
 }
+
+// commentLineBreaks continues a line comment across the line breaks in its
+// text.
+var commentLineBreaks = strings.NewReplacer("\r\n", "\n-- ", "\n", "\n-- ", "\r", "\n-- ")
 
 // writeSequenceOptionsFormatted appends formatted sequence options to the builder.
 // It mirrors the logic in ast/sql.go writeSequenceOptions but uses the nodeFormatter

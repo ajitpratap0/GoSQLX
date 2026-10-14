@@ -2,15 +2,37 @@ name: Publish VSCode Extension
 # Publishes platform-specific VSIXs to the VS Code Marketplace on tag push.
 # Runs in parallel with release.yml (GoReleaser).
 #
-# Required secret:
-#   VSCE_PAT - Azure DevOps Personal Access Token with "Marketplace (Manage)" scope.
-#              Create at: https://dev.azure.com → User Settings → Personal Access Tokens
-#              Scope: "Marketplace (Manage)", Organization: "All accessible organizations"
+#
+# Authentication (publish job, GitHub environment "vscode-marketplace"):
+#   Preferred: Microsoft Entra ID via GitHub OIDC, no stored secret. Global
+#   Azure DevOps PATs are retired on 2026-12-01. Set these environment variables:
+#     AZURE_CLIENT_ID - client ID of the user-assigned managed identity or app
+#                       registration that is a Contributor on the Marketplace publisher
+#     AZURE_TENANT_ID - its Entra tenant ID
+#   Federated credential subject: repo:ajitpratap0/GoSQLX:environment:vscode-marketplace
+#   Fallback (when AZURE_CLIENT_ID is unset): VSCE_PAT secret with
+#   "Marketplace (Manage)" scope and "All accessible organizations".
+#
+# Manual runs (workflow_dispatch):
+#   tag=vX.Y.Z           rebuild and publish an existing tag
+#   print_identity=true  log in and print the identity's Marketplace profile id
+#                        (needed once to add it as a publisher member)
 
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to publish (e.g. v1.15.0)'
+        required: true
+        type: string
+      print_identity:
+        description: 'Only print the Entra identity profile id; do not publish'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -18,6 +40,7 @@ permissions:
 jobs:
   build:
     name: Build VSIX (${{ matrix.target }})
+    if: ${{ !inputs.print_identity }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -46,6 +69,9 @@ jobs:
             binary: gosqlx.exe
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
 
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
@@ -82,10 +108,12 @@ jobs:
 
       - name: Patch version from tag
         working-directory: vscode-extension
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${RELEASE_TAG#v}"
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Tag '$GITHUB_REF_NAME' does not produce a valid semver: '$VERSION'"
+            echo "Tag '$RELEASE_TAG' does not produce a valid semver: '$VERSION'"
             exit 1
           fi
           CURRENT=$(node -p "require('./package.json').version")
@@ -108,47 +136,85 @@ jobs:
   publish:
     name: Publish to Marketplace
     needs: build
+    # Runs after a successful build, or alone for print_identity.
+    if: ${{ !cancelled() && (needs.build.result == 'success' || inputs.print_identity) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: vscode-marketplace
+    permissions:
+      contents: read
+      id-token: write # GitHub OIDC token for Entra ID workload identity federation
+    env:
+      USE_ENTRA: ${{ vars.AZURE_CLIENT_ID != '' }}
     steps:
+      - name: Azure login (Entra ID, OIDC)
+        if: env.USE_ENTRA == 'true'
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Print Marketplace identity id
+        if: inputs.print_identity
+        run: |
+          if [ "$USE_ENTRA" != "true" ]; then
+            echo "::error::AZURE_CLIENT_ID is not set on the vscode-marketplace environment"
+            exit 1
+          fi
+          # 499b84ac-... is the Azure DevOps resource; the returned "id" is the
+          # value to add as a member (Contributor) of the Marketplace publisher.
+          az rest -u https://app.vssps.visualstudio.com/_apis/profile/profiles/me \
+            --resource 499b84ac-1321-427f-aa17-267ca6975798 --query id -o tsv
+
       - name: Setup Node
+        if: ${{ !inputs.print_identity }}
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
 
       - name: Checkout extension manifest
+        if: ${{ !inputs.print_identity }}
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          ref: ${{ inputs.tag || github.ref }}
           persist-credentials: false
           sparse-checkout: vscode-extension
 
       - name: Install vsce
-        # Pinned via vscode-extension/package-lock.json (npm ci = hash-verified install)
+        if: ${{ !inputs.print_identity }}
+        # Pinned via vscode-extension/package-lock.json (npm ci = hash-verified install).
+        # @vscode/vsce >= 2.26.1 is required for --azure-credential.
         working-directory: vscode-extension
         run: |
           npm ci --no-audit --no-fund
           echo "$GITHUB_WORKSPACE/vscode-extension/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Download all VSIX artifacts
+        if: ${{ !inputs.print_identity }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: vsix-*
           merge-multiple: true
           path: vsix
 
-      - name: Verify VSCE_PAT is set
+      - name: Publish all platforms (Entra ID)
+        if: ${{ !inputs.print_identity && env.USE_ENTRA == 'true' }}
+        run: |
+          for vsix in vsix/*.vsix; do
+            echo "Publishing $vsix..."
+            vsce publish --azure-credential --packagePath "$vsix"
+          done
+
+      - name: Publish all platforms (PAT fallback)
+        if: ${{ !inputs.print_identity && env.USE_ENTRA != 'true' }}
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
           if [ -z "$VSCE_PAT" ]; then
-            echo "Error: VSCE_PAT secret is not configured"
+            echo "::error::Neither AZURE_CLIENT_ID (Entra ID) nor the VSCE_PAT secret is configured"
             exit 1
           fi
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-
-      - name: Publish all platforms
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: |
           for vsix in vsix/*.vsix; do
             echo "Publishing $vsix..."
             vsce publish --packagePath "$vsix"

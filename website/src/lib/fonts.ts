@@ -1,20 +1,18 @@
-import { Space_Grotesk, Inter, JetBrains_Mono } from 'next/font/google';
+import { Inter, JetBrains_Mono } from 'next/font/google';
 
-export const spaceGrotesk = Space_Grotesk({
-  subsets: ['latin'],
-  variable: '--font-heading',
-  display: 'swap',
-  weight: ['400', '500', '600', '700'],
-});
-
+// Two variable families only. Omitting `weight` makes next/font load the
+// variable font file, so every weight is served from a single woff2.
 export const inter = Inter({
   subsets: ['latin'],
-  variable: '--font-body',
+  variable: '--font-inter',
   display: 'swap',
 });
 
+// Code, stat numbers and eyebrows. Not preloaded: it is not needed for the
+// first paint of most routes.
 export const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
   variable: '--font-jetbrains',
   display: 'swap',
+  preload: false,
 });

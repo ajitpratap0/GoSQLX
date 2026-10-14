@@ -302,3 +302,26 @@ func TestFunctionCallSubscript_605_SQLiteBracketAlias(t *testing.T) {
 		t.Fatalf("SQLite [cnt] after a call parsed as a subscript: %s", tree.SQL())
 	}
 }
+
+// TestFunctionCallSubscript_605_SQLServerBracketAlias: SQL Server tokenizes
+// [cnt] as a bracket-quoted identifier, so it stays an alias after a call.
+func TestFunctionCallSubscript_605_SQLServerBracketAlias(t *testing.T) {
+	tree, err := gosqlx.ParseWithDialect("SELECT count(*) [cnt] FROM t", keywords.DialectSQLServer)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	stmt, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected *ast.SelectStatement, got %T", tree.Statements[0])
+	}
+	ae, ok := stmt.Columns[0].(*ast.AliasedExpression)
+	if !ok {
+		t.Fatalf("expected *ast.AliasedExpression, got %T (%s)", stmt.Columns[0], tree.SQL())
+	}
+	if ae.Alias != "cnt" {
+		t.Fatalf("alias = %q, want cnt", ae.Alias)
+	}
+	if _, ok := ae.Expr.(*ast.FunctionCall); !ok {
+		t.Fatalf("expected *ast.FunctionCall, got %T", ae.Expr)
+	}
+}

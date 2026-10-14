@@ -35,7 +35,7 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 	// Parse table name (supports schema.table qualification and double-quoted identifiers)
 	tableName, err := p.parseQualifiedName()
 	if err != nil {
-		return nil, p.expectedError("table name")
+		return nil, p.qualifiedNameError(err, "table name")
 	}
 
 	// Parse WHERE clause if present

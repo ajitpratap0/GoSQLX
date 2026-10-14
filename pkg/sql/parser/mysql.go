@@ -104,7 +104,7 @@ func (p *Parser) parseShowStatement() (ast.Statement, error) {
 			p.advance() // Consume TABLE
 			name, err := p.parseQualifiedName()
 			if err != nil {
-				return nil, p.expectedError("table name")
+				return nil, p.qualifiedNameError(err, "table name")
 			}
 			show.ObjectName = name
 		} else {
@@ -112,7 +112,7 @@ func (p *Parser) parseShowStatement() (ast.Statement, error) {
 			p.advance()
 			name, err := p.parseQualifiedName()
 			if err != nil {
-				return nil, p.expectedError("object name")
+				return nil, p.qualifiedNameError(err, "object name")
 			}
 			show.ObjectName = name
 		}
@@ -123,7 +123,7 @@ func (p *Parser) parseShowStatement() (ast.Statement, error) {
 			p.advance()
 			name, err := p.parseQualifiedName()
 			if err != nil {
-				return nil, p.expectedError("table name")
+				return nil, p.qualifiedNameError(err, "table name")
 			}
 			show.ObjectName = name
 		}
@@ -134,7 +134,7 @@ func (p *Parser) parseShowStatement() (ast.Statement, error) {
 			p.advance()
 			name, err := p.parseQualifiedName()
 			if err != nil {
-				return nil, p.expectedError("table name")
+				return nil, p.qualifiedNameError(err, "table name")
 			}
 			show.ObjectName = name
 		}
@@ -188,7 +188,7 @@ func (p *Parser) parseDescribeStatement() (ast.Statement, error) {
 
 	name, err := p.parseQualifiedName()
 	if err != nil {
-		return nil, p.expectedError("table name")
+		return nil, p.qualifiedNameError(err, "table name")
 	}
 	desc := ast.GetDescribeStatement()
 	desc.TableName = name
@@ -206,7 +206,7 @@ func (p *Parser) parseReplaceStatement() (ast.Statement, error) {
 	// Parse table name
 	tableName, err := p.parseQualifiedName()
 	if err != nil {
-		return nil, p.expectedError("table name")
+		return nil, p.qualifiedNameError(err, "table name")
 	}
 
 	// Parse column list if present

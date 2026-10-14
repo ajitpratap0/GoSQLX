@@ -16,6 +16,7 @@ package parser
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -867,7 +868,7 @@ func (p *Parser) parseSnowflakeUseStatement() (ast.Statement, error) {
 	}
 	name, err := p.parseQualifiedName()
 	if err != nil {
-		return nil, p.expectedError("name after USE")
+		return nil, p.qualifiedNameError(err, "name after USE")
 	}
 	rawParts = append(rawParts, name)
 	stmt := ast.GetUnsupportedStatement()
@@ -1146,6 +1147,28 @@ func (p *Parser) parseStringLiteral() string {
 // limit matches maxColumnRefParts so object and column references agree.
 const maxQualifiedNameParts = maxColumnRefParts
 
+// errQualifiedNameTooLong is the Cause of the E2004 that parseQualifiedName
+// returns for a name with more than maxQualifiedNameParts parts.
+var errQualifiedNameTooLong = errors.New("qualified name has too many parts")
+
+// isQualifiedNameTooLong reports whether err is the part-limit error from
+// parseQualifiedName. Callers that re-report a bad name in their own words
+// ("expected table name") must pass this error through unchanged: it is raised
+// after the extra '.' is consumed, so a generic message would point at a
+// valid identifier.
+func isQualifiedNameTooLong(err error) bool {
+	return errors.Is(err, errQualifiedNameTooLong)
+}
+
+// qualifiedNameError returns err when it is the part-limit error from
+// parseQualifiedName and p.expectedError(expected) otherwise.
+func (p *Parser) qualifiedNameError(err error, expected string) error {
+	if isQualifiedNameTooLong(err) {
+		return err
+	}
+	return p.expectedError(expected)
+}
+
 // parseQualifiedName parses a possibly qualified object name (table,
 // schema.table, db.schema.table, server.db.schema.table) and returns it as a
 // dotted string. The parts are collected and joined once, so the cost is
@@ -1168,7 +1191,7 @@ func (p *Parser) parseQualifiedName() (string, error) {
 				fmt.Sprintf("qualified name has more than %d parts", maxQualifiedNameParts),
 				p.currentLocation(),
 				"",
-			)
+			).WithCause(errQualifiedNameTooLong)
 		}
 		if !p.isIdentifier() && !p.isNonReservedKeyword() {
 			return "", p.expectedError("identifier after .")

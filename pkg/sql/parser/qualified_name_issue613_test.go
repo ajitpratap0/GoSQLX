@@ -114,26 +114,73 @@ func TestIssue613_QualifiedNamePartLimit(t *testing.T) {
 		sql := fmt.Sprintf(tmpl, name)
 		t.Run(sql, func(t *testing.T) {
 			_, err := gosqlx.Parse(sql)
-			if err == nil {
-				t.Fatalf("Parse(%q) succeeded, want part-limit error", sql)
-			}
-			if tmpl != "SELECT * FROM %s" {
-				// Most callers (JOIN, DML, DDL) discard the E2004 and re-report
-				// it as an E2002 "expected table name" error; the name is still
-				// rejected. Only the FROM path passes the E2004 through.
-				return
-			}
-			var pe *goerrors.Error
-			if !errors.As(err, &pe) {
-				t.Fatalf("error %T is not *errors.Error: %v", err, err)
-			}
-			if pe.Code != goerrors.ErrCodeInvalidSyntax {
-				t.Fatalf("code = %s, want %s (%v)", pe.Code, goerrors.ErrCodeInvalidSyntax, err)
-			}
-			if !strings.Contains(err.Error(), "qualified name has more than 5 parts") {
-				t.Fatalf("unexpected message: %v", err)
-			}
+			assertIssue613PartLimitError(t, sql, err)
 		})
+	}
+}
+
+// assertIssue613PartLimitError checks that err is the E2004 part-limit error
+// from parseQualifiedName, not a caller's generic "expected table name".
+func assertIssue613PartLimitError(t *testing.T, sql string, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("Parse(%q) succeeded, want part-limit error", sql)
+	}
+	var pe *goerrors.Error
+	if !errors.As(err, &pe) {
+		t.Fatalf("error %T is not *errors.Error: %v", err, err)
+	}
+	if pe.Code != goerrors.ErrCodeInvalidSyntax {
+		t.Fatalf("code = %s, want %s (%v)", pe.Code, goerrors.ErrCodeInvalidSyntax, err)
+	}
+	if !strings.Contains(err.Error(), "qualified name has more than 5 parts") {
+		t.Fatalf("unexpected message: %v", err)
+	}
+}
+
+// TestIssue613_PartLimitErrorDialectPaths covers the dialect-specific callers
+// of parseQualifiedName. The Snowflake CREATE <kind> stub path used to drop the
+// error and keep scanning, so RawSQL silently lost the leading qualifiers
+// ("CREATE SEQUENCE f" for "CREATE SEQUENCE a.b.c.d.e.f").
+func TestIssue613_PartLimitErrorDialectPaths(t *testing.T) {
+	tests := []struct {
+		sql     string
+		dialect keywords.SQLDialect
+	}{
+		{"CREATE STAGE a.b.c.d.e.f.g URL='s3://bucket/x'", keywords.DialectSnowflake},
+		{"CREATE SEQUENCE a.b.c.d.e.f", keywords.DialectSnowflake},
+		{"CREATE SCHEMA IF NOT EXISTS a.b.c.d.e.f", keywords.DialectSnowflake},
+		{"USE DATABASE a.b.c.d.e.f", keywords.DialectSnowflake},
+		{"SHOW COLUMNS FROM a.b.c.d.e.f", keywords.DialectMySQL},
+		{"SHOW CREATE TABLE a.b.c.d.e.f", keywords.DialectMySQL},
+		{"SHOW CREATE VIEW a.b.c.d.e.f", keywords.DialectMySQL},
+		{"SHOW INDEX FROM a.b.c.d.e.f", keywords.DialectMySQL},
+		{"DESCRIBE a.b.c.d.e.f", keywords.DialectMySQL},
+		{"CREATE MATERIALIZED VIEW mv TO a.b.c.d.e.f AS SELECT 1", keywords.DialectClickHouse},
+		{"REFRESH MATERIALIZED VIEW a.b.c.d.e.f", keywords.DialectPostgreSQL},
+		{"REPLACE INTO a.b.c.d.e.f VALUES (1)", keywords.DialectMySQL},
+	}
+	for _, tt := range tests {
+		t.Run(tt.sql, func(t *testing.T) {
+			_, err := gosqlx.ParseWithDialect(tt.sql, tt.dialect)
+			assertIssue613PartLimitError(t, tt.sql, err)
+		})
+	}
+}
+
+// TestIssue613_SnowflakeCreateStubKeepsName guards the success path of the
+// Snowflake CREATE <kind> stub: an in-limit name is kept whole in RawSQL.
+func TestIssue613_SnowflakeCreateStubKeepsName(t *testing.T) {
+	tree, err := gosqlx.ParseWithDialect("CREATE STAGE a.b.c URL='s3://bucket/x'", keywords.DialectSnowflake)
+	if err != nil {
+		t.Fatalf("ParseWithDialect failed: %v", err)
+	}
+	stub, ok := tree.Statements[0].(*ast.UnsupportedStatement)
+	if !ok {
+		t.Fatalf("expected UnsupportedStatement, got %T", tree.Statements[0])
+	}
+	if !strings.HasPrefix(stub.RawSQL, "CREATE STAGE a.b.c ") {
+		t.Fatalf("RawSQL = %q, want prefix %q", stub.RawSQL, "CREATE STAGE a.b.c ")
 	}
 }
 
@@ -146,14 +193,14 @@ func TestIssue613_LongQualifiedNameFailsFast(t *testing.T) {
 	if !strings.Contains(err.Error(), "more than 5 parts") {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Other callers re-wrap the error, but the chain must still be rejected.
 	for _, sql := range []string{
 		"DROP TABLE " + name,
 		"INSERT INTO " + name + " VALUES (1)",
 		"SELECT * FROM t JOIN " + name + " ON 1 = 1",
 	} {
-		if _, err := gosqlx.Parse(sql); err == nil {
-			t.Fatalf("Parse of %d-byte chain succeeded, want error", len(sql))
+		_, err := gosqlx.Parse(sql)
+		if err == nil || !strings.Contains(err.Error(), "more than 5 parts") {
+			t.Fatalf("Parse of %d-byte chain: err = %v, want part-limit error", len(sql), err)
 		}
 	}
 }

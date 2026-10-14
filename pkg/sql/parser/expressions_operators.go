@@ -60,8 +60,8 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			return nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse BETWEEN lower bound: %v", err),
 				p.currentLocation(),
-				p.currentToken.Token.Value,
-			)
+				"",
+			).WithCause(err)
 		}
 
 		// Expect AND keyword
@@ -76,8 +76,8 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			return nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse BETWEEN upper bound: %v", err),
 				p.currentLocation(),
-				p.currentToken.Token.Value,
-			)
+				"",
+			).WithCause(err)
 		}
 
 		return &ast.BetweenExpression{
@@ -141,8 +141,8 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			return nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse LIKE pattern: %v", err),
 				p.currentLocation(),
-				p.currentToken.Token.Value,
-			)
+				"",
+			).WithCause(err)
 		}
 
 		return &ast.BinaryExpression{
@@ -162,8 +162,8 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			return nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse REGEXP pattern: %v", err),
 				p.currentLocation(),
-				p.currentToken.Token.Value,
-			)
+				"",
+			).WithCause(err)
 		}
 		return &ast.BinaryExpression{
 			Left:     left,
@@ -202,8 +202,8 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 				return nil, goerrors.InvalidSyntaxError(
 					fmt.Sprintf("failed to parse IN subquery: %v", err),
 					p.currentLocation(),
-					p.currentToken.Token.Value,
-				)
+					"",
+				).WithCause(err)
 			}
 
 			// Expect closing parenthesis

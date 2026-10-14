@@ -337,6 +337,9 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 		}
 	} else {
 		joinedName, err := p.parseQualifiedName()
+		if isQualifiedNameTooLong(err) {
+			return ref, err
+		}
 		if err != nil {
 			return ref, goerrors.ExpectedTokenError(
 				"table name after "+joinType+" JOIN",

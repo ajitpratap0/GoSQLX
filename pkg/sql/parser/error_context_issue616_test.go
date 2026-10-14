@@ -19,6 +19,7 @@ import (
 	"go/ast"
 	goparser "go/parser"
 	"go/token"
+	"go/types"
 	"os"
 	"path/filepath"
 	"sort"
@@ -109,6 +110,57 @@ func assertIssue616Error(t *testing.T, err error, sql string, code goerrors.Erro
 	}
 }
 
+// TestIssue616_WrappedOperandErrorsHaveNoTokenSnippet covers operator paths
+// that wrapped an operand error and passed the current token's text as `sql`,
+// which printed a fake "1 | )" source line with the caret at the real column.
+func TestIssue616_WrappedOperandErrorsHaveNoTokenSnippet(t *testing.T) {
+	tests := []struct {
+		name    string
+		sql     string
+		dialect keywords.SQLDialect
+		msg     string
+		col     int
+	}{
+		{"between lower", "SELECT * FROM t WHERE a BETWEEN ) AND 2", "", "failed to parse BETWEEN lower bound", 33},
+		{"between upper", "SELECT * FROM t WHERE a BETWEEN 1 AND )", "", "failed to parse BETWEEN upper bound", 39},
+		{"like pattern", "SELECT * FROM t WHERE a LIKE )", "", "failed to parse LIKE pattern", 30},
+		{"regexp pattern", "SELECT * FROM t WHERE a REGEXP )", keywords.DialectMySQL, "failed to parse REGEXP pattern", 32},
+		{"in subquery", "SELECT * FROM t WHERE a IN (SELECT FROM x)", "", "failed to parse IN subquery", 36},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var err error
+			if tt.dialect == "" {
+				_, err = gosqlx.Parse(tt.sql)
+			} else {
+				_, err = gosqlx.ParseWithDialect(tt.sql, tt.dialect)
+			}
+			if err == nil {
+				t.Fatalf("expected an error for %q", tt.sql)
+			}
+			var pe *goerrors.Error
+			if !errors.As(err, &pe) {
+				t.Fatalf("expected *errors.Error, got %T: %v", err, err)
+			}
+			if pe.Code != goerrors.ErrCodeInvalidSyntax {
+				t.Errorf("code = %s, want %s", pe.Code, goerrors.ErrCodeInvalidSyntax)
+			}
+			if !strings.Contains(pe.Message, tt.msg) {
+				t.Errorf("message %q does not contain %q", pe.Message, tt.msg)
+			}
+			if pe.Location.Line != 1 || pe.Location.Column != tt.col {
+				t.Errorf("location = %d:%d, want 1:%d", pe.Location.Line, pe.Location.Column, tt.col)
+			}
+			if pe.Context != nil && pe.Context.SQL != "" && pe.Context.SQL != tt.sql {
+				t.Errorf("Context.SQL = %q, want empty or the real source %q", pe.Context.SQL, tt.sql)
+			}
+			if pe.Cause == nil {
+				t.Errorf("Cause is nil, want the wrapped operand error")
+			}
+		})
+	}
+}
+
 func TestIssue616_StrictModeEmptyStatementContext(t *testing.T) {
 	tests := []struct {
 		name string
@@ -153,10 +205,16 @@ func TestIssue616_StrictModeEmptyStatementContext(t *testing.T) {
 }
 
 // TestIssue616_NoLiteralSQLArgInParserErrorBuilders fails if any non-test file
-// in the parser package passes a non-empty string literal as the `sql`
-// parameter of a pkg/errors builder, which would print it as the query source.
+// in the parser package passes anything other than the literal "" as the `sql`
+// parameter of a pkg/errors builder. The parser does not hold the query source,
+// so any other value (a hint sentence, the current token's text) would be
+// printed as a bogus source line. The only exceptions are the expressions in
+// realSourceSQLArgs, which hold the caller's full query text.
 func TestIssue616_NoLiteralSQLArgInParserErrorBuilders(t *testing.T) {
 	const errorsImport = "github.com/ajitpratap0/GoSQLX/pkg/errors"
+	// realSourceSQLArgs are `sql` argument expressions that carry the real
+	// query source (validate.go receives the raw input bytes).
+	realSourceSQLArgs := map[string]bool{"string(input)": true}
 	fset := token.NewFileSet()
 
 	// builder name -> flattened index of its `sql` parameter
@@ -233,19 +291,23 @@ func TestIssue616_NoLiteralSQLArgInParserErrorBuilders(t *testing.T) {
 			if !ok || idx >= len(call.Args) {
 				return true
 			}
-			lit, ok := call.Args[idx].(*ast.BasicLit)
-			if !ok || lit.Kind != token.STRING {
+			arg := call.Args[idx]
+			if lit, ok := arg.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+				if v, err := strconv.Unquote(lit.Value); err == nil && v == "" {
+					return true
+				}
+			}
+			expr := types.ExprString(arg)
+			if realSourceSQLArgs[expr] {
 				return true
 			}
-			if v, err := strconv.Unquote(lit.Value); err == nil && v != "" {
-				offenders = append(offenders, fset.Position(lit.Pos()).String()+": "+sel.Sel.Name+" sql="+lit.Value)
-			}
+			offenders = append(offenders, fset.Position(arg.Pos()).String()+": "+sel.Sel.Name+" sql="+expr)
 			return true
 		})
 	}
 	sort.Strings(offenders)
 	if len(offenders) > 0 {
-		t.Errorf("%d builder call(s) pass a non-empty literal as sql (use \"\" and WithHint):\n%s",
+		t.Errorf("%d builder call(s) pass something other than \"\" as sql (use \"\", WithHint for hints, WithCause for wrapped errors):\n%s",
 			len(offenders), strings.Join(offenders, "\n"))
 	}
 }

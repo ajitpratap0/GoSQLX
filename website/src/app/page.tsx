@@ -7,6 +7,7 @@ import { CodeExamples } from '@/components/home/CodeExamples';
 import { McpSection } from '@/components/home/McpSection';
 import { VscodeSection } from '@/components/home/VscodeSection';
 import { CtaBanner } from '@/components/home/CtaBanner';
+import { getStars } from '@/lib/github';
 
 import type { Metadata } from 'next';
 import { baseOpenGraph } from '@/lib/open-graph';
@@ -16,11 +17,12 @@ export const metadata: Metadata = {
   openGraph: { ...baseOpenGraph, url: '/' },
 };
 
-export default function Home() {
+export default async function Home() {
+  const stars = await getStars();
   return (
     <>
-      <Hero />
-      <TrustSection />
+      <Hero stars={stars} />
+      <TrustSection stars={stars} />
       <PerformanceSection />
       <FeatureGrid />
       <DialectShowcase />

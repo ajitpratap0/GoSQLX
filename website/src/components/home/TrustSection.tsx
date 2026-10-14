@@ -1,5 +1,5 @@
 import { FadeIn } from '@/components/ui/FadeIn';
-import { GitHubStarCount } from './GitHubStarCount';
+import { formatStars } from '@/lib/github';
 
 /* ── Inline SVG icons (Heroicons-style, 20x20) ────────────────────────── */
 
@@ -50,7 +50,7 @@ const metrics = [
   {
     id: 'stars',
     icon: <StarIcon />,
-    value: null, // rendered via client component
+    value: null, // real count passed in as a prop
     label: 'GitHub Stars',
   },
   {
@@ -89,7 +89,10 @@ const integrations = [
 
 /* ── Component ─────────────────────────────────────────────────────────── */
 
-export function TrustSection() {
+export function TrustSection({ stars }: { stars: number | null }) {
+  // Hide the stars card entirely when the real count is unavailable.
+  const visible = metrics.filter((m) => m.id !== 'stars' || stars !== null);
+
   return (
     <section className="py-16 border-t border-white/[0.06]">
       <div className="max-w-5xl mx-auto px-4">
@@ -102,12 +105,12 @@ export function TrustSection() {
 
         {/* Metric cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {metrics.map((m, i) => (
+          {visible.map((m, i) => (
             <FadeIn viewport key={m.id} delay={i * 0.07}>
               <div className="glass text-center px-4 py-5 flex flex-col items-center gap-2">
                 {m.icon}
                 <span className="text-lg font-bold text-zinc-100">
-                  {m.id === 'stars' ? <GitHubStarCount /> : m.value}
+                  {m.id === 'stars' && stars !== null ? formatStars(stars) : m.value}
                 </span>
                 <span className="text-xs text-zinc-300">{m.label}</span>
               </div>

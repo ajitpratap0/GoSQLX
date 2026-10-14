@@ -652,6 +652,13 @@ func TestDMLReturningNestedScopes(t *testing.T) {
 		{"scalar subquery", "INSERT INTO t SELECT (SELECT max(b) FROM r returning) FROM s"},
 		{"derived table", "INSERT INTO t SELECT a FROM (SELECT a FROM r) returning"},
 		{"join alias on", "INSERT INTO t SELECT * FROM s JOIN r returning ON s.id = returning.id"},
+		{"alias then left join", "INSERT INTO t SELECT * FROM s returning LEFT JOIN r ON s.id = r.id"},
+		{"alias then right join", "INSERT INTO t SELECT * FROM s returning RIGHT JOIN r ON s.id = r.id"},
+		{"alias then left outer join", "INSERT INTO t SELECT * FROM s returning LEFT OUTER JOIN r ON s.id = r.id"},
+		{"alias then offset", "INSERT INTO t SELECT * FROM s returning OFFSET 1"},
+		{"alias then fetch", "INSERT INTO t SELECT * FROM s returning FETCH FIRST 1 ROWS ONLY"},
+		{"alias then window", "INSERT INTO t SELECT * FROM s returning WINDOW w AS (PARTITION BY a)"},
+		{"alias then for update", "INSERT INTO t SELECT * FROM s returning FOR UPDATE"},
 		{"update from subquery", "UPDATE t SET a = 1 FROM (SELECT a FROM r returning) x WHERE t.id = x.a"},
 		{"update from alias then where", "UPDATE t SET a = 1 FROM s returning WHERE t.id = returning.id"},
 	}
@@ -669,9 +676,40 @@ func TestDMLReturningNestedScopes(t *testing.T) {
 		}
 	}
 
+	// A bare returning alias followed by a dialect-specific clause that may
+	// follow a table reference keeps parsing as an alias, as it does without
+	// RETURNING support.
+	for _, tc := range []struct{ dialect, sql string }{
+		{"snowflake", "INSERT INTO t SELECT a, ROW_NUMBER() OVER (ORDER BY a) rn FROM s returning QUALIFY rn = 1"},
+		{"snowflake", "INSERT INTO t SELECT * FROM s returning PIVOT (SUM(a) FOR b IN ('x', 'y')) p"},
+		{"sqlserver", "INSERT INTO t SELECT * FROM s returning PIVOT (SUM(a) FOR b IN ('x', 'y')) p"},
+		{"oracle", "INSERT INTO t SELECT * FROM s returning UNPIVOT (v FOR b IN (x, y)) p"},
+		{"sqlserver", "INSERT INTO t SELECT * FROM s returning WITH (NOLOCK)"},
+		{"clickhouse", "INSERT INTO t SELECT * FROM s returning PREWHERE a = 1"},
+		{"clickhouse", "INSERT INTO t SELECT * FROM s returning FINAL"},
+		{"clickhouse", "INSERT INTO t SELECT * FROM s returning SAMPLE 0.1"},
+		{"clickhouse", "INSERT INTO t SELECT * FROM s returning ARRAY JOIN arr"},
+		{"clickhouse", "INSERT INTO t SELECT * FROM s returning LEFT ARRAY JOIN arr"},
+		{"oracle", "INSERT INTO t SELECT * FROM s returning START WITH a = 1 CONNECT BY PRIOR id = parent"},
+		{"oracle", "INSERT INTO t SELECT * FROM s returning CONNECT BY PRIOR id = parent"},
+		{"mariadb", "INSERT INTO t SELECT * FROM s returning START WITH a = 1 CONNECT BY PRIOR id = parent"},
+	} {
+		t.Run("dialect clause/"+tc.dialect+"/"+tc.sql, func(t *testing.T) {
+			tree, err := parseInsertCTEWithDialect(t, tc.sql, tc.dialect)
+			if tree != nil {
+				defer ast.ReleaseAST(tree)
+			}
+			if err != nil {
+				t.Fatalf("parse(%q, %s): %v", tc.sql, tc.dialect, err)
+			}
+		})
+	}
+
 	// The outermost RETURNING clause is still recognised.
 	for _, sql := range []string{
 		"INSERT INTO t SELECT a FROM s WHERE a IN (SELECT b FROM r) RETURNING id",
+		"INSERT INTO t SELECT a FROM s RETURNING ARRAY[a, 1]",
+		"INSERT INTO t SELECT a FROM s RETURNING window_id",
 		"INSERT INTO t WITH c AS (SELECT * FROM s) SELECT * FROM c RETURNING id",
 		"INSERT INTO t SELECT a FROM (SELECT a FROM r) d RETURNING id",
 	} {

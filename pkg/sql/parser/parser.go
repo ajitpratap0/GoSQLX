@@ -1241,26 +1241,51 @@ func (p *Parser) isQuotedIdentifierToken() bool {
 // an INSERT source query or UPDATE ... FROM list, where it starts the
 // statement's RETURNING clause rather than naming an alias (#610).
 //
-// A RETURNING list cannot begin with a join or clause keyword, ON, USING, a
-// comma, a dot, a closing parenthesis or the end of the statement, so when one of those follows, the
-// token is an ordinary alias (FROM s JOIN r returning ON ...), as it is in
-// dialects that do not reserve the word.
+// A RETURNING list cannot begin with a join keyword (including ON and USING),
+// a clause keyword, a comma, a dot, a closing parenthesis or the end of the
+// statement, nor with any clause that may follow a table reference in the
+// current dialect, so when one of those follows, the token is an ordinary
+// alias (FROM s JOIN r returning ON ..., FROM s returning LEFT JOIN ...), as
+// it is in dialects that do not reserve the word.
 func (p *Parser) isDMLReturningKeyword() bool {
 	if !p.dmlReturning || !p.isReturningKeyword() {
 		return false
 	}
-	switch p.peekToken().Token.Type {
-	case models.TokenTypeOn, models.TokenTypeUsing, models.TokenTypeComma,
-		models.TokenTypePeriod, models.TokenTypeRParen,
+	next := p.peekToken().Token.Type
+	if next.IsJoinKeyword() {
+		return false
+	}
+	switch next {
+	case models.TokenTypeComma, models.TokenTypePeriod, models.TokenTypeRParen,
 		models.TokenTypeEOF, models.TokenTypeSemicolon,
-		models.TokenTypeJoin, models.TokenTypeInner, models.TokenTypeCross,
-		models.TokenTypeNatural, models.TokenTypeFull,
 		models.TokenTypeWhere, models.TokenTypeGroup, models.TokenTypeHaving,
-		models.TokenTypeOrder, models.TokenTypeLimit,
+		models.TokenTypeOrder, models.TokenTypeLimit, models.TokenTypeOffset,
+		models.TokenTypeFetch, models.TokenTypeFor, models.TokenTypeWith,
 		models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect:
 		return false
 	}
-	return true
+	return !p.nextStartsTableClause()
+}
+
+// nextStartsTableClause reports whether the token after the current one
+// starts a dialect-specific clause that may follow a table reference (WINDOW,
+// QUALIFY, PIVOT, START WITH / CONNECT BY, SAMPLE, MATCH_RECOGNIZE, time
+// travel, ClickHouse FINAL / PREWHERE / ARRAY JOIN / SETTINGS, MINUS). It
+// evaluates the same dialect-gated predicates that guard FROM aliases, one
+// token ahead, and restores the parser position before returning.
+func (p *Parser) nextStartsTableClause() bool {
+	savedPos, savedTok := p.currentPos, p.currentToken
+	p.advance()
+	defer func() { p.currentPos, p.currentToken = savedPos, savedTok }()
+	if p.isWindowClauseKeyword() || p.isQualifyKeyword() || p.isMinusSetOp() ||
+		p.isPivotKeyword() || p.isUnpivotKeyword() || p.isMariaDBClauseStart() ||
+		p.isSampleKeyword() || p.isMatchRecognizeKeyword() ||
+		p.isSnowflakeTimeTravelStart() || p.isSettingsKeyword() {
+		return true
+	}
+	return p.dialect == string(keywords.DialectClickHouse) &&
+		(p.isTokenMatch("FINAL") || p.isTokenMatch("PREWHERE") ||
+			(p.isType(models.TokenTypeArray) && p.peekToken().Token.Type == models.TokenTypeJoin))
 }
 
 // canBeAlias checks if current token can be used as an alias.

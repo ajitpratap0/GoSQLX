@@ -409,17 +409,19 @@ var constraintNameWords = map[string]bool{
 }
 
 // constraintNameNeedsQuoting reports whether a table constraint name must be
-// written double-quoted: unless it is lower-case plain (ASCII a-z, 0-9 and
-// '_', not starting with a digit), a bare rendering would not keep its
-// spelling in a case-folding dialect, and a keyword (KEY, INDEX, DEFAULT,
-// TABLE, ...) is not accepted bare in that position at all.
+// written double-quoted: it is not plain (ASCII letters, digits and '_', not
+// starting with a digit), or it is a keyword (KEY, INDEX, DEFAULT, TABLE, ...)
+// the parser does not accept bare in that position. Case alone does not force
+// quotes: the AST does not record whether a name was quoted, and quoting an
+// unquoted PK_USERS would change the name in case-folding dialects. This
+// matches Identifier.SQL(), which renders names quoted only for case bare.
 func constraintNameNeedsQuoting(name string) bool {
 	if name == "" || (name[0] >= '0' && name[0] <= '9') {
 		return true
 	}
 	for i := 0; i < len(name); i++ {
 		c := name[i]
-		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_') {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_') {
 			return true
 		}
 	}
@@ -437,7 +439,7 @@ func writeConstraintName(buf *bytes.Buffer, name string) {
 }
 
 // QuoteConstraintName returns a table constraint name as SQL() writes it:
-// bare when lower-case plain and not a keyword, double-quoted otherwise.
+// bare when plain and not a keyword, double-quoted otherwise.
 func QuoteConstraintName(name string) string {
 	if !constraintNameNeedsQuoting(name) {
 		return name

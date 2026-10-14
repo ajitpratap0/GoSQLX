@@ -261,7 +261,9 @@ func TestQuotedConstraintNamesRoundTrip_PR632(t *testing.T) {
 		{`CREATE TABLE t (a INT, CONSTRAINT "default" CHECK (a > 0))`, `CONSTRAINT "default" CHECK`},
 		{`CREATE TABLE t (a INT, CONSTRAINT "table" PRIMARY KEY (a))`, `CONSTRAINT "table" PRIMARY KEY`},
 		{`CREATE TABLE t (a INT, CONSTRAINT "owner" PRIMARY KEY (a))`, `CONSTRAINT "owner" PRIMARY KEY`},
-		{`CREATE TABLE t (a INT, CONSTRAINT "MixedCase" PRIMARY KEY (a))`, `CONSTRAINT "MixedCase" PRIMARY KEY`},
+		// Quoted only for case: rendered bare, like Identifier.SQL().
+		{`CREATE TABLE t (a INT, CONSTRAINT "MixedCase" PRIMARY KEY (a))`, `CONSTRAINT MixedCase PRIMARY KEY`},
+		{`CREATE TABLE t (a INT, CONSTRAINT PK_USERS PRIMARY KEY (a))`, `CONSTRAINT PK_USERS PRIMARY KEY`},
 		{`CREATE TABLE t (a INT, CONSTRAINT pk_t PRIMARY KEY (a))`, `CONSTRAINT pk_t PRIMARY KEY`},
 	}
 	for _, tc := range cases {

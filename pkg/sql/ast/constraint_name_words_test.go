@@ -94,7 +94,12 @@ func TestConstraintNameWords(t *testing.T) {
 	}
 	for _, c := range []struct{ in, want string }{
 		{"pk_users", "pk_users"},
-		{"MixedCase", `"MixedCase"`},
+		// Case alone never forces quotes: an unquoted PK_USERS must not
+		// become "PK_USERS", which a case-folding dialect reads differently.
+		{"MixedCase", "MixedCase"},
+		{"PK_USERS", "PK_USERS"},
+		{"KEY", `"KEY"`},
+		{"Index", `"Index"`},
 		{"1x", `"1x"`},
 		{"#x", `"#x"`},
 		{"x y", `"x y"`},

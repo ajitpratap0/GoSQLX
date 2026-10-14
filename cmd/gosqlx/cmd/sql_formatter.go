@@ -297,6 +297,11 @@ func (f *SQLFormatter) formatInsert(stmt *ast.InsertStatement) error {
 		f.builder.WriteString(")")
 	}
 
+	if stmt.DefaultValues {
+		f.writeNewline()
+		f.writeKeyword("DEFAULT VALUES")
+	}
+
 	if len(stmt.Values) > 0 {
 		f.writeNewline()
 		f.writeKeyword("VALUES")
@@ -357,6 +362,14 @@ func (f *SQLFormatter) formatUpdate(stmt *ast.UpdateStatement) error {
 				return err
 			}
 		}
+	}
+
+	// PostgreSQL/SQL Server UPDATE ... FROM source list (#610)
+	if len(stmt.From) > 0 {
+		f.writeNewline()
+		f.writeKeyword("FROM")
+		f.builder.WriteString(" ")
+		f.formatTableReferences(stmt.From)
 	}
 
 	if stmt.Where != nil {

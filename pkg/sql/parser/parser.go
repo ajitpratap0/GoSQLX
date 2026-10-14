@@ -143,6 +143,7 @@ func (p *Parser) Reset() {
 	// Reset clears both fields in lockstep; see WithDialect for the active path.
 	p.dialectTyped = dialect.Unknown
 	p.capabilitiesCache = dialect.Capabilities{}
+	p.dmlReturning = false
 }
 
 // currentLocation returns the source location of the current token.
@@ -298,6 +299,10 @@ type Parser struct {
 	// dialectTyped. It is refreshed alongside dialectTyped in WithDialect
 	// and Reset so that Capabilities() is a single struct-field read.
 	capabilitiesCache dialect.Capabilities
+	// dmlReturning is true while parsing an INSERT source query or an
+	// UPDATE ... FROM list, where an unquoted RETURNING starts the RETURNING
+	// clause and must not be taken as an implicit alias (#610).
+	dmlReturning bool
 }
 
 // Deprecated: Parse is provided for backward compatibility only and is scheduled for
@@ -1207,12 +1212,88 @@ func (p *Parser) isSettingsKeyword() bool {
 		p.isTokenMatch("SETTINGS")
 }
 
+// isReturningKeyword reports whether the current token is an unquoted
+// RETURNING keyword (any case). Quoted identifiers named returning are names,
+// not the keyword: quoting is the only way to use a keyword as an identifier.
+func (p *Parser) isReturningKeyword() bool {
+	if p.isType(models.TokenTypeReturning) {
+		return true
+	}
+	return p.isType(models.TokenTypeIdentifier) &&
+		strings.EqualFold(p.currentToken.Token.Value, "RETURNING") &&
+		!p.isQuotedIdentifierToken()
+}
+
+// isQuotedIdentifierToken reports whether the current identifier token was
+// written with delimiters. Bracket identifiers record Token.Quote = '['; the
+// tokenizer leaves Quote zero for backtick identifiers, so a source span wider
+// than the value also counts as quoted. Tokens without spans (Start == End)
+// are treated as unquoted.
+func (p *Parser) isQuotedIdentifierToken() bool {
+	tok := p.currentToken
+	if tok.Token.Quote != 0 {
+		return true
+	}
+	return tok.Start.Line == tok.End.Line && tok.End.Column-tok.Start.Column > len(tok.Token.Value)
+}
+
+// isDMLReturningKeyword reports whether the current token is RETURNING inside
+// an INSERT source query or UPDATE ... FROM list, where it starts the
+// statement's RETURNING clause rather than naming an alias (#610).
+//
+// A RETURNING list cannot begin with a join keyword (including ON and USING),
+// a clause keyword, a comma, a dot, a closing parenthesis or the end of the
+// statement, nor with any clause that may follow a table reference in the
+// current dialect, so when one of those follows, the token is an ordinary
+// alias (FROM s JOIN r returning ON ..., FROM s returning LEFT JOIN ...), as
+// it is in dialects that do not reserve the word.
+func (p *Parser) isDMLReturningKeyword() bool {
+	if !p.dmlReturning || !p.isReturningKeyword() {
+		return false
+	}
+	next := p.peekToken().Token.Type
+	if next.IsJoinKeyword() {
+		return false
+	}
+	switch next {
+	case models.TokenTypeComma, models.TokenTypePeriod, models.TokenTypeRParen,
+		models.TokenTypeEOF, models.TokenTypeSemicolon,
+		models.TokenTypeWhere, models.TokenTypeGroup, models.TokenTypeHaving,
+		models.TokenTypeOrder, models.TokenTypeLimit, models.TokenTypeOffset,
+		models.TokenTypeFetch, models.TokenTypeFor, models.TokenTypeWith,
+		models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect:
+		return false
+	}
+	return !p.nextStartsTableClause()
+}
+
+// nextStartsTableClause reports whether the token after the current one
+// starts a dialect-specific clause that may follow a table reference (WINDOW,
+// QUALIFY, PIVOT, START WITH / CONNECT BY, SAMPLE, MATCH_RECOGNIZE, time
+// travel, ClickHouse FINAL / PREWHERE / ARRAY JOIN / SETTINGS, MINUS). It
+// evaluates the same dialect-gated predicates that guard FROM aliases, one
+// token ahead, and restores the parser position before returning.
+func (p *Parser) nextStartsTableClause() bool {
+	savedPos, savedTok := p.currentPos, p.currentToken
+	p.advance()
+	defer func() { p.currentPos, p.currentToken = savedPos, savedTok }()
+	if p.isWindowClauseKeyword() || p.isQualifyKeyword() || p.isMinusSetOp() ||
+		p.isPivotKeyword() || p.isUnpivotKeyword() || p.isMariaDBClauseStart() ||
+		p.isSampleKeyword() || p.isMatchRecognizeKeyword() ||
+		p.isSnowflakeTimeTravelStart() || p.isSettingsKeyword() {
+		return true
+	}
+	return p.dialect == string(keywords.DialectClickHouse) &&
+		(p.isTokenMatch("FINAL") || p.isTokenMatch("PREWHERE") ||
+			(p.isType(models.TokenTypeArray) && p.peekToken().Token.Type == models.TokenTypeJoin))
+}
+
 // canBeAlias checks if current token can be used as an alias.
 // Aliases can be IDENT, double-quoted identifiers, or certain non-reserved keywords,
 // but NOT contextual clause keywords that would be consumed as aliases by mistake
 // (e.g. MINUS in Snowflake/Oracle, QUALIFY in Snowflake/BigQuery, WINDOW).
 func (p *Parser) canBeAlias() bool {
-	if p.isMinusSetOp() || p.isQualifyKeyword() || p.isWindowClauseKeyword() || p.isSettingsKeyword() {
+	if p.isMinusSetOp() || p.isQualifyKeyword() || p.isWindowClauseKeyword() || p.isSettingsKeyword() || p.isDMLReturningKeyword() {
 		return false
 	}
 	return p.isIdentifier() || p.isNonReservedKeyword()

@@ -285,6 +285,26 @@ func (v *Validator) validateUpdate(s *ast.UpdateStatement) []ValidationError {
 		tableMap[tableName] = tableName
 	}
 
+	// UPDATE ... FROM: check the extra tables exist and make their names and
+	// aliases resolvable, as validateSelect does for its FROM list.
+	for _, ref := range s.From {
+		if ref.Name == "" {
+			continue // subquery, skip
+		}
+		if _, ok := v.Schema.GetTable(ref.Name); !ok {
+			errors = append(errors, ValidationError{
+				Message:    fmt.Sprintf("table %q does not exist in schema", ref.Name),
+				Severity:   "error",
+				Suggestion: v.suggestTable(ref.Name),
+			})
+		}
+		if ref.Alias != "" {
+			tableMap[ref.Alias] = ref.Name
+		} else {
+			tableMap[ref.Name] = ref.Name
+		}
+	}
+
 	// Validate SET column names
 	for _, upd := range s.Assignments {
 		colName := extractColumnName(upd.Column)

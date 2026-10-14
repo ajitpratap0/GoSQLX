@@ -63,7 +63,8 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 			!p.isType(models.TokenTypeSemicolon) &&
 			!p.isType(models.TokenTypeRParen) &&
 			!p.isAnyType(models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect) &&
-			!p.isMinusSetOp() {
+			!p.isMinusSetOp() &&
+			!p.isDMLReturningKeyword() {
 			return "", nil, nil, p.expectedError("FROM, semicolon, or end of statement")
 		}
 		return "", nil, nil, nil

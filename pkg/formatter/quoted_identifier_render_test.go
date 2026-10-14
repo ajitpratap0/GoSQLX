@@ -129,3 +129,45 @@ func TestQuotedIdentifier_FormatAST_SnowflakeStagePath_Issue611(t *testing.T) {
 		t.Errorf("FormatAST(readable) mismatch\n got: %q\nwant: %q", got, wantReadable)
 	}
 }
+
+// TestQuotedIdentifier_FormatAST_CombiningMarks_Issue611 guards that bare
+// names containing combining marks (Mn, Mc), which the tokenizer accepts in
+// an unquoted identifier, are not quoted by FormatAST. Quoting them would
+// make a MySQL string literal or, in PostgreSQL, stop case folding.
+func TestQuotedIdentifier_FormatAST_CombiningMarks_Issue611(t *testing.T) {
+	cases := []struct {
+		name     string
+		dialect  keywords.SQLDialect
+		sql      string
+		readable string
+	}{
+		{"devanagari_mysql", keywords.DialectMySQL, `SELECT * FROM उपयोगकर्ता`,
+			"SELECT *\nFROM उपयोगकर्ता"},
+		{"devanagari_postgres", keywords.DialectPostgreSQL, `SELECT * FROM उपयोगकर्ता`,
+			"SELECT *\nFROM उपयोगकर्ता"},
+		{"devanagari_cte", keywords.DialectGeneric, `WITH उपयोगकर्ता AS (SELECT 1) SELECT * FROM उपयोगकर्ता`,
+			"WITH उपयोगकर्ता AS (SELECT 1)\nSELECT *\nFROM उपयोगकर्ता"},
+		{"decomposed_postgres", keywords.DialectPostgreSQL, "SELECT * FROM Cafe\u0301",
+			"SELECT *\nFROM Cafe\u0301"},
+	}
+	readableOpts := ast.ReadableStyle()
+	readableOpts.AddSemicolon = false
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, err := gosqlx.ParseWithDialect(tc.sql, tc.dialect)
+			if err != nil {
+				t.Fatalf("parse %q: %v", tc.sql, err)
+			}
+			defer ast.ReleaseAST(tree)
+			if got := tree.SQL(); got != tc.sql {
+				t.Errorf("SQL() mismatch\n got: %s\nwant: %s", got, tc.sql)
+			}
+			if got := formatter.FormatAST(tree, ast.CompactStyle()); got != tc.sql {
+				t.Errorf("FormatAST(compact) mismatch\n got: %s\nwant: %s", got, tc.sql)
+			}
+			if got := formatter.FormatAST(tree, readableOpts); got != tc.readable {
+				t.Errorf("FormatAST(readable) mismatch\n got: %q\nwant: %q", got, tc.readable)
+			}
+		})
+	}
+}

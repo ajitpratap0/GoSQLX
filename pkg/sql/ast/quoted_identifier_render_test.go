@@ -118,6 +118,12 @@ func TestQuotedIdentifierRender_Issue611(t *testing.T) {
 		{"guard_mixed_case_bare", `SELECT Mixed, id FROM Users`, ""},
 		{"guard_from_key", `SELECT * FROM key`, ""},
 		{"guard_cte_columns_bare", `WITH c (a, b) AS (SELECT 1, 2) SELECT * FROM c`, ""},
+		// Bare names with combining marks (Devanagari vowel signs, a
+		// decomposed accent) are valid bare identifiers and stay unquoted.
+		{"guard_devanagari_table", `SELECT * FROM उपयोगकर्ता`, ""},
+		{"guard_devanagari_cte", `WITH उपयोगकर्ता AS (SELECT 1) SELECT * FROM उपयोगकर्ता`, ""},
+		{"guard_decomposed_table", "SELECT * FROM Cafe\u0301", ""},
+		{"guard_decomposed_join", "SELECT * FROM a LEFT JOIN cafe\u0301_tbl c ON a.id = c.id", ""},
 	}
 	for _, tc := range cases {
 		want := tc.want

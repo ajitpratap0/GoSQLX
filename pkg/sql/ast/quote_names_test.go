@@ -32,6 +32,14 @@ func TestQuoteName(t *testing.T) {
 		{"#temp", `"#temp"`},
 		{"naïve", "naïve"},
 		{"ROW_NUMBER", "ROW_NUMBER"},
+		// Combining marks (Mn, Mc) and connector punctuation (Pc) are bare
+		// identifier parts after the first rune, as in the tokenizer.
+		{"उपयोगकर्ता", "उपयोगकर्ता"},
+		{"cafe\u0301_tbl", "cafe\u0301_tbl"},
+		{"a\u203fb", "a\u203fb"},
+		// The tokenizer does not start a bare name with a mark or Pc rune.
+		{"\u0301a", "\"\u0301a\""},
+		{"\u203fab", "\"\u203fab\""},
 	}
 	for _, tc := range cases {
 		if got := QuoteName(tc.in); got != tc.want {
@@ -53,6 +61,10 @@ func TestQuoteQualifiedName(t *testing.T) {
 		{"@db.sch.mystage/data", "@db.sch.mystage/data"},
 		{"DUAL", "DUAL"},
 		{"db..t", `db."".t`},
+		{"उपयोगकर्ता", "उपयोगकर्ता"},
+		{"db.उपयोगकर्ता", "db.उपयोगकर्ता"},
+		{"Cafe\u0301", "Cafe\u0301"},
+		{"db.\u0301a", "db.\"\u0301a\""},
 	}
 	for _, tc := range cases {
 		if got := QuoteQualifiedName(tc.in); got != tc.want {

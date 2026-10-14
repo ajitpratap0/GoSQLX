@@ -98,15 +98,23 @@ func isReservedName(name string, table bool) bool {
 
 // nameNeedsQuoting reports whether a single name part must be double-quoted
 // to re-parse as the same name: it contains a character other than a letter,
-// digit or '_', or it is a reserved word for the position. In table positions
-// (table is true) '$', '#' and '@' are also allowed bare so SQL Server #temp
-// tables and Snowflake @stage references keep their form.
+// digit or '_' (or, after the first rune, a combining mark or connector
+// punctuation, which the tokenizer also accepts in a bare identifier), or it
+// is a reserved word for the position. In table positions (table is true)
+// '$', '#' and '@' are also allowed bare so SQL Server #temp tables and
+// Snowflake @stage references keep their form.
 func nameNeedsQuoting(name string, table bool) bool {
 	if name == "" {
 		return false
 	}
-	for _, r := range name {
+	for i, r := range name {
 		if r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r) {
+			continue
+		}
+		// Mirrors tokenizer.unicodeIdentifierPartSlow: Mn and Mc combining
+		// marks (Indic vowel signs, decomposed accents) and Pc connector
+		// punctuation are bare identifier parts, but never a first rune.
+		if i > 0 && r >= 0x80 && (unicode.Is(unicode.Mn, r) || unicode.Is(unicode.Mc, r) || unicode.Is(unicode.Pc, r)) {
 			continue
 		}
 		if table && (r == '$' || r == '#' || r == '@') {

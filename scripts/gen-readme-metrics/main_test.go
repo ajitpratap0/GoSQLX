@@ -14,6 +14,8 @@ func TestSyncBanners(t *testing.T) {
 		{"bold version no v", "**Version**: 1.6.0", "**Version**: 1.15.0"},
 		{"current version", "**Current Version**: v1.14.0 | x", "**Current Version**: v1.15.0 | x"},
 		{"no v prefix", "**GoSQLX Version**: 1.14.0", "**GoSQLX Version**: 1.15.0"},
+		{"colon inside bold", "**Version:** v1.6.0", "**Version:** v1.15.0"},
+		{"colon inside bold GoSQLX", "**GoSQLX Version:** v1.6.0", "**GoSQLX Version:** v1.15.0"},
 		{"history untouched", "| ✅ v1.14.0 |", "| ✅ v1.14.0 |"},
 	}
 	for _, tc := range tests {

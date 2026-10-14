@@ -77,8 +77,8 @@ func replaceBlock(src, name, body string) (string, error) {
 // replaced, groups 1 and 3 are preserved.
 var bannerPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?m)^(# .*\(v)(\d+\.\d+\.\d+)(\)\s*)$`),
-	regexp.MustCompile(`(?m)^(\*\*(?:Current )?Version\*\*: v?)(\d+\.\d+\.\d+)()`),
-	regexp.MustCompile(`(?m)^(\*\*(?:GoSQLX|Test Suite) Version\*\*: )(\d+\.\d+\.\d+)(\s*)$`),
+	regexp.MustCompile(`(?m)^(\*\*(?:Current )?Version(?::\*\*|\*\*:) v?)(\d+\.\d+\.\d+)()`),
+	regexp.MustCompile(`(?m)^(\*\*(?:GoSQLX|Test Suite) Version(?::\*\*|\*\*:) v?)(\d+\.\d+\.\d+)(\s*)$`),
 }
 
 func syncBanners(src, version string) string {

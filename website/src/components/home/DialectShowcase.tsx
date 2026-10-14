@@ -65,7 +65,7 @@ export function DialectShowcase() {
                   {dialect.compliance}%
                 </p>
                 {dialect.detail && (
-                  <p className="text-xs text-zinc-500 mb-2">{dialect.detail}</p>
+                  <p className="text-xs text-text-muted mb-2">{dialect.detail}</p>
                 )}
                 <span
                   className={`inline-block text-xs font-medium px-2.5 py-0.5 rounded-full border ${statusColors[dialect.status]}`}

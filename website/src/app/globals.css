@@ -22,7 +22,7 @@
 
   --color-text-primary: #F0F0F5;
   --color-text-secondary: #9494A8;
-  --color-text-muted: #6B6B80;
+  --color-text-muted: #8B8BA0;
   --color-link: #6366F1;
 
   --color-border-default: rgba(255, 255, 255, 0.08);
@@ -125,9 +125,16 @@ html.light {
   --color-bg-hover: #E5E7EB;
   --color-text-primary: #1A1A2E;
   --color-text-secondary: #4B5563;
-  --color-text-muted: #9CA3AF;
+  --color-text-muted: #5B6472;
   --color-border-default: rgba(0, 0, 0, 0.08);
   --color-border-hover: rgba(0, 0, 0, 0.15);
+}
+
+/* @theme inline bakes token values into utilities, so the html.light variable
+   overrides never reach them; override the muted-text utilities explicitly. */
+html.light .text-text-muted,
+html.light .placeholder\:text-text-muted::placeholder {
+  color: #5B6472;
 }
 
 /* --- Body --- */
@@ -238,21 +245,21 @@ html.light nav .text-lg.font-semibold { color: #1A1A2E; }
 html.light [class*="hover\\:bg-white\\/\\[0\\.04\\]"]:hover { background-color: rgba(0, 0, 0, 0.04); }
 
 /* Search button */
-html.light button[aria-label="Search documentation"],
-html.light button[aria-label="Search documentation"]:hover {
+html.light [data-search-trigger],
+html.light [data-search-trigger]:hover {
   background-color: rgba(0, 0, 0, 0.03);
   border-color: rgba(0, 0, 0, 0.12);
   color: #6B7280;
 }
-html.light button[aria-label="Search documentation"] kbd {
-  color: #9CA3AF;
+html.light [data-search-trigger] kbd {
+  color: #5B6472;
   border-color: rgba(0, 0, 0, 0.10);
   background-color: rgba(0, 0, 0, 0.03);
 }
 
 /* GitHub icon */
-html.light a[aria-label="GitHub"],
-html.light a[aria-label="GitHub"]:hover { color: #374151; }
+html.light [data-link-repo],
+html.light [data-link-repo]:hover { color: #374151; }
 
 /* Hamburger bars */
 html.light .bg-zinc-300 { background-color: #4B5563 !important; }
@@ -419,10 +426,10 @@ html.light .prose-dark {
 }
 
 /* --- ThemeToggle button --- */
-html.light button[aria-label*="Switch to"] {
+html.light [data-theme-toggle] {
   color: #4B5563;
 }
-html.light button[aria-label*="Switch to"]:hover {
+html.light [data-theme-toggle]:hover {
   color: #1A1A2E;
   background-color: rgba(0, 0, 0, 0.04);
 }
@@ -451,6 +458,13 @@ html.light [class*="shadow-indigo-500\\/"] { --tw-shadow-color: rgba(99, 102, 24
 
 /* --- Gradient accent line in footer --- */
 html.light .opacity-40[class*="bg-gradient"] { opacity: 0.2; }
+
+/* Keyboard focus ring (unlayered so it wins over utility resets) */
+:focus-visible {
+  outline: 2px solid var(--color-link);
+  outline-offset: 2px;
+}
+html.light :focus-visible { outline-color: #4F46E5; }
 
 /* Respect prefers-reduced-motion for all animations */
 @media (prefers-reduced-motion: reduce) {

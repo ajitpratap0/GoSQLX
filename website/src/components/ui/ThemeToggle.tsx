@@ -57,8 +57,10 @@ export function ThemeToggle() {
     return (
       <button
         type="button"
-        className="text-zinc-300 hover:text-white transition-colors duration-200 p-2 rounded-lg hover:bg-white/[0.04]"
-        aria-label="Toggle theme"
+        data-theme-toggle=""
+        className="inline-flex min-h-11 min-w-11 items-center justify-center text-zinc-300 hover:text-white transition-colors duration-200 p-2 rounded-lg hover:bg-white/[0.04]"
+        aria-label="Dark mode"
+        aria-pressed="true"
       >
         <span className="block w-5 h-5" />
       </button>
@@ -69,8 +71,10 @@ export function ThemeToggle() {
     <m.button
       type="button"
       onClick={toggle}
-      className="text-zinc-400 hover:text-white transition-colors duration-200 p-2 rounded-lg hover:bg-white/[0.04] relative overflow-hidden"
-      aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+      data-theme-toggle=""
+      className="inline-flex min-h-11 min-w-11 items-center justify-center text-zinc-400 hover:text-white transition-colors duration-200 p-2 rounded-lg hover:bg-white/[0.04] relative overflow-hidden"
+      aria-label="Dark mode"
+      aria-pressed={theme === 'dark'}
       whileTap={{ scale: 0.9 }}
       transition={{ type: 'spring', stiffness: 400, damping: 17 }}
     >

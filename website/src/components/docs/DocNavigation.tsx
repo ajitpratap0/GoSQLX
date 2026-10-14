@@ -19,7 +19,7 @@ export function DocNavigation({ prev, next }: DocNavigationProps) {
           href={`/docs/${prev.slug}`}
           className="glass glass-hover group flex flex-col gap-2 rounded-xl p-5 transition-all"
         >
-          <span className="text-xs font-medium uppercase tracking-wider text-zinc-500">
+          <span className="text-xs font-medium uppercase tracking-wider text-text-muted">
             Previous
           </span>
           <span className="flex items-center gap-2 text-sm font-medium text-zinc-300 transition-colors group-hover:text-white">
@@ -44,7 +44,7 @@ export function DocNavigation({ prev, next }: DocNavigationProps) {
           href={`/docs/${next.slug}`}
           className="glass glass-hover group flex flex-col items-end gap-2 rounded-xl p-5 text-right transition-all"
         >
-          <span className="text-xs font-medium uppercase tracking-wider text-zinc-500">
+          <span className="text-xs font-medium uppercase tracking-wider text-text-muted">
             Next
           </span>
           <span className="flex items-center gap-2 text-sm font-medium text-zinc-300 transition-colors group-hover:text-white">

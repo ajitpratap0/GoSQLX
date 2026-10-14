@@ -51,7 +51,7 @@ export function Toc({ headings, variant = 'rail' }: TocProps) {
                 activeId === heading.id
                   ? 'text-white font-medium'
                   : heading.level === 3
-                  ? 'text-zinc-500 hover:text-zinc-300'
+                  ? 'text-text-muted hover:text-zinc-300'
                   : 'text-zinc-400 hover:text-zinc-300'
               }`}
             >
@@ -87,7 +87,7 @@ export function Toc({ headings, variant = 'rail' }: TocProps) {
 
   return (
     <nav aria-label="On this page" className="sticky top-20 hidden xl:block">
-      <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+      <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
         On this page
       </h4>
       {list}

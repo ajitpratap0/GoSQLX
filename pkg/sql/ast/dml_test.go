@@ -491,7 +491,7 @@ func TestFunctionDesc(t *testing.T) {
 			if len(children) != 1 {
 				t.Fatalf("FunctionDesc.Children() = %v (len %d), want 1 child (Name)", children, len(children))
 			}
-			if on, ok := children[0].(ObjectName); !ok || on != tt.funcDesc.Name {
+			if on, ok := children[0].(*ObjectName); !ok || *on != tt.funcDesc.Name {
 				t.Errorf("FunctionDesc.Children()[0] = %v, want %v", children[0], tt.funcDesc.Name)
 			}
 		})

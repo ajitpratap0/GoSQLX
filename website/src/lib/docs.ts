@@ -13,6 +13,8 @@ export interface Doc {
   description: string;
   content: string;
   category: string;
+  /** Source file mtime (ISO 8601), used for TechArticle dateModified. */
+  modifiedAt: string;
 }
 
 export interface DocHeading {
@@ -127,6 +129,7 @@ export function getDocBySlug(slug: string): Doc | null {
     description: sidebarItem.description,
     content,
     category: categoryName,
+    modifiedAt: fs.statSync(filePath).mtime.toISOString(),
   };
 }
 

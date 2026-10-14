@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { compileMDX } from 'next-mdx-remote/rsc';
 import remarkGfm from 'remark-gfm';
+import { JsonLd } from '@/components/JsonLd';
 import { blogPostHref, getAllPosts, getPostBySlug, getPostSlugs } from '@/lib/blog';
 
 interface Props {
@@ -57,7 +58,7 @@ export default async function BlogPostPage({ params }: Props) {
     headline: post.title,
     description: post.description,
     datePublished: post.date ? `${post.date}T00:00:00Z` : undefined,
-    dateModified: post.date ? `${post.date}T00:00:00Z` : undefined,
+    dateModified: post.updated ? `${post.updated}T00:00:00Z` : undefined,
     url: `https://gosqlx.dev/blog/${slug}/`,
     author: {
       '@type': 'Organization',
@@ -85,13 +86,19 @@ export default async function BlogPostPage({ params }: Props) {
     },
   };
 
+  const breadcrumbJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://gosqlx.dev/' },
+      { '@type': 'ListItem', position: 2, name: 'Release Notes', item: 'https://gosqlx.dev/blog/' },
+      { '@type': 'ListItem', position: 3, name: post.title, item: `https://gosqlx.dev/blog/${slug}/` },
+    ],
+  };
+
   return (
     <>
-      <script
-        type="application/ld+json"
-        suppressHydrationWarning
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      <JsonLd data={[jsonLd, breadcrumbJsonLd]} />
       <main className="min-h-screen py-20 px-4">
         <article className="max-w-3xl mx-auto">
         {/* Back link */}

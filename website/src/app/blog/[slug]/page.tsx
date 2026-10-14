@@ -99,7 +99,7 @@ export default async function BlogPostPage({ params }: Props) {
   return (
     <>
       <JsonLd data={[jsonLd, breadcrumbJsonLd]} />
-      <main className="min-h-screen py-20 px-4">
+      <div className="min-h-screen py-20 px-4">
         <article className="max-w-3xl mx-auto">
         {/* Back link */}
         <Link
@@ -201,7 +201,7 @@ export default async function BlogPostPage({ params }: Props) {
           )}
         </nav>
         </article>
-      </main>
+      </div>
     </>
   );
 }

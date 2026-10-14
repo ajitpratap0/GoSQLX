@@ -201,8 +201,8 @@ func (p *Parser) parseCastLike(try bool) (*ast.CastExpression, error) {
 				return nil, goerrors.InvalidSyntaxError(
 					"expected numeric type parameter",
 					p.currentLocation(),
-					"Use CAST(expr AS TYPE(precision[, scale]))",
-				)
+					"",
+				).WithHint("Use CAST(expr AS TYPE(precision[, scale]))")
 			}
 
 			typeParams += p.currentToken.Token.Value
@@ -270,8 +270,8 @@ func (p *Parser) parseIntervalExpression() (*ast.IntervalExpression, error) {
 	return nil, goerrors.InvalidSyntaxError(
 		"expected string literal or number after INTERVAL keyword",
 		p.currentLocation(),
-		"Use INTERVAL '1 day' or INTERVAL 1 DAY syntax",
-	)
+		"",
+	).WithHint("Use INTERVAL '1 day' or INTERVAL 1 DAY syntax")
 }
 
 // parseIntervalQualifier parses the optional interval qualifier that follows

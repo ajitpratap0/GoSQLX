@@ -78,8 +78,8 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 			"table name",
 			p.currentToken.Token.Type.String(),
 			p.currentLocation(),
-			"FROM clause requires at least one table reference",
-		)
+			"",
+		).WithHint("FROM clause requires at least one table reference")
 	}
 
 	// First table reference. A leading parenthesized joined table
@@ -510,8 +510,8 @@ func (p *Parser) parseSampleClause() (*ast.SampleClause, error) {
 			"sampling size after SAMPLE",
 			p.currentToken.Token.Type.String(),
 			p.currentLocation(),
-			"SAMPLE clause requires a numeric argument",
-		)
+			"",
+		).WithHint("SAMPLE clause requires a numeric argument")
 	}
 
 	clause := &ast.SampleClause{Pos: samplePos}
@@ -522,8 +522,8 @@ func (p *Parser) parseSampleClause() (*ast.SampleClause, error) {
 			"numeric literal after SAMPLE",
 			p.currentToken.Token.Type.String(),
 			p.currentLocation(),
-			"SAMPLE clause requires a numeric argument (ratio, row count, or N/D fraction)",
-		)
+			"",
+		).WithHint("SAMPLE clause requires a numeric argument (ratio, row count, or N/D fraction)")
 	}
 	clause.Value = p.currentToken.Token.Value
 	p.advance()
@@ -536,8 +536,8 @@ func (p *Parser) parseSampleClause() (*ast.SampleClause, error) {
 				"denominator after /",
 				p.currentToken.Token.Type.String(),
 				p.currentLocation(),
-				"SAMPLE N/D fraction requires an integer denominator",
-			)
+				"",
+			).WithHint("SAMPLE N/D fraction requires an integer denominator")
 		}
 		clause.Denominator = p.currentToken.Token.Value
 		p.advance()
@@ -551,8 +551,8 @@ func (p *Parser) parseSampleClause() (*ast.SampleClause, error) {
 				"numeric literal after SAMPLE ... OFFSET",
 				p.currentToken.Token.Type.String(),
 				p.currentLocation(),
-				"SAMPLE OFFSET requires a numeric argument",
-			)
+				"",
+			).WithHint("SAMPLE OFFSET requires a numeric argument")
 		}
 		clause.Offset = p.currentToken.Token.Value
 		p.advance()
@@ -563,8 +563,8 @@ func (p *Parser) parseSampleClause() (*ast.SampleClause, error) {
 					"denominator after OFFSET /",
 					p.currentToken.Token.Type.String(),
 					p.currentLocation(),
-					"SAMPLE OFFSET N/D fraction requires an integer denominator",
-				)
+					"",
+				).WithHint("SAMPLE OFFSET N/D fraction requires an integer denominator")
 			}
 			clause.OffsetDenominator = p.currentToken.Token.Value
 			p.advance()
@@ -595,8 +595,8 @@ func (p *Parser) parsePrewhereClause() (ast.Expression, error) {
 			"expression after PREWHERE",
 			p.currentToken.Token.Type.String(),
 			p.currentLocation(),
-			"PREWHERE clause requires a boolean expression",
-		)
+			"",
+		).WithHint("PREWHERE clause requires a boolean expression")
 	}
 
 	return p.parseExpression()
@@ -621,8 +621,8 @@ func (p *Parser) parseWhereClause() (ast.Expression, error) {
 			"expression after WHERE",
 			p.currentToken.Token.Type.String(),
 			p.currentLocation(),
-			"WHERE clause requires a boolean expression",
-		)
+			"",
+		).WithHint("WHERE clause requires a boolean expression")
 	}
 
 	return p.parseExpression()

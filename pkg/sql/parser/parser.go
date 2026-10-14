@@ -950,8 +950,8 @@ func (p *Parser) checkStrictEmpty() error {
 		return goerrors.InvalidSyntaxError(
 			"empty statement not allowed in strict mode",
 			p.currentLocation(),
-			"provide at least one SQL statement",
-		)
+			"",
+		).WithHint("provide at least one SQL statement")
 	}
 	return nil
 }
@@ -962,8 +962,8 @@ func (p *Parser) checkStrictEmptySemicolon() error {
 		return goerrors.InvalidSyntaxError(
 			"empty statement not allowed in strict mode",
 			p.currentLocation(),
-			"remove extra semicolons or disable strict mode",
-		)
+			"",
+		).WithHint("remove extra semicolons or disable strict mode")
 	}
 	return nil
 }

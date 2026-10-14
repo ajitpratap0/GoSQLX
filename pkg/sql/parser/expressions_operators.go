@@ -386,8 +386,8 @@ func (p *Parser) parseArrayAccessExpression(arrayExpr ast.Expression) (ast.Expre
 			return nil, goerrors.InvalidSyntaxError(
 				"empty array subscript [] is not allowed",
 				p.currentLocation(),
-				"Use arr[index] or arr[start:end] syntax",
-			)
+				"",
+			).WithHint("Use arr[index] or arr[start:end] syntax")
 		}
 
 		// Check for slice starting with colon: arr[:end]

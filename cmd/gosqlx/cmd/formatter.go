@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
@@ -235,6 +236,10 @@ func (f *Formatter) formatSQL(sql string) (string, error) {
 		ast.ReleaseAST(parsedAST)
 	}()
 
+	if err := checkFormattable(parsedAST, tokens); err != nil {
+		return "", err
+	}
+
 	// Configure formatter options
 	indentStr := strings.Repeat(" ", f.Opts.IndentSize)
 	formatterOpts := FormatterOptions{
@@ -358,4 +363,47 @@ func FormatterOptionsFromConfig(cfg *config.Config, flagsChanged map[string]bool
 	}
 
 	return opts
+}
+
+// checkFormattable refuses parse results the CLI cannot rewrite faithfully, so
+// format, format -i and format -o leave such input unchanged.
+//
+// DescribeStatement keeps only a name: it drops EXPLAIN options, the explained
+// query and DESCRIBE object kinds, and "EXPLAIN VERBOSE|ANALYZE <stmt>" parses
+// as a DescribeStatement followed by <stmt>, which would rewrite a
+// non-executing EXPLAIN into the executable statement. UnsupportedStatement is
+// rendered as a comment. Both are refused by type. As a general guard, a parse
+// with more statements than semicolon-separated segments in the input means
+// the parser split a statement, which re-parsing the output cannot detect.
+func checkFormattable(tree *ast.AST, tokens []models.TokenWithSpan) error {
+	for _, stmt := range tree.Statements {
+		switch stmt.(type) {
+		case *ast.DescribeStatement, *ast.UnsupportedStatement:
+			return fmt.Errorf("unsupported statement type: %T (input left unchanged)", stmt)
+		}
+	}
+	if got, segs := len(tree.Statements), statementSegments(tokens); got > segs {
+		return fmt.Errorf("input parses as %d statements but has %d semicolon-separated statements (input left unchanged)", got, segs)
+	}
+	return nil
+}
+
+// statementSegments counts the non-empty runs of tokens between semicolons,
+// ignoring EOF, i.e. the most statements the input can legitimately hold.
+func statementSegments(tokens []models.TokenWithSpan) int {
+	segs := 0
+	inSeg := false
+	for _, tok := range tokens {
+		switch tok.Token.Type {
+		case models.TokenTypeSemicolon:
+			inSeg = false
+		case models.TokenTypeEOF:
+		default:
+			if !inSeg {
+				segs++
+				inSeg = true
+			}
+		}
+	}
+	return segs
 }

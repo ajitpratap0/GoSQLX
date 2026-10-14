@@ -7,10 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Covers everything merged since v1.14.0: the October 2026 performance audit
-(tracking issue #566), the batch-2 and batch-3 bug fixes, two architect-review
-sprints, new dialect coverage and the high-level `Tree` API. The release is
-source-compatible: exported signatures are unchanged apart from additions.
+Covers everything merged since v1.15.0: the October 2026 performance audit
+(tracking issue #566), the batch-2 and batch-3 bug fixes and new dialect
+coverage. The release is source-compatible: exported signatures are unchanged
+apart from additions.
 Runtime behaviour does change (rendered SQL, error codes and text, parse
 acceptance, CLI refusals), so read **Behavior changes** before upgrading.
 
@@ -96,20 +96,6 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   name. Tables with no foreign keys (and MySQL tables with no indexes) carry a
   nil slice instead of an empty one, which serializes as JSON `null`. (#582,
   fixes #579; #570, fixes #565)
-- **Linter rules inspect nested queries**: 14 built-in rules moved to `ast.Walk`
-  and 6 more were reinforced, so violations inside subqueries and CTEs are now
-  reported. Expect more findings on nested SQL. (#517)
-- **Structured parser errors**: 37 `fmt.Errorf` sites in the parser now return
-  structured `*errors.Error` values with position and code, and context
-  cancellation returns `ctx.Err()` directly so `errors.Is(err,
-  context.Canceled)` works. `*errors.Error.WithX` methods now copy instead of
-  mutating the receiver. Legacy `Parse`-family functions wrap the
-  `ErrSyntax`/`ErrTokenize`/`ErrTimeout`/`ErrUnsupportedDialect` sentinels.
-  (#517, #518)
-- **`parser.ValidateBytes("")` returns an error**, matching
-  `gosqlx.Validate("")`. Snowflake stub statements (`USE`, `COPY INTO`, `PUT`,
-  `GET`, `LIST`, `REMOVE`, `CREATE STAGE/STREAM/TASK/PIPE/...`) are now
-  `*ast.UnsupportedStatement` instead of `*ast.DescribeStatement`. (#511)
 - **LSP `Document.Lines` is shared**: `DocumentManager.Get` returns a fresh
   `*Document` header, but its `Lines` now aliases the manager's immutable slice.
   Treat it as read-only. (#573, fixes #564)
@@ -246,55 +232,11 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   `Tokenizer.TokenizeStringContext(ctx, s string)`**: tokenize a string in place
   without the `[]byte` round trip. Both return `[]models.TokenWithSpan`; token
   values reference `s`. (#595, fixes #546)
-- **High-level `Tree` API in `pkg/gosqlx`**: `ParseTree(ctx, sql, opts...)`
-  returns an opaque `*Tree` with typed walkers (`WalkSelects`, `WalkInserts`,
-  `WalkUpdates`, `WalkDeletes`, `WalkCreateTables`, `WalkJoins`, `WalkCTEs`,
-  `WalkFunctionCalls`, `WalkIdentifiers`, `WalkBinaryExpressions`, generic
-  `WalkBy[T]`), `Tree.Rewrite` and `Tree.Clone`. `FormatTree`/`FormatAST` format
-  without re-parsing. Functional options `WithDialect`, `WithStrict`,
-  `WithTimeout`, `WithRecovery` and `WithMaxBytes` replace the combinatorial
-  `ParseWith*` helpers, which remain. `ParseReader`/`ParseReaderMultiple` read
-  from an `io.Reader`, bounded by `WithMaxBytes`; `errors.Is(err,
-  gosqlx.ErrTooLarge)` matches when the limit is exceeded. (#517, #518)
-- **Dialect-aware `gosqlx.SplitStatements(sql, dialect)`**: splits a script on
-  top-level `;`, honouring PostgreSQL dollar quoting and E-strings, nested block
-  comments, MySQL backticks and SQL Server brackets. Segments are substrings of
-  `sql`, so keeping one keeps the script alive. (#518, #569)
-- **One-call `gosqlx.Lint`, `gosqlx.Analyze` and error helpers**: `Lint(sql)`
-  runs all 30 built-in rules, `Analyze(sql)` reports basic optimization hints and
-  query complexity, and `ErrorCode`, `ErrorLocation` and `ErrorHint` unwrap
-  structured error details through `fmt.Errorf` wrapping. (#512)
-- **`pkg/sql/dialect`**: typed `Dialect` and a `Capabilities` struct with
-  feature flags, exposed through `Parser.DialectTyped()`,
-  `Parser.Capabilities()` and `Parser.Is<Dialect>()` helpers. (#517, #518)
-- **`.gosqlx.yml` linter configuration (`pkg/linter/config`)**: YAML loader
-  with rule enable/disable, severity overrides and ignore globs. (#517)
-- **`keywords.Conflicts()`**: reports keyword registrations that collide across
-  dialects; 11 silent conflicts were resolved. (#517)
-- **`ast.UnsupportedStatement` and `AST.HasUnsupportedStatements()`**: parse-only
-  Snowflake stubs are now their own node type, and the formatter emits
-  `-- UNSUPPORTED: <raw SQL>` for them instead of corrupt SQL. (#511)
-- **`EXTRACT(field FROM expr)`** parses. (#511)
-- **ClickHouse at 83/83 of the QA corpus**: `ARRAY JOIN` / `LEFT ARRAY JOIN`
-  (new `ArrayJoinClause`), scalar CTEs (`WITH <expr> AS <name>`),
-  `CREATE MATERIALIZED VIEW` with `ENGINE`/`TO`, `CREATE TABLE ... AS <source>
-  ENGINE = ...`, numeric `SAMPLE` arguments with `OFFSET`, and `LIMIT offset,
-  count`. (#513)
-- **Named `WINDOW` clause** (SQL:2003): `WINDOW w AS (PARTITION BY a ORDER BY
-  b)`. (#513)
-- **Oracle compatibility**: `ROWNUM`/`ROWID`/`LEVEL`/`SYSDATE` pseudo-columns
-  with implicit aliases, `PIVOT`/`UNPIVOT` `IN` lists with `AS` aliases, and
-  backslashes treated literally in string literals outside MySQL/PostgreSQL.
-  (#513)
 - **ClickHouse `SAMPLE` and `ORDER BY ... WITH FILL` round-trip**: `SAMPLE` now
   renders, and `WITH FILL [FROM x] [TO y] [STEP z]` is stored in the new
   `WithFillClause` instead of being skipped. (#534)
 - **ClickHouse tuple/array element access with a dot** (`d.1`, `tuple.2`).
   (#535)
-- **`SQL()` for `PragmaStatement`, `ShowStatement`, `DescribeStatement` and
-  `ReplaceStatement`**. (#513)
-- **`ast.PoolLeakCount()`**: counts work-queue entries dropped while releasing
-  expressions. (#517)
 - **`JOIN ... USING (cols)` is kept**: stored in the new `JoinClause.Using`
   (one `*ast.Identifier` per column, `Condition` left nil) and rendered as
   `USING (c1, c2)` by `SQL()`, `pkg/formatter` and `gosqlx format`, instead of
@@ -351,18 +293,11 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   (see Behavior changes). (#620, #622)
 
 ### Changed
-- **Deprecations**: `pkg/sql/monitor` is deprecated in favour of `pkg/metrics`.
-  The legacy parser APIs `Parse([]token.Token)`,
-  `ParseFromModelTokensWithPositions` and `ConversionResult.PositionMapping` are
-  scheduled for removal in v2.0. (#511)
 - **`tokenizer.NewWithKeywords` no longer consults its keyword table**: the
   tokenizer's keyword field was never read, so it was removed. `NewWithKeywords`
   keeps its signature and nil check. `keywords.Conflicts()` now reflects only
   explicit `keywords.New` calls, because parsing no longer calls it. (#595,
   fixes #550)
-- **`pkg/sql/ast` source split**: `ast.go` and `pool.go` were split into
-  statement, expression, clause and release files. No declarations changed.
-  (#518)
 
 ### Fixed
 - **Tokenizer pool no longer leaks dialect state**: a tokenizer whose dialect was
@@ -413,21 +348,6 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   derived-table subquery twice through `Joins[i].Left`, which could make two
   later `GetSelectStatement` calls return the same object. Pooled expression
   nodes no longer carry stale fields. (#581, fixes #555)
-- **Pool leaks**: `PutSelectStatement` released only some pooled fields, large
-  `IN` lists overflowed the `PutExpression` work queue, and subqueries inside
-  `IN`/`EXISTS`/`ANY`/`ALL`/array constructors were never released. (#517,
-  #518)
-- **`Children()` coverage**: 14 AST node types returned no children despite
-  holding nodes, so `Walk`/`Inspect` skipped them. (#517)
-- **LSP**: statement dispatch uses a type switch instead of `%T` string matching,
-  and `documentSymbol` returns real ranges instead of line 0 to EOF. (#517)
-- **Oracle and ClickHouse parsing**: `CONNECT BY` / `IS NULL` is no longer
-  misread as a CTE, `SETTINGS` and numeric `SAMPLE` are no longer consumed as
-  table aliases, and the SQL Server `OUTPUT` clause on INSERT parses in every
-  dialect. (#513)
-- **`gosqlx.ParseBytes`** passes bytes straight to the tokenizer, and seven
-  previously skipped extraction cases (CASE, CAST, IN, BETWEEN, EXTRACT,
-  recursive CTEs) are fixed. (#511)
 - **Long comment runs no longer grow the stack**: the tokenizer skips
   consecutive comments in a loop instead of recursing once per comment. (#597)
 - **`NOT EXISTS (subquery)` rendered as `NOT (EXISTS (...) NOT )`**, which failed
@@ -558,17 +478,12 @@ Numbers are quoted from each PR (benchstat on an Apple M4 unless stated; the
   pre-merge security review. (#597)
 - **Tokenizer CPU-DoS on long single lines fixed** by linear position tracking.
   (#577, fixes #544)
-- **Metrics error counters are bounded**: error statistics were keyed by
-  `err.Error()`, an unbounded map that could exhaust memory. They are now
-  counted per error code. (#517)
 - **Code-scanning and Dependabot alerts**: every GitHub Actions `uses:` is pinned
   to a commit SHA, workflows default to read-only permissions, install commands
   use pinned versions or lockfiles, blog slugs are validated (3 XSS alerts),
   Docker base images are pinned by digest, and OpenTelemetry v1.47.0,
   `filippo.io/edwards25519` v1.1.1 and `golang.org/x/sys` v0.49.0 are picked up.
   (#567)
-- **Trivy findings**: `golang.org/x/crypto` raised to v0.54.0 and
-  `brace-expansion` pinned to `^5.0.8` in the VS Code extension. (#528)
 - **Scanner descends into table-function arguments**: `url(...)`, `file(...)`
   and similar ClickHouse table functions are detected as out-of-band access
   (also via a `FROM|JOIN <fn>(` pattern), and the scanner descends into array
@@ -580,16 +495,123 @@ Numbers are quoted from each PR (benchstat on an Apple M4 unless stated; the
   parenthesized set operations became parseable. (#612, #630)
 
 ### Internal
+- CI: claude-code-action v1, fork-PR review skip, Scorecard v2.4.4 and a valid
+  glama-sync workflow (#536, #538, #539, #540); `.gitattributes` enforcing LF
+  line endings for golden fixtures (#594).
+- Website and playground: the playground WASM is built during deployment,
+  revalidated by browsers and no longer committed (#543, #580).
+- Docs: the CHANGELOG restored after the #526 merge emptied it (#593).
+
+## [1.15.0] - 2026-07-30 — Tree API, ClickHouse 100%, Oracle Gaps, Correctness Sweep
+
+Covers everything merged between v1.14.0 and the October 2026 performance
+audit: the high-level `Tree` API, ClickHouse at 83/83 of the QA corpus, Oracle
+gaps, and two architect-review correctness sprints (#517, #518). Exported
+signatures are unchanged apart from additions; read **Behavior changes**
+before upgrading.
+
+### Behavior changes
+- **Linter rules inspect nested queries**: 14 built-in rules moved to `ast.Walk`
+  and 6 more were reinforced, so violations inside subqueries and CTEs are now
+  reported. Expect more findings on nested SQL. (#517)
+- **Structured parser errors**: 37 `fmt.Errorf` sites in the parser now return
+  structured `*errors.Error` values with position and code, and context
+  cancellation returns `ctx.Err()` directly so `errors.Is(err,
+  context.Canceled)` works. `*errors.Error.WithX` methods now copy instead of
+  mutating the receiver. Legacy `Parse`-family functions wrap the
+  `ErrSyntax`/`ErrTokenize`/`ErrTimeout`/`ErrUnsupportedDialect` sentinels.
+  (#517, #518)
+- **`parser.ValidateBytes("")` returns an error**, matching
+  `gosqlx.Validate("")`. Snowflake stub statements (`USE`, `COPY INTO`, `PUT`,
+  `GET`, `LIST`, `REMOVE`, `CREATE STAGE/STREAM/TASK/PIPE/...`) are now
+  `*ast.UnsupportedStatement` instead of `*ast.DescribeStatement`. (#511)
+
+### Added
+- **High-level `Tree` API in `pkg/gosqlx`**: `ParseTree(ctx, sql, opts...)`
+  returns an opaque `*Tree` with typed walkers (`WalkSelects`, `WalkInserts`,
+  `WalkUpdates`, `WalkDeletes`, `WalkCreateTables`, `WalkJoins`, `WalkCTEs`,
+  `WalkFunctionCalls`, `WalkIdentifiers`, `WalkBinaryExpressions`, generic
+  `WalkBy[T]`), `Tree.Rewrite` and `Tree.Clone`. `FormatTree`/`FormatAST` format
+  without re-parsing. Functional options `WithDialect`, `WithStrict`,
+  `WithTimeout`, `WithRecovery` and `WithMaxBytes` replace the combinatorial
+  `ParseWith*` helpers, which remain. `ParseReader`/`ParseReaderMultiple` read
+  from an `io.Reader`, bounded by `WithMaxBytes`; `errors.Is(err,
+  gosqlx.ErrTooLarge)` matches when the limit is exceeded. (#517, #518)
+- **Dialect-aware `gosqlx.SplitStatements(sql, dialect)`**: splits a script on
+  top-level `;`, honouring PostgreSQL dollar quoting and E-strings, nested block
+  comments, MySQL backticks and SQL Server brackets. (#518)
+- **One-call `gosqlx.Lint`, `gosqlx.Analyze` and error helpers**: `Lint(sql)`
+  runs all 30 built-in rules, `Analyze(sql)` reports basic optimization hints and
+  query complexity, and `ErrorCode`, `ErrorLocation` and `ErrorHint` unwrap
+  structured error details through `fmt.Errorf` wrapping. (#512)
+- **`pkg/sql/dialect`**: typed `Dialect` and a `Capabilities` struct with
+  feature flags, exposed through `Parser.DialectTyped()`,
+  `Parser.Capabilities()` and `Parser.Is<Dialect>()` helpers. (#517, #518)
+- **`.gosqlx.yml` linter configuration (`pkg/linter/config`)**: YAML loader
+  with rule enable/disable, severity overrides and ignore globs. (#517)
+- **`keywords.Conflicts()`**: reports keyword registrations that collide across
+  dialects; 11 silent conflicts were resolved. (#517)
+- **`ast.UnsupportedStatement` and `AST.HasUnsupportedStatements()`**: parse-only
+  Snowflake stubs are now their own node type, and the formatter emits
+  `-- UNSUPPORTED: <raw SQL>` for them instead of corrupt SQL. (#511)
+- **`EXTRACT(field FROM expr)`** parses. (#511)
+- **ClickHouse at 83/83 of the QA corpus**: `ARRAY JOIN` / `LEFT ARRAY JOIN`
+  (new `ArrayJoinClause`), scalar CTEs (`WITH <expr> AS <name>`),
+  `CREATE MATERIALIZED VIEW` with `ENGINE`/`TO`, `CREATE TABLE ... AS <source>
+  ENGINE = ...`, numeric `SAMPLE` arguments with `OFFSET`, and `LIMIT offset,
+  count`. (#513)
+- **Named `WINDOW` clause** (SQL:2003): `WINDOW w AS (PARTITION BY a ORDER BY
+  b)`. (#513)
+- **Oracle compatibility**: `ROWNUM`/`ROWID`/`LEVEL`/`SYSDATE` pseudo-columns
+  with implicit aliases, `PIVOT`/`UNPIVOT` `IN` lists with `AS` aliases, and
+  backslashes treated literally in string literals outside MySQL/PostgreSQL.
+  (#513)
+- **`SQL()` for `PragmaStatement`, `ShowStatement`, `DescribeStatement` and
+  `ReplaceStatement`**. (#513)
+- **`ast.PoolLeakCount()`**: counts work-queue entries dropped while releasing
+  expressions. (#517)
+
+### Changed
+- **Deprecations**: `pkg/sql/monitor` is deprecated in favour of `pkg/metrics`.
+  The legacy parser APIs `Parse([]token.Token)`,
+  `ParseFromModelTokensWithPositions` and `ConversionResult.PositionMapping` are
+  scheduled for removal in v2.0. (#511)
+- **`pkg/sql/ast` source split**: `ast.go` and `pool.go` were split into
+  statement, expression, clause and release files. No declarations changed.
+  (#518)
+
+### Fixed
+- **Pool leaks**: `PutSelectStatement` released only some pooled fields, large
+  `IN` lists overflowed the `PutExpression` work queue, and subqueries inside
+  `IN`/`EXISTS`/`ANY`/`ALL`/array constructors were never released. (#517,
+  #518)
+- **`Children()` coverage**: 14 AST node types returned no children despite
+  holding nodes, so `Walk`/`Inspect` skipped them. (#517)
+- **LSP**: statement dispatch uses a type switch instead of `%T` string matching,
+  and `documentSymbol` returns real ranges instead of line 0 to EOF. (#517)
+- **Oracle and ClickHouse parsing**: `CONNECT BY` / `IS NULL` is no longer
+  misread as a CTE, `SETTINGS` and numeric `SAMPLE` are no longer consumed as
+  table aliases, and the SQL Server `OUTPUT` clause on INSERT parses in every
+  dialect. (#513)
+- **`gosqlx.ParseBytes`** passes bytes straight to the tokenizer, and seven
+  previously skipped extraction cases (CASE, CAST, IN, BETWEEN, EXTRACT,
+  recursive CTEs) are fixed. (#511)
+
+### Security
+- **Metrics error counters are bounded**: error statistics were keyed by
+  `err.Error()`, an unbounded map that could exhaust memory. They are now
+  counted per error code. (#517)
+- **Trivy findings**: `golang.org/x/crypto` raised to v0.54.0 and
+  `brace-expansion` pinned to `^5.0.8` in the VS Code extension. (#528)
+
+### Internal
 - CI: performance-regression and fuzz-regression jobs, `codecov.yml` thresholds,
   and the `bodyclose`/`noctx` linters (#512); a CI gate against new
-  `p.dialect ==` comparisons (#518); claude-code-action v1, fork-PR review skip,
-  Scorecard v2.4.4 and a valid glama-sync workflow (#536, #538, #539, #540);
-  `.gitattributes` enforcing LF line endings for golden fixtures (#594).
-- Website and playground: site revamp, light-mode fixes and animations (#514,
-  #515, #516); the playground WASM is built during deployment, revalidated by
-  browsers and no longer committed (#543, #580).
-- Docs: version and rule-count sweep (#510), integrations bumped to v1.14.0
-  (#509), and the CHANGELOG restored after the #526 merge emptied it (#593).
+  `p.dialect ==` comparisons (#518); race tests run through `task test:race`
+  with a separate CGO `task test:cbinding` job (#513, #517).
+- Website: site revamp, light-mode fixes and animations (#514, #515, #516).
+- Docs: version and rule-count sweep (#510); integrations bumped to v1.14.0
+  (#509).
 
 ## [1.14.0] - 2026-04-12 — Dialect-Aware Transforms, Snowflake 100%, Schema Introspection
 
@@ -2380,7 +2402,8 @@ For questions about upgrading or changelog entries:
 - Open an issue: https://github.com/ajitpratap0/GoSQLX/issues
 - Join discussions: https://github.com/ajitpratap0/GoSQLX/discussions
 
-[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.14.0...HEAD
+[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.15.0...HEAD
+[1.15.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.12.1...v1.13.0
 [1.12.1]: https://github.com/ajitpratap0/GoSQLX/compare/v1.12.0...v1.12.1

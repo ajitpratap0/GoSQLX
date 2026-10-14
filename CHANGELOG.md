@@ -8,10 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 Covers everything merged since v1.14.0: the October 2026 performance audit
-(tracking issue #566), the batch-2 bug fixes, two architect-review sprints, new
-dialect coverage and the high-level `Tree` API. Exported signatures are
-unchanged apart from additions, but several observable behaviours changed.
-Read **Behavior changes** before upgrading.
+(tracking issue #566), the batch-2 and batch-3 bug fixes, two architect-review
+sprints, new dialect coverage and the high-level `Tree` API. The release is
+source-compatible: exported signatures are unchanged apart from additions.
+Runtime behaviour does change (rendered SQL, error codes and text, parse
+acceptance, CLI refusals), so read **Behavior changes** before upgrading.
 
 ### Behavior changes
 - **Comments now count toward `MaxTokens`**: tokens plus collected comments may

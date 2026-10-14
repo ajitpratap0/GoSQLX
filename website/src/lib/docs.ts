@@ -6,6 +6,8 @@ import { DOCS_SIDEBAR } from './constants';
 export interface Doc {
   slug: string;
   title: string;
+  /** Sidebar label, used for the page <title>. */
+  label: string;
   content: string;
   category: string;
 }
@@ -89,6 +91,7 @@ export function getDocBySlug(slug: string): Doc | null {
   return {
     slug: sidebarItem.slug,
     title,
+    label: sidebarItem.label,
     content,
     category: categoryName,
   };

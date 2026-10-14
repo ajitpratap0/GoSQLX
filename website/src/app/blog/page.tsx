@@ -1,19 +1,14 @@
-import { Metadata } from 'next';
+import type { Metadata } from 'next';
+import { pageMeta } from '@/lib/seo';
 import { getAllPosts } from '@/lib/blog';
 import { BlogList } from './BlogList';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta({
   title: 'Changelog',
-  description: 'GoSQLX changelog — new features, improvements, and bug fixes across all versions of the SQL parsing SDK.',
-  alternates: {
-    canonical: '/blog/',
-  },
-  openGraph: {
-    title: 'GoSQLX Changelog',
-    description: 'New features, improvements, and bug fixes across all GoSQLX versions.',
-    url: '/blog/',
-  },
-};
+  description:
+    'GoSQLX changelog: new features, improvements, and bug fixes across all versions of the SQL parsing SDK.',
+  path: '/blog/',
+});
 
 export default function BlogPage() {
   const posts = getAllPosts();

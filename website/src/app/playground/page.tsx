@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
+import { pageMeta } from '@/lib/seo';
 import PlaygroundLoader from './PlaygroundLoader';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta({
   title: 'SQL Playground',
-  description: 'Interactive SQL playground - parse, format, lint, and analyze SQL in the browser',
-  alternates: { canonical: '/playground/' },
-};
+  description:
+    'Interactive SQL playground: parse, format, lint, and analyze SQL in the browser.',
+  path: '/playground/',
+});
 
 export default function PlaygroundPage() {
   return (

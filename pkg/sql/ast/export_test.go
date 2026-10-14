@@ -23,3 +23,13 @@ func ReservedNameWordsForTest() map[string]bool {
 	}
 	return m
 }
+
+// KeywordFunctionNamesForTest returns a copy of keywordFunctionNames for the
+// external guard test in package ast_test.
+func KeywordFunctionNamesForTest() map[string]bool {
+	m := make(map[string]bool, len(keywordFunctionNames))
+	for k, v := range keywordFunctionNames {
+		m[k] = v
+	}
+	return m
+}

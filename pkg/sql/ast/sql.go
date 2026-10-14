@@ -180,15 +180,29 @@ func writeDottedIdentifier(buf *bytes.Buffer, name string) {
 }
 
 // identifierNeedsQuoting reports whether name must be double-quoted: it is
-// empty or contains a character other than letters, digits, '_', '*' and '.'.
+// empty, contains a character other than letters, digits, '_', '*' and '.',
+// or has a dot-separated part that starts with a digit but is not all digits
+// (1abc would re-read as the number 1 followed by the alias abc). An
+// all-digit part stays bare: it is how the parser stores ClickHouse tuple
+// element access (d.1).
 func identifierNeedsQuoting(name string) bool {
 	if name == "" {
 		return true
 	}
+	digitLed, partStart := false, true
 	for _, r := range name {
-		if r != '_' && r != '*' && r != '.' && !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+		switch {
+		case r == '.':
+			digitLed, partStart = false, true
+			continue
+		case r != '_' && r != '*' && !unicode.IsLetter(r) && !unicode.IsDigit(r):
+			return true
+		case partStart:
+			digitLed = unicode.IsDigit(r)
+		case digitLed && !unicode.IsDigit(r):
 			return true
 		}
+		partStart = false
 	}
 	return false
 }
@@ -349,6 +363,15 @@ func (b *BinaryExpression) writeSQL(buf *bytes.Buffer) {
 	if b.CustomOp != nil {
 		op = b.CustomOp.String()
 	}
+	// writeOp writes the operator: a well-formed OPERATOR(schema.op) as is,
+	// anything else through writeOperator, which quotes non-operator text.
+	writeOp := func() {
+		if b.CustomOp != nil && customOperatorIsSafe(b.CustomOp) {
+			buf.WriteString(op)
+			return
+		}
+		writeOperator(buf, op)
+	}
 
 	// NOT EXISTS (subquery) is parsed as a unary NOT: Operator "NOT" with the
 	// EXISTS on the left and no right operand (issue #601). Render it as a
@@ -385,7 +408,7 @@ func (b *BinaryExpression) writeSQL(buf *bytes.Buffer) {
 		buf.WriteString("NOT (")
 		writeExpr(buf, b.Left)
 		buf.WriteByte(' ')
-		buf.WriteString(op)
+		writeOp()
 		buf.WriteByte(' ')
 		writeExpr(buf, b.Right)
 		buf.WriteByte(')')
@@ -394,7 +417,7 @@ func (b *BinaryExpression) writeSQL(buf *bytes.Buffer) {
 
 	writeExpr(buf, b.Left)
 	buf.WriteByte(' ')
-	buf.WriteString(op)
+	writeOp()
 	buf.WriteByte(' ')
 	writeExpr(buf, b.Right)
 }
@@ -686,7 +709,7 @@ func (a *AnyExpression) writeSQL(buf *bytes.Buffer) {
 	}
 	writeExpr(buf, a.Expr)
 	buf.WriteByte(' ')
-	buf.WriteString(a.Operator)
+	writeOperator(buf, a.Operator)
 	buf.WriteString(" ANY (")
 	writeStmt(buf, a.Subquery)
 	buf.WriteByte(')')
@@ -709,7 +732,7 @@ func (a *AllExpression) writeSQL(buf *bytes.Buffer) {
 	}
 	writeExpr(buf, a.Expr)
 	buf.WriteByte(' ')
-	buf.WriteString(a.Operator)
+	writeOperator(buf, a.Operator)
 	buf.WriteString(" ALL (")
 	writeStmt(buf, a.Subquery)
 	buf.WriteByte(')')
@@ -751,7 +774,9 @@ func (f *FunctionCall) writeSQL(buf *bytes.Buffer) {
 		writeOrderBy(buf, f.OrderBy)
 	}
 	buf.WriteByte(')')
-	if f.NullTreatment != "" {
+	// NullTreatment is keyword text (IGNORE NULLS); anything else can only
+	// come from a hand-built AST and is dropped rather than written raw.
+	if f.NullTreatment != "" && IsPlainKeywordText(f.NullTreatment) {
 		buf.WriteByte(' ')
 		buf.WriteString(f.NullTreatment)
 	}
@@ -887,7 +912,7 @@ func (i *IntervalExpression) SQL() string {
 	if i == nil {
 		return ""
 	}
-	if !stringLiteralNeedsEscape(i.Value) {
+	if !stringLiteralNeedsEscape(i.Value) && (i.Qualifier == "" || IsPlainKeywordText(i.Qualifier)) {
 		if i.Qualifier != "" {
 			return "INTERVAL '" + i.Value + "' " + i.Qualifier
 		}
@@ -905,7 +930,9 @@ func (i *IntervalExpression) writeSQL(buf *bytes.Buffer) {
 	}
 	buf.WriteString("INTERVAL ")
 	writeStringLiteral(buf, i.Value)
-	if i.Qualifier != "" {
+	// The qualifier is keyword text (DAY, YEAR TO MONTH); anything else can
+	// only come from a hand-built AST and is dropped rather than written raw.
+	if i.Qualifier != "" && IsPlainKeywordText(i.Qualifier) {
 		buf.WriteByte(' ')
 		buf.WriteString(i.Qualifier)
 	}
@@ -1285,14 +1312,14 @@ func (i *InsertStatement) writeSQL(buf *bytes.Buffer) {
 			if idx > 0 {
 				buf.WriteString(", ")
 			}
-			writeExpr(buf, col)
+			writeColumnRef(buf, col)
 			buf.WriteString(" = ")
 			writeExpr(buf, i.Values[0][idx])
 		}
 	} else {
 		if len(i.Columns) > 0 {
 			buf.WriteString(" (")
-			writeExprList(buf, i.Columns)
+			writeColumnRefList(buf, i.Columns)
 			buf.WriteByte(')')
 		}
 
@@ -1642,7 +1669,7 @@ func (s *SetOperation) writeSQL(buf *bytes.Buffer) {
 		writeStmt(buf, s.Left)
 	}
 	buf.WriteByte(' ')
-	buf.WriteString(s.Operator)
+	writeOperator(buf, s.Operator)
 	if s.All {
 		buf.WriteString(" ALL")
 	}
@@ -1704,7 +1731,9 @@ func (c *CreateViewStatement) SQL() string {
 	}
 	sb.WriteString(" AS ")
 	sb.WriteString(stmtSQL(c.Query))
-	if c.WithOption != "" {
+	// WithOption is keyword text (CHECK OPTION, LOCAL CHECK OPTION); anything
+	// else can only come from a hand-built AST and is dropped.
+	if c.WithOption != "" && IsPlainKeywordText(c.WithOption) {
 		sb.WriteString(" WITH ")
 		sb.WriteString(c.WithOption)
 	}
@@ -1871,7 +1900,7 @@ func (i *Insert) SQL() string {
 	sb.WriteString(tableRefSQL(&i.Table))
 	if len(i.Columns) > 0 {
 		sb.WriteString(" (")
-		sb.WriteString(exprListSQL(i.Columns))
+		sb.WriteString(ColumnRefListSQL(i.Columns))
 		sb.WriteString(")")
 	}
 	if len(i.Values) > 0 {
@@ -1906,7 +1935,7 @@ func (u *Update) SQL() string {
 	sb.WriteString(" SET ")
 	upds := make([]string, len(u.Updates))
 	for i, upd := range u.Updates {
-		upds[i] = exprSQL(upd.Column) + " = " + exprSQL(upd.Value)
+		upds[i] = ColumnRefSQL(upd.Column) + " = " + exprSQL(upd.Value)
 	}
 	sb.WriteString(strings.Join(upds, ", "))
 	if u.Where != nil {
@@ -2043,7 +2072,7 @@ func writeAssignments(buf *bytes.Buffer, upds []UpdateExpression) {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		writeExpr(buf, upds[i].Column)
+		writeColumnRef(buf, upds[i].Column)
 		buf.WriteString(" = ")
 		writeExpr(buf, upds[i].Value)
 	}
@@ -2302,7 +2331,7 @@ func writeOnConflict(buf *bytes.Buffer, oc *OnConflict) {
 	buf.WriteString(" ON CONFLICT")
 	if len(oc.Target) > 0 {
 		buf.WriteString(" (")
-		writeExprList(buf, oc.Target)
+		writeColumnRefList(buf, oc.Target)
 		buf.WriteByte(')')
 	}
 	if oc.Constraint != "" {

@@ -130,10 +130,14 @@ func nameNeedsQuoting(name string, table bool) bool {
 }
 
 // isBareNameChars reports whether every rune of name may appear in a bare
-// identifier (see nameNeedsQuoting); leadingHash additionally allows a
-// leading run of '#' followed by at least one other rune. An empty name
-// reports true.
+// identifier (see nameNeedsQuoting) and name does not start with a digit
+// (1abc would re-read as the number 1 followed by abc); leadingHash
+// additionally allows a leading run of '#' followed by at least one other
+// rune. An empty name reports true.
 func isBareNameChars(name string, leadingHash bool) bool {
+	if name != "" && name[0] >= '0' && name[0] <= '9' {
+		return false
+	}
 	if leadingHash && name != "" && name[0] == '#' {
 		name = strings.TrimLeft(name, "#")
 		if name == "" {
@@ -156,7 +160,13 @@ func isBareNameChars(name string, leadingHash bool) bool {
 		return true
 	}
 	for j, r := range name[i:] {
-		if r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r) {
+		if r == '_' || unicode.IsLetter(r) {
+			continue
+		}
+		if unicode.IsDigit(r) {
+			if i+j == 0 {
+				return false // a non-ASCII digit cannot start a bare identifier
+			}
 			continue
 		}
 		// Mirrors tokenizer.unicodeIdentifierPartSlow: Mn and Mc combining
@@ -388,10 +398,27 @@ func QuoteColumnName(name string) string {
 }
 
 // functionNamePartNeedsQuoting reports whether one dot-separated part of a
-// function name must be quoted. Keywords are not: the parser accepts many as
-// function names (LEFT, RIGHT, REPLACE, IF), so only the characters decide.
-func functionNamePartNeedsQuoting(part string) bool {
-	return part == "" || !isBareNameChars(part, false)
+// function name must be quoted: it is empty or contains a character a bare
+// identifier cannot. Keywords are left bare, since the parser accepts many as
+// function names (REPLACE, IF), except in an unqualified name (single is
+// true) that is a word the parser rejects bare in every name position and
+// does not accept as a function name, such as "select"(x).
+func functionNamePartNeedsQuoting(part string, single bool) bool {
+	if part == "" || !isBareNameChars(part, false) {
+		return true
+	}
+	return single && isReservedName(part, true) && !keywordFunctionNames[strings.ToUpper(part)]
+}
+
+// keywordFunctionNames lists the words in reservedNameWords that the parser
+// still accepts bare as a function name (IF(a, b, c), REPLACE(s, x, y),
+// VALUES(col) in ON DUPLICATE KEY UPDATE, FIRST/LAST, and the ClickHouse
+// table functions merge(...) and null(...)). Any other reserved word written
+// as a function name must have been quoted in the source.
+// TestKeywordFunctionNames enforces the list against the parser.
+var keywordFunctionNames = map[string]bool{
+	"FIRST": true, "IF": true, "LAST": true, "MERGE": true, "NULL": true,
+	"REPLACE": true, "VALUES": true,
 }
 
 // writeFunctionName writes a possibly schema-qualified function name, quoting
@@ -402,13 +429,14 @@ func writeFunctionName(buf *bytes.Buffer, name string) {
 	if name == "" {
 		return
 	}
+	multi := strings.IndexByte(name, '.') >= 0
 	for {
 		dot := strings.IndexByte(name, '.')
 		part := name
 		if dot >= 0 {
 			part = name[:dot]
 		}
-		if functionNamePartNeedsQuoting(part) {
+		if functionNamePartNeedsQuoting(part, !multi) {
 			writeQuotedIdentifier(buf, part)
 		} else {
 			buf.WriteString(part)
@@ -424,16 +452,30 @@ func writeFunctionName(buf *bytes.Buffer, name string) {
 // dataTypeIsPlain reports whether a column data type (or a table option's
 // argument list) can be written verbatim: it is made only of letters, digits,
 // spaces and the punctuation type syntax uses ('_', ',', '.', '(', ')', '[',
-// ']', '<', '>', '=', '+', '-'), its parentheses balance, it has no "--", and
+// ']', '<', '>', '=', '+', '-'), its parentheses balance, brackets appear
+// only as an array suffix ([] or [n]), it has no "--", and
 // any single-quoted segments (ENUM('a', 'b'), DateTime64(3, 'UTC')) are
 // closed, double an embedded quote and contain no backslash (which some
 // dialects treat as an escape). Such text can neither end the statement nor
-// start a comment.
+// start a comment. A space outside parentheses must start one of the words
+// of a known multi-word type (DOUBLE PRECISION, CHARACTER VARYING(n),
+// TIMESTAMP WITH TIME ZONE, INT UNSIGNED, see typeModifierWords): any other
+// spaced text, such as the quoted custom type "a b", would re-parse as a
+// different type, so it is quoted instead.
 func dataTypeIsPlain(typ string) bool {
 	depth := 0
 	for i := 0; i < len(typ); i++ {
 		c := typ[i]
 		switch {
+		case c == ' ' && depth == 0:
+			j := i + 1
+			for j < len(typ) && (typ[j]|0x20 >= 'a' && typ[j]|0x20 <= 'z') {
+				j++
+			}
+			if !isTypeModifierWord(typ[i+1 : j]) {
+				return false
+			}
+			i = j - 1
 		case c == '\'':
 			for i++; ; i++ {
 				if i >= len(typ) || typ[i] == '\\' {
@@ -458,7 +500,17 @@ func dataTypeIsPlain(typ string) bool {
 			if i+1 < len(typ) && typ[i+1] == '-' {
 				return false
 			}
-		case c == '_' || c == ' ' || c == ',' || c == '.' || c == '[' || c == ']' ||
+		case c == '[':
+			// Only an array suffix: [] or [n].
+			j := i + 1
+			for j < len(typ) && typ[j] >= '0' && typ[j] <= '9' {
+				j++
+			}
+			if j >= len(typ) || typ[j] != ']' {
+				return false
+			}
+			i = j
+		case c == '_' || c == ' ' || c == ',' || c == '.' ||
 			c == '<' || c == '>' || c == '=' || c == '+',
 			c|0x20 >= 'a' && c|0x20 <= 'z', c >= '0' && c <= '9':
 		case c >= utf8.RuneSelf:
@@ -472,6 +524,33 @@ func dataTypeIsPlain(typ string) bool {
 		}
 	}
 	return depth == 0
+}
+
+// typeModifierWords lists, in upper case, the words that may follow a space
+// outside parentheses in a plain data type: the later words of the standard
+// and common multi-word types.
+var typeModifierWords = map[string]bool{
+	"PRECISION": true, "VARYING": true, "CHARACTER": true, "CHAR": true, "VARCHAR": true,
+	"WITH": true, "WITHOUT": true, "LOCAL": true, "TIME": true, "ZONE": true,
+	"UNSIGNED": true, "SIGNED": true, "ZEROFILL": true, "LARGE": true, "OBJECT": true,
+	"RAW": true, "BINARY": true,
+}
+
+// maxTypeModifierLen bounds the stack buffer isTypeModifierWord upper-cases
+// into; it is the length of the longest word in typeModifierWords.
+const maxTypeModifierLen = 9
+
+// isTypeModifierWord reports whether w (ASCII letters) is in
+// typeModifierWords, without allocating.
+func isTypeModifierWord(w string) bool {
+	if w == "" || len(w) > maxTypeModifierLen {
+		return false
+	}
+	var up [maxTypeModifierLen]byte
+	for i := 0; i < len(w); i++ {
+		up[i] = w[i] &^ 0x20
+	}
+	return typeModifierWords[string(up[:len(w)])]
 }
 
 // writeDataType writes a column data type verbatim when it is plainly shaped
@@ -562,6 +641,143 @@ func writePragmaValue(buf *bytes.Buffer, v string) {
 		return
 	}
 	writeStringLiteral(buf, v)
+}
+
+// customOperatorIsSafe reports whether a PostgreSQL OPERATOR(schema.op)
+// operator can be written verbatim: every part but the last is a bare name
+// and the last is operator text (see IsOperatorText).
+func customOperatorIsSafe(op *CustomBinaryOperator) bool {
+	if len(op.Parts) == 0 {
+		return false
+	}
+	for i, p := range op.Parts {
+		if i == len(op.Parts)-1 {
+			return IsOperatorText(p) && !strings.ContainsAny(p, " ()")
+		}
+		if p == "" || !isBareNameChars(p, false) {
+			return false
+		}
+	}
+	return true
+}
+
+// IsOperatorText reports whether op can be written verbatim as a binary
+// operator: it is keyword text (LIKE, IS DISTINCT FROM, see
+// IsPlainKeywordText) or a run of operator punctuation (=, <>, ->>, #>, @>,
+// ||) that contains no comment opener or closer ("--", "/*", "*/").
+func IsOperatorText(op string) bool {
+	if IsPlainKeywordText(op) {
+		return true
+	}
+	if op == "" {
+		return false
+	}
+	for i := 0; i < len(op); i++ {
+		switch op[i] {
+		case '+', '*', '%', '<', '>', '=', '!', '~', '^', '&', '|', '#', '@', '?', ':':
+		case '-':
+			if i+1 < len(op) && op[i+1] == '-' {
+				return false
+			}
+		case '/':
+			if i+1 < len(op) && op[i+1] == '*' {
+				return false
+			}
+		default:
+			return false
+		}
+		if op[i] == '*' && i+1 < len(op) && op[i+1] == '/' {
+			return false
+		}
+	}
+	return true
+}
+
+// writeOperator writes a binary, set or quantified-comparison operator:
+// verbatim when it is operator or keyword text (IsOperatorText), and as a
+// double-quoted identifier otherwise, which cannot end the statement and
+// fails to re-parse rather than changing its meaning. Only a hand-built AST
+// can hold such an operator.
+func writeOperator(buf *bytes.Buffer, op string) {
+	if IsOperatorText(op) {
+		buf.WriteString(op)
+		return
+	}
+	writeQuotedIdentifier(buf, op)
+}
+
+// QuoteOperator returns op unchanged when it is operator or keyword text
+// (IsOperatorText) and double-quoted otherwise; see writeOperator.
+func QuoteOperator(op string) string {
+	if IsOperatorText(op) {
+		return op
+	}
+	buf := getBuf()
+	defer putBuf(buf)
+	writeQuotedIdentifier(buf, op)
+	return buf.String()
+}
+
+// columnRefNeedsQuoting reports whether e is an identifier whose name is a
+// word the parser rejects bare in every name position but which Identifier
+// rendering would leave bare (it was not recorded as Quoted, for example a
+// MySQL `select` or SQL Server [select]). Such a name is quoted where it is
+// a write target: an INSERT column, a SET or DO UPDATE SET target, an ON
+// CONFLICT target.
+func columnRefNeedsQuoting(e Expression) (*Identifier, bool) {
+	id, ok := e.(*Identifier)
+	if !ok || id == nil || id.Quoted || !isReservedName(id.Name, true) {
+		return nil, false
+	}
+	return id, true
+}
+
+// writeColumnRef writes a write-target column (see columnRefNeedsQuoting),
+// quoting a reserved-word name, and any other expression as usual.
+func writeColumnRef(buf *bytes.Buffer, e Expression) {
+	id, ok := columnRefNeedsQuoting(e)
+	if !ok {
+		writeExpr(buf, e)
+		return
+	}
+	if id.Table != "" {
+		writeDottedIdentifier(buf, id.Table)
+		buf.WriteByte('.')
+	}
+	writeQuotedIdentifier(buf, id.Name)
+}
+
+// writeColumnRefList writes exprs separated by ", ", each via writeColumnRef.
+func writeColumnRefList(buf *bytes.Buffer, exprs []Expression) {
+	for i, e := range exprs {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		writeColumnRef(buf, e)
+	}
+}
+
+// ColumnRefSQL renders a write-target column (an INSERT column, a SET or DO
+// UPDATE SET target, an ON CONFLICT target): like the expression's own SQL(),
+// except that an identifier whose name is a reserved word is double-quoted
+// even when it was not written with ANSI double quotes, so INSERT INTO t
+// (`select`) renders as INSERT INTO t ("select").
+func ColumnRefSQL(e Expression) string {
+	if _, ok := columnRefNeedsQuoting(e); !ok {
+		return exprSQL(e)
+	}
+	buf := getBuf()
+	defer putBuf(buf)
+	writeColumnRef(buf, e)
+	return buf.String()
+}
+
+// ColumnRefListSQL joins exprs with ", ", each via ColumnRefSQL.
+func ColumnRefListSQL(exprs []Expression) string {
+	buf := getBuf()
+	defer putBuf(buf)
+	writeColumnRefList(buf, exprs)
+	return buf.String()
 }
 
 // IsPlainKeywordText reports whether s is non-empty and made only of ASCII

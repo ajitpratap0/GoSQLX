@@ -413,7 +413,7 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 
 	if len(i.Columns) > 0 && !setForm {
 		sb.WriteString(" (")
-		sb.WriteString(exprListSQL(i.Columns))
+		sb.WriteString(ast.ColumnRefListSQL(i.Columns))
 		sb.WriteString(")")
 	}
 
@@ -430,7 +430,7 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 		sets := make([]string, len(i.Columns))
 		for k, col := range i.Columns {
-			sets[k] = exprSQL(col) + " = " + exprSQL(i.Values[0][k])
+			sets[k] = ast.ColumnRefSQL(col) + " = " + exprSQL(i.Values[0][k])
 		}
 		sb.WriteString(strings.Join(sets, ", "))
 	} else if i.Query != nil {
@@ -464,7 +464,7 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 		upds := make([]string, len(i.OnDuplicateKey.Updates))
 		for k, u := range i.OnDuplicateKey.Updates {
-			upds[k] = exprSQL(u.Column) + " = " + exprSQL(u.Value)
+			upds[k] = ast.ColumnRefSQL(u.Column) + " = " + exprSQL(u.Value)
 		}
 		sb.WriteString(strings.Join(upds, ", "))
 	}
@@ -508,7 +508,7 @@ func renderUpdate(u *ast.UpdateStatement, opts ast.FormatOptions) string {
 	sb.WriteString(" ")
 	upds := make([]string, len(u.Assignments))
 	for i, upd := range u.Assignments {
-		upds[i] = exprSQL(upd.Column) + " = " + exprSQL(upd.Value)
+		upds[i] = ast.ColumnRefSQL(upd.Column) + " = " + exprSQL(upd.Value)
 	}
 	sb.WriteString(strings.Join(upds, ", "))
 
@@ -716,11 +716,18 @@ func renderSetOperation(s *ast.SetOperation, opts ast.FormatOptions) string {
 	for i := len(spine) - 1; i >= 0; i-- {
 		level := spine[i]
 		sb.WriteString(f.clauseSep())
+		// The operator is keyword text (UNION, EXCEPT); anything else can only
+		// come from a hand-built AST and is double-quoted, never written raw.
 		op := level.Operator
-		if level.All {
-			op += " ALL"
+		if !ast.IsPlainKeywordText(op) {
+			op = ast.QuoteOperator(op)
+		} else {
+			op = f.kw(op)
 		}
-		sb.WriteString(f.kw(op))
+		if level.All {
+			op += " " + f.kw("ALL")
+		}
+		sb.WriteString(op)
 		sb.WriteString(f.clauseSep())
 		if level.Right != nil {
 			if rightSetOp, ok := level.Right.(*ast.SetOperation); level.RightParenthesized || (ok && rightSetOp != nil) {
@@ -875,8 +882,13 @@ func renderCreateView(c *ast.CreateViewStatement, opts ast.FormatOptions) string
 	sb.WriteString(f.clauseSep())
 	sb.WriteString(FormatStatement(c.Query, nestedOpts(opts)))
 
-	if c.WithOption != "" {
+	// WithOption is keyword text (CHECK OPTION, LOCAL CHECK OPTION) written
+	// after WITH; anything else can only come from a hand-built AST and is
+	// dropped rather than written raw.
+	if c.WithOption != "" && ast.IsPlainKeywordText(c.WithOption) {
 		sb.WriteString(f.clauseSep())
+		sb.WriteString(f.kw("WITH"))
+		sb.WriteString(" ")
 		sb.WriteString(f.kw(c.WithOption))
 	}
 
@@ -1595,7 +1607,7 @@ func onConflictSQL(oc *ast.OnConflict) string {
 	sb.WriteString(" ON CONFLICT")
 	if len(oc.Target) > 0 {
 		sb.WriteString(" (")
-		sb.WriteString(exprListSQL(oc.Target))
+		sb.WriteString(ast.ColumnRefListSQL(oc.Target))
 		sb.WriteString(")")
 	}
 	if oc.Constraint != "" {
@@ -1608,7 +1620,7 @@ func onConflictSQL(oc *ast.OnConflict) string {
 		sb.WriteString(" DO UPDATE SET ")
 		upds := make([]string, len(oc.Action.DoUpdate))
 		for i, u := range oc.Action.DoUpdate {
-			upds[i] = exprSQL(u.Column) + " = " + exprSQL(u.Value)
+			upds[i] = ast.ColumnRefSQL(u.Column) + " = " + exprSQL(u.Value)
 		}
 		sb.WriteString(strings.Join(upds, ", "))
 		if oc.Action.Where != nil {

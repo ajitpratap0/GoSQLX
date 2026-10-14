@@ -76,16 +76,33 @@ func writeTableHints(buf *bytes.Buffer, hints []string) {
 
 // QuotePivotColumn returns a PIVOT/UNPIVOT column name (PivotColumn,
 // ValueColumn or NameColumn) ready to write: a name made only of letters,
-// digits, '_', '*' and '.' is returned unchanged, anything else is
-// double-quoted with embedded quotes doubled.
+// digits, '_', '*' and '.' (and not starting a part with a digit) is returned
+// unchanged, except that a dot-separated part that is a word the parser
+// rejects bare in every name position ("select") is double-quoted; anything
+// else is double-quoted as a whole with embedded quotes doubled.
 func QuotePivotColumn(name string) string {
-	if !identifierNeedsQuoting(name) {
+	if !pivotColumnNeedsQuoting(name) {
 		return name
 	}
 	buf := getBuf()
 	defer putBuf(buf)
-	writeQuotedIdentifier(buf, name)
+	writePivotColumn(buf, name)
 	return buf.String()
+}
+
+// pivotColumnNeedsQuoting reports whether writePivotColumn would quote some
+// part of name.
+func pivotColumnNeedsQuoting(name string) bool {
+	return identifierNeedsQuoting(name) || qualifierNeedsQuoting(name)
+}
+
+// writePivotColumn writes a PIVOT/UNPIVOT column name (see QuotePivotColumn).
+func writePivotColumn(buf *bytes.Buffer, name string) {
+	if identifierNeedsQuoting(name) {
+		writeQuotedIdentifier(buf, name)
+		return
+	}
+	writeDottedIdentifier(buf, name)
 }
 
 // QuotePivotItem returns a PIVOT IN value or UNPIVOT IN column ready to
@@ -201,7 +218,7 @@ func writePivotClause(buf *bytes.Buffer, p *PivotClause) {
 	buf.WriteString(" PIVOT (")
 	writeExpr(buf, p.AggregateFunction)
 	buf.WriteString(" FOR ")
-	writeSafeIdentifier(buf, p.PivotColumn)
+	writePivotColumn(buf, p.PivotColumn)
 	buf.WriteString(" IN (")
 	for i, v := range p.InValues {
 		if i > 0 {
@@ -219,9 +236,9 @@ func writeUnpivotClause(buf *bytes.Buffer, u *UnpivotClause) {
 		return
 	}
 	buf.WriteString(" UNPIVOT (")
-	writeSafeIdentifier(buf, u.ValueColumn)
+	writePivotColumn(buf, u.ValueColumn)
 	buf.WriteString(" FOR ")
-	writeSafeIdentifier(buf, u.NameColumn)
+	writePivotColumn(buf, u.NameColumn)
 	buf.WriteString(" IN (")
 	for i, c := range u.InColumns {
 		if i > 0 {

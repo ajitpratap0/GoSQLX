@@ -80,3 +80,46 @@ func TestReservedNameWordsRejectedBare(t *testing.T) {
 		}
 	}
 }
+
+// TestKeywordFunctionNames guards keywordFunctionNames in quote_names.go: a
+// reserved word the parser accepts bare as a function name must be listed
+// (so SQL() keeps IF(a, b, c) bare), and every other reserved word must be
+// rejected bare as a scalar or table function name in every dialect, so the quoted
+// "select"(x) that SQL() writes for it is the only spelling that re-parses.
+func TestKeywordFunctionNames(t *testing.T) {
+	allowed := ast.KeywordFunctionNamesForTest()
+	for word, inAll := range ast.ReservedNameWordsForTest() {
+		if !inAll {
+			continue
+		}
+		w := strings.ToLower(word)
+		parsedAsCall := false
+		for _, d := range quotedRenderDialects {
+			// As a scalar function in the select list.
+			if tree, err := gosqlx.ParseWithDialect("SELECT "+w+"(1) FROM t", d); err == nil {
+				if sel, ok := tree.Statements[0].(*ast.SelectStatement); ok && len(sel.Columns) == 1 {
+					if fc, ok := sel.Columns[0].(*ast.FunctionCall); ok && strings.EqualFold(fc.Name, word) {
+						parsedAsCall = true
+					}
+				}
+				ast.ReleaseAST(tree)
+			}
+			// As a table function in FROM.
+			if tree, err := gosqlx.ParseWithDialect("SELECT * FROM "+w+"(1)", d); err == nil {
+				if sel, ok := tree.Statements[0].(*ast.SelectStatement); ok && len(sel.From) == 1 &&
+					sel.From[0].TableFunc != nil && strings.EqualFold(sel.From[0].TableFunc.Name, word) {
+					parsedAsCall = true
+				}
+				ast.ReleaseAST(tree)
+			}
+		}
+		if parsedAsCall != allowed[word] {
+			t.Errorf("%s: parsed bare as a function call = %v, but keywordFunctionNames[%s] = %v", word, parsedAsCall, word, allowed[word])
+		}
+	}
+	for word := range allowed {
+		if inAll, ok := ast.ReservedNameWordsForTest()[word]; !ok || !inAll {
+			t.Errorf("keywordFunctionNames lists %s, which is not reserved in every name position", word)
+		}
+	}
+}

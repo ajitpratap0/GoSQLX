@@ -348,8 +348,10 @@ func (p *Parser) parseTableConstraint() (*ast.TableConstraint, error) {
 	}
 
 	// Check for optional constraint name (identifier that isn't a constraint type keyword)
-	// Constraint name comes before the constraint type (PRIMARY, FOREIGN, UNIQUE, CHECK)
-	if p.isType(models.TokenTypeIdentifier) &&
+	// Constraint name comes before the constraint type (PRIMARY, FOREIGN, UNIQUE, CHECK).
+	// A double-quoted name is accepted too: SQL Server keeps "x y" as a
+	// DOUBLE_QUOTED_STRING token, and the renderer writes such names quoted.
+	if p.isIdentifier() &&
 		!p.isAnyType(models.TokenTypePrimary, models.TokenTypeForeign, models.TokenTypeUnique, models.TokenTypeCheck) {
 		constraint.Name = p.currentToken.Token.Value
 		p.advance()

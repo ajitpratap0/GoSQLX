@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
+import GithubSlugger from 'github-slugger';
 import { DOCS_SIDEBAR } from './constants';
 
 export interface Doc {
@@ -23,16 +24,43 @@ function extractTitleFromMarkdown(content: string): string {
   return match ? match[1].trim() : 'Untitled';
 }
 
+/** Remove fenced code blocks (``` or ~~~) so their contents are not parsed as prose. */
+export function stripCodeFences(content: string): string {
+  const out: string[] = [];
+  let fence: string | null = null;
+  for (const line of content.split('\n')) {
+    const m = line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (fence === null) {
+      if (m) fence = m[1];
+      else out.push(line);
+    } else if (m && m[1][0] === fence[0] && m[1].length >= fence.length) {
+      fence = null;
+    }
+  }
+  return out.join('\n');
+}
+
+/** Rendered text of a heading: links, backticks and emphasis markers removed (underscores in identifiers are kept). */
+function renderedHeadingText(raw: string): string {
+  return raw
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/\\([_*`])/g, '$1')
+    .replace(/[`*]/g, '')
+    .replace(/(^|\s)_+([^_\s][^_]*?)_+(?=\s|$)/g, '$1$2')
+    .trim();
+}
+
 export function extractHeadings(content: string): DocHeading[] {
   const headings: DocHeading[] = [];
+  const slugger = new GithubSlugger();
   const regex = /^(#{2,3})\s+(.+)$/gm;
   let match;
-  while ((match = regex.exec(content)) !== null) {
-    const text = match[2].trim();
-    const id = text
-      .toLowerCase()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/\s+/g, '-');
+  const body = stripCodeFences(content);
+  while ((match = regex.exec(body)) !== null) {
+    const rendered = renderedHeadingText(match[2]);
+    // Slug the same text rehype-slug sees (trailing colon is dropped by the slugger)
+    const id = slugger.slug(rendered);
+    const text = rendered.replace(/:+$/, '').trim();
     headings.push({ id, text, level: match[1].length });
   }
   return headings;

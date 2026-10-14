@@ -9,7 +9,7 @@ export default function Image() {
   return renderOgCard({
     eyebrow: "SQL parsing SDK for Go",
     title: "Go SQL Parser, Formatter & Linter",
-    subtitle: "Zero-copy, thread-safe, 8 dialects.",
+    subtitle: "Zero-copy, thread-safe, multi-dialect.",
     stat: `${PROJECT.dialectCount} dialects · ${PROJECT.lintRuleCount} lint rules · ${PROJECT.minGo}`,
   });
 }

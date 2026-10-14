@@ -45,14 +45,14 @@ export function Hero() {
 
         {/* Headline */}
         <h1
-          className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 break-words hyphens-auto w-full max-w-full px-4 sm:px-0"
+          className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 break-words hyphens-auto w-full max-w-full px-4 sm:px-0"
           style={{ letterSpacing: '-0.03em' }}
         >
           <GradientText>Parse SQL at the speed of Go</GradientText>
         </h1>
 
         {/* Subtitle */}
-        <p className="text-lg md:text-xl max-w-2xl mx-auto mb-10 text-zinc-300">
+        <p className="text-base sm:text-lg md:text-xl max-w-2xl mx-auto mb-10 text-zinc-300">
           Production-ready SQL parsing with zero-copy tokenization, object pooling, and multi-dialect support
         </p>
 

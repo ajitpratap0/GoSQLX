@@ -111,10 +111,13 @@ html {
   overflow-x: clip;
 }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-inter), system-ui, sans-serif;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+/* In @layer base so Tailwind utilities (font-*, tracking-*) can still override. */
+@layer base {
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-inter), system-ui, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
 }
 
 /* Mono eyebrow label, kept separate from the real heading it introduces. */

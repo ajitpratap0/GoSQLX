@@ -1492,13 +1492,18 @@ func (c *CreateTableStatement) SQL() string {
 
 	if c.PartitionBy != nil {
 		sb.WriteString(" PARTITION BY ")
-		sb.WriteString(c.PartitionBy.Type)
+		sb.WriteString(KeywordText(c.PartitionBy.Type))
 		sb.WriteString(" (")
 		writeColumnNameList(sb, c.PartitionBy.Columns)
 		sb.WriteString(")")
 	}
 
 	for _, opt := range c.Options {
+		// The option name is keyword text (ENGINE, CHARSET); an option with
+		// any other name can only come from a hand-built AST and is dropped.
+		if !IsPlainKeywordText(opt.Name) {
+			continue
+		}
 		sb.WriteByte(' ')
 		sb.WriteString(opt.Name)
 		sb.WriteByte('=')
@@ -1539,9 +1544,9 @@ func (c *CreateIndexStatement) SQL() string {
 			sb.WriteString(", ")
 		}
 		writeColumnName(sb, col.Column)
-		if col.Direction != "" {
+		if dir := SortDirectionText(col.Direction); dir != "" {
 			sb.WriteByte(' ')
-			sb.WriteString(col.Direction)
+			sb.WriteString(dir)
 		}
 	}
 	sb.WriteString(")")
@@ -1582,15 +1587,15 @@ func (d *DropStatement) SQL() string {
 	sb := getBuf()
 	defer putBuf(sb)
 	sb.WriteString("DROP ")
-	sb.WriteString(d.ObjectType)
+	sb.WriteString(KeywordText(d.ObjectType))
 	sb.WriteString(" ")
 	if d.IfExists {
 		sb.WriteString("IF EXISTS ")
 	}
 	writeQualifiedNameList(sb, d.Names)
-	if d.CascadeType != "" {
+	if c := CascadeText(d.CascadeType); c != "" {
 		sb.WriteString(" ")
-		sb.WriteString(d.CascadeType)
+		sb.WriteString(c)
 	}
 	return sb.String()
 }
@@ -1610,9 +1615,9 @@ func (t *TruncateStatement) SQL() string {
 	} else if t.ContinueIdentity {
 		sb.WriteString(" CONTINUE IDENTITY")
 	}
-	if t.CascadeType != "" {
+	if c := CascadeText(t.CascadeType); c != "" {
 		sb.WriteString(" ")
-		sb.WriteString(t.CascadeType)
+		sb.WriteString(c)
 	}
 	return sb.String()
 }
@@ -1824,7 +1829,7 @@ func (m *MergeStatement) SQL() string {
 		case "NOT_MATCHED_BY_SOURCE":
 			sb.WriteString("NOT MATCHED BY SOURCE")
 		default:
-			sb.WriteString(when.Type)
+			sb.WriteString(KeywordText(when.Type))
 		}
 		if when.Condition != nil {
 			sb.WriteString(" AND ")
@@ -2184,8 +2189,11 @@ func writeTableRefList(buf *bytes.Buffer, refs []TableReference) {
 }
 
 func writeJoin(buf *bytes.Buffer, j *JoinClause) {
-	buf.WriteString(j.Type)
-	buf.WriteString(" JOIN ")
+	if t := KeywordText(j.Type); t != "" {
+		buf.WriteString(t)
+		buf.WriteByte(' ')
+	}
+	buf.WriteString("JOIN ")
 	writeTableRef(buf, &j.Right)
 	if len(j.Using) > 0 {
 		buf.WriteString(" USING (")
@@ -2235,7 +2243,7 @@ func writeWindowSpec(buf *bytes.Buffer, base string, w *WindowSpec) {
 }
 
 func writeWindowFrame(buf *bytes.Buffer, f *WindowFrame) {
-	buf.WriteString(f.Type)
+	buf.WriteString(FrameUnitText(f.Type))
 	if f.End != nil {
 		buf.WriteString(" BETWEEN ")
 		writeFrameBound(buf, &f.Start)
@@ -2245,9 +2253,9 @@ func writeWindowFrame(buf *bytes.Buffer, f *WindowFrame) {
 		buf.WriteByte(' ')
 		writeFrameBound(buf, &f.Start)
 	}
-	if f.Exclude != "" {
+	if ex := FrameExcludeText(f.Exclude); ex != "" {
 		buf.WriteString(" EXCLUDE ")
-		buf.WriteString(f.Exclude)
+		buf.WriteString(ex)
 	}
 }
 
@@ -2259,7 +2267,7 @@ func writeFrameBound(buf *bytes.Buffer, b *WindowFrameBound) {
 		writeExpr(buf, b.Value)
 		buf.WriteByte(' ')
 	}
-	buf.WriteString(b.Type)
+	buf.WriteString(FrameBoundText(b.Type))
 }
 
 func writeFetch(buf *bytes.Buffer, f *FetchClause) {
@@ -2269,7 +2277,7 @@ func writeFetch(buf *bytes.Buffer, f *FetchClause) {
 		buf.WriteString(" ROWS")
 	}
 	buf.WriteString(" FETCH ")
-	buf.WriteString(f.FetchType)
+	buf.WriteString(FetchTypeText(f.FetchType))
 	if f.FetchValue != nil {
 		buf.WriteByte(' ')
 		writeInt(buf, *f.FetchValue)
@@ -2287,7 +2295,7 @@ func writeFetch(buf *bytes.Buffer, f *FetchClause) {
 
 func writeFor(buf *bytes.Buffer, f *ForClause) {
 	buf.WriteString(" FOR ")
-	buf.WriteString(f.LockType)
+	buf.WriteString(LockTypeText(f.LockType))
 	if len(f.Tables) > 0 {
 		buf.WriteString(" OF ")
 		writeQualifiedNameList(buf, f.Tables)
@@ -2409,7 +2417,7 @@ func columnConstraintSQL(c *ColumnConstraint) string {
 		if c.AutoIncrement {
 			return "AUTO_INCREMENT"
 		}
-		return c.Type
+		return KeywordText(c.Type)
 	}
 }
 
@@ -2418,7 +2426,7 @@ func tableConstraintSQL(tc *TableConstraint) string {
 	defer putBuf(sb)
 	if tc.Name != "" {
 		sb.WriteString("CONSTRAINT ")
-		writeColumnName(sb, tc.Name)
+		writeConstraintName(sb, tc.Name)
 		sb.WriteString(" ")
 	}
 	switch tc.Type {
@@ -2442,7 +2450,7 @@ func tableConstraintSQL(tc *TableConstraint) string {
 		sb.WriteString(exprSQL(tc.Check))
 		sb.WriteString(")")
 	default:
-		sb.WriteString(tc.Type)
+		sb.WriteString(KeywordText(tc.Type))
 	}
 	return sb.String()
 }
@@ -2457,13 +2465,13 @@ func referenceSQL(r *ReferenceDefinition) string {
 		writeColumnNameList(sb, r.Columns)
 		sb.WriteString(")")
 	}
-	if r.OnDelete != "" {
+	if a := ReferentialActionText(r.OnDelete); a != "" {
 		sb.WriteString(" ON DELETE ")
-		sb.WriteString(r.OnDelete)
+		sb.WriteString(a)
 	}
-	if r.OnUpdate != "" {
+	if a := ReferentialActionText(r.OnUpdate); a != "" {
 		sb.WriteString(" ON UPDATE ")
-		sb.WriteString(r.OnUpdate)
+		sb.WriteString(a)
 	}
 	return sb.String()
 }
@@ -2484,7 +2492,7 @@ func alterActionSQL(a *AlterTableAction) string {
 		}
 		return "ADD CONSTRAINT"
 	default:
-		return a.Type
+		return KeywordText(a.Type)
 	}
 }
 
@@ -2526,7 +2534,7 @@ func mergeActionSQL(a *MergeAction) string {
 	case "DELETE":
 		return "DELETE"
 	default:
-		return a.ActionType
+		return KeywordText(a.ActionType)
 	}
 }
 
@@ -2762,6 +2770,19 @@ func (c *ConnectByClause) ToSQL() string {
 	return b.String()
 }
 
+// writeSampleRatio writes a SAMPLE ratio or offset, n or n/d, writing each
+// part only when it is a plain number (IsPlainNumberText).
+func writeSampleRatio(buf *bytes.Buffer, n, d string) {
+	if !IsPlainNumberText(n) {
+		return
+	}
+	buf.WriteString(n)
+	if IsPlainNumberText(d) {
+		buf.WriteByte('/')
+		buf.WriteString(d)
+	}
+}
+
 // SQL renders a ClickHouse SAMPLE clause, e.g. "SAMPLE 0.1" or
 // "SAMPLE 1/10 OFFSET 2/10".
 func (s *SampleClause) SQL() string {
@@ -2771,18 +2792,12 @@ func (s *SampleClause) SQL() string {
 	sb := getBuf()
 	defer putBuf(sb)
 	sb.WriteString("SAMPLE ")
-	v := s.Value
-	if s.Value != "" && s.Denominator != "" {
-		v = s.Value + "/" + s.Denominator
-	}
-	sb.WriteString(v)
-	if s.Offset != "" {
+	// The ratio and offset are numeric literals; any other text can only come
+	// from a hand-built AST and is dropped rather than written raw.
+	writeSampleRatio(sb, s.Value, s.Denominator)
+	if IsPlainNumberText(s.Offset) {
 		sb.WriteString(" OFFSET ")
-		o := s.Offset
-		if s.OffsetDenominator != "" {
-			o = s.Offset + "/" + s.OffsetDenominator
-		}
-		sb.WriteString(o)
+		writeSampleRatio(sb, s.Offset, s.OffsetDenominator)
 	}
 	return sb.String()
 }

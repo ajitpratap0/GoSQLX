@@ -660,10 +660,14 @@ func renderCreateTable(c *ast.CreateTableStatement, opts ast.FormatOptions) stri
 	if c.PartitionBy != nil {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("PARTITION BY"))
-		fmt.Fprintf(sb, " %s (%s)", c.PartitionBy.Type, quoteColumnNames(c.PartitionBy.Columns))
+		fmt.Fprintf(sb, " %s (%s)", ast.KeywordText(c.PartitionBy.Type), quoteColumnNames(c.PartitionBy.Columns))
 	}
 
 	for _, opt := range c.Options {
+		// Only keyword-text option names (ENGINE, CHARSET) are written.
+		if !ast.IsPlainKeywordText(opt.Name) {
+			continue
+		}
 		fmt.Fprintf(sb, " %s=%s", opt.Name, ast.QuoteTableOptionValue(opt.Value))
 	}
 
@@ -762,7 +766,7 @@ func renderAlterTable(a *ast.AlterTableStatement, opts ast.FormatOptions) string
 			sb.WriteString(",")
 		}
 		sb.WriteString(f.clauseSep())
-		sb.WriteString(f.kw(action.Type))
+		sb.WriteString(f.kw(ast.KeywordText(action.Type)))
 		if action.ColumnDef != nil {
 			sb.WriteString(" ")
 			sb.WriteString(columnDefSQL(action.ColumnDef))
@@ -821,8 +825,8 @@ func renderCreateIndex(c *ast.CreateIndexStatement, opts ast.FormatOptions) stri
 		if col.Collate != "" {
 			s += " " + f.kw("COLLATE") + " " + ast.QuoteColumnName(col.Collate)
 		}
-		if col.Direction != "" {
-			s += " " + f.kw(col.Direction)
+		if dir := ast.SortDirectionText(col.Direction); dir != "" {
+			s += " " + f.kw(dir)
 		}
 		if col.NullsLast {
 			s += " " + f.kw("NULLS LAST")
@@ -988,7 +992,7 @@ func renderDrop(d *ast.DropStatement, opts ast.FormatOptions) string {
 
 	sb.WriteString(f.kw("DROP"))
 	sb.WriteString(" ")
-	sb.WriteString(f.kw(d.ObjectType))
+	sb.WriteString(f.kw(ast.KeywordText(d.ObjectType)))
 	sb.WriteString(" ")
 	if d.IfExists {
 		sb.WriteString(f.kw("IF EXISTS"))
@@ -996,9 +1000,9 @@ func renderDrop(d *ast.DropStatement, opts ast.FormatOptions) string {
 	}
 	sb.WriteString(quoteQualifiedNames(d.Names))
 
-	if d.CascadeType != "" {
+	if c := ast.CascadeText(d.CascadeType); c != "" {
 		sb.WriteString(" ")
-		sb.WriteString(f.kw(d.CascadeType))
+		sb.WriteString(f.kw(c))
 	}
 
 	if opts.AddSemicolon {
@@ -1029,9 +1033,9 @@ func renderTruncate(t *ast.TruncateStatement, opts ast.FormatOptions) string {
 		sb.WriteString(f.kw("CONTINUE IDENTITY"))
 	}
 
-	if t.CascadeType != "" {
+	if c := ast.CascadeText(t.CascadeType); c != "" {
 		sb.WriteString(" ")
-		sb.WriteString(f.kw(t.CascadeType))
+		sb.WriteString(f.kw(c))
 	}
 
 	if opts.AddSemicolon {
@@ -1082,7 +1086,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 		case "NOT_MATCHED_BY_SOURCE":
 			sb.WriteString(f.kw("NOT MATCHED BY SOURCE"))
 		default:
-			sb.WriteString(f.kw(when.Type))
+			sb.WriteString(f.kw(ast.KeywordText(when.Type)))
 		}
 		if when.Condition != nil {
 			sb.WriteString(" ")
@@ -1463,17 +1467,21 @@ func sampleSQL(s *ast.SampleClause, f *nodeFormatter) string {
 	var sb strings.Builder
 	sb.WriteString(f.kw("SAMPLE"))
 	sb.WriteString(" ")
-	sb.WriteString(s.Value)
-	if s.Denominator != "" {
-		sb.WriteString("/")
-		sb.WriteString(s.Denominator)
+	// The ratio and offset parts are numeric literals; anything else can only
+	// come from a hand-built AST and is dropped rather than written raw.
+	if ast.IsPlainNumberText(s.Value) {
+		sb.WriteString(s.Value)
+		if ast.IsPlainNumberText(s.Denominator) {
+			sb.WriteString("/")
+			sb.WriteString(s.Denominator)
+		}
 	}
-	if s.Offset != "" {
+	if ast.IsPlainNumberText(s.Offset) {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("OFFSET"))
 		sb.WriteString(" ")
 		sb.WriteString(s.Offset)
-		if s.OffsetDenominator != "" {
+		if ast.IsPlainNumberText(s.OffsetDenominator) {
 			sb.WriteString("/")
 			sb.WriteString(s.OffsetDenominator)
 		}
@@ -1484,8 +1492,10 @@ func sampleSQL(s *ast.SampleClause, f *nodeFormatter) string {
 // joinSQL renders a JOIN clause.
 func joinSQL(j *ast.JoinClause, f *nodeFormatter) string {
 	var sb strings.Builder
-	sb.WriteString(f.kw(j.Type))
-	sb.WriteString(" ")
+	if t := ast.KeywordText(j.Type); t != "" {
+		sb.WriteString(f.kw(t))
+		sb.WriteString(" ")
+	}
 	sb.WriteString(f.kw("JOIN"))
 	sb.WriteString(" ")
 	sb.WriteString(tableRefSQL(&j.Right, f))
@@ -1532,13 +1542,14 @@ func windowSpecSQL(w *ast.WindowSpec) string {
 // windowFrameSQL renders a window frame clause.
 func windowFrameSQL(f *ast.WindowFrame) string {
 	var s string
+	unit := ast.FrameUnitText(f.Type)
 	if f.End != nil {
-		s = fmt.Sprintf("%s BETWEEN %s AND %s", f.Type, frameBoundSQL(&f.Start), frameBoundSQL(f.End))
+		s = fmt.Sprintf("%s BETWEEN %s AND %s", unit, frameBoundSQL(&f.Start), frameBoundSQL(f.End))
 	} else {
-		s = fmt.Sprintf("%s %s", f.Type, frameBoundSQL(&f.Start))
+		s = fmt.Sprintf("%s %s", unit, frameBoundSQL(&f.Start))
 	}
-	if f.Exclude != "" {
-		s += " EXCLUDE " + f.Exclude
+	if ex := ast.FrameExcludeText(f.Exclude); ex != "" {
+		s += " EXCLUDE " + ex
 	}
 	return s
 }
@@ -1548,9 +1559,9 @@ func windowFrameSQL(f *ast.WindowFrame) string {
 // forms carry no Value.
 func frameBoundSQL(b *ast.WindowFrameBound) string {
 	if b.Value != nil {
-		return exprSQL(b.Value) + " " + b.Type
+		return exprSQL(b.Value) + " " + ast.FrameBoundText(b.Type)
 	}
-	return b.Type
+	return ast.FrameBoundText(b.Type)
 }
 
 // fetchSQL renders a FETCH clause, respecting keyword casing from the nodeFormatter.
@@ -1559,10 +1570,7 @@ func fetchSQL(fc *ast.FetchClause, f *nodeFormatter) string {
 	if fc.OffsetValue != nil {
 		fmt.Fprintf(&sb, " %s %d %s", f.kw("OFFSET"), *fc.OffsetValue, f.kw("ROWS"))
 	}
-	fetchType := fc.FetchType
-	if fetchType == "" {
-		fetchType = "FIRST"
-	}
+	fetchType := ast.FetchTypeText(fc.FetchType)
 	fmt.Fprintf(&sb, " %s %s", f.kw("FETCH"), f.kw(fetchType))
 	if fc.FetchValue != nil {
 		fmt.Fprintf(&sb, " %d", *fc.FetchValue)
@@ -1587,7 +1595,7 @@ func fetchSQL(fc *ast.FetchClause, f *nodeFormatter) string {
 func forSQL(f *ast.ForClause) string {
 	var sb strings.Builder
 	sb.WriteString(" FOR ")
-	sb.WriteString(f.LockType)
+	sb.WriteString(ast.LockTypeText(f.LockType))
 	if len(f.Tables) > 0 {
 		sb.WriteString(" OF ")
 		sb.WriteString(quoteQualifiedNames(f.Tables))
@@ -1663,7 +1671,7 @@ func columnConstraintSQL(c *ast.ColumnConstraint) string {
 		if c.AutoIncrement {
 			return "AUTO_INCREMENT"
 		}
-		return c.Type
+		return ast.KeywordText(c.Type)
 	}
 }
 
@@ -1672,7 +1680,7 @@ func tableConstraintSQL(tc *ast.TableConstraint) string {
 	var sb strings.Builder
 	if tc.Name != "" {
 		sb.WriteString("CONSTRAINT ")
-		sb.WriteString(ast.QuoteColumnName(tc.Name))
+		sb.WriteString(ast.QuoteConstraintName(tc.Name))
 		sb.WriteString(" ")
 	}
 	switch tc.Type {
@@ -1696,7 +1704,7 @@ func tableConstraintSQL(tc *ast.TableConstraint) string {
 		sb.WriteString(exprSQL(tc.Check))
 		sb.WriteString(")")
 	default:
-		sb.WriteString(tc.Type)
+		sb.WriteString(ast.KeywordText(tc.Type))
 	}
 	return sb.String()
 }
@@ -1711,13 +1719,13 @@ func referenceSQL(r *ast.ReferenceDefinition) string {
 		sb.WriteString(quoteColumnNames(r.Columns))
 		sb.WriteString(")")
 	}
-	if r.OnDelete != "" {
+	if a := ast.ReferentialActionText(r.OnDelete); a != "" {
 		sb.WriteString(" ON DELETE ")
-		sb.WriteString(r.OnDelete)
+		sb.WriteString(a)
 	}
-	if r.OnUpdate != "" {
+	if a := ast.ReferentialActionText(r.OnUpdate); a != "" {
 		sb.WriteString(" ON UPDATE ")
-		sb.WriteString(r.OnUpdate)
+		sb.WriteString(a)
 	}
 	return sb.String()
 }

@@ -397,6 +397,57 @@ func QuoteColumnName(name string) string {
 	return QuoteTableAlias(name)
 }
 
+// constraintNameWords lists, in upper case, the words besides
+// reservedNameWords that the parser does not accept bare as a table
+// constraint name (it takes only an identifier or a double-quoted name
+// there). TestConstraintNameWords keeps the list in step with the parser.
+var constraintNameWords = map[string]bool{
+	"ANY": true, "AUTO_INCREMENT": true, "CONNECTOR": true, "DCPROPERTIES": true,
+	"MEMBER": true, "NOCREATEDB": true, "NOCREATEROLE": true, "NOLOGIN": true,
+	"NOSUPERUSER": true, "OWNER": true, "POLICY": true, "RESET": true,
+	"SOME": true, "UNTIL": true, "URL": true, "VALID": true,
+}
+
+// constraintNameNeedsQuoting reports whether a table constraint name must be
+// written double-quoted: unless it is lower-case plain (ASCII a-z, 0-9 and
+// '_', not starting with a digit), a bare rendering would not keep its
+// spelling in a case-folding dialect, and a keyword (KEY, INDEX, DEFAULT,
+// TABLE, ...) is not accepted bare in that position at all.
+func constraintNameNeedsQuoting(name string) bool {
+	if name == "" || (name[0] >= '0' && name[0] <= '9') {
+		return true
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_') {
+			return true
+		}
+	}
+	return isReservedName(name, false) || constraintNameWords[strings.ToUpper(name)]
+}
+
+// writeConstraintName writes a table constraint name, double-quoting it when
+// constraintNameNeedsQuoting says so.
+func writeConstraintName(buf *bytes.Buffer, name string) {
+	if constraintNameNeedsQuoting(name) {
+		writeQuotedIdentifier(buf, name)
+		return
+	}
+	buf.WriteString(name)
+}
+
+// QuoteConstraintName returns a table constraint name as SQL() writes it:
+// bare when lower-case plain and not a keyword, double-quoted otherwise.
+func QuoteConstraintName(name string) string {
+	if !constraintNameNeedsQuoting(name) {
+		return name
+	}
+	buf := getBuf()
+	defer putBuf(buf)
+	writeQuotedIdentifier(buf, name)
+	return buf.String()
+}
+
 // functionNamePartNeedsQuoting reports whether one dot-separated part of a
 // function name must be quoted: it is empty or contains a character a bare
 // identifier cannot. Keywords are left bare, since the parser accepts many as
@@ -459,7 +510,8 @@ func writeFunctionName(buf *bytes.Buffer, name string) {
 // dialects treat as an escape). Such text can neither end the statement nor
 // start a comment. A space outside parentheses must start one of the words
 // of a known multi-word type (DOUBLE PRECISION, CHARACTER VARYING(n),
-// TIMESTAMP WITH TIME ZONE, INT UNSIGNED, see typeModifierWords): any other
+// TIMESTAMP WITH TIME ZONE, INT UNSIGNED, and the ClickHouse column codec the
+// parser appends to the type, UInt64 CODEC(ZSTD(3)); see typeModifierWords): any other
 // spaced text, such as the quoted custom type "a b", would re-parse as a
 // different type, so it is quoted instead.
 func dataTypeIsPlain(typ string) bool {
@@ -472,7 +524,13 @@ func dataTypeIsPlain(typ string) bool {
 			for j < len(typ) && (typ[j]|0x20 >= 'a' && typ[j]|0x20 <= 'z') {
 				j++
 			}
-			if !isTypeModifierWord(typ[i+1 : j]) {
+			w := typ[i+1 : j]
+			if !isTypeModifierWord(w) {
+				return false
+			}
+			// The ClickHouse column CODEC the parser appends to the type is
+			// always followed by its argument list: CODEC(ZSTD(3)).
+			if len(w) == len("CODEC") && strings.EqualFold(w, "CODEC") && (j >= len(typ) || typ[j] != '(') {
 				return false
 			}
 			i = j - 1
@@ -528,12 +586,13 @@ func dataTypeIsPlain(typ string) bool {
 
 // typeModifierWords lists, in upper case, the words that may follow a space
 // outside parentheses in a plain data type: the later words of the standard
-// and common multi-word types.
+// and common multi-word types, and CODEC, which the ClickHouse parser appends
+// to a column type with its argument list (dataTypeIsPlain requires the "(").
 var typeModifierWords = map[string]bool{
 	"PRECISION": true, "VARYING": true, "CHARACTER": true, "CHAR": true, "VARCHAR": true,
 	"WITH": true, "WITHOUT": true, "LOCAL": true, "TIME": true, "ZONE": true,
 	"UNSIGNED": true, "SIGNED": true, "ZEROFILL": true, "LARGE": true, "OBJECT": true,
-	"RAW": true, "BINARY": true,
+	"RAW": true, "BINARY": true, "CODEC": true,
 }
 
 // maxTypeModifierLen bounds the stack buffer isTypeModifierWord upper-cases
@@ -798,6 +857,119 @@ func IsPlainKeywordText(s string) bool {
 		return false
 	}
 	return true
+}
+
+// KeywordText returns s when it is plain keyword text (IsPlainKeywordText)
+// and "" otherwise. Renderers pass every free-text keyword field (a join
+// type, a constraint or table-option kind, a DROP object type, a MERGE WHEN
+// kind) through it: the parser only stores keyword text there, so anything
+// else can only come from a hand-built AST and is dropped rather than written
+// raw, where it could end the statement or open a comment or string.
+func KeywordText(s string) string {
+	if IsPlainKeywordText(s) {
+		return s
+	}
+	return ""
+}
+
+// keywordOneOf returns s when it equals one of allowed, ignoring ASCII case,
+// and "" otherwise.
+func keywordOneOf(s string, allowed []string) string {
+	for _, a := range allowed {
+		if len(s) == len(a) && strings.EqualFold(s, a) {
+			return s
+		}
+	}
+	return ""
+}
+
+// The keyword sets of fields whose parser values form a small fixed set; the
+// renderers write such a field only when it is one of these (see the *Text
+// functions below), so even plain words outside the set are dropped.
+var (
+	cascadeKeywords           = []string{"CASCADE", "RESTRICT"}
+	sortDirectionKeywords     = []string{"ASC", "DESC"}
+	fetchTypeKeywords         = []string{"FIRST", "NEXT"}
+	lockTypeKeywords          = []string{"UPDATE", "SHARE", "NO KEY UPDATE", "KEY SHARE"}
+	referentialActionKeywords = []string{"CASCADE", "RESTRICT", "SET NULL", "SET DEFAULT", "NO ACTION"}
+	frameUnitKeywords         = []string{"ROWS", "RANGE", "GROUPS"}
+	frameBoundKeywords        = []string{"UNBOUNDED PRECEDING", "UNBOUNDED FOLLOWING", "CURRENT ROW", "PRECEDING", "FOLLOWING"}
+	frameOffsetKeywords       = []string{"PRECEDING", "FOLLOWING"}
+	frameExcludeKeywords      = []string{"CURRENT ROW", "GROUP", "TIES", "NO OTHERS"}
+)
+
+// CascadeText returns s when it is CASCADE or RESTRICT (any case), the drop
+// behavior of DROP and TRUNCATE, and "" otherwise.
+func CascadeText(s string) string { return keywordOneOf(s, cascadeKeywords) }
+
+// SortDirectionText returns s when it is ASC or DESC (any case), and ""
+// otherwise.
+func SortDirectionText(s string) string { return keywordOneOf(s, sortDirectionKeywords) }
+
+// FetchTypeText returns s when it is FIRST or NEXT (any case), and FIRST
+// otherwise: FETCH FIRST and FETCH NEXT mean the same.
+func FetchTypeText(s string) string {
+	if t := keywordOneOf(s, fetchTypeKeywords); t != "" {
+		return t
+	}
+	return "FIRST"
+}
+
+// LockTypeText returns s when it is a row-locking strength (UPDATE, SHARE,
+// NO KEY UPDATE, KEY SHARE; any case), and "" otherwise.
+func LockTypeText(s string) string { return keywordOneOf(s, lockTypeKeywords) }
+
+// ReferentialActionText returns s when it is a foreign-key ON DELETE / ON
+// UPDATE action (CASCADE, RESTRICT, SET NULL, SET DEFAULT, NO ACTION; any
+// case), and "" otherwise.
+func ReferentialActionText(s string) string { return keywordOneOf(s, referentialActionKeywords) }
+
+// FrameUnitText returns s when it is a window frame unit (ROWS, RANGE,
+// GROUPS; any case), and "" otherwise.
+func FrameUnitText(s string) string { return keywordOneOf(s, frameUnitKeywords) }
+
+// FrameBoundText returns s when it is a window frame bound kind (UNBOUNDED
+// PRECEDING / FOLLOWING, CURRENT ROW, PRECEDING, FOLLOWING; any case) or a
+// hand-built numeric bound that carries its offset in the kind ("1
+// PRECEDING"), and "" otherwise.
+func FrameBoundText(s string) string {
+	if t := keywordOneOf(s, frameBoundKeywords); t != "" {
+		return t
+	}
+	if n, kind, ok := strings.Cut(s, " "); ok && IsPlainNumberText(n) &&
+		keywordOneOf(kind, frameOffsetKeywords) != "" {
+		return s
+	}
+	return ""
+}
+
+// FrameExcludeText returns s when it is a window frame exclusion (CURRENT
+// ROW, GROUP, TIES, NO OTHERS; any case), and "" otherwise.
+func FrameExcludeText(s string) string { return keywordOneOf(s, frameExcludeKeywords) }
+
+// IsPlainNumberText reports whether s is a bare numeric literal as the
+// tokenizer stores it (digits, '.', an exponent with an optional sign), such
+// as the ClickHouse SAMPLE ratio 0.1 or 1/10's parts.
+func IsPlainNumberText(s string) bool {
+	if s == "" {
+		return false
+	}
+	digits := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= '0' && c <= '9':
+			digits = true
+		case c == '.':
+		case (c == 'e' || c == 'E') && digits && i+1 < len(s):
+			if s[i+1] == '+' || s[i+1] == '-' {
+				i++
+			}
+		default:
+			return false
+		}
+	}
+	return digits
 }
 
 // writeShowType writes the SHOW statement kind. Keyword text (TABLES,

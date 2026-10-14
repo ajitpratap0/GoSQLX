@@ -33,3 +33,13 @@ func KeywordFunctionNamesForTest() map[string]bool {
 	}
 	return m
 }
+
+// ConstraintNameWordsForTest returns a copy of constraintNameWords for the
+// external guard test in package ast_test.
+func ConstraintNameWordsForTest() map[string]bool {
+	m := make(map[string]bool, len(constraintNameWords))
+	for k, v := range constraintNameWords {
+		m[k] = v
+	}
+	return m
+}

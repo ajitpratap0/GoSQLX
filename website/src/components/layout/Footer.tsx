@@ -60,14 +60,14 @@ export function Footer() {
                           href={link.href}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-block py-2 text-sm text-zinc-300 hover:text-zinc-100 transition-colors duration-200"
+                          className="inline-flex min-h-11 items-center text-sm text-zinc-300 hover:text-zinc-100 transition-colors duration-200"
                         >
                           {link.label}
                         </a>
                       ) : (
                         <Link
                           href={link.href}
-                          className="inline-block py-2 text-sm text-zinc-300 hover:text-zinc-100 transition-colors duration-200"
+                          className="inline-flex min-h-11 items-center text-sm text-zinc-300 hover:text-zinc-100 transition-colors duration-200"
                         >
                           {link.label}
                         </Link>

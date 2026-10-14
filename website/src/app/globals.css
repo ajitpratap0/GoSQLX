@@ -130,6 +130,13 @@ html.light {
   --color-border-hover: rgba(0, 0, 0, 0.15);
 }
 
+/* @theme inline bakes token values into utilities, so the html.light variable
+   overrides never reach them; override the muted-text utilities explicitly. */
+html.light .text-text-muted,
+html.light .placeholder\:text-text-muted::placeholder {
+  color: #5B6472;
+}
+
 /* --- Body --- */
 html.light body {
   background-color: #FAFBFC;

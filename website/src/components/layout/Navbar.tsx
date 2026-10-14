@@ -181,7 +181,7 @@ export function Navbar() {
                     href={link.href}
                     onClick={() => setMobileOpen(false)}
                     aria-current={isActive ? 'page' : undefined}
-                    className={`block px-3 py-2.5 text-sm hover:bg-white/[0.04] rounded-lg transition-colors ${isActive ? 'text-white' : 'text-zinc-300 hover:text-white'}`}
+                    className={`flex min-h-11 items-center px-3 text-sm hover:bg-white/[0.04] rounded-lg transition-colors ${isActive ? 'text-white' : 'text-zinc-300 hover:text-white'}`}
                   >
                     {link.label}
                   </Link>
@@ -199,7 +199,7 @@ export function Navbar() {
                   <GitHubIcon className="w-5 h-5" />
                 </a>
                 <ThemeToggle />
-                <Button href="/docs/getting-started" variant="primary" className="text-xs px-4 py-2">
+                <Button href="/docs/getting-started" variant="primary" className="text-xs px-4 py-2 min-h-11">
                   Get Started
                 </Button>
               </div>

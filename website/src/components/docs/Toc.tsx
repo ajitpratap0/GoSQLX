@@ -47,7 +47,7 @@ export function Toc({ headings }: TocProps) {
             <a
               href={`#${heading.id}`}
               title={heading.text}
-              className={`block line-clamp-2 py-0.5 transition-colors ${
+              className={`line-clamp-2 py-0.5 transition-colors ${
                 heading.level === 3 ? 'text-xs' : 'font-medium'
               } ${
                 activeId === heading.id

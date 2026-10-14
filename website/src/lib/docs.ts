@@ -55,13 +55,15 @@ function renderedHeadingText(raw: string): string {
 export function extractHeadings(content: string): DocHeading[] {
   const headings: DocHeading[] = [];
   const slugger = new GithubSlugger();
-  const regex = /^(#{2,3})\s+(.+)$/gm;
+  const regex = /^(#{1,6})\s+(.+)$/gm;
   let match;
   const body = stripCodeFences(content);
   while ((match = regex.exec(body)) !== null) {
     const rendered = renderedHeadingText(match[2]);
     // Slug the same text rehype-slug sees (trailing colon is dropped by the slugger)
     const id = slugger.slug(rendered);
+    // Every level feeds the slugger (as rehype-slug does); only h2/h3 are listed
+    if (match[1].length < 2 || match[1].length > 3) continue;
     const text = rendered.replace(/:+$/, '').trim();
     headings.push({ id, text, level: match[1].length });
   }

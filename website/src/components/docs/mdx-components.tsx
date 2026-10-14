@@ -65,12 +65,6 @@ export const mdxComponents = {
     );
   },
 
-  code: (props: ComponentPropsWithoutRef<'code'>) => {
-    // Inline code (not inside pre)
-    // Block code is styled by the parent <pre>; only style inline code here.
-    return <code {...props} className={props.className} />;
-  },
-
   blockquote: (props: ComponentPropsWithoutRef<'blockquote'>) => (
     <blockquote {...props} className="border-l-2 border-accent-indigo bg-surface/50 pl-4 py-2 italic text-zinc-400" />
   ),

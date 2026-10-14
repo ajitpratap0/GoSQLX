@@ -490,3 +490,7 @@ html.light .opacity-40[class*="bg-gradient"] { opacity: 0.2; }
 .prose-dark :not(pre) > code::after {
   content: none;
 }
+html.light .prose-dark :not(pre) > code {
+  background: rgba(0, 0, 0, 0.06);
+  color: #1f2937;
+}

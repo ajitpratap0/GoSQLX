@@ -125,7 +125,13 @@ Read **Behavior changes** before upgrading.
   `pkg/formatter` (CLI separators `;\n\n` / `; `, no trailing semicolon). If the
   formatted text does not re-parse, or re-parses to a different query, the
   command exits non-zero with "formatted output does not re-parse" and
-  `format -i` leaves the file untouched. (#599, #624)
+  `format -i` leaves the file untouched. It also refuses output that would drop
+  meaningful identifier quotes or change a string literal. With
+  `--dialect mysql`/`mariadb` the output must keep exactly the input's
+  double-quoted tokens, because MySQL reads `"..."` as a string:
+  `WHERE name = "bob"` is refused rather than rewritten as `name = bob`, and
+  `` `select` `` rather than rewritten as `"select"`. ANSI_QUOTES-style input
+  (`"users"."id"`, `FROM "users"`) is formatted as before. (#599, #624)
 - **`Extract*` and `ExtractMetadata` return sorted results; L006/L009 are
   deterministic**: `ExtractTables`, `ExtractTablesQualified`, `ExtractColumns`,
   `ExtractColumnsQualified`, `ExtractFunctions` and `ExtractMetadata` (and the
@@ -149,8 +155,22 @@ Read **Behavior changes** before upgrading.
   and column lists and FROM/JOIN table names that are reserved words or contain
   non-identifier characters. New helpers `ast.QuoteName` and
   `ast.QuoteQualifiedName`. `SELECT "select"` used to render as
-  `SELECT select`. SQL Server `#temp`, Snowflake `@stage/path` and names with
-  Unicode combining marks stay bare. (#611, #632)
+  `SELECT select`. A name quoted only for its case (`"Total"`, `"MixedCase"`)
+  renders bare, so it keeps matching the alias or column list it refers to;
+  the AST does not record quoting for those. Fingerprints of `"id"` and `id`
+  are unchanged and still equal; only names that need quotes (such as
+  `"select"`) now normalize with them. SQL Server `#temp`, Snowflake
+  `@stage/path` and names with Unicode combining marks stay bare. (#611, #632)
+- **Smart quotes inside ASCII-quoted tokens are content**: a string or
+  identifier opened with `'` or `"` now ends only at the same ASCII quote.
+  `“ ” ‘ ’ « »` inside it are kept as written instead of being read as the
+  closing quote. Tokens opened with a smart quote keep their previous rules.
+  (#632)
+- **SQL Server table hints must be bare words**: `WITH (NOLOCK, UPDLOCK)` is
+  unchanged, but `WITH (INDEX = ix)` and quoted or bracketed hints are now
+  parse errors; they used to be accepted and the hint silently dropped. SQL
+  Server now accepts double-quoted constraint names (`CONSTRAINT "x y"`), and
+  every dialect accepts `CAST(x AS "type")`. (#604, #632)
 - **Readable-style formatting emits one trailing `;`**: with `AddSemicolon`
   (readable style, `FormatString` default) only the outermost statement ends with
   `;`. CTE bodies, `IN`/`EXISTS`/scalar subqueries, set-operation operands and
@@ -172,7 +192,12 @@ Read **Behavior changes** before upgrading.
 - **Qualified names with more than 5 parts return E2004**: dotted object names
   in FROM, DML targets and DDL (TABLE, VIEW, INDEX, USE and MySQL statements)
   are capped at 5 parts, the limit already applied to column references.
-  Names of 1 to 5 parts render byte-identically. (#613, #627)
+  Every caller (FROM, JOIN, INSERT/UPDATE/DELETE, CREATE, DROP, TRUNCATE,
+  REFRESH, SHOW/DESCRIBE/REPLACE, USE, ClickHouse MV `TO`) reports this E2004
+  rather than rewrapping it as E2002 "expected table name", and Snowflake's
+  permissive `CREATE STAGE/SEQUENCE/FILE FORMAT` path now rejects such names
+  instead of keeping a truncated `RawSQL`. Names of 1 to 5 parts render
+  byte-identically. (#613, #627)
 - **Error context windows are bounded on long lines**: `(*Error).Error()`,
   `FormatMultiLineContext` and `FormatContextWindow` clip source lines over 120
   bytes to about 60 bytes either side of the error column (UTF-8 safe, marked
@@ -414,7 +439,9 @@ Read **Behavior changes** before upgrading.
 - **Bogus context in 15 parser errors**: nine E2002 and six E2004 sites passed
   an explanatory sentence as the SQL source, so `Error()` printed it as line 1
   of the user's query. The context is now empty and the sentence is the
-  error's `Hint`; code, message and position are unchanged. (#616, #627)
+  error's `Hint`; code, message and position are unchanged. The BETWEEN, LIKE,
+  REGEXP and IN-subquery operand wrappers likewise stop printing a fake
+  `1 | )` snippet and keep the inner error as `Cause`. (#616, #627)
 - **`gosqlx format` dropped or mangled constructs** (see Behavior changes):
   `JOIN ... USING` printed `ON LIST`, and WINDOW, INTERVAL, `UPDATE ... FROM` and
   `DEFAULT VALUES` were lost. (#599, #603, #608, #609, #610, #624)
@@ -500,6 +527,22 @@ Numbers are quoted from each PR (benchstat on an Apple M4 unless stated; the
   op, and the context-format benchmarks are about 20% faster. (#615, #626)
 
 ### Security
+- **Render-time SQL injection closed**: quoted names and some literal and
+  keyword values were written into rendered SQL verbatim, so
+  `SELECT 1 AS "a; DROP TABLE x; --" FROM t` came back from `gosqlx.Format`,
+  `SQL()`, `Normalize` or `Transpile` as two statements. Every name position
+  (SELECT, table, derived-table, JOIN, PIVOT, UPDATE/DELETE and MERGE aliases,
+  window names, DML targets and column lists, DDL names, constraint and
+  function names, data types) is now quoted when it is not a plain
+  identifier or is reserved. INTERVAL, PRAGMA, table-hint and PIVOT values are
+  escaped, and the formatter's `-- UNSUPPORTED:` comment covers every line.
+  Keyword fields (join type, set operator, DROP object type, interval unit,
+  constraint, partition, ALTER, MERGE, frame and lock types, FK actions,
+  FETCH, SAMPLE, table options, view `WITH` option, SHOW kind) are checked
+  against exact allow-lists; a hand-built value outside its list is dropped
+  or rendered so that the output fails to parse, never as an extra statement.
+  Found by the batch-3 adversarial review and validated with hostile-name and
+  AST-mutation fuzzing across all dialects. (#632)
 - **Bounded input-driven work**: comment counts, nesting depth for unary
   operators, `NOT` and derived tables, comment runs and set-operation rendering
   are now bounded or linear (see **Behavior changes**). These were found by the

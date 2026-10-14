@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { GitHubStarButton } from '@/components/home/GitHubStarButton';
 import { MiniPlayground } from '@/components/home/MiniPlayground';
 
-export function Hero() {
+export function Hero({ stars }: { stars: number | null }) {
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-clip">
       {/* Background gradient mesh */}
@@ -64,7 +64,7 @@ export function Hero() {
           <Button variant="ghost" href="/playground">
             Try Playground
           </Button>
-          <GitHubStarButton />
+          <GitHubStarButton stars={stars} />
         </div>
 
         {/* Live mini playground */}

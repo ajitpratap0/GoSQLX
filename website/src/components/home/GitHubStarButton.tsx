@@ -1,22 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
+import { formatStars } from '@/lib/github';
 
 const spring = { type: 'spring' as const, stiffness: 400, damping: 17 };
 
-export function GitHubStarButton() {
-  const [stars, setStars] = useState<number | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch('https://api.github.com/repos/ajitpratap0/GoSQLX', { signal: controller.signal })
-      .then((r) => r.json())
-      .then((d) => { if (typeof d.stargazers_count === 'number') setStars(d.stargazers_count); })
-      .catch(() => {});
-    return () => controller.abort();
-  }, []);
-
+export function GitHubStarButton({ stars }: { stars: number | null }) {
   return (
     <motion.a
       href="https://github.com/ajitpratap0/GoSQLX"
@@ -36,7 +25,7 @@ export function GitHubStarButton() {
       Star
       {stars !== null && (
         <span className="bg-white/10 text-zinc-300 text-xs px-1.5 py-0.5 rounded font-mono">
-          {stars >= 1000 ? `${(stars / 1000).toFixed(1)}k` : stars}
+          {formatStars(stars)}
         </span>
       )}
     </motion.a>

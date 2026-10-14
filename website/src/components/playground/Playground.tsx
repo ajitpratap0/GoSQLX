@@ -208,7 +208,6 @@ export default function Playground() {
       {/* Top toolbar */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800 bg-slate-900/50 min-h-[44px]">
         <div className="flex items-center gap-3">
-          <h1 className="sr-only">SQL Playground</h1>
           <span className="hidden sm:block text-sm font-semibold text-slate-200" aria-hidden="true">SQL Playground</span>
           <div className="hidden sm:block h-4 w-px bg-slate-700" />
           <label htmlFor="dialect-select" className="flex items-center gap-2 text-sm text-slate-400">

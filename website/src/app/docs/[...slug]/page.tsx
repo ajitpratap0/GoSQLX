@@ -114,7 +114,7 @@ export default async function DocPage({ params }: PageProps) {
       </div>
 
       {/* Main content */}
-      <main className="min-w-0 flex-1 px-6 py-10 lg:px-12">
+      <div className="min-w-0 flex-1 px-6 py-10 lg:px-12">
         {/* Breadcrumbs */}
         <nav aria-label="Breadcrumb" className="mb-6 text-sm text-zinc-300">
           <ol className="flex items-center gap-2">
@@ -149,7 +149,7 @@ export default async function DocPage({ params }: PageProps) {
 
         {/* Prev / Next */}
         <DocNavigation prev={prev} next={next} />
-      </main>
+      </div>
 
       {/* Table of Contents */}
       <div className="hidden xl:block w-64 shrink-0 py-10 pr-6">

@@ -24,7 +24,7 @@ const CATEGORY_ICONS: Record<string, string> = {
 
 export default function DocsPage() {
   return (
-    <main className="mx-auto max-w-5xl px-6 py-20">
+    <div className="mx-auto max-w-5xl px-6 py-20">
       <div className="mb-16 text-center">
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
           GoSQLX Documentation
@@ -73,6 +73,6 @@ export default function DocsPage() {
           </FadeIn>
         ))}
       </div>
-    </main>
+    </div>
   );
 }

@@ -14,7 +14,7 @@ export default function BlogPage() {
   const posts = getAllPosts();
 
   return (
-    <main className="min-h-screen py-20 px-4">
+    <div className="min-h-screen py-20 px-4">
       <div className="max-w-3xl mx-auto">
         <h1 className="text-4xl font-bold tracking-tight mb-3">Changelog</h1>
         <p className="text-zinc-500 text-lg mb-12">
@@ -23,6 +23,6 @@ export default function BlogPage() {
 
         <BlogList posts={posts} />
       </div>
-    </main>
+    </div>
   );
 }

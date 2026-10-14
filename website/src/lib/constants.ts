@@ -19,6 +19,7 @@ export const FEATURES = [
 export const DOCS_SIDEBAR = [
   { category: 'Getting Started', items: [
     { slug: 'getting-started', file: 'GETTING_STARTED.md', label: 'Getting Started' },
+    { slug: 'feature-tour', file: 'FEATURE_TOUR.md', label: 'Feature Tour' },
     { slug: 'cli-guide', file: 'CLI_GUIDE.md', label: 'CLI Guide' },
   ]},
   { category: 'Core', items: [

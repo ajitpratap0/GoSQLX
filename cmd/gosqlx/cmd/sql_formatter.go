@@ -187,6 +187,27 @@ func (f *SQLFormatter) formatSelect(stmt *ast.SelectStatement) error {
 		}
 	}
 
+	// WINDOW clause: named window definitions referenced by OVER w /
+	// OVER (w ...). Dropping it would silently change query semantics.
+	if len(stmt.Windows) > 0 {
+		f.writeNewline()
+		f.writeKeyword("WINDOW")
+		f.builder.WriteString(" ")
+		for i := range stmt.Windows {
+			if i > 0 {
+				f.builder.WriteString(", ")
+			}
+			f.builder.WriteString(stmt.Windows[i].Name)
+			f.builder.WriteString(" ")
+			f.writeKeyword("AS")
+			f.builder.WriteString(" (")
+			if err := f.formatWindowSpec(&stmt.Windows[i]); err != nil {
+				return err
+			}
+			f.builder.WriteString(")")
+		}
+	}
+
 	// ORDER BY clause
 	if len(stmt.OrderBy) > 0 {
 		f.writeNewline()
@@ -789,14 +810,29 @@ func (f *SQLFormatter) formatExpression(expr ast.Expression) error {
 		}
 
 		// Window function (OVER clause)
-		if e.Over != nil {
+		if o := e.Over; o != nil {
 			f.builder.WriteString(" ")
 			f.writeKeyword("OVER")
-			f.builder.WriteString(" (")
-			if err := f.formatWindowSpec(e.Over); err != nil {
-				return err
+			f.builder.WriteString(" ")
+			if o.Name != "" && o.BaseWindow == "" && len(o.PartitionBy) == 0 && len(o.OrderBy) == 0 && o.FrameClause == nil {
+				// Bare named-window reference: OVER w.
+				f.builder.WriteString(o.Name)
+			} else {
+				// A hand-built spec may carry the referenced window in Name
+				// alongside other parts; render it as the base window, matching
+				// ast.FunctionCall.SQL().
+				spec := o
+				if o.BaseWindow == "" && o.Name != "" {
+					cp := *o
+					cp.BaseWindow = o.Name
+					spec = &cp
+				}
+				f.builder.WriteString("(")
+				if err := f.formatWindowSpec(spec); err != nil {
+					return err
+				}
+				f.builder.WriteString(")")
 			}
-			f.builder.WriteString(")")
 		}
 	case *ast.CaseExpression:
 		f.writeKeyword("CASE")
@@ -932,14 +968,24 @@ func (f *SQLFormatter) formatExpression(expr ast.Expression) error {
 
 // formatWindowSpec formats window specifications for window functions
 func (f *SQLFormatter) formatWindowSpec(spec *ast.WindowSpec) error {
+	// The existing window this spec refines (OVER (w ORDER BY z),
+	// WINDOW w2 AS (w1 ...)) comes first inside the parentheses.
+	hasBase := spec.BaseWindow != ""
+	if hasBase {
+		f.builder.WriteString(spec.BaseWindow)
+	}
+
 	if len(spec.PartitionBy) > 0 {
+		if hasBase {
+			f.builder.WriteString(" ")
+		}
 		f.writeKeyword("PARTITION BY")
 		f.builder.WriteString(" ")
 		f.formatExpressionList(spec.PartitionBy, ", ")
 	}
 
 	if len(spec.OrderBy) > 0 {
-		if len(spec.PartitionBy) > 0 {
+		if hasBase || len(spec.PartitionBy) > 0 {
 			f.builder.WriteString(" ")
 		}
 		f.writeKeyword("ORDER BY")
@@ -967,7 +1013,7 @@ func (f *SQLFormatter) formatWindowSpec(spec *ast.WindowSpec) error {
 	}
 
 	if fc := spec.FrameClause; fc != nil {
-		if len(spec.PartitionBy) > 0 || len(spec.OrderBy) > 0 {
+		if hasBase || len(spec.PartitionBy) > 0 || len(spec.OrderBy) > 0 {
 			f.builder.WriteString(" ")
 		}
 		f.writeKeyword(fc.Type)

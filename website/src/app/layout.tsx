@@ -57,35 +57,6 @@ export default function RootLayout({
         >
           Skip to main content
         </a>
-        <script
-          type="application/ld+json"
-          suppressHydrationWarning
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              '@context': 'https://schema.org',
-              '@type': 'SoftwareApplication',
-              name: 'GoSQLX',
-              applicationCategory: 'DeveloperApplication',
-              operatingSystem: 'Any',
-              url: 'https://gosqlx.dev',
-              downloadUrl: 'https://github.com/ajitpratap0/GoSQLX/releases',
-              codeRepository: 'https://github.com/ajitpratap0/GoSQLX',
-              programmingLanguage: 'Go',
-              description: 'High-performance, zero-copy SQL parsing SDK for Go',
-              offers: {
-                '@type': 'Offer',
-                price: '0',
-                priceCurrency: 'USD',
-              },
-              publisher: {
-                '@type': 'Organization',
-                name: 'GoSQLX',
-                url: 'https://gosqlx.dev',
-                sameAs: ['https://github.com/ajitpratap0/GoSQLX'],
-              },
-            }),
-          }}
-        />
         <ScrollProgressBar />
         <Navbar />
         <main id="main-content" className="pt-16">{children}</main>

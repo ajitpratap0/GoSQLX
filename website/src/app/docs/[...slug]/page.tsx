@@ -10,6 +10,7 @@ import { DOCS_SIDEBAR } from '@/lib/constants';
 import { Sidebar } from '@/components/docs/Sidebar';
 import { Toc } from '@/components/docs/Toc';
 import { DocNavigation } from '@/components/docs/DocNavigation';
+import { JsonLd } from '@/components/JsonLd';
 import { mdxComponents } from '@/components/docs/mdx-components';
 
 function getReadingTime(text: string): number {
@@ -71,12 +72,9 @@ export default async function DocPage({ params }: PageProps) {
   const breadcrumbItems: Array<{ '@type': string; position: number; name: string; item: string }> = [
     { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://gosqlx.dev/' },
     { '@type': 'ListItem', position: 2, name: 'Documentation', item: 'https://gosqlx.dev/docs/' },
-    ...(categoryItem
-      ? [{ '@type': 'ListItem', position: 3, name: categoryItem.category, item: 'https://gosqlx.dev/docs/' }]
-      : []),
     {
       '@type': 'ListItem',
-      position: categoryItem ? 4 : 3,
+      position: 3,
       name: doc.title,
       item: `https://gosqlx.dev/docs/${slugStr}/`,
     },
@@ -88,13 +86,22 @@ export default async function DocPage({ params }: PageProps) {
     itemListElement: breadcrumbItems,
   };
 
+  const articleJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'TechArticle',
+    headline: doc.title,
+    description: `GoSQLX documentation: ${doc.label}.`,
+    url: `https://gosqlx.dev/docs/${slugStr}/`,
+    dateModified: doc.modifiedAt,
+    inLanguage: 'en',
+    author: { '@type': 'Organization', name: 'GoSQLX', url: 'https://gosqlx.dev' },
+    publisher: { '@type': 'Organization', name: 'GoSQLX', url: 'https://gosqlx.dev' },
+    mainEntityOfPage: { '@type': 'WebPage', '@id': `https://gosqlx.dev/docs/${slugStr}/` },
+  };
+
   return (
     <>
-      <script
-        type="application/ld+json"
-        suppressHydrationWarning
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
-      />
+      <JsonLd data={[breadcrumbJsonLd, articleJsonLd]} />
       <div className="mx-auto flex max-w-[90rem]">
       {/* Sidebar */}
       <div className="hidden lg:block w-64 shrink-0">

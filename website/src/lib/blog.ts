@@ -9,6 +9,8 @@ export interface BlogPost {
   slug: string;
   title: string;
   date: string;
+  /** Optional frontmatter `updated` date; falls back to `date`. */
+  updated: string;
   version: string;
   description: string;
   content: string;
@@ -108,6 +110,7 @@ export function getPostBySlug(slug: string): BlogPost | null {
     slug,
     title: data.title ?? '',
     date: data.date ?? '',
+    updated: data.updated ?? data.date ?? '',
     version,
     // Frontmatter `description` is unreliable (table rows, stubs), so derive it.
     description: deriveDescription(version, content),

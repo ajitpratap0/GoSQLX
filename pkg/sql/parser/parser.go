@@ -1240,8 +1240,27 @@ func (p *Parser) isQuotedIdentifierToken() bool {
 // isDMLReturningKeyword reports whether the current token is RETURNING inside
 // an INSERT source query or UPDATE ... FROM list, where it starts the
 // statement's RETURNING clause rather than naming an alias (#610).
+//
+// A RETURNING list cannot begin with a join or clause keyword, ON, USING, a
+// comma, a dot, a closing parenthesis or the end of the statement, so when one of those follows, the
+// token is an ordinary alias (FROM s JOIN r returning ON ...), as it is in
+// dialects that do not reserve the word.
 func (p *Parser) isDMLReturningKeyword() bool {
-	return p.dmlReturning && p.isReturningKeyword()
+	if !p.dmlReturning || !p.isReturningKeyword() {
+		return false
+	}
+	switch p.peekToken().Token.Type {
+	case models.TokenTypeOn, models.TokenTypeUsing, models.TokenTypeComma,
+		models.TokenTypePeriod, models.TokenTypeRParen,
+		models.TokenTypeEOF, models.TokenTypeSemicolon,
+		models.TokenTypeJoin, models.TokenTypeInner, models.TokenTypeCross,
+		models.TokenTypeNatural, models.TokenTypeFull,
+		models.TokenTypeWhere, models.TokenTypeGroup, models.TokenTypeHaving,
+		models.TokenTypeOrder, models.TokenTypeLimit,
+		models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect:
+		return false
+	}
+	return true
 }
 
 // canBeAlias checks if current token can be used as an alias.

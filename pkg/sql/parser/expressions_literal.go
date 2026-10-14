@@ -460,9 +460,20 @@ func (p *Parser) parseNotOperand() (ast.Expression, error) {
 	return p.parseComparisonExpression()
 }
 
-// parseSubquery parses a subquery (SELECT or WITH statement).
-// Expects current token to be SELECT or WITH.
+// parseSubquery parses a nested subquery (SELECT or WITH statement), such as
+// an IN/EXISTS/scalar subquery. Expects current token to be SELECT or WITH.
+// A nested scope never ends at a DML RETURNING clause, so the INSERT-source
+// RETURNING stop is cleared for its duration (#610).
 func (p *Parser) parseSubquery() (ast.Statement, error) {
+	prev := p.dmlReturning
+	p.dmlReturning = false
+	defer func() { p.dmlReturning = prev }()
+	return p.parseQuerySource()
+}
+
+// parseQuerySource parses a SELECT or WITH statement without changing the
+// DML RETURNING context.
+func (p *Parser) parseQuerySource() (ast.Statement, error) {
 	if p.isType(models.TokenTypeWith) {
 		// WITH statement handles its own token consumption
 		return p.parseWithStatement()

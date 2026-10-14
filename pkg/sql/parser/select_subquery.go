@@ -265,6 +265,11 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 // tables are bounded by MaxRecursionDepth. This path does not pass through
 // parseExpression, which guards other nesting.
 func (p *Parser) parseDerivedTableSelect() (ast.Statement, error) {
+	// A derived table is a nested scope: the INSERT-source RETURNING stop
+	// does not apply inside it (#610).
+	prev := p.dmlReturning
+	p.dmlReturning = false
+	defer func() { p.dmlReturning = prev }()
 	err := p.enterRecursion()
 	defer p.leaveRecursion()
 	if err != nil {

@@ -613,3 +613,43 @@ func TestSchema_CaseInsensitiveColumnLookup(t *testing.T) {
 		t.Fatal("expected case-insensitive column lookup to succeed")
 	}
 }
+
+// TestValidator_UpdateFrom pins that UPDATE ... FROM tables and aliases are
+// resolvable and checked for existence (#610 review).
+func TestValidator_UpdateFrom(t *testing.T) {
+	v := NewValidator(helperSchema())
+
+	t.Run("valid", func(t *testing.T) {
+		for _, sql := range []string{
+			"UPDATE users SET name = o.status FROM orders o WHERE users.id = o.user_id",
+			"UPDATE users SET name = 'x' FROM orders WHERE users.id = orders.user_id",
+		} {
+			errs, err := v.Validate(sql)
+			if err != nil {
+				t.Fatalf("Validate(%q): %v", sql, err)
+			}
+			if len(errs) != 0 {
+				t.Errorf("Validate(%q): unexpected errors: %v", sql, errs)
+			}
+		}
+	})
+
+	t.Run("missing table", func(t *testing.T) {
+		errs, err := v.Validate("UPDATE users SET name = 'x' FROM nosuch WHERE users.id = nosuch.id")
+		if err != nil {
+			t.Fatalf("Validate: %v", err)
+		}
+		found := false
+		for _, e := range errs {
+			if strings.Contains(e.Message, `table "nosuch" does not exist`) {
+				found = true
+			}
+			if strings.Contains(e.Message, "not referenced in FROM clause") {
+				t.Errorf("unexpected misleading error: %q", e.Message)
+			}
+		}
+		if !found {
+			t.Errorf("expected missing-table error, got %v", errs)
+		}
+	})
+}

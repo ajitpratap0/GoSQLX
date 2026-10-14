@@ -636,3 +636,55 @@ func TestDMLReturningQuotedAlias(t *testing.T) {
 		})
 	}
 }
+
+// TestDMLReturningNestedScopes pins that the RETURNING stop applies only to the
+// outermost INSERT source query: nested derived tables, subqueries and CTE
+// bodies, and aliases that cannot start a RETURNING clause, keep parsing
+// "returning" as an ordinary identifier (#610 review).
+func TestDMLReturningNestedScopes(t *testing.T) {
+	cases := []struct {
+		name string
+		sql  string
+	}{
+		{"cte body", "INSERT INTO t WITH c AS (SELECT * FROM s returning) SELECT * FROM c"},
+		{"in subquery", "INSERT INTO t SELECT a FROM s WHERE a IN (SELECT b FROM r returning)"},
+		{"exists subquery", "INSERT INTO t SELECT a FROM s WHERE EXISTS (SELECT 1 FROM r returning)"},
+		{"scalar subquery", "INSERT INTO t SELECT (SELECT max(b) FROM r returning) FROM s"},
+		{"derived table", "INSERT INTO t SELECT a FROM (SELECT a FROM r) returning"},
+		{"join alias on", "INSERT INTO t SELECT * FROM s JOIN r returning ON s.id = returning.id"},
+		{"update from subquery", "UPDATE t SET a = 1 FROM (SELECT a FROM r returning) x WHERE t.id = x.a"},
+		{"update from alias then where", "UPDATE t SET a = 1 FROM s returning WHERE t.id = returning.id"},
+	}
+	for _, d := range []string{"mysql", "sqlserver", "snowflake", "clickhouse"} {
+		for _, tc := range cases {
+			t.Run(tc.name+"/"+d, func(t *testing.T) {
+				tree, err := parseInsertCTEWithDialect(t, tc.sql, d)
+				if tree != nil {
+					defer ast.ReleaseAST(tree)
+				}
+				if err != nil {
+					t.Fatalf("parse(%q, %s): %v", tc.sql, d, err)
+				}
+			})
+		}
+	}
+
+	// The outermost RETURNING clause is still recognised.
+	for _, sql := range []string{
+		"INSERT INTO t SELECT a FROM s WHERE a IN (SELECT b FROM r) RETURNING id",
+		"INSERT INTO t WITH c AS (SELECT * FROM s) SELECT * FROM c RETURNING id",
+		"INSERT INTO t SELECT a FROM (SELECT a FROM r) d RETURNING id",
+	} {
+		stmt, tree := parseGapSingle(t, sql, "postgresql")
+		ins, ok := stmt.(*ast.InsertStatement)
+		if !ok {
+			ast.ReleaseAST(tree)
+			t.Fatalf("parse(%q): got %T", sql, stmt)
+		}
+		if len(ins.Returning) != 1 {
+			ast.ReleaseAST(tree)
+			t.Fatalf("parse(%q): Returning = %d, want 1", sql, len(ins.Returning))
+		}
+		ast.ReleaseAST(tree)
+	}
+}

@@ -311,7 +311,7 @@ func (p *Parser) parseInsertSourceQuery() (ast.Statement, error) {
 	}
 	prev := p.dmlReturning
 	p.dmlReturning = true
-	stmt, err := p.parseSubquery()
+	stmt, err := p.parseQuerySource()
 	p.dmlReturning = prev
 	if err != nil {
 		return nil, err

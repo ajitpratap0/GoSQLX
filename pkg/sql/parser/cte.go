@@ -227,6 +227,12 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 	}
 	p.advance() // Consume (
 
+	// A CTE body is a nested scope: the INSERT-source RETURNING stop does not
+	// apply inside it (#610).
+	prevReturning := p.dmlReturning
+	p.dmlReturning = false
+	defer func() { p.dmlReturning = prevReturning }()
+
 	// Parse the inner statement - handle SELECT with set operations support
 	var stmt ast.Statement
 	var err error

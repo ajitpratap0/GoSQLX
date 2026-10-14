@@ -8,7 +8,7 @@ import { FadeIn } from '@/components/ui/FadeIn';
 export const metadata: Metadata = pageMeta({
   title: 'Documentation',
   description:
-    'GoSQLX documentation: everything you need to parse, analyze, and transform SQL with Go.',
+    'GoSQLX documentation: guides, API reference, CLI, dialect and error code references, and tutorials to parse, analyze and transform SQL in Go.',
   path: '/docs/',
 });
 

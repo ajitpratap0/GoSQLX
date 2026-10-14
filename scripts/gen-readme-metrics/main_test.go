@@ -11,6 +11,7 @@ func TestSyncBanners(t *testing.T) {
 	}{
 		{"bold version", "**Version**: v1.13.0 | **Last Updated**: 2026-03-20", "**Version**: v1.15.0 | **Last Updated**: 2026-03-20"},
 		{"title", "# API Reference (v1.14.0)", "# API Reference (v1.15.0)"},
+		{"bold version no v", "**Version**: 1.6.0", "**Version**: 1.15.0"},
 		{"current version", "**Current Version**: v1.14.0 | x", "**Current Version**: v1.15.0 | x"},
 		{"no v prefix", "**GoSQLX Version**: 1.14.0", "**GoSQLX Version**: 1.15.0"},
 		{"history untouched", "| ✅ v1.14.0 |", "| ✅ v1.14.0 |"},

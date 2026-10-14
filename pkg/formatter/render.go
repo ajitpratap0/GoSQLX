@@ -615,7 +615,7 @@ func renderCreateTable(c *ast.CreateTableStatement, opts ast.FormatOptions) stri
 		sb.WriteString(f.kw("IF NOT EXISTS"))
 		sb.WriteString(" ")
 	}
-	sb.WriteString(c.Name)
+	sb.WriteString(ast.QuoteQualifiedName(c.Name))
 
 	if opts.NewlinePerClause {
 		sb.WriteString(" (\n")
@@ -653,18 +653,18 @@ func renderCreateTable(c *ast.CreateTableStatement, opts ast.FormatOptions) stri
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("INHERITS"))
 		sb.WriteString(" (")
-		sb.WriteString(strings.Join(c.Inherits, ", "))
+		sb.WriteString(quoteQualifiedNames(c.Inherits))
 		sb.WriteString(")")
 	}
 
 	if c.PartitionBy != nil {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("PARTITION BY"))
-		fmt.Fprintf(sb, " %s (%s)", c.PartitionBy.Type, strings.Join(c.PartitionBy.Columns, ", "))
+		fmt.Fprintf(sb, " %s (%s)", c.PartitionBy.Type, quoteColumnNames(c.PartitionBy.Columns))
 	}
 
 	for _, opt := range c.Options {
-		fmt.Fprintf(sb, " %s=%s", opt.Name, opt.Value)
+		fmt.Fprintf(sb, " %s=%s", opt.Name, ast.QuoteTableOptionValue(opt.Value))
 	}
 
 	if opts.AddSemicolon {
@@ -748,7 +748,7 @@ func renderAlterTable(a *ast.AlterTableStatement, opts ast.FormatOptions) string
 
 	sb.WriteString(f.kw("ALTER TABLE"))
 	sb.WriteString(" ")
-	sb.WriteString(a.Table)
+	sb.WriteString(ast.QuoteQualifiedName(a.Table))
 
 	for i, action := range a.Actions {
 		if i > 0 {
@@ -764,7 +764,7 @@ func renderAlterTable(a *ast.AlterTableStatement, opts ast.FormatOptions) string
 			sb.WriteString(tableConstraintSQL(action.Constraint))
 		} else if action.ColumnName != "" {
 			sb.WriteString(" ")
-			sb.WriteString(action.ColumnName)
+			sb.WriteString(ast.QuoteColumnName(action.ColumnName))
 		}
 	}
 
@@ -794,25 +794,25 @@ func renderCreateIndex(c *ast.CreateIndexStatement, opts ast.FormatOptions) stri
 		sb.WriteString(f.kw("IF NOT EXISTS"))
 		sb.WriteString(" ")
 	}
-	sb.WriteString(c.Name)
+	sb.WriteString(ast.QuoteQualifiedName(c.Name))
 	sb.WriteString(" ")
 	sb.WriteString(f.kw("ON"))
 	sb.WriteString(" ")
-	sb.WriteString(c.Table)
+	sb.WriteString(ast.QuoteQualifiedName(c.Table))
 
 	if c.Using != "" {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("USING"))
 		sb.WriteString(" ")
-		sb.WriteString(c.Using)
+		sb.WriteString(ast.QuoteColumnName(c.Using))
 	}
 
 	sb.WriteString(" (")
 	cols := make([]string, len(c.Columns))
 	for i, col := range c.Columns {
-		s := col.Column
+		s := ast.QuoteColumnName(col.Column)
 		if col.Collate != "" {
-			s += " " + f.kw("COLLATE") + " " + col.Collate
+			s += " " + f.kw("COLLATE") + " " + ast.QuoteColumnName(col.Collate)
 		}
 		if col.Direction != "" {
 			s += " " + f.kw(col.Direction)
@@ -912,7 +912,7 @@ func renderCreateMaterializedView(c *ast.CreateMaterializedViewStatement, opts a
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("TABLESPACE"))
 		sb.WriteString(" ")
-		sb.WriteString(c.Tablespace)
+		sb.WriteString(ast.QuoteColumnName(c.Tablespace))
 	}
 
 	sb.WriteString(" ")
@@ -949,7 +949,7 @@ func renderRefreshMaterializedView(r *ast.RefreshMaterializedViewStatement, opts
 		sb.WriteString(f.kw("CONCURRENTLY"))
 		sb.WriteString(" ")
 	}
-	sb.WriteString(r.Name)
+	sb.WriteString(ast.QuoteQualifiedName(r.Name))
 
 	if r.WithData != nil {
 		sb.WriteString(f.clauseSep())
@@ -982,7 +982,7 @@ func renderDrop(d *ast.DropStatement, opts ast.FormatOptions) string {
 		sb.WriteString(f.kw("IF EXISTS"))
 		sb.WriteString(" ")
 	}
-	sb.WriteString(strings.Join(d.Names, ", "))
+	sb.WriteString(quoteQualifiedNames(d.Names))
 
 	if d.CascadeType != "" {
 		sb.WriteString(" ")
@@ -1007,7 +1007,7 @@ func renderTruncate(t *ast.TruncateStatement, opts ast.FormatOptions) string {
 	sb.WriteString(" ")
 	sb.WriteString(f.kw("TABLE"))
 	sb.WriteString(" ")
-	sb.WriteString(strings.Join(t.Tables, ", "))
+	sb.WriteString(quoteQualifiedNames(t.Tables))
 
 	if t.RestartIdentity {
 		sb.WriteString(" ")
@@ -1091,7 +1091,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 				sb.WriteString(" ")
 				sets := make([]string, len(when.Action.SetClauses))
 				for i, sc := range when.Action.SetClauses {
-					sets[i] = sc.Column + " = " + exprSQL(sc.Value)
+					sets[i] = ast.QuoteQualifiedName(sc.Column) + " = " + exprSQL(sc.Value)
 				}
 				sb.WriteString(strings.Join(sets, ", "))
 			case "DELETE":
@@ -1104,7 +1104,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 				} else {
 					if len(when.Action.Columns) > 0 {
 						sb.WriteString(" (")
-						sb.WriteString(strings.Join(when.Action.Columns, ", "))
+						sb.WriteString(quoteColumnNames(when.Action.Columns))
 						sb.WriteString(")")
 					}
 					if len(when.Action.Values) > 0 {
@@ -1578,7 +1578,7 @@ func forSQL(f *ast.ForClause) string {
 	sb.WriteString(f.LockType)
 	if len(f.Tables) > 0 {
 		sb.WriteString(" OF ")
-		sb.WriteString(strings.Join(f.Tables, ", "))
+		sb.WriteString(quoteQualifiedNames(f.Tables))
 	}
 	if f.NoWait {
 		sb.WriteString(" NOWAIT")
@@ -1600,7 +1600,7 @@ func onConflictSQL(oc *ast.OnConflict) string {
 	}
 	if oc.Constraint != "" {
 		sb.WriteString(" ON CONSTRAINT ")
-		sb.WriteString(oc.Constraint)
+		sb.WriteString(ast.QuoteColumnName(oc.Constraint))
 	}
 	if oc.Action.DoNothing {
 		sb.WriteString(" DO NOTHING")
@@ -1622,9 +1622,9 @@ func onConflictSQL(oc *ast.OnConflict) string {
 // columnDefSQL renders a column definition.
 func columnDefSQL(c *ast.ColumnDef) string {
 	var sb strings.Builder
-	sb.WriteString(c.Name)
+	sb.WriteString(ast.QuoteColumnName(c.Name))
 	sb.WriteString(" ")
-	sb.WriteString(c.Type)
+	sb.WriteString(ast.QuoteDataType(c.Type))
 	for _, con := range c.Constraints {
 		con := con
 		sb.WriteString(" ")
@@ -1660,21 +1660,21 @@ func tableConstraintSQL(tc *ast.TableConstraint) string {
 	var sb strings.Builder
 	if tc.Name != "" {
 		sb.WriteString("CONSTRAINT ")
-		sb.WriteString(tc.Name)
+		sb.WriteString(ast.QuoteColumnName(tc.Name))
 		sb.WriteString(" ")
 	}
 	switch tc.Type {
 	case "PRIMARY KEY":
 		sb.WriteString("PRIMARY KEY (")
-		sb.WriteString(strings.Join(tc.Columns, ", "))
+		sb.WriteString(quoteColumnNames(tc.Columns))
 		sb.WriteString(")")
 	case "UNIQUE":
 		sb.WriteString("UNIQUE (")
-		sb.WriteString(strings.Join(tc.Columns, ", "))
+		sb.WriteString(quoteColumnNames(tc.Columns))
 		sb.WriteString(")")
 	case "FOREIGN KEY":
 		sb.WriteString("FOREIGN KEY (")
-		sb.WriteString(strings.Join(tc.Columns, ", "))
+		sb.WriteString(quoteColumnNames(tc.Columns))
 		sb.WriteString(") ")
 		if tc.References != nil {
 			sb.WriteString(referenceSQL(tc.References))
@@ -1693,10 +1693,10 @@ func tableConstraintSQL(tc *ast.TableConstraint) string {
 func referenceSQL(r *ast.ReferenceDefinition) string {
 	var sb strings.Builder
 	sb.WriteString("REFERENCES ")
-	sb.WriteString(r.Table)
+	sb.WriteString(ast.QuoteQualifiedName(r.Table))
 	if len(r.Columns) > 0 {
 		sb.WriteString(" (")
-		sb.WriteString(strings.Join(r.Columns, ", "))
+		sb.WriteString(quoteColumnNames(r.Columns))
 		sb.WriteString(")")
 	}
 	if r.OnDelete != "" {

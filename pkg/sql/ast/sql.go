@@ -310,19 +310,21 @@ func (l *LiteralValue) writeSQL(buf *bytes.Buffer) {
 	}
 }
 
-// SQL returns the unquoted identifier name. Used for round-trip serialization.
+// SQL returns the identifier name, possibly dotted, with each part
+// double-quoted when a bare rendering would not re-parse as the same name
+// (see QuoteQualifiedName). Used for round-trip serialization.
 func (i *Ident) SQL() string {
 	if i == nil {
 		return ""
 	}
-	return i.Name
+	return QuoteQualifiedName(i.Name)
 }
 
 func (i *Ident) writeSQL(buf *bytes.Buffer) {
 	if i == nil {
 		return
 	}
-	buf.WriteString(i.Name)
+	writeQualifiedName(buf, i.Name)
 }
 
 // SQL returns the SQL representation of this binary expression.
@@ -490,7 +492,7 @@ func (c *CastExpression) writeSQL(buf *bytes.Buffer) {
 	buf.WriteString("CAST(")
 	writeExpr(buf, c.Expr)
 	buf.WriteString(" AS ")
-	buf.WriteString(c.Type)
+	writeDataType(buf, c.Type)
 	buf.WriteByte(')')
 }
 
@@ -731,7 +733,7 @@ func (f *FunctionCall) writeSQL(buf *bytes.Buffer) {
 	if f == nil {
 		return
 	}
-	buf.WriteString(f.Name)
+	writeFunctionName(buf, f.Name)
 	if len(f.Parameters) > 0 {
 		// ClickHouse parametric aggregates: quantile(0.5)(x).
 		// Parameters are rendered in their own parenthesis group before args.
@@ -818,7 +820,11 @@ func (e *ExtractExpression) writeSQL(buf *bytes.Buffer) {
 		return
 	}
 	buf.WriteString("EXTRACT(")
-	buf.WriteString(e.Field)
+	if e.Field != "" && !isBareNameChars(e.Field, false) {
+		writeQuotedIdentifier(buf, e.Field)
+	} else {
+		buf.WriteString(e.Field)
+	}
 	buf.WriteString(" FROM ")
 	writeExpr(buf, e.Source)
 	buf.WriteByte(')')
@@ -875,24 +881,30 @@ func (s *SubstringExpression) writeSQL(buf *bytes.Buffer) {
 }
 
 // SQL returns the SQL representation of this interval as "INTERVAL 'value'",
-// followed by the interval qualifier when present ("INTERVAL '1' DAY").
+// with the value escaped as a string literal, followed by the interval
+// qualifier when present ("INTERVAL '1' DAY").
 func (i *IntervalExpression) SQL() string {
 	if i == nil {
 		return ""
 	}
-	if i.Qualifier != "" {
-		return "INTERVAL '" + i.Value + "' " + i.Qualifier
+	if !stringLiteralNeedsEscape(i.Value) {
+		if i.Qualifier != "" {
+			return "INTERVAL '" + i.Value + "' " + i.Qualifier
+		}
+		return "INTERVAL '" + i.Value + "'"
 	}
-	return "INTERVAL '" + i.Value + "'"
+	buf := getBuf()
+	defer putBuf(buf)
+	i.writeSQL(buf)
+	return buf.String()
 }
 
 func (i *IntervalExpression) writeSQL(buf *bytes.Buffer) {
 	if i == nil {
 		return
 	}
-	buf.WriteString("INTERVAL '")
-	buf.WriteString(i.Value)
-	buf.WriteByte('\'')
+	buf.WriteString("INTERVAL ")
+	writeStringLiteral(buf, i.Value)
 	if i.Qualifier != "" {
 		buf.WriteByte(' ')
 		buf.WriteString(i.Qualifier)
@@ -1425,7 +1437,7 @@ func (c *CreateTableStatement) SQL() string {
 	if c.IfNotExists {
 		sb.WriteString("IF NOT EXISTS ")
 	}
-	sb.WriteString(c.Name)
+	writeQualifiedName(sb, c.Name)
 	sb.WriteString(" (")
 
 	parts := make([]string, 0, len(c.Columns)+len(c.Constraints))
@@ -1442,16 +1454,28 @@ func (c *CreateTableStatement) SQL() string {
 
 	if len(c.Inherits) > 0 {
 		sb.WriteString(" INHERITS (")
-		sb.WriteString(strings.Join(c.Inherits, ", "))
+		for i, name := range c.Inherits {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			writeQualifiedName(sb, name)
+		}
 		sb.WriteString(")")
 	}
 
 	if c.PartitionBy != nil {
-		fmt.Fprintf(sb, " PARTITION BY %s (%s)", c.PartitionBy.Type, strings.Join(c.PartitionBy.Columns, ", "))
+		sb.WriteString(" PARTITION BY ")
+		sb.WriteString(c.PartitionBy.Type)
+		sb.WriteString(" (")
+		writeColumnNameList(sb, c.PartitionBy.Columns)
+		sb.WriteString(")")
 	}
 
 	for _, opt := range c.Options {
-		fmt.Fprintf(sb, " %s=%s", opt.Name, opt.Value)
+		sb.WriteByte(' ')
+		sb.WriteString(opt.Name)
+		sb.WriteByte('=')
+		writeOptionValue(sb, opt.Value)
 	}
 
 	return sb.String()
@@ -1473,25 +1497,26 @@ func (c *CreateIndexStatement) SQL() string {
 	if c.IfNotExists {
 		sb.WriteString("IF NOT EXISTS ")
 	}
-	sb.WriteString(c.Name)
+	writeQualifiedName(sb, c.Name)
 	sb.WriteString(" ON ")
-	sb.WriteString(c.Table)
+	writeQualifiedName(sb, c.Table)
 
 	if c.Using != "" {
 		sb.WriteString(" USING ")
-		sb.WriteString(c.Using)
+		writeColumnName(sb, c.Using)
 	}
 
 	sb.WriteString(" (")
-	cols := make([]string, len(c.Columns))
 	for i, col := range c.Columns {
-		s := col.Column
-		if col.Direction != "" {
-			s += " " + col.Direction
+		if i > 0 {
+			sb.WriteString(", ")
 		}
-		cols[i] = s
+		writeColumnName(sb, col.Column)
+		if col.Direction != "" {
+			sb.WriteByte(' ')
+			sb.WriteString(col.Direction)
+		}
 	}
-	sb.WriteString(strings.Join(cols, ", "))
 	sb.WriteString(")")
 
 	if c.Where != nil {
@@ -1512,7 +1537,7 @@ func (a *AlterTableStatement) SQL() string {
 	sb := getBuf()
 	defer putBuf(sb)
 	sb.WriteString("ALTER TABLE ")
-	sb.WriteString(a.Table)
+	writeQualifiedName(sb, a.Table)
 	for _, action := range a.Actions {
 		action := action // G601: Create local copy to avoid memory aliasing
 		sb.WriteString(" ")
@@ -1535,7 +1560,7 @@ func (d *DropStatement) SQL() string {
 	if d.IfExists {
 		sb.WriteString("IF EXISTS ")
 	}
-	sb.WriteString(strings.Join(d.Names, ", "))
+	writeQualifiedNameList(sb, d.Names)
 	if d.CascadeType != "" {
 		sb.WriteString(" ")
 		sb.WriteString(d.CascadeType)
@@ -1552,7 +1577,7 @@ func (t *TruncateStatement) SQL() string {
 	sb := getBuf()
 	defer putBuf(sb)
 	sb.WriteString("TRUNCATE TABLE ")
-	sb.WriteString(strings.Join(t.Tables, ", "))
+	writeQualifiedNameList(sb, t.Tables)
 	if t.RestartIdentity {
 		sb.WriteString(" RESTART IDENTITY")
 	} else if t.ContinueIdentity {
@@ -1726,7 +1751,7 @@ func (r *RefreshMaterializedViewStatement) SQL() string {
 	if r.Concurrently {
 		sb.WriteString("CONCURRENTLY ")
 	}
-	sb.WriteString(r.Name)
+	writeQualifiedName(sb, r.Name)
 	if r.WithData != nil {
 		if *r.WithData {
 			sb.WriteString(" WITH DATA")
@@ -2024,16 +2049,6 @@ func writeAssignments(buf *bytes.Buffer, upds []UpdateExpression) {
 	}
 }
 
-// writeStringList writes items separated by sep.
-func writeStringList(buf *bytes.Buffer, items []string, sep string) {
-	for i, s := range items {
-		if i > 0 {
-			buf.WriteString(sep)
-		}
-		buf.WriteString(s)
-	}
-}
-
 func orderBySQL(orders []OrderByExpression) string {
 	buf := getBuf()
 	defer putBuf(buf)
@@ -2246,7 +2261,7 @@ func writeFor(buf *bytes.Buffer, f *ForClause) {
 	buf.WriteString(f.LockType)
 	if len(f.Tables) > 0 {
 		buf.WriteString(" OF ")
-		writeStringList(buf, f.Tables, ", ")
+		writeQualifiedNameList(buf, f.Tables)
 	}
 	if f.NoWait {
 		buf.WriteString(" NOWAIT")
@@ -2292,7 +2307,7 @@ func writeOnConflict(buf *bytes.Buffer, oc *OnConflict) {
 	}
 	if oc.Constraint != "" {
 		buf.WriteString(" ON CONSTRAINT ")
-		buf.WriteString(oc.Constraint)
+		writeColumnName(buf, oc.Constraint)
 	}
 	if oc.Action.DoNothing {
 		buf.WriteString(" DO NOTHING")
@@ -2337,9 +2352,9 @@ func writeQuerySettings(buf *bytes.Buffer, settings []QuerySetting) {
 func columnDefSQL(c *ColumnDef) string {
 	sb := getBuf()
 	defer putBuf(sb)
-	sb.WriteString(c.Name)
+	writeColumnName(sb, c.Name)
 	sb.WriteString(" ")
-	sb.WriteString(c.Type)
+	writeDataType(sb, c.Type)
 	for _, con := range c.Constraints {
 		con := con // G601: Create local copy to avoid memory aliasing
 		sb.WriteString(" ")
@@ -2374,21 +2389,21 @@ func tableConstraintSQL(tc *TableConstraint) string {
 	defer putBuf(sb)
 	if tc.Name != "" {
 		sb.WriteString("CONSTRAINT ")
-		sb.WriteString(tc.Name)
+		writeColumnName(sb, tc.Name)
 		sb.WriteString(" ")
 	}
 	switch tc.Type {
 	case "PRIMARY KEY":
 		sb.WriteString("PRIMARY KEY (")
-		sb.WriteString(strings.Join(tc.Columns, ", "))
+		writeColumnNameList(sb, tc.Columns)
 		sb.WriteString(")")
 	case "UNIQUE":
 		sb.WriteString("UNIQUE (")
-		sb.WriteString(strings.Join(tc.Columns, ", "))
+		writeColumnNameList(sb, tc.Columns)
 		sb.WriteString(")")
 	case "FOREIGN KEY":
 		sb.WriteString("FOREIGN KEY (")
-		sb.WriteString(strings.Join(tc.Columns, ", "))
+		writeColumnNameList(sb, tc.Columns)
 		sb.WriteString(") ")
 		if tc.References != nil {
 			sb.WriteString(referenceSQL(tc.References))
@@ -2407,10 +2422,10 @@ func referenceSQL(r *ReferenceDefinition) string {
 	sb := getBuf()
 	defer putBuf(sb)
 	sb.WriteString("REFERENCES ")
-	sb.WriteString(r.Table)
+	writeQualifiedName(sb, r.Table)
 	if len(r.Columns) > 0 {
 		sb.WriteString(" (")
-		sb.WriteString(strings.Join(r.Columns, ", "))
+		writeColumnNameList(sb, r.Columns)
 		sb.WriteString(")")
 	}
 	if r.OnDelete != "" {
@@ -2433,7 +2448,7 @@ func alterActionSQL(a *AlterTableAction) string {
 		}
 		return s
 	case "DROP COLUMN":
-		return "DROP COLUMN " + a.ColumnName
+		return "DROP COLUMN " + QuoteColumnName(a.ColumnName)
 	case "ADD CONSTRAINT":
 		if a.Constraint != nil {
 			return "ADD " + tableConstraintSQL(a.Constraint)
@@ -2449,7 +2464,7 @@ func mergeActionSQL(a *MergeAction) string {
 	case "UPDATE":
 		sets := make([]string, len(a.SetClauses))
 		for i, s := range a.SetClauses {
-			sets[i] = s.Column + " = " + exprSQL(s.Value)
+			sets[i] = QuoteQualifiedName(s.Column) + " = " + exprSQL(s.Value)
 		}
 		return "UPDATE SET " + strings.Join(sets, ", ")
 	case "INSERT":
@@ -2460,7 +2475,12 @@ func mergeActionSQL(a *MergeAction) string {
 		} else {
 			if len(a.Columns) > 0 {
 				sb.WriteString(" (")
-				sb.WriteString(strings.Join(a.Columns, ", "))
+				for i, c := range a.Columns {
+					if i > 0 {
+						sb.WriteString(", ")
+					}
+					sb.WriteString(QuoteColumnName(c))
+				}
 				sb.WriteString(")")
 			}
 			if len(a.Values) > 0 {
@@ -2493,7 +2513,7 @@ func (s *CreateSequenceStatement) ToSQL() string {
 		b.WriteString("IF NOT EXISTS ")
 	}
 	if s.Name != nil {
-		b.WriteString(s.Name.Name)
+		b.WriteString(QuoteQualifiedName(s.Name.Name))
 	}
 	writeSequenceOptions(&b, s.Options)
 	return b.String()
@@ -2507,7 +2527,7 @@ func (s *DropSequenceStatement) ToSQL() string {
 		b.WriteString("IF EXISTS ")
 	}
 	if s.Name != nil {
-		b.WriteString(s.Name.Name)
+		b.WriteString(QuoteQualifiedName(s.Name.Name))
 	}
 	return b.String()
 }
@@ -2520,7 +2540,7 @@ func (s *AlterSequenceStatement) ToSQL() string {
 		b.WriteString("IF EXISTS ")
 	}
 	if s.Name != nil {
-		b.WriteString(s.Name.Name)
+		b.WriteString(QuoteQualifiedName(s.Name.Name))
 	}
 	writeSequenceOptions(&b, s.Options)
 	return b.String()
@@ -2604,15 +2624,15 @@ func (p *PeriodDefinition) SQL() string {
 	var b strings.Builder
 	b.WriteString("PERIOD FOR ")
 	if p.Name != nil {
-		b.WriteString(p.Name.Name)
+		b.WriteString(QuoteColumnName(p.Name.Name))
 	}
 	b.WriteString(" (")
 	if p.StartCol != nil {
-		b.WriteString(p.StartCol.Name)
+		b.WriteString(QuoteColumnName(p.StartCol.Name))
 	}
 	b.WriteString(", ")
 	if p.EndCol != nil {
-		b.WriteString(p.EndCol.Name)
+		b.WriteString(QuoteColumnName(p.EndCol.Name))
 	}
 	b.WriteString(")")
 	return b.String()
@@ -2626,14 +2646,18 @@ func (p *PragmaStatement) SQL() string {
 	sb := getBuf()
 	defer putBuf(sb)
 	sb.WriteString("PRAGMA ")
-	sb.WriteString(p.Name)
+	if p.Name != "" && !isBareNameChars(p.Name, false) {
+		writeQuotedIdentifier(sb, p.Name)
+	} else {
+		sb.WriteString(p.Name)
+	}
 	if p.Arg != "" {
 		sb.WriteString("(")
-		sb.WriteString(p.Arg)
+		writePragmaValue(sb, p.Arg)
 		sb.WriteString(")")
 	} else if p.Value != "" {
 		sb.WriteString(" = ")
-		sb.WriteString(p.Value)
+		writePragmaValue(sb, p.Value)
 	}
 	return sb.String()
 }
@@ -2646,14 +2670,17 @@ func (s *ShowStatement) SQL() string {
 	sb := getBuf()
 	defer putBuf(sb)
 	sb.WriteString("SHOW ")
-	sb.WriteString(s.ShowType)
+	writeShowType(sb, s.ShowType)
 	if s.ObjectName != "" {
 		sb.WriteString(" ")
-		sb.WriteString(s.ObjectName)
+		if ShowTakesFrom(s.ShowType) {
+			sb.WriteString("FROM ")
+		}
+		writeQualifiedName(sb, s.ObjectName)
 	}
 	if s.From != "" {
 		sb.WriteString(" FROM ")
-		sb.WriteString(s.From)
+		writeQualifiedName(sb, s.From)
 	}
 	return sb.String()
 }
@@ -2663,7 +2690,7 @@ func (d *DescribeStatement) SQL() string {
 	if d == nil {
 		return ""
 	}
-	return "DESCRIBE " + d.TableName
+	return "DESCRIBE " + QuoteQualifiedName(d.TableName)
 }
 
 // SQL returns the SQL string for a REPLACE statement (MySQL).
@@ -2674,7 +2701,7 @@ func (r *ReplaceStatement) SQL() string {
 	sb := getBuf()
 	defer putBuf(sb)
 	sb.WriteString("REPLACE INTO ")
-	sb.WriteString(r.TableName)
+	writeQualifiedName(sb, r.TableName)
 	if len(r.Columns) > 0 {
 		sb.WriteString(" (")
 		sb.WriteString(exprListSQL(r.Columns))

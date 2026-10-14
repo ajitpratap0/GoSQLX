@@ -35,3 +35,23 @@ func quoteNames(names []string) string {
 	}
 	return strings.Join(parts, ", ")
 }
+
+// quoteQualifiedNames joins table-like names with ", ", quoting each part
+// that needs it (see ast.QuoteQualifiedName).
+func quoteQualifiedNames(names []string) string {
+	parts := make([]string, len(names))
+	for i, n := range names {
+		parts[i] = ast.QuoteQualifiedName(n)
+	}
+	return strings.Join(parts, ", ")
+}
+
+// quoteColumnNames joins single-part DDL column names with ", ", quoting
+// each one that needs it (see ast.QuoteColumnName).
+func quoteColumnNames(names []string) string {
+	parts := make([]string, len(names))
+	for i, n := range names {
+		parts[i] = ast.QuoteColumnName(n)
+	}
+	return strings.Join(parts, ", ")
+}

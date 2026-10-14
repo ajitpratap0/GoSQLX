@@ -55,7 +55,9 @@
 package gosqlx
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -171,14 +173,14 @@ func (q QualifiedName) FullName() string {
 //   - Subqueries and CTEs
 //   - INSERT/UPDATE/DELETE statements
 //
-// Returns a deduplicated slice of table names.
+// Returns a deduplicated slice of table names, sorted in ascending byte order.
 //
 // Example:
 //
 //	sql := "SELECT * FROM users u JOIN orders o ON u.id = o.user_id"
 //	ast, _ := gosqlx.Parse(sql)
 //	tables := gosqlx.ExtractTables(ast)
-//	// tables = ["users", "orders"]
+//	// tables = ["orders", "users"]
 func ExtractTables(astNode *ast.AST) []string {
 	if astNode == nil {
 		return nil
@@ -194,7 +196,8 @@ func ExtractTables(astNode *ast.AST) []string {
 // This function is similar to ExtractTables but preserves schema information
 // when present in the original query.
 //
-// Returns a deduplicated slice of QualifiedName objects.
+// Returns a deduplicated slice of QualifiedName objects, sorted by Schema,
+// then Table, then Name.
 //
 // Example:
 //
@@ -223,14 +226,15 @@ func ExtractTablesQualified(astNode *ast.AST) []QualifiedName {
 //   - JOIN conditions
 //   - HAVING clauses
 //
-// Returns a deduplicated slice of column names (without table qualifiers).
+// Returns a deduplicated slice of column names (without table qualifiers),
+// sorted in ascending byte order.
 //
 // Example:
 //
 //	sql := "SELECT u.name, u.email FROM users u WHERE u.active = true ORDER BY u.created_at"
 //	ast, _ := gosqlx.Parse(sql)
 //	columns := gosqlx.ExtractColumns(ast)
-//	// columns = ["name", "email", "active", "created_at"]
+//	// columns = ["active", "created_at", "email", "name"]
 func ExtractColumns(astNode *ast.AST) []string {
 	if astNode == nil {
 		return nil
@@ -252,7 +256,8 @@ func ExtractColumns(astNode *ast.AST) []string {
 //   - JOIN conditions
 //   - HAVING clauses
 //
-// Returns a deduplicated slice of QualifiedName objects representing columns.
+// Returns a deduplicated slice of QualifiedName objects representing columns,
+// sorted by Schema, then Table, then Name.
 // A multi-part reference is split at its last qualifier: db.t.col yields
 // QualifiedName{Schema: "db", Table: "t", Name: "col"}, and c.s.t.col yields
 // Schema "c.s".
@@ -281,7 +286,7 @@ func ExtractColumnsQualified(astNode *ast.AST) []QualifiedName {
 //   - Window functions (ROW_NUMBER, RANK, etc.)
 //   - Scalar functions (UPPER, LOWER, NOW, etc.)
 //
-// Returns a deduplicated slice of function names.
+// Returns a deduplicated slice of function names, sorted in ascending byte order.
 //
 // Example:
 //
@@ -553,18 +558,31 @@ func (c *metadataCollector) collectFromExpression(expr ast.Expression, want extr
 // are substrings of the parsed SQL, so returning them as-is would let a
 // caller that keeps only a table name keep the whole input alive. Each
 // distinct value is copied once, into a single allocation shared by the
-// result (see detachStrings).
+// result (see detachStrings). The keys are returned in ascending byte order
+// so the output is deterministic regardless of map iteration order (#619).
 func stringSetToSlice(m map[string]struct{}) []string {
 	result := make([]string, 0, len(m))
 	for k := range m {
 		result = append(result, k)
 	}
+	slices.Sort(result)
 	detachStrings(result)
 	return result
 }
 
+// compareQualifiedName is a total order over all three fields: Schema, then
+// Table, then Name.
+func compareQualifiedName(a, b QualifiedName) int {
+	return cmp.Or(
+		strings.Compare(a.Schema, b.Schema),
+		strings.Compare(a.Table, b.Table),
+		strings.Compare(a.Name, b.Name),
+	)
+}
+
 // qualifiedSetToSlice returns the keys of m with every part copied; see
-// stringSetToSlice.
+// stringSetToSlice. The result is sorted by (Schema, Table, Name) so the
+// output is deterministic regardless of map iteration order (#619).
 func qualifiedSetToSlice(m map[QualifiedName]struct{}) []QualifiedName {
 	result := make([]QualifiedName, 0, len(m))
 	parts := 0
@@ -572,6 +590,7 @@ func qualifiedSetToSlice(m map[QualifiedName]struct{}) []QualifiedName {
 		result = append(result, k)
 		parts += len(k.Schema) + len(k.Table) + len(k.Name)
 	}
+	slices.SortFunc(result, compareQualifiedName)
 	if parts == 0 {
 		return result
 	}
@@ -642,7 +661,7 @@ func detachStrings(ss []string) {
 //	metadata := gosqlx.ExtractMetadata(ast)
 //	fmt.Printf("Tables: %v, Columns: %v, Functions: %v\n",
 //	    metadata.Tables, metadata.Columns, metadata.Functions)
-//	// Output: Tables: [users], Columns: [name active], Functions: [COUNT]
+//	// Output: Tables: [users], Columns: [active name], Functions: [COUNT]
 //
 // Example - Query dependency analysis:
 //
@@ -653,7 +672,7 @@ func detachStrings(ss []string) {
 //	ast, _ := gosqlx.Parse(sql)
 //	metadata := gosqlx.ExtractMetadata(ast)
 //	fmt.Printf("Query depends on tables: %v\n", metadata.Tables)
-//	// Output: Query depends on tables: [users orders]
+//	// Output: Query depends on tables: [orders users]
 //
 // Example - Security analysis:
 //
@@ -714,6 +733,11 @@ func ExtractMetadata(astNode *ast.AST) *Metadata {
 // All slices in Metadata are deduplicated - each identifier appears only once
 // regardless of how many times it appears in the original query.
 //
+// Ordering: every slice is sorted, so repeated calls on the same AST return
+// identical slices. String slices are in ascending byte order (as by
+// slices.Sort, so upper case sorts before lower case). QualifiedName slices
+// are ordered by Schema, then Table, then Name.
+//
 // Thread Safety: Metadata instances are safe to read concurrently but should not
 // be modified after creation.
 //
@@ -741,7 +765,7 @@ func ExtractMetadata(astNode *ast.AST) *Metadata {
 //	fmt.Printf("  Functions used: %d (%v)\n", len(metadata.Functions), metadata.Functions)
 type Metadata struct {
 	// Tables contains simple (unqualified) table names extracted from the query.
-	// Example: ["users", "orders", "products"]
+	// Example: ["orders", "products", "users"]
 	//
 	// This includes tables from:
 	//   - FROM clauses
@@ -758,7 +782,7 @@ type Metadata struct {
 	TablesQualified []QualifiedName
 
 	// Columns contains simple (unqualified) column names extracted from the query.
-	// Example: ["name", "email", "created_at"]
+	// Example: ["created_at", "email", "name"]
 	//
 	// This includes columns from:
 	//   - SELECT lists
@@ -777,7 +801,7 @@ type Metadata struct {
 	ColumnsQualified []QualifiedName
 
 	// Functions contains all function names used in the query.
-	// Example: ["COUNT", "SUM", "UPPER", "NOW"]
+	// Example: ["COUNT", "NOW", "SUM", "UPPER"]
 	//
 	// This includes:
 	//   - Aggregate functions (COUNT, SUM, AVG, MIN, MAX)

@@ -172,3 +172,39 @@ func BenchmarkLint(b *testing.B) {
 		})
 	}
 }
+
+// TestLint_DeterministicL006L009 verifies L006 tie-breaking and text-fallback
+// L009 ordering are stable across calls (issue #618).
+func TestLint_DeterministicL006L009(t *testing.T) {
+	type key struct {
+		rule      string
+		line, col int
+	}
+	tests := []struct {
+		name string
+		sql  string
+		want []key
+	}{
+		{"L006 tie", "SELECT a,\n  b,\n    c\nFROM t", []key{{"L006", 3, 5}}},
+		{"L009 text fallback", "SELECT users.id, orders.total\nFROM users u\nJOIN orders ON users.id = orders.uid\nWHERE (", []key{{"L009", 2, 1}, {"L009", 3, 1}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for i := 0; i < 100; i++ {
+				res, err := Lint(tt.sql)
+				if err != nil {
+					t.Fatalf("iteration %d: Lint: %v", i, err)
+				}
+				var got []key
+				for _, v := range res.Violations {
+					if v.Rule == "L006" || v.Rule == "L009" {
+						got = append(got, key{v.Rule, v.Location.Line, v.Location.Column})
+					}
+				}
+				if !reflect.DeepEqual(got, tt.want) {
+					t.Fatalf("iteration %d: got %v, want %v", i, got, tt.want)
+				}
+			}
+		})
+	}
+}

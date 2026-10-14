@@ -26,8 +26,9 @@ import (
 //
 // It is a thin adapter over pkg/formatter: every statement is rendered with
 // pkgformatter.FormatStatement, so the CLI and the library share a single
-// renderer and the CLI never falls back to token literals for expressions it
-// does not know about (#599).
+// renderer and the CLI has no renderer of its own to fall out of sync (#599).
+// Rendering gaps in pkg/formatter are caught, where detectable, by
+// verifyFormattedSQL.
 type SQLFormatter struct {
 	style   ast.FormatOptions
 	compact bool

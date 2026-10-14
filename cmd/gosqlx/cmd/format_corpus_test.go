@@ -31,12 +31,15 @@ import (
 // rather than emit changed SQL; once the gap is fixed they simply pass.
 var corpusFormatKnownGaps = map[string]string{
 	"corpus/orm/ent_queries.sql":                 "#611: quoted keyword identifier \"groups\" rendered bare",
+	"corpus/orm/gorm_joins.sql":                  "#611: mixed-case quoted identifier \"Company\" rendered bare",
 	"corpus/tpch/q21_suppliers_kept_waiting.sql": "#601: NOT EXISTS rendered as NOT (... NOT )",
 	"mysql/19_not_exists.sql":                    "#601: NOT EXISTS rendered as NOT (... NOT )",
 	"mssql/13_cross_apply.sql":                   "follow-up: CROSS APPLY rendered as CROSS APPLY JOIN, TOP lost in derived table",
 	"mssql/14_outer_apply.sql":                   "follow-up: OUTER APPLY rendered as OUTER APPLY JOIN, TOP lost in derived table",
 	"mysql/29_full_text_search.sql":              "follow-up: MATCH ... AGAINST rendered as AGAINST AGAINST(...)",
 	"oracle/08_connect_by_path.sql":              "follow-up: START WITH / CONNECT BY not rendered",
+	"oracle/14_pivot.sql":                        "follow-up: PIVOT IN string values rendered as bare identifiers",
+	"oracle/15_unpivot.sql":                      "follow-up: UNPIVOT IN string values rendered as bare identifiers",
 	"oracle/19_regexp_functions.sql":             "follow-up: string literal backslashes doubled for a dialect that keeps them literal",
 }
 

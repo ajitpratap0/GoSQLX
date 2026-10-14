@@ -1,5 +1,6 @@
 import { FadeIn } from '@/components/ui/FadeIn';
 import { formatStars } from '@/lib/github';
+import { BENCH_ENV } from '@/lib/benchmark-data';
 
 /* ── Inline SVG icons (Heroicons-style, 20x20) ────────────────────────── */
 
@@ -63,7 +64,7 @@ const metrics = [
     id: 'perf',
     icon: <BoltIcon />,
     value: '~3.1M',
-    label: 'parses/sec (simple SELECT, Apple M4)',
+    label: `parses/sec (simple SELECT, ${BENCH_ENV.stage}, ${BENCH_ENV.hardware}, ${BENCH_ENV.goVersion})`,
   },
   {
     id: 'race',

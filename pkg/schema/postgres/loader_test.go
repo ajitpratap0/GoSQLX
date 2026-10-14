@@ -41,7 +41,17 @@ func isDockerAvailable() bool {
 	return cmd.Run() == nil
 }
 
+// startPostgres starts a PostgreSQL container loaded with the shared fixture and
+// returns a connection as the owning role.
 func startPostgres(t *testing.T) *sql.DB {
+	t.Helper()
+	db, _, _ := startPostgresServer(t)
+	return db
+}
+
+// startPostgresServer is startPostgres that also returns the container's host
+// and mapped port so a test can open a second connection as another role.
+func startPostgresServer(t *testing.T) (db *sql.DB, host, port string) {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("skipping testcontainers test in -short mode")
@@ -83,10 +93,11 @@ func startPostgres(t *testing.T) *sql.DB {
 	}
 	t.Cleanup(func() { _ = c.Terminate(ctx) })
 
-	host, _ := c.Host(ctx)
-	port, _ := c.MappedPort(ctx, "5432")
-	dsn := fmt.Sprintf("host=%s port=%s user=test password=test dbname=testdb sslmode=disable", host, port.Port())
-	db, err := sql.Open("postgres", dsn)
+	host, _ = c.Host(ctx)
+	mapped, _ := c.MappedPort(ctx, "5432")
+	port = mapped.Port()
+	dsn := fmt.Sprintf("host=%s port=%s user=test password=test dbname=testdb sslmode=disable", host, port)
+	db, err = sql.Open("postgres", dsn)
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
@@ -155,12 +166,36 @@ func startPostgres(t *testing.T) *sql.DB {
 
 		-- Index over quoted identifiers containing commas, quotes, braces and spaces.
 		CREATE TABLE odd ("a,b" INT, "q""x" INT, "{br}" INT, "sp ace" INT);
-		CREATE INDEX idx_odd ON odd ("a,b", "q""x", "{br}", "sp ace");
+		CREATE INDEX idx_odd ON odd ("sp ace", "a,b", "{br}", "q""x");
+
+		-- #620: index key order, INCLUDE and expression keys.
+		CREATE TABLE t (a INT, b INT, c INT, email TEXT);
+		CREATE INDEX idx_ba    ON t (b, a);
+		CREATE INDEX idx_incl  ON t (c) INCLUDE (a);
+		CREATE INDEX idx_expr  ON t (lower(email));
+		CREATE INDEX idx_mixed ON t (lower(email), b);
+
+		-- #620: composite UNIQUE constraints share columns with a single-column one.
+		CREATE TABLE u (id INT PRIMARY KEY, k INT, UNIQUE (k), UNIQUE (k, id));
+
+		-- #620: partitioned parent (relkind 'p') and its partition.
+		CREATE TABLE p (id INT, region TEXT, PRIMARY KEY (id, region)) PARTITION BY LIST (region);
+		CREATE TABLE p_eu PARTITION OF p FOR VALUES IN ('eu');
+
+		-- #620: foreign key into another schema.
+		CREATE SCHEMA other;
+		CREATE TABLE other.users (id INT PRIMARY KEY);
+		CREATE TABLE r (id INT PRIMARY KEY, uid INT REFERENCES other.users(id));
+
+		-- #620: a role with only SELECT must see the same keys (must stay last).
+		CREATE ROLE ro LOGIN PASSWORD 'ro';
+		GRANT USAGE ON SCHEMA public TO ro;
+		GRANT SELECT ON ALL TABLES IN SCHEMA public TO ro;
 	`)
 	if err != nil {
 		t.Fatalf("create tables: %v", err)
 	}
-	return db
+	return db, host, port
 }
 
 func TestPostgresLoader_Load(t *testing.T) {
@@ -366,39 +401,39 @@ func TestPostgresLoader_ForeignKeyJoinKeys(t *testing.T) {
 	}{
 		{"composite", "ledger", []dbschema.ForeignKey{{
 			Name: "fk_ledger_account", TableName: "ledger",
-			Columns: []string{"acct", "tenant"}, RefTable: "accounts",
+			Columns: []string{"acct", "tenant"}, RefSchema: "public", RefTable: "accounts",
 			RefColumns: []string{"account_no", "tenant_id"},
 			OnDelete:   "CASCADE", OnUpdate: "CASCADE",
 		}}},
 		{"shared_name_set_null", "invoices", []dbschema.ForeignKey{{
 			Name: "fk_parent", TableName: "invoices",
-			Columns: []string{"buyer_id"}, RefTable: "users", RefColumns: []string{"id"},
+			Columns: []string{"buyer_id"}, RefSchema: "public", RefTable: "users", RefColumns: []string{"id"},
 			OnDelete: "SET NULL", OnUpdate: "NO ACTION",
 		}}},
 		{"shared_name_restrict", "shipments", []dbschema.ForeignKey{{
 			Name: "fk_parent", TableName: "shipments",
-			Columns: []string{"order_ref"}, RefTable: "orders", RefColumns: []string{"id"},
+			Columns: []string{"order_ref"}, RefSchema: "public", RefTable: "orders", RefColumns: []string{"id"},
 			OnDelete: "RESTRICT", OnUpdate: "NO ACTION",
 		}}},
 		{"references_partitioned", "event_refs", []dbschema.ForeignKey{{
 			Name: "fk_event", TableName: "event_refs",
-			Columns: []string{"event_id", "region"}, RefTable: "events",
+			Columns: []string{"event_id", "region"}, RefSchema: "public", RefTable: "events",
 			RefColumns: []string{"id", "region"},
 			OnDelete:   "NO ACTION", OnUpdate: "NO ACTION",
 		}}},
 		{"partitioned_parent", "prefs", []dbschema.ForeignKey{{
 			Name: "prefs_user_id_fkey", TableName: "prefs",
-			Columns: []string{"user_id"}, RefTable: "users", RefColumns: []string{"id"},
+			Columns: []string{"user_id"}, RefSchema: "public", RefTable: "users", RefColumns: []string{"id"},
 			OnDelete: "NO ACTION", OnUpdate: "NO ACTION",
 		}}},
 		{"partition", "prefs_eu", []dbschema.ForeignKey{{
 			Name: "prefs_user_id_fkey", TableName: "prefs_eu",
-			Columns: []string{"user_id"}, RefTable: "users", RefColumns: []string{"id"},
+			Columns: []string{"user_id"}, RefSchema: "public", RefTable: "users", RefColumns: []string{"id"},
 			OnDelete: "NO ACTION", OnUpdate: "NO ACTION",
 		}}},
 		{"single_column_cascade", "orders", []dbschema.ForeignKey{{
 			Name: "orders_user_id_fkey", TableName: "orders",
-			Columns: []string{"user_id"}, RefTable: "users", RefColumns: []string{"id"},
+			Columns: []string{"user_id"}, RefSchema: "public", RefTable: "users", RefColumns: []string{"id"},
 			OnDelete: "CASCADE", OnUpdate: "NO ACTION",
 		}}},
 	}
@@ -444,7 +479,7 @@ func TestPostgresLoader_QuotedIndexColumns(t *testing.T) {
 			continue
 		}
 		found = true
-		want := []string{"a,b", `q"x`, "{br}", "sp ace"}
+		want := []string{"sp ace", "a,b", "{br}", `q"x`}
 		if !reflect.DeepEqual(idx.Columns, want) {
 			t.Errorf("idx_odd columns: got %q want %q", idx.Columns, want)
 		}
@@ -455,6 +490,148 @@ func TestPostgresLoader_QuotedIndexColumns(t *testing.T) {
 	if !found {
 		t.Error("idx_odd not found")
 	}
+}
+
+// TestPostgresLoader_IndexAndKeyMetadata is a regression test for #620: index
+// key order, INCLUDE and expression keys, partitioned parents, per-column
+// PK/UNIQUE flags, the referenced schema of foreign keys, and visibility of
+// all of it to a role that only has SELECT.
+func TestPostgresLoader_IndexAndKeyMetadata(t *testing.T) {
+	db, host, port := startPostgresServer(t)
+	loader := pgschema.NewLoader()
+	s, err := loader.Load(db, "public")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	// load returns the table from both Load and LoadTable, which must agree.
+	load := func(t *testing.T, name string) *dbschema.Table {
+		t.Helper()
+		full := findTable(s, name)
+		if full == nil {
+			t.Fatalf("Load: table %q missing", name)
+		}
+		one, err := loader.LoadTable(db, "public", name)
+		if err != nil {
+			t.Fatalf("LoadTable(%q): %v", name, err)
+		}
+		if !reflect.DeepEqual(one, full) {
+			t.Fatalf("LoadTable(%q) differs from Load:\n got: %+v\nwant: %+v", name, *one, *full)
+		}
+		return full
+	}
+
+	t.Run("index_order_include_expression", func(t *testing.T) {
+		want := []dbschema.Index{
+			{Name: "idx_ba", TableName: "t", Columns: []string{"b", "a"}},
+			{Name: "idx_expr", TableName: "t", Columns: []string{"lower(email)"}},
+			{Name: "idx_incl", TableName: "t", Columns: []string{"c"}, IncludeColumns: []string{"a"}},
+			{Name: "idx_mixed", TableName: "t", Columns: []string{"lower(email)", "b"}},
+		}
+		if got := load(t, "t").Indexes; !reflect.DeepEqual(got, want) {
+			t.Errorf("t indexes:\n got: %+v\nwant: %+v", got, want)
+		}
+	})
+
+	t.Run("composite_unique_order", func(t *testing.T) {
+		want := []dbschema.Index{
+			{Name: "u_k_id_key", TableName: "u", Columns: []string{"k", "id"}, IsUnique: true},
+			{Name: "u_k_key", TableName: "u", Columns: []string{"k"}, IsUnique: true},
+			{Name: "u_pkey", TableName: "u", Columns: []string{"id"}, IsUnique: true, IsPrimary: true},
+		}
+		if got := load(t, "u").Indexes; !reflect.DeepEqual(got, want) {
+			t.Errorf("u indexes:\n got: %+v\nwant: %+v", got, want)
+		}
+	})
+
+	t.Run("partitioned_parent", func(t *testing.T) {
+		cases := []struct{ table, index string }{
+			{"p", "p_pkey"},
+			{"p_eu", "p_eu_pkey"},
+			{"events", "events_pkey"},
+		}
+		for _, tc := range cases {
+			want := []dbschema.Index{{
+				Name: tc.index, TableName: tc.table, Columns: []string{"id", "region"},
+				IsUnique: true, IsPrimary: true,
+			}}
+			if got := load(t, tc.table).Indexes; !reflect.DeepEqual(got, want) {
+				t.Errorf("%s indexes:\n got: %+v\nwant: %+v", tc.table, got, want)
+			}
+		}
+	})
+
+	t.Run("column_flags", func(t *testing.T) {
+		u := load(t, "u")
+		if len(u.Columns) != 2 {
+			t.Fatalf("u columns: got %d want 2: %+v", len(u.Columns), u.Columns)
+		}
+		for _, c := range u.Columns {
+			switch c.Name {
+			case "id":
+				if !c.IsPrimary || c.IsUnique {
+					t.Errorf("u.id: primary=%v unique=%v, want primary only", c.IsPrimary, c.IsUnique)
+				}
+			case "k":
+				if c.IsPrimary || !c.IsUnique {
+					t.Errorf("u.k: primary=%v unique=%v, want unique only", c.IsPrimary, c.IsUnique)
+				}
+			default:
+				t.Errorf("unexpected column %q", c.Name)
+			}
+		}
+		for _, c := range load(t, "p").Columns {
+			if !c.IsPrimary {
+				t.Errorf("p.%s: want primary", c.Name)
+			}
+		}
+	})
+
+	t.Run("cross_schema_fk", func(t *testing.T) {
+		want := []dbschema.ForeignKey{{
+			Name: "r_uid_fkey", TableName: "r", Columns: []string{"uid"},
+			RefSchema: "other", RefTable: "users", RefColumns: []string{"id"},
+			OnDelete: "NO ACTION", OnUpdate: "NO ACTION",
+		}}
+		if got := load(t, "r").ForeignKeys; !reflect.DeepEqual(got, want) {
+			t.Errorf("r foreign keys:\n got: %+v\nwant: %+v", got, want)
+		}
+	})
+
+	t.Run("select_only_role", func(t *testing.T) {
+		dsn := fmt.Sprintf("host=%s port=%s user=ro password=ro dbname=testdb sslmode=disable", host, port)
+		ro, err := sql.Open("postgres", dsn)
+		if err != nil {
+			t.Fatalf("open ro db: %v", err)
+		}
+		t.Cleanup(func() { _ = ro.Close() })
+		var pingErr error
+		for i := 0; i < 30; i++ {
+			if pingErr = ro.Ping(); pingErr == nil {
+				break
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+		if pingErr != nil {
+			t.Fatalf("ping ro db after retries: %v", pingErr)
+		}
+		got, err := loader.Load(ro, "public")
+		if err != nil {
+			t.Fatalf("Load as ro: %v", err)
+		}
+		if !reflect.DeepEqual(got, s) {
+			t.Errorf("Load as SELECT-only role differs from owner:\n got: %+v\nwant: %+v", got, s)
+		}
+		users := findTable(got, "users")
+		if users == nil {
+			t.Fatal("users missing for ro")
+		}
+		for _, c := range users.Columns {
+			if c.Name == "id" && !c.IsPrimary {
+				t.Error("users.id not primary for SELECT-only role")
+			}
+		}
+	})
 }
 
 // The name is validated before any query, so no database is needed.

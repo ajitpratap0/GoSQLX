@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { m, AnimatePresence } from 'motion/react';
 
 function SunIcon({ className = '' }: { className?: string }) {
   return (
@@ -66,7 +66,7 @@ export function ThemeToggle() {
   }
 
   return (
-    <motion.button
+    <m.button
       type="button"
       onClick={toggle}
       className="text-zinc-400 hover:text-white transition-colors duration-200 p-2 rounded-lg hover:bg-white/[0.04] relative overflow-hidden"
@@ -76,7 +76,7 @@ export function ThemeToggle() {
     >
       <AnimatePresence mode="wait" initial={false}>
         {theme === 'dark' ? (
-          <motion.span
+          <m.span
             key="sun"
             initial={{ rotate: -90, opacity: 0 }}
             animate={{ rotate: 0, opacity: 1 }}
@@ -85,9 +85,9 @@ export function ThemeToggle() {
             className="block"
           >
             <SunIcon className="w-5 h-5" />
-          </motion.span>
+          </m.span>
         ) : (
-          <motion.span
+          <m.span
             key="moon"
             initial={{ rotate: 90, opacity: 0 }}
             animate={{ rotate: 0, opacity: 1 }}
@@ -96,9 +96,9 @@ export function ThemeToggle() {
             className="block"
           >
             <MoonIcon className="w-5 h-5" />
-          </motion.span>
+          </m.span>
         )}
       </AnimatePresence>
-    </motion.button>
+    </m.button>
   );
 }

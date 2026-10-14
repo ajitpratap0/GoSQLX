@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'motion/react';
+import { m, AnimatePresence } from 'motion/react';
 import Fuse from 'fuse.js';
 import { buildSearchIndex, type SearchEntry } from '@/lib/search-index';
 
@@ -108,7 +108,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
       aria-label="Search documentation"
     >
       {/* Backdrop */}
-      <motion.div
+      <m.div
         className="fixed inset-0 bg-black/60 backdrop-blur-sm"
         aria-hidden="true"
         initial={{ opacity: 0 }}
@@ -118,7 +118,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
       />
 
       {/* Modal */}
-      <motion.div
+      <m.div
         className="relative w-full max-w-lg glass overflow-hidden shadow-2xl shadow-black/40"
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -224,7 +224,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
             close
           </span>
         </div>
-      </motion.div>
+      </m.div>
     </div>
     )}
     </AnimatePresence>

@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback, useRef, Suspense } from "react";
-import { motion } from 'motion/react';
+import { m } from 'motion/react';
 import { useWasm } from "./WasmLoader";
 import SqlEditor from "./SqlEditor";
 import AstTab from "./AstTab";
@@ -268,7 +268,7 @@ export default function Playground() {
               >
                 {tab.label}
                 {activeTab === tab.id && (
-                  <motion.div
+                  <m.div
                     layoutId="playgroundActiveTab"
                     className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500"
                     transition={{ type: 'spring', stiffness: 300, damping: 30 }}

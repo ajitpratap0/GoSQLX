@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { FadeIn } from '@/components/ui/FadeIn';
 
@@ -137,17 +137,14 @@ export function CodeExamples() {
               <span className="text-xs text-zinc-500 ml-2">main.go</span>
             </div>
             <div className="p-4 font-mono text-sm leading-relaxed overflow-x-auto">
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.div
-                  key={active}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  {renderCode(tabs[active].lines)}
-                </motion.div>
-              </AnimatePresence>
+              <motion.div
+                key={active}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                {renderCode(tabs[active].lines)}
+              </motion.div>
             </div>
           </GlassCard>
         </FadeIn>

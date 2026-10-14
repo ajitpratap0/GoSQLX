@@ -176,6 +176,14 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				return p.parseMatchAgainst(funcCall)
 			}
 
+			// Subscript or slice on the call result: groupArray(x)[1],
+			// quantiles(0.5, 0.9)(x)[1] (#605). Mirrors identifier[...] below.
+			// SQLite tokenizes [name] as LBRACKET, where it is a bracket-quoted
+			// alias (count(*) [cnt]), so it is not treated as a subscript there.
+			if p.isType(models.TokenTypeLBracket) && p.dialect != string(keywords.DialectSQLite) {
+				return p.parseArrayAccessExpression(funcCall)
+			}
+
 			return funcCall, nil
 		}
 

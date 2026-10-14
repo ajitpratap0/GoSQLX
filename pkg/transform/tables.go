@@ -24,6 +24,8 @@ import (
 // throughout a SELECT, UPDATE, or DELETE statement. The replacement covers:
 //   - FROM clause table references
 //   - JOIN clause left and right table references
+//   - Function-call table references whose function name matches, such as
+//     FROM my_udtf(1) or ClickHouse FROM numbers(10); the arguments are kept
 //   - Column qualifiers (table.column identifiers in SELECT list, WHERE, ORDER BY)
 //   - The table name field of UPDATE and DELETE statements
 //   - Subquery FROM/JOIN references (recursively)
@@ -134,21 +136,29 @@ func QualifyColumns(tableName string) Rule {
 
 func replaceTableInFrom(from []ast.TableReference, old, new string) {
 	for i := range from {
-		if strings.EqualFold(from[i].Name, old) {
-			from[i].Name = new
-		}
+		renameTableRef(&from[i], old, new)
 	}
 }
 
 func replaceTableInJoins(joins []ast.JoinClause, old, new string) {
 	for i := range joins {
-		if strings.EqualFold(joins[i].Right.Name, old) {
-			joins[i].Right.Name = new
-		}
-		if strings.EqualFold(joins[i].Left.Name, old) {
-			joins[i].Left.Name = new
-		}
+		renameTableRef(&joins[i].Right, old, new)
+		renameTableRef(&joins[i].Left, old, new)
 		joins[i].Condition = replaceTableInExpr(joins[i].Condition, old, new)
+	}
+}
+
+// renameTableRef renames ref when its Name matches old (case-insensitive).
+// A function-call table reference (FROM my_udtf(1), FROM numbers(10)) is
+// rendered from ref.TableFunc, so the call is renamed too when its name
+// matches; the arguments are kept.
+func renameTableRef(ref *ast.TableReference, old, new string) {
+	if !strings.EqualFold(ref.Name, old) {
+		return
+	}
+	ref.Name = new
+	if ref.TableFunc != nil && strings.EqualFold(ref.TableFunc.Name, old) {
+		ref.TableFunc.Name = new
 	}
 }
 

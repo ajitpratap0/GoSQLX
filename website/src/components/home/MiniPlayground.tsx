@@ -65,7 +65,10 @@ function formatOutput(result: unknown, tab: TabId): string {
 }
 
 export function MiniPlayground() {
-  const { loading, ready, api, progress } = useWasm();
+  // WASM is deferred until the user shows intent (focus, click, or tab/dialect change).
+  const [wasmRequested, setWasmRequested] = useState(false);
+  const requestWasm = useCallback(() => setWasmRequested(true), []);
+  const { loading, ready, api, progress } = useWasm(wasmRequested);
   const [sql, setSql] = useState(SAMPLE_SQL);
   const [dialect, setDialect] = useState('generic');
   const [activeTab, setActiveTab] = useState<TabId>('ast');
@@ -121,7 +124,11 @@ export function MiniPlayground() {
   const tabLabel = activeTab === 'ast' ? 'AST Output' : activeTab === 'format' ? 'Formatted' : 'Lint';
 
   return (
-    <div className="grid md:grid-cols-2 divide-y md:divide-y-0 divide-x-0 md:divide-x divide-white/[0.06]">
+    <div
+      className="grid md:grid-cols-2 divide-y md:divide-y-0 divide-x-0 md:divide-x divide-white/[0.06]"
+      onFocusCapture={requestWasm}
+      onPointerDownCapture={requestWasm}
+    >
       {/* Left: SQL input */}
       <div className="text-left min-w-0">
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/[0.06]">
@@ -184,7 +191,9 @@ export function MiniPlayground() {
             ))}
           </div>
           <span className="ml-auto text-xs font-mono text-emerald-400">
-            {loading
+            {!wasmRequested
+              ? 'Sample output'
+              : loading
               ? progress < 1
                 ? `Loading... ${Math.round(progress * 100)}%`
                 : 'Initializing...'
@@ -204,7 +213,7 @@ export function MiniPlayground() {
             </pre>
           ) : (
             <pre className="p-4 text-[14px] leading-relaxed font-mono whitespace-pre-wrap" style={{ color: '#D4D4D8' }}>
-              <code>{output || (loading ? SAMPLE_AST_PLACEHOLDER : '')}</code>
+              <code>{output || (activeTab === 'ast' && !ready ? SAMPLE_AST_PLACEHOLDER : '')}</code>
             </pre>
           )}
         </div>

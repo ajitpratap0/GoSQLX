@@ -516,7 +516,6 @@ gosqlx validate "your SQL here"
 
 ### Production-Ready Performance
 - **1.38M+ operations/second** sustained throughput
-- **1.5M peak** operations with memory-efficient pooling
 - **<1μs latency** for complex queries with window functions
 - **Zero race conditions** - validated with comprehensive concurrent testing
 

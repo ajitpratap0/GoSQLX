@@ -40,7 +40,7 @@
 //
 // # Key Features
 //
-//   - Blazing Fast: 1.38M+ ops/sec sustained, 1.5M+ peak throughput
+//   - Blazing Fast: 1.38M+ ops/sec sustained
 //   - Memory Efficient: 60-80% reduction through intelligent object pooling
 //   - Thread-Safe: Race-free, validated with comprehensive concurrent testing
 //   - Zero-Copy: Direct byte slice operations with <1μs latency
@@ -84,7 +84,6 @@
 //
 // Benchmarks (v1.6.0):
 //   - Parse throughput: 1.38M+ operations/second sustained
-//   - Peak throughput: 1.5M+ operations/second
 //   - Tokenization: 8M+ tokens/second
 //   - Latency: <1μs for complex queries with window functions
 //   - Memory reduction: 60-80% with object pooling
@@ -434,7 +433,7 @@
 // GoSQLX is production-ready and battle-tested:
 //
 //   - Race Detection: Zero race conditions (validated with 20,000+ concurrent operations)
-//   - Performance: 1.5M ops/sec peak, 1.38M+ sustained throughput
+//   - Performance: 1.38M+ ops/sec sustained throughput
 //   - Unicode Support: Full international compliance (8 languages tested)
 //   - SQL Compatibility: Multi-dialect with 115+ real-world queries validated
 //   - Memory Management: Zero leaks detected, stable under extended load

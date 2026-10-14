@@ -1,6 +1,6 @@
 # GoSQLX
 
-> High-performance SQL parsing SDK for Go - 1.5M+ ops/sec, multi-dialect, zero-copy, race-free production library.
+> High-performance SQL parsing SDK for Go, multi-dialect, zero-copy, race-free production library.
 
 GoSQLX is a production-ready SQL parsing library for Go that provides zero-copy tokenization,
 recursive-descent parsing, and AST generation with comprehensive object pooling. It supports

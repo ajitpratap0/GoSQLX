@@ -16,12 +16,12 @@
 // zero-copy tokenization and comprehensive object pooling. It offers enterprise-grade SQL lexing,
 // parsing, and AST generation with support for multiple SQL dialects and advanced SQL features.
 //
-// GoSQLX v1.13.0 includes both a powerful Go SDK and a high-performance CLI tool for SQL processing,
+// GoSQLX includes both a powerful Go SDK and a high-performance CLI tool for SQL processing,
 // validated for production deployment with race-free concurrent operation and extensive real-world testing.
 //
 // Production Status: VALIDATED FOR PRODUCTION DEPLOYMENT (v1.6.0+)
 //   - Thread Safety: Race-free through comprehensive concurrent testing
-//   - Performance: 1.38M+ ops/sec sustained, 1.5M+ peak with memory-efficient pooling
+//   - Performance: 1.38M+ ops/sec sustained with memory-efficient pooling
 //   - International: Full Unicode/UTF-8 support for global SQL processing
 //   - Reliability: 95%+ success rate on real-world SQL queries
 //   - Standards: Multi-dialect SQL compatibility (PostgreSQL, MySQL, SQL Server, Oracle, SQLite)
@@ -195,7 +195,6 @@
 //
 // GoSQLX Library achieves:
 // - 1.38M+ sustained operations/second (validated benchmarks)
-// - 1.5M+ operations/second peak throughput (concurrent)
 // - 8M+ tokens/second processing speed
 // - <1μs latency for complex queries with window functions
 // - Linear scaling to 128+ cores
@@ -278,6 +277,8 @@
 //
 // # Version History
 //
+// v1.15.0: ParseTree opaque Tree API, typed walkers
+// v1.14.0: Dialect-aware transforms, Snowflake and ClickHouse coverage, schema introspection
 // v1.13.0: ClickHouse dialect, LSP semantic tokens, parser API consolidation
 // v1.12.1: Website performance - mobile 94, desktop 100, self-hosted fonts, CLS 0
 // v1.12.0: Custom domain gosqlx.dev, remote MCP server at mcp.gosqlx.dev

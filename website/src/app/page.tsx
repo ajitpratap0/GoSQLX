@@ -9,10 +9,11 @@ import { VscodeSection } from '@/components/home/VscodeSection';
 import { CtaBanner } from '@/components/home/CtaBanner';
 
 import type { Metadata } from 'next';
+import { baseOpenGraph } from '@/lib/open-graph';
 
 export const metadata: Metadata = {
   alternates: { canonical: '/' },
-  openGraph: { url: '/' },
+  openGraph: { ...baseOpenGraph, url: '/' },
 };
 
 export default function Home() {

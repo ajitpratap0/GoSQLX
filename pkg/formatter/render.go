@@ -862,11 +862,11 @@ func renderCreateView(c *ast.CreateViewStatement, opts ast.FormatOptions) string
 		sb.WriteString(f.kw("IF NOT EXISTS"))
 		sb.WriteString(" ")
 	}
-	sb.WriteString(c.Name)
+	sb.WriteString(ast.QuoteQualifiedName(c.Name))
 
 	if len(c.Columns) > 0 {
 		sb.WriteString(" (")
-		sb.WriteString(strings.Join(c.Columns, ", "))
+		sb.WriteString(quoteNames(c.Columns))
 		sb.WriteString(")")
 	}
 
@@ -900,11 +900,11 @@ func renderCreateMaterializedView(c *ast.CreateMaterializedViewStatement, opts a
 		sb.WriteString(f.kw("IF NOT EXISTS"))
 		sb.WriteString(" ")
 	}
-	sb.WriteString(c.Name)
+	sb.WriteString(ast.QuoteQualifiedName(c.Name))
 
 	if len(c.Columns) > 0 {
 		sb.WriteString(" (")
-		sb.WriteString(strings.Join(c.Columns, ", "))
+		sb.WriteString(quoteNames(c.Columns))
 		sb.WriteString(")")
 	}
 
@@ -1273,9 +1273,9 @@ func renderWith(w *ast.WithClause, f *nodeFormatter) string {
 	}
 	ctes := make([]string, len(w.CTEs))
 	for i, cte := range w.CTEs {
-		s := cte.Name + " "
+		s := ast.QuoteName(cte.Name) + " "
 		if len(cte.Columns) > 0 {
-			s += "(" + strings.Join(cte.Columns, ", ") + ") "
+			s += "(" + quoteNames(cte.Columns) + ") "
 		}
 		s += f.kw("AS") + " ("
 		s += FormatStatement(cte.Statement, nestedOpts(f.opts))
@@ -1368,7 +1368,7 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		sb.WriteString(stmtSQL(t.SetSubquery))
 		sb.WriteString(")")
 	} else {
-		sb.WriteString(t.Name)
+		sb.WriteString(ast.QuoteQualifiedName(t.Name))
 	}
 	if t.Pivot != nil {
 		sb.WriteString(" ")

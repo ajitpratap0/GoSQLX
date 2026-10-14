@@ -127,6 +127,11 @@ type Identifier struct {
 	// is indistinguishable from a multi-part one.
 	Table string
 	Pos   models.Location // Source position of this identifier (1-based line and column)
+	// Quoted reports that Name was written as a double-quoted (delimited)
+	// identifier. SQL() re-quotes it so reserved words ("select") and case
+	// ("Mixed") survive a round trip. It is set only for ANSI double quotes,
+	// not for MySQL backticks or SQL Server brackets.
+	Quoted bool
 }
 
 func (i *Identifier) expressionNode()     {}

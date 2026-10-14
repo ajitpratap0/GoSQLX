@@ -88,15 +88,15 @@ func (a AST) SQL() string {
 // ============================================================
 
 // SQL returns the SQL representation of the identifier.
-// Identifiers are emitted unescaped because they have already been validated
-// during parsing - the tokenizer and parser only accept syntactically valid
-// identifiers (or quoted identifiers whose quotes are preserved in the AST).
-// Re-escaping here would be redundant and could introduce double-quoting bugs.
+// A Quoted name (written as a double-quoted identifier in the source) is
+// always re-quoted, so reserved words and case survive a round trip. Other
+// names, and each part of the Table qualifier, are double-quoted only when
+// they contain characters other than letters, digits, '_', '*' and '.'.
 func (i *Identifier) SQL() string {
 	if i == nil {
 		return ""
 	}
-	if !identifierNeedsQuoting(i.Name) && (i.Table == "" || !qualifierNeedsQuoting(i.Table)) {
+	if !i.Quoted && !identifierNeedsQuoting(i.Name) && (i.Table == "" || !qualifierNeedsQuoting(i.Table)) {
 		if i.Table == "" {
 			return i.Name
 		}
@@ -115,6 +115,10 @@ func (i *Identifier) writeSQL(buf *bytes.Buffer) {
 	if i.Table != "" {
 		writeDottedIdentifier(buf, i.Table)
 		buf.WriteByte('.')
+	}
+	if i.Quoted {
+		writeQuotedIdentifier(buf, i.Name)
+		return
 	}
 	writeSafeIdentifier(buf, i.Name)
 }
@@ -166,15 +170,7 @@ func writeSafeIdentifier(buf *bytes.Buffer, name string) {
 		buf.WriteString(name)
 		return
 	}
-	buf.WriteByte('"')
-	for i := 0; i < len(name); i++ {
-		if name[i] == '"' {
-			buf.WriteString(`""`)
-		} else {
-			buf.WriteByte(name[i])
-		}
-	}
-	buf.WriteByte('"')
+	writeQuotedIdentifier(buf, name)
 }
 
 // stringLiteralNeedsEscape reports whether s contains a byte that
@@ -1643,10 +1639,10 @@ func (c *CreateViewStatement) SQL() string {
 	if c.IfNotExists {
 		sb.WriteString("IF NOT EXISTS ")
 	}
-	sb.WriteString(c.Name)
+	writeQualifiedName(sb, c.Name)
 	if len(c.Columns) > 0 {
 		sb.WriteString(" (")
-		sb.WriteString(strings.Join(c.Columns, ", "))
+		writeNameList(sb, c.Columns)
 		sb.WriteString(")")
 	}
 	sb.WriteString(" AS ")
@@ -1669,10 +1665,10 @@ func (c *CreateMaterializedViewStatement) SQL() string {
 	if c.IfNotExists {
 		sb.WriteString("IF NOT EXISTS ")
 	}
-	sb.WriteString(c.Name)
+	writeQualifiedName(sb, c.Name)
 	if len(c.Columns) > 0 {
 		sb.WriteString(" (")
-		sb.WriteString(strings.Join(c.Columns, ", "))
+		writeNameList(sb, c.Columns)
 		sb.WriteString(")")
 	}
 	sb.WriteString(" AS ")
@@ -2078,7 +2074,7 @@ func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 		t.SetSubquery.writeSQL(buf)
 		buf.WriteByte(')')
 	} else {
-		buf.WriteString(t.Name)
+		writeQualifiedName(buf, t.Name)
 	}
 	if t.Alias != "" {
 		buf.WriteByte(' ')
@@ -2225,13 +2221,13 @@ func writeCTE(buf *bytes.Buffer, cte *CommonTableExpr) {
 	if cte.ScalarExpr != nil {
 		writeExpr(buf, cte.ScalarExpr)
 		buf.WriteString(" AS ")
-		buf.WriteString(cte.Name)
+		writeName(buf, cte.Name)
 		return
 	}
-	buf.WriteString(cte.Name)
+	writeName(buf, cte.Name)
 	if len(cte.Columns) > 0 {
 		buf.WriteString(" (")
-		writeStringList(buf, cte.Columns, ", ")
+		writeNameList(buf, cte.Columns)
 		buf.WriteByte(')')
 	}
 	buf.WriteString(" AS ")

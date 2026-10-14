@@ -157,6 +157,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		// Non-reserved keywords (TARGET, SOURCE, etc.) can also be used as identifiers
 		identPos := p.currentLocation()
 		identName := p.currentToken.Token.Value
+		identQuoted := p.isType(models.TokenTypeDoubleQuotedString)
 		p.advance()
 
 		// Check for function call (identifier followed by parentheses)
@@ -188,7 +189,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		}
 
 		// Handle regular identifier or qualified identifier (table.column or table.*)
-		ident := &ast.Identifier{Name: identName, Pos: identPos}
+		ident := &ast.Identifier{Name: identName, Pos: identPos, Quoted: identQuoted}
 
 		// Check for qualified identifier (table.column) or qualified asterisk (table.*)
 		if p.isType(models.TokenTypePeriod) {
@@ -200,6 +201,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				// (one allocation per qualified reference). Pos is already identPos.
 				ident.Table = ident.Name
 				ident.Name = "*"
+				ident.Quoted = false
 				p.advance()
 			} else if p.isQualifiedNamePart() {
 				// Handle table.column (qualified identifier).
@@ -210,6 +212,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				// be copied from Name before Name is overwritten.
 				ident.Table = ident.Name
 				ident.Name = p.currentToken.Token.Value
+				ident.Quoted = p.isType(models.TokenTypeDoubleQuotedString)
 				p.advance()
 
 				// Multi-part reference: db.table.column (MySQL/MariaDB),
@@ -513,6 +516,7 @@ func (p *Parser) parseMultiPartColumnRef(ident *ast.Identifier) error {
 	var parts [maxColumnRefParts]string
 	parts[0], parts[1] = ident.Table, ident.Name
 	n := 2
+	lastQuoted := ident.Quoted
 	for p.isType(models.TokenTypePeriod) {
 		p.advance() // Consume .
 		if n == maxColumnRefParts {
@@ -525,6 +529,7 @@ func (p *Parser) parseMultiPartColumnRef(ident *ast.Identifier) error {
 		switch {
 		case p.isType(models.TokenTypeAsterisk) || p.isType(models.TokenTypeMul):
 			parts[n] = "*"
+			lastQuoted = false
 			n++
 			p.advance()
 			if p.isType(models.TokenTypePeriod) {
@@ -532,6 +537,7 @@ func (p *Parser) parseMultiPartColumnRef(ident *ast.Identifier) error {
 			}
 		case p.isQualifiedNamePart():
 			parts[n] = p.currentToken.Token.Value
+			lastQuoted = p.isType(models.TokenTypeDoubleQuotedString)
 			n++
 			p.advance()
 		default:
@@ -544,6 +550,7 @@ func (p *Parser) parseMultiPartColumnRef(ident *ast.Identifier) error {
 	}
 	ident.Table = strings.Join(parts[:n-1], ".")
 	ident.Name = parts[n-1]
+	ident.Quoted = lastQuoted
 	return nil
 }
 

@@ -17,7 +17,9 @@
 //
 // GoSQLX is a production-ready, high-performance SQL parsing SDK for Go that supports
 // multiple SQL dialects with comprehensive SQL-99 and SQL:2003 feature support.
-// The primary entry points are Parse, Validate, Format, and ParseWithDialect.
+// The recommended entry point is ParseTree (v1.15.0+), which returns an opaque *Tree
+// with helpers for walking, extracting metadata, rewriting and formatting. The
+// original Parse, Validate, Format and ParseWithDialect functions remain supported.
 //
 // # Overview
 //
@@ -27,6 +29,8 @@
 // fine-grained performance control.
 //
 // Key functions:
+//   - ParseTree: parses SQL into an opaque *Tree configured with functional options
+//     (WithDialect, WithStrict, WithTimeout, WithRecovery); recommended for new code
 //   - Parse: tokenizes and parses SQL, returning an *ast.AST
 //   - Validate: checks whether SQL is syntactically valid without building a full AST
 //   - Format: formats SQL text according to configurable style options
@@ -44,10 +48,10 @@
 //   - Memory Efficient: 60-80% reduction through intelligent object pooling
 //   - Thread-Safe: Race-free, validated with comprehensive concurrent testing
 //   - Zero-Copy: Direct byte slice operations with <1μs latency
-//   - Multi-Dialect: PostgreSQL, MySQL, SQL Server, Oracle, SQLite support
+//   - Multi-Dialect: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse
 //   - Production-Ready: ~80-85% SQL-99 compliance, battle-tested
 //
-// # Supported SQL Features (v1.6.0)
+// # Supported SQL Features
 //
 // SQL Standards Compliance:
 //   - DML: SELECT, INSERT, UPDATE, DELETE with complex expressions
@@ -115,7 +119,27 @@
 //
 // # Quick Start
 //
-// Basic SQL parsing:
+// Parse into a Tree (recommended). Options are functional, and errors wrap
+// sentinels (ErrTokenize, ErrSyntax, ErrTimeout, ErrUnsupportedDialect) that work
+// with errors.Is:
+//
+//	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+//	defer cancel()
+//	tree, err := gosqlx.ParseTree(ctx, "SELECT id, name FROM users WHERE active = true",
+//	    gosqlx.WithDialect("postgresql"),
+//	)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	defer tree.Release()
+//	fmt.Println(tree.Tables())   // [users]
+//	fmt.Println(tree.Columns())  // [id name active]
+//	fmt.Println(tree.Format())   // formatted SQL, no re-parse
+//
+// Tree also provides Walk, Functions, Statements, Rewrite, Clone and Raw (an
+// escape hatch to the underlying *ast.AST).
+//
+// Basic SQL parsing with the original API:
 //
 //	sql := "SELECT * FROM users WHERE active = true"
 //	ast, err := gosqlx.Parse(sql)

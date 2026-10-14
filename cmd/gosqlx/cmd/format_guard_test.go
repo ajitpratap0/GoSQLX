@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
@@ -32,9 +33,8 @@ func TestFormatSQL_RefusesLostQuotes(t *testing.T) {
 		dialect string
 		in      string
 	}{
-		{name: "alter reserved word", in: `ALTER TABLE t ADD COLUMN "order" INT`},
-		{name: "alter reserved word postgresql", dialect: "postgresql", in: `ALTER TABLE t ADD COLUMN "order" INT`},
 		{name: "alter mixed case", in: `ALTER TABLE t ADD COLUMN "Mixed" INT`},
+		// Refused by checkMySQLDoubleQuotes: `select` would render as "select".
 		{name: "alter mysql backtick keyword", dialect: "mysql", in: "ALTER TABLE `Users` ADD COLUMN `select` INT"},
 		{name: "select mixed case", in: `SELECT "Mixed" FROM t`},
 		{name: "select mixed case table", in: `SELECT a FROM "Mixed"`},
@@ -70,6 +70,9 @@ func TestFormatSQL_AllowsHarmlessQuotes(t *testing.T) {
 	}{
 		{name: "lowercase quoted", in: `SELECT "users_id" FROM "users"`, want: "SELECT users_id FROM users"},
 		{name: "alter plain", in: "ALTER TABLE t ADD COLUMN c INT", want: "ALTER TABLE t ADD COLUMN c INT"},
+		// Reserved words keep their quotes on render (#632), so these format.
+		{name: "alter reserved word", in: `ALTER TABLE t ADD COLUMN "order" INT`, want: `ALTER TABLE t ADD COLUMN "order" INT`},
+		{name: "alter reserved word postgresql", dialect: "postgresql", in: `ALTER TABLE t ADD COLUMN "order" INT`, want: `ALTER TABLE t ADD COLUMN "order" INT`},
 		{name: "mysql backtick plain", dialect: "mysql", in: "ALTER TABLE `Users` ADD COLUMN `c` INT", want: "ALTER TABLE Users ADD COLUMN c INT"},
 		{name: "sqlserver bracket kept quoted", dialect: "sqlserver", in: "SELECT [Mixed Name] FROM t", want: `SELECT "Mixed Name" FROM t`},
 		{name: "oracle uppercase quoted", dialect: "oracle", in: `SELECT "ABC" FROM t`, want: "SELECT ABC FROM t"},
@@ -145,5 +148,27 @@ func TestFormatSQL_RefusesDescribeObjectKinds(t *testing.T) {
 				t.Fatalf("formatSQL(%q) = %q, want an error", in, out)
 			}
 		})
+	}
+}
+
+// TestCheckMySQLDoubleQuotes checks that MySQL/MariaDB output may not add
+// double-quoted tokens the input did not have, while input that already
+// used ANSI double quotes, and other dialects, are left alone.
+func TestCheckMySQLDoubleQuotes(t *testing.T) {
+	dq := models.TokenWithSpan{Token: models.Token{Type: models.TokenTypeDoubleQuotedString, Value: "select", Quote: '"'}}
+	plain := models.TokenWithSpan{Token: models.Token{Type: models.TokenTypeIdentifier, Value: "select"}}
+	in, added := []models.TokenWithSpan{plain}, []models.TokenWithSpan{dq}
+	for _, d := range []string{"mysql", "MariaDB"} {
+		if err := checkMySQLDoubleQuotes(in, added, d); err == nil {
+			t.Errorf("%s: added double quotes accepted, want an error", d)
+		}
+		if err := checkMySQLDoubleQuotes(added, added, d); err != nil {
+			t.Errorf("%s: input already double-quoted: %v", d, err)
+		}
+	}
+	for _, d := range []string{"", "postgresql", "sqlserver"} {
+		if err := checkMySQLDoubleQuotes(in, added, d); err != nil {
+			t.Errorf("%q: %v, want no check outside MySQL/MariaDB", d, err)
+		}
 	}
 }

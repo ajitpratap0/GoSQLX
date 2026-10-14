@@ -315,6 +315,9 @@ func verifyFormattedSQL(original *ast.AST, inputTokens []models.TokenWithSpan, f
 	if err := checkQuotedTokens(inputTokens, tokens, dialect); err != nil {
 		return err
 	}
+	if err := checkMySQLDoubleQuotes(inputTokens, tokens, dialect); err != nil {
+		return err
+	}
 	reparsed, err := parserForDialect(dialect).ParseFromModelTokens(tokens)
 	if err != nil {
 		return fmt.Errorf("formatted output does not re-parse (formatter bug; input left unchanged): %w", err)
@@ -379,6 +382,30 @@ func checkQuotedTokens(input, output []models.TokenWithSpan, dialect string) err
 		if !bw.safe(v) {
 			return fmt.Errorf("formatted output drops the quotes of identifier %q (formatter bug; input left unchanged)", v)
 		}
+	}
+	return nil
+}
+
+// checkMySQLDoubleQuotes refuses MySQL/MariaDB output that uses more
+// double-quoted tokens than the input. The renderer quotes identifiers with
+// ANSI double quotes, which MySQL reads as string literals unless ANSI_QUOTES
+// is set, so `select` rendered as "select" would not run. Input that already
+// used double quotes is assumed to target ANSI_QUOTES and is left alone.
+func checkMySQLDoubleQuotes(input, output []models.TokenWithSpan, dialect string) error {
+	if d := strings.ToLower(dialect); d != "mysql" && d != "mariadb" {
+		return nil
+	}
+	count := func(toks []models.TokenWithSpan) int {
+		n := 0
+		for _, t := range toks {
+			if t.Token.Quote == '"' {
+				n++
+			}
+		}
+		return n
+	}
+	if count(output) > count(input) {
+		return fmt.Errorf("formatted output uses ANSI double-quoted identifiers, which %s reads as strings unless ANSI_QUOTES is set (formatter limitation; input left unchanged)", dialect)
 	}
 	return nil
 }

@@ -36,7 +36,8 @@ func TestFormatCommand_InsertUpdateForms(t *testing.T) {
 			"UPDATE t SET a = s.b FROM s WHERE t.id = s.id"},
 		{"update from list", "postgresql",
 			"UPDATE t SET a = s.b FROM s, u AS v WHERE t.id = s.id",
-			"UPDATE t SET a = s.b FROM s, u AS v WHERE t.id = s.id"},
+			// pkg/formatter writes table aliases without AS (#599).
+			"UPDATE t SET a = s.b FROM s, u v WHERE t.id = s.id"},
 		{"update from", "sqlserver",
 			"UPDATE t SET a = s.b FROM s WHERE t.id = s.id",
 			"UPDATE t SET a = s.b FROM s WHERE t.id = s.id"},

@@ -320,8 +320,7 @@ gosqlx validate "your SQL here"
 ## v1.14.0 Feature Highlights
 
 ### Production-Ready Performance
-- **1.38M+ operations/second** sustained throughput
-- **~0.6 µs** to parse a window-function query (parse stage only, Apple M4; see `performance_baselines.json`)
+- **~0.6 µs** to parse a window-function query (parse stage only, Apple M4, Go 1.27; see `performance_baselines.json`)
 - **Zero race conditions** - validated with comprehensive concurrent testing
 
 ### SQL Compliance

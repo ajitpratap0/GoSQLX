@@ -43,7 +43,7 @@ Interactive Playground: https://gosqlx.dev/playground/
 - **DDL**: CREATE/ALTER/DROP TABLE, INDEX, VIEW, MATERIALIZED VIEW; SQLite PRAGMA and WITHOUT ROWID
 - **Security scanner**: Tautology (1=1), UNION injection, time-based blind, comment bypass, stacked queries, dangerous functions - 4 severity levels (CRITICAL/HIGH/MEDIUM/LOW)
 - **Object pooling**: sync.Pool throughout; 60-80% memory reduction vs naive allocation
-- **Thread safety**: race-free, validated with 20,000+ concurrent operations
+- **Thread safety**: race-free (verified with the Go race detector in CI)
 - **CLI**: `gosqlx validate/format/parse/analyze/lint/lsp` with SARIF output for GitHub Code Scanning
 - **LSP server**: real-time diagnostics, completion, hover, formatting for VS Code and any LSP client
 - **Query transforms**: add WHERE filters, column projections, JOINs, pagination via composable rules

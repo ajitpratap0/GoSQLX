@@ -99,7 +99,7 @@ export function VscodeContent() {
                 role="region"
                 aria-label="Key Settings JSON"
                 tabIndex={0}
-                className="font-mono text-sm text-zinc-300 whitespace-pre overflow-x-auto"
+                className="font-mono text-sm text-fg whitespace-pre overflow-x-auto"
               >
 {`{
   "gosqlx.executablePath": "/usr/local/bin/gosqlx",

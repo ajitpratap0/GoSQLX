@@ -10,11 +10,11 @@ export const NAV_LINKS = [
 ];
 
 export const FEATURES = [
-  { icon: 'globe', title: 'Multi-Dialect', description: 'PostgreSQL, MySQL, MariaDB, SQLite, SQL Server, Oracle, Snowflake, ClickHouse.', color: 'accent-purple' },
-  { icon: 'lock', title: 'Thread-Safe', description: 'Race-detector clean in CI.', color: 'accent-green' },
-  { icon: 'bolt', title: 'Zero-Copy', description: 'Direct byte slice operations. No unnecessary allocations.', color: 'accent-orange' },
-  { icon: 'recycle', title: 'Object Pooling', description: 'sync.Pool recycling for ASTs, tokenizers, expressions.', color: 'accent-indigo' },
-  { icon: 'shield', title: 'Security Scanner', description: 'SQL injection detection with severity classification.', color: 'red' },
+  { icon: 'globe', title: 'Multi-Dialect', description: 'PostgreSQL, MySQL, MariaDB, SQLite, SQL Server, Oracle, Snowflake, ClickHouse.', color: 'accent' },
+  { icon: 'lock', title: 'Thread-Safe', description: 'Race-detector clean in CI.', color: 'brand' },
+  { icon: 'bolt', title: 'Zero-Copy', description: 'Direct byte slice operations. No unnecessary allocations.', color: 'accent-warm' },
+  { icon: 'recycle', title: 'Object Pooling', description: 'sync.Pool recycling for ASTs, tokenizers, expressions.', color: 'accent' },
+  { icon: 'shield', title: 'Security Scanner', description: 'SQL injection detection with severity classification.', color: 'danger' },
   { icon: 'cpu', title: 'MCP Server', description: `${PROJECT.mcpToolCount} SQL tools for Claude, Cursor, and any MCP client.`, color: 'cyan' },
 ];
 

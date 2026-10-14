@@ -156,7 +156,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
         {/* Search input */}
         <div className="flex items-center gap-3 border-b border-white/[0.08] px-4">
           <svg
-            className="h-4 w-4 shrink-0 text-text-muted"
+            className="h-4 w-4 shrink-0 text-fg-subtle"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -180,12 +180,12 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search documentation..."
-            className="flex-1 bg-transparent py-3.5 text-sm text-white placeholder:text-text-muted outline-none"
+            className="flex-1 bg-transparent py-3.5 text-sm text-white placeholder:text-fg-subtle outline-none"
             aria-label="Search documentation"
             autoComplete="off"
             spellCheck={false}
           />
-          <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-white/[0.1] bg-white/[0.04] px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-white/[0.1] bg-white/[0.04] px-1.5 py-0.5 font-mono text-[10px] text-fg-subtle">
             ESC
           </kbd>
         </div>
@@ -199,7 +199,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
           aria-label="Search results"
         >
           {results.length === 0 && (
-            <li className="px-4 py-8 text-center text-sm text-text-muted">
+            <li className="px-4 py-8 text-center text-sm text-fg-subtle">
               No results found for &ldquo;{query}&rdquo;
             </li>
           )}
@@ -211,7 +211,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
               aria-selected={i === selectedIndex}
               className={`mx-2 flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
                 i === selectedIndex
-                  ? 'bg-accent-indigo/20 text-white'
+                  ? 'bg-accent/20 text-white'
                   : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200'
               }`}
               onClick={() => navigate(entry)}
@@ -219,7 +219,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
             >
               {/* Icon */}
               <svg
-                className="h-4 w-4 shrink-0 text-text-muted"
+                className="h-4 w-4 shrink-0 text-fg-subtle"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -233,10 +233,10 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
               </svg>
               <div className="min-w-0 flex-1">
                 <div className="truncate font-medium">{entry.title}</div>
-                <div className="truncate text-xs text-text-muted">{entry.category}</div>
+                <div className="truncate text-xs text-fg-subtle">{entry.category}</div>
               </div>
               {i === selectedIndex && (
-                <kbd className="hidden sm:inline-flex shrink-0 items-center rounded border border-white/[0.1] bg-white/[0.04] px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
+                <kbd className="hidden sm:inline-flex shrink-0 items-center rounded border border-white/[0.1] bg-white/[0.04] px-1.5 py-0.5 font-mono text-[10px] text-fg-subtle">
                   Enter
                 </kbd>
               )}
@@ -245,7 +245,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
         </ul>
 
         {/* Footer */}
-        <div className="flex items-center gap-4 border-t border-white/[0.08] px-4 py-2 text-[10px] text-text-muted">
+        <div className="flex items-center gap-4 border-t border-white/[0.08] px-4 py-2 text-[10px] text-fg-subtle">
           <span className="inline-flex items-center gap-1">
             <kbd className="rounded border border-white/[0.08] bg-white/[0.03] px-1 py-0.5 font-mono">&uarr;&darr;</kbd>
             navigate

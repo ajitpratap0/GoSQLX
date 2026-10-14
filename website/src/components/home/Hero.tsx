@@ -1,3 +1,4 @@
+import { PROJECT } from '@/data/metrics';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { GradientText } from '@/components/ui/GradientText';
 import { VersionBadge } from '@/components/ui/VersionBadge';
@@ -40,7 +41,7 @@ export function Hero({ stars }: { stars: number | null }) {
       <div className="relative z-10 max-w-5xl mx-auto px-6 py-24 text-center">
         {/* Version badge */}
         <div className="mb-6">
-          <VersionBadge version="v1.14.0 - Multi-Dialect SQL Parser" />
+          <VersionBadge version={`${PROJECT.version} - Multi-Dialect SQL Parser`} />
         </div>
 
         {/* Headline */}

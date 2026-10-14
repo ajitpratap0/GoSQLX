@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { FadeIn } from '@/components/ui/FadeIn';
 import { TerminalMockup } from '@/components/ui/TerminalMockup';
+import { PROJECT } from '@/data/metrics';
 
 const tools = [
   'parse_sql',
@@ -21,13 +22,13 @@ export function McpSection() {
             AI-Ready SQL Tools
           </h2>
           <p className="text-zinc-300 mb-10 max-w-xl mx-auto">
-            Connect 7 SQL tools to Claude, Cursor, or any MCP client — no installation, no API key.
+            Connect {PROJECT.mcpToolCount} SQL tools to Claude, Cursor, or any MCP client — no installation, no API key.
           </p>
         </FadeIn>
         <FadeIn viewport delay={0.15}>
           <TerminalMockup
             command="claude mcp add --transport http gosqlx https://mcp.gosqlx.dev/mcp"
-            output="✓ Added gosqlx (7 tools available)"
+            output={`✓ Added gosqlx (${PROJECT.mcpToolCount} tools available)`}
           />
         </FadeIn>
         <FadeIn viewport delay={0.25}>

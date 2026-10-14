@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { FadeIn } from '@/components/ui/FadeIn';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
+import { PROJECT } from '@/data/metrics';
 
 /* ------------------------------------------------------------------ */
 /*  Data                                                               */
@@ -19,13 +20,13 @@ type FeatureRow = {
 const FEATURES: FeatureRow[] = [
   { feature: 'Language',              values: ['Go',     'Go (C via CGo)', 'Go',   'Go'] },
   { feature: 'Zero-copy',            values: [true,  false, false, false] },
-  { feature: 'Dialects',             values: ['8',   '1 (PostgreSQL)', '1 (MySQL)', '1 (MySQL)'] },
+  { feature: 'Dialects',             values: [String(PROJECT.dialectCount),   '1 (PostgreSQL)', '1 (MySQL)', '1 (MySQL)'] },
   { feature: 'CGo required',         values: [false, true,  false, false] },
   { feature: 'WASM support',         values: [true,  false, false, false] },
   { feature: 'SQL injection detection', values: [true,  false, false, false] },
   { feature: 'MCP server',           values: [true,  false, false, false] },
   { feature: 'SQL formatting',       values: [true,  false, false, false] },
-  { feature: 'SQL linting (30 rules)', values: [true,  false, false, false] },
+  { feature: `SQL linting (${PROJECT.lintRuleCount} rules)`, values: [true,  false, false, false] },
   { feature: 'LSP server',           values: [true,  false, false, false] },
   { feature: 'Thread-safe',          values: [true,  true,  true,  true] },
   { feature: 'Active maintenance',   values: [true,  true,  true,  false] },

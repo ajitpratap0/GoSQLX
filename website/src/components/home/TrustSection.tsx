@@ -1,6 +1,6 @@
 import { FadeIn } from '@/components/ui/FadeIn';
 import { formatStars } from '@/lib/github';
-import { BENCH_ENV } from '@/lib/benchmark-data';
+import { HEADLINE_CAPTION, HEADLINE_OPS_PER_SEC, PROJECT, formatCount } from '@/data/metrics';
 
 /* ── Inline SVG icons (Heroicons-style, 20x20) ────────────────────────── */
 
@@ -57,25 +57,25 @@ const metrics = [
   {
     id: 'tests',
     icon: <CheckIcon />,
-    value: '800+',
-    label: 'Tests Passing',
+    value: formatCount(PROJECT.testFunctions),
+    label: 'Go test functions',
   },
   {
     id: 'perf',
     icon: <BoltIcon />,
-    value: '~3.1M',
-    label: `parses/sec (simple SELECT, ${BENCH_ENV.stage}, ${BENCH_ENV.hardware}, ${BENCH_ENV.goVersion})`,
+    value: `~${(HEADLINE_OPS_PER_SEC / 1_000_000).toFixed(1)}M`,
+    label: `parses/sec (${HEADLINE_CAPTION})`,
   },
   {
     id: 'race',
     icon: <LockIcon />,
     value: 'Zero',
-    label: 'Race Conditions',
+    label: 'race-detector failures in CI',
   },
   {
     id: 'go',
     icon: <PackageIcon />,
-    value: 'Go 1.26+',
+    value: PROJECT.minGo,
     label: 'Minimum Version',
   },
 ] as const;

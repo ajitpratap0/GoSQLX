@@ -11,7 +11,8 @@
     "analyze": "ANALYZE=true next build",
     "wasm": "bash scripts/build-wasm.sh",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "check:metrics": "node scripts/check-metrics-drift.mjs"
   },
   "dependencies": {
     "@codemirror/lang-sql": "^6.10.0",

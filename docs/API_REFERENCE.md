@@ -1,4 +1,4 @@
-# GoSQLX API Reference (v1.14.0)
+# GoSQLX API Reference (v1.15.0)
 
 ## Table of Contents
 

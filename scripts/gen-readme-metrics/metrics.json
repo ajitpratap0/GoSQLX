@@ -1,0 +1,13 @@
+{
+  "stage": "parse",
+  "query": "SELECT id, name FROM users",
+  "parse_ns_per_op": 318,
+  "hardware": "Apple M4",
+  "go_version": "1.27",
+  "runs": 10,
+  "benchmark": "BenchmarkPerformanceBaseline",
+  "benchmark_package": "./pkg/sql/parser/",
+  "sql99_estimate": "~80–85%",
+  "dialects": 8,
+  "race_conditions": 0
+}

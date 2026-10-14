@@ -4,6 +4,7 @@ import PlaygroundLoader from './PlaygroundLoader';
 export const metadata: Metadata = {
   title: 'SQL Playground',
   description: 'Interactive SQL playground - parse, format, lint, and analyze SQL in the browser',
+  alternates: { canonical: '/playground/' },
 };
 
 export default function PlaygroundPage() {

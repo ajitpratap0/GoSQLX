@@ -1,19 +1,20 @@
 'use client';
 
 import { BarChart, type BarChartItem } from './BarChart';
+import { BENCH_ENV, PARSE_BENCHMARKS, opsPerSec } from '@/lib/benchmark-data';
 
-const parseData: BarChartItem[] = [
-  { label: 'Simple SELECT', value: 1_400_000, highlight: true },
-  { label: 'Multi-row INSERT', value: 992_000, highlight: true },
-  { label: 'Window Function', value: 848_000, highlight: true },
-  { label: 'CTE (WITH RECURSIVE)', value: 833_000, highlight: true },
-  { label: 'Complex Multi-JOIN', value: 574_000, highlight: true },
-];
+const parseData: BarChartItem[] = PARSE_BENCHMARKS.map((b) => ({
+  label: b.name,
+  value: opsPerSec(b.nsPerOp),
+  highlight: true,
+}));
 
 export function ParseChart() {
   return (
     <div>
-      <h3 className="text-lg font-semibold text-white mb-4">Parse Performance (Apple M4)</h3>
+      <h3 className="text-lg font-semibold text-white mb-4">
+        Parse-stage throughput ({BENCH_ENV.hardware}, {BENCH_ENV.goVersion})
+      </h3>
       <BarChart data={parseData} />
     </div>
   );

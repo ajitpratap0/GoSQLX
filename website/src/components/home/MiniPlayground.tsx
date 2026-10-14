@@ -261,7 +261,7 @@ export function MiniPlayground() {
           </div>
           {status && <span className="ml-auto text-xs font-mono text-zinc-400">{status}</span>}
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 px-4 py-2 border-b border-white/[0.06]" aria-live="polite">
+        <div className="flex flex-wrap items-center gap-1.5 px-4 py-2 border-b border-white/[0.06]">
           {elapsed !== null && !parseError && (
             <Chip>
               <span className="text-brand">parsed in {formatDuration(elapsed)}</span>

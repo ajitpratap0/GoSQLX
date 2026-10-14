@@ -76,36 +76,60 @@ export function Sidebar() {
     </nav>
   );
 
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMobileOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mobileOpen]);
+
   return (
-    <>
-      {/* Mobile toggle */}
-      <button
-        onClick={() => setMobileOpen(!mobileOpen)}
-        className="fixed bottom-4 right-4 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-accent-indigo text-white shadow-lg lg:hidden"
-        aria-label="Toggle docs sidebar"
-      >
-        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          {mobileOpen ? (
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          ) : (
+    <div className="lg:w-64 lg:shrink-0">
+      {/* Mobile: inline menu bar under the navbar (no floating button) */}
+      <div className="sticky top-16 z-30 border-b border-white/5 bg-surface/95 px-6 py-2 backdrop-blur lg:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          aria-expanded={mobileOpen}
+          aria-controls="docs-sidebar"
+          className="flex items-center gap-2 py-1 text-sm font-medium text-zinc-300 hover:text-white"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-          )}
-        </svg>
-      </button>
+          </svg>
+          Docs menu
+        </button>
+      </div>
 
       {/* Mobile overlay */}
       {mobileOpen && (
         <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setMobileOpen(false)} />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar (sticky column on lg, drawer below) */}
       <aside
+        id="docs-sidebar"
+        aria-label="Documentation"
         className={`fixed top-16 z-40 h-[calc(100vh-4rem)] w-64 overflow-y-auto border-r border-white/5 bg-surface px-2 transition-transform lg:sticky lg:translate-x-0 lg:bg-transparent ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
+        <div className="flex justify-end pt-2 lg:hidden">
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            className="rounded p-1 text-zinc-400 hover:text-white"
+            aria-label="Close docs menu"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
         {sidebarContent}
       </aside>
-    </>
+    </div>
   );
 }

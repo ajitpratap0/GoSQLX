@@ -3,6 +3,7 @@ import Link from 'next/link';
 interface NavItem {
   slug: string;
   title: string;
+  category?: string;
 }
 
 interface DocNavigationProps {
@@ -33,6 +34,7 @@ export function DocNavigation({ prev, next }: DocNavigationProps) {
             </svg>
             {prev.title}
           </span>
+          {prev.category && <span className="text-xs text-zinc-500">{prev.category}</span>}
         </Link>
       ) : (
         <div />
@@ -57,6 +59,7 @@ export function DocNavigation({ prev, next }: DocNavigationProps) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
             </svg>
           </span>
+          {next.category && <span className="text-xs text-zinc-500">{next.category}</span>}
         </Link>
       ) : (
         <div />

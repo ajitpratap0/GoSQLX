@@ -18,9 +18,13 @@ export default function PrivacyPage() {
 
         <h2>Website</h2>
         <p>
-          The GoSQLX website is a static site. We use Vercel Analytics, a
-          privacy-friendly analytics service that does not use cookies and does
-          not track individual users. No personal data is collected or stored.
+          The GoSQLX website is a static site. We use Vercel Speed Insights, a
+          privacy-friendly service that measures page performance (such as load
+          time) without cookies and without tracking individual users. We also
+          use Sentry to receive error reports when something breaks in your
+          browser; these contain the error message, stack trace, and browser and
+          page details, but we do not enable session replay, and we do not
+          collect IP addresses or other personal data through it.
         </p>
 
         <h2>WASM Playground</h2>

@@ -21,7 +21,6 @@
     "@lezer/highlight": "^1.2.3",
     "@sentry/nextjs": "^10.76.2",
     "@tailwindcss/typography": "^0.5.19",
-    "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "codemirror": "^6.0.2",
     "fuse.js": "^7.1.0",

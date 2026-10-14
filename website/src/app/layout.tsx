@@ -4,7 +4,6 @@ import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { ScrollProgressBar } from '@/components/ui/ScrollProgressBar';
-import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { baseOpenGraph } from '@/lib/open-graph';
 import './globals.css';
@@ -91,7 +90,6 @@ export default function RootLayout({
         <main id="main-content" className="pt-16">{children}</main>
         <Footer />
         <ServiceWorkerRegister />
-        <Analytics />
         <SpeedInsights />
       </body>
     </html>

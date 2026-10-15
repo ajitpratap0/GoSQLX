@@ -16,6 +16,7 @@ package gosqlx_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -692,4 +693,59 @@ func Example_extractWindowFunctions() {
 	functions := gosqlx.ExtractFunctions(ast)
 	fmt.Printf("Window functions found: %d\n", len(functions))
 	// Output: Window functions found: 2
+}
+
+// ExampleParseTree demonstrates the recommended entry point: ParseTree returns
+// an opaque Tree with metadata helpers, so no AST import is required.
+func ExampleParseTree() {
+	tree, err := gosqlx.ParseTree(context.Background(),
+		"SELECT u.id, u.name FROM users u WHERE u.active = true")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer tree.Release()
+
+	fmt.Println("tables:", tree.Tables())
+	// Output: tables: [users]
+}
+
+// ExampleParseTree_dialect demonstrates functional options and sentinel errors.
+func ExampleParseTree_dialect() {
+	_, err := gosqlx.ParseTree(context.Background(), "SELECT 1",
+		gosqlx.WithDialect("postgresql"))
+	fmt.Println("postgresql error:", err)
+
+	_, err = gosqlx.ParseTree(context.Background(), "SELECT FROM WHERE")
+	fmt.Println("syntax error:", errors.Is(err, gosqlx.ErrSyntax))
+	// Output:
+	// postgresql error: <nil>
+	// syntax error: true
+}
+
+// ExampleTree_Format demonstrates rendering a parsed Tree back to SQL without
+// re-parsing.
+func ExampleTree_Format() {
+	tree, err := gosqlx.ParseTree(context.Background(), "select id from users")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer tree.Release()
+
+	fmt.Println(tree.Format(gosqlx.WithUppercaseKeywords(true)))
+	// Output:
+	// SELECT id
+	// FROM users
+}
+
+// ExampleTree_Functions demonstrates extracting function names from a Tree.
+func ExampleTree_Functions() {
+	tree, err := gosqlx.ParseTree(context.Background(),
+		"SELECT COUNT(*) FROM orders")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer tree.Release()
+
+	fmt.Println("functions:", tree.Functions())
+	// Output: functions: [COUNT]
 }

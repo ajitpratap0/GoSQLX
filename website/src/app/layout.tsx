@@ -1,9 +1,8 @@
 import type { Metadata } from 'next';
-import { spaceGrotesk, inter, jetbrainsMono } from '@/lib/fonts';
+import { inter, jetbrainsMono } from '@/lib/fonts';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
-import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
-import { ScrollProgressBar } from '@/components/ui/ScrollProgressBar';
+import { Providers } from '@/components/Providers';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { baseOpenGraph } from '@/lib/open-graph';
@@ -11,19 +10,18 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: 'GoSQLX - Production-Ready SQL Parsing SDK for Go',
-    template: 'GoSQLX - %s',
+    default: 'GoSQLX: Go SQL Parser, Formatter & Linter',
+    template: '%s | GoSQLX',
   },
   description:
-    'High-performance, zero-copy SQL parsing SDK for Go. Thread-safe with multi-dialect support for PostgreSQL, MySQL, SQLite, SQL Server, Oracle, Snowflake, and ClickHouse.',
+    'High-performance, zero-copy SQL parser, formatter and linter for Go. Thread-safe with 8-dialect support: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, and ClickHouse.',
   metadataBase: new URL('https://gosqlx.dev'),
   openGraph: baseOpenGraph,
   twitter: {
     card: 'summary_large_image',
-    title: 'GoSQLX - Production-Ready SQL Parsing SDK for Go',
+    title: 'GoSQLX: Go SQL Parser, Formatter & Linter',
     description:
-      'High-performance, zero-copy SQL parsing SDK for Go. Thread-safe with multi-dialect support.',
-    images: ['/images/og-image.png'],
+      'High-performance, zero-copy SQL parser, formatter and linter for Go with 8-dialect support.',
   },
   icons: {
     icon: '/favicon.png',
@@ -42,7 +40,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`dark ${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`dark ${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{
@@ -57,40 +55,11 @@ export default function RootLayout({
         >
           Skip to main content
         </a>
-        <script
-          type="application/ld+json"
-          suppressHydrationWarning
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              '@context': 'https://schema.org',
-              '@type': 'SoftwareApplication',
-              name: 'GoSQLX',
-              applicationCategory: 'DeveloperApplication',
-              operatingSystem: 'Any',
-              url: 'https://gosqlx.dev',
-              downloadUrl: 'https://github.com/ajitpratap0/GoSQLX/releases',
-              codeRepository: 'https://github.com/ajitpratap0/GoSQLX',
-              programmingLanguage: 'Go',
-              description: 'High-performance, zero-copy SQL parsing SDK for Go',
-              offers: {
-                '@type': 'Offer',
-                price: '0',
-                priceCurrency: 'USD',
-              },
-              publisher: {
-                '@type': 'Organization',
-                name: 'GoSQLX',
-                url: 'https://gosqlx.dev',
-                sameAs: ['https://github.com/ajitpratap0/GoSQLX'],
-              },
-            }),
-          }}
-        />
-        <ScrollProgressBar />
-        <Navbar />
-        <main id="main-content" className="pt-16">{children}</main>
-        <Footer />
-        <ServiceWorkerRegister />
+        <Providers>
+          <Navbar />
+          <main id="main-content" className="pt-16">{children}</main>
+          <Footer />
+        </Providers>
         <Analytics />
         <SpeedInsights />
       </body>

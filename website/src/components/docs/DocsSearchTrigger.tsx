@@ -16,7 +16,7 @@ export function DocsSearchTrigger() {
     <button
       type="button"
       onClick={openSearch}
-      className="mx-auto mb-12 flex w-full max-w-md items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-zinc-500 transition-colors hover:border-white/[0.12] hover:bg-white/[0.06] hover:text-zinc-400"
+      className="mx-auto mb-12 flex w-full max-w-md items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-fg-subtle transition-colors hover:border-white/[0.12] hover:bg-white/[0.06] hover:text-zinc-400"
       aria-label="Search documentation"
     >
       <svg
@@ -33,7 +33,7 @@ export function DocsSearchTrigger() {
         />
       </svg>
       <span className="flex-1 text-left">Search documentation...</span>
-      <kbd className="font-mono text-[10px] text-zinc-600 border border-white/[0.08] rounded px-1.5 py-0.5 bg-white/[0.03]">
+      <kbd className="font-mono text-[10px] text-fg-subtle border border-white/[0.08] rounded px-1.5 py-0.5 bg-white/[0.03]">
         &#8984;K
       </kbd>
     </button>

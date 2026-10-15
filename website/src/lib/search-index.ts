@@ -22,7 +22,7 @@ export function buildSearchIndex(): SearchEntry[] {
         slug: item.slug,
         title: item.label,
         category: group.category,
-        description: `${group.category} - ${item.label}`,
+        description: item.description,
         headings: [],
       });
     }

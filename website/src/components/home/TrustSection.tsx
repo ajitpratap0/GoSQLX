@@ -1,6 +1,6 @@
 import { FadeIn } from '@/components/ui/FadeIn';
 import { formatStars } from '@/lib/github';
-import { BENCH_ENV } from '@/lib/benchmark-data';
+import { HEADLINE_CAPTION, HEADLINE_OPS_PER_SEC, PROJECT, formatCount } from '@/data/metrics';
 
 /* ── Inline SVG icons (Heroicons-style, 20x20) ────────────────────────── */
 
@@ -57,25 +57,25 @@ const metrics = [
   {
     id: 'tests',
     icon: <CheckIcon />,
-    value: '800+',
-    label: 'Tests Passing',
+    value: formatCount(PROJECT.testFunctions),
+    label: 'Go test functions',
   },
   {
     id: 'perf',
     icon: <BoltIcon />,
-    value: '~3.1M',
-    label: `parses/sec (simple SELECT, ${BENCH_ENV.stage}, ${BENCH_ENV.hardware}, ${BENCH_ENV.goVersion})`,
+    value: `~${(HEADLINE_OPS_PER_SEC / 1_000_000).toFixed(1)}M`,
+    label: `parses/sec (${HEADLINE_CAPTION})`,
   },
   {
     id: 'race',
     icon: <LockIcon />,
     value: 'Zero',
-    label: 'Race Conditions',
+    label: 'race-detector failures in CI',
   },
   {
     id: 'go',
     icon: <PackageIcon />,
-    value: 'Go 1.26+',
+    value: PROJECT.minGo,
     label: 'Minimum Version',
   },
 ] as const;
@@ -99,7 +99,10 @@ export function TrustSection({ stars }: { stars: number | null }) {
       <div className="max-w-5xl mx-auto px-4">
         {/* Heading */}
         <FadeIn viewport>
-          <h2 className="text-center text-sm font-semibold uppercase tracking-widest text-zinc-300 mb-10">
+          <p className="eyebrow text-center text-zinc-300 mb-2" aria-hidden="true">
+            By the numbers
+          </p>
+          <h2 className="text-center text-h2 text-zinc-100 mb-10">
             Trusted by Developers
           </h2>
         </FadeIn>
@@ -110,7 +113,7 @@ export function TrustSection({ stars }: { stars: number | null }) {
             <FadeIn viewport key={m.id} delay={i * 0.07}>
               <div className="glass text-center px-4 py-5 flex flex-col items-center gap-2">
                 {m.icon}
-                <span className="text-lg font-bold text-zinc-100">
+                <span className="stat-number text-lg font-bold text-zinc-100">
                   {m.id === 'stars' && stars !== null ? formatStars(stars) : m.value}
                 </span>
                 <span className="text-xs text-zinc-300">{m.label}</span>

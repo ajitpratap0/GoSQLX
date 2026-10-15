@@ -175,7 +175,7 @@ WHERE active = true
 | 🤖 | **[MCP Guide](https://gosqlx.dev/docs/mcp_guide/)** | AI assistant integration |
 | 🏗️ | **[Architecture](https://gosqlx.dev/docs/architecture/)** | System design deep-dive |
 | 📊 | **[Benchmarks](https://gosqlx.dev/benchmarks/)** | Performance data and methodology |
-| 📝 | **[Release Notes](https://gosqlx.dev/blog/)** | What's new in each version |
+| 📝 | **[Release Notes](https://gosqlx.dev/changelog/)** | What's new in each version |
 
 <br/>
 
@@ -217,7 +217,7 @@ Using GoSQLX at work? Building something cool with it? Share your story in [GitH
 
 <a href="https://github.com/ajitpratap0/GoSQLX/discussions"><img src="https://img.shields.io/badge/💬_Discussions-Ask_&_Share-purple?style=for-the-badge" alt="Discussions"></a>
 <a href="https://github.com/ajitpratap0/GoSQLX/issues/new/choose"><img src="https://img.shields.io/badge/🐛_Issues-Report_&_Request-red?style=for-the-badge" alt="Issues"></a>
-<a href="https://gosqlx.dev/blog/"><img src="https://img.shields.io/badge/📝_Blog-Release_Notes-green?style=for-the-badge" alt="Blog"></a>
+<a href="https://gosqlx.dev/changelog/"><img src="https://img.shields.io/badge/📝_Changelog-Release_Notes-green?style=for-the-badge" alt="Changelog"></a>
 
 </div>
 

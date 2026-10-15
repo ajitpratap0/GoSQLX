@@ -66,7 +66,7 @@ Interactive Playground: https://gosqlx.dev/playground/
 ## Optional
 
 - [Full documentation in one file](https://gosqlx.dev/llms-full.txt): Every docs page as plain text
-- [Changelog](https://gosqlx.dev/blog/): Release notes for every version
-- [Changelog feed](https://gosqlx.dev/blog/feed.xml): RSS 2.0
+- [Changelog](https://gosqlx.dev/changelog/): Release notes for every version
+- [Changelog feed](https://gosqlx.dev/changelog/feed.xml): RSS 2.0
 - [Source code](https://github.com/ajitpratap0/GoSQLX): GitHub repository
 - [Go package docs](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/gosqlx): pkg.go.dev reference

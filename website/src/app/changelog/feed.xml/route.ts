@@ -43,10 +43,10 @@ export function GET(): Response {
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>GoSQLX Changelog</title>
-    <link>${SITE_URL}/blog/</link>
+    <link>${SITE_URL}/changelog/</link>
     <description>Release notes for GoSQLX, the high-performance SQL parsing SDK for Go.</description>
     <language>en</language>
-${latest ? `    <lastBuildDate>${latest}</lastBuildDate>\n` : ''}    <atom:link href="${SITE_URL}/blog/feed.xml" rel="self" type="application/rss+xml" />
+${latest ? `    <lastBuildDate>${latest}</lastBuildDate>\n` : ''}    <atom:link href="${SITE_URL}/changelog/feed.xml" rel="self" type="application/rss+xml" />
 ${items}
   </channel>
 </rss>

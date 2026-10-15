@@ -25,7 +25,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '/',
     '/playground/',
     '/docs/',
-    '/blog/',
+    '/changelog/',
     '/vscode/',
     '/benchmarks/',
     '/compare/',

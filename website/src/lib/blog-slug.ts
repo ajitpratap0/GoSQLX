@@ -28,5 +28,5 @@ export function blogPostHref(slug: string): string {
   if (!isValidSlug(slug)) {
     throw new Error('invalid blog slug');
   }
-  return `/blog/${encodeURIComponent(slug)}`;
+  return `/changelog/${encodeURIComponent(slug)}`;
 }

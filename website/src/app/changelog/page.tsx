@@ -7,14 +7,14 @@ const baseMeta = pageMeta({
   title: 'Changelog',
   description:
     'GoSQLX changelog: release notes covering new features, improvements and bug fixes across every version of the Go SQL parsing SDK and its CLI.',
-  path: '/blog/',
+  path: '/changelog/',
 });
 
 export const metadata: Metadata = {
   ...baseMeta,
   alternates: {
     ...baseMeta.alternates,
-    types: { 'application/rss+xml': '/blog/feed.xml' },
+    types: { 'application/rss+xml': '/changelog/feed.xml' },
   },
 };
 

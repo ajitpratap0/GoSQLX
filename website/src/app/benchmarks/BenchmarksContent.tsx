@@ -42,7 +42,7 @@ const reproduceSteps = [
   {
     title: 'Competitor comparison (end-to-end)',
     command: `cd benchmarks/compare && ${COMPETITOR_RUN.method.command}`,
-    note: 'Needs CGO for pg_query_go. Run from a repo checkout; writes benchmarks/compare/results/latest.json.',
+    note: 'Needs CGO for pg_query_go. Summarise with benchstat; `task bench:publish` runs this and writes results/latest.json and latest.txt.',
   },
   {
     title: 'CI regression check (not a measurement)',

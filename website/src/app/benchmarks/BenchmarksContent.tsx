@@ -3,7 +3,13 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
 import { RawDataToggle } from '@/components/benchmarks/RawDataToggle';
 import { ParseChart } from '@/components/benchmarks/ParseChart';
-import { BENCH_ENV, PARSE_BENCHMARKS, formatOps, opsPerSec } from '@/data/metrics';
+import {
+  BENCH_ENV,
+  PARSE_BENCHMARKS,
+  formatOps,
+  opsPerSec,
+} from '@/data/metrics';
+import { COMPETITOR_RUN, competitorResult } from '@/data/competitor-metrics';
 
 const metrics = [
   {
@@ -22,6 +28,20 @@ const methodology = [
   'Object pooling enabled for all runs (production configuration)',
   'The CI regression baseline is a deliberately loose ceiling used with a tolerance on slower shared runners; it is not a measurement',
 ];
+
+const measuredOn = COMPETITOR_RUN.generatedAt.slice(0, 10);
+
+function formatNs(ns: number): string {
+  return `${Math.round(ns).toLocaleString('en-US')} ns`;
+}
+
+/** Lowest median ns/op among the libraries that accept the query. */
+function fastestNs(queryId: string): number | undefined {
+  const values = COMPETITOR_RUN.results.flatMap((r) =>
+    r.query === queryId && r.supported && r.nsPerOp !== null ? [r.nsPerOp] : [],
+  );
+  return values.length > 0 ? Math.min(...values) : undefined;
+}
 
 function renderMethodologyItem(item: string) {
   const FLAG = '-benchmem';
@@ -116,18 +136,98 @@ export function BenchmarksContent() {
         </div>
       </section>
 
-      {/* Competitor comparison: withheld until the reproducible harness (#673) lands */}
-      <section className="section-padding pb-16">
+      {/* Competitor comparison: every number comes from the committed harness JSON (#673) */}
+      <section className="section-padding pb-16" id="competitors">
         <div className="container-width">
           <FadeIn>
-            <h2 className="text-2xl font-bold text-fg mb-4">Competitor Comparison</h2>
-            <GlassCard className="p-6" hover={false}>
+            <h2 className="text-2xl font-bold text-fg mb-2">Competitor Comparison</h2>
+            <p className="text-xs text-fg-subtle mb-4">
+              End-to-end stage (SQL text to AST) &middot; {COMPETITOR_RUN.hardware.cpu} (
+              {COMPETITOR_RUN.hardware.goos}/{COMPETITOR_RUN.hardware.goarch}) &middot;{' '}
+              {COMPETITOR_RUN.goVersion} &middot; {COMPETITOR_RUN.method.statistic} of{' '}
+              {COMPETITOR_RUN.method.count} runs &middot; measured {measuredOn} &middot; commit{' '}
+              <code className="font-mono">{COMPETITOR_RUN.commit.slice(0, 7)}</code>
+            </p>
+            <GlassCard className="p-0 overflow-hidden" hover={false}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <caption className="sr-only">
+                    Median nanoseconds per statement, end-to-end, lower is faster
+                  </caption>
+                  <thead>
+                    <tr className="border-b border-fg/[0.06]">
+                      <th scope="col" className="px-3 py-3 sm:px-4 sm:py-4 font-medium text-fg-muted">Query</th>
+                      {COMPETITOR_RUN.parsers.map((p) => (
+                        <th key={p.id} scope="col" className="px-3 py-3 sm:px-4 sm:py-4 font-medium text-fg-muted whitespace-nowrap">
+                          {p.name}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {COMPETITOR_RUN.queries.map((q) => {
+                      const fastest = fastestNs(q.id);
+                      return (
+                        <tr key={q.id} className="border-b border-fg/[0.04]">
+                          <th scope="row" className="px-3 py-3 sm:px-4 sm:py-4 text-fg font-medium" title={q.sql}>
+                            {q.name}
+                          </th>
+                          {COMPETITOR_RUN.parsers.map((p) => {
+                            const r = competitorResult(q.id, p.id);
+                            if (!r || !r.supported || r.nsPerOp === null) {
+                              return (
+                                <td key={p.id} className="px-3 py-3 sm:px-4 sm:py-4 text-fg-subtle whitespace-nowrap">
+                                  not supported
+                                </td>
+                              );
+                            }
+                            const isFastest = r.nsPerOp === fastest;
+                            return (
+                              <td
+                                key={p.id}
+                                className={`px-3 py-3 sm:px-4 sm:py-4 font-mono whitespace-nowrap ${isFastest ? 'text-fg font-semibold' : 'text-fg-muted'}`}
+                              >
+                                {formatNs(r.nsPerOp)}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </GlassCard>
+            <p className="text-xs text-fg-subtle mt-2">
+              Median ns per statement; lower is faster and the fastest library per query is in bold.
+              Hover a query name to see its SQL.
+            </p>
+            <p className="text-xs text-fg-subtle mt-1 md:hidden">&larr; Swipe to see all columns &rarr;</p>
+
+            <GlassCard className="p-6 mt-6" hover={false}>
               <p className="text-sm text-fg-muted">
-                Head-to-head numbers against other Go SQL parsers are not published yet. They will
-                return once a reproducible benchmark harness is committed to the repository, so every
-                figure can be re-run by you. Until then, see the{' '}
+                <strong className="text-fg">Read with care.</strong> {COMPETITOR_RUN.caveat}
+              </p>
+              <ul className="mt-4 space-y-1 text-xs text-fg-muted">
+                {COMPETITOR_RUN.parsers.map((p) => (
+                  <li key={p.id}>
+                    <span className="text-fg-muted">{p.name}</span>: <code className="font-mono">{p.module}</code>{' '}
+                    {p.version} &middot; {p.dialect}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-4 text-sm text-fg-muted">
+                Reproduce with <code className="font-mono text-xs text-fg bg-fg/[0.06] px-1 py-0.5 rounded">task bench:publish</code>{' '}
+                using the{' '}
+                <a
+                  href="https://github.com/ajitpratap0/GoSQLX/tree/main/benchmarks/compare"
+                  className="text-accent underline underline-offset-2"
+                >
+                  benchmark harness
+                </a>
+                , which pins every library version and keeps the raw output for benchstat. See also the{' '}
                 <a href="/compare/" className="text-accent underline underline-offset-2">
-                  qualitative feature comparison
+                  feature comparison
                 </a>
                 .
               </p>

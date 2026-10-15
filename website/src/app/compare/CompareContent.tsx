@@ -170,14 +170,14 @@ export function CompareContent() {
         </div>
       </section>
 
-      {/* Performance comparison withheld until the reproducible harness (#673) lands */}
+      {/* Performance comparison lives on /benchmarks/, fed by the harness JSON (#673) */}
       <section className="section-padding pb-16">
         <div className="container-width">
           <p className="text-sm text-fg-muted">
-            Performance comparisons are withheld until a reproducible benchmark harness is published.
-            For GoSQLX measurements, see the{' '}
-            <Link href="/benchmarks/" className="text-accent underline underline-offset-2">
-              benchmarks page
+            For measured, reproducible performance numbers against pg_query_go, Vitess, TiDB and
+            xwb1989/sqlparser, with hardware, Go version and pinned library versions, see the{' '}
+            <Link href="/benchmarks/#competitors" className="text-accent underline underline-offset-2">
+              competitor benchmarks
             </Link>
             .
           </p>

@@ -13,9 +13,11 @@
  * or end-to-end numbers. This file is seeded by hand from that JSON; it will
  * later be fed by the generated metrics.json (plan section 5.2).
  *
- * Competitor numbers are intentionally absent until the reproducible benchmark
- * harness (issue #673) lands; after that they may only come from its committed
- * JSON output.
+ * Competitor numbers come only from the reproducible benchmark harness
+ * (issue #673, benchmarks/compare). They live in ./competitor-metrics.ts, which
+ * must only be imported by server code: this file is reachable from client
+ * components (Navbar, Sidebar, ParseChart) and would otherwise ship the whole
+ * harness JSON in a shared client chunk.
  */
 
 /** Project facts (not performance). */

@@ -1,7 +1,7 @@
 'use client';
 
 import { BarChart, type BarChartItem } from './BarChart';
-import { BENCH_ENV, PARSE_BENCHMARKS, opsPerSec } from '@/lib/benchmark-data';
+import { BENCH_ENV, PARSE_BENCHMARKS, opsPerSec } from '@/data/metrics';
 
 const parseData: BarChartItem[] = PARSE_BENCHMARKS.map((b) => ({
   label: b.name,

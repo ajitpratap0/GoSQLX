@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { FadeIn } from '@/components/ui/FadeIn';
 
 export const metadata: Metadata = {
-  title: '404 - Page Not Found',
+  title: { absolute: 'Page not found | GoSQLX' },
   description: 'The page you are looking for does not exist. Return to the GoSQLX homepage.',
   robots: { index: false, follow: false },
 };

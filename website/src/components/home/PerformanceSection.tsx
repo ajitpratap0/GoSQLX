@@ -1,14 +1,25 @@
 import { GlassCard } from '@/components/ui/GlassCard';
 import { FadeIn } from '@/components/ui/FadeIn';
 import { AnimatedCounter } from '@/components/ui/AnimatedCounter';
-import { BENCH_ENV, PARSE_BENCHMARKS, formatOps, opsPerSec } from '@/lib/benchmark-data';
+import { BENCH_ENV, HEADLINE_OPS_PER_SEC, PARSE_BENCHMARKS, PROJECT, formatOps, opsPerSec } from '@/data/metrics';
 import { AnimatedBars } from './AnimatedBars';
 
-const stats = [
-  { value: 3140000, suffix: '', label: 'parses/sec (simple SELECT, M4)', color: 'text-accent-orange', prefix: '~' },
-  { value: 318, suffix: 'ns', label: 'parse latency (simple SELECT)', color: 'text-accent-indigo' },
-  { value: 85, suffix: '%', label: 'SQL-99', color: 'text-accent-green' },
-  { value: 8, suffix: '', label: 'Dialects', color: 'text-accent-purple' },
+interface Stat {
+  /** Animated numeric value; omit when `text` is shown instead. */
+  value?: number;
+  /** Static text for figures that are ranges or estimates. */
+  text?: string;
+  suffix?: string;
+  label: string;
+  color: string;
+  prefix?: string;
+}
+
+const stats: Stat[] = [
+  { value: HEADLINE_OPS_PER_SEC, suffix: '', label: `parses/sec (simple SELECT, parse stage, ${BENCH_ENV.hardware})`, color: 'text-accent-warm', prefix: '~' },
+  { value: PARSE_BENCHMARKS[0].nsPerOp, suffix: 'ns', label: 'parse latency (simple SELECT, parse stage)', color: 'text-accent' },
+  { text: PROJECT.sql99, label: 'SQL-99 compliance (estimated)', color: 'text-brand' },
+  { value: PROJECT.dialectCount, suffix: '', label: 'Dialects', color: 'text-accent' },
 ];
 
 const benchmarks = PARSE_BENCHMARKS.map((b) => ({
@@ -39,7 +50,11 @@ export function PerformanceSection() {
                   {stat.prefix && (
                     <span className={`text-3xl sm:text-4xl font-bold ${stat.color}`}>{stat.prefix}</span>
                   )}
-                  <AnimatedCounter value={stat.value} suffix={stat.suffix} color={stat.color} />
+                  {stat.value !== undefined ? (
+                    <AnimatedCounter value={stat.value} suffix={stat.suffix} color={stat.color} />
+                  ) : (
+                    <span className={`text-3xl sm:text-4xl font-bold tabular-nums ${stat.color}`}>{stat.text}</span>
+                  )}
                 </div>
                 <p className="text-sm text-zinc-200 mt-1">{stat.label}</p>
               </GlassCard>

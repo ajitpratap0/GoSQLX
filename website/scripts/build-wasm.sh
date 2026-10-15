@@ -64,3 +64,8 @@ done
 [[ -f "$OUT_DIR/wasm_exec.js" ]] || { echo "build-wasm: wasm_exec.js not found in $goroot" >&2; exit 1; }
 
 echo "build-wasm: wrote $OUT_DIR/gosqlx.wasm ($(wc -c <"$OUT_DIR/gosqlx.wasm" | tr -d ' ') bytes)"
+
+# Precompute the homepage demo's sample AST with the same parser (see MiniPlayground).
+(cd "$REPO_ROOT" && go run ./website/scripts/gen-sample-ast \
+  website/src/components/home/sample.sql website/src/generated/sample-ast.json)
+echo "build-wasm: regenerated src/generated/sample-ast.json"

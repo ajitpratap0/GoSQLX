@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { motion } from 'motion/react';
+import { m } from 'motion/react';
 
 type ButtonProps = {
   variant?: 'primary' | 'ghost';
@@ -22,7 +22,7 @@ export function Button({ variant = 'primary', href, children, className = '', ex
   if (href) {
     if (external) {
       return (
-        <motion.a
+        <m.a
           href={href}
           target="_blank"
           rel="noopener noreferrer"
@@ -33,17 +33,17 @@ export function Button({ variant = 'primary', href, children, className = '', ex
           transition={spring}
         >
           {children}
-        </motion.a>
+        </m.a>
       );
     }
     return (
-      <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }} transition={spring} className="inline-flex">
+      <m.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }} transition={spring} className="inline-flex">
         <Link href={href} className={cls} aria-label={ariaLabel}>{children}</Link>
-      </motion.div>
+      </m.div>
     );
   }
   return (
-    <motion.button
+    <m.button
       className={cls}
       aria-label={ariaLabel}
       whileHover={{ scale: 1.02 }}
@@ -51,6 +51,6 @@ export function Button({ variant = 'primary', href, children, className = '', ex
       transition={spring}
     >
       {children}
-    </motion.button>
+    </m.button>
   );
 }

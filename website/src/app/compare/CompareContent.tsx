@@ -1,9 +1,8 @@
-'use client';
-
 import Link from 'next/link';
 import { FadeIn } from '@/components/ui/FadeIn';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
+import { PROJECT } from '@/data/metrics';
 
 /* ------------------------------------------------------------------ */
 /*  Data                                                               */
@@ -19,13 +18,13 @@ type FeatureRow = {
 const FEATURES: FeatureRow[] = [
   { feature: 'Language',              values: ['Go',     'Go (C via CGo)', 'Go',   'Go'] },
   { feature: 'Zero-copy',            values: [true,  false, false, false] },
-  { feature: 'Dialects',             values: ['8',   '1 (PostgreSQL)', '1 (MySQL)', '1 (MySQL)'] },
+  { feature: 'Dialects',             values: [String(PROJECT.dialectCount),   '1 (PostgreSQL)', '1 (MySQL)', '1 (MySQL)'] },
   { feature: 'Pure Go (no CGo)',     values: [true,  false, true,  true] },
   { feature: 'WASM support',         values: [true,  false, false, false] },
   { feature: 'SQL injection detection', values: [true,  false, false, false] },
   { feature: 'MCP server',           values: [true,  false, false, false] },
   { feature: 'SQL formatting',       values: [true,  false, false, false] },
-  { feature: 'SQL linting (30 rules)', values: [true,  false, false, false] },
+  { feature: `SQL linting (${PROJECT.lintRuleCount} rules)`, values: [true,  false, false, false] },
   { feature: 'LSP server',           values: [true,  false, false, false] },
   { feature: 'Thread-safe',          values: [true,  true,  true,  true] },
   { feature: 'Active maintenance',   values: [true,  true,  true,  false] },
@@ -177,7 +176,7 @@ export function CompareContent() {
           <p className="text-sm text-zinc-400">
             Performance comparisons are withheld until a reproducible benchmark harness is published.
             For GoSQLX measurements, see the{' '}
-            <Link href="/benchmarks/" className="text-indigo-300 underline underline-offset-2">
+            <Link href="/benchmarks/" className="text-accent underline underline-offset-2">
               benchmarks page
             </Link>
             .
@@ -195,7 +194,7 @@ export function CompareContent() {
               </h2>
               <p className="mt-3 text-zinc-400 max-w-xl mx-auto">
                 Get started in under a minute with a single{' '}
-                <code className="font-mono text-xs bg-white/[0.06] px-1.5 py-0.5 rounded">
+                <code className="font-mono text-xs text-fg bg-fg/[0.06] px-1.5 py-0.5 rounded">
                   go get
                 </code>{' '}
                 command.

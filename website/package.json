@@ -11,7 +11,8 @@
     "analyze": "ANALYZE=true next build",
     "wasm": "bash scripts/build-wasm.sh",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "check:metrics": "node scripts/check-metrics-drift.mjs"
   },
   "dependencies": {
     "@codemirror/lang-sql": "^6.10.0",
@@ -21,10 +22,10 @@
     "@lezer/highlight": "^1.2.3",
     "@sentry/nextjs": "^10.76.2",
     "@tailwindcss/typography": "^0.5.19",
-    "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "codemirror": "^6.0.2",
     "fuse.js": "^7.1.0",
+    "github-slugger": "^2.0.0",
     "gray-matter": "^4.0.3",
     "motion": "^12.36.0",
     "next": "16.3.8",

@@ -1,12 +1,9 @@
-'use client';
-
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { FadeIn } from '@/components/ui/FadeIn';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
+import { RawDataToggle } from '@/components/benchmarks/RawDataToggle';
 import { ParseChart } from '@/components/benchmarks/ParseChart';
-import { BENCH_ENV, PARSE_BENCHMARKS, formatOps, opsPerSec } from '@/lib/benchmark-data';
+import { BENCH_ENV, PARSE_BENCHMARKS, formatOps, opsPerSec } from '@/data/metrics';
 
 const metrics = [
   {
@@ -14,7 +11,7 @@ const metrics = [
     value: `${formatOps(opsPerSec(PARSE_BENCHMARKS[0].nsPerOp))} ops/sec`,
   },
   { label: 'Simple SELECT parse latency', value: `${PARSE_BENCHMARKS[0].nsPerOp} ns/op` },
-  { label: 'Concurrent Ops Tested (race-free)', value: '20K+' },
+  { label: 'Race detector in CI', value: 'Clean' },
 ];
 
 const methodology = [
@@ -26,49 +23,6 @@ const methodology = [
   'The CI regression baseline is a deliberately loose ceiling used with a tolerance on slower shared runners; it is not a measurement',
 ];
 
-function RawDataToggle({ id, children }: { id: string; children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="mt-4">
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1"
-        aria-expanded={open}
-        aria-controls={`raw-data-${id}`}
-      >
-        <motion.svg
-          className="w-3 h-3"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-          animate={{ rotate: open ? 90 : 0 }}
-          transition={{ duration: 0.2 }}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </motion.svg>
-        {open ? 'Hide' : 'View'} raw data
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            id={`raw-data-${id}`}
-            className="mt-3 overflow-hidden"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
-          >
-            {children}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
 function renderMethodologyItem(item: string) {
   const FLAG = '-benchmem';
   const idx = item.indexOf(FLAG);
@@ -76,7 +30,7 @@ function renderMethodologyItem(item: string) {
   return (
     <>
       {item.slice(0, idx)}
-      <code className="font-mono text-xs bg-white/[0.06] px-1 py-0.5 rounded">{FLAG}</code>
+      <code className="font-mono text-xs text-fg bg-fg/[0.06] px-1 py-0.5 rounded">{FLAG}</code>
       {item.slice(idx + FLAG.length)}
     </>
   );
@@ -95,7 +49,7 @@ export function BenchmarksContent() {
             <p className="mt-4 text-lg text-zinc-400 max-w-2xl mx-auto">
               Parse-stage performance of the GoSQLX parser, re-measured with the in-repo benchmarks.
             </p>
-            <p className="mt-3 text-xs text-zinc-500">
+            <p className="mt-3 text-xs text-fg-subtle">
               Measured 2026-10-13 &middot; Apple M4 &middot; Go 1.27 &middot; parse stage only
             </p>
           </FadeIn>
@@ -156,7 +110,7 @@ export function BenchmarksContent() {
                   </table>
                 </div>
               </GlassCard>
-              <p className="text-xs text-zinc-500 mt-2 md:hidden">&larr; Swipe to see all columns &rarr;</p>
+              <p className="text-xs text-fg-subtle mt-2 md:hidden">&larr; Swipe to see all columns &rarr;</p>
             </RawDataToggle>
           </FadeIn>
         </div>
@@ -172,7 +126,7 @@ export function BenchmarksContent() {
                 Head-to-head numbers against other Go SQL parsers are not published yet. They will
                 return once a reproducible benchmark harness is committed to the repository, so every
                 figure can be re-run by you. Until then, see the{' '}
-                <a href="/compare/" className="text-indigo-300 underline underline-offset-2">
+                <a href="/compare/" className="text-accent underline underline-offset-2">
                   qualitative feature comparison
                 </a>
                 .

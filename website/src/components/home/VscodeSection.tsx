@@ -38,49 +38,49 @@ export function VscodeSection() {
                   <div className="w-3 h-3 rounded-full bg-red-500/60" />
                   <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
                   <div className="w-3 h-3 rounded-full bg-green-500/60" />
-                  <span className="text-xs text-zinc-500 ml-2">query.sql — GoSQLX</span>
+                  <span className="text-xs text-fg-subtle ml-2">query.sql — GoSQLX</span>
                 </div>
                 {/* Editor content */}
                 <div className="p-4 font-mono text-sm leading-relaxed">
                   <div className="flex">
-                    <span className="w-8 text-right text-zinc-600 select-none mr-4">1</span>
+                    <span className="w-8 text-right text-fg-subtle select-none mr-4">1</span>
                     <span>
-                      <span className="text-accent-indigo">SELECT</span>
+                      <span className="text-accent">SELECT</span>
                       <span className="text-zinc-300"> u.id, u.name, u.email</span>
                     </span>
                   </div>
                   <div className="flex">
-                    <span className="w-8 text-right text-zinc-600 select-none mr-4">2</span>
+                    <span className="w-8 text-right text-fg-subtle select-none mr-4">2</span>
                     <span>
-                      <span className="text-accent-indigo">FROM</span>
-                      <span className="text-accent-orange"> users</span>
+                      <span className="text-accent">FROM</span>
+                      <span className="text-accent-warm"> users</span>
                       <span className="text-zinc-300"> u</span>
                     </span>
                   </div>
                   <div className="flex">
-                    <span className="w-8 text-right text-zinc-600 select-none mr-4">3</span>
+                    <span className="w-8 text-right text-fg-subtle select-none mr-4">3</span>
                     <span>
-                      <span className="text-accent-indigo">JOIN</span>
-                      <span className="text-accent-orange"> orders</span>
+                      <span className="text-accent">JOIN</span>
+                      <span className="text-accent-warm"> orders</span>
                       <span className="text-zinc-300"> o </span>
-                      <span className="text-accent-indigo">ON</span>
+                      <span className="text-accent">ON</span>
                       <span className="text-zinc-300"> o.user_id = u.id</span>
                     </span>
                   </div>
                   <div className="flex">
-                    <span className="w-8 text-right text-zinc-600 select-none mr-4">4</span>
+                    <span className="w-8 text-right text-fg-subtle select-none mr-4">4</span>
                     <span>
-                      <span className="text-accent-indigo">WHERE</span>
+                      <span className="text-accent">WHERE</span>
                       <span className="text-zinc-300"> u.active = </span>
-                      <span className="text-accent-purple">true</span>
+                      <span className="text-accent">true</span>
                     </span>
                   </div>
                   <div className="flex">
-                    <span className="w-8 text-right text-zinc-600 select-none mr-4">5</span>
+                    <span className="w-8 text-right text-fg-subtle select-none mr-4">5</span>
                     <span>
-                      <span className="text-accent-indigo">ORDER BY</span>
+                      <span className="text-accent">ORDER BY</span>
                       <span className="text-zinc-300"> u.name </span>
-                      <span className="text-accent-indigo">ASC</span>
+                      <span className="text-accent">ASC</span>
                       <span className="text-zinc-300">;</span>
                     </span>
                   </div>
@@ -88,16 +88,16 @@ export function VscodeSection() {
                 {/* Status bar */}
                 <div className="flex items-center justify-between px-4 py-2 border-t border-white/[0.06] bg-white/[0.02] text-xs">
                   <div className="flex items-center gap-2">
-                    <span className="flex items-center gap-1 text-accent-green">
+                    <span className="flex items-center gap-1 text-brand">
                       <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clipRule="evenodd" />
                       </svg>
                       Valid SQL
                     </span>
-                    <span className="text-zinc-500">|</span>
-                    <span className="text-zinc-500">PostgreSQL</span>
+                    <span className="text-fg-subtle">|</span>
+                    <span className="text-fg-subtle">PostgreSQL</span>
                   </div>
-                  <span className="text-zinc-500">0 issues</span>
+                  <span className="text-fg-subtle">0 issues</span>
                 </div>
               </GlassCard>
             </FadeIn>

@@ -1,20 +1,12 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import sample from '@/generated/sample-ast.json';
 import { useWasm, type GoSQLXApi } from '@/components/playground/WasmLoader';
 
-const SAMPLE_SQL = `SELECT
-  u.name,
-  u.email,
-  COUNT(o.id) AS order_count,
-  SUM(o.total) AS lifetime_value
-FROM users u
-LEFT JOIN orders o ON o.user_id = u.id
-WHERE u.created_at > '2024-01-01'
-GROUP BY u.name, u.email
-HAVING COUNT(o.id) > 5
-ORDER BY lifetime_value DESC
-LIMIT 20;`;
+// Query and AST are generated from sample.sql by the real parser (scripts/gen-sample-ast).
+const SAMPLE_SQL = sample.sql;
+const SAMPLE_AST = JSON.stringify(sample.ast, null, 2);
 
 const DIALECTS = [
   { value: 'generic', label: 'Generic' },
@@ -65,7 +57,10 @@ function formatOutput(result: unknown, tab: TabId): string {
 }
 
 export function MiniPlayground() {
-  const { loading, ready, api, progress } = useWasm();
+  // WASM is deferred until the user shows intent (focus, click, or tab/dialect change).
+  const [wasmRequested, setWasmRequested] = useState(false);
+  const requestWasm = useCallback(() => setWasmRequested(true), []);
+  const { loading, ready, api, progress } = useWasm(wasmRequested);
   const [sql, setSql] = useState(SAMPLE_SQL);
   const [dialect, setDialect] = useState('generic');
   const [activeTab, setActiveTab] = useState<TabId>('ast');
@@ -121,7 +116,11 @@ export function MiniPlayground() {
   const tabLabel = activeTab === 'ast' ? 'AST Output' : activeTab === 'format' ? 'Formatted' : 'Lint';
 
   return (
-    <div className="grid md:grid-cols-2 divide-y md:divide-y-0 divide-x-0 md:divide-x divide-white/[0.06]">
+    <div
+      className="grid md:grid-cols-2 divide-y md:divide-y-0 divide-x-0 md:divide-x divide-white/[0.06]"
+      onFocusCapture={requestWasm}
+      onPointerDownCapture={requestWasm}
+    >
       {/* Left: SQL input */}
       <div className="text-left min-w-0">
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/[0.06]">
@@ -152,7 +151,7 @@ export function MiniPlayground() {
             onChange={handleSqlChange}
             spellCheck={false}
             aria-label="SQL query input"
-            className="w-full p-4 text-[14px] leading-relaxed font-mono bg-transparent resize-none max-h-[320px] min-h-[200px] focus:outline-none focus:ring-2 focus:ring-accent-indigo/50 overflow-auto"
+            className="w-full p-4 text-[14px] leading-relaxed font-mono bg-transparent resize-none max-h-[320px] min-h-[200px] focus:outline-none focus:ring-2 focus:ring-accent/50 overflow-auto"
             style={{ color: '#D4D4D8' }}
             rows={12}
           />
@@ -183,8 +182,10 @@ export function MiniPlayground() {
               </button>
             ))}
           </div>
-          <span className="ml-auto text-xs font-mono text-emerald-400">
-            {loading
+          <span className="ml-auto text-xs font-mono text-brand">
+            {!wasmRequested
+              ? 'Precomputed sample output'
+              : loading
               ? progress < 1
                 ? `Loading... ${Math.round(progress * 100)}%`
                 : 'Initializing...'
@@ -204,14 +205,14 @@ export function MiniPlayground() {
             </pre>
           ) : (
             <pre className="p-4 text-[14px] leading-relaxed font-mono whitespace-pre-wrap" style={{ color: '#D4D4D8' }}>
-              <code>{output || (loading ? SAMPLE_AST_PLACEHOLDER : '')}</code>
+              <code>{output || (activeTab === 'ast' && !ready ? SAMPLE_AST : '')}</code>
             </pre>
           )}
         </div>
         <div className="px-4 py-2 border-t border-white/[0.06]">
           <Link
             href="/playground"
-            className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors font-medium"
+            className="text-xs text-accent hover:underline font-medium"
           >
             Open Full Playground &rarr;
           </Link>
@@ -220,21 +221,3 @@ export function MiniPlayground() {
     </div>
   );
 }
-
-// Static placeholder shown while WASM loads
-const SAMPLE_AST_PLACEHOLDER = `{
-  "type": "Query",
-  "body": {
-    "type": "Select",
-    "projection": [
-      { "type": "CompoundIdentifier", "value": "u.name" },
-      { "type": "CompoundIdentifier", "value": "u.email" },
-      { "type": "Function", "name": "COUNT", "alias": "order_count" },
-      { "type": "Function", "name": "SUM", "alias": "lifetime_value" }
-    ],
-    "from": { "type": "Join", "join_type": "LEFT" },
-    "group_by": ["u.name", "u.email"],
-    "order_by": [{ "expr": "lifetime_value", "asc": false }],
-    "limit": 20
-  }
-}`;

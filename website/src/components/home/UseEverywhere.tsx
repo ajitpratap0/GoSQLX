@@ -23,13 +23,13 @@ const EDITORS = [
 /** "Use it everywhere": the MCP server for AI assistants and the language server for editors. */
 export function UseEverywhere() {
   return (
-    <section aria-labelledby="everywhere-heading" className="py-20 border-t border-white/[0.06]">
+    <section aria-labelledby="everywhere-heading" className="py-20 border-t border-fg/[0.06]">
       <div className="max-w-6xl mx-auto px-4">
         <FadeIn viewport>
-          <h2 id="everywhere-heading" className="text-3xl font-bold text-white text-center mb-4">
+          <h2 id="everywhere-heading" className="text-3xl font-bold text-fg text-center mb-4">
             Use it everywhere
           </h2>
-          <p className="text-zinc-300 text-center mb-12 max-w-2xl mx-auto">
+          <p className="text-fg-muted text-center mb-12 max-w-2xl mx-auto">
             The same parser powers your Go code, your AI assistant and your editor.
           </p>
         </FadeIn>
@@ -38,8 +38,8 @@ export function UseEverywhere() {
           {/* AI assistants (MCP) */}
           <FadeIn viewport className="h-full">
             <div className="glass h-full p-6 flex flex-col">
-              <h3 className="text-xl font-semibold text-white mb-2">AI assistants</h3>
-              <p className="text-sm text-zinc-300 mb-5">
+              <h3 className="text-xl font-semibold text-fg mb-2">AI assistants</h3>
+              <p className="text-sm text-fg-muted mb-5">
                 Connect {PROJECT.mcpToolCount} SQL tools to Claude, Cursor or any MCP client. No installation, no API key.
               </p>
               <TerminalMockup
@@ -50,7 +50,7 @@ export function UseEverywhere() {
                 {MCP_TOOLS.map((tool) => (
                   <li
                     key={tool}
-                    className="text-xs font-mono text-zinc-300 bg-white/[0.03] border border-white/[0.06] rounded-md px-2.5 py-1"
+                    className="text-xs font-mono text-fg-muted bg-fg/[0.03] border border-fg/[0.06] rounded-md px-2.5 py-1"
                   >
                     {tool}
                   </li>
@@ -68,8 +68,8 @@ export function UseEverywhere() {
           {/* Editors (LSP) */}
           <FadeIn viewport delay={0.1} className="h-full">
             <div className="glass h-full p-6 flex flex-col">
-              <h3 className="text-xl font-semibold text-white mb-2">Editors</h3>
-              <p className="text-sm text-zinc-300 mb-5">
+              <h3 className="text-xl font-semibold text-fg mb-2">Editors</h3>
+              <p className="text-sm text-fg-muted mb-5">
                 Real-time validation, formatting and linting as you type, across all {PROJECT.dialectCount} dialects,
                 through the built-in language server (<code className="text-xs">gosqlx lsp</code>).
               </p>

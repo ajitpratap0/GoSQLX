@@ -35,7 +35,7 @@ export function PerformanceSection() {
     <section className="py-20">
       <div className="max-w-6xl mx-auto px-4">
         <FadeIn viewport>
-          <h2 className="text-2xl sm:text-3xl font-bold text-center text-white mb-12">
+          <h2 className="text-2xl sm:text-3xl font-bold text-center text-fg mb-12">
             Performance That Speaks for Itself
           </h2>
         </FadeIn>
@@ -48,7 +48,7 @@ export function PerformanceSection() {
                 <div className="text-2xl sm:text-3xl xl:text-4xl font-bold tabular-nums text-fg whitespace-nowrap">
                   {stat.display}
                 </div>
-                <p className="text-sm text-zinc-200 mt-1">{stat.label}</p>
+                <p className="text-sm text-fg mt-1">{stat.label}</p>
               </GlassCard>
             </FadeIn>
           ))}
@@ -58,12 +58,12 @@ export function PerformanceSection() {
         <FadeIn viewport delay={0.5}>
           <GlassCard className="mt-12 p-6 sm:p-8" hover={false}>
             <AnimatedBars benchmarks={benchmarks} maxOps={maxOps} />
-            <p className="text-xs text-zinc-400 mt-6 text-center">
+            <p className="text-xs text-fg-muted mt-6 text-center">
               Parse stage only (not tokenize or end-to-end), {BENCH_ENV.hardware}, {BENCH_ENV.goVersion}.
               Source: {BENCH_ENV.source}.
             </p>
             <div className="mt-6">
-              <h3 className="text-sm font-semibold text-zinc-200 mb-2">Reproduce</h3>
+              <h3 className="text-sm font-semibold text-fg mb-2">Reproduce</h3>
               <ReproduceSnippet command={BENCH_ENV.command} />
             </div>
           </GlassCard>

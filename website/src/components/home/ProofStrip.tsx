@@ -104,12 +104,12 @@ export function ProofStrip({ stars }: { stars: number | null }) {
   const metrics = buildMetrics(stars);
 
   return (
-    <section aria-labelledby="proof-heading" className="py-16 border-t border-white/[0.06]">
+    <section aria-labelledby="proof-heading" className="py-16 border-t border-fg/[0.06]">
       <div className="max-w-5xl mx-auto px-4">
         <FadeIn viewport>
           <h2
             id="proof-heading"
-            className="text-center text-sm font-semibold uppercase tracking-widest text-zinc-300 mb-10"
+            className="text-center text-sm font-semibold uppercase tracking-widest text-fg-muted mb-10"
           >
             Built for production
           </h2>
@@ -122,8 +122,8 @@ export function ProofStrip({ stars }: { stars: number | null }) {
               <FadeIn viewport delay={i * 0.07} className="h-full">
                 <div className="glass h-full text-center px-4 py-5 flex flex-col items-center gap-2">
                   <Glyph name={m.icon} />
-                  <span className="text-xl font-bold text-zinc-100 tabular-nums">{m.value}</span>
-                  <span className="text-xs text-zinc-300">{m.label}</span>
+                  <span className="text-xl font-bold text-fg tabular-nums">{m.value}</span>
+                  <span className="text-xs text-fg-muted">{m.label}</span>
                 </div>
               </FadeIn>
             </li>
@@ -132,7 +132,7 @@ export function ProofStrip({ stars }: { stars: number | null }) {
 
         {/* Integration strip */}
         <FadeIn viewport delay={0.2}>
-          <p className="text-center text-sm font-medium text-zinc-300 mt-12 mb-5">
+          <p className="text-center text-sm font-medium text-fg-muted mt-12 mb-5">
             Works with
           </p>
           <ul className="flex flex-wrap justify-center gap-2 sm:gap-3">
@@ -143,8 +143,8 @@ export function ProofStrip({ stars }: { stars: number | null }) {
                   className="glass glass-hover inline-flex min-h-11 items-center gap-2 px-4 py-2 rounded-full text-sm transition-colors"
                 >
                   <Glyph name={item.icon} />
-                  <span className="font-semibold text-zinc-100">{item.name}</span>
-                  <span className="text-xs text-zinc-400">{item.detail}</span>
+                  <span className="font-semibold text-fg">{item.name}</span>
+                  <span className="text-xs text-fg-muted">{item.detail}</span>
                 </Link>
               </li>
             ))}

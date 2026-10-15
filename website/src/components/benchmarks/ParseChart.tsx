@@ -12,7 +12,7 @@ const parseData: BarChartItem[] = PARSE_BENCHMARKS.map((b) => ({
 export function ParseChart() {
   return (
     <div>
-      <h3 className="text-lg font-semibold text-white mb-4">
+      <h3 className="text-lg font-semibold text-fg mb-4">
         Parse-stage throughput ({BENCH_ENV.hardware}, {BENCH_ENV.goVersion})
       </h3>
       <BarChart data={parseData} />

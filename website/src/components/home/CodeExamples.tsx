@@ -12,71 +12,71 @@ const tabs: { label: string; lines: CodeLine[] }[] = [
   {
     label: 'Parse',
     lines: [
-      [{ text: 'package', cls: 'text-accent' }, { text: ' main', cls: 'text-white' }],
+      [{ text: 'package', cls: 'text-accent' }, { text: ' main', cls: 'text-fg' }],
       [],
       [{ text: 'import', cls: 'text-accent' }, { text: ' ', cls: '' }, { text: '"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"', cls: 'text-brand' }],
       [],
-      [{ text: 'func', cls: 'text-accent' }, { text: ' main', cls: 'text-accent-warm' }, { text: '() {', cls: 'text-zinc-300' }],
+      [{ text: 'func', cls: 'text-accent' }, { text: ' main', cls: 'text-accent-warm' }, { text: '() {', cls: 'text-fg-muted' }],
       [{ text: '    ', cls: '' }, { text: '// Parse SQL into an AST', cls: 'text-fg-subtle' }],
-      [{ text: '    ast, err := gosqlx.', cls: 'text-zinc-300' }, { text: 'Parse', cls: 'text-accent-warm' }, { text: '(', cls: 'text-zinc-300' }, { text: '"SELECT * FROM users WHERE active = true"', cls: 'text-brand' }, { text: ')', cls: 'text-zinc-300' }],
-      [{ text: '    ', cls: '' }, { text: 'if', cls: 'text-accent' }, { text: ' err != nil {', cls: 'text-zinc-300' }],
-      [{ text: '        log.Fatal(err)', cls: 'text-zinc-300' }],
-      [{ text: '    }', cls: 'text-zinc-300' }],
-      [{ text: '    fmt.Println(ast.Statements)', cls: 'text-zinc-300' }],
-      [{ text: '}', cls: 'text-zinc-300' }],
+      [{ text: '    ast, err := gosqlx.', cls: 'text-fg-muted' }, { text: 'Parse', cls: 'text-accent-warm' }, { text: '(', cls: 'text-fg-muted' }, { text: '"SELECT * FROM users WHERE active = true"', cls: 'text-brand' }, { text: ')', cls: 'text-fg-muted' }],
+      [{ text: '    ', cls: '' }, { text: 'if', cls: 'text-accent' }, { text: ' err != nil {', cls: 'text-fg-muted' }],
+      [{ text: '        log.Fatal(err)', cls: 'text-fg-muted' }],
+      [{ text: '    }', cls: 'text-fg-muted' }],
+      [{ text: '    fmt.Println(ast.Statements)', cls: 'text-fg-muted' }],
+      [{ text: '}', cls: 'text-fg-muted' }],
     ],
   },
   {
     label: 'Format',
     lines: [
-      [{ text: 'package', cls: 'text-accent' }, { text: ' main', cls: 'text-white' }],
+      [{ text: 'package', cls: 'text-accent' }, { text: ' main', cls: 'text-fg' }],
       [],
       [{ text: 'import', cls: 'text-accent' }, { text: ' ', cls: '' }, { text: '"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"', cls: 'text-brand' }],
       [],
-      [{ text: 'func', cls: 'text-accent' }, { text: ' main', cls: 'text-accent-warm' }, { text: '() {', cls: 'text-zinc-300' }],
+      [{ text: 'func', cls: 'text-accent' }, { text: ' main', cls: 'text-accent-warm' }, { text: '() {', cls: 'text-fg-muted' }],
       [{ text: '    ', cls: '' }, { text: '// Format messy SQL', cls: 'text-fg-subtle' }],
-      [{ text: '    formatted, err := gosqlx.', cls: 'text-zinc-300' }, { text: 'Format', cls: 'text-accent-warm' }, { text: '(', cls: 'text-zinc-300' }, { text: '"select id,name from users where id>5"', cls: 'text-brand' }, { text: ')', cls: 'text-zinc-300' }],
-      [{ text: '    ', cls: '' }, { text: 'if', cls: 'text-accent' }, { text: ' err != nil {', cls: 'text-zinc-300' }],
-      [{ text: '        log.Fatal(err)', cls: 'text-zinc-300' }],
-      [{ text: '    }', cls: 'text-zinc-300' }],
-      [{ text: '    fmt.Println(formatted)', cls: 'text-zinc-300' }],
-      [{ text: '}', cls: 'text-zinc-300' }],
+      [{ text: '    formatted, err := gosqlx.', cls: 'text-fg-muted' }, { text: 'Format', cls: 'text-accent-warm' }, { text: '(', cls: 'text-fg-muted' }, { text: '"select id,name from users where id>5"', cls: 'text-brand' }, { text: ')', cls: 'text-fg-muted' }],
+      [{ text: '    ', cls: '' }, { text: 'if', cls: 'text-accent' }, { text: ' err != nil {', cls: 'text-fg-muted' }],
+      [{ text: '        log.Fatal(err)', cls: 'text-fg-muted' }],
+      [{ text: '    }', cls: 'text-fg-muted' }],
+      [{ text: '    fmt.Println(formatted)', cls: 'text-fg-muted' }],
+      [{ text: '}', cls: 'text-fg-muted' }],
     ],
   },
   {
     label: 'Validate',
     lines: [
-      [{ text: 'package', cls: 'text-accent' }, { text: ' main', cls: 'text-white' }],
+      [{ text: 'package', cls: 'text-accent' }, { text: ' main', cls: 'text-fg' }],
       [],
       [{ text: 'import', cls: 'text-accent' }, { text: ' ', cls: '' }, { text: '"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"', cls: 'text-brand' }],
       [],
-      [{ text: 'func', cls: 'text-accent' }, { text: ' main', cls: 'text-accent-warm' }, { text: '() {', cls: 'text-zinc-300' }],
+      [{ text: 'func', cls: 'text-accent' }, { text: ' main', cls: 'text-accent-warm' }, { text: '() {', cls: 'text-fg-muted' }],
       [{ text: '    ', cls: '' }, { text: '// Validate SQL syntax', cls: 'text-fg-subtle' }],
-      [{ text: '    result := gosqlx.', cls: 'text-zinc-300' }, { text: 'Validate', cls: 'text-accent-warm' }, { text: '(', cls: 'text-zinc-300' }, { text: '"SELECT * FROM users"', cls: 'text-brand' }, { text: ')', cls: 'text-zinc-300' }],
-      [{ text: '    ', cls: '' }, { text: 'if', cls: 'text-accent' }, { text: ' result.Valid {', cls: 'text-zinc-300' }],
-      [{ text: '        fmt.Println(', cls: 'text-zinc-300' }, { text: '"SQL is valid!"', cls: 'text-brand' }, { text: ')', cls: 'text-zinc-300' }],
-      [{ text: '    }', cls: 'text-zinc-300' }],
-      [{ text: '}', cls: 'text-zinc-300' }],
+      [{ text: '    result := gosqlx.', cls: 'text-fg-muted' }, { text: 'Validate', cls: 'text-accent-warm' }, { text: '(', cls: 'text-fg-muted' }, { text: '"SELECT * FROM users"', cls: 'text-brand' }, { text: ')', cls: 'text-fg-muted' }],
+      [{ text: '    ', cls: '' }, { text: 'if', cls: 'text-accent' }, { text: ' result.Valid {', cls: 'text-fg-muted' }],
+      [{ text: '        fmt.Println(', cls: 'text-fg-muted' }, { text: '"SQL is valid!"', cls: 'text-brand' }, { text: ')', cls: 'text-fg-muted' }],
+      [{ text: '    }', cls: 'text-fg-muted' }],
+      [{ text: '}', cls: 'text-fg-muted' }],
     ],
   },
   {
     label: 'Lint',
     lines: [
-      [{ text: 'package', cls: 'text-accent' }, { text: ' main', cls: 'text-white' }],
+      [{ text: 'package', cls: 'text-accent' }, { text: ' main', cls: 'text-fg' }],
       [],
       [{ text: 'import', cls: 'text-accent' }, { text: ' ', cls: '' }, { text: '"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"', cls: 'text-brand' }],
       [],
-      [{ text: 'func', cls: 'text-accent' }, { text: ' main', cls: 'text-accent-warm' }, { text: '() {', cls: 'text-zinc-300' }],
+      [{ text: 'func', cls: 'text-accent' }, { text: ' main', cls: 'text-accent-warm' }, { text: '() {', cls: 'text-fg-muted' }],
       [{ text: '    ', cls: '' }, { text: '// Lint SQL for best practices', cls: 'text-fg-subtle' }],
-      [{ text: '    issues, err := gosqlx.', cls: 'text-zinc-300' }, { text: 'Lint', cls: 'text-accent-warm' }, { text: '(', cls: 'text-zinc-300' }, { text: '"SELECT * FROM orders"', cls: 'text-brand' }, { text: ')', cls: 'text-zinc-300' }],
-      [{ text: '    ', cls: '' }, { text: 'if', cls: 'text-accent' }, { text: ' err != nil {', cls: 'text-zinc-300' }],
-      [{ text: '        log.Fatal(err)', cls: 'text-zinc-300' }],
-      [{ text: '    }', cls: 'text-zinc-300' }],
+      [{ text: '    issues, err := gosqlx.', cls: 'text-fg-muted' }, { text: 'Lint', cls: 'text-accent-warm' }, { text: '(', cls: 'text-fg-muted' }, { text: '"SELECT * FROM orders"', cls: 'text-brand' }, { text: ')', cls: 'text-fg-muted' }],
+      [{ text: '    ', cls: '' }, { text: 'if', cls: 'text-accent' }, { text: ' err != nil {', cls: 'text-fg-muted' }],
+      [{ text: '        log.Fatal(err)', cls: 'text-fg-muted' }],
+      [{ text: '    }', cls: 'text-fg-muted' }],
       [],
-      [{ text: '    ', cls: '' }, { text: 'for', cls: 'text-accent' }, { text: ' _, issue := ', cls: 'text-zinc-300' }, { text: 'range', cls: 'text-accent' }, { text: ' issues {', cls: 'text-zinc-300' }],
-      [{ text: '        fmt.Printf(', cls: 'text-zinc-300' }, { text: '"%s: %s\\n"', cls: 'text-brand' }, { text: ', issue.Code, issue.Message)', cls: 'text-zinc-300' }],
-      [{ text: '    }', cls: 'text-zinc-300' }],
-      [{ text: '}', cls: 'text-zinc-300' }],
+      [{ text: '    ', cls: '' }, { text: 'for', cls: 'text-accent' }, { text: ' _, issue := ', cls: 'text-fg-muted' }, { text: 'range', cls: 'text-accent' }, { text: ' issues {', cls: 'text-fg-muted' }],
+      [{ text: '        fmt.Printf(', cls: 'text-fg-muted' }, { text: '"%s: %s\\n"', cls: 'text-brand' }, { text: ', issue.Code, issue.Message)', cls: 'text-fg-muted' }],
+      [{ text: '    }', cls: 'text-fg-muted' }],
+      [{ text: '}', cls: 'text-fg-muted' }],
     ],
   },
 ];
@@ -102,10 +102,10 @@ export function CodeExamples() {
   const [switched, setSwitched] = useState(false);
 
   return (
-    <section className="py-20 border-t border-white/[0.06]">
+    <section className="py-20 border-t border-fg/[0.06]">
       <div className="max-w-3xl mx-auto px-4">
         <FadeIn viewport>
-          <h2 className="text-3xl font-bold text-white text-center mb-10">
+          <h2 className="text-3xl font-bold text-fg text-center mb-10">
             Simple, Powerful API
           </h2>
         </FadeIn>
@@ -119,7 +119,7 @@ export function CodeExamples() {
                   setSwitched(true);
                 }}
                 className={`relative px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-                  active === i ? 'text-white' : 'text-fg-subtle hover:text-zinc-300'
+                  active === i ? 'text-fg' : 'text-fg-subtle hover:text-fg-muted'
                 }`}
               >
                 {tab.label}
@@ -133,10 +133,10 @@ export function CodeExamples() {
             ))}
           </div>
           <GlassCard hover={false} className="p-0 overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-white/[0.06]">
-              <div className="w-3 h-3 rounded-full bg-red-500/60" />
-              <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
-              <div className="w-3 h-3 rounded-full bg-green-500/60" />
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-fg/[0.06]">
+              <div className="w-3 h-3 rounded-full bg-danger/60" />
+              <div className="w-3 h-3 rounded-full bg-warn/60" />
+              <div className="w-3 h-3 rounded-full bg-ok/60" />
               <span className="text-xs text-fg-subtle ml-2">main.go</span>
             </div>
             <div className="p-4 font-mono text-sm leading-relaxed overflow-x-auto">

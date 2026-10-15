@@ -29,7 +29,7 @@ export default function DocsPage() {
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
           GoSQLX Documentation
         </h1>
-        <p className="mt-4 text-lg text-zinc-400">
+        <p className="mt-4 text-lg text-fg-muted">
           Everything you need to parse, analyze, lint, and transform SQL with Go.
         </p>
         <Link
@@ -57,13 +57,13 @@ export default function DocsPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" d={CATEGORY_ICONS[group.category] || CATEGORY_ICONS['Core']} />
                 </svg>
               </div>
-              <h2 className="text-lg font-semibold text-white">{group.category}</h2>
+              <h2 className="text-lg font-semibold text-fg">{group.category}</h2>
               <p className="mt-1 text-sm text-fg-subtle">
                 {group.items.length} {group.items.length === 1 ? 'article' : 'articles'}
               </p>
               <ul className="mt-3 space-y-1">
                 {group.items.slice(0, 3).map((item) => (
-                  <li key={item.slug} className="text-sm text-zinc-400">{item.label}</li>
+                  <li key={item.slug} className="text-sm text-fg-muted">{item.label}</li>
                 ))}
                 {group.items.length > 3 && (
                   <li className="text-sm text-fg-subtle">+{group.items.length - 3} more</li>

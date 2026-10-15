@@ -59,7 +59,7 @@ export function BarChart({ data, unit = 'ops/sec' }: BarChartProps) {
           <div key={item.label} className="group">
             {/* Label row */}
             <div className="flex items-center justify-between mb-1">
-              <span className={`text-sm font-medium ${item.highlight ? 'text-white' : 'text-zinc-400'}`}>
+              <span className={`text-sm font-medium ${item.highlight ? 'text-fg' : 'text-fg-muted'}`}>
                 {item.label}
                 {item.highlight && (
                   <span className="ml-2 inline-block rounded-full border border-brand/40 px-2 py-0.5 text-xs font-medium text-brand">
@@ -67,18 +67,18 @@ export function BarChart({ data, unit = 'ops/sec' }: BarChartProps) {
                   </span>
                 )}
               </span>
-              <span className={`text-sm font-mono ${item.highlight ? 'text-white' : 'text-zinc-400'}`}>
+              <span className={`text-sm font-mono ${item.highlight ? 'text-fg' : 'text-fg-muted'}`}>
                 {formatValue(item.value)} {unit}
               </span>
             </div>
 
             {/* Bar */}
-            <div className="h-7 w-full rounded bg-white/[0.04] overflow-hidden">
+            <div className="h-7 w-full rounded bg-fg/[0.04] overflow-hidden">
               <div
                 className={`h-full rounded transition-all duration-1000 ease-out ${
                   item.highlight
-                    ? 'bg-gradient-to-r from-green-500 to-green-400'
-                    : item.color ?? 'bg-zinc-700'
+                    ? 'bg-gradient-to-r from-brand to-ok'
+                    : item.color ?? 'bg-bg-overlay'
                 }`}
                 style={{ width: visible ? `${pct}%` : '0%' }}
               />

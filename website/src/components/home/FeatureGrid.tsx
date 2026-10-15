@@ -40,15 +40,15 @@ const colorMap: Record<string, string> = {
   'accent-warm': 'bg-accent-warm/10 text-accent-warm',
   'accent': 'bg-accent/10 text-accent',
   'danger': 'bg-danger/10 text-danger',
-  'cyan': 'bg-cyan-500/10 text-cyan-400',
+  'cyan': 'bg-cyan/10 text-cyan',
 };
 
 export function FeatureGrid() {
   return (
-    <section className="py-20 border-t border-white/[0.06]">
+    <section className="py-20 border-t border-fg/[0.06]">
       <div className="max-w-6xl mx-auto px-4">
         <FadeIn viewport>
-          <h2 className="text-3xl font-bold text-white text-center mb-12">
+          <h2 className="text-3xl font-bold text-fg text-center mb-12">
             Everything you need to work with SQL in Go
           </h2>
         </FadeIn>
@@ -56,11 +56,11 @@ export function FeatureGrid() {
           {FEATURES.map((feature, i) => (
             <FadeIn viewport key={feature.title} delay={i * 0.1}>
               <GlassCard className="p-6 h-full">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-4 ${colorMap[feature.color] || 'bg-white/10 text-white'}`}>
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-4 ${colorMap[feature.color] || 'bg-fg/10 text-fg'}`}>
                   {icons[feature.icon]}
                 </div>
-                <h3 className="text-lg font-semibold text-white mb-1">{feature.title}</h3>
-                <p className="text-sm text-zinc-200">{feature.description}</p>
+                <h3 className="text-lg font-semibold text-fg mb-1">{feature.title}</h3>
+                <p className="text-sm text-fg">{feature.description}</p>
               </GlassCard>
             </FadeIn>
           ))}

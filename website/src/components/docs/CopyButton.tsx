@@ -22,7 +22,7 @@ export function CopyButton({ text }: { text: string }) {
   return (
     <m.button
       onClick={copy}
-      className="absolute right-2 top-2 flex h-8 w-8 max-lg:h-11 max-lg:w-11 items-center justify-center rounded-md bg-white/10 text-zinc-400 opacity-0 transition-opacity hover:bg-white/15 hover:text-white group-hover:opacity-100"
+      className="absolute right-2 top-2 flex h-8 w-8 max-lg:h-11 max-lg:w-11 items-center justify-center rounded-md bg-fg/10 text-fg-muted opacity-0 transition-opacity hover:bg-fg/15 hover:text-fg group-hover:opacity-100"
       aria-label={failed ? 'Copy failed - try Ctrl+C' : copied ? 'Copied' : 'Copy code'}
       title={failed ? 'Clipboard access denied. Try Ctrl+C to copy.' : undefined}
       whileTap={{ scale: 0.85 }}
@@ -42,7 +42,7 @@ export function CopyButton({ text }: { text: string }) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           ) : failed ? (
-            <svg className="h-4 w-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="h-4 w-4 text-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           ) : (

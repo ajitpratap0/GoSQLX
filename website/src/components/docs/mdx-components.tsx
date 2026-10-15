@@ -52,13 +52,13 @@ export const mdxComponents = {
         <pre
           {...props}
           tabIndex={0}
-          className="overflow-x-auto rounded-lg border border-white/5 bg-bg-raised p-4 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-1 focus:ring-offset-zinc-900"
+          className="overflow-x-auto rounded-lg border border-fg/5 bg-bg-raised p-4 text-sm focus:outline-none focus:ring-2 focus:ring-ok/50 focus:ring-offset-1 focus:ring-offset-zinc-900"
         >
           {children}
         </pre>
         {/* Mobile scroll hint: right-edge fade gradient, hidden on md+ where scrollbar is visible */}
         <div
-          className="pointer-events-none absolute bottom-0 right-0 top-0 w-8 rounded-r-lg bg-gradient-to-l from-zinc-900/80 to-transparent md:hidden"
+          className="pointer-events-none absolute bottom-0 right-0 top-0 w-8 rounded-r-lg bg-gradient-to-l from-bg-raised to-transparent md:hidden"
           aria-hidden="true"
         />
       </div>
@@ -66,7 +66,7 @@ export const mdxComponents = {
   },
 
   blockquote: (props: ComponentPropsWithoutRef<'blockquote'>) => (
-    <blockquote {...props} className="border-l-2 border-accent bg-bg-raised/50 pl-4 py-2 italic text-zinc-400" />
+    <blockquote {...props} className="border-l-2 border-accent bg-bg-raised/50 pl-4 py-2 italic text-fg-muted" />
   ),
 
   table: (props: ComponentPropsWithoutRef<'table'>) => (
@@ -74,8 +74,8 @@ export const mdxComponents = {
       <table {...props} className="w-full text-sm" />
     </div>
   ),
-  thead: (props: ComponentPropsWithoutRef<'thead'>) => <thead {...props} className="border-b border-white/10 text-left text-zinc-400" />,
+  thead: (props: ComponentPropsWithoutRef<'thead'>) => <thead {...props} className="border-b border-fg/10 text-left text-fg-muted" />,
   th: (props: ComponentPropsWithoutRef<'th'>) => <th {...props} className="px-3 py-2 font-semibold" />,
-  td: (props: ComponentPropsWithoutRef<'td'>) => <td {...props} className="border-t border-white/5 px-3 py-2" />,
-  tr: (props: ComponentPropsWithoutRef<'tr'>) => <tr {...props} className="hover:bg-white/[0.02]" />,
+  td: (props: ComponentPropsWithoutRef<'td'>) => <td {...props} className="border-t border-fg/5 px-3 py-2" />,
+  tr: (props: ComponentPropsWithoutRef<'tr'>) => <tr {...props} className="hover:bg-fg/[0.02]" />,
 };

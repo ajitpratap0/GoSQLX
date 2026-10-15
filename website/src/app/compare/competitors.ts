@@ -87,7 +87,7 @@ export const COMPETITOR_PAGES: CompetitorPage[] = [
     short: 'xwb1989/sqlparser',
     repo: 'https://github.com/xwb1989/sqlparser',
     summary:
-      'xwb1989/sqlparser is a standalone MySQL parser extracted from Vitess in 2018. It is widely imported, but its last commit is old.',
+      'xwb1989/sqlparser is a standalone MySQL parser extracted from Vitess. It is widely imported, but its last commit was 2018-06-06.',
     description:
       'GoSQLX as an xwb1989/sqlparser alternative: maintained, multi-dialect, with CTE and window function support. Dated maintenance facts and reproducible numbers.',
     facts: [

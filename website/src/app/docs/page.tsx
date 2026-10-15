@@ -1,15 +1,16 @@
 import type { Metadata } from 'next';
+import { pageMeta } from '@/lib/seo';
 import Link from 'next/link';
 import { DOCS_SIDEBAR } from '@/lib/constants';
 import { DocsSearchTrigger } from '@/components/docs/DocsSearchTrigger';
 import { FadeIn } from '@/components/ui/FadeIn';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta({
   title: 'Documentation',
   description:
-    'GoSQLX documentation - everything you need to parse, analyze, and transform SQL with Go.',
-  alternates: { canonical: '/docs/' },
-};
+    'GoSQLX documentation: guides, API reference, CLI, dialect and error code references, and tutorials to parse, analyze and transform SQL in Go.',
+  path: '/docs/',
+});
 
 const CATEGORY_ICONS: Record<string, string> = {
   'Getting Started': 'M13 10V3L4 14h7v7l9-11h-7z',
@@ -23,7 +24,7 @@ const CATEGORY_ICONS: Record<string, string> = {
 
 export default function DocsPage() {
   return (
-    <main className="mx-auto max-w-5xl px-6 py-20">
+    <div className="mx-auto max-w-5xl px-6 py-20">
       <div className="mb-16 text-center">
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
           GoSQLX Documentation
@@ -33,7 +34,7 @@ export default function DocsPage() {
         </p>
         <Link
           href="/docs/getting-started"
-          className="mt-8 inline-flex items-center gap-2 rounded-lg bg-accent-indigo px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-indigo/80"
+          className="mt-8 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent/90"
         >
           Get Started
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -51,13 +52,13 @@ export default function DocsPage() {
               href={`/docs/${group.items[0].slug}`}
               className="glass glass-hover block rounded-xl p-6 transition-colors h-full"
             >
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-accent-indigo/10">
-                <svg className="h-5 w-5 text-accent-indigo" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
+                <svg className="h-5 w-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d={CATEGORY_ICONS[group.category] || CATEGORY_ICONS['Core']} />
                 </svg>
               </div>
               <h2 className="text-lg font-semibold text-white">{group.category}</h2>
-              <p className="mt-1 text-sm text-zinc-500">
+              <p className="mt-1 text-sm text-fg-subtle">
                 {group.items.length} {group.items.length === 1 ? 'article' : 'articles'}
               </p>
               <ul className="mt-3 space-y-1">
@@ -65,13 +66,13 @@ export default function DocsPage() {
                   <li key={item.slug} className="text-sm text-zinc-400">{item.label}</li>
                 ))}
                 {group.items.length > 3 && (
-                  <li className="text-sm text-zinc-600">+{group.items.length - 3} more</li>
+                  <li className="text-sm text-fg-subtle">+{group.items.length - 3} more</li>
                 )}
               </ul>
             </Link>
           </FadeIn>
         ))}
       </div>
-    </main>
+    </div>
   );
 }

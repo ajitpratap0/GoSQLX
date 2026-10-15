@@ -1,36 +1,8 @@
-'use client';
-import { useMotionValue, useSpring } from 'motion/react';
-import { useRef, useEffect, useState } from 'react';
-
 export function AnimatedCounter({ value, suffix = '', color = 'text-white' }: { value: number; suffix?: string; color?: string }) {
-  const ref = useRef(null);
-  const motionValue = useMotionValue(0);
-  const spring = useSpring(motionValue, { stiffness: 100, damping: 30 });
-  const [display, setDisplay] = useState(() => value.toLocaleString('en-US'));
-
-  useEffect(() => {
-    // Respect prefers-reduced-motion
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setDisplay(value.toLocaleString('en-US'));
-      return;
-    }
-    // Start animation after a short delay to ensure mount has completed
-    const timer = setTimeout(() => {
-      motionValue.set(value);
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [value, motionValue]);
-
-  useEffect(() => {
-    const unsubscribe = spring.on('change', (v: number) => {
-      setDisplay(Math.round(v).toLocaleString('en-US'));
-    });
-    return unsubscribe;
-  }, [spring]);
-
+  // Renders the final value directly: no reset-to-0 flash and nothing hidden pending JS.
   return (
-    <span ref={ref} className={`text-3xl sm:text-4xl font-bold tabular-nums ${color}`}>
-      {display}{suffix}
+    <span className={`text-3xl sm:text-4xl font-bold tabular-nums ${color}`}>
+      {value.toLocaleString('en-US')}{suffix}
     </span>
   );
 }

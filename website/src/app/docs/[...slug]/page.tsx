@@ -1,18 +1,20 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
+import { pageMeta } from '@/lib/seo';
 import { compileMDX } from 'next-mdx-remote/rsc';
 import remarkGfm from 'remark-gfm';
 import rehypeSlug from 'rehype-slug';
-import { getDocBySlug, getDocSlugs, getAdjacentDocs, extractHeadings } from '@/lib/docs';
+import { getDocBySlug, getDocSlugs, getAdjacentDocs, extractHeadings, stripCodeFences } from '@/lib/docs';
 import { DOCS_SIDEBAR } from '@/lib/constants';
 import { Sidebar } from '@/components/docs/Sidebar';
 import { Toc } from '@/components/docs/Toc';
 import { DocNavigation } from '@/components/docs/DocNavigation';
+import { JsonLd } from '@/components/JsonLd';
 import { mdxComponents } from '@/components/docs/mdx-components';
 
 function getReadingTime(text: string): number {
-  const words = text.trim().split(/\s+/).length;
+  const words = stripCodeFences(text).trim().split(/\s+/).length;
   return Math.max(1, Math.ceil(words / 200));
 }
 
@@ -30,18 +32,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { slug } = await params;
   const slugStr = slug.join('/');
   const doc = getDocBySlug(slugStr);
-  if (!doc) return { title: 'Not Found' };
+  if (!doc) return { title: { absolute: 'Page not found | GoSQLX' } };
 
-  return {
-    title: doc.title,
-    description: `GoSQLX documentation - ${doc.title}`,
-    alternates: {
-      canonical: `https://gosqlx.dev/docs/${slugStr}/`,
-    },
-    openGraph: {
-      url: `https://gosqlx.dev/docs/${slugStr}/`,
-    },
-  };
+  return pageMeta({
+    title: `${doc.label} (Docs)`,
+    description: doc.description,
+    path: `/docs/${slugStr}/`,
+    image: { url: `/og/docs/${slugStr}/`, alt: `${doc.label} (GoSQLX docs)` },
+  });
 }
 
 export default async function DocPage({ params }: PageProps) {
@@ -75,12 +73,9 @@ export default async function DocPage({ params }: PageProps) {
   const breadcrumbItems: Array<{ '@type': string; position: number; name: string; item: string }> = [
     { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://gosqlx.dev/' },
     { '@type': 'ListItem', position: 2, name: 'Documentation', item: 'https://gosqlx.dev/docs/' },
-    ...(categoryItem
-      ? [{ '@type': 'ListItem', position: 3, name: categoryItem.category, item: 'https://gosqlx.dev/docs/' }]
-      : []),
     {
       '@type': 'ListItem',
-      position: categoryItem ? 4 : 3,
+      position: 3,
       name: doc.title,
       item: `https://gosqlx.dev/docs/${slugStr}/`,
     },
@@ -92,13 +87,22 @@ export default async function DocPage({ params }: PageProps) {
     itemListElement: breadcrumbItems,
   };
 
+  const articleJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'TechArticle',
+    headline: doc.title,
+    description: `GoSQLX documentation: ${doc.label}.`,
+    url: `https://gosqlx.dev/docs/${slugStr}/`,
+    dateModified: doc.modifiedAt,
+    inLanguage: 'en',
+    author: { '@type': 'Organization', name: 'GoSQLX', url: 'https://gosqlx.dev' },
+    publisher: { '@type': 'Organization', name: 'GoSQLX', url: 'https://gosqlx.dev' },
+    mainEntityOfPage: { '@type': 'WebPage', '@id': `https://gosqlx.dev/docs/${slugStr}/` },
+  };
+
   return (
     <>
-      <script
-        type="application/ld+json"
-        suppressHydrationWarning
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
-      />
+      <JsonLd data={[breadcrumbJsonLd, articleJsonLd]} />
       <div className="mx-auto flex max-w-[90rem]">
       {/* Sidebar */}
       <div className="hidden lg:block w-64 shrink-0">
@@ -110,7 +114,7 @@ export default async function DocPage({ params }: PageProps) {
       </div>
 
       {/* Main content */}
-      <main className="min-w-0 flex-1 px-6 py-10 lg:px-12">
+      <div className="min-w-0 flex-1 px-6 py-10 lg:px-12">
         {/* Breadcrumbs */}
         <nav aria-label="Breadcrumb" className="mb-6 text-sm text-zinc-300">
           <ol className="flex items-center gap-2">
@@ -131,7 +135,7 @@ export default async function DocPage({ params }: PageProps) {
         </nav>
 
         {/* Reading time */}
-        <div className="mb-6 flex items-center gap-2 text-sm text-zinc-500">
+        <div className="mb-6 flex items-center gap-2 text-sm text-fg-subtle">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
@@ -139,16 +143,16 @@ export default async function DocPage({ params }: PageProps) {
         </div>
 
         {/* Content */}
-        <article className="prose prose-invert prose-dark max-w-none">
+        <article className="prose prose-invert prose-dark max-w-none prose-code:before:content-none prose-code:after:content-none">
           {content}
         </article>
 
         {/* Prev / Next */}
         <DocNavigation prev={prev} next={next} />
-      </main>
+      </div>
 
       {/* Table of Contents */}
-      <div className="hidden xl:block w-56 shrink-0 py-10 pr-6">
+      <div className="hidden xl:block w-64 shrink-0 py-10 pr-6">
         <Toc headings={headings} />
       </div>
       </div>

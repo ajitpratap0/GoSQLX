@@ -1,0 +1,287 @@
+{
+  "sql": "SELECT\n  u.name,\n  u.email,\n  COUNT(o.id) AS order_count,\n  SUM(o.total) AS lifetime_value\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.id\nWHERE u.created_at \u003e '2024-01-01'\nGROUP BY u.name, u.email\nHAVING COUNT(o.id) \u003e 5\nORDER BY lifetime_value DESC\nLIMIT 20;",
+  "ast": {
+    "Statements": [
+      {
+        "With": null,
+        "Distinct": false,
+        "DistinctOnColumns": null,
+        "Top": null,
+        "Columns": [
+          {
+            "Name": "name",
+            "Table": "u",
+            "Pos": {
+              "Line": 2,
+              "Column": 3
+            },
+            "Quoted": false
+          },
+          {
+            "Name": "email",
+            "Table": "u",
+            "Pos": {
+              "Line": 3,
+              "Column": 3
+            },
+            "Quoted": false
+          },
+          {
+            "Expr": {
+              "Name": "COUNT",
+              "Arguments": [
+                {
+                  "Name": "id",
+                  "Table": "o",
+                  "Pos": {
+                    "Line": 4,
+                    "Column": 9
+                  },
+                  "Quoted": false
+                }
+              ],
+              "Parameters": null,
+              "Over": null,
+              "Distinct": false,
+              "Filter": null,
+              "OrderBy": null,
+              "WithinGroup": null,
+              "NullTreatment": "",
+              "Pos": {
+                "Line": 4,
+                "Column": 3
+              }
+            },
+            "Alias": "order_count"
+          },
+          {
+            "Expr": {
+              "Name": "SUM",
+              "Arguments": [
+                {
+                  "Name": "total",
+                  "Table": "o",
+                  "Pos": {
+                    "Line": 5,
+                    "Column": 7
+                  },
+                  "Quoted": false
+                }
+              ],
+              "Parameters": null,
+              "Over": null,
+              "Distinct": false,
+              "Filter": null,
+              "OrderBy": null,
+              "WithinGroup": null,
+              "NullTreatment": "",
+              "Pos": {
+                "Line": 5,
+                "Column": 3
+              }
+            },
+            "Alias": "lifetime_value"
+          }
+        ],
+        "From": [
+          {
+            "Name": "users",
+            "Alias": "u",
+            "Subquery": null,
+            "Lateral": false,
+            "TableHints": null,
+            "Final": false,
+            "TableFunc": null,
+            "TimeTravel": null,
+            "ForSystemTime": null,
+            "Pivot": null,
+            "Unpivot": null,
+            "MatchRecognize": null,
+            "SetSubquery": null
+          }
+        ],
+        "TableName": "users",
+        "Joins": [
+          {
+            "Type": "LEFT",
+            "Left": {
+              "Name": "users",
+              "Alias": "u",
+              "Subquery": null,
+              "Lateral": false,
+              "TableHints": null,
+              "Final": false,
+              "TableFunc": null,
+              "TimeTravel": null,
+              "ForSystemTime": null,
+              "Pivot": null,
+              "Unpivot": null,
+              "MatchRecognize": null,
+              "SetSubquery": null
+            },
+            "Right": {
+              "Name": "orders",
+              "Alias": "o",
+              "Subquery": null,
+              "Lateral": false,
+              "TableHints": null,
+              "Final": false,
+              "TableFunc": null,
+              "TimeTravel": null,
+              "ForSystemTime": null,
+              "Pivot": null,
+              "Unpivot": null,
+              "MatchRecognize": null,
+              "SetSubquery": null
+            },
+            "Condition": {
+              "Left": {
+                "Name": "user_id",
+                "Table": "o",
+                "Pos": {
+                  "Line": 7,
+                  "Column": 23
+                },
+                "Quoted": false
+              },
+              "Operator": "=",
+              "Right": {
+                "Name": "id",
+                "Table": "u",
+                "Pos": {
+                  "Line": 7,
+                  "Column": 35
+                },
+                "Quoted": false
+              },
+              "Not": false,
+              "CustomOp": null,
+              "Pos": {
+                "Line": 7,
+                "Column": 33
+              }
+            },
+            "Using": null,
+            "Pos": {
+              "Line": 7,
+              "Column": 1
+            }
+          }
+        ],
+        "ArrayJoin": null,
+        "PrewhereClause": null,
+        "Sample": null,
+        "Where": {
+          "Left": {
+            "Name": "created_at",
+            "Table": "u",
+            "Pos": {
+              "Line": 8,
+              "Column": 7
+            },
+            "Quoted": false
+          },
+          "Operator": "\u003e",
+          "Right": {
+            "Value": "2024-01-01",
+            "Type": "string"
+          },
+          "Not": false,
+          "CustomOp": null,
+          "Pos": {
+            "Line": 8,
+            "Column": 20
+          }
+        },
+        "GroupBy": [
+          {
+            "Name": "name",
+            "Table": "u",
+            "Pos": {
+              "Line": 9,
+              "Column": 10
+            },
+            "Quoted": false
+          },
+          {
+            "Name": "email",
+            "Table": "u",
+            "Pos": {
+              "Line": 9,
+              "Column": 18
+            },
+            "Quoted": false
+          }
+        ],
+        "Having": {
+          "Left": {
+            "Name": "COUNT",
+            "Arguments": [
+              {
+                "Name": "id",
+                "Table": "o",
+                "Pos": {
+                  "Line": 10,
+                  "Column": 14
+                },
+                "Quoted": false
+              }
+            ],
+            "Parameters": null,
+            "Over": null,
+            "Distinct": false,
+            "Filter": null,
+            "OrderBy": null,
+            "WithinGroup": null,
+            "NullTreatment": "",
+            "Pos": {
+              "Line": 10,
+              "Column": 8
+            }
+          },
+          "Operator": "\u003e",
+          "Right": {
+            "Value": "5",
+            "Type": "int"
+          },
+          "Not": false,
+          "CustomOp": null,
+          "Pos": {
+            "Line": 10,
+            "Column": 20
+          }
+        },
+        "Qualify": null,
+        "StartWith": null,
+        "ConnectBy": null,
+        "Windows": null,
+        "OrderBy": [
+          {
+            "Expression": {
+              "Name": "lifetime_value",
+              "Table": "",
+              "Pos": {
+                "Line": 11,
+                "Column": 10
+              },
+              "Quoted": false
+            },
+            "Ascending": false,
+            "NullsFirst": null,
+            "WithFill": null
+          }
+        ],
+        "Limit": 20,
+        "Offset": null,
+        "Fetch": null,
+        "For": null,
+        "Settings": null,
+        "Pos": {
+          "Line": 1,
+          "Column": 1
+        }
+      }
+    ],
+    "Comments": null
+  }
+}

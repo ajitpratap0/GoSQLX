@@ -19,7 +19,7 @@ const FEATURES: FeatureRow[] = [
   { feature: 'Language',              values: ['Go',     'Go (C via CGo)', 'Go',   'Go'] },
   { feature: 'Zero-copy',            values: [true,  false, false, false] },
   { feature: 'Dialects',             values: [String(PROJECT.dialectCount),   '1 (PostgreSQL)', '1 (MySQL)', '1 (MySQL)'] },
-  { feature: 'CGo required',         values: [false, true,  false, false] },
+  { feature: 'Pure Go (no CGo)',     values: [true,  false, true,  true] },
   { feature: 'WASM support',         values: [true,  false, false, false] },
   { feature: 'SQL injection detection', values: [true,  false, false, false] },
   { feature: 'MCP server',           values: [true,  false, false, false] },
@@ -86,7 +86,12 @@ function XIcon() {
 
 function CellValue({ value }: { value: string | boolean }) {
   if (typeof value === 'boolean') {
-    return value ? <CheckIcon /> : <XIcon />;
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        {value ? <CheckIcon /> : <XIcon />}
+        <span className="text-xs text-zinc-400">{value ? 'Yes' : 'No'}</span>
+      </span>
+    );
   }
   return <span>{value}</span>;
 }
@@ -171,7 +176,7 @@ export function CompareContent() {
           <p className="text-sm text-zinc-400">
             Performance comparisons are withheld until a reproducible benchmark harness is published.
             For GoSQLX measurements, see the{' '}
-            <Link href="/benchmarks/" className="text-indigo-300 underline underline-offset-2">
+            <Link href="/benchmarks/" className="text-accent underline underline-offset-2">
               benchmarks page
             </Link>
             .
@@ -189,7 +194,7 @@ export function CompareContent() {
               </h2>
               <p className="mt-3 text-zinc-400 max-w-xl mx-auto">
                 Get started in under a minute with a single{' '}
-                <code className="font-mono text-xs bg-white/[0.06] px-1.5 py-0.5 rounded">
+                <code className="font-mono text-xs text-fg bg-fg/[0.06] px-1.5 py-0.5 rounded">
                   go get
                 </code>{' '}
                 command.

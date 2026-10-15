@@ -18,15 +18,15 @@ export function BlogList({ posts }: { posts: BlogPost[] }) {
               className="group flex gap-6 py-5 pl-0 relative"
             >
               {/* Timeline dot */}
-              <div className="relative z-10 mt-2 w-[15px] h-[15px] shrink-0 rounded-full border-2 border-zinc-700 bg-primary group-hover:border-accent-indigo transition-colors" />
+              <div className="relative z-10 mt-2 w-[15px] h-[15px] shrink-0 rounded-full border-2 border-zinc-700 bg-bg group-hover:border-accent transition-colors" />
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3 mb-1.5 flex-wrap">
-                  <span className="inline-block bg-accent-indigo/10 border border-accent-indigo/20 rounded-full px-3 py-0.5 text-xs font-medium text-accent-indigo">
+                  <span className="inline-block bg-accent/10 border border-accent/20 rounded-full px-3 py-0.5 text-xs font-medium text-accent">
                     v{post.version}
                   </span>
                   {post.date && (
-                    <span className="text-sm text-text-muted">{formatDate(post.date)}</span>
+                    <span className="text-sm text-fg-subtle">{formatDate(post.date)}</span>
                   )}
                 </div>
                 <h2 className="text-lg font-semibold text-zinc-100 group-hover:text-white transition-colors truncate">
@@ -40,7 +40,7 @@ export function BlogList({ posts }: { posts: BlogPost[] }) {
               </div>
 
               {/* Arrow */}
-              <div className="mt-2 text-text-muted group-hover:text-zinc-400 transition-colors shrink-0">
+              <div className="mt-2 text-fg-subtle group-hover:text-zinc-400 transition-colors shrink-0">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M6 4l4 4-4 4" />
                 </svg>

@@ -21,11 +21,11 @@ export default function PlaygroundPage() {
         crossOrigin="anonymous"
       />
       <ServiceWorkerRegister />
-      <div className="border-b border-slate-800 bg-slate-900/50 px-4 py-3">
-        <h1 className="text-lg font-semibold text-slate-100">
+      <div className="border-b border-border bg-bg-raised px-4 py-3">
+        <h1 className="text-lg font-semibold text-fg">
           Online Go SQL Parser Playground
         </h1>
-        <p className="mt-1 max-w-3xl text-sm text-slate-400">
+        <p className="mt-1 max-w-3xl text-sm text-fg-muted">
           Parse, format, lint, and analyze SQL right in your browser with
           GoSQLX compiled to WebAssembly. Pick a dialect (PostgreSQL, MySQL,
           SQL Server, Oracle, SQLite, Snowflake, ClickHouse), paste a query, and

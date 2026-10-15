@@ -51,7 +51,7 @@ export function Toc({ headings, variant = 'rail' }: TocProps) {
                 activeId === heading.id
                   ? 'text-white font-medium'
                   : heading.level === 3
-                  ? 'text-text-muted hover:text-zinc-300'
+                  ? 'text-fg-subtle hover:text-zinc-300'
                   : 'text-zinc-400 hover:text-zinc-300'
               }`}
             >

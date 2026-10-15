@@ -61,7 +61,7 @@ export function Sidebar() {
                     aria-current={isActive(item.slug) ? 'page' : undefined}
                     className={`flex items-center rounded-md px-3 py-1.5 max-lg:min-h-11 text-sm transition-colors ${
                       isActive(item.slug)
-                        ? 'border-l-2 border-accent-indigo bg-accent-indigo/10 pl-[10px] text-white font-medium'
+                        ? 'border-l-2 border-accent bg-accent/10 pl-[10px] text-white font-medium'
                         : 'border-l-2 border-transparent pl-[10px] text-zinc-400 hover:text-white hover:bg-white/5'
                     }`}
                   >

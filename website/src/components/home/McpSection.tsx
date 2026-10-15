@@ -47,7 +47,7 @@ export function McpSection() {
           <div className="mt-8">
             <Link
               href="/docs/mcp-guide"
-              className="text-sm text-accent-indigo hover:underline inline-flex items-center gap-1"
+              className="text-sm text-accent hover:underline inline-flex items-center gap-1"
             >
               Learn more →
             </Link>

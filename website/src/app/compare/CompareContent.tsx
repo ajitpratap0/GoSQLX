@@ -19,7 +19,7 @@ const FEATURES: FeatureRow[] = [
   { feature: 'Language',              values: ['Go',     'Go (C via CGo)', 'Go',   'Go'] },
   { feature: 'Zero-copy',            values: [true,  false, false, false] },
   { feature: 'Dialects',             values: [String(PROJECT.dialectCount),   '1 (PostgreSQL)', '1 (MySQL)', '1 (MySQL)'] },
-  { feature: 'CGo required',         values: [false, true,  false, false] },
+  { feature: 'Pure Go (no CGo)',     values: [true,  false, true,  true] },
   { feature: 'WASM support',         values: [true,  false, false, false] },
   { feature: 'SQL injection detection', values: [true,  false, false, false] },
   { feature: 'MCP server',           values: [true,  false, false, false] },
@@ -86,7 +86,12 @@ function XIcon() {
 
 function CellValue({ value }: { value: string | boolean }) {
   if (typeof value === 'boolean') {
-    return value ? <CheckIcon /> : <XIcon />;
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        {value ? <CheckIcon /> : <XIcon />}
+        <span className="text-xs text-zinc-400">{value ? 'Yes' : 'No'}</span>
+      </span>
+    );
   }
   return <span>{value}</span>;
 }

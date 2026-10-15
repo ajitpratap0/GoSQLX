@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { pageMeta } from '@/lib/seo';
 import Link from 'next/link';
-import { DOCS_SIDEBAR } from '@/lib/constants';
+import { DOCS_SIDEBAR, docsCategoryAnchor } from '@/lib/constants';
 import { DocsSearchTrigger } from '@/components/docs/DocsSearchTrigger';
 import { FadeIn } from '@/components/ui/FadeIn';
 
@@ -21,6 +21,9 @@ const CATEGORY_ICONS: Record<string, string> = {
   'Migration': 'M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4',
   'Editors': 'M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z',
 };
+
+const START_HERE = ['getting-started', 'usage-guide', 'cli-guide'];
+const ALL_ITEMS = DOCS_SIDEBAR.flatMap((g) => g.items);
 
 export default function DocsPage() {
   return (
@@ -45,31 +48,60 @@ export default function DocsPage() {
 
       <DocsSearchTrigger />
 
+      <section aria-labelledby="start-here" className="mb-12">
+        <h2 id="start-here" className="mb-4 text-sm font-semibold uppercase tracking-wider text-fg-subtle">
+          Start here
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-3">
+          {START_HERE.map((slug) => {
+            const item = ALL_ITEMS.find((i) => i.slug === slug);
+            if (!item) return null;
+            return (
+              <Link
+                key={slug}
+                href={`/docs/${slug}`}
+                className="glass glass-hover block rounded-xl p-5 transition-colors"
+              >
+                <span className="text-base font-semibold text-white">{item.label}</span>
+                <span className="mt-1 block text-sm text-zinc-400">{item.description}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {DOCS_SIDEBAR.map((group, i) => (
           <FadeIn viewport key={group.category} delay={i * 0.06}>
-            <Link
-              href={`/docs/${group.items[0].slug}`}
-              className="glass glass-hover block rounded-xl p-6 transition-colors h-full"
+            <section
+              id={docsCategoryAnchor(group.category)}
+              aria-labelledby={`${docsCategoryAnchor(group.category)}-heading`}
+              className="glass block h-full scroll-mt-24 rounded-xl p-6"
             >
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
-                <svg className="h-5 w-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <svg className="h-5 w-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" d={CATEGORY_ICONS[group.category] || CATEGORY_ICONS['Core']} />
                 </svg>
               </div>
-              <h2 className="text-lg font-semibold text-white">{group.category}</h2>
+              <h2 id={`${docsCategoryAnchor(group.category)}-heading`} className="text-lg font-semibold text-white">
+                {group.category}
+              </h2>
               <p className="mt-1 text-sm text-fg-subtle">
                 {group.items.length} {group.items.length === 1 ? 'article' : 'articles'}
               </p>
-              <ul className="mt-3 space-y-1">
-                {group.items.slice(0, 3).map((item) => (
-                  <li key={item.slug} className="text-sm text-zinc-400">{item.label}</li>
+              <ul className="mt-4 space-y-4">
+                {group.items.map((item) => (
+                  <li key={item.slug}>
+                    <Link href={`/docs/${item.slug}`} className="group block">
+                      <span className="text-sm font-medium text-white group-hover:text-accent transition-colors">
+                        {item.label}
+                      </span>
+                      <span className="mt-0.5 block text-sm text-zinc-400">{item.description}</span>
+                    </Link>
+                  </li>
                 ))}
-                {group.items.length > 3 && (
-                  <li className="text-sm text-fg-subtle">+{group.items.length - 3} more</li>
-                )}
               </ul>
-            </Link>
+            </section>
           </FadeIn>
         ))}
       </div>

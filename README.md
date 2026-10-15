@@ -1,31 +1,23 @@
-# GoSQLX
-
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/ajitpratap0/GoSQLX/main/.github/logo.png" alt="GoSQLX Logo" width="180"/>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/logo-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset=".github/logo-light.svg">
+  <img src=".github/logo-light.svg" alt="GoSQLX" width="360">
+</picture>
 
-### Parse SQL at the speed of Go
+# GoSQLX
 
-[![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?style=for-the-badge&logo=go)](https://go.dev)
-[![Release](https://img.shields.io/github/v/release/ajitpratap0/GoSQLX?style=for-the-badge&color=orange)](https://github.com/ajitpratap0/GoSQLX/releases)
-[![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg?style=for-the-badge)](LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge)](http://makeapullrequest.com)
+**Pure-Go SQL parser, formatter, linter and security scanner for 8 dialects.**
 
-[![Website](https://img.shields.io/badge/gosqlx.dev-Website-blue?style=for-the-badge&logo=google-chrome)](https://gosqlx.dev)
-[![VS Code](https://img.shields.io/visual-studio-marketplace/v/ajitpratap0.gosqlx?style=for-the-badge&logo=visual-studio-code&label=VS%20Code)](https://marketplace.visualstudio.com/items?itemName=ajitpratap0.gosqlx)
-[![MCP](https://img.shields.io/badge/MCP-Remote%20Server-blue?style=for-the-badge&logo=cloud)](https://mcp.gosqlx.dev/health)
-[![Glama MCP Server](https://glama.ai/mcp/servers/ajitpratap0/GoSQLX/badges/score.svg)](https://glama.ai/mcp/servers/ajitpratap0/GoSQLX)
-[![Lint Action](https://img.shields.io/badge/Lint%20Action-GitHub-blue?style=for-the-badge&logo=github)](https://github.com/marketplace/actions/gosqlx-lint-action)
-
-[![Tests](https://img.shields.io/github/actions/workflow/status/ajitpratap0/GoSQLX/test.yml?branch=main&label=Tests&style=flat-square)](https://github.com/ajitpratap0/GoSQLX/actions)
-[![Go Report](https://goreportcard.com/badge/github.com/ajitpratap0/GoSQLX?style=flat-square)](https://goreportcard.com/report/github.com/ajitpratap0/GoSQLX)
-[![GoDoc](https://pkg.go.dev/badge/github.com/ajitpratap0/GoSQLX?style=flat-square)](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX)
-[![Stars](https://img.shields.io/github/stars/ajitpratap0/GoSQLX?style=social)](https://github.com/ajitpratap0/GoSQLX)
+[![CI](https://img.shields.io/github/actions/workflow/status/ajitpratap0/GoSQLX/test.yml?branch=main&label=CI&style=flat-square)](https://github.com/ajitpratap0/GoSQLX/actions/workflows/test.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/ajitpratap0/GoSQLX.svg)](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX)
+[![Release](https://img.shields.io/github/v/release/ajitpratap0/GoSQLX?style=flat-square)](https://github.com/ajitpratap0/GoSQLX/releases)
+[![License](https://img.shields.io/github/license/ajitpratap0/GoSQLX?style=flat-square)](LICENSE)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/ajitpratap0/GoSQLX/badge)](https://securityscorecards.dev/viewer/?uri=github.com/ajitpratap0/GoSQLX)
+[![Codecov](https://img.shields.io/codecov/c/github/ajitpratap0/GoSQLX?style=flat-square)](https://codecov.io/gh/ajitpratap0/GoSQLX)
 
-<br/>
-
-**[🌐 Try the Playground](https://gosqlx.dev/playground/)** &nbsp;·&nbsp; **[📖 Read the Docs](https://gosqlx.dev/docs/)** &nbsp;·&nbsp; **[🚀 Get Started](docs/GETTING_STARTED.md)** &nbsp;·&nbsp; **[📊 Benchmarks](https://gosqlx.dev/benchmarks/)**
+**[Playground](https://gosqlx.dev/playground/)** &nbsp;·&nbsp; **[Docs](https://gosqlx.dev/docs/)** &nbsp;·&nbsp; **[Benchmarks](https://gosqlx.dev/benchmarks/)** &nbsp;·&nbsp; **[VS Code](https://marketplace.visualstudio.com/items?itemName=ajitpratap0.gosqlx)** &nbsp;·&nbsp; **[MCP server](#-mcp-server-ai-integration)**
 
 <br/>
 
@@ -157,6 +149,9 @@ claude mcp add --transport http gosqlx \
   https://mcp.gosqlx.dev/mcp
 ```
 7 SQL tools in Claude, Cursor, or any MCP client. [Guide →](https://gosqlx.dev/docs/mcp_guide/)
+
+[![MCP](https://img.shields.io/badge/MCP-Remote%20Server-blue?style=flat-square)](https://mcp.gosqlx.dev/health)
+[![Glama MCP Server](https://glama.ai/mcp/servers/ajitpratap0/GoSQLX/badges/score.svg)](https://glama.ai/mcp/servers/ajitpratap0/GoSQLX)
 
 </td>
 </tr>

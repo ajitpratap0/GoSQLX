@@ -29,6 +29,28 @@ const methodology = [
   'The CI regression baseline is a deliberately loose ceiling used with a tolerance on slower shared runners; it is not a measurement',
 ];
 
+const REPO = 'https://github.com/ajitpratap0/GoSQLX';
+
+const codeCls = 'font-mono text-xs text-fg bg-fg/[0.06] px-1 py-0.5 rounded';
+
+const reproduceSteps = [
+  {
+    title: 'Parse stage (the charts above)',
+    command: BENCH_ENV.command,
+    note: 'Summarise the 10 runs with benchstat to get the median.',
+  },
+  {
+    title: 'Competitor comparison (end-to-end)',
+    command: `cd benchmarks/compare && ${COMPETITOR_RUN.method.command}`,
+    note: 'Needs CGO for pg_query_go. Summarise with benchstat; `task bench:publish` runs this and writes results/latest.json and latest.txt.',
+  },
+  {
+    title: 'CI regression check (not a measurement)',
+    command: "go test -run TestPerformanceRegression ./pkg/sql/parser/",
+    note: 'Compares against the loose ceilings in the baselines file; skipped under the race detector.',
+  },
+];
+
 const measuredOn = COMPETITOR_RUN.generatedAt.slice(0, 10);
 
 function formatNs(ns: number): string {
@@ -70,7 +92,7 @@ export function BenchmarksContent() {
               Parse-stage performance of the GoSQLX parser, re-measured with the in-repo benchmarks.
             </p>
             <p className="mt-3 text-xs text-fg-subtle">
-              Measured 2026-10-13 &middot; Apple M4 &middot; Go 1.27 &middot; parse stage only
+              Measured {BENCH_ENV.measuredOn} &middot; {BENCH_ENV.hardware} &middot; {BENCH_ENV.goVersion} &middot; {BENCH_ENV.stage} only
             </p>
           </FadeIn>
         </div>
@@ -100,6 +122,14 @@ export function BenchmarksContent() {
             <GlassCard className="p-6" hover={false}>
               <ParseChart />
             </GlassCard>
+            <p className="text-xs text-fg-subtle mt-2">
+              Measured on {BENCH_ENV.hardware} &middot; {BENCH_ENV.goVersion} &middot; {BENCH_ENV.stage} &middot;
+              median of 10 runs &middot; {BENCH_ENV.measuredOn} &middot; source{' '}
+              <a href={`${REPO}/blob/main/${BENCH_ENV.benchFile}`} className="text-accent underline underline-offset-2">
+                <code className="font-mono">BenchmarkPerformanceBaseline</code>
+              </a>
+              . <a href="#reproduce" className="text-accent underline underline-offset-2">Reproduce</a>
+            </p>
 
             <RawDataToggle id="parse">
               <GlassCard className="p-0 overflow-hidden" hover={false}>
@@ -232,6 +262,56 @@ export function BenchmarksContent() {
                 .
               </p>
             </GlassCard>
+          </FadeIn>
+        </div>
+      </section>
+
+      {/* Reproduce */}
+      <section className="section-padding pb-8" id="reproduce">
+        <div className="container-width max-w-2xl">
+          <FadeIn>
+            <h2 className="text-2xl font-bold text-fg mb-2">Reproduce these numbers</h2>
+            <p className="text-sm text-fg-muted mb-4">
+              Clone the repository, then run the commands below. Absolute numbers depend on your hardware; compare
+              ratios, not raw ns/op.
+            </p>
+            <ol className="space-y-4">
+              {reproduceSteps.map((step) => (
+                <li key={step.title}>
+                  <h3 className="text-sm font-semibold text-fg mb-1">{step.title}</h3>
+                  <pre className="overflow-x-auto rounded-lg bg-fg/[0.06] p-3 text-xs font-mono text-fg">
+                    <code>{step.command}</code>
+                  </pre>
+                  <p className="mt-1 text-xs text-fg-muted">{step.note}</p>
+                </li>
+              ))}
+            </ol>
+            <ul className="mt-6 space-y-1 text-sm text-fg-muted">
+              <li>
+                Parse benchmark source:{' '}
+                <a href={`${REPO}/blob/main/${BENCH_ENV.benchFile}`} className="text-accent underline underline-offset-2">
+                  <code className={codeCls}>{BENCH_ENV.benchFile}</code>
+                </a>
+              </li>
+              <li>
+                CI baselines:{' '}
+                <a href={`${REPO}/blob/main/${BENCH_ENV.baselinesFile}`} className="text-accent underline underline-offset-2">
+                  <code className={codeCls}>{BENCH_ENV.baselinesFile}</code>
+                </a>
+              </li>
+              <li>
+                Competitor harness:{' '}
+                <a href={`${REPO}/tree/main/benchmarks/compare`} className="text-accent underline underline-offset-2">
+                  <code className={codeCls}>benchmarks/compare</code>
+                </a>
+              </li>
+              <li>
+                CI runs:{' '}
+                <a href={`${REPO}/actions/workflows/bench-compare.yml`} className="text-accent underline underline-offset-2">
+                  Competitor Benchmarks workflow
+                </a>
+              </li>
+            </ul>
           </FadeIn>
         </div>
       </section>

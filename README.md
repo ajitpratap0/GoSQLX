@@ -145,37 +145,28 @@ WHERE active = true
 
 <br/>
 
-## Features at a Glance
+## Features
 
-<table>
-<tr>
-<td align="center" width="33%"><h3>⚡ Parser</h3>Zero-copy tokenizer<br/>Recursive descent parser<br/>Full AST generation<br/>Multi-dialect engine</td>
-<td align="center" width="33%"><h3>🛡️ Analysis</h3>SQL injection scanner<br/>30 lint rules (L001–L030)<br/>20 optimizer rules<br/>Metadata extraction</td>
-<td align="center" width="33%"><h3>🔧 Tooling</h3>AST-based formatter<br/>Query transforms API<br/>VS Code extension<br/>GitHub Action</td>
-</tr>
-<tr>
-<td align="center"><h3>🌐 Multi-Dialect</h3>PostgreSQL · MySQL · MariaDB<br/>SQL Server · Oracle<br/>SQLite · Snowflake · ClickHouse</td>
-<td align="center"><h3>🤖 AI-Ready</h3>MCP server (7 tools)<br/>Public remote endpoint<br/>Streamable HTTP</td>
-<td align="center"><h3>🧪 Battle-Tested</h3>Race-detector clean in CI<br/>~80–85% SQL-99 (estimated)</td>
-</tr>
-</table>
+- **[Parser](https://gosqlx.dev/docs/architecture/)** - zero-copy tokenizer, recursive descent parser and full AST generation.
+- **[Analysis](https://gosqlx.dev/docs/linting_rules/)** - SQL injection scanner, 30 lint rules (L001-L030), 20 optimizer rules and metadata extraction.
+- **[Tooling](https://gosqlx.dev/docs/cli_guide/)** - AST-based formatter, query transforms API, VS Code extension and GitHub Action.
+- **[Multi-dialect](https://gosqlx.dev/docs/sql_compatibility/)** - PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse.
+- **[AI-ready](https://gosqlx.dev/docs/mcp_guide/)** - MCP server with 7 tools, public remote endpoint, Streamable HTTP.
+- **[Tested](https://gosqlx.dev/docs/sql_compatibility/)** - race-detector clean in CI, ~80-85% SQL-99 (estimated).
 
 <br/>
 
 ## Documentation
 
-| | Resource | Description |
-|---|---|---|
-| 🌐 | **[gosqlx.dev](https://gosqlx.dev)** | Website with interactive playground |
-| 🚀 | **[Getting Started](https://gosqlx.dev/docs/getting_started/)** | Parse your first SQL in 5 minutes |
-| 📖 | **[Usage Guide](https://gosqlx.dev/docs/usage_guide/)** | Comprehensive patterns and examples |
-| 📄 | **[API Reference](https://gosqlx.dev/docs/api_reference/)** | Complete API documentation |
-| 🖥️ | **[CLI Guide](https://gosqlx.dev/docs/cli_guide/)** | Command-line tool reference |
-| 🌍 | **[SQL Compatibility](https://gosqlx.dev/docs/sql_compatibility/)** | Dialect support matrix |
-| 🤖 | **[MCP Guide](https://gosqlx.dev/docs/mcp_guide/)** | AI assistant integration |
-| 🏗️ | **[Architecture](https://gosqlx.dev/docs/architecture/)** | System design deep-dive |
-| 📊 | **[Benchmarks](https://gosqlx.dev/benchmarks/)** | Performance data and methodology |
-| 📝 | **[Release Notes](https://gosqlx.dev/blog/)** | What's new in each version |
+- **[Getting Started](https://gosqlx.dev/docs/getting_started/)** - parse your first SQL in 5 minutes
+- **[Usage Guide](https://gosqlx.dev/docs/usage_guide/)** - comprehensive patterns and examples
+- **[API Reference](https://gosqlx.dev/docs/api_reference/)** - complete API documentation
+- **[CLI Guide](https://gosqlx.dev/docs/cli_guide/)** - command-line tool reference
+- **[SQL Compatibility](https://gosqlx.dev/docs/sql_compatibility/)** - dialect support matrix
+- **[MCP Guide](https://gosqlx.dev/docs/mcp_guide/)** - AI assistant integration
+- **[Architecture](https://gosqlx.dev/docs/architecture/)** - system design deep-dive
+- **[Benchmarks](https://gosqlx.dev/benchmarks/)** - performance data and methodology
+- **[Changelog](CHANGELOG.md)** - what changed in each version
 
 <br/>
 
@@ -193,33 +184,13 @@ task check    # fmt → vet → lint → test (with race detection)
 3. **Run `task check`** - must pass before PR
 4. **Open a PR** - we review within 24 hours
 
-📋 [Contributing Guide](CONTRIBUTING.md) · 📜 [Code of Conduct](CODE_OF_CONDUCT.md) · 🏛️ [Governance](GOVERNANCE.md)
-
-<br/>
-
-## Who's Using GoSQLX?
-
-GoSQLX is downloaded and cloned by developers worldwide -- 595 unique cloners in just 14 days. If you're using GoSQLX in your project or organization, we'd love to hear about it!
-
-| Project / Company | Use Case |
-|---|---|
-| *Your project here* | [Add yourself via PR](https://github.com/ajitpratap0/GoSQLX/edit/main/README.md) or [tell us in Discussions](https://github.com/ajitpratap0/GoSQLX/discussions) |
-
-Using GoSQLX at work? Building something cool with it? Share your story in [GitHub Discussions](https://github.com/ajitpratap0/GoSQLX/discussions) -- it helps the community grow and motivates continued development.
+[Contributing Guide](CONTRIBUTING.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Governance](GOVERNANCE.md)
 
 <br/>
 
 ## Community
 
-<div align="center">
-
-**Got questions? Ideas? Found a bug?**
-
-<a href="https://github.com/ajitpratap0/GoSQLX/discussions"><img src="https://img.shields.io/badge/💬_Discussions-Ask_&_Share-purple?style=for-the-badge" alt="Discussions"></a>
-<a href="https://github.com/ajitpratap0/GoSQLX/issues/new/choose"><img src="https://img.shields.io/badge/🐛_Issues-Report_&_Request-red?style=for-the-badge" alt="Issues"></a>
-<a href="https://gosqlx.dev/blog/"><img src="https://img.shields.io/badge/📝_Blog-Release_Notes-green?style=for-the-badge" alt="Blog"></a>
-
-</div>
+Questions or ideas: [Discussions](https://github.com/ajitpratap0/GoSQLX/discussions). Found a bug or want a feature: [Issues](https://github.com/ajitpratap0/GoSQLX/issues/new/choose).
 
 <br/>
 
@@ -231,12 +202,6 @@ Apache License 2.0 - see [LICENSE](LICENSE) for details.
 
 <div align="center">
 
-<sub>Built with ❤️ by the GoSQLX community</sub>
-
 **[gosqlx.dev](https://gosqlx.dev)** · **[Playground](https://gosqlx.dev/playground/)** · **[Docs](https://gosqlx.dev/docs/)** · **[MCP Server](https://mcp.gosqlx.dev/mcp)** · **[VS Code](https://marketplace.visualstudio.com/items?itemName=ajitpratap0.gosqlx)**
-
-<br/>
-
-If GoSQLX helps your project, consider giving it a ⭐
 
 </div>

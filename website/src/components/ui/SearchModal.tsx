@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { m, AnimatePresence } from 'motion/react';
 import Fuse from 'fuse.js';
-import { buildSearchIndex, type SearchEntry } from '@/lib/search-index';
+import { SEARCH_INDEX_URL, searchEntryHref, type SearchEntry } from '@/lib/search-index';
 
 interface SearchModalProps {
   open: boolean;
@@ -22,15 +22,37 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
   const triggerRef = useRef<HTMLElement | null>(null);
   const portalRef = useRef<HTMLDivElement | null>(null);
 
-  const index = useMemo(() => buildSearchIndex(), []);
+  const [index, setIndex] = useState<SearchEntry[]>([]);
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  // Fetch the build-time index the first time the modal opens
+  useEffect(() => {
+    if (!open || index.length > 0) return;
+    let cancelled = false;
+    fetch(SEARCH_INDEX_URL)
+      .then((res) => {
+        if (!res.ok) throw new Error(`search index: ${res.status}`);
+        return res.json() as Promise<SearchEntry[]>;
+      })
+      .then((data) => {
+        if (!cancelled) setIndex(data);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, index.length]);
 
   const fuse = useMemo(
     () =>
       new Fuse(index, {
         keys: [
-          { name: 'title', weight: 0.5 },
-          { name: 'category', weight: 0.3 },
-          { name: 'description', weight: 0.2 },
+          { name: 'heading', weight: 0.4 },
+          { name: 'title', weight: 0.35 },
+          { name: 'category', weight: 0.1 },
+          { name: 'description', weight: 0.15 },
         ],
         threshold: 0.4,
         includeMatches: true,
@@ -39,7 +61,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
   );
 
   const results = useMemo(() => {
-    if (!query.trim()) return index.slice(0, 10);
+    if (!query.trim()) return index.filter((e) => !e.heading).slice(0, 10);
     return fuse.search(query, { limit: 10 }).map((r) => r.item);
   }, [query, fuse, index]);
 
@@ -83,7 +105,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
   const navigate = useCallback(
     (entry: SearchEntry) => {
       onClose();
-      router.push(`/docs/${entry.slug}`);
+      router.push(searchEntryHref(entry));
     },
     [onClose, router],
   );
@@ -117,7 +139,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
     setSelectedIndex(0);
   }, [results]);
 
-  const activeId = results[selectedIndex] ? `search-option-${results[selectedIndex].slug}` : undefined;
+  const activeId = results[selectedIndex] ? `search-option-${selectedIndex}` : undefined;
 
   if (typeof document === 'undefined') return null;
 
@@ -199,14 +221,18 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
           aria-label="Search results"
         >
           {results.length === 0 && (
-            <li className="px-4 py-8 text-center text-sm text-fg-subtle">
-              No results found for &ldquo;{query}&rdquo;
+            <li className="px-4 py-8 text-center text-sm text-text-muted">
+              {loadFailed
+                ? 'Search is unavailable right now.'
+                : index.length === 0
+                  ? 'Loading...'
+                  : <>No results found for &ldquo;{query}&rdquo;</>}
             </li>
           )}
           {results.map((entry, i) => (
             <li
-              key={entry.slug}
-              id={`search-option-${entry.slug}`}
+              key={`${entry.slug}#${entry.anchor ?? ''}`}
+              id={`search-option-${i}`}
               role="option"
               aria-selected={i === selectedIndex}
               className={`mx-2 flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
@@ -232,8 +258,10 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
                 />
               </svg>
               <div className="min-w-0 flex-1">
-                <div className="truncate font-medium">{entry.title}</div>
-                <div className="truncate text-xs text-fg-subtle">{entry.category}</div>
+                <div className="truncate font-medium">{entry.heading ?? entry.title}</div>
+                <div className="truncate text-xs text-text-muted">
+                  {entry.heading ? `${entry.category} / ${entry.title}` : entry.category}
+                </div>
               </div>
               {i === selectedIndex && (
                 <kbd className="hidden sm:inline-flex shrink-0 items-center rounded border border-white/[0.1] bg-white/[0.04] px-1.5 py-0.5 font-mono text-[10px] text-fg-subtle">

@@ -33,8 +33,8 @@ export function ReproduceSnippet({ command }: { command: string }) {
   const label = state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : 'Copy';
 
   return (
-    <div className="flex items-stretch gap-2 rounded-lg border border-white/[0.08] bg-black/30 p-2">
-      <pre className="flex-1 overflow-x-auto px-2 py-2 font-mono text-xs text-zinc-300 sm:text-sm">
+    <div className="flex items-stretch gap-2 rounded-lg code-surface border border-border bg-bg-raised p-2">
+      <pre className="flex-1 overflow-x-auto px-2 py-2 font-mono text-xs text-fg-muted sm:text-sm">
         <code>
           <span className="select-none text-brand" aria-hidden="true">$ </span>
           {command}
@@ -43,7 +43,7 @@ export function ReproduceSnippet({ command }: { command: string }) {
       <button
         type="button"
         onClick={copy}
-        className="min-h-11 min-w-11 shrink-0 rounded-md bg-white/[0.06] px-3 text-xs font-medium text-zinc-200 transition-colors hover:bg-white/[0.12]"
+        className="min-h-11 min-w-11 shrink-0 rounded-md bg-fg/[0.06] px-3 text-xs font-medium text-fg transition-colors hover:bg-fg/[0.12]"
       >
         {label}
         <span className="sr-only"> benchmark command</span>

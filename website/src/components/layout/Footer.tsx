@@ -31,7 +31,7 @@ const FOOTER_LINKS = {
 export function Footer() {
   return (
     <FadeIn>
-      <footer className="relative mt-24 border-t border-white/[0.06]">
+      <footer className="relative mt-24 border-t border-fg/[0.06]">
         {/* Gradient accent line */}
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-accent to-accent-warm opacity-40" />
 
@@ -41,9 +41,9 @@ export function Footer() {
             <div className="col-span-2 md:col-span-1">
               <Link href="/" className="flex items-center gap-2.5">
                 <Image src="/images/logo.webp" alt="" width={28} height={28} />
-                <span className="text-lg font-semibold text-white">GoSQLX</span>
+                <span className="text-lg font-semibold text-fg">GoSQLX</span>
               </Link>
-              <p className="mt-3 text-sm text-zinc-300 max-w-xs">
+              <p className="mt-3 text-sm text-fg-muted max-w-xs">
                 Production-ready SQL parsing SDK for Go. Zero-copy, thread-safe, multi-dialect.
               </p>
             </div>
@@ -51,7 +51,7 @@ export function Footer() {
             {/* Link columns */}
             {Object.entries(FOOTER_LINKS).map(([category, links]) => (
               <div key={category}>
-                <h3 className="text-sm font-medium text-zinc-300 mb-3">{category}</h3>
+                <h3 className="text-sm font-medium text-fg-muted mb-3">{category}</h3>
                 <ul>
                   {links.map((link) => (
                     <li key={link.label}>
@@ -60,14 +60,14 @@ export function Footer() {
                           href={link.href}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex min-h-11 items-center text-sm text-zinc-300 hover:text-zinc-100 transition-colors duration-200"
+                          className="inline-flex min-h-11 items-center text-sm text-fg-muted hover:text-fg transition-colors duration-200"
                         >
                           {link.label}
                         </a>
                       ) : (
                         <Link
                           href={link.href}
-                          className="inline-flex min-h-11 items-center text-sm text-zinc-300 hover:text-zinc-100 transition-colors duration-200"
+                          className="inline-flex min-h-11 items-center text-sm text-fg-muted hover:text-fg transition-colors duration-200"
                         >
                           {link.label}
                         </Link>
@@ -79,8 +79,8 @@ export function Footer() {
             ))}
           </div>
 
-          <div className="mt-12 pt-8 border-t border-white/[0.06] text-center">
-            <p className="text-sm text-zinc-300">
+          <div className="mt-12 pt-8 border-t border-fg/[0.06] text-center">
+            <p className="text-sm text-fg-muted">
               Built with love by the GoSQLX community &middot; &copy; {new Date().getFullYear()} GoSQLX
             </p>
           </div>

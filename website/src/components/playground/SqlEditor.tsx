@@ -1,7 +1,7 @@
 'use client';
 import { useRef, useEffect } from "react";
 import { EditorView, placeholder as cmPlaceholder, keymap } from "@codemirror/view";
-import { EditorState } from "@codemirror/state";
+import { EditorState, Compartment } from "@codemirror/state";
 import { sql } from "@codemirror/lang-sql";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
@@ -35,7 +35,7 @@ const baseTheme = EditorView.theme({
     overflow: "hidden",
   },
   "&.cm-focused": {
-    outline: "2px solid #3b82f6",
+    outline: "2px solid var(--accent)",
   },
   ".cm-scroller": {
     overflow: "auto",
@@ -51,14 +51,27 @@ const baseTheme = EditorView.theme({
   },
 });
 
-// Page background so the editor blends into the playground; must come after oneDark.
-const pageBackgroundTheme = EditorView.theme(
-  {
-    "&": { backgroundColor: "#09090b" },
-    ".cm-gutters": { backgroundColor: "#09090b" },
-  },
-  { dark: true },
-);
+// Page background from design tokens so the editor blends into the playground.
+// In light mode no base theme is applied, so the editor falls back to
+// CodeMirror's light defaults plus these token colours.
+const tokenTheme = (dark: boolean) =>
+  EditorView.theme(
+    {
+      "&": { backgroundColor: "var(--bg)", color: "var(--fg)" },
+      ".cm-gutters": { backgroundColor: "var(--bg)", color: "var(--fg-subtle)" },
+      ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: "var(--bg-overlay)" },
+      ".cm-cursor": { borderLeftColor: "var(--fg)" },
+    },
+    { dark },
+  );
+
+const isLightMode = () =>
+  typeof document !== "undefined" && document.documentElement.classList.contains("light");
+
+const themeExtensions = (light: boolean) =>
+  light
+    ? [tokenTheme(false)]
+    : [syntaxHighlighting(accessibleHighlight), oneDark, tokenTheme(true)];
 
 export default function SqlEditor({
   value,
@@ -101,12 +114,12 @@ export default function SqlEditor({
       }
     });
 
+    const themeCompartment = new Compartment();
     const extensions = [
       baseTheme,
       minHeightTheme,
-      syntaxHighlighting(accessibleHighlight),
-      oneDark,
-      pageBackgroundTheme,
+
+      themeCompartment.of(themeExtensions(isLightMode())),
       sql(),
       syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
       bracketMatching(),
@@ -137,7 +150,16 @@ export default function SqlEditor({
 
     viewRef.current = view;
 
+    // Follow the site theme toggle (ThemeToggle flips the `light` class on <html>).
+    const observer = new MutationObserver(() => {
+      view.dispatch({
+        effects: themeCompartment.reconfigure(themeExtensions(isLightMode())),
+      });
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+
     return () => {
+      observer.disconnect();
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
       }

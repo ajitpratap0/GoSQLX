@@ -43,10 +43,10 @@ export function BenchmarksContent() {
       <section className="section-padding pt-24 pb-16 text-center">
         <div className="container-width">
           <FadeIn>
-            <h1 className="text-4xl font-bold tracking-tight text-white">
+            <h1 className="text-4xl font-bold tracking-tight text-fg">
               Performance Benchmarks
             </h1>
-            <p className="mt-4 text-lg text-zinc-400 max-w-2xl mx-auto">
+            <p className="mt-4 text-lg text-fg-muted max-w-2xl mx-auto">
               Parse-stage performance of the GoSQLX parser, re-measured with the in-repo benchmarks.
             </p>
             <p className="mt-3 text-xs text-fg-subtle">
@@ -63,8 +63,8 @@ export function BenchmarksContent() {
             {metrics.map((m, i) => (
               <FadeIn key={m.label} delay={i * 0.1}>
                 <GlassCard className="p-6 text-center">
-                  <div className="text-3xl font-bold text-white">{m.value}</div>
-                  <div className="mt-1 text-sm text-zinc-400">{m.label}</div>
+                  <div className="text-3xl font-bold text-fg">{m.value}</div>
+                  <div className="mt-1 text-sm text-fg-muted">{m.label}</div>
                 </GlassCard>
               </FadeIn>
             ))}
@@ -76,7 +76,7 @@ export function BenchmarksContent() {
       <section className="section-padding pb-16">
         <div className="container-width">
           <FadeIn>
-            <h2 className="text-2xl font-bold text-white mb-4">Parse Benchmarks</h2>
+            <h2 className="text-2xl font-bold text-fg mb-4">Parse Benchmarks</h2>
             <GlassCard className="p-6" hover={false}>
               <ParseChart />
             </GlassCard>
@@ -87,23 +87,23 @@ export function BenchmarksContent() {
                   <table className="w-full text-sm text-left">
                     <caption className="sr-only">GoSQLX Parse Benchmarks</caption>
                     <thead>
-                      <tr className="border-b border-white/[0.06]">
-                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">Benchmark</th>
-                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">Query Type</th>
-                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">Apple M4 (median)</th>
-                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-zinc-400">CI tolerance baseline</th>
+                      <tr className="border-b border-fg/[0.06]">
+                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-fg-muted">Benchmark</th>
+                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-fg-muted">Query Type</th>
+                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-fg-muted">Apple M4 (median)</th>
+                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 font-medium text-fg-muted">CI tolerance baseline</th>
                       </tr>
                     </thead>
                     <tbody>
                       {PARSE_BENCHMARKS.map((b) => (
                         <tr
                           key={b.name}
-                          className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors"
+                          className="border-b border-fg/[0.04] hover:bg-fg/[0.03] transition-colors"
                         >
-                          <td className="px-3 py-3 sm:px-6 sm:py-4 text-white font-medium">{b.name}</td>
-                          <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400">{b.query}</td>
-                          <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-300 font-mono">{b.nsPerOp} ns/op ({formatOps(opsPerSec(b.nsPerOp))} ops/sec)</td>
-                          <td className="px-3 py-3 sm:px-6 sm:py-4 text-zinc-400 font-mono">&le; {b.ciBaselineNs} ns/op</td>
+                          <td className="px-3 py-3 sm:px-6 sm:py-4 text-fg font-medium">{b.name}</td>
+                          <td className="px-3 py-3 sm:px-6 sm:py-4 text-fg-muted">{b.query}</td>
+                          <td className="px-3 py-3 sm:px-6 sm:py-4 text-fg-muted font-mono">{b.nsPerOp} ns/op ({formatOps(opsPerSec(b.nsPerOp))} ops/sec)</td>
+                          <td className="px-3 py-3 sm:px-6 sm:py-4 text-fg-muted font-mono">&le; {b.ciBaselineNs} ns/op</td>
                         </tr>
                       ))}
                     </tbody>
@@ -120,9 +120,9 @@ export function BenchmarksContent() {
       <section className="section-padding pb-16">
         <div className="container-width">
           <FadeIn>
-            <h2 className="text-2xl font-bold text-white mb-4">Competitor Comparison</h2>
+            <h2 className="text-2xl font-bold text-fg mb-4">Competitor Comparison</h2>
             <GlassCard className="p-6" hover={false}>
-              <p className="text-sm text-zinc-300">
+              <p className="text-sm text-fg-muted">
                 Head-to-head numbers against other Go SQL parsers are not published yet. They will
                 return once a reproducible benchmark harness is committed to the repository, so every
                 figure can be re-run by you. Until then, see the{' '}
@@ -140,11 +140,11 @@ export function BenchmarksContent() {
       <section className="section-padding pb-8">
         <div className="container-width max-w-2xl">
           <FadeIn>
-            <h2 className="text-2xl font-bold text-white mb-6">Methodology</h2>
+            <h2 className="text-2xl font-bold text-fg mb-6">Methodology</h2>
             <ul className="space-y-3">
               {methodology.map((item) => (
-                <li key={item} className="flex items-start gap-3 text-sm text-zinc-400">
-                  <span aria-hidden="true" className="mt-1.5 block h-1.5 w-1.5 rounded-full bg-zinc-400 shrink-0" />
+                <li key={item} className="flex items-start gap-3 text-sm text-fg-muted">
+                  <span aria-hidden="true" className="mt-1.5 block h-1.5 w-1.5 rounded-full bg-fg-muted shrink-0" />
                   <span>{renderMethodologyItem(item)}</span>
                 </li>
               ))}
@@ -158,7 +158,7 @@ export function BenchmarksContent() {
         <div className="container-width">
           <FadeIn>
             <div className="text-center">
-              <p className="text-zinc-400 mb-4">Ready to use GoSQLX in your project?</p>
+              <p className="text-fg-muted mb-4">Ready to use GoSQLX in your project?</p>
               <div className="flex gap-3 justify-center">
                 <Button href="/docs/getting-started/" variant="primary">
                   Get Started

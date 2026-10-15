@@ -12,7 +12,8 @@
     "wasm": "bash scripts/build-wasm.sh",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "check:metrics": "node scripts/check-metrics-drift.mjs"
+    "check:metrics": "node scripts/check-metrics-drift.mjs",
+    "check:contrast": "node scripts/check-contrast.mjs"
   },
   "dependencies": {
     "@codemirror/lang-sql": "^6.10.0",

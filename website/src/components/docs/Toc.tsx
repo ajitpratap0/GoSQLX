@@ -49,10 +49,10 @@ export function Toc({ headings, variant = 'rail' }: TocProps) {
                 heading.level === 3 ? 'text-xs' : 'font-medium'
               } ${
                 activeId === heading.id
-                  ? 'text-white font-medium'
+                  ? 'text-fg font-medium'
                   : heading.level === 3
-                  ? 'text-fg-subtle hover:text-zinc-300'
-                  : 'text-zinc-400 hover:text-zinc-300'
+                  ? 'text-fg-subtle hover:text-fg-muted'
+                  : 'text-fg-muted hover:text-fg-muted'
               }`}
             >
               {heading.text}
@@ -64,8 +64,8 @@ export function Toc({ headings, variant = 'rail' }: TocProps) {
 
   if (variant === 'collapsible') {
     return (
-      <details className="group mb-6 rounded-lg border border-white/[0.08] bg-white/[0.03] xl:hidden">
-        <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-medium text-zinc-300 [&::-webkit-details-marker]:hidden">
+      <details className="group mb-6 rounded-lg border border-fg/[0.08] bg-fg/[0.03] xl:hidden">
+        <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-medium text-fg-muted [&::-webkit-details-marker]:hidden">
           On this page
           <svg
             className="h-4 w-4 transition-transform group-open:rotate-180"

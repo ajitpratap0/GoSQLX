@@ -58,7 +58,7 @@ export function ThemeToggle() {
       <button
         type="button"
         data-theme-toggle=""
-        className="inline-flex min-h-11 min-w-11 items-center justify-center text-zinc-300 hover:text-white transition-colors duration-200 p-2 rounded-lg hover:bg-white/[0.04]"
+        className="inline-flex min-h-11 min-w-11 items-center justify-center text-fg-muted hover:text-fg transition-colors duration-200 p-2 rounded-lg hover:bg-fg/[0.04]"
         aria-label="Dark mode"
         aria-pressed="true"
       >
@@ -72,7 +72,7 @@ export function ThemeToggle() {
       type="button"
       onClick={toggle}
       data-theme-toggle=""
-      className="inline-flex min-h-11 min-w-11 items-center justify-center text-zinc-400 hover:text-white transition-colors duration-200 p-2 rounded-lg hover:bg-white/[0.04] relative overflow-hidden"
+      className="inline-flex min-h-11 min-w-11 items-center justify-center text-fg-muted hover:text-fg transition-colors duration-200 p-2 rounded-lg hover:bg-fg/[0.04] relative overflow-hidden"
       aria-label="Dark mode"
       aria-pressed={theme === 'dark'}
       whileTap={{ scale: 0.9 }}

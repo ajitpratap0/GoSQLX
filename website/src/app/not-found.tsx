@@ -13,22 +13,22 @@ export default function NotFound() {
     <div className="min-h-screen flex items-center justify-center">
       <div className="text-center">
         <FadeIn>
-          <p className="text-sm font-semibold text-emerald-400 uppercase tracking-wider mb-4">404</p>
+          <p className="text-sm font-semibold text-ok uppercase tracking-wider mb-4">404</p>
         </FadeIn>
         <FadeIn delay={0.1}>
-          <h1 className="text-4xl font-bold tracking-tight text-white mb-4">
+          <h1 className="text-4xl font-bold tracking-tight text-fg mb-4">
             Page not found
           </h1>
         </FadeIn>
         <FadeIn delay={0.2}>
-          <p className="text-lg text-zinc-400 mb-8">
+          <p className="text-lg text-fg-muted mb-8">
             The page you&apos;re looking for doesn&apos;t exist.
           </p>
         </FadeIn>
         <FadeIn delay={0.3}>
           <Link
             href="/"
-            className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-400 transition-colors"
+            className="inline-flex items-center gap-2 rounded-lg bg-brand px-5 py-2.5 text-sm font-semibold text-brand-fg shadow-sm hover:bg-brand/90 transition-colors"
           >
             Back to Home
           </Link>

@@ -118,7 +118,7 @@ function runDemo(api: GoSQLXApi, sql: string, dialect: string, tab: TabId): Demo
 
 function Chip({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[11px] font-mono text-zinc-300 whitespace-nowrap">
+    <span className="inline-flex items-center rounded-full border border-fg/[0.08] bg-fg/[0.04] px-2 py-0.5 text-[11px] font-mono text-fg-muted whitespace-nowrap">
       {children}
     </span>
   );
@@ -194,27 +194,27 @@ export function MiniPlayground() {
 
   return (
     <div
-      className="grid md:grid-cols-2 divide-y md:divide-y-0 divide-x-0 md:divide-x divide-white/[0.06]"
+      className="grid md:grid-cols-2 divide-y md:divide-y-0 divide-x-0 md:divide-x divide-fg/[0.06]"
       onFocusCapture={requestWasm}
       onPointerDownCapture={requestWasm}
     >
       {/* Left: SQL input */}
       <div className="text-left min-w-0">
-        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/[0.06]">
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-fg/[0.06]">
           <div className="flex gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
-            <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
-            <span className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
+            <span className="w-2.5 h-2.5 rounded-full bg-danger/60" />
+            <span className="w-2.5 h-2.5 rounded-full bg-warn/60" />
+            <span className="w-2.5 h-2.5 rounded-full bg-ok/60" />
           </div>
-          <span className="text-xs text-zinc-300 font-mono ml-2">query.sql</span>
+          <span className="text-xs text-fg-muted font-mono ml-2">query.sql</span>
           <div className="ml-auto flex items-center gap-1.5">
-            <label htmlFor="mini-dialect" className="text-xs text-zinc-300 font-mono">Dialect:</label>
+            <label htmlFor="mini-dialect" className="text-xs text-fg-muted font-mono">Dialect:</label>
             <select
               id="mini-dialect"
               value={dialect}
               onChange={(e) => setDialect(e.target.value)}
               aria-label="SQL dialect"
-              className="bg-zinc-800/80 text-zinc-300 text-xs rounded px-1.5 py-0.5 border border-white/[0.06] focus:outline-none focus:border-indigo-500/50 appearance-none cursor-pointer"
+              className="bg-bg-overlay text-fg-muted text-xs rounded px-1.5 py-0.5 border border-fg/[0.06] focus:outline-none focus:border-accent/50 appearance-none cursor-pointer"
             >
               {DIALECTS.map((d) => (
                 <option key={d.value} value={d.value}>{d.label}</option>
@@ -222,7 +222,7 @@ export function MiniPlayground() {
             </select>
           </div>
         </div>
-        <div className="relative">
+        <div className="code-surface relative">
           <textarea
             value={sql}
             onChange={handleSqlChange}
@@ -233,7 +233,7 @@ export function MiniPlayground() {
             rows={12}
           />
           <div
-            className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-zinc-950/60 to-transparent pointer-events-none md:hidden"
+            className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-bg-raised to-transparent pointer-events-none md:hidden"
             aria-hidden="true"
           />
         </div>
@@ -241,7 +241,7 @@ export function MiniPlayground() {
 
       {/* Right: output */}
       <div className="text-left min-w-0 flex flex-col">
-        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/[0.06]">
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-fg/[0.06]">
           <div className="flex gap-1" role="tablist" aria-label="Output format">
             {TABS.map((tab) => (
               <button
@@ -251,17 +251,17 @@ export function MiniPlayground() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`px-2 py-0.5 text-xs font-mono rounded transition-colors ${
                   activeTab === tab.id
-                    ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
-                    : 'text-zinc-400 hover:text-zinc-200'
+                    ? 'bg-accent/20 text-accent border border-accent/30'
+                    : 'text-fg-muted hover:text-fg'
                 }`}
               >
                 {tab.label}
               </button>
             ))}
           </div>
-          {status && <span className="ml-auto text-xs font-mono text-zinc-400">{status}</span>}
+          {status && <span className="ml-auto text-xs font-mono text-fg-muted">{status}</span>}
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 px-4 py-2 border-b border-white/[0.06]">
+        <div className="flex flex-wrap items-center gap-1.5 px-4 py-2 border-b border-fg/[0.06]">
           {elapsed !== null && !parseError && (
             <Chip>
               <span className="text-brand">parsed in {formatDuration(elapsed)}</span>
@@ -285,7 +285,7 @@ export function MiniPlayground() {
             </pre>
           )}
         </div>
-        <div className="px-4 py-2 border-t border-white/[0.06]">
+        <div className="px-4 py-2 border-t border-fg/[0.06]">
           <Link
             href="/playground"
             className="text-xs text-accent hover:underline font-medium"

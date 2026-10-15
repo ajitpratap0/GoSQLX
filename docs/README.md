@@ -2,7 +2,7 @@
 
 Comprehensive documentation for the GoSQLX SQL parsing SDK.
 
-**Current Version**: v1.14.0 | **Last Updated**: 2026-04-12
+**Current Version**: v1.15.0 | **Last Updated**: 2026-04-12
 
 ## Feature Overview (v1.14.0)
 

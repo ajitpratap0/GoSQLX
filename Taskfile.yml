@@ -240,6 +240,16 @@ tasks:
           exit 1
         fi
 
+  docs:metrics:
+    desc: Regenerate README metrics block and doc version banners
+    cmds:
+      - go run ./scripts/gen-readme-metrics
+
+  docs:metrics:check:
+    desc: Fail if README metrics or doc version banners have drifted
+    cmds:
+      - go run ./scripts/gen-readme-metrics --check
+
   quality:
     desc: Run all quality checks (fmt, vet, lint)
     deps: [fmt, vet, lint]

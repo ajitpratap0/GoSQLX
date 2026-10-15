@@ -1,6 +1,6 @@
 # Configuration Guide
 
-**Version**: v1.6.0
+**Version**: v1.15.0
 **Last Updated**: December 2025
 
 GoSQLX provides a comprehensive configuration system through YAML configuration files.
@@ -529,4 +529,4 @@ See [MCP Server Guide](/docs/mcp-guide) for the full startup and auth reference.
 ---
 
 **Last Updated**: December 2025
-**Version**: v1.6.0
+**Version**: v1.15.0

@@ -14,10 +14,11 @@
  * later be fed by the generated metrics.json (plan section 5.2).
  *
  * Competitor numbers come only from the reproducible benchmark harness
- * (issue #673, benchmarks/compare): COMPETITOR_RUN below is its committed JSON.
+ * (issue #673, benchmarks/compare). They live in ./competitor-metrics.ts, which
+ * must only be imported by server code: this file is reachable from client
+ * components (Navbar, Sidebar, ParseChart) and would otherwise ship the whole
+ * harness JSON in a shared client chunk.
  */
-
-import competitorRun from './competitor-benchmarks.json';
 
 /** Project facts (not performance). */
 export const PROJECT = {
@@ -90,58 +91,4 @@ export const HEADLINE_CAPTION = `simple SELECT, ${BENCH_ENV.stage}, ${BENCH_ENV.
 /** "3,100+" style formatting for counts. */
 export function formatCount(n: number): string {
   return `${n.toLocaleString('en-US')}+`;
-}
-
-/*
- * Competitor comparison (issue #673). The JSON is a verbatim copy of
- * benchmarks/compare/results/latest.json, produced by `task bench:publish`;
- * `scripts/check-metrics-drift.mjs` fails if the two diverge. Never type a
- * competitor number by hand.
- */
-export interface CompetitorParser {
-  id: string;
-  name: string;
-  module: string;
-  version: string;
-  dialect: string;
-  cgo: boolean;
-}
-
-export interface CompetitorQuery {
-  id: string;
-  name: string;
-  sql: string;
-}
-
-export interface CompetitorResult {
-  query: string;
-  parser: string;
-  supported: boolean;
-  samples: number;
-  /** Median ns/op; null when the parser rejects the query. */
-  nsPerOp: number | null;
-  bytesPerOp: number | null;
-  allocsPerOp: number | null;
-}
-
-export interface CompetitorRun {
-  schemaVersion: number;
-  generatedAt: string;
-  commit: string;
-  dirty: boolean;
-  goVersion: string;
-  hardware: { cpu: string; goos: string; goarch: string; numCPU: number };
-  stage: string;
-  method: { command: string; count: number; statistic: string; rawOutput: string };
-  caveat: string;
-  parsers: CompetitorParser[];
-  queries: CompetitorQuery[];
-  results: CompetitorResult[];
-}
-
-export const COMPETITOR_RUN: CompetitorRun = competitorRun;
-
-/** Look up one (query, parser) result from the committed harness run. */
-export function competitorResult(queryId: string, parserId: string): CompetitorResult | undefined {
-  return COMPETITOR_RUN.results.find((r) => r.query === queryId && r.parser === parserId);
 }

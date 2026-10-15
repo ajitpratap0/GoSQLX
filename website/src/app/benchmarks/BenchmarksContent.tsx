@@ -5,12 +5,11 @@ import { RawDataToggle } from '@/components/benchmarks/RawDataToggle';
 import { ParseChart } from '@/components/benchmarks/ParseChart';
 import {
   BENCH_ENV,
-  COMPETITOR_RUN,
   PARSE_BENCHMARKS,
-  competitorResult,
   formatOps,
   opsPerSec,
 } from '@/data/metrics';
+import { COMPETITOR_RUN, competitorResult } from '@/data/competitor-metrics';
 
 const metrics = [
   {

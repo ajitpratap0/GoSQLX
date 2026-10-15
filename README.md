@@ -1,7 +1,7 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset=".github/logo-dark.svg">
+  <source media="(prefers-color-scheme: dark)" srcset=".github/logo.png">
   <source media="(prefers-color-scheme: light)" srcset=".github/logo-light.svg">
   <img src=".github/logo-light.svg" alt="GoSQLX" width="360">
 </picture>
@@ -15,7 +15,6 @@
 [![Release](https://img.shields.io/github/v/release/ajitpratap0/GoSQLX?style=flat-square)](https://github.com/ajitpratap0/GoSQLX/releases)
 [![License](https://img.shields.io/github/license/ajitpratap0/GoSQLX?style=flat-square)](LICENSE)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/ajitpratap0/GoSQLX/badge)](https://securityscorecards.dev/viewer/?uri=github.com/ajitpratap0/GoSQLX)
-[![Codecov](https://img.shields.io/codecov/c/github/ajitpratap0/GoSQLX?style=flat-square)](https://codecov.io/gh/ajitpratap0/GoSQLX)
 
 **[Playground](https://gosqlx.dev/playground/)** &nbsp;·&nbsp; **[Docs](https://gosqlx.dev/docs/)** &nbsp;·&nbsp; **[Benchmarks](https://gosqlx.dev/benchmarks/)** &nbsp;·&nbsp; **[VS Code](https://marketplace.visualstudio.com/items?itemName=ajitpratap0.gosqlx)** &nbsp;·&nbsp; **[MCP server](#-mcp-server-ai-integration)**
 

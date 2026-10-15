@@ -3,6 +3,7 @@ import { FadeIn } from '@/components/ui/FadeIn';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
 import { PROJECT } from '@/data/metrics';
+import { COMPETITOR_PAGES } from './competitors';
 
 /* ------------------------------------------------------------------ */
 /*  Data                                                               */
@@ -181,6 +182,25 @@ export function CompareContent() {
             </Link>
             .
           </p>
+        </div>
+      </section>
+
+      {/* Per-competitor alternative pages (#675) */}
+      <section className="section-padding pb-16">
+        <div className="container-width">
+          <h2 className="text-2xl font-bold text-fg mb-4">Compare one library in detail</h2>
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {COMPETITOR_PAGES.map((c) => (
+              <li key={c.slug}>
+                <Link
+                  href={`/compare/${c.slug}/`}
+                  className="text-accent underline underline-offset-2"
+                >
+                  GoSQLX vs {c.short}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { FadeIn } from '@/components/ui/FadeIn';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
@@ -256,9 +257,9 @@ export function BenchmarksContent() {
                   benchmark harness
                 </a>
                 , which pins every library version and keeps the raw output for benchstat. See also the{' '}
-                <a href="/compare/" className="text-accent underline underline-offset-2">
+                <Link href="/compare/" className="text-accent underline underline-offset-2">
                   feature comparison
-                </a>
+                </Link>
                 .
               </p>
             </GlassCard>

@@ -4,6 +4,8 @@
 
 This guide helps you migrate from SQLFluff (Python) to GoSQLX (Go), covering feature mapping, code examples, and practical migration steps.
 
+**See also:** [GoSQLX vs SQLFluff: when to pick each](https://gosqlx.dev/compare/sqlfluff/)
+
 ---
 
 ## Table of Contents

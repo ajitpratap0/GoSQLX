@@ -14,14 +14,14 @@ export class WasmErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex items-center justify-center h-full bg-primary">
+        <div className="flex items-center justify-center h-full bg-bg">
           <div className="text-center space-y-4 max-w-md">
             <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center mx-auto">
-              <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-6 h-6 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <p className="text-red-400 font-medium">Failed to load SQL parser</p>
+            <p className="text-danger font-medium">Failed to load SQL parser</p>
             <p className="text-zinc-400 text-sm">{this.state.error?.message}</p>
             <button
               onClick={() => this.setState({ hasError: false, error: null })}

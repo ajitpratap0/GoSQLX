@@ -1,49 +1,144 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/* ==========================================================================
+   SEMANTIC DESIGN TOKENS
+   One set of names, two themes. Dark is the default (:root); light mode
+   swaps the raw values on html.light. Every text/UI pair below is checked for
+   WCAG AA (4.5:1 text, 3:1 UI) against --bg, --bg-raised and --bg-overlay.
+   Components use the Tailwind utilities mapped in @theme below
+   (bg-bg, bg-bg-raised, text-fg-muted, border-border, bg-brand, text-accent,
+   ...) and never hardcode hex values.
+   ========================================================================== */
+:root {
+  color-scheme: dark;
+
+  --bg: #0A0A0F;           /* page */
+  --bg-raised: #12121A;    /* cards, code frame */
+  --bg-overlay: #1A1A24;   /* modals, menus, hover */
+
+  --fg: #F0F0F5;           /* body and headings */
+  --fg-muted: #A1A1B5;     /* secondary text */
+  --fg-subtle: #8B8BA0;    /* captions, meta */
+
+  --border: rgba(255, 255, 255, 0.08);  /* decorative hairlines */
+
+  --brand: #22C55E;        /* primary actions, GoSQLX bars */
+  --brand-fg: #052E16;     /* text on brand fills */
+  --accent: #818CF8;       /* links, focus ring */
+  --accent-fg: #0A0A0F;    /* text on accent fills */
+  --accent-warm: #FB923C;  /* sparing highlights */
+
+  --danger: #F87171;
+  --ok: #4ADE80;
+}
+
+html.light {
+  color-scheme: light;
+
+  --bg: #FAFBFC;
+  --bg-raised: #FFFFFF;
+  --bg-overlay: #F1F3F6;
+
+  --fg: #111827;
+  --fg-muted: #4B5563;
+  --fg-subtle: #5B6472;
+
+  --border: #E5E7EB;
+
+  --brand: #15803D;
+  --brand-fg: #FFFFFF;
+  --accent: #4F46E5;
+  --accent-fg: #FFFFFF;
+  --accent-warm: #9A3412;
+
+  --danger: #B91C1C;
+  --ok: #166534;
+}
+
+/* Code blocks stay dark in light mode (standard convention), so restore the
+   dark token values inside them. */
+html.light pre,
+html.light textarea[class*="font-mono"] {
+  --fg: #F0F0F5;
+  --fg-muted: #A1A1B5;
+  --fg-subtle: #8B8BA0;
+  --brand: #22C55E;
+  --accent: #818CF8;
+  --accent-warm: #FB923C;
+  --danger: #F87171;
+  --ok: #4ADE80;
+}
+
+/* `inline` makes each utility reference the runtime variable, so the
+   html.light values above reach every utility without per-class overrides. */
 @theme inline {
-  /* Existing tokens (backward compat) */
-  --color-primary: #09090b;
-  --color-surface: #18181b;
-  --color-elevated: #27272a;
-  --color-accent-indigo: #6366f1;
-  --color-accent-orange: #f97316;
-  --color-accent-green: #22c55e;
-  --color-accent-purple: #a78bfa;
+  --color-bg: var(--bg);
+  --color-bg-raised: var(--bg-raised);
+  --color-bg-overlay: var(--bg-overlay);
 
-  /* Semantic design tokens */
-  --color-bg-deep: #0A0A0F;
-  --color-bg-surface: #12121A;
-  --color-bg-elevated: #1A1A25;
-  --color-bg-hover: #22222F;
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
 
-  --color-brand: #22C55E;
-  --color-brand-hover: #16A34A;
+  --color-border: var(--border);
 
-  --color-text-primary: #F0F0F5;
-  --color-text-secondary: #9494A8;
-  --color-text-muted: #8B8BA0;
-  --color-link: #6366F1;
+  --color-brand: var(--brand);
+  --color-brand-fg: var(--brand-fg);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-warm: var(--accent-warm);
 
-  --color-border-default: rgba(255, 255, 255, 0.08);
-  --color-border-hover: rgba(255, 255, 255, 0.15);
+  --color-danger: var(--danger);
+  --color-ok: var(--ok);
 
-  --font-sans: var(--font-body), system-ui, sans-serif;
-  --font-heading: var(--font-heading), system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains), monospace;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-heading: var(--font-inter), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+
+  /* Fluid type scale */
+  --text-display: clamp(2.5rem, 6vw, 4.5rem);
+  --text-display--line-height: 1.05;
+  --text-h2: clamp(1.75rem, 3.5vw, 2.5rem);
+  --text-h2--line-height: 1.15;
+  --text-body: 1rem;
+  --text-body--line-height: 1.6;
+  --text-eyebrow: 0.8125rem;
+  --text-eyebrow--line-height: 1.4;
 }
 
 html {
   overflow-x: clip;
 }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-heading), system-ui, sans-serif;
+/* In @layer base so Tailwind utilities (font-*, tracking-*) can still override. */
+@layer base {
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-inter), system-ui, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+}
+
+/* Mono eyebrow label, kept separate from the real heading it introduces. */
+.eyebrow {
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  font-size: var(--text-eyebrow);
+  line-height: var(--text-eyebrow--line-height);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Stat numbers: mono, aligned digits. */
+.stat-number {
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 body {
-  background-color: var(--color-primary);
-  color: #fafafa;
+  background-color: var(--bg);
+  color: var(--fg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: clip;
@@ -100,10 +195,18 @@ body {
 
 /* Prose dark theme overrides */
 .prose-dark {
-  --tw-prose-body: rgba(255,255,255,0.8);
-  --tw-prose-headings: #F0F0F5;
-  --tw-prose-links: #6366f1;
-  --tw-prose-code: #F0F0F5;
+  --tw-prose-body: color-mix(in srgb, var(--fg) 82%, var(--bg));
+  --tw-prose-headings: var(--fg);
+  --tw-prose-links: var(--accent);
+  --tw-prose-bold: var(--fg);
+  --tw-prose-counters: var(--fg-subtle);
+  --tw-prose-bullets: var(--fg-subtle);
+  --tw-prose-quotes: var(--fg);
+  --tw-prose-captions: var(--fg-subtle);
+  --tw-prose-hr: var(--border);
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--border);
+  --tw-prose-code: var(--fg);
   --tw-prose-pre-bg: #12121A;
 }
 
@@ -114,44 +217,16 @@ body {
    We override them here to avoid touching 300+ JSX class strings.
    ========================================================================== */
 
-/* --- Design token overrides --- */
-html.light {
-  --color-primary: #FAFBFC;
-  --color-surface: #FFFFFF;
-  --color-elevated: #F3F4F6;
-  --color-bg-deep: #FAFBFC;
-  --color-bg-surface: #FFFFFF;
-  --color-bg-elevated: #F3F4F6;
-  --color-bg-hover: #E5E7EB;
-  --color-text-primary: #1A1A2E;
-  --color-text-secondary: #4B5563;
-  --color-text-muted: #5B6472;
-  --color-border-default: rgba(0, 0, 0, 0.08);
-  --color-border-hover: rgba(0, 0, 0, 0.15);
-}
-
-/* @theme inline bakes token values into utilities, so the html.light variable
-   overrides never reach them; override the muted-text utilities explicitly. */
-html.light .text-text-muted,
-html.light .placeholder\:text-text-muted::placeholder {
-  color: #5B6472;
-}
-
-/* --- Body --- */
-html.light body {
-  background-color: #FAFBFC;
-  color: #1A1A2E;
-}
+/* Token-based utilities (bg-bg, text-fg-*, bg-brand, text-accent, ...) need no
+   overrides: they switch through the html.light variables above. The rules
+   below only remain for components that still use raw zinc/slate/white
+   palette classes; delete them as those components move to tokens. */
 
 /* --- Global text color overrides ---
    !important needed because Tailwind v4 compiles utilities inside @layer
    which wins the CSS cascade over unlayered selectors. */
-html.light .text-white { color: #1A1A2E !important; }
-/* Keep text-white truly white inside accent-colored containers */
-html.light .bg-accent-indigo .text-white,
-html.light .bg-accent-green .text-white,
-html.light .bg-brand .text-white,
-html.light [class*="bg-accent-indigo"].text-white,
+html.light .text-white { color: #111827 !important; }
+/* Keep text-white truly white inside saturated palette fills */
 html.light [class*="bg-green-"].text-white,
 html.light [class*="bg-indigo-"].text-white { color: #FFFFFF !important; }
 html.light .text-zinc-100 { color: #1F2937 !important; }
@@ -201,10 +276,6 @@ html.light [class*="bg-white\\/\\[0\\.0"] { background-color: rgba(0, 0, 0, 0.03
 html.light [class*="bg-white\\/\\[0\\.1"] { background-color: rgba(0, 0, 0, 0.06) !important; }
 html.light [class*="bg-white\\/5"] { background-color: rgba(0, 0, 0, 0.03) !important; }
 html.light [class*="bg-white\\/10"] { background-color: rgba(0, 0, 0, 0.05) !important; }
-
-/* --- Primary bg (used as bg-primary on mobile menu, etc.) --- */
-html.light .bg-primary { background-color: #FAFBFC !important; }
-html.light .bg-surface { background-color: #FFFFFF !important; }
 
 /* --- Slate backgrounds (playground, panels) --- */
 html.light .bg-slate-800 { background-color: #E5E7EB !important; }
@@ -308,19 +379,10 @@ html.light select option {
   color: #1A1A2E;
 }
 
-/* --- Version badge --- */
-html.light .bg-accent-indigo\\/10 {
-  background-color: rgba(99, 102, 241, 0.08);
-}
-html.light .border-accent-indigo\\/30 {
-  border-color: rgba(99, 102, 241, 0.25);
-}
-
 /* --- Hero background gradients: reduce on light mode --- */
 html.light section > [aria-hidden="true"] { opacity: 0.15; }
 
 /* --- Playground: override hardcoded arbitrary bg --- */
-html.light .bg-\[\#09090b\] { background-color: #FAFBFC !important; }
 html.light .bg-\[\#0F172A\] { background-color: #FAFBFC !important; }
 
 /* Playground select element */
@@ -357,7 +419,6 @@ html.light pre[class*="font-mono"] {
   background-color: #1E1E2E;
   color: #D4D4D8;
 }
-html.light code { color: inherit; }
 
 /* Code in MiniPlayground, hero, etc. — keep dark code blocks */
 html.light .font-mono[class*="text-zinc-300"],
@@ -376,32 +437,12 @@ html.light pre .text-zinc-300,
 html.light pre .text-zinc-400 {
   color: inherit !important;
 }
-html.light pre .text-accent-green { color: #22C55E !important; }
-html.light pre .text-accent-orange { color: #F97316 !important; }
-
-/* Accent colors on code stay vivid */
-html.light pre .text-accent-green,
-html.light pre .text-accent-orange,
-html.light textarea .text-accent-green,
-html.light textarea .text-accent-orange {
-  color: inherit;
-}
-
-/* --- Stats / accent-colored numbers --- */
-html.light .text-accent-orange { color: #EA580C !important; }
-html.light .text-accent-green { color: #16A34A !important; }
-html.light .text-accent-indigo { color: #4F46E5 !important; }
-html.light .text-accent-purple { color: #7C3AED !important; }
 
 /* --- Section borders --- */
 html.light section[class*="border-t"] { border-color: rgba(0, 0, 0, 0.06) !important; }
 html.light [class*="border-b"][class*="border-white"] { border-color: rgba(0, 0, 0, 0.06) !important; }
 
 /* --- Feature card icon tinted backgrounds --- */
-html.light [class*="bg-accent-purple\\/10"] { background-color: rgba(124, 58, 237, 0.08) !important; }
-html.light [class*="bg-accent-green\\/10"] { background-color: rgba(22, 163, 74, 0.08) !important; }
-html.light [class*="bg-accent-orange\\/10"] { background-color: rgba(234, 88, 12, 0.08) !important; }
-html.light [class*="bg-accent-indigo\\/10"] { background-color: rgba(79, 70, 229, 0.08) !important; }
 html.light [class*="bg-red-500\\/10"] { background-color: rgba(220, 38, 38, 0.08) !important; }
 html.light [class*="bg-cyan-500\\/10"] { background-color: rgba(6, 182, 212, 0.08) !important; }
 
@@ -418,10 +459,6 @@ html.light ::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.2); }
 
 /* --- Prose / docs --- */
 html.light .prose-dark {
-  --tw-prose-body: rgba(0, 0, 0, 0.75);
-  --tw-prose-headings: #1A1A2E;
-  --tw-prose-links: #4F46E5;
-  --tw-prose-code: #1A1A2E;
   --tw-prose-pre-bg: #1E1E2E;
 }
 
@@ -461,10 +498,9 @@ html.light .opacity-40[class*="bg-gradient"] { opacity: 0.2; }
 
 /* Keyboard focus ring (unlayered so it wins over utility resets) */
 :focus-visible {
-  outline: 2px solid var(--color-link);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-html.light :focus-visible { outline-color: #4F46E5; }
 
 /* Respect prefers-reduced-motion for all animations */
 @media (prefers-reduced-motion: reduce) {
@@ -495,18 +531,14 @@ html.light :focus-visible { outline-color: #4F46E5; }
 /* Inline code in docs prose: no typography backticks, pill styling */
 .prose-dark :not(pre) > code {
   border-radius: 0.25rem;
-  background: rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
   padding: 0.125rem 0.375rem;
   font-size: 0.875em;
-  color: #e4e4e7;
+  color: var(--fg);
 }
 .prose-dark :not(pre) > code::before,
 .prose-dark :not(pre) > code::after {
   content: none;
-}
-html.light .prose-dark :not(pre) > code {
-  background: rgba(0, 0, 0, 0.06);
-  color: #1f2937;
 }
 
 /* Skip rendering offscreen code blocks and tables on long docs pages. */

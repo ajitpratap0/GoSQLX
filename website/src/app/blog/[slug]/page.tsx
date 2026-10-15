@@ -104,7 +104,7 @@ export default async function BlogPostPage({ params }: Props) {
         {/* Back link */}
         <Link
           href="/blog"
-          className="inline-flex items-center gap-1.5 text-sm text-text-muted hover:text-zinc-300 transition-colors mb-8"
+          className="inline-flex items-center gap-1.5 text-sm text-fg-subtle hover:text-zinc-300 transition-colors mb-8"
         >
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10 4l-4 4 4 4" />
@@ -115,11 +115,11 @@ export default async function BlogPostPage({ params }: Props) {
         {/* Header */}
         <header className="mb-10">
           <div className="flex items-center gap-3 mb-3">
-            <span className="inline-block bg-accent-indigo/10 border border-accent-indigo/20 rounded-full px-3.5 py-1 text-xs font-medium text-accent-indigo">
+            <span className="inline-block bg-accent/10 border border-accent/20 rounded-full px-3.5 py-1 text-xs font-medium text-accent">
               v{post.version}
             </span>
             {post.date && (
-              <time className="text-sm text-text-muted" dateTime={post.date}>
+              <time className="text-sm text-fg-subtle" dateTime={post.date}>
                 {formatDate(post.date)}
               </time>
             )}
@@ -128,7 +128,7 @@ export default async function BlogPostPage({ params }: Props) {
         </header>
 
         {/* Content */}
-        <div className="prose prose-invert prose-dark max-w-none prose-headings:font-semibold prose-a:text-accent-indigo prose-a:no-underline hover:prose-a:underline prose-code:bg-surface prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:before:content-none prose-code:after:content-none prose-pre:bg-surface prose-pre:border prose-pre:border-zinc-800 prose-hr:border-zinc-800">
+        <div className="prose prose-invert prose-dark max-w-none prose-headings:font-semibold prose-a:text-accent prose-a:no-underline hover:prose-a:underline [&_:not(pre)>code]:bg-bg-raised prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-raised prose-pre:border prose-pre:border-zinc-800 prose-hr:border-zinc-800">
           {content}
         </div>
 
@@ -139,7 +139,7 @@ export default async function BlogPostPage({ params }: Props) {
           const shareUrl = encodeURIComponent(postUrl);
           return (
             <div className="mt-12 pt-8 border-t border-zinc-800 flex items-center gap-3">
-              <span className="text-sm text-text-muted">Share:</span>
+              <span className="text-sm text-fg-subtle">Share:</span>
               <a
                 href={`https://x.com/intent/tweet?text=${shareText}&url=${shareUrl}`}
                 target="_blank"
@@ -178,7 +178,7 @@ export default async function BlogPostPage({ params }: Props) {
               href={blogPostHref(prevPost.slug)}
               className="group flex flex-col text-sm"
             >
-              <span className="text-text-muted mb-1">Older</span>
+              <span className="text-fg-subtle mb-1">Older</span>
               <span className="text-zinc-300 group-hover:text-white transition-colors">
                 {prevPost.title}
               </span>
@@ -191,7 +191,7 @@ export default async function BlogPostPage({ params }: Props) {
               href={blogPostHref(nextPost.slug)}
               className="group flex flex-col text-sm text-right ml-auto"
             >
-              <span className="text-text-muted mb-1">Newer</span>
+              <span className="text-fg-subtle mb-1">Newer</span>
               <span className="text-zinc-300 group-hover:text-white transition-colors">
                 {nextPost.title}
               </span>

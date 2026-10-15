@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { execFileSync } from 'child_process';
 import path from 'path';
 import matter from 'gray-matter';
 import GithubSlugger from 'github-slugger';
@@ -13,8 +14,10 @@ export interface Doc {
   description: string;
   content: string;
   category: string;
-  /** Source file mtime (ISO 8601), used for TechArticle dateModified. */
+  /** Last content change (ISO 8601): git commit date, mtime fallback. Used for TechArticle dateModified. */
   modifiedAt: string;
+  /** Path of the source file relative to the repo root (for edit-on-GitHub links). */
+  file: string;
 }
 
 export interface DocHeading {
@@ -24,6 +27,45 @@ export interface DocHeading {
 }
 
 const DOCS_DIR = path.join(process.cwd(), '..', 'docs');
+
+let shallowClone: boolean | null = null;
+
+function isShallowClone(): boolean {
+  if (shallowClone === null) {
+    try {
+      shallowClone =
+        execFileSync('git', ['rev-parse', '--is-shallow-repository'], {
+          cwd: DOCS_DIR,
+          encoding: 'utf-8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim() !== 'false';
+    } catch {
+      shallowClone = true;
+    }
+  }
+  return shallowClone;
+}
+
+/**
+ * Date the doc file last changed. Uses the git commit date, but falls back to the
+ * file mtime when git history is unavailable or shallow (Vercel clones are shallow,
+ * so every file would otherwise report the tip commit date).
+ */
+export function getLastUpdated(filePath: string): string {
+  if (!isShallowClone()) {
+    try {
+      const out = execFileSync('git', ['log', '-1', '--format=%cI', '--', filePath], {
+        cwd: DOCS_DIR,
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+      if (out) return out;
+    } catch {
+      // fall through to mtime
+    }
+  }
+  return fs.statSync(filePath).mtime.toISOString();
+}
 
 function extractTitleFromMarkdown(content: string): string {
   const match = content.match(/^#\s+(.+)$/m);
@@ -129,33 +171,34 @@ export function getDocBySlug(slug: string): Doc | null {
     description: sidebarItem.description,
     content,
     category: categoryName,
-    modifiedAt: fs.statSync(filePath).mtime.toISOString(),
+    modifiedAt: getLastUpdated(filePath),
+    file: `docs/${sidebarItem.file}`,
   };
 }
 
-/** Get adjacent docs for prev/next navigation */
+export interface AdjacentDoc {
+  slug: string;
+  title: string;
+  category: string;
+}
+
+/** Get adjacent docs for prev/next navigation (crosses category boundaries). */
 export function getAdjacentDocs(slug: string): {
-  prev: { slug: string; title: string } | null;
-  next: { slug: string; title: string } | null;
+  prev: AdjacentDoc | null;
+  next: AdjacentDoc | null;
 } {
-  const allItems: { slug: string; label: string }[] = [];
+  const allItems: AdjacentDoc[] = [];
   for (const category of DOCS_SIDEBAR) {
     for (const item of category.items) {
-      allItems.push({ slug: item.slug, label: item.label });
+      allItems.push({ slug: item.slug, title: item.label, category: category.category });
     }
   }
 
   const index = allItems.findIndex((item) => item.slug === slug);
   if (index === -1) return { prev: null, next: null };
 
-  const prev =
-    index > 0
-      ? { slug: allItems[index - 1].slug, title: allItems[index - 1].label }
-      : null;
-  const next =
-    index < allItems.length - 1
-      ? { slug: allItems[index + 1].slug, title: allItems[index + 1].label }
-      : null;
-
-  return { prev, next };
+  return {
+    prev: index > 0 ? allItems[index - 1] : null,
+    next: index < allItems.length - 1 ? allItems[index + 1] : null,
+  };
 }

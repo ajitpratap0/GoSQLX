@@ -36,11 +36,10 @@ const icons: Record<string, React.ReactNode> = {
 };
 
 const colorMap: Record<string, string> = {
-  'accent-purple': 'bg-accent-purple/10 text-accent-purple',
-  'accent-green': 'bg-accent-green/10 text-accent-green',
-  'accent-orange': 'bg-accent-orange/10 text-accent-orange',
-  'accent-indigo': 'bg-accent-indigo/10 text-accent-indigo',
-  'red': 'bg-red-500/10 text-red-400',
+  'brand': 'bg-brand/10 text-brand',
+  'accent-warm': 'bg-accent-warm/10 text-accent-warm',
+  'accent': 'bg-accent/10 text-accent',
+  'danger': 'bg-danger/10 text-danger',
   'cyan': 'bg-cyan-500/10 text-cyan-400',
 };
 

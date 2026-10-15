@@ -13,7 +13,7 @@ function HeadingAnchor({ id, level, children }: { id?: string; level: number; ch
           'a',
           {
             href: `#${id}`,
-            className: 'ml-2 text-text-muted opacity-0 transition-opacity group-hover:opacity-100',
+            className: 'ml-2 text-fg-subtle opacity-0 transition-opacity group-hover:opacity-100',
             'aria-label': 'Link to heading',
           },
           '#'
@@ -31,7 +31,7 @@ export const mdxComponents = {
   h6: (props: ComponentPropsWithoutRef<'h6'>) => <HeadingAnchor level={6} {...props} />,
 
   a: (props: ComponentPropsWithoutRef<'a'>) => (
-    <a {...props} className="text-accent-indigo hover:underline" target={props.href?.startsWith('http') ? '_blank' : undefined} rel={props.href?.startsWith('http') ? 'noopener noreferrer' : undefined} />
+    <a {...props} className="text-accent hover:underline" target={props.href?.startsWith('http') ? '_blank' : undefined} rel={props.href?.startsWith('http') ? 'noopener noreferrer' : undefined} />
   ),
 
   pre: ({ children, ...props }: ComponentPropsWithoutRef<'pre'>) => {
@@ -52,7 +52,7 @@ export const mdxComponents = {
         <pre
           {...props}
           tabIndex={0}
-          className="overflow-x-auto rounded-lg border border-white/5 bg-surface p-4 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-1 focus:ring-offset-zinc-900"
+          className="overflow-x-auto rounded-lg border border-white/5 bg-bg-raised p-4 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-1 focus:ring-offset-zinc-900"
         >
           {children}
         </pre>
@@ -66,7 +66,7 @@ export const mdxComponents = {
   },
 
   blockquote: (props: ComponentPropsWithoutRef<'blockquote'>) => (
-    <blockquote {...props} className="border-l-2 border-accent-indigo bg-surface/50 pl-4 py-2 italic text-zinc-400" />
+    <blockquote {...props} className="border-l-2 border-accent bg-bg-raised/50 pl-4 py-2 italic text-zinc-400" />
   ),
 
   table: (props: ComponentPropsWithoutRef<'table'>) => (

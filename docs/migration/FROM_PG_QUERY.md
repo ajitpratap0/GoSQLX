@@ -4,6 +4,8 @@
 
 This guide helps you migrate from pg_query (PostgreSQL's official parser wrapper) to GoSQLX, covering multi-dialect support, performance improvements, and practical migration strategies.
 
+**See also:** [GoSQLX vs pg_query_go: when to pick each, with reproducible numbers](https://gosqlx.dev/compare/pg-query-go/)
+
 ---
 
 ## Table of Contents

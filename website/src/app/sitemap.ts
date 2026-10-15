@@ -3,6 +3,7 @@ import path from 'path';
 import { MetadataRoute } from 'next';
 import { DOCS_SIDEBAR } from '@/lib/constants';
 import { blogPostHref, getAllPosts } from '@/lib/blog';
+import { COMPETITOR_PAGES } from '@/app/compare/competitors';
 
 // Mirrors DOCS_DIR in lib/docs.ts (repo-level docs/ folder).
 const DOCS_DIR = path.join(process.cwd(), '..', 'docs');
@@ -29,7 +30,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '/benchmarks/',
     '/compare/',
     '/privacy/',
-  ].map((p) => ({ url: `${baseUrl}${p}` }));
+  ]
+    .concat(COMPETITOR_PAGES.map((c) => `/compare/${c.slug}/`))
+    .map((p) => ({ url: `${baseUrl}${p}` }));
 
   const docPages: MetadataRoute.Sitemap = DOCS_SIDEBAR.flatMap((category) =>
     category.items.map((item) => ({

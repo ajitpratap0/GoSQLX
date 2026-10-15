@@ -49,6 +49,11 @@ export const BENCH_ENV = {
   hardware: 'Apple M4',
   goVersion: 'Go 1.27',
   stage: 'parse stage',
+  /** Date the PARSE_BENCHMARKS figures were re-measured (ISO). */
+  measuredOn: '2026-10-13',
+  /** Parse-stage benchmark source file and CI baseline file, as repo paths. */
+  benchFile: 'pkg/sql/parser/performance_regression_test.go',
+  baselinesFile: 'performance_baselines.json',
   source: 'BenchmarkPerformanceBaseline, median of 10 runs, re-measured 2026-10-13',
   /** Command that reproduces PARSE_BENCHMARKS from a repo checkout (summarise the 10 runs with benchstat). */
   command: "go test -run='^$' -bench=BenchmarkPerformanceBaseline -benchmem -count=10 ./pkg/sql/parser/",

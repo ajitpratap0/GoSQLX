@@ -1,6 +1,6 @@
 # SQL Linting Rules Reference
 
-**Version**: v1.14.0
+**Version**: v1.15.0
 **Last Updated**: 2026-03-20
 
 This document provides a complete reference for all GoSQLX SQL linting rules (L001-L010).
@@ -465,4 +465,4 @@ jobs:
 ---
 
 **Last Updated**: December 2025
-**Version**: v1.6.0
+**Version**: v1.15.0

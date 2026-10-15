@@ -1,9 +1,8 @@
 import type { Metadata } from 'next';
-import { spaceGrotesk, inter, jetbrainsMono } from '@/lib/fonts';
+import { inter, jetbrainsMono } from '@/lib/fonts';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Providers } from '@/components/Providers';
-import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { baseOpenGraph } from '@/lib/open-graph';
 import './globals.css';
@@ -40,7 +39,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`dark ${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`dark ${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{
@@ -60,7 +59,6 @@ export default function RootLayout({
           <main id="main-content" className="pt-16">{children}</main>
           <Footer />
         </Providers>
-        <Analytics />
         <SpeedInsights />
       </body>
     </html>

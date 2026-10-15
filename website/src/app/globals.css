@@ -92,17 +92,48 @@ html.light textarea[class*="font-mono"] {
   --color-danger: var(--danger);
   --color-ok: var(--ok);
 
-  --font-sans: var(--font-body), system-ui, sans-serif;
-  --font-heading: var(--font-heading), system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains), monospace;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-heading: var(--font-inter), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+
+  /* Fluid type scale */
+  --text-display: clamp(2.5rem, 6vw, 4.5rem);
+  --text-display--line-height: 1.05;
+  --text-h2: clamp(1.75rem, 3.5vw, 2.5rem);
+  --text-h2--line-height: 1.15;
+  --text-body: 1rem;
+  --text-body--line-height: 1.6;
+  --text-eyebrow: 0.8125rem;
+  --text-eyebrow--line-height: 1.4;
 }
 
 html {
   overflow-x: clip;
 }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-heading), system-ui, sans-serif;
+/* In @layer base so Tailwind utilities (font-*, tracking-*) can still override. */
+@layer base {
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-inter), system-ui, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+}
+
+/* Mono eyebrow label, kept separate from the real heading it introduces. */
+.eyebrow {
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  font-size: var(--text-eyebrow);
+  line-height: var(--text-eyebrow--line-height);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Stat numbers: mono, aligned digits. */
+.stat-number {
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 body {

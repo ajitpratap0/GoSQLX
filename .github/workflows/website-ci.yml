@@ -9,6 +9,7 @@ on:
       - 'README.md'
       - 'llms.txt'
       - 'docs/GETTING_STARTED.md'
+      - 'benchmarks/compare/results/**'
   pull_request:
     paths:
       - 'website/**'
@@ -16,6 +17,7 @@ on:
       - 'README.md'
       - 'llms.txt'
       - 'docs/GETTING_STARTED.md'
+      - 'benchmarks/compare/results/**'
   workflow_dispatch:
 
 permissions:

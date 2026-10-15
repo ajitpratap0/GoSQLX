@@ -134,6 +134,23 @@ tasks:
       - echo "Running benchmarks..."
       - go test -bench=. -benchmem ./...
 
+  bench:compare:
+    desc: Run the competitor benchmark harness once (benchmarks/compare, needs CGO for pg_query_go)
+    dir: benchmarks/compare
+    env:
+      CGO_ENABLED: '1'
+    cmds:
+      - go test -run='^$' -bench=. -benchmem ./...
+
+  bench:publish:
+    desc: Run the competitor harness with -count=10 and write benchmarks/compare/results/latest.{json,txt}
+    dir: benchmarks/compare
+    env:
+      CGO_ENABLED: '1'
+    cmds:
+      - go run ./cmd/publish {{.CLI_ARGS}}
+      - go run golang.org/x/perf/cmd/benchstat@v0.0.0-20260908200009-22c9c6c9d4da results/latest.txt
+
   bench:pkg:
     desc: Run benchmarks for specific package (use PKG=./pkg/sql/parser)
     cmds:

@@ -7,6 +7,9 @@
  * immutable historical release notes), README.md, docs/GETTING_STARTED.md and
  * llms.txt. No test framework needed: `node scripts/check-metrics-drift.mjs`.
  *
+ * It also fails when website/src/data/competitor-benchmarks.json is not an
+ * exact copy of the harness output, benchmarks/compare/results/latest.json.
+ *
  * Pass --self-test to confirm the rules still catch a seeded literal.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -77,6 +80,24 @@ for (const file of files) {
     failures++;
     console.error(`${relative(repoRoot, file)}:${line}: banned literal "${rule.name}" (${rule.hint})`);
   }
+}
+
+// Competitor numbers must be a verbatim copy of the harness output (#673).
+const harnessJson = join(repoRoot, 'benchmarks', 'compare', 'results', 'latest.json');
+const siteJson = join(websiteDir, 'src', 'data', 'competitor-benchmarks.json');
+try {
+  const harness = JSON.stringify(JSON.parse(readFileSync(harnessJson, 'utf8')));
+  const site = JSON.stringify(JSON.parse(readFileSync(siteJson, 'utf8')));
+  if (harness !== site) {
+    failures++;
+    console.error(
+      `${relative(repoRoot, siteJson)} differs from ${relative(repoRoot, harnessJson)}; ` +
+        'copy the harness output after running `task bench:publish`',
+    );
+  }
+} catch (err) {
+  failures++;
+  console.error(`competitor benchmark JSON check failed: ${err.message}`);
 }
 
 if (failures > 0) {

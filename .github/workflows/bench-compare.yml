@@ -1,0 +1,122 @@
+name: Competitor Benchmarks
+
+# Reproducible competitor benchmark harness (issue #673). The harness is its own
+# Go module (benchmarks/compare) so `task check` keeps covering only the root
+# module; this workflow is the harness's own CI job.
+#
+# - Pull requests and pushes touching the harness: vet, race tests and a
+#   one-pass benchmark smoke run.
+# - workflow_dispatch and release tags: a full -count run that publishes the
+#   results JSON, the raw benchmark output and a benchstat summary as an
+#   artifact. Shared runners are noisy; the JSON records the CPU so a run is
+#   never presented without its hardware. Commit the artifact to
+#   benchmarks/compare/results/ (and website/src/data/) in a PR to publish it.
+
+on:
+  pull_request:
+    paths:
+      - 'benchmarks/compare/**'
+      - '.github/workflows/bench-compare.yml'
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths:
+      - 'benchmarks/compare/**'
+      - '.github/workflows/bench-compare.yml'
+  workflow_dispatch:
+    inputs:
+      count:
+        description: 'Benchmark repetitions per (query, parser) pair'
+        required: false
+        default: '10'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bench-compare-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: benchmarks/compare
+
+env:
+  CGO_ENABLED: '1'
+  GOTOOLCHAIN: local
+
+jobs:
+  test:
+    name: Harness tests and smoke run
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: benchmarks/compare/go.mod
+          check-latest: true
+          cache-dependency-path: benchmarks/compare/go.sum
+
+      - name: Verify go.mod is tidy
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test (race)
+        run: go test -race -timeout 300s ./...
+
+      - name: Benchmark smoke run
+        run: go test -run='^$' -bench=. -benchmem -benchtime=200x .
+
+  publish:
+    name: Publish results JSON
+    needs: test
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: benchmarks/compare/go.mod
+          check-latest: true
+          cache-dependency-path: benchmarks/compare/go.sum
+
+      - name: Run harness
+        env:
+          COUNT: ${{ github.event.inputs.count || '10' }}
+        run: |
+          case "$COUNT" in
+            ''|*[!0-9]*) echo "count must be a positive integer, got '$COUNT'" >&2; exit 1 ;;
+          esac
+          mkdir -p "$RUNNER_TEMP/bench"
+          go run ./cmd/publish -count="$COUNT" \
+            -out "$RUNNER_TEMP/bench/latest.json" \
+            -raw "$RUNNER_TEMP/bench/latest.txt"
+
+      - name: benchstat summary
+        run: |
+          go run golang.org/x/perf/cmd/benchstat@v0.0.0-20260908200009-22c9c6c9d4da \
+            "$RUNNER_TEMP/bench/latest.txt" | tee "$RUNNER_TEMP/bench/benchstat.txt"
+          {
+            echo '## Competitor benchmark (end-to-end stage)'
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/bench/benchstat.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: bench-compare-${{ github.sha }}
+          path: ${{ runner.temp }}/bench/
+          retention-days: 90

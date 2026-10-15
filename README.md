@@ -16,7 +16,7 @@
 [![License](https://img.shields.io/github/license/ajitpratap0/GoSQLX?style=flat-square)](LICENSE)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/ajitpratap0/GoSQLX/badge)](https://securityscorecards.dev/viewer/?uri=github.com/ajitpratap0/GoSQLX)
 
-**[Playground](https://gosqlx.dev/playground/)** &nbsp;·&nbsp; **[Docs](https://gosqlx.dev/docs/)** &nbsp;·&nbsp; **[Benchmarks](https://gosqlx.dev/benchmarks/)** &nbsp;·&nbsp; **[VS Code](https://marketplace.visualstudio.com/items?itemName=ajitpratap0.gosqlx)** &nbsp;·&nbsp; **[MCP server](#-mcp-server-ai-integration)**
+**[Playground](https://gosqlx.dev/playground/)** &nbsp;·&nbsp; **[Docs](https://gosqlx.dev/docs/)** &nbsp;·&nbsp; **[Benchmarks](https://gosqlx.dev/benchmarks/)** &nbsp;·&nbsp; **[VS Code](https://marketplace.visualstudio.com/items?itemName=ajitpratap0.gosqlx)** &nbsp;·&nbsp; **[MCP server](#mcp-server)**
 
 <br/>
 
@@ -35,27 +35,6 @@
 
 GoSQLX is a **production-ready SQL parsing SDK** for Go. It tokenizes, parses, and generates ASTs from SQL with zero-copy optimizations and intelligent object pooling - parsing a simple SELECT in about <!-- metrics-inline:start -->**318 ns (~3.1M parses/sec)**<!-- metrics-inline:end -->.
 
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-
-	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
-)
-
-func main() {
-	// ParseTree returns an opaque Tree, so you don't need to import
-	// pkg/sql/ast just to get started.
-	tree, _ := gosqlx.ParseTree(context.Background(),
-		"SELECT u.name, COUNT(*) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name",
-		gosqlx.WithDialect("postgresql"))
-	fmt.Println("Tables:", tree.Tables())
-	fmt.Println(tree.Format(gosqlx.WithIndent(2), gosqlx.WithUppercaseKeywords(true)))
-}
-```
-
 ### Why GoSQLX?
 
 - **Not an ORM** - a parser. You get the AST, you decide what to do with it.
@@ -65,11 +44,53 @@ func main() {
 
 <br/>
 
-## Get Started in 60 Seconds
+## Install
+
+### Go library
 
 ```bash
 go get github.com/ajitpratap0/GoSQLX
 ```
+
+### CLI
+
+```bash
+go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest
+```
+
+### VS Code
+
+```bash
+code --install-extension ajitpratap0.gosqlx
+```
+
+The extension bundles the binary, so there is no extra setup. [Learn more](https://gosqlx.dev/vscode/).
+
+### MCP server
+
+```bash
+claude mcp add --transport http gosqlx https://mcp.gosqlx.dev/mcp
+```
+
+7 SQL tools in Claude, Cursor, or any MCP client. [MCP guide](https://gosqlx.dev/docs/mcp_guide/).
+
+[![MCP](https://img.shields.io/badge/MCP-Remote%20Server-blue?style=flat-square)](https://mcp.gosqlx.dev/health)
+[![Glama MCP Server](https://glama.ai/mcp/servers/ajitpratap0/GoSQLX/badges/score.svg)](https://glama.ai/mcp/servers/ajitpratap0/GoSQLX)
+
+### GitHub Action
+
+```yaml
+- uses: ajitpratap0/GoSQLX@v1
+  with:
+    files: '**/*.sql'
+    validate: true
+```
+
+<br/>
+
+## Quick start
+
+Source: [`examples/readme_quickstart/main.go`](examples/readme_quickstart/main.go), compiled in CI against HEAD and the latest release.
 
 ```go
 package main
@@ -112,49 +133,15 @@ func main() {
 }
 ```
 
-<br/>
+Output:
 
-## Install Everywhere
-
-<table>
-<tr>
-<td width="50%">
-
-### 📦 Go Library
-```bash
-go get github.com/ajitpratap0/GoSQLX
+```text
+Tables: [users]
+SELECT id, name
+FROM users
+WHERE active = true
+  SELECT with 2 columns
 ```
-
-### 🖥️ CLI Tool
-```bash
-go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest
-gosqlx validate "SELECT * FROM users"
-gosqlx format query.sql
-gosqlx lint query.sql
-```
-
-</td>
-<td width="50%">
-
-### 💻 VS Code Extension
-```bash
-code --install-extension ajitpratap0.gosqlx
-```
-Bundles the binary - zero setup. [Learn more →](https://gosqlx.dev/vscode/)
-
-### 🤖 MCP Server (AI Integration)
-```bash
-claude mcp add --transport http gosqlx \
-  https://mcp.gosqlx.dev/mcp
-```
-7 SQL tools in Claude, Cursor, or any MCP client. [Guide →](https://gosqlx.dev/docs/mcp_guide/)
-
-[![MCP](https://img.shields.io/badge/MCP-Remote%20Server-blue?style=flat-square)](https://mcp.gosqlx.dev/health)
-[![Glama MCP Server](https://glama.ai/mcp/servers/ajitpratap0/GoSQLX/badges/score.svg)](https://glama.ai/mcp/servers/ajitpratap0/GoSQLX)
-
-</td>
-</tr>
-</table>
 
 <br/>
 

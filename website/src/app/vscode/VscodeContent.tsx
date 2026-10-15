@@ -13,8 +13,8 @@ const features = [
     description: 'Auto-format SQL files on save or on demand. Consistent, readable output every time.',
   },
   {
-    title: 'Linting L001\u2013L010',
-    description: '10 built-in lint rules covering SELECT *, missing WHERE on UPDATE/DELETE, implicit joins, and more.',
+    title: 'Linting L001\u2013L030',
+    description: '30 built-in lint rules covering SELECT *, missing WHERE on UPDATE/DELETE, implicit joins, and more.',
   },
   {
     title: 'Multi-dialect',

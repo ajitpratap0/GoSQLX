@@ -1,6 +1,6 @@
 # GoSQLX Error Codes Reference
 
-**Version**: v1.12.0
+**Version**: v1.15.0
 **Last Updated**: 2026-03-13
 
 Comprehensive reference for all error codes in GoSQLX with examples and solutions.
@@ -946,4 +946,4 @@ For the latest updates and contributions, visit [github.com/ajitpratap0/GoSQLX](
 ---
 
 **Last Updated**: December 2025
-**Version**: v1.6.0
+**Version**: v1.15.0

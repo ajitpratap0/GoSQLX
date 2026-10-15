@@ -51,6 +51,15 @@ const baseTheme = EditorView.theme({
   },
 });
 
+// Page background so the editor blends into the playground; must come after oneDark.
+const pageBackgroundTheme = EditorView.theme(
+  {
+    "&": { backgroundColor: "#09090b" },
+    ".cm-gutters": { backgroundColor: "#09090b" },
+  },
+  { dark: true },
+);
+
 export default function SqlEditor({
   value,
   onChange,
@@ -97,6 +106,7 @@ export default function SqlEditor({
       minHeightTheme,
       syntaxHighlighting(accessibleHighlight),
       oneDark,
+      pageBackgroundTheme,
       sql(),
       syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
       bracketMatching(),

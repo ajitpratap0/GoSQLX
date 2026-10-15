@@ -24,15 +24,24 @@
 //   - Performance: 1.38M+ ops/sec sustained with memory-efficient pooling
 //   - International: Full Unicode/UTF-8 support for global SQL processing
 //   - Reliability: 95%+ success rate on real-world SQL queries
-//   - Standards: Multi-dialect SQL compatibility (PostgreSQL, MySQL, SQL Server, Oracle, SQLite)
+//   - Standards: Multi-dialect SQL compatibility (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse)
 //   - SQL Compliance: ~80-85% SQL-99 compliance (window functions, CTEs, set operations)
 //   - Test Coverage: AST package 73.4%, Models package 100%
+//
+// Recommended API (v1.15.0+):
+//
+//	tree, err := gosqlx.ParseTree(ctx, sql, gosqlx.WithDialect("postgresql"))
+//	if err != nil {
+//	    return err
+//	}
+//	defer tree.Release()
+//	tables := tree.Tables()
 //
 // Core Features:
 //
 // - Zero-copy tokenization for optimal performance
 // - Object pooling for 60-80% memory reduction
-// - Multi-dialect SQL support (PostgreSQL, MySQL, SQL Server, Oracle, SQLite)
+// - Multi-dialect SQL support (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse)
 // - Thread-safe implementation with linear scaling to 128+ cores
 // - Full Unicode/UTF-8 support for international SQL
 // - Performance monitoring and metrics collection
@@ -88,7 +97,7 @@
 //	gosqlx analyze complex_query.sql                  // Advanced analysis (1M+ queries/sec)
 //	gosqlx parse -f json query.sql                    // AST generation (JSON/YAML output)
 //	gosqlx lsp                                        // Start LSP server for IDE integration
-//	gosqlx lint --config .gosqlx.yml src/**/*.sql     // SQL linting with 10 rules (L001-L010)
+//	gosqlx lint --config .gosqlx.yml src/**/*.sql     // SQL linting with 30 rules (L001-L030)
 //
 // Configuration (.gosqlx.yml):
 //
@@ -220,7 +229,7 @@
 //   - pkg/errors: Structured error handling with position tracking
 //
 // Analysis and Tooling:
-//   - pkg/linter: SQL linting with 10 built-in rules (L001-L010)
+//   - pkg/linter: SQL linting with 30 built-in rules (L001-L030)
 //   - pkg/sql/security: SQL injection detection with severity classification
 //   - pkg/metrics: Performance monitoring and observability
 //   - pkg/lsp: Language Server Protocol server for IDE integration
@@ -251,13 +260,13 @@
 //
 // # SQL Linting
 //
-// Built-in linting rules (L001-L010):
+// Built-in linting rules (L001-L030):
 //   - L001: Enforce uppercase keywords
 //   - L002: Consistent indentation
 //   - L003: Avoid SELECT *
 //   - L004: Consistent alias style
 //   - L005: Trailing whitespace
-//   - L006-L010: Additional style rules
+//   - L006-L030: Additional style, safety and performance rules
 //
 // See docs/LINTING_RULES.md for complete linting reference.
 //

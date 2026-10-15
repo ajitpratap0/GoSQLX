@@ -50,11 +50,12 @@ jobs:
         with:
           urls: |
             http://localhost:3000/
-            http://localhost:3000/playground
-            http://localhost:3000/docs
+            http://localhost:3000/playground/
+            http://localhost:3000/docs/
+            http://localhost:3000/docs/getting-started/
+            http://localhost:3000/compare/
+            http://localhost:3000/benchmarks/
+            http://localhost:3000/blog/
+          runs: 3
           configPath: '.github/lighthouse/lighthouserc.json'
           uploadArtifacts: true
-
-      - name: Check scores
-        run: |
-          echo "Lighthouse audit complete. Check artifacts for detailed results."

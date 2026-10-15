@@ -1,4 +1,4 @@
-# GoSQLX API Reference (v1.14.0)
+# GoSQLX API Reference (v1.15.0)
 
 ## Table of Contents
 
@@ -2344,6 +2344,6 @@ GoSQLX achieves **~80-85% SQL-99 compliance** with comprehensive support for:
 
 ---
 
-**Version**: 1.6.0
+**Version**: 1.15.0
 **Last Updated**: 2025-12-12
 **Minimum Go Version**: 1.21+

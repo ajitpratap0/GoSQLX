@@ -1,11 +1,10 @@
 import { Hero } from '@/components/home/Hero';
-import { TrustSection } from '@/components/home/TrustSection';
+import { ProofStrip } from '@/components/home/ProofStrip';
 import { PerformanceSection } from '@/components/home/PerformanceSection';
 import { FeatureGrid } from '@/components/home/FeatureGrid';
 import { DialectShowcase } from '@/components/home/DialectShowcase';
 import { CodeExamples } from '@/components/home/CodeExamples';
-import { McpSection } from '@/components/home/McpSection';
-import { VscodeSection } from '@/components/home/VscodeSection';
+import { UseEverywhere } from '@/components/home/UseEverywhere';
 import { CtaBanner } from '@/components/home/CtaBanner';
 import { getStars } from '@/lib/github';
 import { JsonLd } from '@/components/JsonLd';
@@ -75,13 +74,12 @@ export default async function Home() {
     <>
       <JsonLd data={homeJsonLd} />
       <Hero stars={stars} />
-      <TrustSection stars={stars} />
+      <ProofStrip stars={stars} />
       <PerformanceSection />
       <FeatureGrid />
       <DialectShowcase />
       <CodeExamples />
-      <McpSection />
-      <VscodeSection />
+      <UseEverywhere />
       <CtaBanner />
     </>
   );

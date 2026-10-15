@@ -1,6 +1,6 @@
 # GoSQLX Troubleshooting Guide
 
-**Version:** v1.6.0
+**Version:** v1.15.0
 **Last Updated:** 2025-12-12
 
 ## Table of Contents

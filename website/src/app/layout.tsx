@@ -3,7 +3,6 @@ import { inter, jetbrainsMono } from '@/lib/fonts';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Providers } from '@/components/Providers';
-import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { baseOpenGraph } from '@/lib/open-graph';
 import './globals.css';
@@ -60,7 +59,6 @@ export default function RootLayout({
           <main id="main-content" className="pt-16">{children}</main>
           <Footer />
         </Providers>
-        <Analytics />
         <SpeedInsights />
       </body>
     </html>

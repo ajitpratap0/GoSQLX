@@ -62,7 +62,7 @@ export function BarChart({ data, unit = 'ops/sec' }: BarChartProps) {
               <span className={`text-sm font-medium ${item.highlight ? 'text-white' : 'text-zinc-400'}`}>
                 {item.label}
                 {item.highlight && (
-                  <span className="ml-2 inline-block rounded-full bg-green-500/20 px-2 py-0.5 text-xs font-medium text-green-300">
+                  <span className="ml-2 inline-block rounded-full border border-brand/40 px-2 py-0.5 text-xs font-medium text-brand">
                     GoSQLX
                   </span>
                 )}

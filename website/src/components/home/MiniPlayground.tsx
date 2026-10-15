@@ -151,7 +151,7 @@ export function MiniPlayground() {
             onChange={handleSqlChange}
             spellCheck={false}
             aria-label="SQL query input"
-            className="w-full p-4 text-[14px] leading-relaxed font-mono bg-transparent resize-none max-h-[320px] min-h-[200px] focus:outline-none focus:ring-2 focus:ring-accent-indigo/50 overflow-auto"
+            className="w-full p-4 text-[14px] leading-relaxed font-mono bg-transparent resize-none max-h-[320px] min-h-[200px] focus:outline-none focus:ring-2 focus:ring-accent/50 overflow-auto"
             style={{ color: '#D4D4D8' }}
             rows={12}
           />
@@ -182,7 +182,7 @@ export function MiniPlayground() {
               </button>
             ))}
           </div>
-          <span className="ml-auto text-xs font-mono text-emerald-400">
+          <span className="ml-auto text-xs font-mono text-brand">
             {!wasmRequested
               ? 'Precomputed sample output'
               : loading
@@ -212,7 +212,7 @@ export function MiniPlayground() {
         <div className="px-4 py-2 border-t border-white/[0.06]">
           <Link
             href="/playground"
-            className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors font-medium"
+            className="text-xs text-accent hover:underline font-medium"
           >
             Open Full Playground &rarr;
           </Link>

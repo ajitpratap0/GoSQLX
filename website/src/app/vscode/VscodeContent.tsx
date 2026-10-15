@@ -13,8 +13,8 @@ const features = [
     description: 'Auto-format SQL files on save or on demand. Consistent, readable output every time.',
   },
   {
-    title: 'Linting L001\u2013L010',
-    description: '10 built-in lint rules covering SELECT *, missing WHERE on UPDATE/DELETE, implicit joins, and more.',
+    title: 'Linting L001\u2013L030',
+    description: '30 built-in lint rules covering SELECT *, missing WHERE on UPDATE/DELETE, implicit joins, and more.',
   },
   {
     title: 'Multi-dialect',
@@ -99,7 +99,7 @@ export function VscodeContent() {
                 role="region"
                 aria-label="Key Settings JSON"
                 tabIndex={0}
-                className="font-mono text-sm text-zinc-300 whitespace-pre overflow-x-auto"
+                className="font-mono text-sm text-fg whitespace-pre overflow-x-auto"
               >
 {`{
   "gosqlx.executablePath": "/usr/local/bin/gosqlx",

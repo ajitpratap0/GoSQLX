@@ -3,6 +3,7 @@ import Link from 'next/link';
 interface NavItem {
   slug: string;
   title: string;
+  category?: string;
 }
 
 interface DocNavigationProps {
@@ -18,7 +19,7 @@ export function DocNavigation({ prev, next }: DocNavigationProps) {
           href={`/docs/${prev.slug}`}
           className="glass glass-hover group flex flex-col gap-2 rounded-xl p-5 transition-all"
         >
-          <span className="text-xs font-medium uppercase tracking-wider text-text-muted">
+          <span className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
             Previous
           </span>
           <span className="flex items-center gap-2 text-sm font-medium text-zinc-300 transition-colors group-hover:text-white">
@@ -33,6 +34,7 @@ export function DocNavigation({ prev, next }: DocNavigationProps) {
             </svg>
             {prev.title}
           </span>
+          {prev.category && <span className="text-xs text-zinc-500">{prev.category}</span>}
         </Link>
       ) : (
         <div />
@@ -42,7 +44,7 @@ export function DocNavigation({ prev, next }: DocNavigationProps) {
           href={`/docs/${next.slug}`}
           className="glass glass-hover group flex flex-col items-end gap-2 rounded-xl p-5 text-right transition-all"
         >
-          <span className="text-xs font-medium uppercase tracking-wider text-text-muted">
+          <span className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
             Next
           </span>
           <span className="flex items-center gap-2 text-sm font-medium text-zinc-300 transition-colors group-hover:text-white">
@@ -57,6 +59,7 @@ export function DocNavigation({ prev, next }: DocNavigationProps) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
             </svg>
           </span>
+          {next.category && <span className="text-xs text-zinc-500">{next.category}</span>}
         </Link>
       ) : (
         <div />

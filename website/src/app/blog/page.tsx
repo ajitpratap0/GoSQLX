@@ -25,7 +25,7 @@ export default function BlogPage() {
     <div className="min-h-screen py-20 px-4">
       <div className="max-w-3xl mx-auto">
         <h1 className="text-4xl font-bold tracking-tight mb-3">Changelog</h1>
-        <p className="text-text-muted text-lg mb-12">
+        <p className="text-fg-subtle text-lg mb-12">
           Track every feature, fix, and improvement across GoSQLX releases.
         </p>
 

@@ -99,7 +99,10 @@ export function TrustSection({ stars }: { stars: number | null }) {
       <div className="max-w-5xl mx-auto px-4">
         {/* Heading */}
         <FadeIn viewport>
-          <h2 className="text-center text-sm font-semibold uppercase tracking-widest text-zinc-300 mb-10">
+          <p className="eyebrow text-center text-zinc-300 mb-2" aria-hidden="true">
+            By the numbers
+          </p>
+          <h2 className="text-center text-h2 text-zinc-100 mb-10">
             Trusted by Developers
           </h2>
         </FadeIn>
@@ -110,7 +113,7 @@ export function TrustSection({ stars }: { stars: number | null }) {
             <FadeIn viewport key={m.id} delay={i * 0.07}>
               <div className="glass text-center px-4 py-5 flex flex-col items-center gap-2">
                 {m.icon}
-                <span className="text-lg font-bold text-zinc-100">
+                <span className="stat-number text-lg font-bold text-zinc-100">
                   {m.id === 'stars' && stars !== null ? formatStars(stars) : m.value}
                 </span>
                 <span className="text-xs text-zinc-300">{m.label}</span>

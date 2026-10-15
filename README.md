@@ -74,6 +74,9 @@ claude mcp add --transport http gosqlx https://mcp.gosqlx.dev/mcp
 
 7 SQL tools in Claude, Cursor, or any MCP client. [MCP guide](https://gosqlx.dev/docs/mcp_guide/).
 
+[![MCP](https://img.shields.io/badge/MCP-Remote%20Server-blue?style=flat-square)](https://mcp.gosqlx.dev/health)
+[![Glama MCP Server](https://glama.ai/mcp/servers/ajitpratap0/GoSQLX/badges/score.svg)](https://glama.ai/mcp/servers/ajitpratap0/GoSQLX)
+
 ### GitHub Action
 
 ```yaml
@@ -87,7 +90,7 @@ claude mcp add --transport http gosqlx https://mcp.gosqlx.dev/mcp
 
 ## Quick start
 
-Source: [`examples/readme_quickstart/main.go`](examples/readme_quickstart/main.go), compiled in CI.
+Source: [`examples/readme_quickstart/main.go`](examples/readme_quickstart/main.go), compiled in CI against HEAD and the latest release.
 
 ```go
 package main

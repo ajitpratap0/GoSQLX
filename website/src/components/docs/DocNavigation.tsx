@@ -13,7 +13,7 @@ interface DocNavigationProps {
 
 export function DocNavigation({ prev, next }: DocNavigationProps) {
   return (
-    <div className="mt-16 grid grid-cols-1 gap-4 border-t border-white/5 pt-8 sm:grid-cols-2">
+    <div className="mt-16 grid grid-cols-1 gap-4 border-t border-fg/5 pt-8 sm:grid-cols-2">
       {prev ? (
         <Link
           href={`/docs/${prev.slug}`}
@@ -22,7 +22,7 @@ export function DocNavigation({ prev, next }: DocNavigationProps) {
           <span className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
             Previous
           </span>
-          <span className="flex items-center gap-2 text-sm font-medium text-zinc-300 transition-colors group-hover:text-white">
+          <span className="flex items-center gap-2 text-sm font-medium text-fg-muted transition-colors group-hover:text-fg">
             <svg
               className="h-4 w-4 shrink-0 transition-transform group-hover:-translate-x-0.5"
               fill="none"
@@ -34,7 +34,7 @@ export function DocNavigation({ prev, next }: DocNavigationProps) {
             </svg>
             {prev.title}
           </span>
-          {prev.category && <span className="text-xs text-zinc-500">{prev.category}</span>}
+          {prev.category && <span className="text-xs text-fg-subtle">{prev.category}</span>}
         </Link>
       ) : (
         <div />
@@ -47,7 +47,7 @@ export function DocNavigation({ prev, next }: DocNavigationProps) {
           <span className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
             Next
           </span>
-          <span className="flex items-center gap-2 text-sm font-medium text-zinc-300 transition-colors group-hover:text-white">
+          <span className="flex items-center gap-2 text-sm font-medium text-fg-muted transition-colors group-hover:text-fg">
             {next.title}
             <svg
               className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5"
@@ -59,7 +59,7 @@ export function DocNavigation({ prev, next }: DocNavigationProps) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
             </svg>
           </span>
-          {next.category && <span className="text-xs text-zinc-500">{next.category}</span>}
+          {next.category && <span className="text-xs text-fg-subtle">{next.category}</span>}
         </Link>
       ) : (
         <div />

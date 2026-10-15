@@ -176,7 +176,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
         transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
       >
         {/* Search input */}
-        <div className="flex items-center gap-3 border-b border-white/[0.08] px-4">
+        <div className="flex items-center gap-3 border-b border-fg/[0.08] px-4">
           <svg
             className="h-4 w-4 shrink-0 text-fg-subtle"
             fill="none"
@@ -202,12 +202,12 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search documentation..."
-            className="flex-1 bg-transparent py-3.5 text-sm text-white placeholder:text-fg-subtle outline-none"
+            className="flex-1 bg-transparent py-3.5 text-sm text-fg placeholder:text-fg-subtle outline-none"
             aria-label="Search documentation"
             autoComplete="off"
             spellCheck={false}
           />
-          <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-white/[0.1] bg-white/[0.04] px-1.5 py-0.5 font-mono text-[10px] text-fg-subtle">
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-fg/[0.1] bg-fg/[0.04] px-1.5 py-0.5 font-mono text-[10px] text-fg-subtle">
             ESC
           </kbd>
         </div>
@@ -237,8 +237,8 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
               aria-selected={i === selectedIndex}
               className={`mx-2 flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
                 i === selectedIndex
-                  ? 'bg-accent/20 text-white'
-                  : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200'
+                  ? 'bg-accent/20 text-fg'
+                  : 'text-fg-muted hover:bg-fg/[0.04] hover:text-fg'
               }`}
               onClick={() => navigate(entry)}
               onMouseEnter={() => setSelectedIndex(i)}
@@ -264,7 +264,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
                 </div>
               </div>
               {i === selectedIndex && (
-                <kbd className="hidden sm:inline-flex shrink-0 items-center rounded border border-white/[0.1] bg-white/[0.04] px-1.5 py-0.5 font-mono text-[10px] text-fg-subtle">
+                <kbd className="hidden sm:inline-flex shrink-0 items-center rounded border border-fg/[0.1] bg-fg/[0.04] px-1.5 py-0.5 font-mono text-[10px] text-fg-subtle">
                   Enter
                 </kbd>
               )}
@@ -273,17 +273,17 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
         </ul>
 
         {/* Footer */}
-        <div className="flex items-center gap-4 border-t border-white/[0.08] px-4 py-2 text-[10px] text-fg-subtle">
+        <div className="flex items-center gap-4 border-t border-fg/[0.08] px-4 py-2 text-[10px] text-fg-subtle">
           <span className="inline-flex items-center gap-1">
-            <kbd className="rounded border border-white/[0.08] bg-white/[0.03] px-1 py-0.5 font-mono">&uarr;&darr;</kbd>
+            <kbd className="rounded border border-fg/[0.08] bg-fg/[0.03] px-1 py-0.5 font-mono">&uarr;&darr;</kbd>
             navigate
           </span>
           <span className="inline-flex items-center gap-1">
-            <kbd className="rounded border border-white/[0.08] bg-white/[0.03] px-1 py-0.5 font-mono">Enter</kbd>
+            <kbd className="rounded border border-fg/[0.08] bg-fg/[0.03] px-1 py-0.5 font-mono">Enter</kbd>
             open
           </span>
           <span className="inline-flex items-center gap-1">
-            <kbd className="rounded border border-white/[0.08] bg-white/[0.03] px-1 py-0.5 font-mono">Esc</kbd>
+            <kbd className="rounded border border-fg/[0.08] bg-fg/[0.03] px-1 py-0.5 font-mono">Esc</kbd>
             close
           </span>
         </div>

@@ -13,7 +13,7 @@ export function CtaBanner() {
 
       <div className="max-w-6xl mx-auto px-4 text-center">
         <FadeIn viewport>
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">
+          <h2 className="text-3xl md:text-4xl font-bold text-fg mb-6">
             Ready to parse SQL at the speed of Go?
           </h2>
           <div className="flex flex-wrap items-center justify-center gap-4">

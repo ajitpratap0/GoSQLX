@@ -93,7 +93,7 @@ export function Hero({ stars }: { stars: number | null }) {
         </ul>
 
         {/* Live mini playground */}
-        <GlassCard hover={false} className="p-0 overflow-hidden shadow-2xl shadow-indigo-500/5">
+        <GlassCard hover={false} className="p-0 overflow-hidden shadow-2xl shadow-accent/5">
           <MiniPlayground />
         </GlassCard>
       </div>

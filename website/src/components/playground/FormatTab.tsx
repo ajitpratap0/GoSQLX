@@ -29,7 +29,7 @@ export default function FormatTab({ data }: FormatTabProps) {
 
   if (!data) {
     return (
-      <div className="flex items-center justify-center h-full text-slate-400 text-sm" aria-live="polite">
+      <div className="flex items-center justify-center h-full text-fg-muted text-sm" aria-live="polite">
         No data available. Enter a SQL query to see formatted output.
       </div>
     );
@@ -38,14 +38,14 @@ export default function FormatTab({ data }: FormatTabProps) {
   if (typeof data !== "string" && data.error) {
     return (
       <div className="p-4">
-        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+        <div className="bg-danger/10 border border-danger/30 rounded-lg p-4">
           <div className="flex items-center gap-2 text-danger font-medium mb-1">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             Format Error
           </div>
-          <p className="text-red-300 text-sm font-mono">{data.error}</p>
+          <p className="text-danger text-sm font-mono">{data.error}</p>
         </div>
       </div>
     );
@@ -53,14 +53,14 @@ export default function FormatTab({ data }: FormatTabProps) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800 bg-slate-900/30">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-fg/[0.03]">
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400 uppercase tracking-wider font-medium">Formatted SQL</span>
-          <span className="text-xs text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded">read-only</span>
+          <span className="text-xs text-fg-muted uppercase tracking-wider font-medium">Formatted SQL</span>
+          <span className="text-xs text-fg-subtle bg-bg-overlay px-1.5 py-0.5 rounded">read-only</span>
         </div>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors px-2 py-1 rounded hover:bg-slate-700/50"
+          className="flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg transition-colors px-2 py-1 rounded hover:bg-bg-overlay"
           aria-label="Copy formatted SQL to clipboard"
         >
           {copied ? (

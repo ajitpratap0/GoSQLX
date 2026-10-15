@@ -35,13 +35,13 @@ function DatabaseGlyph() {
 
 export function DialectShowcase() {
   return (
-    <section className="py-20 border-t border-white/[0.06]">
+    <section className="py-20 border-t border-fg/[0.06]">
       <div className="max-w-6xl mx-auto px-4">
         <FadeIn viewport>
-          <h2 className="text-3xl font-bold text-white text-center mb-2">
+          <h2 className="text-3xl font-bold text-fg text-center mb-2">
             {PROJECT.dialectCount} SQL Dialects, One Parser
           </h2>
-          <p className="text-zinc-300 text-center mb-12 text-lg">
+          <p className="text-fg-muted text-center mb-12 text-lg">
             From PostgreSQL to ClickHouse, selected with a single dialect string
           </p>
         </FadeIn>
@@ -57,7 +57,7 @@ export function DialectShowcase() {
                   <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-accent/10 text-accent">
                     <DatabaseGlyph />
                   </span>
-                  <h3 className="text-sm font-semibold text-white">{dialect.name}</h3>
+                  <h3 className="text-sm font-semibold text-fg">{dialect.name}</h3>
                   <code className="mt-1 text-xs text-fg-subtle">&quot;{dialect.key}&quot;</code>
                   <span className="mt-3 text-xs text-accent">
                     {dialect.qa

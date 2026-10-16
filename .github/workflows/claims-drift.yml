@@ -1,0 +1,112 @@
+name: Claims Drift and Signals
+
+# Weekly check that public claims (GitHub About text, llms.txt, README block)
+# still match scripts/gen-readme-metrics/metrics.json, and that the benchmark
+# data is not older than the latest release tag. Also logs weekly GitHub
+# signals (stars, traffic, referrers) to a tracking issue.
+#
+# About text decision (Q10): the default GITHUB_TOKEN cannot edit repository
+# settings, so this workflow only DETECTS About drift and fails; a maintainer
+# fixes it by hand (Settings > About, or `gh repo edit --description ...`).
+# A PAT-based auto-update was rejected to avoid storing an admin-scoped secret.
+#
+# Traffic endpoints (/traffic/*) need push access. Set the optional secret
+# SIGNALS_TOKEN (fine-grained PAT, Administration: read) to record them; without
+# it the traffic section is skipped with a note. pkg.go.dev "Imported by" has no
+# API and stays a manual note in the tracking issue.
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  claims-drift:
+    name: Claims match metrics.json
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: '1.26'
+          check-latest: true
+
+      - name: Self-test (a seeded stale About claim must fail)
+        run: |
+          if go run ./scripts/gen-readme-metrics --claims --about "1.5M+ ops/sec" 2>/dev/null; then
+            echo "::error::seeded About mismatch was not detected"
+            exit 1
+          fi
+
+      - name: README block and version banners
+        run: go run ./scripts/gen-readme-metrics --check
+
+      - name: llms.txt, About text and benchmark freshness
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          about="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.description // ""')"
+          go run ./scripts/gen-readme-metrics --claims --about "$about"
+
+  signals:
+    name: Weekly GitHub signals
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    env:
+      TRACKING_TITLE: 'Weekly GitHub signals'
+    steps:
+      - name: Collect and log signals
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNALS_TOKEN: ${{ secrets.SIGNALS_TOKEN }}
+        run: |
+          set -euo pipefail
+          repo="${GITHUB_REPOSITORY}"
+          today="$(date -u +%F)"
+          body="$(mktemp)"
+
+          stars="$(gh api "repos/${repo}" --jq '.stargazers_count')"
+          forks="$(gh api "repos/${repo}" --jq '.forks_count')"
+          {
+            echo "### Signals for ${today}"
+            echo
+            echo "- Stars: ${stars}"
+            echo "- Forks: ${forks}"
+          } > "$body"
+
+          if [ -n "${SIGNALS_TOKEN:-}" ]; then
+            export GH_TOKEN="$SIGNALS_TOKEN"
+            {
+              echo "- Views (14d): $(gh api "repos/${repo}/traffic/views" --jq '"\(.count) total, \(.uniques) unique"')"
+              echo "- Clones (14d): $(gh api "repos/${repo}/traffic/clones" --jq '"\(.count) total, \(.uniques) unique"')"
+              echo "- Top referrers (14d):"
+              gh api "repos/${repo}/traffic/popular/referrers" \
+                --jq '.[] | "  - \(.referrer): \(.count) views, \(.uniques) unique"'
+            } >> "$body"
+          else
+            echo "- Traffic: skipped (secret SIGNALS_TOKEN not set; /traffic/* needs push access)" >> "$body"
+          fi
+          echo "- pkg.go.dev Imported by: record manually from https://pkg.go.dev/github.com/ajitpratap0/GoSQLX?tab=importedby" >> "$body"
+
+          export GH_TOKEN="${{ github.token }}"
+          number="$(gh issue list --repo "$repo" --state all --search "\"${TRACKING_TITLE}\" in:title" \
+            --json number,title --jq "[.[] | select(.title == \"${TRACKING_TITLE}\")][0].number // empty")"
+          if [ -z "$number" ]; then
+            number="$(gh issue create --repo "$repo" --title "$TRACKING_TITLE" \
+              --body "Automated weekly log of stars, traffic and referrers (claims-drift workflow). One comment per week." \
+              | grep -oE '[0-9]+$')"
+          fi
+          gh issue comment "$number" --repo "$repo" --body-file "$body"
+          cat "$body" >> "$GITHUB_STEP_SUMMARY"

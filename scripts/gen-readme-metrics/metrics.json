@@ -9,5 +9,6 @@
   "benchmark_package": "./pkg/sql/parser/",
   "sql99_estimate": "~80–85%",
   "dialects": 8,
-  "race_conditions": 0
+  "race_conditions": 0,
+  "measured_at": "2026-10-13"
 }

@@ -1,0 +1,37 @@
+name: Lighthouse Monthly (production)
+
+# Monthly lab audit of the live site. Reports are kept as artifacts for the
+# monthly performance review (see .github/lighthouse/README.md). This run is
+# informational: it does not assert, so a regression never blocks unrelated work.
+
+on:
+  schedule:
+    - cron: '0 6 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lighthouse-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Run Lighthouse against production
+        uses: treosh/lighthouse-ci-action@3e7e23fb74242897f95c0ba9cabad3d0227b9b18 # 12.6.2
+        with:
+          urls: |
+            https://gosqlx.dev/
+            https://gosqlx.dev/playground/
+            https://gosqlx.dev/docs/
+            https://gosqlx.dev/docs/getting-started/
+            https://gosqlx.dev/compare/
+            https://gosqlx.dev/benchmarks/
+            https://gosqlx.dev/changelog/
+          runs: 3
+          configPath: '.github/lighthouse/lighthouserc.production.json'
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+          artifactName: lighthouse-production-${{ github.run_id }}

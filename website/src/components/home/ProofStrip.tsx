@@ -91,11 +91,11 @@ interface Integration {
 }
 
 const integrations: Integration[] = [
-  { name: 'Claude', detail: 'MCP server', href: '/docs/mcp-guide/', icon: 'plug' },
-  { name: 'Cursor', detail: 'MCP server', href: '/docs/mcp-guide/', icon: 'plug' },
+  { name: 'Claude', detail: 'MCP server', href: '/docs/integrations/mcp/', icon: 'plug' },
+  { name: 'Cursor', detail: 'MCP server', href: '/docs/integrations/mcp/', icon: 'plug' },
   { name: 'VS Code', detail: 'Extension', href: '/vscode/', icon: 'editor' },
-  { name: 'Neovim', detail: 'Language server', href: '/docs/editors/neovim/', icon: 'editor' },
-  { name: 'JetBrains', detail: 'Language server', href: '/docs/editors/jetbrains/', icon: 'editor' },
+  { name: 'Neovim', detail: 'Language server', href: '/docs/integrations/neovim/', icon: 'editor' },
+  { name: 'JetBrains', detail: 'Language server', href: '/docs/integrations/jetbrains/', icon: 'editor' },
 ];
 
 /* ── Component ─────────────────────────────────────────────────────────── */

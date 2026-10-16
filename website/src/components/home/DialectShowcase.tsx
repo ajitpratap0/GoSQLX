@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { PROJECT, QA_CORPUS } from '@/data/metrics';
 import { FadeIn } from '@/components/ui/FadeIn';
 
-const COMPAT_HREF = '/docs/sql-compatibility/#supported-dialects';
+const COMPAT_HREF = '/docs/reference/sql-compatibility/#supported-dialects';
 
 interface Dialect {
   name: string;

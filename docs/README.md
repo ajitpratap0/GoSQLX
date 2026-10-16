@@ -53,7 +53,7 @@ GoSQLX is a production-ready, high-performance SQL parsing SDK for Go with compr
 
 | Document | Description | Audience |
 |----------|-------------|----------|
-| [**API_REFERENCE.md**](API_REFERENCE.md) | Complete API documentation with 4,400+ lines of examples | Developers |
+| [**API_REFERENCE.md**](API_REFERENCE.md) | API reference index, with one page per package under [api/](api/) | Developers |
 | [**USAGE_GUIDE.md**](USAGE_GUIDE.md) | Detailed usage patterns, best practices, and real-world examples | All Users |
 | [**ARCHITECTURE.md**](ARCHITECTURE.md) | System design, component architecture, and internal implementation | Contributors/Advanced |
 | [**TROUBLESHOOTING.md**](TROUBLESHOOTING.md) | Common issues, error messages, debugging techniques, and FAQ | Support/Debug |
@@ -93,6 +93,16 @@ GoSQLX is a production-ready, high-performance SQL parsing SDK for Go with compr
 | [**migration/FROM_PG_QUERY.md**](migration/FROM_PG_QUERY.md) | Migrating from pg_query |
 | [**migration/FROM_SQLFLUFF.md**](migration/FROM_SQLFLUFF.md) | Migrating from SQLFluff |
 
+### Task Guides
+
+| Document | Description |
+|----------|-------------|
+| [**guides/parse-postgresql-in-go.md**](guides/parse-postgresql-in-go.md) | Parse PostgreSQL in Go |
+| [**guides/format-sql-in-go.md**](guides/format-sql-in-go.md) | Format SQL in Go |
+| [**guides/extract-table-names-from-sql-in-go.md**](guides/extract-table-names-from-sql-in-go.md) | Extract table names from SQL in Go |
+| [**guides/detect-sql-injection-in-go.md**](guides/detect-sql-injection-in-go.md) | Detect SQL injection in Go |
+| [**guides/lint-sql-in-ci.md**](guides/lint-sql-in-ci.md) | Lint SQL in CI |
+
 ### Tutorials
 
 | Document | Description |
@@ -109,7 +119,7 @@ GoSQLX is a production-ready, high-performance SQL parsing SDK for Go with compr
 4. Explore [Examples](../examples/) - Working code samples
 
 ### For Developers
-1. Read [API_REFERENCE.md](API_REFERENCE.md) - Complete API docs (4,400+ lines)
+1. Read [API_REFERENCE.md](API_REFERENCE.md) - API reference index and per-package pages
 2. Study [ARCHITECTURE.md](ARCHITECTURE.md) - System design and internals
 3. Review [USAGE_GUIDE.md](USAGE_GUIDE.md#advanced-patterns) - Advanced patterns
 4. Check [LINTING_RULES.md](LINTING_RULES.md) - SQL linting rules reference
@@ -133,7 +143,7 @@ docs/
 ├── GETTING_STARTED.md                 # 5-minute quickstart guide
 ├── CLI_GUIDE.md                       # CLI tool documentation
 ├── LSP_GUIDE.md                       # Language Server Protocol guide
-├── API_REFERENCE.md                   # Complete API documentation (4,400+ lines)
+├── API_REFERENCE.md                   # API reference index (per-package pages in api/)
 ├── USAGE_GUIDE.md                     # Usage patterns and examples
 ├── ARCHITECTURE.md                    # System architecture
 ├── TROUBLESHOOTING.md                 # Problem solving guide

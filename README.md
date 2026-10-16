@@ -1,9 +1,9 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset=".github/logo.png">
-  <source media="(prefers-color-scheme: light)" srcset=".github/logo-light.svg">
-  <img src=".github/logo-light.svg" alt="GoSQLX" width="360">
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/logo-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset=".github/assets/logo-light.svg">
+  <img src=".github/assets/logo-light.svg" alt="GoSQLX" width="240">
 </picture>
 
 # GoSQLX
@@ -26,6 +26,10 @@
 
 <sub>† Parse stage only (pre-tokenized input to AST), `SELECT id, name FROM users`, Apple M4, Go 1.27, median of 10 runs of `BenchmarkPerformanceBaseline`. Complex queries take longer (see `performance_baselines.json`). Reproduce: `go test -run ^$ -bench BenchmarkPerformanceBaseline -benchmem -count=10 ./pkg/sql/parser/`.</sub>
 <!-- metrics:end -->
+
+<br/>
+
+<img src=".github/assets/demo.gif" alt="Terminal demo: gosqlx validate, format and lint on one query, then the WASM playground" width="720">
 
 </div>
 
@@ -143,9 +147,17 @@ WHERE active = true
   SELECT with 2 columns
 ```
 
+Formatting turns one-line SQL into a readable query:
+
+![Before and after gosqlx format](.github/assets/format-before-after.png)
+
 <br/>
 
 ## Features
+
+<picture>
+  <img src=".github/assets/architecture.svg" alt="Architecture: SQL bytes go through the tokenizer to TokenWithSpan, the parser builds an AST, and the formatter, linter, security scanner, transpiler and fingerprinter consume it" width="900">
+</picture>
 
 - **[Parser](https://gosqlx.dev/docs/architecture/)** - zero-copy tokenizer, recursive descent parser and full AST generation.
 - **[Analysis](https://gosqlx.dev/docs/linting_rules/)** - SQL injection scanner, 30 lint rules (L001-L030), 20 optimizer rules and metadata extraction.

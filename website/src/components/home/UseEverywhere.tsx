@@ -15,9 +15,9 @@ const MCP_TOOLS = [
 ];
 
 const EDITORS = [
-  { name: 'Neovim', href: '/docs/editors/neovim/' },
-  { name: 'JetBrains', href: '/docs/editors/jetbrains/' },
-  { name: 'Any LSP editor', href: '/docs/lsp-guide/' },
+  { name: 'Neovim', href: '/docs/integrations/neovim/' },
+  { name: 'JetBrains', href: '/docs/integrations/jetbrains/' },
+  { name: 'Any LSP editor', href: '/docs/integrations/lsp/' },
 ];
 
 /** "Use it everywhere": the MCP server for AI assistants and the language server for editors. */
@@ -57,7 +57,7 @@ export function UseEverywhere() {
                 ))}
               </ul>
               <Link
-                href="/docs/mcp-guide/"
+                href="/docs/integrations/mcp/"
                 className="mt-auto pt-6 text-sm text-accent hover:underline inline-flex min-h-11 items-center gap-1"
               >
                 MCP guide <span aria-hidden="true">→</span>

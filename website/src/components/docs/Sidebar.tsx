@@ -60,6 +60,8 @@ export function Sidebar() {
                     onClick={() => setMobileOpen(false)}
                     aria-current={isActive(item.slug) ? 'page' : undefined}
                     className={`flex items-center rounded-md px-3 py-1.5 max-lg:min-h-11 text-sm transition-colors ${
+                      item.depth === 1 ? 'ml-3 font-mono' : ''
+                    } ${
                       isActive(item.slug)
                         ? 'border-l-2 border-accent bg-accent/10 pl-[10px] text-fg font-medium'
                         : 'border-l-2 border-transparent pl-[10px] text-fg-muted hover:text-fg hover:bg-fg/5'

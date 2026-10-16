@@ -1,12 +1,16 @@
 # GoSQLX terminal demo, rendered with VHS (https://github.com/charmbracelet/vhs).
 #
-# Regenerate from the repository root:
-#   go install ./cmd/gosqlx   # puts `gosqlx` on PATH
-#   vhs .github/assets/demo.tape
+# This tape records only the terminal segment (validate, format, lint, about
+# 12 seconds). Do not run it directly to refresh the README GIF; run
 #
-# Output: .github/assets/demo.gif (keep it under 5MB, about 12 seconds).
+#   .github/assets/build-demo.sh
+#
+# from the repository root instead. That script runs this tape, then appends
+# the playground.png segment (about 3 seconds) to produce the committed
+# .github/assets/demo.gif (about 15 seconds in total, 150KB, within the
+# 10-15 seconds issue #669 asks for).
 
-Output .github/assets/demo.gif
+Output .github/assets/demo-terminal.gif
 
 Set Shell "bash"
 Set FontSize 18
@@ -26,16 +30,16 @@ Show
 Type "gosqlx validate demo.sql"
 Sleep 400ms
 Enter
-Sleep 2s
+Sleep 1500ms
 
 Type "gosqlx format demo.sql"
 Sleep 400ms
 Enter
-Sleep 3s
+Sleep 2500ms
 
 Type "clear"
 Enter
 Type "gosqlx lint demo.sql 2>&1 | grep -E '^\[L' | head -5"
 Sleep 400ms
 Enter
-Sleep 3s
+Sleep 2500ms

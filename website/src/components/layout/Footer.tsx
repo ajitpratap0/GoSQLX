@@ -15,8 +15,8 @@ const FOOTER_LINKS = {
     { label: 'Getting Started', href: '/docs/getting-started' },
     { label: 'API Reference', href: '/docs/api-reference' },
     { label: 'Compare Parsers', href: '/compare' },
-    { label: 'Blog', href: '/blog' },
-    { label: 'Changelog', href: 'https://github.com/ajitpratap0/GoSQLX/blob/main/CHANGELOG.md', external: true },
+    { label: 'Changelog', href: '/changelog' },
+    { label: 'CHANGELOG.md on GitHub', href: 'https://github.com/ajitpratap0/GoSQLX/blob/main/CHANGELOG.md', external: true },
     { label: 'Privacy Policy', href: '/privacy' },
   ],
   Community: [
@@ -54,7 +54,7 @@ export function Footer() {
                 <h3 className="text-sm font-medium text-fg-muted mb-3">{category}</h3>
                 <ul>
                   {links.map((link) => (
-                    <li key={link.label}>
+                    <li key={link.href}>
                       {'external' in link && link.external ? (
                         <a
                           href={link.href}

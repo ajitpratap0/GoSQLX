@@ -3,7 +3,7 @@ import { PROJECT } from '@/data/metrics';
 export const NAV_LINKS = [
   { href: '/docs', label: 'Docs' },
   { href: '/playground', label: 'Playground' },
-  { href: '/blog', label: 'Changelog' },
+  { href: '/changelog', label: 'Changelog' },
   { href: '/vscode', label: 'VS Code' },
   { href: '/benchmarks', label: 'Benchmarks' },
   { href: '/compare', label: 'Compare' },

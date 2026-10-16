@@ -59,6 +59,10 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
+      // /blog was release notes only; it is now /changelog. Single hop, trailing slashes kept.
+      { source: '/blog', destination: '/changelog/', permanent: true },
+      { source: '/blog/feed.xml', destination: '/changelog/feed.xml', permanent: true },
+      { source: '/blog/:slug', destination: '/changelog/:slug/', permanent: true },
       { source: '/docs/getting_started', destination: '/docs/getting-started', permanent: true },
       { source: '/docs/usage_guide', destination: '/docs/usage-guide', permanent: true },
       { source: '/docs/api_reference', destination: '/docs/api-reference', permanent: true },

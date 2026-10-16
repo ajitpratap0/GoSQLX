@@ -14,7 +14,7 @@ Budgets are the measured value plus roughly 20-30% headroom for CI variance.
 | `/` | 0.63, 0.80, 0.80 | 339 KB | 114 KB | 18 KB | 2.90 MB (2.4 MB is non-script/non-font assets) |
 | `/compare/` | 0.87, 0.89, 0.89 | 329 KB | 114 KB | 18 KB | 0.49 MB |
 
-The other audited routes (`/playground/`, `/docs/`, `/docs/getting-started/`, `/benchmarks/`, `/blog/`) share the
+The other audited routes (`/playground/`, `/docs/`, `/docs/getting-started/`, `/benchmarks/`, `/changelog/`) share the
 same layout chunks; their per-route numbers are in the uploaded Lighthouse artifacts. The local run was cut short by
 a full disk, so only `/` and `/compare/` were measured locally.
 

@@ -55,7 +55,7 @@ jobs:
             http://localhost:3000/docs/getting-started/
             http://localhost:3000/compare/
             http://localhost:3000/benchmarks/
-            http://localhost:3000/blog/
+            http://localhost:3000/changelog/
           runs: 3
           configPath: '.github/lighthouse/lighthouserc.json'
           uploadArtifacts: true

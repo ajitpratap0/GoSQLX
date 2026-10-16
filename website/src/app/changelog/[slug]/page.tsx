@@ -23,7 +23,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return pageMeta({
     title: `${post.title} release notes`,
     description: post.description,
-    path: `/blog/${slug}/`,
+    path: `/changelog/${slug}/`,
     type: 'article',
     openGraph: {
       publishedTime: post.date ? `${post.date}T00:00:00Z` : undefined,
@@ -59,7 +59,7 @@ export default async function BlogPostPage({ params }: Props) {
     description: post.description,
     datePublished: post.date ? `${post.date}T00:00:00Z` : undefined,
     dateModified: post.updated ? `${post.updated}T00:00:00Z` : undefined,
-    url: `https://gosqlx.dev/blog/${slug}/`,
+    url: `https://gosqlx.dev/changelog/${slug}/`,
     author: {
       '@type': 'Organization',
       name: 'GoSQLX',
@@ -82,7 +82,7 @@ export default async function BlogPostPage({ params }: Props) {
     },
     mainEntityOfPage: {
       '@type': 'WebPage',
-      '@id': `https://gosqlx.dev/blog/${slug}/`,
+      '@id': `https://gosqlx.dev/changelog/${slug}/`,
     },
   };
 
@@ -91,8 +91,8 @@ export default async function BlogPostPage({ params }: Props) {
     '@type': 'BreadcrumbList',
     itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://gosqlx.dev/' },
-      { '@type': 'ListItem', position: 2, name: 'Release Notes', item: 'https://gosqlx.dev/blog/' },
-      { '@type': 'ListItem', position: 3, name: post.title, item: `https://gosqlx.dev/blog/${slug}/` },
+      { '@type': 'ListItem', position: 2, name: 'Release Notes', item: 'https://gosqlx.dev/changelog/' },
+      { '@type': 'ListItem', position: 3, name: post.title, item: `https://gosqlx.dev/changelog/${slug}/` },
     ],
   };
 
@@ -103,7 +103,7 @@ export default async function BlogPostPage({ params }: Props) {
         <article className="max-w-3xl mx-auto">
         {/* Back link */}
         <Link
-          href="/blog"
+          href="/changelog"
           className="inline-flex items-center gap-1.5 text-sm text-fg-subtle hover:text-fg-muted transition-colors mb-8"
         >
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -134,7 +134,7 @@ export default async function BlogPostPage({ params }: Props) {
 
         {/* Social share */}
         {(() => {
-          const postUrl = `https://gosqlx.dev/blog/${slug}/`;
+          const postUrl = `https://gosqlx.dev/changelog/${slug}/`;
           const shareText = encodeURIComponent(`${post.title} — GoSQLX`);
           const shareUrl = encodeURIComponent(postUrl);
           return (

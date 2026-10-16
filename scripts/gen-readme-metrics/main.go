@@ -6,6 +6,9 @@
 //
 //	go run ./scripts/gen-readme-metrics           # rewrite README.md and docs banners
 //	go run ./scripts/gen-readme-metrics --check   # exit 1 if anything has drifted
+//	go run ./scripts/gen-readme-metrics --claims [--about "text"]
+//	                                              # exit 1 if llms.txt, the About text
+//	                                              # or benchmark dates disagree with metrics.json
 //
 // Metric blocks live between <!-- metrics:start --> / <!-- metrics:end -->
 // (table + footnote) and <!-- metrics-inline:start --> / <!-- metrics-inline:end -->
@@ -36,6 +39,7 @@ type metrics struct {
 	SQL99Estimate    string `json:"sql99_estimate"`
 	Dialects         int    `json:"dialects"`
 	RaceConditions   int    `json:"race_conditions"`
+	MeasuredAt       string `json:"measured_at"`
 }
 
 func (m metrics) parsesPerSec() string {
@@ -110,6 +114,8 @@ func latestTag() (string, error) {
 func run() error {
 	check := flag.Bool("check", false, "fail if generated content differs from the files on disk")
 	versionFlag := flag.String("version", "", "release version without leading v (default: latest git tag)")
+	claims := flag.Bool("claims", false, "check llms.txt, the About text and benchmark freshness against metrics.json instead of the README blocks")
+	about := flag.String("about", "", "with --claims: the GitHub About (repository description) text to verify")
 	flag.Parse()
 
 	version := strings.TrimPrefix(*versionFlag, "v")
@@ -131,6 +137,20 @@ func run() error {
 	}
 	if m.ParseNsPerOp <= 0 {
 		return fmt.Errorf("metrics.json: parse_ns_per_op must be positive")
+	}
+
+	if *claims {
+		aboutSet := false
+		flag.Visit(func(f *flag.Flag) { aboutSet = aboutSet || f.Name == "about" })
+		problems, err := runClaims(m, version, *about, aboutSet)
+		if err != nil {
+			return err
+		}
+		if len(problems) > 0 {
+			return fmt.Errorf("claims drifted from metrics.json:\n  - %s", strings.Join(problems, "\n  - "))
+		}
+		fmt.Printf("ok: claims match metrics.json at v%s (About text checked: %t)\n", version, aboutSet)
+		return nil
 	}
 
 	var drift []string

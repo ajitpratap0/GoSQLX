@@ -17,7 +17,7 @@ Constants: `TokenTypeSelect`, `TokenTypeFrom`, `TokenTypeWhere`, `TokenTypeIdent
 
 **v1.6.0 Enhancements:**
 - **120+ new SQL token types** with proper categorization
-- `ModelType` field for O(1) int-based comparisons (14x faster)
+- `ModelType` field for O(1) int-based comparisons
 - Helper methods: `IsKeyword()`, `IsOperator()`, `IsLiteral()`, `IsDMLKeyword()`, `IsDDLKeyword()`, etc.
 
 ### `TokenWithSpan`

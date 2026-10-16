@@ -95,6 +95,5 @@ format:
 max_depth: 100
 ```
 
-**v1.6.0 Performance:**
-- **22.5x faster config file loading** with caching (1302ns vs 29379ns)
+**Caching:**
 - Thread-safe cache with automatic invalidation on file modification

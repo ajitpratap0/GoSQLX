@@ -48,7 +48,6 @@ export default function DocsPage() {
         {DOCS_SIDEBAR.map((group, i) => {
           // Package pages (depth 1) are reachable from the API Reference page; list top-level pages only.
           const pages = group.items.filter((item) => !item.depth);
-          const shown = pages.slice(0, 5);
           return (
             <FadeIn viewport key={group.category} delay={i * 0.06}>
               <section className="glass block h-full rounded-xl p-6" aria-labelledby={`docs-cat-${i}`}>
@@ -60,7 +59,7 @@ export default function DocsPage() {
                 <h2 id={`docs-cat-${i}`} className="text-lg font-semibold text-fg">{group.category}</h2>
                 <p className="mt-1 text-sm text-fg-subtle">{group.summary}</p>
                 <ul className="mt-3">
-                  {shown.map((item) => (
+                  {pages.map((item) => (
                     <li key={item.slug}>
                       <Link
                         href={`/docs/${item.slug}/`}
@@ -70,9 +69,6 @@ export default function DocsPage() {
                       </Link>
                     </li>
                   ))}
-                  {pages.length > shown.length && (
-                    <li className="py-1 text-sm text-fg-subtle">+{pages.length - shown.length} more in the sidebar</li>
-                  )}
                 </ul>
               </section>
             </FadeIn>

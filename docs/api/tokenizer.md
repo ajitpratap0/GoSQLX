@@ -68,7 +68,7 @@ tokens, err := tkz.TokenizeContext(ctx, []byte("SELECT * FROM users"))
 | `TokenTypeHashMinus` | `#-` | ✅ **NEW v1.6.0** PostgreSQL delete at path |
 
 **Features:**
-- **14x faster token type checking** (v1.6.0 optimization with ModelType field)
+- O(1) integer-based token type checking via the ModelType field
 - Unicode support (UTF-8)
 - Dialect-specific tokens (PostgreSQL, MySQL, SQL Server, Oracle, SQLite)
 - Zero-copy operations

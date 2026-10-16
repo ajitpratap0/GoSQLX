@@ -61,7 +61,7 @@ defer ast.ReleaseAST(ast)
 ```
 
 ### `ParseMultiple(queries []string) ([]*ast.AST, error)`
-Parse multiple SQL statements efficiently (40-60% faster than individual Parse calls).
+Parse multiple SQL statements in one call (see [benchmarks](/benchmarks/) for measured numbers).
 
 ```go
 queries := []string{

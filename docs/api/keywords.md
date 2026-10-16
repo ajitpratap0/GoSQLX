@@ -79,8 +79,7 @@ Get keywords by category.
 ### `GetSuggestions(prefix string, maxResults int) []string`
 Get keyword suggestions for autocomplete.
 
-**v1.6.0 Performance:**
-- **575x faster** with caching system (12.87ns vs 7402ns)
+Suggestions are served from an LRU cache. See [benchmarks](/benchmarks/) for measured performance.
 
 ```go
 suggestions := keywords.GetSuggestions("SEL", 5)

@@ -141,8 +141,6 @@ import (
     "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
     "github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
     "github.com/ajitpratap0/GoSQLX/pkg/sql/security"
-    "github.com/ajitpratap0/GoSQLX/pkg/linter"
-    "github.com/ajitpratap0/GoSQLX/pkg/linter/rules"
     "github.com/ajitpratap0/GoSQLX/pkg/metrics"
     "github.com/ajitpratap0/GoSQLX/pkg/config"
 )
@@ -160,7 +158,7 @@ func main() {
     }()
 
     sql := `
-        -- PostgreSQL v1.6.0 features demonstration
+        -- PostgreSQL features demonstration
         WITH RECURSIVE active_users AS (
             SELECT id, name, manager_id, 1 as level
             FROM employees
@@ -221,8 +219,10 @@ func main() {
     }
 
     // Lint SQL
-    linter := linter.New(rules.AllRules()...)
-    lintResult := linter.LintString(sql, "demo.sql")
+    lintResult, err := gosqlx.Lint(sql)
+    if err != nil {
+        log.Fatal(err)
+    }
 
     if len(lintResult.Violations) > 0 {
         fmt.Printf("\nLinting violations: %d\n", len(lintResult.Violations))

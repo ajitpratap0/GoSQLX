@@ -5,7 +5,6 @@ This document provides comprehensive security analysis, operational security set
 ## 🛡️ Comprehensive Security Assessment
 
 **Analysis Date**: 2026-02-28
-**Version**: v1.15.0
 **Security Score**: 9.0/10 ⭐⭐⭐⭐⭐
 
 ---
@@ -14,7 +13,7 @@ This document provides comprehensive security analysis, operational security set
 
 GoSQLX has undergone a comprehensive security analysis across 7 critical security domains. The library demonstrates **strong security characteristics** suitable for production deployment with **minimal security concerns**.
 
-### Security Package (v1.4+, updated v1.9.0)
+### Security Package
 
 GoSQLX now includes a dedicated **SQL Injection Detection** package (`pkg/sql/security`) that provides:
 
@@ -24,7 +23,7 @@ GoSQLX now includes a dedicated **SQL Injection Detection** package (`pkg/sql/se
 - **Thread-Safe**: Safe for concurrent use across goroutines
 - **High Performance**: 100,000+ queries/second scanning throughput
 
-### Tautology Detection (v1.9.0)
+### Tautology Detection
 
 `ScanSQL()` detects always-true conditions commonly used in SQL injection:
 
@@ -35,7 +34,7 @@ GoSQLX now includes a dedicated **SQL Injection Detection** package (`pkg/sql/se
 
 **Severity**: CRITICAL (`PatternTautology`)
 
-### UNION Detection (v1.9.0)
+### UNION Detection
 
 UNION-based injection detection is now split into two patterns to eliminate false positives:
 
@@ -62,7 +61,7 @@ See [the security package reference](api/security.md) for complete documentation
 ✅ **HARDENED**: Robust input validation and error handling
 ✅ **RESILIENT**: Excellent memory safety and resource management
 ✅ **COMPLIANT**: Safe Unicode handling across international character sets
-✅ **PROACTIVE**: Built-in SQL injection pattern detection (NEW in v1.4+)
+✅ **PROACTIVE**: Built-in SQL injection pattern detection 
 ⚠️ **MONITOR**: Large input processing requires operational monitoring  
 
 ---
@@ -205,7 +204,7 @@ See [the security package reference](api/security.md) for complete documentation
 
 ## 🔐 CLI Input Sanitization (QW-009)
 
-**Implementation Status**: ✅ COMPLETE (v1.4.0)
+**Implementation Status**: ✅ COMPLETE (since v1.4.0)
 
 ### CLI Security Architecture
 
@@ -616,12 +615,12 @@ _, _ = fmt.Fprintf(w, "output")
 
 ## 📈 Security Roadmap
 
-### v1.0.1 Security Enhancements
+### Security Enhancements
 - [ ] Add configurable input size limits
 - [ ] Enhance error message sanitization
 - [ ] Add security-focused benchmarks
 
-### v1.1 Security Features
+### Additional Security Features
 - [ ] Implement fuzzing integration
 - [ ] Add security metrics collection
 - [ ] Enhance resource usage monitoring

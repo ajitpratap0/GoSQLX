@@ -52,12 +52,12 @@ echo "select * from users where age>18" | gosqlx format
 echo "SELECT COUNT(*) FROM orders GROUP BY status" | gosqlx analyze
 ```
 
-**Available CLI Commands (v1.14.0):**
+**Available CLI Commands:**
 - `validate` - Ultra-fast SQL validation with security scanning
 - `format` - High-performance SQL formatting with style options
 - `analyze` - Advanced SQL analysis with complexity metrics
 - `parse` - AST structure inspection (JSON/text output)
-- `lint` - Check SQL code for style issues (30 built-in rules)
+- `lint` - Check SQL code for style issues (rules L001-L010; all 30 rules run through the Go library with `gosqlx.Lint`)
 - `transpile` - Convert SQL between dialects (MySQL ↔ PostgreSQL, PostgreSQL → SQLite)
 - `optimize` - Run optimization advisor (OPT-001 through OPT-020)
 - `action` - GitHub Actions integration with annotations
@@ -67,13 +67,13 @@ echo "SELECT COUNT(*) FROM orders GROUP BY status" | gosqlx analyze
 - `config` - Manage configuration files (.gosqlx.yml)
 - `completion` - Shell autocompletion for bash/zsh/fish
 
-**New in v1.14.0:**
+**More CLI examples:**
 ```bash
 # Security scanning for SQL injection
 gosqlx validate --security query.sql
 
 # Lint SQL files with auto-fix
-gosqlx lint --fix queries/*.sql
+gosqlx lint --auto-fix queries/*.sql
 
 # Start LSP server for VSCode/Neovim
 gosqlx lsp --log /tmp/lsp.log
@@ -132,7 +132,7 @@ go run main.go
 
 **That's it!** Just 3 lines of code. No pool management, no manual cleanup - everything is handled automatically.
 
-For a tour of the v1.14.0 features (PostgreSQL extensions, security scanning, linting), see the [Feature Tour](FEATURE_TOUR.md).
+For a tour of the features (PostgreSQL extensions, security scanning, linting), see the [Feature Tour](FEATURE_TOUR.md).
 
 ---
 
@@ -175,14 +175,13 @@ func ProcessBatch(queries []string) error {
 ### Lint SQL Before Deployment
 ```go
 func ValidateCodeStyle(sql string) error {
-    l := linter.New()
-    violations, err := l.Lint(sql)
+    result, err := gosqlx.Lint(sql)
     if err != nil {
         return err
     }
 
-    if len(violations) > 0 {
-        return fmt.Errorf("found %d style violations", len(violations))
+    if len(result.Violations) > 0 {
+        return fmt.Errorf("found %d style violations", len(result.Violations))
     }
 
     return nil
@@ -201,7 +200,7 @@ func ValidateCodeStyle(sql string) error {
     gosqlx validate --security queries/*.sql
 
     # Enforce style
-    gosqlx lint --check migrations/*.sql queries/*.sql
+    gosqlx lint --fail-on-warn migrations/*.sql queries/*.sql
 
     # Format check
     gosqlx format --check --diff queries/*.sql
@@ -234,7 +233,7 @@ gosqlx lsp --log /tmp/lsp.log
 - **[API Reference](API_REFERENCE.md)** - Complete API documentation
 - **[Examples](https://github.com/ajitpratap0/GoSQLX/tree/main/examples)** - Real-world code examples
 
-### v1.14.0 Feature Guides:
+### Feature Guides:
 - **Dialect-Aware Transforms:**
   - `transform.FormatSQLWithDialect(stmt, dialect)` for dialect-specific SQL output
   - `transform.ParseSQLWithDialect(sql, dialect)` for dialect-aware parsing
@@ -315,7 +314,7 @@ gosqlx validate "your SQL here"
 
 ---
 
-## v1.14.0 Feature Highlights
+## Feature Highlights
 
 ### Production-Ready Performance
 - **~0.6 µs** to parse a window-function query (parse stage only, Apple M4, Go 1.27; see `performance_baselines.json`)
@@ -344,7 +343,7 @@ gosqlx validate "your SQL here"
 - ✓ Installing GoSQLX (library and CLI)
 - ✓ Validating and formatting SQL with CLI
 - ✓ Parsing SQL in Go applications with simple API
-- ✓ Using v1.14.0 features (dialect-aware transforms, transpilation, schema introspection, 30 linter rules)
+- ✓ Using advanced features (dialect-aware transforms, transpilation, schema introspection, 30 linter rules)
 - ✓ Common use cases and patterns
 - ✓ Where to find more help
 
@@ -356,4 +355,4 @@ gosqlx validate "your SQL here"
 
 ---
 
-*Built by the GoSQLX community - Production-ready since v1.12.0, ClickHouse dialect since v1.13.0, dialect-aware transforms since v1.14.0*
+*Built by the GoSQLX community*

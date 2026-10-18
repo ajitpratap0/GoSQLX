@@ -1,7 +1,5 @@
 # GoSQLX Performance Tuning Guide
 
-**Last Updated:** 2025-12-11
-**GoSQLX Version:** v1.15.0
 **Target Audience:** Production engineers, performance engineers, developers optimizing high-throughput systems
 
 This comprehensive guide helps you achieve optimal performance with GoSQLX in production environments. We cover profiling techniques, object pool optimization, concurrent processing patterns, memory management, and benchmark-driven optimization.
@@ -24,7 +22,7 @@ This comprehensive guide helps you achieve optimal performance with GoSQLX in pr
 
 ---
 
-## Quick Reference: v1.6.0 Performance Tuning
+## Quick Reference: Performance Tuning
 
 This quick reference provides immediate guidance for optimal GoSQLX performance. For detailed explanations, see the sections below.
 
@@ -95,7 +93,7 @@ Before deploying to production:
 | High latency spikes | Cold pools | Pre-warm pools during startup |
 | Low pool hit rate (<90%) | Forgotten defer or leaking goroutines | Audit pool get/put calls |
 
-### Performance By Numbers (v1.6.0 Validated)
+### Performance By Numbers
 
 **Sequential Processing:**
 - Throughput: 139,648 ops/sec
@@ -119,9 +117,9 @@ Before deploying to production:
 
 ## Performance Overview
 
-### Validated Performance Metrics (v1.6.0)
+### Validated Performance Metrics
 
-GoSQLX v1.6.0 has undergone comprehensive performance validation with real-world workloads. All metrics below are from production-grade testing with race detection enabled.
+GoSQLX has undergone comprehensive performance validation with real-world workloads. All metrics below are from production-grade testing with race detection enabled.
 
 #### Core Performance Metrics
 
@@ -311,7 +309,7 @@ GoSQLX uses `sync.Pool` extensively to achieve zero-allocation performance in ho
 | **Statement Pools** | Reuse SELECT/INSERT/UPDATE/DELETE | ~10 ns/op, 0 allocs | `pkg/sql/ast/pool.go` |
 | **Expression Pools** | Reuse identifiers, binary expressions | ~8 ns/op, 0 allocs | `pkg/sql/ast/pool.go` |
 
-**Validated Pool Efficiency (v1.6.0):**
+**Validated Pool Efficiency:**
 - **Hit Rate:** 95-98% in production workloads
 - **Memory Reduction:** 60-80% vs non-pooled implementation
 - **Allocation Reduction:** 95%+ (from ~50 allocs/op to <3 allocs/op)
@@ -444,7 +442,7 @@ func monitorBufferPoolEfficiency() {
 
 GoSQLX achieves excellent memory efficiency through zero-copy operations and object pooling:
 
-**Memory Metrics (v1.6.0):**
+**Memory Metrics:**
 - **Heap Stability:** Stable 50-60 MB over 24-hour soak tests
 - **Per-Query Memory:** 536 B (simple) to 3 KB (complex with pooling)
 - **Pool Overhead:** ~15-20 MB for typical pool sizes
@@ -725,7 +723,7 @@ func processParallel(queries [][]byte) {
 
 The LSP server has specific performance characteristics and tuning options:
 
-#### LSP Performance Metrics (v1.6.0)
+#### LSP Performance Metrics
 
 | Operation | Latency (p50) | Latency (p99) | Rate Limit | Notes |
 |-----------|---------------|---------------|------------|-------|
@@ -1028,7 +1026,7 @@ func processWithWorkerPool(queries [][]byte) {
 }
 ```
 
-**Performance Characteristics (Validated v1.6.0):**
+**Performance Characteristics:**
 - **Throughput:** 1.09M ops/sec (10 workers), 1.38M ops/sec (16 workers)
 - **Scaling:** 7.81x speedup with 10 workers (78% efficiency)
 - **Memory:** Stable at 55 MB for 10 workers, 75 MB for 16 workers
@@ -1164,7 +1162,7 @@ func BenchmarkYourWorkload(b *testing.B) {
     }
 }
 
-// Expected results for reference (v1.6.0 baselines):
+// Expected results for reference (baselines):
 // BenchmarkYourWorkload-8    1091264    1095 ns/op    880 B/op    12 allocs/op
 //
 // Compare your results:
@@ -1202,7 +1200,7 @@ func BenchmarkParallelProcessing(b *testing.B) {
     }
 }
 
-// Expected scaling (v1.6.0 validated):
+// Expected scaling (validated):
 // Workers=1    139648 ops/sec
 // Workers=4    235465 ops/sec (1.69x)
 // Workers=10   1091264 ops/sec (7.81x)
@@ -1387,9 +1385,9 @@ func memoryConstrainedProcess(queries [][]byte) {
 
 ## Production Deployment Checklist
 
-### Pre-Deployment Validation (v1.6.0 Requirements)
+### Pre-Deployment Validation
 
-GoSQLX v1.6.0 is production-ready, but follow these validation steps for your specific deployment:
+GoSQLX is production-ready, but follow these validation steps for your specific deployment:
 
 #### Required Validations
 
@@ -1658,7 +1656,7 @@ http.HandleFunc("/validate", func(w http.ResponseWriter, r *http.Request) {
 9. **Always run race detector** - `go test -race ./...` is mandatory
 10. **LSP: Use incremental sync + AST caching** - 10-50x faster than full sync
 
-### Production-Validated Performance Budget (v1.6.0)
+### Production-Validated Performance Budget
 
 Target these metrics in your deployment. All values are from production-grade testing:
 

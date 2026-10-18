@@ -15,7 +15,7 @@ type TokenType int
 
 Constants: `TokenTypeSelect`, `TokenTypeFrom`, `TokenTypeWhere`, `TokenTypeIdentifier`, etc.
 
-**v1.6.0 Enhancements:**
+**Enhancements:**
 - **120+ new SQL token types** with proper categorization
 - `ModelType` field for O(1) int-based comparisons
 - Helper methods: `IsKeyword()`, `IsOperator()`, `IsLiteral()`, `IsDMLKeyword()`, `IsDDLKeyword()`, etc.
@@ -54,5 +54,5 @@ Create token with span.
 ### `(t TokenType) String() string`
 Get string representation.
 
-**v1.6.0 Enhancement:**
+**Enhancement:**
 - Complete hash map implementation covering all 90+ token types (optimized for performance)

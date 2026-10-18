@@ -8,6 +8,7 @@
 import fixture from "./bridgeContract.fixture.json";
 import type {
   AnalysisData,
+  ErrorSpan,
   LintData,
   LintViolation,
   OptimizationReport,
@@ -25,6 +26,8 @@ type GoAnalyze = typeof fixture.analyze;
 // the bridge's AnalyzeResponse, so it is excluded from that comparison.
 export const contractChecks: Record<string, true> = {
   lint: true satisfies SameKeys<GoLint, LintData>,
+  lintErrorSpan: true satisfies SameKeys<GoLint["parse_error_span"], ErrorSpan>,
+  analyzeErrorSpan: true satisfies SameKeys<GoAnalyze["parse_error_span"], ErrorSpan>,
   lintViolation: true satisfies SameKeys<GoLint["violations"][number], LintViolation>,
   analyze: true satisfies SameKeys<GoAnalyze, Omit<AnalysisData, "error">>,
   security: true satisfies SameKeys<GoAnalyze["security"], SecurityReport>,

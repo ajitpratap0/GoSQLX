@@ -42,7 +42,7 @@
 //	    log.Fatal(err)
 //	}
 //	rules := cfg.Apply(allRules)
-//	l := linter.NewWithConfig(cfg, rules...)
+//	l := linter.NewWithIgnore(cfg, rules...)
 //
 // Unknown rule IDs in the config file are reported via Config.Warnings but do
 // not cause Load to fail. This allows forward compatibility when older

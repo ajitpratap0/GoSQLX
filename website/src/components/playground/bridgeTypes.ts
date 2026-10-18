@@ -1,6 +1,21 @@
 // JSON contract of the playground WASM bridge (wasm/internal/bridge/bridge.go).
 // Keep these shapes in step with the Go response types' JSON tags.
 
+/**
+ * Where a parse error sits in the submitted SQL. Lines and columns are 1-based;
+ * columns count UTF-16 code units, like JavaScript string indices. The end is
+ * exclusive and equals the start when the error sits between characters (for
+ * example at the end of the input).
+ */
+export interface ErrorSpan {
+  code?: string;
+  message: string;
+  line: number;
+  column: number;
+  end_line: number;
+  end_column: number;
+}
+
 export interface LintViolation {
   rule: string;
   rule_name: string;
@@ -15,6 +30,8 @@ export interface LintViolation {
 export interface LintData {
   /** Set when the SQL does not parse in the selected dialect. */
   parse_error?: string;
+  /** Locates parse_error when the parser reported a position. */
+  parse_error_span?: ErrorSpan;
   /** Set when the linter itself failed, or when the WASM call threw. */
   error?: string;
   violations?: LintViolation[];
@@ -60,6 +77,8 @@ export interface OptimizationReport {
 export interface AnalysisData {
   /** Set when the SQL does not parse; no scores are computed then. */
   parse_error?: string;
+  /** Locates parse_error when the parser reported a position. */
+  parse_error_span?: ErrorSpan;
   /** Set when the WASM call threw. */
   error?: string;
   security?: SecurityReport;

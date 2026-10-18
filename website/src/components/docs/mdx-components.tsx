@@ -60,7 +60,7 @@ export const mdxComponents = {
   ),
 
   table: (props: ComponentPropsWithoutRef<'table'>) => (
-    <div className="overflow-x-auto">
+    <div className="docs-table-wrap overflow-x-auto">
       <table {...props} className="w-full text-sm" />
     </div>
   ),

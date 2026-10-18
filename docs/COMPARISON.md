@@ -1,6 +1,5 @@
 # GoSQLX vs Alternatives: Comprehensive Comparison
 
-**Last Updated:** 2025-12-11
 **GoSQLX Version:** v1.15.0
 
 This guide helps you choose the right SQL parsing tool for your needs. We provide an honest assessment of GoSQLX's strengths and limitations compared to popular alternatives.
@@ -19,7 +18,7 @@ This guide helps you choose the right SQL parsing tool for your needs. We provid
 | **Zero Dependencies** | ✅ Yes | ❌ No | ❌ No | ✅ Yes | ⚠️ Minimal |
 | **SQL Validation** | ✅ Fast | ✅ Rules-based | ❌ No | ✅ Yes | ✅ Yes |
 | **SQL Formatting** | ✅ Fast | ✅ Full | ✅ Opinionated | ⚠️ Basic | ❌ No |
-| **Linting Rules** | ✅ 10 rules (L001-L010) | ✅ 60+ rules | ❌ No | ❌ No | ❌ No |
+| **Linting Rules** | ✅ 30 rules (L001-L030) | ✅ 60+ rules | ❌ No | ❌ No | ❌ No |
 | **Multi-Dialect** | ✅ 5 dialects | ✅ 60+ dialects | ⚠️ Limited | ⚠️ 4 dialects | ❌ PostgreSQL only |
 | **CLI Tool** | ✅ Fast | ✅ Feature-rich | ✅ Simple | ❌ No | ⚠️ Limited |
 | **Library API** | ✅ Simple | ✅ Complex | ⚠️ Limited | ✅ Full | ✅ Full |
@@ -191,7 +190,7 @@ SQLFluff:    ~50 KB   (25x)
 **Don't Choose GoSQLX if:**
 
 ⚠️ **You need comprehensive linting (60+ rules)**
-- SQLFluff has 60+ rules, GoSQLX has 10 rules (L001-L010) in v1.6.0
+- SQLFluff has 60+ rules, GoSQLX has 30 rules (L001-L030)
 
 ❌ **You need 60+ SQL dialects**
 - GoSQLX supports 5 dialects
@@ -310,7 +309,5 @@ See individual migration guides for code examples and patterns.
 
 ---
 
-**Last Updated:** 2025-11-28
-**Version:** v1.15.0
 
 *Benchmark numbers are reproducible. See `/benchmarks` directory.*

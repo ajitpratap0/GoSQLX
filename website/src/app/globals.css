@@ -362,9 +362,11 @@ body {
   --shiki-token-link: var(--info);
 }
 
-/* Skip rendering offscreen code blocks and tables on long docs pages. */
+/* Skip rendering offscreen code blocks and tables on long docs pages. The table
+   wrapper (not the table) is the contained box: paint containment on the table
+   itself clipped wide tables at 390px before the wrapper's overflow-x scroll. */
 .prose pre,
-.prose table {
+.prose .docs-table-wrap {
   content-visibility: auto;
   contain-intrinsic-size: auto 240px;
 }

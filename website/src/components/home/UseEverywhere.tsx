@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { FadeIn } from '@/components/ui/FadeIn';
-import { TerminalMockup } from '@/components/ui/TerminalMockup';
+import { ReproduceSnippet } from '@/components/home/ReproduceSnippet';
 import { Button } from '@/components/ui/Button';
 import { PROJECT } from '@/data/metrics';
 
@@ -13,6 +13,9 @@ const MCP_TOOLS = [
   'detect_injection',
   'list_dialects',
 ];
+
+const MCP_ADD_COMMAND = 'claude mcp add --transport http gosqlx https://mcp.gosqlx.dev/mcp';
+const LSP_INSTALL_COMMAND = 'go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest';
 
 const EDITORS = [
   { name: 'Neovim', href: '/docs/integrations/neovim/' },
@@ -42,10 +45,10 @@ export function UseEverywhere() {
               <p className="text-sm text-fg-muted mb-5">
                 Connect {PROJECT.mcpToolCount} SQL tools to Claude, Cursor or any MCP client. No installation, no API key.
               </p>
-              <TerminalMockup
-                command="claude mcp add --transport http gosqlx https://mcp.gosqlx.dev/mcp"
-                output={`Added gosqlx (${PROJECT.mcpToolCount} tools available)`}
-              />
+              <ReproduceSnippet command={MCP_ADD_COMMAND} what="MCP install command" />
+              <p className="mt-2 font-mono text-xs text-fg-subtle">
+                Added gosqlx ({PROJECT.mcpToolCount} tools available)
+              </p>
               <ul className="mt-4 flex flex-wrap gap-2" aria-label="MCP tools">
                 {MCP_TOOLS.map((tool) => (
                   <li
@@ -85,7 +88,10 @@ export function UseEverywhere() {
                   Extension details
                 </Button>
               </div>
-              <ul className="mt-6 space-y-1">
+              <div className="mt-5">
+                <ReproduceSnippet command={LSP_INSTALL_COMMAND} what="CLI install command" />
+              </div>
+              <ul className="mt-4 space-y-1">
                 {EDITORS.map((e) => (
                   <li key={e.name}>
                     <Link

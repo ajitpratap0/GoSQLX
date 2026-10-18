@@ -40,9 +40,9 @@ export const PROJECT = {
 
 /** QA-corpus pass rates, labelled with the release they were measured on. */
 export const QA_CORPUS = {
-  release: 'v1.14.0',
+  release: 'v1.15.0',
   snowflake: { pass: 87, total: 87 },
-  clickhouse: { pass: 69, total: 83 },
+  clickhouse: { pass: 83, total: 83 },
 } as const;
 
 export const BENCH_ENV = {

@@ -179,7 +179,19 @@ export function MiniPlayground() {
     [parse, dialect, activeTab],
   );
 
-  const tabLabel = TABS.find((t) => t.id === activeTab)?.label ?? '';
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const onTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, i: number) => {
+    const last = TABS.length - 1;
+    let next: number | null = null;
+    if (e.key === 'ArrowRight') next = i === last ? 0 : i + 1;
+    else if (e.key === 'ArrowLeft') next = i === 0 ? last : i - 1;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = last;
+    if (next === null) return;
+    e.preventDefault();
+    setActiveTab(TABS[next].id);
+    tabRefs.current[next]?.focus();
+  };
   const dialectLabel = DIALECTS.find((d) => d.value === dialect)?.label ?? dialect;
   // Before WASM is ready, show the precomputed output for the untouched sample.
   const precomputed = activeTab === 'format' ? SAMPLE_FORMATTED : activeTab === 'tree' ? SAMPLE_TREE : '';
@@ -199,7 +211,7 @@ export function MiniPlayground() {
       onPointerDownCapture={requestWasm}
     >
       {/* Left: SQL input */}
-      <div className="text-left min-w-0">
+      <div className="text-left min-w-0 flex flex-col">
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-fg/[0.06]">
           <div className="flex gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-danger/60" />
@@ -214,7 +226,7 @@ export function MiniPlayground() {
               value={dialect}
               onChange={(e) => setDialect(e.target.value)}
               aria-label="SQL dialect"
-              className="bg-bg-overlay text-fg-muted text-xs rounded px-1.5 py-0.5 border border-fg/[0.06] focus:outline-none focus:border-accent/50 appearance-none cursor-pointer"
+              className="bg-bg-overlay text-fg-muted text-xs rounded px-1.5 py-0.5 min-h-11 md:min-h-8 border border-fg/[0.06] focus:outline-none focus:border-accent/50 appearance-none cursor-pointer"
             >
               {DIALECTS.map((d) => (
                 <option key={d.value} value={d.value}>{d.label}</option>
@@ -222,15 +234,15 @@ export function MiniPlayground() {
             </select>
           </div>
         </div>
-        <div className="code-surface relative">
+        {/* The editor fills whatever height the card has (the output pane is fixed height) */}
+        <div className="code-surface relative flex-1 min-h-[200px]">
           <textarea
             value={sql}
             onChange={handleSqlChange}
             spellCheck={false}
             aria-label="SQL query input"
-            className="w-full p-4 text-[14px] leading-relaxed font-mono bg-transparent resize-none max-h-[180px] min-h-[160px] md:max-h-[320px] md:min-h-[200px] focus:outline-none focus:ring-2 focus:ring-accent/50 overflow-auto"
+            className="absolute inset-0 h-full w-full p-4 text-[14px] leading-relaxed font-mono bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-accent/50 overflow-auto"
             style={{ color: '#D4D4D8' }}
-            rows={12}
           />
           <div
             className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-bg-raised to-transparent pointer-events-none md:hidden"
@@ -243,13 +255,21 @@ export function MiniPlayground() {
       <div className="text-left min-w-0 flex flex-col">
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-fg/[0.06]">
           <div className="flex gap-1" role="tablist" aria-label="Output format">
-            {TABS.map((tab) => (
+            {TABS.map((tab, i) => (
               <button
                 key={tab.id}
+                ref={(el) => {
+                  tabRefs.current[i] = el;
+                }}
+                type="button"
                 role="tab"
+                id={`mini-tab-${tab.id}`}
                 aria-selected={activeTab === tab.id}
+                aria-controls="mini-output-panel"
+                tabIndex={activeTab === tab.id ? 0 : -1}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-2 py-0.5 text-xs font-mono rounded transition-colors ${
+                onKeyDown={(e) => onTabKeyDown(e, i)}
+                className={`inline-flex items-center min-h-11 md:min-h-8 px-3 md:px-2 text-xs font-mono rounded transition-colors ${
                   activeTab === tab.id
                     ? 'bg-accent/20 text-accent border border-accent/30'
                     : 'text-fg-muted hover:text-fg'
@@ -272,8 +292,10 @@ export function MiniPlayground() {
         </div>
         <div
           role="tabpanel"
-          aria-label={tabLabel}
-          className="flex-1 overflow-auto max-h-[320px]"
+          id="mini-output-panel"
+          aria-labelledby={`mini-tab-${activeTab}`}
+          tabIndex={0}
+          className="h-[260px] md:h-[320px] overflow-auto"
         >
           {parseError ? (
             <pre className="p-4 text-[14px] leading-relaxed font-mono whitespace-pre-wrap" style={{ color: '#F87171' }}>
@@ -288,7 +310,7 @@ export function MiniPlayground() {
         <div className="px-4 py-2 border-t border-fg/[0.06]">
           <Link
             href="/playground"
-            className="text-xs text-accent hover:underline font-medium"
+            className="inline-flex min-h-11 md:min-h-8 items-center text-xs text-accent hover:underline font-medium"
           >
             Open Full Playground &rarr;
           </Link>

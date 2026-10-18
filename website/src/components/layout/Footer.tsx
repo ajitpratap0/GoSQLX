@@ -34,7 +34,7 @@ export function Footer() {
     <FadeIn>
       <footer className="relative mt-24 border-t border-fg/[0.06]">
         {/* Gradient accent line */}
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-accent to-accent-warm opacity-40" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-accent to-accent-warm-decor opacity-40" />
 
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">

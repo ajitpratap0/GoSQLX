@@ -78,9 +78,9 @@ export function CodeExamplesTabs({ examples }: { examples: ApiExample[] }) {
       </div>
       <GlassCard hover={false} className="p-0 overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-fg/[0.06]">
-          <div aria-hidden="true" className="w-3 h-3 rounded-full bg-danger/60" />
-          <div aria-hidden="true" className="w-3 h-3 rounded-full bg-warn/60" />
-          <div aria-hidden="true" className="w-3 h-3 rounded-full bg-ok/60" />
+          <div aria-hidden="true" className="w-3 h-3 rounded-full bg-dot-red" />
+          <div aria-hidden="true" className="w-3 h-3 rounded-full bg-dot-yellow" />
+          <div aria-hidden="true" className="w-3 h-3 rounded-full bg-dot-green" />
           <span className="text-xs text-fg-subtle ml-2">main.go</span>
         </div>
         {examples.map((ex, i) => (

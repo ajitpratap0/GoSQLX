@@ -216,9 +216,9 @@ export function MiniPlayground() {
       <div className="text-left min-w-0 flex flex-col">
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-fg/[0.06]">
           <div className="flex gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-danger/60" />
-            <span className="w-2.5 h-2.5 rounded-full bg-warn/60" />
-            <span className="w-2.5 h-2.5 rounded-full bg-ok/60" />
+            <span className="w-2.5 h-2.5 rounded-full bg-dot-red" />
+            <span className="w-2.5 h-2.5 rounded-full bg-dot-yellow" />
+            <span className="w-2.5 h-2.5 rounded-full bg-dot-green" />
           </div>
           <span className="text-xs text-fg-muted font-mono ml-2">query.sql</span>
           <div className="ml-auto flex items-center gap-1.5">

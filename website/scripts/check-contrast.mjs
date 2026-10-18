@@ -3,7 +3,7 @@
  * WCAG AA contrast gate for the design tokens in src/app/globals.css (#665).
  *
  * Parses the :root (dark) and html.light (light) token blocks and checks every
- * text/UI token pair against the three surfaces. Text pairs need 4.5:1, UI
+ * text/UI token pair against the four surfaces (incl. --code-bg). Text pairs need 4.5:1, UI
  * pairs 3:1. Also fails if an html.light override rule other than the token
  * block comes back (components must use token utilities instead).
  *
@@ -46,7 +46,8 @@ function ratio(a, b) {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-const SURFACES = ['bg', 'bg-raised', 'bg-overlay'];
+// code-bg: every code block (#762); syntax colours map onto the TEXT tokens below.
+const SURFACES = ['bg', 'bg-raised', 'bg-overlay', 'code-bg'];
 const TEXT = ['fg', 'fg-muted', 'fg-subtle', 'accent', 'accent-warm', 'danger', 'ok', 'warn', 'info', 'violet', 'cyan'];
 const UI = ['brand'];
 const FILLS = [['brand-fg', 'brand'], ['accent-fg', 'accent']];
@@ -75,7 +76,7 @@ for (const [theme, vars] of Object.entries(themes)) {
   for (const [fg, bg] of FILLS) check(theme, fg, bg, 4.5, vars);
 }
 
-// Code surfaces stay dark in both themes: their restored tokens are the dark set.
+// Code surfaces use --code-bg in both themes (no forced-dark token restore).
 const overrides = css.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => /html\.light/.test(l));
 if (overrides.length !== 1 || overrides[0].trim() !== 'html.light {') {
   failures.push(`html.light override rules are not allowed outside the token block:\n  ${overrides.join('\n  ')}`);

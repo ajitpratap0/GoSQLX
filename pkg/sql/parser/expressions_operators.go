@@ -147,8 +147,9 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			}, nil
 		}
 
-		// Parse pattern
-		pattern, err := p.parsePrimaryExpression()
+		// Parse the pattern at the string-concatenation level so arithmetic
+		// and || bind tighter than LIKE: a LIKE b || '%' (#596).
+		pattern, err := p.parseStringConcatExpression()
 		if err != nil {
 			return nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse LIKE pattern: %v", err),
@@ -174,7 +175,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			operator = "RLIKE"
 		}
 		p.advance()
-		pattern, err := p.parsePrimaryExpression()
+		pattern, err := p.parseStringConcatExpression()
 		if err != nil {
 			return nil, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse REGEXP pattern: %v", err),
@@ -352,8 +353,12 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			}, nil
 		}
 
-		// Parse the right side of the expression
-		right, err := p.parsePrimaryExpression()
+		// Parse the right operand at the same level as the left one (string
+		// concatenation, which includes the additive and multiplicative
+		// levels), so arithmetic binds tighter than comparison: a = 1 + 2 is
+		// a = (1 + 2) (#596). Comparisons stay non-chaining: a second
+		// comparison operator is left for the caller, which rejects it.
+		right, err := p.parseStringConcatExpression()
 		if err != nil {
 			return nil, err
 		}

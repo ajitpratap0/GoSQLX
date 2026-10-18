@@ -155,6 +155,12 @@ textarea[class*="font-mono"] {
 
 html {
   overflow-x: clip;
+  /* Fixed header is 4rem tall (h-16); keep anchor targets clear of it site-wide. */
+  scroll-padding-top: 5rem;
+}
+
+[id] {
+  scroll-margin-top: 5rem;
 }
 
 /* In @layer base so Tailwind utilities (font-*, tracking-*) can still override. */

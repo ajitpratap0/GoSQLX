@@ -55,13 +55,13 @@ export default function RootLayout({
       <body className="font-sans overflow-x-clip">
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-fg focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-bg focus:shadow-lg focus:outline-none"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[60] focus:rounded-md focus:bg-fg focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-bg focus:shadow-lg focus:outline-none"
         >
           Skip to main content
         </a>
         <Providers>
           <Navbar />
-          <main id="main-content" className="pt-16">{children}</main>
+          <main id="main-content" tabIndex={-1} className="pt-16 focus:outline-none">{children}</main>
           <Footer />
         </Providers>
         <SpeedInsights />

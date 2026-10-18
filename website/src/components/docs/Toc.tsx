@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface TocProps {
   headings: { id: string; text: string; level: number }[];
@@ -10,6 +10,20 @@ interface TocProps {
 
 export function Toc({ headings, variant = 'rail' }: TocProps) {
   const [activeId, setActiveId] = useState<string>('');
+  const navRef = useRef<HTMLElement>(null);
+
+  // Keep the active entry visible inside the scrollable rail (scroll only the nav, never the page).
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav || !activeId) return;
+    const link = nav.querySelector<HTMLElement>(`a[href="#${CSS.escape(activeId)}"]`);
+    if (!link) return;
+    const navRect = nav.getBoundingClientRect();
+    const linkRect = link.getBoundingClientRect();
+    if (linkRect.top < navRect.top || linkRect.bottom > navRect.bottom) {
+      nav.scrollTop += linkRect.top - navRect.top - nav.clientHeight / 2 + linkRect.height / 2;
+    }
+  }, [activeId]);
 
   useEffect(() => {
     if (headings.length === 0) return;
@@ -86,7 +100,11 @@ export function Toc({ headings, variant = 'rail' }: TocProps) {
   }
 
   return (
-    <nav aria-label="On this page" className="sticky top-20 hidden xl:block">
+    <nav
+      ref={navRef}
+      aria-label="On this page"
+      className="sticky top-20 hidden max-h-[calc(100vh-6rem)] overflow-y-auto overscroll-contain xl:block"
+    >
       <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
         On this page
       </h4>

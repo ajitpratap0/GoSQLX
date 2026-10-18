@@ -62,13 +62,14 @@ function CheckIcon() {
       viewBox="0 0 20 20"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
+      className="text-ok"
       aria-label="Yes"
       role="img"
     >
-      <circle cx="10" cy="10" r="10" fill="rgba(34,197,94,0.15)" />
+      <circle cx="10" cy="10" r="10" style={{ fill: "color-mix(in srgb, currentColor 15%, transparent)" }} />
       <path
         d="M6 10.5L8.5 13L14 7.5"
-        stroke="#22c55e"
+        stroke="currentColor"
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -85,13 +86,14 @@ function XIcon() {
       viewBox="0 0 20 20"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
+      className="text-fg-subtle"
       aria-label="No"
       role="img"
     >
-      <circle cx="10" cy="10" r="10" fill="rgba(113,113,122,0.15)" />
+      <circle cx="10" cy="10" r="10" style={{ fill: "color-mix(in srgb, currentColor 15%, transparent)" }} />
       <path
         d="M7 7L13 13M13 7L7 13"
-        stroke="#71717a"
+        stroke="currentColor"
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"

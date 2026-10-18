@@ -34,6 +34,13 @@
   --accent: #818CF8;       /* links, focus ring */
   --accent-fg: #0A0A0F;    /* text on accent fills */
   --accent-warm: #FB923C;  /* sparing highlights */
+  /* Decorative (non-text) fills: bright in both themes, never used for text. */
+  --accent-warm-decor: #FB923C;
+  --dot-red: #FF5F57;
+  --dot-yellow: #FEBC2E;
+  --dot-green: #28C840;
+  --hero-glow-strength: 1;
+  --hero-dot-strength: 3%;
 
   --danger: #F87171;
   --ok: #4ADE80;
@@ -78,6 +85,9 @@ html.light {
   --accent: #4F46E5;
   --accent-fg: #FFFFFF;
   --accent-warm: #9A3412;
+  --accent-warm-decor: #F97316;
+  --hero-glow-strength: 0.5;
+  --hero-dot-strength: 14%;
 
   --danger: #B91C1C;
   --ok: #166534;
@@ -122,6 +132,10 @@ html.light {
   --color-accent: var(--accent);
   --color-accent-fg: var(--accent-fg);
   --color-accent-warm: var(--accent-warm);
+  --color-accent-warm-decor: var(--accent-warm-decor);
+  --color-dot-red: var(--dot-red);
+  --color-dot-yellow: var(--dot-yellow);
+  --color-dot-green: var(--dot-green);
 
   --color-danger: var(--danger);
   --color-ok: var(--ok);

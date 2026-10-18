@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	gerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
@@ -71,6 +72,59 @@ func TestErrorSpan_Positions(t *testing.T) {
 				t.Errorf("message should be the one-line error text, got %q", span.Message)
 			}
 		})
+	}
+}
+
+// Wrapped errors repeat the wrapped error's formatted text (prefix, hint and
+// help URL) in their own message; the span reports only the root cause.
+func TestErrorSpan_NestedErrorsReportRootCause(t *testing.T) {
+	tests := []struct {
+		name    string
+		sql     string
+		want    spanPos
+		code    string
+		message string
+	}{
+		{"wrapped as cause", "INSERT INTO t VALUES (1, )", spanPos{1, 26, 1, 27},
+			"E2001", "unexpected token: RPAREN (')')"},
+		{"flattened into the message", "WITH x AS (SELECT 1 SELECT 2) SELECT * FROM x", spanPos{1, 21, 1, 27},
+			"E2002", "expected FROM, semicolon, or end of statement, got SELECT"},
+		{"tokenizer error under E2004", "SELECT 'abc", spanPos{1, 8, 1, 9},
+			"E1002", "unterminated string literal"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Parse(tt.sql, "generic")
+			if err == nil {
+				t.Fatalf("expected a parse error for %q", tt.sql)
+			}
+			span := errorSpan(tt.sql, err)
+			if span == nil {
+				t.Fatalf("expected a span for %q (error: %v)", tt.sql, err)
+			}
+			if got := (spanPos{span.Line, span.Column, span.EndLine, span.EndColumn}); got != tt.want {
+				t.Errorf("span = %+v, want %+v", got, tt.want)
+			}
+			if span.Code != tt.code {
+				t.Errorf("code = %q, want %q", span.Code, tt.code)
+			}
+			if span.Message != tt.message {
+				t.Errorf("message = %q, want %q", span.Message, tt.message)
+			}
+			for _, bad := range []string{"\n", "Hint:", "Help:", "http", "Error E"} {
+				if strings.Contains(span.Message, bad) {
+					t.Errorf("message contains %q: %q", bad, span.Message)
+				}
+			}
+		})
+	}
+}
+
+func TestErrorSpan_SummarizeKeepsPlainMessage(t *testing.T) {
+	e := &gerrors.Error{Code: "E2002", Message: "expected FROM\n\nHint: x"}
+	code, msg := summarize(e)
+	if code != "E2002" || msg != "expected FROM" {
+		t.Errorf("summarize = (%q, %q), want (%q, %q)", code, msg, "E2002", "expected FROM")
 	}
 }
 

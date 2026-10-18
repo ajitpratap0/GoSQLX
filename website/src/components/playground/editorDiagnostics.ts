@@ -7,7 +7,7 @@
 // design tokens so they follow the light and dark themes. The editor's content
 // element gets aria-invalid and an aria-describedby message. Any edit clears
 // the marker until the next parse reports a new one.
-import { EditorState, StateEffect, StateField, type Extension, type Text, type TransactionSpec } from "@codemirror/state";
+import { EditorState, Prec, StateEffect, StateField, type Extension, type Text, type TransactionSpec } from "@codemirror/state";
 import { EditorView, ViewPlugin, keymap, type ViewUpdate } from "@codemirror/view";
 import { diagnosticCount, lintGutter, lintKeymap, linter, setDiagnosticsEffect, type Diagnostic } from "@codemirror/lint";
 import type { ErrorSpan } from "./bridgeTypes";
@@ -48,6 +48,17 @@ const errorMessage = StateField.define<string | null>({
   },
 });
 
+// The last message announced through the live region. Unlike errorMessage it
+// survives edits, so an error that is cleared by typing and then reported
+// again unchanged is not announced twice; it resets when a parse succeeds.
+const announcedMessage = StateField.define<string | null>({
+  create: () => null,
+  update(value, tr) {
+    for (const e of tr.effects) if (e.is(setErrorMessage)) return e.value;
+    return value;
+  },
+});
+
 // Edits invalidate the marker: drop it in the same transaction as the change.
 const clearOnEdit = EditorState.transactionExtender.of((tr) =>
   tr.docChanged && diagnosticCount(tr.startState) > 0 ? { effects: setDiagnosticsEffect.of([]) } : null,
@@ -55,23 +66,33 @@ const clearOnEdit = EditorState.transactionExtender.of((tr) =>
 
 let nextDescriptionId = 0;
 
-// A visually hidden element holding the message, referenced by aria-describedby.
+// Visually hidden elements: one holds the message and is referenced by
+// aria-describedby; a polite live region announces each newly found error
+// once, so screen-reader users hear about it while typing.
 const description = ViewPlugin.fromClass(
   class {
     readonly dom: HTMLElement;
+    readonly live: HTMLElement;
     constructor(view: EditorView) {
       this.dom = document.createElement("span");
       this.dom.id = `sql-editor-error-${++nextDescriptionId}`;
       this.dom.className = "cm-sr-only";
       this.dom.textContent = view.state.field(errorMessage) ?? "";
-      view.dom.appendChild(this.dom);
+      this.live = document.createElement("span");
+      this.live.className = "cm-sr-only";
+      this.live.setAttribute("role", "status");
+      this.live.setAttribute("aria-live", "polite");
+      view.dom.append(this.dom, this.live);
     }
     update(update: ViewUpdate) {
       const message = update.state.field(errorMessage);
       if (message !== update.startState.field(errorMessage)) this.dom.textContent = message ?? "";
+      const announced = update.state.field(announcedMessage);
+      if (announced !== update.startState.field(announcedMessage)) this.live.textContent = announced ?? "";
     }
     destroy() {
       this.dom.remove();
+      this.live.remove();
     }
   },
   {
@@ -153,10 +174,17 @@ export function parseErrorMarker(): Extension {
     lintGutter(),
     keymap.of(lintKeymap),
     errorMessage,
+    announcedMessage,
     clearOnEdit,
     description,
-    markerTheme,
+    // Above oneDark, whose own panel colours would otherwise win in dark mode.
+    Prec.highest(markerTheme),
   ];
+}
+
+/** The last message announced through the live region, or null after a successful parse. */
+export function announcedErrorMessage(state: EditorState): string | null {
+  return state.field(announcedMessage, false) ?? null;
 }
 
 /** The announced message for the marked parse error, or null when none is marked. */
@@ -176,7 +204,7 @@ export function errorMarkerTransaction(state: EditorState, marker: EditorErrorMa
   // The editor was built without parseErrorMarker() (e.g. a read-only pane).
   if (current === undefined) return null;
   if (!marker) {
-    return current === null && diagnosticCount(state) === 0
+    return current === null && diagnosticCount(state) === 0 && state.field(announcedMessage, false) == null
       ? null
       : { effects: [setDiagnosticsEffect.of([]), setErrorMessage.of(null)] };
   }

@@ -92,6 +92,8 @@ export default function SqlEditor({
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The latest marker, applied again when the editor is rebuilt.
+  const errorMarkerRef = useRef(errorMarker);
 
   // Keep onChange ref current without recreating the editor
   useEffect(() => {
@@ -160,6 +162,10 @@ export default function SqlEditor({
 
     viewRef.current = view;
 
+    // A rebuilt editor shows the current marker without waiting for the next parse.
+    const initialMarker = errorMarkerTransaction(view.state, errorMarkerRef.current);
+    if (initialMarker) view.dispatch(initialMarker);
+
     // Follow the site theme toggle (ThemeToggle flips the `light` class on <html>).
     const observer = new MutationObserver(() => {
       view.dispatch({
@@ -200,6 +206,7 @@ export default function SqlEditor({
   // Show (or clear) the parse error marker. Declared after the value sync so a
   // marker computed for new external text is applied to that text.
   useEffect(() => {
+    errorMarkerRef.current = errorMarker;
     const view = viewRef.current;
     if (!view) return;
     const tr = errorMarkerTransaction(view.state, errorMarker);

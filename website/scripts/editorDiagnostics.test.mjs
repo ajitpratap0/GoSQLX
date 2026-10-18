@@ -8,6 +8,7 @@ import { diagnosticCount, forEachDiagnostic } from '@codemirror/lint';
 import {
   describeErrorSpan,
   errorMarkerTransaction,
+  announcedErrorMessage,
   markedErrorMessage,
   parseErrorMarker,
   spanToDiagnostic,
@@ -80,6 +81,24 @@ test('an edit clears the marker and its message', () => {
   const edited = marked.update({ changes: { from: 0, insert: ' ' } }).state;
   assert.equal(diagnosticCount(edited), 0);
   assert.equal(markedErrorMessage(edited), null);
+});
+
+test('the announced message survives edits and is reset by a successful parse', () => {
+  const state = stateWith(SQL);
+  const marked = state.update(errorMarkerTransaction(state, { source: SQL, span: SPAN })).state;
+  assert.equal(announcedErrorMessage(marked), describeErrorSpan(SPAN));
+
+  // Typing drops the marker but keeps the announcement, so the same error
+  // reported again for the new text is not announced twice.
+  const edited = marked.update({ changes: { from: 0, insert: ' ' } }).state;
+  assert.equal(markedErrorMessage(edited), null);
+  assert.equal(announcedErrorMessage(edited), describeErrorSpan(SPAN));
+
+  // A successful parse (null marker) still clears the announcement.
+  const spec = errorMarkerTransaction(edited, null);
+  assert.ok(spec);
+  assert.equal(announcedErrorMessage(edited.update(spec).state), null);
+  assert.equal(errorMarkerTransaction(edited.update(spec).state, null), null);
 });
 
 test('an editor without parseErrorMarker() is left alone', () => {

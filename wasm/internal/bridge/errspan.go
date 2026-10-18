@@ -16,6 +16,7 @@ package bridge
 
 import (
 	stderrors "errors"
+	"regexp"
 	"sort"
 	"strings"
 	"unicode/utf16"
@@ -43,21 +44,45 @@ type ErrorSpan struct {
 	EndColumn int    `json:"end_column"`
 }
 
-// positionedError returns the outermost structured error in err's chain that
-// carries a position. Wrappers such as the parser's "tokenization error"
-// (E2004) have none; the tokenizer error they wrap does.
+// positionedError returns the innermost structured error in err's chain that
+// carries a position: the root cause the parser reported. Wrappers such as the
+// parser's "tokenization error" (E2004) may have no position at all, and those
+// that do repeat the wrapped error's full text in their own message.
 func positionedError(err error) *gerrors.Error {
+	var found *gerrors.Error
 	for err != nil {
 		var e *gerrors.Error
 		if !stderrors.As(err, &e) {
-			return nil
+			break
 		}
 		if e.Location.Line >= 1 && e.Location.Column >= 1 {
-			return e
+			found = e
 		}
 		err = e.Unwrap()
 	}
-	return nil
+	return found
+}
+
+// embeddedError matches the "Error E2002 at line 1, column 21: " prefix that
+// an error's formatted text carries when a wrapper flattens it into its own
+// message instead of keeping it as the cause.
+var embeddedError = regexp.MustCompile(`Error (E\d{4}) at line \d+, column \d+: `)
+
+// summarize returns the code and one-line message of the innermost error that
+// e describes. Some wrappers embed the wrapped error's formatted text (prefix,
+// source excerpt, hint and help URL) in their message rather than keeping it
+// as the cause; the last embedded error is the root cause, and only the first
+// line of its text is the message.
+func summarize(e *gerrors.Error) (string, string) {
+	code, msg := string(e.Code), e.Message
+	if m := embeddedError.FindAllStringSubmatchIndex(msg, -1); len(m) > 0 {
+		last := m[len(m)-1]
+		code, msg = msg[last[2]:last[3]], msg[last[1]:]
+	}
+	if i := strings.IndexByte(msg, '\n'); i >= 0 {
+		msg = msg[:i]
+	}
+	return code, strings.TrimSpace(msg)
 }
 
 // tokenEndAt returns the end of the token that starts at loc, if the SQL
@@ -116,9 +141,10 @@ func errorSpan(sql string, err error) *ErrorSpan {
 
 	line, col := src.utf16Position(start)
 	endLine, endCol := src.utf16Position(end)
+	code, msg := summarize(e)
 	return &ErrorSpan{
-		Code:      string(e.Code),
-		Message:   e.Message,
+		Code:      code,
+		Message:   msg,
 		Line:      line,
 		Column:    col,
 		EndLine:   endLine,

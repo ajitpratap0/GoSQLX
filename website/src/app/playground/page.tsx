@@ -46,7 +46,8 @@ export default function PlaygroundPage() {
         crossOrigin="anonymous"
       />
       <ServiceWorkerRegister />
-      <div className="border-b border-border bg-bg-raised px-4 py-3">
+      <div className="border-b border-border bg-bg-raised">
+       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-3">
         <h1 className="text-lg font-semibold text-fg">
           Online Go SQL Parser Playground
         </h1>
@@ -63,8 +64,9 @@ export default function PlaygroundPage() {
             examples.
           </p>
         </noscript>
+       </div>
       </div>
-      <div className="h-[calc(100vh-64px-96px)] min-h-[480px]">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-[calc(100vh-64px-96px)] min-h-[480px]">
         <PlaygroundLoader />
       </div>
     </>

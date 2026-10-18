@@ -128,14 +128,14 @@ sql := "SELECT * FORM users" // Typo: FORM instead of FROM
 SELECT, FROM, WHERE, JOIN, LEFT, RIGHT, INNER, OUTER, GROUP, ORDER, HAVING, LIMIT, OFFSET, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, TRUNCATE, WITH, UNION, EXCEPT, INTERSECT, CASE, WHEN, THEN, ELSE, END, AND, OR, NOT, IN, BETWEEN, LIKE, IS, NULL, AS, DISTINCT, COUNT, SUM, AVG, MIN, MAX, OVER, PARTITION, ROW_NUMBER, RANK, DENSE_RANK, LAG, LEAD, MERGE, ROLLUP, CUBE, GROUPING, FETCH, ROWS, RANGE
 
 **Example:**
-```go
+````go
 // Hovering over "SELECT" shows:
 **SELECT** - Retrieves data from one or more tables.
 
 ```sql
 SELECT column1, column2 FROM table_name;
 ```
-```
+````
 
 ### **4. Code Completion**
 - `textDocument/completion` - SQL keywords and snippets

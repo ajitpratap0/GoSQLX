@@ -6,6 +6,7 @@ import { compileMDX } from 'next-mdx-remote/rsc';
 import remarkGfm from 'remark-gfm';
 import { JsonLd } from '@/components/JsonLd';
 import { blogPostHref, getAllPosts, getPostBySlug, getPostSlugs } from '@/lib/blog';
+import { remarkChangelogHeadings, remarkGithubIssueRefs } from '@/lib/remark-changelog';
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -41,7 +42,7 @@ export default async function BlogPostPage({ params }: Props) {
     options: {
       mdxOptions: {
         format: 'md',
-        remarkPlugins: [remarkGfm],
+        remarkPlugins: [remarkGfm, remarkChangelogHeadings, remarkGithubIssueRefs],
       },
     },
   });
@@ -128,7 +129,7 @@ export default async function BlogPostPage({ params }: Props) {
         </header>
 
         {/* Content */}
-        <div className="prose prose-invert prose-dark max-w-none prose-headings:font-semibold prose-a:text-accent prose-a:no-underline hover:prose-a:underline [&_:not(pre)>code]:bg-bg-raised prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-raised prose-pre:border prose-pre:border-border prose-hr:border-border">
+        <div className="prose prose-invert prose-dark max-w-none prose-headings:font-semibold prose-a:text-accent prose-a:underline prose-a:decoration-accent/50 prose-a:underline-offset-2 prose-a:hover:decoration-accent [&_:not(pre)>code]:bg-bg-raised prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-raised prose-pre:border prose-pre:border-border prose-hr:border-border [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto">
           {content}
         </div>
 

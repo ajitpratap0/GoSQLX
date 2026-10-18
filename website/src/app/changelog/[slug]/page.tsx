@@ -6,6 +6,7 @@ import { compileMDX } from 'next-mdx-remote/rsc';
 import remarkGfm from 'remark-gfm';
 import { JsonLd } from '@/components/JsonLd';
 import { blogPostHref, getAllPosts, getPostBySlug, getPostSlugs } from '@/lib/blog';
+import { remarkChangelogHeadings, remarkGithubIssueRefs } from '@/lib/remark-changelog';
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -41,7 +42,7 @@ export default async function BlogPostPage({ params }: Props) {
     options: {
       mdxOptions: {
         format: 'md',
-        remarkPlugins: [remarkGfm],
+        remarkPlugins: [remarkGfm, remarkChangelogHeadings, remarkGithubIssueRefs],
       },
     },
   });

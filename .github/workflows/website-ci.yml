@@ -60,6 +60,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Unit tests (changelog splitter and renderer)
+        run: npm test
+
       - name: Metrics drift check
         run: |
           node scripts/check-metrics-drift.mjs --self-test

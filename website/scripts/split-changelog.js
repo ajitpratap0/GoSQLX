@@ -1,86 +1,122 @@
+/**
+ * Splits CHANGELOG.md into one Markdown file per released version under
+ * src/content/blog/ (rendered at /changelog/<slug>/).
+ *
+ * Every `## [X.Y.Z]` heading starts a release. Heading formats vary across the
+ * file's history, and all of these are accepted:
+ *
+ *   ## [1.10.4] - 2026-03-14 — AST-based LSP Formatting   (em dash subtitle)
+ *   ## [1.9.0] - 2026-02-28 - SQLite PRAGMA, ...           (hyphen subtitle)
+ *   ## [1.0.2] - 2025-08-23                               (no subtitle)
+ *   ## [0.8.0] - 2023-12-01 [Pre-release]                 (bracketed tag)
+ *
+ * A release ends at the next `## ` heading of any kind, so trailing non-release
+ * sections ("Version History Summary", "Upgrade Guide", "Support") and the
+ * `[x.y.z]: https://...` link reference footer never leak into the last page.
+ * A heading that starts like a release but cannot be parsed fails the build
+ * instead of silently merging into the previous release.
+ */
 const fs = require('fs');
 const path = require('path');
 
-const changelogPath = path.resolve(__dirname, '../../CHANGELOG.md');
-const blogDir = path.resolve(__dirname, '../src/content/blog');
+/** Any H2 that starts with a bracketed semantic version is a release heading. */
+const RELEASE_HEADING = /^## \[v?(\d+\.\d+\.\d+)\]/;
+/** Parses the remainder of a release heading after `## [X.Y.Z]`. */
+const HEADING_REST =
+  /^\s*(?:[-–—]\s*(\d{4}-\d{2}-\d{2}))?\s*(?:\[([^\]]+)\])?\s*(?:[-–—:]\s*(.*?))?\s*$/;
+/** Link reference definitions such as `[1.2.0]: https://github.com/...`. */
+const LINK_REF_DEF = /^\[[^\]]+\]:\s+\S+/;
 
-// Ensure blog directory exists
-fs.mkdirSync(blogDir, { recursive: true });
+/**
+ * @param {string} changelog CHANGELOG.md contents
+ * @returns {{version: string, date: string, subtitle: string, body: string}[]}
+ */
+function splitChangelog(changelog) {
+  const lines = changelog.replace(/\r\n?/g, '\n').split('\n');
+  const releases = [];
+  let current = null;
+  let inFence = false;
 
-// Clear existing generated blog posts
-const existing = fs.readdirSync(blogDir).filter(f => f.endsWith('.md'));
-for (const file of existing) {
-  fs.unlinkSync(path.join(blogDir, file));
-}
-
-const changelog = fs.readFileSync(changelogPath, 'utf-8');
-
-// Split on ## [X.Y.Z] headers
-// Matches: ## [1.10.4] - 2026-03-14 — AST-based LSP Formatting
-const versionRegex = /^## \[(\d+\.\d+\.\d+)\]\s*-?\s*(\d{4}-\d{2}-\d{2})?\s*(?:—\s*(.*))?$/;
-
-const lines = changelog.split('\n');
-const releases = [];
-let current = null;
-
-for (const line of lines) {
-  const match = line.match(versionRegex);
-  if (match) {
+  const finish = () => {
     if (current) {
-      releases.push(current);
-    }
-    current = {
-      version: match[1],
-      date: match[2] || '',
-      subtitle: (match[3] || '').trim(),
-      body: [],
-    };
-  } else if (line.match(/^## \[Unreleased\]/i)) {
-    // End any current section, skip Unreleased
-    if (current) {
-      releases.push(current);
+      releases.push({ ...current, body: current.body.join('\n').trim() });
     }
     current = null;
-  } else if (current) {
+  };
+
+  for (const line of lines) {
+    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
+
+    if (!inFence && line.startsWith('## ')) {
+      finish();
+      const match = line.match(RELEASE_HEADING);
+      if (!match) continue; // [Unreleased] or a trailing non-release section
+      const rest = line.slice(match[0].length).match(HEADING_REST);
+      if (!rest) {
+        throw new Error(`split-changelog: cannot parse release heading: ${line}`);
+      }
+      const subtitle = (rest[3] || rest[2] || '').trim();
+      current = { version: match[1], date: rest[1] || '', subtitle, body: [] };
+      continue;
+    }
+
+    if (!current) continue;
+    if (!inFence && LINK_REF_DEF.test(line)) continue;
     current.body.push(line);
   }
+  finish();
+
+  // Drop a trailing horizontal rule left over from section separators.
+  return releases.map((r) => ({ ...r, body: r.body.replace(/\n+-{3,}\s*$/, '').trim() }));
 }
 
-if (current) {
-  releases.push(current);
+function slugFor(version) {
+  return `v${version.replace(/\./g, '-')}`;
 }
 
-let count = 0;
-for (const release of releases) {
-  const { version, date, subtitle } = release;
-  const body = release.body.join('\n').trim();
-
-  // Skip empty sections
-  if (!body) continue;
-
-  const slug = `v${version.replace(/\./g, '-')}`;
-  const titleParts = [`v${version}`];
-  if (subtitle) titleParts.push(`\u2014 ${subtitle}`);
-  const title = titleParts.join(' ');
-
-  // Extract first non-empty, non-heading, non-list line as description
-  const descLine = release.body.find(l => l.trim() && !l.startsWith('#') && !l.startsWith('---') && !l.startsWith('- '));
-  const rawDesc = (descLine || subtitle || `GoSQLX v${version} release`).replace(/\*\*/g, '').replace(/`/g, '').trim();
-  // YAML-safe: escape quotes, strip trailing truncated quotes, limit length
+function toMarkdown(release) {
+  const { version, date, subtitle, body } = release;
+  const title = subtitle ? `v${version} — ${subtitle}` : `v${version}`;
+  const descLine = body
+    .split('\n')
+    .find((l) => l.trim() && !l.startsWith('#') && !l.startsWith('---') && !l.startsWith('- '));
+  const rawDesc = (descLine || subtitle || `GoSQLX v${version} release`)
+    .replace(/\*\*/g, '')
+    .replace(/`/g, '')
+    .trim();
   const description = rawDesc.slice(0, 160).replace(/"/g, "'").replace(/'$/, '');
-
   const frontmatter = [
     '---',
-    `title: "${title}"`,
+    `title: "${title.replace(/"/g, "'")}"`,
     `date: "${date}"`,
     `version: "${version}"`,
     `description: "${description}"`,
     '---',
   ].join('\n');
-
-  const content = `${frontmatter}\n\n${body}\n`;
-  fs.writeFileSync(path.join(blogDir, `${slug}.md`), content);
-  count++;
+  return `${frontmatter}\n\n${body}\n`;
 }
 
-console.log(`Generated ${count} blog posts from CHANGELOG.md`);
+function main() {
+  const changelogPath = path.resolve(__dirname, '../../CHANGELOG.md');
+  const blogDir = path.resolve(__dirname, '../src/content/blog');
+
+  fs.mkdirSync(blogDir, { recursive: true });
+  for (const file of fs.readdirSync(blogDir).filter((f) => f.endsWith('.md'))) {
+    fs.unlinkSync(path.join(blogDir, file));
+  }
+
+  const releases = splitChangelog(fs.readFileSync(changelogPath, 'utf-8'));
+  let count = 0;
+  for (const release of releases) {
+    if (!release.body) continue;
+    fs.writeFileSync(path.join(blogDir, `${slugFor(release.version)}.md`), toMarkdown(release));
+    count++;
+  }
+  console.log(`Generated ${count} changelog pages from CHANGELOG.md`);
+}
+
+module.exports = { splitChangelog, slugFor, RELEASE_HEADING };
+
+if (require.main === module) {
+  main();
+}

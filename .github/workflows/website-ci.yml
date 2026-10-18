@@ -70,6 +70,8 @@ jobs:
           node scripts/check-metrics-drift.mjs --self-test
           node scripts/check-metrics-drift.mjs
 
+      - name: Dialect anchor check
+        run: npm run check:anchors
       - name: Docs link check (relative links, resolvable anchors, no local paths)
         run: npm run check:docs-links
 

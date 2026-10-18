@@ -14,6 +14,7 @@
     "lint": "eslint .",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test scripts/changelog.test.mjs",
     "check:metrics": "node scripts/check-metrics-drift.mjs",
+    "check:anchors": "node scripts/check-dialect-anchors.mjs",
     "check:docs-links": "node scripts/check-docs-links.mjs --self-test && node scripts/check-docs-links.mjs",
     "check:contrast": "node scripts/check-contrast.mjs"
   },

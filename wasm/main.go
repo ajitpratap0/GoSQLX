@@ -20,38 +20,16 @@ import (
 	"encoding/json"
 	"syscall/js"
 
-	"github.com/ajitpratap0/GoSQLX/pkg/advisor"
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
-	"github.com/ajitpratap0/GoSQLX/pkg/linter"
-	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/keywords"
-	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/whitespace"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/security"
-
-	sqlkeywords "github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
+	"github.com/ajitpratap0/GoSQLX/wasm/internal/bridge"
 )
 
-// dialectMap maps JS-friendly dialect strings to keywords.SQLDialect constants.
-var dialectMap = map[string]sqlkeywords.SQLDialect{
-	"generic":    sqlkeywords.DialectGeneric,
-	"postgresql": sqlkeywords.DialectPostgreSQL,
-	"mysql":      sqlkeywords.DialectMySQL,
-	"mariadb":    sqlkeywords.DialectMariaDB,
-	"clickhouse": sqlkeywords.DialectClickHouse,
-	"sqlite":     sqlkeywords.DialectSQLite,
-	"sqlserver":  sqlkeywords.DialectSQLServer,
-	"oracle":     sqlkeywords.DialectOracle,
-	"snowflake":  sqlkeywords.DialectSnowflake,
-}
-
-// getDialect extracts an optional dialect from the second JS argument.
-// Returns empty string if not provided or unrecognized.
-func getDialect(args []js.Value) sqlkeywords.SQLDialect {
+// dialectArg extracts the optional playground dialect string from the second
+// JS argument. Returns "" when absent.
+func dialectArg(args []js.Value) string {
 	if len(args) > 1 && args[1].Type() == js.TypeString {
-		d := args[1].String()
-		if mapped, ok := dialectMap[d]; ok {
-			return mapped
-		}
+		return args[1].String()
 	}
 	return ""
 }
@@ -60,18 +38,7 @@ func parse(_ js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return jsonError("no SQL provided")
 	}
-	sql := args[0].String()
-	dialect := getDialect(args)
-
-	var (
-		astObj any
-		err    error
-	)
-	if dialect != "" {
-		astObj, err = gosqlx.ParseWithDialect(sql, dialect)
-	} else {
-		astObj, err = gosqlx.Parse(sql)
-	}
+	astObj, err := bridge.Parse(args[0].String(), dialectArg(args))
 	if err != nil {
 		return jsonError(err.Error())
 	}
@@ -88,7 +55,6 @@ func format(_ js.Value, args []js.Value) any {
 	}
 	sql := args[0].String()
 	// dialect is accepted but formatter currently uses generic formatting
-	_ = getDialect(args)
 
 	result, err := formatter.FormatString(sql)
 	if err != nil {
@@ -97,26 +63,13 @@ func format(_ js.Value, args []js.Value) any {
 	return result
 }
 
+// lint runs the full built-in rule set (L001-L030, the same rules as
+// gosqlx.Lint) and reports a parse error when the SQL does not parse.
 func lint(_ js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return jsonError("no SQL provided")
 	}
-	sql := args[0].String()
-	// dialect is accepted for API consistency
-	_ = getDialect(args)
-
-	l := linter.New(
-		whitespace.NewTrailingWhitespaceRule(),
-		whitespace.NewMixedIndentationRule(),
-		keywords.NewKeywordCaseRule(keywords.CaseUpper),
-	)
-	result := l.LintString(sql, "<playground>")
-
-	b, err := json.MarshalIndent(result, "", "  ")
-	if err != nil {
-		return jsonError(err.Error())
-	}
-	return string(b)
+	return jsonResult(bridge.Lint(args[0].String(), dialectArg(args)))
 }
 
 func validate(_ js.Value, args []js.Value) any {
@@ -125,7 +78,6 @@ func validate(_ js.Value, args []js.Value) any {
 	}
 	sql := args[0].String()
 	// dialect is accepted for API consistency
-	_ = getDialect(args)
 
 	err := gosqlx.Validate(sql)
 	if err != nil {
@@ -134,35 +86,13 @@ func validate(_ js.Value, args []js.Value) any {
 	return jsonResult(map[string]any{"valid": true})
 }
 
+// analyze runs the security scanner and the optimization advisor. SQL that
+// fails to parse yields only a parse_error and is never scored.
 func analyze(_ js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return jsonError("no SQL provided")
 	}
-	sql := args[0].String()
-	// dialect is accepted for API consistency
-	_ = getDialect(args)
-
-	// Run security scan
-	scanner := security.NewScanner()
-	securityResult := scanner.ScanSQL(sql)
-
-	// Run optimization analysis
-	opt := advisor.New()
-	optResult, err := opt.AnalyzeSQL(sql)
-	if err != nil {
-		// If parsing fails, still return security results with an optimization error
-		combined := map[string]any{
-			"security":     securityResult,
-			"optimization": map[string]any{"error": err.Error()},
-		}
-		return jsonResult(combined)
-	}
-
-	combined := map[string]any{
-		"security":     securityResult,
-		"optimization": optResult,
-	}
-	return jsonResult(combined)
+	return jsonResult(bridge.Analyze(args[0].String(), dialectArg(args)))
 }
 
 func jsonError(msg string) string {

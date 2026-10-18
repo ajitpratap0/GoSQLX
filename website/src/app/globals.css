@@ -282,7 +282,8 @@ body {
   --tw-prose-quote-borders: var(--border);
   --tw-prose-captions: var(--fg-subtle);
   --tw-prose-hr: var(--border);
-  --tw-prose-th-borders: var(--border);
+  /* Rendered tables get their dividers from mdx-components; these back non-MDX prose and match its values. */
+  --tw-prose-th-borders: color-mix(in srgb, var(--fg) 15%, transparent);
   --tw-prose-td-borders: var(--border);
   --tw-prose-code: var(--fg);
   --tw-prose-pre-code: var(--fg);
@@ -325,6 +326,17 @@ body {
       animation-range: entry 0% entry 30%;
     }
   }
+}
+
+/* Literal operators: no programming ligatures (!=, :=, <=, ->) in any code (#810) */
+code, kbd, pre, samp, textarea,
+.font-mono,
+.cm-editor, .cm-content,
+.code-block pre code,
+.prose pre code,
+.prose-dark :not(pre) > code {
+  font-variant-ligatures: none;
+  font-feature-settings: 'liga' 0, 'calt' 0;
 }
 
 /* Inline code in docs prose: no typography backticks, pill styling */

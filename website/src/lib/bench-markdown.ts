@@ -23,6 +23,8 @@ import {
   type CompetitorResult,
 } from '@/data/competitor-metrics';
 
+import { shortVersion, shortDialect } from './bench-format';
+
 const BASE_ID = 'gosqlx';
 
 type Metric = 'nsPerOp' | 'allocsPerOp' | 'bytesPerOp';
@@ -125,13 +127,15 @@ function vitessSentence(): string {
 }
 
 function librariesTable(): string {
-  return [
-    '| Library | Module | Version | Dialect | CGo |',
-    '|---|---|---|---|---|',
+  const table = [
+    '| Library | Version | Dialect | CGo |',
+    '|---|---|---|---|',
     ...COMPETITOR_RUN.parsers.map(
-      (p) => `| ${p.name} | \`${p.module}\` | \`${p.version}\` | ${escapeCell(p.dialect)} | ${p.cgo ? 'yes' : 'no'} |`,
+      (p) => `| ${p.name} | \`${shortVersion(p.version)}\` | ${escapeCell(shortDialect(p.dialect))} | ${p.cgo ? 'yes' : 'no'} |`,
     ),
   ].join('\n');
+  const modules = COMPETITOR_RUN.parsers.map((p) => `${p.name}: \`${p.module}\``).join('; ');
+  return `${table}\n\nModules: ${modules}. Pseudo-versions are shortened here; the full versions are in the harness's \`go.mod\`.`;
 }
 
 function queriesTable(): string {

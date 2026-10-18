@@ -137,7 +137,7 @@ export default async function ArticlePage({ params }: Props) {
             </div>
           </header>
 
-          <div className="prose prose-invert prose-dark max-w-none prose-headings:font-semibold prose-a:no-underline prose-hr:border-border">
+          <div className="prose prose-invert prose-dark max-w-none prose-headings:font-semibold prose-a:text-accent prose-a:underline prose-a:decoration-accent/50 prose-a:underline-offset-2 prose-a:hover:decoration-accent prose-hr:border-border">
             {content}
           </div>
 

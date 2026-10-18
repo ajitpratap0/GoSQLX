@@ -41,11 +41,11 @@ export default function BlogIndexPage() {
           </p>
           <p className="text-sm text-fg-subtle mb-12">
             Looking for release notes? See the{' '}
-            <Link href="/changelog/" className="text-accent hover:underline">
+            <Link href="/changelog/" className="text-accent underline decoration-accent/50 underline-offset-2 hover:decoration-accent">
               changelog
             </Link>
             . Subscribe with{' '}
-            <a href="/blog/rss.xml" className="text-accent hover:underline">
+            <a href="/blog/rss.xml" className="text-accent underline decoration-accent/50 underline-offset-2 hover:decoration-accent">
               RSS
             </a>
             .

@@ -58,6 +58,15 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async rewrites() {
+    // Raw-markdown alternates: /docs/<slug>.md is served by the /md/docs route handler.
+    // Paths with an extension are exempt from the trailing-slash redirect.
+    return {
+      beforeFiles: [{ source: '/docs/:slug*.md', destination: '/md/docs/:slug*' }],
+      afterFiles: [],
+      fallback: [],
+    };
+  },
   async redirects() {
     return [
       // /blog was release notes only; it is now /changelog. Single hop, trailing slashes kept.

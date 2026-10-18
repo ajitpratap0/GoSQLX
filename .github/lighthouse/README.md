@@ -28,3 +28,28 @@ a full disk, so only `/` and `/compare/` were measured locally.
 | resource-summary script / font / stylesheet / total | error | 420 KB / 150 KB / 25 KB / 3.6 MB |
 
 Re-measure and update this table whenever the budgets are changed.
+
+## Field data (RUM) and p75 per route
+
+Field data comes from Vercel Speed Insights (`<SpeedInsights />` in `website/src/app/layout.tsx`). `web-vitals`
+sampling is intentionally not added, so there is one source. In the Vercel dashboard open the project Speed Insights tab,
+filter to Mobile and group by Route to read p75 LCP, CLS and INP per route.
+
+| Metric | Budget (mobile, p75) |
+|---|---|
+| LCP | < 2.5 s |
+| CLS | < 0.1 |
+| INP | < 200 ms |
+
+## Monthly production Lighthouse
+
+`.github/workflows/lighthouse-monthly.yml` runs on the 1st of each month (and on demand) against the production
+URLs, 3 runs each, and uploads the reports as workflow artifacts. It does not assert; regressions are triaged in the
+monthly review.
+
+## Monthly review checklist
+
+1. Download the latest `lighthouse-production-*` artifact and compare with the previous month and the baseline above.
+2. Read p75 LCP, CLS and INP per route in Speed Insights against the budgets.
+3. Re-grade the website scorecard and re-run the 8-route screenshot audit at 390, 768 and 1440 px in both themes.
+4. Open a `fix/...` PR for each regression, naming the metric and route.

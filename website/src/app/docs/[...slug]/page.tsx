@@ -6,7 +6,8 @@ import { compileMDX } from 'next-mdx-remote/rsc';
 import remarkGfm from 'remark-gfm';
 import rehypeSlug from 'rehype-slug';
 import { getDocBySlug, getDocSlugs, getAdjacentDocs, extractHeadings, stripCodeFences } from '@/lib/docs';
-import { DOCS_SIDEBAR } from '@/lib/constants';
+import { DOCS_SIDEBAR, docsCategoryAnchor } from '@/lib/constants';
+import { docMarkdownPath } from '@/lib/llms';
 import { PROJECT } from '@/data/metrics';
 import { Sidebar } from '@/components/docs/Sidebar';
 import { Toc } from '@/components/docs/Toc';
@@ -44,12 +45,16 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const doc = getDocBySlug(slugStr);
   if (!doc) return { title: { absolute: 'Page not found | GoSQLX' } };
 
-  return pageMeta({
+  const meta = pageMeta({
     title: `${doc.label} (Docs)`,
     description: doc.description,
     path: `/docs/${slugStr}/`,
     image: { url: `/og/docs/${slugStr}/`, alt: `${doc.label} (GoSQLX docs)` },
   });
+  return {
+    ...meta,
+    alternates: { ...meta.alternates, types: { 'text/markdown': docMarkdownPath(slugStr) } },
+  };
 }
 
 export default async function DocPage({ params }: PageProps) {
@@ -130,7 +135,15 @@ export default async function DocPage({ params }: PageProps) {
             {categoryItem && (
               <>
                 <li aria-hidden="true" className="shrink-0">/</li>
-                <li className="shrink-0">{categoryItem.category}</li>
+                <li className="shrink-0">
+                  <Link
+                    href={`/docs#${docsCategoryAnchor(categoryItem.category)}`}
+                    className="hover:text-white transition-colors"
+                  >
+                    {categoryItem.category}
+                    <span className="sr-only"> section</span>
+                  </Link>
+                </li>
               </>
             )}
             <li aria-hidden="true" className="shrink-0">/</li>

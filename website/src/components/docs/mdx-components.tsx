@@ -16,7 +16,7 @@ function HeadingAnchor({ id, level, children }: { id?: string; level: number; ch
   const title = nodeText(children).trim();
   return React.createElement(
     `h${level}`,
-    { id, className: 'group scroll-mt-20' },
+    { id, className: 'group' },
     children,
     id
       ? React.createElement(

@@ -147,6 +147,18 @@ html.light {
 
 html {
   overflow-x: clip;
+  /* Fixed header is 4rem tall (h-16); keep anchor targets clear of it site-wide.
+     Single offset mechanism: do not add scroll-mt-* utilities (they stack with this).
+     Exception: FadeIn-wrapped targets may use a small scroll-mt-4 to cover the translate offset. */
+  scroll-padding-top: 5rem;
+}
+
+/* Below lg the sticky "Docs menu" bar (top-16, ~2.75rem) sits under the header:
+   header 4rem + bar 2.75rem + margin. */
+@media (max-width: 1023.98px) {
+  html:has(#docs-sidebar) {
+    scroll-padding-top: 7.5rem;
+  }
 }
 
 /* In @layer base so Tailwind utilities (font-*, tracking-*) can still override. */
@@ -260,6 +272,12 @@ body {
   outline-offset: 2px;
 }
 
+/* Programmatic focus target of the skip link: no ring on the whole <main> */
+#main-content:focus,
+#main-content:focus-visible {
+  outline: none;
+}
+
 /* Respect prefers-reduced-motion for all animations */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -362,11 +380,6 @@ body {
   --shiki-token-link: var(--info);
 }
 
-/* Skip rendering offscreen code blocks and tables on long docs pages. The table
-   wrapper (not the table) is the contained box: paint containment on the table
-   itself clipped wide tables at 390px before the wrapper's overflow-x scroll. */
-.prose pre,
-.prose .docs-table-wrap {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 240px;
-}
+/* Note: do not use content-visibility on .prose pre/table. Placeholder sizes differ
+   from real heights, so blocks growing above an anchor target push headings off-screen
+   after TOC jumps / deep links (#747). */

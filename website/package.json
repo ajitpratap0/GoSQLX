@@ -19,7 +19,8 @@
     "check:docs-links": "node scripts/check-docs-links.mjs --self-test && node scripts/check-docs-links.mjs",
     "check:seo": "node scripts/check-seo.mjs --self-test && node scripts/check-seo.mjs",
     "check:contrast": "node scripts/check-contrast.mjs",
-    "check:rendered": "node scripts/check-rendered-markdown.mjs"
+    "check:rendered": "node scripts/check-rendered-markdown.mjs",
+    "check:layout": "node scripts/check-layout-guards.mjs"
   },
   "dependencies": {
     "@codemirror/lang-sql": "^6.10.0",

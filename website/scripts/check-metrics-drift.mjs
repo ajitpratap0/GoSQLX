@@ -27,6 +27,7 @@ const RULES = [
   { name: 'blastrain', re: /blastrain/i, hint: 'unsourced competitor numbers; wait for the #673 harness JSON' },
   { name: 'averaged over 5 runs', re: /averaged over 5 runs/i, hint: 'methodology is median of 10 runs' },
   { name: 'unqualified <1us', re: /<\s?1\s?[μµu]s/i, hint: 'name the stage and query, e.g. "~0.3 us to parse a simple SELECT"' },
+  { name: '69/83', re: /69\/83/, hint: 'stale ClickHouse QA result; v1.15.0 is 83/83 (see src/data/metrics.ts)' },
   { name: '85% SQL-99', re: /(?<![\d–-])85% SQL-99/, hint: 'say "~80-85% (estimated)"' },
 ];
 

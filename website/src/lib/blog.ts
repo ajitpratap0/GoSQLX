@@ -122,14 +122,10 @@ export function getAllPosts(): BlogPost[] {
   return getPostSlugs()
     .map((slug) => getPostBySlug(slug))
     .filter((post): post is BlogPost => post !== null)
-    .sort((a, b) => {
-      // Sort by date descending, then by version descending as tiebreaker
-      if (a.date && b.date && a.date !== b.date) {
-        return b.date.localeCompare(a.date);
-      }
-      // Compare semantic versions as tiebreaker
-      return compareVersions(b.version, a.version);
-    });
+    // Newest version first. Sorting by version rather than date keeps the
+    // index in release order even where CHANGELOG.md dates are inconsistent
+    // (e.g. 1.1.0 is dated before 1.0.2).
+    .sort((a, b) => compareVersions(b.version, a.version));
 }
 
 function compareVersions(a: string, b: string): number {

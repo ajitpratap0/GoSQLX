@@ -71,7 +71,8 @@ func TestParser_ConnectByExpressions_Issue783(t *testing.T) {
 				if stmt.ConnectBy == nil {
 					t.Fatal("ConnectBy is nil")
 				}
-				if tc.wantShape != "" {
+				// MariaDB treats || as logical OR by default, so the concat shape only applies to Oracle.
+				if tc.wantShape != "" && !(tc.name == "concat" && d == keywords.DialectMariaDB) {
 					if got := rhs596Shape(t, stmt.ConnectBy.Condition); got != tc.wantShape {
 						t.Fatalf("shape = %s, want %s", got, tc.wantShape)
 					}

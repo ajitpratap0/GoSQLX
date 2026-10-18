@@ -3,13 +3,20 @@ import { Button } from '@/components/ui/Button';
 
 export function CtaBanner() {
   return (
-    <section className="py-20 relative overflow-clip">
-      {/* Gradient mesh background */}
-      <div className="absolute inset-0 -z-10">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-accent/[0.07] rounded-full blur-[120px]" />
-        <div className="absolute top-1/3 left-1/4 w-[300px] h-[300px] bg-accent/[0.05] rounded-full blur-[100px]" />
-        <div className="absolute bottom-1/3 right-1/4 w-[300px] h-[300px] bg-accent-warm/[0.04] rounded-full blur-[100px]" />
-      </div>
+    <section className="py-20 relative">
+      {/* Glow: radial gradients that fade to transparent inside the section box.
+          (Blurred blobs were clipped by the section, leaving hard rectangle edges.) */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 -z-10"
+        style={{
+          background: [
+            'radial-gradient(ellipse 50% 50% at 50% 50%, color-mix(in srgb, var(--accent) 9%, transparent), transparent)',
+            'radial-gradient(ellipse 25% 35% at 25% 40%, color-mix(in srgb, var(--accent) 6%, transparent), transparent)',
+            'radial-gradient(ellipse 25% 35% at 75% 60%, color-mix(in srgb, var(--accent-warm) 5%, transparent), transparent)',
+          ].join(', '),
+        }}
+      />
 
       <div className="max-w-6xl mx-auto px-4 text-center">
         <FadeIn viewport>

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { FadeIn } from '@/components/ui/FadeIn';
 import { GlassCard } from '@/components/ui/GlassCard';
+import { HighlightedCode } from '@/components/ui/CodeBlock';
 import { Button } from '@/components/ui/Button';
 import { RawDataToggle } from '@/components/benchmarks/RawDataToggle';
 import { ParseChart } from '@/components/benchmarks/ParseChart';
@@ -280,9 +281,7 @@ export function BenchmarksContent() {
               {reproduceSteps.map((step) => (
                 <li key={step.title}>
                   <h3 className="text-sm font-semibold text-fg mb-1">{step.title}</h3>
-                  <pre className="overflow-x-auto rounded-lg bg-fg/[0.06] p-3 text-xs font-mono text-fg">
-                    <code>{step.command}</code>
-                  </pre>
+                  <HighlightedCode code={step.command} lang="bash" label={`${step.title} command`} />
                   <p className="mt-1 text-xs text-fg-muted">{step.note}</p>
                 </li>
               ))}

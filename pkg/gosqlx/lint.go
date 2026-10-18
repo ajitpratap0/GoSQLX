@@ -15,6 +15,7 @@
 package gosqlx
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/linter"
@@ -24,6 +25,7 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/safety"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/style"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/whitespace"
+	sqlkeywords "github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // LintResult represents the result of linting a SQL string.
@@ -65,6 +67,49 @@ var defaultLinter = sync.OnceValue(func() *linter.Linter {
 func Lint(sql string) (*LintResult, error) {
 	l := defaultLinter()
 	fileResult := l.LintString(sql, "<input>")
+	if fileResult.Error != nil {
+		return nil, fileResult.Error
+	}
+	return &LintResult{Violations: fileResult.Violations}, nil
+}
+
+// dialectLinters caches one linter per dialect for LintWithDialect. Only
+// dialects accepted by sqlkeywords.IsValidDialect are ever stored, so the cache
+// is bounded by the size of sqlkeywords.AllDialects(). Each cached
+// Linter has its dialect set exactly once, before it is published, and is never
+// mutated afterwards, so sharing it follows the same invariant as defaultLinter.
+var dialectLinters sync.Map // sqlkeywords.SQLDialect -> *linter.Linter
+
+func linterForDialect(dialect sqlkeywords.SQLDialect) *linter.Linter {
+	if cached, ok := dialectLinters.Load(dialect); ok {
+		if l, ok := cached.(*linter.Linter); ok {
+			return l
+		}
+	}
+	l := linter.New(allRules()...)
+	l.SetDialect(dialect)
+	actual, _ := dialectLinters.LoadOrStore(dialect, l)
+	if shared, ok := actual.(*linter.Linter); ok {
+		return shared
+	}
+	return l
+}
+
+// LintWithDialect is like Lint but tokenizes and parses the SQL with the given
+// dialect, so the AST-based rules (L011-L030) also run on dialect-specific
+// syntax such as SQL Server's TOP or [bracketed] identifiers. An empty dialect
+// behaves exactly like Lint. An unknown dialect returns an error wrapping
+// ErrUnsupportedDialect, matching ParseWithDialect.
+//
+// Thread Safety: safe for concurrent use.
+func LintWithDialect(sql string, dialect sqlkeywords.SQLDialect) (*LintResult, error) {
+	if dialect == "" {
+		return Lint(sql)
+	}
+	if !sqlkeywords.IsValidDialect(string(dialect)) {
+		return nil, fmt.Errorf("%w: %q", ErrUnsupportedDialect, dialect)
+	}
+	fileResult := linterForDialect(dialect).LintString(sql, "<input>")
 	if fileResult.Error != nil {
 		return nil, fileResult.Error
 	}

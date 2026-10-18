@@ -144,9 +144,9 @@ export default function Playground() {
           <div className="animate-pulse bg-bg-overlay rounded h-4 w-20" />
         </div>
         {/* Skeleton panels */}
-        <div className="flex flex-col lg:flex-row flex-1 min-h-0">
+        <div className="flex flex-col lg:flex-row flex-1 min-h-0 border-x border-b border-pane-border">
           {/* Left: editor skeleton */}
-          <div className="w-full lg:w-1/2 border-r border-border flex flex-col min-h-[240px] lg:min-h-0 p-4 gap-3">
+          <div className="w-full lg:w-1/2 border-r border-border bg-pane-bg flex flex-col min-h-[240px] lg:min-h-0 p-4 gap-3">
             <div className="animate-pulse bg-bg-overlay rounded h-3 w-3/4" />
             <div className="animate-pulse bg-bg-overlay rounded h-3 w-full" />
             <div className="animate-pulse bg-bg-overlay rounded h-3 w-5/6" />
@@ -154,7 +154,7 @@ export default function Playground() {
             <div className="animate-pulse bg-bg-overlay rounded h-3 w-4/5" />
           </div>
           {/* Right: tab + content skeleton */}
-          <div className="w-full lg:w-1/2 flex flex-col min-h-0">
+          <div className="w-full lg:w-1/2 bg-pane-bg flex flex-col min-h-0">
             <div className="flex border-b border-border bg-fg/[0.03] gap-2 px-2 py-1">
               {[80, 72, 60, 88].map((w, i) => (
                 <div key={i} className={`animate-pulse bg-bg-overlay rounded h-6`} style={{ width: w }} />
@@ -244,10 +244,10 @@ export default function Playground() {
       </div>
 
       {/* Main content: split panels */}
-      <div className="flex flex-col lg:flex-row flex-1 min-h-0">
+      <div className="flex flex-col lg:flex-row flex-1 min-h-0 border-x border-b border-pane-border">
         {/* Left panel - SQL Editor */}
-        <div className="w-full lg:w-1/2 border-r border-border bg-[var(--pane-bg)] flex flex-col min-h-[240px] lg:min-h-0">
-          <div className="px-4 py-2 border-b border-border bg-fg/[0.03]">
+        <div className="w-full lg:w-1/2 border-r border-border bg-pane-bg flex flex-col min-h-[240px] lg:min-h-0">
+          <div className="px-4 py-2 border-b border-border bg-pane-band">
             <span className="text-xs text-fg-muted uppercase tracking-wider font-medium">Input</span>
           </div>
           <div className="flex-1 overflow-hidden p-2">
@@ -262,9 +262,9 @@ export default function Playground() {
         </div>
 
         {/* Right panel - Tabs + Content */}
-        <div className="w-full lg:w-1/2 bg-[var(--pane-bg)] flex flex-col min-h-[240px] lg:min-h-0">
+        <div className="w-full lg:w-1/2 bg-pane-bg flex flex-col min-h-[240px] lg:min-h-0">
           {/* Tab bar with animated underline */}
-          <div className="flex border-b border-border bg-fg/[0.03]" role="tablist" aria-label="Output format">
+          <div className="flex border-b border-border bg-pane-band" role="tablist" aria-label="Output format">
             {TABS.map((tab) => (
               <button
                 key={tab.id}

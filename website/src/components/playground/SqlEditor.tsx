@@ -36,9 +36,11 @@ const baseTheme = EditorView.theme({
     height: "100%",
     borderRadius: "0.5rem",
     overflow: "hidden",
+    border: "1px solid var(--pane-border)",
   },
   "&.cm-focused": {
     outline: "2px solid var(--accent)",
+    outlineOffset: "-2px",
   },
   ".cm-scroller": {
     overflow: "auto",
@@ -57,7 +59,7 @@ const baseTheme = EditorView.theme({
   },
 });
 
-// Page background from design tokens so the editor blends into the playground.
+// Pane surface token (--pane-bg): raised white field in light, inset page colour in dark.
 // In light mode no base theme is applied, so the editor falls back to
 // CodeMirror's light defaults plus these token colours.
 const tokenTheme = (dark: boolean) =>

@@ -39,9 +39,12 @@ func (v *VariantPath) writeSQL(buf *bytes.Buffer) {
 		return
 	}
 	// Operator-like roots are parenthesized so the path binds to the whole
-	// expression rather than only its last operand.
+	// expression rather than only its last operand. UnaryExpression is
+	// deliberately not wrapped: the parser currently attaches the path to the
+	// already-unary operand (-src:a parses as Root=-src), and wrapping would
+	// turn Snowflake's -(src:a) into (-src):a, which means something else.
 	switch v.Root.(type) {
-	case *BinaryExpression, *UnaryExpression, *CastExpression,
+	case *BinaryExpression, *CastExpression,
 		*CaseExpression, *BetweenExpression, *InExpression:
 		buf.WriteByte('(')
 		writeExpr(buf, v.Root)
@@ -76,9 +79,21 @@ func (v *VariantPath) writeSQL(buf *bytes.Buffer) {
 // case-sensitive whether or not they are quoted, so quoting is always safe.
 func writeVariantFieldName(buf *bytes.Buffer, name string) {
 	if name != "" && !nameNeedsQuoting(name, false) &&
-		!strings.EqualFold(name, "ANY") && !strings.EqualFold(name, "SOME") {
+		!strings.EqualFold(name, "ANY") && !strings.EqualFold(name, "SOME") &&
+		!variantQuotedWords[strings.ToUpper(name)] {
 		buf.WriteString(name)
 		return
 	}
 	writeQuotedIdentifier(buf, name)
+}
+
+// variantQuotedWords lists words that the tokenizer gives their own token type
+// (neither identifier nor generic keyword) but that are absent from
+// reservedNameWords. The VARIANT path parser rejects them bare, so they are
+// always quoted. A brute-force test over every keyword table guards this list.
+var variantQuotedWords = map[string]bool{
+	"URL": true, "OWNER": true, "POLICY": true, "VALID": true, "UNTIL": true,
+	"RESET": true, "MEMBER": true, "CONNECTOR": true, "AUTO_INCREMENT": true,
+	"DCPROPERTIES": true, "NOCREATEDB": true, "NOCREATEROLE": true,
+	"NOLOGIN": true, "NOSUPERUSER": true,
 }

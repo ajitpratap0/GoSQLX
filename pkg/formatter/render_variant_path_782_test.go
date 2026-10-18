@@ -143,10 +143,131 @@ func TestVariantPath_HostileKey_782(t *testing.T) {
 			if n := len(tree2.Statements); n != 1 {
 				t.Fatalf("key %q: output re-parses to %d statements: %s", key, n, got)
 			}
+			if names := variantNames(t, tree2); len(names) != 2 || names[1] != key {
+				t.Errorf("key %q: re-parsed names = %q", key, names)
+			}
 			ast.ReleaseAST(tree2)
 		}
 		if got := vp.SQL(); got != `src:ok."`+strings.ReplaceAll(key, `"`, `""`)+`"` {
 			t.Errorf("key %q: SQL() = %s", key, got)
 		}
+	}
+}
+
+// variantNames returns the field names of the first VariantPath found in the
+// first SELECT column of tree.
+func variantNames(t *testing.T, tree *ast.AST) []string {
+	t.Helper()
+	sel, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok || len(sel.Columns) == 0 {
+		t.Fatalf("expected SelectStatement with columns, got %T", tree.Statements[0])
+	}
+	vp, ok := sel.Columns[0].(*ast.VariantPath)
+	if !ok {
+		t.Fatalf("expected VariantPath column, got %T", sel.Columns[0])
+	}
+	var names []string
+	for _, seg := range vp.Segments {
+		names = append(names, seg.Name)
+	}
+	return names
+}
+
+// TestVariantPath_AllKeywordsRoundTrip_782 builds a path for every known
+// keyword (upper and lower case) at both segment positions and requires the
+// rendered SQL to re-parse with the exact same names, so a keyword whose token
+// type the path parser rejects cannot silently break round-trips.
+func TestVariantPath_AllKeywordsRoundTrip_782(t *testing.T) {
+	seen := map[string]bool{}
+	var words []string
+	add := func(list []keywords.Keyword) {
+		for _, k := range list {
+			if !seen[k.Word] {
+				seen[k.Word] = true
+				words = append(words, k.Word)
+			}
+		}
+	}
+	add(keywords.RESERVED_FOR_TABLE_ALIAS)
+	add(keywords.ADDITIONAL_KEYWORDS)
+	for _, d := range keywords.AllDialects() {
+		add(keywords.DialectKeywords(d))
+	}
+	// Words with their own tokenizer token type that the keyword tables above
+	// do not list.
+	for _, w := range []string{"URL", "OWNER", "POLICY", "VALID", "UNTIL", "RESET",
+		"MEMBER", "CONNECTOR", "AUTO_INCREMENT", "DCPROPERTIES", "NOCREATEDB",
+		"NOCREATEROLE", "NOLOGIN", "NOSUPERUSER"} {
+		if !seen[w] {
+			seen[w] = true
+			words = append(words, w)
+		}
+	}
+	if len(words) < 100 {
+		t.Fatalf("keyword enumeration looks wrong: %d words", len(words))
+	}
+	for _, w := range words {
+		for _, word := range []string{w, strings.ToLower(w)} {
+			vp := &ast.VariantPath{
+				Root:     &ast.Identifier{Name: "src"},
+				Segments: []ast.VariantPathSegment{{Name: word}, {Name: word}},
+			}
+			sel := &ast.SelectStatement{
+				Columns: []ast.Expression{vp},
+				From:    []ast.TableReference{{Name: "t"}},
+			}
+			tree := &ast.AST{Statements: []ast.Statement{sel}}
+			outs := []string{tree.SQL(),
+				formatter.FormatAST(tree, ast.CompactStyle()),
+				formatter.FormatAST(tree, ast.ReadableStyle())}
+			for _, out := range outs {
+				tree2, err := gosqlx.ParseWithDialect(out, keywords.DialectSnowflake)
+				if err != nil {
+					t.Errorf("word %q: re-parse of %q: %v", word, out, err)
+					continue
+				}
+				if names := variantNames(t, tree2); len(names) != 2 || names[0] != word || names[1] != word {
+					t.Errorf("word %q: re-parsed names = %q from %q", word, names, out)
+				}
+				ast.ReleaseAST(tree2)
+			}
+		}
+	}
+}
+
+// TestVariantPath_UnaryRoot_782 checks that a leading unary operator is not
+// rewritten to (-src):a, which binds differently in Snowflake, and that the
+// text and AST shape are stable.
+func TestVariantPath_UnaryRoot_782(t *testing.T) {
+	for _, in := range []string{
+		`SELECT -src:a FROM t`,
+		`SELECT * FROM t WHERE -src:a > 0`,
+	} {
+		first := variantSQL(t, in)
+		if first != in {
+			t.Errorf("SQL() = %q, want %q", first, in)
+		}
+		if strings.Contains(first, "(-src)") {
+			t.Errorf("unary root was parenthesized: %q", first)
+		}
+		if second := variantSQL(t, first); second != first {
+			t.Errorf("unstable: %q -> %q", first, second)
+		}
+	}
+	tree, err := gosqlx.ParseWithDialect(`SELECT -src:a FROM t`, keywords.DialectSnowflake)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ast.ReleaseAST(tree)
+	sel, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("expected SelectStatement, got %T", tree.Statements[0])
+	}
+	vp, ok := sel.Columns[0].(*ast.VariantPath)
+	if !ok {
+		t.Fatalf("expected VariantPath, got %T", sel.Columns[0])
+	}
+	if _, ok := vp.Root.(*ast.UnaryExpression); !ok {
+		t.Fatalf("expected UnaryExpression root, got %T", vp.Root)
 	}
 }

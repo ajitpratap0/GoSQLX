@@ -40,11 +40,19 @@ func TestParser_ConnectByExpressions_Issue783(t *testing.T) {
 		{"not", "CONNECT BY PRIOR id = parent_id AND NOT archived", "(AND (= (PRIOR id) parent_id) (NOT archived))"},
 		{"nocycle", "CONNECT BY NOCYCLE PRIOR id = parent_id + 1", "(= (PRIOR id) (+ parent_id 1))"},
 		{"concat", "CONNECT BY PRIOR path || '/' = parent_path", "(= (|| (PRIOR path) '/') parent_path)"},
-		{"function", "CONNECT BY PRIOR id = COALESCE(parent_id, 0)", ""},
+		{"function", "CONNECT BY PRIOR id = COALESCE(parent_id, 0)", "(= (PRIOR id) COALESCE(parent_id, 0))"},
 		{"in_list", "CONNECT BY PRIOR id = parent_id AND level_no IN (1, 2)", "(AND (= (PRIOR id) parent_id) (IN level_no [1 2]))"},
 		{"between", "CONNECT BY PRIOR id = parent_id AND x BETWEEN 1 AND 5", "(AND (= (PRIOR id) parent_id) (BETWEEN x 1 5))"},
 		{"parenthesized", "CONNECT BY (PRIOR id = parent_id) AND active = 1", "(AND (PAREN (= (PRIOR id) parent_id)) (= active 1))"},
-		{"start_with_expr", "START WITH parent_id IS NULL AND id + 1 > 0 CONNECT BY PRIOR id = parent_id", ""},
+		{"start_with_expr", "START WITH parent_id IS NULL AND id + 1 > 0 CONNECT BY PRIOR id = parent_id", "(= (PRIOR id) parent_id)"},
+		{"string_prior_and", "CONNECT BY PRIOR id = parent_id AND kind = 'prior' AND active = 1", "(AND (AND (= (PRIOR id) parent_id) (= kind 'prior')) (= active 1))"},
+		{"string_prior_or", "CONNECT BY PRIOR id = parent_id AND kind = 'PRIOR' OR x = 1", "(OR (AND (= (PRIOR id) parent_id) (= kind 'PRIOR')) (= x 1))"},
+		{"string_prior_case_else", "CONNECT BY PRIOR id = parent_id AND CASE WHEN k = 1 THEN 'prior' ELSE 'x' END = 'x'", ""},
+		{"string_prior_case_then", "CONNECT BY PRIOR id = parent_id AND CASE k WHEN 'prior' THEN 1 ELSE 2 END = 1", ""},
+		{"column_prior_eq", "CONNECT BY prior = x", "(= prior x)"},
+		{"column_prior_dot", "CONNECT BY prior.id = x", ""},
+		{"column_prior_paren", "CONNECT BY (prior) = x", ""},
+		{"subquery_prior_column", "CONNECT BY PRIOR id = parent_id AND x IN (SELECT prior FROM u)", ""},
 	}
 
 	for _, tc := range cases {
@@ -71,8 +79,13 @@ func TestParser_ConnectByExpressions_Issue783(t *testing.T) {
 				if tc.name == "nocycle" && !stmt.ConnectBy.NoCycle {
 					t.Fatal("NoCycle not set")
 				}
-				if tc.name == "start_with_expr" && stmt.StartWith == nil {
-					t.Fatal("StartWith is nil")
+				if tc.name == "start_with_expr" {
+					if stmt.StartWith == nil {
+						t.Fatal("StartWith is nil")
+					}
+					if got, want := rhs596Shape(t, stmt.StartWith), "(AND (IS NULL parent_id NULL) (> (+ id 1) 0))"; got != want {
+						t.Fatalf("StartWith shape = %s, want %s", got, want)
+					}
 				}
 
 				got := tree.SQL()
@@ -102,5 +115,29 @@ func TestParser_ConnectByPriorColumnName(t *testing.T) {
 	defer ast.ReleaseAST(tree)
 	if got, want := tree.SQL(), "SELECT prior FROM t WHERE prior = 1"; got != want {
 		t.Fatalf("SQL() = %q, want %q", got, want)
+	}
+}
+
+// TestParser_ConnectByQuotedPriorIsIdentifier verifies a double-quoted
+// "PRIOR" is a plain identifier operand, not the PRIOR operator. Only the
+// tree is checked: SQL() does not re-quote identifiers.
+func TestParser_ConnectByQuotedPriorIsIdentifier(t *testing.T) {
+	for _, d := range []keywords.SQLDialect{keywords.DialectOracle, keywords.DialectMariaDB} {
+		t.Run(string(d), func(t *testing.T) {
+			tree, err := ParseWithDialect(`SELECT id FROM t CONNECT BY PRIOR id = parent_id AND "PRIOR" + 1 = b`, d)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			defer ast.ReleaseAST(tree)
+			stmt, ok := tree.Statements[0].(*ast.SelectStatement)
+			if !ok {
+				t.Fatalf("expected *ast.SelectStatement, got %T", tree.Statements[0])
+			}
+			got := rhs596Shape(t, stmt.ConnectBy.Condition)
+			want := "(AND (= (PRIOR id) parent_id) (= (+ PRIOR 1) b))"
+			if got != want {
+				t.Fatalf("shape = %s, want %s", got, want)
+			}
+		})
 	}
 }

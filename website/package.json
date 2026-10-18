@@ -16,7 +16,8 @@
     "check:metrics": "node scripts/check-metrics-drift.mjs",
     "check:anchors": "node scripts/check-dialect-anchors.mjs",
     "check:docs-links": "node scripts/check-docs-links.mjs --self-test && node scripts/check-docs-links.mjs",
-    "check:contrast": "node scripts/check-contrast.mjs"
+    "check:contrast": "node scripts/check-contrast.mjs",
+    "check:rendered": "node scripts/check-rendered-markdown.mjs"
   },
   "dependencies": {
     "@codemirror/lang-sql": "^6.10.0",
@@ -46,6 +47,8 @@
   "devDependencies": {
     "@next/bundle-analyzer": "16.3.8",
     "@tailwindcss/postcss": "^4",
+    "@types/hast": "^3.0.4",
+    "@types/mdast": "^4.0.4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

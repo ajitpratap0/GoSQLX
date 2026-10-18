@@ -33,7 +33,7 @@ export function ReproduceSnippet({ command, what = 'benchmark command' }: { comm
   const label = state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : 'Copy';
 
   return (
-    <div className="flex items-stretch gap-2 rounded-lg code-surface border border-border bg-bg-raised p-2">
+    <div className="code-surface flex items-stretch gap-2 p-2">
       <pre tabIndex={0} role="region" aria-label={`${what} (scrollable)`} className="flex-1 overflow-x-auto px-2 py-2 font-mono text-xs text-fg-muted sm:text-sm">
         <code>
           <span className="select-none text-brand" aria-hidden="true">$ </span>

@@ -243,8 +243,7 @@ export function MiniPlayground() {
             onChange={handleSqlChange}
             spellCheck={false}
             aria-label="SQL query input"
-            className="absolute inset-0 h-full w-full p-4 text-[14px] leading-relaxed font-mono bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-accent/50 overflow-auto"
-            style={{ color: '#D4D4D8' }}
+            className="absolute inset-0 h-full w-full p-4 text-[14px] leading-relaxed font-mono text-fg bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-accent/50 overflow-auto"
           />
           <div
             className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-bg-raised to-transparent pointer-events-none md:hidden"
@@ -300,11 +299,11 @@ export function MiniPlayground() {
           className="h-[260px] md:h-[320px] overflow-auto"
         >
           {parseError ? (
-            <pre className="p-4 text-[14px] leading-relaxed font-mono whitespace-pre-wrap" style={{ color: '#F87171' }}>
+            <pre className="p-4 text-[14px] leading-relaxed font-mono whitespace-pre-wrap text-danger">
               {parseError}
             </pre>
           ) : (
-            <pre className="p-4 text-[14px] leading-relaxed font-mono whitespace-pre-wrap" style={{ color: '#D4D4D8' }}>
+            <pre className="p-4 text-[14px] leading-relaxed font-mono whitespace-pre-wrap text-fg">
               <code>{shown}</code>
             </pre>
           )}

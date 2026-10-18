@@ -22,11 +22,11 @@ function* walk(dir) {
 
 function decode(s) {
   return s
-    .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
-    .replace(/&#x27;|&#39;/g, "'");
+    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/&amp;/g, '&'); // last, so '&amp;lt;' decodes to '&lt;' (no double-unescape)
 }
 
 /** Return the SEO problems found in one prerendered page. */

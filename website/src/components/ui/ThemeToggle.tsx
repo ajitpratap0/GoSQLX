@@ -64,7 +64,14 @@ function install() {
   // Next.js re-renders the viewport theme-color metas on client-side navigation,
   // resetting them to media defaults. The handler reads the live theme from
   // <html>, never from a closure, and applyTheme is idempotent, so it settles.
-  new MutationObserver(() => applyTheme(readTheme())).observe(document.head, {
+  new MutationObserver((records) => {
+    // Ignore unrelated head churn (style/script injection by the playground etc.).
+    const relevant = records.some((r) => {
+      const nodes = [r.target, ...Array.from(r.addedNodes), ...Array.from(r.removedNodes)];
+      return nodes.some((n) => n instanceof HTMLMetaElement && n.name === 'theme-color');
+    });
+    if (relevant) applyTheme(readTheme());
+  }).observe(document.head, {
     childList: true,
     subtree: true,
     attributes: true,

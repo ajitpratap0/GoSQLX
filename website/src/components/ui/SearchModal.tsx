@@ -221,7 +221,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
           aria-label="Search results"
         >
           {results.length === 0 && (
-            <li className="px-4 py-8 text-center text-sm text-text-muted">
+            <li className="px-4 py-8 text-center text-sm text-fg-subtle">
               {loadFailed
                 ? 'Search is unavailable right now.'
                 : index.length === 0
@@ -259,7 +259,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
               </svg>
               <div className="min-w-0 flex-1">
                 <div className="truncate font-medium">{entry.heading ?? entry.title}</div>
-                <div className="truncate text-xs text-text-muted">
+                <div className="truncate text-xs text-fg-subtle">
                   {entry.heading ? `${entry.category} / ${entry.title}` : entry.category}
                 </div>
               </div>

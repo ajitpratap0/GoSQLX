@@ -25,29 +25,40 @@ export function Toc({ headings, variant = 'rail' }: TocProps) {
     }
   }, [activeId]);
 
+  // Scroll-spy: the active heading is the last one whose top is at or above the
+  // offset (matches html scroll-padding-top: 5rem plus a little slack). Stays
+  // active through long sections; first heading at top, last heading at bottom.
   useEffect(() => {
     if (headings.length === 0) return;
+    const OFFSET = 96;
+    let raf = 0;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        // Find the first intersecting heading
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setActiveId(entry.target.id);
-            break;
-          }
-        }
-      },
-      { rootMargin: '-80px 0px -80% 0px', threshold: 0 }
-    );
+    const update = () => {
+      raf = 0;
+      let current = headings[0].id;
+      for (const h of headings) {
+        const el = document.getElementById(h.id);
+        if (!el) continue;
+        if (el.getBoundingClientRect().top <= OFFSET) current = h.id;
+        else break;
+      }
+      const atBottom =
+        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+      if (atBottom && window.scrollY > 0) current = headings[headings.length - 1].id;
+      setActiveId(current);
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
 
-    const elements = headings
-      .map((h) => document.getElementById(h.id))
-      .filter(Boolean) as HTMLElement[];
-
-    elements.forEach((el) => observer.observe(el));
-
-    return () => observer.disconnect();
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, [headings]);
 
   if (headings.length === 0) return null;
@@ -66,8 +77,8 @@ export function Toc({ headings, variant = 'rail' }: TocProps) {
                 activeId === heading.id
                   ? 'text-fg font-medium'
                   : heading.level === 3
-                  ? 'text-fg-subtle hover:text-fg-muted'
-                  : 'text-fg-muted hover:text-fg-muted'
+                  ? 'text-fg-subtle hover:text-fg'
+                  : 'text-fg-muted hover:text-fg'
               }`}
             >
               {heading.text}
@@ -106,7 +117,7 @@ export function Toc({ headings, variant = 'rail' }: TocProps) {
       aria-label="On this page"
       className="sticky top-20 -mx-1 hidden max-h-[calc(100vh-7rem)] overflow-y-auto overscroll-contain px-1 py-1 xl:block"
     >
-      <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+      <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-fg-subtle">
         On this page
       </h4>
       {list}

@@ -128,7 +128,7 @@ export default async function DocPage({ params }: PageProps) {
                 <li className="shrink-0">
                   <Link
                     href={`/docs#${docsCategoryAnchor(categoryItem.category)}`}
-                    className="hover:text-white transition-colors"
+                    className="hover:text-fg transition-colors"
                   >
                     {categoryItem.category}
                     <span className="sr-only"> section</span>
@@ -142,7 +142,7 @@ export default async function DocPage({ params }: PageProps) {
         </nav>
 
         {/* Meta: reading time, last updated, version, edit link */}
-        <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-text-muted">
+        <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-fg-subtle">
           <span className="flex items-center gap-2">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />

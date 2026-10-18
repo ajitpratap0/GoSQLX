@@ -97,3 +97,8 @@ export const DOCS_SIDEBAR: DocsSidebarCategory[] = [
     { slug: 'migration/from-sqlfluff', file: 'migration/FROM_SQLFLUFF.md', label: 'From SQLFluff', description: 'Migrate from SQLFluff to GoSQLX: map lint rules and configuration to GoSQLX equivalents, compare speed and dialects, and move CI checks over.' },
   ]},
 ];
+
+/** Stable DOM id for a docs category card on /docs/ (breadcrumb anchor target). */
+export function docsCategoryAnchor(category: string): string {
+  return category.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}

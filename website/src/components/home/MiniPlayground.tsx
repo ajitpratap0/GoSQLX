@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import sample from '@/generated/sample-ast.json';
 import { useWasm, type GoSQLXApi } from '@/components/playground/WasmLoader';
+import type { LintData } from '@/components/playground/bridgeTypes';
 
 // Query, formatted SQL and AST are generated from sample.sql by the real
 // parser and formatter (scripts/gen-sample-ast), so the demo shows real output
@@ -103,13 +104,14 @@ function runDemo(api: GoSQLXApi, sql: string, dialect: string, tab: TabId): Demo
       const text = typeof f === 'string' ? f : (f as { result?: string }).result ?? '';
       return { output: text, error: null, parseUs, statement };
     }
-    const lint = api.lint(sql, dialect);
-    const violations = Array.isArray(lint)
-      ? lint
-      : (lint as { violations?: unknown[] })?.violations ?? [];
-    const output = Array.isArray(violations) && violations.length === 0
+    const lint = api.lint(sql, dialect) as LintData;
+    if (lint?.error) return { output: '', error: lint.error, parseUs, statement };
+    const violations = lint?.violations ?? [];
+    const output = violations.length === 0
       ? 'No lint violations found.'
-      : JSON.stringify(violations, null, 2);
+      : violations
+          .map((v) => `${v.rule} ${v.severity.toUpperCase()}${v.line > 0 ? ` ${v.line}:${v.column}` : ''}  ${v.message}`)
+          .join('\n');
     return { output, error: null, parseUs, statement };
   } catch (e: unknown) {
     return { output: '', error: e instanceof Error ? e.message : String(e), parseUs, statement };
@@ -241,8 +243,7 @@ export function MiniPlayground() {
             onChange={handleSqlChange}
             spellCheck={false}
             aria-label="SQL query input"
-            className="absolute inset-0 h-full w-full p-4 text-[14px] leading-relaxed font-mono bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-accent/50 overflow-auto"
-            style={{ color: '#D4D4D8' }}
+            className="absolute inset-0 h-full w-full p-4 text-[14px] leading-relaxed font-mono text-fg bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-accent/50 overflow-auto"
           />
           <div
             className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-bg-raised to-transparent pointer-events-none md:hidden"
@@ -298,11 +299,11 @@ export function MiniPlayground() {
           className="h-[260px] md:h-[320px] overflow-auto"
         >
           {parseError ? (
-            <pre className="p-4 text-[14px] leading-relaxed font-mono whitespace-pre-wrap" style={{ color: '#F87171' }}>
+            <pre className="p-4 text-[14px] leading-relaxed font-mono whitespace-pre-wrap text-danger">
               {parseError}
             </pre>
           ) : (
-            <pre className="p-4 text-[14px] leading-relaxed font-mono whitespace-pre-wrap" style={{ color: '#D4D4D8' }}>
+            <pre className="p-4 text-[14px] leading-relaxed font-mono whitespace-pre-wrap text-fg">
               <code>{shown}</code>
             </pre>
           )}

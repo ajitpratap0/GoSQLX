@@ -274,6 +274,21 @@ func TestCapabilities_KnownFlags(t *testing.T) {
 	}
 }
 
+// TestCapabilities_PipesAsLogicalOr verifies that only MySQL and MariaDB
+// treat || as logical OR by default (#781).
+func TestCapabilities_PipesAsLogicalOr(t *testing.T) {
+	t.Parallel()
+	for _, d := range []Dialect{
+		Unknown, Generic, PostgreSQL, MySQL, MariaDB, SQLServer, Oracle,
+		SQLite, Snowflake, ClickHouse, BigQuery, Redshift,
+	} {
+		want := d == MySQL || d == MariaDB
+		if got := d.Capabilities().PipesAsLogicalOr; got != want {
+			t.Errorf("%q.Capabilities().PipesAsLogicalOr = %v, want %v", d, got, want)
+		}
+	}
+}
+
 // TestCapabilities_UnknownIsPermissive verifies the Unknown dialect returns
 // the permissive default that enables common standard features. Callers
 // that never pass WithDialect rely on this.

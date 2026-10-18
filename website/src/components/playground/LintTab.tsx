@@ -1,63 +1,25 @@
 'use client';
 import { useState, useCallback } from "react";
+import { formatPosition, type LintData, type LintViolation } from "./bridgeTypes";
+import { ErrorNotice, Position, SeverityBadge } from "./ResultParts";
 
-export interface LintViolation {
-  severity?: string;
-  level?: string;
-  rule?: string;
-  code?: string;
-  rule_code?: string;
-  line?: number;
-  column?: number;
-  location?: { line: number; column: number };
-  message?: string;
-  description?: string;
-  msg?: string;
-  suggestion?: string;
-  fix?: string;
-  hint?: string;
-}
+export type { LintViolation, LintData } from "./bridgeTypes";
+
+const NO_VIOLATIONS: LintViolation[] = [];
 
 interface LintTabProps {
-  data: { error?: string; violations?: LintViolation[]; results?: LintViolation[] } | LintViolation[] | null;
-}
-
-function SeverityBadge({ severity }: { severity: string }) {
-  const s = severity?.toLowerCase() || "info";
-  const styles: Record<string, string> = {
-    error: "bg-danger/20 text-danger border-danger/30",
-    warning: "bg-warn/20 text-warn border-warn/30",
-    info: "bg-info/20 text-info border-info/30",
-  };
-  const cls = styles[s] || styles.info;
-
-  return (
-    <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded border ${cls} uppercase`}>
-      {severity}
-    </span>
-  );
-}
-
-function extractViolations(
-  data: LintTabProps['data']
-): LintViolation[] {
-  if (Array.isArray(data)) return data;
-  if (data && !Array.isArray(data)) {
-    if (Array.isArray(data.violations)) return data.violations;
-    if (Array.isArray(data.results)) return data.results;
-  }
-  return [];
+  data: LintData | null;
 }
 
 export default function LintTab({ data }: LintTabProps) {
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
 
-  const violations = extractViolations(data);
+  const violations = data?.violations ?? NO_VIOLATIONS;
 
   const handleCopy = useCallback(() => {
     const text = violations.map((v: LintViolation) =>
-      `[${(v.severity || v.level || 'info').toUpperCase()}] ${v.rule || v.code || v.rule_code || ''} ${v.message || v.description || v.msg || ''}`
+      `[${(v.severity || 'info').toUpperCase()}] ${v.rule} ${formatPosition(v.line, v.column) ?? ''} ${v.message}`.replace(/\s+/g, ' ')
     ).join('\n');
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
@@ -76,27 +38,30 @@ export default function LintTab({ data }: LintTabProps) {
     );
   }
 
-  if (!Array.isArray(data) && data.error) {
+  if (data.error) {
     return (
       <div className="p-4">
-        <div className="bg-danger/10 border border-danger/30 rounded-lg p-4">
-          <div className="flex items-center gap-2 text-danger font-medium mb-1">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Lint Error
-          </div>
-          <p className="text-danger text-sm font-mono">{data.error}</p>
-        </div>
+        <ErrorNotice title="Lint error" message={data.error} />
       </div>
     );
   }
 
+  const parseNotice = data.parse_error ? (
+    <ErrorNotice title="Parse error" message={data.parse_error} polite>
+      <p className="text-fg-muted text-xs mt-3">
+        Rules that need a parsed statement could not run. Fix the error above to lint the full query.
+      </p>
+    </ErrorNotice>
+  ) : null;
+
   if (violations.length === 0) {
+    if (parseNotice) {
+      return <div className="p-4">{parseNotice}</div>;
+    }
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3">
         <div className="w-12 h-12 rounded-full bg-ok/20 flex items-center justify-center">
-          <svg className="w-6 h-6 text-ok" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-6 h-6 text-ok" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
         </div>
@@ -131,35 +96,27 @@ export default function LintTab({ data }: LintTabProps) {
         </button>
       </div>
       <div className="p-4 overflow-auto flex-1 space-y-3">
+        {parseNotice}
         {violations.map((v: LintViolation, i: number) => (
           <div
             key={i}
             className="bg-bg-overlay border border-border rounded-lg p-3 space-y-2"
           >
             <div className="flex items-center gap-2 flex-wrap">
-              <SeverityBadge severity={v.severity || v.level || "info"} />
-              {(v.rule || v.code || v.rule_code) && (
-                <span className="text-xs font-mono text-violet bg-violet/10 px-1.5 py-0.5 rounded">
-                  {v.rule || v.code || v.rule_code}
-                </span>
-              )}
-              {(v.line !== undefined || v.location) && (
-                <span className="text-xs text-fg-muted font-mono">
-                  {v.location
-                    ? `${v.location.line}:${v.location.column}`
-                    : `${v.line}:${v.column ?? 0}`}
-                </span>
-              )}
+              <SeverityBadge severity={v.severity} />
+              <span className="text-xs font-mono text-violet bg-violet/10 px-1.5 py-0.5 rounded" title={v.rule_name}>
+                {v.rule}
+              </span>
+              {v.rule_name && <span className="text-xs text-fg-muted">{v.rule_name}</span>}
+              <Position line={v.line} column={v.column} />
             </div>
-            <p className="text-sm text-fg-muted">
-              {v.message || v.description || v.msg}
-            </p>
-            {(v.suggestion || v.fix || v.hint) && (
+            <p className="text-sm text-fg">{v.message}</p>
+            {v.suggestion && (
               <p className="text-xs text-info flex items-center gap-1">
                 <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                {v.suggestion || v.fix || v.hint}
+                {v.suggestion}
               </p>
             )}
           </div>

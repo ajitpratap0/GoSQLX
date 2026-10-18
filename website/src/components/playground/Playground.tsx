@@ -4,8 +4,8 @@ import { useWasm } from "./WasmLoader";
 import SqlEditor from "./SqlEditor";
 import AstTab from "./AstTab";
 import FormatTab from "./FormatTab";
-import LintTab, { type LintViolation } from "./LintTab";
-import type { AnalysisData } from "./AnalyzeTab";
+import LintTab from "./LintTab";
+import type { AnalysisData, LintData } from "./bridgeTypes";
 const AnalyzeTab = React.lazy(() => import("./AnalyzeTab"));
 
 const DEFAULT_SQL = `SELECT u.id, u.name, COUNT(o.id) AS order_count
@@ -41,7 +41,7 @@ const TABS: { id: TabId; label: string }[] = [
 interface Results {
   ast: (Record<string, unknown> & { error?: string }) | null;
   format: string | { result?: string; formatted?: string; error?: string } | null;
-  lint: { error?: string; violations?: LintViolation[]; results?: LintViolation[] } | LintViolation[] | null;
+  lint: LintData | null;
   analyze: AnalysisData | null;
 }
 

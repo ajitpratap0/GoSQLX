@@ -332,8 +332,8 @@ func allCompiledPatterns(t *testing.T) []compiledPattern {
 // empty string (which justifies using FindString in detectRegexPatterns).
 func TestCompiledPatterns_AllHaveLiterals(t *testing.T) {
 	all := allCompiledPatterns(t)
-	if len(all) != 35 {
-		t.Errorf("expected 35 compiled patterns (26 group + 6 comment + 3 tautology), got %d", len(all))
+	if len(all) != 36 {
+		t.Errorf("expected 36 compiled patterns (27 group + 6 comment + 3 tautology), got %d", len(all))
 	}
 	for _, p := range all {
 		if len(p.lits) == 0 {

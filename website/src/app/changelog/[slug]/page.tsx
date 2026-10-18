@@ -2,8 +2,7 @@ import { Metadata } from 'next';
 import { pageMeta } from '@/lib/seo';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { compileMDX } from 'next-mdx-remote/rsc';
-import remarkGfm from 'remark-gfm';
+import { renderMarkdown } from '@/lib/markdown';
 import { JsonLd } from '@/components/JsonLd';
 import { blogPostHref, getAllPosts, getPostBySlug, getPostSlugs } from '@/lib/blog';
 import { remarkChangelogHeadings, remarkGithubIssueRefs } from '@/lib/remark-changelog';
@@ -22,7 +21,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!post) return {};
 
   return pageMeta({
-    title: `${post.title} release notes`,
+    title: `GoSQLX v${post.version} Release Notes`,
+    absolute: true,
     description: post.description,
     path: `/changelog/${slug}/`,
     type: 'article',
@@ -37,15 +37,7 @@ export default async function BlogPostPage({ params }: Props) {
   const post = getPostBySlug(slug);
   if (!post) notFound();
 
-  const { content } = await compileMDX({
-    source: post.content,
-    options: {
-      mdxOptions: {
-        format: 'md',
-        remarkPlugins: [remarkGfm, remarkChangelogHeadings, remarkGithubIssueRefs],
-      },
-    },
-  });
+  const content = await renderMarkdown(post.content, [remarkChangelogHeadings, remarkGithubIssueRefs]);
 
   // Find prev/next posts for navigation
   const allPosts = getAllPosts();
@@ -129,7 +121,7 @@ export default async function BlogPostPage({ params }: Props) {
         </header>
 
         {/* Content */}
-        <div className="prose prose-invert prose-dark max-w-none prose-headings:font-semibold prose-a:text-accent prose-a:underline prose-a:decoration-accent/50 prose-a:underline-offset-2 prose-a:hover:decoration-accent [&_:not(pre)>code]:bg-bg-raised prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-raised prose-pre:border prose-pre:border-border prose-hr:border-border [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto">
+        <div className="prose prose-invert prose-dark max-w-none prose-headings:font-semibold prose-a:text-accent prose-a:underline prose-a:decoration-accent/50 prose-a:underline-offset-2 prose-a:hover:decoration-accent prose-hr:border-border [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto">
           {content}
         </div>
 

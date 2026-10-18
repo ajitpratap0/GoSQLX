@@ -1,15 +1,26 @@
 import type { Metadata } from 'next';
 import { pageMeta } from '@/lib/seo';
+import { JsonLd } from '@/components/JsonLd';
+import { pageJsonLd } from '@/lib/jsonld';
 
 export const metadata: Metadata = pageMeta({
   title: 'Privacy Policy',
-  description: 'GoSQLX privacy policy. No tracking, no telemetry, no query logging.',
+  description: 'GoSQLX privacy policy: no tracking, no telemetry and no query logging. What the website and the playground do and do not collect.',
   path: '/privacy/',
   image: { url: '/opengraph-image', alt: 'GoSQLX' },
 });
 
+const jsonLd = pageJsonLd({
+  name: 'Privacy Policy',
+  description: metadata.description as string,
+  path: '/privacy/',
+  crumbs: [{ name: 'Privacy Policy', path: '/privacy/' }],
+});
+
 export default function PrivacyPage() {
   return (
+    <>
+    <JsonLd data={jsonLd} />
     <div className="min-h-screen section-padding pt-24 pb-24">
       <div className="container-width max-w-3xl prose prose-invert prose-dark">
         <h1>Privacy Policy</h1>
@@ -72,5 +83,6 @@ export default function PrivacyPage() {
         </p>
       </div>
     </div>
+    </>
   );
 }

@@ -9,26 +9,31 @@ import { COMPETITOR_PAGES } from './competitors';
 /*  Data                                                               */
 /* ------------------------------------------------------------------ */
 
-const LIBRARIES = ['GoSQLX', 'pg_query_go', 'vitess-sqlparser', 'sqlparser (xwb1989)'] as const;
+const LIBRARIES = ['GoSQLX', 'pg_query_go', 'vitess-sqlparser', 'sqlparser (xwb1989)', 'TiDB parser', 'SQLFluff (Python)'] as const;
+
+/** Shown where the claim has not been assessed for that tool. */
+const NA = '\u2014';
+
+type Cell = string | boolean;
 
 type FeatureRow = {
   feature: string;
-  values: [string | boolean, string | boolean, string | boolean, string | boolean];
+  values: [Cell, Cell, Cell, Cell, Cell, Cell];
 };
 
 const FEATURES: FeatureRow[] = [
-  { feature: 'Language',              values: ['Go',     'Go (C via CGo)', 'Go',   'Go'] },
-  { feature: 'Zero-copy',            values: [true,  false, false, false] },
-  { feature: 'Dialects',             values: [String(PROJECT.dialectCount),   '1 (PostgreSQL)', '1 (MySQL)', '1 (MySQL)'] },
-  { feature: 'Pure Go (no CGo)',     values: [true,  false, true,  true] },
-  { feature: 'WASM support',         values: [true,  false, false, false] },
-  { feature: 'SQL injection detection', values: [true,  false, false, false] },
-  { feature: 'MCP server',           values: [true,  false, false, false] },
-  { feature: 'SQL formatting',       values: [true,  false, false, false] },
-  { feature: `SQL linting (${PROJECT.lintRuleCount} rules)`, values: [true,  false, false, false] },
-  { feature: 'LSP server',           values: [true,  false, false, false] },
-  { feature: 'Thread-safe',          values: [true,  true,  true,  true] },
-  { feature: 'Active maintenance',   values: [true,  true,  true,  false] },
+  { feature: 'Language',              values: ['Go',     'Go (C via CGo)', 'Go',   'Go', 'Go', 'Python'] },
+  { feature: 'Zero-copy',            values: [true,  false, false, false, false, NA] },
+  { feature: 'Dialects',             values: [String(PROJECT.dialectCount),   '1 (PostgreSQL)', '1 (MySQL)', '1 (MySQL)', '1 (MySQL)', 'Many'] },
+  { feature: 'Pure Go (no CGo)',     values: [true,  false, true,  true, true, false] },
+  { feature: 'WASM support',         values: [true,  false, false, false, false, NA] },
+  { feature: 'SQL injection detection', values: [true,  false, false, false, false, NA] },
+  { feature: 'MCP server',           values: [true,  false, false, false, false, NA] },
+  { feature: 'SQL formatting',       values: [true,  false, false, false, false, true] },
+  { feature: `SQL linting (${PROJECT.lintRuleCount} rules)`, values: [true,  false, false, false, false, true] },
+  { feature: 'LSP server',           values: [true,  false, false, false, false, NA] },
+  { feature: 'Thread-safe',          values: [true,  true,  true,  true, NA, NA] },
+  { feature: 'Active maintenance',   values: [true,  true,  true,  false, true, true] },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -112,7 +117,7 @@ export function CompareContent() {
               GoSQLX vs The Competition
             </h1>
             <p className="mt-4 text-lg text-fg-muted max-w-2xl mx-auto">
-              See how GoSQLX compares to other Go SQL parsing libraries
+              See how GoSQLX compares to other SQL parsing libraries and tools
             </p>
           </FadeIn>
         </div>
@@ -167,6 +172,10 @@ export function CompareContent() {
                 </tbody>
               </table>
             </GlassCard>
+            <p className="mt-3 text-xs text-fg-subtle">
+              {NA} means not assessed for that tool. SQLFluff is a Python linter and formatter, not a Go parser,
+              so it is listed for feature context only and has no benchmark figures.
+            </p>
           </FadeIn>
         </div>
       </section>

@@ -21,10 +21,13 @@ const metrics = [
   { label: 'Race detector in CI', value: 'Clean' },
 ];
 
+// Replaced at render time by the single-source command from BENCH_ENV (shell-safe, quoted -run).
+const REPRODUCE_MARKER = 'Reproduce: ';
+
 const methodology = [
   `${BENCH_ENV.goVersion} on ${BENCH_ENV.hardware} (arm64); every figure is for the parse stage only (pre-tokenized input to AST), not tokenize or end-to-end`,
   `Source: ${BENCH_ENV.source}, run with -benchmem`,
-  'Reproduce: go test -run ^$ -bench BenchmarkPerformanceBaseline -benchmem -count=10 ./pkg/sql/parser/',
+  REPRODUCE_MARKER,
   'Race detector disabled during benchmarks (adds 3\u20135x overhead)',
   'Object pooling enabled for all runs (production configuration)',
   'The CI regression baseline is a deliberately loose ceiling used with a tolerance on slower shared runners; it is not a measurement',
@@ -67,6 +70,14 @@ function fastestNs(queryId: string): number | undefined {
 }
 
 function renderMethodologyItem(item: string) {
+  if (item === REPRODUCE_MARKER) {
+    return (
+      <>
+        Reproduce:{' '}
+        <code className="font-mono text-xs text-fg bg-fg/[0.06] px-1 py-0.5 rounded break-words">{BENCH_ENV.command}</code>
+      </>
+    );
+  }
   const FLAG = '-benchmem';
   const idx = item.indexOf(FLAG);
   if (idx === -1) return <>{item}</>;

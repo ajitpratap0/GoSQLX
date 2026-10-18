@@ -114,9 +114,11 @@ export default async function CompetitorComparePage({ params }: Props) {
                 <div className="contents">
                   <dt className="font-medium text-fg">Maintenance</dt>
                   <dd className="text-fg-muted">
+                    {page.maintenance.before}
                     <a href={page.maintenance.href} className={link} rel="noopener noreferrer">
-                      {page.maintenance.text}
+                      {page.maintenance.linkText}
                     </a>
+                    {page.maintenance.after}
                   </dd>
                 </div>
               )}

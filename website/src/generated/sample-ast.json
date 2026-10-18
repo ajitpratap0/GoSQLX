@@ -156,6 +156,7 @@
                 "Quoted": false
               },
               "Not": false,
+              "PipesOr": false,
               "CustomOp": null,
               "Pos": {
                 "Line": 7,
@@ -188,6 +189,7 @@
             "Type": "string"
           },
           "Not": false,
+          "PipesOr": false,
           "CustomOp": null,
           "Pos": {
             "Line": 8,
@@ -246,6 +248,7 @@
             "Type": "int"
           },
           "Not": false,
+          "PipesOr": false,
           "CustomOp": null,
           "Pos": {
             "Line": 10,

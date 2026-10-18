@@ -2,9 +2,7 @@
 
 Comprehensive documentation for the GoSQLX SQL parsing SDK.
 
-**Current Version**: v1.15.0 | **Last Updated**: 2026-04-12
-
-## Feature Overview (v1.14.0)
+## Feature Overview
 
 GoSQLX is a production-ready, high-performance SQL parsing SDK for Go with comprehensive feature support:
 
@@ -15,7 +13,7 @@ GoSQLX is a production-ready, high-performance SQL parsing SDK for Go with compr
 - **Memory Efficient** - Object pooling architecture with 60-80% memory reduction
 - **Production Ready** - Comprehensive error handling, position tracking, and recovery
 
-### v1.6.0 PostgreSQL Extensions
+### PostgreSQL Extensions
 - **LATERAL JOIN** - Correlated subqueries in FROM clause for advanced query patterns
 - **JSON/JSONB Operators** - Full operator support (`->`, `->>`, `#>`, `#>>`, `@>`, `<@`, `?`, `?|`, `?&`, `#-`)
 - **DISTINCT ON** - PostgreSQL-specific row selection with deterministic ordering
@@ -173,8 +171,8 @@ docs/
 ### By Topic
 
 **Installation & Setup**
-- [Installation](GETTING_STARTED.md#installation)
-- [Quick Start](GETTING_STARTED.md#quick-start)
+- [Installation](GETTING_STARTED.md#step-1-install-gosqlx-30-seconds)
+- [Quick Start](GETTING_STARTED.md#step-2-validate-your-first-query-1-minute)
 - [Prerequisites](PRODUCTION_GUIDE.md#prerequisites)
 - [CLI Installation](CLI_GUIDE.md#installation)
 
@@ -182,20 +180,20 @@ docs/
 - [Simple Tokenization](USAGE_GUIDE.md#simple-tokenization)
 - [Parsing to AST](USAGE_GUIDE.md#parsing-to-ast)
 - [Error Handling](USAGE_GUIDE.md#error-handling-with-position-info)
-- [CLI Commands](CLI_GUIDE.md#commands)
+- [CLI Commands](CLI_GUIDE.md#commands-reference)
 
-**v1.6.0 Features**
-- [LSP Server Setup](LSP_GUIDE.md#getting-started)
+**Tooling and Extensions**
+- [LSP Server Setup](LSP_GUIDE.md#starting-the-lsp-server)
 - [Linting Configuration](LINTING_RULES.md#configuration)
-- [PostgreSQL Extensions](USAGE_GUIDE.md#postgresql-specific-features)
-- [Security Scanning](SECURITY.md#sql-injection-detection)
-- [Configuration Files](CONFIGURATION.md#configuration-file-format)
+- [PostgreSQL Extensions](USAGE_GUIDE.md#postgresql-features)
+- [Security Scanning](SECURITY.md)
+- [Configuration Files](CONFIGURATION.md#configuration-schema)
 
 **Advanced Topics**
 - [Concurrent Processing](USAGE_GUIDE.md#concurrent-processing)
 - [Memory Management](ARCHITECTURE.md#memory-management)
-- [Performance Tuning](PERFORMANCE_TUNING.md#optimization-strategies)
-- [Object Pooling](ARCHITECTURE.md#object-pooling-architecture)
+- [Performance Tuning](PERFORMANCE_TUNING.md#object-pool-optimization)
+- [Object Pooling](ARCHITECTURE.md#object-pool-architecture)
 
 **Troubleshooting**
 - [Common Issues](TROUBLESHOOTING.md#common-issues)
@@ -205,12 +203,12 @@ docs/
 - [Memory Issues](TROUBLESHOOTING.md#memory-issues)
 
 **SQL Dialects**
-- [PostgreSQL](SQL_COMPATIBILITY.md#postgresql)
+- [PostgreSQL](SQL_COMPATIBILITY.md#postgresql-specific-features)
 - [MySQL](SQL_COMPATIBILITY.md#mysql)
-- [SQL Server](SQL_COMPATIBILITY.md#sql-server)
+- [SQL Server](SQL_COMPATIBILITY.md#sql-server-specific-features)
 - [Oracle](SQL_COMPATIBILITY.md#oracle)
 - [SQLite](SQL_COMPATIBILITY.md#sqlite)
-- [Dialect Comparison](SQL_COMPATIBILITY.md#feature-comparison-matrix)
+- [Dialect Comparison](SQL_COMPATIBILITY.md#core-sql-features-support-matrix)
 
 ### By Use Case
 
@@ -221,25 +219,25 @@ docs/
 → See [USAGE_GUIDE.md - Parsing to AST](USAGE_GUIDE.md#parsing-to-ast)
 
 **"I want to validate SQL syntax"**
-→ See [CLI_GUIDE.md - Validate Command](CLI_GUIDE.md#validate-command)
+→ See [CLI_GUIDE.md - Validate Command](CLI_GUIDE.md#gosqlx-validate---ultra-fast-sql-validation)
 
 **"I want to format SQL files"**
-→ See [CLI_GUIDE.md - Format Command](CLI_GUIDE.md#format-command)
+→ See [CLI_GUIDE.md - Format Command](CLI_GUIDE.md#gosqlx-format---high-performance-sql-formatting)
 
 **"I want IDE integration"**
-→ See [LSP_GUIDE.md - Getting Started](LSP_GUIDE.md#getting-started)
+→ See [LSP_GUIDE.md - Getting Started](LSP_GUIDE.md#starting-the-lsp-server)
 
 **"I want to lint SQL files"**
 → See [LINTING_RULES.md - Overview](LINTING_RULES.md#overview)
 
 **"I want to detect SQL injection"**
-→ See [SECURITY.md - SQL Injection Detection](SECURITY.md#sql-injection-detection)
+→ See [SECURITY.md - SQL Injection Detection](SECURITY.md)
 
 **"I want to configure GoSQLX"**
-→ See [CONFIGURATION.md - Configuration Guide](CONFIGURATION.md#configuration-file-format)
+→ See [CONFIGURATION.md - Configuration Guide](CONFIGURATION.md#configuration-schema)
 
 **"I want to support PostgreSQL features"**
-→ See [USAGE_GUIDE.md - PostgreSQL Features](USAGE_GUIDE.md#postgresql-specific-features)
+→ See [USAGE_GUIDE.md - PostgreSQL Features](USAGE_GUIDE.md#postgresql-features)
 
 **"I want to support Unicode SQL"**
 → See [USAGE_GUIDE.md - Unicode Support](USAGE_GUIDE.md#unicode-and-international-support)
@@ -248,7 +246,7 @@ docs/
 → See [ERROR_CODES.md - Error Reference](ERROR_CODES.md)
 
 **"My application is slow"**
-→ See [PERFORMANCE_TUNING.md - Optimization](PERFORMANCE_TUNING.md#optimization-strategies)
+→ See [PERFORMANCE_TUNING.md - Optimization](PERFORMANCE_TUNING.md#object-pool-optimization)
 
 **"I found a memory leak"**
 → See [TROUBLESHOOTING.md - Memory Issues](TROUBLESHOOTING.md#memory-issues)
@@ -308,30 +306,9 @@ If you can't find what you need:
 3. **Ask**: Open a [new issue](https://github.com/ajitpratap0/GoSQLX/issues/new)
 4. **Discuss**: Join [discussions](https://github.com/ajitpratap0/GoSQLX/discussions)
 
-## Documentation Updates
-
-| Document | Last Updated | Version | Status |
-|----------|--------------|---------|--------|
-| README.md | 2025-12 | v1.6.0 | ✓ Updated |
-| GETTING_STARTED.md | 2025-12 | v1.6.0 | ✓ Updated |
-| CLI_GUIDE.md | 2025-12 | v1.6.0 | ✓ Updated |
-| LSP_GUIDE.md | 2025-12 | v1.6.0 | ✓ New |
-| LINTING_RULES.md | 2025-12 | v1.6.0 | ✓ New |
-| CONFIGURATION.md | 2025-12 | v1.6.0 | ✓ New |
-| API_REFERENCE.md | 2025-12 | v1.6.0 | ✓ Updated |
-| USAGE_GUIDE.md | 2025-12 | v1.6.0 | ✓ Updated |
-| ARCHITECTURE.md | 2025-12 | v1.6.0 | ✓ Updated |
-| TROUBLESHOOTING.md | 2025-12 | v1.6.0 | ✓ Updated |
-| PRODUCTION_GUIDE.md | 2025-12 | v1.6.0 | ✓ Updated |
-| SQL_COMPATIBILITY.md | 2025-12 | v1.6.0 | ✓ Updated |
-| SECURITY.md | 2025-12 | v1.6.0 | ✓ Updated |
-| ERROR_CODES.md | 2025-12 | v1.6.0 | ✓ Updated |
-| PERFORMANCE_TUNING.md | 2025-12 | v1.6.0 | ✓ Updated |
-| UPGRADE_GUIDE.md | 2025-12 | v1.6.0 | ✓ Updated |
-
 ## Recent Feature Additions
 
-### v1.6.0 (December 2025) - PostgreSQL Extensions & Developer Tools
+### PostgreSQL Extensions & Developer Tools (since v1.6.0)
 - **LATERAL JOIN** - Correlated subqueries in FROM clause
 - **JSON/JSONB Operators** - Full operator support (`->`, `->>`, `#>`, `#>>`, `@>`, `<@`, `?`, `?|`, `?&`, `#-`)
 - **DISTINCT ON** - PostgreSQL-specific row selection
@@ -339,17 +316,17 @@ If you can't find what you need:
 - **Aggregate ORDER BY** - ORDER BY within aggregate functions
 - **RETURNING Clause** - Return modified rows from DML statements
 - **LSP Server** - Language Server Protocol for IDE integration
-- **Linter** - 10 built-in linting rules (L001-L010) with auto-fix
+- **Linter** - 30 built-in linting rules (L001-L030), with auto-fix on five style rules
 - **Configuration** - YAML-based project configuration (.gosqlx.yml)
 - **Enhanced CLI** - Improved format, analyze, and parse commands
 
-### v1.5.0 - Advanced SQL Features
+### Advanced SQL Features (since v1.5.0)
 - **Window Functions** - ROW_NUMBER, RANK, DENSE_RANK, NTILE, LAG, LEAD, FIRST_VALUE, LAST_VALUE
 - **Window Frames** - ROWS/RANGE with PRECEDING/FOLLOWING/CURRENT ROW
 - **CTEs** - Common Table Expressions with recursive support
 - **Set Operations** - UNION, EXCEPT, INTERSECT with proper precedence
 
-### v1.4.0 - Enterprise Features
+### Enterprise Features (since v1.4.0)
 - **SQL Injection Detection** - `pkg/sql/security` package for pattern detection
 - **MERGE Statements** - SQL Server/PostgreSQL MERGE support (SQL:2003 F312)
 - **Grouping Sets** - ROLLUP, CUBE, GROUPING SETS (SQL-99 T431)
@@ -358,7 +335,7 @@ If you can't find what you need:
 - **Subquery Support** - Scalar, table, correlated, EXISTS subqueries
 - **NULLS FIRST/LAST** - ORDER BY with null ordering (SQL-99 F851)
 
-## What's New in v1.6.0
+## PostgreSQL Extensions and Developer Tools
 
 ### PostgreSQL Extensions
 GoSQLX now supports advanced PostgreSQL-specific features:

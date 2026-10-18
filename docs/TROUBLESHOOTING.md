@@ -1,19 +1,5 @@
 # GoSQLX Troubleshooting Guide
 
-
-## Table of Contents
-- [Common Issues](#common-issues)
-- [Feature Issues](#feature-issues)
-  - [LSP Server Issues](#lsp-server-issues)
-  - [Linter Issues](#linter-issues)
-  - [Security Scanner Issues](#security-scanner-issues)
-  - [Parser Issues](#parser-issues)
-- [Error Codes Reference](#error-codes-reference)
-- [Performance Issues](#performance-issues)
-- [Memory Issues](#memory-issues)
-- [Debugging Techniques](#debugging-techniques)
-- [FAQ](#faq)
-
 ## Common Issues
 
 ### Issue: "panic: runtime error: invalid memory address or nil pointer dereference"
@@ -250,30 +236,27 @@ lsp:
     severity_threshold: "hint"  # Show all levels
     debounce_ms: 300
     max_diagnostics: 100
-
-linter:
-  enabled: true
-  rules:
-    - L001  # Ensure key rules enabled
-    - L002
-    - L003
 ```
 
 **Verify Diagnostics Programmatically:**
 ```go
 import (
-    "github.com/ajitpratap0/GoSQLX/pkg/lsp"
     "github.com/ajitpratap0/GoSQLX/pkg/linter"
+    "github.com/ajitpratap0/GoSQLX/pkg/linter/rules/keywords"
+    "github.com/ajitpratap0/GoSQLX/pkg/linter/rules/whitespace"
 )
 
 func TestDiagnostics(sqlContent string) {
-    // Create linter
-    l := linter.NewLinter()
+    // Create a linter from the rules you want to run
+    l := linter.New(
+        whitespace.NewTrailingWhitespaceRule(),
+        keywords.NewKeywordCaseRule(keywords.CaseUpper),
+    )
 
     // Run lint
-    violations := l.Lint(sqlContent)
+    result := l.LintString(sqlContent, "query.sql")
 
-    for _, v := range violations {
+    for _, v := range result.Violations {
         log.Printf("Line %d: [%s] %s",
             v.Location.Line, v.Rule, v.Message)
     }
@@ -377,18 +360,8 @@ func TestHover(content string, line, char int) {
 3. Syntax errors prevent parsing
 
 **Diagnosis:**
-```bash
-# Check which rules support auto-fix
-gosqlx lint --list-rules
 
-# Output shows:
-# L001: keyword-capitalization (auto-fixable)
-# L002: indentation (auto-fixable)
-# L003: trailing-whitespace (auto-fixable)
-# L004: semicolon-required (auto-fixable)
-# L005: line-length (not auto-fixable)
-# ...
-```
+The CLI auto-fixes only the style rules that support it: L001 (Trailing Whitespace), L002 (Mixed Indentation), L003 (Consecutive Blank Lines), L007 (Keyword Case Consistency) and L010 (Redundant Whitespace). See the [Linting Rules reference](LINTING_RULES.md) for the full list of rules and which ones are auto-fixable. Violations from other rules, for example L004 (Indentation Depth) and L005 (Long Lines), are reported but never rewritten.
 
 **Solutions:**
 ```bash
@@ -408,10 +381,15 @@ gosqlx lint --auto-fix query.sql
 ```
 
 **Programmatic Auto-Fix:**
+
+Auto-fix is a method of each rule: `Rule.CanAutoFix()` reports support and `Rule.Fix(content, violations)` returns the corrected text.
+
 ```go
 import (
-    "github.com/ajitpratap0/GoSQLX/pkg/linter"
     "os"
+
+    "github.com/ajitpratap0/GoSQLX/pkg/linter"
+    "github.com/ajitpratap0/GoSQLX/pkg/linter/rules/whitespace"
 )
 
 func AutoFixFile(filename string) error {
@@ -420,13 +398,20 @@ func AutoFixFile(filename string) error {
         return err
     }
 
-    l := linter.NewLinter()
-    l.EnableAutoFix(true)
-    l.EnableRules([]string{"L001", "L002", "L003", "L004"})
+    rule := whitespace.NewTrailingWhitespaceRule()
+    l := linter.New(rule)
 
-    fixed, err := l.Fix(string(content))
-    if err != nil {
-        return err
+    result := l.LintString(string(content), filename)
+    if result.Error != nil {
+        return result.Error
+    }
+
+    fixed := string(content)
+    if rule.CanAutoFix() && len(result.Violations) > 0 {
+        fixed, err = rule.Fix(fixed, result.Violations)
+        if err != nil {
+            return err
+        }
     }
 
     return os.WriteFile(filename, []byte(fixed), 0644)
@@ -444,86 +429,46 @@ func AutoFixFile(filename string) error {
 
 **Diagnosis:**
 ```bash
-# Check active configuration
-gosqlx lint --show-config
-
-# Test specific rule
+# Run the CLI on the file; it reports every violation from the style rules L001-L010
 gosqlx lint query.sql
-
-# Show all violations regardless of severity
-gosqlx lint --severity hint query.sql
 ```
+
+The CLI runs only the style rules L001-L010 (see [Linting Rules](LINTING_RULES.md)). The safety, performance and naming rules (L011-L030) run only through the Go library, so a missing L011-L030 violation on the command line is expected.
 
 **Solutions:**
 ```yaml
-# .gosqlx.yml - Enable all rules with detailed config
-linter:
-  enabled: true
-  auto_fix: false
-  severity_threshold: "hint"
-
-  rules:
-    L001:  # Keyword capitalization
-      enabled: true
-      severity: "warning"
-      style: "upper"  # or "lower"
-
-    L002:  # Indentation
-      enabled: true
-      severity: "warning"
-      indent_size: 4
-      indent_type: "space"  # or "tab"
-
-    L003:  # Trailing whitespace
-      enabled: true
-      severity: "info"
-
-    L004:  # Semicolon required
-      enabled: true
-      severity: "warning"
-
-    L005:  # Line length
-      enabled: true
-      severity: "info"
+# .gosqlx.yml - read by pkg/linter/config (Go library), not by the gosqlx lint CLI
+rules:
+  L001:
+    enabled: true
+    severity: warning
+  L005:
+    enabled: true
+    params:
       max_length: 120
-
-    L006:  # Table alias required
-      enabled: true
-      severity: "warning"
-
-    L007:  # No SELECT *
-      enabled: true
-      severity: "info"
-
-    L008:  # Column naming convention
-      enabled: true
-      severity: "info"
-      pattern: "^[a-z_][a-z0-9_]*$"
-
-    L009:  # No implicit JOIN
-      enabled: true
-      severity: "warning"
-
-    L010:  # Consistent quoting
-      enabled: true
-      severity: "info"
-      quote_style: "double"  # or "single", "backtick"
+  L011:
+    enabled: true
+    severity: error
+ignore:
+  - "migrations/*.sql"
+default_severity: warning
 ```
+
+Rule IDs are `L001` to `L030`; severities are `error`, `warning` and `info`. Unknown rule IDs become `Config.Warnings` rather than errors, but an unknown top-level key (for example a `linter:` wrapper) is a load error.
 
 **Test Rule Detection:**
 ```go
-func TestRuleDetection(sql string, ruleID string) {
-    l := linter.NewLinter()
-    l.EnableRules([]string{ruleID})
+func TestRuleDetection(sql string, rule linter.Rule) {
+    l := linter.New(rule)
 
-    violations := l.Lint(sql)
+    result := l.LintString(sql, "inline.sql")
 
-    if len(violations) == 0 {
-        log.Printf("Rule %s: No violations detected", ruleID)
+    if len(result.Violations) == 0 {
+        log.Printf("Rule %s: No violations detected", rule.ID())
     } else {
-        for _, v := range violations {
+        for _, v := range result.Violations {
             log.Printf("Rule %s: Line %d - %s",
-                ruleID, v.Location.Line, v.Message)
+                v.Rule, v.Location.Line, v.Message)
         }
     }
 }
@@ -540,39 +485,54 @@ func TestRuleDetection(sql string, ruleID string) {
 4. Config file not in project root
 
 **Diagnosis:**
-```bash
-# Check config file search path
-gosqlx lint --show-config-path
 
+The `gosqlx lint` command does not read `.gosqlx.yml`; it always runs the style rules L001-L010 with its own flags (`--max-length`, `--auto-fix`, `--fail-on-warn`, `--dialect`, `--security`). `.gosqlx.yml` is read by the Go package `pkg/linter/config`.
+
+```bash
 # Validate YAML syntax
 yamllint .gosqlx.yml
-
-# Show effective configuration
-gosqlx lint --show-config query.sql
 ```
 
 **Solutions:**
-```bash
-# Solution 1: Place config in correct location
-# Priority order:
-# 1. .gosqlx.yml in current directory
-# 2. .gosqlx.yml in parent directories (up to git root)
-# 3. ~/.gosqlx.yml (user home)
+```go
+import (
+    "errors"
+    "log"
 
-# Solution 2: Specify config explicitly
-gosqlx lint query.sql
+    "github.com/ajitpratap0/GoSQLX/pkg/linter"
+    "github.com/ajitpratap0/GoSQLX/pkg/linter/config"
+)
 
-# Solution 3: Validate config structure
-cat > .gosqlx.yml <<EOF
-linter:
-  enabled: true
-  rules:
-    - L001
-    - L002
-EOF
+func NewConfiguredLinter(allRules []linter.Rule) (*linter.Linter, error) {
+    // LoadDefault walks up from the working directory looking for .gosqlx.yml
+    cfg, err := config.LoadDefault()
+    if errors.Is(err, config.ErrNotFound) {
+        return linter.New(allRules...), nil // no config: built-in defaults
+    }
+    if err != nil {
+        return nil, err
+    }
+    for _, w := range cfg.Warnings {
+        log.Printf("config warning: %s", w)
+    }
 
-# Solution 4: Use default config template
-gosqlx lint --init-config
+    // Load(path) reads an explicit file instead:
+    //   cfg, err := config.Load("ci/.gosqlx.yml")
+    rules := cfg.Apply(allRules)
+    return linter.NewWithIgnore(cfg, rules...), nil
+}
+```
+
+A valid file uses the top-level keys `rules`, `ignore` and `default_severity`:
+```yaml
+rules:
+  L001:
+    enabled: true
+  L011:
+    enabled: false
+ignore:
+  - "vendor/**"
+default_severity: warning
 ```
 
 #### Issue: Performance Degradation with Many Rules
@@ -580,18 +540,15 @@ gosqlx lint --init-config
 **Symptom:** Linting very slow with all 30 rules enabled
 
 **Solutions:**
-```yaml
-# .gosqlx.yml - Optimize linter performance
-linter:
-  enabled: true
-  parallel: true  # Enable parallel rule execution
-  max_workers: 4  # Limit concurrent workers
 
-  # Enable only essential rules for fast feedback
-  rules:
-    - L001  # Keywords
-    - L003  # Whitespace
-    - L004  # Semicolon
+Pass only the rules you need to `linter.New(...)`, or disable rules in `.gosqlx.yml` and filter with `cfg.Apply(rules)`:
+```yaml
+# .gosqlx.yml
+rules:
+  L011:
+    enabled: false
+  L016:
+    enabled: false
 ```
 
 **Benchmark Linter:**
@@ -600,11 +557,11 @@ import "testing"
 
 func BenchmarkLinter(b *testing.B) {
     sql := `SELECT * FROM users WHERE id = 1`
-    l := linter.NewLinter()
+    l := linter.New(whitespace.NewTrailingWhitespaceRule())
 
     b.ResetTimer()
     for i := 0; i < b.N; i++ {
-        _ = l.Lint(sql)
+        _ = l.LintString(sql, "bench.sql")
     }
 }
 
@@ -1320,26 +1277,20 @@ func (s *LSPServer) OnDocumentChange(content string) {
 **Issue:** Linting large files or codebases is slow
 
 **Solutions:**
-```yaml
-# .gosqlx.yml - Linter optimization
-linter:
-  enabled: true
-  parallel: true  # Run rules in parallel
-  max_workers: 8  # Use 8 workers for parallel execution
 
-  # Cache results
-  cache_enabled: true
-  cache_dir: ".gosqlx-cache"
+The linter has no worker, cache or timeout settings. Lint fewer files and run fewer rules:
+```bash
+# Lint only the SQL you changed
+gosqlx lint --pattern "*.sql" -r migrations/
+```
 
-  # Limit processing
-  max_file_size: 524288  # 512KB
-  timeout_seconds: 10
-
-  # Enable only fast rules
-  rules:
-    - L001  # Keyword case (fast)
-    - L003  # Trailing whitespace (fast)
-    - L004  # Semicolon (fast)
+In Go, build the linter from only the rules you need, and reuse one `*linter.Linter` across goroutines (it is thread-safe):
+```go
+l := linter.New(
+    whitespace.NewTrailingWhitespaceRule(), // L001
+    whitespace.NewRedundantWhitespaceRule(), // L010
+)
+result := l.LintDirectory("migrations", "*.sql")
 ```
 
 **Benchmark and Optimize:**
@@ -1352,16 +1303,18 @@ func BenchmarkLinterRules(b *testing.B) {
         WHERE u.active = true
     `
 
-    l := linter.NewLinter()
-
     // Benchmark individual rules
-    rules := []string{"L001", "L002", "L003", "L004", "L005"}
+    rules := []linter.Rule{
+        whitespace.NewTrailingWhitespaceRule(),
+        whitespace.NewMixedIndentationRule(),
+        whitespace.NewLongLinesRule(100),
+    }
     for _, rule := range rules {
-        b.Run(rule, func(b *testing.B) {
-            l.EnableRules([]string{rule})
+        l := linter.New(rule)
+        b.Run(rule.ID(), func(b *testing.B) {
             b.ResetTimer()
             for i := 0; i < b.N; i++ {
-                _ = l.Lint(testSQL)
+                _ = l.LintString(testSQL, "bench.sql")
             }
         })
     }
@@ -1416,9 +1369,6 @@ parser:
 lsp:
   max_documents: 100  # Limit open documents
   gc_interval_seconds: 300  # Run GC every 5 minutes
-
-linter:
-  max_workers: 4  # Limit parallel workers
 ```
 
 **Code-Level Optimization:**
@@ -1600,10 +1550,6 @@ parser:
 lsp:
   max_file_size: 10485760  # 10MB limit
   stream_large_files: true
-
-linter:
-  max_file_size: 5242880  # 5MB limit
-  skip_large_files: true  # Skip instead of error
 ```
 
 ## Memory Issues
@@ -1860,21 +1806,19 @@ require('lspconfig').gosqlx.setup{
 
 **A:** Check these common issues:
 1. Ensure file is saved
-2. Check `.gosqlx.yml` has linter enabled
+2. Check that the file is a `.sql` file the editor associates with the SQL language
 3. Verify `gosqlx` is in PATH: `which gosqlx`
 4. Check LSP server logs: `gosqlx lsp --log /tmp/lsp.log`
 
 #### Q: Can I disable specific linter rules in the LSP?
 
-**A:** Yes, configure in `.gosqlx.yml`:
+**A:** The LSP server runs the built-in style rules and does not read a linter section from `.gosqlx.yml`. To disable rules in your own Go tooling, use the `rules` map read by `pkg/linter/config`:
 ```yaml
-linter:
-  enabled: true
-  rules:
-    L001:
-      enabled: false  # Disable keyword capitalization
-    L002:
-      enabled: true   # Keep indentation
+rules:
+  L001:
+    enabled: false  # Disable trailing whitespace
+  L002:
+    enabled: true
 ```
 
 #### Q: How do I get hover documentation to work?
@@ -1893,47 +1837,43 @@ lsp:
 
 #### Q: Which linter rules support auto-fix?
 
-**A:** Auto-fixable rules:
-- **L001**: Keyword capitalization
-- **L002**: Indentation
-- **L003**: Trailing whitespace
-- **L004**: Semicolon required
+**A:** Five rules, as listed in the [Linting Rules reference](LINTING_RULES.md):
+- **L001**: Trailing Whitespace
+- **L002**: Mixed Indentation
+- **L003**: Consecutive Blank Lines
+- **L007**: Keyword Case Consistency
+- **L010**: Redundant Whitespace
 
-Not auto-fixable:
-- **L005**: Line length
-- **L006**: Table alias required
-- **L007**: No SELECT *
-- **L008**: Column naming convention
-- **L009**: No implicit JOIN
-- **L010**: Consistent quoting
+Not auto-fixable: L004 (Indentation Depth), L005 (Long Lines), L006 (Column Alignment), L008 (Comma Placement), L009 (Aliasing Consistency) and the safety, performance and naming rules L011-L030.
 
 #### Q: How do I run only specific linter rules?
 
-**A:** Use the `--rules` flag:
-```bash
-gosqlx lint query.sql
+**A:** The CLI cannot select rules; `gosqlx lint` always runs the style rules L001-L010. To run a subset, use `.gosqlx.yml` with `pkg/linter/config`, or pass just the rules you want to `linter.New(rules...)`:
+```go
+l := linter.New(
+    whitespace.NewTrailingWhitespaceRule(),
+    whitespace.NewMixedIndentationRule(),
+)
 ```
 
-Or configure in `.gosqlx.yml`:
+Or disable rules in `.gosqlx.yml`:
 ```yaml
-linter:
-  enabled: true
-  rules:
-    - L001
-    - L002
-    - L003
+rules:
+  L004:
+    enabled: false
+  L005:
+    enabled: false
 ```
 
 #### Q: Can I customize linter rule severity?
 
-**A:** Yes, in `.gosqlx.yml`:
+**A:** Yes, in `.gosqlx.yml` (read by `pkg/linter/config`):
 ```yaml
-linter:
-  rules:
-    L001:
-      severity: "error"    # error, warning, info, hint
-    L002:
-      severity: "warning"
+rules:
+  L001:
+    severity: error    # error, warning, info
+  L002:
+    severity: warning
 ```
 
 #### Q: How do I ignore linter warnings for specific queries?
@@ -1969,7 +1909,7 @@ SELECT * FROM users WHERE profile ? 'email';
 
 #### Q: Can I parse LATERAL JOINs?
 
-**A:** Yes, LATERAL JOIN support added in v1.6.0:
+**A:** Yes, LATERAL JOIN is supported:
 ```sql
 SELECT u.name, r.order_date
 FROM users u,
@@ -2065,9 +2005,9 @@ gosqlx config init
 
 #### Q: Can I use different configs for different environments?
 
-**A:** Yes, specify config file explicitly:
-```bash
-gosqlx lint query.sql
+**A:** Yes. `gosqlx lint` does not read `.gosqlx.yml`, so choose the file in Go code with `config.Load`:
+```go
+cfg, err := config.Load("ci/.gosqlx.yml") // pick the file per environment
 ```
 
 ### Performance Questions
@@ -2085,13 +2025,7 @@ lsp:
 
 #### Q: How can I improve linter performance?
 
-**A:** Enable parallel processing:
-```yaml
-linter:
-  parallel: true
-  max_workers: 8
-  cache_enabled: true
-```
+**A:** Run only the rules you need and reuse one `*linter.Linter` (it is thread-safe) across goroutines. See [Linter Performance Issues](#linter-performance-issues).
 
 #### Q: What's the expected performance for parsing?
 
@@ -2184,9 +2118,9 @@ Before submitting an issue, verify:
 4. Check logs: `tail -f /tmp/gosqlx-lsp.log`
 
 **Linter Issues:**
-1. List available rules: `gosqlx lint --list-rules`
-2. Show config: `gosqlx lint --show-config`
-3. Run the linter on a single file: `gosqlx lint query.sql`
+1. See the available rules: [Linting Rules](LINTING_RULES.md)
+2. Run the linter on a single file: `gosqlx lint query.sql`
+3. Verbose output: `gosqlx lint --verbose query.sql`
 
 **Parser Issues:**
 1. Test tokenization: `gosqlx parse --tokens query.sql`
@@ -2197,7 +2131,7 @@ Before submitting an issue, verify:
 
 When submitting bug reports, include:
 
-```markdown
+````markdown
 ### Environment
 - GoSQLX version: `gosqlx --version`
 - Go version: `go version`
@@ -2222,7 +2156,7 @@ SELECT * FROM users WHERE id = 1;
 - Configuration file (if relevant)
 - IDE/editor being used (for LSP issues)
 - Relevant code snippets
-```
+````
 
 ### Performance Issues
 

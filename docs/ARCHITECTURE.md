@@ -178,7 +178,7 @@ The codebase is organized into focused packages with clear responsibilities and 
   - **linter.go**: Linting engine with file/directory support
   - **rule.go**: Rule interface (Check, Fix, CanAutoFix methods)
   - **context.go**: Linting context with tokens, AST, and SQL content
-  - **30 Built-in Rules (L001-L030)**, see the [Linting Rules reference](/docs/reference/linting-rules/):
+  - **30 Built-in Rules (L001-L030)**, see the [Linting Rules reference](LINTING_RULES.md):
     - **Whitespace** (6 rules): L001 (trailing whitespace), L002 (mixed indentation), L003 (consecutive blank lines), L004 (indentation depth), L005 (long lines), L010 (redundant whitespace)
     - **Style** (3 rules): L006 (column alignment), L008 (comma placement), L009 (aliasing consistency)
     - **Keywords** (1 rule): L007 (keyword case consistency)
@@ -1192,7 +1192,7 @@ ctx.WithAST(astObj, parseErr)    // Add AST (best-effort)
 
 ### Built-in Rules (30 total)
 
-The linter ships 30 rules (L001-L030). Each rule declares its ID, name, description, default severity and whether it supports auto-fix. The [Linting Rules reference](/docs/reference/linting-rules/) documents every rule with examples.
+The linter ships 30 rules (L001-L030). Each rule declares its ID, name, description, default severity and whether it supports auto-fix. The [Linting Rules reference](LINTING_RULES.md) documents every rule with examples.
 
 | Category | Rules | Auto-fix |
 |----------|-------|----------|

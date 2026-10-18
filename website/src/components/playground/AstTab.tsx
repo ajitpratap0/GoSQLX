@@ -1,5 +1,6 @@
 'use client';
 import { useState, useCallback } from "react";
+import { ErrorNotice } from "./ResultParts";
 
 interface AstNodeProps {
   data: unknown;
@@ -78,9 +79,11 @@ function AstNode({ data, depth = 0, label, showEmpty }: AstNodeProps) {
       <div>
         <button
           onClick={() => setCollapsed(!collapsed)}
+          aria-expanded={!collapsed}
+          aria-label={`${label ? label + " " : ""}list, ${data.length} items`}
           className="flex items-center gap-1 hover:bg-bg-overlay rounded px-1 -ml-1 text-sm min-h-[44px] py-2"
         >
-          <span className="text-fg-muted w-4 text-center">
+          <span className="text-fg-muted w-4 text-center" aria-hidden="true">
             {collapsed ? "+" : "-"}
           </span>
           {label && <span className="text-fg-muted">{label}:</span>}
@@ -122,9 +125,11 @@ function AstNode({ data, depth = 0, label, showEmpty }: AstNodeProps) {
       <div>
         <button
           onClick={() => setCollapsed(!collapsed)}
+          aria-expanded={!collapsed}
+          aria-label={`${label ? label + " " : ""}${nodeType ?? "object"}`}
           className="flex items-center gap-1.5 hover:bg-bg-overlay rounded px-1 -ml-1 text-sm min-h-[44px] py-2"
         >
-          <span className="text-fg-muted w-4 text-center">
+          <span className="text-fg-muted w-4 text-center" aria-hidden="true">
             {collapsed ? "+" : "-"}
           </span>
           {label && <span className="text-fg-muted">{label}:</span>}
@@ -177,15 +182,7 @@ export default function AstTab({ data }: AstTabProps) {
   if (data.error) {
     return (
       <div className="p-4">
-        <div className="bg-danger/10 border border-danger/30 rounded-lg p-4">
-          <div className="flex items-center gap-2 text-danger font-medium mb-1">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Parse Error
-          </div>
-          <p className="text-danger text-sm font-mono">{data.error}</p>
-        </div>
+        <ErrorNotice title="Parse Error" message={data.error} polite />
       </div>
     );
   }

@@ -23,6 +23,9 @@
 
   --border: rgba(255, 255, 255, 0.08);  /* decorative hairlines */
 
+  --code-bg: #16161F;      /* every code block, raised above --bg */
+  --code-border: rgba(255, 255, 255, 0.14);  /* visible frame on the dark page */
+
   --brand: #22C55E;        /* primary actions, GoSQLX bars */
   --brand-fg: #052E16;     /* text on brand fills */
   --accent: #818CF8;       /* links, focus ring */
@@ -59,6 +62,9 @@ html.light {
 
   --border: #E5E7EB;
 
+  --code-bg: #F3F4F6;
+  --code-border: #D1D5DB;
+
   --brand: #15803D;
   --brand-fg: #FFFFFF;
   --accent: #4F46E5;
@@ -82,36 +88,6 @@ html.light {
   --scrollbar-hover: rgba(0, 0, 0, 0.2);
 }
 
-/* Code surfaces stay dark in both themes (standard convention): restore the
-   dark token values inside them so every token utility used within resolves
-   to its dark value. Same values as :root, so this is a no-op in dark mode. */
-pre,
-textarea[class*="font-mono"],
-.code-surface {
-  --bg: #0A0A0F;
-  --bg-raised: #12121A;
-  --bg-overlay: #1A1A24;
-  --fg: #F0F0F5;
-  --fg-muted: #A1A1B5;
-  --fg-subtle: #8B8BA0;
-  --border: rgba(255, 255, 255, 0.08);
-  --brand: #22C55E;
-  --accent: #818CF8;
-  --accent-warm: #FB923C;
-  --danger: #F87171;
-  --ok: #4ADE80;
-  --warn: #FACC15;
-  --info: #60A5FA;
-  --violet: #C084FC;
-  --cyan: #22D3EE;
-}
-
-pre,
-textarea[class*="font-mono"] {
-  background-color: #12121A;
-  color: #F0F0F5;
-}
-
 /* `inline` makes each utility reference the runtime variable, so the
    light-mode token values above reach every utility without per-class overrides. */
 @theme inline {
@@ -124,6 +100,9 @@ textarea[class*="font-mono"] {
   --color-fg-subtle: var(--fg-subtle);
 
   --color-border: var(--border);
+
+  --color-code-bg: var(--code-bg);
+  --color-code-border: var(--code-border);
 
   --color-brand: var(--brand);
   --color-brand-fg: var(--brand-fg);
@@ -242,18 +221,21 @@ body {
 /* Prose dark theme overrides */
 .prose-dark {
   --tw-prose-body: color-mix(in srgb, var(--fg) 82%, var(--bg));
+  --tw-prose-lead: var(--fg-muted);
   --tw-prose-headings: var(--fg);
   --tw-prose-links: var(--accent);
   --tw-prose-bold: var(--fg);
   --tw-prose-counters: var(--fg-subtle);
   --tw-prose-bullets: var(--fg-subtle);
   --tw-prose-quotes: var(--fg);
+  --tw-prose-quote-borders: var(--border);
   --tw-prose-captions: var(--fg-subtle);
   --tw-prose-hr: var(--border);
   --tw-prose-th-borders: var(--border);
   --tw-prose-td-borders: var(--border);
   --tw-prose-code: var(--fg);
-  --tw-prose-pre-bg: #12121A;
+  --tw-prose-pre-code: var(--fg);
+  --tw-prose-pre-bg: var(--code-bg);
 }
 
 /* Keyboard focus ring (unlayered so it wins over utility resets) */
@@ -301,9 +283,74 @@ body {
   content: none;
 }
 
-/* Skip rendering offscreen code blocks and tables on long docs pages. */
+/* ==========================================================================
+   CODE SURFACES (#748, #749, #762)
+   One token set for every code block (docs, blog, release notes, home,
+   benchmarks, VS Code page) in both themes: --code-bg / --code-border above.
+   Syntax colours come from build-time Shiki output that references
+   --shiki-token-* (src/lib/highlight.ts), mapped here onto the AA-checked
+   text tokens so highlighting follows the theme with no extra markup.
+   ========================================================================== */
+.code-surface,
+.code-block pre {
+  background-color: var(--code-bg);
+  color: var(--fg);
+  border: 1px solid var(--code-border);
+  border-radius: 0.5rem;
+}
+
+.prose .code-block {
+  margin-top: 1.5em;
+  margin-bottom: 1.5em;
+}
+
+.code-block pre {
+  margin: 0;
+  overflow-x: auto;
+  padding: 1rem;
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+/* Where the copy button is always visible (touch, below lg), reserve room at
+   the inline end so it never covers the end of a scrolled line. */
+@media (max-width: 63.999rem), (hover: none) {
+  .code-block pre {
+    padding-inline-end: 3.5rem;
+  }
+}
+
+/* Code inside a block never gets the inline-code pill (padding, background),
+   which pushed the first line ~6px right of the rest (#749). */
+.code-block pre code,
+.prose pre code {
+  display: block;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  font-size: inherit;
+  color: inherit;
+}
+
+.shiki {
+  --shiki-foreground: var(--fg);
+  --shiki-background: var(--code-bg);
+  --shiki-token-keyword: var(--accent);
+  --shiki-token-string: var(--ok);
+  --shiki-token-string-expression: var(--ok);
+  --shiki-token-comment: var(--fg-subtle);
+  --shiki-token-function: var(--accent-warm);
+  --shiki-token-constant: var(--cyan);
+  --shiki-token-parameter: var(--fg);
+  --shiki-token-punctuation: var(--fg-muted);
+  --shiki-token-link: var(--info);
+}
+
+/* Skip rendering offscreen code blocks and tables on long docs pages. The table
+   wrapper (not the table) is the contained box: paint containment on the table
+   itself clipped wide tables at 390px before the wrapper's overflow-x scroll. */
 .prose pre,
-.prose table {
+.prose .docs-table-wrap {
   content-visibility: auto;
   contain-intrinsic-size: auto 240px;
 }

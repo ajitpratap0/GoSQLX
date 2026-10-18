@@ -1,6 +1,7 @@
 'use client';
 import { useState, useCallback } from "react";
 import SqlEditor from "./SqlEditor";
+import { ErrorNotice } from "./ResultParts";
 
 interface FormatTabProps {
   data: string | { result?: string; formatted?: string; error?: string } | null;
@@ -38,15 +39,7 @@ export default function FormatTab({ data }: FormatTabProps) {
   if (typeof data !== "string" && data.error) {
     return (
       <div className="p-4">
-        <div className="bg-danger/10 border border-danger/30 rounded-lg p-4">
-          <div className="flex items-center gap-2 text-danger font-medium mb-1">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Format Error
-          </div>
-          <p className="text-danger text-sm font-mono">{data.error}</p>
-        </div>
+        <ErrorNotice title="Format Error" message={data.error} polite />
       </div>
     );
   }

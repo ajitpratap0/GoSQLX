@@ -1,7 +1,14 @@
 import { FadeIn } from '@/components/ui/FadeIn';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
-import { TerminalMockup } from '@/components/ui/TerminalMockup';
+import { HighlightedCode } from '@/components/ui/CodeBlock';
+import { DIALECT_NAMES } from '@/data/metrics';
+
+
+const SETTINGS_JSON = `{
+  "gosqlx.executablePath": "/usr/local/bin/gosqlx",
+  "gosqlx.forcePathLookup": false
+}`;
 
 const features = [
   {
@@ -18,7 +25,7 @@ const features = [
   },
   {
     title: 'Multi-dialect',
-    description: 'Supports PostgreSQL, MySQL, SQLite, SQL Server, Oracle, Snowflake, and ClickHouse out of the box.',
+    description: `Supports ${DIALECT_NAMES.join(', ')} out of the box.`,
   },
   {
     title: 'Bundled Binary',
@@ -82,7 +89,7 @@ export function VscodeContent() {
             <h2 className="text-2xl font-bold text-fg mb-6 text-center">
               Install via CLI
             </h2>
-            <TerminalMockup command="code --install-extension ajitpratap0.gosqlx" />
+            <HighlightedCode code="code --install-extension ajitpratap0.gosqlx" lang="bash" label="Install command" />
           </FadeIn>
         </div>
       </section>
@@ -94,19 +101,7 @@ export function VscodeContent() {
             <h2 className="text-2xl font-bold text-fg mb-6 text-center">
               Key Settings
             </h2>
-            <GlassCard className="p-6" hover={false}>
-              <pre
-                role="region"
-                aria-label="Key Settings JSON"
-                tabIndex={0}
-                className="font-mono text-sm text-fg whitespace-pre overflow-x-auto"
-              >
-{`{
-  "gosqlx.executablePath": "/usr/local/bin/gosqlx",
-  "gosqlx.forcePathLookup": false
-}`}
-              </pre>
-            </GlassCard>
+            <HighlightedCode code={SETTINGS_JSON} lang="json" label="Key Settings JSON" />
           </FadeIn>
         </div>
       </section>

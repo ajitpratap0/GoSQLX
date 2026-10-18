@@ -956,7 +956,7 @@ func AdvancedSecurityCheck(sql string) (*security.ScanResult, error) {
 
 ## SQL Linter Usage
 
-GoSQLX includes a SQL linter with 30 built-in rules (L001-L030) covering whitespace, style, keyword case, safety, performance and naming. The full list is in the [Linting Rules reference](/docs/reference/linting-rules/).
+GoSQLX includes a SQL linter with 30 built-in rules (L001-L030) covering whitespace, style, keyword case, safety, performance and naming. The full list is in the [Linting Rules reference](LINTING_RULES.md).
 
 ### Basic Linting
 
@@ -1248,7 +1248,7 @@ The LSP server provides:
 - Helpful error messages
 - Suggested fixes
 
-For complete LSP documentation, see [LSP Guide](/docs/integrations/lsp/).
+For complete LSP documentation, see [LSP Guide](LSP_GUIDE.md).
 
 ## CLI Tool Usage
 
@@ -1436,7 +1436,7 @@ lsp:
   hover_enabled: true
 ```
 
-For complete configuration documentation, see [Configuration](/docs/reference/configuration/).
+For complete configuration documentation, see [Configuration](CONFIGURATION.md).
 
 ### CLI Examples
 
@@ -1730,6 +1730,14 @@ sql := "SELECT * FROM users LIMIT 10, 20"
 // Double-double quotes for escaping
 sql := `SELECT * FROM users WHERE name = "John""s Pizza"`
 ```
+
+In MySQL and MariaDB `||` means logical `OR` (the server default without the
+`PIPES_AS_CONCAT` SQL mode), so with those dialects GoSQLX parses
+`a = 1 || b` as `(a = 1) OR b`. The AST is an `OR`, but `SQL()` and the
+formatter keep the `||` spelling, so output means the same in either server
+mode. Use
+`parser.WithPipesAsConcat()` or `gosqlx.WithPipesAsConcat()` to parse `||` as
+concatenation instead. See [SQL_COMPATIBILITY.md](SQL_COMPATIBILITY.md#-operator-in-mysql-and-mariadb).
 
 ### SQL Server Specific Features
 

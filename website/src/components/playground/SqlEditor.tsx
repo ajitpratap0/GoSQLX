@@ -1,7 +1,7 @@
 'use client';
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, type MouseEvent as ReactMouseEvent } from "react";
 import { EditorView, placeholder as cmPlaceholder, keymap } from "@codemirror/view";
-import { EditorState, Compartment } from "@codemirror/state";
+import { EditorState, Compartment, Prec } from "@codemirror/state";
 import { sql } from "@codemirror/lang-sql";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
@@ -42,6 +42,9 @@ const baseTheme = EditorView.theme({
     fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
     fontSize: "14px",
     lineHeight: "1.6",
+    // Stretch .cm-content to the full pane so a click below the last line
+    // lands in the editable area and focuses the editor.
+    alignItems: "stretch",
   },
   ".cm-gutters": {
     borderRight: "none",
@@ -55,15 +58,15 @@ const baseTheme = EditorView.theme({
 // In light mode no base theme is applied, so the editor falls back to
 // CodeMirror's light defaults plus these token colours.
 const tokenTheme = (dark: boolean) =>
-  EditorView.theme(
+  Prec.highest(EditorView.theme(
     {
       "&": { backgroundColor: "var(--bg)", color: "var(--fg)" },
-      ".cm-gutters": { backgroundColor: "var(--bg)", color: "var(--fg-subtle)" },
+      ".cm-gutters": { backgroundColor: "var(--bg)", color: "var(--fg-subtle)", border: "none" },
       ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: "var(--bg-overlay)" },
       ".cm-cursor": { borderLeftColor: "var(--fg)" },
     },
     { dark },
-  );
+  ));
 
 const isLightMode = () =>
   typeof document !== "undefined" && document.documentElement.classList.contains("light");
@@ -95,9 +98,6 @@ export default function SqlEditor({
     if (!containerRef.current) return;
 
     const minHeightTheme = EditorView.theme({
-      ".cm-content": {
-        minHeight,
-      },
       ".cm-scroller": {
         minHeight,
       },
@@ -187,5 +187,13 @@ export default function SqlEditor({
     }
   }, [value]);
 
-  return <div ref={containerRef} className="h-full" style={{ maxWidth: "100%", overflow: "hidden" }} aria-label={ariaLabel} />;
+  // Clicks on the pane padding (outside .cm-editor) also focus the editor.
+  const focusOnPaneClick = (e: ReactMouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget && !readOnly) {
+      e.preventDefault();
+      viewRef.current?.focus();
+    }
+  };
+
+  return <div ref={containerRef} onMouseDown={focusOnPaneClick} className="h-full" style={{ maxWidth: "100%", overflow: "hidden" }} aria-label={ariaLabel} />;
 }

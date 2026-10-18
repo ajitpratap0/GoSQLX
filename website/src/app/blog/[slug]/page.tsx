@@ -1,9 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { compileMDX } from 'next-mdx-remote/rsc';
-import remarkGfm from 'remark-gfm';
-import rehypeSlug from 'rehype-slug';
 import { pageMeta } from '@/lib/seo';
 import {
   articleHref,
@@ -16,7 +13,7 @@ import {
 } from '@/lib/articles';
 import { SITE_URL } from '@/lib/site';
 import { JsonLd } from '@/components/JsonLd';
-import { mdxComponents } from '@/components/docs/mdx-components';
+import { renderMarkdown } from '@/lib/markdown';
 import { formatArticleDate } from '../format-date';
 
 interface Props {
@@ -35,7 +32,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!article) return {};
 
   const meta = pageMeta({
-    title: article.title,
+    title: article.metaTitle ?? article.title,
     description: article.description,
     path: articleHref(slug),
     type: 'article',
@@ -51,6 +48,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     alternates: {
       ...meta.alternates,
       types: {
+        ...meta.alternates?.types,
         'text/markdown': articleMarkdownPath(slug),
         'application/rss+xml': '/blog/rss.xml',
       },
@@ -63,17 +61,7 @@ export default async function ArticlePage({ params }: Props) {
   const article = getArticleBySlug(slug);
   if (!article) notFound();
 
-  const { content } = await compileMDX({
-    source: article.content,
-    options: {
-      mdxOptions: {
-        format: 'md',
-        remarkPlugins: [remarkGfm],
-        rehypePlugins: [rehypeSlug],
-      },
-    },
-    components: mdxComponents,
-  });
+  const content = await renderMarkdown(article.content);
 
   const url = articleUrl(slug);
   const others = getAllArticles().filter((a) => a.slug !== slug).slice(0, 3);
@@ -149,7 +137,7 @@ export default async function ArticlePage({ params }: Props) {
             </div>
           </header>
 
-          <div className="prose prose-invert prose-dark max-w-none prose-headings:font-semibold prose-a:no-underline [&_:not(pre)>code]:bg-bg-raised prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:before:content-none prose-code:after:content-none prose-hr:border-border">
+          <div className="prose prose-invert prose-dark max-w-none prose-headings:font-semibold prose-a:no-underline prose-hr:border-border">
             {content}
           </div>
 

@@ -132,7 +132,7 @@ Format linting results for display.
 
 ## Built-in Rules
 
-All 30 rules are listed below. The [Linting Rules reference](/docs/reference/linting-rules/) documents each one with examples.
+All 30 rules are listed below. The [Linting Rules reference](../LINTING_RULES.md) documents each one with examples.
 
 | Rule | Name | Package | Auto-Fix | Severity |
 |------|------|---------|----------|----------|

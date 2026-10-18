@@ -8,6 +8,9 @@
  *    and the doc must not claim a different rule count;
  *  - no hand-written "Version:" / "Last Updated:" lines (the site derives the
  *    date from git and the release badge from the current release);
+ *  - no `gosqlx lint` flag that cmd/gosqlx/cmd does not define, and no mention of
+ *    --rules, --list-rules, --show-config, --init-config;
+ *  - the error-code count claimed in ERROR_CODES.md matches pkg/errors;
  *  - no per-release labels such as "(v1.6.0)" or "NEW v1.6.0" in headings;
  *  - no stale Go requirement (the project needs Go 1.26+);
  *  - no hand-written table of contents (the page already has "On this page"),
@@ -24,6 +27,18 @@ const websiteDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = resolve(websiteDir, '..');
 const docsDir = join(repoRoot, 'docs');
 
+/** Long flag names registered in cmd/gosqlx/cmd (lint's own flags plus the global ones). */
+function realLintFlags() {
+  const flags = new Set(['--help']);
+  for (const f of ['lint.go', 'root.go']) {
+    const text = readFileSync(join(repoRoot, 'cmd', 'gosqlx', 'cmd', f), 'utf8');
+    const re = f === 'lint.go' ? /lintCmd\.Flags\(\)\.\w+\([^"\n]*"([a-z-]+)"/g : /rootCmd\.PersistentFlags\(\)\.\w+\([^"\n]*"([a-z-]+)"/g;
+    for (const m of text.matchAll(re)) flags.add(`--${m[1]}`);
+  }
+  return flags;
+}
+const REAL_LINT_FLAGS = realLintFlags();
+
 /** Per-line checks. Rules marked `fenced` also run inside fenced code blocks. */
 const LINE_RULES = [
   {
@@ -33,7 +48,7 @@ const LINE_RULES = [
   },
   {
     name: 'per-release heading label',
-    re: /^#{1,6}\s+(?:.*(\(\s*[^)]*\bv\d+\.\d+(\.\d+)?\+?[^)]*\)|\bNEW v\d+\.\d+|\bNew in v\d|\bAdded in v\d|\bin v\d+\.\d+(\.\d+)?\s*$))/i,
+    re: /^#{1,6}\s+(?:v\d+\.\d+(?:\.\d+)?\b|.*(\(\s*[^)]*\bv\d+\.\d+(\.\d+)?\+?[^)]*\)|\bNEW v\d+\.\d+|\bNew in v\d|\bAdded in v\d|\bin v\d+\.\d+(\.\d+)?\s*$))/i,
     hint: 'evergreen docs should not label headings with a release',
   },
   {
@@ -49,9 +64,21 @@ const LINE_RULES = [
   },
   {
     name: 'nonexistent gosqlx lint flag',
-    re: /gosqlx lint\b[^\n|]*\s--(fix|rules|config)\b/,
-    hint: 'the real flag is --auto-fix; there is no --rules or --config',
+    test: (line) => {
+      const m = line.match(/gosqlx lint\b([^\n|]*)/);
+      if (!m) return false;
+      return [...m[1].matchAll(/(?:^|\s)(--[a-z][a-z-]*)/g)].some((f) => !REAL_LINT_FLAGS.has(f[1]));
+    },
+    hint: 'gosqlx lint only has --recursive, --pattern, --auto-fix, --max-length, --fail-on-warn, --security, --dialect and the global --verbose, --output, --format',
     fenced: true,
+  },
+  {
+    name: 'nonexistent lint option mentioned in text',
+    re: /(?<![\w-])--(?:rules|list-rules|show-config(?:-path)?|init-config)\b/,
+    hint: 'the CLI cannot select rules or read .gosqlx.yml; link to LINTING_RULES.md or use pkg/linter/config',
+    fenced: true,
+    // `gosqlx action` really has --rules/--severity, and SQLFluff has its own --rules.
+    skip: (file, line) => file.endsWith('lint-sql-in-ci.md') || /sqlfluff/i.test(line),
   },
   {
     name: 'stale Go requirement',
@@ -103,7 +130,7 @@ function scanDoc(file, text) {
       if (fence !== null && !rule.fenced) continue;
       if (rule.only && !rule.only(file)) continue;
       if (rule.skip && rule.skip(file, line)) continue;
-      if (rule.re.test(line)) hits.push({ line: i + 1, rule });
+      if (rule.test ? rule.test(line) : rule.re.test(line)) hits.push({ line: i + 1, rule });
     }
   });
   return hits;
@@ -155,6 +182,22 @@ function checkRuleCounts(text) {
   return errors;
 }
 
+/** Number of ErrorCode constants declared in pkg/errors/errors.go. */
+function errorCodeCount() {
+  const text = readFileSync(join(repoRoot, 'pkg', 'errors', 'errors.go'), 'utf8');
+  return [...text.matchAll(/^\s*ErrCode\w+\s+ErrorCode\s*=\s*"E\d{4}"/gm)].length;
+}
+
+function checkErrorCodes(text) {
+  const n = errorCodeCount();
+  const errors = [];
+  if (n === 0) return ['no error codes found in pkg/errors/errors.go (script out of date?)'];
+  for (const m of text.matchAll(/\ball (\d+) error codes\b/g)) {
+    if (Number(m[1]) !== n) errors.push(`doc claims "${m[0]}" but pkg/errors declares ${n}`);
+  }
+  return errors;
+}
+
 if (process.argv.includes('--self-test')) {
   const seeded = [
     '**Version**: v1.15.0',
@@ -169,13 +212,21 @@ if (process.argv.includes('--self-test')) {
     '### Company: Startup (Fictional Example)',
     '| MariaDB | Excellent | superset (v1.14.0) |',
     'gosqlx lint --fix queries/*.sql',
+    'gosqlx lint --list-rules',
+    'gosqlx lint --show-config query.sql',
+    'gosqlx lint --severity hint query.sql',
+    'gosqlx lint --init-config',
+    'Use the `--rules` flag:',
+    'run `--show-config-path` to see it',
+    '### v1.6.0 (December 2025)',
+    '### v1.4.0',
   ];
   const missed = seeded.filter((l) => scanDoc(join(docsDir, 'X.md'), l).length === 0);
   const fenced = scanDoc(join(docsDir, 'X.md'), '```\n**Version**: v1.15.0\n```').length;
   const fencedGo = ['```dockerfile\nFROM golang:1.21-alpine\n```', "```yaml\ngo-version: '1.21'\n```", '```yaml\nimage: golang:1.21\n```'].filter(
     (t) => scanDoc(join(docsDir, 'X.md'), t).length === 0,
   );
-  if (missed.length > 0 || fenced !== 0 || fencedGo.length > 0 || checkLintingRules('# Rules\n').length === 0 || checkRuleCounts('- **10 Linter Rules (L001-L030)**: x').length === 0) {
+  if (missed.length > 0 || fenced !== 0 || fencedGo.length > 0 || checkLintingRules('# Rules\n').length === 0 || checkRuleCounts('- **10 Linter Rules (L001-L030)**: x').length === 0 || checkErrorCodes('covers all 3 error codes').length === 0 || scanDoc(join(docsDir, 'X.md'), 'gosqlx lint --auto-fix -r --dialect mysql --max-length 80 q.sql').length !== 0) {
     console.error('self-test failed', { missed, fenced, fencedGo });
     process.exit(1);
   }
@@ -200,6 +251,12 @@ for (const file of sidebarFiles()) {
   for (const err of checkRuleCounts(text)) {
     failures++;
     console.error(`${relative(repoRoot, file)}: ${err}`);
+  }
+  if (file.endsWith('ERROR_CODES.md')) {
+    for (const err of checkErrorCodes(text)) {
+      failures++;
+      console.error(`${relative(repoRoot, file)}: ${err}`);
+    }
   }
   if (file.endsWith('LINTING_RULES.md')) {
     for (const err of checkLintingRules(text)) {

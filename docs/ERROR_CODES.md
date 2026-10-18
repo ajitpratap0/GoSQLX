@@ -44,7 +44,6 @@ Comprehensive reference for all error codes in GoSQLX with examples and solution
 - [LSP Integration for Real-Time Error Detection](#lsp-integration-for-real-time-error-detection)
 - [Performance Tips](#performance-tips)
 - [Getting Help](#getting-help)
-- [Changelog](#changelog)
 
 ---
 
@@ -699,7 +698,7 @@ SELECT * FROM cte;
 
 ## Linter Rules (L001-L030)
 
-While error codes (E1xxx-E4xxx) identify parsing and semantic errors, linter rules (L001-L030) identify style and quality issues. See the [Linting Rules reference](/docs/reference/linting-rules/) for complete details.
+While error codes (E1xxx-E4xxx) identify parsing and semantic errors, linter rules (L001-L030) identify style and quality issues. See the [Linting Rules reference](LINTING_RULES.md) for complete details.
 
 ### Linter Rule Summary
 
@@ -789,7 +788,7 @@ for _, finding := range results.Findings {
 }
 ```
 
-See [pkg/sql/security/scanner.go](/Users/ajitpratapsingh/dev/GoSQLX/pkg/sql/security/scanner.go) for implementation details.
+See [pkg/sql/security/scanner.go](https://github.com/ajitpratap0/GoSQLX/blob/main/pkg/sql/security/scanner.go) for implementation details.
 
 ---
 
@@ -921,34 +920,11 @@ See [LSP_GUIDE.md](LSP_GUIDE.md) for complete LSP documentation.
 
 ---
 
-## Changelog
-
-### v1.6.0 (December 2025)
-- Updated E2010 with LATERAL JOIN support (now fully supported)
-- Clarified E2008 data type support with PostgreSQL extensions
-- Enhanced E2007 with recursion depth limit examples
-- Updated all examples to reflect v1.6.0 SQL feature support
-- Added references to LSP integration for real-time error diagnostics
-- Improved error context extraction with better position tracking
-
-### v1.4.0
-- Added comprehensive error context formatting
-- Added intelligent error suggestions
-- Added Unicode support in error messages
-- Added window function, CTE, and set operation error patterns
-
-### v1.3.0
-- Initial structured error system
-- Basic error codes (E1xxx-E4xxx)
-- Position tracking and hints
-
----
-
 ## Summary
 
-This comprehensive error code reference covers all 26 error codes in GoSQLX:
+This comprehensive error code reference covers all 27 error codes in GoSQLX:
 
-- **8 Tokenizer Errors (E1001-E1008)**: Lexical analysis and DoS protection
+- **9 Tokenizer Errors (E1001-E1009)**: Lexical analysis and DoS protection
 - **12 Parser Errors (E2001-E2012)**: SQL syntax and parsing failures
 - **4 Semantic Errors (E3001-E3004)**: Logical and type validation
 - **2 Unsupported Feature Errors (E4001-E4002)**: Features not yet implemented

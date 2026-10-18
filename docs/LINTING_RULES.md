@@ -25,7 +25,7 @@ GoSQLX ships 30 linting rules in six categories: whitespace, style, keywords, sa
 | `pkg/linter` | The rules you pass to `linter.New(...)`. All 30 rule constructors are exported from `pkg/linter/rules/*` |
 | `gosqlx lint` (CLI), `gosqlx action` and the MCP `lint_sql` tool | The style rules L001-L010 |
 
-The safety, performance and naming rules (L011-L030) are applied through the Go library. To enforce them in CI, call `gosqlx.Lint` from a Go test, as shown in [Lint SQL in CI](/docs/guides/lint-sql-in-ci/).
+The safety, performance and naming rules (L011-L030) are applied through the Go library. To enforce them in CI, call `gosqlx.Lint` from a Go test, as shown in [Lint SQL in CI](guides/lint-sql-in-ci.md).
 
 ---
 
@@ -736,7 +736,7 @@ ignore:
 default_severity: warning
 ```
 
-Unknown rule IDs are reported as warnings and do not fail loading, so a config can reference rules from newer releases. See the [Configuration reference](/docs/reference/configuration/) for the full file format.
+Unknown rule IDs are reported as warnings and do not fail loading, so a config can reference rules from newer releases. See the [Configuration reference](CONFIGURATION.md) for the full file format.
 
 ---
 
@@ -773,7 +773,7 @@ result := l.LintString(sql, "query.sql")
 fmt.Println(linter.FormatResult(result))
 ```
 
-See the [linter package reference](/docs/reference/api/linter/) for the `Rule` interface and auto-fix.
+See the [linter package reference](api/linter.md) for the `Rule` interface and auto-fix.
 
 ---
 
@@ -811,7 +811,7 @@ jobs:
 
 ## Related Documentation
 
-- [CLI Guide](/docs/cli-guide/) - Complete CLI reference
-- [Configuration Guide](/docs/reference/configuration/) - Configuration options
-- [API Reference](/docs/reference/api/) - Full API documentation
+- [CLI Guide](CLI_GUIDE.md) - Complete CLI reference
+- [Configuration Guide](CONFIGURATION.md) - Configuration options
+- [API Reference](API_REFERENCE.md) - Full API documentation
 

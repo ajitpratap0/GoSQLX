@@ -105,6 +105,7 @@ function runDemo(api: GoSQLXApi, sql: string, dialect: string, tab: TabId): Demo
       return { output: text, error: null, parseUs, statement };
     }
     const lint = api.lint(sql, dialect) as LintData;
+    if (lint?.error) return { output: '', error: lint.error, parseUs, statement };
     const violations = lint?.violations ?? [];
     const output = violations.length === 0
       ? 'No lint violations found.'

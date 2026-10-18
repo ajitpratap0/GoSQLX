@@ -1,7 +1,7 @@
 'use client';
 import { useState, useCallback } from "react";
 import { formatPosition, type LintData, type LintViolation } from "./bridgeTypes";
-import { ErrorNotice, SeverityBadge } from "./ResultParts";
+import { ErrorNotice, Position, SeverityBadge } from "./ResultParts";
 
 export type { LintViolation, LintData } from "./bridgeTypes";
 
@@ -47,7 +47,7 @@ export default function LintTab({ data }: LintTabProps) {
   }
 
   const parseNotice = data.parse_error ? (
-    <ErrorNotice title="Parse error" message={data.parse_error}>
+    <ErrorNotice title="Parse error" message={data.parse_error} polite>
       <p className="text-fg-muted text-xs mt-3">
         Rules that need a parsed statement could not run. Fix the error above to lint the full query.
       </p>
@@ -108,9 +108,7 @@ export default function LintTab({ data }: LintTabProps) {
                 {v.rule}
               </span>
               {v.rule_name && <span className="text-xs text-fg-muted">{v.rule_name}</span>}
-              {formatPosition(v.line, v.column) && (
-                <span className="text-xs text-fg-muted font-mono">{formatPosition(v.line, v.column)}</span>
-              )}
+              <Position line={v.line} column={v.column} />
             </div>
             <p className="text-sm text-fg">{v.message}</p>
             {v.suggestion && (

@@ -1,5 +1,6 @@
 // Small presentational pieces shared by the Lint and Analyze tabs.
 import type { ReactNode } from "react";
+import { formatPosition } from "./bridgeTypes";
 
 const SEVERITY_STYLES: Record<string, string> = {
   critical: "bg-danger/20 text-danger border-danger/30",
@@ -29,10 +30,36 @@ function AlertIcon() {
   );
 }
 
-/** A danger-styled notice for a parse failure or a failed WASM call. */
-export function ErrorNotice({ title, message, children }: { title: string; message: string; children?: ReactNode }) {
+/** A 1-based "line:column" position, or nothing when the position is unknown. */
+export function Position({ line, column }: { line?: number; column?: number }) {
+  const pos = formatPosition(line, column);
+  return pos ? <span className="text-xs text-fg-muted font-mono">{pos}</span> : null;
+}
+
+/**
+ * A danger-styled notice for a parse failure or a failed WASM call.
+ *
+ * `polite` uses a polite status region instead of an assertive alert. Use it for
+ * parse errors: the playground re-runs on every edit, so transient parse errors
+ * while typing must not interrupt screen-reader users.
+ */
+export function ErrorNotice({
+  title,
+  message,
+  polite = false,
+  children,
+}: {
+  title: string;
+  message: string;
+  polite?: boolean;
+  children?: ReactNode;
+}) {
   return (
-    <div role="alert" className="bg-danger/10 border border-danger/30 rounded-lg p-4">
+    <div
+      role={polite ? "status" : "alert"}
+      aria-live={polite ? "polite" : "assertive"}
+      className="bg-danger/10 border border-danger/30 rounded-lg p-4"
+    >
       <div className="flex items-center gap-2 text-danger font-medium mb-1">
         <AlertIcon />
         {title}

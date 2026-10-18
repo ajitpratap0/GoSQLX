@@ -71,6 +71,40 @@ func TestLint_RunsFullRuleSet(t *testing.T) {
 	}
 }
 
+// TestLint_DialectOnlySQLRunsASTRules guards #739 for non-generic dialects:
+// SQL that parses only in the selected dialect must still get the AST-level
+// rules, so the playground can never call it clean when it is not.
+func TestLint_DialectOnlySQLRunsASTRules(t *testing.T) {
+	tests := []struct {
+		name    string
+		sql     string
+		dialect string
+		want    []string
+	}{
+		{name: "sqlserver TOP and brackets", sql: "SELECT TOP 10 * FROM [users]", dialect: "sqlserver", want: []string{"L016", "L017"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := Parse(tt.sql, "generic"); err == nil {
+				t.Fatalf("test needs SQL the generic parser rejects; %q parsed", tt.sql)
+			}
+			resp := Lint(tt.sql, tt.dialect)
+			if resp.ParseError != "" || resp.Error != "" {
+				t.Fatalf("unexpected error: parse=%q lint=%q", resp.ParseError, resp.Error)
+			}
+			if len(resp.Violations) == 0 {
+				t.Fatal("dialect SQL reported clean: AST rules did not run")
+			}
+			got := ruleIDs(resp.Violations)
+			for _, id := range tt.want {
+				if !got[id] {
+					t.Errorf("expected rule %s to fire, got %v", id, got)
+				}
+			}
+		})
+	}
+}
+
 func TestLint_JSONContract(t *testing.T) {
 	b, err := json.Marshal(Lint("select id from users", "postgresql"))
 	if err != nil {

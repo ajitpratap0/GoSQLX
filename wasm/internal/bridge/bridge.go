@@ -17,9 +17,13 @@
 // be unit-tested with the normal Go toolchain.
 //
 // Every response type here is part of the contract with the website's
-// playground components (website/src/components/playground), so fields carry
-// explicit snake_case JSON tags. Changing a tag is a breaking change for the
-// website and must be mirrored there.
+// playground components, so fields carry explicit snake_case JSON tags. The
+// TypeScript mirror of these types is
+// website/src/components/playground/bridgeTypes.ts. TestContractFixture keeps
+// website/src/components/playground/bridgeContract.fixture.json in step,
+// which bridgeContract.check.ts type-checks against those TS types during the
+// website's typecheck. Changing a tag is a breaking change for the website and
+// must be mirrored there.
 package bridge
 
 import (
@@ -80,7 +84,8 @@ type LintResponse struct {
 }
 
 // Lint runs the full built-in rule set that gosqlx.Lint ships (L001-L030)
-// and reports whether the SQL parses in the selected dialect.
+// with the selected dialect, so AST-level rules see dialect-specific syntax,
+// and reports whether the SQL parses in that dialect.
 func Lint(sql, dialect string) LintResponse {
 	resp := LintResponse{Violations: []LintViolation{}}
 
@@ -88,7 +93,7 @@ func Lint(sql, dialect string) LintResponse {
 		resp.ParseError = err.Error()
 	}
 
-	result, err := gosqlx.Lint(sql)
+	result, err := gosqlx.LintWithDialect(sql, Dialect(dialect))
 	if err != nil {
 		resp.Error = err.Error()
 		return resp

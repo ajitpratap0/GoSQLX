@@ -1,6 +1,6 @@
 'use client';
-import { formatPosition, type AnalysisData, type OptimizationSuggestion, type SecurityFinding } from "./bridgeTypes";
-import { ErrorNotice, SeverityBadge } from "./ResultParts";
+import { type AnalysisData, type OptimizationSuggestion, type SecurityFinding } from "./bridgeTypes";
+import { ErrorNotice, Position, SeverityBadge } from "./ResultParts";
 
 interface AnalyzeTabProps {
   data: AnalysisData | null;
@@ -40,11 +40,6 @@ function ScoreCard({ title, score, subtitle, subtitleTitle }: { title: string; s
       {subtitle && <div className="text-xs text-fg-muted mt-1" title={subtitleTitle}>{subtitle}</div>}
     </div>
   );
-}
-
-function Position({ line, column }: { line?: number; column?: number }) {
-  const pos = formatPosition(line, column);
-  return pos ? <span className="text-xs text-fg-muted font-mono">{pos}</span> : null;
 }
 
 function SecurityFindingCard({ finding }: { finding: SecurityFinding }) {
@@ -98,7 +93,7 @@ export default function AnalyzeTab({ data }: AnalyzeTabProps) {
   if (data.parse_error) {
     return (
       <div className="p-4">
-        <ErrorNotice title="Parse error" message={data.parse_error}>
+        <ErrorNotice title="Parse error" message={data.parse_error} polite>
           <p className="text-fg-muted text-xs mt-3">
             Analysis runs only on SQL that parses. Fix the error above to see security and optimization results.
           </p>

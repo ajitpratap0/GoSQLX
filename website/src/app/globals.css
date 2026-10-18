@@ -22,6 +22,9 @@
   --fg-subtle: #8B8BA0;    /* captions, meta */
 
   --border: rgba(255, 255, 255, 0.08);  /* decorative hairlines */
+  /* Outlines of controls that must read as a boundary (3:1 in light, checked
+     by scripts/check-contrast.mjs). Dark keeps the existing hairline look. */
+  --border-strong: rgba(255, 255, 255, 0.08);
 
   --code-bg: #16161F;      /* every code block, raised above --bg */
   --code-border: rgba(255, 255, 255, 0.14);  /* visible frame on the dark page */
@@ -42,9 +45,13 @@
   --glass-bg: rgba(255, 255, 255, 0.04);
   --glass-border: rgba(255, 255, 255, 0.08);
   --glass-inset: rgba(255, 255, 255, 0.04);
+  /* Drop shadow under .glass surfaces; none in dark (the inset highlight and
+     border already separate cards from the near-black page). */
+  --glass-shadow: 0 0 #0000;
   --glass-hover-bg: rgba(255, 255, 255, 0.06);
   --glass-hover-border: rgba(255, 255, 255, 0.12);
   --glass-hover-shadow: rgba(0, 0, 0, 0.3);
+  --scrim: rgba(0, 0, 0, 0.6);  /* modal backdrop */
   --scrollbar: rgba(255, 255, 255, 0.1);
   --scrollbar-hover: rgba(255, 255, 255, 0.2);
 }
@@ -60,7 +67,8 @@ html.light {
   --fg-muted: #4B5563;
   --fg-subtle: #5B6472;
 
-  --border: #E5E7EB;
+  --border: #D1D5DB;
+  --border-strong: #848B96;
 
   --code-bg: #F3F4F6;
   --code-border: #D1D5DB;
@@ -78,12 +86,15 @@ html.light {
   --violet: #7E22CE;
   --cyan: #0E7490;
 
-  --glass-bg: rgba(255, 255, 255, 0.80);
-  --glass-border: rgba(0, 0, 0, 0.10);
+  /* Opaque white cards on the off-white page, lifted by a soft shadow (#800). */
+  --glass-bg: #FFFFFF;
+  --glass-border: rgba(0, 0, 0, 0.16);
   --glass-inset: rgba(255, 255, 255, 0.80);
-  --glass-hover-bg: rgba(255, 255, 255, 0.95);
-  --glass-hover-border: rgba(0, 0, 0, 0.15);
+  --glass-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --glass-hover-bg: #FFFFFF;
+  --glass-hover-border: rgba(0, 0, 0, 0.22);
   --glass-hover-shadow: rgba(0, 0, 0, 0.08);
+  --scrim: rgba(15, 23, 42, 0.35);
   --scrollbar: rgba(0, 0, 0, 0.12);
   --scrollbar-hover: rgba(0, 0, 0, 0.2);
 }
@@ -100,6 +111,8 @@ html.light {
   --color-fg-subtle: var(--fg-subtle);
 
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-scrim: var(--scrim);
 
   --color-code-bg: var(--code-bg);
   --color-code-border: var(--code-border);
@@ -169,20 +182,23 @@ body {
   overflow-x: clip;
 }
 
-/* Glass morphism utility */
-.glass {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  backdrop-filter: blur(16px);
-  border-radius: 0.75rem;
-  box-shadow: inset 0 1px 0 var(--glass-inset);
-}
+/* Glass morphism surface. In @layer components so Tailwind utilities
+   (shadow-*, rounded-*, bg-*) on a .glass element can override it (#799). */
+@layer components {
+  .glass {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(16px);
+    border-radius: 0.75rem;
+    box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-inset);
+  }
 
-.glass-hover:hover {
-  background: var(--glass-hover-bg);
-  border-color: var(--glass-hover-border);
-  box-shadow: 0 4px 16px var(--glass-hover-shadow),
-              inset 0 1px 0 var(--glass-inset);
+  .glass-hover:hover {
+    background: var(--glass-hover-bg);
+    border-color: var(--glass-hover-border);
+    box-shadow: 0 4px 16px var(--glass-hover-shadow),
+                inset 0 1px 0 var(--glass-inset);
+  }
 }
 
 /* Layout utilities */

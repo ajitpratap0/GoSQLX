@@ -76,6 +76,24 @@ for (const [theme, vars] of Object.entries(themes)) {
   for (const [fg, bg] of FILLS) check(theme, fg, bg, 4.5, vars);
 }
 
+// Control outlines that must read as a boundary in light (#800). Dark keeps
+// its rgba hairline, which this hex-only parser does not read.
+for (const s of SURFACES) check('light', 'border-strong', s, 3, themes.light);
+
+// Theme tokens that components reference must exist in both blocks (#799, #800).
+for (const t of ['border-strong', 'glass-shadow', 'scrim']) {
+  for (const sel of [':root', 'html.light']) {
+    if (!new RegExp(`--${t}:`).test(block(sel))) failures.push(`${sel}: missing --${t}`);
+  }
+}
+
+// .glass must stay inside @layer components: unlayered, its box-shadow beats
+// every Tailwind shadow-* utility (#799).
+const unlayered = css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/@layer components\s*\{[\s\S]*?\n\}/g, '');
+if (/^\s*\.glass(-hover)?[\s:{,]/m.test(unlayered)) {
+  failures.push('.glass / .glass-hover must be declared inside @layer components');
+}
+
 // Code surfaces use --code-bg in both themes (no forced-dark token restore).
 const overrides = css.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => /html\.light/.test(l));
 if (overrides.length !== 1 || overrides[0].trim() !== 'html.light {') {

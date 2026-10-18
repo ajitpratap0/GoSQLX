@@ -124,14 +124,28 @@ function vitessSentence(): string {
   return `${base}, and its geometric-mean time is ${gm}x GoSQLX's (see the summary table).`;
 }
 
+/** v0.0.0-20261015143638-7193401b6746 -> v0.0.0-…7193401b (full version stays in go.mod). */
+function shortVersion(v: string): string {
+  const m = /^(v\d+\.\d+\.\d+)-(?:[0-9a-z.]+\.)?\d{14}-([0-9a-f]{12})$/.exec(v);
+  return m ? `${m[1]}-…${m[2].slice(0, 8)}` : v;
+}
+
+/** Keep the dialect cell to one short line: drop long parenthetical notes. */
+function shortDialect(d: string): string {
+  const i = d.indexOf(' (');
+  return i > 0 && d.length - i > 12 ? d.slice(0, i) : d;
+}
+
 function librariesTable(): string {
-  return [
-    '| Library | Module | Version | Dialect | CGo |',
-    '|---|---|---|---|---|',
+  const table = [
+    '| Library | Version | Dialect | CGo |',
+    '|---|---|---|---|',
     ...COMPETITOR_RUN.parsers.map(
-      (p) => `| ${p.name} | \`${p.module}\` | \`${p.version}\` | ${escapeCell(p.dialect)} | ${p.cgo ? 'yes' : 'no'} |`,
+      (p) => `| ${p.name} | \`${shortVersion(p.version)}\` | ${escapeCell(shortDialect(p.dialect))} | ${p.cgo ? 'yes' : 'no'} |`,
     ),
   ].join('\n');
+  const modules = COMPETITOR_RUN.parsers.map((p) => `${p.name}: \`${p.module}\``).join('; ');
+  return `${table}\n\nModules: ${modules}. Pseudo-versions are shortened here; the full versions are in the harness's \`go.mod\`.`;
 }
 
 function queriesTable(): string {

@@ -576,17 +576,17 @@ SELECT u.id, o.total FROM users u JOIN orders o ON u.id = o.user_id;
 
 ### L025: Reserved Keyword Identifier
 
-Using a reserved SQL keyword as an identifier requires quoting and is confusing.
+Using a reserved SQL keyword as a table name or alias in a `FROM` clause requires quoting and is confusing. The rule checks table names and aliases.
 
 **Severity**: Warning
 **Auto-Fix**: No
 
 ```sql
 -- VIOLATION
-CREATE TABLE "order" ("select" INT, "from" TEXT);
+SELECT "order".id FROM "order";
 
 -- FIXED
-CREATE TABLE orders (item_id INT, source TEXT);
+SELECT o.id FROM orders o;
 ```
 
 ---

@@ -581,12 +581,12 @@ GoSQLX provides a first-class dialect mode engine that threads the SQL dialect t
 |---------|---------------|-------------|--------------------------|--------|
 | **PostgreSQL** | `"postgresql"` | Full PG keywords | `::`, `ON CONFLICT`, `$$`, JSONB ops, LATERAL, DISTINCT ON | ✅ Default dialect |
 | **MySQL** | `"mysql"` | MySQL keywords | SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE KEY, LIMIT n,m, GROUP_CONCAT, MATCH AGAINST, REGEXP | ✅ Full support |
-| **SQL Server** | `"sqlserver"` | T-SQL keywords | MERGE, bracket identifiers `[col]`, PIVOT/UNPIVOT | ✅ v1.14.0 PIVOT/UNPIVOT added |
+| **SQL Server** | `"sqlserver"` | T-SQL keywords | MERGE, bracket identifiers `[col]`, PIVOT/UNPIVOT | ✅ PIVOT/UNPIVOT (since v1.14.0) |
 | **Oracle** | `"oracle"` | Oracle keywords | DUAL table, basic PL/SQL keywords, MINUS as EXCEPT | ⚠️ Keywords + basic parsing |
 | **SQLite** | `"sqlite"` | SQLite keywords | Flexible typing, simplified syntax | ⚠️ Keywords + basic parsing |
-| **Snowflake** | `"snowflake"` | Snowflake keywords | MATCH_RECOGNIZE, @stage, SAMPLE, QUALIFY, VARIANT paths, time-travel, MINUS, LATERAL FLATTEN, TRY_CAST, IGNORE/RESPECT NULLS, LIKE ANY/ALL, CREATE STAGE/STREAM/TASK/PIPE stubs | ✅ v1.14.0 — 87/87 QA pass |
-| **ClickHouse** | `"clickhouse"` | ClickHouse keywords | PREWHERE, FINAL, GLOBAL IN/NOT IN, nested types, parametric aggregates, bare-bracket arrays, ORDER BY WITH FILL, CODEC, WITH TOTALS, LIMIT BY, ANY/ALL JOIN, SETTINGS, TTL, INSERT FORMAT | ✅ v1.14.0 — 69/83 QA pass (was 53%) |
-| **MariaDB** | `"mariadb"` | MariaDB keywords (superset of MySQL) | All MySQL features + SEQUENCE DDL, FOR SYSTEM_TIME, WITH SYSTEM VERSIONING, PERIOD FOR, CONNECT BY | ✅ v1.14.0 |
+| **Snowflake** | `"snowflake"` | Snowflake keywords | MATCH_RECOGNIZE, @stage, SAMPLE, QUALIFY, VARIANT paths, time-travel, MINUS, LATERAL FLATTEN, TRY_CAST, IGNORE/RESPECT NULLS, LIKE ANY/ALL, CREATE STAGE/STREAM/TASK/PIPE stubs | ✅ 87/87 QA pass |
+| **ClickHouse** | `"clickhouse"` | ClickHouse keywords | PREWHERE, FINAL, GLOBAL IN/NOT IN, nested types, parametric aggregates, bare-bracket arrays, ORDER BY WITH FILL, CODEC, WITH TOTALS, LIMIT BY, ANY/ALL JOIN, SETTINGS, TTL, INSERT FORMAT | ✅ 69/83 QA pass |
+| **MariaDB** | `"mariadb"` | MariaDB keywords (superset of MySQL) | All MySQL features + SEQUENCE DDL, FOR SYSTEM_TIME, WITH SYSTEM VERSIONING, PERIOD FOR, CONNECT BY | ✅ since v1.14.0 |
 
 ### Usage
 
@@ -614,7 +614,7 @@ gosqlx format --dialect mysql query.sql
 - CREATE EVENT not supported
 
 #### SQL Server (T-SQL)
-- PIVOT/UNPIVOT parsed (v1.14.0)
+- PIVOT/UNPIVOT parsed (since v1.14.0)
 - CROSS/OUTER APPLY keywords reserved but no parsing logic
 - TRY/CATCH blocks not supported
 - OPENROWSET / OPENQUERY not supported
@@ -700,7 +700,7 @@ gosqlx format --dialect mysql query.sql
 | **SQL Server** | 85% | 65% | ⭐⭐⭐⭐ Very Good | Keywords + MERGE |
 | **Oracle** | 80% | 60% | ⭐⭐⭐⭐ Good | Keywords + basic features |
 | **SQLite** | 85% | 50% | ⭐⭐⭐⭐ Good | Keywords + basic features |
-| **MariaDB** | 95% | 90% | ⭐⭐⭐⭐⭐ Excellent | MySQL superset + SEQUENCE DDL, temporal tables, CONNECT BY (v1.14.0) |
+| **MariaDB** | 95% | 90% | ⭐⭐⭐⭐⭐ Excellent | MySQL superset + SEQUENCE DDL, temporal tables, CONNECT BY (since v1.14.0) |
 | **Snowflake** | 80% | 30% | ⭐⭐⭐ Good | Keyword detection only |
 
 ## Performance Characteristics by Feature
@@ -783,7 +783,7 @@ gosqlx format --dialect mysql query.sql
 - **Materialized views**
 - **Table partitioning**
 
-**PostgreSQL Extensions** (v1.6.0-v1.7.0):
+**PostgreSQL Extensions** (since v1.6.0):
 - **JSON/JSONB operators** - All 10 operators (`->`, `->>`, `#>`, `#>>`, `@>`, `<@`, `?`, `?|`, `?&`, `#-`)
 - **LATERAL JOIN** - Full support with LEFT/INNER/CROSS variants
 - **DISTINCT ON** - PostgreSQL-specific row selection

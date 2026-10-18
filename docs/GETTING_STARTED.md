@@ -73,7 +73,7 @@ echo "SELECT COUNT(*) FROM orders GROUP BY status" | gosqlx analyze
 gosqlx validate --security query.sql
 
 # Lint SQL files with auto-fix
-gosqlx lint --fix queries/*.sql
+gosqlx lint --auto-fix queries/*.sql
 
 # Start LSP server for VSCode/Neovim
 gosqlx lsp --log /tmp/lsp.log
@@ -175,14 +175,13 @@ func ProcessBatch(queries []string) error {
 ### Lint SQL Before Deployment
 ```go
 func ValidateCodeStyle(sql string) error {
-    l := linter.New()
-    violations, err := l.Lint(sql)
+    result, err := gosqlx.Lint(sql)
     if err != nil {
         return err
     }
 
-    if len(violations) > 0 {
-        return fmt.Errorf("found %d style violations", len(violations))
+    if len(result.Violations) > 0 {
+        return fmt.Errorf("found %d style violations", len(result.Violations))
     }
 
     return nil

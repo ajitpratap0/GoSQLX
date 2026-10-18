@@ -42,6 +42,18 @@ const LINE_RULES = [
     hint: 'drop the marker or say "since vX.Y.Z"',
   },
   {
+    name: 'bare release label in body text',
+    re: /\((?:v1\.\d+(?:\.\d+)?(?:\+|\s*-\s*v\d+\.\d+(?:\.\d+)?)?)\)/,
+    hint: 'write "since vX.Y.Z" or drop the label',
+    skip: (file) => file.endsWith('CHANGELOG.md'),
+  },
+  {
+    name: 'nonexistent gosqlx lint flag',
+    re: /gosqlx lint\b[^\n|]*\s--(fix|rules|config)\b/,
+    hint: 'the real flag is --auto-fix; there is no --rules or --config',
+    fenced: true,
+  },
+  {
     name: 'stale Go requirement',
     re: /(Go 1\.(1\d|2[0-5])\+?(\s+or (higher|later))?\b(?!\.\d)|golang:1\.(1\d|2[0-5])\b|go-version:\s*'1\.(1\d|2[0-5])')/,
     hint: 'the project requires Go 1.26+',
@@ -125,8 +137,20 @@ function checkLintingRules(text) {
   const last = [...rules.keys()].sort().pop();
   if (!text.includes(`${rules.size} built-in`)) errors.push(`doc does not state the rule count (${rules.size} built-in)`);
   if (!text.includes(`L001-${last}`)) errors.push(`doc does not state the range L001-${last}`);
-  for (const m of text.matchAll(/\b(\d+) (?:built-in )?(?:lint(?:ing)? )?rules\b/g)) {
-    if (Number(m[1]) > 12 && Number(m[1]) !== rules.size) errors.push(`doc claims "${m[0]}" but ${rules.size} rules ship`);
+  return errors;
+}
+
+/** Wrong rule-count claims, checked on every rendered doc. */
+function checkRuleCounts(text) {
+  const size = linterRulesFromSource().size;
+  const errors = [];
+  for (const m of text.matchAll(/\b(\d+) (?:built-in )?(?:lint(?:ing)? |linter )?rules\b/gi)) {
+    if (/\(L001-L0(?:10|30)\)/.test(text.slice(m.index, m.index + m[0].length + 14)) && Number(m[1]) === 10) {
+      errors.push(`"${m[0]}" is paired with the full L001-L030 range`);
+    } else if (Number(m[1]) > 12 && Number(m[1]) !== size) errors.push(`doc claims "${m[0]}" but ${size} rules ship`);
+  }
+  for (const m of text.matchAll(/\b(\d+) Linter Rules \(L001-L030\)/g)) {
+    if (Number(m[1]) !== size) errors.push(`doc claims "${m[0]}" but ${size} rules ship`);
   }
   return errors;
 }
@@ -143,13 +167,15 @@ if (process.argv.includes('--self-test')) {
     '## Summary (v1.6.0)',
     'FROM golang:1.21-alpine AS builder',
     '### Company: Startup (Fictional Example)',
+    '| MariaDB | Excellent | superset (v1.14.0) |',
+    'gosqlx lint --fix queries/*.sql',
   ];
   const missed = seeded.filter((l) => scanDoc(join(docsDir, 'X.md'), l).length === 0);
   const fenced = scanDoc(join(docsDir, 'X.md'), '```\n**Version**: v1.15.0\n```').length;
   const fencedGo = ['```dockerfile\nFROM golang:1.21-alpine\n```', "```yaml\ngo-version: '1.21'\n```", '```yaml\nimage: golang:1.21\n```'].filter(
     (t) => scanDoc(join(docsDir, 'X.md'), t).length === 0,
   );
-  if (missed.length > 0 || fenced !== 0 || fencedGo.length > 0 || checkLintingRules('# Rules\n').length === 0) {
+  if (missed.length > 0 || fenced !== 0 || fencedGo.length > 0 || checkLintingRules('# Rules\n').length === 0 || checkRuleCounts('- **10 Linter Rules (L001-L030)**: x').length === 0) {
     console.error('self-test failed', { missed, fenced, fencedGo });
     process.exit(1);
   }
@@ -170,6 +196,10 @@ for (const file of sidebarFiles()) {
   for (const { line, rule } of scanDoc(file, text)) {
     failures++;
     console.error(`${relative(repoRoot, file)}:${line}: ${rule.name} (${rule.hint})`);
+  }
+  for (const err of checkRuleCounts(text)) {
+    failures++;
+    console.error(`${relative(repoRoot, file)}: ${err}`);
   }
   if (file.endsWith('LINTING_RULES.md')) {
     for (const err of checkLintingRules(text)) {

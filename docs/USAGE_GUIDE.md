@@ -1371,12 +1371,6 @@ Run SQL linter:
 # Lint SQL file
 gosqlx lint query.sql
 
-# Lint with specific rules
-gosqlx lint --rules L001,L002,L003 query.sql
-
-# Lint with configuration file
-gosqlx lint --config .gosqlx.yml query.sql
-
 # Lint all SQL files in directory
 gosqlx lint *.sql
 ```
@@ -2104,7 +2098,7 @@ Example comprehensive workflow:
 gosqlx format -i sql/**/*.sql
 
 # 2. Run linter with configuration
-gosqlx lint --config .gosqlx.yml sql/**/*.sql
+gosqlx lint sql/**/*.sql
 
 # 3. Security scan with high severity threshold
 gosqlx security scan --severity high sql/**/*.sql

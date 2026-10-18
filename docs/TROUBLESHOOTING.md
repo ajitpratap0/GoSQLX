@@ -369,7 +369,7 @@ func TestHover(content string, line, char int) {
 
 #### Issue: Auto-Fix Not Working
 
-**Symptom:** Running `gosqlx lint --fix` doesn't modify files
+**Symptom:** Running `gosqlx lint --auto-fix` doesn't modify files
 
 **Common Causes:**
 1. Rule doesn't support auto-fix
@@ -401,10 +401,10 @@ gosqlx validate query.sql
 # Fix syntax errors before linting
 
 # Solution 3: Enable verbose mode
-gosqlx lint --fix --verbose query.sql
+gosqlx lint --auto-fix --verbose query.sql
 
-# Solution 4: Use specific rules
-gosqlx lint --fix --rules L001,L002,L003 query.sql
+# Solution 4: Run auto-fix without verbose output
+gosqlx lint --auto-fix query.sql
 ```
 
 **Programmatic Auto-Fix:**
@@ -448,7 +448,7 @@ func AutoFixFile(filename string) error {
 gosqlx lint --show-config
 
 # Test specific rule
-gosqlx lint --rules L001 query.sql
+gosqlx lint query.sql
 
 # Show all violations regardless of severity
 gosqlx lint --severity hint query.sql
@@ -560,7 +560,7 @@ gosqlx lint --show-config query.sql
 # 3. ~/.gosqlx.yml (user home)
 
 # Solution 2: Specify config explicitly
-gosqlx lint --config ./custom-config.yml query.sql
+gosqlx lint query.sql
 
 # Solution 3: Validate config structure
 cat > .gosqlx.yml <<EOF
@@ -1911,7 +1911,7 @@ Not auto-fixable:
 
 **A:** Use the `--rules` flag:
 ```bash
-gosqlx lint --rules L001,L002,L003 query.sql
+gosqlx lint query.sql
 ```
 
 Or configure in `.gosqlx.yml`:
@@ -2067,7 +2067,7 @@ gosqlx config init
 
 **A:** Yes, specify config file explicitly:
 ```bash
-gosqlx lint --config .gosqlx.production.yml query.sql
+gosqlx lint query.sql
 ```
 
 ### Performance Questions
@@ -2186,7 +2186,7 @@ Before submitting an issue, verify:
 **Linter Issues:**
 1. List available rules: `gosqlx lint --list-rules`
 2. Show config: `gosqlx lint --show-config`
-3. Test specific rule: `gosqlx lint --rules L001 query.sql`
+3. Run the linter on a single file: `gosqlx lint query.sql`
 
 **Parser Issues:**
 1. Test tokenization: `gosqlx parse --tokens query.sql`

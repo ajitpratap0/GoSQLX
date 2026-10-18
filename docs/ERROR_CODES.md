@@ -954,7 +954,7 @@ This comprehensive error code reference covers all 26 error codes in GoSQLX:
 - **2 Unsupported Feature Errors (E4001-E4002)**: Features not yet implemented
 
 Additionally, GoSQLX provides:
-- **10 Linter Rules (L001-L030)**: Code style and quality checks
+- **30 Linter Rules (L001-L030)**: Style, safety, performance and naming checks
 - **8 Security Pattern Types**: SQL injection detection
 - **LSP Integration**: Real-time error detection in IDEs
 - **Intelligent Error Suggestions**: Context-aware hints and fixes

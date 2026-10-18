@@ -204,7 +204,7 @@ See [the security package reference](api/security.md) for complete documentation
 
 ## 🔐 CLI Input Sanitization (QW-009)
 
-**Implementation Status**: ✅ COMPLETE (v1.4.0)
+**Implementation Status**: ✅ COMPLETE (since v1.4.0)
 
 ### CLI Security Architecture
 

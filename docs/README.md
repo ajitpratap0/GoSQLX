@@ -339,7 +339,7 @@ If you can't find what you need:
 - **Aggregate ORDER BY** - ORDER BY within aggregate functions
 - **RETURNING Clause** - Return modified rows from DML statements
 - **LSP Server** - Language Server Protocol for IDE integration
-- **Linter** - 30 built-in linting rules (L001-L030) with auto-fix
+- **Linter** - 10 built-in linting rules (L001-L010) with auto-fix
 - **Configuration** - YAML-based project configuration (.gosqlx.yml)
 - **Enhanced CLI** - Improved format, analyze, and parse commands
 

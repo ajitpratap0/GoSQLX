@@ -865,7 +865,7 @@ Use SQLFluff for unsupported dialects, or contribute dialect support to GoSQLX!
 **GoSQLX Status:**
 - Auto-fix
 - Supports 30 linting rules, with automatic corrections for the formatting rules that support them
-- Use `gosqlx lint --fix` to apply fixes
+- Use `gosqlx lint --auto-fix` to apply fixes
 
 ---
 

@@ -25,6 +25,7 @@
 
   --code-bg: #16161F;      /* every code block, raised above --bg */
   --code-border: rgba(255, 255, 255, 0.14);  /* visible frame on the dark page */
+  --pane-bg: var(--bg);    /* playground input/output panes: inset in dark */
 
   --brand: #22C55E;        /* primary actions, GoSQLX bars */
   --brand-fg: #052E16;     /* text on brand fills */
@@ -64,6 +65,7 @@ html.light {
 
   --code-bg: #F3F4F6;
   --code-border: #D1D5DB;
+  --pane-bg: var(--bg-raised);  /* raised white field against the #FAFBFC page */
 
   --brand: #15803D;
   --brand-fg: #FFFFFF;

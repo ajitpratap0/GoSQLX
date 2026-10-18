@@ -63,8 +63,8 @@ const baseTheme = EditorView.theme({
 const tokenTheme = (dark: boolean) =>
   Prec.highest(EditorView.theme(
     {
-      "&": { backgroundColor: "var(--bg)", color: "var(--fg)" },
-      ".cm-gutters": { backgroundColor: "var(--bg)", color: "var(--fg-subtle)", border: "none" },
+      "&": { backgroundColor: "var(--pane-bg)", color: "var(--fg)" },
+      ".cm-gutters": { backgroundColor: "var(--pane-bg)", color: "var(--fg-subtle)", border: "none" },
       ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: "var(--bg-overlay)" },
       ".cm-cursor": { borderLeftColor: "var(--fg)" },
     },

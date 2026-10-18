@@ -157,6 +157,7 @@ func (p *Parser) Reset() {
 	// Reset clears both fields in lockstep; see WithDialect for the active path.
 	p.resetDialectState()
 	p.dmlReturning = false
+	p.inConnectBy = false
 }
 
 // currentLocation returns the source location of the current token.
@@ -316,6 +317,9 @@ type Parser struct {
 	// UPDATE ... FROM list, where an unquoted RETURNING starts the RETURNING
 	// clause and must not be taken as an implicit alias (#610).
 	dmlReturning bool
+	// inConnectBy is true while parsing a CONNECT BY condition, where PRIOR
+	// is a prefix operator binding to its operand (#783).
+	inConnectBy bool
 }
 
 // Deprecated: Parse is provided for backward compatibility only and is scheduled for

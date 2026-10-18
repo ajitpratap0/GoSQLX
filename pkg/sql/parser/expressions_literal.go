@@ -51,6 +51,18 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		}, nil
 	}
 
+	// CONNECT BY: PRIOR is a prefix operator that binds to its operand, so
+	// "PRIOR a + 1" is "(PRIOR a) + 1" (#783).
+	if p.inConnectBy && p.isConnectByPrior() {
+		priorPos := p.currentLocation()
+		p.advance() // Consume PRIOR
+		operand, err := p.parseUnaryOperand()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.UnaryExpression{Operator: ast.Prior, Expr: operand, Pos: priorPos}, nil
+	}
+
 	if p.isType(models.TokenTypeCase) {
 		// Handle CASE expressions (both simple and searched forms)
 		return p.parseCaseExpression()
@@ -446,6 +458,22 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		p.currentLocation(),
 		"",
 	)
+}
+
+// isConnectByPrior reports whether the current token is the PRIOR operator
+// rather than a column that happens to be named prior.
+func (p *Parser) isConnectByPrior() bool {
+	if !strings.EqualFold(p.currentToken.Token.Value, "PRIOR") {
+		return false
+	}
+	switch p.peekToken().Token.Type {
+	case models.TokenTypeEq, models.TokenTypeNeq, models.TokenTypeLt, models.TokenTypeGt,
+		models.TokenTypeLtEq, models.TokenTypeGtEq, models.TokenTypeDot,
+		models.TokenTypeRParen, models.TokenTypeComma, models.TokenTypeSemicolon,
+		models.TokenTypeEOF:
+		return false
+	}
+	return true
 }
 
 // parseUnaryOperand parses the operand of a unary minus or plus one recursion

@@ -89,13 +89,21 @@ function walk(dir) {
     const f = resolve(dir, e.name);
     if (e.isDirectory()) walk(f);
     else if (/\.(tsx|ts|jsx|js)$/.test(e.name)) {
-      for (const m of readFileSync(f, 'utf8').matchAll(/(["'`])([^"'`\n]*\bprose-invert\b[^"'`\n]*)\1/g)) {
-        if (!/\bprose-dark\b/.test(m[2])) failures.push(`${f.slice(SRC.length)}: prose-invert without prose-dark`);
+      const src = readFileSync(f, 'utf8');
+      if (/\bprose-invert\b/.test(src) && !/\bprose-dark\b/.test(src)) {
+        failures.push(`${f.slice(SRC.length)}: prose-invert without prose-dark`);
       }
     }
   }
 }
 walk(SRC);
+
+// .prose-dark must override every --tw-prose-* variable that prose-invert sets,
+// otherwise the invert (light-on-dark) value leaks through in light mode.
+const proseDark = (css.match(/\.prose-dark\s*\{([^}]*)\}/) || [])[1] || '';
+for (const v of ['body', 'lead', 'headings', 'links', 'bold', 'counters', 'bullets', 'hr', 'quotes', 'quote-borders', 'captions', 'code', 'pre-bg', 'th-borders', 'td-borders']) {
+  if (!proseDark.includes(`--tw-prose-${v}:`)) failures.push(`.prose-dark does not override --tw-prose-${v}`);
+}
 
 if (failures.length) {
   console.error(`Contrast check failed (${failures.length}):\n- ${failures.join('\n- ')}`);

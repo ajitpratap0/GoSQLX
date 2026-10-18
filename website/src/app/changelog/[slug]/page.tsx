@@ -2,8 +2,7 @@ import { Metadata } from 'next';
 import { pageMeta } from '@/lib/seo';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { compileMDX } from 'next-mdx-remote/rsc';
-import remarkGfm from 'remark-gfm';
+import { renderMarkdown } from '@/lib/markdown';
 import { JsonLd } from '@/components/JsonLd';
 import { blogPostHref, getAllPosts, getPostBySlug, getPostSlugs } from '@/lib/blog';
 
@@ -36,15 +35,7 @@ export default async function BlogPostPage({ params }: Props) {
   const post = getPostBySlug(slug);
   if (!post) notFound();
 
-  const { content } = await compileMDX({
-    source: post.content,
-    options: {
-      mdxOptions: {
-        format: 'md',
-        remarkPlugins: [remarkGfm],
-      },
-    },
-  });
+  const content = await renderMarkdown(post.content);
 
   // Find prev/next posts for navigation
   const allPosts = getAllPosts();
@@ -128,7 +119,7 @@ export default async function BlogPostPage({ params }: Props) {
         </header>
 
         {/* Content */}
-        <div className="prose prose-invert prose-dark max-w-none prose-headings:font-semibold prose-a:text-accent prose-a:no-underline hover:prose-a:underline [&_:not(pre)>code]:bg-bg-raised prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-raised prose-pre:border prose-pre:border-border prose-hr:border-border">
+        <div className="prose prose-invert prose-dark max-w-none prose-headings:font-semibold prose-a:text-accent prose-a:no-underline hover:prose-a:underline prose-hr:border-border">
           {content}
         </div>
 

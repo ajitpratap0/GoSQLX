@@ -1,7 +1,8 @@
-'use client';
-
+// Server module on purpose: a 'use client' file can only export components, and
+// an exported object map would reach compileMDX as a client reference, silently
+// dropping every override below (no copy buttons, no heading anchors).
 import React, { type ReactNode, type ComponentPropsWithoutRef } from 'react';
-import { CopyButton } from './CopyButton';
+import { CodeBlock } from '@/components/ui/CodeBlock';
 
 function HeadingAnchor({ id, level, children }: { id?: string; level: number; children?: ReactNode }) {
   return React.createElement(
@@ -34,36 +35,13 @@ export const mdxComponents = {
     <a {...props} className="text-accent hover:underline" target={props.href?.startsWith('http') ? '_blank' : undefined} rel={props.href?.startsWith('http') ? 'noopener noreferrer' : undefined} />
   ),
 
-  pre: ({ children, ...props }: ComponentPropsWithoutRef<'pre'>) => {
-    // Extract text content for copy button
-    let codeText = '';
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const child = children as any;
-      if (child?.props?.children) {
-        codeText = String(child.props.children);
-      }
-    } catch {
-      // ignore
-    }
-    return (
-      <div className="group relative">
-        <CopyButton text={codeText} />
-        <pre
-          {...props}
-          tabIndex={0}
-          className="overflow-x-auto rounded-lg border border-fg/5 bg-bg-raised p-4 text-sm focus:outline-none focus:ring-2 focus:ring-ok/50 focus:ring-offset-1 focus:ring-offset-zinc-900"
-        >
-          {children}
-        </pre>
-        {/* Mobile scroll hint: right-edge fade gradient, hidden on md+ where scrollbar is visible */}
-        <div
-          className="pointer-events-none absolute bottom-0 right-0 top-0 w-8 rounded-r-lg bg-gradient-to-l from-bg-raised to-transparent md:hidden"
-          aria-hidden="true"
-        />
-      </div>
-    );
-  },
+  pre: ({ children, className, ...props }: ComponentPropsWithoutRef<'pre'>) => (
+    <CodeBlock>
+      <pre {...props} tabIndex={0} className={className}>
+        {children}
+      </pre>
+    </CodeBlock>
+  ),
 
   blockquote: (props: ComponentPropsWithoutRef<'blockquote'>) => (
     <blockquote {...props} className="border-l-2 border-accent bg-bg-raised/50 pl-4 py-2 italic text-fg-muted" />

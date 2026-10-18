@@ -222,14 +222,13 @@ export function MiniPlayground() {
             </select>
           </div>
         </div>
-        <div className="code-surface relative">
+        <div className="relative">
           <textarea
             value={sql}
             onChange={handleSqlChange}
             spellCheck={false}
             aria-label="SQL query input"
-            className="w-full p-4 text-[14px] leading-relaxed font-mono bg-transparent resize-none max-h-[180px] min-h-[160px] md:max-h-[320px] md:min-h-[200px] focus:outline-none focus:ring-2 focus:ring-accent/50 overflow-auto"
-            style={{ color: '#D4D4D8' }}
+            className="w-full p-4 text-[14px] leading-relaxed font-mono text-fg bg-transparent resize-none max-h-[180px] min-h-[160px] md:max-h-[320px] md:min-h-[200px] focus:outline-none focus:ring-2 focus:ring-accent/50 overflow-auto"
             rows={12}
           />
           <div
@@ -276,11 +275,11 @@ export function MiniPlayground() {
           className="flex-1 overflow-auto max-h-[320px]"
         >
           {parseError ? (
-            <pre className="p-4 text-[14px] leading-relaxed font-mono whitespace-pre-wrap" style={{ color: '#F87171' }}>
+            <pre className="p-4 text-[14px] leading-relaxed font-mono whitespace-pre-wrap text-danger">
               {parseError}
             </pre>
           ) : (
-            <pre className="p-4 text-[14px] leading-relaxed font-mono whitespace-pre-wrap" style={{ color: '#D4D4D8' }}>
+            <pre className="p-4 text-[14px] leading-relaxed font-mono whitespace-pre-wrap text-fg">
               <code>{shown}</code>
             </pre>
           )}

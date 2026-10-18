@@ -1,5 +1,6 @@
 import { FadeIn } from '@/components/ui/FadeIn';
 import { GlassCard } from '@/components/ui/GlassCard';
+import { HighlightedCode } from '@/components/ui/CodeBlock';
 import { Button } from '@/components/ui/Button';
 import { TerminalMockup } from '@/components/ui/TerminalMockup';
 
@@ -94,19 +95,14 @@ export function VscodeContent() {
             <h2 className="text-2xl font-bold text-fg mb-6 text-center">
               Key Settings
             </h2>
-            <GlassCard className="p-6" hover={false}>
-              <pre
-                role="region"
-                aria-label="Key Settings JSON"
-                tabIndex={0}
-                className="font-mono text-sm text-fg whitespace-pre overflow-x-auto"
-              >
-{`{
+            <HighlightedCode
+              lang="json"
+              label="Key Settings JSON"
+              code={`{
   "gosqlx.executablePath": "/usr/local/bin/gosqlx",
   "gosqlx.forcePathLookup": false
 }`}
-              </pre>
-            </GlassCard>
+            />
           </FadeIn>
         </div>
       </section>

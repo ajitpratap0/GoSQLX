@@ -89,7 +89,7 @@ export default function DocsPage() {
               <section
                 id={docsCategoryAnchor(group.category)}
                 aria-labelledby={`docs-cat-${i}`}
-                className="glass block h-full rounded-xl p-6"
+                className="glass block h-full scroll-mt-24 rounded-xl p-6"
               >
                 <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
                   <svg className="h-5 w-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">

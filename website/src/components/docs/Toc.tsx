@@ -104,7 +104,7 @@ export function Toc({ headings, variant = 'rail' }: TocProps) {
     <nav
       ref={navRef}
       aria-label="On this page"
-      className="sticky top-20 -mx-1 hidden max-h-[calc(100vh-6rem)] overflow-y-auto overscroll-contain px-1 py-1 xl:block"
+      className="sticky top-20 -mx-1 hidden max-h-[calc(100vh-7rem)] overflow-y-auto overscroll-contain px-1 py-1 xl:block"
     >
       <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
         On this page

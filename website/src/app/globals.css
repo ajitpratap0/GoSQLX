@@ -255,6 +255,12 @@ body {
   outline-offset: 2px;
 }
 
+/* Programmatic focus target of the skip link: no ring on the whole <main> */
+#main-content:focus,
+#main-content:focus-visible {
+  outline: none;
+}
+
 /* Respect prefers-reduced-motion for all animations */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

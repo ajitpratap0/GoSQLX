@@ -32,8 +32,8 @@ check(
   'globals.css: .prose pre/table must not use content-visibility (layout shifts break anchor jumps)',
 );
 check(
-  /<main[^>]*id="main-content"[^>]*outline-none/.test(read('app/layout.tsx')),
-  'layout.tsx: main#main-content must suppress the focus ring',
+  /#main-content:focus-visible\s*\{[^}]*outline:\s*none/.test(read('app/globals.css')),
+  'globals.css: an unlayered #main-content:focus-visible rule must suppress the focus ring',
 );
 
 const toc = read('components/docs/Toc.tsx');

@@ -36,6 +36,30 @@ export function Position({ line, column }: { line?: number; column?: number }) {
   return pos ? <span className="text-xs text-fg-muted font-mono">{pos}</span> : null;
 }
 
+export interface ParsedError {
+  summary: string;
+  hint?: string;
+  help?: string;
+}
+
+/**
+ * Splits a GoSQLX error string of the form
+ * "<summary> Hint: <hint> Help: <url>" into its parts. Missing parts are
+ * omitted; unrecognised text is returned unchanged as the summary.
+ */
+export function parseErrorMessage(message: string): ParsedError {
+  const text = message.trim().replace(/\n{3,}/g, "\n\n");
+  const m = /^([\s\S]*?)(?:\s+Hint:\s*([\s\S]*?))?(?:\s+Help:\s*(\S+))?\s*$/.exec(text);
+  if (!m) return { summary: text };
+  const hint = m[2]?.trim();
+  const help = m[3]?.trim();
+  return {
+    summary: m[1].trim() || text,
+    hint: hint || undefined,
+    help: help && /^https?:\/\//i.test(help) ? help : undefined,
+  };
+}
+
 /**
  * A danger-styled notice for a parse failure or a failed WASM call.
  *
@@ -54,6 +78,7 @@ export function ErrorNotice({
   polite?: boolean;
   children?: ReactNode;
 }) {
+  const parsed = parseErrorMessage(message);
   return (
     <div
       role={polite ? "status" : "alert"}
@@ -64,7 +89,25 @@ export function ErrorNotice({
         <AlertIcon />
         {title}
       </div>
-      <p className="text-danger text-sm font-mono whitespace-pre-wrap break-words">{message.trim().replace(/\n{3,}/g, "\n\n")}</p>
+      <p className="text-danger text-sm font-mono whitespace-pre-wrap break-words">{parsed.summary}</p>
+      {parsed.hint && (
+        <p className="mt-2 text-sm text-fg">
+          <span className="font-medium text-fg-muted">Hint: </span>
+          {parsed.hint}
+        </p>
+      )}
+      {parsed.help && (
+        <p className="mt-2 text-sm">
+          <a
+            href={parsed.help}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-accent underline underline-offset-2 hover:text-fg"
+          >
+            Error code help (opens in a new tab)
+          </a>
+        </p>
+      )}
       {children}
     </div>
   );

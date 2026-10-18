@@ -268,8 +268,10 @@ export default function Playground() {
                 {tab.label}
                 <span
                   aria-hidden="true"
-                  className={`absolute bottom-0 left-0 right-0 h-0.5 bg-info origin-left transition-transform duration-300 ease-out ${
-                    activeTab === tab.id ? "scale-x-100" : "scale-x-0"
+                  className={`absolute bottom-0 left-0 right-0 h-0.5 bg-info origin-left ${
+                    activeTab === tab.id
+                      ? "scale-x-100 transition-transform duration-300 ease-out motion-reduce:transition-none"
+                      : "hidden"
                   }`}
                 />
               </button>

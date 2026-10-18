@@ -259,12 +259,12 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
               </svg>
               <div className="min-w-0 flex-1">
                 <div className="truncate font-medium">{entry.heading ?? entry.title}</div>
-                <div className="truncate text-xs text-fg-subtle">
+                <div className={`truncate text-xs ${i === selectedIndex ? 'text-fg-muted' : 'text-fg-subtle'}`}>
                   {entry.heading ? `${entry.category} / ${entry.title}` : entry.category}
                 </div>
               </div>
               {i === selectedIndex && (
-                <kbd className="hidden sm:inline-flex shrink-0 items-center rounded border border-fg/[0.1] bg-fg/[0.04] px-1.5 py-0.5 font-mono text-[10px] text-fg-subtle">
+                <kbd className="hidden sm:inline-flex shrink-0 items-center rounded border border-fg/[0.1] bg-fg/[0.04] px-1.5 py-0.5 font-mono text-[10px] text-fg-muted">
                   Enter
                 </kbd>
               )}

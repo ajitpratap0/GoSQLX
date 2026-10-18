@@ -30,16 +30,19 @@ export function Toc({ headings, variant = 'rail' }: TocProps) {
   // active through long sections; first heading at top, last heading at bottom.
   useEffect(() => {
     if (headings.length === 0) return;
-    const OFFSET = 96;
     let raf = 0;
 
     const update = () => {
       raf = 0;
+      // Live scroll padding (5rem desktop, 7.5rem below lg) plus slack, so a clicked
+      // anchor (which lands at exactly scroll-padding-top) counts as reached.
+      const offset =
+        (parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 80) + 16;
       let current = headings[0].id;
       for (const h of headings) {
         const el = document.getElementById(h.id);
         if (!el) continue;
-        if (el.getBoundingClientRect().top <= OFFSET) current = h.id;
+        if (el.getBoundingClientRect().top <= offset) current = h.id;
         else break;
       }
       const atBottom =

@@ -76,6 +76,16 @@ for (const [theme, vars] of Object.entries(themes)) {
   for (const [fg, bg] of FILLS) check(theme, fg, bg, 4.5, vars);
 }
 
+// Selected search row: bg-accent/20 composited over bg-overlay (subtitle + Enter kbd use fg-muted).
+function blend(top, bottom, alpha) {
+  const ch = (i) => Math.round(parseInt(top.slice(i, i + 2), 16) * alpha + parseInt(bottom.slice(i, i + 2), 16) * (1 - alpha));
+  return '#' + [1, 3, 5].map((i) => ch(i).toString(16).padStart(2, '0')).join('');
+}
+for (const [theme, vars] of Object.entries(themes)) {
+  const v = { ...vars, 'search-selected': blend(vars.accent, vars['bg-overlay'], 0.2) };
+  for (const t of ['fg', 'fg-muted']) check(theme, t, 'search-selected', 4.5, v);
+}
+
 // Control outlines that must read as a boundary in light (#800). Dark keeps
 // its rgba hairline, which this hex-only parser does not read.
 for (const s of SURFACES) check('light', 'border-strong', s, 3, themes.light);

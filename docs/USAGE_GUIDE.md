@@ -1814,6 +1814,12 @@ sql := "SELECT * FROM users LIMIT 10, 20"
 sql := `SELECT * FROM users WHERE name = "John""s Pizza"`
 ```
 
+In MySQL and MariaDB `||` means logical `OR` (the server default without the
+`PIPES_AS_CONCAT` SQL mode), so with those dialects GoSQLX parses
+`a = 1 || b` as `(a = 1) OR b` and renders it back as `OR`. Use
+`parser.WithPipesAsConcat()` or `gosqlx.WithPipesAsConcat()` to parse `||` as
+concatenation instead. See [SQL_COMPATIBILITY.md](SQL_COMPATIBILITY.md#-operator-in-mysql-and-mariadb).
+
 ### SQL Server Specific Features
 
 ```go

@@ -61,11 +61,17 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 		return nil, err
 	}
 
-	// Handle OR operators (lowest precedence, left-associative)
-	for p.isType(models.TokenTypeOr) {
+	// Handle OR operators (lowest precedence, left-associative). In MySQL and
+	// MariaDB (without PIPES_AS_CONCAT) || is a synonym for OR (#781); it is
+	// normalised to the OR operator so linters, the security scanner, the
+	// formatter and the transpiler treat both spellings identically.
+	for p.isType(models.TokenTypeOr) || (p.pipesAsOr && p.isType(models.TokenTypeStringConcat)) {
 		opPos := p.currentLocation()
 		operator := p.currentToken.Token.Value
-		p.advance() // Consume OR
+		if p.currentToken.Token.Type == models.TokenTypeStringConcat {
+			operator = "OR"
+		}
+		p.advance() // Consume OR / ||
 
 		right, err := p.parseAndExpression()
 		if err != nil {
@@ -142,7 +148,9 @@ func (p *Parser) parseAndExpression() (ast.Expression, error) {
 	return left, nil
 }
 
-// parseStringConcatExpression parses expressions with || (string concatenation) operator
+// parseStringConcatExpression parses expressions with || (string concatenation)
+// operator. When || is logical OR (p.pipesAsOr, MySQL/MariaDB default) the loop
+// does not consume it, leaving it for parseExpression at OR precedence.
 func (p *Parser) parseStringConcatExpression() (ast.Expression, error) {
 	// Parse the left side using additive expression
 	left, err := p.parseAdditiveExpression()
@@ -151,7 +159,7 @@ func (p *Parser) parseStringConcatExpression() (ast.Expression, error) {
 	}
 
 	// Handle || (string concatenation) operator (left-associative)
-	for p.isType(models.TokenTypeStringConcat) {
+	for !p.pipesAsOr && p.isType(models.TokenTypeStringConcat) {
 		opPos := p.currentLocation()
 		operator := p.currentToken.Token.Value
 		p.advance() // Consume ||

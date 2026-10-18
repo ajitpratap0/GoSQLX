@@ -330,6 +330,37 @@ level over a parenthesized query that already has one, such as
 | **AUTO_INCREMENT** | ✅ Full | ✅ Full | 95% | Column property |
 | **Backtick identifiers** | ✅ Full | ✅ Full | 100% | `` `table`.`column` `` syntax |
 | **Multi-part column references** | ✅ Full | ✅ Full | 95% | `` `db`.`table`.`column` `` and `db.table.*` (#521) |
+| **`\|\|` as logical OR** | ✅ Full | ✅ Full | 95% | MySQL/MariaDB default; see below (#781) |
+
+#### `||` operator in MySQL and MariaDB
+
+In MySQL and MariaDB `||` is a synonym for `OR` unless the server runs with the
+`PIPES_AS_CONCAT` SQL mode. GoSQLX follows the server default:
+
+- With the `mysql` or `mariadb` dialect, `a = 1 || b` parses as `(a = 1) OR b`,
+  with `OR` precedence (looser than `AND`, `NOT`, comparisons and arithmetic).
+  The AST is identical to the `OR` keyword (`BinaryExpression{Operator: "OR"}`),
+  so `SQL()`, the formatter, linter rules, the security scanner and the
+  transpiler all see and emit `OR`.
+- To mirror `PIPES_AS_CONCAT`, pass `parser.WithPipesAsConcat()` (or
+  `gosqlx.WithPipesAsConcat()` with `gosqlx.ParseTree`); `||` is then string
+  concatenation, binding tighter than comparisons, as in other dialects.
+- Every other dialect (PostgreSQL, SQL Server, Oracle, SQLite, Snowflake,
+  ClickHouse, and no dialect) always parses `||` as concatenation.
+- Transpiling PostgreSQL to MySQL rewrites `a || b` to `CONCAT(a, b)`.
+
+```go
+// MySQL default: logical OR
+p := parser.NewParser(parser.WithDialect("mysql"))
+
+// MySQL with PIPES_AS_CONCAT: concatenation
+p := parser.NewParser(parser.WithDialect("mysql"), parser.WithPipesAsConcat())
+
+tree, err := gosqlx.ParseTree(ctx, sql,
+    gosqlx.WithDialect("mysql"), gosqlx.WithPipesAsConcat())
+```
+
+Before #781, `||` was concatenation in every dialect, including MySQL and MariaDB.
 
 ### MariaDB-Specific Features (v1.14.0+)
 

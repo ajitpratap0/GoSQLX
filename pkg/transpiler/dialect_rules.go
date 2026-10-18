@@ -36,6 +36,7 @@ func init() {
 		rules.PgSerialToAutoIncrement,
 		rules.PgDoubleQuoteToBacktick,
 		rules.PgILikeToLower,
+		rules.PgConcatToMySQLConcat,
 	)
 	register(keywords.DialectPostgreSQL, keywords.DialectSQLite,
 		rules.PgSerialToIntegerPK,

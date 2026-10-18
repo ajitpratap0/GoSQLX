@@ -64,8 +64,8 @@ export const mdxComponents = {
       <table {...props} className="w-full text-sm" />
     </div>
   ),
-  thead: (props: ComponentPropsWithoutRef<'thead'>) => <thead {...props} className="border-b border-fg/15 bg-fg/[0.03] text-left text-fg-muted" />,
-  th: (props: ComponentPropsWithoutRef<'th'>) => <th {...props} className="px-3 py-2 font-semibold" />,
+  thead: (props: ComponentPropsWithoutRef<'thead'>) => <thead {...props} className="bg-fg/[0.03] text-left text-fg-muted" />,
+  th: (props: ComponentPropsWithoutRef<'th'>) => <th {...props} className="border-b border-fg/15 px-3 py-2 font-semibold" />,
   td: (props: ComponentPropsWithoutRef<'td'>) => <td {...props} className="border-t border-border px-3 py-2" />,
   tr: (props: ComponentPropsWithoutRef<'tr'>) => <tr {...props} className="hover:bg-fg/[0.02]" />,
 };

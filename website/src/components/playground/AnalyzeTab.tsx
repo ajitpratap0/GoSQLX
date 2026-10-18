@@ -1,31 +1,6 @@
 'use client';
-
-interface SecurityAnalysis {
-  critical_count?: number;
-  high_count?: number;
-  medium_count?: number;
-  low_count?: number;
-  total_count?: number;
-  findings?: unknown[];
-}
-
-interface OptimizationResult {
-  Score?: number;
-  QueryComplexity?: string;
-  Suggestions?: unknown[];
-}
-
-interface Suggestion {
-  message?: string;
-  description?: string;
-  text?: string;
-}
-
-export interface AnalysisData {
-  error?: string;
-  security?: SecurityAnalysis;
-  optimization?: OptimizationResult | number;
-}
+import { type AnalysisData, type OptimizationSuggestion, type SecurityFinding } from "./bridgeTypes";
+import { ErrorNotice, Position, SeverityBadge } from "./ResultParts";
 
 interface AnalyzeTabProps {
   data: AnalysisData | null;
@@ -67,6 +42,45 @@ function ScoreCard({ title, score, subtitle, subtitleTitle }: { title: string; s
   );
 }
 
+function SecurityFindingCard({ finding }: { finding: SecurityFinding }) {
+  return (
+    <li className="bg-bg-overlay border border-border rounded-lg p-3 space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <SeverityBadge severity={finding.severity} />
+        {finding.pattern && (
+          <span className="text-xs font-mono text-violet bg-violet/10 px-1.5 py-0.5 rounded">{finding.pattern}</span>
+        )}
+        <Position line={finding.line} column={finding.column} />
+      </div>
+      <p className="text-sm text-fg">{finding.description}</p>
+      {finding.risk && <p className="text-xs text-fg-muted">Risk: {finding.risk}</p>}
+      {finding.suggestion && <p className="text-xs text-info">{finding.suggestion}</p>}
+    </li>
+  );
+}
+
+function SuggestionCard({ suggestion }: { suggestion: OptimizationSuggestion }) {
+  return (
+    <li className="bg-bg-overlay border border-border rounded-lg p-3 space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <SeverityBadge severity={suggestion.severity} />
+        <span className="text-xs font-mono text-violet bg-violet/10 px-1.5 py-0.5 rounded">{suggestion.rule_id}</span>
+        <Position line={suggestion.line} column={suggestion.column} />
+      </div>
+      <p className="text-sm text-fg">{suggestion.message}</p>
+      {suggestion.detail && <p className="text-xs text-fg-muted">{suggestion.detail}</p>}
+      {suggestion.suggested_sql && (
+        <div className="text-xs">
+          <div className="text-fg-subtle mb-1">Suggested</div>
+          <code className="block font-mono text-info bg-bg border border-border rounded px-2 py-1.5 whitespace-pre-wrap break-words">
+            {suggestion.suggested_sql}
+          </code>
+        </div>
+      )}
+    </li>
+  );
+}
+
 export default function AnalyzeTab({ data }: AnalyzeTabProps) {
   if (!data) {
     return (
@@ -76,49 +90,34 @@ export default function AnalyzeTab({ data }: AnalyzeTabProps) {
     );
   }
 
-  if (data.error) {
+  if (data.parse_error) {
     return (
       <div className="p-4">
-        <div className="bg-danger/10 border border-danger/30 rounded-lg p-4">
-          <div className="flex items-center gap-2 text-danger font-medium mb-1">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Analysis Error
-          </div>
-          <p className="text-danger text-sm font-mono">{data.error}</p>
-        </div>
+        <ErrorNotice title="Parse error" message={data.parse_error} polite>
+          <p className="text-fg-muted text-xs mt-3">
+            Analysis runs only on SQL that parses. Fix the error above to see security and optimization results.
+          </p>
+        </ErrorNotice>
+      </div>
+    );
+  }
+
+  if (data.error || !data.security || !data.optimization) {
+    return (
+      <div className="p-4">
+        <ErrorNotice title="Analysis error" message={data.error || "The analyzer returned no result."} />
       </div>
     );
   }
 
   // Derive security score
-  const security = (data.security || {}) as SecurityAnalysis;
-  const critical = security.critical_count || 0;
-  const high = security.high_count || 0;
-  const medium = security.medium_count || 0;
-  const low = security.low_count || 0;
+  const security = data.security;
+  const { critical_count: critical, high_count: high, medium_count: medium, low_count: low } = security;
   const securityScore = Math.max(0, 100 - (critical * 25 + high * 10 + medium * 5 + low * 1));
+  const findings = security.findings ?? [];
 
-  // Optimization score
   const optimization = data.optimization;
-  const optimizationScore = typeof optimization === "number"
-    ? optimization
-    : typeof (optimization as OptimizationResult)?.Score === "number"
-      ? (optimization as OptimizationResult).Score!
-      : 100;
-
-  // Complexity (nested inside optimization object)
-  const complexityRaw = typeof optimization === "object" && optimization !== null
-    ? (optimization as OptimizationResult).QueryComplexity
-    : undefined;
-  const complexityLevel = complexityRaw || "N/A";
-
-  // Suggestions (nested inside optimization object)
-  const rawSuggestions = typeof optimization === "object" && optimization !== null
-    ? (optimization as OptimizationResult).Suggestions
-    : undefined;
-  const allSuggestions = Array.isArray(rawSuggestions) ? rawSuggestions : [];
+  const suggestions = optimization.suggestions ?? [];
 
   return (
     <div className="p-4 overflow-auto h-full space-y-6">
@@ -131,38 +130,45 @@ export default function AnalyzeTab({ data }: AnalyzeTabProps) {
         />
         <ScoreCard
           title="Optimization"
-          score={optimizationScore}
+          score={optimization.score}
           subtitle="Performance score"
         />
         <ScoreCard
           title="Complexity"
-          score={complexityLevel}
+          score={optimization.complexity || "N/A"}
           subtitle="simple → moderate → complex"
         />
       </div>
 
-      {allSuggestions.length > 0 && (
-        <div>
-          <h3 className="text-sm font-medium text-fg-muted mb-3">Suggestions</h3>
-          <div className="space-y-2">
-            {allSuggestions.map((s: unknown, i: number) => {
-              const suggestion = s as string | Suggestion;
-              const text = typeof suggestion === "string" ? suggestion : suggestion.message || suggestion.description || suggestion.text || JSON.stringify(suggestion);
-              return (
-                <div
-                  key={i}
-                  className="flex items-start gap-2 bg-bg-overlay border border-border rounded-lg p-3"
-                >
-                  <svg className="w-4 h-4 text-info mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                  <span className="text-sm text-fg-muted">{text}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      <section aria-labelledby="analyze-security-heading">
+        <h3 id="analyze-security-heading" className="text-sm font-medium text-fg-muted mb-3">
+          Security findings ({findings.length})
+        </h3>
+        {findings.length > 0 ? (
+          <ul className="space-y-2">
+            {findings.map((f, i) => (
+              <SecurityFindingCard key={`${f.pattern}-${i}`} finding={f} />
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-fg-muted">No security issues detected.</p>
+        )}
+      </section>
+
+      <section aria-labelledby="analyze-suggestions-heading">
+        <h3 id="analyze-suggestions-heading" className="text-sm font-medium text-fg-muted mb-3">
+          Optimization suggestions ({suggestions.length})
+        </h3>
+        {suggestions.length > 0 ? (
+          <ul className="space-y-2">
+            {suggestions.map((s, i) => (
+              <SuggestionCard key={`${s.rule_id}-${i}`} suggestion={s} />
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-fg-muted">No optimization suggestions.</p>
+        )}
+      </section>
     </div>
   );
 }

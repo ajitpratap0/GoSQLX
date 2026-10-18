@@ -1,12 +1,17 @@
 # GoSQLX SQL Feature Compatibility Matrix
 
-**Version**: v1.15.0 | **Last Updated**: 2026-04-12
+**Version**: v1.15.0 | **Last Updated**: 2026-10-18
 
 ## Overview
 
 This matrix documents the comprehensive SQL feature support in GoSQLX across different SQL dialects and standards. The testing was conducted using the comprehensive integration test suite with 700+ test cases covering real-world SQL patterns.
 
-### Recent Additions (v1.9.0)
+### Recent Additions (v1.15.0)
+- ✅ **Snowflake**: 87/87 QA corpus pass (MATCH_RECOGNIZE, QUALIFY, VARIANT paths, time-travel, LATERAL FLATTEN, stage/stream/task/pipe stubs)
+- ✅ **ClickHouse**: 83/83 QA corpus pass (up from 69/83 in v1.14.0): `ARRAY JOIN`, scalar CTEs, `CREATE MATERIALIZED VIEW`, numeric `SAMPLE ... OFFSET`, `LIMIT offset, count`
+- See [Snowflake](#snowflake) and [ClickHouse](#clickhouse) below for per-dialect details
+
+### Previous Additions (v1.9.0)
 - ✅ **SQLite PRAGMA**: Fully parsed - bare (`PRAGMA x`), arg (`PRAGMA x(n)`), and assignment (`PRAGMA x=v`) forms; `PragmaStatement` AST node
 - ✅ **WITHOUT ROWID**: `CREATE TABLE ... WITHOUT ROWID`; reserved keywords now valid as DDL column names
 - ✅ **Tautology Detection**: `ScanSQL()` detects `1=1`, `'a'='a'`, `col=col`, `OR TRUE` → CRITICAL severity (`PatternTautology`)
@@ -626,8 +631,8 @@ GoSQLX v1.8.0 introduces a first-class dialect mode engine that threads the SQL 
 | **SQL Server** | `"sqlserver"` | T-SQL keywords | MERGE, bracket identifiers `[col]`, PIVOT/UNPIVOT | ✅ v1.14.0 PIVOT/UNPIVOT added |
 | **Oracle** | `"oracle"` | Oracle keywords | DUAL table, basic PL/SQL keywords, MINUS as EXCEPT | ⚠️ Keywords + basic parsing |
 | **SQLite** | `"sqlite"` | SQLite keywords | Flexible typing, simplified syntax | ⚠️ Keywords + basic parsing |
-| **Snowflake** | `"snowflake"` | Snowflake keywords | MATCH_RECOGNIZE, @stage, SAMPLE, QUALIFY, VARIANT paths, time-travel, MINUS, LATERAL FLATTEN, TRY_CAST, IGNORE/RESPECT NULLS, LIKE ANY/ALL, CREATE STAGE/STREAM/TASK/PIPE stubs | ✅ v1.14.0 — 87/87 QA pass |
-| **ClickHouse** | `"clickhouse"` | ClickHouse keywords | PREWHERE, FINAL, GLOBAL IN/NOT IN, nested types, parametric aggregates, bare-bracket arrays, ORDER BY WITH FILL, CODEC, WITH TOTALS, LIMIT BY, ANY/ALL JOIN, SETTINGS, TTL, INSERT FORMAT | ✅ v1.14.0 — 69/83 QA pass (was 53%) |
+| **Snowflake** | `"snowflake"` | Snowflake keywords | MATCH_RECOGNIZE, @stage, SAMPLE, QUALIFY, VARIANT paths, time-travel, MINUS, LATERAL FLATTEN, TRY_CAST, IGNORE/RESPECT NULLS, LIKE ANY/ALL, CREATE STAGE/STREAM/TASK/PIPE stubs | ✅ v1.15.0 — 87/87 QA pass |
+| **ClickHouse** | `"clickhouse"` | ClickHouse keywords | PREWHERE, FINAL, GLOBAL IN/NOT IN, nested types, parametric aggregates, bare-bracket arrays, ORDER BY WITH FILL, CODEC, WITH TOTALS, LIMIT BY, ANY/ALL JOIN, SETTINGS, TTL, INSERT FORMAT | ✅ v1.15.0 — 83/83 QA pass (was 69/83 in v1.14.0) |
 | **MariaDB** | `"mariadb"` | MariaDB keywords (superset of MySQL) | All MySQL features + SEQUENCE DDL, FOR SYSTEM_TIME, WITH SYSTEM VERSIONING, PERIOD FOR, CONNECT BY | ✅ v1.14.0 |
 
 ### Usage
@@ -672,7 +677,8 @@ gosqlx format --dialect mysql query.sql
 - VACUUM not supported
 - Virtual tables (FTS5, rtree) not supported
 
-#### Snowflake (v1.14.0 — 87/87 QA pass, 100%)
+#### Snowflake
+- v1.15.0: 87/87 QA corpus pass (100%)
 - MATCH_RECOGNIZE (SQL:2016 R010), @stage references, SAMPLE/TABLESAMPLE, QUALIFY
 - VARIANT colon-path expressions (`expr:field.sub[0]`)
 - Time-travel: AT/BEFORE/CHANGES
@@ -689,7 +695,8 @@ gosqlx format --dialect mysql query.sql
 - Spider storage engine syntax not parsed
 - ColumnStore-specific syntax not supported
 
-#### ClickHouse (v1.14.0 — 69/83 QA pass, 83%)
+#### ClickHouse
+- v1.15.0: 83/83 QA corpus pass (100%; 69/83 in v1.14.0). It closed the remaining QA gaps: `ARRAY JOIN` / `LEFT ARRAY JOIN`, scalar CTEs (`WITH <expr> AS <name>`), `CREATE MATERIALIZED VIEW` with `ENGINE`/`TO`, `CREATE TABLE ... AS <source> ENGINE = ...`, numeric `SAMPLE` arguments with `OFFSET`, and `LIMIT offset, count`
 - PREWHERE clause for pre-filter optimization before primary key scan
 - FINAL modifier on table references (forces MergeTree part merge)
 - GLOBAL IN / GLOBAL NOT IN for distributed query execution
@@ -705,7 +712,7 @@ gosqlx format --dialect mysql query.sql
 
 ## SQL Standards Compliance Summary
 
-### Overall Compliance (v1.14.0)
+### Overall Compliance
 
 | Standard | Compliance % | Status | Notes |
 |----------|--------------|--------|-------|
@@ -743,7 +750,8 @@ gosqlx format --dialect mysql query.sql
 | **Oracle** | 80% | 60% | ⭐⭐⭐⭐ Good | Keywords + basic features |
 | **SQLite** | 85% | 50% | ⭐⭐⭐⭐ Good | Keywords + basic features |
 | **MariaDB** | 95% | 90% | ⭐⭐⭐⭐⭐ Excellent | MySQL superset + SEQUENCE DDL, temporal tables, CONNECT BY (v1.14.0) |
-| **Snowflake** | 80% | 30% | ⭐⭐⭐ Good | Keyword detection only |
+| **Snowflake** | n/a | n/a | ⭐⭐⭐⭐ Good | 87/87 QA corpus pass (v1.15.0); the QA pass rate is not a core/extension percentage |
+| **ClickHouse** | n/a | n/a | ⭐⭐⭐⭐ Good | 83/83 QA corpus pass (v1.15.0); the QA pass rate is not a core/extension percentage |
 
 ## Performance Characteristics by Feature
 
@@ -895,7 +903,7 @@ gosqlx format --dialect mysql query.sql
 
 ---
 
-**Last Updated**: 2026-04-12
+**Last Updated**: 2026-10-18
 **GoSQLX Version**: 1.15.0
 **Test Suite Version**: 1.15.0
 **Total Test Cases**: 800+
@@ -903,6 +911,13 @@ gosqlx format --dialect mysql query.sql
 **SQL-99 Compliance**: ~85%
 **PostgreSQL Compliance**: ~95% (core features), ~85% (extensions)
 **MySQL Compliance**: ~95% (core features), ~85% (extensions)
+
+## Quick Reference: What's New in v1.15.0
+
+1. **Snowflake** - 87/87 QA corpus pass
+2. **ClickHouse** - 83/83 QA corpus pass (was 69/83): `ARRAY JOIN`, scalar CTEs, materialized views, `SAMPLE ... OFFSET`, `LIMIT offset, count`
+
+---
 
 ## Quick Reference: What's New in v1.9.0
 

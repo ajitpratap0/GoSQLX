@@ -1,0 +1,55 @@
+{
+  "lint": {
+    "parse_error": "parse error",
+    "error": "lint error",
+    "violations": [
+      {
+        "rule": "L016",
+        "rule_name": "Select Star",
+        "severity": "warning",
+        "message": "message",
+        "line": 1,
+        "column": 1,
+        "suggestion": "suggestion"
+      }
+    ]
+  },
+  "analyze": {
+    "parse_error": "parse error",
+    "security": {
+      "findings": [
+        {
+          "severity": "high",
+          "pattern": "TAUTOLOGY",
+          "description": "description",
+          "risk": "risk",
+          "line": 1,
+          "column": 1,
+          "sql": "1=1",
+          "suggestion": "suggestion"
+        }
+      ],
+      "total_count": 1,
+      "critical_count": 0,
+      "high_count": 1,
+      "medium_count": 0,
+      "low_count": 0
+    },
+    "optimization": {
+      "score": 90,
+      "complexity": "simple",
+      "suggestions": [
+        {
+          "rule_id": "OPT-001",
+          "severity": "warning",
+          "message": "message",
+          "detail": "detail",
+          "line": 1,
+          "column": 1,
+          "original_sql": "SELECT *",
+          "suggested_sql": "SELECT id"
+        }
+      ]
+    }
+  }
+}

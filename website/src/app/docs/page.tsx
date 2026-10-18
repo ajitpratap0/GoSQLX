@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { pageMeta } from '@/lib/seo';
 import Link from 'next/link';
-import { DOCS_SIDEBAR } from '@/lib/constants';
+import { DOCS_SIDEBAR, docsCategoryAnchor } from '@/lib/constants';
 import { DocsSearchTrigger } from '@/components/docs/DocsSearchTrigger';
 import { FadeIn } from '@/components/ui/FadeIn';
 
@@ -20,6 +20,9 @@ const CATEGORY_ICONS: Record<string, string> = {
   'Migration': 'M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4',
   'Integrations':'M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z',
 };
+
+const START_HERE = ['getting-started', 'usage-guide', 'cli-guide'];
+const ALL_ITEMS = DOCS_SIDEBAR.flatMap((g) => g.items);
 
 export default function DocsPage() {
   return (
@@ -44,13 +47,39 @@ export default function DocsPage() {
 
       <DocsSearchTrigger />
 
+      <section aria-labelledby="start-here" className="mb-12">
+        <h2 id="start-here" className="mb-4 text-sm font-semibold uppercase tracking-wider text-fg-subtle">
+          Start here
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-3">
+          {START_HERE.map((slug) => {
+            const item = ALL_ITEMS.find((i) => i.slug === slug);
+            if (!item) return null;
+            return (
+              <Link
+                key={slug}
+                href={`/docs/${slug}`}
+                className="glass glass-hover block rounded-xl p-5 transition-colors"
+              >
+                <span className="text-base font-semibold text-fg">{item.label}</span>
+                <span className="mt-1 block text-sm text-fg-muted">{item.description}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {DOCS_SIDEBAR.map((group, i) => {
           // Package pages (depth 1) are reachable from the API Reference page; list top-level pages only.
           const pages = group.items.filter((item) => !item.depth);
           return (
             <FadeIn viewport key={group.category} delay={i * 0.06}>
-              <section className="glass block h-full rounded-xl p-6" aria-labelledby={`docs-cat-${i}`}>
+              <section
+                id={docsCategoryAnchor(group.category)}
+                aria-labelledby={`docs-cat-${i}`}
+                className="glass block h-full scroll-mt-24 rounded-xl p-6"
+              >
                 <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
                   <svg className="h-5 w-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" d={CATEGORY_ICONS[group.category] || CATEGORY_ICONS['Guides']} />

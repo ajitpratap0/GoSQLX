@@ -76,7 +76,7 @@ export default function RootLayout({
         </a>
         <Providers>
           <Navbar />
-          <main id="main-content" tabIndex={-1} className="pt-16 outline-none focus:outline-none focus-visible:outline-none">{children}</main>
+          <main id="main-content" className="pt-16">{children}</main>
           <Footer />
         </Providers>
         <SpeedInsights />

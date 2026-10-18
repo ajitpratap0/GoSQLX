@@ -36,6 +36,11 @@ check(
   'globals.css: an unlayered #main-content:focus-visible rule must suppress the focus ring',
 );
 
+check(
+  !/<main[^>]*tabIndex/.test(read('app/layout.tsx')),
+  'layout.tsx: <main> must not have a static tabIndex (it hijacks the sequential focus starting point on click)',
+);
+
 const toc = read('components/docs/Toc.tsx');
 const rail = toc.match(/<nav[^>]*className="([^"]*sticky[^"]*)"/);
 check(!!rail, 'Toc.tsx: rail nav with sticky className not found');
@@ -54,6 +59,26 @@ check(
   Number.isFinite(skipZ) && skipZ > navZ,
   `layout.tsx: skip link focus z-index (${skipZ}) must exceed Navbar z-${navZ}`,
 );
+
+import { readdirSync, statSync } from 'node:fs';
+const allowScrollMt = new Map([
+  ['app/docs/page.tsx', /scroll-mt-4\b/],
+  ['components/docs/mdx-components.tsx', /scroll-mt-20\b/],
+]);
+const walk = (d) =>
+  readdirSync(d).flatMap((f) => {
+    const full = resolve(d, f);
+    return statSync(full).isDirectory() ? walk(full) : /\.tsx?$/.test(f) ? [full] : [];
+  });
+for (const f of walk(root)) {
+  const rel = f.slice(root.length + 1);
+  const src = readFileSync(f, 'utf8');
+  const hits = src.match(/scroll-mt-[\w.\[\]-]+/g) || [];
+  const ok = allowScrollMt.get(rel);
+  for (const h of hits) {
+    if (!(ok && ok.test(h))) failures.push(`${rel}: unexpected ${h} (stacks with html scroll-padding-top)`);
+  }
+}
 
 if (failures.length) {
   console.error('Layout guard failures:\n - ' + failures.join('\n - '));

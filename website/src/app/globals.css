@@ -135,7 +135,8 @@ html.light {
 html {
   overflow-x: clip;
   /* Fixed header is 4rem tall (h-16); keep anchor targets clear of it site-wide.
-     Single offset mechanism: do not add scroll-mt-* utilities (they stack with this). */
+     Single offset mechanism: do not add scroll-mt-* utilities (they stack with this).
+     Exception: FadeIn-wrapped targets may use a small scroll-mt-4 to cover the translate offset. */
   scroll-padding-top: 5rem;
 }
 

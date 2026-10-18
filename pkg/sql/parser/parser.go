@@ -67,7 +67,9 @@ type TokenPosition struct {
 //	ast, err := parser.Parse(tokens)
 var parserPool = sync.Pool{
 	New: func() interface{} {
-		return &Parser{}
+		p := &Parser{}
+		p.resetDialectState()
+		return p
 	},
 }
 
@@ -113,6 +115,16 @@ func PutParser(p *Parser) {
 	}
 }
 
+// resetDialectState puts the typed dialect and its capability cache into the
+// default (dialect.Unknown) state. It is the single initialiser shared by
+// NewParser, the pool's New func and Reset, so a pooled default parser and a
+// freshly constructed one are state-identical. Allocation-free:
+// dialect.Unknown.Capabilities() returns a small struct by value.
+func (p *Parser) resetDialectState() {
+	p.dialectTyped = dialect.Unknown
+	p.capabilitiesCache = dialect.Unknown.Capabilities()
+}
+
 // maxPooledTokenBuf is the largest Parser.tokenBuf capacity (in tokens, about
 // 288 KiB at 72 B per token) that Reset keeps for reuse. Larger buffers are
 // dropped so one huge query does not pin memory in the parser pool.
@@ -143,8 +155,7 @@ func (p *Parser) Reset() {
 	p.dialect = ""
 	// INVARIANT: p.dialectTyped must always equal dialect.Parse(p.dialect).
 	// Reset clears both fields in lockstep; see WithDialect for the active path.
-	p.dialectTyped = dialect.Unknown
-	p.capabilitiesCache = dialect.Capabilities{}
+	p.resetDialectState()
 	p.dmlReturning = false
 }
 
@@ -928,9 +939,8 @@ func (p *Parser) parseSnowflakeStageStatement(kind string) (ast.Statement, error
 
 // NewParser creates a new parser with optional configuration.
 func NewParser(opts ...ParserOption) *Parser {
-	p := &Parser{
-		capabilitiesCache: dialect.Unknown.Capabilities(),
-	}
+	p := &Parser{}
+	p.resetDialectState()
 	for _, opt := range opts {
 		opt(p)
 	}

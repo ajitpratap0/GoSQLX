@@ -1,15 +1,16 @@
 import type { Metadata } from 'next';
+import { pageMeta } from '@/lib/seo';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta({
   title: 'Privacy Policy',
   description: 'GoSQLX privacy policy. No tracking, no telemetry, no query logging.',
-  alternates: { canonical: '/privacy/' },
-};
+  path: '/privacy/',
+});
 
 export default function PrivacyPage() {
   return (
     <div className="min-h-screen section-padding pt-24 pb-24">
-      <div className="container-width max-w-3xl prose prose-invert">
+      <div className="container-width max-w-3xl prose prose-invert prose-dark prose-a:no-underline">
         <h1>Privacy Policy</h1>
         <p className="lead">
           GoSQLX is committed to user privacy. This policy explains what data is

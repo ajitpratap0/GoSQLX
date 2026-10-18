@@ -9,7 +9,7 @@
  *
  * Usage: node scripts/check-contrast.mjs
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -80,6 +80,22 @@ const overrides = css.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) =>
 if (overrides.length !== 1 || overrides[0].trim() !== 'html.light {') {
   failures.push(`html.light override rules are not allowed outside the token block:\n  ${overrides.join('\n  ')}`);
 }
+
+// Any element using prose-invert must also carry prose-dark, otherwise typography
+// falls back to white text and is unreadable in light mode (#736).
+const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '../src');
+function walk(dir) {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const f = resolve(dir, e.name);
+    if (e.isDirectory()) walk(f);
+    else if (/\.(tsx|ts|jsx|js)$/.test(e.name)) {
+      for (const m of readFileSync(f, 'utf8').matchAll(/(["'`])([^"'`\n]*\bprose-invert\b[^"'`\n]*)\1/g)) {
+        if (!/\bprose-dark\b/.test(m[2])) failures.push(`${f.slice(SRC.length)}: prose-invert without prose-dark`);
+      }
+    }
+  }
+}
+walk(SRC);
 
 if (failures.length) {
   console.error(`Contrast check failed (${failures.length}):\n- ${failures.join('\n- ')}`);

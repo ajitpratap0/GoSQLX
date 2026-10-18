@@ -9,7 +9,6 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 ### Recent Additions (v1.15.0)
 - ✅ **Snowflake**: 87/87 QA corpus pass (MATCH_RECOGNIZE, QUALIFY, VARIANT paths, time-travel, LATERAL FLATTEN, stage/stream/task/pipe stubs)
 - ✅ **ClickHouse**: 83/83 QA corpus pass (up from 69/83 in v1.14.0): `ARRAY JOIN`, scalar CTEs, `CREATE MATERIALIZED VIEW`, numeric `SAMPLE ... OFFSET`, `LIMIT offset, count`
-- ✅ **Parser**: arithmetic on the right-hand side of comparisons; pooled parser capabilities now match `NewParser`
 - See [Snowflake](#snowflake) and [ClickHouse](#clickhouse) below for per-dialect details
 
 ### Previous Additions (v1.9.0)
@@ -670,7 +669,7 @@ gosqlx format --dialect mysql query.sql
 
 ## SQL Standards Compliance Summary
 
-### Overall Compliance (v1.14.0)
+### Overall Compliance
 
 | Standard | Compliance % | Status | Notes |
 |----------|--------------|--------|-------|
@@ -708,8 +707,8 @@ gosqlx format --dialect mysql query.sql
 | **Oracle** | 80% | 60% | ⭐⭐⭐⭐ Good | Keywords + basic features |
 | **SQLite** | 85% | 50% | ⭐⭐⭐⭐ Good | Keywords + basic features |
 | **MariaDB** | 95% | 90% | ⭐⭐⭐⭐⭐ Excellent | MySQL superset + SEQUENCE DDL, temporal tables, CONNECT BY (v1.14.0) |
-| **Snowflake** | 100% | 100% | ⭐⭐⭐⭐⭐ Excellent | 87/87 QA corpus pass (v1.15.0); QA-corpus pass rate, not a full-spec percentage |
-| **ClickHouse** | 100% | 100% | ⭐⭐⭐⭐⭐ Excellent | 83/83 QA corpus pass (v1.15.0); QA-corpus pass rate, not a full-spec percentage |
+| **Snowflake** | n/a | n/a | ⭐⭐⭐⭐ Good | 87/87 QA corpus pass (v1.15.0); the QA pass rate is not a core/extension percentage |
+| **ClickHouse** | n/a | n/a | ⭐⭐⭐⭐ Good | 83/83 QA corpus pass (v1.15.0); the QA pass rate is not a core/extension percentage |
 
 ## Performance Characteristics by Feature
 
@@ -874,7 +873,6 @@ gosqlx format --dialect mysql query.sql
 
 1. **Snowflake** - 87/87 QA corpus pass
 2. **ClickHouse** - 83/83 QA corpus pass (was 69/83): `ARRAY JOIN`, scalar CTEs, materialized views, `SAMPLE ... OFFSET`, `LIMIT offset, count`
-3. **Parser** - arithmetic on the right-hand side of comparisons
 
 ---
 

@@ -47,7 +47,7 @@ export function UseEverywhere() {
               </p>
               <ReproduceSnippet command={MCP_ADD_COMMAND} what="MCP install command" />
               <p className="mt-2 font-mono text-xs text-fg-subtle">
-                Expected output: Added gosqlx ({PROJECT.mcpToolCount} tools available)
+                {PROJECT.mcpToolCount} tools: see the list below
               </p>
               <ul className="mt-4 flex flex-wrap gap-2" aria-label="MCP tools">
                 {MCP_TOOLS.map((tool) => (

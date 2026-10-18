@@ -31,7 +31,7 @@ import (
 // Version 1.14.0 includes:
 //   - Dialect-aware SQL formatting (TOP/FETCH FIRST/LIMIT per dialect)
 //   - Snowflake dialect: 87/87 QA pass (MATCH_RECOGNIZE, @stage, SAMPLE, QUALIFY, VARIANT, time-travel, MINUS, LATERAL FLATTEN, TRY_CAST)
-//   - ClickHouse dialect: 83/83 QA pass as of v1.15.0 (69/83 in v1.14.0, 53% before) (nested types, parametric aggregates, WITH FILL, CODEC, SETTINGS/TTL, INSERT FORMAT)
+//   - ClickHouse dialect: 69/83 QA pass, up from 53% (nested types, parametric aggregates, WITH FILL, CODEC, SETTINGS/TTL, INSERT FORMAT)
 //   - MariaDB dialect (SEQUENCE DDL, temporal tables, CONNECT BY)
 //   - SQL transpilation (MySQL↔PostgreSQL, PostgreSQL→SQLite) + CLI subcommand
 //   - Live schema introspection (Postgres/MySQL/SQLite loaders)

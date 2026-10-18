@@ -252,7 +252,7 @@ gosqlx lsp --log /tmp/lsp.log
 
 - **Expanded Dialects:**
   - Snowflake at 100% QA pass (87/87: MATCH_RECOGNIZE, @stage, SAMPLE, QUALIFY, VARIANT, time-travel)
-  - ClickHouse 100% QA pass (83/83 as of v1.15.0; was 53% before v1.14.0: nested types, parametric aggregates, WITH FILL, CODEC)
+  - ClickHouse 83% QA pass at v1.14.0, up from 53% (nested types, parametric aggregates, WITH FILL, CODEC); now 83/83 as of v1.15.0
   - MariaDB with SEQUENCE, temporal tables, CONNECT BY
 
 - **IDE Integration:**

@@ -11,6 +11,9 @@ on:
       - 'llms.txt'
       - 'docs/**'
       - 'pkg/linter/rules/**'
+      - 'cmd/gosqlx/cmd/lint.go'
+      - 'cmd/gosqlx/cmd/root.go'
+      - 'pkg/errors/errors.go'
       - 'benchmarks/compare/results/**'
   pull_request:
     paths:
@@ -21,6 +24,9 @@ on:
       - 'llms.txt'
       - 'docs/**'
       - 'pkg/linter/rules/**'
+      - 'cmd/gosqlx/cmd/lint.go'
+      - 'cmd/gosqlx/cmd/root.go'
+      - 'pkg/errors/errors.go'
       - 'benchmarks/compare/results/**'
   workflow_dispatch:
 

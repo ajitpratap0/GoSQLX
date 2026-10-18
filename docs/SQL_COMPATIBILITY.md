@@ -314,7 +314,7 @@ level over a parenthesized query that already has one, such as
 | **Custom operators** | ✅ Full | ⚠️ Partial | 30% | Basic operator recognition |
 | **Dollar quoting** | ✅ Full | ✅ Full | 90% | `$$body$$` and `$tag$body$tag$` (since v1.8.0) |
 
-### MySQL-Specific Features 
+### MySQL-Specific Features
 
 | Feature | Support Level | GoSQLX Parser | Test Coverage | Notes |
 |---------|---------------|---------------|---------------|-------|

@@ -239,26 +239,20 @@ lsp:
 ```
 
 **Verify Diagnostics Programmatically:**
+
+The LSP server publishes parse errors, so reproduce them with the same recovering parser (this is not the linter):
 ```go
 import (
-    "github.com/ajitpratap0/GoSQLX/pkg/linter"
-    "github.com/ajitpratap0/GoSQLX/pkg/linter/rules/keywords"
-    "github.com/ajitpratap0/GoSQLX/pkg/linter/rules/whitespace"
+    "log"
+
+    "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 )
 
-func TestDiagnostics(sqlContent string) {
-    // Create a linter from the rules you want to run
-    l := linter.New(
-        whitespace.NewTrailingWhitespaceRule(),
-        keywords.NewKeywordCaseRule(keywords.CaseUpper),
-    )
-
-    // Run lint
-    result := l.LintString(sqlContent, "query.sql")
-
-    for _, v := range result.Violations {
-        log.Printf("Line %d: [%s] %s",
-            v.Location.Line, v.Rule, v.Message)
+func CheckDiagnostics(sqlContent string) {
+    // ParseWithRecovery is what the LSP server uses to build diagnostics
+    _, errs := gosqlx.ParseWithRecovery(sqlContent)
+    for _, err := range errs {
+        log.Printf("parse error: %v", err)
     }
 }
 ```
@@ -1812,7 +1806,7 @@ require('lspconfig').gosqlx.setup{
 
 #### Q: Can I disable specific linter rules in the LSP?
 
-**A:** The LSP server runs the built-in style rules and does not read a linter section from `.gosqlx.yml`. To disable rules in your own Go tooling, use the `rules` map read by `pkg/linter/config`:
+**A:** The LSP server does not run lint rules; it reports parse/syntax errors only. To lint, use `gosqlx lint` (L001-L010) or `gosqlx.Lint` / `pkg/linter` (all 30 rules), and disable rules with the `rules` map read by `pkg/linter/config`:
 ```yaml
 rules:
   L001:
@@ -1948,12 +1942,7 @@ RETURNING id, created_at;
 
 #### Q: How do I scan SQL for injection vulnerabilities?
 
-**A:** Use the security scanner:
-```bash
-gosqlx security scan query.sql
-```
-
-Or programmatically:
+**A:** Use the security scanner API (there is no `gosqlx security` subcommand):
 ```go
 import "github.com/ajitpratap0/GoSQLX/pkg/sql/security"
 
@@ -2002,6 +1991,8 @@ security:
 gosqlx config init
 # Creates .gosqlx.yml with default settings
 ```
+
+> **Note:** The CLI config written by `gosqlx config init` (top-level `format`, `validate`, `output`, `analyze` keys) and the `pkg/linter/config` schema (`rules`, `ignore`) cannot share one `.gosqlx.yml`, because the linter config rejects unknown keys. Keep the linter config in a separate file and pass its path explicitly to `config.Load`.
 
 #### Q: Can I use different configs for different environments?
 

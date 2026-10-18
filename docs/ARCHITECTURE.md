@@ -186,7 +186,7 @@ The codebase is organized into focused packages with clear responsibilities and 
     - **Performance** (8 rules): L016-L023 (SELECT *, full scans, leading wildcards, NOT IN with NULL, and more)
     - **Naming** (7 rules): L024-L030 (table aliases, reserved keywords, implicit INSERT columns, UNION vs UNION ALL, and more)
   - **Auto-fix Support**: 5 of the 30 rules (L001, L002, L003, L007, L010) support automatic fixes
-  - **Integration**: `gosqlx.Lint` runs all 30 rules; the CLI lint command and MCP `lint_sql` tool run the style rules L001-L010; LSP code actions apply fixes
+  - **Integration**: `gosqlx.Lint` runs all 30 rules; the CLI lint command and MCP `lint_sql` tool run the style rules L001-L010
 
 - **pkg/compatibility**: Compatibility layer for API evolution
 

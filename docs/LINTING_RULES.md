@@ -38,7 +38,7 @@ The safety, performance and naming rules (L011-L030) are applied through the Go 
 | [L003](#l003-consecutive-blank-lines) | Consecutive Blank Lines | Warning | Yes | Enabled |
 | [L004](#l004-indentation-depth) | Indentation Depth | Warning | No | Enabled |
 | [L005](#l005-long-lines) | Long Lines | Info | No | Enabled |
-| [L006](#l006-select-column-alignment) | Column Alignment | Info | No | Enabled |
+| [L006](#l006-column-alignment) | Column Alignment | Info | No | Enabled |
 | [L007](#l007-keyword-case-consistency) | Keyword Case Consistency | Warning | Yes | Enabled |
 | [L008](#l008-comma-placement) | Comma Placement | Info | No | Enabled |
 | [L009](#l009-aliasing-consistency) | Aliasing Consistency | Warning | No | Enabled |
@@ -175,12 +175,12 @@ Warns when SQL lines exceed maximum length.
 
 **Severity**: Info
 **Auto-Fix**: No
-**Default Max**: 100 characters
+**Default Max**: 100 characters in the `gosqlx lint` CLI (120 in `gosqlx.Lint`)
 
 #### Example
 
 ```sql
--- VIOLATION: Line exceeds 100 characters
+-- VIOLATION: Line exceeds the maximum length
 SELECT user_id, first_name, last_name, email_address, phone_number, registration_date FROM users WHERE active = true;
 
 -- RECOMMENDED: Split into multiple lines
@@ -217,7 +217,7 @@ SELECT * FROM users WHERE id = 1
 
 ## Style Rules
 
-### L006: SELECT Column Alignment
+### L006: Column Alignment
 
 Ensures columns in SELECT statements are consistently aligned.
 

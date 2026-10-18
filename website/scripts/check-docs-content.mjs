@@ -52,6 +52,12 @@ const LINE_RULES = [
     hint: 'evergreen docs should not label headings with a release',
   },
   {
+    name: 'bold per-release callout',
+    re: /^>?\s*\*\*v\d+\.\d+(?:\.\d+)?\*\*\s*:/,
+    hint: 'write "Since vX.Y.Z, ..." or just state the current behaviour',
+    skip: (file) => file.endsWith('CHANGELOG.md'),
+  },
+  {
     name: 'inline NEW vX.Y.Z marker',
     re: /\bNEW v\d+\.\d+\.\d+/,
     hint: 'drop the marker or say "since vX.Y.Z"',

@@ -313,11 +313,14 @@ func initCompiledPatterns() {
 		// Tautology patterns (always-true conditions used in SQL injection).
 		// Note: Go's RE2 engine does not support backreferences, so equality-based
 		// tautologies (1=1, 'a'='a') are handled by detectTautologyInSQL; only the
-		// simple OR TRUE form is matched here.
+		// simple OR TRUE / || TRUE forms are matched here.
 		PatternTautology: {
 			patterns: []compiledPattern{
 				// OR TRUE
 				compilePattern(`(?i)\bOR\s+TRUE\b`),
+				// || TRUE: || is logical OR in MySQL and MariaDB (#781), so
+				// ' || TRUE -- is the same bypass as ' OR TRUE --.
+				compilePattern(`(?i)\|\|\s*TRUE\b`),
 			},
 			severity:   SeverityCritical,
 			risk:       "Authentication bypass via always-true condition",

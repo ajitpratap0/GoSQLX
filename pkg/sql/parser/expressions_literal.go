@@ -51,6 +51,18 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		}, nil
 	}
 
+	// CONNECT BY: PRIOR is a prefix operator that binds to its operand, so
+	// "PRIOR a + 1" is "(PRIOR a) + 1" (#783).
+	if p.inConnectBy && p.isConnectByPrior() {
+		priorPos := p.currentLocation()
+		p.advance() // Consume PRIOR
+		operand, err := p.parseUnaryOperand()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.UnaryExpression{Operator: ast.Prior, Expr: operand, Pos: priorPos}, nil
+	}
+
 	if p.isType(models.TokenTypeCase) {
 		// Handle CASE expressions (both simple and searched forms)
 		return p.parseCaseExpression()
@@ -448,6 +460,26 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 	)
 }
 
+// isConnectByPrior reports whether the current token is the PRIOR operator
+// rather than a column that happens to be named prior.
+func (p *Parser) isConnectByPrior() bool {
+	// Only a bare word counts: a string literal 'prior' or a quoted
+	// identifier "PRIOR" is an ordinary operand.
+	if p.currentToken.Token.Quote != 0 ||
+		!(p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeKeyword)) ||
+		!strings.EqualFold(p.currentToken.Token.Value, "PRIOR") {
+		return false
+	}
+	switch p.peekToken().Token.Type {
+	case models.TokenTypeEq, models.TokenTypeNeq, models.TokenTypeLt, models.TokenTypeGt,
+		models.TokenTypeLtEq, models.TokenTypeGtEq, models.TokenTypeDot,
+		models.TokenTypeRParen, models.TokenTypeComma, models.TokenTypeSemicolon,
+		models.TokenTypeEOF:
+		return false
+	}
+	return true
+}
+
 // parseUnaryOperand parses the operand of a unary minus or plus one recursion
 // level deeper, so a long run of prefix operators is bounded by
 // MaxRecursionDepth like nested parentheses are.
@@ -478,7 +510,10 @@ func (p *Parser) parseNotOperand() (ast.Expression, error) {
 func (p *Parser) parseSubquery() (ast.Statement, error) {
 	prev := p.dmlReturning
 	p.dmlReturning = false
-	defer func() { p.dmlReturning = prev }()
+	// PRIOR is not valid inside a subquery of a CONNECT BY condition.
+	prevConnectBy := p.inConnectBy
+	p.inConnectBy = false
+	defer func() { p.dmlReturning = prev; p.inConnectBy = prevConnectBy }()
 	return p.parseQuerySource()
 }
 

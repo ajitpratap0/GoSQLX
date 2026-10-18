@@ -11,6 +11,10 @@ type ButtonProps = {
   'aria-label'?: string;
 };
 
+// The motion props live on the <a> itself: a wrapper <div> with whileTap gets an
+// auto tabindex from Motion, which gave every CTA two keyboard tab stops.
+const MotionLink = m.create(Link);
+
 const spring = { type: 'spring' as const, stiffness: 400, damping: 17 };
 
 export function Button({ variant = 'primary', href, children, className = '', external, 'aria-label': ariaLabel }: ButtonProps) {
@@ -37,9 +41,16 @@ export function Button({ variant = 'primary', href, children, className = '', ex
       );
     }
     return (
-      <m.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }} transition={spring} className="inline-flex">
-        <Link href={href} className={cls} aria-label={ariaLabel}>{children}</Link>
-      </m.div>
+      <MotionLink
+        href={href}
+        className={cls}
+        aria-label={ariaLabel}
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.97 }}
+        transition={spring}
+      >
+        {children}
+      </MotionLink>
     );
   }
   return (

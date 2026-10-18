@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 type CopyState = 'idle' | 'copied' | 'failed';
 
 /** A shell command with an always-visible copy button (keyboard and touch friendly). */
-export function ReproduceSnippet({ command }: { command: string }) {
+export function ReproduceSnippet({ command, what = 'benchmark command' }: { command: string; what?: string }) {
   const [state, setState] = useState<CopyState>('idle');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -33,8 +33,8 @@ export function ReproduceSnippet({ command }: { command: string }) {
   const label = state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : 'Copy';
 
   return (
-    <div className="flex items-stretch gap-2 rounded-lg code-surface border border-border bg-bg-raised p-2">
-      <pre className="flex-1 overflow-x-auto px-2 py-2 font-mono text-xs text-fg-muted sm:text-sm">
+    <div className="code-surface flex items-stretch gap-2 p-2">
+      <pre tabIndex={0} role="region" aria-label={`${what} (scrollable)`} className="flex-1 overflow-x-auto px-2 py-2 font-mono text-xs text-fg-muted sm:text-sm">
         <code>
           <span className="select-none text-brand" aria-hidden="true">$ </span>
           {command}
@@ -46,10 +46,10 @@ export function ReproduceSnippet({ command }: { command: string }) {
         className="min-h-11 min-w-11 shrink-0 rounded-md bg-fg/[0.06] px-3 text-xs font-medium text-fg transition-colors hover:bg-fg/[0.12]"
       >
         {label}
-        <span className="sr-only"> benchmark command</span>
+        <span className="sr-only"> {what}</span>
       </button>
       <span className="sr-only" role="status">
-        {state === 'copied' ? 'Command copied to clipboard' : state === 'failed' ? 'Copy failed, select the command and copy it manually' : ''}
+        {state === 'copied' ? `${what[0].toUpperCase()}${what.slice(1)} copied to clipboard` : state === 'failed' ? 'Copy failed, select the command and copy it manually' : ''}
       </span>
     </div>
   );

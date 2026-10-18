@@ -48,4 +48,4 @@ Returns `next` unchanged when `cfg.AuthEnabled()` is false. When enabled, enforc
 | `lint_sql` | Style rule enforcement (L001–L010) |
 | `analyze_sql` | Concurrent composite of all 6 above |
 
-See [MCP Server Guide](/docs/integrations/mcp/) for complete tool schemas and JSON response formats.
+See [MCP Server Guide](../MCP_GUIDE.md) for complete tool schemas and JSON response formats.

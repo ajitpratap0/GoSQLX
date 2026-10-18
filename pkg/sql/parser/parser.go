@@ -124,6 +124,14 @@ func (p *Parser) resetDialectState() {
 	p.dialectTyped = dialect.Unknown
 	p.capabilitiesCache = dialect.Unknown.Capabilities()
 	p.capabilitiesSet = true
+	p.refreshPipesMode()
+}
+
+// refreshPipesMode recomputes pipesAsOr from the dialect capabilities and the
+// PIPES_AS_CONCAT opt-in. It must run after any change to either input, so
+// the expression parser reads a single precomputed bool on its hot path.
+func (p *Parser) refreshPipesMode() {
+	p.pipesAsOr = p.capabilitiesCache.PipesAsLogicalOr && !p.pipesAsConcat
 }
 
 // maxPooledTokenBuf is the largest Parser.tokenBuf capacity (in tokens, about
@@ -153,11 +161,13 @@ func (p *Parser) Reset() {
 	p.depth = 0
 	p.ctx = nil
 	p.strict = false
+	p.pipesAsConcat = false
 	p.dialect = ""
 	// INVARIANT: p.dialectTyped must always equal dialect.Parse(p.dialect).
 	// Reset clears both fields in lockstep; see WithDialect for the active path.
 	p.resetDialectState()
 	p.dmlReturning = false
+	p.inConnectBy = false
 }
 
 // currentLocation returns the source location of the current token.
@@ -257,6 +267,23 @@ func WithDialect(newDialect string) ParserOption {
 		p.dialectTyped = dialect.Parse(newDialect)
 		p.capabilitiesCache = p.dialectTyped.Capabilities()
 		p.capabilitiesSet = true
+		p.refreshPipesMode()
+	}
+}
+
+// WithPipesAsConcat mirrors the MySQL / MariaDB PIPES_AS_CONCAT SQL mode:
+// || is parsed as string concatenation instead of logical OR.
+//
+// By default the MySQL and MariaDB dialects parse || as logical OR, with OR
+// precedence, and produce the same AST as the OR keyword
+// (BinaryExpression{Operator: "OR"}), with PipesOr set so SQL() writes ||
+// back. Every other dialect, including the
+// default (no dialect), already parses || as concatenation, so this option
+// has no effect there. It may be passed before or after WithDialect.
+func WithPipesAsConcat() ParserOption {
+	return func(p *Parser) {
+		p.pipesAsConcat = true
+		p.refreshPipesMode()
 	}
 }
 
@@ -323,6 +350,15 @@ type Parser struct {
 	// UPDATE ... FROM list, where an unquoted RETURNING starts the RETURNING
 	// clause and must not be taken as an implicit alias (#610).
 	dmlReturning bool
+	// inConnectBy is true while parsing a CONNECT BY condition, where PRIOR
+	// is a prefix operator binding to its operand (#783).
+	inConnectBy bool
+	// pipesAsConcat is the PIPES_AS_CONCAT opt-in set by WithPipesAsConcat.
+	pipesAsConcat bool
+	// pipesAsOr is true when || is logical OR: the dialect has
+	// Capabilities.PipesAsLogicalOr (MySQL, MariaDB) and pipesAsConcat is
+	// unset. Derived by refreshPipesMode; never set it directly.
+	pipesAsOr bool
 }
 
 // Deprecated: Parse is provided for backward compatibility only and is scheduled for

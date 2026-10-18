@@ -61,7 +61,7 @@ func parsePipesWhere(t *testing.T, d keywords.SQLDialect, where string, opts ...
 
 // TestParser_PipesLogicalOr_MySQL_Issue781 checks that || is logical OR at OR
 // precedence in MySQL and MariaDB, gives exactly the AST of the OR keyword,
-// and that SQL() renders the OR form, which re-parses to itself.
+// and that SQL() keeps the || spelling, which re-parses to itself.
 func TestParser_PipesLogicalOr_MySQL_Issue781(t *testing.T) {
 	cases := []struct {
 		name, where, wantShape string
@@ -108,12 +108,14 @@ func TestParser_PipesLogicalOr_MySQL_Issue781(t *testing.T) {
 					t.Fatalf("|| shape %s differs from OR shape %s", shape, orShape)
 				}
 
-				// SQL() renders OR, and the OR form is a fixpoint.
-				if want := "SELECT * FROM t WHERE " + orWhere; sql != want {
+				// SQL() keeps each spelling, so formatting never turns ||
+				// into OR (which would change the meaning on a server
+				// running with PIPES_AS_CONCAT), and both forms are fixpoints.
+				if want := "SELECT * FROM t WHERE " + tc.where; sql != want {
 					t.Fatalf("SQL() = %q, want %q", sql, want)
 				}
-				if sql != orSQL {
-					t.Fatalf("SQL() %q differs from OR spelling SQL() %q", sql, orSQL)
+				if want := "SELECT * FROM t WHERE " + orWhere; orSQL != want {
+					t.Fatalf("OR spelling SQL() = %q, want %q", orSQL, want)
 				}
 				reShape, reSQL := parsePipesWhere(t, d, strings.TrimPrefix(sql, "SELECT * FROM t WHERE "))
 				if reShape != shape || reSQL != sql {
@@ -224,8 +226,11 @@ func TestParser_PipesLogicalOr_SelectList_Issue781(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s: column is %T, want *ast.BinaryExpression", d, stmt.Columns[0])
 		}
-		if bin.Operator != "OR" {
-			t.Fatalf("%s: operator = %q, want OR", d, bin.Operator)
+		if bin.Operator != "OR" || !bin.PipesOr {
+			t.Fatalf("%s: operator = %q PipesOr = %v, want OR / true", d, bin.Operator, bin.PipesOr)
+		}
+		if got := bin.SQL(); got != "a || b" {
+			t.Fatalf("%s: SQL() = %q, want %q", d, got, "a || b")
 		}
 		if bin.Pos.Line != 1 || bin.Pos.Column != 10 {
 			t.Fatalf("%s: operator position = %d:%d, want 1:10", d, bin.Pos.Line, bin.Pos.Column)

@@ -33,10 +33,10 @@ func TestParseTree_WithPipesAsConcat_Issue781(t *testing.T) {
 		wantTop string // operator at the top of the WHERE clause
 		wantSQL string
 	}{
-		{"mysql_default", []gosqlx.Option{gosqlx.WithDialect("mysql")}, "OR",
-			"SELECT * FROM t WHERE a = 1 OR b"},
-		{"mariadb_default", []gosqlx.Option{gosqlx.WithDialect("mariadb")}, "OR",
-			"SELECT * FROM t WHERE a = 1 OR b"},
+		// SQL() keeps the || spelling of a MySQL OR, so rendering does not
+		// change the meaning under PIPES_AS_CONCAT.
+		{"mysql_default", []gosqlx.Option{gosqlx.WithDialect("mysql")}, "OR", sql},
+		{"mariadb_default", []gosqlx.Option{gosqlx.WithDialect("mariadb")}, "OR", sql},
 		{"mysql_pipes_as_concat", []gosqlx.Option{gosqlx.WithDialect("mysql"), gosqlx.WithPipesAsConcat()}, "=", sql},
 		{"pipes_as_concat_first", []gosqlx.Option{gosqlx.WithPipesAsConcat(), gosqlx.WithDialect("mariadb")}, "=", sql},
 		{"postgresql", []gosqlx.Option{gosqlx.WithDialect("postgresql")}, "=", sql},

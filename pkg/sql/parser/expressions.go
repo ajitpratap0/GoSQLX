@@ -63,12 +63,14 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 
 	// Handle OR operators (lowest precedence, left-associative). In MySQL and
 	// MariaDB (without PIPES_AS_CONCAT) || is a synonym for OR (#781); it is
-	// normalised to the OR operator so linters, the security scanner, the
-	// formatter and the transpiler treat both spellings identically.
+	// normalised to the OR operator so linters, the security scanner and the
+	// transpiler treat both spellings identically. PipesOr keeps the source
+	// spelling so SQL() and the formatter write || back.
 	for p.isType(models.TokenTypeOr) || (p.pipesAsOr && p.isType(models.TokenTypeStringConcat)) {
 		opPos := p.currentLocation()
 		operator := p.currentToken.Token.Value
-		if p.currentToken.Token.Type == models.TokenTypeStringConcat {
+		pipes := p.currentToken.Token.Type == models.TokenTypeStringConcat
+		if pipes {
 			operator = "OR"
 		}
 		p.advance() // Consume OR / ||
@@ -82,6 +84,7 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 			Left:     left,
 			Operator: operator,
 			Right:    right,
+			PipesOr:  pipes,
 			Pos:      opPos,
 		}
 	}

@@ -20,8 +20,10 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
-// PgConcatToMySQLConcat rewrites the PostgreSQL || concatenation operator to
-// the MySQL CONCAT() function.
+// PgConcatToMySQLConcat rewrites the || concatenation operator to the MySQL
+// CONCAT() function. The transpiler applies it whenever the source dialect
+// reads || as concatenation (PostgreSQL, SQLite, Oracle, ...) and the target
+// reads it as logical OR (MySQL, MariaDB).
 //
 // MySQL and MariaDB parse || as logical OR unless the PIPES_AS_CONCAT SQL mode
 // is set (#781), so emitting || unchanged would silently turn a concatenation
@@ -129,7 +131,15 @@ func buildConcatCall(bin *ast.BinaryExpression, seen map[uintptr]struct{}) *ast.
 	return &ast.FunctionCall{Name: "CONCAT", Arguments: args}
 }
 
+// flattenConcat collects the operands of a || chain in order. Concatenation
+// is associative, so a parenthesised plain || operand, as in (a || b) || c,
+// is flattened as well: CONCAT(a, b, c), not CONCAT((CONCAT(a, b)), c).
 func flattenConcat(e ast.Expression, out []ast.Expression) []ast.Expression {
+	if paren, ok := e.(*ast.ParenthesizedExpression); ok && paren != nil {
+		if _, ok := isConcat(paren.Expr); ok {
+			return flattenConcat(paren.Expr, out)
+		}
+	}
 	if bin, ok := isConcat(e); ok {
 		out = flattenConcat(bin.Left, out)
 		return flattenConcat(bin.Right, out)

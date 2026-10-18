@@ -339,22 +339,34 @@ In MySQL and MariaDB `||` is a synonym for `OR` unless the server runs with the
 
 - With the `mysql` or `mariadb` dialect, `a = 1 || b` parses as `(a = 1) OR b`,
   with `OR` precedence (looser than `AND`, `NOT`, comparisons and arithmetic).
-  The AST is identical to the `OR` keyword (`BinaryExpression{Operator: "OR"}`),
-  so `SQL()`, the formatter, linter rules, the security scanner and the
-  transpiler all see and emit `OR`.
+  The AST is the same as for the `OR` keyword
+  (`BinaryExpression{Operator: "OR"}`), so linter rules, the security scanner
+  and other analysis see an `OR`. The node also sets `PipesOr: true`, and
+  `SQL()`, the formatter, the CLI and LSP formatting write `||` back, so
+  formatting never changes the meaning for a server that runs with
+  `PIPES_AS_CONCAT`.
 - To mirror `PIPES_AS_CONCAT`, pass `parser.WithPipesAsConcat()` (or
   `gosqlx.WithPipesAsConcat()` with `gosqlx.ParseTree`); `||` is then string
-  concatenation, binding tighter than comparisons, as in other dialects.
+  concatenation. The CLI, LSP and linter configuration do not expose this
+  option yet, so with `--dialect mysql` they analyse `||` as `OR` (for example
+  OR-based lint rules may report a concatenation).
+- Precedence in the opt-in mode differs from MySQL: MySQL gives `||` under
+  `PIPES_AS_CONCAT` a precedence between `^` and the unary operators, tighter
+  than `*`, `/`, `+` and `-`. GoSQLX places concatenation just below `+` and
+  `-`, so `a + b || c` parses as `(a + b) || c`, while MySQL reads
+  `a + (b || c)`. Parenthesise mixed arithmetic and concatenation.
 - Every other dialect (PostgreSQL, SQL Server, Oracle, SQLite, Snowflake,
   ClickHouse, and no dialect) always parses `||` as concatenation.
-- Transpiling PostgreSQL to MySQL rewrites `a || b` to `CONCAT(a, b)`.
+- Transpiling from any of those dialects to MySQL or MariaDB rewrites `a || b`
+  to `CONCAT(a, b)`. Transpiling from MySQL or MariaDB to any of them writes a
+  `||` OR as `OR`; between MySQL and MariaDB it stays `||`.
 
 ```go
-// MySQL default: logical OR
+// MySQL default: || is logical OR
 p := parser.NewParser(parser.WithDialect("mysql"))
 
-// MySQL with PIPES_AS_CONCAT: concatenation
-p := parser.NewParser(parser.WithDialect("mysql"), parser.WithPipesAsConcat())
+// MySQL with PIPES_AS_CONCAT: || is concatenation
+p2 := parser.NewParser(parser.WithDialect("mysql"), parser.WithPipesAsConcat())
 
 tree, err := gosqlx.ParseTree(ctx, sql,
     gosqlx.WithDialect("mysql"), gosqlx.WithPipesAsConcat())

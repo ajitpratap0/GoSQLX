@@ -273,7 +273,8 @@ func WithDialect(newDialect string) ParserOption {
 //
 // By default the MySQL and MariaDB dialects parse || as logical OR, with OR
 // precedence, and produce the same AST as the OR keyword
-// (BinaryExpression{Operator: "OR"}). Every other dialect, including the
+// (BinaryExpression{Operator: "OR"}), with PipesOr set so SQL() writes ||
+// back. Every other dialect, including the
 // default (no dialect), already parses || as concatenation, so this option
 // has no effect there. It may be passed before or after WithDialect.
 func WithPipesAsConcat() ParserOption {

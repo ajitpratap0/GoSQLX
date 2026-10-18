@@ -15,6 +15,7 @@
 package transpiler
 
 import (
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/dialect"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/transpiler/rules"
 )
@@ -36,7 +37,6 @@ func init() {
 		rules.PgSerialToAutoIncrement,
 		rules.PgDoubleQuoteToBacktick,
 		rules.PgILikeToLower,
-		rules.PgConcatToMySQLConcat,
 	)
 	register(keywords.DialectPostgreSQL, keywords.DialectSQLite,
 		rules.PgSerialToIntegerPK,
@@ -56,7 +56,28 @@ func RulesFor(from, to keywords.SQLDialect) []RewriteRule {
 	if from == to {
 		return nil
 	}
-	return ruleRegistry[dialectPair{from, to}]
+	rs := ruleRegistry[dialectPair{from, to}]
+	if r := pipesRule(from, to); r != nil {
+		// Full slice expression: never append into the registry's array.
+		return append(rs[:len(rs):len(rs)], r)
+	}
+	return rs
+}
+
+// pipesRule returns the rule that keeps || meaning the same across the pair
+// (#781), or nil. MySQL and MariaDB read || as logical OR; every other dialect
+// reads it as concatenation. Going from concatenation to OR, || becomes
+// CONCAT(); going from OR to concatenation, a || OR is written as OR.
+func pipesRule(from, to keywords.SQLDialect) RewriteRule {
+	fromOr := dialect.Parse(string(from)).Capabilities().PipesAsLogicalOr
+	toOr := dialect.Parse(string(to)).Capabilities().PipesAsLogicalOr
+	switch {
+	case !fromOr && toOr:
+		return rules.PgConcatToMySQLConcat
+	case fromOr && !toOr:
+		return rules.PipesOrToKeywordOr
+	}
+	return nil
 }
 
 // rulesFor is the internal version used by Transpile.

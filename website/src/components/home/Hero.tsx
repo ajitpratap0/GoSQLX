@@ -25,14 +25,14 @@ export function Hero({ stars }: { stars: number | null }) {
           className="absolute inset-0"
           style={{
             background:
-              'radial-gradient(circle at 90% 0%, rgba(99,102,241,0.15) 0%, transparent 45%), radial-gradient(circle at 5% 100%, rgba(249,115,22,0.08) 0%, transparent 40%)',
+              'radial-gradient(circle at 90% 0%, color-mix(in srgb, var(--accent) calc(15% * var(--hero-glow-strength)), transparent) 0%, transparent 45%), radial-gradient(circle at 5% 100%, color-mix(in srgb, var(--accent-warm-decor) calc(8% * var(--hero-glow-strength)), transparent) 0%, transparent 40%)',
           }}
         />
         {/* Dot grid overlay */}
         <div
-          className="absolute inset-0 opacity-5"
+          className="absolute inset-0"
           style={{
-            backgroundImage: 'radial-gradient(rgba(255,255,255,0.5) 1px, transparent 1px)',
+            backgroundImage: 'radial-gradient(color-mix(in srgb, var(--fg) var(--hero-dot-strength), transparent) 1px, transparent 1px)',
             backgroundSize: '24px 24px',
           }}
         />

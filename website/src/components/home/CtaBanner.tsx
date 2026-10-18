@@ -13,7 +13,7 @@ export function CtaBanner() {
           background: [
             'radial-gradient(ellipse 50% 50% at 50% 50%, color-mix(in srgb, var(--accent) 9%, transparent), transparent)',
             'radial-gradient(ellipse 25% 35% at 25% 40%, color-mix(in srgb, var(--accent) 6%, transparent), transparent)',
-            'radial-gradient(ellipse 25% 35% at 75% 60%, color-mix(in srgb, var(--accent-warm) 5%, transparent), transparent)',
+            'radial-gradient(ellipse 25% 35% at 75% 60%, color-mix(in srgb, var(--accent-warm-decor) 5%, transparent), transparent)',
           ].join(', '),
         }}
       />

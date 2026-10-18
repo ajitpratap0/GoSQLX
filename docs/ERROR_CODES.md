@@ -771,7 +771,7 @@ for _, finding := range results.Findings {
 }
 ```
 
-See [pkg/sql/security/scanner.go](/Users/ajitpratapsingh/dev/GoSQLX/pkg/sql/security/scanner.go) for implementation details.
+See [pkg/sql/security/scanner.go](https://github.com/ajitpratap0/GoSQLX/blob/main/pkg/sql/security/scanner.go) for implementation details.
 
 ---
 

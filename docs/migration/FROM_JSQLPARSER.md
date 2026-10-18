@@ -175,8 +175,9 @@ package main
 
 import (
     "fmt"
-    "github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
+    "github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
     "github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
+    "github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
 func main() {
@@ -191,23 +192,17 @@ func main() {
         panic(err)
     }
 
-    // Step 2: Convert tokens for parser
-    p := parser.NewParser()
-    defer p.Release()
-    if err != nil {
-        panic(err)
-    }
-
-    // Step 3: Parse
+    // Step 2: Parse (one parser, released when main returns)
     p := parser.NewParser()
     defer p.Release()
 
-    ast, err := p.ParseFromModelTokens(tokens)
+    astObj, err := p.ParseFromModelTokens(tokens)
     if err != nil {
         panic(err)
     }
+    defer ast.ReleaseAST(astObj)
 
-    fmt.Println("Parsed SELECT statement")
+    fmt.Printf("Parsed %d statement(s)\n", len(astObj.Statements))
 }
 ```
 
@@ -369,9 +364,6 @@ func parseSQL(sql string) *ast.AST {
     tokens, _ := tkz.Tokenize([]byte(sql))
 
     p := parser.NewParser()
-        defer p.Release()
-
-    p := parser.NewParser()
     defer p.Release()
 
     astObj, _ := p.ParseFromModelTokens(tokens)
@@ -450,10 +442,8 @@ func parseMultiple(sql string) []interface{} {
             continue
         }
 
-        p := parser.NewParser()
-        defer p.Release()
-        ast, _ := p.ParseFromModelTokens(tokens)
-        statements = append(statements, ast)
+        astObj, _ := p.ParseFromModelTokens(tokens)
+        statements = append(statements, astObj)
     }
 
     return statements

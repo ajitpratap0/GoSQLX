@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { FadeIn } from '@/components/ui/FadeIn';
 import { GlassCard } from '@/components/ui/GlassCard';
+import { HighlightedCode } from '@/components/ui/CodeBlock';
 import { Button } from '@/components/ui/Button';
 import { RawDataToggle } from '@/components/benchmarks/RawDataToggle';
 import { ParseChart } from '@/components/benchmarks/ParseChart';
@@ -21,13 +22,16 @@ const metrics = [
   { label: 'Race detector in CI', value: 'Clean' },
 ];
 
-const methodology = [
-  `${BENCH_ENV.goVersion} on ${BENCH_ENV.hardware} (arm64); every figure is for the parse stage only (pre-tokenized input to AST), not tokenize or end-to-end`,
-  `Source: ${BENCH_ENV.source}, run with -benchmem`,
-  'Reproduce: go test -run ^$ -bench BenchmarkPerformanceBaseline -benchmem -count=10 ./pkg/sql/parser/',
-  'Race detector disabled during benchmarks (adds 3\u20135x overhead)',
-  'Object pooling enabled for all runs (production configuration)',
-  'The CI regression baseline is a deliberately loose ceiling used with a tolerance on slower shared runners; it is not a measurement',
+type MethodologyItem = { kind: 'text'; text: string } | { kind: 'command'; command: string };
+
+const methodology: MethodologyItem[] = [
+  { kind: 'text', text: `${BENCH_ENV.goVersion} on ${BENCH_ENV.hardware} (arm64); every figure is for the parse stage only (pre-tokenized input to AST), not tokenize or end-to-end` },
+  { kind: 'text', text: `Source: ${BENCH_ENV.source}, run with -benchmem` },
+  // Single-source command from BENCH_ENV (shell-safe, quoted -run), scrollable with a copy button.
+  { kind: 'command', command: BENCH_ENV.command },
+  { kind: 'text', text: 'Race detector disabled during benchmarks (adds 3\u20135x overhead)' },
+  { kind: 'text', text: 'Object pooling enabled for all runs (production configuration)' },
+  { kind: 'text', text: 'The CI regression baseline is a deliberately loose ceiling used with a tolerance on slower shared runners; it is not a measurement' },
 ];
 
 const REPO = 'https://github.com/ajitpratap0/GoSQLX';
@@ -66,15 +70,24 @@ function fastestNs(queryId: string): number | undefined {
   return values.length > 0 ? Math.min(...values) : undefined;
 }
 
-function renderMethodologyItem(item: string) {
+function renderMethodologyItem(item: MethodologyItem) {
+  if (item.kind === 'command') {
+    return (
+      <span className="block min-w-0">
+        <span className="mb-2 block">Reproduce:</span>
+        <HighlightedCode code={item.command} lang="bash" label="Reproduce benchmark command" />
+      </span>
+    );
+  }
   const FLAG = '-benchmem';
-  const idx = item.indexOf(FLAG);
-  if (idx === -1) return <>{item}</>;
+  const text = item.text;
+  const idx = text.indexOf(FLAG);
+  if (idx === -1) return <>{text}</>;
   return (
     <>
-      {item.slice(0, idx)}
+      {text.slice(0, idx)}
       <code className="font-mono text-xs text-fg bg-fg/[0.06] px-1 py-0.5 rounded">{FLAG}</code>
-      {item.slice(idx + FLAG.length)}
+      {text.slice(idx + FLAG.length)}
     </>
   );
 }
@@ -280,9 +293,7 @@ export function BenchmarksContent() {
               {reproduceSteps.map((step) => (
                 <li key={step.title}>
                   <h3 className="text-sm font-semibold text-fg mb-1">{step.title}</h3>
-                  <pre className="overflow-x-auto rounded-lg bg-fg/[0.06] p-3 text-xs font-mono text-fg">
-                    <code>{step.command}</code>
-                  </pre>
+                  <HighlightedCode code={step.command} lang="bash" label={`${step.title} command`} />
                   <p className="mt-1 text-xs text-fg-muted">{step.note}</p>
                 </li>
               ))}
@@ -324,9 +335,9 @@ export function BenchmarksContent() {
             <h2 className="text-2xl font-bold text-fg mb-6">Methodology</h2>
             <ul className="space-y-3">
               {methodology.map((item) => (
-                <li key={item} className="flex items-start gap-3 text-sm text-fg-muted">
+                <li key={item.kind === 'text' ? item.text : item.command} className="flex items-start gap-3 text-sm text-fg-muted">
                   <span aria-hidden="true" className="mt-1.5 block h-1.5 w-1.5 rounded-full bg-fg-muted shrink-0" />
-                  <span>{renderMethodologyItem(item)}</span>
+                  <span className="min-w-0 flex-1">{renderMethodologyItem(item)}</span>
                 </li>
               ))}
             </ul>

@@ -257,7 +257,8 @@
 //
 //	func TestAPIStability_ParserInterface(t *testing.T) {
 //	    // Verify Parser interface hasn't changed
-//	    p := &parser.Parser{}
+//	    p := parser.GetParser()
+//	    defer parser.PutParser(p)
 //
 //	    // Parse should accept []models.TokenWithSpan
 //	    tokens := []models.TokenWithSpan{}

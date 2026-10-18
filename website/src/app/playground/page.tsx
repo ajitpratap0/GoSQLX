@@ -2,6 +2,9 @@ import type { Metadata } from 'next';
 import { pageMeta } from '@/lib/seo';
 import PlaygroundLoader from './PlaygroundLoader';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
+import { JsonLd } from '@/components/JsonLd';
+import { pageJsonLd } from '@/lib/jsonld';
+import { PROJECT } from '@/data/metrics';
 
 export const metadata: Metadata = pageMeta({
   title: 'SQL Playground',
@@ -10,9 +13,31 @@ export const metadata: Metadata = pageMeta({
   path: '/playground/',
 });
 
+const jsonLd = pageJsonLd({
+  name: 'GoSQLX SQL Playground',
+  description: metadata.description as string,
+  path: '/playground/',
+  crumbs: [{ name: 'Playground', path: '/playground/' }],
+  extra: [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'WebApplication',
+      name: 'GoSQLX SQL Playground',
+      url: 'https://gosqlx.dev/playground/',
+      applicationCategory: 'DeveloperApplication',
+      operatingSystem: 'Any (WebAssembly-capable browser)',
+      browserRequirements: 'Requires JavaScript and WebAssembly',
+      softwareVersion: PROJECT.version.replace(/^v/, ''),
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+      isAccessibleForFree: true,
+    },
+  ],
+});
+
 export default function PlaygroundPage() {
   return (
     <>
+      <JsonLd data={jsonLd} />
       {/* Preload WASM binary to start download before JS hydration */}
       <link
         rel="preload"

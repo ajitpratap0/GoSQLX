@@ -253,6 +253,15 @@ type Capabilities struct {
 	// SupportsILike indicates case-insensitive LIKE via the ILIKE operator
 	// (PostgreSQL, Snowflake, DuckDB, Redshift).
 	SupportsILike bool
+
+	// --- Operators ---
+
+	// PipesAsLogicalOr indicates that || is the logical OR operator (with OR
+	// precedence) rather than string concatenation. This is the default in
+	// MySQL and MariaDB unless the PIPES_AS_CONCAT SQL mode is enabled; the
+	// parser exposes that mode through parser.WithPipesAsConcat. Every other
+	// dialect treats || as concatenation.
+	PipesAsLogicalOr bool
 }
 
 // Capabilities returns the capability matrix for d.
@@ -286,6 +295,7 @@ func (d Dialect) Capabilities() Capabilities {
 			SupportsIndexHints:            true,
 			SupportsBacktickQuoting:       true,
 			SupportsDoubleQuoteIdentifier: true, // when ANSI_QUOTES is set
+			PipesAsLogicalOr:              true, // unless PIPES_AS_CONCAT is set
 		}
 
 	case MariaDB:
@@ -297,6 +307,7 @@ func (d Dialect) Capabilities() Capabilities {
 			SupportsConnectBy:             true, // MariaDB 10.2+
 			SupportsBacktickQuoting:       true,
 			SupportsDoubleQuoteIdentifier: true,
+			PipesAsLogicalOr:              true, // unless PIPES_AS_CONCAT is set
 		}
 
 	case SQLServer:

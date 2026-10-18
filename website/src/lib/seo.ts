@@ -1,12 +1,8 @@
 import type { Metadata } from 'next';
 import { baseOpenGraph } from '@/lib/open-graph';
+import { RSS_FEEDS } from '@/lib/site';
 
 const BRAND = 'GoSQLX';
-
-const RSS_FEEDS = [
-  { url: '/changelog/feed.xml', title: 'GoSQLX Release Notes' },
-  { url: '/blog/rss.xml', title: 'GoSQLX Blog' },
-];
 
 interface PageMetaInput {
   /** Page title without the brand. The layout template appends " | GoSQLX". */

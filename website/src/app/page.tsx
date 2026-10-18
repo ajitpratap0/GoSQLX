@@ -16,7 +16,7 @@ import { pageMeta } from '@/lib/seo';
 export const metadata: Metadata = pageMeta({
   title: 'GoSQLX: Go SQL Parser, Formatter & Linter',
   description:
-    'High-performance, zero-copy SQL parser, formatter and linter for Go. Thread-safe, 8 dialects: PostgreSQL, MySQL, SQL Server, Oracle, ClickHouse and more.',
+    `High-performance, zero-copy SQL parser, formatter and linter for Go. Thread-safe, ${PROJECT.dialectCount} dialects: PostgreSQL, MySQL, SQL Server, Oracle, ClickHouse and more.`,
   path: '/',
   absolute: true,
 });

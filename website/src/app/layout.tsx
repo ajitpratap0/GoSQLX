@@ -5,13 +5,14 @@ import { Footer } from '@/components/layout/Footer';
 import { Providers } from '@/components/Providers';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { baseOpenGraph } from '@/lib/open-graph';
+import { PROJECT } from '@/data/metrics';
+import { RSS_FEEDS, THEME_COLORS } from '@/lib/site';
 import './globals.css';
 
-// Keep in sync with --bg in globals.css (dark and html.light).
 export const viewport: Viewport = {
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#FAFBFC' },
-    { media: '(prefers-color-scheme: dark)', color: '#0A0A0F' },
+    { media: '(prefers-color-scheme: light)', color: THEME_COLORS.light },
+    { media: '(prefers-color-scheme: dark)', color: THEME_COLORS.dark },
   ],
 };
 
@@ -21,22 +22,19 @@ export const metadata: Metadata = {
     template: '%s | GoSQLX',
   },
   description:
-    'High-performance, zero-copy SQL parser, formatter and linter for Go. Thread-safe, 8 dialects: PostgreSQL, MySQL, SQL Server, Oracle, ClickHouse and more.',
+    `High-performance, zero-copy SQL parser, formatter and linter for Go. Thread-safe, ${PROJECT.dialectCount} dialects: PostgreSQL, MySQL, SQL Server, Oracle, ClickHouse and more.`,
   metadataBase: new URL('https://gosqlx.dev'),
   openGraph: baseOpenGraph,
   twitter: {
     card: 'summary_large_image',
     title: 'GoSQLX: Go SQL Parser, Formatter & Linter',
     description:
-      'High-performance, zero-copy SQL parser, formatter and linter for Go with 8-dialect support.',
+      `High-performance, zero-copy SQL parser, formatter and linter for Go with ${PROJECT.dialectCount}-dialect support.`,
   },
   // RSS autodiscovery on every page: release notes and engineering articles.
   alternates: {
     types: {
-      'application/rss+xml': [
-        { url: '/changelog/feed.xml', title: 'GoSQLX Release Notes' },
-        { url: '/blog/rss.xml', title: 'GoSQLX Blog' },
-      ],
+      'application/rss+xml': RSS_FEEDS,
     },
   },
   icons: {
@@ -65,7 +63,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='light'||(!t&&window.matchMedia('(prefers-color-scheme:light)').matches)){document.documentElement.classList.add('light');document.documentElement.classList.remove('dark')}else{document.documentElement.classList.add('dark');document.documentElement.classList.remove('light')}}catch(e){}})();`,
+            __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='light'||(!t&&window.matchMedia('(prefers-color-scheme:light)').matches)){document.documentElement.classList.add('light');document.documentElement.classList.remove('dark')}else{document.documentElement.classList.add('dark');document.documentElement.classList.remove('light')}var d=document.documentElement.classList.contains('light')?'light':'dark';var c=${JSON.stringify(THEME_COLORS)};document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.setAttribute('content',c[d])})}catch(e){}})();`,
           }}
         />
       </head>

@@ -29,20 +29,9 @@ function decode(s) {
     .replace(/&#x27;|&#39;/g, "'");
 }
 
-if (!fs.existsSync(ROOT)) {
-  console.error('check-seo: .next/server/app not found; run `npm run build` first.');
-  process.exit(2);
-}
-
-const problems = [];
-let pages = 0;
-for (const file of walk(ROOT)) {
-  const html = fs.readFileSync(file, 'utf-8');
-  // Skip framework shells (404, error) that are not indexable pages.
-  if (/<meta name="robots" content="noindex/.test(html)) continue;
-  if (/^(_not-found|_global-error|404|500)/.test(path.relative(ROOT, file))) continue;
-  pages++;
-  const rel = path.relative(ROOT, file);
+/** Return the SEO problems found in one prerendered page. */
+function checkHtml(rel, html) {
+  const problems = [];
   const title = /<title>([\s\S]*?)<\/title>/.exec(html);
   const desc = /<meta name="description" content="([^"]*)"/.exec(html);
   if (!title) problems.push(`${rel}: missing <title>`);
@@ -56,6 +45,43 @@ for (const file of walk(ROOT)) {
   if (!/<meta name="theme-color"/.test(html)) problems.push(`${rel}: no theme-color meta`);
   if (!/<link rel="manifest"/.test(html)) problems.push(`${rel}: no manifest link`);
   if (!/type="application\/rss\+xml"/.test(html)) problems.push(`${rel}: no RSS autodiscovery link`);
+  return problems;
+}
+
+// --self-test guards against Next changing its attribute order or quoting, which
+// would make the real check pass vacuously or fail on every page.
+if (process.argv.includes('--self-test')) {
+  const good =
+    '<html><head><title>Short title | GoSQLX</title>' +
+    `<meta name="description" content="${'d'.repeat(100)}"/>` +
+    '<meta name="theme-color" content="#0A0A0F"/><link rel="manifest" href="/manifest.webmanifest"/>' +
+    '<link rel="alternate" type="application/rss+xml" href="/blog/rss.xml"/>' +
+    '<script type="application/ld+json">{}</script></head></html>';
+  const bad = '<html><head><title>' + 't'.repeat(70) + '</title></head></html>';
+  const goodProblems = checkHtml('good', good);
+  const badProblems = checkHtml('bad', bad);
+  if (goodProblems.length !== 0 || badProblems.length < 6) {
+    console.error('check-seo self-test FAILED', { goodProblems, badProblems });
+    process.exit(1);
+  }
+  console.log('check-seo self-test OK');
+  process.exit(0);
+}
+
+if (!fs.existsSync(ROOT)) {
+  console.error('check-seo: .next/server/app not found; run `npm run build` first.');
+  process.exit(2);
+}
+
+const problems = [];
+let pages = 0;
+for (const file of walk(ROOT)) {
+  const html = fs.readFileSync(file, 'utf-8');
+  // Skip framework shells (404, error) that are not indexable pages.
+  if (/<meta name="robots" content="noindex/.test(html)) continue;
+  if (/^(_not-found|_global-error|404|500)/.test(path.relative(ROOT, file))) continue;
+  pages++;
+  problems.push(...checkHtml(path.relative(ROOT, file), html));
 }
 
 if (problems.length) {

@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
+import { THEME_COLORS } from '@/lib/site';
 import { m, AnimatePresence } from 'motion/react';
 
 function SunIcon({ className = '' }: { className?: string }) {
@@ -25,9 +27,6 @@ function MoonIcon({ className = '' }: { className?: string }) {
 
 type Theme = 'dark' | 'light';
 
-// Keep in sync with --bg in globals.css and the viewport export in layout.tsx.
-const THEME_COLORS: Record<Theme, string> = { dark: '#0A0A0F', light: '#FAFBFC' };
-
 /** Apply a theme to <html> and point the browser-chrome colour at it, even when it differs from the OS scheme. */
 function applyTheme(next: Theme) {
   const html = document.documentElement;
@@ -41,6 +40,23 @@ function applyTheme(next: Theme) {
 export function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>('dark');
   const [mounted, setMounted] = useState(false);
+  const pathname = usePathname();
+
+  // Next.js re-renders the viewport theme-color metas on every client-side
+  // navigation, resetting them to their media defaults. Re-apply the active
+  // theme after each route change and whenever the metas are rewritten.
+  useEffect(() => {
+    if (!mounted) return;
+    applyTheme(theme);
+    const observer = new MutationObserver(() => {
+      const stale = Array.from(
+        document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]'),
+      ).some((meta) => meta.getAttribute('content') !== THEME_COLORS[theme]);
+      if (stale) applyTheme(theme);
+    });
+    observer.observe(document.head, { childList: true, subtree: true, attributes: true, attributeFilter: ['content'] });
+    return () => observer.disconnect();
+  }, [mounted, theme, pathname]);
 
   useEffect(() => {
     setMounted(true);

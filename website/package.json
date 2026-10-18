@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "check:metrics": "node scripts/check-metrics-drift.mjs",
     "check:docs-links": "node scripts/check-docs-links.mjs --self-test && node scripts/check-docs-links.mjs",
-    "check:seo": "node scripts/check-seo.mjs",
+    "check:seo": "node scripts/check-seo.mjs --self-test && node scripts/check-seo.mjs",
     "check:contrast": "node scripts/check-contrast.mjs"
   },
   "dependencies": {

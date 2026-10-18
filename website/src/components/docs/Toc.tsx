@@ -34,6 +34,8 @@ export function Toc({ headings, variant = 'rail' }: TocProps) {
 
     const update = () => {
       raf = 0;
+      // Only the visible variant tracks scroll: rail at xl+, collapsible below.
+      if (window.matchMedia('(min-width: 1280px)').matches !== (variant === 'rail')) return;
       // Live scroll padding (5rem desktop, 7.5rem below lg) plus slack, so a clicked
       // anchor (which lands at exactly scroll-padding-top) counts as reached.
       const offset =
@@ -62,7 +64,7 @@ export function Toc({ headings, variant = 'rail' }: TocProps) {
       window.removeEventListener('resize', onScroll);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [headings]);
+  }, [headings, variant]);
 
   if (headings.length === 0) return null;
 
@@ -78,7 +80,7 @@ export function Toc({ headings, variant = 'rail' }: TocProps) {
                 heading.level === 3 ? 'text-xs' : 'font-medium'
               } ${
                 activeId === heading.id
-                  ? 'text-fg font-medium'
+                  ? 'text-accent font-semibold'
                   : heading.level === 3
                   ? 'text-fg-subtle hover:text-fg'
                   : 'text-fg-muted hover:text-fg'

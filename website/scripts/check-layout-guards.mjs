@@ -81,7 +81,7 @@ for (const f of walk(root)) {
 }
 
 // Guard: utility classes must be backed by @theme tokens (legacy names emit no CSS, #798).
-const bad = /(?<![\w-])(?:[\w-]+:)*(?:text-text-[\w-]+|bg-surface|border-surface)(?![\w-])/;
+const bad = /(?<![\w-])(?:[\w-]+:)*(?:text-text(?:-[\w-]+)?|text-muted|bg-card|(?:bg|border|ring|divide)-surface(?:-[\w]+)?)(?![\w-])/;
 const hoverWhite = /(?<![\w-])(?:group-)?hover:text-white(?![\w-])/;
 for (const f of walk(root)) {
   const rel = f.slice(root.length + 1);

@@ -2,9 +2,6 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { pageMeta } from '@/lib/seo';
-import { compileMDX } from 'next-mdx-remote/rsc';
-import remarkGfm from 'remark-gfm';
-import rehypeSlug from 'rehype-slug';
 import { getDocBySlug, getDocSlugs, getAdjacentDocs, extractHeadings, stripCodeFences } from '@/lib/docs';
 import { DOCS_SIDEBAR, docsCategoryAnchor } from '@/lib/constants';
 import { docMarkdownPath } from '@/lib/llms';
@@ -13,7 +10,7 @@ import { Sidebar } from '@/components/docs/Sidebar';
 import { Toc } from '@/components/docs/Toc';
 import { DocNavigation } from '@/components/docs/DocNavigation';
 import { JsonLd } from '@/components/JsonLd';
-import { mdxComponents } from '@/components/docs/mdx-components';
+import { renderMarkdown } from '@/lib/markdown';
 
 function getReadingTime(text: string): number {
   const words = stripCodeFences(text).trim().split(/\s+/).length;
@@ -71,17 +68,7 @@ export default async function DocPage({ params }: PageProps) {
   const { prev, next } = getAdjacentDocs(slugStr);
   const readingTime = getReadingTime(doc.content);
 
-  const { content } = await compileMDX({
-    source: doc.content,
-    options: {
-      mdxOptions: {
-        remarkPlugins: [remarkGfm],
-        rehypePlugins: [rehypeSlug],
-        format: 'md',
-      },
-    },
-    components: mdxComponents,
-  });
+  const content = await renderMarkdown(doc.content);
 
   // Build breadcrumb
   const categoryItem = DOCS_SIDEBAR.find((g) =>

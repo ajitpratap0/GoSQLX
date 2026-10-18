@@ -28,7 +28,7 @@ go get github.com/ajitpratap0/GoSQLX
 ```
 
 ### Minimum Go Version
-Go 1.26+ or higher is required.
+Go 1.26 or later is required.
 
 ### Import Packages
 

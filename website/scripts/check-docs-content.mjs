@@ -24,16 +24,16 @@ const websiteDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = resolve(websiteDir, '..');
 const docsDir = join(repoRoot, 'docs');
 
-/** Per-line checks applied outside fenced code blocks. */
+/** Per-line checks. Rules marked `fenced` also run inside fenced code blocks. */
 const LINE_RULES = [
   {
     name: 'hand-written version/date line',
-    re: /^\s*\**(Version|Last Updated|Last updated)\**\s*:/,
+    re: /^\s*\**([A-Za-z ]+ )?(Version|Last Updated|Last updated)\**\s*:/i,
     hint: 'remove it; the site shows the release badge and a git-derived date',
   },
   {
     name: 'per-release heading label',
-    re: /^#{1,6}\s.*(\(\s*(NEW\s+)?v\d+\.\d+\.\d+[^)]*\)|\bNEW v\d+\.\d+\.\d+)/,
+    re: /^#{1,6}\s+(?:.*(\(\s*[^)]*\bv\d+\.\d+(\.\d+)?\+?[^)]*\)|\bNEW v\d+\.\d+|\bNew in v\d|\bAdded in v\d|\bin v\d+\.\d+(\.\d+)?\s*$))/i,
     hint: 'evergreen docs should not label headings with a release',
   },
   {
@@ -45,6 +45,7 @@ const LINE_RULES = [
     name: 'stale Go requirement',
     re: /(Go 1\.(1\d|2[0-5])\+?(\s+or (higher|later))?\b(?!\.\d)|golang:1\.(1\d|2[0-5])\b|go-version:\s*'1\.(1\d|2[0-5])')/,
     hint: 'the project requires Go 1.26+',
+    fenced: true,
     // Benchmark-environment and historical migration notes may name older Go versions.
     skip: (file, line) =>
       file.endsWith('COMPARISON.md') ||
@@ -82,11 +83,12 @@ function scanDoc(file, text) {
         fence = m[1];
         return;
       }
-    } else {
-      if (m && m[1][0] === fence[0] && m[1].length >= fence.length) fence = null;
+    } else if (m && m[1][0] === fence[0] && m[1].length >= fence.length) {
+      fence = null;
       return;
     }
     for (const rule of LINE_RULES) {
+      if (fence !== null && !rule.fenced) continue;
       if (rule.only && !rule.only(file)) continue;
       if (rule.skip && rule.skip(file, line)) continue;
       if (rule.re.test(line)) hits.push({ line: i + 1, rule });
@@ -134,13 +136,21 @@ if (process.argv.includes('--self-test')) {
     '**Version**: v1.15.0',
     '## Parser Issues (v1.6.0)',
     'Go 1.21 or higher installed',
+    '**GoSQLX Version:** v1.9.0',
+    '## Quick Reference: What is New in v1.9.0',
+    "## Quick Reference: What's New in v1.9.0",
+    '### Feature (v1.4+)',
+    '## Summary (v1.6.0)',
     'FROM golang:1.21-alpine AS builder',
     '### Company: Startup (Fictional Example)',
   ];
   const missed = seeded.filter((l) => scanDoc(join(docsDir, 'X.md'), l).length === 0);
   const fenced = scanDoc(join(docsDir, 'X.md'), '```\n**Version**: v1.15.0\n```').length;
-  if (missed.length > 0 || fenced !== 0 || checkLintingRules('# Rules\n').length === 0) {
-    console.error('self-test failed', { missed, fenced });
+  const fencedGo = ['```dockerfile\nFROM golang:1.21-alpine\n```', "```yaml\ngo-version: '1.21'\n```", '```yaml\nimage: golang:1.21\n```'].filter(
+    (t) => scanDoc(join(docsDir, 'X.md'), t).length === 0,
+  );
+  if (missed.length > 0 || fenced !== 0 || fencedGo.length > 0 || checkLintingRules('# Rules\n').length === 0) {
+    console.error('self-test failed', { missed, fenced, fencedGo });
     process.exit(1);
   }
   console.log('self-test ok');

@@ -332,7 +332,7 @@ func (p *SQLProcessor) ProcessWithSecurity(sql []byte) ([]interface{}, error) {
 }
 ```
 
-### 4. SQL Injection Detection (v1.4+)
+### 4. SQL Injection Detection
 
 GoSQLX includes a built-in security scanner for detecting SQL injection patterns:
 

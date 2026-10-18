@@ -5,7 +5,9 @@
 
 This matrix documents the comprehensive SQL feature support in GoSQLX across different SQL dialects and standards. The testing was conducted using the comprehensive integration test suite with 700+ test cases covering real-world SQL patterns.
 
-### Added in v1.9.0
+### Feature Highlights
+
+#### SQLite, Security Scanner and Error Codes
 - ✅ **SQLite PRAGMA**: Fully parsed - bare (`PRAGMA x`), arg (`PRAGMA x(n)`), and assignment (`PRAGMA x=v`) forms; `PragmaStatement` AST node
 - ✅ **WITHOUT ROWID**: `CREATE TABLE ... WITHOUT ROWID`; reserved keywords now valid as DDL column names
 - ✅ **Tautology Detection**: `ScanSQL()` detects `1=1`, `'a'='a'`, `col=col`, `OR TRUE` → CRITICAL severity (`PatternTautology`)
@@ -14,7 +16,7 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 - ✅ **Dialect Fixes**: MySQL backtick + SQL Server bracket reserved-word identifiers now parsed correctly
 - ✅ **Parser Fixes**: KEY/INDEX in qualified names, NATURAL JOIN type, OVER window_name (bare name per SQL:2003 §7.11)
 
-### Added in v1.8.0
+#### Dialect Engine and MySQL Syntax
 - ✅ **Dialect Mode Engine**: First-class dialect support with `ParseWithDialect()` - thread dialect through tokenizer and parser
 - ✅ **MySQL Syntax Support**:
   - **LIMIT offset, count** - MySQL-style `LIMIT 10, 20`
@@ -35,7 +37,7 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 - ✅ **~50% Faster Parsing**: Token type overhaul with O(1) integer comparison
 - ✅ **Snowflake Dialect**: Keyword detection and weighted dialect scoring
 
-### Added in v1.7.0
+#### Schema-Qualified Names and PostgreSQL Enhancements
 - ✅ **Schema-Qualified Names**: Full support for `schema.table`, `db.schema.table` in all DML/DDL statements
 - ✅ **PostgreSQL Enhancements**:
   - **Type Casting** - `::` operator for PostgreSQL-style casts (`SELECT 1::int`)
@@ -49,7 +51,7 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 - ✅ **FOR UPDATE/SHARE** - Row-level locking clauses
 - ✅ **Multi-row INSERT** - `INSERT INTO t VALUES (1), (2), (3)` batch inserts
 
-### Added in v1.6.0
+#### PostgreSQL Extensions and SQL Standards
 - ✅ **PostgreSQL Extensions**:
   - **LATERAL JOIN** - Correlated subqueries in FROM clause
   - **JSON/JSONB Operators** - Complete operator set (`->`, `->>`, `#>`, `#>>`, `@>`, `<@`, `?`, `?|`, `?&`, `#-`)
@@ -64,7 +66,7 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
   - **TRUNCATE TABLE** - SQL:2008 table truncation
   - **Materialized CTE Hints** - CTE optimization
 
-### Previous Additions (v1.4+)
+#### Core SQL Features
 - ✅ **MERGE Statements** (SQL:2003 F312)
 - ✅ **GROUPING SETS, ROLLUP, CUBE** (SQL-99 T431)
 - ✅ **Materialized Views** (CREATE, DROP, REFRESH)
@@ -308,7 +310,7 @@ level over a parenthesized query that already has one, such as
 | **Custom operators** | ✅ Full | ⚠️ Partial | 30% | Basic operator recognition |
 | **Dollar quoting** | ✅ Full | ✅ Full | 90% | `$$body$$` and `$tag$body$tag$` (since v1.8.0) |
 
-### MySQL-Specific Features (Enhanced in v1.8.0)
+### MySQL-Specific Features 
 
 | Feature | Support Level | GoSQLX Parser | Test Coverage | Notes |
 |---------|---------------|---------------|---------------|-------|
@@ -450,9 +452,9 @@ MariaDB inherits all MySQL features (SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE 
 | **JSON functions** | ⚠️ Partial | 20% | Limited function support |
 | **Row pattern recognition** | ❌ Not Supported | 0% | MATCH_RECOGNIZE clause |
 
-## v1.6.0 PostgreSQL Extension Summary
+## PostgreSQL Extension Summary
 
-GoSQLX v1.6.0 introduces comprehensive PostgreSQL-specific feature support, making it one of the most PostgreSQL-compatible SQL parsers available.
+GoSQLX provides comprehensive PostgreSQL-specific feature support, making it one of the most PostgreSQL-compatible SQL parsers available.
 
 ### Complete PostgreSQL Feature Set
 
@@ -571,7 +573,7 @@ RETURNING user_id, session_id;
 
 ## Dialect Mode Engine
 
-GoSQLX v1.8.0 introduces a first-class dialect mode engine that threads the SQL dialect through the tokenizer and parser. This enables dialect-specific keyword recognition, syntax parsing, and validation.
+GoSQLX provides a first-class dialect mode engine that threads the SQL dialect through the tokenizer and parser. This enables dialect-specific keyword recognition, syntax parsing, and validation.
 
 ### Supported Dialects
 
@@ -851,68 +853,8 @@ gosqlx format --dialect mysql query.sql
 
 ---
 
-**GoSQLX Version**: 1.15.0
-**Test Suite Version**: 1.15.0
 **Total Test Cases**: 800+
 **Coverage Percentage**: 95%+
 **SQL-99 Compliance**: ~85%
 **PostgreSQL Compliance**: ~95% (core features), ~85% (extensions)
 **MySQL Compliance**: ~95% (core features), ~85% (extensions)
-
-## Quick Reference: What's New in v1.9.0
-
-### SQLite Enhancements
-1. **PRAGMA** - Fully parsed: bare (`PRAGMA x`), arg (`PRAGMA x(n)`), assignment (`PRAGMA x=v`)
-2. **WITHOUT ROWID** - `CREATE TABLE ... WITHOUT ROWID` fully supported
-3. **Reserved keywords as DDL column names** - No longer cause parse errors
-
-### Security Scanner
-1. **Tautology detection** - `1=1`, `'a'='a'`, `col=col`, `OR TRUE` → CRITICAL (`PatternTautology`)
-2. **UNION split** - `PatternUnionInjection` (CRITICAL) vs `PatternUnionGeneric` (HIGH)
-
-### Parser Fixes
-1. **KEY/INDEX/VIEW** in qualified identifiers (e.g., `a.key`)
-2. **NATURAL JOIN** - type stored as `"NATURAL"` not `"NATURAL INNER"`
-3. **OVER window_name** / **OVER (window_name ...)** - bare reference and refinement of an existing named window (SQL:2003 §7.11)
-4. **MySQL backtick** + **SQL Server bracket** reserved-word identifiers
-
-### Error Codes
-1. **E1009** - `ErrCodeUnterminatedBlockComment` for unterminated `/* ... */`
-
----
-
-## Quick Reference: What's New in v1.8.0
-
-### Dialect Engine
-1. **ParseWithDialect()** - Parse SQL with dialect-specific syntax
-2. **ValidateWithDialect()** - Validate with dialect awareness
-3. **--dialect CLI flag** - Specify dialect for CLI commands
-4. **8 Supported Dialects** - PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse
-
-### MySQL Syntax (11 Features)
-1. **SHOW statements** - SHOW TABLES, DATABASES, CREATE TABLE
-2. **DESCRIBE/EXPLAIN** - Table description
-3. **REPLACE INTO** - Insert-or-replace
-4. **ON DUPLICATE KEY UPDATE** - MySQL upsert
-5. **LIMIT offset, count** - MySQL-style pagination
-6. **UPDATE/DELETE with LIMIT** - Row limiting extension
-7. **GROUP_CONCAT** - With ORDER BY and SEPARATOR
-8. **MATCH AGAINST** - Full-text search
-9. **REGEXP/RLIKE** - Regular expression operators
-10. **INTERVAL number unit** - MySQL-style intervals
-11. **IF()/REPLACE() as functions** - Keywords as function names
-
-### New Capabilities
-1. **Query Transform API** - `pkg/transform/` for programmatic SQL rewriting
-2. **Comment Preservation** - Comments survive parse-format round-trips
-3. **AST-to-SQL** - `SQL()` methods on all nodes for roundtrip serialization
-4. **WASM Playground** - Browser-based SQL parsing and formatting
-5. **Error Recovery** - `ParseWithRecovery()` for multi-error diagnostics
-6. **Dollar-Quoted Strings** - PostgreSQL `$$body$$` support
-7. **~50% Faster Parsing** - O(1) integer token comparison
-
-### Migration Notes
-- **From v1.7.0**: High-level API (`gosqlx.Parse()`, `gosqlx.Validate()`) is fully backward compatible
-- **Breaking**: `token.Token.ModelType` renamed to `Type`; string-based `token.Type` removed. See [MIGRATION.md](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/MIGRATION.md)
-- **MySQL Users**: Use `parser.ParseWithDialect(sql, "mysql")` for MySQL-specific syntax
-- **Performance**: ~50% faster parsing from token type overhaul

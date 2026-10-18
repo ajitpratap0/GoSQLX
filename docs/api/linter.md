@@ -81,7 +81,7 @@ Create linter with specified rules.
 ```go
 linter := linter.New(
     whitespace.NewTrailingWhitespaceRule(),
-    rules.NewMixedTabsSpacesRule(),
+    whitespace.NewMixedIndentationRule(),
     keywords.NewKeywordCaseRule(keywords.CaseUpper),
 )
 ```
@@ -90,7 +90,11 @@ linter := linter.New(
 Lint a single SQL file.
 
 ```go
-linter := linter.New(rules.AllRules()...)
+// Pass the rules to run; use gosqlx.Lint to run all 30 built-in rules.
+linter := linter.New(
+    whitespace.NewTrailingWhitespaceRule(),
+    whitespace.NewMixedIndentationRule(),
+)
 result := linter.LintFile("query.sql")
 
 for _, violation := range result.Violations {

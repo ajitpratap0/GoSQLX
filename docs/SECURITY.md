@@ -13,7 +13,7 @@ This document provides comprehensive security analysis, operational security set
 
 GoSQLX has undergone a comprehensive security analysis across 7 critical security domains. The library demonstrates **strong security characteristics** suitable for production deployment with **minimal security concerns**.
 
-### Security Package (v1.4+, updated v1.9.0)
+### Security Package
 
 GoSQLX now includes a dedicated **SQL Injection Detection** package (`pkg/sql/security`) that provides:
 
@@ -61,7 +61,7 @@ See [the security package reference](api/security.md) for complete documentation
 ✅ **HARDENED**: Robust input validation and error handling
 ✅ **RESILIENT**: Excellent memory safety and resource management
 ✅ **COMPLIANT**: Safe Unicode handling across international character sets
-✅ **PROACTIVE**: Built-in SQL injection pattern detection (NEW in v1.4+)
+✅ **PROACTIVE**: Built-in SQL injection pattern detection 
 ⚠️ **MONITOR**: Large input processing requires operational monitoring  
 
 ---
@@ -620,7 +620,7 @@ _, _ = fmt.Fprintf(w, "output")
 - [ ] Enhance error message sanitization
 - [ ] Add security-focused benchmarks
 
-### v1.1 Security Features
+### Additional Security Features
 - [ ] Implement fuzzing integration
 - [ ] Add security metrics collection
 - [ ] Enhance resource usage monitoring

@@ -136,6 +136,7 @@ export default async function DocPage({ params }: PageProps) {
                     className="hover:text-white transition-colors"
                   >
                     {categoryItem.category}
+                    <span className="sr-only"> section</span>
                   </Link>
                 </li>
               </>

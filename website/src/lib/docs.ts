@@ -72,16 +72,25 @@ function extractTitleFromMarkdown(content: string): string {
   return match ? match[1].trim() : 'Untitled';
 }
 
+/**
+ * CommonMark: a closing fence uses the same character, is at least as long as the
+ * opener, and carries no info string (so a nested ```sql line inside a ```go block is
+ * content, not a closer). `m` is the match of /^ {0,3}(`{3,}|~{3,})(.*)$/.
+ */
+function closesFence(m: RegExpMatchArray | null, fence: string): boolean {
+  return !!m && m[1][0] === fence[0] && m[1].length >= fence.length && m[2].trim() === '';
+}
+
 /** Remove fenced code blocks (``` or ~~~) so their contents are not parsed as prose. */
 export function stripCodeFences(content: string): string {
   const out: string[] = [];
   let fence: string | null = null;
   for (const line of content.split('\n')) {
-    const m = line.match(/^ {0,3}(`{3,}|~{3,})/);
+    const m = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
     if (fence === null) {
       if (m) fence = m[1];
       else out.push(line);
-    } else if (m && m[1][0] === fence[0] && m[1].length >= fence.length) {
+    } else if (closesFence(m, fence)) {
       fence = null;
     }
   }
@@ -181,14 +190,14 @@ export function rewriteDocLinks(content: string, fromFile: string): string {
   const out: string[] = [];
   let fence: string | null = null;
   for (const line of content.split('\n')) {
-    const m = line.match(/^ {0,3}(`{3,}|~{3,})/);
+    const m = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
     if (fence === null && m) {
       fence = m[1];
       out.push(line);
       continue;
     }
     if (fence !== null) {
-      if (m && m[1][0] === fence[0] && m[1].length >= fence.length) fence = null;
+      if (closesFence(m, fence)) fence = null;
       out.push(line);
       continue;
     }

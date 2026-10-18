@@ -1,15 +1,13 @@
 # GoSQLX Troubleshooting Guide
 
-**Version:** v1.15.0
-**Last Updated:** 2025-12-12
 
 ## Table of Contents
 - [Common Issues](#common-issues)
-- [v1.6.0 Feature Issues](#v160-feature-issues)
+- [Feature Issues](#feature-issues)
   - [LSP Server Issues](#lsp-server-issues)
   - [Linter Issues](#linter-issues)
   - [Security Scanner Issues](#security-scanner-issues)
-  - [Parser Issues (v1.6.0)](#parser-issues-v160)
+  - [Parser Issues](#parser-issues)
 - [Error Codes Reference](#error-codes-reference)
 - [Performance Issues](#performance-issues)
 - [Memory Issues](#memory-issues)
@@ -111,7 +109,7 @@ func ConcurrentGood(queries []string) {
 }
 ```
 
-## v1.6.0 Feature Issues
+## Feature Issues
 
 ### LSP Server Issues
 
@@ -579,7 +577,7 @@ gosqlx lint --init-config
 
 #### Issue: Performance Degradation with Many Rules
 
-**Symptom:** Linting very slow with all 10 rules enabled
+**Symptom:** Linting very slow with all 30 rules enabled
 
 **Solutions:**
 ```yaml
@@ -768,7 +766,7 @@ func SelectiveScan(files []string) error {
 }
 ```
 
-### Parser Issues (v1.6.0)
+### Parser Issues
 
 #### Issue: LATERAL JOIN Parsing Problems
 
@@ -1835,7 +1833,7 @@ func ValidateBeforeExecute(db *sql.DB, query string) error {
 }
 ```
 
-### v1.6.0 LSP Questions
+### LSP Questions
 
 #### Q: How do I configure my IDE to use the GoSQLX LSP server?
 
@@ -1891,7 +1889,7 @@ lsp:
     show_documentation: true
 ```
 
-### v1.6.0 Linter Questions
+### Linter Questions
 
 #### Q: Which linter rules support auto-fix?
 
@@ -1950,7 +1948,7 @@ select * from orders;
 -- gosqlx-enable L001
 ```
 
-### v1.6.0 Parser Questions
+### Parser Questions
 
 #### Q: Does GoSQLX support PostgreSQL JSON operators?
 
@@ -2006,7 +2004,7 @@ VALUES ('John', 'john@example.com')
 RETURNING id, created_at;
 ```
 
-### v1.6.0 Security Questions
+### Security Questions
 
 #### Q: How do I scan SQL for injection vulnerabilities?
 
@@ -2133,7 +2131,7 @@ linter:
 1. **Quick Start**: `docs/GETTING_STARTED.md` - Basic usage and setup
 2. **Comprehensive Guide**: `docs/USAGE_GUIDE.md` - Detailed SDK documentation
 3. **LSP Guide**: `docs/LSP_GUIDE.md` - LSP server setup and IDE integration
-4. **Linting Rules**: `docs/LINTING_RULES.md` - All 10 linter rules reference
+4. **Linting Rules**: `docs/LINTING_RULES.md` - All 30 linter rules reference
 5. **Configuration**: `docs/CONFIGURATION.md` - .gosqlx.yml file structure
 6. **SQL Compatibility**: `docs/SQL_COMPATIBILITY.md` - Dialect support matrix
 
@@ -2177,7 +2175,7 @@ Before submitting an issue, verify:
 - [ ] Error messages captured completely
 - [ ] Environment details documented (OS, Go version)
 
-### v1.6.0 Specific Troubleshooting
+### Specific Troubleshooting
 
 **LSP Issues:**
 1. Check server is running: `ps aux | grep gosqlx`

@@ -2,7 +2,7 @@
 
 This page walks through the feature examples from the Getting Started guide: PostgreSQL extensions, security scanning, and linting. Install GoSQLX first by following [Getting Started](/docs/getting-started/).
 
-## v1.14.0 Feature Examples
+## Feature Examples
 
 ### PostgreSQL Extensions
 
@@ -114,28 +114,25 @@ import (
     "fmt"
     "log"
 
-    "github.com/ajitpratap0/GoSQLX/pkg/linter"
+    "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 )
 
 func main() {
-    // Create linter with default rules (L001-L010)
-    l := linter.New()
-
     sql := "select * from users where name='john'"
 
-    // Run linting
-    violations, err := l.Lint(sql)
+    // Run all 30 built-in lint rules (L001-L030)
+    result, err := gosqlx.Lint(sql)
     if err != nil {
         log.Fatal(err)
     }
 
-    if len(violations) > 0 {
-        fmt.Printf("Found %d style violations:\n", len(violations))
-        for _, v := range violations {
-            fmt.Printf("  [%s] %s at line %d\n", v.Rule, v.Message, v.Line)
+    if len(result.Violations) > 0 {
+        fmt.Printf("Found %d violations:\n", len(result.Violations))
+        for _, v := range result.Violations {
+            fmt.Printf("  [%s] %s at line %d\n", v.Rule, v.Message, v.Location.Line)
         }
     } else {
-        fmt.Println("No style violations found!")
+        fmt.Println("No violations found!")
     }
 }
 ```

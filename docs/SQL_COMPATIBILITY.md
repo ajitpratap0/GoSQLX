@@ -1,12 +1,11 @@
 # GoSQLX SQL Feature Compatibility Matrix
 
-**Version**: v1.15.0 | **Last Updated**: 2026-04-12
 
 ## Overview
 
 This matrix documents the comprehensive SQL feature support in GoSQLX across different SQL dialects and standards. The testing was conducted using the comprehensive integration test suite with 700+ test cases covering real-world SQL patterns.
 
-### Recent Additions (v1.9.0)
+### Added in v1.9.0
 - ✅ **SQLite PRAGMA**: Fully parsed - bare (`PRAGMA x`), arg (`PRAGMA x(n)`), and assignment (`PRAGMA x=v`) forms; `PragmaStatement` AST node
 - ✅ **WITHOUT ROWID**: `CREATE TABLE ... WITHOUT ROWID`; reserved keywords now valid as DDL column names
 - ✅ **Tautology Detection**: `ScanSQL()` detects `1=1`, `'a'='a'`, `col=col`, `OR TRUE` → CRITICAL severity (`PatternTautology`)
@@ -15,7 +14,7 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 - ✅ **Dialect Fixes**: MySQL backtick + SQL Server bracket reserved-word identifiers now parsed correctly
 - ✅ **Parser Fixes**: KEY/INDEX in qualified names, NATURAL JOIN type, OVER window_name (bare name per SQL:2003 §7.11)
 
-### Previous Additions (v1.8.0)
+### Added in v1.8.0
 - ✅ **Dialect Mode Engine**: First-class dialect support with `ParseWithDialect()` - thread dialect through tokenizer and parser
 - ✅ **MySQL Syntax Support**:
   - **LIMIT offset, count** - MySQL-style `LIMIT 10, 20`
@@ -36,7 +35,7 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 - ✅ **~50% Faster Parsing**: Token type overhaul with O(1) integer comparison
 - ✅ **Snowflake Dialect**: Keyword detection and weighted dialect scoring
 
-### Previous Additions (v1.7.0)
+### Added in v1.7.0
 - ✅ **Schema-Qualified Names**: Full support for `schema.table`, `db.schema.table` in all DML/DDL statements
 - ✅ **PostgreSQL Enhancements**:
   - **Type Casting** - `::` operator for PostgreSQL-style casts (`SELECT 1::int`)
@@ -50,7 +49,7 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 - ✅ **FOR UPDATE/SHARE** - Row-level locking clauses
 - ✅ **Multi-row INSERT** - `INSERT INTO t VALUES (1), (2), (3)` batch inserts
 
-### Previous Additions (v1.6.0)
+### Added in v1.6.0
 - ✅ **PostgreSQL Extensions**:
   - **LATERAL JOIN** - Correlated subqueries in FROM clause
   - **JSON/JSONB Operators** - Complete operator set (`->`, `->>`, `#>`, `#>>`, `@>`, `<@`, `?`, `?|`, `?&`, `#-`)
@@ -307,23 +306,23 @@ level over a parenthesized query that already has one, such as
 | **Full-text search** | ✅ Full | 🔧 Syntax | 30% | tsvector, tsquery types |
 | **LATERAL Joins** | ✅ Full | ✅ Full | 95% | Full support with LEFT/INNER/CROSS variants |
 | **Custom operators** | ✅ Full | ⚠️ Partial | 30% | Basic operator recognition |
-| **Dollar quoting** | ✅ Full | ✅ Full | 90% | `$$body$$` and `$tag$body$tag$` (v1.8.0) |
+| **Dollar quoting** | ✅ Full | ✅ Full | 90% | `$$body$$` and `$tag$body$tag$` (since v1.8.0) |
 
 ### MySQL-Specific Features (Enhanced in v1.8.0)
 
 | Feature | Support Level | GoSQLX Parser | Test Coverage | Notes |
 |---------|---------------|---------------|---------------|-------|
-| **SHOW statements** | ✅ Full | ✅ Full | 95% | SHOW TABLES, DATABASES, CREATE TABLE (v1.8.0) |
-| **DESCRIBE/EXPLAIN** | ✅ Full | ✅ Full | 95% | Table description commands (v1.8.0) |
-| **REPLACE INTO** | ✅ Full | ✅ Full | 95% | MySQL insert-or-replace (v1.8.0) |
-| **ON DUPLICATE KEY UPDATE** | ✅ Full | ✅ Full | 95% | MySQL upsert syntax (v1.8.0) |
-| **LIMIT offset, count** | ✅ Full | ✅ Full | 95% | MySQL-style `LIMIT 10, 20` (v1.8.0) |
-| **UPDATE/DELETE with LIMIT** | ✅ Full | ✅ Full | 90% | MySQL extension (v1.8.0) |
-| **GROUP_CONCAT** | ✅ Full | ✅ Full | 95% | With ORDER BY and SEPARATOR (v1.8.0) |
-| **MATCH/AGAINST** | ✅ Full | ✅ Full | 95% | Full-text search (v1.8.0) |
-| **REGEXP/RLIKE** | ✅ Full | ✅ Full | 90% | Regular expression operators (v1.8.0) |
-| **INTERVAL number unit** | ✅ Full | ✅ Full | 90% | MySQL-style `INTERVAL 30 DAY` (v1.8.0) |
-| **IF()/REPLACE() as functions** | ✅ Full | ✅ Full | 85% | Keywords usable as function names (v1.8.0) |
+| **SHOW statements** | ✅ Full | ✅ Full | 95% | SHOW TABLES, DATABASES, CREATE TABLE (since v1.8.0) |
+| **DESCRIBE/EXPLAIN** | ✅ Full | ✅ Full | 95% | Table description commands (since v1.8.0) |
+| **REPLACE INTO** | ✅ Full | ✅ Full | 95% | MySQL insert-or-replace (since v1.8.0) |
+| **ON DUPLICATE KEY UPDATE** | ✅ Full | ✅ Full | 95% | MySQL upsert syntax (since v1.8.0) |
+| **LIMIT offset, count** | ✅ Full | ✅ Full | 95% | MySQL-style `LIMIT 10, 20` (since v1.8.0) |
+| **UPDATE/DELETE with LIMIT** | ✅ Full | ✅ Full | 90% | MySQL extension (since v1.8.0) |
+| **GROUP_CONCAT** | ✅ Full | ✅ Full | 95% | With ORDER BY and SEPARATOR (since v1.8.0) |
+| **MATCH/AGAINST** | ✅ Full | ✅ Full | 95% | Full-text search (since v1.8.0) |
+| **REGEXP/RLIKE** | ✅ Full | ✅ Full | 90% | Regular expression operators (since v1.8.0) |
+| **INTERVAL number unit** | ✅ Full | ✅ Full | 90% | MySQL-style `INTERVAL 30 DAY` (since v1.8.0) |
+| **IF()/REPLACE() as functions** | ✅ Full | ✅ Full | 85% | Keywords usable as function names (since v1.8.0) |
 | **Storage engines** | ✅ Full | 🔧 Syntax | 80% | ENGINE=InnoDB syntax |
 | **Index hints** | ✅ Full | ✅ Full | 75% | USE/IGNORE/FORCE INDEX |
 | **Partitioning** | ✅ Full | 🔧 Syntax | 70% | PARTITION BY syntax |
@@ -331,7 +330,7 @@ level over a parenthesized query that already has one, such as
 | **Backtick identifiers** | ✅ Full | ✅ Full | 100% | `` `table`.`column` `` syntax |
 | **Multi-part column references** | ✅ Full | ✅ Full | 95% | `` `db`.`table`.`column` `` and `db.table.*` (#521) |
 
-### MariaDB-Specific Features (v1.14.0+)
+### MariaDB-Specific Features
 
 MariaDB inherits all MySQL features (SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE KEY UPDATE, GROUP_CONCAT, MATCH/AGAINST, REGEXP/RLIKE, backtick identifiers, etc.) and adds the following extensions:
 
@@ -570,7 +569,7 @@ WHERE expired_at < NOW()
 RETURNING user_id, session_id;
 ```
 
-## Dialect Mode Engine (v1.8.0)
+## Dialect Mode Engine
 
 GoSQLX v1.8.0 introduces a first-class dialect mode engine that threads the SQL dialect through the tokenizer and parser. This enables dialect-specific keyword recognition, syntax parsing, and validation.
 
@@ -629,7 +628,7 @@ gosqlx format --dialect mysql query.sql
 - VACUUM not supported
 - Virtual tables (FTS5, rtree) not supported
 
-#### Snowflake (v1.14.0 — 87/87 QA pass, 100%)
+#### Snowflake (87/87 QA pass, 100%)
 - MATCH_RECOGNIZE (SQL:2016 R010), @stage references, SAMPLE/TABLESAMPLE, QUALIFY
 - VARIANT colon-path expressions (`expr:field.sub[0]`)
 - Time-travel: AT/BEFORE/CHANGES
@@ -646,7 +645,7 @@ gosqlx format --dialect mysql query.sql
 - Spider storage engine syntax not parsed
 - ColumnStore-specific syntax not supported
 
-#### ClickHouse (v1.14.0 — 69/83 QA pass, 83%)
+#### ClickHouse (69/83 QA pass, 83%)
 - PREWHERE clause for pre-filter optimization before primary key scan
 - FINAL modifier on table references (forces MergeTree part merge)
 - GLOBAL IN / GLOBAL NOT IN for distributed query execution
@@ -662,7 +661,7 @@ gosqlx format --dialect mysql query.sql
 
 ## SQL Standards Compliance Summary
 
-### Overall Compliance (v1.14.0)
+### Overall Compliance
 
 | Standard | Compliance % | Status | Notes |
 |----------|--------------|--------|-------|
@@ -695,7 +694,7 @@ gosqlx format --dialect mysql query.sql
 | Database | Core Features | Extensions | Overall Rating | Notes |
 |----------|---------------|------------|----------------|-------|
 | **PostgreSQL** | 95% | 85% | ⭐⭐⭐⭐⭐ Excellent | Default dialect, best supported |
-| **MySQL** | 95% | 85% | ⭐⭐⭐⭐⭐ Excellent | Full dialect parsing (v1.8.0) |
+| **MySQL** | 95% | 85% | ⭐⭐⭐⭐⭐ Excellent | Full dialect parsing (since v1.8.0) |
 | **SQL Server** | 85% | 65% | ⭐⭐⭐⭐ Very Good | Keywords + MERGE |
 | **Oracle** | 80% | 60% | ⭐⭐⭐⭐ Good | Keywords + basic features |
 | **SQLite** | 85% | 50% | ⭐⭐⭐⭐ Good | Keywords + basic features |
@@ -771,7 +770,7 @@ gosqlx format --dialect mysql query.sql
 
 ## Production Readiness Summary
 
-### Ready for Production (v1.7.0)
+### Ready for Production
 
 **Core DML/DDL**:
 - **Core SQL operations** (SELECT, INSERT, UPDATE, DELETE, TRUNCATE)
@@ -852,7 +851,6 @@ gosqlx format --dialect mysql query.sql
 
 ---
 
-**Last Updated**: 2026-04-12
 **GoSQLX Version**: 1.15.0
 **Test Suite Version**: 1.15.0
 **Total Test Cases**: 800+

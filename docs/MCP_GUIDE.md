@@ -1,7 +1,5 @@
 # GoSQLX MCP Server Guide
 
-**Version**: v1.15.0
-**Last Updated**: 2026-03-09
 
 ## Table of Contents
 
@@ -76,7 +74,7 @@ All 7 GoSQLX SQL tools are available instantly:
 - `parse_sql` - Parse SQL into AST statement types
 - `extract_metadata` - Extract tables, columns, and functions
 - `security_scan` - Detect SQL injection patterns
-- `lint_sql` - Lint against 10 rules (L001–L010)
+- `lint_sql` - Lint against the style rules (L001–L010)
 - `analyze_sql` - Run all 6 tools in one concurrent request
 
 ### Rate Limits
@@ -466,7 +464,7 @@ curl -s -X POST http://127.0.0.1:8080/mcp \
 
 ### lint\_sql
 
-**Description**: Lint SQL against all 10 GoSQLX style rules (L001–L010).
+**Description**: Lint SQL against the GoSQLX style rules (L001–L010).
 
 #### Parameters
 
@@ -791,8 +789,3 @@ The format, security scan, and lint tools operate on the raw SQL string independ
 - **Issues**: https://github.com/ajitpratap0/GoSQLX/issues
 - **MCP Specification**: https://modelcontextprotocol.io/specification
 - **mark3labs/mcp-go**: https://github.com/mark3labs/mcp-go
-
----
-
-**Last Updated**: 2026-03-09
-**Version**: v1.15.0

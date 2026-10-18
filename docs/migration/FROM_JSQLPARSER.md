@@ -1,23 +1,7 @@
 # Migrating from JSQLParser to GoSQLX
 
-**Last Updated:** 2025-11-05
 
 This guide helps Java developers migrate from JSQLParser to GoSQLX, covering API differences, code translation patterns, and practical migration strategies.
-
----
-
-## Table of Contents
-
-- [Overview Comparison](#overview-comparison)
-- [Why Migrate to GoSQLX?](#why-migrate-to-gosqlx)
-- [Feature Mapping](#feature-mapping)
-- [Side-by-Side Code Examples](#side-by-side-code-examples)
-- [Common Patterns Translation](#common-patterns-translation)
-- [Performance Comparison](#performance-comparison)
-- [Migration Checklist](#migration-checklist)
-- [Real Migration Case Study](#real-migration-case-study)
-- [Known Limitations](#known-limitations)
-- [Getting Help](#getting-help)
 
 ---
 
@@ -815,7 +799,7 @@ GROUP BY u.id, u.name
 | JVM Startup | ~2 seconds | N/A (no JVM) | Instant |
 | Container Size | 250MB (with JVM) | 15MB | 16x smaller |
 
-### Real-World Scenario: SQL Validation Service
+### Example Scenario: SQL Validation Service
 
 **Scenario:** REST API validating 1,000 SQL queries/second
 
@@ -851,7 +835,7 @@ GROUP BY u.id, u.name
 - [ ] Check if you use fluent API for SQL building
 
 ### Phase 2: Proof of Concept (Week 1-2)
-- [ ] Install Go 1.21+ on development machines
+- [ ] Install Go 1.26+ on development machines
 - [ ] Install GoSQLX: `go get github.com/ajitpratap0/GoSQLX`
 - [ ] Port one Java class to Go
 - [ ] Test with your SQL queries
@@ -889,9 +873,9 @@ GROUP BY u.id, u.name
 
 ---
 
-## Real Migration Case Study
+## Example Migration Case Study
 
-### Company: FinTech Startup (Fictional Example)
+### Scenario: FinTech Startup (illustrative example, not a real company)
 **Industry:** Financial Services
 **Use Case:** SQL query analysis in fraud detection system
 **Previous Setup:** Java microservice with JSQLParser
@@ -1134,5 +1118,4 @@ See code examples above for table/column extraction.
 
 ---
 
-**Last Updated:** 2025-11-05
 **Maintained by:** GoSQLX Community

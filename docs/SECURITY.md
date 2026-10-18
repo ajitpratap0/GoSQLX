@@ -5,7 +5,6 @@ This document provides comprehensive security analysis, operational security set
 ## 🛡️ Comprehensive Security Assessment
 
 **Analysis Date**: 2026-02-28
-**Version**: v1.15.0
 **Security Score**: 9.0/10 ⭐⭐⭐⭐⭐
 
 ---
@@ -24,7 +23,7 @@ GoSQLX now includes a dedicated **SQL Injection Detection** package (`pkg/sql/se
 - **Thread-Safe**: Safe for concurrent use across goroutines
 - **High Performance**: 100,000+ queries/second scanning throughput
 
-### Tautology Detection (v1.9.0)
+### Tautology Detection
 
 `ScanSQL()` detects always-true conditions commonly used in SQL injection:
 
@@ -35,7 +34,7 @@ GoSQLX now includes a dedicated **SQL Injection Detection** package (`pkg/sql/se
 
 **Severity**: CRITICAL (`PatternTautology`)
 
-### UNION Detection (v1.9.0)
+### UNION Detection
 
 UNION-based injection detection is now split into two patterns to eliminate false positives:
 
@@ -616,7 +615,7 @@ _, _ = fmt.Fprintf(w, "output")
 
 ## 📈 Security Roadmap
 
-### v1.0.1 Security Enhancements
+### Security Enhancements
 - [ ] Add configurable input size limits
 - [ ] Enhance error message sanitization
 - [ ] Add security-focused benchmarks

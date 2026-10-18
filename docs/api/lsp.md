@@ -63,7 +63,7 @@ if err := server.Run(); err != nil {
 }
 ```
 
-## LSP Capabilities (v1.6.0)
+## LSP Capabilities
 
 The GoSQLX LSP server implements the following LSP features:
 
@@ -273,7 +273,7 @@ func main() {
 }
 ```
 
-## LSP Performance (v1.6.0)
+## LSP Performance
 
 - **Rate Limiting**: 100 requests/second with window-based throttling
 - **Size Limits**: 10MB max message size, 5MB max document size

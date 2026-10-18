@@ -39,7 +39,7 @@ tokens, err := tkz.TokenizeContext(ctx, []byte("SELECT * FROM users"))
 
 ## Supported Token Types
 
-| Token Type | Example | v1.6.0 Features |
+| Token Type | Example | Notes |
 |------------|---------|-----------------|
 | `TokenTypeSelect` | `SELECT` | ✅ Standard |
 | `TokenTypeFrom` | `FROM` | ✅ Standard |
@@ -49,23 +49,23 @@ tokens, err := tkz.TokenizeContext(ctx, []byte("SELECT * FROM users"))
 | `TokenTypeSingleQuotedString` | `'hello'` | ✅ Standard |
 | `TokenTypeDoubleQuotedString` | `"column name"` | ✅ Standard |
 | `TokenTypeBacktickIdentifier` | `` `column` `` | ✅ MySQL dialect |
-| `TokenTypeLateral` | `LATERAL` | ✅ **NEW v1.6.0** PostgreSQL |
-| `TokenTypeFilter` | `FILTER` | ✅ **NEW v1.6.0** SQL:2003 |
-| `TokenTypeDistinctOn` | `DISTINCT ON` | ✅ **NEW v1.6.0** PostgreSQL |
-| `TokenTypeReturning` | `RETURNING` | ✅ **NEW v1.6.0** PostgreSQL |
-| `TokenTypeFetch` | `FETCH FIRST` | ✅ **NEW v1.6.0** SQL-99 F861 |
-| `TokenTypeTruncate` | `TRUNCATE` | ✅ **NEW v1.6.0** SQL:2008 |
+| `TokenTypeLateral` | `LATERAL` | ✅ PostgreSQL |
+| `TokenTypeFilter` | `FILTER` | ✅ SQL:2003 |
+| `TokenTypeDistinctOn` | `DISTINCT ON` | ✅ PostgreSQL |
+| `TokenTypeReturning` | `RETURNING` | ✅ PostgreSQL |
+| `TokenTypeFetch` | `FETCH FIRST` | ✅ SQL-99 F861 |
+| `TokenTypeTruncate` | `TRUNCATE` | ✅ SQL:2008 |
 | **JSON/JSONB Operators** | | |
-| `TokenTypeArrow` | `->` | ✅ **NEW v1.6.0** PostgreSQL |
-| `TokenTypeDoubleArrow` | `->>` | ✅ **NEW v1.6.0** PostgreSQL |
-| `TokenTypeHashArrow` | `#>` | ✅ **NEW v1.6.0** PostgreSQL |
-| `TokenTypeHashDoubleArrow` | `#>>` | ✅ **NEW v1.6.0** PostgreSQL |
-| `TokenTypeAtGreater` | `@>` | ✅ **NEW v1.6.0** PostgreSQL containment |
-| `TokenTypeLessAt` | `<@` | ✅ **NEW v1.6.0** PostgreSQL contained by |
-| `TokenTypeQuestionMark` | `?` | ✅ **NEW v1.6.0** PostgreSQL key exists |
-| `TokenTypeQuestionPipe` | `?|` | ✅ **NEW v1.6.0** PostgreSQL any key exists |
-| `TokenTypeQuestionAmpersand` | `?&` | ✅ **NEW v1.6.0** PostgreSQL all keys exist |
-| `TokenTypeHashMinus` | `#-` | ✅ **NEW v1.6.0** PostgreSQL delete at path |
+| `TokenTypeArrow` | `->` | ✅ PostgreSQL |
+| `TokenTypeDoubleArrow` | `->>` | ✅ PostgreSQL |
+| `TokenTypeHashArrow` | `#>` | ✅ PostgreSQL |
+| `TokenTypeHashDoubleArrow` | `#>>` | ✅ PostgreSQL |
+| `TokenTypeAtGreater` | `@>` | ✅ PostgreSQL containment |
+| `TokenTypeLessAt` | `<@` | ✅ PostgreSQL contained by |
+| `TokenTypeQuestionMark` | `?` | ✅ PostgreSQL key exists |
+| `TokenTypeQuestionPipe` | `?|` | ✅ PostgreSQL any key exists |
+| `TokenTypeQuestionAmpersand` | `?&` | ✅ PostgreSQL all keys exist |
+| `TokenTypeHashMinus` | `#-` | ✅ PostgreSQL delete at path |
 
 **Features:**
 - O(1) integer-based token type checking via the ModelType field

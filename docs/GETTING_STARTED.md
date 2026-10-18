@@ -52,12 +52,12 @@ echo "select * from users where age>18" | gosqlx format
 echo "SELECT COUNT(*) FROM orders GROUP BY status" | gosqlx analyze
 ```
 
-**Available CLI Commands (v1.14.0):**
+**Available CLI Commands:**
 - `validate` - Ultra-fast SQL validation with security scanning
 - `format` - High-performance SQL formatting with style options
 - `analyze` - Advanced SQL analysis with complexity metrics
 - `parse` - AST structure inspection (JSON/text output)
-- `lint` - Check SQL code for style issues (30 built-in rules)
+- `lint` - Check SQL code for style issues (rules L001-L010; all 30 rules run through the Go library with `gosqlx.Lint`)
 - `transpile` - Convert SQL between dialects (MySQL ↔ PostgreSQL, PostgreSQL → SQLite)
 - `optimize` - Run optimization advisor (OPT-001 through OPT-020)
 - `action` - GitHub Actions integration with annotations
@@ -67,7 +67,7 @@ echo "SELECT COUNT(*) FROM orders GROUP BY status" | gosqlx analyze
 - `config` - Manage configuration files (.gosqlx.yml)
 - `completion` - Shell autocompletion for bash/zsh/fish
 
-**New in v1.14.0:**
+**More CLI examples:**
 ```bash
 # Security scanning for SQL injection
 gosqlx validate --security query.sql
@@ -132,7 +132,7 @@ go run main.go
 
 **That's it!** Just 3 lines of code. No pool management, no manual cleanup - everything is handled automatically.
 
-For a tour of the v1.14.0 features (PostgreSQL extensions, security scanning, linting), see the [Feature Tour](/docs/feature-tour/).
+For a tour of the features (PostgreSQL extensions, security scanning, linting), see the [Feature Tour](/docs/feature-tour/).
 
 ---
 
@@ -234,7 +234,7 @@ gosqlx lsp --log /tmp/lsp.log
 - **[API Reference](/docs/reference/api/)** - Complete API documentation
 - **[Examples](https://github.com/ajitpratap0/GoSQLX/tree/main/examples)** - Real-world code examples
 
-### v1.14.0 Feature Guides:
+### Feature Guides:
 - **Dialect-Aware Transforms:**
   - `transform.FormatSQLWithDialect(stmt, dialect)` for dialect-specific SQL output
   - `transform.ParseSQLWithDialect(sql, dialect)` for dialect-aware parsing
@@ -315,7 +315,7 @@ gosqlx validate "your SQL here"
 
 ---
 
-## v1.14.0 Feature Highlights
+## Feature Highlights
 
 ### Production-Ready Performance
 - **~0.6 µs** to parse a window-function query (parse stage only, Apple M4, Go 1.27; see `performance_baselines.json`)
@@ -344,7 +344,7 @@ gosqlx validate "your SQL here"
 - ✓ Installing GoSQLX (library and CLI)
 - ✓ Validating and formatting SQL with CLI
 - ✓ Parsing SQL in Go applications with simple API
-- ✓ Using v1.14.0 features (dialect-aware transforms, transpilation, schema introspection, 30 linter rules)
+- ✓ Using advanced features (dialect-aware transforms, transpilation, schema introspection, 30 linter rules)
 - ✓ Common use cases and patterns
 - ✓ Where to find more help
 
@@ -356,4 +356,4 @@ gosqlx validate "your SQL here"
 
 ---
 
-*Built by the GoSQLX community - Production-ready since v1.12.0, ClickHouse dialect since v1.13.0, dialect-aware transforms since v1.14.0*
+*Built by the GoSQLX community*

@@ -1,7 +1,5 @@
 # GoSQLX CLI Guide
 
-**Version**: v1.15.0
-**Last Updated**: 2026-04-12
 
 The GoSQLX Command Line Interface (CLI) provides high-performance SQL parsing, validation, formatting, and analysis capabilities directly from your terminal.
 
@@ -447,7 +445,7 @@ gosqlx analyze < query.sql
 
 ### `gosqlx lint` - Style and Quality Checking
 
-Check SQL files for style issues and best practices with 10 built-in rules (L001-L010).
+Check SQL files for style issues and best practices with the style rules L001-L010. The full set of 30 rules (L001-L030) is available from the Go library through `gosqlx.Lint`.
 
 #### Syntax
 
@@ -1023,10 +1021,10 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.26'
       - name: Install GoSQLX
         run: go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest
       - name: Validate SQL
@@ -1395,7 +1393,7 @@ See [CONTRIBUTING.md](https://github.com/ajitpratap0/GoSQLX/blob/main/CONTRIBUTI
 ## Related Documentation
 
 - [LSP Guide](/docs/integrations/lsp/) - Complete LSP server documentation and IDE integration
-- [Linting Rules](/docs/reference/linting-rules/) - All 10 linting rules (L001-L010) reference
+- [Linting Rules](/docs/reference/linting-rules/) - All 30 linting rules (L001-L030) reference
 - [Configuration Guide](/docs/reference/configuration/) - Configuration file (.gosqlx.yml) guide
 - [Getting Started](/docs/getting-started/) - Quick start guide for new users
 - [Usage Guide](/docs/usage-guide/) - Comprehensive usage guide
@@ -1406,8 +1404,3 @@ See [CONTRIBUTING.md](https://github.com/ajitpratap0/GoSQLX/blob/main/CONTRIBUTI
 ## License
 
 GoSQLX CLI is licensed under the Apache License 2.0. See [LICENSE](../LICENSE) for details.
-
----
-
-**Last Updated**: December 2025
-**Version**: v1.15.0

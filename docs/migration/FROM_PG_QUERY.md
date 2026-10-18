@@ -1,25 +1,9 @@
 # Migrating from pg_query to GoSQLX
 
-**Last Updated:** 2025-11-05
 
 This guide helps you migrate from pg_query (PostgreSQL's official parser wrapper) to GoSQLX, covering multi-dialect support, performance improvements, and practical migration strategies.
 
 **See also:** [GoSQLX vs pg_query_go: when to pick each, with reproducible numbers](https://gosqlx.dev/compare/pg-query-go/)
-
----
-
-## Table of Contents
-
-- [Overview Comparison](#overview-comparison)
-- [Why Migrate to GoSQLX?](#why-migrate-to-gosqlx)
-- [Feature Mapping](#feature-mapping)
-- [Side-by-Side Code Examples](#side-by-side-code-examples)
-- [Common Patterns Translation](#common-patterns-translation)
-- [Performance Comparison](#performance-comparison)
-- [Migration Checklist](#migration-checklist)
-- [Real Migration Case Study](#real-migration-case-study)
-- [Known Limitations](#known-limitations)
-- [Getting Help](#getting-help)
 
 ---
 
@@ -820,7 +804,7 @@ ORDER BY order_count DESC
 | Build Time | 5 minutes (CGO) | 30 seconds | 10x faster |
 | Cross-compile | Difficult (C deps) | Easy (pure Go) | Much easier |
 
-### Real-World Scenario: Query Analysis Service
+### Example Scenario: Query Analysis Service
 
 **Scenario:** Microservice analyzing SQL queries for a multi-tenant SaaS
 
@@ -860,7 +844,7 @@ ORDER BY order_count DESC
 - [ ] Document build complexity issues (if any)
 
 ### Phase 2: Proof of Concept (Week 1-2)
-- [ ] Install Go 1.21+ if not already present
+- [ ] Install Go 1.26+ if not already present
 - [ ] Install GoSQLX: `go get github.com/ajitpratap0/GoSQLX`
 - [ ] Test parsing your PostgreSQL queries
 - [ ] Implement custom normalization if needed
@@ -897,9 +881,9 @@ ORDER BY order_count DESC
 
 ---
 
-## Real Migration Case Study
+## Example Migration Case Study
 
-### Company: Database Tools Startup (Fictional Example)
+### Scenario: Database Tools Startup (illustrative example, not a real company)
 **Industry:** Database DevOps Tools
 **Product:** SQL query analyzer for multi-database environments
 **Previous Setup:** pg_query for PostgreSQL customers only
@@ -1171,5 +1155,4 @@ For heavy PL/pgSQL use, keep pg_query or contribute PL/pgSQL support to GoSQLX.
 
 ---
 
-**Last Updated:** 2025-11-05
 **Maintained by:** GoSQLX Community

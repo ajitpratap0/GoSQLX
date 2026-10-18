@@ -83,7 +83,7 @@ type PoolStats struct {
 }
 ```
 
-**v1.6.0 Enhancements:**
+**Enhancements:**
 - Parser operation metrics (duration, errors, statement counts)
 - AST pool metrics (gets/puts/balance)
 - Statement pool metrics

@@ -27,7 +27,7 @@ GoSQLX is a production-ready, high-performance SQL parsing SDK for Go with compr
 - **LSP Server** - Full Language Server Protocol support for IDE integration (diagnostics, hover, completion, formatting)
 - **CLI Tool** - Command-line interface with validate, format, analyze, parse, and lsp commands
 - **Security Scanner** - SQL injection detection with pattern scanning and severity classification
-- **Linter** - 10 built-in linting rules (L001-L010) with auto-fix capabilities
+- **Linter** - 30 built-in linting rules (L001-L030) with auto-fix for the style rules that support it
 - **Configuration** - YAML-based configuration (.gosqlx.yml) for project-wide settings
 
 ### Advanced SQL Features
@@ -57,7 +57,7 @@ GoSQLX is a production-ready, high-performance SQL parsing SDK for Go with compr
 | [**USAGE_GUIDE.md**](USAGE_GUIDE.md) | Detailed usage patterns, best practices, and real-world examples | All Users |
 | [**ARCHITECTURE.md**](ARCHITECTURE.md) | System design, component architecture, and internal implementation | Contributors/Advanced |
 | [**TROUBLESHOOTING.md**](TROUBLESHOOTING.md) | Common issues, error messages, debugging techniques, and FAQ | Support/Debug |
-| [**LINTING_RULES.md**](LINTING_RULES.md) | Complete linting rules reference (L001-L010) with examples | Developers/QA |
+| [**LINTING_RULES.md**](LINTING_RULES.md) | Complete linting rules reference (L001-L030) with examples | Developers/QA |
 | [**CONFIGURATION.md**](CONFIGURATION.md) | Configuration file (.gosqlx.yml) guide with all options | DevOps/Teams |
 
 ### Reference Documentation
@@ -147,7 +147,7 @@ docs/
 ├── USAGE_GUIDE.md                     # Usage patterns and examples
 ├── ARCHITECTURE.md                    # System architecture
 ├── TROUBLESHOOTING.md                 # Problem solving guide
-├── LINTING_RULES.md                   # Linting rules reference (L001-L010)
+├── LINTING_RULES.md                   # Linting rules reference (L001-L030)
 ├── CONFIGURATION.md                   # Configuration file guide (.gosqlx.yml)
 ├── PRODUCTION_GUIDE.md                # Production deployment
 ├── PERFORMANCE_TUNING.md              # Performance optimization
@@ -339,7 +339,7 @@ If you can't find what you need:
 - **Aggregate ORDER BY** - ORDER BY within aggregate functions
 - **RETURNING Clause** - Return modified rows from DML statements
 - **LSP Server** - Language Server Protocol for IDE integration
-- **Linter** - 10 built-in linting rules (L001-L010) with auto-fix
+- **Linter** - 30 built-in linting rules (L001-L030) with auto-fix
 - **Configuration** - YAML-based project configuration (.gosqlx.yml)
 - **Enhanced CLI** - Improved format, analyze, and parse commands
 
@@ -376,8 +376,8 @@ Three major new tools for improved developer experience:
    - Code completion for SQL keywords
    - Document formatting with intelligent indentation
 
-2. **Linter** - SQL code quality enforcement with 10 built-in rules
-   - L001-L010 rules covering style, naming, and best practices
+2. **Linter** - SQL code quality enforcement with 30 built-in rules
+   - L001-L030 rules covering style, safety, performance, naming, and best practices
    - Auto-fix capabilities for many rules
    - Configurable severity levels and rule exclusions
 

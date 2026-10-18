@@ -8,7 +8,8 @@ on:
       - '.github/workflows/website-ci.yml'
       - 'README.md'
       - 'llms.txt'
-      - 'docs/GETTING_STARTED.md'
+      - 'docs/**'
+      - 'pkg/linter/rules/**'
       - 'benchmarks/compare/results/**'
   pull_request:
     paths:
@@ -16,7 +17,8 @@ on:
       - '.github/workflows/website-ci.yml'
       - 'README.md'
       - 'llms.txt'
-      - 'docs/GETTING_STARTED.md'
+      - 'docs/**'
+      - 'pkg/linter/rules/**'
       - 'benchmarks/compare/results/**'
   workflow_dispatch:
 
@@ -64,6 +66,11 @@ jobs:
         run: |
           node scripts/check-metrics-drift.mjs --self-test
           node scripts/check-metrics-drift.mjs
+
+      - name: Docs content check (rule coverage, version labels, Go version)
+        run: |
+          node scripts/check-docs-content.mjs --self-test
+          node scripts/check-docs-content.mjs
 
       - name: Contrast check (WCAG AA, dark and light tokens)
         run: npm run check:contrast

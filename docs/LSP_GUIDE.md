@@ -1,7 +1,5 @@
 # GoSQLX Language Server Protocol (LSP) Guide
 
-**Version**: v1.15.0
-**Last Updated**: 2026-03-20
 
 ## Table of Contents
 
@@ -193,7 +191,7 @@ Quick fixes for common issues:
 
 ### Semantic Tokens
 
-GoSQLX v1.13.0 adds `textDocument/semanticTokens/full` support with a 6-type legend:
+GoSQLX adds `textDocument/semanticTokens/full` support with a 6-type legend:
 
 | Token Type | Applies To |
 |------------|-----------|
@@ -442,8 +440,3 @@ tail -f /tmp/gosqlx-lsp.log | grep -E "Initialize|Document|Diagnostic"
 - **Issues**: https://github.com/ajitpratap0/GoSQLX/issues
 - **Discussions**: https://github.com/ajitpratap0/GoSQLX/discussions
 - **LSP Specification**: https://microsoft.github.io/language-server-protocol/
-
----
-
-**Last Updated**: 2026-03-20
-**Version**: v1.15.0

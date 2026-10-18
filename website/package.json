@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "check:metrics": "node scripts/check-metrics-drift.mjs",
+    "check:docs": "node scripts/check-docs-content.mjs",
     "check:contrast": "node scripts/check-contrast.mjs"
   },
   "dependencies": {

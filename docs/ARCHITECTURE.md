@@ -1,7 +1,5 @@
 # GoSQLX Architecture Documentation
 
-**Version**: v1.15.0
-**Last Updated**: 2026-03-20
 
 ## Table of Contents
 - [System Overview](#system-overview)
@@ -33,17 +31,17 @@ GoSQLX is a production-ready, high-performance SQL parsing library with comprehe
 7. **Type-Safe Dispatch**: O(1) integer-based token type comparisons (14x faster)
 8. **Lock-Free Metrics**: Atomic counters for production observability
 
-### High-Level Architecture (v1.6.0)
+### High-Level Architecture
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────┐
 │                          Application Layer & Tools                             │
 │  ┌─────────────┬──────────────┬──────────────┬─────────────┬───────────────┐  │
 │  │ CLI Tool    │ LSP Server   │  Linter      │  Security   │  MCP Server   │  │
-│  │ (validate,  │ (JSON-RPC    │  (10 rules:  │  Scanner    │  (7 tools,    │  │
-│  │  format,    │  handler,    │   L001-L010, │  (injection │   HTTP,       │  │
-│  │  analyze,   │  rate limit, │   whitespace,│   detection)│   bearer auth,│  │
-│  │  parse)     │  doc mgmt)   │   style)     │             │   streaming)  │  │
+│  │ (validate,  │ (JSON-RPC    │  (30 rules:  │  Scanner    │  (7 tools,    │  │
+│  │  format,    │  handler,    │   L001-L030, │  (injection │   HTTP,       │  │
+│  │  analyze,   │  rate limit, │   style,     │   detection)│   bearer auth,│  │
+│  │  parse)     │  doc mgmt)   │   safety)    │             │   streaming)  │  │
 │  └─────────────┴──────────────┴──────────────┴─────────────┴───────────────┘  │
 └────────────────────────────────────────────────────────────────────────────────┘
                                 ▼
@@ -180,12 +178,15 @@ The codebase is organized into focused packages with clear responsibilities and 
   - **linter.go**: Linting engine with file/directory support
   - **rule.go**: Rule interface (Check, Fix, CanAutoFix methods)
   - **context.go**: Linting context with tokens, AST, and SQL content
-  - **10 Built-in Rules (L001-L010)**:
-    - **Whitespace** (5 rules): L001 (trailing), L002 (mixed indentation), L003 (long lines), L004 (consecutive blank lines), L005 (redundant whitespace)
-    - **Keywords** (1 rule): L006 (keyword case consistency)
-    - **Style** (4 rules): L007 (comma placement), L008 (aliasing consistency), L009 (column alignment), L010 (indentation depth)
-  - **Auto-fix Support**: 7/10 rules support automatic fixes
-  - **Integration**: Used by CLI lint command and LSP code actions
+  - **30 Built-in Rules (L001-L030)**, see the [Linting Rules reference](/docs/reference/linting-rules/):
+    - **Whitespace** (6 rules): L001 (trailing whitespace), L002 (mixed indentation), L003 (consecutive blank lines), L004 (indentation depth), L005 (long lines), L010 (redundant whitespace)
+    - **Style** (3 rules): L006 (column alignment), L008 (comma placement), L009 (aliasing consistency)
+    - **Keywords** (1 rule): L007 (keyword case consistency)
+    - **Safety** (5 rules): L011-L015 (DELETE/UPDATE without WHERE, DROP without IF EXISTS, TRUNCATE, SELECT INTO OUTFILE)
+    - **Performance** (8 rules): L016-L023 (SELECT *, full scans, leading wildcards, NOT IN with NULL, and more)
+    - **Naming** (7 rules): L024-L030 (table aliases, reserved keywords, implicit INSERT columns, UNION vs UNION ALL, and more)
+  - **Auto-fix Support**: 5 of the 30 rules (L001, L002, L003, L007, L010) support automatic fixes
+  - **Integration**: `gosqlx.Lint` runs all 30 rules; the CLI lint command and MCP `lint_sql` tool run the style rules L001-L010; LSP code actions apply fixes
 
 - **pkg/compatibility**: Compatibility layer for API evolution
 
@@ -209,7 +210,7 @@ ALTER TABLE, ALTER (generic), DROP, REFRESH MATERIALIZED VIEW
 
 ## Token Type System (ARCH-002)
 
-**Design Decision**: v1.6.0 introduces a comprehensive token type system with 120+ distinct token types for O(1) categorization and 14x performance improvement over string comparisons.
+**Design Decision**: GoSQLX uses a comprehensive token type system with 120+ distinct token types for O(1) categorization and 14x performance improvement over string comparisons.
 
 ### Token Type Architecture
 
@@ -323,7 +324,7 @@ func (t TokenType) IsSetOperation() bool {
 4. **Cache Friendly**: Integer comparisons have better cache locality
 5. **Type Safety**: Compile-time type checking prevents errors
 
-### PostgreSQL Extension Tokens (v1.6.0)
+### PostgreSQL Extension Tokens
 
 ```go
 // JSON/JSONB operators
@@ -466,7 +467,7 @@ parseStatement()  # Fast ModelType (int) dispatch with O(1) switching
 └── parseTruncateStatement()          # TRUNCATE
 ```
 
-**PostgreSQL-Specific Features (v1.6.0):**
+**PostgreSQL-Specific Features:**
 
 ```
 parseSelectExpression()
@@ -876,7 +877,7 @@ fmt.Printf("Avg duration: %v, Error rate: %.2f%%\n",
 
 ## LSP Architecture
 
-**Language Server Protocol (LSP) Implementation** (v1.6.0) provides real-time IDE integration for SQL editing.
+**Language Server Protocol (LSP) Implementation** provides real-time IDE integration for SQL editing.
 
 ### LSP Component Design
 
@@ -1047,7 +1048,7 @@ $ gosqlx lsp --log /tmp/lsp.log  // With debug logging
 
 ## Linter Architecture
 
-**SQL Linting Engine** (v1.6.0) provides style checking and automatic fixing with 10 built-in rules.
+**SQL Linting Engine** provides style, safety and performance checking, with automatic fixing for the rules that support it, across 30 built-in rules (L001-L030).
 
 ### Linter Component Design
 
@@ -1066,12 +1067,13 @@ $ gosqlx lsp --log /tmp/lsp.log  // With debug logging
 │        │                    │                     │          │
 │        ▼                    ▼                     ▼          │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │                10 Built-in Rules                      │  │
-│  │  Whitespace (5): L001-L005 (trailing, mixed, long,   │  │
-│  │                  blank lines, redundant)              │  │
-│  │  Keywords (1): L006 (case consistency)                │  │
-│  │  Style (4): L007-L010 (comma, aliasing, alignment,   │  │
-│  │             indentation depth)                        │  │
+│  │                30 Built-in Rules                      │  │
+│  │  Whitespace (6): L001-L005, L010                      │  │
+│  │  Style (3): L006, L008, L009                          │  │
+│  │  Keywords (1): L007 (case consistency)                │  │
+│  │  Safety (5): L011-L015                                │  │
+│  │  Performance (8): L016-L023                           │  │
+│  │  Naming (7): L024-L030                                │  │
 │  └──────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -1188,83 +1190,34 @@ ctx.WithAST(astObj, parseErr)    // Add AST (best-effort)
 - Token-only rules work without AST
 - AST-aware rules skip on parse failure
 
-### Built-in Rules (10 total)
+### Built-in Rules (30 total)
 
-#### Whitespace Rules (5)
+The linter ships 30 rules (L001-L030). Each rule declares its ID, name, description, default severity and whether it supports auto-fix. The [Linting Rules reference](/docs/reference/linting-rules/) documents every rule with examples.
 
-**L001: Trailing Whitespace** (auto-fix)
-- Detects spaces/tabs at end of lines
-- Severity: warning
-- Fix: Remove trailing whitespace
+| Category | Rules | Auto-fix |
+|----------|-------|----------|
+| Whitespace (6) | L001 Trailing Whitespace, L002 Mixed Indentation, L003 Consecutive Blank Lines, L004 Indentation Depth, L005 Long Lines, L010 Redundant Whitespace | L001, L002, L003, L010 |
+| Style (3) | L006 Column Alignment, L008 Comma Placement, L009 Aliasing Consistency | none |
+| Keywords (1) | L007 Keyword Case Consistency | L007 |
+| Safety (5) | L011 Delete Without WHERE, L012 Update Without WHERE, L013 Drop Without IF EXISTS, L014 Truncate Table, L015 Select Into Outfile | none |
+| Performance (8) | L016 Select Star, L017 Missing WHERE on Full Scan, L018 Leading Wildcard LIKE, L019 NOT IN With NULL Risk, L020 Correlated Subquery in SELECT, L021 OR Instead of IN, L022 Function on Indexed Column, L023 Implicit Cross Join | none |
+| Naming (7) | L024 Table Alias Required, L025 Reserved Keyword Identifier, L026 Implicit Column List in INSERT, L027 UNION Instead of UNION ALL, L028 Missing ORDER BY with LIMIT, L029 Subquery Can Be JOIN, L030 Distinct on Many Columns | none |
 
-**L002: Mixed Indentation** (auto-fix)
-- Detects mixed tabs and spaces
-- Severity: error
-- Fix: Convert tabs to spaces (or vice versa)
-
-**L003: Long Lines** (info)
-- Detects lines exceeding max length (default: 120)
-- Severity: info
-- No auto-fix (requires manual reflow)
-
-**L004: Consecutive Blank Lines** (auto-fix)
-- Detects 3+ consecutive blank lines
-- Severity: warning
-- Fix: Collapse to 2 blank lines max
-
-**L005: Redundant Whitespace** (auto-fix)
-- Detects multiple consecutive spaces
-- Severity: warning
-- Fix: Collapse to single space
-
-#### Keyword Rules (1)
-
-**L006: Keyword Case Consistency** (auto-fix)
-- Detects inconsistent keyword casing
-- Severity: warning
-- Options: uppercase, lowercase, or consistent
-- Fix: Normalize all keywords to chosen case
-
-#### Style Rules (4)
-
-**L007: Comma Placement** (auto-fix)
-- Detects inconsistent comma placement
-- Severity: warning
-- Options: trailing (after item), leading (before item)
-- Fix: Move commas to preferred position
-
-**L008: Aliasing Consistency** (info)
-- Detects inconsistent AS usage in aliases
-- Severity: info
-- Options: always-as, never-as, or consistent
-- No auto-fix (semantic changes required)
-
-**L009: Column Alignment** (info)
-- Detects misaligned columns in SELECT list
-- Severity: info
-- No auto-fix (requires complex reformatting)
-
-**L010: Indentation Depth** (info)
-- Detects excessive nesting depth
-- Severity: info
-- Default max: 4 levels
-- No auto-fix (requires query refactoring)
+Whitespace rules inspect the source text, while most safety, performance and naming rules walk the AST.
 
 ### Linter Usage Example
 
 ```bash
-# CLI usage
+# CLI usage (runs the style rules L001-L010)
 $ gosqlx lint query.sql
-$ gosqlx lint --fix query.sql           # Auto-fix violations
-$ gosqlx lint --rules L001,L006 *.sql   # Specific rules only
-$ gosqlx lint --config .gosqlx.yml ./   # With config file
+$ gosqlx lint --auto-fix query.sql      # Apply available auto-fixes
+$ gosqlx lint --max-length 120 *.sql    # Set the L005 line length
+```
 
-# Configuration (.gosqlx.yml)
-linter:
-  rules:
-    L001: { enabled: true }
-    L006: { enabled: true, uppercase: true }
-    L007: { enabled: true, style: "trailing" }
+```go
+// Library usage: all 30 rules
+result, err := gosqlx.Lint("DELETE FROM users")
+// result.Violations contains L011 (Delete Without WHERE)
 ```
 
 ### Linter Performance
@@ -1276,7 +1229,7 @@ linter:
 
 ## Security Scanner Architecture
 
-**SQL Injection Detection** (v1.6.0) provides comprehensive pattern-based and AST-based security analysis.
+**SQL Injection Detection** provides comprehensive pattern-based and AST-based security analysis.
 
 ### Security Scanner Design
 
@@ -1536,7 +1489,7 @@ cmd/gosqlx-mcp/main.go
                       ├─ parse_sql       → pkg/gosqlx.Parse
                       ├─ extract_metadata→ pkg/gosqlx.Parse + ExtractMetadata
                       ├─ security_scan   → pkg/sql/security.NewScanner().ScanSQL
-                      ├─ lint_sql        → pkg/linter.New(10 rules).LintString
+                      ├─ lint_sql        → pkg/linter.New(L001-L010).LintString
                       └─ analyze_sql     → concurrent fan-out of all 6 above
 ```
 

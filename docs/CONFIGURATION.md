@@ -1,7 +1,5 @@
 # Configuration Guide
 
-**Version**: v1.15.0
-**Last Updated**: December 2025
 
 GoSQLX provides a comprehensive configuration system through YAML configuration files.
 
@@ -525,8 +523,3 @@ GOSQLX_MCP_HOST=0.0.0.0 GOSQLX_MCP_PORT=8080 GOSQLX_MCP_AUTH_TOKEN=my-secret gos
 - MCP server configuration is independent of `.gosqlx.yml` - the YAML config file is not read by `gosqlx-mcp`.
 
 See [MCP Server Guide](/docs/integrations/mcp/) for the full startup and auth reference.
-
----
-
-**Last Updated**: December 2025
-**Version**: v1.15.0

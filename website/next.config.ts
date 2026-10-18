@@ -59,20 +59,26 @@ const nextConfig: NextConfig = {
     ];
   },
   async rewrites() {
-    // Raw-markdown alternates: /docs/<slug>.md is served by the /md/docs route handler.
+    // Raw-markdown alternates: /docs/<slug>.md and /blog/<slug>.md are served by the
+    // /md/docs and /md/blog route handlers.
     // Paths with an extension are exempt from the trailing-slash redirect.
     return {
-      beforeFiles: [{ source: '/docs/:slug*.md', destination: '/md/docs/:slug*' }],
+      beforeFiles: [
+        { source: '/docs/:slug*.md', destination: '/md/docs/:slug*' },
+        { source: '/blog/:slug.md', destination: '/md/blog/:slug' },
+      ],
       afterFiles: [],
       fallback: [],
     };
   },
   async redirects() {
     return [
-      // /blog was release notes only; it is now /changelog. Single hop, trailing slashes kept.
-      { source: '/blog', destination: '/changelog/', permanent: true },
+      // /blog/ used to hold release notes only; those moved to /changelog/ and /blog/
+      // now serves articles. Only release-note URLs (v1-14-0 shape) and the old feed
+      // redirect. Single hop, trailing slashes kept. Article slugs never use this
+      // shape (enforced in src/lib/articles.ts).
       { source: '/blog/feed.xml', destination: '/changelog/feed.xml', permanent: true },
-      { source: '/blog/:slug', destination: '/changelog/:slug/', permanent: true },
+      { source: '/blog/:slug(v\\d+-\\d+-\\d+)', destination: '/changelog/:slug/', permanent: true },
       // Moved docs pages (IA restructure and legacy file-name URLs). Single hop, trailing slashes kept.
       ...docsRedirects(),
     ];

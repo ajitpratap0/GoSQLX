@@ -3,6 +3,7 @@ import path from 'path';
 import { MetadataRoute } from 'next';
 import { DOCS_SIDEBAR } from '@/lib/constants';
 import { blogPostHref, getAllPosts } from '@/lib/blog';
+import { articleHref, getAllArticles } from '@/lib/articles';
 import { COMPETITOR_PAGES } from '@/app/compare/competitors';
 
 // Mirrors DOCS_DIR in lib/docs.ts (repo-level docs/ folder).
@@ -25,6 +26,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '/',
     '/playground/',
     '/docs/',
+    '/blog/',
     '/changelog/',
     '/vscode/',
     '/benchmarks/',
@@ -46,5 +48,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
     lastModified: post.date ? new Date(post.date + 'T00:00:00') : undefined,
   }));
 
-  return [...staticPages, ...docPages, ...blogPages];
+  const articlePages: MetadataRoute.Sitemap = getAllArticles().map((a) => ({
+    url: `${baseUrl}${articleHref(a.slug)}`,
+    lastModified: new Date(`${a.updated}T00:00:00Z`),
+  }));
+
+  return [...staticPages, ...docPages, ...articlePages, ...blogPages];
 }

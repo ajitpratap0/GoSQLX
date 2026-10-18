@@ -1,8 +1,10 @@
 import { DOCS_SIDEBAR } from '@/lib/constants';
 import { getAllDocs, type Doc } from '@/lib/docs';
 import { PROJECT, QA_CORPUS, BENCH_ENV, PARSE_BENCHMARKS, opsPerSec, formatOps } from '@/data/metrics';
+import { SITE_URL } from '@/lib/site';
+import { articleUrl, getAllArticles } from '@/lib/articles';
 
-export const SITE_URL = 'https://gosqlx.dev';
+export { SITE_URL };
 
 const REPO = 'https://github.com/ajitpratap0/GoSQLX';
 
@@ -48,11 +50,21 @@ export function buildLlmsTxt(): string {
     }
     lines.push('');
   }
+  const articles = getAllArticles();
+  if (articles.length > 0) {
+    lines.push('## Blog', '');
+    for (const article of articles) {
+      lines.push(`- [${article.title}](${articleUrl(article.slug)}): ${article.description}`);
+    }
+    lines.push('');
+  }
   lines.push(
     '## Optional',
     '',
     `- [Full documentation in one file](${SITE_URL}/llms-full.txt): Every docs page as plain text`,
     `- Raw markdown of any docs page: append \`.md\` to its URL, e.g. ${SITE_URL}/docs/getting-started.md`,
+    `- Raw markdown of any blog article: append \`.md\` to its URL without the trailing slash`,
+    `- [Blog feed](${SITE_URL}/blog/rss.xml): RSS 2.0`,
     `- [Changelog](${SITE_URL}/changelog/): Release notes for every version`,
     `- [Changelog feed](${SITE_URL}/changelog/feed.xml): RSS 2.0`,
     `- [Source code](${REPO}): GitHub repository`,

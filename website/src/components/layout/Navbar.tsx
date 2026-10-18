@@ -93,7 +93,7 @@ export function Navbar() {
         </Link>
 
         {/* Desktop nav links */}
-        <div className="hidden lg:flex items-center gap-1">
+        <div className="hidden lg:flex items-center gap-0.5 xl:gap-1">
           {NAV_LINKS.map((link) => {
             const isActive = pathname === link.href || pathname.startsWith(link.href + '/');
             return (
@@ -101,7 +101,7 @@ export function Navbar() {
                 key={link.href}
                 href={link.href}
                 aria-current={isActive ? 'page' : undefined}
-                className={`px-3 py-2 text-sm transition-colors duration-200 rounded-lg hover:bg-fg/[0.04] ${isActive ? 'text-fg' : 'text-fg-muted hover:text-fg'}`}
+                className={`whitespace-nowrap px-2 xl:px-3 py-2 text-sm transition-colors duration-200 rounded-lg hover:bg-fg/[0.04] ${isActive ? 'text-fg' : 'text-fg-muted hover:text-fg'}`}
               >
                 {link.label}
               </Link>
@@ -110,7 +110,7 @@ export function Navbar() {
         </div>
 
         {/* Desktop right side */}
-        <div className="hidden lg:flex items-center gap-3">
+        <div className="hidden lg:flex items-center gap-2 xl:gap-3">
           <button
             type="button"
             onClick={() => setSearchOpen(true)}

@@ -1,4 +1,4 @@
-# Tutorial 1: Building a SQL Validator for CI/CD
+# Build a SQL Validator for CI/CD
 
 ## What You'll Build
 
@@ -20,7 +20,7 @@ In this tutorial, you'll create a SQL validation tool that scans directories for
 
 ## Prerequisites
 
-- Go 1.21 or higher installed
+- Go 1.26 or higher installed
 - Basic understanding of SQL
 - Familiarity with command-line tools
 - GoSQLX installed: `go get github.com/ajitpratap0/GoSQLX`
@@ -350,12 +350,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
-        go-version: '1.21'
+        go-version: '1.26'
 
     - name: Install SQL Validator
       run: |
@@ -379,7 +379,7 @@ stages:
 
 validate-sql:
   stage: validate
-  image: golang:1.21
+  image: golang:1.26
   script:
     - git clone https://github.com/ajitpratap0/GoSQLX.git
     - cd GoSQLX/examples/tutorials/01-sql-validator
@@ -568,7 +568,7 @@ Now that you've built a SQL validator, you can:
 1. **Add more validation rules**: Check for specific patterns, naming conventions, or anti-patterns
 2. **Create a custom reporter**: Generate HTML or markdown reports
 3. **Add performance metrics**: Track validation time and SQL complexity
-4. **Move to Tutorial 2**: Build a custom SQL formatter with team-specific rules
+4. **Move to the next tutorial**: Build a custom SQL formatter with team-specific rules
 
 ## Full Example
 

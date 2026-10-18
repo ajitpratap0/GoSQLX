@@ -159,7 +159,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
     >
       {/* Backdrop */}
       <m.div
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 bg-scrim backdrop-blur-sm"
         aria-hidden="true"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}

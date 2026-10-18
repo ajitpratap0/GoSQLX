@@ -1,18 +1,17 @@
 # GoSQLX Usage Guide
 
-**Version**: v1.15.0 | **Last Updated**: 2026-03-20
 
 ## Table of Contents
 - [Getting Started](#getting-started)
 - [Simple API (Recommended)](#simple-api-recommended)
 - [Basic Usage](#basic-usage)
-- [Advanced SQL Features (v1.6.0)](#advanced-sql-features-v160)
-- [PostgreSQL Features (v1.6.0)](#postgresql-features-v160)
-- [SQL Standards Compliance (v1.6.0)](#sql-standards-compliance-v160)
+- [Advanced SQL Features](#advanced-sql-features)
+- [PostgreSQL Features](#postgresql-features)
+- [SQL Standards Compliance](#sql-standards-compliance)
 - [SQL Injection Detection](#sql-injection-detection)
-- [SQL Linter Usage (v1.6.0)](#sql-linter-usage-v160)
-- [LSP Integration (v1.6.0)](#lsp-integration-v160)
-- [CLI Tool Usage (v1.6.0)](#cli-tool-usage-v160)
+- [SQL Linter Usage](#sql-linter-usage)
+- [LSP Integration](#lsp-integration)
+- [CLI Tool Usage](#cli-tool-usage)
 - [Advanced Patterns](#advanced-patterns)
 - [Real-World Examples](#real-world-examples)
 - [SQL Dialect Support](#sql-dialect-support)
@@ -29,7 +28,7 @@ go get github.com/ajitpratap0/GoSQLX
 ```
 
 ### Minimum Go Version
-Go 1.21+ or higher is required.
+Go 1.26 or later is required.
 
 ### Import Packages
 
@@ -267,7 +266,7 @@ func HandleTokenizerError(sql string) {
 }
 ```
 
-## Advanced SQL Features (v1.6.0)
+## Advanced SQL Features
 
 ### GROUPING SETS, ROLLUP, CUBE (SQL-99 T431)
 
@@ -499,9 +498,9 @@ sql := `SELECT * FROM colors CROSS JOIN sizes`
 ast, err := gosqlx.Parse(sql)
 ```
 
-## PostgreSQL Features (v1.6.0)
+## PostgreSQL Features
 
-GoSQLX v1.6.0 adds comprehensive PostgreSQL-specific feature support:
+GoSQLX adds comprehensive PostgreSQL-specific feature support:
 
 ### LATERAL JOIN
 
@@ -732,7 +731,7 @@ sql := `INSERT INTO audit_log (action, user_id, timestamp)
 ast, err := gosqlx.Parse(sql)
 ```
 
-## SQL Standards Compliance (v1.6.0)
+## SQL Standards Compliance
 
 ### FETCH FIRST / OFFSET-FETCH
 
@@ -837,7 +836,7 @@ ast, err := gosqlx.Parse(sql)
 
 ## SQL Injection Detection
 
-GoSQLX v1.6.0 includes a built-in security scanner (`pkg/sql/security`) for detecting SQL injection patterns:
+GoSQLX includes a built-in security scanner (`pkg/sql/security`) for detecting SQL injection patterns:
 
 ```go
 import (
@@ -955,222 +954,146 @@ func AdvancedSecurityCheck(sql string) (*security.ScanResult, error) {
 }
 ```
 
-## SQL Linter Usage (v1.6.0)
+## SQL Linter Usage
 
-GoSQLX v1.6.0 includes a comprehensive SQL linter with 10 built-in rules (L001-L010):
+GoSQLX includes a SQL linter with 30 built-in rules (L001-L030) covering whitespace, style, keyword case, safety, performance and naming. The full list is in the [Linting Rules reference](LINTING_RULES.md).
 
 ### Basic Linting
+
+`gosqlx.Lint` runs all 30 rules with sensible defaults:
 
 ```go
 import (
     "fmt"
-    "github.com/ajitpratap0/GoSQLX/pkg/linter"
+
+    "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 )
 
-func LintSQL(sql string) {
-    // Create linter with all default rules
-    l := linter.New()
-
-    // Lint the SQL
-    violations, err := l.Lint(sql)
-    if err != nil {
-        fmt.Printf("Linting error: %v\n", err)
-        return
-    }
-
-    // Print violations
-    if len(violations) == 0 {
-        fmt.Println("No violations found - SQL is clean!")
-        return
-    }
-
-    fmt.Printf("Found %d violation(s):\n", len(violations))
-    for _, v := range violations {
-        fmt.Printf("[%s] Line %d, Col %d: %s\n",
-            v.Rule,
-            v.Line,
-            v.Column,
-            v.Message)
-    }
-}
-```
-
-### Linter Rules (L001-L010)
-
-The linter enforces the following rules:
-
-**L001: Unnecessary aliases for single tables**
-```go
-// BAD: Alias not needed for single table
-sql := `SELECT u.name FROM users u`
-
-// GOOD: No alias for single table
-sql := `SELECT name FROM users`
-```
-
-**L002: SELECT * usage**
-```go
-// BAD: SELECT * is ambiguous
-sql := `SELECT * FROM users`
-
-// GOOD: Explicit column list
-sql := `SELECT id, name, email FROM users`
-```
-
-**L003: Missing table aliases in JOINs**
-```go
-// BAD: No aliases in multi-table query
-sql := `SELECT name FROM users JOIN orders ON users.id = orders.user_id`
-
-// GOOD: Clear aliases
-sql := `SELECT u.name FROM users u JOIN orders o ON u.id = o.user_id`
-```
-
-**L004: Implicit column references**
-```go
-// BAD: Ambiguous column in JOIN
-sql := `SELECT name FROM users u JOIN profiles p ON u.id = p.user_id`
-
-// GOOD: Qualified column reference
-sql := `SELECT u.name FROM users u JOIN profiles p ON u.id = p.user_id`
-```
-
-**L005-L010: Additional style and performance rules**
-
-### Custom Linting Configuration
-
-```go
-import (
-    "github.com/ajitpratap0/GoSQLX/pkg/linter"
-    "github.com/ajitpratap0/GoSQLX/pkg/linter/rules"
-)
-
-func CustomLinting(sql string) {
-    // Create linter with specific rules
-    l := linter.New(
-        rules.L001UnnecessaryAlias,
-        rules.L002SelectStar,
-        rules.L003MissingAlias,
-    )
-
-    violations, err := l.Lint(sql)
-    if err != nil {
-        fmt.Printf("Error: %v\n", err)
-        return
-    }
-
-    // Process violations
-    for _, v := range violations {
-        fmt.Printf("%s at %d:%d - %s\n",
-            v.Rule, v.Line, v.Column, v.Message)
-    }
-}
-```
-
-### Linting Multiple Files
-
-```go
-import (
-    "io/ioutil"
-    "path/filepath"
-    "github.com/ajitpratap0/GoSQLX/pkg/linter"
-)
-
-func LintDirectory(dirPath string) error {
-    l := linter.New()
-
-    // Find all .sql files
-    files, err := filepath.Glob(filepath.Join(dirPath, "*.sql"))
+func LintSQL(sql string) error {
+    result, err := gosqlx.Lint(sql)
     if err != nil {
         return err
     }
 
-    totalViolations := 0
-    for _, file := range files {
-        content, err := ioutil.ReadFile(file)
-        if err != nil {
-            fmt.Printf("Error reading %s: %v\n", file, err)
-            continue
-        }
-
-        violations, err := l.Lint(string(content))
-        if err != nil {
-            fmt.Printf("Error linting %s: %v\n", file, err)
-            continue
-        }
-
-        if len(violations) > 0 {
-            fmt.Printf("\n%s: %d violation(s)\n", file, len(violations))
-            for _, v := range violations {
-                fmt.Printf("  [%s] Line %d: %s\n", v.Rule, v.Line, v.Message)
-            }
-            totalViolations += len(violations)
-        }
+    if len(result.Violations) == 0 {
+        fmt.Println("No violations found - SQL is clean!")
+        return nil
     }
 
-    fmt.Printf("\nTotal violations: %d across %d files\n",
-        totalViolations, len(files))
+    fmt.Printf("Found %d violation(s):\n", len(result.Violations))
+    for _, v := range result.Violations {
+        fmt.Printf("[%s] %s (line %d, col %d): %s\n",
+            v.Rule, v.RuleName, v.Location.Line, v.Location.Column, v.Message)
+    }
     return nil
 }
 ```
 
-### Configuration File Support
+### Rule Categories
 
-GoSQLX supports `.gosqlx.yml` configuration files for linter customization:
+| Category | Rules | Examples |
+|----------|-------|----------|
+| Whitespace | L001-L005, L010 | Trailing whitespace, mixed indentation, long lines |
+| Style | L006, L008, L009 | Column alignment, comma placement, aliasing consistency |
+| Keywords | L007 | Keyword case consistency |
+| Safety | L011-L015 | `DELETE`/`UPDATE` without `WHERE`, `DROP` without `IF EXISTS` |
+| Performance | L016-L023 | `SELECT *`, leading wildcard `LIKE`, `NOT IN` with `NULL` |
+| Naming | L024-L030 | Missing table aliases, implicit `INSERT` columns, `UNION` vs `UNION ALL` |
 
-```yaml
-# .gosqlx.yml
-linting:
-  enabled: true
-  rules:
-    L001: true   # Unnecessary aliases
-    L002: true   # SELECT * usage
-    L003: true   # Missing aliases in JOINs
-    L004: true   # Implicit column references
-    L005: false  # Disable this rule
-  severity:
-    L001: warning
-    L002: error
-    L003: error
+```go
+result, _ := gosqlx.Lint("DELETE FROM users")
+// result.Violations contains L011 (Delete Without WHERE)
+
+result, _ = gosqlx.Lint("SELECT * FROM users WHERE name LIKE '%smith'")
+// result.Violations contains L016 (Select Star) and L018 (Leading Wildcard LIKE)
 ```
 
-Load configuration programmatically:
+### Choosing Rules
+
+To run only the rules you want, build a linter from the rule constructors in `pkg/linter/rules/*`:
 
 ```go
 import (
-    "github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
+    "fmt"
+
     "github.com/ajitpratap0/GoSQLX/pkg/linter"
+    "github.com/ajitpratap0/GoSQLX/pkg/linter/rules/keywords"
+    "github.com/ajitpratap0/GoSQLX/pkg/linter/rules/safety"
+    "github.com/ajitpratap0/GoSQLX/pkg/linter/rules/whitespace"
 )
 
-func LintWithConfig(sql string, configPath string) {
-    // Load configuration
-    cfg, err := config.Load(configPath)
-    if err != nil {
-        fmt.Printf("Config error: %v\n", err)
-        return
-    }
+func CustomLinting(sql string) {
+    l := linter.New(
+        whitespace.NewTrailingWhitespaceRule(),     // L001
+        whitespace.NewLongLinesRule(120),           // L005
+        keywords.NewKeywordCaseRule(keywords.CaseUpper), // L007
+        safety.NewDeleteWithoutWhereRule(),         // L011
+        safety.NewUpdateWithoutWhereRule(),         // L012
+    )
 
-    // Create linter from config
-    l := linter.NewFromConfig(cfg)
-
-    // Lint with configured rules
-    violations, err := l.Lint(sql)
-    if err != nil {
-        fmt.Printf("Error: %v\n", err)
-        return
-    }
-
-    // Handle violations based on severity
-    for _, v := range violations {
-        severity := cfg.GetSeverity(v.Rule)
-        fmt.Printf("[%s] %s: %s\n", severity, v.Rule, v.Message)
+    fileResult := l.LintString(sql, "inline.sql")
+    for _, v := range fileResult.Violations {
+        fmt.Printf("%s at %d:%d - %s\n",
+            v.Rule, v.Location.Line, v.Location.Column, v.Message)
     }
 }
 ```
 
-## LSP Integration (v1.6.0)
+### Linting Files and Directories
 
-GoSQLX v1.6.0 includes a full Language Server Protocol (LSP) server for IDE integration:
+```go
+l := linter.New(whitespace.NewTrailingWhitespaceRule(), safety.NewDeleteWithoutWhereRule())
+
+// A single file
+fileResult := l.LintFile("queries/report.sql")
+
+// A directory, matching a file pattern
+dirResult := l.LintDirectory("./queries", "*.sql")
+fmt.Print(linter.FormatResult(dirResult))
+fmt.Printf("%d violation(s) across %d file(s)\n", dirResult.TotalViolations, dirResult.TotalFiles)
+```
+
+### Configuration File Support
+
+The `pkg/linter/config` package loads a `.gosqlx.yml` file to enable or disable rules, override severities and ignore files:
+
+```yaml
+# .gosqlx.yml
+rules:
+  L001:
+    enabled: true
+    severity: error
+  L016:
+    enabled: false   # allow SELECT *
+ignore:
+  - "migrations/*.sql"
+default_severity: warning
+```
+
+Apply it to a rule set programmatically:
+
+```go
+import (
+    "errors"
+
+    "github.com/ajitpratap0/GoSQLX/pkg/linter"
+    "github.com/ajitpratap0/GoSQLX/pkg/linter/config"
+)
+
+func LintWithConfig(allRules []linter.Rule) (*linter.Linter, error) {
+    cfg, err := config.LoadDefault()
+    if err != nil && !errors.Is(err, config.ErrNotFound) {
+        return nil, err
+    }
+
+    rules := cfg.Apply(allRules) // drops disabled rules, applies severity overrides
+    return linter.NewWithIgnore(cfg, rules...), nil
+}
+```
+
+## LSP Integration
+
+GoSQLX includes a full Language Server Protocol (LSP) server for IDE integration:
 
 ### Starting the LSP Server
 
@@ -1327,9 +1250,9 @@ The LSP server provides:
 
 For complete LSP documentation, see [LSP Guide](LSP_GUIDE.md).
 
-## CLI Tool Usage (v1.6.0)
+## CLI Tool Usage
 
-GoSQLX v1.6.0 includes a comprehensive CLI tool for SQL operations:
+GoSQLX includes a comprehensive CLI tool for SQL operations:
 
 ### Installation
 
@@ -1447,12 +1370,6 @@ Run SQL linter:
 ```bash
 # Lint SQL file
 gosqlx lint query.sql
-
-# Lint with specific rules
-gosqlx lint --rules L001,L002,L003 query.sql
-
-# Lint with configuration file
-gosqlx lint --config .gosqlx.yml query.sql
 
 # Lint all SQL files in directory
 gosqlx lint *.sql
@@ -1745,9 +1662,9 @@ func (f *SQLFormatter) Format(sql string) (string, error) {
 
 ## SQL Dialect Support
 
-### PostgreSQL Specific Features (v1.6.0 Enhanced)
+### PostgreSQL Specific Features
 
-GoSQLX v1.6.0 significantly enhances PostgreSQL support:
+GoSQLX significantly enhances PostgreSQL support:
 
 ```go
 // LATERAL JOIN - correlated subqueries in FROM clause
@@ -2136,7 +2053,7 @@ func BenchmarkTokenization(b *testing.B) {
 }
 ```
 
-## Best Practices Summary (v1.6.0)
+## Best Practices Summary
 
 ### Memory Management
 1. **Always use defer** for returning objects to pools (critical for performance)
@@ -2168,7 +2085,7 @@ func BenchmarkTokenization(b *testing.B) {
 19. **Security scan** all SQL files with `gosqlx security scan`
 20. **Lint SQL** files to catch style issues early
 
-### PostgreSQL-Specific (v1.6.0)
+### PostgreSQL-Specific
 21. **Use LATERAL JOIN** for correlated subqueries instead of nested SELECTs
 22. **Use FILTER clause** instead of CASE expressions for conditional aggregates
 23. **Use DISTINCT ON** for efficient row deduplication
@@ -2189,7 +2106,7 @@ Example comprehensive workflow:
 gosqlx format -i sql/**/*.sql
 
 # 2. Run linter with configuration
-gosqlx lint --config .gosqlx.yml sql/**/*.sql
+gosqlx lint sql/**/*.sql
 
 # 3. Security scan with high severity threshold
 gosqlx security scan --severity high sql/**/*.sql

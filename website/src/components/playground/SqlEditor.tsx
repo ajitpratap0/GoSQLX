@@ -12,6 +12,7 @@ import {
   HighlightStyle,
 } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
+import { errorMarkerTransaction, parseErrorMarker, type EditorErrorMarker } from "./editorDiagnostics";
 
 // Override oneDark's coral (#e06c75) which fails WCAG AA (4.38:1 on #282c34).
 // #e87980 achieves ~5.07:1 contrast against #282c34.
@@ -26,6 +27,8 @@ interface SqlEditorProps {
   readOnly?: boolean;
   minHeight?: string;
   ariaLabel?: string;
+  /** Parse error to mark in the editor; cleared on the next edit. */
+  errorMarker?: EditorErrorMarker | null;
 }
 
 const baseTheme = EditorView.theme({
@@ -83,11 +86,14 @@ export default function SqlEditor({
   readOnly = false,
   minHeight = "200px",
   ariaLabel = "SQL editor",
+  errorMarker = null,
 }: SqlEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The latest marker, applied again when the editor is rebuilt.
+  const errorMarkerRef = useRef(errorMarker);
 
   // Keep onChange ref current without recreating the editor
   useEffect(() => {
@@ -129,6 +135,12 @@ export default function SqlEditor({
       updateListener,
     ];
 
+    // Only the editable input marks parse errors; the read-only output pane
+    // would otherwise carry an empty lint gutter and unused key bindings.
+    if (!readOnly) {
+      extensions.push(parseErrorMarker());
+    }
+
     if (placeholder) {
       extensions.push(cmPlaceholder(placeholder));
     }
@@ -149,6 +161,10 @@ export default function SqlEditor({
     });
 
     viewRef.current = view;
+
+    // A rebuilt editor shows the current marker without waiting for the next parse.
+    const initialMarker = errorMarkerTransaction(view.state, errorMarkerRef.current);
+    if (initialMarker) view.dispatch(initialMarker);
 
     // Follow the site theme toggle (ThemeToggle flips the `light` class on <html>).
     const observer = new MutationObserver(() => {
@@ -186,6 +202,16 @@ export default function SqlEditor({
       });
     }
   }, [value]);
+
+  // Show (or clear) the parse error marker. Declared after the value sync so a
+  // marker computed for new external text is applied to that text.
+  useEffect(() => {
+    errorMarkerRef.current = errorMarker;
+    const view = viewRef.current;
+    if (!view) return;
+    const tr = errorMarkerTransaction(view.state, errorMarker);
+    if (tr) view.dispatch(tr);
+  }, [errorMarker]);
 
   // Clicks on the pane padding (outside .cm-editor) also focus the editor.
   const focusOnPaneClick = (e: ReactMouseEvent<HTMLDivElement>) => {

@@ -1,6 +1,5 @@
 # GoSQLX Production Deployment Guide
 
-**Version**: v1.15.0 | **Last Updated**: 2026-04-12
 
 Comprehensive guide for deploying GoSQLX in production environments.
 
@@ -11,7 +10,7 @@ GoSQLX is **production-ready** for enterprise deployment with validated performa
 ## Prerequisites
 
 ### System Requirements
-- **Go Version**: 1.21+ (latest stable recommended)
+- **Go Version**: 1.26+ (latest stable recommended)
 - **Memory**: Minimum 512MB, recommended 2GB+ for high-load
 - **CPU**: Any modern architecture (x86_64, ARM64)  
 - **OS**: Linux, macOS, Windows (cross-platform)
@@ -38,7 +37,7 @@ go build ./pkg/...
 
 ### 3. Container Deployment
 ```dockerfile
-FROM golang:1.21-alpine AS builder
+FROM golang:1.26-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -333,7 +332,7 @@ func (p *SQLProcessor) ProcessWithSecurity(sql []byte) ([]interface{}, error) {
 }
 ```
 
-### 4. SQL Injection Detection (v1.4+)
+### 4. SQL Injection Detection
 
 GoSQLX includes a built-in security scanner for detecting SQL injection patterns:
 

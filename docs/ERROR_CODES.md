@@ -1,7 +1,5 @@
 # GoSQLX Error Codes Reference
 
-**Version**: v1.15.0
-**Last Updated**: 2026-03-13
 
 Comprehensive reference for all error codes in GoSQLX with examples and solutions.
 
@@ -39,14 +37,13 @@ Comprehensive reference for all error codes in GoSQLX with examples and solution
   - [E4001 - Unsupported Feature](#e4001---unsupported-feature)
   - [E4002 - Unsupported Dialect](#e4002---unsupported-dialect)
 - [Common SQL Patterns](#common-sql-patterns)
-- [Linter Rules (L001-L010)](#linter-rules-l001-l010)
+- [Linter Rules (L001-L030)](#linter-rules-l001-l030)
 - [Security Scanner Findings](#security-scanner-findings)
 - [Error Handling in Code](#error-handling-in-code)
-- [Advanced Error Diagnostics (v1.6.0)](#advanced-error-diagnostics-v160)
-- [LSP Integration for Real-Time Error Detection (v1.6.0)](#lsp-integration-for-real-time-error-detection-v160)
+- [Advanced Error Diagnostics](#advanced-error-diagnostics)
+- [LSP Integration for Real-Time Error Detection](#lsp-integration-for-real-time-error-detection)
 - [Performance Tips](#performance-tips)
 - [Getting Help](#getting-help)
-- [Changelog](#changelog)
 
 ---
 
@@ -419,17 +416,17 @@ CREATE TABLE users (
 
 JOIN type not supported by the parser.
 
-**Note**: As of v1.6.0, LATERAL JOIN is fully supported.
+**Note**: LATERAL JOIN is fully supported.
 
 ```sql
--- SUPPORTED in v1.6.0: LATERAL JOIN
+-- SUPPORTED: LATERAL JOIN
 SELECT * FROM users,
 LATERAL (SELECT * FROM orders WHERE user_id = users.id LIMIT 3) o;
 
 SELECT * FROM users
 LEFT JOIN LATERAL (SELECT * FROM orders WHERE user_id = users.id) o ON true;
 
--- Supported JOIN types (v1.6.0):
+-- Supported JOIN types:
 -- INNER JOIN, LEFT JOIN, RIGHT JOIN, FULL JOIN
 -- CROSS JOIN, NATURAL JOIN, LATERAL JOIN
 -- LEFT JOIN LATERAL, INNER JOIN LATERAL, CROSS JOIN LATERAL
@@ -441,7 +438,7 @@ LEFT JOIN LATERAL (SELECT * FROM orders WHERE user_id = users.id) o ON true;
 **Common fixes:**
 - Use standard SQL JOIN syntax
 - Replace proprietary syntax with ANSI SQL JOINs
-- Use LATERAL JOIN for correlated subqueries (v1.6.0+)
+- Use LATERAL JOIN for correlated subqueries
 
 ---
 
@@ -570,7 +567,7 @@ SQL dialect-specific syntax not supported.
 
 ## Common SQL Patterns
 
-### Window Functions (v1.6.0)
+### Window Functions
 
 ```sql
 -- Wrong: Missing OVER clause
@@ -582,7 +579,7 @@ SELECT name, ROW_NUMBER() OVER (ORDER BY salary DESC) FROM employees
 -- Window frame with proper specification
 SELECT SUM(amount) OVER (ORDER BY date ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM sales
 
--- Supported window functions (v1.6.0):
+-- Supported window functions:
 -- ROW_NUMBER(), RANK(), DENSE_RANK(), NTILE()
 -- LAG(), LEAD(), FIRST_VALUE(), LAST_VALUE()
 -- SUM(), AVG(), COUNT(), MIN(), MAX() with OVER clause
@@ -622,12 +619,12 @@ SELECT * FROM users JOIN orders ON users.id = orders.user_id
 -- Or use USING clause
 SELECT * FROM users JOIN orders USING (user_id)
 
--- LATERAL JOIN (v1.6.0)
+-- LATERAL JOIN
 SELECT * FROM users,
 LATERAL (SELECT * FROM orders WHERE user_id = users.id LIMIT 3) o;
 ```
 
-### PostgreSQL Extensions (v1.6.0)
+### PostgreSQL Extensions
 
 ```sql
 -- DISTINCT ON - PostgreSQL-specific row selection
@@ -657,7 +654,7 @@ SELECT STRING_AGG(name, ', ' ORDER BY name) FROM users;
 SELECT ARRAY_AGG(price ORDER BY price DESC) FROM products;
 ```
 
-### SQL Standards Compliance (v1.6.0)
+### SQL Standards Compliance
 
 ```sql
 -- FETCH FIRST/NEXT (SQL:1999 F861, F862)
@@ -699,9 +696,9 @@ SELECT * FROM cte;
 
 ---
 
-## Linter Rules (L001-L010)
+## Linter Rules (L001-L030)
 
-While error codes (E1xxx-E4xxx) identify parsing and semantic errors, linter rules (L001-L010) identify style and quality issues. See [LINTING_RULES.md](LINTING_RULES.md) for complete details.
+While error codes (E1xxx-E4xxx) identify parsing and semantic errors, linter rules (L001-L030) identify style and quality issues. See the [Linting Rules reference](LINTING_RULES.md) for complete details.
 
 ### Linter Rule Summary
 
@@ -712,16 +709,36 @@ While error codes (E1xxx-E4xxx) identify parsing and semantic errors, linter rul
 | L003 | Consecutive Blank Lines | Warning | Yes |
 | L004 | Indentation Depth | Warning | No |
 | L005 | Long Lines | Info | No |
-| L006 | SELECT Column Alignment | Info | No |
+| L006 | Column Alignment | Info | No |
 | L007 | Keyword Case Consistency | Warning | Yes |
 | L008 | Comma Placement | Info | No |
 | L009 | Aliasing Consistency | Warning | No |
 | L010 | Redundant Whitespace | Info | Yes |
+| L011 | Delete Without WHERE | Error | No |
+| L012 | Update Without WHERE | Error | No |
+| L013 | Drop Without IF EXISTS | Warning | No |
+| L014 | Truncate Table | Warning | No |
+| L015 | Select Into Outfile | Error | No |
+| L016 | Select Star | Warning | No |
+| L017 | Missing WHERE on Full Scan | Warning | No |
+| L018 | Leading Wildcard LIKE | Warning | No |
+| L019 | NOT IN With NULL Risk | Warning | No |
+| L020 | Correlated Subquery in SELECT | Warning | No |
+| L021 | OR Instead of IN | Warning | No |
+| L022 | Function on Indexed Column | Warning | No |
+| L023 | Implicit Cross Join | Warning | No |
+| L024 | Table Alias Required | Warning | No |
+| L025 | Reserved Keyword Identifier | Warning | No |
+| L026 | Implicit Column List in INSERT | Warning | No |
+| L027 | UNION Instead of UNION ALL | Warning | No |
+| L028 | Missing ORDER BY with LIMIT | Warning | No |
+| L029 | Subquery Can Be JOIN | Warning | No |
+| L030 | Distinct on Many Columns | Warning | No |
 
 ### CLI Usage
 
 ```bash
-# Lint SQL files with all rules
+# Lint SQL files (CLI runs the style rules L001-L010)
 gosqlx lint query.sql
 
 # Auto-fix linter violations
@@ -818,7 +835,7 @@ if parseErr, ok := err.(*errors.Error); ok {
 
 ---
 
-## Advanced Error Diagnostics (v1.6.0)
+## Advanced Error Diagnostics
 
 ### Error Context Formatting
 
@@ -858,11 +875,11 @@ Error codes follow a hierarchical structure:
 2. **Use error codes**: Check error codes instead of string matching (O(1) comparison)
 3. **Structured logging**: Log error codes and locations for debugging
 4. **Error recovery**: Use error codes to implement auto-fix logic
-5. **LSP integration**: Use Language Server for real-time error detection (v1.6.0)
+5. **LSP integration**: Use Language Server for real-time error detection
 
 ---
 
-## LSP Integration for Real-Time Error Detection (v1.6.0)
+## LSP Integration for Real-Time Error Detection
 
 GoSQLX includes a Language Server Protocol implementation for real-time error detection in your IDE.
 
@@ -903,47 +920,19 @@ See [LSP_GUIDE.md](LSP_GUIDE.md) for complete LSP documentation.
 
 ---
 
-## Changelog
-
-### v1.6.0 (December 2025)
-- Updated E2010 with LATERAL JOIN support (now fully supported)
-- Clarified E2008 data type support with PostgreSQL extensions
-- Enhanced E2007 with recursion depth limit examples
-- Updated all examples to reflect v1.6.0 SQL feature support
-- Added references to LSP integration for real-time error diagnostics
-- Improved error context extraction with better position tracking
-
-### v1.4.0
-- Added comprehensive error context formatting
-- Added intelligent error suggestions
-- Added Unicode support in error messages
-- Added window function, CTE, and set operation error patterns
-
-### v1.3.0
-- Initial structured error system
-- Basic error codes (E1xxx-E4xxx)
-- Position tracking and hints
-
----
-
 ## Summary
 
-This comprehensive error code reference covers all 26 error codes in GoSQLX v1.6.0:
+This comprehensive error code reference covers all 27 error codes in GoSQLX:
 
-- **8 Tokenizer Errors (E1001-E1008)**: Lexical analysis and DoS protection
+- **9 Tokenizer Errors (E1001-E1009)**: Lexical analysis and DoS protection
 - **12 Parser Errors (E2001-E2012)**: SQL syntax and parsing failures
 - **4 Semantic Errors (E3001-E3004)**: Logical and type validation
 - **2 Unsupported Feature Errors (E4001-E4002)**: Features not yet implemented
 
 Additionally, GoSQLX provides:
-- **10 Linter Rules (L001-L010)**: Code style and quality checks
+- **30 Linter Rules (L001-L030)**: Style, safety, performance and naming checks
 - **8 Security Pattern Types**: SQL injection detection
 - **LSP Integration**: Real-time error detection in IDEs
 - **Intelligent Error Suggestions**: Context-aware hints and fixes
 
 For the latest updates and contributions, visit [github.com/ajitpratap0/GoSQLX](https://github.com/ajitpratap0/GoSQLX).
-
----
-
-**Last Updated**: December 2025
-**Version**: v1.15.0

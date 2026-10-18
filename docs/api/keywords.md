@@ -30,7 +30,7 @@ Check if string is a SQL keyword.
 
 ```go
 keywords.IsKeyword("SELECT")  // true
-keywords.IsKeyword("LATERAL") // true (v1.6.0)
+keywords.IsKeyword("LATERAL") // true
 ```
 
 ### `GetCategory(word string) (Category, bool)`

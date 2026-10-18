@@ -140,7 +140,7 @@ export function ProofStrip({ stars }: { stars: number | null }) {
               <li key={item.name}>
                 <Link
                   href={item.href}
-                  className="glass glass-hover inline-flex min-h-11 items-center gap-2 px-4 py-2 rounded-full text-sm transition-colors"
+                  className="glass glass-hover inline-flex min-h-11 items-center gap-2 px-4 py-2 rounded-xl text-sm transition-colors"
                 >
                   <Glyph name={item.icon} />
                   <span className="font-semibold text-fg">{item.name}</span>

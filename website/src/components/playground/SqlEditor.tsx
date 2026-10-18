@@ -130,9 +130,14 @@ export default function SqlEditor({
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       EditorView.contentAttributes.of({ "aria-label": ariaLabel }),
-      parseErrorMarker(),
       updateListener,
     ];
+
+    // Only the editable input marks parse errors; the read-only output pane
+    // would otherwise carry an empty lint gutter and unused key bindings.
+    if (!readOnly) {
+      extensions.push(parseErrorMarker());
+    }
 
     if (placeholder) {
       extensions.push(cmPlaceholder(placeholder));

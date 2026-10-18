@@ -16,6 +16,7 @@ package bridge
 
 import (
 	stderrors "errors"
+	"sort"
 	"strings"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -42,40 +43,6 @@ type ErrorSpan struct {
 	EndColumn int    `json:"end_column"`
 }
 
-// errorSpan returns the location of err in sql, or nil when err carries no
-// position. The tokenizer reports columns in bytes; they are converted here.
-// The span covers the token that starts at the error position, or one
-// character when no token does (for example after a tokenizer error).
-func errorSpan(sql string, err error) *ErrorSpan {
-	e := positionedError(err)
-	if e == nil {
-		return nil
-	}
-
-	lines := strings.Split(sql, "\n")
-	line, startByte := clampLocation(lines, e.Location)
-	endLine, endByte := line, startByte
-
-	if end, ok := tokenEndAt(sql, e.Location); ok {
-		endLine, endByte = clampLocation(lines, end)
-	} else if text := strings.TrimSuffix(lines[line-1], "\r"); startByte < len(text) {
-		_, size := utf8.DecodeRuneInString(text[startByte:])
-		endByte = startByte + size
-	}
-	if endLine < line || (endLine == line && endByte < startByte) {
-		endLine, endByte = line, startByte
-	}
-
-	return &ErrorSpan{
-		Code:      string(e.Code),
-		Message:   e.Message,
-		Line:      line,
-		Column:    utf16Len(lines[line-1][:startByte]) + 1,
-		EndLine:   endLine,
-		EndColumn: utf16Len(lines[endLine-1][:endByte]) + 1,
-	}
-}
-
 // positionedError returns the outermost structured error in err's chain that
 // carries a position. Wrappers such as the parser's "tokenization error"
 // (E2004) have none; the tokenizer error they wrap does.
@@ -91,28 +58,6 @@ func positionedError(err error) *gerrors.Error {
 		err = e.Unwrap()
 	}
 	return nil
-}
-
-// clampLocation converts a 1-based line and byte column into a line number and
-// a byte offset within that line, clamped to the text and moved back to a rune
-// boundary. A trailing carriage return is excluded, since editors drop it.
-func clampLocation(lines []string, loc models.Location) (int, int) {
-	line := loc.Line
-	if line > len(lines) {
-		line = len(lines)
-	}
-	text := strings.TrimSuffix(lines[line-1], "\r")
-	off := loc.Column - 1
-	if loc.Line > len(lines) || off > len(text) {
-		off = len(text)
-	}
-	if off < 0 {
-		off = 0
-	}
-	for off > 0 && off < len(text) && !utf8.RuneStart(text[off]) {
-		off--
-	}
-	return line, off
 }
 
 // tokenEndAt returns the end of the token that starts at loc, if the SQL
@@ -139,4 +84,152 @@ func utf16Len(s string) int {
 		n += utf16.RuneLen(r)
 	}
 	return n
+}
+
+// errorSpan returns the location of err in sql, or nil when err carries no
+// position. The tokenizer reports columns in bytes with a tab counting as four
+// columns; they are converted to byte offsets here and then to UTF-16 columns.
+// The span covers the token that starts at the error position, or one
+// character when no token does (for example after a tokenizer error).
+func errorSpan(sql string, err error) *ErrorSpan {
+	e := positionedError(err)
+	if e == nil {
+		return nil
+	}
+
+	src := newSourceLines(sql)
+	start := src.offset(e.Location)
+	end := start
+
+	if tokEnd, ok := tokenEndAt(sql, e.Location); ok {
+		end = src.offset(tokEnd)
+		// A token's Start can point at a comment or whitespace skipped before
+		// it; mark the token itself.
+		start = skipTrivia(sql, start, end)
+	} else if line, off := src.locate(start); off < len(src.text(line)) {
+		_, size := utf8.DecodeRuneInString(src.text(line)[off:])
+		end = start + size
+	}
+	if end < start {
+		end = start
+	}
+
+	line, col := src.utf16Position(start)
+	endLine, endCol := src.utf16Position(end)
+	return &ErrorSpan{
+		Code:      string(e.Code),
+		Message:   e.Message,
+		Line:      line,
+		Column:    col,
+		EndLine:   endLine,
+		EndColumn: endCol,
+	}
+}
+
+// sourceLines indexes the lines of the SQL by byte offset.
+type sourceLines struct {
+	lines  []string
+	starts []int // byte offset of each line's first byte
+}
+
+func newSourceLines(sql string) sourceLines {
+	lines := strings.Split(sql, "\n")
+	starts := make([]int, len(lines))
+	off := 0
+	for i, l := range lines {
+		starts[i] = off
+		off += len(l) + 1
+	}
+	return sourceLines{lines: lines, starts: starts}
+}
+
+// text returns 1-based line n without a trailing carriage return, which
+// editors drop.
+func (s sourceLines) text(n int) string {
+	return strings.TrimSuffix(s.lines[n-1], "\r")
+}
+
+// offset converts a tokenizer location to a byte offset in the SQL.
+func (s sourceLines) offset(loc models.Location) int {
+	line, off := clampLocation(s.lines, loc)
+	return s.starts[line-1] + off
+}
+
+// locate returns the 1-based line holding byte offset abs and the byte offset
+// within it, clamped to the line's text.
+func (s sourceLines) locate(abs int) (int, int) {
+	i := sort.Search(len(s.starts), func(i int) bool { return s.starts[i] > abs }) - 1
+	if i < 0 {
+		i = 0
+	}
+	line := i + 1
+	off := min(abs-s.starts[i], len(s.text(line)))
+	return line, max(off, 0)
+}
+
+// utf16Position returns the 1-based line and UTF-16 column of byte offset abs.
+func (s sourceLines) utf16Position(abs int) (int, int) {
+	line, off := s.locate(abs)
+	return line, utf16Len(s.text(line)[:off]) + 1
+}
+
+// tokenizerTabWidth is the number of columns the tokenizer counts for a tab
+// (see Tokenizer.toSQLPosition).
+const tokenizerTabWidth = 4
+
+// clampLocation converts a 1-based line and tokenizer column into a line
+// number and a byte offset within that line, clamped to the text and moved
+// back to a rune boundary. The tokenizer counts one column per byte and
+// tokenizerTabWidth per tab; a column inside a tab's span maps to the tab. A
+// trailing carriage return is excluded, since editors drop it.
+func clampLocation(lines []string, loc models.Location) (int, int) {
+	line := min(max(loc.Line, 1), len(lines))
+	text := strings.TrimSuffix(lines[line-1], "\r")
+	if loc.Line > len(lines) {
+		return line, len(text)
+	}
+	off, col := 0, 1
+	for off < len(text) {
+		w := 1
+		if text[off] == '\t' {
+			w = tokenizerTabWidth
+		}
+		if loc.Column < col+w {
+			break
+		}
+		col += w
+		off++
+	}
+	for off > 0 && off < len(text) && !utf8.RuneStart(text[off]) {
+		off--
+	}
+	return line, off
+}
+
+// skipTrivia returns the offset of the first byte at or after start that is
+// not whitespace or part of a comment, or start itself when only trivia lies
+// before limit.
+func skipTrivia(sql string, start, limit int) int {
+	i := start
+	for i < limit {
+		switch {
+		case sql[i] == ' ' || sql[i] == '\t' || sql[i] == '\r' || sql[i] == '\n':
+			i++
+		case strings.HasPrefix(sql[i:], "--"):
+			nl := strings.IndexByte(sql[i:], '\n')
+			if nl < 0 {
+				return start
+			}
+			i += nl + 1
+		case strings.HasPrefix(sql[i:], "/*"):
+			c := strings.Index(sql[i+2:], "*/")
+			if c < 0 {
+				return start
+			}
+			i += 2 + c + 2
+		default:
+			return i
+		}
+	}
+	return start
 }

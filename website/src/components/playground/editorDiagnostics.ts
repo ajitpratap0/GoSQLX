@@ -110,18 +110,29 @@ const markerTheme = EditorView.theme({
     borderRadius: "50%",
     backgroundColor: "var(--danger)",
   },
-  ".cm-tooltip.cm-tooltip-lint": {
+  // @codemirror/lint renders the hover tooltip as ul.cm-tooltip-lint inside a
+  // separate .cm-tooltip wrapper, so the surface is set on that wrapper.
+  ".cm-tooltip:has(> .cm-tooltip-lint)": {
     backgroundColor: "var(--bg-raised)",
     color: "var(--fg)",
     border: "1px solid var(--border)",
     borderRadius: "0.375rem",
     overflow: "hidden",
   },
+  ".cm-tooltip-lint": { backgroundColor: "var(--bg-raised)", color: "var(--fg)" },
   ".cm-diagnostic-error": { borderLeft: "4px solid var(--danger)" },
   ".cm-diagnosticSource": { color: "var(--fg-muted)", opacity: "1" },
   ".cm-panels": { backgroundColor: "var(--bg-raised)", color: "var(--fg)" },
   ".cm-panels-bottom": { borderTop: "1px solid var(--border)" },
-  ".cm-panel.cm-panel-lint ul [aria-selected]": { backgroundColor: "var(--bg-overlay)" },
+  // The base theme colours the selected row light blue (#ddd unfocused,
+  // Highlight while the list has focus); both states use tokens instead, with
+  // an accent bar marking the focused list.
+  ".cm-panel.cm-panel-lint ul [aria-selected], .cm-panel.cm-panel-lint ul:focus [aria-selected]": {
+    backgroundColor: "var(--bg-overlay)",
+    color: "var(--fg)",
+  },
+  ".cm-panel.cm-panel-lint ul:focus [aria-selected]": { boxShadow: "inset 3px 0 0 var(--accent)" },
+  ".cm-panel.cm-panel-lint ul [aria-selected] .cm-diagnosticSource": { color: "var(--fg-muted)" },
   ".cm-sr-only": {
     position: "absolute",
     width: "1px",
@@ -148,15 +159,24 @@ export function parseErrorMarker(): Extension {
   ];
 }
 
+/** The announced message for the marked parse error, or null when none is marked. */
+export function markedErrorMessage(state: EditorState): string | null {
+  return state.field(errorMessage, false) ?? null;
+}
+
 /**
  * The transaction that shows marker in the editor (or clears it when null).
- * Returns null when nothing needs to change, including when the marker was
+ * Returns null when nothing needs to change, when the editor has no
+ * parseErrorMarker() extension, or when the marker was
  * computed for different SQL than the editor now holds: the user has typed
  * since, and the next parse will report a fresh position.
  */
 export function errorMarkerTransaction(state: EditorState, marker: EditorErrorMarker | null): TransactionSpec | null {
+  const current = state.field(errorMessage, false);
+  // The editor was built without parseErrorMarker() (e.g. a read-only pane).
+  if (current === undefined) return null;
   if (!marker) {
-    return state.field(errorMessage) === null && diagnosticCount(state) === 0
+    return current === null && diagnosticCount(state) === 0
       ? null
       : { effects: [setDiagnosticsEffect.of([]), setErrorMessage.of(null)] };
   }

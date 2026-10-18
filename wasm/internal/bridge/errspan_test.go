@@ -42,6 +42,13 @@ func TestErrorSpan_Positions(t *testing.T) {
 		{"two-byte character before error", "SELECT 'é', x FROM t WHERE ) 1", spanPos{1, 28, 1, 29}, "E2002"},
 		{"astral character before error", "SELECT '😀', x FROM t WHERE ) 1", spanPos{1, 29, 1, 30}, "E2002"},
 		{"CRLF line endings", "SELECT a,\r\nFROM t", spanPos{2, 1, 2, 5}, "E2001"},
+		// The tokenizer counts a tab as four columns; the span counts it as one.
+		{"tab before error on the same line", "SELECT 1 FROM t\tWHERE x = = 1", spanPos{1, 27, 1, 28}, "E2001"},
+		{"tab indentation before error", "SELECT id\n\tFROM users\n\tWHERE ) AND x = 1", spanPos{3, 8, 3, 9}, "E2002"},
+		{"tab indentation at error", "SELECT a,\n\tFROM t", spanPos{2, 2, 2, 6}, "E2001"},
+		// A token's Start includes a comment skipped before it; mark the token.
+		{"block comment before error", "SELECT * FROM t WHERE x = 1 /* é */ )", spanPos{1, 37, 1, 38}, "E2002"},
+		{"line comment before error", "SELECT * FROM t WHERE x = 1 -- c\n )", spanPos{2, 2, 2, 3}, "E2002"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -89,6 +96,28 @@ func TestErrorSpan_ClampsOutOfRangeLocation(t *testing.T) {
 			line, off := clampLocation(lines, models.Location{Line: tc.line, Column: tc.col})
 			if line != tc.wantLine || off != tc.wantOffset {
 				t.Errorf("clampLocation = (%d, %d), want (%d, %d)", line, off, tc.wantLine, tc.wantOffset)
+			}
+		})
+	}
+}
+
+func TestErrorSpan_ClampLocationCountsTabsAsFourColumns(t *testing.T) {
+	lines := []string{"a\tb"}
+	for _, tc := range []struct {
+		name       string
+		col        int
+		wantOffset int
+	}{
+		{"before tab", 1, 0},
+		{"at tab", 2, 1},
+		{"inside tab span", 4, 1},
+		{"after tab", 6, 2},
+		{"past end", 9, 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, off := clampLocation(lines, models.Location{Line: 1, Column: tc.col})
+			if off != tc.wantOffset {
+				t.Errorf("clampLocation(col %d) offset = %d, want %d", tc.col, off, tc.wantOffset)
 			}
 		})
 	}

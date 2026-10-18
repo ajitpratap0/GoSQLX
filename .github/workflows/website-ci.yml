@@ -90,6 +90,9 @@ jobs:
       - name: Contrast check (WCAG AA, dark and light tokens)
         run: npm run check:contrast
 
+      - name: Layout regression guards
+        run: npm run check:layout
+
       - name: Build (prebuild compiles the playground WASM)
         run: npm run build
 

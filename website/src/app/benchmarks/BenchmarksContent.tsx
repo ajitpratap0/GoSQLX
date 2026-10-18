@@ -4,7 +4,6 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { HighlightedCode } from '@/components/ui/CodeBlock';
 import { Button } from '@/components/ui/Button';
 import { RawDataToggle } from '@/components/benchmarks/RawDataToggle';
-import { ReproduceSnippet } from '@/components/home/ReproduceSnippet';
 import { ParseChart } from '@/components/benchmarks/ParseChart';
 import {
   BENCH_ENV,
@@ -76,7 +75,7 @@ function renderMethodologyItem(item: MethodologyItem) {
     return (
       <span className="block min-w-0">
         <span className="mb-2 block">Reproduce:</span>
-        <ReproduceSnippet command={item.command} />
+        <HighlightedCode code={item.command} lang="bash" label="Reproduce benchmark command" />
       </span>
     );
   }

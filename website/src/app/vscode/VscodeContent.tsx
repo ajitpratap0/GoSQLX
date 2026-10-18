@@ -1,7 +1,7 @@
 import { FadeIn } from '@/components/ui/FadeIn';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
-import { ReproduceSnippet } from '@/components/home/ReproduceSnippet';
+import { HighlightedCode } from '@/components/ui/CodeBlock';
 import { DIALECT_NAMES } from '@/data/metrics';
 
 
@@ -89,7 +89,7 @@ export function VscodeContent() {
             <h2 className="text-2xl font-bold text-fg mb-6 text-center">
               Install via CLI
             </h2>
-            <ReproduceSnippet command="code --install-extension ajitpratap0.gosqlx" what="install command" />
+            <HighlightedCode code="code --install-extension ajitpratap0.gosqlx" lang="bash" label="Install command" />
           </FadeIn>
         </div>
       </section>
@@ -101,7 +101,7 @@ export function VscodeContent() {
             <h2 className="text-2xl font-bold text-fg mb-6 text-center">
               Key Settings
             </h2>
-            <ReproduceSnippet command={SETTINGS_JSON} what="settings JSON" prompt={false} />
+            <HighlightedCode code={SETTINGS_JSON} lang="json" label="Key Settings JSON" />
           </FadeIn>
         </div>
       </section>

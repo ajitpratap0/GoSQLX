@@ -34,6 +34,7 @@ export const metadata: Metadata = {
   // Google Search Console ownership (HTML tag method, #682).
   verification: {
     google: 'wYXXkeFTH-HVJGWHs8K-Hjf6b1YcdbmJ97Nvid1QhmY',
+    other: { 'msvalidate.01': 'F5D3E06E9745044CA78765234197D1ED' },
   },
 };
 

@@ -481,7 +481,14 @@ type BinaryExpression struct {
 	Left     Expression
 	Operator string
 	Right    Expression
-	Not      bool                  // For NOT (expr)
+	Not      bool // For NOT (expr)
+	// PipesOr records that an Operator "OR" was spelled || in the source
+	// (MySQL / MariaDB, where || is logical OR unless PIPES_AS_CONCAT is set;
+	// #781). Analysis code sees a plain OR; SQL() writes || back so that
+	// formatting does not change the meaning for servers running with
+	// PIPES_AS_CONCAT. Code that emits SQL for a dialect where || is
+	// concatenation must clear it first (the transpiler does).
+	PipesOr  bool
 	CustomOp *CustomBinaryOperator // For PostgreSQL custom operators
 	Pos      models.Location       // Source position of the operator (1-based line and column)
 }

@@ -1,11 +1,20 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { inter, jetbrainsMono } from '@/lib/fonts';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Providers } from '@/components/Providers';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { baseOpenGraph } from '@/lib/open-graph';
+import { PROJECT } from '@/data/metrics';
+import { RSS_FEEDS, THEME_COLORS } from '@/lib/site';
 import './globals.css';
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: THEME_COLORS.light },
+    { media: '(prefers-color-scheme: dark)', color: THEME_COLORS.dark },
+  ],
+};
 
 export const metadata: Metadata = {
   title: {
@@ -13,14 +22,20 @@ export const metadata: Metadata = {
     template: '%s | GoSQLX',
   },
   description:
-    'High-performance, zero-copy SQL parser, formatter and linter for Go. Thread-safe with 8-dialect support: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, and ClickHouse.',
+    `High-performance, zero-copy SQL parser, formatter and linter for Go. Thread-safe, ${PROJECT.dialectCount} dialects: PostgreSQL, MySQL, SQL Server, Oracle, ClickHouse and more.`,
   metadataBase: new URL('https://gosqlx.dev'),
   openGraph: baseOpenGraph,
   twitter: {
     card: 'summary_large_image',
     title: 'GoSQLX: Go SQL Parser, Formatter & Linter',
     description:
-      'High-performance, zero-copy SQL parser, formatter and linter for Go with 8-dialect support.',
+      `High-performance, zero-copy SQL parser, formatter and linter for Go with ${PROJECT.dialectCount}-dialect support.`,
+  },
+  // RSS autodiscovery on every page: release notes and engineering articles.
+  alternates: {
+    types: {
+      'application/rss+xml': RSS_FEEDS,
+    },
   },
   icons: {
     icon: '/favicon.png',
@@ -48,7 +63,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='light'||(!t&&window.matchMedia('(prefers-color-scheme:light)').matches)){document.documentElement.classList.add('light');document.documentElement.classList.remove('dark')}else{document.documentElement.classList.add('dark');document.documentElement.classList.remove('light')}}catch(e){}})();`,
+            __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='light'||(!t&&window.matchMedia('(prefers-color-scheme:light)').matches)){document.documentElement.classList.add('light');document.documentElement.classList.remove('dark')}else{document.documentElement.classList.add('dark');document.documentElement.classList.remove('light')}var d=document.documentElement.classList.contains('light')?'light':'dark';var c=${JSON.stringify(THEME_COLORS).replace(/</g, '\\u003c')};var o=window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark';if(d!==o){document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.setAttribute('content',c[d])})}}catch(e){}})();`,
           }}
         />
       </head>
@@ -61,7 +76,7 @@ export default function RootLayout({
         </a>
         <Providers>
           <Navbar />
-          <main id="main-content" tabIndex={-1} className="pt-16">{children}</main>
+          <main id="main-content" tabIndex={-1} className="pt-16 outline-none focus:outline-none focus-visible:outline-none">{children}</main>
           <Footer />
         </Providers>
         <SpeedInsights />

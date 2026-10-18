@@ -417,7 +417,12 @@ func (b *BinaryExpression) writeSQL(buf *bytes.Buffer) {
 
 	writeExpr(buf, b.Left)
 	buf.WriteByte(' ')
-	writeOp()
+	if b.PipesOr && b.CustomOp == nil && strings.EqualFold(op, "OR") {
+		// Keep the source spelling of a MySQL / MariaDB || OR (#781).
+		buf.WriteString("||")
+	} else {
+		writeOp()
+	}
 	buf.WriteByte(' ')
 	writeExpr(buf, b.Right)
 }

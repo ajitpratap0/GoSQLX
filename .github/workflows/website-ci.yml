@@ -7,16 +7,18 @@ on:
       - 'website/**'
       - '.github/workflows/website-ci.yml'
       - 'README.md'
+      - 'CHANGELOG.md'
       - 'llms.txt'
-      - 'docs/GETTING_STARTED.md'
+      - 'docs/**'
       - 'benchmarks/compare/results/**'
   pull_request:
     paths:
       - 'website/**'
       - '.github/workflows/website-ci.yml'
       - 'README.md'
+      - 'CHANGELOG.md'
       - 'llms.txt'
-      - 'docs/GETTING_STARTED.md'
+      - 'docs/**'
       - 'benchmarks/compare/results/**'
   workflow_dispatch:
 
@@ -60,10 +62,18 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Unit tests (changelog splitter and renderer)
+        run: npm test
+
       - name: Metrics drift check
         run: |
           node scripts/check-metrics-drift.mjs --self-test
           node scripts/check-metrics-drift.mjs
+
+      - name: Dialect anchor check
+        run: npm run check:anchors
+      - name: Docs link check (relative links, resolvable anchors, no local paths)
+        run: npm run check:docs-links
 
       - name: Contrast check (WCAG AA, dark and light tokens)
         run: npm run check:contrast
@@ -73,3 +83,9 @@ jobs:
 
       - name: Build (prebuild compiles the playground WASM)
         run: npm run build
+
+      - name: SEO regression check (reads the built HTML)
+        run: npm run check:seo
+
+      - name: Rendered markdown check (highlighting, copy buttons, line breaks)
+        run: npm run check:rendered

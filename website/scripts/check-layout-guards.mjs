@@ -23,6 +23,19 @@ check(
   'globals.css: html must set scroll-padding-top: 5rem (anchor headings clear the fixed header)',
 );
 
+check(
+  /@media\s*\(max-width:\s*1023\.98px\)\s*\{\s*html:has\(#docs-sidebar\)\s*\{[^}]*scroll-padding-top:\s*(7\.5|[89]|\d{2,})rem/.test(css),
+  'globals.css: below lg, html:has(#docs-sidebar) needs scroll-padding-top >= 7.5rem (header 4rem + sticky Docs menu bar + margin)',
+);
+check(
+  !/\.prose\s+(pre|table)[^{]*\{[^}]*content-visibility/.test(css),
+  'globals.css: .prose pre/table must not use content-visibility (layout shifts break anchor jumps)',
+);
+check(
+  /<main[^>]*id="main-content"[^>]*outline-none/.test(read('app/layout.tsx')),
+  'layout.tsx: main#main-content must suppress the focus ring',
+);
+
 const toc = read('components/docs/Toc.tsx');
 const rail = toc.match(/<nav[^>]*className="([^"]*sticky[^"]*)"/);
 check(!!rail, 'Toc.tsx: rail nav with sticky className not found');

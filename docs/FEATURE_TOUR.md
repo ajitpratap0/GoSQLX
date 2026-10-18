@@ -1,6 +1,6 @@
 # Feature Tour
 
-This page walks through the feature examples from the Getting Started guide: PostgreSQL extensions, security scanning, and linting. Install GoSQLX first by following [Getting Started](/docs/getting-started/).
+This page walks through the feature examples from the Getting Started guide: PostgreSQL extensions, security scanning, and linting. Install GoSQLX first by following [Getting Started](GETTING_STARTED.md).
 
 ## v1.14.0 Feature Examples
 

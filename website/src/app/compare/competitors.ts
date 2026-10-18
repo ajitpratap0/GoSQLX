@@ -22,7 +22,7 @@ export interface CompetitorPage {
   pickThem: string[];
   pickGoSQLX: string[];
   /** Dated source for any maintenance claim. */
-  maintenance?: { text: string; href: string };
+  maintenance?: { before: string; linkText: string; after: string; href: string };
   migrationDoc?: { label: string; slug: string };
 }
 
@@ -105,7 +105,9 @@ export const COMPETITOR_PAGES: CompetitorPage[] = [
       'You need other dialects, or formatting, linting and security scanning.',
     ],
     maintenance: {
-      text: 'Latest commit on the default branch: 2018-06-06 (120387863bf2). This is the version pinned in the benchmark harness.',
+      before: 'Latest commit on the default branch: ',
+      linkText: '2018-06-06 (120387863bf2)',
+      after: '. This is the version pinned in the benchmark harness.',
       href: 'https://github.com/xwb1989/sqlparser/commit/120387863bf27d04bc07db8015110a6e96d0146c',
     },
   },

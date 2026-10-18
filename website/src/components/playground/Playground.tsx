@@ -4,8 +4,8 @@ import { useWasm } from "./WasmLoader";
 import SqlEditor from "./SqlEditor";
 import AstTab from "./AstTab";
 import FormatTab from "./FormatTab";
-import LintTab, { type LintViolation } from "./LintTab";
-import type { AnalysisData } from "./AnalyzeTab";
+import LintTab from "./LintTab";
+import type { AnalysisData, LintData } from "./bridgeTypes";
 const AnalyzeTab = React.lazy(() => import("./AnalyzeTab"));
 
 const DEFAULT_SQL = `SELECT u.id, u.name, COUNT(o.id) AS order_count
@@ -41,7 +41,7 @@ const TABS: { id: TabId; label: string }[] = [
 interface Results {
   ast: (Record<string, unknown> & { error?: string }) | null;
   format: string | { result?: string; formatted?: string; error?: string } | null;
-  lint: { error?: string; violations?: LintViolation[]; results?: LintViolation[] } | LintViolation[] | null;
+  lint: LintData | null;
   analyze: AnalysisData | null;
 }
 
@@ -268,8 +268,10 @@ export default function Playground() {
                 {tab.label}
                 <span
                   aria-hidden="true"
-                  className={`absolute bottom-0 left-0 right-0 h-0.5 bg-info origin-left transition-transform duration-300 ease-out ${
-                    activeTab === tab.id ? "scale-x-100" : "scale-x-0"
+                  className={`absolute bottom-0 left-0 right-0 h-0.5 bg-info origin-left ${
+                    activeTab === tab.id
+                      ? "scale-x-100 transition-transform duration-300 ease-out motion-reduce:transition-none"
+                      : "hidden"
                   }`}
                 />
               </button>

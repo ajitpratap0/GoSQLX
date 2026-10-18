@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { DOCS_SIDEBAR, docsCategoryAnchor } from '@/lib/constants';
 import { DocsSearchTrigger } from '@/components/docs/DocsSearchTrigger';
 import { FadeIn } from '@/components/ui/FadeIn';
+import { JsonLd } from '@/components/JsonLd';
+import { pageJsonLd } from '@/lib/jsonld';
 
 export const metadata: Metadata = pageMeta({
   title: 'Documentation',
@@ -21,11 +23,20 @@ const CATEGORY_ICONS: Record<string, string> = {
   'Integrations':'M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z',
 };
 
+const jsonLd = pageJsonLd({
+  name: 'GoSQLX Documentation',
+  description: metadata.description as string,
+  path: '/docs/',
+  crumbs: [{ name: 'Documentation', path: '/docs/' }],
+});
+
 const START_HERE = ['getting-started', 'usage-guide', 'cli-guide'];
 const ALL_ITEMS = DOCS_SIDEBAR.flatMap((g) => g.items);
 
 export default function DocsPage() {
   return (
+    <>
+    <JsonLd data={jsonLd} />
     <div className="mx-auto max-w-5xl px-6 py-20">
       <div className="mb-16 text-center">
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
@@ -105,5 +116,6 @@ export default function DocsPage() {
         })}
       </div>
     </div>
+    </>
   );
 }

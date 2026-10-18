@@ -334,6 +334,9 @@ func parseWithConfig(ctx context.Context, sql string, cfg parseOptions) (*ast.AS
 	if cfg.dialect != "" {
 		p.ApplyOptions(parser.WithDialect(cfg.dialect))
 	}
+	if cfg.pipesAsConcat {
+		p.ApplyOptions(parser.WithPipesAsConcat())
+	}
 
 	if cfg.recover {
 		stmts, errs := p.ParseWithRecoveryFromModelTokens(tokens)

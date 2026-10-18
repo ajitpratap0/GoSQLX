@@ -68,7 +68,13 @@ func (p *Parser) DialectTyped() dialect.Dialect {
 // For the Unknown dialect (no WithDialect), Capabilities returns a
 // permissive default suitable for "parse anything widely supported" use
 // cases. See dialect.Capabilities for the full flag set.
+//
+// A zero-value &Parser{} is valid: it has no dialect set (Unknown) and
+// reports the same permissive default as NewParser() and GetParser().
 func (p *Parser) Capabilities() dialect.Capabilities {
+	if !p.capabilitiesSet {
+		return p.dialectTyped.Capabilities()
+	}
 	return p.capabilitiesCache
 }
 

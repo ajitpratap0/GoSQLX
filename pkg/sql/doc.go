@@ -45,7 +45,8 @@
 //
 // 3. Parsing (pkg/sql/parser):
 //
-//	p := &parser.Parser{}
+//	p := parser.GetParser()
+//	defer parser.PutParser(p)
 //	astObj, err := p.Parse(parserTokens)
 //	defer ast.ReleaseAST(astObj)
 //
@@ -318,7 +319,8 @@
 //	    }
 //
 //	    // Parse
-//	    p := &parser.Parser{}
+//	    p := parser.GetParser()
+//	    defer parser.PutParser(p)
 //	    astObj, err := p.Parse(tokens)
 //	    if err != nil {
 //	        log.Fatal(err)

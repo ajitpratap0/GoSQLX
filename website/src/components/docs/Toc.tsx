@@ -58,6 +58,7 @@ export function Toc({ headings, variant = 'rail' }: TocProps) {
           <li key={heading.id} className={heading.level === 3 ? 'pl-3' : ''}>
             <a
               href={`#${heading.id}`}
+              aria-current={activeId === heading.id ? 'location' : undefined}
               title={heading.text}
               className={`line-clamp-2 py-0.5 transition-colors ${
                 heading.level === 3 ? 'text-xs' : 'font-medium'

@@ -132,7 +132,8 @@
 //	}
 //
 //	// Parse tokens into AST
-//	p := &parser.Parser{}
+//	p := parser.GetParser()
+//	defer parser.PutParser(p)
 //	astObj, err := p.Parse(tokens)
 //	if err != nil {
 //	    log.Fatal(err)

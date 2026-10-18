@@ -123,6 +123,7 @@ func PutParser(p *Parser) {
 func (p *Parser) resetDialectState() {
 	p.dialectTyped = dialect.Unknown
 	p.capabilitiesCache = dialect.Unknown.Capabilities()
+	p.capabilitiesSet = true
 }
 
 // maxPooledTokenBuf is the largest Parser.tokenBuf capacity (in tokens, about
@@ -255,6 +256,7 @@ func WithDialect(newDialect string) ParserOption {
 		p.dialect = newDialect
 		p.dialectTyped = dialect.Parse(newDialect)
 		p.capabilitiesCache = p.dialectTyped.Capabilities()
+		p.capabilitiesSet = true
 	}
 }
 
@@ -312,6 +314,11 @@ type Parser struct {
 	// dialectTyped. It is refreshed alongside dialectTyped in WithDialect
 	// and Reset so that Capabilities() is a single struct-field read.
 	capabilitiesCache dialect.Capabilities
+	// capabilitiesSet reports whether capabilitiesCache has been populated.
+	// It is false only for a zero-value &Parser{} that never went through
+	// NewParser, GetParser, Reset or WithDialect; Capabilities() then derives
+	// the matrix from dialectTyped so the zero value is a valid parser.
+	capabilitiesSet bool
 	// dmlReturning is true while parsing an INSERT source query or an
 	// UPDATE ... FROM list, where an unquoted RETURNING starts the RETURNING
 	// clause and must not be taken as an implicit alias (#610).

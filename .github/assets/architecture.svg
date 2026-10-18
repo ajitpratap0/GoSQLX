@@ -11,11 +11,11 @@
     .box { fill: var(--box); stroke: var(--stroke); stroke-width: 1.5; }
     .core { fill: var(--accent-bg); stroke: var(--accent); stroke-width: 2; }
     .title { font-size: 20px; font-weight: 600; text-anchor: middle; }
-    .sub { font-size: 16px; text-anchor: middle; fill: var(--muted); }
+    .sub { font-size: 18px; text-anchor: middle; fill: var(--muted); }
     .mono { font-family: Menlo, Consolas, "Liberation Mono", monospace; }
     .line { stroke: var(--stroke); stroke-width: 1.8; fill: none; }
     .arrow { fill: var(--stroke); }
-    .label { font-size: 16px; fill: var(--muted); }
+    .label { font-size: 18px; fill: var(--muted); }
   </style>
   <rect class="bg" width="1200" height="420"/>
 
@@ -29,7 +29,7 @@
   <rect class="box" x="485" y="150" width="200" height="80" rx="10"/>
   <text class="title mono" x="585" y="182" style="font-size:18px">[]TokenWithSpan</text>
   <text class="sub " x="585" y="212">with positions</text>
-  <rect class="core" x="750" y="150" width="170" height="80" rx="10"/>
+  <rect class="core" x="740" y="150" width="190" height="80" rx="10"/>
   <text class="title " x="835" y="182">Parser</text>
   <text class="sub " x="835" y="212">recursive descent</text>
   <rect class="core" x="985" y="150" width="190" height="80" rx="10"/>
@@ -38,8 +38,8 @@
 
   <path class="line" d="M165 190 H212"/><path class="arrow" d="M220 190 l-10 -5 v10 z"/>
   <path class="line" d="M420 190 H477"/><path class="arrow" d="M485 190 l-10 -5 v10 z"/>
-  <path class="line" d="M685 190 H742"/><path class="arrow" d="M750 190 l-10 -5 v10 z"/>
-  <path class="line" d="M920 190 H977"/><path class="arrow" d="M985 190 l-10 -5 v10 z"/>
+  <path class="line" d="M685 190 H732"/><path class="arrow" d="M740 190 l-10 -5 v10 z"/>
+  <path class="line" d="M930 190 H977"/><path class="arrow" d="M985 190 l-10 -5 v10 z"/>
 
   <!-- consumers -->
   <path class="line" d="M1080 230 V268 M1080 268 H120 M120 268 V300 M360 268 V300 M600 268 V300 M840 268 V300 M1080 268 V300"/>

@@ -6,7 +6,7 @@ Import path: `github.com/ajitpratap0/GoSQLX/pkg/linter` ([pkg.go.dev](https://pk
 
 Part of the [GoSQLX API reference](../API_REFERENCE.md).
 
-The linter package provides SQL linting with 10 built-in rules (L001-L010) and auto-fix capabilities.
+The linter package provides SQL linting with 30 built-in rules (L001-L030) and auto-fix for the rules that support it. The rules live in sub-packages of `pkg/linter/rules/`. For a one-call API that runs all 30 rules, use `gosqlx.Lint`.
 
 ## Types
 
@@ -80,9 +80,9 @@ Create linter with specified rules.
 
 ```go
 linter := linter.New(
-    rules.NewTrailingWhitespaceRule(),
-    rules.NewMixedTabsSpacesRule(),
-    rules.NewKeywordCaseRule(),
+    whitespace.NewTrailingWhitespaceRule(),
+    whitespace.NewMixedIndentationRule(),
+    keywords.NewKeywordCaseRule(keywords.CaseUpper),
 )
 ```
 
@@ -90,7 +90,11 @@ linter := linter.New(
 Lint a single SQL file.
 
 ```go
-linter := linter.New(rules.AllRules()...)
+// Pass the rules to run; use gosqlx.Lint to run all 30 built-in rules.
+linter := linter.New(
+    whitespace.NewTrailingWhitespaceRule(),
+    whitespace.NewMixedIndentationRule(),
+)
 result := linter.LintFile("query.sql")
 
 for _, violation := range result.Violations {
@@ -126,61 +130,78 @@ Format violation for display.
 ### `FormatResult(result Result) string`
 Format linting results for display.
 
-## Built-in Rules (v1.6.0)
+## Built-in Rules
 
-| Rule | Name | Description | Auto-Fix | Severity |
-|------|------|-------------|----------|----------|
-| **L001** | Trailing Whitespace | Detects trailing whitespace at end of lines | ✅ Yes | warning |
-| **L002** | Mixed Tabs/Spaces | Detects mixed tab and space indentation | ❌ No | error |
-| **L003** | Consecutive Blank Lines | Detects multiple consecutive blank lines | ✅ Yes | warning |
-| **L004** | Indentation Depth | Warns on excessive nesting (>4 levels) | ❌ No | warning |
-| **L005** | Line Length | Warns on long lines (configurable, default 120 chars) | ❌ No | warning |
-| **L006** | Column Alignment | Checks SELECT column alignment consistency | ❌ No | info |
-| **L007** | Keyword Case | Enforces uppercase/lowercase keywords (configurable) | ✅ Yes | warning |
-| **L008** | Comma Placement | Checks trailing vs leading comma style | ❌ No | info |
-| **L009** | Aliasing Consistency | Detects mixed table aliasing (AS vs no AS) | ❌ No | warning |
-| **L010** | Redundant Whitespace | Finds multiple consecutive spaces | ✅ Yes | warning |
+All 30 rules are listed below. The [Linting Rules reference](../LINTING_RULES.md) documents each one with examples.
+
+| Rule | Name | Package | Auto-Fix | Severity |
+|------|------|---------|----------|----------|
+| **L001** | Trailing Whitespace | `whitespace` | Yes | warning |
+| **L002** | Mixed Indentation | `whitespace` | Yes | error |
+| **L003** | Consecutive Blank Lines | `whitespace` | Yes | warning |
+| **L004** | Indentation Depth | `whitespace` | No | warning |
+| **L005** | Long Lines | `whitespace` | No | info |
+| **L006** | Column Alignment | `style` | No | info |
+| **L007** | Keyword Case Consistency | `keywords` | Yes | warning |
+| **L008** | Comma Placement | `style` | No | info |
+| **L009** | Aliasing Consistency | `style` | No | warning |
+| **L010** | Redundant Whitespace | `whitespace` | Yes | info |
+| **L011** | Delete Without WHERE | `safety` | No | error |
+| **L012** | Update Without WHERE | `safety` | No | error |
+| **L013** | Drop Without IF EXISTS | `safety` | No | warning |
+| **L014** | Truncate Table | `safety` | No | warning |
+| **L015** | Select Into Outfile | `safety` | No | error |
+| **L016** | Select Star | `performance` | No | warning |
+| **L017** | Missing WHERE on Full Scan | `performance` | No | warning |
+| **L018** | Leading Wildcard LIKE | `performance` | No | warning |
+| **L019** | NOT IN With NULL Risk | `performance` | No | warning |
+| **L020** | Correlated Subquery in SELECT | `performance` | No | warning |
+| **L021** | OR Instead of IN | `performance` | No | warning |
+| **L022** | Function on Indexed Column | `performance` | No | warning |
+| **L023** | Implicit Cross Join | `performance` | No | warning |
+| **L024** | Table Alias Required | `naming` | No | warning |
+| **L025** | Reserved Keyword Identifier | `naming` | No | warning |
+| **L026** | Implicit Column List in INSERT | `naming` | No | warning |
+| **L027** | UNION Instead of UNION ALL | `naming` | No | warning |
+| **L028** | Missing ORDER BY with LIMIT | `naming` | No | warning |
+| **L029** | Subquery Can Be JOIN | `naming` | No | warning |
+| **L030** | Distinct on Many Columns | `naming` | No | warning |
 
 **Example:**
 ```go
 import (
+    "fmt"
+
     "github.com/ajitpratap0/GoSQLX/pkg/linter"
-    "github.com/ajitpratap0/GoSQLX/pkg/linter/rules"
+    "github.com/ajitpratap0/GoSQLX/pkg/linter/rules/keywords"
+    "github.com/ajitpratap0/GoSQLX/pkg/linter/rules/safety"
+    "github.com/ajitpratap0/GoSQLX/pkg/linter/rules/whitespace"
 )
 
-// Create linter with all rules
-l := linter.New(rules.AllRules()...)
+// Create a linter from the rules you want
+l := linter.New(
+    whitespace.NewTrailingWhitespaceRule(),
+    whitespace.NewRedundantWhitespaceRule(),
+    keywords.NewKeywordCaseRule(keywords.CaseUpper),
+    safety.NewDeleteWithoutWhereRule(),
+)
 
 // Lint SQL
-sql := `SELECT  *  from   users
-WHERE  id=1`
-
-result := l.LintString(sql, "test.sql")
+result := l.LintString("select  *  from users", "test.sql")
 
 // Output violations
 for _, v := range result.Violations {
     fmt.Println(linter.FormatViolation(v))
 }
-// [L010] Redundant Whitespace at line 1, column 7
-//   Severity: warning
-//   Multiple consecutive spaces found
-//
-// [L007] Keyword Case at line 1, column 16
-//   Severity: warning
-//   Keyword 'from' should be uppercase
-//
-// [L001] Trailing Whitespace at line 1, column 26
-//   Severity: warning
-//   Trailing whitespace found
 ```
 
 **Auto-Fix Example:**
 ```go
 // Get violations that can be auto-fixed
 autoFixableRules := []linter.Rule{
-    rules.NewTrailingWhitespaceRule(),
-    rules.NewKeywordCaseRule(),
-    rules.NewRedundantWhitespaceRule(),
+    whitespace.NewTrailingWhitespaceRule(),
+    keywords.NewKeywordCaseRule(keywords.CaseUpper),
+    whitespace.NewRedundantWhitespaceRule(),
 }
 
 l := linter.New(autoFixableRules...)

@@ -11,16 +11,16 @@ Part of the [GoSQLX API reference](../API_REFERENCE.md).
 ### `Error`
 ```go
 type Error struct {
-    Code     ErrorCode        // NEW v1.6.0: Structured error codes
+    Code     ErrorCode        // Structured error codes
     Message  string
     Location *models.Location
     Context  string
-    Hint     string           // NEW v1.6.0: Helpful hints
-    DocURL   string           // NEW v1.6.0: Documentation link
+    Hint     string           // Helpful hints
+    DocURL   string           // Documentation link
 }
 ```
 
-**v1.6.0 Enhancements:**
+**Enhancements:**
 - Structured error codes (E1001-E1005 tokenizer, E2001-E2012 parser, E3001-E3004 semantic)
 - Helpful hints for common errors
 - Documentation links
@@ -80,10 +80,10 @@ Get error message.
 ### `(e *Error) WithContext(ctx string) *Error`
 Add context to error.
 
-### `(e *Error) WithHint(hint string) *Error` (**NEW v1.6.0**)
+### `(e *Error) WithHint(hint string) *Error`
 Add helpful hint.
 
-### `(e *Error) WithDocURL(url string) *Error` (**NEW v1.6.0**)
+### `(e *Error) WithDocURL(url string) *Error`
 Add documentation link.
 
 **Example:**

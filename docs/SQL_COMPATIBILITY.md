@@ -1,17 +1,17 @@
 # GoSQLX SQL Feature Compatibility Matrix
 
-**Version**: v1.15.0 | **Last Updated**: 2026-10-18
-
 ## Overview
 
 This matrix documents the comprehensive SQL feature support in GoSQLX across different SQL dialects and standards. The testing was conducted using the comprehensive integration test suite with 700+ test cases covering real-world SQL patterns.
 
-### Recent Additions (v1.15.0)
+### Feature Highlights
+
+#### Snowflake and ClickHouse
 - ✅ **Snowflake**: 87/87 QA corpus pass (MATCH_RECOGNIZE, QUALIFY, VARIANT paths, time-travel, LATERAL FLATTEN, stage/stream/task/pipe stubs)
-- ✅ **ClickHouse**: 83/83 QA corpus pass (up from 69/83 in v1.14.0): `ARRAY JOIN`, scalar CTEs, `CREATE MATERIALIZED VIEW`, numeric `SAMPLE ... OFFSET`, `LIMIT offset, count`
+- ✅ **ClickHouse**: 83/83 QA corpus pass: `ARRAY JOIN`, scalar CTEs, `CREATE MATERIALIZED VIEW`, numeric `SAMPLE ... OFFSET`, `LIMIT offset, count`
 - See [Snowflake](#snowflake) and [ClickHouse](#clickhouse) below for per-dialect details
 
-### Previous Additions (v1.9.0)
+#### SQLite, Security Scanner and Error Codes
 - ✅ **SQLite PRAGMA**: Fully parsed - bare (`PRAGMA x`), arg (`PRAGMA x(n)`), and assignment (`PRAGMA x=v`) forms; `PragmaStatement` AST node
 - ✅ **WITHOUT ROWID**: `CREATE TABLE ... WITHOUT ROWID`; reserved keywords now valid as DDL column names
 - ✅ **Tautology Detection**: `ScanSQL()` detects `1=1`, `'a'='a'`, `col=col`, `OR TRUE` → CRITICAL severity (`PatternTautology`)
@@ -20,7 +20,7 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 - ✅ **Dialect Fixes**: MySQL backtick + SQL Server bracket reserved-word identifiers now parsed correctly
 - ✅ **Parser Fixes**: KEY/INDEX in qualified names, NATURAL JOIN type, OVER window_name (bare name per SQL:2003 §7.11)
 
-### Previous Additions (v1.8.0)
+#### Dialect Engine and MySQL Syntax
 - ✅ **Dialect Mode Engine**: First-class dialect support with `ParseWithDialect()` - thread dialect through tokenizer and parser
 - ✅ **MySQL Syntax Support**:
   - **LIMIT offset, count** - MySQL-style `LIMIT 10, 20`
@@ -41,7 +41,7 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 - ✅ **~50% Faster Parsing**: Token type overhaul with O(1) integer comparison
 - ✅ **Snowflake Dialect**: Keyword detection and weighted dialect scoring
 
-### Previous Additions (v1.7.0)
+#### Schema-Qualified Names and PostgreSQL Enhancements
 - ✅ **Schema-Qualified Names**: Full support for `schema.table`, `db.schema.table` in all DML/DDL statements
 - ✅ **PostgreSQL Enhancements**:
   - **Type Casting** - `::` operator for PostgreSQL-style casts (`SELECT 1::int`)
@@ -55,7 +55,7 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 - ✅ **FOR UPDATE/SHARE** - Row-level locking clauses
 - ✅ **Multi-row INSERT** - `INSERT INTO t VALUES (1), (2), (3)` batch inserts
 
-### Previous Additions (v1.6.0)
+#### PostgreSQL Extensions and SQL Standards
 - ✅ **PostgreSQL Extensions**:
   - **LATERAL JOIN** - Correlated subqueries in FROM clause
   - **JSON/JSONB Operators** - Complete operator set (`->`, `->>`, `#>`, `#>>`, `@>`, `<@`, `?`, `?|`, `?&`, `#-`)
@@ -70,7 +70,7 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
   - **TRUNCATE TABLE** - SQL:2008 table truncation
   - **Materialized CTE Hints** - CTE optimization
 
-### Previous Additions (v1.4+)
+#### Core SQL Features
 - ✅ **MERGE Statements** (SQL:2003 F312)
 - ✅ **GROUPING SETS, ROLLUP, CUBE** (SQL-99 T431)
 - ✅ **Materialized Views** (CREATE, DROP, REFRESH)
@@ -312,23 +312,23 @@ level over a parenthesized query that already has one, such as
 | **Full-text search** | ✅ Full | 🔧 Syntax | 30% | tsvector, tsquery types |
 | **LATERAL Joins** | ✅ Full | ✅ Full | 95% | Full support with LEFT/INNER/CROSS variants |
 | **Custom operators** | ✅ Full | ⚠️ Partial | 30% | Basic operator recognition |
-| **Dollar quoting** | ✅ Full | ✅ Full | 90% | `$$body$$` and `$tag$body$tag$` (v1.8.0) |
+| **Dollar quoting** | ✅ Full | ✅ Full | 90% | `$$body$$` and `$tag$body$tag$` (since v1.8.0) |
 
-### MySQL-Specific Features (Enhanced in v1.8.0)
+### MySQL-Specific Features
 
 | Feature | Support Level | GoSQLX Parser | Test Coverage | Notes |
 |---------|---------------|---------------|---------------|-------|
-| **SHOW statements** | ✅ Full | ✅ Full | 95% | SHOW TABLES, DATABASES, CREATE TABLE (v1.8.0) |
-| **DESCRIBE/EXPLAIN** | ✅ Full | ✅ Full | 95% | Table description commands (v1.8.0) |
-| **REPLACE INTO** | ✅ Full | ✅ Full | 95% | MySQL insert-or-replace (v1.8.0) |
-| **ON DUPLICATE KEY UPDATE** | ✅ Full | ✅ Full | 95% | MySQL upsert syntax (v1.8.0) |
-| **LIMIT offset, count** | ✅ Full | ✅ Full | 95% | MySQL-style `LIMIT 10, 20` (v1.8.0) |
-| **UPDATE/DELETE with LIMIT** | ✅ Full | ✅ Full | 90% | MySQL extension (v1.8.0) |
-| **GROUP_CONCAT** | ✅ Full | ✅ Full | 95% | With ORDER BY and SEPARATOR (v1.8.0) |
-| **MATCH/AGAINST** | ✅ Full | ✅ Full | 95% | Full-text search (v1.8.0) |
-| **REGEXP/RLIKE** | ✅ Full | ✅ Full | 90% | Regular expression operators (v1.8.0) |
-| **INTERVAL number unit** | ✅ Full | ✅ Full | 90% | MySQL-style `INTERVAL 30 DAY` (v1.8.0) |
-| **IF()/REPLACE() as functions** | ✅ Full | ✅ Full | 85% | Keywords usable as function names (v1.8.0) |
+| **SHOW statements** | ✅ Full | ✅ Full | 95% | SHOW TABLES, DATABASES, CREATE TABLE (since v1.8.0) |
+| **DESCRIBE/EXPLAIN** | ✅ Full | ✅ Full | 95% | Table description commands (since v1.8.0) |
+| **REPLACE INTO** | ✅ Full | ✅ Full | 95% | MySQL insert-or-replace (since v1.8.0) |
+| **ON DUPLICATE KEY UPDATE** | ✅ Full | ✅ Full | 95% | MySQL upsert syntax (since v1.8.0) |
+| **LIMIT offset, count** | ✅ Full | ✅ Full | 95% | MySQL-style `LIMIT 10, 20` (since v1.8.0) |
+| **UPDATE/DELETE with LIMIT** | ✅ Full | ✅ Full | 90% | MySQL extension (since v1.8.0) |
+| **GROUP_CONCAT** | ✅ Full | ✅ Full | 95% | With ORDER BY and SEPARATOR (since v1.8.0) |
+| **MATCH/AGAINST** | ✅ Full | ✅ Full | 95% | Full-text search (since v1.8.0) |
+| **REGEXP/RLIKE** | ✅ Full | ✅ Full | 90% | Regular expression operators (since v1.8.0) |
+| **INTERVAL number unit** | ✅ Full | ✅ Full | 90% | MySQL-style `INTERVAL 30 DAY` (since v1.8.0) |
+| **IF()/REPLACE() as functions** | ✅ Full | ✅ Full | 85% | Keywords usable as function names (since v1.8.0) |
 | **Storage engines** | ✅ Full | 🔧 Syntax | 80% | ENGINE=InnoDB syntax |
 | **Index hints** | ✅ Full | ✅ Full | 75% | USE/IGNORE/FORCE INDEX |
 | **Partitioning** | ✅ Full | 🔧 Syntax | 70% | PARTITION BY syntax |
@@ -379,7 +379,7 @@ tree, err := gosqlx.ParseTree(ctx, sql,
 
 Before #781, `||` was concatenation in every dialect, including MySQL and MariaDB.
 
-### MariaDB-Specific Features (v1.14.0+)
+### MariaDB-Specific Features
 
 MariaDB inherits all MySQL features (SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE KEY UPDATE, GROUP_CONCAT, MATCH/AGAINST, REGEXP/RLIKE, backtick identifiers, etc.) and adds the following extensions:
 
@@ -499,9 +499,9 @@ MariaDB inherits all MySQL features (SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE 
 | **JSON functions** | ⚠️ Partial | 20% | Limited function support |
 | **Row pattern recognition** | ❌ Not Supported | 0% | MATCH_RECOGNIZE clause |
 
-## v1.6.0 PostgreSQL Extension Summary
+## PostgreSQL Extension Summary
 
-GoSQLX v1.6.0 introduces comprehensive PostgreSQL-specific feature support, making it one of the most PostgreSQL-compatible SQL parsers available.
+GoSQLX provides comprehensive PostgreSQL-specific feature support, making it one of the most PostgreSQL-compatible SQL parsers available.
 
 ### Complete PostgreSQL Feature Set
 
@@ -618,9 +618,9 @@ WHERE expired_at < NOW()
 RETURNING user_id, session_id;
 ```
 
-## Dialect Mode Engine (v1.8.0)
+## Dialect Mode Engine
 
-GoSQLX v1.8.0 introduces a first-class dialect mode engine that threads the SQL dialect through the tokenizer and parser. This enables dialect-specific keyword recognition, syntax parsing, and validation.
+GoSQLX provides a first-class dialect mode engine that threads the SQL dialect through the tokenizer and parser. This enables dialect-specific keyword recognition, syntax parsing, and validation.
 
 ### Supported Dialects
 
@@ -628,12 +628,12 @@ GoSQLX v1.8.0 introduces a first-class dialect mode engine that threads the SQL 
 |---------|---------------|-------------|--------------------------|--------|
 | **PostgreSQL** | `"postgresql"` | Full PG keywords | `::`, `ON CONFLICT`, `$$`, JSONB ops, LATERAL, DISTINCT ON | ✅ Default dialect |
 | **MySQL** | `"mysql"` | MySQL keywords | SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE KEY, LIMIT n,m, GROUP_CONCAT, MATCH AGAINST, REGEXP | ✅ Full support |
-| **SQL Server** | `"sqlserver"` | T-SQL keywords | MERGE, bracket identifiers `[col]`, PIVOT/UNPIVOT | ✅ v1.14.0 PIVOT/UNPIVOT added |
+| **SQL Server** | `"sqlserver"` | T-SQL keywords | MERGE, bracket identifiers `[col]`, PIVOT/UNPIVOT | ✅ PIVOT/UNPIVOT (since v1.14.0) |
 | **Oracle** | `"oracle"` | Oracle keywords | DUAL table, basic PL/SQL keywords, MINUS as EXCEPT | ⚠️ Keywords + basic parsing |
 | **SQLite** | `"sqlite"` | SQLite keywords | Flexible typing, simplified syntax | ⚠️ Keywords + basic parsing |
-| **Snowflake** | `"snowflake"` | Snowflake keywords | MATCH_RECOGNIZE, @stage, SAMPLE, QUALIFY, VARIANT paths, time-travel, MINUS, LATERAL FLATTEN, TRY_CAST, IGNORE/RESPECT NULLS, LIKE ANY/ALL, CREATE STAGE/STREAM/TASK/PIPE stubs | ✅ v1.15.0 — 87/87 QA pass |
-| **ClickHouse** | `"clickhouse"` | ClickHouse keywords | PREWHERE, FINAL, GLOBAL IN/NOT IN, nested types, parametric aggregates, bare-bracket arrays, ORDER BY WITH FILL, CODEC, WITH TOTALS, LIMIT BY, ANY/ALL JOIN, SETTINGS, TTL, INSERT FORMAT | ✅ v1.15.0 — 83/83 QA pass (was 69/83 in v1.14.0) |
-| **MariaDB** | `"mariadb"` | MariaDB keywords (superset of MySQL) | All MySQL features + SEQUENCE DDL, FOR SYSTEM_TIME, WITH SYSTEM VERSIONING, PERIOD FOR, CONNECT BY | ✅ v1.14.0 |
+| **Snowflake** | `"snowflake"` | Snowflake keywords | MATCH_RECOGNIZE, @stage, SAMPLE, QUALIFY, VARIANT paths, time-travel, MINUS, LATERAL FLATTEN, TRY_CAST, IGNORE/RESPECT NULLS, LIKE ANY/ALL, CREATE STAGE/STREAM/TASK/PIPE stubs | ✅ 87/87 QA pass |
+| **ClickHouse** | `"clickhouse"` | ClickHouse keywords | PREWHERE, FINAL, GLOBAL IN/NOT IN, nested types, parametric aggregates, bare-bracket arrays, ORDER BY WITH FILL, CODEC, WITH TOTALS, LIMIT BY, ANY/ALL JOIN, SETTINGS, TTL, INSERT FORMAT | ✅ 83/83 QA pass (was 69/83 in v1.14.0) |
+| **MariaDB** | `"mariadb"` | MariaDB keywords (superset of MySQL) | All MySQL features + SEQUENCE DDL, FOR SYSTEM_TIME, WITH SYSTEM VERSIONING, PERIOD FOR, CONNECT BY | ✅ |
 
 ### Usage
 
@@ -661,7 +661,7 @@ gosqlx format --dialect mysql query.sql
 - CREATE EVENT not supported
 
 #### SQL Server (T-SQL)
-- PIVOT/UNPIVOT parsed (v1.14.0)
+- PIVOT/UNPIVOT parsed (since v1.14.0)
 - CROSS/OUTER APPLY keywords reserved but no parsing logic
 - TRY/CATCH blocks not supported
 - OPENROWSET / OPENQUERY not supported
@@ -678,7 +678,7 @@ gosqlx format --dialect mysql query.sql
 - Virtual tables (FTS5, rtree) not supported
 
 #### Snowflake
-- v1.15.0: 87/87 QA corpus pass (100%)
+- 87/87 QA corpus pass (100%)
 - MATCH_RECOGNIZE (SQL:2016 R010), @stage references, SAMPLE/TABLESAMPLE, QUALIFY
 - VARIANT colon-path expressions (`expr:field.sub[0]`)
 - Time-travel: AT/BEFORE/CHANGES
@@ -696,7 +696,7 @@ gosqlx format --dialect mysql query.sql
 - ColumnStore-specific syntax not supported
 
 #### ClickHouse
-- v1.15.0: 83/83 QA corpus pass (100%; 69/83 in v1.14.0). It closed the remaining QA gaps: `ARRAY JOIN` / `LEFT ARRAY JOIN`, scalar CTEs (`WITH <expr> AS <name>`), `CREATE MATERIALIZED VIEW` with `ENGINE`/`TO`, `CREATE TABLE ... AS <source> ENGINE = ...`, numeric `SAMPLE` arguments with `OFFSET`, and `LIMIT offset, count`
+- 83/83 QA corpus pass (100%). It closed the remaining QA gaps: `ARRAY JOIN` / `LEFT ARRAY JOIN`, scalar CTEs (`WITH <expr> AS <name>`), `CREATE MATERIALIZED VIEW` with `ENGINE`/`TO`, `CREATE TABLE ... AS <source> ENGINE = ...`, numeric `SAMPLE` arguments with `OFFSET`, and `LIMIT offset, count`
 - PREWHERE clause for pre-filter optimization before primary key scan
 - FINAL modifier on table references (forces MergeTree part merge)
 - GLOBAL IN / GLOBAL NOT IN for distributed query execution
@@ -745,13 +745,13 @@ gosqlx format --dialect mysql query.sql
 | Database | Core Features | Extensions | Overall Rating | Notes |
 |----------|---------------|------------|----------------|-------|
 | **PostgreSQL** | 95% | 85% | ⭐⭐⭐⭐⭐ Excellent | Default dialect, best supported |
-| **MySQL** | 95% | 85% | ⭐⭐⭐⭐⭐ Excellent | Full dialect parsing (v1.8.0) |
+| **MySQL** | 95% | 85% | ⭐⭐⭐⭐⭐ Excellent | Full dialect parsing (since v1.8.0) |
 | **SQL Server** | 85% | 65% | ⭐⭐⭐⭐ Very Good | Keywords + MERGE |
 | **Oracle** | 80% | 60% | ⭐⭐⭐⭐ Good | Keywords + basic features |
 | **SQLite** | 85% | 50% | ⭐⭐⭐⭐ Good | Keywords + basic features |
-| **MariaDB** | 95% | 90% | ⭐⭐⭐⭐⭐ Excellent | MySQL superset + SEQUENCE DDL, temporal tables, CONNECT BY (v1.14.0) |
-| **Snowflake** | n/a | n/a | ⭐⭐⭐⭐ Good | 87/87 QA corpus pass (v1.15.0); the QA pass rate is not a core/extension percentage |
-| **ClickHouse** | n/a | n/a | ⭐⭐⭐⭐ Good | 83/83 QA corpus pass (v1.15.0); the QA pass rate is not a core/extension percentage |
+| **MariaDB** | 95% | 90% | ⭐⭐⭐⭐⭐ Excellent | MySQL superset + SEQUENCE DDL, temporal tables, CONNECT BY  |
+| **Snowflake** | n/a | n/a | ⭐⭐⭐⭐ Good | 87/87 QA corpus pass; the QA pass rate is not a core/extension percentage |
+| **ClickHouse** | n/a | n/a | ⭐⭐⭐⭐ Good | 83/83 QA corpus pass; the QA pass rate is not a core/extension percentage |
 
 ## Performance Characteristics by Feature
 
@@ -822,7 +822,7 @@ gosqlx format --dialect mysql query.sql
 
 ## Production Readiness Summary
 
-### Ready for Production (v1.7.0)
+### Ready for Production
 
 **Core DML/DDL**:
 - **Core SQL operations** (SELECT, INSERT, UPDATE, DELETE, TRUNCATE)
@@ -833,7 +833,7 @@ gosqlx format --dialect mysql query.sql
 - **Materialized views**
 - **Table partitioning**
 
-**PostgreSQL Extensions** (v1.6.0-v1.7.0):
+**PostgreSQL Extensions** (since v1.6.0):
 - **JSON/JSONB operators** - All 10 operators (`->`, `->>`, `#>`, `#>>`, `@>`, `<@`, `?`, `?|`, `?&`, `#-`)
 - **LATERAL JOIN** - Full support with LEFT/INNER/CROSS variants
 - **DISTINCT ON** - PostgreSQL-specific row selection
@@ -903,76 +903,8 @@ gosqlx format --dialect mysql query.sql
 
 ---
 
-**Last Updated**: 2026-10-18
-**GoSQLX Version**: 1.15.0
-**Test Suite Version**: 1.15.0
 **Total Test Cases**: 800+
 **Coverage Percentage**: 95%+
 **SQL-99 Compliance**: ~85%
 **PostgreSQL Compliance**: ~95% (core features), ~85% (extensions)
 **MySQL Compliance**: ~95% (core features), ~85% (extensions)
-
-## Quick Reference: What's New in v1.15.0
-
-1. **Snowflake** - 87/87 QA corpus pass
-2. **ClickHouse** - 83/83 QA corpus pass (was 69/83): `ARRAY JOIN`, scalar CTEs, materialized views, `SAMPLE ... OFFSET`, `LIMIT offset, count`
-
----
-
-## Quick Reference: What's New in v1.9.0
-
-### SQLite Enhancements
-1. **PRAGMA** - Fully parsed: bare (`PRAGMA x`), arg (`PRAGMA x(n)`), assignment (`PRAGMA x=v`)
-2. **WITHOUT ROWID** - `CREATE TABLE ... WITHOUT ROWID` fully supported
-3. **Reserved keywords as DDL column names** - No longer cause parse errors
-
-### Security Scanner
-1. **Tautology detection** - `1=1`, `'a'='a'`, `col=col`, `OR TRUE` → CRITICAL (`PatternTautology`)
-2. **UNION split** - `PatternUnionInjection` (CRITICAL) vs `PatternUnionGeneric` (HIGH)
-
-### Parser Fixes
-1. **KEY/INDEX/VIEW** in qualified identifiers (e.g., `a.key`)
-2. **NATURAL JOIN** - type stored as `"NATURAL"` not `"NATURAL INNER"`
-3. **OVER window_name** / **OVER (window_name ...)** - bare reference and refinement of an existing named window (SQL:2003 §7.11)
-4. **MySQL backtick** + **SQL Server bracket** reserved-word identifiers
-
-### Error Codes
-1. **E1009** - `ErrCodeUnterminatedBlockComment` for unterminated `/* ... */`
-
----
-
-## Quick Reference: What's New in v1.8.0
-
-### Dialect Engine
-1. **ParseWithDialect()** - Parse SQL with dialect-specific syntax
-2. **ValidateWithDialect()** - Validate with dialect awareness
-3. **--dialect CLI flag** - Specify dialect for CLI commands
-4. **8 Supported Dialects** - PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse
-
-### MySQL Syntax (11 Features)
-1. **SHOW statements** - SHOW TABLES, DATABASES, CREATE TABLE
-2. **DESCRIBE/EXPLAIN** - Table description
-3. **REPLACE INTO** - Insert-or-replace
-4. **ON DUPLICATE KEY UPDATE** - MySQL upsert
-5. **LIMIT offset, count** - MySQL-style pagination
-6. **UPDATE/DELETE with LIMIT** - Row limiting extension
-7. **GROUP_CONCAT** - With ORDER BY and SEPARATOR
-8. **MATCH AGAINST** - Full-text search
-9. **REGEXP/RLIKE** - Regular expression operators
-10. **INTERVAL number unit** - MySQL-style intervals
-11. **IF()/REPLACE() as functions** - Keywords as function names
-
-### New Capabilities
-1. **Query Transform API** - `pkg/transform/` for programmatic SQL rewriting
-2. **Comment Preservation** - Comments survive parse-format round-trips
-3. **AST-to-SQL** - `SQL()` methods on all nodes for roundtrip serialization
-4. **WASM Playground** - Browser-based SQL parsing and formatting
-5. **Error Recovery** - `ParseWithRecovery()` for multi-error diagnostics
-6. **Dollar-Quoted Strings** - PostgreSQL `$$body$$` support
-7. **~50% Faster Parsing** - O(1) integer token comparison
-
-### Migration Notes
-- **From v1.7.0**: High-level API (`gosqlx.Parse()`, `gosqlx.Validate()`) is fully backward compatible
-- **Breaking**: `token.Token.ModelType` renamed to `Type`; string-based `token.Type` removed. See [MIGRATION.md](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/MIGRATION.md)
-- **MySQL Users**: Use `parser.ParseWithDialect(sql, "mysql")` for MySQL-specific syntax
-- **Performance**: ~50% faster parsing from token type overhaul

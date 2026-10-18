@@ -1,4 +1,4 @@
-# Tutorial 2: Creating a SQL Formatter with Custom Rules
+# Build a Custom SQL Formatter
 
 ## What You'll Build
 
@@ -20,8 +20,8 @@ In this tutorial, you'll create a SQL formatter that enforces your team's coding
 
 ## Prerequisites
 
-- Go 1.21 or higher installed
-- Completion of Tutorial 1 (recommended but not required)
+- Go 1.26 or higher installed
+- Completion of the SQL Validator tutorial (recommended but not required)
 - Basic understanding of SQL formatting preferences
 - GoSQLX installed: `go get github.com/ajitpratap0/GoSQLX`
 
@@ -811,12 +811,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
-        go-version: '1.21'
+        go-version: '1.26'
 
     - name: Install SQL Formatter
       run: |
@@ -860,7 +860,7 @@ stages:
 
 check-sql-format:
   stage: format-check
-  image: golang:1.21
+  image: golang:1.26
   script:
     - git clone https://github.com/ajitpratap0/GoSQLX.git
     - cd GoSQLX/examples/tutorials/02-sql-formatter
@@ -939,7 +939,7 @@ func formatDirectory(dirPath string, config FormatterConfig, inPlace bool) error
 ## Troubleshooting
 
 ### Issue: "Parse error"
-**Solution**: The SQL has syntax errors. Run it through the validator from Tutorial 1 first.
+**Solution**: The SQL has syntax errors. Run it through the validator from the SQL Validator tutorial first.
 
 ### Issue: Formatting changes semantics
 **Solution**: This shouldn't happen. Report as a bug. Always test formatted SQL before committing.

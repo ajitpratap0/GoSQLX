@@ -36,8 +36,18 @@ function cell(r: CompetitorResult | undefined, metric: Metric): string {
   return v === null ? 'n/a' : fmtNumber(v);
 }
 
+/** Escape plain (non-code-span) text for a GFM table cell: backslashes first, then pipes. */
 function escapeCell(s: string): string {
-  return s.replace(/\|/g, '\\|');
+  return s.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+}
+
+/**
+ * Escape text placed inside a backtick code span in a GFM table cell. Only the
+ * pipe needs escaping (GFM strips the backslash before '|'); doubling
+ * backslashes here would change the SQL shown, since code spans are literal.
+ */
+function escapeCodeCell(s: string): string {
+  return s.split('|').join('\\|');
 }
 
 function metricTable(metric: Metric): string {
@@ -97,7 +107,7 @@ function queriesTable(): string {
   return [
     '| Query | SQL |',
     '|---|---|',
-    ...COMPETITOR_RUN.queries.map((q) => `| ${q.name} | \`${escapeCell(q.sql)}\` |`),
+    ...COMPETITOR_RUN.queries.map((q) => `| ${q.name} | \`${escapeCodeCell(q.sql)}\` |`),
   ].join('\n');
 }
 

@@ -322,11 +322,6 @@ code, kbd, pre, samp,
   font-feature-settings: 'liga' 0, 'calt' 0;
 }
 
-/* Prose table header gets a subtle fill so it reads as a header in both themes */
-.prose-dark thead th {
-  background: color-mix(in srgb, var(--fg) 4%, transparent);
-}
-
 /* Inline code in docs prose: no typography backticks, pill styling */
 .prose-dark :not(pre) > code {
   border-radius: 0.25rem;

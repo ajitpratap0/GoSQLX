@@ -11,11 +11,11 @@
     .box { fill: var(--box); stroke: var(--stroke); stroke-width: 1.5; }
     .core { fill: var(--accent-bg); stroke: var(--accent); stroke-width: 2; }
     .title { font-size: 17px; font-weight: 600; text-anchor: middle; }
-    .sub { font-size: 12.5px; text-anchor: middle; fill: var(--muted); }
+    .sub { font-size: 16px; text-anchor: middle; fill: var(--muted); }
     .mono { font-family: Menlo, Consolas, "Liberation Mono", monospace; }
     .line { stroke: var(--stroke); stroke-width: 1.8; fill: none; }
     .arrow { fill: var(--stroke); }
-    .label { font-size: 12.5px; fill: var(--muted); }
+    .label { font-size: 16px; fill: var(--muted); }
   </style>
   <rect class="bg" width="1200" height="420"/>
 

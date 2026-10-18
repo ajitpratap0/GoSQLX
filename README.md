@@ -1,20 +1,16 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/logo-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset=".github/assets/logo-light.svg">
-  <img src=".github/assets/logo-light.svg" alt="GoSQLX" width="240">
-</picture>
+<img src=".github/assets/logo.png" alt="GoSQLX: a gopher mascot with a magnifying glass, a database and a rising arrow" width="240">
 
 # GoSQLX
 
 **Pure-Go SQL parser, formatter, linter and security scanner for 8 dialects.**
 
 [![CI](https://img.shields.io/github/actions/workflow/status/ajitpratap0/GoSQLX/test.yml?branch=main&label=CI&style=flat-square)](https://github.com/ajitpratap0/GoSQLX/actions/workflows/test.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/ajitpratap0/GoSQLX.svg)](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX)
+[![Go Reference](https://img.shields.io/badge/pkg.go.dev-reference-007d9c?style=flat-square&logo=go&logoColor=white)](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX)
 [![Release](https://img.shields.io/github/v/release/ajitpratap0/GoSQLX?style=flat-square)](https://github.com/ajitpratap0/GoSQLX/releases)
 [![License](https://img.shields.io/github/license/ajitpratap0/GoSQLX?style=flat-square)](LICENSE)
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/ajitpratap0/GoSQLX/badge)](https://securityscorecards.dev/viewer/?uri=github.com/ajitpratap0/GoSQLX)
+[![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/ajitpratap0/GoSQLX?style=flat-square&label=OpenSSF%20Scorecard)](https://securityscorecards.dev/viewer/?uri=github.com/ajitpratap0/GoSQLX)
 
 **[Playground](https://gosqlx.dev/playground/)** &nbsp;·&nbsp; **[Docs](https://gosqlx.dev/docs/)** &nbsp;·&nbsp; **[Benchmarks](https://gosqlx.dev/benchmarks/)** &nbsp;·&nbsp; **[VS Code](https://marketplace.visualstudio.com/items?itemName=ajitpratap0.gosqlx)** &nbsp;·&nbsp; **[MCP server](#mcp-server)**
 
@@ -76,7 +72,7 @@ The extension bundles the binary, so there is no extra setup. [Learn more](https
 claude mcp add --transport http gosqlx https://mcp.gosqlx.dev/mcp
 ```
 
-7 SQL tools in Claude, Cursor, or any MCP client. [MCP guide](https://gosqlx.dev/docs/mcp_guide/).
+7 SQL tools in Claude, Cursor, or any MCP client. [MCP guide](https://gosqlx.dev/docs/integrations/mcp/).
 
 [![MCP](https://img.shields.io/badge/MCP-Remote%20Server-blue?style=flat-square)](https://mcp.gosqlx.dev/health)
 [![Glama MCP Server](https://glama.ai/mcp/servers/ajitpratap0/GoSQLX/badges/score.svg)](https://glama.ai/mcp/servers/ajitpratap0/GoSQLX)
@@ -149,7 +145,10 @@ WHERE active = true
 
 Formatting turns one-line SQL into a readable query:
 
-![Before and after gosqlx format](.github/assets/format-before-after.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/format-before-after-dark.png">
+  <img src=".github/assets/format-before-after.png" alt="Before: one-line lowercase SQL. After gosqlx format: SELECT, FROM, INNER JOIN, WHERE, GROUP BY, HAVING, ORDER BY and LIMIT each on their own line" width="900">
+</picture>
 
 <br/>
 
@@ -159,24 +158,24 @@ Formatting turns one-line SQL into a readable query:
   <img src=".github/assets/architecture.svg" alt="Architecture: SQL bytes go through the tokenizer to TokenWithSpan, the parser builds an AST, and the formatter, linter, security scanner, transpiler and fingerprinter consume it" width="900">
 </picture>
 
-- **[Parser](https://gosqlx.dev/docs/architecture/)** - zero-copy tokenizer, recursive descent parser and full AST generation.
-- **[Analysis](https://gosqlx.dev/docs/linting_rules/)** - SQL injection scanner, 30 lint rules (L001-L030), 20 optimizer rules and metadata extraction.
-- **[Tooling](https://gosqlx.dev/docs/cli_guide/)** - AST-based formatter, query transforms API, VS Code extension and GitHub Action.
-- **[Multi-dialect](https://gosqlx.dev/docs/sql_compatibility/)** - PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse.
-- **[AI-ready](https://gosqlx.dev/docs/mcp_guide/)** - MCP server with 7 tools, public remote endpoint, Streamable HTTP.
-- **[Tested](https://gosqlx.dev/docs/sql_compatibility/)** - race-detector clean in CI, ~80-85% SQL-99 (estimated).
+- **[Parser](https://gosqlx.dev/docs/concepts/architecture/)** - zero-copy tokenizer, recursive descent parser and full AST generation.
+- **[Analysis](https://gosqlx.dev/docs/reference/linting-rules/)** - SQL injection scanner, 30 lint rules (L001-L030), 20 optimizer rules and metadata extraction.
+- **[Tooling](https://gosqlx.dev/docs/cli-guide/)** - AST-based formatter, query transforms API, VS Code extension and GitHub Action.
+- **[Multi-dialect](https://gosqlx.dev/docs/reference/sql-compatibility/)** - PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse.
+- **[AI-ready](https://gosqlx.dev/docs/integrations/mcp/)** - MCP server with 7 tools, public remote endpoint, Streamable HTTP.
+- **[Tested](https://gosqlx.dev/docs/reference/sql-compatibility/)** - race-detector clean in CI, ~80-85% SQL-99 (estimated).
 
 <br/>
 
 ## Documentation
 
-- **[Getting Started](https://gosqlx.dev/docs/getting_started/)** - parse your first SQL in 5 minutes
-- **[Usage Guide](https://gosqlx.dev/docs/usage_guide/)** - comprehensive patterns and examples
-- **[API Reference](https://gosqlx.dev/docs/api_reference/)** - complete API documentation
-- **[CLI Guide](https://gosqlx.dev/docs/cli_guide/)** - command-line tool reference
-- **[SQL Compatibility](https://gosqlx.dev/docs/sql_compatibility/)** - dialect support matrix
-- **[MCP Guide](https://gosqlx.dev/docs/mcp_guide/)** - AI assistant integration
-- **[Architecture](https://gosqlx.dev/docs/architecture/)** - system design deep-dive
+- **[Getting Started](https://gosqlx.dev/docs/getting-started/)** - parse your first SQL in 5 minutes
+- **[Usage Guide](https://gosqlx.dev/docs/usage-guide/)** - comprehensive patterns and examples
+- **[API Reference](https://gosqlx.dev/docs/reference/api/)** - complete API documentation
+- **[CLI Guide](https://gosqlx.dev/docs/cli-guide/)** - command-line tool reference
+- **[SQL Compatibility](https://gosqlx.dev/docs/reference/sql-compatibility/)** - dialect support matrix
+- **[MCP Guide](https://gosqlx.dev/docs/integrations/mcp/)** - AI assistant integration
+- **[Architecture](https://gosqlx.dev/docs/concepts/architecture/)** - system design deep-dive
 - **[Benchmarks](https://gosqlx.dev/benchmarks/)** - performance data and methodology
 - **[Changelog](CHANGELOG.md)** - what changed in each version
 
@@ -214,6 +213,6 @@ Apache License 2.0 - see [LICENSE](LICENSE) for details.
 
 <div align="center">
 
-**[gosqlx.dev](https://gosqlx.dev)** · **[Playground](https://gosqlx.dev/playground/)** · **[Docs](https://gosqlx.dev/docs/)** · **[MCP Server](https://mcp.gosqlx.dev/mcp)** · **[VS Code](https://marketplace.visualstudio.com/items?itemName=ajitpratap0.gosqlx)**
+**[gosqlx.dev](https://gosqlx.dev)** · **[Playground](https://gosqlx.dev/playground/)** · **[Docs](https://gosqlx.dev/docs/)** · **[MCP Server](https://gosqlx.dev/docs/integrations/mcp/)** · **[VS Code](https://marketplace.visualstudio.com/items?itemName=ajitpratap0.gosqlx)**
 
 </div>

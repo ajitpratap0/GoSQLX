@@ -1,0 +1,170 @@
+// In-editor parse error marker for the playground's SQL editor (#759).
+//
+// The WASM bridge reports where a parse error sits (ErrorSpan, see
+// bridgeTypes.ts). This module turns that span into a CodeMirror lint
+// diagnostic: a wavy underline (or a caret for an empty span at the end of the
+// input), a gutter marker and a hover tooltip, all coloured with the site's
+// design tokens so they follow the light and dark themes. The editor's content
+// element gets aria-invalid and an aria-describedby message. Any edit clears
+// the marker until the next parse reports a new one.
+import { EditorState, StateEffect, StateField, type Extension, type Text, type TransactionSpec } from "@codemirror/state";
+import { EditorView, ViewPlugin, keymap, type ViewUpdate } from "@codemirror/view";
+import { diagnosticCount, lintGutter, lintKeymap, linter, setDiagnosticsEffect, type Diagnostic } from "@codemirror/lint";
+import type { ErrorSpan } from "./bridgeTypes";
+
+/** A parse error span together with the SQL it was computed for. */
+export interface EditorErrorMarker {
+  source: string;
+  span: ErrorSpan;
+}
+
+/** Screen-reader text for the editor while a parse error is marked. */
+export function describeErrorSpan(span: ErrorSpan): string {
+  const code = span.code ? ` ${span.code}` : "";
+  return `Parse error${code} at line ${span.line}, column ${span.column}: ${span.message}`;
+}
+
+/** Maps a 1-based line and UTF-16 column to a document offset, clamped to the text. */
+function offsetOf(doc: Text, line: number, column: number): number {
+  const l = doc.line(Math.min(Math.max(line, 1), doc.lines));
+  return l.from + Math.min(Math.max(column - 1, 0), l.length);
+}
+
+/** The diagnostic for span in doc, with its range clamped to the document. */
+export function spanToDiagnostic(doc: Text, span: ErrorSpan): Diagnostic {
+  const from = offsetOf(doc, span.line, span.column);
+  const to = Math.max(from, offsetOf(doc, span.end_line, span.end_column));
+  return { from, to, severity: "error", source: "GoSQLX parser", message: describeErrorSpan(span) };
+}
+
+const setErrorMessage = StateEffect.define<string | null>();
+
+// The message announced for the marked error; null when nothing is marked.
+const errorMessage = StateField.define<string | null>({
+  create: () => null,
+  update(value, tr) {
+    for (const e of tr.effects) if (e.is(setErrorMessage)) return e.value;
+    return tr.docChanged ? null : value;
+  },
+});
+
+// Edits invalidate the marker: drop it in the same transaction as the change.
+const clearOnEdit = EditorState.transactionExtender.of((tr) =>
+  tr.docChanged && diagnosticCount(tr.startState) > 0 ? { effects: setDiagnosticsEffect.of([]) } : null,
+);
+
+let nextDescriptionId = 0;
+
+// A visually hidden element holding the message, referenced by aria-describedby.
+const description = ViewPlugin.fromClass(
+  class {
+    readonly dom: HTMLElement;
+    constructor(view: EditorView) {
+      this.dom = document.createElement("span");
+      this.dom.id = `sql-editor-error-${++nextDescriptionId}`;
+      this.dom.className = "cm-sr-only";
+      this.dom.textContent = view.state.field(errorMessage) ?? "";
+      view.dom.appendChild(this.dom);
+    }
+    update(update: ViewUpdate) {
+      const message = update.state.field(errorMessage);
+      if (message !== update.startState.field(errorMessage)) this.dom.textContent = message ?? "";
+    }
+    destroy() {
+      this.dom.remove();
+    }
+  },
+  {
+    provide: (plugin) =>
+      EditorView.contentAttributes.of((view): Record<string, string> => {
+        const message = view.state.field(errorMessage);
+        const id = view.plugin(plugin)?.dom.id;
+        return message && id ? { "aria-invalid": "true", "aria-describedby": id } : {};
+      }),
+  },
+);
+
+// Token colours replace @codemirror/lint's fixed reds so the marker meets
+// contrast in both themes.
+const markerTheme = EditorView.theme({
+  ".cm-lintRange-error": {
+    backgroundImage: "none",
+    textDecorationLine: "underline",
+    textDecorationStyle: "wavy",
+    textDecorationColor: "var(--danger)",
+    textDecorationThickness: "1.5px",
+    textUnderlineOffset: "3px",
+    textDecorationSkipInk: "none",
+  },
+  ".cm-lintPoint-error:after": {
+    left: "-4px",
+    borderLeftWidth: "5px",
+    borderRightWidth: "5px",
+    borderBottom: "6px solid var(--danger)",
+  },
+  ".cm-lint-marker-error": {
+    content: "none",
+    width: "0.7em",
+    height: "0.7em",
+    margin: "0.15em",
+    borderRadius: "50%",
+    backgroundColor: "var(--danger)",
+  },
+  ".cm-tooltip.cm-tooltip-lint": {
+    backgroundColor: "var(--bg-raised)",
+    color: "var(--fg)",
+    border: "1px solid var(--border)",
+    borderRadius: "0.375rem",
+    overflow: "hidden",
+  },
+  ".cm-diagnostic-error": { borderLeft: "4px solid var(--danger)" },
+  ".cm-diagnosticSource": { color: "var(--fg-muted)", opacity: "1" },
+  ".cm-panels": { backgroundColor: "var(--bg-raised)", color: "var(--fg)" },
+  ".cm-panels-bottom": { borderTop: "1px solid var(--border)" },
+  ".cm-panel.cm-panel-lint ul [aria-selected]": { backgroundColor: "var(--bg-overlay)" },
+  ".cm-sr-only": {
+    position: "absolute",
+    width: "1px",
+    height: "1px",
+    padding: "0",
+    margin: "-1px",
+    overflow: "hidden",
+    clip: "rect(0, 0, 0, 0)",
+    whiteSpace: "nowrap",
+    border: "0",
+  },
+});
+
+/** Editor extensions that display a parse error marker. */
+export function parseErrorMarker(): Extension {
+  return [
+    linter(null, { autoPanel: false }),
+    lintGutter(),
+    keymap.of(lintKeymap),
+    errorMessage,
+    clearOnEdit,
+    description,
+    markerTheme,
+  ];
+}
+
+/**
+ * The transaction that shows marker in the editor (or clears it when null).
+ * Returns null when nothing needs to change, including when the marker was
+ * computed for different SQL than the editor now holds: the user has typed
+ * since, and the next parse will report a fresh position.
+ */
+export function errorMarkerTransaction(state: EditorState, marker: EditorErrorMarker | null): TransactionSpec | null {
+  if (!marker) {
+    return state.field(errorMessage) === null && diagnosticCount(state) === 0
+      ? null
+      : { effects: [setDiagnosticsEffect.of([]), setErrorMessage.of(null)] };
+  }
+  if (state.doc.toString() !== marker.source) return null;
+  return {
+    effects: [
+      setDiagnosticsEffect.of([spanToDiagnostic(state.doc, marker.span)]),
+      setErrorMessage.of(describeErrorSpan(marker.span)),
+    ],
+  };
+}

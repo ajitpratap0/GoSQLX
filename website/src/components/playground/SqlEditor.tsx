@@ -12,6 +12,7 @@ import {
   HighlightStyle,
 } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
+import { errorMarkerTransaction, parseErrorMarker, type EditorErrorMarker } from "./editorDiagnostics";
 
 // Override oneDark's coral (#e06c75) which fails WCAG AA (4.38:1 on #282c34).
 // #e87980 achieves ~5.07:1 contrast against #282c34.
@@ -26,6 +27,8 @@ interface SqlEditorProps {
   readOnly?: boolean;
   minHeight?: string;
   ariaLabel?: string;
+  /** Parse error to mark in the editor; cleared on the next edit. */
+  errorMarker?: EditorErrorMarker | null;
 }
 
 const baseTheme = EditorView.theme({
@@ -83,6 +86,7 @@ export default function SqlEditor({
   readOnly = false,
   minHeight = "200px",
   ariaLabel = "SQL editor",
+  errorMarker = null,
 }: SqlEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -126,6 +130,7 @@ export default function SqlEditor({
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       EditorView.contentAttributes.of({ "aria-label": ariaLabel }),
+      parseErrorMarker(),
       updateListener,
     ];
 
@@ -186,6 +191,15 @@ export default function SqlEditor({
       });
     }
   }, [value]);
+
+  // Show (or clear) the parse error marker. Declared after the value sync so a
+  // marker computed for new external text is applied to that text.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const tr = errorMarkerTransaction(view.state, errorMarker);
+    if (tr) view.dispatch(tr);
+  }, [errorMarker]);
 
   // Clicks on the pane padding (outside .cm-editor) also focus the editor.
   const focusOnPaneClick = (e: ReactMouseEvent<HTMLDivElement>) => {

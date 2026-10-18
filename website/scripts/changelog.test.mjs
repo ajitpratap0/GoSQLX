@@ -103,3 +103,36 @@ test('remarkGithubIssueRefs: links bare #N, skips code, links and entities', asy
       '[#44](https://github.com/ajitpratap0/GoSQLX/issues/44)) and `#12`; see [#9](https://x.test) and a#1.\n',
   );
 });
+
+test('splitChangelog: un-bulleted [TAG] lines become list items', () => {
+  const md = [
+    '## [1.9.0] - 2026-02-28 - Tags',
+    '### Fixes',
+    '[CLI-1/2]   token_count fixed',
+    '[SEC-2]     UNION split: A (CRITICAL, +',
+    '            NULL padding)',
+    '```',
+    '[KEEP-1] inside a fence',
+    '```',
+    '[1.9.0]: https://example.test/v1.9.0',
+  ].join('\n');
+  const [release] = splitChangelog(md);
+  assert.equal(
+    release.body,
+    [
+      '### Fixes',
+      '- [CLI-1/2] token_count fixed',
+      '- [SEC-2] UNION split: A (CRITICAL, +',
+      '            NULL padding)',
+      '```',
+      '[KEEP-1] inside a fence',
+      '```',
+    ].join('\n'),
+  );
+});
+
+test('changelog article links are underlined, not marked by colour alone (WCAG 1.4.1)', () => {
+  const page = readFileSync(path.resolve(here, '../src/app/changelog/[slug]/page.tsx'), 'utf-8');
+  assert.match(page, /prose-a:underline\b/);
+  assert.doesNotMatch(page, /prose-a:no-underline/);
+});

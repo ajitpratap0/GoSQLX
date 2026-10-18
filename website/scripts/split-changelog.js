@@ -26,6 +26,12 @@ const HEADING_REST =
   /^\s*(?:[-–—]\s*(\d{4}-\d{2}-\d{2}))?\s*(?:\[([^\]]+)\])?\s*(?:[-–—:]\s*(.*?))?\s*$/;
 /** Link reference definitions such as `[1.2.0]: https://github.com/...`. */
 const LINK_REF_DEF = /^\[[^\]]+\]:\s+\S+/;
+/**
+ * Un-bulleted change lines tagged like `[CLI-3]     analyze ...` (used in the
+ * 1.9.0 section). Markdown would join them into one paragraph, so they are
+ * emitted as list items; indented continuation lines stay part of the item.
+ */
+const TAGGED_LINE = /^\[[A-Z][A-Z0-9/-]*\]\s/;
 
 /**
  * @param {string} changelog CHANGELOG.md contents
@@ -62,7 +68,7 @@ function splitChangelog(changelog) {
 
     if (!current) continue;
     if (!inFence && LINK_REF_DEF.test(line)) continue;
-    current.body.push(line);
+    current.body.push(!inFence && TAGGED_LINE.test(line) ? `- ${line.replace(/\s+/, ' ')}` : line);
   }
   finish();
 

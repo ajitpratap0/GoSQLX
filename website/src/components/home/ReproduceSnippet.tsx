@@ -33,8 +33,8 @@ export function ReproduceSnippet({ command, what = 'benchmark command', prompt =
   const label = state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : 'Copy';
 
   return (
-    <div className="code-surface flex items-stretch gap-2 p-2">
-      <pre tabIndex={0} role="region" aria-label={`${what} (scrollable)`} className="flex-1 overflow-x-auto px-2 py-2 font-mono text-xs text-fg-muted sm:text-sm">
+    <div className="code-surface flex min-w-0 items-stretch gap-2 p-2">
+      <pre tabIndex={0} role="region" aria-label={`${what} (scrollable)`} className="min-w-0 flex-1 overflow-x-auto px-2 py-2 font-mono text-xs text-fg-muted sm:text-sm">
         <code>
           {prompt && <span className="select-none text-brand" aria-hidden="true">$ </span>}
           {command}

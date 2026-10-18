@@ -2174,7 +2174,7 @@ This substantial test coverage increase provides strong confidence in the AST pa
 - ✅ Zero performance regression while adding significant new functionality
 - ✅ Complete integration with existing CTE and set operations from previous phases
 
-## [1.2.0] - 2025-08-15 - Phase 2: Advanced SQL Features
+## [1.2.0] - 2025-09-04 - Phase 2: Advanced SQL Features
 
 ### ✅ Major Features Implemented
 - **Complete Common Table Expression (CTE) support**: Simple and recursive CTEs with full SQL-92 compliance
@@ -2231,7 +2231,7 @@ This substantial test coverage increase provides strong confidence in the AST pa
 - ✅ Comprehensive test coverage for all new features
 - ✅ Zero performance regression while adding major features
 
-## [1.1.0] - 2025-01-03 - Phase 1: Core SQL Enhancements
+## [1.1.0] - 2025-09-03 - Phase 1: Core SQL Enhancements
 
 ### ✅ Implemented Features  
 - **Complete JOIN support**: All JOIN types (INNER/LEFT/RIGHT/FULL OUTER/CROSS/NATURAL)

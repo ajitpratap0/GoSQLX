@@ -38,6 +38,18 @@ var rhs596Dialects = []keywords.SQLDialect{
 	keywords.DialectClickHouse,
 }
 
+// rhs596ConcatDialects are the dialects where || is concatenation by
+// default. MySQL and MariaDB parse || as logical OR (#781); their concat
+// coverage lives in pipes_logical_or_test.go.
+var rhs596ConcatDialects = []keywords.SQLDialect{
+	keywords.DialectPostgreSQL,
+	keywords.DialectSQLServer,
+	keywords.DialectOracle,
+	keywords.DialectSQLite,
+	keywords.DialectSnowflake,
+	keywords.DialectClickHouse,
+}
+
 // rhs596Shape renders an expression tree as a fully parenthesized
 // s-expression so a test can assert operator binding: a = 1 + 2 renders as
 // (= a (+ 1 2)). Leaves render through their own SQL().
@@ -153,8 +165,8 @@ func TestParser_ComparisonRHSArithmetic_Issue596(t *testing.T) {
 		{name: "additive_left_assoc", where: "a = b - 1 - 2", wantShape: "(= a (- (- b 1) 2))"},
 		{name: "paren_group_then_mul", where: "a = (1 + 2) * 3", wantShape: "(= a (* (PAREN (+ 1 2)) 3))"},
 		{name: "unary_minus_operand", where: "a = 1 - -2", wantShape: "(= a (- 1 (- 2)))"},
-		{name: "concat_rhs", where: "a = b || 'x' || c", wantShape: "(= a (|| (|| b 'x') c))"},
-		{name: "concat_of_sum", where: "a = b || c + 1", wantShape: "(= a (|| b (+ c 1)))"},
+		{name: "concat_rhs", where: "a = b || 'x' || c", wantShape: "(= a (|| (|| b 'x') c))", dialects: rhs596ConcatDialects},
+		{name: "concat_of_sum", where: "a = b || c + 1", wantShape: "(= a (|| b (+ c 1)))", dialects: rhs596ConcatDialects},
 
 		// Boolean connectives still bind looser than comparison.
 		{
@@ -168,20 +180,16 @@ func TestParser_ComparisonRHSArithmetic_Issue596(t *testing.T) {
 		// Other predicates with arithmetic operands.
 		{name: "between_arith", where: "a BETWEEN 1 + 1 AND 2 * 3", wantShape: "(BETWEEN a (+ 1 1) (* 2 3))"},
 		{name: "in_arith", where: "a IN (1 + 1, 2)", wantShape: "(IN a [(+ 1 1) 2])"},
-		{name: "like_concat", where: "a LIKE b || '%'", wantShape: "(LIKE a (|| b '%'))"},
-		{name: "not_like_concat", where: "a NOT LIKE '%' || b || '%'", wantShape: "(NOT LIKE a (|| (|| '%' b) '%'))"},
+		{name: "like_concat", where: "a LIKE b || '%'", wantShape: "(LIKE a (|| b '%'))", dialects: rhs596ConcatDialects},
+		{name: "not_like_concat", where: "a NOT LIKE '%' || b || '%'", wantShape: "(NOT LIKE a (|| (|| '%' b) '%'))", dialects: rhs596ConcatDialects},
 		{name: "is_null", where: "a IS NULL", wantShape: "(IS NULL a NULL)"},
 	})
 }
 
 func TestParser_ComparisonRHSArithmetic_DialectOperators_Issue596(t *testing.T) {
 	runRHS596Cases(t, []rhs596Case{
-		{
-			name:      "regexp_concat",
-			where:     "a REGEXP b || 'x'",
-			wantShape: "(REGEXP a (|| b 'x'))",
-			dialects:  []keywords.SQLDialect{keywords.DialectMySQL, keywords.DialectMariaDB},
-		},
+		// regexp_concat (MySQL/MariaDB only) moved to pipes_logical_or_test.go:
+		// there || is logical OR unless PIPES_AS_CONCAT is enabled (#781).
 		{
 			name:      "ilike_concat",
 			where:     "a ILIKE b || '%'",

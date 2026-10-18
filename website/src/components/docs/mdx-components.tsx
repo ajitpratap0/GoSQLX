@@ -6,7 +6,7 @@ import { CopyButton } from './CopyButton';
 function HeadingAnchor({ id, level, children }: { id?: string; level: number; children?: ReactNode }) {
   return React.createElement(
     `h${level}`,
-    { id, className: 'group scroll-mt-20' },
+    { id, className: 'group' },
     children,
     id
       ? React.createElement(

@@ -155,12 +155,9 @@ textarea[class*="font-mono"] {
 
 html {
   overflow-x: clip;
-  /* Fixed header is 4rem tall (h-16); keep anchor targets clear of it site-wide. */
+  /* Fixed header is 4rem tall (h-16); keep anchor targets clear of it site-wide.
+     Single offset mechanism: do not add scroll-mt-* utilities (they stack with this). */
   scroll-padding-top: 5rem;
-}
-
-[id] {
-  scroll-margin-top: 5rem;
 }
 
 /* In @layer base so Tailwind utilities (font-*, tracking-*) can still override. */

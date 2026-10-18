@@ -3,13 +3,13 @@ import type { ReactNode } from "react";
 import { formatPosition } from "./bridgeTypes";
 
 const SEVERITY_STYLES: Record<string, string> = {
-  critical: "bg-danger/20 text-danger border-danger/30",
-  high: "bg-danger/20 text-danger border-danger/30",
-  error: "bg-danger/20 text-danger border-danger/30",
-  medium: "bg-warn/20 text-warn border-warn/30",
-  warning: "bg-warn/20 text-warn border-warn/30",
-  low: "bg-info/20 text-info border-info/30",
-  info: "bg-info/20 text-info border-info/30",
+  critical: "bg-danger/10 text-danger border-danger/30",
+  high: "bg-danger/10 text-danger border-danger/30",
+  error: "bg-danger/10 text-danger border-danger/30",
+  medium: "bg-warn/10 text-warn border-warn/30",
+  warning: "bg-warn/10 text-warn border-warn/30",
+  low: "bg-info/10 text-info border-info/30",
+  info: "bg-info/10 text-info border-info/30",
 };
 
 export function SeverityBadge({ severity }: { severity: string }) {

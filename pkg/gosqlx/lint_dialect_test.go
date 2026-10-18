@@ -15,6 +15,8 @@
 package gosqlx
 
 import (
+	"errors"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -77,4 +79,29 @@ func TestLintWithDialect_Concurrent(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+func TestLintWithDialect_UnknownDialect(t *testing.T) {
+	countCached := func() int {
+		n := 0
+		dialectLinters.Range(func(_, _ any) bool { n++; return true })
+		return n
+	}
+	before := countCached()
+	for i := 0; i < 100; i++ {
+		d := sqlkeywords.SQLDialect(fmt.Sprintf("bogus-%d", i))
+		res, err := LintWithDialect("SELECT * FROM users", d)
+		if !errors.Is(err, ErrUnsupportedDialect) {
+			t.Fatalf("LintWithDialect(%q) err = %v, want ErrUnsupportedDialect", d, err)
+		}
+		if res != nil {
+			t.Fatalf("LintWithDialect(%q) result = %+v, want nil", d, res)
+		}
+	}
+	if after := countCached(); after != before {
+		t.Fatalf("unknown dialects grew the linter cache from %d to %d entries", before, after)
+	}
+	if max := len(sqlkeywords.AllDialects()); countCached() > max {
+		t.Fatalf("linter cache has %d entries, more than the %d known dialects", countCached(), max)
+	}
 }

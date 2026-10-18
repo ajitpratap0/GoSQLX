@@ -90,7 +90,7 @@ export function Sidebar() {
   return (
     <div className="contents lg:block lg:w-64 lg:shrink-0">
       {/* Mobile: inline menu bar under the navbar (no floating button) */}
-      <div className="sticky top-16 z-30 border-b border-fg/5 bg-surface px-6 py-2 backdrop-blur lg:hidden">
+      <div className="sticky top-16 z-30 border-b border-fg/5 bg-bg/90 px-6 py-2 backdrop-blur lg:hidden">
         <button
           type="button"
           onClick={() => setMobileOpen(true)}
@@ -107,14 +107,14 @@ export function Sidebar() {
 
       {/* Mobile overlay */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setMobileOpen(false)} />
+        <div className="fixed inset-0 z-40 bg-scrim lg:hidden" onClick={() => setMobileOpen(false)} />
       )}
 
       {/* Sidebar (sticky column on lg, drawer below) */}
       <aside
         id="docs-sidebar"
         aria-label="Documentation"
-        className={`fixed top-16 z-40 h-[calc(100vh-4rem)] w-64 overflow-y-auto border-r border-fg/5 bg-surface px-2 transition-transform lg:sticky lg:translate-x-0 lg:bg-transparent ${
+        className={`fixed top-16 z-40 h-[calc(100vh-4rem)] w-64 overflow-y-auto border-r border-fg/5 bg-bg-raised px-2 transition-transform lg:sticky lg:translate-x-0 lg:bg-transparent ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >

@@ -80,6 +80,18 @@ for (const f of walk(root)) {
   }
 }
 
+// Guard: utility classes must be backed by @theme tokens (legacy names emit no CSS, #798).
+const bad = /(?<![\w-])(?:[\w-]+:)*(?:text-text(?:-[\w-]+)?|text-muted|bg-card|(?:bg|border|ring|divide)-surface(?:-[\w]+)?)(?![\w-])/;
+const hoverWhite = /(?<![\w-])(?:group-)?hover:text-white(?![\w-])/;
+for (const f of walk(root)) {
+  const rel = f.slice(root.length + 1);
+  const src = readFileSync(f, 'utf8');
+  const m = src.match(bad);
+  if (m) failures.push(`${rel}: undefined utility "${m[0]}" (no @theme token; emits no CSS)`);
+  const w = src.match(hoverWhite);
+  if (w) failures.push(`${rel}: "${w[0]}" is invisible in light mode; use hover:text-fg`);
+}
+
 if (failures.length) {
   console.error('Layout guard failures:\n - ' + failures.join('\n - '));
   process.exit(1);

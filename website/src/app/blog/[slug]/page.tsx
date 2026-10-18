@@ -149,7 +149,7 @@ export default async function ArticlePage({ params }: Props) {
                 href={s.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex min-h-11 items-center text-xs text-fg-muted hover:text-fg border border-border rounded px-2.5 py-1.5 transition-colors"
+                className="inline-flex min-h-11 items-center text-xs text-fg-muted hover:text-fg border border-border-strong rounded px-2.5 py-1.5 transition-colors"
               >
                 {s.label}
               </a>

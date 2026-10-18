@@ -9,6 +9,7 @@ on:
       - 'README.md'
       - 'llms.txt'
       - 'docs/GETTING_STARTED.md'
+      - 'benchmarks/compare/results/**'
   pull_request:
     paths:
       - 'website/**'
@@ -16,6 +17,7 @@ on:
       - 'README.md'
       - 'llms.txt'
       - 'docs/GETTING_STARTED.md'
+      - 'benchmarks/compare/results/**'
   workflow_dispatch:
 
 permissions:
@@ -62,6 +64,9 @@ jobs:
         run: |
           node scripts/check-metrics-drift.mjs --self-test
           node scripts/check-metrics-drift.mjs
+
+      - name: Contrast check (WCAG AA, dark and light tokens)
+        run: npm run check:contrast
 
       - name: Build (prebuild compiles the playground WASM)
         run: npm run build

@@ -38,7 +38,7 @@ export function Sidebar() {
         <div key={group.category}>
           <button
             onClick={() => toggleCategory(group.category)}
-            className="flex w-full items-center justify-between px-3 max-lg:min-h-11 text-xs font-semibold uppercase tracking-wider text-zinc-400 hover:text-zinc-200 transition-colors"
+            className="flex w-full items-center justify-between px-3 max-lg:min-h-11 text-xs font-semibold uppercase tracking-wider text-fg-muted hover:text-fg transition-colors"
           >
             {group.category}
             <svg
@@ -60,9 +60,11 @@ export function Sidebar() {
                     onClick={() => setMobileOpen(false)}
                     aria-current={isActive(item.slug) ? 'page' : undefined}
                     className={`flex items-center rounded-md px-3 py-1.5 max-lg:min-h-11 text-sm transition-colors ${
+                      item.depth === 1 ? 'ml-3 font-mono' : ''
+                    } ${
                       isActive(item.slug)
-                        ? 'border-l-2 border-accent bg-accent/10 pl-[10px] text-white font-medium'
-                        : 'border-l-2 border-transparent pl-[10px] text-zinc-400 hover:text-white hover:bg-white/5'
+                        ? 'border-l-2 border-accent bg-accent/10 pl-[10px] text-fg font-medium'
+                        : 'border-l-2 border-transparent pl-[10px] text-fg-muted hover:text-fg hover:bg-fg/5'
                     }`}
                   >
                     {item.label}
@@ -88,13 +90,13 @@ export function Sidebar() {
   return (
     <div className="contents lg:block lg:w-64 lg:shrink-0">
       {/* Mobile: inline menu bar under the navbar (no floating button) */}
-      <div className="sticky top-16 z-30 border-b border-white/5 bg-surface px-6 py-2 backdrop-blur lg:hidden">
+      <div className="sticky top-16 z-30 border-b border-fg/5 bg-surface px-6 py-2 backdrop-blur lg:hidden">
         <button
           type="button"
           onClick={() => setMobileOpen(true)}
           aria-expanded={mobileOpen}
           aria-controls="docs-sidebar"
-          className="flex items-center gap-2 py-1 text-sm font-medium text-zinc-300 hover:text-white"
+          className="flex items-center gap-2 py-1 text-sm font-medium text-fg-muted hover:text-fg"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
@@ -112,7 +114,7 @@ export function Sidebar() {
       <aside
         id="docs-sidebar"
         aria-label="Documentation"
-        className={`fixed top-16 z-40 h-[calc(100vh-4rem)] w-64 overflow-y-auto border-r border-white/5 bg-surface px-2 transition-transform lg:sticky lg:translate-x-0 lg:bg-transparent ${
+        className={`fixed top-16 z-40 h-[calc(100vh-4rem)] w-64 overflow-y-auto border-r border-fg/5 bg-surface px-2 transition-transform lg:sticky lg:translate-x-0 lg:bg-transparent ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -120,7 +122,7 @@ export function Sidebar() {
           <button
             type="button"
             onClick={() => setMobileOpen(false)}
-            className="rounded p-1 text-zinc-400 hover:text-white"
+            className="rounded p-1 text-fg-muted hover:text-fg"
             aria-label="Close docs menu"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">

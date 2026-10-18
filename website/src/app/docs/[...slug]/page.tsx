@@ -120,10 +120,10 @@ export default async function DocPage({ params }: PageProps) {
       {/* Main content */}
       <div className="min-w-0 flex-1 px-6 py-10 lg:px-12">
         {/* Breadcrumbs */}
-        <nav aria-label="Breadcrumb" className="mb-6 text-sm text-zinc-300">
+        <nav aria-label="Breadcrumb" className="mb-6 text-sm text-fg-muted">
           <ol className="flex min-w-0 items-center gap-2 whitespace-nowrap">
             <li className="shrink-0">
-              <Link href="/docs" className="hover:text-white transition-colors">
+              <Link href="/docs" className="hover:text-fg transition-colors">
                 Docs
               </Link>
             </li>
@@ -141,7 +141,7 @@ export default async function DocPage({ params }: PageProps) {
               </>
             )}
             <li aria-hidden="true" className="shrink-0">/</li>
-            <li className="min-w-0 truncate text-zinc-300" title={doc.label} aria-current="page">{doc.label}</li>
+            <li className="min-w-0 truncate text-fg-muted" title={doc.label} aria-current="page">{doc.label}</li>
           </ol>
         </nav>
 
@@ -157,14 +157,14 @@ export default async function DocPage({ params }: PageProps) {
             Last updated{' '}
             <time dateTime={doc.modifiedAt}>{formatDate(doc.modifiedAt)}</time>
           </span>
-          <span className="rounded-full border border-white/10 px-2 py-0.5 text-xs text-zinc-400">
+          <span className="rounded-full border border-fg/10 px-2 py-0.5 text-xs text-fg-muted">
             {PROJECT.version}
           </span>
           <a
             href={`https://github.com/ajitpratap0/GoSQLX/edit/main/${doc.file}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-zinc-400 underline-offset-2 transition-colors hover:text-white hover:underline"
+            className="text-fg-muted underline-offset-2 transition-colors hover:text-fg hover:underline"
           >
             Edit this page
           </a>

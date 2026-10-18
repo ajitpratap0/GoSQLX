@@ -3,6 +3,7 @@ import { FadeIn } from '@/components/ui/FadeIn';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
 import { PROJECT } from '@/data/metrics';
+import { COMPETITOR_PAGES } from './competitors';
 
 /* ------------------------------------------------------------------ */
 /*  Data                                                               */
@@ -89,7 +90,7 @@ function CellValue({ value }: { value: string | boolean }) {
     return (
       <span className="inline-flex items-center gap-1.5">
         {value ? <CheckIcon /> : <XIcon />}
-        <span className="text-xs text-zinc-400">{value ? 'Yes' : 'No'}</span>
+        <span className="text-xs text-fg-muted">{value ? 'Yes' : 'No'}</span>
       </span>
     );
   }
@@ -107,10 +108,10 @@ export function CompareContent() {
       <section className="section-padding pt-24 pb-16 text-center">
         <div className="container-width">
           <FadeIn>
-            <h1 className="text-4xl font-bold tracking-tight text-white">
+            <h1 className="text-4xl font-bold tracking-tight text-fg">
               GoSQLX vs The Competition
             </h1>
-            <p className="mt-4 text-lg text-zinc-400 max-w-2xl mx-auto">
+            <p className="mt-4 text-lg text-fg-muted max-w-2xl mx-auto">
               See how GoSQLX compares to other Go SQL parsing libraries
             </p>
           </FadeIn>
@@ -124,13 +125,13 @@ export function CompareContent() {
             <GlassCard className="p-0 overflow-x-auto" hover={false}>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-white/[0.06]">
-                    <th className="text-left px-5 py-4 text-zinc-400 font-medium">Feature</th>
+                  <tr className="border-b border-fg/[0.06]">
+                    <th className="text-left px-5 py-4 text-fg-muted font-medium">Feature</th>
                     {LIBRARIES.map((lib) => (
                       <th
                         key={lib}
                         className={`px-5 py-4 text-center font-medium ${
-                          lib === 'GoSQLX' ? 'text-white' : 'text-zinc-400'
+                          lib === 'GoSQLX' ? 'text-fg' : 'text-fg-muted'
                         }`}
                       >
                         {lib}
@@ -143,17 +144,17 @@ export function CompareContent() {
                     <tr
                       key={row.feature}
                       className={
-                        i < FEATURES.length - 1 ? 'border-b border-white/[0.04]' : ''
+                        i < FEATURES.length - 1 ? 'border-b border-fg/[0.04]' : ''
                       }
                     >
-                      <td className="px-5 py-3.5 text-zinc-300 font-medium whitespace-nowrap">
+                      <td className="px-5 py-3.5 text-fg-muted font-medium whitespace-nowrap">
                         {row.feature}
                       </td>
                       {row.values.map((val, j) => (
                         <td
                           key={`${row.feature}-${j}`}
                           className={`px-5 py-3.5 text-center ${
-                            j === 0 ? 'text-white' : 'text-zinc-400'
+                            j === 0 ? 'text-fg' : 'text-fg-muted'
                           }`}
                         >
                           <span className="inline-flex justify-center">
@@ -170,17 +171,36 @@ export function CompareContent() {
         </div>
       </section>
 
-      {/* Performance comparison withheld until the reproducible harness (#673) lands */}
+      {/* Performance comparison lives on /benchmarks/, fed by the harness JSON (#673) */}
       <section className="section-padding pb-16">
         <div className="container-width">
-          <p className="text-sm text-zinc-400">
-            Performance comparisons are withheld until a reproducible benchmark harness is published.
-            For GoSQLX measurements, see the{' '}
-            <Link href="/benchmarks/" className="text-accent underline underline-offset-2">
-              benchmarks page
+          <p className="text-sm text-fg-muted">
+            For measured, reproducible performance numbers against pg_query_go, Vitess, TiDB and
+            xwb1989/sqlparser, with hardware, Go version and pinned library versions, see the{' '}
+            <Link href="/benchmarks/#competitors" className="text-accent underline underline-offset-2">
+              competitor benchmarks
             </Link>
             .
           </p>
+        </div>
+      </section>
+
+      {/* Per-competitor alternative pages (#675) */}
+      <section className="section-padding pb-16">
+        <div className="container-width">
+          <h2 className="text-2xl font-bold text-fg mb-4">Compare one library in detail</h2>
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {COMPETITOR_PAGES.map((c) => (
+              <li key={c.slug}>
+                <Link
+                  href={`/compare/${c.slug}/`}
+                  className="text-accent underline underline-offset-2"
+                >
+                  GoSQLX vs {c.short}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 
@@ -189,10 +209,10 @@ export function CompareContent() {
         <div className="container-width text-center">
           <FadeIn delay={0.3}>
             <GlassCard className="p-10" hover={false}>
-              <h2 className="text-2xl font-bold text-white">
+              <h2 className="text-2xl font-bold text-fg">
                 Ready to try GoSQLX?
               </h2>
-              <p className="mt-3 text-zinc-400 max-w-xl mx-auto">
+              <p className="mt-3 text-fg-muted max-w-xl mx-auto">
                 Get started in under a minute with a single{' '}
                 <code className="font-mono text-xs text-fg bg-fg/[0.06] px-1.5 py-0.5 rounded">
                   go get

@@ -54,7 +54,7 @@ if result.HasCritical() {
 }
 ```
 
-See [API_REFERENCE.md#security-package](API_REFERENCE.md#security-package) for complete documentation.
+See [the security package reference](api/security.md) for complete documentation.
 
 ### 🎯 Key Security Findings
 

@@ -1,0 +1,617 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-15T22:14:33Z",
+  "commit": "c95aa7c719d046d78a9f9075eb1b315bd043cf37",
+  "dirty": false,
+  "goVersion": "go1.27.2",
+  "hardware": {
+    "cpu": "Apple M4",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "numCPU": 10
+  },
+  "stage": "e2e",
+  "method": {
+    "command": "go test -run=^$ -bench=^BenchmarkParse$ -benchmem -count=10 .",
+    "count": 10,
+    "statistic": "median",
+    "rawOutput": "results/latest.txt"
+  },
+  "caveat": "The libraries implement different SQL dialects and build different ASTs (pg_query_go wraps the real PostgreSQL parser through CGo and converts its tree to Go structs; Vitess, TiDB and xwb1989 implement MySQL grammars). Each figure is the end-to-end cost of turning the same SQL text into that library's AST on the stated hardware, not identical work.",
+  "parsers": [
+    {
+      "id": "gosqlx",
+      "name": "GoSQLX",
+      "module": "github.com/ajitpratap0/GoSQLX",
+      "version": "commit c95aa7c719d0",
+      "dialect": "multi-dialect (default settings)",
+      "cgo": false
+    },
+    {
+      "id": "pg_query_go",
+      "name": "pg_query_go",
+      "module": "github.com/pganalyze/pg_query_go/v6",
+      "version": "v6.2.5",
+      "dialect": "PostgreSQL (the real PostgreSQL grammar via CGo)",
+      "cgo": true
+    },
+    {
+      "id": "vitess",
+      "name": "Vitess sqlparser",
+      "module": "vitess.io/vitess",
+      "version": "v0.24.5",
+      "dialect": "MySQL",
+      "cgo": false
+    },
+    {
+      "id": "tidb",
+      "name": "TiDB parser",
+      "module": "github.com/pingcap/tidb/pkg/parser",
+      "version": "v0.0.0-20261015143638-7193401b6746",
+      "dialect": "MySQL (TiDB)",
+      "cgo": false
+    },
+    {
+      "id": "xwb1989",
+      "name": "xwb1989/sqlparser",
+      "module": "github.com/xwb1989/sqlparser",
+      "version": "v0.0.0-20180606152119-120387863bf2",
+      "dialect": "MySQL (2018 Vitess fork, unmaintained)",
+      "cgo": false
+    }
+  ],
+  "queries": [
+    {
+      "id": "simple_select",
+      "name": "Simple SELECT",
+      "sql": "SELECT id, name FROM users"
+    },
+    {
+      "id": "select_where",
+      "name": "SELECT with WHERE, ORDER BY, LIMIT",
+      "sql": "SELECT id, name, email FROM users WHERE active = 1 AND created_at \u003e '2024-01-01' ORDER BY name LIMIT 10"
+    },
+    {
+      "id": "join",
+      "name": "Two-table JOIN",
+      "sql": "SELECT u.id, u.name, o.total FROM users u JOIN orders o ON u.id = o.user_id WHERE o.total \u003e 100 ORDER BY o.total DESC LIMIT 50"
+    },
+    {
+      "id": "aggregate",
+      "name": "GROUP BY with HAVING",
+      "sql": "SELECT status, COUNT(*), SUM(total) FROM orders GROUP BY status HAVING COUNT(*) \u003e 10"
+    },
+    {
+      "id": "subquery",
+      "name": "IN subquery",
+      "sql": "SELECT name FROM users WHERE id IN (SELECT user_id FROM orders WHERE total \u003e 1000)"
+    },
+    {
+      "id": "cte",
+      "name": "Common table expression",
+      "sql": "WITH recent AS (SELECT user_id, total FROM orders WHERE total \u003e 100) SELECT user_id, SUM(total) FROM recent GROUP BY user_id"
+    },
+    {
+      "id": "window",
+      "name": "Window function",
+      "sql": "SELECT name, salary, ROW_NUMBER() OVER (PARTITION BY dept ORDER BY salary DESC) FROM employees"
+    },
+    {
+      "id": "complex",
+      "name": "Multi-JOIN analytical query",
+      "sql": "SELECT c.name, p.category, COUNT(o.id), SUM(oi.quantity * oi.price) FROM customers c JOIN orders o ON c.id = o.customer_id JOIN order_items oi ON o.id = oi.order_id LEFT JOIN products p ON oi.product_id = p.id WHERE o.created_at \u003e= '2024-01-01' AND p.category IS NOT NULL GROUP BY c.name, p.category HAVING SUM(oi.quantity * oi.price) \u003e 500 ORDER BY c.name, p.category LIMIT 100"
+    },
+    {
+      "id": "insert",
+      "name": "INSERT VALUES",
+      "sql": "INSERT INTO users (id, name, email) VALUES (1, 'alice', 'alice@example.com')"
+    },
+    {
+      "id": "update",
+      "name": "UPDATE with WHERE",
+      "sql": "UPDATE users SET name = 'bob', active = 0 WHERE id = 42"
+    },
+    {
+      "id": "delete",
+      "name": "DELETE with WHERE",
+      "sql": "DELETE FROM sessions WHERE expires_at \u003c '2024-01-01'"
+    }
+  ],
+  "results": [
+    {
+      "query": "simple_select",
+      "parser": "gosqlx",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 924.8,
+      "bytesPerOp": 2229,
+      "allocsPerOp": 7
+    },
+    {
+      "query": "simple_select",
+      "parser": "pg_query_go",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 7106.5,
+      "bytesPerOp": 1816,
+      "allocsPerOp": 36
+    },
+    {
+      "query": "simple_select",
+      "parser": "vitess",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 870.2,
+      "bytesPerOp": 840,
+      "allocsPerOp": 14
+    },
+    {
+      "query": "simple_select",
+      "parser": "tidb",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 1464,
+      "bytesPerOp": 2296,
+      "allocsPerOp": 24
+    },
+    {
+      "query": "simple_select",
+      "parser": "xwb1989",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 3440.5,
+      "bytesPerOp": 20008,
+      "allocsPerOp": 26
+    },
+    {
+      "query": "select_where",
+      "parser": "gosqlx",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 2027.5,
+      "bytesPerOp": 3945,
+      "allocsPerOp": 21
+    },
+    {
+      "query": "select_where",
+      "parser": "pg_query_go",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 22686,
+      "bytesPerOp": 5024,
+      "allocsPerOp": 111
+    },
+    {
+      "query": "select_where",
+      "parser": "vitess",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 2035,
+      "bytesPerOp": 1528,
+      "allocsPerOp": 30
+    },
+    {
+      "query": "select_where",
+      "parser": "tidb",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 3893.5,
+      "bytesPerOp": 6032,
+      "allocsPerOp": 50
+    },
+    {
+      "query": "select_where",
+      "parser": "xwb1989",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 5803,
+      "bytesPerOp": 21128,
+      "allocsPerOp": 69
+    },
+    {
+      "query": "join",
+      "parser": "gosqlx",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 3215,
+      "bytesPerOp": 6063,
+      "allocsPerOp": 20
+    },
+    {
+      "query": "join",
+      "parser": "pg_query_go",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 30034.5,
+      "bytesPerOp": 6624,
+      "allocsPerOp": 145
+    },
+    {
+      "query": "join",
+      "parser": "vitess",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 2693.5,
+      "bytesPerOp": 1776,
+      "allocsPerOp": 33
+    },
+    {
+      "query": "join",
+      "parser": "tidb",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 4849.5,
+      "bytesPerOp": 6416,
+      "allocsPerOp": 54
+    },
+    {
+      "query": "join",
+      "parser": "xwb1989",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 11725,
+      "bytesPerOp": 62480,
+      "allocsPerOp": 97
+    },
+    {
+      "query": "aggregate",
+      "parser": "gosqlx",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 2229.5,
+      "bytesPerOp": 4193,
+      "allocsPerOp": 21
+    },
+    {
+      "query": "aggregate",
+      "parser": "pg_query_go",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 17666,
+      "bytesPerOp": 4072,
+      "allocsPerOp": 86
+    },
+    {
+      "query": "aggregate",
+      "parser": "vitess",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 1778,
+      "bytesPerOp": 1240,
+      "allocsPerOp": 25
+    },
+    {
+      "query": "aggregate",
+      "parser": "tidb",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 3417,
+      "bytesPerOp": 5152,
+      "allocsPerOp": 45
+    },
+    {
+      "query": "aggregate",
+      "parser": "xwb1989",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 5897,
+      "bytesPerOp": 20960,
+      "allocsPerOp": 61
+    },
+    {
+      "query": "subquery",
+      "parser": "gosqlx",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 1887,
+      "bytesPerOp": 3608,
+      "allocsPerOp": 16
+    },
+    {
+      "query": "subquery",
+      "parser": "pg_query_go",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 15954.5,
+      "bytesPerOp": 3816,
+      "allocsPerOp": 75
+    },
+    {
+      "query": "subquery",
+      "parser": "vitess",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 2175.5,
+      "bytesPerOp": 4201,
+      "allocsPerOp": 28
+    },
+    {
+      "query": "subquery",
+      "parser": "tidb",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 3362,
+      "bytesPerOp": 5224,
+      "allocsPerOp": 44
+    },
+    {
+      "query": "subquery",
+      "parser": "xwb1989",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 9677.5,
+      "bytesPerOp": 61896,
+      "allocsPerOp": 59
+    },
+    {
+      "query": "cte",
+      "parser": "gosqlx",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 2747.5,
+      "bytesPerOp": 4940,
+      "allocsPerOp": 24
+    },
+    {
+      "query": "cte",
+      "parser": "pg_query_go",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 23176.5,
+      "bytesPerOp": 5472,
+      "allocsPerOp": 112
+    },
+    {
+      "query": "cte",
+      "parser": "vitess",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 2516.5,
+      "bytesPerOp": 1896,
+      "allocsPerOp": 37
+    },
+    {
+      "query": "cte",
+      "parser": "tidb",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 4917.5,
+      "bytesPerOp": 6936,
+      "allocsPerOp": 64
+    },
+    {
+      "query": "cte",
+      "parser": "xwb1989",
+      "supported": false,
+      "samples": 0,
+      "nsPerOp": null,
+      "bytesPerOp": null,
+      "allocsPerOp": null
+    },
+    {
+      "query": "window",
+      "parser": "gosqlx",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 1898.5,
+      "bytesPerOp": 3248,
+      "allocsPerOp": 14
+    },
+    {
+      "query": "window",
+      "parser": "pg_query_go",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 14279,
+      "bytesPerOp": 3440,
+      "allocsPerOp": 70
+    },
+    {
+      "query": "window",
+      "parser": "vitess",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 2070.5,
+      "bytesPerOp": 3977,
+      "allocsPerOp": 25
+    },
+    {
+      "query": "window",
+      "parser": "tidb",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 3220.5,
+      "bytesPerOp": 4688,
+      "allocsPerOp": 44
+    },
+    {
+      "query": "window",
+      "parser": "xwb1989",
+      "supported": false,
+      "samples": 0,
+      "nsPerOp": null,
+      "bytesPerOp": null,
+      "allocsPerOp": null
+    },
+    {
+      "query": "complex",
+      "parser": "gosqlx",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 8775.5,
+      "bytesPerOp": 17697,
+      "allocsPerOp": 56
+    },
+    {
+      "query": "complex",
+      "parser": "pg_query_go",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 81637,
+      "bytesPerOp": 17512,
+      "allocsPerOp": 398
+    },
+    {
+      "query": "complex",
+      "parser": "vitess",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 6988.5,
+      "bytesPerOp": 6402,
+      "allocsPerOp": 73
+    },
+    {
+      "query": "complex",
+      "parser": "tidb",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 12445,
+      "bytesPerOp": 16048,
+      "allocsPerOp": 124
+    },
+    {
+      "query": "complex",
+      "parser": "xwb1989",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 21259.5,
+      "bytesPerOp": 66120,
+      "allocsPerOp": 253
+    },
+    {
+      "query": "insert",
+      "parser": "gosqlx",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 1442.5,
+      "bytesPerOp": 2556,
+      "allocsPerOp": 19
+    },
+    {
+      "query": "insert",
+      "parser": "pg_query_go",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 8917.5,
+      "bytesPerOp": 2432,
+      "allocsPerOp": 51
+    },
+    {
+      "query": "insert",
+      "parser": "vitess",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 1248.5,
+      "bytesPerOp": 952,
+      "allocsPerOp": 17
+    },
+    {
+      "query": "insert",
+      "parser": "tidb",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 2105,
+      "bytesPerOp": 2832,
+      "allocsPerOp": 34
+    },
+    {
+      "query": "insert",
+      "parser": "xwb1989",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 4208.5,
+      "bytesPerOp": 20176,
+      "allocsPerOp": 37
+    },
+    {
+      "query": "update",
+      "parser": "gosqlx",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 1200,
+      "bytesPerOp": 2165,
+      "allocsPerOp": 15
+    },
+    {
+      "query": "update",
+      "parser": "pg_query_go",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 9422.5,
+      "bytesPerOp": 2208,
+      "allocsPerOp": 50
+    },
+    {
+      "query": "update",
+      "parser": "vitess",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 1158,
+      "bytesPerOp": 920,
+      "allocsPerOp": 19
+    },
+    {
+      "query": "update",
+      "parser": "tidb",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 2127,
+      "bytesPerOp": 3032,
+      "allocsPerOp": 26
+    },
+    {
+      "query": "update",
+      "parser": "xwb1989",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 4062.5,
+      "bytesPerOp": 20208,
+      "allocsPerOp": 40
+    },
+    {
+      "query": "delete",
+      "parser": "gosqlx",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 841.2,
+      "bytesPerOp": 1763.5,
+      "allocsPerOp": 7
+    },
+    {
+      "query": "delete",
+      "parser": "pg_query_go",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 5678,
+      "bytesPerOp": 1416,
+      "allocsPerOp": 30
+    },
+    {
+      "query": "delete",
+      "parser": "vitess",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 755.3,
+      "bytesPerOp": 704,
+      "allocsPerOp": 11
+    },
+    {
+      "query": "delete",
+      "parser": "tidb",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 1223,
+      "bytesPerOp": 1840,
+      "allocsPerOp": 16
+    },
+    {
+      "query": "delete",
+      "parser": "xwb1989",
+      "supported": true,
+      "samples": 10,
+      "nsPerOp": 3077.5,
+      "bytesPerOp": 19928,
+      "allocsPerOp": 26
+    }
+  ]
+}

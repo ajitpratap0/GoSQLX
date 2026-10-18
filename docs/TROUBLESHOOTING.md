@@ -2097,11 +2097,7 @@ linter:
 
 #### Q: What's the expected performance for parsing?
 
-**A:** v1.6.0 performance benchmarks:
-- **Throughput**: 1.38M+ ops/sec sustained, 1.5M peak
-- **Tokenization**: 8M+ tokens/sec
-- **Latency**: <1μs for complex queries
-- **Memory**: 60-80% reduction with object pooling
+**A:** See the [benchmarks page](/benchmarks/) for measured numbers, each labelled with stage (tokenize / parse / end-to-end), hardware and Go version. Reproduce them locally with `task bench`.
 
 ### Contributing
 

@@ -2,8 +2,6 @@
 
 Welcome! This guide will get you parsing SQL in under 5 minutes. No prior experience with GoSQLX required.
 
-See the [changelog](https://github.com/ajitpratap0/GoSQLX/blob/main/CHANGELOG.md) for what's new in each release.
-
 ---
 
 ## Step 1: Install GoSQLX (30 seconds)
@@ -84,7 +82,7 @@ gosqlx lsp --log /tmp/lsp.log
 gosqlx format --config .gosqlx.yml query.sql
 ```
 
-See [CLI Guide](/docs/cli-guide) for complete documentation.
+See [CLI Guide](/docs/cli-guide/) for complete documentation.
 
 ---
 
@@ -134,7 +132,7 @@ go run main.go
 
 **That's it!** Just 3 lines of code. No pool management, no manual cleanup - everything is handled automatically.
 
-For a tour of the v1.14.0 features (PostgreSQL extensions, security scanning, linting), see the [Feature Tour](/docs/feature-tour).
+For a tour of the v1.14.0 features (PostgreSQL extensions, security scanning, linting), see the [Feature Tour](/docs/feature-tour/).
 
 ---
 
@@ -226,14 +224,14 @@ gosqlx lsp --log /tmp/lsp.log
 ## What's Next?
 
 ### Essential Guides:
-- **[Feature Tour](/docs/feature-tour)** - PostgreSQL extensions, security scanning, and linting examples
-- **[Usage Guide](/docs/usage-guide)** - Comprehensive patterns and examples
-- **[CLI Guide](/docs/cli-guide)** - Full CLI documentation and all commands
-- **[LSP Guide](/docs/lsp-guide)** - Complete LSP server documentation for IDE integration
-- **[MCP Server Guide](/docs/mcp-guide)** - Use GoSQLX as MCP tools inside Claude, Cursor, and other AI assistants
-- **[Linting Rules](/docs/linting-rules)** - All 30 linting rules reference
-- **[Configuration](/docs/configuration)** - Configuration file (.gosqlx.yml) guide
-- **[API Reference](/docs/api-reference)** - Complete API documentation
+- **[Feature Tour](/docs/feature-tour/)** - PostgreSQL extensions, security scanning, and linting examples
+- **[Usage Guide](/docs/usage-guide/)** - Comprehensive patterns and examples
+- **[CLI Guide](/docs/cli-guide/)** - Full CLI documentation and all commands
+- **[LSP Guide](/docs/integrations/lsp/)** - Complete LSP server documentation for IDE integration
+- **[MCP Server Guide](/docs/integrations/mcp/)** - Use GoSQLX as MCP tools inside Claude, Cursor, and other AI assistants
+- **[Linting Rules](/docs/reference/linting-rules/)** - All 30 linting rules reference
+- **[Configuration](/docs/reference/configuration/)** - Configuration file (.gosqlx.yml) guide
+- **[API Reference](/docs/reference/api/)** - Complete API documentation
 - **[Examples](https://github.com/ajitpratap0/GoSQLX/tree/main/examples)** - Real-world code examples
 
 ### v1.14.0 Feature Guides:
@@ -262,29 +260,29 @@ gosqlx lsp --log /tmp/lsp.log
   - Semantic tokens + diagnostic debouncing
   - Code completion for SQL keywords
   - Auto-formatting on save
-  - See [LSP Guide](/docs/lsp-guide) for setup instructions
+  - See [LSP Guide](/docs/integrations/lsp/) for setup instructions
 
 - **Security Features:**
   - SQL injection pattern detection
   - Severity classification (HIGH/MEDIUM/LOW)
   - OpenSSF Scorecard workflow
-  - See [Usage Guide](/docs/usage-guide) for security scanning patterns
+  - See [Usage Guide](/docs/usage-guide/) for security scanning patterns
 
 - **Code Quality:**
   - 30 built-in linter rules (safety, performance, naming, style)
   - Auto-fix capabilities for common issues
   - OPT-001 through OPT-020 optimization advisor
   - Query fingerprinting + normalization
-  - See [Linting Rules](/docs/linting-rules) for complete reference
+  - See [Linting Rules](/docs/reference/linting-rules/) for complete reference
 
 ### Advanced Topics:
 - **Low-Level API** - For performance-critical applications (>100K queries/sec)
 - **Object Pooling** - Manual resource management for fine-grained control
 - **Multi-Dialect Support** - PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse
 - **Unicode Support** - Full international character support
-- **SQL Compatibility** - See [SQL Compatibility](/docs/sql-compatibility) for dialect matrix
+- **SQL Compatibility** - See [SQL Compatibility](/docs/reference/sql-compatibility/) for dialect matrix
 
-See [Usage Guide](/docs/usage-guide) for advanced patterns.
+See [Usage Guide](/docs/usage-guide/) for advanced patterns.
 
 ---
 
@@ -311,7 +309,7 @@ gosqlx validate "your SQL here"
 ```
 
 ### Need Help?
-- **[Troubleshooting Guide](/docs/troubleshooting)** - Common issues and solutions
+- **[Troubleshooting Guide](/docs/guides/troubleshooting/)** - Common issues and solutions
 - **[GitHub Issues](https://github.com/ajitpratap0/GoSQLX/issues)** - Report bugs or ask questions
 - **[Discussions](https://github.com/ajitpratap0/GoSQLX/discussions)** - Community Q&A
 

@@ -32,7 +32,7 @@ export default function PlaygroundPage() {
           inspect the tokens and AST. Nothing leaves your machine.
         </p>
         <noscript>
-          <p className="mt-2 text-sm text-amber-400">
+          <p className="mt-2 text-sm text-warn">
             The playground runs GoSQLX as WebAssembly and needs JavaScript
             enabled. Without it, see the documentation at /docs/ for usage
             examples.

@@ -12,7 +12,7 @@ export function GlassCard({ children, className = '', hover = true }: { children
       whileTap={hover ? { scale: 0.99 } : undefined}
       transition={spring}
     >
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-fg/10 to-transparent" />
       {children}
     </m.div>
   );

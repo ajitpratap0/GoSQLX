@@ -1,0 +1,63 @@
+'use client';
+
+import Link from 'next/link';
+import type { BlogPost } from '@/lib/blog';
+import { blogPostHref } from '@/lib/blog-slug';
+
+export function BlogList({ posts }: { posts: BlogPost[] }) {
+  return (
+    <div className="relative">
+      {/* Timeline line */}
+      <div className="absolute left-[7px] top-2 bottom-2 w-px bg-bg-overlay" />
+
+      <div className="space-y-0">
+        {posts.map((post) => (
+          <div key={post.slug}>
+            <Link
+              href={blogPostHref(post.slug)}
+              className="group flex gap-6 py-5 pl-0 relative"
+            >
+              {/* Timeline dot */}
+              <div className="relative z-10 mt-2 w-[15px] h-[15px] shrink-0 rounded-full border-2 border-border bg-bg group-hover:border-accent transition-colors" />
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-3 mb-1.5 flex-wrap">
+                  <span className="inline-block bg-accent/10 border border-accent/20 rounded-full px-3 py-0.5 text-xs font-medium text-accent">
+                    v{post.version}
+                  </span>
+                  {post.date && (
+                    <span className="text-sm text-fg-subtle">{formatDate(post.date)}</span>
+                  )}
+                </div>
+                <h2 className="text-lg font-semibold text-fg group-hover:text-fg transition-colors truncate">
+                  {post.title}
+                </h2>
+                {post.description && (
+                  <p className="mt-1 text-sm text-fg-muted line-clamp-2">
+                    {post.description}
+                  </p>
+                )}
+              </div>
+
+              {/* Arrow */}
+              <div className="mt-2 text-fg-subtle group-hover:text-fg-muted transition-colors shrink-0">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 4l4 4-4 4" />
+                </svg>
+              </div>
+            </Link>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function formatDate(dateStr: string): string {
+  try {
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  } catch {
+    return dateStr;
+  }
+}

@@ -11,7 +11,7 @@ export function RawDataToggle({ id, children }: { id: string; children: React.Re
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="text-xs text-fg-subtle hover:text-zinc-300 transition-colors flex items-center gap-1"
+        className="text-xs text-fg-subtle hover:text-fg-muted transition-colors flex items-center gap-1"
         aria-expanded={open}
         aria-controls={panelId}
       >

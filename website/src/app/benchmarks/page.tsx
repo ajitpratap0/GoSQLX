@@ -5,7 +5,7 @@ import { BenchmarksContent } from './BenchmarksContent';
 export const metadata: Metadata = pageMeta({
   title: 'GoSQLX Performance Benchmarks: Reproducible SQL Parser Numbers for Go',
   description:
-    'Detailed performance benchmarks for GoSQLX: parse-stage ns/op and ops/sec for common query shapes, with hardware, Go version and the command to reproduce them.',
+    'GoSQLX performance benchmarks: parse-stage ns/op for common query shapes and a reproducible end-to-end comparison with pg_query_go, Vitess, TiDB and xwb1989, with hardware, Go version and commands.',
   path: '/benchmarks/',
   absolute: true,
 });

@@ -3,7 +3,7 @@ import { execFileSync } from 'child_process';
 import path from 'path';
 import matter from 'gray-matter';
 import GithubSlugger from 'github-slugger';
-import { DOCS_SIDEBAR } from './constants';
+import { DOCS_SIDEBAR, type DocsSidebarItem } from './constants';
 
 export interface Doc {
   slug: string;
@@ -137,9 +137,73 @@ export function getAllDocs(): Doc[] {
   return docs;
 }
 
+const REPO_BLOB = 'https://github.com/ajitpratap0/GoSQLX/blob/main/';
+const REPO_TREE = 'https://github.com/ajitpratap0/GoSQLX/tree/main/';
+
+let fileToSlug: Map<string, string> | null = null;
+
+function docsFileMap(): Map<string, string> {
+  if (!fileToSlug) {
+    fileToSlug = new Map();
+    for (const category of DOCS_SIDEBAR) {
+      for (const item of category.items) fileToSlug.set(item.file, item.slug);
+    }
+  }
+  return fileToSlug;
+}
+
+/**
+ * Resolve a relative link written for GitHub (e.g. `../api/ast.md#visitor-pattern`)
+ * from the doc at `fromFile` (relative to docs/). Docs pages map to their site URL;
+ * anything else in the repo maps to its GitHub URL. Absolute and in-page links are
+ * returned unchanged.
+ */
+export function resolveDocLink(href: string, fromFile: string): string {
+  if (/^([a-z][a-z0-9+.-]*:|\/|#)/i.test(href)) return href;
+  const hashAt = href.indexOf('#');
+  const target = hashAt === -1 ? href : href.slice(0, hashAt);
+  const hash = hashAt === -1 ? '' : href.slice(hashAt);
+  if (!target) return href;
+  const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(fromFile), target));
+  const repoBase = target.endsWith('/') ? REPO_TREE : REPO_BLOB;
+  if (resolved.startsWith('../')) {
+    // Outside docs/: link to the file in the repository.
+    const repoPath = resolved.slice(3);
+    return repoPath.startsWith('../') ? href : `${repoBase}${repoPath}${hash}`;
+  }
+  const slug = docsFileMap().get(resolved);
+  if (slug) return `/docs/${slug}/${hash.toLowerCase()}`;
+  return `${repoBase}docs/${resolved}${hash}`;
+}
+
+/** Rewrite relative markdown links (outside code fences) so they work on the site. */
+export function rewriteDocLinks(content: string, fromFile: string): string {
+  const out: string[] = [];
+  let fence: string | null = null;
+  for (const line of content.split('\n')) {
+    const m = line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (fence === null && m) {
+      fence = m[1];
+      out.push(line);
+      continue;
+    }
+    if (fence !== null) {
+      if (m && m[1][0] === fence[0] && m[1].length >= fence.length) fence = null;
+      out.push(line);
+      continue;
+    }
+    out.push(
+      line.replace(/\]\(([^)\s]+)(\s+"[^"]*")?\)/g, (_all, href: string, title: string | undefined) =>
+        `](${resolveDocLink(href, fromFile)}${title ?? ''})`
+      )
+    );
+  }
+  return out.join('\n');
+}
+
 export function getDocBySlug(slug: string): Doc | null {
   // Find the item in sidebar config
-  let sidebarItem: { slug: string; file: string; label: string; description: string } | undefined;
+  let sidebarItem: DocsSidebarItem | undefined;
   let categoryName = '';
 
   for (const category of DOCS_SIDEBAR) {
@@ -169,7 +233,7 @@ export function getDocBySlug(slug: string): Doc | null {
     title,
     label: sidebarItem.label,
     description: sidebarItem.description,
-    content,
+    content: rewriteDocLinks(content, sidebarItem.file),
     category: categoryName,
     modifiedAt: getLastUpdated(filePath),
     file: `docs/${sidebarItem.file}`,

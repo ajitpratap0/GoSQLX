@@ -37,10 +37,10 @@ export function VscodeContent() {
       <section className="section-padding pt-24 pb-16 text-center">
         <div className="container-width">
           <FadeIn>
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-white">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-fg">
               GoSQLX for VS Code
             </h1>
-            <p className="mt-4 text-lg text-zinc-400 max-w-2xl mx-auto">
+            <p className="mt-4 text-lg text-fg-muted max-w-2xl mx-auto">
               Real-time SQL validation, formatting, and linting directly in your editor.
               Powered by the GoSQLX parser with multi-dialect support.
             </p>
@@ -66,8 +66,8 @@ export function VscodeContent() {
             {features.map((f, i) => (
               <FadeIn key={f.title} delay={i * 0.08}>
                 <GlassCard className="p-6 h-full">
-                  <h3 className="text-lg font-semibold text-white">{f.title}</h3>
-                  <p className="mt-2 text-sm text-zinc-400">{f.description}</p>
+                  <h3 className="text-lg font-semibold text-fg">{f.title}</h3>
+                  <p className="mt-2 text-sm text-fg-muted">{f.description}</p>
                 </GlassCard>
               </FadeIn>
             ))}
@@ -79,7 +79,7 @@ export function VscodeContent() {
       <section className="section-padding pb-16">
         <div className="container-width max-w-2xl mx-auto">
           <FadeIn>
-            <h2 className="text-2xl font-bold text-white mb-6 text-center">
+            <h2 className="text-2xl font-bold text-fg mb-6 text-center">
               Install via CLI
             </h2>
             <TerminalMockup command="code --install-extension ajitpratap0.gosqlx" />
@@ -91,7 +91,7 @@ export function VscodeContent() {
       <section className="section-padding pb-24">
         <div className="container-width max-w-2xl mx-auto">
           <FadeIn>
-            <h2 className="text-2xl font-bold text-white mb-6 text-center">
+            <h2 className="text-2xl font-bold text-fg mb-6 text-center">
               Key Settings
             </h2>
             <GlassCard className="p-6" hover={false}>

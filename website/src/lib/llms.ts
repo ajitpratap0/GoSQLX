@@ -52,8 +52,8 @@ export function buildLlmsTxt(): string {
     '## Optional',
     '',
     `- [Full documentation in one file](${SITE_URL}/llms-full.txt): Every docs page as plain text`,
-    `- [Changelog](${SITE_URL}/blog/): Release notes for every version`,
-    `- [Changelog feed](${SITE_URL}/blog/feed.xml): RSS 2.0`,
+    `- [Changelog](${SITE_URL}/changelog/): Release notes for every version`,
+    `- [Changelog feed](${SITE_URL}/changelog/feed.xml): RSS 2.0`,
     `- [Source code](${REPO}): GitHub repository`,
     '- [Go package docs](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX/pkg/gosqlx): pkg.go.dev reference',
     ''

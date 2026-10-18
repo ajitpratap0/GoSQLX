@@ -37,28 +37,24 @@ export function AnimatedBars({ benchmarks, maxOps }: { benchmarks: Benchmark[]; 
   }, []);
 
   return (
-    <div ref={ref} className="space-y-4" role="img" aria-label="Performance comparison bar chart">
+    <div ref={ref} className="space-y-4" role="img" aria-label={`GoSQLX parse-stage throughput: ${benchmarks.map((b) => `${b.name} ${b.label}`).join(', ')}`}>
       {benchmarks.map((b, i) => {
         const widthPercent = (b.ops / maxOps) * 100;
         return (
           <div key={b.name} className="flex items-center gap-4">
-            <span className="w-20 sm:w-24 text-sm text-zinc-300 text-right shrink-0 font-mono">
+            <span className="w-20 sm:w-24 text-sm text-fg-muted text-right shrink-0 font-mono">
               {b.name}
             </span>
-            <div className="flex-1 h-8 rounded-md bg-zinc-800/50 overflow-hidden relative">
+            <div className="flex-1 h-8 rounded-md bg-bg-overlay overflow-hidden relative">
               <div
-                className={`h-full rounded-md ${
-                  b.highlight
-                    ? 'bg-gradient-to-r from-green-500 to-emerald-400'
-                    : 'bg-zinc-700'
-                }`}
+                className={`h-full rounded-md ${b.highlight ? 'bg-brand' : 'bg-bg-overlay'}`}
                 style={{
                   width: visible ? `${widthPercent}%` : '0%',
                   transition: `width 1s cubic-bezier(0.22,1,0.36,1) ${i * 0.15}s`,
                 }}
               />
             </div>
-            <span className="w-28 sm:w-32 text-sm text-zinc-300 shrink-0 font-mono">
+            <span className="w-28 sm:w-32 text-sm text-fg-muted shrink-0 font-mono">
               {b.label}
             </span>
           </div>

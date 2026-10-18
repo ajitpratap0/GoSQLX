@@ -1,31 +1,22 @@
-# GoSQLX
-
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/ajitpratap0/GoSQLX/main/.github/logo.png" alt="GoSQLX Logo" width="180"/>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/logo-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset=".github/assets/logo-light.svg">
+  <img src=".github/assets/logo-light.svg" alt="GoSQLX" width="240">
+</picture>
 
-### Parse SQL at the speed of Go
+# GoSQLX
 
-[![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?style=for-the-badge&logo=go)](https://go.dev)
-[![Release](https://img.shields.io/github/v/release/ajitpratap0/GoSQLX?style=for-the-badge&color=orange)](https://github.com/ajitpratap0/GoSQLX/releases)
-[![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg?style=for-the-badge)](LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge)](http://makeapullrequest.com)
+**Pure-Go SQL parser, formatter, linter and security scanner for 8 dialects.**
 
-[![Website](https://img.shields.io/badge/gosqlx.dev-Website-blue?style=for-the-badge&logo=google-chrome)](https://gosqlx.dev)
-[![VS Code](https://img.shields.io/visual-studio-marketplace/v/ajitpratap0.gosqlx?style=for-the-badge&logo=visual-studio-code&label=VS%20Code)](https://marketplace.visualstudio.com/items?itemName=ajitpratap0.gosqlx)
-[![MCP](https://img.shields.io/badge/MCP-Remote%20Server-blue?style=for-the-badge&logo=cloud)](https://mcp.gosqlx.dev/health)
-[![Glama MCP Server](https://glama.ai/mcp/servers/ajitpratap0/GoSQLX/badges/score.svg)](https://glama.ai/mcp/servers/ajitpratap0/GoSQLX)
-[![Lint Action](https://img.shields.io/badge/Lint%20Action-GitHub-blue?style=for-the-badge&logo=github)](https://github.com/marketplace/actions/gosqlx-lint-action)
-
-[![Tests](https://img.shields.io/github/actions/workflow/status/ajitpratap0/GoSQLX/test.yml?branch=main&label=Tests&style=flat-square)](https://github.com/ajitpratap0/GoSQLX/actions)
-[![Go Report](https://goreportcard.com/badge/github.com/ajitpratap0/GoSQLX?style=flat-square)](https://goreportcard.com/report/github.com/ajitpratap0/GoSQLX)
-[![GoDoc](https://pkg.go.dev/badge/github.com/ajitpratap0/GoSQLX?style=flat-square)](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX)
-[![Stars](https://img.shields.io/github/stars/ajitpratap0/GoSQLX?style=social)](https://github.com/ajitpratap0/GoSQLX)
+[![CI](https://img.shields.io/github/actions/workflow/status/ajitpratap0/GoSQLX/test.yml?branch=main&label=CI&style=flat-square)](https://github.com/ajitpratap0/GoSQLX/actions/workflows/test.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/ajitpratap0/GoSQLX.svg)](https://pkg.go.dev/github.com/ajitpratap0/GoSQLX)
+[![Release](https://img.shields.io/github/v/release/ajitpratap0/GoSQLX?style=flat-square)](https://github.com/ajitpratap0/GoSQLX/releases)
+[![License](https://img.shields.io/github/license/ajitpratap0/GoSQLX?style=flat-square)](LICENSE)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/ajitpratap0/GoSQLX/badge)](https://securityscorecards.dev/viewer/?uri=github.com/ajitpratap0/GoSQLX)
 
-<br/>
-
-**[🌐 Try the Playground](https://gosqlx.dev/playground/)** &nbsp;·&nbsp; **[📖 Read the Docs](https://gosqlx.dev/docs/)** &nbsp;·&nbsp; **[🚀 Get Started](docs/GETTING_STARTED.md)** &nbsp;·&nbsp; **[📊 Benchmarks](https://gosqlx.dev/benchmarks/)**
+**[Playground](https://gosqlx.dev/playground/)** &nbsp;·&nbsp; **[Docs](https://gosqlx.dev/docs/)** &nbsp;·&nbsp; **[Benchmarks](https://gosqlx.dev/benchmarks/)** &nbsp;·&nbsp; **[VS Code](https://marketplace.visualstudio.com/items?itemName=ajitpratap0.gosqlx)** &nbsp;·&nbsp; **[MCP server](#mcp-server)**
 
 <br/>
 
@@ -36,6 +27,10 @@
 <sub>† Parse stage only (pre-tokenized input to AST), `SELECT id, name FROM users`, Apple M4, Go 1.27, median of 10 runs of `BenchmarkPerformanceBaseline`. Complex queries take longer (see `performance_baselines.json`). Reproduce: `go test -run ^$ -bench BenchmarkPerformanceBaseline -benchmem -count=10 ./pkg/sql/parser/`.</sub>
 <!-- metrics:end -->
 
+<br/>
+
+<img src=".github/assets/demo.gif" alt="Terminal demo: gosqlx validate, format and lint on one query, then the WASM playground" width="720">
+
 </div>
 
 <br/>
@@ -43,27 +38,6 @@
 ## What is GoSQLX?
 
 GoSQLX is a **production-ready SQL parsing SDK** for Go. It tokenizes, parses, and generates ASTs from SQL with zero-copy optimizations and intelligent object pooling - parsing a simple SELECT in about <!-- metrics-inline:start -->**318 ns (~3.1M parses/sec)**<!-- metrics-inline:end -->.
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-
-	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
-)
-
-func main() {
-	// ParseTree returns an opaque Tree, so you don't need to import
-	// pkg/sql/ast just to get started.
-	tree, _ := gosqlx.ParseTree(context.Background(),
-		"SELECT u.name, COUNT(*) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name",
-		gosqlx.WithDialect("postgresql"))
-	fmt.Println("Tables:", tree.Tables())
-	fmt.Println(tree.Format(gosqlx.WithIndent(2), gosqlx.WithUppercaseKeywords(true)))
-}
-```
 
 ### Why GoSQLX?
 
@@ -74,11 +48,53 @@ func main() {
 
 <br/>
 
-## Get Started in 60 Seconds
+## Install
+
+### Go library
 
 ```bash
 go get github.com/ajitpratap0/GoSQLX
 ```
+
+### CLI
+
+```bash
+go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest
+```
+
+### VS Code
+
+```bash
+code --install-extension ajitpratap0.gosqlx
+```
+
+The extension bundles the binary, so there is no extra setup. [Learn more](https://gosqlx.dev/vscode/).
+
+### MCP server
+
+```bash
+claude mcp add --transport http gosqlx https://mcp.gosqlx.dev/mcp
+```
+
+7 SQL tools in Claude, Cursor, or any MCP client. [MCP guide](https://gosqlx.dev/docs/mcp_guide/).
+
+[![MCP](https://img.shields.io/badge/MCP-Remote%20Server-blue?style=flat-square)](https://mcp.gosqlx.dev/health)
+[![Glama MCP Server](https://glama.ai/mcp/servers/ajitpratap0/GoSQLX/badges/score.svg)](https://glama.ai/mcp/servers/ajitpratap0/GoSQLX)
+
+### GitHub Action
+
+```yaml
+- uses: ajitpratap0/GoSQLX@v1
+  with:
+    files: '**/*.sql'
+    validate: true
+```
+
+<br/>
+
+## Quick start
+
+Source: [`examples/readme_quickstart/main.go`](examples/readme_quickstart/main.go), compiled in CI against HEAD and the latest release.
 
 ```go
 package main
@@ -121,80 +137,48 @@ func main() {
 }
 ```
 
-<br/>
+Output:
 
-## Install Everywhere
-
-<table>
-<tr>
-<td width="50%">
-
-### 📦 Go Library
-```bash
-go get github.com/ajitpratap0/GoSQLX
+```text
+Tables: [users]
+SELECT id, name
+FROM users
+WHERE active = true
+  SELECT with 2 columns
 ```
 
-### 🖥️ CLI Tool
-```bash
-go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest
-gosqlx validate "SELECT * FROM users"
-gosqlx format query.sql
-gosqlx lint query.sql
-```
+Formatting turns one-line SQL into a readable query:
 
-</td>
-<td width="50%">
-
-### 💻 VS Code Extension
-```bash
-code --install-extension ajitpratap0.gosqlx
-```
-Bundles the binary - zero setup. [Learn more →](https://gosqlx.dev/vscode/)
-
-### 🤖 MCP Server (AI Integration)
-```bash
-claude mcp add --transport http gosqlx \
-  https://mcp.gosqlx.dev/mcp
-```
-7 SQL tools in Claude, Cursor, or any MCP client. [Guide →](https://gosqlx.dev/docs/mcp_guide/)
-
-</td>
-</tr>
-</table>
+![Before and after gosqlx format](.github/assets/format-before-after.png)
 
 <br/>
 
-## Features at a Glance
+## Features
 
-<table>
-<tr>
-<td align="center" width="33%"><h3>⚡ Parser</h3>Zero-copy tokenizer<br/>Recursive descent parser<br/>Full AST generation<br/>Multi-dialect engine</td>
-<td align="center" width="33%"><h3>🛡️ Analysis</h3>SQL injection scanner<br/>30 lint rules (L001–L030)<br/>20 optimizer rules<br/>Metadata extraction</td>
-<td align="center" width="33%"><h3>🔧 Tooling</h3>AST-based formatter<br/>Query transforms API<br/>VS Code extension<br/>GitHub Action</td>
-</tr>
-<tr>
-<td align="center"><h3>🌐 Multi-Dialect</h3>PostgreSQL · MySQL · MariaDB<br/>SQL Server · Oracle<br/>SQLite · Snowflake · ClickHouse</td>
-<td align="center"><h3>🤖 AI-Ready</h3>MCP server (7 tools)<br/>Public remote endpoint<br/>Streamable HTTP</td>
-<td align="center"><h3>🧪 Battle-Tested</h3>Race-detector clean in CI<br/>~80–85% SQL-99 (estimated)</td>
-</tr>
-</table>
+<picture>
+  <img src=".github/assets/architecture.svg" alt="Architecture: SQL bytes go through the tokenizer to TokenWithSpan, the parser builds an AST, and the formatter, linter, security scanner, transpiler and fingerprinter consume it" width="900">
+</picture>
+
+- **[Parser](https://gosqlx.dev/docs/architecture/)** - zero-copy tokenizer, recursive descent parser and full AST generation.
+- **[Analysis](https://gosqlx.dev/docs/linting_rules/)** - SQL injection scanner, 30 lint rules (L001-L030), 20 optimizer rules and metadata extraction.
+- **[Tooling](https://gosqlx.dev/docs/cli_guide/)** - AST-based formatter, query transforms API, VS Code extension and GitHub Action.
+- **[Multi-dialect](https://gosqlx.dev/docs/sql_compatibility/)** - PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse.
+- **[AI-ready](https://gosqlx.dev/docs/mcp_guide/)** - MCP server with 7 tools, public remote endpoint, Streamable HTTP.
+- **[Tested](https://gosqlx.dev/docs/sql_compatibility/)** - race-detector clean in CI, ~80-85% SQL-99 (estimated).
 
 <br/>
 
 ## Documentation
 
-| | Resource | Description |
-|---|---|---|
-| 🌐 | **[gosqlx.dev](https://gosqlx.dev)** | Website with interactive playground |
-| 🚀 | **[Getting Started](https://gosqlx.dev/docs/getting_started/)** | Parse your first SQL in 5 minutes |
-| 📖 | **[Usage Guide](https://gosqlx.dev/docs/usage_guide/)** | Comprehensive patterns and examples |
-| 📄 | **[API Reference](https://gosqlx.dev/docs/api_reference/)** | Complete API documentation |
-| 🖥️ | **[CLI Guide](https://gosqlx.dev/docs/cli_guide/)** | Command-line tool reference |
-| 🌍 | **[SQL Compatibility](https://gosqlx.dev/docs/sql_compatibility/)** | Dialect support matrix |
-| 🤖 | **[MCP Guide](https://gosqlx.dev/docs/mcp_guide/)** | AI assistant integration |
-| 🏗️ | **[Architecture](https://gosqlx.dev/docs/architecture/)** | System design deep-dive |
-| 📊 | **[Benchmarks](https://gosqlx.dev/benchmarks/)** | Performance data and methodology |
-| 📝 | **[Release Notes](https://gosqlx.dev/blog/)** | What's new in each version |
+- **[Getting Started](https://gosqlx.dev/docs/getting_started/)** - parse your first SQL in 5 minutes
+- **[Usage Guide](https://gosqlx.dev/docs/usage_guide/)** - comprehensive patterns and examples
+- **[API Reference](https://gosqlx.dev/docs/api_reference/)** - complete API documentation
+- **[CLI Guide](https://gosqlx.dev/docs/cli_guide/)** - command-line tool reference
+- **[SQL Compatibility](https://gosqlx.dev/docs/sql_compatibility/)** - dialect support matrix
+- **[MCP Guide](https://gosqlx.dev/docs/mcp_guide/)** - AI assistant integration
+- **[Architecture](https://gosqlx.dev/docs/architecture/)** - system design deep-dive
+- **[Benchmarks](https://gosqlx.dev/benchmarks/)** - performance data and methodology
+- **[Changelog](CHANGELOG.md)** - what changed in each version
 
 <br/>
 
@@ -212,33 +196,13 @@ task check    # fmt → vet → lint → test (with race detection)
 3. **Run `task check`** - must pass before PR
 4. **Open a PR** - we review within 24 hours
 
-📋 [Contributing Guide](CONTRIBUTING.md) · 📜 [Code of Conduct](CODE_OF_CONDUCT.md) · 🏛️ [Governance](GOVERNANCE.md)
-
-<br/>
-
-## Who's Using GoSQLX?
-
-GoSQLX is downloaded and cloned by developers worldwide -- 595 unique cloners in just 14 days. If you're using GoSQLX in your project or organization, we'd love to hear about it!
-
-| Project / Company | Use Case |
-|---|---|
-| *Your project here* | [Add yourself via PR](https://github.com/ajitpratap0/GoSQLX/edit/main/README.md) or [tell us in Discussions](https://github.com/ajitpratap0/GoSQLX/discussions) |
-
-Using GoSQLX at work? Building something cool with it? Share your story in [GitHub Discussions](https://github.com/ajitpratap0/GoSQLX/discussions) -- it helps the community grow and motivates continued development.
+[Contributing Guide](CONTRIBUTING.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Governance](GOVERNANCE.md)
 
 <br/>
 
 ## Community
 
-<div align="center">
-
-**Got questions? Ideas? Found a bug?**
-
-<a href="https://github.com/ajitpratap0/GoSQLX/discussions"><img src="https://img.shields.io/badge/💬_Discussions-Ask_&_Share-purple?style=for-the-badge" alt="Discussions"></a>
-<a href="https://github.com/ajitpratap0/GoSQLX/issues/new/choose"><img src="https://img.shields.io/badge/🐛_Issues-Report_&_Request-red?style=for-the-badge" alt="Issues"></a>
-<a href="https://gosqlx.dev/blog/"><img src="https://img.shields.io/badge/📝_Blog-Release_Notes-green?style=for-the-badge" alt="Blog"></a>
-
-</div>
+Questions or ideas: [Discussions](https://github.com/ajitpratap0/GoSQLX/discussions). Found a bug or want a feature: [Issues](https://github.com/ajitpratap0/GoSQLX/issues/new/choose).
 
 <br/>
 
@@ -250,12 +214,6 @@ Apache License 2.0 - see [LICENSE](LICENSE) for details.
 
 <div align="center">
 
-<sub>Built with ❤️ by the GoSQLX community</sub>
-
 **[gosqlx.dev](https://gosqlx.dev)** · **[Playground](https://gosqlx.dev/playground/)** · **[Docs](https://gosqlx.dev/docs/)** · **[MCP Server](https://mcp.gosqlx.dev/mcp)** · **[VS Code](https://marketplace.visualstudio.com/items?itemName=ajitpratap0.gosqlx)**
-
-<br/>
-
-If GoSQLX helps your project, consider giving it a ⭐
 
 </div>

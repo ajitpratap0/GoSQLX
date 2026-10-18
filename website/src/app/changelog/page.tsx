@@ -16,7 +16,7 @@ const jsonLd = pageJsonLd({
   name: 'GoSQLX Changelog',
   description: metadata.description as string,
   path: '/changelog/',
-  crumbs: [{ name: 'Release Notes', path: '/changelog/' }],
+  crumbs: [{ name: 'Changelog', path: '/changelog/' }],
 });
 
 export default function BlogPage() {

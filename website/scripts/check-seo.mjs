@@ -9,7 +9,7 @@ import path from 'node:path';
 
 const ROOT = path.resolve(import.meta.dirname, '../.next/server/app');
 const TITLE_MAX = 60;
-const DESC_MIN = 70;
+const DESC_MIN = 120;
 const DESC_MAX = 160;
 
 function* walk(dir) {
@@ -53,7 +53,7 @@ function checkHtml(rel, html) {
 if (process.argv.includes('--self-test')) {
   const good =
     '<html><head><title>Short title | GoSQLX</title>' +
-    `<meta name="description" content="${'d'.repeat(100)}"/>` +
+    `<meta name="description" content="${'d'.repeat(130)}"/>` +
     '<meta name="theme-color" content="#0A0A0F"/><link rel="manifest" href="/manifest.webmanifest"/>' +
     '<link rel="alternate" type="application/rss+xml" href="/blog/rss.xml"/>' +
     '<script type="application/ld+json">{}</script></head></html>';

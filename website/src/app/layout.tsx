@@ -63,7 +63,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='light'||(!t&&window.matchMedia('(prefers-color-scheme:light)').matches)){document.documentElement.classList.add('light');document.documentElement.classList.remove('dark')}else{document.documentElement.classList.add('dark');document.documentElement.classList.remove('light')}var d=document.documentElement.classList.contains('light')?'light':'dark';var c=${JSON.stringify(THEME_COLORS)};document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.setAttribute('content',c[d])})}catch(e){}})();`,
+            __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='light'||(!t&&window.matchMedia('(prefers-color-scheme:light)').matches)){document.documentElement.classList.add('light');document.documentElement.classList.remove('dark')}else{document.documentElement.classList.add('dark');document.documentElement.classList.remove('light')}var d=document.documentElement.classList.contains('light')?'light':'dark';var c=${JSON.stringify(THEME_COLORS)};var o=window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark';if(d!==o){document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.setAttribute('content',c[d])})}}catch(e){}})();`,
           }}
         />
       </head>

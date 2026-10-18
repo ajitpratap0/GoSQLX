@@ -23,34 +23,61 @@ function MoonIcon({ className = '' }: { className?: string }) {
   );
 }
 
+type Theme = 'dark' | 'light';
+
+// Keep in sync with --bg in globals.css and the viewport export in layout.tsx.
+const THEME_COLORS: Record<Theme, string> = { dark: '#0A0A0F', light: '#FAFBFC' };
+
+/** Apply a theme to <html> and point the browser-chrome colour at it, even when it differs from the OS scheme. */
+function applyTheme(next: Theme) {
+  const html = document.documentElement;
+  html.classList.add(next);
+  html.classList.remove(next === 'light' ? 'dark' : 'light');
+  document
+    .querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')
+    .forEach((meta) => meta.setAttribute('content', THEME_COLORS[next]));
+}
+
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [theme, setTheme] = useState<Theme>('dark');
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     const saved = localStorage.getItem('theme');
+    let initial: Theme;
     if (saved === 'light' || saved === 'dark') {
-      setTheme(saved);
+      initial = saved;
     } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
-      setTheme('light');
+      initial = 'light';
     } else {
-      setTheme('dark');
+      initial = 'dark';
     }
+    setTheme(initial);
+    applyTheme(initial);
+
+    // Keep every open tab in step: the storage event fires in the other tabs.
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== 'theme' && e.key !== null) return;
+      const value = e.key === null ? null : e.newValue;
+      const next: Theme =
+        value === 'light' || value === 'dark'
+          ? value
+          : window.matchMedia('(prefers-color-scheme: light)').matches
+            ? 'light'
+            : 'dark';
+      setTheme(next);
+      applyTheme(next);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
 
   const toggle = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
     setTheme(next);
     localStorage.setItem('theme', next);
-    const html = document.documentElement;
-    if (next === 'light') {
-      html.classList.add('light');
-      html.classList.remove('dark');
-    } else {
-      html.classList.add('dark');
-      html.classList.remove('light');
-    }
+    applyTheme(next);
   };
 
   if (!mounted) {

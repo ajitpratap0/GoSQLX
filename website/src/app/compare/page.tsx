@@ -4,7 +4,7 @@ import { CompareContent } from './CompareContent';
 import { JsonLd } from '@/components/JsonLd';
 
 export const metadata: Metadata = pageMeta({
-  title: 'GoSQLX vs pg_query vs vitess-sqlparser: Go SQL Parser Comparison',
+  title: 'GoSQLX vs pg_query vs Vitess: Go SQL Parser Comparison',
   description:
     'Compare GoSQLX against pg_query_go, vitess-sqlparser, and xwb1989/sqlparser. Feature matrix, dialect support, and more for Go SQL parsing libraries.',
   path: '/compare/',

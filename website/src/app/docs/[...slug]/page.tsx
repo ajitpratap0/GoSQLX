@@ -53,7 +53,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   });
   return {
     ...meta,
-    alternates: { ...meta.alternates, types: { 'text/markdown': docMarkdownPath(slugStr) } },
+    alternates: {
+      ...meta.alternates,
+      types: { ...meta.alternates?.types, 'text/markdown': docMarkdownPath(slugStr) },
+    },
   };
 }
 

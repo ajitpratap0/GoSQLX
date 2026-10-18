@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { inter, jetbrainsMono } from '@/lib/fonts';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
@@ -7,13 +7,21 @@ import { SpeedInsights } from '@vercel/speed-insights/next';
 import { baseOpenGraph } from '@/lib/open-graph';
 import './globals.css';
 
+// Keep in sync with --bg in globals.css (dark and html.light).
+export const viewport: Viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#FAFBFC' },
+    { media: '(prefers-color-scheme: dark)', color: '#0A0A0F' },
+  ],
+};
+
 export const metadata: Metadata = {
   title: {
     default: 'GoSQLX: Go SQL Parser, Formatter & Linter',
     template: '%s | GoSQLX',
   },
   description:
-    'High-performance, zero-copy SQL parser, formatter and linter for Go. Thread-safe with 8-dialect support: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, and ClickHouse.',
+    'High-performance, zero-copy SQL parser, formatter and linter for Go. Thread-safe, 8 dialects: PostgreSQL, MySQL, SQL Server, Oracle, ClickHouse and more.',
   metadataBase: new URL('https://gosqlx.dev'),
   openGraph: baseOpenGraph,
   twitter: {
@@ -21,6 +29,15 @@ export const metadata: Metadata = {
     title: 'GoSQLX: Go SQL Parser, Formatter & Linter',
     description:
       'High-performance, zero-copy SQL parser, formatter and linter for Go with 8-dialect support.',
+  },
+  // RSS autodiscovery on every page: release notes and engineering articles.
+  alternates: {
+    types: {
+      'application/rss+xml': [
+        { url: '/changelog/feed.xml', title: 'GoSQLX Release Notes' },
+        { url: '/blog/rss.xml', title: 'GoSQLX Blog' },
+      ],
+    },
   },
   icons: {
     icon: '/favicon.png',

@@ -35,7 +35,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!article) return {};
 
   const meta = pageMeta({
-    title: article.title,
+    title: article.metaTitle ?? article.title,
     description: article.description,
     path: articleHref(slug),
     type: 'article',

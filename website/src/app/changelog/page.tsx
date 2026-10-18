@@ -2,26 +2,29 @@ import type { Metadata } from 'next';
 import { pageMeta } from '@/lib/seo';
 import { getAllPosts } from '@/lib/blog';
 import { BlogList } from './BlogList';
+import { JsonLd } from '@/components/JsonLd';
+import { pageJsonLd } from '@/lib/jsonld';
 
-const baseMeta = pageMeta({
+export const metadata: Metadata = pageMeta({
   title: 'Changelog',
   description:
     'GoSQLX changelog: release notes covering new features, improvements and bug fixes across every version of the Go SQL parsing SDK and its CLI.',
   path: '/changelog/',
 });
 
-export const metadata: Metadata = {
-  ...baseMeta,
-  alternates: {
-    ...baseMeta.alternates,
-    types: { 'application/rss+xml': '/changelog/feed.xml' },
-  },
-};
+const jsonLd = pageJsonLd({
+  name: 'GoSQLX Changelog',
+  description: metadata.description as string,
+  path: '/changelog/',
+  crumbs: [{ name: 'Release Notes', path: '/changelog/' }],
+});
 
 export default function BlogPage() {
   const posts = getAllPosts();
 
   return (
+    <>
+    <JsonLd data={jsonLd} />
     <div className="min-h-screen py-20 px-4">
       <div className="max-w-3xl mx-auto">
         <h1 className="text-4xl font-bold tracking-tight mb-3">Changelog</h1>
@@ -32,5 +35,6 @@ export default function BlogPage() {
         <BlogList posts={posts} />
       </div>
     </div>
+    </>
   );
 }

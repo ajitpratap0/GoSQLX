@@ -3,6 +3,11 @@ import { baseOpenGraph } from '@/lib/open-graph';
 
 const BRAND = 'GoSQLX';
 
+const RSS_FEEDS = [
+  { url: '/changelog/feed.xml', title: 'GoSQLX Release Notes' },
+  { url: '/blog/rss.xml', title: 'GoSQLX Blog' },
+];
+
 interface PageMetaInput {
   /** Page title without the brand. The layout template appends " | GoSQLX". */
   title: string;
@@ -39,7 +44,9 @@ export function pageMeta({
   return {
     title: absolute ? { absolute: title } : title,
     description,
-    alternates: { canonical: path },
+    // `alternates` is replaced, not merged, so the RSS feeds from the root layout
+    // are repeated here to keep autodiscovery on every page.
+    alternates: { canonical: path, types: { 'application/rss+xml': RSS_FEEDS } },
     openGraph: {
       ...baseOpenGraph,
       ...openGraph,

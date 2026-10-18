@@ -1,11 +1,12 @@
 'use client';
-import React, { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
 import { useWasm } from "./WasmLoader";
 import SqlEditor from "./SqlEditor";
 import AstTab from "./AstTab";
 import FormatTab from "./FormatTab";
 import LintTab from "./LintTab";
 import type { AnalysisData, LintData } from "./bridgeTypes";
+import type { EditorErrorMarker } from "./editorDiagnostics";
 const AnalyzeTab = React.lazy(() => import("./AnalyzeTab"));
 
 const DEFAULT_SQL = `SELECT u.id, u.name, COUNT(o.id) AS order_count
@@ -39,6 +40,8 @@ const TABS: { id: TabId; label: string }[] = [
 ];
 
 interface Results {
+  /** The SQL these results were computed for. */
+  source: string | null;
   ast: (Record<string, unknown> & { error?: string }) | null;
   format: string | { result?: string; formatted?: string; error?: string } | null;
   lint: LintData | null;
@@ -51,6 +54,7 @@ export default function Playground() {
   const [dialect, setDialect] = useState("generic");
   const [activeTab, setActiveTab] = useState<TabId>("ast");
   const [results, setResults] = useState<Results>({
+    source: null,
     ast: null,
     format: null,
     lint: null,
@@ -61,7 +65,7 @@ export default function Playground() {
   const runAll = useCallback(
     (query: string, dial: string) => {
       if (!api || !query.trim()) {
-        setResults({ ast: null, format: null, lint: null, analyze: null });
+        setResults({ source: null, ast: null, format: null, lint: null, analyze: null });
         return;
       }
 
@@ -86,6 +90,7 @@ export default function Playground() {
 
         if (runId === runIdRef.current) {
           setResults({
+            source: query,
             ast: astResult,
             format: formatResult,
             lint: lintResult,
@@ -108,6 +113,13 @@ export default function Playground() {
       setSql(value);
     },
     []
+  );
+
+  // Lint and Analyze both parse the SQL and locate a parse error the same way.
+  const errorSpan = results.lint?.parse_error_span ?? results.analyze?.parse_error_span;
+  const errorMarker = useMemo<EditorErrorMarker | null>(
+    () => (results.source !== null && errorSpan ? { source: results.source, span: errorSpan } : null),
+    [results.source, errorSpan],
   );
 
   const [copied, setCopied] = useState(false);
@@ -244,6 +256,7 @@ export default function Playground() {
               onChange={handleSqlChange}
               placeholder="Enter your SQL query here..."
               minHeight="200px"
+              errorMarker={errorMarker}
             />
           </div>
         </div>

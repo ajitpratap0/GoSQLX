@@ -29,20 +29,25 @@ var contractFixture = filepath.Join("..", "..", "..", "website", "src", "compone
 // contractSample returns one response of each kind with every field set, so
 // that no key is dropped by omitempty and the fixture lists the full contract.
 func contractSample() any {
+	sampleSpan := &ErrorSpan{
+		Code: "E2002", Message: "message", Line: 1, Column: 14, EndLine: 1, EndColumn: 14,
+	}
 	return struct {
 		Lint    LintResponse    `json:"lint"`
 		Analyze AnalyzeResponse `json:"analyze"`
 	}{
 		Lint: LintResponse{
-			ParseError: "parse error",
-			Error:      "lint error",
+			ParseError:     "parse error",
+			ParseErrorSpan: sampleSpan,
+			Error:          "lint error",
 			Violations: []LintViolation{{
 				Rule: "L016", RuleName: "Select Star", Severity: "warning", Message: "message",
 				Line: 1, Column: 1, Suggestion: "suggestion",
 			}},
 		},
 		Analyze: AnalyzeResponse{
-			ParseError: "parse error",
+			ParseError:     "parse error",
+			ParseErrorSpan: sampleSpan,
 			Security: &SecurityReport{
 				Findings: []SecurityFinding{{
 					Severity: "high", Pattern: "TAUTOLOGY", Description: "description", Risk: "risk",

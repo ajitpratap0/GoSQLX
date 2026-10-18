@@ -74,13 +74,15 @@ type LintViolation struct {
 
 // LintResponse is the result of Lint.
 //
-// ParseError is set when the SQL does not parse in the selected dialect. The
+// ParseError is set when the SQL does not parse in the selected dialect, and
+// ParseErrorSpan locates it when the error carries a position. The
 // violations from rules that can still run (text- and token-level rules) are
 // reported alongside it, but the SQL must never be presented as clean.
 type LintResponse struct {
-	ParseError string          `json:"parse_error,omitempty"`
-	Error      string          `json:"error,omitempty"`
-	Violations []LintViolation `json:"violations"`
+	ParseError     string          `json:"parse_error,omitempty"`
+	ParseErrorSpan *ErrorSpan      `json:"parse_error_span,omitempty"`
+	Error          string          `json:"error,omitempty"`
+	Violations     []LintViolation `json:"violations"`
 }
 
 // Lint runs the full built-in rule set that gosqlx.Lint ships (L001-L030)
@@ -91,6 +93,7 @@ func Lint(sql, dialect string) LintResponse {
 
 	if _, err := Parse(sql, dialect); err != nil {
 		resp.ParseError = err.Error()
+		resp.ParseErrorSpan = errorSpan(sql, err)
 	}
 
 	result, err := gosqlx.LintWithDialect(sql, Dialect(dialect))
@@ -155,18 +158,20 @@ type OptimizationReport struct {
 }
 
 // AnalyzeResponse is the result of Analyze. When the SQL does not parse,
-// only ParseError is set: no score is computed for SQL that fails to parse.
+// only ParseError (and ParseErrorSpan, when the error has a position) is set:
+// no score is computed for SQL that fails to parse.
 type AnalyzeResponse struct {
-	ParseError   string              `json:"parse_error,omitempty"`
-	Security     *SecurityReport     `json:"security,omitempty"`
-	Optimization *OptimizationReport `json:"optimization,omitempty"`
+	ParseError     string              `json:"parse_error,omitempty"`
+	ParseErrorSpan *ErrorSpan          `json:"parse_error_span,omitempty"`
+	Security       *SecurityReport     `json:"security,omitempty"`
+	Optimization   *OptimizationReport `json:"optimization,omitempty"`
 }
 
 // Analyze runs the security scanner and the optimization advisor on sql.
 func Analyze(sql, dialect string) AnalyzeResponse {
 	tree, err := Parse(sql, dialect)
 	if err != nil {
-		return AnalyzeResponse{ParseError: err.Error()}
+		return AnalyzeResponse{ParseError: err.Error(), ParseErrorSpan: errorSpan(sql, err)}
 	}
 
 	scan := security.NewScanner().ScanSQL(sql)

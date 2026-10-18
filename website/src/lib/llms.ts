@@ -1,5 +1,5 @@
 import { DOCS_SIDEBAR } from '@/lib/constants';
-import { getAllDocs } from '@/lib/docs';
+import { getAllDocs, type Doc } from '@/lib/docs';
 import { PROJECT, QA_CORPUS, BENCH_ENV, PARSE_BENCHMARKS, opsPerSec, formatOps } from '@/data/metrics';
 
 export const SITE_URL = 'https://gosqlx.dev';
@@ -52,6 +52,7 @@ export function buildLlmsTxt(): string {
     '## Optional',
     '',
     `- [Full documentation in one file](${SITE_URL}/llms-full.txt): Every docs page as plain text`,
+    `- Raw markdown of any docs page: append \`.md\` to its URL, e.g. ${SITE_URL}/docs/getting-started.md`,
     `- [Changelog](${SITE_URL}/changelog/): Release notes for every version`,
     `- [Changelog feed](${SITE_URL}/changelog/feed.xml): RSS 2.0`,
     `- [Source code](${REPO}): GitHub repository`,
@@ -61,22 +62,32 @@ export function buildLlmsTxt(): string {
   return lines.join('\n');
 }
 
+export const MARKDOWN_HEADERS = {
+  'Content-Type': 'text/markdown; charset=utf-8',
+} as const;
+
+/** Path of the raw-markdown alternate of a docs page. No trailing slash: the path has an extension. */
+export function docMarkdownPath(slug: string): string {
+  return `/docs/${slug}.md`;
+}
+
+/** One docs page as standalone markdown: title, canonical source URL, then the body. */
+export function buildDocMarkdown(doc: Doc): string {
+  return [
+    `# ${doc.title}`,
+    '',
+    `Source: ${SITE_URL}/docs/${doc.slug}/`,
+    '',
+    doc.content.replace(/^\s*#\s+.+\n+/, '').trim(),
+    '',
+  ].join('\n');
+}
+
 /** Index summary followed by the full markdown of every docs page. */
 export function buildLlmsFullTxt(): string {
   const parts = [header().join('\n')];
   for (const doc of getAllDocs()) {
-    parts.push(
-      [
-        '---',
-        '',
-        `# ${doc.title}`,
-        '',
-        `Source: ${SITE_URL}/docs/${doc.slug}/`,
-        '',
-        doc.content.replace(/^\s*#\s+.+\n+/, '').trim(),
-        '',
-      ].join('\n')
-    );
+    parts.push(['---', '', buildDocMarkdown(doc)].join('\n'));
   }
   return parts.join('\n');
 }

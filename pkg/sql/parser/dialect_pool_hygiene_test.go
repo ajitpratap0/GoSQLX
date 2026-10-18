@@ -44,8 +44,9 @@ var dialectSamples = []struct {
 	{keywords.DialectClickHouse, "SELECT a FROM t PREWHERE b = 1", true},
 }
 
-// defaultParserCapabilities is what Reset leaves behind (zero value).
-var defaultParserCapabilities = (&Parser{}).Capabilities()
+// defaultParserCapabilities is what Reset leaves behind: the same state as
+// NewParser() (dialect.Unknown capabilities), see #590.
+var defaultParserCapabilities = NewParser().Capabilities()
 
 // checkPoolsDefault fetches a tokenizer and a parser from the pools and
 // reports any non-default dialect state. sync.Pool may hand back a different
@@ -66,7 +67,7 @@ func checkPoolsDefault() error {
 		return fmt.Errorf("pooled parser DialectTyped() = %v, want Unknown", got)
 	}
 	if got := p.Capabilities(); got != defaultParserCapabilities {
-		return fmt.Errorf("pooled parser Capabilities() = %+v, want zero value", got)
+		return fmt.Errorf("pooled parser Capabilities() = %+v, want default (Unknown) capabilities", got)
 	}
 	if p.strict {
 		return fmt.Errorf("pooled parser strict = true, want false")

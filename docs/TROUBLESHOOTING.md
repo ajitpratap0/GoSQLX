@@ -2199,7 +2199,7 @@ Before submitting an issue, verify:
 
 When submitting bug reports, include:
 
-```markdown
+````markdown
 ### Environment
 - GoSQLX version: `gosqlx --version`
 - Go version: `go version`
@@ -2224,7 +2224,7 @@ SELECT * FROM users WHERE id = 1;
 - Configuration file (if relevant)
 - IDE/editor being used (for LSP issues)
 - Relevant code snippets
-```
+````
 
 ### Performance Issues
 

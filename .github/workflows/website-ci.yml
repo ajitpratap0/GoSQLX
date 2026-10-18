@@ -8,7 +8,7 @@ on:
       - '.github/workflows/website-ci.yml'
       - 'README.md'
       - 'llms.txt'
-      - 'docs/GETTING_STARTED.md'
+      - 'docs/**'
       - 'benchmarks/compare/results/**'
   pull_request:
     paths:
@@ -16,7 +16,7 @@ on:
       - '.github/workflows/website-ci.yml'
       - 'README.md'
       - 'llms.txt'
-      - 'docs/GETTING_STARTED.md'
+      - 'docs/**'
       - 'benchmarks/compare/results/**'
   workflow_dispatch:
 
@@ -64,6 +64,9 @@ jobs:
         run: |
           node scripts/check-metrics-drift.mjs --self-test
           node scripts/check-metrics-drift.mjs
+
+      - name: Docs link check (relative links, resolvable anchors, no local paths)
+        run: npm run check:docs-links
 
       - name: Contrast check (WCAG AA, dark and light tokens)
         run: npm run check:contrast

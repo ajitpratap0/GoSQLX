@@ -31,6 +31,10 @@ export const metadata: Metadata = {
     follow: true,
     googleBot: { index: true, follow: true },
   },
+  // Google Search Console ownership (HTML tag method, #682).
+  verification: {
+    google: 'wYXXkeFTH-HVJGWHs8K-Hjf6b1YcdbmJ97Nvid1QhmY',
+  },
 };
 
 export default function RootLayout({

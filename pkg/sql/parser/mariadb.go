@@ -387,87 +387,20 @@ func (p *Parser) parseTemporalPointExpression() (ast.Expression, error) {
 	return p.parsePrimaryExpression()
 }
 
-// parseConnectByCondition parses the condition expression for CONNECT BY.
-// It handles the PRIOR prefix operator in either position:
+// parseConnectByCondition parses the condition expression for CONNECT BY with
+// the general expression grammar (arithmetic, ||, AND/OR/NOT, function calls,
+// IN, BETWEEN, ...). PRIOR is a prefix operator that binds to its operand:
 //
-//	CONNECT BY PRIOR id = parent_id           (PRIOR on left)
-//	CONNECT BY id = PRIOR parent_id           (PRIOR on right)
-//	CONNECT BY PRIOR id = parent_id AND active = 1  (complex with AND/OR)
+//	CONNECT BY PRIOR id = parent_id
+//	CONNECT BY PRIOR id = parent_id + 1        ((PRIOR id) = (parent_id + 1))
+//	CONNECT BY PRIOR a + 1 = b                 (((PRIOR a) + 1) = b)
 //
-// PRIOR references the value from the parent row in the hierarchy.
-// It is modeled as UnaryExpression{Operator: ast.Prior, Expr: <column>}.
+// It is modeled as UnaryExpression{Operator: ast.Prior, Expr: <operand>}.
 func (p *Parser) parseConnectByCondition() (ast.Expression, error) {
-	var base ast.Expression
-
-	// Case 1: PRIOR col op col
-	if strings.EqualFold(p.currentToken.Token.Value, "PRIOR") {
-		p.advance()
-		priorIdent := p.parseIdent()
-		if priorIdent == nil || priorIdent.Name == "" {
-			return nil, p.expectedError("column name after PRIOR")
-		}
-		priorExpr := &ast.UnaryExpression{Operator: ast.Prior, Expr: priorIdent}
-
-		if p.isType(models.TokenTypeEq) || p.isType(models.TokenTypeNeq) ||
-			p.isType(models.TokenTypeLt) || p.isType(models.TokenTypeGt) ||
-			p.isType(models.TokenTypeLtEq) || p.isType(models.TokenTypeGtEq) {
-			op := p.currentToken.Token.Value
-			p.advance()
-			right, err := p.parsePrimaryExpression()
-			if err != nil {
-				return nil, err
-			}
-			base = &ast.BinaryExpression{Left: priorExpr, Operator: op, Right: right}
-		} else {
-			base = priorExpr
-		}
-	} else {
-		// Case 2: col op PRIOR col  (PRIOR on the right-hand side)
-		// or plain expression (no PRIOR)
-		left, err := p.parsePrimaryExpression()
-		if err != nil {
-			return nil, err
-		}
-		if p.isType(models.TokenTypeEq) || p.isType(models.TokenTypeNeq) ||
-			p.isType(models.TokenTypeLt) || p.isType(models.TokenTypeGt) ||
-			p.isType(models.TokenTypeLtEq) || p.isType(models.TokenTypeGtEq) {
-			op := p.currentToken.Token.Value
-			p.advance()
-			// Check for PRIOR on the right side
-			if strings.EqualFold(p.currentToken.Token.Value, "PRIOR") {
-				p.advance()
-				priorIdent := p.parseIdent()
-				if priorIdent == nil || priorIdent.Name == "" {
-					return nil, p.expectedError("column name after PRIOR")
-				}
-				priorExpr := &ast.UnaryExpression{Operator: ast.Prior, Expr: priorIdent}
-				base = &ast.BinaryExpression{Left: left, Operator: op, Right: priorExpr}
-			} else {
-				right, err := p.parsePrimaryExpression()
-				if err != nil {
-					return nil, err
-				}
-				base = &ast.BinaryExpression{Left: left, Operator: op, Right: right}
-			}
-		} else {
-			base = left
-		}
-	}
-
-	// Handle AND/OR chaining for complex conditions like:
-	//   PRIOR id = parent_id AND active = 1
-	for strings.EqualFold(p.currentToken.Token.Value, "AND") ||
-		strings.EqualFold(p.currentToken.Token.Value, "OR") {
-		logicOp := p.currentToken.Token.Value
-		p.advance()
-		rest, err := p.parseConnectByCondition()
-		if err != nil {
-			return nil, err
-		}
-		base = &ast.BinaryExpression{Left: base, Operator: logicOp, Right: rest}
-	}
-
-	return base, nil
+	prev := p.inConnectBy
+	p.inConnectBy = true
+	defer func() { p.inConnectBy = prev }()
+	return p.parseExpression()
 }
 
 // parsePeriodDefinition parses: PERIOD FOR name (start_col, end_col)

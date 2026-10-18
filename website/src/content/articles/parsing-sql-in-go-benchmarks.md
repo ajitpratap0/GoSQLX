@@ -1,5 +1,6 @@
 ---
 title: "Parsing SQL in Go: benchmark methodology and results"
+metaTitle: "Parsing SQL in Go: Benchmark Methodology"
 description: "A reproducible end-to-end benchmark of five Go SQL parsers, GoSQLX, pg_query_go, Vitess, TiDB and xwb1989, with the method, raw data and honest caveats."
 date: 2026-10-18
 tags: [go, benchmarks, sql, parsers]

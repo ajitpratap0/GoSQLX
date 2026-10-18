@@ -48,6 +48,10 @@ type parseOptions struct {
 	// semicolons). When false, the parser is lenient for backward compat.
 	strict bool
 
+	// pipesAsConcat mirrors the MySQL/MariaDB PIPES_AS_CONCAT SQL mode:
+	// || is concatenation instead of logical OR. No effect in other dialects.
+	pipesAsConcat bool
+
 	// timeout applies a parse-time deadline to contexts passed without one.
 	// Zero means no deadline applied by the options layer.
 	timeout time.Duration
@@ -120,6 +124,24 @@ func WithDialect(dialect string) Option {
 func WithStrict() Option {
 	return func(o *parseOptions) {
 		o.strict = true
+	}
+}
+
+// WithPipesAsConcat mirrors the MySQL / MariaDB PIPES_AS_CONCAT SQL mode, so
+// || is parsed as string concatenation instead of logical OR.
+//
+// With WithDialect("mysql") or WithDialect("mariadb") the parser follows the
+// server default and treats || as logical OR with OR precedence: the result
+// is the same AST as the OR keyword. Every other dialect already treats || as
+// concatenation, so this option only matters for MySQL and MariaDB.
+//
+// Example:
+//
+//	tree, err := gosqlx.ParseTree(ctx, "SELECT first || ' ' || last FROM t",
+//	    gosqlx.WithDialect("mysql"), gosqlx.WithPipesAsConcat())
+func WithPipesAsConcat() Option {
+	return func(o *parseOptions) {
+		o.pipesAsConcat = true
 	}
 }
 

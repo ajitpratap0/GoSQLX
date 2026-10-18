@@ -67,7 +67,9 @@ type TokenPosition struct {
 //	ast, err := parser.Parse(tokens)
 var parserPool = sync.Pool{
 	New: func() interface{} {
-		return &Parser{}
+		p := &Parser{}
+		p.resetDialectState()
+		return p
 	},
 }
 
@@ -113,6 +115,25 @@ func PutParser(p *Parser) {
 	}
 }
 
+// resetDialectState puts the typed dialect and its capability cache into the
+// default (dialect.Unknown) state. It is the single initialiser shared by
+// NewParser, the pool's New func and Reset, so a pooled default parser and a
+// freshly constructed one are state-identical. Allocation-free:
+// dialect.Unknown.Capabilities() returns a small struct by value.
+func (p *Parser) resetDialectState() {
+	p.dialectTyped = dialect.Unknown
+	p.capabilitiesCache = dialect.Unknown.Capabilities()
+	p.capabilitiesSet = true
+	p.refreshPipesMode()
+}
+
+// refreshPipesMode recomputes pipesAsOr from the dialect capabilities and the
+// PIPES_AS_CONCAT opt-in. It must run after any change to either input, so
+// the expression parser reads a single precomputed bool on its hot path.
+func (p *Parser) refreshPipesMode() {
+	p.pipesAsOr = p.capabilitiesCache.PipesAsLogicalOr && !p.pipesAsConcat
+}
+
 // maxPooledTokenBuf is the largest Parser.tokenBuf capacity (in tokens, about
 // 288 KiB at 72 B per token) that Reset keeps for reuse. Larger buffers are
 // dropped so one huge query does not pin memory in the parser pool.
@@ -140,12 +161,13 @@ func (p *Parser) Reset() {
 	p.depth = 0
 	p.ctx = nil
 	p.strict = false
+	p.pipesAsConcat = false
 	p.dialect = ""
 	// INVARIANT: p.dialectTyped must always equal dialect.Parse(p.dialect).
 	// Reset clears both fields in lockstep; see WithDialect for the active path.
-	p.dialectTyped = dialect.Unknown
-	p.capabilitiesCache = dialect.Capabilities{}
+	p.resetDialectState()
 	p.dmlReturning = false
+	p.inConnectBy = false
 }
 
 // currentLocation returns the source location of the current token.
@@ -244,6 +266,24 @@ func WithDialect(newDialect string) ParserOption {
 		p.dialect = newDialect
 		p.dialectTyped = dialect.Parse(newDialect)
 		p.capabilitiesCache = p.dialectTyped.Capabilities()
+		p.capabilitiesSet = true
+		p.refreshPipesMode()
+	}
+}
+
+// WithPipesAsConcat mirrors the MySQL / MariaDB PIPES_AS_CONCAT SQL mode:
+// || is parsed as string concatenation instead of logical OR.
+//
+// By default the MySQL and MariaDB dialects parse || as logical OR, with OR
+// precedence, and produce the same AST as the OR keyword
+// (BinaryExpression{Operator: "OR"}), with PipesOr set so SQL() writes ||
+// back. Every other dialect, including the
+// default (no dialect), already parses || as concatenation, so this option
+// has no effect there. It may be passed before or after WithDialect.
+func WithPipesAsConcat() ParserOption {
+	return func(p *Parser) {
+		p.pipesAsConcat = true
+		p.refreshPipesMode()
 	}
 }
 
@@ -301,10 +341,24 @@ type Parser struct {
 	// dialectTyped. It is refreshed alongside dialectTyped in WithDialect
 	// and Reset so that Capabilities() is a single struct-field read.
 	capabilitiesCache dialect.Capabilities
+	// capabilitiesSet reports whether capabilitiesCache has been populated.
+	// It is false only for a zero-value &Parser{} that never went through
+	// NewParser, GetParser, Reset or WithDialect; Capabilities() then derives
+	// the matrix from dialectTyped so the zero value is a valid parser.
+	capabilitiesSet bool
 	// dmlReturning is true while parsing an INSERT source query or an
 	// UPDATE ... FROM list, where an unquoted RETURNING starts the RETURNING
 	// clause and must not be taken as an implicit alias (#610).
 	dmlReturning bool
+	// inConnectBy is true while parsing a CONNECT BY condition, where PRIOR
+	// is a prefix operator binding to its operand (#783).
+	inConnectBy bool
+	// pipesAsConcat is the PIPES_AS_CONCAT opt-in set by WithPipesAsConcat.
+	pipesAsConcat bool
+	// pipesAsOr is true when || is logical OR: the dialect has
+	// Capabilities.PipesAsLogicalOr (MySQL, MariaDB) and pipesAsConcat is
+	// unset. Derived by refreshPipesMode; never set it directly.
+	pipesAsOr bool
 }
 
 // Deprecated: Parse is provided for backward compatibility only and is scheduled for
@@ -928,9 +982,8 @@ func (p *Parser) parseSnowflakeStageStatement(kind string) (ast.Statement, error
 
 // NewParser creates a new parser with optional configuration.
 func NewParser(opts ...ParserOption) *Parser {
-	p := &Parser{
-		capabilitiesCache: dialect.Unknown.Capabilities(),
-	}
+	p := &Parser{}
+	p.resetDialectState()
 	for _, opt := range opts {
 		opt(p)
 	}

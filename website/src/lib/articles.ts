@@ -16,6 +16,8 @@ import { SITE_URL } from './site';
 export interface Article {
   slug: string;
   title: string;
+  /** Optional shorter <title> (frontmatter `metaTitle`) keeping the tab title within 60 characters. */
+  metaTitle?: string;
   /** Hand-written meta description, 120-155 characters. */
   description: string;
   /** ISO date (YYYY-MM-DD). */
@@ -113,6 +115,7 @@ export function getArticleBySlug(slug: string): Article | null {
   const article: Article = {
     slug,
     title,
+    metaTitle: typeof data.metaTitle === 'string' ? data.metaTitle : undefined,
     description,
     date,
     updated,

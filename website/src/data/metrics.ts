@@ -20,12 +20,24 @@
  * harness JSON in a shared client chunk.
  */
 
+/** Supported dialect names; the single source for PROJECT.dialectCount. */
+export const DIALECT_NAMES = [
+  'PostgreSQL',
+  'MySQL',
+  'MariaDB',
+  'SQL Server',
+  'Oracle',
+  'SQLite',
+  'Snowflake',
+  'ClickHouse',
+] as const;
+
 /** Project facts (not performance). */
 export const PROJECT = {
   /** Latest released tag. */
   version: 'v1.15.0',
   /** Dialects supported (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse). */
-  dialectCount: 8,
+  dialectCount: DIALECT_NAMES.length,
   /** Built-in linter rules L001-L030. */
   lintRuleCount: 30,
   /** MCP tools exposed by the gosqlx MCP server. */
@@ -40,9 +52,9 @@ export const PROJECT = {
 
 /** QA-corpus pass rates, labelled with the release they were measured on. */
 export const QA_CORPUS = {
-  release: 'v1.14.0',
+  release: 'v1.15.0',
   snowflake: { pass: 87, total: 87 },
-  clickhouse: { pass: 69, total: 83 },
+  clickhouse: { pass: 83, total: 83 },
 } as const;
 
 export const BENCH_ENV = {

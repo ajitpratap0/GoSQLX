@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { baseOpenGraph } from '@/lib/open-graph';
+import { RSS_FEEDS } from '@/lib/site';
 
 const BRAND = 'GoSQLX';
 
@@ -39,7 +40,9 @@ export function pageMeta({
   return {
     title: absolute ? { absolute: title } : title,
     description,
-    alternates: { canonical: path },
+    // `alternates` is replaced, not merged, so the RSS feeds from the root layout
+    // are repeated here to keep autodiscovery on every page.
+    alternates: { canonical: path, types: { 'application/rss+xml': RSS_FEEDS } },
     openGraph: {
       ...baseOpenGraph,
       ...openGraph,

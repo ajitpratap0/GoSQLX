@@ -2,29 +2,71 @@ import { compileMDX } from 'next-mdx-remote/rsc';
 import remarkGfm from 'remark-gfm';
 import rehypeSlug from 'rehype-slug';
 import { visit, SKIP } from 'unist-util-visit';
-import type { Root as MdastRoot, PhrasingContent, Text } from 'mdast';
+import type { Root as MdastRoot, Paragraph, PhrasingContent } from 'mdast';
 import type { Root as HastRoot, Element, ElementContent } from 'hast';
 import { mdxComponents } from '@/components/docs/mdx-components';
 import { getHighlighter, resolveLang, THEME_NAME } from './highlight';
 
+/** Plain text of an mdast node (for the line-start checks below). */
+function mdText(node: PhrasingContent | undefined): string {
+  if (!node) return '';
+  if ('value' in node && typeof node.value === 'string') return node.value;
+  if ('children' in node) return (node.children as PhrasingContent[]).map(mdText).join('');
+  return '';
+}
+
+// A line that opens with an emoji/status symbol (✅ ❌ ⚠️) or a bracketed tag
+// such as [DIALECT-3] / [CLI-1/2].
+const ITEM_LINE = /^(?:\p{Extended_Pictographic}|\[[A-Z][A-Z0-9/_.-]*\])/u;
+
+/** Does the line that starts at `children[next]` (right after a newline) open a one-line item? */
+function siblingStartsItemLine(children: PhrasingContent[], next: number): boolean {
+  const node = children[next];
+  if (!node) return false;
+  if (node.type === 'text') return ITEM_LINE.test(node.value.replace(/^[ \t]+/, ''));
+  // "**Key**:" / "**Key:**" metadata lines (Version, Last Updated, Industry, ...).
+  if (node.type === 'strong') {
+    return mdText(node).trimEnd().endsWith(':') || /^:/.test(mdText(children[next + 1]));
+  }
+  return false;
+}
+
 /**
- * Single line breaks inside a paragraph become <br>. The docs and CHANGELOG.md
- * use one line per item for metadata blocks (**Version**: ... / **Last Updated**:
- * ...), emoji checklists and release-note entries; CommonMark would join those
- * into one run-on paragraph (#753). Same behaviour as remark-breaks.
+ * Keep line-per-item blocks on separate lines (#753) without touching
+ * hard-wrapped prose. A single newline inside a paragraph becomes <br> only
+ * when the next line starts with an emoji/status symbol, a bracketed tag
+ * ([DIALECT-3]) or a bold "**Key**:" label: the metadata blocks
+ * (**Version**: ... / **Industry:** ...), emoji checklists and the [1.9.0]
+ * release notes. Every other newline stays a soft break (a space), so wrapped
+ * sentences are not split mid-line.
  */
 export function remarkSoftBreaks() {
   return (tree: MdastRoot) => {
-    visit(tree, 'text', (node: Text, index, parent) => {
-      if (!parent || index === undefined || !node.value.includes('\n')) return;
-      const parts = node.value.split(/[ \t]*\r?\n[ \t]*/);
-      const replacement: PhrasingContent[] = [];
-      parts.forEach((value, i) => {
-        if (i > 0) replacement.push({ type: 'break' });
-        if (value) replacement.push({ type: 'text', value });
+    visit(tree, 'paragraph', (para: Paragraph) => {
+      const children = para.children;
+      const out: PhrasingContent[] = [];
+      children.forEach((node, idx) => {
+        if (node.type !== 'text' || !node.value.includes('\n')) {
+          out.push(node);
+          return;
+        }
+        const parts = node.value.split(/[ \t]*\r?\n/);
+        let buf = parts[0];
+        for (let i = 1; i < parts.length; i++) {
+          const rest = parts[i].replace(/^[ \t]+/, '');
+          const isLast = i === parts.length - 1;
+          const item = rest ? ITEM_LINE.test(rest) : isLast && siblingStartsItemLine(children, idx + 1);
+          if (item) {
+            if (buf) out.push({ type: 'text', value: buf });
+            out.push({ type: 'break' });
+            buf = rest;
+          } else {
+            buf += '\n' + parts[i];
+          }
+        }
+        if (buf) out.push({ type: 'text', value: buf });
       });
-      (parent.children as PhrasingContent[]).splice(index, 1, ...replacement);
-      return [SKIP, index + replacement.length];
+      para.children = out;
     });
   };
 }

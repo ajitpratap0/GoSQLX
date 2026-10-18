@@ -4,7 +4,16 @@
 import React, { type ReactNode, type ComponentPropsWithoutRef } from 'react';
 import { CodeBlock } from '@/components/ui/CodeBlock';
 
+/** Plain text of rendered heading children, for the anchor's accessible label. */
+function nodeText(node: ReactNode): string {
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(nodeText).join('');
+  if (React.isValidElement<{ children?: ReactNode }>(node)) return nodeText(node.props.children);
+  return '';
+}
+
 function HeadingAnchor({ id, level, children }: { id?: string; level: number; children?: ReactNode }) {
+  const title = nodeText(children).trim();
   return React.createElement(
     `h${level}`,
     { id, className: 'group scroll-mt-20' },
@@ -14,10 +23,13 @@ function HeadingAnchor({ id, level, children }: { id?: string; level: number; ch
           'a',
           {
             href: `#${id}`,
-            className: 'ml-2 text-fg-subtle opacity-0 transition-opacity group-hover:opacity-100',
-            'aria-label': 'Link to heading',
+            // Shown on hover and whenever it has keyboard focus, so the focus
+            // ring is never hidden behind opacity 0 (WCAG 2.4.7).
+            className:
+              'ml-2 rounded-sm text-fg-subtle opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100',
+            'aria-label': title ? `Link to section: ${title}` : 'Link to this section',
           },
-          '#'
+          React.createElement('span', { 'aria-hidden': true }, '#')
         )
       : null
   );

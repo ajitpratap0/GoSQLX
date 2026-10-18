@@ -310,6 +310,14 @@ body {
   line-height: 1.7;
 }
 
+/* Where the copy button is always visible (touch, below lg), reserve room at
+   the inline end so it never covers the end of a scrolled line. */
+@media (max-width: 63.999rem), (hover: none) {
+  .code-block pre {
+    padding-inline-end: 3.5rem;
+  }
+}
+
 /* Code inside a block never gets the inline-code pill (padding, background),
    which pushed the first line ~6px right of the rest (#749). */
 .code-block pre code,

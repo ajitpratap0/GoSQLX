@@ -7,7 +7,9 @@
  *   (class="shiki", token spans coloured through var(--shiki-token-*)) and has
  *   a copy button.
  * - The marketing code blocks (/vscode, /benchmarks) use the same component.
- * - Single line breaks render as <br> (metadata lines, release-note entries).
+ * - Line-per-item blocks (emoji checklists, **Key**: metadata, [TAG] release
+ *   notes) render with <br>, but hard-wrapped prose does not: no page may
+ *   have a <br> followed by a lowercase word (a sentence split mid-line).
  * - No page applies inline-code padding utilities to all code (prose-code:px-*),
  *   which indented the first line of every block.
  *
@@ -58,6 +60,10 @@ for (const file of pages) {
   blocks += pre;
   if (pre !== shiki) failures.push(`${rel}: ${pre - shiki} of ${pre} <pre> blocks are not highlighted`);
   if (copy !== pre) failures.push(`${rel}: ${pre} <pre> blocks but ${copy} copy buttons`);
+  if (markdownPages.includes(file)) {
+    const split = html.match(/<br\/>\s*[a-z][^<]{0,40}/g);
+    if (split) failures.push(`${rel}: ${split.length} mid-sentence <br> (e.g. "${split[0].slice(5)}")`);
+  }
   if (/prose-code:p[xy]-/.test(html)) failures.push(`${rel}: prose-code padding utility pads code inside <pre>`);
 }
 
@@ -66,6 +72,8 @@ const mustHave = [
   ['vscode.html', /<pre[^>]*class="shiki"[^>]*data-language="json"|<pre[^>]*data-language="json"[^>]*class="shiki"/, 'highlighted JSON settings'],
   ['docs/migration/from-jsqlparser.html', /You Should Stay with JSQLParser If[\s\S]{0,400}?<br\/>/, '<br> between checklist lines'],
   ['changelog/v1-9-2.html', /SQLite PRAGMA parsing[^<]*<br\/>/, '<br> between release-note entries'],
+  ['docs/migration/from-sqlfluff.html', /SaaS Platform<br\/>/, '<br> between case-study metadata lines'],
+  ['changelog/v1-15-0.html', /^(?![\s\S]*<br\/>\s*[a-z])/, 'no mid-sentence <br> in the current release notes'],
 ];
 for (const [rel, re, what] of mustHave) {
   const file = join(APP, rel);

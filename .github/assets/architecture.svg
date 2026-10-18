@@ -10,7 +10,7 @@
     .bg { fill: var(--bg); }
     .box { fill: var(--box); stroke: var(--stroke); stroke-width: 1.5; }
     .core { fill: var(--accent-bg); stroke: var(--accent); stroke-width: 2; }
-    .title { font-size: 17px; font-weight: 600; text-anchor: middle; }
+    .title { font-size: 20px; font-weight: 600; text-anchor: middle; }
     .sub { font-size: 16px; text-anchor: middle; fill: var(--muted); }
     .mono { font-family: Menlo, Consolas, "Liberation Mono", monospace; }
     .line { stroke: var(--stroke); stroke-width: 1.8; fill: none; }
@@ -20,60 +20,52 @@
   <rect class="bg" width="1200" height="420"/>
 
   <!-- main pipeline -->
-  <rect class="box" x="30" y="150" width="170" height="80" rx="10"/>
-  <text class="title" x="115" y="184">SQL bytes</text>
-  <text class="sub mono" x="115" y="207">[]byte</text>
+  <rect class="box" x="15" y="150" width="150" height="80" rx="10"/>
+  <text class="title " x="90" y="182">SQL bytes</text>
+  <text class="sub mono" x="90" y="212">[]byte</text>
+  <rect class="core" x="220" y="150" width="200" height="80" rx="10"/>
+  <text class="title " x="320" y="182">Tokenizer</text>
+  <text class="sub " x="320" y="212">zero-copy, UTF-8</text>
+  <rect class="box" x="485" y="150" width="200" height="80" rx="10"/>
+  <text class="title mono" x="585" y="182" style="font-size:18px">[]TokenWithSpan</text>
+  <text class="sub " x="585" y="212">with positions</text>
+  <rect class="core" x="750" y="150" width="170" height="80" rx="10"/>
+  <text class="title " x="835" y="182">Parser</text>
+  <text class="sub " x="835" y="212">recursive descent</text>
+  <rect class="core" x="985" y="150" width="190" height="80" rx="10"/>
+  <text class="title " x="1080" y="182">AST</text>
+  <text class="sub " x="1080" y="212">pooled, visitor</text>
 
-  <rect class="core" x="270" y="150" width="190" height="80" rx="10"/>
-  <text class="title" x="365" y="184">Tokenizer</text>
-  <text class="sub" x="365" y="207">zero-copy, UTF-8</text>
-
-  <rect class="box" x="530" y="150" width="190" height="80" rx="10"/>
-  <text class="title mono" x="625" y="184" style="font-size:15px">[]TokenWithSpan</text>
-  <text class="sub" x="625" y="207">tokens with positions</text>
-
-  <rect class="core" x="790" y="150" width="150" height="80" rx="10"/>
-  <text class="title" x="865" y="184">Parser</text>
-  <text class="sub" x="865" y="207">recursive descent</text>
-
-  <rect class="core" x="1010" y="150" width="160" height="80" rx="10"/>
-  <text class="title" x="1090" y="184">AST</text>
-  <text class="sub" x="1090" y="207">pooled, visitor API</text>
-
-  <path class="line" d="M200 190 H262"/><path class="arrow" d="M270 190 l-10 -5 v10 z"/>
-  <path class="line" d="M460 190 H522"/><path class="arrow" d="M530 190 l-10 -5 v10 z"/>
-  <path class="line" d="M720 190 H782"/><path class="arrow" d="M790 190 l-10 -5 v10 z"/>
-  <path class="line" d="M940 190 H1002"/><path class="arrow" d="M1010 190 l-10 -5 v10 z"/>
+  <path class="line" d="M165 190 H212"/><path class="arrow" d="M220 190 l-10 -5 v10 z"/>
+  <path class="line" d="M420 190 H477"/><path class="arrow" d="M485 190 l-10 -5 v10 z"/>
+  <path class="line" d="M685 190 H742"/><path class="arrow" d="M750 190 l-10 -5 v10 z"/>
+  <path class="line" d="M920 190 H977"/><path class="arrow" d="M985 190 l-10 -5 v10 z"/>
 
   <!-- consumers -->
-  <path class="line" d="M1090 230 V268 M1090 268 H110 M110 268 V300 M350 268 V300 M600 268 V300 M850 268 V300 M1090 268 V300"/>
-  <path class="arrow" d="M110 310 l-5 -10 h10 z"/>
-  <path class="arrow" d="M350 310 l-5 -10 h10 z"/>
+  <path class="line" d="M1080 230 V268 M1080 268 H120 M120 268 V300 M360 268 V300 M600 268 V300 M840 268 V300 M1080 268 V300"/>
+  <path class="arrow" d="M120 310 l-5 -10 h10 z"/>
+  <path class="arrow" d="M360 310 l-5 -10 h10 z"/>
   <path class="arrow" d="M600 310 l-5 -10 h10 z"/>
-  <path class="arrow" d="M850 310 l-5 -10 h10 z"/>
-  <path class="arrow" d="M1090 310 l-5 -10 h10 z"/>
-  <text class="label" x="30" y="252">consumers of the AST</text>
+  <path class="arrow" d="M840 310 l-5 -10 h10 z"/>
+  <path class="arrow" d="M1080 310 l-5 -10 h10 z"/>
+  <text class="label" x="1062" y="258" style="text-anchor:end">consumers of the AST</text>
 
-  <rect class="box" x="30" y="310" width="160" height="70" rx="10"/>
-  <text class="title" x="110" y="340">Formatter</text>
-  <text class="sub" x="110" y="362">AST to SQL</text>
+  <rect class="box" x="15" y="310" width="210" height="80" rx="10"/>
+  <text class="title " x="120" y="342">Formatter</text>
+  <text class="sub " x="120" y="372">AST to SQL</text>
+  <rect class="box" x="255" y="310" width="210" height="80" rx="10"/>
+  <text class="title " x="360" y="342">Linter</text>
+  <text class="sub " x="360" y="372">30 rules, L001-L030</text>
+  <rect class="box" x="495" y="310" width="210" height="80" rx="10"/>
+  <text class="title " x="600" y="342">Security</text>
+  <text class="sub " x="600" y="372">injection scanner</text>
+  <rect class="box" x="735" y="310" width="210" height="80" rx="10"/>
+  <text class="title " x="840" y="342">Transpile</text>
+  <text class="sub " x="840" y="372">dialect to dialect</text>
+  <rect class="box" x="975" y="310" width="210" height="80" rx="10"/>
+  <text class="title " x="1080" y="342">Fingerprint</text>
+  <text class="sub " x="1080" y="372">query normalization</text>
 
-  <rect class="box" x="270" y="310" width="160" height="70" rx="10"/>
-  <text class="title" x="350" y="340">Linter</text>
-  <text class="sub" x="350" y="362">30 rules, L001-L030</text>
-
-  <rect class="box" x="520" y="310" width="160" height="70" rx="10"/>
-  <text class="title" x="600" y="340">Security</text>
-  <text class="sub" x="600" y="362">injection scanner</text>
-
-  <rect class="box" x="770" y="310" width="160" height="70" rx="10"/>
-  <text class="title" x="850" y="340">Transpile</text>
-  <text class="sub" x="850" y="362">dialect to dialect</text>
-
-  <rect class="box" x="1010" y="310" width="160" height="70" rx="10"/>
-  <text class="title" x="1090" y="340">Fingerprint</text>
-  <text class="sub" x="1090" y="362">query normalization</text>
-
-  <text class="label" x="30" y="60" style="font-size:15px;font-weight:600;fill:var(--text)">GoSQLX pipeline</text>
-  <text class="label" x="30" y="82">Raw SQL becomes tokens, then an AST. Every tool works on the same tree.</text>
+  <text class="title" x="15" y="46" style="text-anchor:start;font-size:26px">GoSQLX pipeline</text>
+  <text class="label" x="15" y="82">Raw SQL becomes tokens, then an AST. Every tool works on the same tree.</text>
 </svg>

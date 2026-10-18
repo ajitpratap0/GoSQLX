@@ -6,20 +6,13 @@ import { SITE_URL } from '@/lib/site';
 import { JsonLd } from '@/components/JsonLd';
 import { formatArticleDate } from './format-date';
 
-const baseMeta = pageMeta({
-  title: 'Blog',
+export const metadata: Metadata = pageMeta({
+  title: 'GoSQLX Blog: Go SQL Parsing, Linting & Benchmarks',
   description:
     'GoSQLX engineering blog: how the zero-copy SQL tokenizer and pooled parser work, benchmark methodology, and guides to linting and securing SQL in Go.',
   path: '/blog/',
+  absolute: true,
 });
-
-export const metadata: Metadata = {
-  ...baseMeta,
-  alternates: {
-    ...baseMeta.alternates,
-    types: { 'application/rss+xml': '/blog/rss.xml' },
-  },
-};
 
 export default function BlogIndexPage() {
   const articles = getAllArticles();

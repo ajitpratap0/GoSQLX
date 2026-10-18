@@ -21,7 +21,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!post) return {};
 
   return pageMeta({
-    title: `${post.title} release notes`,
+    title: `GoSQLX v${post.version} Release Notes`,
+    absolute: true,
     description: post.description,
     path: `/changelog/${slug}/`,
     type: 'article',

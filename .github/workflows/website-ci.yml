@@ -81,5 +81,8 @@ jobs:
       - name: Build (prebuild compiles the playground WASM)
         run: npm run build
 
+      - name: SEO regression check (reads the built HTML)
+        run: npm run check:seo
+
       - name: Rendered markdown check (highlighting, copy buttons, line breaks)
         run: npm run check:rendered

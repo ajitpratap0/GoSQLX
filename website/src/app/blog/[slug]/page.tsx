@@ -32,7 +32,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!article) return {};
 
   const meta = pageMeta({
-    title: article.title,
+    title: article.metaTitle ?? article.title,
     description: article.description,
     path: articleHref(slug),
     type: 'article',
@@ -48,6 +48,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     alternates: {
       ...meta.alternates,
       types: {
+        ...meta.alternates?.types,
         'text/markdown': articleMarkdownPath(slug),
         'application/rss+xml': '/blog/rss.xml',
       },

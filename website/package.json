@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "check:metrics": "node scripts/check-metrics-drift.mjs",
-    "check:contrast": "node scripts/check-contrast.mjs"
+    "check:contrast": "node scripts/check-contrast.mjs",
+    "check:layout": "node scripts/check-layout-guards.mjs"
   },
   "dependencies": {
     "@codemirror/lang-sql": "^6.10.0",

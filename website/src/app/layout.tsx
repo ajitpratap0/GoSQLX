@@ -61,7 +61,7 @@ export default function RootLayout({
         </a>
         <Providers>
           <Navbar />
-          <main id="main-content" tabIndex={-1} className="pt-16 focus:outline-none">{children}</main>
+          <main id="main-content" tabIndex={-1} className="pt-16">{children}</main>
           <Footer />
         </Providers>
         <SpeedInsights />

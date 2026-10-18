@@ -156,7 +156,7 @@ result = scanner.ScanSQL(sql)
 // result.IsClean() == true
 ```
 
-**v1.6.0 Performance:**
+**Performance:**
 - Pre-compiled regex patterns for performance
 - Thread-safe pattern compilation (sync.Once)
 - Precise system table matching (avoids false positives)

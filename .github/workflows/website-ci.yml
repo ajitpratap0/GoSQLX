@@ -10,6 +10,10 @@ on:
       - 'CHANGELOG.md'
       - 'llms.txt'
       - 'docs/**'
+      - 'pkg/linter/rules/**'
+      - 'cmd/gosqlx/cmd/lint.go'
+      - 'cmd/gosqlx/cmd/root.go'
+      - 'pkg/errors/errors.go'
       - 'benchmarks/compare/results/**'
   pull_request:
     paths:
@@ -19,6 +23,10 @@ on:
       - 'CHANGELOG.md'
       - 'llms.txt'
       - 'docs/**'
+      - 'pkg/linter/rules/**'
+      - 'cmd/gosqlx/cmd/lint.go'
+      - 'cmd/gosqlx/cmd/root.go'
+      - 'pkg/errors/errors.go'
       - 'benchmarks/compare/results/**'
   workflow_dispatch:
 
@@ -70,6 +78,10 @@ jobs:
           node scripts/check-metrics-drift.mjs --self-test
           node scripts/check-metrics-drift.mjs
 
+      - name: Docs content check (rule coverage, version labels, Go version)
+        run: |
+          node scripts/check-docs-content.mjs --self-test
+          node scripts/check-docs-content.mjs
       - name: Dialect anchor check
         run: npm run check:anchors
       - name: Docs link check (relative links, resolvable anchors, no local paths)

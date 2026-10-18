@@ -45,7 +45,7 @@ type Expression interface {
 type SelectStatement struct {
     With        *WithClause         // CTE support
     Distinct    bool                // DISTINCT keyword
-    DistinctOn  []Expression        // NEW v1.6.0: PostgreSQL DISTINCT ON
+    DistinctOn  []Expression        // PostgreSQL DISTINCT ON
     Columns     []Expression
     From        []TableReference
     Joins       []JoinClause
@@ -56,11 +56,11 @@ type SelectStatement struct {
     OrderBy     []OrderByExpression // Supports NULLS FIRST/LAST
     Limit       *int
     Offset      *int
-    FetchClause *FetchClause        // NEW v1.6.0: SQL-99 FETCH FIRST support
+    FetchClause *FetchClause        // SQL-99 FETCH FIRST support
 }
 ```
 
-**PostgreSQL-Specific Features (v1.6.0):**
+**PostgreSQL-Specific Features:**
 - `DistinctOn` - SELECT DISTINCT ON (column1, column2)
 
 **Example:**
@@ -81,12 +81,12 @@ type InsertStatement struct {
     Columns    []Expression
     Values     []Expression     // Supports function calls (NOW(), UUID(), etc.)
     Query      *SelectStatement // INSERT INTO ... SELECT
-    Returning  []Expression     // NEW v1.6.0: PostgreSQL RETURNING clause
+    Returning  []Expression     // PostgreSQL RETURNING clause
     OnConflict *OnConflict      // Upsert support
 }
 ```
 
-**v1.6.0 Enhancements:**
+**Enhancements:**
 - `Returning` - PostgreSQL RETURNING clause for INSERT
 - Expression-based VALUES (function calls, arithmetic)
 
@@ -109,11 +109,11 @@ type UpdateStatement struct {
     Assignments []UpdateExpression // Alias for Updates (preferred)
     From        []TableReference  // PostgreSQL UPDATE ... FROM
     Where       Expression
-    Returning   []Expression      // NEW v1.6.0: PostgreSQL RETURNING clause
+    Returning   []Expression      // PostgreSQL RETURNING clause
 }
 ```
 
-**v1.6.0 Enhancements:**
+**Enhancements:**
 - `Returning` - PostgreSQL RETURNING clause for UPDATE
 
 ### `DeleteStatement`
@@ -123,11 +123,11 @@ type DeleteStatement struct {
     TableName string
     Using     []TableReference // PostgreSQL DELETE ... USING
     Where     Expression
-    Returning []Expression     // NEW v1.6.0: PostgreSQL RETURNING clause
+    Returning []Expression     // PostgreSQL RETURNING clause
 }
 ```
 
-**v1.6.0 Enhancements:**
+**Enhancements:**
 - `Returning` - PostgreSQL RETURNING clause for DELETE
 
 ### `MergeStatement`
@@ -150,7 +150,7 @@ sql := `MERGE INTO target_table t USING source_table s ON t.id = s.id
 ast, _ := gosqlx.Parse(sql)
 ```
 
-### `TruncateStatement` (**NEW v1.6.0**)
+### `TruncateStatement`
 ```go
 type TruncateStatement struct {
     Tables          []string // Table names to truncate
@@ -186,7 +186,7 @@ type CreateTableStatement struct {
 }
 ```
 
-**v1.6.0 Enhancements:**
+**Enhancements:**
 - Full column constraint support (PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK, NOT NULL, DEFAULT)
 - Parameterized types (VARCHAR(100), DECIMAL(10,2))
 - Referential actions (ON DELETE/UPDATE CASCADE, SET NULL, SET DEFAULT)
@@ -233,7 +233,7 @@ sql := "CREATE MATERIALIZED VIEW sales_summary AS SELECT region, SUM(amount) FRO
 ast, _ := gosqlx.Parse(sql)
 ```
 
-### `RefreshMaterializedViewStatement` (**NEW v1.6.0**)
+### `RefreshMaterializedViewStatement`
 ```go
 type RefreshMaterializedViewStatement struct {
     Name         string
@@ -265,12 +265,12 @@ type DropStatement struct {
 ```go
 type WithClause struct {
     Recursive    bool
-    Materialized *bool              // NEW v1.6.0: MATERIALIZED/NOT MATERIALIZED hint
+    Materialized *bool              // MATERIALIZED/NOT MATERIALIZED hint
     CTEs         []CommonTableExpr
 }
 ```
 
-**v1.6.0 Enhancements:**
+**Enhancements:**
 - `Materialized` - PostgreSQL optimization hints (MATERIALIZED, NOT MATERIALIZED)
 
 **Example:**
@@ -399,7 +399,7 @@ type BinaryExpression struct {
 }
 ```
 
-**Supported Operators (v1.6.0):**
+**Supported Operators:**
 - Arithmetic: `+`, `-`, `*`, `/`, `%`
 - Comparison: `=`, `!=`, `<>`, `<`, `>`, `<=`, `>=`
 - Logical: `AND`, `OR`, `NOT`
@@ -418,13 +418,13 @@ type FunctionCall struct {
     Name      string
     Arguments []Expression
     Distinct  bool          // DISTINCT keyword in aggregate
-    Filter    Expression    // NEW v1.6.0: FILTER (WHERE ...) clause
-    OrderBy   []OrderByExpression // NEW v1.6.0: ORDER BY inside aggregate
+    Filter    Expression    // FILTER (WHERE ...) clause
+    OrderBy   []OrderByExpression // ORDER BY inside aggregate
     Over      *WindowSpec   // Window specification
 }
 ```
 
-**v1.6.0 Enhancements:**
+**Enhancements:**
 - `Filter` - SQL:2003 T612 FILTER clause for conditional aggregation
 - `OrderBy` - ORDER BY inside aggregates (STRING_AGG, ARRAY_AGG, JSON_AGG, etc.)
 
@@ -475,7 +475,7 @@ type SubqueryExpression struct {
 }
 ```
 
-**v1.6.0 Enhancement:**
+**Enhancement:**
 - Derived tables in FROM clause: `(SELECT ...) AS alias`
 
 ## Supporting Types
@@ -495,8 +495,8 @@ type JoinClause struct {
 type OrderByExpression struct {
     Expression Expression
     Descending bool
-    NullsFirst bool // NEW v1.6.0: NULLS FIRST
-    NullsLast  bool // NEW v1.6.0: NULLS LAST
+    NullsFirst bool // NULLS FIRST
+    NullsLast  bool // NULLS LAST
 }
 ```
 
@@ -512,13 +512,13 @@ ast, _ := gosqlx.Parse(sql)
 type TableReference struct {
     Name        string
     Alias       string
-    Lateral     bool             // NEW v1.6.0: PostgreSQL LATERAL JOIN
+    Lateral     bool             // PostgreSQL LATERAL JOIN
     Subquery    *SelectStatement // Derived table: (SELECT ...) alias
     SetSubquery *SetOperation    // Derived table whose body is a set operation
 }
 ```
 
-**v1.6.0 Enhancement:**
+**Enhancement:**
 - `Lateral` - PostgreSQL LATERAL JOIN support
 
 At most one of `Subquery` and `SetSubquery` is set. A derived table whose body is a
@@ -533,7 +533,7 @@ sql := "SELECT u.name, r.order_date FROM users u, LATERAL (SELECT * FROM orders 
 ast, _ := gosqlx.Parse(sql)
 ```
 
-### `FetchClause` (**NEW v1.6.0**)
+### `FetchClause`
 ```go
 type FetchClause struct {
     Count       *int64  // Number of rows
@@ -577,7 +577,7 @@ defer ast.ReleaseSelectStatement(stmt)
 - `ListExpression`, `UnaryExpression`
 - `ExtractExpression`, `PositionExpression`, `SubstringExpression`
 
-**v1.6.0 Pool Optimizations:**
+**Pool Optimizations:**
 - Iterative cleanup with work queue pattern (prevents stack overflow)
 - MaxCleanupDepth and MaxWorkQueueSize limits
 - 8 new expression pools added

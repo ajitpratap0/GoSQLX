@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import { renderMarkdown } from '@/lib/markdown';
 import { JsonLd } from '@/components/JsonLd';
 import { blogPostHref, getAllPosts, getPostBySlug, getPostSlugs } from '@/lib/blog';
+import { remarkChangelogHeadings, remarkGithubIssueRefs } from '@/lib/remark-changelog';
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -35,7 +36,7 @@ export default async function BlogPostPage({ params }: Props) {
   const post = getPostBySlug(slug);
   if (!post) notFound();
 
-  const content = await renderMarkdown(post.content);
+  const content = await renderMarkdown(post.content, [remarkChangelogHeadings, remarkGithubIssueRefs]);
 
   // Find prev/next posts for navigation
   const allPosts = getAllPosts();
@@ -119,7 +120,7 @@ export default async function BlogPostPage({ params }: Props) {
         </header>
 
         {/* Content */}
-        <div className="prose prose-invert prose-dark max-w-none prose-headings:font-semibold prose-a:text-accent prose-a:no-underline hover:prose-a:underline prose-hr:border-border">
+        <div className="prose prose-invert prose-dark max-w-none prose-headings:font-semibold prose-a:text-accent prose-a:underline prose-a:decoration-accent/50 prose-a:underline-offset-2 prose-a:hover:decoration-accent prose-hr:border-border [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto">
           {content}
         </div>
 

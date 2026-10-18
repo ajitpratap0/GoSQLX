@@ -221,12 +221,14 @@ body {
 /* Prose dark theme overrides */
 .prose-dark {
   --tw-prose-body: color-mix(in srgb, var(--fg) 82%, var(--bg));
+  --tw-prose-lead: var(--fg-muted);
   --tw-prose-headings: var(--fg);
   --tw-prose-links: var(--accent);
   --tw-prose-bold: var(--fg);
   --tw-prose-counters: var(--fg-subtle);
   --tw-prose-bullets: var(--fg-subtle);
   --tw-prose-quotes: var(--fg);
+  --tw-prose-quote-borders: var(--border);
   --tw-prose-captions: var(--fg-subtle);
   --tw-prose-hr: var(--border);
   --tw-prose-th-borders: var(--border);

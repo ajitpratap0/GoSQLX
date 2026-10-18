@@ -71,7 +71,7 @@ const mustHave = [
   ['docs/getting-started.html', /var\(--shiki-token-keyword\)|var\(--shiki-token-function\)/, 'token-coloured spans'],
   ['vscode.html', /<pre[^>]*class="shiki"[^>]*data-language="json"|<pre[^>]*data-language="json"[^>]*class="shiki"/, 'highlighted JSON settings'],
   ['docs/migration/from-jsqlparser.html', /You Should Stay with JSQLParser If[\s\S]{0,400}?<br\/>/, '<br> between checklist lines'],
-  ['changelog/v1-9-2.html', /SQLite PRAGMA parsing[^<]*<br\/>/, '<br> between release-note entries'],
+  ['changelog/v1-9-0.html', /<li>\[DIALECT-3\] SQLite PRAGMA parsing[^<]*<\/li>/, 'release-note entries as separate list items'],
   ['docs/migration/from-sqlfluff.html', /SaaS Platform<br\/>/, '<br> between case-study metadata lines'],
   ['changelog/v1-15-0.html', /^(?![\s\S]*<br\/>\s*[a-z])/, 'no mid-sentence <br> in the current release notes'],
 ];

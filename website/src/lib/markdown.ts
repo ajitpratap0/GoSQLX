@@ -1,6 +1,7 @@
 import { compileMDX } from 'next-mdx-remote/rsc';
 import remarkGfm from 'remark-gfm';
 import rehypeSlug from 'rehype-slug';
+import type { PluggableList } from 'unified';
 import { visit, SKIP } from 'unist-util-visit';
 import type { Root as MdastRoot, Paragraph, PhrasingContent } from 'mdast';
 import type { Root as HastRoot, Element, ElementContent } from 'hast';
@@ -112,13 +113,13 @@ export function rehypeShikiTokens() {
 }
 
 /** Compile repo markdown (docs, blog articles, release notes) with the shared pipeline. */
-export async function renderMarkdown(source: string) {
+export async function renderMarkdown(source: string, extraRemarkPlugins: PluggableList = []) {
   const { content } = await compileMDX({
     source,
     options: {
       mdxOptions: {
         format: 'md',
-        remarkPlugins: [remarkGfm, remarkSoftBreaks],
+        remarkPlugins: [remarkGfm, remarkSoftBreaks, ...extraRemarkPlugins],
         rehypePlugins: [rehypeSlug, rehypeShikiTokens],
       },
     },

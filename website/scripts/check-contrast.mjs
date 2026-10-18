@@ -9,7 +9,7 @@
  *
  * Usage: node scripts/check-contrast.mjs
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -80,6 +80,30 @@ for (const [theme, vars] of Object.entries(themes)) {
 const overrides = css.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => /html\.light/.test(l));
 if (overrides.length !== 1 || overrides[0].trim() !== 'html.light {') {
   failures.push(`html.light override rules are not allowed outside the token block:\n  ${overrides.join('\n  ')}`);
+}
+
+// Any element using prose-invert must also carry prose-dark, otherwise typography
+// falls back to white text and is unreadable in light mode (#736).
+const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '../src');
+function walk(dir) {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const f = resolve(dir, e.name);
+    if (e.isDirectory()) walk(f);
+    else if (/\.(tsx|ts|jsx|js)$/.test(e.name)) {
+      const src = readFileSync(f, 'utf8');
+      if (/\bprose-invert\b/.test(src) && !/\bprose-dark\b/.test(src)) {
+        failures.push(`${f.slice(SRC.length)}: prose-invert without prose-dark`);
+      }
+    }
+  }
+}
+walk(SRC);
+
+// .prose-dark must override every --tw-prose-* variable that prose-invert sets,
+// otherwise the invert (light-on-dark) value leaks through in light mode.
+const proseDark = (css.match(/\.prose-dark\s*\{([^}]*)\}/) || [])[1] || '';
+for (const v of ['body', 'lead', 'headings', 'links', 'bold', 'counters', 'bullets', 'hr', 'quotes', 'quote-borders', 'captions', 'code', 'pre-bg', 'th-borders', 'td-borders']) {
+  if (!proseDark.includes(`--tw-prose-${v}:`)) failures.push(`.prose-dark does not override --tw-prose-${v}`);
 }
 
 if (failures.length) {

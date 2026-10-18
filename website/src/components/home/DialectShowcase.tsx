@@ -2,25 +2,30 @@ import Link from 'next/link';
 import { PROJECT, QA_CORPUS } from '@/data/metrics';
 import { FadeIn } from '@/components/ui/FadeIn';
 
-const COMPAT_HREF = '/docs/reference/sql-compatibility/#supported-dialects';
+const COMPAT_PATH = '/docs/reference/sql-compatibility/';
 
 interface Dialect {
   name: string;
   /** The dialect string passed to the parser (docs/SQL_COMPATIBILITY.md, "Supported Dialects"). */
   key: string;
+  /**
+   * Heading slug of this dialect's "Known Gaps by Dialect" section in
+   * docs/SQL_COMPATIBILITY.md (github-slugger of the "####" heading).
+   */
+  anchor: string;
   /** QA-corpus result, only where a corpus run is recorded. No unsourced percentages. */
   qa?: { pass: number; total: number };
 }
 
 const DIALECTS: Dialect[] = [
-  { name: 'PostgreSQL', key: 'postgresql' },
-  { name: 'MySQL', key: 'mysql' },
-  { name: 'MariaDB', key: 'mariadb' },
-  { name: 'SQL Server', key: 'sqlserver' },
-  { name: 'Oracle', key: 'oracle' },
-  { name: 'SQLite', key: 'sqlite' },
-  { name: 'Snowflake', key: 'snowflake', qa: QA_CORPUS.snowflake },
-  { name: 'ClickHouse', key: 'clickhouse', qa: QA_CORPUS.clickhouse },
+  { name: 'PostgreSQL', key: 'postgresql', anchor: 'postgresql-default-best-supported' },
+  { name: 'MySQL', key: 'mysql', anchor: 'mysql' },
+  { name: 'MariaDB', key: 'mariadb', anchor: 'mariadb' },
+  { name: 'SQL Server', key: 'sqlserver', anchor: 'sql-server-t-sql' },
+  { name: 'Oracle', key: 'oracle', anchor: 'oracle' },
+  { name: 'SQLite', key: 'sqlite', anchor: 'sqlite' },
+  { name: 'Snowflake', key: 'snowflake', anchor: 'snowflake', qa: QA_CORPUS.snowflake },
+  { name: 'ClickHouse', key: 'clickhouse', anchor: 'clickhouse', qa: QA_CORPUS.clickhouse },
 ];
 
 /** Neutral database glyph shared by every dialect (no vendor marks). */
@@ -51,7 +56,7 @@ export function DialectShowcase() {
             <li key={dialect.key}>
               <FadeIn viewport delay={i * 0.05} className="h-full">
                 <Link
-                  href={COMPAT_HREF}
+                  href={`${COMPAT_PATH}#${dialect.anchor}`}
                   className="glass glass-hover flex h-full flex-col items-center p-5 text-center transition-colors"
                 >
                   <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-accent/10 text-accent">

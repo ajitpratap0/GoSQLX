@@ -65,7 +65,7 @@ Median bytes allocated per operation. Lower is better.
 
 The tables above are regenerated on every build. The observations in this section describe the run recorded on this page; if you are reading a later version of the data, trust the tables over the prose.
 
-**GoSQLX is not the fastest parser on every query.** Vitess, the MySQL parser from the Vitess project, is GoSQLX's closest competitor and is faster on several statements. The two trade places depending on query shape. If you only parse MySQL and only need a syntax tree, Vitess is an excellent choice, and the summary table shows exactly how close the two are.
+**GoSQLX is not the fastest parser on every query.** Vitess, the MySQL parser from the Vitess project, is a strong choice for MySQL. {{bench:vitess}} If you only parse MySQL and only need a syntax tree, Vitess is an excellent choice; GoSQLX's case is breadth across dialects and a built-in toolchain, not raw MySQL parse speed.
 
 **Allocation counts and allocated bytes tell different stories.** In this run GoSQLX makes fewer heap allocations than the other libraries on most queries, which reflects its pooled tokenizer and zero-copy token values. Vitess allocates fewer bytes on most queries. Fewer allocations usually means less GC bookkeeping, fewer bytes means less memory traffic; which one matters more depends on your workload, so the harness reports both.
 

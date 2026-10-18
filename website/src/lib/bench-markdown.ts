@@ -15,6 +15,7 @@
  *   {{bench:table:allocs}}   median allocs/op for every (query, library)
  *   {{bench:table:bytes}}    median B/op for every (query, library)
  *   {{bench:table:summary}}  per-library summary relative to GoSQLX
+ *   {{bench:vitess}}         one sentence on Vitess vs GoSQLX (wins and geometric mean)
  */
 import {
   COMPETITOR_RUN,
@@ -93,6 +94,36 @@ function summaryTable(): string {
   ].join('\n');
 }
 
+/** Compare one library to GoSQLX over the queries both accept. */
+function compareToBase(id: string): { name: string; faster: number; total: number; gm: number } | null {
+  const parser = COMPETITOR_RUN.parsers.find((p) => p.id === id);
+  if (!parser) return null;
+  const ratios: number[] = [];
+  let faster = 0;
+  for (const q of COMPETITOR_RUN.queries) {
+    const base = competitorResult(q.id, BASE_ID);
+    const other = competitorResult(q.id, id);
+    if (!base || !base.supported || base.nsPerOp === null) continue;
+    if (!other || !other.supported || other.nsPerOp === null) continue;
+    ratios.push(other.nsPerOp / base.nsPerOp);
+    if (other.nsPerOp < base.nsPerOp) faster++;
+  }
+  if (ratios.length === 0) return null;
+  return { name: parser.name, faster, total: ratios.length, gm: geometricMean(ratios) };
+}
+
+/** Plain, data-driven sentence so the prose cannot drift from the JSON. */
+function vitessSentence(): string {
+  const c = compareToBase('vitess');
+  if (!c) throw new Error('bench:vitess requires vitess and gosqlx results in the committed JSON');
+  const gm = c.gm.toFixed(2);
+  const base = `In this run ${c.name} is faster than GoSQLX on ${c.faster} of ${c.total} queries compared`;
+  if (c.gm < 1) {
+    return `${base}, and its geometric-mean time is ${gm}x GoSQLX's, so it is faster on most queries and on average (see the summary table).`;
+  }
+  return `${base}, and its geometric-mean time is ${gm}x GoSQLX's (see the summary table).`;
+}
+
 function librariesTable(): string {
   return [
     '| Library | Module | Version | Dialect | CGo |',
@@ -131,6 +162,7 @@ const EXPANSIONS: Record<string, () => string> = {
   'table:allocs': () => metricTable('allocsPerOp'),
   'table:bytes': () => metricTable('bytesPerOp'),
   'table:summary': summaryTable,
+  vitess: vitessSentence,
 };
 
 const PLACEHOLDER = /\{\{bench:([a-z:]+)\}\}/g;

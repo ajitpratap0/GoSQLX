@@ -15,7 +15,7 @@ const MCP_TOOLS = [
 ];
 
 const MCP_ADD_COMMAND = 'claude mcp add --transport http gosqlx https://mcp.gosqlx.dev/mcp';
-const LSP_INSTALL_COMMAND = 'go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest';
+const CLI_INSTALL_COMMAND = 'go install github.com/ajitpratap0/GoSQLX/cmd/gosqlx@latest';
 
 const EDITORS = [
   { name: 'Neovim', href: '/docs/integrations/neovim/' },
@@ -47,7 +47,7 @@ export function UseEverywhere() {
               </p>
               <ReproduceSnippet command={MCP_ADD_COMMAND} what="MCP install command" />
               <p className="mt-2 font-mono text-xs text-fg-subtle">
-                Added gosqlx ({PROJECT.mcpToolCount} tools available)
+                Expected output: Added gosqlx ({PROJECT.mcpToolCount} tools available)
               </p>
               <ul className="mt-4 flex flex-wrap gap-2" aria-label="MCP tools">
                 {MCP_TOOLS.map((tool) => (
@@ -89,7 +89,7 @@ export function UseEverywhere() {
                 </Button>
               </div>
               <div className="mt-5">
-                <ReproduceSnippet command={LSP_INSTALL_COMMAND} what="CLI install command" />
+                <ReproduceSnippet command={CLI_INSTALL_COMMAND} what="CLI install command" />
               </div>
               <ul className="mt-4 space-y-1">
                 {EDITORS.map((e) => (

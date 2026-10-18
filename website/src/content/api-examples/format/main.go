@@ -9,7 +9,8 @@ import (
 
 func main() {
 	// Format messy SQL
-	formatted, err := gosqlx.Format("select id,name from users where id>5", gosqlx.DefaultFormatOptions())
+	opts := gosqlx.DefaultFormatOptions()
+	formatted, err := gosqlx.Format("select id,name from users where id>5", opts)
 	if err != nil {
 		log.Fatal(err)
 	}

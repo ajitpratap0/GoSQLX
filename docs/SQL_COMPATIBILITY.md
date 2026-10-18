@@ -6,7 +6,13 @@
 
 This matrix documents the comprehensive SQL feature support in GoSQLX across different SQL dialects and standards. The testing was conducted using the comprehensive integration test suite with 700+ test cases covering real-world SQL patterns.
 
-### Recent Additions (v1.9.0)
+### Recent Additions (v1.15.0)
+- ✅ **Snowflake**: 87/87 QA corpus pass (MATCH_RECOGNIZE, QUALIFY, VARIANT paths, time-travel, LATERAL FLATTEN, stage/stream/task/pipe stubs)
+- ✅ **ClickHouse**: 83/83 QA corpus pass (up from 69/83 in v1.14.0): `ARRAY JOIN`, scalar CTEs, `CREATE MATERIALIZED VIEW`, numeric `SAMPLE ... OFFSET`, `LIMIT offset, count`
+- ✅ **Parser**: arithmetic on the right-hand side of comparisons; pooled parser capabilities now match `NewParser`
+- See [Snowflake](#snowflake) and [ClickHouse](#clickhouse) below for per-dialect details
+
+### Previous Additions (v1.9.0)
 - ✅ **SQLite PRAGMA**: Fully parsed - bare (`PRAGMA x`), arg (`PRAGMA x(n)`), and assignment (`PRAGMA x=v`) forms; `PragmaStatement` AST node
 - ✅ **WITHOUT ROWID**: `CREATE TABLE ... WITHOUT ROWID`; reserved keywords now valid as DDL column names
 - ✅ **Tautology Detection**: `ScanSQL()` detects `1=1`, `'a'='a'`, `col=col`, `OR TRUE` → CRITICAL severity (`PatternTautology`)
@@ -664,7 +670,7 @@ gosqlx format --dialect mysql query.sql
 
 ## SQL Standards Compliance Summary
 
-### Overall Compliance (v1.15.0)
+### Overall Compliance (v1.14.0)
 
 | Standard | Compliance % | Status | Notes |
 |----------|--------------|--------|-------|
@@ -702,7 +708,8 @@ gosqlx format --dialect mysql query.sql
 | **Oracle** | 80% | 60% | ⭐⭐⭐⭐ Good | Keywords + basic features |
 | **SQLite** | 85% | 50% | ⭐⭐⭐⭐ Good | Keywords + basic features |
 | **MariaDB** | 95% | 90% | ⭐⭐⭐⭐⭐ Excellent | MySQL superset + SEQUENCE DDL, temporal tables, CONNECT BY (v1.14.0) |
-| **Snowflake** | 80% | 30% | ⭐⭐⭐ Good | Keyword detection only |
+| **Snowflake** | 100% | 100% | ⭐⭐⭐⭐⭐ Excellent | 87/87 QA corpus pass (v1.15.0); QA-corpus pass rate, not a full-spec percentage |
+| **ClickHouse** | 100% | 100% | ⭐⭐⭐⭐⭐ Excellent | 83/83 QA corpus pass (v1.15.0); QA-corpus pass rate, not a full-spec percentage |
 
 ## Performance Characteristics by Feature
 
@@ -862,6 +869,14 @@ gosqlx format --dialect mysql query.sql
 **SQL-99 Compliance**: ~85%
 **PostgreSQL Compliance**: ~95% (core features), ~85% (extensions)
 **MySQL Compliance**: ~95% (core features), ~85% (extensions)
+
+## Quick Reference: What's New in v1.15.0
+
+1. **Snowflake** - 87/87 QA corpus pass
+2. **ClickHouse** - 83/83 QA corpus pass (was 69/83): `ARRAY JOIN`, scalar CTEs, materialized views, `SAMPLE ... OFFSET`, `LIMIT offset, count`
+3. **Parser** - arithmetic on the right-hand side of comparisons
+
+---
 
 ## Quick Reference: What's New in v1.9.0
 

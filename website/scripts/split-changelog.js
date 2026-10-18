@@ -80,17 +80,66 @@ function slugFor(version) {
   return `v${version.replace(/\./g, '-')}`;
 }
 
+const DESCRIPTION_MAX = 160;
+
+/** Strips inline Markdown so a summary reads as plain text on a card. */
+function plainText(md) {
+  return md
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/\*\*|__|`/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Shortens to at most `max` chars, preferring a sentence end, then a word boundary. */
+function truncate(text, max) {
+  if (text.length <= max) return text;
+  const head = text.slice(0, max);
+  const sentenceEnd = Math.max(head.lastIndexOf('. '), head.lastIndexOf('! '), head.lastIndexOf('? '));
+  if (sentenceEnd >= max / 2) return head.slice(0, sentenceEnd + 1);
+  const space = head.lastIndexOf(' ', max - 1);
+  return `${head.slice(0, space > 0 ? space : max - 1).replace(/[\s,;:(—–-]+$/, '')}…`;
+}
+
+/**
+ * Card summary for a release. In order of preference: the lead paragraph that
+ * precedes the first heading (all of its lines, so it is never cut mid-sentence),
+ * the heading subtitle, the first top-level bullet, then a generic fallback.
+ * Nested bullets, tables, quotes and prose under later headings are never used,
+ * because out of context they read as fragments.
+ */
+function describe(release) {
+  const { version, subtitle, body } = release;
+  const lead = [];
+  for (const line of body.split('\n')) {
+    const t = line.trim();
+    if (/^(#|```|~~~)/.test(t)) break;
+    if (!t) {
+      if (lead.length) break;
+      continue;
+    }
+    if (/^([-*+]\s|\d+\.\s|\||>|-{3,}$)/.test(t)) {
+      if (lead.length) break;
+      continue;
+    }
+    lead.push(t);
+  }
+  const firstBullet = body.split('\n').find((l) => /^[-*+]\s+\S/.test(l));
+  const candidates = [
+    lead.join(' '),
+    // A bare status tag such as "Pre-release" says nothing about the release.
+    /^(pre-?release|released\b)/i.test(subtitle) ? '' : subtitle,
+    firstBullet ? firstBullet.replace(/^[-*+]\s+/, '') : '',
+    `GoSQLX v${version} release`,
+  ];
+  const text = plainText(candidates.find((c) => plainText(c)) || '');
+  return truncate(text, DESCRIPTION_MAX).replace(/"/g, "'");
+}
+
 function toMarkdown(release) {
   const { version, date, subtitle, body } = release;
   const title = subtitle ? `v${version} — ${subtitle}` : `v${version}`;
-  const descLine = body
-    .split('\n')
-    .find((l) => l.trim() && !l.startsWith('#') && !l.startsWith('---') && !l.startsWith('- '));
-  const rawDesc = (descLine || subtitle || `GoSQLX v${version} release`)
-    .replace(/\*\*/g, '')
-    .replace(/`/g, '')
-    .trim();
-  const description = rawDesc.slice(0, 160).replace(/"/g, "'").replace(/'$/, '');
+  const description = describe(release);
   const frontmatter = [
     '---',
     `title: "${title.replace(/"/g, "'")}"`,
@@ -121,7 +170,7 @@ function main() {
   console.log(`Generated ${count} changelog pages from CHANGELOG.md`);
 }
 
-module.exports = { splitChangelog, slugFor, RELEASE_HEADING };
+module.exports = { splitChangelog, slugFor, describe, RELEASE_HEADING };
 
 if (require.main === module) {
   main();

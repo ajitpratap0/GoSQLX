@@ -11,7 +11,7 @@ import { remark } from 'remark';
 import { remarkChangelogHeadings, remarkGithubIssueRefs } from '../src/lib/remark-changelog.ts';
 
 const require = createRequire(import.meta.url);
-const { splitChangelog, slugFor } = require('./split-changelog.js');
+const { splitChangelog, slugFor, describe } = require('./split-changelog.js');
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const changelog = readFileSync(path.resolve(here, '../../CHANGELOG.md'), 'utf-8');
@@ -135,4 +135,59 @@ test('changelog article links are underlined, not marked by colour alone (WCAG 1
   const page = readFileSync(path.resolve(here, '../src/app/changelog/[slug]/page.tsx'), 'utf-8');
   assert.match(page, /prose-a:underline\b/);
   assert.doesNotMatch(page, /prose-a:no-underline/);
+});
+
+/** Orders "X.Y.Z" strings numerically, newest first. */
+const byVersionDesc = (a, b) => {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if (pa[i] !== pb[i]) return pb[i] - pa[i];
+  return 0;
+};
+
+test('CHANGELOG.md: release dates never increase as versions decrease', () => {
+  const releases = splitChangelog(changelog).sort((a, b) => byVersionDesc(a.version, b.version));
+  for (let i = 1; i < releases.length; i++) {
+    const newer = releases[i - 1];
+    const older = releases[i];
+    assert.ok(
+      older.date <= newer.date,
+      `v${older.version} (${older.date}) is dated after v${newer.version} (${newer.date})`,
+    );
+  }
+});
+
+test('describe: card summaries are whole sentences, never nested bullets or fragments', () => {
+  for (const r of splitChangelog(changelog)) {
+    const d = describe(r);
+    assert.ok(d.length > 0 && d.length <= 160, `v${r.version}: bad length ${d.length}`);
+    assert.doesNotMatch(d, /^[-*+]\s/, `v${r.version}: starts with a bullet: ${d}`);
+    assert.doesNotMatch(d, /[,;:]$/, `v${r.version}: ends mid-sentence: ${d}`);
+    assert.doesNotMatch(d, /\*\*|`/, `v${r.version}: contains Markdown: ${d}`);
+  }
+});
+
+test('describe: prefers the full lead paragraph, then the subtitle, then a bullet', () => {
+  const lead = describe({
+    version: '9.0.0',
+    subtitle: 'Sub',
+    body: 'First line of the lead,\nsecond line ends here.\n\n### Added\n- x',
+  });
+  assert.equal(lead, 'First line of the lead, second line ends here.');
+  const sub = describe({
+    version: '9.0.0',
+    subtitle: 'MCP Server',
+    body: '### New\n- **MCP** server\n  - 7 tools: a, b\n\n### Note\nLater prose,',
+  });
+  assert.equal(sub, 'MCP Server');
+  const bullet = describe({ version: '9.0.0', subtitle: 'Pre-release', body: '- **Initial** `parser`\n- y' });
+  assert.equal(bullet, 'Initial parser');
+  const long = describe({ version: '9.0.0', subtitle: '', body: 'word '.repeat(60).trim() });
+  assert.ok(long.length <= 160 && long.endsWith('…'));
+});
+
+test('changelog article tables scroll horizontally instead of being clipped on narrow screens', () => {
+  const page = readFileSync(path.resolve(here, '../src/app/changelog/[slug]/page.tsx'), 'utf-8');
+  assert.match(page, /\[&_table\]:overflow-x-auto/);
+  assert.match(page, /\[&_table\]:block/);
 });

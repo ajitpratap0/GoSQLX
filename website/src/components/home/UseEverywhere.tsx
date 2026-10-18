@@ -39,8 +39,8 @@ export function UseEverywhere() {
 
         <div className="grid gap-6 md:grid-cols-2">
           {/* AI assistants (MCP) */}
-          <FadeIn viewport className="h-full">
-            <div className="glass h-full p-6 flex flex-col">
+          <FadeIn viewport className="h-full min-w-0">
+            <div className="glass h-full min-w-0 p-6 flex flex-col">
               <h3 className="text-xl font-semibold text-fg mb-2">AI assistants</h3>
               <p className="text-sm text-fg-muted mb-5">
                 Connect {PROJECT.mcpToolCount} SQL tools to Claude, Cursor or any MCP client. No installation, no API key.
@@ -69,8 +69,8 @@ export function UseEverywhere() {
           </FadeIn>
 
           {/* Editors (LSP) */}
-          <FadeIn viewport delay={0.1} className="h-full">
-            <div className="glass h-full p-6 flex flex-col">
+          <FadeIn viewport delay={0.1} className="h-full min-w-0">
+            <div className="glass h-full min-w-0 p-6 flex flex-col">
               <h3 className="text-xl font-semibold text-fg mb-2">Editors</h3>
               <p className="text-sm text-fg-muted mb-5">
                 Real-time validation, formatting and linting as you type, across all {PROJECT.dialectCount} dialects,

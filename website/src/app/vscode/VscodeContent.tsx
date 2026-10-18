@@ -2,12 +2,8 @@ import { FadeIn } from '@/components/ui/FadeIn';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
 import { ReproduceSnippet } from '@/components/home/ReproduceSnippet';
-import { PROJECT } from '@/data/metrics';
+import { DIALECT_NAMES } from '@/data/metrics';
 
-const DIALECTS = ['PostgreSQL', 'MySQL', 'MariaDB', 'SQLite', 'SQL Server', 'Oracle', 'Snowflake', 'ClickHouse'];
-if (DIALECTS.length !== PROJECT.dialectCount) {
-  throw new Error('VS Code dialect list is out of sync with PROJECT.dialectCount');
-}
 
 const SETTINGS_JSON = `{
   "gosqlx.executablePath": "/usr/local/bin/gosqlx",
@@ -29,7 +25,7 @@ const features = [
   },
   {
     title: 'Multi-dialect',
-    description: `Supports ${DIALECTS.join(', ')} out of the box.`,
+    description: `Supports ${DIALECT_NAMES.join(', ')} out of the box.`,
   },
   {
     title: 'Bundled Binary',

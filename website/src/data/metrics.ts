@@ -20,12 +20,24 @@
  * harness JSON in a shared client chunk.
  */
 
+/** Supported dialect names; the single source for PROJECT.dialectCount. */
+export const DIALECT_NAMES = [
+  'PostgreSQL',
+  'MySQL',
+  'MariaDB',
+  'SQL Server',
+  'Oracle',
+  'SQLite',
+  'Snowflake',
+  'ClickHouse',
+] as const;
+
 /** Project facts (not performance). */
 export const PROJECT = {
   /** Latest released tag. */
   version: 'v1.15.0',
   /** Dialects supported (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse). */
-  dialectCount: 8,
+  dialectCount: DIALECT_NAMES.length,
   /** Built-in linter rules L001-L030. */
   lintRuleCount: 30,
   /** MCP tools exposed by the gosqlx MCP server. */

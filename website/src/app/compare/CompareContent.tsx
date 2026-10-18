@@ -9,26 +9,45 @@ import { COMPETITOR_PAGES } from './competitors';
 /*  Data                                                               */
 /* ------------------------------------------------------------------ */
 
-const LIBRARIES = ['GoSQLX', 'pg_query_go', 'vitess-sqlparser', 'sqlparser (xwb1989)'] as const;
+const LIBRARIES = [
+  { label: 'GoSQLX', slug: null },
+  { label: 'pg_query_go', slug: 'pg-query-go' },
+  { label: 'vitess-sqlparser', slug: 'vitess-sqlparser' },
+  { label: 'sqlparser (xwb1989)', slug: 'xwb1989-sqlparser' },
+  { label: 'TiDB parser', slug: 'tidb-parser' },
+  { label: 'SQLFluff (Python)', slug: 'sqlfluff' },
+] as const;
+
+// Build-time guard: every per-competitor page must have a column in this table.
+for (const page of COMPETITOR_PAGES) {
+  if (!LIBRARIES.some((lib) => lib.slug === page.slug)) {
+    throw new Error(`Compare table has no column for competitor page "${page.slug}"`);
+  }
+}
+
+/** Shown where the claim has not been assessed for that tool. */
+const NA = '\u2014';
+
+type Cell = string | boolean;
 
 type FeatureRow = {
   feature: string;
-  values: [string | boolean, string | boolean, string | boolean, string | boolean];
+  values: [Cell, Cell, Cell, Cell, Cell, Cell];
 };
 
 const FEATURES: FeatureRow[] = [
-  { feature: 'Language',              values: ['Go',     'Go (C via CGo)', 'Go',   'Go'] },
-  { feature: 'Zero-copy',            values: [true,  false, false, false] },
-  { feature: 'Dialects',             values: [String(PROJECT.dialectCount),   '1 (PostgreSQL)', '1 (MySQL)', '1 (MySQL)'] },
-  { feature: 'Pure Go (no CGo)',     values: [true,  false, true,  true] },
-  { feature: 'WASM support',         values: [true,  false, false, false] },
-  { feature: 'SQL injection detection', values: [true,  false, false, false] },
-  { feature: 'MCP server',           values: [true,  false, false, false] },
-  { feature: 'SQL formatting',       values: [true,  false, false, false] },
-  { feature: `SQL linting (${PROJECT.lintRuleCount} rules)`, values: [true,  false, false, false] },
-  { feature: 'LSP server',           values: [true,  false, false, false] },
-  { feature: 'Thread-safe',          values: [true,  true,  true,  true] },
-  { feature: 'Active maintenance',   values: [true,  true,  true,  false] },
+  { feature: 'Language',              values: ['Go',     'Go (C via CGo)', 'Go',   'Go', 'Go', 'Python'] },
+  { feature: 'Zero-copy',            values: [true,  false, false, false, NA, NA] },
+  { feature: 'Dialects',             values: [String(PROJECT.dialectCount),   '1 (PostgreSQL)', '1 (MySQL)', '1 (MySQL)', '1 (MySQL)', 'Many'] },
+  { feature: 'Pure Go (no CGo)',     values: [true,  false, true,  true, true, NA] },
+  { feature: 'WASM support',         values: [true,  false, false, false, NA, NA] },
+  { feature: 'SQL injection detection', values: [true,  false, false, false, false, NA] },
+  { feature: 'MCP server',           values: [true,  false, false, false, false, NA] },
+  { feature: 'SQL formatting',       values: [true,  false, false, false, NA, true] },
+  { feature: 'SQL linting',           values: [`Yes (${PROJECT.lintRuleCount} rules)`, false, false, false, false, 'Yes (own rule set)'] },
+  { feature: 'LSP server',           values: [true,  false, false, false, false, NA] },
+  { feature: 'Thread-safe',          values: [true,  true,  true,  true, NA, NA] },
+  { feature: 'Active maintenance',   values: [true,  true,  true,  false, true, true] },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -94,6 +113,14 @@ function CellValue({ value }: { value: string | boolean }) {
       </span>
     );
   }
+  if (value === NA) {
+    return (
+      <span>
+        <span aria-hidden="true">{NA}</span>
+        <span className="sr-only">Not assessed</span>
+      </span>
+    );
+  }
   return <span>{value}</span>;
 }
 
@@ -112,7 +139,7 @@ export function CompareContent() {
               GoSQLX vs The Competition
             </h1>
             <p className="mt-4 text-lg text-fg-muted max-w-2xl mx-auto">
-              See how GoSQLX compares to other Go SQL parsing libraries
+              See how GoSQLX compares to other SQL parsing libraries and tools
             </p>
           </FadeIn>
         </div>
@@ -127,7 +154,7 @@ export function CompareContent() {
                 <thead>
                   <tr className="border-b border-fg/[0.06]">
                     <th className="text-left px-5 py-4 text-fg-muted font-medium">Feature</th>
-                    {LIBRARIES.map((lib) => (
+                    {LIBRARIES.map(({ label: lib }) => (
                       <th
                         key={lib}
                         className={`px-5 py-4 text-center font-medium ${
@@ -167,6 +194,10 @@ export function CompareContent() {
                 </tbody>
               </table>
             </GlassCard>
+            <p className="mt-3 text-xs text-fg-subtle">
+              {NA} means not assessed for that tool. SQLFluff is a Python linter and formatter, not a Go parser,
+              so it is listed for feature context only and has no benchmark figures.
+            </p>
           </FadeIn>
         </div>
       </section>

@@ -32,6 +32,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '/benchmarks/',
     '/compare/',
     '/privacy/',
+    '/terms/',
   ]
     .concat(COMPETITOR_PAGES.map((c) => `/compare/${c.slug}/`))
     .map((p) => ({ url: `${baseUrl}${p}` }));

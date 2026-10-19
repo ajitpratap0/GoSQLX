@@ -212,6 +212,23 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   `WINDOW w AS (w2)`. (#608, #629)
 
 ### Added
+- **Claude Code plugin and marketplace**: `/plugin marketplace add
+  ajitpratap0/GoSQLX` then `/plugin install gosqlx@gosqlx` installs the
+  `gosqlx` plugin (`plugins/gosqlx/`): the hosted MCP server, five SQL skills
+  (analysis, formatting, security review, linting, dialects), four slash
+  commands, a read-only `sql-reviewer` agent and an opt-out PostToolUse hook
+  that validates edited `.sql` files when the `gosqlx` CLI is installed.
+- **ChatGPT app support in `gosqlx-mcp`** (OpenAI Apps SDK and MCP Apps):
+  `analyze_sql` links an embedded report widget
+  (`ui://gosqlx/analysis-v1.html`, `text/html;profile=mcp-app`); all tools now
+  return `structuredContent` alongside the unchanged text JSON, carry
+  `securitySchemes`/invocation-status metadata, and the server sends usage
+  instructions. `validate_sql` accepts `mariadb` and `clickhouse`; the server
+  reports `gosqlx.Version`; `/health` reports the real tool count; the
+  optional `GOSQLX_MCP_OPENAI_APPS_CHALLENGE` env var serves
+  `/.well-known/openai-apps-challenge` for app verification; idle MCP sessions
+  are swept after 30 minutes instead of living until restart. Setup:
+  `integrations/chatgpt/README.md`, details: `docs/CHATGPT_APP.md`.
 - **`--dialect` flag for the `parse`, `format`, `analyze`, and `lint` CLI
   commands**: dialect-specific SQL (e.g. MySQL `LIMIT offset, count`) can now be
   parsed by these commands, matching the existing `validate --dialect`. Unknown

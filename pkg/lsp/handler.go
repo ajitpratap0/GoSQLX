@@ -22,14 +22,16 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+	"github.com/ajitpratap0/GoSQLX/pkg/highlight"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
 // Handler processes LSP requests and notifications.
@@ -116,6 +118,11 @@ type Handler struct {
 	keywords       *keywords.Keywords
 	debounceMu     sync.Mutex
 	debounceTimers map[string]*time.Timer
+
+	// dialectMu guards dialect, which is set from the client's
+	// initializationOptions and read by semantic token requests.
+	dialectMu sync.RWMutex
+	dialect   keywords.SQLDialect
 }
 
 // NewHandler creates a new LSP request handler.
@@ -135,6 +142,7 @@ func NewHandler(server *Server) *Handler {
 		server:         server,
 		keywords:       keywords.New(keywords.DialectGeneric, true),
 		debounceTimers: make(map[string]*time.Timer),
+		dialect:        keywords.DialectGeneric,
 	}
 }
 
@@ -194,6 +202,7 @@ func (h *Handler) handleInitialize(params json.RawMessage) (*InitializeResult, e
 	}
 
 	h.server.Logger().Printf("Initialize request from client, rootURI: %s", initParams.RootURI)
+	h.setDialect(dialectFromInitOptions(initParams.InitializationOptions))
 
 	return &InitializeResult{
 		Capabilities: ServerCapabilities{
@@ -219,14 +228,9 @@ func (h *Handler) handleInitialize(params json.RawMessage) (*InitializeResult, e
 				CodeActionKinds: []CodeActionKind{CodeActionQuickFix},
 			},
 			SemanticTokensProvider: &SemanticTokensOptions{
-				Legend: SemanticTokensLegend{
-					TokenTypes: []string{
-						"keyword", "identifier", "number", "string", "operator", "comment",
-					},
-					TokenModifiers: []string{},
-				},
-				Full:  true,
-				Range: false,
+				Legend: semanticTokensLegend(),
+				Full:   true,
+				Range:  false,
 			},
 		},
 		ServerInfo: &ServerInfo{
@@ -2139,119 +2143,207 @@ func truncateForLog(data json.RawMessage) string {
 }
 
 // handleSemanticTokensFull handles textDocument/semanticTokens/full requests.
-// It tokenizes the document and returns LSP-encoded semantic token data.
+// It classifies the document with pkg/highlight and returns LSP-encoded
+// semantic token data. Invalid SQL is still highlighted up to the first
+// lexical error; unknown documents yield an empty token stream.
 func (h *Handler) handleSemanticTokensFull(params SemanticTokensParams) (*SemanticTokens, error) {
 	content, ok := h.server.Documents().GetContent(params.TextDocument.URI)
 	if !ok {
 		return &SemanticTokens{Data: []uint32{}}, nil
 	}
-
-	tkz := tokenizer.GetTokenizer()
-	defer tokenizer.PutTokenizer(tkz)
-	tokens, err := tkz.TokenizeString(content)
-	if err != nil {
-		return &SemanticTokens{Data: []uint32{}}, nil
-	}
-
-	return &SemanticTokens{Data: encodeSemanticTokens(tokens)}, nil
+	spans := highlight.Spans(content, highlight.WithDialect(h.currentDialect()))
+	return &SemanticTokens{Data: encodeSemanticTokens(content, spans)}, nil
 }
 
-// encodeSemanticTokens converts token positions to LSP semantic token encoding.
-// Each token is encoded as 5 uint32 values:
+// dialectFromInitOptions extracts the "dialect" entry from the client's
+// initializationOptions (as sent by the VS Code extension). A missing,
+// non-string or unrecognised value yields DialectGeneric.
+func dialectFromInitOptions(opts interface{}) keywords.SQLDialect {
+	m, ok := opts.(map[string]interface{})
+	if !ok {
+		return keywords.DialectGeneric
+	}
+	name, ok := m["dialect"].(string)
+	if !ok {
+		return keywords.DialectGeneric
+	}
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" || !keywords.IsValidDialect(name) {
+		return keywords.DialectGeneric
+	}
+	return keywords.SQLDialect(name)
+}
+
+// setDialect records the SQL dialect used for semantic highlighting.
+func (h *Handler) setDialect(d keywords.SQLDialect) {
+	h.dialectMu.Lock()
+	h.dialect = d
+	h.dialectMu.Unlock()
+	h.server.Logger().Printf("Semantic highlighting dialect: %s", d)
+}
+
+// currentDialect returns the SQL dialect used for semantic highlighting.
+func (h *Handler) currentDialect() keywords.SQLDialect {
+	h.dialectMu.RLock()
+	defer h.dialectMu.RUnlock()
+	return h.dialect
+}
+
+// semanticTokenSpec describes how a highlight.Category is reported to LSP
+// clients: a token type name and its modifier names.
+type semanticTokenSpec struct {
+	tokenType string
+	modifiers []string
+}
+
+// semanticTokenSpecs is the single source of truth for semantic tokens. The
+// advertised legend and the per-category encoding are both derived from it,
+// so they cannot drift apart. Only standard LSP token types and modifiers are
+// used, so editor themes color them without extension-specific configuration.
+//
+// Categories absent from this table are omitted from the token stream:
+// Punctuation has no standard token type, and Error is already reported
+// through diagnostics.
+var semanticTokenSpecs = map[highlight.Category]semanticTokenSpec{
+	highlight.Keyword:          {tokenType: "keyword"},
+	highlight.Function:         {tokenType: "function"},
+	highlight.DataType:         {tokenType: "type"},
+	highlight.Identifier:       {tokenType: "variable"},
+	highlight.QuotedIdentifier: {tokenType: "variable"},
+	highlight.String:           {tokenType: "string"},
+	highlight.Number:           {tokenType: "number"},
+	highlight.Constant:         {tokenType: "keyword", modifiers: []string{"readonly"}}, // TRUE, FALSE, NULL
+	highlight.Operator:         {tokenType: "operator"},
+	highlight.Comment:          {tokenType: "comment"},
+	highlight.Placeholder:      {tokenType: "parameter"},
+}
+
+// semanticTokenEncoding is the legend index and modifier bitset of a category.
+type semanticTokenEncoding struct {
+	tokenType uint32
+	modifiers uint32
+	ok        bool
+}
+
+// semanticLegend is the legend advertised in the initialize response, and
+// semanticEncodings maps each category to its encoding in that legend.
+var semanticLegend, semanticEncodings = buildSemanticLegend()
+
+// buildSemanticLegend derives the legend from semanticTokenSpecs. Token types
+// and modifiers are listed in order of first use when walking categories in
+// declaration order, which keeps the legend deterministic.
+func buildSemanticLegend() (SemanticTokensLegend, map[highlight.Category]semanticTokenEncoding) {
+	legend := SemanticTokensLegend{TokenTypes: []string{}, TokenModifiers: []string{}}
+	encodings := make(map[highlight.Category]semanticTokenEncoding, len(semanticTokenSpecs))
+	typeIndex := make(map[string]uint32)
+	modIndex := make(map[string]uint32)
+
+	for _, cat := range highlight.Categories() {
+		spec, ok := semanticTokenSpecs[cat]
+		if !ok {
+			continue
+		}
+		ti, seen := typeIndex[spec.tokenType]
+		if !seen {
+			ti = uint32(len(legend.TokenTypes))
+			typeIndex[spec.tokenType] = ti
+			legend.TokenTypes = append(legend.TokenTypes, spec.tokenType)
+		}
+		var mods uint32
+		for _, m := range spec.modifiers {
+			mi, seen := modIndex[m]
+			if !seen {
+				mi = uint32(len(legend.TokenModifiers))
+				modIndex[m] = mi
+				legend.TokenModifiers = append(legend.TokenModifiers, m)
+			}
+			mods |= 1 << mi
+		}
+		encodings[cat] = semanticTokenEncoding{tokenType: ti, modifiers: mods, ok: true}
+	}
+	return legend, encodings
+}
+
+// semanticTokensLegend returns a copy of the advertised legend so callers
+// cannot mutate the shared tables.
+func semanticTokensLegend() SemanticTokensLegend {
+	return SemanticTokensLegend{
+		TokenTypes:     append([]string(nil), semanticLegend.TokenTypes...),
+		TokenModifiers: append([]string(nil), semanticLegend.TokenModifiers...),
+	}
+}
+
+// encodeSemanticTokens converts highlight spans over content to the LSP
+// relative semantic token encoding. Each token is 5 uint32 values:
 //
 //	[deltaLine, deltaStartChar, length, tokenType, tokenModifiers]
-func encodeSemanticTokens(tokens []models.TokenWithSpan) []uint32 {
-	data := make([]uint32, 0, len(tokens)*5)
-	prevLine := uint32(0)
-	prevStartChar := uint32(0)
+//
+// Lines and characters are 0-based and characters are counted in UTF-16 code
+// units, the LSP default position encoding. "\n", "\r\n" and a lone "\r" all
+// end a line. Spans covering several lines (block comments, multi-line
+// strings) are split into one token per line because clients are not required
+// to support multi-line tokens. Zero-length tokens are never emitted.
+func encodeSemanticTokens(content string, spans []highlight.Span) []uint32 {
+	data := make([]uint32, 0, len(spans)*5)
 
-	for _, tok := range tokens {
-		tokenType := classifyToken(tok)
-		if tokenType < 0 {
-			continue // skip tokens we don't classify
-		}
+	// Cursor state: byte offset into content and its LSP position.
+	pos, line, char := 0, uint32(0), uint32(0)
+	prevLine, prevChar := uint32(0), uint32(0)
 
-		// Location is 1-based; convert to 0-based for LSP
-		line := uint32(tok.Start.Line - 1)
-		startChar := uint32(tok.Start.Column - 1)
-		length := uint32(tok.End.Column - tok.Start.Column)
+	emit := func(l, c, length uint32, enc semanticTokenEncoding) {
 		if length == 0 {
-			// Fallback: use text length
-			length = uint32(len(tok.Token.Value))
+			return
 		}
-
-		deltaLine := line - prevLine
-		deltaStartChar := startChar
+		deltaLine := l - prevLine
+		deltaChar := c
 		if deltaLine == 0 {
-			deltaStartChar = startChar - prevStartChar
+			deltaChar = c - prevChar
 		}
+		data = append(data, deltaLine, deltaChar, length, enc.tokenType, enc.modifiers)
+		prevLine, prevChar = l, c
+	}
 
-		data = append(data, deltaLine, deltaStartChar, length, uint32(tokenType), 0)
-		prevLine = line
-		prevStartChar = startChar
+	// step consumes one rune or line break at pos, reporting whether it was
+	// a line break.
+	step := func() bool {
+		switch content[pos] {
+		case '\n':
+			pos++
+		case '\r':
+			pos++
+			if pos < len(content) && content[pos] == '\n' {
+				pos++
+			}
+		default:
+			r, size := utf8.DecodeRuneInString(content[pos:])
+			pos += size
+			char += uint32(utf16.RuneLen(r)) // RuneError (invalid UTF-8) counts as 1
+			return false
+		}
+		line++
+		char = 0
+		return true
+	}
+
+	for _, sp := range spans {
+		enc := semanticEncodings[sp.Category]
+		if !enc.ok || sp.Start < 0 || sp.End > len(content) || sp.Start >= sp.End {
+			continue
+		}
+		for pos < sp.Start {
+			step()
+		}
+		// A preceding "\r\n" consumed as a unit can leave pos past Start;
+		// emit only the remainder of the span.
+		segLine, segChar := line, char
+		for pos < sp.End {
+			before := char
+			if step() {
+				emit(segLine, segChar, before-segChar, enc)
+				segLine, segChar = line, char
+			}
+		}
+		emit(segLine, segChar, char-segChar, enc)
 	}
 	return data
-}
-
-// Token type indices matching the legend declared in handleInitialize:
-//
-//	"keyword", "identifier", "number", "string", "operator", "comment"
-const (
-	semTokKeyword    = 0
-	semTokIdentifier = 1
-	semTokNumber     = 2
-	semTokString     = 3
-	semTokOperator   = 4
-	semTokComment    = 5
-)
-
-// classifyToken maps a TokenWithSpan to a semantic token type index.
-// Returns -1 for tokens that should not be included in the semantic token stream.
-func classifyToken(tok models.TokenWithSpan) int {
-	switch tok.Token.Type {
-	case models.TokenTypeKeyword,
-		models.TokenTypeSelect, models.TokenTypeFrom, models.TokenTypeWhere,
-		models.TokenTypeInsert, models.TokenTypeUpdate, models.TokenTypeDelete,
-		models.TokenTypeCreate, models.TokenTypeDrop, models.TokenTypeAlter,
-		models.TokenTypeTable, models.TokenTypeIndex,
-		models.TokenTypeJoin, models.TokenTypeLeft, models.TokenTypeRight,
-		models.TokenTypeInner, models.TokenTypeOuter,
-		models.TokenTypeOn, models.TokenTypeAs,
-		models.TokenTypeAnd, models.TokenTypeOr, models.TokenTypeNot,
-		models.TokenTypeIn, models.TokenTypeIs, models.TokenTypeNull,
-		models.TokenTypeLike,
-		models.TokenTypeOrder, models.TokenTypeGroup, models.TokenTypeBy,
-		models.TokenTypeHaving, models.TokenTypeLimit, models.TokenTypeOffset,
-		models.TokenTypeWith, models.TokenTypeUnion,
-		models.TokenTypeIntersect, models.TokenTypeExcept,
-		models.TokenTypeDistinct,
-		models.TokenTypeCase, models.TokenTypeWhen, models.TokenTypeThen,
-		models.TokenTypeElse, models.TokenTypeEnd:
-		return semTokKeyword
-	case models.TokenTypeWord, models.TokenTypeIdentifier:
-		return semTokIdentifier
-	case models.TokenTypeNumber:
-		return semTokNumber
-	case models.TokenTypeString,
-		models.TokenTypeSingleQuotedString, models.TokenTypeDoubleQuotedString,
-		models.TokenTypeDollarQuotedString, models.TokenTypeEscapedStringLiteral,
-		models.TokenTypeNationalStringLiteral, models.TokenTypeUnicodeStringLiteral,
-		models.TokenTypeHexStringLiteral:
-		return semTokString
-	case models.TokenTypeWhitespace:
-		// Whitespace tokens that are comments
-		if tok.Token.Word == nil {
-			return -1
-		}
-		return semTokComment
-	case models.TokenTypeEq, models.TokenTypeNeq,
-		models.TokenTypeLt, models.TokenTypeGt,
-		models.TokenTypeLtEq, models.TokenTypeGtEq,
-		models.TokenTypePlus, models.TokenTypeMinus,
-		models.TokenTypeMul, models.TokenTypeDiv,
-		models.TokenTypeMod:
-		return semTokOperator
-	default:
-		return -1 // don't classify
-	}
 }

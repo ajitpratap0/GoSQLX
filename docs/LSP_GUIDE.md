@@ -28,6 +28,7 @@ The GoSQLX Language Server Protocol (LSP) implementation provides real-time SQL 
 - **Document Symbols**: Navigation through SQL statements
 - **Signature Help**: Function parameter documentation for 15+ SQL functions
 - **Code Actions**: Quick fixes for common SQL issues
+- **Semantic Tokens**: Dialect-aware syntax highlighting powered by `pkg/highlight`
 - **Rate Limiting**: Protection against DoS (100 requests/sec)
 
 ---
@@ -191,19 +192,73 @@ Quick fixes for common issues:
 
 ### Semantic Tokens
 
-GoSQLX adds `textDocument/semanticTokens/full` support with a 6-type legend:
+`textDocument/semanticTokens/full` is powered by `pkg/highlight`, the same
+classifier used by `gosqlx highlight`, so every dialect keyword and all line and
+block comments are covered. The legend uses standard LSP token types:
 
 | Token Type | Applies To |
 |------------|-----------|
-| `keyword` | SQL keywords (SELECT, FROM, WHERE, etc.) |
-| `identifier` | Table names, column names, aliases |
+| `keyword` | SQL keywords (SELECT, FROM, WHERE, AND, etc.); TRUE/FALSE/NULL carry the `readonly` modifier |
+| `function` | Function names in call position (`COUNT(*)`, `now()`) |
+| `type` | Data types in type position (`VARCHAR(20)`, `x::int`, `CAST(x AS DATE)`) |
+| `variable` | Table names, column names, aliases and quoted identifiers |
+| `string` | String literals |
 | `number` | Integer and float literals |
-| `string` | String literals and quoted identifiers |
-| `operator` | Operators (=, >, <, AND, OR, NOT, etc.) |
+| `operator` | Operators (`=`, `<>`, `\|\|`, `->>`, `::`, etc.) |
 | `comment` | SQL line and block comments |
+| `parameter` | Placeholders and bind variables (`$1`, `?`, `:name`, `@var`) |
 
-Editors that support semantic tokens (VS Code, Neovim with nvim-lspconfig) will use these
-types to apply richer syntax highlighting beyond what TextMate grammars provide.
+Positions are UTF-16 code units, as LSP requires, and multi-line tokens (block
+comments, multi-line strings) are split into one token per line. Editors that
+support semantic tokens (VS Code, Neovim with nvim-lspconfig) use these types to
+apply richer highlighting than TextMate grammars provide. See
+[HIGHLIGHTING.md](HIGHLIGHTING.md) for the full category list.
+
+Earlier builds used a non-standard `identifier` token type and reported quoted
+identifiers as `string`. Custom highlight rules keyed on `identifier` (for
+example Neovim's `@lsp.type.identifier`) must use `variable` instead.
+
+#### Dialect for Semantic Tokens
+
+Semantic tokens use the SQL dialect from the client's `initializationOptions`:
+
+```json
+{ "dialect": "mysql" }
+```
+
+- `dialect` is a string and accepts `generic`, `postgresql`, `mysql`,
+  `mariadb`, `sqlserver`, `oracle`, `sqlite`, `snowflake`, `bigquery`,
+  `redshift` and `clickhouse`.
+- A missing, non-string, empty or unrecognised value uses `generic`.
+- The setting is read once, at `initialize`, and affects semantic tokens only.
+  Changing it requires restarting the language server. The VS Code extension
+  restarts the server when `gosqlx.dialect` changes. Other clients must restart
+  the server themselves (in nvim-lspconfig, `:LspRestart`).
+
+Neovim with nvim-lspconfig, using the `gosqlx` config from
+[Neovim](#neovim):
+
+```lua
+require('lspconfig').gosqlx.setup{
+  init_options = { dialect = 'mysql' },
+}
+```
+
+Any client sends the setting in the `initialize` request:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "processId": null,
+    "rootUri": "file:///path/to/project",
+    "capabilities": {},
+    "initializationOptions": { "dialect": "postgresql" }
+  }
+}
+```
 
 ### Diagnostic Debouncing
 

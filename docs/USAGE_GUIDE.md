@@ -10,6 +10,7 @@
 - [SQL Standards Compliance](#sql-standards-compliance)
 - [SQL Injection Detection](#sql-injection-detection)
 - [SQL Linter Usage](#sql-linter-usage)
+- [Syntax Highlighting](#syntax-highlighting)
 - [LSP Integration](#lsp-integration)
 - [CLI Tool Usage](#cli-tool-usage)
 - [Advanced Patterns](#advanced-patterns)
@@ -1090,6 +1091,42 @@ func LintWithConfig(allRules []linter.Rule) (*linter.Linter, error) {
     return linter.NewWithIgnore(cfg, rules...), nil
 }
 ```
+
+## Syntax Highlighting
+
+`pkg/highlight` classifies SQL into byte-offset spans (keyword, function, type,
+string, comment, ...) and renders them for terminals or HTML. It never fails:
+input after the first lexical error is marked as one `error` span.
+
+```go
+import (
+    "fmt"
+
+    "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+    "github.com/ajitpratap0/GoSQLX/pkg/highlight"
+    "github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
+)
+
+sql := "SELECT name FROM users WHERE id = $1 -- by id"
+
+// High-level helpers
+fmt.Println(gosqlx.HighlightANSI(sql))
+
+// Low-level: spans, then a renderer
+spans := highlight.Spans(sql, highlight.WithDialect(keywords.DialectPostgreSQL))
+html := highlight.HTML(sql, spans, highlight.HTMLOptions{Wrap: true})
+css := highlight.CSS(highlight.DarkTheme(), "") // matching .gsx-* stylesheet
+```
+
+From the command line:
+
+```bash
+gosqlx highlight query.sql                        # ANSI colors in the terminal
+gosqlx highlight -f html --standalone query.sql > query.html
+```
+
+See [HIGHLIGHTING.md](HIGHLIGHTING.md) for categories, themes, the CLI flags,
+LSP semantic tokens and the WASM API.
 
 ## LSP Integration
 

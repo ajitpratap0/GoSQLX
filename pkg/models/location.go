@@ -44,11 +44,15 @@ package models
 //	    Character: location.Column - 1,    // Convert to 0-based
 //	}
 //
+// Columns produced by the tokenizer count bytes: every byte of the line before
+// the position, a tab included, is one column. A token's Start is the location
+// of the token itself, not of the whitespace or comments before it.
+//
 // Performance: Location is a lightweight value type (2 ints) that is
 // stack-allocated and has no memory overhead.
 type Location struct {
 	Line   int // Line number (1-based)
-	Column int // Column number (1-based)
+	Column int // Column number (1-based, counted in bytes; a tab is one column)
 }
 
 // IsZero reports whether the location is the zero value (i.e., no position information).

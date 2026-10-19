@@ -31,7 +31,8 @@ const LINK_REF_DEF = /^\[[^\]]+\]:\s+\S+/;
  * 1.9.0 section). Markdown would join them into one paragraph, so they are
  * emitted as list items; indented continuation lines stay part of the item.
  */
-const TAGGED_LINE = /^\[[A-Z][A-Z0-9/-]*\]\s/;
+const SECTION_HEADING_EMOJI = /^(#{3,6})\s+(?:\p{Extended_Pictographic}️?‍?)+\s*/u;
+const TAGGED_LINE =/^\[[A-Z][A-Z0-9/-]*\]\s/;
 
 /**
  * @param {string} changelog CHANGELOG.md contents
@@ -68,6 +69,11 @@ function splitChangelog(changelog) {
 
     if (!current) continue;
     if (!inFence && LINK_REF_DEF.test(line)) continue;
+    if (!inFence && SECTION_HEADING_EMOJI.test(line)) {
+      // Section headings drop a leading emoji so anchors and the TOC stay clean.
+      current.body.push(line.replace(SECTION_HEADING_EMOJI, '$1 '));
+      continue;
+    }
     current.body.push(!inFence && TAGGED_LINE.test(line) ? `- ${line.replace(/\s+/, ' ')}` : line);
   }
   finish();

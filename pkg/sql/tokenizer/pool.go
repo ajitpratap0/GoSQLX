@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
@@ -209,9 +210,10 @@ func (t *Tokenizer) Reset() {
 
 	t.line = 0
 
-	// Invalidate the toSQLPosition column cursor: it is only valid for the
+	// Invalidate the toSQLPosition line hint: it is only valid for the
 	// input and lineStarts it was built on.
-	t.posCacheLine, t.posCacheIdx, t.posCacheCol = 0, 0, 0
+	t.posCacheLine = 0
+	t.tokStart = models.Location{}
 	t.inlLine, t.inlScan, t.inlCode = 0, 0, false
 
 	// Don't reset the dialect here: Reset also runs at the start of every

@@ -139,8 +139,8 @@ available to projects with EU data residency.
 - [ ] Privacy policy URL: <https://gosqlx.dev/privacy/>. It must cover the data
       categories, purposes, recipients and user controls.
 - [ ] Terms of service URL: <https://gosqlx.dev/terms/>.
-- [ ] Support contact: <https://github.com/ajitpratap0/GoSQLX/issues> (if the form
-      insists on an email address, use a maintainer-controlled inbox).
+- [ ] Support contact: <https://github.com/ajitpratap0/GoSQLX/issues>; email
+      `privacy@gosqlx.dev` (forwarding must be set up on gosqlx.dev).
 - [ ] Logo (light and dark), at least 3 screenshots of the `analyze_sql` widget, and a
       short demo video.
 - [ ] Test cases: use the positive and negative example prompts above

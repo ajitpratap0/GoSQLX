@@ -151,7 +151,7 @@
         "gosqlx.telemetry.enable": {
           "type": "boolean",
           "default": false,
-          "description": "Enable anonymous usage telemetry to help improve GoSQLX. No SQL content or file paths are collected."
+          "description": "Record anonymous usage statistics in memory on this machine. They are never transmitted. No SQL content or file paths are collected."
         },
         "gosqlx.performance.showStatusBar": {
           "type": "boolean",

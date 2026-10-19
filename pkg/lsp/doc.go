@@ -73,6 +73,13 @@ Code Actions (textDocument/codeAction):
   - Keyword case correction suggestions
   - Context-aware refactoring hints
 
+SQL Dialect (initializationOptions.dialect, workspace/didChangeConfiguration):
+  - One dialect drives diagnostics, formatting, document symbols, completion,
+    hover and semantic tokens
+  - Set at initialize with {"dialect": "mysql"} or changed at runtime with
+    settings {"gosqlx": {"dialect": "mysql"}}
+  - The default, generic, keeps the dialect-less parsing pipeline
+
 # Architecture
 
 The LSP server consists of three main components:

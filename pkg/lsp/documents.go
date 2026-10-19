@@ -277,6 +277,24 @@ func (dm *DocumentManager) Get(uri string) (*Document, bool) {
 	}, true
 }
 
+// snapshots returns a snapshot (as returned by Get) of every open document,
+// in no particular order.
+func (dm *DocumentManager) snapshots() []*Document {
+	dm.mu.RLock()
+	defer dm.mu.RUnlock()
+	docs := make([]*Document, 0, len(dm.documents))
+	for _, doc := range dm.documents {
+		docs = append(docs, &Document{
+			URI:        doc.URI,
+			LanguageID: doc.LanguageID,
+			Version:    doc.Version,
+			Content:    doc.Content,
+			Lines:      doc.Lines,
+		})
+	}
+	return docs
+}
+
 // GetContent retrieves a document's content
 func (dm *DocumentManager) GetContent(uri string) (string, bool) {
 	dm.mu.RLock()

@@ -239,12 +239,16 @@ func newFullLinter() *linter.Linter {
 }
 
 // toolResult marshals a map[string]any result into an MCP CallToolResult.
+//
+// The JSON is returned twice: as the text content (unchanged, for clients that
+// only read content) and as structuredContent, which MCP Apps hosts and
+// ChatGPT hand to both the model and the UI widget.
 func toolResult(data map[string]any) (*mcpmcp.CallToolResult, error) {
 	b, err := json.Marshal(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal result: %w", err)
 	}
-	return mcpmcp.NewToolResultText(string(b)), nil
+	return mcpmcp.NewToolResultStructured(data, string(b)), nil
 }
 
 // ---------------------------------------------------------------------------

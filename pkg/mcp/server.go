@@ -19,35 +19,76 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 )
 
-// Server wraps the MCP server with all GoSQLX tools registered.
+// Server wraps the MCP server with all GoSQLX tools and UI resources registered.
 type Server struct {
 	cfg    *Config
 	mcpSrv *mcpserver.MCPServer
 }
 
-// New creates a Server with all 7 GoSQLX tools registered.
+// serverInstructions is returned in the initialize result so the client
+// model knows when to reach for each tool.
+const serverInstructions = `GoSQLX parses, validates, formats, lints, and security-scans SQL locally. ` +
+	`All tools are read-only, deterministic, and never connect to a database or execute SQL.
+
+Pick the narrowest tool for the request:
+- analyze_sql: one-shot review of a query (validity, statement types, tables/columns/functions, security findings, lint violations, formatted SQL). Prefer it when the user asks to "review", "check", or "analyze" SQL; hosts that support MCP Apps render it as an interactive report.
+- validate_sql: is the SQL syntactically valid, optionally for a specific dialect (postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, clickhouse).
+- format_sql: pretty-print SQL (indent size, keyword casing, trailing semicolon).
+- parse_sql: statement count and AST statement types.
+- extract_metadata: tables, columns, and functions referenced.
+- security_scan: SQL-injection pattern detection (tautologies, UNION-based, stacked queries, comment bypass, ...), with severities.
+- lint_sql: style rules L001-L010 (whitespace, indentation, line length, alignment, keyword case, comma placement, aliasing).
+
+Pass the SQL text exactly as the user wrote it. Results are JSON; summarise them for the user rather than repeating them verbatim.`
+
+// New creates a Server with all GoSQLX tools and the analysis widget resource registered.
 func New(cfg *Config) *Server {
 	s := &Server{cfg: cfg}
 	s.mcpSrv = mcpserver.NewMCPServer(
 		"gosqlx-mcp",
-		"1.14.0",
+		gosqlx.Version,
 		mcpserver.WithToolCapabilities(false),
+		mcpserver.WithResourceCapabilities(false, false),
+		mcpserver.WithInstructions(serverInstructions),
 	)
 	s.registerTools()
+	s.registerResources()
 	return s
+}
+
+// ToolCount reports how many tools are registered.
+func (s *Server) ToolCount() int {
+	return len(s.mcpSrv.ListTools())
 }
 
 // Handler returns the HTTP handler chain (MCP server + auth middleware)
 // without starting an HTTP server. Use this when you need to wrap
 // the handler with additional middleware (e.g., rate limiting).
 func (s *Server) Handler() http.Handler {
-	streamSrv := mcpserver.NewStreamableHTTPServer(s.mcpSrv)
+	streamSrv := s.newStreamableHTTPServer()
 	return BearerAuthMiddleware(s.cfg, streamSrv)
+}
+
+// SessionIdleTTL is how long an idle MCP session's transport state is kept.
+// Clients that disconnect without sending DELETE (the common case for hosted
+// assistants) would otherwise leave their session state in memory until the
+// process restarts. The privacy policy on gosqlx.dev cites this value.
+const SessionIdleTTL = 30 * time.Minute
+
+// newStreamableHTTPServer builds the streamable HTTP transport with idle
+// session sweeping enabled.
+func (s *Server) newStreamableHTTPServer() *mcpserver.StreamableHTTPServer {
+	return mcpserver.NewStreamableHTTPServer(s.mcpSrv,
+		mcpserver.WithSessionIdleTTL(SessionIdleTTL),
+	)
 }
 
 // Cfg returns the server configuration.
@@ -64,7 +105,7 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 // Start binds to cfg.Addr() and serves using streamable HTTP transport.
 // It blocks until ctx is cancelled or a fatal error occurs.
 func (s *Server) Start(ctx context.Context) error {
-	streamSrv := mcpserver.NewStreamableHTTPServer(s.mcpSrv)
+	streamSrv := s.newStreamableHTTPServer()
 	wrapped := BearerAuthMiddleware(s.cfg, streamSrv)
 
 	httpSrv := &http.Server{
@@ -84,36 +125,62 @@ func (s *Server) Start(ctx context.Context) error {
 	return nil
 }
 
+// readOnlyAnnotations are shared by every GoSQLX tool: pure local computation
+// on the SQL text, no side effects, no network or database access. ChatGPT
+// requires readOnly/destructive/openWorld to be set explicitly.
+func readOnlyAnnotations(title string) []mcp.ToolOption {
+	return []mcp.ToolOption{
+		mcp.WithTitleAnnotation(title),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
+	}
+}
+
+// newTool assembles a tool from shared annotations, _meta and its own options.
+func newTool(name, title, description string, meta *mcp.Meta, opts ...mcp.ToolOption) mcp.Tool {
+	all := make([]mcp.ToolOption, 0, len(opts)+7)
+	all = append(all, mcp.WithDescription(description))
+	all = append(all, readOnlyAnnotations(title)...)
+	all = append(all, withToolMeta(meta))
+	all = append(all, opts...)
+	return mcp.NewTool(name, all...)
+}
+
+// supportedDialects lists the dialect values accepted by validate_sql. Each
+// one is accepted by gosqlx.ParseWithDialect.
+var supportedDialects = []string{
+	"generic", "postgresql", "mysql", "mariadb", "sqlserver",
+	"oracle", "sqlite", "snowflake", "clickhouse",
+}
+
 // registerTools adds all 7 GoSQLX tools with their JSON Schema definitions.
 func (s *Server) registerTools() {
-	// validate_sql
+	cfg := s.cfg
+
 	s.mcpSrv.AddTool(
-		mcp.NewTool("validate_sql",
-			mcp.WithDescription("Validate SQL syntax. Returns {valid: bool, error?: string, dialect?: string}."),
-			mcp.WithReadOnlyHintAnnotation(true),
-			mcp.WithDestructiveHintAnnotation(false),
-			mcp.WithIdempotentHintAnnotation(true),
-			mcp.WithOpenWorldHintAnnotation(false),
+		newTool("validate_sql", "Validate SQL",
+			"Use this when the user wants to know whether a SQL statement is syntactically valid, "+
+				"optionally for a specific dialect. Returns {valid: bool, error?: string, dialect?: string}.",
+			toolMeta(cfg, "Validating SQL…", "Validated SQL", false),
 			mcp.WithString("sql",
 				mcp.Required(),
 				mcp.Description("The SQL string to validate"),
 			),
 			mcp.WithString("dialect",
-				mcp.Description("SQL dialect: generic, mysql, postgresql, sqlite, sqlserver, oracle, snowflake"),
-				mcp.Enum("generic", "mysql", "postgresql", "sqlite", "sqlserver", "oracle", "snowflake"),
+				mcp.Description("SQL dialect: generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, clickhouse"),
+				mcp.Enum(supportedDialects...),
 			),
 		),
 		handleValidateSQL,
 	)
 
-	// format_sql
 	s.mcpSrv.AddTool(
-		mcp.NewTool("format_sql",
-			mcp.WithDescription("Format SQL with configurable indentation and keyword casing."),
-			mcp.WithReadOnlyHintAnnotation(true),
-			mcp.WithDestructiveHintAnnotation(false),
-			mcp.WithIdempotentHintAnnotation(true),
-			mcp.WithOpenWorldHintAnnotation(false),
+		newTool("format_sql", "Format SQL",
+			"Use this when the user wants SQL pretty-printed or reformatted, with configurable "+
+				"indentation, keyword casing, and trailing semicolon. Returns {formatted_sql, options}.",
+			toolMeta(cfg, "Formatting SQL…", "Formatted SQL", false),
 			mcp.WithString("sql",
 				mcp.Required(),
 				mcp.Description("The SQL string to format"),
@@ -131,14 +198,11 @@ func (s *Server) registerTools() {
 		handleFormatSQL,
 	)
 
-	// parse_sql
 	s.mcpSrv.AddTool(
-		mcp.NewTool("parse_sql",
-			mcp.WithDescription("Parse SQL and return an AST summary: statement count and types."),
-			mcp.WithReadOnlyHintAnnotation(true),
-			mcp.WithDestructiveHintAnnotation(false),
-			mcp.WithIdempotentHintAnnotation(true),
-			mcp.WithOpenWorldHintAnnotation(false),
+		newTool("parse_sql", "Parse SQL",
+			"Use this when the user wants to know how SQL parses: returns an AST summary with "+
+				"the statement count and the type of each statement.",
+			toolMeta(cfg, "Parsing SQL…", "Parsed SQL", false),
 			mcp.WithString("sql",
 				mcp.Required(),
 				mcp.Description("The SQL string to parse"),
@@ -147,14 +211,11 @@ func (s *Server) registerTools() {
 		handleParseSQL,
 	)
 
-	// extract_metadata
 	s.mcpSrv.AddTool(
-		mcp.NewTool("extract_metadata",
-			mcp.WithDescription("Extract tables, columns, and functions referenced in SQL."),
-			mcp.WithReadOnlyHintAnnotation(true),
-			mcp.WithDestructiveHintAnnotation(false),
-			mcp.WithIdempotentHintAnnotation(true),
-			mcp.WithOpenWorldHintAnnotation(false),
+		newTool("extract_metadata", "Extract SQL metadata",
+			"Use this when the user wants the tables, columns, and functions a SQL query references "+
+				"(e.g. for lineage or impact analysis). Returns {tables, columns, functions}.",
+			toolMeta(cfg, "Extracting tables and columns…", "Extracted SQL metadata", false),
 			mcp.WithString("sql",
 				mcp.Required(),
 				mcp.Description("The SQL string to analyze"),
@@ -163,14 +224,11 @@ func (s *Server) registerTools() {
 		handleExtractMetadata,
 	)
 
-	// security_scan
 	s.mcpSrv.AddTool(
-		mcp.NewTool("security_scan",
-			mcp.WithDescription("Scan SQL for injection patterns: tautologies, UNION attacks, stacked queries, comment bypasses, and more."),
-			mcp.WithReadOnlyHintAnnotation(true),
-			mcp.WithDestructiveHintAnnotation(false),
-			mcp.WithIdempotentHintAnnotation(true),
-			mcp.WithOpenWorldHintAnnotation(false),
+		newTool("security_scan", "Scan SQL for injection",
+			"Use this when the user wants SQL checked for injection patterns: tautologies, UNION attacks, "+
+				"stacked queries, comment bypasses, and more. Returns findings with severity counts.",
+			toolMeta(cfg, "Scanning SQL for injection patterns…", "Scanned SQL", false),
 			mcp.WithString("sql",
 				mcp.Required(),
 				mcp.Description("The SQL string to scan"),
@@ -179,14 +237,14 @@ func (s *Server) registerTools() {
 		handleSecurityScan,
 	)
 
-	// lint_sql
 	s.mcpSrv.AddTool(
-		mcp.NewTool("lint_sql",
-			mcp.WithDescription("Lint SQL against all 10 GoSQLX style rules (L001–L010)."),
-			mcp.WithReadOnlyHintAnnotation(true),
-			mcp.WithDestructiveHintAnnotation(false),
-			mcp.WithIdempotentHintAnnotation(true),
-			mcp.WithOpenWorldHintAnnotation(false),
+		newTool("lint_sql", "Lint SQL",
+			"Use this when the user wants SQL style feedback. Applies the same 10 rules as `gosqlx lint`: "+
+				"L001 trailing whitespace, L002 mixed indentation, L003 consecutive blank lines, "+
+				"L004 indentation depth, L005 line length (>100), L006 column alignment, L007 keyword case (upper), "+
+				"L008 comma placement (trailing), L009 aliasing consistency, L010 redundant whitespace. "+
+				"Returns {violation_count, violations}.",
+			toolMeta(cfg, "Linting SQL…", "Linted SQL", false),
 			mcp.WithString("sql",
 				mcp.Required(),
 				mcp.Description("The SQL string to lint"),
@@ -195,14 +253,12 @@ func (s *Server) registerTools() {
 		handleLintSQL,
 	)
 
-	// analyze_sql
 	s.mcpSrv.AddTool(
-		mcp.NewTool("analyze_sql",
-			mcp.WithDescription("Run all 6 analysis tools concurrently and return a composite report (validate, parse, metadata, security, lint, format)."),
-			mcp.WithReadOnlyHintAnnotation(true),
-			mcp.WithDestructiveHintAnnotation(false),
-			mcp.WithIdempotentHintAnnotation(true),
-			mcp.WithOpenWorldHintAnnotation(false),
+		newTool("analyze_sql", "Analyze SQL",
+			"Use this when the user wants a complete review of a SQL query. Runs validate, parse, metadata, "+
+				"security, lint, and format concurrently and returns one composite report; "+
+				"hosts that support MCP Apps render it as an interactive report.",
+			toolMeta(cfg, "Analyzing SQL…", "Analyzed SQL", true),
 			mcp.WithString("sql",
 				mcp.Required(),
 				mcp.Description("The SQL string to analyze"),

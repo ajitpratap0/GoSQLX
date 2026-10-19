@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GoSQLX analysis</title>
+<!--
+  GoSQLX analyze_sql report widget.
+  Self-contained on purpose: inline CSS/JS, no network requests, no remote
+  assets, so it runs under the MCP Apps default CSP (connect-src 'none').
+  Data arrives through the MCP Apps postMessage bridge (ui/initialize,
+  ui/notifications/tool-input, ui/notifications/tool-result) and, in
+  ChatGPT, also through window.openai.toolOutput / openai:set_globals.
+  All tool data is rendered with textContent only (no HTML string injection).
+-->
+<style>
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #f6f7f9;
+  --border: #e3e6ea;
+  --text: #16181d;
+  --muted: #5d6573;
+  --accent: #0b6bcb;
+  --code-bg: #f3f5f8;
+  --ok-bg: #e5f6ec; --ok-fg: #13663a;
+  --bad-bg: #fdecec; --bad-fg: #a3231f;
+  --crit-bg: #fde4e4; --crit-fg: #9b1c1c;
+  --high-bg: #feeedd; --high-fg: #9a4a07;
+  --med-bg: #fdf6d8; --med-fg: #7a5d00;
+  --low-bg: #e8f0fb; --low-fg: #1f4f8f;
+  --font: var(--font-sans, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif);
+  --mono: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #17181b; --surface: #1f2125; --border: #30333a; --text: #eceef2; --muted: #a2a9b5;
+    --accent: #6cb2ff; --code-bg: #121316;
+    --ok-bg: #12301f; --ok-fg: #7fdca3; --bad-bg: #3a1716; --bad-fg: #ff9b95;
+    --crit-bg: #42161a; --crit-fg: #ff9ea3; --high-bg: #3d2410; --high-fg: #ffbe85;
+    --med-bg: #3a3110; --med-fg: #f2d36b; --low-bg: #142a45; --low-fg: #9cc6ff;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #17181b; --surface: #1f2125; --border: #30333a; --text: #eceef2; --muted: #a2a9b5;
+  --accent: #6cb2ff; --code-bg: #121316;
+  --ok-bg: #12301f; --ok-fg: #7fdca3; --bad-bg: #3a1716; --bad-fg: #ff9b95;
+  --crit-bg: #42161a; --crit-fg: #ff9ea3; --high-bg: #3d2410; --high-fg: #ffbe85;
+  --med-bg: #3a3110; --med-fg: #f2d36b; --low-bg: #142a45; --low-fg: #9cc6ff;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+body { font: 14px/1.45 var(--font); -webkit-font-smoothing: antialiased; }
+#app { padding: 14px 16px 16px; max-width: 100%; overflow-wrap: anywhere; }
+.head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.title { font-weight: 600; font-size: 15px; margin: 0; }
+.badge { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 2px 9px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.ok { background: var(--ok-bg); color: var(--ok-fg); }
+.bad { background: var(--bad-bg); color: var(--bad-fg); }
+.sev-CRITICAL, .sev-error { background: var(--crit-bg); color: var(--crit-fg); }
+.sev-HIGH { background: var(--high-bg); color: var(--high-fg); }
+.sev-MEDIUM, .sev-warning { background: var(--med-bg); color: var(--med-fg); }
+.sev-LOW, .sev-info { background: var(--low-bg); color: var(--low-fg); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; }
+.stat b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
+.stat span { color: var(--muted); font-size: 12px; }
+details { border: 1px solid var(--border); border-radius: 10px; margin-top: 8px; background: var(--bg); }
+summary { cursor: pointer; padding: 9px 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; list-style: none; }
+summary::-webkit-details-marker { display: none; }
+summary::before { content: "\25B8"; color: var(--muted); font-size: 11px; transition: transform .15s; }
+details[open] > summary::before { transform: rotate(90deg); }
+summary .count { margin-left: auto; color: var(--muted); font-weight: 500; font-size: 12px; }
+.body { padding: 0 12px 12px; }
+.muted { color: var(--muted); }
+.group { margin-top: 6px; }
+.group h4 { margin: 8px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip { font-family: var(--mono); font-size: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px; }
+ul.items { list-style: none; margin: 0; padding: 0; }
+ul.items li { padding: 8px 0; border-top: 1px solid var(--border); }
+ul.items li:first-child { border-top: 0; }
+.row { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.rule { font-family: var(--mono); font-size: 12px; font-weight: 600; }
+.loc { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.hint { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.err { background: var(--bad-bg); color: var(--bad-fg); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; }
+.codewrap { position: relative; }
+pre { margin: 0; background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; overflow: auto; max-height: 360px; font: 12.5px/1.5 var(--mono); white-space: pre; }
+button.copy { position: absolute; top: 6px; right: 6px; font: 600 12px var(--font); color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px; cursor: pointer; }
+button.copy:hover { border-color: var(--accent); color: var(--accent); }
+button.copy:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.empty { padding: 18px 4px; color: var(--muted); text-align: center; }
+</style>
+</head>
+<body>
+<main id="app" aria-live="polite"><div class="empty">Waiting for the GoSQLX analysis…</div></main>
+<script>
+(function () {
+  "use strict";
+
+  var state = { input: null, output: null, cancelled: false };
+  var app = document.getElementById("app");
+  var SEV_ORDER = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+
+  // ---- tiny DOM helpers (text nodes only, no HTML parsing of data) ----
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined && text !== null) n.textContent = String(text);
+    return n;
+  }
+  function add(parent) {
+    for (var i = 1; i < arguments.length; i++) if (arguments[i]) parent.appendChild(arguments[i]);
+    return parent;
+  }
+  function arr(v) { return Array.isArray(v) ? v : []; }
+  function obj(v) { return v && typeof v === "object" && !Array.isArray(v) ? v : null; }
+  function plural(n, one, many) { return n + " " + (n === 1 ? one : many); }
+
+  function stmtLabel(t) {
+    var s = String(t || "").replace(/^\*?ast\./, "").replace(/Statement$/, "").replace(/Stmt$/, "");
+    return s.replace(/([a-z])([A-Z])/g, "$1 $2").toUpperCase() || "UNKNOWN";
+  }
+
+  function section(title, count, open) {
+    var d = el("details");
+    if (open) d.open = true;
+    var s = add(el("summary"), el("span", null, title));
+    if (count !== undefined) add(s, el("span", "count", count));
+    var body = el("div", "body");
+    add(d, s, body);
+    return { root: d, body: body };
+  }
+
+  function chipGroup(label, items) {
+    var g = el("div", "group");
+    add(g, el("h4", null, label + " (" + items.length + ")"));
+    if (!items.length) return add(g, el("div", "muted", "None"));
+    var c = el("div", "chips");
+    items.forEach(function (it) { add(c, el("span", "chip", it)); });
+    return add(g, c);
+  }
+
+  function copyText(text, btn) {
+    function done(ok) {
+      btn.textContent = ok ? "Copied" : "Copy failed";
+      setTimeout(function () { btn.textContent = "Copy"; }, 1500);
+    }
+    function fallback() {
+      try {
+        var ta = el("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        var ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        done(ok);
+      } catch (e) { done(false); }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
+    } else {
+      fallback();
+    }
+  }
+
+  // ---- rendering ----
+  function render() {
+    var out = state.output;
+    app.textContent = "";
+    if (!out) {
+      add(app, el("div", "empty", state.cancelled ? "Analysis was cancelled." : "Waiting for the GoSQLX analysis…"));
+      return;
+    }
+
+    var validate = obj(out.validate) || {};
+    var parse = obj(out.parse) || {};
+    var meta = obj(out.metadata) || {};
+    var sec = obj(out.security) || {};
+    var lint = obj(out.lint) || {};
+    var fmt = obj(out.format) || {};
+    var errs = obj(out.errors) || {};
+    var valid = validate.valid === true;
+
+    var head = el("div", "head");
+    add(head, el("h1", "title", "GoSQLX analysis"));
+    add(head, el("span", "badge " + (valid ? "ok" : "bad"), valid ? "✓ Valid SQL" : "✗ Invalid SQL"));
+    if (validate.dialect) add(head, el("span", "badge chip", validate.dialect));
+    add(app, head);
+
+    if (!valid && validate.error) add(app, el("div", "err", validate.error));
+
+    var findings = arr(sec.findings).slice().sort(function (a, b) {
+      return (SEV_ORDER[a.severity] ?? 9) - (SEV_ORDER[b.severity] ?? 9);
+    });
+    var violations = arr(lint.violations).slice().sort(function (a, b) {
+      return (a.line || 0) - (b.line || 0) || (a.column || 0) - (b.column || 0);
+    });
+    var types = arr(parse.statement_types);
+
+    // headline numbers
+    var stats = el("div", "stats");
+    function stat(n, label) { add(stats, add(el("div", "stat"), el("b", null, n), el("span", null, label))); }
+    stat(parse.statement_count !== undefined ? parse.statement_count : "–", "statements");
+    stat(arr(meta.tables).length, "tables");
+    stat(findings.length, "security findings");
+    stat(violations.length, "lint violations");
+    add(app, stats);
+
+    // statements
+    if (types.length) {
+      var st = section("Statements", plural(types.length, "statement", "statements"), true);
+      var chips = el("div", "chips");
+      types.forEach(function (t) { add(chips, el("span", "chip", stmtLabel(t))); });
+      add(st.body, chips);
+      add(app, st.root);
+    }
+
+    // metadata
+    if (out.metadata) {
+      var md = section("Tables, columns & functions", undefined, true);
+      add(md.body,
+        chipGroup("Tables", arr(meta.tables)),
+        chipGroup("Columns", arr(meta.columns)),
+        chipGroup("Functions", arr(meta.functions)));
+      add(app, md.root);
+    }
+
+    // security
+    if (out.security) {
+      var sc = section("Security", findings.length ? plural(findings.length, "finding", "findings") : "clean", findings.length > 0);
+      if (findings.length) {
+        var sevRow = el("div", "row");
+        [["CRITICAL", sec.critical_count], ["HIGH", sec.high_count], ["MEDIUM", sec.medium_count], ["LOW", sec.low_count]]
+          .forEach(function (p) { if (p[1]) add(sevRow, el("span", "badge sev-" + p[0], p[1] + " " + p[0].toLowerCase())); });
+        add(sc.body, sevRow);
+        var ul = el("ul", "items");
+        findings.forEach(function (f) {
+          var li = el("li");
+          add(li, add(el("div", "row"),
+            el("span", "badge sev-" + f.severity, f.severity),
+            el("span", "rule", f.pattern),
+            el("span", null, f.description)));
+          if (f.risk) add(li, el("div", "hint", "Risk: " + f.risk));
+          if (f.suggestion) add(li, el("div", "hint", "Fix: " + f.suggestion));
+          add(ul, li);
+        });
+        add(sc.body, ul);
+      } else {
+        add(sc.body, el("div", "muted", "No injection patterns detected."));
+      }
+      add(app, sc.root);
+    }
+
+    // lint
+    if (out.lint) {
+      var ln = section("Lint", violations.length ? plural(violations.length, "violation", "violations") : "clean", violations.length > 0 && violations.length <= 20);
+      if (violations.length) {
+        var lul = el("ul", "items");
+        violations.forEach(function (v) {
+          var li = el("li");
+          add(li, add(el("div", "row"),
+            el("span", "badge sev-" + v.severity, v.severity),
+            el("span", "rule", v.rule + (v.rule_name ? " · " + v.rule_name : "")),
+            el("span", "loc", "line " + v.line + ":" + v.column)));
+          add(li, el("div", null, v.message));
+          if (v.suggestion) add(li, el("div", "hint", v.suggestion));
+          add(lul, li);
+        });
+        add(ln.body, lul);
+      } else {
+        add(ln.body, el("div", "muted", "No style violations."));
+      }
+      add(app, ln.root);
+    }
+
+    // formatted SQL (or the original input when formatting failed)
+    var sqlText = typeof fmt.formatted_sql === "string" ? fmt.formatted_sql
+      : (state.input && typeof state.input.sql === "string" ? state.input.sql : "");
+    if (sqlText) {
+      var fs = section(fmt.formatted_sql !== undefined ? "Formatted SQL" : "SQL", undefined, true);
+      var wrap = el("div", "codewrap");
+      var btn = el("button", "copy", "Copy");
+      btn.type = "button";
+      btn.setAttribute("aria-label", "Copy SQL to clipboard");
+      btn.addEventListener("click", function () { copyText(sqlText, btn); });
+      add(wrap, add(el("pre"), el("code", null, sqlText)), btn);
+      add(fs.body, wrap);
+      add(app, fs.root);
+    }
+
+    // other sub-tool errors (e.g. parse/format skipped on invalid SQL)
+    var errKeys = Object.keys(errs).filter(function (k) { return k !== "validate" || !validate.error; });
+    if (errKeys.length) {
+      var es = section("Skipped checks", String(errKeys.length), !valid);
+      var eul = el("ul", "items");
+      errKeys.forEach(function (k) {
+        add(eul, add(el("li"), el("span", "rule", k), el("div", "hint", errs[k])));
+      });
+      add(es.body, eul);
+      add(app, es.root);
+    }
+  }
+
+  function applyToolResult(res) {
+    if (!res) return;
+    var sc = obj(res.structuredContent);
+    if (!sc && Array.isArray(res.content)) {
+      for (var i = 0; i < res.content.length; i++) {
+        var c = res.content[i];
+        if (c && c.type === "text") { try { sc = obj(JSON.parse(c.text)); } catch (e) { /* not JSON */ } if (sc) break; }
+      }
+    }
+    if (sc) { state.output = sc; state.cancelled = false; render(); }
+  }
+
+  // ---- theming ----
+  function setTheme(t) {
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  }
+  function applyHostContext(ctx) {
+    ctx = obj(ctx);
+    if (!ctx) return;
+    setTheme(ctx.theme);
+    var vars = ctx.styles && obj(ctx.styles.variables);
+    if (vars) {
+      ["--font-sans", "--font-mono"].forEach(function (k) {
+        if (typeof vars[k] === "string" && vars[k]) document.documentElement.style.setProperty(k, vars[k]);
+      });
+    }
+  }
+
+  // ---- MCP Apps bridge (JSON-RPC 2.0 over postMessage) ----
+  var hasParent = window.parent && window.parent !== window;
+  var nextId = 1;
+  var pending = {};
+  function post(msg) { if (hasParent) window.parent.postMessage(msg, "*"); }
+  function notify(method, params) { post({ jsonrpc: "2.0", method: method, params: params || {} }); }
+  function request(method, params) {
+    var id = nextId++;
+    post({ jsonrpc: "2.0", id: id, method: method, params: params || {} });
+    return new Promise(function (resolve, reject) {
+      pending[id] = { resolve: resolve, reject: reject };
+      setTimeout(function () {
+        if (pending[id]) { delete pending[id]; reject(new Error("timeout: " + method)); }
+      }, 15000);
+    });
+  }
+
+  window.addEventListener("message", function (ev) {
+    if (ev.source !== window.parent) return;
+    var m = ev.data;
+    if (!m || m.jsonrpc !== "2.0") return;
+
+    if (m.id !== undefined && m.id !== null && !m.method) {
+      var p = pending[m.id];
+      if (p) { delete pending[m.id]; if (m.error) p.reject(m.error); else p.resolve(m.result); }
+      return;
+    }
+    switch (m.method) {
+      case "ui/notifications/tool-input":
+        state.input = obj(m.params && m.params.arguments);
+        render();
+        break;
+      case "ui/notifications/tool-result":
+        applyToolResult(m.params);
+        break;
+      case "ui/notifications/tool-cancelled":
+        state.cancelled = true;
+        render();
+        break;
+      case "ui/notifications/host-context-changed":
+        applyHostContext(m.params);
+        break;
+      case "ui/resource-teardown":
+      case "ping":
+        if (m.id !== undefined) post({ jsonrpc: "2.0", id: m.id, result: {} });
+        break;
+    }
+  });
+
+  // ---- size reporting so the host can fit the iframe ----
+  var lastW = 0, lastH = 0, queued = false;
+  function reportSize() {
+    queued = false;
+    // Measure the content, not the viewport: documentElement.scrollHeight never
+    // drops below the iframe height, so the widget could grow but never shrink
+    // (e.g. after collapsing a section).
+    var h = Math.ceil(app.getBoundingClientRect().height);
+    var w = Math.ceil(document.documentElement.scrollWidth);
+    if (h === lastH && w === lastW) return;
+    lastH = h; lastW = w;
+    notify("ui/notifications/size-changed", { width: w, height: h });
+    if (window.openai && typeof window.openai.notifyIntrinsicHeight === "function") {
+      try { window.openai.notifyIntrinsicHeight(h); } catch (e) { /* ignore */ }
+    }
+  }
+  function scheduleSize() { if (!queued) { queued = true; requestAnimationFrame(reportSize); } }
+
+  // ---- ChatGPT window.openai compatibility (optional) ----
+  function readOpenAI() {
+    var oa = window.openai;
+    if (!oa) return;
+    setTheme(oa.theme);
+    if (obj(oa.toolInput)) state.input = oa.toolInput;
+    if (obj(oa.toolOutput)) { state.output = oa.toolOutput; render(); }
+  }
+  window.addEventListener("openai:set_globals", function (ev) {
+    var g = ev && ev.detail && ev.detail.globals;
+    if (!g) return;
+    if (g.theme) setTheme(g.theme);
+    if (obj(g.toolInput)) state.input = g.toolInput;
+    if (obj(g.toolOutput)) { state.output = g.toolOutput; render(); }
+  });
+
+  // ---- boot ----
+  render();
+  readOpenAI();
+  if (typeof ResizeObserver === "function") new ResizeObserver(scheduleSize).observe(app);
+  document.addEventListener("toggle", scheduleSize, true);
+
+  if (hasParent) {
+    request("ui/initialize", {
+      // ext-apps SDK sends appInfo; the spec's raw example uses clientInfo. Send both.
+      appInfo: { name: "gosqlx-analysis", version: "1.0.0" },
+      clientInfo: { name: "gosqlx-analysis", version: "1.0.0" },
+      appCapabilities: { availableDisplayModes: ["inline"] },
+      protocolVersion: "2026-01-26"
+    }).then(function (res) {
+      applyHostContext(res && res.hostContext);
+      notify("ui/notifications/initialized", {});
+      scheduleSize();
+    }, function () {
+      // Host without the MCP Apps bridge (e.g. legacy ChatGPT skybridge): window.openai covers it.
+      scheduleSize();
+    });
+  }
+})();
+</script>
+</body>
+</html>

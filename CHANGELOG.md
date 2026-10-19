@@ -954,7 +954,7 @@ corrected LICENSE is served for `go get` users.
 ## [1.9.1] - 2026-02-28 — Documentation & Community Health
 
 Documentation and community-health release; no runtime behavior changes.
-(These changes are also summarized under 1.9.2 below.)
+(These changes were also announced in the 1.9.2 notes.)
 
 ### 📚 Documentation (PR #351)
 - Fix pkg.go.dev license detection and add comprehensive doc comments across
@@ -2361,6 +2361,8 @@ This substantial test coverage increase provides strong confidence in the AST pa
 2. **Pool Usage**: Always use `defer` when returning objects to pools
 3. **Import Paths**: Update imports from test packages if used
 4. **Performance**: Expect 47% performance improvement, adjust timeouts accordingly
+
+For the fuller guide, see [Upgrading to v1.0.0 from v0.9.0](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/UPGRADE_GUIDE.md) in `docs/UPGRADE_GUIDE.md`.
 
 ### Breaking Changes in 1.0.0
 

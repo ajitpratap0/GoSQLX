@@ -191,3 +191,12 @@ test('changelog article tables scroll horizontally instead of being clipped on n
   assert.match(page, /\[&_table\]:overflow-x-auto/);
   assert.match(page, /\[&_table\]:block/);
 });
+
+test('splitChangelog strips leading emoji from section headings only', () => {
+  const md = '## [1.0.0] - 2026-01-01\n\n### ✨ New Features\n- 🚀 keep me\n\n### 🏷️ Tagged\n\n```\n### 🔧 in fence\n```\n';
+  const [r] = splitChangelog(md);
+  assert.match(r.body, /^### New Features$/m);
+  assert.match(r.body, /^### Tagged$/m);
+  assert.match(r.body, /- 🚀 keep me/);
+  assert.match(r.body, /### 🔧 in fence/);
+});

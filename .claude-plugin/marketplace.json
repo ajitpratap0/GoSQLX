@@ -1,0 +1,21 @@
+{
+  "name": "gosqlx",
+  "description": "Official GoSQLX plugins for Claude Code: SQL validation, formatting, linting, security scanning and analysis.",
+  "owner": {
+    "name": "Ajit Pratap Singh",
+    "url": "https://github.com/ajitpratap0"
+  },
+  "plugins": [
+    {
+      "name": "gosqlx",
+      "source": "./plugins/gosqlx",
+      "description": "Validate, format, lint, analyze and security-scan SQL with GoSQLX (MCP tools, skills, slash commands, a SQL reviewer agent and a .sql validation hook).",
+      "version": "1.15.0",
+      "category": "development",
+      "tags": ["sql", "database", "linting", "formatting", "security", "mcp"],
+      "homepage": "https://gosqlx.dev",
+      "repository": "https://github.com/ajitpratap0/GoSQLX",
+      "license": "Apache-2.0"
+    }
+  ]
+}

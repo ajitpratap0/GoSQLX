@@ -11,7 +11,7 @@
  *   ## [0.8.0] - 2023-12-01 [Pre-release]                 (bracketed tag)
  *
  * A release ends at the next `## ` heading of any kind, so trailing non-release
- * sections ("Version History Summary", "Upgrade Guide", "Support") and the
+ * sections ("Version History Summary", "Support") and the
  * `[x.y.z]: https://...` link reference footer never leak into the last page.
  * A heading that starts like a release but cannot be parsed fails the build
  * instead of silently merging into the previous release.

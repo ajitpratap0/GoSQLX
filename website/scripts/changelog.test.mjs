@@ -42,8 +42,18 @@ test('CHANGELOG.md: no release body contains another H2 or the link footer', () 
   for (const r of splitChangelog(changelog)) {
     assert.doesNotMatch(r.body, /^## /m, `v${r.version} contains an H2`);
     assert.doesNotMatch(r.body, /^\[[^\]]+\]:\s+https?:/m, `v${r.version} contains link refs`);
-    assert.doesNotMatch(r.body, /Version History Summary|Upgrade Guide/);
+    assert.doesNotMatch(r.body, /Version History Summary/);
+    // The 0.9.0 -> 1.0.0 upgrade guide lives inside [1.0.0] as H3s (#787).
   }
+});
+
+test('CHANGELOG.md: v1.0.0 page keeps the upgrade guide and v1.9.1 exists', () => {
+  const rel = splitChangelog(changelog);
+  const v100 = rel.find((r) => r.version === '1.0.0');
+  assert.ok(v100, 'v1.0.0 missing');
+  assert.match(v100.body, /^### Upgrade Guide \(0\.9\.0 to 1\.0\.0\)/m);
+  assert.match(v100.body, /^### Breaking Changes in 1\.0\.0/m);
+  assert.ok(rel.some((r) => r.version === '1.9.1'), 'v1.9.1 missing');
 });
 
 test('splitChangelog: handles every heading variant and drops trailing sections', () => {

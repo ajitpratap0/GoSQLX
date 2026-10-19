@@ -114,7 +114,7 @@
 //	-p, --pattern string      File pattern for recursive processing (default "*.sql")
 //	-q, --quiet               Quiet mode (exit code only)
 //	-s, --stats               Show performance statistics
-//	--dialect string          SQL dialect: postgresql, mysql, sqlserver, oracle, sqlite
+//	--dialect string          SQL dialect: generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse
 //	--strict                  Enable strict validation mode
 //	--output-format string    Output format: text, json, sarif (default "text")
 //	--output-file string      Output file path (default: stdout)

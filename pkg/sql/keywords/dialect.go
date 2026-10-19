@@ -156,6 +156,29 @@ func AllDialects() []SQLDialect {
 	}
 }
 
+// DialectNames returns the user-selectable SQL dialect names as plain strings,
+// in the same stable order as AllDialects. It is the single source of truth
+// for user-facing dialect lists (CLI flag help, CLI and config error messages,
+// MCP tool schemas, editor settings); every name it returns is accepted by
+// IsValidDialect. DialectUnknown is not included because it is not a
+// meaningful user choice.
+//
+// Each call returns a fresh slice that the caller may modify.
+//
+// Example:
+//
+//	fmt.Println(strings.Join(keywords.DialectNames(), ", "))
+//	// generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite,
+//	// snowflake, bigquery, redshift, clickhouse
+func DialectNames() []string {
+	dialects := AllDialects()
+	names := make([]string, len(dialects))
+	for i, d := range dialects {
+		names[i] = string(d)
+	}
+	return names
+}
+
 // GetCompoundKeywords returns the compound keywords map.
 // Compound keywords are multi-word SQL keywords like "GROUP BY", "ORDER BY",
 // "GROUPING SETS", "MATERIALIZED VIEW", etc.

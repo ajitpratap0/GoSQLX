@@ -11,7 +11,7 @@
  *   ## [0.8.0] - 2023-12-01 [Pre-release]                 (bracketed tag)
  *
  * A release ends at the next `## ` heading of any kind, so trailing non-release
- * sections ("Version History Summary", "Upgrade Guide", "Support") and the
+ * sections ("Version History Summary", "Support") and the
  * `[x.y.z]: https://...` link reference footer never leak into the last page.
  * A heading that starts like a release but cannot be parsed fails the build
  * instead of silently merging into the previous release.
@@ -31,7 +31,8 @@ const LINK_REF_DEF = /^\[[^\]]+\]:\s+\S+/;
  * 1.9.0 section). Markdown would join them into one paragraph, so they are
  * emitted as list items; indented continuation lines stay part of the item.
  */
-const TAGGED_LINE = /^\[[A-Z][A-Z0-9/-]*\]\s/;
+const SECTION_HEADING_EMOJI = /^(#{3,6})\s+(?:\p{Extended_Pictographic}️?‍?)+\s*/u;
+const TAGGED_LINE =/^\[[A-Z][A-Z0-9/-]*\]\s/;
 
 /**
  * @param {string} changelog CHANGELOG.md contents
@@ -68,6 +69,11 @@ function splitChangelog(changelog) {
 
     if (!current) continue;
     if (!inFence && LINK_REF_DEF.test(line)) continue;
+    if (!inFence && SECTION_HEADING_EMOJI.test(line)) {
+      // Section headings drop a leading emoji so anchors and the TOC stay clean.
+      current.body.push(line.replace(SECTION_HEADING_EMOJI, '$1 '));
+      continue;
+    }
     current.body.push(!inFence && TAGGED_LINE.test(line) ? `- ${line.replace(/\s+/, ' ')}` : line);
   }
   finish();

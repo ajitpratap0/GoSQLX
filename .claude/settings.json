@@ -1,6 +1,0 @@
-{
-  "enabledPlugins": {
-    "qodo-skills@claude-plugins-official": true,
-    "pagerduty@claude-plugins-official": true
-  }
-}

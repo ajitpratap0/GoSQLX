@@ -318,15 +318,17 @@ type Tokenizer struct {
 	// Together with len(Comments) it is checked against MaxTokens.
 	emitted int
 
-	// Forward column cursor used by toSQLPosition so that the mostly
-	// monotone position requests made during tokenization cost O(1)
-	// amortized instead of re-counting the whole line prefix each time.
-	// The cursor is only meaningful for the current input/lineStarts and is
-	// invalidated by Reset(). The zero value (posCacheCol == 0) means
-	// "no cursor".
-	posCacheLine int // index into lineStarts of the line the cursor is on
-	posCacheIdx  int // byte offset the cursor has counted up to (<= len(input))
-	posCacheCol  int // 1-based column at posCacheIdx; 0 means the cursor is invalid
+	// tokStart is the location of the first byte of the token being scanned,
+	// after any whitespace and comments before it. Tokenize sets it before
+	// calling nextToken, and nextToken moves it past comments it skips.
+	tokStart models.Location
+
+	// posCacheLine is the index into lineStarts of the line the last
+	// toSQLPosition request fell on. Position requests made during
+	// tokenization are mostly monotone, so lineIndexAt checks it (and the line
+	// after it) before falling back to a binary search. It is only meaningful
+	// for the current input/lineStarts and is reset by Reset().
+	posCacheLine int
 
 	// Forward cursor used by hasCodeBeforeOnLine so that a run of comments
 	// on one line costs time linear in the line length instead of
@@ -629,9 +631,9 @@ func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, have
 			t.emitted = len(tokens)
 
 			// Compute the start location before scanning so position requests
-			// stay monotone (nextToken may record comment positions past it).
-			startPos := t.pos
-			startLoc := t.toSQLPosition(startPos)
+			// stay monotone. nextToken replaces it when it skips comments, so
+			// that Start always addresses the token and not the trivia before it.
+			t.tokStart = t.toSQLPosition(t.pos)
 
 			token, err := t.nextToken()
 			if err != nil {
@@ -642,7 +644,7 @@ func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, have
 
 			tw := models.TokenWithSpan{
 				Token: token,
-				Start: startLoc,
+				Start: t.tokStart,
 				End:   t.getCurrentPosition(),
 			}
 			if t.logger != nil && t.logger.Enabled(context.Background(), slog.LevelDebug) {
@@ -857,6 +859,7 @@ func (t *Tokenizer) nextToken() (models.Token, error) {
 					return models.Token{}, err
 				}
 				t.skipWhitespace()
+				t.tokStart = t.toSQLPosition(t.pos)
 				continue
 			}
 			if r == '/' && next == '*' {
@@ -864,6 +867,7 @@ func (t *Tokenizer) nextToken() (models.Token, error) {
 					return models.Token{}, err
 				}
 				t.skipWhitespace()
+				t.tokStart = t.toSQLPosition(t.pos)
 				continue
 			}
 		}
@@ -2289,9 +2293,9 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 // byte offset idx, i.e. the largest i with t.lineStarts[i] <= idx. It returns 0
 // when lineStarts is empty or idx precedes the first line start.
 //
-// The cursor line and the line after it are checked first in O(1) because
-// tokenization requests positions in (almost) increasing order; otherwise a
-// binary search is used.
+// The hinted line (posCacheLine) and the line after it are checked first in
+// O(1) because tokenization requests positions in (almost) increasing order;
+// otherwise a binary search is used.
 func (t *Tokenizer) lineIndexAt(idx int) int {
 	n := len(t.lineStarts)
 	if n == 0 {
@@ -2319,11 +2323,10 @@ func (t *Tokenizer) lineIndexAt(idx int) int {
 
 // toSQLPosition converts an internal Position => a models.Location.
 //
-// Columns are 1-based and byte-based, with a tab counting as 4 columns. The
-// line is found with lineIndexAt and the column count resumes from the
-// forward cursor (posCacheLine/posCacheIdx/posCacheCol) when the request is on
-// the cursor's line at or after it; otherwise it counts from the line start.
-// Either way the result is identical to counting from the line start.
+// Columns are 1-based and byte-based: every byte, a tab included, counts as
+// one column, matching editors and LSP clients. The line is found with
+// lineIndexAt, so the column is the distance from the line start in O(1). A
+// position past the end of the input is clamped to the end.
 func (t *Tokenizer) toSQLPosition(pos Position) models.Location {
 	li := t.lineIndexAt(pos.Index)
 	lineStart := 0
@@ -2331,29 +2334,12 @@ func (t *Tokenizer) toSQLPosition(pos Position) models.Location {
 		lineStart = t.lineStarts[li]
 	}
 
-	// Column is 1-based, so we start at 1 unless resuming from the cursor.
-	start, column := lineStart, 1
-	if t.posCacheCol > 0 && t.posCacheLine == li && t.posCacheIdx >= lineStart && pos.Index >= t.posCacheIdx {
-		start, column = t.posCacheIdx, t.posCacheCol
-	}
+	// Column is 1-based and never less than 1.
+	end := min(pos.Index, len(t.input))
+	column := max(end-lineStart, 0) + 1
 
-	i := start
-	for ; i < pos.Index && i < len(t.input); i++ {
-		if t.input[i] == '\t' {
-			column += 4 // Treat tab as 4 spaces
-		} else {
-			column++
-		}
-	}
-
-	// Ensure column is never less than 1
-	if column < 1 {
-		column = 1
-	}
-
-	// Remember where counting stopped (clamped to len(input)) so the next
-	// request on this line can resume from here.
-	t.posCacheLine, t.posCacheIdx, t.posCacheCol = li, i, column
+	// Remember the line so the next, usually monotone, request starts there.
+	t.posCacheLine = li
 
 	return models.Location{
 		Line:   li + 1,

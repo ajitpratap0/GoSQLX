@@ -5,7 +5,7 @@ import { pageJsonLd } from '@/lib/jsonld';
 
 export const metadata: Metadata = pageMeta({
   title: 'Privacy Policy',
-  description: 'GoSQLX privacy policy: no tracking cookies and no query logging. What the website, playground, hosted MCP server, ChatGPT app, Claude plugin and VS Code extension collect, why, who receives it and your rights.',
+  description: 'GoSQLX privacy policy: no cookies, no SQL logging. What the website, playground, MCP server, ChatGPT app and Claude plugin collect, and your rights.',
   path: '/privacy/',
   image: { url: '/opengraph-image', alt: 'GoSQLX' },
 });

@@ -43,11 +43,11 @@ func TestErrorSpan_Positions(t *testing.T) {
 		{"two-byte character before error", "SELECT 'é', x FROM t WHERE ) 1", spanPos{1, 28, 1, 29}, "E2002"},
 		{"astral character before error", "SELECT '😀', x FROM t WHERE ) 1", spanPos{1, 29, 1, 30}, "E2002"},
 		{"CRLF line endings", "SELECT a,\r\nFROM t", spanPos{2, 1, 2, 5}, "E2001"},
-		// The tokenizer counts a tab as four columns; the span counts it as one.
+		// A tab is one column in the tokenizer and in the span.
 		{"tab before error on the same line", "SELECT 1 FROM t\tWHERE x = = 1", spanPos{1, 27, 1, 28}, "E2001"},
 		{"tab indentation before error", "SELECT id\n\tFROM users\n\tWHERE ) AND x = 1", spanPos{3, 8, 3, 9}, "E2002"},
 		{"tab indentation at error", "SELECT a,\n\tFROM t", spanPos{2, 2, 2, 6}, "E2001"},
-		// A token's Start includes a comment skipped before it; mark the token.
+		// A token's Start is the token itself, not a comment before it.
 		{"block comment before error", "SELECT * FROM t WHERE x = 1 /* é */ )", spanPos{1, 37, 1, 38}, "E2002"},
 		{"line comment before error", "SELECT * FROM t WHERE x = 1 -- c\n )", spanPos{2, 2, 2, 3}, "E2002"},
 	}
@@ -155,7 +155,7 @@ func TestErrorSpan_ClampsOutOfRangeLocation(t *testing.T) {
 	}
 }
 
-func TestErrorSpan_ClampLocationCountsTabsAsFourColumns(t *testing.T) {
+func TestErrorSpan_ClampLocationCountsTabsAsOneColumn(t *testing.T) {
 	lines := []string{"a\tb"}
 	for _, tc := range []struct {
 		name       string
@@ -164,8 +164,7 @@ func TestErrorSpan_ClampLocationCountsTabsAsFourColumns(t *testing.T) {
 	}{
 		{"before tab", 1, 0},
 		{"at tab", 2, 1},
-		{"inside tab span", 4, 1},
-		{"after tab", 6, 2},
+		{"after tab", 3, 2},
 		{"past end", 9, 3},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

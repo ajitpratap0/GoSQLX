@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 
 	mcpmcp "github.com/mark3labs/mcp-go/mcp"
@@ -74,6 +75,14 @@ func validateSQLInternal(sql, dialect string) (map[string]any, error) {
 }
 
 // formatSQLInternal formats a SQL string using the provided options.
+//
+// gosqlx.Format always emits clause keywords (SELECT, FROM, WHERE, ...) in
+// upper case and leaves the case of other keywords (and, in, case, ...) to the
+// AST, so its UppercaseKeywords option alone changes nothing visible. When
+// uppercaseKeywords is true the remaining keywords are therefore upper-cased
+// here (data type names are left alone); when false the output is
+// gosqlx.Format's, unchanged. indentSize 0 puts each statement on one line;
+// positive values only indent nested blocks such as CREATE TABLE columns.
 func formatSQLInternal(sql string, indentSize int, uppercaseKeywords, addSemicolon bool) (map[string]any, error) {
 	if sql == "" {
 		return nil, fmt.Errorf("parameter 'sql' is required and must not be empty")
@@ -89,6 +98,9 @@ func formatSQLInternal(sql string, indentSize int, uppercaseKeywords, addSemicol
 	if err != nil {
 		return nil, fmt.Errorf("format failed: %w", err)
 	}
+	if uppercaseKeywords {
+		formatted = uppercaseSQLKeywords(formatted)
+	}
 
 	return map[string]any{
 		"formatted_sql": formatted,
@@ -98,6 +110,119 @@ func formatSQLInternal(sql string, indentSize int, uppercaseKeywords, addSemicol
 			"add_semicolon":      addSemicolon,
 		},
 	}, nil
+}
+
+// keywordCaseRule is lint_sql's L007 rule; its keyword list decides, together
+// with the generic reserved words, which words uppercaseSQLKeywords changes,
+// so format_sql output with uppercase_keywords passes L007.
+var (
+	keywordCaseRule = keywords.NewKeywordCaseRule(keywords.CaseUpper)
+	genericKeywords = sqlkeywords.New(sqlkeywords.DialectGeneric, true)
+)
+
+// isUppercasableKeyword reports whether word is a SQL keyword that
+// uppercaseSQLKeywords should upper-case.
+func isUppercasableKeyword(word string) bool {
+	if genericKeywords.IsReserved(word) {
+		return true
+	}
+	// L007's Fix upper-cases exactly the words in its keyword list.
+	lower := strings.ToLower(word)
+	fixed, err := keywordCaseRule.Fix(lower, nil)
+	return err == nil && fixed != lower
+}
+
+// uppercaseSQLKeywords upper-cases the SQL keywords in formatted SQL. String
+// literals, quoted identifiers ("x", `x`, [x]), dollar-quoted bodies,
+// comments, numbers, parameters (:p, @v, $1) and qualified-name parts (t.key)
+// are copied unchanged.
+func uppercaseSQLKeywords(sql string) string {
+	isWord := func(c byte) bool {
+		return c == '_' || c == '$' || c >= 0x80 ||
+			(c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+	}
+	// skipQuoted returns the index just past the closing quote of the
+	// quoted text starting at i; a doubled closing quote is an escape.
+	skipQuoted := func(i int, closing byte, backslash bool) int {
+		for j := i + 1; j < len(sql); j++ {
+			switch {
+			case backslash && sql[j] == '\\':
+				j++
+			case sql[j] == closing:
+				if j+1 < len(sql) && sql[j+1] == closing && closing != ']' {
+					j++
+					continue
+				}
+				return j + 1
+			}
+		}
+		return len(sql)
+	}
+
+	var sb strings.Builder
+	sb.Grow(len(sql))
+	for i := 0; i < len(sql); {
+		c := sql[i]
+		end := i + 1
+		switch {
+		case c == '\'':
+			end = skipQuoted(i, '\'', true)
+		case c == '"' || c == '`':
+			end = skipQuoted(i, c, false)
+		case c == '[':
+			end = skipQuoted(i, ']', false)
+		case c == '-' && strings.HasPrefix(sql[i:], "--"):
+			if nl := strings.IndexByte(sql[i:], '\n'); nl >= 0 {
+				end = i + nl
+			} else {
+				end = len(sql)
+			}
+		case c == '/' && strings.HasPrefix(sql[i:], "/*"):
+			if close := strings.Index(sql[i+2:], "*/"); close >= 0 {
+				end = i + 2 + close + 2
+			} else {
+				end = len(sql)
+			}
+		case c == '$':
+			// $tag$ ... $tag$ (tag may be empty); $1 and $name are copied as words.
+			j := i + 1
+			for j < len(sql) && sql[j] != '$' && isWord(sql[j]) {
+				j++
+			}
+			if j < len(sql) && sql[j] == '$' && (j == i+1 || sql[i+1] < '0' || sql[i+1] > '9') {
+				tag := sql[i : j+1]
+				if close := strings.Index(sql[j+1:], tag); close >= 0 {
+					end = j + 1 + close + len(tag)
+				} else {
+					end = len(sql)
+				}
+			} else {
+				end = j
+			}
+		case isWord(c):
+			for end < len(sql) && isWord(sql[end]) {
+				end++
+			}
+			word := sql[i:end]
+			prev, next := byte(0), byte(0)
+			if i > 0 {
+				prev = sql[i-1]
+			}
+			if end < len(sql) {
+				next = sql[end]
+			}
+			qualified := prev == '.' || next == '.' || prev == ':' || prev == '@'
+			if !qualified && (c < '0' || c > '9') && isUppercasableKeyword(word) {
+				word = strings.ToUpper(word)
+			}
+			sb.WriteString(word)
+			i = end
+			continue
+		}
+		sb.WriteString(sql[i:end])
+		i = end
+	}
+	return sb.String()
 }
 
 // parseSQLInternal parses a SQL string and returns statement count and types.

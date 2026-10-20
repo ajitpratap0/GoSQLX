@@ -84,9 +84,13 @@ export default function PrivacyPage() {
         </p>
         <p>
           To serve requests, the server holds short-lived state in memory
-          that is never written to disk: an MCP session identifier for each
-          connected client, deleted after 30 minutes of inactivity, and
-          per-IP rate-limit counters, deleted after 10 minutes of inactivity.
+          that is never written to disk: transport state for each MCP
+          session, deleted 30 to 45 minutes after the session&rsquo;s last
+          request, and per-IP rate-limit counters, deleted after 10 minutes
+          of inactivity. MCP session identifiers are random values held in
+          memory only as part of that transport state; they are never logged
+          or written to disk, and deleting a session&rsquo;s state does not
+          invalidate its identifier.
           ChatGPT may attach metadata to requests, such as locale, user agent
           or approximate location; the server receives it but does not use,
           log or store it.

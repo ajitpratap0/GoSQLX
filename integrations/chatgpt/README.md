@@ -45,7 +45,7 @@ what you see, look for "Developer mode" and "Create connector" under Apps or Con
 |---|---|
 | "Review this query: `SELECT * FROM orders o JOIN users u ON o.user_id = u.id WHERE u.email = 'a' OR 1=1`" | `analyze_sql` (renders the report) |
 | "Is `SELECT TOP 10 * FROM t` valid SQL Server syntax?" | `validate_sql` with `dialect: sqlserver` |
-| "Format this SQL with 4-space indentation and uppercase keywords: …" | `format_sql` |
+| "Format this SQL with uppercase keywords and a trailing semicolon: …" | `format_sql` |
 | "Which tables and columns does this query touch?" | `extract_metadata` |
 | "Does this WHERE clause look like SQL injection? `id = '' OR '1'='1' --`" | `security_scan` |
 | "Lint this SQL for style problems." | `lint_sql` |
@@ -109,8 +109,10 @@ are not accepted for directory submission.
 - All tools run locally inside the server process on the SQL text you send. GoSQLX
   never connects to a database and never executes SQL.
 - The hosted server at `mcp.gosqlx.dev` does not log, store or forward the SQL it
-  processes. Its only state is in memory: MCP session state (swept after 30 minutes of inactivity)
-  and per-IP rate-limit counters (dropped after 10 minutes of inactivity). Render and
+  processes. Its only state is in memory: per-session MCP transport state (removed 30 to 45
+  minutes after the session's last request) and per-IP rate-limit counters (dropped after 10
+  minutes of inactivity). MCP session IDs are random; the server does not record or log them,
+  and removing a session's state does not invalidate its ID. Render and
   Cloudflare, which host and front it, see connection metadata such as IP addresses.
   See <https://gosqlx.dev/privacy/>.
 - Tool results contain only analysis of the SQL you sent: no user identifiers, request

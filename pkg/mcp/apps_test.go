@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -95,6 +96,9 @@ func checkWidgetResourceMeta(t *testing.T, meta map[string]any) {
 	mustEmptyList(t, csp["resourceDomains"], "ui.csp.resourceDomains")
 	if ui["prefersBorder"] != true {
 		t.Errorf("ui.prefersBorder = %v, want true", ui["prefersBorder"])
+	}
+	if meta["openai/widgetPrefersBorder"] != true {
+		t.Errorf("openai/widgetPrefersBorder = %v, want true", meta["openai/widgetPrefersBorder"])
 	}
 	perms := mustMap(t, ui["permissions"], "ui.permissions")
 	if _, ok := perms["clipboardWrite"]; !ok {
@@ -192,11 +196,76 @@ func TestApps_ResourcesRead_ReturnsSelfContainedWidget(t *testing.T) {
 			t.Errorf("widget HTML contains %q; it must be self-contained and render via textContent", forbidden)
 		}
 	}
-	// The widget must speak the MCP Apps bridge.
-	for _, want := range []string{"ui/initialize", "ui/notifications/initialized", "ui/notifications/tool-result", "structuredContent"} {
-		if !strings.Contains(tc.Text, want) {
-			t.Errorf("widget HTML does not reference %q", want)
+	checkWidgetScript(t, tc.Text)
+}
+
+// widgetScript returns the widget's inline JavaScript with HTML comments
+// removed, so prose in the header comment cannot satisfy a code check.
+func widgetScript(t *testing.T, html string) string {
+	t.Helper()
+	html = regexp.MustCompile(`(?s)<!--.*?-->`).ReplaceAllString(html, "")
+	m := regexp.MustCompile(`(?s)<script>(.*?)</script>`).FindStringSubmatch(html)
+	if m == nil {
+		t.Fatal("widget has no inline <script>")
+	}
+	return m[1]
+}
+
+// checkWidgetScript asserts the widget code (not its comments) handles the
+// MCP Apps bridge, failed calls, large results and the clipboard policy.
+func checkWidgetScript(t *testing.T, html string) {
+	t.Helper()
+	js := widgetScript(t, html)
+	for _, re := range []string{
+		`request\("ui/initialize"`,                                   // handshake request
+		`notify\("ui/notifications/initialized"`,                     // handshake completion
+		`case\s+"ui/notifications/tool-result":\s*applyToolResult\(`, // result handler
+		`case\s+"ui/notifications/tool-input":`,
+		`notify\("ui/notifications/size-changed"`,
+		`res\.structuredContent`,
+		`res\.isError\s*===\s*true`,          // failed call -> error state
+		`applyOpenAIOutput\(g\.toolOutput\)`, // ChatGPT path shares error handling
+		`var LIST_CAP = \d+;`,                // large lists are capped
+		`allowsFeature\("clipboard-write"\)`, // clipboard permissions policy
+	} {
+		if !regexp.MustCompile(re).MatchString(js) {
+			t.Errorf("widget script does not match %s", re)
 		}
+	}
+}
+
+func TestApps_Constants(t *testing.T) {
+	if AppMIMEType != "text/html;profile=mcp-app" {
+		t.Errorf("AppMIMEType = %q, want text/html;profile=mcp-app", AppMIMEType)
+	}
+	if AnalysisWidgetURI != "ui://gosqlx/analysis-v1.html" {
+		t.Errorf("AnalysisWidgetURI = %q; changing it breaks ChatGPT's template cache, bump the version suffix deliberately", AnalysisWidgetURI)
+	}
+	if !regexp.MustCompile(`^ui://gosqlx/analysis-v\d+\.html$`).MatchString(AnalysisWidgetURI) {
+		t.Errorf("AnalysisWidgetURI %q must be ui:// with a version suffix", AnalysisWidgetURI)
+	}
+}
+
+func TestToolMeta_NilConfig(t *testing.T) {
+	var meta *mcpmcp.Meta
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("toolMeta(nil, ...) panicked: %v", r)
+			}
+		}()
+		meta = toolMeta(nil, "a", "b", false)
+	}()
+	m := metaMap(t, meta)
+	list, ok := m["securitySchemes"].([]any)
+	if !ok || len(list) != 1 || mustMap(t, list[0], "securitySchemes[0]")["type"] != "noauth" {
+		t.Errorf("toolMeta(nil) securitySchemes = %v, want [{type: noauth}]", m["securitySchemes"])
+	}
+	if m["openai/toolInvocation/invoking"] != "a" || m["openai/toolInvocation/invoked"] != "b" {
+		t.Errorf("toolMeta(nil) invocation strings = %v / %v", m["openai/toolInvocation/invoking"], m["openai/toolInvocation/invoked"])
+	}
+	if _, ok := m["ui"]; ok {
+		t.Error("toolMeta(nil, ..., false) must not bind the widget")
 	}
 }
 
@@ -232,6 +301,9 @@ func TestApps_ToolsList_MetaAndAnnotations(t *testing.T) {
 				}
 				if a.OpenWorldHint == nil || *a.OpenWorldHint {
 					t.Errorf("%s: openWorldHint must be false", tool.Name)
+				}
+				if a.IdempotentHint == nil || !*a.IdempotentHint {
+					t.Errorf("%s: idempotentHint must be true", tool.Name)
 				}
 				if a.Title == "" {
 					t.Errorf("%s: title annotation missing", tool.Name)
@@ -272,6 +344,9 @@ func TestApps_ToolsList_MetaAndAnnotations(t *testing.T) {
 				ui := mustMap(t, meta["ui"], "analyze_sql _meta.ui")
 				if ui["resourceUri"] != AnalysisWidgetURI {
 					t.Errorf("analyze_sql ui.resourceUri = %v, want %q", ui["resourceUri"], AnalysisWidgetURI)
+				}
+				if vis, ok := ui["visibility"].([]any); !ok || !reflect.DeepEqual(vis, []any{"model", "app"}) {
+					t.Errorf("analyze_sql ui.visibility = %v, want [model app]", ui["visibility"])
 				}
 				if meta["openai/outputTemplate"] != AnalysisWidgetURI {
 					t.Errorf("analyze_sql openai/outputTemplate = %v, want %q", meta["openai/outputTemplate"], AnalysisWidgetURI)

@@ -162,6 +162,15 @@ build step or SDK:
 4. ChatGPT fallback: reads `window.openai.toolOutput`, `toolInput` and `theme`, and
    listens for `openai:set_globals`.
 5. Theme: follows the host theme (`data-theme`) and otherwise `prefers-color-scheme`.
+6. Failed calls: a tool result with `isError: true`, or one without analysis data,
+   shows "Analysis failed" with the error text instead of waiting forever.
+7. Large results: repeated statement types collapse into counts (`SELECT ×5000`), and
+   every chip and finding list shows its first 50 items with a "+K more" toggle; an
+   expanded list scrolls inside a fixed height. The reported iframe height stays
+   bounded however large the input is.
+8. Copy uses the async Clipboard API only when the frame's permissions policy allows
+   `clipboard-write`, and `execCommand("copy")` otherwise, so hosts that omit
+   `allow="clipboard-write"` see no console error.
 
 It renders all data with `textContent`, so SQL text and error messages are never parsed
 as HTML. The test `TestApps_ResourcesRead_ReturnsSelfContainedWidget` fails if the
@@ -175,6 +184,24 @@ HTML gains remote `src`/`href` URLs, `@import`, `fetch(`, `XMLHttpRequest` or
 | `/mcp` | MCP streamable HTTP: rate limit → optional bearer auth → MCP |
 | `/health` | `{"status":"ok","version":<gosqlx.Version>,"tools":<registered tool count>}` |
 | `/.well-known/openai-apps-challenge` | Plain-text domain-verification token. Served only when `GOSQLX_MCP_OPENAI_APPS_CHALLENGE` is set; returns 404 otherwise |
+
+### Sessions
+
+The streamable HTTP transport runs in mcp-go's default stateless mode. Session IDs
+are random, the server does not record which ones it issued, and any well-formed
+ID is accepted. Per-session transport state (request-ID counters, per-session
+tool/resource registrations, last-activity time) is removed by a sweeper that runs
+every `SessionIdleTTL/2`, so state goes 30 to 45 minutes after a session's last
+request (`SessionIdleTTL` is 30 minutes). Neither the sweep nor `DELETE /mcp`
+invalidates an ID: a later request with the same ID simply starts new state.
+mcp-go's informational transport logs, which include session IDs, are discarded;
+only transport errors are logged, so nothing identifies a session in the logs.
+
+The HTTP server sets `ReadHeaderTimeout`. `Server.Start` (library use) also sets
+`IdleTimeout` but applies only bearer auth, not the rate limiter or the 64 KB body
+cap; `cmd/gosqlx-mcp` wraps the handler in `RateLimitMiddleware`. Call
+`Server.Shutdown` when you discard a `Server` whose `Handler` you used, to stop the
+session sweeper goroutine.
 
 The server sends no CORS headers. ChatGPT and Claude connect to MCP servers server to
 server, and nothing in the Apps SDK or MCP Apps requirements asks for CORS on the MCP

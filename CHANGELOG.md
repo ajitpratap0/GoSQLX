@@ -227,7 +227,14 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   reports `gosqlx.Version`; `/health` reports the real tool count; the
   optional `GOSQLX_MCP_OPENAI_APPS_CHALLENGE` env var serves
   `/.well-known/openai-apps-challenge` for app verification; idle MCP sessions
-  are swept after 30 minutes instead of living until restart. Setup:
+  have their transport state swept 30–45 minutes after their last request
+  (`SessionIdleTTL`, sweep every TTL/2) instead of living until restart, and
+  session IDs are not logged. `uppercase_keywords: true` on
+  `format_sql` now also uppercases operator and function keywords (`AND`,
+  `OR`, `COUNT`); `indent_size` affects nested blocks only, as now
+  documented. `Server.Shutdown(ctx)` stops the transport, and `Server.Start`
+  sets read-header and idle timeouts. The `analyze_sql` widget caps long
+  lists, shows failed calls as errors and avoids blocked clipboard calls. Setup:
   `integrations/chatgpt/README.md`, details: `docs/CHATGPT_APP.md`.
 - **`--dialect` flag for the `parse`, `format`, `analyze`, and `lint` CLI
   commands**: dialect-specific SQL (e.g. MySQL `LIMIT offset, count`) can now be

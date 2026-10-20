@@ -79,6 +79,10 @@ summary .count { margin-left: auto; color: var(--muted); font-weight: 500; font-
 .group h4 { margin: 8px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
 .chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .chip { font-family: var(--mono); font-size: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px; }
+.chips.expanded, ul.items.expanded { max-height: 240px; overflow: auto; }
+button.more { font: 600 12px var(--font); color: var(--accent); background: none; border: 1px dashed var(--border); border-radius: 6px; padding: 1px 7px; cursor: pointer; }
+li > button.more { margin-top: 6px; }
+button.more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 ul.items { list-style: none; margin: 0; padding: 0; }
 ul.items li { padding: 8px 0; border-top: 1px solid var(--border); }
 ul.items li:first-child { border-top: 0; }
@@ -101,9 +105,16 @@ button.copy:focus-visible, summary:focus-visible { outline: 2px solid var(--acce
 (function () {
   "use strict";
 
-  var state = { input: null, output: null, cancelled: false };
+  var state = { input: null, output: null, cancelled: false, error: null };
   var app = document.getElementById("app");
   var SEV_ORDER = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+  // Lists longer than this show their first LIST_CAP items and a "+K more"
+  // toggle, so a large result keeps the widget (and the iframe height it asks
+  // the host for) bounded.
+  var LIST_CAP = 50;
+  // Keys of a successful analyze_sql result; an object with none of them is
+  // not an analysis.
+  var RESULT_KEYS = ["validate", "parse", "metadata", "security", "lint", "format", "errors"];
 
   // ---- tiny DOM helpers (text nodes only, no HTML parsing of data) ----
   function el(tag, cls, text) {
@@ -135,13 +146,53 @@ button.copy:focus-visible, summary:focus-visible { outline: 2px solid var(--acce
     return { root: d, body: body };
   }
 
+  // cappedList renders items into container with renderItem, showing at most
+  // LIST_CAP of them plus a "+K more" / "Show fewer" toggle. The rest are
+  // only built on first expand, and an expanded list scrolls inside a fixed
+  // max-height instead of growing the widget.
+  function cappedList(container, items, renderItem, moreWrapTag) {
+    items.slice(0, LIST_CAP).forEach(function (it) { add(container, renderItem(it)); });
+    var rest = items.length - LIST_CAP;
+    if (rest <= 0) return container;
+    var extra = null;
+    var btn = el("button", "more", "+" + rest + " more");
+    btn.type = "button";
+    btn.setAttribute("aria-expanded", "false");
+    var toggle = moreWrapTag ? add(el(moreWrapTag), btn) : btn;
+    btn.addEventListener("click", function () {
+      var expand = btn.getAttribute("aria-expanded") !== "true";
+      if (expand && !extra) {
+        extra = items.slice(LIST_CAP).map(renderItem);
+        extra.forEach(function (n) { container.insertBefore(n, toggle); });
+      }
+      extra.forEach(function (n) { n.hidden = !expand; });
+      container.classList.toggle("expanded", expand);
+      btn.setAttribute("aria-expanded", String(expand));
+      btn.textContent = expand ? "Show fewer" : "+" + rest + " more";
+      if (!expand) container.scrollTop = 0;
+      scheduleSize();
+    });
+    return add(container, toggle);
+  }
+
   function chipGroup(label, items) {
     var g = el("div", "group");
     add(g, el("h4", null, label + " (" + items.length + ")"));
     if (!items.length) return add(g, el("div", "muted", "None"));
-    var c = el("div", "chips");
-    items.forEach(function (it) { add(c, el("span", "chip", it)); });
+    var c = cappedList(el("div", "chips"), items, function (it) { return el("span", "chip", it); });
     return add(g, c);
+  }
+
+  // countTypes collapses repeated statement types, in first-seen order:
+  // ["SELECT", "SELECT", "INSERT"] -> [["SELECT", 2], ["INSERT", 1]].
+  function countTypes(types) {
+    var order = [], counts = {};
+    types.forEach(function (t) {
+      var k = stmtLabel(t);
+      if (!Object.prototype.hasOwnProperty.call(counts, k)) { counts[k] = 0; order.push(k); }
+      counts[k]++;
+    });
+    return order.map(function (k) { return [k, counts[k]]; });
   }
 
   function copyText(text, btn) {
@@ -162,7 +213,13 @@ button.copy:focus-visible, summary:focus-visible { outline: 2px solid var(--acce
         done(ok);
       } catch (e) { done(false); }
     }
-    if (navigator.clipboard && navigator.clipboard.writeText) {
+    // A cross-origin frame without allow="clipboard-write" rejects the async
+    // API and the browser logs a console error first, so skip it when the
+    // permissions policy says it is blocked.
+    var pp = document.permissionsPolicy || document.featurePolicy;
+    var blocked = false;
+    try { blocked = !!pp && typeof pp.allowsFeature === "function" && !pp.allowsFeature("clipboard-write"); } catch (e) { /* unknown: try the API */ }
+    if (!blocked && navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
     } else {
       fallback();
@@ -173,6 +230,12 @@ button.copy:focus-visible, summary:focus-visible { outline: 2px solid var(--acce
   function render() {
     var out = state.output;
     app.textContent = "";
+    if (!out && state.error !== null) {
+      var eh = el("div", "head");
+      add(eh, el("h1", "title", "GoSQLX analysis"), el("span", "badge bad", "✗ Analysis failed"));
+      add(app, eh, el("div", "err", state.error || "The analyze_sql tool call failed."));
+      return;
+    }
     if (!out) {
       add(app, el("div", "empty", state.cancelled ? "Analysis was cancelled." : "Waiting for the GoSQLX analysis…"));
       return;
@@ -215,9 +278,9 @@ button.copy:focus-visible, summary:focus-visible { outline: 2px solid var(--acce
     // statements
     if (types.length) {
       var st = section("Statements", plural(types.length, "statement", "statements"), true);
-      var chips = el("div", "chips");
-      types.forEach(function (t) { add(chips, el("span", "chip", stmtLabel(t))); });
-      add(st.body, chips);
+      add(st.body, cappedList(el("div", "chips"), countTypes(types), function (p) {
+        return el("span", "chip", p[1] > 1 ? p[0] + " ×" + p[1] : p[0]);
+      }));
       add(app, st.root);
     }
 
@@ -239,8 +302,7 @@ button.copy:focus-visible, summary:focus-visible { outline: 2px solid var(--acce
         [["CRITICAL", sec.critical_count], ["HIGH", sec.high_count], ["MEDIUM", sec.medium_count], ["LOW", sec.low_count]]
           .forEach(function (p) { if (p[1]) add(sevRow, el("span", "badge sev-" + p[0], p[1] + " " + p[0].toLowerCase())); });
         add(sc.body, sevRow);
-        var ul = el("ul", "items");
-        findings.forEach(function (f) {
+        add(sc.body, cappedList(el("ul", "items"), findings, function (f) {
           var li = el("li");
           add(li, add(el("div", "row"),
             el("span", "badge sev-" + f.severity, f.severity),
@@ -248,9 +310,8 @@ button.copy:focus-visible, summary:focus-visible { outline: 2px solid var(--acce
             el("span", null, f.description)));
           if (f.risk) add(li, el("div", "hint", "Risk: " + f.risk));
           if (f.suggestion) add(li, el("div", "hint", "Fix: " + f.suggestion));
-          add(ul, li);
-        });
-        add(sc.body, ul);
+          return li;
+        }, "li"));
       } else {
         add(sc.body, el("div", "muted", "No injection patterns detected."));
       }
@@ -261,8 +322,7 @@ button.copy:focus-visible, summary:focus-visible { outline: 2px solid var(--acce
     if (out.lint) {
       var ln = section("Lint", violations.length ? plural(violations.length, "violation", "violations") : "clean", violations.length > 0 && violations.length <= 20);
       if (violations.length) {
-        var lul = el("ul", "items");
-        violations.forEach(function (v) {
+        add(ln.body, cappedList(el("ul", "items"), violations, function (v) {
           var li = el("li");
           add(li, add(el("div", "row"),
             el("span", "badge sev-" + v.severity, v.severity),
@@ -270,9 +330,8 @@ button.copy:focus-visible, summary:focus-visible { outline: 2px solid var(--acce
             el("span", "loc", "line " + v.line + ":" + v.column)));
           add(li, el("div", null, v.message));
           if (v.suggestion) add(li, el("div", "hint", v.suggestion));
-          add(lul, li);
-        });
-        add(ln.body, lul);
+          return li;
+        }, "li"));
       } else {
         add(ln.body, el("div", "muted", "No style violations."));
       }
@@ -307,16 +366,55 @@ button.copy:focus-visible, summary:focus-visible { outline: 2px solid var(--acce
     }
   }
 
+  function isAnalysis(o) {
+    return !!o && RESULT_KEYS.some(function (k) { return Object.prototype.hasOwnProperty.call(o, k); });
+  }
+
+  // errorText picks a message out of an error-shaped value: a string, or an
+  // object with a string error/message field.
+  function errorText(v) {
+    if (typeof v === "string") return v;
+    var o = obj(v);
+    if (!o) return "";
+    if (typeof o.error === "string") return o.error;
+    if (obj(o.error) && typeof o.error.message === "string") return o.error.message;
+    if (typeof o.message === "string") return o.message;
+    return "";
+  }
+
+  function showOutput(o) { state.output = o; state.error = null; state.cancelled = false; render(); }
+  function showError(msg) { state.output = null; state.error = String(msg || ""); state.cancelled = false; render(); }
+
+  // applyToolResult handles a CallToolResult from ui/notifications/tool-result
+  // (or a ChatGPT toolOutput that carries one). A failed call (isError, or a
+  // result with no analysis in it) shows an error state instead of waiting.
   function applyToolResult(res) {
+    res = obj(res);
     if (!res) return;
     var sc = obj(res.structuredContent);
-    if (!sc && Array.isArray(res.content)) {
+    var text = "";
+    if (Array.isArray(res.content)) {
       for (var i = 0; i < res.content.length; i++) {
         var c = res.content[i];
-        if (c && c.type === "text") { try { sc = obj(JSON.parse(c.text)); } catch (e) { /* not JSON */ } if (sc) break; }
+        if (!c || c.type !== "text" || typeof c.text !== "string") continue;
+        if (!text) text = c.text;
+        if (!sc) { try { sc = obj(JSON.parse(c.text)); } catch (e) { /* not JSON */ } }
       }
     }
-    if (sc) { state.output = sc; state.cancelled = false; render(); }
+    if (res.isError === true) { showError(errorText(sc) || text); return; }
+    if (isAnalysis(sc)) { showOutput(sc); return; }
+    if (sc || text || Object.prototype.hasOwnProperty.call(res, "content")) showError(errorText(sc) || text);
+  }
+
+  // applyOpenAIOutput handles window.openai.toolOutput, which is normally the
+  // structuredContent itself but may be a CallToolResult or an error object.
+  function applyOpenAIOutput(o) {
+    o = obj(o);
+    if (!o) return;
+    if (isAnalysis(o)) { showOutput(o); return; }
+    if (Object.prototype.hasOwnProperty.call(o, "isError") || Array.isArray(o.content)) { applyToolResult(o); return; }
+    var msg = errorText(o);
+    if (msg) showError(msg);
   }
 
   // ---- theming ----
@@ -408,14 +506,14 @@ button.copy:focus-visible, summary:focus-visible { outline: 2px solid var(--acce
     if (!oa) return;
     setTheme(oa.theme);
     if (obj(oa.toolInput)) state.input = oa.toolInput;
-    if (obj(oa.toolOutput)) { state.output = oa.toolOutput; render(); }
+    applyOpenAIOutput(oa.toolOutput);
   }
   window.addEventListener("openai:set_globals", function (ev) {
     var g = ev && ev.detail && ev.detail.globals;
     if (!g) return;
     if (g.theme) setTheme(g.theme);
     if (obj(g.toolInput)) state.input = g.toolInput;
-    if (obj(g.toolOutput)) { state.output = g.toolOutput; render(); }
+    applyOpenAIOutput(g.toolOutput);
   });
 
   // ---- boot ----

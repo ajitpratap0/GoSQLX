@@ -10,6 +10,15 @@ services:
         value: "0.0.0.0"
       - key: GOSQLX_MCP_PORT
         value: "8080"
+      # Rate-limit key. Render's edge (and the mcp.gosqlx.dev zone) is
+      # Cloudflare, which overwrites CF-Connecting-IP with the visitor IP on
+      # every request, so clients cannot spoof it. X-Forwarded-For is NOT used:
+      # Render appends to a client-supplied value instead of resetting it, so
+      # its left-most entry is attacker-controlled. RemoteAddr alone would be
+      # Render's proxy, putting every user in one bucket. Only set this when
+      # all traffic reaches the server through Cloudflare.
+      - key: GOSQLX_MCP_TRUSTED_PROXY_HEADER
+        value: "CF-Connecting-IP"
       # Domain-verification token for the ChatGPT app directory, issued by the
       # OpenAI Platform during submission. Set the value in the Render
       # dashboard; it is served at /.well-known/openai-apps-challenge.

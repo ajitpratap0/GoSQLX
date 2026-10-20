@@ -300,6 +300,13 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   fixes #550)
 
 ### Fixed
+- **PostgreSQL composite-returning function queries parse correctly**:
+  `(get_item(payload)).name` and `(get_item(payload)).*` retain their base
+  expression in a new `ast.FieldAccessExpression`, including quoted field names
+  and chained field/subscript access. SQL rendering, AST traversal, extraction,
+  security scanning and expression release preserve the nested expression.
+  Direct `JOIN LATERAL get_item(t.payload) AS f` references now parse their
+  arguments under the same dialect gate as FROM table functions. (#833)
 - **Tokenizer pool no longer leaks dialect state**: a tokenizer whose dialect was
   changed via `SetDialect` (e.g. by `validate --dialect mysql`) is now restored to
   the default (PostgreSQL) dialect when returned to the pool via `PutTokenizer`.

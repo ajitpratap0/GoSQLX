@@ -439,6 +439,12 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 			// ParenthesizedExpression has no dedicated pool; children are freed above
 			// and the node itself is left to the garbage collector.
 
+		case *FieldAccessExpression:
+			if e.Expr != nil {
+				workQueue = append(workQueue, e.Expr)
+			}
+			*e = FieldAccessExpression{}
+
 		case *CastExpression:
 			if e.Expr != nil {
 				workQueue = append(workQueue, e.Expr)

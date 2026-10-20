@@ -1656,6 +1656,8 @@ func nodeLocation(n ast.Node) models.Location {
 		return v.Pos
 	case *ast.ParenthesizedExpression:
 		return v.Pos
+	case *ast.FieldAccessExpression:
+		return v.Pos
 	case *ast.BetweenExpression:
 		return v.Pos
 	}

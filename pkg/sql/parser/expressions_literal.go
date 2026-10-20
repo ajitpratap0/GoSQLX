@@ -323,7 +323,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				return nil, p.expectedError(")")
 			}
 			p.advance() // Consume )
-			return &ast.SubqueryExpression{Subquery: subquery, Pos: parenPos}, nil
+			return p.parseCompositeIndirection(&ast.SubqueryExpression{Subquery: subquery, Pos: parenPos})
 		}
 
 		// Regular parenthesized expression - could be tuple (a, b, c) or single (expr)
@@ -351,7 +351,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				return nil, p.expectedError(")")
 			}
 			p.advance() // Consume )
-			return tuple, nil
+			return p.parseCompositeIndirection(tuple)
 		}
 
 		// Expect closing parenthesis for single expression
@@ -363,13 +363,13 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		// Check for array subscript or slice on parenthesized expression
 		// This handles: (expr)[1], (SELECT arr)[2:3]
 		if p.isType(models.TokenTypeLBracket) {
-			return p.parseArrayAccessExpression(expr)
+			return p.parseCompositeIndirection(expr)
 		}
 
 		// Preserve grouping for a single parenthesized expression. Without this
 		// node the parentheses are dropped and AND/OR precedence changes on
 		// re-render, e.g. `(a OR b) AND c` → `a OR b AND c` (see #519).
-		return &ast.ParenthesizedExpression{Expr: expr, Pos: parenPos}, nil
+		return p.parseCompositeIndirection(&ast.ParenthesizedExpression{Expr: expr, Pos: parenPos})
 	}
 
 	if p.isType(models.TokenTypeExists) {

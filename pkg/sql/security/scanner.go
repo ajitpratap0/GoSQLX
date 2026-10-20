@@ -865,6 +865,8 @@ func (s *Scanner) scanExpression(expr ast.Expression, result *ScanResult, contex
 		}
 	case *ast.ParenthesizedExpression:
 		s.scanExpression(e.Expr, result, context)
+	case *ast.FieldAccessExpression:
+		s.scanExpression(e.Expr, result, context)
 	case *ast.ArraySubscriptExpression, *ast.ArraySliceExpression:
 		// A subscript or slice on a call result, such as pg_sleep(5)[1].
 		s.scanExpressionForDangerousFunctions(e, result)
@@ -1179,6 +1181,8 @@ func (s *Scanner) scanExpressionForDangerousFunctions(expr ast.Expression, resul
 	case *ast.UnaryExpression:
 		s.scanExpressionForDangerousFunctions(e.Expr, result)
 	case *ast.ParenthesizedExpression:
+		s.scanExpressionForDangerousFunctions(e.Expr, result)
+	case *ast.FieldAccessExpression:
 		s.scanExpressionForDangerousFunctions(e.Expr, result)
 	case *ast.ArraySubscriptExpression:
 		s.scanExpressionForDangerousFunctions(e.Array, result)

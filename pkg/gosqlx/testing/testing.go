@@ -424,6 +424,8 @@ func extractColumnNames(expr ast.Expression, columns map[string]bool) {
 		extractColumnNames(e.Right, columns)
 	case *ast.ParenthesizedExpression:
 		extractColumnNames(e.Expr, columns)
+	case *ast.FieldAccessExpression:
+		extractColumnNames(e.Expr, columns)
 	}
 }
 

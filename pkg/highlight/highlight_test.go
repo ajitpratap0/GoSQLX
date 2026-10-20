@@ -143,7 +143,7 @@ func TestSpans_Classification(t *testing.T) {
 			want: map[string]Category{"->>": Operator, "->": Operator, "'k'": String},
 		},
 		{
-			name: "tabs (tokenizer counts a tab as 4 columns)",
+			name: "tabs",
 			sql:  "\tSELECT\ta,\tb\tFROM\tt /* x */\tWHERE\tc = '\tv'",
 			want: map[string]Category{
 				"SELECT": Keyword, "a": Identifier, "b": Identifier, "FROM": Keyword, "t": Identifier,
@@ -421,6 +421,11 @@ func FuzzSpans(f *testing.F) {
 			}
 		}
 		// Renderers must reproduce the source exactly once markup is removed.
+		// Source text is passed through verbatim, so input that already
+		// contains escape sequences cannot be told apart from added markup.
+		if strings.ContainsRune(sql, '\x1b') {
+			return
+		}
 		if got := stripANSI(ANSI(sql, spans, ANSIOptions{})); got != sql {
 			t.Fatalf("ANSI round trip mismatch:\n got %q\nwant %q", got, sql)
 		}

@@ -130,7 +130,6 @@ type lexeme struct {
 type classifier struct {
 	src        string
 	lineStarts []int
-	lineTabs   map[int][]int // byte offsets of tabs, for lines that have any
 	kw         *keywords.Keywords
 	dialect    keywords.SQLDialect
 }
@@ -166,9 +165,9 @@ func (h *classifier) run(input []byte, limit int) ([]Span, error) {
 	return h.classify(lexemes, comments), nil
 }
 
-// resolve computes byte ranges for tokens. Token end locations are exact but
-// start locations can include preceding comments, so each start is derived
-// from the previous token's end by skipping whitespace and comments.
+// resolve computes byte ranges for tokens. Each start is derived from the
+// previous token's end by skipping whitespace and comments, so classification
+// depends only on token end locations and the captured comments.
 func (h *classifier) resolve(toks []models.TokenWithSpan, comments []Span, limit int) []lexeme {
 	out := make([]lexeme, 0, len(toks))
 	cursor, ci := 0, 0
@@ -201,25 +200,17 @@ func (h *classifier) resolve(toks []models.TokenWithSpan, comments []Span, limit
 }
 
 // offset converts a tokenizer location to a byte offset. Tokenizer columns
-// are 1-based and count bytes, except that a tab counts as 4 columns.
+// are 1-based and count bytes, a tab included. Locations that do not fall on
+// their line (column 0, or past the line's end) are rejected.
 func (h *classifier) offset(loc models.Location, limit int) (int, bool) {
 	if loc.Line < 1 || loc.Line > len(h.lineStarts) || loc.Column < 1 {
 		return 0, false
 	}
-	start := h.lineStarts[loc.Line-1]
-	off := start + loc.Column - 1
-	for _, tab := range h.lineTabs[loc.Line-1] {
-		if tab >= off {
-			break
-		}
-		off -= 3 // a tab before off took 4 columns but only 1 byte
-		if off <= tab {
-			// The column falls inside a tab's width: not a byte position
-			// produced by the tokenizer's column rule.
-			return 0, false
-		}
+	off := h.lineStarts[loc.Line-1] + loc.Column - 1
+	if loc.Line < len(h.lineStarts) && off >= h.lineStarts[loc.Line] {
+		return 0, false
 	}
-	if off < start || off > limit {
+	if off > limit {
 		return 0, false
 	}
 	return off, true
@@ -699,21 +690,13 @@ func upper(s string) string {
 	return strings.ToUpper(s)
 }
 
-// indexLines records the byte offset of each line start and, for lines
-// containing tabs, the offsets of those tabs.
+// indexLines records the byte offset of each line start.
 func (h *classifier) indexLines() {
 	s := h.src
 	h.lineStarts = make([]int, 1, strings.Count(s, "\n")+1)
 	for i := 0; i < len(s); i++ {
-		switch s[i] {
-		case '\n':
+		if s[i] == '\n' {
 			h.lineStarts = append(h.lineStarts, i+1)
-		case '\t':
-			if h.lineTabs == nil {
-				h.lineTabs = map[int][]int{}
-			}
-			line := len(h.lineStarts) - 1
-			h.lineTabs[line] = append(h.lineTabs[line], i)
 		}
 	}
 }

@@ -138,6 +138,11 @@ func TestMarkerFunctions_ExpressionNodes(t *testing.T) {
 			wantLiteral: "COUNT",
 		},
 		{
+			name:        "FieldAccessExpression",
+			expression:  &FieldAccessExpression{Expr: &Identifier{Name: "payload"}, Field: "name"},
+			wantLiteral: ".",
+		},
+		{
 			name:        "BinaryExpression",
 			expression:  &BinaryExpression{Operator: "=", Left: &Identifier{Name: "a"}, Right: &LiteralValue{Value: 1}},
 			wantLiteral: "=",

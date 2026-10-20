@@ -370,6 +370,18 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
 - **Readable-style output that did not re-parse**: inner `;` and `;;` removed
   (#602, #631); readable-style re-parse failures over the testdata corpus fell
   from 36 to 6.
+- **Tokenizer error locations point at the offending construct**: an
+  unterminated dollar-quoted string (`$$`/`$tag$`) and an unterminated SQL
+  Server `[identifier]` now report their opening delimiter instead of the end of
+  input, and a double-quoted identifier broken by a newline now reports its
+  opening quote on the correct column. These errors, invalid escape sequences
+  (which point at the character after the backslash) and `StringLiteralReader`
+  errors now use the same rule as token spans: 1-based line, 1-based byte
+  column, a tab counting as one column. Before, they used internal rune counts,
+  so the column drifted after multibyte characters and could be 0, and a dollar
+  quote could report the wrong line. The two errors with no position
+  (`keywords cannot be nil`, input too large) report column 1 instead of 0.
+  Error codes and messages are unchanged.
 
 ### Performance
 Numbers are quoted from each PR (benchstat on an Apple M4 unless stated; the

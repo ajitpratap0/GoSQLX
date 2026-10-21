@@ -1,7 +1,7 @@
 {
   "name": "gosqlx",
   "displayName": "GoSQLX",
-  "version": "1.15.0",
+  "version": "1.16.0",
   "description": "SQL validation, formatting, linting, injection scanning and analysis for Claude Code, powered by the GoSQLX parser (multi-dialect).",
   "author": {
     "name": "Ajit Pratap Singh",

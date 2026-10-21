@@ -10,7 +10,7 @@
       "name": "gosqlx",
       "source": "./plugins/gosqlx",
       "description": "Validate, format, lint, analyze and security-scan SQL with GoSQLX (MCP tools, skills, slash commands, a SQL reviewer agent and a .sql validation hook).",
-      "version": "1.15.0",
+      "version": "1.16.0",
       "category": "development",
       "tags": ["sql", "database", "linting", "formatting", "security", "mcp"],
       "homepage": "https://gosqlx.dev",

@@ -119,3 +119,26 @@ func TestDefaultConfig(t *testing.T) {
 		t.Error("AuthEnabled() = true, want false")
 	}
 }
+
+func TestLoadConfig_OpenAIAppsChallenge(t *testing.T) {
+	tests := []struct {
+		name string
+		env  string
+		want string
+	}{
+		{name: "unset", env: "", want: ""},
+		{name: "trimmed", env: "  tok-123\n", want: "tok-123"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GOSQLX_MCP_OPENAI_APPS_CHALLENGE", tt.env)
+			cfg, err := LoadConfig()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cfg.OpenAIAppsChallenge != tt.want {
+				t.Errorf("OpenAIAppsChallenge = %q, want %q", cfg.OpenAIAppsChallenge, tt.want)
+			}
+		})
+	}
+}

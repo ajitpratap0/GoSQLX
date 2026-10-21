@@ -314,8 +314,8 @@ export class TelemetryManager {
  * Prompts user to opt-in to telemetry.
  */
 export async function promptTelemetryOptIn(): Promise<boolean> {
-    const message = 'Would you like to help improve GoSQLX by sharing anonymous usage data? ' +
-        'No SQL content or file paths are ever collected.';
+    const message = 'Allow GoSQLX to record anonymous usage statistics on this machine? ' +
+        'They are never transmitted, and no SQL content or file paths are collected.';
 
     const learnMore = 'Learn More';
     const yes = 'Yes, help improve';
@@ -330,7 +330,7 @@ export async function promptTelemetryOptIn(): Promise<boolean> {
 
     if (choice === learnMore) {
         vscode.env.openExternal(
-            vscode.Uri.parse('https://github.com/ajitpratap0/GoSQLX/blob/main/PRIVACY.md')
+            vscode.Uri.parse('https://gosqlx.dev/privacy/#vscode')
         );
         // Re-prompt after they've had a chance to read
         return promptTelemetryOptIn();

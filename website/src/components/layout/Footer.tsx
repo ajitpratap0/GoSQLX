@@ -19,6 +19,7 @@ const FOOTER_LINKS = {
     { label: 'Changelog', href: '/changelog' },
     { label: 'CHANGELOG.md on GitHub', href: 'https://github.com/ajitpratap0/GoSQLX/blob/main/CHANGELOG.md', external: true },
     { label: 'Privacy Policy', href: '/privacy' },
+    { label: 'Terms of Service', href: '/terms' },
   ],
   Community: [
     { label: 'GitHub', href: 'https://github.com/ajitpratap0/GoSQLX', external: true },

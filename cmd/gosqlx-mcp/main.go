@@ -22,6 +22,9 @@
 //	GOSQLX_MCP_HOST        bind host (default: 127.0.0.1)
 //	GOSQLX_MCP_PORT        bind port (default: 8080)
 //	GOSQLX_MCP_AUTH_TOKEN  bearer token; empty disables auth
+//	GOSQLX_MCP_OPENAI_APPS_CHALLENGE  ChatGPT app domain-verification token
+//
+// Pass --stdio to serve MCP over stdin/stdout instead of HTTP.
 //
 // # Usage
 //
@@ -32,6 +35,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -88,20 +92,10 @@ func runHTTP() error {
 
 	srv := gosqlxmcp.New(cfg)
 
-	// Build handler chain: MCP → auth → rate limiter
-	handler := gosqlxmcp.RateLimitMiddleware(srv.Handler())
-
-	mux := http.NewServeMux()
-	mux.Handle("/mcp", handler)
-	mux.Handle("/mcp/", handler)
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"status":"ok","version":"%s","tools":7}`, gosqlx.Version)
-	})
-
 	httpSrv := &http.Server{
-		Addr:    cfg.Addr(),
-		Handler: mux,
+		Addr:              cfg.Addr(),
+		Handler:           newMux(cfg, srv),
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	go func() {
@@ -116,4 +110,38 @@ func runHTTP() error {
 		return fmt.Errorf("server error: %w", err)
 	}
 	return nil
+}
+
+// newMux builds the HTTP routes:
+//
+//	/mcp, /mcp/  MCP streamable HTTP (rate limit → auth → MCP)
+//	/health      liveness probe with version and tool count
+//	/.well-known/openai-apps-challenge  ChatGPT app domain verification (only when configured)
+//
+// Every other path (including OAuth discovery probes from connector wizards)
+// returns 404, which tells clients that no OAuth is configured.
+func newMux(cfg *gosqlxmcp.Config, srv *gosqlxmcp.Server) *http.ServeMux {
+	handler := gosqlxmcp.RateLimitMiddleware(srv.Handler())
+
+	mux := http.NewServeMux()
+	mux.Handle("/mcp", handler)
+	mux.Handle("/mcp/", handler)
+
+	health, _ := json.Marshal(map[string]any{
+		"status":  "ok",
+		"version": gosqlx.Version,
+		"tools":   srv.ToolCount(),
+	})
+	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(health)
+	})
+
+	if token := cfg.OpenAIAppsChallenge; token != "" {
+		mux.HandleFunc("/.well-known/openai-apps-challenge", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			_, _ = w.Write([]byte(token))
+		})
+	}
+	return mux
 }

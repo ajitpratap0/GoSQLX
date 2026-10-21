@@ -221,6 +221,30 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   to `variable`.
 
 ### Added
+- **Claude Code plugin and marketplace**: `/plugin marketplace add
+  ajitpratap0/GoSQLX` then `/plugin install gosqlx@gosqlx` installs the
+  `gosqlx` plugin (`plugins/gosqlx/`): the hosted MCP server, five SQL skills
+  (analysis, formatting, security review, linting, dialects), four slash
+  commands, a read-only `sql-reviewer` agent and an opt-out PostToolUse hook
+  that validates edited `.sql` files when the `gosqlx` CLI is installed.
+- **ChatGPT app support in `gosqlx-mcp`** (OpenAI Apps SDK and MCP Apps):
+  `analyze_sql` links an embedded report widget
+  (`ui://gosqlx/analysis-v1.html`, `text/html;profile=mcp-app`); all tools now
+  return `structuredContent` alongside the unchanged text JSON, carry
+  `securitySchemes`/invocation-status metadata, and the server sends usage
+  instructions. `validate_sql` accepts `mariadb` and `clickhouse`; the server
+  reports `gosqlx.Version`; `/health` reports the real tool count; the
+  optional `GOSQLX_MCP_OPENAI_APPS_CHALLENGE` env var serves
+  `/.well-known/openai-apps-challenge` for app verification; idle MCP sessions
+  have their transport state swept 30–45 minutes after their last request
+  (`SessionIdleTTL`, sweep every TTL/2) instead of living until restart, and
+  session IDs are not logged. `uppercase_keywords: true` on
+  `format_sql` now also uppercases operator and function keywords (`AND`,
+  `OR`, `COUNT`); `indent_size` affects nested blocks only, as now
+  documented. `Server.Shutdown(ctx)` stops the transport, and `Server.Start`
+  sets read-header and idle timeouts. The `analyze_sql` widget caps long
+  lists, shows failed calls as errors and avoids blocked clipboard calls. Setup:
+  `integrations/chatgpt/README.md`, details: `docs/CHATGPT_APP.md`.
 - **SQL syntax highlighting (`pkg/highlight`)**: `highlight.Spans(sql, opts...)`
   classifies SQL into sorted, non-overlapping byte-offset spans tagged with one
   of 13 stable categories (keyword, function, type, identifier,

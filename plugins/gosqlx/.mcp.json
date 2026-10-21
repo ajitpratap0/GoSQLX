@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "gosqlx": {
+      "type": "http",
+      "url": "${GOSQLX_MCP_URL:-https://mcp.gosqlx.dev/mcp}"
+    }
+  }
+}

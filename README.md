@@ -74,6 +74,10 @@ claude mcp add --transport http gosqlx https://mcp.gosqlx.dev/mcp
 
 7 SQL tools in Claude, Cursor, or any MCP client. [MCP guide](https://gosqlx.dev/docs/integrations/mcp/).
 
+**Claude Code plugin** (skills, slash commands, SQL reviewer agent): `/plugin marketplace add ajitpratap0/GoSQLX` then `/plugin install gosqlx@gosqlx` - [details](plugins/gosqlx/README.md).
+
+**ChatGPT app**: add `https://mcp.gosqlx.dev/mcp` as a connector in developer mode for an interactive analysis widget - [details](integrations/chatgpt/README.md).
+
 [![MCP](https://img.shields.io/badge/MCP-Remote%20Server-blue?style=flat-square)](https://mcp.gosqlx.dev/health)
 [![Glama MCP Server](https://glama.ai/mcp/servers/ajitpratap0/GoSQLX/badges/score.svg)](https://glama.ai/mcp/servers/ajitpratap0/GoSQLX)
 

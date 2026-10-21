@@ -73,6 +73,13 @@ Code Actions (textDocument/codeAction):
   - Keyword case correction suggestions
   - Context-aware refactoring hints
 
+SQL Dialect (initializationOptions.dialect, workspace/didChangeConfiguration):
+  - One dialect drives diagnostics, formatting, document symbols, completion,
+    hover and semantic tokens
+  - Set at initialize with {"dialect": "mysql"} or changed at runtime with
+    settings {"gosqlx": {"dialect": "mysql"}}
+  - The default, generic, keeps the dialect-less parsing pipeline
+
 # Architecture
 
 The LSP server consists of three main components:
@@ -237,7 +244,7 @@ Add to LSP.sublime-settings:
 
 The LSP server can be configured via .gosqlx.yml in your project root:
 
-	# SQL dialect (postgresql, mysql, sqlite, sqlserver, oracle, generic)
+	# SQL dialect (generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse)
 	dialect: postgresql
 
 	# Linting rules (see docs/LINTING_RULES.md)

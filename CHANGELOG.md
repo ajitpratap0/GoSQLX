@@ -228,6 +228,15 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   `OVER (w)`, and `WINDOW w AS (...)` no longer repeats its name inside the
   parentheses. The non-standard `WINDOW w AS w2` is normalized to
   `WINDOW w AS (w2)`. (#608, #629)
+- **LSP semantic token legend changed**: the non-standard `identifier` token
+  type is replaced by the standard `variable`, which now covers table, column
+  and alias names and quoted identifiers (double-quoted identifiers were
+  `string` before). Function names are `function` and type names are `type`.
+  Comments and placeholders (`$1`, `?`, `:name`, `@var`) are now emitted, as
+  `comment` and `parameter`. AND, OR and NOT stay `keyword`. Positions are
+  UTF-16 code units. Clients with custom rules keyed on the old `identifier`
+  type (for example Neovim `@lsp.type.identifier` highlight links) must switch
+  to `variable`.
 
 ### Added
 - **Claude Code plugin and marketplace**: `/plugin marketplace add
@@ -254,6 +263,40 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   sets read-header and idle timeouts. The `analyze_sql` widget caps long
   lists, shows failed calls as errors and avoids blocked clipboard calls. Setup:
   `integrations/chatgpt/README.md`, details: `docs/CHATGPT_APP.md`.
+- **SQL syntax highlighting (`pkg/highlight`)**: `highlight.Spans(sql, opts...)`
+  classifies SQL into sorted, non-overlapping byte-offset spans tagged with one
+  of 13 stable categories (keyword, function, type, identifier,
+  quoted-identifier, string, number, constant, operator, punctuation, comment,
+  placeholder, error). It is dialect-aware via `WithDialect`, never fails
+  (input after the first lexical error becomes one `error` span), and detects
+  functions in call position and types in type position. Renderers: `ANSI` /
+  `WriteANSI` (256-color, true color or attributes only), `HTML` / `WriteHTML`
+  (classes or inline styles) and `CSS`, with `dark`, `light` and `mono` themes.
+  Spans marshal to JSON. Built on top of it:
+  - `gosqlx.Highlight`, `gosqlx.HighlightANSI` and `gosqlx.HighlightHTML`.
+  - `gosqlx highlight [file|SQL]` (alias `hl`, reads stdin) with
+    `--format ansi|html|json|css`, `--theme`, `--dialect`,
+    `--color auto|always|never` (honors TTY, `NO_COLOR` and `COLORTERM`) and
+    `--standalone` for a full HTML page.
+  - LSP `textDocument/semanticTokens/full` now uses `pkg/highlight` with the
+    standard token types (keyword, function, type, variable, string, number,
+    operator, comment, parameter), UTF-16 positions, per-line splitting of
+    multi-line tokens, and coverage of every dialect keyword and all comments.
+  - WASM `gosqlxHighlight(sql[, dialect])` returns spans with UTF-16 offsets;
+    the gosqlx.dev playground uses it for editor highlighting.
+
+  See [docs/HIGHLIGHTING.md](docs/HIGHLIGHTING.md).
+- **Dialect-aware LSP server**: the dialect from `initializationOptions.dialect`
+  now drives every feature, not only semantic tokens. Diagnostics, formatting
+  and document symbols tokenize and parse with the dialect's rules (MySQL
+  `LIMIT 5, 10` is valid under `mysql`, `ILIKE` is reported under `mysql`);
+  completion and hover add the dialect's own keywords. The server also handles
+  `workspace/didChangeConfiguration` with `{"gosqlx": {"dialect": "..."}}`:
+  it switches dialect without a restart, re-publishes diagnostics for open
+  documents and, when the client advertises `refreshSupport`, sends
+  `workspace/semanticTokens/refresh`. Invalid values fall back to `generic`, as
+  in `initialize`. The default `generic` dialect keeps the previous behaviour
+  for every feature. See [docs/LSP_GUIDE.md](docs/LSP_GUIDE.md#sql-dialect).
 - **`--dialect` flag for the `parse`, `format`, `analyze`, and `lint` CLI
   commands**: dialect-specific SQL (e.g. MySQL `LIMIT offset, count`) can now be
   parsed by these commands, matching the existing `validate --dialect`. Unknown
@@ -412,6 +455,31 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
 - **Readable-style output that did not re-parse**: inner `;` and `;;` removed
   (#602, #631); readable-style re-parse failures over the testdata corpus fell
   from 36 to 6.
+- **Tokenizer error locations point at the offending construct**: an
+  unterminated dollar-quoted string (`$$`/`$tag$`) and an unterminated SQL
+  Server `[identifier]` now report their opening delimiter instead of the end of
+  input, and a double-quoted identifier broken by a newline now reports its
+  opening quote on the correct column. These errors, invalid escape sequences
+  (which point at the character after the backslash) and `StringLiteralReader`
+  errors now use the same rule as token spans: 1-based line, 1-based byte
+  column, a tab counting as one column. Before, they used internal rune counts,
+  so the column drifted after multibyte characters and could be 0, and a dollar
+  quote could report the wrong line. The two errors with no position
+  (`keywords cannot be nil`, input too large) report column 1 instead of 0.
+  Error codes and messages are unchanged.
+- **Dialect lists now agree everywhere**: the `--dialect` help on `parse`,
+  `format`, `analyze`, `lint` and `validate`, the CLI's unknown-dialect error,
+  config-file validation, the MCP `validate_sql` schema, the playground WASM
+  bridge, the GitHub Action and the VS Code `gosqlx.dialect` setting all list or
+  accept the same 11 names: `generic`, `postgresql`, `mysql`, `mariadb`,
+  `sqlserver`, `oracle`, `sqlite`, `snowflake`, `bigquery`, `redshift`,
+  `clickhouse`. Before, help listed 7, the error omitted `generic` and
+  `clickhouse`, `pkg/config` rejected `generic`, `bigquery`, `redshift` and
+  `clickhouse`, and the VS Code setting offered 6 (and suggested `mysql` for
+  `mariadb`). The Go lists derive from the new `keywords.DialectNames()`, and a
+  test checks the VS Code extension and the example configs and READMEs against
+  it. Names stay case-sensitive in the CLI. `transpile --from/--to` keep their
+  own list of transpilable dialects.
 
 ### Performance
 Numbers are quoted from each PR (benchstat on an Apple M4 unless stated; the
@@ -990,6 +1058,22 @@ corrected LICENSE is served for `go get` users.
 
 ### 🐛 Bug Fixes (PR #352)
 - Fix leading blank line in vscode-extension/LICENSE
+
+---
+
+## [1.9.1] - 2026-02-28 — Documentation & Community Health
+
+Documentation and community-health release; no runtime behavior changes.
+(These changes were also announced in the 1.9.2 notes.)
+
+### 📚 Documentation (PR #351)
+- Fix pkg.go.dev license detection and add comprehensive doc comments across
+  `pkg/sql/ast`, `pkg/transform`, `pkg/sql/parser`, `pkg/errors`, `pkg/models`,
+  `pkg/formatter`, `pkg/gosqlx` and the tokenizer packages
+
+### 🌍 Community (PR #350)
+- Open-source health files (issue and discussion templates, SUPPORT.md, etc.)
+- LLM discovery metadata and SEO improvements for project discoverability
 
 ---
 
@@ -2381,6 +2465,21 @@ This substantial test coverage increase provides strong confidence in the AST pa
 - Extended load testing (30+ seconds)
 - Memory leak detection
 
+### Upgrade Guide (0.9.0 to 1.0.0)
+
+1. **Token Type Changes**: Review any code that directly references token type constants
+2. **Pool Usage**: Always use `defer` when returning objects to pools
+3. **Import Paths**: Update imports from test packages if used
+4. **Performance**: Expect 47% performance improvement, adjust timeouts accordingly
+
+For the fuller guide, see [Upgrading to v1.0.0 from v0.9.0](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/UPGRADE_GUIDE.md) in `docs/UPGRADE_GUIDE.md`.
+
+### Breaking Changes in 1.0.0
+
+- Token type constants have been reorganized to prevent collisions
+- Some internal APIs have been refactored for better performance
+- Test helper functions have been updated
+
 ## [0.9.0] - 2024-01-15
 
 ### Added
@@ -2423,21 +2522,6 @@ This substantial test coverage increase provides strong confidence in the AST pa
 | 0.9.0 | 2024-01-15 | Legacy | Initial public release |
 | 0.8.0 | 2023-12-01 | Pre-release | Prototype version |
 
-## Upgrade Guide
-
-### From 0.9.0 to 1.0.0
-
-1. **Token Type Changes**: Review any code that directly references token type constants
-2. **Pool Usage**: Always use `defer` when returning objects to pools
-3. **Import Paths**: Update imports from test packages if used
-4. **Performance**: Expect 47% performance improvement, adjust timeouts accordingly
-
-### Breaking Changes in 1.0.0
-
-- Token type constants have been reorganized to prevent collisions
-- Some internal APIs have been refactored for better performance
-- Test helper functions have been updated
-
 ## Support
 
 For questions about upgrading or changelog entries:
@@ -2450,6 +2534,7 @@ For questions about upgrading or changelog entries:
 [1.13.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.12.1...v1.13.0
 [1.12.1]: https://github.com/ajitpratap0/GoSQLX/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.10.2...v1.12.0
+[1.9.1]: https://github.com/ajitpratap0/GoSQLX/compare/v1.9.0...v1.9.1
 [1.8.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.5.1...v1.6.0

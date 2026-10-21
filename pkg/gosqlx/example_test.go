@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+	"github.com/ajitpratap0/GoSQLX/pkg/highlight"
 )
 
 // ExampleParse demonstrates basic SQL parsing.
@@ -748,4 +749,30 @@ func ExampleTree_Functions() {
 
 	fmt.Println("functions:", tree.Functions())
 	// Output: functions: [COUNT]
+}
+
+// ExampleHighlight demonstrates classifying SQL into syntax-highlighting spans.
+func ExampleHighlight() {
+	sql := "SELECT name FROM users WHERE id = 42"
+	for _, s := range gosqlx.Highlight(sql) {
+		fmt.Printf("%d-%d %s %s\n", s.Start, s.End, s.Category, s.Text(sql))
+	}
+	// Output:
+	// 0-6 keyword SELECT
+	// 7-11 identifier name
+	// 12-16 keyword FROM
+	// 17-22 identifier users
+	// 23-28 keyword WHERE
+	// 29-31 identifier id
+	// 32-33 operator =
+	// 34-36 number 42
+}
+
+// ExampleHighlightHTML demonstrates rendering highlighted SQL as HTML.
+func ExampleHighlightHTML() {
+	fmt.Println(gosqlx.HighlightHTML("SELECT 'a<b'"))
+	// Pair the markup with the matching stylesheet:
+	_ = highlight.CSS(highlight.DarkTheme(), "")
+	// Output:
+	// <pre class="gsx-highlight"><code><span class="gsx-keyword">SELECT</span> <span class="gsx-string">&#39;a&lt;b&#39;</span></code></pre>
 }

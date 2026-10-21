@@ -95,6 +95,23 @@ func analyze(_ js.Value, args []js.Value) any {
 	return jsonResult(bridge.Analyze(args[0].String(), dialectArg(args)))
 }
 
+// highlight classifies the SQL for syntax highlighting. It returns
+// {"spans":[{"start":0,"end":6,"category":"keyword"}, ...]} where start and
+// end are 0-based, end-exclusive offsets in UTF-16 code units (JavaScript
+// string indices), not bytes. Invalid SQL is still highlighted; the text from
+// the first lexical error on is one "error" span.
+func highlight(_ js.Value, args []js.Value) any {
+	if len(args) == 0 {
+		return jsonError("no SQL provided")
+	}
+	// Compact JSON: this runs on every edit and a span is five lines indented.
+	b, err := json.Marshal(bridge.Highlight(args[0].String(), dialectArg(args)))
+	if err != nil {
+		return jsonError(err.Error())
+	}
+	return string(b)
+}
+
 func jsonError(msg string) string {
 	b, _ := json.Marshal(map[string]any{"error": msg})
 	return string(b)
@@ -111,6 +128,7 @@ func main() {
 	js.Global().Set("gosqlxLint", js.FuncOf(lint))
 	js.Global().Set("gosqlxValidate", js.FuncOf(validate))
 	js.Global().Set("gosqlxAnalyze", js.FuncOf(analyze))
+	js.Global().Set("gosqlxHighlight", js.FuncOf(highlight))
 
 	// Keep the Go program running
 	select {}

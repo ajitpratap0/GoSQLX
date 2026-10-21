@@ -350,19 +350,19 @@ func splitRows(out string) []string {
 	return strings.Split(strings.TrimSuffix(strings.TrimPrefix(out, "\n"), "\n"), "\n")
 }
 
-// TestContext_TabExpandedColumnLongLine guards against treating the
-// tab-expanded column reported by the tokenizer (each '\t' counts as 4) as a
-// byte offset when clipping: with many tabs before the error the window used to
-// miss the offending text entirely.
-func TestContext_TabExpandedColumnLongLine(t *testing.T) {
+// TestContext_TabIsOneColumnLongLine checks that the column reported by the
+// tokenizer, where a '\t' counts as one column like any other byte, is used as
+// a byte offset when clipping: with many tabs before the error the window must
+// still show the offending text.
+func TestContext_TabIsOneColumnLongLine(t *testing.T) {
 	const tabs = 25
 	prefix := strings.Repeat("\t", tabs) + strings.Repeat("a ", 60)
 	line := prefix + "ZZTOP" + strings.Repeat(" b", 60)
 	if len(line) <= contextMaxLine {
 		t.Fatalf("test line must be longer than %d bytes", contextMaxLine)
 	}
-	// Column as computed by tokenizer.toSQLPosition: 1 + 4 per tab + 1 per other byte.
-	col := 1 + 4*tabs + (len(prefix) - tabs)
+	// Column as computed by tokenizer.toSQLPosition: 1 + 1 per byte, tabs included.
+	col := 1 + len(prefix)
 	out := FormatMultiLineContext(line, models.Location{Line: 1, Column: col}, 5)
 	rows := splitRows(out)
 	if len(rows) != 2 {
@@ -375,13 +375,59 @@ func TestContext_TabExpandedColumnLongLine(t *testing.T) {
 	if idx < 0 || idx >= len(rows[0]) || !strings.HasPrefix(rows[0][idx:], "ZZTOP") {
 		t.Errorf("caret at %d does not point at ZZTOP in %q", idx, rows[0])
 	}
+	if got, want := rows[1][:idx], mirrorOf(rows[0][:idx]); got != want {
+		t.Errorf("caret padding %q does not mirror the source text %q", got, want)
+	}
 
 	// Tabs interleaved inside the window: the error text must still be shown.
 	line2 := strings.Repeat("\ta", 40) + "ZZTOP" + strings.Repeat("b", 100)
-	col2 := 1 + 40*5
+	col2 := 1 + 40*2
 	rows2 := splitRows(FormatMultiLineContext(line2, models.Location{Line: 1, Column: col2}, 5))
 	if len(rows2) != 2 || !strings.Contains(rows2[0], "ZZTOP") {
 		t.Errorf("interleaved tabs: window misses the error site: %q", rows2)
+	}
+}
+
+// mirrorOf returns s with every byte but a tab replaced by a space: the padding
+// that puts a caret under the byte that follows s whatever width a tab has.
+func mirrorOf(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\t' {
+			return r
+		}
+		return ' '
+	}, s)
+}
+
+// With a tab as one column, the caret line repeats the tabs of the source line
+// so the caret stays under the error byte for any tab width.
+func TestContext_CaretKeepsTabs(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+		col  int
+		want string // whitespace between the gutter and the caret
+	}{
+		{"no tab", "SELECT 1 FROM t", 8, "       "},
+		{"leading tab", "\tWHERE ) AND x", 8, "\t      "},
+		{"tab before error", "SELECT 1 FROM t\tWHERE x = = 1", 27, strings.Repeat(" ", 15) + "\t" + strings.Repeat(" ", 10)},
+		{"column past the end", "a\tb", 6, " \t   "},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rows := splitRows(FormatMultiLineContext(tc.line, models.Location{Line: 1, Column: tc.col}, 1))
+			if len(rows) != 2 {
+				t.Fatalf("expected source and caret rows, got %q", rows)
+			}
+			const gutter = "   1 | "
+			if !strings.HasPrefix(rows[1], strings.Repeat(" ", len(gutter))) {
+				t.Fatalf("caret row %q does not start with the gutter", rows[1])
+			}
+			pad := strings.TrimSuffix(rows[1][len(gutter):], "^")
+			if pad != tc.want {
+				t.Errorf("padding = %q, want %q", pad, tc.want)
+			}
+		})
 	}
 }
 

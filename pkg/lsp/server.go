@@ -157,6 +157,10 @@ type Server struct {
 	// strings only to throw them away. Set once in NewServer.
 	verboseLog bool
 
+	// nextRequestID numbers server-to-client requests (for example
+	// workspace/semanticTokens/refresh).
+	nextRequestID atomic.Int64
+
 	// Rate limiting
 	requestCount int64
 	lastReset    time.Time
@@ -371,6 +375,13 @@ func (s *Server) handleMessage(msg json.RawMessage) {
 
 	// Validate required JSON-RPC fields
 	if req.Method == "" {
+		// A message with an id and a result or error but no method is the
+		// client's response to a server-to-client request; there is nothing
+		// to answer, so it must not be rejected as an invalid request.
+		if req.ID != nil && isResponseMessage(msg) {
+			s.logger.Printf("Received response to server request %v", req.ID)
+			return
+		}
 		s.logger.Printf("Invalid request: missing method")
 		if req.ID != nil {
 			s.sendError(req.ID, InvalidRequest, "missing method field")
@@ -472,6 +483,38 @@ func (s *Server) SendNotification(method string, params interface{}) {
 		notif.Params = json.RawMessage(data)
 	}
 	s.sendMessage(notif)
+}
+
+// sendRequest sends a server-to-client request. Responses are not awaited:
+// handleMessage recognises and drops them, which suits fire-and-forget
+// requests such as workspace/semanticTokens/refresh.
+func (s *Server) sendRequest(method string, params interface{}) {
+	req := Request{
+		JSONRPC: "2.0",
+		ID:      s.nextRequestID.Add(1),
+		Method:  method,
+	}
+	if params != nil {
+		data, err := json.Marshal(params)
+		if err != nil {
+			s.logger.Printf("Failed to marshal request params for %s: %v", method, err)
+			return
+		}
+		req.Params = json.RawMessage(data)
+	}
+	s.sendMessage(req)
+}
+
+// isResponseMessage reports whether msg is a JSON-RPC response, that is an
+// object carrying a "result" or "error" member.
+func isResponseMessage(msg json.RawMessage) bool {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(msg, &fields); err != nil {
+		return false
+	}
+	_, hasResult := fields["result"]
+	_, hasError := fields["error"]
+	return hasResult || hasError
 }
 
 // msgBufPool recycles the buffers used to frame outgoing messages. A buffer is

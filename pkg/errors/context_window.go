@@ -78,40 +78,18 @@ func lineRange(sql string, first, last int) []string {
 	return out
 }
 
-// tabWidth is the number of columns a '\t' occupies in models.Location.Column.
-// It mirrors tokenizer.toSQLPosition, which counts every byte as one column
-// except '\t', which counts as four.
-const tabWidth = 4
-
-// columnToByte maps the 0-based display column col (Column-1) to a byte offset in
-// line, using the tokenizer's column rule (see tabWidth). A column that falls
-// inside a tab's expansion maps to that tab. The result is clamped to
-// [0, len(line)]. Lines without tabs before col map col to itself.
+// columnToByte maps the 0-based column col (Column-1) to a byte offset in line.
+// models.Location.Column counts one column per byte, a tab included (see
+// tokenizer.toSQLPosition), so the offset is col itself, clamped to
+// [0, len(line)].
 func columnToByte(line string, col int) int {
 	if col <= 0 {
 		return 0
 	}
-	c := 0
-	for i := 0; i < len(line); i++ {
-		if c >= col {
-			return i
-		}
-		w := 1
-		if line[i] == '\t' {
-			w = tabWidth
-		}
-		if c+w > col {
-			return i
-		}
-		c += w
+	if col > len(line) {
+		return len(line)
 	}
-	return len(line)
-}
-
-// displayWidth returns the number of columns s occupies under the tokenizer's
-// column rule (see tabWidth).
-func displayWidth(s string) int {
-	return len(s) + (tabWidth-1)*strings.Count(s, "\t")
+	return col
 }
 
 // clipLine returns the text to display for line, given the byte offset off of the
@@ -165,23 +143,31 @@ func clipLine(line string, off int) (display string, start, prefixLen int) {
 	return sb.String(), start, prefixLen
 }
 
-// caretPad returns the number of spaces to put between the gutter and the caret
-// line. col is the 0-based display column (Column-1) and off the byte offset it
-// maps to in line (see columnToByte); display, start and prefixLen come from
-// clipLine. Verbatim lines keep the historical Column-1 padding. For clipped
-// lines the padding is the display width (tabs counted as tabWidth, like col) of
-// the shown text before off, which for tab-free lines is off-start+prefixLen,
-// i.e. directly under the error byte. The padding is bounded by the display
-// width of the shown text, so the caret line is bounded too.
-func caretPad(line string, col, off int, display string, start, prefixLen int, verbatim bool) int {
+// caretPad returns the whitespace to put between the gutter and the caret line.
+// col is the 0-based column (Column-1) and off the byte offset it maps to in
+// line (see columnToByte); display, start and prefixLen come from clipLine.
+//
+// The padding mirrors the text before the error: a tab stays a tab and every
+// other byte becomes a space, so the caret lines up under the error byte
+// whatever tab width the viewer uses (the gutter on both rows has the same
+// width, so tab stops agree). Verbatim lines keep the historical Column-1
+// padding, extended with spaces when the column lies past the end of the line.
+// For clipped lines the padding covers the shown text before off, plus the
+// leading ellipsis, and is bounded by the length of the shown text, so the caret
+// line is bounded too.
+func caretPad(line string, col, off int, display string, start, prefixLen int, verbatim bool) string {
 	if col < 0 {
 		col = 0
 	}
 	if verbatim {
 		if col > contextMaxLine {
-			return contextMaxLine
+			col = contextMaxLine
 		}
-		return col
+		n := col
+		if n > len(line) {
+			n = len(line)
+		}
+		return mirrorWhitespace(line[:n]) + strings.Repeat(" ", col-n)
 	}
 	if off < start {
 		off = start
@@ -189,11 +175,26 @@ func caretPad(line string, col, off int, display string, start, prefixLen int, v
 	if off > len(line) {
 		off = len(line)
 	}
-	pad := prefixLen + displayWidth(line[start:off])
-	if w := displayWidth(display); pad > w {
-		pad = w
+	pad := strings.Repeat(" ", prefixLen) + mirrorWhitespace(line[start:off])
+	if len(pad) > len(display) {
+		pad = pad[:len(display)]
 	}
 	return pad
+}
+
+// mirrorWhitespace returns a string as long as s with each tab kept and every
+// other byte replaced by a space.
+func mirrorWhitespace(s string) string {
+	if strings.IndexByte(s, '\t') < 0 {
+		return strings.Repeat(" ", len(s))
+	}
+	b := []byte(s)
+	for i, c := range b {
+		if c != '\t' {
+			b[i] = ' '
+		}
+	}
+	return string(b)
 }
 
 // clampHighlight bounds the caret run length to [1, contextMaxLine].
@@ -256,7 +257,8 @@ func renderContext(sb *strings.Builder, sql string, loc models.Location, highlig
 		if i == errIdx && loc.Column > 0 {
 			gutter := len("  ") + width + len(" | ")
 			pad := caretPad(line, off, b, display, start, prefixLen, len(line) <= contextMaxLine)
-			sb.WriteString(strings.Repeat(" ", gutter+pad))
+			sb.WriteString(strings.Repeat(" ", gutter))
+			sb.WriteString(pad)
 			sb.WriteString(strings.Repeat("^", clampHighlight(highlightLen)))
 			sb.WriteString("\n")
 		}

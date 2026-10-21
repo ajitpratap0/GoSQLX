@@ -9,6 +9,8 @@ import fixture from "./bridgeContract.fixture.json";
 import type {
   AnalysisData,
   ErrorSpan,
+  HighlightData,
+  HighlightSpan,
   LintData,
   LintViolation,
   OptimizationReport,
@@ -21,6 +23,7 @@ type SameKeys<A, B> = [Exclude<keyof A, keyof B>, Exclude<keyof B, keyof A>] ext
 
 type GoLint = typeof fixture.lint;
 type GoAnalyze = typeof fixture.analyze;
+type GoHighlight = typeof fixture.highlight;
 
 // `error` on AnalysisData is set by wasm/main.go when the call throws, not by
 // the bridge's AnalyzeResponse, so it is excluded from that comparison.
@@ -34,8 +37,11 @@ export const contractChecks: Record<string, true> = {
   securityFinding: true satisfies SameKeys<GoAnalyze["security"]["findings"][number], SecurityFinding>,
   optimization: true satisfies SameKeys<GoAnalyze["optimization"], OptimizationReport>,
   optimizationSuggestion: true satisfies SameKeys<GoAnalyze["optimization"]["suggestions"][number], OptimizationSuggestion>,
+  highlight: true satisfies SameKeys<GoHighlight, HighlightData>,
+  highlightSpan: true satisfies SameKeys<GoHighlight["spans"][number], HighlightSpan>,
 };
 
 // Values must also be assignable, not just share key names.
 export const lintSample: LintData = fixture.lint;
 export const analyzeSample: AnalysisData = fixture.analyze;
+export const highlightSample: HighlightData = fixture.highlight;

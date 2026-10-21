@@ -30,7 +30,7 @@ format:
 # Validate Configuration
 # Controls SQL validation behavior
 validate:
-  # SQL dialect: postgresql, mysql, sqlserver, oracle, sqlite, generic
+  # SQL dialect: generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse
   # Default: postgresql
   dialect: postgresql
 

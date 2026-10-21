@@ -9,7 +9,12 @@ export interface ValidationResult {
     suggestion?: string;
 }
 
-export const VALID_DIALECTS = ['generic', 'postgresql', 'mysql', 'sqlserver', 'oracle', 'sqlite'] as const;
+// Must match keywords.DialectNames() in the Go library and the gosqlx.dialect
+// enum in package.json (both checked by cmd/gosqlx/cmd/dialect_sync_test.go).
+export const VALID_DIALECTS = [
+    'generic', 'postgresql', 'mysql', 'mariadb', 'sqlserver', 'oracle', 'sqlite',
+    'snowflake', 'bigquery', 'redshift', 'clickhouse'
+] as const;
 export type SqlDialect = typeof VALID_DIALECTS[number];
 
 export const SQL_LANGUAGE_IDS = ['sql', 'pgsql', 'mysql', 'plpgsql', 'tsql', 'plsql', 'gosqlx'] as const;
@@ -315,7 +320,6 @@ function findClosestDialect(input: string): string | undefined {
         'postgres': 'postgresql',
         'pg': 'postgresql',
         'pgsql': 'postgresql',
-        'mariadb': 'mysql',
         'mssql': 'sqlserver',
         'sql server': 'sqlserver',
         'microsoftsql': 'sqlserver',

@@ -50,7 +50,7 @@ type FormatConfig struct {
 
 ```go
 type ValidationConfig struct {
-    Dialect    string // SQL dialect (postgresql, mysql, sqlserver, oracle, sqlite, generic)
+    Dialect    string // SQL dialect (generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse)
     StrictMode bool   // Enable strict validation
     Recursive  bool   // Recursively process directories
     Pattern    string // File pattern for recursive processing
@@ -298,7 +298,7 @@ The package validates configuration values to ensure correctness:
 
 - **indent**: Must be between 0 and 8
 - **max_line_length**: Must be between 0 and 500
-- **dialect**: Must be one of: postgresql, mysql, sqlserver, oracle, sqlite, generic
+- **dialect**: Must be one of: generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse
 - **output.format**: Must be one of: json, yaml, table, tree, auto
 
 ## Testing

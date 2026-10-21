@@ -27,6 +27,7 @@ GoSQLX is a **production-ready**, **race-free**, high-performance SQL parsing SD
 - **Metrics** (`pkg/metrics/`): Production performance monitoring
 - **Security** (`pkg/sql/security/`): SQL injection detection with severity classification
 - **Linter** (`pkg/linter/`): SQL linting engine with 30 built-in rules (L001-L030)
+- **Highlight** (`pkg/highlight/`): Dialect-aware SQL syntax highlighting (spans, ANSI/HTML/CSS renderers, themes)
 - **LSP** (`pkg/lsp/`): Language Server Protocol for IDE integration
 - **GoSQLX** (`pkg/gosqlx/`): High-level simple API (recommended for most users)
 - **Compatibility** (`pkg/compatibility/`): API stability testing
@@ -67,6 +68,7 @@ fingerprint→ formatter, sql/ast, sql/parser, sql/tokenizer
 security   → sql/ast            (scanner; tests also pull parser, tokenizer)
 linter     → sql/parser, sql/tokenizer
            # rule sub-packages additionally import: linter, models, sql/ast
+highlight  → models, errors, sql/keywords, sql/tokenizer
 lsp        → errors, models, gosqlx, sql/keywords, sql/parser, sql/tokenizer
 cbinding   → gosqlx, sql/ast    (requires CGO; excluded from task test:race)
 

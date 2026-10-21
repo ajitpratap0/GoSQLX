@@ -115,7 +115,7 @@ suite('Indent Size Validation Edge Cases', () => {
 suite('Dialect Validation Edge Cases', () => {
 
     test('should accept valid dialects in lowercase', () => {
-        const dialects = ['generic', 'postgresql', 'mysql', 'sqlserver', 'oracle', 'sqlite'];
+        const dialects = ['generic', 'postgresql', 'mysql', 'mariadb', 'sqlserver', 'oracle', 'sqlite', 'snowflake', 'bigquery', 'redshift', 'clickhouse'];
         for (const dialect of dialects) {
             const result = validateDialect(dialect);
             assert.strictEqual(result.valid, true, `${dialect} should be valid`);
@@ -123,7 +123,7 @@ suite('Dialect Validation Edge Cases', () => {
     });
 
     test('should accept valid dialects in uppercase', () => {
-        const dialects = ['GENERIC', 'POSTGRESQL', 'MYSQL', 'SQLSERVER', 'ORACLE', 'SQLITE'];
+        const dialects = ['GENERIC', 'POSTGRESQL', 'MYSQL', 'MARIADB', 'SQLSERVER', 'ORACLE', 'SQLITE', 'SNOWFLAKE', 'BIGQUERY', 'REDSHIFT', 'CLICKHOUSE'];
         for (const dialect of dialects) {
             const result = validateDialect(dialect);
             assert.strictEqual(result.valid, true, `${dialect} should be valid`);
@@ -131,7 +131,7 @@ suite('Dialect Validation Edge Cases', () => {
     });
 
     test('should accept valid dialects in mixed case', () => {
-        const dialects = ['Generic', 'PostgreSQL', 'MySQL', 'SQLServer', 'Oracle', 'SQLite'];
+        const dialects = ['Generic', 'PostgreSQL', 'MySQL', 'MariaDB', 'SQLServer', 'Oracle', 'SQLite', 'Snowflake', 'BigQuery', 'Redshift', 'ClickHouse'];
         for (const dialect of dialects) {
             const result = validateDialect(dialect);
             assert.strictEqual(result.valid, true, `${dialect} should be valid`);
@@ -165,9 +165,9 @@ suite('Dialect Validation Edge Cases', () => {
         assert.ok(result.suggestion?.includes('postgresql'));
     });
 
-    test('should suggest mysql for mariadb', () => {
+    test('should accept mariadb as its own dialect', () => {
         const result = validateDialect('mariadb');
-        assert.ok(result.suggestion?.includes('mysql'));
+        assert.strictEqual(result.valid, true);
     });
 
     test('should suggest sqlserver for mssql', () => {
@@ -583,7 +583,7 @@ function validateDialect(dialect: unknown): ValidationResult {
         return {
             valid: false,
             message: 'Dialect must be a string',
-            suggestion: 'Valid dialects: generic, postgresql, mysql, sqlserver, oracle, sqlite'
+            suggestion: 'Valid dialects: generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse'
         };
     }
 
@@ -593,11 +593,11 @@ function validateDialect(dialect: unknown): ValidationResult {
         return {
             valid: false,
             message: 'Dialect cannot be empty',
-            suggestion: 'Valid dialects: generic, postgresql, mysql, sqlserver, oracle, sqlite'
+            suggestion: 'Valid dialects: generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse'
         };
     }
 
-    const validDialects = ['generic', 'postgresql', 'mysql', 'sqlserver', 'oracle', 'sqlite'];
+    const validDialects = ['generic', 'postgresql', 'mysql', 'mariadb', 'sqlserver', 'oracle', 'sqlite', 'snowflake', 'bigquery', 'redshift', 'clickhouse'];
 
     if (!validDialects.includes(normalized)) {
         // Check for common aliases
@@ -605,7 +605,6 @@ function validateDialect(dialect: unknown): ValidationResult {
             'postgres': 'postgresql',
             'pg': 'postgresql',
             'pgsql': 'postgresql',
-            'mariadb': 'mysql',
             'mssql': 'sqlserver',
             'sql server': 'sqlserver',
             'ora': 'oracle',

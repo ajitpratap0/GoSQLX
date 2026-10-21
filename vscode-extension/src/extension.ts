@@ -141,6 +141,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
                 if (newConfig.get<boolean>('enable', true)) {
                     if (!client) {
                         await startLanguageServer(context);
+                    } else if (e.affectsConfiguration('gosqlx.dialect')) {
+                        // The server reads the dialect at initialize (it drives
+                        // semantic highlighting), so restart to apply it.
+                        await restartServerCommand();
                     }
                 } else {
                     await stopLanguageServer();

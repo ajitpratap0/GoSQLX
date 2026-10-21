@@ -185,6 +185,19 @@ HTML gains remote `src`/`href` URLs, `@import`, `fetch(`, `XMLHttpRequest` or
 | `/health` | `{"status":"ok","version":<gosqlx.Version>,"tools":<registered tool count>}` |
 | `/.well-known/openai-apps-challenge` | Plain-text domain-verification token. Served only when `GOSQLX_MCP_OPENAI_APPS_CHALLENGE` is set; returns 404 otherwise |
 
+### Rate limits are shared
+
+Rate limits are per client IP (see [MCP_GUIDE.md, Rate Limits](MCP_GUIDE.md#rate-limits)).
+ChatGPT calls the MCP server from OpenAI's servers, not from each user's browser, so
+the "client" the limiter sees is an OpenAI egress address. Many ChatGPT users can
+therefore share one budget of 10 requests/second and 120 weighted requests/minute,
+and heavy use by some can make tool calls fail for others with a rate-limit error
+(HTTP 429, or HTTP 200 with a JSON-RPC error for `initialize`) until the window
+resets. The same applies to any proxy in front of a self-hosted server that is not
+configured as trusted: without `GOSQLX_MCP_TRUSTED_PROXY_HEADER` or
+`GOSQLX_MCP_TRUSTED_PROXY_HOPS`, every client behind it shares one bucket and one
+4-stream `GET` cap, and `gosqlx-mcp` logs a warning at startup.
+
 ### Sessions
 
 The streamable HTTP transport runs in mcp-go's default stateless mode. Session IDs
@@ -197,9 +210,10 @@ invalidates an ID: a later request with the same ID simply starts new state.
 mcp-go's informational transport logs, which include session IDs, are discarded;
 only transport errors are logged, so nothing identifies a session in the logs.
 
-The HTTP server sets `ReadHeaderTimeout`. `Server.Start` (library use) also sets
-`IdleTimeout` but applies only bearer auth, not the rate limiter or the 64 KB body
-cap; `cmd/gosqlx-mcp` wraps the handler in `RateLimitMiddleware`. Call
+The HTTP server sets `ReadHeaderTimeout`. `Server.Start` and `Server.Handler`
+(library use) apply only bearer auth, not `RateLimitMiddleware`, so they have no rate
+limit, stream cap, body read deadline or 64 KB body cap; `cmd/gosqlx-mcp` wraps the
+handler in `NewRateLimitMiddleware`. Call
 `Server.Shutdown` when you discard a `Server` whose `Handler` you used, to stop the
 session sweeper goroutine.
 

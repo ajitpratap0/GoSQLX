@@ -28,6 +28,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"testing/iotest"
 	"time"
@@ -394,6 +395,8 @@ func TestRateLimitMiddleware_Denials(t *testing.T) {
 		{name: "notification gets null id", body: `{"jsonrpc":"2.0","method":"notifications/initialized"}`, wantStatus: http.StatusTooManyRequests, wantID: "null"},
 		{name: "unparseable body gets null id", body: `{not json`, wantStatus: http.StatusTooManyRequests, wantID: "null"},
 		{name: "initialize stays HTTP 200", body: `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`, wantStatus: http.StatusOK, wantID: "1"},
+		{name: "batched initialize stays HTTP 200", body: `[{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}]`, wantStatus: http.StatusOK, wantID: "null"},
+		{name: "batch without initialize gets 429", body: "[" + toolCallBody("1", "validate_sql") + "]", wantStatus: http.StatusTooManyRequests, wantID: "null"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -639,17 +642,24 @@ func TestReadRequestInfo(t *testing.T) {
 		wantWeight int
 		wantID     string
 		wantMethod string
+		wantInit   bool
 	}{
 		{name: "validate_sql", body: toolCallBody("1", "validate_sql"), wantWeight: 1, wantID: "1", wantMethod: "tools/call"},
 		{name: "analyze_sql", body: toolCallBody("2", "analyze_sql"), wantWeight: 5, wantID: "2", wantMethod: "tools/call"},
 		{name: "security_scan", body: toolCallBody(`"s"`, "security_scan"), wantWeight: 2, wantID: `"s"`, wantMethod: "tools/call"},
-		{name: "initialize", body: `{"jsonrpc":"2.0","id":4,"method":"initialize","params":{}}`, wantWeight: 0, wantID: "4", wantMethod: "initialize"},
+		{name: "initialize", body: `{"jsonrpc":"2.0","id":4,"method":"initialize","params":{}}`, wantWeight: 0, wantID: "4", wantMethod: "initialize", wantInit: true},
 		{name: "tools/list", body: `{"jsonrpc":"2.0","id":5,"method":"tools/list","params":{}}`, wantWeight: 0, wantID: "5", wantMethod: "tools/list"},
 		{name: "unknown tool", body: toolCallBody("6", "unknown_tool"), wantWeight: 1, wantID: "6", wantMethod: "tools/call"},
 		{name: "null id", body: `{"jsonrpc":"2.0","id":null,"method":"ping"}`, wantWeight: 0, wantMethod: "ping"},
 		{name: "batch sums weights", body: "[" + toolCallBody("1", "analyze_sql") + "," + toolCallBody("2", "lint_sql") + "]", wantWeight: 7},
+		{name: "batched initialize", body: `[{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}},{"jsonrpc":"2.0","method":"notifications/initialized"}]`, wantWeight: 0, wantInit: true},
 		{name: "empty body", body: "", wantWeight: 0},
-		{name: "invalid JSON", body: `not json at all`, wantWeight: 0},
+		{name: "invalid JSON costs minimum weight", body: `not json at all`, wantWeight: minUnparsedWeight},
+		{name: "truncated object costs minimum weight", body: `{"jsonrpc":"2.0","method":"tools/call"`, wantWeight: minUnparsedWeight},
+		{name: "non-object JSON costs minimum weight", body: `42`, wantWeight: minUnparsedWeight},
+		{name: "whitespace-only body costs minimum weight", body: " \n\t", wantWeight: minUnparsedWeight},
+		{name: "invalid batch costs minimum weight", body: `[{"method":`, wantWeight: minUnparsedWeight},
+		{name: "empty batch costs minimum weight", body: `[]`, wantWeight: minUnparsedWeight},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -662,9 +672,9 @@ func TestReadRequestInfo(t *testing.T) {
 			if err != nil {
 				t.Fatalf("readRequestInfo: %v", err)
 			}
-			if info.weight != tt.wantWeight || string(info.id) != tt.wantID || info.method != tt.wantMethod {
-				t.Errorf("got weight=%d id=%s method=%q, want weight=%d id=%s method=%q",
-					info.weight, info.id, info.method, tt.wantWeight, tt.wantID, tt.wantMethod)
+			if info.weight != tt.wantWeight || string(info.id) != tt.wantID || info.method != tt.wantMethod || info.initialize != tt.wantInit {
+				t.Errorf("got weight=%d id=%s method=%q initialize=%v, want weight=%d id=%s method=%q initialize=%v",
+					info.weight, info.id, info.method, info.initialize, tt.wantWeight, tt.wantID, tt.wantMethod, tt.wantInit)
 			}
 			if tt.body != "" {
 				rebuffered, err := io.ReadAll(newReq.Body)
@@ -710,4 +720,323 @@ func (rl *rateLimiter) bucketCount() int {
 		sh.mu.Unlock()
 	}
 	return n
+}
+
+// weightedCount reports the sustained budget key has used in its window.
+func (rl *rateLimiter) weightedCount(t *testing.T, key string) int {
+	t.Helper()
+	sh := &rl.shards[shardFor(key)]
+	sh.mu.Lock()
+	el, ok := sh.buckets[key]
+	sh.mu.Unlock()
+	if !ok {
+		return 0
+	}
+	b, ok := el.Value.(*bucket)
+	if !ok {
+		t.Fatalf("bucket for %s has type %T", key, el.Value)
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.weightedCount
+}
+
+// openStreams reports how many GET stream slots key holds.
+func (rl *rateLimiter) openStreams(key string) int {
+	rl.streams.mu.Lock()
+	defer rl.streams.mu.Unlock()
+	return rl.streams.open[key]
+}
+
+// discardLogs stops rl from writing warnings to the test output.
+func discardLogs(rl *rateLimiter) { rl.logf = func(string, ...any) {} }
+
+func TestRateLimitMiddleware_StreamCapRejectionIsFree(t *testing.T) {
+	started := make(chan struct{}, 16)
+	stream := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			_ = http.NewResponseController(w).Flush()
+			started <- struct{}{}
+			<-r.Context().Done()
+			return
+		}
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.WriteHeader(http.StatusOK)
+	})
+	h, rl := newRateLimitHandler(nil, stream, time.Second)
+	defer rl.Close()
+	ts := httptest.NewServer(h)
+	defer ts.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	get := func() *http.Response {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+"/mcp", nil)
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("GET: %v", err)
+		}
+		return resp
+	}
+
+	for i := 0; i < maxStreamsPerIP; i++ {
+		resp := get()
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("stream %d: status %d, want 200", i+1, resp.StatusCode)
+		}
+		<-started
+	}
+	const key = "127.0.0.1"
+	if got := rl.weightedCount(t, key); got != maxStreamsPerIP*streamWeight {
+		t.Fatalf("after %d streams weightedCount = %d, want %d", maxStreamsPerIP, got, maxStreamsPerIP*streamWeight)
+	}
+
+	// More refused GETs than the burst limit allows: none may cost budget.
+	for i := 0; i < 2*burstLimit; i++ {
+		resp := get()
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusTooManyRequests || !strings.Contains(string(body), "Too many open streams") {
+			t.Fatalf("refused GET %d: status %d body %q, want 429 stream-cap error", i+1, resp.StatusCode, body)
+		}
+	}
+	if got := rl.weightedCount(t, key); got != maxStreamsPerIP*streamWeight {
+		t.Errorf("stream-cap rejections were charged: weightedCount = %d, want %d", got, maxStreamsPerIP*streamWeight)
+	}
+
+	// The client can still make tool calls with its full remaining budget.
+	resp, err := http.Post(ts.URL+"/mcp", "application/json", strings.NewReader(toolCallBody("1", "validate_sql")))
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST after refused GETs: status %d, want 200", resp.StatusCode)
+	}
+	want := strconv.Itoa(sustainedLimit - maxStreamsPerIP*streamWeight - 1)
+	if got := resp.Header.Get("X-RateLimit-Remaining"); got != want {
+		t.Errorf("X-RateLimit-Remaining = %s, want %s", got, want)
+	}
+}
+
+func TestRateLimitMiddleware_RateLimitedGETReleasesStreamSlot(t *testing.T) {
+	h, rl := newRateLimitHandler(nil, okHandler, time.Second)
+	defer rl.Close()
+	discardLogs(rl)
+	const key = "10.7.0.1"
+	rl.allow(key, 1)
+	sh := &rl.shards[shardFor(key)]
+	sh.mu.Lock()
+	b, _ := sh.buckets[key].Value.(*bucket)
+	sh.mu.Unlock()
+	b.mu.Lock()
+	b.weightedCount = sustainedLimit
+	b.mu.Unlock()
+
+	for i := 0; i < maxStreamsPerIP+1; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
+		req.RemoteAddr = key + ":1"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusTooManyRequests || !strings.Contains(rec.Body.String(), "Rate limit exceeded") {
+			t.Fatalf("GET %d: status %d body %q, want 429 rate-limit error", i+1, rec.Code, rec.Body.String())
+		}
+	}
+	if got := rl.openStreams(key); got != 0 {
+		t.Fatalf("rate-limited GETs kept %d stream slots, want 0", got)
+	}
+}
+
+func TestRateLimitMiddleware_ReadDeadlineErrors(t *testing.T) {
+	t.Run("unsupported writer is logged once and counted", func(t *testing.T) {
+		h, rl := newRateLimitHandler(nil, okHandler, time.Second)
+		defer rl.Close()
+		var logs []string
+		var mu sync.Mutex
+		rl.logf = func(format string, v ...any) {
+			mu.Lock()
+			defer mu.Unlock()
+			logs = append(logs, fmt.Sprintf(format, v...))
+		}
+
+		const sessionID = "mcp-session-0b5e7c1a-1111-2222-3333-444455556666"
+		const sqlMarker = "SELECT secret_marker_column"
+		for i := 0; i < 3; i++ {
+			body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"validate_sql","arguments":{"sql":"` + sqlMarker + `"}}}`
+			req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+			req.RemoteAddr = "10.6.0.1:1"
+			req.Header.Set("Mcp-Session-Id", sessionID)
+			rec := httptest.NewRecorder() // does not support read deadlines
+			h.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("request %d: status %d, want 200", i+1, rec.Code)
+			}
+		}
+		// Each request fails to set and to clear the deadline.
+		if got := rl.deadlineErrs.Load(); got != 6 {
+			t.Errorf("deadlineErrs = %d, want 6", got)
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if len(logs) != 1 {
+			t.Fatalf("logged %d warnings, want exactly 1: %q", len(logs), logs)
+		}
+		if !strings.Contains(logs[0], "does not support read deadlines") {
+			t.Errorf("warning does not explain the problem: %q", logs[0])
+		}
+		for _, secret := range []string{sessionID, "mcp-session-", sqlMarker, "10.6.0.1"} {
+			if strings.Contains(logs[0], secret) {
+				t.Errorf("warning leaks %q: %q", secret, logs[0])
+			}
+		}
+	})
+	t.Run("other errors log only the error type", func(t *testing.T) {
+		rl := NewRateLimiter()
+		defer rl.Close()
+		var logs []string
+		rl.logf = func(format string, v ...any) { logs = append(logs, fmt.Sprintf(format, v...)) }
+		rl.noteDeadlineErr(nil)
+		if rl.deadlineErrs.Load() != 0 || len(logs) != 0 {
+			t.Fatalf("nil error was recorded: count=%d logs=%q", rl.deadlineErrs.Load(), logs)
+		}
+		rl.noteDeadlineErr(&net.OpError{Op: "set", Net: "tcp", Addr: &net.TCPAddr{IP: net.ParseIP("192.0.2.44"), Port: 443}, Err: errors.New("use of closed network connection")})
+		rl.noteDeadlineErr(errors.New("again"))
+		if got := rl.deadlineErrs.Load(); got != 2 {
+			t.Errorf("deadlineErrs = %d, want 2", got)
+		}
+		if len(logs) != 1 {
+			t.Fatalf("logged %d warnings, want 1: %q", len(logs), logs)
+		}
+		if strings.Contains(logs[0], "192.0.2.44") || !strings.Contains(logs[0], "*net.OpError") {
+			t.Errorf("warning = %q, want the error type without its address", logs[0])
+		}
+	})
+	t.Run("real connection has no deadline errors", func(t *testing.T) {
+		h, rl := newRateLimitHandler(nil, okHandler, time.Second)
+		defer rl.Close()
+		ts := httptest.NewServer(h)
+		defer ts.Close()
+		resp, err := http.Post(ts.URL+"/mcp", "application/json", strings.NewReader(toolCallBody("1", "validate_sql")))
+		if err != nil {
+			t.Fatalf("post: %v", err)
+		}
+		resp.Body.Close()
+		if got := rl.deadlineErrs.Load(); got != 0 {
+			t.Errorf("deadlineErrs = %d, want 0", got)
+		}
+	})
+}
+
+func TestRateLimitMiddleware_UnparseableBodyCostsBudget(t *testing.T) {
+	h, rl := newRateLimitHandler(nil, okHandler, time.Second)
+	defer rl.Close()
+	discardLogs(rl)
+	const key = "10.5.0.1"
+	for _, body := range []string{`{not json`, `[]`, `[{"method":`} {
+		req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+		req.RemoteAddr = key + ":1"
+		h.ServeHTTP(httptest.NewRecorder(), req)
+	}
+	if got := rl.weightedCount(t, key); got != 3*minUnparsedWeight {
+		t.Fatalf("weightedCount = %d, want %d", got, 3*minUnparsedWeight)
+	}
+	// A body-less request (e.g. DELETE to end a session) stays free.
+	req := httptest.NewRequest(http.MethodDelete, "/mcp", nil)
+	req.RemoteAddr = key + ":1"
+	h.ServeHTTP(httptest.NewRecorder(), req)
+	if got := rl.weightedCount(t, key); got != 3*minUnparsedWeight {
+		t.Fatalf("DELETE was charged: weightedCount = %d, want %d", got, 3*minUnparsedWeight)
+	}
+}
+
+const testProxySecret = "s3cret-0123456789abcdef"
+
+func TestClientKey_ProxySecret(t *testing.T) {
+	gated := &Config{TrustedProxyHeader: "Cf-Connecting-Ip", TrustedProxySecretHeader: "X-Origin-Secret", TrustedProxySecret: testProxySecret}
+	gatedHops := &Config{TrustedProxyHops: 1, TrustedProxySecretHeader: "X-Origin-Secret", TrustedProxySecret: testProxySecret}
+	tests := []struct {
+		name    string
+		cfg     *Config
+		secrets []string
+		want    string
+	}{
+		{name: "matching secret trusts header", cfg: gated, secrets: []string{testProxySecret}, want: "203.0.113.9"},
+		{name: "missing secret falls back", cfg: gated, want: "10.0.0.1"},
+		{name: "wrong secret falls back", cfg: gated, secrets: []string{"s3cret-0123456789abcdeX"}, want: "10.0.0.1"},
+		{name: "secret prefix falls back", cfg: gated, secrets: []string{testProxySecret[:8]}, want: "10.0.0.1"},
+		{name: "secret with suffix falls back", cfg: gated, secrets: []string{testProxySecret + "x"}, want: "10.0.0.1"},
+		{name: "empty secret falls back", cfg: gated, secrets: []string{""}, want: "10.0.0.1"},
+		{name: "last value is the proxy's", cfg: gated, secrets: []string{"forged", testProxySecret}, want: "203.0.113.9"},
+		{name: "forged last value falls back", cfg: gated, secrets: []string{testProxySecret, "forged"}, want: "10.0.0.1"},
+		{name: "matching secret trusts XFF hops", cfg: gatedHops, secrets: []string{testProxySecret}, want: "198.51.100.4"},
+		{name: "missing secret ignores XFF hops", cfg: gatedHops, want: "10.0.0.1"},
+		{name: "secret header without secret never trusts", cfg: &Config{TrustedProxyHeader: "Cf-Connecting-Ip", TrustedProxySecretHeader: "X-Origin-Secret"}, secrets: []string{""}, want: "10.0.0.1"},
+		{name: "secret without header never trusts", cfg: &Config{TrustedProxyHeader: "Cf-Connecting-Ip", TrustedProxySecret: testProxySecret}, want: "10.0.0.1"},
+		{name: "no secret configured keeps old behaviour", cfg: &Config{TrustedProxyHeader: "Cf-Connecting-Ip"}, want: "203.0.113.9"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+			req.RemoteAddr = "10.0.0.1:1234"
+			req.Header.Set("CF-Connecting-IP", "203.0.113.9")
+			req.Header.Set("X-Forwarded-For", "6.6.6.6, 198.51.100.4")
+			for _, v := range tt.secrets {
+				req.Header.Add("X-Origin-Secret", v)
+			}
+			if got := newClientIPResolver(tt.cfg).clientKey(req); got != tt.want {
+				t.Errorf("clientKey() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRateLimitMiddleware_ProxySecret(t *testing.T) {
+	cfg := &Config{TrustedProxyHeader: "Cf-Connecting-Ip", TrustedProxySecretHeader: "X-Origin-Secret", TrustedProxySecret: testProxySecret}
+	var seen []string
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.Header.Get("X-Origin-Secret"))
+		w.WriteHeader(http.StatusOK)
+	})
+	h, rl := newRateLimitHandler(cfg, next, time.Second)
+	defer rl.Close()
+	discardLogs(rl)
+
+	send := func(cfIP, secret string) int {
+		req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(toolCallBody("1", "validate_sql")))
+		req.RemoteAddr = "10.4.0.1:1"
+		req.Header.Set("CF-Connecting-IP", cfIP)
+		if secret != "" {
+			req.Header.Set("X-Origin-Secret", secret)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	// Without the secret, rotating CF-Connecting-IP does not escape the
+	// RemoteAddr bucket.
+	last := 0
+	for i := 0; i <= burstLimit; i++ {
+		last = send(fmt.Sprintf("11.0.%d.1", i), "")
+	}
+	if last != http.StatusTooManyRequests {
+		t.Fatalf("rotating CF-Connecting-IP without the secret: status %d, want 429", last)
+	}
+	// With the secret, each forwarded client gets its own bucket.
+	for i := 0; i <= burstLimit; i++ {
+		if code := send(fmt.Sprintf("12.0.%d.1", i), testProxySecret); code != http.StatusOK {
+			t.Fatalf("client %d with the secret: status %d, want 200", i, code)
+		}
+	}
+	for _, v := range seen {
+		if v != "" {
+			t.Fatalf("secret header reached the MCP handler: %q", v)
+		}
+	}
 }

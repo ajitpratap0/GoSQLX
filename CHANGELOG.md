@@ -216,8 +216,6 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   `WINDOW w AS (w2)`. (#608, #629)
 
 ### Added
-- **`ast.FieldAccessExpression`**: represents composite-field selection with a
-  traversable base expression, field name, quote flag and source position. (#833)
 - **`--dialect` flag for the `parse`, `format`, `analyze`, and `lint` CLI
   commands**: dialect-specific SQL (e.g. MySQL `LIMIT offset, count`) can now be
   parsed by these commands, matching the existing `validate --dialect`. Unknown
@@ -297,6 +295,8 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   (#599, #624)
 - **New schema fields**: `db.Index.IncludeColumns` and `db.ForeignKey.RefSchema`
   (see Behavior changes). (#620, #622)
+- **`ast.FieldAccessExpression`**: represents composite-field selection with a
+  traversable base expression, field name, quote flag and source position. (#833)
 
 ### Changed
 - **`tokenizer.NewWithKeywords` no longer consults its keyword table**: the

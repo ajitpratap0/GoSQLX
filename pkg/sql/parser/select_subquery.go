@@ -128,12 +128,8 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		// ClickHouse numbers(...), remote(...)).
 		// If the parsed name is followed by '(' at FROM position, reparse
 		// it as a function call. Gated to dialects that actually use this.
-		if p.isType(models.TokenTypeLParen) && p.supportsTableFunction() {
-			funcCall, ferr := p.parseFunctionCall(qualifiedName)
-			if ferr != nil {
-				return tableRef, ferr
-			}
-			tableRef.TableFunc = funcCall
+		if err := p.parseTableFunctionCall(&tableRef); err != nil {
+			return tableRef, err
 		}
 
 		// Snowflake / ANSI SAMPLE or TABLESAMPLE clause on a table reference:
@@ -349,6 +345,9 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 			)
 		}
 		ref = ast.TableReference{Name: joinedName, Lateral: isLateral}
+		if err := p.parseTableFunctionCall(&ref); err != nil {
+			return ref, err
+		}
 	}
 
 	// Optional alias.
@@ -415,6 +414,20 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 	}
 
 	return ref, nil
+}
+
+// parseTableFunctionCall keeps FROM and JOIN function-call references under
+// the same dialect gate and preserves their arguments for AST consumers.
+func (p *Parser) parseTableFunctionCall(ref *ast.TableReference) error {
+	if !p.isType(models.TokenTypeLParen) || !p.supportsTableFunction() {
+		return nil
+	}
+	call, err := p.parseFunctionCall(ref.Name)
+	if err != nil {
+		return err
+	}
+	ref.TableFunc = call
+	return nil
 }
 
 // parseTableHints parses SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.

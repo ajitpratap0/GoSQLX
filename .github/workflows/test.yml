@@ -130,7 +130,12 @@ jobs:
         test -s "$dir/main.go"
         cd "$dir"
         go mod init readme_quickstart
-        go get github.com/ajitpratap0/GoSQLX@latest
+        # Resolve the latest tagged release explicitly, then pin it in go.mod
+        # (module checksums are verified against sum.golang.org by go mod tidy).
+        tag="$(go list -m -f '{{.Version}}' github.com/ajitpratap0/GoSQLX@latest)"
+        echo "Latest tagged GoSQLX release: ${tag}"
+        go mod edit -require="github.com/ajitpratap0/GoSQLX@${tag}"
+        go mod tidy
         go build -o /dev/null .
         go run .
 

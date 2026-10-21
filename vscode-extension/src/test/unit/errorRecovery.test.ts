@@ -585,7 +585,7 @@ class ConfigWithFallback {
             if (dialectValue === 'postgres') {
                 dialectValue = 'postgresql';
             }
-            const validDialects = ['generic', 'postgresql', 'mysql', 'sqlserver', 'oracle', 'sqlite'];
+            const validDialects = ['generic', 'postgresql', 'mysql', 'mariadb', 'sqlserver', 'oracle', 'sqlite', 'snowflake', 'bigquery', 'redshift', 'clickhouse'];
             if (validDialects.includes(dialectValue as string)) {
                 result.dialect = dialectValue as string;
             }

@@ -18,6 +18,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	sqlkeywords "github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 const (
@@ -211,5 +213,13 @@ func TestDialect(t *testing.T) {
 	}
 	if Dialect("nope") != "" {
 		t.Error("unknown dialect should resolve to the default")
+	}
+	if Dialect("") != "" {
+		t.Error("empty dialect should resolve to the default")
+	}
+	for _, name := range sqlkeywords.DialectNames() {
+		if got := Dialect(name); string(got) != name {
+			t.Errorf("Dialect(%q) = %q, want %q", name, got, name)
+		}
 	}
 }

@@ -99,7 +99,7 @@ gosqlx validate [file...] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--dialect` | string | postgresql | SQL dialect (postgresql, mysql, sqlserver, oracle, sqlite) |
+| `--dialect` | string | postgresql | SQL dialect (generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse) |
 | `-r, --recursive` | bool | false | Recursively process directories |
 | `-p, --pattern` | string | `*.sql` | File pattern for recursive processing |
 | `-q, --quiet` | bool | false | Quiet mode (exit code only) |
@@ -681,7 +681,7 @@ format:
 
 # Validation settings - controls SQL validation behavior
 validate:
-  dialect: postgresql          # SQL dialect (postgresql, mysql, sqlserver, oracle, sqlite, generic)
+  dialect: postgresql          # SQL dialect (generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse)
   strict_mode: false           # Enable strict validation
   recursive: false             # Recursively process directories
   pattern: "*.sql"             # File pattern for recursive processing

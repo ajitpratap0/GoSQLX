@@ -102,6 +102,20 @@ func TestConfigValidation(t *testing.T) {
 			wantError: true,
 		},
 		{
+			name: "clickhouse dialect",
+			modifier: func(c *Config) {
+				c.Validation.Dialect = "clickhouse"
+			},
+			wantError: false,
+		},
+		{
+			name: "generic dialect",
+			modifier: func(c *Config) {
+				c.Validation.Dialect = "generic"
+			},
+			wantError: false,
+		},
+		{
 			name: "invalid output format",
 			modifier: func(c *Config) {
 				c.Output.Format = "invalid"

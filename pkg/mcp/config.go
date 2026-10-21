@@ -32,10 +32,15 @@
 //	GOSQLX_MCP_AUTH_TOKEN  bearer token; empty disables auth
 //	GOSQLX_MCP_OPENAI_APPS_CHALLENGE  ChatGPT app domain-verification token,
 //	                       served at /.well-known/openai-apps-challenge
+//	GOSQLX_MCP_TRUSTED_PROXY_HEADER  header set by a trusted proxy that holds
+//	                       the client IP (e.g. CF-Connecting-IP); empty = unused
+//	GOSQLX_MCP_TRUSTED_PROXY_HOPS    number of trusted proxies appending to
+//	                       X-Forwarded-For (0-16, default 0 = ignore XFF)
 package mcp
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -62,7 +67,25 @@ type Config struct {
 	// served as plain text at /.well-known/openai-apps-challenge.
 	// Source: GOSQLX_MCP_OPENAI_APPS_CHALLENGE (default: "" - not served)
 	OpenAIAppsChallenge string
+
+	// TrustedProxyHeader names a header, written by a trusted reverse proxy,
+	// that carries the client IP used as the rate-limit key (for example
+	// "CF-Connecting-IP" behind Cloudflare). Only set it when every request
+	// reaches the server through that proxy, since clients can send any
+	// header themselves. Invalid values fall back to RemoteAddr.
+	// Source: GOSQLX_MCP_TRUSTED_PROXY_HEADER (default: "" - not used)
+	TrustedProxyHeader string
+
+	// TrustedProxyHops is the number of trusted proxies in front of the
+	// server that append to X-Forwarded-For. When > 0 the client IP is the
+	// entry that many positions from the right; entries further left are
+	// client-supplied and ignored.
+	// Source: GOSQLX_MCP_TRUSTED_PROXY_HOPS (default: 0 - X-Forwarded-For ignored)
+	TrustedProxyHops int
 }
+
+// maxTrustedProxyHops bounds GOSQLX_MCP_TRUSTED_PROXY_HOPS.
+const maxTrustedProxyHops = 16
 
 // LoadConfig reads configuration from environment variables, applying defaults
 // for any variables that are unset or empty.
@@ -92,7 +115,44 @@ func LoadConfig() (*Config, error) {
 		cfg.OpenAIAppsChallenge = v
 	}
 
+	if v := strings.TrimSpace(os.Getenv("GOSQLX_MCP_TRUSTED_PROXY_HEADER")); v != "" {
+		if !validHeaderName(v) {
+			return nil, fmt.Errorf("GOSQLX_MCP_TRUSTED_PROXY_HEADER: %q is not a valid HTTP header name", v)
+		}
+		canonical := http.CanonicalHeaderKey(v)
+		if canonical == "X-Forwarded-For" {
+			return nil, fmt.Errorf("GOSQLX_MCP_TRUSTED_PROXY_HEADER: use GOSQLX_MCP_TRUSTED_PROXY_HOPS for X-Forwarded-For")
+		}
+		cfg.TrustedProxyHeader = canonical
+	}
+
+	if v := strings.TrimSpace(os.Getenv("GOSQLX_MCP_TRUSTED_PROXY_HOPS")); v != "" {
+		hops, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("GOSQLX_MCP_TRUSTED_PROXY_HOPS: expected integer, got %q", v)
+		}
+		if hops < 0 || hops > maxTrustedProxyHops {
+			return nil, fmt.Errorf("GOSQLX_MCP_TRUSTED_PROXY_HOPS: %d is out of range (0–%d)", hops, maxTrustedProxyHops)
+		}
+		cfg.TrustedProxyHops = hops
+	}
+
 	return cfg, nil
+}
+
+// validHeaderName reports whether s is a valid HTTP header field name
+// (an RFC 9110 token).
+func validHeaderName(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		case strings.IndexByte("!#$%&'*+-.^_`|~", c) >= 0:
+		default:
+			return false
+		}
+	}
+	return s != ""
 }
 
 // DefaultConfig returns a Config with all defaults applied (auth disabled).

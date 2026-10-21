@@ -142,3 +142,44 @@ func TestLoadConfig_OpenAIAppsChallenge(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadConfig_TrustedProxy(t *testing.T) {
+	tests := []struct {
+		name       string
+		header     string
+		hops       string
+		wantHeader string
+		wantHops   int
+		wantErr    bool
+	}{
+		{name: "unset", wantHeader: "", wantHops: 0},
+		{name: "cloudflare header canonicalised", header: " cf-connecting-ip ", wantHeader: "Cf-Connecting-Ip"},
+		{name: "hops", hops: "2", wantHops: 2},
+		{name: "both", header: "True-Client-IP", hops: "1", wantHeader: "True-Client-Ip", wantHops: 1},
+		{name: "invalid header name", header: "CF Connecting IP", wantErr: true},
+		{name: "XFF as header rejected", header: "x-forwarded-for", wantErr: true},
+		{name: "hops non-numeric", hops: "one", wantErr: true},
+		{name: "hops negative", hops: "-1", wantErr: true},
+		{name: "hops too large", hops: "17", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GOSQLX_MCP_TRUSTED_PROXY_HEADER", tt.header)
+			t.Setenv("GOSQLX_MCP_TRUSTED_PROXY_HOPS", tt.hops)
+			cfg, err := LoadConfig()
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got config %+v", cfg)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cfg.TrustedProxyHeader != tt.wantHeader || cfg.TrustedProxyHops != tt.wantHops {
+				t.Errorf("got header=%q hops=%d, want header=%q hops=%d",
+					cfg.TrustedProxyHeader, cfg.TrustedProxyHops, tt.wantHeader, tt.wantHops)
+			}
+		})
+	}
+}

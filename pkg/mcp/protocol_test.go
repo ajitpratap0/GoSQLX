@@ -263,9 +263,14 @@ func TestProtocol_CallTool_MissingSQLReturnsError(t *testing.T) {
 	req.Params.Name = "validate_sql"
 	req.Params.Arguments = map[string]any{}
 
-	_, err := c.CallTool(ctx, req)
-	if err == nil {
-		t.Fatal("expected error for missing sql param via protocol")
+	// Input problems are reported as an isError tool result so the model
+	// can correct its call, not as a JSON-RPC internal error.
+	res, err := c.CallTool(ctx, req)
+	if err != nil {
+		t.Fatalf("expected isError tool result, got protocol error: %v", err)
+	}
+	if res == nil || !res.IsError {
+		t.Fatalf("expected isError tool result for missing sql param, got %+v", res)
 	}
 }
 

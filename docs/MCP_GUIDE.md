@@ -84,6 +84,12 @@ The public server has smart rate limiting to ensure fair usage:
 - **Sustained**: 120 weighted-requests/minute per IP
 - Heavier tools (`analyze_sql`) consume more budget than simple ones (`validate_sql`)
 - Limits tighten automatically under high server load
+- **Streams**: at most 4 concurrent `GET /mcp` (SSE) streams per IP; each costs 1 unit of sustained budget
+- **Request body**: at most 64 KB, and it must arrive within 30 seconds
+
+A denied request gets HTTP `429 Too Many Requests` with a `Retry-After` header (seconds) and a JSON-RPC error (code `-32000`) carrying the request's `id`. A denied `initialize` is the exception: it returns HTTP 200 with the same JSON-RPC error, because mcp-go clients treat any 4xx on `initialize` as a legacy-SSE server. Every response carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` (sustained budget left in the current minute) and `X-RateLimit-Reset` (Unix time the minute ends). An oversized body gets HTTP `413` with a JSON-RPC error that names the limit; a body that stalls gets HTTP `408`.
+
+The 64 KB limit is deliberate: `analyze_sql` allocates roughly 500× the SQL size (about 33 MB for 64 KB of SQL, 530 MB for 1 MB), so larger bodies would let a handful of requests exhaust a small instance.
 
 ### Health Check
 
@@ -210,12 +216,30 @@ The `gosqlx-mcp` server is configured exclusively via environment variables. No 
 | `GOSQLX_MCP_HOST` | `127.0.0.1` | string | Any valid bind address |
 | `GOSQLX_MCP_PORT` | `8080` | integer | 1–65535; non-integer or out-of-range → startup error |
 | `GOSQLX_MCP_AUTH_TOKEN` | *(empty)* | string | Empty = auth disabled; value is whitespace-trimmed |
+| `GOSQLX_MCP_OPENAI_APPS_CHALLENGE` | *(empty)* | string | ChatGPT app domain-verification token served at `/.well-known/openai-apps-challenge` |
+| `GOSQLX_MCP_TRUSTED_PROXY_HEADER` | *(empty)* | string | Header a trusted proxy sets to the client IP (e.g. `CF-Connecting-IP`); must be a valid header name and not `X-Forwarded-For` |
+| `GOSQLX_MCP_TRUSTED_PROXY_HOPS` | `0` | integer | 0–16; number of trusted proxies that append to `X-Forwarded-For` |
 
 **Notes:**
 
 - `GOSQLX_MCP_PORT` fails fast at startup with a descriptive error if the value is not a valid port number.
 - `GOSQLX_MCP_AUTH_TOKEN` enables bearer token auth for all requests when set to a non-empty string.
 - MCP server configuration is independent of `.gosqlx.yml` - the YAML config is not read by `gosqlx-mcp`.
+
+### Client IP and reverse proxies
+
+Rate limits are tracked per client IP (IPv6 clients per `/64`). By default the server uses the TCP peer address (`RemoteAddr`) and ignores `X-Forwarded-For`, `X-Real-IP` and similar headers, because any client can send them: trusting the left-most `X-Forwarded-For` entry would let a client pick a fresh rate-limit bucket on every request.
+
+Behind a reverse proxy every request comes from the proxy, so all users would share one bucket. Opt in to a forwarded address:
+
+- `GOSQLX_MCP_TRUSTED_PROXY_HEADER=CF-Connecting-IP`: use a single-IP header that your proxy overwrites on every request. Cloudflare sets `CF-Connecting-IP` to the visitor address. The hosted server runs on Render, whose edge is Cloudflare, and `render.yaml` sets this.
+- `GOSQLX_MCP_TRUSTED_PROXY_HOPS=N`: use the entry `N` positions from the right of `X-Forwarded-For` (the address appended by the outermost of `N` trusted proxies). Entries further left are client-supplied and are ignored.
+
+If the header is set, it takes precedence. A missing or unparseable value falls back to `RemoteAddr`. Only enable either option when every request reaches the server through that proxy; otherwise clients can set the header directly.
+
+### HTTP server limits
+
+`gosqlx-mcp` sets `ReadHeaderTimeout` 10 s, `IdleTimeout` 120 s and `MaxHeaderBytes` 32 KB. It sets no global `ReadTimeout`/`WriteTimeout`, because those would cut long-lived `GET /mcp` SSE streams. POST bodies instead get a 30 s read deadline in the rate-limit middleware, so slow-body (slowloris) connections are closed with HTTP 408.
 
 ---
 
@@ -237,13 +261,19 @@ curl -s -X POST http://127.0.0.1:8080/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"validate_sql","arguments":{"sql":"SELECT 1"}}}'
 ```
 
-Requests missing or carrying an incorrect token receive HTTP `401 Unauthorized`. The `BearerAuthMiddleware` wraps the streamable HTTP handler and is a no-op when auth is disabled.
+Requests missing or carrying an incorrect token receive HTTP `401 Unauthorized`. The `Bearer` scheme is matched case-insensitively and surrounding whitespace is ignored. Tokens are compared in constant time (SHA-256 digests with `crypto/subtle`). The `BearerAuthMiddleware` wraps the streamable HTTP handler and is a no-op when auth is disabled.
 
 ---
 
 ## Tools Reference
 
-All tools accept a required `sql` string parameter. The server returns tool-semantic failures (e.g., invalid SQL) as a valid JSON result with `valid: false` rather than as a protocol error. Protocol errors (missing required parameter, server fault) return an MCP error response.
+All tools accept a required `sql` string parameter. Errors are reported at three levels:
+
+- **Result data**: `validate_sql` reports invalid SQL as a normal result with `valid: false`; `analyze_sql` reports sub-tool failures under its `errors` key.
+- **Tool errors** (`isError: true`, message in the text content): input problems the model can fix, such as a missing, empty or non-string `sql`, SQL that `parse_sql`, `extract_metadata` or `format_sql` cannot parse, or an optional argument of the wrong type or out of range (the message names the argument).
+- **JSON-RPC errors**: unknown tools, malformed requests and genuine server faults.
+
+Optional arguments must match their schema type. Absent or `null` means the default. For clients that stringify scalars, `"true"`/`"false"` and decimal-integer strings are also accepted.
 
 ---
 
@@ -301,7 +331,7 @@ Invalid SQL:
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `sql` | string | yes | - | The SQL string to format |
-| `indent_size` | integer | no | `2` | Spaces per indent level |
+| `indent_size` | integer | no | `2` | Spaces per indent level (0–16) |
 | `uppercase_keywords` | boolean | no | `false` | Uppercase SQL keywords |
 | `add_semicolon` | boolean | no | `false` | Append a trailing semicolon |
 
@@ -698,6 +728,8 @@ func main() {
 | `New` | `(cfg *Config) *Server` | Create server with all 7 tools registered |
 | `(*Server).Start` | `(ctx context.Context) error` | Bind, serve, block until ctx cancelled |
 | `BearerAuthMiddleware` | `(cfg *Config, next http.Handler) http.Handler` | Auth wrapper; no-op when auth is disabled |
+| `NewRateLimitMiddleware` | `(cfg *Config, next http.Handler) http.Handler` | Rate limiter keyed by client IP, honouring `cfg`'s trusted-proxy settings |
+| `RateLimitMiddleware` | `(next http.Handler) http.Handler` | `NewRateLimitMiddleware` keyed on `RemoteAddr` only |
 | `(*Config).Addr` | `() string` | Returns `"host:port"` |
 | `(*Config).AuthEnabled` | `() bool` | Reports whether auth token is set |
 
@@ -708,6 +740,10 @@ type Config struct {
     Host      string // GOSQLX_MCP_HOST (default "127.0.0.1")
     Port      int    // GOSQLX_MCP_PORT (default 8080, range 1–65535)
     AuthToken string // GOSQLX_MCP_AUTH_TOKEN (default "" = auth disabled)
+
+    OpenAIAppsChallenge string // GOSQLX_MCP_OPENAI_APPS_CHALLENGE (default "" = not served)
+    TrustedProxyHeader  string // GOSQLX_MCP_TRUSTED_PROXY_HEADER (default "" = not used)
+    TrustedProxyHops    int    // GOSQLX_MCP_TRUSTED_PROXY_HOPS (default 0 = X-Forwarded-For ignored)
 }
 ```
 

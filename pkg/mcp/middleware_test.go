@@ -140,6 +140,9 @@ func TestExtractBearerToken(t *testing.T) {
 		{"no bearer", "Token mytoken", ""},
 		{"basic", "Basic dXNlcjpwYXNz", ""},
 		{"bearer no token", "Bearer ", ""},
+		{"lowercase scheme", "bearer mytoken", "mytoken"},
+		{"trimmed", "  Bearer  mytoken ", "mytoken"},
+		{"no space", "Bearermytoken", ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -150,6 +153,39 @@ func TestExtractBearerToken(t *testing.T) {
 			got := extractBearerToken(req)
 			if got != tc.wantToken {
 				t.Errorf("extractBearerToken() = %q, want %q", got, tc.wantToken)
+			}
+		})
+	}
+}
+
+func TestBearerAuthMiddleware_HeaderVariants(t *testing.T) {
+	cfg := &Config{Host: "127.0.0.1", Port: 8080, AuthToken: "secret"}
+	tests := []struct {
+		name       string
+		header     string
+		wantStatus int
+	}{
+		{"canonical", "Bearer secret", http.StatusOK},
+		{"lowercase scheme", "bearer secret", http.StatusOK},
+		{"uppercase scheme", "BEARER secret", http.StatusOK},
+		{"surrounding whitespace", "  Bearer   secret  ", http.StatusOK},
+		{"prefix of token", "Bearer secre", http.StatusUnauthorized},
+		{"token with suffix", "Bearer secretx", http.StatusUnauthorized},
+		{"empty token", "Bearer ", http.StatusUnauthorized},
+		{"scheme only", "Bearer", http.StatusUnauthorized},
+		{"wrong case token", "Bearer SECRET", http.StatusUnauthorized},
+	}
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+			req.Header.Set("Authorization", tc.header)
+			rr := httptest.NewRecorder()
+			BearerAuthMiddleware(cfg, next).ServeHTTP(rr, req)
+			if rr.Code != tc.wantStatus {
+				t.Errorf("status = %d, want %d", rr.Code, tc.wantStatus)
 			}
 		})
 	}

@@ -17,12 +17,15 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	gosqlxmcp "github.com/ajitpratap0/GoSQLX/pkg/mcp"
@@ -190,6 +193,8 @@ func TestNewMux_HTTPChain(t *testing.T) {
 	}
 
 	t.Run("rate limit", func(t *testing.T) {
+		// X-Forwarded-For is ignored by default, so the limit keys on the
+		// loopback peer; the header only proves spoofing does not help.
 		const xff = "198.51.100.7"
 		resp, _ := mcpPost(t, ts.URL+"/mcp", token, "", xff, initializeRequest)
 		sid := resp.Header.Get("Mcp-Session-Id")
@@ -199,11 +204,17 @@ func TestNewMux_HTTPChain(t *testing.T) {
 			resp, body := mcpPost(t, ts.URL+"/mcp", token, sid, xff, call)
 			if strings.Contains(body, "Rate limit exceeded") {
 				limited = true
-				if !strings.Contains(body, `"code":-32000`) {
-					t.Errorf("rate-limit response is not a JSON-RPC -32000 error: %s", body)
+				if resp.StatusCode != http.StatusTooManyRequests {
+					t.Errorf("rate-limit status = %d, want 429", resp.StatusCode)
 				}
-				if resp.Header.Get("X-RateLimit-Remaining") != "0" {
-					t.Errorf("X-RateLimit-Remaining = %q, want 0", resp.Header.Get("X-RateLimit-Remaining"))
+				if !strings.Contains(body, `"code":-32000`) || !strings.Contains(body, `"id":2`) {
+					t.Errorf("rate-limit response is not a JSON-RPC -32000 error for id 2: %s", body)
+				}
+				if resp.Header.Get("Retry-After") == "" {
+					t.Error("rate-limit response has no Retry-After header")
+				}
+				if resp.Header.Get("X-RateLimit-Remaining") == "" {
+					t.Error("rate-limit response has no X-RateLimit-Remaining header")
 				}
 			}
 		}
@@ -224,4 +235,126 @@ func TestNewMux_HTTPChain(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestNewHTTPServer_Limits(t *testing.T) {
+	cfg := gosqlxmcp.DefaultConfig()
+	s := newHTTPServer(cfg, gosqlxmcp.New(cfg))
+	tests := []struct {
+		name string
+		got  any
+		want any
+	}{
+		{"ReadHeaderTimeout", s.ReadHeaderTimeout, readHeaderTimeout},
+		{"IdleTimeout", s.IdleTimeout, idleTimeout},
+		{"MaxHeaderBytes", s.MaxHeaderBytes, maxHeaderBytes},
+		// A global ReadTimeout/WriteTimeout would cut off GET SSE streams.
+		{"ReadTimeout unset", s.ReadTimeout, time.Duration(0)},
+		{"WriteTimeout unset", s.WriteTimeout, time.Duration(0)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.want {
+				t.Errorf("%s = %v, want %v", tt.name, tt.got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewMux_RateLimitIgnoresSpoofedXFF(t *testing.T) {
+	cfg := gosqlxmcp.DefaultConfig()
+	ts := httptest.NewServer(newMux(cfg, gosqlxmcp.New(cfg)))
+	t.Cleanup(ts.Close)
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`
+	var last int
+	for i := 0; i < 15; i++ {
+		req, err := http.NewRequest(http.MethodPost, ts.URL+"/mcp", strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		req.Header.Set("X-Forwarded-For", fmt.Sprintf("11.0.%d.1", i))
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST: %v", err)
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		last = resp.StatusCode
+	}
+	if last != http.StatusTooManyRequests {
+		t.Fatalf("15 rapid requests with rotating X-Forwarded-For: last status %d, want 429", last)
+	}
+}
+
+func TestClientIPSource(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  gosqlxmcp.Config
+		want string
+	}{
+		{"default", gosqlxmcp.Config{}, "RemoteAddr"},
+		{"header", gosqlxmcp.Config{TrustedProxyHeader: "Cf-Connecting-Ip"}, "Cf-Connecting-Ip"},
+		{"hops", gosqlxmcp.Config{TrustedProxyHops: 2}, "X-Forwarded-For[-2]"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := clientIPSource(&tt.cfg); got != tt.want {
+				t.Errorf("clientIPSource() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWithBodyDeadline_SlowBodyOutsideMCP(t *testing.T) {
+	tests := []struct {
+		name      string
+		wrap      bool
+		wantClose bool
+	}{
+		{"with deadline", true, true},
+		// Control: without the wrapper the server keeps waiting for the body,
+		// proving the test detects the slowloris case.
+		{"without deadline", false, false},
+	}
+	for _, tt := range tests {
+		for _, path := range []string{"/health", "/nope"} {
+			t.Run(tt.name+path, func(t *testing.T) {
+				cfg := gosqlxmcp.DefaultConfig()
+				var h http.Handler = newMux(cfg, gosqlxmcp.New(cfg))
+				if tt.wrap {
+					h = withBodyDeadline(h, 200*time.Millisecond)
+				}
+				ln, err := net.Listen("tcp", "127.0.0.1:0")
+				if err != nil {
+					t.Fatalf("listen: %v", err)
+				}
+				srv := &http.Server{Handler: h, ReadHeaderTimeout: time.Second}
+				go func() { _ = srv.Serve(ln) }()
+				t.Cleanup(func() { _ = srv.Close() })
+
+				conn, err := net.Dial("tcp", ln.Addr().String())
+				if err != nil {
+					t.Fatalf("dial: %v", err)
+				}
+				defer conn.Close()
+				// Promise a body that never arrives.
+				req := "POST " + path + " HTTP/1.1\r\nHost: x\r\nContent-Length: 1000\r\n\r\nabc"
+				if _, err := conn.Write([]byte(req)); err != nil {
+					t.Fatalf("write: %v", err)
+				}
+				_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+				// The server replies, then must close the connection once the
+				// body-drain deadline passes instead of waiting for the body.
+				_, err = io.ReadAll(conn)
+				var ne net.Error
+				timedOut := errors.As(err, &ne) && ne.Timeout()
+				if closed := err == nil; closed != tt.wantClose || (!tt.wantClose && !timedOut) {
+					t.Errorf("connection closed by server = %v (err %v), want %v", closed, err, tt.wantClose)
+				}
+			})
+		}
+	}
 }

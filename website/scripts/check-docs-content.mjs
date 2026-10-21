@@ -50,6 +50,8 @@ const LINE_RULES = [
     name: 'per-release heading label',
     re: /^#{1,6}\s+(?:v\d+\.\d+(?:\.\d+)?\b|.*(\(\s*[^)]*\bv\d+\.\d+(\.\d+)?\+?[^)]*\)|\bNEW v\d+\.\d+|\bNew in v\d|\bAdded in v\d|\bin v\d+\.\d+(\.\d+)?\s*$))/i,
     hint: 'evergreen docs should not label headings with a release',
+    // The upgrade guide is organised by release on purpose ("## v1.13.0 → v1.14.0").
+    skip: (file) => file.endsWith(`${join('docs', 'MIGRATION.md')}`),
   },
   {
     name: 'bold per-release callout',

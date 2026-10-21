@@ -2,6 +2,31 @@
 
 All notable changes to the "GoSQLX" extension will be documented in this file.
 
+## [1.15.0] - 2026-07-30
+
+Bundles the GoSQLX v1.15.0 language server. The extension's own settings and
+commands are unchanged. See the
+[main CHANGELOG](https://github.com/ajitpratap0/GoSQLX/blob/main/CHANGELOG.md)
+for the full list.
+
+### Added
+- **ClickHouse at 83/83 of the QA corpus**: `ARRAY JOIN`, scalar CTEs,
+  `CREATE MATERIALIZED VIEW` with `ENGINE`/`TO`, numeric `SAMPLE` with
+  `OFFSET`, and `LIMIT offset, count` no longer produce diagnostics.
+- **Oracle**: `ROWNUM`/`ROWID`/`LEVEL`/`SYSDATE` pseudo-columns and
+  `PIVOT`/`UNPIVOT` `IN` lists with `AS` aliases parse.
+- Named `WINDOW` clauses and `EXTRACT(field FROM expr)` parse.
+
+### Fixed
+- **Document symbols** report each statement's real range instead of line 0
+  to the end of the file.
+- 37 more parser errors carry an error code and a source position, so their
+  diagnostics show a code and point at the offending token.
+
+### Security
+- `brace-expansion` pinned to `^5.0.8` in the extension's lockfile (build
+  tooling).
+
 ## [1.14.0] - 2026-04-12
 
 ### Added

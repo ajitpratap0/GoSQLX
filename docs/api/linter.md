@@ -13,7 +13,7 @@ The linter package provides SQL linting with 30 built-in rules (L001-L030) and a
 ### `Linter`
 ```go
 type Linter struct {
-    rules []Rule
+    // unexported fields: rules, ignore matcher, dialect
 }
 ```
 
@@ -86,6 +86,21 @@ linter := linter.New(
 )
 ```
 
+### `(l *Linter) SetDialect(dialect keywords.SQLDialect)`
+Select the SQL dialect used when tokenizing and parsing SQL for the rules that inspect tokens or the AST. An empty string or `keywords.DialectUnknown` restores the default dialect (PostgreSQL). Call it before linting; it is not synchronised with concurrent `Lint*` calls on the same `Linter`.
+
+This affects dialect-specific syntax such as SQL Server `TOP` and `[bracketed]` identifiers, the MySQL/SQLite `?` placeholder or MySQL `LIMIT offset, count`.
+
+```go
+import sqlkeywords "github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
+
+l := linter.New(rules...)
+l.SetDialect(sqlkeywords.DialectSQLServer)
+result := l.LintString("SELECT TOP 10 [id] FROM orders", "query.sql")
+```
+
+The CLI sets it from `gosqlx lint --dialect`.
+
 ### `(l *Linter) LintFile(filename string) FileResult`
 Lint a single SQL file.
 
@@ -129,6 +144,21 @@ Format violation for display.
 
 ### `FormatResult(result Result) string`
 Format linting results for display.
+
+## Linting With a Dialect From gosqlx
+
+### `gosqlx.LintWithDialect(sql string, dialect keywords.SQLDialect) (*gosqlx.LintResult, error)`
+Like `gosqlx.Lint`, which runs all 30 built-in rules, but tokenizes and parses the SQL with the given dialect, so the AST-based rules (L011-L030) also run on dialect-specific syntax such as SQL Server's `TOP` or `[bracketed]` identifiers. An empty dialect behaves exactly like `gosqlx.Lint`. An unknown dialect returns an error wrapping `gosqlx.ErrUnsupportedDialect`, as `gosqlx.ParseWithDialect` does. Safe for concurrent use.
+
+```go
+result, err := gosqlx.LintWithDialect("SELECT TOP 10 [id] FROM orders", sqlkeywords.DialectSQLServer)
+if err != nil {
+    log.Fatal(err)
+}
+for _, v := range result.Violations {
+    fmt.Println(linter.FormatViolation(v))
+}
+```
 
 ## Built-in Rules
 

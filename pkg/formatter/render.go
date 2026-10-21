@@ -1383,6 +1383,10 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		sb.WriteString(")")
 	} else if t.TableFunc != nil {
 		sb.WriteString(t.TableFunc.SQL())
+		if t.WithOrdinality {
+			sb.WriteString(" ")
+			sb.WriteString(f.kw("WITH ORDINALITY"))
+		}
 	} else if t.SetSubquery != nil {
 		sb.WriteString("(")
 		sb.WriteString(stmtSQL(t.SetSubquery))
@@ -1393,6 +1397,16 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 	if t.Alias != "" && t.Pivot == nil && t.Unpivot == nil {
 		sb.WriteString(" ")
 		sb.WriteString(ast.QuoteTableAlias(t.Alias))
+		if t.ColumnAliases != nil && len(t.ColumnAliases.Names) > 0 && t.TableFunc != nil {
+			sb.WriteString("(")
+			for i, c := range t.ColumnAliases.Names {
+				if i > 0 {
+					sb.WriteString(", ")
+				}
+				sb.WriteString(ast.QuoteColumnName(c))
+			}
+			sb.WriteString(")")
+		}
 	}
 	// SQL Server table hints follow the alias and precede PIVOT/UNPIVOT (#604).
 	if len(t.TableHints) > 0 {

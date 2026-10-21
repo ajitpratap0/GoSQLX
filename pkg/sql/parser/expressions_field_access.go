@@ -15,6 +15,8 @@
 package parser
 
 import (
+	"fmt"
+
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -23,11 +25,21 @@ import (
 // parseCompositeIndirection consumes field selections and array subscripts
 // after a parenthesized value: (f(x)).a, (row).*, (row).items[1].name.
 // Qualified identifiers keep their existing representation and parse path.
+//
+// Field selection is gated by Capabilities.SupportsCompositeFieldAccess
+// (PostgreSQL, BigQuery, Generic and the default dialect); array subscripts
+// are accepted in every dialect, as before field selection existed.
 func (p *Parser) parseCompositeIndirection(expr ast.Expression) (ast.Expression, error) {
 	fields := 0
 	for {
 		switch {
 		case p.isType(models.TokenTypePeriod):
+			if !p.Capabilities().SupportsCompositeFieldAccess {
+				return nil, goerrors.UnsupportedFeatureError(
+					fmt.Sprintf("composite field access (expr).field is not supported in %s", p.dialect),
+					p.currentLocation(), "",
+				)
+			}
 			fields++
 			if p.depth+fields > MaxRecursionDepth {
 				return nil, goerrors.RecursionDepthLimitError(
@@ -37,7 +49,7 @@ func (p *Parser) parseCompositeIndirection(expr ast.Expression) (ast.Expression,
 			pos := p.currentLocation()
 			p.advance() // Consume .
 			wildcard := p.isType(models.TokenTypeAsterisk) || p.isType(models.TokenTypeMul)
-			if !wildcard && !p.isIdentifier() && !p.isNonReservedKeyword() {
+			if !wildcard && !p.isIdentifier() && !p.isFieldLabelWord() {
 				return nil, p.expectedError("field name or * after .")
 			}
 			expr = &ast.FieldAccessExpression{
@@ -61,4 +73,39 @@ func (p *Parser) parseCompositeIndirection(expr ast.Expression) (ast.Expression,
 			return expr, nil
 		}
 	}
+}
+
+// isFieldLabelWord reports whether the current token is a bare word that may
+// name a field after "." in (expr).field. Like PostgreSQL's ColLabel, this
+// includes every keyword, reserved ones too: (a).order and (t).select are
+// valid, because nothing but a field name can follow the dot. String, number
+// and other literal tokens are excluded even when their text looks like a
+// word ('abc' arrives with its quotes stripped).
+func (p *Parser) isFieldLabelWord() bool {
+	t := p.currentToken.Token.Type
+	if t == models.TokenTypeNumber || t == models.TokenTypeEOF ||
+		(t >= models.TokenRangeStringStart && t < models.TokenRangeStringEnd) {
+		return false
+	}
+	return isBareWord(p.currentToken.Token.Value)
+}
+
+// isBareWord reports whether s has the shape of an unquoted SQL word: an
+// ASCII letter or '_' followed by ASCII letters, digits or '_'. Keywords are
+// ASCII, and a non-ASCII bare identifier already arrives as an identifier
+// token, so the ASCII check is sufficient here.
+func isBareWord(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '_', c|0x20 >= 'a' && c|0x20 <= 'z':
+		case c >= '0' && c <= '9' && i > 0:
+		default:
+			return false
+		}
+	}
+	return true
 }

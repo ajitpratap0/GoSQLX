@@ -45,6 +45,12 @@ func TestFieldAccessExpression(t *testing.T) {
 		{"*", true, `(f())."*"`},
 		{"MixedCase", true, `(f())."MixedCase"`},
 		{"a.b", false, `(f())."a.b"`},
+		// Any keyword is a bare field label after the dot (#839), so an
+		// unquoted reserved word stays bare and keeps Quoted false.
+		{"order", false, "(f()).order"},
+		{"SELECT", false, "(f()).SELECT"},
+		{"order", true, `(f())."order"`},
+		{"1st", false, `(f())."1st"`},
 		{`x"; SELECT 1; --`, false, `(f())."x""; SELECT 1; --"`},
 	} {
 		t.Run(tt.want, func(t *testing.T) {

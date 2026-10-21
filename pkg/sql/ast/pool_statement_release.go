@@ -575,6 +575,8 @@ func releaseTableReference(tr *TableReference, mode releaseMode) {
 	tr.Lateral = false
 	tr.Final = false
 	tr.TableHints = nil
+	tr.WithOrdinality = false
+	tr.ColumnAliases = nil // not pooled: a plain string list
 }
 
 // releaseSetOperationOperands releases the operands of a set operation held by

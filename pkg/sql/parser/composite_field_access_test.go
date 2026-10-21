@@ -88,7 +88,10 @@ func TestCompositeFieldAccessRoundTrip(t *testing.T) {
 
 func TestCompositeFieldAccessInvalid(t *testing.T) {
 	for _, query := range []string{
-		`SELECT (f(x)). FROM t`,
+		// "(f(x)). FROM t" is not here: like PostgreSQL, FROM after the dot
+		// is the field label "from" (see TestCompositeFieldAccessReservedLabels).
+		`SELECT (f(x)).`,
+		`SELECT (f(x)). , 1 FROM t`,
 		`SELECT (f(x)).123 FROM t`,
 		`SELECT (f(x)).'name' FROM t`,
 		`SELECT (f(x)).* .name FROM t`,

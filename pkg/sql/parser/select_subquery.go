@@ -198,6 +198,9 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		if p.isIdentifier() {
 			tableRef.Alias = p.currentToken.Token.Value
 			p.advance()
+			if err := p.parseTableFuncColumnAliases(&tableRef); err != nil {
+				return tableRef, err
+			}
 		}
 	}
 
@@ -365,6 +368,9 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 		if p.isIdentifier() {
 			ref.Alias = p.currentToken.Token.Value
 			p.advance()
+			if err := p.parseTableFuncColumnAliases(&ref); err != nil {
+				return ref, err
+			}
 		}
 	}
 
@@ -427,7 +433,46 @@ func (p *Parser) parseTableFunctionCall(ref *ast.TableReference) error {
 		return err
 	}
 	ref.TableFunc = call
+	// PostgreSQL: unnest(arr) WITH ORDINALITY. The other table-function
+	// dialects have no such modifier (BigQuery spells it WITH OFFSET after
+	// the alias), so it stays PostgreSQL-only.
+	if p.IsPostgreSQL() && p.isType(models.TokenTypeWith) &&
+		strings.EqualFold(p.peekToken().Token.Value, "ORDINALITY") {
+		p.advance() // Consume WITH
+		p.advance() // Consume ORDINALITY
+		ref.WithOrdinality = true
+	}
 	return nil
+}
+
+// parseTableFuncColumnAliases parses the optional column alias list that
+// follows a table function's alias: unnest(arr) AS g(elem) or
+// generate_series(1, 3) WITH ORDINALITY AS s(n, idx). It is a no-op for any
+// other table reference, so a "(" after a plain table alias keeps its
+// existing meaning in each dialect.
+func (p *Parser) parseTableFuncColumnAliases(ref *ast.TableReference) error {
+	if ref.TableFunc == nil || !p.isType(models.TokenTypeLParen) {
+		return nil
+	}
+	p.advance() // Consume (
+	list := &ast.ColumnAliasList{}
+	ref.ColumnAliases = list
+	for {
+		if !p.isIdentifier() && !p.isNonReservedKeyword() {
+			return p.expectedError("column alias in table function alias list")
+		}
+		list.Names = append(list.Names, p.currentToken.Token.Value)
+		p.advance()
+		if p.isType(models.TokenTypeComma) {
+			p.advance()
+			continue
+		}
+		if !p.isType(models.TokenTypeRParen) {
+			return p.expectedError(") after table function column aliases")
+		}
+		p.advance() // Consume )
+		return nil
+	}
 }
 
 // parseTableHints parses SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.

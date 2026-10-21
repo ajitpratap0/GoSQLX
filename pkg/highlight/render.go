@@ -19,6 +19,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // walk calls fn for every run of src in order: gaps between spans as Plain,
@@ -75,6 +76,12 @@ const ansiReset = "\x1b[0m"
 //
 // Styles are reset before every newline and re-applied after it, so output
 // stays correct when piped through head, grep or a pager.
+//
+// Source text cannot inject terminal escape sequences: C0 control characters
+// other than tab, newline and carriage return are shown as Unicode control
+// pictures (ESC becomes "␛", U+241B), DEL as "␡" (U+2421), and C1 control
+// characters and invalid UTF-8 bytes as U+FFFD. Only the renderer's own SGR
+// sequences reach the terminal.
 func ANSI(src string, spans []Span, opts ANSIOptions) string {
 	var b strings.Builder
 	b.Grow(len(src) + len(spans)*12)
@@ -94,6 +101,7 @@ func WriteANSI(w io.Writer, src string, spans []Span, opts ANSIOptions) error {
 	}
 	sw := stringWriter(w)
 	return walk(src, spans, func(text string, c Category) error {
+		text = terminalSafe(text)
 		seq := ""
 		if c < numCategories {
 			seq = sgr[c]
@@ -118,6 +126,71 @@ func WriteANSI(w io.Writer, src string, spans []Span, opts ANSIOptions) error {
 			text = rest
 		}
 	})
+}
+
+// terminalSafe returns s with every character a terminal could interpret as
+// a control function replaced by a visible stand-in: C0 controls except
+// '\t', '\n' and '\r' become U+2400+c (control pictures), DEL becomes
+// U+2421, and C1 controls (U+0080-U+009F) and invalid UTF-8 bytes become
+// U+FFFD. Clean input is returned unchanged without allocating.
+func terminalSafe(s string) string {
+	i := 0
+	for i < len(s) {
+		c := s[i]
+		if c < utf8.RuneSelf {
+			if isTerminalControl(c) {
+				break
+			}
+			i++
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if isUnsafeRune(r, size) {
+			break
+		}
+		i += size
+	}
+	if i == len(s) {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s) + 8)
+	b.WriteString(s[:i])
+	for i < len(s) {
+		c := s[i]
+		if c < utf8.RuneSelf {
+			switch {
+			case c == 0x7f:
+				b.WriteRune('\u2421')
+			case isTerminalControl(c):
+				b.WriteRune(0x2400 + rune(c))
+			default:
+				b.WriteByte(c)
+			}
+			i++
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if isUnsafeRune(r, size) {
+			b.WriteRune(utf8.RuneError)
+		} else {
+			b.WriteString(s[i : i+size])
+		}
+		i += size
+	}
+	return b.String()
+}
+
+// isTerminalControl reports whether the ASCII byte c is a control character
+// that terminalSafe must replace.
+func isTerminalControl(c byte) bool {
+	return c == 0x7f || c < 0x20 && c != '\t' && c != '\n' && c != '\r'
+}
+
+// isUnsafeRune reports whether a decoded non-ASCII rune is a C1 control or an
+// invalid UTF-8 byte (which a non-UTF-8 terminal could read as a C1 control).
+func isUnsafeRune(r rune, size int) bool {
+	return r == utf8.RuneError && size == 1 || r >= 0x80 && r <= 0x9f
 }
 
 // sgrFor builds the "\x1b[...m" sequence for a style, or "" for no styling.

@@ -975,6 +975,22 @@ corrected LICENSE is served for `go get` users.
 
 ---
 
+## [1.9.1] - 2026-02-28 — Documentation & Community Health
+
+Documentation and community-health release; no runtime behavior changes.
+(These changes were also announced in the 1.9.2 notes.)
+
+### 📚 Documentation (PR #351)
+- Fix pkg.go.dev license detection and add comprehensive doc comments across
+  `pkg/sql/ast`, `pkg/transform`, `pkg/sql/parser`, `pkg/errors`, `pkg/models`,
+  `pkg/formatter`, `pkg/gosqlx` and the tokenizer packages
+
+### 🌍 Community (PR #350)
+- Open-source health files (issue and discussion templates, SUPPORT.md, etc.)
+- LLM discovery metadata and SEO improvements for project discoverability
+
+---
+
 ## [1.9.0] - 2026-02-28 - SQLite PRAGMA, Tautology Detection & 19 Post-UAT Fixes
 
 19 actionable bugs fixed (PR #348) — 3 new capabilities, 8 parser fixes,
@@ -2363,6 +2379,21 @@ This substantial test coverage increase provides strong confidence in the AST pa
 - Extended load testing (30+ seconds)
 - Memory leak detection
 
+### Upgrade Guide (0.9.0 to 1.0.0)
+
+1. **Token Type Changes**: Review any code that directly references token type constants
+2. **Pool Usage**: Always use `defer` when returning objects to pools
+3. **Import Paths**: Update imports from test packages if used
+4. **Performance**: Expect 47% performance improvement, adjust timeouts accordingly
+
+For the fuller guide, see [Upgrading to v1.0.0 from v0.9.0](https://github.com/ajitpratap0/GoSQLX/blob/main/docs/UPGRADE_GUIDE.md) in `docs/UPGRADE_GUIDE.md`.
+
+### Breaking Changes in 1.0.0
+
+- Token type constants have been reorganized to prevent collisions
+- Some internal APIs have been refactored for better performance
+- Test helper functions have been updated
+
 ## [0.9.0] - 2024-01-15
 
 ### Added
@@ -2405,21 +2436,6 @@ This substantial test coverage increase provides strong confidence in the AST pa
 | 0.9.0 | 2024-01-15 | Legacy | Initial public release |
 | 0.8.0 | 2023-12-01 | Pre-release | Prototype version |
 
-## Upgrade Guide
-
-### From 0.9.0 to 1.0.0
-
-1. **Token Type Changes**: Review any code that directly references token type constants
-2. **Pool Usage**: Always use `defer` when returning objects to pools
-3. **Import Paths**: Update imports from test packages if used
-4. **Performance**: Expect 47% performance improvement, adjust timeouts accordingly
-
-### Breaking Changes in 1.0.0
-
-- Token type constants have been reorganized to prevent collisions
-- Some internal APIs have been refactored for better performance
-- Test helper functions have been updated
-
 ## Support
 
 For questions about upgrading or changelog entries:
@@ -2432,6 +2448,7 @@ For questions about upgrading or changelog entries:
 [1.13.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.12.1...v1.13.0
 [1.12.1]: https://github.com/ajitpratap0/GoSQLX/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.10.2...v1.12.0
+[1.9.1]: https://github.com/ajitpratap0/GoSQLX/compare/v1.9.0...v1.9.1
 [1.8.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.5.1...v1.6.0

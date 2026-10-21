@@ -82,3 +82,9 @@ api-reference-*.png
 
 # Built by `make -C wasm build`; not used by the website (see website/scripts/build-wasm.sh)
 /wasm/playground/gosqlx.wasm
+
+# Internal, non-user-facing material (#772): keep local, never track
+.claude/settings.json
+docs/ARCHITECT_REVIEW_*.md
+docs/audits/
+docs/superpowers/

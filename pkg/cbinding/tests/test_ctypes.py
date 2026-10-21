@@ -44,10 +44,18 @@ def _load_library():
     for path in _LIB_PATHS:
         if os.path.exists(path):
             lib = ctypes.CDLL(path)
+            # Results are declared c_void_p (not c_char_p) so ctypes hands back
+            # the original malloc'd pointer. With c_char_p, ctypes converts the
+            # result to a Python bytes copy and gosqlx_free would then be given
+            # a pointer it never allocated.
             for fn_name in _RESULT_FUNCTIONS:
                 fn = getattr(lib, fn_name, None)
                 if fn is not None:
-                    fn.restype = ctypes.c_char_p
+                    fn.restype = ctypes.c_void_p
+                    if fn_name != "gosqlx_version":
+                        fn.argtypes = [ctypes.c_char_p]
+            lib.gosqlx_free.argtypes = [ctypes.c_void_p]
+            lib.gosqlx_free.restype = None
             return lib
     raise RuntimeError(
         "Could not find libgosqlx. Build it first with:\n"
@@ -75,8 +83,10 @@ def _call(fn_name: str, sql: str) -> dict:
     result_ptr = fn(sql.encode("utf-8"))
     if result_ptr is None:
         raise RuntimeError(f"{fn_name} returned NULL")
-    result_json = ctypes.cast(result_ptr, ctypes.c_char_p).value.decode("utf-8")
-    _lib.gosqlx_free(result_ptr)
+    try:
+        result_json = ctypes.string_at(result_ptr).decode("utf-8")
+    finally:
+        _lib.gosqlx_free(result_ptr)
     return json.loads(result_json)
 
 
@@ -230,12 +240,14 @@ class TestGosqlxExtract(unittest.TestCase):
 
 @_skip_if_no_lib
 class TestGosqlxVersion(unittest.TestCase):
-    """Tests for gosqlx_version (cached singleton — must NOT be freed)."""
+    """Tests for gosqlx_version (caller-owned string — must be freed with gosqlx_free)."""
 
     def test_version_is_semver(self):
-        # Do NOT call gosqlx_free — the version is a cached singleton.
         result_ptr = _lib.gosqlx_version()
-        version = ctypes.cast(result_ptr, ctypes.c_char_p).value.decode("utf-8")
+        try:
+            version = ctypes.string_at(result_ptr).decode("utf-8")
+        finally:
+            _lib.gosqlx_free(result_ptr)
         self.assertGreater(len(version), 0)
         parts = version.split(".")
         self.assertEqual(len(parts), 3, f"Expected semver X.Y.Z, got: {version}")
@@ -243,12 +255,18 @@ class TestGosqlxVersion(unittest.TestCase):
             self.assertTrue(part.isdigit(), f"Non-numeric semver part: {part!r} in {version!r}")
 
     def test_version_is_stable(self):
-        """Calling gosqlx_version twice must return the same string."""
+        """Two calls return equal strings in distinct allocations, both freeable."""
         ptr1 = _lib.gosqlx_version()
         ptr2 = _lib.gosqlx_version()
-        v1 = ctypes.cast(ptr1, ctypes.c_char_p).value.decode("utf-8")
-        v2 = ctypes.cast(ptr2, ctypes.c_char_p).value.decode("utf-8")
-        self.assertEqual(v1, v2)
+        try:
+            self.assertNotEqual(ptr1, ptr2, "gosqlx_version must return a fresh allocation")
+            v1 = ctypes.string_at(ptr1).decode("utf-8")
+            v2 = ctypes.string_at(ptr2).decode("utf-8")
+            self.assertEqual(v1, v2)
+        finally:
+            _lib.gosqlx_free(ptr1)
+            if ptr2 != ptr1:
+                _lib.gosqlx_free(ptr2)
 
 
 if __name__ == "__main__":

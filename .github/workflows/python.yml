@@ -1,0 +1,82 @@
+name: Python Bindings
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'pkg/**'
+      - 'python/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/python.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'pkg/**'
+      - 'python/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/python.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pygosqlx:
+    name: pygosqlx (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, macos-latest ]
+        python-version: [ '3.10', '3.13' ]
+
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+    - name: Set up Go
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+      with:
+        go-version: '1.26'
+        check-latest: true
+
+    - name: Set up Python
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Build libgosqlx shared library
+      working-directory: pkg/cbinding
+      run: bash build.sh
+
+    - name: Locate shared library
+      shell: bash
+      run: |
+        case "$(uname -s)" in
+          Darwin) ext=dylib ;;
+          *) ext=so ;;
+        esac
+        lib="$GITHUB_WORKSPACE/python/pygosqlx/lib/libgosqlx.$ext"
+        test -f "$lib" || { echo "::error::shared library not built at $lib"; exit 1; }
+        echo "GOSQLX_LIB_PATH=$lib" >> "$GITHUB_ENV"
+        # The raw ctypes ABI harness looks for the library next to pkg/cbinding.
+        cp "$lib" "pkg/cbinding/libgosqlx.$ext"
+
+    - name: Install pygosqlx
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install -e "python[dev]"
+
+    - name: Smoke test (version() twice must not double-free)
+      run: python -c "import pygosqlx as p; a = p.version(); b = p.version(); assert a == b, (a, b); print('libgosqlx', a, 'pygosqlx', p.__version__)"
+
+    - name: Run pytest
+      run: python -m pytest python/tests -v -rs
+
+    - name: Run raw ctypes ABI tests
+      run: python pkg/cbinding/tests/test_ctypes.py -v

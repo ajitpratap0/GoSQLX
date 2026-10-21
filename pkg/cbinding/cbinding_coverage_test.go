@@ -364,6 +364,28 @@ func TestCGosqlxVersion_Idempotent(t *testing.T) {
 	}
 }
 
+// TestCGosqlxVersion_CallerOwned is the regression test for the double free
+// hit by pygosqlx: gosqlx_version is documented as returning a caller-owned
+// string that must be released with gosqlx_free, so two calls must yield two
+// distinct allocations that can both be freed.
+func TestCGosqlxVersion_CallerOwned(t *testing.T) {
+	v1, v2, distinct := versionTwiceFreed()
+	if !distinct {
+		t.Fatal("gosqlx_version returned the same pointer twice; freeing both would double free")
+	}
+	if v1 != v2 {
+		t.Errorf("gosqlx_version strings differ: %q vs %q", v1, v2)
+	}
+	if v1 != VERSION {
+		t.Errorf("gosqlx_version = %q, want %q", v1, VERSION)
+	}
+}
+
+// TestCGosqlxFree_Nil verifies gosqlx_free(NULL) is a safe no-op.
+func TestCGosqlxFree_Nil(t *testing.T) {
+	freeNil()
+}
+
 // ---------------------------------------------------------------------------
 // toJSON helper — tested directly (same package)
 // ---------------------------------------------------------------------------

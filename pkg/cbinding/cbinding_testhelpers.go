@@ -114,11 +114,34 @@ func extractMetadataRaw(sql string) string {
 	return C.GoString(cResult)
 }
 
-// getVersion calls the real gosqlx_version C export and returns the version string.
-// The returned C string is a cached singleton and must NOT be freed.
+// getVersion calls the real gosqlx_version C export and returns the version string,
+// freeing the returned C string as the documented ownership contract requires.
 func getVersion() string {
 	cResult := gosqlx_version()
+	defer gosqlx_free(cResult)
 	return C.GoString(cResult)
+}
+
+// versionTwiceFreed calls gosqlx_version twice, checks that each call returned a
+// distinct caller-owned allocation, and frees both results with gosqlx_free. It
+// returns both decoded strings and whether the two pointers were distinct. A
+// regression to a cached pointer makes the second gosqlx_free a double free.
+func versionTwiceFreed() (string, string, bool) {
+	p1 := gosqlx_version()
+	p2 := gosqlx_version()
+	distinct := p1 != p2
+	v1 := C.GoString(p1)
+	v2 := C.GoString(p2)
+	gosqlx_free(p1)
+	if distinct {
+		gosqlx_free(p2)
+	}
+	return v1, v2, distinct
+}
+
+// freeNil calls gosqlx_free with a NULL pointer, which must be a no-op.
+func freeNil() {
+	gosqlx_free(nil)
 }
 
 // toJSONString calls the real toJSON helper and returns the JSON as a Go string,

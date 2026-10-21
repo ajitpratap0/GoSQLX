@@ -76,6 +76,15 @@ func startMySQLImage(t *testing.T, image string, env map[string]string, waitFor 
 		t.Skip("Docker not available, skipping integration test")
 	}
 	ctx := context.Background()
+	// Bound the container start by the test binary's deadline. A slow image
+	// pull or server init on CI otherwise runs into the -timeout panic, which
+	// fails the whole package instead of skipping this integration test.
+	startCtx := ctx
+	if deadline, ok := t.Deadline(); ok {
+		var cancel context.CancelFunc
+		startCtx, cancel = context.WithDeadline(ctx, deadline.Add(-30*time.Second))
+		defer cancel()
+	}
 	req := testcontainers.ContainerRequest{
 		Image:        image,
 		ExposedPorts: []string{"3306/tcp"},
@@ -92,7 +101,7 @@ func startMySQLImage(t *testing.T, image string, env map[string]string, waitFor 
 				t.Skipf("testcontainers panicked: %v", r)
 			}
 		}()
-		c, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		c, err = testcontainers.GenericContainer(startCtx, testcontainers.GenericContainerRequest{
 			ContainerRequest: req,
 			Started:          true,
 		})

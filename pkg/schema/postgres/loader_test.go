@@ -63,6 +63,14 @@ func startPostgresServer(t *testing.T) (db *sql.DB, host, port string) {
 		t.Skip("Docker not available, skipping integration test")
 	}
 	ctx := context.Background()
+	// Bound the container start by the test binary's deadline so a slow CI
+	// pull or init skips this integration test instead of panicking the package.
+	startCtx := ctx
+	if deadline, ok := t.Deadline(); ok {
+		var cancel context.CancelFunc
+		startCtx, cancel = context.WithDeadline(ctx, deadline.Add(-30*time.Second))
+		defer cancel()
+	}
 	req := testcontainers.ContainerRequest{
 		Image:        "postgres:16-alpine",
 		ExposedPorts: []string{"5432/tcp"},
@@ -83,7 +91,7 @@ func startPostgresServer(t *testing.T) (db *sql.DB, host, port string) {
 				t.Skipf("testcontainers panicked: %v", r)
 			}
 		}()
-		c, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		c, err = testcontainers.GenericContainer(startCtx, testcontainers.GenericContainerRequest{
 			ContainerRequest: req,
 			Started:          true,
 		})

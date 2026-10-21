@@ -29,6 +29,8 @@
 package parser
 
 import (
+	"strings"
+
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 )
 
@@ -89,6 +91,25 @@ var (
 	compoundFullOuterJoin  = []models.Token{{Type: models.TokenTypeFull, Value: "FULL"}, {Type: models.TokenTypeOuter, Value: "OUTER"}, {Type: models.TokenTypeJoin, Value: "JOIN"}}
 )
 
+// compoundByValue maps the multi-word Value of a generic keyword token to its
+// sub-token table. Matching is ASCII case-insensitive; see compoundParts.
+var compoundByValue = [...]struct {
+	value string
+	parts []models.Token
+}{
+	{"INNER JOIN", compoundInnerJoin},
+	{"LEFT JOIN", compoundLeftJoin},
+	{"RIGHT JOIN", compoundRightJoin},
+	{"FULL JOIN", compoundFullJoin},
+	{"CROSS JOIN", compoundCrossJoin},
+	{"LEFT OUTER JOIN", compoundLeftOuterJoin},
+	{"RIGHT OUTER JOIN", compoundRightOuterJoin},
+	{"FULL OUTER JOIN", compoundFullOuterJoin},
+	{"ORDER BY", compoundOrderBy},
+	{"GROUP BY", compoundGroupBy},
+	{"GROUPING SETS", compoundGroupingSets},
+}
+
 // compoundParts returns the read-only sub-token table for a compound token such
 // as INNER_JOIN → [INNER, JOIN], or nil if the token is not compound.
 // The returned slice is shared package data and must not be modified.
@@ -114,33 +135,19 @@ func compoundParts(t *models.TokenWithSpan) []models.Token {
 		return compoundGroupingSets
 	}
 
-	// Value-based compound token matching (tokenizer may produce these as
-	// TokenTypeKeyword with a multi-word value).
-	switch t.Token.Value {
-	case "INNER JOIN":
-		return compoundInnerJoin
-	case "LEFT JOIN":
-		return compoundLeftJoin
-	case "RIGHT JOIN":
-		return compoundRightJoin
-	case "FULL JOIN":
-		return compoundFullJoin
-	case "CROSS JOIN":
-		return compoundCrossJoin
-	case "LEFT OUTER JOIN":
-		return compoundLeftOuterJoin
-	case "RIGHT OUTER JOIN":
-		return compoundRightOuterJoin
-	case "FULL OUTER JOIN":
-		return compoundFullOuterJoin
-	case "ORDER BY":
-		return compoundOrderBy
-	case "GROUP BY":
-		return compoundGroupBy
-	case "GROUPING SETS":
-		return compoundGroupingSets
+	// Value-based compound token matching. The tokenizer emits these as
+	// TokenTypeKeyword whose Value keeps the source spelling ("cross join",
+	// "Grouping Sets"), so the match is case-insensitive (#842). Only keyword
+	// tokens qualify: a string literal such as 'CROSS JOIN' is not a join.
+	if t.Token.Type != models.TokenTypeKeyword {
+		return nil
 	}
-
+	v := t.Token.Value
+	for i := range compoundByValue {
+		if len(v) == len(compoundByValue[i].value) && strings.EqualFold(v, compoundByValue[i].value) {
+			return compoundByValue[i].parts
+		}
+	}
 	return nil
 }
 

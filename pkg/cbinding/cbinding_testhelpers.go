@@ -151,3 +151,132 @@ func toJSONString(v interface{}) string {
 	defer gosqlx_free(cStr)
 	return C.GoString(cStr)
 }
+
+// export identifies one of the original single-argument exports that has a
+// *_dialect variant, so tests can call either form through one helper.
+type export int
+
+const (
+	exportParse export = iota
+	exportValidate
+	exportFormat
+	exportExtractTables
+	exportExtractColumns
+	exportExtractFunctions
+	exportExtractMetadata
+)
+
+// allExports lists every export that has a *_dialect variant.
+var allExports = []export{
+	exportParse, exportValidate, exportFormat,
+	exportExtractTables, exportExtractColumns, exportExtractFunctions, exportExtractMetadata,
+}
+
+func (e export) String() string {
+	return [...]string{"parse", "validate", "format", "extract_tables",
+		"extract_columns", "extract_functions", "extract_metadata"}[e]
+}
+
+// cString converts s to a C string the caller frees with C.free; a nil s
+// yields NULL.
+func cString(s *string) *C.char {
+	if s == nil {
+		return nil
+	}
+	return C.CString(*s)
+}
+
+func freeCString(p *C.char) {
+	if p != nil {
+		C.free(unsafe.Pointer(p))
+	}
+}
+
+// takeResult decodes a returned C string and frees it with gosqlx_free, as
+// the ownership contract requires of every result.
+func takeResult(p *C.char) string {
+	defer gosqlx_free(p)
+	return C.GoString(p)
+}
+
+// callLegacyRaw calls the original export e and returns its raw JSON. A nil sql
+// passes NULL.
+func callLegacyRaw(e export, sql *string) string {
+	cSQL := cString(sql)
+	defer freeCString(cSQL)
+	switch e {
+	case exportParse:
+		return takeResult(gosqlx_parse(cSQL))
+	case exportValidate:
+		return takeResult(gosqlx_validate(cSQL))
+	case exportFormat:
+		return takeResult(gosqlx_format(cSQL))
+	case exportExtractTables:
+		return takeResult(gosqlx_extract_tables(cSQL))
+	case exportExtractColumns:
+		return takeResult(gosqlx_extract_columns(cSQL))
+	case exportExtractFunctions:
+		return takeResult(gosqlx_extract_functions(cSQL))
+	default:
+		return takeResult(gosqlx_extract_metadata(cSQL))
+	}
+}
+
+// callDialectRaw calls the *_dialect variant of e and returns its raw JSON. A
+// nil sql or dialect passes NULL.
+func callDialectRaw(e export, sql, dialect *string) string {
+	cSQL := cString(sql)
+	defer freeCString(cSQL)
+	cDialect := cString(dialect)
+	defer freeCString(cDialect)
+	switch e {
+	case exportParse:
+		return takeResult(gosqlx_parse_dialect(cSQL, cDialect))
+	case exportValidate:
+		return takeResult(gosqlx_validate_dialect(cSQL, cDialect))
+	case exportFormat:
+		return takeResult(gosqlx_format_dialect(cSQL, cDialect))
+	case exportExtractTables:
+		return takeResult(gosqlx_extract_tables_dialect(cSQL, cDialect))
+	case exportExtractColumns:
+		return takeResult(gosqlx_extract_columns_dialect(cSQL, cDialect))
+	case exportExtractFunctions:
+		return takeResult(gosqlx_extract_functions_dialect(cSQL, cDialect))
+	default:
+		return takeResult(gosqlx_extract_metadata_dialect(cSQL, cDialect))
+	}
+}
+
+// lintRaw calls gosqlx_lint and returns its raw JSON. A nil options passes NULL.
+func lintRaw(sql string, options *string) string {
+	cSQL := C.CString(sql)
+	defer C.free(unsafe.Pointer(cSQL))
+	cOpts := cString(options)
+	defer freeCString(cOpts)
+	return takeResult(gosqlx_lint(cSQL, cOpts))
+}
+
+// securityScanRaw calls gosqlx_security_scan and returns its raw JSON. A nil
+// sql passes NULL.
+func securityScanRaw(sql *string) string {
+	cSQL := cString(sql)
+	defer freeCString(cSQL)
+	return takeResult(gosqlx_security_scan(cSQL))
+}
+
+// transpileRaw calls gosqlx_transpile and returns its raw JSON. A nil argument
+// passes NULL.
+func transpileRaw(sql, from, to *string) string {
+	cSQL := cString(sql)
+	defer freeCString(cSQL)
+	cFrom := cString(from)
+	defer freeCString(cFrom)
+	cTo := cString(to)
+	defer freeCString(cTo)
+	return takeResult(gosqlx_transpile(cSQL, cFrom, cTo))
+}
+
+// dialectsRaw calls gosqlx_dialects and returns its raw JSON.
+func dialectsRaw() string {
+	return takeResult(gosqlx_dialects())
+}

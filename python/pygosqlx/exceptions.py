@@ -50,3 +50,20 @@ class ValidationError(GoSQLXError):
     """Raised when SQL validation fails."""
 
     pass
+
+
+class UnsupportedDialectError(GoSQLXError, ValueError):
+    """Raised when a ``dialect`` argument is not a supported SQL dialect name.
+
+    Also a :class:`ValueError`, since it signals a bad argument rather than bad
+    SQL. ``code`` is ``"E4002"``; :func:`pygosqlx.dialects` lists the valid
+    names.
+    """
+
+    pass
+
+
+class TranspileError(GoSQLXError):
+    """Raised when SQL cannot be transpiled from one dialect to another."""
+
+    pass

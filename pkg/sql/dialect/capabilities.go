@@ -262,6 +262,15 @@ type Capabilities struct {
 	// parser exposes that mode through parser.WithPipesAsConcat. Every other
 	// dialect treats || as concatenation.
 	PipesAsLogicalOr bool
+
+	// --- Expressions ---
+
+	// SupportsCompositeFieldAccess indicates field selection on a
+	// parenthesized value: (expr).field, (expr).* and (SELECT ...).field.
+	// This is the SQL:1999 <field reference> on a row / composite value
+	// (PostgreSQL composite types, BigQuery STRUCT values). Dialects without
+	// composite row values (MySQL, MariaDB, SQL Server, SQLite, ...) reject it.
+	SupportsCompositeFieldAccess bool
 }
 
 // Capabilities returns the capability matrix for d.
@@ -286,6 +295,7 @@ func (d Dialect) Capabilities() Capabilities {
 			SupportsMaterializedView:      true,
 			SupportsDoubleQuoteIdentifier: true,
 			SupportsILike:                 true,
+			SupportsCompositeFieldAccess:  true, // (row).field
 		}
 
 	case MySQL:
@@ -387,6 +397,7 @@ func (d Dialect) Capabilities() Capabilities {
 			SupportsMaterializedView:      true,
 			SupportsBacktickQuoting:       true,
 			SupportsDoubleQuoteIdentifier: true,
+			SupportsCompositeFieldAccess:  true, // (struct_expr).field
 		}
 
 	case Redshift:
@@ -408,6 +419,7 @@ func (d Dialect) Capabilities() Capabilities {
 			SupportsMerge:                 true,
 			SupportsReturning:             false, // RETURNING is PG/Oracle, not ANSI
 			SupportsDoubleQuoteIdentifier: true,
+			SupportsCompositeFieldAccess:  true, // SQL:1999 <field reference>
 		}
 
 	case Unknown:
@@ -424,6 +436,7 @@ func (d Dialect) Capabilities() Capabilities {
 			SupportsReturning:             true,
 			SupportsDoubleQuoteIdentifier: true,
 			SupportsILike:                 true,
+			SupportsCompositeFieldAccess:  true, // PostgreSQL-ish default
 		}
 	}
 }

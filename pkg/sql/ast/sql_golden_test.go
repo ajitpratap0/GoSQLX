@@ -156,6 +156,11 @@ var goldenParseCases = []goldenParseCase{
 	{"postgresql/merge", keywords.DialectPostgreSQL, "MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN UPDATE SET a = s.a WHEN NOT MATCHED THEN INSERT (id, a) VALUES (s.id, s.a)", "MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN UPDATE SET a = s.a WHEN NOT MATCHED THEN INSERT (id, a) VALUES (s.id, s.a)", true},
 	{"postgresql/create index", keywords.DialectPostgreSQL, "CREATE UNIQUE INDEX IF NOT EXISTS i ON t USING btree (a DESC, b) WHERE c > 0", "CREATE UNIQUE INDEX IF NOT EXISTS i ON t USING btree (a DESC, b) WHERE c > 0", true},
 	{"postgresql/create view", keywords.DialectPostgreSQL, "CREATE OR REPLACE VIEW v (a) AS SELECT a FROM t WHERE b IN (SELECT b FROM u)", "CREATE OR REPLACE VIEW v (a) AS SELECT a FROM t WHERE b IN (SELECT b FROM u)", true},
+	{"postgresql/reserved composite fields", keywords.DialectPostgreSQL, "SELECT (a).order, (t).select, (f(x)).Group[1].end FROM t", "SELECT (a).order, (t).select, (f(x)).Group[1].end FROM t", true},
+	{"default/reserved composite field", "", "SELECT (a).order FROM t", "SELECT (a).order FROM t", true},
+	{"postgresql/table function column aliases", keywords.DialectPostgreSQL, "SELECT * FROM unnest(arr) AS g(a, b)", "SELECT * FROM unnest(arr) g(a, b)", true},
+	{"postgresql/with ordinality", keywords.DialectPostgreSQL, "SELECT * FROM unnest(arr) WITH ORDINALITY", "SELECT * FROM unnest(arr) WITH ORDINALITY", true},
+	{"postgresql/with ordinality alias list", keywords.DialectPostgreSQL, "SELECT * FROM t CROSS JOIN LATERAL unnest(t.arr) WITH ORDINALITY AS u(v, \"order\")", "SELECT * FROM t CROSS JOIN LATERAL unnest(t.arr) WITH ORDINALITY u(v, \"order\")", true},
 	{"snowflake/qualify-free select", keywords.DialectSnowflake, "SELECT a FROM t WHERE b = 'x' ORDER BY a LIMIT 5", "SELECT a FROM t WHERE b = 'x' ORDER BY a LIMIT 5", true},
 }
 

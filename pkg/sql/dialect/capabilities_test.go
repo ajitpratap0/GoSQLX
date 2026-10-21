@@ -289,6 +289,22 @@ func TestCapabilities_PipesAsLogicalOr(t *testing.T) {
 	}
 }
 
+// TestCapabilities_CompositeFieldAccess pins which dialects accept
+// (expr).field: those with composite / struct values plus the standard and
+// default dialects (#839).
+func TestCapabilities_CompositeFieldAccess(t *testing.T) {
+	t.Parallel()
+	for _, d := range []Dialect{
+		Unknown, Generic, PostgreSQL, MySQL, MariaDB, SQLServer, Oracle,
+		SQLite, Snowflake, ClickHouse, BigQuery, Redshift,
+	} {
+		want := d == Unknown || d == Generic || d == PostgreSQL || d == BigQuery
+		if got := d.Capabilities().SupportsCompositeFieldAccess; got != want {
+			t.Errorf("%q.Capabilities().SupportsCompositeFieldAccess = %v, want %v", d, got, want)
+		}
+	}
+}
+
 // TestCapabilities_UnknownIsPermissive verifies the Unknown dialect returns
 // the permissive default that enables common standard features. Callers
 // that never pass WithDialect rely on this.

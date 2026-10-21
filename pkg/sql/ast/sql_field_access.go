@@ -44,11 +44,13 @@ func (f *FieldAccessExpression) writeSQL(buf *bytes.Buffer) {
 		buf.WriteByte(')')
 	}
 	buf.WriteByte('.')
-	if f.Quoted {
+	// Any keyword, reserved or not, is a valid field label after the dot
+	// ((a).order), so an unquoted field is quoted only when its characters
+	// could not form a bare word; quoting a reserved word here would turn
+	// Quoted false into true on a re-parse.
+	if f.Quoted || (f.Field != "*" && !isBareNameChars(f.Field, false)) {
 		writeQuotedIdentifier(buf, f.Field)
-	} else if f.Field == "*" {
-		buf.WriteByte('*')
 	} else {
-		writeName(buf, f.Field)
+		buf.WriteString(f.Field)
 	}
 }

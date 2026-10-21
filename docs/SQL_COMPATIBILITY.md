@@ -58,7 +58,8 @@ This matrix documents the comprehensive SQL feature support in GoSQLX across dif
 #### PostgreSQL Extensions and SQL Standards
 - ✅ **PostgreSQL Extensions**:
   - **LATERAL JOIN** - Correlated subqueries and table functions in FROM/JOIN clauses; select the PostgreSQL dialect for table functions
-  - **Composite Field Access** - `(get_item(payload)).name`, `(payload).*`, quoted fields and chained field/subscript access such as `(payload).items[1].name` and `(items)[1].name`. Reserved keyword field names currently require double quotes, e.g. `(payload)."order"`.
+  - **Table Function Aliases** - Column alias lists and `WITH ORDINALITY` on FROM/JOIN table functions: `unnest(arr) AS g(elem)`, `generate_series(1, 3) WITH ORDINALITY AS s(n, idx)`. `WITH ORDINALITY` is PostgreSQL-only.
+  - **Composite Field Access** - `(get_item(payload)).name`, `(payload).*`, quoted fields and chained field/subscript access such as `(payload).items[1].name` and `(items)[1].name`. Any keyword, reserved ones included, is accepted as a field name, e.g. `(payload).order`. Field access parses for PostgreSQL, BigQuery, the generic dialect and the default (no dialect) parser; MySQL, MariaDB, SQL Server, SQLite, Oracle, Snowflake, ClickHouse and Redshift reject it with E4001.
   - **JSON/JSONB Operators** - Complete operator set (`->`, `->>`, `#>`, `#>>`, `@>`, `<@`, `?`, `?|`, `?&`, `#-`)
   - **DISTINCT ON** - PostgreSQL-specific row selection
   - **FILTER Clause** - Conditional aggregation (SQL:2003)

@@ -21,7 +21,7 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
-	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
+	"github.com/ajitpratap0/GoSQLX/pkg/highlight"
 )
 
 // A diagnostic's range starts at the offending character as an editor counts it:
@@ -65,21 +65,17 @@ func TestDiagnosticPosition_TabsAndComments(t *testing.T) {
 // Semantic tokens are encoded with the character offsets editors use, so a tab
 // and a comment before a token do not shift it.
 func TestSemanticTokens_TabAndCommentOffsets(t *testing.T) {
-	tkz := tokenizer.GetTokenizer()
-	defer tokenizer.PutTokenizer(tkz)
-	tokens, err := tkz.Tokenize([]byte("a\tb /* x */ c"))
-	if err != nil {
-		t.Fatalf("tokenize: %v", err)
-	}
-	data := encodeSemanticTokens(tokens)
+	content := "a\tb /* x */ c"
+	data := encodeSemanticTokens(content, highlight.Spans(content))
 
-	// [deltaLine, deltaStartChar, length, type, modifiers] per identifier.
+	// [deltaLine, deltaStartChar, length, type, modifiers] per token.
 	type enc struct{ dLine, dStart, length uint32 }
 	var got []enc
 	for i := 0; i+4 < len(data); i += 5 {
 		got = append(got, enc{data[i], data[i+1], data[i+2]})
 	}
-	want := []enc{{0, 0, 1}, {0, 2, 1}, {0, 10, 1}} // a at 0, b at 2, c at 12
+	// a at 0, b at 2, the comment at 4 (7 long), c at 12.
+	want := []enc{{0, 0, 1}, {0, 2, 1}, {0, 2, 7}, {0, 8, 1}}
 	if len(got) != len(want) {
 		t.Fatalf("got %d semantic tokens, want %d: %v", len(got), len(want), data)
 	}

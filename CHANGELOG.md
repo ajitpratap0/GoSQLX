@@ -210,8 +210,40 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   `OVER (w)`, and `WINDOW w AS (...)` no longer repeats its name inside the
   parentheses. The non-standard `WINDOW w AS w2` is normalized to
   `WINDOW w AS (w2)`. (#608, #629)
+- **LSP semantic token legend changed**: the non-standard `identifier` token
+  type is replaced by the standard `variable`, which now covers table, column
+  and alias names and quoted identifiers (double-quoted identifiers were
+  `string` before). Function names are `function` and type names are `type`.
+  Comments and placeholders (`$1`, `?`, `:name`, `@var`) are now emitted, as
+  `comment` and `parameter`. AND, OR and NOT stay `keyword`. Positions are
+  UTF-16 code units. Clients with custom rules keyed on the old `identifier`
+  type (for example Neovim `@lsp.type.identifier` highlight links) must switch
+  to `variable`.
 
 ### Added
+- **SQL syntax highlighting (`pkg/highlight`)**: `highlight.Spans(sql, opts...)`
+  classifies SQL into sorted, non-overlapping byte-offset spans tagged with one
+  of 13 stable categories (keyword, function, type, identifier,
+  quoted-identifier, string, number, constant, operator, punctuation, comment,
+  placeholder, error). It is dialect-aware via `WithDialect`, never fails
+  (input after the first lexical error becomes one `error` span), and detects
+  functions in call position and types in type position. Renderers: `ANSI` /
+  `WriteANSI` (256-color, true color or attributes only), `HTML` / `WriteHTML`
+  (classes or inline styles) and `CSS`, with `dark`, `light` and `mono` themes.
+  Spans marshal to JSON. Built on top of it:
+  - `gosqlx.Highlight`, `gosqlx.HighlightANSI` and `gosqlx.HighlightHTML`.
+  - `gosqlx highlight [file|SQL]` (alias `hl`, reads stdin) with
+    `--format ansi|html|json|css`, `--theme`, `--dialect`,
+    `--color auto|always|never` (honors TTY, `NO_COLOR` and `COLORTERM`) and
+    `--standalone` for a full HTML page.
+  - LSP `textDocument/semanticTokens/full` now uses `pkg/highlight` with the
+    standard token types (keyword, function, type, variable, string, number,
+    operator, comment, parameter), UTF-16 positions, per-line splitting of
+    multi-line tokens, and coverage of every dialect keyword and all comments.
+  - WASM `gosqlxHighlight(sql[, dialect])` returns spans with UTF-16 offsets;
+    the gosqlx.dev playground uses it for editor highlighting.
+
+  See [docs/HIGHLIGHTING.md](docs/HIGHLIGHTING.md).
 - **`--dialect` flag for the `parse`, `format`, `analyze`, and `lint` CLI
   commands**: dialect-specific SQL (e.g. MySQL `LIMIT offset, count`) can now be
   parsed by these commands, matching the existing `validate --dialect`. Unknown

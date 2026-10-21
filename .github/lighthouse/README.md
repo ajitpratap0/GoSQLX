@@ -13,6 +13,7 @@ Budgets are the measured value plus roughly 20-30% headroom for CI variance.
 |---|---|---|---|---|---|
 | `/` | 0.63, 0.80, 0.80 | 339 KB | 114 KB | 18 KB | 2.90 MB (2.4 MB is non-script/non-font assets) |
 | `/compare/` | 0.87, 0.89, 0.89 | 329 KB | 114 KB | 18 KB | 0.49 MB |
+| `/playground/` (CI median, 2026-10-20, PR #825) | - | 420 KB | - | - | - |
 
 The other audited routes (`/playground/`, `/docs/`, `/docs/getting-started/`, `/benchmarks/`, `/changelog/`) share the
 same layout chunks; their per-route numbers are in the uploaded Lighthouse artifacts. The local run was cut short by
@@ -26,6 +27,11 @@ a full disk, so only `/` and `/compare/` were measured locally.
 | accessibility, seo | error | 0.95 |
 | best-practices | warn | 0.85 |
 | resource-summary script / font / stylesheet / total | error | 420 KB / 150 KB / 25 KB / 3.6 MB |
+| resource-summary script, `/playground/` only | error | 480 KB |
+
+`/playground/` loads the CodeMirror editor and the GoSQLX highlighting bridge, so it gets its own script budget
+via `assertMatrix` (the measured 420 KB plus ~15% headroom). Every other route keeps the shared 420 KB budget, and
+the two matrix entries are otherwise identical: change an assertion in both when editing thresholds.
 
 Re-measure and update this table whenever the budgets are changed.
 

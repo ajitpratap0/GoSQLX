@@ -81,7 +81,7 @@ This extension contributes the following settings:
 | `gosqlx.format.indentSize` | `2` | Resource | Number of spaces for indentation |
 | `gosqlx.format.uppercaseKeywords` | `true` | Resource | Convert keywords to uppercase |
 | `gosqlx.validation.enable` | `true` | Resource | Enable real-time SQL validation |
-| `gosqlx.dialect` | `generic` | Resource | SQL dialect for validation |
+| `gosqlx.dialect` | `generic` | Resource | SQL dialect for validation: `generic`, `postgresql`, `mysql`, `mariadb`, `sqlserver`, `oracle`, `sqlite`, `snowflake`, `bigquery`, `redshift`, `clickhouse` |
 | `gosqlx.timeouts.startup` | `10000` | Window | Language server startup timeout (ms) |
 | `gosqlx.timeouts.validation` | `5000` | Window | Executable validation timeout (ms) |
 | `gosqlx.timeouts.analysis` | `30000` | Window | SQL analysis timeout (ms) |

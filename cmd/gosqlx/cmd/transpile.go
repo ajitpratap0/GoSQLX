@@ -82,6 +82,9 @@ Examples:
 }
 
 func init() {
+	// The transpile dialect list is deliberately separate from
+	// keywords.DialectNames(): it names the dialects parseDialectFlag maps for
+	// gosqlx.Transpile (and accepts the postgres/mssql aliases).
 	transpileCmd.Flags().String("from", "mysql", "Source dialect (mysql, postgres, sqlite, sqlserver, oracle, snowflake, clickhouse, mariadb)")
 	transpileCmd.Flags().String("to", "postgres", "Target dialect (mysql, postgres, sqlite, sqlserver, oracle, snowflake, clickhouse, mariadb)")
 	rootCmd.AddCommand(transpileCmd)

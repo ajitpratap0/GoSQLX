@@ -19,6 +19,7 @@ New to GoSQLX? Start with [Getting Started](GETTING_STARTED.md), then pick a tas
 | [errors](api/errors.md) | `pkg/errors` | Structured errors with codes, positions and hints |
 | [metrics](api/metrics.md) | `pkg/metrics` | Production counters and timings |
 | [security](api/security.md) | `pkg/sql/security` | SQL injection pattern detection |
+| [highlight](#highlight-package) | `pkg/highlight` | Dialect-aware SQL syntax highlighting as spans, ANSI, HTML and CSS |
 | [linter](api/linter.md) | `pkg/linter` | The lint engine and its rules |
 | [lsp](api/lsp.md) | `pkg/lsp` | The Language Server Protocol server |
 | [mcp](api/mcp.md) | `pkg/mcp` | The Model Context Protocol server |
@@ -61,6 +62,127 @@ Moved to the [metrics package reference](api/metrics.md).
 ## Security Package
 
 Moved to the [security package reference](api/security.md).
+
+## Highlight Package
+
+`github.com/ajitpratap0/GoSQLX/pkg/highlight` classifies SQL into byte-offset spans for terminals, HTML and editors. The guide with examples is [Syntax Highlighting](HIGHLIGHTING.md).
+
+### Spans
+
+```go
+func Spans(sql string, opts ...Option) []Span
+func WithDialect(d keywords.SQLDialect) Option // type Option func(*config)
+
+type Span struct {
+    Start    int      `json:"start"`    // byte offset, inclusive
+    End      int      `json:"end"`      // byte offset, exclusive
+    Category Category `json:"category"`
+}
+func (s Span) Text(src string) string
+```
+
+`Spans` returns spans sorted by `Start` that never overlap and never carry `Plain`; uncovered bytes are plain text. It never returns an error: after the first lexical error the rest of the input is one `Error` span. Input the tokenizer refuses outright (beyond its size or token limits) yields no spans. `Spans` is safe for concurrent use. `WithDialect` accepts the dialect identifiers listed below; an empty or unknown dialect uses the generic keyword set.
+
+### Categories
+
+```go
+type Category uint8
+
+const (
+    Plain Category = iota // never on a Span; implicit category of gaps
+    Keyword
+    Function
+    DataType
+    Identifier
+    QuotedIdentifier
+    String
+    Number
+    Constant
+    Operator
+    Punctuation
+    Comment
+    Placeholder
+    Error
+)
+
+func Categories() []Category          // every category except Plain, in declaration order
+func ParseCategory(name string) (Category, bool)
+func (c Category) String() string     // stable name, e.g. "quoted-identifier"
+```
+
+Stable names, used as JSON values, HTML class suffixes and theme keys: `keyword`, `function`, `type` (`DataType`), `identifier`, `quoted-identifier`, `string`, `number`, `constant`, `operator`, `punctuation`, `comment`, `placeholder`, `error`. `Category` marshals to and from these names in JSON.
+
+### Terminal Output
+
+```go
+func ANSI(src string, spans []Span, opts ANSIOptions) string
+func WriteANSI(w io.Writer, src string, spans []Span, opts ANSIOptions) error
+
+type ANSIOptions struct {
+    Theme Theme     // zero Theme means DarkTheme
+    Mode  ColorMode // zero value is Color256
+}
+
+type ColorMode int // Color256 (default), TrueColor, NoColor
+```
+
+`NoColor` emits only bold, italic and underline. Styles are reset before each newline and re-applied after it, so output stays correct through `head`, `grep` or a pager.
+
+### HTML and CSS
+
+```go
+func HTML(src string, spans []Span, opts HTMLOptions) string
+func WriteHTML(w io.Writer, src string, spans []Span, opts HTMLOptions) error
+func CSS(theme Theme, classPrefix string) string
+
+type HTMLOptions struct {
+    ClassPrefix  string // empty means DefaultClassPrefix ("gsx-")
+    InlineStyles bool   // emit style="..." from Theme instead of classes
+    Theme        Theme  // used with InlineStyles; zero means DarkTheme
+    Wrap         bool   // wrap in <pre class="{prefix}highlight"><code>
+}
+
+const DefaultClassPrefix = "gsx-"
+```
+
+All source text is HTML-escaped. Spans become `<span class="gsx-<category>">`. `CSS` returns one rule per category for the same class names; it styles the token classes only.
+
+### Themes
+
+```go
+type Theme struct {
+    Name   string
+    Styles map[Category]Style
+}
+
+type Style struct {
+    Color     string // "#RRGGBB" or "#RGB"; other values are ignored
+    Bold      bool
+    Italic    bool
+    Underline bool
+}
+
+func DarkTheme() Theme
+func LightTheme() Theme
+func MonoTheme() Theme
+func ThemeByName(name string) (Theme, bool) // case-insensitive
+func ThemeNames() []string                  // "dark", "light", "mono"
+func (t Theme) Style(c Category) Style
+```
+
+Each constructor returns a fresh copy that the caller may modify.
+
+### High-Level Helpers (gosqlx)
+
+```go
+func gosqlx.Highlight(sql string, opts ...highlight.Option) []highlight.Span
+func gosqlx.HighlightANSI(sql string, opts ...highlight.Option) string // dark theme, 256 colors
+func gosqlx.HighlightHTML(sql string, opts ...highlight.Option) string // wrapped in <pre class="gsx-highlight">
+```
+
+### Dialects
+
+`highlight.WithDialect` and the CLI `--dialect` flag accept `generic`, `postgresql`, `mysql`, `mariadb`, `sqlserver`, `oracle`, `sqlite`, `snowflake`, `bigquery`, `redshift` and `clickhouse` (the values of `keywords.AllDialects()`). With no dialect, the generic keyword set is used.
 
 ## Linter Package
 

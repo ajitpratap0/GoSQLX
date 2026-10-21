@@ -85,6 +85,41 @@ export interface AnalysisData {
   optimization?: OptimizationReport;
 }
 
+/**
+ * Syntactic class of a highlighted span (highlight.Category names in
+ * pkg/highlight). New categories may be added; unknown ones render as plain.
+ */
+export type HighlightCategory =
+  | "keyword"
+  | "function"
+  | "type"
+  | "identifier"
+  | "quoted-identifier"
+  | "string"
+  | "number"
+  | "constant"
+  | "operator"
+  | "punctuation"
+  | "comment"
+  | "placeholder"
+  | "error";
+
+/**
+ * One classified range of the SQL. Offsets are 0-based and end-exclusive,
+ * counted in UTF-16 code units like JavaScript string indices and CodeMirror
+ * document positions.
+ */
+export interface HighlightSpan {
+  start: number;
+  end: number;
+  category: string;
+}
+
+export interface HighlightData {
+  /** Sorted and non-overlapping; text between spans is plain. */
+  spans: HighlightSpan[];
+}
+
 /** Formats a 1-based position, or returns null when the position is unknown. */
 export function formatPosition(line?: number, column?: number): string | null {
   if (!line || line < 1) return null;

@@ -7,6 +7,7 @@ import FormatTab from "./FormatTab";
 import LintTab from "./LintTab";
 import type { AnalysisData, LintData } from "./bridgeTypes";
 import type { EditorErrorMarker } from "./editorDiagnostics";
+import type { HighlightSource } from "./editorHighlight";
 const AnalyzeTab = React.lazy(() => import("./AnalyzeTab"));
 
 const DEFAULT_SQL = `SELECT u.id, u.name, COUNT(o.id) AS order_count
@@ -120,6 +121,12 @@ export default function Playground() {
   const errorMarker = useMemo<EditorErrorMarker | null>(
     () => (results.source !== null && errorSpan ? { source: results.source, span: errorSpan } : null),
     [results.source, errorSpan],
+  );
+
+  // GoSQLX highlighting in the selected dialect once the parser is loaded.
+  const highlighter = useMemo<HighlightSource | null>(
+    () => (api ? (text: string) => api.highlight(text, dialect).spans : null),
+    [api, dialect],
   );
 
   const [copied, setCopied] = useState(false);
@@ -257,6 +264,7 @@ export default function Playground() {
               placeholder="Enter your SQL query here..."
               minHeight="200px"
               errorMarker={errorMarker}
+              highlighter={highlighter}
             />
           </div>
         </div>

@@ -38,7 +38,7 @@ fi
 
 DIALECT="${INPUT_DIALECT:-}"
 if [ -n "$DIALECT" ]; then
-  if [[ "$DIALECT" =~ ^(postgresql|mysql|sqlserver|oracle|sqlite)$ ]]; then
+  if [[ "$DIALECT" =~ ^(generic|postgresql|mysql|mariadb|sqlserver|oracle|sqlite|snowflake|bigquery|redshift|clickhouse)$ ]]; then
     CMD="$CMD --dialect $DIALECT"
   else
     echo "::warning::Invalid dialect '$DIALECT', skipping dialect flag"

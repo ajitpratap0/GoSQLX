@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from "react";
+import type { HighlightData } from "./bridgeTypes";
 
 // Type declarations for the Go WASM runtime
 declare global {
@@ -13,6 +14,8 @@ declare global {
     gosqlxLint(sql: string, dialect?: string): string;
     gosqlxAnalyze(sql: string, dialect?: string): string;
     gosqlxValidate(sql: string, dialect?: string): string;
+    /** Absent in WASM binaries built before syntax highlighting was added. */
+    gosqlxHighlight?: (sql: string, dialect?: string) => string;
   }
 }
 
@@ -22,6 +25,8 @@ export interface GoSQLXApi {
   lint(sql: string, dialect?: string): unknown;
   analyze(sql: string, dialect?: string): unknown;
   validate(sql: string, dialect?: string): { valid: boolean; error?: string };
+  /** Span offsets are UTF-16 code units (JavaScript string indices). Throws on failure. */
+  highlight(sql: string, dialect?: string): HighlightData;
 }
 
 export interface UseWasmResult {
@@ -164,6 +169,13 @@ export async function initWasm(): Promise<GoSQLXApi> {
       },
       validate(sql: string, dialect?: string) {
         return callAndParse(window.gosqlxValidate, sql, dialect) as { valid: boolean; error?: string };
+      },
+      highlight(sql: string, dialect?: string) {
+        const fn = window.gosqlxHighlight;
+        if (typeof fn !== "function") {
+          throw new Error("gosqlxHighlight is not available in this WASM build");
+        }
+        return callAndParse(fn, sql, dialect) as HighlightData;
       },
     };
 

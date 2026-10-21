@@ -14,6 +14,7 @@ The GoSQLX Command Line Interface (CLI) provides high-performance SQL parsing, v
   - [analyze](#gosqlx-analyze---sql-analysis)
   - [lint](#gosqlx-lint---style-and-quality-checking)
   - [lsp](#gosqlx-lsp---language-server-protocol)
+  - [highlight](#gosqlx-highlight---syntax-highlighting)
   - [config](#gosqlx-config---configuration-management)
   - [completion](#gosqlx-completion---shell-autocompletion)
 - [Global Flags](#global-flags)
@@ -99,7 +100,7 @@ gosqlx validate [file...] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--dialect` | string | postgresql | SQL dialect (postgresql, mysql, sqlserver, oracle, sqlite) |
+| `--dialect` | string | postgresql | SQL dialect (generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse) |
 | `-r, --recursive` | bool | false | Recursively process directories |
 | `-p, --pattern` | string | `*.sql` | File pattern for recursive processing |
 | `-q, --quiet` | bool | false | Quiet mode (exit code only) |
@@ -619,6 +620,74 @@ See [LSP Guide](LSP_GUIDE.md) for complete LSP documentation.
 
 ---
 
+### `gosqlx highlight` - Syntax Highlighting
+
+Syntax-highlight SQL as ANSI terminal colors, an HTML fragment or a standalone HTML page, a stylesheet, or JSON spans. Highlighting is lexical and never fails: SQL is highlighted up to the first lexical error and the rest is marked as an error. Alias: `hl`. See [Syntax Highlighting](HIGHLIGHTING.md) for the categories and the Go API.
+
+#### Syntax
+
+```bash
+gosqlx highlight [file|query] [flags]
+gosqlx hl [file|query] [flags]
+```
+
+Pass a file, an inline query, or `-` (or pipe SQL on stdin) to read from stdin. The `css` format reads no input.
+
+#### Flags
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-f, --format` | string | `ansi` | Output format: `ansi`, `html`, `json`, `css` |
+| `--theme` | string | `dark` | Color theme: `dark`, `light`, `mono` |
+| `--dialect` | string | generic keyword set | SQL dialect: `generic`, `postgresql`, `mysql`, `mariadb`, `sqlserver`, `oracle`, `sqlite`, `snowflake`, `bigquery`, `redshift`, `clickhouse` |
+| `--color` | string | `auto` | ANSI coloring: `auto`, `always`, `never` (ANSI format only) |
+| `--standalone` | bool | false | Emit a complete HTML document with an inline stylesheet (HTML format only) |
+| `-o, --output` | string | stdout | Write output to a file (global flag) |
+
+`--color auto` colors output only when stdout is a terminal and `NO_COLOR` is unset. `--color always` ignores both. `COLORTERM=truecolor` or `COLORTERM=24bit` selects 24-bit color; otherwise the 256-color palette is used.
+
+#### Formats
+
+| Format | Output |
+|--------|--------|
+| `ansi` | ANSI escape sequences (default). Without color, the SQL is printed unchanged. |
+| `html` | `<pre class="gsx-highlight"><code>` with `<span class="gsx-<category>">` elements. |
+| `json` | Array of `{start, end, category, text, line, column}`. `start` and `end` are 0-based byte offsets (`end` exclusive); `line` and `column` are 1-based, with `column` counted in bytes. |
+| `css` | Stylesheet for `--theme`, matching the HTML class names. |
+
+#### Examples
+
+```bash
+# Colored output in the terminal
+gosqlx highlight query.sql
+gosqlx hl "SELECT * FROM users WHERE id = 1"
+
+# Theme for light terminals, and keep colors when piping to a pager
+gosqlx highlight --theme light query.sql
+gosqlx highlight --color always query.sql | less -R
+
+# Dialect-specific keywords
+gosqlx highlight --dialect mysql query.sql
+
+# HTML fragment, or a complete page written to a file
+gosqlx highlight -f html query.sql > query.html
+gosqlx highlight -f html --standalone -o out.html query.sql
+
+# Stylesheet for the -f html output
+gosqlx highlight -f css --theme dark > gosqlx.css
+
+# Spans for editors and tools
+gosqlx highlight -f json "SELECT 1"
+
+# Stdin
+echo "SELECT 1" | gosqlx highlight
+gosqlx highlight < query.sql
+```
+
+An inline query is detected by the same rules as the other commands (see [Input Methods](#input-methods)). A query containing `/`, such as one with a block comment, is treated as a file path, so pipe such SQL on stdin instead. Files larger than 10 MB are rejected.
+
+---
+
 ### `gosqlx config` - Configuration Management
 
 Manage GoSQLX configuration files for persistent settings.
@@ -681,7 +750,7 @@ format:
 
 # Validation settings - controls SQL validation behavior
 validate:
-  dialect: postgresql          # SQL dialect (postgresql, mysql, sqlserver, oracle, sqlite, generic)
+  dialect: postgresql          # SQL dialect (generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse)
   strict_mode: false           # Enable strict validation
   recursive: false             # Recursively process directories
   pattern: "*.sql"             # File pattern for recursive processing

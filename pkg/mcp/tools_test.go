@@ -17,6 +17,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	mcpmcp "github.com/mark3labs/mcp-go/mcp"
@@ -52,6 +53,29 @@ func unmarshalResult(t *testing.T, res *mcpmcp.CallToolResult) map[string]any {
 		t.Fatalf("failed to unmarshal result JSON: %v\nraw: %s", err, textContent.Text)
 	}
 	return out
+}
+
+// requireToolError asserts that a handler reported an input problem as an
+// isError tool result (not a Go error, which becomes JSON-RPC -32603) whose
+// text contains want.
+func requireToolError(t *testing.T, res *mcpmcp.CallToolResult, err error, want string) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("expected isError tool result, got Go error: %v", err)
+	}
+	if res == nil || !res.IsError {
+		t.Fatalf("expected isError tool result, got %+v", res)
+	}
+	if len(res.Content) == 0 {
+		t.Fatal("tool error has no content")
+	}
+	text, ok := res.Content[0].(mcpmcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent, got %T", res.Content[0])
+	}
+	if !strings.Contains(text.Text, want) {
+		t.Errorf("tool error %q does not contain %q", text.Text, want)
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -90,20 +114,16 @@ func TestHandleValidateSQL(t *testing.T) {
 		}
 	})
 
-	t.Run("empty sql returns protocol error", func(t *testing.T) {
+	t.Run("empty sql returns tool error", func(t *testing.T) {
 		req := makeReq(map[string]any{"sql": ""})
-		_, err := handleValidateSQL(ctx, req)
-		if err == nil {
-			t.Fatal("expected error for empty sql, got nil")
-		}
+		res, err := handleValidateSQL(ctx, req)
+		requireToolError(t, res, err, "required")
 	})
 
-	t.Run("missing sql param returns protocol error", func(t *testing.T) {
+	t.Run("missing sql param returns tool error", func(t *testing.T) {
 		req := makeReq(map[string]any{})
-		_, err := handleValidateSQL(ctx, req)
-		if err == nil {
-			t.Fatal("expected error for missing sql param, got nil")
-		}
+		res, err := handleValidateSQL(ctx, req)
+		requireToolError(t, res, err, "required")
 	})
 
 	t.Run("valid SQL with dialect", func(t *testing.T) {
@@ -175,20 +195,16 @@ func TestHandleFormatSQL(t *testing.T) {
 		}
 	})
 
-	t.Run("empty sql returns protocol error", func(t *testing.T) {
+	t.Run("empty sql returns tool error", func(t *testing.T) {
 		req := makeReq(map[string]any{"sql": ""})
-		_, err := handleFormatSQL(ctx, req)
-		if err == nil {
-			t.Fatal("expected error for empty sql, got nil")
-		}
+		res, err := handleFormatSQL(ctx, req)
+		requireToolError(t, res, err, "required")
 	})
 
-	t.Run("missing sql param returns protocol error", func(t *testing.T) {
+	t.Run("missing sql param returns tool error", func(t *testing.T) {
 		req := makeReq(map[string]any{})
-		_, err := handleFormatSQL(ctx, req)
-		if err == nil {
-			t.Fatal("expected error for missing sql param, got nil")
-		}
+		res, err := handleFormatSQL(ctx, req)
+		requireToolError(t, res, err, "required")
 	})
 }
 
@@ -218,20 +234,16 @@ func TestHandleParseSQL(t *testing.T) {
 		}
 	})
 
-	t.Run("empty sql returns protocol error", func(t *testing.T) {
+	t.Run("empty sql returns tool error", func(t *testing.T) {
 		req := makeReq(map[string]any{"sql": ""})
-		_, err := handleParseSQL(ctx, req)
-		if err == nil {
-			t.Fatal("expected error for empty sql, got nil")
-		}
+		res, err := handleParseSQL(ctx, req)
+		requireToolError(t, res, err, "required")
 	})
 
-	t.Run("missing sql param returns protocol error", func(t *testing.T) {
+	t.Run("missing sql param returns tool error", func(t *testing.T) {
 		req := makeReq(map[string]any{})
-		_, err := handleParseSQL(ctx, req)
-		if err == nil {
-			t.Fatal("expected error for missing sql param, got nil")
-		}
+		res, err := handleParseSQL(ctx, req)
+		requireToolError(t, res, err, "required")
 	})
 }
 
@@ -256,20 +268,16 @@ func TestHandleExtractMetadata(t *testing.T) {
 		}
 	})
 
-	t.Run("empty sql returns protocol error", func(t *testing.T) {
+	t.Run("empty sql returns tool error", func(t *testing.T) {
 		req := makeReq(map[string]any{"sql": ""})
-		_, err := handleExtractMetadata(ctx, req)
-		if err == nil {
-			t.Fatal("expected error for empty sql, got nil")
-		}
+		res, err := handleExtractMetadata(ctx, req)
+		requireToolError(t, res, err, "required")
 	})
 
-	t.Run("missing sql param returns protocol error", func(t *testing.T) {
+	t.Run("missing sql param returns tool error", func(t *testing.T) {
 		req := makeReq(map[string]any{})
-		_, err := handleExtractMetadata(ctx, req)
-		if err == nil {
-			t.Fatal("expected error for missing sql param, got nil")
-		}
+		res, err := handleExtractMetadata(ctx, req)
+		requireToolError(t, res, err, "required")
 	})
 }
 
@@ -295,20 +303,16 @@ func TestHandleSecurityScan(t *testing.T) {
 		}
 	})
 
-	t.Run("empty sql returns protocol error", func(t *testing.T) {
+	t.Run("empty sql returns tool error", func(t *testing.T) {
 		req := makeReq(map[string]any{"sql": ""})
-		_, err := handleSecurityScan(ctx, req)
-		if err == nil {
-			t.Fatal("expected error for empty sql, got nil")
-		}
+		res, err := handleSecurityScan(ctx, req)
+		requireToolError(t, res, err, "required")
 	})
 
-	t.Run("missing sql param returns protocol error", func(t *testing.T) {
+	t.Run("missing sql param returns tool error", func(t *testing.T) {
 		req := makeReq(map[string]any{})
-		_, err := handleSecurityScan(ctx, req)
-		if err == nil {
-			t.Fatal("expected error for missing sql param, got nil")
-		}
+		res, err := handleSecurityScan(ctx, req)
+		requireToolError(t, res, err, "required")
 	})
 }
 
@@ -334,20 +338,16 @@ func TestHandleLintSQL(t *testing.T) {
 		}
 	})
 
-	t.Run("empty sql returns protocol error", func(t *testing.T) {
+	t.Run("empty sql returns tool error", func(t *testing.T) {
 		req := makeReq(map[string]any{"sql": ""})
-		_, err := handleLintSQL(ctx, req)
-		if err == nil {
-			t.Fatal("expected error for empty sql, got nil")
-		}
+		res, err := handleLintSQL(ctx, req)
+		requireToolError(t, res, err, "required")
 	})
 
-	t.Run("missing sql param returns protocol error", func(t *testing.T) {
+	t.Run("missing sql param returns tool error", func(t *testing.T) {
 		req := makeReq(map[string]any{})
-		_, err := handleLintSQL(ctx, req)
-		if err == nil {
-			t.Fatal("expected error for missing sql param, got nil")
-		}
+		res, err := handleLintSQL(ctx, req)
+		requireToolError(t, res, err, "required")
 	})
 }
 
@@ -406,20 +406,16 @@ func TestHandleAnalyzeSQL(t *testing.T) {
 		}
 	})
 
-	t.Run("empty sql returns protocol error", func(t *testing.T) {
+	t.Run("empty sql returns tool error", func(t *testing.T) {
 		req := makeReq(map[string]any{"sql": ""})
-		_, err := handleAnalyzeSQL(ctx, req)
-		if err == nil {
-			t.Fatal("expected error for empty sql, got nil")
-		}
+		res, err := handleAnalyzeSQL(ctx, req)
+		requireToolError(t, res, err, "required")
 	})
 
-	t.Run("missing sql param returns protocol error", func(t *testing.T) {
+	t.Run("missing sql param returns tool error", func(t *testing.T) {
 		req := makeReq(map[string]any{})
-		_, err := handleAnalyzeSQL(ctx, req)
-		if err == nil {
-			t.Fatal("expected error for missing sql param, got nil")
-		}
+		res, err := handleAnalyzeSQL(ctx, req)
+		requireToolError(t, res, err, "required")
 	})
 }
 
@@ -686,10 +682,8 @@ func TestHandleFormatSQL_InvalidSQL(t *testing.T) {
 	req := makeReq(map[string]any{
 		"sql": ")))((( @@@ !!!",
 	})
-	_, err := handleFormatSQL(ctx, req)
-	if err == nil {
-		t.Fatal("expected error for unparseable SQL, got nil")
-	}
+	res, err := handleFormatSQL(ctx, req)
+	requireToolError(t, res, err, "format failed")
 }
 
 func TestHandleAnalyzeSQL_InvalidSQLPartialResults(t *testing.T) {
@@ -738,5 +732,97 @@ func TestHandleAnalyzeSQL_InvalidSQLPartialResults(t *testing.T) {
 		if _, ok := errs[key]; !ok {
 			t.Errorf("expected error entry for %q in errors map", key)
 		}
+	}
+}
+
+func TestHandlers_InputProblemsAreToolErrors(t *testing.T) {
+	ctx := context.Background()
+	type handler func(context.Context, mcpmcp.CallToolRequest) (*mcpmcp.CallToolResult, error)
+	handlers := map[string]handler{
+		"validate_sql":     handleValidateSQL,
+		"format_sql":       handleFormatSQL,
+		"parse_sql":        handleParseSQL,
+		"extract_metadata": handleExtractMetadata,
+		"security_scan":    handleSecurityScan,
+		"lint_sql":         handleLintSQL,
+		"analyze_sql":      handleAnalyzeSQL,
+	}
+	tests := []struct {
+		name string
+		tool string
+		args map[string]any
+		want string
+	}{
+		{name: "missing sql", tool: "validate_sql", args: map[string]any{}, want: "parameter 'sql' is required"},
+		{name: "null sql", tool: "lint_sql", args: map[string]any{"sql": nil}, want: "parameter 'sql' is required"},
+		{name: "empty sql", tool: "analyze_sql", args: map[string]any{"sql": ""}, want: "parameter 'sql' is required"},
+		{name: "numeric sql", tool: "validate_sql", args: map[string]any{"sql": 123.0}, want: "parameter 'sql' must be a string, got number"},
+		{name: "object sql", tool: "security_scan", args: map[string]any{"sql": map[string]any{}}, want: "must be a string, got object"},
+		{name: "parse failure", tool: "parse_sql", args: map[string]any{"sql": "SELEC"}, want: "parse failed"},
+		{name: "metadata parse failure", tool: "extract_metadata", args: map[string]any{"sql": "SELEC"}, want: "parse failed"},
+		{name: "format failure", tool: "format_sql", args: map[string]any{"sql": "SELEC"}, want: "format failed"},
+		{name: "indent_size word", tool: "format_sql", args: map[string]any{"sql": "SELECT 1", "indent_size": "four"}, want: "parameter 'indent_size' must be an integer between 0 and 16, got string \"four\""},
+		{name: "indent_size negative", tool: "format_sql", args: map[string]any{"sql": "SELECT 1", "indent_size": -3.0}, want: "'indent_size' must be an integer between 0 and 16"},
+		{name: "indent_size absurd", tool: "format_sql", args: map[string]any{"sql": "SELECT 1", "indent_size": 1e9}, want: "'indent_size' must be an integer"},
+		{name: "indent_size fractional", tool: "format_sql", args: map[string]any{"sql": "SELECT 1", "indent_size": 2.5}, want: "'indent_size' must be an integer"},
+		{name: "indent_size bool", tool: "format_sql", args: map[string]any{"sql": "SELECT 1", "indent_size": true}, want: "got boolean"},
+		{name: "uppercase_keywords yes", tool: "format_sql", args: map[string]any{"sql": "SELECT 1", "uppercase_keywords": "yes"}, want: "parameter 'uppercase_keywords' must be a boolean"},
+		{name: "add_semicolon number", tool: "format_sql", args: map[string]any{"sql": "SELECT 1", "add_semicolon": 1.0}, want: "parameter 'add_semicolon' must be a boolean, got number"},
+		{name: "dialect number", tool: "validate_sql", args: map[string]any{"sql": "SELECT 1", "dialect": 5.0}, want: "parameter 'dialect' must be a string, got number"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h, ok := handlers[tt.tool]
+			if !ok {
+				t.Fatalf("no handler for %s", tt.tool)
+			}
+			res, err := h(ctx, makeReq(tt.args))
+			requireToolError(t, res, err, tt.want)
+		})
+	}
+}
+
+func TestHandleFormatSQL_OptionalArgsAccepted(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		name      string
+		args      map[string]any
+		wantOpts  map[string]any
+		wantInSQL string
+	}{
+		{name: "defaults", args: map[string]any{}, wantOpts: map[string]any{"indent_size": 2.0, "uppercase_keywords": false, "add_semicolon": false}},
+		{name: "null treated as absent", args: map[string]any{"indent_size": nil, "add_semicolon": nil}, wantOpts: map[string]any{"indent_size": 2.0, "add_semicolon": false}},
+		{name: "native types", args: map[string]any{"indent_size": 4.0, "uppercase_keywords": true, "add_semicolon": true}, wantOpts: map[string]any{"indent_size": 4.0, "uppercase_keywords": true, "add_semicolon": true}, wantInSQL: ";"},
+		{name: "stringified scalars", args: map[string]any{"indent_size": "4", "uppercase_keywords": "TRUE", "add_semicolon": "false"}, wantOpts: map[string]any{"indent_size": 4.0, "uppercase_keywords": true, "add_semicolon": false}},
+		{name: "bounds inclusive", args: map[string]any{"indent_size": 0.0}, wantOpts: map[string]any{"indent_size": 0.0}},
+		{name: "upper bound", args: map[string]any{"indent_size": float64(maxIndentSize)}, wantOpts: map[string]any{"indent_size": float64(maxIndentSize)}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := map[string]any{"sql": "select a from t"}
+			for k, v := range tt.args {
+				args[k] = v
+			}
+			res, err := handleFormatSQL(ctx, makeReq(args))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if res.IsError {
+				t.Fatalf("unexpected tool error: %+v", res.Content)
+			}
+			data := unmarshalResult(t, res)
+			opts, ok := data["options"].(map[string]any)
+			if !ok {
+				t.Fatalf("missing options in %v", data)
+			}
+			for k, want := range tt.wantOpts {
+				if opts[k] != want {
+					t.Errorf("options[%s] = %v, want %v", k, opts[k], want)
+				}
+			}
+			if sql, _ := data["formatted_sql"].(string); tt.wantInSQL != "" && !strings.Contains(sql, tt.wantInSQL) {
+				t.Errorf("formatted_sql %q does not contain %q", sql, tt.wantInSQL)
+			}
+		})
 	}
 }

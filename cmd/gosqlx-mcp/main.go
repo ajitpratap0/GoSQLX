@@ -23,6 +23,8 @@
 //	GOSQLX_MCP_PORT        bind port (default: 8080)
 //	GOSQLX_MCP_AUTH_TOKEN  bearer token; empty disables auth
 //	GOSQLX_MCP_OPENAI_APPS_CHALLENGE  ChatGPT app domain-verification token
+//	GOSQLX_MCP_TRUSTED_PROXY_HEADER   trusted client-IP header (e.g. CF-Connecting-IP)
+//	GOSQLX_MCP_TRUSTED_PROXY_HOPS     trusted proxies appending to X-Forwarded-For
 //
 // Pass --stdio to serve MCP over stdin/stdout instead of HTTP.
 //
@@ -41,12 +43,25 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	gosqlxmcp "github.com/ajitpratap0/GoSQLX/pkg/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+)
+
+// HTTP server limits. See runHTTP for why there is no Read/WriteTimeout.
+const (
+	readHeaderTimeout = 10 * time.Second
+	idleTimeout       = 120 * time.Second
+	maxHeaderBytes    = 32 << 10 // 32KB
+	// otherBodyTimeout bounds request-body reads on routes other than /mcp,
+	// which never read a body. net/http drains an unread body (up to 256KB)
+	// before replying, so without a deadline a trickled body holds the
+	// connection open forever. /mcp sets its own deadline in the rate limiter.
+	otherBodyTimeout = 30 * time.Second
 )
 
 func main() {
@@ -92,11 +107,7 @@ func runHTTP() error {
 
 	srv := gosqlxmcp.New(cfg)
 
-	httpSrv := &http.Server{
-		Addr:              cfg.Addr(),
-		Handler:           newMux(cfg, srv),
-		ReadHeaderTimeout: 10 * time.Second,
-	}
+	httpSrv := newHTTPServer(cfg, srv)
 
 	go func() {
 		<-ctx.Done()
@@ -105,11 +116,52 @@ func runHTTP() error {
 		_ = httpSrv.Shutdown(shutdownCtx)
 	}()
 
-	log.Printf("gosqlx-mcp: listening on %s (auth=%v)\n", cfg.Addr(), cfg.AuthEnabled())
+	log.Printf("gosqlx-mcp: listening on %s (auth=%v, client-ip=%s)\n", cfg.Addr(), cfg.AuthEnabled(), clientIPSource(cfg))
 	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("server error: %w", err)
 	}
 	return nil
+}
+
+// newHTTPServer builds the http.Server for runHTTP.
+//
+// No ReadTimeout/WriteTimeout: they would cut off long-lived GET (SSE)
+// streams. POST bodies get their own read deadline in the rate-limit
+// middleware; IdleTimeout closes idle keep-alive connections.
+func newHTTPServer(cfg *gosqlxmcp.Config, srv *gosqlxmcp.Server) *http.Server {
+	return &http.Server{
+		Addr:              cfg.Addr(),
+		Handler:           withBodyDeadline(newMux(cfg, srv), otherBodyTimeout),
+		ReadHeaderTimeout: readHeaderTimeout,
+		IdleTimeout:       idleTimeout,
+		MaxHeaderBytes:    maxHeaderBytes,
+	}
+}
+
+// withBodyDeadline sets a read deadline of timeout on every request outside
+// /mcp, so slow or stalled bodies sent to /health, the challenge route or an
+// unknown path cannot keep connections open. /mcp is left alone: its POST
+// bodies get a deadline in the rate limiter and its GET (SSE) streams must
+// not be cut off.
+func withBodyDeadline(next http.Handler, timeout time.Duration) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/mcp" && !strings.HasPrefix(r.URL.Path, "/mcp/") {
+			_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(timeout))
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// clientIPSource describes where rate limiting takes the client IP from.
+func clientIPSource(cfg *gosqlxmcp.Config) string {
+	switch {
+	case cfg.TrustedProxyHeader != "":
+		return cfg.TrustedProxyHeader
+	case cfg.TrustedProxyHops > 0:
+		return fmt.Sprintf("X-Forwarded-For[-%d]", cfg.TrustedProxyHops)
+	default:
+		return "RemoteAddr"
+	}
 }
 
 // newMux builds the HTTP routes:
@@ -121,7 +173,7 @@ func runHTTP() error {
 // Every other path (including OAuth discovery probes from connector wizards)
 // returns 404, which tells clients that no OAuth is configured.
 func newMux(cfg *gosqlxmcp.Config, srv *gosqlxmcp.Server) *http.ServeMux {
-	handler := gosqlxmcp.RateLimitMiddleware(srv.Handler())
+	handler := gosqlxmcp.NewRateLimitMiddleware(cfg, srv.Handler())
 
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", handler)

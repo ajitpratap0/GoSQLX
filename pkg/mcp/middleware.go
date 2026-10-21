@@ -15,6 +15,8 @@
 package mcp
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
 	"net/http"
 	"strings"
 )
@@ -23,12 +25,17 @@ import (
 // authentication when cfg.AuthEnabled() is true. When auth is disabled it
 // passes all requests through unchanged. On failure it responds 401 with a
 // WWW-Authenticate header.
+//
+// Tokens are compared as SHA-256 digests with crypto/subtle, so the
+// comparison time reveals neither the token's content nor its length.
 func BearerAuthMiddleware(cfg *Config, next http.Handler) http.Handler {
 	if !cfg.AuthEnabled() {
 		return next
 	}
+	want := sha256.Sum256([]byte(cfg.AuthToken))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if extractBearerToken(r) != cfg.AuthToken {
+		got := sha256.Sum256([]byte(extractBearerToken(r)))
+		if subtle.ConstantTimeCompare(got[:], want[:]) != 1 {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="gosqlx-mcp"`)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
@@ -37,13 +44,14 @@ func BearerAuthMiddleware(cfg *Config, next http.Handler) http.Handler {
 	})
 }
 
-// extractBearerToken parses the "Authorization: Bearer <token>" header.
-// Returns an empty string if the header is absent or malformed.
+// extractBearerToken parses the "Authorization: Bearer <token>" header. The
+// scheme is matched case-insensitively (RFC 9110 §11.1) and surrounding
+// whitespace is trimmed. Returns an empty string if the header is absent or
+// malformed.
 func extractBearerToken(r *http.Request) string {
-	const prefix = "Bearer "
-	auth := r.Header.Get("Authorization")
-	if !strings.HasPrefix(auth, prefix) {
+	scheme, token, ok := strings.Cut(strings.TrimSpace(r.Header.Get("Authorization")), " ")
+	if !ok || !strings.EqualFold(scheme, "Bearer") {
 		return ""
 	}
-	return auth[len(prefix):]
+	return strings.TrimSpace(token)
 }

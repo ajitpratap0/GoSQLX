@@ -14,7 +14,7 @@ Input: `$ARGUMENTS` - a SQL string or a path to a `.sql` file.
 1. Get the SQL (read the file if a path was given).
 2. Call `format_sql` (`mcp__plugin_gosqlx_gosqlx__format_sql`) with:
    - `sql` (required)
-   - `indent_size` - default 2. `0` puts each statement on one line. Clauses always start at column 0; larger values only indent nested blocks such as CREATE TABLE column lists
+   - `indent_size` - integer 0–16, default 2. `0` puts each statement on one line. Clauses always start at column 0; larger values only indent nested blocks such as CREATE TABLE column lists
    - `uppercase_keywords` - `true` upper-cases all keywords (`AND`, `IN`, `CASE`, ...) but not data type names such as `int`. The default `false` still upper-cases clause keywords (`SELECT`, `FROM`, `WHERE`, ...) and leaves others such as `and`/`or` as written; the MCP tool cannot lowercase keywords
    - `add_semicolon` - default `false`
 3. If formatting fails, the SQL probably does not parse: call `validate_sql` and report the error instead of guessing a fix.

@@ -15,6 +15,24 @@ Runtime behaviour does change (rendered SQL, error codes and text, parse
 acceptance, CLI refusals), so read **Behavior changes** before upgrading.
 
 ### Behavior changes
+- **`gosqlx-mcp` HTTP hardening**: rate limiting now keys on the TCP peer
+  address and no longer trusts `X-Forwarded-For` (which let any client evade
+  limits and grow limiter memory without bound). Behind a proxy, set
+  `GOSQLX_MCP_TRUSTED_PROXY_HEADER` (e.g. `CF-Connecting-IP`, as `render.yaml`
+  does) or `GOSQLX_MCP_TRUSTED_PROXY_HOPS`. Limiter memory is capped with
+  least-recently-seen eviction; GET (SSE) streams are capped at 4 per IP and
+  no longer tighten limits for everyone; JSON-RPC batches are charged per tool
+  call. Denials are HTTP 429 with `Retry-After` and the request id (a denied
+  `initialize` keeps HTTP 200 for mcp-go clients). Oversized bodies (over
+  64 KB) get 413, bodies not received within 30s get 408 or a closed
+  connection on any route, idle connections close after 120s and headers are
+  capped at 32 KB. Bearer tokens are compared in constant time and the
+  `Bearer` scheme is case-insensitive. Tool input problems (missing, empty or
+  non-string `sql`, parse/format failures, wrongly typed options) are now
+  `isError` tool results naming the argument instead of JSON-RPC -32603
+  internal errors, and `indent_size` must be an integer from 0 to 16.
+  New `pkg/mcp` API: `NewRateLimitMiddleware(cfg, next)`,
+  `Config.TrustedProxyHeader`, `Config.TrustedProxyHops`.
 - **Comments now count toward `MaxTokens`**: tokens plus collected comments may
   not exceed `MaxTokens` (1,000,000). Past that the tokenizer returns the
   existing E1007 token-limit error at the comment or token that crosses the

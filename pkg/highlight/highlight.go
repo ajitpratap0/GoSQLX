@@ -684,8 +684,9 @@ func isSpace(c byte) bool {
 	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v'
 }
 
-// upper returns s in upper case; ASCII-uppercase input is returned without
-// allocating.
+// upper returns s in upper case. It is a thin wrapper over strings.ToUpper,
+// so it allocates whenever s contains a lowercase letter; only input that is
+// already upper case is returned without allocating.
 func upper(s string) string {
 	return strings.ToUpper(s)
 }

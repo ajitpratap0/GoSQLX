@@ -223,3 +223,60 @@ func TestXterm256(t *testing.T) {
 		}
 	}
 }
+
+// sgrOnlyRE matches output whose only escape sequences are SGR codes.
+var sgrOnlyRE = regexp.MustCompile(`^(?s:\x1b\[[0-9;]*m|[^\x1b])*$`)
+
+func TestANSI_NeutralizesTerminalControls(t *testing.T) {
+	sql := "SELECT '\x1b[31mred\x1b]0;pwn\x07' AS a,\t'x\x7f' -- \x1b[2J clear\r\n" +
+		"/* \x1b[31m */ FROM t\x00 WHERE b = '\u009b31m' AND c = 'ok\xff';\n"
+	spans := Spans(sql)
+	for _, mode := range []ColorMode{Color256, TrueColor, NoColor} {
+		for _, theme := range []Theme{DarkTheme(), MonoTheme()} {
+			got := ANSI(sql, spans, ANSIOptions{Theme: theme, Mode: mode})
+			text := stripANSI(got)
+			if strings.ContainsAny(text, "\x1b\x07\x00\x7f\u009b") {
+				t.Fatalf("mode %d: control character leaked into output: %q", mode, got)
+			}
+			if !sgrOnlyRE.MatchString(got) {
+				t.Fatalf("mode %d: output contains a non-SGR escape: %q", mode, got)
+			}
+			want := "SELECT '␛[31mred␛]0;pwn␇' AS a,\t'x␡' -- ␛[2J clear\r\n" +
+				"/* ␛[31m */ FROM t␀ WHERE b = '\ufffd31m' AND c = 'ok\ufffd';\n"
+			if text != want {
+				t.Fatalf("mode %d: got text\n%q\nwant\n%q", mode, text, want)
+			}
+		}
+	}
+}
+
+func TestANSI_LiteralAndCommentEscapesAreInert(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT '\x1b[31m' FROM t",
+		"SELECT 1 -- \x1b[31m\nFROM t",
+		"SELECT 1 /* \x1b[31m */",
+	} {
+		got := ANSI(sql, Spans(sql), ANSIOptions{})
+		if strings.Contains(got, "\x1b[31m") {
+			t.Errorf("%q: raw source escape survived: %q", sql, got)
+		}
+		if !strings.Contains(got, "␛[31m") {
+			t.Errorf("%q: expected visible ␛ in output: %q", sql, got)
+		}
+	}
+}
+
+func TestANSI_PreservesWhitespaceAndUnicode(t *testing.T) {
+	sql := "SELECT\t'naïve é世界 😀'\r\n  FROM t\n"
+	got := stripANSI(ANSI(sql, Spans(sql), ANSIOptions{}))
+	if got != sql {
+		t.Fatalf("got %q, want %q", got, sql)
+	}
+}
+
+func TestTerminalSafe_CleanInputDoesNotAllocate(t *testing.T) {
+	s := "SELECT 'café'\t\r\n FROM t"
+	if n := testing.AllocsPerRun(100, func() { _ = terminalSafe(s) }); n != 0 {
+		t.Fatalf("terminalSafe allocated %v times on clean input", n)
+	}
+}

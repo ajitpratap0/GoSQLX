@@ -420,14 +420,15 @@ func FuzzSpans(f *testing.F) {
 				t.Fatalf("unclassified trailing text %q (spans: %v)", gap, spans)
 			}
 		}
-		// Renderers must reproduce the source exactly once markup is removed.
-		// Source text is passed through verbatim, so input that already
-		// contains escape sequences cannot be told apart from added markup.
-		if strings.ContainsRune(sql, '\x1b') {
-			return
+		// Renderers must reproduce the source exactly once markup is removed,
+		// with terminal control characters neutralized, and source text must
+		// never contribute an ESC byte of its own.
+		out := ANSI(sql, spans, ANSIOptions{})
+		if got, want := stripANSI(out), terminalSafe(sql); got != want {
+			t.Fatalf("ANSI round trip mismatch:\n got %q\nwant %q", got, want)
 		}
-		if got := stripANSI(ANSI(sql, spans, ANSIOptions{})); got != sql {
-			t.Fatalf("ANSI round trip mismatch:\n got %q\nwant %q", got, sql)
+		if strings.ContainsRune(stripANSI(out), '\x1b') {
+			t.Fatalf("ANSI output leaks a raw ESC from source: %q", out)
 		}
 	})
 }
@@ -449,5 +450,15 @@ func BenchmarkHTML(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		_ = HTML(sql, spans, HTMLOptions{})
+	}
+}
+
+func BenchmarkANSI(b *testing.B) {
+	sql := strings.Repeat("SELECT a, 'b' FROM t WHERE c = 1; -- note\n", 50)
+	spans := Spans(sql)
+	b.ReportAllocs()
+	b.SetBytes(int64(len(sql)))
+	for i := 0; i < b.N; i++ {
+		_ = ANSI(sql, spans, ANSIOptions{})
 	}
 }

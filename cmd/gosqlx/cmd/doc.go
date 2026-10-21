@@ -22,9 +22,16 @@
 //   - parse: AST generation and inspection with multiple output formats
 //   - analyze: Security and complexity analysis with grading
 //   - lint: Style and quality checking with L001-L010 rules
+//   - highlight (alias hl): Syntax highlighting as ANSI, HTML, CSS or JSON spans
 //   - lsp: Language Server Protocol server for IDE integration
 //   - config: Configuration file management
 //   - completion: Shell autocompletion setup
+//
+// validate, parse, format, analyze, lint and highlight accept --dialect with
+// one of the 11 names from keywords.DialectNames(): generic, postgresql,
+// mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift
+// and clickhouse; an unknown name is rejected with an error. Each
+// command's --help names its default (highlight uses the generic keyword set).
 //
 // # Architecture
 //
@@ -44,6 +51,7 @@
 //	├── sql_analyzer.go      - AST-based analysis engine
 //	├── analysis_types.go    - Analysis data structures
 //	├── lint.go              - Lint command definition
+//	├── highlight.go         - Highlight command (pkg/highlight renderers)
 //	├── lsp.go               - LSP server command
 //	├── config.go            - Config management commands
 //	├── config_manager.go    - Config management logic
@@ -314,13 +322,24 @@
 // Key types: Analyzer, SQLAnalyzer, AnalysisReport
 // Key functions: Analyze(), DisplayReport(), scoreQuery()
 //
+// ## highlight Command
+//
+// Syntax-highlights SQL through pkg/highlight. --format selects ansi (the
+// default), html, css or json spans; --theme selects dark, light or mono;
+// --color auto|always|never controls ANSI coloring; --standalone emits a full
+// HTML document. Highlighting is lexical and never fails: invalid SQL is
+// highlighted up to the first lexical error and the rest is marked as an
+// error.
+//
+// Implementation: highlight.go
+//
 // ## lint Command
 //
 // Checks SQL for style violations.
 //
 // Implementation: lint.go
 // Key functions: lintRun(), createLinter()
-// Rules: L001-L010 (see pkg/linter)
+// Rules: L001-L010 (see pkg/linter); --dialect is passed to Linter.SetDialect
 //
 // ## lsp Command
 //

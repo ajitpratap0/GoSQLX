@@ -65,12 +65,8 @@ func startPostgresServer(t *testing.T) (db *sql.DB, host, port string) {
 	ctx := context.Background()
 	// Bound the container start by the test binary's deadline so a slow CI
 	// pull or init skips this integration test instead of panicking the package.
-	startCtx := ctx
-	if deadline, ok := t.Deadline(); ok {
-		var cancel context.CancelFunc
-		startCtx, cancel = context.WithDeadline(ctx, deadline.Add(-30*time.Second))
-		defer cancel()
-	}
+	startCtx, cancel := containerStartContext(ctx, t)
+	defer cancel()
 	req := testcontainers.ContainerRequest{
 		Image:        "postgres:16-alpine",
 		ExposedPorts: []string{"5432/tcp"},
@@ -97,6 +93,9 @@ func startPostgresServer(t *testing.T) (db *sql.DB, host, port string) {
 		})
 	}()
 	if err != nil {
+		if startCtx.Err() != nil {
+			t.Skipf("container start exceeded its time budget (%v): %v", startCtx.Err(), err)
+		}
 		t.Skipf("testcontainers unavailable: %v", err)
 	}
 	t.Cleanup(func() { _ = c.Terminate(ctx) })
@@ -647,4 +646,17 @@ func TestPostgresLoader_LoadTable_EmptyName(t *testing.T) {
 	if _, err := pgschema.NewLoader().LoadTable(nil, "public", ""); err == nil {
 		t.Fatal("expected error for empty table name")
 	}
+}
+
+// containerStartContext bounds one container start. Each start gets at most
+// 75s and always ends 30s before the test binary's deadline, which all tests
+// in the package share. A slow start therefore cannot consume the whole
+// package budget, and a skip caused by it is reported as such.
+func containerStartContext(ctx context.Context, t *testing.T) (context.Context, context.CancelFunc) {
+	t.Helper()
+	end := time.Now().Add(75 * time.Second)
+	if deadline, ok := t.Deadline(); ok && deadline.Add(-30*time.Second).Before(end) {
+		end = deadline.Add(-30 * time.Second)
+	}
+	return context.WithDeadline(ctx, end)
 }

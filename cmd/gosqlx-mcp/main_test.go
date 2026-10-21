@@ -298,6 +298,8 @@ func TestClientIPSource(t *testing.T) {
 		{"default", gosqlxmcp.Config{}, "RemoteAddr"},
 		{"header", gosqlxmcp.Config{TrustedProxyHeader: "Cf-Connecting-Ip"}, "Cf-Connecting-Ip"},
 		{"hops", gosqlxmcp.Config{TrustedProxyHops: 2}, "X-Forwarded-For[-2]"},
+		{"secret-gated header", gosqlxmcp.Config{TrustedProxyHeader: "Cf-Connecting-Ip", TrustedProxySecretHeader: "X-Origin-Secret", TrustedProxySecret: "s3cret-0123456789abcdef"},
+			"Cf-Connecting-Ip when X-Origin-Secret matches, else RemoteAddr"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -356,5 +358,45 @@ func TestWithBodyDeadline_SlowBodyOutsideMCP(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestClientIPSource_NeverLogsSecret(t *testing.T) {
+	cfg := gosqlxmcp.Config{TrustedProxyHops: 1, TrustedProxySecretHeader: "X-Origin-Secret", TrustedProxySecret: "s3cret-0123456789abcdef"}
+	if got := clientIPSource(&cfg); strings.Contains(got, cfg.TrustedProxySecret) {
+		t.Fatalf("clientIPSource leaks the secret: %q", got)
+	}
+}
+
+func TestSharedClientIPWarning(t *testing.T) {
+	tests := []struct {
+		name     string
+		cfg      gosqlxmcp.Config
+		wantWarn bool
+	}{
+		{"no trusted proxy warns", gosqlxmcp.Config{Host: "0.0.0.0", Port: 8080}, true},
+		{"loopback still warns (local reverse proxy)", gosqlxmcp.Config{Host: "127.0.0.1", Port: 8080}, true},
+		{"trusted header silences", gosqlxmcp.Config{TrustedProxyHeader: "Cf-Connecting-Ip"}, false},
+		{"trusted hops silences", gosqlxmcp.Config{TrustedProxyHops: 1}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := sharedClientIPWarning(&tt.cfg)
+			if (got != "") != tt.wantWarn {
+				t.Fatalf("sharedClientIPWarning() = %q, want warning=%v", got, tt.wantWarn)
+			}
+			if !tt.wantWarn {
+				return
+			}
+			for _, want := range []string{"warning", "share", "rate-limit bucket", "stream cap",
+				"GOSQLX_MCP_TRUSTED_PROXY_HEADER", "GOSQLX_MCP_TRUSTED_PROXY_HOPS"} {
+				if !strings.Contains(got, want) {
+					t.Errorf("warning %q does not mention %q", got, want)
+				}
+			}
+			if strings.Contains(got, "\n") {
+				t.Errorf("warning should be a single log line: %q", got)
+			}
+		})
 	}
 }

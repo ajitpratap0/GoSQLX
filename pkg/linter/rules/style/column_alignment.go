@@ -52,6 +52,11 @@ import (
 //
 // The rule finds the most common indentation level among columns and reports
 // columns that deviate from this pattern.
+//
+// Indentation widths are compared with a tab counting as 4 columns, so a tab
+// and four spaces align. The reported Location.Column is the 1-based byte
+// column of the column's first non-whitespace character (a tab is one byte),
+// matching the byte columns documented on models.Location.
 type ColumnAlignmentRule struct {
 	linter.BaseRule
 }
@@ -91,6 +96,7 @@ func (r *ColumnAlignmentRule) Check(ctx *linter.Context) ([]linter.Violation, er
 	selectLineNum := 0
 	columnIndents := []int{}
 	columnLines := []int{}
+	columnCols := []int{} // 1-based byte column of each column's first character
 
 	for lineNum, line := range ctx.Lines {
 		trimmed := strings.TrimSpace(line)
@@ -102,17 +108,21 @@ func (r *ColumnAlignmentRule) Check(ctx *linter.Context) ([]linter.Violation, er
 			selectLineNum = lineNum + 1
 			columnIndents = []int{}
 			columnLines = []int{}
+			columnCols = []int{}
 
 			// Check if columns are on same line or start of multi-line
 			afterSelect := strings.TrimPrefix(trimmed[6:], " ")
 			if afterSelect != "" && !strings.HasPrefix(strings.ToUpper(afterSelect), "DISTINCT") {
 				// Columns start on SELECT line
 				indent := getIndentSize(line) + 7 // SELECT + space
+				col := leadingWhitespaceBytes(line) + 8
 				if strings.HasPrefix(upper, "SELECT DISTINCT") {
 					indent = getIndentSize(line) + 16 // SELECT DISTINCT + space
+					col = leadingWhitespaceBytes(line) + 17
 				}
 				columnIndents = append(columnIndents, indent)
 				columnLines = append(columnLines, lineNum+1)
+				columnCols = append(columnCols, col)
 			}
 			continue
 		}
@@ -128,7 +138,7 @@ func (r *ColumnAlignmentRule) Check(ctx *linter.Context) ([]linter.Violation, er
 				trimmed == "" {
 				// End of columns, check alignment
 				if len(columnIndents) > 1 {
-					violations = append(violations, r.checkColumnAlignment(columnIndents, columnLines, selectLineNum, ctx)...)
+					violations = append(violations, r.checkColumnAlignment(columnIndents, columnLines, columnCols, selectLineNum, ctx)...)
 				}
 				inSelectColumns = false
 				continue
@@ -138,12 +148,13 @@ func (r *ColumnAlignmentRule) Check(ctx *linter.Context) ([]linter.Violation, er
 			indent := getIndentSize(line)
 			columnIndents = append(columnIndents, indent)
 			columnLines = append(columnLines, lineNum+1)
+			columnCols = append(columnCols, leadingWhitespaceBytes(line)+1)
 		}
 	}
 
 	// Handle case where SELECT is at end of file
 	if inSelectColumns && len(columnIndents) > 1 {
-		violations = append(violations, r.checkColumnAlignment(columnIndents, columnLines, selectLineNum, ctx)...)
+		violations = append(violations, r.checkColumnAlignment(columnIndents, columnLines, columnCols, selectLineNum, ctx)...)
 	}
 
 	return violations, nil
@@ -156,8 +167,11 @@ func (r *ColumnAlignmentRule) Check(ctx *linter.Context) ([]linter.Violation, er
 // the one belonging to the earliest continuation column wins. The first column
 // is skipped as it may appear on the SELECT line with different indentation.
 //
+// indents holds tab-expanded widths used for comparison; cols holds the
+// matching 1-based byte columns used for the reported Location.
+//
 // Returns a slice of violations for misaligned columns.
-func (r *ColumnAlignmentRule) checkColumnAlignment(indents []int, lines []int, _ int, ctx *linter.Context) []linter.Violation {
+func (r *ColumnAlignmentRule) checkColumnAlignment(indents, lines, cols []int, _ int, ctx *linter.Context) []linter.Violation {
 	violations := []linter.Violation{}
 
 	if len(indents) < 2 {
@@ -190,7 +204,7 @@ func (r *ColumnAlignmentRule) checkColumnAlignment(indents []int, lines []int, _
 				RuleName:   r.Name(),
 				Severity:   r.Severity(),
 				Message:    "Column not aligned with other columns",
-				Location:   models.Location{Line: lineNum, Column: indent + 1},
+				Location:   models.Location{Line: lineNum, Column: cols[i+1]},
 				Line:       ctx.GetLine(lineNum),
 				Suggestion: "Align column to match other columns in the SELECT list",
 				CanAutoFix: false,
@@ -206,7 +220,9 @@ func (r *ColumnAlignmentRule) checkColumnAlignment(indents []int, lines []int, _
 // Counts leading spaces (1 each) and tabs (4 each) to compute total indentation.
 // Stops at the first non-whitespace character.
 //
-// Returns the total indentation size in space-equivalent units.
+// Returns the total indentation size in space-equivalent units. The result is
+// used only to compare alignment between columns; it is not a byte column (see
+// leadingWhitespaceBytes for the reported position).
 func getIndentSize(line string) int {
 	count := 0
 	for _, ch := range line {
@@ -220,6 +236,19 @@ func getIndentSize(line string) int {
 		}
 	}
 	return count
+}
+
+// leadingWhitespaceBytes returns the number of leading space and tab bytes in
+// line, i.e. the 0-based byte offset of its first non-whitespace character.
+// Unlike getIndentSize, a tab counts as one byte, so the result plus one is the
+// 1-based byte column documented on models.Location.
+func leadingWhitespaceBytes(line string) int {
+	for i := 0; i < len(line); i++ {
+		if line[i] != ' ' && line[i] != '\t' {
+			return i
+		}
+	}
+	return len(line)
 }
 
 // Fix is not supported for this rule as it requires complex formatting logic.

@@ -240,6 +240,8 @@ SELECT
     col3
 ```
 
+When comparing indentation, a tab counts as 4 spaces, so a tab-indented column aligns with one indented by 4 spaces. The reported column is the 1-based byte column of the misaligned column's first character, and a tab counts as one byte. For example, a column indented with two tabs is reported at column 3.
+
 ---
 
 ### L008: Comma Placement

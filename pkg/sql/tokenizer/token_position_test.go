@@ -135,28 +135,70 @@ func TestTokenPositions_StartIsAfterTrivia(t *testing.T) {
 // A comment before a token must not move the token's Start, and the comment is
 // still collected with its own position.
 func TestTokenPositions_CommentsKeepOwnPositions(t *testing.T) {
-	tkz := pooledTokenizer(t)
-	tokens, err := tkz.Tokenize([]byte("a\tb /* x */ c"))
-	if err != nil {
-		t.Fatalf("Tokenize: %v", err)
+	tests := []struct {
+		name         string
+		sql          string
+		commentStart models.Location
+		commentEnd   models.Location
+		afterStart   models.Location // Start of the token right after the comment ("c")
+	}{
+		{"single-line block comment", "a\tb /* x */ c", loc(1, 5), loc(1, 12), loc(1, 13)},
+		{"multi-line block comment", "a\tb /* x\n y */ c", loc(1, 5), loc(2, 6), loc(2, 7)},
 	}
-	if len(tkz.Comments) != 1 {
-		t.Fatalf("got %d comments, want 1", len(tkz.Comments))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tkz := pooledTokenizer(t)
+			tokens, err := tkz.Tokenize([]byte(tt.sql))
+			if err != nil {
+				t.Fatalf("Tokenize: %v", err)
+			}
+			if len(tkz.Comments) != 1 {
+				t.Fatalf("got %d comments, want 1", len(tkz.Comments))
+			}
+			c := tkz.Comments[0]
+			if c.Start != tt.commentStart || c.End != tt.commentEnd {
+				t.Errorf("comment span = %+v-%+v, want %+v-%+v", c.Start, c.End, tt.commentStart, tt.commentEnd)
+			}
+			if len(tokens) < 3 {
+				t.Fatalf("got %d tokens, want at least 3", len(tokens))
+			}
+			// The token after the comment must not overlap the comment span:
+			// tokens[2].Start >= Comments[0].End, comparing line then column.
+			after := tokens[2]
+			if after.Token.Value != "c" {
+				t.Fatalf("tokens[2] = %q, want %q", after.Token.Value, "c")
+			}
+			if locBefore(after.Start, c.End) {
+				t.Errorf("tokens[2] (%q) Start %+v overlaps comment ending at %+v", after.Token.Value, after.Start, c.End)
+			}
+			if after.Start != tt.afterStart {
+				t.Errorf("tokens[2] (%q) Start = %+v, want %+v", after.Token.Value, after.Start, tt.afterStart)
+			}
+			// Every token lies wholly before or wholly after the comment, and
+			// has a non-empty span.
+			for i, tok := range tokens {
+				if tok.Token.Type == models.TokenTypeEOF {
+					continue
+				}
+				if tok.End.Line == tok.Start.Line && tok.End.Column <= tok.Start.Column {
+					t.Errorf("token %d (%q): empty span %+v-%+v", i, tok.Token.Value, tok.Start, tok.End)
+				}
+				// Half-open spans [Start, End) overlap iff each starts before the other ends.
+				if locBefore(tok.Start, c.End) && locBefore(c.Start, tok.End) {
+					t.Errorf("token %d (%q) span %+v-%+v overlaps comment %+v-%+v",
+						i, tok.Token.Value, tok.Start, tok.End, c.Start, c.End)
+				}
+			}
+		})
 	}
-	c := tkz.Comments[0]
-	if c.Start != loc(1, 5) || c.End != loc(1, 12) {
-		t.Errorf("comment span = %+v-%+v, want %+v-%+v", c.Start, c.End, loc(1, 5), loc(1, 12))
+}
+
+// locBefore reports whether a precedes b, comparing line then column.
+func locBefore(a, b models.Location) bool {
+	if a.Line != b.Line {
+		return a.Line < b.Line
 	}
-	// Every token's Start is at or after the end of the preceding comment and
-	// before its own End.
-	for i, tok := range tokens {
-		if tok.Token.Type == models.TokenTypeEOF {
-			continue
-		}
-		if tok.End.Line == tok.Start.Line && tok.End.Column <= tok.Start.Column {
-			t.Errorf("token %d (%q): empty span %+v-%+v", i, tok.Token.Value, tok.Start, tok.End)
-		}
-	}
+	return a.Column < b.Column
 }
 
 // A trailing comment leaves no token after it; the EOF token sits at the end.

@@ -1,5 +1,59 @@
 # Migration Guide
 
+## v1.15.0 → v1.16.0 (2026-10-21)
+
+**Source-compatible upgrade**: exported signatures are unchanged apart from additions, so code that compiled against v1.15.0 compiles against v1.16.0. Runtime behaviour does change in several places (token positions, rendered SQL, parse acceptance, CLI refusals, MCP HTTP limits). Read the checklist below before upgrading. The [CHANGELOG](../CHANGELOG.md) has the full list.
+
+### Why upgrade
+
+- **SQL syntax highlighting**: new `pkg/highlight`, `gosqlx.Highlight*`, the `gosqlx highlight` command, LSP semantic tokens and the playground editor all share one dialect-aware classifier. See [HIGHLIGHTING.md](HIGHLIGHTING.md).
+- **Dialect-aware LSP**: the configured dialect drives diagnostics, formatting, symbols, completion and hover, and can be changed at runtime with `workspace/didChangeConfiguration`.
+- **`gosqlx-mcp` hardening and ChatGPT app support**, plus a Claude Code plugin (`/plugin marketplace add ajitpratap0/GoSQLX`).
+- **Performance audit (#566)**: zero-copy token values, linear position tracking and fewer allocations across the tokenizer, parser, AST, linter and LSP.
+- **Correctness sweep**: `SQL()`, the formatter and `gosqlx format` round-trip far more constructs, and render-time SQL injection through quoted names is closed.
+
+### New APIs to adopt
+
+- `gosqlx.Highlight`, `gosqlx.HighlightANSI`, `gosqlx.HighlightHTML` and `pkg/highlight` (`Spans`, `ANSI`, `HTML`, `CSS`, `WithDialect`).
+- `gosqlx.LintWithDialect(sql, dialect)` and `(*linter.Linter).SetDialect`.
+- `parser.WithPipesAsConcat()` / `gosqlx.WithPipesAsConcat()` for MySQL/MariaDB servers running with `PIPES_AS_CONCAT`.
+- `Tokenizer.TokenizeString` / `TokenizeStringContext` to tokenize a string without a `[]byte` copy.
+- `keywords.DialectNames()`: the 11 dialect names every surface accepts.
+- `pkg/mcp`: `NewRateLimitMiddleware`, `Config.TrustedProxyHeader`, `TrustedProxyHops`, `TrustedProxySecretHeader`, `TrustedProxySecret`, `Server.Shutdown`.
+- AST additions: `FieldAccessExpression`, `ParenthesizedExpression`, `JoinClause.Using`, `TableReference.SetSubquery`, `TableReference.ColumnAliases`, `TableReference.WithOrdinality`, `BinaryExpression.PipesOr`, `Identifier.Quoted`, `WindowFrame.Exclude`, `WindowSpec.BaseWindow`, `SelectStatement.Settings` and others listed in the CHANGELOG.
+- CLI: `gosqlx highlight`, and `--dialect` on `parse`, `format`, `analyze` and `lint`.
+
+### Behavior changes to act on
+
+- [ ] **Token columns**: a tab is now one column (it was four), and a token's `Start` after comments is the token itself. Columns are 1-based byte offsets. If you map `models.Location.Column` back to text, treat it as a byte offset. L006 reports byte columns too.
+- [ ] **MySQL/MariaDB `||`**: under `mysql`/`mariadb`, `||` is logical OR. Pass `WithPipesAsConcat()` if your server uses `PIPES_AS_CONCAT`.
+- [ ] **Composite field access** `(expr).field` returns E4001 under MySQL, MariaDB, SQL Server, SQLite, Oracle, Snowflake, ClickHouse and Redshift.
+- [ ] **Zero-copy token values**: token and AST strings reference the input. `strings.Clone` any value you cache long-term.
+- [ ] **Oracle binds**: under the Oracle dialect `:1` and `:name` are placeholders.
+- [ ] **Sorted extraction**: `Extract*` and `ExtractMetadata` results are sorted; drop any code that sorted them itself or relied on map order.
+- [ ] **`gosqlx format`** renders through `pkg/formatter` and exits non-zero if the result does not re-parse to the same query; `format -i` then leaves the file untouched.
+- [ ] **Rendering**: quoted names that need quotes keep them, `NOT EXISTS`, named windows and window frame offsets render correctly, and readable style emits a single trailing `;`. Update golden files that captured the old output.
+- [ ] **AST pooling**: `ReleaseAST` no longer pools most expression and statement nodes, and `Children()`/`Walk` return pointers into the parent, so visitor edits now change the tree. Do not use those pointers after `ReleaseAST`.
+- [ ] **Limits**: comments count toward `MaxTokens`; unary operators, `NOT` and derived tables count toward `MaxRecursionDepth`; qualified names over 5 parts return E2004.
+- [ ] **LSP semantic tokens**: the `identifier` token type is now the standard `variable`. Update editor rules such as Neovim `@lsp.type.identifier`.
+- [ ] **Schema loaders**: the PostgreSQL loader needs PostgreSQL 11+. `Index.Columns` excludes INCLUDE columns (now `Index.IncludeColumns`), and tables with no foreign keys carry a nil slice.
+- [ ] **`gosqlx-mcp` behind a proxy**: rate limiting keys on the TCP peer. Set `GOSQLX_MCP_TRUSTED_PROXY_HEADER` (for example `CF-Connecting-IP`) or `GOSQLX_MCP_TRUSTED_PROXY_HOPS`, optionally with the proxy-secret pair, or every client shares one bucket. Tool input errors are now `isError` results, and `indent_size` must be 0 to 16. See [MCP_GUIDE.md](MCP_GUIDE.md).
+
+### Companion release versions
+
+| Component | v1.15.0 | v1.16.0 |
+|-----------|---------|---------|
+| Library (`github.com/ajitpratap0/GoSQLX`) | 1.15.0 | **1.16.0** |
+| CLI (`cmd/gosqlx`, `gosqlx --version`) | 1.14.0 (stale constant) | **1.16.0** |
+| MCP server (`cmd/gosqlx-mcp`) | 1.14.0 (stale constant) | **1.16.0** |
+| VS Code extension (`ajitpratap0.gosqlx`) | 1.15.0 | **1.16.0** |
+| Claude Code plugin (`gosqlx@gosqlx`) | 1.15.0 | **1.16.0** |
+| OpenTelemetry integration (`integrations/opentelemetry`) | requires v1.14.0 | updated after the tag |
+| GORM integration (`integrations/gorm`) | requires v1.14.0 | updated after the tag |
+| Python bindings (`pygosqlx`) | 0.2.0 (alpha) | 0.2.0 (alpha), independent track |
+
+---
+
 ## v1.13.0 → v1.14.0 (2026-04-12)
 
 **Drop-in upgrade** — no breaking API changes. Anything that compiled against v1.13.0 will still compile and run identically against v1.14.0.

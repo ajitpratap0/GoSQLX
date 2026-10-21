@@ -136,6 +136,13 @@ if err != nil {
 bold, italic and underline only. Styles are reset before each newline and
 re-applied after it, so output stays correct through `head`, `grep` or a pager.
 
+**Untrusted input.** `ANSI` and `WriteANSI` never copy terminal control
+characters from the source, so a string literal or comment cannot inject
+escape sequences. C0 controls other than tab, newline and carriage return are
+shown as Unicode control pictures (ESC becomes U+241B), DEL as U+2421, and C1
+controls and invalid UTF-8 as U+FFFD. The rendered text therefore differs from
+the input only where it contained such characters. HTML output is escaped.
+
 ### HTML and CSS
 
 ```go

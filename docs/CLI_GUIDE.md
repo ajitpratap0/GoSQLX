@@ -196,6 +196,7 @@ gosqlx format [file...] [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `-i, --in-place` | bool | false | Edit files in place (not supported with stdin) |
+| `--dialect` | string | postgresql | SQL dialect (generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse); unknown names are rejected |
 | `--indent` | int | 2 | Indentation size in spaces (0-8) |
 | `--uppercase` | bool | true | Uppercase SQL keywords |
 | `--no-uppercase` | bool | false | Keep original keyword case |
@@ -293,6 +294,7 @@ gosqlx parse [file|query] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--dialect` | string | postgresql | SQL dialect (generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse); unknown names are rejected |
 | `--ast` | bool | false | Show detailed AST structure |
 | `--tokens` | bool | false | Show tokenization output |
 | `--tree` | bool | false | Show tree visualization |
@@ -367,6 +369,7 @@ gosqlx analyze [file|query] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--dialect` | string | postgresql | SQL dialect (generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse); unknown names are rejected |
 | `--security` | bool | false | Focus on security vulnerability analysis |
 | `--performance` | bool | false | Focus on performance optimization analysis |
 | `--complexity` | bool | false | Focus on complexity metrics |
@@ -460,6 +463,7 @@ gosqlx lint [file...] [flags]
 |------|------|---------|-------------|
 | `-r, --recursive` | bool | false | Recursively process directories |
 | `-p, --pattern` | string | `*.sql` | File pattern for recursive processing |
+| `--dialect` | string | postgresql | SQL dialect (generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse); unknown names are rejected |
 | `--auto-fix` | bool | false | Automatically fix violations where possible |
 | `--max-length` | int | 100 | Maximum line length for L005 rule |
 | `--fail-on-warn` | bool | false | Exit with error code on warnings |
@@ -1298,6 +1302,12 @@ gosqlx validate --dialect mysql mysql_query.sql
 
 # SQL Server validation
 gosqlx validate --dialect sqlserver tsql_query.sql
+
+# parse, format, analyze and lint take the same flag
+gosqlx format --dialect mysql "SELECT * FROM t LIMIT 5, 10"
+gosqlx parse --dialect clickhouse query.sql
+gosqlx analyze --dialect sqlserver tsql_query.sql
+gosqlx lint --dialect oracle oracle_query.sql
 ```
 
 ### Pipeline Processing
@@ -1428,11 +1438,18 @@ GoSQLX supports multiple SQL dialects with dialect-specific features:
 | Dialect | Identifier | Special Features |
 |---------|-----------|------------------|
 | PostgreSQL | `postgresql` | JSONB, arrays, LATERAL JOIN, DISTINCT ON, FILTER clause |
-| MySQL | `mysql` | Backtick identifiers, MySQL-specific functions |
-| SQL Server | `sqlserver` | Bracket identifiers, T-SQL syntax |
-| Oracle | `oracle` | Oracle-specific syntax and functions |
-| SQLite | `sqlite` | SQLite-specific features |
+| MySQL | `mysql` | Backtick identifiers, `LIMIT offset, count`, `\|\|` as logical OR |
+| MariaDB | `mariadb` | MySQL syntax plus SEQUENCE DDL, temporal tables, CONNECT BY |
+| SQL Server | `sqlserver` | Bracket identifiers, T-SQL syntax, TOP, PIVOT/UNPIVOT |
+| Oracle | `oracle` | `:1`/`:name` bind variables, CONNECT BY, PRIOR |
+| SQLite | `sqlite` | SQLite-specific features, `?` placeholders |
+| Snowflake | `snowflake` | VARIANT paths, `@stage`, QUALIFY, MATCH_RECOGNIZE |
+| BigQuery | `bigquery` | Keyword set and composite field access |
+| Redshift | `redshift` | Keyword set |
+| ClickHouse | `clickhouse` | PREWHERE, FINAL, SETTINGS, table functions, parametric aggregates |
 | Generic | `generic` | Standard SQL only |
+
+Dialect names are case-sensitive. The same 11 names are accepted by every command's `--dialect` flag, the config file, the LSP server and the MCP `validate_sql` tool (see `keywords.DialectNames()`).
 
 ### Advanced SQL Features Supported
 

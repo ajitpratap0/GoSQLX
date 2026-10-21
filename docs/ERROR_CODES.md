@@ -555,7 +555,7 @@ The SQL uses a feature that GoSQLX does not implement, or that the selected dial
 
 Common causes:
 - Composite field access `(expr).field` outside PostgreSQL, BigQuery and `generic` (and the default dialect).
-- `TOP` outside SQL Server, or `LIMIT` under Oracle.
+- `TOP` outside SQL Server, or `LIMIT` under SQL Server or Oracle.
 - A comma list, alias or ClickHouse `FINAL` after a parenthesized join group.
 - `JOIN` in `UPDATE ... FROM`, or `ORDER BY`/`LIMIT` after a parenthesized query that the AST cannot represent.
 

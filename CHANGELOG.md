@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.16.0] - 2026-10-21 — Performance Audit, SQL Highlighting, Dialect-Aware LSP, Claude Code Plugin & ChatGPT App, Correctness Sweep
 
 Covers everything merged since v1.15.0: the October 2026 performance audit
-(#566) with 2-90% fewer allocations across tokenizer, parser, AST and LSP; the
+(#566) with large allocation cuts across tokenizer, parser, AST and LSP; the
 batch-2/batch-3 correctness sweep (round-tripping `SQL()`, formatter and
 `gosqlx format`, render-time injection hardening); new `pkg/highlight` SQL
 syntax highlighting across API, CLI, LSP, WASM and playground; a fully

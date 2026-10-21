@@ -47,7 +47,7 @@
 | CLI (`cmd/gosqlx`, `gosqlx --version`) | 1.14.0 (stale constant) | **1.16.0** |
 | MCP server (`cmd/gosqlx-mcp`) | 1.14.0 (stale constant) | **1.16.0** |
 | VS Code extension (`ajitpratap0.gosqlx`) | 1.15.0 | **1.16.0** |
-| Claude Code plugin (`gosqlx@gosqlx`) | 1.15.0 | **1.16.0** |
+| Claude Code plugin (`gosqlx@gosqlx`) | — (new) | **1.16.0** |
 | OpenTelemetry integration (`integrations/opentelemetry`) | requires v1.14.0 | updated after the tag |
 | GORM integration (`integrations/gorm`) | requires v1.14.0 | updated after the tag |
 | Python bindings (`pygosqlx`) | 0.2.0 (alpha) | 0.2.0 (alpha), independent track |

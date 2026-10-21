@@ -29,7 +29,7 @@ Without a trusted-proxy setting, rate limits key on the TCP peer address, so eve
 ## Functions
 
 ### `LoadConfig() (*Config, error)`
-Load from env vars. Returns an error if `GOSQLX_MCP_PORT` is non-integer or out of range, or if the trusted-proxy settings are invalid (bad header name, negative hops, or a proxy secret shorter than 16 bytes).
+Load from env vars. Returns an error if `GOSQLX_MCP_PORT` is non-integer or out of range, or if the trusted-proxy settings are invalid (bad header name, `X-Forwarded-For` as the trusted header, hops outside 0-16, a proxy secret shorter than 16 bytes, a secret header or secret set without the other, a secret header that reuses `Authorization`, `X-Forwarded-For` or the trusted header, or a secret with no trusted header or hops configured). See [MCP_GUIDE.md](../MCP_GUIDE.md).
 
 ### `DefaultConfig() *Config`
 Returns `Config{Host: "127.0.0.1", Port: 8080}` with auth disabled and no trusted proxy.

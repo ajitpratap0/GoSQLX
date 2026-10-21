@@ -1,9 +1,11 @@
 {
   "$schema": "https://glama.ai/mcp/schemas/server.json",
-  "maintainers": ["ajitpratap0"],
+  "maintainers": [
+    "ajitpratap0"
+  ],
   "name": "gosqlx-mcp",
   "display_name": "GoSQLX — SQL Intelligence MCP Server",
-  "description": "Production-ready SQL parsing, formatting, linting, security scanning, and metadata extraction for Go. 7 MCP tools covering the full SQL analysis pipeline: validate_sql, format_sql, parse_sql, extract_metadata, security_scan, lint_sql, and analyze_sql. Supports PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, and ClickHouse dialects. 1.38M+ ops/sec, zero-copy, race-free.",
+  "description": "SQL parsing, formatting, linting, security scanning and metadata extraction, built on the GoSQLX Go SDK. 7 MCP tools: validate_sql, format_sql, parse_sql, extract_metadata, security_scan, lint_sql and analyze_sql. Dialect-aware validation for PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, BigQuery, Redshift and ClickHouse. Zero-copy tokenizer, race-free, with object pooling.",
   "repository": "https://github.com/ajitpratap0/GoSQLX",
   "homepage": "https://gosqlx.dev",
   "version": "1.16.0",
@@ -38,6 +40,8 @@
     "sql-server",
     "oracle",
     "snowflake",
+    "bigquery",
+    "redshift",
     "clickhouse",
     "mcp",
     "code-analysis"
@@ -45,15 +49,15 @@
   "tools": [
     {
       "name": "validate_sql",
-      "description": "Validate SQL syntax against generic or dialect-specific rules. Accepts optional dialect parameter (generic, mysql, postgresql, sqlite, sqlserver, oracle, snowflake). Returns {valid: bool, error?: string, dialect?: string}."
+      "description": "Check whether SQL is syntactically valid, optionally for a specific dialect (dialect parameter: generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse). Returns {valid: bool, error?: string, dialect?: string}."
     },
     {
       "name": "format_sql",
-      "description": "Format SQL with configurable indentation size, keyword casing (uppercase/lowercase), and optional trailing semicolon. Returns the formatted SQL string and the options applied."
+      "description": "Pretty-print SQL: one clause per line, configurable indent size, optional upper-case keywords and trailing semicolon. Comments are not kept. Returns {formatted_sql, options}."
     },
     {
       "name": "parse_sql",
-      "description": "Parse SQL into an AST and return a summary: total statement count and fully-qualified AST node types for each statement."
+      "description": "Parse SQL and return an AST summary: the statement count and the type of each statement."
     },
     {
       "name": "extract_metadata",
@@ -65,11 +69,11 @@
     },
     {
       "name": "lint_sql",
-      "description": "Lint SQL against all 30 GoSQLX style rules (L001–L030): whitespace, keywords, safety, performance, and naming. Returns violations with line/column positions and fix suggestions."
+      "description": "Lint SQL with the same 10 rules as `gosqlx lint` (L001–L010): trailing whitespace, mixed indentation, consecutive blank lines, indentation depth, line length (>100), column alignment, keyword case (upper), comma placement (trailing), aliasing consistency and redundant whitespace. Returns {violation_count, violations} with line/column positions."
     },
     {
       "name": "analyze_sql",
-      "description": "Run all 6 analysis tools concurrently (validate_sql, parse_sql, extract_metadata, security_scan, lint_sql, format_sql) and return a single composite report. The most efficient way to get full SQL intelligence in one call."
+      "description": "Run validate, parse, metadata, security, lint and format concurrently and return one composite report. The most efficient way to get a full review of a query in one call."
     }
   ],
   "capabilities": {
@@ -80,28 +84,53 @@
   "features": {
     "dialects": [
       "generic",
+      "postgresql",
       "mysql",
       "mariadb",
-      "postgresql",
-      "sqlite",
       "sqlserver",
       "oracle",
+      "sqlite",
       "snowflake",
+      "bigquery",
+      "redshift",
       "clickhouse"
     ],
     "security": {
       "injection_detection": true,
-      "severity_levels": ["critical", "high", "medium", "low"],
-      "patterns": ["tautology", "union-attack", "stacked-queries", "comment-bypass", "blind-injection"]
+      "severity_levels": [
+        "critical",
+        "high",
+        "medium",
+        "low"
+      ],
+      "patterns": [
+        "tautology",
+        "union-attack",
+        "stacked-queries",
+        "comment-bypass",
+        "blind-injection"
+      ]
     },
     "linting": {
-      "rules": 30,
-      "rule_ids": ["L001", "L002", "L003", "L004", "L005", "L006", "L007", "L008", "L009", "L010", "L011", "L012", "L013", "L014", "L015", "L016", "L017", "L018", "L019", "L020", "L021", "L022", "L023", "L024", "L025", "L026", "L027", "L028", "L029", "L030"]
+      "rules": 10,
+      "rule_ids": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006",
+        "L007",
+        "L008",
+        "L009",
+        "L010"
+      ],
+      "note": "The GoSQLX CLI and Go SDK provide 30 rules (L001–L030); the MCP lint_sql tool applies L001–L010."
     },
     "performance": {
-      "ops_per_sec": "1380000+",
       "concurrency": "race-free",
-      "memory": "zero-copy object pooling"
+      "memory": "zero-copy tokenizer with object pooling",
+      "benchmarks": "https://gosqlx.dev/benchmarks"
     }
   },
   "related_servers": [

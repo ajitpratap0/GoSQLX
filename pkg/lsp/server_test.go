@@ -25,6 +25,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 )
 
 // mockReadWriter provides a mock for testing the LSP server
@@ -154,6 +156,10 @@ func TestHandler_Initialize(t *testing.T) {
 
 	if initResult.ServerInfo.Name != "gosqlx-lsp" {
 		t.Errorf("expected server name 'gosqlx-lsp', got %q", initResult.ServerInfo.Name)
+	}
+
+	if initResult.ServerInfo.Version != gosqlx.Version {
+		t.Errorf("expected server version %q (gosqlx.Version), got %q", gosqlx.Version, initResult.ServerInfo.Version)
 	}
 
 	if !initResult.Capabilities.HoverProvider {

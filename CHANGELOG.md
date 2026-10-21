@@ -268,6 +268,17 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
     the gosqlx.dev playground uses it for editor highlighting.
 
   See [docs/HIGHLIGHTING.md](docs/HIGHLIGHTING.md).
+- **Dialect-aware LSP server**: the dialect from `initializationOptions.dialect`
+  now drives every feature, not only semantic tokens. Diagnostics, formatting
+  and document symbols tokenize and parse with the dialect's rules (MySQL
+  `LIMIT 5, 10` is valid under `mysql`, `ILIKE` is reported under `mysql`);
+  completion and hover add the dialect's own keywords. The server also handles
+  `workspace/didChangeConfiguration` with `{"gosqlx": {"dialect": "..."}}`:
+  it switches dialect without a restart, re-publishes diagnostics for open
+  documents and, when the client advertises `refreshSupport`, sends
+  `workspace/semanticTokens/refresh`. Invalid values fall back to `generic`, as
+  in `initialize`. The default `generic` dialect keeps the previous behaviour
+  for every feature. See [docs/LSP_GUIDE.md](docs/LSP_GUIDE.md#sql-dialect).
 - **`--dialect` flag for the `parse`, `format`, `analyze`, and `lint` CLI
   commands**: dialect-specific SQL (e.g. MySQL `LIMIT offset, count`) can now be
   parsed by these commands, matching the existing `validate --dialect`. Unknown
@@ -426,6 +437,18 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
 - **Readable-style output that did not re-parse**: inner `;` and `;;` removed
   (#602, #631); readable-style re-parse failures over the testdata corpus fell
   from 36 to 6.
+- **Tokenizer error locations point at the offending construct**: an
+  unterminated dollar-quoted string (`$$`/`$tag$`) and an unterminated SQL
+  Server `[identifier]` now report their opening delimiter instead of the end of
+  input, and a double-quoted identifier broken by a newline now reports its
+  opening quote on the correct column. These errors, invalid escape sequences
+  (which point at the character after the backslash) and `StringLiteralReader`
+  errors now use the same rule as token spans: 1-based line, 1-based byte
+  column, a tab counting as one column. Before, they used internal rune counts,
+  so the column drifted after multibyte characters and could be 0, and a dollar
+  quote could report the wrong line. The two errors with no position
+  (`keywords cannot be nil`, input too large) report column 1 instead of 0.
+  Error codes and messages are unchanged.
 - **Dialect lists now agree everywhere**: the `--dialect` help on `parse`,
   `format`, `analyze`, `lint` and `validate`, the CLI's unknown-dialect error,
   config-file validation, the MCP `validate_sql` schema, the playground WASM

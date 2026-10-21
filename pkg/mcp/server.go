@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -105,9 +106,10 @@ func (s *Server) Handler() http.Handler {
 // process restarts. The sweep runs every SessionIdleTTL/2, so state is removed
 // 30 to 45 minutes after a session's last request.
 //
-// The transport is stateless: session IDs are random, not recorded, and any
-// well-formed ID is accepted, so sweeping (or DELETE) frees memory but does
-// not invalidate an ID. The privacy policy on gosqlx.dev cites this value.
+// The transport is stateless (see newSessionIdManager): session IDs are
+// random, not recorded, and any well-formed ID is accepted, so sweeping (or
+// DELETE) frees memory but does not invalidate an ID. The privacy policy on
+// gosqlx.dev cites this value.
 const SessionIdleTTL = 30 * time.Minute
 
 // streamable returns the server's streamable HTTP transport, building it with
@@ -117,11 +119,31 @@ func (s *Server) streamable() *mcpserver.StreamableHTTPServer {
 	defer s.streamMu.Unlock()
 	if s.streamSrv == nil {
 		s.streamSrv = mcpserver.NewStreamableHTTPServer(s.mcpSrv,
+			mcpserver.WithSessionIdManager(newSessionIdManager()),
 			mcpserver.WithSessionIdleTTL(s.sessionIdleTTL),
 			mcpserver.WithLogger(s.transportLogger),
 		)
 	}
 	return s.streamSrv
+}
+
+// newSessionIdManager returns the session ID manager for the HTTP transport.
+//
+// It is pinned explicitly rather than left to mcp-go's default so that an
+// upstream default change cannot silently switch the public, unauthenticated
+// server to mcp-go's InsecureStatefulSessionIdManager. That manager records
+// every terminated session ID in a sync.Map that is never pruned
+// (server/streamable_http.go in mcp-go v0.45.0, the terminated field and its
+// Store in Terminate), so memory would grow with every session a client opens
+// and closes, and the IDs would be retained for the life of the process.
+//
+// StatelessGeneratingSessionIdManager issues random IDs, checks only their
+// format, and keeps no record of issued or terminated IDs. None of the GoSQLX
+// tools needs per-session state, so nothing depends on a terminated ID being
+// rejected; the transport's own per-session state is still freed by DELETE
+// and by the idle sweeper (see SessionIdleTTL).
+func newSessionIdManager() mcpserver.SessionIdManager {
+	return &mcpserver.StatelessGeneratingSessionIdManager{}
 }
 
 // Shutdown stops the background session sweeper of the HTTP transport. It
@@ -142,12 +164,40 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// transportLogger adapts mcp-go's transport logging. Informational messages
-// are dropped because they carry session IDs (e.g. "Sweeping expired session:
-// <id>"); errors, such as failed response writes, are still logged.
+// transportLogger adapts mcp-go's transport logging so that session IDs are
+// never logged, as the privacy policy on gosqlx.dev promises.
+//
+// Informational messages are dropped because they carry session IDs (e.g.
+// "Sweeping expired session: <id>"). Error messages are logged, but their
+// arguments are printed only for formats known to carry no session ID (I/O
+// failures and fixed sentinel errors); for any other format the arguments are
+// replaced with a placeholder. This matters because some mcp-go errors embed
+// the client-supplied Mcp-Session-Id header, e.g. "Failed to deliver sampling
+// response: no active session found for session <id>", which any client can
+// trigger by POSTing a response-shaped JSON-RPC message.
 type transportLogger struct {
 	logger *log.Logger
 }
+
+// transportErrorsWithSafeArgs lists the mcp-go v0.45.0 Errorf formats whose
+// arguments never include a session ID. Formats not listed here (including
+// ones added by future mcp-go releases) are logged with redacted arguments.
+var transportErrorsWithSafeArgs = map[string]bool{
+	"Failed to write SSE event: %v":                true,
+	"Failed to write SSE event during drain: %v":   true,
+	"Failed to write final SSE response event: %v": true,
+	"Failed to write response: %v":                 true,
+	"Failed to register POST session: %v":          true, // ErrSessionExists only
+	"Failed to write JSONRPCError: %v":             true,
+}
+
+// redactedArg replaces each argument of a transport error whose format is not
+// in transportErrorsWithSafeArgs.
+const redactedArg = "[redacted]"
+
+// sessionIDPattern matches the IDs mcp-go generates. It is applied to every
+// logged error as a second line of defence.
+var sessionIDPattern = regexp.MustCompile(`mcp-session-[0-9A-Fa-f-]+`)
 
 func newTransportLogger() util.Logger {
 	return transportLogger{logger: log.Default()}
@@ -156,7 +206,15 @@ func newTransportLogger() util.Logger {
 func (transportLogger) Infof(string, ...any) {}
 
 func (l transportLogger) Errorf(format string, v ...any) {
-	l.logger.Printf("gosqlx-mcp: transport error: "+format, v...)
+	args := v
+	if !transportErrorsWithSafeArgs[format] {
+		args = make([]any, len(v))
+		for i := range args {
+			args[i] = redactedArg
+		}
+	}
+	msg := sessionIDPattern.ReplaceAllString(fmt.Sprintf(format, args...), "mcp-session-"+redactedArg)
+	l.logger.Printf("gosqlx-mcp: transport error: %s", msg)
 }
 
 // Cfg returns the server configuration.

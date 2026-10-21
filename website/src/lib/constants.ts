@@ -60,6 +60,7 @@ export const DOCS_SIDEBAR: DocsSidebarCategory[] = [
     { slug: 'guides/production', file: 'PRODUCTION_GUIDE.md', label: 'Run in Production', description: 'Run GoSQLX in production: sizing object pools, concurrency and race safety, metrics and monitoring, error handling, timeouts and deployment advice.' },
     { slug: 'guides/performance-tuning', file: 'PERFORMANCE_TUNING.md', label: 'Performance Tuning', description: 'Tune GoSQLX for throughput: reuse pooled tokenizers and ASTs, choose the right API, profile hot paths and read benchmark results for your workload.' },
     { slug: 'guides/troubleshooting', file: 'TROUBLESHOOTING.md', label: 'Troubleshooting', description: 'Fix common GoSQLX problems: parse errors, LSP server and linter issues, security scanner surprises, performance and memory problems, with debugging tips.' },
+    { slug: 'guides/syntax-highlighting', file: 'HIGHLIGHTING.md', label: 'Syntax Highlighting', description: 'Highlight SQL with GoSQLX for terminals, HTML pages and editors: the categories, themes, the highlight CLI command, LSP semantic tokens and the WASM build.' },
   ]},
   { category: 'Integrations', summary: 'Editors, language server and AI assistants.', items: [
     { slug: 'integrations/vscode', file: 'editors/vscode.md', label: 'VS Code', description: 'Install the GoSQLX VS Code extension for SQL diagnostics, formatting, completion and hover, and configure the language server for your project.' },
@@ -67,6 +68,7 @@ export const DOCS_SIDEBAR: DocsSidebarCategory[] = [
     { slug: 'integrations/jetbrains', file: 'editors/jetbrains.md', label: 'JetBrains', description: 'Connect JetBrains IDEs such as GoLand, IntelliJ and DataGrip to the GoSQLX language server for SQL diagnostics, formatting and completion, step by step.' },
     { slug: 'integrations/lsp', file: 'LSP_GUIDE.md', label: 'Language Server (LSP)', description: 'Set up the GoSQLX Language Server for diagnostics, completion, hover, formatting and symbols in VS Code, Neovim, JetBrains and other LSP editors.' },
     { slug: 'integrations/mcp', file: 'MCP_GUIDE.md', label: 'MCP Server', description: 'Expose GoSQLX to AI assistants through the Model Context Protocol: available tools for parsing, validating, formatting and analyzing SQL, plus setup steps.' },
+    { slug: 'integrations/chatgpt', file: 'CHATGPT_APP.md', label: 'ChatGPT App', description: 'How gosqlx-mcp works as a ChatGPT app and in MCP Apps hosts: tool and resource metadata, the analyze_sql report widget, structured content and testing.' },
   ]},
   { category: 'Reference', summary: 'API, CLI configuration, errors, rules and dialects.', items: [
     { slug: 'reference/api', file: 'API_REFERENCE.md', label: 'API Reference', description: 'GoSQLX API reference index: every package from the high-level gosqlx API to the tokenizer, parser and AST, with pooling advice and a complete example.' },
@@ -79,6 +81,7 @@ export const DOCS_SIDEBAR: DocsSidebarCategory[] = [
     { slug: 'reference/api/errors', file: 'api/errors.md', label: 'errors package', depth: 1, description: 'Reference for the GoSQLX errors package: structured errors with codes, source positions, hints and help links, and helpers to build and inspect them.' },
     { slug: 'reference/api/metrics', file: 'api/metrics.md', label: 'metrics package', depth: 1, description: 'Reference for the GoSQLX metrics package: enable, record and read counters and timings for tokenizer and parser operations in production services.' },
     { slug: 'reference/api/security', file: 'api/security.md', label: 'security package', depth: 1, description: 'Reference for the GoSQLX security package: the SQL injection scanner, its finding and result types, severity levels and every detection pattern.' },
+    { slug: 'reference/api/highlight', file: 'api/highlight.md', label: 'highlight package', depth: 1, description: 'Reference for the GoSQLX highlight package: classify SQL into byte-offset spans by category, then render them as ANSI, HTML or CSS with built-in themes.' },
     { slug: 'reference/api/linter', file: 'api/linter.md', label: 'linter package', depth: 1, description: 'Reference for the GoSQLX linter package: the lint engine, the Rule interface, violations, auto-fix support and how to build a linter with your rules.' },
     { slug: 'reference/api/lsp', file: 'api/lsp.md', label: 'lsp package', depth: 1, description: 'Reference for the GoSQLX lsp package: the Language Server Protocol server, its handlers and capabilities, and how to embed it in your own tool.' },
     { slug: 'reference/api/mcp', file: 'api/mcp.md', label: 'mcp package', depth: 1, description: 'Reference for the GoSQLX mcp package: the Model Context Protocol server, its configuration and the SQL tools it registers for AI assistants.' },
@@ -92,7 +95,8 @@ export const DOCS_SIDEBAR: DocsSidebarCategory[] = [
     { slug: 'concepts/architecture', file: 'ARCHITECTURE.md', label: 'Architecture', description: 'How GoSQLX is built: the zero-copy tokenizer, recursive descent parser, AST and visitor pattern, object pools and package dependencies, explained.' },
     { slug: 'concepts/security', file: 'SECURITY.md', label: 'Security Model', description: 'The GoSQLX security model: test results, architecture, CLI input sanitization, best practices for users, hardening, and the SQL injection scanner.' },
   ]},
-  { category: 'Migration', summary: 'Move to GoSQLX from other SQL parsers and linters.', items: [
+  { category: 'Migration', summary: 'Upgrade between GoSQLX releases, or move to GoSQLX from other SQL parsers and linters.', items: [
+    { slug: 'migration/upgrading', file: 'MIGRATION.md', label: 'Upgrading GoSQLX', description: 'Upgrade GoSQLX between releases: new APIs worth adopting, behavior changes to check, deprecations and companion component versions, release by release.' },
     { slug: 'migration/from-jsqlparser', file: 'migration/FROM_JSQLPARSER.md', label: 'From JSQLParser', description: 'Migrate from JSqlParser to GoSQLX: how Java parsing concepts map to Go APIs, equivalent AST nodes, visitor usage and a step-by-step porting checklist.' },
     { slug: 'migration/from-pg-query', file: 'migration/FROM_PG_QUERY.md', label: 'From pg_query', description: 'Migrate from pg_query_go to GoSQLX: swap the cgo dependency for a pure Go parser, map AST nodes and functions, and handle multiple SQL dialects.' },
     { slug: 'migration/from-sqlfluff', file: 'migration/FROM_SQLFLUFF.md', label: 'From SQLFluff', description: 'Migrate from SQLFluff to GoSQLX: map lint rules and configuration to GoSQLX equivalents, compare speed and dialects, and move CI checks over.' },

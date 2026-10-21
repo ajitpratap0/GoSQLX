@@ -21,12 +21,14 @@ package models
 //
 // Fields:
 //   - Line: Line number in source code (starts at 1)
-//   - Column: Column number within the line (starts at 1)
+//   - Column: Byte column within the line (starts at 1)
 //
 // Example:
 //
 //	loc := models.Location{Line: 5, Column: 20}
-//	// Represents position: line 5, column 20 (5th line, 20th character)
+//	// Represents line 5, byte column 20: the position 19 bytes after the
+//	// start of the 5th line. A multi-byte UTF-8 character before it counts
+//	// all of its bytes, so this is not necessarily the 20th character.
 //
 // Usage in error reporting:
 //
@@ -38,10 +40,15 @@ package models
 //
 // Integration with LSP (Language Server Protocol):
 //
-//	// Convert to LSP Position (0-based)
+// LSP positions are 0-based and, by default, count UTF-16 code units, so the
+// line converts directly but the column must be re-measured against the line
+// text. Subtracting 1 from Column is only correct for ASCII-only lines:
+//
+//	lineText := lines[location.Line-1]
+//	prefix := lineText[:location.Column-1] // bytes before the position
 //	lspPos := lsp.Position{
-//	    Line:      location.Line - 1,      // Convert to 0-based
-//	    Character: location.Column - 1,    // Convert to 0-based
+//	    Line:      location.Line - 1,
+//	    Character: len(utf16.Encode([]rune(prefix))),
 //	}
 //
 // Columns produced by the tokenizer count bytes: every byte of the line before

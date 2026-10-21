@@ -8,7 +8,7 @@ GoSQLX is a production-ready, high-performance SQL parsing SDK for Go with compr
 
 ### Core Capabilities
 - **High-Performance Parsing** - 1.38M+ operations/second sustained, 1.5M peak with zero-copy tokenization
-- **Multi-Dialect Support** - PostgreSQL, MySQL, SQL Server, Oracle, SQLite with ~80-85% SQL-99 compliance
+- **Multi-Dialect Support** - PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake and ClickHouse (plus `generic`, `bigquery` and `redshift` as accepted dialect names) with ~80-85% SQL-99 compliance
 - **Thread-Safe Operations** - Race-free concurrent processing validated with 20,000+ concurrent operations
 - **Memory Efficient** - Object pooling architecture with 60-80% memory reduction
 - **Production Ready** - Comprehensive error handling, position tracking, and recovery
@@ -46,6 +46,8 @@ GoSQLX is a production-ready, high-performance SQL parsing SDK for Go with compr
 | [**GETTING_STARTED.md**](GETTING_STARTED.md) | 5-minute quickstart guide for new users | Beginners |
 | [**CLI_GUIDE.md**](CLI_GUIDE.md) | Command-line tool usage and examples | CLI Users |
 | [**LSP_GUIDE.md**](LSP_GUIDE.md) | Language Server Protocol integration for IDEs | IDE Users/Developers |
+| [**MCP_GUIDE.md**](MCP_GUIDE.md) | MCP server for AI assistants: tools, configuration, rate limits and embedding | AI Tooling/DevOps |
+| [**CHATGPT_APP.md**](CHATGPT_APP.md) | How `gosqlx-mcp` works as a ChatGPT app and in MCP Apps hosts | AI Tooling |
 
 ### Core Documentation
 
@@ -57,6 +59,7 @@ GoSQLX is a production-ready, high-performance SQL parsing SDK for Go with compr
 | [**TROUBLESHOOTING.md**](TROUBLESHOOTING.md) | Common issues, error messages, debugging techniques, and FAQ | Support/Debug |
 | [**LINTING_RULES.md**](LINTING_RULES.md) | Complete linting rules reference (L001-L030) with examples | Developers/QA |
 | [**CONFIGURATION.md**](CONFIGURATION.md) | Configuration file (.gosqlx.yml) guide with all options | DevOps/Teams |
+| [**HIGHLIGHTING.md**](HIGHLIGHTING.md) | SQL syntax highlighting: categories, themes, CLI, LSP semantic tokens and WASM ([API](api/highlight.md)) | Developers/Tool Builders |
 
 ### Reference Documentation
 
@@ -86,6 +89,7 @@ GoSQLX is a production-ready, high-performance SQL parsing SDK for Go with compr
 
 | Document | Description |
 |----------|-------------|
+| [**MIGRATION.md**](MIGRATION.md) | Release-by-release upgrade notes: new APIs, behavior changes and companion versions |
 | [**UPGRADE_GUIDE.md**](UPGRADE_GUIDE.md) | Version upgrade guide with breaking changes |
 | [**migration/FROM_JSQLPARSER.md**](migration/FROM_JSQLPARSER.md) | Migrating from JSqlParser |
 | [**migration/FROM_PG_QUERY.md**](migration/FROM_PG_QUERY.md) | Migrating from pg_query |
@@ -387,7 +391,7 @@ The command-line tool now includes:
 
 ### Comprehensive SQL Support
 - **80-85% SQL-99 Compliance**: Window functions, CTEs, set operations
-- **Multi-Dialect**: PostgreSQL, MySQL, SQL Server, Oracle, SQLite
+- **Multi-Dialect**: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse
 - **Advanced Features**: MERGE, GROUPING SETS, materialized views
 - **Modern SQL**: Full window function and CTE support
 

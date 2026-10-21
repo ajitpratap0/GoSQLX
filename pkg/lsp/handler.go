@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -120,9 +121,19 @@ type Handler struct {
 	debounceTimers map[string]*time.Timer
 
 	// dialectMu guards dialect, which is set from the client's
-	// initializationOptions and read by semantic token requests.
+	// initializationOptions or workspace/didChangeConfiguration and read by
+	// every feature that tokenizes, parses or offers keywords (see dialect.go).
 	dialectMu sync.RWMutex
 	dialect   keywords.SQLDialect
+
+	// publishMu serialises the dialect staleness check and the publish in
+	// validateDocument, so diagnostics computed under a superseded dialect
+	// can never be published after the ones that replace them.
+	publishMu sync.Mutex
+
+	// semanticRefresh records whether the client advertised
+	// workspace.semanticTokens.refreshSupport in initialize.
+	semanticRefresh atomic.Bool
 }
 
 // NewHandler creates a new LSP request handler.
@@ -130,8 +141,10 @@ type Handler struct {
 // This constructor initializes the handler with a reference to the server
 // and sets up the SQL keywords database for hover documentation and completion.
 //
-// The handler uses DialectGeneric for maximum SQL compatibility across
-// PostgreSQL, MySQL, SQL Server, Oracle, and SQLite dialects.
+// The handler starts with DialectGeneric for maximum SQL compatibility across
+// PostgreSQL, MySQL, SQL Server, Oracle, and SQLite dialects. A client selects
+// another dialect via initializationOptions.dialect or, at runtime, via
+// workspace/didChangeConfiguration (see dialect.go).
 //
 // Parameters:
 //   - server: The LSP server instance that owns this handler
@@ -191,6 +204,8 @@ func (h *Handler) HandleNotification(method string, params json.RawMessage) {
 		h.handleDidClose(params)
 	case "textDocument/didSave":
 		h.handleDidSave(params)
+	case "workspace/didChangeConfiguration":
+		h.handleDidChangeConfiguration(params)
 	}
 }
 
@@ -203,6 +218,9 @@ func (h *Handler) handleInitialize(params json.RawMessage) (*InitializeResult, e
 
 	h.server.Logger().Printf("Initialize request from client, rootURI: %s", initParams.RootURI)
 	h.setDialect(dialectFromInitOptions(initParams.InitializationOptions))
+	if ws := initParams.Capabilities.Workspace; ws != nil && ws.SemanticTokens != nil {
+		h.semanticRefresh.Store(ws.SemanticTokens.RefreshSupport)
+	}
 
 	return &InitializeResult{
 		Capabilities: ServerCapabilities{
@@ -403,14 +421,23 @@ func (h *Handler) handleDidSave(params json.RawMessage) {
 func (h *Handler) validateDocument(uri, content string, version int) {
 	// Use ParseWithRecovery for multi-error diagnostics so the user sees
 	// every problem at once instead of fixing them one-by-one.
-	_, errs := gosqlx.ParseWithRecovery(content)
+	dialect := h.currentDialect()
+	_, errs := parseWithRecoveryForDialect(content, dialect)
 	diagnostics := buildDiagnostics(content, errs)
 	if diagnostics == nil {
 		// Publish an empty (non-nil) slice so the JSON stays "diagnostics":[].
 		diagnostics = []Diagnostic{}
 	}
 
-	// Publish diagnostics
+	// Publish diagnostics, unless the dialect changed while parsing: the
+	// dialect change re-validates every open document (see
+	// revalidateOpenDocuments), and that result must not be overwritten.
+	h.publishMu.Lock()
+	defer h.publishMu.Unlock()
+	if h.currentDialect() != dialect {
+		h.server.Logger().Printf("Dropped diagnostics for %s: dialect changed during validation", uri)
+		return
+	}
 	h.server.SendNotification("textDocument/publishDiagnostics", PublishDiagnosticsParams{
 		URI:         uri,
 		Version:     version,
@@ -642,8 +669,13 @@ func (h *Handler) handleHover(params json.RawMessage) (*Hover, error) {
 		return &Hover{}, nil
 	}
 
-	// Look up keyword documentation
-	doc_text := getKeywordDocumentation(strings.ToUpper(word))
+	// Look up keyword documentation, then the configured dialect's own
+	// keywords (none for the generic dialect).
+	upper := strings.ToUpper(word)
+	doc_text := getKeywordDocumentation(upper)
+	if doc_text == "" {
+		doc_text = dialectKeywordHover(upper, h.currentDialect())
+	}
 	if doc_text == "" {
 		return &Hover{}, nil
 	}
@@ -698,6 +730,13 @@ func (h *Handler) handleCompletion(params json.RawMessage) (*CompletionList, err
 	items := []CompletionItem{}
 	for _, kw := range sqlKeywords {
 		if prefix == "" || strings.HasPrefix(strings.ToUpper(kw.Label), prefix) {
+			items = append(items, kw)
+		}
+	}
+
+	// Then the configured dialect's own keywords (none for generic).
+	for _, kw := range dialectKeywordCompletions[h.currentDialect()] {
+		if prefix == "" || strings.HasPrefix(kw.Label, prefix) {
 			items = append(items, kw)
 		}
 	}
@@ -762,7 +801,7 @@ func (h *Handler) handleFormatting(params json.RawMessage) ([]TextEdit, error) {
 	if p.Options.InsertSpaces {
 		opts.IndentSize = p.Options.TabSize
 	}
-	formatted, err := gosqlx.Format(content, opts)
+	formatted, err := formatForDialect(content, opts, h.currentDialect())
 	if err != nil {
 		// If parsing fails, fall back to basic formatting
 		formatted = formatSQL(content, p.Options)
@@ -1220,7 +1259,7 @@ func (h *Handler) handleDocumentSymbol(params json.RawMessage) ([]DocumentSymbol
 	lines := doc.Lines
 
 	// Parse the SQL to extract symbols
-	parsed, err := gosqlx.Parse(content)
+	parsed, err := parseForDialect(content, h.currentDialect())
 	if err != nil {
 		// Return empty symbols on parse error
 		return []DocumentSymbol{}, nil
@@ -2174,15 +2213,18 @@ func dialectFromInitOptions(opts interface{}) keywords.SQLDialect {
 	return keywords.SQLDialect(name)
 }
 
-// setDialect records the SQL dialect used for semantic highlighting.
-func (h *Handler) setDialect(d keywords.SQLDialect) {
+// setDialect records the SQL dialect used by all language features and
+// reports whether it differs from the previous one.
+func (h *Handler) setDialect(d keywords.SQLDialect) bool {
 	h.dialectMu.Lock()
+	changed := h.dialect != d
 	h.dialect = d
 	h.dialectMu.Unlock()
-	h.server.Logger().Printf("Semantic highlighting dialect: %s", d)
+	h.server.Logger().Printf("SQL dialect: %s", d)
+	return changed
 }
 
-// currentDialect returns the SQL dialect used for semantic highlighting.
+// currentDialect returns the SQL dialect used by all language features.
 func (h *Handler) currentDialect() keywords.SQLDialect {
 	h.dialectMu.RLock()
 	defer h.dialectMu.RUnlock()

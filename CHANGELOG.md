@@ -244,6 +244,17 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
     the gosqlx.dev playground uses it for editor highlighting.
 
   See [docs/HIGHLIGHTING.md](docs/HIGHLIGHTING.md).
+- **Dialect-aware LSP server**: the dialect from `initializationOptions.dialect`
+  now drives every feature, not only semantic tokens. Diagnostics, formatting
+  and document symbols tokenize and parse with the dialect's rules (MySQL
+  `LIMIT 5, 10` is valid under `mysql`, `ILIKE` is reported under `mysql`);
+  completion and hover add the dialect's own keywords. The server also handles
+  `workspace/didChangeConfiguration` with `{"gosqlx": {"dialect": "..."}}`:
+  it switches dialect without a restart, re-publishes diagnostics for open
+  documents and, when the client advertises `refreshSupport`, sends
+  `workspace/semanticTokens/refresh`. Invalid values fall back to `generic`, as
+  in `initialize`. The default `generic` dialect keeps the previous behaviour
+  for every feature. See [docs/LSP_GUIDE.md](docs/LSP_GUIDE.md#sql-dialect).
 - **`--dialect` flag for the `parse`, `format`, `analyze`, and `lint` CLI
   commands**: dialect-specific SQL (e.g. MySQL `LIMIT offset, count`) can now be
   parsed by these commands, matching the existing `validate --dialect`. Unknown

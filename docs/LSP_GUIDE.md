@@ -29,6 +29,7 @@ The GoSQLX Language Server Protocol (LSP) implementation provides real-time SQL 
 - **Signature Help**: Function parameter documentation for 15+ SQL functions
 - **Code Actions**: Quick fixes for common SQL issues
 - **Semantic Tokens**: Dialect-aware syntax highlighting powered by `pkg/highlight`
+- **SQL Dialects**: One configurable dialect drives diagnostics, formatting, symbols, completion, hover and highlighting, and can change at runtime
 - **Rate Limiting**: Protection against DoS (100 requests/sec)
 
 ---
@@ -218,9 +219,10 @@ Earlier builds used a non-standard `identifier` token type and reported quoted
 identifiers as `string`. Custom highlight rules keyed on `identifier` (for
 example Neovim's `@lsp.type.identifier`) must use `variable` instead.
 
-#### Dialect for Semantic Tokens
+### SQL Dialect
 
-Semantic tokens use the SQL dialect from the client's `initializationOptions`:
+The server uses one SQL dialect for every feature. The client chooses it in
+`initializationOptions` and can change it later without a restart:
 
 ```json
 { "dialect": "mysql" }
@@ -228,12 +230,56 @@ Semantic tokens use the SQL dialect from the client's `initializationOptions`:
 
 - `dialect` is a string and accepts `generic`, `postgresql`, `mysql`,
   `mariadb`, `sqlserver`, `oracle`, `sqlite`, `snowflake`, `bigquery`,
-  `redshift` and `clickhouse`.
+  `redshift` and `clickhouse` (case and surrounding spaces are ignored).
 - A missing, non-string, empty or unrecognised value uses `generic`.
-- The setting is read once, at `initialize`, and affects semantic tokens only.
-  Changing it requires restarting the language server. The VS Code extension
-  restarts the server when `gosqlx.dialect` changes. Other clients must restart
-  the server themselves (in nvim-lspconfig, `:LspRestart`).
+
+What the dialect changes:
+
+| Feature | Effect |
+|---------|--------|
+| Diagnostics | Documents are tokenized and parsed with the dialect's rules, so MySQL `LIMIT 5, 10` is valid under `mysql` but reported under `postgresql`, and `ILIKE` is reported under `mysql` |
+| Formatting | Dialect-specific SQL is parsed and reformatted instead of falling back to whitespace-only formatting |
+| Document symbols | Statements that only the dialect accepts appear in the outline |
+| Completion | The dialect's own keywords (for example MySQL `ZEROFILL`) are offered after the standard keywords |
+| Hover | The dialect's own keywords show a short "MySQL-specific keyword" note |
+| Semantic tokens | Keywords, quoting and literals are classified for the dialect (for example `"x"` is a string under `mysql`) |
+
+Signature help and code actions do not depend on the dialect.
+
+`generic`, the default, keeps the behaviour of earlier releases exactly: the
+server parses with the library's default pipeline (PostgreSQL keyword rules,
+no parser dialect). That pipeline is more permissive than an explicit dialect,
+so, for example, `ILIKE` is accepted under `generic`.
+
+#### Changing the Dialect at Runtime
+
+Send `workspace/didChangeConfiguration` with the dialect under a `gosqlx`
+section:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "workspace/didChangeConfiguration",
+  "params": { "settings": { "gosqlx": { "dialect": "postgresql" } } }
+}
+```
+
+- The value is validated exactly as in `initializationOptions`: a non-string,
+  empty or unrecognised `dialect` switches to `generic`, so a live change and a
+  restart with the same setting always agree.
+- Settings without a `gosqlx.dialect` entry (including `"settings": null`)
+  leave the dialect unchanged, so unrelated configuration changes are harmless.
+- When the dialect changes, the server re-publishes diagnostics for every open
+  document. If the client advertised
+  `capabilities.workspace.semanticTokens.refreshSupport` in `initialize`, the
+  server also sends a `workspace/semanticTokens/refresh` request so the editor
+  re-requests highlighting. Other features read the dialect on each request.
+
+The VS Code extension sends `gosqlx.dialect` as `initializationOptions.dialect`
+and restarts the server when the setting changes; it does not send
+`workspace/didChangeConfiguration`. Other clients can push the setting with
+`workspace/didChangeConfiguration` or restart the server (in nvim-lspconfig,
+`:LspRestart`).
 
 Neovim with nvim-lspconfig, using the `gosqlx` config from
 [Neovim](#neovim):
@@ -241,10 +287,16 @@ Neovim with nvim-lspconfig, using the `gosqlx` config from
 ```lua
 require('lspconfig').gosqlx.setup{
   init_options = { dialect = 'mysql' },
+  settings = { gosqlx = { dialect = 'mysql' } },
 }
 ```
 
-Any client sends the setting in the `initialize` request:
+Neovim's LSP client sends `settings` in `workspace/didChangeConfiguration`
+right after initialization, and sending new settings later (for example with
+`client.notify('workspace/didChangeConfiguration', { settings = ... })`)
+switches the dialect live.
+
+Any client sends the initial setting in the `initialize` request:
 
 ```json
 {

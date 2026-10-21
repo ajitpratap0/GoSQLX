@@ -173,6 +173,18 @@ type InitializeParams struct {
 // ClientCapabilities describes the client's capabilities
 type ClientCapabilities struct {
 	TextDocument TextDocumentClientCapabilities `json:"textDocument,omitempty"`
+	Workspace    *WorkspaceClientCapabilities   `json:"workspace,omitempty"`
+}
+
+// WorkspaceClientCapabilities describes workspace-level client capabilities
+type WorkspaceClientCapabilities struct {
+	SemanticTokens *SemanticTokensWorkspaceClientCapabilities `json:"semanticTokens,omitempty"`
+}
+
+// SemanticTokensWorkspaceClientCapabilities describes whether the client
+// accepts workspace/semanticTokens/refresh requests from the server
+type SemanticTokensWorkspaceClientCapabilities struct {
+	RefreshSupport bool `json:"refreshSupport,omitempty"`
 }
 
 // TextDocumentClientCapabilities describes text document capabilities
@@ -333,6 +345,12 @@ type DidCloseTextDocumentParams struct {
 type DidSaveTextDocumentParams struct {
 	TextDocument TextDocumentIdentifier `json:"textDocument"`
 	Text         string                 `json:"text,omitempty"`
+}
+
+// DidChangeConfigurationParams is sent when the client's settings change.
+// Settings is client-defined; the server reads {"gosqlx": {"dialect": ...}}.
+type DidChangeConfigurationParams struct {
+	Settings interface{} `json:"settings"`
 }
 
 // Position in a text document

@@ -74,6 +74,10 @@ claude mcp add --transport http gosqlx https://mcp.gosqlx.dev/mcp
 
 7 SQL tools in Claude, Cursor, or any MCP client. [MCP guide](https://gosqlx.dev/docs/integrations/mcp/).
 
+**Claude Code plugin** (skills, slash commands, SQL reviewer agent): `/plugin marketplace add ajitpratap0/GoSQLX` then `/plugin install gosqlx@gosqlx` - [details](plugins/gosqlx/README.md).
+
+**ChatGPT app**: add `https://mcp.gosqlx.dev/mcp` as a connector in developer mode for an interactive analysis widget - [details](integrations/chatgpt/README.md).
+
 [![MCP](https://img.shields.io/badge/MCP-Remote%20Server-blue?style=flat-square)](https://mcp.gosqlx.dev/health)
 [![Glama MCP Server](https://glama.ai/mcp/servers/ajitpratap0/GoSQLX/badges/score.svg)](https://glama.ai/mcp/servers/ajitpratap0/GoSQLX)
 
@@ -161,6 +165,7 @@ Formatting turns one-line SQL into a readable query:
 - **[Parser](https://gosqlx.dev/docs/concepts/architecture/)** - zero-copy tokenizer, recursive descent parser and full AST generation.
 - **[Analysis](https://gosqlx.dev/docs/reference/linting-rules/)** - SQL injection scanner, 30 lint rules (L001-L030), 20 optimizer rules and metadata extraction.
 - **[Tooling](https://gosqlx.dev/docs/cli-guide/)** - AST-based formatter, query transforms API, VS Code extension and GitHub Action.
+- **[Syntax highlighting](docs/HIGHLIGHTING.md)** - dialect-aware highlighting for terminals (ANSI), HTML/CSS, JSON spans, LSP semantic tokens and WASM; `gosqlx highlight query.sql` or `gosqlx.HighlightANSI(sql)`.
 - **[Multi-dialect](https://gosqlx.dev/docs/reference/sql-compatibility/)** - PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse.
 - **[AI-ready](https://gosqlx.dev/docs/integrations/mcp/)** - MCP server with 7 tools, public remote endpoint, Streamable HTTP.
 - **[Tested](https://gosqlx.dev/docs/reference/sql-compatibility/)** - race-detector clean in CI, ~80-85% SQL-99 (estimated).

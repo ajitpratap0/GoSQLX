@@ -30,6 +30,8 @@
 //	GOSQLX_MCP_HOST        bind host (default: 127.0.0.1)
 //	GOSQLX_MCP_PORT        bind port (default: 8080)
 //	GOSQLX_MCP_AUTH_TOKEN  bearer token; empty disables auth
+//	GOSQLX_MCP_OPENAI_APPS_CHALLENGE  ChatGPT app domain-verification token,
+//	                       served at /.well-known/openai-apps-challenge
 package mcp
 
 import (
@@ -54,6 +56,12 @@ type Config struct {
 	// When non-empty every request must carry "Authorization: Bearer <token>".
 	// Source: GOSQLX_MCP_AUTH_TOKEN (default: "" - auth disabled)
 	AuthToken string
+
+	// OpenAIAppsChallenge is the domain-verification token issued by the
+	// OpenAI Platform when submitting a ChatGPT app. When non-empty it is
+	// served as plain text at /.well-known/openai-apps-challenge.
+	// Source: GOSQLX_MCP_OPENAI_APPS_CHALLENGE (default: "" - not served)
+	OpenAIAppsChallenge string
 }
 
 // LoadConfig reads configuration from environment variables, applying defaults
@@ -78,6 +86,10 @@ func LoadConfig() (*Config, error) {
 
 	if v := strings.TrimSpace(os.Getenv("GOSQLX_MCP_AUTH_TOKEN")); v != "" {
 		cfg.AuthToken = v
+	}
+
+	if v := strings.TrimSpace(os.Getenv("GOSQLX_MCP_OPENAI_APPS_CHALLENGE")); v != "" {
+		cfg.OpenAIAppsChallenge = v
 	}
 
 	return cfg, nil

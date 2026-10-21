@@ -32,7 +32,7 @@ The GoSQLX MCP server (`gosqlx-mcp`) exposes all GoSQLX SQL capabilities as [Mod
 - **7 SQL Tools**: validate, format, parse, extract metadata, security scan, lint, and composite analyze
 - **Streamable HTTP**: Compatible with any MCP client that supports the streamable HTTP transport
 - **Optional Bearer Auth**: Protect the server with a token when exposing to a network
-- **Multi-Dialect Validation**: postgresql, mysql, sqlite, sqlserver, oracle, snowflake, generic
+- **Multi-Dialect Validation**: generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse
 - **Concurrent Analysis**: `analyze_sql` fans out all 6 tools via `sync.WaitGroup` - one round trip for a full SQL health report
 - **Zero Business Logic Duplication**: Every tool delegates to the existing `pkg/gosqlx`, `pkg/linter`, and `pkg/sql/security` packages
 
@@ -256,7 +256,7 @@ All tools accept a required `sql` string parameter. The server returns tool-sema
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `sql` | string | yes | - | The SQL string to validate |
-| `dialect` | string | no | *(generic)* | One of: `generic`, `mysql`, `postgresql`, `sqlite`, `sqlserver`, `oracle`, `snowflake` |
+| `dialect` | string | no | *(generic)* | One of: `generic`, `postgresql`, `mysql`, `mariadb`, `sqlserver`, `oracle`, `sqlite`, `snowflake`, `bigquery`, `redshift`, `clickhouse` |
 
 #### Response
 
@@ -595,6 +595,28 @@ curl -s -X POST http://127.0.0.1:8080/mcp \
 
 ## AI Assistant Integration
 
+### Claude Code plugin
+
+The repository doubles as a Claude Code plugin marketplace. The `gosqlx` plugin
+connects to the hosted server and adds SQL skills, `/gosqlx:analyze`,
+`/gosqlx:format`, `/gosqlx:lint` and `/gosqlx:security` commands, a read-only
+`sql-reviewer` agent and an optional hook that validates edited `.sql` files:
+
+```
+/plugin marketplace add ajitpratap0/GoSQLX
+/plugin install gosqlx@gosqlx
+```
+
+See [`plugins/gosqlx/README.md`](../plugins/gosqlx/README.md) for local mode and privacy notes.
+
+### ChatGPT
+
+`gosqlx-mcp` is also a ChatGPT app (OpenAI Apps SDK): `analyze_sql` renders an
+interactive report widget, and every tool returns `structuredContent`. Add
+`https://mcp.gosqlx.dev/mcp` as a connector in ChatGPT developer mode (no auth).
+See [`integrations/chatgpt/README.md`](../integrations/chatgpt/README.md) and
+[CHATGPT_APP.md](CHATGPT_APP.md).
+
 ### Claude Desktop
 
 Add `gosqlx-mcp` to your Claude Desktop configuration (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
@@ -604,9 +626,7 @@ Add `gosqlx-mcp` to your Claude Desktop configuration (`~/Library/Application Su
   "mcpServers": {
     "gosqlx": {
       "command": "gosqlx-mcp",
-      "env": {
-        "GOSQLX_MCP_PORT": "8080"
-      }
+      "args": ["--stdio"]
     }
   }
 }

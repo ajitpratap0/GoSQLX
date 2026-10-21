@@ -212,5 +212,5 @@ func init() {
 	analyzeCmd.Flags().BoolVar(&analyzePerformance, "performance", false, "focus on performance optimization analysis (config: analyze.performance)")
 	analyzeCmd.Flags().BoolVar(&analyzeComplexity, "complexity", false, "focus on complexity metrics (config: analyze.complexity)")
 	analyzeCmd.Flags().BoolVar(&analyzeAll, "all", false, "comprehensive analysis (config: analyze.all)")
-	analyzeCmd.Flags().StringVar(&analyzeDialect, "dialect", "", "SQL dialect: postgresql, mysql, mariadb, snowflake, sqlserver, oracle, sqlite (default: postgresql)")
+	analyzeCmd.Flags().StringVar(&analyzeDialect, "dialect", "", dialectFlagUsage("default: postgresql"))
 }

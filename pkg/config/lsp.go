@@ -18,7 +18,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // LoadFromLSPInitOptions loads configuration from LSP initialization options.
@@ -335,7 +338,7 @@ func GetLSPConfigSections() []LSPConfigSection {
 			Description:  "SQL validation options",
 			DefaultValue: ToLSPSettings(defaults)["validation"],
 			Properties: map[string]interface{}{
-				"dialect":    "SQL dialect (postgresql, mysql, mariadb, snowflake, sqlserver, oracle, sqlite)",
+				"dialect":    "SQL dialect (" + strings.Join(keywords.DialectNames(), ", ") + ")",
 				"strictMode": "Enable strict validation mode",
 			},
 		},

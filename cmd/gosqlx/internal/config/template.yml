@@ -23,7 +23,7 @@ format:
 # Validation settings - controls SQL validation behavior
 validate:
   # SQL dialect for validation
-  # Options: postgresql, mysql, sqlserver, oracle, sqlite, generic
+  # Options: generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse
   # Default: postgresql
   dialect: postgresql
 

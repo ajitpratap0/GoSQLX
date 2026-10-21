@@ -58,11 +58,13 @@ func (r *StringLiteralReader) ReadStringLiteral() (models.Token, error) {
 		ch = quotedRune(ch, strict)
 
 		if ch == '\\' {
-			// Handle escape sequences
+			// Handle escape sequences. Errors point at the character after
+			// the backslash (or end of input), matching Tokenizer.
+			escChar := r.pos.Index + 1
 			if err := r.handleEscapeSequence(&buf); err != nil {
 				return models.Token{}, errors.InvalidSyntaxError(
 					fmt.Sprintf("invalid escape sequence: %v", err),
-					models.Location{Line: r.pos.Line, Column: r.pos.Column},
+					locationAt(r.input, escChar),
 					string(r.input),
 				)
 			}
@@ -71,7 +73,7 @@ func (r *StringLiteralReader) ReadStringLiteral() (models.Token, error) {
 
 		if ch == '\n' {
 			return models.Token{}, errors.UnterminatedStringError(
-				models.Location{Line: startPos.Line, Column: startPos.Column},
+				locationAt(r.input, startPos.Index),
 				string(r.input),
 			)
 		}
@@ -105,7 +107,7 @@ func (r *StringLiteralReader) ReadStringLiteral() (models.Token, error) {
 	}
 
 	return models.Token{}, errors.UnterminatedStringError(
-		models.Location{Line: startPos.Line, Column: startPos.Column},
+		locationAt(r.input, startPos.Index),
 		string(r.input),
 	)
 }

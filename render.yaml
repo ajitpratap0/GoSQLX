@@ -10,4 +10,9 @@ services:
         value: "0.0.0.0"
       - key: GOSQLX_MCP_PORT
         value: "8080"
+      # Domain-verification token for the ChatGPT app directory, issued by the
+      # OpenAI Platform during submission. Set the value in the Render
+      # dashboard; it is served at /.well-known/openai-apps-challenge.
+      - key: GOSQLX_MCP_OPENAI_APPS_CHALLENGE
+        sync: false
     healthCheckPath: /health

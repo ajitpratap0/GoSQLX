@@ -214,8 +214,75 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   `OVER (w)`, and `WINDOW w AS (...)` no longer repeats its name inside the
   parentheses. The non-standard `WINDOW w AS w2` is normalized to
   `WINDOW w AS (w2)`. (#608, #629)
+- **LSP semantic token legend changed**: the non-standard `identifier` token
+  type is replaced by the standard `variable`, which now covers table, column
+  and alias names and quoted identifiers (double-quoted identifiers were
+  `string` before). Function names are `function` and type names are `type`.
+  Comments and placeholders (`$1`, `?`, `:name`, `@var`) are now emitted, as
+  `comment` and `parameter`. AND, OR and NOT stay `keyword`. Positions are
+  UTF-16 code units. Clients with custom rules keyed on the old `identifier`
+  type (for example Neovim `@lsp.type.identifier` highlight links) must switch
+  to `variable`.
 
 ### Added
+- **Claude Code plugin and marketplace**: `/plugin marketplace add
+  ajitpratap0/GoSQLX` then `/plugin install gosqlx@gosqlx` installs the
+  `gosqlx` plugin (`plugins/gosqlx/`): the hosted MCP server, five SQL skills
+  (analysis, formatting, security review, linting, dialects), four slash
+  commands, a read-only `sql-reviewer` agent and an opt-out PostToolUse hook
+  that validates edited `.sql` files when the `gosqlx` CLI is installed.
+- **ChatGPT app support in `gosqlx-mcp`** (OpenAI Apps SDK and MCP Apps):
+  `analyze_sql` links an embedded report widget
+  (`ui://gosqlx/analysis-v1.html`, `text/html;profile=mcp-app`); all tools now
+  return `structuredContent` alongside the unchanged text JSON, carry
+  `securitySchemes`/invocation-status metadata, and the server sends usage
+  instructions. `validate_sql` accepts `mariadb` and `clickhouse`; the server
+  reports `gosqlx.Version`; `/health` reports the real tool count; the
+  optional `GOSQLX_MCP_OPENAI_APPS_CHALLENGE` env var serves
+  `/.well-known/openai-apps-challenge` for app verification; idle MCP sessions
+  have their transport state swept 30–45 minutes after their last request
+  (`SessionIdleTTL`, sweep every TTL/2) instead of living until restart, and
+  session IDs are not logged. `uppercase_keywords: true` on
+  `format_sql` now also uppercases operator and function keywords (`AND`,
+  `OR`, `COUNT`); `indent_size` affects nested blocks only, as now
+  documented. `Server.Shutdown(ctx)` stops the transport, and `Server.Start`
+  sets read-header and idle timeouts. The `analyze_sql` widget caps long
+  lists, shows failed calls as errors and avoids blocked clipboard calls. Setup:
+  `integrations/chatgpt/README.md`, details: `docs/CHATGPT_APP.md`.
+- **SQL syntax highlighting (`pkg/highlight`)**: `highlight.Spans(sql, opts...)`
+  classifies SQL into sorted, non-overlapping byte-offset spans tagged with one
+  of 13 stable categories (keyword, function, type, identifier,
+  quoted-identifier, string, number, constant, operator, punctuation, comment,
+  placeholder, error). It is dialect-aware via `WithDialect`, never fails
+  (input after the first lexical error becomes one `error` span), and detects
+  functions in call position and types in type position. Renderers: `ANSI` /
+  `WriteANSI` (256-color, true color or attributes only), `HTML` / `WriteHTML`
+  (classes or inline styles) and `CSS`, with `dark`, `light` and `mono` themes.
+  Spans marshal to JSON. Built on top of it:
+  - `gosqlx.Highlight`, `gosqlx.HighlightANSI` and `gosqlx.HighlightHTML`.
+  - `gosqlx highlight [file|SQL]` (alias `hl`, reads stdin) with
+    `--format ansi|html|json|css`, `--theme`, `--dialect`,
+    `--color auto|always|never` (honors TTY, `NO_COLOR` and `COLORTERM`) and
+    `--standalone` for a full HTML page.
+  - LSP `textDocument/semanticTokens/full` now uses `pkg/highlight` with the
+    standard token types (keyword, function, type, variable, string, number,
+    operator, comment, parameter), UTF-16 positions, per-line splitting of
+    multi-line tokens, and coverage of every dialect keyword and all comments.
+  - WASM `gosqlxHighlight(sql[, dialect])` returns spans with UTF-16 offsets;
+    the gosqlx.dev playground uses it for editor highlighting.
+
+  See [docs/HIGHLIGHTING.md](docs/HIGHLIGHTING.md).
+- **Dialect-aware LSP server**: the dialect from `initializationOptions.dialect`
+  now drives every feature, not only semantic tokens. Diagnostics, formatting
+  and document symbols tokenize and parse with the dialect's rules (MySQL
+  `LIMIT 5, 10` is valid under `mysql`, `ILIKE` is reported under `mysql`);
+  completion and hover add the dialect's own keywords. The server also handles
+  `workspace/didChangeConfiguration` with `{"gosqlx": {"dialect": "..."}}`:
+  it switches dialect without a restart, re-publishes diagnostics for open
+  documents and, when the client advertises `refreshSupport`, sends
+  `workspace/semanticTokens/refresh`. Invalid values fall back to `generic`, as
+  in `initialize`. The default `generic` dialect keeps the previous behaviour
+  for every feature. See [docs/LSP_GUIDE.md](docs/LSP_GUIDE.md#sql-dialect).
 - **`--dialect` flag for the `parse`, `format`, `analyze`, and `lint` CLI
   commands**: dialect-specific SQL (e.g. MySQL `LIMIT offset, count`) can now be
   parsed by these commands, matching the existing `validate --dialect`. Unknown
@@ -383,6 +450,31 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
 - **Readable-style output that did not re-parse**: inner `;` and `;;` removed
   (#602, #631); readable-style re-parse failures over the testdata corpus fell
   from 36 to 6.
+- **Tokenizer error locations point at the offending construct**: an
+  unterminated dollar-quoted string (`$$`/`$tag$`) and an unterminated SQL
+  Server `[identifier]` now report their opening delimiter instead of the end of
+  input, and a double-quoted identifier broken by a newline now reports its
+  opening quote on the correct column. These errors, invalid escape sequences
+  (which point at the character after the backslash) and `StringLiteralReader`
+  errors now use the same rule as token spans: 1-based line, 1-based byte
+  column, a tab counting as one column. Before, they used internal rune counts,
+  so the column drifted after multibyte characters and could be 0, and a dollar
+  quote could report the wrong line. The two errors with no position
+  (`keywords cannot be nil`, input too large) report column 1 instead of 0.
+  Error codes and messages are unchanged.
+- **Dialect lists now agree everywhere**: the `--dialect` help on `parse`,
+  `format`, `analyze`, `lint` and `validate`, the CLI's unknown-dialect error,
+  config-file validation, the MCP `validate_sql` schema, the playground WASM
+  bridge, the GitHub Action and the VS Code `gosqlx.dialect` setting all list or
+  accept the same 11 names: `generic`, `postgresql`, `mysql`, `mariadb`,
+  `sqlserver`, `oracle`, `sqlite`, `snowflake`, `bigquery`, `redshift`,
+  `clickhouse`. Before, help listed 7, the error omitted `generic` and
+  `clickhouse`, `pkg/config` rejected `generic`, `bigquery`, `redshift` and
+  `clickhouse`, and the VS Code setting offered 6 (and suggested `mysql` for
+  `mariadb`). The Go lists derive from the new `keywords.DialectNames()`, and a
+  test checks the VS Code extension and the example configs and READMEs against
+  it. Names stay case-sensitive in the CLI. `transpile --from/--to` keep their
+  own list of transpilable dialects.
 
 ### Performance
 Numbers are quoted from each PR (benchstat on an Apple M4 unless stated; the

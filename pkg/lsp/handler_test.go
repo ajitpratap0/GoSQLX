@@ -25,6 +25,7 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 )
 
@@ -938,5 +939,13 @@ func TestHoistedMaps_Stable(t *testing.T) {
 	}
 	if got := getSQLFunctionSignature("NOT_A_FUNCTION"); got != nil {
 		t.Errorf("unknown function returned %+v", got)
+	}
+}
+
+func TestCompositeFieldAccessLocation(t *testing.T) {
+	want := models.Location{Line: 2, Column: 14}
+	field := &ast.FieldAccessExpression{Expr: &ast.Identifier{Name: "payload"}, Field: "name", Pos: want}
+	if got := nodeLocation(field); got != want {
+		t.Fatalf("nodeLocation = %v, want %v", got, want)
 	}
 }

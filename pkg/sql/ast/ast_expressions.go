@@ -303,6 +303,30 @@ func (p ParenthesizedExpression) Children() []Node {
 	return []Node{p.Expr}
 }
 
+// FieldAccessExpression selects a field of a composite value, as in
+// (get_item(payload)).name. An unquoted "*" expands all fields; a quoted
+// "*" names a single field. Expr remains a child so visitors can inspect
+// function calls and subqueries inside the composite value.
+type FieldAccessExpression struct {
+	Expr   Expression
+	Field  string
+	Quoted bool
+	Pos    models.Location // Source position of the dot
+}
+
+func (f *FieldAccessExpression) expressionNode() {}
+
+// TokenLiteral returns the field-selection operator.
+func (f FieldAccessExpression) TokenLiteral() string { return "." }
+
+// Children exposes the composite value for AST traversal.
+func (f FieldAccessExpression) Children() []Node {
+	if f.Expr == nil {
+		return nil
+	}
+	return []Node{f.Expr}
+}
+
 // AnyExpression represents expr op ANY (subquery)
 type AnyExpression struct {
 	Expr     Expression

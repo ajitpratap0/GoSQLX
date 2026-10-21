@@ -5,6 +5,11 @@ before:
     - go mod tidy
     - go test -race ./...
 
+# The release archives ship the example tools only. Neither example defines a
+# version variable, so a "-X main.version=..." ldflag would be a silent no-op
+# and is intentionally omitted. The gosqlx CLI reports the tag version via
+# -X github.com/ajitpratap0/GoSQLX/cmd/gosqlx/cmd.Version=<version>
+# (see .github/workflows/vscode-publish.yml, which builds the bundled binary).
 builds:
   - id: sql-validator
     main: ./examples/sql-validator
@@ -19,7 +24,7 @@ builds:
     env:
       - CGO_ENABLED=0
     ldflags:
-      - -s -w -X main.version={{.Version}}
+      - -s -w
 
   - id: sql-formatter
     main: ./examples/sql-formatter
@@ -34,7 +39,7 @@ builds:
     env:
       - CGO_ENABLED=0
     ldflags:
-      - -s -w -X main.version={{.Version}}
+      - -s -w
 
 archives:
   - id: gosqlx-tools

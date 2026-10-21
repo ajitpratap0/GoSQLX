@@ -253,7 +253,7 @@ func (h *Handler) handleInitialize(params json.RawMessage) (*InitializeResult, e
 		},
 		ServerInfo: &ServerInfo{
 			Name:    "gosqlx-lsp",
-			Version: "1.0.0",
+			Version: gosqlx.Version,
 		},
 	}, nil
 }

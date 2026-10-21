@@ -84,9 +84,17 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
+          VERSION="${RELEASE_TAG#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag '$RELEASE_TAG' does not produce a valid semver: '$VERSION'"
+            exit 1
+          fi
           mkdir -p vscode-extension/bin
-          go build -ldflags="-s -w" -o "vscode-extension/bin/${{ matrix.binary }}" ./cmd/gosqlx
+          # Stamp the tag version so `gosqlx --version` matches the release.
+          go build -ldflags="-s -w -X github.com/ajitpratap0/GoSQLX/cmd/gosqlx/cmd.Version=${VERSION}" \
+            -o "vscode-extension/bin/${{ matrix.binary }}" ./cmd/gosqlx
 
       - name: Generate binary checksum
         run: |
@@ -94,9 +102,16 @@ jobs:
 
       - name: Smoke test binary
         if: matrix.target == 'linux-x64'
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           chmod +x vscode-extension/bin/${{ matrix.binary }}
-          ./vscode-extension/bin/${{ matrix.binary }} --version
+          out="$(./vscode-extension/bin/${{ matrix.binary }} --version)"
+          echo "$out"
+          if [ "$out" != "gosqlx version ${RELEASE_TAG#v}" ]; then
+            echo "::error::bundled binary reports '$out', expected version ${RELEASE_TAG#v}"
+            exit 1
+          fi
 
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0

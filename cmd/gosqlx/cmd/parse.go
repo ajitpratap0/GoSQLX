@@ -182,5 +182,5 @@ func init() {
 	parseCmd.Flags().BoolVar(&parseShowAST, "ast", false, "show detailed AST structure")
 	parseCmd.Flags().BoolVar(&parseShowTokens, "tokens", false, "show tokenization output")
 	parseCmd.Flags().BoolVar(&parseTreeView, "tree", false, "show tree visualization")
-	parseCmd.Flags().StringVar(&parseDialect, "dialect", "", "SQL dialect: postgresql, mysql, mariadb, snowflake, sqlserver, oracle, sqlite (default: postgresql)")
+	parseCmd.Flags().StringVar(&parseDialect, "dialect", "", dialectFlagUsage("default: postgresql"))
 }

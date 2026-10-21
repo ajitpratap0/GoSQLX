@@ -19,9 +19,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+
+	sqlkeywords "github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // Server wraps the MCP server with all GoSQLX tools registered.
@@ -99,8 +102,8 @@ func (s *Server) registerTools() {
 				mcp.Description("The SQL string to validate"),
 			),
 			mcp.WithString("dialect",
-				mcp.Description("SQL dialect: generic, mysql, postgresql, sqlite, sqlserver, oracle, snowflake"),
-				mcp.Enum("generic", "mysql", "postgresql", "sqlite", "sqlserver", "oracle", "snowflake"),
+				mcp.Description("SQL dialect: "+strings.Join(sqlkeywords.DialectNames(), ", ")),
+				mcp.Enum(sqlkeywords.DialectNames()...),
 			),
 		),
 		handleValidateSQL,

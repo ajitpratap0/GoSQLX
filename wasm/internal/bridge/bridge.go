@@ -34,23 +34,15 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/security"
 )
 
-// dialectMap maps the playground's dialect strings to keywords.SQLDialect constants.
-var dialectMap = map[string]sqlkeywords.SQLDialect{
-	"generic":    sqlkeywords.DialectGeneric,
-	"postgresql": sqlkeywords.DialectPostgreSQL,
-	"mysql":      sqlkeywords.DialectMySQL,
-	"mariadb":    sqlkeywords.DialectMariaDB,
-	"clickhouse": sqlkeywords.DialectClickHouse,
-	"sqlite":     sqlkeywords.DialectSQLite,
-	"sqlserver":  sqlkeywords.DialectSQLServer,
-	"oracle":     sqlkeywords.DialectOracle,
-	"snowflake":  sqlkeywords.DialectSnowflake,
-}
-
-// Dialect resolves a playground dialect string. Unknown or empty values
-// resolve to "" (the parser's default dialect).
+// Dialect resolves a playground dialect string. Any name accepted by
+// keywords.IsValidDialect (see keywords.DialectNames) resolves to that
+// dialect; unknown or empty values resolve to "" (the parser's default
+// dialect).
 func Dialect(name string) sqlkeywords.SQLDialect {
-	return dialectMap[name]
+	if name == "" || !sqlkeywords.IsValidDialect(name) {
+		return ""
+	}
+	return sqlkeywords.SQLDialect(name)
 }
 
 // Parse parses sql with the given playground dialect.

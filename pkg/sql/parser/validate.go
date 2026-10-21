@@ -86,16 +86,7 @@ func trimBytes(b []byte) []byte {
 // validDialectList returns a human-readable comma-separated list of all valid
 // dialect names for use in error messages.
 func validDialectList() string {
-	dialects := keywords.AllDialects()
-	names := make([]string, 0, len(dialects))
-	for _, d := range dialects {
-		// Belt-and-suspenders: DialectUnknown is not in AllDialects(), but guard
-		// here in case a future refactor inadvertently adds it back.
-		if d != keywords.DialectUnknown {
-			names = append(names, string(d))
-		}
-	}
-	return strings.Join(names, ", ")
+	return strings.Join(keywords.DialectNames(), ", ")
 }
 
 // ParseBytes parses SQL from a []byte input without requiring a string conversion.

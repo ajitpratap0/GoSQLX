@@ -402,6 +402,19 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
 - **Readable-style output that did not re-parse**: inner `;` and `;;` removed
   (#602, #631); readable-style re-parse failures over the testdata corpus fell
   from 36 to 6.
+- **Dialect lists now agree everywhere**: the `--dialect` help on `parse`,
+  `format`, `analyze`, `lint` and `validate`, the CLI's unknown-dialect error,
+  config-file validation, the MCP `validate_sql` schema, the playground WASM
+  bridge, the GitHub Action and the VS Code `gosqlx.dialect` setting all list or
+  accept the same 11 names: `generic`, `postgresql`, `mysql`, `mariadb`,
+  `sqlserver`, `oracle`, `sqlite`, `snowflake`, `bigquery`, `redshift`,
+  `clickhouse`. Before, help listed 7, the error omitted `generic` and
+  `clickhouse`, `pkg/config` rejected `generic`, `bigquery`, `redshift` and
+  `clickhouse`, and the VS Code setting offered 6 (and suggested `mysql` for
+  `mariadb`). The Go lists derive from the new `keywords.DialectNames()`, and a
+  test checks the VS Code extension and the example configs and READMEs against
+  it. Names stay case-sensitive in the CLI. `transpile --from/--to` keep their
+  own list of transpilable dialects.
 
 ### Performance
 Numbers are quoted from each PR (benchstat on an Apple M4 unless stated; the

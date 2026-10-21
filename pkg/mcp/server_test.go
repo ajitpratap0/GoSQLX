@@ -19,8 +19,11 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"reflect"
 	"testing"
 	"time"
+
+	sqlkeywords "github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 func TestNew_CreatesServer(t *testing.T) {
@@ -178,5 +181,27 @@ func TestServer_Start_WithAuth(t *testing.T) {
 	case <-errCh:
 	case <-time.After(5 * time.Second):
 		t.Fatal("server did not shut down within 5s")
+	}
+}
+
+// TestValidateSQL_DialectEnumMatchesLibrary guards against the validate_sql
+// tool schema drifting from the dialects the library accepts.
+func TestValidateSQL_DialectEnumMatchesLibrary(t *testing.T) {
+	srv := New(DefaultConfig())
+	tool := srv.mcpSrv.GetTool("validate_sql")
+	if tool == nil {
+		t.Fatal("validate_sql tool not registered")
+	}
+	prop, ok := tool.Tool.InputSchema.Properties["dialect"].(map[string]any)
+	if !ok {
+		t.Fatalf("dialect property has unexpected type %T", tool.Tool.InputSchema.Properties["dialect"])
+	}
+	got, ok := prop["enum"].([]string)
+	if !ok {
+		t.Fatalf("dialect enum has unexpected type %T", prop["enum"])
+	}
+	want := sqlkeywords.DialectNames()
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("validate_sql dialect enum = %v, want %v", got, want)
 	}
 }

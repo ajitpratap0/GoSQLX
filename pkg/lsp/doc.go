@@ -237,7 +237,7 @@ Add to LSP.sublime-settings:
 
 The LSP server can be configured via .gosqlx.yml in your project root:
 
-	# SQL dialect (postgresql, mysql, sqlite, sqlserver, oracle, generic)
+	# SQL dialect (generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse)
 	dialect: postgresql
 
 	# Linting rules (see docs/LINTING_RULES.md)

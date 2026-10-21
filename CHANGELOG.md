@@ -15,6 +15,10 @@ Runtime behaviour does change (rendered SQL, error codes and text, parse
 acceptance, CLI refusals), so read **Behavior changes** before upgrading.
 
 ### Behavior changes
+- **Parenthesized array operands keep their AST grouping**: `(items)[1]` now
+  retains a `ParenthesizedExpression` in the subscript's `Array` field. This
+  preserves arithmetic precedence and lets `(items)[1].name` round-trip without
+  becoming the invalid `items[1].name`. (#833)
 - **Comments now count toward `MaxTokens`**: tokens plus collected comments may
   not exceed `MaxTokens` (1,000,000). Past that the tokenizer returns the
   existing E1007 token-limit error at the comment or token that crosses the
@@ -212,6 +216,8 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   `WINDOW w AS (w2)`. (#608, #629)
 
 ### Added
+- **`ast.FieldAccessExpression`**: represents composite-field selection with a
+  traversable base expression, field name, quote flag and source position. (#833)
 - **`--dialect` flag for the `parse`, `format`, `analyze`, and `lint` CLI
   commands**: dialect-specific SQL (e.g. MySQL `LIMIT offset, count`) can now be
   parsed by these commands, matching the existing `validate --dialect`. Unknown

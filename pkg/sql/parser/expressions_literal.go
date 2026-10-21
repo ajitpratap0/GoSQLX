@@ -360,15 +360,11 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		}
 		p.advance() // Consume )
 
-		// Check for array subscript or slice on parenthesized expression
-		// This handles: (expr)[1], (SELECT arr)[2:3]
-		if p.isType(models.TokenTypeLBracket) {
-			return p.parseCompositeIndirection(expr)
-		}
-
 		// Preserve grouping for a single parenthesized expression. Without this
 		// node the parentheses are dropped and AND/OR precedence changes on
 		// re-render, e.g. `(a OR b) AND c` → `a OR b AND c` (see #519).
+		// Keep the wrapper before subscripts too: `(a)[1].c` must not become
+		// `a[1].c`, and `(a + b)[1]` must retain its operand grouping.
 		return p.parseCompositeIndirection(&ast.ParenthesizedExpression{Expr: expr, Pos: parenPos})
 	}
 

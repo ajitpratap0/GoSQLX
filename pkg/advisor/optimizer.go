@@ -284,6 +284,8 @@ func countSubqueries(expr ast.Expression) int {
 		count += countSubqueries(e.Right)
 	case *ast.ParenthesizedExpression:
 		count += countSubqueries(e.Expr)
+	case *ast.FieldAccessExpression:
+		count += countSubqueries(e.Expr)
 	}
 
 	return count

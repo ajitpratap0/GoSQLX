@@ -439,13 +439,20 @@ func TestParser_ArraySubscript_OnParenthesizedExpr(t *testing.T) {
 		t.Fatalf("expected ArraySubscriptExpression, got %T", stmt.Columns[0])
 	}
 
-	// The array should be an identifier
-	arrayIdent, ok := subscriptExpr.Array.(*ast.Identifier)
+	// The array must retain its explicit parentheses.
+	arrayGroup, ok := subscriptExpr.Array.(*ast.ParenthesizedExpression)
 	if !ok {
-		t.Fatalf("expected array to be Identifier, got %T", subscriptExpr.Array)
+		t.Fatalf("expected array to be ParenthesizedExpression, got %T", subscriptExpr.Array)
+	}
+	arrayIdent, ok := arrayGroup.Expr.(*ast.Identifier)
+	if !ok {
+		t.Fatalf("expected grouped array to be Identifier, got %T", arrayGroup.Expr)
 	}
 	if arrayIdent.Name != "arr" {
 		t.Errorf("expected array name 'arr', got '%s'", arrayIdent.Name)
+	}
+	if got := tree.SQL(); got != sql {
+		t.Errorf("SQL() = %q, want %q", got, sql)
 	}
 }
 

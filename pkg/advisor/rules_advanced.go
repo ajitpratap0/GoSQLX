@@ -178,6 +178,8 @@ func containsCastExprInWhere(expr ast.Expression) bool {
 		return containsCastExprInWhere(v.Expr)
 	case *ast.ParenthesizedExpression:
 		return containsCastExprInWhere(v.Expr)
+	case *ast.FieldAccessExpression:
+		return containsCastExprInWhere(v.Expr)
 	}
 	return false
 }
@@ -296,6 +298,8 @@ func containsNotInSubquery(expr ast.Expression) bool {
 		return containsNotInSubquery(v.Expr)
 	case *ast.ParenthesizedExpression:
 		return containsNotInSubquery(v.Expr)
+	case *ast.FieldAccessExpression:
+		return containsNotInSubquery(v.Expr)
 	}
 	return false
 }
@@ -404,6 +408,8 @@ func markAliasUsed(expr ast.Expression, aliases map[string]bool) {
 	case *ast.UnaryExpression:
 		markAliasUsed(v.Expr, aliases)
 	case *ast.ParenthesizedExpression:
+		markAliasUsed(v.Expr, aliases)
+	case *ast.FieldAccessExpression:
 		markAliasUsed(v.Expr, aliases)
 	case *ast.FunctionCall:
 		for _, arg := range v.Arguments {

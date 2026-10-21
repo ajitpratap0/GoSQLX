@@ -15,6 +15,10 @@ Runtime behaviour does change (rendered SQL, error codes and text, parse
 acceptance, CLI refusals), so read **Behavior changes** before upgrading.
 
 ### Behavior changes
+- **Parenthesized array operands keep their AST grouping**: `(items)[1]` now
+  retains a `ParenthesizedExpression` in the subscript's `Array` field. This
+  preserves arithmetic precedence and lets `(items)[1].name` round-trip without
+  becoming the invalid `items[1].name`. (#833)
 - **`gosqlx-mcp` HTTP hardening**: rate limiting now keys on the TCP peer
   address and no longer trusts `X-Forwarded-For` (which let any client evade
   limits and grow limiter memory without bound). Behind a proxy, set
@@ -376,6 +380,8 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   (#599, #624)
 - **New schema fields**: `db.Index.IncludeColumns` and `db.ForeignKey.RefSchema`
   (see Behavior changes). (#620, #622)
+- **`ast.FieldAccessExpression`**: represents composite-field selection with a
+  traversable base expression, field name, quote flag and source position. (#833)
 
 ### Changed
 - **`tokenizer.NewWithKeywords` no longer consults its keyword table**: the
@@ -385,6 +391,13 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   fixes #550)
 
 ### Fixed
+- **PostgreSQL composite-returning function queries parse correctly**:
+  `(get_item(payload)).name` and `(get_item(payload)).*` retain their base
+  expression in a new `ast.FieldAccessExpression`, including quoted field names
+  and chained field/subscript access. SQL rendering, AST traversal, extraction,
+  security scanning and expression release preserve the nested expression.
+  Direct `JOIN LATERAL get_item(t.payload) AS f` references now parse their
+  arguments under the same dialect gate as FROM table functions. (#833)
 - **Tokenizer pool no longer leaks dialect state**: a tokenizer whose dialect was
   changed via `SetDialect` (e.g. by `validate --dialect mysql`) is now restored to
   the default (PostgreSQL) dialect when returned to the pool via `PutTokenizer`.

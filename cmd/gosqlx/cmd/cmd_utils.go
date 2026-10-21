@@ -16,6 +16,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -53,11 +54,25 @@ func trackChangedFlags(cmd *cobra.Command) map[string]bool {
 // validateDialectName returns an error if dialect is a non-empty, unrecognized
 // SQL dialect name. An empty string means "use the default dialect" and is
 // always accepted.
+// Names are matched case-sensitively, as keywords.IsValidDialect does.
 func validateDialectName(dialect string) error {
 	if dialect != "" && !keywords.IsValidDialect(dialect) {
-		return fmt.Errorf("unknown SQL dialect %q; valid dialects: postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift", dialect)
+		return fmt.Errorf("unknown SQL dialect %q; valid dialects: %s", dialect, validDialectsText())
 	}
 	return nil
+}
+
+// validDialectsText returns the comma-separated list of user-selectable
+// dialect names, derived from keywords.DialectNames so CLI help and errors
+// never drift from what the library accepts.
+func validDialectsText() string {
+	return strings.Join(keywords.DialectNames(), ", ")
+}
+
+// dialectFlagUsage builds the help text for a --dialect flag. suffix is the
+// command-specific default note, e.g. "default: postgresql".
+func dialectFlagUsage(suffix string) string {
+	return fmt.Sprintf("SQL dialect: %s (%s)", validDialectsText(), suffix)
 }
 
 // tokenizerForDialect returns a tokenizer configured for the given dialect

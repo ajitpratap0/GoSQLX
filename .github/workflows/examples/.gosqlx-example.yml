@@ -5,7 +5,7 @@
 # Validation settings
 validate:
   # SQL dialect to use (auto-detect if not specified)
-  # Options: postgresql, mysql, sqlserver, oracle, sqlite
+  # Options: generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse
   dialect: postgresql
 
   # Enable strict validation mode (more rigorous checks)

@@ -48,7 +48,7 @@ inputs:
     default: ''
 
   dialect:
-    description: 'SQL dialect: postgresql, mysql, sqlserver, oracle, sqlite (default: auto-detect)'
+    description: 'SQL dialect: generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse (default: auto-detect)'
     required: false
     default: ''
 
@@ -211,7 +211,7 @@ runs:
 
         # Add dialect if provided
         DIALECT="${{ inputs.dialect }}"
-        if [ -n "$DIALECT" ] && [[ "$DIALECT" =~ ^(postgresql|mysql|sqlserver|oracle|sqlite)$ ]]; then
+        if [ -n "$DIALECT" ] && [[ "$DIALECT" =~ ^(generic|postgresql|mysql|mariadb|sqlserver|oracle|sqlite|snowflake|bigquery|redshift|clickhouse)$ ]]; then
           CMD="$CMD --dialect $DIALECT"
         fi
 

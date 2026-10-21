@@ -102,7 +102,7 @@ format:
 
 ```yaml
 validation:
-  dialect: postgresql         # SQL dialect (postgresql, mysql, sqlserver, oracle, sqlite)
+  dialect: postgresql         # SQL dialect (generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse)
   strict_mode: false          # Enable strict validation
   recursive: false            # Recursively validate directories
   pattern: "*.sql"            # File pattern for validation
@@ -185,7 +185,7 @@ if err := cfg.Validate(); err != nil {
 Validation rules:
 - **Format.Indent**: Must be non-negative
 - **Format.MaxLineLength**: Must be non-negative
-- **Validation.Dialect**: Must be one of: postgresql, mysql, sqlserver, oracle, sqlite
+- **Validation.Dialect**: Must be one of: generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse
 - **Validation.Security.MaxFileSize**: Must be non-negative
 - **Output.Format**: Must be one of: text, json, yaml
 - **LSP.TraceServer**: Must be one of: off, messages, verbose

@@ -249,7 +249,7 @@ func init() {
 	formatCmd.Flags().BoolVar(&formatCompact, "compact", false, "compact format (config: format.compact)")
 	formatCmd.Flags().BoolVar(&formatCheck, "check", false, "check if files need formatting (CI mode)")
 	formatCmd.Flags().IntVar(&formatMaxLine, "max-line", 80, "maximum line length (config: format.max_line_length)")
-	formatCmd.Flags().StringVar(&formatDialect, "dialect", "", "SQL dialect: postgresql, mysql, mariadb, snowflake, sqlserver, oracle, sqlite (default: postgresql)")
+	formatCmd.Flags().StringVar(&formatDialect, "dialect", "", dialectFlagUsage("default: postgresql"))
 
 	// Add negation flags
 	formatCmd.Flags().BoolVar(&formatUppercase, "no-uppercase", false, "keep original keyword case")

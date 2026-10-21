@@ -129,9 +129,14 @@
             "generic",
             "postgresql",
             "mysql",
+            "mariadb",
             "sqlserver",
             "oracle",
-            "sqlite"
+            "sqlite",
+            "snowflake",
+            "bigquery",
+            "redshift",
+            "clickhouse"
           ],
           "default": "generic",
           "scope": "resource",

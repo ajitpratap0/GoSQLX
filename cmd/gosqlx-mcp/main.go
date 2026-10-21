@@ -25,6 +25,9 @@
 //	GOSQLX_MCP_OPENAI_APPS_CHALLENGE  ChatGPT app domain-verification token
 //	GOSQLX_MCP_TRUSTED_PROXY_HEADER   trusted client-IP header (e.g. CF-Connecting-IP)
 //	GOSQLX_MCP_TRUSTED_PROXY_HOPS     trusted proxies appending to X-Forwarded-For
+//	GOSQLX_MCP_TRUSTED_PROXY_SECRET_HEADER  header carrying the proxy shared secret
+//	GOSQLX_MCP_TRUSTED_PROXY_SECRET   shared secret; forwarded IPs are trusted only
+//	                                  on requests that carry it
 //
 // Pass --stdio to serve MCP over stdin/stdout instead of HTTP.
 //
@@ -117,6 +120,9 @@ func runHTTP() error {
 	}()
 
 	log.Printf("gosqlx-mcp: listening on %s (auth=%v, client-ip=%s)\n", cfg.Addr(), cfg.AuthEnabled(), clientIPSource(cfg))
+	if msg := sharedClientIPWarning(cfg); msg != "" {
+		log.Print(msg)
+	}
 	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("server error: %w", err)
 	}
@@ -152,16 +158,35 @@ func withBodyDeadline(next http.Handler, timeout time.Duration) http.Handler {
 	})
 }
 
-// clientIPSource describes where rate limiting takes the client IP from.
+// clientIPSource describes where rate limiting takes the client IP from. It
+// names the secret header when one gates the forwarded address, but never
+// the secret itself.
 func clientIPSource(cfg *gosqlxmcp.Config) string {
+	var src string
 	switch {
 	case cfg.TrustedProxyHeader != "":
-		return cfg.TrustedProxyHeader
+		src = cfg.TrustedProxyHeader
 	case cfg.TrustedProxyHops > 0:
-		return fmt.Sprintf("X-Forwarded-For[-%d]", cfg.TrustedProxyHops)
+		src = fmt.Sprintf("X-Forwarded-For[-%d]", cfg.TrustedProxyHops)
 	default:
 		return "RemoteAddr"
 	}
+	if cfg.TrustedProxySecretHeader != "" {
+		src += " when " + cfg.TrustedProxySecretHeader + " matches, else RemoteAddr"
+	}
+	return src
+}
+
+// sharedClientIPWarning returns the startup warning logged when rate limiting
+// is keyed on RemoteAddr only, or "" when a trusted proxy is configured.
+func sharedClientIPWarning(cfg *gosqlxmcp.Config) string {
+	if cfg.TrustedProxyHeader != "" || cfg.TrustedProxyHops > 0 {
+		return ""
+	}
+	return "gosqlx-mcp: warning: no trusted proxy configured, so rate limits are keyed on the TCP peer address. " +
+		"If this server runs behind a reverse proxy or load balancer, every client shares the proxy's " +
+		"rate-limit bucket and per-client GET (SSE) stream cap. Set GOSQLX_MCP_TRUSTED_PROXY_HEADER " +
+		"or GOSQLX_MCP_TRUSTED_PROXY_HOPS (see docs/MCP_GUIDE.md, \"Client IP and reverse proxies\")."
 }
 
 // newMux builds the HTTP routes:

@@ -417,3 +417,97 @@ func TestColumnAlignmentRule_TieBreakDeterministic(t *testing.T) {
 		})
 	}
 }
+
+// TestColumnAlignmentRule_TabColumnIsByteOffset verifies that L006 compares
+// indentation with a tab counted as 4 columns but reports Location.Column as
+// the 1-based byte column of the first non-whitespace character, where a tab
+// is one byte (issue #830, models.Location docs).
+func TestColumnAlignmentRule_TabColumnIsByteOffset(t *testing.T) {
+	type pos struct{ line, col int }
+	tests := []struct {
+		name string
+		sql  string
+		want []pos
+	}{
+		{
+			name: "tab aligns with four spaces",
+			sql:  "SELECT a,\n    b,\n\tc\nFROM t",
+			want: nil,
+		},
+		{
+			name: "two tabs misaligned against four spaces",
+			sql:  "SELECT a,\n    b,\n    c,\n\t\td\nFROM t",
+			want: []pos{{4, 3}}, // width 8 vs 4; first char at byte 3, not 9
+		},
+		{
+			name: "single tab misaligned against two spaces",
+			sql:  "SELECT a,\n  b,\n  c,\n\td\nFROM t",
+			want: []pos{{4, 2}}, // width 4 vs 2; first char at byte 2, not 5
+		},
+		{
+			name: "mixed spaces and tab misaligned",
+			sql:  "SELECT a,\n    b,\n    c,\n  \t  d\nFROM t",
+			want: []pos{{4, 6}}, // width 2+4+2=8; first char at byte 6, not 9
+		},
+		{
+			name: "spaces misaligned against tab majority",
+			sql:  "SELECT a,\n\tb,\n\tc,\n  d\nFROM t",
+			want: []pos{{4, 3}},
+		},
+		{
+			name: "tab-indented majority with mixed outlier and multi-byte name",
+			sql:  "SELECT a,\n\t\tb,\n\t\tc,\n\t  名前\nFROM t",
+			want: []pos{{4, 4}}, // width 6 vs 8; first char at byte 4
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := NewColumnAlignmentRule()
+			ctx := linter.NewContext(tt.sql, "test.sql")
+			vs, err := rule.Check(ctx)
+			if err != nil {
+				t.Fatalf("Check error: %v", err)
+			}
+			got := make([]pos, 0, len(vs))
+			for _, v := range vs {
+				got = append(got, pos{v.Location.Line, v.Location.Column})
+			}
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Fatalf("got %v, want %v", got, tt.want)
+				}
+				// The reported column must address the first non-whitespace
+				// byte of the reported line.
+				line := ctx.GetLine(got[i].line)
+				if c := got[i].col; c < 1 || c > len(line) || line[c-1] == ' ' || line[c-1] == '\t' ||
+					(c > 1 && line[c-2] != ' ' && line[c-2] != '\t') {
+					t.Errorf("column %d does not address the first non-whitespace byte of %q", c, line)
+				}
+			}
+		})
+	}
+}
+
+func TestLeadingWhitespaceBytes(t *testing.T) {
+	tests := []struct {
+		line string
+		want int
+	}{
+		{"", 0},
+		{"x", 0},
+		{"    x", 4},
+		{"\tx", 1},
+		{"\t\tx", 2},
+		{"  \t  x", 5},
+		{"\t名前", 1},
+		{" \t ", 3},
+	}
+	for _, tt := range tests {
+		if got := leadingWhitespaceBytes(tt.line); got != tt.want {
+			t.Errorf("leadingWhitespaceBytes(%q) = %d, want %d", tt.line, got, tt.want)
+		}
+	}
+}

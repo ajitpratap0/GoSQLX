@@ -135,6 +135,22 @@ func TestDialectVariants_DialectChangesParsing(t *testing.T) {
 	}
 }
 
+// TestFormatDialect_GenericMatchesLegacy guards formatFor's copy of the
+// gosqlx.Format option mapping: the generic dialect must render portable SQL
+// exactly like gosqlx_format.
+func TestFormatDialect_GenericMatchesLegacy(t *testing.T) {
+	for _, sql := range []string{
+		"select id, name from users where id = 1 order by name",
+		"WITH c AS (SELECT a FROM t) SELECT a, COUNT(*) FROM c GROUP BY a HAVING COUNT(*) > 1",
+		"insert into t (a, b) values (1, 'x'); update t set a = 2 where b = 'x'",
+	} {
+		legacy := callLegacyRaw(exportFormat, strPtr(sql))
+		if got := callDialectRaw(exportFormat, strPtr(sql), strPtr("generic")); got != legacy {
+			t.Errorf("generic format differs from gosqlx_format for %q:\n got: %s\nwant: %s", sql, got, legacy)
+		}
+	}
+}
+
 func TestDialectVariants_UnknownDialect(t *testing.T) {
 	for _, e := range allExports {
 		for _, d := range []string{"fakesql", "MySQL", " postgresql"} {

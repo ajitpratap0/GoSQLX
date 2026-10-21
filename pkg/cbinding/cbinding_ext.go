@@ -49,6 +49,10 @@ var errCodeUnsupportedDialect = string(goerrors.ErrCodeUnsupportedDialect)
 // options_json argument that is not a valid options object.
 const errCodeInvalidOptions = "INVALID_OPTIONS"
 
+// formatLineWidth is the line width gosqlx.DefaultFormatOptions sets. It is
+// spelled out because the FormatOptions field that carries it is deprecated.
+const formatLineWidth = 80
+
 // defaultLintMaxLineLength mirrors the default of `gosqlx lint --max-length`.
 const defaultLintMaxLineLength = 100
 
@@ -177,7 +181,7 @@ func formatFor(sql, dialect string) (string, error) {
 		IndentStyle:      ast.IndentSpaces,
 		IndentWidth:      opts.IndentSize,
 		KeywordCase:      kwCase,
-		LineWidth:        opts.SingleLineLimit, //nolint:staticcheck // mirrors gosqlx.Format's option mapping
+		LineWidth:        formatLineWidth,
 		NewlinePerClause: opts.IndentSize > 0,
 		AddSemicolon:     opts.AddSemicolon,
 		Dialect:          dialect,

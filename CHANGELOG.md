@@ -7,27 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-10-21 — Performance Audit, SQL Highlighting, Dialect-Aware LSP, Claude Code Plugin & ChatGPT App, Correctness Sweep
+
 Covers everything merged since v1.15.0: the October 2026 performance audit
-(tracking issue #566), the batch-2 and batch-3 bug fixes and new dialect
-coverage. The release is source-compatible: exported signatures are unchanged
-apart from additions.
-Runtime behaviour does change (rendered SQL, error codes and text, parse
-acceptance, CLI refusals), so read **Behavior changes** before upgrading.
+(#566) with 2-90% fewer allocations across tokenizer, parser, AST and LSP; the
+batch-2/batch-3 correctness sweep (round-tripping `SQL()`, formatter and
+`gosqlx format`, render-time injection hardening); new `pkg/highlight` SQL
+syntax highlighting across API, CLI, LSP, WASM and playground; a fully
+dialect-aware LSP; a hardened `gosqlx-mcp` HTTP server with ChatGPT app support
+and a Claude Code plugin; and editor-accurate positions (a tab is one column).
+The release is source-compatible: exported signatures are unchanged apart from
+additions. Runtime behaviour does change (rendered SQL, token positions, error
+codes and text, parse acceptance including MySQL `||`, CLI refusals, MCP HTTP
+limits), so read **Behavior changes** before upgrading.
 
 ### Behavior changes
+- **Token positions match editors: a tab is one column and `Start` skips
+  comments**: the tokenizer counts a tab as one column (it was four), so
+  `a\tb` puts `b` at column 3. The first token after one or more comments, and
+  the EOF token after a trailing comment, now start at the token itself rather
+  than at the comment. Columns stay 1-based byte offsets. Parse errors, LSP
+  diagnostics, semantic tokens, CLI output and the playground move
+  accordingly, and error carets repeat the source line's tabs. Consumers that
+  mapped columns back to text with tab width 4 must treat them as plain byte
+  offsets. `Comment.Start`/`End` are unchanged. (#826, fixes #797)
+- **`||` is logical OR under MySQL and MariaDB**: with the `mysql` or `mariadb`
+  dialect (API, linter, CLI `--dialect`, LSP), `a = 1 || b` now parses as
+  `(a = 1) OR b`, a `BinaryExpression{Operator: "OR", PipesOr: true}`, instead
+  of `a = (1 || b)`. `SQL()` and the formatter write `||` back. The linter and
+  the security scanner treat it as OR. Pass `parser.WithPipesAsConcat()` /
+  `gosqlx.WithPipesAsConcat()` to keep concatenation (`PIPES_AS_CONCAT`).
+  Transpiling a `||` concatenation to MySQL/MariaDB now emits `CONCAT(...)`,
+  and a MySQL `||` OR becomes `OR` for other targets. Other dialects are
+  unchanged. (#790, fixes #781)
+- **Composite field access is dialect-gated**: `(expr).field` parses under
+  PostgreSQL, BigQuery, `generic` and the default dialect. MySQL, MariaDB, SQL
+  Server, SQLite, Oracle, Snowflake, ClickHouse and Redshift return E4001
+  ("composite field access ... is not supported in <dialect>"). Array
+  subscripts on parenthesized values are not gated. (#843, fixes #839)
+- **L006 reports a byte column**: the column-alignment rule reports the 1-based
+  byte column of a misaligned column's first character (a tab is one column),
+  consistent with token and error positions. Tabs still count as 4 spaces when
+  comparing alignment, so which lines are flagged is unchanged. (#840, fixes
+  #830)
 - **Parenthesized array operands keep their AST grouping**: `(items)[1]` now
   retains a `ParenthesizedExpression` in the subscript's `Array` field. This
   preserves arithmetic precedence and lets `(items)[1].name` round-trip without
-  becoming the invalid `items[1].name`. (#833)
+  becoming the invalid `items[1].name`. (#834, fixes #833)
 - **`gosqlx-mcp` HTTP hardening**: rate limiting now keys on the TCP peer
   address and no longer trusts `X-Forwarded-For` (which let any client evade
   limits and grow limiter memory without bound). Behind a proxy, set
   `GOSQLX_MCP_TRUSTED_PROXY_HEADER` (e.g. `CF-Connecting-IP`, as `render.yaml`
   does) or `GOSQLX_MCP_TRUSTED_PROXY_HOPS`. Limiter memory is capped with
-  least-recently-seen eviction; GET (SSE) streams are capped at 4 per IP and
-  no longer tighten limits for everyone; JSON-RPC batches are charged per tool
-  call. Denials are HTTP 429 with `Retry-After` and the request id (a denied
-  `initialize` keeps HTTP 200 for mcp-go clients). Oversized bodies (over
+  least-recently-seen eviction; GET (SSE) streams are capped at 4 per client,
+  and a GET refused by that cap costs no rate-limit budget; JSON-RPC batches
+  are charged per tool call, and a malformed non-empty body or empty batch
+  costs 1. Denials are HTTP 429 with `Retry-After` and the request id (a denied
+  `initialize`, alone or in a batch, keeps HTTP 200 for mcp-go clients). Oversized bodies (over
   64 KB) get 413, bodies not received within 30s get 408 or a closed
   connection on any route, idle connections close after 120s and headers are
   capped at 32 KB. Bearer tokens are compared in constant time and the
@@ -35,8 +71,19 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   non-string `sql`, parse/format failures, wrongly typed options) are now
   `isError` tool results naming the argument instead of JSON-RPC -32603
   internal errors, and `indent_size` must be an integer from 0 to 16.
+  With neither trusted-proxy setting, `gosqlx-mcp` logs a startup warning
+  that all clients behind a proxy share one bucket. The opt-in
+  `GOSQLX_MCP_TRUSTED_PROXY_SECRET_HEADER`/`GOSQLX_MCP_TRUSTED_PROXY_SECRET`
+  pair makes the trusted header and hops apply only to requests that carry the
+  shared secret (constant-time compare); other requests are keyed by the peer
+  address (see [docs/MCP_GUIDE.md](docs/MCP_GUIDE.md)).
   New `pkg/mcp` API: `NewRateLimitMiddleware(cfg, next)`,
-  `Config.TrustedProxyHeader`, `Config.TrustedProxyHops`.
+  `Config.TrustedProxyHeader`, `Config.TrustedProxyHops`,
+  `Config.TrustedProxySecretHeader`, `Config.TrustedProxySecret`. (#831, #841,
+  fixes #838)
+- **MCP `format_sql` uppercases more keywords**: `uppercase_keywords: true` now
+  also uppercases operator and function keywords (`AND`, `OR`, `COUNT`);
+  `indent_size` affects nested blocks only, as now documented. (#823)
 - **Comments now count toward `MaxTokens`**: tokens plus collected comments may
   not exceed `MaxTokens` (1,000,000). Past that the tokenizer returns the
   existing E1007 token-limit error at the comment or token that crosses the
@@ -240,7 +287,7 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   `comment` and `parameter`. AND, OR and NOT stay `keyword`. Positions are
   UTF-16 code units. Clients with custom rules keyed on the old `identifier`
   type (for example Neovim `@lsp.type.identifier` highlight links) must switch
-  to `variable`.
+  to `variable`. (#825)
 
 ### Added
 - **Claude Code plugin and marketplace**: `/plugin marketplace add
@@ -249,24 +296,23 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   (analysis, formatting, security review, linting, dialects), four slash
   commands, a read-only `sql-reviewer` agent and an opt-out PostToolUse hook
   that validates edited `.sql` files when the `gosqlx` CLI is installed.
+  (#823)
 - **ChatGPT app support in `gosqlx-mcp`** (OpenAI Apps SDK and MCP Apps):
   `analyze_sql` links an embedded report widget
   (`ui://gosqlx/analysis-v1.html`, `text/html;profile=mcp-app`); all tools now
   return `structuredContent` alongside the unchanged text JSON, carry
   `securitySchemes`/invocation-status metadata, and the server sends usage
-  instructions. `validate_sql` accepts `mariadb` and `clickhouse`; the server
-  reports `gosqlx.Version`; `/health` reports the real tool count; the
+  instructions. The server reports `gosqlx.Version`; `/health` reports the real tool count; the
   optional `GOSQLX_MCP_OPENAI_APPS_CHALLENGE` env var serves
   `/.well-known/openai-apps-challenge` for app verification; idle MCP sessions
   have their transport state swept 30–45 minutes after their last request
   (`SessionIdleTTL`, sweep every TTL/2) instead of living until restart, and
-  session IDs are not logged. `uppercase_keywords: true` on
-  `format_sql` now also uppercases operator and function keywords (`AND`,
-  `OR`, `COUNT`); `indent_size` affects nested blocks only, as now
-  documented. `Server.Shutdown(ctx)` stops the transport, and `Server.Start`
+  session IDs are generated statelessly and redacted from transport error logs
+  (#835). `Server.Shutdown(ctx)` stops the transport, and `Server.Start`
   sets read-header and idle timeouts. The `analyze_sql` widget caps long
   lists, shows failed calls as errors and avoids blocked clipboard calls. Setup:
-  `integrations/chatgpt/README.md`, details: `docs/CHATGPT_APP.md`.
+  `integrations/chatgpt/README.md`, details: `docs/CHATGPT_APP.md`. (#823;
+  #831, #835)
 - **SQL syntax highlighting (`pkg/highlight`)**: `highlight.Spans(sql, opts...)`
   classifies SQL into sorted, non-overlapping byte-offset spans tagged with one
   of 13 stable categories (keyword, function, type, identifier,
@@ -282,14 +328,13 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
     `--format ansi|html|json|css`, `--theme`, `--dialect`,
     `--color auto|always|never` (honors TTY, `NO_COLOR` and `COLORTERM`) and
     `--standalone` for a full HTML page.
-  - LSP `textDocument/semanticTokens/full` now uses `pkg/highlight` with the
-    standard token types (keyword, function, type, variable, string, number,
-    operator, comment, parameter), UTF-16 positions, per-line splitting of
-    multi-line tokens, and coverage of every dialect keyword and all comments.
+  - LSP `textDocument/semanticTokens/full` uses `pkg/highlight` (see Behavior
+    changes), with per-line splitting of multi-line tokens and coverage of
+    every dialect keyword and all comments.
   - WASM `gosqlxHighlight(sql[, dialect])` returns spans with UTF-16 offsets;
     the gosqlx.dev playground uses it for editor highlighting.
 
-  See [docs/HIGHLIGHTING.md](docs/HIGHLIGHTING.md).
+  See [docs/HIGHLIGHTING.md](docs/HIGHLIGHTING.md). (#825; #836)
 - **Dialect-aware LSP server**: the dialect from `initializationOptions.dialect`
   now drives every feature, not only semantic tokens. Diagnostics, formatting
   and document symbols tokenize and parse with the dialect's rules (MySQL
@@ -301,6 +346,7 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   `workspace/semanticTokens/refresh`. Invalid values fall back to `generic`, as
   in `initialize`. The default `generic` dialect keeps the previous behaviour
   for every feature. See [docs/LSP_GUIDE.md](docs/LSP_GUIDE.md#sql-dialect).
+  (#828)
 - **`--dialect` flag for the `parse`, `format`, `analyze`, and `lint` CLI
   commands**: dialect-specific SQL (e.g. MySQL `LIMIT offset, count`) can now be
   parsed by these commands, matching the existing `validate --dialect`. Unknown
@@ -381,7 +427,21 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
 - **New schema fields**: `db.Index.IncludeColumns` and `db.ForeignKey.RefSchema`
   (see Behavior changes). (#620, #622)
 - **`ast.FieldAccessExpression`**: represents composite-field selection with a
-  traversable base expression, field name, quote flag and source position. (#833)
+  traversable base expression, field name, quote flag and source position.
+  (#834, fixes #833)
+- **Table-function column alias lists and `WITH ORDINALITY`**: FROM and JOIN
+  table functions accept `AS g(a, b)`, and PostgreSQL also accepts
+  `WITH ORDINALITY` with or without an alias list
+  (`unnest(arr) WITH ORDINALITY AS t(elem, n)`). They are exposed as
+  `ast.TableReference.ColumnAliases` (`*ast.ColumnAliasList`) and
+  `TableReference.WithOrdinality`, plus the new
+  `dialect.Capabilities.SupportsCompositeFieldAccess`. `SQL()` and the
+  formatter round-trip them. (#843, fixes #839)
+- **`WithPipesAsConcat` options, `ast.BinaryExpression.PipesOr` and
+  `dialect.Capabilities.PipesAsLogicalOr`** (see Behavior changes). (#790)
+- **`gosqlx.LintWithDialect(sql, dialect)`**: runs the full built-in rule set
+  with a per-dialect cached linter, so AST rules also run on SQL that parses
+  only in that dialect. Unknown dialects return `ErrUnsupportedDialect`. (#780)
 
 ### Changed
 - **`tokenizer.NewWithKeywords` no longer consults its keyword table**: the
@@ -397,7 +457,33 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   and chained field/subscript access. SQL rendering, AST traversal, extraction,
   security scanning and expression release preserve the nested expression.
   Direct `JOIN LATERAL get_item(t.payload) AS f` references now parse their
-  arguments under the same dialect gate as FROM table functions. (#833)
+  arguments under the same dialect gate as FROM table functions. Any keyword,
+  reserved ones included, can follow the dot (`(a).order`, `(f(x)).from`), as
+  in PostgreSQL, and renders unquoted. Composite access is dialect-gated (see
+  Behavior changes). (#834, fixes #833; #843, fixes #839)
+- **Arithmetic and `||` on the right of a comparison or LIKE/ILIKE/REGEXP
+  pattern parse**: `WHERE a = 1 + 2` failed with "expected statement, got
+  PLUS". Comparisons still do not chain. (#734, fixes #596)
+- **Pooled and zero-value parsers report the default capabilities**:
+  `GetParser().Capabilities()` and a literal `&parser.Parser{}` returned
+  all-false capabilities instead of matching `NewParser()`. (#735, fixes #590;
+  #789, fixes #784)
+- **Oracle `CONNECT BY` accepts general expressions**: `PRIOR` is a prefix
+  operator, so `CONNECT BY PRIOR id = parent_id + 1` parses. A column named
+  `prior` is still an identifier. (#791, fixes #783)
+- **Snowflake `VariantPath` renders**: `WHERE src:a = 1` came out as
+  `WHERE : = 1` from `SQL()` and the formatter. Keys that are not bare words
+  are double-quoted. (#786, fixes #782)
+- **Lower- and mixed-case `CROSS JOIN`, `FULL JOIN` and `GROUPING SETS`
+  parse**, so formatter output with lower-case keywords round-trips. (#844,
+  fixes #842)
+- **Playground Lint and Analyze**: Lint runs all 30 rules (it ran 3, and the
+  tab always reported clean SQL), Analyze reports a parse error instead of
+  scoring unparseable SQL, security findings and optimization suggestions are
+  listed, and the editor marks parse errors. (#780, fixes #737, #738, #739,
+  #758; #796)
+- **`gosqlx.Version` and `gosqlx --version` report the release version**:
+  v1.15.0 still reported 1.14.0, and so did the MCP server info and `/health`.
 - **Tokenizer pool no longer leaks dialect state**: a tokenizer whose dialect was
   changed via `SetDialect` (e.g. by `validate --dialect mysql`) is now restored to
   the default (PostgreSQL) dialect when returned to the pool via `PutTokenizer`.
@@ -479,7 +565,7 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   so the column drifted after multibyte characters and could be 0, and a dollar
   quote could report the wrong line. The two errors with no position
   (`keywords cannot be nil`, input too large) report column 1 instead of 0.
-  Error codes and messages are unchanged.
+  Error codes and messages are unchanged. (#827, follows #826)
 - **Dialect lists now agree everywhere**: the `--dialect` help on `parse`,
   `format`, `analyze`, `lint` and `validate`, the CLI's unknown-dialect error,
   config-file validation, the MCP `validate_sql` schema, the playground WASM
@@ -492,7 +578,7 @@ acceptance, CLI refusals), so read **Behavior changes** before upgrading.
   `mariadb`). The Go lists derive from the new `keywords.DialectNames()`, and a
   test checks the VS Code extension and the example configs and READMEs against
   it. Names stay case-sensitive in the CLI. `transpile --from/--to` keep their
-  own list of transpilable dialects.
+  own list of transpilable dialects. (#829)
 
 ### Performance
 Numbers are quoted from each PR (benchstat on an Apple M4 unless stated; the
@@ -616,6 +702,19 @@ Numbers are quoted from each PR (benchstat on an Apple M4 unless stated; the
   right-nested and parenthesized `UNION`/`EXCEPT` trees, so
   `x UNION (SELECT ... FROM pg_user UNION ...)` is no longer missed after
   parenthesized set operations became parseable. (#612, #630)
+- **ANSI highlighting neutralizes terminal control characters**: an ESC or
+  other control character inside a string literal or comment could inject
+  OSC/CSI sequences when highlighting untrusted SQL. C0 controls other than
+  tab/LF/CR are shown as Unicode control pictures (ESC becomes U+241B), DEL as
+  U+2421, and C1 controls and invalid UTF-8 as U+FFFD. HTML output was already
+  escaped. (#836)
+- **`gosqlx-mcp` no longer logs session IDs**: transport error paths reachable
+  by an unauthenticated response-shaped POST logged the client-supplied
+  `Mcp-Session-Id`. Non-allowlisted error arguments are now redacted and
+  generated IDs scrubbed, and the stateless session-ID manager is pinned so
+  terminated IDs are never retained. (#835)
+- Dependency patches: certifi 2026.10.19 (CI Sentry script) and markdown-it
+  14.3.3 (VS Code extension). (#837)
 
 ### Internal
 - CI: claude-code-action v1, fork-PR review skip, Scorecard v2.4.4 and a valid
@@ -624,6 +723,23 @@ Numbers are quoted from each PR (benchstat on an Apple M4 unless stated; the
 - Website and playground: the playground WASM is built during deployment,
   revalidated by browsers and no longer committed (#543, #580).
 - Docs: the CHANGELOG restored after the #526 merge emptied it (#593).
+- Website and docs: gosqlx.dev redesign (design tokens, light-mode parity,
+  type scale, home, docs IA and navigation, compare and benchmarks pages),
+  SEO/a11y/performance passes, /changelog with one page per release, llms.txt
+  and raw-markdown alternates, and a reproducible competitor benchmark harness
+  (`benchmarks/compare`, #719) feeding the site. (#687-#832)
+- CI: VS Code extension publishes with Entra ID OIDC (#685, #686), website CI
+  and Lighthouse budgets, weekly claims-drift check, Vercel preview opt-out
+  with `[vercel skip]` (#821, #832), and internal review/plan files untracked
+  (#822). Testcontainer startup in the schema loader tests is bounded by the
+  test deadline, so a slow image pull skips instead of failing the package
+  (#837).
+- Docs: README rewrite with a compile-checked quickstart, refreshed pkg.go.dev
+  docs for ParseTree (#713), all 30 lint rules documented (#785), the CHANGELOG
+  1.0.0 upgrade guide and 1.9.1 entry (#824); `Server.Start`/`Server.Handler`
+  document that they do not apply `RateLimitMiddleware`, and
+  `docs/CHATGPT_APP.md` explains that ChatGPT users share OpenAI's per-IP limit
+  (#841).
 
 ## [1.15.0] - 2026-07-30 — Tree API, ClickHouse 100%, Oracle Gaps, Correctness Sweep
 
@@ -2541,7 +2657,8 @@ For questions about upgrading or changelog entries:
 - Open an issue: https://github.com/ajitpratap0/GoSQLX/issues
 - Join discussions: https://github.com/ajitpratap0/GoSQLX/discussions
 
-[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.15.0...HEAD
+[Unreleased]: https://github.com/ajitpratap0/GoSQLX/compare/v1.16.0...HEAD
+[1.16.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/ajitpratap0/GoSQLX/compare/v1.12.1...v1.13.0

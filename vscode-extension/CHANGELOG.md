@@ -2,6 +2,33 @@
 
 All notable changes to the "GoSQLX" extension will be documented in this file.
 
+## [1.16.0] - 2026-10-21
+
+Bundles the GoSQLX v1.16.0 language server. See the
+[main CHANGELOG](https://github.com/ajitpratap0/GoSQLX/blob/main/CHANGELOG.md)
+for the full list.
+
+### Added
+- **The `gosqlx.dialect` setting drives every feature**: diagnostics,
+  formatting, document symbols, completion and hover use the selected dialect,
+  and changing the setting restarts the language server automatically.
+- **`gosqlx.dialect` offers all 11 dialects**: `generic`, `postgresql`, `mysql`,
+  `mariadb`, `sqlserver`, `oracle`, `sqlite`, `snowflake`, `bigquery`,
+  `redshift` and `clickhouse` (it offered 6).
+
+### Changed
+- **Semantic highlighting uses standard token types**: the non-standard
+  `identifier` type is replaced by `variable` (table, column and alias names
+  and quoted identifiers); comments and placeholders are now highlighted.
+  Custom `editor.semanticTokenColorCustomizations` rules keyed on `identifier`
+  must switch to `variable`.
+- **Positions match the editor**: a tab counts as one column, and diagnostics
+  for a token after a comment point at the token, not the comment.
+- Under the `mysql` and `mariadb` dialects, `||` is parsed as logical OR.
+
+### Security
+- markdown-it 14.3.3 in the extension's lockfile (build tooling).
+
 ## [1.14.0] - 2026-04-12
 
 ### Added

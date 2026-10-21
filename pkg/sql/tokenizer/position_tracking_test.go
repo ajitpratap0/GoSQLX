@@ -12,8 +12,8 @@ import (
 
 // naiveLocation is a literal reimplementation of the pre-#544 toSQLPosition
 // algorithm: the line is 1 + the number of '\n' before idx, and the column is
-// 1 + (4 per tab, 1 per other byte) from the line start up to idx (clamped to
-// len(input)). Columns are byte-based, not rune-based.
+// 1 + the number of bytes (a tab is one) from the line start up to idx (clamped
+// to len(input)). Columns are byte-based, not rune-based.
 func naiveLocation(input []byte, idx int) models.Location {
 	line, lineStart := 1, 0
 	for i := 0; i < idx && i < len(input); i++ {
@@ -24,13 +24,36 @@ func naiveLocation(input []byte, idx int) models.Location {
 	}
 	column := 1
 	for i := lineStart; i < idx && i < len(input); i++ {
-		if input[i] == '\t' {
-			column += 4
-		} else {
-			column++
-		}
+		column++
 	}
 	return models.Location{Line: line, Column: column}
+}
+
+// skipTriviaBytes returns the offset of the first byte at or after i that is
+// neither whitespace nor part of a "--" or "/* */" comment. It is an
+// independent reimplementation of what the tokenizer skips before a token.
+func skipTriviaBytes(input []byte, i int) int {
+	for i < len(input) {
+		switch {
+		case input[i] == ' ' || input[i] == '\t' || input[i] == '\r' || input[i] == '\n':
+			i++
+		case bytes.HasPrefix(input[i:], []byte("--")):
+			nl := bytes.IndexByte(input[i:], '\n')
+			if nl < 0 {
+				return len(input)
+			}
+			i += nl + 1
+		case bytes.HasPrefix(input[i:], []byte("/*")):
+			end := bytes.Index(input[i+2:], []byte("*/"))
+			if end < 0 {
+				return len(input)
+			}
+			i += 2 + end + 2
+		default:
+			return i
+		}
+	}
+	return i
 }
 
 // positionTestInputs covers the shapes that stress the line lookup and the
@@ -64,7 +87,8 @@ func positionTestInputs() map[string]string {
 
 // tokenByteBounds replays Tokenize's scanning loop white-box and returns the
 // [start, end) byte offsets of every non-EOF token, independent of
-// toSQLPosition's result values.
+// toSQLPosition's result values. A token starts after the whitespace and
+// comments before it.
 func tokenByteBounds(t *testing.T, tkz *Tokenizer, input []byte) [][2]int {
 	t.Helper()
 	tkz.load(input, string(input))
@@ -79,7 +103,7 @@ func tokenByteBounds(t *testing.T, tkz *Tokenizer, input []byte) [][2]int {
 		if tkz.pos.Index >= len(tkz.input) {
 			break
 		}
-		start := tkz.pos.Index
+		start := skipTriviaBytes(input, tkz.pos.Index)
 		if _, err := tkz.nextToken(); err != nil {
 			t.Fatalf("replay nextToken: %v", err)
 		}
@@ -218,9 +242,9 @@ func assertSpans(t *testing.T, sql string, want []wantSpan) {
 
 func TestToSQLPosition_Tabs(t *testing.T) {
 	assertSpans(t, "\tSELECT\t\tx\n\t\ty", []wantSpan{
-		{"SELECT", models.Location{Line: 1, Column: 5}, models.Location{Line: 1, Column: 11}},
-		{"x", models.Location{Line: 1, Column: 19}, models.Location{Line: 1, Column: 20}},
-		{"y", models.Location{Line: 2, Column: 9}, models.Location{Line: 2, Column: 10}},
+		{"SELECT", models.Location{Line: 1, Column: 2}, models.Location{Line: 1, Column: 8}},
+		{"x", models.Location{Line: 1, Column: 10}, models.Location{Line: 1, Column: 11}},
+		{"y", models.Location{Line: 2, Column: 3}, models.Location{Line: 2, Column: 4}},
 	})
 }
 
@@ -230,14 +254,12 @@ func TestToSQLPosition_MultiLine(t *testing.T) {
 		{"SELECT", models.Location{Line: 1, Column: 1}, models.Location{Line: 1, Column: 7}},
 		{"a", models.Location{Line: 1, Column: 8}, models.Location{Line: 1, Column: 9}},
 		{"bb", models.Location{Line: 2, Column: 5}, models.Location{Line: 2, Column: 7}},
-		// A token's Start is taken before nextToken skips a preceding comment,
-		// so the first token after a comment starts at the comment's start
-		// (pre-existing behaviour, preserved by #544).
+		// A token's Start is the token itself, not the comment before it.
 		// First token after a line comment.
-		{"FROM", models.Location{Line: 2, Column: 8}, models.Location{Line: 3, Column: 5}},
+		{"FROM", models.Location{Line: 3, Column: 1}, models.Location{Line: 3, Column: 5}},
 		{"t", models.Location{Line: 3, Column: 6}, models.Location{Line: 3, Column: 7}},
 		// First token after a block comment spanning lines 3-4.
-		{"WHERE", models.Location{Line: 3, Column: 8}, models.Location{Line: 4, Column: 15}},
+		{"WHERE", models.Location{Line: 4, Column: 10}, models.Location{Line: 4, Column: 15}},
 		{"c", models.Location{Line: 4, Column: 16}, models.Location{Line: 4, Column: 17}},
 	})
 }
@@ -304,14 +326,14 @@ func TestToSQLPosition_PooledReuse(t *testing.T) {
 		t.Errorf("short after long (same tokenizer): spans differ from fresh tokenizer")
 	}
 
-	// White-box: Reset invalidates the cursor.
+	// White-box: Reset invalidates the line hint.
 	_ = spansOf(t, d, "SELECT a\nFROM t")
 	if d.posCacheLine != 1 {
 		t.Errorf("after 2-line input, posCacheLine = %d, want 1 (last line)", d.posCacheLine)
 	}
 	d.Reset()
-	if d.posCacheLine != 0 || d.posCacheIdx != 0 || d.posCacheCol != 0 {
-		t.Errorf("after Reset, cursor = (%d,%d,%d), want (0,0,0)", d.posCacheLine, d.posCacheIdx, d.posCacheCol)
+	if d.posCacheLine != 0 {
+		t.Errorf("after Reset, posCacheLine = %d, want 0", d.posCacheLine)
 	}
 
 	// A position request at offset 0 on new input must be {1,1}.

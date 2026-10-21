@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!post) return {};
 
   return pageMeta({
-    title: `GoSQLX v${post.version} Release Notes`,
+    title: `GoSQLX v${post.version} Changelog`,
     absolute: true,
     description: post.description,
     path: `/changelog/${slug}/`,
@@ -84,7 +84,7 @@ export default async function BlogPostPage({ params }: Props) {
     '@type': 'BreadcrumbList',
     itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://gosqlx.dev/' },
-      { '@type': 'ListItem', position: 2, name: 'Release Notes', item: 'https://gosqlx.dev/changelog/' },
+      { '@type': 'ListItem', position: 2, name: 'Changelog', item: 'https://gosqlx.dev/changelog/' },
       { '@type': 'ListItem', position: 3, name: post.title, item: `https://gosqlx.dev/changelog/${slug}/` },
     ],
   };
@@ -102,7 +102,7 @@ export default async function BlogPostPage({ params }: Props) {
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10 4l-4 4 4 4" />
           </svg>
-          Back to Release Notes
+          Back to Changelog
         </Link>
 
         {/* Header */}

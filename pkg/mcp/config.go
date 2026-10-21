@@ -36,6 +36,12 @@
 //	                       the client IP (e.g. CF-Connecting-IP); empty = unused
 //	GOSQLX_MCP_TRUSTED_PROXY_HOPS    number of trusted proxies appending to
 //	                       X-Forwarded-For (0-16, default 0 = ignore XFF)
+//	GOSQLX_MCP_TRUSTED_PROXY_SECRET_HEADER  optional header the trusted proxy
+//	                       sets to GOSQLX_MCP_TRUSTED_PROXY_SECRET; when both are
+//	                       set, forwarded client IPs are trusted only on
+//	                       requests that carry the secret
+//	GOSQLX_MCP_TRUSTED_PROXY_SECRET  shared secret for the header above
+//	                       (at least 16 characters)
 package mcp
 
 import (
@@ -82,10 +88,28 @@ type Config struct {
 	// client-supplied and ignored.
 	// Source: GOSQLX_MCP_TRUSTED_PROXY_HOPS (default: 0 - X-Forwarded-For ignored)
 	TrustedProxyHops int
+
+	// TrustedProxySecretHeader and TrustedProxySecret, when both set, make
+	// TrustedProxyHeader and TrustedProxyHops apply only to requests whose
+	// TrustedProxySecretHeader value equals TrustedProxySecret (compared in
+	// constant time). Other requests are keyed by RemoteAddr. This stops a
+	// client that reaches the origin directly, bypassing the proxy, from
+	// choosing its own rate-limit key. The proxy must overwrite the header on
+	// every request (for example with a Cloudflare Transform Rule). The
+	// header is removed before the request reaches the MCP handler. If only
+	// one of the two is set, forwarded addresses are never trusted.
+	// Source: GOSQLX_MCP_TRUSTED_PROXY_SECRET_HEADER and
+	// GOSQLX_MCP_TRUSTED_PROXY_SECRET (default: "" - not required)
+	TrustedProxySecretHeader string
+	TrustedProxySecret       string
 }
 
 // maxTrustedProxyHops bounds GOSQLX_MCP_TRUSTED_PROXY_HOPS.
 const maxTrustedProxyHops = 16
+
+// minTrustedProxySecretLen is the shortest accepted
+// GOSQLX_MCP_TRUSTED_PROXY_SECRET.
+const minTrustedProxySecretLen = 16
 
 // LoadConfig reads configuration from environment variables, applying defaults
 // for any variables that are unset or empty.
@@ -137,7 +161,42 @@ func LoadConfig() (*Config, error) {
 		cfg.TrustedProxyHops = hops
 	}
 
+	if err := loadTrustedProxySecret(cfg); err != nil {
+		return nil, err
+	}
+
 	return cfg, nil
+}
+
+// loadTrustedProxySecret reads GOSQLX_MCP_TRUSTED_PROXY_SECRET_HEADER and
+// GOSQLX_MCP_TRUSTED_PROXY_SECRET into cfg. It must run after the trusted
+// proxy header and hops are loaded. Errors never include the secret.
+func loadTrustedProxySecret(cfg *Config) error {
+	header := strings.TrimSpace(os.Getenv("GOSQLX_MCP_TRUSTED_PROXY_SECRET_HEADER"))
+	secret := strings.TrimSpace(os.Getenv("GOSQLX_MCP_TRUSTED_PROXY_SECRET"))
+	if header == "" && secret == "" {
+		return nil
+	}
+	if header == "" || secret == "" {
+		return fmt.Errorf("GOSQLX_MCP_TRUSTED_PROXY_SECRET_HEADER and GOSQLX_MCP_TRUSTED_PROXY_SECRET must be set together")
+	}
+	if !validHeaderName(header) {
+		return fmt.Errorf("GOSQLX_MCP_TRUSTED_PROXY_SECRET_HEADER: %q is not a valid HTTP header name", header)
+	}
+	canonical := http.CanonicalHeaderKey(header)
+	switch canonical {
+	case "X-Forwarded-For", "Authorization", cfg.TrustedProxyHeader:
+		return fmt.Errorf("GOSQLX_MCP_TRUSTED_PROXY_SECRET_HEADER: %q cannot be used as the secret header", canonical)
+	}
+	if len(secret) < minTrustedProxySecretLen {
+		return fmt.Errorf("GOSQLX_MCP_TRUSTED_PROXY_SECRET: must be at least %d characters", minTrustedProxySecretLen)
+	}
+	if cfg.TrustedProxyHeader == "" && cfg.TrustedProxyHops == 0 {
+		return fmt.Errorf("GOSQLX_MCP_TRUSTED_PROXY_SECRET requires GOSQLX_MCP_TRUSTED_PROXY_HEADER or GOSQLX_MCP_TRUSTED_PROXY_HOPS")
+	}
+	cfg.TrustedProxySecretHeader = canonical
+	cfg.TrustedProxySecret = secret
+	return nil
 }
 
 // validHeaderName reports whether s is a valid HTTP header field name

@@ -2169,6 +2169,9 @@ func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 		buf.WriteByte(')')
 	} else if t.TableFunc != nil {
 		t.TableFunc.writeSQL(buf)
+		if t.WithOrdinality {
+			buf.WriteString(" WITH ORDINALITY")
+		}
 	} else if t.SetSubquery != nil {
 		buf.WriteByte('(')
 		t.SetSubquery.writeSQL(buf)
@@ -2179,6 +2182,7 @@ func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 	if t.Alias != "" && t.Pivot == nil && t.Unpivot == nil {
 		buf.WriteByte(' ')
 		writeTableAlias(buf, t.Alias)
+		writeTableColumnAliases(buf, t)
 	}
 	if t.Final {
 		buf.WriteString(" FINAL")
@@ -2195,6 +2199,18 @@ func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 		buf.WriteString(" AS ")
 		writeTableAlias(buf, t.Alias)
 	}
+}
+
+// writeTableColumnAliases writes the column alias list of a table function
+// alias, as in unnest(arr) AS g(a, b). The list is written only for a table
+// function, the one table reference the parser reads it for.
+func writeTableColumnAliases(buf *bytes.Buffer, t *TableReference) {
+	if t.ColumnAliases == nil || len(t.ColumnAliases.Names) == 0 || t.TableFunc == nil {
+		return
+	}
+	buf.WriteByte('(')
+	writeColumnNameList(buf, t.ColumnAliases.Names)
+	buf.WriteByte(')')
 }
 
 // writeTableRefList writes refs separated by ", ".

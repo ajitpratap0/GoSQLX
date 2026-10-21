@@ -84,10 +84,11 @@ The public server has smart rate limiting to ensure fair usage:
 - **Sustained**: 120 weighted-requests/minute per IP
 - Heavier tools (`analyze_sql`) consume more budget than simple ones (`validate_sql`)
 - Limits tighten automatically under high server load
-- **Streams**: at most 4 concurrent `GET /mcp` (SSE) streams per IP; each costs 1 unit of sustained budget
+- **Streams**: at most 4 concurrent `GET /mcp` (SSE) streams per IP; each opened stream costs 1 unit of sustained budget. A `GET` refused because 4 streams are already open costs nothing
+- **Malformed bodies**: a non-empty POST body that is not a JSON-RPC message or a non-empty batch costs 1 unit, so malformed requests are not free
 - **Request body**: at most 64 KB, and it must arrive within 30 seconds
 
-A denied request gets HTTP `429 Too Many Requests` with a `Retry-After` header (seconds) and a JSON-RPC error (code `-32000`) carrying the request's `id`. A denied `initialize` is the exception: it returns HTTP 200 with the same JSON-RPC error, because mcp-go clients treat any 4xx on `initialize` as a legacy-SSE server. Every response carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` (sustained budget left in the current minute) and `X-RateLimit-Reset` (Unix time the minute ends). An oversized body gets HTTP `413` with a JSON-RPC error that names the limit; a body that stalls gets HTTP `408`.
+A denied request gets HTTP `429 Too Many Requests` with a `Retry-After` header (seconds) and a JSON-RPC error (code `-32000`) carrying the request's `id`. A denied `initialize`, alone or inside a JSON-RPC batch, is the exception: it returns HTTP 200 with the same JSON-RPC error, because mcp-go clients treat any 4xx on `initialize` as a legacy-SSE server. A `GET` refused by the stream cap gets HTTP 429 with `Retry-After: 60`. Every response to a request the limiter evaluates carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` (sustained budget left in the current minute) and `X-RateLimit-Reset` (Unix time the minute ends); stream-cap, body-size and body-timeout rejections, which happen before that check, do not. An oversized body gets HTTP `413` with a JSON-RPC error that names the limit; a body that stalls gets HTTP `408`.
 
 The 64 KB limit is deliberate: `analyze_sql` allocates roughly 500× the SQL size (about 33 MB for 64 KB of SQL, 530 MB for 1 MB), so larger bodies would let a handful of requests exhaust a small instance.
 
@@ -219,6 +220,8 @@ The `gosqlx-mcp` server is configured exclusively via environment variables. No 
 | `GOSQLX_MCP_OPENAI_APPS_CHALLENGE` | *(empty)* | string | ChatGPT app domain-verification token served at `/.well-known/openai-apps-challenge` |
 | `GOSQLX_MCP_TRUSTED_PROXY_HEADER` | *(empty)* | string | Header a trusted proxy sets to the client IP (e.g. `CF-Connecting-IP`); must be a valid header name and not `X-Forwarded-For` |
 | `GOSQLX_MCP_TRUSTED_PROXY_HOPS` | `0` | integer | 0–16; number of trusted proxies that append to `X-Forwarded-For` |
+| `GOSQLX_MCP_TRUSTED_PROXY_SECRET_HEADER` | *(empty)* | string | Optional. Header the proxy sets to the shared secret; set together with `GOSQLX_MCP_TRUSTED_PROXY_SECRET`. Must be a valid header name and not `X-Forwarded-For`, `Authorization` or the client-IP header. Requires the trusted proxy header or hops |
+| `GOSQLX_MCP_TRUSTED_PROXY_SECRET` | *(empty)* | string | Optional. Shared secret, at least 16 characters; whitespace-trimmed. Never logged |
 
 **Notes:**
 
@@ -236,6 +239,30 @@ Behind a reverse proxy every request comes from the proxy, so all users would sh
 - `GOSQLX_MCP_TRUSTED_PROXY_HOPS=N`: use the entry `N` positions from the right of `X-Forwarded-For` (the address appended by the outermost of `N` trusted proxies). Entries further left are client-supplied and are ignored.
 
 If the header is set, it takes precedence. A missing or unparseable value falls back to `RemoteAddr`. Only enable either option when every request reaches the server through that proxy; otherwise clients can set the header directly.
+
+**Startup warning.** When neither option is set, `gosqlx-mcp` logs one warning at startup: behind a reverse proxy or load balancer every client then shares the proxy's address, so all of them share one rate-limit bucket and one 4-stream `GET` cap. The warning is expected for a server that clients reach directly; behind a proxy, set one of the options above.
+
+#### Requiring a proxy secret (optional)
+
+A trusted client-IP header is only as trustworthy as the path to the server. If the origin can also be reached without the proxy (for example through Render's `*.onrender.com` hostname rather than the Cloudflare zone), a client can send its own `CF-Connecting-IP` and pick its rate-limit key. To close that gap, have the proxy add a secret header and tell the server to trust forwarded addresses only on requests that carry it:
+
+```bash
+GOSQLX_MCP_TRUSTED_PROXY_HEADER=CF-Connecting-IP
+GOSQLX_MCP_TRUSTED_PROXY_SECRET_HEADER=X-Origin-Secret
+GOSQLX_MCP_TRUSTED_PROXY_SECRET=<random value, at least 16 characters>
+```
+
+With both secret variables set, `GOSQLX_MCP_TRUSTED_PROXY_HEADER` and `GOSQLX_MCP_TRUSTED_PROXY_HOPS` apply only when the last value of the secret header equals the secret (compared in constant time). Requests with a missing or wrong secret are not rejected; they are keyed by `RemoteAddr`, so traffic that bypasses the proxy shares one bucket instead of choosing its own. The secret header is removed before the request reaches the MCP handler, and the secret never appears in logs or configuration errors. With neither variable set, behaviour is unchanged.
+
+To set the header with a Cloudflare Transform Rule:
+
+1. Generate a secret, for example `openssl rand -hex 32`.
+2. In the Cloudflare dashboard for the zone that serves the MCP hostname, open **Rules → Transform Rules → Modify Request Header** and create a rule.
+3. Match the MCP hostname, for example *Hostname equals `mcp.example.com`*.
+4. Add the action **Set static**, header name `X-Origin-Secret`, value the secret. *Set* overwrites any value a client sent, so clients cannot supply their own.
+5. Deploy the rule, then set `GOSQLX_MCP_TRUSTED_PROXY_SECRET_HEADER` and `GOSQLX_MCP_TRUSTED_PROXY_SECRET` on the server as secret environment variables (on Render, in the dashboard rather than in `render.yaml`) and restart it.
+
+Deploy the rule before the server variables: until both sides agree, requests fall back to the shared `RemoteAddr` bucket rather than failing. Rotate the secret the same way. The rule must cover every hostname that should get per-client limits.
 
 ### HTTP server limits
 
@@ -726,7 +753,8 @@ func main() {
 | `LoadConfig` | `() (*Config, error)` | Load from env vars |
 | `DefaultConfig` | `() *Config` | Defaults: `127.0.0.1:8080`, auth disabled |
 | `New` | `(cfg *Config) *Server` | Create server with all 7 tools registered |
-| `(*Server).Start` | `(ctx context.Context) error` | Bind, serve, block until ctx cancelled |
+| `(*Server).Start` | `(ctx context.Context) error` | Bind, serve, block until ctx cancelled. Applies bearer auth only, not `RateLimitMiddleware` |
+| `(*Server).Handler` | `() http.Handler` | MCP transport behind bearer auth, without `RateLimitMiddleware`; wrap it with `NewRateLimitMiddleware` before exposing it to untrusted clients |
 | `BearerAuthMiddleware` | `(cfg *Config, next http.Handler) http.Handler` | Auth wrapper; no-op when auth is disabled |
 | `NewRateLimitMiddleware` | `(cfg *Config, next http.Handler) http.Handler` | Rate limiter keyed by client IP, honouring `cfg`'s trusted-proxy settings |
 | `RateLimitMiddleware` | `(next http.Handler) http.Handler` | `NewRateLimitMiddleware` keyed on `RemoteAddr` only |
@@ -744,6 +772,10 @@ type Config struct {
     OpenAIAppsChallenge string // GOSQLX_MCP_OPENAI_APPS_CHALLENGE (default "" = not served)
     TrustedProxyHeader  string // GOSQLX_MCP_TRUSTED_PROXY_HEADER (default "" = not used)
     TrustedProxyHops    int    // GOSQLX_MCP_TRUSTED_PROXY_HOPS (default 0 = X-Forwarded-For ignored)
+
+    // Optional: trust the two fields above only when this header carries the secret.
+    TrustedProxySecretHeader string // GOSQLX_MCP_TRUSTED_PROXY_SECRET_HEADER (default "" = not required)
+    TrustedProxySecret       string // GOSQLX_MCP_TRUSTED_PROXY_SECRET
 }
 ```
 

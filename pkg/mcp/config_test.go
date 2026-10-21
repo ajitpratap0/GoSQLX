@@ -16,6 +16,7 @@ package mcp
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -179,6 +180,65 @@ func TestLoadConfig_TrustedProxy(t *testing.T) {
 			if cfg.TrustedProxyHeader != tt.wantHeader || cfg.TrustedProxyHops != tt.wantHops {
 				t.Errorf("got header=%q hops=%d, want header=%q hops=%d",
 					cfg.TrustedProxyHeader, cfg.TrustedProxyHops, tt.wantHeader, tt.wantHops)
+			}
+		})
+	}
+}
+
+func TestLoadConfig_TrustedProxySecret(t *testing.T) {
+	const secret = "s3cret-0123456789abcdef"
+	tests := []struct {
+		name       string
+		header     string
+		hops       string
+		secretHdr  string
+		secret     string
+		wantHeader string
+		wantErr    string
+	}{
+		{name: "unset keeps default", header: "CF-Connecting-IP"},
+		{name: "header and secret", header: "CF-Connecting-IP", secretHdr: " x-origin-secret ", secret: secret, wantHeader: "X-Origin-Secret"},
+		{name: "with hops", hops: "1", secretHdr: "X-Origin-Secret", secret: secret, wantHeader: "X-Origin-Secret"},
+		{name: "secret without header", header: "CF-Connecting-IP", secret: secret, wantErr: "must be set together"},
+		{name: "header without secret", header: "CF-Connecting-IP", secretHdr: "X-Origin-Secret", wantErr: "must be set together"},
+		{name: "invalid header name", header: "CF-Connecting-IP", secretHdr: "X Origin", secret: secret, wantErr: "not a valid HTTP header name"},
+		{name: "XFF rejected", hops: "1", secretHdr: "X-Forwarded-For", secret: secret, wantErr: "cannot be used"},
+		{name: "Authorization rejected", header: "CF-Connecting-IP", secretHdr: "authorization", secret: secret, wantErr: "cannot be used"},
+		{name: "same as client IP header rejected", header: "CF-Connecting-IP", secretHdr: "cf-connecting-ip", secret: secret, wantErr: "cannot be used"},
+		{name: "short secret rejected", header: "CF-Connecting-IP", secretHdr: "X-Origin-Secret", secret: "short", wantErr: "at least 16"},
+		{name: "no trusted proxy rejected", secretHdr: "X-Origin-Secret", secret: secret, wantErr: "requires GOSQLX_MCP_TRUSTED_PROXY_HEADER"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GOSQLX_MCP_TRUSTED_PROXY_HEADER", tt.header)
+			t.Setenv("GOSQLX_MCP_TRUSTED_PROXY_HOPS", tt.hops)
+			t.Setenv("GOSQLX_MCP_TRUSTED_PROXY_SECRET_HEADER", tt.secretHdr)
+			t.Setenv("GOSQLX_MCP_TRUSTED_PROXY_SECRET", tt.secret)
+			cfg, err := LoadConfig()
+			if tt.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got config %+v", tt.wantErr, cfg)
+				}
+				if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Errorf("error = %q, want it to contain %q", err, tt.wantErr)
+				}
+				if tt.secret != "" && strings.Contains(err.Error(), tt.secret) {
+					t.Errorf("error leaks the secret: %q", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cfg.TrustedProxySecretHeader != tt.wantHeader {
+				t.Errorf("TrustedProxySecretHeader = %q, want %q", cfg.TrustedProxySecretHeader, tt.wantHeader)
+			}
+			wantSecret := ""
+			if tt.wantHeader != "" {
+				wantSecret = tt.secret
+			}
+			if cfg.TrustedProxySecret != wantSecret {
+				t.Errorf("TrustedProxySecret not loaded as expected (set=%v)", cfg.TrustedProxySecret != "")
 			}
 		})
 	}

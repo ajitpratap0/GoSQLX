@@ -17,11 +17,14 @@ package mcp
 import (
 	"bytes"
 	"container/list"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
+	"log"
 	"math"
 	"net"
 	"net/http"
@@ -69,6 +72,11 @@ const (
 	// bodyReadTimeout bounds how long a client may take to send a request
 	// body, so slow-body (slowloris) connections cannot be held open forever.
 	bodyReadTimeout = 30 * time.Second
+
+	// minUnparsedWeight is the sustained-budget cost of a non-empty POST body
+	// that is not a decodable JSON-RPC message or batch, so malformed
+	// requests are not free.
+	minUnparsedWeight = 1
 
 	// maxBodySize is the largest accepted request body. analyze_sql on 64KB of
 	// SQL allocates ~33MB; 1MB of SQL allocates ~530MB, more than the 512MB
@@ -137,6 +145,14 @@ type rateLimiter struct {
 	streams     streamCounter
 	stopCleanup chan struct{}
 	closeOnce   sync.Once
+
+	// deadlineErrs counts failures to set or clear the body read deadline.
+	// Only the first is logged; see noteDeadlineErr.
+	deadlineErrs   atomic.Int64
+	deadlineLogged atomic.Bool
+	// logf logs operational warnings. It never receives session IDs, request
+	// bodies or client addresses.
+	logf func(format string, v ...any)
 }
 
 // NewRateLimiter creates a new rateLimiter, initializes all shards,
@@ -146,6 +162,7 @@ func NewRateLimiter() *rateLimiter {
 		maxPerShard: maxBucketsPerShard,
 		streams:     streamCounter{open: make(map[string]int)},
 		stopCleanup: make(chan struct{}),
+		logf:        log.Printf,
 	}
 	for i := range rl.shards {
 		rl.shards[i].buckets = make(map[string]*list.Element)
@@ -283,6 +300,27 @@ func (rl *rateLimiter) allow(key string, weight int) decision {
 	return d
 }
 
+// noteDeadlineErr records a failure to set or clear the request body read
+// deadline. The first failure is logged with a fixed message (the error text
+// can contain connection addresses, so only its kind is reported); later
+// ones are only counted, so a misbehaving connection cannot flood the log.
+func (rl *rateLimiter) noteDeadlineErr(err error) {
+	if err == nil {
+		return
+	}
+	rl.deadlineErrs.Add(1)
+	if !rl.deadlineLogged.CompareAndSwap(false, true) {
+		return
+	}
+	if errors.Is(err, http.ErrNotSupported) {
+		rl.logf("gosqlx-mcp: warning: the HTTP response writer does not support read deadlines; " +
+			"slow request bodies are not timed out. Further deadline errors are counted, not logged.")
+		return
+	}
+	rl.logf("gosqlx-mcp: warning: could not set a request body read deadline (%T); "+
+		"further deadline errors are counted, not logged.", err)
+}
+
 // cleanupLoop periodically removes entries that have been idle for longer
 // than staleTimeout.
 func (rl *rateLimiter) cleanupLoop() {
@@ -330,6 +368,17 @@ type clientIPResolver struct {
 	// hops, when > 0, is the number of trusted proxies that append to
 	// X-Forwarded-For; the client is the hops-th entry from the right.
 	hops int
+
+	// secretHeader, when set, gates header and hops: they are used only for
+	// requests whose secretHeader value hashes to secretHash.
+	secretHeader string
+	// secretGated is true when either secret setting is present. With only
+	// one present, secretOK is false and forwarded values are never trusted.
+	secretGated bool
+	secretOK    bool
+	// secretHash is the SHA-256 of the configured secret. Comparing digests
+	// keeps the comparison constant-time regardless of the presented length.
+	secretHash [sha256.Size]byte
 }
 
 // newClientIPResolver builds a resolver from cfg (nil means RemoteAddr only).
@@ -337,12 +386,49 @@ func newClientIPResolver(cfg *Config) clientIPResolver {
 	if cfg == nil {
 		return clientIPResolver{}
 	}
-	return clientIPResolver{header: cfg.TrustedProxyHeader, hops: cfg.TrustedProxyHops}
+	c := clientIPResolver{header: cfg.TrustedProxyHeader, hops: cfg.TrustedProxyHops}
+	if cfg.TrustedProxySecretHeader != "" || cfg.TrustedProxySecret != "" {
+		c.secretGated = true
+		c.secretHeader = http.CanonicalHeaderKey(cfg.TrustedProxySecretHeader)
+		c.secretOK = cfg.TrustedProxySecretHeader != "" && cfg.TrustedProxySecret != ""
+		c.secretHash = sha256.Sum256([]byte(cfg.TrustedProxySecret))
+	}
+	return c
+}
+
+// fromTrustedProxy reports whether forwarded client addresses on r may be
+// used: always when no secret is configured, otherwise only when the last
+// value of the secret header matches the configured secret.
+func (c clientIPResolver) fromTrustedProxy(r *http.Request) bool {
+	if !c.secretGated {
+		return true
+	}
+	if !c.secretOK {
+		return false
+	}
+	vals := r.Header.Values(c.secretHeader)
+	if len(vals) == 0 {
+		return false
+	}
+	got := sha256.Sum256([]byte(vals[len(vals)-1]))
+	return subtle.ConstantTimeCompare(got[:], c.secretHash[:]) == 1
+}
+
+// stripSecret removes the proxy secret header from r so it never reaches
+// downstream handlers.
+func (c clientIPResolver) stripSecret(r *http.Request) {
+	if c.secretHeader != "" {
+		r.Header.Del(c.secretHeader)
+	}
 }
 
 // clientKey returns the normalised client address for r. Invalid or missing
-// forwarded values fall back to RemoteAddr.
+// forwarded values, and requests without the configured proxy secret, fall
+// back to RemoteAddr.
 func (c clientIPResolver) clientKey(r *http.Request) string {
+	if (c.header != "" || c.hops > 0) && !c.fromTrustedProxy(r) {
+		return remoteAddrKey(r)
+	}
 	if c.header != "" {
 		if vals := r.Header.Values(c.header); len(vals) > 0 {
 			// The trusted proxy's value is the last one it wrote.
@@ -365,6 +451,11 @@ func (c clientIPResolver) clientKey(r *http.Request) string {
 			}
 		}
 	}
+	return remoteAddrKey(r)
+}
+
+// remoteAddrKey returns the normalised TCP peer address of r.
+func remoteAddrKey(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		host = r.RemoteAddr
@@ -432,6 +523,8 @@ type requestInfo struct {
 	id json.RawMessage
 	// method is the JSON-RPC method of a single (non-batch) request.
 	method string
+	// initialize is true for an initialize request, alone or in a batch.
+	initialize bool
 }
 
 // weightOf returns the cost of one decoded JSON-RPC message.
@@ -451,9 +544,10 @@ func weightOf(req jsonRPCRequest) int {
 
 // readRequestInfo reads the request body (at most maxBodySize bytes) to
 // determine its weight and JSON-RPC id, then re-buffers it so downstream
-// handlers can read it again. A non-nil error means the body could not be
-// read in full (too large, too slow, or a transport error) and the request
-// must be rejected.
+// handlers can read it again. A non-empty body that is not a JSON-RPC
+// message or a non-empty batch costs minUnparsedWeight. A non-nil error
+// means the body could not be read in full (too large, too slow, or a
+// transport error) and the request must be rejected.
 func readRequestInfo(w http.ResponseWriter, r *http.Request) (requestInfo, *http.Request, error) {
 	if r.Body == nil || r.Body == http.NoBody {
 		return requestInfo{}, r, nil
@@ -469,21 +563,24 @@ func readRequestInfo(w http.ResponseWriter, r *http.Request) (requestInfo, *http
 	if len(trimmed) > 0 && trimmed[0] == '[' {
 		// JSON-RPC batch: charge for every message in it.
 		var batch []jsonRPCRequest
-		if err := json.Unmarshal(trimmed, &batch); err != nil {
-			return requestInfo{}, r, nil
+		if err := json.Unmarshal(trimmed, &batch); err != nil || len(batch) == 0 {
+			return requestInfo{weight: minUnparsedWeight}, r, nil
 		}
 		info := requestInfo{}
 		for _, m := range batch {
 			info.weight += weightOf(m)
+			if m.Method == "initialize" {
+				info.initialize = true
+			}
 		}
 		return info, r, nil
 	}
 
 	var req jsonRPCRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		return requestInfo{}, r, nil
+		return requestInfo{weight: minUnparsedWeight}, r, nil
 	}
-	info := requestInfo{weight: weightOf(req), method: req.Method}
+	info := requestInfo{weight: weightOf(req), method: req.Method, initialize: req.Method == "initialize"}
 	if len(req.ID) > 0 && !bytes.Equal(req.ID, []byte("null")) {
 		info.id = req.ID
 	}
@@ -545,7 +642,9 @@ func retryAfterSeconds(d time.Duration) int {
 }
 
 // RateLimitMiddleware is NewRateLimitMiddleware with the default
-// configuration: clients are keyed by their TCP peer address only.
+// configuration: clients are keyed by their TCP peer address only. Behind a
+// reverse proxy that means every client shares the proxy's budget and stream
+// cap; use NewRateLimitMiddleware with a trusted-proxy Config there.
 func RateLimitMiddleware(next http.Handler) http.Handler {
 	return NewRateLimitMiddleware(nil, next)
 }
@@ -555,11 +654,12 @@ func RateLimitMiddleware(next http.Handler) http.Handler {
 // RemoteAddr unless cfg names a trusted proxy header or hop count.
 //
 // Denied requests get HTTP 429 with Retry-After and a JSON-RPC error that
-// echoes the request id. A denied initialize gets HTTP 200 instead, because
-// mcp-go clients treat any 4xx on initialize as "legacy SSE server".
-// POST bodies must arrive within bodyReadTimeout and fit in maxBodySize.
-// GET (SSE) streams are capped per client and excluded from the load metric,
-// since they stay open for the life of the session.
+// echoes the request id. A denied initialize (alone or in a batch) gets
+// HTTP 200 instead, because mcp-go clients treat any 4xx on initialize as
+// "legacy SSE server". POST bodies must arrive within bodyReadTimeout and fit
+// in maxBodySize. GET (SSE) streams are capped per client and excluded from
+// the load metric, since they stay open for the life of the session; a GET
+// refused by the stream cap is not charged against the rate limit.
 func NewRateLimitMiddleware(cfg *Config, next http.Handler) http.Handler {
 	h, _ := newRateLimitHandler(cfg, next, bodyReadTimeout)
 	return h
@@ -573,24 +673,35 @@ func newRateLimitHandler(cfg *Config, next http.Handler, readTimeout time.Durati
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := resolver.clientKey(r)
+		resolver.stripSecret(r)
 		isStream := r.Method == http.MethodGet
 
 		var info requestInfo
 		if isStream {
+			// Reserve a stream slot before charging the rate limit, so a
+			// GET refused by the cap costs no budget. A GET later denied by
+			// the rate limit releases its slot through the deferred release.
+			if !rl.streams.acquire(key, maxStreamsPerIP) {
+				w.Header().Set("Retry-After", "60")
+				writeJSONRPCError(w, http.StatusTooManyRequests, nil, -32000,
+					fmt.Sprintf("Too many open streams: at most %d concurrent GET streams per client.", maxStreamsPerIP))
+				return
+			}
+			defer rl.streams.release(key)
 			info.weight = streamWeight
 		} else {
 			// Bound the body read. On success clear the deadline so a
 			// streamed (SSE) POST response is not cut off by it; on failure
 			// keep it, so net/http's drain of the unread body cannot block.
 			rc := http.NewResponseController(w)
-			_ = rc.SetReadDeadline(time.Now().Add(readTimeout))
+			rl.noteDeadlineErr(rc.SetReadDeadline(time.Now().Add(readTimeout)))
 			var err error
 			info, r, err = readRequestInfo(w, r)
 			if err != nil {
 				writeBodyError(w, err, readTimeout)
 				return
 			}
-			_ = rc.SetReadDeadline(time.Time{})
+			rl.noteDeadlineErr(rc.SetReadDeadline(time.Time{}))
 			rl.activeReqs.Add(1)
 			defer rl.activeReqs.Add(-1)
 		}
@@ -606,22 +717,12 @@ func newRateLimitHandler(cfg *Config, next http.Handler, readTimeout time.Durati
 			secs := retryAfterSeconds(d.retryAfter)
 			h.Set("Retry-After", strconv.Itoa(secs))
 			status := http.StatusTooManyRequests
-			if info.method == "initialize" {
+			if info.initialize {
 				status = http.StatusOK
 			}
 			writeJSONRPCError(w, status, info.id, -32000,
 				fmt.Sprintf("Rate limit exceeded. Try again in %d seconds.", secs))
 			return
-		}
-
-		if isStream {
-			if !rl.streams.acquire(key, maxStreamsPerIP) {
-				h.Set("Retry-After", "60")
-				writeJSONRPCError(w, http.StatusTooManyRequests, nil, -32000,
-					fmt.Sprintf("Too many open streams: at most %d concurrent GET streams per client.", maxStreamsPerIP))
-				return
-			}
-			defer rl.streams.release(key)
 		}
 
 		next.ServeHTTP(w, r)

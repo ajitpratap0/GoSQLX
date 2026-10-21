@@ -94,6 +94,12 @@ func (s *Server) ToolCount() int {
 // without starting an HTTP server. Use this when you need to wrap
 // the handler with additional middleware (e.g., rate limiting).
 //
+// The returned handler does NOT apply RateLimitMiddleware or
+// NewRateLimitMiddleware, so it has no per-client rate limit, GET stream
+// cap, body read deadline or 64KB body cap. Wrap it with
+// NewRateLimitMiddleware (as cmd/gosqlx-mcp does) before exposing it to
+// untrusted clients.
+//
 // Every call shares one streamable HTTP transport, whose idle-session sweeper
 // runs in a background goroutine until Shutdown is called.
 func (s *Server) Handler() http.Handler {
@@ -232,9 +238,11 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 // It blocks until ctx is cancelled or a fatal error occurs; either way the
 // HTTP server and the transport's session sweeper are shut down.
 //
-// Start applies bearer auth only. It does NOT apply rate limiting or the
-// request body size cap: wrap Handler with RateLimitMiddleware (as
-// cmd/gosqlx-mcp does) when the server is exposed to untrusted clients.
+// Start applies bearer auth only. It does NOT apply RateLimitMiddleware or
+// NewRateLimitMiddleware, so there is no rate limit, GET stream cap, body
+// read deadline or request body size cap. When the server is exposed to
+// untrusted clients, build your own http.Server around Handler wrapped with
+// NewRateLimitMiddleware (as cmd/gosqlx-mcp does) instead of calling Start.
 func (s *Server) Start(ctx context.Context) error {
 	httpSrv := &http.Server{
 		Addr:              s.cfg.Addr(),

@@ -167,17 +167,30 @@ func (j *JoinClause) childrenInPlace() []Node {
 //
 // New in v1.6.0: Lateral field for PostgreSQL LATERAL JOIN support.
 type TableReference struct {
-	Name       string           // Table name (empty if this is a derived table)
-	Alias      string           // Optional alias
-	Subquery   *SelectStatement // For derived tables: (SELECT ...) AS alias
-	Lateral    bool             // LATERAL keyword for correlated subqueries (PostgreSQL)
-	TableHints []string         // SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
-	Final      bool             // ClickHouse FINAL modifier: forces MergeTree part merge
+	Name     string           // Table name (empty if this is a derived table)
+	Alias    string           // Optional alias
+	Subquery *SelectStatement // For derived tables: (SELECT ...) AS alias
+	Lateral  bool             // LATERAL keyword for correlated subqueries (PostgreSQL)
+	Final    bool             // ClickHouse FINAL modifier: forces MergeTree part merge
+	// WithOrdinality is the PostgreSQL WITH ORDINALITY modifier on a
+	// table function: unnest(arr) WITH ORDINALITY appends a bigint column
+	// numbering the function's output rows. Only set when TableFunc is set.
+	//
+	// The three flags are kept together so they share one word of padding;
+	// TableReference is copied by value on the parser hot path.
+	WithOrdinality bool
+	TableHints     []string // SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
 	// TableFunc is a function-call table reference such as
 	// Snowflake LATERAL FLATTEN(input => col), TABLE(my_func(1,2)),
 	// IDENTIFIER('t'), or PostgreSQL unnest(array_col). When set, Name
 	// holds the function name and TableFunc carries the call itself.
 	TableFunc *FunctionCall
+	// ColumnAliases is the column alias list of a table function's alias:
+	// unnest(arr) AS g(elem) or generate_series(1, 3) WITH ORDINALITY
+	// AS s(n, idx). It is nil unless TableFunc and Alias are set. It is a
+	// pointer so the many references without a list cost one word instead
+	// of a slice header.
+	ColumnAliases *ColumnAliasList
 	// TimeTravel is the Snowflake time-travel clause applied to this table
 	// reference: AT / BEFORE (TIMESTAMP|OFFSET|STATEMENT => expr) or
 	// CHANGES (INFORMATION => DEFAULT|APPEND_ONLY).
@@ -198,6 +211,12 @@ type TableReference struct {
 	// SetSubquery is set; a body that is a single SELECT (including one
 	// with a WITH clause or extra parentheses) is always held in Subquery.
 	SetSubquery *SetOperation
+}
+
+// ColumnAliasList is the column alias list that follows a table alias, as
+// in unnest(arr) AS g(a, b). Names holds the column names in order.
+type ColumnAliasList struct {
+	Names []string
 }
 
 func (t *TableReference) statementNode() {}

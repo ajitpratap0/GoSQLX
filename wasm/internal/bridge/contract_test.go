@@ -33,8 +33,9 @@ func contractSample() any {
 		Code: "E2002", Message: "message", Line: 1, Column: 14, EndLine: 1, EndColumn: 14,
 	}
 	return struct {
-		Lint    LintResponse    `json:"lint"`
-		Analyze AnalyzeResponse `json:"analyze"`
+		Lint      LintResponse      `json:"lint"`
+		Analyze   AnalyzeResponse   `json:"analyze"`
+		Highlight HighlightResponse `json:"highlight"`
 	}{
 		Lint: LintResponse{
 			ParseError:     "parse error",
@@ -62,6 +63,9 @@ func contractSample() any {
 					Line: 1, Column: 1, OriginalSQL: "SELECT *", SuggestedSQL: "SELECT id",
 				}},
 			},
+		},
+		Highlight: HighlightResponse{
+			Spans: []HighlightSpan{{Start: 0, End: 6, Category: "keyword"}},
 		},
 	}
 }

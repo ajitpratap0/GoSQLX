@@ -19,8 +19,9 @@ file=""
 if command -v jq >/dev/null 2>&1; then
   file=$(printf '%s' "$input" | jq -r '.tool_input.file_path // empty' 2>/dev/null) || exit 0
 else
-  # Fallback without jq: take the first "file_path":"..." value. Give up on
-  # paths containing JSON escapes rather than risk reading the wrong file.
+  # Fallback without jq: take the last "file_path":"..." value in the input
+  # (the leading .* is greedy). Give up on paths containing JSON escapes
+  # rather than risk reading the wrong file.
   file=$(printf '%s' "$input" | tr -d '\n' |
     sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
   case $file in *\\*) exit 0 ;; esac

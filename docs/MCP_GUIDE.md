@@ -32,7 +32,7 @@ The GoSQLX MCP server (`gosqlx-mcp`) exposes all GoSQLX SQL capabilities as [Mod
 - **7 SQL Tools**: validate, format, parse, extract metadata, security scan, lint, and composite analyze
 - **Streamable HTTP**: Compatible with any MCP client that supports the streamable HTTP transport
 - **Optional Bearer Auth**: Protect the server with a token when exposing to a network
-- **Multi-Dialect Validation**: postgresql, mysql, sqlite, sqlserver, oracle, snowflake, generic
+- **Multi-Dialect Validation**: generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse
 - **Concurrent Analysis**: `analyze_sql` fans out all 6 tools via `sync.WaitGroup` - one round trip for a full SQL health report
 - **Zero Business Logic Duplication**: Every tool delegates to the existing `pkg/gosqlx`, `pkg/linter`, and `pkg/sql/security` packages
 
@@ -286,7 +286,7 @@ Optional arguments must match their schema type. Absent or `null` means the defa
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `sql` | string | yes | - | The SQL string to validate |
-| `dialect` | string | no | *(generic)* | One of: `generic`, `mysql`, `postgresql`, `sqlite`, `sqlserver`, `oracle`, `snowflake` |
+| `dialect` | string | no | *(generic)* | One of: `generic`, `postgresql`, `mysql`, `mariadb`, `sqlserver`, `oracle`, `sqlite`, `snowflake`, `bigquery`, `redshift`, `clickhouse` |
 
 #### Response
 

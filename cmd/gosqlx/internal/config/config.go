@@ -20,6 +20,8 @@ import (
 	"path/filepath"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // Config represents the complete GoSQLX CLI configuration.
@@ -84,7 +86,7 @@ type FormatConfig struct {
 // Controls validation behavior including dialect selection and security limits.
 //
 // Fields:
-//   - Dialect: SQL dialect for validation (postgresql, mysql, mariadb, snowflake, sqlserver, oracle, sqlite, generic)
+//   - Dialect: SQL dialect for validation (any name from keywords.DialectNames())
 //   - StrictMode: Enable strict validation rules (default: false)
 //   - Recursive: Recursively process directories (default: false)
 //   - Pattern: File pattern for recursive processing (default: "*.sql")
@@ -345,16 +347,8 @@ func (c *Config) Validate() error {
 
 	// Validate dialect (empty string means permissive/no dialect gates)
 	if c.Validation.Dialect != "" {
-		validDialects := []string{"postgresql", "mysql", "mariadb", "snowflake", "sqlserver", "oracle", "sqlite", "generic"}
-		dialectValid := false
-		for _, d := range validDialects {
-			if c.Validation.Dialect == d {
-				dialectValid = true
-				break
-			}
-		}
-		if !dialectValid {
-			return fmt.Errorf("validate.dialect must be one of: %v, got '%s'", validDialects, c.Validation.Dialect)
+		if !keywords.IsValidDialect(c.Validation.Dialect) {
+			return fmt.Errorf("validate.dialect must be one of: %v, got '%s'", keywords.DialectNames(), c.Validation.Dialect)
 		}
 	}
 

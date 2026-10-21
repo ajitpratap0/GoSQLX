@@ -27,7 +27,7 @@ suite('Configuration Validation Unit Tests', () => {
     });
 
     test('validateDialect should accept valid dialects', () => {
-        const validDialects = ['generic', 'postgresql', 'mysql', 'sqlserver', 'oracle', 'sqlite'];
+        const validDialects = ['generic', 'postgresql', 'mysql', 'mariadb', 'sqlserver', 'oracle', 'sqlite', 'snowflake', 'bigquery', 'redshift', 'clickhouse'];
         for (const dialect of validDialects) {
             const result = validateDialect(dialect);
             assert.strictEqual(result.valid, true, `Dialect ${dialect} should be valid`);
@@ -349,7 +349,7 @@ function validateIndentSize(value: number): ValidationResult {
 }
 
 function validateDialect(dialect: string): ValidationResult {
-    const validDialects = ['generic', 'postgresql', 'mysql', 'sqlserver', 'oracle', 'sqlite'];
+    const validDialects = ['generic', 'postgresql', 'mysql', 'mariadb', 'sqlserver', 'oracle', 'sqlite', 'snowflake', 'bigquery', 'redshift', 'clickhouse'];
     if (!validDialects.includes(dialect.toLowerCase())) {
         return { valid: false, message: `Invalid dialect. Valid options: ${validDialects.join(', ')}` };
     }

@@ -445,5 +445,5 @@ func init() {
 	lintCmd.Flags().IntVar(&lintMaxLength, "max-length", 100, "maximum line length (L005 rule)")
 	lintCmd.Flags().BoolVar(&lintFailOnWarn, "fail-on-warn", false, "exit with error code on warnings")
 	lintCmd.Flags().BoolVar(&lintSecurity, "security", false, "run security scanner (LIKE injection, tautology, UNION injection)")
-	lintCmd.Flags().StringVar(&lintDialect, "dialect", "", "SQL dialect: postgresql, mysql, mariadb, snowflake, sqlserver, oracle, sqlite (default: postgresql)")
+	lintCmd.Flags().StringVar(&lintDialect, "dialect", "", dialectFlagUsage("default: postgresql"))
 }

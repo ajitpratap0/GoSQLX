@@ -8,7 +8,7 @@ export function BlogList({ posts }: { posts: BlogPost[] }) {
   return (
     <div className="relative">
       {/* Timeline line */}
-      <div className="absolute left-[7px] top-2 bottom-2 w-px bg-bg-overlay" />
+      <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border-strong" />
 
       <div className="space-y-0">
         {posts.map((post) => (
@@ -18,7 +18,7 @@ export function BlogList({ posts }: { posts: BlogPost[] }) {
               className="group flex gap-6 py-5 pl-0 relative"
             >
               {/* Timeline dot */}
-              <div className="relative z-10 mt-2 w-[15px] h-[15px] shrink-0 rounded-full border-2 border-border bg-bg group-hover:border-accent transition-colors" />
+              <div className="relative z-10 mt-2 w-[15px] h-[15px] shrink-0 rounded-full border-2 border-border-strong bg-bg group-hover:border-accent transition-colors" />
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3 mb-1.5 flex-wrap">
@@ -29,7 +29,7 @@ export function BlogList({ posts }: { posts: BlogPost[] }) {
                     <span className="text-sm text-fg-subtle">{formatDate(post.date)}</span>
                   )}
                 </div>
-                <h2 className="text-lg font-semibold text-fg group-hover:text-fg transition-colors truncate">
+                <h2 className="text-lg font-semibold text-fg group-hover:text-accent transition-colors truncate">
                   {post.title}
                 </h2>
                 {post.description && (

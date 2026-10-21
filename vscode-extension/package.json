@@ -63,6 +63,16 @@
         "path": "./syntaxes/sql.tmLanguage.json"
       }
     ],
+    "semanticTokenScopes": [
+      {
+        "language": "sql",
+        "scopes": {
+          "keyword.readonly": [
+            "constant.language.sql"
+          ]
+        }
+      }
+    ],
     "configuration": {
       "title": "GoSQLX",
       "properties": {
@@ -119,9 +129,14 @@
             "generic",
             "postgresql",
             "mysql",
+            "mariadb",
             "sqlserver",
             "oracle",
-            "sqlite"
+            "sqlite",
+            "snowflake",
+            "bigquery",
+            "redshift",
+            "clickhouse"
           ],
           "default": "generic",
           "scope": "resource",

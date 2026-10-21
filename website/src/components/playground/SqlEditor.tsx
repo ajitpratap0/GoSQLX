@@ -1,9 +1,9 @@
 'use client';
-import { useRef, useEffect, type MouseEvent as ReactMouseEvent } from "react";
+import { useRef, useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { EditorView, placeholder as cmPlaceholder, keymap } from "@codemirror/view";
 import { EditorState, Compartment, Prec } from "@codemirror/state";
 import { sql } from "@codemirror/lang-sql";
-import { oneDark } from "@codemirror/theme-one-dark";
+import { oneDarkHighlightStyle, oneDarkTheme } from "@codemirror/theme-one-dark";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import {
   syntaxHighlighting,
@@ -13,6 +13,13 @@ import {
 } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { errorMarkerTransaction, parseErrorMarker, type EditorErrorMarker } from "./editorDiagnostics";
+import {
+  gosqlxHighlighting,
+  gosqlxHighlightSource,
+  highlightActivation,
+  isGosqlxHighlightActive,
+  type HighlightSource,
+} from "./editorHighlight";
 
 // Override oneDark's coral (#e06c75) which fails WCAG AA (4.38:1 on #282c34).
 // #e87980 achieves ~5.07:1 contrast against #282c34.
@@ -29,6 +36,12 @@ interface SqlEditorProps {
   ariaLabel?: string;
   /** Parse error to mark in the editor; cleared on the next edit. */
   errorMarker?: EditorErrorMarker | null;
+  /**
+   * GoSQLX span source (the WASM parser). While it yields spans they colour
+   * the text; until then, or when it fails, the generic Lezer SQL
+   * highlighting is used.
+   */
+  highlighter?: HighlightSource | null;
 }
 
 const baseTheme = EditorView.theme({
@@ -76,10 +89,18 @@ const tokenTheme = (dark: boolean) =>
 const isLightMode = () =>
   typeof document !== "undefined" && document.documentElement.classList.contains("light");
 
-const themeExtensions = (light: boolean) =>
+// Generic Lezer token colours, used until GoSQLX highlighting is active.
+const lezerHighlighting = (light: boolean) =>
   light
-    ? [tokenTheme(false)]
-    : [syntaxHighlighting(accessibleHighlight), oneDark, tokenTheme(true)];
+    ? [syntaxHighlighting(defaultHighlightStyle)]
+    : [syntaxHighlighting(accessibleHighlight), syntaxHighlighting(oneDarkHighlightStyle)];
+
+// The Lezer colours are left out while GoSQLX marks are shown, so a token is
+// never coloured by both.
+const themeExtensions = (light: boolean, gosqlx: boolean) => [
+  gosqlx ? [] : lezerHighlighting(light),
+  light ? [tokenTheme(false)] : [oneDarkTheme, tokenTheme(true)],
+];
 
 export default function SqlEditor({
   value,
@@ -89,6 +110,7 @@ export default function SqlEditor({
   minHeight = "200px",
   ariaLabel = "SQL editor",
   errorMarker = null,
+  highlighter = null,
 }: SqlEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -96,6 +118,9 @@ export default function SqlEditor({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The latest marker, applied again when the editor is rebuilt.
   const errorMarkerRef = useRef(errorMarker);
+  // The latest highlighter, used when the editor is rebuilt.
+  const highlighterRef = useRef(highlighter);
+  const [sourceCompartment] = useState(() => new Compartment());
 
   // Keep onChange ref current without recreating the editor
   useEffect(() => {
@@ -123,13 +148,20 @@ export default function SqlEditor({
     });
 
     const themeCompartment = new Compartment();
+    // Swap the Lezer colours in the transaction that turns GoSQLX marks on or off.
+    const syncFallbackHighlighting = EditorState.transactionExtender.of((tr) => {
+      const active = highlightActivation(tr);
+      return active === null ? null : { effects: themeCompartment.reconfigure(themeExtensions(isLightMode(), active)) };
+    });
     const extensions = [
       baseTheme,
       minHeightTheme,
 
-      themeCompartment.of(themeExtensions(isLightMode())),
+      themeCompartment.of(themeExtensions(isLightMode(), false)),
       sql(),
-      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+      gosqlxHighlighting(),
+      sourceCompartment.of(gosqlxHighlightSource(highlighterRef.current)),
+      syncFallbackHighlighting,
       bracketMatching(),
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
@@ -171,7 +203,7 @@ export default function SqlEditor({
     // Follow the site theme toggle (ThemeToggle flips the `light` class on <html>).
     const observer = new MutationObserver(() => {
       view.dispatch({
-        effects: themeCompartment.reconfigure(themeExtensions(isLightMode())),
+        effects: themeCompartment.reconfigure(themeExtensions(isLightMode(), isGosqlxHighlightActive(view.state))),
       });
     });
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
@@ -214,6 +246,12 @@ export default function SqlEditor({
     const tr = errorMarkerTransaction(view.state, errorMarker);
     if (tr) view.dispatch(tr);
   }, [errorMarker]);
+
+  // Switch the span source (WASM loaded, dialect changed) without rebuilding the editor.
+  useEffect(() => {
+    highlighterRef.current = highlighter;
+    viewRef.current?.dispatch({ effects: sourceCompartment.reconfigure(gosqlxHighlightSource(highlighter)) });
+  }, [highlighter, sourceCompartment]);
 
   // Clicks on the pane padding (outside .cm-editor) also focus the editor.
   const focusOnPaneClick = (e: ReactMouseEvent<HTMLDivElement>) => {

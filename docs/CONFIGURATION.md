@@ -99,7 +99,7 @@ GoSQLX searches for configuration files in this order:
 
 | Option | Default | Type | Options |
 |--------|---------|------|---------|
-| `validate.dialect` | `postgresql` | string | postgresql, mysql, sqlserver, oracle, sqlite, generic |
+| `validate.dialect` | `postgresql` | string | generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, bigquery, redshift, clickhouse |
 | `validate.strict_mode` | `false` | bool | - |
 | `validate.recursive` | `false` | bool | - |
 | `validate.pattern` | `*.sql` | string | Any glob pattern |
@@ -177,7 +177,7 @@ format:
 
 SQL dialect for validation.
 
-**Options**: `postgresql`, `mysql`, `sqlserver`, `oracle`, `sqlite`, `generic`
+**Options**: `generic`, `postgresql`, `mysql`, `mariadb`, `sqlserver`, `oracle`, `sqlite`, `snowflake`, `bigquery`, `redshift`, `clickhouse`
 
 ```yaml
 validate:
@@ -378,7 +378,7 @@ analyze:
 
 ### Dialect Validation
 
-Valid values: `postgresql`, `mysql`, `sqlserver`, `oracle`, `sqlite`, `generic`
+Valid values: `generic`, `postgresql`, `mysql`, `mariadb`, `sqlserver`, `oracle`, `sqlite`, `snowflake`, `bigquery`, `redshift`, `clickhouse`
 
 ### Output Format Validation
 

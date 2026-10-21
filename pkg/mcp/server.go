@@ -21,6 +21,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/mark3labs/mcp-go/util"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+	sqlkeywords "github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // Server wraps the MCP server with all GoSQLX tools and UI resources registered.
@@ -288,12 +290,10 @@ func newTool(name, title, description string, meta *mcp.Meta, opts ...mcp.ToolOp
 	return mcp.NewTool(name, all...)
 }
 
-// supportedDialects lists the dialect values accepted by validate_sql. Each
+// supportedDialects lists the dialect values accepted by validate_sql. It is
+// derived from keywords.DialectNames, the single source of truth, and each
 // one is accepted by gosqlx.ParseWithDialect.
-var supportedDialects = []string{
-	"generic", "postgresql", "mysql", "mariadb", "sqlserver",
-	"oracle", "sqlite", "snowflake", "clickhouse",
-}
+var supportedDialects = sqlkeywords.DialectNames()
 
 // registerTools adds all 7 GoSQLX tools with their JSON Schema definitions.
 func (s *Server) registerTools() {
@@ -309,7 +309,7 @@ func (s *Server) registerTools() {
 				mcp.Description("The SQL string to validate"),
 			),
 			mcp.WithString("dialect",
-				mcp.Description("SQL dialect: generic, postgresql, mysql, mariadb, sqlserver, oracle, sqlite, snowflake, clickhouse"),
+				mcp.Description("SQL dialect: "+strings.Join(supportedDialects, ", ")),
 				mcp.Enum(supportedDialects...),
 			),
 		),

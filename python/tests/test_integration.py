@@ -330,6 +330,18 @@ class TestVersion:
         parts = v.split(".")
         assert len(parts) >= 2, f"Expected semver-like version, got: {v}"
 
+    def test_version_called_twice(self):
+        """Regression: the 2nd version() call used to double-free and abort.
+
+        gosqlx_version returned a process-wide cached pointer while version()
+        freed it, so the second call in a process crashed with "pointer being
+        freed was not allocated" on macOS (heap corruption elsewhere).
+        """
+        first = version()
+        second = version()
+        third = version()
+        assert first == second == third
+
 
 # ---------------------------------------------------------------------------
 # Error detail tests

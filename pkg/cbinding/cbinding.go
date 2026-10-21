@@ -45,7 +45,6 @@ import (
 	"encoding/json"
 	"regexp"
 	"strconv"
-	"sync"
 	"unsafe"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
@@ -58,13 +57,6 @@ var VERSION = gosqlx.Version
 
 // errorPositionRegex matches "line X, column Y" patterns in error messages.
 var errorPositionRegex = regexp.MustCompile(`line\s+(\d+),\s*column\s+(\d+)`)
-
-// cachedVersion is a process-lifetime C string for gosqlx_version().
-// Allocated once via sync.Once to avoid leaking memory on every call.
-var (
-	cachedVersion     *C.char
-	cachedVersionOnce sync.Once
-)
 
 // ParseResult represents the result of parsing SQL.
 type ParseResult struct {
@@ -413,6 +405,7 @@ func gosqlx_extract_metadata(sql *C.char) *C.char {
 }
 
 // gosqlx_free releases memory allocated by the C binding functions.
+// Passing NULL is a no-op (free(NULL) is defined by the C standard).
 // Every C string returned by gosqlx_parse, gosqlx_validate, gosqlx_format,
 // gosqlx_extract_tables, gosqlx_extract_columns, gosqlx_extract_functions,
 // gosqlx_extract_metadata, and gosqlx_version must be freed with this function
@@ -429,15 +422,14 @@ func gosqlx_free(ptr *C.char) {
 // gosqlx_version returns the current GoSQLX library version as a C string.
 // The version follows semantic versioning (e.g., "1.8.0").
 //
-// Returns a C string with the version. The caller must free the returned
-// pointer with gosqlx_free.
+// Returns a newly allocated C string with the version on every call. Like every
+// other gosqlx_* result, the caller owns it and must free it exactly once with
+// gosqlx_free. (Earlier releases returned a process-wide cached pointer here,
+// which made the documented free a double free on the second call.)
 //
 //export gosqlx_version
 func gosqlx_version() *C.char {
-	cachedVersionOnce.Do(func() {
-		cachedVersion = C.CString(VERSION)
-	})
-	return cachedVersion
+	return C.CString(VERSION)
 }
 
 func main() {}

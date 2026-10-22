@@ -428,7 +428,9 @@ const (
 
 // AlterPolicyOperation represents operations that can be performed on a policy
 type AlterPolicyOperation struct {
-	Type      AlterPolicyOpType
+	Type AlterPolicyOpType
+	// Table is the table the policy is on (ALTER POLICY name ON table).
+	Table     string
 	NewName   string
 	To        []string
 	Using     Expression

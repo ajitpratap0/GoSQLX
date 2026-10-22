@@ -150,9 +150,12 @@ func (p *Parser) parseAlterPolicyStatement(stmt *ast.AlterStatement) (*ast.Alter
 	if !p.matchType(models.TokenTypeOn) {
 		return nil, p.expectedError("ON")
 	}
-	p.parseIdentAsString() // table name
+	table, err := p.parseQualifiedName()
+	if err != nil {
+		return nil, p.qualifiedNameError(err, "table name")
+	}
 
-	op := &ast.AlterPolicyOperation{}
+	op := &ast.AlterPolicyOperation{Table: table}
 
 	if p.matchType(models.TokenTypeRename) {
 		if !p.matchType(models.TokenTypeTo) {
@@ -241,13 +244,15 @@ func (p *Parser) parseAlterConnectorStatement(stmt *ast.AlterStatement) (*ast.Al
 
 	case p.matchType(models.TokenTypeOwner):
 		owner := &ast.AlterConnectorOwner{}
-		if p.matchType(models.TokenTypeUser) {
+		switch p.utilityWord(p.currentPos) {
+		case "USER":
 			owner.IsUser = true
-		} else if p.matchType(models.TokenTypeRole) {
+		case "ROLE":
 			owner.IsUser = false
-		} else {
+		default:
 			return nil, p.expectedError("USER or ROLE")
 		}
+		p.advance()
 		owner.Name = p.parseIdentAsString()
 		op.Owner = owner
 

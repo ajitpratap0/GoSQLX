@@ -213,6 +213,7 @@ func (p *Parser) alterGenericAllowed(prefix, w string) bool {
 // alterObjectKinds lists, per object word that may follow ALTER, the dialects
 // that accept the statement; such statements are kept as written.
 var alterObjectKinds = map[string]alterDialects{
+	"ROLE":         dialectPostgres | dialectOracle | dialectSQLServer | dialectMySQLFamily | dialectSnowflake | dialectRedshift,
 	"INDEX":        dialectPostgres | dialectOracle | dialectSQLServer | dialectMySQLFamily | dialectRedshift,
 	"SESSION":      dialectOracle | dialectSnowflake,
 	"SYSTEM":       dialectOracle | dialectClickHouse,

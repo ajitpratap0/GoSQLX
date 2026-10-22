@@ -21,13 +21,17 @@ import (
 )
 
 // renderAlterStatement renders an *ast.AlterStatement. ALTER TABLE statements
-// (every action the parser produces, comma-separated) are rendered in full;
-// other ALTER kinds (ROLE, POLICY, CONNECTOR) keep the previous stmtSQL output.
+// (every action the parser produces, comma-separated) are rendered in full, as
+// are ALTER ROLE, POLICY and CONNECTOR; a statement without an operation keeps
+// the stmtSQL output.
 func renderAlterStatement(a *ast.AlterStatement, opts ast.FormatOptions) string {
 	if a == nil {
 		return ""
 	}
 	if a.Type != ast.AlterTypeTable {
+		if out := renderAlterOther(a, opts); out != "" {
+			return out
+		}
 		return stmtSQL(a)
 	}
 	f := newNodeFormatter(opts)

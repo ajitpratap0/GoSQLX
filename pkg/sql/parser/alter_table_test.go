@@ -639,6 +639,9 @@ func TestAlterObjects(t *testing.T) {
 		{keywords.DialectPostgreSQL, "ALTER MATERIALIZED VIEW v RENAME TO w", "ALTER MATERIALIZED"},
 		{keywords.DialectPostgreSQL, "ALTER SCHEMA s RENAME TO t", "ALTER SCHEMA"},
 		{keywords.DialectPostgreSQL, "ALTER VIEW v OWNER TO bob", "ALTER VIEW"},
+		{keywords.DialectPostgreSQL, "ALTER ROLE r WITH LOGIN PASSWORD 'x'", "ALTER ROLE"},
+		{keywords.DialectMySQL, "ALTER ROLE r IDENTIFIED BY 'x'", "ALTER ROLE"},
+		{keywords.DialectOracle, "ALTER ROLE r NOT IDENTIFIED", "ALTER ROLE"},
 	}
 	for _, tc := range tests {
 		t.Run(string(tc.dialect)+"/"+tc.sql, func(t *testing.T) {
@@ -755,5 +758,59 @@ func TestAlterTable_Prefixes(t *testing.T) {
 				}
 			}()
 		}
+	}
+}
+
+// TestAlterPolicy_Table checks that ALTER POLICY keeps the table it is on.
+func TestAlterPolicy_Table(t *testing.T) {
+	tree, err := ParseWithDialect("ALTER POLICY p ON s.t RENAME TO q", keywords.DialectPostgreSQL)
+	if err != nil {
+		t.Fatalf("ParseWithDialect: %v", err)
+	}
+	defer ast.ReleaseAST(tree)
+	if len(tree.Statements) != 1 {
+		t.Fatalf("got %d statements, want 1", len(tree.Statements))
+	}
+	stmt, ok := tree.Statements[0].(*ast.AlterStatement)
+	if !ok {
+		t.Fatalf("expected *ast.AlterStatement, got %T", tree.Statements[0])
+	}
+	op, ok := stmt.Operation.(*ast.AlterPolicyOperation)
+	if !ok {
+		t.Fatalf("expected *ast.AlterPolicyOperation, got %T", stmt.Operation)
+	}
+	if stmt.Name != "p" || op.Table != "s.t" || op.NewName != "q" || op.Type != ast.RenamePolicy {
+		t.Errorf("Name=%q Table=%q NewName=%q Type=%v", stmt.Name, op.Table, op.NewName, op.Type)
+	}
+}
+
+// TestAlterConnector_OwnerWords checks that SET OWNER USER / ROLE are read by
+// their words, which the tokenizer does not always give keyword types.
+func TestAlterConnector_OwnerWords(t *testing.T) {
+	for _, tc := range []struct {
+		sql    string
+		isUser bool
+	}{
+		{"ALTER CONNECTOR c SET OWNER USER bob", true},
+		{"ALTER CONNECTOR c SET OWNER ROLE admins", false},
+	} {
+		tree, err := ParseWithDialect(tc.sql, keywords.DialectGeneric)
+		if err != nil {
+			t.Fatalf("ParseWithDialect(%q): %v", tc.sql, err)
+		}
+		stmt, ok := tree.Statements[0].(*ast.AlterStatement)
+		if !ok {
+			ast.ReleaseAST(tree)
+			t.Fatalf("expected *ast.AlterStatement, got %T", tree.Statements[0])
+		}
+		op, ok := stmt.Operation.(*ast.AlterConnectorOperation)
+		if !ok || op.Owner == nil {
+			ast.ReleaseAST(tree)
+			t.Fatalf("expected an owner operation, got %T", stmt.Operation)
+		}
+		if op.Owner.IsUser != tc.isUser {
+			t.Errorf("%q: IsUser = %v, want %v", tc.sql, op.Owner.IsUser, tc.isUser)
+		}
+		ast.ReleaseAST(tree)
 	}
 }

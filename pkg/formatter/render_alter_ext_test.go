@@ -180,3 +180,41 @@ func TestFormatStatement_AlterObjects(t *testing.T) {
 		})
 	}
 }
+
+// TestFormatStatement_AlterRolePolicyConnector checks that ALTER ROLE,
+// ALTER POLICY and ALTER CONNECTOR no longer render as a bare "ALTER".
+func TestFormatStatement_AlterRolePolicyConnector(t *testing.T) {
+	opts := ast.CompactStyle()
+	opts.KeywordCase = ast.KeywordUpper
+	tests := []struct {
+		name    string
+		dialect keywords.SQLDialect
+		in      string
+		want    string
+	}{
+		{"role rename", keywords.DialectGeneric, "ALTER ROLE r RENAME TO s", "ALTER ROLE r RENAME TO s"},
+		{"role add member", keywords.DialectGeneric, "ALTER ROLE r ADD MEMBER m", "ALTER ROLE r ADD MEMBER m"},
+		{"role drop member", keywords.DialectGeneric, "ALTER ROLE r DROP MEMBER m", "ALTER ROLE r DROP MEMBER m"},
+		{"role set", keywords.DialectGeneric, "ALTER ROLE r SET search_path TO public", "ALTER ROLE r SET search_path TO public"},
+		{"role reset all", keywords.DialectGeneric, "ALTER ROLE r RESET ALL", "ALTER ROLE r RESET ALL"},
+		{"role options", keywords.DialectGeneric, "ALTER ROLE r WITH SUPERUSER, VALID UNTIL '2030-01-01'", "ALTER ROLE r WITH SUPERUSER, VALID UNTIL '2030-01-01'"},
+		{"role password", keywords.DialectGeneric, "ALTER ROLE r WITH LOGIN, PASSWORD 'x'", "ALTER ROLE r WITH LOGIN, PASSWORD 'x'"},
+		{"policy rename", keywords.DialectPostgreSQL, "ALTER POLICY p ON s.t RENAME TO q", "ALTER POLICY p ON s.t RENAME TO q"},
+		{"policy modify", keywords.DialectPostgreSQL, "ALTER POLICY p ON t TO a, b USING (x > 1) WITH CHECK (y > 1)", "ALTER POLICY p ON t TO a, b USING (x > 1) WITH CHECK (y > 1)"},
+		{"connector url", keywords.DialectGeneric, "ALTER CONNECTOR c SET URL 'jdbc:x'", "ALTER CONNECTOR c SET URL 'jdbc:x'"},
+		{"connector properties", keywords.DialectGeneric, "ALTER CONNECTOR c SET DCPROPERTIES ('b' = 'it''s', a = '1')", "ALTER CONNECTOR c SET DCPROPERTIES ('a' = '1', 'b' = 'it''s')"},
+		{"connector owner", keywords.DialectGeneric, "ALTER CONNECTOR c SET OWNER USER bob", "ALTER CONNECTOR c SET OWNER USER bob"},
+		{"connector owner role", keywords.DialectGeneric, "ALTER CONNECTOR c SET OWNER ROLE admins", "ALTER CONNECTOR c SET OWNER ROLE admins"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := formatAlter(t, tc.in, tc.dialect, opts)
+			if got != tc.want {
+				t.Errorf("format(%q):\n got: %q\nwant: %q", tc.in, got, tc.want)
+			}
+			if again := formatAlter(t, got, tc.dialect, opts); again != got {
+				t.Errorf("render is not stable across re-parse:\nfirst:  %q\nsecond: %q", got, again)
+			}
+		})
+	}
+}

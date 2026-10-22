@@ -209,14 +209,28 @@ func (p *Parser) peekStatementAfterOptions() bool {
 // statement does not end it (see blockScan). It returns an error when the
 // parentheses do not balance.
 func (p *Parser) utilityStatementEnd() (int, error) {
-	end, open, err := p.scanStatementEnd(true)
-	if err == nil && open {
-		// An unclosed block: like gosqlx.SplitStatements, fall back to
-		// plain ';' boundaries rather than swallowing the rest of the input.
-		end, _, err = p.scanStatementEnd(false)
+	// A scan that runs into the end of the input inside an unclosed block
+	// examined every remaining token for nothing. Repeated for each
+	// statement of a script full of unclosed blocks (BEGIN x; BEGIN y; ...)
+	// that is quadratic, so once such scans have cost a few passes over the
+	// input, the remaining statements use plain ';' boundaries straight away.
+	if p.openBlockWork <= openBlockWorkPasses*len(p.tokens) {
+		start := p.currentPos
+		end, open, err := p.scanStatementEnd(true)
+		if err != nil || !open {
+			return end, err
+		}
+		p.openBlockWork += len(p.tokens) - start
 	}
+	// An unclosed block: like gosqlx.SplitStatements, fall back to plain
+	// ';' boundaries rather than swallowing the rest of the input.
+	end, _, err := p.scanStatementEnd(false)
 	return end, err
 }
+
+// openBlockWorkPasses is how many passes over the input the block-tracking
+// scans of utilityStatementEnd may waste on unclosed blocks.
+const openBlockWorkPasses = 4
 
 // scanStatementEnd implements utilityStatementEnd. With blocks unset the
 // BEGIN ... END nesting is ignored; open reports that the input ended

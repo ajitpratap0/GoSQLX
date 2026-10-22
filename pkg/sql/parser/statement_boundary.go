@@ -110,6 +110,9 @@ func (p *Parser) implicitStartAt(i int) bool {
 	switch p.utilityWord(i) {
 	case "COMMIT", "ROLLBACK", "SAVEPOINT":
 		return true
+	case "END", "ABORT", "RELEASE":
+		// END [TRANSACTION] (PostgreSQL, SQLite), ABORT, RELEASE SAVEPOINT.
+		return p.isTransactionStartAt(i)
 	case "START":
 		return p.utilityWord(i+1) == "TRANSACTION"
 	case "BEGIN":

@@ -152,6 +152,14 @@ func TestParser_ScriptsWithoutSemicolons(t *testing.T) {
 			"BEGIN TRANSACTION;\nINSERT INTO t VALUES (1);\nEND TRANSACTION;", "[Transaction Insert Transaction]"},
 		{"start transaction with consistent snapshot", keywords.DialectMySQL,
 			"START TRANSACTION WITH CONSISTENT SNAPSHOT\nSELECT 1", "[Transaction Select]"},
+		{"pg end after update", keywords.DialectPostgreSQL,
+			"BEGIN TRANSACTION\nUPDATE t SET a = 1 WHERE id = 2\nEND", "[Transaction Update Transaction]"},
+		{"pg abort after delete", keywords.DialectPostgreSQL,
+			"DELETE FROM t WHERE a = 1\nABORT", "[Delete Transaction]"},
+		{"pg release savepoint after update", keywords.DialectPostgreSQL,
+			"SAVEPOINT s\nUPDATE t SET a = 1 WHERE id = 2\nRELEASE SAVEPOINT s", "[Transaction Update Transaction]"},
+		{"sqlite end transaction without semicolons", keywords.DialectSQLite,
+			"BEGIN TRANSACTION\nINSERT INTO t VALUES (1)\nEND TRANSACTION", "[Transaction Insert Transaction]"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -327,5 +335,43 @@ func TestParser_ScriptsWithoutSemicolonsOtherEntryPoints(t *testing.T) {
 	}
 	if got := fmt.Sprint(stmtShapes(&ast.AST{Statements: stmts})); got != want {
 		t.Errorf("recovery parse = %s, want %s", got, want)
+	}
+}
+
+// A script full of unclosed blocks falls back to ';' boundaries for each
+// statement. The block-tracking scans that run into the end of the input
+// are bounded, so such input is parsed in linear time.
+func TestParser_UnclosedBlocksBoundedWork(t *testing.T) {
+	tests := []struct {
+		dialect keywords.SQLDialect
+		sql     string
+	}{
+		{keywords.DialectSQLServer, "CREATE PROCEDURE p AS " + strings.Repeat("BEGIN SELECT 1; ", 2000)},
+		{keywords.DialectOracle, strings.Repeat("BEGIN NULL; ", 2000)},
+	}
+	for _, tc := range tests {
+		t.Run(string(tc.dialect), func(t *testing.T) {
+			tkz, err := tokenizer.NewWithDialect(tc.dialect)
+			if err != nil {
+				t.Fatalf("tokenizer: %v", err)
+			}
+			tokens, err := tkz.Tokenize([]byte(tc.sql))
+			if err != nil {
+				t.Fatalf("tokenize: %v", err)
+			}
+			p := NewParser(WithDialect(string(tc.dialect)))
+			defer p.Release()
+			tree, err := p.ParseFromModelTokens(tokens)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			defer ast.ReleaseAST(tree)
+			if n := len(tree.Statements); n != 2000 {
+				t.Errorf("statements = %d, want 2000", n)
+			}
+			if limit := 8 * len(p.tokens); p.openBlockWork > limit {
+				t.Errorf("wasted block-scan work = %d tokens, want at most %d", p.openBlockWork, limit)
+			}
+		})
 	}
 }

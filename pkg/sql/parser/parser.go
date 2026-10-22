@@ -157,6 +157,7 @@ func (p *Parser) Reset() {
 	}
 	p.currentPos = 0
 	p.implicitEnd = 0
+	p.openBlockWork = 0
 	p.currentToken = models.TokenWithSpan{}
 	p.depth = 0
 	p.ctx = nil
@@ -363,6 +364,10 @@ type Parser struct {
 	// statement ended without a ';' because the next statement began there
 	// (0: none). See utility_implicit_end.go.
 	implicitEnd int
+	// openBlockWork counts the tokens that block-tracking statement scans
+	// examined before running into the end of the input inside an unclosed
+	// block. It bounds that wasted work (see utilityStatementEnd).
+	openBlockWork int
 }
 
 // Deprecated: Parse is provided for backward compatibility only and is scheduled for
@@ -408,6 +413,7 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 	p.tokens = tokens
 	p.currentPos = 0
 	p.implicitEnd = 0
+	p.openBlockWork = 0
 	if len(tokens) > 0 {
 		p.currentToken = tokens[0]
 	}
@@ -603,6 +609,7 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 	p.tokens = tokens
 	p.currentPos = 0
 	p.implicitEnd = 0
+	p.openBlockWork = 0
 	if len(tokens) > 0 {
 		p.currentToken = tokens[0]
 	}

@@ -30,11 +30,6 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
-// isMySQLFamily reports whether the dialect is MySQL or MariaDB.
-func (p *Parser) isMySQLFamily() bool {
-	return p.dialect == string(keywords.DialectMySQL) || p.dialect == string(keywords.DialectMariaDB)
-}
-
 // isUnquotedWord reports whether the current token is an unquoted
 // identifier or keyword whose text equals upper (case-insensitively).
 func (p *Parser) isUnquotedWord(upper string) bool {

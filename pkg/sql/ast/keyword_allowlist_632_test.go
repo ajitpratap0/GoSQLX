@@ -49,6 +49,8 @@ var keywordFieldLiterals = []string{
 	"SELECT a FROM t MINUS SELECT b FROM u",
 	"MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN UPDATE SET a = s.a WHEN NOT MATCHED THEN INSERT (id) VALUES (s.id)",
 	"MERGE INTO t USING s ON t.id = s.id WHEN NOT MATCHED BY SOURCE THEN DELETE",
+	"MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN DO NOTHING WHEN NOT MATCHED BY TARGET THEN INSERT (id) VALUES (s.id)",
+	"INSERT INTO t (a) OVERRIDING SYSTEM VALUE VALUES (1)", "INSERT INTO t (a) OVERRIDING USER VALUE VALUES (1)",
 	"CREATE TABLE t (a INT NOT NULL, b INT NULL, c INT UNIQUE, d INT PRIMARY KEY, e INT DEFAULT 1, f INT CHECK (f > 0), g INT REFERENCES r (x), h INT AUTO_INCREMENT)",
 	"CREATE TABLE t (a INT, PRIMARY KEY (a), UNIQUE (a), FOREIGN KEY (a) REFERENCES r (x), CHECK (a > 0))",
 	"CREATE TABLE t (a INT) PARTITION BY RANGE (a)", "CREATE TABLE t (a INT) PARTITION BY LIST (a)",
@@ -103,7 +105,7 @@ var keywordFieldGates = map[string]func(string) bool{
 	"ShowStatement.ShowType":       func(v string) bool { return v == "" || ast.IsShowTypeText(v) },
 	"SetOperation.Operator":        func(v string) bool { return ast.SetOperatorText(v) == v },
 	"MergeWhenClause.Type": func(v string) bool {
-		return v == "MATCHED" || v == "NOT_MATCHED" || v == "NOT_MATCHED_BY_SOURCE" || ast.MergeWhenText(v) == v
+		return v == "MATCHED" || v == "NOT_MATCHED" || v == "NOT_MATCHED_BY_SOURCE" || v == "NOT_MATCHED_BY_TARGET" || ast.MergeWhenText(v) == v
 	},
 	"MergeAction.ActionType": func(v string) bool {
 		return v == "UPDATE" || v == "INSERT" || ast.MergeActionText(v) == v
@@ -117,6 +119,7 @@ var keywordFieldGates = map[string]func(string) bool{
 	"PartitionBy.Type":               func(v string) bool { return ast.PartitionByText(v) == v },
 	"TableOption.Name":               func(v string) bool { return ast.TableOptionNameText(v) == v },
 	"CreateViewStatement.WithOption": func(v string) bool { return v == "" || ast.ViewWithOptionText(v) == v },
+	"InsertDialectFields.Overriding": func(v string) bool { return v == "" || ast.OverridingText(v) == v },
 	"BinaryExpression.Operator":      ast.IsOperatorText,
 	"AnyExpression.Operator":         ast.IsOperatorText,
 	"AllExpression.Operator":         ast.IsOperatorText,

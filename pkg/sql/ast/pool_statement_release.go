@@ -113,6 +113,8 @@ func releaseInsertStatement(stmt *InsertStatement, mode releaseMode) {
 		stmt.OnConflict.Action.DoUpdate = nil
 		releaseExpression(stmt.OnConflict.Action.Where, mode)
 		stmt.OnConflict.Action.Where = nil
+		releaseExpression(stmt.OnConflict.TargetWhere, mode)
+		stmt.OnConflict.TargetWhere = nil
 		stmt.OnConflict = nil
 	}
 
@@ -132,6 +134,7 @@ func releaseInsertStatement(stmt *InsertStatement, mode releaseMode) {
 	stmt.Pos = models.Location{}
 	stmt.DefaultValues = false
 	stmt.SetSyntax = false
+	releaseInsertDialectFields(&stmt.InsertDialectFields, mode)
 
 	// Return to pool
 	if mode == releaseAll {
@@ -209,6 +212,7 @@ func releaseUpdateStatement(stmt *UpdateStatement, mode releaseMode) {
 	stmt.TableName = ""
 	stmt.Alias = ""
 	stmt.Pos = models.Location{}
+	releaseDMLTargetFields(&stmt.DMLTargetFields, mode)
 
 	// Return to pool
 	if mode == releaseAll {
@@ -276,6 +280,11 @@ func releaseDeleteStatement(stmt *DeleteStatement, mode releaseMode) {
 	stmt.TableName = ""
 	stmt.Alias = ""
 	stmt.Pos = models.Location{}
+	for i := range stmt.From {
+		releaseTableReference(&stmt.From[i], mode)
+	}
+	stmt.From = nil
+	releaseDMLTargetFields(&stmt.DMLTargetFields, mode)
 
 	// Return to pool
 	if mode == releaseAll {
@@ -797,6 +806,10 @@ func PutMergeStatement(stmt *MergeStatement) {
 			stmt.WhenClauses[i].Action.Columns = stmt.WhenClauses[i].Action.Columns[:0]
 			stmt.WhenClauses[i].Action.ActionType = ""
 			stmt.WhenClauses[i].Action.DefaultValues = false
+			PutExpression(stmt.WhenClauses[i].Action.Where)
+			stmt.WhenClauses[i].Action.Where = nil
+			PutExpression(stmt.WhenClauses[i].Action.DeleteWhere)
+			stmt.WhenClauses[i].Action.DeleteWhere = nil
 			stmt.WhenClauses[i].Action = nil
 		}
 		stmt.WhenClauses[i].Type = ""
@@ -810,6 +823,11 @@ func PutMergeStatement(stmt *MergeStatement) {
 		stmt.Output[i] = nil
 	}
 	stmt.Output = stmt.Output[:0]
+	for i, expr := range stmt.Returning {
+		PutExpression(expr)
+		stmt.Returning[i] = nil
+	}
+	stmt.Returning = stmt.Returning[:0]
 
 	// Reset TargetTable / SourceTable (value types - zero them out)
 	stmt.TargetTable = TableReference{}
@@ -850,6 +868,16 @@ func PutReplaceStatement(stmt *ReplaceStatement) {
 	}
 	stmt.Values = stmt.Values[:0]
 
+	if stmt.Query != nil {
+		releaseStatement(stmt.Query, releaseAll)
+		stmt.Query = nil
+	}
+	for i := range stmt.Returning {
+		PutExpression(stmt.Returning[i])
+		stmt.Returning[i] = nil
+	}
+	stmt.Returning = stmt.Returning[:0]
+	stmt.SetSyntax = false
 	stmt.TableName = ""
 
 	replaceStmtPool.Put(stmt)

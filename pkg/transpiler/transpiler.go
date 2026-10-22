@@ -75,6 +75,14 @@ func Transpile(sql string, from, to keywords.SQLDialect) (string, error) {
 		}
 	}
 
+	// Re-render string literals for the target dialect (escaping and
+	// introducers); see retargetStringLiterals.
+	for _, stmt := range tree.Statements {
+		if err := retargetStringLiterals(stmt, to); err != nil {
+			return "", fmt.Errorf("rewrite: %w", err)
+		}
+	}
+
 	// Format each statement and join with ";\n".
 	parts := make([]string, 0, len(tree.Statements))
 	for _, stmt := range tree.Statements {

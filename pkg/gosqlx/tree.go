@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
@@ -346,7 +347,11 @@ func parseWithConfig(ctx context.Context, sql string, cfg parseOptions) (*ast.AS
 			joined := errors.Join(errs...)
 			return &ast.AST{Statements: stmts}, fmt.Errorf("%w: %w", ErrSyntax, joined)
 		}
-		return &ast.AST{Statements: stmts}, nil
+		recovered := &ast.AST{Statements: stmts}
+		if cfg.comments {
+			attachComments(recovered, tkz.Comments)
+		}
+		return recovered, nil
 	}
 
 	astNode, err := p.ParseContextFromModelTokens(ctx, tokens)
@@ -356,7 +361,19 @@ func parseWithConfig(ctx context.Context, sql string, cfg parseOptions) (*ast.AS
 		}
 		return nil, fmt.Errorf("%w: %w", ErrSyntax, err)
 	}
+	if cfg.comments {
+		attachComments(astNode, tkz.Comments)
+	}
 	return astNode, nil
+}
+
+// attachComments copies the tokenizer's comments onto a. The tokenizer reuses
+// its slice, so the AST gets its own.
+func attachComments(a *ast.AST, comments []models.Comment) {
+	if len(comments) == 0 {
+		return
+	}
+	a.Comments = append(a.Comments[:0], comments...)
 }
 
 // wrapContextErr returns the context error wrapped in ErrTimeout so callers

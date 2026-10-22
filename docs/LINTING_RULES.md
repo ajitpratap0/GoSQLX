@@ -717,7 +717,7 @@ gosqlx lint --fail-on-warn query.sql
 | Code | Meaning |
 |------|---------|
 | 0 | No violations (or info only) |
-| 1 | Violations found (errors/warnings) |
+| 1 | Violations found (errors/warnings), or the SQL has a syntax error |
 
 ---
 

@@ -27,6 +27,8 @@
 package bridge
 
 import (
+	"errors"
+
 	"github.com/ajitpratap0/GoSQLX/pkg/advisor"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -90,8 +92,13 @@ func Lint(sql, dialect string) LintResponse {
 
 	result, err := gosqlx.LintWithDialect(sql, Dialect(dialect))
 	if err != nil {
-		resp.Error = err.Error()
-		return resp
+		// Invalid SQL is reported through ParseError above; the violations of
+		// the rules that still ran are returned with the error.
+		invalidSQL := errors.Is(err, gosqlx.ErrSyntax) || errors.Is(err, gosqlx.ErrTokenize)
+		if result == nil || !invalidSQL {
+			resp.Error = err.Error()
+			return resp
+		}
 	}
 	for _, v := range result.Violations {
 		resp.Violations = append(resp.Violations, LintViolation{

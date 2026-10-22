@@ -76,9 +76,10 @@ func TestSplitStatements_Table(t *testing.T) {
 		// Same dollar-quote input with no dialect should split naively and
 		// produce MORE segments — confirming the feature is gated.
 		// Input has three top-level semicolons under ANSI rules (after
-		// `RETURN 1`, `END`, and `plpgsql`), yielding 4 segments.
+		// `SELECT 1`, `SELECT 2`, and `sql`), yielding 4 segments. (The body
+		// deliberately avoids BEGIN … END, which the splitter now keeps whole.)
 		{"ansi/dollar-not-recognised",
-			"CREATE FUNCTION f() RETURNS int AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql; SELECT 1",
+			"CREATE FUNCTION f() RETURNS int AS $$ SELECT 1; SELECT 2; $$ LANGUAGE sql; SELECT 1",
 			"", 4},
 
 		// ─── PostgreSQL E-strings ───────────────────────────────────────
@@ -210,6 +211,25 @@ var splitterDialects = []string{
 // represented), and the segment count never exceeds the number of ';' bytes
 // plus one.
 func checkTiling(src string, segs []string) (string, bool) {
+	return checkTilingFor(src, segs, "")
+}
+
+// checkTilingFor is checkTiling for a dialect. The dialects whose scripts can
+// hold client directives (GO, DELIMITER, a lone "/") consume those lines, so
+// for them the segments must only be ordered substrings of src.
+func checkTilingFor(src string, segs []string, dialect string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(dialect)) {
+	case "sqlserver", "mssql", "tsql", "mysql", "mariadb", "oracle":
+		pos := 0
+		for _, seg := range segs {
+			at := strings.Index(src[pos:], seg)
+			if at < 0 {
+				return "segment is not an in-order substring of the source", false
+			}
+			pos += at + len(seg)
+		}
+		return "", true
+	}
 	joined := strings.Join(segs, ";")
 	if joined != src && !(strings.HasSuffix(src, ";") && joined == src[:len(src)-1]) {
 		return "segments do not tile the source", false
@@ -294,7 +314,7 @@ func TestSplitStatements_TilesSource(t *testing.T) {
 		src := string(data)
 		for _, dialect := range splitterDialects {
 			segs := SplitStatements(src, dialect)
-			if msg, ok := checkTiling(src, segs); !ok {
+			if msg, ok := checkTilingFor(src, segs, dialect); !ok {
 				t.Errorf("%s (dialect %q): %s", path, dialect, msg)
 			}
 		}

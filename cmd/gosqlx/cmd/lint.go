@@ -75,7 +75,11 @@ Pipeline/Stdin Examples:
 
 Exit Codes:
   0 - No violations found
-  1 - Errors or warnings found (warnings only if --fail-on-warn is set)`,
+  1 - Violations found, or the SQL has a syntax error. With --auto-fix the
+      result is judged after the fixes are applied.
+
+Input with no statements (empty, whitespace or only comments) is not a syntax
+error.`,
 	Args: cobra.MinimumNArgs(0),
 	RunE: lintRun,
 }
@@ -84,7 +88,10 @@ func lintRun(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
 
 	// Reject unknown dialect names early before any parsing.
-	if err := validateDialectName(lintDialect); err != nil {
+	if err := normalizeDialectFlag(&lintDialect); err != nil {
+		return err
+	}
+	if err := rejectGlobalFormat(cmd); err != nil {
 		return err
 	}
 
@@ -139,7 +146,8 @@ func lintRun(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(outWriter, "\nApplying auto-fixes...")
 		fixCount := 0
 
-		for _, fileResult := range result.Files {
+		fixedIdx := make([]int, 0, len(result.Files))
+		for idx, fileResult := range result.Files {
 			if len(fileResult.Violations) == 0 {
 				continue
 			}
@@ -185,8 +193,21 @@ func lintRun(cmd *cobra.Command, args []string) error {
 					continue
 				}
 				fixCount++
+				fixedIdx = append(fixedIdx, idx)
 				fmt.Fprintf(outWriter, "Fixed: %s\n", fileResult.Filename)
 			}
+		}
+
+		// Judge the run by what is left after the fixes, not by the report
+		// printed before them.
+		if len(fixedIdx) > 0 {
+			for _, idx := range fixedIdx {
+				before := result.Files[idx]
+				after := l.LintFile(before.Filename)
+				result.TotalViolations += len(after.Violations) - len(before.Violations)
+				result.Files[idx] = after
+			}
+			fmt.Fprintf(outWriter, "\n%d violation(s) remain after auto-fix\n", result.TotalViolations)
 		}
 
 		fmt.Fprintf(outWriter, "\nAuto-fixed %d file(s)\n", fixCount)
@@ -219,9 +240,12 @@ func lintRun(cmd *cobra.Command, args []string) error {
 	warningCount := 0
 	infoCount := 0
 	fileErrorCount := 0
+	syntaxErrorCount := 0
 	for _, fileResult := range result.Files {
 		if fileResult.Error != nil {
 			fileErrorCount++
+		} else if fileResult.SyntaxError() != nil {
+			syntaxErrorCount++
 		}
 		for _, violation := range fileResult.Violations {
 			switch violation.Severity {
@@ -240,6 +264,9 @@ func lintRun(cmd *cobra.Command, args []string) error {
 	}
 
 	totalViolations := errorCount + warningCount + infoCount
+	if syntaxErrorCount > 0 {
+		return fmt.Errorf("%d file(s) contain SQL syntax errors (and %d violation(s))", syntaxErrorCount, totalViolations)
+	}
 	if totalViolations > 0 {
 		return fmt.Errorf("found %d violation(s): %d error(s), %d warning(s), %d info(s)",
 			totalViolations, errorCount, warningCount, infoCount)
@@ -281,13 +308,22 @@ func lintFromStdin(cmd *cobra.Command) error {
 	// Display results
 	fmt.Fprintf(outWriter, "Linting stdin input:\n\n")
 
+	synErr := result.SyntaxError()
+	if synErr != nil {
+		fmt.Fprintf(outWriter, "Syntax error: %v\n\n", synErr)
+	}
+
 	if len(result.Violations) == 0 {
-		fmt.Fprintln(outWriter, "No violations found.")
+		if synErr == nil {
+			fmt.Fprintln(outWriter, "No violations found.")
+		}
 		// Write to file if specified
 		if outputFile != "" {
-			return WriteOutput(outputBuf.Bytes(), outputFile, cmd.OutOrStdout())
+			if err := WriteOutput(outputBuf.Bytes(), outputFile, cmd.OutOrStdout()); err != nil {
+				return err
+			}
 		}
-		return nil
+		return lintOutcomeError(result.Violations, synErr)
 	}
 
 	fmt.Fprintf(outWriter, "Found %d violation(s):\n\n", len(result.Violations))
@@ -295,7 +331,8 @@ func lintFromStdin(cmd *cobra.Command) error {
 		fmt.Fprintf(outWriter, "%d. %s\n", i+1, linter.FormatViolation(violation))
 	}
 
-	// Apply auto-fix if requested
+	// Apply auto-fix if requested. The exit status then reflects what is left
+	// in the fixed text.
 	if lintAutoFix {
 		fmt.Fprintln(outWriter, "\nAuto-fixed output:")
 		fixed := string(content)
@@ -308,6 +345,11 @@ func lintFromStdin(cmd *cobra.Command) error {
 			}
 		}
 		fmt.Fprintln(outWriter, fixed)
+		if fixed != string(content) {
+			result = l.LintString(fixed, "stdin")
+			synErr = result.SyntaxError()
+			fmt.Fprintf(outWriter, "\n%d violation(s) remain after auto-fix\n", len(result.Violations))
+		}
 	}
 
 	// Write to file if specified
@@ -317,23 +359,7 @@ func lintFromStdin(cmd *cobra.Command) error {
 		}
 	}
 
-	// Exit with error code if there were violations
-	errorCount := 0
-	warningCount := 0
-	for _, violation := range result.Violations {
-		switch violation.Severity {
-		case linter.SeverityError:
-			errorCount++
-		case linter.SeverityWarning:
-			warningCount++
-		}
-	}
-
-	if errorCount > 0 || (lintFailOnWarn && warningCount > 0) {
-		return fmt.Errorf("%d error(s) and %d warning(s) found", errorCount, warningCount)
-	}
-
-	return nil
+	return lintOutcomeError(result.Violations, synErr)
 }
 
 // lintInlineSQL lints inline SQL passed as a command argument
@@ -347,17 +373,19 @@ func lintInlineSQL(cmd *cobra.Command, sql string) error {
 		outWriter = &outputBuf
 	}
 
-	if len(result.Violations) == 0 {
-		fmt.Fprintln(outWriter, "No violations found.")
-		if outputFile != "" {
-			return WriteOutput(outputBuf.Bytes(), outputFile, cmd.OutOrStdout())
-		}
-		return nil
+	synErr := result.SyntaxError()
+	if synErr != nil {
+		fmt.Fprintf(outWriter, "Syntax error: %v\n\n", synErr)
 	}
 
-	fmt.Fprintf(outWriter, "Found %d violation(s):\n\n", len(result.Violations))
-	for i, violation := range result.Violations {
-		fmt.Fprintf(outWriter, "%d. %s\n", i+1, linter.FormatViolation(violation))
+	switch {
+	case len(result.Violations) > 0:
+		fmt.Fprintf(outWriter, "Found %d violation(s):\n\n", len(result.Violations))
+		for i, violation := range result.Violations {
+			fmt.Fprintf(outWriter, "%d. %s\n", i+1, linter.FormatViolation(violation))
+		}
+	case synErr == nil:
+		fmt.Fprintln(outWriter, "No violations found.")
 	}
 
 	if outputFile != "" {
@@ -366,9 +394,16 @@ func lintInlineSQL(cmd *cobra.Command, sql string) error {
 		}
 	}
 
+	return lintOutcomeError(result.Violations, synErr)
+}
+
+// lintOutcomeError maps one lint run of stdin or inline SQL to the command's
+// result: invalid SQL and error-severity violations always fail it, warnings
+// only with --fail-on-warn.
+func lintOutcomeError(violations []linter.Violation, synErr error) error {
 	errorCount := 0
 	warningCount := 0
-	for _, violation := range result.Violations {
+	for _, violation := range violations {
 		switch violation.Severity {
 		case linter.SeverityError:
 			errorCount++
@@ -377,10 +412,12 @@ func lintInlineSQL(cmd *cobra.Command, sql string) error {
 		}
 	}
 
+	if synErr != nil {
+		return fmt.Errorf("invalid SQL: %w", synErr)
+	}
 	if errorCount > 0 || (lintFailOnWarn && warningCount > 0) {
 		return fmt.Errorf("%d error(s) and %d warning(s) found", errorCount, warningCount)
 	}
-
 	return nil
 }
 

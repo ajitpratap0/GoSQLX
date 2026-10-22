@@ -29,11 +29,16 @@ import "strings"
 //	"postgresql", "postgres", "pg" — dollar-quotes, E-strings, nested /*…*/
 //	"mysql", "mariadb"            — backtick identifiers
 //	"clickhouse"                  — backtick identifiers
-//	"sqlserver", "mssql", "tsql"  — [bracketed identifiers]
+//	"sqlserver", "mssql", "tsql"  — [bracketed identifiers], GO batch separator
+//	"oracle"                      — DECLARE / IS|AS sections, "/" line terminator
 //	""                            — ANSI only (single/double quotes, line/block comments)
 //
+// Compound statements stay in one piece in every dialect (see the notes on
+// procedural scripts below): a BEGIN … END body is not cut at its inner ';'.
+//
 // The returned slice preserves the original byte ranges between semicolons
-// (the terminating ';' itself is stripped). Empty or whitespace-only segments
+// (the terminating ';' itself is stripped). Client directive lines (GO,
+// DELIMITER, a lone "/") are consumed and appear in no segment. Empty or whitespace-only segments
 // are NOT filtered out here; callers such as ParseReaderMultiple trim and
 // skip them. This mirrors the long-standing behaviour of the splitter that
 // this function replaces.
@@ -53,6 +58,16 @@ func SplitStatements(sql, dialect string) []string {
 	return splitWithProfile(sql, p)
 }
 
+// Procedural scripts. Beyond plain ';' separation the splitter keeps compound
+// statements whole: BEGIN … END blocks (triggers, procedures, T-SQL batches),
+// CASE … END, IF … END IF and loops inside a block, Oracle DECLARE / IS|AS
+// sections, and PostgreSQL BEGIN ATOMIC bodies. It also honours the batch
+// separators of client tools: a line holding only GO [n] for SQL Server, a
+// DELIMITER directive for MySQL/MariaDB, and a line holding only "/" for
+// Oracle. Directive lines are consumed and do not appear in any segment.
+// Transaction statements (BEGIN; BEGIN TRANSACTION; …) are not blocks, and a
+// script whose blocks do not balance falls back to plain semicolon splitting.
+
 // dialectProfile collects the per-dialect feature flags the splitter needs.
 // Profiles are immutable and shared; one is resolved per call and passed to
 // the state machine by value-ish (read-only) pointer.
@@ -62,6 +77,12 @@ type dialectProfile struct {
 	supportsBrackets            bool
 	supportsEStrings            bool
 	supportsNestedBlockComments bool
+
+	// Procedural-script features (see splitter_proc.go).
+	tsql      bool // GO batches; IF/WHILE/LOOP are not delimited by END IF etc.
+	oracle    bool // DECLARE / IS|AS sections; "/" line terminator
+	delimiter bool // MySQL client DELIMITER directive
+	noBlocks  bool // disable BEGIN…END tracking (unbalanced-script fallback)
 }
 
 // profileForDialect returns the feature flags for the named dialect. The
@@ -76,11 +97,13 @@ func profileForDialect(dialect string) dialectProfile {
 			supportsNestedBlockComments: true,
 		}
 	case "mysql", "mariadb":
-		return dialectProfile{supportsBackticks: true}
+		return dialectProfile{supportsBackticks: true, delimiter: true}
 	case "clickhouse":
 		return dialectProfile{supportsBackticks: true}
 	case "sqlserver", "mssql", "tsql":
-		return dialectProfile{supportsBrackets: true}
+		return dialectProfile{supportsBrackets: true, tsql: true}
+	case "oracle":
+		return dialectProfile{oracle: true}
 	default:
 		return dialectProfile{}
 	}
@@ -100,14 +123,27 @@ func profileForDialect(dialect string) dialectProfile {
 // documents the transitions it performs so future readers do not have to
 // reconstruct the logic from a stack trace.
 func splitWithProfile(src string, p dialectProfile) []string {
+	out, open := splitCore(src, p)
+	if open && !p.noBlocks {
+		// Unbalanced BEGIN/CASE/IF: don't let one malformed block swallow
+		// the rest of the script; fall back to plain semicolon splitting.
+		p.noBlocks = true
+		out, _ = splitCore(src, p)
+	}
+	return out
+}
+
+// splitCore runs the state machine. open reports that the input ended inside
+// an unclosed procedural block.
+func splitCore(src string, p dialectProfile) (out []string, open bool) {
 	if len(src) == 0 {
-		return nil
+		return nil, false
 	}
 	// Every ';' that terminates a segment is a literal ';' in src, so the
 	// count is an upper bound on the number of emitted segments (semicolons
 	// inside strings/comments are counted too). Presizing means the result
 	// slice is the only allocation and never regrows.
-	out := make([]string, 0, strings.Count(src, ";")+1)
+	out = make([]string, 0, strings.Count(src, ";")+1)
 	// start is the index in src where the current segment begins. Every
 	// segment is the contiguous substring src[start:i], so no bytes are copied.
 	start := 0
@@ -129,7 +165,16 @@ func splitWithProfile(src string, p dialectProfile) []string {
 	// escapes the following byte, including '\''.
 	eStringActive := false
 
+	// Procedural-script state (splitter_proc.go). st tracks block nesting;
+	// delim is the active MySQL client delimiter ("" means the default ';').
+	var st procState
+	st.init(p)
+	delim := ""
+
 	i := 0
+	if strings.HasPrefix(src, "\xef\xbb\xbf") {
+		i = 3 // a UTF-8 byte order mark is not part of the first word
+	}
 	for i < len(src) {
 		c := src[i]
 
@@ -211,6 +256,14 @@ func splitWithProfile(src string, p dialectProfile) []string {
 		}
 
 		// ─── Top-level: look for openers and semicolons ───────────────────
+		if delim != "" && strings.HasPrefix(src[i:], delim) {
+			// MySQL client DELIMITER in force: only the custom delimiter
+			// terminates a statement; ';' is ordinary text.
+			out = append(out, src[start:i])
+			i += len(delim)
+			start = i
+			continue
+		}
 		switch {
 		case c == '-' && i+1 < len(src) && src[i+1] == '-':
 			inLine = true
@@ -219,6 +272,17 @@ func splitWithProfile(src string, p dialectProfile) []string {
 		case c == '/' && i+1 < len(src) && src[i+1] == '*':
 			blockCommentDepth = 1
 			i += 2
+
+		case c == '/' && p.oracle && delim == "":
+			// SQL*Plus "/" on a line of its own ends the current statement
+			// or PL/SQL block.
+			if ls, le, ok := lineOnly(src, i, i+1); ok {
+				out = appendNonBlank(out, src[start:ls])
+				start, i = le, le
+				st.reset()
+				continue
+			}
+			i++
 
 		case p.supportsEStrings && (c == 'E' || c == 'e') &&
 			i+1 < len(src) && src[i+1] == '\'':
@@ -256,19 +320,62 @@ func splitWithProfile(src string, p dialectProfile) []string {
 			i++
 
 		case c == ';':
+			if delim != "" || st.depth > 0 {
+				// Inside a custom-delimiter statement or an open block.
+				st.semicolon()
+				i++
+				continue
+			}
 			out = append(out, src[start:i])
 			i++
 			start = i
+			st.semicolon()
+
+		case isWordByte(c):
+			j := i + 1
+			for j < len(src) && isWordByte(src[j]) {
+				j++
+			}
+			if c >= '0' && c <= '9' || prevIsQualifier(src, i) {
+				i = j
+				continue
+			}
+			word := src[i:j]
+			switch {
+			case p.tsql && len(word) == 2 && asciiFold(word[0]) == 'g' && asciiFold(word[1]) == 'o':
+				if ls, le, ok := goLine(src, i, j); ok {
+					out = appendNonBlank(out, src[start:ls])
+					start, i = le, le
+					st.reset()
+					continue
+				}
+			case p.delimiter && len(word) == 9 && equalFoldASCII(word, "delimiter"):
+				if ls, le, d, ok := delimiterLine(src, i, j); ok {
+					out = appendNonBlank(out, src[start:ls])
+					start, i = le, le
+					delim = d
+					st.reset()
+					continue
+				}
+			}
+			if st.on && delim == "" {
+				j = st.word(src, i, j)
+			}
+			i = j
 
 		default:
+			if st.on {
+				st.punct(src, i)
+			}
 			i++
 		}
 	}
 
+	open = st.depth > 0
 	if start < len(src) {
 		out = append(out, src[start:])
 	}
-	return out
+	return out, open
 }
 
 // readDollarTag attempts to read a PostgreSQL dollar-quote opener starting at

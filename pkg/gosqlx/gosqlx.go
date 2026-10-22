@@ -608,13 +608,56 @@ func DefaultFormatOptions() FormatOptions {
 //	opts.UppercaseKeywords = true
 //	formatted, err := gosqlx.Format(sql, opts)
 //
+// Comments are preserved: a comment between statements stays between them, a
+// trailing comment stays after its statement, and a comment inside a statement
+// moves to the line above that statement. An optimizer hint (/*+ ... */)
+// directly after the first keyword of a statement is kept there. SQL whose
+// comments cannot be kept faithfully, such as a hint inside a subquery, is
+// rejected with an error wrapping formatter.ErrUnplaceableComment instead of
+// being rewritten without them.
+//
 // Returns the formatted SQL string or an error if SQL is invalid.
 func Format(sql string, options FormatOptions) (string, error) {
-	// Parse SQL into AST
-	parsedAST, err := Parse(sql)
-	if err != nil {
-		return "", fmt.Errorf("cannot format invalid SQL: %w", err)
+	return formatSQL(sql, options, "")
+}
+
+// FormatWithDialect is Format for SQL in a specific dialect: the SQL is
+// tokenized and parsed with the dialect's rules, and dialect-specific
+// constructs are rendered for that dialect (for example TOP versus LIMIT).
+// Comments and optimizer hints are preserved exactly as in Format.
+//
+// An empty dialect behaves like Format. An unknown dialect returns an error
+// wrapping ErrUnsupportedDialect.
+func FormatWithDialect(sql string, options FormatOptions, dialect keywords.SQLDialect) (string, error) {
+	if dialect != "" && !keywords.IsValidDialect(string(dialect)) {
+		return "", fmt.Errorf("%w: %q", ErrUnsupportedDialect, dialect)
 	}
+	return formatSQL(sql, options, dialect)
+}
+
+func formatSQL(sql string, options FormatOptions, dialect keywords.SQLDialect) (string, error) {
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+	if dialect != "" {
+		tkz.SetDialect(dialect)
+	}
+
+	tokens, err := tkz.TokenizeString(sql)
+	if err != nil {
+		return "", fmt.Errorf("cannot format invalid SQL: %w: %w", ErrTokenize, err)
+	}
+	comments := tkz.Comments
+
+	p := parser.GetParser()
+	defer parser.PutParser(p)
+	if dialect != "" {
+		p.ApplyOptions(parser.WithDialect(string(dialect)))
+	}
+	parsedAST, err := p.ParseFromModelTokens(tokens)
+	if err != nil {
+		return "", fmt.Errorf("cannot format invalid SQL: %w: %w", ErrSyntax, err)
+	}
+	defer ast.ReleaseAST(parsedAST)
 
 	// Convert gosqlx FormatOptions to ast.FormatOptions
 	kwCase := ast.KeywordPreserve
@@ -628,10 +671,30 @@ func Format(sql string, options FormatOptions) (string, error) {
 		LineWidth:        options.SingleLineLimit,
 		NewlinePerClause: options.IndentSize > 0,
 		AddSemicolon:     options.AddSemicolon,
+		Dialect:          string(dialect),
 	}
 
-	result := formatter.FormatAST(parsedAST, astOpts)
-	return result, nil
+	if len(comments) == 0 {
+		return formatter.FormatAST(parsedAST, astOpts), nil
+	}
+
+	// Comments go back around the statements they belonged to. A comment that
+	// cannot be put back faithfully (an optimizer hint that is not directly
+	// after its statement's first keyword) is an error rather than silently
+	// dropped or moved: either would change what the statement does.
+	stmts := make([]string, len(parsedAST.Statements))
+	for i, stmt := range parsedAST.Statements {
+		stmts[i] = formatter.FormatStatement(stmt, astOpts)
+	}
+	layout := formatter.CommentLayout{Terminator: ";", Gap: "\n"}
+	if options.AddSemicolon {
+		layout.Terminator = "" // each rendered statement already ends with ';'
+	}
+	out, err := formatter.JoinWithComments(stmts, tokens, comments, layout)
+	if err != nil {
+		return "", fmt.Errorf("cannot format SQL: %w", err)
+	}
+	return out, nil
 }
 
 // ParseWithRecovery tokenizes and parses SQL with error recovery, returning

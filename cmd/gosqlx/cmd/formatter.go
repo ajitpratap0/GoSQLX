@@ -208,8 +208,25 @@ func (f *Formatter) formatFile(filename string) FileFormatterResult {
 	return result
 }
 
-// formatSQL formats a SQL string
+// utf8BOM is the byte order mark some editors put at the start of a file.
+const utf8BOM = "\uFEFF"
+
+// formatSQL formats a SQL string. A leading UTF-8 byte order mark is not SQL:
+// it is set aside and written back in front of the result, so formatting a
+// file in place does not strip it.
 func (f *Formatter) formatSQL(sql string) (string, error) {
+	if strings.HasPrefix(sql, utf8BOM) {
+		out, err := f.formatSQLText(strings.TrimPrefix(sql, utf8BOM))
+		if err != nil {
+			return "", err
+		}
+		return utf8BOM + out, nil
+	}
+	return f.formatSQLText(sql)
+}
+
+// formatSQLText formats SQL text without a byte order mark.
+func (f *Formatter) formatSQLText(sql string) (string, error) {
 	// Acquire a tokenizer for the configured dialect (pooled for the default)
 	tkz, releaseTkz, err := tokenizerForDialect(f.Opts.Dialect)
 	if err != nil {
@@ -226,8 +243,12 @@ func (f *Formatter) formatSQL(sql string) (string, error) {
 	if len(tokens) == 0 {
 		return "", nil
 	}
-
-	// Convert tokens for parser using centralized converter
+	if !hasStatementTokens(tokens) {
+		// Whitespace or comments only: there is nothing to format, and the
+		// text is returned untouched rather than reported as a syntax error.
+		return sql, nil
+	}
+	comments := tkz.Comments
 
 	// Parse to AST with proper error handling for memory management
 	p := parserForDialect(f.Opts.Dialect)
@@ -256,11 +277,18 @@ func (f *Formatter) formatSQL(sql string) (string, error) {
 		Dialect:      f.Opts.Dialect,
 	}
 
-	// Create formatter and format the AST
+	// Create formatter and format the AST. Comments are put back around the
+	// statements they belonged to; one that cannot be put back (an optimizer
+	// hint away from its statement's first keyword) refuses the whole file.
 	formatter := NewSQLFormatter(formatterOpts)
-	formatted, err := formatter.Format(parsedAST)
+	var formatted string
+	if len(comments) == 0 {
+		formatted, err = formatter.Format(parsedAST)
+	} else {
+		formatted, err = formatter.FormatWithComments(parsedAST, tokens, comments)
+	}
 	if err != nil {
-		return "", fmt.Errorf("render: %w", err)
+		return "", fmt.Errorf("render: %w (input left unchanged)", err)
 	}
 
 	// Refuse output that fails verifyFormattedSQL, so format, format -i and
@@ -283,8 +311,41 @@ func (f *Formatter) formatSQL(sql string) (string, error) {
 	if err := verifyFormattedSQL(parsedAST, tokens, verifyText, f.Opts.Dialect); err != nil {
 		return "", err
 	}
+	// Comments are not part of the AST, so verify them on the real output.
+	if err := verifyComments(comments, formatted, f.Opts.Dialect); err != nil {
+		return "", err
+	}
 
 	return formatted, nil
+}
+
+// verifyComments requires the formatted output to contain exactly the
+// comments of the input, so format -i can never delete or invent one.
+func verifyComments(input []models.Comment, formatted, dialect string) error {
+	tkz, release, err := tokenizerForDialect(dialect)
+	if err != nil {
+		return fmt.Errorf("tokenizer setup failed: %w", err)
+	}
+	defer release()
+	if _, err := tkz.TokenizeString(formatted); err != nil {
+		return fmt.Errorf("formatted output does not re-tokenize (formatter bug; input left unchanged): %w", err)
+	}
+	pool := make(map[string]int, len(input))
+	for _, c := range tkz.Comments {
+		pool[c.Text]++
+	}
+	for _, c := range input {
+		if pool[c.Text] == 0 {
+			return fmt.Errorf("formatted output loses the comment %q (formatter bug; input left unchanged)", c.Text)
+		}
+		pool[c.Text]--
+	}
+	for text, n := range pool {
+		if n > 0 {
+			return fmt.Errorf("formatted output adds the comment %q (formatter bug; input left unchanged)", text)
+		}
+	}
+	return nil
 }
 
 // verifyFormattedSQL re-parses formatted with the same dialect and checks

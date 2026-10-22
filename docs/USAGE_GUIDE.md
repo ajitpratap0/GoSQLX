@@ -102,6 +102,7 @@ package main
 import (
     "fmt"
     "log"
+    "github.com/ajitpratap0/GoSQLX/pkg/models"
     "github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
@@ -139,8 +140,9 @@ package main
 
 import (
     "fmt"
-    "github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
+    "github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
     "github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
+    "github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
 func ParseSQL(sql string) error {
@@ -153,23 +155,18 @@ func ParseSQL(sql string) error {
         return err
     }
 
-    // Step 2: Convert to parser tokens using the proper converter
-    converter := parser.NewTokenConverter()
-    result, err := converter.Convert(tokens)
-    if err != nil {
-        return fmt.Errorf("token conversion failed: %w", err)
-    }
-
-    // Step 3: Parse
+    // Step 2: Parse the tokenizer's output directly. No conversion step is
+    // needed: ParseFromModelTokens takes []models.TokenWithSpan.
     p := parser.NewParser()
     defer p.Release()
 
-    ast, err := p.Parse(result.Tokens)
+    tree, err := p.ParseFromModelTokens(tokens)
     if err != nil {
         return err
     }
+    defer ast.ReleaseAST(tree) // CRITICAL: return the AST to its pool
 
-    fmt.Printf("Parsed: %T\n", ast)
+    fmt.Printf("Parsed %d statement(s)\n", len(tree.Statements))
     return nil
 }
 ```
@@ -1887,19 +1884,16 @@ func ProcessWithPreallocation(sql string) error {
         return err
     }
 
-    // Convert tokens using the proper converter
-    converter := parser.NewTokenConverter()
-    result, err := converter.Convert(tokens)
-    if err != nil {
-        return err
-    }
-
-    // Parse with pre-converted tokens
+    // Parse the tokenizer's output directly
     p := parser.NewParser()
     defer p.Release()
 
-    _, err = p.Parse(result.Tokens)
-    return err
+    tree, err := p.ParseFromModelTokens(tokens)
+    if err != nil {
+        return err
+    }
+    ast.ReleaseAST(tree)
+    return nil
 }
 ```
 

@@ -81,14 +81,15 @@ func validateRun(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// In quiet/check mode, silence all cobra output - only exit code matters
-	if validateQuiet {
-		cmd.SilenceErrors = true
-		cmd.SilenceUsage = true
-	}
+	// In quiet/check mode only the exit code matters: failures are returned
+	// as silent errors, which main turns into exit status 1 without printing.
 
 	// Reject unknown dialect names early before any parsing.
-	if err := validateDialectName(validateDialect); err != nil {
+	if err := normalizeDialectFlag(&validateDialect); err != nil {
+		return err
+	}
+
+	if err := applyGlobalValidateFlags(cmd); err != nil {
 		return err
 	}
 
@@ -190,7 +191,7 @@ func validateRun(cmd *cobra.Command, args []string) error {
 
 	// Return error if there were invalid files
 	if result.InvalidFiles > 0 {
-		return fmt.Errorf("validation failed: %d invalid file(s)", result.InvalidFiles)
+		return validationFailed(fmt.Errorf("validation failed: %d invalid file(s)", result.InvalidFiles))
 	}
 
 	return nil
@@ -209,22 +210,12 @@ func validateFromStdin(cmd *cobra.Command) error {
 		return fmt.Errorf("stdin validation failed: %w", err)
 	}
 
-	// Create a temporary file to leverage existing validation logic
-	tmpFile, err := os.CreateTemp("", "gosqlx-stdin-*.sql")
-	if err != nil {
-		return fmt.Errorf("failed to create temporary file: %w", err)
-	}
-	defer func() { _ = os.Remove(tmpFile.Name()) }()
-	defer func() { _ = tmpFile.Close() }()
+	return validateContent(cmd, stdinDisplayName, content)
+}
 
-	// Write stdin content to temp file
-	if _, err := tmpFile.Write(content); err != nil {
-		return fmt.Errorf("failed to write to temporary file: %w", err)
-	}
-	if err := tmpFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temporary file: %w", err)
-	}
-
+// validateContent validates one in-memory input (stdin, inline SQL) and
+// reports it under name in the selected output format.
+func validateContent(cmd *cobra.Command, name string, content []byte) error {
 	// Load configuration
 	cfg, err := config.LoadDefault()
 	if err != nil {
@@ -237,7 +228,7 @@ func validateFromStdin(cmd *cobra.Command) error {
 	// Create validator options
 	quietMode := validateQuiet || validateOutputFormat == OutputFormatSARIF || validateOutputFormat == OutputFormatJSON
 	opts := ValidatorOptionsFromConfig(cfg, flagsChanged, ValidatorFlags{
-		Recursive:  false, // stdin is always single input
+		Recursive:  false, // a single input
 		Pattern:    "",
 		Quiet:      quietMode,
 		ShowStats:  validateStats && validateOutputFormat == OutputFormatText, // Only show text stats for text output
@@ -249,15 +240,8 @@ func validateFromStdin(cmd *cobra.Command) error {
 	// Create validator
 	validator := NewValidator(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
 
-	// Validate the temporary file
-	result, err := validator.Validate([]string{tmpFile.Name()})
-	if err != nil {
-		return err
-	}
-
-	// Update result to show "stdin" instead of temp file path
-	// The validation has already output results with temp file path
-	// Different output formats are handled below
+	// Validate the content in memory; results are reported under name
+	result := validator.ValidateInput(name, content)
 
 	// Handle different output formats
 	switch validateOutputFormat {
@@ -275,7 +259,7 @@ func validateFromStdin(cmd *cobra.Command) error {
 			fmt.Fprintf(cmd.OutOrStdout(), "SARIF output written to %s\n", validateOutputFile)
 		}
 	case OutputFormatJSON:
-		jsonData, err := output.FormatValidationJSON(result, []string{"stdin"}, validateStats)
+		jsonData, err := output.FormatValidationJSON(result, []string{name}, validateStats)
 		if err != nil {
 			return fmt.Errorf("failed to generate JSON output: %w", err)
 		}
@@ -291,15 +275,62 @@ func validateFromStdin(cmd *cobra.Command) error {
 
 	// Return error if validation failed
 	if result.InvalidFiles > 0 {
-		return fmt.Errorf("validation failed: %d invalid file(s)", result.InvalidFiles)
+		return validationFailed(fmt.Errorf("validation failed: %d invalid file(s)", result.InvalidFiles))
 	}
 
 	return nil
 }
 
+// applyGlobalValidateFlags maps the global -o/--output and -f/--format flags
+// onto validate's own --output-file and --output-format. Both only make sense
+// for the machine-readable formats; text output always goes to stdout.
+func applyGlobalValidateFlags(cmd *cobra.Command) error {
+	if formatSet() {
+		if flagSet(cmd, "output-format") && validateOutputFormat != format {
+			return fmt.Errorf("-f/--format %q conflicts with --output-format %q", format, validateOutputFormat)
+		}
+		switch format {
+		case OutputFormatJSON, OutputFormatText:
+			validateOutputFormat = format
+		default:
+			return fmt.Errorf("validate does not support -f/--format %q (use json, or --output-format sarif)", format)
+		}
+	}
+	if outputFile != "" {
+		if validateOutputFile != "" && validateOutputFile != outputFile {
+			return fmt.Errorf("-o/--output %q conflicts with --output-file %q", outputFile, validateOutputFile)
+		}
+		validateOutputFile = outputFile
+		if validateOutputFormat == "" || validateOutputFormat == OutputFormatText {
+			return fmt.Errorf("-o/--output needs a machine-readable format: add -f json or --output-format sarif")
+		}
+	}
+	return nil
+}
+
+// inlineDisplayName is how results name SQL given as a command argument.
+const inlineDisplayName = "<inline>"
+
+// stdinDisplayName is how results name input read from standard input.
+const stdinDisplayName = "<stdin>"
+
+// validationFailed wraps a validation failure. With --quiet only the exit
+// status matters, so the error is returned silent: main exits 1 and prints
+// nothing.
+func validationFailed(err error) error {
+	if validateQuiet {
+		return silentError{err}
+	}
+	return err
+}
+
 // validateInlineSQL validates inline SQL passed as a command argument.
 // Uses the fast-path Validate() which skips full AST construction (#274).
 func validateInlineSQL(cmd *cobra.Command, sql string) error {
+	if validateOutputFormat == OutputFormatJSON || validateOutputFormat == OutputFormatSARIF {
+		// A machine-readable report needs the full result, not the fast path.
+		return validateContent(cmd, inlineDisplayName, []byte(sql))
+	}
 	var err error
 	if validateDialect != "" {
 		err = parser.ValidateWithDialect(sql, keywords.SQLDialect(validateDialect))
@@ -310,7 +341,7 @@ func validateInlineSQL(cmd *cobra.Command, sql string) error {
 		if !validateQuiet {
 			fmt.Fprintf(cmd.ErrOrStderr(), "❌ Invalid SQL: %v\n", err)
 		}
-		return fmt.Errorf("validation failed: %w", err)
+		return validationFailed(fmt.Errorf("validation failed: %w", err))
 	}
 
 	if sql == "" {

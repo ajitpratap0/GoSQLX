@@ -466,3 +466,27 @@ func TestSnowflakeFromValuesAndStagePath(t *testing.T) {
 		t.Errorf("got name %q func %v alias %q", ref.Name, ref.TableFunc, ref.Alias)
 	}
 }
+
+func TestQualifiedNameForms(t *testing.T) {
+	ref := firstFrom(t, parseOne(t, keywords.DialectSQLServer, "SELECT * FROM db..t"))
+	if ref.Name != "db..t" {
+		t.Errorf("name = %q, want db..t", ref.Name)
+	}
+	if tree, err := gosqlx.ParseWithDialect("SELECT * FROM db..t", keywords.DialectPostgreSQL); err == nil {
+		ast.ReleaseAST(tree)
+		t.Error("db..t parsed outside SQL Server")
+	}
+	sel, ok := parseOne(t, keywords.DialectSnowflake, "SELECT t.$1 FROM @s t").(*ast.SelectStatement)
+	if !ok || len(sel.Columns) != 1 {
+		t.Fatal("want one select column")
+	}
+	id, ok := sel.Columns[0].(*ast.Identifier)
+	if !ok || id.Table != "t" || id.Name != "$1" {
+		t.Errorf("column = %#v", sel.Columns[0])
+	}
+	ref = firstFrom(t, parseOne(t, keywords.DialectSQLServer, "SELECT * FROM OPENJSON(@j) WITH (Id INT '$.id', R NVARCHAR(MAX) AS JSON) AS x"))
+	want := []ast.OpenJSONColumn{{Name: "Id", Type: "INT", Path: "$.id"}, {Name: "R", Type: "NVARCHAR(MAX)", AsJSON: true}}
+	if ref.Modifiers == nil || !reflect.DeepEqual(ref.Modifiers.WithSchema, want) || ref.Alias != "x" || len(ref.TableHints) != 0 {
+		t.Errorf("got %+v alias %q hints %v", ref.Modifiers, ref.Alias, ref.TableHints)
+	}
+}

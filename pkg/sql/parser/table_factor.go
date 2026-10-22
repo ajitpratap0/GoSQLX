@@ -226,7 +226,14 @@ func (p *Parser) parseTableSample() (*ast.TableSampleClause, error) {
 // SYSTEM_TIME, Snowflake time travel, SAMPLE / TABLESAMPLE and Oracle
 // flashback.
 func (p *Parser) parseTableModifiersBeforeAlias(ref *ast.TableReference) error {
-	if p.isMySQLFamily() && p.isType(models.TokenTypePartition) &&
+	if p.isOpenJSONSchemaStart(ref) {
+		cols, err := p.parseOpenJSONSchema()
+		if err != nil {
+			return err
+		}
+		tableModifiers(ref).WithSchema = cols
+	}
+	if (p.isMySQLFamily() || p.IsOracle()) && p.isType(models.TokenTypePartition) &&
 		p.peekToken().Token.Type == models.TokenTypeLParen {
 		p.advance() // Consume PARTITION
 		names, err := p.parseParenthesizedWordList("partition name")
@@ -880,4 +887,76 @@ func (p *Parser) parsePivotSuffix(ref *ast.TableReference) error {
 		return p.parseTableColumnAliases(ref)
 	}
 	return nil
+}
+
+// isSnowflakePositionalColumn reports whether the current token is a
+// Snowflake positional column reference $1, $2, ... (after a qualifier, as in
+// t.$1 for a staged file).
+func (p *Parser) isSnowflakePositionalColumn() bool {
+	if !p.IsSnowflake() || !p.isType(models.TokenTypePlaceholder) {
+		return false
+	}
+	v := p.currentToken.Token.Value
+	if len(v) < 2 || v[0] != '$' {
+		return false
+	}
+	for i := 1; i < len(v); i++ {
+		if v[i] < '0' || v[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// isEmptyNamePart reports whether the current token, right after a ".", is
+// another "." that leaves an empty part in a SQL Server qualified name:
+// db..t names table t in the default schema of database db.
+func (p *Parser) isEmptyNamePart() bool {
+	return p.IsSQLServer() && p.isType(models.TokenTypePeriod)
+}
+
+// isOpenJSONSchemaStart reports whether the current WITH ( starts the column
+// schema of a SQL Server OPENJSON(...) table function rather than table
+// hints.
+func (p *Parser) isOpenJSONSchemaStart(ref *ast.TableReference) bool {
+	return p.IsSQLServer() && ref.TableFunc != nil && strings.EqualFold(ref.TableFunc.Name, "OPENJSON") &&
+		p.isType(models.TokenTypeWith) && p.peekToken().Token.Type == models.TokenTypeLParen
+}
+
+// parseOpenJSONSchema parses WITH (name type ['$.path'] [AS JSON], ...).
+func (p *Parser) parseOpenJSONSchema() ([]ast.OpenJSONColumn, error) {
+	p.advance() // Consume WITH
+	p.advance() // Consume (
+	var cols []ast.OpenJSONColumn
+	for {
+		if !p.isIdentifier() && !p.isNonReservedKeyword() {
+			return nil, p.expectedError("column name in OPENJSON WITH")
+		}
+		col := ast.OpenJSONColumn{Name: p.currentToken.Token.Value}
+		p.advance()
+		typ, err := p.parseDataType()
+		if err != nil {
+			return nil, err
+		}
+		col.Type = typ
+		if p.isStringLiteral() {
+			col.Path = p.currentToken.Token.Value
+			p.advance()
+		}
+		if p.isType(models.TokenTypeAs) && equalsUpper(p.peekToken().Token.Value, "JSON") {
+			p.advance() // Consume AS
+			p.advance() // Consume JSON
+			col.AsJSON = true
+		}
+		cols = append(cols, col)
+		if !p.isType(models.TokenTypeComma) {
+			break
+		}
+		p.advance() // Consume ,
+	}
+	if !p.isType(models.TokenTypeRParen) {
+		return nil, p.expectedError(") after OPENJSON WITH columns")
+	}
+	p.advance() // Consume )
+	return cols, nil
 }

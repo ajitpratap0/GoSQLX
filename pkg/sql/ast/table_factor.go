@@ -120,7 +120,8 @@ type IndexHint struct {
 type TableModifiers struct {
 	// DBLink is the Oracle database link of t@dblink.
 	DBLink string
-	// Partitions is the MySQL / MariaDB partition selection PARTITION (p0, p1).
+	// Partitions is the MySQL / MariaDB / Oracle partition selection
+	// PARTITION (p0, p1).
 	Partitions []string
 	// IndexHints are the MySQL / MariaDB index hints after the alias.
 	IndexHints []IndexHint
@@ -128,12 +129,24 @@ type TableModifiers struct {
 	IndexedBy string
 	// NotIndexed is the SQLite NOT INDEXED modifier.
 	NotIndexed bool
+	// WithSchema is the column schema of SQL Server OPENJSON(...) WITH (...).
+	WithSchema []OpenJSONColumn
+}
+
+// OpenJSONColumn is one column of a SQL Server OPENJSON WITH schema:
+//
+//	name type ['$.path'] [AS JSON]
+type OpenJSONColumn struct {
+	Name   string
+	Type   string
+	Path   string // the JSON path without quotes; "" when omitted
+	AsJSON bool
 }
 
 // isEmpty reports whether m carries no modifier.
 func (m *TableModifiers) isEmpty() bool {
 	return m == nil || (m.DBLink == "" && len(m.Partitions) == 0 && len(m.IndexHints) == 0 &&
-		m.IndexedBy == "" && !m.NotIndexed)
+		m.IndexedBy == "" && !m.NotIndexed && len(m.WithSchema) == 0)
 }
 
 // textWriter is the writer interface shared by *bytes.Buffer and
@@ -172,6 +185,9 @@ func writeTableRefNameSuffix(w textWriter, t *TableReference) {
 // MySQL PARTITION (...), FOR SYSTEM_TIME, Snowflake AT / BEFORE / CHANGES,
 // Oracle SAMPLE and flashback clauses. Each is preceded by a space.
 func writeTableRefPreAlias(w textWriter, t *TableReference, kw func(string) string) {
+	if m := t.Modifiers; m != nil && len(m.WithSchema) > 0 {
+		writeOpenJSONSchema(w, m.WithSchema, kw)
+	}
 	if m := t.Modifiers; m != nil && len(m.Partitions) > 0 {
 		w.WriteByte(' ')
 		w.WriteString(kw("PARTITION"))
@@ -235,7 +251,7 @@ func writeTableRefPostAlias(w textWriter, t *TableReference, kw func(string) str
 func TableRefPreAliasSQL(t *TableReference, kw func(string) string) string {
 	if t == nil || (t.ForSystemTime == nil && t.TimeTravel == nil && t.Flashback == nil &&
 		(t.TableSample == nil || t.TableSample.AfterAlias) &&
-		(t.Modifiers == nil || len(t.Modifiers.Partitions) == 0)) {
+		(t.Modifiers == nil || (len(t.Modifiers.Partitions) == 0 && len(t.Modifiers.WithSchema) == 0))) {
 		return ""
 	}
 	if kw == nil {
@@ -725,4 +741,45 @@ func TableHintSQL(h string, kw func(string) string) string {
 		return kw(h[:open]) + h[open:]
 	}
 	return kw(h)
+}
+
+// isPositionalColumnName reports whether name is a Snowflake positional
+// column reference: $ followed by digits ($1, $12).
+func isPositionalColumnName(name string) bool {
+	if len(name) < 2 || name[0] != '$' {
+		return false
+	}
+	for i := 1; i < len(name); i++ {
+		if name[i] < '0' || name[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// writeOpenJSONSchema writes " WITH (name type ['path'] [AS JSON], ...)".
+func writeOpenJSONSchema(w textWriter, cols []OpenJSONColumn, kw func(string) string) {
+	w.WriteByte(' ')
+	w.WriteString(kw("WITH"))
+	w.WriteString(" (")
+	for i, c := range cols {
+		if i > 0 {
+			w.WriteString(", ")
+		}
+		w.WriteString(QuoteColumnName(c.Name))
+		w.WriteByte(' ')
+		w.WriteString(QuoteDataType(c.Type))
+		if c.Path != "" {
+			buf := getBuf()
+			writeStringLiteral(buf, c.Path)
+			w.WriteByte(' ')
+			w.WriteString(buf.String())
+			putBuf(buf)
+		}
+		if c.AsJSON {
+			w.WriteByte(' ')
+			w.WriteString(kw("AS JSON"))
+		}
+	}
+	w.WriteByte(')')
 }

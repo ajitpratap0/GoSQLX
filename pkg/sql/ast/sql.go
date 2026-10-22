@@ -103,6 +103,9 @@ func (i *Identifier) SQL() string {
 	if i.Table == "" && !i.Quoted && i.QuoteStyle == 0 && isVariableName(i.Name) {
 		return i.Name
 	}
+	if i.Table != "" && isPositionalColumnName(i.Name) && !qualifierNeedsQuoting(i.Table) {
+		return i.Table + "." + i.Name // Snowflake t.$1
+	}
 	if !i.quotedReserved() && !identifierNeedsQuoting(i.Name) && (i.Table == "" || !qualifierNeedsQuoting(i.Table)) {
 		if i.Table == "" {
 			return i.Name
@@ -126,6 +129,10 @@ func (i *Identifier) writeSQL(buf *bytes.Buffer) {
 	if i.Table != "" {
 		writeDottedIdentifierStyle(buf, i.Table, i.QuoteStyle)
 		buf.WriteByte('.')
+		if isPositionalColumnName(i.Name) {
+			buf.WriteString(i.Name) // Snowflake t.$1
+			return
+		}
 	}
 	if i.quotedReserved() || identifierNeedsQuoting(i.Name) {
 		writeDelimitedIdentifier(buf, i.Name, i.QuoteStyle)

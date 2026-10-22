@@ -1177,6 +1177,11 @@ func (p *Parser) parseQualifiedName() (string, error) {
 	// Check for schema.table or db.schema.table
 	for p.isType(models.TokenTypePeriod) {
 		p.advance() // Consume .
+		if p.isEmptyNamePart() && n < maxQualifiedNameParts {
+			// SQL Server db..t: the default schema, written as an empty part.
+			n++
+			continue
+		}
 		if n == maxQualifiedNameParts {
 			return "", goerrors.InvalidSyntaxError(
 				fmt.Sprintf("qualified name has more than %d parts", maxQualifiedNameParts),

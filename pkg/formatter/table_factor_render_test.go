@@ -68,6 +68,7 @@ func TestRender_QueryExpressionsAndTableFactors(t *testing.T) {
 		{"oracle versions", keywords.DialectOracle, "SELECT * FROM t VERSIONS BETWEEN SCN MINVALUE AND MAXVALUE", "SELECT * FROM t VERSIONS BETWEEN SCN MINVALUE AND MAXVALUE"},
 		{"oracle db link", keywords.DialectOracle, "SELECT * FROM t@lnk.example.com x", "SELECT * FROM t@lnk.example.com x"},
 		{"mysql partition", keywords.DialectMySQL, "SELECT * FROM t PARTITION (p0, p1) AS x", "SELECT * FROM t PARTITION (p0, p1) x"},
+		{"oracle partition", keywords.DialectOracle, "SELECT * FROM sales PARTITION (sales_q1) s", "SELECT * FROM sales PARTITION (sales_q1) s"},
 		{"mysql index hints", keywords.DialectMySQL, "SELECT * FROM t x FORCE INDEX FOR JOIN (ix, PRIMARY) USE KEY ()", "SELECT * FROM t x FORCE INDEX FOR JOIN (ix, PRIMARY) USE KEY ()"},
 		{"sqlite indexed by", keywords.DialectSQLite, "SELECT * FROM t AS x INDEXED BY i WHERE a = 1", "SELECT * FROM t x INDEXED BY i WHERE a = 1"},
 		{"sqlite not indexed", keywords.DialectSQLite, "SELECT * FROM t NOT INDEXED", "SELECT * FROM t NOT INDEXED"},
@@ -90,6 +91,9 @@ func TestRender_QueryExpressionsAndTableFactors(t *testing.T) {
 		// Snowflake FROM forms
 		{"snowflake bare values", keywords.DialectSnowflake, "SELECT * FROM VALUES (1, 'a'), (2, 'b') AS v (id, name)", "SELECT * FROM (VALUES (1, 'a'), (2, 'b')) v(id, name)"},
 		{"snowflake stage file", keywords.DialectSnowflake, "SELECT $1, $2 FROM @my_stage/data.csv (FILE_FORMAT => 'my_csv')", "SELECT $1, $2 FROM @my_stage/data.csv (FILE_FORMAT => 'my_csv')"},
+		{"snowflake qualified positional column", keywords.DialectSnowflake, "SELECT t.$1 AS id FROM @my_stage/users/ (FILE_FORMAT => 'my_csv') t", "SELECT t.$1 AS id FROM @my_stage/users/ (FILE_FORMAT => 'my_csv') t"},
+		{"sqlserver default schema", keywords.DialectSQLServer, "SELECT x.a FROM srv.db..t AS x", "SELECT x.a FROM srv.db..t x"},
+		{"sqlserver openjson schema", keywords.DialectSQLServer, "SELECT * FROM OPENJSON(@json) WITH (Id INT '$.id', Raw NVARCHAR(MAX) '$.raw' AS JSON) AS j", "SELECT * FROM OPENJSON(@json) WITH (Id INT '$.id', Raw NVARCHAR(MAX) '$.raw' AS JSON) j"},
 		// PIVOT / UNPIVOT
 		{"oracle multi aggregate pivot", keywords.DialectOracle, "SELECT * FROM (SELECT a, b, c FROM t) PIVOT (SUM(c) AS total, COUNT(*) AS cnt FOR a IN (1 AS x, 2 AS y))", "SELECT * FROM (SELECT a, b, c FROM t) PIVOT (SUM(c) AS total, COUNT(*) AS cnt FOR a IN (1 AS x, 2 AS y))"},
 		{"pivot source alias", keywords.DialectSQLServer, "SELECT * FROM (SELECT a, q FROM t) s PIVOT (SUM(a) FOR q IN ([Q1], [Q2])) AS p", "SELECT * FROM (SELECT a, q FROM t) s PIVOT (SUM(a) FOR q IN ([Q1], [Q2])) AS p"},

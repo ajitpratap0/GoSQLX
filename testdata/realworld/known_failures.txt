@@ -352,7 +352,6 @@ snowflake/03_ddl_migrations.sql#6 parse
 snowflake/03_ddl_migrations.sql#7 parse
 snowflake/03_ddl_migrations.sql#8 reparse
 snowflake/03_ddl_migrations.sql#9 reparse
-snowflake/05_dialect_specific.sql#25 parse
 snowflake/05_dialect_specific.sql#42 drop
 snowflake/05_dialect_specific.sql#49 parse
 snowflake/06_etl_merge.sql#13 reparse
@@ -437,10 +436,7 @@ sqlserver/03_ddl_migrations.sql#6 parse
 sqlserver/03_ddl_migrations.sql#7 parse
 sqlserver/03_ddl_migrations.sql#8 parse
 sqlserver/03_ddl_migrations.sql#9 parse
-sqlserver/05_dialect_specific.sql#11 parse
-sqlserver/05_dialect_specific.sql#12 parse
 sqlserver/05_dialect_specific.sql#28 parse
-sqlserver/05_dialect_specific.sql#33 parse
 sqlserver/05_dialect_specific.sql#9 parse
 sqlserver/06_merge_etl.sql#16 parse
 sqlserver/07_ctes_deep.sql#15 parse

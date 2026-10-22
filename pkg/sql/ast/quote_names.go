@@ -279,15 +279,20 @@ func writeQualifiedName(buf *bytes.Buffer, name string) {
 		buf.WriteString(name)
 		return
 	}
-	for {
+	for prevEmpty := true; ; {
 		dot := strings.IndexByte(name, '.')
 		part := name
 		if dot >= 0 {
 			part = name[:dot]
 		}
-		if part == "" || nameNeedsQuoting(part, true) {
+		if part == "" && !prevEmpty && isEmptyMiddlePart(name, dot) {
+			// SQL Server db..t: an empty schema part is written as nothing.
+			prevEmpty = true
+		} else if part == "" || nameNeedsQuoting(part, true) {
+			prevEmpty = part == ""
 			writeQuotedIdentifier(buf, part)
 		} else {
+			prevEmpty = false
 			buf.WriteString(part)
 		}
 		if dot < 0 {
@@ -298,17 +303,30 @@ func writeQualifiedName(buf *bytes.Buffer, name string) {
 	}
 }
 
+// isEmptyMiddlePart reports whether the empty part ending at dot (the index
+// of the "." after it in the remaining name, -1 for the last part) lies
+// between two non-empty parts, as the schema of SQL Server db..t does.
+func isEmptyMiddlePart(rest string, dot int) bool {
+	return dot == 0 && len(rest) > 1 && rest[1] != '.'
+}
+
 // qualifiedNameNeedsQuoting reports whether writeQualifiedName would quote
 // some part of the non-empty name.
 func qualifiedNameNeedsQuoting(name string) bool {
 	if isStageReference(name) {
 		return false
 	}
-	for {
+	for first := true; ; first = false {
 		dot := strings.IndexByte(name, '.')
 		part := name
 		if dot >= 0 {
 			part = name[:dot]
+		}
+		if part == "" && !first && isEmptyMiddlePart(name, dot) {
+			// db..t: the empty part sits between two non-empty parts (an
+			// empty part before it was reported already).
+			name = name[dot+1:]
+			continue
 		}
 		if part == "" || nameNeedsQuoting(part, true) {
 			return true

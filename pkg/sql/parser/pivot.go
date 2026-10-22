@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package parser - pivot.go
-// SQL Server / Oracle PIVOT and UNPIVOT clause parsing.
+// SQL Server / Oracle / Snowflake / BigQuery PIVOT and UNPIVOT clause parsing.
 
 package parser
 
@@ -46,17 +46,35 @@ func renderQuotedIdent(tok models.Token) string {
 	return tok.Value
 }
 
+// renderCurrentIdent renders the current identifier token in source form via
+// renderQuotedIdent. The tokenizer records Token.Quote for double-quoted and
+// bracketed identifiers but leaves it zero for backtick identifiers (MySQL,
+// BigQuery, ...), so an identifier token whose source span is wider than its
+// value, or spans lines, is taken to have been backtick-quoted.
+func (p *Parser) renderCurrentIdent() string {
+	tok := p.currentToken.Token
+	if tok.Quote == 0 && tok.Type == models.TokenTypeIdentifier &&
+		(tok.Word == nil || tok.Word.QuoteStyle == 0) {
+		start, end := p.currentToken.Start, p.currentToken.End
+		if start.Line != end.Line ||
+			(end.Column-start.Column > len(tok.Value)) {
+			tok.Quote = '`'
+		}
+	}
+	return renderQuotedIdent(tok)
+}
+
 // renderPivotValue reproduces a PIVOT/UNPIVOT IN-list token in source form:
 // a string literal is re-quoted and escaped the same way LiteralValue.SQL()
 // writes strings, a quoted identifier keeps its delimiters
-// (renderQuotedIdent), and anything else (a bare name or number) is returned
+// (renderCurrentIdent), and anything else (a bare name or number) is returned
 // as is.
 func (p *Parser) renderPivotValue() string {
 	if p.isStringLiteral() {
 		lit := ast.LiteralValue{Value: p.currentToken.Token.Value, Type: "STRING"}
 		return lit.SQL()
 	}
-	return renderQuotedIdent(p.currentToken.Token)
+	return p.renderCurrentIdent()
 }
 
 // parsePivotAlias consumes an optional alias (with or without AS) following a
@@ -78,16 +96,31 @@ func (p *Parser) parsePivotAlias(ref *ast.TableReference) {
 }
 
 // pivotDialectAllowed reports whether PIVOT/UNPIVOT is a recognized clause
-// for the parser's current dialect. PIVOT/UNPIVOT are SQL Server, Oracle,
-// and Snowflake extensions; in other dialects the words must remain valid
-// identifiers.
+// for the parser's current dialect, i.e. whether the dialect's capability
+// matrix sets SupportsPivotUnpivot (SQL Server, Oracle, Snowflake and
+// BigQuery). In other dialects - including the default Unknown dialect and
+// Generic - the words must remain valid identifiers.
 func (p *Parser) pivotDialectAllowed() bool {
-	return p.dialect == string(keywords.DialectSQLServer) ||
-		p.dialect == string(keywords.DialectOracle) ||
-		p.dialect == string(keywords.DialectSnowflake)
+	return p.Capabilities().SupportsPivotUnpivot
 }
 
-// isPivotKeyword returns true if the current token is the contextual PIVOT
+// pivotMultiAggregateAllowed reports whether the dialect accepts aliased
+// and multiple aggregates in PIVOT (Oracle, BigQuery):
+//
+//	PIVOT (SUM(x) AS total, COUNT(*) AS n FOR col IN (...))
+//
+// It also gates the multi-column UNPIVOT form, which the same two dialects
+// support.
+func (p *Parser) pivotMultiAggregateAllowed() bool {
+	return p.IsOracle() || p.IsBigQuery()
+}
+
+// unpivotNullHandlingAllowed reports whether the dialect accepts
+// UNPIVOT { INCLUDE | EXCLUDE } NULLS (Oracle, Snowflake, BigQuery).
+func (p *Parser) unpivotNullHandlingAllowed() bool {
+	return p.IsOracle() || p.IsSnowflake() || p.IsBigQuery()
+}
+
 // isQualifyKeyword returns true if the current token is the Snowflake /
 // BigQuery QUALIFY clause keyword. QUALIFY tokenizes as an identifier, so
 // detect by value and gate by dialect to avoid consuming a legitimate
@@ -103,6 +136,7 @@ func (p *Parser) isQualifyKeyword() bool {
 	return strings.EqualFold(p.currentToken.Token.Value, "QUALIFY")
 }
 
+// isPivotKeyword returns true if the current token is the contextual PIVOT
 // keyword in a dialect that supports it. PIVOT is non-reserved, so it may
 // arrive as either an identifier or a keyword token.
 func (p *Parser) isPivotKeyword() bool {
@@ -139,10 +173,31 @@ func (p *Parser) parsePivotClause() (*ast.PivotClause, error) {
 	}
 	p.advance() // consume (
 
-	// Parse aggregate function expression (e.g. SUM(sales))
+	// Parse aggregate function expression (e.g. SUM(sales)). Oracle and
+	// BigQuery also allow an alias on each aggregate and several
+	// comma-separated aggregates.
 	aggFunc, err := p.parseExpression()
 	if err != nil {
 		return nil, err
+	}
+	var aggAlias string
+	var extraAggs []ast.PivotAggregate
+	if p.pivotMultiAggregateAllowed() {
+		if aggAlias, err = p.parsePivotAggregateAlias(); err != nil {
+			return nil, err
+		}
+		for p.isType(models.TokenTypeComma) {
+			p.advance() // consume ,
+			fn, err := p.parseExpression()
+			if err != nil {
+				return nil, err
+			}
+			alias, err := p.parsePivotAggregateAlias()
+			if err != nil {
+				return nil, err
+			}
+			extraAggs = append(extraAggs, ast.PivotAggregate{Function: fn, Alias: alias})
+		}
 	}
 
 	// Expect FOR keyword
@@ -179,17 +234,25 @@ func (p *Parser) parsePivotClause() (*ast.PivotClause, error) {
 		}
 		val := p.renderPivotValue()
 		p.advance()
-		// Optional alias: AS <name>
+		// Optional alias: [AS] <name>. Oracle, Snowflake and BigQuery allow
+		// the alias without AS; SQL Server has no IN-value aliases, so the
+		// bare form stays rejected there.
 		if p.isType(models.TokenTypeAs) {
 			p.advance() // consume AS
-			if p.isIdentifier() || p.isNonReservedKeyword() {
-				val += " AS " + renderQuotedIdent(p.currentToken.Token)
-				p.advance()
+			if !p.isIdentifier() && !p.isNonReservedKeyword() {
+				return nil, p.expectedError("alias after AS in PIVOT IN list")
 			}
+			val += " AS " + p.renderCurrentIdent()
+			p.advance()
+		} else if p.isIdentifier() && !p.IsSQLServer() {
+			val += " AS " + p.renderCurrentIdent()
+			p.advance()
 		}
 		inValues = append(inValues, val)
 		if p.isType(models.TokenTypeComma) {
 			p.advance()
+		} else if !p.isType(models.TokenTypeRParen) {
+			return nil, p.expectedError(", or ) in PIVOT IN list")
 		}
 	}
 
@@ -208,29 +271,81 @@ func (p *Parser) parsePivotClause() (*ast.PivotClause, error) {
 
 	return &ast.PivotClause{
 		AggregateFunction: aggFunc,
+		AggregateAlias:    aggAlias,
+		ExtraAggregates:   extraAggs,
 		PivotColumn:       pivotCol,
 		InValues:          inValues,
 		Pos:               pos,
 	}, nil
 }
 
-// parseUnpivotClause parses UNPIVOT (value_col FOR name_col IN (columns)).
-// The current token must be the UNPIVOT keyword.
+// parsePivotAggregateAlias consumes an optional "[AS] alias" after a PIVOT
+// aggregate (Oracle / BigQuery) and returns the alias, or "" when none.
+// AS with no alias after it is an error.
+func (p *Parser) parsePivotAggregateAlias() (string, error) {
+	if p.isType(models.TokenTypeAs) {
+		p.advance() // consume AS
+		if !p.isIdentifier() && !p.isNonReservedKeyword() {
+			return "", p.expectedError("alias after AS in PIVOT aggregate")
+		}
+		alias := p.renderCurrentIdent()
+		p.advance()
+		return alias, nil
+	}
+	if p.isIdentifier() {
+		alias := p.renderCurrentIdent()
+		p.advance()
+		return alias, nil
+	}
+	return "", nil
+}
+
+// parseUnpivotClause parses
+//
+//	UNPIVOT [{INCLUDE | EXCLUDE} NULLS] (value_col FOR name_col IN (columns))
+//	UNPIVOT [{INCLUDE | EXCLUDE} NULLS] ((v1, v2) FOR name_col IN ((c1, c2) [AS] 'k', ...))
+//
+// The NULLS modifier is accepted for Oracle, Snowflake and BigQuery and the
+// multi-column form for Oracle and BigQuery. The current token must be the
+// UNPIVOT keyword.
 func (p *Parser) parseUnpivotClause() (*ast.UnpivotClause, error) {
 	pos := p.currentLocation()
 	p.advance() // consume UNPIVOT
+
+	var nullHandling string
+	if p.unpivotNullHandlingAllowed() {
+		v := p.currentToken.Token.Value
+		if (strings.EqualFold(v, "INCLUDE") || strings.EqualFold(v, "EXCLUDE")) &&
+			strings.EqualFold(p.peekToken().Token.Value, "NULLS") {
+			nullHandling = strings.ToUpper(v) + " NULLS"
+			p.advance() // consume INCLUDE / EXCLUDE
+			p.advance() // consume NULLS
+		}
+	}
 
 	if !p.isType(models.TokenTypeLParen) {
 		return nil, p.expectedError("( after UNPIVOT")
 	}
 	p.advance() // consume (
 
-	// Parse value column name
-	if !p.isIdentifier() {
-		return nil, p.expectedError("value column name in UNPIVOT")
+	multiColumn := p.isType(models.TokenTypeLParen) && p.pivotMultiAggregateAllowed()
+
+	// Parse value column name, or the (v1, v2, ...) value column set.
+	var valueCol string
+	var valueCols []string
+	if multiColumn {
+		cols, err := p.parseUnpivotNameList("value column name in UNPIVOT")
+		if err != nil {
+			return nil, err
+		}
+		valueCols = cols
+	} else {
+		if !p.isIdentifier() {
+			return nil, p.expectedError("value column name in UNPIVOT")
+		}
+		valueCol = p.renderCurrentIdent()
+		p.advance()
 	}
-	valueCol := p.currentToken.Token.Value
-	p.advance()
 
 	// Expect FOR keyword
 	if !p.isType(models.TokenTypeFor) {
@@ -257,26 +372,51 @@ func (p *Parser) parseUnpivotClause() (*ast.UnpivotClause, error) {
 	}
 	p.advance() // consume (
 
-	// Parse IN columns — each may have an optional AS alias (Oracle:
-	// north_sales AS 'North').
+	// Parse IN columns (or column sets in the multi-column form) — each may
+	// have an optional alias: Oracle north_sales AS 'North'; BigQuery also
+	// allows the alias without AS and an INT64 alias.
 	var cols []string
 	for !p.isType(models.TokenTypeRParen) && !p.isType(models.TokenTypeEOF) {
-		if !p.isIdentifier() {
-			return nil, p.expectedError("column name in UNPIVOT IN list")
+		var col string
+		if multiColumn {
+			if !p.isType(models.TokenTypeLParen) {
+				return nil, p.expectedError("( to open a column set in UNPIVOT IN list")
+			}
+			set, err := p.parseUnpivotNameList("column name in UNPIVOT IN list")
+			if err != nil {
+				return nil, err
+			}
+			if len(set) != len(valueCols) {
+				return nil, p.expectedError(
+					"a column set with as many columns as the UNPIVOT value columns")
+			}
+			col = "(" + strings.Join(set, ", ") + ")"
+		} else {
+			if !p.isIdentifier() {
+				return nil, p.expectedError("column name in UNPIVOT IN list")
+			}
+			col = p.renderCurrentIdent()
+			p.advance()
 		}
-		col := renderQuotedIdent(p.currentToken.Token)
-		p.advance()
-		// Optional alias: AS <string_literal_or_identifier>
 		if p.isType(models.TokenTypeAs) {
 			p.advance() // consume AS
-			if p.isStringLiteral() || p.isIdentifier() || p.isNonReservedKeyword() {
-				col += " AS " + p.renderPivotValue()
-				p.advance()
+			// Oracle accepts a literal alias; BigQuery also permits INT64 aliases.
+			numericAlias := p.isType(models.TokenTypeNumber) && (p.IsOracle() || p.IsBigQuery())
+			if !p.isStringLiteral() && !p.isIdentifier() && !p.isNonReservedKeyword() &&
+				!numericAlias {
+				return nil, p.expectedError("alias after AS in UNPIVOT IN list")
 			}
+			col += " AS " + p.renderPivotValue()
+			p.advance()
+		} else if p.IsBigQuery() && (p.isStringLiteral() || p.isType(models.TokenTypeNumber)) {
+			col += " AS " + p.renderPivotValue()
+			p.advance()
 		}
 		cols = append(cols, col)
 		if p.isType(models.TokenTypeComma) {
 			p.advance()
+		} else if !p.isType(models.TokenTypeRParen) {
+			return nil, p.expectedError(", or ) in UNPIVOT IN list")
 		}
 	}
 
@@ -294,11 +434,37 @@ func (p *Parser) parseUnpivotClause() (*ast.UnpivotClause, error) {
 	p.advance() // close UNPIVOT )
 
 	return &ast.UnpivotClause{
-		ValueColumn: valueCol,
-		NameColumn:  nameCol,
-		InColumns:   cols,
-		Pos:         pos,
+		NullHandling: nullHandling,
+		ValueColumn:  valueCol,
+		ValueColumns: valueCols,
+		NameColumn:   nameCol,
+		InColumns:    cols,
+		Pos:          pos,
 	}, nil
+}
+
+// parseUnpivotNameList parses a parenthesized, comma-separated list of
+// column names, "(a, b, ...)", for the multi-column UNPIVOT form. Names
+// retain their source quoting. The current token must be the opening parenthesis.
+func (p *Parser) parseUnpivotNameList(what string) ([]string, error) {
+	p.advance() // consume (
+	var names []string
+	for {
+		if !p.isIdentifier() {
+			return nil, p.expectedError(what)
+		}
+		names = append(names, p.renderCurrentIdent())
+		p.advance()
+		if !p.isType(models.TokenTypeComma) {
+			break
+		}
+		p.advance() // consume ,
+	}
+	if !p.isType(models.TokenTypeRParen) {
+		return nil, p.expectedError(") to close UNPIVOT column set")
+	}
+	p.advance() // consume )
+	return names, nil
 }
 
 // supportsTableFunction reports whether the current dialect allows

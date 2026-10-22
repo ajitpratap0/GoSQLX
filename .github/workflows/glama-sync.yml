@@ -56,7 +56,10 @@ jobs:
           mv /tmp/glama.json glama.json
 
       - name: Commit and push
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
+          VERSION="${RELEASE_TAG#v}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add glama.json

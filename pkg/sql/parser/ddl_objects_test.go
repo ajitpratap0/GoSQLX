@@ -312,6 +312,7 @@ func TestDDLObjects_VerbatimObjects(t *testing.T) {
 		{keywords.DialectOracle, "DROP USER u CASCADE", "DROP USER"},
 		{keywords.DialectMySQL, "DROP FUNCTION IF EXISTS f", "DROP FUNCTION"},
 		{keywords.DialectOracle, "DROP PUBLIC SYNONYM e", "DROP PUBLIC SYNONYM"},
+		{keywords.DialectSQLServer, "CREATE OR ALTER PROCEDURE p AS SELECT 1", "CREATE PROCEDURE"},
 		{keywords.DialectSnowflake, "DROP SCHEMA s", "DROP SCHEMA"},
 	}
 	for _, tt := range tests {
@@ -347,6 +348,13 @@ func TestDDLObjects_Errors(t *testing.T) {
 		{keywords.DialectClickHouse, "CREATE TABLE t (a UInt8) ENGINE = MergeTree ORDER BY a ORDER BY a"},
 		{keywords.DialectPostgreSQL, "CREATE INDEX i ON t (a NULLS)"},
 		{keywords.DialectSnowflake, "CREATE SCHEMA a.b.c.d.e.f"},
+		// Modifier words alone do not make a verbatim statement.
+		{keywords.DialectPostgreSQL, "CREATE OR FUNCTION f"},
+		{keywords.DialectPostgreSQL, "CREATE REPLACE FUNCTION f"},
+		{keywords.DialectPostgreSQL, "DROP REPLACE x"},
+		{keywords.DialectPostgreSQL, "DROP OR x"},
+		{keywords.DialectPostgreSQL, "DROP TEMP x"},
+		{keywords.DialectPostgreSQL, "DROP UNIQUE x"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.sql, func(t *testing.T) {

@@ -84,3 +84,39 @@ func TestFormatDDLObjects(t *testing.T) {
 		})
 	}
 }
+
+// TestFormatAST_VerbatimStatementsKeepSeparators checks that statements kept
+// as written (CREATE SCHEMA, DROP TYPE, GRANT, ...) still end with ";" when
+// AddSemicolon is set, so the next statement is not read back as part of
+// their text.
+func TestFormatAST_VerbatimStatementsKeepSeparators(t *testing.T) {
+	tests := []struct {
+		dialect keywords.SQLDialect
+		sql     string
+	}{
+		{keywords.DialectPostgreSQL, "DROP TYPE mood; DROP SCHEMA s CASCADE"},
+		{keywords.DialectPostgreSQL, "CREATE SCHEMA s; CREATE TABLE s.t (a INT)"},
+		{keywords.DialectPostgreSQL, "CREATE FUNCTION f() RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql; SELECT 1"},
+		{keywords.DialectPostgreSQL, "GRANT SELECT ON t TO u; SELECT 1"},
+		{keywords.DialectSnowflake, "CREATE STAGE s URL = 's3://b/p'; DROP WAREHOUSE w"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.sql, func(t *testing.T) {
+			tree, err := gosqlx.ParseWithDialect(tt.sql, tt.dialect)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			defer ast.ReleaseAST(tree)
+			want := len(tree.Statements)
+			out := formatter.FormatAST(tree, ast.ReadableStyle())
+			tree2, err := gosqlx.ParseWithDialect(out, tt.dialect)
+			if err != nil {
+				t.Fatalf("re-parse %q: %v", out, err)
+			}
+			defer ast.ReleaseAST(tree2)
+			if got := len(tree2.Statements); got != want {
+				t.Fatalf("readable output re-parses to %d statements, want %d:\n%s", got, want, out)
+			}
+		})
+	}
+}

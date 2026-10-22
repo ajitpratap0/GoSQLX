@@ -142,6 +142,16 @@ func (p *Parser) createVerbatimKind() string {
 			options = true
 			i += 2
 			continue
+		case "OR":
+			// OR REPLACE / OR ALTER only; anything else is left to the
+			// structured parser, which reports it.
+			if next := p.wordAt(i + 1); next != "REPLACE" && next != "ALTER" {
+				return ""
+			}
+			i++
+			continue
+		case "REPLACE", "ALTER":
+			return "" // only valid after OR
 		case "TABLE", "INDEX", "MATERIALIZED", "FULLTEXT", "SPATIAL", "BITMAP",
 			"CLUSTERED", "NONCLUSTERED":
 			return ""
@@ -245,14 +255,18 @@ func (p *Parser) dropVerbatimKind() string {
 	if w == "SEQUENCE" && (p.isMariaDB() || p.dialect == string(keywords.DialectMySQL)) {
 		return ""
 	}
-	if !verbatimCreateKinds[w] && !createModifierWords[w] {
-		return ""
-	}
-	if w == "PUBLIC" || w == "UNIQUE" || w == "GLOBAL" {
-		if next := p.wordAt(1); next != "" {
-			w += " " + next
+	if !verbatimCreateKinds[w] {
+		// Of the CREATE modifiers only PUBLIC / GLOBAL / UNIQUE may lead a
+		// DROP, and only before an object kind (DROP PUBLIC SYNONYM); DROP
+		// REPLACE x or DROP OR x is not a statement.
+		if w != "PUBLIC" && w != "UNIQUE" && w != "GLOBAL" {
+			return ""
 		}
-		return "DROP " + w
+		next := p.wordAt(1)
+		if !verbatimCreateKinds[next] {
+			return ""
+		}
+		return "DROP " + w + " " + next
 	}
 	if next := p.wordAt(1); verbatimKindSuffixes[next] {
 		w += " " + next

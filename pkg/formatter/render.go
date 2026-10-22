@@ -84,11 +84,18 @@ func FormatAST(a *ast.AST, opts ast.FormatOptions) string {
 	}
 	parts := make([]string, 0, len(a.Statements))
 	for _, stmt := range a.Statements {
-		parts = append(parts, FormatStatement(stmt, opts))
+		part := FormatStatement(stmt, opts)
+		// Renderers that keep a statement as written (UtilityStatement and
+		// the stmtSQL fallback) do not add the ";" themselves; without it the
+		// next statement would be read back as part of their text.
+		if opts.AddSemicolon && part != "" && !strings.HasSuffix(part, ";") {
+			part += ";"
+		}
+		parts = append(parts, part)
 	}
 	sep := ";\n"
 	if opts.AddSemicolon {
-		// Each statement already ends with ";"
+		// Each statement now ends with ";"
 		sep = "\n"
 	}
 	result := strings.Join(parts, sep)

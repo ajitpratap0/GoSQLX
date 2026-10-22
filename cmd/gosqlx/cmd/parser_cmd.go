@@ -94,6 +94,11 @@ func (p *Parser) Parse(input string) (*ParserResult, error) {
 		return result, nil
 	}
 
+	if !hasStatementTokens(tokens) {
+		result.Error = errNoStatements
+		return result, result.Error
+	}
+
 	// Parse to AST with proper error handling for memory management
 	pr := parserForDialect(p.Opts.Dialect)
 	defer pr.Release()

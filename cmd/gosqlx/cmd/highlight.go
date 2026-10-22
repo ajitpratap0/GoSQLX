@@ -146,7 +146,7 @@ func newHighlightConfig(format, theme, dialect, color string, standalone bool) (
 	if !ok {
 		return highlightConfig{}, fmt.Errorf("unknown theme %q; valid themes: %s", theme, strings.Join(highlight.ThemeNames(), ", "))
 	}
-	if err := validateDialectName(dialect); err != nil {
+	if err := normalizeDialectFlag(&dialect); err != nil {
 		return highlightConfig{}, err
 	}
 	color = strings.ToLower(strings.TrimSpace(color))

@@ -60,7 +60,7 @@ Performance: Direct AST inspection without intermediate representations`,
 
 func parseRun(cmd *cobra.Command, args []string) error {
 	// Reject unknown dialect names early before any parsing.
-	if err := validateDialectName(parseDialect); err != nil {
+	if err := normalizeDialectFlag(&parseDialect); err != nil {
 		return err
 	}
 
@@ -101,7 +101,8 @@ func parseRun(cmd *cobra.Command, args []string) error {
 	})
 
 	// Create parser with injectable output writers
-	parser := NewParser(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
+	out, finish := outputSink(cmd)
+	parser := NewParser(out, cmd.ErrOrStderr(), opts)
 
 	// Run parsing
 	result, err := parser.Parse(args[0])
@@ -115,7 +116,10 @@ func parseRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Display the result
-	return parser.Display(result)
+	if err := parser.Display(result); err != nil {
+		return err
+	}
+	return finish()
 }
 
 // parseFromStdin handles parsing from stdin input
@@ -159,7 +163,8 @@ func parseFromStdin(cmd *cobra.Command) error {
 	})
 
 	// Create parser
-	parser := NewParser(cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
+	out, finish := outputSink(cmd)
+	parser := NewParser(out, cmd.ErrOrStderr(), opts)
 
 	// Parse the stdin content (Parse accepts string input directly)
 	result, err := parser.Parse(string(content))
@@ -173,7 +178,10 @@ func parseFromStdin(cmd *cobra.Command) error {
 	}
 
 	// Display the result
-	return parser.Display(result)
+	if err := parser.Display(result); err != nil {
+		return err
+	}
+	return finish()
 }
 
 func init() {

@@ -8,7 +8,7 @@
  *
  * Benchmark values come from `BenchmarkPerformanceBaseline` (pkg/sql/parser),
  * the parse stage only (pre-tokenized input -> AST via ParseFromModelTokens),
- * median of 10 runs with -benchmem, and are recorded in
+ * median of 20 runs with -benchmem, and are recorded in
  * `performance_baselines.json` (`current_performance`). They are NOT tokenize
  * or end-to-end numbers. This file is seeded by hand from that JSON; it will
  * later be fed by the generated metrics.json (plan section 5.2).
@@ -62,13 +62,13 @@ export const BENCH_ENV = {
   goVersion: 'Go 1.27',
   stage: 'parse stage',
   /** Date the PARSE_BENCHMARKS figures were re-measured (ISO). */
-  measuredOn: '2026-10-13',
+  measuredOn: '2026-10-22',
   /** Parse-stage benchmark source file and CI baseline file, as repo paths. */
   benchFile: 'pkg/sql/parser/performance_regression_test.go',
   baselinesFile: 'performance_baselines.json',
-  source: 'BenchmarkPerformanceBaseline, median of 10 runs, re-measured 2026-10-13',
-  /** Command that reproduces PARSE_BENCHMARKS from a repo checkout (summarise the 10 runs with benchstat). */
-  command: "go test -run='^$' -bench=BenchmarkPerformanceBaseline -benchmem -count=10 ./pkg/sql/parser/",
+  source: 'BenchmarkPerformanceBaseline, median of 20 runs, re-measured 2026-10-22',
+  /** Command that reproduces PARSE_BENCHMARKS from a repo checkout (summarise the 20 runs with benchstat). */
+  command: "go test -run='^$' -bench=BenchmarkPerformanceBaseline -benchmem -count=20 ./pkg/sql/parser/",
 } as const;
 
 export interface ParseBenchmark {
@@ -82,11 +82,11 @@ export interface ParseBenchmark {
 }
 
 export const PARSE_BENCHMARKS: ParseBenchmark[] = [
-  { name: 'Simple SELECT', query: 'SELECT id, name FROM users', nsPerOp: 318, ciBaselineNs: 800 },
-  { name: 'INSERT', query: 'Simple INSERT statement', nsPerOp: 382, ciBaselineNs: 950 },
-  { name: 'CTE', query: 'WITH clause', nsPerOp: 561, ciBaselineNs: 1400 },
-  { name: 'Window Function', query: 'ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...)', nsPerOp: 585, ciBaselineNs: 1500 },
-  { name: 'Complex Query', query: 'JOIN, WHERE, ORDER BY, LIMIT', nsPerOp: 1165, ciBaselineNs: 2900 },
+  { name: 'Simple SELECT', query: 'SELECT id, name FROM users', nsPerOp: 349, ciBaselineNs: 800 },
+  { name: 'INSERT', query: 'Simple INSERT statement', nsPerOp: 406, ciBaselineNs: 950 },
+  { name: 'CTE', query: 'WITH clause', nsPerOp: 644, ciBaselineNs: 1400 },
+  { name: 'Window Function', query: 'ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...)', nsPerOp: 631, ciBaselineNs: 1500 },
+  { name: 'Complex Query', query: 'JOIN, WHERE, ORDER BY, LIMIT', nsPerOp: 1234, ciBaselineNs: 2900 },
 ];
 
 export function opsPerSec(nsPerOp: number): number {

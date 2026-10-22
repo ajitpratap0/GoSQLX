@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # GoReleaser creates the GitHub release and uploads assets
+      actions: write  # dispatch glama-sync.yml (release events from GITHUB_TOKEN start no workflows)
     
     steps:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -83,7 +84,16 @@ jobs:
         args: release --clean
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
+
+    # The release GoReleaser just published does not trigger glama-sync.yml's
+    # `release: published` (it was created with GITHUB_TOKEN); dispatch it.
+    - name: Dispatch Glama sync
+      continue-on-error: true
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        TAG: ${{ github.ref_name }}
+      run: gh workflow run glama-sync.yml --repo "$GITHUB_REPOSITORY" --ref main -f tag="$TAG"
+
     - name: Upload assets
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       with:

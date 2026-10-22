@@ -1,6 +1,6 @@
 name: Glama MCP Server Sync
 
-# Runs on every GitHub release to:
+# Runs on every GitHub release (and on manual dispatch with a tag) to:
 #   1. Keep glama.json version in sync with the release tag
 #   2. Trigger a fresh Glama Docker build pinned to the exact release commit
 #
@@ -16,9 +16,17 @@ name: Glama MCP Server Sync
 #   The cookie expires periodically. When builds start failing with "auth failed",
 #   repeat the steps above to refresh the secret.
 
+# GoReleaser publishes releases with GITHUB_TOKEN, and events created with
+# GITHUB_TOKEN do not start other workflows, so release.yml dispatches this
+# workflow explicitly after GoReleaser (workflow_dispatch is the exception).
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to sync (e.g. v1.16.0)'
+        required: true
 
 permissions:
   contents: read
@@ -35,25 +43,30 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ github.event.release.target_commitish }}
+          ref: ${{ github.event.release.target_commitish || 'main' }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Bump version in glama.json
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${RELEASE_TAG#v}"
           echo "Updating glama.json → $VERSION"
           jq --arg v "$VERSION" '.version = $v' glama.json > /tmp/glama.json
           mv /tmp/glama.json glama.json
 
       - name: Commit and push
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
+          VERSION="${RELEASE_TAG#v}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add glama.json
           if git diff --staged --quiet; then
-            echo "glama.json already at ${GITHUB_REF_NAME#v} — no commit needed"
+            echo "glama.json already at ${VERSION} — no commit needed"
           else
-            git commit -m "chore(glama): sync version to ${GITHUB_REF_NAME#v} [skip ci]"
+            git commit -m "chore(glama): sync version to ${VERSION} [skip ci]"
             git push
           fi
 
@@ -65,9 +78,12 @@ jobs:
       - name: Trigger build
         env:
           GLAMA_SESSION_COOKIE: ${{ secrets.GLAMA_SESSION_COOKIE }}
-          COMMIT_SHA: ${{ github.sha }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
         run: |
+          # Pin the build to the tagged commit (github.sha is main's head on dispatch).
+          COMMIT_SHA="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq .sha)"
+          export COMMIT_SHA
           if [ -z "$GLAMA_SESSION_COOKIE" ]; then
             echo "::warning::GLAMA_SESSION_COOKIE not set — skipping Glama build trigger."
             echo ""
@@ -93,7 +109,7 @@ jobs:
           # Build steps run inside Glama's debian:bookworm-slim container.
           # Update the Go version below when go.mod bumps the minimum Go requirement.
           build_steps = json.dumps([
-              "curl -fsSL -o /tmp/go.tar.gz https://go.dev/dl/go1.26.1.linux-amd64.tar.gz",
+              "curl -fsSL -o /tmp/go.tar.gz https://go.dev/dl/go1.26.10.linux-amd64.tar.gz",
               "tar -C /usr/local -xzf /tmp/go.tar.gz",
               "PATH=/usr/local/go/bin:$PATH /usr/local/go/bin/go build -ldflags='-s -w' -o /app/gosqlx-mcp ./cmd/gosqlx-mcp",
           ])

@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ajitpratap0/GoSQLX/internal/tokscratch"
 	"github.com/ajitpratap0/GoSQLX/pkg/fingerprint"
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -111,8 +112,9 @@ func Parse(sql string) (*ast.AST, error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 
-	// Step 2: Tokenize SQL
-	tokens, err := tkz.TokenizeString(sql)
+	// Step 2: Tokenize SQL into the tokenizer's scratch buffer: the parser
+	// copies the tokens while preprocessing and they are not used after.
+	tokens, err := tokscratch.String(tkz, sql)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrTokenize, err)
 	}
@@ -199,7 +201,7 @@ func ParseWithContext(ctx context.Context, sql string) (*ast.AST, error) {
 	defer tokenizer.PutTokenizer(tkz)
 
 	// Step 2: Tokenize SQL with context support
-	tokens, err := tkz.TokenizeStringContext(ctx, sql)
+	tokens, err := tokscratch.StringContext(ctx, tkz, sql)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, fmt.Errorf("%w: %w", ErrTimeout, ctxErr)
@@ -277,7 +279,7 @@ func Validate(sql string) error {
 	}
 
 	// Use the dedicated validation fast-path that avoids building a full AST
-	err := parser.ValidateBytes([]byte(sql))
+	err := parser.Validate(sql)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrSyntax, err)
 	}
@@ -303,7 +305,7 @@ func ParseBytes(sql []byte) (*ast.AST, error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 
-	tokens, err := tkz.Tokenize(sql)
+	tokens, err := tokscratch.Bytes(tkz, sql)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrTokenize, err)
 	}
@@ -427,7 +429,7 @@ func ParseMultiple(queries []string) ([]*ast.AST, error) {
 		p.Reset()
 
 		// Tokenize
-		tokens, err := tkz.TokenizeString(sql)
+		tokens, err := tokscratch.String(tkz, sql)
 		if err != nil {
 			releaseASTs(results)
 			return nil, fmt.Errorf("query %d: %w: %w", i, ErrTokenize, err)
@@ -472,7 +474,7 @@ func ValidateMultiple(queries []string) error {
 		p.Reset()
 
 		// Tokenize
-		tokens, err := tkz.TokenizeString(sql)
+		tokens, err := tokscratch.String(tkz, sql)
 		if err != nil {
 			return fmt.Errorf("query %d: %w: %w", i, ErrTokenize, err)
 		}
@@ -642,7 +644,7 @@ func formatSQL(sql string, options FormatOptions, dialect keywords.SQLDialect) (
 		tkz.SetDialect(dialect)
 	}
 
-	tokens, err := tkz.TokenizeString(sql)
+	tokens, err := tokscratch.String(tkz, sql)
 	if err != nil {
 		return "", fmt.Errorf("cannot format invalid SQL: %w: %w", ErrTokenize, err)
 	}
@@ -708,7 +710,7 @@ func ParseWithRecovery(sql string) ([]ast.Statement, []error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 
-	tokens, err := tkz.TokenizeString(sql)
+	tokens, err := tokscratch.String(tkz, sql)
 	if err != nil {
 		return nil, []error{fmt.Errorf("%w: %w", ErrTokenize, err)}
 	}

@@ -45,7 +45,7 @@ func TestSelectExt_SQL(t *testing.T) {
 			s.Fetch = &FetchClause{FetchType: "NEXT", FetchExpr: ph("@n")}
 		}, "SELECT a FROM t OFFSET 4 ROWS FETCH NEXT @n ROWS ONLY"},
 		{"limit by", func(s *SelectStatement) {
-			s.LimitBy = &LimitByClause{Count: num("2"), Offset: num("1"), Exprs: []Expression{id("u"), id("p")}}
+			s.EnsureExtras().LimitBy = &LimitByClause{Count: num("2"), Offset: num("1"), Exprs: []Expression{id("u"), id("p")}}
 			v := 100
 			s.Limit = &v
 		}, "SELECT a FROM t LIMIT 2 OFFSET 1 BY u, p LIMIT 100"},
@@ -55,37 +55,37 @@ func TestSelectExt_SQL(t *testing.T) {
 			s.GroupByModifiers.WithCube = true
 		}, "SELECT a FROM t GROUP BY a WITH CUBE"},
 		{"modifiers and top", func(s *SelectStatement) {
-			s.SelectModifiers = []string{"HIGH_PRIORITY", "SQL_NO_CACHE"}
+			s.EnsureExtras().SelectModifiers = []string{"HIGH_PRIORITY", "SQL_NO_CACHE"}
 			s.Top = &TopClause{Count: ph("@n")}
 		}, "SELECT HIGH_PRIORITY SQL_NO_CACHE TOP (@n) a FROM t"},
 		{"top keeps parentheses", func(s *SelectStatement) { s.Top = &TopClause{Count: num("10"), Parenthesized: true} }, "SELECT TOP (10) a FROM t"},
 		{"top bare number", func(s *SelectStatement) { s.Top = &TopClause{Count: num("10"), IsPercent: true} }, "SELECT TOP 10 PERCENT a FROM t"},
 		{"into table", func(s *SelectStatement) {
-			s.Into = &SelectInto{Kind: SelectIntoTable, Table: "db.n", Temporary: "UNLOGGED", TableKeyword: true}
+			s.EnsureExtras().Into = &SelectInto{Kind: SelectIntoTable, Table: "db.n", Temporary: "UNLOGGED", TableKeyword: true}
 		}, "SELECT a INTO UNLOGGED TABLE db.n FROM t"},
 		{"into variables trailing", func(s *SelectStatement) {
-			s.Into = &SelectInto{Kind: SelectIntoVariables, Targets: []Expression{ph("@x")}, Trailing: true}
+			s.EnsureExtras().Into = &SelectInto{Kind: SelectIntoVariables, Targets: []Expression{ph("@x")}, Trailing: true}
 			s.For = &ForClause{LockType: "UPDATE"}
 		}, "SELECT a FROM t INTO @x FOR UPDATE"},
 		{"into dumpfile", func(s *SelectStatement) {
-			s.Into = &SelectInto{Kind: SelectIntoDumpfile, File: str("/tmp/x")}
+			s.EnsureExtras().Into = &SelectInto{Kind: SelectIntoDumpfile, File: str("/tmp/x")}
 		}, "SELECT a INTO DUMPFILE '/tmp/x' FROM t"},
 		{"into outfile options", func(s *SelectStatement) {
-			s.Into = &SelectInto{Kind: SelectIntoOutfile, File: str("f"), CharacterSet: "utf8mb4", Trailing: true,
+			s.EnsureExtras().Into = &SelectInto{Kind: SelectIntoOutfile, File: str("f"), CharacterSet: "utf8mb4", Trailing: true,
 				FieldsOptions: []IntoFileOption{{Option: "TERMINATED BY", Value: str(",")}, {Option: "ESCAPED BY", Value: str("x")}},
 				LinesOptions:  []IntoFileOption{{Option: "STARTING BY", Value: str(">")}}}
 		}, "SELECT a FROM t INTO OUTFILE 'f' CHARACTER SET utf8mb4 FIELDS TERMINATED BY ',' ESCAPED BY 'x' LINES STARTING BY '>'"},
 		{"order siblings and interpolate", func(s *SelectStatement) {
 			s.OrderBy = []OrderByExpression{{Expression: id("a"), Ascending: true, UsingOperator: ">"}}
 			s.OrderSiblings = true
-			s.Interpolate = &InterpolateClause{}
+			s.EnsureExtras().Interpolate = &InterpolateClause{}
 		}, "SELECT a FROM t ORDER SIBLINGS BY a USING > INTERPOLATE"},
 		{"for xml raw", func(s *SelectStatement) {
-			s.ForOutput = &ForOutputClause{Kind: "XML", Mode: "RAW", ModeArg: str("r"), Options: []ForOutputOption{{Name: "BINARY BASE64"}, {Name: "ROOT"}}}
+			s.EnsureExtras().ForOutput = &ForOutputClause{Kind: "XML", Mode: "RAW", ModeArg: str("r"), Options: []ForOutputOption{{Name: "BINARY BASE64"}, {Name: "ROOT"}}}
 		}, "SELECT a FROM t FOR XML RAW('r'), BINARY BASE64, ROOT"},
-		{"for browse", func(s *SelectStatement) { s.ForOutput = &ForOutputClause{Kind: "BROWSE"} }, "SELECT a FROM t FOR BROWSE"},
+		{"for browse", func(s *SelectStatement) { s.EnsureExtras().ForOutput = &ForOutputClause{Kind: "BROWSE"} }, "SELECT a FROM t FOR BROWSE"},
 		{"query hints", func(s *SelectStatement) {
-			s.QueryHints = []QueryHint{
+			s.EnsureExtras().QueryHints = []QueryHint{
 				{Name: "USE HINT", HasArgs: true, Args: []QueryHintArg{{Expr: str("X")}}},
 				{Name: "MAX_GRANT_PERCENT", Equals: true, Value: num("5")},
 			}
@@ -93,7 +93,7 @@ func TestSelectExt_SQL(t *testing.T) {
 		{"lock in share mode wait", func(s *SelectStatement) {
 			s.For = &ForClause{LockType: "SHARE", LockInShareMode: true, Wait: num("3")}
 		}, "SELECT a FROM t LOCK IN SHARE MODE WAIT 3"},
-		{"format", func(s *SelectStatement) { s.OutputFormat = "TSV" }, "SELECT a FROM t FORMAT TSV"},
+		{"format", func(s *SelectStatement) { s.EnsureExtras().OutputFormat = "TSV" }, "SELECT a FROM t FORMAT TSV"},
 		{"qualify", func(s *SelectStatement) { s.Qualify = id("q") }, "SELECT a FROM t QUALIFY q"},
 		{"joins", func(s *SelectStatement) {
 			s.Joins = []JoinClause{
@@ -122,21 +122,23 @@ func TestSelectExt_SQL(t *testing.T) {
 func TestSelectExt_UnknownKeywordsDropped(t *testing.T) {
 	const evil = "x; DROP TABLE users; --"
 	s := &SelectStatement{
-		Columns:         []Expression{&Identifier{Name: "a"}},
-		From:            []TableReference{{Name: "t"}},
-		SelectModifiers: []string{evil},
-		Into:            &SelectInto{Kind: SelectIntoTable, Table: "n", Temporary: evil},
-		ForOutput:       &ForOutputClause{Kind: "JSON", Mode: evil, Options: []ForOutputOption{{Name: evil}}},
-		QueryHints:      []QueryHint{{Name: evil}},
-		OutputFormat:    evil,
-		Joins:           []JoinClause{{Type: "INNER", Strictness: evil, Hint: evil, Right: TableReference{Name: "b"}}},
-		OrderBy:         []OrderByExpression{{Expression: &Identifier{Name: "a"}, UsingOperator: evil}},
+		Columns: []Expression{&Identifier{Name: "a"}},
+		From:    []TableReference{{Name: "t"}},
+		Extras: &SelectExtras{
+			SelectModifiers: []string{evil},
+			Into:            &SelectInto{Kind: SelectIntoTable, Table: "n", Temporary: evil},
+			ForOutput:       &ForOutputClause{Kind: "JSON", Mode: evil, Options: []ForOutputOption{{Name: evil}}},
+			QueryHints:      []QueryHint{{Name: evil}},
+			OutputFormat:    evil,
+		},
+		Joins:   []JoinClause{{Type: "INNER", Strictness: evil, Hint: evil, Right: TableReference{Name: "b"}}},
+		OrderBy: []OrderByExpression{{Expression: &Identifier{Name: "a"}, UsingOperator: evil}},
 	}
 	got := s.SQL()
 	if strings.Contains(got, "DROP") {
 		t.Fatalf("SQL() wrote an unknown keyword: %s", got)
 	}
-	if forced := (&SelectStatement{Columns: []Expression{&Identifier{Name: "a"}}, ForOutput: &ForOutputClause{Kind: evil}}).SQL(); strings.Contains(forced, "DROP") || strings.Contains(forced, "FOR") {
+	if forced := (&SelectStatement{Columns: []Expression{&Identifier{Name: "a"}}, Extras: &SelectExtras{ForOutput: &ForOutputClause{Kind: evil}}}).SQL(); strings.Contains(forced, "DROP") || strings.Contains(forced, "FOR") {
 		t.Fatalf("unknown FOR kind written: %s", forced)
 	}
 }
@@ -171,11 +173,13 @@ func TestSelectExt_Children(t *testing.T) {
 	s := SelectStatement{
 		LimitExpr:  lim,
 		OffsetExpr: off,
-		LimitBy:    &LimitByClause{Count: cnt},
-		QueryHints: []QueryHint{{Name: "MAXDOP", Value: &Identifier{Name: "h"}}},
+		Extras: &SelectExtras{
+			LimitBy:    &LimitByClause{Count: cnt},
+			QueryHints: []QueryHint{{Name: "MAXDOP", Value: &Identifier{Name: "h"}}},
+		},
 	}
 	got := s.Children()
-	for _, want := range []Node{lim, off, s.LimitBy, s.QueryHints[0].Value} {
+	for _, want := range []Node{lim, off, s.Extras.LimitBy, s.Extras.QueryHints[0].Value} {
 		if !containsNode(got, want) {
 			t.Errorf("SelectStatement.Children() lacks %v", want)
 		}
@@ -188,24 +192,26 @@ func TestSelectExt_Children(t *testing.T) {
 func TestSelectExt_ReleaseClearsFields(t *testing.T) {
 	n := 3
 	s := &SelectStatement{
-		SelectModifiers:  []string{"SQL_NO_CACHE"},
-		Into:             &SelectInto{Kind: SelectIntoVariables, Targets: []Expression{&Identifier{Name: "@x"}}},
 		GroupByModifiers: GroupByModifiers{All: true},
 		OrderSiblings:    true,
-		Interpolate:      &InterpolateClause{Items: []InterpolateItem{{Column: "c", Expr: &Identifier{Name: "c"}}}},
 		LimitExpr:        &Identifier{Name: "$1"},
 		OffsetExpr:       &Identifier{Name: "$2"},
 		LimitAll:         true,
 		OffsetRows:       true,
 		LimitWithTies:    true,
-		LimitBy:          &LimitByClause{Count: &Identifier{Name: "n"}},
-		ForOutput:        &ForOutputClause{Kind: "JSON"},
-		QueryHints:       []QueryHint{{Name: "RECOMPILE"}},
-		OutputFormat:     "JSON",
-		Limit:            &n,
-		Fetch:            &FetchClause{FetchExpr: &Identifier{Name: "f"}},
-		For:              &ForClause{Wait: &Identifier{Name: "w"}},
-		Joins:            []JoinClause{{Global: true, Strictness: "ANY", Hint: "HASH", MatchCondition: &Identifier{Name: "m"}, Comma: true}},
+		Extras: &SelectExtras{
+			SelectModifiers: []string{"SQL_NO_CACHE"},
+			Into:            &SelectInto{Kind: SelectIntoVariables, Targets: []Expression{&Identifier{Name: "@x"}}},
+			Interpolate:     &InterpolateClause{Items: []InterpolateItem{{Column: "c", Expr: &Identifier{Name: "c"}}}},
+			LimitBy:         &LimitByClause{Count: &Identifier{Name: "n"}},
+			ForOutput:       &ForOutputClause{Kind: "JSON"},
+			QueryHints:      []QueryHint{{Name: "RECOMPILE"}},
+			OutputFormat:    "JSON",
+		},
+		Limit: &n,
+		Fetch: &FetchClause{FetchExpr: &Identifier{Name: "f"}},
+		For:   &ForClause{Wait: &Identifier{Name: "w"}},
+		Joins: []JoinClause{{Global: true, Strictness: "ANY", Hint: "HASH", MatchCondition: &Identifier{Name: "m"}, Comma: true}},
 	}
 	releaseSelectStatement(s, releaseDrawn)
 	rv := reflect.ValueOf(s).Elem()

@@ -99,13 +99,14 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	selectStmt := &ast.SelectStatement{
 		Distinct:          isDistinct,
 		DistinctOnColumns: distinctOnColumns,
-		SelectModifiers:   selectModifiers,
 		Top:               topClause,
 		Columns:           columns,
-		Into:              into,
 		From:              tables,
 		Joins:             joins,
 		TableName:         tableName,
+	}
+	if len(selectModifiers) > 0 || into != nil {
+		selectStmt.Extras = &ast.SelectExtras{SelectModifiers: selectModifiers, Into: into}
 	}
 
 	// ClickHouse ARRAY JOIN / LEFT ARRAY JOIN.
@@ -279,9 +280,11 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	// ClickHouse ORDER BY ... WITH FILL INTERPOLATE [(col AS expr, ...)]
 	if len(selectStmt.OrderBy) > 0 && p.dialect == string(keywords.DialectClickHouse) &&
 		p.isUnquotedWord("INTERPOLATE") {
-		if selectStmt.Interpolate, err = p.parseInterpolate(); err != nil {
+		interpolate, err := p.parseInterpolate()
+		if err != nil {
 			return nil, err
 		}
+		selectStmt.EnsureExtras().Interpolate = interpolate
 	}
 
 	// LIMIT / OFFSET (either order), ClickHouse LIMIT ... BY
@@ -297,8 +300,8 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	// MySQL: INTO after the FROM ... clauses
-	if selectStmt.Into == nil && p.isMySQLFamily() && p.isType(models.TokenTypeInto) {
-		if selectStmt.Into, err = p.parseSelectInto(true); err != nil {
+	if !hasSelectInto(selectStmt) && p.isMySQLFamily() && p.isType(models.TokenTypeInto) {
+		if err = p.parseTrailingSelectInto(selectStmt); err != nil {
 			return nil, err
 		}
 	}
@@ -315,8 +318,8 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	// MySQL 8: INTO after the locking clause
-	if selectStmt.Into == nil && selectStmt.For != nil && p.isMySQLFamily() && p.isType(models.TokenTypeInto) {
-		if selectStmt.Into, err = p.parseSelectInto(true); err != nil {
+	if !hasSelectInto(selectStmt) && selectStmt.For != nil && p.isMySQLFamily() && p.isType(models.TokenTypeInto) {
+		if err = p.parseTrailingSelectInto(selectStmt); err != nil {
 			return nil, err
 		}
 	}

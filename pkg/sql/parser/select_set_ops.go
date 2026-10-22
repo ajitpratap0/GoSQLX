@@ -281,7 +281,7 @@ func (p *Parser) attachParenthesizedQueryTail(stmt ast.Statement) error {
 		}
 	}
 	if target == nil || target.OrderBy != nil || target.HasLimit() ||
-		target.HasOffset() || target.LimitBy != nil || target.Fetch != nil || target.For != nil {
+		target.HasOffset() || (target.Extras != nil && target.Extras.LimitBy != nil) || target.Fetch != nil || target.For != nil {
 		// The clauses cannot move into the last operand without changing
 		// which rows they apply to. A set operation keeps them as the tail of
 		// the whole operation; a single parenthesized query has no node for

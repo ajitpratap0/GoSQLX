@@ -51,7 +51,7 @@ func (p *Parser) parseTrailingSelectSettings(stmt ast.Statement) error {
 		if !p.isQuerySettingName() || ast.FormatNameText(p.currentToken.Token.Value) == "" {
 			return p.expectedError("format name after FORMAT")
 		}
-		target.OutputFormat = p.currentToken.Token.Value
+		target.EnsureExtras().OutputFormat = p.currentToken.Token.Value
 		p.advance() // format name
 	}
 	return nil

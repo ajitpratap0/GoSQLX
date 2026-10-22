@@ -127,16 +127,16 @@ func TestSelectExt_LimitOffsetValues(t *testing.T) {
 			}
 		}},
 		{"clickhouse limit by then limit", keywords.DialectClickHouse, "SELECT user_id, page FROM e ORDER BY ts DESC LIMIT 2 BY user_id, page LIMIT 100", func(t *testing.T, s *ast.SelectStatement) {
-			if s.LimitBy == nil || exprSQLText(s.LimitBy.Count) != "2" || len(s.LimitBy.Exprs) != 2 || s.LimitBy.Offset != nil {
-				t.Fatalf("LimitBy = %+v", s.LimitBy)
+			if extras(s).LimitBy == nil || exprSQLText(extras(s).LimitBy.Count) != "2" || len(extras(s).LimitBy.Exprs) != 2 || extras(s).LimitBy.Offset != nil {
+				t.Fatalf("LimitBy = %+v", extras(s).LimitBy)
 			}
 			if s.Limit == nil || *s.Limit != 100 {
 				t.Errorf("Limit = %v, want 100", s.Limit)
 			}
 		}},
 		{"clickhouse limit offset by", keywords.DialectClickHouse, "SELECT a FROM t LIMIT 1 OFFSET 2 BY a", func(t *testing.T, s *ast.SelectStatement) {
-			if s.LimitBy == nil || exprSQLText(s.LimitBy.Offset) != "2" || s.HasLimit() || s.HasOffset() {
-				t.Errorf("LimitBy = %+v, Limit = %v, Offset = %v", s.LimitBy, s.Limit, s.Offset)
+			if extras(s).LimitBy == nil || exprSQLText(extras(s).LimitBy.Offset) != "2" || s.HasLimit() || s.HasOffset() {
+				t.Errorf("LimitBy = %+v, Limit = %v, Offset = %v", extras(s).LimitBy, s.Limit, s.Offset)
 			}
 		}},
 	})
@@ -145,18 +145,18 @@ func TestSelectExt_LimitOffsetValues(t *testing.T) {
 func TestSelectExt_SelectListPrologue(t *testing.T) {
 	runSelectExtCases(t, []selectExtCase{
 		{"mysql calc found rows", keywords.DialectMySQL, "SELECT SQL_CALC_FOUND_ROWS * FROM t", func(t *testing.T, s *ast.SelectStatement) {
-			if len(s.SelectModifiers) != 1 || s.SelectModifiers[0] != "SQL_CALC_FOUND_ROWS" {
-				t.Errorf("SelectModifiers = %v", s.SelectModifiers)
+			if len(extras(s).SelectModifiers) != 1 || extras(s).SelectModifiers[0] != "SQL_CALC_FOUND_ROWS" {
+				t.Errorf("SelectModifiers = %v", extras(s).SelectModifiers)
 			}
 		}},
 		{"mysql modifiers before distinct", keywords.DialectMySQL, "SELECT SQL_NO_CACHE STRAIGHT_JOIN DISTINCT a FROM t", func(t *testing.T, s *ast.SelectStatement) {
-			if len(s.SelectModifiers) != 2 || !s.Distinct {
-				t.Errorf("SelectModifiers = %v Distinct = %v", s.SelectModifiers, s.Distinct)
+			if len(extras(s).SelectModifiers) != 2 || !s.Distinct {
+				t.Errorf("SelectModifiers = %v Distinct = %v", extras(s).SelectModifiers, s.Distinct)
 			}
 		}},
 		{"mysql modifier name as column", keywords.DialectMySQL, "SELECT high_priority, b FROM t", func(t *testing.T, s *ast.SelectStatement) {
-			if len(s.SelectModifiers) != 0 || len(s.Columns) != 2 {
-				t.Errorf("SelectModifiers = %v Columns = %d", s.SelectModifiers, len(s.Columns))
+			if len(extras(s).SelectModifiers) != 0 || len(s.Columns) != 2 {
+				t.Errorf("SelectModifiers = %v Columns = %d", extras(s).SelectModifiers, len(s.Columns))
 			}
 		}},
 		{"sqlserver top parenthesized", keywords.DialectSQLServer, "SELECT TOP (10) a FROM t", func(t *testing.T, s *ast.SelectStatement) {
@@ -248,30 +248,30 @@ func TestSelectExt_StarModifiers(t *testing.T) {
 func TestSelectExt_Into(t *testing.T) {
 	runSelectExtCases(t, []selectExtCase{
 		{"sqlserver temp table", keywords.DialectSQLServer, "SELECT * INTO #t FROM u", func(t *testing.T, s *ast.SelectStatement) {
-			if s.Into == nil || s.Into.Kind != ast.SelectIntoTable || s.Into.Table != "#t" || s.Into.Trailing {
-				t.Errorf("Into = %+v", s.Into)
+			if extras(s).Into == nil || extras(s).Into.Kind != ast.SelectIntoTable || extras(s).Into.Table != "#t" || extras(s).Into.Trailing {
+				t.Errorf("Into = %+v", extras(s).Into)
 			}
 		}},
 		{"sqlserver qualified table", keywords.DialectSQLServer, "SELECT Id, Name INTO dbo.Backup FROM dbo.Customers", func(t *testing.T, s *ast.SelectStatement) {
-			if s.Into == nil || s.Into.Table != "dbo.Backup" {
-				t.Errorf("Into = %+v", s.Into)
+			if extras(s).Into == nil || extras(s).Into.Table != "dbo.Backup" {
+				t.Errorf("Into = %+v", extras(s).Into)
 			}
 		}},
 		{"postgres temp table", keywords.DialectPostgreSQL, "SELECT * INTO TEMP TABLE n FROM o", func(t *testing.T, s *ast.SelectStatement) {
-			if s.Into == nil || s.Into.Temporary != "TEMP" || !s.Into.TableKeyword || s.Into.Table != "n" {
-				t.Errorf("Into = %+v", s.Into)
+			if extras(s).Into == nil || extras(s).Into.Temporary != "TEMP" || !extras(s).Into.TableKeyword || extras(s).Into.Table != "n" {
+				t.Errorf("Into = %+v", extras(s).Into)
 			}
 		}},
 		{"mysql variables", keywords.DialectMySQL, "SELECT id, total INTO @id, @total FROM orders WHERE id = 1", func(t *testing.T, s *ast.SelectStatement) {
-			if s.Into == nil || s.Into.Kind != ast.SelectIntoVariables || len(s.Into.Targets) != 2 {
-				t.Errorf("Into = %+v", s.Into)
+			if extras(s).Into == nil || extras(s).Into.Kind != ast.SelectIntoVariables || len(extras(s).Into.Targets) != 2 {
+				t.Errorf("Into = %+v", extras(s).Into)
 			}
 			if s.Where == nil {
 				t.Errorf("WHERE lost")
 			}
 		}},
 		{"mysql trailing outfile", keywords.DialectMySQL, "SELECT * FROM o INTO OUTFILE '/tmp/o.csv' FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"' LINES TERMINATED BY '\\n'", func(t *testing.T, s *ast.SelectStatement) {
-			in := s.Into
+			in := extras(s).Into
 			if in == nil || in.Kind != ast.SelectIntoOutfile || !in.Trailing || exprSQLText(in.File) != "'/tmp/o.csv'" {
 				t.Fatalf("Into = %+v", in)
 			}
@@ -280,13 +280,13 @@ func TestSelectExt_Into(t *testing.T) {
 			}
 		}},
 		{"mysql into after locking", keywords.DialectMySQL, "SELECT a FROM t FOR UPDATE INTO @x", func(t *testing.T, s *ast.SelectStatement) {
-			if s.For == nil || s.Into == nil || !s.Into.Trailing {
-				t.Errorf("For = %+v Into = %+v", s.For, s.Into)
+			if s.For == nil || extras(s).Into == nil || !extras(s).Into.Trailing {
+				t.Errorf("For = %+v Into = %+v", s.For, extras(s).Into)
 			}
 		}},
 		{"oracle bind variable", keywords.DialectOracle, "SELECT a INTO :v FROM t", func(t *testing.T, s *ast.SelectStatement) {
-			if s.Into == nil || s.Into.Kind != ast.SelectIntoVariables {
-				t.Errorf("Into = %+v", s.Into)
+			if extras(s).Into == nil || extras(s).Into.Kind != ast.SelectIntoVariables {
+				t.Errorf("Into = %+v", extras(s).Into)
 			}
 		}},
 	})
@@ -348,7 +348,7 @@ func TestSelectExt_HierarchicalAndOrdering(t *testing.T) {
 			}
 		}},
 		{"clickhouse interpolate", keywords.DialectClickHouse, "SELECT d, c FROM daily ORDER BY d WITH FILL STEP 1 INTERPOLATE (c AS c + 1, e)", func(t *testing.T, s *ast.SelectStatement) {
-			ip := s.Interpolate
+			ip := extras(s).Interpolate
 			if ip == nil || len(ip.Items) != 2 || ip.Items[0].Column != "c" || exprSQLText(ip.Items[0].Expr) != "c + 1" || ip.Items[1].Expr != nil {
 				t.Errorf("Interpolate = %+v", ip)
 			}
@@ -359,7 +359,7 @@ func TestSelectExt_HierarchicalAndOrdering(t *testing.T) {
 func TestSelectExt_TrailingClauses(t *testing.T) {
 	runSelectExtCases(t, []selectExtCase{
 		{"for json path options", keywords.DialectSQLServer, "SELECT Id FROM c FOR JSON PATH, ROOT('customers'), INCLUDE_NULL_VALUES", func(t *testing.T, s *ast.SelectStatement) {
-			fo := s.ForOutput
+			fo := extras(s).ForOutput
 			if fo == nil || fo.Kind != "JSON" || fo.Mode != "PATH" || len(fo.Options) != 2 || exprSQLText(fo.Options[0].Arg) != "'customers'" {
 				t.Errorf("ForOutput = %+v", fo)
 			}
@@ -368,18 +368,18 @@ func TestSelectExt_TrailingClauses(t *testing.T) {
 			}
 		}},
 		{"for xml path elements", keywords.DialectSQLServer, "SELECT Id FROM c FOR XML PATH('row'), ELEMENTS XSINIL, TYPE", func(t *testing.T, s *ast.SelectStatement) {
-			fo := s.ForOutput
+			fo := extras(s).ForOutput
 			if fo == nil || fo.Kind != "XML" || exprSQLText(fo.ModeArg) != "'row'" || len(fo.Options) != 2 || fo.Options[0].Name != "ELEMENTS XSINIL" {
 				t.Errorf("ForOutput = %+v", fo)
 			}
 		}},
 		{"for json in subquery", keywords.DialectSQLServer, "SELECT c.Id, (SELECT o.Id FROM o WHERE o.c = c.Id FOR JSON PATH) AS Orders FROM c FOR JSON PATH, WITHOUT_ARRAY_WRAPPER", func(t *testing.T, s *ast.SelectStatement) {
-			if s.ForOutput == nil || len(s.ForOutput.Options) != 1 {
-				t.Errorf("ForOutput = %+v", s.ForOutput)
+			if extras(s).ForOutput == nil || len(extras(s).ForOutput.Options) != 1 {
+				t.Errorf("ForOutput = %+v", extras(s).ForOutput)
 			}
 		}},
 		{"option hints", keywords.DialectSQLServer, "SELECT * FROM t WHERE c = @c OPTION (MAXDOP 1, RECOMPILE, OPTIMIZE FOR (@c UNKNOWN), LABEL = 'x')", func(t *testing.T, s *ast.SelectStatement) {
-			h := s.QueryHints
+			h := extras(s).QueryHints
 			if len(h) != 4 {
 				t.Fatalf("QueryHints = %+v", h)
 			}
@@ -394,23 +394,23 @@ func TestSelectExt_TrailingClauses(t *testing.T) {
 			}
 		}},
 		{"option after table without alias", keywords.DialectSQLServer, "SELECT * FROM t OPTION (RECOMPILE)", func(t *testing.T, s *ast.SelectStatement) {
-			if len(s.QueryHints) != 1 || s.From[0].Alias != "" {
-				t.Errorf("QueryHints = %+v Alias = %q", s.QueryHints, s.From[0].Alias)
+			if len(extras(s).QueryHints) != 1 || s.From[0].Alias != "" {
+				t.Errorf("QueryHints = %+v Alias = %q", extras(s).QueryHints, s.From[0].Alias)
 			}
 		}},
 		{"clickhouse format", keywords.DialectClickHouse, "SELECT a FROM t FORMAT JSONEachRow", func(t *testing.T, s *ast.SelectStatement) {
-			if s.OutputFormat != "JSONEachRow" || s.From[0].Alias != "" {
-				t.Errorf("OutputFormat = %q Alias = %q", s.OutputFormat, s.From[0].Alias)
+			if extras(s).OutputFormat != "JSONEachRow" || s.From[0].Alias != "" {
+				t.Errorf("OutputFormat = %q Alias = %q", extras(s).OutputFormat, s.From[0].Alias)
 			}
 		}},
 		{"clickhouse settings then format", keywords.DialectClickHouse, "SELECT * FROM t SETTINGS max_threads = 2 FORMAT CSVWithNames", func(t *testing.T, s *ast.SelectStatement) {
-			if s.OutputFormat != "CSVWithNames" || len(s.Settings) != 1 {
-				t.Errorf("OutputFormat = %q Settings = %v", s.OutputFormat, s.Settings)
+			if extras(s).OutputFormat != "CSVWithNames" || len(s.Settings) != 1 {
+				t.Errorf("OutputFormat = %q Settings = %v", extras(s).OutputFormat, s.Settings)
 			}
 		}},
 		{"clickhouse format without from", keywords.DialectClickHouse, "SELECT 'ok' FORMAT Null", func(t *testing.T, s *ast.SelectStatement) {
-			if s.OutputFormat != "Null" {
-				t.Errorf("OutputFormat = %q", s.OutputFormat)
+			if extras(s).OutputFormat != "Null" {
+				t.Errorf("OutputFormat = %q", extras(s).OutputFormat)
 			}
 		}},
 		{"mysql lock in share mode", keywords.DialectMySQL, "SELECT * FROM a WHERE id = 1 LOCK IN SHARE MODE", func(t *testing.T, s *ast.SelectStatement) {
@@ -545,6 +545,72 @@ func TestSelectExt_DialectGating(t *testing.T) {
 			if err == nil {
 				ast.ReleaseAST(tree)
 				t.Fatalf("ParseWithDialect(%q, %s) succeeded, want an error", tc.sql, tc.dialect)
+			}
+		})
+	}
+}
+
+// extras returns s.Extras, or an empty SelectExtras when the statement has
+// none of its clauses.
+func extras(s *ast.SelectStatement) *ast.SelectExtras {
+	if s.Extras != nil {
+		return s.Extras
+	}
+	return &ast.SelectExtras{}
+}
+
+// TestSelectExtras_OnlyWhenUsed checks that the parser allocates
+// SelectStatement.Extras only for statements that use one of its clauses,
+// and that the clause lands there.
+func TestSelectExtras_OnlyWhenUsed(t *testing.T) {
+	tests := []struct {
+		name    string
+		dialect keywords.SQLDialect
+		sql     string
+		check   func(x *ast.SelectExtras) bool // nil: Extras must be nil
+	}{
+		{"plain", keywords.DialectPostgreSQL, "SELECT a, b FROM t WHERE c = 1 ORDER BY a LIMIT $1 OFFSET 2", nil},
+		{"group by rollup", keywords.DialectMySQL, "SELECT a, COUNT(*) FROM t GROUP BY a WITH ROLLUP", nil},
+		{"select modifiers", keywords.DialectMySQL, "SELECT SQL_NO_CACHE a FROM t",
+			func(x *ast.SelectExtras) bool { return len(x.SelectModifiers) == 1 }},
+		{"into leading", keywords.DialectSQLServer, "SELECT a INTO #t FROM s",
+			func(x *ast.SelectExtras) bool { return x.Into != nil && !x.Into.Trailing }},
+		{"into trailing", keywords.DialectMySQL, "SELECT a FROM t INTO @v",
+			func(x *ast.SelectExtras) bool { return x.Into != nil && x.Into.Trailing }},
+		{"into after lock", keywords.DialectMySQL, "SELECT a FROM t FOR UPDATE INTO @v",
+			func(x *ast.SelectExtras) bool { return x.Into != nil && x.Into.Trailing }},
+		{"interpolate", keywords.DialectClickHouse, "SELECT a FROM t ORDER BY a WITH FILL INTERPOLATE (b AS b + 1)",
+			func(x *ast.SelectExtras) bool { return x.Interpolate != nil && len(x.Interpolate.Items) == 1 }},
+		{"limit by", keywords.DialectClickHouse, "SELECT a FROM t LIMIT 2 BY a",
+			func(x *ast.SelectExtras) bool { return x.LimitBy != nil }},
+		{"for json", keywords.DialectSQLServer, "SELECT a FROM t FOR JSON PATH",
+			func(x *ast.SelectExtras) bool { return x.ForOutput != nil }},
+		{"option hints", keywords.DialectSQLServer, "SELECT a FROM t OPTION (RECOMPILE)",
+			func(x *ast.SelectExtras) bool { return len(x.QueryHints) == 1 }},
+		{"format", keywords.DialectClickHouse, "SELECT a FROM t FORMAT JSONEachRow",
+			func(x *ast.SelectExtras) bool { return x.OutputFormat == "JSONEachRow" }},
+		{"settings format", keywords.DialectClickHouse, "SELECT a FROM t SETTINGS max_threads = 2 FORMAT CSV",
+			func(x *ast.SelectExtras) bool { return x.OutputFormat == "CSV" }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, err := ParseWithDialect(tc.sql, tc.dialect)
+			if err != nil {
+				t.Fatalf("ParseWithDialect(%q): %v", tc.sql, err)
+			}
+			defer ast.ReleaseAST(tree)
+			s, ok := tree.Statements[0].(*ast.SelectStatement)
+			if !ok {
+				t.Fatalf("got %T, want *ast.SelectStatement", tree.Statements[0])
+			}
+			if tc.check == nil {
+				if s.Extras != nil {
+					t.Errorf("Extras = %+v, want nil", s.Extras)
+				}
+				return
+			}
+			if s.Extras == nil || !tc.check(s.Extras) {
+				t.Errorf("Extras = %+v, want the clause set", s.Extras)
 			}
 		})
 	}

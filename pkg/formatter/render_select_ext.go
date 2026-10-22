@@ -27,10 +27,23 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
+// noSelectExtras is the read-only stand-in selectExtras returns for a
+// statement without Extras. Nothing may write through it.
+var noSelectExtras ast.SelectExtras
+
+// selectExtras returns s.Extras, or a read-only empty SelectExtras when it is
+// nil, so the renderers can read the rarer clauses without nil checks.
+func selectExtras(s *ast.SelectStatement) *ast.SelectExtras {
+	if s.Extras != nil {
+		return s.Extras
+	}
+	return &noSelectExtras
+}
+
 // writeSelectPrologue writes the MySQL select modifiers and the TOP clause,
 // each followed by a space.
 func writeSelectPrologue(sb *strings.Builder, s *ast.SelectStatement, f *nodeFormatter) {
-	for _, m := range s.SelectModifiers {
+	for _, m := range selectExtras(s).SelectModifiers {
 		if t := ast.SelectModifierText(m); t != "" {
 			sb.WriteString(f.kw(t))
 			sb.WriteString(" ")
@@ -199,7 +212,7 @@ func writeHierarchical(sb *strings.Builder, s *ast.SelectStatement, f *nodeForma
 // a clause separator. OFFSET keeps ROWS when it was written or a FETCH
 // clause follows.
 func writeLimitOffsetClauses(sb *strings.Builder, s *ast.SelectStatement, f *nodeFormatter) {
-	if lb := s.LimitBy; lb != nil && lb.Count != nil && len(lb.Exprs) > 0 {
+	if lb := selectExtras(s).LimitBy; lb != nil && lb.Count != nil && len(lb.Exprs) > 0 {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("LIMIT"))
 		sb.WriteString(" ")
@@ -246,11 +259,11 @@ func writeLimitOffsetClauses(sb *strings.Builder, s *ast.SelectStatement, f *nod
 			sb.WriteString(f.kw(ast.OffsetRowsKeyword(s)))
 		}
 	}
-	if s.RowsExamined != nil {
+	if x := s.Extras; x != nil && x.RowsExamined != nil {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("ROWS EXAMINED"))
 		sb.WriteString(" ")
-		sb.WriteString(exprSQL(s.RowsExamined))
+		sb.WriteString(exprSQL(x.RowsExamined))
 	}
 }
 
@@ -338,8 +351,9 @@ func queryHintsSQL(hints []ast.QueryHint, f *nodeFormatter) string {
 // writeSelectEpilogue writes the clauses after FOR UPDATE: FOR JSON/XML,
 // SETTINGS, OPTION (...) and FORMAT.
 func writeSelectEpilogue(sb *strings.Builder, s *ast.SelectStatement, f *nodeFormatter) {
-	if s.ForOutput != nil {
-		sb.WriteString(forOutputSQL(s.ForOutput, f))
+	x := selectExtras(s)
+	if x.ForOutput != nil {
+		sb.WriteString(forOutputSQL(x.ForOutput, f))
 	}
 	if len(s.Settings) > 0 {
 		sb.WriteString(f.clauseSep())
@@ -351,11 +365,11 @@ func writeSelectEpilogue(sb *strings.Builder, s *ast.SelectStatement, f *nodeFor
 		}
 		sb.WriteString(strings.Join(parts, ", "))
 	}
-	if len(s.QueryHints) > 0 {
+	if len(x.QueryHints) > 0 {
 		sb.WriteString(f.clauseSep())
-		sb.WriteString(queryHintsSQL(s.QueryHints, f))
+		sb.WriteString(queryHintsSQL(x.QueryHints, f))
 	}
-	if n := ast.FormatNameText(s.OutputFormat); n != "" {
+	if n := ast.FormatNameText(x.OutputFormat); n != "" {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("FORMAT"))
 		sb.WriteString(" ")

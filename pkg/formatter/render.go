@@ -219,6 +219,9 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 
 	f := newNodeFormatter(opts)
 	sb := f.sb
+	// Most rendered SELECTs are under 128 bytes; one up-front allocation
+	// replaces the builder's 8-16-32-64-128 growth steps.
+	sb.Grow(128)
 
 	if s.With != nil {
 		sb.WriteString(renderWith(s.With, f))
@@ -243,9 +246,9 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 
 	sb.WriteString(exprListSQL(s.Columns))
 
-	if s.Into != nil && !s.Into.Trailing {
+	if into := selectExtras(s).Into; into != nil && !into.Trailing {
 		sb.WriteString(" ")
-		sb.WriteString(selectIntoSQL(s.Into, f))
+		sb.WriteString(selectIntoSQL(into, f))
 	}
 
 	if len(s.From) > 0 {
@@ -325,8 +328,8 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 		sb.WriteString(orderBySQL(s.OrderBy))
 	}
-	if s.Interpolate != nil {
-		sb.WriteString(interpolateSQL(s.Interpolate, f))
+	if interp := selectExtras(s).Interpolate; interp != nil {
+		sb.WriteString(interpolateSQL(interp, f))
 	}
 
 	// LIMIT BY, LIMIT, OFFSET
@@ -336,9 +339,9 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		sb.WriteString(fetchSQL(s.Fetch, f))
 	}
 
-	if s.Into != nil && s.Into.Trailing {
+	if into := selectExtras(s).Into; into != nil && into.Trailing {
 		sb.WriteString(f.clauseSep())
-		sb.WriteString(selectIntoSQL(s.Into, f))
+		sb.WriteString(selectIntoSQL(into, f))
 	}
 
 	if s.For != nil {

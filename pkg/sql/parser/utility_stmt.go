@@ -293,6 +293,7 @@ func (p *Parser) parseTransactionStatement(action string) (ast.Statement, bool, 
 	if err != nil {
 		return nil, true, err
 	}
+	savepointExpected := false // ROLLBACK ... TO [SAVEPOINT] name
 	switch action {
 	case "SAVEPOINT":
 		// SAVEPOINT name | SAVE TRAN[SACTION] name
@@ -316,6 +317,7 @@ func (p *Parser) parseTransactionStatement(action string) (ast.Statement, bool, 
 			if p.utilityWord(i) != "TO" {
 				continue
 			}
+			savepointExpected = true
 			i++
 			if p.utilityWord(i) == "SAVEPOINT" {
 				i++
@@ -325,6 +327,10 @@ func (p *Parser) parseTransactionStatement(action string) (ast.Statement, bool, 
 			}
 			break
 		}
+	}
+	if stmt.Savepoint == "" && (action == "SAVEPOINT" || action == "RELEASE SAVEPOINT" || savepointExpected) {
+		p.seek(end)
+		return nil, true, p.expectedError("savepoint name")
 	}
 	stmt.Text = p.renderTokenRange(start, end)
 	p.seek(end)
@@ -352,7 +358,7 @@ func (p *Parser) parseSetStatement() (ast.Statement, bool, error) {
 	}
 	// The name is the run of adjacent tokens up to whitespace or an
 	// assignment operator: search_path, @a, @@session.sql_mode, NAMES.
-	if i < end {
+	if i < end && !isAssignmentToken(p.tokens[i].Token.Type) {
 		j := i + 1
 		for j < end && !isAssignmentToken(p.tokens[j].Token.Type) &&
 			p.tokens[j].Token.Type != models.TokenTypeComma &&
@@ -362,6 +368,7 @@ func (p *Parser) parseSetStatement() (ast.Statement, bool, error) {
 		stmt.Name = p.renderTokenRange(i, j)
 	}
 	if stmt.Name == "" {
+		p.seek(i)
 		return nil, true, p.expectedError("variable name after SET")
 	}
 	stmt.Text = p.renderTokenRange(start, end)
@@ -431,7 +438,7 @@ func (p *Parser) parseCallStatement() (ast.Statement, bool, error) {
 		return stmt, true, nil
 	}
 	p.currentPos, p.currentToken = savedPos, savedTok
-	return p.parseVerbatimStatement("CALL")
+	return p.parseVerbatimArgs("CALL")
 }
 
 func (p *Parser) parseCallStatementStructured() (*ast.CallStatement, error) {
@@ -758,9 +765,6 @@ func (p *Parser) isAliasAfterAS() bool {
 // and Oracle, so there they must stay quoted. A word followed by '(' is not
 // taken as a name, so these keywords do not become function names.
 func (p *Parser) isKeywordColumnName() bool {
-	if p.peekToken().Token.Type == models.TokenTypeLParen {
-		return false
-	}
 	switch p.currentToken.Token.Type {
 	case models.TokenTypeOwner, models.TokenTypeUrl, models.TokenTypeMember,
 		models.TokenTypeConnector, models.TokenTypePolicy, models.TokenTypeUntil,
@@ -769,20 +773,26 @@ func (p *Parser) isKeywordColumnName() bool {
 		models.TokenTypeFirst, models.TokenTypeLast, models.TokenTypeFilter,
 		models.TokenTypeShare, models.TokenTypeSource, models.TokenTypeTarget,
 		models.TokenTypeMatched:
-		return true
+		return !p.nextIsLParen()
 	case models.TokenTypeNext:
 		// NEXT VALUE FOR seq is a sequence expression.
-		return !strings.EqualFold(p.peekToken().Token.Value, "VALUE")
+		return !p.nextIsLParen() && !strings.EqualFold(p.peekToken().Token.Value, "VALUE")
 	case models.TokenTypeKey, models.TokenTypeIndex, models.TokenTypeView:
 		switch p.dialect {
 		case string(keywords.DialectMySQL), string(keywords.DialectMariaDB),
 			string(keywords.DialectSQLServer), string(keywords.DialectOracle):
 			return false
 		}
-		return true
+		return !p.nextIsLParen()
 	case models.TokenTypeKeyword:
 		v := p.currentToken.Token.Value
-		return strings.EqualFold(v, "FINAL") || strings.EqualFold(v, "TEMPORARY")
+		return (strings.EqualFold(v, "FINAL") || strings.EqualFold(v, "TEMPORARY")) && !p.nextIsLParen()
 	}
 	return false
+}
+
+// nextIsLParen reports whether the token after the current one is '('.
+func (p *Parser) nextIsLParen() bool {
+	next := p.currentPos + 1
+	return next < len(p.tokens) && p.tokens[next].Token.Type == models.TokenTypeLParen
 }

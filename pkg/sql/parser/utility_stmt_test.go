@@ -410,6 +410,15 @@ func TestParser_UtilityStatementErrors(t *testing.T) {
 		{keywords.DialectMySQL, "KILL;"},
 		{keywords.DialectSQLServer, "EXEC"},
 		{keywords.DialectPostgreSQL, "SELEC 1"},
+		{keywords.DialectMySQL, "CALL"},
+		{keywords.DialectMySQL, "CALL;"},
+		{keywords.DialectMySQL, "SET = 1"},
+		{keywords.DialectPostgreSQL, "SAVEPOINT"},
+		{keywords.DialectPostgreSQL, "RELEASE"},
+		{keywords.DialectPostgreSQL, "RELEASE SAVEPOINT"},
+		{keywords.DialectPostgreSQL, "ROLLBACK TO"},
+		{keywords.DialectPostgreSQL, "ROLLBACK TO SAVEPOINT"},
+		{keywords.DialectSQLServer, "SAVE TRANSACTION"},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.dialect)+"/"+tt.sql, func(t *testing.T) {

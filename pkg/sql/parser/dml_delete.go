@@ -52,6 +52,11 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 		if _, err := p.parseDMLTargets(&stmt.TableName, &stmt.Alias, &stmt.DMLTargetFields, p.isMySQLFamily()); err != nil {
 			return nil, err
 		}
+		// MySQL names several targets only in the USING form; without it
+		// DELETE FROM t1, t2 WHERE ... is a syntax error.
+		if p.isMySQLFamily() && len(stmt.Tables) > 0 && stmt.TableName != "" && !p.isType(models.TokenTypeUsing) {
+			return nil, p.expectedError("USING")
+		}
 	} else {
 		multiFrom := p.isMySQLFamily() || sqlServer
 		if !multiFrom && p.dialect != string(keywords.DialectOracle) {
@@ -70,8 +75,10 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 			if err := p.parseDeleteSources(&stmt.From, stmt); err != nil {
 				return nil, err
 			}
-		} else if len(stmt.Tables) > 0 && stmt.TableName != "" {
-			// DELETE t1, t2 needs a FROM clause naming the source tables.
+		} else if p.isMySQLFamily() || (len(stmt.Tables) > 0 && stmt.TableName != "") {
+			// DELETE t1, t2 needs a FROM clause naming the source tables,
+			// and MySQL has no FROM-less DELETE t WHERE ... at all (only
+			// Oracle and SQL Server do).
 			return nil, p.expectedError("FROM")
 		}
 	}

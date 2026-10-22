@@ -583,6 +583,7 @@ type MergeStatement struct {
 	OnCondition Expression         // The join/match condition
 	WhenClauses []*MergeWhenClause // List of WHEN clauses
 	Output      []Expression       // SQL Server OUTPUT clause columns
+	OutputInto  *OutputInto        // SQL Server OUTPUT ... INTO target
 	Returning   []Expression       // PostgreSQL 17 RETURNING list
 }
 
@@ -601,7 +602,7 @@ func (m MergeStatement) Children() []Node { return m.childrenInPlace() }
 // childrenInPlace is Children for a MergeStatement reached through a pointer:
 // TargetTable and SourceTable are returned as pointers into *m itself.
 func (m *MergeStatement) childrenInPlace() []Node {
-	n := 2 + len(m.WhenClauses) + len(m.Output)
+	n := 3 + len(m.WhenClauses) + len(m.Output)
 	if m.OnCondition != nil {
 		n++
 	}
@@ -615,6 +616,9 @@ func (m *MergeStatement) childrenInPlace() []Node {
 	}
 	for _, e := range m.Output {
 		children = append(children, e)
+	}
+	if m.OutputInto != nil {
+		children = append(children, m.OutputInto)
 	}
 	return append(children, nodifyExpressions(m.Returning)...)
 }

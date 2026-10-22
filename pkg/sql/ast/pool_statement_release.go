@@ -774,14 +774,24 @@ func GetMergeStatement() *MergeStatement {
 }
 
 // PutMergeStatement returns a MergeStatement to the pool.
-// It recursively releases nested expressions in WHEN clauses and OUTPUT.
+// It recursively releases nested expressions in WHEN clauses, OUTPUT and
+// RETURNING, and the statements of a derived-table source or target.
 func PutMergeStatement(stmt *MergeStatement) {
+	releaseMergeStatement(stmt, releaseAll)
+}
+
+// releaseMergeStatement implements PutMergeStatement. With releaseDrawn
+// (ReleaseAST) the walk and field reset are the same, but only the node
+// types the parser draws from pools are returned: the parser allocates a
+// MergeStatement with a plain composite literal, so the statement itself is
+// left to the GC (issue #556).
+func releaseMergeStatement(stmt *MergeStatement, mode releaseMode) {
 	if stmt == nil {
 		return
 	}
 
 	// Release OnCondition
-	PutExpression(stmt.OnCondition)
+	releaseExpression(stmt.OnCondition, mode)
 	stmt.OnCondition = nil
 
 	// Release WHEN clause expressions
@@ -789,26 +799,26 @@ func PutMergeStatement(stmt *MergeStatement) {
 		if stmt.WhenClauses[i] == nil {
 			continue
 		}
-		PutExpression(stmt.WhenClauses[i].Condition)
+		releaseExpression(stmt.WhenClauses[i].Condition, mode)
 		stmt.WhenClauses[i].Condition = nil
 		if stmt.WhenClauses[i].Action != nil {
 			for j := range stmt.WhenClauses[i].Action.SetClauses {
-				PutExpression(stmt.WhenClauses[i].Action.SetClauses[j].Value)
+				releaseExpression(stmt.WhenClauses[i].Action.SetClauses[j].Value, mode)
 				stmt.WhenClauses[i].Action.SetClauses[j].Value = nil
 				stmt.WhenClauses[i].Action.SetClauses[j].Column = ""
 			}
 			stmt.WhenClauses[i].Action.SetClauses = stmt.WhenClauses[i].Action.SetClauses[:0]
 			for j, expr := range stmt.WhenClauses[i].Action.Values {
-				PutExpression(expr)
+				releaseExpression(expr, mode)
 				stmt.WhenClauses[i].Action.Values[j] = nil
 			}
 			stmt.WhenClauses[i].Action.Values = stmt.WhenClauses[i].Action.Values[:0]
 			stmt.WhenClauses[i].Action.Columns = stmt.WhenClauses[i].Action.Columns[:0]
 			stmt.WhenClauses[i].Action.ActionType = ""
 			stmt.WhenClauses[i].Action.DefaultValues = false
-			PutExpression(stmt.WhenClauses[i].Action.Where)
+			releaseExpression(stmt.WhenClauses[i].Action.Where, mode)
 			stmt.WhenClauses[i].Action.Where = nil
-			PutExpression(stmt.WhenClauses[i].Action.DeleteWhere)
+			releaseExpression(stmt.WhenClauses[i].Action.DeleteWhere, mode)
 			stmt.WhenClauses[i].Action.DeleteWhere = nil
 			stmt.WhenClauses[i].Action = nil
 		}
@@ -819,23 +829,34 @@ func PutMergeStatement(stmt *MergeStatement) {
 
 	// Release OUTPUT expressions
 	for i, expr := range stmt.Output {
-		PutExpression(expr)
+		releaseExpression(expr, mode)
 		stmt.Output[i] = nil
 	}
 	stmt.Output = stmt.Output[:0]
+	if stmt.OutputInto != nil {
+		for _, e := range stmt.OutputInto.Columns {
+			releaseExpression(e, mode)
+		}
+		stmt.OutputInto = nil
+	}
 	for i, expr := range stmt.Returning {
-		PutExpression(expr)
+		releaseExpression(expr, mode)
 		stmt.Returning[i] = nil
 	}
 	stmt.Returning = stmt.Returning[:0]
 
-	// Reset TargetTable / SourceTable (value types - zero them out)
+	// Release and reset TargetTable / SourceTable. A derived-table source
+	// (USING (SELECT ...) AS s) owns a subquery statement.
+	releaseTableReference(&stmt.TargetTable, mode)
+	releaseTableReference(&stmt.SourceTable, mode)
 	stmt.TargetTable = TableReference{}
 	stmt.SourceTable = TableReference{}
 	stmt.TargetAlias = ""
 	stmt.SourceAlias = ""
 
-	mergeStmtPool.Put(stmt)
+	if mode == releaseAll {
+		mergeStmtPool.Put(stmt)
+	}
 }
 
 // GetReplaceStatement gets a ReplaceStatement from the pool.
@@ -849,19 +870,28 @@ func GetReplaceStatement() *ReplaceStatement {
 // PutReplaceStatement returns a ReplaceStatement to the pool.
 // It recursively releases nested column and value expressions.
 func PutReplaceStatement(stmt *ReplaceStatement) {
+	releaseReplaceStatement(stmt, releaseAll)
+}
+
+// releaseReplaceStatement implements PutReplaceStatement. The parser draws
+// ReplaceStatement from its pool, so the statement is always returned, but
+// under releaseDrawn (ReleaseAST, issue #556) only the drawn node types
+// nested in it are: an embedded query is released with the same mode instead
+// of putting never-drawn SelectStatements into their pools.
+func releaseReplaceStatement(stmt *ReplaceStatement, mode releaseMode) {
 	if stmt == nil {
 		return
 	}
 
 	for i := range stmt.Columns {
-		PutExpression(stmt.Columns[i])
+		releaseExpression(stmt.Columns[i], mode)
 		stmt.Columns[i] = nil
 	}
 	stmt.Columns = stmt.Columns[:0]
 
 	for i := range stmt.Values {
 		for j := range stmt.Values[i] {
-			PutExpression(stmt.Values[i][j])
+			releaseExpression(stmt.Values[i][j], mode)
 			stmt.Values[i][j] = nil
 		}
 		stmt.Values[i] = stmt.Values[i][:0]
@@ -869,11 +899,11 @@ func PutReplaceStatement(stmt *ReplaceStatement) {
 	stmt.Values = stmt.Values[:0]
 
 	if stmt.Query != nil {
-		releaseStatement(stmt.Query, releaseAll)
+		releaseStatement(stmt.Query, mode)
 		stmt.Query = nil
 	}
 	for i := range stmt.Returning {
-		PutExpression(stmt.Returning[i])
+		releaseExpression(stmt.Returning[i], mode)
 		stmt.Returning[i] = nil
 	}
 	stmt.Returning = stmt.Returning[:0]

@@ -123,12 +123,10 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 
 	// Parse optional OUTPUT clause (SQL Server)
 	if p.dialect == string(keywords.DialectSQLServer) && equalsUpper(p.currentToken.Token.Value, "OUTPUT") {
-		p.advance() // Consume OUTPUT
-		cols, err := p.parseSelectColumnList()
+		stmt.Output, stmt.OutputInto, err = p.parseDMLOutputClause()
 		if err != nil {
 			return nil, err
 		}
-		stmt.Output = cols
 	}
 
 	// PostgreSQL 17: RETURNING

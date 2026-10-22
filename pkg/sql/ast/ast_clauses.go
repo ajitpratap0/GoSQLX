@@ -463,6 +463,9 @@ type OnConflict struct {
 	Target     []Expression // Target columns
 	Constraint string       // Optional constraint name
 	Action     OnConflictAction
+	// TargetWhere is the partial-index predicate of the conflict target:
+	// ON CONFLICT (a) WHERE b > 0 DO ...
+	TargetWhere Expression
 }
 
 func (o *OnConflict) expressionNode()     {}
@@ -476,6 +479,9 @@ func (o OnConflict) Children() []Node {
 	}
 	if o.Action.Where != nil {
 		children = append(children, o.Action.Where)
+	}
+	if o.TargetWhere != nil {
+		children = append(children, o.TargetWhere)
 	}
 	return children
 }

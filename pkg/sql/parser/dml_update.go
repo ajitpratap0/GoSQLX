@@ -18,21 +18,42 @@
 package parser
 
 import (
-	"strings"
-
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
-// parseUpdateStatement parses an UPDATE statement
+// parseUpdateStatement parses an UPDATE statement:
+//
+//	UPDATE [modifiers] [TOP (n)] [ONLY] target [alias] [, target ...] [JOIN ...]
+//	SET assignments [OUTPUT ...] [FROM ...] [WHERE ...]
+//	[ORDER BY ...] [LIMIT n] [RETURNING ... [INTO ...]]
 func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 	// We've already consumed the UPDATE token in matchType
-
-	// Parse table name (supports schema.table qualification and double-quoted identifiers)
-	tableName, err := p.parseQualifiedName()
+	stmt := &ast.UpdateStatement{}
+	stmt.Modifiers = p.parseDMLModifiers(dmlUpdate)
+	top, err := p.parseTopClause()
 	if err != nil {
-		return nil, p.qualifiedNameError(err, "table name")
+		return nil, err
+	}
+	stmt.Top = top
+	if p.isDMLOnly() {
+		stmt.Only = true
+		p.advance() // Consume ONLY
+	}
+
+	// Target(s). MySQL/MariaDB allow a multi-table target list with JOINs.
+	multi := p.isMySQLFamily()
+	first, err := p.parseDMLTargets(&stmt.TableName, &stmt.Alias, &stmt.DMLTargetFields, multi)
+	if err != nil {
+		return nil, err
+	}
+	if multi && p.isJoinKeyword() {
+		joins, err := p.parseJoinClauses(first, nil)
+		if err != nil {
+			return nil, err
+		}
+		stmt.Joins = joins
 	}
 
 	// Parse SET
@@ -41,66 +62,28 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 	}
 	p.advance() // Consume SET
 
-	// Parse assignments
-	updates := make([]ast.UpdateExpression, 0)
-	for {
-		// Parse column name (supports double-quoted identifiers)
-		if !p.isIdentifier() {
-			return nil, p.expectedError("column name")
-		}
-		columnName := p.currentToken.Token.Value
-		p.advance()
+	stmt.Assignments, err = p.parseAssignments("SET")
+	if err != nil {
+		return nil, err
+	}
 
-		if !p.isType(models.TokenTypeEq) {
-			return nil, p.expectedError("=")
+	// SQL Server: OUTPUT precedes FROM and WHERE.
+	if p.isDMLOutputKeyword() {
+		stmt.Output, stmt.OutputInto, err = p.parseDMLOutputClause()
+		if err != nil {
+			return nil, err
 		}
-		p.advance() // Consume =
-
-		// Parse value expression
-		var expr ast.Expression
-		if p.isStringLiteral() {
-			expr = &ast.LiteralValue{Value: p.currentToken.Token.Value, Type: "string"}
-			p.advance()
-		} else if p.isNumericLiteral() {
-			litType := "int"
-			if strings.ContainsAny(p.currentToken.Token.Value, ".eE") {
-				litType = "float"
-			}
-			expr = &ast.LiteralValue{Value: p.currentToken.Token.Value, Type: litType}
-			p.advance()
-		} else if p.isBooleanLiteral() {
-			expr = &ast.LiteralValue{Value: p.currentToken.Token.Value, Type: "bool"}
-			p.advance()
-		} else {
-			var err error
-			expr, err = p.parseExpression()
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		// Create update expression
-		columnExpr := &ast.Identifier{Name: columnName}
-		updateExpr := ast.UpdateExpression{
-			Column: columnExpr,
-			Value:  expr,
-		}
-		updates = append(updates, updateExpr)
-
-		// Check if there are more assignments
-		if !p.isType(models.TokenTypeComma) {
-			break
-		}
-		p.advance() // Consume comma
 	}
 
 	// PostgreSQL / SQL Server / SQLite: UPDATE t SET ... FROM s [, ...] (#610).
-	var from []ast.TableReference
 	if p.isType(models.TokenTypeFrom) {
+		if len(stmt.Joins) > 0 {
+			return nil, goerrors.UnsupportedFeatureError("FROM after a joined UPDATE target", p.currentLocation(), "")
+		}
 		p.advance() // Consume FROM
 		prev := p.dmlReturning
 		p.dmlReturning = true
-		from, err = p.parseUpdateFromList()
+		stmt.From, stmt.Joins, err = p.parseUpdateFromList()
 		p.dmlReturning = prev
 		if err != nil {
 			return nil, err
@@ -108,53 +91,38 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 	}
 
 	// Parse WHERE clause if present
-	var whereClause ast.Expression
 	if p.isType(models.TokenTypeWhere) {
 		p.advance() // Consume WHERE
-		var err error
-		whereClause, err = p.parseExpression()
+		stmt.Where, err = p.parseExpression()
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	// Parse LIMIT clause if present (MySQL)
-	if p.isType(models.TokenTypeLimit) {
-		p.advance() // Consume LIMIT
-		if p.isNumericLiteral() {
-			p.advance() // Consume limit value (MySQL UPDATE LIMIT)
-		}
+	// MySQL / MariaDB / SQLite: ORDER BY ... LIMIT n
+	if err := p.parseDMLOrderLimit(&stmt.DMLTargetFields); err != nil {
+		return nil, err
 	}
 
-	// Parse RETURNING clause if present (PostgreSQL)
-	var returning []ast.Expression
-	if p.isType(models.TokenTypeReturning) || p.currentToken.Token.Value == "RETURNING" {
-		p.advance() // Consume RETURNING
-		var err error
-		returning, err = p.parseReturningColumns()
+	// Parse RETURNING clause if present (PostgreSQL, SQLite, Oracle INTO)
+	if p.isReturningKeyword() {
+		stmt.Returning, stmt.ReturningInto, err = p.parseReturningClause()
 		if err != nil {
 			return nil, err
 		}
 	}
-
-	// Create UPDATE statement
-	return &ast.UpdateStatement{
-		TableName:   tableName,
-		Assignments: updates,
-		From:        from,
-		Where:       whereClause,
-		Returning:   returning,
-	}, nil
+	return stmt, nil
 }
 
 // parseUpdateFromList parses the comma-separated table references of
-// UPDATE ... FROM. JOINs are rejected: UpdateStatement has no join list.
-func (p *Parser) parseUpdateFromList() ([]ast.TableReference, error) {
+// UPDATE ... FROM and the JOIN clauses that follow them (SQL Server,
+// PostgreSQL).
+func (p *Parser) parseUpdateFromList() ([]ast.TableReference, []ast.JoinClause, error) {
 	var refs []ast.TableReference
 	for {
 		ref, err := p.parseFromTableReference()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		refs = append(refs, ref)
 		if !p.isType(models.TokenTypeComma) {
@@ -162,8 +130,12 @@ func (p *Parser) parseUpdateFromList() ([]ast.TableReference, error) {
 		}
 		p.advance() // Consume comma
 	}
-	if p.isJoinKeyword() {
-		return nil, goerrors.UnsupportedFeatureError("JOIN in UPDATE ... FROM", p.currentLocation(), "")
+	if !p.isJoinKeyword() {
+		return refs, nil, nil
 	}
-	return refs, nil
+	joins, err := p.parseJoinClauses(refs[len(refs)-1], nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	return refs, joins, nil
 }

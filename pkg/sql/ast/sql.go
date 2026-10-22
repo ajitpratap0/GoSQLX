@@ -1318,8 +1318,11 @@ func (i *InsertStatement) writeSQL(buf *bytes.Buffer) {
 		buf.WriteByte(' ')
 	}
 
-	buf.WriteString("INSERT INTO ")
-	writeQualifiedName(buf, i.TableName)
+	if i.MultiTable != nil {
+		i.writeMultiTableInsert(buf)
+		return
+	}
+	i.writeInsertHead(buf)
 
 	if i.isSetForm() {
 		buf.WriteString(" SET ")
@@ -1338,10 +1341,8 @@ func (i *InsertStatement) writeSQL(buf *bytes.Buffer) {
 			buf.WriteByte(')')
 		}
 
-		if len(i.Output) > 0 {
-			buf.WriteString(" OUTPUT ")
-			writeExprList(buf, i.Output)
-		}
+		writeDMLOutput(buf, i.Output, i.OutputInto)
+		i.writeInsertBeforeSource(buf)
 
 		if i.Query != nil {
 			buf.WriteByte(' ')
@@ -1353,6 +1354,7 @@ func (i *InsertStatement) writeSQL(buf *bytes.Buffer) {
 			buf.WriteString(" DEFAULT VALUES")
 		}
 	}
+	i.writeInsertRowAlias(buf)
 
 	if i.OnConflict != nil {
 		writeOnConflict(buf, i.OnConflict)
@@ -1363,10 +1365,8 @@ func (i *InsertStatement) writeSQL(buf *bytes.Buffer) {
 		writeAssignments(buf, i.OnDuplicateKey.Updates)
 	}
 
-	if len(i.Returning) > 0 {
-		buf.WriteString(" RETURNING ")
-		writeExprList(buf, i.Returning)
-	}
+	writeReturning(buf, i.Returning, i.ReturningInto)
+	i.writeInsertFormat(buf)
 }
 
 // SQL returns the full SQL string for this UPDATE statement, including the
@@ -1393,29 +1393,29 @@ func (u *UpdateStatement) writeSQL(buf *bytes.Buffer) {
 	}
 
 	buf.WriteString("UPDATE ")
-	writeQualifiedName(buf, u.TableName)
-	if u.Alias != "" {
-		buf.WriteByte(' ')
-		writeTableAlias(buf, u.Alias)
+	writeDMLModifiers(buf, u.Modifiers)
+	writeDMLTop(buf, u.Top)
+	u.writeDMLTargets(buf, u.TableName, u.Alias)
+	if len(u.From) == 0 {
+		writeDMLJoins(buf, u.Joins)
 	}
 
 	buf.WriteString(" SET ")
 	writeAssignments(buf, u.Assignments)
+	writeDMLOutput(buf, u.Output, u.OutputInto)
 
 	if len(u.From) > 0 {
 		buf.WriteString(" FROM ")
 		writeTableRefList(buf, u.From)
+		writeDMLJoins(buf, u.Joins)
 	}
 
 	if u.Where != nil {
 		buf.WriteString(" WHERE ")
 		writeExpr(buf, u.Where)
 	}
-
-	if len(u.Returning) > 0 {
-		buf.WriteString(" RETURNING ")
-		writeExprList(buf, u.Returning)
-	}
+	u.writeDMLOrderLimit(buf)
+	writeReturning(buf, u.Returning, u.ReturningInto)
 }
 
 // SQL returns the full SQL string for this DELETE statement, including the
@@ -1440,27 +1440,31 @@ func (d *DeleteStatement) writeSQL(buf *bytes.Buffer) {
 		buf.WriteByte(' ')
 	}
 
-	buf.WriteString("DELETE FROM ")
-	writeQualifiedName(buf, d.TableName)
-	if d.Alias != "" {
-		buf.WriteByte(' ')
-		writeTableAlias(buf, d.Alias)
+	buf.WriteString("DELETE ")
+	writeDMLModifiers(buf, d.Modifiers)
+	writeDMLTop(buf, d.Top)
+	if len(d.From) == 0 {
+		buf.WriteString("FROM ")
 	}
+	d.writeDMLTargets(buf, d.TableName, d.Alias)
+	writeDMLOutput(buf, d.Output, d.OutputInto)
 
+	if len(d.From) > 0 {
+		buf.WriteString(" FROM ")
+		writeTableRefList(buf, d.From)
+	}
 	if len(d.Using) > 0 {
 		buf.WriteString(" USING ")
 		writeTableRefList(buf, d.Using)
 	}
+	writeDMLJoins(buf, d.Joins)
 
 	if d.Where != nil {
 		buf.WriteString(" WHERE ")
 		writeExpr(buf, d.Where)
 	}
-
-	if len(d.Returning) > 0 {
-		buf.WriteString(" RETURNING ")
-		writeExprList(buf, d.Returning)
-	}
+	d.writeDMLOrderLimit(buf)
+	writeReturning(buf, d.Returning, d.ReturningInto)
 }
 
 // SQL returns the full SQL string for this CREATE TABLE statement including
@@ -1846,6 +1850,8 @@ func (m *MergeStatement) SQL() string {
 			sb.WriteString("NOT MATCHED")
 		case "NOT_MATCHED_BY_SOURCE":
 			sb.WriteString("NOT MATCHED BY SOURCE")
+		case "NOT_MATCHED_BY_TARGET":
+			sb.WriteString("NOT MATCHED BY TARGET")
 		default:
 			// An unknown kind is left out: "WHEN  THEN" does not parse.
 			sb.WriteString(MergeWhenText(when.Type))
@@ -1857,8 +1863,10 @@ func (m *MergeStatement) SQL() string {
 		sb.WriteString(" THEN ")
 		if when.Action != nil {
 			sb.WriteString(mergeActionSQL(when.Action))
+			sb.WriteString(mergeActionWhereSQL(when.Action))
 		}
 	}
+	m.writeMergeTail(sb)
 
 	return sb.String()
 }
@@ -2378,6 +2386,10 @@ func writeOnConflict(buf *bytes.Buffer, oc *OnConflict) {
 		writeColumnRefList(buf, oc.Target)
 		buf.WriteByte(')')
 	}
+	if oc.TargetWhere != nil {
+		buf.WriteString(" WHERE ")
+		writeExpr(buf, oc.TargetWhere)
+	}
 	if oc.Constraint != "" {
 		buf.WriteString(" ON CONSTRAINT ")
 		writeColumnName(buf, oc.Constraint)
@@ -2793,25 +2805,7 @@ func (r *ReplaceStatement) SQL() string {
 	}
 	sb := getBuf()
 	defer putBuf(sb)
-	sb.WriteString("REPLACE INTO ")
-	writeQualifiedName(sb, r.TableName)
-	if len(r.Columns) > 0 {
-		sb.WriteString(" (")
-		sb.WriteString(exprListSQL(r.Columns))
-		sb.WriteString(")")
-	}
-	if len(r.Values) > 0 {
-		sb.WriteString(" VALUES ")
-		rows := make([]string, len(r.Values))
-		for idx, row := range r.Values {
-			vals := make([]string, len(row))
-			for j, v := range row {
-				vals[j] = exprSQL(v)
-			}
-			rows[idx] = "(" + strings.Join(vals, ", ") + ")"
-		}
-		sb.WriteString(strings.Join(rows, ", "))
-	}
+	r.writeReplaceSQL(sb)
 	return sb.String()
 }
 

@@ -372,6 +372,17 @@ func (c *metadataCollector) addTable(name string) {
 	}
 }
 
+// addDMLTargetTables adds the extra UPDATE / DELETE targets and the joined
+// tables of a multi-table statement.
+func (c *metadataCollector) addDMLTargetTables(d *ast.DMLTargetFields) {
+	for i := range d.Tables {
+		c.addTable(d.Tables[i].Name)
+	}
+	for i := range d.Joins {
+		c.addTable(d.Joins[i].Right.Name)
+	}
+}
+
 func (c *metadataCollector) addColumn(table, name string, want extractKind) {
 	if name == "" || name == "*" {
 		return
@@ -447,6 +458,7 @@ func (c *metadataCollector) collectFromNode(node ast.Node) {
 		for _, from := range n.From {
 			c.addTable(from.Name)
 		}
+		c.addDMLTargetTables(&n.DMLTargetFields)
 		for i := range n.Assignments {
 			c.collectFromNode(&n.Assignments[i])
 		}
@@ -455,9 +467,23 @@ func (c *metadataCollector) collectFromNode(node ast.Node) {
 			c.collectFromNode(n.With)
 		}
 	case *ast.DeleteStatement:
-		c.addTable(n.TableName)
+		// In DELETE t1 FROM t1 JOIN t2 the targets name FROM entries
+		// (often by alias), so the tables are the FROM list.
+		if len(n.From) == 0 {
+			c.addTable(n.TableName)
+		}
 		for _, using := range n.Using {
 			c.addTable(using.Name)
+		}
+		for _, from := range n.From {
+			c.addTable(from.Name)
+		}
+		if len(n.From) == 0 {
+			c.addDMLTargetTables(&n.DMLTargetFields)
+		} else {
+			for _, j := range n.Joins {
+				c.addTable(j.Right.Name)
+			}
 		}
 		c.collectFromExpression(n.Where, c.want)
 		if n.With != nil {

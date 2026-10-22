@@ -281,6 +281,10 @@ type InsertStatement struct {
 	// The assignments are stored as Columns plus a single Values row
 	// (Columns[i] = Values[0][i]); renderers emit SET when the shapes match.
 	SetSyntax bool
+	// InsertDialectFields holds the dialect-specific INSERT clauses
+	// (modifiers, OVERRIDING, row alias, OUTPUT INTO, RETURNING INTO,
+	// ClickHouse SETTINGS / FUNCTION / FORMAT, Oracle INSERT ALL/FIRST).
+	InsertDialectFields
 }
 
 func (i *InsertStatement) statementNode()      {}
@@ -331,7 +335,7 @@ func (i InsertStatement) Children() []Node {
 	if i.OnDuplicateKey != nil {
 		children = append(children, i.OnDuplicateKey)
 	}
-	return children
+	return i.insertDialectChildren(children)
 }
 
 // Values represents VALUES clause
@@ -359,6 +363,9 @@ type UpdateStatement struct {
 	Where       Expression
 	Returning   []Expression
 	Pos         models.Location // Source position of the UPDATE keyword (1-based line and column)
+	// DMLTargetFields holds modifiers, TOP, ONLY, extra targets, joins,
+	// OUTPUT, ORDER BY, LIMIT and RETURNING INTO (see ast_dml.go).
+	DMLTargetFields
 }
 
 // GetUpdates returns Assignments for backward compatibility.
@@ -386,7 +393,7 @@ func (u UpdateStatement) Children() []Node {
 		children = append(children, u.Where)
 	}
 	children = append(children, nodifyExpressions(u.Returning)...)
-	return children
+	return u.dmlTargetChildren(children)
 }
 
 // CreateTableStatement represents a CREATE TABLE statement
@@ -439,6 +446,13 @@ type DeleteStatement struct {
 	Where     Expression
 	Returning []Expression
 	Pos       models.Location // Source position of the DELETE keyword (1-based line and column)
+	// From is the source table list of the multi-table form
+	// DELETE t1[, t2] FROM t1 JOIN t2 ... (MySQL, SQL Server). When set, the
+	// targets (TableName/Alias and Tables) are written before FROM.
+	From []TableReference
+	// DMLTargetFields holds modifiers, TOP, ONLY, extra targets, joins,
+	// OUTPUT, ORDER BY, LIMIT and RETURNING INTO (see ast_dml.go).
+	DMLTargetFields
 }
 
 func (d *DeleteStatement) statementNode()      {}
@@ -452,11 +466,14 @@ func (d DeleteStatement) Children() []Node {
 	for i := range d.Using {
 		children = append(children, &d.Using[i])
 	}
+	for i := range d.From {
+		children = append(children, &d.From[i])
+	}
 	if d.Where != nil {
 		children = append(children, d.Where)
 	}
 	children = append(children, nodifyExpressions(d.Returning)...)
-	return children
+	return d.dmlTargetChildren(children)
 }
 
 // AlterTableStatement represents an ALTER TABLE statement.
@@ -550,6 +567,7 @@ type MergeStatement struct {
 	OnCondition Expression         // The join/match condition
 	WhenClauses []*MergeWhenClause // List of WHEN clauses
 	Output      []Expression       // SQL Server OUTPUT clause columns
+	Returning   []Expression       // PostgreSQL 17 RETURNING list
 }
 
 func (m *MergeStatement) statementNode()      {}
@@ -582,7 +600,7 @@ func (m *MergeStatement) childrenInPlace() []Node {
 	for _, e := range m.Output {
 		children = append(children, e)
 	}
-	return children
+	return append(children, nodifyExpressions(m.Returning)...)
 }
 
 // MergeWhenClause represents a WHEN clause in a MERGE statement
@@ -614,6 +632,11 @@ type MergeAction struct {
 	Columns       []string     // For INSERT: column list
 	Values        []Expression // For INSERT: value list
 	DefaultValues bool         // For INSERT: use DEFAULT VALUES
+	// Where is the Oracle action predicate: UPDATE SET ... WHERE cond or
+	// INSERT ... VALUES (...) WHERE cond.
+	Where Expression
+	// DeleteWhere is the Oracle UPDATE SET ... DELETE WHERE cond predicate.
+	DeleteWhere Expression
 }
 
 func (a *MergeAction) expressionNode()     {}
@@ -625,6 +648,12 @@ func (a MergeAction) Children() []Node {
 	}
 	for _, val := range a.Values {
 		children = append(children, val)
+	}
+	if a.Where != nil {
+		children = append(children, a.Where)
+	}
+	if a.DeleteWhere != nil {
+		children = append(children, a.DeleteWhere)
 	}
 	return children
 }
@@ -796,6 +825,12 @@ type ReplaceStatement struct {
 	TableName string
 	Columns   []Expression
 	Values    [][]Expression
+	// Query is the source of REPLACE ... SELECT.
+	Query QueryExpression
+	// SetSyntax marks REPLACE t SET col = expr, ... (Columns plus one Values row).
+	SetSyntax bool
+	// Returning is the MariaDB RETURNING list.
+	Returning []Expression
 }
 
 func (r *ReplaceStatement) statementNode()      {}
@@ -806,7 +841,10 @@ func (r ReplaceStatement) Children() []Node {
 	for _, row := range r.Values {
 		children = append(children, nodifyExpressions(row)...)
 	}
-	return children
+	if r.Query != nil {
+		children = append(children, r.Query)
+	}
+	return append(children, nodifyExpressions(r.Returning)...)
 }
 
 // ── MariaDB SEQUENCE DDL (10.3+) ───────────────────────────────────────────

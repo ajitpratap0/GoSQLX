@@ -399,6 +399,13 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 	if i == nil {
 		return ""
 	}
+	if i.MultiTable != nil {
+		// Oracle INSERT ALL / FIRST: rendered on one line by the AST.
+		if opts.AddSemicolon {
+			return i.SQL() + ";"
+		}
+		return i.SQL()
+	}
 	f := newNodeFormatter(opts)
 	sb := f.sb
 
@@ -407,9 +414,7 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 		sb.WriteString(f.clauseSep())
 	}
 
-	sb.WriteString(f.kw("INSERT INTO"))
-	sb.WriteString(" ")
-	sb.WriteString(ast.QuoteQualifiedName(i.TableName))
+	writeInsertHead(sb, f, i)
 
 	// MySQL INSERT ... SET form: Columns[k] = Values[0][k].
 	setForm := i.SetSyntax && i.Query == nil && len(i.Columns) > 0 &&
@@ -421,11 +426,9 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 		sb.WriteString(")")
 	}
 
-	if len(i.Output) > 0 && !setForm {
-		sb.WriteString(f.clauseSep())
-		sb.WriteString(f.kw("OUTPUT"))
-		sb.WriteString(" ")
-		sb.WriteString(exprListSQL(i.Output))
+	if !setForm {
+		writeDMLOutput(sb, f, i.Output, i.OutputInto)
+		writeInsertBeforeSource(sb, f, i)
 	}
 
 	if setForm {
@@ -457,6 +460,7 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("DEFAULT VALUES"))
 	}
+	writeInsertAfterSource(sb, f, i)
 
 	if i.OnConflict != nil {
 		sb.WriteString(onConflictSQL(i.OnConflict))
@@ -473,12 +477,7 @@ func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
 		sb.WriteString(strings.Join(upds, ", "))
 	}
 
-	if len(i.Returning) > 0 {
-		sb.WriteString(f.clauseSep())
-		sb.WriteString(f.kw("RETURNING"))
-		sb.WriteString(" ")
-		sb.WriteString(exprListSQL(i.Returning))
-	}
+	writeInsertTail(sb, f, i)
 
 	if opts.AddSemicolon {
 		sb.WriteString(";")
@@ -501,10 +500,11 @@ func renderUpdate(u *ast.UpdateStatement, opts ast.FormatOptions) string {
 
 	sb.WriteString(f.kw("UPDATE"))
 	sb.WriteString(" ")
-	sb.WriteString(ast.QuoteQualifiedName(u.TableName))
-	if u.Alias != "" {
-		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteTableAlias(u.Alias))
+	writeDMLModifiers(sb, f, u.Modifiers)
+	writeDMLTop(sb, f, u.Top)
+	writeDMLTargets(sb, f, &u.DMLTargetFields, u.TableName, u.Alias)
+	if len(u.From) == 0 {
+		writeDMLJoins(sb, f, u.Joins)
 	}
 
 	sb.WriteString(f.clauseSep())
@@ -515,6 +515,7 @@ func renderUpdate(u *ast.UpdateStatement, opts ast.FormatOptions) string {
 		upds[i] = ast.ColumnRefSQL(upd.Column) + " = " + exprSQL(upd.Value)
 	}
 	sb.WriteString(strings.Join(upds, ", "))
+	writeDMLOutput(sb, f, u.Output, u.OutputInto)
 
 	if len(u.From) > 0 {
 		sb.WriteString(f.clauseSep())
@@ -525,6 +526,7 @@ func renderUpdate(u *ast.UpdateStatement, opts ast.FormatOptions) string {
 			froms[i] = tableRefSQL(&u.From[i], f)
 		}
 		sb.WriteString(strings.Join(froms, ", "))
+		writeDMLJoins(sb, f, u.Joins)
 	}
 
 	if u.Where != nil {
@@ -533,13 +535,8 @@ func renderUpdate(u *ast.UpdateStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 		sb.WriteString(FormatExpression(u.Where, opts))
 	}
-
-	if len(u.Returning) > 0 {
-		sb.WriteString(f.clauseSep())
-		sb.WriteString(f.kw("RETURNING"))
-		sb.WriteString(" ")
-		sb.WriteString(exprListSQL(u.Returning))
-	}
+	writeDMLOrderLimit(sb, f, &u.DMLTargetFields)
+	writeReturning(sb, f, u.Returning, u.ReturningInto)
 
 	if opts.AddSemicolon {
 		sb.WriteString(";")
@@ -560,12 +557,26 @@ func renderDelete(d *ast.DeleteStatement, opts ast.FormatOptions) string {
 		sb.WriteString(f.clauseSep())
 	}
 
-	sb.WriteString(f.kw("DELETE FROM"))
+	sb.WriteString(f.kw("DELETE"))
 	sb.WriteString(" ")
-	sb.WriteString(ast.QuoteQualifiedName(d.TableName))
-	if d.Alias != "" {
+	writeDMLModifiers(sb, f, d.Modifiers)
+	writeDMLTop(sb, f, d.Top)
+	if len(d.From) == 0 {
+		sb.WriteString(f.kw("FROM"))
 		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteTableAlias(d.Alias))
+	}
+	writeDMLTargets(sb, f, &d.DMLTargetFields, d.TableName, d.Alias)
+	writeDMLOutput(sb, f, d.Output, d.OutputInto)
+
+	if len(d.From) > 0 {
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(f.kw("FROM"))
+		sb.WriteString(" ")
+		froms := make([]string, len(d.From))
+		for i := range d.From {
+			froms[i] = tableRefSQL(&d.From[i], f)
+		}
+		sb.WriteString(strings.Join(froms, ", "))
 	}
 
 	if len(d.Using) > 0 {
@@ -578,6 +589,7 @@ func renderDelete(d *ast.DeleteStatement, opts ast.FormatOptions) string {
 		}
 		sb.WriteString(strings.Join(usings, ", "))
 	}
+	writeDMLJoins(sb, f, d.Joins)
 
 	if d.Where != nil {
 		sb.WriteString(f.clauseSep())
@@ -585,13 +597,8 @@ func renderDelete(d *ast.DeleteStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 		sb.WriteString(FormatExpression(d.Where, opts))
 	}
-
-	if len(d.Returning) > 0 {
-		sb.WriteString(f.clauseSep())
-		sb.WriteString(f.kw("RETURNING"))
-		sb.WriteString(" ")
-		sb.WriteString(exprListSQL(d.Returning))
-	}
+	writeDMLOrderLimit(sb, f, &d.DMLTargetFields)
+	writeReturning(sb, f, d.Returning, d.ReturningInto)
 
 	if opts.AddSemicolon {
 		sb.WriteString(";")
@@ -1090,6 +1097,8 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 			sb.WriteString(f.kw("NOT MATCHED"))
 		case "NOT_MATCHED_BY_SOURCE":
 			sb.WriteString(f.kw("NOT MATCHED BY SOURCE"))
+		case "NOT_MATCHED_BY_TARGET":
+			sb.WriteString(f.kw("NOT MATCHED BY TARGET"))
 		default:
 			// An unknown kind is left out: "WHEN  THEN" does not parse.
 			sb.WriteString(f.kw(ast.MergeWhenText(when.Type)))
@@ -1141,9 +1150,13 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 						sb.WriteString(")")
 					}
 				}
+			default:
+				sb.WriteString(f.kw(ast.MergeActionText(when.Action.ActionType)))
 			}
+			writeMergeActionWhere(sb, f, when.Action)
 		}
 	}
+	writeMergeTail(sb, f, m)
 
 	if opts.AddSemicolon {
 		sb.WriteString(";")
@@ -1638,6 +1651,10 @@ func onConflictSQL(oc *ast.OnConflict) string {
 		sb.WriteString(" (")
 		sb.WriteString(ast.ColumnRefListSQL(oc.Target))
 		sb.WriteString(")")
+	}
+	if oc.TargetWhere != nil {
+		sb.WriteString(" WHERE ")
+		sb.WriteString(exprSQL(oc.TargetWhere))
 	}
 	if oc.Constraint != "" {
 		sb.WriteString(" ON CONSTRAINT ")

@@ -384,6 +384,12 @@ func peekWord(src string, j int) (w string, c byte, end int) {
 	return "", 0, j
 }
 
+// commentsOnly reports whether seg holds nothing but whitespace and comments.
+func commentsOnly(seg string) bool {
+	_, c, end := peekWord(seg, 0)
+	return c == 0 && end >= len(seg)
+}
+
 // isWordByte reports whether c can be part of an identifier-like word.
 func isWordByte(c byte) bool {
 	return c == '_' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' ||

@@ -172,3 +172,22 @@ func TestSplitStatements_ProceduralNoAlloc(t *testing.T) {
 		}
 	}
 }
+
+func TestCommentsOnly(t *testing.T) {
+	for in, want := range map[string]bool{
+		"":                     true,
+		"  \n\t":               true,
+		"-- c":                 true,
+		"-- c\n/* d */ -- e\n": true,
+		"/* unterminated":      true,
+		"SELECT 1":             false,
+		"-- c\nSELECT 1":       false,
+		"/* c */ SELECT 1":     false,
+		"/* c */ ; -- d":       false,
+		"(":                    false,
+	} {
+		if got := commentsOnly(in); got != want {
+			t.Errorf("commentsOnly(%q) = %v, want %v", in, got, want)
+		}
+	}
+}

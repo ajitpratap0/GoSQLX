@@ -163,12 +163,14 @@ func (p *Parser) parseUtilityStatement() (stmt ast.Statement, ok bool, err error
 }
 
 // atStatementBoundary reports whether the current token starts the input or
-// follows a ';'. Statements may follow one another without a semicolon, so
+// follows a ';' or a T-SQL utility statement that ended where this one begins
+// (see implicitEnd). Statements may follow one another without a semicolon, so
 // without this check the tail of a statement the parser stopped short in
 // (ALTER ... SET DEFAULT, FROM t USE INDEX) would be taken for a utility
 // statement and silently split off.
 func (p *Parser) atStatementBoundary() bool {
-	return p.currentPos == 0 || p.tokens[p.currentPos-1].Token.Type == models.TokenTypeSemicolon
+	return p.currentPos == 0 || p.tokens[p.currentPos-1].Token.Type == models.TokenTypeSemicolon ||
+		p.currentPos == p.implicitEnd-1
 }
 
 // beginIsBlock reports whether BEGIN opens a procedural block rather than a
@@ -196,12 +198,18 @@ func (p *Parser) peekStatementAfterOptions() bool {
 }
 
 // utilityStatementEnd returns the index of the token that ends the statement
-// starting at the current position (a top-level ';' or EOF), or an error when
-// its parentheses do not balance.
+// starting at the current position (a top-level ';' or EOF, or in SQL Server
+// the word that starts the next statement), or an error when its parentheses
+// do not balance.
 func (p *Parser) utilityStatementEnd() (int, error) {
 	depth := 0
 	i := p.currentPos
+	implicit := p.implicitEndAllowed()
 	for ; i < len(p.tokens); i++ {
+		if implicit && depth == 0 && p.startsNewStatement(i, p.currentPos) {
+			p.markImplicitEnd(i)
+			return i, nil
+		}
 		switch p.tokens[i].Token.Type {
 		case models.TokenTypeLParen:
 			depth++
@@ -276,8 +284,12 @@ func (p *Parser) parseVerbatimArgs(kind string) (ast.Statement, bool, error) {
 // as a UtilityStatement of the given kind that keeps its text as written.
 func (p *Parser) parseVerbatimStatement(kind string) (ast.Statement, bool, error) {
 	pos := p.currentLocation()
+	start := p.currentPos
 	text, err := p.consumeUtilityText()
 	if err != nil {
+		return nil, true, err
+	}
+	if err := p.verbatimTailError(start, p.currentPos); err != nil {
 		return nil, true, err
 	}
 	return &ast.UtilityStatement{Kind: kind, Text: text, Pos: pos}, true, nil
@@ -370,6 +382,9 @@ func (p *Parser) parseSetStatement() (ast.Statement, bool, error) {
 	if stmt.Name == "" {
 		p.seek(i)
 		return nil, true, p.expectedError("variable name after SET")
+	}
+	if err := p.setValueError(stmt.Name, i, start, end); err != nil {
+		return nil, true, err
 	}
 	stmt.Text = p.renderTokenRange(start, end)
 	p.seek(end)
@@ -482,6 +497,9 @@ func (p *Parser) parseShowOrUtility() (ast.Statement, error) {
 	savedPos, savedTok := p.currentPos, p.currentToken
 	boundary := p.atStatementBoundary()
 	p.advance() // SHOW
+	if p.showTailMissing() {
+		return nil, p.expectedError("object after SHOW")
+	}
 	stmt, err := p.parseShowStatement()
 	if err == nil && (p.isType(models.TokenTypeSemicolon) || p.isType(models.TokenTypeEOF)) {
 		return stmt, nil

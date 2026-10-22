@@ -157,6 +157,7 @@ func (p *Parser) Reset() {
 		p.tokenBuf = p.tokenBuf[:0]
 	}
 	p.currentPos = 0
+	p.implicitEnd = 0
 	p.currentToken = models.TokenWithSpan{}
 	p.depth = 0
 	p.ctx = nil
@@ -359,6 +360,10 @@ type Parser struct {
 	// Capabilities.PipesAsLogicalOr (MySQL, MariaDB) and pipesAsConcat is
 	// unset. Derived by refreshPipesMode; never set it directly.
 	pipesAsOr bool
+	// implicitEnd is one more than the token index at which a T-SQL utility
+	// statement ended without a ';' because the next statement began there
+	// (0: none). See utility_implicit_end.go.
+	implicitEnd int
 }
 
 // Deprecated: Parse is provided for backward compatibility only and is scheduled for
@@ -403,6 +408,7 @@ func (p *Parser) preprocess(tokens []models.TokenWithSpan) []models.TokenWithSpa
 func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 	p.tokens = tokens
 	p.currentPos = 0
+	p.implicitEnd = 0
 	if len(tokens) > 0 {
 		p.currentToken = tokens[0]
 	}
@@ -592,6 +598,7 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 
 	p.tokens = tokens
 	p.currentPos = 0
+	p.implicitEnd = 0
 	if len(tokens) > 0 {
 		p.currentToken = tokens[0]
 	}

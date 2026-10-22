@@ -29,7 +29,11 @@ _LIB_NAME = {
 
 def test_imported_from_installed_package_not_checkout():
     pkg_dir = os.path.dirname(os.path.abspath(pygosqlx.__file__))
-    assert os.path.commonpath([pkg_dir, _SOURCE_DIR]) != _SOURCE_DIR, (
+    try:
+        inside_checkout = os.path.commonpath([pkg_dir, _SOURCE_DIR]) == _SOURCE_DIR
+    except ValueError:  # different drives on Windows: cannot be nested
+        inside_checkout = False
+    assert not inside_checkout, (
         f"pygosqlx was imported from the source checkout ({pkg_dir}), "
         "not from the installed wheel"
     )

@@ -209,7 +209,7 @@ func formatNameSQL(name string) string {
 
 // writeMergeTail writes the MERGE OUTPUT and RETURNING clauses.
 func writeMergeTail(sb *strings.Builder, f *nodeFormatter, m *ast.MergeStatement) {
-	writeDMLOutput(sb, f, m.Output, nil)
+	writeDMLOutput(sb, f, m.Output, m.OutputInto)
 	writeReturning(sb, f, m.Returning, nil)
 }
 

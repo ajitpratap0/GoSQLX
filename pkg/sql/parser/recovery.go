@@ -180,6 +180,7 @@ func (p *Parser) ParseWithRecoveryFromModelTokens(tokens []models.TokenWithSpan)
 func (p *Parser) parseWithRecovery(tokens []models.TokenWithSpan) ([]ast.Statement, []error) {
 	p.tokens = tokens
 	p.currentPos = 0
+	p.implicitEnd = 0
 	if len(tokens) > 0 {
 		p.currentToken = tokens[0]
 	}

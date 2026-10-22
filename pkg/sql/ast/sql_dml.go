@@ -225,7 +225,7 @@ func (i *InsertStatement) writeMultiTableInsert(buf *bytes.Buffer) {
 
 // writeMergeTail writes the MERGE OUTPUT and RETURNING clauses.
 func (m *MergeStatement) writeMergeTail(buf *bytes.Buffer) {
-	writeDMLOutput(buf, m.Output, nil)
+	writeDMLOutput(buf, m.Output, m.OutputInto)
 	writeReturning(buf, m.Returning, nil)
 }
 

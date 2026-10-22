@@ -610,7 +610,7 @@ func releaseStatement(stmt Statement, mode releaseMode) {
 	case *CreateIndexStatement:
 		PutCreateIndexStatement(s)
 	case *MergeStatement:
-		PutMergeStatement(s)
+		releaseMergeStatement(s, mode)
 	case *CreateViewStatement:
 		PutCreateViewStatement(s)
 	case *CreateMaterializedViewStatement:
@@ -628,7 +628,7 @@ func releaseStatement(stmt Statement, mode releaseMode) {
 	case *UnsupportedStatement:
 		PutUnsupportedStatement(s)
 	case *ReplaceStatement:
-		PutReplaceStatement(s)
+		releaseReplaceStatement(s, mode)
 	case *AlterStatement:
 		PutAlterStatement(s)
 	// Sequence statements are pooled via NewXxx/ReleaseXxx helpers.

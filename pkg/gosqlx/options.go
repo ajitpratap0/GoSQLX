@@ -65,6 +65,10 @@ type parseOptions struct {
 	// Inputs that exceed the cap are rejected with ErrTooLarge before any
 	// parsing work begins.
 	maxBytes int64
+
+	// comments attaches the comments the tokenizer captured to the parsed
+	// AST (ast.AST.Comments), so FormatTree and FormatAST write them back.
+	comments bool
 }
 
 // defaultParseOptions returns the baseline configuration used when no options
@@ -193,5 +197,27 @@ func WithMaxBytes(n int64) Option {
 func WithRecovery() Option {
 	return func(o *parseOptions) {
 		o.recover = true
+	}
+}
+
+// WithComments keeps the comments of the SQL text: the tokenizer's comments
+// are attached to the parsed ast.AST (AST.Comments), and FormatTree and
+// FormatAST write them back out. Without it comments are discarded, which is
+// the default because they cost an allocation and most callers only inspect
+// the tree.
+//
+// FormatTree and FormatAST place comments without knowing where in the text
+// they stood: comments on their own line go in front of the query, comments
+// that shared a line with SQL after it. To keep each comment next to its
+// statement, and to keep optimizer hints in place, format the text with
+// Format instead.
+//
+// Example:
+//
+//	tree, err := gosqlx.ParseTree(ctx, "SELECT 1 -- one", gosqlx.WithComments())
+//	out := gosqlx.FormatTree(tree) // "SELECT 1 -- one"
+func WithComments() Option {
+	return func(o *parseOptions) {
+		o.comments = true
 	}
 }

@@ -170,3 +170,34 @@ func TestAddTableAlias_AmbiguousDML(t *testing.T) {
 		})
 	}
 }
+
+// AddTableAlias leaves the qualifiers of a subquery that names the table in
+// its own FROM alone: they refer to the subquery's table, and renaming them
+// to the outer alias would turn them into correlated references.
+func TestAddTableAlias_DMLSubqueryScope(t *testing.T) {
+	tests := []struct {
+		name string
+		sql  string
+		want string
+	}{
+		{"shadowing scalar subquery", "UPDATE t SET a = (SELECT max(t.b) FROM t)",
+			"UPDATE t x SET a = (SELECT max(t.b) FROM t)"},
+		{"shadowing IN subquery", "DELETE FROM t WHERE t.id IN (SELECT t.id FROM t WHERE t.b = 1)",
+			"DELETE FROM t x WHERE x.id IN (SELECT t.id FROM t WHERE t.b = 1)"},
+		{"correlated reference is renamed", "DELETE FROM t WHERE EXISTS (SELECT 1 FROM u WHERE u.id = t.id)",
+			"DELETE FROM t x WHERE EXISTS (SELECT 1 FROM u WHERE u.id = x.id)"},
+		{"aliased inner table does not shadow", "DELETE FROM t WHERE EXISTS (SELECT 1 FROM t t2 WHERE t2.p = t.id)",
+			"DELETE FROM t x WHERE EXISTS (SELECT 1 FROM t t2 WHERE t2.p = x.id)"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := applyDialect(t, keywords.DialectPostgreSQL, tc.sql, AddTableAlias("t", "x"))
+			if err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("got  %s\nwant %s", got, tc.want)
+			}
+		})
+	}
+}

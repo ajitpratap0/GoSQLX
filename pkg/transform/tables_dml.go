@@ -279,11 +279,15 @@ func (t *dmlAliasTargets) apply() {
 
 // qualifierRewriter returns a function that renames the qualifier of every
 // column that named the table (by name or previous alias) to the alias.
+// Columns inside a subquery whose own FROM / JOIN introduces one of those
+// names refer to the subquery's table, not the aliased one, and are left
+// alone.
 func (t *dmlAliasTargets) qualifierRewriter() func(ast.Expression) ast.Expression {
 	names := t.matched
 	return func(expr ast.Expression) ast.Expression {
+		shadowed := shadowedIdentifiers(expr, names)
 		return walkExpr(expr, func(e ast.Expression) ast.Expression {
-			if id, ok := e.(*ast.Identifier); ok && id.Table != "" {
+			if id, ok := e.(*ast.Identifier); ok && id.Table != "" && !shadowed[id] {
 				for _, n := range names {
 					if strings.EqualFold(id.Table, n) {
 						id.Table = t.alias
@@ -294,4 +298,73 @@ func (t *dmlAliasTargets) qualifierRewriter() func(ast.Expression) ast.Expressio
 			return e
 		})
 	}
+}
+
+// shadowedIdentifiers returns the identifiers of expr that sit inside a
+// subquery whose FROM or JOIN list introduces one of names, so that a
+// qualifier with that name resolves to the subquery's own table.
+func shadowedIdentifiers(expr ast.Expression, names []string) map[*ast.Identifier]bool {
+	var shadowed map[*ast.Identifier]bool
+	mark := func(e ast.Expression) ast.Expression {
+		if id, ok := e.(*ast.Identifier); ok {
+			if shadowed == nil {
+				shadowed = make(map[*ast.Identifier]bool)
+			}
+			shadowed[id] = true
+		}
+		return e
+	}
+	walkExpr(expr, func(e ast.Expression) ast.Expression {
+		if sel := exprSubquery(e); sel != nil && selectIntroduces(sel, names) {
+			walkStmtExprs(sel, mark)
+		}
+		return e
+	})
+	return shadowed
+}
+
+// exprSubquery returns the SELECT held by a subquery-bearing expression.
+func exprSubquery(e ast.Expression) *ast.SelectStatement {
+	var stmt ast.Statement
+	switch x := e.(type) {
+	case *ast.SubqueryExpression:
+		stmt = x.Subquery
+	case *ast.ExistsExpression:
+		stmt = x.Subquery
+	case *ast.InExpression:
+		stmt = x.Subquery
+	case *ast.AnyExpression:
+		stmt = x.Subquery
+	case *ast.AllExpression:
+		stmt = x.Subquery
+	case *ast.ArrayConstructorExpression:
+		stmt = x.Subquery
+	}
+	sel, _ := stmt.(*ast.SelectStatement)
+	return sel
+}
+
+// selectIntroduces reports whether the FROM or JOIN list of sel introduces
+// a table known by one of names.
+func selectIntroduces(sel *ast.SelectStatement, names []string) bool {
+	match := func(ref *ast.TableReference) bool {
+		eff := effectiveRefName(ref)
+		for _, n := range names {
+			if eff != "" && strings.EqualFold(eff, n) {
+				return true
+			}
+		}
+		return false
+	}
+	for i := range sel.From {
+		if match(&sel.From[i]) {
+			return true
+		}
+	}
+	for i := range sel.Joins {
+		if match(&sel.Joins[i].Right) {
+			return true
+		}
+	}
+	return false
 }

@@ -82,9 +82,10 @@ func (p *Parser) startsNewStatement(i, start int) bool {
 		return false
 	}
 	switch p.utilityWord(i - 1) {
-	case "FOR", "AS":
-		// DECLARE c CURSOR FOR SELECT ..., CURSOR FOR UPDATE: the word
-		// continues the statement.
+	case "FOR", "AS", "UNION", "EXCEPT", "INTERSECT", "ALL", "DISTINCT":
+		// DECLARE c CURSOR FOR SELECT ..., CURSOR FOR UPDATE, and the
+		// set-operation operands of a cursor query (... UNION [ALL]
+		// SELECT ...): the word continues the statement.
 		return false
 	}
 	if word == "WITH" {

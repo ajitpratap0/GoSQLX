@@ -54,9 +54,11 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 			return nil, p.expectedError("target alias after AS")
 		}
 		stmt.TargetAlias = p.currentToken.Token.Value
+		stmt.TargetAliasQuote = p.currentNameQuote()
 		p.advance()
 	} else if p.canBeAlias() && !p.isType(models.TokenTypeUsing) && p.currentToken.Token.Value != "USING" {
 		stmt.TargetAlias = p.currentToken.Token.Value
+		stmt.TargetAliasQuote = p.currentNameQuote()
 		p.advance()
 	}
 
@@ -74,6 +76,7 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 		}
 		// The renderers write the alias from SourceAlias.
 		stmt.SourceAlias, sourceRef.Alias = sourceRef.Alias, ""
+		stmt.SourceAliasQuote, sourceRef.AliasQuote = sourceRef.AliasQuote, 0
 		stmt.SourceTable = sourceRef
 	} else {
 		sourceRef, err := p.parseTableReference()
@@ -90,9 +93,11 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 			return nil, p.expectedError("source alias after AS")
 		}
 		stmt.SourceAlias = p.currentToken.Token.Value
+		stmt.SourceAliasQuote = p.currentNameQuote()
 		p.advance()
 	} else if stmt.SourceAlias == "" && p.canBeAlias() && !p.isType(models.TokenTypeOn) && p.currentToken.Token.Value != "ON" {
 		stmt.SourceAlias = p.currentToken.Token.Value
+		stmt.SourceAliasQuote = p.currentNameQuote()
 		p.advance()
 	}
 
@@ -229,6 +234,7 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 			}
 			// Handle qualified column names (e.g., t.name)
 			columnName := p.currentToken.Token.Value
+			columnQuote := p.currentNameQuote()
 			p.advance()
 
 			// Check for qualified name (table.column)
@@ -238,10 +244,11 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 					return nil, p.expectedError("column name after .")
 				}
 				columnName = fmt.Sprintf("%s.%s", columnName, p.currentToken.Token.Value)
+				columnQuote = p.appendNamePart(columnQuote)
 				p.advance()
 			}
 
-			setClause := ast.SetClause{Column: columnName}
+			setClause := ast.SetClause{Column: columnName, ColumnQuote: columnQuote}
 
 			if !p.isType(models.TokenTypeEq) {
 				return nil, p.expectedError("=")
@@ -277,6 +284,7 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 				if !p.isIdentifier() {
 					return nil, p.expectedError("column name")
 				}
+				action.ColumnQuotes = nameQuoteList(action.ColumnQuotes, len(action.Columns), p.currentNameQuote())
 				action.Columns = append(action.Columns, p.currentToken.Token.Value)
 				p.advance()
 

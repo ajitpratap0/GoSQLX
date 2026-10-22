@@ -30,11 +30,7 @@ import (
 // rendering gap. For these the CLI must refuse to format (return an error)
 // rather than emit changed SQL; once the gap is fixed they simply pass.
 var corpusFormatKnownGaps = map[string]string{
-	"corpus/orm/gorm_joins.sql":                     "follow-up: a name quoted only for case (\"Company\") renders bare; the AST does not record quoting, so the CLI refuses",
-	"realworld/mysql/01_app_crud.sql":               "follow-up: a reserved-word alias (`exists`) is written in ANSI double quotes; alias quoting is not dialect-aware",
-	"realworld/mysql/10_misc_functions.sql":         "follow-up: a string literal is rewritten by the formatter",
-	"realworld/oracle/01_app_crud.sql":              "follow-up: a case-sensitive quoted name (\"CreatedAt\") renders bare in some clause",
-	"realworld/postgresql/08_supabase_rls_misc.sql": "follow-up: a quoted reserved-word name (\"table\") renders bare in some clause",
+	"realworld/mysql/10_misc_functions.sql": "follow-up: a string literal is rewritten by the formatter",
 }
 
 // corpusDialect maps a testdata path to the dialect its SQL is written in.

@@ -73,6 +73,7 @@ func Transpile(sql string, from, to keywords.SQLDialect) (string, error) {
 				return "", fmt.Errorf("rewrite: %w", err)
 			}
 		}
+		requoteIdentifiers(stmt, from, to)
 	}
 
 	// Format each statement and join with ";\n".

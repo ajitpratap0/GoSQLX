@@ -96,43 +96,59 @@ func assertQuotedRoundTrip(t *testing.T, sql, want string, d keywords.SQLDialect
 
 // TestQuotedIdentifierRender_Issue611 covers quoted identifiers that are
 // reserved words or contain spaces: SQL() must keep the quotes so the output
-// re-parses as the same names in every dialect. A name quoted only for its
-// case renders bare, like the aliases and column lists it may refer to.
+// re-parses as the same names in every dialect. A name quoted for its case
+// keeps its quotes too where the dialect folds unquoted names (the parser
+// records it, see ast.NameQuote): upper-case letters in PostgreSQL and
+// generic SQL, lower-case letters in Oracle and Snowflake. Dialects that do
+// not fold drop quotes needed only for case, as before.
 func TestQuotedIdentifierRender_Issue611(t *testing.T) {
 	cases := []struct {
-		name string
-		sql  string
-		want string // "" means identical to sql
+		name      string
+		sql       string
+		want      string // "" means identical to sql
+		upperWant string // want in Oracle and Snowflake; "" means want
+		noneWant  string // want in dialects that do not fold; "" means want
 	}{
-		{"cte_column_reserved", `WITH c ("select") AS (SELECT 1) SELECT * FROM c`, ""},
-		{"cte_column_space", `WITH c ("a b") AS (SELECT 1) SELECT * FROM c`, ""},
-		{"view_column_reserved", `CREATE VIEW v ("select") AS SELECT 1`, ""},
-		{"select_reserved", `SELECT "select" FROM t`, ""},
-		{"select_space_case_table_space", `SELECT "a b", "Mixed" FROM "my table"`, `SELECT "a b", Mixed FROM "my table"`},
-		{"cte_name_reserved", `WITH "select" AS (SELECT 1) SELECT * FROM "select"`, ""},
-		{"mview_column_reserved", `CREATE MATERIALIZED VIEW mv ("select") AS SELECT 1`, ""},
-		{"cte_column_key", `WITH c ("key") AS (SELECT 1) SELECT * FROM c`, ""},
-		{"select_null_true", `SELECT "null", "true" FROM t`, ""},
-		{"join_reserved_table", `SELECT * FROM a JOIN "order" o ON a.id = o.id`, `SELECT * FROM a INNER JOIN "order" o ON a.id = o.id`},
-		{"qualified_reserved", `SELECT "T"."select" FROM t`, `SELECT T."select" FROM t`},
-		{"qualified_table_space", `SELECT * FROM "db"."My T"`, `SELECT * FROM db."My T"`},
+		{"cte_column_reserved", `WITH c ("select") AS (SELECT 1) SELECT * FROM c`, "", "", ""},
+		{"cte_column_space", `WITH c ("a b") AS (SELECT 1) SELECT * FROM c`, "", "", ""},
+		{"view_column_reserved", `CREATE VIEW v ("select") AS SELECT 1`, "", "", ""},
+		{"select_reserved", `SELECT "select" FROM t`, "", "", ""},
+		{"select_space_case_table_space", `SELECT "a b", "Mixed" FROM "my table"`, "", "", `SELECT "a b", Mixed FROM "my table"`},
+		{"cte_name_reserved", `WITH "select" AS (SELECT 1) SELECT * FROM "select"`, "", "", ""},
+		{"mview_column_reserved", `CREATE MATERIALIZED VIEW mv ("select") AS SELECT 1`, "", "", ""},
+		{"cte_column_key", `WITH c ("key") AS (SELECT 1) SELECT * FROM c`, "", "", ""},
+		{"select_null_true", `SELECT "null", "true" FROM t`, "", "", ""},
+		{"join_reserved_table", `SELECT * FROM a JOIN "order" o ON a.id = o.id`, `SELECT * FROM a INNER JOIN "order" o ON a.id = o.id`, "", ""},
+		{"qualified_reserved", `SELECT "T"."select" FROM t`, "", `SELECT T."select" FROM t`, `SELECT T."select" FROM t`},
+		{"qualified_table_space", `SELECT * FROM "db"."My T"`, `SELECT * FROM db."My T"`, `SELECT * FROM "db"."My T"`, ""},
 		// No-change guards: unquoted input renders as before.
-		{"guard_mixed_case_bare", `SELECT Mixed, id FROM Users`, ""},
-		{"guard_from_key", `SELECT * FROM key`, ""},
-		{"guard_cte_columns_bare", `WITH c (a, b) AS (SELECT 1, 2) SELECT * FROM c`, ""},
+		{"guard_mixed_case_bare", `SELECT Mixed, id FROM Users`, "", "", ""},
+		{"guard_from_key", `SELECT * FROM key`, "", "", ""},
+		{"guard_cte_columns_bare", `WITH c (a, b) AS (SELECT 1, 2) SELECT * FROM c`, "", "", ""},
 		// Bare names with combining marks (Devanagari vowel signs, a
 		// decomposed accent) are valid bare identifiers and stay unquoted.
-		{"guard_devanagari_table", `SELECT * FROM उपयोगकर्ता`, ""},
-		{"guard_devanagari_cte", `WITH उपयोगकर्ता AS (SELECT 1) SELECT * FROM उपयोगकर्ता`, ""},
-		{"guard_decomposed_table", "SELECT * FROM Cafe\u0301", ""},
-		{"guard_decomposed_join", "SELECT * FROM a LEFT JOIN cafe\u0301_tbl c ON a.id = c.id", ""},
+		{"guard_devanagari_table", `SELECT * FROM उपयोगकर्ता`, "", "", ""},
+		{"guard_devanagari_cte", `WITH उपयोगकर्ता AS (SELECT 1) SELECT * FROM उपयोगकर्ता`, "", "", ""},
+		{"guard_decomposed_table", "SELECT * FROM Cafe\u0301", "", "", ""},
+		{"guard_decomposed_join", "SELECT * FROM a LEFT JOIN cafe\u0301_tbl c ON a.id = c.id", "", "", ""},
 	}
 	for _, tc := range cases {
-		want := tc.want
-		if want == "" {
-			want = tc.sql
-		}
 		for _, d := range quotedRenderDialects {
+			want := tc.want
+			if want == "" {
+				want = tc.sql
+			}
+			switch d {
+			case keywords.DialectOracle, keywords.DialectSnowflake:
+				if tc.upperWant != "" {
+					want = tc.upperWant
+				}
+			case keywords.DialectGeneric, keywords.DialectPostgreSQL:
+			default:
+				if tc.noneWant != "" {
+					want = tc.noneWant
+				}
+			}
 			t.Run(tc.name+"/"+string(d), func(t *testing.T) {
 				tree := assertQuotedRoundTrip(t, tc.sql, want, d)
 				defer ast.ReleaseAST(tree)

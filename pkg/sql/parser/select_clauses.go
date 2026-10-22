@@ -605,7 +605,7 @@ func (p *Parser) parseJoinCondition(joinType string, isNatural, isApply bool) (a
 			if !p.isIdentifier() {
 				return nil, nil, p.expectedError("column name in USING")
 			}
-			usingColumns = append(usingColumns, &ast.Identifier{Name: p.currentToken.Token.Value, Pos: p.currentLocation()})
+			usingColumns = append(usingColumns, p.currentColumnIdent())
 			p.advance()
 			if !p.isType(models.TokenTypeComma) {
 				break

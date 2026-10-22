@@ -587,7 +587,7 @@ func renderCreateTable(c *ast.CreateTableStatement, opts ast.FormatOptions) stri
 		sb.WriteString(f.kw("IF NOT EXISTS"))
 		sb.WriteString(" ")
 	}
-	sb.WriteString(ast.QuoteQualifiedName(c.Name))
+	sb.WriteString(ast.QuoteQualifiedNameWith(c.Name, f.nq(c.NameQuote)))
 
 	if opts.NewlinePerClause {
 		sb.WriteString(" (\n")
@@ -845,11 +845,11 @@ func renderCreateView(c *ast.CreateViewStatement, opts ast.FormatOptions) string
 		sb.WriteString(f.kw("IF NOT EXISTS"))
 		sb.WriteString(" ")
 	}
-	sb.WriteString(ast.QuoteQualifiedName(c.Name))
+	sb.WriteString(ast.QuoteQualifiedNameWith(c.Name, f.nq(c.NameQuote)))
 
 	if len(c.Columns) > 0 {
 		sb.WriteString(" (")
-		sb.WriteString(quoteNames(c.Columns))
+		sb.WriteString(f.quoteNamesWith(c.Columns, c.ColumnQuotes))
 		sb.WriteString(")")
 	}
 
@@ -1030,7 +1030,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 	sb.WriteString(tableRefSQL(&m.TargetTable, f))
 	if m.TargetAlias != "" {
 		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteTableAlias(m.TargetAlias))
+		sb.WriteString(ast.QuoteTableAliasWith(m.TargetAlias, f.nq(m.TargetAliasQuote)))
 	}
 
 	sb.WriteString(f.clauseSep())
@@ -1039,7 +1039,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 	sb.WriteString(tableRefSQL(&m.SourceTable, f))
 	if m.SourceAlias != "" {
 		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteTableAlias(m.SourceAlias))
+		sb.WriteString(ast.QuoteTableAliasWith(m.SourceAlias, f.nq(m.SourceAliasQuote)))
 	}
 
 	sb.WriteString(f.clauseSep())
@@ -1083,7 +1083,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 				sb.WriteString(" ")
 				sets := make([]string, len(when.Action.SetClauses))
 				for i, sc := range when.Action.SetClauses {
-					sets[i] = ast.QuoteQualifiedName(sc.Column) + " = " + exprSQL(sc.Value)
+					sets[i] = ast.QuoteQualifiedNameWith(sc.Column, f.nq(sc.ColumnQuote)) + " = " + exprSQL(sc.Value)
 				}
 				sb.WriteString(strings.Join(sets, ", "))
 			case "DELETE":
@@ -1096,7 +1096,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 				} else {
 					if len(when.Action.Columns) > 0 {
 						sb.WriteString(" (")
-						sb.WriteString(quoteColumnNames(when.Action.Columns))
+						sb.WriteString(f.quoteColumnNamesWith(when.Action.Columns, when.Action.ColumnQuotes))
 						sb.WriteString(")")
 					}
 					if len(when.Action.Values) > 0 {
@@ -1279,9 +1279,9 @@ func renderWith(w *ast.WithClause, f *nodeFormatter) string {
 	}
 	ctes := make([]string, len(w.CTEs))
 	for i, cte := range w.CTEs {
-		s := ast.QuoteName(cte.Name) + " "
+		s := ast.QuoteNameWith(cte.Name, f.nq(cte.NameQuote)) + " "
 		if len(cte.Columns) > 0 {
-			s += "(" + quoteNames(cte.Columns) + ") "
+			s += "(" + f.quoteNamesWith(cte.Columns, cte.ColumnQuotes) + ") "
 		}
 		s += f.kw("AS") + " ("
 		s += FormatStatement(cte.Statement, nestedOpts(f.opts))
@@ -1380,18 +1380,22 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		sb.WriteString(stmtSQL(t.SetSubquery))
 		sb.WriteString(")")
 	} else {
-		sb.WriteString(ast.QuoteQualifiedName(t.Name))
+		sb.WriteString(ast.QuoteQualifiedNameWith(t.Name, f.nq(t.NameQuote)))
 	}
 	if t.Alias != "" && t.Pivot == nil && t.Unpivot == nil {
 		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteTableAlias(t.Alias))
+		sb.WriteString(ast.QuoteTableAliasWith(t.Alias, f.nq(t.AliasQuote)))
 		if t.ColumnAliases != nil && len(t.ColumnAliases.Names) > 0 && t.TableFunc != nil {
 			sb.WriteString("(")
 			for i, c := range t.ColumnAliases.Names {
 				if i > 0 {
 					sb.WriteString(", ")
 				}
-				sb.WriteString(ast.QuoteColumnName(c))
+				var q ast.NameQuote
+				if i < len(t.ColumnAliases.Quotes) {
+					q = t.ColumnAliases.Quotes[i]
+				}
+				sb.WriteString(ast.QuoteColumnNameWith(c, f.nq(q)))
 			}
 			sb.WriteString(")")
 		}
@@ -1451,7 +1455,7 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("AS"))
 		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteTableAlias(t.Alias))
+		sb.WriteString(ast.QuoteTableAliasWith(t.Alias, f.nq(t.AliasQuote)))
 	}
 	return sb.String()
 }
@@ -1679,7 +1683,7 @@ func onConflictSQL(oc *ast.OnConflict) string {
 // columnDefSQL renders a column definition.
 func columnDefSQL(c *ast.ColumnDef) string {
 	var sb strings.Builder
-	sb.WriteString(ast.QuoteColumnName(c.Name))
+	sb.WriteString(ast.QuoteColumnNameWith(c.Name, c.NameQuote))
 	sb.WriteString(" ")
 	sb.WriteString(ast.QuoteDataType(c.Type))
 	for _, con := range c.Constraints {

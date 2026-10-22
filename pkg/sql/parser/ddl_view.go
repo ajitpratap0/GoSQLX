@@ -46,11 +46,12 @@ func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStat
 	}
 
 	// Parse view name (supports schema.view qualification and double-quoted identifiers)
-	viewName, err := p.parseQualifiedName()
+	viewName, viewQuote, err := p.parseQualifiedNameQuoted()
 	if err != nil {
 		return nil, p.qualifiedNameError(err, "view name")
 	}
 	stmt.Name = viewName
+	stmt.NameQuote = viewQuote
 
 	// Parse optional column list
 	if p.isType(models.TokenTypeLParen) {
@@ -59,6 +60,7 @@ func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStat
 			if !p.isIdentifier() {
 				return nil, p.expectedError("column name")
 			}
+			stmt.ColumnQuotes = nameQuoteList(stmt.ColumnQuotes, len(stmt.Columns), p.currentNameQuote())
 			stmt.Columns = append(stmt.Columns, p.currentToken.Token.Value)
 			p.advance()
 

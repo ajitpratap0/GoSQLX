@@ -17,10 +17,12 @@
 // references and INSERT/UPDATE/DELETE targets, select-item, table and
 // ARRAY JOIN aliases, window names, DDL object, column and constraint names,
 // function names) and for the free-text positions rendered next to them
-// (column data types, table option and PRAGMA values). Those positions record
-// no quote information, so a name is quoted whenever a bare rendering could
-// not re-parse as the same name, and a free-text value that is not plainly
-// shaped is quoted as a whole.
+// (column data types, table option and PRAGMA values). A name is quoted
+// whenever a bare rendering could not re-parse as the same name, and a
+// free-text value that is not plainly shaped is quoted as a whole. Where the
+// parser records how a name was delimited (NameQuote, see name_quote.go), the
+// *Q / *With variants also keep the quotes the source needed for letter case
+// or a keyword, in the source's delimiters.
 package ast
 
 import (
@@ -419,9 +421,9 @@ var constraintNameWords = map[string]bool{
 // written double-quoted: it is not plain (ASCII letters, digits and '_', not
 // starting with a digit), or it is a keyword (KEY, INDEX, DEFAULT, TABLE, ...)
 // the parser does not accept bare in that position. Case alone does not force
-// quotes: the AST does not record whether a name was quoted, and quoting an
-// unquoted PK_USERS would change the name in case-folding dialects. This
-// matches Identifier.SQL(), which renders names quoted only for case bare.
+// quotes: constraint names do not record whether they were quoted, and
+// quoting an unquoted PK_USERS would change the name in case-folding
+// dialects.
 func constraintNameNeedsQuoting(name string) bool {
 	if name == "" || (name[0] >= '0' && name[0] <= '9') {
 		return true
@@ -873,13 +875,12 @@ func QuoteOperator(op string) string {
 
 // columnRefNeedsQuoting reports whether e is an identifier whose name is a
 // word the parser rejects bare in every name position but which Identifier
-// rendering would leave bare (it was not recorded as Quoted, for example a
-// MySQL `select` or SQL Server [select]). Such a name is quoted where it is
-// a write target: an INSERT column, a SET or DO UPDATE SET target, an ON
-// CONFLICT target.
+// rendering would leave bare (it was not recorded as delimited in the
+// source). Such a name is quoted where it is a write target: an INSERT
+// column, a SET or DO UPDATE SET target, an ON CONFLICT target.
 func columnRefNeedsQuoting(e Expression) (*Identifier, bool) {
 	id, ok := e.(*Identifier)
-	if !ok || id == nil || id.Quoted || !isReservedName(id.Name, true) {
+	if !ok || id == nil || id.Quoted || id.QuoteStyle != 0 || id.Quotes.Part(0) || !isReservedName(id.Name, true) {
 		return nil, false
 	}
 	return id, true
@@ -893,11 +894,9 @@ func writeColumnRef(buf *bytes.Buffer, e Expression) {
 		writeExpr(buf, e)
 		return
 	}
-	if id.Table != "" {
-		writeDottedIdentifier(buf, id.Table)
-		buf.WriteByte('.')
-	}
-	writeQuotedIdentifier(buf, id.Name)
+	forced := *id
+	forced.Quotes = forced.Quotes.WithPart(0)
+	forced.writeSQL(buf)
 }
 
 // writeColumnRefList writes exprs separated by ", ", each via writeColumnRef.

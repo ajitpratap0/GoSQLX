@@ -150,6 +150,10 @@ type FunctionCall struct {
 	Pos           models.Location     // Source position of the function name (1-based line and column)
 	Separator     *LiteralValue       // MySQL/MariaDB GROUP_CONCAT(... SEPARATOR 'str'); nil when absent
 	Keep          *KeepClause         // Oracle KEEP (DENSE_RANK FIRST|LAST ORDER BY ...); nil when absent
+	// NameQuote records the parts of Name the source delimited and that
+	// must stay delimited, such as s."select" or "MySchema"."MyFunc" (see
+	// NameQuote).
+	NameQuote NameQuote
 }
 
 func (f *FunctionCall) expressionNode()     {}
@@ -709,6 +713,9 @@ func (c CastExpression) Children() []Node {
 type AliasedExpression struct {
 	Expr  Expression
 	Alias string
+	// AliasQuote records the delimiters the source wrote around Alias when
+	// they must be kept (see NameQuote).
+	AliasQuote NameQuote
 }
 
 func (a *AliasedExpression) expressionNode()     {}

@@ -199,19 +199,21 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		identPos := p.currentLocation()
 		identName := p.currentToken.Token.Value
 		identQuote := p.currentIdentQuote()
+		identQuotes := p.appendNamePartQuoted(0, identQuote)
 		p.advance()
 
 		// Check for function call (identifier followed by parentheses)
 		if p.isType(models.TokenTypeLParen) {
 			// Oracle outer-join marker: col(+)
 			if p.isOuterJoinMarker() {
-				return p.parseOuterJoinMarker(&ast.Identifier{Name: identName, Pos: identPos, Quoted: identQuote == '"', QuoteStyle: identQuote}), nil
+				return p.parseOuterJoinMarker(&ast.Identifier{Name: identName, Pos: identPos, Quoted: identQuote == '"', QuoteStyle: identQuote, Quotes: identQuotes}), nil
 			}
 			// This is a function call
 			funcCall, err := p.parseFunctionCall(identName)
 			if err != nil {
 				return nil, err
 			}
+			funcCall.NameQuote = identQuotes
 			// Assign position of function name
 			if funcCall.Pos.IsZero() {
 				funcCall.Pos = identPos
@@ -234,7 +236,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		}
 
 		// Handle regular identifier or qualified identifier (table.column or table.*)
-		ident := &ast.Identifier{Name: identName, Pos: identPos, Quoted: identQuote == '"', QuoteStyle: identQuote}
+		ident := &ast.Identifier{Name: identName, Pos: identPos, Quoted: identQuote == '"', QuoteStyle: identQuote, Quotes: identQuotes}
 
 		// Check for qualified identifier (table.column) or qualified asterisk (table.*)
 		if p.isType(models.TokenTypePeriod) {
@@ -247,6 +249,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				ident.Table = ident.Name
 				ident.Name = "*"
 				ident.Quoted = false
+				ident.Quotes = ident.Quotes.AppendPart(false)
 				p.advance()
 			} else if p.isQualifiedNamePart() {
 				// Handle table.column (qualified identifier).
@@ -262,6 +265,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				if q != 0 {
 					ident.QuoteStyle = q
 				}
+				ident.Quotes = p.appendNamePartQuoted(ident.Quotes, q)
 				p.advance()
 
 				// Multi-part reference: db.table.column (MySQL/MariaDB),
@@ -610,6 +614,7 @@ func (p *Parser) parseMultiPartColumnRef(ident *ast.Identifier) error {
 		case p.isType(models.TokenTypeAsterisk) || p.isType(models.TokenTypeMul):
 			parts[n] = "*"
 			lastQuoted = false
+			ident.Quotes = ident.Quotes.AppendPart(false)
 			n++
 			p.advance()
 			if p.isType(models.TokenTypePeriod) {
@@ -622,6 +627,7 @@ func (p *Parser) parseMultiPartColumnRef(ident *ast.Identifier) error {
 			if q != 0 {
 				ident.QuoteStyle = q
 			}
+			ident.Quotes = p.appendNamePartQuoted(ident.Quotes, q)
 			n++
 			p.advance()
 		default:

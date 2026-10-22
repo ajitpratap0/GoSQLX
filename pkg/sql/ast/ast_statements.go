@@ -432,6 +432,9 @@ type CreateTableStatement struct {
 	// PeriodDefinitions holds PERIOD FOR clauses for application-time or system-time periods.
 	// Example: PERIOD FOR app_time (start_col, end_col)
 	PeriodDefinitions []*PeriodDefinition
+	// NameQuote records the delimiters of Name when they must be kept
+	// (see NameQuote).
+	NameQuote NameQuote
 }
 
 func (c *CreateTableStatement) statementNode()      {}
@@ -584,6 +587,10 @@ type MergeStatement struct {
 	WhenClauses []*MergeWhenClause // List of WHEN clauses
 	Output      []Expression       // SQL Server OUTPUT clause columns
 	Returning   []Expression       // PostgreSQL 17 RETURNING list
+	// TargetAliasQuote and SourceAliasQuote record the delimiters of
+	// TargetAlias and SourceAlias when they must be kept (see NameQuote).
+	TargetAliasQuote NameQuote
+	SourceAliasQuote NameQuote
 }
 
 func (m *MergeStatement) statementNode()      {}
@@ -653,6 +660,9 @@ type MergeAction struct {
 	Where Expression
 	// DeleteWhere is the Oracle UPDATE SET ... DELETE WHERE cond predicate.
 	DeleteWhere Expression
+	// ColumnQuotes records the delimiters of each Columns entry by index
+	// (nil when no column keeps delimiters); see NameQuote.
+	ColumnQuotes []NameQuote
 }
 
 func (a *MergeAction) expressionNode()     {}
@@ -678,6 +688,9 @@ func (a MergeAction) Children() []Node {
 type SetClause struct {
 	Column string
 	Value  Expression
+	// ColumnQuote records the delimiters of Column's parts when they must
+	// be kept (see NameQuote).
+	ColumnQuote NameQuote
 }
 
 func (s *SetClause) expressionNode()     {}
@@ -699,6 +712,11 @@ type CreateViewStatement struct {
 	Columns     []string  // Optional column list
 	Query       Statement // The SELECT statement
 	WithOption  string    // PostgreSQL: WITH (CHECK OPTION | CASCADED | LOCAL)
+	// NameQuote records the delimiters of Name when they must be kept, and
+	// ColumnQuotes those of each Columns entry by index (nil when no column
+	// keeps delimiters); see NameQuote.
+	NameQuote    NameQuote
+	ColumnQuotes []NameQuote
 }
 
 func (c *CreateViewStatement) statementNode()      {}

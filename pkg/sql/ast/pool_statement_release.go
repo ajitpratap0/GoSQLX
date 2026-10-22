@@ -591,6 +591,8 @@ func releaseTableReference(tr *TableReference, mode releaseMode) {
 	}
 	tr.Name = ""
 	tr.Alias = ""
+	tr.NameQuote = 0
+	tr.AliasQuote = 0
 	tr.Lateral = false
 	tr.Final = false
 	tr.TableHints = nil
@@ -657,6 +659,7 @@ func PutCreateTableStatement(stmt *CreateTableStatement) {
 		stmt.Columns[i].Constraints = stmt.Columns[i].Constraints[:0]
 		stmt.Columns[i].Name = ""
 		stmt.Columns[i].Type = ""
+		stmt.Columns[i].NameQuote = 0
 	}
 	stmt.Columns = stmt.Columns[:0]
 
@@ -719,6 +722,7 @@ func PutCreateTableStatement(stmt *CreateTableStatement) {
 	stmt.IfNotExists = false
 	stmt.Temporary = false
 	stmt.Name = ""
+	stmt.NameQuote = 0
 
 	createTableStmtPool.Put(stmt)
 }
@@ -796,6 +800,7 @@ func PutMergeStatement(stmt *MergeStatement) {
 				PutExpression(stmt.WhenClauses[i].Action.SetClauses[j].Value)
 				stmt.WhenClauses[i].Action.SetClauses[j].Value = nil
 				stmt.WhenClauses[i].Action.SetClauses[j].Column = ""
+				stmt.WhenClauses[i].Action.SetClauses[j].ColumnQuote = 0
 			}
 			stmt.WhenClauses[i].Action.SetClauses = stmt.WhenClauses[i].Action.SetClauses[:0]
 			for j, expr := range stmt.WhenClauses[i].Action.Values {
@@ -804,6 +809,7 @@ func PutMergeStatement(stmt *MergeStatement) {
 			}
 			stmt.WhenClauses[i].Action.Values = stmt.WhenClauses[i].Action.Values[:0]
 			stmt.WhenClauses[i].Action.Columns = stmt.WhenClauses[i].Action.Columns[:0]
+			stmt.WhenClauses[i].Action.ColumnQuotes = nil
 			stmt.WhenClauses[i].Action.ActionType = ""
 			stmt.WhenClauses[i].Action.DefaultValues = false
 			PutExpression(stmt.WhenClauses[i].Action.Where)
@@ -834,6 +840,8 @@ func PutMergeStatement(stmt *MergeStatement) {
 	stmt.SourceTable = TableReference{}
 	stmt.TargetAlias = ""
 	stmt.SourceAlias = ""
+	stmt.TargetAliasQuote = 0
+	stmt.SourceAliasQuote = 0
 
 	mergeStmtPool.Put(stmt)
 }

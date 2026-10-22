@@ -113,14 +113,15 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		}
 	} else {
 		// Parse regular table name (supports schema.table qualification)
-		qualifiedName, err := p.parseQualifiedName()
+		qualifiedName, nameQuote, err := p.parseQualifiedNameQuoted()
 		if err != nil {
 			return tableRef, err
 		}
 
 		tableRef = ast.TableReference{
-			Name:    qualifiedName,
-			Lateral: isLateral,
+			Name:      qualifiedName,
+			NameQuote: nameQuote,
+			Lateral:   isLateral,
 		}
 
 		// Function-call table reference (Snowflake FLATTEN, TABLE(...),
@@ -197,6 +198,7 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		}
 		if p.isIdentifier() {
 			tableRef.Alias = p.currentToken.Token.Value
+			tableRef.AliasQuote = p.currentNameQuote()
 			p.advance()
 			if err := p.parseTableFuncColumnAliases(&tableRef); err != nil {
 				return tableRef, err
@@ -262,6 +264,7 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		}
 		if p.isIdentifier() {
 			tableRef.Alias = p.currentToken.Token.Value
+			tableRef.AliasQuote = p.currentNameQuote()
 			p.advance()
 		}
 	}
@@ -335,7 +338,7 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 			return ref, err
 		}
 	} else {
-		joinedName, err := p.parseQualifiedName()
+		joinedName, joinedQuote, err := p.parseQualifiedNameQuoted()
 		if isQualifiedNameTooLong(err) {
 			return ref, err
 		}
@@ -347,7 +350,7 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 				"",
 			)
 		}
-		ref = ast.TableReference{Name: joinedName, Lateral: isLateral}
+		ref = ast.TableReference{Name: joinedName, NameQuote: joinedQuote, Lateral: isLateral}
 		if err := p.parseApplyFunctionCall(joinType, &ref); err != nil {
 			return ref, err
 		}
@@ -370,6 +373,7 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 		}
 		if p.isIdentifier() {
 			ref.Alias = p.currentToken.Token.Value
+			ref.AliasQuote = p.currentNameQuote()
 			p.advance()
 			if err := p.parseTableFuncColumnAliases(&ref); err != nil {
 				return ref, err
@@ -435,6 +439,7 @@ func (p *Parser) parseTableFunctionCall(ref *ast.TableReference) error {
 	if err != nil {
 		return err
 	}
+	call.NameQuote = ref.NameQuote
 	ref.TableFunc = call
 	// PostgreSQL: unnest(arr) WITH ORDINALITY. The other table-function
 	// dialects have no such modifier (BigQuery spells it WITH OFFSET after
@@ -464,6 +469,7 @@ func (p *Parser) parseTableFuncColumnAliases(ref *ast.TableReference) error {
 		if !p.isIdentifier() && !p.isNonReservedKeyword() {
 			return p.expectedError("column alias in table function alias list")
 		}
+		list.Quotes = nameQuoteList(list.Quotes, len(list.Names), p.currentNameQuote())
 		list.Names = append(list.Names, p.currentToken.Token.Value)
 		p.advance()
 		if p.isType(models.TokenTypeComma) {

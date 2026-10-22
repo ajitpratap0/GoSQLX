@@ -53,10 +53,10 @@ func writeDMLTargets(sb *strings.Builder, f *nodeFormatter, d *ast.DMLTargetFiel
 	}
 	first := true
 	if name != "" {
-		sb.WriteString(ast.QuoteQualifiedName(name))
+		sb.WriteString(ast.QuoteQualifiedNameWith(name, f.nq(d.TableNameQuote)))
 		if alias != "" {
 			sb.WriteString(" ")
-			sb.WriteString(ast.QuoteTableAlias(alias))
+			sb.WriteString(ast.QuoteTableAliasWith(alias, f.nq(d.AliasQuote)))
 		}
 		first = false
 	}
@@ -145,7 +145,7 @@ func writeInsertHead(sb *strings.Builder, f *nodeFormatter, i *ast.InsertStateme
 		sb.WriteString(exprSQL(i.TableFunction))
 		return
 	}
-	sb.WriteString(ast.QuoteQualifiedName(i.TableName))
+	sb.WriteString(ast.QuoteQualifiedNameWith(i.TableName, f.nq(i.TableNameQuote)))
 }
 
 // writeInsertBeforeSource writes ClickHouse SETTINGS and PostgreSQL

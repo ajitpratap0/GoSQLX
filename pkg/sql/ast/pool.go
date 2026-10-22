@@ -707,6 +707,8 @@ func PutCreateViewStatement(stmt *CreateViewStatement) {
 	stmt.Columns = stmt.Columns[:0]
 	stmt.Query = nil
 	stmt.WithOption = ""
+	stmt.NameQuote = 0
+	stmt.ColumnQuotes = nil
 
 	createViewStmtPool.Put(stmt)
 }

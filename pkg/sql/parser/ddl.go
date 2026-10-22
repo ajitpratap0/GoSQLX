@@ -190,11 +190,12 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 	}
 
 	// Parse table name (supports schema.table qualification and double-quoted identifiers)
-	createTableName, err := p.parseQualifiedName()
+	createTableName, createTableQuote, err := p.parseQualifiedNameQuoted()
 	if err != nil {
 		return nil, p.qualifiedNameError(err, "table name")
 	}
 	stmt.Name = createTableName
+	stmt.NameQuote = createTableQuote
 
 	// Snowflake: COPY GRANTS modifier before the column list or AS SELECT.
 	// Consumed but not modeled on the AST.

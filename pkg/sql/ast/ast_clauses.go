@@ -48,6 +48,11 @@ type CommonTableExpr struct {
 	ScalarExpr   Expression      // ClickHouse: WITH <expr> AS <name> (scalar CTE, no subquery)
 	Materialized *bool           // nil = default, true = MATERIALIZED, false = NOT MATERIALIZED
 	Pos          models.Location // Source position of the CTE name (1-based line and column)
+	// NameQuote records the delimiters of Name when they must be kept, and
+	// ColumnQuotes those of each Columns entry by index (nil when no
+	// column keeps delimiters); see NameQuote.
+	NameQuote    NameQuote
+	ColumnQuotes []NameQuote
 }
 
 func (c *CommonTableExpr) statementNode()      {}
@@ -197,7 +202,12 @@ type TableReference struct {
 	// The three flags are kept together so they share one word of padding;
 	// TableReference is copied by value on the parser hot path.
 	WithOrdinality bool
-	TableHints     []string // SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
+	// NameQuote and AliasQuote record the parts of Name and Alias the
+	// source delimited and that must stay delimited (see NameQuote). They
+	// share the flags' word of padding.
+	NameQuote  NameQuote
+	AliasQuote NameQuote
+	TableHints []string // SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
 	// TableFunc is a function-call table reference such as
 	// Snowflake LATERAL FLATTEN(input => col), TABLE(my_func(1,2)),
 	// IDENTIFIER('t'), or PostgreSQL unnest(array_col). When set, Name
@@ -235,6 +245,9 @@ type TableReference struct {
 // in unnest(arr) AS g(a, b). Names holds the column names in order.
 type ColumnAliasList struct {
 	Names []string
+	// Quotes holds the NameQuote of each name by index; it is nil when no
+	// name keeps delimiters.
+	Quotes []NameQuote
 }
 
 func (t *TableReference) statementNode() {}
@@ -565,6 +578,9 @@ type ColumnDef struct {
 	Name        string
 	Type        string
 	Constraints []ColumnConstraint
+	// NameQuote records the delimiters of Name when they must be kept
+	// (see NameQuote).
+	NameQuote NameQuote
 }
 
 func (c *ColumnDef) expressionNode()     {}

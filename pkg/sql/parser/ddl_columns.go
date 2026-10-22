@@ -43,7 +43,7 @@ func (p *Parser) parseColumnName() *ast.Identifier {
 		return nil
 	}
 	pos := p.currentLocation()
-	ident := &ast.Identifier{Name: val, Pos: pos}
+	ident := &ast.Identifier{Name: val, Pos: pos, Quotes: p.currentNameQuote()}
 	p.advance()
 	return ident
 }
@@ -89,8 +89,9 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 	}
 
 	colDef := &ast.ColumnDef{
-		Name: name.Name,
-		Type: dataTypeStr,
+		Name:      name.Name,
+		Type:      dataTypeStr,
+		NameQuote: name.Quotes,
 	}
 
 	// ClickHouse column options that may appear between the type and the

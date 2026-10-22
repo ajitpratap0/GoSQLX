@@ -500,8 +500,9 @@ func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
 					return nil, p.expectedError("alias name after AS")
 				}
 				alias := p.currentToken.Token.Value
+				aliasQuote := p.currentNameQuote()
 				p.advance()
-				expr = &ast.AliasedExpression{Expr: expr, Alias: alias}
+				expr = &ast.AliasedExpression{Expr: expr, Alias: alias, AliasQuote: aliasQuote}
 			} else if p.canBeAlias() {
 				// Implicit aliasing (SELECT expr alias) is allowed for non-identifier
 				// expressions (functions, literals, casts, etc.) and for bare identifiers
@@ -511,8 +512,9 @@ func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
 				allowAlias := !isIdent || (isIdent && ident.Table == "" && p.isOraclePseudoColumn2(ident.Name)) || p.isQuotedIdentifierToken()
 				if allowAlias {
 					alias := p.currentToken.Token.Value
+					aliasQuote := p.currentNameQuote()
 					p.advance()
-					expr = &ast.AliasedExpression{Expr: expr, Alias: alias}
+					expr = &ast.AliasedExpression{Expr: expr, Alias: alias, AliasQuote: aliasQuote}
 				}
 			}
 		}

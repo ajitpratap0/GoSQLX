@@ -39,19 +39,43 @@ Usage:
     metadata = pygosqlx.extract_metadata("SELECT COUNT(*) FROM users u JOIN orders o ON u.id = o.user_id")
     print(metadata.tables)     # ['users', 'orders']
     print(metadata.functions)  # ['COUNT']
+
+    # Dialect-aware parsing (every function above accepts dialect=)
+    pygosqlx.parse("SELECT TOP 5 [id] FROM [users]", dialect="sqlserver")
+    print(pygosqlx.dialects())  # ['generic', 'postgresql', 'mysql', ...]
+
+    # Lint with the `gosqlx lint` rule set (L001-L010)
+    for v in pygosqlx.lint("select id from users").violations:
+        print(v.rule, v.message)
+
+    # Scan for SQL injection patterns
+    scan = pygosqlx.security_scan("SELECT * FROM users WHERE id = 1 OR 1=1 --")
+    print(scan.is_clean, scan.has_critical)
+
+    # Convert between dialects
+    print(pygosqlx.transpile("CREATE TABLE t (id INT AUTO_INCREMENT PRIMARY KEY)",
+                             "mysql", "postgresql"))
 """
 
 from pygosqlx.core import (
+    LintResult,
+    LintViolation,
     Metadata,
     ParseResult,
     QualifiedName,
+    SecurityFinding,
+    SecurityScanResult,
     ValidationResult,
+    dialects,
     extract_columns,
     extract_functions,
     extract_metadata,
     extract_tables,
     format,
+    lint,
     parse,
+    security_scan,
+    transpile,
     validate,
     validate_detailed,
     version,
@@ -60,10 +84,12 @@ from pygosqlx.exceptions import (
     FormatError,
     GoSQLXError,
     ParseError,
+    TranspileError,
+    UnsupportedDialectError,
     ValidationError,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __all__ = [
     # Functions
     "parse",
@@ -74,15 +100,25 @@ __all__ = [
     "extract_columns",
     "extract_functions",
     "extract_metadata",
+    "lint",
+    "security_scan",
+    "transpile",
+    "dialects",
     "version",
     # Data types
     "ParseResult",
     "ValidationResult",
     "Metadata",
     "QualifiedName",
+    "LintResult",
+    "LintViolation",
+    "SecurityScanResult",
+    "SecurityFinding",
     # Exceptions
     "GoSQLXError",
     "ParseError",
     "FormatError",
     "ValidationError",
+    "TranspileError",
+    "UnsupportedDialectError",
 ]

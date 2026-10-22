@@ -2,7 +2,8 @@
 
 This module loads the GoSQLX shared library (built from Go with cgo) and
 provides a Pythonic API for SQL parsing, validation, formatting, and
-metadata extraction.
+metadata extraction, plus dialect-aware variants, linting, SQL injection
+scanning, and dialect transpilation.
 
 IMPORTANT: All C function return types are declared as c_void_p (not c_char_p)
 to prevent ctypes from auto-converting the C pointer to a Python bytes object.
@@ -21,7 +22,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from pygosqlx.exceptions import FormatError, GoSQLXError, ParseError
+from pygosqlx.exceptions import (
+    FormatError,
+    GoSQLXError,
+    ParseError,
+    TranspileError,
+    UnsupportedDialectError,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -77,12 +84,98 @@ class Metadata:
     columns_qualified: List[QualifiedName] = field(default_factory=list)
 
 
+@dataclass
+class LintViolation:
+    """A single lint rule violation reported by :func:`lint`."""
+
+    rule: str
+    rule_name: str
+    severity: str
+    message: str
+    line: int
+    column: int
+    suggestion: str = ""
+    can_auto_fix: bool = False
+
+
+@dataclass
+class LintResult:
+    """Result of linting SQL with :func:`lint`."""
+
+    violations: List[LintViolation] = field(default_factory=list)
+
+    @property
+    def violation_count(self) -> int:
+        """Number of violations found."""
+        return len(self.violations)
+
+    @property
+    def is_clean(self) -> bool:
+        """True when no rule reported a violation."""
+        return not self.violations
+
+
+@dataclass
+class SecurityFinding:
+    """A potential SQL injection pattern reported by :func:`security_scan`."""
+
+    severity: str
+    pattern: str
+    description: str
+    risk: str = ""
+    line: Optional[int] = None
+    column: Optional[int] = None
+    sql: str = ""
+    suggestion: str = ""
+
+
+@dataclass
+class SecurityScanResult:
+    """Result of scanning SQL with :func:`security_scan`."""
+
+    findings: List[SecurityFinding] = field(default_factory=list)
+    total_count: int = 0
+    critical_count: int = 0
+    high_count: int = 0
+    medium_count: int = 0
+    low_count: int = 0
+
+    @property
+    def is_clean(self) -> bool:
+        """True when no injection pattern was found."""
+        return self.total_count == 0
+
+    @property
+    def has_critical(self) -> bool:
+        """True when at least one CRITICAL finding was reported."""
+        return self.critical_count > 0
+
+    @property
+    def has_high(self) -> bool:
+        """True when at least one HIGH or CRITICAL finding was reported."""
+        return self.critical_count + self.high_count > 0
+
+
 # ---------------------------------------------------------------------------
 # Library loading
 # ---------------------------------------------------------------------------
 
 _lib = None
 _lib_lock = threading.Lock()
+
+# Original single-argument exports mapped to their dialect-aware variants.
+_DIALECT_EXPORTS = {
+    "gosqlx_parse": "gosqlx_parse_dialect",
+    "gosqlx_validate": "gosqlx_validate_dialect",
+    "gosqlx_format": "gosqlx_format_dialect",
+    "gosqlx_extract_tables": "gosqlx_extract_tables_dialect",
+    "gosqlx_extract_columns": "gosqlx_extract_columns_dialect",
+    "gosqlx_extract_functions": "gosqlx_extract_functions_dialect",
+    "gosqlx_extract_metadata": "gosqlx_extract_metadata_dialect",
+}
+
+# error_code the library reports for an unknown dialect name.
+_ERR_UNSUPPORTED_DIALECT = "E4002"
 
 
 def _get_lib_path() -> str:
@@ -162,6 +255,23 @@ def _load_library() -> ctypes.CDLL:
         lib, "gosqlx_extract_metadata", [ctypes.c_char_p], ctypes.c_void_p
     )
 
+    # --- Dialect-aware variants and analysis exports (libgosqlx for 0.3.0) ---
+    for name in _DIALECT_EXPORTS.values():
+        _bind_optional(
+            lib, name, [ctypes.c_char_p, ctypes.c_char_p], ctypes.c_void_p
+        )
+    _bind_optional(
+        lib, "gosqlx_lint", [ctypes.c_char_p, ctypes.c_char_p], ctypes.c_void_p
+    )
+    _bind_optional(lib, "gosqlx_security_scan", [ctypes.c_char_p], ctypes.c_void_p)
+    _bind_optional(
+        lib,
+        "gosqlx_transpile",
+        [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p],
+        ctypes.c_void_p,
+    )
+    _bind_optional(lib, "gosqlx_dialects", [], ctypes.c_void_p)
+
     return lib
 
 
@@ -232,6 +342,52 @@ def _has_func(name: str) -> bool:
         return False
 
 
+def _require_func(name: str) -> None:
+    """Raise GoSQLXError when the loaded library predates the export ``name``."""
+    if not _has_func(name):
+        raise GoSQLXError(
+            f"{name} not available in this library build. "
+            "Rebuild the shared library with the latest cbinding."
+        )
+
+
+def _check_dialect_arg(dialect: Optional[str], arg: str = "dialect") -> None:
+    if dialect is not None and not isinstance(dialect, str):
+        raise TypeError(f"{arg} must be a str or None, not {type(dialect).__name__}")
+
+
+def _check_dialect_error(data: Dict[str, Any]) -> None:
+    """Raise UnsupportedDialectError when the library rejected the dialect."""
+    if data.get("error_code") == _ERR_UNSUPPORTED_DIALECT:
+        raise UnsupportedDialectError(
+            message=data.get("error", "unsupported dialect"),
+            code=_ERR_UNSUPPORTED_DIALECT,
+        )
+
+
+def _call_sql(name: str, sql: str, dialect: Optional[str]) -> Dict[str, Any]:
+    """Call a SQL export, or its ``_dialect`` variant when a dialect is given.
+
+    Without a dialect the original export is used, so these calls keep working
+    against libraries built before the dialect-aware exports existed. With a
+    dialect, an older library raises GoSQLXError, and an unknown dialect raises
+    UnsupportedDialectError.
+    """
+    _check_dialect_arg(dialect)
+    if dialect is None:
+        _require_func(name)
+        return _call_and_decode(getattr(_get_lib(), name), sql.encode("utf-8"))
+    dialect_name = _DIALECT_EXPORTS[name]
+    _require_func(dialect_name)
+    data = _call_and_decode(
+        getattr(_get_lib(), dialect_name),
+        sql.encode("utf-8"),
+        dialect.encode("utf-8"),
+    )
+    _check_dialect_error(data)
+    return data
+
+
 def _parse_error_from_json(data: Dict[str, Any]) -> ParseError:
     """Create a ParseError from a JSON error response."""
     error_msg = data.get("error", "Unknown parse error")
@@ -281,21 +437,25 @@ def _parse_qualified_names(raw_list: List[Dict[str, str]]) -> List[QualifiedName
 # ---------------------------------------------------------------------------
 
 
-def parse(sql: str) -> ParseResult:
+def parse(sql: str, *, dialect: Optional[str] = None) -> ParseResult:
     """Parse a SQL statement and return the result.
 
     Args:
         sql: The SQL string to parse.
+        dialect: Optional SQL dialect name (see :func:`dialects`), e.g.
+            ``"postgresql"`` or ``"sqlserver"``. ``None`` uses the default
+            parser.
 
     Returns:
         ParseResult with statement_count and statement_types.
 
     Raises:
         ParseError: If the SQL is syntactically invalid.
-        GoSQLXError: If the shared library is not available or returns NULL.
+        UnsupportedDialectError: If ``dialect`` is not a supported dialect.
+        GoSQLXError: If the shared library is not available, returns NULL,
+            or (with ``dialect``) predates dialect support.
     """
-    lib = _get_lib()
-    data = _call_and_decode(lib.gosqlx_parse, sql.encode("utf-8"))
+    data = _call_sql("gosqlx_parse", sql, dialect)
 
     _check_parse_error(data)
 
@@ -305,31 +465,37 @@ def parse(sql: str) -> ParseResult:
     )
 
 
-def validate(sql: str) -> bool:
+def validate(sql: str, *, dialect: Optional[str] = None) -> bool:
     """Validate SQL syntax.
 
     Args:
         sql: The SQL string to validate.
+        dialect: Optional SQL dialect name (see :func:`dialects`).
 
     Returns:
         True if the SQL is syntactically valid, False otherwise.
+
+    Raises:
+        UnsupportedDialectError: If ``dialect`` is not a supported dialect.
     """
-    lib = _get_lib()
-    data = _call_and_decode(lib.gosqlx_validate, sql.encode("utf-8"))
+    data = _call_sql("gosqlx_validate", sql, dialect)
     return data.get("valid", False)
 
 
-def validate_detailed(sql: str) -> ValidationResult:
+def validate_detailed(sql: str, *, dialect: Optional[str] = None) -> ValidationResult:
     """Validate SQL syntax with detailed error information.
 
     Args:
         sql: The SQL string to validate.
+        dialect: Optional SQL dialect name (see :func:`dialects`).
 
     Returns:
         ValidationResult with valid flag and optional error details.
+
+    Raises:
+        UnsupportedDialectError: If ``dialect`` is not a supported dialect.
     """
-    lib = _get_lib()
-    data = _call_and_decode(lib.gosqlx_validate, sql.encode("utf-8"))
+    data = _call_sql("gosqlx_validate", sql, dialect)
     return ValidationResult(
         valid=data.get("valid", False),
         error=data.get("error") or None,
@@ -338,26 +504,23 @@ def validate_detailed(sql: str) -> ValidationResult:
     )
 
 
-def format(sql: str) -> str:
+def format(sql: str, *, dialect: Optional[str] = None) -> str:
     """Format a SQL statement for readability.
 
     Args:
         sql: The SQL string to format.
+        dialect: Optional SQL dialect name (see :func:`dialects`). The SQL is
+            parsed with this dialect and rendered for it.
 
     Returns:
         The formatted SQL string.
 
     Raises:
         FormatError: If the SQL cannot be formatted (e.g., invalid syntax).
+        UnsupportedDialectError: If ``dialect`` is not a supported dialect.
         GoSQLXError: If the gosqlx_format function is not available.
     """
-    if not _has_func("gosqlx_format"):
-        raise GoSQLXError(
-            "gosqlx_format not available in this library build. "
-            "Rebuild the shared library with the latest cbinding."
-        )
-    lib = _get_lib()
-    data = _call_and_decode(lib.gosqlx_format, sql.encode("utf-8"))
+    data = _call_sql("gosqlx_format", sql, dialect)
 
     if data.get("error"):
         raise FormatError(message=data["error"])
@@ -365,79 +528,72 @@ def format(sql: str) -> str:
     return data.get("formatted", data.get("result", sql))
 
 
-def extract_tables(sql: str) -> List[str]:
+def extract_tables(sql: str, *, dialect: Optional[str] = None) -> List[str]:
     """Extract table names from a SQL statement.
 
     Args:
         sql: The SQL string to analyze.
+        dialect: Optional SQL dialect name (see :func:`dialects`).
 
     Returns:
         List of table names referenced in the SQL.
 
     Raises:
         ParseError: If the SQL is syntactically invalid.
+        UnsupportedDialectError: If ``dialect`` is not a supported dialect.
     """
-    lib = _get_lib()
-    data = _call_and_decode(lib.gosqlx_extract_tables, sql.encode("utf-8"))
+    data = _call_sql("gosqlx_extract_tables", sql, dialect)
 
     _check_parse_error(data)
 
     return data.get("tables", [])
 
 
-def extract_columns(sql: str) -> List[str]:
+def extract_columns(sql: str, *, dialect: Optional[str] = None) -> List[str]:
     """Extract column names from a SQL statement.
 
     Args:
         sql: The SQL string to analyze.
+        dialect: Optional SQL dialect name (see :func:`dialects`).
 
     Returns:
         List of column names referenced in the SQL.
 
     Raises:
         ParseError: If the SQL is syntactically invalid.
+        UnsupportedDialectError: If ``dialect`` is not a supported dialect.
         GoSQLXError: If the gosqlx_extract_columns function is not available.
     """
-    if not _has_func("gosqlx_extract_columns"):
-        raise GoSQLXError(
-            "gosqlx_extract_columns not available in this library build. "
-            "Rebuild the shared library with the latest cbinding."
-        )
-    lib = _get_lib()
-    data = _call_and_decode(lib.gosqlx_extract_columns, sql.encode("utf-8"))
+    data = _call_sql("gosqlx_extract_columns", sql, dialect)
 
     _check_parse_error(data)
 
     return data.get("columns", [])
 
 
-def extract_functions(sql: str) -> List[str]:
+def extract_functions(sql: str, *, dialect: Optional[str] = None) -> List[str]:
     """Extract function names from a SQL statement.
 
     Args:
         sql: The SQL string to analyze.
+        dialect: Optional SQL dialect name (see :func:`dialects`).
 
     Returns:
         List of function names used in the SQL.
 
     Raises:
         ParseError: If the SQL is syntactically invalid.
+        UnsupportedDialectError: If ``dialect`` is not a supported dialect.
         GoSQLXError: If the gosqlx_extract_functions function is not available.
     """
-    if not _has_func("gosqlx_extract_functions"):
-        raise GoSQLXError(
-            "gosqlx_extract_functions not available in this library build. "
-            "Rebuild the shared library with the latest cbinding."
-        )
-    lib = _get_lib()
-    data = _call_and_decode(lib.gosqlx_extract_functions, sql.encode("utf-8"))
+    data = _call_sql("gosqlx_extract_functions", sql, dialect)
 
     _check_parse_error(data)
 
     return data.get("functions", [])
 
 
-def extract_metadata(sql: str) -> Metadata:
+def extract_metadata(sql: str, *, dialect: Optional[str] = None) -> Metadata:
     """Extract comprehensive metadata from a SQL statement.
 
     This returns tables, columns, functions, and their qualified variants
@@ -445,21 +601,17 @@ def extract_metadata(sql: str) -> Metadata:
 
     Args:
         sql: The SQL string to analyze.
+        dialect: Optional SQL dialect name (see :func:`dialects`).
 
     Returns:
         Metadata object containing all extracted information.
 
     Raises:
         ParseError: If the SQL is syntactically invalid.
+        UnsupportedDialectError: If ``dialect`` is not a supported dialect.
         GoSQLXError: If the gosqlx_extract_metadata function is not available.
     """
-    if not _has_func("gosqlx_extract_metadata"):
-        raise GoSQLXError(
-            "gosqlx_extract_metadata not available in this library build. "
-            "Rebuild the shared library with the latest cbinding."
-        )
-    lib = _get_lib()
-    data = _call_and_decode(lib.gosqlx_extract_metadata, sql.encode("utf-8"))
+    data = _call_sql("gosqlx_extract_metadata", sql, dialect)
 
     _check_parse_error(data)
 
@@ -474,6 +626,179 @@ def extract_metadata(sql: str) -> Metadata:
             data.get("columns_qualified", [])
         ),
     )
+
+
+def lint(
+    sql: str,
+    *,
+    dialect: Optional[str] = None,
+    max_line_length: Optional[int] = None,
+) -> LintResult:
+    """Lint SQL with the rule set of the ``gosqlx lint`` CLI command.
+
+    The rules are L001-L010 (whitespace, indentation, line length, column
+    alignment, keyword case, comma placement, aliasing). SQL that does not
+    parse is still linted by the text and token rules.
+
+    Args:
+        sql: The SQL string to lint.
+        dialect: Optional SQL dialect name (see :func:`dialects`).
+        max_line_length: Maximum line length for rule L005 (default 100,
+            like ``gosqlx lint --max-length``). Must be a positive int.
+
+    Returns:
+        LintResult with the list of violations.
+
+    Raises:
+        ValueError: If ``max_line_length`` is not a positive int.
+        UnsupportedDialectError: If ``dialect`` is not a supported dialect.
+        GoSQLXError: If the library predates gosqlx_lint or linting fails.
+    """
+    _check_dialect_arg(dialect)
+    options: Dict[str, Any] = {}
+    if dialect is not None:
+        options["dialect"] = dialect
+    if max_line_length is not None:
+        if (
+            isinstance(max_line_length, bool)
+            or not isinstance(max_line_length, int)
+            or max_line_length <= 0
+        ):
+            raise ValueError(
+                f"max_line_length must be a positive int, got {max_line_length!r}"
+            )
+        options["max_line_length"] = max_line_length
+
+    _require_func("gosqlx_lint")
+    lib = _get_lib()
+    data = _call_and_decode(
+        lib.gosqlx_lint, sql.encode("utf-8"), json.dumps(options).encode("utf-8")
+    )
+    _check_dialect_error(data)
+    if not data.get("success", False):
+        raise GoSQLXError(
+            message=data.get("error", "lint failed"),
+            code=data.get("error_code") or None,
+        )
+
+    violations = [
+        LintViolation(
+            rule=v.get("rule", ""),
+            rule_name=v.get("rule_name", ""),
+            severity=v.get("severity", ""),
+            message=v.get("message", ""),
+            line=v.get("line", 0),
+            column=v.get("column", 0),
+            suggestion=v.get("suggestion", ""),
+            can_auto_fix=bool(v.get("can_auto_fix", False)),
+        )
+        for v in data.get("violations") or []
+        if isinstance(v, dict)
+    ]
+    return LintResult(violations=violations)
+
+
+def security_scan(sql: str) -> SecurityScanResult:
+    """Scan SQL for SQL injection patterns.
+
+    Detects tautologies (``OR 1=1``), comment bypasses, stacked queries,
+    UNION-based injection, time-based and out-of-band techniques, and
+    dangerous functions. The scan works on the raw text, so payloads that are
+    not valid SQL are scanned too; empty input is clean.
+
+    Args:
+        sql: The SQL string to scan.
+
+    Returns:
+        SecurityScanResult with findings and per-severity counts.
+
+    Raises:
+        GoSQLXError: If the library predates gosqlx_security_scan.
+    """
+    _require_func("gosqlx_security_scan")
+    lib = _get_lib()
+    data = _call_and_decode(lib.gosqlx_security_scan, sql.encode("utf-8"))
+    if data.get("error"):
+        raise GoSQLXError(message=data["error"])
+
+    findings = [
+        SecurityFinding(
+            severity=f.get("severity", ""),
+            pattern=f.get("pattern", ""),
+            description=f.get("description", ""),
+            risk=f.get("risk", ""),
+            line=f.get("line"),
+            column=f.get("column"),
+            sql=f.get("sql", ""),
+            suggestion=f.get("suggestion", ""),
+        )
+        for f in data.get("findings") or []
+        if isinstance(f, dict)
+    ]
+    return SecurityScanResult(
+        findings=findings,
+        total_count=data.get("total_count", len(findings)),
+        critical_count=data.get("critical_count", 0),
+        high_count=data.get("high_count", 0),
+        medium_count=data.get("medium_count", 0),
+        low_count=data.get("low_count", 0),
+    )
+
+
+def transpile(sql: str, from_dialect: str, to_dialect: str) -> str:
+    """Convert SQL from one dialect to another.
+
+    Dedicated rewrites exist for MySQL -> PostgreSQL, PostgreSQL -> MySQL and
+    PostgreSQL -> SQLite (e.g. ``AUTO_INCREMENT`` <-> ``SERIAL``); other pairs
+    are parsed with the source dialect and re-rendered without rewrites.
+
+    Args:
+        sql: The SQL string to convert.
+        from_dialect: Source dialect name (see :func:`dialects`).
+        to_dialect: Target dialect name (see :func:`dialects`).
+
+    Returns:
+        The transpiled SQL.
+
+    Raises:
+        UnsupportedDialectError: If either dialect is missing or unsupported.
+        TranspileError: If the SQL cannot be parsed or rewritten.
+        GoSQLXError: If the library predates gosqlx_transpile.
+    """
+    _check_dialect_arg(from_dialect, "from_dialect")
+    _check_dialect_arg(to_dialect, "to_dialect")
+    for value, arg in ((from_dialect, "from_dialect"), (to_dialect, "to_dialect")):
+        if not value:
+            raise UnsupportedDialectError(
+                message=f"{arg} is required", code=_ERR_UNSUPPORTED_DIALECT
+            )
+    _require_func("gosqlx_transpile")
+    lib = _get_lib()
+    data = _call_and_decode(
+        lib.gosqlx_transpile,
+        sql.encode("utf-8"),
+        (from_dialect or "").encode("utf-8"),
+        (to_dialect or "").encode("utf-8"),
+    )
+    _check_dialect_error(data)
+    if not data.get("success", False):
+        raise TranspileError(message=data.get("error", "transpile failed"))
+    return data.get("sql", "")
+
+
+def dialects() -> List[str]:
+    """List the SQL dialect names accepted by every ``dialect`` argument.
+
+    Returns:
+        Dialect names such as ``["generic", "postgresql", "mysql", ...]``.
+
+    Raises:
+        GoSQLXError: If the library predates gosqlx_dialects.
+    """
+    _require_func("gosqlx_dialects")
+    lib = _get_lib()
+    data = _call_and_decode(lib.gosqlx_dialects)
+    return list(data.get("dialects", []))
 
 
 def version() -> str:

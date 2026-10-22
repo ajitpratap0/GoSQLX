@@ -8,7 +8,7 @@ Powered by Go's compiled performance, PyGoSQLX is 100x+ faster than pure Python 
 
 ### Step 1: Build the shared library
 
-Requires Go 1.21+ installed.
+Requires a Go toolchain matching the repository's `go.mod` (Go 1.26+) with cgo enabled.
 
 ```bash
 cd pkg/cbinding
@@ -98,6 +98,79 @@ for qn in meta.tables_qualified:
     print(f"{qn.schema}.{qn.name}" if qn.schema else qn.name)
 ```
 
+### Dialects
+
+Every parsing function takes an optional keyword-only `dialect=` argument.
+Without it (or with `dialect=None`) the default parser is used, exactly as in
+earlier releases.
+
+```python
+print(pygosqlx.dialects())
+# ['generic', 'postgresql', 'mysql', 'mariadb', 'sqlserver', 'oracle',
+#  'sqlite', 'snowflake', 'bigquery', 'redshift', 'clickhouse']
+
+sql = "SELECT TOP 5 [id] FROM [dbo].[users]"
+pygosqlx.validate(sql)                       # False - not generic SQL
+pygosqlx.validate(sql, dialect="sqlserver")  # True
+pygosqlx.extract_tables(sql, dialect="sqlserver")  # ['dbo.users']
+pygosqlx.format("SELECT `id` FROM `users`", dialect="mysql")
+
+# An unknown dialect raises UnsupportedDialectError (also a ValueError)
+pygosqlx.parse("SELECT 1", dialect="postgres")  # use "postgresql"
+```
+
+### Linting
+
+`lint()` runs the same rule set as the `gosqlx lint` CLI command (L001-L010:
+whitespace, indentation, line length, column alignment, keyword case, comma
+placement, aliasing). SQL that does not parse is still linted by the text and
+token rules.
+
+```python
+result = pygosqlx.lint("select id from users  ", max_line_length=100)
+for v in result.violations:
+    print(v.rule, v.severity, v.line, v.column, v.message)
+# L001 warning 1 21 Line has trailing whitespace
+# L007 warning 1 1 Keyword 'select' should be uppercase: 'SELECT'
+# ...
+print(result.is_clean, result.violation_count)
+```
+
+### Security scanning
+
+`security_scan()` looks for SQL injection patterns (tautologies, comment
+bypasses, stacked queries, UNION injection, time-based and out-of-band
+techniques, dangerous functions). The scan works on the raw text, so payloads
+that are not valid SQL are scanned too.
+
+```python
+scan = pygosqlx.security_scan("SELECT * FROM users WHERE id = 1 OR 1=1 --")
+print(scan.is_clean, scan.has_critical)  # False True
+for f in scan.findings:
+    print(f.severity, f.pattern, f.description)
+```
+
+### Transpiling
+
+```python
+pygosqlx.transpile(
+    "CREATE TABLE t (id INT AUTO_INCREMENT PRIMARY KEY)", "mysql", "postgresql"
+)
+# 'CREATE TABLE t (id SERIAL PRIMARY KEY)'
+```
+
+Dedicated rewrites exist for MySQL to PostgreSQL, PostgreSQL to MySQL and
+PostgreSQL to SQLite. Other pairs are parsed with the source dialect and
+re-rendered without rewrites.
+
+### Library compatibility
+
+The functions and the `dialect=` argument added in 0.3.0 need a shared
+library built from a matching GoSQLX checkout. With an older library, calls
+without `dialect=` keep working, while `dialect=`, `lint()`,
+`security_scan()`, `transpile()` and `dialects()` raise `GoSQLXError` asking
+you to rebuild the library.
+
 ### Error Handling
 
 ```python
@@ -132,15 +205,22 @@ except GoSQLXError as e:
 
 | Function | Returns | Description |
 |---|---|---|
-| `parse(sql)` | `ParseResult` | Parse SQL; raises `ParseError` on failure |
-| `validate(sql)` | `bool` | Check if SQL is syntactically valid |
-| `validate_detailed(sql)` | `ValidationResult` | Validate with error line/column details |
-| `format(sql)` | `str` | Format/pretty-print a SQL statement |
-| `extract_tables(sql)` | `list[str]` | Extract all table names |
-| `extract_columns(sql)` | `list[str]` | Extract all column names |
-| `extract_functions(sql)` | `list[str]` | Extract all function calls |
-| `extract_metadata(sql)` | `Metadata` | Extract tables, columns, functions, and qualified names |
+| `parse(sql, *, dialect=None)` | `ParseResult` | Parse SQL; raises `ParseError` on failure |
+| `validate(sql, *, dialect=None)` | `bool` | Check if SQL is syntactically valid |
+| `validate_detailed(sql, *, dialect=None)` | `ValidationResult` | Validate with error line/column details |
+| `format(sql, *, dialect=None)` | `str` | Format/pretty-print a SQL statement |
+| `extract_tables(sql, *, dialect=None)` | `list[str]` | Extract all table names |
+| `extract_columns(sql, *, dialect=None)` | `list[str]` | Extract all column names |
+| `extract_functions(sql, *, dialect=None)` | `list[str]` | Extract all function calls |
+| `extract_metadata(sql, *, dialect=None)` | `Metadata` | Extract tables, columns, functions, and qualified names |
+| `lint(sql, *, dialect=None, max_line_length=None)` | `LintResult` | Lint with the `gosqlx lint` rule set (L001-L010); `max_line_length` defaults to 100 |
+| `security_scan(sql)` | `SecurityScanResult` | Scan for SQL injection patterns |
+| `transpile(sql, from_dialect, to_dialect)` | `str` | Convert SQL between dialects; raises `TranspileError` on failure |
+| `dialects()` | `list[str]` | Names accepted by every `dialect` argument |
 | `version()` | `str` | Get the GoSQLX library version |
+
+`dialect` must be one of the names returned by `dialects()`; an unknown name
+raises `UnsupportedDialectError`.
 
 ### Data Types
 
@@ -150,6 +230,10 @@ except GoSQLXError as e:
 | `ValidationResult` | `valid: bool`, `error: str?`, `error_line: int?`, `error_column: int?` |
 | `Metadata` | `tables`, `columns`, `functions`, `tables_qualified`, `columns_qualified` |
 | `QualifiedName` | `name: str`, `schema: str`, `table: str` |
+| `LintResult` | `violations: list[LintViolation]`; properties `violation_count`, `is_clean` |
+| `LintViolation` | `rule`, `rule_name`, `severity`, `message`, `line`, `column`, `suggestion`, `can_auto_fix` |
+| `SecurityScanResult` | `findings: list[SecurityFinding]`, `total_count`, `critical_count`, `high_count`, `medium_count`, `low_count`; properties `is_clean`, `has_critical`, `has_high` |
+| `SecurityFinding` | `severity`, `pattern`, `description`, `risk`, `line: int?`, `column: int?`, `sql`, `suggestion` |
 
 ### Exceptions
 
@@ -159,6 +243,8 @@ except GoSQLXError as e:
 | `ParseError` | `GoSQLXError` | SQL parsing fails |
 | `FormatError` | `GoSQLXError` | SQL formatting fails |
 | `ValidationError` | `GoSQLXError` | SQL validation fails |
+| `TranspileError` | `GoSQLXError` | `transpile()` cannot parse or rewrite the SQL |
+| `UnsupportedDialectError` | `GoSQLXError`, `ValueError` | A `dialect` argument is not a supported dialect (`code` is `E4002`) |
 
 All exceptions have `message`, `code`, `line`, and `column` attributes.
 
@@ -223,8 +309,10 @@ python/
     py.typed          # PEP 561 type hint marker
     lib/              # Shared library output directory (built artifacts)
   tests/
-    test_types.py         # Type and exception tests (40 tests)
-    test_integration.py   # Integration tests with shared library (36 tests)
+    test_types.py                  # Type and exception tests (no shared library needed)
+    test_package_version.py        # Version metadata consistency
+    test_integration.py            # Integration tests with shared library
+    test_dialect_and_analysis.py   # dialect=, lint, security_scan, transpile, dialects
   pyproject.toml      # Package metadata and build config
   setup.py            # Legacy build support
 ```

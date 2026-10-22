@@ -110,12 +110,8 @@ var keywordFieldGates = map[string]func(string) bool{
 	"MergeAction.ActionType": func(v string) bool {
 		return v == "UPDATE" || v == "INSERT" || ast.MergeActionText(v) == v
 	},
-	"ColumnConstraint.Type": func(v string) bool {
-		return v == "DEFAULT" || v == "CHECK" || v == "REFERENCES" || ast.ColumnConstraintText(v) == v
-	},
-	"TableConstraint.Type": func(v string) bool {
-		return v == "PRIMARY KEY" || v == "UNIQUE" || v == "FOREIGN KEY" || v == "CHECK"
-	},
+	"ColumnConstraint.Type":          ast.IsColumnConstraintKind,
+	"TableConstraint.Type":           ast.IsTableConstraintKind,
 	"PartitionBy.Type":               func(v string) bool { return ast.PartitionByText(v) == v },
 	"TableOption.Name":               func(v string) bool { return ast.TableOptionNameText(v) == v },
 	"CreateViewStatement.WithOption": func(v string) bool { return v == "" || ast.ViewWithOptionText(v) == v },

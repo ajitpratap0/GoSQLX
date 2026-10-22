@@ -584,6 +584,19 @@ type ColumnConstraint struct {
 	References    *ReferenceDefinition
 	Check         Expression
 	AutoIncrement bool
+
+	// Name is the CONSTRAINT <name> written before the constraint.
+	Name string
+	// Keyword, Value, Expr and Args carry the payload of the dialect
+	// constraint kinds listed in ast_columns.go (COMMENT, COLLATE, ON UPDATE,
+	// generated columns, identity columns, ClickHouse MATERIALIZED / ALIAS /
+	// TTL / CODEC, ...). Keyword is a spelling or mode the source chose
+	// (AUTOINCREMENT, CHARSET, STORED), Value a name or literal text, Expr an
+	// expression and Args the raw text of a parenthesised argument list.
+	Keyword string
+	Value   string
+	Expr    Expression
+	Args    string
 }
 
 func (c *ColumnConstraint) expressionNode()     {}
@@ -599,16 +612,44 @@ func (c ColumnConstraint) Children() []Node {
 	if c.Check != nil {
 		children = append(children, c.Check)
 	}
+	if c.Expr != nil {
+		children = append(children, c.Expr)
+	}
 	return children
 }
 
-// TableConstraint represents a table constraint
+// TableConstraint represents a table constraint. Type is PRIMARY KEY, UNIQUE,
+// FOREIGN KEY or CHECK, or one of the index and dialect element kinds listed
+// in ast_columns.go (KEY, INDEX, FULLTEXT, SPATIAL, LIKE, PROJECTION).
 type TableConstraint struct {
 	Name       string
-	Type       string // PRIMARY KEY, UNIQUE, FOREIGN KEY, CHECK
+	Type       string
 	Columns    []string
 	References *ReferenceDefinition
 	Check      Expression
+
+	// ColumnSuffix holds, parallel to Columns, each key part's prefix length
+	// and sort order as written ("(191)", "DESC", "(10) DESC"); it is empty
+	// when no part has one.
+	ColumnSuffix []string
+	// Keyword is the KEY or INDEX word written after UNIQUE, FULLTEXT or
+	// SPATIAL; IndexName the index name; Using the index method (BTREE,
+	// HASH); Cluster CLUSTERED or NONCLUSTERED; Deferrable the DEFERRABLE
+	// timing clause; Exprs the key parts of a functional index or the
+	// expression of a ClickHouse INDEX; Text the verbatim ClickHouse INDEX
+	// TYPE or PROJECTION body; Granularity the ClickHouse GRANULARITY value;
+	// LikeTable and LikeOptions the PostgreSQL LIKE source and its
+	// INCLUDING / EXCLUDING options.
+	Keyword     string
+	IndexName   string
+	Using       string
+	Cluster     string
+	Deferrable  string
+	Exprs       []Expression
+	Text        string
+	Granularity string
+	LikeTable   string
+	LikeOptions []string
 }
 
 func (t *TableConstraint) expressionNode()     {}
@@ -620,6 +661,11 @@ func (t TableConstraint) Children() []Node {
 	}
 	if t.Check != nil {
 		children = append(children, t.Check)
+	}
+	for _, e := range t.Exprs {
+		if e != nil {
+			children = append(children, e)
+		}
 	}
 	return children
 }

@@ -237,6 +237,7 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 	p.advance() // Consume (
 
 	// Parse column definitions and constraints
+	likeSeen := false
 	for {
 		// MariaDB: PERIOD FOR name (start_col, end_col) — application-time or system-time period
 		if p.isMariaDB() && p.isTokenMatch("PERIOD") {
@@ -247,15 +248,20 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 			}
 			pd.Pos = periodPos
 			stmt.PeriodDefinitions = append(stmt.PeriodDefinitions, pd)
-		} else if p.isAnyType(models.TokenTypePrimary, models.TokenTypeForeign,
-			models.TokenTypeUnique, models.TokenTypeCheck, models.TokenTypeConstraint) {
-			// Check for table-level constraints
+		} else if p.isTableConstraintStart() {
+			// Check for table-level constraints and index elements
 			constraint, err := p.parseTableConstraint()
 			if err != nil {
 				return nil, err
 			}
+			likeSeen = likeSeen || constraint.Type == "LIKE"
 			stmt.Constraints = append(stmt.Constraints, *constraint)
 		} else {
+			// The constraint list is rendered after the columns, which
+			// would move the columns before a LIKE source's own.
+			if likeSeen {
+				return nil, p.expectedError("no column definition after LIKE source_table")
+			}
 			// Parse column definition
 			colDef, err := p.parseColumnDef()
 			if err != nil {

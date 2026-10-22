@@ -1007,10 +1007,11 @@ func (p *Parser) parseCreateTableTail(stmt *ast.CreateTableStatement) error {
 			p.advance() // INHERITS
 			p.advance() // (
 			for {
-				name, err := p.parseQualifiedName()
+				name, nq, err := p.parseQualifiedNameQuoted()
 				if err != nil {
 					return p.qualifiedNameError(err, "parent table")
 				}
+				stmt.InheritsQuotes = nameQuoteList(stmt.InheritsQuotes, len(stmt.Inherits), nq)
 				stmt.Inherits = append(stmt.Inherits, name)
 				if !p.isType(models.TokenTypeComma) {
 					break

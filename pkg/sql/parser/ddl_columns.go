@@ -424,7 +424,7 @@ func (p *Parser) parseTypeArgsString() (string, error) {
 		// Render leaf token. Quote string literals; everything else is rendered
 		// by its raw value (numbers, identifiers, keywords like Nullable / Array).
 		val := tok.Value
-		if val == "" {
+		if val == "" && !isQuotedTokenType(tok) {
 			return "", p.expectedError("type argument")
 		}
 
@@ -434,19 +434,43 @@ func (p *Parser) parseTypeArgsString() (string, error) {
 			buf.WriteByte(' ')
 		}
 
-		switch tok.Type {
-		case models.TokenTypeString, models.TokenTypeSingleQuotedString,
-			models.TokenTypeDoubleQuotedString:
+		switch {
+		case tok.Type == models.TokenTypeString || tok.Type == models.TokenTypeSingleQuotedString:
 			// Double embedded quotes so 'it''s' is written back as one literal.
-			buf.WriteByte('\'')
-			buf.WriteString(strings.ReplaceAll(val, "'", "''"))
-			buf.WriteByte('\'')
-			prevWasIdent = false
+			writeDelimitedToken(&buf, val, '\'')
+		case tok.Type == models.TokenTypeDoubleQuotedString:
+			// A "quoted" word is an identifier (or, in MySQL, a string):
+			// keep its delimiters so neither changes meaning.
+			writeDelimitedToken(&buf, val, '"')
+		case tok.Type == models.TokenTypeIdentifier && (tok.Quote == '"' || tok.Quote == '`' || tok.Quote == '['):
+			writeDelimitedToken(&buf, val, tok.Quote)
 		default:
 			buf.WriteString(val)
-			prevWasIdent = true
 		}
+		prevWasIdent = true
 
 		p.advance()
 	}
+}
+
+// writeDelimitedToken writes val delimited with quote (' " ` or [), doubling
+// any closing delimiter inside it so the text reads back as one token.
+func writeDelimitedToken(buf *strings.Builder, val string, quote rune) {
+	closer := quote
+	if quote == '[' {
+		closer = ']'
+	}
+	buf.WriteRune(quote)
+	buf.WriteString(strings.ReplaceAll(val, string(closer), string(closer)+string(closer)))
+	buf.WriteRune(closer)
+}
+
+// isQuotedTokenType reports whether tok is a string literal or a delimited
+// identifier, whose empty value is still a token.
+func isQuotedTokenType(tok models.Token) bool {
+	switch tok.Type {
+	case models.TokenTypeString, models.TokenTypeSingleQuotedString, models.TokenTypeDoubleQuotedString:
+		return true
+	}
+	return tok.Quote != 0
 }

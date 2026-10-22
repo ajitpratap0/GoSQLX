@@ -304,6 +304,7 @@ func (p *Parser) parseIndexHead(tc *ast.TableConstraint) {
 	if tc.Keyword != "" && p.isWordToken() && !p.isType(models.TokenTypeLParen) &&
 		!p.isUnquotedWord("USING") {
 		tc.IndexName = p.currentToken.Token.Value
+		tc.IndexNameQuote = p.currentNameQuote()
 		p.advance()
 	}
 	p.parseIndexMethod(tc)
@@ -417,6 +418,7 @@ func (p *Parser) parseTableElement(tc *ast.TableConstraint) (*ast.TableConstrain
 		p.advance() // Consume PROJECTION
 		tc.Type = "PROJECTION"
 		tc.IndexName = p.currentToken.Token.Value
+		tc.IndexNameQuote = p.currentNameQuote()
 		p.advance()
 		body, err := p.parseTypeArgsString()
 		if err != nil {
@@ -434,6 +436,7 @@ func (p *Parser) parseTableElement(tc *ast.TableConstraint) (*ast.TableConstrain
 		p.parseIndexHead(tc)
 		if tc.Keyword == "" && p.isWordToken() && !p.isType(models.TokenTypeLParen) {
 			tc.IndexName = p.currentToken.Token.Value
+			tc.IndexNameQuote = p.currentNameQuote()
 			p.advance()
 		}
 
@@ -443,6 +446,7 @@ func (p *Parser) parseTableElement(tc *ast.TableConstraint) (*ast.TableConstrain
 		p.parseIndexMethod(tc)
 		if p.isWordToken() && !p.isType(models.TokenTypeLParen) && !p.isUnquotedWord("USING") {
 			tc.IndexName = p.currentToken.Token.Value
+			tc.IndexNameQuote = p.currentNameQuote()
 			p.advance()
 		}
 		p.parseIndexMethod(tc)
@@ -462,6 +466,7 @@ func (p *Parser) parseClickHouseIndex(tc *ast.TableConstraint) (*ast.TableConstr
 		return nil, p.expectedError("index name")
 	}
 	tc.IndexName = p.currentToken.Token.Value
+	tc.IndexNameQuote = p.currentNameQuote()
 	p.advance()
 	expr, err := p.parseExpression()
 	if err != nil {

@@ -1095,6 +1095,16 @@ func (p *Parser) parseIdentAsString() string {
 	return ident.Name
 }
 
+// parseIdentAsStringQuoted is parseIdentAsString that also returns how the
+// name was delimited (see ast.NameQuote).
+func (p *Parser) parseIdentAsStringQuoted() (string, ast.NameQuote) {
+	ident := p.parseIdent()
+	if ident == nil {
+		return "", 0
+	}
+	return ident.Name, ident.Quotes
+}
+
 // parseBareWordAsString parses any word-like token (identifier or keyword) and
 // returns its value as a string.  This is used in contexts where arbitrary
 // user-defined names may collide with SQL keywords (e.g. DCPROPERTIES keys).

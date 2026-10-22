@@ -79,7 +79,7 @@ func (p *Parser) alterModifierFollows(i int) bool {
 
 // parseAlterRoleStatement parses ALTER ROLE statements
 func (p *Parser) parseAlterRoleStatement(stmt *ast.AlterStatement) (*ast.AlterStatement, error) {
-	stmt.Name = p.parseIdentAsString()
+	stmt.Name, stmt.NameQuote = p.parseIdentAsStringQuoted()
 	op := &ast.AlterRoleOperation{}
 
 	switch {
@@ -88,21 +88,21 @@ func (p *Parser) parseAlterRoleStatement(stmt *ast.AlterStatement) (*ast.AlterSt
 			return nil, p.expectedError("TO")
 		}
 		op.Type = ast.RenameRole
-		op.NewName = p.parseIdentAsString()
+		op.NewName, op.NewNameQuote = p.parseIdentAsStringQuoted()
 
 	case p.matchType(models.TokenTypeAdd):
 		if !p.matchType(models.TokenTypeMember) {
 			return nil, p.expectedError("MEMBER")
 		}
 		op.Type = ast.AddMember
-		op.MemberName = p.parseIdentAsString()
+		op.MemberName, op.MemberNameQuote = p.parseIdentAsStringQuoted()
 
 	case p.matchType(models.TokenTypeDrop):
 		if !p.matchType(models.TokenTypeMember) {
 			return nil, p.expectedError("MEMBER")
 		}
 		op.Type = ast.DropMember
-		op.MemberName = p.parseIdentAsString()
+		op.MemberName, op.MemberNameQuote = p.parseIdentAsStringQuoted()
 
 	case p.matchType(models.TokenTypeSet):
 		op.Type = ast.SetConfig
@@ -146,28 +146,30 @@ func (p *Parser) parseAlterRoleStatement(stmt *ast.AlterStatement) (*ast.AlterSt
 
 // parseAlterPolicyStatement parses ALTER POLICY statements
 func (p *Parser) parseAlterPolicyStatement(stmt *ast.AlterStatement) (*ast.AlterStatement, error) {
-	stmt.Name = p.parseIdentAsString()
+	stmt.Name, stmt.NameQuote = p.parseIdentAsStringQuoted()
 	if !p.matchType(models.TokenTypeOn) {
 		return nil, p.expectedError("ON")
 	}
-	table, err := p.parseQualifiedName()
+	table, tableQuote, err := p.parseQualifiedNameQuoted()
 	if err != nil {
 		return nil, p.qualifiedNameError(err, "table name")
 	}
 
-	op := &ast.AlterPolicyOperation{Table: table}
+	op := &ast.AlterPolicyOperation{Table: table, TableQuote: tableQuote}
 
 	if p.matchType(models.TokenTypeRename) {
 		if !p.matchType(models.TokenTypeTo) {
 			return nil, p.expectedError("TO")
 		}
 		op.Type = ast.RenamePolicy
-		op.NewName = p.parseIdentAsString()
+		op.NewName, op.NewNameQuote = p.parseIdentAsStringQuoted()
 	} else {
 		op.Type = ast.ModifyPolicy
 		if p.matchType(models.TokenTypeTo) {
 			for {
-				op.To = append(op.To, p.parseIdentAsString())
+				name, q := p.parseIdentAsStringQuoted()
+				op.ToQuotes = nameQuoteList(op.ToQuotes, len(op.To), q)
+				op.To = append(op.To, name)
 				if !p.matchType(models.TokenTypeComma) {
 					break
 				}
@@ -207,7 +209,7 @@ func (p *Parser) parseAlterPolicyStatement(stmt *ast.AlterStatement) (*ast.Alter
 
 // parseAlterConnectorStatement parses ALTER CONNECTOR statements
 func (p *Parser) parseAlterConnectorStatement(stmt *ast.AlterStatement) (*ast.AlterStatement, error) {
-	stmt.Name = p.parseIdentAsString()
+	stmt.Name, stmt.NameQuote = p.parseIdentAsStringQuoted()
 	if !p.matchType(models.TokenTypeSet) {
 		return nil, p.expectedError("SET")
 	}
@@ -253,7 +255,7 @@ func (p *Parser) parseAlterConnectorStatement(stmt *ast.AlterStatement) (*ast.Al
 			return nil, p.expectedError("USER or ROLE")
 		}
 		p.advance()
-		owner.Name = p.parseIdentAsString()
+		owner.Name, owner.NameQuote = p.parseIdentAsStringQuoted()
 		op.Owner = owner
 
 	default:

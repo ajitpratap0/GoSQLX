@@ -701,6 +701,7 @@ func PutCreateTableStatement(stmt *CreateTableStatement) {
 		stmt.Partitions[i].From = nil
 		stmt.Partitions[i].To = nil
 		stmt.Partitions[i].Name = ""
+		stmt.Partitions[i].NameQuote = 0
 		stmt.Partitions[i].Type = ""
 		stmt.Partitions[i].Tablespace = ""
 	}

@@ -33,10 +33,11 @@ func TestFormatSQL_RefusesLostQuotes(t *testing.T) {
 		dialect string
 		in      string
 	}{
-		// Names the AST does not record quoting for (ALTER POLICY names, for
+		// Names the AST does not record quoting for (a TABLESPACE name, for
 		// example) still render bare, so the CLI must refuse. (CREATE
-		// SEQUENCE is now kept as written, so its quotes survive.)
-		{name: "policy mixed case", in: `ALTER POLICY "Pol" ON t RENAME TO q`},
+		// SEQUENCE and ALTER POLICY names are recorded, so their quotes
+		// survive.)
+		{name: "tablespace mixed case", in: `CREATE TABLE t (a INT) TABLESPACE "Ts"`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -66,6 +67,7 @@ func TestFormatSQL_AllowsHarmlessQuotes(t *testing.T) {
 		want    string
 	}{
 		{name: "lowercase quoted", in: `SELECT "users_id" FROM "users"`, want: "SELECT users_id FROM users"},
+		{name: "alter policy mixed case", in: `ALTER POLICY "Pol" ON "Tbl" RENAME TO "Q"`, want: `ALTER POLICY "Pol" ON "Tbl" RENAME TO "Q"`},
 		{name: "alter plain", in: "ALTER TABLE t ADD COLUMN c INT", want: "ALTER TABLE t ADD COLUMN c INT"},
 		// Reserved words keep their quotes on render (#632), so these format.
 		{name: "alter reserved word", in: `ALTER TABLE t ADD COLUMN "order" INT`, want: `ALTER TABLE t ADD COLUMN "order" INT`},

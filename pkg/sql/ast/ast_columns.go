@@ -135,6 +135,13 @@ func rawTextIsPlain(s string) bool {
 					break
 				}
 			}
+		case c == '"' || c == '`':
+			// A delimited identifier: closed, doubled delimiters, no escapes.
+			j, ok := skipDelimited(s, i)
+			if !ok {
+				return false
+			}
+			i = j
 		case c == '(' || c == '[':
 			depth++
 		case c == ')' || c == ']':
@@ -159,6 +166,27 @@ func rawTextIsPlain(s string) bool {
 		}
 	}
 	return depth == 0
+}
+
+// skipDelimited returns the index of the closing delimiter of the "..." or
+// `...` segment of s that starts at i, treating a doubled delimiter as part of
+// the name. It reports false when the segment is not closed or holds a
+// backslash.
+func skipDelimited(s string, i int) (int, bool) {
+	q := s[i]
+	for j := i + 1; j < len(s); j++ {
+		switch s[j] {
+		case '\\':
+			return 0, false
+		case q:
+			if j+1 < len(s) && s[j+1] == q {
+				j++
+				continue
+			}
+			return j, true
+		}
+	}
+	return 0, false
 }
 
 // qualifiedNameTextIsPlain reports whether s is a possibly dot-qualified name

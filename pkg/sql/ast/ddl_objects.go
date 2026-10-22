@@ -75,6 +75,9 @@ type CreateTableExtras struct {
 	Kind string
 	// OnCluster is the ClickHouse ON CLUSTER name.
 	OnCluster string
+	// InheritsQuotes records the delimiters of each Inherits entry by index
+	// (nil when none keeps delimiters); see NameQuote.
+	InheritsQuotes []NameQuote
 	// Like is the source table of CREATE TABLE t LIKE src.
 	Like string
 	// Clone is the Snowflake CLONE source.

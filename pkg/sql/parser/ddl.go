@@ -426,6 +426,7 @@ func (p *Parser) parsePartitionDefinition() (*ast.PartitionDefinition, error) {
 		return nil, p.expectedError("partition name")
 	}
 	partDef.Name = p.currentToken.Token.Value
+	partDef.NameQuote = p.currentNameQuote()
 	p.advance()
 
 	switch w := p.wordAt(0); {

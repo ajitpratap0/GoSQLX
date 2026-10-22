@@ -395,7 +395,7 @@ func (p *Parser) parseAlterAddIndex(op *ast.AlterTableOperation) (*ast.AlterTabl
 	}
 	if !p.isType(models.TokenTypeLParen) && !p.isType(models.TokenTypeUsing) {
 		if name := p.parseColumnName(); name != nil {
-			op.IndexName = name.Name
+			op.IndexName, op.IndexNameQuote = name.Name, name.Quotes
 		}
 	}
 	return p.parseAlterTail(op)
@@ -460,7 +460,7 @@ func (p *Parser) parseAlterDrop(op *ast.AlterTableOperation) (*ast.AlterTableOpe
 			if name == nil {
 				return nil, p.expectedError("index name")
 			}
-			op.IndexName = name.Name
+			op.IndexName, op.IndexNameQuote = name.Name, name.Quotes
 			return op, nil
 		}
 	}

@@ -27,7 +27,10 @@ import (
 //   - Function-call table references whose function name matches, such as
 //     FROM my_udtf(1) or ClickHouse FROM numbers(10); the arguments are kept
 //   - Column qualifiers (table.column identifiers in SELECT list, WHERE, ORDER BY)
-//   - The table name field of UPDATE and DELETE statements
+//   - The table name field of UPDATE and DELETE statements, and everything
+//     else those statements name tables in: further targets and JOINs
+//     (MySQL multi-table forms), UPDATE ... FROM, DELETE ... FROM / USING,
+//     and column qualifiers in SET, OUTPUT, ORDER BY and RETURNING
 //   - Subquery FROM/JOIN references (recursively)
 //
 // Matching is case-insensitive. This is useful for renaming tables, routing
@@ -53,16 +56,10 @@ func ReplaceTable(oldName, newName string) Rule {
 			}
 			return nil
 		case *ast.UpdateStatement:
-			if strings.EqualFold(s.TableName, oldName) {
-				s.TableName = newName
-			}
-			s.Where = replaceTableInExpr(s.Where, oldName, newName)
+			replaceTableInUpdate(s, oldName, newName)
 			return nil
 		case *ast.DeleteStatement:
-			if strings.EqualFold(s.TableName, oldName) {
-				s.TableName = newName
-			}
-			s.Where = replaceTableInExpr(s.Where, oldName, newName)
+			replaceTableInDelete(s, oldName, newName)
 			return nil
 		default:
 			return &ErrUnsupportedStatement{Transform: "ReplaceTable", Got: stmtTypeName(stmt)}
@@ -72,8 +69,13 @@ func ReplaceTable(oldName, newName string) Rule {
 
 // AddTableAlias returns a Rule that assigns an alias to a specific table in a
 // SELECT, UPDATE, or DELETE statement. For SELECT statements the alias is applied
-// to the matching entry in the FROM clause; for UPDATE and DELETE it sets the
-// statement-level alias field.
+// to the matching entry in the FROM clause. For UPDATE and DELETE it is applied
+// to the matching table wherever the statement names it (the target, further
+// targets, JOINs, FROM / USING lists) and the column qualifiers that named the
+// table are renamed to the alias, because a table with an alias can no longer
+// be referred to by its name. In DELETE t FROM t JOIN ... the target is renamed
+// to the alias as well. A table that appears more than once in an UPDATE or
+// DELETE (a self join) is an error, since one alias cannot name both.
 //
 // Parameters:
 //   - tableName: The table to alias (case-insensitive match)
@@ -91,15 +93,9 @@ func AddTableAlias(tableName, alias string) Rule {
 			}
 			return nil
 		case *ast.UpdateStatement:
-			if strings.EqualFold(s.TableName, tableName) {
-				s.Alias = alias
-			}
-			return nil
+			return addAliasToUpdate(s, tableName, alias)
 		case *ast.DeleteStatement:
-			if strings.EqualFold(s.TableName, tableName) {
-				s.Alias = alias
-			}
-			return nil
+			return addAliasToDelete(s, tableName, alias)
 		default:
 			return &ErrUnsupportedStatement{Transform: "AddTableAlias", Got: stmtTypeName(stmt)}
 		}

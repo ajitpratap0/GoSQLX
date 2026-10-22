@@ -150,7 +150,10 @@ func (i Identifier) Children() []Node     { return nil }
 // LiteralValue represents a literal value in SQL
 type LiteralValue struct {
 	Value interface{}
-	Type  string // INTEGER, FLOAT, STRING, BOOLEAN, NULL, etc.
+	// Type is INTEGER, FLOAT, STRING, BOOLEAN, NULL, etc. A SQL Server
+	// national character string N'abc' has Type "nstring" (see
+	// NationalStringType); its Value is the unquoted text, as for "string".
+	Type string
 }
 
 func (l *LiteralValue) expressionNode()     {}

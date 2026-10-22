@@ -371,7 +371,7 @@ func TestDDLNameRendering_Benign_PR632(t *testing.T) {
 			`SELECT COUNT(*), COALESCE(a, 1), NOW(), IF(a, 1, 2), Fn(1) FROM t`},
 		{keywords.DialectClickHouse, `SELECT quantile(0.5)(x) FROM t`, `SELECT quantile(0.5)(x) FROM t`},
 		{"", `SELECT * FROM t FOR UPDATE OF t`, `SELECT * FROM t FOR UPDATE OF t`},
-		{"", `SELECT INTERVAL '1 day', INTERVAL 5 DAY FROM t`, `SELECT INTERVAL '1 day', INTERVAL '5 DAY' FROM t`},
+		{"", `SELECT INTERVAL '1 day', INTERVAL 5 DAY FROM t`, `SELECT INTERVAL '1 day', INTERVAL 5 DAY FROM t`},
 		{"", `SELECT EXTRACT(YEAR FROM d) FROM t`, `SELECT EXTRACT(YEAR FROM d) FROM t`},
 		{"", `SELECT CAST(a AS VARCHAR(10)), CAST(b AS DECIMAL(10, 2)), c::TEXT FROM t`,
 			`SELECT CAST(a AS VARCHAR(10)), CAST(b AS DECIMAL(10,2)), CAST(c AS TEXT) FROM t`},

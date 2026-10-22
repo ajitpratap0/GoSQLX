@@ -92,11 +92,11 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return p.parseArrayConstructor()
 	}
 
-	// ClickHouse array literal: [expr, expr, ...] without the ARRAY keyword.
-	// Gated to ClickHouse to avoid colliding with subscript-style usage in other
-	// dialects.
-	if p.isType(models.TokenTypeLBracket) && p.dialect == string(keywords.DialectClickHouse) {
-		return p.parseBracketArrayLiteral()
+	// ClickHouse / Snowflake array literal: [expr, expr, ...] without the
+	// ARRAY keyword, optionally subscripted: [1, 2, 3][2]. Gated to those
+	// dialects to avoid colliding with bracket-quoted names elsewhere.
+	if p.isType(models.TokenTypeLBracket) && p.hasBracketArrayLiterals() {
+		return p.parseBracketArrayPrimary()
 	}
 
 	// Handle MySQL VALUES(column) helper in ON DUPLICATE KEY UPDATE.
@@ -167,6 +167,15 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		// Handle identifiers and function calls
 		// Double-quoted strings are treated as identifiers in SQL (e.g., "column_name")
 		// Non-reserved keywords (TARGET, SOURCE, etc.) can also be used as identifiers
+		// Typed literal: DATE '2024-01-01', inet '10.0.0.1' (PostgreSQL).
+		if p.isTypedLiteralStart() {
+			return p.parseTypedLiteral(), nil
+		}
+		// Oracle CONNECT_BY_ROOT expr, and PRIOR expr in the select list.
+		if p.isHierarchicalOperator() {
+			return p.parseHierarchicalOperator()
+		}
+
 		identPos := p.currentLocation()
 		identName := p.currentToken.Token.Value
 		identQuote := p.currentIdentQuote()
@@ -174,6 +183,10 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 
 		// Check for function call (identifier followed by parentheses)
 		if p.isType(models.TokenTypeLParen) {
+			// Oracle outer-join marker: col(+)
+			if p.isOuterJoinMarker() {
+				return p.parseOuterJoinMarker(&ast.Identifier{Name: identName, Pos: identPos, Quoted: identQuote == '"', QuoteStyle: identQuote}), nil
+			}
 			// This is a function call
 			funcCall, err := p.parseFunctionCall(identName)
 			if err != nil {
@@ -251,6 +264,17 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			}
 		}
 
+		if p.isType(models.TokenTypeLParen) {
+			// Oracle outer-join marker: t.col(+)
+			if p.isOuterJoinMarker() {
+				return p.parseOuterJoinMarker(ident), nil
+			}
+			// Qualified function call: pg_catalog.now(), pkg.fn(1)
+			if ident.Table != "" && ident.Name != "*" {
+				return p.parseQualifiedFunctionCall(ident)
+			}
+		}
+
 		// Check for array subscript or slice syntax: identifier[...]
 		// This handles: arr[1], arr[1][2], arr[1:3], arr[2:], arr[:5]
 		if p.isType(models.TokenTypeLBracket) {
@@ -269,9 +293,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 
 	if p.isStringLiteral() {
 		// Handle string literals
-		value := p.currentToken.Token.Value
-		p.advance()
-		return &ast.LiteralValue{Value: value, Type: "string"}, nil
+		return p.parseStringLiteralExpr(), nil
 	}
 
 	if p.isNumericLiteral() {
@@ -297,7 +319,12 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		// SQL Server; ? for MySQL/MariaDB/SQLite; :1, :name for Oracle)
 		value := p.currentToken.Token.Value
 		p.advance()
-		return &ast.LiteralValue{Value: value, Type: "placeholder"}, nil
+		ph := &ast.LiteralValue{Value: value, Type: "placeholder"}
+		// MySQL user-variable assignment: @rownum := @rownum + 1
+		if p.isVariableAssignment() {
+			return p.parseVariableAssignment(ph)
+		}
+		return ph, nil
 	}
 
 	if p.isType(models.TokenTypeNull) {
@@ -452,12 +479,10 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		}, nil
 	}
 
-	return nil, goerrors.UnexpectedTokenError(
-		p.currentToken.Token.Type.String(),
-		p.currentToken.Token.Value,
-		p.currentLocation(),
-		"",
-	)
+	if expr, err := p.parsePrimaryFallback(); expr != nil || err != nil {
+		return expr, err
+	}
+	return nil, p.errUnexpectedPrimary()
 }
 
 // isConnectByPrior reports whether the current token is the PRIOR operator

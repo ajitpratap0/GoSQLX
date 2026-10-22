@@ -353,6 +353,9 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 			workQueue = appendOrderByExprs(workQueue, e.OrderBy)
 			workQueue = appendOrderByExprs(workQueue, e.WithinGroup)
 			workQueue = appendWindowSpecExprs(workQueue, e.Over)
+			if e.Keep != nil {
+				workQueue = appendOrderByExprs(workQueue, e.Keep.OrderBy)
+			}
 			if mode == releaseAll {
 				// Keep Arguments/Parameters capacity; OrderBy, WithinGroup and
 				// Over are rare and left to the GC.
@@ -455,6 +458,9 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 			}
 
 		case *IntervalExpression:
+			if e.ValueExpr != nil {
+				workQueue = append(workQueue, e.ValueExpr)
+			}
 			if mode == releaseAll {
 				*e = IntervalExpression{}
 				intervalExprPool.Put(e)
@@ -554,6 +560,13 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 			// statement pool, not a bare nil-assign (leak before fix).
 			if e.Subquery != nil {
 				releaseSelectStatement(e.Subquery, mode)
+			}
+			// ARRAY(SELECT 1 UNION SELECT 2): the set operation itself is
+			// not pooled, its operand statements are.
+			if so, ok := e.Query.(*SetOperation); ok {
+				releaseSetOperationOperands(so, mode)
+			} else if e.Query != nil {
+				releaseStatement(e.Query, mode)
 			}
 			elems := e.Elements
 			clear(elems)
@@ -666,6 +679,36 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 			}
 
 		// Default case - expression type not pooled, just ignore
+		// Unpooled primary-expression nodes: release their children only.
+		case *KeywordArgument:
+			if e.Value != nil {
+				workQueue = append(workQueue, e.Value)
+			}
+		case *MatchAgainstExpression:
+			for _, c := range e.Columns {
+				if c != nil {
+					workQueue = append(workQueue, c)
+				}
+			}
+			if e.Query != nil {
+				workQueue = append(workQueue, e.Query)
+			}
+		case *OuterJoinMarker:
+			if e.Expr != nil {
+				workQueue = append(workQueue, e.Expr)
+			}
+		case *ConnectByRootExpression:
+			if e.Expr != nil {
+				workQueue = append(workQueue, e.Expr)
+			}
+		case *AssignmentExpression:
+			if e.Target != nil {
+				workQueue = append(workQueue, e.Target)
+			}
+			if e.Value != nil {
+				workQueue = append(workQueue, e.Value)
+			}
+
 		default:
 			// Unknown expression type - no pool available
 		}

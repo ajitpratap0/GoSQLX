@@ -20,6 +20,7 @@ import (
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
 // parseCompositeIndirection consumes field selections and array subscripts
@@ -33,6 +34,12 @@ func (p *Parser) parseCompositeIndirection(expr ast.Expression) (ast.Expression,
 	fields := 0
 	for {
 		switch {
+		case p.isType(models.TokenTypePeriod) && p.isTupleElementAccess():
+			// ClickHouse tuple element by position: (1, 'a').1
+			pos := p.currentLocation()
+			p.advance() // Consume .
+			expr = &ast.FieldAccessExpression{Expr: expr, Field: p.currentToken.Token.Value, Pos: pos}
+			p.advance() // Consume the element number
 		case p.isType(models.TokenTypePeriod):
 			if !p.Capabilities().SupportsCompositeFieldAccess {
 				return nil, goerrors.UnsupportedFeatureError(
@@ -104,6 +111,24 @@ func isBareWord(s string) bool {
 		case c == '_', c|0x20 >= 'a' && c|0x20 <= 'z':
 		case c >= '0' && c <= '9' && i > 0:
 		default:
+			return false
+		}
+	}
+	return true
+}
+
+// isTupleElementAccess reports whether the current '.' selects a ClickHouse
+// tuple element by its 1-based position: (1, 'a').1.
+func (p *Parser) isTupleElementAccess() bool {
+	if p.dialect != string(keywords.DialectClickHouse) {
+		return false
+	}
+	next := p.peekToken().Token
+	if next.Type != models.TokenTypeNumber || next.Value == "" {
+		return false
+	}
+	for i := 0; i < len(next.Value); i++ {
+		if next.Value[i] < '0' || next.Value[i] > '9' {
 			return false
 		}
 	}

@@ -464,7 +464,7 @@ func functionNamePartNeedsQuoting(part string, single bool) bool {
 }
 
 // keywordFunctionNames lists the words in reservedNameWords that the parser
-// still accepts bare as a function name (IF(a, b, c), REPLACE(s, x, y),
+// still accepts bare as a function name (IF(a, b, c), REPLACE(s, x, y), LEFT(s, 2),
 // VALUES(col) in ON DUPLICATE KEY UPDATE, FIRST/LAST, and the ClickHouse
 // table functions merge(...) and null(...)). Any other reserved word written
 // as a function name must have been quoted in the source.
@@ -472,6 +472,11 @@ func functionNamePartNeedsQuoting(part string, single bool) bool {
 var keywordFunctionNames = map[string]bool{
 	"FIRST": true, "IF": true, "LAST": true, "MERGE": true, "NULL": true,
 	"REPLACE": true, "VALUES": true,
+	// Keyword-named functions: LEFT(s, 2), RIGHT(s, 2), GROUPING(a),
+	// ROW(1, 2), TRUNCATE(x, 1), INSERT(s, 1, 2, 'x'), ClickHouse range(n)
+	// and Snowflake HASH(a), and MySQL INTERVAL(n, n1, n2).
+	"GROUPING": true, "HASH": true, "INSERT": true, "INTERVAL": true, "LEFT": true, "RANGE": true,
+	"RIGHT": true, "ROW": true, "TRUNCATE": true,
 }
 
 // writeFunctionName writes a possibly schema-qualified function name, quoting
@@ -522,6 +527,9 @@ func dataTypeIsPlain(typ string) bool {
 		c := typ[i]
 		switch {
 		case c == ' ' && depth == 0:
+			if i == 0 {
+				return false // a modifier word cannot start a type
+			}
 			j := i + 1
 			for j < len(typ) && (typ[j]|0x20 >= 'a' && typ[j]|0x20 <= 'z') {
 				j++
@@ -594,7 +602,7 @@ var typeModifierWords = map[string]bool{
 	"PRECISION": true, "VARYING": true, "CHARACTER": true, "CHAR": true, "VARCHAR": true,
 	"WITH": true, "WITHOUT": true, "LOCAL": true, "TIME": true, "ZONE": true,
 	"UNSIGNED": true, "SIGNED": true, "ZEROFILL": true, "LARGE": true, "OBJECT": true,
-	"RAW": true, "BINARY": true, "CODEC": true,
+	"RAW": true, "BINARY": true, "CODEC": true, "INTEGER": true, "INT": true,
 }
 
 // maxTypeModifierLen bounds the stack buffer isTypeModifierWord upper-cases

@@ -148,6 +148,8 @@ type FunctionCall struct {
 	WithinGroup   []OrderByExpression // ORDER BY clause for ordered-set aggregates (PERCENTILE_CONT, etc.)
 	NullTreatment string              // "IGNORE NULLS" or "RESPECT NULLS" on window functions (Snowflake, Oracle, BigQuery, SQL:2016)
 	Pos           models.Location     // Source position of the function name (1-based line and column)
+	Separator     *LiteralValue       // MySQL/MariaDB GROUP_CONCAT(... SEPARATOR 'str'); nil when absent
+	Keep          *KeepClause         // Oracle KEEP (DENSE_RANK FIRST|LAST ORDER BY ...); nil when absent
 }
 
 func (f *FunctionCall) expressionNode()     {}
@@ -179,7 +181,7 @@ func (f FunctionCall) Children() []Node {
 	for i := range f.WithinGroup {
 		children = append(children, &f.WithinGroup[i])
 	}
-	return children
+	return f.appendClauseChildren(children)
 }
 
 // CaseExpression represents a CASE expression
@@ -567,6 +569,13 @@ func (t TupleExpression) Children() []Node     { return nodifyExpressions(t.Expr
 type ArrayConstructorExpression struct {
 	Elements []Expression     // Elements inside ARRAY[...]
 	Subquery *SelectStatement // For ARRAY(SELECT ...) syntax (optional)
+	// Bracket reports a bare bracket literal [1, 2] (ClickHouse, Snowflake,
+	// and nested PostgreSQL ARRAY[[1, 2], [3, 4]] rows); SQL() then omits the
+	// ARRAY keyword.
+	Bracket bool
+	// Query is the body of ARRAY(<query>) when it is not a plain SELECT,
+	// e.g. ARRAY(SELECT 1 UNION SELECT 2); Subquery is nil then.
+	Query Statement
 }
 
 func (a *ArrayConstructorExpression) expressionNode()     {}
@@ -574,6 +583,9 @@ func (a ArrayConstructorExpression) TokenLiteral() string { return "ARRAY" }
 func (a ArrayConstructorExpression) Children() []Node {
 	if a.Subquery != nil {
 		return []Node{a.Subquery}
+	}
+	if a.Query != nil {
+		return append(nodifyExpressions(a.Elements), a.Query)
 	}
 	return nodifyExpressions(a.Elements)
 }
@@ -660,6 +672,9 @@ type CastExpression struct {
 	Expr Expression
 	Type string
 	Try  bool
+	// TypeAsString reports the ClickHouse form CAST(expr, 'Type'), where the
+	// target type is a string argument; Type holds its unquoted value.
+	TypeAsString bool
 }
 
 func (c *CastExpression) expressionNode() {}
@@ -752,15 +767,27 @@ type IntervalExpression struct {
 	// "YEAR_MONTH". Empty for INTERVAL '1 day' and for the MySQL numeric form
 	// INTERVAL 30 DAY, whose unit stays in Value.
 	Qualifier string
+	// ValueExpr is the unquoted value of INTERVAL <expr> <unit> (MySQL,
+	// MariaDB, ClickHouse, Oracle): INTERVAL 30 DAY, INTERVAL n DAY,
+	// INTERVAL -1 HOUR. When it is set, Unit holds the upper-cased unit, Value
+	// keeps the legacy "<expr> <UNIT>" text, and SQL() writes the value
+	// unquoted so the output parses in those dialects.
+	ValueExpr Expression
+	// Unit is the unit after an unquoted ValueExpr (DAY, YEAR_MONTH).
+	Unit string
 }
 
 func (i *IntervalExpression) expressionNode()     {}
 func (i IntervalExpression) TokenLiteral() string { return "INTERVAL" }
 
-// Children implements Node. IntervalExpression stores its value as a raw
-// string (not an Expression), so it has no child nodes. Returns nil for
-// consistency with other leaf nodes.
-func (i IntervalExpression) Children() []Node { return nil }
+// Children implements Node and returns the unquoted value expression, if
+// any; a quoted INTERVAL '1 day' has no child nodes.
+func (i IntervalExpression) Children() []Node {
+	if i.ValueExpr == nil {
+		return nil
+	}
+	return []Node{i.ValueExpr}
+}
 
 // ArraySubscriptExpression represents array element access syntax.
 // Supports single and multi-dimensional array subscripting.

@@ -33,7 +33,6 @@ var corpusFormatKnownGaps = map[string]string{
 	"corpus/orm/gorm_joins.sql":      "follow-up: a name quoted only for case (\"Company\") renders bare; the AST does not record quoting, so the CLI refuses",
 	"mssql/13_cross_apply.sql":       "follow-up: CROSS APPLY rendered as CROSS APPLY JOIN, TOP lost in derived table",
 	"mssql/14_outer_apply.sql":       "follow-up: OUTER APPLY rendered as OUTER APPLY JOIN, TOP lost in derived table",
-	"mysql/29_full_text_search.sql":  "follow-up: MATCH ... AGAINST rendered as AGAINST AGAINST(...)",
 	"oracle/08_connect_by_path.sql":  "follow-up: START WITH / CONNECT BY not rendered",
 	"oracle/19_regexp_functions.sql": "follow-up: string literal backslashes doubled for a dialect that keeps them literal",
 }

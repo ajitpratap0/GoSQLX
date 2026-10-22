@@ -47,7 +47,15 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 	}
 
 	// Parse arguments if not empty
-	if !p.isType(models.TokenTypeRParen) {
+	var separator *ast.LiteralValue
+	if form := specialFormOf(funcName); form != formNone && !p.isType(models.TokenTypeRParen) {
+		// Keyword-introduced arguments: SUBSTRING(s FROM 1 FOR 2), TRIM(BOTH ' ' FROM s), ...
+		args, err := p.parseSpecialFormArgs(form)
+		if err != nil {
+			return nil, err
+		}
+		arguments = args
+	} else if !p.isType(models.TokenTypeRParen) {
 		for !p.isType(models.TokenTypeOrder) {
 			// Named argument form: `name => expr` (Snowflake FLATTEN,
 			// BigQuery, Oracle, PostgreSQL procedural calls). Detect by a
@@ -88,14 +96,8 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 				p.advance() // Consume comma
 			} else if p.isType(models.TokenTypeRParen) || p.isType(models.TokenTypeOrder) {
 				break
-			} else if strings.ToUpper(p.currentToken.Token.Value) == "SEPARATOR" {
-				// MySQL GROUP_CONCAT SEPARATOR clause
-				p.advance() // Consume SEPARATOR
-				sepArg, err := p.parseExpression()
-				if err != nil {
-					return nil, err
-				}
-				arguments = append(arguments, sepArg)
+			} else if p.isWord("SEPARATOR") {
+				// MySQL GROUP_CONCAT SEPARATOR clause; parsed below.
 				break
 			} else {
 				return nil, p.expectedError(", or )")
@@ -152,7 +154,7 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 				p.advance() // Consume comma
 			} else if p.isType(models.TokenTypeRParen) {
 				break
-			} else if strings.EqualFold(p.currentToken.Token.Value, "SEPARATOR") {
+			} else if p.isWord("SEPARATOR") {
 				break // Let SEPARATOR be handled below
 			} else {
 				return nil, p.expectedError(", or )")
@@ -160,14 +162,15 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 		}
 	}
 
-	// Handle MySQL SEPARATOR clause (GROUP_CONCAT)
-	if strings.EqualFold(p.currentToken.Token.Value, "SEPARATOR") {
+	// Handle MySQL SEPARATOR clause (GROUP_CONCAT). It is kept apart from the
+	// arguments: GROUP_CONCAT(a SEPARATOR '|') is not GROUP_CONCAT(a, '|').
+	if p.isWord("SEPARATOR") {
 		p.advance() // Consume SEPARATOR
-		sepExpr, err := p.parseExpression()
+		sep, err := p.parseSeparatorLiteral()
 		if err != nil {
 			return nil, err
 		}
-		arguments = append(arguments, sepExpr)
+		separator = sep
 	}
 
 	// Expect closing parenthesis
@@ -182,6 +185,7 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 		Arguments: arguments,
 		Distinct:  distinct,
 		OrderBy:   orderByExprs,
+		Separator: separator,
 	}
 
 	// ClickHouse parametric aggregates: funcName(params)(args).
@@ -193,6 +197,15 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 		if err := p.parseClickHouseParametricArgs(funcCall, distinctPos); err != nil {
 			return nil, err
 		}
+	}
+
+	// Oracle KEEP (DENSE_RANK FIRST|LAST ORDER BY ...) aggregate modifier.
+	if p.isKeepClause() {
+		keep, err := p.parseKeepClause()
+		if err != nil {
+			return nil, err
+		}
+		funcCall.Keep = keep
 	}
 
 	// Check for IGNORE NULLS / RESPECT NULLS (SQL:2016 null treatment).

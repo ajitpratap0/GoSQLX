@@ -430,8 +430,9 @@ func (p *Parser) parseTypeArgsString() (string, error) {
 		switch tok.Type {
 		case models.TokenTypeString, models.TokenTypeSingleQuotedString,
 			models.TokenTypeDoubleQuotedString:
+			// Double embedded quotes so 'it''s' is written back as one literal.
 			buf.WriteByte('\'')
-			buf.WriteString(val)
+			buf.WriteString(strings.ReplaceAll(val, "'", "''"))
 			buf.WriteByte('\'')
 			prevWasIdent = false
 		default:

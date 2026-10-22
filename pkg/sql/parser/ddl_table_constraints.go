@@ -68,7 +68,9 @@ func (p *Parser) isTableElementStart() bool {
 		case p.isType(models.TokenTypeIndex) || p.isUnquotedWord("INDEX"):
 			return p.clickHouseIndexAhead()
 		case p.isUnquotedWord("PROJECTION"):
-			return p.peekAt(2).Token.Type == models.TokenTypeLParen
+			// PROJECTION name (SELECT ...); "projection FixedString(16)" is
+			// a column.
+			return p.peekAt(2).Token.Type == models.TokenTypeLParen && p.peekValueIs(3, "SELECT")
 		}
 	}
 	return p.isType(models.TokenTypeLike) &&
@@ -101,8 +103,14 @@ func (p *Parser) clickHouseIndexAhead() bool {
 		if t.Token.Type == models.TokenTypeUnknown && t.Token.Value == "" {
 			return false
 		}
-		if depth == 0 && equalsUpper(t.Token.Value, "TYPE") && i >= 2 {
-			return true
+		if depth == 0 && i >= 2 && t.Token.Quote == 0 && equalsUpper(t.Token.Value, "TYPE") {
+			switch t.Token.Type {
+			case models.TokenTypeString, models.TokenTypeSingleQuotedString,
+				models.TokenTypeDoubleQuotedString, models.TokenTypeDollarQuotedString:
+				// A 'type' literal (DEFAULT 'type') is not the TYPE keyword.
+			default:
+				return true
+			}
 		}
 	}
 }

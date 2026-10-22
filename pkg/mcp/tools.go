@@ -27,9 +27,8 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter"
+	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/keywords"
-	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/style"
-	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/whitespace"
 	sqlkeywords "github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/security"
 )
@@ -346,23 +345,11 @@ func lintSQLInternal(sql string) (map[string]any, error) {
 // Private helpers
 // ---------------------------------------------------------------------------
 
-// newFullLinter mirrors createLinter() from cmd/gosqlx/cmd/lint.go exactly,
-// using a fixed line-length of 100 for the MCP context.
+// newFullLinter builds the rule set of the `gosqlx lint` CLI command (the
+// core rules L001-L010 from rules.CoreRules with the CLI's configuration,
+// L005 limit 100).
 func newFullLinter() *linter.Linter {
-	return linter.New(
-		whitespace.NewTrailingWhitespaceRule(),     // L001
-		whitespace.NewMixedIndentationRule(),       // L002
-		whitespace.NewConsecutiveBlankLinesRule(1), // L003
-		whitespace.NewIndentationDepthRule(4, 4),   // L004
-		whitespace.NewLongLinesRule(100),           // L005
-		whitespace.NewRedundantWhitespaceRule(),    // L010
-
-		style.NewColumnAlignmentRule(),                   // L006
-		style.NewCommaPlacementRule(style.CommaTrailing), // L008
-		style.NewAliasingConsistencyRule(true),           // L009
-
-		keywords.NewKeywordCaseRule(keywords.CaseUpper), // L007
-	)
+	return linter.New(rules.CoreRules(rules.DefaultCoreConfig())...)
 }
 
 // toolResult marshals a map[string]any result into an MCP CallToolResult.

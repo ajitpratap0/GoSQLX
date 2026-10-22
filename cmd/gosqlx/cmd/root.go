@@ -21,6 +21,7 @@ import (
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/cmdutil"
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/lspcmd"
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/optimizecmd"
+	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 )
 
 // Version is the current version of gosqlx CLI.
@@ -56,7 +57,7 @@ import (
 //   - ClickHouse SQL dialect support (PREWHERE, FINAL, GLOBAL IN)
 //   - LSP semantic tokens + diagnostic debouncing
 //   - Parser API consolidation (ParseFromModelTokens canonical)
-var Version = "1.16.0"
+var Version = gosqlx.Version
 
 var (
 	// verbose enables detailed output for debugging and troubleshooting.
@@ -144,7 +145,6 @@ Key features:
 • CI/CD integration with proper exit codes
 
 Performance: 1.5M+ operations/second sustained, 1.97M peak. 100-1000x faster than competitors.`,
-	Version: "1.16.0",
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -190,7 +190,8 @@ func Execute() error {
 func init() {
 	// Report the Version variable from --version so release builds can set it
 	// with -ldflags "-X github.com/ajitpratap0/GoSQLX/cmd/gosqlx/cmd.Version=<tag>".
-	// A plain `go build` keeps the hard-coded default.
+	// A plain `go build` reports the library's gosqlx.Version, so the CLI and
+	// the library (and the LSP, which reports gosqlx.Version) cannot drift.
 	rootCmd.Version = Version
 
 	// Global flags available to all subcommands

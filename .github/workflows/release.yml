@@ -19,7 +19,24 @@ jobs:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       with:
         fetch-depth: 0
-    
+
+    # The CLI's unstamped --version and the LSP report gosqlx.Version, so a
+    # tag must match the Version const in pkg/gosqlx. Fail before building.
+    - name: Check tag matches gosqlx.Version
+      env:
+        TAG: ${{ github.ref_name }}
+      run: |
+        src="$(sed -n 's/^const Version = "\([^"]*\)".*/\1/p' pkg/gosqlx/gosqlx.go)"
+        if [ -z "$src" ]; then
+          echo "::error file=pkg/gosqlx/gosqlx.go::could not find 'const Version = \"...\"'"
+          exit 1
+        fi
+        if [ "${TAG#v}" != "$src" ]; then
+          echo "::error file=pkg/gosqlx/gosqlx.go::tag ${TAG} does not match gosqlx.Version ${src}; bump the const before tagging"
+          exit 1
+        fi
+        echo "tag ${TAG} matches gosqlx.Version ${src}"
+
     - name: Set up Go
       uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
       with:

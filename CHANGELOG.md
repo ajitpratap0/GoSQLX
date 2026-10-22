@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`SplitStatements` keeps compound statements whole**: `BEGIN ... END` blocks
+  (trigger, procedure and function bodies, T-SQL `IF ... BEGIN`, `BEGIN TRY`,
+  PostgreSQL `BEGIN ATOMIC`), `CASE ... END`, `IF`/`LOOP`/`WHILE`/`REPEAT`
+  inside a block and Oracle `DECLARE`/`IS`/`AS` sections are no longer cut at
+  the first inner `;`. Transaction statements (`BEGIN;`, `BEGIN TRANSACTION`,
+  `BEGIN IMMEDIATE`) are not blocks, and a script whose blocks do not balance
+  falls back to plain `;` splitting. Client batch separators are honoured and
+  removed from the output: a `GO [n]` line for SQL Server, `DELIMITER` for
+  MySQL/MariaDB and a lone `/` line for Oracle.
+- **`gosqlx.Lint` / `LintWithDialect` report invalid SQL**: SQL that does not
+  tokenize or parse returns an error wrapping `ErrTokenize` or `ErrSyntax`
+  together with the violations of the text and token rules. Callers that
+  ignored the error and treated an empty result as clean must now check it.
+  `linter.FileResult` gains `TokenizeError`, `ParseError` and `SyntaxError()`.
+- **`gosqlx.Format` and `gosqlx format` keep comments and optimizer hints**:
+  comments stay with their statement (a comment inside a statement moves to the
+  line above it) and `/*+ ... */` hints directly after a statement's first
+  keyword stay in place. Input whose hints or MySQL `/*! ... */` comments
+  cannot be placed faithfully is refused (`formatter.ErrUnplaceableComment`)
+  instead of being rewritten without them, and `format -i` verifies that the
+  output holds exactly the input's comments. New `formatter.JoinWithComments`
+  and `gosqlx.WithComments()`.
+- **CLI**: `lint` exits 1 on syntax errors and `--auto-fix` judges the fixed
+  text; `format --no-uppercase` lower-cases keywords (it used to upper-case
+  them); `postgres`, `pg`, `mssql`, `tsql` and `sqlite3` are accepted by every
+  `--dialect` flag; errors are printed once and usage only for flag and
+  argument errors; `validate --quiet` exits silently; `validate` names stdin
+  `<stdin>`, validates `GO`/`DELIMITER` scripts and files over the token
+  limit statement by statement; empty and comment-only input is valid for
+  `validate`, `lint` and `format`; `-o` works for `parse` and `transpile`,
+  `-f`/`-o` map onto `validate`'s output flags and are rejected where
+  unsupported; `format` keeps a leading byte order mark.
+- **`ParseReaderMultiple`** skips segments that hold only comments.
+- **Docs**: removed `parser.NewTokenConverter`, `SetMaxTokens`,
+  `SetMaxRecursionDepth` and the `parser.max_tokens` config key, none of which
+  exist; the limits are constants.
+
 ## [1.16.0] - 2026-10-22 — Performance Audit, SQL Highlighting, Dialect-Aware LSP, Claude Code Plugin & ChatGPT App, Correctness Sweep
 
 Covers everything merged since v1.15.0: the October 2026 performance audit

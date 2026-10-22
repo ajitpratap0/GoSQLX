@@ -181,6 +181,7 @@ func (p *Parser) parseWithRecovery(tokens []models.TokenWithSpan) ([]ast.Stateme
 	p.tokens = tokens
 	p.currentPos = 0
 	p.implicitEnd = 0
+	p.openBlockWork = 0
 	if len(tokens) > 0 {
 		p.currentToken = tokens[0]
 	}
@@ -192,6 +193,9 @@ func (p *Parser) parseWithRecovery(tokens []models.TokenWithSpan) ([]ast.Stateme
 		// Skip semicolons between statements
 		if p.isType(models.TokenTypeSemicolon) {
 			p.advance()
+			continue
+		}
+		if p.skipBatchSeparator() {
 			continue
 		}
 
@@ -223,6 +227,8 @@ func (p *Parser) parseWithRecovery(tokens []models.TokenWithSpan) ([]ast.Stateme
 			// Optionally consume semicolon after statement
 			if p.isType(models.TokenTypeSemicolon) {
 				p.advance()
+			} else {
+				p.noteStatementEnd()
 			}
 		}
 	}

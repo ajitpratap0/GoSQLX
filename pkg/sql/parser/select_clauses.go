@@ -69,7 +69,9 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 			!p.isSelectTailStart() &&
 			// A DDL tail after a FROM-less query: CREATE ... AS SELECT 1
 			// WITH [NO] DATA | WITH CHECK OPTION | WITH READ ONLY.
-			!p.isType(models.TokenTypeWith) {
+			!p.isType(models.TokenTypeWith) &&
+			// The next statement of a script without semicolons.
+			!p.statementMayEndAt(p.currentPos) {
 			return "", nil, nil, p.expectedError("FROM, semicolon, or end of statement")
 		}
 		return "", nil, nil, nil

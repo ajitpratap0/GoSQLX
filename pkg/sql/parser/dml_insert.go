@@ -65,7 +65,7 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 		stmt.TableFunction = fn
 	} else {
 		// Parse table name (supports schema.table qualification and double-quoted identifiers)
-		tableName, tableQuote, err := p.parseQualifiedNameQuoted()
+		tableName, tableQuote, err := p.parseTableNameQuoted()
 		if err != nil {
 			return nil, p.qualifiedNameError(err, "table name")
 		}

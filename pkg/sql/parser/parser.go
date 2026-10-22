@@ -157,6 +157,7 @@ func (p *Parser) Reset() {
 	}
 	p.currentPos = 0
 	p.implicitEnd = 0
+	p.openBlockWork = 0
 	p.currentToken = models.TokenWithSpan{}
 	p.depth = 0
 	p.ctx = nil
@@ -363,6 +364,10 @@ type Parser struct {
 	// statement ended without a ';' because the next statement began there
 	// (0: none). See utility_implicit_end.go.
 	implicitEnd int
+	// openBlockWork counts the tokens that block-tracking statement scans
+	// examined before running into the end of the input inside an unclosed
+	// block. It bounds that wasted work (see utilityStatementEnd).
+	openBlockWork int
 }
 
 // Deprecated: Parse is provided for backward compatibility only and is scheduled for
@@ -408,6 +413,7 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 	p.tokens = tokens
 	p.currentPos = 0
 	p.implicitEnd = 0
+	p.openBlockWork = 0
 	if len(tokens) > 0 {
 		p.currentToken = tokens[0]
 	}
@@ -437,6 +443,9 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 			p.advance()
 			continue
 		}
+		if p.skipBatchSeparator() {
+			continue
+		}
 
 		stmt, err := p.parseStatement()
 		if err != nil {
@@ -449,6 +458,8 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 		// Optionally consume semicolon after statement
 		if p.isType(models.TokenTypeSemicolon) {
 			p.advance()
+		} else {
+			p.noteStatementEnd()
 		}
 	}
 
@@ -598,6 +609,7 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 	p.tokens = tokens
 	p.currentPos = 0
 	p.implicitEnd = 0
+	p.openBlockWork = 0
 	if len(tokens) > 0 {
 		p.currentToken = tokens[0]
 	}
@@ -632,6 +644,9 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 			p.advance()
 			continue
 		}
+		if p.skipBatchSeparator() {
+			continue
+		}
 
 		stmt, err := p.parseStatement()
 		if err != nil {
@@ -644,6 +659,8 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 		// Optionally consume semicolon after statement
 		if p.isType(models.TokenTypeSemicolon) {
 			p.advance()
+		} else {
+			p.noteStatementEnd()
 		}
 	}
 
@@ -1194,7 +1211,7 @@ func (p *Parser) parseQualifiedName() (string, error) {
 
 // Accepts IDENT or non-reserved keywords that can be used as table names
 func (p *Parser) parseTableReference() (*ast.TableReference, error) {
-	name, q, err := p.parseQualifiedNameQuoted()
+	name, q, err := p.parseTableNameQuoted()
 	if err != nil {
 		return nil, err
 	}
@@ -1350,7 +1367,7 @@ func (p *Parser) nextStartsTableClause() bool {
 // but NOT contextual clause keywords that would be consumed as aliases by mistake
 // (e.g. MINUS in Snowflake/Oracle, QUALIFY in Snowflake/BigQuery, WINDOW).
 func (p *Parser) canBeAlias() bool {
-	if p.isMinusSetOp() || p.isQualifyKeyword() || p.isWindowClauseKeyword() || p.isSettingsKeyword() || p.isDMLReturningKeyword() || p.isSelectExtClauseStart() {
+	if p.isMinusSetOp() || p.isQualifyKeyword() || p.isWindowClauseKeyword() || p.isSettingsKeyword() || p.isDMLReturningKeyword() || p.isSelectExtClauseStart() || p.isTSQLStatementStart() {
 		return false
 	}
 	return p.isIdentifier() || p.isNonReservedKeyword()

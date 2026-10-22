@@ -143,7 +143,7 @@ func (p *Parser) isDMLTargetAlias() bool {
 	if !p.isIdentifier() {
 		return false
 	}
-	return !p.isReturningKeyword() && !p.isDMLOutputKeyword()
+	return !p.isReturningKeyword() && !p.isDMLOutputKeyword() && !p.isTSQLStatementStart()
 }
 
 // parseDMLTargetRef parses one UPDATE/DELETE target: a possibly qualified
@@ -153,7 +153,7 @@ func (p *Parser) parseDMLTargetRef() (ast.TableReference, error) {
 	if p.isType(models.TokenTypeLParen) {
 		return p.parseFromTableReference()
 	}
-	name, nameQuote, err := p.parseQualifiedNameQuoted()
+	name, nameQuote, err := p.parseTableNameQuoted()
 	if err != nil {
 		return ast.TableReference{}, p.qualifiedNameError(err, "table name")
 	}

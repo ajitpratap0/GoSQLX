@@ -320,8 +320,9 @@ func splitCore(src string, p dialectProfile) (out []string, open bool) {
 			i++
 
 		case c == ';':
-			if delim != "" || st.depth > 0 {
-				// Inside a custom-delimiter statement or an open block.
+			if delim != "" || st.depth > 0 || (p.tsql && elseFollows(src, i+1)) {
+				// Inside a custom-delimiter statement or an open block, or
+				// T-SQL IF ... stmt; ELSE stmt.
 				st.semicolon()
 				i++
 				continue

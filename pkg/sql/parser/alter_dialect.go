@@ -273,10 +273,14 @@ func (p *Parser) parseAlterVerbatim(word string) (ast.Statement, error) {
 	if start < 0 || p.tokens[start].Token.Type != models.TokenTypeAlter {
 		return nil, p.expectedError("ALTER")
 	}
+	// Scan from ALTER so that the statement's kind decides where it ends.
+	objPos := p.currentPos
+	p.seek(start)
 	end, err := p.utilityStatementEnd()
 	if err != nil {
 		return nil, err
 	}
+	p.seek(objPos)
 	// ALTER <object> alone is not a statement.
 	if end <= p.currentPos+1 {
 		p.seek(p.currentPos + 1)

@@ -325,8 +325,16 @@ func foldWord(buf *[12]byte, w string) []byte {
 // than starting a transaction (BEGIN; BEGIN TRANSACTION; BEGIN IMMEDIATE …)
 // or being a column or alias that happens to be called begin.
 func beginIsBlock(src string, j int) bool {
-	w, _, end := peekWord(src, j)
+	w, c, end := peekWord(src, j)
 	if w == "" {
+		// BEGIN :NEW.x := ..., BEGIN <<label>>, BEGIN "x" := ... open a
+		// PL/SQL block; BEGIN; and BEGIN at the end do not.
+		switch c {
+		case ':', '"':
+			return true
+		case '<':
+			return end+1 < len(src) && src[end+1] == '<'
+		}
 		return false
 	}
 	var b [12]byte
@@ -410,6 +418,13 @@ func peekWord(src string, j int) (w string, c byte, end int) {
 		return "", c, j
 	}
 	return "", 0, j
+}
+
+// elseFollows reports whether the next word at or after j is ELSE: in T-SQL
+// "IF @x = 1 PRINT 'a'; ELSE PRINT 'b'" the ';' does not end the IF.
+func elseFollows(src string, j int) bool {
+	w, _, _ := peekWord(src, j)
+	return len(w) == 4 && equalFoldASCII(w, "else")
 }
 
 // commentsOnly reports whether seg holds nothing but whitespace and comments.

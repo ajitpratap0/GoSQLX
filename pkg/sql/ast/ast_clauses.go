@@ -351,6 +351,10 @@ type WindowSpec struct {
 	PartitionBy []Expression
 	OrderBy     []OrderByExpression
 	FrameClause *WindowFrame
+	// NameQuote and BaseWindowQuote record the delimiters of Name and
+	// BaseWindow when they must be kept (see NameQuote).
+	NameQuote       NameQuote
+	BaseWindowQuote NameQuote
 }
 
 func (w *WindowSpec) statementNode()      {}

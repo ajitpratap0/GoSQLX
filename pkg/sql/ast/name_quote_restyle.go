@@ -49,6 +49,15 @@ func SetNameQuoteStyle(node Node, style rune, keepBareHash bool) {
 			v.AliasQuote = restyle(v.AliasQuote)
 		case *FunctionCall:
 			v.NameQuote = restyle(v.NameQuote)
+			if v.Over != nil {
+				v.Over.NameQuote = restyle(v.Over.NameQuote)
+				v.Over.BaseWindowQuote = restyle(v.Over.BaseWindowQuote)
+			}
+		case *SelectStatement:
+			for i := range v.Windows {
+				v.Windows[i].NameQuote = restyle(v.Windows[i].NameQuote)
+				v.Windows[i].BaseWindowQuote = restyle(v.Windows[i].BaseWindowQuote)
+			}
 		case *TableReference:
 			v.NameQuote = restyle(v.NameQuote)
 			v.AliasQuote = restyle(v.AliasQuote)

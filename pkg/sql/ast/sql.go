@@ -844,16 +844,16 @@ func (f *FunctionCall) writeSQL(buf *bytes.Buffer) {
 		if o.Name != "" && o.BaseWindow == "" && len(o.PartitionBy) == 0 && len(o.OrderBy) == 0 && o.FrameClause == nil {
 			// Bare named-window reference: OVER w.
 			buf.WriteString(" OVER ")
-			writeName(buf, o.Name)
+			writeNameQ(buf, o.Name, o.NameQuote)
 		} else {
 			// Hand-built specs may carry the referenced window in Name alongside
 			// other parts; render it as the base window, as before.
-			base := o.BaseWindow
+			base, baseQuote := o.BaseWindow, o.BaseWindowQuote
 			if base == "" {
-				base = o.Name
+				base, baseQuote = o.Name, o.NameQuote
 			}
 			buf.WriteString(" OVER (")
-			writeWindowSpec(buf, base, o)
+			writeWindowSpec(buf, base, baseQuote, o)
 			buf.WriteByte(')')
 		}
 	}
@@ -1310,9 +1310,9 @@ func (s *SelectStatement) writeSQL(buf *bytes.Buffer) {
 			if i > 0 {
 				buf.WriteString(", ")
 			}
-			writeName(buf, s.Windows[i].Name)
+			writeNameQ(buf, s.Windows[i].Name, s.Windows[i].NameQuote)
 			buf.WriteString(" AS (")
-			writeWindowSpec(buf, s.Windows[i].BaseWindow, &s.Windows[i])
+			writeWindowSpec(buf, s.Windows[i].BaseWindow, s.Windows[i].BaseWindowQuote, &s.Windows[i])
 			buf.WriteByte(')')
 		}
 	}
@@ -2336,7 +2336,7 @@ func writeJoin(buf *bytes.Buffer, j *JoinClause) {
 // space-separated base (existing) window name, PARTITION BY, ORDER BY and
 // frame parts that are present. w.Name is never written here; callers write
 // it outside the parentheses (OVER w, WINDOW w AS (...)).
-func writeWindowSpec(buf *bytes.Buffer, base string, w *WindowSpec) {
+func writeWindowSpec(buf *bytes.Buffer, base string, baseQuote NameQuote, w *WindowSpec) {
 	first := true
 	sep := func() {
 		if !first {
@@ -2346,7 +2346,7 @@ func writeWindowSpec(buf *bytes.Buffer, base string, w *WindowSpec) {
 	}
 	if base != "" {
 		sep()
-		writeName(buf, base)
+		writeNameQ(buf, base, baseQuote)
 	}
 	if len(w.PartitionBy) > 0 {
 		sep()

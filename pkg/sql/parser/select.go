@@ -240,6 +240,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 				return nil, p.expectedError("window name after WINDOW")
 			}
 			winName := p.currentToken.Token.Value
+			winQuote := p.currentNameQuote()
 			p.advance()
 			if !p.isType(models.TokenTypeAs) {
 				return nil, p.expectedError("AS after window name")
@@ -253,9 +254,9 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			// is w2; keep it as the base window instead of dropping it, so it
 			// renders as the standard w AS (w2).
 			if winSpec.Name != "" {
-				winSpec.BaseWindow = winSpec.Name
+				winSpec.BaseWindow, winSpec.BaseWindowQuote = winSpec.Name, winSpec.NameQuote
 			}
-			winSpec.Name = winName
+			winSpec.Name, winSpec.NameQuote = winName, winQuote
 			selectStmt.Windows = append(selectStmt.Windows, *winSpec)
 			if !p.isType(models.TokenTypeComma) {
 				break

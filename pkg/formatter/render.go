@@ -303,7 +303,7 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 		wins := make([]string, len(s.Windows))
 		for i := range s.Windows {
-			wins[i] = ast.QuoteName(s.Windows[i].Name) + " AS (" + windowSpecSQL(&s.Windows[i]) + ")"
+			wins[i] = ast.QuoteNameWith(s.Windows[i].Name, f.nq(s.Windows[i].NameQuote)) + " AS (" + windowSpecSQL(&s.Windows[i]) + ")"
 		}
 		sb.WriteString(strings.Join(wins, ", "))
 	}
@@ -1544,7 +1544,7 @@ func joinSQL(j *ast.JoinClause, f *nodeFormatter) string {
 func windowSpecSQL(w *ast.WindowSpec) string {
 	var parts []string
 	if w.BaseWindow != "" {
-		parts = append(parts, ast.QuoteName(w.BaseWindow))
+		parts = append(parts, ast.QuoteNameWith(w.BaseWindow, w.BaseWindowQuote))
 	}
 	if len(w.PartitionBy) > 0 {
 		parts = append(parts, "PARTITION BY "+exprListSQL(w.PartitionBy))

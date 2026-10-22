@@ -357,7 +357,7 @@ func (p *Parser) parseWindowSpec() (*ast.WindowSpec, error) {
 	// This must be checked before the '(' path so that e.g. OVER w is not
 	// mistakenly rejected.
 	if p.isIdentifier() {
-		spec := &ast.WindowSpec{Name: p.currentToken.Token.Value}
+		spec := &ast.WindowSpec{Name: p.currentToken.Token.Value, NameQuote: p.currentNameQuote()}
 		p.advance()
 		return spec, nil
 	}
@@ -375,6 +375,7 @@ func (p *Parser) parseWindowSpec() (*ast.WindowSpec, error) {
 	// have dedicated token types, so a leading identifier can only be a name.
 	if p.isIdentifier() {
 		windowSpec.BaseWindow = p.currentToken.Token.Value
+		windowSpec.BaseWindowQuote = p.currentNameQuote()
 		p.advance()
 	}
 

@@ -205,18 +205,10 @@ var splitterDialects = []string{
 	"clickhouse", "sqlserver", "mssql", "tsql", "oracle", "unknown",
 }
 
-// checkTiling asserts the structural invariants of a split: the segments are
-// the exact byte ranges of src between top-level semicolons, so joining them
-// with ';' reproduces src (a single trailing top-level ';' is consumed and not
-// represented), and the segment count never exceeds the number of ';' bytes
-// plus one.
-func checkTiling(src string, segs []string) (string, bool) {
-	return checkTilingFor(src, segs, "")
-}
-
-// checkTilingFor is checkTiling for a dialect. The dialects whose scripts can
-// hold client directives (GO, DELIMITER, a lone "/") consume those lines, so
-// for them the segments must only be ordered substrings of src.
+// checkTilingFor asserts that segments exactly tile the source between
+// top-level semicolons, allowing a consumed trailing semicolon. Dialects with
+// client directives (GO, DELIMITER, a lone "/") consume those lines, so their
+// segments must instead be ordered substrings of src.
 func checkTilingFor(src string, segs []string, dialect string) (string, bool) {
 	switch strings.ToLower(strings.TrimSpace(dialect)) {
 	case "sqlserver", "mssql", "tsql", "mysql", "mariadb", "oracle":

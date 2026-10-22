@@ -50,8 +50,14 @@ func (a AtTimeZoneExpression) Children() []Node {
 //	a COLLATE NOCASE          (SQLite)
 type CollateExpression struct {
 	Expr Expression
-	// Collation is the collation name; a schema-qualified name is dotted
-	// ("pg_catalog.default").
+	// Schema is the qualifier of a schema-qualified collation name
+	// (pg_catalog in pg_catalog."default"); empty when unqualified. The
+	// parser always splits a qualified name this way so that a dot inside a
+	// quoted name ("en_US.utf8") stays part of the name.
+	Schema string
+	// Collation is the collation name. When Schema is empty and Quoted is
+	// false, a dotted Collation ("pg_catalog.default") is still written as a
+	// qualified name.
 	Collation string
 	// Quoted records that the (last part of the) name was written as a
 	// double-quoted identifier. It is re-quoted on output because PostgreSQL

@@ -612,10 +612,14 @@ func (t TableOption) Children() []Node     { return nil }
 
 // IndexColumn represents a column in an index definition
 type IndexColumn struct {
-	Column    string
-	Collate   string
-	Direction string // ASC, DESC
-	NullsLast bool
+	Column  string
+	Collate string
+	// CollateQuoted records that the collation name was written as a
+	// double-quoted identifier (COLLATE "C"); it is re-quoted on output
+	// because PostgreSQL folds a bare C to c.
+	CollateQuoted bool
+	Direction     string // ASC, DESC
+	NullsLast     bool
 }
 
 func (i *IndexColumn) expressionNode()     {}

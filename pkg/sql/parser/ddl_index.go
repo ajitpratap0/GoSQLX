@@ -94,6 +94,7 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 				return nil, p.expectedError("collation name")
 			}
 			col.Collate = p.currentToken.Token.Value
+			col.CollateQuoted = p.isType(models.TokenTypeDoubleQuotedString)
 			p.advance()
 		}
 

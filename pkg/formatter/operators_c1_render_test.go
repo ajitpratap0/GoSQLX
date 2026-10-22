@@ -40,6 +40,8 @@ func TestOperatorsC1_RenderRoundTrip(t *testing.T) {
 		{keywords.DialectPostgreSQL, "SELECT created_at AT TIME ZONE 'UTC' FROM t", "created_at AT TIME ZONE 'UTC'"},
 		{keywords.DialectPostgreSQL, `SELECT col COLLATE "C" FROM t ORDER BY name COLLATE "en_US"`, `col COLLATE "C"`},
 		{keywords.DialectMySQL, "SELECT x FROM t WHERE x COLLATE utf8mb4_bin = 'a'", "x COLLATE utf8mb4_bin = 'a'"},
+		{keywords.DialectPostgreSQL, `SELECT a COLLATE "en_US.utf8", b COLLATE pg_catalog."C" FROM t`, `a COLLATE "en_US.utf8", b COLLATE pg_catalog."C"`},
+		{keywords.DialectPostgreSQL, `CREATE INDEX i ON t (a COLLATE "C" DESC)`, `(a COLLATE "C" DESC)`},
 		{keywords.DialectPostgreSQL, "SELECT x FROM t WHERE tsv @@ to_tsquery('a') AND a && b", "tsv @@ to_tsquery('a') AND a && b"},
 		{keywords.DialectSQLServer, "SELECT a & b, ~c FROM t", "a & b, ~c"},
 		{keywords.DialectMySQL, "SELECT a DIV 3, b MOD 2 FROM t WHERE x NOT REGEXP 'a' AND y SOUNDS LIKE z", "a DIV 3, b MOD 2"},

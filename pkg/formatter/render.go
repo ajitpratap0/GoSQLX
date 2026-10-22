@@ -827,7 +827,7 @@ func renderCreateIndex(c *ast.CreateIndexStatement, opts ast.FormatOptions) stri
 	for i, col := range c.Columns {
 		s := ast.QuoteColumnName(col.Column)
 		if col.Collate != "" {
-			s += " " + f.kw("COLLATE") + " " + ast.QuoteColumnName(col.Collate)
+			s += " " + f.kw("COLLATE") + " " + ast.CollationNameSQL(col.Collate, col.CollateQuoted)
 		}
 		if dir := ast.SortDirectionText(col.Direction); dir != "" {
 			s += " " + f.kw(dir)

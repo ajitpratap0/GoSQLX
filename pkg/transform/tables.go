@@ -175,6 +175,19 @@ func walkExpr(expr ast.Expression, fn func(ast.Expression) ast.Expression) ast.E
 	case *ast.BinaryExpression:
 		e.Left = walkExpr(e.Left, fn)
 		e.Right = walkExpr(e.Right, fn)
+		e.Escape = walkExpr(e.Escape, fn)
+	case *ast.AtTimeZoneExpression:
+		e.Expr = walkExpr(e.Expr, fn)
+		e.Zone = walkExpr(e.Zone, fn)
+	case *ast.CollateExpression:
+		e.Expr = walkExpr(e.Expr, fn)
+	case *ast.AnyAllExpression:
+		e.Expr = walkExpr(e.Expr, fn)
+		e.Array = walkExpr(e.Array, fn)
+	case *ast.TernaryExpression:
+		e.Cond = walkExpr(e.Cond, fn)
+		e.Then = walkExpr(e.Then, fn)
+		e.Else = walkExpr(e.Else, fn)
 	case *ast.AliasedExpression:
 		e.Expr = walkExpr(e.Expr, fn)
 	case *ast.UnaryExpression:
@@ -339,6 +352,11 @@ func replaceTableInExpr(expr ast.Expression, old, new string) ast.Expression {
 	case *ast.AllExpression:
 		e.Expr = replaceTableInExpr(e.Expr, old, new)
 		replaceTableInStmt(e.Subquery, old, new)
+		return e
+	case *ast.AnyAllExpression:
+		// = SOME (SELECT ...) keeps its subquery in Array.
+		e.Expr = replaceTableInExpr(e.Expr, old, new)
+		e.Array = replaceTableInExpr(e.Array, old, new)
 		return e
 	}
 	return walkExpr(expr, func(e ast.Expression) ast.Expression {

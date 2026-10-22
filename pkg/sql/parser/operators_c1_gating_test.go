@@ -219,6 +219,29 @@ func TestOperatorsC1_IndexColumnCollate(t *testing.T) {
 	if idx.Columns[0].Collate != "NOCASE" || idx.Columns[0].Direction != "DESC" || idx.Columns[1].Collate != "" {
 		t.Errorf("columns = %+v, want a COLLATE NOCASE DESC and plain b", idx.Columns)
 	}
+	if got, want := idx.SQL(), "CREATE INDEX i ON t (a COLLATE NOCASE DESC, b)"; got != want {
+		t.Errorf("SQL() = %q, want %q", got, want)
+	}
+}
+
+// TestOperatorsC1_IndexColumnCollateQuoted checks that a quoted index column
+// collation keeps its quotes: PostgreSQL folds a bare C to c.
+func TestOperatorsC1_IndexColumnCollateQuoted(t *testing.T) {
+	tree, err := c1Parse(`CREATE INDEX i ON t (a COLLATE "C")`, keywords.DialectPostgreSQL)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	defer ast.ReleaseAST(tree)
+	idx, ok := tree.Statements[0].(*ast.CreateIndexStatement)
+	if !ok {
+		t.Fatalf("got %T, want *ast.CreateIndexStatement", tree.Statements[0])
+	}
+	if len(idx.Columns) != 1 || idx.Columns[0].Collate != "C" || !idx.Columns[0].CollateQuoted {
+		t.Fatalf("columns = %+v, want a COLLATE \"C\" (quoted)", idx.Columns)
+	}
+	if got, want := idx.SQL(), `CREATE INDEX i ON t (a COLLATE "C")`; got != want {
+		t.Errorf("SQL() = %q, want %q", got, want)
+	}
 }
 
 // TestOperatorsC1_ReleaseAST parses statements that use every new node and

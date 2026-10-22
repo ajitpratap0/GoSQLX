@@ -60,17 +60,43 @@ func (c *CollateExpression) writeSQL(buf *bytes.Buffer) {
 		writeStringLiteral(buf, c.Collation)
 		return
 	}
-	name := c.Collation
-	if dot := strings.LastIndexByte(name, '.'); dot > 0 && dot < len(name)-1 {
-		writeQualifiedName(buf, name[:dot])
+	if c.Schema != "" {
+		writeQualifiedName(buf, c.Schema)
 		buf.WriteByte('.')
-		name = name[dot+1:]
+		writeCollationName(buf, c.Collation, c.Quoted)
+		return
 	}
-	if c.Quoted {
+	name := c.Collation
+	if !c.Quoted {
+		// A programmatically built dotted name: schema.collation.
+		if dot := strings.LastIndexByte(name, '.'); dot > 0 && dot < len(name)-1 {
+			writeQualifiedName(buf, name[:dot])
+			buf.WriteByte('.')
+			name = name[dot+1:]
+		}
+	}
+	writeCollationName(buf, name, c.Quoted)
+}
+
+// writeCollationName writes a single-part collation name: double-quoted when
+// it was quoted in the source (PostgreSQL folds a bare C to c), otherwise
+// bare unless it needs quoting.
+func writeCollationName(buf *bytes.Buffer, name string, quoted bool) {
+	if quoted {
 		writeQuotedIdentifier(buf, name)
 		return
 	}
 	writeName(buf, name)
+}
+
+// CollationNameSQL returns a single-part collation name as SQL text, quoted
+// when quoted is set (see CollateExpression.Quoted) or when the name needs
+// quoting.
+func CollationNameSQL(name string, quoted bool) string {
+	buf := getBuf()
+	defer putBuf(buf)
+	writeCollationName(buf, name, quoted)
+	return buf.String()
 }
 
 // writePostfixOperand writes the operand of a postfix operator (AT TIME ZONE,

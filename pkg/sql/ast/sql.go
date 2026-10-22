@@ -1575,6 +1575,10 @@ func (c *CreateIndexStatement) SQL() string {
 			sb.WriteString(", ")
 		}
 		writeColumnName(sb, col.Column)
+		if col.Collate != "" {
+			sb.WriteString(" COLLATE ")
+			writeCollationName(sb, col.Collate, col.CollateQuoted)
+		}
 		if dir := SortDirectionText(col.Direction); dir != "" {
 			sb.WriteByte(' ')
 			sb.WriteString(dir)

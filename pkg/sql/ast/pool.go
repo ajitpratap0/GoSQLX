@@ -667,6 +667,7 @@ func PutCreateIndexStatement(stmt *CreateIndexStatement) {
 	for i := range stmt.Columns {
 		stmt.Columns[i].Column = ""
 		stmt.Columns[i].Collate = ""
+		stmt.Columns[i].CollateQuoted = false
 		stmt.Columns[i].Direction = ""
 		stmt.Columns[i].NullsLast = false
 	}

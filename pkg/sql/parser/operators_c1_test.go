@@ -91,7 +91,11 @@ func c1Shape(e ast.Expression) string {
 	case *ast.AtTimeZoneExpression:
 		return "(AT " + c1Shape(n.Expr) + " " + c1Shape(n.Zone) + ")"
 	case *ast.CollateExpression:
-		return "(COLLATE " + c1Shape(n.Expr) + " " + n.Collation + ")"
+		name := n.Collation
+		if n.Schema != "" {
+			name = n.Schema + "." + name
+		}
+		return "(COLLATE " + c1Shape(n.Expr) + " " + name + ")"
 	case *ast.CastExpression:
 		return "(CAST " + c1Shape(n.Expr) + " " + n.Type + ")"
 	case *ast.TernaryExpression:
@@ -154,6 +158,8 @@ func TestOperatorsC1_Shapes(t *testing.T) {
 		{"collate quoted keeps quotes", pg, `SELECT col COLLATE "C" FROM t`, false, "(COLLATE col C)", `col COLLATE "C"`},
 		{"collate bare mysql", my, "SELECT x FROM t WHERE x COLLATE utf8mb4_bin = 'a'", true, "(= (COLLATE x utf8mb4_bin) 'a')", "x COLLATE utf8mb4_bin = 'a'"},
 		{"collate qualified", pg, `SELECT a COLLATE pg_catalog."default" FROM t`, false, "(COLLATE a pg_catalog.default)", `a COLLATE pg_catalog."default"`},
+		{"collate quoted name with a dot", pg, `SELECT a COLLATE "en_US.utf8" FROM t`, false, "(COLLATE a en_US.utf8)", `a COLLATE "en_US.utf8"`},
+		{"collate qualified quoted name with a dot", pg, `SELECT a COLLATE pg_catalog."en_US.UTF-8" FROM t`, false, "(COLLATE a pg_catalog.en_US.UTF-8)", `a COLLATE pg_catalog."en_US.UTF-8"`},
 		{"collate string literal clickhouse", ch, "SELECT x FROM t ORDER BY y COLLATE 'en'", false, "(COLLATE y en)", "y COLLATE 'en'"},
 
 		// Bitwise and other binary operators

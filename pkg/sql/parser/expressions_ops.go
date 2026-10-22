@@ -284,16 +284,24 @@ func (p *Parser) parseCollateSuffix(left ast.Expression) (ast.Expression, error)
 	quoted := p.isType(models.TokenTypeDoubleQuotedString)
 	p.advance() // Consume the name
 
+	// Schema-qualified name: the parts before the last one form Schema, so
+	// a dot inside a quoted part ("en_US.utf8") is never read as a qualifier.
+	schema := ""
 	for p.isType(models.TokenTypePeriod) {
 		p.advance() // Consume .
 		if !p.isIdentifier() && !p.isNonReservedKeyword() {
 			return nil, p.expectedError("collation name")
 		}
-		name += "." + p.currentToken.Token.Value
+		if schema == "" {
+			schema = name
+		} else {
+			schema += "." + name
+		}
+		name = p.currentToken.Token.Value
 		quoted = p.isType(models.TokenTypeDoubleQuotedString)
 		p.advance()
 	}
-	return &ast.CollateExpression{Expr: left, Collation: name, Quoted: quoted, Pos: collatePos}, nil
+	return &ast.CollateExpression{Expr: left, Schema: schema, Collation: name, Quoted: quoted, Pos: collatePos}, nil
 }
 
 // parseIsSuffix parses what follows IS [NOT] in a comparison. The current

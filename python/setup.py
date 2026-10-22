@@ -12,6 +12,7 @@ Python version or ABI. The wheel is therefore tagged ``py3-none-<platform>``:
 one wheel per OS/architecture serves every supported Python version.
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -36,22 +37,25 @@ class PlatformWheel(bdist_wheel):
         return "py3", "none", platform_tag
 
     def run(self) -> None:
-        # Building from the sdist on a platform with no prebuilt wheel yields
-        # a wheel without the native library; it installs fine and only fails
-        # at first use. Say so loudly at build time.
+        # Building from the sdist on a platform with no prebuilt wheel (musl,
+        # 32-bit, ...) would yield a wheel without the native library. pip
+        # would cache and install it, and pygosqlx would only fail at first
+        # use; pip hides build-time warnings, so fail the build instead.
         if not any(
             (_LIB_DIR / f"libgosqlx.{ext}").is_file() for ext in ("so", "dylib", "dll")
         ):
-            print(
-                "WARNING: pygosqlx/lib/libgosqlx.{so,dylib,dll} is missing; "
-                "this wheel will not include the native library and pygosqlx "
-                "will raise FileNotFoundError at first use. Build it with "
-                "pkg/cbinding/build.sh before installing, or set "
-                "GOSQLX_LIB_PATH at runtime. See 'Building from source' in "
-                "python/README.md.",
-                file=sys.stderr,
+            message = (
+                "pygosqlx/lib/libgosqlx.{so,dylib,dll} is missing, so this "
+                "wheel would not include the native library. No prebuilt "
+                "pygosqlx wheel exists for this platform: build the library "
+                "with pkg/cbinding/build.sh first (see 'Building from source' "
+                "in python/README.md). To build anyway and point "
+                "GOSQLX_LIB_PATH at a library at runtime, set "
+                "PYGOSQLX_ALLOW_MISSING_LIB=1."
             )
+            if os.environ.get("PYGOSQLX_ALLOW_MISSING_LIB") != "1":
+                raise SystemExit(f"error: {message}")
+            print(f"WARNING: {message}", file=sys.stderr)
         super().run()
-
 
 setup(distclass=BinaryDistribution, cmdclass={"bdist_wheel": PlatformWheel})

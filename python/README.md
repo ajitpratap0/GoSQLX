@@ -46,7 +46,11 @@ Linux, `libgosqlx.dylib` on macOS, `libgosqlx.dll` on Windows via MSYS2/MinGW)
 and places it in `python/pygosqlx/lib/`, where `pip install .` bundles it. Use
 `OUTPUT_DIR=/path/to/output ./build.sh` to write it elsewhere.
 
-To use a library that is not bundled in the package, set:
+Building a wheel without the library fails on purpose, so `pip install` on a
+platform with no prebuilt wheel (for example musl or 32-bit Linux) stops with
+an error instead of installing a package that cannot load. To install without
+a bundled library and supply one at runtime instead, set
+`PYGOSQLX_ALLOW_MISSING_LIB=1` for the install and:
 
 ```bash
 export GOSQLX_LIB_PATH=/path/to/libgosqlx.so

@@ -209,7 +209,10 @@ def _get_lib_path() -> str:
     raise FileNotFoundError(
         f"GoSQLX shared library not found. "
         f"Searched: GOSQLX_LIB_PATH env var, {lib_path}. "
-        f"Build it with: cd pkg/cbinding && ./build.sh"
+        f"No prebuilt wheel bundles it for this platform; build it from "
+        f"source (cd pkg/cbinding && ./build.sh) and reinstall, or set "
+        f"GOSQLX_LIB_PATH. See 'Building from source' in "
+        f"https://github.com/ajitpratap0/GoSQLX/blob/main/python/README.md"
     )
 
 

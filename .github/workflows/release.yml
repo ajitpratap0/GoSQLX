@@ -40,6 +40,22 @@ jobs:
         CGO_ENABLED: '1'
       run: task test:cbinding
 
+    # pygosqlx-v* tags (Python package releases, see pygosqlx-release.yml)
+    # live on main too. GoReleaser OSS derives the previous tag with
+    # `git describe --tags`, which would pick a pygosqlx tag and produce a
+    # truncated changelog and a wrong compare link. Pin both tags to the
+    # 'v*' series explicitly (git.ignore_tags in .goreleaser.yml is Pro-only).
+    - name: Resolve release tags
+      env:
+        TAG: ${{ github.ref_name }}
+      run: |
+        prev="$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${TAG}^" 2>/dev/null || true)"
+        echo "GORELEASER_CURRENT_TAG=${TAG}" >> "$GITHUB_ENV"
+        if [ -n "$prev" ]; then
+          echo "GORELEASER_PREVIOUS_TAG=${prev}" >> "$GITHUB_ENV"
+        fi
+        echo "current=${TAG} previous=${prev:-<none>}"
+
     - name: Run GoReleaser
       uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
       with:

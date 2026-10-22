@@ -1,37 +1,57 @@
-"""Setup script for pygosqlx - Python bindings for GoSQLX SQL parser."""
+"""Wheel-tagging shim for pygosqlx.
 
-import os
-from setuptools import setup, find_packages
+All package metadata lives in pyproject.toml. This file exists only because
+pyproject.toml cannot express one thing: pygosqlx bundles a native shared
+library (pygosqlx/lib/libgosqlx.{so,dylib,dll}) that it loads through ctypes,
+so its wheels must be platform-specific. Without this shim setuptools would
+see no extension modules and tag the wheel ``py3-none-any``, which pip would
+then install on platforms the bundled library cannot run on.
 
-long_description = ""
-readme_path = os.path.join(os.path.dirname(__file__), "README.md")
-if os.path.exists(readme_path):
-    with open(readme_path, encoding="utf-8") as f:
-        long_description = f.read()
+The library is not a CPython extension module, so it does not depend on the
+Python version or ABI. The wheel is therefore tagged ``py3-none-<platform>``:
+one wheel per OS/architecture serves every supported Python version.
+"""
 
-setup(
-    name="pygosqlx",
-    version="0.3.0",
-    description="Python bindings for GoSQLX - High-performance SQL parser",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    author="GoSQLX Contributors",
-    url="https://github.com/ajitpratap0/GoSQLX",
-    packages=find_packages(),
-    package_data={"pygosqlx": ["lib/*", "py.typed"]},
-    python_requires=">=3.8",
-    classifiers=[
-        "Development Status :: 3 - Alpha",
-        "Intended Audience :: Developers",
-        "License :: OSI Approved :: Apache Software License",
-        "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
-        "Programming Language :: Python :: 3.13",
-        "Topic :: Database",
-        "Topic :: Software Development :: Libraries",
-    ],
-)
+import sys
+from pathlib import Path
+
+from setuptools import Distribution, setup
+from setuptools.command.bdist_wheel import bdist_wheel
+
+_LIB_DIR = Path(__file__).resolve().parent / "pygosqlx" / "lib"
+
+
+class BinaryDistribution(Distribution):
+    """Distribution that ships a native library, so it is never pure."""
+
+    def has_ext_modules(self) -> bool:
+        return True
+
+
+class PlatformWheel(bdist_wheel):
+    """bdist_wheel that produces a ``py3-none-<platform>`` wheel."""
+
+    def get_tag(self) -> tuple:
+        _, _, platform_tag = super().get_tag()
+        return "py3", "none", platform_tag
+
+    def run(self) -> None:
+        # Building from the sdist on a platform with no prebuilt wheel yields
+        # a wheel without the native library; it installs fine and only fails
+        # at first use. Say so loudly at build time.
+        if not any(
+            (_LIB_DIR / f"libgosqlx.{ext}").is_file() for ext in ("so", "dylib", "dll")
+        ):
+            print(
+                "WARNING: pygosqlx/lib/libgosqlx.{so,dylib,dll} is missing; "
+                "this wheel will not include the native library and pygosqlx "
+                "will raise FileNotFoundError at first use. Build it with "
+                "pkg/cbinding/build.sh before installing, or set "
+                "GOSQLX_LIB_PATH at runtime. See 'Building from source' in "
+                "python/README.md.",
+                file=sys.stderr,
+            )
+        super().run()
+
+
+setup(distclass=BinaryDistribution, cmdclass={"bdist_wheel": PlatformWheel})

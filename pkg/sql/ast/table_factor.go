@@ -147,12 +147,6 @@ type OpenJSONColumn struct {
 	AsJSON bool
 }
 
-// isEmpty reports whether m carries no modifier.
-func (m *TableModifiers) isEmpty() bool {
-	return m == nil || (m.TableSample == nil && m.Flashback == nil && m.DBLink == "" && len(m.Partitions) == 0 && len(m.IndexHints) == 0 &&
-		m.IndexedBy == "" && !m.NotIndexed && len(m.WithSchema) == 0)
-}
-
 // tableSample returns the sampling clause of t, or nil.
 func (t *TableReference) tableSample() *TableSampleClause {
 	if t.Modifiers == nil {

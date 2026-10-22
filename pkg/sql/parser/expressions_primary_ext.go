@@ -57,11 +57,7 @@ func (p *Parser) isKeywordFunctionName() bool {
 // isFunctionKeywordWord reports whether a generic keyword may be written as
 // a function name.
 func isFunctionKeywordWord(w string) bool {
-	switch len(w) {
-	case 4:
-		return strings.EqualFold(w, "HASH")
-	}
-	return false
+	return len(w) == 4 && strings.EqualFold(w, "HASH")
 }
 
 // parseKeywordFunctionCall parses a keyword-named function call; the current

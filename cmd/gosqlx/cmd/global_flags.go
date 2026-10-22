@@ -46,15 +46,6 @@ func rejectGlobalFormat(cmd *cobra.Command) error {
 	return nil
 }
 
-// rejectGlobalOutput fails when -o/--output was set on a command that only
-// writes to stdout.
-func rejectGlobalOutput(cmd *cobra.Command) error {
-	if outputFile != "" {
-		return fmt.Errorf("%s does not support -o/--output", cmd.CommandPath())
-	}
-	return nil
-}
-
 // outputSink returns the writer a command should print its result to and a
 // finish function to call once it has printed. With -o the result is buffered
 // and written to the file by finish; otherwise it goes straight to stdout.

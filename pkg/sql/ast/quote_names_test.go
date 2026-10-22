@@ -85,9 +85,9 @@ func TestQuoteQualifiedName(t *testing.T) {
 
 func TestWriteNameList(t *testing.T) {
 	var buf bytes.Buffer
-	writeNameList(&buf, []string{"a", "select", "a b", "Mixed"})
+	writeNameListQ(&buf, []string{"a", "select", "a b", "Mixed"}, nil)
 	if got, want := buf.String(), `a, "select", "a b", Mixed`; got != want {
-		t.Errorf("writeNameList = %s, want %s", got, want)
+		t.Errorf("writeNameListQ = %s, want %s", got, want)
 	}
 }
 

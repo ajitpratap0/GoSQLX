@@ -276,7 +276,7 @@ func writeTableAliasQ(buf *bytes.Buffer, name string, q NameQuote) {
 	writeNamePart(buf, name, partDelimited(name, q.Part(0), tableAliasNeedsQuoting(name), q), q.Style())
 }
 
-// writeNameListQ writes names separated by ", " like writeNameList; qs, when
+// writeNameListQ writes names separated by ", ", quoting each as needed; qs, when
 // not nil, holds the NameQuote of each name by index.
 func writeNameListQ(buf *bytes.Buffer, names []string, qs []NameQuote) {
 	for i, n := range names {

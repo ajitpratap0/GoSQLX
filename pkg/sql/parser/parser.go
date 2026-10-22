@@ -1119,15 +1119,6 @@ func (p *Parser) parseBareWordAsString() string {
 	return val
 }
 
-// parseObjectName parses an object name (possibly qualified)
-func (p *Parser) parseObjectName() ast.ObjectName {
-	ident := p.parseIdent()
-	if ident == nil {
-		return ast.ObjectName{}
-	}
-	return ast.ObjectName{Name: ident.Name, Quote: ident.Quotes}
-}
-
 // parseStringLiteral parses a string literal
 func (p *Parser) parseStringLiteral() string {
 	if !p.isStringLiteral() {

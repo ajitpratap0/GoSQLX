@@ -258,16 +258,6 @@ func writeTableAlias(buf *bytes.Buffer, name string) {
 	buf.WriteString(name)
 }
 
-// writeNameList writes names separated by ", ", quoting each as needed.
-func writeNameList(buf *bytes.Buffer, names []string) {
-	for i, n := range names {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		writeName(buf, n)
-	}
-}
-
 // writeQualifiedName writes a possibly dotted table or view name, quoting
 // each dot-separated part on its own as needed. A dot is always treated as a
 // part separator (the same convention as writeDottedIdentifier). An empty

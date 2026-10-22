@@ -19,7 +19,10 @@ import (
 	"testing"
 )
 
-func TestSplitStatements_Procedural(t *testing.T) {
+// proceduralSplitCases are the procedural scripts of
+// TestSplitStatements_Procedural; TestSplitStatements_AgreesWithParser
+// also parses each of their pieces.
+var proceduralSplitCases = func() []proceduralSplitCase {
 	mysqlRoutine := `CREATE PROCEDURE p(IN n INT)
 BEGIN
   DECLARE i INT DEFAULT 0;
@@ -38,12 +41,7 @@ BEGIN
   CASE i WHEN 1 THEN SELECT 1; ELSE SELECT 2; END CASE;
 END`
 
-	cases := []struct {
-		name    string
-		sql     string
-		dialect string
-		want    []string
-	}{
+	return []proceduralSplitCase{
 		// --- T-SQL ---
 		{"tsql if-begin-end", "IF 1 = 1 BEGIN SELECT 1; SELECT 2; END; SELECT 3;", "sqlserver",
 			[]string{"IF 1 = 1 BEGIN SELECT 1; SELECT 2; END", " SELECT 3"}},
@@ -59,6 +57,11 @@ END`
 			[]string{"IF @a = 1 BEGIN SELECT 1; END IF @b = 1 BEGIN SELECT 2; END", " SELECT 3"}},
 		{"tsql while with begin", "WHILE @i < 3 BEGIN SET @i += 1; END; SELECT 1", "sqlserver",
 			[]string{"WHILE @i < 3 BEGIN SET @i += 1; END", " SELECT 1"}},
+		{"tsql semicolon before else", "IF @a = 1 PRINT 'a'; ELSE PRINT 'b'; SELECT 3", "sqlserver",
+			[]string{"IF @a = 1 PRINT 'a'; ELSE PRINT 'b'", " SELECT 3"}},
+		{"tsql semicolon before else after comment", "IF @a = 1 BEGIN SELECT 1; END; -- branch\nELSE SELECT 2; SELECT 3", "sqlserver",
+			[]string{"IF @a = 1 BEGIN SELECT 1; END; -- branch\nELSE SELECT 2", " SELECT 3"}},
+		{"else after semicolon is plain text elsewhere", "SELECT 1; ELSE", "postgresql", []string{"SELECT 1", " ELSE"}},
 		{"tsql loop join hint is not a loop", "CREATE PROC p AS BEGIN SELECT * FROM a INNER LOOP JOIN b ON a.x = b.x; SELECT 2; END; SELECT 3", "sqlserver",
 			[]string{"CREATE PROC p AS BEGIN SELECT * FROM a INNER LOOP JOIN b ON a.x = b.x; SELECT 2; END", " SELECT 3"}},
 
@@ -158,7 +161,17 @@ END`
 		{"oracle slash division", "SELECT 1\n/ 2 FROM dual; SELECT 2", "oracle", []string{"SELECT 1\n/ 2 FROM dual", " SELECT 2"}},
 		{"slash ignored for other dialects", "SELECT 1\n/\nSELECT 2", "postgresql", []string{"SELECT 1\n/\nSELECT 2"}},
 	}
-	for _, tc := range cases {
+}()
+
+type proceduralSplitCase struct {
+	name    string
+	sql     string
+	dialect string
+	want    []string
+}
+
+func TestSplitStatements_Procedural(t *testing.T) {
+	for _, tc := range proceduralSplitCases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := SplitStatements(tc.sql, tc.dialect)
 			if !reflect.DeepEqual(got, tc.want) {

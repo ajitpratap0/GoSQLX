@@ -11,7 +11,7 @@ publisher directly. The workflow checks that the release tag belongs to main,
 the manifest name, version and remote URL match, and the deployed endpoint
 reports that version. It then validates and publishes with GitHub Actions OIDC;
 no registry token or PAT is stored. A deployment that has not reached the
-release version within two minutes fails the workflow; rerun it after deployment.
+release version within five minutes fails the workflow; rerun it after deployment.
 
 For an existing stable release such as `v1.16.0`, run **Publish MCP Registry
 entry** with `tag=v1.16.0` from the Actions tab after `server.json` is present

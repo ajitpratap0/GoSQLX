@@ -67,14 +67,20 @@ jobs:
           TAG: ${{ inputs.tag || github.event.release.tag_name }}
         run: |
           set -euo pipefail
-          for attempt in {1..12}; do
-            if health="$(curl -fsS --max-time 10 https://mcp.gosqlx.dev/health)" && \
+          deadline=$((SECONDS + 300))
+          while (( SECONDS < deadline )); do
+            remaining=$((deadline - SECONDS))
+            request_timeout=$((remaining < 10 ? remaining : 10))
+            if health="$(curl -fsS --max-time "$request_timeout" https://mcp.gosqlx.dev/health)" && \
                jq -e --arg version "${TAG#v}" '.status == "ok" and .version == $version' <<< "$health" > /dev/null; then
               exit 0
             fi
-            if (( attempt < 12 )); then sleep 10; fi
+            remaining=$((deadline - SECONDS))
+            if (( remaining > 0 )); then
+              sleep "$((remaining < 10 ? remaining : 10))"
+            fi
           done
-          echo "::error::MCP endpoint did not report ${TAG#v} within two minutes"
+          echo "::error::MCP endpoint did not report ${TAG#v} within five minutes"
           exit 1
 
       - name: Install verified MCP publisher

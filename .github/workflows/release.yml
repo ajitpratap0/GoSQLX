@@ -85,6 +85,12 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Upload assets
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: dist
+        path: dist/
+
     # The release GoReleaser just published does not trigger glama-sync.yml's
     # `release: published` (it was created with GITHUB_TOKEN); dispatch it.
     - name: Dispatch Glama sync
@@ -98,10 +104,9 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         TAG: ${{ github.ref_name }}
-      run: gh workflow run publish-mcp.yml --repo "$GITHUB_REPOSITORY" --ref main -f tag="$TAG"
-
-    - name: Upload assets
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-      with:
-        name: dist
-        path: dist/
+      run: |
+        if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "Skipping MCP Registry for nonstable tag $TAG"
+          exit 0
+        fi
+        gh workflow run publish-mcp.yml --repo "$GITHUB_REPOSITORY" --ref main -f tag="$TAG"

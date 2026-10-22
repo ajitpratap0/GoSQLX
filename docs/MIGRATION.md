@@ -37,6 +37,10 @@
 - [ ] **Limits**: comments count toward `MaxTokens`; unary operators, `NOT` and derived tables count toward `MaxRecursionDepth`; qualified names over 5 parts return E2004.
 - [ ] **LSP semantic tokens**: the `identifier` token type is now the standard `variable`. Update editor rules such as Neovim `@lsp.type.identifier`.
 - [ ] **Schema loaders**: the PostgreSQL loader needs PostgreSQL 11+. `Index.Columns` excludes INCLUDE columns (now `Index.IncludeColumns`), and tables with no foreign keys carry a nil slice.
+- [ ] **LSP `serverInfo.version`** now reports the GoSQLX library version (1.16.0) instead of a hard-coded `1.0.0`. Update any client check that matched `1.0.0`.
+- [ ] **CLI version stamping**: release builds can set the `gosqlx --version` string with `-ldflags "-X github.com/ajitpratap0/GoSQLX/cmd/gosqlx/cmd.Version=<version>"`; a plain `go build` keeps the built-in 1.16.0.
+- [ ] **C binding `gosqlx_version()`** now returns a newly allocated string on every call. Free each result once with `gosqlx_free` (earlier releases returned a shared pointer, so freeing it twice crashed). Callers that never freed it now leak a few bytes per call.
+- [ ] **pygosqlx 0.3.0** requires Python 3.10 or later (3.8 and 3.9 are dropped). An unknown `dialect=` raises `UnsupportedDialectError`, a subclass of both `GoSQLXError` and `ValueError`.
 - [ ] **`gosqlx-mcp` behind a proxy**: rate limiting keys on the TCP peer. Set `GOSQLX_MCP_TRUSTED_PROXY_HEADER` (for example `CF-Connecting-IP`) or `GOSQLX_MCP_TRUSTED_PROXY_HOPS`, optionally with the proxy-secret pair, or every client shares one bucket. Tool input errors are now `isError` results, and `indent_size` must be 0 to 16. See [MCP_GUIDE.md](MCP_GUIDE.md).
 
 ### Companion release versions
@@ -50,7 +54,9 @@
 | Claude Code plugin (`gosqlx@gosqlx`) | — (new) | **1.16.0** |
 | OpenTelemetry integration (`integrations/opentelemetry`) | requires v1.14.0 | updated after the tag |
 | GORM integration (`integrations/gorm`) | requires v1.14.0 | updated after the tag |
-| Python bindings (`pygosqlx`) | 0.2.0 (alpha) | 0.2.0 (alpha), independent track |
+| LSP `serverInfo.version` (`gosqlx lsp`) | 1.0.0 (hard-coded) | **1.16.0** (library version) |
+| C binding (`libgosqlx`) | 1.15.0 exports | **1.16.0**: adds `gosqlx_*_dialect`, `gosqlx_lint`, `gosqlx_security_scan`, `gosqlx_transpile`, `gosqlx_dialects` |
+| Python bindings (`pygosqlx`) | 0.2.0 (alpha) | **0.3.0** (alpha), independent track; Python 3.10+; PyPI wheels from the `pygosqlx-v0.3.0` tag |
 
 ---
 

@@ -21,7 +21,7 @@ func TestStringEscape(t *testing.T) {
 		d    Dialect
 		want StringEscape
 	}{
-		{Unknown, StringEscapeLenient},
+		{Unknown, StringEscapeStrict},
 		{Generic, StringEscapeNone},
 		{PostgreSQL, StringEscapeNone},
 		{Oracle, StringEscapeNone},
@@ -30,11 +30,12 @@ func TestStringEscape(t *testing.T) {
 		{MySQL, StringEscapeMySQL},
 		{MariaDB, StringEscapeMySQL},
 		{ClickHouse, StringEscapeLenient},
-		{Snowflake, StringEscapeLenient},
+		{Snowflake, StringEscapeDropUnknown},
 		{BigQuery, StringEscapeLenient},
-		{Redshift, StringEscapeLenient},
+		{Redshift, StringEscapeDropUnknown},
 		{Parse("postgres"), StringEscapeNone},
 		{Parse("mssql"), StringEscapeNone},
+		{Parse("no-such-dialect"), StringEscapeStrict},
 	}
 	for _, tt := range tests {
 		if got := tt.d.StringEscape(); got != tt.want {

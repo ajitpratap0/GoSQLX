@@ -105,7 +105,8 @@ func TestFormatSQL_KeepsBackslashLiteral(t *testing.T) {
 		{"sqlite", `'C:\temp\x'`},
 		{"postgresql", `'C:\temp\x'`},
 		// \t is a tab; \x keeps its backslash, which the output doubles.
-		{"snowflake", "'C:\temp\\\\x'"},
+		// (Snowflake refuses an incomplete \x escape; see
+		// format_string_escape_test.go.)
 		{"clickhouse", "'C:\temp\\\\x'"},
 	} {
 		t.Run(tt.dialect, func(t *testing.T) {

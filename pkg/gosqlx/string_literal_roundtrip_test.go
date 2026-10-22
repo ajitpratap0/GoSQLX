@@ -81,6 +81,14 @@ func TestStringBackslashFormatIsIdempotent(t *testing.T) {
 			sql := "SELECT '" + strings.ReplaceAll(body, "'", "''") + "'"
 			t.Run(fmt.Sprintf("%s/%s", d, body), func(t *testing.T) {
 				tree, err := parseDialect(sql, d)
+				if d == "" && strictRejects(body) {
+					// Without a dialect an escape whose meaning depends on
+					// the dialect is refused rather than guessed.
+					if err == nil {
+						t.Fatalf("parse %q without a dialect succeeded, want an escape error", sql)
+					}
+					return
+				}
 				if err != nil {
 					t.Fatalf("parse %q: %v", sql, err)
 				}
@@ -100,6 +108,21 @@ func TestStringBackslashFormatIsIdempotent(t *testing.T) {
 			})
 		}
 	}
+}
+
+// strictRejects reports whether body has a backslash escape the unconfigured
+// tokenizer refuses (anything but \\ \' \" \` \n \r \t).
+func strictRejects(body string) bool {
+	for i := 0; i < len(body); i++ {
+		if body[i] != '\\' {
+			continue
+		}
+		if i+1 >= len(body) || !strings.ContainsRune(`\'"`+"`nrt", rune(body[i+1])) {
+			return true
+		}
+		i++
+	}
+	return false
 }
 
 // TestStringBackslashRendering pins what the formatter writes for backslashes

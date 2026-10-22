@@ -149,10 +149,14 @@ func (i *Identifier) writeSQL(buf *bytes.Buffer) {
 	writeNamePart(buf, i.Name, need, style)
 }
 
-// quotedReserved reports whether i is a Quoted name that is a reserved word,
-// which must stay quoted to re-parse as a name.
+// quotedReserved reports whether i is a delimited name that must stay
+// delimited: a reserved word, which would not re-parse as a name, or a name
+// containing '$', which standard SQL, BigQuery and ClickHouse do not accept
+// bare (the renderer does not know the dialect, so a '$' name the source
+// delimited stays delimited; one the source wrote bare stays bare).
 func (i *Identifier) quotedReserved() bool {
-	return (i.Quoted || i.QuoteStyle != 0) && isReservedName(i.Name, false)
+	return (i.Quoted || i.QuoteStyle != 0) &&
+		(isReservedName(i.Name, false) || strings.IndexByte(i.Name, '$') >= 0)
 }
 
 // qualifierNeedsQuoting reports whether some dot-separated part of the
@@ -273,7 +277,9 @@ func writeEscapedStringLiteral(buf *bytes.Buffer, s string) {
 		case '\\':
 			buf.WriteString(`\\`)
 		case '\x00':
-			// Drop null bytes - invalid in SQL string literals.
+			// Written as an escape: a raw NUL byte truncates the statement
+			// in C-string APIs, and dropping it would change the value.
+			buf.WriteString(`\0`)
 		case '\n':
 			buf.WriteString(`\n`)
 		case '\r':

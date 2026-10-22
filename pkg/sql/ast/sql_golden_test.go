@@ -407,7 +407,7 @@ var goldenNodeWant = map[string]string{
 	"literal/bool BOOLEAN":              "TRUE",
 	"literal/bool lowercase type":       "true",
 	"literal/empty type":                "?",
-	"literal/string escapes":            "'a''b\\\\c\\nd\\re\\Zfg'",
+	"literal/string escapes":            "'a''b\\\\c\\nd\\re\\Zf\\0g'",
 	"literal/string invalid utf8":       "'x�y'",
 	"literal/string non-string value":   "'42'",
 	"literal/nil value":                 "NULL",

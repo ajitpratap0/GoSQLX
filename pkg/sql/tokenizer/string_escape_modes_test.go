@@ -44,7 +44,9 @@ func firstString(t *testing.T, tkz *Tokenizer, sql string) (models.Token, error)
 // single-quoted string: PostgreSQL standard strings, Oracle, SQLite, SQL Server
 // and generic keep it, MySQL/MariaDB decode escapes (\% and \_ keep their
 // backslash, other escaped characters stand for themselves), the remaining
-// dialects decode escapes and keep the backslash of unknown ones.
+// dialects decode escapes; ClickHouse keeps the backslash of unknown ones and
+// Snowflake drops it. See string_escape_strict_test.go for the unconfigured
+// tokenizer.
 func TestStringEscapeModes(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -77,10 +79,9 @@ func TestStringEscapeModes(t *testing.T) {
 		{"clickhouse escaped backslash", keywords.DialectClickHouse, `SELECT 'a\\b'`, `a\b`},
 		{"snowflake escaped quote", keywords.DialectSnowflake, `SELECT 'a\'b'`, `a'b`},
 		{"snowflake tab escape", keywords.DialectSnowflake, `SELECT 'a\tb'`, "a\tb"},
-		{"snowflake unknown escape keeps backslash", keywords.DialectSnowflake, `SELECT '\d+'`, `\d+`},
+		{"snowflake unknown escape drops backslash", keywords.DialectSnowflake, `SELECT '\d+'`, `d+`},
 
 		{"unconfigured tokenizer decodes", "", `SELECT 'a\nb'`, "a\nb"},
-		{"unconfigured tokenizer keeps unknown escape", "", `SELECT 'x\.y'`, `x\.y`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

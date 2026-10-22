@@ -328,12 +328,8 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 	if p.isNumericLiteral() {
 		// Handle numeric literals (int or float)
 		value := p.currentToken.Token.Value
-		litType := "int"
-		if strings.ContainsAny(value, ".eE") {
-			litType = "float"
-		}
 		p.advance()
-		return &ast.LiteralValue{Value: value, Type: litType}, nil
+		return &ast.LiteralValue{Value: value, Type: numericLiteralType(value)}, nil
 	}
 
 	if p.isBooleanLiteral() {

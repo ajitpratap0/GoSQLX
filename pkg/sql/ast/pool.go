@@ -827,6 +827,8 @@ func PutDescribeStatement(stmt *DescribeStatement) {
 	}
 
 	stmt.TableName = ""
+	stmt.Keyword = ""
+	stmt.ObjectKind = ""
 
 	describeStmtPool.Put(stmt)
 }

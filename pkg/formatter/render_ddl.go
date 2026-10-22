@@ -121,7 +121,7 @@ func renderDescribe(s *ast.DescribeStatement, opts ast.FormatOptions) string {
 	f := newNodeFormatter(opts)
 	sb := f.sb
 
-	sb.WriteString(f.kw("DESCRIBE"))
+	sb.WriteString(f.kw(s.Prefix()))
 	if s.TableName != "" {
 		sb.WriteString(" ")
 		sb.WriteString(ast.QuoteQualifiedName(s.TableName))

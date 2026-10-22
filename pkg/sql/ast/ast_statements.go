@@ -729,6 +729,8 @@ type PragmaStatement struct {
 	Name  string // Pragma name, e.g. "table_info"
 	Arg   string // Optional: parenthesized arg, e.g. "users"
 	Value string // Optional: assigned value, e.g. "WAL"
+
+	Schema string // Optional: schema qualifier, e.g. "main" in PRAGMA main.synchronous
 }
 
 func (p *PragmaStatement) statementNode()      {}
@@ -749,6 +751,9 @@ func (s ShowStatement) Children() []Node     { return nil }
 // DescribeStatement represents MySQL DESCRIBE/DESC/EXPLAIN table commands
 type DescribeStatement struct {
 	TableName string
+
+	Keyword    string // DESCRIBE, DESC or EXPLAIN as written; "" renders DESCRIBE
+	ObjectKind string // object kind written before the name (TABLE, VIEW, STAGE, ...), upper-cased
 }
 
 func (d *DescribeStatement) statementNode()      {}

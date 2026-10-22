@@ -848,8 +848,7 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		p.advance()
 		return p.parseTruncateStatement()
 	case models.TokenTypeShow:
-		p.advance()
-		return p.parseShowStatement()
+		return p.parseShowOrUtility()
 	case models.TokenTypeDescribe, models.TokenTypeExplain, models.TokenTypeDesc:
 		// DESC is the ORDER-BY sort-direction token but also a synonym for
 		// DESCRIBE at statement position (Oracle, Snowflake, MySQL).
@@ -884,12 +883,6 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 			p.advance()
 			return p.parsePragmaStatement()
 		}
-		// Snowflake session-context switches: USE [WAREHOUSE|DATABASE|SCHEMA|ROLE] <name>.
-		// USE is not tokenized as a keyword; dispatch by value in the Snowflake dialect.
-		if p.dialect == string(keywords.DialectSnowflake) &&
-			strings.EqualFold(p.currentToken.Token.Value, "USE") {
-			return p.parseSnowflakeUseStatement()
-		}
 		// Snowflake stage operations: COPY INTO, PUT, GET, LIST, REMOVE.
 		// All tokenize as identifiers; parse-only stubs that consume the
 		// rest of the statement body.
@@ -901,38 +894,15 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 			}
 		}
 	}
+	// Utility statements (BEGIN, COMMIT, SET, USE, CALL, GRANT, ...) are
+	// dispatched by value, after every typed statement has been ruled out.
+	if stmt, ok, err := p.parseUtilityStatement(); ok {
+		return stmt, err
+	}
 	return nil, p.expectedError("statement")
 }
 
-// parseSnowflakeUseStatement parses:
-//
-//	USE [WAREHOUSE | DATABASE | SCHEMA | ROLE] <name>
-//
-// The object-kind keyword is optional (plain "USE <name>" switches the current
-// database). Returned as an UnsupportedStatement until a dedicated UseStatement
-// node is introduced.
-func (p *Parser) parseSnowflakeUseStatement() (ast.Statement, error) {
-	p.advance() // Consume USE
-	var rawParts []string
-	rawParts = append(rawParts, "USE")
-	// Optional object kind.
-	switch strings.ToUpper(p.currentToken.Token.Value) {
-	case "WAREHOUSE", "DATABASE", "SCHEMA", "ROLE":
-		rawParts = append(rawParts, strings.ToUpper(p.currentToken.Token.Value))
-		p.advance()
-	}
-	name, err := p.parseQualifiedName()
-	if err != nil {
-		return nil, p.qualifiedNameError(err, "name after USE")
-	}
-	rawParts = append(rawParts, name)
-	stmt := ast.GetUnsupportedStatement()
-	stmt.Kind = "USE"
-	stmt.RawSQL = strings.Join(rawParts, " ")
-	return stmt, nil
-}
-
-// parseSnowflakeStageStatement parses Snowflake stage operations as stubs:
+// parseSnowflakeStageStatement parses Snowflake stage operations:
 //
 //	COPY INTO <target> FROM <source> [options]
 //	PUT file://<path> @<stage>
@@ -940,45 +910,11 @@ func (p *Parser) parseSnowflakeUseStatement() (ast.Statement, error) {
 //	LIST @<stage>   (or LS)
 //	REMOVE @<stage>/<path>
 //
-// The statement is consumed token-by-token (tracking balanced parens) until
-// ';' or EOF and returned as an UnsupportedStatement tagged with the
-// operation kind. No full AST modeling yet; follow-up work.
+// The statement is kept verbatim as a UtilityStatement tagged with the
+// operation kind; its text re-parses to the same statement.
 func (p *Parser) parseSnowflakeStageStatement(kind string) (ast.Statement, error) {
-	p.advance() // Consume leading kind token
-
-	var rawParts []string
-	rawParts = append(rawParts, kind)
-
-	// COPY INTO: consume the INTO keyword if present.
-	if kind == "COPY" && p.isType(models.TokenTypeInto) {
-		rawParts = append(rawParts, "INTO")
-		p.advance()
-	}
-
-	// Consume the rest of the statement body, capturing tokens for RawSQL.
-	depth := 0
-	for {
-		t := p.currentToken.Token.Type
-		if t == models.TokenTypeEOF {
-			break
-		}
-		if t == models.TokenTypeSemicolon && depth == 0 {
-			break
-		}
-		if p.currentToken.Token.Value != "" {
-			rawParts = append(rawParts, p.currentToken.Token.Value)
-		}
-		if t == models.TokenTypeLParen {
-			depth++
-		} else if t == models.TokenTypeRParen {
-			depth--
-		}
-		p.advance()
-	}
-	stub := ast.GetUnsupportedStatement()
-	stub.Kind = kind
-	stub.RawSQL = strings.Join(rawParts, " ")
-	return stub, nil
+	stmt, _, err := p.parseVerbatimStatement(kind)
+	return stmt, err
 }
 
 // NewParser creates a new parser with optional configuration.
@@ -1138,7 +1074,8 @@ func (p *Parser) parseIdent() *ast.Identifier {
 		return nil
 	}
 	pos := p.currentLocation()
-	ident := &ast.Identifier{Name: p.currentToken.Token.Value, Pos: pos, Quoted: p.isType(models.TokenTypeDoubleQuotedString)}
+	q := p.currentIdentQuote()
+	ident := &ast.Identifier{Name: p.currentToken.Token.Value, Pos: pos, Quoted: q == '"', QuoteStyle: q}
 	p.advance()
 	return ident
 }
@@ -1275,6 +1212,13 @@ func (p *Parser) isNonReservedKeyword() bool {
 	// the generic TokenTypeKeyword.
 	switch p.currentToken.Token.Type {
 	case models.TokenTypeTarget, models.TokenTypeSource, models.TokenTypeMatched:
+		return true
+	case models.TokenTypeOwner, models.TokenTypeUrl, models.TokenTypeMember,
+		models.TokenTypeConnector, models.TokenTypePolicy, models.TokenTypeUntil,
+		models.TokenTypeValid, models.TokenTypeDcproperties, models.TokenTypeNologin,
+		models.TokenTypeNocreatedb, models.TokenTypeNocreaterole, models.TokenTypeNosuperuser:
+		// Role-option words (ALTER ... OWNER TO, VALID UNTIL) are keyword
+		// tokens only so those statements can match them by type.
 		return true
 	case models.TokenTypeTable, models.TokenTypeIndex, models.TokenTypeView,
 		models.TokenTypeKey, models.TokenTypeColumn, models.TokenTypeDatabase,

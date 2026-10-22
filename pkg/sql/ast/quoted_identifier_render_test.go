@@ -171,8 +171,8 @@ func TestQuotedIdentifierRender_DialectGuards_Issue611(t *testing.T) {
 		{"snowflake_stage_path", keywords.DialectSnowflake, `SELECT $1 FROM @mystage/data`, `SELECT $1 FROM @mystage/data`},
 		{"clickhouse_tuple_access", keywords.DialectClickHouse, `SELECT d.1 FROM t`, `SELECT d.1 FROM t`},
 		{"oracle_dual", keywords.DialectOracle, `SELECT 1 FROM DUAL`, `SELECT 1 FROM DUAL`},
-		// Backtick-quoted names are not ANSI-quoted: Quoted stays false and
-		// the rendering is unchanged.
+		// Backtick-quoted names are not ANSI-quoted: Quoted stays false,
+		// QuoteStyle records the backtick, and a plain name renders bare.
 		{"mysql_backtick", keywords.DialectMySQL, "SELECT `id` FROM t", `SELECT id FROM t`},
 	}
 	for _, tc := range cases {
@@ -190,6 +190,9 @@ func TestQuotedIdentifierRender_DialectGuards_Issue611(t *testing.T) {
 				}
 				if id.Quoted {
 					t.Errorf("backtick identifier: Quoted = true, want false")
+				}
+				if id.QuoteStyle != '`' {
+					t.Errorf("backtick identifier: QuoteStyle = %q, want '`'", id.QuoteStyle)
 				}
 			}
 		})

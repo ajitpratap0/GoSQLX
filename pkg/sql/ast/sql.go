@@ -100,6 +100,9 @@ func (i *Identifier) SQL() string {
 	if i == nil {
 		return ""
 	}
+	if i.Table == "" && !i.Quoted && i.QuoteStyle == 0 && isVariableName(i.Name) {
+		return i.Name
+	}
 	if !i.quotedReserved() && !identifierNeedsQuoting(i.Name) && (i.Table == "" || !qualifierNeedsQuoting(i.Table)) {
 		if i.Table == "" {
 			return i.Name
@@ -116,21 +119,25 @@ func (i *Identifier) writeSQL(buf *bytes.Buffer) {
 	if i == nil {
 		return
 	}
-	if i.Table != "" {
-		writeDottedIdentifier(buf, i.Table)
-		buf.WriteByte('.')
-	}
-	if i.quotedReserved() {
-		writeQuotedIdentifier(buf, i.Name)
+	if i.Table == "" && !i.Quoted && i.QuoteStyle == 0 && isVariableName(i.Name) {
+		buf.WriteString(i.Name)
 		return
 	}
-	writeSafeIdentifier(buf, i.Name)
+	if i.Table != "" {
+		writeDottedIdentifierStyle(buf, i.Table, i.QuoteStyle)
+		buf.WriteByte('.')
+	}
+	if i.quotedReserved() || identifierNeedsQuoting(i.Name) {
+		writeDelimitedIdentifier(buf, i.Name, i.QuoteStyle)
+		return
+	}
+	buf.WriteString(i.Name)
 }
 
 // quotedReserved reports whether i is a Quoted name that is a reserved word,
 // which must stay quoted to re-parse as a name.
 func (i *Identifier) quotedReserved() bool {
-	return i.Quoted && isReservedName(i.Name, false)
+	return (i.Quoted || i.QuoteStyle != 0) && isReservedName(i.Name, false)
 }
 
 // qualifierNeedsQuoting reports whether some dot-separated part of the
@@ -2724,6 +2731,14 @@ func (p *PragmaStatement) SQL() string {
 	sb := getBuf()
 	defer putBuf(sb)
 	sb.WriteString("PRAGMA ")
+	if p.Schema != "" {
+		if !isBareNameChars(p.Schema, false) {
+			writeQuotedIdentifier(sb, p.Schema)
+		} else {
+			sb.WriteString(p.Schema)
+		}
+		sb.WriteByte('.')
+	}
 	if p.Name != "" && !isBareNameChars(p.Name, false) {
 		writeQuotedIdentifier(sb, p.Name)
 	} else {
@@ -2768,7 +2783,7 @@ func (d *DescribeStatement) SQL() string {
 	if d == nil {
 		return ""
 	}
-	return "DESCRIBE " + QuoteQualifiedName(d.TableName)
+	return d.Prefix() + " " + QuoteQualifiedName(d.TableName)
 }
 
 // SQL returns the SQL string for an EXPLAIN / DESCRIBE <statement>.

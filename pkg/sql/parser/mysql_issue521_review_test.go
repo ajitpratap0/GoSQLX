@@ -52,13 +52,13 @@ func TestIssue521_QuotedMultiPartRoundTrip(t *testing.T) {
 		want    string
 	}{
 		{"mysql backticks with hyphen", keywords.DialectMySQL,
-			"SELECT `my-db`.`t`.`c` FROM t", `SELECT "my-db".t.c FROM t`},
+			"SELECT `my-db`.`t`.`c` FROM t", "SELECT `my-db`.t.c FROM t"},
 		{"postgres double quotes with space", keywords.DialectPostgreSQL,
 			`SELECT "my db"."t"."c" FROM t`, `SELECT "my db".t.c FROM t`},
 		{"four parts, quoted middle", keywords.DialectSQLServer,
 			`SELECT c."s-1".t.col FROM t`, `SELECT c."s-1".t.col FROM t`},
 		{"two parts unchanged", keywords.DialectMySQL,
-			"SELECT `my-db`.`t` FROM t", `SELECT "my-db".t FROM t`},
+			"SELECT `my-db`.`t` FROM t", "SELECT `my-db`.t FROM t"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

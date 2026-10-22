@@ -171,6 +171,7 @@ func (p *Parser) parseDescribeStatement(keyword string) (ast.Statement, error) {
 		return explain, nil
 	}
 
+	kind := ""
 	// Snowflake: DESCRIBE TABLE <name>, DESCRIBE VIEW <name>, DESCRIBE STAGE
 	// <name>, etc. Also MySQL's DESCRIBE <db>.<table>. Accept and consume a
 	// leading object-kind keyword (TABLE, VIEW, DATABASE, SCHEMA) before the
@@ -185,7 +186,12 @@ func (p *Parser) parseDescribeStatement(keyword string) (ast.Statement, error) {
 		strings.EqualFold(p.currentToken.Token.Value, "FUNCTION") ||
 		strings.EqualFold(p.currentToken.Token.Value, "PROCEDURE") ||
 		strings.EqualFold(p.currentToken.Token.Value, "WAREHOUSE") {
-		p.advance()
+		// A name follows the kind; DESCRIBE table (a table named "table")
+		// has nothing after it.
+		if next := p.peekToken().Token.Type; next != models.TokenTypeEOF && next != models.TokenTypeSemicolon {
+			kind = strings.ToUpper(p.currentToken.Token.Value)
+			p.advance()
+		}
 	}
 
 	name, err := p.parseQualifiedName()
@@ -194,6 +200,8 @@ func (p *Parser) parseDescribeStatement(keyword string) (ast.Statement, error) {
 	}
 	desc := ast.GetDescribeStatement()
 	desc.TableName = name
+	desc.Keyword = keyword
+	desc.ObjectKind = kind
 	return desc, nil
 }
 

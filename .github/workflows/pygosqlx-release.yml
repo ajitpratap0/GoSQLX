@@ -89,8 +89,10 @@ jobs:
         include:
           - name: linux-x86_64
             os: ubuntu-24.04
+            arch: x86_64
           - name: linux-aarch64
             os: ubuntu-24.04-arm
+            arch: aarch64
           - name: macos-x86_64
             os: macos-15-intel
           - name: macos-arm64
@@ -129,7 +131,10 @@ jobs:
           # library uses only ancient glibc symbols), claiming distros that
           # were never tested and that Go 1.26 (kernel 3.2+) may not run on.
           # Pin the floor to manylinux_2_17 (manylinux2014) on both arches.
-          CIBW_REPAIR_WHEEL_COMMAND_LINUX: auditwheel repair --plat manylinux_2_17_{arch} -w {dest_dir} {wheel}
+          # cibuildwheel does not expand an {arch} placeholder here, so the
+          # architecture comes from the matrix (empty on macOS/Windows, where
+          # this Linux-only command is unused).
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: auditwheel repair --plat manylinux_2_17_${{ matrix.arch }} -w {dest_dir} {wheel}
           CIBW_BEFORE_ALL_LINUX: bash {project}/python/scripts/install-go-linux.sh
           CIBW_BEFORE_BUILD_LINUX: cd {project}/pkg/cbinding && bash build.sh
           CIBW_BEFORE_BUILD_MACOS: cd {project}/pkg/cbinding && bash build.sh

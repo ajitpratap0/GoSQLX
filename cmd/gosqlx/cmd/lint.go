@@ -25,9 +25,7 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter"
-	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/keywords"
-	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/style"
-	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/whitespace"
+	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	sqlkeywords "github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	sqlsecurity "github.com/ajitpratap0/GoSQLX/pkg/sql/security"
@@ -411,25 +409,12 @@ func runSecurityScan(sql string, filename string, outWriter io.Writer) int {
 	return result.TotalCount
 }
 
-// createLinter creates a new linter instance with configured rules
+// createLinter creates a new linter instance with the core rule set
+// (L001-L010) from rules.CoreRules, using --max-length for L005.
 func createLinter() *linter.Linter {
-	l := linter.New(
-		// Whitespace rules (L001, L002, L003, L004, L005, L010)
-		whitespace.NewTrailingWhitespaceRule(),     // L001
-		whitespace.NewMixedIndentationRule(),       // L002
-		whitespace.NewConsecutiveBlankLinesRule(1), // L003
-		whitespace.NewIndentationDepthRule(4, 4),   // L004
-		whitespace.NewLongLinesRule(lintMaxLength), // L005
-		whitespace.NewRedundantWhitespaceRule(),    // L010
-
-		// Style rules (L006, L008, L009)
-		style.NewColumnAlignmentRule(),                   // L006
-		style.NewCommaPlacementRule(style.CommaTrailing), // L008
-		style.NewAliasingConsistencyRule(true),           // L009
-
-		// Keyword rules (L007)
-		keywords.NewKeywordCaseRule(keywords.CaseUpper), // L007
-	)
+	cfg := rules.DefaultCoreConfig()
+	cfg.MaxLineLength = lintMaxLength
+	l := linter.New(rules.CoreRules(cfg)...)
 	if lintDialect != "" {
 		l.SetDialect(sqlkeywords.SQLDialect(lintDialect))
 	}

@@ -19,12 +19,10 @@ import (
 	"sync"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/linter"
-	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/keywords"
+	lintrules "github.com/ajitpratap0/GoSQLX/pkg/linter/rules"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/naming"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/performance"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/safety"
-	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/style"
-	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/whitespace"
 	sqlkeywords "github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
@@ -116,25 +114,13 @@ func LintWithDialect(sql string, dialect sqlkeywords.SQLDialect) (*LintResult, e
 	return &LintResult{Violations: fileResult.Violations}, nil
 }
 
-// allRules returns all 30 built-in lint rules with sensible defaults.
+// allRules returns all 30 built-in lint rules with sensible defaults: the
+// core rules L001-L010 from rules.CoreRules (with a 120-column L005 limit)
+// followed by L011-L030.
 func allRules() []linter.Rule {
-	return []linter.Rule{
-		// Whitespace rules (L001-L005, L010)
-		whitespace.NewTrailingWhitespaceRule(),     // L001
-		whitespace.NewMixedIndentationRule(),       // L002
-		whitespace.NewConsecutiveBlankLinesRule(1), // L003
-		whitespace.NewIndentationDepthRule(4, 4),   // L004
-		whitespace.NewLongLinesRule(120),           // L005
-		whitespace.NewRedundantWhitespaceRule(),    // L010
-
-		// Style rules (L006, L008, L009)
-		style.NewColumnAlignmentRule(),                   // L006
-		style.NewCommaPlacementRule(style.CommaTrailing), // L008
-		style.NewAliasingConsistencyRule(true),           // L009
-
-		// Keyword rules (L007)
-		keywords.NewKeywordCaseRule(keywords.CaseUpper), // L007
-
+	core := lintrules.DefaultCoreConfig()
+	core.MaxLineLength = 120
+	return append(lintrules.CoreRules(core),
 		// Safety rules (L011-L015)
 		safety.NewDeleteWithoutWhereRule(),   // L011
 		safety.NewUpdateWithoutWhereRule(),   // L012
@@ -160,5 +146,5 @@ func allRules() []linter.Rule {
 		naming.NewMissingOrderByLimitRule(),       // L028
 		naming.NewSubqueryCanBeJoinRule(),         // L029
 		naming.NewDistinctOnManyColumnsRule(),     // L030
-	}
+	)
 }

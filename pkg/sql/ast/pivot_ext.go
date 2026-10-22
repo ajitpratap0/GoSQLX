@@ -45,6 +45,9 @@ type PivotExtensions struct {
 	// (SELECT ...) s PIVOT (...) AS p. The PIVOT alias stays in
 	// TableReference.Alias.
 	SourceAlias string
+	// SourceAliasQuote records the delimiters of SourceAlias when they must
+	// be kept (see NameQuote).
+	SourceAliasQuote NameQuote
 }
 
 func (e *PivotExtensions) pivotExtensionChildren(nodes []Node) []Node {
@@ -93,24 +96,33 @@ func UnpivotSQL(u *UnpivotClause, kw func(string) string) string {
 // TableRefSourceAliasSQL returns " alias" for the alias of the table that a
 // PIVOT / UNPIVOT applies to, or "".
 func TableRefSourceAliasSQL(t *TableReference) string {
-	alias := tableRefSourceAlias(t)
+	return TableRefSourceAliasSQLWith(t, nil)
+}
+
+// TableRefSourceAliasSQLWith is TableRefSourceAliasSQL with the alias's
+// recorded NameQuote passed through nq first (nil leaves it unchanged).
+func TableRefSourceAliasSQLWith(t *TableReference, nq func(NameQuote) NameQuote) string {
+	alias, q := tableRefSourceAlias(t)
 	if alias == "" {
 		return ""
 	}
-	return " " + QuoteTableAlias(alias)
+	if nq != nil {
+		q = nq(q)
+	}
+	return " " + QuoteTableAliasWith(alias, q)
 }
 
-func tableRefSourceAlias(t *TableReference) string {
+func tableRefSourceAlias(t *TableReference) (string, NameQuote) {
 	if t == nil {
-		return ""
+		return "", 0
 	}
 	if t.Pivot != nil {
-		return t.Pivot.SourceAlias
+		return t.Pivot.SourceAlias, t.Pivot.SourceAliasQuote
 	}
 	if t.Unpivot != nil {
-		return t.Unpivot.SourceAlias
+		return t.Unpivot.SourceAlias, t.Unpivot.SourceAliasQuote
 	}
-	return ""
+	return "", 0
 }
 
 func writePivot(w textWriter, p *PivotClause, kw func(string) string) {

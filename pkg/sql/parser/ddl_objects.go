@@ -623,18 +623,20 @@ func (p *Parser) parseCreateTableSource(stmt *ast.CreateTableStatement) (bool, e
 	switch {
 	case p.isType(models.TokenTypeLike):
 		p.advance() // LIKE
-		name, err := p.parseQualifiedName()
+		name, q, err := p.parseQualifiedNameQuoted()
 		if err != nil {
 			return true, p.qualifiedNameError(err, "source table after LIKE")
 		}
 		stmt.Like = name
+		stmt.SourceQuote = q
 		return true, nil
 	case p.dialect == string(keywords.DialectSnowflake) && p.wordAt(0) == "CLONE":
 		p.advance() // CLONE
-		name, err := p.parseQualifiedName()
+		name, q, err := p.parseQualifiedNameQuoted()
 		if err != nil {
 			return true, p.qualifiedNameError(err, "source table after CLONE")
 		}
+		stmt.SourceQuote = q
 		clone := &ast.TableClone{Source: name}
 		if at := p.wordAt(0); (at == "AT" || at == "BEFORE") &&
 			p.tokenAt(1).Token.Type == models.TokenTypeLParen {
@@ -666,11 +668,12 @@ func (p *Parser) parseCreateTableSource(stmt *ast.CreateTableStatement) (bool, e
 	case p.isType(models.TokenTypePartition) && p.wordAt(1) == "OF":
 		p.advance() // PARTITION
 		p.advance() // OF
-		name, err := p.parseQualifiedName()
+		name, q, err := p.parseQualifiedNameQuoted()
 		if err != nil {
 			return true, p.qualifiedNameError(err, "parent table after PARTITION OF")
 		}
 		stmt.PartitionOf = name
+		stmt.SourceQuote = q
 		bound, err := p.parsePartitionBound()
 		if err != nil {
 			return true, err
@@ -682,11 +685,12 @@ func (p *Parser) parseCreateTableSource(stmt *ast.CreateTableStatement) (bool, e
 		p.tokenAt(1).Token.Type != models.TokenTypeWith &&
 		p.tokenAt(1).Token.Type != models.TokenTypeLParen:
 		p.advance() // AS
-		name, err := p.parseQualifiedName()
+		name, q, err := p.parseQualifiedNameQuoted()
 		if err != nil {
 			return true, p.qualifiedNameError(err, "source table after AS")
 		}
 		stmt.AsTable = name
+		stmt.SourceQuote = q
 		return true, nil
 	}
 	return false, nil

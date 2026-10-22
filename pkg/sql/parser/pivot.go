@@ -66,12 +66,14 @@ func (p *Parser) parsePivotAlias(ref *ast.TableReference) {
 		p.advance() // consume AS
 		if p.isIdentifier() {
 			ref.Alias = p.currentToken.Token.Value
+			ref.AliasQuote = p.currentNameQuote()
 			p.advance()
 		}
 		return
 	}
 	if p.isIdentifier() {
 		ref.Alias = p.currentToken.Token.Value
+		ref.AliasQuote = p.currentNameQuote()
 		p.advance()
 	}
 }

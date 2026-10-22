@@ -686,13 +686,19 @@ func writeRowConstructorRows(buf *bytes.Buffer, rows [][]Expression) {
 }
 
 // writeColumnAliasEntries writes the entries of a table column alias list,
-// each with its type when one is recorded.
-func writeColumnAliasEntries(w textWriter, list *ColumnAliasList) {
+// each with its type when one is recorded, honouring the delimiters
+// recorded in list.Quotes; nq, when not nil, adjusts each NameQuote (the
+// formatter uses it to apply the target dialect's delimiter).
+func writeColumnAliasEntries(w textWriter, list *ColumnAliasList, nq func(NameQuote) NameQuote) {
 	for i, n := range list.Names {
 		if i > 0 {
 			w.WriteString(", ")
 		}
-		w.WriteString(QuoteColumnName(n))
+		q := nameQuoteAt(list.Quotes, i)
+		if nq != nil {
+			q = nq(q)
+		}
+		w.WriteString(QuoteColumnNameWith(n, q))
 		if i < len(list.Types) && list.Types[i] != "" {
 			w.WriteByte(' ')
 			w.WriteString(QuoteDataType(list.Types[i]))
@@ -703,12 +709,18 @@ func writeColumnAliasEntries(w textWriter, list *ColumnAliasList) {
 // TableColumnAliasesSQL returns the "(a, b)" column alias list of t's alias,
 // with column types when recorded, or "" when there is none.
 func TableColumnAliasesSQL(t *TableReference) string {
+	return TableColumnAliasesSQLWith(t, nil)
+}
+
+// TableColumnAliasesSQLWith is TableColumnAliasesSQL with each name's
+// recorded NameQuote passed through nq first (nil leaves it unchanged).
+func TableColumnAliasesSQLWith(t *TableReference, nq func(NameQuote) NameQuote) string {
 	if t == nil || t.ColumnAliases == nil || len(t.ColumnAliases.Names) == 0 {
 		return ""
 	}
 	var sb strings.Builder
 	sb.WriteByte('(')
-	writeColumnAliasEntries(&sb, t.ColumnAliases)
+	writeColumnAliasEntries(&sb, t.ColumnAliases, nq)
 	sb.WriteByte(')')
 	return sb.String()
 }

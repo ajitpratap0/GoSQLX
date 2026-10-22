@@ -310,7 +310,7 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 		wins := make([]string, len(s.Windows))
 		for i := range s.Windows {
-			wins[i] = ast.QuoteName(s.Windows[i].Name) + " AS (" + windowSpecSQL(&s.Windows[i]) + ")"
+			wins[i] = ast.QuoteNameWith(s.Windows[i].Name, f.nq(s.Windows[i].NameQuote)) + " AS (" + windowSpecSQL(&s.Windows[i]) + ")"
 		}
 		sb.WriteString(strings.Join(wins, ", "))
 	}
@@ -746,7 +746,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 	sb.WriteString(tableRefSQL(&m.TargetTable, f))
 	if m.TargetAlias != "" {
 		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteTableAlias(m.TargetAlias))
+		sb.WriteString(ast.QuoteTableAliasWith(m.TargetAlias, f.nq(m.TargetAliasQuote)))
 	}
 
 	sb.WriteString(f.clauseSep())
@@ -755,7 +755,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 	sb.WriteString(tableRefSQL(&m.SourceTable, f))
 	if m.SourceAlias != "" {
 		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteTableAlias(m.SourceAlias))
+		sb.WriteString(ast.QuoteTableAliasWith(m.SourceAlias, f.nq(m.SourceAliasQuote)))
 	}
 
 	sb.WriteString(f.clauseSep())
@@ -799,7 +799,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 				sb.WriteString(" ")
 				sets := make([]string, len(when.Action.SetClauses))
 				for i, sc := range when.Action.SetClauses {
-					sets[i] = ast.QuoteQualifiedName(sc.Column) + " = " + exprSQL(sc.Value)
+					sets[i] = ast.QuoteQualifiedNameWith(sc.Column, f.nq(sc.ColumnQuote)) + " = " + exprSQL(sc.Value)
 				}
 				sb.WriteString(strings.Join(sets, ", "))
 			case "DELETE":
@@ -812,7 +812,7 @@ func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {
 				} else {
 					if len(when.Action.Columns) > 0 {
 						sb.WriteString(" (")
-						sb.WriteString(quoteColumnNames(when.Action.Columns))
+						sb.WriteString(f.quoteColumnNamesWith(when.Action.Columns, when.Action.ColumnQuotes))
 						sb.WriteString(")")
 					}
 					if len(when.Action.Values) > 0 {
@@ -1098,16 +1098,16 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 			sb.WriteString(f.kw("ONLY"))
 			sb.WriteString(" ")
 		}
-		sb.WriteString(ast.QuoteQualifiedName(t.Name))
+		sb.WriteString(ast.QuoteQualifiedNameWith(t.Name, f.nq(t.NameQuote)))
 		sb.WriteString(ast.TableRefNameSuffixSQL(t))
 	}
 	sb.WriteString(ast.TableRefPreAliasSQL(t, f.kw))
 	if t.Alias != "" && !ast.TableAliasFollowsClause(t) {
 		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteTableAlias(t.Alias))
-		sb.WriteString(ast.TableColumnAliasesSQL(t))
+		sb.WriteString(ast.QuoteTableAliasWith(t.Alias, f.nq(t.AliasQuote)))
+		sb.WriteString(ast.TableColumnAliasesSQLWith(t, f.nq))
 	} else {
-		sb.WriteString(ast.TableRefSourceAliasSQL(t))
+		sb.WriteString(ast.TableRefSourceAliasSQLWith(t, f.nq))
 	}
 	sb.WriteString(ast.TableRefPostAliasSQL(t, f.kw))
 	// SQL Server table hints follow the alias and precede PIVOT/UNPIVOT (#604).
@@ -1134,8 +1134,8 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("AS"))
 		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteTableAlias(t.Alias))
-		sb.WriteString(ast.TableColumnAliasesSQL(t))
+		sb.WriteString(ast.QuoteTableAliasWith(t.Alias, f.nq(t.AliasQuote)))
+		sb.WriteString(ast.TableColumnAliasesSQLWith(t, f.nq))
 	}
 	return sb.String()
 }
@@ -1212,7 +1212,7 @@ func joinSQL(j *ast.JoinClause, f *nodeFormatter) string {
 func windowSpecSQL(w *ast.WindowSpec) string {
 	var parts []string
 	if w.BaseWindow != "" {
-		parts = append(parts, ast.QuoteName(w.BaseWindow))
+		parts = append(parts, ast.QuoteNameWith(w.BaseWindow, w.BaseWindowQuote))
 	}
 	if len(w.PartitionBy) > 0 {
 		parts = append(parts, "PARTITION BY "+exprListSQL(w.PartitionBy))
@@ -1344,27 +1344,6 @@ func onConflictSQL(oc *ast.OnConflict) string {
 			sb.WriteString(" WHERE ")
 			sb.WriteString(exprSQL(oc.Action.Where))
 		}
-	}
-	return sb.String()
-}
-
-// referenceSQL renders a REFERENCES clause.
-func referenceSQL(r *ast.ReferenceDefinition) string {
-	var sb strings.Builder
-	sb.WriteString("REFERENCES ")
-	sb.WriteString(ast.QuoteQualifiedName(r.Table))
-	if len(r.Columns) > 0 {
-		sb.WriteString(" (")
-		sb.WriteString(quoteColumnNames(r.Columns))
-		sb.WriteString(")")
-	}
-	if a := ast.ReferentialActionText(r.OnDelete); a != "" {
-		sb.WriteString(" ON DELETE ")
-		sb.WriteString(a)
-	}
-	if a := ast.ReferentialActionText(r.OnUpdate); a != "" {
-		sb.WriteString(" ON UPDATE ")
-		sb.WriteString(a)
 	}
 	return sb.String()
 }

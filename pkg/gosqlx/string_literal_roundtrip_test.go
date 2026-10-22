@@ -263,7 +263,7 @@ func TestLexicalLiteralsFormat(t *testing.T) {
 		{keywords.DialectPostgreSQL, `SELECT a$b FROM t`, "a$b"},
 		{keywords.DialectSQLite, `SELECT a FROM t WHERE a = :name`, ":name"},
 		{keywords.DialectSQLite, `SELECT ?1, ?2`, "?1, ?2"},
-		{keywords.DialectSQLite, `SELECT [col] FROM [my table]`, `"my table"`},
+		{keywords.DialectSQLite, `SELECT [col] FROM [my table]`, `[my table]`},
 		{keywords.DialectClickHouse, `SELECT a FROM t WHERE x = {p:UInt64}`, "{p:UInt64}"},
 	}
 	for _, tt := range tests {

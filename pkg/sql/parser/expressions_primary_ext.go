@@ -92,6 +92,7 @@ func (p *Parser) parseQualifiedFunctionCall(ident *ast.Identifier) (ast.Expressi
 	if err != nil {
 		return nil, err
 	}
+	fc.NameQuote = ident.Quotes
 	if fc.Pos.IsZero() {
 		fc.Pos = ident.Pos
 	}

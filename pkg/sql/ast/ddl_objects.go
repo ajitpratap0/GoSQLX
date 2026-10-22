@@ -85,6 +85,10 @@ type CreateTableExtras struct {
 	PartitionBound *PartitionBound
 	// AsTable is the ClickHouse source table of CREATE TABLE t AS other.
 	AsTable string
+	// SourceQuote records the delimiters of the source table name (Like,
+	// Clone.Source, PartitionOf or AsTable, whichever is set) when they
+	// must be kept (see NameQuote).
+	SourceQuote NameQuote
 	// AsQuery is the query of CREATE TABLE ... AS query.
 	AsQuery Statement
 	// WithData is the PostgreSQL WITH [NO] DATA of CREATE TABLE AS (nil
@@ -160,8 +164,10 @@ type CreateIndexExtras struct {
 	Concurrently bool
 	// Only is PostgreSQL ON ONLY table.
 	Only bool
-	// Include lists the INCLUDE (cols) columns.
-	Include []string
+	// Include lists the INCLUDE (cols) columns; IncludeQuotes records the
+	// delimiters of each by index (nil when none keeps them).
+	Include       []string
+	IncludeQuotes []NameQuote
 	// Options are the trailing index options (WITH (...), TABLESPACE x,
 	// LOCAL, ONLINE, ...).
 	Options []TableOption
@@ -180,8 +186,10 @@ type ViewExtras struct {
 	Modifiers string
 	// OnCluster is the ClickHouse ON CLUSTER name.
 	OnCluster string
-	// To is the ClickHouse materialized-view target table (TO name).
-	To string
+	// To is the ClickHouse materialized-view target table (TO name);
+	// ToQuote records its delimiters when they must be kept.
+	To      string
+	ToQuote NameQuote
 	// ColumnDefs are typed columns of a ClickHouse materialized view
 	// (TO dst (a UInt8) or (a UInt8) ENGINE = ...).
 	ColumnDefs []ColumnDef
@@ -205,8 +213,10 @@ type DropExtras struct {
 	Temporary bool
 	// Concurrently is PostgreSQL DROP INDEX CONCURRENTLY.
 	Concurrently bool
-	// OnTable is the table of MySQL / SQL Server DROP INDEX name ON table.
-	OnTable string
+	// OnTable is the table of MySQL / SQL Server DROP INDEX name ON table;
+	// OnTableQuote records its delimiters when they must be kept.
+	OnTable      string
+	OnTableQuote NameQuote
 	// OnCluster is the ClickHouse ON CLUSTER name.
 	OnCluster string
 	// Purge is Oracle PURGE.

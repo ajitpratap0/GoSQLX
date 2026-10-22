@@ -31,7 +31,7 @@ func TableConstraintSQL(tc *TableConstraint) string { return tableConstraintSQL(
 func columnDefSQL(c *ColumnDef) string {
 	sb := getBuf()
 	defer putBuf(sb)
-	writeColumnName(sb, c.Name)
+	writeTableAliasQ(sb, c.Name, c.NameQuote)
 	if c.Type != "" {
 		// A SQLite or ClickHouse column may have no type.
 		sb.WriteString(" ")
@@ -231,7 +231,7 @@ func writeKeyParts(buf *bytes.Buffer, tc *TableConstraint) {
 			if i > 0 {
 				buf.WriteString(", ")
 			}
-			writeColumnName(buf, n)
+			writeTableAliasQ(buf, n, nameQuoteAt(tc.ColumnQuotes, i))
 			if i < len(tc.ColumnSuffix) && keySuffixIsPlain(tc.ColumnSuffix[i]) {
 				sfx := tc.ColumnSuffix[i]
 				if strings.HasPrefix(sfx, "(") || sfx == "" {
@@ -273,7 +273,7 @@ func writeDeferrable(buf *bytes.Buffer, tc *TableConstraint) {
 func writeTableConstraint(buf *bytes.Buffer, tc *TableConstraint) {
 	if tc.Name != "" {
 		buf.WriteString("CONSTRAINT ")
-		writeConstraintName(buf, tc.Name)
+		writeConstraintNameQ(buf, tc.Name, tc.NameQuote)
 		buf.WriteString(" ")
 	}
 	switch tc.Type {
@@ -298,7 +298,7 @@ func writeTableConstraint(buf *bytes.Buffer, tc *TableConstraint) {
 		writeDeferrable(buf, tc)
 	case "FOREIGN KEY":
 		buf.WriteString("FOREIGN KEY (")
-		writeColumnNameList(buf, tc.Columns)
+		writeColumnNameListQ(buf, tc.Columns, tc.ColumnQuotes)
 		buf.WriteString(") ")
 		if tc.References != nil {
 			buf.WriteString(referenceSQL(tc.References))
@@ -335,7 +335,7 @@ func writeTableConstraint(buf *bytes.Buffer, tc *TableConstraint) {
 		writeKeyParts(buf, tc)
 	case "LIKE":
 		buf.WriteString("LIKE ")
-		writeQualifiedName(buf, tc.LikeTable)
+		writeQualifiedNameQ(buf, tc.LikeTable, tc.LikeTableQuote)
 		for _, o := range tc.LikeOptions {
 			if kw := keywordOneOf(o, likeOptionKeywords); kw != "" {
 				buf.WriteString(" ")

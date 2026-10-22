@@ -138,6 +138,7 @@ func (p *Parser) parseTableConstraint() (*ast.TableConstraint, error) {
 	if p.isIdentifier() &&
 		!p.isAnyType(models.TokenTypePrimary, models.TokenTypeForeign, models.TokenTypeUnique, models.TokenTypeCheck) {
 		constraint.Name = p.currentToken.Token.Value
+		constraint.NameQuote = p.currentNameQuote()
 		p.advance()
 	}
 
@@ -169,11 +170,12 @@ func (p *Parser) parseTableConstraint() (*ast.TableConstraint, error) {
 		constraint.Type = "FOREIGN KEY"
 
 		// Parse column list
-		columns, err := p.parseConstraintColumnList()
+		columns, columnQuotes, err := p.parseConstraintColumnListQuoted()
 		if err != nil {
 			return nil, err
 		}
 		constraint.Columns = columns
+		constraint.ColumnQuotes = columnQuotes
 
 		// Expect REFERENCES
 		if !p.isType(models.TokenTypeReferences) {
@@ -186,17 +188,19 @@ func (p *Parser) parseTableConstraint() (*ast.TableConstraint, error) {
 			return nil, p.expectedError("table name after REFERENCES")
 		}
 		refDef := &ast.ReferenceDefinition{
-			Table: p.currentToken.Token.Value,
+			Table:      p.currentToken.Token.Value,
+			TableQuote: p.currentNameQuote(),
 		}
 		p.advance()
 
 		// Parse optional referenced column list
 		if p.isType(models.TokenTypeLParen) {
-			refColumns, err := p.parseConstraintColumnList()
+			refColumns, refColumnQuotes, err := p.parseConstraintColumnListQuoted()
 			if err != nil {
 				return nil, err
 			}
 			refDef.Columns = refColumns
+			refDef.ColumnQuotes = refColumnQuotes
 		}
 
 		// Parse optional ON DELETE/UPDATE
@@ -316,6 +320,7 @@ func (p *Parser) parseKeyParts(tc *ast.TableConstraint) error {
 
 	var (
 		names      []string
+		quotes     []ast.NameQuote
 		suffixes   []string
 		exprs      []ast.Expression
 		functional bool
@@ -343,6 +348,7 @@ func (p *Parser) parseKeyParts(tc *ast.TableConstraint) error {
 				return p.expectedError("column name")
 			}
 			name = p.currentToken.Token.Value
+			quotes = nameQuoteList(quotes, len(names), p.currentNameQuote())
 			p.advance()
 			if p.isType(models.TokenTypeLParen) && p.peekTypeAt(1) == models.TokenTypeNumber &&
 				p.peekTypeAt(2) == models.TokenTypeRParen {
@@ -378,6 +384,7 @@ func (p *Parser) parseKeyParts(tc *ast.TableConstraint) error {
 
 	if !functional {
 		tc.Columns = names
+		tc.ColumnQuotes = quotes
 		if anySuffix {
 			tc.ColumnSuffix = suffixes
 		}
@@ -393,7 +400,7 @@ func (p *Parser) parseKeyParts(tc *ast.TableConstraint) error {
 		if suffixes[i] != "" {
 			return p.expectedError("a functional key part list without column prefix lengths or sort orders")
 		}
-		exprs[i] = &ast.Identifier{Name: names[i]}
+		exprs[i] = &ast.Identifier{Name: names[i], Quotes: nameQuoteAt(quotes, i)}
 	}
 	tc.Exprs = exprs
 	return nil
@@ -494,11 +501,13 @@ func (p *Parser) parseLikeElement(tc *ast.TableConstraint) (*ast.TableConstraint
 	p.advance() // Consume LIKE
 	tc.Type = "LIKE"
 	var sb strings.Builder
+	var q ast.NameQuote
 	for {
 		if !p.isIdentifier() && !p.isWordToken() {
 			return nil, p.expectedError("table name after LIKE")
 		}
 		sb.WriteString(p.currentToken.Token.Value)
+		q = p.appendNamePart(q)
 		p.advance()
 		if !p.isType(models.TokenTypePeriod) {
 			break
@@ -507,6 +516,7 @@ func (p *Parser) parseLikeElement(tc *ast.TableConstraint) (*ast.TableConstraint
 		p.advance()
 	}
 	tc.LikeTable = sb.String()
+	tc.LikeTableQuote = q
 	for p.isUnquotedWord("INCLUDING") || p.isUnquotedWord("EXCLUDING") {
 		verb := strings.ToUpper(p.currentToken.Token.Value)
 		p.advance()

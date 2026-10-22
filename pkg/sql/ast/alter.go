@@ -113,6 +113,9 @@ type AlterStatement struct {
 	// Operation is the first of them (kept for compatibility); Operations is
 	// nil for statements that have a single non-table operation.
 	Operations []AlterOperation
+	// NameQuote records the delimiters of Name when they must be kept
+	// (see NameQuote).
+	NameQuote NameQuote
 }
 
 func (a *AlterStatement) statementNode() {}

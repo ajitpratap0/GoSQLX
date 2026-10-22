@@ -153,20 +153,22 @@ func (p *Parser) parseDMLTargetRef() (ast.TableReference, error) {
 	if p.isType(models.TokenTypeLParen) {
 		return p.parseFromTableReference()
 	}
-	name, err := p.parseQualifiedName()
+	name, nameQuote, err := p.parseQualifiedNameQuoted()
 	if err != nil {
 		return ast.TableReference{}, p.qualifiedNameError(err, "table name")
 	}
-	ref := ast.TableReference{Name: name}
+	ref := ast.TableReference{Name: name, NameQuote: nameQuote}
 	if p.isType(models.TokenTypeAs) {
 		p.advance() // Consume AS
 		if !p.isIdentifier() {
 			return ref, p.expectedError("alias after AS")
 		}
 		ref.Alias = p.currentToken.Token.Value
+		ref.AliasQuote = p.currentNameQuote()
 		p.advance()
 	} else if p.isDMLTargetAlias() {
 		ref.Alias = p.currentToken.Token.Value
+		ref.AliasQuote = p.currentNameQuote()
 		p.advance()
 	}
 	return ref, nil
@@ -183,6 +185,7 @@ func (p *Parser) parseDMLTargets(name, alias *string, d *ast.DMLTargetFields, mu
 	}
 	if first.Subquery == nil && first.SetSubquery == nil && first.TableFunc == nil {
 		*name, *alias = first.Name, first.Alias
+		d.TableNameQuote, d.AliasQuote = first.NameQuote, first.AliasQuote
 	} else {
 		d.Tables = append(d.Tables, first)
 	}
@@ -251,10 +254,13 @@ func (p *Parser) parseAssignmentColumn() (ast.Expression, error) {
 	if !p.isWordToken() {
 		return nil, p.expectedError("column name")
 	}
+	q := p.currentIdentQuote()
 	ident := &ast.Identifier{
-		Name:   p.currentToken.Token.Value,
-		Pos:    p.currentLocation(),
-		Quoted: p.isType(models.TokenTypeDoubleQuotedString),
+		Name:       p.currentToken.Token.Value,
+		Pos:        p.currentLocation(),
+		Quoted:     q == '"',
+		QuoteStyle: q,
+		Quotes:     p.appendNamePartQuoted(0, q),
 	}
 	p.advance()
 	for p.isType(models.TokenTypePeriod) {
@@ -268,7 +274,12 @@ func (p *Parser) parseAssignmentColumn() (ast.Expression, error) {
 			ident.Table += "." + ident.Name
 		}
 		ident.Name = p.currentToken.Token.Value
-		ident.Quoted = p.isType(models.TokenTypeDoubleQuotedString)
+		q = p.currentIdentQuote()
+		ident.Quoted = q == '"'
+		if q != 0 {
+			ident.QuoteStyle = q
+		}
+		ident.Quotes = p.appendNamePartQuoted(ident.Quotes, q)
 		p.advance()
 	}
 	return ident, nil

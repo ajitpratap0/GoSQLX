@@ -49,6 +49,10 @@ type DMLTargetFields struct {
 	Limit   Expression
 	// ReturningInto holds the Oracle RETURNING ... INTO :bind targets.
 	ReturningInto []Expression
+	// TableNameQuote and AliasQuote record the delimiters of the statement's
+	// TableName and Alias when they must be kept (see NameQuote).
+	TableNameQuote NameQuote
+	AliasQuote     NameQuote
 }
 
 // dmlTargetChildren appends the nodes of d to children.
@@ -119,6 +123,9 @@ type InsertDialectFields struct {
 	// MultiTable is the Oracle INSERT ALL / INSERT FIRST body; Query holds the
 	// source subquery and TableName is empty.
 	MultiTable *MultiTableInsert
+	// TableNameQuote records the delimiters of TableName when they must be
+	// kept (see NameQuote).
+	TableNameQuote NameQuote
 }
 
 // insertDialectChildren appends the nodes of d to children.

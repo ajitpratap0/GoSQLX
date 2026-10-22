@@ -42,11 +42,12 @@ func (p *Parser) parseAlterTableStatement(stmt *ast.AlterStatement) (*ast.AlterS
 			stmt.Only = true
 		}
 	}
-	name, err := p.parseQualifiedName()
+	name, nameQuote, err := p.parseQualifiedNameQuoted()
 	if err != nil {
 		return nil, p.qualifiedNameError(err, "table name")
 	}
 	stmt.Name = name
+	stmt.NameQuote = nameQuote
 	if p.alterDialect(dialectClickHouse) && p.isType(models.TokenTypeOn) && p.utilityWord(p.currentPos+1) == "CLUSTER" {
 		p.advance() // ON
 		p.advance() // CLUSTER
@@ -278,7 +279,7 @@ func (p *Parser) parseAlterColumnPosition() *ast.ColumnPosition {
 		saved, savedTok := p.currentPos, p.currentToken
 		p.advance()
 		if name := p.parseColumnName(); name != nil {
-			return &ast.ColumnPosition{After: &ast.Ident{Name: name.Name}}
+			return &ast.ColumnPosition{After: &ast.Ident{Name: name.Name, Quote: name.Quotes}}
 		}
 		p.currentPos, p.currentToken = saved, savedTok
 	}
@@ -292,17 +293,19 @@ func (p *Parser) parseAlterAddConstraint(op *ast.AlterTableOperation) (*ast.Alte
 	op.Type = ast.AddConstraint
 	op.BareConstraint = !p.isType(models.TokenTypeConstraint)
 	name := ""
+	var nameQuote ast.NameQuote
 	if !op.BareConstraint {
 		p.advance() // CONSTRAINT
 		if p.isIdentifier() && !p.isAnyType(models.TokenTypePrimary, models.TokenTypeForeign, models.TokenTypeUnique, models.TokenTypeCheck) {
 			name = p.currentToken.Token.Value
+			nameQuote = p.currentNameQuote()
 			p.advance()
 		}
 	}
 	var c *ast.TableConstraint
 	if i := p.clusteringWordAt(); i > 0 {
 		op.Clustering = p.utilityWord(i)
-		c = &ast.TableConstraint{Name: name}
+		c = &ast.TableConstraint{Name: name, NameQuote: nameQuote}
 		if p.isType(models.TokenTypePrimary) {
 			c.Type = "PRIMARY KEY"
 			p.advance() // PRIMARY
@@ -311,11 +314,12 @@ func (p *Parser) parseAlterAddConstraint(op *ast.AlterTableOperation) (*ast.Alte
 		}
 		p.advance() // KEY or UNIQUE
 		p.advance() // CLUSTERED / NONCLUSTERED
-		cols, err := p.parseConstraintColumnList()
+		cols, colQuotes, err := p.parseConstraintColumnListQuoted()
 		if err != nil {
 			return nil, err
 		}
 		c.Columns = cols
+		c.ColumnQuotes = colQuotes
 	} else {
 		var err error
 		c, err = p.parseTableConstraint()
@@ -324,6 +328,7 @@ func (p *Parser) parseAlterAddConstraint(op *ast.AlterTableOperation) (*ast.Alte
 		}
 		if name != "" {
 			c.Name = name
+			c.NameQuote = nameQuote
 		}
 	}
 	op.Constraint = c
@@ -487,14 +492,14 @@ func (p *Parser) parseAlterDropNames(op *ast.AlterTableOperation, what string, s
 	if name == nil {
 		return nil, p.expectedError(what)
 	}
-	set(&ast.Ident{Name: name.Name})
+	set(&ast.Ident{Name: name.Name, Quote: name.Quotes})
 	for p.dialect == string(keywords.DialectSQLServer) && p.isType(models.TokenTypeComma) && !p.alterActionStartsAt(p.currentPos+1) {
 		p.advance()
 		more := p.parseColumnName()
 		if more == nil {
 			return nil, p.expectedError(what)
 		}
-		op.ExtraNames = append(op.ExtraNames, &ast.Ident{Name: more.Name})
+		op.ExtraNames = append(op.ExtraNames, &ast.Ident{Name: more.Name, Quote: more.Quotes})
 	}
 	if p.matchType(models.TokenTypeCascade) {
 		op.CascadeDrops = true
@@ -528,8 +533,8 @@ func (p *Parser) parseAlterRename(op *ast.AlterTableOperation) (*ast.AlterTableO
 		if newName == nil {
 			return nil, p.expectedError("new constraint name")
 		}
-		op.OldName = &ast.Ident{Name: old.Name}
-		op.NewName = &ast.Ident{Name: newName.Name}
+		op.OldName = &ast.Ident{Name: old.Name, Quote: old.Quotes}
+		op.NewName = &ast.Ident{Name: newName.Name, Quote: newName.Quotes}
 		return op, nil
 	case p.alterGenericAllowed("RENAME", word):
 		return p.parseAlterGeneric(op, "RENAME")
@@ -545,12 +550,12 @@ func (p *Parser) parseAlterRename(op *ast.AlterTableOperation) (*ast.AlterTableO
 
 // parseAlterRenameTable parses the new name of RENAME [TO] name.
 func (p *Parser) parseAlterRenameTable(op *ast.AlterTableOperation) (*ast.AlterTableOperation, error) {
-	name, err := p.parseQualifiedName()
+	name, nameQuote, err := p.parseQualifiedNameQuoted()
 	if err != nil {
 		return nil, p.qualifiedNameError(err, "table name")
 	}
 	op.Type = ast.RenameTable
-	op.NewTableName = ast.ObjectName{Name: name}
+	op.NewTableName = ast.ObjectName{Name: name, Quote: nameQuote}
 	return op, nil
 }
 
@@ -566,7 +571,7 @@ func (p *Parser) parseAlterRenameColumn(op *ast.AlterTableOperation) (*ast.Alter
 	if old == nil {
 		return nil, p.expectedError("column name")
 	}
-	op.ColumnName = &ast.Ident{Name: old.Name}
+	op.ColumnName = &ast.Ident{Name: old.Name, Quote: old.Quotes}
 	if !p.matchType(models.TokenTypeTo) {
 		return nil, p.expectedError("TO")
 	}
@@ -574,7 +579,7 @@ func (p *Parser) parseAlterRenameColumn(op *ast.AlterTableOperation) (*ast.Alter
 	if newName == nil {
 		return nil, p.expectedError("new column name")
 	}
-	op.NewColumnName = &ast.Ident{Name: newName.Name}
+	op.NewColumnName = &ast.Ident{Name: newName.Name, Quote: newName.Quotes}
 	return op, nil
 }
 
@@ -605,7 +610,7 @@ func (p *Parser) parseAlterColumn(op *ast.AlterTableOperation, typ ast.AlterTabl
 			return nil, err
 		}
 		if ok {
-			op.ColumnName = &ast.Ident{Name: name.Name}
+			op.ColumnName = &ast.Ident{Name: name.Name, Quote: name.Quotes}
 			return op, nil
 		}
 	}
@@ -616,7 +621,7 @@ func (p *Parser) parseAlterColumn(op *ast.AlterTableOperation, typ ast.AlterTabl
 		return nil, err
 	}
 	op.ColumnDef = def
-	op.ColumnName = &ast.Ident{Name: def.Name}
+	op.ColumnName = &ast.Ident{Name: def.Name, Quote: def.NameQuote}
 	op.ColumnPosition = p.parseAlterColumnPosition()
 	return op, nil
 }
@@ -713,7 +718,7 @@ func (p *Parser) parseAlterChange(op *ast.AlterTableOperation) (*ast.AlterTableO
 	if old == nil {
 		return nil, p.expectedError("column name")
 	}
-	op.ColumnName = &ast.Ident{Name: old.Name}
+	op.ColumnName = &ast.Ident{Name: old.Name, Quote: old.Quotes}
 	def, err := p.parseColumnDef()
 	if err != nil {
 		return nil, err

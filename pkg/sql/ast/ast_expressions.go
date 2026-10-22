@@ -143,6 +143,7 @@ type FunctionCall struct {
 	Parameters    []Expression // ClickHouse parametric aggregates: quantile(0.5)(x) — params before args
 	Over          *WindowSpec  // For window functions
 	Distinct      bool
+	NameQuote     NameQuote           // Delimited parts of Name to keep, as in s."select"(1) (see NameQuote); shares Distinct's padding
 	Filter        Expression          // WHERE clause for aggregate functions
 	OrderBy       []OrderByExpression // ORDER BY clause for aggregate functions (STRING_AGG, ARRAY_AGG, etc.)
 	WithinGroup   []OrderByExpression // ORDER BY clause for ordered-set aggregates (PERCENTILE_CONT, etc.)
@@ -709,6 +710,9 @@ func (c CastExpression) Children() []Node {
 type AliasedExpression struct {
 	Expr  Expression
 	Alias string
+	// AliasQuote records the delimiters the source wrote around Alias when
+	// they must be kept (see NameQuote).
+	AliasQuote NameQuote
 }
 
 func (a *AliasedExpression) expressionNode()     {}

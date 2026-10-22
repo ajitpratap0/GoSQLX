@@ -541,6 +541,7 @@ func (p *Parser) parseTableColumnAliases(ref *ast.TableReference) error {
 		if !p.isIdentifier() && !p.isNonReservedKeyword() {
 			return p.expectedError("column alias in table alias list")
 		}
+		list.Quotes = nameQuoteList(list.Quotes, len(list.Names), p.currentNameQuote())
 		list.Names = append(list.Names, p.currentToken.Token.Value)
 		p.advance()
 		// A column type follows only a built-in type keyword, so a
@@ -872,6 +873,7 @@ func (p *Parser) parsePivotSuffix(ref *ast.TableReference) error {
 			return err
 		}
 		pivot.SourceAlias, ref.Alias = ref.Alias, ""
+		pivot.SourceAliasQuote, ref.AliasQuote = ref.AliasQuote, 0
 		ref.Pivot = pivot
 	} else if p.isUnpivotKeyword() {
 		unpivot, err := p.parseUnpivotClause()
@@ -879,6 +881,7 @@ func (p *Parser) parsePivotSuffix(ref *ast.TableReference) error {
 			return err
 		}
 		unpivot.SourceAlias, ref.Alias = ref.Alias, ""
+		unpivot.SourceAliasQuote, ref.AliasQuote = ref.AliasQuote, 0
 		ref.Unpivot = unpivot
 	} else {
 		return nil

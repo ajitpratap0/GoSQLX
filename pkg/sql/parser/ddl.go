@@ -202,11 +202,12 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 	}
 
 	// Parse table name (supports schema.table qualification and double-quoted identifiers)
-	createTableName, err := p.parseQualifiedName()
+	createTableName, createTableQuote, err := p.parseQualifiedNameQuoted()
 	if err != nil {
 		return nil, p.qualifiedNameError(err, "table name")
 	}
 	stmt.Name = createTableName
+	stmt.NameQuote = createTableQuote
 
 	if stmt.OnCluster, err = p.parseOnCluster(); err != nil {
 		return nil, err
@@ -579,10 +580,11 @@ func (p *Parser) parseDropStatement() (ast.Statement, error) {
 
 	// Parse object names (can be comma-separated, supports schema.name qualification)
 	for {
-		dropName, err := p.parseQualifiedName()
+		dropName, dropQuote, err := p.parseQualifiedNameQuoted()
 		if err != nil {
 			return nil, p.qualifiedNameError(err, "object name")
 		}
+		stmt.NameQuotes = nameQuoteList(stmt.NameQuotes, len(stmt.Names), dropQuote)
 		stmt.Names = append(stmt.Names, dropName)
 
 		if p.isType(models.TokenTypeComma) {
@@ -599,11 +601,12 @@ func (p *Parser) parseDropStatement() (ast.Statement, error) {
 	// MySQL / SQL Server / MariaDB: DROP INDEX name ON table
 	if stmt.ObjectType == "INDEX" && p.isType(models.TokenTypeOn) && len(stmt.Names) == 1 {
 		p.advance() // ON
-		table, err := p.parseQualifiedName()
+		table, tableQuote, err := p.parseQualifiedNameQuoted()
 		if err != nil {
 			return nil, p.qualifiedNameError(err, "table name after ON")
 		}
 		stmt.OnTable = table
+		stmt.OnTableQuote = tableQuote
 	}
 
 	// Parse optional CASCADE [CONSTRAINTS] / RESTRICT
@@ -642,10 +645,11 @@ func (p *Parser) parseTruncateStatement() (*ast.TruncateStatement, error) {
 
 	// Parse table names (can be comma-separated, supports schema.table qualification)
 	for {
-		truncTableName, err := p.parseQualifiedName()
+		truncTableName, truncQuote, err := p.parseQualifiedNameQuoted()
 		if err != nil {
 			return nil, p.qualifiedNameError(err, "table name")
 		}
+		stmt.TableQuotes = nameQuoteList(stmt.TableQuotes, len(stmt.Tables), truncQuote)
 		stmt.Tables = append(stmt.Tables, truncTableName)
 
 		if p.isType(models.TokenTypeComma) {

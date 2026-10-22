@@ -261,8 +261,10 @@ func TestQuotedConstraintNamesRoundTrip_PR632(t *testing.T) {
 		{`CREATE TABLE t (a INT, CONSTRAINT "default" CHECK (a > 0))`, `CONSTRAINT "default" CHECK`},
 		{`CREATE TABLE t (a INT, CONSTRAINT "table" PRIMARY KEY (a))`, `CONSTRAINT "table" PRIMARY KEY`},
 		{`CREATE TABLE t (a INT, CONSTRAINT "owner" PRIMARY KEY (a))`, `CONSTRAINT "owner" PRIMARY KEY`},
-		// Quoted only for case: rendered bare, like Identifier.SQL().
-		{`CREATE TABLE t (a INT, CONSTRAINT "MixedCase" PRIMARY KEY (a))`, `CONSTRAINT MixedCase PRIMARY KEY`},
+		// Quoted only for case: the quotes are kept where the dialect folds
+		// unquoted names (generic, PostgreSQL) and dropped in SQLite, so only
+		// the name is checked here; the re-parse check below pins the name.
+		{`CREATE TABLE t (a INT, CONSTRAINT "MixedCase" PRIMARY KEY (a))`, `MixedCase`},
 		{`CREATE TABLE t (a INT, CONSTRAINT PK_USERS PRIMARY KEY (a))`, `CONSTRAINT PK_USERS PRIMARY KEY`},
 		{`CREATE TABLE t (a INT, CONSTRAINT pk_t PRIMARY KEY (a))`, `CONSTRAINT pk_t PRIMARY KEY`},
 	}

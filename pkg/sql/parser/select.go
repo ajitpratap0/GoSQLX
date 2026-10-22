@@ -240,6 +240,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 				return nil, p.expectedError("window name after WINDOW")
 			}
 			winName := p.currentToken.Token.Value
+			winQuote := p.currentNameQuote()
 			p.advance()
 			if !p.isType(models.TokenTypeAs) {
 				return nil, p.expectedError("AS after window name")
@@ -253,9 +254,9 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			// is w2; keep it as the base window instead of dropping it, so it
 			// renders as the standard w AS (w2).
 			if winSpec.Name != "" {
-				winSpec.BaseWindow = winSpec.Name
+				winSpec.BaseWindow, winSpec.BaseWindowQuote = winSpec.Name, winSpec.NameQuote
 			}
-			winSpec.Name = winName
+			winSpec.Name, winSpec.NameQuote = winName, winQuote
 			selectStmt.Windows = append(selectStmt.Windows, *winSpec)
 			if !p.isType(models.TokenTypeComma) {
 				break
@@ -500,8 +501,9 @@ func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
 					return nil, p.expectedError("alias name after AS")
 				}
 				alias := p.currentToken.Token.Value
+				aliasQuote := p.currentNameQuote()
 				p.advance()
-				expr = &ast.AliasedExpression{Expr: expr, Alias: alias}
+				expr = &ast.AliasedExpression{Expr: expr, Alias: alias, AliasQuote: aliasQuote}
 			} else if p.canBeAlias() {
 				// Implicit aliasing (SELECT expr alias) is allowed for non-identifier
 				// expressions (functions, literals, casts, etc.) and for bare identifiers
@@ -511,8 +513,9 @@ func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
 				allowAlias := !isIdent || (isIdent && ident.Table == "" && p.isOraclePseudoColumn2(ident.Name)) || p.isQuotedIdentifierToken()
 				if allowAlias {
 					alias := p.currentToken.Token.Value
+					aliasQuote := p.currentNameQuote()
 					p.advance()
-					expr = &ast.AliasedExpression{Expr: expr, Alias: alias}
+					expr = &ast.AliasedExpression{Expr: expr, Alias: alias, AliasQuote: aliasQuote}
 				}
 			}
 		}

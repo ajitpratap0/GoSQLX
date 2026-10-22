@@ -995,6 +995,7 @@ func (p *Parser) parseApplyFunctionCall(joinType string, ref *ast.TableReference
 	if err != nil {
 		return err
 	}
+	call.NameQuote = ref.NameQuote
 	ref.TableFunc = call
 	return nil
 }

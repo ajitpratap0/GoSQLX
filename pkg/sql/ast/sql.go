@@ -92,10 +92,10 @@ func (a AST) SQL() string {
 // a reserved word ("select", "key", "null") is re-quoted so it re-parses as a
 // name. Names, and each part of the Table qualifier, are otherwise
 // double-quoted only when they contain characters other than letters, digits,
-// '_', '*' and '.'. Case alone does not trigger quoting: aliases and CTE/view
-// column lists record no quoting and render bare, so a quoted "Total" that
-// refers to one must render bare as well to keep matching it after the
-// database folds case.
+// '_', '*' and '.', or when Quotes records that the source delimited them for
+// a reason a bare rendering would lose (letter case, a keyword). The
+// delimiters are those of Quotes' style, else QuoteStyle, else ANSI double
+// quotes.
 func (i *Identifier) SQL() string {
 	if i == nil {
 		return ""
@@ -103,10 +103,10 @@ func (i *Identifier) SQL() string {
 	if i.Table == "" && !i.Quoted && i.QuoteStyle == 0 && isVariableName(i.Name) {
 		return i.Name
 	}
-	if i.Table != "" && isPositionalColumnName(i.Name) && !qualifierNeedsQuoting(i.Table) {
+	if i.Table != "" && isPositionalColumnName(i.Name) && !i.Quotes.HasParts() && !qualifierNeedsQuoting(i.Table) {
 		return i.Table + "." + i.Name // Snowflake t.$1
 	}
-	if !i.quotedReserved() && !identifierNeedsQuoting(i.Name) && (i.Table == "" || !qualifierNeedsQuoting(i.Table)) {
+	if !i.Quotes.HasParts() && !i.quotedReserved() && !identifierNeedsQuoting(i.Name) && (i.Table == "" || !qualifierNeedsQuoting(i.Table)) {
 		if i.Table == "" {
 			return i.Name
 		}
@@ -126,19 +126,27 @@ func (i *Identifier) writeSQL(buf *bytes.Buffer) {
 		buf.WriteString(i.Name)
 		return
 	}
+	style := i.QuoteStyle
+	if i.Quotes.HasStyle() {
+		style = i.Quotes.Style()
+	}
 	if i.Table != "" {
-		writeDottedIdentifierStyle(buf, i.Table, i.QuoteStyle)
+		if i.Quotes == 0 {
+			writeDottedIdentifierStyle(buf, i.Table, style)
+		} else {
+			writeIdentifierQualifier(buf, i.Table, style, i.Quotes)
+		}
 		buf.WriteByte('.')
 		if isPositionalColumnName(i.Name) {
 			buf.WriteString(i.Name) // Snowflake t.$1
 			return
 		}
 	}
-	if i.quotedReserved() || identifierNeedsQuoting(i.Name) {
-		writeDelimitedIdentifier(buf, i.Name, i.QuoteStyle)
-		return
+	need := i.quotedReserved() || identifierNeedsQuoting(i.Name)
+	if i.Quotes != 0 {
+		need = partDelimited(i.Name, i.Quotes.Part(0), need, i.Quotes)
 	}
-	buf.WriteString(i.Name)
+	writeNamePart(buf, i.Name, need, style)
 }
 
 // quotedReserved reports whether i is a Quoted name that is a reserved word,
@@ -526,7 +534,7 @@ func (a *AliasedExpression) writeSQL(buf *bytes.Buffer) {
 	}
 	writeExpr(buf, a.Expr)
 	buf.WriteString(" AS ")
-	writeName(buf, a.Alias)
+	writeNameQ(buf, a.Alias, a.AliasQuote)
 }
 
 // SQL returns the SQL representation of this CAST expression in the form
@@ -800,7 +808,7 @@ func (f *FunctionCall) writeSQL(buf *bytes.Buffer) {
 	if f == nil {
 		return
 	}
-	writeFunctionName(buf, f.Name)
+	writeFunctionNameQ(buf, f.Name, f.NameQuote)
 	if len(f.Parameters) > 0 {
 		// ClickHouse parametric aggregates: quantile(0.5)(x).
 		// Parameters are rendered in their own parenthesis group before args.
@@ -843,16 +851,16 @@ func (f *FunctionCall) writeSQL(buf *bytes.Buffer) {
 		if o.Name != "" && o.BaseWindow == "" && len(o.PartitionBy) == 0 && len(o.OrderBy) == 0 && o.FrameClause == nil {
 			// Bare named-window reference: OVER w.
 			buf.WriteString(" OVER ")
-			writeName(buf, o.Name)
+			writeNameQ(buf, o.Name, o.NameQuote)
 		} else {
 			// Hand-built specs may carry the referenced window in Name alongside
 			// other parts; render it as the base window, as before.
-			base := o.BaseWindow
+			base, baseQuote := o.BaseWindow, o.BaseWindowQuote
 			if base == "" {
-				base = o.Name
+				base, baseQuote = o.Name, o.NameQuote
 			}
 			buf.WriteString(" OVER (")
-			writeWindowSpec(buf, base, o)
+			writeWindowSpec(buf, base, baseQuote, o)
 			buf.WriteByte(')')
 		}
 	}
@@ -1309,9 +1317,9 @@ func (s *SelectStatement) writeSQL(buf *bytes.Buffer) {
 			if i > 0 {
 				buf.WriteString(", ")
 			}
-			writeName(buf, s.Windows[i].Name)
+			writeNameQ(buf, s.Windows[i].Name, s.Windows[i].NameQuote)
 			buf.WriteString(" AS (")
-			writeWindowSpec(buf, s.Windows[i].BaseWindow, &s.Windows[i])
+			writeWindowSpec(buf, s.Windows[i].BaseWindow, s.Windows[i].BaseWindowQuote, &s.Windows[i])
 			buf.WriteByte(')')
 		}
 	}
@@ -1762,13 +1770,13 @@ func (m *MergeStatement) SQL() string {
 	sb.WriteString(tableRefSQL(&m.TargetTable))
 	if m.TargetAlias != "" {
 		sb.WriteString(" ")
-		writeTableAlias(sb, m.TargetAlias)
+		writeTableAliasQ(sb, m.TargetAlias, m.TargetAliasQuote)
 	}
 	sb.WriteString(" USING ")
 	sb.WriteString(tableRefSQL(&m.SourceTable))
 	if m.SourceAlias != "" {
 		sb.WriteString(" ")
-		writeTableAlias(sb, m.SourceAlias)
+		writeTableAliasQ(sb, m.SourceAlias, m.SourceAliasQuote)
 	}
 	sb.WriteString(" ON ")
 	sb.WriteString(exprSQL(m.OnCondition))
@@ -2127,17 +2135,17 @@ func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 		if t.Only {
 			buf.WriteString("ONLY ")
 		}
-		writeQualifiedName(buf, t.Name)
+		writeQualifiedNameQ(buf, t.Name, t.NameQuote)
 		writeTableRefNameSuffix(buf, t)
 	}
 	writeTableRefPreAlias(buf, t, identityKeyword)
 	if t.Alias != "" && !tableAliasFollowsClause(t) {
 		buf.WriteByte(' ')
-		writeTableAlias(buf, t.Alias)
+		writeTableAliasQ(buf, t.Alias, t.AliasQuote)
 		writeTableColumnAliases(buf, t)
-	} else if alias := tableRefSourceAlias(t); alias != "" {
+	} else if alias, q := tableRefSourceAlias(t); alias != "" {
 		buf.WriteByte(' ')
-		writeTableAlias(buf, alias)
+		writeTableAliasQ(buf, alias, q)
 	}
 	writeTableRefPostAlias(buf, t, identityKeyword)
 	// Parser order: table hints, then PIVOT/UNPIVOT, then its AS alias (#604).
@@ -2149,7 +2157,7 @@ func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 	}
 	if t.Alias != "" && tableAliasFollowsClause(t) {
 		buf.WriteString(" AS ")
-		writeTableAlias(buf, t.Alias)
+		writeTableAliasQ(buf, t.Alias, t.AliasQuote)
 		writeTableColumnAliases(buf, t)
 	}
 }
@@ -2162,7 +2170,7 @@ func writeTableColumnAliases(buf *bytes.Buffer, t *TableReference) {
 		return
 	}
 	buf.WriteByte('(')
-	writeColumnAliasEntries(buf, t.ColumnAliases)
+	writeColumnAliasEntries(buf, t.ColumnAliases, nil)
 	buf.WriteByte(')')
 }
 
@@ -2209,7 +2217,7 @@ func writeJoin(buf *bytes.Buffer, j *JoinClause) {
 // space-separated base (existing) window name, PARTITION BY, ORDER BY and
 // frame parts that are present. w.Name is never written here; callers write
 // it outside the parentheses (OVER w, WINDOW w AS (...)).
-func writeWindowSpec(buf *bytes.Buffer, base string, w *WindowSpec) {
+func writeWindowSpec(buf *bytes.Buffer, base string, baseQuote NameQuote, w *WindowSpec) {
 	first := true
 	sep := func() {
 		if !first {
@@ -2219,7 +2227,7 @@ func writeWindowSpec(buf *bytes.Buffer, base string, w *WindowSpec) {
 	}
 	if base != "" {
 		sep()
-		writeName(buf, base)
+		writeNameQ(buf, base, baseQuote)
 	}
 	if len(w.PartitionBy) > 0 {
 		sep()
@@ -2321,15 +2329,15 @@ func writeCTE(buf *bytes.Buffer, cte *CommonTableExpr) {
 	if cte.ScalarExpr != nil {
 		writeExpr(buf, cte.ScalarExpr)
 		buf.WriteString(" AS ")
-		writeTableAlias(buf, cte.Name)
+		writeTableAliasQ(buf, cte.Name, cte.NameQuote)
 		return
 	}
 	// A CTE name is quoted like a table alias, so position-only words
 	// (WITH source AS ...) stay bare and keep their case semantics.
-	writeTableAlias(buf, cte.Name)
+	writeTableAliasQ(buf, cte.Name, cte.NameQuote)
 	if len(cte.Columns) > 0 {
 		buf.WriteString(" (")
-		writeNameList(buf, cte.Columns)
+		writeNameListQ(buf, cte.Columns, cte.ColumnQuotes)
 		buf.WriteByte(')')
 	}
 	buf.WriteString(" AS ")
@@ -2405,10 +2413,10 @@ func referenceSQL(r *ReferenceDefinition) string {
 	sb := getBuf()
 	defer putBuf(sb)
 	sb.WriteString("REFERENCES ")
-	writeQualifiedName(sb, r.Table)
+	writeQualifiedNameQ(sb, r.Table, r.TableQuote)
 	if len(r.Columns) > 0 {
 		sb.WriteString(" (")
-		writeColumnNameList(sb, r.Columns)
+		writeColumnNameListQ(sb, r.Columns, r.ColumnQuotes)
 		sb.WriteString(")")
 	}
 	if a := ReferentialActionText(r.OnDelete); a != "" {
@@ -2448,7 +2456,7 @@ func mergeActionSQL(a *MergeAction) string {
 	case "UPDATE":
 		sets := make([]string, len(a.SetClauses))
 		for i, s := range a.SetClauses {
-			sets[i] = QuoteQualifiedName(s.Column) + " = " + exprSQL(s.Value)
+			sets[i] = QuoteQualifiedNameWith(s.Column, s.ColumnQuote) + " = " + exprSQL(s.Value)
 		}
 		return "UPDATE SET " + strings.Join(sets, ", ")
 	case "INSERT":
@@ -2463,7 +2471,7 @@ func mergeActionSQL(a *MergeAction) string {
 					if i > 0 {
 						sb.WriteString(", ")
 					}
-					sb.WriteString(QuoteColumnName(c))
+					sb.WriteString(QuoteColumnNameWith(c, nameQuoteAt(a.ColumnQuotes, i)))
 				}
 				sb.WriteString(")")
 			}

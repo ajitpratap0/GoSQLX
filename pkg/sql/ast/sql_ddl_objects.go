@@ -37,6 +37,30 @@ type DDLStyle struct {
 	// ClauseSep separates a statement from its nested query and trailing
 	// clauses (WHERE, WITH ...); empty means one space.
 	ClauseSep string
+	// NameQuote adjusts the recorded NameQuote of a name before it is
+	// written (the formatter sets the target dialect's default delimiter);
+	// nil leaves it unchanged.
+	NameQuote func(NameQuote) NameQuote
+}
+
+func (s DDLStyle) nq(q NameQuote) NameQuote {
+	if s.NameQuote == nil {
+		return q
+	}
+	return s.NameQuote(q)
+}
+
+// nqList returns qs with each entry adjusted by s.NameQuote, or qs itself
+// when there is nothing to adjust.
+func (s DDLStyle) nqList(qs []NameQuote, n int) []NameQuote {
+	if s.NameQuote == nil {
+		return qs
+	}
+	out := make([]NameQuote, n)
+	for i := range out {
+		out[i] = s.NameQuote(nameQuoteAt(qs, i))
+	}
+	return out
 }
 
 func (s DDLStyle) kw(k string) string {
@@ -117,17 +141,17 @@ func writeCreateTableHead(buf *bytes.Buffer, c *CreateTableStatement, st DDLStyl
 	if c.IfNotExists {
 		st.writeKw(buf, "IF NOT EXISTS ")
 	}
-	writeQualifiedName(buf, c.Name)
+	writeQualifiedNameQ(buf, c.Name, st.nq(c.NameQuote))
 	writeOnCluster(buf, c.OnCluster, st)
 	switch {
 	case c.Like != "":
 		buf.WriteByte(' ')
 		st.writeKw(buf, "LIKE ")
-		writeQualifiedName(buf, c.Like)
+		writeQualifiedNameQ(buf, c.Like, st.nq(c.SourceQuote))
 	case c.Clone != nil:
 		buf.WriteByte(' ')
 		st.writeKw(buf, "CLONE ")
-		writeQualifiedName(buf, c.Clone.Source)
+		writeQualifiedNameQ(buf, c.Clone.Source, st.nq(c.SourceQuote))
 		if at := keywordOneOf(c.Clone.At, []string{"AT", "BEFORE"}); at != "" && c.Clone.Point != nil {
 			if kind := keywordOneOf(c.Clone.PointKind, clonePointKeywords); kind != "" {
 				buf.WriteByte(' ')
@@ -142,12 +166,12 @@ func writeCreateTableHead(buf *bytes.Buffer, c *CreateTableStatement, st DDLStyl
 	case c.PartitionOf != "":
 		buf.WriteByte(' ')
 		st.writeKw(buf, "PARTITION OF ")
-		writeQualifiedName(buf, c.PartitionOf)
+		writeQualifiedNameQ(buf, c.PartitionOf, st.nq(c.SourceQuote))
 		writePartitionBound(buf, c.PartitionBound, st)
 	case c.AsTable != "":
 		buf.WriteByte(' ')
 		st.writeKw(buf, "AS ")
-		writeQualifiedName(buf, c.AsTable)
+		writeQualifiedNameQ(buf, c.AsTable, st.nq(c.SourceQuote))
 	}
 }
 
@@ -600,14 +624,14 @@ func writeCreateIndex(buf *bytes.Buffer, c *CreateIndexStatement, st DDLStyle) {
 		st.writeKw(buf, "IF NOT EXISTS ")
 	}
 	if c.Name != "" {
-		writeQualifiedName(buf, c.Name)
+		writeQualifiedNameQ(buf, c.Name, st.nq(c.NameQuote))
 		buf.WriteByte(' ')
 	}
 	st.writeKw(buf, "ON ")
 	if c.Only {
 		st.writeKw(buf, "ONLY ")
 	}
-	writeQualifiedName(buf, c.Table)
+	writeQualifiedNameQ(buf, c.Table, st.nq(c.TableQuote))
 
 	if c.Using != "" {
 		buf.WriteByte(' ')
@@ -633,7 +657,7 @@ func writeCreateIndex(buf *bytes.Buffer, c *CreateIndexStatement, st DDLStyle) {
 	if len(c.Include) > 0 {
 		buf.WriteByte(' ')
 		st.writeKw(buf, "INCLUDE (")
-		writeColumnNameList(buf, c.Include)
+		writeColumnNameListQ(buf, c.Include, st.nqList(c.IncludeQuotes, len(c.Include)))
 		buf.WriteByte(')')
 	}
 	split := c.OptionsBeforeWhere
@@ -671,7 +695,7 @@ func writeIndexColumn(buf *bytes.Buffer, col *IndexColumn, st DDLStyle) {
 			buf.WriteByte(')')
 		}
 	} else {
-		writeColumnName(buf, col.Column)
+		writeTableAliasQ(buf, col.Column, st.nq(col.ColumnQuote))
 	}
 	if col.Collate != "" {
 		buf.WriteByte(' ')
@@ -720,11 +744,11 @@ func writeCreateView(buf *bytes.Buffer, c *CreateViewStatement, st DDLStyle) {
 	if c.IfNotExists {
 		st.writeKw(buf, "IF NOT EXISTS ")
 	}
-	writeQualifiedName(buf, c.Name)
+	writeQualifiedNameQ(buf, c.Name, st.nq(c.NameQuote))
 	writeOnCluster(buf, c.OnCluster, st)
 	if len(c.Columns) > 0 {
 		buf.WriteString(" (")
-		writeNameList(buf, c.Columns)
+		writeNameListQ(buf, c.Columns, st.nqList(c.ColumnQuotes, len(c.Columns)))
 		buf.WriteByte(')')
 	}
 	buf.WriteByte(' ')
@@ -762,12 +786,12 @@ func writeCreateMaterializedView(buf *bytes.Buffer, c *CreateMaterializedViewSta
 	if c.IfNotExists {
 		st.writeKw(buf, "IF NOT EXISTS ")
 	}
-	writeQualifiedName(buf, c.Name)
+	writeQualifiedNameQ(buf, c.Name, st.nq(c.NameQuote))
 	writeOnCluster(buf, c.OnCluster, st)
 	if c.To != "" {
 		buf.WriteByte(' ')
 		st.writeKw(buf, "TO ")
-		writeQualifiedName(buf, c.To)
+		writeQualifiedNameQ(buf, c.To, st.nq(c.ToQuote))
 	}
 	switch {
 	case len(c.ColumnDefs) > 0:
@@ -781,7 +805,7 @@ func writeCreateMaterializedView(buf *bytes.Buffer, c *CreateMaterializedViewSta
 		buf.WriteByte(')')
 	case len(c.Columns) > 0:
 		buf.WriteString(" (")
-		writeNameList(buf, c.Columns)
+		writeNameListQ(buf, c.Columns, st.nqList(c.ColumnQuotes, len(c.Columns)))
 		buf.WriteByte(')')
 	}
 	if c.Tablespace != "" {
@@ -829,12 +853,12 @@ func writeDrop(buf *bytes.Buffer, d *DropStatement, st DDLStyle) {
 	if d.IfExists {
 		st.writeKw(buf, "IF EXISTS ")
 	}
-	writeQualifiedNameList(buf, d.Names)
+	writeQualifiedNameListQ(buf, d.Names, st.nqList(d.NameQuotes, len(d.Names)))
 	writeOnCluster(buf, d.OnCluster, st)
 	if d.OnTable != "" {
 		buf.WriteByte(' ')
 		st.writeKw(buf, "ON ")
-		writeQualifiedName(buf, d.OnTable)
+		writeQualifiedNameQ(buf, d.OnTable, st.nq(d.OnTableQuote))
 	}
 	if c := CascadeText(d.CascadeType); c != "" {
 		buf.WriteByte(' ')
@@ -860,7 +884,7 @@ func TruncateSQL(t *TruncateStatement, st DDLStyle) string {
 
 func writeTruncate(buf *bytes.Buffer, t *TruncateStatement, st DDLStyle) {
 	st.writeKw(buf, "TRUNCATE TABLE ")
-	writeQualifiedNameList(buf, t.Tables)
+	writeQualifiedNameListQ(buf, t.Tables, st.nqList(t.TableQuotes, len(t.Tables)))
 	if t.RestartIdentity {
 		buf.WriteByte(' ')
 		st.writeKw(buf, "RESTART IDENTITY")

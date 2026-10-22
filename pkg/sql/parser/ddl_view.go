@@ -48,7 +48,7 @@ func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStat
 	}
 
 	// Parse view name (supports schema.view qualification and double-quoted identifiers)
-	viewName, err := p.parseQualifiedName()
+	viewName, viewQuote, err := p.parseQualifiedNameQuoted()
 	if err != nil {
 		return nil, p.qualifiedNameError(err, "view name")
 	}
@@ -56,6 +56,7 @@ func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStat
 	if stmt.OnCluster, err = p.parseOnCluster(); err != nil {
 		return nil, err
 	}
+	stmt.NameQuote = viewQuote
 
 	// Parse optional column list
 	if p.isType(models.TokenTypeLParen) {
@@ -64,6 +65,7 @@ func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStat
 			if !p.isIdentifier() {
 				return nil, p.expectedError("column name")
 			}
+			stmt.ColumnQuotes = nameQuoteList(stmt.ColumnQuotes, len(stmt.Columns), p.currentNameQuote())
 			stmt.Columns = append(stmt.Columns, p.currentToken.Token.Value)
 			p.advance()
 
@@ -161,7 +163,7 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 	}
 
 	// Parse view name (supports schema.view qualification and double-quoted identifiers)
-	matViewName, err := p.parseQualifiedName()
+	matViewName, matViewQuote, err := p.parseQualifiedNameQuoted()
 	if err != nil {
 		return nil, p.qualifiedNameError(err, "materialized view name")
 	}
@@ -170,15 +172,17 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 		return nil, err
 	}
 	clickhouse := p.dialect == string(keywords.DialectClickHouse)
+	stmt.NameQuote = matViewQuote
 
 	// ClickHouse: optional TO <table> before the column list / ENGINE / AS
 	if clickhouse && p.isType(models.TokenTypeTo) {
 		p.advance() // Consume TO
-		toName, toErr := p.parseQualifiedName()
+		toName, toQuote, toErr := p.parseQualifiedNameQuoted()
 		if toErr != nil {
 			return nil, p.qualifiedNameError(toErr, "target table after TO")
 		}
 		stmt.To = toName
+		stmt.ToQuote = toQuote
 	}
 
 	// Parse optional column list: names, or ClickHouse typed columns
@@ -203,6 +207,7 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 				if !p.isIdentifier() {
 					return nil, p.expectedError("column name")
 				}
+				stmt.ColumnQuotes = nameQuoteList(stmt.ColumnQuotes, len(stmt.Columns), p.currentNameQuote())
 				stmt.Columns = append(stmt.Columns, p.currentToken.Token.Value)
 				p.advance()
 

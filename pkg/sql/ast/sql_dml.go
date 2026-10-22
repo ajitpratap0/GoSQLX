@@ -66,10 +66,10 @@ func (d *DMLTargetFields) writeDMLTargets(buf *bytes.Buffer, name, alias string)
 	}
 	first := true
 	if name != "" {
-		writeQualifiedName(buf, name)
+		writeQualifiedNameQ(buf, name, d.TableNameQuote)
 		if alias != "" {
 			buf.WriteByte(' ')
-			writeTableAlias(buf, alias)
+			writeTableAliasQ(buf, alias, d.AliasQuote)
 		}
 		first = false
 	}
@@ -144,7 +144,7 @@ func (i *InsertStatement) writeInsertHead(buf *bytes.Buffer) {
 		i.TableFunction.writeSQL(buf)
 		return
 	}
-	writeQualifiedName(buf, i.TableName)
+	writeQualifiedNameQ(buf, i.TableName, i.TableNameQuote)
 }
 
 // writeInsertBeforeSource writes the clauses between the column list and the

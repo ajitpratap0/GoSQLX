@@ -52,6 +52,11 @@ type CommonTableExpr struct {
 	// recursive CTE (PostgreSQL 14+, Oracle); nil when absent.
 	Search *CTESearchClause
 	Cycle  *CTECycleClause
+	// NameQuote records the delimiters of Name when they must be kept, and
+	// ColumnQuotes those of each Columns entry by index (nil when no
+	// column keeps delimiters); see NameQuote.
+	NameQuote    NameQuote
+	ColumnQuotes []NameQuote
 }
 
 func (c *CommonTableExpr) statementNode()      {}
@@ -204,7 +209,12 @@ type TableReference struct {
 	// The three flags are kept together so they share one word of padding;
 	// TableReference is copied by value on the parser hot path.
 	WithOrdinality bool
-	TableHints     []string // SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
+	// NameQuote and AliasQuote record the parts of Name and Alias the
+	// source delimited and that must stay delimited (see NameQuote). They
+	// share the flags' word of padding.
+	NameQuote  NameQuote
+	AliasQuote NameQuote
+	TableHints []string // SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
 	// TableFunc is a function-call table reference such as
 	// Snowflake LATERAL FLATTEN(input => col), TABLE(my_func(1,2)),
 	// IDENTIFIER('t'), or PostgreSQL unnest(array_col). When set, Name
@@ -257,6 +267,9 @@ type ColumnAliasList struct {
 	// Types holds a column type per name for PostgreSQL record-returning
 	// functions (jsonb_to_recordset(j) AS t(a int, b text)); nil otherwise.
 	Types []string
+	// Quotes holds the NameQuote of each name by index; it is nil when no
+	// name keeps delimiters.
+	Quotes []NameQuote
 }
 
 func (t *TableReference) statementNode() {}
@@ -374,6 +387,10 @@ type WindowSpec struct {
 	PartitionBy []Expression
 	OrderBy     []OrderByExpression
 	FrameClause *WindowFrame
+	// NameQuote and BaseWindowQuote record the delimiters of Name and
+	// BaseWindow when they must be kept (see NameQuote).
+	NameQuote       NameQuote
+	BaseWindowQuote NameQuote
 }
 
 func (w *WindowSpec) statementNode()      {}
@@ -601,6 +618,9 @@ type ColumnDef struct {
 	Name        string
 	Type        string
 	Constraints []ColumnConstraint
+	// NameQuote records the delimiters of Name when they must be kept
+	// (see NameQuote).
+	NameQuote NameQuote
 }
 
 func (c *ColumnDef) expressionNode()     {}
@@ -685,7 +705,15 @@ type TableConstraint struct {
 	Text        string
 	Granularity string
 	LikeTable   string
-	LikeOptions []string
+	// LikeTableQuote records the delimiters of LikeTable when they must
+	// be kept (see NameQuote).
+	LikeTableQuote NameQuote
+	LikeOptions    []string
+	// NameQuote records the delimiters of Name, and ColumnQuotes those of
+	// each Columns entry by index (nil when none keeps delimiters); see
+	// NameQuote.
+	NameQuote    NameQuote
+	ColumnQuotes []NameQuote
 }
 
 func (t *TableConstraint) expressionNode()     {}
@@ -713,6 +741,11 @@ type ReferenceDefinition struct {
 	OnDelete string
 	OnUpdate string
 	Match    string
+	// TableQuote records the delimiters of Table, and ColumnQuotes those of
+	// each Columns entry by index (nil when none keeps delimiters); see
+	// NameQuote.
+	TableQuote   NameQuote
+	ColumnQuotes []NameQuote
 }
 
 func (r *ReferenceDefinition) expressionNode()     {}
@@ -791,6 +824,9 @@ type IndexColumn struct {
 	Expr Expression
 	// OpClass is the PostgreSQL operator class (jsonb_path_ops).
 	OpClass string
+	// ColumnQuote records the delimiters of Column when they must be kept
+	// (see NameQuote).
+	ColumnQuote NameQuote
 }
 
 func (i *IndexColumn) expressionNode()     {}
@@ -959,6 +995,9 @@ type UnpivotClause struct {
 	ValueColumns []string
 	// SourceAlias is the alias of the unpivoted table or derived table.
 	SourceAlias string
+	// SourceAliasQuote records the delimiters of SourceAlias when they must
+	// be kept (see NameQuote).
+	SourceAliasQuote NameQuote
 }
 
 func (u *UnpivotClause) expressionNode()     {}

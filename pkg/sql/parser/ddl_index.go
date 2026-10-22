@@ -57,11 +57,12 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 	// Parse index name (supports schema.index qualification and double-quoted
 	// identifiers). PostgreSQL allows the name to be omitted.
 	if !p.isType(models.TokenTypeOn) || stmt.IfNotExists {
-		indexName, err := p.parseQualifiedName()
+		indexName, indexQuote, err := p.parseQualifiedNameQuoted()
 		if err != nil {
 			return nil, p.qualifiedNameError(err, "index name")
 		}
 		stmt.Name = indexName
+		stmt.NameQuote = indexQuote
 	}
 
 	// Expect ON
@@ -75,11 +76,12 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 	}
 
 	// Parse table name (supports schema.table qualification and double-quoted identifiers)
-	indexTableName, err := p.parseQualifiedName()
+	indexTableName, indexTableQuote, err := p.parseQualifiedNameQuoted()
 	if err != nil {
 		return nil, p.qualifiedNameError(err, "table name")
 	}
 	stmt.Table = indexTableName
+	stmt.TableQuote = indexTableQuote
 
 	// Parse optional USING method (hash is a keyword)
 	if p.isType(models.TokenTypeUsing) {
@@ -127,6 +129,7 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 			if name == nil {
 				return nil, p.expectedError("column name")
 			}
+			stmt.IncludeQuotes = nameQuoteList(stmt.IncludeQuotes, len(stmt.Include), name.Quotes)
 			stmt.Include = append(stmt.Include, name.Name)
 			if !p.isType(models.TokenTypeComma) {
 				break
@@ -166,6 +169,7 @@ func (p *Parser) parseIndexElement() (ast.IndexColumn, error) {
 	col := ast.IndexColumn{}
 	if p.isIdentifier() && p.isIndexElementEnd(1) {
 		col.Column = p.currentToken.Token.Value
+		col.ColumnQuote = p.currentNameQuote()
 		p.advance()
 	} else {
 		e, err := p.parseExpression()
@@ -174,6 +178,7 @@ func (p *Parser) parseIndexElement() (ast.IndexColumn, error) {
 		}
 		if id, ok := e.(*ast.Identifier); ok && id.Table == "" && !id.Quoted {
 			col.Column = id.Name
+			col.ColumnQuote = id.Quotes
 		} else {
 			col.Expr = e
 		}

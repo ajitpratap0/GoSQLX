@@ -451,6 +451,9 @@ type CreateTableStatement struct {
 	// CreateTableExtras holds AS query, LIKE, CLONE, PARTITION OF, the
 	// table kind and ClickHouse engine clauses (see ddl_objects.go).
 	CreateTableExtras
+	// NameQuote records the delimiters of Name when they must be kept
+	// (see NameQuote).
+	NameQuote NameQuote
 }
 
 func (c *CreateTableStatement) statementNode()      {}
@@ -580,6 +583,10 @@ type CreateIndexStatement struct {
 	// CreateIndexExtras holds the index kind, CONCURRENTLY, INCLUDE and
 	// trailing options (see ddl_objects.go).
 	CreateIndexExtras
+	// NameQuote and TableQuote record the delimiters of Name and Table
+	// when they must be kept (see NameQuote).
+	NameQuote  NameQuote
+	TableQuote NameQuote
 }
 
 func (c *CreateIndexStatement) statementNode()      {}
@@ -610,6 +617,10 @@ type MergeStatement struct {
 	WhenClauses []*MergeWhenClause // List of WHEN clauses
 	Output      []Expression       // SQL Server OUTPUT clause columns
 	Returning   []Expression       // PostgreSQL 17 RETURNING list
+	// TargetAliasQuote and SourceAliasQuote record the delimiters of
+	// TargetAlias and SourceAlias when they must be kept (see NameQuote).
+	TargetAliasQuote NameQuote
+	SourceAliasQuote NameQuote
 }
 
 func (m *MergeStatement) statementNode()      {}
@@ -679,6 +690,9 @@ type MergeAction struct {
 	Where Expression
 	// DeleteWhere is the Oracle UPDATE SET ... DELETE WHERE cond predicate.
 	DeleteWhere Expression
+	// ColumnQuotes records the delimiters of each Columns entry by index
+	// (nil when no column keeps delimiters); see NameQuote.
+	ColumnQuotes []NameQuote
 }
 
 func (a *MergeAction) expressionNode()     {}
@@ -704,6 +718,9 @@ func (a MergeAction) Children() []Node {
 type SetClause struct {
 	Column string
 	Value  Expression
+	// ColumnQuote records the delimiters of Column's parts when they must
+	// be kept (see NameQuote).
+	ColumnQuote NameQuote
 }
 
 func (s *SetClause) expressionNode()     {}
@@ -729,6 +746,11 @@ type CreateViewStatement struct {
 	// ViewExtras holds OR ALTER, SECURE / FORCE modifiers and WITH READ
 	// ONLY (see ddl_objects.go).
 	ViewExtras
+	// NameQuote records the delimiters of Name when they must be kept, and
+	// ColumnQuotes those of each Columns entry by index (nil when no column
+	// keeps delimiters); see NameQuote.
+	NameQuote    NameQuote
+	ColumnQuotes []NameQuote
 }
 
 func (c *CreateViewStatement) statementNode()      {}
@@ -756,6 +778,11 @@ type CreateMaterializedViewStatement struct {
 	ViewExtras
 	// OrReplace is CREATE OR REPLACE MATERIALIZED VIEW.
 	OrReplace bool
+	// NameQuote records the delimiters of Name, and ColumnQuotes those of
+	// each Columns entry by index (nil when none keeps delimiters); see
+	// NameQuote.
+	NameQuote    NameQuote
+	ColumnQuotes []NameQuote
 }
 
 func (c *CreateMaterializedViewStatement) statementNode()      {}
@@ -790,6 +817,9 @@ type DropStatement struct {
 	// DropExtras holds DROP INDEX ... ON table, CONCURRENTLY, TEMPORARY,
 	// PURGE and ClickHouse ON CLUSTER / SYNC (see ddl_objects.go).
 	DropExtras
+	// NameQuotes records the delimiters of each Names entry by index (nil
+	// when none keeps delimiters); see NameQuote.
+	NameQuotes []NameQuote
 }
 
 func (d *DropStatement) statementNode()      {}
@@ -806,6 +836,9 @@ type TruncateStatement struct {
 	// Storage is Oracle DROP STORAGE / REUSE STORAGE (or DROP ALL STORAGE),
 	// or empty.
 	Storage string
+	// TableQuotes records the delimiters of each Tables entry by index (nil
+	// when none keeps delimiters); see NameQuote.
+	TableQuotes []NameQuote
 }
 
 func (t *TruncateStatement) statementNode()      {}

@@ -33,14 +33,10 @@ func TestFormatSQL_RefusesLostQuotes(t *testing.T) {
 		dialect string
 		in      string
 	}{
-		{name: "alter mixed case", in: `ALTER TABLE t ADD COLUMN "Mixed" INT`},
-		// Refused by checkMySQLDoubleQuotes: in ALTER, `select` would render as
-		// "select". (In a SELECT list checkQuotedTokens refuses it first.)
-		{name: "alter mysql backtick keyword", dialect: "mysql", in: "ALTER TABLE `Users` ADD COLUMN `select` INT"},
-		{name: "select mixed case", in: `SELECT "Mixed" FROM t`},
-		{name: "select mixed case table", in: `SELECT a FROM "Mixed"`},
-		{name: "create table quoted", in: `CREATE TABLE "Mixed" ("order" INT)`},
-		{name: "oracle lowercase quoted", dialect: "oracle", in: `SELECT "abc" FROM t`},
+		// Names the AST does not record quoting for (ALTER POLICY names, for
+		// example) still render bare, so the CLI must refuse. (CREATE
+		// SEQUENCE is now kept as written, so its quotes survive.)
+		{name: "policy mixed case", in: `ALTER POLICY "Pol" ON t RENAME TO q`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

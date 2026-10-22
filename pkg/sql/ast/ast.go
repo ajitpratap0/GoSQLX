@@ -129,11 +129,17 @@ type Identifier struct {
 	Pos   models.Location // Source position of this identifier (1-based line and column)
 	// Quoted reports that Name was written as a double-quoted (delimited)
 	// identifier. SQL() re-quotes it when Name is a reserved word ("select")
-	// so it re-parses as a name. Case alone ("Mixed") is not re-quoted, to
-	// stay consistent with aliases and column lists, which record no quoting.
-	// It is set only for ANSI double quotes; QuoteStyle records MySQL
-	// backticks and SQL Server brackets.
+	// so it re-parses as a name; quotes needed for letter case ("Mixed") are
+	// recorded in Quotes. It is set only for ANSI double quotes; QuoteStyle
+	// records MySQL backticks and SQL Server brackets.
 	Quoted bool
+	// Quotes records which parts of the reference (part 0 is Name, part 1
+	// the last qualifier part, ...) were delimited in the source and must
+	// stay delimited, such as a name quoted for its letter case ("CreatedAt")
+	// or a keyword ("table"); see NameQuote. Its style, when set, takes
+	// precedence over QuoteStyle. It sits next to Quoted so the struct keeps
+	// its size.
+	Quotes NameQuote
 	// QuoteStyle is the opening delimiter the source used for the quoted
 	// part(s) of the reference: '"', '`' (MySQL, MariaDB, ClickHouse) or
 	// '[' (SQL Server), and zero when no part was delimited. A reserved

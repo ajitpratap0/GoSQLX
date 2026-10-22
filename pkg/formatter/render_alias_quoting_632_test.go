@@ -215,7 +215,7 @@ func TestFormat_AliasQuoting_PR632(t *testing.T) {
 		{`SELECT * FROM t AS "u; DROP TABLE x; --"`, "SELECT *\nFROM t \"u; DROP TABLE x; --\""},
 		{`SELECT amount AS total FROM t`, "SELECT amount AS total\nFROM t"},
 		{`SELECT * FROM t AS u`, "SELECT *\nFROM t u"},
-		{`SELECT amount AS "Total" FROM t ORDER BY "Total"`, "SELECT amount AS Total\nFROM t\nORDER BY Total"},
+		{`SELECT amount AS "Total" FROM t ORDER BY "Total"`, "SELECT amount AS \"Total\"\nFROM t\nORDER BY \"Total\""},
 		{`SELECT amount AS "select" FROM t ORDER BY "select"`, "SELECT amount AS \"select\"\nFROM t\nORDER BY \"select\""},
 	}
 	for _, tc := range cases {

@@ -53,7 +53,7 @@ func renderAlterStatement(a *ast.AlterStatement, opts ast.FormatOptions) string 
 		f.sb.WriteString(f.kw("ONLY"))
 	}
 	f.sb.WriteString(" ")
-	f.sb.WriteString(ast.QuoteQualifiedName(a.Name))
+	f.sb.WriteString(ast.QuoteQualifiedNameWith(a.Name, f.nq(a.NameQuote)))
 	if cluster := alterClusterText(a.OnCluster); cluster != "" {
 		f.sb.WriteString(" ")
 		f.sb.WriteString(f.kw("ON CLUSTER"))
@@ -83,25 +83,35 @@ func renderAlterStatement(a *ast.AlterStatement, opts ast.FormatOptions) string 
 	return f.result()
 }
 
-// alterIdentName returns the name of i, or "" for nil.
-func alterIdentName(i *ast.Ident) string {
+// alterIdentName returns the name of i quoted as a column name when it needs
+// delimiters (or the source's are recorded); nil renders as an empty name.
+func alterIdentName(f *nodeFormatter, i *ast.Ident) string {
 	if i == nil {
-		return ""
+		return ast.QuoteColumnName("")
 	}
-	return i.Name
+	return ast.QuoteColumnNameWith(i.Name, f.nq(i.Quote))
 }
 
 // alterColName returns i as a column name, quoted when needed.
-func alterColName(i *ast.Ident) string {
-	return ast.QuoteColumnName(alterIdentName(i))
+func alterColName(f *nodeFormatter, i *ast.Ident) string {
+	return alterIdentName(f, i)
+}
+
+// alterConstraintName returns i as a constraint name, quoted when needed
+// and honouring its recorded delimiters.
+func alterConstraintName(f *nodeFormatter, i *ast.Ident) string {
+	if i == nil {
+		return ast.QuoteConstraintName("")
+	}
+	return ast.QuoteConstraintNameWith(i.Name, f.nq(i.Quote))
 }
 
 // alterColNames renders i followed by extra, comma-separated.
-func alterColNames(i *ast.Ident, extra []*ast.Ident) string {
+func alterColNames(f *nodeFormatter, i *ast.Ident, extra []*ast.Ident) string {
 	parts := make([]string, 0, 1+len(extra))
-	parts = append(parts, alterColName(i))
+	parts = append(parts, alterColName(f, i))
 	for _, e := range extra {
-		parts = append(parts, alterColName(e))
+		parts = append(parts, alterColName(f, e))
 	}
 	return strings.Join(parts, ", ")
 }
@@ -151,7 +161,7 @@ func writeAlterColumnPosition(f *nodeFormatter, op *ast.AlterTableOperation) {
 		f.sb.WriteString(" ")
 		f.sb.WriteString(f.kw("AFTER"))
 		f.sb.WriteString(" ")
-		f.sb.WriteString(alterColName(pos.After))
+		f.sb.WriteString(alterColName(f, pos.After))
 	}
 }
 
@@ -222,7 +232,7 @@ func alterConstraintSQL(f *nodeFormatter, op *ast.AlterTableOperation) string {
 	if op.Clustering != "" {
 		prefix := ""
 		if tc.Name != "" {
-			prefix = "CONSTRAINT " + ast.QuoteConstraintName(tc.Name) + " "
+			prefix = "CONSTRAINT " + ast.QuoteConstraintNameWith(tc.Name, tc.NameQuote) + " "
 		}
 		if strings.HasPrefix(s, prefix+tc.Type) {
 			rest := s[len(prefix)+len(tc.Type):]
@@ -295,7 +305,7 @@ func writeAlterTableOperation(f *nodeFormatter, op *ast.AlterTableOperation) {
 			sb.WriteString(f.kw("IF EXISTS"))
 		}
 		sb.WriteString(" ")
-		sb.WriteString(alterColNames(op.ColumnName, op.ExtraNames))
+		sb.WriteString(alterColNames(f, op.ColumnName, op.ExtraNames))
 		writeAlterDropTail(f, op)
 	case ast.DropConstraint:
 		kind := "CONSTRAINT"
@@ -311,9 +321,9 @@ func writeAlterTableOperation(f *nodeFormatter, op *ast.AlterTableOperation) {
 			sb.WriteString(f.kw("IF EXISTS"))
 		}
 		sb.WriteString(" ")
-		names := []string{ast.QuoteConstraintName(alterIdentName(op.ConstraintName))}
+		names := []string{alterConstraintName(f, op.ConstraintName)}
 		for _, e := range op.ExtraNames {
-			names = append(names, ast.QuoteConstraintName(alterIdentName(e)))
+			names = append(names, alterConstraintName(f, e))
 		}
 		sb.WriteString(strings.Join(names, ", "))
 		writeAlterDropTail(f, op)
@@ -332,7 +342,7 @@ func writeAlterTableOperation(f *nodeFormatter, op *ast.AlterTableOperation) {
 	case ast.RenameTable:
 		sb.WriteString(f.kw("RENAME TO"))
 		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteQualifiedName(op.NewTableName.Name))
+		sb.WriteString(ast.QuoteQualifiedNameWith(op.NewTableName.Name, f.nq(op.NewTableName.Quote)))
 	case ast.RenameColumn:
 		oldName := op.ColumnName
 		if oldName == nil {
@@ -344,19 +354,19 @@ func writeAlterTableOperation(f *nodeFormatter, op *ast.AlterTableOperation) {
 			sb.WriteString(f.kw("IF EXISTS"))
 		}
 		sb.WriteString(" ")
-		sb.WriteString(alterColName(oldName))
+		sb.WriteString(alterColName(f, oldName))
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("TO"))
 		sb.WriteString(" ")
-		sb.WriteString(alterColName(op.NewColumnName))
+		sb.WriteString(alterColName(f, op.NewColumnName))
 	case ast.RenameConstraint:
 		sb.WriteString(f.kw("RENAME CONSTRAINT"))
 		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteConstraintName(alterIdentName(op.OldName)))
+		sb.WriteString(alterConstraintName(f, op.OldName))
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("TO"))
 		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteConstraintName(alterIdentName(op.NewName)))
+		sb.WriteString(alterConstraintName(f, op.NewName))
 	case ast.AlterColumn:
 		sb.WriteString(alterColumnKeyword(f, "ALTER", op))
 		writeAlterColumnTarget(f, op)
@@ -375,7 +385,7 @@ func writeAlterTableOperation(f *nodeFormatter, op *ast.AlterTableOperation) {
 	case ast.ChangeColumn:
 		sb.WriteString(alterColumnKeyword(f, "CHANGE", op))
 		sb.WriteString(" ")
-		sb.WriteString(alterColName(op.ColumnName))
+		sb.WriteString(alterColName(f, op.ColumnName))
 		if op.ColumnDef != nil {
 			sb.WriteString(" ")
 			sb.WriteString(columnDefSQL(op.ColumnDef))
@@ -407,7 +417,7 @@ func writeAlterColumnTarget(f *nodeFormatter, op *ast.AlterTableOperation) {
 	sb := f.sb
 	if op.AlterColumnOp != nil {
 		sb.WriteString(" ")
-		sb.WriteString(alterColName(op.ColumnName))
+		sb.WriteString(alterColName(f, op.ColumnName))
 		sb.WriteString(" ")
 		writeAlterColumnSub(f, op)
 		return
@@ -415,7 +425,7 @@ func writeAlterColumnTarget(f *nodeFormatter, op *ast.AlterTableOperation) {
 	if op.ColumnDef == nil {
 		if op.ColumnName != nil {
 			sb.WriteString(" ")
-			sb.WriteString(alterColName(op.ColumnName))
+			sb.WriteString(alterColName(f, op.ColumnName))
 		}
 		return
 	}
@@ -423,7 +433,7 @@ func writeAlterColumnTarget(f *nodeFormatter, op *ast.AlterTableOperation) {
 	// in ColumnName and the rest of the clause in ColumnDef.
 	if op.ColumnName != nil && op.ColumnName.Name != op.ColumnDef.Name {
 		sb.WriteString(" ")
-		sb.WriteString(alterColName(op.ColumnName))
+		sb.WriteString(alterColName(f, op.ColumnName))
 	}
 	sb.WriteString(" ")
 	sb.WriteString(columnDefSQL(op.ColumnDef))

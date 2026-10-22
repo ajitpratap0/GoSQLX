@@ -152,11 +152,13 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 		}
 		scalarName := p.currentToken.Token.Value
 		scalarPos := p.currentLocation()
+		scalarQuote := p.currentNameQuote()
 		p.advance()
 		return &ast.CommonTableExpr{
 			Name:       scalarName,
 			ScalarExpr: scalarExpr,
 			Pos:        scalarPos,
+			NameQuote:  scalarQuote,
 		}, nil
 	}
 
@@ -167,10 +169,12 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 	}
 	cteNamePos := p.currentLocation()
 	name := p.currentToken.Token.Value
+	nameQuote := p.currentNameQuote()
 	p.advance()
 
 	// Parse optional column list
 	var columns []string
+	var columnQuotes []ast.NameQuote
 	if p.isType(models.TokenTypeLParen) {
 		// "name (SELECT ...)" is a CTE missing its AS keyword, not a column
 		// list; report the missing AS instead of "expected column name" (#537).
@@ -183,6 +187,7 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 			if !p.isIdentifier() {
 				return nil, p.expectedError("column name")
 			}
+			columnQuotes = nameQuoteList(columnQuotes, len(columns), p.currentNameQuote())
 			columns = append(columns, p.currentToken.Token.Value)
 			p.advance()
 
@@ -270,6 +275,8 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 		Statement:    stmt,
 		Materialized: materialized,
 		Pos:          cteNamePos,
+		NameQuote:    nameQuote,
+		ColumnQuotes: columnQuotes,
 	}
 	// SQL:1999 SEARCH / CYCLE clauses of a recursive CTE.
 	if err := p.parseCTESearchCycle(cte); err != nil {

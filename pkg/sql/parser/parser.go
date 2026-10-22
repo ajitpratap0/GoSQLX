@@ -17,7 +17,6 @@ package parser
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"sync"
 
@@ -1075,7 +1074,7 @@ func (p *Parser) parseIdent() *ast.Identifier {
 	}
 	pos := p.currentLocation()
 	q := p.currentIdentQuote()
-	ident := &ast.Identifier{Name: p.currentToken.Token.Value, Pos: pos, Quoted: q == '"', QuoteStyle: q}
+	ident := &ast.Identifier{Name: p.currentToken.Token.Value, Pos: pos, Quoted: q == '"', QuoteStyle: q, Quotes: p.appendNamePartQuoted(0, q)}
 	p.advance()
 	return ident
 }
@@ -1119,7 +1118,7 @@ func (p *Parser) parseObjectName() ast.ObjectName {
 	if ident == nil {
 		return ast.ObjectName{}
 	}
-	return ast.ObjectName{Name: ident.Name}
+	return ast.ObjectName{Name: ident.Name, Quote: ident.Quotes}
 }
 
 // parseStringLiteral parses a string literal
@@ -1166,47 +1165,17 @@ func (p *Parser) qualifiedNameError(err error, expected string) error {
 // linear in the input, and names with more than maxQualifiedNameParts parts
 // are rejected with E2004.
 func (p *Parser) parseQualifiedName() (string, error) {
-	if !p.isIdentifier() && !p.isNonReservedKeyword() {
-		return "", p.expectedError("identifier")
-	}
-	var parts [maxQualifiedNameParts]string
-	parts[0] = p.currentToken.Token.Value
-	n := 1
-	p.advance()
-
-	// Check for schema.table or db.schema.table
-	for p.isType(models.TokenTypePeriod) {
-		p.advance() // Consume .
-		if p.isEmptyNamePart() && n < maxQualifiedNameParts {
-			// SQL Server db..t: the default schema, written as an empty part.
-			n++
-			continue
-		}
-		if n == maxQualifiedNameParts {
-			return "", goerrors.InvalidSyntaxError(
-				fmt.Sprintf("qualified name has more than %d parts", maxQualifiedNameParts),
-				p.currentLocation(),
-				"",
-			).WithCause(errQualifiedNameTooLong)
-		}
-		if !p.isIdentifier() && !p.isNonReservedKeyword() {
-			return "", p.expectedError("identifier after .")
-		}
-		parts[n] = p.currentToken.Token.Value
-		n++
-		p.advance()
-	}
-
-	return strings.Join(parts[:n], "."), nil
+	name, _, err := p.parseQualifiedNameQuoted()
+	return name, err
 }
 
 // Accepts IDENT or non-reserved keywords that can be used as table names
 func (p *Parser) parseTableReference() (*ast.TableReference, error) {
-	name, err := p.parseQualifiedName()
+	name, q, err := p.parseQualifiedNameQuoted()
 	if err != nil {
 		return nil, err
 	}
-	return &ast.TableReference{Name: name}, nil
+	return &ast.TableReference{Name: name, NameQuote: q}, nil
 }
 
 // isNonReservedKeyword checks if current token is a non-reserved keyword

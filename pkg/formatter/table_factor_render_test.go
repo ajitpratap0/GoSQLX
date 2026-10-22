@@ -208,11 +208,14 @@ func tableRefFieldSamples() map[string]func(*ast.TableReference) {
 	num := func(v string) *ast.LiteralValue { return &ast.LiteralValue{Value: v, Type: "int"} }
 	sub := func() *ast.SelectStatement { return &ast.SelectStatement{Columns: []ast.Expression{ident("s")}} }
 	return map[string]func(*ast.TableReference){
-		"Name":     func(r *ast.TableReference) { r.Name = "other" },
-		"Alias":    func(r *ast.TableReference) { r.Alias = "y" },
-		"Subquery": func(r *ast.TableReference) { r.Subquery = sub() },
-		"Lateral":  func(r *ast.TableReference) { r.Lateral = true },
-		"Final":    func(r *ast.TableReference) { r.Final = true },
+		"Name":  func(r *ast.TableReference) { r.Name = "other" },
+		"Alias": func(r *ast.TableReference) { r.Alias = "y" },
+		// A recorded NameQuote keeps the base name "t" / alias "x" quoted.
+		"NameQuote":  func(r *ast.TableReference) { r.NameQuote = ast.QuotedName('"') },
+		"AliasQuote": func(r *ast.TableReference) { r.AliasQuote = ast.QuotedName('"') },
+		"Subquery":   func(r *ast.TableReference) { r.Subquery = sub() },
+		"Lateral":    func(r *ast.TableReference) { r.Lateral = true },
+		"Final":      func(r *ast.TableReference) { r.Final = true },
 		"WithOrdinality": func(r *ast.TableReference) {
 			r.WithOrdinality = true
 		},

@@ -44,7 +44,7 @@ func (p *Parser) parseColumnName() *ast.Identifier {
 		return nil
 	}
 	pos := p.currentLocation()
-	ident := &ast.Identifier{Name: val, Pos: pos}
+	ident := &ast.Identifier{Name: val, Pos: pos, Quotes: p.currentNameQuote()}
 	p.advance()
 	return ident
 }
@@ -74,8 +74,9 @@ func (p *Parser) parseColumnDef() (*ast.ColumnDef, error) {
 	}
 
 	colDef := &ast.ColumnDef{
-		Name: name.Name,
-		Type: dataTypeStr,
+		Name:      name.Name,
+		Type:      dataTypeStr,
+		NameQuote: name.Quotes,
 	}
 
 	// ClickHouse column options that may appear between the type and the
@@ -236,7 +237,8 @@ func (p *Parser) parseColumnConstraintBody() (*ast.ColumnConstraint, bool, error
 			return nil, false, p.expectedError("table name after REFERENCES")
 		}
 		refDef := &ast.ReferenceDefinition{
-			Table: p.currentToken.Token.Value,
+			Table:      p.currentToken.Token.Value,
+			TableQuote: p.currentNameQuote(),
 		}
 		p.advance()
 
@@ -247,6 +249,7 @@ func (p *Parser) parseColumnConstraintBody() (*ast.ColumnConstraint, bool, error
 				if !p.isIdentifier() {
 					return nil, false, p.expectedError("column name in REFERENCES")
 				}
+				refDef.ColumnQuotes = nameQuoteList(refDef.ColumnQuotes, len(refDef.Columns), p.currentNameQuote())
 				refDef.Columns = append(refDef.Columns, p.currentToken.Token.Value)
 				p.advance()
 
@@ -342,18 +345,22 @@ func (p *Parser) parseReferentialAction() string {
 	return ""
 }
 
-// parseConstraintColumnList parses a parenthesized list of column names
-func (p *Parser) parseConstraintColumnList() ([]string, error) {
+// parseConstraintColumnListQuoted parses a parenthesized list of column
+// names and also returns how each was delimited (nil when none keeps its
+// delimiters; see ast.NameQuote).
+func (p *Parser) parseConstraintColumnListQuoted() ([]string, []ast.NameQuote, error) {
 	if !p.isType(models.TokenTypeLParen) {
-		return nil, p.expectedError("( for column list")
+		return nil, nil, p.expectedError("( for column list")
 	}
 	p.advance() // Consume (
 
 	var columns []string
+	var quotes []ast.NameQuote
 	for {
 		if !p.isIdentifier() {
-			return nil, p.expectedError("column name")
+			return nil, nil, p.expectedError("column name")
 		}
+		quotes = nameQuoteList(quotes, len(columns), p.currentNameQuote())
 		columns = append(columns, p.currentToken.Token.Value)
 		p.advance()
 
@@ -365,11 +372,11 @@ func (p *Parser) parseConstraintColumnList() ([]string, error) {
 	}
 
 	if !p.isType(models.TokenTypeRParen) {
-		return nil, p.expectedError(") after column list")
+		return nil, nil, p.expectedError(") after column list")
 	}
 	p.advance() // Consume )
 
-	return columns, nil
+	return columns, quotes, nil
 }
 
 // parseTypeArgsString consumes a balanced parenthesised type-argument list

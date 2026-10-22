@@ -65,11 +65,12 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 		stmt.TableFunction = fn
 	} else {
 		// Parse table name (supports schema.table qualification and double-quoted identifiers)
-		tableName, err := p.parseQualifiedName()
+		tableName, tableQuote, err := p.parseQualifiedNameQuoted()
 		if err != nil {
 			return nil, p.qualifiedNameError(err, "table name")
 		}
 		stmt.TableName = tableName
+		stmt.TableNameQuote = tableQuote
 	}
 
 	// Parse column list if present
@@ -307,7 +308,7 @@ func (p *Parser) parseInsertColumnList() ([]ast.Expression, error) {
 		if !p.isWordToken() {
 			return nil, p.expectedError("column name")
 		}
-		columns = append(columns, &ast.Identifier{Name: p.currentToken.Token.Value})
+		columns = append(columns, p.currentColumnIdent())
 		p.advance()
 		if !p.isType(models.TokenTypeComma) {
 			break
@@ -383,7 +384,7 @@ func (p *Parser) parseInsertSetList() ([]ast.Expression, []ast.Expression, error
 		if !p.isWordToken() {
 			return nil, nil, p.expectedError("column name")
 		}
-		columns = append(columns, &ast.Identifier{Name: p.currentToken.Token.Value})
+		columns = append(columns, p.currentColumnIdent())
 		p.advance()
 		if !p.isType(models.TokenTypeEq) {
 			return nil, nil, p.expectedError("=")
@@ -490,7 +491,7 @@ func (p *Parser) parseOnConflictClause() (*ast.OnConflict, error) {
 				switch p.peekToken().Token.Type {
 				case models.TokenTypeComma, models.TokenTypeRParen:
 					// A plain column name (which may be a keyword: key, value).
-					target = &ast.Identifier{Name: p.currentToken.Token.Value}
+					target = p.currentColumnIdent()
 					p.advance()
 				}
 			}

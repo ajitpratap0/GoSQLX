@@ -36,14 +36,14 @@ func cteSQL(cte *ast.CommonTableExpr, f *nodeFormatter) string {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("AS"))
 		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteTableAlias(cte.Name))
+		sb.WriteString(ast.QuoteTableAliasWith(cte.Name, f.nq(cte.NameQuote)))
 		return sb.String()
 	}
-	sb.WriteString(ast.QuoteTableAlias(cte.Name))
+	sb.WriteString(ast.QuoteTableAliasWith(cte.Name, f.nq(cte.NameQuote)))
 	sb.WriteString(" ")
 	if len(cte.Columns) > 0 {
 		sb.WriteString("(")
-		sb.WriteString(quoteNames(cte.Columns))
+		sb.WriteString(f.quoteNamesWith(cte.Columns, cte.ColumnQuotes))
 		sb.WriteString(") ")
 	}
 	sb.WriteString(f.kw("AS"))

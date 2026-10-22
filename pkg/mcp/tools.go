@@ -78,7 +78,7 @@ func validateSQLInternal(sql, dialect string) (map[string]any, error) {
 // formatSQLInternal formats a SQL string using the provided options.
 //
 // gosqlx.Format always emits clause keywords (SELECT, FROM, WHERE, ...) in
-// upper case and leaves the case of other keywords (and, in, case, ...) to the
+// upper case and leaves the case of other keywords (like, case, ...) to the
 // AST, so its UppercaseKeywords option alone changes nothing visible. When
 // uppercaseKeywords is true the remaining keywords are therefore upper-cased
 // here (data type names are left alone); when false the output is

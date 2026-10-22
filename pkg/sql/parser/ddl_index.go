@@ -87,6 +87,17 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 		col.Column = p.currentToken.Token.Value
 		p.advance()
 
+		// Parse optional COLLATE (SQLite, PostgreSQL): col COLLATE NOCASE
+		if p.isType(models.TokenTypeCollate) {
+			p.advance() // Consume COLLATE
+			if !p.isIdentifier() && !p.isNonReservedKeyword() {
+				return nil, p.expectedError("collation name")
+			}
+			col.Collate = p.currentToken.Token.Value
+			col.CollateQuoted = p.isType(models.TokenTypeDoubleQuotedString)
+			p.advance()
+		}
+
 		// Parse optional direction
 		if p.isType(models.TokenTypeAsc) {
 			col.Direction = "ASC"

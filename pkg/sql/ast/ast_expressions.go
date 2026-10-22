@@ -255,7 +255,15 @@ type InExpression struct {
 	List     []Expression // For value list: IN (1, 2, 3)
 	Subquery Statement    // For subquery: IN (SELECT ...)
 	Not      bool
-	Pos      models.Location // Source position of the IN keyword (1-based line and column)
+	// Global records the ClickHouse GLOBAL modifier (a GLOBAL IN (...)),
+	// which makes a distributed query evaluate the right side once on the
+	// initiator rather than on every shard.
+	Global bool
+	// Bare records a right side written without parentheses (SQLite
+	// "a IN tbl", "a IN fn(1)"). List then holds the single table or
+	// table-function reference.
+	Bare bool
+	Pos  models.Location // Source position of the IN keyword (1-based line and column)
 }
 
 func (i *InExpression) expressionNode()     {}
@@ -516,7 +524,10 @@ type BinaryExpression struct {
 	// concatenation must clear it first (the transpiler does).
 	PipesOr  bool
 	CustomOp *CustomBinaryOperator // For PostgreSQL custom operators
-	Pos      models.Location       // Source position of the operator (1-based line and column)
+	// Escape is the ESCAPE character expression of a LIKE / ILIKE /
+	// SIMILAR TO pattern match (a LIKE 'x!%' ESCAPE '!'); nil when absent.
+	Escape Expression
+	Pos    models.Location // Source position of the operator (1-based line and column)
 }
 
 func (b *BinaryExpression) expressionNode() {}
@@ -535,6 +546,9 @@ func (b BinaryExpression) Children() []Node {
 	}
 	if b.Right != nil {
 		nodes = append(nodes, b.Right)
+	}
+	if b.Escape != nil {
+		nodes = append(nodes, b.Escape)
 	}
 	return nodes
 }

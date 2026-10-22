@@ -324,6 +324,9 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 			if e.Right != nil {
 				workQueue = append(workQueue, e.Right)
 			}
+			if e.Escape != nil {
+				workQueue = append(workQueue, e.Escape)
+			}
 			if mode == releaseAll {
 				// CustomOp is not pooled; the reset drops it for the GC.
 				*e = BinaryExpression{}
@@ -432,6 +435,40 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 			if mode == releaseAll {
 				*e = SubqueryExpression{}
 				subqueryExprPool.Put(e)
+			}
+
+		case *AtTimeZoneExpression:
+			// No dedicated pool; children are freed here and the node is left
+			// to the garbage collector.
+			if e.Expr != nil {
+				workQueue = append(workQueue, e.Expr)
+			}
+			if e.Zone != nil {
+				workQueue = append(workQueue, e.Zone)
+			}
+
+		case *CollateExpression:
+			if e.Expr != nil {
+				workQueue = append(workQueue, e.Expr)
+			}
+
+		case *AnyAllExpression:
+			if e.Expr != nil {
+				workQueue = append(workQueue, e.Expr)
+			}
+			if e.Array != nil {
+				workQueue = append(workQueue, e.Array)
+			}
+
+		case *TernaryExpression:
+			if e.Cond != nil {
+				workQueue = append(workQueue, e.Cond)
+			}
+			if e.Then != nil {
+				workQueue = append(workQueue, e.Then)
+			}
+			if e.Else != nil {
+				workQueue = append(workQueue, e.Else)
 			}
 
 		case *ParenthesizedExpression:

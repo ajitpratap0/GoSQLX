@@ -174,57 +174,13 @@ func (p *Parser) parseCastLike(try bool) (*ast.CastExpression, error) {
 	}
 	p.advance() // Consume AS
 
-	// Parse the target data type
-	// The type can be:
-	// - Simple type: VARCHAR, INT, DECIMAL, etc.
-	// - Type with precision: VARCHAR(100), DECIMAL(10,2), etc.
-	// - Quoted user-defined type: "my type", as :: accepts and SQL()
-	//   renders a type name that is not a plain word
-	if !p.isIdentifier() {
-		return nil, p.expectedError("data type")
-	}
-
-	dataType := p.currentToken.Token.Value
-	p.advance() // Consume type name
-
-	// Check for type parameters (e.g., VARCHAR(100), DECIMAL(10,2))
-	if p.isType(models.TokenTypeLParen) {
-		p.advance() // Consume (
-
-		// Build the full type string including parameters
-		typeParams := "("
-		paramCount := 0
-
-		for !p.isType(models.TokenTypeRParen) {
-			if paramCount > 0 {
-				if !p.isType(models.TokenTypeComma) {
-					return nil, p.expectedError(", or )")
-				}
-				typeParams += p.currentToken.Token.Value
-				p.advance() // Consume comma
-			}
-
-			// Parse parameter (should be a number)
-			if !p.isNumericLiteral() && !p.isType(models.TokenTypeIdentifier) {
-				return nil, goerrors.InvalidSyntaxError(
-					"expected numeric type parameter",
-					p.currentLocation(),
-					"",
-				).WithHint("Use CAST(expr AS TYPE(precision[, scale]))")
-			}
-
-			typeParams += p.currentToken.Token.Value
-			p.advance()
-			paramCount++
-		}
-
-		typeParams += ")"
-		dataType += typeParams
-
-		if !p.isType(models.TokenTypeRParen) {
-			return nil, p.expectedError(")")
-		}
-		p.advance() // Consume )
+	// Parse the target data type. The type can be a simple type (VARCHAR),
+	// a type with precision (DECIMAL(10,2)), a multi-word type (DOUBLE
+	// PRECISION, MySQL SIGNED INTEGER, CHAR(10) CHARACTER SET utf8mb4), an
+	// array type (text[]) or a quoted user-defined type ("my type").
+	dataType, err := p.parseDataTypeHint("Use CAST(expr AS TYPE(precision[, scale]))")
+	if err != nil {
+		return nil, err
 	}
 
 	// Multi-word types and array suffixes: DOUBLE PRECISION,

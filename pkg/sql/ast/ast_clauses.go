@@ -642,21 +642,55 @@ type PartitionBy struct {
 	Type     string // RANGE, LIST, HASH
 	Columns  []string
 	Boundary []Expression
+	// Expressions holds the partition key when it is not a plain column
+	// list (RANGE (YEAR(d))); it is written instead of Columns.
+	Expressions []Expression
+	// Partitions is the HASH / KEY partition count (PARTITIONS n).
+	Partitions Expression
+	// Interval is the Oracle INTERVAL (expr) of interval partitioning, or
+	// the MariaDB SYSTEM_TIME INTERVAL n unit.
+	Interval Expression
+	// Linear is MySQL LINEAR HASH / LINEAR KEY.
+	Linear bool
 }
 
 func (p *PartitionBy) expressionNode()     {}
 func (p PartitionBy) TokenLiteral() string { return "PARTITION BY" }
-func (p PartitionBy) Children() []Node     { return nodifyExpressions(p.Boundary) }
+func (p PartitionBy) Children() []Node {
+	nodes := nodifyExpressions(p.Boundary)
+	nodes = append(nodes, nodifyExpressions(p.Expressions)...)
+	if p.Partitions != nil {
+		nodes = append(nodes, p.Partitions)
+	}
+	if p.Interval != nil {
+		nodes = append(nodes, p.Interval)
+	}
+	return nodes
+}
 
 // TableOption represents table options like ENGINE, CHARSET, etc.
 type TableOption struct {
 	Name  string
 	Value string
+	// Form says how the option is written (zero value: Name=Value); see
+	// ddl_objects.go.
+	Form TableOptionForm
+	// ValueKind says how Value is written (zero value: a bare word).
+	ValueKind TableOptionValueKind
+	// Args holds the expressions of a TableOptionArgs option.
+	Args []Expression
+	// Sub holds the entries of a TableOptionList option.
+	Sub []OptionParam
 }
 
 func (t *TableOption) expressionNode()     {}
 func (t TableOption) TokenLiteral() string { return t.Name }
-func (t TableOption) Children() []Node     { return nil }
+func (t TableOption) Children() []Node {
+	if len(t.Args) == 0 {
+		return nil
+	}
+	return nodifyExpressions(t.Args)
+}
 
 // IndexColumn represents a column in an index definition
 type IndexColumn struct {
@@ -668,11 +702,23 @@ type IndexColumn struct {
 	CollateQuoted bool
 	Direction     string // ASC, DESC
 	NullsLast     bool
+	// NullsFirst is NULLS FIRST.
+	NullsFirst bool
+	// Expr is the indexed expression when it is not a plain column
+	// (lower(email), (a + b), email(10)); it is written instead of Column.
+	Expr Expression
+	// OpClass is the PostgreSQL operator class (jsonb_path_ops).
+	OpClass string
 }
 
 func (i *IndexColumn) expressionNode()     {}
 func (i IndexColumn) TokenLiteral() string { return i.Column }
-func (i IndexColumn) Children() []Node     { return nil }
+func (i IndexColumn) Children() []Node {
+	if i.Expr != nil {
+		return []Node{i.Expr}
+	}
+	return nil
+}
 
 // PartitionDefinition represents a partition definition in CREATE TABLE
 // Syntax: PARTITION name VALUES { LESS THAN (expr) | IN (list) | FROM (expr) TO (expr) }

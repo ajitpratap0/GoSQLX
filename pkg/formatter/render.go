@@ -569,86 +569,7 @@ func renderDelete(d *ast.DeleteStatement, opts ast.FormatOptions) string {
 }
 
 func renderCreateTable(c *ast.CreateTableStatement, opts ast.FormatOptions) string {
-	if c == nil {
-		return ""
-	}
-	f := newNodeFormatter(opts)
-	sb := f.sb
-
-	sb.WriteString(f.kw("CREATE"))
-	sb.WriteString(" ")
-	if c.Temporary {
-		sb.WriteString(f.kw("TEMPORARY"))
-		sb.WriteString(" ")
-	}
-	sb.WriteString(f.kw("TABLE"))
-	sb.WriteString(" ")
-	if c.IfNotExists {
-		sb.WriteString(f.kw("IF NOT EXISTS"))
-		sb.WriteString(" ")
-	}
-	sb.WriteString(ast.QuoteQualifiedName(c.Name))
-
-	if opts.NewlinePerClause {
-		sb.WriteString(" (\n")
-		f.depth++
-		parts := make([]string, 0, len(c.Columns)+len(c.Constraints))
-		for _, col := range c.Columns {
-			col := col
-			parts = append(parts, f.indentStr()+columnDefSQL(&col))
-		}
-		for _, con := range c.Constraints {
-			con := con
-			parts = append(parts, f.indentStr()+tableConstraintSQL(&con))
-		}
-		sb.WriteString(strings.Join(parts, ",\n"))
-		f.depth--
-		sb.WriteString("\n")
-		sb.WriteString(f.indentStr())
-		sb.WriteString(")")
-	} else {
-		sb.WriteString(" (")
-		parts := make([]string, 0, len(c.Columns)+len(c.Constraints))
-		for _, col := range c.Columns {
-			col := col
-			parts = append(parts, columnDefSQL(&col))
-		}
-		for _, con := range c.Constraints {
-			con := con
-			parts = append(parts, tableConstraintSQL(&con))
-		}
-		sb.WriteString(strings.Join(parts, ", "))
-		sb.WriteString(")")
-	}
-
-	if len(c.Inherits) > 0 {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("INHERITS"))
-		sb.WriteString(" (")
-		sb.WriteString(quoteQualifiedNames(c.Inherits))
-		sb.WriteString(")")
-	}
-
-	if c.PartitionBy != nil {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("PARTITION BY"))
-		// An unknown method is left out: "PARTITION BY  (cols)" does not parse.
-		fmt.Fprintf(sb, " %s (%s)", ast.PartitionByText(c.PartitionBy.Type), quoteColumnNames(c.PartitionBy.Columns))
-	}
-
-	for _, opt := range c.Options {
-		// Only known option names (ENGINE, CHARSET) are written.
-		if ast.TableOptionNameText(opt.Name) == "" {
-			continue
-		}
-		fmt.Fprintf(sb, " %s=%s", opt.Name, ast.QuoteTableOptionValue(opt.Value))
-	}
-
-	if opts.AddSemicolon {
-		sb.WriteString(";")
-	}
-
-	return f.result()
+	return renderCreateTableStmt(c, opts)
 }
 
 func renderSetOperation(s *ast.SetOperation, opts ast.FormatOptions) string {
@@ -759,169 +680,15 @@ func renderAlterTable(a *ast.AlterTableStatement, opts ast.FormatOptions) string
 }
 
 func renderCreateIndex(c *ast.CreateIndexStatement, opts ast.FormatOptions) string {
-	if c == nil {
-		return ""
-	}
-	f := newNodeFormatter(opts)
-	sb := f.sb
-
-	sb.WriteString(f.kw("CREATE"))
-	sb.WriteString(" ")
-	if c.Unique {
-		sb.WriteString(f.kw("UNIQUE"))
-		sb.WriteString(" ")
-	}
-	sb.WriteString(f.kw("INDEX"))
-	sb.WriteString(" ")
-	if c.IfNotExists {
-		sb.WriteString(f.kw("IF NOT EXISTS"))
-		sb.WriteString(" ")
-	}
-	sb.WriteString(ast.QuoteQualifiedName(c.Name))
-	sb.WriteString(" ")
-	sb.WriteString(f.kw("ON"))
-	sb.WriteString(" ")
-	sb.WriteString(ast.QuoteQualifiedName(c.Table))
-
-	if c.Using != "" {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("USING"))
-		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteColumnName(c.Using))
-	}
-
-	sb.WriteString(" (")
-	cols := make([]string, len(c.Columns))
-	for i, col := range c.Columns {
-		s := ast.QuoteColumnName(col.Column)
-		if col.Collate != "" {
-			s += " " + f.kw("COLLATE") + " " + ast.CollationNameSQL(col.Collate, col.CollateQuoted)
-		}
-		if dir := ast.SortDirectionText(col.Direction); dir != "" {
-			s += " " + f.kw(dir)
-		}
-		if col.NullsLast {
-			s += " " + f.kw("NULLS LAST")
-		}
-		cols[i] = s
-	}
-	sb.WriteString(strings.Join(cols, ", "))
-	sb.WriteString(")")
-
-	if c.Where != nil {
-		sb.WriteString(f.clauseSep())
-		sb.WriteString(f.kw("WHERE"))
-		sb.WriteString(" ")
-		sb.WriteString(FormatExpression(c.Where, opts))
-	}
-
-	if opts.AddSemicolon {
-		sb.WriteString(";")
-	}
-
-	return f.result()
+	return renderCreateIndexStmt(c, opts)
 }
 
 func renderCreateView(c *ast.CreateViewStatement, opts ast.FormatOptions) string {
-	if c == nil {
-		return ""
-	}
-	f := newNodeFormatter(opts)
-	sb := f.sb
-
-	sb.WriteString(f.kw("CREATE"))
-	sb.WriteString(" ")
-	if c.OrReplace {
-		sb.WriteString(f.kw("OR REPLACE"))
-		sb.WriteString(" ")
-	}
-	if c.Temporary {
-		sb.WriteString(f.kw("TEMPORARY"))
-		sb.WriteString(" ")
-	}
-	sb.WriteString(f.kw("VIEW"))
-	sb.WriteString(" ")
-	if c.IfNotExists {
-		sb.WriteString(f.kw("IF NOT EXISTS"))
-		sb.WriteString(" ")
-	}
-	sb.WriteString(ast.QuoteQualifiedName(c.Name))
-
-	if len(c.Columns) > 0 {
-		sb.WriteString(" (")
-		sb.WriteString(quoteNames(c.Columns))
-		sb.WriteString(")")
-	}
-
-	sb.WriteString(" ")
-	sb.WriteString(f.kw("AS"))
-	sb.WriteString(f.clauseSep())
-	sb.WriteString(FormatStatement(c.Query, nestedOpts(opts)))
-
-	// WithOption is CHECK OPTION, CASCADED or LOCAL CHECK OPTION, written
-	// after WITH; anything else can only come from a hand-built AST and is
-	// dropped rather than written raw.
-	if ast.ViewWithOptionText(c.WithOption) != "" {
-		sb.WriteString(f.clauseSep())
-		sb.WriteString(f.kw("WITH"))
-		sb.WriteString(" ")
-		sb.WriteString(f.kw(c.WithOption))
-	}
-
-	if opts.AddSemicolon {
-		sb.WriteString(";")
-	}
-
-	return f.result()
+	return renderCreateViewStmt(c, opts)
 }
 
 func renderCreateMaterializedView(c *ast.CreateMaterializedViewStatement, opts ast.FormatOptions) string {
-	if c == nil {
-		return ""
-	}
-	f := newNodeFormatter(opts)
-	sb := f.sb
-
-	sb.WriteString(f.kw("CREATE MATERIALIZED VIEW"))
-	sb.WriteString(" ")
-	if c.IfNotExists {
-		sb.WriteString(f.kw("IF NOT EXISTS"))
-		sb.WriteString(" ")
-	}
-	sb.WriteString(ast.QuoteQualifiedName(c.Name))
-
-	if len(c.Columns) > 0 {
-		sb.WriteString(" (")
-		sb.WriteString(quoteNames(c.Columns))
-		sb.WriteString(")")
-	}
-
-	if c.Tablespace != "" {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("TABLESPACE"))
-		sb.WriteString(" ")
-		sb.WriteString(ast.QuoteColumnName(c.Tablespace))
-	}
-
-	sb.WriteString(" ")
-	sb.WriteString(f.kw("AS"))
-	sb.WriteString(f.clauseSep())
-	sb.WriteString(FormatStatement(c.Query, nestedOpts(opts)))
-
-	if c.WithData != nil {
-		sb.WriteString(f.clauseSep())
-		if *c.WithData {
-			sb.WriteString(f.kw("WITH DATA"))
-		} else {
-			sb.WriteString(f.kw("WITH NO DATA"))
-		}
-	}
-
-	if opts.AddSemicolon {
-		sb.WriteString(";")
-	}
-
-	return f.result()
+	return renderCreateMaterializedViewStmt(c, opts)
 }
 
 func renderRefreshMaterializedView(r *ast.RefreshMaterializedViewStatement, opts ast.FormatOptions) string {
@@ -956,66 +723,11 @@ func renderRefreshMaterializedView(r *ast.RefreshMaterializedViewStatement, opts
 }
 
 func renderDrop(d *ast.DropStatement, opts ast.FormatOptions) string {
-	if d == nil {
-		return ""
-	}
-	f := newNodeFormatter(opts)
-	sb := f.sb
-
-	sb.WriteString(f.kw("DROP"))
-	sb.WriteString(" ")
-	// An unknown object type is left out: "DROP  name" does not parse.
-	sb.WriteString(f.kw(ast.DropObjectTypeText(d.ObjectType)))
-	sb.WriteString(" ")
-	if d.IfExists {
-		sb.WriteString(f.kw("IF EXISTS"))
-		sb.WriteString(" ")
-	}
-	sb.WriteString(quoteQualifiedNames(d.Names))
-
-	if c := ast.CascadeText(d.CascadeType); c != "" {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw(c))
-	}
-
-	if opts.AddSemicolon {
-		sb.WriteString(";")
-	}
-
-	return f.result()
+	return renderDropStmt(d, opts)
 }
 
 func renderTruncate(t *ast.TruncateStatement, opts ast.FormatOptions) string {
-	if t == nil {
-		return ""
-	}
-	f := newNodeFormatter(opts)
-	sb := f.sb
-
-	sb.WriteString(f.kw("TRUNCATE"))
-	sb.WriteString(" ")
-	sb.WriteString(f.kw("TABLE"))
-	sb.WriteString(" ")
-	sb.WriteString(quoteQualifiedNames(t.Tables))
-
-	if t.RestartIdentity {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("RESTART IDENTITY"))
-	} else if t.ContinueIdentity {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("CONTINUE IDENTITY"))
-	}
-
-	if c := ast.CascadeText(t.CascadeType); c != "" {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw(c))
-	}
-
-	if opts.AddSemicolon {
-		sb.WriteString(";")
-	}
-
-	return f.result()
+	return renderTruncateStmt(t, opts)
 }
 
 func renderMerge(m *ast.MergeStatement, opts ast.FormatOptions) string {

@@ -432,6 +432,10 @@ type CreateTableStatement struct {
 	// PeriodDefinitions holds PERIOD FOR clauses for application-time or system-time periods.
 	// Example: PERIOD FOR app_time (start_col, end_col)
 	PeriodDefinitions []*PeriodDefinition
+
+	// CreateTableExtras holds AS query, LIKE, CLONE, PARTITION OF, the
+	// table kind and ClickHouse engine clauses (see ddl_objects.go).
+	CreateTableExtras
 }
 
 func (c *CreateTableStatement) statementNode()      {}
@@ -449,6 +453,9 @@ func (c CreateTableStatement) Children() []Node {
 	}
 	for i := range c.Partitions {
 		children = append(children, &c.Partitions[i])
+	}
+	if c.AsQuery != nil {
+		children = append(children, c.AsQuery)
 	}
 	return children
 }
@@ -554,6 +561,10 @@ type CreateIndexStatement struct {
 	Columns     []IndexColumn
 	Using       string
 	Where       Expression
+
+	// CreateIndexExtras holds the index kind, CONCURRENTLY, INCLUDE and
+	// trailing options (see ddl_objects.go).
+	CreateIndexExtras
 }
 
 func (c *CreateIndexStatement) statementNode()      {}
@@ -699,6 +710,10 @@ type CreateViewStatement struct {
 	Columns     []string  // Optional column list
 	Query       Statement // The SELECT statement
 	WithOption  string    // PostgreSQL: WITH (CHECK OPTION | CASCADED | LOCAL)
+
+	// ViewExtras holds OR ALTER, SECURE / FORCE modifiers and WITH READ
+	// ONLY (see ddl_objects.go).
+	ViewExtras
 }
 
 func (c *CreateViewStatement) statementNode()      {}
@@ -719,6 +734,13 @@ type CreateMaterializedViewStatement struct {
 	Query       Statement // The SELECT statement
 	WithData    *bool     // nil = default, true = WITH DATA, false = WITH NO DATA
 	Tablespace  string    // Optional tablespace (PostgreSQL)
+
+	// ViewExtras holds OR REPLACE, the ClickHouse TO target, column
+	// definitions, ENGINE clauses and POPULATE, and the Oracle BUILD /
+	// REFRESH clauses (see ddl_objects.go).
+	ViewExtras
+	// OrReplace is CREATE OR REPLACE MATERIALIZED VIEW.
+	OrReplace bool
 }
 
 func (c *CreateMaterializedViewStatement) statementNode()      {}
@@ -749,6 +771,10 @@ type DropStatement struct {
 	IfExists    bool
 	Names       []string // Can drop multiple objects
 	CascadeType string   // CASCADE, RESTRICT, or empty
+
+	// DropExtras holds DROP INDEX ... ON table, CONCURRENTLY, TEMPORARY,
+	// PURGE and ClickHouse ON CLUSTER / SYNC (see ddl_objects.go).
+	DropExtras
 }
 
 func (d *DropStatement) statementNode()      {}
@@ -762,6 +788,9 @@ type TruncateStatement struct {
 	RestartIdentity  bool     // RESTART IDENTITY - reset sequences
 	ContinueIdentity bool     // CONTINUE IDENTITY - keep sequences (default)
 	CascadeType      string   // CASCADE, RESTRICT, or empty
+	// Storage is Oracle DROP STORAGE / REUSE STORAGE (or DROP ALL STORAGE),
+	// or empty.
+	Storage string
 }
 
 func (t *TruncateStatement) statementNode()      {}

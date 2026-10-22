@@ -1002,7 +1002,10 @@ var (
 		"NOT NULL", "NULL", "UNIQUE", "PRIMARY KEY", "AUTO_INCREMENT",
 		"GENERATED ALWAYS AS ROW START", "GENERATED ALWAYS AS ROW END",
 	}
-	partitionByKeywords = []string{"RANGE", "LIST", "HASH", "KEY", "LINEAR HASH", "LINEAR KEY"}
+	partitionByKeywords = []string{
+		"RANGE", "LIST", "HASH", "KEY", "LINEAR HASH", "LINEAR KEY",
+		"RANGE COLUMNS", "LIST COLUMNS", "SYSTEM_TIME",
+	}
 	// alterTableActionKeywords: the legacy AlterTableStatement (never produced
 	// by the parser) writes an action other than its explicit cases as bare
 	// keyword text.
@@ -1015,6 +1018,26 @@ var (
 	tableOptionNames = []string{
 		"ENGINE", "CHARSET", "DEFAULT CHARSET", "CHARACTER SET", "DEFAULT CHARACTER SET",
 		"COLLATE", "DEFAULT COLLATE", "COMMENT", "AUTO_INCREMENT", "ROW_FORMAT",
+		// Further MySQL / MariaDB options.
+		"KEY_BLOCK_SIZE", "AVG_ROW_LENGTH", "MAX_ROWS", "MIN_ROWS", "PACK_KEYS",
+		"CHECKSUM", "DELAY_KEY_WRITE", "STATS_PERSISTENT", "STATS_AUTO_RECALC",
+		"STATS_SAMPLE_PAGES", "COMPRESSION", "ENCRYPTION", "PAGE_CHECKSUM",
+		"TRANSACTIONAL", "INSERT_METHOD", "DATA DIRECTORY", "INDEX DIRECTORY",
+		// PostgreSQL, Oracle and SQL Server storage options.
+		"TABLESPACE", "USING", "PCTFREE", "PCTUSED", "INITRANS", "MAXTRANS", "PARALLEL",
+		"WITH", "ON COMMIT DELETE ROWS", "ON COMMIT PRESERVE ROWS", "ON COMMIT DROP",
+		"WITHOUT OIDS", "LOGGING", "NOLOGGING", "COMPRESS", "NOCOMPRESS", "NOCACHE",
+		"NOPARALLEL", "ROWDEPENDENCIES", "NOROWDEPENDENCIES", "MONITORING", "NOMONITORING",
+		"ENABLE ROW MOVEMENT", "DISABLE ROW MOVEMENT", "SEGMENT CREATION IMMEDIATE",
+		"SEGMENT CREATION DEFERRED", "ORGANIZATION HEAP", "ORGANIZATION INDEX",
+		// SQLite.
+		"STRICT", "WITHOUT ROWID",
+		// Snowflake.
+		"DATA_RETENTION_TIME_IN_DAYS", "MAX_DATA_EXTENSION_TIME_IN_DAYS", "CHANGE_TRACKING",
+		"DEFAULT_DDL_COLLATION", "ENABLE_SCHEMA_EVOLUTION", "CLUSTER BY", "COPY GRANTS",
+		// CREATE INDEX options.
+		"NULLS NOT DISTINCT", "NULLS DISTINCT", "ALGORITHM", "LOCK", "LOCAL", "GLOBAL",
+		"ONLINE", "REVERSE", "VISIBLE", "INVISIBLE",
 	}
 	viewWithOptionKeywords = []string{"CHECK OPTION", "CASCADED CHECK OPTION", "LOCAL CHECK OPTION"}
 	// mergeWhenKeywords: the parser stores MATCHED, NOT_MATCHED and
@@ -1151,7 +1174,7 @@ func keywordOneOf(s string, allowed []string) string {
 // renderers write such a field only when it is one of these (see the *Text
 // functions below), so even plain words outside the set are dropped.
 var (
-	cascadeKeywords           = []string{"CASCADE", "RESTRICT"}
+	cascadeKeywords           = []string{"CASCADE", "RESTRICT", "CASCADE CONSTRAINTS"}
 	sortDirectionKeywords     = []string{"ASC", "DESC"}
 	fetchTypeKeywords         = []string{"FIRST", "NEXT"}
 	lockTypeKeywords          = []string{"UPDATE", "SHARE", "NO KEY UPDATE", "KEY SHARE"}

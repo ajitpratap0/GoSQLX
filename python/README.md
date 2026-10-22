@@ -6,37 +6,47 @@ Powered by Go's compiled performance, PyGoSQLX is 100x+ faster than pure Python 
 
 ## Installation
 
-### Step 1: Build the shared library
-
-Requires a Go toolchain matching the repository's `go.mod` (Go 1.26+) with cgo enabled.
-
 ```bash
-cd pkg/cbinding
-./build.sh
+pip install pygosqlx
 ```
 
-This compiles the Go code into a shared library (`libgosqlx.so` on Linux, `libgosqlx.dylib` on macOS, `libgosqlx.dll` on Windows) and places it in `python/pygosqlx/lib/`.
+Prebuilt wheels bundle the native `libgosqlx` library, so no Go toolchain is
+needed. They are published to PyPI from the `pygosqlx-v*` release tags; the
+command above works once the first such tag (`pygosqlx-v0.3.0`) has been
+published. Until then, build from source as shown below.
 
-You can customize the output directory:
+Wheels are available for Python 3.10-3.14 on:
+
+| Platform | Architectures | Wheel tag |
+|---|---|---|
+| Linux (glibc 2.28+) | x86_64, aarch64 | `manylinux_2_28` |
+| macOS 13+ | x86_64, arm64 | `macosx_13_0` |
+| Windows | AMD64 | `win_amd64` |
+
+There are no wheels for musl-based Linux (Alpine) or 32-bit platforms. On
+those, pip falls back to the source distribution, which installs the Python
+package without the native library; build it as described below and point
+`GOSQLX_LIB_PATH` at it.
+
+### Building from source
+
+Requires a Go toolchain matching the repository's `go.mod` (Go 1.26+) with cgo
+enabled (a C compiler on `PATH`).
 
 ```bash
-OUTPUT_DIR=/path/to/output ./build.sh
+git clone https://github.com/ajitpratap0/GoSQLX.git
+cd GoSQLX/pkg/cbinding
+./build.sh          # writes python/pygosqlx/lib/libgosqlx.{so,dylib}
+cd ../../python
+pip install .       # or: pip install -e ".[dev]" for development
 ```
 
-### Step 2: Install the Python package
+`build.sh` compiles the Go code into a shared library (`libgosqlx.so` on
+Linux, `libgosqlx.dylib` on macOS, `libgosqlx.dll` on Windows via MSYS2/MinGW)
+and places it in `python/pygosqlx/lib/`, where `pip install .` bundles it. Use
+`OUTPUT_DIR=/path/to/output ./build.sh` to write it elsewhere.
 
-```bash
-cd python
-pip install .
-```
-
-For development:
-
-```bash
-pip install -e ".[dev]"
-```
-
-If the library is not bundled in the package, set the environment variable:
+To use a library that is not bundled in the package, set:
 
 ```bash
 export GOSQLX_LIB_PATH=/path/to/libgosqlx.so
@@ -250,11 +260,12 @@ All exceptions have `message`, `code`, `line`, and `column` attributes.
 
 ## Platform Support
 
-| Platform | Library Extension | Status |
-|---|---|---|
-| Linux (x86_64, arm64) | `.so` | Supported |
-| macOS (x86_64, arm64) | `.dylib` | Supported |
-| Windows (via MSYS2/MinGW) | `.dll` | Supported |
+| Platform | Library | Prebuilt wheel | From source |
+|---|---|---|---|
+| Linux x86_64, aarch64 (glibc) | `.so` | Yes | Yes |
+| macOS x86_64, arm64 | `.dylib` | Yes (macOS 13+) | Yes |
+| Windows AMD64 | `.dll` | Yes | Yes (MSYS2/MinGW) |
+| Other (musl, 32-bit, ...) | - | No | Where Go supports `-buildmode=c-shared` |
 
 ## Performance
 
@@ -269,25 +280,6 @@ This makes PyGoSQLX suitable for high-throughput use cases such as SQL proxies, 
 
 ## Development
 
-### Building from source
-
-```bash
-# Clone the repository
-git clone https://github.com/ajitpratap0/GoSQLX.git
-cd GoSQLX
-
-# Build the shared library
-cd pkg/cbinding
-./build.sh
-cd ../../python
-
-# Install in development mode
-pip install -e ".[dev]"
-
-# Run tests
-pytest
-```
-
 ### Running tests
 
 ```bash
@@ -297,6 +289,22 @@ pytest tests/test_types.py   # Type/exception tests (no shared library needed)
 pytest tests/test_integration.py  # Integration tests (requires shared library)
 pytest --cov=pygosqlx        # With coverage
 ```
+
+To run the suite against an installed wheel instead of the checkout (as the
+release CI does):
+
+```bash
+pip install pygosqlx pytest   # or a locally built wheel
+cd /tmp && PYGOSQLX_TEST_INSTALLED=1 python -m pytest --import-mode=importlib /path/to/GoSQLX/python/tests
+```
+
+### Releasing
+
+Wheels for every supported platform and an sdist are built and tested by
+`.github/workflows/pygosqlx-release.yml` on each pull request that touches
+`python/` or `pkg/cbinding/`. Pushing a tag `pygosqlx-vX.Y.Z` (matching the
+version in `pyproject.toml`) publishes them to PyPI through Trusted
+Publishing. See the workflow header for the one-time PyPI setup.
 
 ### Project structure
 
@@ -313,10 +321,13 @@ python/
     test_package_version.py        # Version metadata consistency
     test_integration.py            # Integration tests with shared library
     test_dialect_and_analysis.py   # dialect=, lint, security_scan, transpile, dialects
+    test_installed_wheel.py        # Installed-wheel checks (PYGOSQLX_TEST_INSTALLED=1)
+  scripts/
+    install-go-linux.sh  # Pinned, checksum-verified Go install for manylinux CI
   pyproject.toml      # Package metadata and build config
-  setup.py            # Legacy build support
+  setup.py            # Shim that tags wheels per platform (no metadata)
 ```
 
 ## License
 
-Apache-2.0. See the [LICENSE](../LICENSE) file in the repository root.
+Apache-2.0. See the [LICENSE](https://github.com/ajitpratap0/GoSQLX/blob/main/LICENSE) file.

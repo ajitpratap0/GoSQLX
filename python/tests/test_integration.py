@@ -11,33 +11,24 @@ Or set GOSQLX_LIB_PATH to point to the built library:
     GOSQLX_LIB_PATH=/path/to/libgosqlx.dylib python -m pytest tests/test_integration.py -v
 """
 
-import os
-import platform
-import sys
 import threading
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
 
 def _lib_available() -> bool:
-    """Check if the GoSQLX shared library can be found."""
-    # Check environment variable
-    env_path = os.environ.get("GOSQLX_LIB_PATH")
-    if env_path and os.path.exists(env_path):
-        return True
+    """Check if pygosqlx can locate the GoSQLX shared library.
 
-    # Check bundled location
-    system = platform.system().lower()
-    ext_map = {"linux": "so", "darwin": "dylib", "windows": "dll"}
-    ext = ext_map.get(system)
-    if ext is None:
+    Uses the package's own lookup (GOSQLX_LIB_PATH, then the bundled
+    pygosqlx/lib/), so it also works against an installed wheel.
+    """
+    from pygosqlx import core
+
+    try:
+        core._get_lib_path()
+    except OSError:  # FileNotFoundError or unsupported platform
         return False
-
-    pkg_dir = os.path.join(os.path.dirname(__file__), "..", "pygosqlx", "lib")
-    lib_path = os.path.join(pkg_dir, f"libgosqlx.{ext}")
-    return os.path.exists(lib_path)
+    return True
 
 
 # Skip all tests in this module if the library is not built
@@ -54,7 +45,6 @@ pytestmark = pytest.mark.skipif(
 from pygosqlx.core import (
     Metadata,
     ParseResult,
-    QualifiedName,
     ValidationResult,
     extract_columns,
     extract_functions,

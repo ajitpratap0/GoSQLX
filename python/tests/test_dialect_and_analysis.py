@@ -6,14 +6,9 @@ without the shared library. The rest exercise the real library and are skipped
 when it is not built (run: cd pkg/cbinding && ./build.sh).
 """
 
-import os
-import platform
-import sys
 import threading
 
 import pytest
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pygosqlx
 from pygosqlx import core
@@ -34,18 +29,16 @@ from pygosqlx import (
 
 
 def _lib_available() -> bool:
-    env_path = os.environ.get("GOSQLX_LIB_PATH")
-    if env_path and os.path.exists(env_path):
-        return True
-    ext = {"linux": "so", "darwin": "dylib", "windows": "dll"}.get(
-        platform.system().lower()
-    )
-    if ext is None:
+    """Check if pygosqlx can locate the GoSQLX shared library.
+
+    Uses the package's own lookup (GOSQLX_LIB_PATH, then the bundled
+    pygosqlx/lib/), so it also works against an installed wheel.
+    """
+    try:
+        core._get_lib_path()
+    except OSError:  # FileNotFoundError or unsupported platform
         return False
-    lib_path = os.path.join(
-        os.path.dirname(__file__), "..", "pygosqlx", "lib", f"libgosqlx.{ext}"
-    )
-    return os.path.exists(lib_path)
+    return True
 
 
 requires_lib = pytest.mark.skipif(

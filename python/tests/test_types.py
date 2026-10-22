@@ -5,11 +5,6 @@ representations, and exception inheritance hierarchy. They run purely in
 Python with no shared library dependency.
 """
 
-import sys
-import os
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
 from pygosqlx.core import (
     Metadata,
     ParseResult,

@@ -407,7 +407,7 @@ MariaDB inherits all MySQL features (SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE 
 | Feature | Support Level | GoSQLX Parser | Test Coverage | Notes |
 |---------|---------------|---------------|---------------|-------|
 | **MERGE** | ✅ Full | ✅ Full | 95% | MERGE statements with WHEN clauses |
-| **PIVOT/UNPIVOT** | ✅ Full | ✅ Full | — | Parsed and rendered since v1.14.0 (`FROM s PIVOT (...) AS p`) |
+| **PIVOT/UNPIVOT** | ✅ Full | ✅ Full | — | Parsed and rendered since v1.14.0 (`FROM s PIVOT (...) AS p`). Also parsed for Oracle, Snowflake and BigQuery: PIVOT/UNPIVOT is gated on the dialect capability `SupportsPivotUnpivot` |
 | **CROSS/OUTER APPLY** | ✅ Full | 🔧 Syntax | 10% | Keywords reserved, no parsing logic |
 | **HierarchyID** | ✅ Full | 🔧 Syntax | 20% | Data type recognition |
 | **T-SQL functions** | ✅ Full | ⚠️ Partial | 40% | Subset of T-SQL functions |
@@ -636,7 +636,7 @@ GoSQLX provides a first-class dialect mode engine that threads the SQL dialect t
 | **Snowflake** | `"snowflake"` | Snowflake keywords | MATCH_RECOGNIZE, @stage, SAMPLE, QUALIFY, VARIANT paths, time-travel, MINUS, LATERAL FLATTEN, TRY_CAST, IGNORE/RESPECT NULLS, LIKE ANY/ALL, CREATE STAGE/STREAM/TASK/PIPE stubs | ✅ 87/87 QA pass |
 | **ClickHouse** | `"clickhouse"` | ClickHouse keywords | PREWHERE, FINAL, GLOBAL IN/NOT IN, nested types, parametric aggregates, bare-bracket arrays, ORDER BY WITH FILL, CODEC, WITH TOTALS, LIMIT BY, ANY/ALL JOIN, SETTINGS, TTL, INSERT FORMAT | ✅ 83/83 QA pass (was 69/83 in v1.14.0) |
 | **MariaDB** | `"mariadb"` | MariaDB keywords (superset of MySQL) | All MySQL features + SEQUENCE DDL, FOR SYSTEM_TIME, WITH SYSTEM VERSIONING, PERIOD FOR, CONNECT BY | ✅ |
-| **BigQuery** | `"bigquery"` | BigQuery keywords | Composite field access `(expr).field`, table functions | ⚠️ Keywords + basic parsing |
+| **BigQuery** | `"bigquery"` | BigQuery keywords | Composite field access `(expr).field`, table functions, QUALIFY, PIVOT/UNPIVOT | ⚠️ Keywords + basic parsing |
 | **Redshift** | `"redshift"` | Redshift keywords | Keyword recognition | ⚠️ Keywords + basic parsing |
 | **Generic** | `"generic"` | Standard SQL keywords | No dialect-specific syntax; composite field access allowed | ✅ |
 
@@ -714,6 +714,14 @@ gosqlx format --dialect mysql query.sql
 - `table`, `partition`, `tables`, `databases` as identifiers
 - Table functions in FROM: `numbers(N)`, `remote(...)`, `file(...)`, `url(...)`, `merge(...)`, `s3(...)`, `values(...)`, etc.
 - 30+ ClickHouse-specific keywords: TTL, CODEC, FORMAT, SETTINGS, DISTRIBUTED, etc.
+
+#### BigQuery
+- PIVOT / UNPIVOT (unreleased, #854): aggregate aliases and multiple aggregates (`PIVOT (SUM(s) AS total, COUNT(*) AS n FOR q IN ('Q1' AS q1, 'Q2' q2))`), `UNPIVOT INCLUDE NULLS` / `EXCLUDE NULLS`, row-value aliases with or without `AS` (string or INT64), and multi-column UNPIVOT (`UNPIVOT ((a, b) FOR k IN ((c1, c2) AS 'x', (c3, c4) AS 'y'))`)
+- PIVOT `IN` values must be literals or names; constant expressions such as `IN (1 + 1)` or `IN (DATE '2024-01-01')` are not parsed
+- QUALIFY, `UNNEST` in FROM and `(struct).field` access are capability-gated; BigQuery has no dedicated keyword set
+- Quoted PIVOT aggregate aliases and UNPIVOT value-column names retain their source delimiters, including BigQuery backticks and Oracle double quotes
+
+Oracle also accepts aggregate aliases, multiple aggregates, `INCLUDE`/`EXCLUDE NULLS` and multi-column UNPIVOT; Snowflake accepts `INCLUDE`/`EXCLUDE NULLS`. SQL Server keeps the single-aggregate form without aliases or a NULLS modifier. Oracle's tuple row-value aliases (`(c1, c2) AS ('a', 'b')`) are not parsed.
 
 ## SQL Standards Compliance Summary
 

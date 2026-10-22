@@ -1432,6 +1432,12 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		sb.WriteString(f.kw("PIVOT"))
 		sb.WriteString(" (")
 		sb.WriteString(exprSQL(t.Pivot.AggregateFunction))
+		writePivotAggregateAlias(&sb, f, t.Pivot.AggregateAlias)
+		for _, a := range t.Pivot.ExtraAggregates {
+			sb.WriteString(", ")
+			sb.WriteString(exprSQL(a.Function))
+			writePivotAggregateAlias(&sb, f, a.Alias)
+		}
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("FOR"))
 		sb.WriteString(" ")
@@ -1445,8 +1451,23 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 	if t.Unpivot != nil {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("UNPIVOT"))
+		if nh := ast.UnpivotNullHandling(t.Unpivot.NullHandling); nh != "" {
+			sb.WriteString(" ")
+			sb.WriteString(f.kw(nh))
+		}
 		sb.WriteString(" (")
-		sb.WriteString(ast.QuotePivotColumn(t.Unpivot.ValueColumn))
+		if len(t.Unpivot.ValueColumns) > 0 {
+			sb.WriteString("(")
+			for i, c := range t.Unpivot.ValueColumns {
+				if i > 0 {
+					sb.WriteString(", ")
+				}
+				sb.WriteString(ast.QuoteUnpivotValueColumn(c))
+			}
+			sb.WriteString(")")
+		} else {
+			sb.WriteString(ast.QuoteUnpivotValueColumn(t.Unpivot.ValueColumn))
+		}
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("FOR"))
 		sb.WriteString(" ")
@@ -1466,6 +1487,19 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		sb.WriteString(ast.QuoteTableAlias(t.Alias))
 	}
 	return sb.String()
+}
+
+// writePivotAggregateAlias writes " AS alias" for a PIVOT aggregate alias,
+// preserving source delimiters or quoting it like a table alias; an empty
+// alias writes nothing.
+func writePivotAggregateAlias(sb *strings.Builder, f *nodeFormatter, alias string) {
+	if alias == "" {
+		return
+	}
+	sb.WriteString(" ")
+	sb.WriteString(f.kw("AS"))
+	sb.WriteString(" ")
+	sb.WriteString(ast.QuotePivotAggregateAlias(alias))
 }
 
 // writePivotItems writes PIVOT IN values or UNPIVOT IN columns separated by

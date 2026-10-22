@@ -23,7 +23,7 @@
 # loaded through ctypes and does not depend on the CPython ABI), each tested
 # on CPython 3.10-3.14 against the installed wheel:
 #   linux   x86_64, aarch64   (built in manylinux_2_28, native runners;
-#                              auditwheel picks the final manylinux tag)
+#                              auditwheel repair pins manylinux_2_17)
 #   macOS   x86_64, arm64     (macOS 13+)
 #   windows AMD64
 #
@@ -125,6 +125,11 @@ jobs:
           CIBW_ARCHS: native
           CIBW_BUILD_VERBOSITY: 1
 
+          # auditwheel would tag x86_64 as old as manylinux_2_5 (the Go
+          # library uses only ancient glibc symbols), claiming distros that
+          # were never tested and that Go 1.26 (kernel 3.2+) may not run on.
+          # Pin the floor to manylinux_2_17 (manylinux2014) on both arches.
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: auditwheel repair --plat manylinux_2_17_{arch} -w {dest_dir} {wheel}
           CIBW_BEFORE_ALL_LINUX: bash {project}/python/scripts/install-go-linux.sh
           CIBW_BEFORE_BUILD_LINUX: cd {project}/pkg/cbinding && bash build.sh
           CIBW_BEFORE_BUILD_MACOS: cd {project}/pkg/cbinding && bash build.sh
@@ -243,7 +248,10 @@ jobs:
   publish-pypi:
     name: publish to PyPI
     needs: [ wheels, sdist ]
-    if: startsWith(github.ref, 'refs/tags/pygosqlx-v')
+    # Only a tag *push* publishes to PyPI. A workflow_dispatch run on a tag
+    # ref also has github.ref == refs/tags/pygosqlx-v*, so the event check is
+    # what keeps 'target: none' / 'testpypi' dispatches off real PyPI.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/pygosqlx-v')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment:

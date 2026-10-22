@@ -39,7 +39,6 @@ def test_dunder_version_matches_pyproject():
     assert pygosqlx.__version__ == _pyproject_version()
 
 
-
 def test_setup_py_carries_no_metadata():
     """setup.py must not reintroduce a second, drifting copy of the metadata."""
     text = _read("setup.py")

@@ -19,7 +19,7 @@ Wheels are available for Python 3.10-3.14 on:
 
 | Platform | Architectures | Wheel tag |
 |---|---|---|
-| Linux (glibc) | x86_64, aarch64 | `manylinux` (built on manylinux_2_28; auditwheel assigns the widest tag the library allows, e.g. `manylinux_2_17`) |
+| Linux (glibc) | x86_64, aarch64 | `manylinux_2_17` (manylinux2014; glibc 2.17+, built on manylinux_2_28) |
 | macOS 13+ | x86_64, arm64 | `macosx_13_0` |
 | Windows | AMD64 | `win_amd64` |
 
@@ -262,7 +262,7 @@ All exceptions have `message`, `code`, `line`, and `column` attributes.
 
 | Platform | Library | Prebuilt wheel | From source |
 |---|---|---|---|
-| Linux x86_64, aarch64 (glibc) | `.so` | Yes | Yes |
+| Linux x86_64, aarch64 (glibc) | `.so` | Yes (glibc 2.17+) | Yes |
 | macOS x86_64, arm64 | `.dylib` | Yes (macOS 13+) | Yes |
 | Windows AMD64 | `.dll` | Yes | Yes (MSYS2/MinGW) |
 | Other (musl, 32-bit, ...) | - | No | Where Go supports `-buildmode=c-shared` |

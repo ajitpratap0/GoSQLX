@@ -25,7 +25,8 @@ The GoSQLX LSP server transforms any LSP-compatible editor into a powerful SQL d
 environment. It leverages the GoSQLX SQL parser to provide accurate, real-time feedback on
 SQL syntax and offers intelligent code assistance through the Language Server Protocol.
 
-Version: 1.0.0 (GoSQLX v1.6.0+)
+The server reports the GoSQLX library version (gosqlx.Version) in serverInfo.version.
+Available since GoSQLX v1.6.0.
 
 # Features
 

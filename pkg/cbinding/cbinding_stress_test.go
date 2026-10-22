@@ -157,7 +157,7 @@ func TestStressConcurrentAllFunctions(t *testing.T) {
 				extractColumns(sql)
 				extractFunctions(sql)
 				extractMetadata(sql)
-				// gosqlx_version is a cached singleton — just read it.
+				// gosqlx_version returns a caller-owned string; getVersion frees it.
 				getVersion()
 			}
 		}()
@@ -259,10 +259,10 @@ func TestStressMixedValidInvalid(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Version singleton is stable under concurrency
+// Version is stable under concurrency (each call allocates and is freed)
 // ---------------------------------------------------------------------------
 
-func TestStressVersionSingleton(t *testing.T) {
+func TestStressVersionConcurrent(t *testing.T) {
 	const goroutines = 100
 	var wg sync.WaitGroup
 	versions := make(chan string, goroutines)

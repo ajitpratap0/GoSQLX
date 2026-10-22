@@ -6,37 +6,47 @@ Powered by Go's compiled performance, PyGoSQLX is 100x+ faster than pure Python 
 
 ## Installation
 
-### Step 1: Build the shared library
-
-Requires Go 1.21+ installed.
-
 ```bash
-cd pkg/cbinding
-./build.sh
+pip install pygosqlx
 ```
 
-This compiles the Go code into a shared library (`libgosqlx.so` on Linux, `libgosqlx.dylib` on macOS, `libgosqlx.dll` on Windows) and places it in `python/pygosqlx/lib/`.
+Prebuilt wheels bundle the native `libgosqlx` library, so no Go toolchain is
+needed. They are published to PyPI from the `pygosqlx-v*` release tags; the
+command above works once the first such tag (`pygosqlx-v0.3.0`) has been
+published. Until then, build from source as shown below.
 
-You can customize the output directory:
+Wheels are available for Python 3.10-3.14 on:
+
+| Platform | Architectures | Wheel tag |
+|---|---|---|
+| Linux (glibc) | x86_64, aarch64 | `manylinux_2_17` (manylinux2014; glibc 2.17+, built on manylinux_2_28) |
+| macOS 13+ | x86_64, arm64 | `macosx_13_0` |
+| Windows | AMD64 | `win_amd64` |
+
+There are no wheels for musl-based Linux (Alpine) or 32-bit platforms. On
+those, pip falls back to the source distribution, which installs the Python
+package without the native library; build it as described below and point
+`GOSQLX_LIB_PATH` at it.
+
+### Building from source
+
+Requires a Go toolchain matching the repository's `go.mod` (Go 1.26+) with cgo
+enabled (a C compiler on `PATH`).
 
 ```bash
-OUTPUT_DIR=/path/to/output ./build.sh
+git clone https://github.com/ajitpratap0/GoSQLX.git
+cd GoSQLX/pkg/cbinding
+./build.sh          # writes python/pygosqlx/lib/libgosqlx.{so,dylib}
+cd ../../python
+pip install .       # or: pip install -e ".[dev]" for development
 ```
 
-### Step 2: Install the Python package
+`build.sh` compiles the Go code into a shared library (`libgosqlx.so` on
+Linux, `libgosqlx.dylib` on macOS, `libgosqlx.dll` on Windows via MSYS2/MinGW)
+and places it in `python/pygosqlx/lib/`, where `pip install .` bundles it. Use
+`OUTPUT_DIR=/path/to/output ./build.sh` to write it elsewhere.
 
-```bash
-cd python
-pip install .
-```
-
-For development:
-
-```bash
-pip install -e ".[dev]"
-```
-
-If the library is not bundled in the package, set the environment variable:
+To use a library that is not bundled in the package, set:
 
 ```bash
 export GOSQLX_LIB_PATH=/path/to/libgosqlx.so
@@ -98,6 +108,79 @@ for qn in meta.tables_qualified:
     print(f"{qn.schema}.{qn.name}" if qn.schema else qn.name)
 ```
 
+### Dialects
+
+Every parsing function takes an optional keyword-only `dialect=` argument.
+Without it (or with `dialect=None`) the default parser is used, exactly as in
+earlier releases.
+
+```python
+print(pygosqlx.dialects())
+# ['generic', 'postgresql', 'mysql', 'mariadb', 'sqlserver', 'oracle',
+#  'sqlite', 'snowflake', 'bigquery', 'redshift', 'clickhouse']
+
+sql = "SELECT TOP 5 [id] FROM [dbo].[users]"
+pygosqlx.validate(sql)                       # False - not generic SQL
+pygosqlx.validate(sql, dialect="sqlserver")  # True
+pygosqlx.extract_tables(sql, dialect="sqlserver")  # ['dbo.users']
+pygosqlx.format("SELECT `id` FROM `users`", dialect="mysql")
+
+# An unknown dialect raises UnsupportedDialectError (also a ValueError)
+pygosqlx.parse("SELECT 1", dialect="postgres")  # use "postgresql"
+```
+
+### Linting
+
+`lint()` runs the same rule set as the `gosqlx lint` CLI command (L001-L010:
+whitespace, indentation, line length, column alignment, keyword case, comma
+placement, aliasing). SQL that does not parse is still linted by the text and
+token rules.
+
+```python
+result = pygosqlx.lint("select id from users  ", max_line_length=100)
+for v in result.violations:
+    print(v.rule, v.severity, v.line, v.column, v.message)
+# L001 warning 1 21 Line has trailing whitespace
+# L007 warning 1 1 Keyword 'select' should be uppercase: 'SELECT'
+# ...
+print(result.is_clean, result.violation_count)
+```
+
+### Security scanning
+
+`security_scan()` looks for SQL injection patterns (tautologies, comment
+bypasses, stacked queries, UNION injection, time-based and out-of-band
+techniques, dangerous functions). The scan works on the raw text, so payloads
+that are not valid SQL are scanned too.
+
+```python
+scan = pygosqlx.security_scan("SELECT * FROM users WHERE id = 1 OR 1=1 --")
+print(scan.is_clean, scan.has_critical)  # False True
+for f in scan.findings:
+    print(f.severity, f.pattern, f.description)
+```
+
+### Transpiling
+
+```python
+pygosqlx.transpile(
+    "CREATE TABLE t (id INT AUTO_INCREMENT PRIMARY KEY)", "mysql", "postgresql"
+)
+# 'CREATE TABLE t (id SERIAL PRIMARY KEY)'
+```
+
+Dedicated rewrites exist for MySQL to PostgreSQL, PostgreSQL to MySQL and
+PostgreSQL to SQLite. Other pairs are parsed with the source dialect and
+re-rendered without rewrites.
+
+### Library compatibility
+
+The functions and the `dialect=` argument added in 0.3.0 need a shared
+library built from a matching GoSQLX checkout. With an older library, calls
+without `dialect=` keep working, while `dialect=`, `lint()`,
+`security_scan()`, `transpile()` and `dialects()` raise `GoSQLXError` asking
+you to rebuild the library.
+
 ### Error Handling
 
 ```python
@@ -132,15 +215,22 @@ except GoSQLXError as e:
 
 | Function | Returns | Description |
 |---|---|---|
-| `parse(sql)` | `ParseResult` | Parse SQL; raises `ParseError` on failure |
-| `validate(sql)` | `bool` | Check if SQL is syntactically valid |
-| `validate_detailed(sql)` | `ValidationResult` | Validate with error line/column details |
-| `format(sql)` | `str` | Format/pretty-print a SQL statement |
-| `extract_tables(sql)` | `list[str]` | Extract all table names |
-| `extract_columns(sql)` | `list[str]` | Extract all column names |
-| `extract_functions(sql)` | `list[str]` | Extract all function calls |
-| `extract_metadata(sql)` | `Metadata` | Extract tables, columns, functions, and qualified names |
+| `parse(sql, *, dialect=None)` | `ParseResult` | Parse SQL; raises `ParseError` on failure |
+| `validate(sql, *, dialect=None)` | `bool` | Check if SQL is syntactically valid |
+| `validate_detailed(sql, *, dialect=None)` | `ValidationResult` | Validate with error line/column details |
+| `format(sql, *, dialect=None)` | `str` | Format/pretty-print a SQL statement |
+| `extract_tables(sql, *, dialect=None)` | `list[str]` | Extract all table names |
+| `extract_columns(sql, *, dialect=None)` | `list[str]` | Extract all column names |
+| `extract_functions(sql, *, dialect=None)` | `list[str]` | Extract all function calls |
+| `extract_metadata(sql, *, dialect=None)` | `Metadata` | Extract tables, columns, functions, and qualified names |
+| `lint(sql, *, dialect=None, max_line_length=None)` | `LintResult` | Lint with the `gosqlx lint` rule set (L001-L010); `max_line_length` defaults to 100 |
+| `security_scan(sql)` | `SecurityScanResult` | Scan for SQL injection patterns |
+| `transpile(sql, from_dialect, to_dialect)` | `str` | Convert SQL between dialects; raises `TranspileError` on failure |
+| `dialects()` | `list[str]` | Names accepted by every `dialect` argument |
 | `version()` | `str` | Get the GoSQLX library version |
+
+`dialect` must be one of the names returned by `dialects()`; an unknown name
+raises `UnsupportedDialectError`.
 
 ### Data Types
 
@@ -150,6 +240,10 @@ except GoSQLXError as e:
 | `ValidationResult` | `valid: bool`, `error: str?`, `error_line: int?`, `error_column: int?` |
 | `Metadata` | `tables`, `columns`, `functions`, `tables_qualified`, `columns_qualified` |
 | `QualifiedName` | `name: str`, `schema: str`, `table: str` |
+| `LintResult` | `violations: list[LintViolation]`; properties `violation_count`, `is_clean` |
+| `LintViolation` | `rule`, `rule_name`, `severity`, `message`, `line`, `column`, `suggestion`, `can_auto_fix` |
+| `SecurityScanResult` | `findings: list[SecurityFinding]`, `total_count`, `critical_count`, `high_count`, `medium_count`, `low_count`; properties `is_clean`, `has_critical`, `has_high` |
+| `SecurityFinding` | `severity`, `pattern`, `description`, `risk`, `line: int?`, `column: int?`, `sql`, `suggestion` |
 
 ### Exceptions
 
@@ -159,16 +253,19 @@ except GoSQLXError as e:
 | `ParseError` | `GoSQLXError` | SQL parsing fails |
 | `FormatError` | `GoSQLXError` | SQL formatting fails |
 | `ValidationError` | `GoSQLXError` | SQL validation fails |
+| `TranspileError` | `GoSQLXError` | `transpile()` cannot parse or rewrite the SQL |
+| `UnsupportedDialectError` | `GoSQLXError`, `ValueError` | A `dialect` argument is not a supported dialect (`code` is `E4002`) |
 
 All exceptions have `message`, `code`, `line`, and `column` attributes.
 
 ## Platform Support
 
-| Platform | Library Extension | Status |
-|---|---|---|
-| Linux (x86_64, arm64) | `.so` | Supported |
-| macOS (x86_64, arm64) | `.dylib` | Supported |
-| Windows (via MSYS2/MinGW) | `.dll` | Supported |
+| Platform | Library | Prebuilt wheel | From source |
+|---|---|---|---|
+| Linux x86_64, aarch64 (glibc) | `.so` | Yes (glibc 2.17+) | Yes |
+| macOS x86_64, arm64 | `.dylib` | Yes (macOS 13+) | Yes |
+| Windows AMD64 | `.dll` | Yes | Yes (MSYS2/MinGW) |
+| Other (musl, 32-bit, ...) | - | No | Where Go supports `-buildmode=c-shared` |
 
 ## Performance
 
@@ -183,25 +280,6 @@ This makes PyGoSQLX suitable for high-throughput use cases such as SQL proxies, 
 
 ## Development
 
-### Building from source
-
-```bash
-# Clone the repository
-git clone https://github.com/ajitpratap0/GoSQLX.git
-cd GoSQLX
-
-# Build the shared library
-cd pkg/cbinding
-./build.sh
-cd ../../python
-
-# Install in development mode
-pip install -e ".[dev]"
-
-# Run tests
-pytest
-```
-
 ### Running tests
 
 ```bash
@@ -211,6 +289,23 @@ pytest tests/test_types.py   # Type/exception tests (no shared library needed)
 pytest tests/test_integration.py  # Integration tests (requires shared library)
 pytest --cov=pygosqlx        # With coverage
 ```
+
+To run the suite against an installed wheel instead of the checkout (as the
+release CI does):
+
+```bash
+pip install pygosqlx pytest   # or a locally built wheel
+cd /tmp && PYGOSQLX_TEST_INSTALLED=1 python -m pytest --import-mode=importlib /path/to/GoSQLX/python/tests
+```
+
+### Releasing
+
+Wheels for every supported platform and an sdist are built and tested by
+`.github/workflows/pygosqlx-release.yml` on each pull request that touches
+`python/` or `pkg/`. Pushing a tag `pygosqlx-vX.Y.Z` (matching the version in
+`pyproject.toml`, on a commit already on `main`) publishes them to PyPI
+through Trusted Publishing; this is the only path to PyPI. A manual dispatch
+can publish a dry run to TestPyPI. See the workflow header for the one-time PyPI setup.
 
 ### Project structure
 
@@ -223,12 +318,17 @@ python/
     py.typed          # PEP 561 type hint marker
     lib/              # Shared library output directory (built artifacts)
   tests/
-    test_types.py         # Type and exception tests (40 tests)
-    test_integration.py   # Integration tests with shared library (36 tests)
+    test_types.py                  # Type and exception tests (no shared library needed)
+    test_package_version.py        # Version metadata consistency
+    test_integration.py            # Integration tests with shared library
+    test_dialect_and_analysis.py   # dialect=, lint, security_scan, transpile, dialects
+    test_installed_wheel.py        # Installed-wheel checks (PYGOSQLX_TEST_INSTALLED=1)
+  scripts/
+    install-go-linux.sh  # Pinned, checksum-verified Go install for manylinux CI
   pyproject.toml      # Package metadata and build config
-  setup.py            # Legacy build support
+  setup.py            # Shim that tags wheels per platform (no metadata)
 ```
 
 ## License
 
-Apache-2.0. See the [LICENSE](../LICENSE) file in the repository root.
+Apache-2.0. See the [LICENSE](https://github.com/ajitpratap0/GoSQLX/blob/main/LICENSE) file.

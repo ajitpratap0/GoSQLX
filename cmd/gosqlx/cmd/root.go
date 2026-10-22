@@ -188,6 +188,11 @@ func Execute() error {
 // Persistent flags are available to the command and all its children,
 // enabling consistent behavior across all subcommands.
 func init() {
+	// Report the Version variable from --version so release builds can set it
+	// with -ldflags "-X github.com/ajitpratap0/GoSQLX/cmd/gosqlx/cmd.Version=<tag>".
+	// A plain `go build` keeps the hard-coded default.
+	rootCmd.Version = Version
+
 	// Global flags available to all subcommands
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
 	rootCmd.PersistentFlags().StringVarP(&outputFile, "output", "o", "", "output file (default: stdout)")

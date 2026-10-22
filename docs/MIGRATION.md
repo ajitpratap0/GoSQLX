@@ -54,6 +54,55 @@
 
 ---
 
+## v1.14.0 → v1.15.0 (2026-07-30)
+
+**Source-compatible upgrade**: exported signatures are unchanged apart from additions, so code that compiled against v1.14.0 compiles against v1.15.0. Some runtime behavior changed; read the checklist below. The [CHANGELOG](../CHANGELOG.md) has the full list.
+
+### Why upgrade
+
+- **High-level `Tree` API**: `gosqlx.ParseTree` with typed walkers, `Rewrite` and `Clone`, and functional options instead of the `ParseWith*` combinations.
+- **ClickHouse at 83/83 of the QA corpus**: `ARRAY JOIN`, scalar CTEs, `CREATE MATERIALIZED VIEW ... ENGINE/TO`, `SAMPLE ... OFFSET` and `LIMIT offset, count`.
+- **Oracle gaps closed**: `ROWNUM`/`ROWID`/`LEVEL`/`SYSDATE` pseudo-columns, `PIVOT`/`UNPIVOT` `IN` lists with aliases, and literal backslashes in strings outside MySQL/PostgreSQL.
+- **Correctness sweep**: structured parser errors, pool leak fixes, and `Children()` coverage for 14 node types that `Walk`/`Inspect` used to skip.
+
+### New APIs to adopt
+
+- `gosqlx.ParseTree(ctx, sql, opts...)` returning `*Tree`, with `WalkSelects`, `WalkInserts`, `WalkUpdates`, `WalkDeletes`, `WalkCreateTables`, `WalkJoins`, `WalkCTEs`, `WalkFunctionCalls`, `WalkIdentifiers`, `WalkBinaryExpressions`, generic `WalkBy[T]`, `Tree.Rewrite` and `Tree.Clone`.
+- Options `WithDialect`, `WithStrict`, `WithTimeout`, `WithRecovery` and `WithMaxBytes`; `ParseReader` / `ParseReaderMultiple`, with `errors.Is(err, gosqlx.ErrTooLarge)` when the `WithMaxBytes` limit is exceeded.
+- `FormatTree` / `FormatAST` to format without re-parsing.
+- `gosqlx.SplitStatements(sql, dialect)`: dialect-aware script splitting on top-level `;`.
+- `gosqlx.Lint(sql)` (all 30 rules), `gosqlx.Analyze(sql)`, and `ErrorCode`, `ErrorLocation` and `ErrorHint` to unwrap structured error details.
+- `pkg/sql/dialect`: typed `Dialect` and `Capabilities`, exposed through `Parser.DialectTyped()`, `Parser.Capabilities()` and `Parser.Is<Dialect>()` helpers.
+- `pkg/linter/config`: `.gosqlx.yml` linter configuration with rule enable/disable, severity overrides and ignore globs.
+- `keywords.Conflicts()`, `ast.UnsupportedStatement` with `AST.HasUnsupportedStatements()`, and `ast.PoolLeakCount()`.
+
+### Behavior changes to act on
+
+- [ ] **Lint findings in nested queries**: fourteen rules now walk the whole AST, so violations inside subqueries and CTEs are reported. Expect more findings.
+- [ ] **Structured parser errors**: parser errors are `*errors.Error` values with a code and position, and the legacy `Parse`-family functions wrap the `ErrSyntax`, `ErrTokenize`, `ErrTimeout` and `ErrUnsupportedDialect` sentinels. Match with `errors.Is` / `errors.As` instead of comparing message strings.
+- [ ] **Cancellation**: a cancelled context returns `ctx.Err()` directly, so `errors.Is(err, context.Canceled)` works.
+- [ ] **`*errors.Error.WithX` methods copy** instead of mutating the receiver. Use the returned value.
+- [ ] **`parser.ValidateBytes("")` returns an error**, matching `gosqlx.Validate("")`.
+- [ ] **Snowflake stub statements** (`USE`, `COPY INTO`, `PUT`, `GET`, `LIST`, `REMOVE`, `CREATE STAGE/STREAM/TASK/PIPE/...`) are `*ast.UnsupportedStatement`, not `*ast.DescribeStatement`, and the formatter emits `-- UNSUPPORTED: <raw SQL>` for them. Update type switches.
+- [ ] **Metrics error statistics** are counted per error code instead of per `err.Error()` string.
+
+### Deprecations
+
+- `pkg/sql/monitor` is deprecated in favour of `pkg/metrics`.
+- `parser.Parse([]token.Token)`, `ParseFromModelTokensWithPositions` and `ConversionResult.PositionMapping` are scheduled for removal in v2.0.
+
+### Companion release versions
+
+| Component | v1.14.0 | v1.15.0 |
+|-----------|---------|---------|
+| Library (`github.com/ajitpratap0/GoSQLX`) | 1.14.0 | **1.15.0** (the `gosqlx.Version` constant still reads 1.14.0) |
+| CLI (`cmd/gosqlx`, `gosqlx --version`) | 1.14.0 | 1.14.0 (stale constant) |
+| VS Code extension (`ajitpratap0.gosqlx`) | 1.14.0 | **1.15.0** (version taken from the release tag) |
+| OpenTelemetry integration (`integrations/opentelemetry`) | requires v1.14.0 | requires v1.14.0 |
+| GORM integration (`integrations/gorm`) | requires v1.14.0 | requires v1.14.0 |
+
+---
+
 ## v1.13.0 → v1.14.0 (2026-04-12)
 
 **Drop-in upgrade** — no breaking API changes. Anything that compiled against v1.13.0 will still compile and run identically against v1.14.0.

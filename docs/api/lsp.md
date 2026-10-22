@@ -232,6 +232,58 @@ Parameters:
 // Quick fix: Convert 'select' to 'SELECT'
 ```
 
+### **9. Semantic Tokens**
+- `textDocument/semanticTokens/full` - Syntax highlighting computed by the server
+
+The server classifies the document with [pkg/highlight](highlight.md) under the configured dialect and returns the standard LSP relative encoding. Only full-document requests are supported (`full: true`, `range: false`). Invalid SQL is still highlighted up to the first lexical error; an unknown document returns an empty token stream.
+
+The legend uses only standard LSP token types and modifiers, so editor themes color them without extra configuration:
+
+| `pkg/highlight` category | Token type | Modifiers |
+|---|---|---|
+| `Keyword` | `keyword` | |
+| `Function` | `function` | |
+| `DataType` | `type` | |
+| `Identifier`, `QuotedIdentifier` | `variable` | |
+| `String` | `string` | |
+| `Number` | `number` | |
+| `Constant` (`TRUE`, `FALSE`, `NULL`) | `keyword` | `readonly` |
+| `Operator` | `operator` | |
+| `Comment` | `comment` | |
+| `Placeholder` | `parameter` | |
+
+The advertised legend is `tokenTypes: ["keyword", "function", "type", "variable", "string", "number", "operator", "comment", "parameter"]` and `tokenModifiers: ["readonly"]`. Punctuation is not reported (there is no standard token type for it), and lexical errors are reported as diagnostics instead. Positions are 0-based lines and UTF-16 characters, and a token that spans several lines (a block comment or multi-line string) is split into one token per line.
+
+## SQL Dialect
+
+One dialect drives diagnostics, formatting, document symbols, completion, hover and semantic tokens. The default is `generic`. Accepted values are the 11 names from `keywords.AllDialects()`: `generic`, `postgresql`, `mysql`, `mariadb`, `sqlserver`, `oracle`, `sqlite`, `snowflake`, `bigquery`, `redshift` and `clickhouse`. Values are trimmed and lower-cased; a missing, non-string, empty or unrecognised value selects `generic`.
+
+### At startup: `initializationOptions`
+
+```json
+{
+  "method": "initialize",
+  "params": {
+    "initializationOptions": { "dialect": "mysql" }
+  }
+}
+```
+
+### At runtime: `workspace/didChangeConfiguration`
+
+```json
+{
+  "method": "workspace/didChangeConfiguration",
+  "params": {
+    "settings": { "gosqlx": { "dialect": "sqlserver" } }
+  }
+}
+```
+
+The server reads only `settings.gosqlx.dialect`. Settings without that entry (for example the `null` settings some clients send) keep the current dialect; a present but invalid value selects `generic`, exactly as at startup. When the dialect actually changes, the server re-publishes diagnostics for every open document and, if the client advertised `workspace.semanticTokens.refreshSupport` in `initialize`, sends `workspace/semanticTokens/refresh` so the client re-requests highlighting. Hover, completion, formatting and document symbols read the dialect on every request.
+
+The VS Code extension sends its `gosqlx.dialect` setting as `initializationOptions.dialect`.
+
 ## LSP Usage
 
 ### **Starting the LSP Server**

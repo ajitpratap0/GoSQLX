@@ -70,7 +70,9 @@ linter     → sql/parser, sql/tokenizer
            # rule sub-packages additionally import: linter, models, sql/ast
 highlight  → models, errors, sql/keywords, sql/tokenizer
 lsp        → errors, models, gosqlx, sql/keywords, sql/parser, sql/tokenizer
-cbinding   → gosqlx, sql/ast    (requires CGO; excluded from task test:race)
+cbinding   → gosqlx, errors, formatter, linter (+ rule sub-packages), sql/ast,
+             sql/keywords, sql/parser, sql/security
+             (requires CGO; excluded from task test:race)
 
 # High-level wrapper
 gosqlx     → all of the above (top-level convenience API)

@@ -37,6 +37,33 @@
 //	gosqlx_extract_metadata(sql)  - extract tables, columns, functions with schema qualification
 //	gosqlx_version()              - return the library version string (e.g. "1.10.0")
 //	gosqlx_free(ptr)              - free a string previously returned by any gosqlx_* function
+//
+// Dialect-aware and analysis exports (added for pygosqlx 0.3.0; see cbinding_ext.go):
+//
+//	gosqlx_parse_dialect(sql, dialect)             - gosqlx_parse with a SQL dialect
+//	gosqlx_validate_dialect(sql, dialect)          - gosqlx_validate with a SQL dialect
+//	gosqlx_format_dialect(sql, dialect)            - gosqlx_format with a SQL dialect
+//	gosqlx_extract_tables_dialect(sql, dialect)    - gosqlx_extract_tables with a SQL dialect
+//	gosqlx_extract_columns_dialect(sql, dialect)   - gosqlx_extract_columns with a SQL dialect
+//	gosqlx_extract_functions_dialect(sql, dialect) - gosqlx_extract_functions with a SQL dialect
+//	gosqlx_extract_metadata_dialect(sql, dialect)  - gosqlx_extract_metadata with a SQL dialect
+//	gosqlx_lint(sql, options_json)                 - run the `gosqlx lint` rule set (L001-L010)
+//	gosqlx_security_scan(sql)                      - scan SQL for injection patterns
+//	gosqlx_transpile(sql, from, to)                - convert SQL between dialects
+//	gosqlx_dialects()                              - list the accepted dialect names
+//
+// The *_dialect variants take the dialect as a plain C string rather than an
+// options JSON object: a dialect is the only option those operations accept, so
+// a second string argument keeps the ABI as simple as the original exports. A
+// NULL or empty dialect behaves exactly like the original export. An unknown
+// dialect yields the operation's normal error shape with "error_code" set to
+// "E4002" (pkg/errors.ErrCodeUnsupportedDialect) and the error message listing
+// the valid names from gosqlx_dialects. Exports that genuinely take several
+// options (gosqlx_lint) accept an options JSON object instead.
+//
+// The original exports are ABI-stable: their names, signatures and JSON output
+// are unchanged. New fields are only ever added with omitempty so existing
+// consumers see byte-identical results.
 package main
 
 // #include <stdlib.h>
@@ -45,7 +72,6 @@ import (
 	"encoding/json"
 	"regexp"
 	"strconv"
-	"sync"
 	"unsafe"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
@@ -59,13 +85,6 @@ var VERSION = gosqlx.Version
 // errorPositionRegex matches "line X, column Y" patterns in error messages.
 var errorPositionRegex = regexp.MustCompile(`line\s+(\d+),\s*column\s+(\d+)`)
 
-// cachedVersion is a process-lifetime C string for gosqlx_version().
-// Allocated once via sync.Once to avoid leaking memory on every call.
-var (
-	cachedVersion     *C.char
-	cachedVersionOnce sync.Once
-)
-
 // ParseResult represents the result of parsing SQL.
 type ParseResult struct {
 	Success     bool     `json:"success"`
@@ -74,6 +93,8 @@ type ParseResult struct {
 	ErrorColumn int      `json:"error_column,omitempty"`
 	StmtCount   int      `json:"statement_count"`
 	StmtTypes   []string `json:"statement_types"`
+	// ErrorCode is set only by the *_dialect exports for an unknown dialect.
+	ErrorCode string `json:"error_code,omitempty"`
 }
 
 // ValidationResult represents the result of validating SQL.
@@ -82,6 +103,8 @@ type ValidationResult struct {
 	Error       string `json:"error,omitempty"`
 	ErrorLine   int    `json:"error_line,omitempty"`
 	ErrorColumn int    `json:"error_column,omitempty"`
+	// ErrorCode is set only by the *_dialect exports for an unknown dialect.
+	ErrorCode string `json:"error_code,omitempty"`
 }
 
 // FormatResult represents the result of formatting SQL.
@@ -89,6 +112,8 @@ type FormatResult struct {
 	Success   bool   `json:"success"`
 	Formatted string `json:"formatted,omitempty"`
 	Error     string `json:"error,omitempty"`
+	// ErrorCode is set only by the *_dialect exports for an unknown dialect.
+	ErrorCode string `json:"error_code,omitempty"`
 }
 
 // QualifiedNameJSON represents a qualified name for JSON serialization.
@@ -106,6 +131,8 @@ type MetadataResult struct {
 	ColumnsQualified []QualifiedNameJSON `json:"columns_qualified"`
 	Functions        []string            `json:"functions"`
 	Error            string              `json:"error,omitempty"`
+	// ErrorCode is set only by the *_dialect exports for an unknown dialect.
+	ErrorCode string `json:"error_code,omitempty"`
 }
 
 // extractErrorPosition extracts line and column numbers from an error message string.
@@ -181,31 +208,7 @@ func statementTypeName(stmt ast.Statement) string {
 //
 //export gosqlx_parse
 func gosqlx_parse(sql *C.char) *C.char {
-	goSQL := C.GoString(sql)
-
-	tree, err := gosqlx.Parse(goSQL)
-	if err != nil {
-		line, col := extractErrorPosition(err.Error())
-		result := ParseResult{
-			Success:     false,
-			Error:       err.Error(),
-			ErrorLine:   line,
-			ErrorColumn: col,
-		}
-		return toJSON(result)
-	}
-
-	stmtTypes := make([]string, 0, len(tree.Statements))
-	for _, stmt := range tree.Statements {
-		stmtTypes = append(stmtTypes, statementTypeName(stmt))
-	}
-
-	result := ParseResult{
-		Success:   true,
-		StmtCount: len(tree.Statements),
-		StmtTypes: stmtTypes,
-	}
-	return toJSON(result)
+	return toJSON(parseResultFor(C.GoString(sql), ""))
 }
 
 // gosqlx_validate validates a SQL string for syntactic correctness and returns
@@ -220,22 +223,7 @@ func gosqlx_parse(sql *C.char) *C.char {
 //
 //export gosqlx_validate
 func gosqlx_validate(sql *C.char) *C.char {
-	goSQL := C.GoString(sql)
-
-	err := gosqlx.Validate(goSQL)
-	if err != nil {
-		line, col := extractErrorPosition(err.Error())
-		result := ValidationResult{
-			Valid:       false,
-			Error:       err.Error(),
-			ErrorLine:   line,
-			ErrorColumn: col,
-		}
-		return toJSON(result)
-	}
-
-	result := ValidationResult{Valid: true}
-	return toJSON(result)
+	return toJSON(validationResultFor(C.GoString(sql), ""))
 }
 
 // gosqlx_format formats a SQL string using default formatting options and
@@ -250,23 +238,7 @@ func gosqlx_validate(sql *C.char) *C.char {
 //
 //export gosqlx_format
 func gosqlx_format(sql *C.char) *C.char {
-	goSQL := C.GoString(sql)
-
-	opts := gosqlx.DefaultFormatOptions()
-	formatted, err := gosqlx.Format(goSQL, opts)
-	if err != nil {
-		result := FormatResult{
-			Success: false,
-			Error:   err.Error(),
-		}
-		return toJSON(result)
-	}
-
-	result := FormatResult{
-		Success:   true,
-		Formatted: formatted,
-	}
-	return toJSON(result)
+	return toJSON(formatResultFor(C.GoString(sql), ""))
 }
 
 // gosqlx_extract_tables parses a SQL string and extracts all referenced table
@@ -281,18 +253,7 @@ func gosqlx_format(sql *C.char) *C.char {
 //
 //export gosqlx_extract_tables
 func gosqlx_extract_tables(sql *C.char) *C.char {
-	goSQL := C.GoString(sql)
-
-	tree, err := gosqlx.Parse(goSQL)
-	if err != nil {
-		return toJSON(map[string]interface{}{"error": err.Error()})
-	}
-
-	tables := gosqlx.ExtractTables(tree)
-	if tables == nil {
-		tables = []string{}
-	}
-	return toJSON(map[string]interface{}{"tables": tables})
+	return toJSON(extractListFor(C.GoString(sql), "", "tables", gosqlx.ExtractTables))
 }
 
 // gosqlx_extract_columns parses a SQL string and extracts all referenced column
@@ -307,18 +268,7 @@ func gosqlx_extract_tables(sql *C.char) *C.char {
 //
 //export gosqlx_extract_columns
 func gosqlx_extract_columns(sql *C.char) *C.char {
-	goSQL := C.GoString(sql)
-
-	tree, err := gosqlx.Parse(goSQL)
-	if err != nil {
-		return toJSON(map[string]interface{}{"error": err.Error()})
-	}
-
-	columns := gosqlx.ExtractColumns(tree)
-	if columns == nil {
-		columns = []string{}
-	}
-	return toJSON(map[string]interface{}{"columns": columns})
+	return toJSON(extractListFor(C.GoString(sql), "", "columns", gosqlx.ExtractColumns))
 }
 
 // gosqlx_extract_functions parses a SQL string and extracts all referenced
@@ -333,18 +283,7 @@ func gosqlx_extract_columns(sql *C.char) *C.char {
 //
 //export gosqlx_extract_functions
 func gosqlx_extract_functions(sql *C.char) *C.char {
-	goSQL := C.GoString(sql)
-
-	tree, err := gosqlx.Parse(goSQL)
-	if err != nil {
-		return toJSON(map[string]interface{}{"error": err.Error()})
-	}
-
-	functions := gosqlx.ExtractFunctions(tree)
-	if functions == nil {
-		functions = []string{}
-	}
-	return toJSON(map[string]interface{}{"functions": functions})
+	return toJSON(extractListFor(C.GoString(sql), "", "functions", gosqlx.ExtractFunctions))
 }
 
 // gosqlx_extract_metadata parses a SQL string and extracts comprehensive
@@ -359,64 +298,16 @@ func gosqlx_extract_functions(sql *C.char) *C.char {
 //
 //export gosqlx_extract_metadata
 func gosqlx_extract_metadata(sql *C.char) *C.char {
-	goSQL := C.GoString(sql)
-
-	tree, err := gosqlx.Parse(goSQL)
-	if err != nil {
-		return toJSON(map[string]interface{}{"error": err.Error()})
-	}
-
-	metadata := gosqlx.ExtractMetadata(tree)
-
-	// Convert qualified tables
-	tablesQualified := make([]QualifiedNameJSON, 0, len(metadata.TablesQualified))
-	for _, tq := range metadata.TablesQualified {
-		tablesQualified = append(tablesQualified, QualifiedNameJSON{
-			Schema: tq.Schema,
-			Table:  tq.Table,
-			Name:   tq.Name,
-		})
-	}
-
-	// Convert qualified columns
-	columnsQualified := make([]QualifiedNameJSON, 0, len(metadata.ColumnsQualified))
-	for _, cq := range metadata.ColumnsQualified {
-		columnsQualified = append(columnsQualified, QualifiedNameJSON{
-			Schema: cq.Schema,
-			Table:  cq.Table,
-			Name:   cq.Name,
-		})
-	}
-
-	// Ensure non-nil slices for consistent JSON output
-	tables := metadata.Tables
-	if tables == nil {
-		tables = []string{}
-	}
-	columns := metadata.Columns
-	if columns == nil {
-		columns = []string{}
-	}
-	functions := metadata.Functions
-	if functions == nil {
-		functions = []string{}
-	}
-
-	result := MetadataResult{
-		Tables:           tables,
-		TablesQualified:  tablesQualified,
-		Columns:          columns,
-		ColumnsQualified: columnsQualified,
-		Functions:        functions,
-	}
-	return toJSON(result)
+	return toJSON(metadataFor(C.GoString(sql), ""))
 }
 
 // gosqlx_free releases memory allocated by the C binding functions.
-// Every C string returned by gosqlx_parse, gosqlx_validate, gosqlx_format,
-// gosqlx_extract_tables, gosqlx_extract_columns, gosqlx_extract_functions,
-// gosqlx_extract_metadata, and gosqlx_version must be freed with this function
-// to avoid memory leaks.
+// Passing NULL is a no-op (free(NULL) is defined by the C standard).
+// Every C string returned by any other gosqlx_* export (gosqlx_parse,
+// gosqlx_validate, gosqlx_format, the gosqlx_extract_* functions, every
+// *_dialect variant, gosqlx_lint, gosqlx_security_scan, gosqlx_transpile,
+// gosqlx_dialects and gosqlx_version) must be freed exactly once with this
+// function to avoid memory leaks.
 //
 // Parameters:
 //   - ptr: a C string pointer previously returned by a gosqlx_* function.
@@ -429,15 +320,14 @@ func gosqlx_free(ptr *C.char) {
 // gosqlx_version returns the current GoSQLX library version as a C string.
 // The version follows semantic versioning (e.g., "1.8.0").
 //
-// Returns a C string with the version. The caller must free the returned
-// pointer with gosqlx_free.
+// Returns a newly allocated C string with the version on every call. Like every
+// other gosqlx_* result, the caller owns it and must free it exactly once with
+// gosqlx_free. (Earlier releases returned a process-wide cached pointer here,
+// which made the documented free a double free on the second call.)
 //
 //export gosqlx_version
 func gosqlx_version() *C.char {
-	cachedVersionOnce.Do(func() {
-		cachedVersion = C.CString(VERSION)
-	})
-	return cachedVersion
+	return C.CString(VERSION)
 }
 
 func main() {}

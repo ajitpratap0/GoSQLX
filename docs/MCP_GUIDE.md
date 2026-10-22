@@ -74,12 +74,12 @@ All 7 GoSQLX SQL tools are available instantly:
 - `parse_sql` - Parse SQL into AST statement types
 - `extract_metadata` - Extract tables, columns, and functions
 - `security_scan` - Detect SQL injection patterns
-- `lint_sql` - Lint against the style rules (L001–L010)
+- `lint_sql` - Lint against the ten style rules L001–L010 (not the L011–L030 safety, performance and naming rules)
 - `analyze_sql` - Run all 6 tools in one concurrent request
 
 ### Rate Limits
 
-The public server has smart rate limiting to ensure fair usage:
+The public server has smart rate limiting to ensure fair usage. These limits come from the rate-limit middleware that the `gosqlx-mcp` binary installs (`NewRateLimitMiddleware`); a server embedded with `pkg/mcp` through `Server.Start` or `Server.Handler` has none of them unless you add the middleware yourself (see [Embedding as a Go Library](#embedding-as-a-go-library)):
 - **Burst**: 10 requests/second per IP
 - **Sustained**: 120 weighted-requests/minute per IP
 - Heavier tools (`analyze_sql`) consume more budget than simple ones (`validate_sql`)
@@ -521,7 +521,7 @@ curl -s -X POST http://127.0.0.1:8080/mcp \
 
 ### lint\_sql
 
-**Description**: Lint SQL against the GoSQLX style rules (L001–L010).
+**Description**: Lint SQL against the ten GoSQLX style rules L001–L010, the same set `gosqlx lint` runs, with L005's maximum line length fixed at 100 characters. The safety, performance and naming rules L011–L030, which `gosqlx.Lint` also runs, are not applied.
 
 #### Parameters
 
@@ -744,6 +744,26 @@ func main() {
     }
 }
 ```
+
+`Start` and `Handler` apply bearer auth only. They do **not** apply the rate limiting described under [Rate Limits](#rate-limits): there is no per-client rate limit, no `GET` stream cap, no request body size cap and no body read deadline. That is fine on `127.0.0.1`, but before exposing an embedded server to untrusted clients, serve `Handler` wrapped in `NewRateLimitMiddleware`, as `gosqlx-mcp` does:
+
+```go
+cfg, err := mcp.LoadConfig()
+if err != nil {
+    log.Fatal(err)
+}
+srv := mcp.New(cfg)
+defer srv.Shutdown(context.Background())
+
+httpSrv := &http.Server{
+    Addr:              cfg.Addr(),
+    Handler:           mcp.NewRateLimitMiddleware(cfg, srv.Handler()),
+    ReadHeaderTimeout: 10 * time.Second,
+}
+log.Fatal(httpSrv.ListenAndServe())
+```
+
+`NewRateLimitMiddleware` honours the trusted-proxy settings in `cfg` (see [Client IP and reverse proxies](#client-ip-and-reverse-proxies)). `Shutdown` stops the idle-session sweeper that `Handler` starts; it does not close an `http.Server` you built yourself.
 
 ### Public API
 

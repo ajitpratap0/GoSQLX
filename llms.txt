@@ -15,7 +15,7 @@ Interactive Playground: https://gosqlx.dev/playground/
 - MCP server tools: 7
 - SQL-99 compliance: ~80–85% (estimated)
 - QA corpus (v1.15.0): Snowflake 87/87, ClickHouse 83/83
-- Performance: ~318 ns/op (~3.14M ops/sec) for a simple SELECT (parse stage) on Apple M4, Go 1.27. This is the parse stage only (pre-tokenized input), not tokenize or end-to-end. Source: BenchmarkPerformanceBaseline, median of 10 runs, re-measured 2026-10-13.
+- Performance: ~349 ns/op (~2.87M ops/sec) for a simple SELECT (parse stage) on Apple M4, Go 1.27. This is the parse stage only (pre-tokenized input), not tokenize or end-to-end. Source: BenchmarkPerformanceBaseline, median of 20 runs, re-measured 2026-10-22.
 
 ## Documentation
 

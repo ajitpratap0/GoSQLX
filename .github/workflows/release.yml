@@ -45,11 +45,13 @@ jobs:
     # `git describe --tags`, which would pick a pygosqlx tag and produce a
     # truncated changelog and a wrong compare link. Pin both tags to the
     # 'v*' series explicitly (git.ignore_tags in .goreleaser.yml is Pro-only).
+    # The match needs two dots so the floating Marketplace major tag ('v1',
+    # moved with `git tag -fa v1`, see MARKETPLACE_PUBLISHING.md) never wins.
     - name: Resolve release tags
       env:
         TAG: ${{ github.ref_name }}
       run: |
-        prev="$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${TAG}^" 2>/dev/null || true)"
+        prev="$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' "${TAG}^" 2>/dev/null || true)"
         echo "GORELEASER_CURRENT_TAG=${TAG}" >> "$GITHUB_ENV"
         if [ -n "$prev" ]; then
           echo "GORELEASER_PREVIOUS_TAG=${prev}" >> "$GITHUB_ENV"

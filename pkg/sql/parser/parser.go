@@ -437,6 +437,9 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 			p.advance()
 			continue
 		}
+		if p.skipBatchSeparator() {
+			continue
+		}
 
 		stmt, err := p.parseStatement()
 		if err != nil {
@@ -449,6 +452,8 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 		// Optionally consume semicolon after statement
 		if p.isType(models.TokenTypeSemicolon) {
 			p.advance()
+		} else {
+			p.noteStatementEnd()
 		}
 	}
 
@@ -632,6 +637,9 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 			p.advance()
 			continue
 		}
+		if p.skipBatchSeparator() {
+			continue
+		}
 
 		stmt, err := p.parseStatement()
 		if err != nil {
@@ -644,6 +652,8 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 		// Optionally consume semicolon after statement
 		if p.isType(models.TokenTypeSemicolon) {
 			p.advance()
+		} else {
+			p.noteStatementEnd()
 		}
 	}
 
@@ -1169,7 +1179,7 @@ func (p *Parser) parseQualifiedName() (string, error) {
 
 // Accepts IDENT or non-reserved keywords that can be used as table names
 func (p *Parser) parseTableReference() (*ast.TableReference, error) {
-	name, q, err := p.parseQualifiedNameQuoted()
+	name, q, err := p.parseTableNameQuoted()
 	if err != nil {
 		return nil, err
 	}
@@ -1325,7 +1335,7 @@ func (p *Parser) nextStartsTableClause() bool {
 // but NOT contextual clause keywords that would be consumed as aliases by mistake
 // (e.g. MINUS in Snowflake/Oracle, QUALIFY in Snowflake/BigQuery, WINDOW).
 func (p *Parser) canBeAlias() bool {
-	if p.isMinusSetOp() || p.isQualifyKeyword() || p.isWindowClauseKeyword() || p.isSettingsKeyword() || p.isDMLReturningKeyword() || p.isSelectExtClauseStart() {
+	if p.isMinusSetOp() || p.isQualifyKeyword() || p.isWindowClauseKeyword() || p.isSettingsKeyword() || p.isDMLReturningKeyword() || p.isSelectExtClauseStart() || p.isTSQLStatementStart() {
 		return false
 	}
 	return p.isIdentifier() || p.isNonReservedKeyword()

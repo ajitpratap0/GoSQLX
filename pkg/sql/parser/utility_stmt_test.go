@@ -109,7 +109,7 @@ func TestParser_BeginEndDialectGating(t *testing.T) {
 		{keywords.DialectSQLServer, "BEGIN TRY SELECT 1 / 0", "*ast.UtilityStatement"},
 		{keywords.DialectSQLServer, "END CATCH", "*ast.UtilityStatement"},
 		{keywords.DialectSQLServer, "END", "*ast.UtilityStatement"},
-		{keywords.DialectOracle, "BEGIN NULL; END", "error"}, // the block body is split at ';'
+		{keywords.DialectOracle, "BEGIN NULL; END", "*ast.UtilityStatement"}, // one PL/SQL block
 		{keywords.DialectOracle, "BEGIN dbms_stats.gather_schema_stats('APP')", "*ast.UtilityStatement"},
 		{keywords.DialectPostgreSQL, "END", "*ast.TransactionStatement"},
 		{keywords.DialectSQLite, "END", "*ast.TransactionStatement"},
@@ -366,7 +366,8 @@ func TestParser_UtilityStatementBoundary(t *testing.T) {
 		{keywords.DialectMySQL, "SELECT * FROM accounts WHERE id = 1 USE db"},
 		{keywords.DialectMySQL, "SELECT 1 SET @a = 1"},
 		{keywords.DialectPostgreSQL, "SELECT a FROM t WHERE a = 1 COMMIT"},
-		{keywords.DialectSQLServer, "SELECT 1 PRINT 'x'"},
+		{keywords.DialectPostgreSQL, "SELECT a FROM t\nSET x = 1"},
+		{keywords.DialectSQLServer, "SELECT 1 FROM t garbage garbage2"},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.dialect)+"/"+tt.sql, func(t *testing.T) {

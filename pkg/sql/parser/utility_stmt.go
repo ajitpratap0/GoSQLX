@@ -134,7 +134,12 @@ func (p *Parser) parseUtilityStatement() (stmt ast.Statement, ok bool, err error
 			return nil, false, nil
 		}
 		return p.parseVerbatimStatement(word)
-	case "IF", "WHILE", "PRINT", "THROW", "RAISERROR", "WAITFOR", "DBCC", "BULK", "EXEC", "RETURN", "REVERT":
+	case "IF", "WHILE":
+		if p.dialect != string(keywords.DialectSQLServer) {
+			return nil, false, nil
+		}
+		return p.parseTSQLConditional(word)
+	case "PRINT", "THROW", "RAISERROR", "DENY", "WAITFOR", "DBCC", "BULK", "EXEC", "RETURN", "REVERT":
 		if p.dialect != string(keywords.DialectSQLServer) {
 			return nil, false, nil
 		}
@@ -198,17 +203,63 @@ func (p *Parser) peekStatementAfterOptions() bool {
 }
 
 // utilityStatementEnd returns the index of the token that ends the statement
-// starting at the current position (a top-level ';' or EOF, or in SQL Server
-// the word that starts the next statement), or an error when its parentheses
-// do not balance.
+// starting at the current position: a top-level ';' or EOF, a T-SQL GO line,
+// or in SQL Server the word that starts the next statement (see
+// implicitEndPolicy). A ';' inside a BEGIN ... END block or another compound
+// statement does not end it (see blockScan). It returns an error when the
+// parentheses do not balance.
 func (p *Parser) utilityStatementEnd() (int, error) {
+	end, open, err := p.scanStatementEnd(true)
+	if err == nil && open {
+		// An unclosed block: like gosqlx.SplitStatements, fall back to
+		// plain ';' boundaries rather than swallowing the rest of the input.
+		end, _, err = p.scanStatementEnd(false)
+	}
+	return end, err
+}
+
+// scanStatementEnd implements utilityStatementEnd. With blocks unset the
+// BEGIN ... END nesting is ignored; open reports that the input ended
+// inside a block.
+func (p *Parser) scanStatementEnd(blocks bool) (end int, open bool, err error) {
 	depth := 0
-	i := p.currentPos
-	implicit := p.implicitEndAllowed()
+	start := p.currentPos
+	policy := p.implicitEndPolicy(start)
+	blk := p.newBlockScan()
+	cases := 0       // open CASE expressions of an implicitLeader statement
+	grantee := false // an implicitGrant statement reached TO / FROM
+	i := start
 	for ; i < len(p.tokens); i++ {
-		if implicit && depth == 0 && p.startsNewStatement(i, p.currentPos) {
+		if i > start {
+			if _, ok := p.batchSeparatorEnd(i); ok {
+				return i, false, nil
+			}
+		}
+		if policy == implicitGrant && depth == 0 {
+			if w := p.utilityWord(i); w == "TO" || w == "FROM" {
+				grantee = true
+			}
+		}
+		if policy == implicitLeader && depth == 0 && i > start {
+			// SET @x = CASE ... ELSE ... END; outside a CASE, ELSE ends the
+			// first branch of an IF (IF @@ERROR <> 0 ROLLBACK ELSE COMMIT).
+			switch p.utilityWord(i) {
+			case "CASE":
+				cases++
+			case "END":
+				if cases > 0 {
+					cases--
+				}
+			case "ELSE":
+				if cases == 0 {
+					return i, false, nil
+				}
+			}
+		}
+		if policy != implicitNone && depth == 0 && blk.depth == 0 && i > start &&
+			p.implicitEndAt(i, start, policy, &blk, grantee) {
 			p.markImplicitEnd(i)
-			return i, nil
+			return i, false, nil
 		}
 		switch p.tokens[i].Token.Type {
 		case models.TokenTypeLParen:
@@ -217,24 +268,28 @@ func (p *Parser) utilityStatementEnd() (int, error) {
 			depth--
 			if depth < 0 {
 				p.seek(i)
-				return 0, p.expectedError("end of statement")
+				return 0, false, p.expectedError("end of statement")
 			}
 		case models.TokenTypeSemicolon:
-			if depth == 0 {
-				return i, nil
+			if depth == 0 && blk.depth == 0 {
+				return i, false, nil
 			}
 		case models.TokenTypeEOF:
 			if depth != 0 {
 				p.seek(i)
-				return 0, p.expectedError(")")
+				return 0, false, p.expectedError(")")
 			}
-			return i, nil
+			return i, blk.depth > 0, nil
+		}
+		if blocks && (i > start || policy != implicitTxn) {
+			// A transaction's BEGIN opens no block (MySQL BEGIN\nUPDATE ...).
+			i = blk.token(p, i)
 		}
 	}
 	if depth != 0 {
-		return 0, goerrors.IncompleteStatementError(p.currentLocation(), "")
+		return 0, false, goerrors.IncompleteStatementError(p.currentLocation(), "")
 	}
-	return i, nil
+	return i, blk.depth > 0, nil
 }
 
 // consumeUtilityText consumes the rest of the statement and returns its text.

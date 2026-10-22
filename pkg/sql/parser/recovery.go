@@ -194,6 +194,9 @@ func (p *Parser) parseWithRecovery(tokens []models.TokenWithSpan) ([]ast.Stateme
 			p.advance()
 			continue
 		}
+		if p.skipBatchSeparator() {
+			continue
+		}
 
 		stmtStartPos := p.currentPos
 		stmt, err := p.parseStatement()
@@ -223,6 +226,8 @@ func (p *Parser) parseWithRecovery(tokens []models.TokenWithSpan) ([]ast.Stateme
 			// Optionally consume semicolon after statement
 			if p.isType(models.TokenTypeSemicolon) {
 				p.advance()
+			} else {
+				p.noteStatementEnd()
 			}
 		}
 	}

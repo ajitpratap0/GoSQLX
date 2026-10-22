@@ -82,7 +82,8 @@ func TestParser_UtilityStatementEndsAtNextStatement(t *testing.T) {
 			"SET @x = [update] SELECT 1", []string{set, sel}},
 		{"semicolons still separate", keywords.DialectSQLServer,
 			"SET NOCOUNT ON; SELECT 1;", []string{set, sel}},
-		// Statements that own a nested body keep running to the semicolon.
+		// An IF keeps its body and its ELSE branch; GRANT keeps its
+		// permission list.
 		{"if keeps its body", keywords.DialectSQLServer,
 			"IF @x = 1 SELECT 1 ELSE SELECT 2", []string{util}},
 		{"grant keeps select privilege", keywords.DialectSQLServer,

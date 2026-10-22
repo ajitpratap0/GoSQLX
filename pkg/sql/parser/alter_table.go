@@ -73,7 +73,7 @@ func (p *Parser) parseAlterTableStatement(stmt *ast.AlterStatement) (*ast.AlterS
 	// The statement ends at ';', EOF, or (as for every other statement, and
 	// as T-SQL scripts without semicolons rely on) the next statement keyword.
 	if !p.isType(models.TokenTypeSemicolon) && !p.isType(models.TokenTypeEOF) &&
-		!p.isStatementStartingKeyword() {
+		!p.isStatementStartingKeyword() && !p.statementMayEndAt(p.currentPos) {
 		return nil, p.expectedError("end of ALTER TABLE action")
 	}
 	return stmt, nil
@@ -836,7 +836,20 @@ func (p *Parser) tokenIsEq(i int) bool {
 func (p *Parser) alterActionEnd(commaInside bool) (int, error) {
 	depth := 0
 	i := p.currentPos
+	// T-SQL scripts need no ';': the action also ends where the next
+	// statement starts (ALTER TABLE t NOCHECK CONSTRAINT ALL ALTER TABLE u ...).
+	// The action's keyword was consumed, so the statement began before it.
+	tsql := p.IsSQLServer()
 	for ; i < len(p.tokens); i++ {
+		if tsql && depth == 0 && i > 0 {
+			if _, ok := p.batchSeparatorEnd(i); ok {
+				return i, nil
+			}
+			if p.startsNewDDLStatement(i, p.currentPos-1, false) {
+				p.markImplicitEnd(i)
+				return i, nil
+			}
+		}
 		switch p.tokens[i].Token.Type {
 		case models.TokenTypeLParen:
 			depth++

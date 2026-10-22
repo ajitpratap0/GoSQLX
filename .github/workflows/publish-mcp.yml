@@ -1,0 +1,94 @@
+name: Publish MCP Registry entry
+
+# GoReleaser creates releases with GITHUB_TOKEN, so release.yml explicitly
+# dispatches this workflow after publication. release.published covers releases
+# created by a maintainer outside that workflow.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Published GoSQLX release tag (for example, v1.16.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-registry-${{ inputs.tag || github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.repository == 'ajitpratap0/GoSQLX' &&
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'v') &&
+        !github.event.release.prerelease && !github.event.release.draft))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify published release and manifest
+        env:
+          TAG: ${{ inputs.tag || github.event.release.tag_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Expected a vMAJOR.MINOR.PATCH release tag"
+            exit 1
+          fi
+          release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")"
+          if ! jq -e --arg tag "$TAG" '.tag_name == $tag and .draft == false and .prerelease == false' <<< "$release" > /dev/null; then
+            echo "::error::${TAG} is not a published stable GitHub release"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "${TAG}^{commit}" HEAD; then
+            echo "::error::${TAG} is not on main history"
+            exit 1
+          fi
+          jq -e --arg version "${TAG#v}" \
+            '.name == "io.github.ajitpratap0/gosqlx" and .version == $version and (.remotes | any(.type == "streamable-http" and .url == "https://mcp.gosqlx.dev/mcp"))' \
+            server.json > /dev/null
+
+      - name: Wait for deployed release
+        env:
+          TAG: ${{ inputs.tag || github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          for attempt in {1..12}; do
+            if health="$(curl -fsS --max-time 10 https://mcp.gosqlx.dev/health)" && \
+               jq -e --arg version "${TAG#v}" '.status == "ok" and .version == $version' <<< "$health" > /dev/null; then
+              exit 0
+            fi
+            if (( attempt < 12 )); then sleep 10; fi
+          done
+          echo "::error::MCP endpoint did not report ${TAG#v} within two minutes"
+          exit 1
+
+      - name: Install verified MCP publisher
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o /tmp/mcp-publisher.tar.gz \
+            https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/mcp-publisher_linux_amd64.tar.gz
+          echo 'a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc  /tmp/mcp-publisher.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/mcp-publisher.tar.gz mcp-publisher
+          chmod +x ./mcp-publisher
+
+      - name: Validate and publish
+        run: |
+          set -euo pipefail
+          ./mcp-publisher validate server.json
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish server.json

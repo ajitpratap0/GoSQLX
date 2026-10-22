@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # GoReleaser creates the GitHub release and uploads assets
-      actions: write  # dispatch glama-sync.yml (release events from GITHUB_TOKEN start no workflows)
+      actions: write  # dispatch downstream workflows (GITHUB_TOKEN release events start no workflows)
     
     steps:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -93,6 +93,12 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         TAG: ${{ github.ref_name }}
       run: gh workflow run glama-sync.yml --repo "$GITHUB_REPOSITORY" --ref main -f tag="$TAG"
+
+    - name: Dispatch MCP Registry publish
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        TAG: ${{ github.ref_name }}
+      run: gh workflow run publish-mcp.yml --repo "$GITHUB_REPOSITORY" --ref main -f tag="$TAG"
 
     - name: Upload assets
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

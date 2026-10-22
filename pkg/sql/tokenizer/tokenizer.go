@@ -1145,9 +1145,11 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 					// Exactly one ASCII space between the words: the joined
 					// Value is already a substring of the input. Otherwise
 					// normalize the separator to a single space.
-					value := ident + " " + nextIdent
+					var value string
 					if sep := start + len(ident); nextStart == sep+1 && t.input[sep] == ' ' {
 						value = t.src[start:t.pos.Index]
+					} else {
+						value = ident + " " + nextIdent
 					}
 					return models.Token{
 						Type:  compoundType,

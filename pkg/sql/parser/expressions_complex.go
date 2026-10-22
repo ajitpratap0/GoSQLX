@@ -343,10 +343,17 @@ func (p *Parser) intervalUnit() string {
 		return ""
 	}
 	u := strings.ToUpper(tok.Value)
-	if intervalLeadingField(u) || (len(u) > 1 && u[len(u)-1] == 'S' && intervalLeadingField(u[:len(u)-1])) {
+	if isUnquotedIntervalUnit(u) || (len(u) > 1 && u[len(u)-1] == 'S' && isUnquotedIntervalUnit(u[:len(u)-1])) {
 		return u
 	}
 	return ""
+}
+
+// isUnquotedIntervalUnit reports whether u (upper-case) is a unit of the
+// unquoted INTERVAL <expr> <unit> form: any leading interval field, plus the
+// ClickHouse NANOSECOND unit, which is not an ANSI interval qualifier.
+func isUnquotedIntervalUnit(u string) bool {
+	return intervalLeadingField(u) || u == "NANOSECOND"
 }
 
 // parseIntervalQualifier parses the optional interval qualifier that follows

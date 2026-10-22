@@ -321,6 +321,8 @@ func TestPrimary_Interval(t *testing.T) {
 		{keywords.DialectClickHouse, "SELECT INTERVAL x DAY", "x DAY", "DAY", true},
 		{keywords.DialectMySQL, "SELECT INTERVAL -2 MINUTE", "-2 MINUTE", "MINUTE", true},
 		{keywords.DialectMySQL, "SELECT INTERVAL (a + 1) DAY", "(a + 1) DAY", "DAY", true},
+		{keywords.DialectClickHouse, "SELECT INTERVAL 1 NANOSECOND", "1 NANOSECOND", "NANOSECOND", true},
+		{keywords.DialectClickHouse, "SELECT INTERVAL 5 nanoseconds", "5 NANOSECONDS", "NANOSECONDS", true},
 		{keywords.DialectMySQL, "SELECT INTERVAL '1-2' YEAR_MONTH", "1-2", "", false},
 		{keywords.DialectPostgreSQL, "SELECT INTERVAL '1 day'", "1 day", "", false},
 	}

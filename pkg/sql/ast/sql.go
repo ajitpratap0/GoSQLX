@@ -1749,7 +1749,7 @@ func (s *SetOperation) writeSQL(buf *bytes.Buffer) {
 	if s == nil {
 		return
 	}
-	if s.LeftParenthesized {
+	if SetOperandNeedsParens(s, false, "") {
 		buf.WriteByte('(')
 		writeStmt(buf, s.Left)
 		buf.WriteByte(')')
@@ -1757,12 +1757,10 @@ func (s *SetOperation) writeSQL(buf *bytes.Buffer) {
 		writeStmt(buf, s.Left)
 	}
 	buf.WriteByte(' ')
-	writeSetOperator(buf, s.Operator)
-	if s.All {
-		buf.WriteString(" ALL")
-	}
+	op, _ := SetOperationKeyword(s, "")
+	buf.WriteString(op)
 	buf.WriteByte(' ')
-	if rightSetOp, ok := s.Right.(*SetOperation); s.RightParenthesized || (ok && rightSetOp != nil) {
+	if SetOperandNeedsParens(s, true, "") {
 		buf.WriteByte('(')
 		writeStmt(buf, s.Right)
 		buf.WriteByte(')')
@@ -1788,6 +1786,10 @@ func (v *Values) writeSQL(buf *bytes.Buffer) {
 		return
 	}
 	buf.WriteString("VALUES ")
+	if v.RowConstructor {
+		writeRowConstructorRows(buf, v.Rows)
+		return
+	}
 	writeValueRows(buf, v.Rows)
 }
 
@@ -2248,26 +2250,32 @@ func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 		buf.WriteByte('(')
 		t.SetSubquery.writeSQL(buf)
 		buf.WriteByte(')')
+	} else if t.Values != nil {
+		buf.WriteByte('(')
+		t.Values.writeSQL(buf)
+		buf.WriteByte(')')
 	} else {
+		if t.Only {
+			buf.WriteString("ONLY ")
+		}
 		writeQualifiedName(buf, t.Name)
+		writeTableRefNameSuffix(buf, t)
 	}
-	if t.Alias != "" && t.Pivot == nil && t.Unpivot == nil {
+	writeTableRefPreAlias(buf, t, identityKeyword)
+	if t.Alias != "" && !tableAliasFollowsClause(t) {
 		buf.WriteByte(' ')
 		writeTableAlias(buf, t.Alias)
 		writeTableColumnAliases(buf, t)
 	}
-	if t.Final {
-		buf.WriteString(" FINAL")
-	}
-	if t.ForSystemTime != nil {
-		buf.WriteByte(' ')
-		buf.WriteString(t.ForSystemTime.ToSQL())
-	}
+	writeTableRefPostAlias(buf, t, identityKeyword)
 	// Parser order: table hints, then PIVOT/UNPIVOT, then its AS alias (#604).
 	writeTableHints(buf, t.TableHints)
 	writePivotClause(buf, t.Pivot)
 	writeUnpivotClause(buf, t.Unpivot)
-	if t.Alias != "" && (t.Pivot != nil || t.Unpivot != nil) {
+	if t.MatchRecognize != nil {
+		writeMatchRecognize(buf, t.MatchRecognize, identityKeyword)
+	}
+	if t.Alias != "" && tableAliasFollowsClause(t) {
 		buf.WriteString(" AS ")
 		writeTableAlias(buf, t.Alias)
 	}
@@ -2277,11 +2285,11 @@ func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 // alias, as in unnest(arr) AS g(a, b). The list is written only for a table
 // function, the one table reference the parser reads it for.
 func writeTableColumnAliases(buf *bytes.Buffer, t *TableReference) {
-	if t.ColumnAliases == nil || len(t.ColumnAliases.Names) == 0 || t.TableFunc == nil {
+	if t.ColumnAliases == nil || len(t.ColumnAliases.Names) == 0 {
 		return
 	}
 	buf.WriteByte('(')
-	writeColumnNameList(buf, t.ColumnAliases.Names)
+	writeColumnAliasEntries(buf, t.ColumnAliases)
 	buf.WriteByte(')')
 }
 
@@ -2778,6 +2786,12 @@ func (c *ForSystemTimeClause) ToSQL() string {
 		b.WriteString(exprSQL(c.Start))
 		b.WriteString(" TO ")
 		b.WriteString(exprSQL(c.End))
+	case SystemTimeContainedIn:
+		b.WriteString("CONTAINED IN (")
+		b.WriteString(exprSQL(c.Start))
+		b.WriteString(", ")
+		b.WriteString(exprSQL(c.End))
+		b.WriteString(")")
 	case SystemTimeAll:
 		b.WriteString("ALL")
 	}

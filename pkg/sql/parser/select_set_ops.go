@@ -46,91 +46,139 @@ func (p *Parser) parseSelectWithSetOperations() (ast.Statement, error) {
 }
 
 // parseSetOperationChain parses zero or more set operations following the
-// already-parsed left operand and builds a left-deep tree. leftParens reports
-// that left was written as "(query)". A right operand may be a SELECT or a
-// parenthesized query expression, e.g. SELECT 1 UNION (SELECT 2).
+// already-parsed left operand. leftParens reports that left was written as
+// "(query)". A right operand may be a SELECT or a parenthesized query
+// expression, e.g. SELECT 1 UNION (SELECT 2).
+//
+// Operators of equal precedence group left to right. INTERSECT binds tighter
+// than UNION and EXCEPT/MINUS (SQL standard), so A UNION B INTERSECT C is
+// A UNION (B INTERSECT C); SQLite and Oracle give all set operators equal
+// precedence and group the whole chain left to right.
 //
 // When the last operand was parenthesized, a following ORDER BY / LIMIT /
 // OFFSET / FETCH is attached by attachParenthesizedQueryTail.
 func (p *Parser) parseSetOperationChain(left ast.Statement, leftParens bool) (ast.Statement, error) {
-	leftStmt := left
-	lastParen := leftParens
-
-	// Check for set operations (UNION, EXCEPT, INTERSECT). MINUS is a
-	// Snowflake / Oracle synonym for EXCEPT; it tokenizes as a plain
-	// identifier, so match it by value.
-	for p.isAnyType(models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect) ||
-		p.isMinusSetOp() {
-		// Parse the set operation type
-		operationLiteral := p.currentToken.Token.Value
-		if p.isMinusSetOp() {
-			operationLiteral = "EXCEPT" // normalize to canonical name
-		}
-		p.advance()
-
-		// Check for ALL keyword
-		all := false
-		if p.isType(models.TokenTypeAll) {
-			all = true
-			p.advance()
-		}
-
-		var rightStmt ast.Statement
-		rightParens := false
-		if p.isType(models.TokenTypeLParen) {
-			// Parenthesized right operand: SELECT 1 UNION (SELECT 2)
-			stmt, err := p.parseParenthesizedQuery("SELECT after set operation")
-			if err != nil {
-				return nil, goerrors.InvalidSetOperationError(
-					operationLiteral,
-					fmt.Sprintf("error parsing right SELECT: %v", err),
-					p.currentLocation(),
-					"",
-				)
-			}
-			rightStmt = stmt
-			rightParens = true
-		} else {
-			// Parse the right-hand SELECT statement
-			if !p.isType(models.TokenTypeSelect) {
-				return nil, p.expectedError("SELECT after set operation")
-			}
-			p.advance() // Consume SELECT
-
-			stmt, err := p.parseSelectStatement()
-			if err != nil {
-				return nil, goerrors.InvalidSetOperationError(
-					operationLiteral,
-					fmt.Sprintf("error parsing right SELECT: %v", err),
-					p.currentLocation(),
-					"",
-				)
-			}
-			rightStmt = stmt
-		}
-
-		// Create the set operation with left as the accumulated result
-		setOp := &ast.SetOperation{
-			Left:               leftStmt,
-			Operator:           operationLiteral,
-			All:                all,
-			Right:              rightStmt,
-			LeftParenthesized:  leftParens,
-			RightParenthesized: rightParens,
-		}
-
-		leftStmt = setOp // The result becomes the left side for any subsequent operations
-		leftParens = false
-		lastParen = rightParens
+	stmt, lastParen, err := p.parseSetOperationsFrom(left, leftParens, 1)
+	if err != nil {
+		return nil, err
 	}
-
 	if lastParen && p.isQueryTailStart() {
-		if err := p.attachParenthesizedQueryTail(leftStmt); err != nil {
+		if err := p.attachParenthesizedQueryTail(stmt); err != nil {
 			return nil, err
 		}
 	}
+	return stmt, nil
+}
 
-	return leftStmt, nil
+// setOperatorPrecedence returns the precedence of the set operator at the
+// current token (2 for INTERSECT, 1 for UNION / EXCEPT / MINUS), or 0 when
+// the current token is not a set operator.
+func (p *Parser) setOperatorPrecedence() int {
+	switch {
+	case p.isType(models.TokenTypeIntersect):
+		if ast.SetOperatorsEqualPrecedence(p.dialect) {
+			return 1
+		}
+		return 2
+	case p.isAnyType(models.TokenTypeUnion, models.TokenTypeExcept), p.isMinusSetOp():
+		return 1
+	}
+	return 0
+}
+
+// parseSetOperationsFrom folds the set operations of precedence minPrec or
+// higher onto left by precedence climbing. It returns the resulting tree and
+// whether its last operand was written in parentheses. The recursion depth
+// is bounded by the number of precedence levels.
+func (p *Parser) parseSetOperationsFrom(left ast.Statement, leftParens bool, minPrec int) (ast.Statement, bool, error) {
+	lastParen := leftParens
+	for {
+		prec := p.setOperatorPrecedence()
+		if prec == 0 || prec < minPrec {
+			return left, lastParen, nil
+		}
+		setOp := &ast.SetOperation{
+			Operator:          p.currentToken.Token.Value,
+			LeftParenthesized: leftParens,
+		}
+		if p.isMinusSetOp() {
+			setOp.Operator = "EXCEPT" // canonical name; the spelling is kept in Minus
+			setOp.Minus = true
+		}
+		p.advance()
+
+		// Optional ALL / DISTINCT quantifier
+		if p.isType(models.TokenTypeAll) {
+			setOp.All = true
+			p.advance()
+		} else if p.isType(models.TokenTypeDistinct) {
+			setOp.Distinct = true
+			p.advance()
+		}
+
+		right, rightParens, err := p.parseSetOperand(setOp.Operator)
+		if err != nil {
+			return nil, false, err
+		}
+		lastParen = rightParens
+		// Operators that bind tighter than this one take the right operand
+		// as their left: A UNION B INTERSECT C.
+		for next := p.setOperatorPrecedence(); next > prec; next = p.setOperatorPrecedence() {
+			right, lastParen, err = p.parseSetOperationsFrom(right, rightParens, next)
+			if err != nil {
+				return nil, false, err
+			}
+			rightParens = false
+		}
+		setOp.Left = left
+		setOp.Right = right
+		setOp.RightParenthesized = rightParens
+		left = setOp // The result becomes the left side for any subsequent operations
+		leftParens = false
+	}
+}
+
+// parseSetOperand parses the right operand of a set operation: a SELECT or a
+// parenthesized query expression. It reports whether the operand was
+// parenthesized.
+func (p *Parser) parseSetOperand(operationLiteral string) (ast.Statement, bool, error) {
+	if p.isType(models.TokenTypeLParen) {
+		// Parenthesized right operand: SELECT 1 UNION (SELECT 2)
+		stmt, err := p.parseParenthesizedQuery("SELECT after set operation")
+		if err != nil {
+			return nil, false, goerrors.InvalidSetOperationError(
+				operationLiteral,
+				fmt.Sprintf("error parsing right SELECT: %v", err),
+				p.currentLocation(),
+				"",
+			)
+		}
+		return stmt, true, nil
+	}
+	if p.isType(models.TokenTypeValues) {
+		// VALUES table constructor operand: SELECT 1 UNION VALUES (2)
+		v, err := p.parseValuesQuery()
+		if err != nil {
+			return nil, false, err
+		}
+		return v, false, nil
+	}
+	// Parse the right-hand SELECT statement
+	if !p.isType(models.TokenTypeSelect) {
+		return nil, false, p.expectedError("SELECT after set operation")
+	}
+	p.advance() // Consume SELECT
+
+	stmt, err := p.parseSelectStatement()
+	if err != nil {
+		return nil, false, goerrors.InvalidSetOperationError(
+			operationLiteral,
+			fmt.Sprintf("error parsing right SELECT: %v", err),
+			p.currentLocation(),
+			"",
+		)
+	}
+	return stmt, false, nil
 }
 
 // parseQueryExpression parses a query expression starting at SELECT, WITH or
@@ -160,8 +208,21 @@ func (p *Parser) parseQueryExpression(ctx string) (ast.Statement, error) {
 			return nil, err
 		}
 		return p.parseSetOperationChain(q, true)
+	case models.TokenTypeValues:
+		v, err := p.parseValuesQuery()
+		if err != nil {
+			return nil, err
+		}
+		return p.parseSetOperationChain(v, false)
 	}
 	return nil, p.expectedError(ctx)
+}
+
+// isDerivedTableQueryStart reports whether the current token (after the
+// "(" of a derived table) starts its query: SELECT, WITH, VALUES or a
+// nested "(".
+func (p *Parser) isDerivedTableQueryStart() bool {
+	return p.isAnyType(models.TokenTypeSelect, models.TokenTypeWith, models.TokenTypeLParen, models.TokenTypeValues)
 }
 
 // parseParenthesizedQuery parses "( query_expression )" with the current
@@ -174,7 +235,7 @@ func (p *Parser) parseParenthesizedQuery(ctx string) (ast.Statement, error) {
 	}
 
 	p.advance() // Consume (
-	if !p.isAnyType(models.TokenTypeSelect, models.TokenTypeWith, models.TokenTypeLParen) {
+	if !p.isDerivedTableQueryStart() {
 		return nil, p.expectedError(ctx)
 	}
 	q, err := p.parseQueryExpression(ctx)

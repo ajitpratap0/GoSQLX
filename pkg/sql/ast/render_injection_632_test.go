@@ -67,7 +67,10 @@ func TestTableHints_RejectNonWordHints_PR632(t *testing.T) {
 		`SELECT * FROM t WITH ("x); DROP TABLE y; --")`,
 		`SELECT * FROM t WITH ([x); DROP TABLE y; --])`,
 		`SELECT * FROM t WITH (NOLOCK, "a b")`,
-		`SELECT * FROM t WITH (INDEX = ix)`,
+		// INDEX = ix is accepted and stored as INDEX(ix); its argument must
+		// still be a bare word or number.
+		`SELECT * FROM t WITH (INDEX = 'x); DROP TABLE y; --')`,
+		`SELECT * FROM t WITH (INDEX("x); DROP TABLE y; --"))`,
 	}
 	for _, in := range inputs {
 		t.Run(in, func(t *testing.T) {

@@ -30,7 +30,8 @@ import (
 // operands rendered without ";", and a single trailing ";" after the whole
 // top-level set operation when AddSemicolon is set (#602). An operand is
 // wrapped in parentheses when its Parenthesized flag is set or, for Right,
-// when it is a non-nil *SetOperation (#612).
+// when it is a non-nil *SetOperation that standard precedence would not
+// group as the tree does (#612).
 func setOpReference(s *ast.SetOperation, opts ast.FormatOptions) string {
 	if s == nil {
 		return ""
@@ -60,8 +61,9 @@ func setOpReferenceBody(s *ast.SetOperation, opts ast.FormatOptions) string {
 		}
 		return "(" + render(st) + ")"
 	}
-	rightSetOp, ok := s.Right.(*ast.SetOperation)
-	rightParens := s.RightParenthesized || (ok && rightSetOp != nil)
+	// A right set operation is parenthesized unless standard precedence
+	// already groups it (A UNION B INTERSECT C).
+	rightParens := ast.SetOperandNeedsParens(s, true, opts.Dialect)
 	sep := " "
 	if opts.NewlinePerClause {
 		sep = "\n"

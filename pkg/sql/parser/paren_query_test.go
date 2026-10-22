@@ -377,11 +377,11 @@ var parenExtraCases = []parenCase{
 	{
 		name:     "MINUS between parenthesized operands",
 		sql:      "SELECT * FROM ((SELECT 1) MINUS (SELECT 2)) t",
-		want:     "SELECT * FROM ((SELECT 1) EXCEPT (SELECT 2)) t",
+		want:     "SELECT * FROM ((SELECT 1) MINUS (SELECT 2)) t",
 		dialects: []string{"snowflake", "oracle"},
 		check: func(t *testing.T, s ast.Statement) {
 			so := parenSelect(t, s).From[0].SetSubquery
-			if so == nil || so.Operator != "EXCEPT" {
+			if so == nil || so.Operator != "EXCEPT" || !so.Minus {
 				t.Fatalf("want EXCEPT SetSubquery, got %+v", so)
 			}
 		},

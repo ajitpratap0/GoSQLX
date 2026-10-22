@@ -348,6 +348,36 @@ func (p *Parser) parseForSystemTimeClause() (*ast.ForSystemTimeClause, error) {
 	case "ALL":
 		p.advance()
 		clause.Type = ast.SystemTimeAll
+	case "CONTAINED":
+		// SQL Server: CONTAINED IN (start, end)
+		if !p.IsSQLServer() || !strings.EqualFold(p.peekToken().Token.Value, "IN") {
+			return nil, p.expectedError("AS OF, BETWEEN, FROM, or ALL after FOR SYSTEM_TIME")
+		}
+		p.advance() // Consume CONTAINED
+		p.advance() // Consume IN
+		if !p.isType(models.TokenTypeLParen) {
+			return nil, p.expectedError("( after CONTAINED IN")
+		}
+		p.advance() // Consume (
+		start, err := p.parseTemporalPointExpression()
+		if err != nil {
+			return nil, err
+		}
+		if !p.isType(models.TokenTypeComma) {
+			return nil, p.expectedError(", in CONTAINED IN")
+		}
+		p.advance() // Consume ,
+		end, err := p.parseTemporalPointExpression()
+		if err != nil {
+			return nil, err
+		}
+		if !p.isType(models.TokenTypeRParen) {
+			return nil, p.expectedError(") after CONTAINED IN")
+		}
+		p.advance() // Consume )
+		clause.Type = ast.SystemTimeContainedIn
+		clause.Start = start
+		clause.End = end
 	default:
 		return nil, goerrors.ExpectedTokenError(
 			"AS OF, BETWEEN, FROM, or ALL after FOR SYSTEM_TIME",

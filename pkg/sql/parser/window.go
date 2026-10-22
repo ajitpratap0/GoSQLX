@@ -59,8 +59,9 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 		for !p.isType(models.TokenTypeOrder) {
 			// Named argument form: `name => expr` (Snowflake FLATTEN,
 			// BigQuery, Oracle, PostgreSQL procedural calls). Detect by a
-			// bare identifier immediately followed by =>.
-			if p.isIdentifier() &&
+			// bare identifier or keyword (FLATTEN's outer => / recursive =>)
+			// immediately followed by =>.
+			if (p.isIdentifier() || p.isWordToken()) &&
 				p.peekToken().Token.Type == models.TokenTypeRArrow {
 				namePos := p.currentLocation()
 				argName := p.currentToken.Token.Value

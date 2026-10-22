@@ -229,12 +229,28 @@ type TableReference struct {
 	// SetSubquery is set; a body that is a single SELECT (including one
 	// with a WITH clause or extra parentheses) is always held in Subquery.
 	SetSubquery *SetOperation
+	// Only is the PostgreSQL ONLY modifier (FROM ONLY parent): the table's
+	// inheritance children are excluded.
+	Only bool
+	// TableSample is a row-sampling clause: TABLESAMPLE / SAMPLE.
+	TableSample *TableSampleClause
+	// Flashback is the Oracle AS OF / VERSIONS BETWEEN flashback clause.
+	Flashback *FlashbackClause
+	// Modifiers holds the rarer table modifiers: Oracle @dblink, MySQL
+	// PARTITION selection and index hints, SQLite INDEXED BY.
+	Modifiers *TableModifiers
+	// Values is a derived table whose body is a VALUES table constructor:
+	// FROM (VALUES (1, 'a'), (2, 'b')) AS v(id, name).
+	Values *Values
 }
 
 // ColumnAliasList is the column alias list that follows a table alias, as
 // in unnest(arr) AS g(a, b). Names holds the column names in order.
 type ColumnAliasList struct {
 	Names []string
+	// Types holds a column type per name for PostgreSQL record-returning
+	// functions (jsonb_to_recordset(j) AS t(a int, b text)); nil otherwise.
+	Types []string
 }
 
 func (t *TableReference) statementNode() {}
@@ -269,6 +285,18 @@ func (t TableReference) Children() []Node {
 	}
 	if t.MatchRecognize != nil {
 		nodes = append(nodes, t.MatchRecognize)
+	}
+	if t.ForSystemTime != nil {
+		nodes = append(nodes, t.ForSystemTime)
+	}
+	if t.TableSample != nil {
+		nodes = append(nodes, t.TableSample)
+	}
+	if t.Flashback != nil {
+		nodes = append(nodes, t.Flashback)
+	}
+	if t.Values != nil {
+		nodes = append(nodes, t.Values)
 	}
 	return nodes
 }
@@ -715,10 +743,11 @@ func (p PartitionDefinition) Children() []Node {
 type SystemTimeClauseType int
 
 const (
-	SystemTimeAsOf    SystemTimeClauseType = iota // FOR SYSTEM_TIME AS OF <point>
-	SystemTimeBetween                             // FOR SYSTEM_TIME BETWEEN <start> AND <end>
-	SystemTimeFromTo                              // FOR SYSTEM_TIME FROM <start> TO <end>
-	SystemTimeAll                                 // FOR SYSTEM_TIME ALL
+	SystemTimeAsOf        SystemTimeClauseType = iota // FOR SYSTEM_TIME AS OF <point>
+	SystemTimeBetween                                 // FOR SYSTEM_TIME BETWEEN <start> AND <end>
+	SystemTimeFromTo                                  // FOR SYSTEM_TIME FROM <start> TO <end>
+	SystemTimeAll                                     // FOR SYSTEM_TIME ALL
+	SystemTimeContainedIn                             // FOR SYSTEM_TIME CONTAINED IN (<start>, <end>) (SQL Server)
 )
 
 // ForSystemTimeClause represents a temporal query on a system-versioned table.

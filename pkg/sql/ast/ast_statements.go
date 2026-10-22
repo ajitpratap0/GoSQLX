@@ -34,8 +34,13 @@ type QueryExpression interface {
 // those parentheses because they can change the meaning: A EXCEPT (B UNION C)
 // groups differently from A EXCEPT B UNION C, and in
 // A UNION (B ORDER BY x LIMIT n) the ORDER BY/LIMIT applies to B only.
-// Renderers also always parenthesize a Right operand that is itself a
-// *SetOperation, so hand-built trees render with their intended grouping.
+// Renderers also parenthesize an operand that is itself a *SetOperation
+// whenever standard precedence (INTERSECT binds tighter than UNION and
+// EXCEPT) would otherwise regroup it; see SetOperandNeedsParens.
+//
+// The parser applies that precedence, so A UNION B INTERSECT C is
+// A UNION (B INTERSECT C) with the INTERSECT in Right. SQLite and Oracle
+// give all set operators equal precedence and build a left-deep tree.
 type SetOperation struct {
 	Left     Statement
 	Operator string // UNION, EXCEPT, INTERSECT
@@ -45,6 +50,13 @@ type SetOperation struct {
 	LeftParenthesized bool
 	// RightParenthesized reports that Right was written as "(query)".
 	RightParenthesized bool
+	// Distinct reports an explicit DISTINCT quantifier (UNION DISTINCT,
+	// INTERSECT DISTINCT). It means the same as no quantifier.
+	Distinct bool
+	// Minus reports that an EXCEPT was written with the Oracle / Snowflake
+	// synonym MINUS. Operator is still EXCEPT; renderers write MINUS unless
+	// the target dialect is known not to accept it.
+	Minus bool
 }
 
 func (s *SetOperation) statementNode()       {}
@@ -357,6 +369,9 @@ func (i InsertStatement) Children() []Node {
 // Values represents VALUES clause
 type Values struct {
 	Rows [][]Expression
+	// RowConstructor reports the MySQL form VALUES ROW(1, 2), ROW(3, 4),
+	// used when VALUES is a query (derived table, set operand, CTE body).
+	RowConstructor bool
 }
 
 func (v *Values) statementNode()      {}

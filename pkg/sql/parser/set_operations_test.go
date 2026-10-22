@@ -230,25 +230,23 @@ func TestParser_MultipleSetOperations(t *testing.T) {
 		t.Fatalf("Expected SetOperation, got %T", astObj.Statements[0])
 	}
 
-	// Verify the outer operation is INTERSECT (the last one parsed)
-	if outerSetOp.Operator != "INTERSECT" {
-		t.Errorf("Expected outer operation to be INTERSECT, got %s", outerSetOp.Operator)
+	// INTERSECT binds tighter than UNION: users UNION (customers INTERSECT employees).
+	if outerSetOp.Operator != "UNION" {
+		t.Errorf("Expected outer operation to be UNION, got %s", outerSetOp.Operator)
 	}
 
-	// Verify the left side is also a SetOperation (UNION)
-	leftSetOp, ok := outerSetOp.Left.(*ast.SetOperation)
+	// The left side is the first SELECT.
+	if _, ok := outerSetOp.Left.(*ast.SelectStatement); !ok {
+		t.Errorf("Expected left side to be SELECT statement, got %T", outerSetOp.Left)
+	}
+
+	// The right side is the INTERSECT, not written in parentheses.
+	rightSetOp, ok := outerSetOp.Right.(*ast.SetOperation)
 	if !ok {
-		t.Errorf("Expected left side to be SetOperation, got %T", outerSetOp.Left)
-	} else {
-		if leftSetOp.Operator != "UNION" {
-			t.Errorf("Expected left operation to be UNION, got %s", leftSetOp.Operator)
-		}
-	}
-
-	// Verify the right side is a SELECT statement
-	_, rightOk := outerSetOp.Right.(*ast.SelectStatement)
-	if !rightOk {
-		t.Errorf("Expected right side to be SELECT statement, got %T", outerSetOp.Right)
+		t.Errorf("Expected right side to be SetOperation, got %T", outerSetOp.Right)
+	} else if rightSetOp.Operator != "INTERSECT" || outerSetOp.RightParenthesized {
+		t.Errorf("Expected unparenthesized INTERSECT on the right, got %s (parenthesized %v)",
+			rightSetOp.Operator, outerSetOp.RightParenthesized)
 	}
 }
 

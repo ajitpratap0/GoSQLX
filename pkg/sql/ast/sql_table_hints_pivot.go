@@ -44,7 +44,7 @@ func isBareTableHint(h string) bool {
 // in a hand-built AST) is double-quoted with embedded quotes doubled so it
 // cannot end the hint list or the statement.
 func QuoteTableHint(h string) string {
-	if isBareTableHint(h) {
+	if isTableHintText(h) {
 		return h
 	}
 	buf := getBuf()
@@ -65,7 +65,7 @@ func writeTableHints(buf *bytes.Buffer, hints []string) {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		if isBareTableHint(h) {
+		if isTableHintText(h) {
 			buf.WriteString(h)
 		} else {
 			writeQuotedIdentifier(buf, h)

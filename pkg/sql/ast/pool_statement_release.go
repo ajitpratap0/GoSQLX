@@ -589,6 +589,7 @@ func releaseTableReference(tr *TableReference, mode releaseMode) {
 		tr.ForSystemTime.End = nil
 		tr.ForSystemTime = nil
 	}
+	releaseTableFactorModifiers(tr, mode)
 	tr.Name = ""
 	tr.Alias = ""
 	tr.Lateral = false

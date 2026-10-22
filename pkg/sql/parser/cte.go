@@ -241,6 +241,10 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 		// For SELECT statements, use parseSelectWithSetOperations to support UNION, EXCEPT, INTERSECT
 		p.advance() // Consume SELECT
 		stmt, err = p.parseSelectWithSetOperations()
+	} else if p.isAnyType(models.TokenTypeValues, models.TokenTypeLParen) {
+		// VALUES body or a parenthesized query expression:
+		// WITH c AS (VALUES (1), (2)), WITH c AS ((SELECT 1) UNION SELECT 2)
+		stmt, err = p.parseQueryExpression("CTE query")
 	} else {
 		// For other statement types (INSERT, UPDATE, DELETE, WITH), use parseStatement
 		stmt, err = p.parseStatement()

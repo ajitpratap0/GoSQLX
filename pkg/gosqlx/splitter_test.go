@@ -76,9 +76,10 @@ func TestSplitStatements_Table(t *testing.T) {
 		// Same dollar-quote input with no dialect should split naively and
 		// produce MORE segments — confirming the feature is gated.
 		// Input has three top-level semicolons under ANSI rules (after
-		// `RETURN 1`, `END`, and `plpgsql`), yielding 4 segments.
+		// `SELECT 1`, `SELECT 2`, and `sql`), yielding 4 segments. (The body
+		// deliberately avoids BEGIN … END, which the splitter now keeps whole.)
 		{"ansi/dollar-not-recognised",
-			"CREATE FUNCTION f() RETURNS int AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql; SELECT 1",
+			"CREATE FUNCTION f() RETURNS int AS $$ SELECT 1; SELECT 2; $$ LANGUAGE sql; SELECT 1",
 			"", 4},
 
 		// ─── PostgreSQL E-strings ───────────────────────────────────────

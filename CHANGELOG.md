@@ -16,7 +16,7 @@ batch-2/batch-3 correctness sweep (round-tripping `SQL()`, formatter and
 syntax highlighting across API, CLI, LSP, WASM and playground; a fully
 dialect-aware LSP; a hardened `gosqlx-mcp` HTTP server with ChatGPT app support
 and a Claude Code plugin; editor-accurate positions (a tab is one column); and
-pygosqlx 0.3.0 with dialect support, lint, security scan, transpile and
+pygosqlx 1.16.0 with dialect support, lint, security scan, transpile and
 prebuilt wheels.
 The release is source-compatible: exported signatures are unchanged apart from
 additions. Runtime behaviour does change (rendered SQL, token positions, error
@@ -447,7 +447,7 @@ limits), so read **Behavior changes** before upgrading.
 - **`gosqlx.LintWithDialect(sql, dialect)`**: runs the full built-in rule set
   with a per-dialect cached linter, so AST rules also run on SQL that parses
   only in that dialect. Unknown dialects return `ErrUnsupportedDialect`. (#780)
-- **pygosqlx 0.3.0: dialects, lint, security scan and transpile**: `parse`,
+- **pygosqlx 1.16.0: dialects, lint, security scan and transpile**: `parse`,
   `validate`, `validate_detailed`, `format` and the `extract_*` functions take
   an optional `dialect=` argument (for example `dialect="sqlserver"`), and
   `pygosqlx.dialects()` lists the supported names. An unknown dialect raises
@@ -466,8 +466,10 @@ limits), so read **Behavior changes** before upgrading.
 - **pygosqlx prebuilt wheels and PyPI release pipeline**: wheels bundle the
   native library for Linux x86_64/aarch64 (`manylinux_2_17`), macOS
   x86_64/arm64 (13+) and Windows AMD64, and are tested on Python 3.10-3.14.
-  `pip install pygosqlx` works once the first `pygosqlx-v*` tag is published
-  through PyPI Trusted Publishing (`.github/workflows/pygosqlx-release.yml`).
+  pygosqlx is now versioned in lockstep with GoSQLX (it was 0.2.0), and each
+  GoSQLX release tag publishes the matching version to PyPI through Trusted
+  Publishing (`.github/workflows/pygosqlx-release.yml`), starting with
+  `pip install pygosqlx==1.16.0`.
   On a platform with no prebuilt wheel, installing from the sdist now fails
   with an error unless the native library has been built first, instead of
   installing a package that cannot load; set `PYGOSQLX_ALLOW_MISSING_LIB=1`

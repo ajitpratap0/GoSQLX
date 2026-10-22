@@ -4,20 +4,24 @@
 #   pull_request (python/**, pkg/**, go.mod, go.sum, this file)
 #       -> build + test wheels and sdist only. Nothing is published.
 #          pkg/** because pkg/cbinding links the whole parser via pkg/gosqlx.
-#   push of a tag matching 'pygosqlx-v*' (e.g. pygosqlx-v0.3.0)
-#       -> build + test, then publish to PyPI. The tag must match the version
-#          in python/pyproject.toml and must point at a commit on main.
-#          This is the ONLY path to PyPI, so every published version has a tag.
+#   push of a GoSQLX release tag 'vX.Y.Z' (e.g. v1.16.0)
+#       -> build + test, then publish to PyPI. pygosqlx is versioned in
+#          lockstep with GoSQLX (its wheels bundle libgosqlx from the same
+#          commit), so the tag must equal the version in python/pyproject.toml.
+#   push of a tag 'pygosqlx-v*' (e.g. pygosqlx-v1.16.0.post1)
+#       -> same, for Python-only follow-up releases between GoSQLX releases.
+#   Either tag must point at a commit on main. Tag pushes are the ONLY path
+#   to PyPI, so every published version has a tag.
 #   workflow_dispatch
 #       -> build + test, then publish to the index chosen by the 'target'
 #          input: 'testpypi' (default) or 'none' (build only). Publishing
 #          from a dispatch is only allowed on main. TestPyPI skips files that
 #          already exist, so repeated dry runs of one version do not fail.
 #
-# Tag isolation: the main GoSQLX 'v*' release tags never trigger this
-# workflow, and pygosqlx-v* tags must not disturb the Go release:
-# release.yml pins GoReleaser's current/previous tag to the 'v*' series, and
-# release.yml, vscode-publish.yml and bench-compare.yml filter on 'v*'.
+# Tag isolation: pygosqlx-v* tags must not disturb the Go release:
+# release.yml pins GoReleaser's current/previous tag to the 'vX.Y.Z' series,
+# and release.yml, vscode-publish.yml and bench-compare.yml filter on 'v*'.
+# The floating Marketplace tag 'v1' does not match 'v[0-9]+.[0-9]+.[0-9]+'.
 #
 # Wheels: one py3-none-<platform> wheel per OS/arch (the bundled libgosqlx is
 # loaded through ctypes and does not depend on the CPython ABI), each tested
@@ -34,12 +38,13 @@
 #      repository 'GoSQLX', workflow 'pygosqlx-release.yml', environment
 #      'pypi'.
 #   2. In GitHub repo Settings -> Environments create an environment named
-#      'pypi' (recommended: deployment policy limited to tags 'pygosqlx-v*'
-#      and a required reviewer). Also recommended: a tag ruleset restricting
-#      who may create 'pygosqlx-v*' tags.
+#      'pypi' (deployment policy limited to tags 'v[0-9]*.[0-9]*.[0-9]*'
+#      and 'pygosqlx-v*'; optionally a required reviewer).
+#      Both steps were done for the first release (v1.16.0).
 #   3. Optional, for dry runs: repeat 1 on https://test.pypi.org with
 #      environment 'testpypi', and create a 'testpypi' GitHub environment.
-#   Then release with: git tag -a pygosqlx-vX.Y.Z && git push origin pygosqlx-vX.Y.Z
+#   Releases then happen with the GoSQLX tag (git push origin vX.Y.Z), or
+#   git tag -a pygosqlx-vX.Y.Z.postN && git push origin pygosqlx-vX.Y.Z.postN
 
 name: pygosqlx Release
 
@@ -54,6 +59,7 @@ on:
       - '.github/workflows/pygosqlx-release.yml'
   push:
     tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
       - 'pygosqlx-v*'
   workflow_dispatch:
     inputs:
@@ -205,7 +211,7 @@ jobs:
 
       # Defense in depth: never publish a tag whose commit is not on main.
       - name: Check tagged commit is on main
-        if: startsWith(github.ref, 'refs/tags/pygosqlx-v')
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
           if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
             echo "::error::$GITHUB_SHA ($GITHUB_REF_NAME) is not an ancestor of origin/main"
@@ -218,12 +224,14 @@ jobs:
           python-version: '3.13'
 
       - name: Check tag matches package version
-        if: startsWith(github.ref, 'refs/tags/pygosqlx-v')
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           TAG: ${{ github.ref_name }}
         run: |
           pkg_version="$(python -c 'import tomllib; print(tomllib.load(open("python/pyproject.toml", "rb"))["project"]["version"])')"
-          if [ "${TAG#pygosqlx-v}" != "$pkg_version" ]; then
+          tag_version="${TAG#pygosqlx-v}"
+          tag_version="${tag_version#v}"
+          if [ "$tag_version" != "$pkg_version" ]; then
             echo "::error::tag $TAG does not match python/pyproject.toml version $pkg_version"
             exit 1
           fi
@@ -254,9 +262,9 @@ jobs:
     name: publish to PyPI
     needs: [ wheels, sdist ]
     # Only a tag *push* publishes to PyPI. A workflow_dispatch run on a tag
-    # ref also has github.ref == refs/tags/pygosqlx-v*, so the event check is
-    # what keeps 'target: none' / 'testpypi' dispatches off real PyPI.
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/pygosqlx-v')
+    # ref also has github.ref == refs/tags/..., so the event check is what
+    # keeps 'target: none' / 'testpypi' dispatches off real PyPI.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment:

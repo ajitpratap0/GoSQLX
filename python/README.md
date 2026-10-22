@@ -11,9 +11,9 @@ pip install pygosqlx
 ```
 
 Prebuilt wheels bundle the native `libgosqlx` library, so no Go toolchain is
-needed. They are published to PyPI from the `pygosqlx-v*` release tags; the
-command above works once the first such tag (`pygosqlx-v0.3.0`) has been
-published. Until then, build from source as shown below.
+needed. pygosqlx is versioned in lockstep with GoSQLX: each GoSQLX release
+(starting with 1.16.0) publishes the matching pygosqlx version, whose wheels
+bundle the library built from that release.
 
 Wheels are available for Python 3.10-3.14 on:
 
@@ -181,7 +181,7 @@ re-rendered without rewrites.
 
 ### Library compatibility
 
-The functions and the `dialect=` argument added in 0.3.0 need a shared
+The functions and the `dialect=` argument added in 1.16.0 need a shared
 library built from a matching GoSQLX checkout. With an older library, calls
 without `dialect=` keep working, while `dialect=`, `lint()`,
 `security_scan()`, `transpile()` and `dialects()` raise `GoSQLXError` asking
@@ -308,9 +308,11 @@ cd /tmp && PYGOSQLX_TEST_INSTALLED=1 python -m pytest --import-mode=importlib /p
 
 Wheels for every supported platform and an sdist are built and tested by
 `.github/workflows/pygosqlx-release.yml` on each pull request that touches
-`python/` or `pkg/`. Pushing a tag `pygosqlx-vX.Y.Z` (matching the version in
-`pyproject.toml`, on a commit already on `main`) publishes them to PyPI
-through Trusted Publishing; this is the only path to PyPI. A manual dispatch
+`python/` or `pkg/`. Pushing the GoSQLX release tag `vX.Y.Z` publishes them to
+PyPI through Trusted Publishing, so bump `pyproject.toml` and `__version__`
+in the release PR. Python-only follow-ups use a `pygosqlx-vX.Y.Z.postN` tag.
+Either tag must match `pyproject.toml` and point at a commit on `main`; tag
+pushes are the only path to PyPI. A manual dispatch
 can publish a dry run to TestPyPI. See the workflow header for the one-time PyPI setup.
 
 ### Project structure

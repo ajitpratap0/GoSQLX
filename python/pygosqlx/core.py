@@ -258,7 +258,7 @@ def _load_library() -> ctypes.CDLL:
         lib, "gosqlx_extract_metadata", [ctypes.c_char_p], ctypes.c_void_p
     )
 
-    # --- Dialect-aware variants and analysis exports (libgosqlx for 0.3.0) ---
+    # --- Dialect-aware variants and analysis exports (libgosqlx 1.16.0+) ---
     for name in _DIALECT_EXPORTS.values():
         _bind_optional(
             lib, name, [ctypes.c_char_p, ctypes.c_char_p], ctypes.c_void_p

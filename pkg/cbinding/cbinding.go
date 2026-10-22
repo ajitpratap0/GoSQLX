@@ -38,7 +38,7 @@
 //	gosqlx_version()              - return the library version string (e.g. "1.10.0")
 //	gosqlx_free(ptr)              - free a string previously returned by any gosqlx_* function
 //
-// Dialect-aware and analysis exports (added for pygosqlx 0.3.0; see cbinding_ext.go):
+// Dialect-aware and analysis exports (added in v1.16.0; see cbinding_ext.go):
 //
 //	gosqlx_parse_dialect(sql, dialect)             - gosqlx_parse with a SQL dialect
 //	gosqlx_validate_dialect(sql, dialect)          - gosqlx_validate with a SQL dialect

@@ -1,4 +1,4 @@
-"""Tests for the pygosqlx 0.3.0 API: dialect=, lint(), security_scan(),
+"""Tests for the pygosqlx 1.16.0 API: dialect=, lint(), security_scan(),
 transpile() and dialects().
 
 Tests in the ``TestOlderLibrary`` and ``TestArgumentValidation`` classes run
@@ -97,8 +97,10 @@ class TestPublicAPI:
             assert name in pygosqlx.__all__
             assert hasattr(pygosqlx, name)
 
-    def test_version_is_0_3_0(self):
-        assert pygosqlx.__version__ == "0.3.0"
+    def test_version_in_lockstep_with_library(self):
+        # pygosqlx is versioned in lockstep with GoSQLX; a Python-only
+        # follow-up release adds a .postN suffix.
+        assert pygosqlx.__version__.split(".post")[0] == pygosqlx.version()
 
     def test_dialect_is_keyword_only(self):
         with pytest.raises(TypeError):
@@ -168,7 +170,7 @@ class TestArgumentValidation:
 
 
 class TestOlderLibrary:
-    """A library built before 0.3.0 lacks the new exports: fail cleanly."""
+    """A library built before 1.16.0 lacks the new exports: fail cleanly."""
 
     @pytest.fixture
     def old_library(self, monkeypatch):

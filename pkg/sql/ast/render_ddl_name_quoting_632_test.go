@@ -505,14 +505,18 @@ func TestHandBuiltHostileDDLNames_NoStatementBreak_PR632(t *testing.T) {
 // only as the leading SQL Server temp-table marker and '@' only as a
 // Snowflake stage reference made of path characters: anywhere else the
 // tokenizer does not accept them bare (and MySQL treats '#' as a comment),
-// so the part is quoted.
+// so the part is quoted. '$' is a bare identifier character, but never the
+// first one (Oracle v$session, Snowflake SYSTEM$TYPEOF).
 func TestQualifiedName_SpecialCharsOnlyLeading_PR632(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"#tmp", "#tmp"},
 		{"##global", "##global"},
 		{"db.#tmp", "db.#tmp"},
 		{"a#b", `"a#b"`},
-		{"a$b", `"a$b"`},
+		{"a$b", "a$b"},
+		{"v$session", "v$session"},
+		{"$a", `"$a"`},
+		{"1$a", `"1$a"`},
 		{"a@b", `"a@b"`},
 		{"@stage", "@stage"},
 		{"@db.sch.stage/path/file.csv", "@db.sch.stage/path/file.csv"},

@@ -484,10 +484,6 @@ func (f *FunctionCall) appendClauseChildren(children []Node) []Node {
 	return children
 }
 
-// NationalStringType is the LiteralValue.Type of a SQL Server national
-// character string literal, N'abc'.
-const NationalStringType = "nstring"
-
 // SystemVariableScopeText returns s when it is a system-variable scope
 // (GLOBAL, SESSION, LOCAL, PERSIST, PERSIST_ONLY; any case) and "" otherwise.
 func SystemVariableScopeText(s string) string { return keywordOneOf(s, systemVariableScopes) }

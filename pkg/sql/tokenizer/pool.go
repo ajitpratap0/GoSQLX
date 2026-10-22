@@ -20,6 +20,7 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
+	sqldialect "github.com/ajitpratap0/GoSQLX/pkg/sql/dialect"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
@@ -128,6 +129,7 @@ func PutTokenizer(t *Tokenizer) {
 		// Tokenize call where the configured dialect must persist. The dialect
 		// is a plain field, so restoring it is a single assignment.
 		t.dialect = keywords.DialectPostgreSQL
+		t.strEscape = sqldialect.StringEscapeLenient
 
 		tokenizerPool.Put(t)
 

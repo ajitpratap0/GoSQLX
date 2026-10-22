@@ -181,7 +181,7 @@ func (p *Parser) parseStringLiteralExpr() ast.Expression {
 		}
 		value = sb.String()
 	}
-	return &ast.LiteralValue{Value: value, Type: "string"}
+	return p.newStringLiteral(value)
 }
 
 // concatsAdjacentStrings reports whether the dialect reads adjacent string
@@ -192,13 +192,6 @@ func (p *Parser) concatsAdjacentStrings() bool {
 		return true
 	}
 	return false
-}
-
-// parseNationalStringLiteral parses N'...' (SQL Server).
-func (p *Parser) parseNationalStringLiteral() ast.Expression {
-	value := p.currentToken.Token.Value
-	p.advance()
-	return &ast.LiteralValue{Value: value, Type: ast.NationalStringType}
 }
 
 // isNextValueFor reports whether the current tokens start NEXT VALUE FOR.
@@ -264,7 +257,8 @@ func (p *Parser) parseSystemVariable() ast.Expression {
 // isVariableAssignment reports whether the current tokens are the MySQL
 // assignment operator ":=" after a user variable.
 func (p *Parser) isVariableAssignment() bool {
-	if !p.isType(models.TokenTypeColon) || p.peekToken().Token.Type != models.TokenTypeEq {
+	if !p.isType(models.TokenTypeAssignment) &&
+		(!p.isType(models.TokenTypeColon) || p.peekToken().Token.Type != models.TokenTypeEq) {
 		return false
 	}
 	switch p.dialect {
@@ -277,8 +271,10 @@ func (p *Parser) isVariableAssignment() bool {
 // parseVariableAssignment parses ":= expr" after target.
 func (p *Parser) parseVariableAssignment(target ast.Expression) (ast.Expression, error) {
 	pos := p.currentLocation()
-	p.advance() // Consume :
-	p.advance() // Consume =
+	if !p.isType(models.TokenTypeAssignment) {
+		p.advance() // Consume : of a split ":="
+	}
+	p.advance() // Consume := or =
 	value, err := p.parseExpression()
 	if err != nil {
 		return nil, err
@@ -336,8 +332,6 @@ func (p *Parser) parsePrimaryFallback() (ast.Expression, error) {
 		return p.parseNextValueFor()
 	case p.isSystemVariable():
 		return p.parseSystemVariable(), nil
-	case p.isType(models.TokenTypeNationalStringLiteral):
-		return p.parseNationalStringLiteral(), nil
 	}
 	return nil, nil
 }

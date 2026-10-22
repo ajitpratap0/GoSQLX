@@ -79,6 +79,10 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return &ast.UnaryExpression{Operator: ast.Prior, Expr: operand, Pos: priorPos}, nil
 	}
 
+	if lit, ok := p.parsePrefixedStringLiteral(); ok {
+		return lit, nil
+	}
+
 	if p.isType(models.TokenTypeCase) {
 		// Handle CASE expressions (both simple and searched forms)
 		return p.parseCaseExpression()

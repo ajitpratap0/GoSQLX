@@ -192,7 +192,7 @@ func TestPrimary_StringLiterals(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected *ast.LiteralValue")
 		}
-		if lit.Value != "abc" || lit.Type != ast.NationalStringType {
+		if lit.Value != "abc" || lit.Type != "string" || lit.Prefix != "N" {
 			t.Errorf("got %#v, want N'abc'", lit)
 		}
 	})

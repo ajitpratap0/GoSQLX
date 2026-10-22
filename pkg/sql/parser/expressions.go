@@ -93,10 +93,13 @@ func (p *Parser) parseExpression() (ast.Expression, error) {
 
 	// MySQL / MariaDB user-variable assignment: @a := expr (right-associative,
 	// the loosest operator).
-	if p.isType(models.TokenTypeColon) && p.isMySQLFamily() && p.peekTypeAt(1) == models.TokenTypeEq && p.nextAdjacent(1) {
+	if p.isMySQLFamily() && (p.isType(models.TokenTypeAssignment) ||
+		p.isType(models.TokenTypeColon) && p.peekTypeAt(1) == models.TokenTypeEq && p.nextAdjacent(1)) {
 		opPos := p.currentLocation()
-		p.advance() // Consume :
-		p.advance() // Consume =
+		if !p.isType(models.TokenTypeAssignment) {
+			p.advance() // Consume : of a split ":="
+		}
+		p.advance() // Consume := or =
 		right, err := p.parseExpression()
 		if err != nil {
 			return nil, err

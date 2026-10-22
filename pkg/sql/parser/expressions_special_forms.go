@@ -425,7 +425,7 @@ func (p *Parser) parseSeparatorLiteral() (*ast.LiteralValue, error) {
 	if !p.isStringLiteral() {
 		return nil, p.expectedError("string literal after SEPARATOR")
 	}
-	lit := &ast.LiteralValue{Value: p.currentToken.Token.Value, Type: "string"}
+	lit := p.newStringLiteral(p.currentToken.Token.Value)
 	p.advance()
 	return lit, nil
 }

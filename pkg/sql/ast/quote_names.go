@@ -154,6 +154,10 @@ func isBareNameChars(name string, leadingHash bool) bool {
 		if c == '_' || (c|0x20 >= 'a' && c|0x20 <= 'z') || (c >= '0' && c <= '9') {
 			continue
 		}
+		if c == '$' && i > 0 {
+			// Not a first character: Oracle v$session, Snowflake SYSTEM$TYPEOF.
+			continue
+		}
 		return false
 	}
 	if i == len(name) {
@@ -161,6 +165,9 @@ func isBareNameChars(name string, leadingHash bool) bool {
 	}
 	for j, r := range name[i:] {
 		if r == '_' || unicode.IsLetter(r) {
+			continue
+		}
+		if r == '$' && i+j > 0 {
 			continue
 		}
 		if unicode.IsDigit(r) {

@@ -117,6 +117,19 @@ func (p *Parser) bitwiseOperator() (op string, prec, n int) {
 		if p.peekTypeAt(1) == models.TokenTypeGt && p.nextAdjacent(1) {
 			return ">>", 3, 2
 		}
+	// Single-token forms produced by the tokenizer.
+	case models.TokenTypeShiftLeft:
+		return "<<", 3, 1
+	case models.TokenTypeShiftRight:
+		return ">>", 3, 1
+	case models.TokenTypeSpaceship:
+		if p.IsPostgreSQL() {
+			return "<=>", 2, 1
+		}
+	case models.TokenTypeCustomBinaryOperator:
+		if p.currentToken.Token.Value == "<->" && p.IsPostgreSQL() {
+			return "<->", 2, 1
+		}
 	}
 	return "", 0, 0
 }
@@ -487,6 +500,12 @@ func (p *Parser) combinedComparison() (op string, n int) {
 		if p.peekTypeAt(1) == models.TokenTypeEq && p.nextAdjacent(1) {
 			return "==", 2
 		}
+	case models.TokenTypeSpaceship:
+		if !p.IsPostgreSQL() {
+			return "<=>", 1
+		}
+	case models.TokenTypeDoubleEq:
+		return "==", 1
 	}
 	return "", 0
 }

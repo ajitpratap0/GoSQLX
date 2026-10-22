@@ -618,8 +618,29 @@ func DefaultFormatOptions() FormatOptions {
 //
 // Returns the formatted SQL string or an error if SQL is invalid.
 func Format(sql string, options FormatOptions) (string, error) {
+	return formatSQL(sql, options, "")
+}
+
+// FormatWithDialect is Format for SQL in a specific dialect: the SQL is
+// tokenized and parsed with the dialect's rules, and dialect-specific
+// constructs are rendered for that dialect (for example TOP versus LIMIT).
+// Comments and optimizer hints are preserved exactly as in Format.
+//
+// An empty dialect behaves like Format. An unknown dialect returns an error
+// wrapping ErrUnsupportedDialect.
+func FormatWithDialect(sql string, options FormatOptions, dialect keywords.SQLDialect) (string, error) {
+	if dialect != "" && !keywords.IsValidDialect(string(dialect)) {
+		return "", fmt.Errorf("%w: %q", ErrUnsupportedDialect, dialect)
+	}
+	return formatSQL(sql, options, dialect)
+}
+
+func formatSQL(sql string, options FormatOptions, dialect keywords.SQLDialect) (string, error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
+	if dialect != "" {
+		tkz.SetDialect(dialect)
+	}
 
 	tokens, err := tkz.TokenizeString(sql)
 	if err != nil {
@@ -629,6 +650,9 @@ func Format(sql string, options FormatOptions) (string, error) {
 
 	p := parser.GetParser()
 	defer parser.PutParser(p)
+	if dialect != "" {
+		p.ApplyOptions(parser.WithDialect(string(dialect)))
+	}
 	parsedAST, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
 		return "", fmt.Errorf("cannot format invalid SQL: %w: %w", ErrSyntax, err)
@@ -647,6 +671,7 @@ func Format(sql string, options FormatOptions) (string, error) {
 		LineWidth:        options.SingleLineLimit,
 		NewlinePerClause: options.IndentSize > 0,
 		AddSemicolon:     options.AddSemicolon,
+		Dialect:          string(dialect),
 	}
 
 	if len(comments) == 0 {

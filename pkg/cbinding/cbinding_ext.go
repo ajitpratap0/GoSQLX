@@ -30,7 +30,6 @@ import (
 	"strings"
 
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
-	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter"
 	lintrules "github.com/ajitpratap0/GoSQLX/pkg/linter/rules"
@@ -47,10 +46,6 @@ var errCodeUnsupportedDialect = string(goerrors.ErrCodeUnsupportedDialect)
 // errCodeInvalidOptions is the "error_code" gosqlx_lint reports for an
 // options_json argument that is not a valid options object.
 const errCodeInvalidOptions = "INVALID_OPTIONS"
-
-// formatLineWidth is the line width gosqlx.DefaultFormatOptions sets. It is
-// spelled out because the FormatOptions field that carries it is deprecated.
-const formatLineWidth = 80
 
 // defaultLintMaxLineLength mirrors the default of `gosqlx lint --max-length`.
 const defaultLintMaxLineLength = 100
@@ -157,9 +152,9 @@ func validationResultFor(sql, dialect string) ValidationResult {
 }
 
 // formatFor formats sql with gosqlx.DefaultFormatOptions. An empty dialect goes
-// through gosqlx.Format; otherwise the SQL is parsed with the dialect and
-// rendered with the same option mapping gosqlx.Format uses, plus the dialect so
-// dialect-specific constructs are rendered for that dialect.
+// through gosqlx.Format; otherwise gosqlx.FormatWithDialect parses the SQL with
+// the dialect and renders dialect-specific constructs for it. Either way
+// comments and optimizer hints are preserved.
 func formatFor(sql, dialect string) (string, error) {
 	if err := dialectError(dialect); err != nil {
 		return "", err
@@ -168,23 +163,7 @@ func formatFor(sql, dialect string) (string, error) {
 	if dialect == "" {
 		return gosqlx.Format(sql, opts)
 	}
-	tree, err := gosqlx.ParseWithDialect(sql, keywords.SQLDialect(dialect))
-	if err != nil {
-		return "", fmt.Errorf("cannot format invalid SQL: %w", err)
-	}
-	kwCase := ast.KeywordPreserve
-	if opts.UppercaseKeywords {
-		kwCase = ast.KeywordUpper
-	}
-	return formatter.FormatAST(tree, ast.FormatOptions{
-		IndentStyle:      ast.IndentSpaces,
-		IndentWidth:      opts.IndentSize,
-		KeywordCase:      kwCase,
-		LineWidth:        formatLineWidth,
-		NewlinePerClause: opts.IndentSize > 0,
-		AddSemicolon:     opts.AddSemicolon,
-		Dialect:          dialect,
-	}), nil
+	return gosqlx.FormatWithDialect(sql, opts, keywords.SQLDialect(dialect))
 }
 
 // formatResultFor builds the gosqlx_format / gosqlx_format_dialect result.

@@ -28,8 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keyword stay in place. Input whose hints or MySQL `/*! ... */` comments
   cannot be placed faithfully is refused (`formatter.ErrUnplaceableComment`)
   instead of being rewritten without them, and `format -i` verifies that the
-  output holds exactly the input's comments. New `formatter.JoinWithComments`
-  and `gosqlx.WithComments()`.
+  output holds exactly the input's comments. LSP and C-binding dialect
+  formatting no longer drop comments either. New `formatter.JoinWithComments`,
+  `gosqlx.FormatWithDialect` and `gosqlx.WithComments()`.
 - **CLI**: `lint` exits 1 on syntax errors and `--auto-fix` judges the fixed
   text; `format --no-uppercase` lower-cases keywords (it used to upper-case
   them); `postgres`, `pg`, `mssql`, `tsql` and `sqlite3` are accepted by every

@@ -100,3 +100,31 @@ func TestParseTree_WithCommentsKeepsThemForFormatTree(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatWithDialect(t *testing.T) {
+	opts := DefaultFormatOptions()
+	opts.IndentSize = 0
+	opts.UppercaseKeywords = true
+
+	got, err := FormatWithDialect("select /*+ MAX_EXECUTION_TIME(1000) */ a from t -- why", opts, "mysql")
+	if err != nil {
+		t.Fatalf("FormatWithDialect: %v", err)
+	}
+	if want := "SELECT /*+ MAX_EXECUTION_TIME(1000) */ a FROM t -- why"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+
+	// An empty dialect is Format.
+	a, errA := FormatWithDialect("select 1 -- x", opts, "")
+	b, errB := Format("select 1 -- x", opts)
+	if errA != nil || errB != nil || a != b {
+		t.Fatalf("empty dialect: %q (%v) vs Format %q (%v)", a, errA, b, errB)
+	}
+
+	if _, err := FormatWithDialect("select 1", opts, "nosuchsql"); !errors.Is(err, ErrUnsupportedDialect) {
+		t.Fatalf("unknown dialect: err = %v, want ErrUnsupportedDialect", err)
+	}
+	if _, err := FormatWithDialect("selec 1", opts, "mysql"); !errors.Is(err, ErrSyntax) {
+		t.Fatalf("invalid SQL: err = %v, want ErrSyntax", err)
+	}
+}

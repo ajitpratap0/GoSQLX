@@ -74,6 +74,7 @@ END`
 		{"go inside string", "SELECT '\nGO\n'; SELECT 2", "sqlserver", []string{"SELECT '\nGO\n'", " SELECT 2"}},
 		{"go inside comment", "/*\nGO\n*/ SELECT 1", "sqlserver", []string{"/*\nGO\n*/ SELECT 1"}},
 		{"go identifier prefix", "SELECT 1\nGOTO x", "sqlserver", []string{"SELECT 1\nGOTO x"}},
+		{"go after byte order mark", "\uFEFFGO\nSELECT 2", "sqlserver", []string{"SELECT 2"}},
 		{"go ignored for other dialects", "SELECT 1\nGO\nSELECT 2", "postgresql", []string{"SELECT 1\nGO\nSELECT 2"}},
 
 		// --- Triggers and transactions elsewhere ---

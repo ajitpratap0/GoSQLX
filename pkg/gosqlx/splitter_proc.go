@@ -440,6 +440,10 @@ func lineStartOK(src string, i int) (ls int, ok bool) {
 			return ls, true
 		}
 		if c != ' ' && c != '\t' && c != '\r' {
+			// A byte order mark in front of the first line is not content.
+			if ls == 3 && src[:3] == "\xef\xbb\xbf" {
+				return 0, true
+			}
 			return 0, false
 		}
 		ls--

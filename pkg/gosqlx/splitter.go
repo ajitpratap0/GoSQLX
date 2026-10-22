@@ -29,11 +29,16 @@ import "strings"
 //	"postgresql", "postgres", "pg" — dollar-quotes, E-strings, nested /*…*/
 //	"mysql", "mariadb"            — backtick identifiers
 //	"clickhouse"                  — backtick identifiers
-//	"sqlserver", "mssql", "tsql"  — [bracketed identifiers]
+//	"sqlserver", "mssql", "tsql"  — [bracketed identifiers], GO batch separator
+//	"oracle"                      — DECLARE / IS|AS sections, "/" line terminator
 //	""                            — ANSI only (single/double quotes, line/block comments)
 //
+// Compound statements stay in one piece in every dialect (see the notes on
+// procedural scripts below): a BEGIN … END body is not cut at its inner ';'.
+//
 // The returned slice preserves the original byte ranges between semicolons
-// (the terminating ';' itself is stripped). Empty or whitespace-only segments
+// (the terminating ';' itself is stripped). Client directive lines (GO,
+// DELIMITER, a lone "/") are consumed and appear in no segment. Empty or whitespace-only segments
 // are NOT filtered out here; callers such as ParseReaderMultiple trim and
 // skip them. This mirrors the long-standing behaviour of the splitter that
 // this function replaces.
@@ -167,6 +172,9 @@ func splitCore(src string, p dialectProfile) (out []string, open bool) {
 	delim := ""
 
 	i := 0
+	if strings.HasPrefix(src, "\xef\xbb\xbf") {
+		i = 3 // a UTF-8 byte order mark is not part of the first word
+	}
 	for i < len(src) {
 		c := src[i]
 

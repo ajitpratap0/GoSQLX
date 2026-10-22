@@ -194,11 +194,17 @@ type aliasRange struct{ lo, hi uintptr }
 
 // aliasCollect records the storage ranges of slice backing arrays reachable
 // from v and the pointers it holds. A child that is one of those pointers, or
-// lies inside one of those ranges, is owned by the parent.
+// lies inside one of those ranges, is owned by the parent. A pointer to a
+// plain (non-Node) struct, such as SelectStatement.Extras, is storage the
+// parent owns through one indirection, so it is searched too.
 func aliasCollect(v reflect.Value, ranges *[]aliasRange, ptrs map[uintptr]bool) {
 	switch v.Kind() {
 	case reflect.Ptr:
 		if !v.IsNil() {
+			if !ptrs[v.Pointer()] && v.Elem().Kind() == reflect.Struct && !v.Type().Implements(reflect.TypeOf((*Node)(nil)).Elem()) {
+				ptrs[v.Pointer()] = true
+				aliasCollect(v.Elem(), ranges, ptrs)
+			}
 			ptrs[v.Pointer()] = true
 		}
 	case reflect.Interface:

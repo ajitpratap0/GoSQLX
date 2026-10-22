@@ -530,7 +530,7 @@ func (p *Parser) parseLimitOffsetInto(s *ast.SelectStatement) error {
 					// whole result, not to LIMIT BY: reject these rather
 					// than silently drop or move a clause.
 					switch {
-					case s.LimitBy != nil:
+					case s.Extras != nil && s.Extras.LimitBy != nil:
 						return goerrors.InvalidSyntaxError("only one LIMIT ... BY clause is allowed", p.currentLocation(), "")
 					case s.LimitWithTies:
 						return goerrors.InvalidSyntaxError("WITH TIES cannot be used with LIMIT ... BY", p.currentLocation(), "")
@@ -552,6 +552,22 @@ func (p *Parser) parseLimitOffsetInto(s *ast.SelectStatement) error {
 			return nil
 		}
 	}
+}
+
+// hasSelectInto reports whether s already has an INTO clause.
+func hasSelectInto(s *ast.SelectStatement) bool {
+	return s.Extras != nil && s.Extras.Into != nil
+}
+
+// parseTrailingSelectInto parses a MySQL INTO written after the FROM ...
+// clauses into s; the current token is INTO.
+func (p *Parser) parseTrailingSelectInto(s *ast.SelectStatement) error {
+	into, err := p.parseSelectInto(true)
+	if err != nil {
+		return err
+	}
+	s.EnsureExtras().Into = into
+	return nil
 }
 
 // parseLimitValue parses "LIMIT value [, value] [WITH TIES]"; the current
@@ -641,7 +657,7 @@ func (p *Parser) parseLimitByTail(s *ast.SelectStatement) error {
 		}
 		p.advance()
 	}
-	s.LimitBy = lb
+	s.EnsureExtras().LimitBy = lb
 	return nil
 }
 
@@ -928,17 +944,17 @@ func (p *Parser) parseSelectTail(s *ast.SelectStatement) error {
 		if err != nil {
 			return err
 		}
-		s.ForOutput = fo
+		s.EnsureExtras().ForOutput = fo
 	}
 	if p.isQueryHintStart() {
 		hints, err := p.parseQueryHints()
 		if err != nil {
 			return err
 		}
-		s.QueryHints = hints
+		s.EnsureExtras().QueryHints = hints
 	}
 	if p.isFormatClauseStart() {
-		s.OutputFormat = p.parseFormatClause()
+		s.EnsureExtras().OutputFormat = p.parseFormatClause()
 	}
 	return nil
 }

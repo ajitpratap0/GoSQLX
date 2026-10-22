@@ -172,20 +172,17 @@ type SelectStatement struct {
 	Pos       models.Location // Source position of the SELECT keyword (1-based line and column)
 
 	// SELECT-body clauses added for dialect coverage (see select_ext.go).
-	SelectModifiers  []string           // MySQL/MariaDB HIGH_PRIORITY, STRAIGHT_JOIN, SQL_CALC_FOUND_ROWS, ... after SELECT [DISTINCT]
-	Into             *SelectInto        // SELECT ... INTO table / variables / OUTFILE
-	GroupByModifiers GroupByModifiers   // GROUP BY ALL, WITH ROLLUP / CUBE / TOTALS
-	OrderSiblings    bool               // Oracle ORDER SIBLINGS BY
-	Interpolate      *InterpolateClause // ClickHouse ORDER BY ... WITH FILL INTERPOLATE (col AS expr, ...)
-	LimitExpr        Expression         // LIMIT value that is not a plain integer ($1, ?, -1, 1 + 1); Limit wins when both are set
-	OffsetExpr       Expression         // OFFSET value that is not a plain integer; Offset wins when both are set
-	LimitAll         bool               // PostgreSQL LIMIT ALL
-	OffsetRows       bool               // OFFSET n ROW / ROWS
-	LimitWithTies    bool               // ClickHouse LIMIT n WITH TIES
-	LimitBy          *LimitByClause     // ClickHouse LIMIT n [OFFSET m] BY expr, ...
-	ForOutput        *ForOutputClause   // SQL Server FOR JSON / FOR XML / FOR BROWSE
-	QueryHints       []QueryHint        // SQL Server OPTION (hint, ...)
-	OutputFormat     string             // ClickHouse FORMAT name
+	GroupByModifiers GroupByModifiers // GROUP BY ALL, WITH ROLLUP / CUBE / TOTALS
+	OrderSiblings    bool             // Oracle ORDER SIBLINGS BY
+	LimitExpr        Expression       // LIMIT value that is not a plain integer ($1, ?, -1, 1 + 1); Limit wins when both are set
+	OffsetExpr       Expression       // OFFSET value that is not a plain integer; Offset wins when both are set
+	LimitAll         bool             // PostgreSQL LIMIT ALL
+	OffsetRows       bool             // OFFSET n ROW / ROWS
+	LimitWithTies    bool             // ClickHouse LIMIT n WITH TIES
+	// Extras holds the rarer dialect-specific clauses (select modifiers,
+	// INTO, INTERPOLATE, LIMIT BY, FOR JSON/XML, OPTION hints, FORMAT); nil
+	// when the statement has none of them. See SelectExtras.
+	Extras *SelectExtras
 }
 
 func (s *SelectStatement) statementNode()       {}

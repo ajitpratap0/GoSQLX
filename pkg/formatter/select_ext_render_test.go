@@ -162,8 +162,10 @@ func selectFieldSamples() map[string]func(*ast.SelectStatement) {
 		"Settings": func(s *ast.SelectStatement) {
 			s.Settings = []ast.QuerySetting{{Name: "max_threads", Value: &ast.LiteralValue{Value: "2", Type: "int"}}}
 		},
-		"SelectModifiers": func(s *ast.SelectStatement) { s.SelectModifiers = []string{"SQL_NO_CACHE"} },
-		"Into":            func(s *ast.SelectStatement) { s.Into = &ast.SelectInto{Kind: ast.SelectIntoTable, Table: "dest"} },
+		"SelectModifiers": func(s *ast.SelectStatement) { s.EnsureExtras().SelectModifiers = []string{"SQL_NO_CACHE"} },
+		"Into": func(s *ast.SelectStatement) {
+			s.EnsureExtras().Into = &ast.SelectInto{Kind: ast.SelectIntoTable, Table: "dest"}
+		},
 		"GroupByModifiers": func(s *ast.SelectStatement) {
 			s.GroupBy = []ast.Expression{ident("g")}
 			s.GroupByModifiers = ast.GroupByModifiers{WithRollup: true}
@@ -174,7 +176,7 @@ func selectFieldSamples() map[string]func(*ast.SelectStatement) {
 		},
 		"Interpolate": func(s *ast.SelectStatement) {
 			s.OrderBy = []ast.OrderByExpression{{Expression: ident("o"), Ascending: true}}
-			s.Interpolate = &ast.InterpolateClause{Items: []ast.InterpolateItem{{Column: "c"}}}
+			s.EnsureExtras().Interpolate = &ast.InterpolateClause{Items: []ast.InterpolateItem{{Column: "c"}}}
 		},
 		"LimitExpr":  func(s *ast.SelectStatement) { s.LimitExpr = &ast.Identifier{Name: "$1"} },
 		"OffsetExpr": func(s *ast.SelectStatement) { s.OffsetExpr = &ast.Identifier{Name: "$2"} },
@@ -188,11 +190,13 @@ func selectFieldSamples() map[string]func(*ast.SelectStatement) {
 			s.LimitWithTies = true
 		},
 		"LimitBy": func(s *ast.SelectStatement) {
-			s.LimitBy = &ast.LimitByClause{Count: &ast.LiteralValue{Value: "1", Type: "int"}, Exprs: []ast.Expression{ident("lb")}}
+			s.EnsureExtras().LimitBy = &ast.LimitByClause{Count: &ast.LiteralValue{Value: "1", Type: "int"}, Exprs: []ast.Expression{ident("lb")}}
 		},
-		"ForOutput":    func(s *ast.SelectStatement) { s.ForOutput = &ast.ForOutputClause{Kind: "JSON", Mode: "AUTO"} },
-		"QueryHints":   func(s *ast.SelectStatement) { s.QueryHints = []ast.QueryHint{{Name: "RECOMPILE"}} },
-		"OutputFormat": func(s *ast.SelectStatement) { s.OutputFormat = "JSONEachRow" },
+		"ForOutput": func(s *ast.SelectStatement) {
+			s.EnsureExtras().ForOutput = &ast.ForOutputClause{Kind: "JSON", Mode: "AUTO"}
+		},
+		"QueryHints":   func(s *ast.SelectStatement) { s.EnsureExtras().QueryHints = []ast.QueryHint{{Name: "RECOMPILE"}} },
+		"OutputFormat": func(s *ast.SelectStatement) { s.EnsureExtras().OutputFormat = "JSONEachRow" },
 	}
 }
 
@@ -227,12 +231,17 @@ func TestRender_SelectRendersEveryField(t *testing.T) {
 		"LimitWithTies": func(s *ast.SelectStatement) { v := 7; s.Limit = &v },
 	}
 	samples := selectFieldSamples()
-	typ := reflect.TypeOf(ast.SelectStatement{})
-	for i := 0; i < typ.NumField(); i++ {
-		field := typ.Field(i)
-		if !field.IsExported() {
-			continue
+	// The fields of SelectStatement.Extras are checked like the statement's
+	// own fields; Extras itself is only their holder.
+	var fields []reflect.StructField
+	for _, typ := range []reflect.Type{reflect.TypeOf(ast.SelectStatement{}), reflect.TypeOf(ast.SelectExtras{})} {
+		for i := 0; i < typ.NumField(); i++ {
+			if f := typ.Field(i); f.IsExported() && f.Name != "Extras" {
+				fields = append(fields, f)
+			}
 		}
+	}
+	for _, field := range fields {
 		name := field.Name
 		if _, skip := selectFieldsNotRendered[name]; skip {
 			continue

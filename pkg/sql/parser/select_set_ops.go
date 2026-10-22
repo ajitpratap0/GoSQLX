@@ -281,7 +281,7 @@ func (p *Parser) attachParenthesizedQueryTail(stmt ast.Statement) error {
 		}
 	}
 	if target == nil || target.OrderBy != nil || target.HasLimit() ||
-		target.HasOffset() || target.LimitBy != nil || target.Fetch != nil || target.For != nil {
+		target.HasOffset() || (target.Extras != nil && target.Extras.LimitBy != nil) || target.Fetch != nil || target.For != nil {
 		return goerrors.UnsupportedFeatureError(
 			"ORDER BY/LIMIT/OFFSET/FETCH after a parenthesized query that has its own ORDER BY/LIMIT/OFFSET/FETCH or is a set operation",
 			p.currentLocation(),

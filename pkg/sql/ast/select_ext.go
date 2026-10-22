@@ -40,6 +40,44 @@ type GroupByModifiers struct {
 	WithTotals bool
 }
 
+// SelectExtras holds the less common, dialect-specific clauses of a SELECT.
+// It is a pointer on SelectStatement (SelectStatement.Extras) so the many
+// statements without any of them pay one word instead of about a hundred
+// bytes, which keeps SelectStatement in a smaller allocation size class.
+// Code that sets one of these clauses must allocate Extras first; code that
+// reads them must allow Extras to be nil.
+type SelectExtras struct {
+	SelectModifiers []string           // MySQL/MariaDB HIGH_PRIORITY, STRAIGHT_JOIN, SQL_CALC_FOUND_ROWS, ... after SELECT [DISTINCT]
+	Into            *SelectInto        // SELECT ... INTO table / variables / OUTFILE
+	Interpolate     *InterpolateClause // ClickHouse ORDER BY ... WITH FILL INTERPOLATE (col AS expr, ...)
+	LimitBy         *LimitByClause     // ClickHouse LIMIT n [OFFSET m] BY expr, ...
+	ForOutput       *ForOutputClause   // SQL Server FOR JSON / FOR XML / FOR BROWSE
+	QueryHints      []QueryHint        // SQL Server OPTION (hint, ...)
+	OutputFormat    string             // ClickHouse FORMAT name
+}
+
+// noSelectExtras is the read-only stand-in extras returns for a statement
+// without Extras. Nothing may write through it.
+var noSelectExtras SelectExtras
+
+// extras returns s.Extras, or a read-only empty SelectExtras when it is nil,
+// so renderers and walkers can read the clauses without nil checks.
+func (s *SelectStatement) extras() *SelectExtras {
+	if s.Extras != nil {
+		return s.Extras
+	}
+	return &noSelectExtras
+}
+
+// EnsureExtras returns s.Extras, allocating it first when it is nil. Use it
+// to set one of the SelectExtras clauses.
+func (s *SelectStatement) EnsureExtras() *SelectExtras {
+	if s.Extras == nil {
+		s.Extras = &SelectExtras{}
+	}
+	return s.Extras
+}
+
 // IsZero reports whether no modifier is set.
 func (m GroupByModifiers) IsZero() bool {
 	return !m.All && !m.WithRollup && !m.WithCube && !m.WithTotals
@@ -323,14 +361,15 @@ func (s *SelectStatement) HasOffset() bool {
 // appendSelectExtChildren appends the expression children of the clauses
 // declared in this file to children.
 func (s *SelectStatement) appendSelectExtChildren(children []Node) []Node {
-	if s.Into != nil {
-		children = append(children, s.Into)
+	x := s.extras()
+	if x.Into != nil {
+		children = append(children, x.Into)
 	}
-	if s.Interpolate != nil {
-		children = append(children, s.Interpolate)
+	if x.Interpolate != nil {
+		children = append(children, x.Interpolate)
 	}
-	if s.LimitBy != nil {
-		children = append(children, s.LimitBy)
+	if x.LimitBy != nil {
+		children = append(children, x.LimitBy)
 	}
 	if s.LimitExpr != nil {
 		children = append(children, s.LimitExpr)
@@ -338,11 +377,11 @@ func (s *SelectStatement) appendSelectExtChildren(children []Node) []Node {
 	if s.OffsetExpr != nil {
 		children = append(children, s.OffsetExpr)
 	}
-	if s.ForOutput != nil {
-		children = append(children, s.ForOutput)
+	if x.ForOutput != nil {
+		children = append(children, x.ForOutput)
 	}
-	for i := range s.QueryHints {
-		h := &s.QueryHints[i]
+	for i := range x.QueryHints {
+		h := &x.QueryHints[i]
 		if h.Value != nil {
 			children = append(children, h.Value)
 		}
@@ -358,28 +397,8 @@ func (s *SelectStatement) appendSelectExtChildren(children []Node) []Node {
 // releaseSelectExt releases and clears the fields declared for the clauses
 // in this file; releaseSelectStatement calls it.
 func releaseSelectExt(stmt *SelectStatement, mode releaseMode) {
-	stmt.SelectModifiers = stmt.SelectModifiers[:0]
-	if stmt.Into != nil {
-		for _, t := range stmt.Into.Targets {
-			releaseExpression(t, mode)
-		}
-		releaseExpression(stmt.Into.File, mode)
-		for _, o := range stmt.Into.FieldsOptions {
-			releaseExpression(o.Value, mode)
-		}
-		for _, o := range stmt.Into.LinesOptions {
-			releaseExpression(o.Value, mode)
-		}
-		stmt.Into = nil
-	}
 	stmt.GroupByModifiers = GroupByModifiers{}
 	stmt.OrderSiblings = false
-	if stmt.Interpolate != nil {
-		for _, it := range stmt.Interpolate.Items {
-			releaseExpression(it.Expr, mode)
-		}
-		stmt.Interpolate = nil
-	}
 	releaseExpression(stmt.LimitExpr, mode)
 	stmt.LimitExpr = nil
 	releaseExpression(stmt.OffsetExpr, mode)
@@ -387,30 +406,51 @@ func releaseSelectExt(stmt *SelectStatement, mode releaseMode) {
 	stmt.LimitAll = false
 	stmt.OffsetRows = false
 	stmt.LimitWithTies = false
-	if stmt.LimitBy != nil {
-		releaseExpression(stmt.LimitBy.Count, mode)
-		releaseExpression(stmt.LimitBy.Offset, mode)
-		for _, e := range stmt.LimitBy.Exprs {
+	if x := stmt.Extras; x != nil {
+		releaseSelectExtras(x, mode)
+		stmt.Extras = nil
+	}
+}
+
+// releaseSelectExtras releases the expressions held by x.
+func releaseSelectExtras(x *SelectExtras, mode releaseMode) {
+	if x.Into != nil {
+		for _, t := range x.Into.Targets {
+			releaseExpression(t, mode)
+		}
+		releaseExpression(x.Into.File, mode)
+		for _, o := range x.Into.FieldsOptions {
+			releaseExpression(o.Value, mode)
+		}
+		for _, o := range x.Into.LinesOptions {
+			releaseExpression(o.Value, mode)
+		}
+	}
+	if x.Interpolate != nil {
+		for _, it := range x.Interpolate.Items {
+			releaseExpression(it.Expr, mode)
+		}
+	}
+	if x.LimitBy != nil {
+		releaseExpression(x.LimitBy.Count, mode)
+		releaseExpression(x.LimitBy.Offset, mode)
+		for _, e := range x.LimitBy.Exprs {
 			releaseExpression(e, mode)
 		}
-		stmt.LimitBy = nil
 	}
-	if stmt.ForOutput != nil {
-		releaseExpression(stmt.ForOutput.ModeArg, mode)
-		for _, o := range stmt.ForOutput.Options {
+	if x.ForOutput != nil {
+		releaseExpression(x.ForOutput.ModeArg, mode)
+		for _, o := range x.ForOutput.Options {
 			releaseExpression(o.Arg, mode)
 		}
-		stmt.ForOutput = nil
 	}
-	for i := range stmt.QueryHints {
-		releaseExpression(stmt.QueryHints[i].Value, mode)
-		for _, a := range stmt.QueryHints[i].Args {
+	for i := range x.QueryHints {
+		releaseExpression(x.QueryHints[i].Value, mode)
+		for _, a := range x.QueryHints[i].Args {
 			releaseExpression(a.Expr, mode)
 		}
-		stmt.QueryHints[i] = QueryHint{}
 	}
-	stmt.QueryHints = stmt.QueryHints[:0]
-	stmt.OutputFormat = ""
+	*x = SelectExtras{}
 }
 
 // ─── rendering ───────────────────────────────────────────────────────────────
@@ -573,7 +613,7 @@ func writeOffsetValue(buf *bytes.Buffer, s *SelectStatement) {
 // keeps ROWS when it was written or when FETCH follows (OFFSET n ROWS FETCH
 // ... is required by SQL Server, Oracle and MariaDB).
 func writeLimitOffset(buf *bytes.Buffer, s *SelectStatement) {
-	if lb := s.LimitBy; lb != nil && lb.Count != nil && len(lb.Exprs) > 0 {
+	if lb := s.extras().LimitBy; lb != nil && lb.Count != nil && len(lb.Exprs) > 0 {
 		buf.WriteString(" LIMIT ")
 		writeExpr(buf, lb.Count)
 		if lb.Offset != nil {

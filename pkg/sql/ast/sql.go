@@ -1242,13 +1242,14 @@ func (s *SelectStatement) writeSQL(buf *bytes.Buffer) {
 	} else if s.Distinct {
 		buf.WriteString("DISTINCT ")
 	}
-	writeSelectModifiers(buf, s.SelectModifiers)
+	x := s.extras()
+	writeSelectModifiers(buf, x.SelectModifiers)
 	writeTop(buf, s.Top)
 
 	writeExprList(buf, s.Columns)
 
-	if s.Into != nil && !s.Into.Trailing {
-		writeSelectInto(buf, s.Into)
+	if x.Into != nil && !x.Into.Trailing {
+		writeSelectInto(buf, x.Into)
 	}
 
 	if len(s.From) > 0 {
@@ -1338,7 +1339,7 @@ func (s *SelectStatement) writeSQL(buf *bytes.Buffer) {
 		}
 		writeOrderBy(buf, s.OrderBy)
 	}
-	writeInterpolate(buf, s.Interpolate)
+	writeInterpolate(buf, x.Interpolate)
 
 	writeLimitOffset(buf, s)
 
@@ -1346,23 +1347,23 @@ func (s *SelectStatement) writeSQL(buf *bytes.Buffer) {
 		writeFetch(buf, s.Fetch)
 	}
 
-	if s.Into != nil && s.Into.Trailing {
-		writeSelectInto(buf, s.Into)
+	if x.Into != nil && x.Into.Trailing {
+		writeSelectInto(buf, x.Into)
 	}
 
 	if s.For != nil {
 		writeFor(buf, s.For)
 	}
 
-	writeForOutput(buf, s.ForOutput)
+	writeForOutput(buf, x.ForOutput)
 
 	if len(s.Settings) > 0 {
 		buf.WriteString(" SETTINGS ")
 		writeQuerySettings(buf, s.Settings)
 	}
 
-	writeQueryHints(buf, s.QueryHints)
-	writeFormat(buf, s.OutputFormat)
+	writeQueryHints(buf, x.QueryHints)
+	writeFormat(buf, x.OutputFormat)
 }
 
 // SQL returns the full SQL string for this INSERT statement, including the

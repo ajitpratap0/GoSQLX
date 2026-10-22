@@ -187,6 +187,10 @@ func selectFieldSamples() map[string]func(*ast.SelectStatement) {
 			s.Limit = n(7)
 			s.LimitWithTies = true
 		},
+		"RowsExamined": func(s *ast.SelectStatement) {
+			s.Limit = n(7)
+			s.RowsExamined = &ast.LiteralValue{Value: "1000", Type: "int"}
+		},
 		"LimitBy": func(s *ast.SelectStatement) {
 			s.LimitBy = &ast.LimitByClause{Count: &ast.LiteralValue{Value: "1", Type: "int"}, Exprs: []ast.Expression{ident("lb")}}
 		},
@@ -225,6 +229,7 @@ func TestRender_SelectRendersEveryField(t *testing.T) {
 		},
 		"OffsetRows":    func(s *ast.SelectStatement) { v := 8; s.Offset = &v },
 		"LimitWithTies": func(s *ast.SelectStatement) { v := 7; s.Limit = &v },
+		"RowsExamined":  func(s *ast.SelectStatement) { v := 7; s.Limit = &v },
 	}
 	samples := selectFieldSamples()
 	typ := reflect.TypeOf(ast.SelectStatement{})

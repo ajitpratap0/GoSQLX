@@ -41,6 +41,11 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 	}
 	stmt.Top = top
 
+	// MariaDB: DELETE HISTORY FROM t [BEFORE SYSTEM_TIME point]
+	if p.isMariaDB() && p.isUnquotedWord("HISTORY") && p.peekToken().Token.Type == models.TokenTypeFrom {
+		return p.parseDeleteHistory(stmt)
+	}
+
 	sqlServer := p.dialect == string(keywords.DialectSQLServer)
 	if p.isType(models.TokenTypeFrom) {
 		p.advance() // Consume FROM
@@ -141,4 +146,26 @@ func (p *Parser) parseDeleteSources(dst *[]ast.TableReference, stmt *ast.DeleteS
 	*dst = refs
 	stmt.Joins = joins
 	return nil
+}
+
+// parseDeleteHistory parses the rest of MariaDB's DELETE HISTORY FROM table
+// [BEFORE SYSTEM_TIME point]; the current token is HISTORY. HISTORY is kept as
+// a statement modifier.
+func (p *Parser) parseDeleteHistory(stmt *ast.DeleteStatement) (ast.Statement, error) {
+	stmt.Modifiers = append(stmt.Modifiers, "HISTORY")
+	p.advance() // Consume HISTORY
+	p.advance() // Consume FROM
+	name, quote, err := p.parseQualifiedNameQuoted()
+	if err != nil {
+		return nil, err
+	}
+	stmt.TableName, stmt.TableNameQuote = name, quote
+	if p.isUnquotedWord("BEFORE") && p.peekValueIs(1, "SYSTEM_TIME") {
+		p.advance() // Consume BEFORE
+		p.advance() // Consume SYSTEM_TIME
+		if stmt.BeforeSystemTime, err = p.parseTemporalPointExpression(); err != nil {
+			return nil, err
+		}
+	}
+	return stmt, nil
 }

@@ -15,6 +15,7 @@
 package formatter
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -138,5 +139,43 @@ func TestParseWithParenthesizedQuery_Rejects(t *testing.T) {
 			ast.ReleaseAST(tree)
 			t.Errorf("parse %q: expected an error", in)
 		}
+	}
+}
+
+// TestSetOperationTailRender checks that the ORDER BY / LIMIT after a set
+// operation whose last operand has its own clauses is written after the whole
+// operation in every layout, and that the output parses back to the same text.
+func TestSetOperationTailRender(t *testing.T) {
+	const in = "SELECT a FROM t UNION ALL (SELECT b FROM u ORDER BY b LIMIT 1) ORDER BY 1 LIMIT 3 OFFSET 2"
+	tree, err := parser.ParseWithDialect(in, keywords.DialectPostgreSQL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ast.ReleaseAST(tree)
+
+	compact := ast.CompactStyle()
+	compact.Dialect = "postgresql"
+	if got := FormatAST(tree, compact); got != in {
+		t.Errorf("compact = %q, want %q", got, in)
+	}
+	for name, opts := range map[string]ast.FormatOptions{"readable": ast.ReadableStyle(), "compact+semicolon": func() ast.FormatOptions {
+		o := ast.CompactStyle()
+		o.AddSemicolon = true
+		return o
+	}()} {
+		opts.Dialect = "postgresql"
+		out := FormatAST(tree, opts)
+		if !strings.Contains(out, "ORDER BY 1") || strings.Index(out, "ORDER BY 1") < strings.Index(out, ")") {
+			t.Errorf("%s: tail is not after the parenthesized operand: %s", name, out)
+		}
+		tree2, err := parser.ParseWithDialect(out, keywords.DialectPostgreSQL)
+		if err != nil {
+			t.Errorf("%s: output %q does not re-parse: %v", name, out, err)
+			continue
+		}
+		if got := FormatAST(tree2, compact); got != in {
+			t.Errorf("%s: output re-parses to %q, want %q", name, got, in)
+		}
+		ast.ReleaseAST(tree2)
 	}
 }

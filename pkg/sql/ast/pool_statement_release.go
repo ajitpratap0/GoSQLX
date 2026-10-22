@@ -265,6 +265,10 @@ func releaseDeleteStatement(stmt *DeleteStatement, mode releaseMode) {
 	}
 	stmt.Using = stmt.Using[:0]
 
+	// ── BEFORE SYSTEM_TIME (MariaDB DELETE HISTORY) ───────────────────
+	releaseExpression(stmt.BeforeSystemTime, mode)
+	stmt.BeforeSystemTime = nil
+
 	// ── WHERE ──────────────────────────────────────────────────────────
 	releaseExpression(stmt.Where, mode)
 	stmt.Where = nil
@@ -613,6 +617,8 @@ func releaseTableReference(tr *TableReference, mode releaseMode) {
 // MaxRecursionDepth.
 func releaseSetOperationOperands(s *SetOperation, mode releaseMode) {
 	for s != nil {
+		s.Tail.release(mode)
+		s.Tail = nil
 		if right, ok := s.Right.(*SetOperation); ok {
 			releaseSetOperationOperands(right, mode)
 		} else {

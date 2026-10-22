@@ -285,6 +285,9 @@ func (i InExpression) Children() []Node {
 type SubqueryExpression struct {
 	Subquery Statement
 	Pos      models.Location // Source position of the opening parenthesis (1-based line and column)
+	// Bare marks a query that is the whole argument of CURSOR(...) or
+	// MULTISET(...) (Oracle) and is written without parentheses of its own.
+	Bare bool
 }
 
 func (s *SubqueryExpression) expressionNode()     {}
@@ -323,6 +326,11 @@ type FieldAccessExpression struct {
 	Field  string
 	Quoted bool
 	Pos    models.Location // Source position of the dot
+	// IsCall marks a method call on the value, (expr).name(args), as SQL
+	// Server writes on xml values: (SELECT ... FOR XML PATH(''), TYPE).value(
+	// '.', 'NVARCHAR(MAX)'). Field is the method name and Args its arguments.
+	IsCall bool
+	Args   []Expression
 }
 
 func (f *FieldAccessExpression) expressionNode() {}
@@ -335,7 +343,14 @@ func (f FieldAccessExpression) Children() []Node {
 	if f.Expr == nil {
 		return nil
 	}
-	return []Node{f.Expr}
+	nodes := make([]Node, 0, 1+len(f.Args))
+	nodes = append(nodes, f.Expr)
+	for _, a := range f.Args {
+		if a != nil {
+			nodes = append(nodes, a)
+		}
+	}
+	return nodes
 }
 
 // AnyExpression represents expr op ANY (subquery)

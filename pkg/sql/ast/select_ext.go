@@ -338,6 +338,9 @@ func (s *SelectStatement) appendSelectExtChildren(children []Node) []Node {
 	if s.OffsetExpr != nil {
 		children = append(children, s.OffsetExpr)
 	}
+	if s.RowsExamined != nil {
+		children = append(children, s.RowsExamined)
+	}
 	if s.ForOutput != nil {
 		children = append(children, s.ForOutput)
 	}
@@ -384,6 +387,8 @@ func releaseSelectExt(stmt *SelectStatement, mode releaseMode) {
 	stmt.LimitExpr = nil
 	releaseExpression(stmt.OffsetExpr, mode)
 	stmt.OffsetExpr = nil
+	releaseExpression(stmt.RowsExamined, mode)
+	stmt.RowsExamined = nil
 	stmt.LimitAll = false
 	stmt.OffsetRows = false
 	stmt.LimitWithTies = false
@@ -597,6 +602,10 @@ func writeLimitOffset(buf *bytes.Buffer, s *SelectStatement) {
 			buf.WriteByte(' ')
 			buf.WriteString(OffsetRowsKeyword(s))
 		}
+	}
+	if s.RowsExamined != nil {
+		buf.WriteString(" ROWS EXAMINED ")
+		writeExpr(buf, s.RowsExamined)
 	}
 }
 

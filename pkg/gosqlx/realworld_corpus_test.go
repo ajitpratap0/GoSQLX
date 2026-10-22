@@ -155,10 +155,11 @@ func realworldDroppedWords(in, out string) []string {
 
 // realworldSynonyms matches spellings the formatter writes in their canonical
 // form because the dialects define them as exact synonyms: SELECT ALL (ALL is
-// the default quantifier), DISTINCTROW (MySQL) for DISTINCT, and the postfix
+// the default quantifier), DISTINCTROW (MySQL) and SELECT UNIQUE (Oracle) for
+// DISTINCT, and the postfix
 // ISNULL / NOTNULL (PostgreSQL, SQLite) for IS NULL / IS NOT NULL. UNION ALL
 // and the function ISNULL(...) are not touched.
-var realworldSynonyms = regexp.MustCompile(`(?i)\b(SELECT\s+ALL|DISTINCTROW|ISNULL|NOTNULL)\b`)
+var realworldSynonyms = regexp.MustCompile(`(?i)\b(SELECT\s+ALL|SELECT\s+UNIQUE|DISTINCTROW|ISNULL|NOTNULL)\b`)
 
 // realworldCanonicalSynonyms rewrites the synonyms of realworldSynonyms in s
 // to the canonical spelling the formatter writes.
@@ -170,6 +171,8 @@ func realworldCanonicalSynonyms(s string) string {
 		rest := strings.TrimLeft(s[m[1]:], " \t\r\n")
 		var repl string
 		switch {
+		case strings.HasPrefix(word, "SELECT") && strings.HasSuffix(word, "UNIQUE"):
+			repl = "SELECT DISTINCT"
 		case strings.HasPrefix(word, "SELECT"):
 			repl = "SELECT"
 		case word == "DISTINCTROW":

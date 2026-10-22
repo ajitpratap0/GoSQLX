@@ -126,6 +126,36 @@ type InsertDialectFields struct {
 	// TableNameQuote records the delimiters of TableName when they must be
 	// kept (see NameQuote).
 	TableNameQuote NameQuote
+	// LogErrors is the Oracle error logging clause LOG ERRORS [INTO table]
+	// [(tag)] [REJECT LIMIT n | UNLIMITED].
+	LogErrors *LogErrorsClause
+}
+
+// LogErrorsClause is the Oracle DML error logging clause:
+//
+//	LOG ERRORS INTO err$_dest ('nightly load') REJECT LIMIT UNLIMITED
+type LogErrorsClause struct {
+	// Into is the error table, possibly schema-qualified; empty when the
+	// default error table is meant. IntoQuote records its delimiters.
+	Into      string
+	IntoQuote NameQuote
+	// Tag is the optional simple expression identifying the statement in the
+	// error table.
+	Tag Expression
+	// RejectLimit is the REJECT LIMIT value: an integer's digits or UNLIMITED;
+	// empty when the clause is absent.
+	RejectLimit string
+}
+
+func (l *LogErrorsClause) expressionNode()     {}
+func (l LogErrorsClause) TokenLiteral() string { return "LOG ERRORS" }
+
+// Children returns the tag expression.
+func (l LogErrorsClause) Children() []Node {
+	if l.Tag == nil {
+		return nil
+	}
+	return []Node{l.Tag}
 }
 
 // insertDialectChildren appends the nodes of d to children.
@@ -144,6 +174,9 @@ func (d *InsertDialectFields) insertDialectChildren(children []Node) []Node {
 	}
 	if d.MultiTable != nil {
 		children = append(children, d.MultiTable)
+	}
+	if d.LogErrors != nil {
+		children = append(children, d.LogErrors)
 	}
 	return children
 }

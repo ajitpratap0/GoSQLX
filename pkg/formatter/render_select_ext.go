@@ -246,6 +246,12 @@ func writeLimitOffsetClauses(sb *strings.Builder, s *ast.SelectStatement, f *nod
 			sb.WriteString(f.kw(ast.OffsetRowsKeyword(s)))
 		}
 	}
+	if s.RowsExamined != nil {
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(f.kw("ROWS EXAMINED"))
+		sb.WriteString(" ")
+		sb.WriteString(exprSQL(s.RowsExamined))
+	}
 }
 
 // forOutputSQL renders " FOR JSON|XML|BROWSE ..." (with a leading space), or

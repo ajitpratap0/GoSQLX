@@ -29,7 +29,9 @@ import (
 // formatted output does not yet round-trip because of a pkg/formatter or SQL()
 // rendering gap. For these the CLI must refuse to format (return an error)
 // rather than emit changed SQL; once the gap is fixed they simply pass.
-var corpusFormatKnownGaps = map[string]string{}
+var corpusFormatKnownGaps = map[string]string{
+	"realworld/mysql/05_dialect_specific.sql": "DESCRIBE has no renderer, so the CLI refuses the file rather than rewrite it (see TestFormatSQL_RefusesDescribe)",
+}
 
 // corpusDialect maps a testdata path to the dialect its SQL is written in.
 func corpusDialect(rel string) string {

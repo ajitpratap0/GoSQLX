@@ -146,6 +146,11 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return p.parseBracketArrayPrimary()
 	}
 
+	// Snowflake object constant {'k': v, ...}.
+	if p.isType(models.TokenTypeLBrace) && p.dialect == string(keywords.DialectSnowflake) {
+		return p.parseObjectLiteral()
+	}
+
 	// Handle MySQL VALUES(column) helper in ON DUPLICATE KEY UPDATE.
 	// VALUES is normally a DML keyword, but inside ON DUPLICATE KEY UPDATE it acts
 	// as a scalar function that returns the value that was attempted for insertion.
@@ -777,4 +782,47 @@ func (p *Parser) peekMoneyFraction() bool {
 		}
 	}
 	return true
+}
+
+// parseObjectLiteral parses a Snowflake object constant {'k': v, ...}; the
+// current token is the opening brace.
+func (p *Parser) parseObjectLiteral() (ast.Expression, error) {
+	obj := &ast.ObjectLiteral{Pos: p.currentLocation()}
+	p.advance() // Consume {
+	if p.isType(models.TokenTypeRBrace) {
+		p.advance()
+		return obj, nil
+	}
+	err := p.enterRecursion()
+	defer p.leaveRecursion()
+	if err != nil {
+		return nil, err
+	}
+	for {
+		// The key is a string constant; parsing a full expression would read
+		// 'k': v as a variant path k:v.
+		key, err := p.parsePrimaryExpression()
+		if err != nil {
+			return nil, err
+		}
+		if !p.isType(models.TokenTypeColon) {
+			return nil, p.expectedError(": after object key")
+		}
+		p.advance() // Consume :
+		value, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+		obj.Entries = append(obj.Entries, ast.ObjectEntry{Key: key, Value: value})
+		if p.isType(models.TokenTypeComma) {
+			p.advance()
+			continue
+		}
+		break
+	}
+	if !p.isType(models.TokenTypeRBrace) {
+		return nil, p.expectedError("} to close the object constant")
+	}
+	p.advance() // Consume }
+	return obj, nil
 }

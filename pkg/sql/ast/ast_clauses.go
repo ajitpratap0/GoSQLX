@@ -315,9 +315,15 @@ func (t TableReference) Children() []Node {
 		if m.Flashback != nil {
 			nodes = append(nodes, m.Flashback)
 		}
+		if m.PartitionFor != nil {
+			nodes = append(nodes, m.PartitionFor)
+		}
 	}
 	if t.Values != nil {
 		nodes = append(nodes, t.Values)
+	}
+	if g := t.Modifiers; g != nil && g.Group != nil {
+		nodes = append(nodes, g.Group)
 	}
 	return nodes
 }

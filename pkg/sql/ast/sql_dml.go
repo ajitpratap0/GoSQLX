@@ -21,6 +21,7 @@ import "bytes"
 var dmlModifierKeywords = []string{
 	"LOW_PRIORITY", "HIGH_PRIORITY", "DELAYED", "QUICK", "IGNORE", "OVERWRITE",
 	"OR REPLACE", "OR IGNORE", "OR ABORT", "OR FAIL", "OR ROLLBACK",
+	"HISTORY",
 }
 
 // DMLModifierText returns s when it is a known INSERT / UPDATE / DELETE
@@ -286,4 +287,34 @@ func (r *ReplaceStatement) writeReplaceSQL(buf *bytes.Buffer) {
 		}
 	}
 	writeReturning(buf, r.Returning, nil)
+}
+
+// LogErrorsRejectLimitText returns s when it is a REJECT LIMIT value the
+// parser produces (digits or UNLIMITED, any case) and "" otherwise.
+func LogErrorsRejectLimitText(s string) string {
+	if isDigits(s) {
+		return s
+	}
+	return keywordOneOf(s, []string{"UNLIMITED"})
+}
+
+// writeLogErrors writes " LOG ERRORS [INTO table] [(tag)] [REJECT LIMIT n]".
+func writeLogErrors(buf *bytes.Buffer, l *LogErrorsClause) {
+	if l == nil {
+		return
+	}
+	buf.WriteString(" LOG ERRORS")
+	if l.Into != "" {
+		buf.WriteString(" INTO ")
+		writeQualifiedNameQ(buf, l.Into, l.IntoQuote)
+	}
+	if l.Tag != nil {
+		buf.WriteString(" (")
+		writeExpr(buf, l.Tag)
+		buf.WriteByte(')')
+	}
+	if lim := LogErrorsRejectLimitText(l.RejectLimit); lim != "" {
+		buf.WriteString(" REJECT LIMIT ")
+		buf.WriteString(lim)
+	}
 }

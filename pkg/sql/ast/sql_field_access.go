@@ -53,6 +53,11 @@ func (f *FieldAccessExpression) writeSQL(buf *bytes.Buffer) {
 	} else {
 		buf.WriteString(f.Field)
 	}
+	if f.IsCall {
+		buf.WriteByte('(')
+		writeExprList(buf, f.Args)
+		buf.WriteByte(')')
+	}
 }
 
 // isTupleElementNumber reports whether field is a ClickHouse tuple element

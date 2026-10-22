@@ -57,7 +57,13 @@ func SetOperandNeedsParens(s *SetOperation, right bool, dialect string) bool {
 			return true
 		}
 		child, ok := s.Left.(*SetOperation)
-		if !ok || child == nil || SetOperatorsEqualPrecedence(dialect) {
+		if !ok || child == nil {
+			return false
+		}
+		if child.Tail != nil {
+			return true // its ORDER BY / LIMIT belongs inside the parentheses
+		}
+		if SetOperatorsEqualPrecedence(dialect) {
 			return false
 		}
 		return setOperatorPrecedence(child.Operator) < setOperatorPrecedence(s.Operator)
@@ -68,6 +74,9 @@ func SetOperandNeedsParens(s *SetOperation, right bool, dialect string) bool {
 	child, ok := s.Right.(*SetOperation)
 	if !ok || child == nil {
 		return false
+	}
+	if child.Tail != nil {
+		return true
 	}
 	if SetOperatorsEqualPrecedence(dialect) {
 		return true

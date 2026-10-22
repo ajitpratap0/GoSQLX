@@ -243,3 +243,330 @@ func TestParseSQLServerUpdateStatisticsAndMoney(t *testing.T) {
 		{"money literal", keywords.DialectSQLServer, "SELECT $5.00 AS Money, $7", "SELECT $5.00 AS Money, $7"},
 	})
 }
+
+func TestParseJoinGroupOperand(t *testing.T) {
+	runSyntaxCases(t, []syntaxCase{
+		{"group with join", keywords.DialectMySQL,
+			"SELECT * FROM a LEFT JOIN (b JOIN c ON b.id = c.b_id) ON a.id = b.a_id",
+			"SELECT * FROM a LEFT JOIN (b INNER JOIN c ON b.id = c.b_id) ON a.id = b.a_id"},
+		{"comma list", keywords.DialectMySQL,
+			"SELECT * FROM t1 LEFT JOIN (t2, t3) ON t1.id = t2.id AND t2.id = t3.id",
+			"SELECT * FROM t1 LEFT JOIN (t2, t3) ON t1.id = t2.id AND t2.id = t3.id"},
+		{"nested groups", keywords.DialectMySQL,
+			"SELECT * FROM t1 JOIN (t2 LEFT JOIN (t3 JOIN t4 ON t3.a = t4.a) ON t2.b = t3.b) ON t1.c = t2.c",
+			"SELECT * FROM t1 INNER JOIN (t2 LEFT JOIN (t3 INNER JOIN t4 ON t3.a = t4.a) ON t2.b = t3.b) ON t1.c = t2.c"},
+		{"sqlite", keywords.DialectSQLite,
+			"SELECT * FROM a LEFT JOIN (b JOIN c ON b.id = c.id) ON a.id = b.id",
+			"SELECT * FROM a LEFT JOIN (b INNER JOIN c ON b.id = c.id) ON a.id = b.id"},
+		{"derived table is not a group", keywords.DialectPostgreSQL,
+			"SELECT * FROM a JOIN (SELECT 1 AS x) s ON a.x = s.x",
+			"SELECT * FROM a INNER JOIN (SELECT 1 AS x) s ON a.x = s.x"},
+	})
+
+	tree, err := ParseWithDialect("SELECT * FROM a LEFT JOIN (b JOIN c ON b.id = c.b_id) ON a.id = b.a_id", keywords.DialectMySQL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ast.ReleaseAST(tree)
+	sel, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("statement is %T", tree.Statements[0])
+	}
+	if len(sel.From) != 1 || len(sel.Joins) != 1 {
+		t.Fatalf("From = %d, Joins = %d; want 1 and 1", len(sel.From), len(sel.Joins))
+	}
+	g := ast.TableRefJoinGroup(&sel.Joins[0].Right)
+	if g == nil {
+		t.Fatal("the right side of the join is not a join group")
+	}
+	if len(g.Tables) != 1 || g.Tables[0].Name != "b" || len(g.Joins) != 1 || g.Joins[0].Right.Name != "c" {
+		t.Errorf("group = %+v, want b JOIN c", g)
+	}
+	if sel.Joins[0].Condition == nil {
+		t.Error("the ON condition after the group was lost")
+	}
+	// The walker reaches the tables inside the group.
+	var names []string
+	_ = ast.Walk(ast.Inspector(func(n ast.Node) bool {
+		if r, ok := n.(*ast.TableReference); ok && r.Name != "" {
+			names = append(names, r.Name)
+		}
+		return true
+	}), sel)
+	found := map[string]bool{}
+	for _, n := range names {
+		found[n] = true
+	}
+	for _, want := range []string{"a", "b", "c"} {
+		if !found[want] {
+			t.Errorf("Walk did not visit table %q (visited %v)", want, names)
+		}
+	}
+
+	// An alias after the group is refused, not attached to the wrong table.
+	if tree2, err := ParseWithDialect("SELECT * FROM a JOIN (b JOIN c ON b.id = c.id) g ON a.id = g.id", keywords.DialectMySQL); err == nil {
+		ast.ReleaseAST(tree2)
+		t.Error("an alias after a join group was accepted")
+	}
+}
+
+func TestParseJSONTable(t *testing.T) {
+	runSyntaxCases(t, []syntaxCase{
+		{"mysql", keywords.DialectMySQL,
+			"SELECT jt.* FROM events, JSON_TABLE(payload, '$.items[*]' COLUMNS (id INT PATH '$.id', name VARCHAR(50) PATH '$.name')) AS jt",
+			"SELECT jt.* FROM events, JSON_TABLE(payload, '$.items[*]' COLUMNS (id INT PATH '$.id', name VARCHAR(50) PATH '$.name')) jt"},
+		{"mariadb ordinality and default", keywords.DialectMariaDB,
+			"SELECT o.id FROM orders o, JSON_TABLE(o.items, '$[*]' COLUMNS (rn FOR ORDINALITY, qty INT PATH '$.qty' DEFAULT '1' ON EMPTY)) AS jt",
+			"SELECT o.id FROM orders o, JSON_TABLE(o.items, '$[*]' COLUMNS (rn FOR ORDINALITY, qty INT PATH '$.qty' DEFAULT '1' ON EMPTY)) jt"},
+		{"oracle", keywords.DialectOracle,
+			"SELECT * FROM JSON_TABLE(:doc, '$.items[*]' COLUMNS (id NUMBER PATH '$.id')) jt",
+			"SELECT * FROM JSON_TABLE(:doc, '$.items[*]' COLUMNS (id NUMBER PATH '$.id')) jt"},
+	})
+	tree, err := ParseWithDialect("SELECT * FROM JSON_TABLE(d, '$' COLUMNS (a INT PATH '$.a')) jt", keywords.DialectMySQL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ast.ReleaseAST(tree)
+	sel, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok || len(sel.From) != 1 || sel.From[0].TableFunc == nil {
+		t.Fatalf("unexpected tree: %#v", tree.Statements[0])
+	}
+	args := sel.From[0].TableFunc.Arguments
+	if len(args) != 2 {
+		t.Fatalf("JSON_TABLE has %d arguments, want 2 (document, path with COLUMNS)", len(args))
+	}
+	cols, ok := args[1].(*ast.ClauseArgument)
+	if !ok {
+		t.Fatalf("second argument is %T, want *ast.ClauseArgument", args[1])
+	}
+	if cols.Clause != "COLUMNS (a INT PATH '$.a')" {
+		t.Errorf("Clause = %q", cols.Clause)
+	}
+}
+
+func TestParseMariaDBHistoryAndRowsExamined(t *testing.T) {
+	runSyntaxCases(t, []syntaxCase{
+		{"delete history", keywords.DialectMariaDB,
+			"DELETE HISTORY FROM accounts BEFORE SYSTEM_TIME '2024-01-01 00:00:00'",
+			"DELETE HISTORY FROM accounts BEFORE SYSTEM_TIME '2024-01-01 00:00:00'"},
+		{"delete history all", keywords.DialectMariaDB, "DELETE HISTORY FROM accounts", "DELETE HISTORY FROM accounts"},
+		{"delete from a table named history", keywords.DialectMariaDB, "DELETE FROM history WHERE a = 1", "DELETE FROM history WHERE a = 1"},
+		{"rows examined", keywords.DialectMariaDB,
+			"SELECT * FROM orders ORDER BY id LIMIT 10 OFFSET 5 ROWS EXAMINED 1000",
+			"SELECT * FROM orders ORDER BY id LIMIT 10 OFFSET 5 ROWS EXAMINED 1000"},
+		{"rows examined without offset", keywords.DialectMariaDB,
+			"SELECT * FROM orders LIMIT 10 ROWS EXAMINED 1000", "SELECT * FROM orders LIMIT 10 ROWS EXAMINED 1000"},
+		{"offset rows still parses", keywords.DialectMariaDB,
+			"SELECT * FROM orders OFFSET 5 ROWS FETCH NEXT 3 ROWS ONLY", "SELECT * FROM orders OFFSET 5 ROWS FETCH NEXT 3 ROWS ONLY"},
+		{"system versioning column", keywords.DialectMariaDB,
+			"ALTER TABLE users ADD COLUMN IF NOT EXISTS email_hash CHAR(32) WITHOUT SYSTEM VERSIONING",
+			"ALTER TABLE users ADD COLUMN IF NOT EXISTS email_hash CHAR(32) WITHOUT SYSTEM VERSIONING"},
+		{"system versioning in create", keywords.DialectMariaDB,
+			"CREATE TABLE t (a INT WITH SYSTEM VERSIONING, b INT WITHOUT SYSTEM VERSIONING NOT NULL)",
+			"CREATE TABLE t (a INT WITH SYSTEM VERSIONING, b INT WITHOUT SYSTEM VERSIONING NOT NULL)"},
+	})
+	tree, err := ParseWithDialect("DELETE HISTORY FROM accounts BEFORE SYSTEM_TIME '2024-01-01'", keywords.DialectMariaDB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ast.ReleaseAST(tree)
+	del, ok := tree.Statements[0].(*ast.DeleteStatement)
+	if !ok {
+		t.Fatalf("statement is %T", tree.Statements[0])
+	}
+	if del.TableName != "accounts" || del.BeforeSystemTime == nil {
+		t.Errorf("delete = %+v, want table accounts with a BEFORE SYSTEM_TIME point", del)
+	}
+}
+
+func TestParseClickHouseColumnsApply(t *testing.T) {
+	runSyntaxCases(t, []syntaxCase{
+		{"columns apply", keywords.DialectClickHouse, "SELECT COLUMNS('a|b') APPLY (sum) FROM t", "SELECT COLUMNS('a|b') APPLY (sum) FROM t"},
+		{"star apply chain", keywords.DialectClickHouse,
+			"SELECT * APPLY(sum) APPLY(x -> x + 1) FROM t", "SELECT * APPLY (sum) APPLY (x -> x + 1) FROM t"},
+		{"columns except apply", keywords.DialectClickHouse,
+			"SELECT COLUMNS('a') EXCEPT (b) APPLY(avg) FROM t", "SELECT COLUMNS('a') EXCEPT (b) APPLY (avg) FROM t"},
+	})
+}
+
+func TestParseSnowflakeObjectLiteral(t *testing.T) {
+	runSyntaxCases(t, []syntaxCase{
+		{"object and array", keywords.DialectSnowflake,
+			"SELECT {'a': 1, 'b': 'two'} AS obj, [1, 2, 3] AS arr", "SELECT {'a': 1, 'b': 'two'} AS obj, [1, 2, 3] AS arr"},
+		{"empty", keywords.DialectSnowflake, "SELECT {}", "SELECT {}"},
+		{"nested with expressions", keywords.DialectSnowflake,
+			"SELECT {'k': {'n': [1, 2]}, 'f': f(x) + 1} FROM t", "SELECT {'k': {'n': [1, 2]}, 'f': f(x) + 1} FROM t"},
+	})
+	tree, err := ParseWithDialect("SELECT {'a': 1, 'b': 2}", keywords.DialectSnowflake)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ast.ReleaseAST(tree)
+	sel, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok || len(sel.Columns) != 1 {
+		t.Fatalf("unexpected statement %T", tree.Statements[0])
+	}
+	obj, ok := sel.Columns[0].(*ast.ObjectLiteral)
+	if !ok || len(obj.Entries) != 2 {
+		t.Fatalf("column is %#v, want an object literal with 2 entries", sel.Columns[0])
+	}
+}
+
+func TestParseSQLServerOpenrowsetAndMethodCall(t *testing.T) {
+	runSyntaxCases(t, []syntaxCase{
+		{"openrowset bulk", keywords.DialectSQLServer,
+			`SELECT * FROM OPENROWSET(BULK 'C:\data\file.csv', SINGLE_CLOB) AS x`,
+			`SELECT * FROM OPENROWSET(BULK 'C:\data\file.csv', SINGLE_CLOB) x`},
+		{"xml method on a subquery", keywords.DialectSQLServer,
+			"SELECT STUFF((SELECT N',' + Name FROM dbo.Customers FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, N'')",
+			"SELECT STUFF((SELECT N',' + Name FROM dbo.Customers FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, N'')"},
+		{"chained methods", keywords.DialectSQLServer,
+			"SELECT (SELECT 1 FOR XML PATH, TYPE).query('a').exist('b')",
+			"SELECT (SELECT 1 FOR XML PATH, TYPE).query('a').exist('b')"},
+		{"method without arguments", keywords.DialectSQLServer, "SELECT (x).f()", "SELECT (x).f()"},
+	})
+	tree, err := ParseWithDialect("SELECT (x).value('.', 'int')", keywords.DialectSQLServer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ast.ReleaseAST(tree)
+	sel, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok || len(sel.Columns) != 1 {
+		t.Fatalf("unexpected statement %T", tree.Statements[0])
+	}
+	fa, ok := sel.Columns[0].(*ast.FieldAccessExpression)
+	if !ok || !fa.IsCall || fa.Field != "value" || len(fa.Args) != 2 {
+		t.Fatalf("column is %#v, want a method call value with 2 arguments", sel.Columns[0])
+	}
+	// Other dialects keep refusing a method call on a parenthesized value.
+	if tree2, err := ParseWithDialect("SELECT (x).f(1)", keywords.DialectMySQL); err == nil {
+		ast.ReleaseAST(tree2)
+		t.Error("mysql: a method call on a parenthesized value was accepted")
+	}
+}
+
+func TestParseOracleLogErrors(t *testing.T) {
+	runSyntaxCases(t, []syntaxCase{
+		{"insert select", keywords.DialectOracle,
+			"INSERT INTO dest SELECT * FROM src LOG ERRORS INTO err$_dest ('nightly load') REJECT LIMIT UNLIMITED",
+			"INSERT INTO dest SELECT * FROM src LOG ERRORS INTO err$_dest ('nightly load') REJECT LIMIT UNLIMITED"},
+		{"insert values with limit", keywords.DialectOracle,
+			"INSERT INTO dest (a) VALUES (1) LOG ERRORS REJECT LIMIT 10",
+			"INSERT INTO dest (a) VALUES (1) LOG ERRORS REJECT LIMIT 10"},
+		{"after returning", keywords.DialectOracle,
+			"INSERT INTO dest (a) VALUES (1) RETURNING a INTO :x LOG ERRORS INTO s.e",
+			"INSERT INTO dest (a) VALUES (1) RETURNING a INTO :x LOG ERRORS INTO s.e"},
+		{"log as a table alias", keywords.DialectOracle, "SELECT log FROM errors log", "SELECT log FROM errors log"},
+	})
+	tree, err := ParseWithDialect("INSERT INTO d SELECT * FROM s LOG ERRORS INTO e REJECT LIMIT 5", keywords.DialectOracle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ast.ReleaseAST(tree)
+	ins, ok := tree.Statements[0].(*ast.InsertStatement)
+	if !ok || ins.LogErrors == nil {
+		t.Fatalf("statement = %#v, want an INSERT with LOG ERRORS", tree.Statements[0])
+	}
+	if ins.LogErrors.Into != "e" || ins.LogErrors.RejectLimit != "5" {
+		t.Errorf("LogErrors = %+v", ins.LogErrors)
+	}
+}
+
+func TestParseSetOperationQueryTail(t *testing.T) {
+	const q = "SELECT a FROM t1 UNION ALL SELECT b FROM t2 UNION ALL (SELECT c FROM t3 ORDER BY c LIMIT 1) ORDER BY 1"
+	for _, d := range []keywords.SQLDialect{keywords.DialectClickHouse, keywords.DialectPostgreSQL, keywords.DialectMySQL} {
+		runSyntaxCases(t, []syntaxCase{
+			{string(d) + " parenthesized last operand with its own clauses", d, q, q},
+			{string(d) + " both operands parenthesized", d,
+				"(SELECT a FROM t ORDER BY a LIMIT 5) UNION ALL (SELECT b FROM u LIMIT 5) ORDER BY 1 LIMIT 3 OFFSET 1",
+				"(SELECT a FROM t ORDER BY a LIMIT 5) UNION ALL (SELECT b FROM u LIMIT 5) ORDER BY 1 LIMIT 3 OFFSET 1"},
+			{string(d) + " last operand is a set operation", d,
+				"SELECT 1 UNION (SELECT 2 UNION SELECT 3) ORDER BY 1", "SELECT 1 UNION (SELECT 2 UNION SELECT 3) ORDER BY 1"},
+		})
+	}
+
+	tree, err := ParseWithDialect(q, keywords.DialectPostgreSQL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ast.ReleaseAST(tree)
+	op, ok := tree.Statements[0].(*ast.SetOperation)
+	if !ok {
+		t.Fatalf("statement is %T", tree.Statements[0])
+	}
+	if op.Tail == nil || len(op.Tail.OrderBy) != 1 {
+		t.Fatalf("Tail = %+v, want one ORDER BY item", op.Tail)
+	}
+	last, ok := op.Right.(*ast.SelectStatement)
+	if !ok || !op.RightParenthesized || len(last.OrderBy) != 1 || last.Limit == nil {
+		t.Errorf("the parenthesized operand lost its own ORDER BY / LIMIT: %#v", op.Right)
+	}
+
+	// The merge into the last SELECT still happens when nothing conflicts.
+	merged, err := ParseWithDialect("SELECT 1 UNION (SELECT 2) ORDER BY 1", keywords.DialectPostgreSQL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ast.ReleaseAST(merged)
+	if mop, ok := merged.Statements[0].(*ast.SetOperation); !ok || mop.Tail != nil {
+		t.Errorf("a clause without conflict was kept as a tail: %#v", merged.Statements[0])
+	}
+
+	// A LIMIT already applying to the whole operation cannot take a second one.
+	for _, in := range []string{
+		"(SELECT 1 UNION SELECT 2 LIMIT 5) ORDER BY 1",
+		"(SELECT 1 ORDER BY 1 LIMIT 5) ORDER BY 1",
+	} {
+		if tree2, err := ParseWithDialect(in, keywords.DialectPostgreSQL); err == nil {
+			ast.ReleaseAST(tree2)
+			t.Errorf("parse %q: expected an error", in)
+		}
+	}
+}
+
+func TestParseOracleSyntaxW3(t *testing.T) {
+	runSyntaxCases(t, []syntaxCase{
+		{"select unique", keywords.DialectOracle, "SELECT UNIQUE job_id FROM employees", "SELECT DISTINCT job_id FROM employees"},
+		{"cursor and multiset subqueries", keywords.DialectOracle,
+			"SELECT CURSOR(SELECT 1 FROM dual), CAST(MULTISET(SELECT order_id FROM orders WHERE customer_id = c.customer_id) AS id_list_t) FROM customers c",
+			"SELECT CURSOR(SELECT 1 FROM dual), CAST(MULTISET(SELECT order_id FROM orders WHERE customer_id = c.customer_id) AS id_list_t) FROM customers c"},
+		{"json_object value form", keywords.DialectOracle,
+			"SELECT JSON_OBJECT('id' VALUE employee_id, KEY 'name' VALUE last_name, 'x': 1, 'p', 2) FROM employees",
+			"SELECT JSON_OBJECT('id' VALUE employee_id, KEY 'name' VALUE last_name, 'x': 1, 'p', 2) FROM employees"},
+		{"xmlattributes with names", keywords.DialectOracle,
+			`SELECT XMLELEMENT("emp", XMLATTRIBUTES(employee_id AS "id", x AS y), last_name), XMLFOREST(a AS b) FROM employees`,
+			`SELECT XMLELEMENT("emp", XMLATTRIBUTES(employee_id AS "id", x AS y), last_name), XMLFOREST(a AS b) FROM employees`},
+		{"xmltable", keywords.DialectOracle,
+			"SELECT * FROM XMLTABLE('/rows/row' PASSING XMLTYPE(:x) COLUMNS id NUMBER PATH 'id', nm VARCHAR2(50) PATH 'name')",
+			"SELECT * FROM XMLTABLE('/rows/row' PASSING XMLTYPE(:x) COLUMNS id NUMBER PATH 'id', nm VARCHAR2(50) PATH 'name')"},
+		{"xmltable in postgresql", keywords.DialectPostgreSQL,
+			"SELECT * FROM XMLTABLE('/rows/row' PASSING data COLUMNS id int PATH '@id') AS t",
+			"SELECT * FROM XMLTABLE('/rows/row' PASSING data COLUMNS id int PATH '@id') t"},
+		{"partition for", keywords.DialectOracle,
+			"SELECT * FROM sales_hist PARTITION FOR (TO_DATE('2024-05-01', 'YYYY-MM-DD')) s",
+			"SELECT * FROM sales_hist PARTITION FOR (TO_DATE('2024-05-01', 'YYYY-MM-DD')) s"},
+		{"partition names still parse", keywords.DialectOracle,
+			"SELECT * FROM sales PARTITION (p1) s", "SELECT * FROM sales PARTITION (p1) s"},
+	})
+	tree, err := ParseWithDialect("SELECT CURSOR(SELECT 1 FROM dual) FROM dual", keywords.DialectOracle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ast.ReleaseAST(tree)
+	sel, ok := tree.Statements[0].(*ast.SelectStatement)
+	if !ok {
+		t.Fatalf("statement is %T", tree.Statements[0])
+	}
+	fn, ok := sel.Columns[0].(*ast.FunctionCall)
+	if !ok || len(fn.Arguments) != 1 {
+		t.Fatalf("column is %#v, want CURSOR(...) with one argument", sel.Columns[0])
+	}
+	if sq, ok := fn.Arguments[0].(*ast.SubqueryExpression); !ok || !sq.Bare {
+		t.Errorf("argument is %#v, want a bare subquery", fn.Arguments[0])
+	}
+	// CURSOR is only special in Oracle.
+	if tree2, err := ParseWithDialect("SELECT CURSOR(SELECT 1)", keywords.DialectMySQL); err == nil {
+		ast.ReleaseAST(tree2)
+		t.Error("mysql: CURSOR(SELECT ...) was accepted")
+	}
+}

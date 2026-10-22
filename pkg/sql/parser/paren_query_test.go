@@ -536,7 +536,9 @@ func TestParenQuery_Controls(t *testing.T) {
 }
 
 // TestParenQuery_UnsupportedTail checks that a tail clause that cannot be
-// represented without changing meaning returns E4001, and that a derived
+// represented without changing meaning returns E4001 (one after a single
+// parenthesized query with clauses of its own, as a set operation keeps it as
+// its Tail), and that a derived
 // table whose WITH body is not a query fails cleanly.
 func TestParenQuery_UnsupportedTail(t *testing.T) {
 	tests := []struct {
@@ -545,8 +547,6 @@ func TestParenQuery_UnsupportedTail(t *testing.T) {
 		code     string
 	}{
 		{"(SELECT a FROM t ORDER BY a LIMIT 1) ORDER BY a", parenLimitDialects, string(goerrors.ErrCodeUnsupportedFeature)},
-		{"SELECT 1 UNION (SELECT 2 UNION SELECT 3) ORDER BY 1", parenDialects, string(goerrors.ErrCodeUnsupportedFeature)},
-		{"((SELECT 1) UNION (SELECT 2 ORDER BY 1)) ORDER BY 1", parenDialects, string(goerrors.ErrCodeUnsupportedFeature)},
 		{"SELECT * FROM (WITH c AS (SELECT 1) INSERT INTO t VALUES (1)) x", parenDialects, ""},
 	}
 	for _, tc := range tests {

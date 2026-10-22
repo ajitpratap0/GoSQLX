@@ -332,8 +332,6 @@ func TestIssue521_Rejections(t *testing.T) {
 			"SELECT * FROM (a, b) JOIN c ON a.id = c.id", "inside a parenthesized join"},
 		{"unclosed group", keywords.DialectMySQL,
 			"SELECT * FROM (a JOIN b ON a.id = b.id", ""},
-		{"parenthesized join on the right side", keywords.DialectMySQL,
-			"SELECT * FROM a JOIN (b JOIN c ON b.x = c.x) ON a.y = b.y", ""},
 		{"alias on join group", keywords.DialectMySQL,
 			"SELECT * FROM (a JOIN b ON a.id = b.id) j", ""},
 		{"VALUES without ROW in MySQL", keywords.DialectMySQL,

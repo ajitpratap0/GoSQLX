@@ -127,6 +127,9 @@ type TableModifiers struct {
 	// Partitions is the MySQL / MariaDB / Oracle partition selection
 	// PARTITION (p0, p1).
 	Partitions []string
+	// PartitionFor is the Oracle PARTITION FOR (key value, ...) selection of
+	// the partition holding the given partition key values.
+	PartitionFor *PartitionForClause
 	// IndexHints are the MySQL / MariaDB index hints after the alias.
 	IndexHints []IndexHint
 	// IndexedBy is the SQLite INDEXED BY index name.
@@ -135,6 +138,81 @@ type TableModifiers struct {
 	NotIndexed bool
 	// WithSchema is the column schema of SQL Server OPENJSON(...) WITH (...).
 	WithSchema []OpenJSONColumn
+	// Group is set when the reference is a parenthesized joined table used as
+	// a join operand: a JOIN (b JOIN c ON ...) ON ... or t1 LEFT JOIN (t2, t3)
+	// ON .... The reference has no name, alias or other modifier then.
+	Group *JoinGroup
+}
+
+// PartitionForClause holds the partition key values of an Oracle PARTITION
+// FOR (value, ...) table selection.
+type PartitionForClause struct {
+	Values []Expression
+}
+
+func (c *PartitionForClause) expressionNode()     {}
+func (c PartitionForClause) TokenLiteral() string { return "PARTITION FOR" }
+
+// Children returns the key value expressions.
+func (c PartitionForClause) Children() []Node {
+	nodes := make([]Node, 0, len(c.Values))
+	for _, e := range c.Values {
+		if e != nil {
+			nodes = append(nodes, e)
+		}
+	}
+	return nodes
+}
+
+// JoinGroup is a parenthesized joined table: the tables of a FROM list and the
+// joins that follow them, as in "(b JOIN c ON b.id = c.b_id)" or
+// "(t2, t3)". It is the operand of a JOIN, where flattening it into the
+// enclosing join chain would change which tables an ON condition may see (and,
+// for outer joins, the result). Joins at the left-most position of a FROM
+// clause are flattened by the parser instead; there the grouping has no effect.
+type JoinGroup struct {
+	// Tables are the comma-separated table references; at least one.
+	Tables []TableReference
+	// Joins are the JOIN clauses that follow Tables.
+	Joins []JoinClause
+}
+
+func (g *JoinGroup) statementNode()      {}
+func (g JoinGroup) TokenLiteral() string { return "(" }
+func (g *JoinGroup) Children() []Node    { return g.childrenInPlace() }
+func (g *JoinGroup) childrenInPlace() []Node {
+	nodes := make([]Node, 0, len(g.Tables)+len(g.Joins))
+	for i := range g.Tables {
+		nodes = append(nodes, &g.Tables[i])
+	}
+	for i := range g.Joins {
+		nodes = append(nodes, &g.Joins[i])
+	}
+	return nodes
+}
+
+// joinGroup returns the parenthesized joined table t stands for, or nil.
+func (t *TableReference) joinGroup() *JoinGroup {
+	if t.Modifiers == nil {
+		return nil
+	}
+	return t.Modifiers.Group
+}
+
+// TableRefJoinGroup returns the parenthesized joined table t stands for, or
+// nil when t is an ordinary table reference.
+func TableRefJoinGroup(t *TableReference) *JoinGroup { return t.joinGroup() }
+
+// writeJoinGroup writes g in parentheses: its tables separated by ", ", then
+// its joins.
+func writeJoinGroup(buf *bytes.Buffer, g *JoinGroup) {
+	buf.WriteByte('(')
+	writeTableRefList(buf, g.Tables)
+	for i := range g.Joins {
+		buf.WriteByte(' ')
+		writeJoin(buf, &g.Joins[i])
+	}
+	buf.WriteByte(')')
 }
 
 // OpenJSONColumn is one column of a SQL Server OPENJSON WITH schema:
@@ -214,6 +292,18 @@ func writeTableRefPreAlias(w textWriter, t *TableReference, kw func(string) stri
 		}
 		w.WriteByte(')')
 	}
+	if m := t.Modifiers; m != nil && m.PartitionFor != nil && len(m.PartitionFor.Values) > 0 {
+		w.WriteByte(' ')
+		w.WriteString(kw("PARTITION FOR"))
+		w.WriteString(" (")
+		for i, e := range m.PartitionFor.Values {
+			if i > 0 {
+				w.WriteString(", ")
+			}
+			w.WriteString(exprSQL(e))
+		}
+		w.WriteByte(')')
+	}
 	if t.ForSystemTime != nil {
 		w.WriteByte(' ')
 		writeForSystemTime(w, t.ForSystemTime, kw)
@@ -265,7 +355,7 @@ func writeTableRefPostAlias(w textWriter, t *TableReference, kw func(string) str
 func TableRefPreAliasSQL(t *TableReference, kw func(string) string) string {
 	if t == nil || (t.ForSystemTime == nil && t.TimeTravel == nil && t.flashback() == nil &&
 		(t.tableSample() == nil || t.tableSample().AfterAlias) &&
-		(t.Modifiers == nil || (len(t.Modifiers.Partitions) == 0 && len(t.Modifiers.WithSchema) == 0))) {
+		(t.Modifiers == nil || (len(t.Modifiers.Partitions) == 0 && t.Modifiers.PartitionFor == nil && len(t.Modifiers.WithSchema) == 0))) {
 		return ""
 	}
 	if kw == nil {
@@ -640,6 +730,12 @@ func releaseTableFactorModifiers(tr *TableReference, mode releaseMode) {
 		releaseExpression(f.End, mode)
 		f.Point, f.Start, f.End = nil, nil, nil
 	}
+	if m := tr.Modifiers; m != nil && m.PartitionFor != nil {
+		for i := range m.PartitionFor.Values {
+			releaseExpression(m.PartitionFor.Values[i], mode)
+			m.PartitionFor.Values[i] = nil
+		}
+	}
 	if v := tr.Values; v != nil {
 		for _, row := range v.Rows {
 			for i := range row {
@@ -649,6 +745,21 @@ func releaseTableFactorModifiers(tr *TableReference, mode releaseMode) {
 		}
 		v.Rows = nil
 		tr.Values = nil
+	}
+	if g := tr.joinGroup(); g != nil {
+		for i := range g.Tables {
+			releaseTableReference(&g.Tables[i], mode)
+		}
+		for i := range g.Joins {
+			releaseTableReference(&g.Joins[i].Right, mode)
+			releaseExpression(g.Joins[i].Condition, mode)
+			releaseExpression(g.Joins[i].MatchCondition, mode)
+			for _, u := range g.Joins[i].Using {
+				releaseExpression(u, mode)
+			}
+			g.Joins[i] = JoinClause{}
+		}
+		g.Tables, g.Joins = nil, nil
 	}
 	tr.Modifiers = nil // not pooled; its expressions were released above
 	tr.Only = false

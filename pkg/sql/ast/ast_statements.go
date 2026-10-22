@@ -55,6 +55,10 @@ type SetOperation struct {
 	LeftWithHoisted bool
 	// RightParenthesized reports that Right was written as "(query)".
 	RightParenthesized bool
+	// Tail holds an ORDER BY / LIMIT / OFFSET / FETCH that follows the whole
+	// operation when it cannot be stored on the last SELECT (see QueryTail);
+	// nil otherwise.
+	Tail *QueryTail
 	// Distinct reports an explicit DISTINCT quantifier (UNION DISTINCT,
 	// INTERSECT DISTINCT). It means the same as no quantifier.
 	Distinct bool
@@ -74,6 +78,9 @@ func (s SetOperation) Children() []Node {
 	}
 	if s.Right != nil {
 		nodes = append(nodes, s.Right)
+	}
+	if s.Tail != nil {
+		nodes = append(nodes, s.Tail)
 	}
 	return nodes
 }
@@ -187,6 +194,7 @@ type SelectStatement struct {
 	LimitAll         bool               // PostgreSQL LIMIT ALL
 	OffsetRows       bool               // OFFSET n ROW / ROWS
 	LimitWithTies    bool               // ClickHouse LIMIT n WITH TIES
+	RowsExamined     Expression         // MariaDB LIMIT ... ROWS EXAMINED n
 	LimitBy          *LimitByClause     // ClickHouse LIMIT n [OFFSET m] BY expr, ...
 	ForOutput        *ForOutputClause   // SQL Server FOR JSON / FOR XML / FOR BROWSE
 	QueryHints       []QueryHint        // SQL Server OPTION (hint, ...)
@@ -496,6 +504,10 @@ type DeleteStatement struct {
 	// DELETE t1[, t2] FROM t1 JOIN t2 ... (MySQL, SQL Server). When set, the
 	// targets (TableName/Alias and Tables) are written before FROM.
 	From []TableReference
+	// BeforeSystemTime is the point of MariaDB's DELETE HISTORY FROM t
+	// BEFORE SYSTEM_TIME point; nil when the statement has none. DELETE
+	// HISTORY itself is the HISTORY modifier.
+	BeforeSystemTime Expression
 	// DMLTargetFields holds modifiers, TOP, ONLY, extra targets, joins,
 	// OUTPUT, ORDER BY, LIMIT and RETURNING INTO (see ast_dml.go).
 	DMLTargetFields
@@ -514,6 +526,9 @@ func (d DeleteStatement) Children() []Node {
 	}
 	for i := range d.From {
 		children = append(children, &d.From[i])
+	}
+	if d.BeforeSystemTime != nil {
+		children = append(children, d.BeforeSystemTime)
 	}
 	if d.Where != nil {
 		children = append(children, d.Where)

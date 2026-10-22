@@ -421,36 +421,46 @@ func (p *Parser) parseTypeArgsString() (string, error) {
 			continue
 		}
 
-		// Render leaf token. Quote string literals; everything else is rendered
-		// by its raw value (numbers, identifiers, keywords like Nullable / Array).
-		val := tok.Value
-		if val == "" && !isQuotedTokenType(tok) {
-			return "", p.expectedError("type argument")
-		}
-
-		// Insert a space when two adjacent leaf tokens both look like identifiers
-		// or numbers — this preserves "name Type" pairs in named tuple elements.
-		if prevWasIdent {
-			buf.WriteByte(' ')
-		}
-
-		switch {
-		case tok.Type == models.TokenTypeString || tok.Type == models.TokenTypeSingleQuotedString:
-			// Double embedded quotes so 'it''s' is written back as one literal.
-			writeDelimitedToken(&buf, val, '\'')
-		case tok.Type == models.TokenTypeDoubleQuotedString:
-			// A "quoted" word is an identifier (or, in MySQL, a string):
-			// keep its delimiters so neither changes meaning.
-			writeDelimitedToken(&buf, val, '"')
-		case tok.Type == models.TokenTypeIdentifier && (tok.Quote == '"' || tok.Quote == '`' || tok.Quote == '['):
-			writeDelimitedToken(&buf, val, tok.Quote)
-		default:
-			buf.WriteString(val)
+		if err := p.writeRawLeaf(&buf, tok, prevWasIdent); err != nil {
+			return "", err
 		}
 		prevWasIdent = true
 
 		p.advance()
 	}
+}
+
+// writeRawLeaf writes one token of a verbatim text capture: string literals
+// and delimited names keep their delimiters, everything else is written by
+// its value. Two adjacent words are separated by a space (afterWord).
+func (p *Parser) writeRawLeaf(buf *strings.Builder, tok models.Token, afterWord bool) error {
+	// Render leaf token. Quote string literals; everything else is rendered
+	// by its raw value (numbers, identifiers, keywords like Nullable / Array).
+	val := tok.Value
+	if val == "" && !isQuotedTokenType(tok) {
+		return p.expectedError("type argument")
+	}
+
+	// Insert a space when two adjacent leaf tokens both look like identifiers
+	// or numbers — this preserves "name Type" pairs in named tuple elements.
+	if afterWord {
+		buf.WriteByte(' ')
+	}
+
+	switch {
+	case tok.Type == models.TokenTypeString || tok.Type == models.TokenTypeSingleQuotedString:
+		// Double embedded quotes so 'it''s' is written back as one literal.
+		writeDelimitedToken(buf, val, '\'')
+	case tok.Type == models.TokenTypeDoubleQuotedString:
+		// A "quoted" word is an identifier (or, in MySQL, a string):
+		// keep its delimiters so neither changes meaning.
+		writeDelimitedToken(buf, val, '"')
+	case tok.Type == models.TokenTypeIdentifier && (tok.Quote == '"' || tok.Quote == '`' || tok.Quote == '['):
+		writeDelimitedToken(buf, val, tok.Quote)
+	default:
+		buf.WriteString(val)
+	}
+	return nil
 }
 
 // writeDelimitedToken writes val delimited with quote (' " ` or [), doubling
@@ -473,4 +483,90 @@ func isQuotedTokenType(tok models.Token) bool {
 		return true
 	}
 	return tok.Quote != 0
+}
+
+// isClauseArgument reports whether the current tokens start the clause words
+// that follow the first argument of a JSON_TABLE (COLUMNS ( ...) or XMLTABLE
+// (PASSING ... or COLUMNS ...) call named funcName.
+func (p *Parser) isClauseArgument(funcName string) bool {
+	switch {
+	case equalsUpper(funcName, "JSON_TABLE"):
+		return p.isUnquotedWord("COLUMNS") && p.peekToken().Token.Type == models.TokenTypeLParen &&
+			p.dialectAllows(dialect.MySQL, dialect.MariaDB, dialect.Oracle)
+	case equalsUpper(funcName, "XMLTABLE"):
+		return (p.isUnquotedWord("PASSING") || p.isUnquotedWord("COLUMNS")) &&
+			p.dialectAllows(dialect.Oracle, dialect.PostgreSQL)
+	}
+	return false
+}
+
+// parseClauseArgument keeps the clause words after head, up to the ")" that
+// closes the call, as text. For JSON_TABLE that is COLUMNS and its
+// parenthesized list; for XMLTABLE it is PASSING / COLUMNS and everything
+// after them.
+func (p *Parser) parseClauseArgument(funcName string, head ast.Expression) (*ast.ClauseArgument, error) {
+	pos := p.currentLocation()
+	var clause string
+	if equalsUpper(funcName, "JSON_TABLE") {
+		p.advance() // Consume COLUMNS
+		cols, err := p.parseTypeArgsString()
+		if err != nil {
+			return nil, err
+		}
+		clause = "COLUMNS " + cols
+	} else {
+		var err error
+		if clause, err = p.parseRawUntilClose(); err != nil {
+			return nil, err
+		}
+	}
+	if !ast.IsPlainRawText(clause) {
+		return nil, goerrors.UnsupportedFeatureError(
+			funcName+" clause with backslashes or unusual characters",
+			pos,
+			"",
+		)
+	}
+	return &ast.ClauseArgument{Head: head, Clause: clause, Pos: pos}, nil
+}
+
+// parseRawUntilClose consumes tokens up to, but not including, the ")" that
+// closes the enclosing call and returns them as text, as parseTypeArgsString
+// does for a parenthesized list.
+func (p *Parser) parseRawUntilClose() (string, error) {
+	var buf strings.Builder
+	depth := 0
+	prevWasWord := false
+	for {
+		tok := p.currentToken.Token
+		switch tok.Type {
+		case models.TokenTypeEOF:
+			return "", p.expectedError(") to close the call")
+		case models.TokenTypeLParen:
+			buf.WriteByte('(')
+			depth++
+			prevWasWord = false
+			p.advance()
+			continue
+		case models.TokenTypeRParen:
+			if depth == 0 {
+				return buf.String(), nil
+			}
+			buf.WriteByte(')')
+			depth--
+			prevWasWord = true
+			p.advance()
+			continue
+		case models.TokenTypeComma:
+			buf.WriteString(", ")
+			prevWasWord = false
+			p.advance()
+			continue
+		}
+		if err := p.writeRawLeaf(&buf, tok, prevWasWord); err != nil {
+			return "", err
+		}
+		prevWasWord = true
+		p.advance()
+	}
 }

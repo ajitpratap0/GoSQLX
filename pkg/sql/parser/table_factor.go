@@ -263,6 +263,34 @@ func (p *Parser) parseTableModifiersBeforeAlias(ref *ast.TableReference) error {
 		}
 		tableModifiers(ref).Partitions = names
 	}
+	if p.IsOracle() && p.isType(models.TokenTypePartition) && p.peekToken().Token.Type == models.TokenTypeFor {
+		// Oracle PARTITION FOR (partition key value, ...)
+		p.advance() // Consume PARTITION
+		p.advance() // Consume FOR
+		if !p.isType(models.TokenTypeLParen) {
+			return p.expectedError("( after PARTITION FOR")
+		}
+		p.advance() // Consume (
+		for {
+			e, err := p.parseExpression()
+			if err != nil {
+				return err
+			}
+			m := tableModifiers(ref)
+			if m.PartitionFor == nil {
+				m.PartitionFor = &ast.PartitionForClause{}
+			}
+			m.PartitionFor.Values = append(m.PartitionFor.Values, e)
+			if !p.isType(models.TokenTypeComma) {
+				break
+			}
+			p.advance() // Consume ,
+		}
+		if !p.isType(models.TokenTypeRParen) {
+			return p.expectedError(") after PARTITION FOR values")
+		}
+		p.advance() // Consume )
+	}
 	if ref.ForSystemTime == nil && p.isForSystemTimeStart() {
 		p.advance() // Consume FOR
 		clause, err := p.parseForSystemTimeClause()

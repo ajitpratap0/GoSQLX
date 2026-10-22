@@ -747,6 +747,10 @@ func (s *SubqueryExpression) writeSQL(buf *bytes.Buffer) {
 	if s == nil {
 		return
 	}
+	if s.Bare {
+		writeStmt(buf, s.Subquery)
+		return
+	}
 	buf.WriteByte('(')
 	writeStmt(buf, s.Subquery)
 	buf.WriteByte(')')
@@ -1467,6 +1471,7 @@ func (i *InsertStatement) writeSQL(buf *bytes.Buffer) {
 	}
 
 	writeReturning(buf, i.Returning, i.ReturningInto)
+	writeLogErrors(buf, i.LogErrors)
 	i.writeInsertFormat(buf)
 }
 
@@ -1548,6 +1553,10 @@ func (d *DeleteStatement) writeSQL(buf *bytes.Buffer) {
 		buf.WriteString("FROM ")
 	}
 	d.writeDMLTargets(buf, d.TableName, d.Alias)
+	if d.BeforeSystemTime != nil {
+		buf.WriteString(" BEFORE SYSTEM_TIME ")
+		writeExpr(buf, d.BeforeSystemTime)
+	}
 	writeDMLOutput(buf, d.Output, d.OutputInto)
 
 	if len(d.From) > 0 {
@@ -1730,6 +1739,7 @@ func (s *SetOperation) writeBody(buf *bytes.Buffer) {
 	} else {
 		writeStmt(buf, s.Right)
 	}
+	writeQueryTail(buf, s.Tail)
 }
 
 // SQL returns the SQL representation of this VALUES clause as
@@ -2155,6 +2165,10 @@ func tableRefSQL(t *TableReference) string {
 }
 
 func writeTableRef(buf *bytes.Buffer, t *TableReference) {
+	if g := t.joinGroup(); g != nil {
+		writeJoinGroup(buf, g)
+		return
+	}
 	if t.Lateral {
 		buf.WriteString("LATERAL ")
 	}

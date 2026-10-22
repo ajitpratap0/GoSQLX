@@ -344,6 +344,11 @@ func (p *Parser) parseDistinctModifier() (isDistinct bool, distinctOnColumns []a
 		p.advance() // Consume DISTINCTROW
 		return true, nil, nil
 	}
+	// Oracle: UNIQUE is a synonym of DISTINCT.
+	if p.IsOracle() && p.isType(models.TokenTypeUnique) {
+		p.advance() // Consume UNIQUE
+		return true, nil, nil
+	}
 	if p.isType(models.TokenTypeDistinct) {
 		isDistinct = true
 		p.advance() // Consume DISTINCT
@@ -494,6 +499,12 @@ func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
 			}
 			// t.* EXCLUDE (...) and other wildcard modifiers
 			if id, ok := expr.(*ast.Identifier); ok && id.Name == "*" {
+				if expr, err = p.parseStarModifiers(expr); err != nil {
+					return nil, err
+				}
+			} else if fc, ok := expr.(*ast.FunctionCall); ok && p.dialect == string(keywords.DialectClickHouse) &&
+				strings.EqualFold(fc.Name, "COLUMNS") && p.isStarModifierStart() {
+				// ClickHouse COLUMNS('regexp') APPLY (fn) ...
 				if expr, err = p.parseStarModifiers(expr); err != nil {
 					return nil, err
 				}

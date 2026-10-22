@@ -330,6 +330,12 @@ func TestRender_TableModifiersRendersEveryField(t *testing.T) {
 		},
 		"IndexedBy":  func(m *ast.TableModifiers) { m.IndexedBy = "i" },
 		"NotIndexed": func(m *ast.TableModifiers) { m.NotIndexed = true },
+		"PartitionFor": func(m *ast.TableModifiers) {
+			m.PartitionFor = &ast.PartitionForClause{Values: []ast.Expression{num("1")}}
+		},
+		"Group": func(m *ast.TableModifiers) {
+			m.Group = &ast.JoinGroup{Tables: []ast.TableReference{{Name: "u"}, {Name: "v"}}}
+		},
 		"WithSchema": func(m *ast.TableModifiers) {
 			m.WithSchema = []ast.OpenJSONColumn{{Name: "id", Type: "INT", Path: "$.id"}}
 		},

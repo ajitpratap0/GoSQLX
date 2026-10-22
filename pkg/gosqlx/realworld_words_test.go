@@ -28,6 +28,7 @@ func TestRealworldDroppedWords(t *testing.T) {
 	}{
 		{"select all", "SELECT ALL a FROM t", "SELECT a FROM t", ""},
 		{"union all is not a synonym", "SELECT a FROM t UNION ALL SELECT a FROM u", "SELECT a FROM t UNION SELECT a FROM u", "ALL"},
+		{"oracle select unique", "SELECT UNIQUE a FROM t", "SELECT DISTINCT a FROM t", ""},
 		{"distinctrow", "SELECT DISTINCTROW a FROM t", "SELECT DISTINCT a FROM t", ""},
 		{"postfix isnull", "SELECT a FROM t WHERE a ISNULL", "SELECT a FROM t WHERE a IS NULL", ""},
 		{"postfix notnull", "SELECT a FROM t WHERE a NOTNULL", "SELECT a FROM t WHERE a IS NOT NULL", ""},

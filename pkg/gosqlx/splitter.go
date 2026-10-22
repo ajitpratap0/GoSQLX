@@ -341,6 +341,14 @@ func splitCore(src string, p dialectProfile) (out []string, open bool) {
 				continue
 			}
 			word := src[i:j]
+			if p.oracle && j < len(src) && src[j] == '\'' {
+				// Oracle alternative quoting q'[...]' / nq'[...]': the body can
+				// hold quotes and semicolons.
+				if end, ok := oracleQuoteEnd(src, word, j); ok {
+					i = end
+					continue
+				}
+			}
 			switch {
 			case p.tsql && len(word) == 2 && asciiFold(word[0]) == 'g' && asciiFold(word[1]) == 'o':
 				if ls, le, ok := goLine(src, i, j); ok {
@@ -430,4 +438,40 @@ func isDollarTagStart(c byte) bool {
 // tag after the first byte. Letters, digits, and underscores are permitted.
 func isDollarTagCont(c byte) bool {
 	return isDollarTagStart(c) || (c >= '0' && c <= '9')
+}
+
+// oracleQuoteEnd reports where an Oracle alternative-quoting literal ends. word
+// is the q or nq introducer (any case) and src[quote] the opening apostrophe
+// right after it. The literal q'<d>...<d>' takes the delimiter d from the
+// character after the apostrophe; ( [ { < pair with ) ] } >, any other
+// non-blank character closes itself. The result is the index just past the
+// closing apostrophe.
+func oracleQuoteEnd(src, word string, quote int) (int, bool) {
+	if !equalFoldASCII(word, "q") && !equalFoldASCII(word, "nq") {
+		return 0, false
+	}
+	if quote+2 >= len(src) {
+		return 0, false
+	}
+	open := src[quote+1]
+	if open == ' ' || open == '\t' || open == '\n' || open == '\r' {
+		return 0, false
+	}
+	closer := open
+	switch open {
+	case '(':
+		closer = ')'
+	case '[':
+		closer = ']'
+	case '{':
+		closer = '}'
+	case '<':
+		closer = '>'
+	}
+	for k := quote + 2; k+1 < len(src); k++ {
+		if src[k] == closer && src[k+1] == '\'' {
+			return k + 2, true
+		}
+	}
+	return 0, false
 }

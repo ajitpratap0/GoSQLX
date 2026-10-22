@@ -553,6 +553,24 @@ func (c *metadataCollector) collectFromExpression(expr ast.Expression, want extr
 	case *ast.AliasedExpression:
 		// Unwrap the aliased expression and collect from inner expression
 		c.collectFromExpression(e.Expr, want)
+	case *ast.KeywordArgument:
+		c.collectFromExpression(e.Value, want)
+	case *ast.MatchAgainstExpression:
+		if want&extractFunctions != 0 {
+			c.addFunction("MATCH")
+		}
+		for _, col := range e.Columns {
+			c.collectFromExpression(col, want)
+		}
+		c.collectFromExpression(e.Query, want)
+	case *ast.OuterJoinMarker:
+		c.collectFromExpression(e.Expr, want)
+	case *ast.ConnectByRootExpression:
+		c.collectFromExpression(e.Expr, want)
+	case *ast.AssignmentExpression:
+		c.collectFromExpression(e.Value, want)
+	case *ast.IntervalExpression:
+		c.collectFromExpression(e.ValueExpr, want)
 	}
 }
 

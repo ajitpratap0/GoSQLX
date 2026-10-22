@@ -24,6 +24,8 @@ import (
 )
 
 // parseMatchAgainst parses MySQL MATCH(...) AGAINST('text' [IN NATURAL LANGUAGE MODE | IN BOOLEAN MODE | WITH QUERY EXPANSION])
+// into an *ast.MatchAgainstExpression. matchFunc holds the already parsed
+// MATCH(col, ...) column list; the current token is AGAINST.
 func (p *Parser) parseMatchAgainst(matchFunc *ast.FunctionCall) (ast.Expression, error) {
 	p.advance() // Consume AGAINST
 	if !p.isType(models.TokenTypeLParen) {
@@ -31,8 +33,9 @@ func (p *Parser) parseMatchAgainst(matchFunc *ast.FunctionCall) (ast.Expression,
 	}
 	p.advance() // Consume (
 
-	// Parse search expression (just the primary - not full expression, to avoid IN being eaten)
-	searchExpr, err := p.parsePrimaryExpression()
+	// Parse the search expression below the comparison level so that the
+	// IN of IN BOOLEAN MODE is not read as an IN predicate.
+	searchExpr, err := p.parseStringConcatExpression()
 	if err != nil {
 		return nil, goerrors.InvalidSyntaxError(
 			fmt.Sprintf("failed to parse AGAINST expression: %v", err),
@@ -41,11 +44,22 @@ func (p *Parser) parseMatchAgainst(matchFunc *ast.FunctionCall) (ast.Expression,
 		).WithCause(err)
 	}
 
-	// Consume optional mode keywords until we hit )
-	mode := ""
+	// Optional search modifier words up to the closing parenthesis.
+	var words []string
 	for !p.isType(models.TokenTypeRParen) && !p.isType(models.TokenTypeEOF) {
-		mode += " " + p.currentToken.Token.Value
+		if p.currentToken.Token.Quote != 0 || !isBareWord(p.currentToken.Token.Value) {
+			return nil, p.expectedError("search modifier or )")
+		}
+		words = append(words, strings.ToUpper(p.currentToken.Token.Value))
 		p.advance()
+	}
+	modifier := strings.Join(words, " ")
+	if modifier != "" && ast.MatchModifierText(modifier) == "" {
+		return nil, goerrors.InvalidSyntaxError(
+			fmt.Sprintf("unknown MATCH ... AGAINST search modifier %q", modifier),
+			p.currentLocation(),
+			"",
+		).WithHint("Use IN NATURAL LANGUAGE MODE, IN BOOLEAN MODE or WITH QUERY EXPANSION")
 	}
 
 	if !p.isType(models.TokenTypeRParen) {
@@ -53,23 +67,11 @@ func (p *Parser) parseMatchAgainst(matchFunc *ast.FunctionCall) (ast.Expression,
 	}
 	p.advance() // Consume )
 
-	// Represent as a binary expression: MATCH(cols) AGAINST(expr)
-	// Store the search expr and mode as a function call named "AGAINST"
-	againstFunc := &ast.FunctionCall{
-		Name:      "AGAINST",
-		Arguments: []ast.Expression{searchExpr},
-	}
-	if mode != "" {
-		againstFunc.Arguments = append(againstFunc.Arguments, &ast.LiteralValue{
-			Value: strings.TrimSpace(mode),
-			Type:  "STRING",
-		})
-	}
-
-	return &ast.BinaryExpression{
-		Left:     matchFunc,
-		Operator: "AGAINST",
-		Right:    againstFunc,
+	return &ast.MatchAgainstExpression{
+		Columns:  matchFunc.Arguments,
+		Query:    searchExpr,
+		Modifier: modifier,
+		Pos:      matchFunc.Pos,
 	}, nil
 }
 

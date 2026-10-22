@@ -299,6 +299,11 @@ func (l *LiteralValue) SQL() string {
 		return buf.String()
 	case strings.EqualFold(l.Type, "BOOLEAN"):
 		return strings.ToUpper(literalText(l.Value))
+	case strings.EqualFold(l.Type, NationalStringType):
+		buf := getBuf()
+		defer putBuf(buf)
+		l.writeSQL(buf)
+		return buf.String()
 	default:
 		return literalText(l.Value)
 	}
@@ -315,6 +320,10 @@ func (l *LiteralValue) writeSQL(buf *bytes.Buffer) {
 	switch {
 	case strings.EqualFold(l.Type, "STRING"):
 		buf.WriteByte('\'')
+		writeEscapedStringLiteral(buf, literalText(l.Value))
+		buf.WriteByte('\'')
+	case strings.EqualFold(l.Type, NationalStringType):
+		buf.WriteString("N'")
 		writeEscapedStringLiteral(buf, literalText(l.Value))
 		buf.WriteByte('\'')
 	case strings.EqualFold(l.Type, "BOOLEAN"):
@@ -526,10 +535,19 @@ func (c *CastExpression) writeSQL(buf *bytes.Buffer) {
 	if c == nil {
 		return
 	}
-	buf.WriteString("CAST(")
+	if c.Try {
+		buf.WriteString("TRY_CAST(")
+	} else {
+		buf.WriteString("CAST(")
+	}
 	writeExpr(buf, c.Expr)
-	buf.WriteString(" AS ")
-	writeDataType(buf, c.Type)
+	if c.TypeAsString {
+		buf.WriteString(", ")
+		writeStringLiteral(buf, c.Type)
+	} else {
+		buf.WriteString(" AS ")
+		writeDataType(buf, c.Type)
+	}
 	buf.WriteByte(')')
 }
 
@@ -782,12 +800,17 @@ func (f *FunctionCall) writeSQL(buf *bytes.Buffer) {
 	if f.Distinct {
 		buf.WriteString("DISTINCT ")
 	}
-	writeExprList(buf, f.Arguments)
+	writeFunctionArgs(buf, f.Arguments)
 	if len(f.OrderBy) > 0 {
 		buf.WriteString(" ORDER BY ")
 		writeOrderBy(buf, f.OrderBy)
 	}
+	if f.Separator != nil {
+		buf.WriteString(" SEPARATOR ")
+		f.Separator.writeSQL(buf)
+	}
 	buf.WriteByte(')')
+	f.Keep.writeSQL(buf)
 	// NullTreatment is IGNORE NULLS or RESPECT NULLS; anything else can only
 	// come from a hand-built AST and is dropped rather than written raw.
 	if NullTreatmentText(f.NullTreatment) != "" {
@@ -926,7 +949,7 @@ func (i *IntervalExpression) SQL() string {
 	if i == nil {
 		return ""
 	}
-	if !stringLiteralNeedsEscape(i.Value) && (i.Qualifier == "" || IntervalQualifierText(i.Qualifier) != "") {
+	if i.ValueExpr == nil && !stringLiteralNeedsEscape(i.Value) && (i.Qualifier == "" || IntervalQualifierText(i.Qualifier) != "") {
 		if i.Qualifier != "" {
 			return "INTERVAL '" + i.Value + "' " + i.Qualifier
 		}
@@ -943,6 +966,11 @@ func (i *IntervalExpression) writeSQL(buf *bytes.Buffer) {
 		return
 	}
 	buf.WriteString("INTERVAL ")
+	if i.ValueExpr != nil {
+		writeExpr(buf, i.ValueExpr)
+		writeIntervalUnit(buf, i.Unit)
+		return
+	}
 	writeStringLiteral(buf, i.Value)
 	// The qualifier is a known interval qualifier (DAY, YEAR TO MONTH, see
 	// IntervalQualifierText); anything else can only come from a hand-built
@@ -1016,7 +1044,17 @@ func (a *ArrayConstructorExpression) writeSQL(buf *bytes.Buffer) {
 		buf.WriteByte(')')
 		return
 	}
-	buf.WriteString("ARRAY[")
+	if a.Query != nil {
+		buf.WriteString("ARRAY(")
+		writeStmt(buf, a.Query)
+		buf.WriteByte(')')
+		return
+	}
+	if a.Bracket {
+		buf.WriteByte('[')
+	} else {
+		buf.WriteString("ARRAY[")
+	}
 	writeExprList(buf, a.Elements)
 	buf.WriteByte(']')
 }

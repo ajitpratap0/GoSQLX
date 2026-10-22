@@ -28,25 +28,69 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
+// Kinds of comparison suffix reported by parseComparisonSuffix.
+const (
+	suffixNone       = iota // no suffix operator follows
+	suffixPredicate         // BETWEEN, IN, LIKE and the other predicates, IS ...
+	suffixComparison        // =, <>, <, ... and quantified comparisons
+)
+
 // parseComparisonExpression parses an expression with comparison operators
+// and the predicates (BETWEEN, IN, LIKE, IS, ...). The suffix operators are
+// applied left to right, so "a IN (1, 2) = TRUE" and "a BETWEEN 1 AND 2 = TRUE"
+// read as a predicate compared to a value. Comparison operators themselves do
+// not chain: after "a = b" another comparison operator is left for the
+// caller, which rejects it.
 func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
-	// Parse the left side using string concatenation expression for arithmetic support
-	left, err := p.parseStringConcatExpression()
+	// Parse the left side with bitwise and arithmetic operators binding tighter.
+	left, err := p.parseBitwiseExpression(1)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check for NOT prefix for BETWEEN, LIKE, IN operators
-	// Only consume NOT if followed by BETWEEN, LIKE, ILIKE, or IN
-	// This prevents breaking cases like: WHERE NOT active AND name LIKE '%'
-	notPrefix := false
-	if p.isType(models.TokenTypeNot) {
-		nextToken := p.peekToken()
-		nv := nextToken.Token.Value
-		if equalsUpper(nv, "BETWEEN") || equalsUpper(nv, "LIKE") || equalsUpper(nv, "ILIKE") || equalsUpper(nv, "IN") {
-			notPrefix = true
-			p.advance() // Consume NOT only if followed by valid operator
+	afterComparison := false
+	for {
+		next, kind, err := p.parseComparisonSuffix(left, afterComparison)
+		if err != nil {
+			return nil, err
 		}
+		if kind == suffixNone {
+			return left, nil
+		}
+		left = next
+		afterComparison = kind == suffixComparison
+	}
+}
+
+// notOperatorFollows reports whether the NOT at the current token negates a
+// predicate operator that follows it. NOT is consumed only then, which keeps
+// cases like "WHERE NOT active AND name LIKE '%'" and "DEFAULT 0 NOT NULL"
+// working.
+func (p *Parser) notOperatorFollows() bool {
+	nv := p.peekAt(1).Token.Value
+	switch {
+	case equalsUpper(nv, "BETWEEN"), equalsUpper(nv, "LIKE"), equalsUpper(nv, "ILIKE"), equalsUpper(nv, "IN"),
+		equalsUpper(nv, "REGEXP"), equalsUpper(nv, "RLIKE"):
+		return true
+	case equalsUpper(nv, "SIMILAR"):
+		return p.peekValueIs(2, "TO")
+	case equalsUpper(nv, "GLOB"), equalsUpper(nv, "MATCH"):
+		return p.IsSQLite()
+	}
+	return false
+}
+
+// parseComparisonSuffix parses at most one comparison or predicate operator
+// following left and returns the combined expression. It returns suffixNone
+// (and a nil expression) when no operator follows. afterComparison is set when
+// the previous suffix was a comparison operator, which may not be followed by
+// another one.
+func (p *Parser) parseComparisonSuffix(left ast.Expression, afterComparison bool) (ast.Expression, int, error) {
+	// Check for NOT prefix for BETWEEN, LIKE, IN operators
+	notPrefix := false
+	if p.isType(models.TokenTypeNot) && p.notOperatorFollows() {
+		notPrefix = true
+		p.advance() // Consume NOT only if followed by valid operator
 	}
 
 	// Check for BETWEEN operator
@@ -54,11 +98,11 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 		betweenPos := p.currentLocation()
 		p.advance() // Consume BETWEEN
 
-		// Parse lower bound - use parseStringConcatExpression to support complex expressions
+		// Parse lower bound - use the bitwise level to support complex expressions
 		// like: price BETWEEN price * 0.9 AND price * 1.1
-		lower, err := p.parseStringConcatExpression()
+		lower, err := p.parseBitwiseExpression(1)
 		if err != nil {
-			return nil, goerrors.InvalidSyntaxError(
+			return nil, suffixNone, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse BETWEEN lower bound: %v", err),
 				p.currentLocation(),
 				"",
@@ -67,14 +111,14 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 
 		// Expect AND keyword
 		if !p.isType(models.TokenTypeAnd) {
-			return nil, p.expectedError("AND")
+			return nil, suffixNone, p.expectedError("AND")
 		}
 		p.advance() // Consume AND
 
-		// Parse upper bound - use parseStringConcatExpression to support complex expressions
-		upper, err := p.parseStringConcatExpression()
+		// Parse upper bound
+		upper, err := p.parseBitwiseExpression(1)
 		if err != nil {
-			return nil, goerrors.InvalidSyntaxError(
+			return nil, suffixNone, goerrors.InvalidSyntaxError(
 				fmt.Sprintf("failed to parse BETWEEN upper bound: %v", err),
 				p.currentLocation(),
 				"",
@@ -87,7 +131,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			Upper: upper,
 			Not:   notPrefix,
 			Pos:   betweenPos,
-		}, nil
+		}, suffixPredicate, nil
 	}
 
 	// Check for LIKE/ILIKE operator
@@ -114,7 +158,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 				string(keywords.DialectClickHouse):
 				// supported
 			default:
-				return nil, goerrors.UnsupportedFeatureError(
+				return nil, suffixNone, goerrors.UnsupportedFeatureError(
 					fmt.Sprintf("ILIKE is not supported in %s; use LIKE or LOWER() for case-insensitive matching", p.dialect),
 					p.currentLocation(),
 					"",
@@ -133,37 +177,23 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			p.advance() // Consume ANY/ALL
 			// Expect a tuple: (pattern, pattern, ...)
 			if !p.isType(models.TokenTypeLParen) {
-				return nil, p.expectedError("( after " + quantifier)
+				return nil, suffixNone, p.expectedError("( after " + quantifier)
 			}
 			tuple, err := p.parsePrimaryExpression()
 			if err != nil {
-				return nil, err
+				return nil, suffixNone, err
 			}
 			return &ast.BinaryExpression{
 				Left:     left,
 				Operator: operator,
 				Right:    tuple,
 				Not:      notPrefix,
-			}, nil
+			}, suffixPredicate, nil
 		}
 
 		// Parse the pattern at the string-concatenation level so arithmetic
 		// and || bind tighter than LIKE: a LIKE b || '%' (#596).
-		pattern, err := p.parseStringConcatExpression()
-		if err != nil {
-			return nil, goerrors.InvalidSyntaxError(
-				fmt.Sprintf("failed to parse LIKE pattern: %v", err),
-				p.currentLocation(),
-				"",
-			).WithCause(err)
-		}
-
-		return &ast.BinaryExpression{
-			Left:     left,
-			Operator: operator,
-			Right:    pattern,
-			Not:      notPrefix,
-		}, nil
+		return p.parsePatternMatch(left, operator, notPrefix, true)
 	}
 
 	// Check for REGEXP/RLIKE operator (MySQL)
@@ -175,25 +205,42 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			operator = "RLIKE"
 		}
 		p.advance()
-		pattern, err := p.parseStringConcatExpression()
-		if err != nil {
-			return nil, goerrors.InvalidSyntaxError(
-				fmt.Sprintf("failed to parse REGEXP pattern: %v", err),
-				p.currentLocation(),
-				"",
-			).WithCause(err)
+		return p.parsePatternMatch(left, operator, notPrefix, false)
+	}
+
+	// SIMILAR TO (PostgreSQL, Redshift): the TO keyword makes it unambiguous.
+	if p.currentToken.Token.Type == models.TokenTypeIdentifier && equalsUpper(p.currentToken.Token.Value, "SIMILAR") && p.peekValueIs(1, "TO") {
+		p.advance() // Consume SIMILAR
+		p.advance() // Consume TO
+		return p.parsePatternMatch(left, "SIMILAR TO", notPrefix, true)
+	}
+
+	// SQLite GLOB and MATCH pattern operators.
+	if p.currentToken.Token.Type == models.TokenTypeIdentifier && p.IsSQLite() {
+		switch {
+		case equalsUpper(p.currentToken.Token.Value, "GLOB"):
+			p.advance()
+			return p.parsePatternMatch(left, "GLOB", notPrefix, false)
+		case equalsUpper(p.currentToken.Token.Value, "MATCH"):
+			p.advance()
+			return p.parsePatternMatch(left, "MATCH", notPrefix, false)
 		}
-		return &ast.BinaryExpression{
-			Left:     left,
-			Operator: operator,
-			Right:    pattern,
-			Not:      notPrefix,
-		}, nil
+	}
+
+	// MySQL SOUNDS LIKE.
+	if p.currentToken.Token.Type == models.TokenTypeIdentifier && p.isMySQLFamily() &&
+		equalsUpper(p.currentToken.Token.Value, "SOUNDS") && p.peekTypeAt(1) == models.TokenTypeLike {
+		p.advance() // Consume SOUNDS
+		p.advance() // Consume LIKE
+		return p.parsePatternMatch(left, "SOUNDS LIKE", notPrefix, false)
 	}
 
 	// ClickHouse GLOBAL IN / GLOBAL NOT IN — GLOBAL is a distributed query modifier
-	// before IN. Consume it and fall through to standard IN parsing below.
-	if p.dialect == string(keywords.DialectClickHouse) && p.isTokenMatch("GLOBAL") {
+	// before IN. It is kept on the InExpression.
+	global := false
+	if p.dialect == string(keywords.DialectClickHouse) && p.isTokenMatch("GLOBAL") &&
+		(p.peekTypeAt(1) == models.TokenTypeIn || (p.peekTypeAt(1) == models.TokenTypeNot && p.peekTypeAt(2) == models.TokenTypeIn)) {
+		global = true
 		p.advance() // consume GLOBAL
 		if p.isType(models.TokenTypeNot) {
 			notPrefix = true
@@ -203,76 +250,17 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 
 	// Check for IN operator
 	if p.isType(models.TokenTypeIn) {
-		inPos := p.currentLocation()
-		p.advance() // Consume IN
-
-		// Expect opening parenthesis
-		if !p.isType(models.TokenTypeLParen) {
-			return nil, p.expectedError("(")
+		in, err := p.parseInTail(left, notPrefix, global)
+		if err != nil {
+			return nil, suffixNone, err
 		}
-		p.advance() // Consume (
-
-		// Check if this is a subquery (starts with SELECT or WITH)
-		if p.isType(models.TokenTypeSelect) || p.isType(models.TokenTypeWith) {
-			// Parse subquery
-			subquery, err := p.parseSubquery()
-			if err != nil {
-				return nil, goerrors.InvalidSyntaxError(
-					fmt.Sprintf("failed to parse IN subquery: %v", err),
-					p.currentLocation(),
-					"",
-				).WithCause(err)
-			}
-
-			// Expect closing parenthesis
-			if !p.isType(models.TokenTypeRParen) {
-				return nil, p.expectedError(")")
-			}
-			p.advance() // Consume )
-
-			return &ast.InExpression{
-				Expr:     left,
-				Subquery: subquery,
-				Not:      notPrefix,
-				Pos:      inPos,
-			}, nil
-		}
-
-		// Parse value list
-		var values []ast.Expression
-		for {
-			value, err := p.parseExpression()
-			if err != nil {
-				return nil, goerrors.InvalidSyntaxError(
-					fmt.Sprintf("failed to parse IN value: %v", err),
-					p.currentLocation(),
-					"",
-				)
-			}
-			values = append(values, value)
-
-			if p.isType(models.TokenTypeComma) {
-				p.advance() // Consume comma
-			} else if p.isType(models.TokenTypeRParen) {
-				break
-			} else {
-				return nil, p.expectedError(", or )")
-			}
-		}
-		p.advance() // Consume )
-
-		return &ast.InExpression{
-			Expr: left,
-			List: values,
-			Not:  notPrefix,
-			Pos:  inPos,
-		}, nil
+		return in, suffixPredicate, nil
 	}
 
 	// If NOT was consumed but no BETWEEN/LIKE/IN follows, we need to handle this case
 	// Put back the NOT by creating a NOT expression with left as the operand
 	if notPrefix {
-		return nil, goerrors.ExpectedTokenError(
+		return nil, suffixNone, goerrors.ExpectedTokenError(
 			"BETWEEN, LIKE, or IN",
 			"NOT",
 			p.currentLocation(),
@@ -280,7 +268,7 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 		)
 	}
 
-	// Check for IS NULL / IS NOT NULL
+	// Check for IS NULL / IS NOT NULL / IS [NOT] TRUE|FALSE|UNKNOWN / IS [NOT] DISTINCT FROM
 	if p.isType(models.TokenTypeIs) {
 		isPos := p.currentLocation()
 		p.advance() // Consume IS
@@ -291,76 +279,52 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			p.advance() // Consume NOT
 		}
 
-		if p.isType(models.TokenTypeNull) {
-			p.advance() // Consume NULL
-			return &ast.BinaryExpression{
-				Left:     left,
-				Operator: "IS NULL",
-				Right:    &ast.LiteralValue{Value: nil, Type: "null"},
-				Not:      isNot,
-				Pos:      isPos,
-			}, nil
+		is, err := p.parseIsSuffix(left, isPos, isNot)
+		if err != nil {
+			return nil, suffixNone, err
 		}
+		return is, suffixPredicate, nil
+	}
 
-		return nil, p.expectedError("NULL")
+	// PostgreSQL / SQLite postfix ISNULL and NOTNULL.
+	if is, ok := p.postfixNullTest(left); ok {
+		return is, suffixPredicate, nil
+	}
+
+	// Comparison operators do not chain: "a = b = c" is left to the caller.
+	if afterComparison {
+		return nil, suffixNone, nil
 	}
 
 	// Check if this is a comparison binary expression (uses O(1) switch instead of O(n) isAnyType)
-	if p.isComparisonOperator() {
-		// Save the operator and its position
+	operator, nTok := p.combinedComparison()
+	if nTok == 0 && p.isComparisonOperator() {
+		operator, nTok = p.currentToken.Token.Value, 1
+	}
+	if nTok > 0 {
+		// Save the operator position
 		opPos := p.currentLocation()
-		operator := p.currentToken.Token.Value
-		p.advance()
-
-		// Check for ANY/ALL subquery operators (uses O(1) switch instead of O(n) isAnyType)
-		if p.isQuantifier() {
-			quantifier := p.currentToken.Token.Value
-			p.advance() // Consume ANY/ALL
-
-			// Expect opening parenthesis
-			if !p.isType(models.TokenTypeLParen) {
-				return nil, p.expectedError("(")
-			}
-			p.advance() // Consume (
-
-			// Parse subquery
-			subquery, err := p.parseSubquery()
-			if err != nil {
-				return nil, goerrors.InvalidSyntaxError(
-					fmt.Sprintf("failed to parse %s subquery: %v", quantifier, err),
-					p.currentLocation(),
-					"",
-				)
-			}
-
-			// Expect closing parenthesis
-			if !p.isType(models.TokenTypeRParen) {
-				return nil, p.expectedError(")")
-			}
-			p.advance() // Consume )
-
-			if quantifier == "ANY" {
-				return &ast.AnyExpression{
-					Expr:     left,
-					Operator: operator,
-					Subquery: subquery,
-				}, nil
-			}
-			return &ast.AllExpression{
-				Expr:     left,
-				Operator: operator,
-				Subquery: subquery,
-			}, nil
+		for i := 0; i < nTok; i++ {
+			p.advance()
 		}
 
-		// Parse the right operand at the same level as the left one (string
-		// concatenation, which includes the additive and multiplicative
-		// levels), so arithmetic binds tighter than comparison: a = 1 + 2 is
-		// a = (1 + 2) (#596). Comparisons stay non-chaining: a second
-		// comparison operator is left for the caller, which rejects it.
-		right, err := p.parseStringConcatExpression()
+		// Check for ANY/ALL/SOME quantified comparisons: = ANY (subquery),
+		// = ANY($1), <> ALL (ARRAY[1, 2]).
+		if p.isQuantifier() || p.isSomeQuantifier() {
+			quantified, err := p.parseQuantifiedComparison(left, operator)
+			if err != nil {
+				return nil, suffixNone, err
+			}
+			return quantified, suffixComparison, nil
+		}
+
+		// Parse the right operand at the same level as the left one (bitwise,
+		// string concatenation, additive and multiplicative levels), so
+		// arithmetic binds tighter than comparison: a = 1 + 2 is a = (1 + 2)
+		// (#596).
+		right, err := p.parseBitwiseExpression(1)
 		if err != nil {
-			return nil, err
+			return nil, suffixNone, err
 		}
 
 		// Create a binary expression
@@ -369,10 +333,128 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 			Operator: operator,
 			Right:    right,
 			Pos:      opPos,
+		}, suffixComparison, nil
+	}
+
+	return nil, suffixNone, nil
+}
+
+// parsePatternMatch parses the pattern of a LIKE-style operator whose keyword
+// has been consumed, with an optional ESCAPE clause when allowEscape is set.
+func (p *Parser) parsePatternMatch(left ast.Expression, operator string, not, allowEscape bool) (ast.Expression, int, error) {
+	pattern, err := p.parseBitwiseExpression(1)
+	if err != nil {
+		return nil, suffixNone, goerrors.InvalidSyntaxError(
+			fmt.Sprintf("failed to parse %s pattern: %v", operator, err),
+			p.currentLocation(),
+			"",
+		).WithCause(err)
+	}
+	var escape ast.Expression
+	if allowEscape {
+		escape, err = p.parseEscapeClause()
+		if err != nil {
+			return nil, suffixNone, err
+		}
+	}
+	return &ast.BinaryExpression{
+		Left:     left,
+		Operator: operator,
+		Right:    pattern,
+		Not:      not,
+		Escape:   escape,
+	}, suffixPredicate, nil
+}
+
+// parseInTail parses the right side of IN once left (and any NOT / GLOBAL)
+// has been consumed. The current token is IN.
+func (p *Parser) parseInTail(left ast.Expression, notPrefix, global bool) (ast.Expression, error) {
+	inPos := p.currentLocation()
+	p.advance() // Consume IN
+
+	// Expect opening parenthesis
+	if !p.isType(models.TokenTypeLParen) {
+		// SQLite also takes a table or table-valued function: a IN tbl.
+		if p.IsSQLite() && p.isIdentifier() {
+			ref, err := p.parsePrimaryExpression()
+			if err != nil {
+				return nil, err
+			}
+			return &ast.InExpression{
+				Expr: left,
+				List: []ast.Expression{ref},
+				Not:  notPrefix,
+				Bare: true,
+				Pos:  inPos,
+			}, nil
+		}
+		return nil, p.expectedError("(")
+	}
+	p.advance() // Consume (
+
+	// SQLite accepts an empty list: a IN () is always false.
+	if p.isType(models.TokenTypeRParen) && p.IsSQLite() {
+		p.advance() // Consume )
+		return &ast.InExpression{Expr: left, Not: notPrefix, Pos: inPos}, nil
+	}
+
+	// Check if this is a subquery (starts with SELECT or WITH)
+	if p.isType(models.TokenTypeSelect) || p.isType(models.TokenTypeWith) {
+		// Parse subquery
+		subquery, err := p.parseSubquery()
+		if err != nil {
+			return nil, goerrors.InvalidSyntaxError(
+				fmt.Sprintf("failed to parse IN subquery: %v", err),
+				p.currentLocation(),
+				"",
+			).WithCause(err)
+		}
+
+		// Expect closing parenthesis
+		if !p.isType(models.TokenTypeRParen) {
+			return nil, p.expectedError(")")
+		}
+		p.advance() // Consume )
+
+		return &ast.InExpression{
+			Expr:     left,
+			Subquery: subquery,
+			Not:      notPrefix,
+			Global:   global,
+			Pos:      inPos,
 		}, nil
 	}
 
-	return left, nil
+	// Parse value list
+	var values []ast.Expression
+	for {
+		value, err := p.parseExpression()
+		if err != nil {
+			return nil, goerrors.InvalidSyntaxError(
+				fmt.Sprintf("failed to parse IN value: %v", err),
+				p.currentLocation(),
+				"",
+			)
+		}
+		values = append(values, value)
+
+		if p.isType(models.TokenTypeComma) {
+			p.advance() // Consume comma
+		} else if p.isType(models.TokenTypeRParen) {
+			break
+		} else {
+			return nil, p.expectedError(", or )")
+		}
+	}
+	p.advance() // Consume )
+
+	return &ast.InExpression{
+		Expr:   left,
+		List:   values,
+		Not:    notPrefix,
+		Global: global,
+		Pos:    inPos,
+	}, nil
 }
 
 // parseArrayAccessExpression parses array subscript and slice expressions.

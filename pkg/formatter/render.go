@@ -1221,11 +1221,21 @@ func renderIn(i *ast.InExpression, opts ast.FormatOptions) string {
 
 	sb.WriteString(FormatExpression(i.Expr, opts))
 	sb.WriteString(" ")
+	if i.Global {
+		sb.WriteString(f.kw("GLOBAL"))
+		sb.WriteString(" ")
+	}
 	if i.Not {
 		sb.WriteString(f.kw("NOT"))
 		sb.WriteString(" ")
 	}
 	sb.WriteString(f.kw("IN"))
+	if i.Bare && i.Subquery == nil {
+		// SQLite "a IN tbl": no parentheses around the table reference.
+		sb.WriteString(" ")
+		sb.WriteString(exprListSQL(i.List))
+		return f.result()
+	}
 	sb.WriteString(" (")
 	if i.Subquery != nil {
 		sb.WriteString(FormatStatement(i.Subquery, nestedOpts(opts)))

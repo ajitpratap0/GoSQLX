@@ -51,6 +51,22 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		}, nil
 	}
 
+	// Bitwise NOT (~a: MySQL, PostgreSQL, SQL Server, SQLite) and MySQL's !a,
+	// a synonym of NOT with a higher precedence.
+	if p.isType(models.TokenTypeTilde) || (p.isType(models.TokenTypeExclamationMark) && p.isMySQLFamily()) {
+		unaryPos := p.currentLocation()
+		op := ast.PGBitwiseNot
+		if p.isType(models.TokenTypeExclamationMark) {
+			op = ast.BangNot
+		}
+		p.advance() // Consume ~ / !
+		expr, err := p.parseUnaryOperand()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.UnaryExpression{Operator: op, Expr: expr, Pos: unaryPos}, nil
+	}
+
 	// CONNECT BY: PRIOR is a prefix operator that binds to its operand, so
 	// "PRIOR a + 1" is "(PRIOR a) + 1" (#783).
 	if p.inConnectBy && p.isConnectByPrior() {

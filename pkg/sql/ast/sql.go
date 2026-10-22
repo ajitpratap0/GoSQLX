@@ -403,6 +403,7 @@ func (b *BinaryExpression) writeSQL(buf *bytes.Buffer) {
 			buf.WriteString(canon)
 			buf.WriteByte(' ')
 			writeExpr(buf, b.Right)
+			writeEscape(buf, b.Escape)
 			return
 		}
 		buf.WriteString("NOT (")
@@ -425,6 +426,7 @@ func (b *BinaryExpression) writeSQL(buf *bytes.Buffer) {
 	}
 	buf.WriteByte(' ')
 	writeExpr(buf, b.Right)
+	writeEscape(buf, b.Escape)
 }
 
 // notQualifiedOperator reports whether op (case-insensitively) is one of the
@@ -437,6 +439,16 @@ func notQualifiedOperator(op string) (string, bool) {
 		return "ILIKE", true
 	case strings.EqualFold(op, "SIMILAR TO"):
 		return "SIMILAR TO", true
+	case strings.EqualFold(op, "REGEXP"):
+		return "REGEXP", true
+	case strings.EqualFold(op, "RLIKE"):
+		return "RLIKE", true
+	case strings.EqualFold(op, "GLOB"):
+		return "GLOB", true
+	case strings.EqualFold(op, "MATCH"):
+		return "MATCH", true
+	case strings.EqualFold(op, "SOUNDS LIKE"):
+		return "SOUNDS LIKE", true
 	}
 	return "", false
 }
@@ -632,11 +644,13 @@ func (i *InExpression) writeSQL(buf *bytes.Buffer) {
 		return
 	}
 	writeExpr(buf, i.Expr)
-	if i.Not {
-		buf.WriteString(" NOT IN (")
-	} else {
-		buf.WriteString(" IN (")
+	buf.WriteString(inKeywords(i.Global, i.Not))
+	if i.Bare && i.Subquery == nil {
+		buf.WriteByte(' ')
+		writeExprList(buf, i.List)
+		return
 	}
+	buf.WriteString(" (")
 	if i.Subquery != nil {
 		writeStmt(buf, i.Subquery)
 	} else {

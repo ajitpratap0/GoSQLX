@@ -527,7 +527,23 @@ func dataTypeIsPlain(typ string) bool {
 				j++
 			}
 			w := typ[i+1 : j]
-			if !isTypeModifierWord(w) {
+			if strings.EqualFold(w, "SET") || strings.EqualFold(w, "CHARSET") {
+				// MySQL CHARACTER SET name / CHARSET name: a bare charset
+				// name follows the word.
+				m := j + 1
+				if j >= len(typ) || typ[j] != ' ' {
+					return false
+				}
+				for m < len(typ) && (typ[m] == '_' || typ[m] >= '0' && typ[m] <= '9' || typ[m]|0x20 >= 'a' && typ[m]|0x20 <= 'z') {
+					m++
+				}
+				if m == j+1 {
+					return false
+				}
+				i = m - 1
+				continue
+			}
+			if !isTypeModifierWord(w) && !(isSignednessInt(w) && prevWordIsSignedness(typ, i)) {
 				return false
 			}
 			// The ClickHouse column CODEC the parser appends to the type is
@@ -595,6 +611,23 @@ var typeModifierWords = map[string]bool{
 	"WITH": true, "WITHOUT": true, "LOCAL": true, "TIME": true, "ZONE": true,
 	"UNSIGNED": true, "SIGNED": true, "ZEROFILL": true, "LARGE": true, "OBJECT": true,
 	"RAW": true, "BINARY": true, "CODEC": true,
+}
+
+// isSignednessInt reports whether w is INT or INTEGER, the optional word that
+// follows MySQL's SIGNED and UNSIGNED in a cast type (SIGNED INTEGER).
+func isSignednessInt(w string) bool {
+	return strings.EqualFold(w, "INT") || strings.EqualFold(w, "INTEGER")
+}
+
+// prevWordIsSignedness reports whether the word of typ that ends just before
+// index end (the space) is SIGNED or UNSIGNED.
+func prevWordIsSignedness(typ string, end int) bool {
+	start := end
+	for start > 0 && typ[start-1]|0x20 >= 'a' && typ[start-1]|0x20 <= 'z' {
+		start--
+	}
+	w := typ[start:end]
+	return strings.EqualFold(w, "SIGNED") || strings.EqualFold(w, "UNSIGNED")
 }
 
 // maxTypeModifierLen bounds the stack buffer isTypeModifierWord upper-cases
@@ -945,6 +978,7 @@ var (
 		"IS NULL", "IS NOT NULL", "IS", "IS NOT",
 		"IS DISTINCT FROM", "IS NOT DISTINCT FROM",
 		"IN", "NOT IN", "AGAINST", "DIV", "MOD", "OVERLAPS", "GLOB",
+		"NOT GLOB", "MATCH", "NOT MATCH", "SOUNDS LIKE",
 	}
 	// columnConstraintKeywords: the constraint kinds columnConstraintSQL
 	// writes as bare keyword text (the parser stores NULL, AUTO_INCREMENT and

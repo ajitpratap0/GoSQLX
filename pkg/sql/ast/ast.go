@@ -133,6 +133,13 @@ type Identifier struct {
 	// recorded in Quotes. It is set only for ANSI double quotes; QuoteStyle
 	// records MySQL backticks and SQL Server brackets.
 	Quoted bool
+	// Quotes records which parts of the reference (part 0 is Name, part 1
+	// the last qualifier part, ...) were delimited in the source and must
+	// stay delimited, such as a name quoted for its letter case ("CreatedAt")
+	// or a keyword ("table"); see NameQuote. Its style, when set, takes
+	// precedence over QuoteStyle. It sits next to Quoted so the struct keeps
+	// its size.
+	Quotes NameQuote
 	// QuoteStyle is the opening delimiter the source used for the quoted
 	// part(s) of the reference: '"', '`' (MySQL, MariaDB, ClickHouse) or
 	// '[' (SQL Server), and zero when no part was delimited. A reserved
@@ -140,12 +147,6 @@ type Identifier struct {
 	// quotes with the same delimiters, so a MySQL `from` is not turned into
 	// the string "from".
 	QuoteStyle rune
-	// Quotes records which parts of the reference (part 0 is Name, part 1
-	// the last qualifier part, ...) were delimited in the source and must
-	// stay delimited, such as a name quoted for its letter case ("CreatedAt")
-	// or a keyword ("table"); see NameQuote. Its style, when set, takes
-	// precedence over QuoteStyle.
-	Quotes NameQuote
 }
 
 func (i *Identifier) expressionNode()     {}

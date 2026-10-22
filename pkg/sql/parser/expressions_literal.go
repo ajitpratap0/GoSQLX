@@ -199,7 +199,10 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		identPos := p.currentLocation()
 		identName := p.currentToken.Token.Value
 		identQuote := p.currentIdentQuote()
-		identQuotes := p.appendNamePartQuoted(0, identQuote)
+		var identQuotes ast.NameQuote
+		if p.nameQuoteRelevant(identQuote) {
+			identQuotes = p.appendNamePartQuoted(0, identQuote)
+		}
 		p.advance()
 
 		// Check for function call (identifier followed by parentheses)
@@ -265,7 +268,9 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				if q != 0 {
 					ident.QuoteStyle = q
 				}
-				ident.Quotes = p.appendNamePartQuoted(ident.Quotes, q)
+				if ident.Quotes != 0 || p.nameQuoteRelevant(q) {
+					ident.Quotes = p.appendNamePartQuoted(ident.Quotes, q)
+				}
 				p.advance()
 
 				// Multi-part reference: db.table.column (MySQL/MariaDB),
@@ -627,7 +632,9 @@ func (p *Parser) parseMultiPartColumnRef(ident *ast.Identifier) error {
 			if q != 0 {
 				ident.QuoteStyle = q
 			}
-			ident.Quotes = p.appendNamePartQuoted(ident.Quotes, q)
+			if ident.Quotes != 0 || p.nameQuoteRelevant(q) {
+				ident.Quotes = p.appendNamePartQuoted(ident.Quotes, q)
+			}
 			n++
 			p.advance()
 		default:

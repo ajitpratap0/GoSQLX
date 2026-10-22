@@ -112,6 +112,15 @@ func (p *Parser) appendNamePart(q ast.NameQuote) ast.NameQuote {
 	return p.appendNamePartQuoted(q, p.currentIdentQuote())
 }
 
+// nameQuoteRelevant reports whether a name part with delimiter quote (0 for
+// a bare part) can record anything in a NameQuote: it is delimited, or it is
+// an Oracle name that may carry a bare '#'. Hot paths check it inline before
+// calling appendNamePartQuoted, since appending an unmarked part to a zero
+// NameQuote leaves it zero.
+func (p *Parser) nameQuoteRelevant(quote rune) bool {
+	return quote != 0 || p.dialect == string(keywords.DialectOracle)
+}
+
 // appendNamePartQuoted is appendNamePart for a caller that already has the
 // current token's delimiter (p.currentIdentQuote()).
 func (p *Parser) appendNamePartQuoted(q ast.NameQuote, quote rune) ast.NameQuote {
@@ -138,7 +147,10 @@ func (p *Parser) parseQualifiedNameQuoted() (string, ast.NameQuote, error) {
 	}
 	var parts [maxQualifiedNameParts]string
 	parts[0] = p.currentToken.Token.Value
-	q := p.currentNameQuote()
+	var q ast.NameQuote
+	if quote := p.currentIdentQuote(); p.nameQuoteRelevant(quote) {
+		q = p.appendNamePartQuoted(0, quote)
+	}
 	n := 1
 	p.advance()
 
@@ -156,7 +168,9 @@ func (p *Parser) parseQualifiedNameQuoted() (string, ast.NameQuote, error) {
 			return "", 0, p.expectedError("identifier after .")
 		}
 		parts[n] = p.currentToken.Token.Value
-		q = p.appendNamePart(q)
+		if quote := p.currentIdentQuote(); q != 0 || p.nameQuoteRelevant(quote) {
+			q = p.appendNamePartQuoted(q, quote)
+		}
 		n++
 		p.advance()
 	}

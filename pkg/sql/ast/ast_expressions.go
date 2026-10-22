@@ -143,6 +143,7 @@ type FunctionCall struct {
 	Parameters    []Expression // ClickHouse parametric aggregates: quantile(0.5)(x) — params before args
 	Over          *WindowSpec  // For window functions
 	Distinct      bool
+	NameQuote     NameQuote           // Delimited parts of Name to keep, as in s."select"(1) (see NameQuote); shares Distinct's padding
 	Filter        Expression          // WHERE clause for aggregate functions
 	OrderBy       []OrderByExpression // ORDER BY clause for aggregate functions (STRING_AGG, ARRAY_AGG, etc.)
 	WithinGroup   []OrderByExpression // ORDER BY clause for ordered-set aggregates (PERCENTILE_CONT, etc.)
@@ -150,10 +151,6 @@ type FunctionCall struct {
 	Pos           models.Location     // Source position of the function name (1-based line and column)
 	Separator     *LiteralValue       // MySQL/MariaDB GROUP_CONCAT(... SEPARATOR 'str'); nil when absent
 	Keep          *KeepClause         // Oracle KEEP (DENSE_RANK FIRST|LAST ORDER BY ...); nil when absent
-	// NameQuote records the parts of Name the source delimited and that
-	// must stay delimited, such as s."select" or "MySchema"."MyFunc" (see
-	// NameQuote).
-	NameQuote NameQuote
 }
 
 func (f *FunctionCall) expressionNode()     {}

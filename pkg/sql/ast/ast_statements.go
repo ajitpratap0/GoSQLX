@@ -755,6 +755,25 @@ func (d *DescribeStatement) statementNode()      {}
 func (d DescribeStatement) TokenLiteral() string { return "DESCRIBE" }
 func (d DescribeStatement) Children() []Node     { return nil }
 
+// ExplainStatement represents EXPLAIN / DESCRIBE / DESC applied to a
+// statement, e.g. "EXPLAIN ANALYZE SELECT ...", "EXPLAIN (FORMAT JSON) ...",
+// "EXPLAIN QUERY PLAN ..." (SQLite) or "DESCRIBE PIPELINE ..." (ClickHouse).
+// DESCRIBE of a table name is a DescribeStatement instead.
+type ExplainStatement struct {
+	Keyword   string    // EXPLAIN, DESCRIBE or DESC, upper-cased
+	Options   string    // text between the keyword and the statement, e.g. "ANALYZE VERBOSE"
+	Statement Statement // the explained statement
+}
+
+func (e *ExplainStatement) statementNode()      {}
+func (e ExplainStatement) TokenLiteral() string { return e.Keyword }
+func (e ExplainStatement) Children() []Node {
+	if e.Statement == nil {
+		return nil
+	}
+	return []Node{e.Statement}
+}
+
 // UnsupportedStatement represents a SQL statement that was parsed but not
 // fully modeled in the AST. The parser consumed and validated the tokens
 // but no dedicated AST node exists yet for this statement kind.

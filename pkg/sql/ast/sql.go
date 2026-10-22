@@ -2771,6 +2771,21 @@ func (d *DescribeStatement) SQL() string {
 	return "DESCRIBE " + QuoteQualifiedName(d.TableName)
 }
 
+// SQL returns the SQL string for an EXPLAIN / DESCRIBE <statement>.
+func (e *ExplainStatement) SQL() string {
+	if e == nil {
+		return ""
+	}
+	out := e.Keyword
+	if e.Options != "" {
+		out += " " + e.Options
+	}
+	if e.Statement != nil {
+		out += " " + stmtSQL(e.Statement)
+	}
+	return out
+}
+
 // SQL returns the SQL string for a REPLACE statement (MySQL).
 func (r *ReplaceStatement) SQL() string {
 	if r == nil {

@@ -621,11 +621,9 @@ func FormatterOptionsFromConfig(cfg *config.Config, flagsChanged map[string]bool
 // checkFormattable refuses parse results the CLI cannot rewrite faithfully, so
 // format, format -i and format -o leave such input unchanged.
 //
-// DescribeStatement keeps only a name: it drops EXPLAIN options, the explained
-// query and DESCRIBE object kinds, and "EXPLAIN VERBOSE|ANALYZE <stmt>" parses
-// as a DescribeStatement followed by <stmt>, which would rewrite a
-// non-executing EXPLAIN into the executable statement. UnsupportedStatement is
-// rendered as a comment. Both are refused by type. As a general guard, a parse
+// DescribeStatement keeps only a name and drops DESCRIBE object kinds
+// (EXPLAIN <stmt> is an ExplainStatement, which round-trips).
+// UnsupportedStatement is rendered as a comment. Both are refused by type. As a general guard, a parse
 // with more statements than semicolon-separated segments in the input means
 // the parser split a statement, which re-parsing the output cannot detect.
 func checkFormattable(tree *ast.AST, tokens []models.TokenWithSpan) error {

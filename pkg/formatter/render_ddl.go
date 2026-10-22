@@ -129,6 +129,23 @@ func renderDescribe(s *ast.DescribeStatement, opts ast.FormatOptions) string {
 	return sb.String()
 }
 
+// renderExplain renders EXPLAIN / DESCRIBE <options> <statement>.
+func renderExplain(s *ast.ExplainStatement, opts ast.FormatOptions) string {
+	f := newNodeFormatter(opts)
+	sb := f.sb
+
+	sb.WriteString(f.kw(s.Keyword))
+	if s.Options != "" {
+		sb.WriteString(" ")
+		sb.WriteString(s.Options)
+	}
+	if s.Statement != nil {
+		sb.WriteString(" ")
+		sb.WriteString(FormatStatement(s.Statement, opts))
+	}
+	return sb.String()
+}
+
 // renderUnsupported renders an UnsupportedStatement as a SQL comment
 // preserving the original SQL fragment. This prevents silently producing
 // corrupt SQL for statement types the formatter cannot handle. The fragment

@@ -853,8 +853,9 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 	case models.TokenTypeDescribe, models.TokenTypeExplain, models.TokenTypeDesc:
 		// DESC is the ORDER-BY sort-direction token but also a synonym for
 		// DESCRIBE at statement position (Oracle, Snowflake, MySQL).
+		keyword := strings.ToUpper(p.currentToken.Token.Value)
 		p.advance()
-		return p.parseDescribeStatement()
+		return p.parseDescribeStatement(keyword)
 	case models.TokenTypeReplace:
 		p.advance()
 		return p.parseReplaceStatement()

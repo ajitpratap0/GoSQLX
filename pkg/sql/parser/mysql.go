@@ -150,23 +150,25 @@ func (p *Parser) parseShowStatement() (ast.Statement, error) {
 	return show, nil
 }
 
-// parseDescribeStatement parses DESCRIBE/DESC/EXPLAIN table_name
-func (p *Parser) parseDescribeStatement() (ast.Statement, error) {
-	// For EXPLAIN SELECT ..., defer to parseStatement for the SELECT
-	// For DESCRIBE table_name, just parse the table name
-	if p.isType(models.TokenTypeSelect) {
-		// EXPLAIN SELECT ... - treat as describe with the query text
-		// For now, just skip to parse the select
-		p.advance()
-		stmt, err := p.parseSelectWithSetOperations()
+// parseDescribeStatement parses DESCRIBE/DESC/EXPLAIN. When a statement
+// follows (optionally after options such as ANALYZE, "(FORMAT JSON)",
+// "QUERY PLAN" or "PLAN FOR") it returns an ExplainStatement wrapping it;
+// otherwise it parses DESCRIBE [object kind] table_name.
+func (p *Parser) parseDescribeStatement(keyword string) (ast.Statement, error) {
+	if n := p.explainOptionTokens(); n >= 0 {
+		explain := &ast.ExplainStatement{Keyword: keyword}
+		parts := make([]string, 0, n)
+		for i := 0; i < n; i++ {
+			parts = append(parts, explainTokenText(p.currentToken.Token))
+			p.advance()
+		}
+		explain.Options = joinExplainOptions(parts)
+		stmt, err := p.parseStatement()
 		if err != nil {
 			return nil, err
 		}
-		// Wrap in a describe
-		_ = stmt
-		desc := ast.GetDescribeStatement()
-		desc.TableName = "SELECT"
-		return desc, nil
+		explain.Statement = stmt
+		return explain, nil
 	}
 
 	// Snowflake: DESCRIBE TABLE <name>, DESCRIBE VIEW <name>, DESCRIBE STAGE
@@ -193,6 +195,56 @@ func (p *Parser) parseDescribeStatement() (ast.Statement, error) {
 	desc := ast.GetDescribeStatement()
 	desc.TableName = name
 	return desc, nil
+}
+
+// maxExplainOptionTokens bounds the lookahead for an explained statement.
+const maxExplainOptionTokens = 64
+
+// explainOptionTokens reports how many option tokens sit between EXPLAIN /
+// DESCRIBE and the statement being explained, or -1 if no statement follows
+// (DESCRIBE table_name). Parenthesised option lists are skipped as a unit.
+func (p *Parser) explainOptionTokens() int {
+	depth := 0
+	for i := 0; i < maxExplainOptionTokens && p.currentPos+i < len(p.tokens); i++ {
+		switch p.tokens[p.currentPos+i].Token.Type {
+		case models.TokenTypeLParen:
+			depth++
+		case models.TokenTypeRParen:
+			depth--
+		case models.TokenTypeSemicolon, models.TokenTypeEOF:
+			return -1
+		case models.TokenTypeSelect, models.TokenTypeWith, models.TokenTypeInsert,
+			models.TokenTypeUpdate, models.TokenTypeDelete, models.TokenTypeMerge,
+			models.TokenTypeReplace:
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+// explainTokenText renders an EXPLAIN option token back to SQL text; option
+// words are keywords, so they are upper-cased.
+func explainTokenText(tok models.Token) string {
+	switch tok.Type {
+	case models.TokenTypeSingleQuotedString, models.TokenTypeString:
+		return "'" + strings.ReplaceAll(tok.Value, "'", "''") + "'"
+	}
+	return strings.ToUpper(tok.Value)
+}
+
+// joinExplainOptions joins option tokens with single spaces, except inside
+// parentheses and before commas: "(FORMAT JSON, ANALYZE)".
+func joinExplainOptions(parts []string) string {
+	var sb strings.Builder
+	for i, part := range parts {
+		if i > 0 && part != ")" && part != "," && parts[i-1] != "(" {
+			sb.WriteByte(' ')
+		}
+		sb.WriteString(part)
+	}
+	return sb.String()
 }
 
 // parseReplaceStatement parses MySQL REPLACE INTO statement

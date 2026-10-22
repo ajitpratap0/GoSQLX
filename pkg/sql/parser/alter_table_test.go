@@ -220,9 +220,10 @@ func TestAlterTable_Constraints(t *testing.T) {
 					t.Errorf("BareConstraint=%v Constraint=%+v Suffix=%q", op.BareConstraint, op.Constraint, op.ConstraintSuffix)
 				}
 			}},
-		{"foreign key with deferrable suffix", keywords.DialectPostgreSQL, "ALTER TABLE t ADD CONSTRAINT fk FOREIGN KEY (a) REFERENCES u (id) DEFERRABLE INITIALLY DEFERRED",
+		{"foreign key with deferrable clause", keywords.DialectPostgreSQL, "ALTER TABLE t ADD CONSTRAINT fk FOREIGN KEY (a) REFERENCES u (id) DEFERRABLE INITIALLY DEFERRED",
 			func(t *testing.T, op *ast.AlterTableOperation) {
-				if op.Constraint == nil || op.Constraint.Type != "FOREIGN KEY" || op.ConstraintSuffix != "DEFERRABLE INITIALLY DEFERRED" {
+				if op.Constraint == nil || op.Constraint.Type != "FOREIGN KEY" ||
+					op.Constraint.Deferrable != "DEFERRABLE INITIALLY DEFERRED" || op.ConstraintSuffix != "" {
 					t.Errorf("Constraint=%+v Suffix=%q", op.Constraint, op.ConstraintSuffix)
 				}
 			}},

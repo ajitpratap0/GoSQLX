@@ -652,6 +652,8 @@ var typeModifierWords = map[string]bool{
 	"WITH": true, "WITHOUT": true, "LOCAL": true, "TIME": true, "ZONE": true,
 	"UNSIGNED": true, "SIGNED": true, "ZEROFILL": true, "LARGE": true, "OBJECT": true,
 	"RAW": true, "BINARY": true, "CODEC": true, "INTEGER": true, "INT": true,
+	"BIG": true, "VARBINARY": true, "ARRAY": true, "TO": true,
+	"YEAR": true, "MONTH": true, "DAY": true, "HOUR": true, "MINUTE": true, "SECOND": true,
 }
 
 // isSignednessInt reports whether w is INT or INTEGER, the optional word that
@@ -1027,6 +1029,8 @@ var (
 	columnConstraintKeywords = []string{
 		"NOT NULL", "NULL", "UNIQUE", "PRIMARY KEY", "AUTO_INCREMENT",
 		"GENERATED ALWAYS AS ROW START", "GENERATED ALWAYS AS ROW END",
+		"INVISIBLE", "VISIBLE", "DEFERRABLE", "NOT DEFERRABLE",
+		"INITIALLY DEFERRED", "INITIALLY IMMEDIATE", "NOT FOR REPLICATION",
 	}
 	partitionByKeywords = []string{
 		"RANGE", "LIST", "HASH", "KEY", "LINEAR HASH", "LINEAR KEY",

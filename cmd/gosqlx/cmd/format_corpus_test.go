@@ -33,6 +33,7 @@ var corpusFormatKnownGaps = map[string]string{
 	"corpus/orm/gorm_joins.sql":                     "follow-up: a name quoted only for case (\"Company\") renders bare; the AST does not record quoting, so the CLI refuses",
 	"realworld/mysql/01_app_crud.sql":               "follow-up: a reserved-word alias (`exists`) is written in ANSI double quotes; alias quoting is not dialect-aware",
 	"realworld/mysql/10_misc_functions.sql":         "follow-up: a string literal is rewritten by the formatter",
+	"realworld/mysql/11_stored_programs.sql":        "follow-up: a reserved-word name is written in ANSI double quotes for mysql",
 	"realworld/oracle/01_app_crud.sql":              "follow-up: a case-sensitive quoted name (\"CreatedAt\") renders bare in some clause",
 	"realworld/postgresql/08_supabase_rls_misc.sql": "follow-up: a quoted reserved-word name (\"table\") renders bare in some clause",
 }

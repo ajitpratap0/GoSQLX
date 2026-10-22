@@ -215,12 +215,12 @@ type DropExtras struct {
 	Sync bool
 }
 
-// storageKeywords are the TRUNCATE storage clauses the renderers write.
-var storageKeywords = []string{"DROP STORAGE", "REUSE STORAGE", "DROP ALL STORAGE"}
+// truncateStorageKeywords are the TRUNCATE storage clauses the renderers write.
+var truncateStorageKeywords = []string{"DROP STORAGE", "REUSE STORAGE", "DROP ALL STORAGE"}
 
 // TruncateStorageText returns s when it is DROP STORAGE, REUSE STORAGE or
 // DROP ALL STORAGE (any case) and "" otherwise.
-func TruncateStorageText(s string) string { return keywordOneOf(s, storageKeywords) }
+func TruncateStorageText(s string) string { return keywordOneOf(s, truncateStorageKeywords) }
 
 // tableKindKeywords are the CREATE TABLE kind modifiers the renderers write.
 var tableKindKeywords = []string{

@@ -650,11 +650,7 @@ func PutCreateTableStatement(stmt *CreateTableStatement) {
 	// Release expressions embedded in column definitions
 	for i := range stmt.Columns {
 		for j := range stmt.Columns[i].Constraints {
-			PutExpression(stmt.Columns[i].Constraints[j].Default)
-			PutExpression(stmt.Columns[i].Constraints[j].Check)
-			stmt.Columns[i].Constraints[j].Default = nil
-			stmt.Columns[i].Constraints[j].Check = nil
-			stmt.Columns[i].Constraints[j].References = nil
+			releaseColumnConstraint(&stmt.Columns[i].Constraints[j])
 		}
 		stmt.Columns[i].Constraints = stmt.Columns[i].Constraints[:0]
 		stmt.Columns[i].Name = ""
@@ -664,12 +660,7 @@ func PutCreateTableStatement(stmt *CreateTableStatement) {
 
 	// Release expressions in table constraints
 	for i := range stmt.Constraints {
-		PutExpression(stmt.Constraints[i].Check)
-		stmt.Constraints[i].Check = nil
-		stmt.Constraints[i].References = nil
-		stmt.Constraints[i].Name = ""
-		stmt.Constraints[i].Type = ""
-		stmt.Constraints[i].Columns = stmt.Constraints[i].Columns[:0]
+		releaseTableConstraint(&stmt.Constraints[i])
 	}
 	stmt.Constraints = stmt.Constraints[:0]
 
@@ -744,19 +735,14 @@ func PutAlterTableStatement(stmt *AlterTableStatement) {
 		// Release nested ColumnDef expressions
 		if stmt.Actions[i].ColumnDef != nil {
 			for j := range stmt.Actions[i].ColumnDef.Constraints {
-				PutExpression(stmt.Actions[i].ColumnDef.Constraints[j].Default)
-				PutExpression(stmt.Actions[i].ColumnDef.Constraints[j].Check)
-				stmt.Actions[i].ColumnDef.Constraints[j].Default = nil
-				stmt.Actions[i].ColumnDef.Constraints[j].Check = nil
-				stmt.Actions[i].ColumnDef.Constraints[j].References = nil
+				releaseColumnConstraint(&stmt.Actions[i].ColumnDef.Constraints[j])
 			}
 			stmt.Actions[i].ColumnDef.Constraints = stmt.Actions[i].ColumnDef.Constraints[:0]
 			stmt.Actions[i].ColumnDef = nil
 		}
 		// Release nested TableConstraint expressions
 		if stmt.Actions[i].Constraint != nil {
-			PutExpression(stmt.Actions[i].Constraint.Check)
-			stmt.Actions[i].Constraint.Check = nil
+			releaseTableConstraint(stmt.Actions[i].Constraint)
 			stmt.Actions[i].Constraint = nil
 		}
 		stmt.Actions[i].Type = ""

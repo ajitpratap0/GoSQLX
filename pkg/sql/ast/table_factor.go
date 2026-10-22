@@ -732,18 +732,6 @@ func isTableHintText(h string) bool {
 	return true
 }
 
-func isDigits(s string) bool {
-	if s == "" {
-		return false
-	}
-	for i := 0; i < len(s); i++ {
-		if s[i] < '0' || s[i] > '9' {
-			return false
-		}
-	}
-	return true
-}
-
 // TableHintSQL returns a SQL Server table hint ready to write inside
 // WITH (...), with its hint keyword passed through kw (nil keeps it): a hint
 // the parser produces (see QuoteTableHint) is written as is, anything else is

@@ -158,6 +158,22 @@ type SelectStatement struct {
 	For       *ForClause      // Row-level locking clause (SQL:2003, PostgreSQL, MySQL)
 	Settings  []QuerySetting  // ClickHouse trailing SETTINGS name = value, ... (query-level settings)
 	Pos       models.Location // Source position of the SELECT keyword (1-based line and column)
+
+	// SELECT-body clauses added for dialect coverage (see select_ext.go).
+	SelectModifiers  []string           // MySQL/MariaDB HIGH_PRIORITY, STRAIGHT_JOIN, SQL_CALC_FOUND_ROWS, ... after SELECT [DISTINCT]
+	Into             *SelectInto        // SELECT ... INTO table / variables / OUTFILE
+	GroupByModifiers GroupByModifiers   // GROUP BY ALL, WITH ROLLUP / CUBE / TOTALS
+	OrderSiblings    bool               // Oracle ORDER SIBLINGS BY
+	Interpolate      *InterpolateClause // ClickHouse ORDER BY ... WITH FILL INTERPOLATE (col AS expr, ...)
+	LimitExpr        Expression         // LIMIT value that is not a plain integer ($1, ?, -1, 1 + 1); Limit wins when both are set
+	OffsetExpr       Expression         // OFFSET value that is not a plain integer; Offset wins when both are set
+	LimitAll         bool               // PostgreSQL LIMIT ALL
+	OffsetRows       bool               // OFFSET n ROW / ROWS
+	LimitWithTies    bool               // ClickHouse LIMIT n WITH TIES
+	LimitBy          *LimitByClause     // ClickHouse LIMIT n [OFFSET m] BY expr, ...
+	ForOutput        *ForOutputClause   // SQL Server FOR JSON / FOR XML / FOR BROWSE
+	QueryHints       []QueryHint        // SQL Server OPTION (hint, ...)
+	OutputFormat     string             // ClickHouse FORMAT name
 }
 
 func (s *SelectStatement) statementNode()       {}
@@ -260,7 +276,7 @@ func (s SelectStatement) Children() []Node {
 			children = append(children, v)
 		}
 	}
-	return children
+	return s.appendSelectExtChildren(children)
 }
 
 // InsertStatement represents an INSERT SQL statement

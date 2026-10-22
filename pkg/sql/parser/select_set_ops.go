@@ -215,8 +215,8 @@ func (p *Parser) attachParenthesizedQueryTail(stmt ast.Statement) error {
 			target = right
 		}
 	}
-	if target == nil || target.OrderBy != nil || target.Limit != nil ||
-		target.Offset != nil || target.Fetch != nil || target.For != nil {
+	if target == nil || target.OrderBy != nil || target.HasLimit() ||
+		target.HasOffset() || target.LimitBy != nil || target.Fetch != nil || target.For != nil {
 		return goerrors.UnsupportedFeatureError(
 			"ORDER BY/LIMIT/OFFSET/FETCH after a parenthesized query that has its own ORDER BY/LIMIT/OFFSET/FETCH or is a set operation",
 			p.currentLocation(),
@@ -231,7 +231,7 @@ func (p *Parser) attachParenthesizedQueryTail(stmt ast.Statement) error {
 	if target.OrderBy, err = p.parseOrderByClause(); err != nil {
 		return err
 	}
-	if target.Limit, target.Offset, err = p.parseLimitOffsetClause(); err != nil {
+	if err = p.parseLimitOffsetInto(target); err != nil {
 		return err
 	}
 	if p.isType(models.TokenTypeFetch) {

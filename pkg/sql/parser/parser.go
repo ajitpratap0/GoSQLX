@@ -1405,7 +1405,7 @@ func (p *Parser) nextStartsTableClause() bool {
 // but NOT contextual clause keywords that would be consumed as aliases by mistake
 // (e.g. MINUS in Snowflake/Oracle, QUALIFY in Snowflake/BigQuery, WINDOW).
 func (p *Parser) canBeAlias() bool {
-	if p.isMinusSetOp() || p.isQualifyKeyword() || p.isWindowClauseKeyword() || p.isSettingsKeyword() || p.isDMLReturningKeyword() {
+	if p.isMinusSetOp() || p.isQualifyKeyword() || p.isWindowClauseKeyword() || p.isSettingsKeyword() || p.isDMLReturningKeyword() || p.isSelectExtClauseStart() {
 		return false
 	}
 	return p.isIdentifier() || p.isNonReservedKeyword()
@@ -1448,7 +1448,7 @@ func (p *Parser) isJoinKeyword() bool {
 		(p.isType(models.TokenTypeAny) || p.isType(models.TokenTypeAll)) {
 		return true
 	}
-	return false
+	return p.isExtJoinStart()
 }
 
 // parseWithStatement parses a WITH statement (Common Table Expression).

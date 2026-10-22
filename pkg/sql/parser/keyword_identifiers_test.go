@@ -88,6 +88,16 @@ func TestParser_KeywordColumnNames(t *testing.T) {
 		{keywords.DialectMySQL, "SELECT url FROM links", "url", ""},
 		{keywords.DialectPostgreSQL, "SELECT member FROM teams WHERE member = 1", "member", ""},
 		{keywords.DialectSnowflake, "SELECT policy FROM t", "policy", ""},
+		{keywords.DialectPostgreSQL, "SELECT key FROM settings WHERE key = 'a'", "key", ""},
+		{keywords.DialectSQLite, "SELECT s.key FROM settings s", "key", "s"},
+		{keywords.DialectPostgreSQL, "SELECT index FROM t", "index", ""},
+		{keywords.DialectPostgreSQL, "SELECT first, last FROM people", "first", ""},
+		{keywords.DialectMySQL, "SELECT next FROM t", "next", ""},
+		{keywords.DialectMySQL, "SELECT source, target FROM edges", "source", ""},
+		{keywords.DialectPostgreSQL, "SELECT filter FROM t", "filter", ""},
+		{keywords.DialectMySQL, "SELECT share FROM t", "share", ""},
+		{keywords.DialectSnowflake, "SELECT final FROM t", "final", ""},
+		{keywords.DialectPostgreSQL, "SELECT temporary FROM t", "temporary", ""},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.dialect)+"/"+tt.sql, func(t *testing.T) {
@@ -100,6 +110,22 @@ func TestParser_KeywordColumnNames(t *testing.T) {
 				t.Errorf("name/table = %q/%q, want %q/%q", id.Name, id.Table, tt.name, tt.table)
 			}
 		})
+	}
+
+	// KEY, INDEX and VIEW are reserved in MySQL, MariaDB, SQL Server's and
+	// Oracle's grammars; a keyword followed by '(' is not a column.
+	for _, tc := range []struct {
+		dialect keywords.SQLDialect
+		sql     string
+	}{
+		{keywords.DialectMySQL, "SELECT key FROM t"},
+		{keywords.DialectMariaDB, "SELECT index FROM t"},
+		{keywords.DialectOracle, "SELECT view FROM t"},
+		{keywords.DialectPostgreSQL, "SELECT share(1)"},
+	} {
+		if _, err := ParseWithDialect(tc.sql, tc.dialect); err == nil {
+			t.Errorf("%s: %q parsed, want an error", tc.dialect, tc.sql)
+		}
 	}
 }
 

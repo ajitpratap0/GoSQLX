@@ -629,7 +629,6 @@ postgresql/06_cte_dml_etl.sql#22 parse
 postgresql/06_cte_dml_etl.sql#3 drop
 postgresql/06_cte_dml_etl.sql#5 parse
 postgresql/06_cte_dml_etl.sql#6 parse
-postgresql/06_cte_dml_etl.sql#7 parse
 postgresql/06_cte_dml_etl.sql#9 parse
 postgresql/07_admin_ops.sql#20 parse
 postgresql/07_admin_ops.sql#41 parse
@@ -713,7 +712,6 @@ snowflake/06_etl_merge.sql#2 parse
 snowflake/06_etl_merge.sql#20 reparse
 snowflake/06_etl_merge.sql#21 parse
 snowflake/06_etl_merge.sql#22 reparse
-snowflake/06_etl_merge.sql#23 parse
 snowflake/07_admin.sql#21 reparse
 snowflake/07_admin.sql#22 parse
 snowflake/07_admin.sql#23 parse
@@ -811,13 +809,11 @@ sqlite/06_json.sql#18 parse
 sqlite/06_json.sql#21 parse
 sqlite/06_json.sql#22 parse
 sqlite/07_ctes_recursive.sql#10 parse
-sqlite/07_ctes_recursive.sql#11 parse
 sqlite/07_ctes_recursive.sql#2 parse
 sqlite/07_ctes_recursive.sql#7 drop
 sqlite/07_ctes_recursive.sql#8 drop
 sqlite/08_reporting.sql#13 parse
 sqlite/08_reporting.sql#15 parse
-sqlite/08_reporting.sql#16 parse
 sqlite/09_etl_admin.sql#1 drop
 sqlite/09_etl_admin.sql#10 parse
 sqlite/09_etl_admin.sql#2 parse

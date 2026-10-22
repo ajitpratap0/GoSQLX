@@ -727,17 +727,41 @@ func (p *Parser) isAliasAfterAS() bool {
 }
 
 // isKeywordColumnName reports whether the current token is a keyword that
-// PostgreSQL and the other dialects accept unquoted as a column or table name
-// (SELECT owner FROM t). These words are keyword tokens only so that role and
-// ALTER statements can match them by type; as an operand they are plain
-// names.
+// may be written unquoted as a column name in the current dialect
+// (SELECT owner, first, key FROM t). The parser reaches it only where an
+// operand starts, where none of these words has a keyword meaning: role
+// options (OWNER, URL, VALID, ...) are keyword tokens only so the role and
+// ALTER statements can match them, and FIRST / LAST / NEXT / FILTER /
+// SHARE / SOURCE / TARGET / MATCHED / FINAL are keywords only inside their
+// clauses. KEY, INDEX and VIEW are reserved in MySQL, MariaDB, SQL Server
+// and Oracle, so there they must stay quoted. A word followed by '(' is not
+// taken as a name, so these keywords do not become function names.
 func (p *Parser) isKeywordColumnName() bool {
+	if p.peekToken().Token.Type == models.TokenTypeLParen {
+		return false
+	}
 	switch p.currentToken.Token.Type {
 	case models.TokenTypeOwner, models.TokenTypeUrl, models.TokenTypeMember,
 		models.TokenTypeConnector, models.TokenTypePolicy, models.TokenTypeUntil,
 		models.TokenTypeValid, models.TokenTypeDcproperties, models.TokenTypeNologin,
-		models.TokenTypeNocreatedb, models.TokenTypeNocreaterole, models.TokenTypeNosuperuser:
+		models.TokenTypeNocreatedb, models.TokenTypeNocreaterole, models.TokenTypeNosuperuser,
+		models.TokenTypeFirst, models.TokenTypeLast, models.TokenTypeFilter,
+		models.TokenTypeShare, models.TokenTypeSource, models.TokenTypeTarget,
+		models.TokenTypeMatched:
 		return true
+	case models.TokenTypeNext:
+		// NEXT VALUE FOR seq is a sequence expression.
+		return !strings.EqualFold(p.peekToken().Token.Value, "VALUE")
+	case models.TokenTypeKey, models.TokenTypeIndex, models.TokenTypeView:
+		switch p.dialect {
+		case string(keywords.DialectMySQL), string(keywords.DialectMariaDB),
+			string(keywords.DialectSQLServer), string(keywords.DialectOracle):
+			return false
+		}
+		return true
+	case models.TokenTypeKeyword:
+		v := p.currentToken.Token.Value
+		return strings.EqualFold(v, "FINAL") || strings.EqualFold(v, "TEMPORARY")
 	}
 	return false
 }

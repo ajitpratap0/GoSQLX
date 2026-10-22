@@ -131,9 +131,16 @@ type Identifier struct {
 	// identifier. SQL() re-quotes it when Name is a reserved word ("select")
 	// so it re-parses as a name. Case alone ("Mixed") is not re-quoted, to
 	// stay consistent with aliases and column lists, which record no quoting.
-	// It is set only for ANSI double quotes, not for MySQL backticks or SQL
-	// Server brackets.
+	// It is set only for ANSI double quotes; QuoteStyle records MySQL
+	// backticks and SQL Server brackets.
 	Quoted bool
+	// QuoteStyle is the opening delimiter the source used for the quoted
+	// part(s) of the reference: '"', '`' (MySQL, MariaDB, ClickHouse) or
+	// '[' (SQL Server), and zero when no part was delimited. A reserved
+	// Name delimited in the source is re-quoted like a Quoted one, and SQL()
+	// quotes with the same delimiters, so a MySQL `from` is not turned into
+	// the string "from".
+	QuoteStyle rune
 }
 
 func (i *Identifier) expressionNode()     {}

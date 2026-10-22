@@ -163,13 +163,13 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return &ast.FunctionCall{Name: identName, Pos: identPos}, nil
 	}
 
-	if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeDoubleQuotedString) || ((p.dialect == string(keywords.DialectSQLServer) || p.dialect == string(keywords.DialectClickHouse)) && p.isNonReservedKeyword()) {
+	if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeDoubleQuotedString) || p.isKeywordColumnName() || ((p.dialect == string(keywords.DialectSQLServer) || p.dialect == string(keywords.DialectClickHouse)) && p.isNonReservedKeyword()) {
 		// Handle identifiers and function calls
 		// Double-quoted strings are treated as identifiers in SQL (e.g., "column_name")
 		// Non-reserved keywords (TARGET, SOURCE, etc.) can also be used as identifiers
 		identPos := p.currentLocation()
 		identName := p.currentToken.Token.Value
-		identQuoted := p.isType(models.TokenTypeDoubleQuotedString)
+		identQuote := p.currentIdentQuote()
 		p.advance()
 
 		// Check for function call (identifier followed by parentheses)
@@ -201,7 +201,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		}
 
 		// Handle regular identifier or qualified identifier (table.column or table.*)
-		ident := &ast.Identifier{Name: identName, Pos: identPos, Quoted: identQuoted}
+		ident := &ast.Identifier{Name: identName, Pos: identPos, Quoted: identQuote == '"', QuoteStyle: identQuote}
 
 		// Check for qualified identifier (table.column) or qualified asterisk (table.*)
 		if p.isType(models.TokenTypePeriod) {
@@ -224,7 +224,11 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				// be copied from Name before Name is overwritten.
 				ident.Table = ident.Name
 				ident.Name = p.currentToken.Token.Value
-				ident.Quoted = p.isType(models.TokenTypeDoubleQuotedString)
+				q := p.currentIdentQuote()
+				ident.Quoted = q == '"'
+				if q != 0 {
+					ident.QuoteStyle = q
+				}
 				p.advance()
 
 				// Multi-part reference: db.table.column (MySQL/MariaDB),
@@ -568,7 +572,11 @@ func (p *Parser) parseMultiPartColumnRef(ident *ast.Identifier) error {
 			}
 		case p.isQualifiedNamePart():
 			parts[n] = p.currentToken.Token.Value
-			lastQuoted = p.isType(models.TokenTypeDoubleQuotedString)
+			q := p.currentIdentQuote()
+			lastQuoted = q == '"'
+			if q != 0 {
+				ident.QuoteStyle = q
+			}
 			n++
 			p.advance()
 		default:
@@ -589,6 +597,6 @@ func (p *Parser) parseMultiPartColumnRef(ident *ast.Identifier) error {
 // qualified column reference: an identifier, a non-reserved keyword (t.KEY,
 // schema.INDEX), or - in ClickHouse - a numeric tuple element (d.1).
 func (p *Parser) isQualifiedNamePart() bool {
-	return p.isIdentifier() || p.isNonReservedKeyword() ||
+	return p.isIdentifier() || p.isNonReservedKeyword() || p.isKeywordColumnName() ||
 		(p.dialect == string(keywords.DialectClickHouse) && p.isNumericLiteral())
 }

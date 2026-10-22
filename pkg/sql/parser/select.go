@@ -411,7 +411,7 @@ func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
 			// Optional alias: AS name  or  implicit name (non-identifier expressions only)
 			if p.isType(models.TokenTypeAs) {
 				p.advance() // Consume AS
-				if !p.isIdentifier() {
+				if !p.isAliasAfterAS() {
 					return nil, p.expectedError("alias name after AS")
 				}
 				alias := p.currentToken.Token.Value
@@ -423,7 +423,7 @@ func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
 				// that are known pseudo-columns (ROWNUM, SYSDATE, LEVEL, etc.) where
 				// the alias pattern is idiomatic: SELECT ROWNUM rn FROM ...
 				ident, isIdent := expr.(*ast.Identifier)
-				allowAlias := !isIdent || (isIdent && ident.Table == "" && p.isOraclePseudoColumn2(ident.Name))
+				allowAlias := !isIdent || (isIdent && ident.Table == "" && p.isOraclePseudoColumn2(ident.Name)) || p.isQuotedIdentifierToken()
 				if allowAlias {
 					alias := p.currentToken.Token.Value
 					p.advance()

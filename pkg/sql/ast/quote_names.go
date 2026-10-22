@@ -1226,3 +1226,70 @@ func ShowTakesFrom(showType string) bool {
 	}
 	return false
 }
+
+// writeDottedIdentifierStyle is writeDottedIdentifier quoting with the
+// delimiters of style (see writeDelimitedIdentifier).
+func writeDottedIdentifierStyle(buf *bytes.Buffer, name string, style rune) {
+	for {
+		dot := strings.IndexByte(name, '.')
+		part := name
+		if dot >= 0 {
+			part = name[:dot]
+		}
+		if isReservedName(part, true) || identifierNeedsQuoting(part) {
+			writeDelimitedIdentifier(buf, part, style)
+		} else {
+			buf.WriteString(part)
+		}
+		if dot < 0 {
+			return
+		}
+		buf.WriteByte('.')
+		name = name[dot+1:]
+	}
+}
+
+// writeDelimitedIdentifier writes name as a delimited identifier using the
+// delimiters of style: `name` for '`', [name] for '[', and ANSI "name"
+// otherwise. The closing delimiter is doubled inside the name.
+func writeDelimitedIdentifier(buf *bytes.Buffer, name string, style rune) {
+	var open, closing byte
+	switch style {
+	case '`':
+		open, closing = '`', '`'
+	case '[':
+		open, closing = '[', ']'
+	default:
+		writeQuotedIdentifier(buf, name)
+		return
+	}
+	buf.WriteByte(open)
+	for i := 0; i < len(name); i++ {
+		if name[i] == closing {
+			buf.WriteByte(closing)
+		}
+		buf.WriteByte(name[i])
+	}
+	buf.WriteByte(closing)
+}
+
+// isVariableName reports whether name is a session or system variable
+// reference that is written bare: '@' or '@@' followed by letters, digits,
+// '_', '$' and '.' (@x, @@VERSION, @@session.sql_mode). Quoting it would
+// turn the variable into an identifier.
+func isVariableName(name string) bool {
+	i := 0
+	for i < len(name) && i < 2 && name[i] == '@' {
+		i++
+	}
+	if i == 0 || i == len(name) || name[i] == '.' {
+		return false
+	}
+	for ; i < len(name); i++ {
+		c := name[i]
+		if c != '_' && c != '$' && c != '.' && (c < '0' || c > '9') && (c|0x20 < 'a' || c|0x20 > 'z') {
+			return false
+		}
+	}
+	return true
+}

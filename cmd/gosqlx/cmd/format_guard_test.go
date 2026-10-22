@@ -75,7 +75,7 @@ func TestFormatSQL_AllowsHarmlessQuotes(t *testing.T) {
 		{name: "alter reserved word", in: `ALTER TABLE t ADD COLUMN "order" INT`, want: `ALTER TABLE t ADD COLUMN "order" INT`},
 		{name: "alter reserved word postgresql", dialect: "postgresql", in: `ALTER TABLE t ADD COLUMN "order" INT`, want: `ALTER TABLE t ADD COLUMN "order" INT`},
 		{name: "mysql backtick plain", dialect: "mysql", in: "ALTER TABLE `Users` ADD COLUMN `c` INT", want: "ALTER TABLE Users ADD COLUMN c INT"},
-		{name: "sqlserver bracket kept quoted", dialect: "sqlserver", in: "SELECT [Mixed Name] FROM t", want: `SELECT "Mixed Name" FROM t`},
+		{name: "sqlserver bracket kept quoted", dialect: "sqlserver", in: "SELECT [Mixed Name] FROM t", want: "SELECT [Mixed Name] FROM t"},
 		{name: "oracle uppercase quoted", dialect: "oracle", in: `SELECT "ABC" FROM t`, want: "SELECT ABC FROM t"},
 		{name: "string literal kept", in: "SELECT a FROM t WHERE b = 'it''s'", want: "SELECT a FROM t WHERE b = 'it''s'"},
 		{name: "mysql escaped literal", dialect: "mysql", in: `SELECT 'a\nb'`, want: `SELECT 'a\nb'`},

@@ -185,6 +185,17 @@ func normalizeToken(t models.TokenWithSpan) models.TokenWithSpan {
 	// Identifier tokens whose *value* is a keyword that the parser dispatches
 	// on by type need to be remapped.
 	if t.Token.Type == models.TokenTypeIdentifier {
+		// A delimited identifier (`key`, [Group]) is a name, never a
+		// keyword. The tokenizer strips backticks without recording them,
+		// so a single-line span wider than the value marks one; record
+		// the backtick so later stages can tell it from a bare word.
+		if t.Token.Quote != 0 {
+			return t
+		}
+		if t.Start.Line != 0 && t.Start.Line == t.End.Line && t.End.Column-t.Start.Column > len(t.Token.Value) {
+			t.Token.Quote = '`'
+			return t
+		}
 		if remapped := identifierKeywordType(t.Token.Value); remapped != models.TokenTypeUnknown {
 			t.Token.Type = remapped
 		}

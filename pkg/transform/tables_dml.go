@@ -31,7 +31,7 @@ import (
 // replaceTableInUpdate renames old to new in every table reference and
 // column qualifier of an UPDATE statement.
 func replaceTableInUpdate(s *ast.UpdateStatement, old, new string) {
-	renameTableName(&s.TableName, old, new)
+	renameTableName(&s.TableName, &s.TableNameQuote, old, new)
 	replaceTableInDMLTargets(&s.DMLTargetFields, old, new)
 	replaceTableInFrom(s.From, old, new)
 	for i := range s.Assignments {
@@ -47,7 +47,7 @@ func replaceTableInUpdate(s *ast.UpdateStatement, old, new string) {
 // replaceTableInDelete renames old to new in every table reference and
 // column qualifier of a DELETE statement.
 func replaceTableInDelete(s *ast.DeleteStatement, old, new string) {
-	renameTableName(&s.TableName, old, new)
+	renameTableName(&s.TableName, &s.TableNameQuote, old, new)
 	replaceTableInDMLTargets(&s.DMLTargetFields, old, new)
 	replaceTableInFrom(s.From, old, new)
 	replaceTableInFrom(s.Using, old, new)
@@ -70,9 +70,10 @@ func replaceTableInDMLTargets(d *ast.DMLTargetFields, old, new string) {
 	}
 }
 
-func renameTableName(name *string, old, new string) {
+func renameTableName(name *string, quote *ast.NameQuote, old, new string) {
 	if strings.EqualFold(*name, old) {
 		*name = new
+		*quote = replacedNameQuote(*quote)
 	}
 }
 
@@ -80,7 +81,7 @@ func renameTableName(name *string, old, new string) {
 // statement and points the column qualifiers at the alias.
 func addAliasToUpdate(s *ast.UpdateStatement, tableName, alias string) error {
 	refs := dmlAliasTargets{tableName: tableName, alias: alias}
-	refs.name(&s.TableName, &s.Alias)
+	refs.name(&s.TableName, &s.Alias, &s.AliasQuote)
 	refs.list(s.Tables)
 	refs.list(s.From)
 	refs.joins(s.Joins)
@@ -113,7 +114,7 @@ func addAliasToDelete(s *ast.DeleteStatement, tableName, alias string) error {
 		// an alias of their own.
 		refs.list(s.From)
 	} else {
-		refs.name(&s.TableName, &s.Alias)
+		refs.name(&s.TableName, &s.Alias, &s.AliasQuote)
 		refs.list(s.Tables)
 	}
 	refs.list(s.Using)
@@ -187,11 +188,15 @@ func renameDeleteTargets(s *ast.DeleteStatement, names []string, alias string) {
 	if matches(s.TableName) {
 		s.TableName = alias
 		s.Alias = ""
+		s.TableNameQuote = replacedNameQuote(s.TableNameQuote)
+		s.AliasQuote = 0
 	}
 	for i := range s.Tables {
 		if matches(s.Tables[i].Name) {
 			s.Tables[i].Name = alias
 			s.Tables[i].Alias = ""
+			s.Tables[i].NameQuote = replacedNameQuote(s.Tables[i].NameQuote)
+			s.Tables[i].AliasQuote = 0
 		}
 	}
 }
@@ -227,21 +232,22 @@ type dmlAliasTargets struct {
 
 type aliasSlot struct {
 	alias *string
+	quote *ast.NameQuote
 	prev  string
 }
 
-func (t *dmlAliasTargets) record(alias *string) {
+func (t *dmlAliasTargets) record(alias *string, quote *ast.NameQuote) {
 	t.matched = append(t.matched, t.tableName)
 	if *alias != "" {
 		t.matched = append(t.matched, *alias)
 	}
-	t.sets = append(t.sets, aliasSlot{alias: alias, prev: *alias})
+	t.sets = append(t.sets, aliasSlot{alias: alias, quote: quote, prev: *alias})
 }
 
 // name records the statement's own target.
-func (t *dmlAliasTargets) name(name, alias *string) {
+func (t *dmlAliasTargets) name(name, alias *string, quote *ast.NameQuote) {
 	if strings.EqualFold(*name, t.tableName) {
-		t.record(alias)
+		t.record(alias, quote)
 	}
 }
 
@@ -249,7 +255,7 @@ func (t *dmlAliasTargets) name(name, alias *string) {
 func (t *dmlAliasTargets) list(refs []ast.TableReference) {
 	for i := range refs {
 		if strings.EqualFold(refs[i].Name, t.tableName) {
-			t.record(&refs[i].Alias)
+			t.record(&refs[i].Alias, &refs[i].AliasQuote)
 		}
 	}
 }
@@ -258,7 +264,7 @@ func (t *dmlAliasTargets) list(refs []ast.TableReference) {
 func (t *dmlAliasTargets) joins(joins []ast.JoinClause) {
 	for i := range joins {
 		if strings.EqualFold(joins[i].Right.Name, t.tableName) {
-			t.record(&joins[i].Right.Alias)
+			t.record(&joins[i].Right.Alias, &joins[i].Right.AliasQuote)
 		}
 	}
 }
@@ -274,6 +280,7 @@ func (t *dmlAliasTargets) check() error {
 func (t *dmlAliasTargets) apply() {
 	for _, s := range t.sets {
 		*s.alias = t.alias
+		*s.quote = replacedNameQuote(*s.quote)
 	}
 }
 
@@ -291,6 +298,7 @@ func (t *dmlAliasTargets) qualifierRewriter() func(ast.Expression) ast.Expressio
 				for _, n := range names {
 					if strings.EqualFold(id.Table, n) {
 						id.Table = t.alias
+						id.Quotes = replacedQualifierQuote(id.Quotes)
 						break
 					}
 				}

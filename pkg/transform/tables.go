@@ -89,6 +89,7 @@ func AddTableAlias(tableName, alias string) Rule {
 			for i := range s.From {
 				if strings.EqualFold(s.From[i].Name, tableName) {
 					s.From[i].Alias = alias
+					s.From[i].AliasQuote = replacedNameQuote(s.From[i].AliasQuote)
 				}
 			}
 			return nil
@@ -153,9 +154,33 @@ func renameTableRef(ref *ast.TableReference, old, new string) {
 		return
 	}
 	ref.Name = new
+	ref.NameQuote = replacedNameQuote(ref.NameQuote)
 	if ref.TableFunc != nil && strings.EqualFold(ref.TableFunc.Name, old) {
 		ref.TableFunc.Name = new
+		ref.TableFunc.NameQuote = replacedNameQuote(ref.TableFunc.NameQuote)
 	}
+}
+
+// replacedNameQuote returns the NameQuote for a name that a transform has
+// replaced: the new name is written as the caller gave it (quoted only when
+// its content needs it), so the delimited parts recorded for the old name
+// are dropped; the source's delimiter style is kept.
+func replacedNameQuote(q ast.NameQuote) ast.NameQuote {
+	if !q.HasStyle() {
+		return 0
+	}
+	return ast.NameQuoteOf(q.Style())
+}
+
+// replacedQualifierQuote returns the NameQuote of a column reference whose
+// table qualifier a transform has replaced: the column's own mark (part 0)
+// is kept and the marks of the old qualifier's parts are dropped.
+func replacedQualifierQuote(q ast.NameQuote) ast.NameQuote {
+	out := replacedNameQuote(q).WithBareHash(q.BareHash())
+	if q.Part(0) {
+		out = out.WithPart(0)
+	}
+	return out
 }
 
 // walkExpr recursively walks all expression types and applies fn to each expression.
@@ -359,6 +384,7 @@ func replaceTableInExpr(expr ast.Expression, old, new string) ast.Expression {
 		if id, ok := e.(*ast.Identifier); ok {
 			if strings.EqualFold(id.Table, old) {
 				id.Table = new
+				id.Quotes = replacedQualifierQuote(id.Quotes)
 			}
 		}
 		return e

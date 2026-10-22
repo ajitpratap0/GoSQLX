@@ -59,6 +59,7 @@ func TestRender_SelectBodyClauses(t *testing.T) {
 		{"sqlserver top in derived table", keywords.DialectSQLServer, "SELECT * FROM (SELECT TOP (10) a FROM t ORDER BY a) AS s", "SELECT * FROM (SELECT TOP (10) a FROM t ORDER BY a) s"},
 		{"sqlserver top variable", keywords.DialectSQLServer, "SELECT TOP (@n) * FROM t", "SELECT TOP (@n) * FROM t"},
 		{"sqlserver cross apply", keywords.DialectSQLServer, "SELECT * FROM a CROSS APPLY (SELECT 1 AS x) AS t", "SELECT * FROM a CROSS APPLY (SELECT 1 AS x) t"},
+		{"sqlserver apply table function", keywords.DialectSQLServer, "SELECT t.text FROM qs OUTER APPLY sys.dm_exec_sql_text(qs.h) AS t", "SELECT t.text FROM qs OUTER APPLY sys.dm_exec_sql_text(qs.h) t"},
 		{"sqlserver hash join", keywords.DialectSQLServer, "SELECT o.Id FROM o INNER HASH JOIN c ON c.Id = o.CId", "SELECT o.Id FROM o INNER HASH JOIN c ON c.Id = o.CId"},
 		{"sqlserver into temp", keywords.DialectSQLServer, "SELECT * INTO #t FROM u", "SELECT * INTO #t FROM u"},
 		{"sqlserver for json", keywords.DialectSQLServer, "SELECT a FROM t FOR JSON PATH, ROOT('r'), INCLUDE_NULL_VALUES", "SELECT a FROM t FOR JSON PATH, ROOT('r'), INCLUDE_NULL_VALUES"},

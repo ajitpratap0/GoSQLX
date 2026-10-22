@@ -974,3 +974,19 @@ func (p *Parser) parseInterpolate() (*ast.InterpolateClause, error) {
 	p.advance()
 	return c, nil
 }
+
+// parseApplyFunctionCall parses the table-valued function on the right of
+// CROSS APPLY / OUTER APPLY (STRING_SPLIT(...), sys.dm_exec_sql_text(...))
+// in dialects whose FROM clause does not otherwise take function calls.
+func (p *Parser) parseApplyFunctionCall(joinType string, ref *ast.TableReference) error {
+	if (joinType != "CROSS APPLY" && joinType != "OUTER APPLY") ||
+		!p.isType(models.TokenTypeLParen) || p.supportsTableFunction() {
+		return nil
+	}
+	call, err := p.parseFunctionCall(ref.Name)
+	if err != nil {
+		return err
+	}
+	ref.TableFunc = call
+	return nil
+}

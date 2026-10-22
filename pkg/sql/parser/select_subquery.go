@@ -348,6 +348,9 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 			)
 		}
 		ref = ast.TableReference{Name: joinedName, Lateral: isLateral}
+		if err := p.parseApplyFunctionCall(joinType, &ref); err != nil {
+			return ref, err
+		}
 		if err := p.parseTableFunctionCall(&ref); err != nil {
 			return ref, err
 		}

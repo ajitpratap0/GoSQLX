@@ -353,48 +353,7 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 // shallow copy of the statement. This keeps the rendering code simple —
 // each clause renderer only handles its own field.
 func normalizeSelectForDialect(s *ast.SelectStatement, dialect string) {
-	switch dialect {
-	case "sqlserver":
-		if s.Top == nil && s.Limit != nil {
-			if s.Offset != nil || len(s.OrderBy) > 0 {
-				// SQL Server 2012+ OFFSET/FETCH syntax (requires ORDER BY in practice,
-				// but we emit it faithfully and let the database validate).
-				fetchVal := int64(*s.Limit)
-				s.Fetch = &ast.FetchClause{
-					FetchValue: &fetchVal,
-					FetchType:  "NEXT",
-				}
-				offsetVal := int64(0)
-				if s.Offset != nil {
-					offsetVal = int64(*s.Offset)
-				}
-				s.Fetch.OffsetValue = &offsetVal
-				s.Limit = nil
-				s.Offset = nil
-			} else {
-				// Simple TOP N
-				s.Top = &ast.TopClause{
-					Count: &ast.LiteralValue{Value: *s.Limit, Type: "int"},
-				}
-				s.Limit = nil
-			}
-		}
-
-	case "oracle":
-		if s.Fetch == nil && s.Limit != nil {
-			fetchVal := int64(*s.Limit)
-			s.Fetch = &ast.FetchClause{
-				FetchValue: &fetchVal,
-				FetchType:  "FIRST",
-			}
-			if s.Offset != nil {
-				offsetVal := int64(*s.Offset)
-				s.Fetch.OffsetValue = &offsetVal
-				s.Offset = nil
-			}
-			s.Limit = nil
-		}
-	}
+	normalizeLimitForDialect(s, dialect)
 }
 
 func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {

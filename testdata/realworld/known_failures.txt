@@ -1132,7 +1132,6 @@ sqlserver/08_procs_batches.sql#6 parse
 sqlserver/08_procs_batches.sql#7 parse
 sqlserver/08_procs_batches.sql#8 parse
 sqlserver/08_procs_batches.sql#9 parse
-sqlserver/09_admin_dmv.sql#1 parse
 sqlserver/09_admin_dmv.sql#13 parse
 sqlserver/09_admin_dmv.sql#15 parse
 sqlserver/09_admin_dmv.sql#16 parse

@@ -387,3 +387,72 @@ func interpolateSQL(c *ast.InterpolateClause, f *nodeFormatter) string {
 	sb.WriteString(")")
 	return sb.String()
 }
+
+// normalizeLimitForDialect rewrites LIMIT / OFFSET (integer or expression
+// values) into TOP or OFFSET ... FETCH for SQL Server and into FETCH FIRST
+// for Oracle, on the caller's shallow copy of the statement. LIMIT ALL means
+// no limit and is dropped for those dialects.
+func normalizeLimitForDialect(s *ast.SelectStatement, dialect string) {
+	if dialect != "sqlserver" && dialect != "oracle" {
+		return
+	}
+	s.LimitAll = false
+	if s.Limit == nil && s.LimitExpr == nil {
+		return
+	}
+	newFetch := func(fetchType string) *ast.FetchClause {
+		fc := &ast.FetchClause{FetchType: fetchType}
+		if s.Limit != nil {
+			v := int64(*s.Limit)
+			fc.FetchValue = &v
+		} else {
+			fc.FetchExpr = s.LimitExpr
+		}
+		return fc
+	}
+	clearLimit := func() {
+		s.Limit, s.LimitExpr, s.LimitWithTies = nil, nil, false
+	}
+	// moveOffset moves an integer OFFSET into the FETCH clause; an OFFSET
+	// expression stays on the statement and renders as OFFSET expr ROWS.
+	moveOffset := func(fc *ast.FetchClause, defaultZero bool) {
+		switch {
+		case s.Offset != nil:
+			v := int64(*s.Offset)
+			fc.OffsetValue = &v
+			s.Offset = nil
+		case s.OffsetExpr == nil && defaultZero:
+			var zero int64
+			fc.OffsetValue = &zero
+		}
+	}
+
+	switch dialect {
+	case "sqlserver":
+		if s.Top != nil {
+			return
+		}
+		if s.HasOffset() || len(s.OrderBy) > 0 {
+			// SQL Server 2012+ OFFSET/FETCH syntax (requires ORDER BY in practice,
+			// but we emit it faithfully and let the database validate).
+			s.Fetch = newFetch("NEXT")
+			moveOffset(s.Fetch, true)
+		} else {
+			// Simple TOP N
+			var count ast.Expression = s.LimitExpr
+			if s.Limit != nil {
+				count = &ast.LiteralValue{Value: *s.Limit, Type: "int"}
+			}
+			s.Top = &ast.TopClause{Count: count}
+		}
+		clearLimit()
+
+	case "oracle":
+		if s.Fetch != nil {
+			return
+		}
+		s.Fetch = newFetch("FIRST")
+		moveOffset(s.Fetch, false)
+		clearLimit()
+	}
+}

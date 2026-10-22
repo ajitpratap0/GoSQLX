@@ -497,6 +497,12 @@ func TestSelectExt_Joins(t *testing.T) {
 				t.Errorf("Join = %+v", j)
 			}
 		}},
+		{"sqlserver cross apply table function", keywords.DialectSQLServer, "SELECT t.text FROM qs CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) AS t", func(t *testing.T, s *ast.SelectStatement) {
+			j := join(t, s, 0)
+			if j.Type != "CROSS APPLY" || j.Right.TableFunc == nil || j.Right.Alias != "t" {
+				t.Errorf("Join = %+v", j)
+			}
+		}},
 		{"oracle outer apply", keywords.DialectOracle, "SELECT d.n FROM d OUTER APPLY (SELECT l FROM e WHERE e.d = d.id) e", func(t *testing.T, s *ast.SelectStatement) {
 			if j := join(t, s, 0); j.Type != "OUTER APPLY" {
 				t.Errorf("Join = %+v", j)

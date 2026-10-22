@@ -16,6 +16,7 @@ package ast
 
 import (
 	"bytes"
+	"strings"
 	"unicode"
 	"unicode/utf8"
 )
@@ -131,9 +132,13 @@ func writePivotItem(buf *bytes.Buffer, item string) {
 }
 
 // isWellFormedPivotItem reports whether item is "atom" or "atom AS atom"
-// (see QuotePivotItem).
+// (see QuotePivotItem), where the first atom may also be a parenthesized
+// column set "(atom, atom, ...)" as in a multi-column UNPIVOT.
 func isWellFormedPivotItem(item string) bool {
 	n := pivotAtomLen(item)
+	if n == 0 {
+		n = pivotColumnSetLen(item)
+	}
 	if n == 0 {
 		return false
 	}
@@ -147,6 +152,30 @@ func isWellFormedPivotItem(item string) bool {
 	}
 	rest = rest[len(as):]
 	return pivotAtomLen(rest) == len(rest)
+}
+
+// pivotColumnSetLen returns the length of the "(atom, atom, ...)" column set
+// at the start of s, or 0 if s does not start with one. Sets do not nest.
+func pivotColumnSetLen(s string) int {
+	if s == "" || s[0] != '(' {
+		return 0
+	}
+	i := 1
+	for {
+		n := pivotAtomLen(s[i:])
+		if n == 0 {
+			return 0
+		}
+		i += n
+		switch {
+		case i < len(s) && s[i] == ')':
+			return i + 1
+		case len(s)-i > 2 && s[i] == ',' && s[i+1] == ' ':
+			i += 2
+		default:
+			return 0
+		}
+	}
 }
 
 // pivotAtomLen returns the length of the atom at the start of s, or 0 if s
@@ -207,16 +236,23 @@ func pivotAtomLen(s string) int {
 	return i
 }
 
-// writePivotClause writes " PIVOT (agg FOR col IN (v1, v2))". The pivot
-// column is quoted when it is not a plain name, and each IN value is written
-// in its stored source form (e.g. [Q1], 'JAN', 1 AS one) when well formed,
-// otherwise double-quoted (see QuotePivotItem).
+// writePivotClause writes " PIVOT (agg [AS alias][, ...] FOR col IN (v1, v2))".
+// The pivot column is quoted when it is not a plain name, aggregate aliases
+// are quoted like table aliases, and each IN value is written in its stored
+// source form (e.g. [Q1], 'JAN', 1 AS one) when well formed, otherwise
+// double-quoted (see QuotePivotItem).
 func writePivotClause(buf *bytes.Buffer, p *PivotClause) {
 	if p == nil {
 		return
 	}
 	buf.WriteString(" PIVOT (")
 	writeExpr(buf, p.AggregateFunction)
+	writePivotAggregateAlias(buf, p.AggregateAlias)
+	for _, a := range p.ExtraAggregates {
+		buf.WriteString(", ")
+		writeExpr(buf, a.Function)
+		writePivotAggregateAlias(buf, a.Alias)
+	}
 	buf.WriteString(" FOR ")
 	writePivotColumn(buf, p.PivotColumn)
 	buf.WriteString(" IN (")
@@ -229,14 +265,40 @@ func writePivotClause(buf *bytes.Buffer, p *PivotClause) {
 	buf.WriteString("))")
 }
 
-// writeUnpivotClause writes " UNPIVOT (val FOR name IN (c1, c2))", quoting
+func writePivotAggregateAlias(buf *bytes.Buffer, alias string) {
+	if alias == "" {
+		return
+	}
+	buf.WriteString(" AS ")
+	writeTableAlias(buf, alias)
+}
+
+// writeUnpivotClause writes
+// " UNPIVOT [INCLUDE NULLS | EXCLUDE NULLS] (val FOR name IN (c1, c2))", or
+// with a parenthesized value column set in the multi-column form, quoting
 // names and IN columns the same way as writePivotClause.
 func writeUnpivotClause(buf *bytes.Buffer, u *UnpivotClause) {
 	if u == nil {
 		return
 	}
-	buf.WriteString(" UNPIVOT (")
-	writePivotColumn(buf, u.ValueColumn)
+	buf.WriteString(" UNPIVOT ")
+	if nh := UnpivotNullHandling(u.NullHandling); nh != "" {
+		buf.WriteString(nh)
+		buf.WriteByte(' ')
+	}
+	buf.WriteByte('(')
+	if len(u.ValueColumns) > 0 {
+		buf.WriteByte('(')
+		for i, c := range u.ValueColumns {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			writePivotColumn(buf, c)
+		}
+		buf.WriteByte(')')
+	} else {
+		writePivotColumn(buf, u.ValueColumn)
+	}
 	buf.WriteString(" FOR ")
 	writePivotColumn(buf, u.NameColumn)
 	buf.WriteString(" IN (")
@@ -247,4 +309,17 @@ func writeUnpivotClause(buf *bytes.Buffer, u *UnpivotClause) {
 		writePivotItem(buf, c)
 	}
 	buf.WriteString("))")
+}
+
+// UnpivotNullHandling normalizes an UnpivotClause.NullHandling value to
+// "INCLUDE NULLS" or "EXCLUDE NULLS". Any other value (only possible in a
+// hand-built AST) yields "" so it is never written raw.
+func UnpivotNullHandling(s string) string {
+	switch {
+	case strings.EqualFold(s, "INCLUDE NULLS"), strings.EqualFold(s, "INCLUDE"):
+		return "INCLUDE NULLS"
+	case strings.EqualFold(s, "EXCLUDE NULLS"), strings.EqualFold(s, "EXCLUDE"):
+		return "EXCLUDE NULLS"
+	}
+	return ""
 }

@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **BigQuery PIVOT / UNPIVOT** (#854): the parser gated PIVOT/UNPIVOT on a
+  hard-coded SQL Server / Oracle / Snowflake list, so BigQuery rejected them
+  with E2002 although its capabilities advertise `SupportsPivotUnpivot`. The
+  gate is now `Capabilities().SupportsPivotUnpivot` (true for exactly SQL
+  Server, Oracle, Snowflake and BigQuery; the default, Generic, PostgreSQL,
+  MySQL, MariaDB, SQLite, ClickHouse and Redshift dialects still treat `pivot`
+  / `unpivot` as identifiers). Supported BigQuery forms: aggregate aliases and
+  multiple aggregates, `IN` value aliases with or without `AS`,
+  `UNPIVOT INCLUDE NULLS` / `EXCLUDE NULLS`, row-value aliases with or without
+  `AS` (string or INT64) and multi-column UNPIVOT. The extensions follow each
+  dialect's grammar: Oracle also gets aliased/multiple aggregates, the NULLS
+  modifier and multi-column UNPIVOT; Snowflake gets the NULLS modifier and
+  bare `IN` value aliases; SQL Server is unchanged.
+- PIVOT/UNPIVOT backtick-quoted `IN` names and aliases keep their backticks
+  when rendered (they were written bare, which did not re-parse).
+
+### Added
+- `ast.PivotClause.AggregateAlias`, `ast.PivotClause.ExtraAggregates`
+  (`[]ast.PivotAggregate`), `ast.UnpivotClause.NullHandling`,
+  `ast.UnpivotClause.ValueColumns` and `ast.UnpivotNullHandling`; rendered by
+  `SQL()` and `pkg/formatter`.
+
+### Behavior changes
+- PIVOT / UNPIVOT `IN` lists now require commas between entries and an alias
+  after `AS` in every PIVOT dialect (`IN (a b)` used to parse as two entries
+  and `IN ('a' AS)` silently dropped the `AS`).
+
 ## [1.16.0] - 2026-10-22 — Performance Audit, SQL Highlighting, Dialect-Aware LSP, Claude Code Plugin & ChatGPT App, Correctness Sweep
 
 Covers everything merged since v1.15.0: the October 2026 performance audit

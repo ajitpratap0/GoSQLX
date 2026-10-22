@@ -665,13 +665,11 @@ func PutCreateIndexStatement(stmt *CreateIndexStatement) {
 	PutExpression(stmt.Where)
 
 	for i := range stmt.Columns {
-		stmt.Columns[i].Column = ""
-		stmt.Columns[i].Collate = ""
-		stmt.Columns[i].CollateQuoted = false
-		stmt.Columns[i].Direction = ""
-		stmt.Columns[i].NullsLast = false
+		PutExpression(stmt.Columns[i].Expr)
+		stmt.Columns[i] = IndexColumn{}
 	}
 	stmt.Columns = stmt.Columns[:0]
+	resetCreateIndexExtras(&stmt.CreateIndexExtras)
 
 	stmt.Where = nil
 	stmt.Unique = false
@@ -707,6 +705,7 @@ func PutCreateViewStatement(stmt *CreateViewStatement) {
 	stmt.Columns = stmt.Columns[:0]
 	stmt.Query = nil
 	stmt.WithOption = ""
+	resetViewExtras(&stmt.ViewExtras)
 
 	createViewStmtPool.Put(stmt)
 }
@@ -734,6 +733,8 @@ func PutCreateMaterializedViewStatement(stmt *CreateMaterializedViewStatement) {
 	stmt.Query = nil
 	stmt.WithData = nil
 	stmt.Tablespace = ""
+	stmt.OrReplace = false
+	resetViewExtras(&stmt.ViewExtras)
 
 	createMaterializedViewStmtPool.Put(stmt)
 }
@@ -773,6 +774,7 @@ func PutDropStatement(stmt *DropStatement) {
 	stmt.IfExists = false
 	stmt.Names = stmt.Names[:0]
 	stmt.CascadeType = ""
+	stmt.DropExtras = DropExtras{}
 
 	dropStmtPool.Put(stmt)
 }
@@ -794,6 +796,7 @@ func PutTruncateStatement(stmt *TruncateStatement) {
 	stmt.RestartIdentity = false
 	stmt.ContinueIdentity = false
 	stmt.CascadeType = ""
+	stmt.Storage = ""
 
 	truncateStmtPool.Put(stmt)
 }

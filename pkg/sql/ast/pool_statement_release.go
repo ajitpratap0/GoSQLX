@@ -678,6 +678,7 @@ func PutCreateTableStatement(stmt *CreateTableStatement) {
 			stmt.PartitionBy.Boundary[i] = nil
 		}
 		stmt.PartitionBy.Boundary = stmt.PartitionBy.Boundary[:0]
+		releasePartitionByExtras(stmt.PartitionBy)
 		stmt.PartitionBy.Columns = stmt.PartitionBy.Columns[:0]
 		stmt.PartitionBy.Type = ""
 		stmt.PartitionBy = nil
@@ -709,16 +710,16 @@ func PutCreateTableStatement(stmt *CreateTableStatement) {
 
 	stmt.Inherits = stmt.Inherits[:0]
 
-	for i := range stmt.Options {
-		stmt.Options[i].Name = ""
-		stmt.Options[i].Value = ""
-	}
-	stmt.Options = stmt.Options[:0]
+	stmt.Options = resetTableOptions(stmt.Options)
+	resetCreateTableExtras(&stmt.CreateTableExtras)
 
 	// Reset scalar fields
 	stmt.IfNotExists = false
 	stmt.Temporary = false
 	stmt.Name = ""
+	stmt.WithoutRowID = false
+	stmt.WithSystemVersioning = false
+	stmt.PeriodDefinitions = nil
 
 	createTableStmtPool.Put(stmt)
 }

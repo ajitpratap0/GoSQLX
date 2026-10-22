@@ -13,11 +13,13 @@
 // limitations under the License.
 
 // Package parser - ddl.go
-// DDL statement parsing: CREATE TABLE core, DROP, TRUNCATE.
+// DDL statement parsing: CREATE dispatch, CREATE TABLE core, partitioning,
+// DROP, TRUNCATE.
 // Related modules:
 //   - ddl_columns.go  - column definitions and table constraints
 //   - ddl_index.go    - CREATE INDEX
 //   - ddl_view.go     - CREATE VIEW, CREATE MATERIALIZED VIEW, REFRESH
+//   - ddl_objects.go  - verbatim objects, CREATE TABLE heads/tails, options
 
 package parser
 
@@ -37,53 +39,130 @@ func (p *Parser) isTokenMatch(keyword string) bool {
 	return strings.EqualFold(p.currentToken.Token.Value, keyword)
 }
 
-// parseCreateStatement parses CREATE statements (TABLE, VIEW, MATERIALIZED VIEW, INDEX)
+// parseCreateStatement parses CREATE statements. TABLE, VIEW, MATERIALIZED
+// VIEW and INDEX (and MariaDB SEQUENCE) get dedicated AST nodes; every other
+// object (SCHEMA, FUNCTION, TRIGGER, USER, ...) is kept verbatim as a
+// UtilityStatement so it round-trips unchanged.
 func (p *Parser) parseCreateStatement() (ast.Statement, error) {
-	// Check for modifiers: OR REPLACE, TEMPORARY, TEMP
-	orReplace := false
-	temporary := false
+	createIdx := p.currentPos - 1 // the CREATE token
+	if kind := p.createVerbatimKind(); kind != "" {
+		return p.parseVerbatimFrom(createIdx, kind)
+	}
 
+	// Modifiers: OR REPLACE, OR ALTER, and the table / view kind words.
+	orReplace, orAlter := false, false
+	var mods []string
 	for {
 		if p.isType(models.TokenTypeOr) {
 			p.advance() // Consume OR
-			if !p.isType(models.TokenTypeReplace) {
+			switch {
+			case p.isType(models.TokenTypeReplace):
+				orReplace = true
+			case p.isTokenMatch("ALTER"):
+				orAlter = true
+			default:
 				return nil, p.expectedError("REPLACE after OR")
 			}
-			p.advance() // Consume REPLACE
-			orReplace = true
-		} else if p.isTokenMatch("TEMPORARY") || p.isTokenMatch("TEMP") {
-			p.advance() // Consume TEMPORARY/TEMP
+			p.advance() // Consume REPLACE / ALTER
+			continue
+		}
+		switch w := p.wordAt(0); w {
+		case "TEMPORARY", "TEMP", "GLOBAL", "LOCAL", "UNLOGGED", "TRANSIENT",
+			"VOLATILE", "SECURE", "FORCE", "RECURSIVE":
+			mods = append(mods, w)
+			p.advance()
+			continue
+		case "NO":
+			if p.wordAt(1) == "FORCE" {
+				mods = append(mods, "NO", "FORCE")
+				p.advance()
+				p.advance()
+				continue
+			}
+		}
+		break
+	}
+	modText := strings.Join(mods, " ")
+	temporary := false
+	for _, m := range mods {
+		if m == "TEMP" || m == "TEMPORARY" {
 			temporary = true
-		} else {
-			break
 		}
 	}
 
 	// Determine object type
-	if p.isType(models.TokenTypeMaterialized) {
+	switch {
+	case p.isType(models.TokenTypeMaterialized):
 		p.advance() // Consume MATERIALIZED
 		if !p.isType(models.TokenTypeView) {
 			return nil, p.expectedError("VIEW after MATERIALIZED")
 		}
 		p.advance() // Consume VIEW
-		return p.parseCreateMaterializedView()
-	} else if p.isType(models.TokenTypeView) {
-		p.advance() // Consume VIEW
-		return p.parseCreateView(orReplace, temporary)
-	} else if p.isType(models.TokenTypeTable) {
-		p.advance() // Consume TABLE
-		return p.parseCreateTable(temporary)
-	} else if p.isType(models.TokenTypeIndex) {
-		p.advance()                      // Consume INDEX
-		return p.parseCreateIndex(false) // Not unique
-	} else if p.isType(models.TokenTypeUnique) {
-		p.advance() // Consume UNIQUE
-		if !p.isType(models.TokenTypeIndex) {
-			return nil, p.expectedError("INDEX after UNIQUE")
+		if modText != "" || orAlter {
+			return nil, p.expectedError("MATERIALIZED VIEW without " + modText)
 		}
-		p.advance()                     // Consume INDEX
-		return p.parseCreateIndex(true) // Unique
-	} else if p.isMariaDB() && p.isTokenMatch("SEQUENCE") {
+		stmt, err := p.parseCreateMaterializedView()
+		if err != nil {
+			return nil, err
+		}
+		stmt.OrReplace = orReplace
+		return stmt, nil
+	case p.isType(models.TokenTypeView):
+		p.advance() // Consume VIEW
+		stmt, err := p.parseCreateView(orReplace, temporary)
+		if err != nil {
+			return nil, err
+		}
+		stmt.OrAlter = orAlter
+		if modText != "TEMPORARY" {
+			stmt.Modifiers = modText
+		}
+		return stmt, nil
+	case p.isType(models.TokenTypeTable):
+		p.advance() // Consume TABLE
+		if orAlter || (modText != "" && ast.TableKindText(modText) == "") {
+			return nil, p.expectedError("TABLE kind")
+		}
+		stmt, err := p.parseCreateTable(temporary)
+		if err != nil {
+			return nil, err
+		}
+		stmt.OrReplace = orReplace
+		if modText != "TEMPORARY" {
+			stmt.Kind = modText
+		}
+		return stmt, nil
+	}
+	if modText != "" || orAlter {
+		return nil, p.expectedError("TABLE or VIEW after " + modText)
+	}
+
+	// [UNIQUE] [FULLTEXT | SPATIAL | BITMAP | [NON]CLUSTERED] INDEX
+	unique := false
+	if p.isType(models.TokenTypeUnique) {
+		p.advance() // Consume UNIQUE
+		unique = true
+	}
+	indexKind := ""
+	if k := ast.IndexKindText(p.wordAt(0)); k != "" && p.wordAt(1) == "INDEX" {
+		indexKind = k
+		p.advance()
+	}
+	if p.isType(models.TokenTypeIndex) {
+		p.advance() // Consume INDEX
+		stmt, err := p.parseCreateIndex(unique)
+		if err != nil {
+			return nil, err
+		}
+		stmt.Kind = indexKind
+		stmt.OrReplace = orReplace
+		return stmt, nil
+	}
+	if unique {
+		return nil, p.expectedError("INDEX after UNIQUE")
+	}
+
+	if p.isMariaDB() && p.isTokenMatch("SEQUENCE") {
 		seqPos := p.currentLocation() // position of SEQUENCE token
 		p.advance()                   // Consume SEQUENCE
 		stmt, err := p.parseCreateSequenceStatement(orReplace)
@@ -96,80 +175,13 @@ func (p *Parser) parseCreateStatement() (ast.Statement, error) {
 		return stmt, nil
 	}
 
-	// Snowflake object-type extensions: STAGE, STREAM, TASK, PIPE, FILE FORMAT,
-	// WAREHOUSE, DATABASE, SCHEMA, ROLE, FUNCTION, PROCEDURE, SEQUENCE.
-	// Parse-only: consumed permissively and returned as UnsupportedStatement
-	// until dedicated AST nodes are introduced.
-	if p.dialect == string(keywords.DialectSnowflake) {
-		kind := strings.ToUpper(p.currentToken.Token.Value)
-		if kind == "FILE" && strings.EqualFold(p.peekToken().Token.Value, "FORMAT") {
-			p.advance() // FILE
-			kind = "FILE FORMAT"
-		}
-		switch kind {
-		case "STAGE", "STREAM", "TASK", "PIPE", "FILE FORMAT",
-			"WAREHOUSE", "DATABASE", "SCHEMA", "ROLE", "SEQUENCE",
-			"FUNCTION", "PROCEDURE":
-			stmtKind := "CREATE " + kind
-			p.advance() // Consume object-kind keyword
-			var rawParts []string
-			rawParts = append(rawParts, "CREATE", kind)
-			// Optional IF NOT EXISTS
-			if p.isType(models.TokenTypeIf) {
-				rawParts = append(rawParts, "IF")
-				p.advance()
-				if p.isType(models.TokenTypeNot) {
-					rawParts = append(rawParts, "NOT")
-					p.advance()
-				}
-				if p.isType(models.TokenTypeExists) {
-					rawParts = append(rawParts, "EXISTS")
-					p.advance()
-				}
-			}
-			// Object name (qualified identifier). Other name errors are
-			// tolerated by this permissive stub, but an over-long name is
-			// rejected: the limit fires mid-name, and scanning on would
-			// record only its tail in RawSQL.
-			name, err := p.parseQualifiedName()
-			if isQualifiedNameTooLong(err) {
-				return nil, err
-			}
-			if name != "" {
-				rawParts = append(rawParts, name)
-			}
-			// Consume the rest of the statement body until ';' or EOF,
-			// tracking balanced parens.
-			depth := 0
-			for {
-				t := p.currentToken.Token.Type
-				if t == models.TokenTypeEOF {
-					break
-				}
-				if t == models.TokenTypeSemicolon && depth == 0 {
-					break
-				}
-				if p.currentToken.Token.Value != "" {
-					rawParts = append(rawParts, p.currentToken.Token.Value)
-				}
-				if t == models.TokenTypeLParen {
-					depth++
-				} else if t == models.TokenTypeRParen {
-					depth--
-				}
-				p.advance()
-			}
-			stub := ast.GetUnsupportedStatement()
-			stub.Kind = stmtKind
-			stub.RawSQL = strings.Join(rawParts, " ")
-			return stub, nil
-		}
-	}
-
 	return nil, p.expectedError("TABLE, VIEW, MATERIALIZED VIEW, or INDEX after CREATE")
 }
 
-// parseCreateTable parses CREATE TABLE statement with partitioning support
+// parseCreateTable parses CREATE TABLE after the TABLE keyword: the column
+// list, or one of the LIKE / CLONE / PARTITION OF / AS forms, followed by
+// partitioning, table options, ClickHouse engine clauses and an optional
+// AS query.
 func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, error) {
 	stmt := &ast.CreateTableStatement{
 		Temporary: temporary,
@@ -196,44 +208,45 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 	}
 	stmt.Name = createTableName
 
-	// Snowflake: COPY GRANTS modifier before the column list or AS SELECT.
-	// Consumed but not modeled on the AST.
-	if strings.EqualFold(p.currentToken.Token.Value, "COPY") &&
-		strings.EqualFold(p.peekToken().Token.Value, "GRANTS") {
+	if stmt.OnCluster, err = p.parseOnCluster(); err != nil {
+		return nil, err
+	}
+
+	// Snowflake: COPY GRANTS may precede the column list or AS query.
+	if p.wordAt(0) == "COPY" && p.wordAt(1) == "GRANTS" {
 		p.advance() // COPY
 		p.advance() // GRANTS
+		stmt.Options = append(stmt.Options, ast.TableOption{Name: "COPY GRANTS", Form: ast.TableOptionFlag})
 	}
 
-	// CREATE TABLE ... AS SELECT — no column list, just a query.
-	// ClickHouse also: CREATE TABLE t AS source_table ENGINE = ...
-	if p.isType(models.TokenTypeAs) {
-		p.advance() // AS
-		if p.isType(models.TokenTypeSelect) || p.isType(models.TokenTypeWith) {
-			p.advance() // SELECT / WITH
-			query, err := p.parseSelectWithSetOperations()
-			if err != nil {
-				return nil, err
-			}
-			_ = query // CTAS query not modeled on CreateTableStatement yet
-			return stmt, nil
-		}
-		// ClickHouse: CREATE TABLE t AS <source_table> ENGINE = ...
-		// The identifier is the source table; consume remaining clauses.
-		if p.dialect == string(keywords.DialectClickHouse) && p.isIdentifier() {
-			p.advance() // Consume source table name
-			// Consume ENGINE and trailing clauses
-			for !p.isType(models.TokenTypeEOF) && !p.isType(models.TokenTypeSemicolon) {
-				p.advance()
-			}
-			return stmt, nil
-		}
-		return nil, p.expectedError("SELECT after AS")
+	hasSource, err := p.parseCreateTableSource(stmt)
+	if err != nil {
+		return nil, err
 	}
-
-	// Expect opening parenthesis for column definitions
-	if !p.isType(models.TokenTypeLParen) {
+	if !hasSource && p.isType(models.TokenTypeLParen) && !p.isInsertQueryParenStart() {
+		if err := p.parseCreateTableElements(stmt); err != nil {
+			return nil, err
+		}
+	} else if !hasSource && !p.isType(models.TokenTypeAs) && p.matchOptionSpec(tableOptionSpecs) == nil &&
+		!(p.dialect == string(keywords.DialectClickHouse) && p.isEngineClauseStart()) {
 		return nil, p.expectedError("(")
 	}
+
+	if err := p.parseCreateTableTail(stmt); err != nil {
+		return nil, err
+	}
+	// Without a column list, a source or a query there is nothing to
+	// create: CREATE TABLE t ENGINE = x.
+	if !hasSource && stmt.AsQuery == nil &&
+		len(stmt.Columns)+len(stmt.Constraints)+len(stmt.PeriodDefinitions) == 0 {
+		return nil, p.expectedError("( or AS")
+	}
+	return stmt, nil
+}
+
+// parseCreateTableElements parses the parenthesized column definitions,
+// table constraints and MariaDB PERIOD FOR clauses of CREATE TABLE.
+func (p *Parser) parseCreateTableElements(stmt *ast.CreateTableStatement) error {
 	p.advance() // Consume (
 
 	// Parse column definitions and constraints
@@ -243,7 +256,7 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 			periodPos := p.currentLocation() // position of PERIOD keyword
 			pd, err := p.parsePeriodDefinition()
 			if err != nil {
-				return nil, err
+				return err
 			}
 			pd.Pos = periodPos
 			stmt.PeriodDefinitions = append(stmt.PeriodDefinitions, pd)
@@ -252,14 +265,14 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 			// Check for table-level constraints
 			constraint, err := p.parseTableConstraint()
 			if err != nil {
-				return nil, err
+				return err
 			}
 			stmt.Constraints = append(stmt.Constraints, *constraint)
 		} else {
 			// Parse column definition
 			colDef, err := p.parseColumnDef()
 			if err != nil {
-				return nil, err
+				return err
 			}
 			stmt.Columns = append(stmt.Columns, *colDef)
 		}
@@ -274,204 +287,50 @@ func (p *Parser) parseCreateTable(temporary bool) (*ast.CreateTableStatement, er
 
 	// Expect closing parenthesis
 	if !p.isType(models.TokenTypeRParen) {
-		return nil, p.expectedError(")")
+		return p.expectedError(")")
 	}
 	p.advance() // Consume )
-
-	// MariaDB: WITH SYSTEM VERSIONING — enables system-versioned temporal history
-	if p.isMariaDB() && p.isType(models.TokenTypeWith) {
-		// peek ahead to check for SYSTEM VERSIONING (not WITH TIES or WITH CHECK etc.)
-		next := p.peekToken()
-		if strings.EqualFold(next.Token.Value, "SYSTEM") {
-			p.advance() // Consume WITH
-			p.advance() // Consume SYSTEM
-			if !strings.EqualFold(p.currentToken.Token.Value, "VERSIONING") {
-				return nil, p.expectedError("VERSIONING after WITH SYSTEM")
-			}
-			p.advance() // Consume VERSIONING
-			stmt.WithSystemVersioning = true
-		}
-	}
-
-	// Parse optional PARTITION BY clause
-	if p.isType(models.TokenTypePartition) {
-		p.advance() // Consume PARTITION
-		if !p.isType(models.TokenTypeBy) {
-			return nil, p.expectedError("BY after PARTITION")
-		}
-		p.advance() // Consume BY
-
-		partitionBy, err := p.parsePartitionByClause()
-		if err != nil {
-			return nil, err
-		}
-		stmt.PartitionBy = partitionBy
-
-		// Parse partition definitions if present
-		if p.isType(models.TokenTypeLParen) {
-			p.advance() // Consume (
-			for {
-				partDef, err := p.parsePartitionDefinition()
-				if err != nil {
-					return nil, err
-				}
-				stmt.Partitions = append(stmt.Partitions, *partDef)
-
-				if p.isType(models.TokenTypeComma) {
-					p.advance() // Consume comma
-					continue
-				}
-				break
-			}
-			if !p.isType(models.TokenTypeRParen) {
-				return nil, p.expectedError(")")
-			}
-			p.advance() // Consume )
-		}
-	}
-
-	// Parse optional table options
-	for p.isTokenMatch("ENGINE") || p.isTokenMatch("CHARSET") ||
-		p.isType(models.TokenTypeCollate) || p.isTokenMatch("COMMENT") {
-		opt := ast.TableOption{Name: p.currentToken.Token.Value}
-		p.advance()
-		if p.isType(models.TokenTypeEq) {
-			p.advance() // Consume =
-		}
-		if p.isIdentifier() || p.isType(models.TokenTypeString) {
-			opt.Value = p.currentToken.Token.Value
-			p.advance()
-		}
-		// ClickHouse engine values may carry their own argument list:
-		//   ENGINE = MergeTree()
-		//   ENGINE = ReplicatedMergeTree('/path', '{replica}')
-		//   ENGINE = Distributed('cluster', 'db', 'local_t', sharding_key)
-		// Consume them as a balanced block appended to the option value.
-		if p.isType(models.TokenTypeLParen) {
-			args, err := p.parseTypeArgsString()
-			if err != nil {
-				return nil, err
-			}
-			opt.Value += args
-		}
-		stmt.Options = append(stmt.Options, opt)
-	}
-
-	// ClickHouse CREATE TABLE trailing clauses: ORDER BY, PARTITION BY,
-	// PRIMARY KEY, SAMPLE BY, SETTINGS. These appear after ENGINE = ... and
-	// are required for MergeTree-family engines. Parse permissively:
-	// each consumes a parenthesised expression list or a single column ref.
-	for p.dialect == string(keywords.DialectClickHouse) {
-		if p.isType(models.TokenTypeOrder) {
-			p.advance() // ORDER
-			if p.isType(models.TokenTypeBy) {
-				p.advance()
-			}
-			if err := p.skipClickHouseClauseExpr(); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		if p.isTokenMatch("PARTITION") {
-			p.advance()
-			if p.isType(models.TokenTypeBy) {
-				p.advance()
-			}
-			if err := p.skipClickHouseClauseExpr(); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		if p.isType(models.TokenTypePrimary) {
-			p.advance()
-			if p.isType(models.TokenTypeKey) {
-				p.advance()
-			}
-			if err := p.skipClickHouseClauseExpr(); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		if p.isTokenMatch("SAMPLE") {
-			p.advance()
-			if p.isType(models.TokenTypeBy) {
-				p.advance()
-			}
-			if err := p.skipClickHouseClauseExpr(); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		if p.isTokenMatch("TTL") {
-			p.advance()
-			if err := p.skipClickHouseClauseExpr(); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		if p.isTokenMatch("SETTINGS") {
-			p.advance()
-			// SETTINGS is a comma-separated list of name=value assignments.
-			// Consume each k=v pair until the next clause, EOF, or ';'.
-			for {
-				t := p.currentToken.Token.Type
-				val := strings.ToUpper(p.currentToken.Token.Value)
-				if t == models.TokenTypeEOF || t == models.TokenTypeSemicolon {
-					break
-				}
-				if val == "ORDER" || val == "PARTITION" || val == "PRIMARY" ||
-					val == "SAMPLE" || val == "TTL" {
-					break
-				}
-				p.advance()
-			}
-			continue
-		}
-		break
-	}
-
-	// Snowflake: CLUSTER BY (expr, ...) — defines the clustering key.
-	if strings.EqualFold(p.currentToken.Token.Value, "CLUSTER") {
-		p.advance() // CLUSTER
-		if p.isType(models.TokenTypeBy) {
-			p.advance() // BY
-		}
-		if p.isType(models.TokenTypeLParen) {
-			if err := p.skipClickHouseClauseExpr(); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	// SQLite: optional WITHOUT ROWID clause
-	if p.isTokenMatch("WITHOUT") {
-		p.advance() // Consume WITHOUT
-		if !p.isTokenMatch("ROWID") {
-			return nil, p.expectedError("ROWID after WITHOUT")
-		}
-		p.advance() // Consume ROWID
-		stmt.WithoutRowID = true
-	}
-
-	return stmt, nil
+	return nil
 }
 
-// parsePartitionByClause parses PARTITION BY RANGE/LIST/HASH (columns)
+// parsePartitionByClause parses the partitioning method and key after
+// PARTITION BY: RANGE | LIST [COLUMNS] (key), [LINEAR] HASH | KEY (key)
+// [PARTITIONS n], Oracle INTERVAL (expr), and MariaDB SYSTEM_TIME
+// [INTERVAL n unit].
 func (p *Parser) parsePartitionByClause() (*ast.PartitionBy, error) {
 	partitionBy := &ast.PartitionBy{}
 
-	// Parse partition type
-	if p.isType(models.TokenTypeRange) {
-		partitionBy.Type = "RANGE"
+	if p.wordAt(0) == "LINEAR" {
+		partitionBy.Linear = true
 		p.advance()
-	} else if p.isTokenMatch("LIST") {
-		partitionBy.Type = "LIST"
+	}
+	switch w := p.wordAt(0); {
+	case w == "RANGE" || w == "LIST":
+		partitionBy.Type = w
 		p.advance()
-	} else if p.isTokenMatch("HASH") {
-		partitionBy.Type = "HASH"
+		if p.wordAt(0) == "COLUMNS" {
+			partitionBy.Type += " COLUMNS"
+			p.advance()
+		}
+	case w == "HASH" || w == "KEY":
+		partitionBy.Type = w
 		p.advance()
-	} else {
+	case w == "SYSTEM_TIME" && !partitionBy.Linear:
+		partitionBy.Type = w
+		p.advance()
+		if p.isType(models.TokenTypeInterval) {
+			e, err := p.parseExpression()
+			if err != nil {
+				return nil, err
+			}
+			partitionBy.Interval = e
+		}
+		return partitionBy, nil
+	default:
 		return nil, p.expectedError("RANGE, LIST, or HASH")
+	}
+	if partitionBy.Linear && partitionBy.Type != "HASH" && partitionBy.Type != "KEY" {
+		return nil, p.expectedError("HASH or KEY after LINEAR")
 	}
 
 	// Expect opening parenthesis
@@ -480,19 +339,33 @@ func (p *Parser) parsePartitionByClause() (*ast.PartitionBy, error) {
 	}
 	p.advance() // Consume (
 
-	// Parse column list
-	for {
-		if !p.isIdentifier() {
-			return nil, p.expectedError("column name")
+	// Parse the partition key: plain columns, or expressions such as
+	// YEAR(created_at). KEY () may be empty.
+	plain := true
+	var exprs []ast.Expression
+	for !(partitionBy.Type == "KEY" && p.isType(models.TokenTypeRParen) && len(exprs) == 0) {
+		next := p.peekToken().Token.Type
+		if p.isIdentifier() && (next == models.TokenTypeComma || next == models.TokenTypeRParen) {
+			partitionBy.Columns = append(partitionBy.Columns, p.currentToken.Token.Value)
+			exprs = append(exprs, &ast.Identifier{Name: p.currentToken.Token.Value})
+			p.advance()
+		} else {
+			e, err := p.parseExpression()
+			if err != nil {
+				return nil, err
+			}
+			plain = false
+			exprs = append(exprs, e)
 		}
-		partitionBy.Columns = append(partitionBy.Columns, p.currentToken.Token.Value)
-		p.advance()
-
 		if p.isType(models.TokenTypeComma) {
 			p.advance() // Consume comma
 			continue
 		}
 		break
+	}
+	if !plain {
+		partitionBy.Columns = nil
+		partitionBy.Expressions = exprs
 	}
 
 	// Expect closing parenthesis
@@ -501,10 +374,37 @@ func (p *Parser) parsePartitionByClause() (*ast.PartitionBy, error) {
 	}
 	p.advance() // Consume )
 
+	// Oracle interval partitioning: INTERVAL (expr)
+	if partitionBy.Type == "RANGE" && p.isType(models.TokenTypeInterval) &&
+		p.peekToken().Token.Type == models.TokenTypeLParen {
+		p.advance() // INTERVAL
+		p.advance() // (
+		e, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+		if !p.isType(models.TokenTypeRParen) {
+			return nil, p.expectedError(")")
+		}
+		p.advance()
+		partitionBy.Interval = e
+	}
+	// MySQL / Oracle partition count: PARTITIONS n
+	if p.wordAt(0) == "PARTITIONS" && p.peekToken().Token.Type == models.TokenTypeNumber {
+		p.advance()
+		e, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+		partitionBy.Partitions = e
+	}
+
 	return partitionBy, nil
 }
 
-// parsePartitionDefinition parses a single partition definition
+// parsePartitionDefinition parses a single partition definition:
+// PARTITION name [VALUES LESS THAN (...) | VALUES IN (...) | VALUES (...) |
+// VALUES FROM (...) TO (...) | HISTORY | CURRENT] [TABLESPACE ts].
 func (p *Parser) parsePartitionDefinition() (*ast.PartitionDefinition, error) {
 	partDef := &ast.PartitionDefinition{}
 
@@ -515,121 +415,28 @@ func (p *Parser) parsePartitionDefinition() (*ast.PartitionDefinition, error) {
 	p.advance() // Consume PARTITION
 
 	// Parse partition name (supports double-quoted identifiers)
-	if !p.isIdentifier() {
+	if !p.isIdentifier() && !p.isNonReservedKeyword() {
 		return nil, p.expectedError("partition name")
 	}
 	partDef.Name = p.currentToken.Token.Value
 	p.advance()
 
-	// Parse VALUES clause
-	if !p.isType(models.TokenTypeValues) {
-		return nil, p.expectedError("VALUES")
-	}
-	p.advance() // Consume VALUES
-
-	// Parse value specification
-	if p.isTokenMatch("LESS") {
-		p.advance() // Consume LESS
-		if !p.isTokenMatch("THAN") {
-			return nil, p.expectedError("THAN after LESS")
-		}
-		p.advance() // Consume THAN
-		partDef.Type = "LESS THAN"
-
-		// Parse value or MAXVALUE
-		if p.isType(models.TokenTypeLParen) {
-			p.advance() // Consume (
-			if p.isTokenMatch("MAXVALUE") {
-				partDef.LessThan = &ast.Identifier{Name: "MAXVALUE"}
-				p.advance()
-			} else {
-				expr, err := p.parseExpression()
-				if err != nil {
-					return nil, err
-				}
-				partDef.LessThan = expr
-			}
-			if !p.isType(models.TokenTypeRParen) {
-				return nil, p.expectedError(")")
-			}
-			p.advance() // Consume )
-		} else if p.isTokenMatch("MAXVALUE") {
-			partDef.LessThan = &ast.Identifier{Name: "MAXVALUE"}
-			p.advance()
-		}
-	} else if p.isType(models.TokenTypeIn) {
-		p.advance() // Consume IN
-		partDef.Type = "IN"
-
-		// Parse value list
-		if !p.isType(models.TokenTypeLParen) {
-			return nil, p.expectedError("(")
-		}
-		p.advance() // Consume (
-
-		for {
-			expr, err := p.parseExpression()
-			if err != nil {
-				return nil, err
-			}
-			partDef.InValues = append(partDef.InValues, expr)
-
-			if p.isType(models.TokenTypeComma) {
-				p.advance() // Consume comma
-				continue
-			}
-			break
-		}
-
-		if !p.isType(models.TokenTypeRParen) {
-			return nil, p.expectedError(")")
-		}
-		p.advance() // Consume )
-	} else if p.isType(models.TokenTypeFrom) {
-		p.advance() // Consume FROM
-		partDef.Type = "FROM TO"
-
-		// Parse FROM value
-		if !p.isType(models.TokenTypeLParen) {
-			return nil, p.expectedError("(")
-		}
-		p.advance() // Consume (
-		fromExpr, err := p.parseExpression()
-		if err != nil {
+	switch w := p.wordAt(0); {
+	case w == "HISTORY" || w == "CURRENT":
+		// MariaDB system-versioning partitions
+		partDef.Type = w
+		p.advance()
+	case p.isType(models.TokenTypeValues):
+		p.advance() // Consume VALUES
+		if err := p.parsePartitionValues(partDef); err != nil {
 			return nil, err
 		}
-		partDef.From = fromExpr
-		if !p.isType(models.TokenTypeRParen) {
-			return nil, p.expectedError(")")
-		}
-		p.advance() // Consume )
-
-		// Expect TO
-		if !p.isType(models.TokenTypeTo) {
-			return nil, p.expectedError("TO")
-		}
-		p.advance() // Consume TO
-
-		// Parse TO value
-		if !p.isType(models.TokenTypeLParen) {
-			return nil, p.expectedError("(")
-		}
-		p.advance() // Consume (
-		toExpr, err := p.parseExpression()
-		if err != nil {
-			return nil, err
-		}
-		partDef.To = toExpr
-		if !p.isType(models.TokenTypeRParen) {
-			return nil, p.expectedError(")")
-		}
-		p.advance() // Consume )
 	}
 
 	// Parse optional TABLESPACE
 	if p.isTokenMatch("TABLESPACE") {
 		p.advance() // Consume TABLESPACE
-		if !p.isIdentifier() {
+		if !p.isIdentifier() && !p.isNonReservedKeyword() {
 			return nil, p.expectedError("tablespace name")
 		}
 		partDef.Tablespace = p.currentToken.Token.Value
@@ -639,9 +446,95 @@ func (p *Parser) parsePartitionDefinition() (*ast.PartitionDefinition, error) {
 	return partDef, nil
 }
 
-// parseDropStatement parses DROP statements (TABLE, VIEW, MATERIALIZED VIEW, INDEX)
-func (p *Parser) parseDropStatement() (*ast.DropStatement, error) {
+// parsePartitionValues parses the value specification after VALUES in a
+// partition definition.
+func (p *Parser) parsePartitionValues(partDef *ast.PartitionDefinition) error {
+	switch {
+	case p.isTokenMatch("LESS"):
+		p.advance() // Consume LESS
+		if !p.isTokenMatch("THAN") {
+			return p.expectedError("THAN after LESS")
+		}
+		p.advance() // Consume THAN
+		partDef.Type = "LESS THAN"
+
+		// Parse value or MAXVALUE
+		if p.isType(models.TokenTypeLParen) {
+			list, err := p.parseParenExprList()
+			if err != nil {
+				return err
+			}
+			if len(list) == 1 {
+				partDef.LessThan = list[0]
+			} else {
+				partDef.Values = list
+			}
+		} else if p.isTokenMatch("MAXVALUE") {
+			partDef.LessThan = &ast.Identifier{Name: "MAXVALUE"}
+			p.advance()
+		} else {
+			return p.expectedError("( or MAXVALUE")
+		}
+	case p.isType(models.TokenTypeIn):
+		p.advance() // Consume IN
+		partDef.Type = "IN"
+		list, err := p.parseParenExprList()
+		if err != nil {
+			return err
+		}
+		partDef.InValues = list
+	case p.isType(models.TokenTypeFrom):
+		p.advance() // Consume FROM
+		partDef.Type = "FROM TO"
+		from, err := p.parseParenExprList()
+		if err != nil {
+			return err
+		}
+		if len(from) != 1 {
+			return p.expectedError("one FROM value")
+		}
+		partDef.From = from[0]
+		// Expect TO
+		if !p.isType(models.TokenTypeTo) {
+			return p.expectedError("TO")
+		}
+		p.advance() // Consume TO
+		to, err := p.parseParenExprList()
+		if err != nil {
+			return err
+		}
+		if len(to) != 1 {
+			return p.expectedError("one TO value")
+		}
+		partDef.To = to[0]
+	case p.isType(models.TokenTypeLParen):
+		// Oracle list partition: VALUES ('a', 'b') or VALUES (DEFAULT)
+		partDef.Type = "VALUES"
+		list, err := p.parseParenExprList()
+		if err != nil {
+			return err
+		}
+		partDef.Values = list
+	default:
+		return p.expectedError("LESS THAN, IN or (")
+	}
+	return nil
+}
+
+// parseDropStatement parses DROP TABLE / VIEW / MATERIALIZED VIEW / INDEX.
+// DROP of any other object (SCHEMA, FUNCTION, USER, ...) is kept verbatim.
+func (p *Parser) parseDropStatement() (ast.Statement, error) {
+	dropIdx := p.currentPos - 1 // the DROP token
+	if kind := p.dropVerbatimKind(); kind != "" {
+		return p.parseVerbatimFrom(dropIdx, kind)
+	}
 	stmt := &ast.DropStatement{}
+
+	// MySQL: DROP TEMPORARY TABLE
+	if p.wordAt(0) == "TEMPORARY" && p.peekToken().Token.Type == models.TokenTypeTable {
+		p.advance()
+		stmt.Temporary = true
+	}
 
 	// Determine object type
 	if p.isType(models.TokenTypeMaterialized) {
@@ -660,6 +553,10 @@ func (p *Parser) parseDropStatement() (*ast.DropStatement, error) {
 	} else if p.isType(models.TokenTypeIndex) {
 		p.advance() // Consume INDEX
 		stmt.ObjectType = "INDEX"
+		if p.wordAt(0) == "CONCURRENTLY" {
+			p.advance()
+			stmt.Concurrently = true
+		}
 	} else {
 		return nil, p.expectedError("TABLE, VIEW, MATERIALIZED VIEW, or INDEX after DROP")
 	}
@@ -689,12 +586,38 @@ func (p *Parser) parseDropStatement() (*ast.DropStatement, error) {
 		break
 	}
 
-	// Parse optional CASCADE/RESTRICT
+	var err error
+	if stmt.OnCluster, err = p.parseOnCluster(); err != nil {
+		return nil, err
+	}
+	// MySQL / SQL Server / MariaDB: DROP INDEX name ON table
+	if stmt.ObjectType == "INDEX" && p.isType(models.TokenTypeOn) && len(stmt.Names) == 1 {
+		p.advance() // ON
+		table, err := p.parseQualifiedName()
+		if err != nil {
+			return nil, p.qualifiedNameError(err, "table name after ON")
+		}
+		stmt.OnTable = table
+	}
+
+	// Parse optional CASCADE [CONSTRAINTS] / RESTRICT
 	if p.isType(models.TokenTypeCascade) {
 		stmt.CascadeType = "CASCADE"
 		p.advance()
+		if p.wordAt(0) == "CONSTRAINTS" {
+			stmt.CascadeType = "CASCADE CONSTRAINTS"
+			p.advance()
+		}
 	} else if p.isType(models.TokenTypeRestrict) {
 		stmt.CascadeType = "RESTRICT"
+		p.advance()
+	}
+	if p.wordAt(0) == "PURGE" {
+		stmt.Purge = true
+		p.advance()
+	}
+	if p.dialect == string(keywords.DialectClickHouse) && p.wordAt(0) == "SYNC" {
+		stmt.Sync = true
 		p.advance()
 	}
 
@@ -752,51 +675,18 @@ func (p *Parser) parseTruncateStatement() (*ast.TruncateStatement, error) {
 		p.advance()
 	}
 
-	return stmt, nil
-}
-
-// skipClickHouseClauseExpr consumes the expression following a ClickHouse
-// CREATE TABLE trailing clause (ORDER BY, PARTITION BY, PRIMARY KEY, SAMPLE BY).
-// We do not currently model these clauses on the AST; this just walks the
-// tokens until the start of the next clause, EOF, or ';'. Supports both
-// parenthesised lists and bare expressions.
-func (p *Parser) skipClickHouseClauseExpr() error {
-	if p.isType(models.TokenTypeLParen) {
-		// Balanced paren block.
-		depth := 0
-		for {
-			switch p.currentToken.Token.Type {
-			case models.TokenTypeEOF:
-				return p.expectedError(") to close clause expression")
-			case models.TokenTypeLParen:
-				depth++
-				p.advance()
-			case models.TokenTypeRParen:
-				depth--
-				p.advance()
-				if depth == 0 {
-					return nil
-				}
-			default:
-				p.advance()
-			}
-		}
+	// Oracle: DROP [ALL] STORAGE | REUSE STORAGE
+	switch {
+	case p.isType(models.TokenTypeDrop) && p.wordAt(1) == "STORAGE":
+		stmt.Storage = "DROP STORAGE"
+	case p.isType(models.TokenTypeDrop) && p.wordAt(1) == "ALL" && p.wordAt(2) == "STORAGE":
+		stmt.Storage = "DROP ALL STORAGE"
+	case p.wordAt(0) == "REUSE" && p.wordAt(1) == "STORAGE":
+		stmt.Storage = "REUSE STORAGE"
 	}
-
-	// Bare expression: consume until next clause/EOF/;.
-	for {
-		t := p.currentToken.Token.Type
-		if t == models.TokenTypeEOF || t == models.TokenTypeSemicolon {
-			return nil
-		}
-		// Stop at next CH trailing-clause keyword.
-		if t == models.TokenTypeOrder || t == models.TokenTypePrimary {
-			return nil
-		}
-		val := strings.ToUpper(p.currentToken.Token.Value)
-		if val == "PARTITION" || val == "SAMPLE" || val == "SETTINGS" || val == "TTL" {
-			return nil
-		}
+	for i := strings.Count(stmt.Storage, " "); stmt.Storage != "" && i >= 0; i-- {
 		p.advance()
 	}
+
+	return stmt, nil
 }

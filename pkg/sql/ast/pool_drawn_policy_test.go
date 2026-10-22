@@ -38,7 +38,6 @@ var releaseDrawnConstructors = []string{
 	"GetArrayConstructor",
 	"GetArraySubscriptExpression",
 	"GetArraySliceExpression",
-	"GetUnsupportedStatement",
 	"GetAlterStatement",
 	"GetShowStatement",
 	"GetDescribeStatement",
@@ -233,11 +232,6 @@ var drawnCases = map[string]func() (node any, release func()){
 		n.Start = GetLiteralValue()
 		n.End = GetLiteralValue()
 		return n, func() { releaseExpression(n, releaseDrawn) }
-	},
-	"GetUnsupportedStatement": func() (any, func()) {
-		n := GetUnsupportedStatement()
-		n.Kind, n.RawSQL = "USE", "USE db"
-		return n, func() { releaseStatement(n, releaseDrawn) }
 	},
 	"GetAlterStatement": func() (any, func()) {
 		n := GetAlterStatement()

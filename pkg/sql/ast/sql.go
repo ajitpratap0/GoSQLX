@@ -1532,62 +1532,25 @@ func (c *CreateTableStatement) SQL() string {
 	}
 	sb := getBuf()
 	defer putBuf(sb)
-	sb.WriteString("CREATE ")
-	if c.Temporary {
-		sb.WriteString("TEMPORARY ")
-	}
-	sb.WriteString("TABLE ")
-	if c.IfNotExists {
-		sb.WriteString("IF NOT EXISTS ")
-	}
-	writeQualifiedName(sb, c.Name)
-	sb.WriteString(" (")
-
-	parts := make([]string, 0, len(c.Columns)+len(c.Constraints))
-	for _, col := range c.Columns {
-		col := col // G601: Create local copy to avoid memory aliasing
-		parts = append(parts, columnDefSQL(&col))
-	}
-	for _, con := range c.Constraints {
-		con := con // G601: Create local copy to avoid memory aliasing
-		parts = append(parts, tableConstraintSQL(&con))
-	}
-	sb.WriteString(strings.Join(parts, ", "))
-	sb.WriteString(")")
-
-	if len(c.Inherits) > 0 {
-		sb.WriteString(" INHERITS (")
-		for i, name := range c.Inherits {
-			if i > 0 {
-				sb.WriteString(", ")
-			}
-			writeQualifiedName(sb, name)
-		}
-		sb.WriteString(")")
-	}
-
-	if c.PartitionBy != nil {
-		sb.WriteString(" PARTITION BY ")
-		// An unknown method is left out: "PARTITION BY  (cols)" does not parse.
-		sb.WriteString(PartitionByText(c.PartitionBy.Type))
+	writeCreateTableHead(sb, c, DDLStyle{})
+	if c.HasColumnList() {
 		sb.WriteString(" (")
-		writeColumnNameList(sb, c.PartitionBy.Columns)
+		parts := make([]string, 0, len(c.Columns)+len(c.PeriodDefinitions)+len(c.Constraints))
+		for _, col := range c.Columns {
+			col := col // G601: Create local copy to avoid memory aliasing
+			parts = append(parts, columnDefSQL(&col))
+		}
+		for _, pd := range c.PeriodDefinitions {
+			parts = append(parts, pd.SQL())
+		}
+		for _, con := range c.Constraints {
+			con := con // G601: Create local copy to avoid memory aliasing
+			parts = append(parts, tableConstraintSQL(&con))
+		}
+		sb.WriteString(strings.Join(parts, ", "))
 		sb.WriteString(")")
 	}
-
-	for _, opt := range c.Options {
-		// The option name is a known table option (ENGINE, CHARSET); an
-		// option with any other name can only come from a hand-built AST and
-		// is dropped.
-		if TableOptionNameText(opt.Name) == "" {
-			continue
-		}
-		sb.WriteByte(' ')
-		sb.WriteString(opt.Name)
-		sb.WriteByte('=')
-		writeOptionValue(sb, opt.Value)
-	}
-
+	writeCreateTableTail(sb, c, DDLStyle{})
 	return sb.String()
 }
 
@@ -1599,45 +1562,7 @@ func (c *CreateIndexStatement) SQL() string {
 	}
 	sb := getBuf()
 	defer putBuf(sb)
-	sb.WriteString("CREATE ")
-	if c.Unique {
-		sb.WriteString("UNIQUE ")
-	}
-	sb.WriteString("INDEX ")
-	if c.IfNotExists {
-		sb.WriteString("IF NOT EXISTS ")
-	}
-	writeQualifiedName(sb, c.Name)
-	sb.WriteString(" ON ")
-	writeQualifiedName(sb, c.Table)
-
-	if c.Using != "" {
-		sb.WriteString(" USING ")
-		writeColumnName(sb, c.Using)
-	}
-
-	sb.WriteString(" (")
-	for i, col := range c.Columns {
-		if i > 0 {
-			sb.WriteString(", ")
-		}
-		writeColumnName(sb, col.Column)
-		if col.Collate != "" {
-			sb.WriteString(" COLLATE ")
-			writeCollationName(sb, col.Collate, col.CollateQuoted)
-		}
-		if dir := SortDirectionText(col.Direction); dir != "" {
-			sb.WriteByte(' ')
-			sb.WriteString(dir)
-		}
-	}
-	sb.WriteString(")")
-
-	if c.Where != nil {
-		sb.WriteString(" WHERE ")
-		sb.WriteString(exprSQL(c.Where))
-	}
-
+	writeCreateIndex(sb, c, DDLStyle{})
 	return sb.String()
 }
 
@@ -1668,18 +1593,7 @@ func (d *DropStatement) SQL() string {
 	}
 	sb := getBuf()
 	defer putBuf(sb)
-	sb.WriteString("DROP ")
-	// An unknown object type is left out: "DROP  name" does not parse.
-	sb.WriteString(DropObjectTypeText(d.ObjectType))
-	sb.WriteString(" ")
-	if d.IfExists {
-		sb.WriteString("IF EXISTS ")
-	}
-	writeQualifiedNameList(sb, d.Names)
-	if c := CascadeText(d.CascadeType); c != "" {
-		sb.WriteString(" ")
-		sb.WriteString(c)
-	}
+	writeDrop(sb, d, DDLStyle{})
 	return sb.String()
 }
 
@@ -1691,17 +1605,7 @@ func (t *TruncateStatement) SQL() string {
 	}
 	sb := getBuf()
 	defer putBuf(sb)
-	sb.WriteString("TRUNCATE TABLE ")
-	writeQualifiedNameList(sb, t.Tables)
-	if t.RestartIdentity {
-		sb.WriteString(" RESTART IDENTITY")
-	} else if t.ContinueIdentity {
-		sb.WriteString(" CONTINUE IDENTITY")
-	}
-	if c := CascadeText(t.CascadeType); c != "" {
-		sb.WriteString(" ")
-		sb.WriteString(c)
-	}
+	writeTruncate(sb, t, DDLStyle{})
 	return sb.String()
 }
 
@@ -1800,31 +1704,7 @@ func (c *CreateViewStatement) SQL() string {
 	}
 	sb := getBuf()
 	defer putBuf(sb)
-	sb.WriteString("CREATE ")
-	if c.OrReplace {
-		sb.WriteString("OR REPLACE ")
-	}
-	if c.Temporary {
-		sb.WriteString("TEMPORARY ")
-	}
-	sb.WriteString("VIEW ")
-	if c.IfNotExists {
-		sb.WriteString("IF NOT EXISTS ")
-	}
-	writeQualifiedName(sb, c.Name)
-	if len(c.Columns) > 0 {
-		sb.WriteString(" (")
-		writeNameList(sb, c.Columns)
-		sb.WriteString(")")
-	}
-	sb.WriteString(" AS ")
-	sb.WriteString(stmtSQL(c.Query))
-	// WithOption is CHECK OPTION, CASCADED or LOCAL CHECK OPTION; anything
-	// else can only come from a hand-built AST and is dropped.
-	if ViewWithOptionText(c.WithOption) != "" {
-		sb.WriteString(" WITH ")
-		sb.WriteString(c.WithOption)
-	}
+	writeCreateView(sb, c, DDLStyle{})
 	return sb.String()
 }
 
@@ -1835,25 +1715,7 @@ func (c *CreateMaterializedViewStatement) SQL() string {
 	}
 	sb := getBuf()
 	defer putBuf(sb)
-	sb.WriteString("CREATE MATERIALIZED VIEW ")
-	if c.IfNotExists {
-		sb.WriteString("IF NOT EXISTS ")
-	}
-	writeQualifiedName(sb, c.Name)
-	if len(c.Columns) > 0 {
-		sb.WriteString(" (")
-		writeNameList(sb, c.Columns)
-		sb.WriteString(")")
-	}
-	sb.WriteString(" AS ")
-	sb.WriteString(stmtSQL(c.Query))
-	if c.WithData != nil {
-		if *c.WithData {
-			sb.WriteString(" WITH DATA")
-		} else {
-			sb.WriteString(" WITH NO DATA")
-		}
-	}
+	writeCreateMaterializedView(sb, c, DDLStyle{})
 	return sb.String()
 }
 

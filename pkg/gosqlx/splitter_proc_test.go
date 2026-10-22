@@ -96,6 +96,12 @@ END`
 		{"qualified begin", "SELECT t.begin, @begin FROM t; SELECT 2", "sqlserver", []string{"SELECT t.begin, @begin FROM t", " SELECT 2"}},
 		{"case expression at top level", "SELECT CASE WHEN a THEN 1 END; SELECT 2", "", []string{"SELECT CASE WHEN a THEN 1 END", " SELECT 2"}},
 		{"stray end at top level", "END; SELECT 1", "postgresql", []string{"END", " SELECT 1"}},
+		{"begin column in create table", "CREATE TABLE t (begin INT, x INT); INSERT INTO t VALUES (1, 2); UPDATE t SET end = 1; SELECT 3", "mysql",
+			[]string{"CREATE TABLE t (begin INT, x INT)", " INSERT INTO t VALUES (1, 2)", " UPDATE t SET end = 1", " SELECT 3"}},
+		{"begin column added by alter table", "ALTER TABLE t ADD COLUMN begin int; SELECT 1; SELECT y FROM t ORDER BY end; SELECT 2", "postgresql",
+			[]string{"ALTER TABLE t ADD COLUMN begin int", " SELECT 1", " SELECT y FROM t ORDER BY end", " SELECT 2"}},
+		{"begin column modified", "ALTER TABLE t MODIFY begin TIME NOT NULL; SELECT end FROM t; SELECT 2", "mysql",
+			[]string{"ALTER TABLE t MODIFY begin TIME NOT NULL", " SELECT end FROM t", " SELECT 2"}},
 
 		// --- MySQL / MariaDB routines ---
 		{"mysql routine without delimiter", mysqlRoutine + ";\nSELECT 9", "mysql", []string{mysqlRoutine, "\nSELECT 9"}},

@@ -354,9 +354,17 @@ func isExecutable(text string) bool {
 	return strings.HasPrefix(text, "/*!") || strings.HasPrefix(text, "/*M!")
 }
 
+// isLineHint reports whether text is an Oracle line hint, --+ ... . It is
+// significant like /*+ */ but cannot be written inline after a keyword (it
+// would swallow the rest of the line), so it is never placed, only refused
+// when it sits inside a statement.
+func isLineHint(text string) bool { return strings.HasPrefix(text, "--+") }
+
 // isSignificantComment reports whether a comment affects how the database
 // runs the statement.
-func isSignificantComment(text string) bool { return isHint(text) || isExecutable(text) }
+func isSignificantComment(text string) bool {
+	return isHint(text) || isLineHint(text) || isExecutable(text)
+}
 
 // insertHints writes hints after the first word of the rendered statement:
 // "SELECT a FROM t" becomes "SELECT /*+ H */ a FROM t".

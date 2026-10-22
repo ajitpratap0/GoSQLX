@@ -102,6 +102,7 @@ func TestJoinWithComments_RefusesWhatItCannotPlace(t *testing.T) {
 		"hint in union branch":   "select 1 union select /*+ x */ 2",
 		"executable in stmt":     "select 1 /*!50000 + 1 */",
 		"executable before stmt": "/*!40101 SET x = 1 */ select 1",
+		"oracle line hint":       "select --+ FULL(t)\n a from t",
 	} {
 		t.Run(name, func(t *testing.T) {
 			got, err := renderJoin(t, sql, layout)

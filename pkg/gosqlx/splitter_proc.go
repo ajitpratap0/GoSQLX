@@ -157,7 +157,7 @@ func (s *procState) word(src string, i, j int) int {
 			s.stmtStart = true
 			return j
 		}
-		if !beginIsBlock(src, j) {
+		if beginNamesColumn(src, i) || !beginIsBlock(src, j) {
 			return j
 		}
 		s.push(false)
@@ -347,6 +347,34 @@ func beginIsBlock(src string, j int) bool {
 		return string(foldWord(&b2, w2)) == "atomic"
 	}
 	return true
+}
+
+// beginNamesColumn reports whether the BEGIN starting at i is a column name
+// rather than a block opener because of what precedes it: a column list
+// ("(begin INT", ", begin DATE") or an ALTER TABLE column clause ("ADD
+// COLUMN begin INT", "MODIFY begin TIME"). Treating such a BEGIN as a block
+// would merge the following statements up to the next unrelated END.
+func beginNamesColumn(src string, i int) bool {
+	k := i
+	for k > 0 && (src[k-1] == ' ' || src[k-1] == '\t' || src[k-1] == '\n' || src[k-1] == '\r') {
+		k--
+	}
+	if k == 0 {
+		return false
+	}
+	if c := src[k-1]; c == ',' || c == '(' {
+		return true
+	}
+	e := k
+	for k > 0 && isWordByte(src[k-1]) {
+		k--
+	}
+	var b [12]byte
+	switch string(foldWord(&b, src[k:e])) {
+	case "column", "add", "modify", "change", "alter", "drop", "rename":
+		return true
+	}
+	return false
 }
 
 // peekWord skips whitespace and comments from j and returns the word that

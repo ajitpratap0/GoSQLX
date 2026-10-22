@@ -34,8 +34,9 @@ import (
 //     else, since its meaning depends on the dialect;
 //   - MySQL decodes \0 \b \Z, keeps the backslash of \% and \_ and drops it
 //     before any other character;
-//   - Lenient (ClickHouse, BigQuery) decodes \` \0 \a \b \f \v and ASCII
-//     \xHH and keeps the backslash before any other character;
+//   - Lenient (ClickHouse, BigQuery) decodes \` \/ \= \0 \a \b \f \v and
+//     ASCII \xHH, rejects \e and \N and keeps the backslash before any
+//     other character;
 //   - DropUnknown (Snowflake, Redshift) decodes \b \f, three-digit octal,
 //     \xhh and \uhhhh and drops the backslash before any other character.
 //
@@ -94,8 +95,15 @@ func (t *Tokenizer) handleEscapeSequence(buf *bytes.Buffer) error {
 		return t.decodeDropUnknownEscape(buf, r, size)
 	default: // StringEscapeLenient
 		switch r {
-		case '`':
+		case '`', '/', '=':
+			// ClickHouse drops the backslash before these, as it does
+			// before \\ \' and \" (BigQuery rejects \/ and \=, so
+			// decoding them cannot change a valid BigQuery literal).
 			buf.WriteRune(r)
+		case 'e', 'N':
+			// ClickHouse reads \e as ESC and \N as nothing; refused rather
+			// than guessed, since BigQuery rejects both.
+			return t.invalidEscape(r)
 		case '0':
 			buf.WriteByte(0)
 		case 'a':

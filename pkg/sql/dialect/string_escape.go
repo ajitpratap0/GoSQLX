@@ -30,9 +30,9 @@ const (
 	// literal is better than silently changing its value on a format pass.
 	StringEscapeStrict StringEscape = iota
 	// StringEscapeLenient is ClickHouse and BigQuery: C-style backslash
-	// escapes (\b \f \n \r \t \0 \a \v \xHH) are decoded and an
-	// unrecognised sequence keeps its backslash, as ClickHouse does so that
-	// LIKE patterns and regular expressions survive.
+	// escapes (\b \f \n \r \t \0 \a \v \xHH, and \/ \= as in ClickHouse)
+	// are decoded and an unrecognised sequence keeps its backslash, as
+	// ClickHouse does so that LIKE patterns and regular expressions survive.
 	StringEscapeLenient
 	// StringEscapeNone means a backslash is an ordinary character
 	// (PostgreSQL standard strings, Oracle, SQLite, SQL Server and the

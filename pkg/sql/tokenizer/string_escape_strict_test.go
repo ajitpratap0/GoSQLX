@@ -165,10 +165,15 @@ func TestStringEscapeLenientClickHouse(t *testing.T) {
 		{name: "hex", dialect: ch, sql: `SELECT '\x41'`, want: "A"},
 		{name: "not hex keeps backslash", dialect: ch, sql: `SELECT '\xzz'`, want: `\xzz`},
 		{name: "raw NUL byte", dialect: ch, sql: "SELECT 'a\x00b'", want: "a\x00b"},
+		{name: "escaped slash", dialect: ch, sql: `SELECT 'http:\/\/x'`, want: "http://x"},
+		{name: "escaped equals", dialect: ch, sql: `SELECT 'k\=v'`, want: "k=v"},
+		{name: "escaped backtick", dialect: ch, sql: "SELECT 'a\\`b'", want: "a`b"},
 
 		{name: "hex ctrl-z", dialect: ch, sql: `SELECT '\x1a'`, wantErr: true},
 		{name: "hex above ASCII", dialect: ch, sql: `SELECT '\xff'`, wantErr: true},
 		{name: "raw ctrl-z byte", dialect: ch, sql: "SELECT 'a\x1ab'", wantErr: true},
+		{name: "escape char", dialect: ch, sql: `SELECT 'a\eb'`, wantErr: true},
+		{name: "null marker", dialect: ch, sql: `SELECT 'a\Nb'`, wantErr: true},
 	})
 }
 
@@ -195,9 +200,10 @@ func TestStringRawControlBytes(t *testing.T) {
 	}
 }
 
-// TestTripleQuotedOnlyBigQuery checks that ”' opens a triple-quoted string
-// only in BigQuery. Elsewhere it is a string whose text starts with a quote,
-// so ”'a' (the value 'a) tokenizes and ”'abc”' means 'abc', not abc.
+// TestTripleQuotedOnlyBigQuery checks that three single quotes open a
+// triple-quoted string only in BigQuery. Elsewhere they open a string whose
+// text starts with a quote: the literal of three quotes, a and one quote is
+// the value 'a, and the value of three quotes, abc, three quotes is 'abc'.
 func TestTripleQuotedOnlyBigQuery(t *testing.T) {
 	type tc struct {
 		dialect keywords.SQLDialect

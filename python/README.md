@@ -50,9 +50,11 @@ Building a wheel without the library fails on purpose, so `pip install` on a
 platform with no prebuilt wheel (for example musl or 32-bit Linux) stops with
 an error instead of installing a package that cannot load. To install without
 a bundled library and supply one at runtime instead, set
-`PYGOSQLX_ALLOW_MISSING_LIB=1` for the install and:
+`PYGOSQLX_ALLOW_MISSING_LIB=1` for the install and point `GOSQLX_LIB_PATH` at
+the library:
 
 ```bash
+PYGOSQLX_ALLOW_MISSING_LIB=1 pip install pygosqlx
 export GOSQLX_LIB_PATH=/path/to/libgosqlx.so
 ```
 

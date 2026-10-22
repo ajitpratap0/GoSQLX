@@ -58,4 +58,5 @@ class PlatformWheel(bdist_wheel):
             print(f"WARNING: {message}", file=sys.stderr)
         super().run()
 
+
 setup(distclass=BinaryDistribution, cmdclass={"bdist_wheel": PlatformWheel})

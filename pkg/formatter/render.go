@@ -219,6 +219,9 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 
 	f := newNodeFormatter(opts)
 	sb := f.sb
+	// Most rendered SELECTs are under 128 bytes; one up-front allocation
+	// replaces the builder's 8-16-32-64-128 growth steps.
+	sb.Grow(128)
 
 	if s.With != nil {
 		sb.WriteString(renderWith(s.With, f))

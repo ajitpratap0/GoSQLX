@@ -437,11 +437,8 @@ func WithUppercaseKeywords(on bool) FormatOption {
 // concrete ast.FormatOptions the formatter consumes.
 func buildASTFormatOptions(opts []FormatOption) ast.FormatOptions {
 	cfg := defaultFormatOptions()
-	for _, opt := range opts {
-		if opt == nil {
-			continue
-		}
-		opt(&cfg)
+	if len(opts) > 0 {
+		cfg = applyFormatOptions(cfg, opts)
 	}
 
 	kwCase := ast.KeywordPreserve
@@ -457,6 +454,19 @@ func buildASTFormatOptions(opts []FormatOption) ast.FormatOptions {
 		NewlinePerClause: cfg.indentWidth > 0,
 		AddSemicolon:     false,
 	}
+}
+
+// applyFormatOptions applies opts to cfg. It is separate from
+// buildASTFormatOptions because passing &cfg to an option moves cfg to the
+// heap; this way only calls that pass options pay for that allocation.
+func applyFormatOptions(cfg formatOptions, opts []FormatOption) formatOptions {
+	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
+		opt(&cfg)
+	}
+	return cfg
 }
 
 // FormatTree renders a Tree back to SQL text using the AST-based formatter.

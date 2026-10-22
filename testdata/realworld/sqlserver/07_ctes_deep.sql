@@ -1,0 +1,22 @@
+-- Complex CTE chains, recursion, deep nesting, many joins
+WITH Org AS (SELECT EmployeeId, ManagerId, Name, 0 AS Lvl FROM HR.Employees WHERE ManagerId IS NULL UNION ALL SELECT e.EmployeeId, e.ManagerId, e.Name, o.Lvl + 1 FROM HR.Employees e JOIN Org o ON e.ManagerId = o.EmployeeId) SELECT * FROM Org ORDER BY Lvl OPTION (MAXRECURSION 100);
+WITH Nums AS (SELECT 1 AS n UNION ALL SELECT n + 1 FROM Nums WHERE n < 1000) SELECT n FROM Nums OPTION (MAXRECURSION 0);
+WITH Paths AS (SELECT Id, ParentId, CAST(Name AS NVARCHAR(MAX)) AS Path FROM dbo.Categories WHERE ParentId IS NULL UNION ALL SELECT c.Id, c.ParentId, p.Path + N' > ' + c.Name FROM dbo.Categories c INNER JOIN Paths p ON c.ParentId = p.Id) SELECT Id, Path FROM Paths;
+WITH a AS (SELECT CustomerId, SUM(Total) AS T FROM dbo.Orders GROUP BY CustomerId), b AS (SELECT CustomerId, COUNT(*) AS C FROM dbo.Orders GROUP BY CustomerId), c AS (SELECT a.CustomerId, a.T, b.C FROM a JOIN b ON a.CustomerId = b.CustomerId), d AS (SELECT *, T / NULLIF(C, 0) AS Avg FROM c) SELECT * FROM d WHERE Avg > 100;
+WITH Sales2024 (Region, Total) AS (SELECT Region, SUM(Amount) FROM dbo.Sales WHERE YEAR(SaleDate) = 2024 GROUP BY Region), Sales2023 (Region, Total) AS (SELECT Region, SUM(Amount) FROM dbo.Sales WHERE YEAR(SaleDate) = 2023 GROUP BY Region) SELECT a.Region, a.Total AS T24, b.Total AS T23, (a.Total - b.Total) * 100.0 / NULLIF(b.Total, 0) AS GrowthPct FROM Sales2024 a FULL OUTER JOIN Sales2023 b ON a.Region = b.Region;
+SELECT o.OrderId, c.CustomerName, e.LastName, p.ProductName, cat.CategoryName, s.CompanyName, sh.CompanyName AS Shipper, r.RegionDescription FROM Sales.Orders o JOIN Sales.Customers c ON c.CustomerId = o.CustomerId JOIN HR.Employees e ON e.EmployeeId = o.EmployeeId JOIN Sales.OrderDetails od ON od.OrderId = o.OrderId JOIN Production.Products p ON p.ProductId = od.ProductId JOIN Production.Categories cat ON cat.CategoryId = p.CategoryId JOIN Production.Suppliers s ON s.SupplierId = p.SupplierId LEFT JOIN Sales.Shippers sh ON sh.ShipperId = o.ShipperId LEFT JOIN Geo.Regions r ON r.RegionId = c.RegionId WHERE o.OrderDate >= '20240101' AND o.OrderDate < '20250101';
+SELECT * FROM (SELECT * FROM (SELECT * FROM (SELECT Id, Name FROM dbo.Customers WHERE IsActive = 1) a WHERE Id > 10) b WHERE Id < 1000) c;
+SELECT Id FROM dbo.A WHERE Id IN (SELECT Id FROM dbo.B WHERE Val > (SELECT AVG(Val) FROM dbo.C WHERE Grp IN (SELECT Grp FROM dbo.D WHERE EXISTS (SELECT 1 FROM dbo.E WHERE E.Id = D.Id))));
+SELECT Id FROM dbo.A WHERE NOT EXISTS (SELECT 1 FROM dbo.B WHERE B.AId = A.Id) AND Val > ALL (SELECT Val FROM dbo.C) AND Val < ANY (SELECT Val FROM dbo.D);
+SELECT Id, Name FROM dbo.A UNION SELECT Id, Name FROM dbo.B UNION ALL SELECT Id, Name FROM dbo.C EXCEPT SELECT Id, Name FROM dbo.D INTERSECT SELECT Id, Name FROM dbo.E;
+(SELECT Id FROM dbo.A UNION SELECT Id FROM dbo.B) INTERSECT SELECT Id FROM dbo.C ORDER BY Id;
+SELECT t.* FROM (VALUES (1, N'a'), (2, N'b'), (3, N'c')) AS t (Id, Name);
+SELECT a.Id, b.Id FROM dbo.A a CROSS JOIN dbo.B b WHERE a.Id <> b.Id;
+SELECT a.Id FROM dbo.A a RIGHT OUTER JOIN dbo.B b ON a.Id = b.Id LEFT OUTER JOIN dbo.C c ON c.Id = b.Id FULL JOIN dbo.D d ON d.Id = c.Id;
+SELECT CASE WHEN a > 1 THEN CASE WHEN b > 2 THEN N'x' ELSE N'y' END WHEN a < 0 THEN N'z' ELSE N'w' END FROM dbo.T;
+SELECT (a + b) * (c - d) / NULLIF(e % 3, 0) AS Calc, -a AS Neg, ~b AS BitNot, a & b AS BitAnd, a | b AS BitOr, a ^ b AS BitXor FROM dbo.T;
+SELECT * FROM dbo.T WHERE (a = 1 OR b = 2) AND NOT (c = 3 OR d IS NOT NULL) AND e NOT BETWEEN 1 AND 5 AND f NOT IN (1, 2, 3) AND g NOT LIKE N'x%' ESCAPE N'\';
+SELECT 1 + 2 * 3 - 4 / 2 AS Prec;
+SELECT Name FROM dbo.Customers c WHERE c.Id = (SELECT MAX(Id) FROM dbo.Customers) ORDER BY 1;
+SELECT COUNT(DISTINCT CustomerId) AS UniqueCust, COUNT_BIG(*) AS Big, APPROX_COUNT_DISTINCT(CustomerId) AS Approx FROM dbo.Orders;
+SELECT a.Id, SUM(b.Qty) AS Q FROM dbo.A a JOIN dbo.B b ON b.AId = a.Id GROUP BY a.Id HAVING COUNT(*) > 1 AND SUM(b.Qty) < 100 ORDER BY Q DESC, a.Id;

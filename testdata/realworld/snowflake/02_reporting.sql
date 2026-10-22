@@ -1,0 +1,28 @@
+-- BI dashboards and reports: revenue, cohorts, funnels
+SELECT DATE_TRUNC('month', order_date) AS month, SUM(total_amount) AS revenue, COUNT(DISTINCT customer_id) AS customers FROM orders GROUP BY 1 ORDER BY 1;
+SELECT region, product_line, SUM(revenue) AS revenue FROM sales GROUP BY ROLLUP (region, product_line);
+SELECT region, product_line, SUM(revenue) AS revenue FROM sales GROUP BY CUBE (region, product_line);
+SELECT region, product_line, SUM(revenue) FROM sales GROUP BY GROUPING SETS ((region, product_line), (region), ());
+SELECT region, SUM(revenue) AS revenue FROM sales GROUP BY ALL;
+SELECT customer_id, SUM(amount) AS total FROM payments GROUP BY customer_id HAVING SUM(amount) > 10000 ORDER BY total DESC LIMIT 100;
+WITH monthly AS (SELECT DATE_TRUNC('month', created_at) AS m, SUM(amount) AS amt FROM payments GROUP BY 1) SELECT m, amt, amt - LAG(amt) OVER (ORDER BY m) AS delta FROM monthly ORDER BY m;
+WITH first_orders AS (SELECT customer_id, MIN(order_date) AS first_date FROM orders GROUP BY customer_id), cohorts AS (SELECT customer_id, DATE_TRUNC('month', first_date) AS cohort_month FROM first_orders), activity AS (SELECT o.customer_id, c.cohort_month, DATEDIFF('month', c.cohort_month, DATE_TRUNC('month', o.order_date)) AS month_number FROM orders o JOIN cohorts c ON c.customer_id = o.customer_id) SELECT cohort_month, month_number, COUNT(DISTINCT customer_id) AS active_customers FROM activity GROUP BY 1, 2 ORDER BY 1, 2;
+SELECT COUNT_IF(status = 'completed') AS completed, COUNT_IF(status = 'failed') AS failed, COUNT(*) AS total FROM jobs;
+SELECT user_id, LISTAGG(DISTINCT tag, ', ') WITHIN GROUP (ORDER BY tag) AS tags FROM user_tags GROUP BY user_id;
+SELECT ARRAY_AGG(product_id) WITHIN GROUP (ORDER BY product_id) AS products FROM order_items WHERE order_id = 7;
+SELECT APPROX_COUNT_DISTINCT(user_id) AS dau FROM events WHERE event_date = CURRENT_DATE();
+SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY latency_ms) AS p50, PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95 FROM requests;
+SELECT MEDIAN(amount) AS median_amount, AVG(amount) AS avg_amount, STDDEV(amount) AS sd FROM payments;
+SELECT d.dept_name, e.name, e.salary FROM employees e JOIN departments d ON d.id = e.dept_id WHERE e.salary > (SELECT AVG(salary) FROM employees WHERE dept_id = e.dept_id);
+SELECT a.name, b.name FROM a FULL OUTER JOIN b ON a.key = b.key WHERE a.key IS NULL OR b.key IS NULL;
+SELECT c.name, o.order_date FROM customers c CROSS JOIN (SELECT DISTINCT order_date FROM orders) o;
+SELECT * FROM orders o LEFT JOIN customers c USING (customer_id);
+SELECT * FROM t1 NATURAL JOIN t2;
+SELECT order_id FROM orders UNION ALL SELECT order_id FROM archived_orders;
+SELECT id FROM a INTERSECT SELECT id FROM b;
+SELECT id FROM a MINUS SELECT id FROM b;
+SELECT id FROM a EXCEPT SELECT id FROM b;
+SELECT TO_CHAR(order_date, 'YYYY-MM') AS ym, SUM(total) FROM orders GROUP BY 1;
+SELECT DAYNAME(order_date) AS dow, COUNT(*) FROM orders GROUP BY 1 ORDER BY 2 DESC;
+SELECT TIMESTAMPDIFF(minute, started_at, ended_at) AS duration_min FROM sessions;
+SELECT year, quarter, revenue, SUM(revenue) OVER (PARTITION BY year ORDER BY quarter ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS ytd FROM quarterly;

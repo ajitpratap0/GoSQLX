@@ -1,0 +1,27 @@
+-- Rails/Django style ORM generated CRUD for a users/orders app
+SELECT "users".* FROM "users" WHERE "users"."id" = $1 LIMIT 1;
+SELECT "users".* FROM "users" WHERE "users"."email" = $1 AND "users"."deleted_at" IS NULL ORDER BY "users"."id" ASC LIMIT $2;
+SELECT "orders"."id", "orders"."total_cents", "orders"."status" FROM "orders" WHERE "orders"."user_id" IN ($1, $2, $3) ORDER BY "orders"."created_at" DESC LIMIT 20 OFFSET 40;
+SELECT COUNT(*) FROM "orders" WHERE "orders"."status" = 'pending' AND "orders"."created_at" >= NOW() - INTERVAL '7 days';
+INSERT INTO users (email, name, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) RETURNING id;
+INSERT INTO orders (user_id, total_cents, status, metadata, created_at) VALUES ($1, $2, 'pending', '{"source": "web"}'::jsonb, now()) RETURNING *;
+INSERT INTO order_items (order_id, product_id, quantity, unit_price_cents) VALUES (1, 10, 2, 1999), (1, 11, 1, 4999), (1, 12, 5, 99) RETURNING id, order_id;
+UPDATE users SET name = $1, updated_at = NOW() WHERE id = $2 RETURNING id, name, updated_at;
+UPDATE orders SET status = 'shipped', shipped_at = CURRENT_TIMESTAMP WHERE id = ANY($1::bigint[]) AND status = 'paid';
+UPDATE products SET stock = stock - oi.quantity FROM order_items oi WHERE oi.product_id = products.id AND oi.order_id = $1;
+DELETE FROM sessions WHERE expires_at < NOW();
+DELETE FROM order_items USING orders WHERE order_items.order_id = orders.id AND orders.status = 'cancelled' RETURNING order_items.id;
+DELETE FROM users WHERE id = $1 RETURNING *;
+INSERT INTO users (email, name) VALUES ('a@example.com', 'A') ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, updated_at = now() RETURNING id, (xmax = 0) AS inserted;
+INSERT INTO page_views (page_id, day, hits) VALUES (1, CURRENT_DATE, 1) ON CONFLICT (page_id, day) DO UPDATE SET hits = page_views.hits + 1;
+INSERT INTO tags (name) VALUES ('go') ON CONFLICT DO NOTHING;
+INSERT INTO tags (name) VALUES ('sql') ON CONFLICT ON CONSTRAINT tags_name_key DO NOTHING RETURNING id;
+INSERT INTO accounts (id, balance) VALUES (1, 100) ON CONFLICT (id) DO UPDATE SET balance = accounts.balance + EXCLUDED.balance WHERE accounts.active;
+SELECT u.id, u.email, COUNT(o.id) AS order_count FROM users u LEFT JOIN orders o ON o.user_id = u.id GROUP BY u.id, u.email HAVING COUNT(o.id) > 5 ORDER BY order_count DESC;
+SELECT * FROM users WHERE email ILIKE '%@example.com' AND name NOT ILIKE 'test%';
+SELECT * FROM products WHERE id = ANY(ARRAY[1, 2, 3]) AND price BETWEEN 10 AND 100;
+SELECT * FROM users WHERE created_at > $1 FOR UPDATE SKIP LOCKED;
+SELECT id FROM jobs WHERE state = 'queued' ORDER BY priority DESC, id LIMIT 1 FOR UPDATE SKIP LOCKED;
+SELECT EXISTS (SELECT 1 FROM users WHERE email = $1);
+SELECT * FROM orders WHERE user_id = (SELECT id FROM users WHERE email = $1);
+SELECT "posts"."id" FROM "posts" WHERE "posts"."author_id" = $1 AND "posts"."published_at" IS NOT NULL AND ("posts"."title" LIKE $2 OR "posts"."body" LIKE $2) ORDER BY "posts"."published_at" DESC FETCH FIRST 10 ROWS ONLY;

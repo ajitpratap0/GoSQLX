@@ -1,16 +1,23 @@
 # Build, test and publish pygosqlx (python/) wheels to PyPI.
 #
 # What runs when:
-#   pull_request (python/**, pkg/cbinding/**, go.mod, go.sum, this file)
+#   pull_request (python/**, pkg/**, go.mod, go.sum, this file)
 #       -> build + test wheels and sdist only. Nothing is published.
+#          pkg/** because pkg/cbinding links the whole parser via pkg/gosqlx.
 #   push of a tag matching 'pygosqlx-v*' (e.g. pygosqlx-v0.3.0)
 #       -> build + test, then publish to PyPI. The tag must match the version
-#          in python/pyproject.toml. The main GoSQLX 'v*' release tags never
-#          trigger this workflow.
+#          in python/pyproject.toml and must point at a commit on main.
+#          This is the ONLY path to PyPI, so every published version has a tag.
 #   workflow_dispatch
 #       -> build + test, then publish to the index chosen by the 'target'
-#          input: 'testpypi' (default), 'pypi', or 'none' (build only).
-#          Publishing from a dispatch is only allowed on main.
+#          input: 'testpypi' (default) or 'none' (build only). Publishing
+#          from a dispatch is only allowed on main. TestPyPI skips files that
+#          already exist, so repeated dry runs of one version do not fail.
+#
+# Tag isolation: the main GoSQLX 'v*' release tags never trigger this
+# workflow, and pygosqlx-v* tags must not disturb the Go release:
+# release.yml pins GoReleaser's current/previous tag to the 'v*' series, and
+# release.yml, vscode-publish.yml and bench-compare.yml filter on 'v*'.
 #
 # Wheels: one py3-none-<platform> wheel per OS/arch (the bundled libgosqlx is
 # loaded through ctypes and does not depend on the CPython ABI), each tested
@@ -27,8 +34,9 @@
 #      repository 'GoSQLX', workflow 'pygosqlx-release.yml', environment
 #      'pypi'.
 #   2. In GitHub repo Settings -> Environments create an environment named
-#      'pypi' (recommended: restrict deployments to tags 'pygosqlx-v*' and
-#      require a reviewer).
+#      'pypi' (recommended: deployment policy limited to tags 'pygosqlx-v*'
+#      and a required reviewer). Also recommended: a tag ruleset restricting
+#      who may create 'pygosqlx-v*' tags.
 #   3. Optional, for dry runs: repeat 1 on https://test.pypi.org with
 #      environment 'testpypi', and create a 'testpypi' GitHub environment.
 #   Then release with: git tag -a pygosqlx-vX.Y.Z && git push origin pygosqlx-vX.Y.Z
@@ -40,7 +48,7 @@ on:
     branches: [ main ]
     paths:
       - 'python/**'
-      - 'pkg/cbinding/**'
+      - 'pkg/**'
       - 'go.mod'
       - 'go.sum'
       - '.github/workflows/pygosqlx-release.yml'
@@ -54,7 +62,6 @@ on:
         type: choice
         options:
           - testpypi
-          - pypi
           - none
         default: testpypi
 
@@ -66,8 +73,9 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  # Go toolchain for the macOS and Windows runners. Keep in step with
-  # GO_VERSION in python/scripts/install-go-linux.sh (used in manylinux).
+  # Go toolchain for the macOS and Windows runners. Must equal GO_VERSION in
+  # python/scripts/install-go-linux.sh (used in manylinux); the sdist job
+  # fails if they differ.
   GO_VERSION: '1.26.10'
 
 jobs:
@@ -124,12 +132,14 @@ jobs:
             cd /d "{project}\pkg\cbinding" &&
             go build -buildmode=c-shared -o ..\..\python\pygosqlx\lib\libgosqlx.dll .
 
+          # GOFLAGS -trimpath (all platforms): keep absolute build and module
+          # cache paths out of the published binaries.
           # -buildvcs=false: the container's copy of the checkout is owned by a
           # different user, which makes Go's VCS stamping fail.
           CIBW_ENVIRONMENT_LINUX: >-
             PATH="/usr/local/go/bin:$PATH"
             GOTOOLCHAIN=local
-            GOFLAGS=-buildvcs=false
+            GOFLAGS="-buildvcs=false -trimpath"
             CGO_ENABLED=1
             PYGOSQLX_TEST_INSTALLED=1
           # Go 1.26 targets macOS 12+, and cgo objects must not be built for a
@@ -139,10 +149,12 @@ jobs:
             CGO_CFLAGS="-O2 -g -mmacosx-version-min=13.0"
             CGO_LDFLAGS="-O2 -g -mmacosx-version-min=13.0"
             GOTOOLCHAIN=local
+            GOFLAGS=-trimpath
             CGO_ENABLED=1
             PYGOSQLX_TEST_INSTALLED=1
           CIBW_ENVIRONMENT_WINDOWS: >-
             GOTOOLCHAIN=local
+            GOFLAGS=-trimpath
             CGO_ENABLED=1
             PYGOSQLX_TEST_INSTALLED=1
 
@@ -170,6 +182,25 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+          # Full history so a release tag can be checked against main.
+          fetch-depth: 0
+
+      - name: Check Go version pins agree
+        run: |
+          script_go="$(sed -n 's/^GO_VERSION="\(.*\)"$/\1/p' python/scripts/install-go-linux.sh)"
+          if [ -z "$script_go" ] || [ "$script_go" != "$GO_VERSION" ]; then
+            echo "::error::GO_VERSION mismatch: workflow '$GO_VERSION' vs install-go-linux.sh '$script_go'"
+            exit 1
+          fi
+
+      # Defense in depth: never publish a tag whose commit is not on main.
+      - name: Check tagged commit is on main
+        if: startsWith(github.ref, 'refs/tags/pygosqlx-v')
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_SHA ($GITHUB_REF_NAME) is not an ancestor of origin/main"
+            exit 1
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -212,11 +243,7 @@ jobs:
   publish-pypi:
     name: publish to PyPI
     needs: [ wheels, sdist ]
-    if: >-
-      startsWith(github.ref, 'refs/tags/pygosqlx-v') ||
-      (github.event_name == 'workflow_dispatch' &&
-       inputs.target == 'pypi' &&
-       github.ref == 'refs/heads/main')
+    if: startsWith(github.ref, 'refs/tags/pygosqlx-v')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment:
@@ -261,3 +288,6 @@ jobs:
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           repository-url: https://test.pypi.org/legacy/
+          # The version only changes per release, so repeated dry runs would
+          # otherwise fail on files already uploaded. TestPyPI only.
+          skip-existing: true

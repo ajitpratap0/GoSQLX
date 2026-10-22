@@ -3,3 +3,4 @@ include README.md
 include pyproject.toml
 recursive-include pygosqlx *.py *.pyi py.typed
 recursive-include pygosqlx/lib *.so *.dylib *.dll *.h
+recursive-include tests *.py

@@ -302,9 +302,10 @@ cd /tmp && PYGOSQLX_TEST_INSTALLED=1 python -m pytest --import-mode=importlib /p
 
 Wheels for every supported platform and an sdist are built and tested by
 `.github/workflows/pygosqlx-release.yml` on each pull request that touches
-`python/` or `pkg/cbinding/`. Pushing a tag `pygosqlx-vX.Y.Z` (matching the
-version in `pyproject.toml`) publishes them to PyPI through Trusted
-Publishing. See the workflow header for the one-time PyPI setup.
+`python/` or `pkg/`. Pushing a tag `pygosqlx-vX.Y.Z` (matching the version in
+`pyproject.toml`, on a commit already on `main`) publishes them to PyPI
+through Trusted Publishing; this is the only path to PyPI. A manual dispatch
+can publish a dry run to TestPyPI. See the workflow header for the one-time PyPI setup.
 
 ### Project structure
 

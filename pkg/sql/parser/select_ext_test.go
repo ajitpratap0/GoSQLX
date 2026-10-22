@@ -461,6 +461,12 @@ func TestSelectExt_Joins(t *testing.T) {
 				t.Errorf("Join = %+v", j)
 			}
 		}},
+		{"snowflake asof without on", keywords.DialectSnowflake, "SELECT * FROM t1 ASOF JOIN t2 MATCH_CONDITION (t1.ts >= t2.ts)", func(t *testing.T, s *ast.SelectStatement) {
+			j := join(t, s, 0)
+			if j.Strictness != "ASOF" || j.MatchCondition == nil || j.Condition != nil || len(j.Using) != 0 {
+				t.Errorf("Join = %+v", j)
+			}
+		}},
 		{"sqlserver hash join hint", keywords.DialectSQLServer, "SELECT o.Id FROM o INNER HASH JOIN c ON c.Id = o.CId", func(t *testing.T, s *ast.SelectStatement) {
 			if j := join(t, s, 0); j.Hint != "HASH" || j.Type != "INNER" {
 				t.Errorf("Join = %+v", j)
@@ -528,6 +534,10 @@ func TestSelectExt_DialectGating(t *testing.T) {
 		{"select into in sqlite", keywords.DialectSQLite, "SELECT * INTO n FROM t"},
 		{"for json in postgres", keywords.DialectPostgreSQL, "SELECT a FROM t FOR JSON PATH"},
 		{"outfile in postgres", keywords.DialectPostgreSQL, "SELECT a FROM t INTO OUTFILE 'x'"},
+		{"second limit by in clickhouse", keywords.DialectClickHouse, "SELECT * FROM t LIMIT 1 BY a LIMIT 2 BY b"},
+		{"limit with ties by in clickhouse", keywords.DialectClickHouse, "SELECT * FROM t LIMIT 1 WITH TIES BY a"},
+		{"offset before limit by in clickhouse", keywords.DialectClickHouse, "SELECT * FROM t OFFSET 2 LIMIT 1 BY a"},
+		{"asof join without match condition in snowflake", keywords.DialectSnowflake, "SELECT * FROM t1 ASOF JOIN t2 ON t1.a = t2.a"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

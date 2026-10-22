@@ -102,7 +102,12 @@ func (s *StarExpression) writeSQL(buf *bytes.Buffer) {
 		buf.WriteByte(' ')
 		buf.WriteString(kw)
 		buf.WriteString(" (")
-		writeNameList(buf, s.Exclude)
+		for i, n := range s.Exclude {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			writeStarColumnName(buf, n)
+		}
 		buf.WriteByte(')')
 	}
 	if len(s.Replace) > 0 {
@@ -131,5 +136,22 @@ func (s *StarExpression) writeSQL(buf *bytes.Buffer) {
 			writeName(buf, r.Alias)
 		}
 		buf.WriteByte(')')
+	}
+}
+
+// writeStarColumnName writes an EXCLUDE / EXCEPT column name. The parser
+// stores a qualified name (t.col) joined with dots, so each dot-separated
+// part is quoted on its own: t.col must not become the single identifier
+// "t.col".
+func writeStarColumnName(buf *bytes.Buffer, name string) {
+	for {
+		dot := strings.IndexByte(name, '.')
+		if dot < 0 {
+			writeName(buf, name)
+			return
+		}
+		writeName(buf, name[:dot])
+		buf.WriteByte('.')
+		name = name[dot+1:]
 	}
 }

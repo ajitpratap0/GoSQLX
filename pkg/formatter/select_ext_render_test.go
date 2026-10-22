@@ -69,6 +69,7 @@ func TestRender_SelectBodyClauses(t *testing.T) {
 		{"snowflake qualify", keywords.DialectSnowflake, "SELECT * FROM t QUALIFY ROW_NUMBER() OVER (ORDER BY a) = 1", "SELECT * FROM t QUALIFY ROW_NUMBER() OVER (ORDER BY a) = 1"},
 		{"snowflake top", keywords.DialectSnowflake, "SELECT TOP 10 a FROM t", "SELECT TOP 10 a FROM t"},
 		{"snowflake star modifiers", keywords.DialectSnowflake, "SELECT * EXCLUDE (a, b) REPLACE (UPPER(n) AS n) FROM t", "SELECT * EXCLUDE (a, b) REPLACE (UPPER(n) AS n) FROM t"},
+		{"snowflake exclude qualified name", keywords.DialectSnowflake, "SELECT t.* EXCLUDE (t.a, \"my col\") FROM t", "SELECT t.* EXCLUDE (t.a, \"my col\") FROM t"},
 		{"snowflake ilike rename", keywords.DialectSnowflake, "SELECT * ILIKE '%id%', b.* RENAME (id AS b_id) FROM b", "SELECT * ILIKE '%id%', b.* RENAME (id AS b_id) FROM b"},
 		{"snowflake group by all", keywords.DialectSnowflake, "SELECT a, COUNT(*) FROM t GROUP BY ALL", "SELECT a, COUNT(*) FROM t GROUP BY ALL"},
 		{"snowflake asof", keywords.DialectSnowflake, "SELECT * FROM t1 ASOF JOIN t2 MATCH_CONDITION (t1.ts >= t2.ts) ON t1.sym = t2.sym", "SELECT * FROM t1 ASOF JOIN t2 MATCH_CONDITION (t1.ts >= t2.ts) ON t1.sym = t2.sym"},

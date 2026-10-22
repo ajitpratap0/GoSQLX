@@ -517,6 +517,7 @@ func (p *Parser) parseLimitOffsetInto(s *ast.SelectStatement) error {
 		switch {
 		case !sawLimit && p.isType(models.TokenTypeLimit):
 			sawLimit = true
+			offsetBeforeLimit := sawOffset
 			if err := p.parseLimitValue(s); err != nil {
 				return err
 			}
@@ -529,6 +530,18 @@ func (p *Parser) parseLimitOffsetInto(s *ast.SelectStatement) error {
 					}
 				}
 				if p.isType(models.TokenTypeBy) {
+					// Only one LIMIT BY is allowed, it takes no WITH TIES,
+					// and an OFFSET written before LIMIT belongs to the
+					// whole result, not to LIMIT BY: reject these rather
+					// than silently drop or move a clause.
+					switch {
+					case s.LimitBy != nil:
+						return goerrors.InvalidSyntaxError("only one LIMIT ... BY clause is allowed", p.currentLocation(), "")
+					case s.LimitWithTies:
+						return goerrors.InvalidSyntaxError("WITH TIES cannot be used with LIMIT ... BY", p.currentLocation(), "")
+					case offsetBeforeLimit:
+						return goerrors.InvalidSyntaxError("OFFSET for LIMIT ... BY must follow the LIMIT count", p.currentLocation(), "")
+					}
 					if err := p.parseLimitByTail(s); err != nil {
 						return err
 					}

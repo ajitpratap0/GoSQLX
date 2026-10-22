@@ -405,8 +405,12 @@ func (p *Parser) parseJoinClauses(firstRef ast.TableReference, joins []ast.JoinC
 
 // joinConditionOptional reports whether a join of this type may omit ON /
 // USING: MySQL, MariaDB and SQLite treat [INNER] JOIN and STRAIGHT_JOIN
-// without a condition as a cross join.
+// without a condition as a cross join, and a Snowflake ASOF JOIN needs only
+// its MATCH_CONDITION.
 func (p *Parser) joinConditionOptional(joinType string, jc *ast.JoinClause) bool {
+	if jc.MatchCondition != nil {
+		return true
+	}
 	if jc.Strictness != "" || joinType != "INNER" {
 		return false
 	}

@@ -303,6 +303,9 @@ func TestLint_ErrorPaths(t *testing.T) {
 		{"zero length", `{"max_line_length": 0}`, "INVALID_OPTIONS", "must be positive"},
 		{"negative length", `{"max_line_length": -5}`, "INVALID_OPTIONS", "must be positive"},
 		{"trailing data", `{} {}`, "INVALID_OPTIONS", "trailing data"},
+		{"trailing brace", `{} }`, "INVALID_OPTIONS", "trailing data"},
+		{"trailing bracket", `{"dialect":"mysql"} ]`, "INVALID_OPTIONS", "trailing data"},
+		{"trailing value", `{} 1`, "INVALID_OPTIONS", "trailing data"},
 		{"unknown dialect", `{"dialect":"fakesql"}`, "E4002", "valid dialects"},
 	}
 	for _, tc := range cases {

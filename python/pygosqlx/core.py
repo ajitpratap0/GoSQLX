@@ -767,6 +767,11 @@ def transpile(sql: str, from_dialect: str, to_dialect: str) -> str:
     """
     _check_dialect_arg(from_dialect, "from_dialect")
     _check_dialect_arg(to_dialect, "to_dialect")
+    for value, arg in ((from_dialect, "from_dialect"), (to_dialect, "to_dialect")):
+        if not value:
+            raise UnsupportedDialectError(
+                message=f"{arg} is required", code=_ERR_UNSUPPORTED_DIALECT
+            )
     _require_func("gosqlx_transpile")
     lib = _get_lib()
     data = _call_and_decode(

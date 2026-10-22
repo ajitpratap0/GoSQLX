@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
@@ -409,7 +410,8 @@ func parseLintOptions(raw string) (LintOptions, error) {
 	if err := dec.Decode(&opts); err != nil {
 		return opts, fmt.Errorf("invalid options_json: %w", err)
 	}
-	if dec.More() {
+	// dec.More() reports false before a stray ']' or '}', so require EOF.
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
 		return opts, errors.New("invalid options_json: trailing data after the options object")
 	}
 	if opts.MaxLineLength != nil && *opts.MaxLineLength <= 0 {

@@ -95,6 +95,24 @@ type AlterStatement struct {
 	Type      AlterType
 	Name      string // Name of the object being altered
 	Operation AlterOperation
+
+	// The fields below describe ALTER TABLE statements beyond the single
+	// unqualified-name, single-action form; see alter_ext.go.
+
+	// IfExists is true for ALTER TABLE IF EXISTS name.
+	IfExists bool
+	// Only is true for ALTER TABLE ONLY name (PostgreSQL).
+	Only bool
+	// Modifiers are the words written between ALTER and TABLE, upper-cased
+	// (MariaDB ONLINE / IGNORE).
+	Modifiers []string
+	// OnCluster is the ClickHouse ON CLUSTER target as written (identifier or
+	// quoted string); empty when absent.
+	OnCluster string
+	// Operations lists every comma-separated action in source order.
+	// Operation is the first of them (kept for compatibility); Operations is
+	// nil for statements that have a single non-table operation.
+	Operations []AlterOperation
 }
 
 func (a *AlterStatement) statementNode() {}
@@ -105,6 +123,13 @@ func (a AlterStatement) TokenLiteral() string { return "ALTER" }
 // Children implements Node and returns the alter operation as a single child,
 // or nil if no operation is set.
 func (a AlterStatement) Children() []Node {
+	if len(a.Operations) > 0 {
+		children := make([]Node, len(a.Operations))
+		for i, op := range a.Operations {
+			children[i] = op
+		}
+		return children
+	}
 	if a.Operation != nil {
 		return []Node{a.Operation}
 	}
@@ -153,6 +178,61 @@ type AlterTableOperation struct {
 	ColumnName       *Ident                // Used for AlterColumn
 	AlterColumnOp    *AlterColumnOperation // Used for AlterColumn
 	CascadeDrops     bool                  // Used for DropColumn, DropConstraint
+
+	// Extended ALTER TABLE action fields (see alter_ext.go).
+
+	// Modifier is a phrase written before the action: WITH CHECK or
+	// WITH NOCHECK (SQL Server), upper-cased.
+	Modifier string
+	// NoColumnKeyword is true when the action was written without the
+	// optional COLUMN keyword (ADD c INT, DROP c, RENAME a TO b).
+	NoColumnKeyword bool
+	// ColumnDefs holds every column definition of a multi-column ADD or
+	// MODIFY (SQL Server ADD a INT, b INT; Oracle ADD (a INT, b INT)); it is
+	// nil for a single column. ColumnDef is its first element.
+	ColumnDefs []*ColumnDef
+	// Parenthesized is true when the column definitions are wrapped in
+	// parentheses (Oracle / MySQL ADD (...), MODIFY (...)).
+	Parenthesized bool
+	// ExtraNames are the further names of DROP COLUMN a, b (SQL Server).
+	ExtraNames []*Ident
+	// Restrict is true when DROP ... ended in RESTRICT.
+	Restrict bool
+	// BareConstraint is true when AddConstraint was written without the
+	// CONSTRAINT keyword (ADD PRIMARY KEY (id)).
+	BareConstraint bool
+	// ConstraintKind is the kind of constraint dropped: "" (CONSTRAINT),
+	// "PRIMARY KEY", "FOREIGN KEY" or "CHECK".
+	ConstraintKind string
+	// Clustering is CLUSTERED or NONCLUSTERED after PRIMARY KEY / UNIQUE
+	// (SQL Server).
+	Clustering string
+	// ConstraintSuffix is text following an added constraint as written
+	// (NOT VALID, DEFERRABLE, NOT ENFORCED, ...).
+	ConstraintSuffix string
+	// IndexKind is UNIQUE, FULLTEXT or SPATIAL for AddIndex.
+	IndexKind string
+	// IndexKeyword is INDEX or KEY for AddIndex and DropIndex.
+	IndexKeyword string
+	// IndexName names the index of AddIndex and DropIndex.
+	IndexName string
+	// Keyword and Text hold an AlterTableOther action: the leading keyword
+	// phrase and the remainder as written. They also carry the keyword
+	// spelling of an AlterColumnSetDataType (TYPE, SET DATA TYPE) and the
+	// content of an AlterColumnOther sub-action.
+	Keyword string
+	Text    string
+	// DefaultValue is the expression of ALTER COLUMN ... SET DEFAULT.
+	DefaultValue Expression
+	// DataType and Using are the new type and USING expression of
+	// ALTER COLUMN ... [SET DATA] TYPE.
+	DataType string
+	Using    Expression
+	// Assignments, PartitionExpr and Where describe a ClickHouse UPDATE or
+	// DELETE mutation.
+	Assignments   []UpdateExpression
+	PartitionExpr Expression
+	Where         Expression
 }
 
 func (a *AlterTableOperation) alterOperationNode() {}
@@ -168,6 +248,11 @@ func (a AlterTableOperation) Children() []Node {
 	if a.ColumnDef != nil {
 		children = append(children, a.ColumnDef)
 	}
+	if len(a.ColumnDefs) > 1 {
+		for _, c := range a.ColumnDefs[1:] {
+			children = append(children, c)
+		}
+	}
 	if a.Constraint != nil {
 		children = append(children, a.Constraint)
 	}
@@ -177,6 +262,7 @@ func (a AlterTableOperation) Children() []Node {
 	if a.AlterColumnOp != nil {
 		children = append(children, a.AlterColumnOp)
 	}
+	children = append(children, a.extChildren()...)
 	return children
 }
 
@@ -200,6 +286,20 @@ const (
 	RenameConstraint
 	RenamePartitions
 	RenameTable
+	// AddIndex is ADD [UNIQUE|FULLTEXT|SPATIAL] INDEX|KEY name ... (MySQL,
+	// MariaDB, ClickHouse).
+	AddIndex
+	// DropIndex is DROP INDEX|KEY [IF EXISTS] name.
+	DropIndex
+	// AlterTableOther is an action kept as a leading keyword phrase
+	// (AlterTableOperation.Keyword) and the text that follows it as written
+	// (AlterTableOperation.Text): ENABLE ROW LEVEL SECURITY, OWNER TO x,
+	// ENGINE=InnoDB, SWAP WITH t, ClickHouse partition operations, ...
+	AlterTableOther
+	// UpdateMutation is the ClickHouse UPDATE col = expr [, ...] WHERE cond.
+	UpdateMutation
+	// DeleteMutation is the ClickHouse DELETE [IN PARTITION p] WHERE cond.
+	DeleteMutation
 )
 
 // RoleOption represents an option in ROLE statement

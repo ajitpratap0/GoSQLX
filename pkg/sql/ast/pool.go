@@ -867,6 +867,14 @@ func PutAlterStatement(stmt *AlterStatement) {
 	stmt.Type = 0
 	stmt.Name = ""
 	stmt.Operation = nil
+	stmt.IfExists = false
+	stmt.Only = false
+	stmt.Modifiers = nil
+	stmt.OnCluster = ""
+	for i := range stmt.Operations {
+		stmt.Operations[i] = nil
+	}
+	stmt.Operations = stmt.Operations[:0]
 
 	alterStmtPool.Put(stmt)
 }

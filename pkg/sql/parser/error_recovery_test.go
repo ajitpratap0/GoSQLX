@@ -862,16 +862,18 @@ func TestParser_ErrorRecovery_ALTER(t *testing.T) {
 			errorContains: "ADD, DROP, RENAME, or ALTER",
 		},
 		{
-			name: "missing COLUMN or CONSTRAINT after ADD",
+			// COLUMN is optional (PostgreSQL, MySQL, SQL Server, SQLite), so the
+			// error is the missing data type of the column definition.
+			name: "missing data type after ADD column name",
 			tokens: []token.Token{
 				{Type: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: models.TokenTypeTable, Literal: "TABLE"},
 				{Type: models.TokenTypeIdentifier, Literal: "users"},
 				{Type: models.TokenTypeAdd, Literal: "ADD"},
-				{Type: models.TokenTypeIdentifier, Literal: "email"}, // Missing COLUMN/CONSTRAINT keyword
+				{Type: models.TokenTypeIdentifier, Literal: "email"}, // No data type
 			},
 			wantErr:       true,
-			errorContains: "COLUMN or CONSTRAINT",
+			errorContains: "data type",
 		},
 		{
 			name: "missing column definition after ADD COLUMN",
@@ -900,16 +902,17 @@ func TestParser_ErrorRecovery_ALTER(t *testing.T) {
 			errorContains: "constraint name",
 		},
 		{
-			name: "missing COLUMN or CONSTRAINT after DROP",
+			// DROP name is DROP COLUMN name (PostgreSQL, MySQL); a missing name
+			// is the error.
+			name: "missing name after DROP",
 			tokens: []token.Token{
 				{Type: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: models.TokenTypeTable, Literal: "TABLE"},
 				{Type: models.TokenTypeIdentifier, Literal: "users"},
 				{Type: models.TokenTypeDrop, Literal: "DROP"},
-				{Type: models.TokenTypeIdentifier, Literal: "email"}, // Missing COLUMN/CONSTRAINT keyword
 			},
 			wantErr:       true,
-			errorContains: "COLUMN or CONSTRAINT",
+			errorContains: "column name",
 		},
 		{
 			name: "missing TO or COLUMN after RENAME",
@@ -938,16 +941,18 @@ func TestParser_ErrorRecovery_ALTER(t *testing.T) {
 			errorContains: "TO",
 		},
 		{
-			name: "missing COLUMN after ALTER",
+			// COLUMN is optional after ALTER; the error is the missing
+			// definition or sub-action of the column.
+			name: "missing action after ALTER column name",
 			tokens: []token.Token{
 				{Type: models.TokenTypeAlter, Literal: "ALTER"},
 				{Type: models.TokenTypeTable, Literal: "TABLE"},
 				{Type: models.TokenTypeIdentifier, Literal: "users"},
 				{Type: models.TokenTypeAlter, Literal: "ALTER"},
-				{Type: models.TokenTypeIdentifier, Literal: "email"}, // Missing COLUMN keyword
+				{Type: models.TokenTypeIdentifier, Literal: "email"}, // No action
 			},
 			wantErr:       true,
-			errorContains: "COLUMN",
+			errorContains: "data type",
 		},
 	}
 

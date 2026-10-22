@@ -19,129 +19,62 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
-// parseAlterStatement parses ALTER statements
-func (p *Parser) parseAlterStatement() (*ast.AlterStatement, error) {
-	stmt := ast.GetAlterStatement()
-
-	// Parse the type of object being altered
+// parseAlterStatement parses ALTER statements. ALTER TABLE, ROLE, POLICY and
+// CONNECTOR are parsed into an *ast.AlterStatement; the other object kinds
+// (INDEX, SESSION, SYSTEM, USER, DATABASE, WAREHOUSE, ...) are kept as
+// written in an *ast.UtilityStatement.
+func (p *Parser) parseAlterStatement() (ast.Statement, error) {
+	var parse func(*ast.AlterStatement) (*ast.AlterStatement, error)
+	var typ ast.AlterType
+	// MariaDB ALTER [ONLINE] [IGNORE] TABLE.
+	var modifiers []string
+	if p.alterDialect(dialectMySQLFamily) {
+		for {
+			w := p.utilityWord(p.currentPos)
+			if (w != "ONLINE" && w != "IGNORE") || !p.alterModifierFollows(p.currentPos+1) {
+				break
+			}
+			modifiers = append(modifiers, w)
+			p.advance()
+		}
+	}
 	switch {
 	case p.matchType(models.TokenTypeTable):
-		stmt.Type = ast.AlterTypeTable
-		return p.parseAlterTableStatement(stmt)
+		typ, parse = ast.AlterTypeTable, p.parseAlterTableStatement
 	case p.matchType(models.TokenTypeRole):
-		stmt.Type = ast.AlterTypeRole
-		return p.parseAlterRoleStatement(stmt)
+		typ, parse = ast.AlterTypeRole, p.parseAlterRoleStatement
 	case p.matchType(models.TokenTypePolicy):
-		stmt.Type = ast.AlterTypePolicy
-		return p.parseAlterPolicyStatement(stmt)
+		typ, parse = ast.AlterTypePolicy, p.parseAlterPolicyStatement
 	case p.matchType(models.TokenTypeConnector):
-		stmt.Type = ast.AlterTypeConnector
-		return p.parseAlterConnectorStatement(stmt)
+		typ, parse = ast.AlterTypeConnector, p.parseAlterConnectorStatement
 	default:
+		if word, ok := p.alterObjectWord(); ok {
+			return p.parseAlterVerbatim(word)
+		}
 		return nil, p.expectedError("TABLE, ROLE, POLICY, or CONNECTOR")
 	}
+	if len(modifiers) > 0 && typ != ast.AlterTypeTable {
+		return nil, p.expectedError("TABLE")
+	}
+	stmt := ast.GetAlterStatement()
+	stmt.Type = typ
+	stmt.Modifiers = modifiers
+	out, err := parse(stmt)
+	if err != nil {
+		ast.PutAlterStatement(stmt)
+		return nil, err
+	}
+	return out, nil
 }
 
-// parseAlterTableStatement parses ALTER TABLE statements
-func (p *Parser) parseAlterTableStatement(stmt *ast.AlterStatement) (*ast.AlterStatement, error) {
-	stmt.Name = p.parseIdentAsString()
-	op := &ast.AlterTableOperation{}
-
-	switch {
-	case p.matchType(models.TokenTypeAdd):
-		if p.matchType(models.TokenTypeColumn) {
-			op.Type = ast.AddColumn
-			colDef, err := p.parseColumnDef()
-			if err != nil {
-				return nil, err
-			}
-			op.ColumnDef = colDef
-		} else if p.matchType(models.TokenTypeConstraint) {
-			op.Type = ast.AddConstraint
-			constraint, err := p.parseTableConstraint()
-			if err != nil {
-				return nil, err
-			}
-			op.Constraint = constraint
-		} else {
-			return nil, p.expectedError("COLUMN or CONSTRAINT")
-		}
-
-	case p.matchType(models.TokenTypeDrop):
-		if p.matchType(models.TokenTypeColumn) {
-			op.Type = ast.DropColumn
-			// Convert ast.Identifier to ast.Ident
-			ident := p.parseIdent()
-			if ident == nil {
-				return nil, p.expectedError("column name")
-			}
-			op.ColumnName = &ast.Ident{Name: ident.Name}
-			if p.matchType(models.TokenTypeCascade) {
-				op.CascadeDrops = true
-			}
-		} else if p.matchType(models.TokenTypeConstraint) {
-			op.Type = ast.DropConstraint
-			// Convert ast.Identifier to ast.Ident
-			ident := p.parseIdent()
-			if ident == nil {
-				return nil, p.expectedError("constraint name")
-			}
-			op.ConstraintName = &ast.Ident{Name: ident.Name}
-			if p.matchType(models.TokenTypeCascade) {
-				op.CascadeDrops = true
-			}
-		} else {
-			return nil, p.expectedError("COLUMN or CONSTRAINT")
-		}
-
-	case p.matchType(models.TokenTypeRename):
-		if p.matchType(models.TokenTypeTo) {
-			op.Type = ast.RenameTable
-			op.NewTableName = p.parseObjectName()
-		} else if p.matchType(models.TokenTypeColumn) {
-			op.Type = ast.RenameColumn
-			// Convert ast.Identifier to ast.Ident
-			ident := p.parseIdent()
-			if ident == nil {
-				return nil, p.expectedError("column name")
-			}
-			op.ColumnName = &ast.Ident{Name: ident.Name}
-			if !p.matchType(models.TokenTypeTo) {
-				return nil, p.expectedError("TO")
-			}
-			// Convert ast.Identifier to ast.Ident
-			newIdent := p.parseIdent()
-			if newIdent == nil {
-				return nil, p.expectedError("new column name")
-			}
-			op.NewColumnName = &ast.Ident{Name: newIdent.Name}
-		} else {
-			return nil, p.expectedError("TO or COLUMN")
-		}
-
-	case p.matchType(models.TokenTypeAlter):
-		if !p.matchType(models.TokenTypeColumn) {
-			return nil, p.expectedError("COLUMN")
-		}
-		op.Type = ast.AlterColumn
-		// Convert ast.Identifier to ast.Ident
-		ident := p.parseIdent()
-		if ident == nil {
-			return nil, p.expectedError("column name")
-		}
-		op.ColumnName = &ast.Ident{Name: ident.Name}
-		colDef, err := p.parseColumnDef()
-		if err != nil {
-			return nil, err
-		}
-		op.ColumnDef = colDef
-
-	default:
-		return nil, p.expectedError("ADD, DROP, RENAME, or ALTER")
+// alterModifierFollows reports whether the token at index i is TABLE or
+// another ALTER modifier (ONLINE, IGNORE).
+func (p *Parser) alterModifierFollows(i int) bool {
+	if i < len(p.tokens) && p.tokens[i].Token.Type == models.TokenTypeTable {
+		return true
 	}
-
-	stmt.Operation = op
-	return stmt, nil
+	w := p.utilityWord(i)
+	return w == "ONLINE" || w == "IGNORE"
 }
 
 // parseAlterRoleStatement parses ALTER ROLE statements

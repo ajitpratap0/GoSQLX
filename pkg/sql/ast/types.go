@@ -60,6 +60,10 @@ func (a *AlterColumnOperation) TokenLiteral() string {
 		return "SET NOT NULL"
 	case AlterColumnDropNotNull:
 		return "DROP NOT NULL"
+	case AlterColumnSetDataType:
+		return "SET DATA TYPE"
+	case AlterColumnOther:
+		return "ALTER COLUMN"
 	default:
 		return "UNKNOWN"
 	}

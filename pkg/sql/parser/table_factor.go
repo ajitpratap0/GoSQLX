@@ -35,6 +35,11 @@ func tableModifiers(ref *ast.TableReference) *ast.TableModifiers {
 	return ref.Modifiers
 }
 
+// hasTableSample reports whether ref already has a sampling clause.
+func hasTableSample(ref *ast.TableReference) bool {
+	return ref.Modifiers != nil && ref.Modifiers.TableSample != nil
+}
+
 // parseTableOnly consumes the PostgreSQL ONLY modifier before a table name
 // (FROM ONLY parent) and reports whether it was present.
 func (p *Parser) parseTableOnly() bool {
@@ -257,19 +262,19 @@ func (p *Parser) parseTableModifiersBeforeAlias(ref *ast.TableReference) error {
 		}
 		ref.TimeTravel = tt
 	}
-	if ref.TableSample == nil && p.isTableSampleStart() {
+	if !hasTableSample(ref) && p.isTableSampleStart() {
 		sample, err := p.parseTableSample()
 		if err != nil {
 			return err
 		}
-		ref.TableSample = sample
+		tableModifiers(ref).TableSample = sample
 	}
-	if ref.Flashback == nil && p.isOracleFlashbackStart() {
+	if (ref.Modifiers == nil || ref.Modifiers.Flashback == nil) && p.isOracleFlashbackStart() {
 		fb, err := p.parseOracleFlashback()
 		if err != nil {
 			return err
 		}
-		ref.Flashback = fb
+		tableModifiers(ref).Flashback = fb
 	}
 	return nil
 }
@@ -286,12 +291,12 @@ func (p *Parser) isTableModifierAfterAliasStart() bool {
 // alias: TABLESAMPLE, ClickHouse FINAL, MySQL index hints, SQLite INDEXED BY
 // / NOT INDEXED and SQL Server bare table hints t (NOLOCK).
 func (p *Parser) parseTableModifiersAfterAlias(ref *ast.TableReference) error {
-	if ref.TableSample == nil && p.isTableSampleStart() {
+	if !hasTableSample(ref) && p.isTableSampleStart() {
 		sample, err := p.parseTableSample()
 		if err != nil {
 			return err
 		}
-		ref.TableSample = sample
+		tableModifiers(ref).TableSample = sample
 	}
 	if p.IsClickHouse() && p.isTokenMatch("FINAL") {
 		ref.Final = true

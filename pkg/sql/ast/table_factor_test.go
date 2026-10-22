@@ -31,13 +31,15 @@ func TestReleaseTableReference_ClearsTableFactorModifiers(t *testing.T) {
 		Only:          true,
 		Final:         true,
 		ColumnAliases: &ColumnAliasList{Names: []string{"a"}, Types: []string{"int"}},
-		TableSample: &TableSampleClause{
-			Keyword: "TABLESAMPLE", Method: "SYSTEM", Args: []Expression{num("1")},
-			SeedKeyword: "REPEATABLE", Seed: num("2"),
+		Modifiers: &TableModifiers{
+			TableSample: &TableSampleClause{
+				Keyword: "TABLESAMPLE", Method: "SYSTEM", Args: []Expression{num("1")},
+				SeedKeyword: "REPEATABLE", Seed: num("2"),
+			},
+			Flashback: &FlashbackClause{Versions: true, Kind: "SCN", Start: num("1"), End: num("2")},
+			DBLink:    "l", Partitions: []string{"p"}, IndexedBy: "i",
 		},
-		Flashback: &FlashbackClause{Versions: true, Kind: "SCN", Start: num("1"), End: num("2")},
-		Modifiers: &TableModifiers{DBLink: "l", Partitions: []string{"p"}, IndexedBy: "i"},
-		Values:    &Values{Rows: [][]Expression{{num("3")}}},
+		Values: &Values{Rows: [][]Expression{{num("3")}}},
 		ForSystemTime: &ForSystemTimeClause{
 			Type: SystemTimeContainedIn, Start: num("4"), End: num("5"),
 		},
@@ -57,10 +59,10 @@ func TestTableFactorRender_HandBuiltValuesAreSafe(t *testing.T) {
 		name string
 		ref  TableReference
 	}{
-		{"sample method", TableReference{Name: "t", TableSample: &TableSampleClause{Keyword: "TABLESAMPLE", Method: evil, Args: []Expression{&LiteralValue{Value: "1", Type: "int"}}}}},
-		{"sample keyword", TableReference{Name: "t", TableSample: &TableSampleClause{Keyword: evil, Args: []Expression{&LiteralValue{Value: "1", Type: "int"}}}}},
-		{"sample unit", TableReference{Name: "t", TableSample: &TableSampleClause{Keyword: "SAMPLE", Unit: evil, Args: []Expression{&LiteralValue{Value: "1", Type: "int"}}}}},
-		{"flashback kind", TableReference{Name: "t", Flashback: &FlashbackClause{Kind: evil, Point: &LiteralValue{Value: "1", Type: "int"}}}},
+		{"sample method", TableReference{Name: "t", Modifiers: &TableModifiers{TableSample: &TableSampleClause{Keyword: "TABLESAMPLE", Method: evil, Args: []Expression{&LiteralValue{Value: "1", Type: "int"}}}}}},
+		{"sample keyword", TableReference{Name: "t", Modifiers: &TableModifiers{TableSample: &TableSampleClause{Keyword: evil, Args: []Expression{&LiteralValue{Value: "1", Type: "int"}}}}}},
+		{"sample unit", TableReference{Name: "t", Modifiers: &TableModifiers{TableSample: &TableSampleClause{Keyword: "SAMPLE", Unit: evil, Args: []Expression{&LiteralValue{Value: "1", Type: "int"}}}}}},
+		{"flashback kind", TableReference{Name: "t", Modifiers: &TableModifiers{Flashback: &FlashbackClause{Kind: evil, Point: &LiteralValue{Value: "1", Type: "int"}}}}},
 		{"db link", TableReference{Name: "t", Modifiers: &TableModifiers{DBLink: evil}}},
 		{"partition", TableReference{Name: "t", Modifiers: &TableModifiers{Partitions: []string{evil}}}},
 		{"index hint name", TableReference{Name: "t", Modifiers: &TableModifiers{IndexHints: []IndexHint{{Action: "USE", Keyword: "INDEX", Names: []string{evil}}}}}},

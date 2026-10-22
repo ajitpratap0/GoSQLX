@@ -118,6 +118,10 @@ type IndexHint struct {
 // pointer on TableReference so the many references without any of them pay
 // one word.
 type TableModifiers struct {
+	// TableSample is a row-sampling clause: TABLESAMPLE / SAMPLE.
+	TableSample *TableSampleClause
+	// Flashback is the Oracle AS OF / VERSIONS BETWEEN flashback clause.
+	Flashback *FlashbackClause
 	// DBLink is the Oracle database link of t@dblink.
 	DBLink string
 	// Partitions is the MySQL / MariaDB / Oracle partition selection
@@ -145,8 +149,24 @@ type OpenJSONColumn struct {
 
 // isEmpty reports whether m carries no modifier.
 func (m *TableModifiers) isEmpty() bool {
-	return m == nil || (m.DBLink == "" && len(m.Partitions) == 0 && len(m.IndexHints) == 0 &&
+	return m == nil || (m.TableSample == nil && m.Flashback == nil && m.DBLink == "" && len(m.Partitions) == 0 && len(m.IndexHints) == 0 &&
 		m.IndexedBy == "" && !m.NotIndexed && len(m.WithSchema) == 0)
+}
+
+// tableSample returns the sampling clause of t, or nil.
+func (t *TableReference) tableSample() *TableSampleClause {
+	if t.Modifiers == nil {
+		return nil
+	}
+	return t.Modifiers.TableSample
+}
+
+// flashback returns the Oracle flashback clause of t, or nil.
+func (t *TableReference) flashback() *FlashbackClause {
+	if t.Modifiers == nil {
+		return nil
+	}
+	return t.Modifiers.Flashback
 }
 
 // textWriter is the writer interface shared by *bytes.Buffer and
@@ -207,11 +227,11 @@ func writeTableRefPreAlias(w textWriter, t *TableReference, kw func(string) stri
 	if t.TimeTravel != nil {
 		writeTimeTravel(w, t.TimeTravel, kw)
 	}
-	if t.TableSample != nil && !t.TableSample.AfterAlias {
-		writeTableSample(w, t.TableSample, kw)
+	if s := t.tableSample(); s != nil && !s.AfterAlias {
+		writeTableSample(w, s, kw)
 	}
-	if t.Flashback != nil {
-		writeFlashback(w, t.Flashback, kw)
+	if f := t.flashback(); f != nil {
+		writeFlashback(w, f, kw)
 	}
 }
 
@@ -219,8 +239,8 @@ func writeTableRefPreAlias(w textWriter, t *TableReference, kw func(string) stri
 // TABLESAMPLE, ClickHouse FINAL, MySQL index hints and SQLite INDEXED BY.
 // Each is preceded by a space.
 func writeTableRefPostAlias(w textWriter, t *TableReference, kw func(string) string) {
-	if t.TableSample != nil && t.TableSample.AfterAlias {
-		writeTableSample(w, t.TableSample, kw)
+	if s := t.tableSample(); s != nil && s.AfterAlias {
+		writeTableSample(w, s, kw)
 	}
 	if t.Final {
 		w.WriteByte(' ')
@@ -249,8 +269,8 @@ func writeTableRefPostAlias(w textWriter, t *TableReference, kw func(string) str
 // kw (nil keeps them upper case). It returns "" without allocating when
 // there are none.
 func TableRefPreAliasSQL(t *TableReference, kw func(string) string) string {
-	if t == nil || (t.ForSystemTime == nil && t.TimeTravel == nil && t.Flashback == nil &&
-		(t.TableSample == nil || t.TableSample.AfterAlias) &&
+	if t == nil || (t.ForSystemTime == nil && t.TimeTravel == nil && t.flashback() == nil &&
+		(t.tableSample() == nil || t.tableSample().AfterAlias) &&
 		(t.Modifiers == nil || (len(t.Modifiers.Partitions) == 0 && len(t.Modifiers.WithSchema) == 0))) {
 		return ""
 	}
@@ -266,7 +286,7 @@ func TableRefPreAliasSQL(t *TableReference, kw func(string) string) string {
 // alias (TABLESAMPLE, FINAL, index hints, INDEXED BY), each preceded by a
 // space; see TableRefPreAliasSQL.
 func TableRefPostAliasSQL(t *TableReference, kw func(string) string) string {
-	if t == nil || (!t.Final && (t.TableSample == nil || !t.TableSample.AfterAlias) &&
+	if t == nil || (!t.Final && (t.tableSample() == nil || !t.tableSample().AfterAlias) &&
 		(t.Modifiers == nil || (len(t.Modifiers.IndexHints) == 0 && t.Modifiers.IndexedBy == "" && !t.Modifiers.NotIndexed))) {
 		return ""
 	}
@@ -612,21 +632,19 @@ func writeMatchRecognize(w textWriter, mr *MatchRecognizeClause, kw func(string)
 // releaseTableFactorModifiers releases the expressions held by the
 // table-factor modifiers of tr and clears them.
 func releaseTableFactorModifiers(tr *TableReference, mode releaseMode) {
-	if s := tr.TableSample; s != nil {
+	if s := tr.tableSample(); s != nil {
 		for i := range s.Args {
 			releaseExpression(s.Args[i], mode)
 			s.Args[i] = nil
 		}
 		releaseExpression(s.Seed, mode)
 		s.Args, s.Seed = nil, nil
-		tr.TableSample = nil
 	}
-	if f := tr.Flashback; f != nil {
+	if f := tr.flashback(); f != nil {
 		releaseExpression(f.Point, mode)
 		releaseExpression(f.Start, mode)
 		releaseExpression(f.End, mode)
 		f.Point, f.Start, f.End = nil, nil, nil
-		tr.Flashback = nil
 	}
 	if v := tr.Values; v != nil {
 		for _, row := range v.Rows {
@@ -638,7 +656,7 @@ func releaseTableFactorModifiers(tr *TableReference, mode releaseMode) {
 		v.Rows = nil
 		tr.Values = nil
 	}
-	tr.Modifiers = nil // not pooled: strings only
+	tr.Modifiers = nil // not pooled; its expressions were released above
 	tr.Only = false
 }
 

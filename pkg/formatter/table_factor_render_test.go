@@ -240,18 +240,14 @@ func tableRefFieldSamples() map[string]func(*ast.TableReference) {
 			r.SetSubquery = &ast.SetOperation{Left: sub(), Operator: "UNION", Right: sub()}
 		},
 		"Only": func(r *ast.TableReference) { r.Only = true },
-		"TableSample": func(r *ast.TableReference) {
-			r.TableSample = &ast.TableSampleClause{Keyword: "TABLESAMPLE", Method: "SYSTEM", Args: []ast.Expression{num("5")}, AfterAlias: true}
-		},
-		"Flashback": func(r *ast.TableReference) {
-			r.Flashback = &ast.FlashbackClause{Kind: "SCN", Point: num("9")}
-		},
 		"Modifiers": func(r *ast.TableReference) {
 			r.Modifiers = &ast.TableModifiers{
-				DBLink:     "lnk",
-				Partitions: []string{"p0"},
-				IndexHints: []ast.IndexHint{{Action: "USE", Keyword: "INDEX", Names: []string{"ix"}}},
-				IndexedBy:  "i",
+				TableSample: &ast.TableSampleClause{Keyword: "TABLESAMPLE", Method: "SYSTEM", Args: []ast.Expression{num("5")}, AfterAlias: true},
+				Flashback:   &ast.FlashbackClause{Kind: "SCN", Point: num("9")},
+				DBLink:      "lnk",
+				Partitions:  []string{"p0"},
+				IndexHints:  []ast.IndexHint{{Action: "USE", Keyword: "INDEX", Names: []string{"ix"}}},
+				IndexedBy:   "i",
 			}
 		},
 		"Values": func(r *ast.TableReference) {
@@ -310,6 +306,52 @@ func TestRender_TableReferenceRendersEveryField(t *testing.T) {
 			}
 			if s0, s1 := before.SQL(), after.SQL(); s0 == s1 {
 				t.Errorf("SQL() ignores %s: %s", name, s1)
+			}
+		})
+	}
+}
+
+// TestRender_TableModifiersRendersEveryField sets each exported
+// TableModifiers field in turn and asserts that both renderers write it.
+func TestRender_TableModifiersRendersEveryField(t *testing.T) {
+	num := func(v string) *ast.LiteralValue { return &ast.LiteralValue{Value: v, Type: "int"} }
+	samples := map[string]func(*ast.TableModifiers){
+		"TableSample": func(m *ast.TableModifiers) {
+			m.TableSample = &ast.TableSampleClause{Keyword: "SAMPLE", Args: []ast.Expression{num("5")}}
+		},
+		"Flashback":  func(m *ast.TableModifiers) { m.Flashback = &ast.FlashbackClause{Kind: "SCN", Point: num("9")} },
+		"DBLink":     func(m *ast.TableModifiers) { m.DBLink = "lnk" },
+		"Partitions": func(m *ast.TableModifiers) { m.Partitions = []string{"p0"} },
+		"IndexHints": func(m *ast.TableModifiers) {
+			m.IndexHints = []ast.IndexHint{{Action: "FORCE", Keyword: "INDEX", Names: []string{"ix"}}}
+		},
+		"IndexedBy":  func(m *ast.TableModifiers) { m.IndexedBy = "i" },
+		"NotIndexed": func(m *ast.TableModifiers) { m.NotIndexed = true },
+		"WithSchema": func(m *ast.TableModifiers) {
+			m.WithSchema = []ast.OpenJSONColumn{{Name: "id", Type: "INT", Path: "$.id"}}
+		},
+	}
+	typ := reflect.TypeOf(ast.TableModifiers{})
+	for i := 0; i < typ.NumField(); i++ {
+		name := typ.Field(i).Name
+		set, ok := samples[name]
+		if !ok {
+			t.Errorf("TableModifiers.%s has no render sample", name)
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
+			stmt := &ast.SelectStatement{
+				Columns: []ast.Expression{&ast.Identifier{Name: "a"}},
+				From:    []ast.TableReference{{Name: "t", Alias: "x", Modifiers: &ast.TableModifiers{}}},
+			}
+			before := formatter.FormatStatement(stmt, ast.CompactStyle())
+			beforeSQL := stmt.SQL()
+			set(stmt.From[0].Modifiers)
+			if after := formatter.FormatStatement(stmt, ast.CompactStyle()); after == before {
+				t.Errorf("formatter ignores %s: %s", name, after)
+			}
+			if after := stmt.SQL(); after == beforeSQL {
+				t.Errorf("SQL() ignores %s: %s", name, after)
 			}
 		})
 	}

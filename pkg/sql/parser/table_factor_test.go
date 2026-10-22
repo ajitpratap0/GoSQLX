@@ -163,7 +163,10 @@ func TestTableSampleClause(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			ref := firstFrom(t, parseOne(t, tc.dialect, tc.sql))
-			s := ref.TableSample
+			if ref.Modifiers == nil {
+				t.Fatal("Modifiers not set")
+			}
+			s := ref.Modifiers.TableSample
 			if s == nil {
 				t.Fatal("TableSample not set")
 			}
@@ -205,13 +208,19 @@ func TestTableFactorModifiers(t *testing.T) {
 			}
 		}},
 		{"oracle as of scn", keywords.DialectOracle, "SELECT * FROM t AS OF SCN 123 x", func(t *testing.T, ref *ast.TableReference) {
-			f := ref.Flashback
+			if ref.Modifiers == nil {
+				t.Fatal("Modifiers not set")
+			}
+			f := ref.Modifiers.Flashback
 			if f == nil || f.Versions || f.Kind != "SCN" || f.Point == nil || ref.Alias != "x" {
 				t.Errorf("got %+v", f)
 			}
 		}},
 		{"oracle versions between", keywords.DialectOracle, "SELECT * FROM t VERSIONS BETWEEN SCN MINVALUE AND MAXVALUE", func(t *testing.T, ref *ast.TableReference) {
-			f := ref.Flashback
+			if ref.Modifiers == nil {
+				t.Fatal("Modifiers not set")
+			}
+			f := ref.Modifiers.Flashback
 			if f == nil || !f.Versions || f.Kind != "SCN" || f.Start == nil || f.End == nil {
 				t.Errorf("got %+v", f)
 			}
@@ -318,7 +327,7 @@ func TestTableFactorModifiersOnJoins(t *testing.T) {
 	if !ok || len(sel.Joins) != 1 {
 		t.Fatal("want a SELECT with one join")
 	}
-	if sel.From[0].TableSample == nil {
+	if sel.From[0].Modifiers == nil || sel.From[0].Modifiers.TableSample == nil {
 		t.Error("FROM sample dropped")
 	}
 	right := sel.Joins[0].Right

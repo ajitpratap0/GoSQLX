@@ -239,12 +239,11 @@ type TableReference struct {
 	// Only is the PostgreSQL ONLY modifier (FROM ONLY parent): the table's
 	// inheritance children are excluded.
 	Only bool
-	// TableSample is a row-sampling clause: TABLESAMPLE / SAMPLE.
-	TableSample *TableSampleClause
-	// Flashback is the Oracle AS OF / VERSIONS BETWEEN flashback clause.
-	Flashback *FlashbackClause
-	// Modifiers holds the rarer table modifiers: Oracle @dblink, MySQL
-	// PARTITION selection and index hints, SQLite INDEXED BY.
+	// Modifiers holds the rarer table modifiers: TABLESAMPLE / SAMPLE,
+	// Oracle flashback and @dblink, MySQL PARTITION selection and index
+	// hints, SQLite INDEXED BY, SQL Server OPENJSON WITH schema. It is one
+	// pointer because TableReference is copied by value on the parser hot
+	// path.
 	Modifiers *TableModifiers
 	// Values is a derived table whose body is a VALUES table constructor:
 	// FROM (VALUES (1, 'a'), (2, 'b')) AS v(id, name).
@@ -296,11 +295,13 @@ func (t TableReference) Children() []Node {
 	if t.ForSystemTime != nil {
 		nodes = append(nodes, t.ForSystemTime)
 	}
-	if t.TableSample != nil {
-		nodes = append(nodes, t.TableSample)
-	}
-	if t.Flashback != nil {
-		nodes = append(nodes, t.Flashback)
+	if m := t.Modifiers; m != nil {
+		if m.TableSample != nil {
+			nodes = append(nodes, m.TableSample)
+		}
+		if m.Flashback != nil {
+			nodes = append(nodes, m.Flashback)
+		}
 	}
 	if t.Values != nil {
 		nodes = append(nodes, t.Values)

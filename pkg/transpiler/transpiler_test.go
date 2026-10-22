@@ -66,3 +66,39 @@ func BenchmarkTranspile(b *testing.B) {
 		}
 	}
 }
+
+// TestTranspile_SetOperationsForTarget checks that set operations are
+// written for the target dialect: MINUS becomes EXCEPT where the target has
+// no MINUS, and an Oracle chain (all operators of equal precedence, grouped
+// left to right) keeps its grouping under standard precedence.
+func TestTranspile_SetOperationsForTarget(t *testing.T) {
+	tests := []struct {
+		from, to keywords.SQLDialect
+		sql      string
+		want     string
+	}{
+		{keywords.DialectSnowflake, keywords.DialectPostgreSQL,
+			"SELECT a FROM t MINUS SELECT a FROM u",
+			"SELECT a FROM t EXCEPT SELECT a FROM u"},
+		{keywords.DialectOracle, keywords.DialectMySQL,
+			"SELECT a FROM t MINUS SELECT a FROM u",
+			"SELECT a FROM t EXCEPT SELECT a FROM u"},
+		{keywords.DialectOracle, keywords.DialectSnowflake,
+			"SELECT a FROM t MINUS SELECT a FROM u",
+			"SELECT a FROM t MINUS SELECT a FROM u"},
+		{keywords.DialectOracle, keywords.DialectPostgreSQL,
+			"SELECT 1 FROM dual UNION SELECT 2 FROM dual INTERSECT SELECT 3 FROM dual",
+			"(SELECT 1 FROM dual UNION SELECT 2 FROM dual) INTERSECT SELECT 3 FROM dual"},
+	}
+	for _, tc := range tests {
+		t.Run(string(tc.from)+"_to_"+string(tc.to), func(t *testing.T) {
+			got, err := transpiler.Transpile(tc.sql, tc.from, tc.to)
+			if err != nil {
+				t.Fatalf("Transpile: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("got  %s\nwant %s", got, tc.want)
+			}
+		})
+	}
+}

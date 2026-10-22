@@ -541,6 +541,7 @@ func releaseTableReference(tr *TableReference, mode releaseMode) {
 	}
 	// Pivot.AggregateFunction is an Expression.
 	if tr.Pivot != nil {
+		releasePivotExtensions(tr.Pivot, mode)
 		releaseExpression(tr.Pivot.AggregateFunction, mode)
 		tr.Pivot.AggregateFunction = nil
 		tr.Pivot = nil
@@ -589,6 +590,7 @@ func releaseTableReference(tr *TableReference, mode releaseMode) {
 		tr.ForSystemTime.End = nil
 		tr.ForSystemTime = nil
 	}
+	releaseTableFactorModifiers(tr, mode)
 	tr.Name = ""
 	tr.Alias = ""
 	tr.Lateral = false

@@ -643,5 +643,6 @@ func (p *Parser) parseMultiPartColumnRef(ident *ast.Identifier) error {
 // schema.INDEX), or - in ClickHouse - a numeric tuple element (d.1).
 func (p *Parser) isQualifiedNamePart() bool {
 	return p.isIdentifier() || p.isNonReservedKeyword() || p.isKeywordColumnName() ||
-		(p.dialect == string(keywords.DialectClickHouse) && p.isNumericLiteral())
+		(p.dialect == string(keywords.DialectClickHouse) && p.isNumericLiteral()) ||
+		p.isSnowflakePositionalColumn()
 }

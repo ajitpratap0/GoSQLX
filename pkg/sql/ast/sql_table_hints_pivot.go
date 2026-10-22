@@ -44,7 +44,7 @@ func isBareTableHint(h string) bool {
 // in a hand-built AST) is double-quoted with embedded quotes doubled so it
 // cannot end the hint list or the statement.
 func QuoteTableHint(h string) string {
-	if isBareTableHint(h) {
+	if isTableHintText(h) {
 		return h
 	}
 	buf := getBuf()
@@ -65,7 +65,7 @@ func writeTableHints(buf *bytes.Buffer, hints []string) {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		if isBareTableHint(h) {
+		if isTableHintText(h) {
 			buf.WriteString(h)
 		} else {
 			writeQuotedIdentifier(buf, h)
@@ -122,18 +122,13 @@ func QuotePivotItem(item string) string {
 	return buf.String()
 }
 
-func writePivotItem(buf *bytes.Buffer, item string) {
-	if isWellFormedPivotItem(item) {
-		buf.WriteString(item)
-		return
-	}
-	writeQuotedIdentifier(buf, item)
-}
-
 // isWellFormedPivotItem reports whether item is "atom" or "atom AS atom"
 // (see QuotePivotItem).
 func isWellFormedPivotItem(item string) bool {
 	n := pivotAtomLen(item)
+	if n == 0 {
+		n = pivotTupleLen(item)
+	}
 	if n == 0 {
 		return false
 	}
@@ -215,18 +210,7 @@ func writePivotClause(buf *bytes.Buffer, p *PivotClause) {
 	if p == nil {
 		return
 	}
-	buf.WriteString(" PIVOT (")
-	writeExpr(buf, p.AggregateFunction)
-	buf.WriteString(" FOR ")
-	writePivotColumn(buf, p.PivotColumn)
-	buf.WriteString(" IN (")
-	for i, v := range p.InValues {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		writePivotItem(buf, v)
-	}
-	buf.WriteString("))")
+	writePivot(buf, p, identityKeyword)
 }
 
 // writeUnpivotClause writes " UNPIVOT (val FOR name IN (c1, c2))", quoting
@@ -235,16 +219,5 @@ func writeUnpivotClause(buf *bytes.Buffer, u *UnpivotClause) {
 	if u == nil {
 		return
 	}
-	buf.WriteString(" UNPIVOT (")
-	writePivotColumn(buf, u.ValueColumn)
-	buf.WriteString(" FOR ")
-	writePivotColumn(buf, u.NameColumn)
-	buf.WriteString(" IN (")
-	for i, c := range u.InColumns {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		writePivotItem(buf, c)
-	}
-	buf.WriteString("))")
+	writeUnpivot(buf, u, identityKeyword)
 }

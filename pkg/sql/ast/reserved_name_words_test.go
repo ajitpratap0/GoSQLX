@@ -44,7 +44,8 @@ func TestReservedNameWordsRejectedBare(t *testing.T) {
 		{"from_table", "SELECT a FROM %s", true},
 		{"cte_column", "WITH c (%s) AS (SELECT 1) SELECT * FROM c", false},
 		{"view_column", "CREATE VIEW v (%s) AS SELECT 1", false},
-		{"cte_name", "WITH %s AS (SELECT 1) SELECT * FROM x", false},
+		// A CTE name takes the same words as a table name.
+		{"cte_name", "WITH %s AS (SELECT 1) SELECT * FROM x", true},
 	}
 	for word, inAll := range words {
 		w := strings.ToLower(word)

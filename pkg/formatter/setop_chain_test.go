@@ -29,8 +29,9 @@ import (
 // render(Left) + sep + op + sep + render(Right), recursing on both sides with
 // operands rendered without ";", and a single trailing ";" after the whole
 // top-level set operation when AddSemicolon is set (#602). An operand is
-// wrapped in parentheses when its Parenthesized flag is set or, for Right,
-// when it is a non-nil *SetOperation (#612).
+// wrapped in parentheses when its Parenthesized flag is set or when it is a
+// non-nil *SetOperation that standard precedence would not group as the
+// tree does (#612); see ast.SetOperandNeedsParens.
 func setOpReference(s *ast.SetOperation, opts ast.FormatOptions) string {
 	if s == nil {
 		return ""
@@ -60,8 +61,9 @@ func setOpReferenceBody(s *ast.SetOperation, opts ast.FormatOptions) string {
 		}
 		return "(" + render(st) + ")"
 	}
-	rightSetOp, ok := s.Right.(*ast.SetOperation)
-	rightParens := s.RightParenthesized || (ok && rightSetOp != nil)
+	// A right set operation is parenthesized unless standard precedence
+	// already groups it (A UNION B INTERSECT C).
+	rightParens := ast.SetOperandNeedsParens(s, true, opts.Dialect)
 	sep := " "
 	if opts.NewlinePerClause {
 		sep = "\n"
@@ -78,7 +80,7 @@ func setOpReferenceBody(s *ast.SetOperation, opts ast.FormatOptions) string {
 	}
 	var sb strings.Builder
 	if s.Left != nil {
-		sb.WriteString(operand(s.Left, s.LeftParenthesized))
+		sb.WriteString(operand(s.Left, ast.SetOperandNeedsParens(s, false, opts.Dialect)))
 	}
 	sb.WriteString(sep + op + sep)
 	if s.Right != nil {

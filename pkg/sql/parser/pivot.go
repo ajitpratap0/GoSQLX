@@ -132,15 +132,22 @@ func (p *Parser) isUnpivotKeyword() bool {
 func (p *Parser) parsePivotClause() (*ast.PivotClause, error) {
 	pos := p.currentLocation()
 	p.advance() // consume PIVOT
+	clause := &ast.PivotClause{Pos: pos}
+
+	// Oracle PIVOT XML
+	if p.IsOracle() && p.isTokenMatch("XML") && p.peekToken().Token.Type == models.TokenTypeLParen {
+		clause.XML = true
+		p.advance() // consume XML
+	}
 
 	if !p.isType(models.TokenTypeLParen) {
 		return nil, p.expectedError("( after PIVOT")
 	}
 	p.advance() // consume (
 
-	// Parse aggregate function expression (e.g. SUM(sales))
-	aggFunc, err := p.parseExpression()
-	if err != nil {
+	// Parse the aggregate function expressions (e.g. SUM(sales)), each with
+	// an optional alias (Oracle: SUM(c) AS total, COUNT(*) AS cnt).
+	if err := p.parsePivotAggregates(clause); err != nil {
 		return nil, err
 	}
 
@@ -168,6 +175,13 @@ func (p *Parser) parsePivotClause() (*ast.PivotClause, error) {
 		return nil, p.expectedError("( after IN in PIVOT")
 	}
 	p.advance() // consume (
+
+	clause.PivotColumn = pivotCol
+	if handled, err := p.parsePivotInSpecial(clause); err != nil {
+		return nil, err
+	} else if handled {
+		return clause, nil
+	}
 
 	// Parse IN values — identifiers, numbers, or string literals, each with
 	// an optional AS alias (Oracle syntax: 'North' AS north).
@@ -205,12 +219,8 @@ func (p *Parser) parsePivotClause() (*ast.PivotClause, error) {
 	}
 	p.advance() // close PIVOT )
 
-	return &ast.PivotClause{
-		AggregateFunction: aggFunc,
-		PivotColumn:       pivotCol,
-		InValues:          inValues,
-		Pos:               pos,
-	}, nil
+	clause.InValues = inValues
+	return clause, nil
 }
 
 // parseUnpivotClause parses UNPIVOT (value_col FOR name_col IN (columns)).
@@ -219,17 +229,36 @@ func (p *Parser) parseUnpivotClause() (*ast.UnpivotClause, error) {
 	pos := p.currentLocation()
 	p.advance() // consume UNPIVOT
 
+	// Oracle / Snowflake: UNPIVOT {INCLUDE | EXCLUDE} NULLS
+	nullHandling := ""
+	if (p.isTokenMatch("INCLUDE") || p.isTokenMatch("EXCLUDE")) &&
+		equalsUpper(p.peekToken().Token.Value, "NULLS") {
+		nullHandling = strings.ToUpper(p.currentToken.Token.Value)
+		p.advance() // consume INCLUDE / EXCLUDE
+		p.advance() // consume NULLS
+	}
+
 	if !p.isType(models.TokenTypeLParen) {
 		return nil, p.expectedError("( after UNPIVOT")
 	}
 	p.advance() // consume (
 
-	// Parse value column name
-	if !p.isIdentifier() {
-		return nil, p.expectedError("value column name in UNPIVOT")
+	// Parse value column name, or an Oracle column list: (units, revenue)
+	var valueCols []string
+	if p.IsOracle() && p.isType(models.TokenTypeLParen) {
+		cols, err := p.parseParenthesizedWordList("value column name in UNPIVOT")
+		if err != nil {
+			return nil, err
+		}
+		valueCols = cols
+	} else {
+		if !p.isIdentifier() {
+			return nil, p.expectedError("value column name in UNPIVOT")
+		}
+		valueCols = []string{p.currentToken.Token.Value}
+		p.advance()
 	}
-	valueCol := p.currentToken.Token.Value
-	p.advance()
+	valueCol := valueCols[0]
 
 	// Expect FOR keyword
 	if !p.isType(models.TokenTypeFor) {
@@ -260,11 +289,21 @@ func (p *Parser) parseUnpivotClause() (*ast.UnpivotClause, error) {
 	// north_sales AS 'North').
 	var cols []string
 	for !p.isType(models.TokenTypeRParen) && !p.isType(models.TokenTypeEOF) {
-		if !p.isIdentifier() {
-			return nil, p.expectedError("column name in UNPIVOT IN list")
+		var col string
+		if len(valueCols) > 1 && p.isType(models.TokenTypeLParen) {
+			// Multi-column UNPIVOT entry: (u1, r1) AS 'P1'
+			tuple, err := p.parsePivotTuple()
+			if err != nil {
+				return nil, err
+			}
+			col = tuple
+		} else {
+			if !p.isIdentifier() {
+				return nil, p.expectedError("column name in UNPIVOT IN list")
+			}
+			col = renderQuotedIdent(p.currentToken.Token)
+			p.advance()
 		}
-		col := renderQuotedIdent(p.currentToken.Token)
-		p.advance()
 		// Optional alias: AS <string_literal_or_identifier>
 		if p.isType(models.TokenTypeAs) {
 			p.advance() // consume AS
@@ -292,12 +331,17 @@ func (p *Parser) parseUnpivotClause() (*ast.UnpivotClause, error) {
 	}
 	p.advance() // close UNPIVOT )
 
-	return &ast.UnpivotClause{
-		ValueColumn: valueCol,
-		NameColumn:  nameCol,
-		InColumns:   cols,
-		Pos:         pos,
-	}, nil
+	clause := &ast.UnpivotClause{
+		ValueColumn:  valueCol,
+		NameColumn:   nameCol,
+		InColumns:    cols,
+		Pos:          pos,
+		NullHandling: nullHandling,
+	}
+	if len(valueCols) > 1 {
+		clause.ValueColumns = valueCols
+	}
+	return clause, nil
 }
 
 // supportsTableFunction reports whether the current dialect allows

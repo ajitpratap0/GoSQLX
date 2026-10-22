@@ -598,7 +598,7 @@ func renderSetOperation(s *ast.SetOperation, opts ast.FormatOptions) string {
 	spine := []*ast.SetOperation{s}
 	for {
 		last := spine[len(spine)-1]
-		if last.LeftParenthesized {
+		if ast.SetOperandNeedsParens(last, false, opts.Dialect) {
 			// A parenthesized left operand is rendered whole, in parentheses.
 			break
 		}
@@ -610,7 +610,7 @@ func renderSetOperation(s *ast.SetOperation, opts ast.FormatOptions) string {
 	}
 
 	if innermost := spine[len(spine)-1]; innermost.Left != nil {
-		if innermost.LeftParenthesized {
+		if ast.SetOperandNeedsParens(innermost, false, opts.Dialect) {
 			sb.WriteString("(")
 			sb.WriteString(FormatStatement(innermost.Left, inner))
 			sb.WriteString(")")
@@ -624,17 +624,14 @@ func renderSetOperation(s *ast.SetOperation, opts ast.FormatOptions) string {
 		// The operator is UNION, EXCEPT or INTERSECT; anything else can only
 		// come from a hand-built AST and is written as UNION followed by the
 		// double-quoted text, which fails to parse (see ast.SetOperatorSQL).
-		op, known := ast.SetOperatorSQL(level.Operator)
+		op, known := ast.SetOperationKeyword(level, opts.Dialect)
 		if known {
 			op = f.kw(op)
-		}
-		if level.All {
-			op += " " + f.kw("ALL")
 		}
 		sb.WriteString(op)
 		sb.WriteString(f.clauseSep())
 		if level.Right != nil {
-			if rightSetOp, ok := level.Right.(*ast.SetOperation); level.RightParenthesized || (ok && rightSetOp != nil) {
+			if ast.SetOperandNeedsParens(level, true, opts.Dialect) {
 				sb.WriteString("(")
 				sb.WriteString(FormatStatement(level.Right, inner))
 				sb.WriteString(")")
@@ -998,14 +995,7 @@ func renderWith(w *ast.WithClause, f *nodeFormatter) string {
 	}
 	ctes := make([]string, len(w.CTEs))
 	for i, cte := range w.CTEs {
-		s := ast.QuoteName(cte.Name) + " "
-		if len(cte.Columns) > 0 {
-			s += "(" + quoteNames(cte.Columns) + ") "
-		}
-		s += f.kw("AS") + " ("
-		s += FormatStatement(cte.Statement, nestedOpts(f.opts))
-		s += ")"
-		ctes[i] = s
+		ctes[i] = cteSQL(cte, f)
 	}
 	sb.WriteString(strings.Join(ctes, ", "))
 	return sb.String()
@@ -1098,23 +1088,28 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		sb.WriteString("(")
 		sb.WriteString(stmtSQL(t.SetSubquery))
 		sb.WriteString(")")
+	} else if t.Values != nil {
+		sb.WriteString("(")
+		sb.WriteString(f.kw("VALUES"))
+		sb.WriteString(strings.TrimPrefix(t.Values.SQL(), "VALUES"))
+		sb.WriteString(")")
 	} else {
+		if t.Only {
+			sb.WriteString(f.kw("ONLY"))
+			sb.WriteString(" ")
+		}
 		sb.WriteString(ast.QuoteQualifiedName(t.Name))
+		sb.WriteString(ast.TableRefNameSuffixSQL(t))
 	}
-	if t.Alias != "" && t.Pivot == nil && t.Unpivot == nil {
+	sb.WriteString(ast.TableRefPreAliasSQL(t, f.kw))
+	if t.Alias != "" && !ast.TableAliasFollowsClause(t) {
 		sb.WriteString(" ")
 		sb.WriteString(ast.QuoteTableAlias(t.Alias))
-		if t.ColumnAliases != nil && len(t.ColumnAliases.Names) > 0 && t.TableFunc != nil {
-			sb.WriteString("(")
-			for i, c := range t.ColumnAliases.Names {
-				if i > 0 {
-					sb.WriteString(", ")
-				}
-				sb.WriteString(ast.QuoteColumnName(c))
-			}
-			sb.WriteString(")")
-		}
+		sb.WriteString(ast.TableColumnAliasesSQL(t))
+	} else {
+		sb.WriteString(ast.TableRefSourceAliasSQL(t))
 	}
+	sb.WriteString(ast.TableRefPostAliasSQL(t, f.kw))
 	// SQL Server table hints follow the alias and precede PIVOT/UNPIVOT (#604).
 	if len(t.TableHints) > 0 {
 		sb.WriteString(" ")
@@ -1124,67 +1119,25 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
-			// Bare-word hints honor the keyword case policy; anything else
+			// Hint keywords honor the keyword case policy; anything else
 			// (only possible in a hand-built AST) is double-quoted.
-			if q := ast.QuoteTableHint(h); q != h {
-				sb.WriteString(q)
-			} else {
-				sb.WriteString(f.kw(h))
-			}
+			sb.WriteString(ast.TableHintSQL(h, f.kw))
 		}
 		sb.WriteString(")")
 	}
-	if t.Pivot != nil {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("PIVOT"))
-		sb.WriteString(" (")
-		sb.WriteString(exprSQL(t.Pivot.AggregateFunction))
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("FOR"))
-		sb.WriteString(" ")
-		sb.WriteString(ast.QuotePivotColumn(t.Pivot.PivotColumn))
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("IN"))
-		sb.WriteString(" (")
-		writePivotItems(&sb, t.Pivot.InValues)
-		sb.WriteString("))")
-	}
-	if t.Unpivot != nil {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("UNPIVOT"))
-		sb.WriteString(" (")
-		sb.WriteString(ast.QuotePivotColumn(t.Unpivot.ValueColumn))
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("FOR"))
-		sb.WriteString(" ")
-		sb.WriteString(ast.QuotePivotColumn(t.Unpivot.NameColumn))
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("IN"))
-		sb.WriteString(" (")
-		writePivotItems(&sb, t.Unpivot.InColumns)
-		sb.WriteString("))")
-	}
-	if t.Alias != "" && (t.Pivot != nil || t.Unpivot != nil) {
+	sb.WriteString(ast.PivotSQL(t.Pivot, f.kw))
+	sb.WriteString(ast.UnpivotSQL(t.Unpivot, f.kw))
+	sb.WriteString(ast.MatchRecognizeSQL(t.MatchRecognize, f.kw))
+	if t.Alias != "" && ast.TableAliasFollowsClause(t) {
 		// PIVOT/UNPIVOT aliases conventionally use AS to avoid ambiguity
 		// with the closing paren of the clause.
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("AS"))
 		sb.WriteString(" ")
 		sb.WriteString(ast.QuoteTableAlias(t.Alias))
+		sb.WriteString(ast.TableColumnAliasesSQL(t))
 	}
 	return sb.String()
-}
-
-// writePivotItems writes PIVOT IN values or UNPIVOT IN columns separated by
-// ", ", each in its stored source form when well formed and double-quoted
-// otherwise (see ast.QuotePivotItem).
-func writePivotItems(sb *strings.Builder, items []string) {
-	for i, item := range items {
-		if i > 0 {
-			sb.WriteString(", ")
-		}
-		sb.WriteString(ast.QuotePivotItem(item))
-	}
 }
 
 // sampleSQL renders a ClickHouse SAMPLE clause.

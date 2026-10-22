@@ -23,6 +23,7 @@
 package parser
 
 import (
+	"github.com/ajitpratap0/GoSQLX/internal/batch"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
@@ -32,36 +33,25 @@ import (
 // count (GO 5). It returns the index of the first token after the
 // separator. Tokens without source positions never form a separator.
 func (p *Parser) batchSeparatorEnd(i int) (int, bool) {
-	if !p.IsSQLServer() || p.utilityWord(i) != "GO" {
+	if !p.IsSQLServer() {
 		return 0, false
 	}
-	tok := &p.tokens[i]
-	line := tok.Start.Line
-	if line == 0 || (i > 0 && p.tokens[i-1].End.Line >= line) {
-		return 0, false
-	}
-	j := i + 1
-	if j < len(p.tokens) && p.tokens[j].Token.Type == models.TokenTypeNumber &&
-		p.tokens[j].Start.Line == line {
-		j++
-	}
-	if j < len(p.tokens) && p.tokens[j].Token.Type != models.TokenTypeEOF &&
-		p.tokens[j].Start.Line <= line {
-		return 0, false
-	}
-	return j, true
+	return batch.End(p.tokens, i)
 }
 
-// skipBatchSeparator consumes a GO line at the current position and marks
-// the following token as a statement boundary. It reports whether it did.
-func (p *Parser) skipBatchSeparator() bool {
+// parseBatchSeparator retains a GO line and marks the next statement boundary.
+func (p *Parser) parseBatchSeparator() (*ast.BatchSeparator, bool) {
 	next, ok := p.batchSeparatorEnd(p.currentPos)
 	if !ok {
-		return false
+		return nil, false
+	}
+	sep := &ast.BatchSeparator{Pos: p.currentLocation()}
+	if next > p.currentPos+1 {
+		sep.RepeatCount, _ = batch.Count(p.tokens[p.currentPos+1].Token.Value) // validated by batch.End
 	}
 	p.seek(next)
 	p.markImplicitEnd(next)
-	return true
+	return sep, true
 }
 
 // noteStatementEnd is called by the statement loops after a statement was

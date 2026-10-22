@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/ajitpratap0/GoSQLX/cmd/gosqlx/internal/config"
+	"github.com/ajitpratap0/GoSQLX/internal/batch"
 	pkgformatter "github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -263,7 +264,7 @@ func (f *Formatter) formatSQLText(sql string) (string, error) {
 		ast.ReleaseAST(parsedAST)
 	}()
 
-	if err := checkFormattable(parsedAST, tokens); err != nil {
+	if err := checkFormattable(parsedAST, tokens, f.Opts.Dialect); err != nil {
 		return "", err
 	}
 
@@ -748,14 +749,26 @@ func FormatterOptionsFromConfig(cfg *config.Config, flagsChanged map[string]bool
 // UnsupportedStatement is rendered as a comment. Both are refused by type. As a general guard, a parse
 // with more statements than semicolon-separated segments in the input means
 // the parser split a statement, which re-parsing the output cannot detect.
-func checkFormattable(tree *ast.AST, tokens []models.TokenWithSpan) error {
+func checkFormattable(tree *ast.AST, tokens []models.TokenWithSpan, dialect ...string) error {
+	withBatches := false
 	for _, stmt := range tree.Statements {
 		switch stmt.(type) {
+		case *ast.BatchSeparator:
+			withBatches = true
 		case *ast.DescribeStatement, *ast.UnsupportedStatement:
 			return fmt.Errorf("unsupported statement type: %T (input left unchanged)", stmt)
 		}
 	}
-	if got, segs := len(tree.Statements), statementSegments(tokens); got > segs {
+	// T-SQL intentionally accepts statements without semicolons. Its parser
+	// validates those boundaries; a semicolon count cannot bound its AST size.
+	// The caller still verifies each rendered statement and the reparse count.
+	if len(dialect) > 0 {
+		switch strings.ToLower(dialect[0]) {
+		case "sqlserver", "mssql", "tsql":
+			return nil
+		}
+	}
+	if got, segs := len(tree.Statements), statementSegments(tokens, withBatches); got > segs {
 		return fmt.Errorf("input parses as %d statements but has %d semicolon-separated statements (input left unchanged)", got, segs)
 	}
 	return nil
@@ -763,10 +776,19 @@ func checkFormattable(tree *ast.AST, tokens []models.TokenWithSpan) error {
 
 // statementSegments counts the non-empty runs of tokens between semicolons,
 // ignoring EOF, i.e. the most statements the input can legitimately hold.
-func statementSegments(tokens []models.TokenWithSpan) int {
+func statementSegments(tokens []models.TokenWithSpan, withBatches ...bool) int {
 	segs := 0
 	inSeg := false
-	for _, tok := range tokens {
+	for i := 0; i < len(tokens); i++ {
+		if len(withBatches) > 0 && withBatches[0] {
+			if next, ok := batch.End(tokens, i); ok {
+				segs++ // a retained BatchSeparator is itself an AST statement
+				inSeg = false
+				i = next - 1
+				continue
+			}
+		}
+		tok := tokens[i]
 		switch tok.Token.Type {
 		case models.TokenTypeSemicolon:
 			inSeg = false

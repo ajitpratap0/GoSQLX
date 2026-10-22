@@ -100,6 +100,11 @@ func (p *Parser) isStatementStartingKeyword() bool {
 // either past a semicolon or to a statement-starting keyword.
 func (p *Parser) synchronize() {
 	for p.currentPos < len(p.tokens) && !p.isType(models.TokenTypeEOF) {
+		// Leave GO for the statement loop so recovery preserves batch scope
+		// even when the statement immediately before it was malformed.
+		if _, ok := p.batchSeparatorEnd(p.currentPos); ok {
+			return
+		}
 		// If we hit a semicolon, consume it and stop
 		if p.isType(models.TokenTypeSemicolon) {
 			p.advance()
@@ -195,7 +200,8 @@ func (p *Parser) parseWithRecovery(tokens []models.TokenWithSpan) ([]ast.Stateme
 			p.advance()
 			continue
 		}
-		if p.skipBatchSeparator() {
+		if separator, ok := p.parseBatchSeparator(); ok {
+			statements = append(statements, separator)
 			continue
 		}
 

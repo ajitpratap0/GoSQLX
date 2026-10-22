@@ -73,9 +73,9 @@ func TestParser_ScriptsWithoutSemicolons(t *testing.T) {
 		{"begin tran inside script", keywords.DialectSQLServer,
 			"SELECT 1\nBEGIN TRAN\nSELECT 2\nCOMMIT", "[Select Transaction Select Transaction]"},
 		{"go separates batches", keywords.DialectSQLServer,
-			"SELECT 1\nGO\nSELECT 2\nGO 3\nPRINT 'x'", "[Select Select Utility(PRINT)]"},
+			"SELECT 1\nGO\nSELECT 2\nGO 3\nPRINT 'x'", "[Select BatchSeparator Select BatchSeparator Utility(PRINT)]"},
 		{"go after a utility statement", keywords.DialectSQLServer,
-			"USE db\nGO\nSET NOCOUNT ON\nGO", "[Use Set]"},
+			"USE db\nGO\nSET NOCOUNT ON\nGO", "[Use BatchSeparator Set BatchSeparator]"},
 		{"deny then select", keywords.DialectSQLServer,
 			"DENY DELETE ON t TO r\nSELECT 1", "[Utility(DENY) Select]"},
 		{"grant ends after its principal", keywords.DialectSQLServer,
@@ -265,7 +265,7 @@ func TestParser_RoutineBodiesAreOneStatement(t *testing.T) {
 			"[Utility(CREATE PROCEDURE)]"},
 		{"tsql procedure runs to go", keywords.DialectSQLServer,
 			"CREATE PROCEDURE p AS SELECT 1\nSELECT 2\nGO\nEXEC p",
-			"[Utility(CREATE PROCEDURE) Utility(EXEC)]"},
+			"[Utility(CREATE PROCEDURE) BatchSeparator Utility(EXEC)]"},
 		{"oracle anonymous block", keywords.DialectOracle,
 			"BEGIN NULL; END;\nSELECT 1 FROM dual;", "[Utility(BEGIN) Select]"},
 		{"oracle block with commit", keywords.DialectOracle,
@@ -306,7 +306,7 @@ func TestParser_RoutineBodiesAreOneStatement(t *testing.T) {
 // statement loop's handling of GO lines and implicit statement ends.
 func TestParser_ScriptsWithoutSemicolonsOtherEntryPoints(t *testing.T) {
 	const sql = "SET NOCOUNT ON\nSELECT 1\nGO\nUPDATE t SET a = 1\nCOMMIT"
-	const want = "[Set Select Update Transaction]"
+	const want = "[Set Select BatchSeparator Update Transaction]"
 	tkz, err := tokenizer.NewWithDialect(keywords.DialectSQLServer)
 	if err != nil {
 		t.Fatalf("tokenizer: %v", err)
@@ -335,6 +335,31 @@ func TestParser_ScriptsWithoutSemicolonsOtherEntryPoints(t *testing.T) {
 	}
 	if got := fmt.Sprint(stmtShapes(&ast.AST{Statements: stmts})); got != want {
 		t.Errorf("recovery parse = %s, want %s", got, want)
+	}
+}
+
+func TestParser_RecoveryPreservesBatchBoundaryAfterError(t *testing.T) {
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+	tkz.SetDialect(keywords.DialectSQLServer)
+	tokens, err := tkz.TokenizeString("SELECT FROM\nGO 2\nSELECT 2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := NewParser(WithDialect("sqlserver"))
+	defer p.Release()
+	stmts, errs := p.ParseWithRecoveryFromModelTokens(tokens)
+	tree := &ast.AST{Statements: stmts}
+	defer ast.ReleaseAST(tree)
+	if len(errs) == 0 {
+		t.Fatal("expected error for invalid first batch")
+	}
+	if got := fmt.Sprint(stmtShapes(tree)); got != "[BatchSeparator Select]" {
+		t.Fatalf("recovery lost batch boundary: %s", got)
+	}
+	sep, ok := stmts[0].(*ast.BatchSeparator)
+	if !ok || sep.RepeatCount != 2 {
+		t.Fatalf("recovery lost GO repeat count: %#v", stmts[0])
 	}
 }
 

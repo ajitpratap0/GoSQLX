@@ -110,7 +110,7 @@ func (f *SQLFormatter) formatStatements(astObj *ast.AST) ([]string, error) {
 
 func (f *SQLFormatter) layout() pkgformatter.CommentLayout {
 	if f.compact {
-		return pkgformatter.CommentLayout{Terminator: ";", Gap: " "}
+		return pkgformatter.CommentLayout{Terminator: ";", Gap: " ", Dialect: f.style.Dialect}
 	}
-	return pkgformatter.CommentLayout{Terminator: ";", Gap: "\n\n"}
+	return pkgformatter.CommentLayout{Terminator: ";", Gap: "\n\n", Dialect: f.style.Dialect}
 }

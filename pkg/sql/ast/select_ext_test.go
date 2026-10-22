@@ -207,13 +207,18 @@ func TestSelectExt_ReleaseClearsFields(t *testing.T) {
 			ForOutput:       &ForOutputClause{Kind: "JSON"},
 			QueryHints:      []QueryHint{{Name: "RECOMPILE"}},
 			OutputFormat:    "JSON",
+			RowsExamined:    &Identifier{Name: "examined"},
 		},
 		Limit: &n,
 		Fetch: &FetchClause{FetchExpr: &Identifier{Name: "f"}},
 		For:   &ForClause{Wait: &Identifier{Name: "w"}},
 		Joins: []JoinClause{{Global: true, Strictness: "ANY", Hint: "HASH", MatchCondition: &Identifier{Name: "m"}, Comma: true}},
 	}
+	extras := s.Extras
 	releaseSelectStatement(s, releaseDrawn)
+	if !reflect.ValueOf(extras).Elem().IsZero() {
+		t.Errorf("released extras retain state: %#v", extras)
+	}
 	rv := reflect.ValueOf(s).Elem()
 	rt := rv.Type()
 	for i := 0; i < rv.NumField(); i++ {

@@ -70,15 +70,22 @@ func (a AST) SQL() string {
 	buf := getBuf()
 	defer putBuf(buf)
 	first := true
+	previousBatch := false
 	for _, stmt := range a.Statements {
 		if _, ok := stmt.(interface{ SQL() string }); !ok {
 			continue
 		}
+		_, isBatch := stmt.(*BatchSeparator)
 		if !first {
-			buf.WriteString(";\n")
+			if previousBatch || isBatch {
+				buf.WriteByte('\n')
+			} else {
+				buf.WriteString(";\n")
+			}
 		}
 		first = false
 		writeStmt(buf, stmt)
+		previousBatch = isBatch
 	}
 	return buf.String()
 }

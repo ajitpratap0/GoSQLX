@@ -37,7 +37,7 @@ var corpusFormatKnownGaps = map[string]string{
 func corpusDialect(rel string) string {
 	p := "/" + rel
 	switch {
-	case strings.Contains(p, "/mssql/"):
+	case strings.Contains(p, "/mssql/"), strings.Contains(p, "/sqlserver/"):
 		return "sqlserver"
 	case strings.Contains(p, "/mysql/"):
 		return "mysql"

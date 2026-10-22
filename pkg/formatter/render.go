@@ -83,12 +83,15 @@ func FormatAST(a *ast.AST, opts ast.FormatOptions) string {
 		return ""
 	}
 	parts := make([]string, 0, len(a.Statements))
+	hasBatch := false
 	for _, stmt := range a.Statements {
 		part := FormatStatement(stmt, opts)
 		// Renderers that keep a statement as written (UtilityStatement and
 		// the stmtSQL fallback) do not add the ";" themselves; without it the
 		// next statement would be read back as part of their text.
-		if opts.AddSemicolon && part != "" && !strings.HasSuffix(part, ";") {
+		_, isBatch := stmt.(*ast.BatchSeparator)
+		hasBatch = hasBatch || isBatch
+		if opts.AddSemicolon && !isBatch && part != "" && !strings.HasSuffix(part, ";") {
 			part += ";"
 		}
 		parts = append(parts, part)
@@ -98,7 +101,25 @@ func FormatAST(a *ast.AST, opts ast.FormatOptions) string {
 		// Each statement now ends with ";"
 		sep = "\n"
 	}
-	result := strings.Join(parts, sep)
+	var result string
+	if !hasBatch {
+		result = strings.Join(parts, sep)
+	} else {
+		var joined strings.Builder
+		for i, part := range parts {
+			if i > 0 {
+				_, prevBatch := a.Statements[i-1].(*ast.BatchSeparator)
+				_, curBatch := a.Statements[i].(*ast.BatchSeparator)
+				if prevBatch || curBatch {
+					joined.WriteByte('\n')
+				} else {
+					joined.WriteString(sep)
+				}
+			}
+			joined.WriteString(part)
+		}
+		result = joined.String()
+	}
 
 	// Emit preserved comments
 	if len(a.Comments) > 0 {

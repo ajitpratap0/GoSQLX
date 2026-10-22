@@ -443,24 +443,34 @@ func (p *Parser) writeRawLeaf(buf *strings.Builder, tok models.Token, afterWord 
 
 	// Insert a space when two adjacent leaf tokens both look like identifiers
 	// or numbers — this preserves "name Type" pairs in named tuple elements.
-	if afterWord {
+	if afterWord && !p.rawLiteralAdjacentToCharset(tok) {
 		buf.WriteByte(' ')
 	}
 
 	switch {
-	case tok.Type == models.TokenTypeString || tok.Type == models.TokenTypeSingleQuotedString:
-		// Double embedded quotes so 'it''s' is written back as one literal.
+	case tok.Quote == 'q' && tok.Type == models.TokenTypeSingleQuotedString:
+		// A normal doubled-quote literal has the same value and also passes
+		// the raw clause's conservative safety validation.
 		writeDelimitedToken(buf, val, '\'')
-	case tok.Type == models.TokenTypeDoubleQuotedString:
-		// A "quoted" word is an identifier (or, in MySQL, a string):
-		// keep its delimiters so neither changes meaning.
-		writeDelimitedToken(buf, val, '"')
-	case tok.Type == models.TokenTypeIdentifier && (tok.Quote == '"' || tok.Quote == '`' || tok.Quote == '['):
-		writeDelimitedToken(buf, val, tok.Quote)
+		return nil
+	case isQuotedTokenType(tok):
+		p.writeTokenSource(buf, &p.currentToken)
 	default:
 		buf.WriteString(val)
 	}
 	return nil
+}
+
+// A MySQL charset introducer forms one lexical unit with the following
+// string when the two tokens touched in the source (_utf8mb4'text').
+func (p *Parser) rawLiteralAdjacentToCharset(tok models.Token) bool {
+	if p.currentPos == 0 || !p.dialectAllows(dialect.MySQL, dialect.MariaDB) || !isQuotedTokenType(tok) {
+		return false
+	}
+	prev := p.tokens[p.currentPos-1]
+	return prev.End.Line != 0 && prev.End == p.currentToken.Start &&
+		prev.Token.Type == models.TokenTypeIdentifier && prev.Token.Quote == 0 &&
+		strings.HasPrefix(prev.Token.Value, "_")
 }
 
 // writeDelimitedToken writes val delimited with quote (' " ` or [), doubling
@@ -479,7 +489,11 @@ func writeDelimitedToken(buf *strings.Builder, val string, quote rune) {
 // identifier, whose empty value is still a token.
 func isQuotedTokenType(tok models.Token) bool {
 	switch tok.Type {
-	case models.TokenTypeString, models.TokenTypeSingleQuotedString, models.TokenTypeDoubleQuotedString:
+	case models.TokenTypeString, models.TokenTypeSingleQuotedString, models.TokenTypeDoubleQuotedString,
+		models.TokenTypeNationalStringLiteral, models.TokenTypeEscapedStringLiteral,
+		models.TokenTypeUnicodeStringLiteral, models.TokenTypeHexStringLiteral,
+		models.TokenTypeByteStringLiteral, models.TokenTypeDollarQuotedString,
+		models.TokenTypeTripleSingleQuotedString, models.TokenTypeTripleDoubleQuotedString:
 		return true
 	}
 	return tok.Quote != 0

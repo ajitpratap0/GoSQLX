@@ -27,6 +27,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
@@ -125,6 +126,7 @@ func check(path string, i int, stmt string, d keywords.SQLDialect) (r result) {
 // literals) that are missing from the formatted output — a cheap detector for
 // clauses the formatter silently drops even though its output reparses.
 func droppedWords(in, out string) []string {
+	in = canonicalSynonyms(in)
 	have := map[string]bool{}
 	for _, w := range sqlWords(out) {
 		have[w] = true
@@ -138,6 +140,40 @@ func droppedWords(in, out string) []string {
 		}
 	}
 	return lost
+}
+
+// These dialect synonyms are written in their canonical form by the formatter.
+// Keep ISNULL(...) functions and UNION ALL distinct from the postfix and
+// SELECT quantifier spellings.
+var synonyms = regexp.MustCompile(`(?i)\b(SELECT\s+ALL|SELECT\s+UNIQUE|DISTINCTROW|ISNULL|NOTNULL)\b`)
+
+func canonicalSynonyms(s string) string {
+	var sb strings.Builder
+	last := 0
+	for _, m := range synonyms.FindAllStringIndex(s, -1) {
+		word := strings.ToUpper(s[m[0]:m[1]])
+		rest := strings.TrimLeft(s[m[1]:], " \t\r\n")
+		var repl string
+		switch {
+		case strings.HasPrefix(word, "SELECT") && strings.HasSuffix(word, "UNIQUE"):
+			repl = "SELECT DISTINCT"
+		case strings.HasPrefix(word, "SELECT"):
+			repl = "SELECT"
+		case word == "DISTINCTROW":
+			repl = "DISTINCT"
+		case strings.HasPrefix(rest, "("): // the ISNULL(...) function
+			continue
+		case word == "ISNULL":
+			repl = "IS NULL"
+		default:
+			repl = "IS NOT NULL"
+		}
+		sb.WriteString(s[last:m[0]])
+		sb.WriteString(repl)
+		last = m[1]
+	}
+	sb.WriteString(s[last:])
+	return sb.String()
 }
 
 // ignorableWords are noise words the formatter may legitimately add or drop.
@@ -160,6 +196,8 @@ func sqlWords(s string) []string {
 				return words
 			}
 			i += end + 4
+		case c == '$' && dollarQuoteEnd(s, i) > i:
+			i = dollarQuoteEnd(s, i)
 		case c == '\'':
 			for i++; i < len(s); i++ {
 				if s[i] == '\\' {
@@ -193,6 +231,24 @@ func sqlWords(s string) []string {
 		}
 	}
 	return words
+}
+
+// dollarQuoteEnd returns the offset just past a complete dollar-quoted
+// string ($$...$$ or $tag$...$tag$), or i when none starts at s[i].
+func dollarQuoteEnd(s string, i int) int {
+	j := i + 1
+	for j < len(s) && (s[j] == '_' || s[j] >= '0' && s[j] <= '9' || s[j] >= 'A' && s[j] <= 'Z' || s[j] >= 'a' && s[j] <= 'z') {
+		j++
+	}
+	if j >= len(s) || s[j] != '$' || (j > i+1 && s[i+1] >= '0' && s[i+1] <= '9') {
+		return i
+	}
+	tag := s[i : j+1]
+	end := strings.Index(s[j+1:], tag)
+	if end < 0 {
+		return i
+	}
+	return j + 1 + end + len(tag)
 }
 
 func stripComments(s string) string {

@@ -688,7 +688,7 @@ func formatSQL(sql string, options FormatOptions, dialect keywords.SQLDialect) (
 	for i, stmt := range parsedAST.Statements {
 		stmts[i] = formatter.FormatStatement(stmt, astOpts)
 	}
-	layout := formatter.CommentLayout{Terminator: ";", Gap: "\n"}
+	layout := formatter.CommentLayout{Terminator: ";", Gap: "\n", Dialect: string(dialect)}
 	if options.AddSemicolon {
 		layout.Terminator = "" // each rendered statement already ends with ';'
 	}

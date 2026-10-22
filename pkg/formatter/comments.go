@@ -20,7 +20,10 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ajitpratap0/GoSQLX/internal/batch"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
 
 // ErrUnplaceableComment is returned by JoinWithComments for a comment that
@@ -32,6 +35,8 @@ var ErrUnplaceableComment = errors.New("formatter: cannot preserve comment")
 
 // CommentLayout describes how JoinWithComments separates statements.
 type CommentLayout struct {
+	// Dialect selects lexical rules for rendered keywords and batch boundaries.
+	Dialect string
 	// Terminator is written after every statement except the last. Use ";"
 	// when the rendered statements carry no terminator, "" when they already
 	// end with one.
@@ -77,7 +82,7 @@ func JoinWithComments(stmts []string, tokens []models.TokenWithSpan, comments []
 	if len(comments) == 0 {
 		return joinPlain(stmts, layout), nil
 	}
-	items := splitItems(tokens)
+	items := splitItems(tokens, layout.Dialect)
 	var nStmt int
 	for _, it := range items {
 		if !it.empty {
@@ -135,6 +140,7 @@ func JoinWithComments(stmts []string, tokens []models.TokenWithSpan, comments []
 
 	var sb strings.Builder
 	prevEndsInLine := false // the text written so far ends in a line comment
+	prevBatch := false      // last emitted item, ignoring empty semicolons
 	si := 0                 // index into stmts
 	for i, it := range items {
 		a := att[i]
@@ -164,12 +170,12 @@ func JoinWithComments(stmts []string, tokens []models.TokenWithSpan, comments []
 			si++
 			if len(a.hints) > 0 {
 				var err error
-				if stmt, err = insertHints(stmt, a.hints); err != nil {
+				if stmt, err = insertHints(stmt, a.hints, layout.Dialect); err != nil {
 					return "", err
 				}
 			}
 			chunk.WriteString(stmt)
-			if i < len(items)-1 {
+			if i < len(items)-1 && !it.batch {
 				chunk.WriteString(layout.Terminator)
 			}
 		}
@@ -182,7 +188,9 @@ func JoinWithComments(stmts []string, tokens []models.TokenWithSpan, comments []
 		}
 		if sb.Len() > 0 {
 			gap := layout.Gap
-			if (prevEndsInLine || len(a.leading) > 0) && !strings.Contains(gap, "\n") {
+			if it.batch || prevBatch {
+				gap = "\n"
+			} else if (prevEndsInLine || len(a.leading) > 0) && !strings.Contains(gap, "\n") {
 				gap = "\n"
 			}
 			sb.WriteString(gap)
@@ -192,6 +200,7 @@ func JoinWithComments(stmts []string, tokens []models.TokenWithSpan, comments []
 			endsInLine = strings.HasPrefix(lastComment(a.trailing), "--")
 		}
 		prevEndsInLine = endsInLine
+		prevBatch = it.batch
 	}
 	for _, t := range tail {
 		sb.WriteString("\n")
@@ -221,12 +230,30 @@ func joinPlain(stmts []string, layout CommentLayout) string {
 	var sb strings.Builder
 	for i, s := range stmts {
 		if i > 0 {
-			sb.WriteString(layout.Terminator)
-			sb.WriteString(layout.Gap)
+			if !isBatchText(stmts[i-1], layout.Dialect) {
+				sb.WriteString(layout.Terminator)
+			}
+			if isBatchText(s, layout.Dialect) || isBatchText(stmts[i-1], layout.Dialect) {
+				sb.WriteByte('\n')
+			} else {
+				sb.WriteString(layout.Gap)
+			}
 		}
 		sb.WriteString(s)
 	}
 	return sb.String()
+}
+
+func isBatchText(s, dialect string) bool {
+	return isSQLServerDialect(dialect) && batch.IsText(s)
+}
+
+func isSQLServerDialect(d string) bool {
+	switch strings.ToLower(d) {
+	case "sqlserver", "mssql", "tsql":
+		return true
+	}
+	return false
 }
 
 // joinHoisted is the fallback used when statements cannot be matched to the
@@ -250,6 +277,7 @@ type item struct {
 	first, last int // token indexes of the statement (first > last for empty)
 	term        int // index of the terminating ';' token, -1 when absent
 	empty       bool
+	batch       bool
 	// start and end bound the item in the source: start is the first token
 	// (or, for an empty item, its ';'), end is just past the terminator (or
 	// the last token).
@@ -257,8 +285,9 @@ type item struct {
 }
 
 // splitItems splits tokens at ';'.
-func splitItems(tokens []models.TokenWithSpan) []item {
+func splitItems(tokens []models.TokenWithSpan, dialect ...string) []item {
 	var items []item
+	sqlServer := len(dialect) > 0 && isSQLServerDialect(dialect[0])
 	cur := item{first: -1, term: -1}
 	flush := func() {
 		if cur.first >= 0 {
@@ -266,8 +295,16 @@ func splitItems(tokens []models.TokenWithSpan) []item {
 		}
 		cur = item{first: -1, term: -1}
 	}
-	for i := range tokens {
+	for i := 0; i < len(tokens); i++ {
 		t := tokens[i]
+		if sqlServer {
+			if end, ok := batch.End(tokens, i); ok {
+				flush()
+				items = append(items, item{first: i, last: end - 1, term: -1, batch: true, start: t.Start, end: tokens[end-1].End})
+				i = end - 1
+				continue
+			}
+		}
 		switch t.Token.Type {
 		case models.TokenTypeEOF:
 			continue
@@ -391,7 +428,8 @@ func locateComment(items []item, tokens []models.TokenWithSpan, c models.Comment
 	for i, it := range items {
 		if before(c.Start, it.start) {
 			// Between the previous item and this one (or before the first).
-			if i > 0 && !it.empty && c.Start.Line == items[i-1].end.Line && items[i-1].term >= 0 {
+			if i > 0 && !it.empty && c.Start.Line == items[i-1].end.Line &&
+				(items[i-1].term >= 0 || items[i-1].batch) {
 				return i - 1, roleTrailing
 			}
 			return i, roleLeading
@@ -443,7 +481,7 @@ func isSignificantComment(text string) bool {
 // rendered statement to have as many occurrences of the word as the source,
 // and goes after the same one; otherwise the hint has no place to go and the
 // call fails with ErrUnplaceableComment.
-func insertHints(stmt string, hints []placedHint) (string, error) {
+func insertHints(stmt string, hints []placedHint, dialect ...string) (string, error) {
 	type insertion struct {
 		at   int // byte offset just after the keyword
 		text string
@@ -459,7 +497,15 @@ func insertHints(stmt string, hints []placedHint) (string, error) {
 			}
 		}
 		if !scanned {
-			words = wordEnds(stmt)
+			var d string
+			if len(dialect) > 0 {
+				d = dialect[0]
+			}
+			var err error
+			words, err = wordEnds(stmt, d)
+			if err != nil {
+				return "", fmt.Errorf("%w: rendered statement: %v", ErrUnplaceableComment, err)
+			}
 			scanned = true
 		}
 		ends := words[h.keyword]
@@ -498,62 +544,42 @@ func leadingWordEnd(stmt, keyword string) (int, bool) {
 	return j, strings.EqualFold(stmt[i:j], keyword)
 }
 
-// wordEnds scans rendered SQL and returns, for each hint-carrying keyword, the
-// end offsets of its occurrences as a bare word, skipping string literals,
-// quoted names and comments, and words that follow '.', '@' or ':'.
-func wordEnds(stmt string) map[string][]int {
+// wordEnds uses the active dialect's lexer so quote, escape, and delimited
+// identifier rules are identical to those used to parse the statement.
+func wordEnds(stmt, dialect string) (map[string][]int, error) {
 	out := map[string][]int{}
-	n := len(stmt)
-	for i := 0; i < n; {
-		c := stmt[i]
-		switch {
-		case c == '\'' || c == '"' || c == '`':
-			// Quoted text; a doubled quote or a backslash escape stays inside.
-			i++
-			for i < n {
-				if stmt[i] == '\\' && c == '\'' && i+1 < n {
-					i += 2
-					continue
-				}
-				if stmt[i] == c {
-					if i+1 < n && stmt[i+1] == c {
-						i += 2
-						continue
-					}
-					break
-				}
-				i++
-			}
-			i++
-		case c == '-' && i+1 < n && stmt[i+1] == '-':
-			for i < n && stmt[i] != '\n' {
-				i++
-			}
-		case c == '/' && i+1 < n && stmt[i+1] == '*':
-			end := strings.Index(stmt[i+2:], "*/")
-			if end < 0 {
-				i = n
-			} else {
-				i += end + 4
-			}
-		case isWordByte(c):
-			j := i
-			for j < n && isWordByte(stmt[j]) {
-				j++
-			}
-			if i == 0 || (stmt[i-1] != '.' && stmt[i-1] != '@' && stmt[i-1] != ':') {
-				w := strings.ToUpper(stmt[i:j])
-				switch w {
-				case "SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "REPLACE":
-					out[w] = append(out[w], j)
-				}
-			}
-			i = j
-		default:
-			i++
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+	if dialect != "" {
+		tkz.SetDialect(keywords.SQLDialect(dialect))
+	}
+	tokens, err := tkz.TokenizeString(stmt)
+	if err != nil {
+		return nil, err
+	}
+	lineStart := []int{0}
+	for i := range stmt {
+		if stmt[i] == '\n' {
+			lineStart = append(lineStart, i+1)
 		}
 	}
-	return out
+	for _, tok := range tokens {
+		w, ok := hintKeyword(tok.Token)
+		if !ok || tok.Start.Line < 1 || tok.Start.Line > len(lineStart) ||
+			tok.End.Line < 1 || tok.End.Line > len(lineStart) {
+			continue
+		}
+		start := lineStart[tok.Start.Line-1] + tok.Start.Column - 1
+		end := lineStart[tok.End.Line-1] + tok.End.Column - 1
+		if start < 0 || end > len(stmt) || start >= end {
+			continue
+		}
+		if start > 0 && (stmt[start-1] == '.' || stmt[start-1] == '@' || stmt[start-1] == ':') {
+			continue
+		}
+		out[w] = append(out[w], end)
+	}
+	return out, nil
 }
 
 func abbreviate(s string) string {

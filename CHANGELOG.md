@@ -7,7 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Dialect audit corpus**: 2,788 production-style statements across PostgreSQL,
+  MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake and ClickHouse now pass
+  split, parse, format, reparse, idempotency and dropped-word checks, with zero
+  known failures. `scripts/dialect-audit` runs the same checks on SQL files.
+- **AST representation**: `ExplainStatement` retains the explained statement;
+  `BatchSeparator` retains SQL Server `GO` and its optional `RepeatCount` without
+  expanding repeated batches. `SQL()` and `FormatAST` keep GO on its own line.
+  Callers enumerating `AST.Statements` or recovery results must account for
+  batch-separator nodes.
+- **Literal and identifier metadata**: `LiteralValue.Prefix` and `RawBackslash`
+  retain string introducers and escape rules. `Identifier.QuoteStyle`,
+  `Identifier.Quotes` and the statement/table/column `NameQuote` fields retain
+  identifier delimiters through rendering.
+
+### Changed
+- **Strict default string escapes**: without a dialect, unknown backslash
+  escapes now return an error instead of silently rewriting the value. Select
+  the source dialect explicitly when parsing dialect-specific strings.
+- **SELECT extension fields**: rare dialect clauses now live under the optional
+  `SelectStatement.Extras` pointer (`SelectExtras`), including SELECT modifiers,
+  INTO, LIMIT BY, ROWS EXAMINED, INTERPOLATE, query hints and output formats.
+  These fields were introduced on this unreleased branch; reads must allow
+  `Extras == nil`, and writes must allocate it first.
+- **Transpilation**: string literals and quoted identifiers are rendered using
+  the target dialect's escape rules and delimiters. Unrepresentable literals
+  return an error rather than changing their value. SQL Server GO scripts
+  targeting another dialect return an error because batch scopes and repeat
+  counts cannot be represented there.
+
 ### Fixed
+- **SQL round trips**: preserve ALTER actions, grouped joins, set-operation
+  query tails and CTE placement, standalone VALUES, JSON_TABLE/XMLTABLE literal
+  quoting, and nested optimizer hints. Hint placement uses the source dialect's
+  lexer so a keyword inside a string or quoted identifier is never a hint slot.
+- **Pooled parsing**: internal tokenize/parse paths reuse scratch token storage
+  without retaining it in returned ASTs. Concurrent retained-tree regression
+  tests cover the public parse entry points; SELECT release clears all Extras.
 - **`SplitStatements` keeps compound statements whole**: `BEGIN ... END` blocks
   (trigger, procedure and function bodies, T-SQL `IF ... BEGIN`, `BEGIN TRY`,
   PostgreSQL `BEGIN ATOMIC`), `CASE ... END`, `IF`/`LOOP`/`WHILE`/`REPEAT`

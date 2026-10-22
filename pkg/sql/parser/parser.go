@@ -443,7 +443,8 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 			p.advance()
 			continue
 		}
-		if p.skipBatchSeparator() {
+		if separator, ok := p.parseBatchSeparator(); ok {
+			result.Statements = append(result.Statements, separator)
 			continue
 		}
 
@@ -644,7 +645,8 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 			p.advance()
 			continue
 		}
-		if p.skipBatchSeparator() {
+		if separator, ok := p.parseBatchSeparator(); ok {
+			result.Statements = append(result.Statements, separator)
 			continue
 		}
 

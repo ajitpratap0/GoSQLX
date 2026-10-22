@@ -21,8 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dialect's grammar: Oracle also gets aliased/multiple aggregates, the NULLS
   modifier and multi-column UNPIVOT; Snowflake gets the NULLS modifier and
   bare `IN` value aliases; SQL Server is unchanged.
-- PIVOT/UNPIVOT backtick-quoted `IN` names and aliases keep their backticks
-  when rendered (they were written bare, which did not re-parse).
+- PIVOT/UNPIVOT quoted aggregate aliases, UNPIVOT value columns, and
+  backtick-quoted `IN` names and aliases keep their source delimiters when
+  rendered. This preserves BigQuery backticks and Oracle alias case.
 
 ### Added
 - `ast.PivotClause.AggregateAlias`, `ast.PivotClause.ExtraAggregates`
@@ -32,8 +33,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Behavior changes
 - PIVOT / UNPIVOT `IN` lists now require commas between entries and an alias
-  after `AS` in every PIVOT dialect (`IN (a b)` used to parse as two entries
-  and `IN ('a' AS)` silently dropped the `AS`).
+  after `AS` in every PIVOT dialect. Where bare aliases are supported,
+  `IN (a b)` is one entry (`a AS b`); otherwise a missing comma is rejected.
+  `IN ('a' AS)` no longer silently drops the `AS`.
 
 ## [1.16.0] - 2026-10-22 — Performance Audit, SQL Highlighting, Dialect-Aware LSP, Claude Code Plugin & ChatGPT App, Correctness Sweep
 

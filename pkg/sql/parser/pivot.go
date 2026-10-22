@@ -288,12 +288,12 @@ func (p *Parser) parsePivotAggregateAlias() (string, error) {
 		if !p.isIdentifier() && !p.isNonReservedKeyword() {
 			return "", p.expectedError("alias after AS in PIVOT aggregate")
 		}
-		alias := p.currentToken.Token.Value
+		alias := p.renderCurrentIdent()
 		p.advance()
 		return alias, nil
 	}
 	if p.isIdentifier() {
-		alias := p.currentToken.Token.Value
+		alias := p.renderCurrentIdent()
 		p.advance()
 		return alias, nil
 	}
@@ -334,7 +334,7 @@ func (p *Parser) parseUnpivotClause() (*ast.UnpivotClause, error) {
 	var valueCol string
 	var valueCols []string
 	if multiColumn {
-		cols, err := p.parseUnpivotNameList("value column name in UNPIVOT", false)
+		cols, err := p.parseUnpivotNameList("value column name in UNPIVOT")
 		if err != nil {
 			return nil, err
 		}
@@ -343,7 +343,7 @@ func (p *Parser) parseUnpivotClause() (*ast.UnpivotClause, error) {
 		if !p.isIdentifier() {
 			return nil, p.expectedError("value column name in UNPIVOT")
 		}
-		valueCol = p.currentToken.Token.Value
+		valueCol = p.renderCurrentIdent()
 		p.advance()
 	}
 
@@ -382,7 +382,7 @@ func (p *Parser) parseUnpivotClause() (*ast.UnpivotClause, error) {
 			if !p.isType(models.TokenTypeLParen) {
 				return nil, p.expectedError("( to open a column set in UNPIVOT IN list")
 			}
-			set, err := p.parseUnpivotNameList("column name in UNPIVOT IN list", true)
+			set, err := p.parseUnpivotNameList("column name in UNPIVOT IN list")
 			if err != nil {
 				return nil, err
 			}
@@ -442,23 +442,16 @@ func (p *Parser) parseUnpivotClause() (*ast.UnpivotClause, error) {
 }
 
 // parseUnpivotNameList parses a parenthesized, comma-separated list of
-// column names, "(a, b, ...)", for the multi-column UNPIVOT form. With
-// sourceForm set each name is returned as written (quoted identifiers keep
-// their delimiters, as InColumns entries do); otherwise the bare name value
-// is returned, as ValueColumn / ValueColumns store it. The current token
-// must be the opening parenthesis.
-func (p *Parser) parseUnpivotNameList(what string, sourceForm bool) ([]string, error) {
+// column names, "(a, b, ...)", for the multi-column UNPIVOT form. Names
+// retain their source quoting. The current token must be the opening parenthesis.
+func (p *Parser) parseUnpivotNameList(what string) ([]string, error) {
 	p.advance() // consume (
 	var names []string
 	for {
 		if !p.isIdentifier() {
 			return nil, p.expectedError(what)
 		}
-		if sourceForm {
-			names = append(names, p.renderCurrentIdent())
-		} else {
-			names = append(names, p.currentToken.Token.Value)
-		}
+		names = append(names, p.renderCurrentIdent())
 		p.advance()
 		if !p.isType(models.TokenTypeComma) {
 			break

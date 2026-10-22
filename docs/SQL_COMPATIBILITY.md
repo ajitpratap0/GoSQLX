@@ -719,7 +719,7 @@ gosqlx format --dialect mysql query.sql
 - PIVOT / UNPIVOT (unreleased, #854): aggregate aliases and multiple aggregates (`PIVOT (SUM(s) AS total, COUNT(*) AS n FOR q IN ('Q1' AS q1, 'Q2' q2))`), `UNPIVOT INCLUDE NULLS` / `EXCLUDE NULLS`, row-value aliases with or without `AS` (string or INT64), and multi-column UNPIVOT (`UNPIVOT ((a, b) FOR k IN ((c1, c2) AS 'x', (c3, c4) AS 'y'))`)
 - PIVOT `IN` values must be literals or names; constant expressions such as `IN (1 + 1)` or `IN (DATE '2024-01-01')` are not parsed
 - QUALIFY, `UNNEST` in FROM and `(struct).field` access are capability-gated; BigQuery has no dedicated keyword set
-- Aggregate aliases with characters that need quoting are re-rendered in ANSI double quotes, as all GoSQLX aliases are
+- Quoted PIVOT aggregate aliases and UNPIVOT value-column names retain their source delimiters, including BigQuery backticks and Oracle double quotes
 
 Oracle also accepts aggregate aliases, multiple aggregates, `INCLUDE`/`EXCLUDE NULLS` and multi-column UNPIVOT; Snowflake accepts `INCLUDE`/`EXCLUDE NULLS`. SQL Server keeps the single-aggregate form without aliases or a NULLS modifier. Oracle's tuple row-value aliases (`(c1, c2) AS ('a', 'b')`) are not parsed.
 

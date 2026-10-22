@@ -1462,11 +1462,11 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 				if i > 0 {
 					sb.WriteString(", ")
 				}
-				sb.WriteString(ast.QuotePivotColumn(c))
+				sb.WriteString(ast.QuoteUnpivotValueColumn(c))
 			}
 			sb.WriteString(")")
 		} else {
-			sb.WriteString(ast.QuotePivotColumn(t.Unpivot.ValueColumn))
+			sb.WriteString(ast.QuoteUnpivotValueColumn(t.Unpivot.ValueColumn))
 		}
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("FOR"))
@@ -1490,7 +1490,8 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 }
 
 // writePivotAggregateAlias writes " AS alias" for a PIVOT aggregate alias,
-// quoting the alias like a table alias; an empty alias writes nothing.
+// preserving source delimiters or quoting it like a table alias; an empty
+// alias writes nothing.
 func writePivotAggregateAlias(sb *strings.Builder, f *nodeFormatter, alias string) {
 	if alias == "" {
 		return
@@ -1498,7 +1499,7 @@ func writePivotAggregateAlias(sb *strings.Builder, f *nodeFormatter, alias strin
 	sb.WriteString(" ")
 	sb.WriteString(f.kw("AS"))
 	sb.WriteString(" ")
-	sb.WriteString(ast.QuoteTableAlias(alias))
+	sb.WriteString(ast.QuotePivotAggregateAlias(alias))
 }
 
 // writePivotItems writes PIVOT IN values or UNPIVOT IN columns separated by

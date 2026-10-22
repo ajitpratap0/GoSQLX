@@ -747,7 +747,7 @@ func (c TimeTravelClause) Children() []Node {
 // ExtraAggregates in source order.
 type PivotClause struct {
 	AggregateFunction Expression       // The aggregate function, e.g. SUM(sales)
-	AggregateAlias    string           // Optional alias of AggregateFunction (BigQuery prefix / Oracle alias)
+	AggregateAlias    string           // Optional alias of AggregateFunction; quoted aliases retain source delimiters
 	ExtraAggregates   []PivotAggregate // Second and later aggregates (Oracle / BigQuery), in source order
 	PivotColumn       string           // The column used for pivoting, e.g. region
 	InValues          []string         // The values to pivot on, e.g. [North], 'Q1' AS q1
@@ -758,7 +758,7 @@ type PivotClause struct {
 // the "COUNT(*) AS n" in PIVOT (SUM(x) AS total, COUNT(*) AS n FOR ...).
 type PivotAggregate struct {
 	Function Expression // The aggregate function call
-	Alias    string     // Optional alias; empty when none was given
+	Alias    string     // Optional alias; quoted aliases retain source delimiters
 }
 
 func (p *PivotClause) expressionNode()     {}
@@ -787,8 +787,8 @@ func (p PivotClause) Children() []Node {
 // parenthesized column set such as "(q1, q2) AS 'H1'".
 type UnpivotClause struct {
 	NullHandling string          // "", "INCLUDE NULLS" or "EXCLUDE NULLS" (Oracle / Snowflake / BigQuery)
-	ValueColumn  string          // The target value column, e.g. sales (single-column form)
-	ValueColumns []string        // The target value columns (multi-column form), e.g. h1, h2
+	ValueColumn  string          // The target value column; quoted names retain source delimiters
+	ValueColumns []string        // The target value columns; quoted names retain source delimiters
 	NameColumn   string          // The target name column, e.g. region
 	InColumns    []string        // The source columns to unpivot, e.g. north_sales, south_sales
 	Pos          models.Location // Source position of the UNPIVOT keyword

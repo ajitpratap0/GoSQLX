@@ -95,6 +95,11 @@ func TestBigQueryPivot_Issue854(t *testing.T) {
 			inValues: []string{"'Q1' AS `q 1`"},
 		},
 		{
+			name:     "quoted aggregate aliases preserve source form",
+			sql:      "SELECT * FROM sales PIVOT (SUM(amount) AS `日本`, COUNT(*) `a``b` FOR quarter IN ('Q1'))",
+			aggAlias: "`日本`", extraAggs: []string{"`a``b`"}, pivotCol: "quarter", inValues: []string{"'Q1'"},
+		},
+		{
 			name:     "subquery source",
 			sql:      "SELECT * FROM (SELECT product, sales, quarter FROM produce) PIVOT (SUM(sales) FOR quarter IN ('Q1', 'Q2'))",
 			pivotCol: "quarter",
@@ -186,6 +191,14 @@ func TestBigQueryUnpivot_Issue854(t *testing.T) {
 			valueCols: []string{"first_half_sales", "second_half_sales"},
 			nameCol:   "semesters",
 			inColumns: []string{"(Q1, Q2) AS 'semester_1'", "(Q3, Q4) AS 'semester_2'"},
+		},
+		{
+			name: "quoted single value column", sql: "SELECT * FROM produce UNPIVOT (`日本` FOR quarter IN (Q1, Q2))",
+			valueCol: "`日本`", nameCol: "quarter", inColumns: []string{"Q1", "Q2"},
+		},
+		{
+			name: "quoted multiple value columns", sql: "SELECT * FROM produce UNPIVOT ((`日本`, `a``b`) FOR quarter IN ((Q1, Q2)))",
+			valueCols: []string{"`日本`", "`a``b`"}, nameCol: "quarter", inColumns: []string{"(Q1, Q2)"},
 		},
 		{
 			name:         "multi-column with NULLS modifier, unaliased sets and alias",

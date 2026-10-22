@@ -91,6 +91,38 @@ func QuotePivotColumn(name string) string {
 	return buf.String()
 }
 
+// isQuotedPivotIdentifier accepts only one complete delimited identifier.
+// Bare atoms, numbers and string literals must use the normal name quoting
+// fallback, even though pivotAtomLen also recognizes them in IN values.
+func isQuotedPivotIdentifier(name string) bool {
+	if len(name) < 2 {
+		return false
+	}
+	switch name[0] {
+	case '"', '`', '[':
+		return pivotAtomLen(name) == len(name)
+	}
+	return false
+}
+
+// QuotePivotAggregateAlias retains source quoting for parsed aliases and
+// applies normal table-alias quoting to bare or hand-built values.
+func QuotePivotAggregateAlias(alias string) string {
+	if isQuotedPivotIdentifier(alias) {
+		return alias
+	}
+	return QuoteTableAlias(alias)
+}
+
+// QuoteUnpivotValueColumn retains source quoting for parsed value columns and
+// applies normal column quoting to bare or hand-built values.
+func QuoteUnpivotValueColumn(name string) string {
+	if isQuotedPivotIdentifier(name) {
+		return name
+	}
+	return QuotePivotColumn(name)
+}
+
 // pivotColumnNeedsQuoting reports whether writePivotColumn would quote some
 // part of name.
 func pivotColumnNeedsQuoting(name string) bool {
@@ -237,10 +269,10 @@ func pivotAtomLen(s string) int {
 }
 
 // writePivotClause writes " PIVOT (agg [AS alias][, ...] FOR col IN (v1, v2))".
-// The pivot column is quoted when it is not a plain name, aggregate aliases
-// are quoted like table aliases, and each IN value is written in its stored
-// source form (e.g. [Q1], 'JAN', 1 AS one) when well formed, otherwise
-// double-quoted (see QuotePivotItem).
+// The pivot column is quoted when it is not a plain name. Aggregate aliases
+// retain source quoting or are quoted like table aliases. Each IN value is
+// written in its stored source form (e.g. [Q1], 'JAN', 1 AS one) when well
+// formed, otherwise double-quoted (see QuotePivotItem).
 func writePivotClause(buf *bytes.Buffer, p *PivotClause) {
 	if p == nil {
 		return
@@ -270,7 +302,7 @@ func writePivotAggregateAlias(buf *bytes.Buffer, alias string) {
 		return
 	}
 	buf.WriteString(" AS ")
-	writeTableAlias(buf, alias)
+	buf.WriteString(QuotePivotAggregateAlias(alias))
 }
 
 // writeUnpivotClause writes
@@ -293,11 +325,11 @@ func writeUnpivotClause(buf *bytes.Buffer, u *UnpivotClause) {
 			if i > 0 {
 				buf.WriteString(", ")
 			}
-			writePivotColumn(buf, c)
+			buf.WriteString(QuoteUnpivotValueColumn(c))
 		}
 		buf.WriteByte(')')
 	} else {
-		writePivotColumn(buf, u.ValueColumn)
+		buf.WriteString(QuoteUnpivotValueColumn(u.ValueColumn))
 	}
 	buf.WriteString(" FOR ")
 	writePivotColumn(buf, u.NameColumn)

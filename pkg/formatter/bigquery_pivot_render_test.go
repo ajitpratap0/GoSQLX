@@ -47,8 +47,11 @@ func TestBigQueryPivot_FormatRoundTrip_Issue854(t *testing.T) {
 		{
 			"backtick_alias",
 			"SELECT * FROM sales PIVOT (SUM(amount) AS `total amount` FOR quarter IN ('Q1' AS `q 1`))",
-			"SELECT * FROM sales PIVOT (SUM(amount) AS \"total amount\" FOR quarter IN ('Q1' AS `q 1`))",
+			"SELECT * FROM sales PIVOT (SUM(amount) AS `total amount` FOR quarter IN ('Q1' AS `q 1`))",
 		},
+		{"backtick_first_and_extra_alias", "SELECT * FROM sales PIVOT (SUM(amount) AS `日本`, COUNT(*) `a``b` FOR quarter IN ('Q1'))", "SELECT * FROM sales PIVOT (SUM(amount) AS `日本`, COUNT(*) AS `a``b` FOR quarter IN ('Q1'))"},
+		{"unpivot_backtick_value", "SELECT * FROM sales UNPIVOT (`日本` FOR quarter IN (Q1, Q2))", "SELECT * FROM sales UNPIVOT (`日本` FOR quarter IN (Q1, Q2))"},
+		{"unpivot_backtick_value_set", "SELECT * FROM sales UNPIVOT ((`日本`, `a``b`) FOR quarter IN ((Q1, Q2)))", "SELECT * FROM sales UNPIVOT ((`日本`, `a``b`) FOR quarter IN ((Q1, Q2)))"},
 		{
 			"unpivot_include_nulls",
 			"SELECT * FROM produce UNPIVOT INCLUDE NULLS (sales FOR quarter IN (Q1 'first', Q2 AS 2)) AS u",
@@ -120,5 +123,60 @@ func TestPivotItem_ColumnSetQuoting_Issue854(t *testing.T) {
 		if got := ast.QuotePivotItem(tc.in); got != tc.want {
 			t.Errorf("QuotePivotItem(%q) = %q, want %q", tc.in, got, tc.want)
 		}
+	}
+}
+
+func TestOraclePivotQuotedAggregateAliasRoundTrip(t *testing.T) {
+	const want = `SELECT * FROM sales PIVOT (SUM(amount) AS "Total", COUNT(*) AS "Count" FOR quarter IN ('Q1'))`
+	tree, err := gosqlx.ParseWithDialect(want, keywords.DialectOracle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ast.ReleaseAST(tree)
+	out := formatter.FormatAST(tree, ast.CompactStyle())
+	if out != want {
+		t.Errorf("formatted = %s, want %s", out, want)
+	}
+	reparsed, err := gosqlx.ParseWithDialect(out, keywords.DialectOracle)
+	if err != nil {
+		t.Fatalf("reparse: %v", err)
+	}
+	defer ast.ReleaseAST(reparsed)
+	if got := formatter.FormatAST(reparsed, ast.CompactStyle()); got != want {
+		t.Errorf("reparsed = %s, want %s", got, want)
+	}
+	if got := tree.SQL(); got != want {
+		t.Errorf("SQL() = %s, want %s", got, want)
+	}
+}
+
+func TestPivotQuotedNameFallback(t *testing.T) {
+	makeSelect := func(ref ast.TableReference) *ast.SelectStatement {
+		return &ast.SelectStatement{Columns: []ast.Expression{&ast.Identifier{Name: "*"}}, From: []ast.TableReference{ref}}
+	}
+	cases := []struct {
+		name string
+		ref  ast.TableReference
+		want string
+	}{
+		{"first_alias", ast.TableReference{Name: "t", Pivot: &ast.PivotClause{AggregateFunction: &ast.Identifier{Name: "x"}, AggregateAlias: "a); DROP", PivotColumn: "q", InValues: []string{"a"}}}, `SELECT * FROM t PIVOT (x AS "a); DROP" FOR q IN (a))`},
+		{"string_alias", ast.TableReference{Name: "t", Pivot: &ast.PivotClause{AggregateFunction: &ast.Identifier{Name: "x"}, AggregateAlias: "'total'", PivotColumn: "q", InValues: []string{"a"}}}, `SELECT * FROM t PIVOT (x AS "'total'" FOR q IN (a))`},
+		{"extra_alias", ast.TableReference{Name: "t", Pivot: &ast.PivotClause{AggregateFunction: &ast.Identifier{Name: "x"}, ExtraAggregates: []ast.PivotAggregate{{Function: &ast.Identifier{Name: "y"}, Alias: "select"}}, PivotColumn: "q", InValues: []string{"a"}}}, `SELECT * FROM t PIVOT (x, y AS "select" FOR q IN (a))`},
+		{"numeric_extra_alias", ast.TableReference{Name: "t", Pivot: &ast.PivotClause{AggregateFunction: &ast.Identifier{Name: "x"}, ExtraAggregates: []ast.PivotAggregate{{Function: &ast.Identifier{Name: "y"}, Alias: "123"}}, PivotColumn: "q", InValues: []string{"a"}}}, `SELECT * FROM t PIVOT (x, y AS "123" FOR q IN (a))`},
+		{"single_value", ast.TableReference{Name: "t", Unpivot: &ast.UnpivotClause{ValueColumn: "a); DROP", NameColumn: "q", InColumns: []string{"a"}}}, `SELECT * FROM t UNPIVOT ("a); DROP" FOR q IN (a))`},
+		{"string_value", ast.TableReference{Name: "t", Unpivot: &ast.UnpivotClause{ValueColumn: "'total'", NameColumn: "q", InColumns: []string{"a"}}}, `SELECT * FROM t UNPIVOT ("'total'" FOR q IN (a))`},
+		{"multiple_values", ast.TableReference{Name: "t", Unpivot: &ast.UnpivotClause{ValueColumns: []string{"select", "a); DROP"}, NameColumn: "q", InColumns: []string{"(a, b)"}}}, `SELECT * FROM t UNPIVOT (("select", "a); DROP") FOR q IN ((a, b)))`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sel := makeSelect(tc.ref)
+			if got := sel.SQL(); got != tc.want {
+				t.Errorf("SQL() = %s, want %s", got, tc.want)
+			}
+			tree := &ast.AST{Statements: []ast.Statement{sel}}
+			if got := formatter.FormatAST(tree, ast.CompactStyle()); got != tc.want {
+				t.Errorf("formatter = %s, want %s", got, tc.want)
+			}
+		})
 	}
 }

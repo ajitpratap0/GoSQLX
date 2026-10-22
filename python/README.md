@@ -19,7 +19,7 @@ Wheels are available for Python 3.10-3.14 on:
 
 | Platform | Architectures | Wheel tag |
 |---|---|---|
-| Linux (glibc 2.28+) | x86_64, aarch64 | `manylinux_2_28` |
+| Linux (glibc) | x86_64, aarch64 | `manylinux` (built on manylinux_2_28; auditwheel assigns the widest tag the library allows, e.g. `manylinux_2_17`) |
 | macOS 13+ | x86_64, arm64 | `macosx_13_0` |
 | Windows | AMD64 | `win_amd64` |
 

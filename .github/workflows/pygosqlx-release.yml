@@ -15,7 +15,8 @@
 # Wheels: one py3-none-<platform> wheel per OS/arch (the bundled libgosqlx is
 # loaded through ctypes and does not depend on the CPython ABI), each tested
 # on CPython 3.10-3.14 against the installed wheel:
-#   linux   x86_64, aarch64   (manylinux_2_28, native runners)
+#   linux   x86_64, aarch64   (built in manylinux_2_28, native runners;
+#                              auditwheel picks the final manylinux tag)
 #   macOS   x86_64, arm64     (macOS 13+)
 #   windows AMD64
 #

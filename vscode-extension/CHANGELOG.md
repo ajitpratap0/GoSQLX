@@ -2,7 +2,7 @@
 
 All notable changes to the "GoSQLX" extension will be documented in this file.
 
-## [1.16.0] - 2026-10-21
+## [1.16.0] - 2026-10-22
 
 Bundles the GoSQLX v1.16.0 language server. See the
 [main CHANGELOG](https://github.com/ajitpratap0/GoSQLX/blob/main/CHANGELOG.md)
@@ -25,6 +25,11 @@ for the full list.
 - **Positions match the editor**: a tab counts as one column, and diagnostics
   for a token after a comment point at the token, not the comment.
 - Under the `mysql` and `mariadb` dialects, `||` is parsed as logical OR.
+
+### Fixed
+- **Version reporting**: the bundled `gosqlx --version` and the language
+  server's `serverInfo.version` now report the release version (1.16.0)
+  instead of 1.14.0 and a hard-coded 1.0.0. (#846)
 
 ### Security
 - markdown-it 14.3.3 in the extension's lockfile (build tooling).

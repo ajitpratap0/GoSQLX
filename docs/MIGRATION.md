@@ -1,6 +1,6 @@
 # Migration Guide
 
-## v1.15.0 → v1.16.0 (2026-10-21)
+## v1.15.0 → v1.16.0 (2026-10-22)
 
 **Source-compatible upgrade**: exported signatures are unchanged apart from additions, so code that compiled against v1.15.0 compiles against v1.16.0. Runtime behaviour does change in several places (token positions, rendered SQL, parse acceptance, CLI refusals, MCP HTTP limits). Read the checklist below before upgrading. The [CHANGELOG](../CHANGELOG.md) has the full list.
 
@@ -56,7 +56,7 @@
 | GORM integration (`integrations/gorm`) | requires v1.14.0 | updated after the tag |
 | LSP `serverInfo.version` (`gosqlx lsp`) | 1.0.0 (hard-coded) | **1.16.0** (library version) |
 | C binding (`libgosqlx`) | 1.15.0 exports | **1.16.0**: adds `gosqlx_*_dialect`, `gosqlx_lint`, `gosqlx_security_scan`, `gosqlx_transpile`, `gosqlx_dialects` |
-| Python bindings (`pygosqlx`) | 0.2.0 (alpha) | **0.3.0** (alpha), independent track; Python 3.10+; PyPI wheels from the `pygosqlx-v0.3.0` tag |
+| Python bindings (`pygosqlx`) | 0.2.0 (alpha) | **0.3.0** (alpha), independent track; Python 3.10+; PyPI wheels once `pygosqlx-v0.3.0` is tagged and published |
 
 ---
 

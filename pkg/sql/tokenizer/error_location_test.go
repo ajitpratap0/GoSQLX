@@ -74,7 +74,7 @@ func TestTokenizer_ErrorLocations(t *testing.T) {
 		{"single quote multi-line", keywords.DialectPostgreSQL, "SELECT\t'é',\n\t'abc", "'abc", models.Location{Line: 2, Column: 2}},
 		{"block comment after multibyte", keywords.DialectPostgreSQL, "SELECT 'é€'\t/* never closed", "/*", models.Location{Line: 1, Column: 16}},
 		{"backtick after tab", keywords.DialectMySQL, "SELECT\t`a", "`", models.Location{Line: 1, Column: 8}},
-		{"triple quote after tab", keywords.DialectPostgreSQL, "SELECT\t'''abc", "'''", models.Location{Line: 1, Column: 8}},
+		{"triple quote after tab", keywords.DialectBigQuery, "SELECT\t'''abc", "'''", models.Location{Line: 1, Column: 8}},
 	}
 
 	for _, tc := range cases {

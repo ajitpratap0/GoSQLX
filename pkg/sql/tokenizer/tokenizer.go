@@ -313,9 +313,10 @@ type Tokenizer struct {
 	line       int                 // Current line number (1-based)
 	dialect    keywords.SQLDialect // SQL dialect for dialect-specific keyword recognition
 	// strEscape holds the backslash rules for string literals. It stays
-	// StringEscapeLenient (the zero value) until a dialect is chosen
-	// explicitly, so the default PostgreSQL keyword set still accepts the
-	// C-style escapes of existing callers.
+	// StringEscapeStrict (the zero value) until a dialect is chosen
+	// explicitly: the default PostgreSQL keyword set still decodes the
+	// escapes every backslash-escaping dialect agrees on, and rejects the
+	// rest instead of guessing their meaning.
 	strEscape sqldialect.StringEscape
 	logger    *slog.Logger     // Optional structured logger for verbose tracing
 	Comments  []models.Comment // Comments captured during tokenization
@@ -397,7 +398,7 @@ func (t *Tokenizer) Dialect() keywords.SQLDialect {
 func (t *Tokenizer) SetDialect(dialect keywords.SQLDialect) {
 	if dialect == "" || dialect == keywords.DialectUnknown {
 		t.dialect = keywords.DialectPostgreSQL
-		t.strEscape = sqldialect.StringEscapeLenient
+		t.strEscape = sqldialect.StringEscapeStrict
 		return
 	}
 	t.dialect = dialect
@@ -1447,8 +1448,10 @@ func (t *Tokenizer) readQuotedString(quote rune) (models.Token, error) {
 	// Store start position for error reporting
 	startPos := t.pos
 
-	// Check for triple quotes
-	if t.pos.Index+2 < len(t.input) {
+	// Check for triple quotes. Only BigQuery has triple-quoted strings;
+	// everywhere else ''' opens a string whose text starts with a quote
+	// ('''a' is 'a and '''a''' is 'a').
+	if t.dialect == keywords.DialectBigQuery && t.pos.Index+2 < len(t.input) {
 		next1, _ := utf8.DecodeRune(t.input[t.pos.Index+1:])
 		next2, _ := utf8.DecodeRune(t.input[t.pos.Index+2:])
 		if next1 == quote && next2 == quote {
@@ -1525,7 +1528,9 @@ func (t *Tokenizer) scanQuotedStringFast(quote rune, strict bool) (string, Posit
 			p.Index += size
 			p.Column++
 			return t.src[start:end], p, true
-		case r == '\\' && escapes:
+		case r == '\\' && escapes, r == 0, r == 0x1a:
+			// A NUL or Ctrl-Z byte goes to the slow reader, which decides
+			// whether the dialect can write it back (controlUnrepresentable).
 			return "", p, false
 		case r == '\n':
 			p.Index += size
@@ -1607,6 +1612,14 @@ func (t *Tokenizer) readQuotedStringSlow(startPos Position, originalQuote, quote
 			t.pos.Line++
 			t.pos.Column = 1
 			continue
+		}
+
+		if (r == 0 || r == 0x1a) && quote == '\'' && t.controlUnrepresentable(r) {
+			return models.Token{}, errors.InvalidSyntaxError(
+				fmt.Sprintf("control character %U in a string literal is not supported in this dialect", r),
+				t.getCurrentPosition(),
+				t.src,
+			)
 		}
 
 		// Handle regular characters
@@ -1737,53 +1750,6 @@ func (t *Tokenizer) readTripleQuotedStringSlow(startPos Position, quote rune) (m
 		t.toSQLPosition(startPos),
 		t.src,
 	)
-}
-
-// handleEscapeSequence decodes one backslash escape in a string literal whose
-// dialect treats '\' as an escape character (see backslashEscapes). On entry
-// t.pos is at the backslash.
-//
-// Recognised everywhere: \\ \' \" \` \n \r \t \0 \b \Z. \% and \_ keep their
-// backslash (the MySQL rule that lets LIKE patterns survive). Any other
-// sequence is not an error: MySQL and MariaDB drop the backslash, every other
-// dialect keeps both characters, so the literal always tokenizes and
-// re-escaping the value (backslash doubled) reads back identically.
-func (t *Tokenizer) handleEscapeSequence(buf *bytes.Buffer) error {
-	t.pos.Index++
-	t.pos.Column++
-
-	if t.pos.Index >= len(t.input) {
-		return errors.IncompleteStatementError(t.getCurrentPosition(), t.src)
-	}
-
-	r, size := utf8.DecodeRune(t.input[t.pos.Index:])
-	switch r {
-	case '\\', '"', '\'', '`':
-		buf.WriteRune(r)
-	case 'n':
-		buf.WriteRune('\n')
-	case 'r':
-		buf.WriteRune('\r')
-	case 't':
-		buf.WriteRune('\t')
-	case '0':
-		buf.WriteByte(0)
-	case 'b':
-		buf.WriteByte('\b')
-	case 'Z':
-		buf.WriteByte(0x1a)
-	case '%', '_':
-		buf.WriteByte('\\')
-		buf.WriteRune(r)
-	default:
-		if t.strEscape != sqldialect.StringEscapeMySQL {
-			buf.WriteByte('\\')
-		}
-		buf.WriteRune(r)
-	}
-
-	t.pos.AdvanceRune(r, size)
-	return nil
 }
 
 // readNumber reads an integer/float

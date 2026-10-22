@@ -64,6 +64,7 @@ var (
 
 func quotedCases() []quotedCase {
 	pg := keywords.DialectPostgreSQL
+	bq := keywords.DialectBigQuery
 	str := models.TokenTypeSingleQuotedString
 	ident := models.TokenTypeDoubleQuotedString
 	bt := models.TokenTypeIdentifier
@@ -135,11 +136,11 @@ func quotedCases() []quotedCase {
 		{name: "backtick unterminated", dialect: keywords.DialectMySQL, sql: "`abc", errCode: gerrors.ErrCodeUnterminatedString, errLoc: loc(1, 1)},
 
 		// Triple-quoted strings.
-		{name: "triple clean", dialect: pg, sql: "'''abc'''", typ: triple, value: "abc", quote: '\'', quoteStyle: noWord, alias: aliasYes},
-		{name: "triple with quote inside", dialect: pg, sql: "'''a'b'''", typ: triple, value: "a'b", quote: '\'', quoteStyle: noWord, alias: aliasYes},
-		{name: "triple multi-line", dialect: pg, sql: "'''a\nb''' x", typ: triple, value: "a\nb", quote: '\'', quoteStyle: noWord, end: loc(2, 5), alias: aliasYes},
-		{name: "triple unterminated", dialect: pg, sql: "'''abc", errCode: gerrors.ErrCodeUnterminatedString, errLoc: loc(1, 1)},
-		{name: "triple invalid UTF-8", dialect: pg, sql: "'''a\xffb'''", typ: triple, value: "a�b", quote: '\'', quoteStyle: noWord, alias: aliasNo},
+		{name: "triple clean", dialect: bq, sql: "'''abc'''", typ: triple, value: "abc", quote: '\'', quoteStyle: noWord, alias: aliasYes},
+		{name: "triple with quote inside", dialect: bq, sql: "'''a'b'''", typ: triple, value: "a'b", quote: '\'', quoteStyle: noWord, alias: aliasYes},
+		{name: "triple multi-line", dialect: bq, sql: "'''a\nb''' x", typ: triple, value: "a\nb", quote: '\'', quoteStyle: noWord, end: loc(2, 5), alias: aliasYes},
+		{name: "triple unterminated", dialect: bq, sql: "'''abc", errCode: gerrors.ErrCodeUnterminatedString, errLoc: loc(1, 1)},
+		{name: "triple invalid UTF-8", dialect: bq, sql: "'''a\xffb'''", typ: triple, value: "a�b", quote: '\'', quoteStyle: noWord, alias: aliasNo},
 
 		// SQL Server national strings.
 		{name: "national clean", dialect: keywords.DialectSQLServer, sql: "N'abc'", typ: nat, value: "abc", quote: 'N', quoteStyle: noWord, end: loc(1, 7), alias: aliasYes},
@@ -448,7 +449,7 @@ func readQuotedSlowRef(tkz *Tokenizer, kind string) (models.Token, error) {
 	default: // "string"
 		quote, _ := utf8.DecodeRune(tkz.input[tkz.pos.Index:])
 		startPos := tkz.pos
-		if tkz.pos.Index+2 < len(tkz.input) {
+		if tkz.dialect == keywords.DialectBigQuery && tkz.pos.Index+2 < len(tkz.input) {
 			next1, _ := utf8.DecodeRune(tkz.input[tkz.pos.Index+1:])
 			next2, _ := utf8.DecodeRune(tkz.input[tkz.pos.Index+2:])
 			if next1 == quote && next2 == quote {

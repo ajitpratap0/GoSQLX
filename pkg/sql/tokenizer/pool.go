@@ -129,7 +129,7 @@ func PutTokenizer(t *Tokenizer) {
 		// Tokenize call where the configured dialect must persist. The dialect
 		// is a plain field, so restoring it is a single assignment.
 		t.dialect = keywords.DialectPostgreSQL
-		t.strEscape = sqldialect.StringEscapeLenient
+		t.strEscape = sqldialect.StringEscapeStrict
 
 		tokenizerPool.Put(t)
 

@@ -256,12 +256,8 @@ func (p *Parser) parseNumericLit() (*ast.LiteralValue, error) {
 		return nil, p.expectedError("numeric literal")
 	}
 	value := p.currentToken.Token.Value
-	litType := "int"
-	if strings.ContainsAny(value, ".eE") {
-		litType = "float"
-	}
 	p.advance()
-	return &ast.LiteralValue{Value: value, Type: litType}, nil
+	return &ast.LiteralValue{Value: value, Type: numericLiteralType(value)}, nil
 }
 
 // parseForSystemTimeClause parses the FOR SYSTEM_TIME clause that follows a table reference.

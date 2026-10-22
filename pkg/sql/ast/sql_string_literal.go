@@ -34,8 +34,11 @@ func stringLiteralNeedsEscapeRaw(s string) bool {
 
 // writeRawStringLiteral escapes s for a single-quoted literal in a dialect
 // where a backslash is an ordinary character: only the quote is doubled and
-// invalid UTF-8 is replaced with U+FFFD. NUL bytes are dropped, as in
-// writeEscapedStringLiteral.
+// invalid UTF-8 is replaced with U+FFFD. Such a dialect has no way to write a
+// NUL, and a raw NUL byte would truncate the statement in C-string APIs, so
+// NUL bytes are dropped. Parsed input cannot reach this (the tokenizer
+// rejects a NUL inside a string in these dialects, and the transpiler
+// refuses to target them with one); only a hand-built AST can.
 func writeRawStringLiteral(buf *bytes.Buffer, s string) {
 	if !stringLiteralNeedsEscapeRaw(s) {
 		buf.WriteString(s)
@@ -146,6 +149,9 @@ func writeEscapedEStringLiteral(buf *bytes.Buffer, s string) {
 		case '\\':
 			buf.WriteString(`\\`)
 		case 0:
+			// Three octal digits, so a following digit is not read as part
+			// of the escape.
+			buf.WriteString(`\000`)
 		case '\n':
 			buf.WriteString(`\n`)
 		case '\r':

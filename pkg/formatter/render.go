@@ -583,6 +583,19 @@ func renderSetOperation(s *ast.SetOperation, opts ast.FormatOptions) string {
 	if s == nil {
 		return ""
 	}
+	// A WITH clause that scopes over the whole operation but would end up
+	// inside the parentheses of a left operand is written before the chain.
+	if with, body := ast.HoistLeadingWith(s, opts.Dialect); with != nil {
+		f := newNodeFormatter(opts)
+		f.sb.WriteString(renderWith(with, f))
+		f.sb.WriteString(f.clauseSep())
+		f.sb.WriteString(renderSetOperationBody(body, opts))
+		return f.result()
+	}
+	return renderSetOperationBody(s, opts)
+}
+
+func renderSetOperationBody(s *ast.SetOperation, opts ast.FormatOptions) string {
 	f := newNodeFormatter(opts)
 	sb := f.sb
 	inner := nestedOpts(opts)

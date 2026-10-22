@@ -1674,10 +1674,25 @@ func (s *SetOperation) writeSQL(buf *bytes.Buffer) {
 	if s == nil {
 		return
 	}
+	if with, body := HoistLeadingWith(s, ""); with != nil {
+		with.writeSQL(buf)
+		buf.WriteByte(' ')
+		body.writeBody(buf)
+		return
+	}
+	s.writeBody(buf)
+}
+
+// writeBody writes the operation without looking for a WITH clause to hoist;
+// a left operand that is a set operation is a link of the same chain, not a
+// new one, unless it is parenthesized.
+func (s *SetOperation) writeBody(buf *bytes.Buffer) {
 	if SetOperandNeedsParens(s, false, "") {
 		buf.WriteByte('(')
 		writeStmt(buf, s.Left)
 		buf.WriteByte(')')
+	} else if left, ok := s.Left.(*SetOperation); ok && left != nil {
+		left.writeBody(buf)
 	} else {
 		writeStmt(buf, s.Left)
 	}

@@ -75,6 +75,15 @@ func TestJoinWithComments(t *testing.T) {
 		{"hint after first keyword stays", "select /*+ FULL(t) */ a from t", "SELECT /*+ FULL(t) */ a FROM t"},
 		{"hint plus comment", "select /*+ FULL(t) */ a from t -- note", "SELECT /*+ FULL(t) */ a FROM t -- note"},
 		{"hint on insert", "insert /*+ APPEND */ into t (a) values (1)", "INSERT /*+ APPEND */ INTO t (a) VALUES (1)"},
+		{"hint in subquery", "select * from (select /*+ x */ 1) s", "SELECT * FROM (SELECT /*+ x */ 1) s"},
+		{"hint in union branch", "select 1 union select /*+ x */ 2", "SELECT 1 union SELECT /*+ x */ 2"},
+		{"hint inside a CTE body",
+			"with c as (select /*+ MATERIALIZE */ * from big where f = 'select') select count(*) from c",
+			"WITH c AS (SELECT /*+ MATERIALIZE */ * FROM big WHERE f = 'select') SELECT count(*) FROM c"},
+		{"hints on the CTE and the main query",
+			"with c as (select /*+ a */ 1) select /*+ b */ * from c",
+			"WITH c AS (SELECT /*+ a */ 1) SELECT /*+ b */ * FROM c"},
+		{"two hints on one keyword keep their order", "select /*+ a */ /*+ b */ 1", "SELECT /*+ a */ /*+ b */ 1"},
 		{"hint on second statement", "select 1; select /*+ x */ 2", "SELECT 1;\nSELECT /*+ x */ 2"},
 		{"executable comment statement kept with its semicolon",
 			"/*!40101 SET x = 1 */;\nselect 1", "/*!40101 SET x = 1 */;\nSELECT 1"},
@@ -97,9 +106,7 @@ func TestJoinWithComments(t *testing.T) {
 func TestJoinWithComments_RefusesWhatItCannotPlace(t *testing.T) {
 	layout := CommentLayout{Terminator: ";", Gap: "\n"}
 	for name, sql := range map[string]string{
-		"hint in subquery":       "select * from (select /*+ x */ 1) s",
 		"hint after from":        "select a from /*+ x */ t",
-		"hint in union branch":   "select 1 union select /*+ x */ 2",
 		"executable in stmt":     "select 1 /*!50000 + 1 */",
 		"executable before stmt": "/*!40101 SET x = 1 */ select 1",
 		"oracle line hint":       "select --+ FULL(t)\n a from t",
@@ -201,5 +208,38 @@ func TestJoinWithComments_NoComments(t *testing.T) {
 	got, _ = JoinWithComments([]string{"A;", "B;"}, nil, nil, CommentLayout{Gap: "\n"})
 	if got != "A;\nB;" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+// TestInsertHints_RefusesWhenKeywordMoved checks that a hint on a nested
+// keyword is only placed when the rendered statement has the same number of
+// that keyword, so it can never land on a different one.
+func TestInsertHints_RefusesWhenKeywordMoved(t *testing.T) {
+	h := []placedHint{{text: "/*+ x */", keyword: "SELECT", ordinal: 1, total: 2}}
+	tests := []struct {
+		name string
+		stmt string
+		want string
+		ok   bool
+	}{
+		{"same count", "WITH c AS (SELECT 1) SELECT 2", "WITH c AS (SELECT 1) SELECT /*+ x */ 2", true},
+		{"words in strings and comments are skipped", "WITH c AS (SELECT 'select') /* select */ SELECT 2", "WITH c AS (SELECT 'select') /* select */ SELECT /*+ x */ 2", true},
+		{"quoted names are skipped", `WITH "select" AS (SELECT 1) SELECT 2`, `WITH "select" AS (SELECT 1) SELECT /*+ x */ 2`, true},
+		{"fewer keywords", "SELECT 2", "", false},
+		{"more keywords", "SELECT 1 UNION SELECT 2 UNION SELECT 3", "", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := insertHints(tc.stmt, h)
+			if !tc.ok {
+				if !errors.Is(err, ErrUnplaceableComment) {
+					t.Fatalf("err = %v (output %q), want ErrUnplaceableComment", err, got)
+				}
+				return
+			}
+			if err != nil || got != tc.want {
+				t.Fatalf("insertHints = %q, %v; want %q", got, err, tc.want)
+			}
+		})
 	}
 }

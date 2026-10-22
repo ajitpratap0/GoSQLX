@@ -108,7 +108,7 @@ func TestSetOperandNeedsParens(t *testing.T) {
 		{"right parenthesized select", &SetOperation{Left: sel, Operator: "UNION", Right: sel, RightParenthesized: true}, true, "", true},
 		{"left looser set operation", &SetOperation{Left: union, Operator: "INTERSECT", Right: sel}, false, "", true},
 		{"left looser set operation oracle", &SetOperation{Left: union, Operator: "INTERSECT", Right: sel}, false, "oracle", false},
-		{"left looser set operation with CTE", &SetOperation{Left: &SetOperation{Left: &SelectStatement{With: &WithClause{}}, Operator: "UNION", Right: sel}, Operator: "INTERSECT", Right: sel}, false, "", false},
+		{"left looser set operation with CTE (hoisted by HoistLeadingWith)", &SetOperation{Left: &SetOperation{Left: &SelectStatement{With: &WithClause{}}, Operator: "UNION", Right: sel}, Operator: "INTERSECT", Right: sel}, false, "", true},
 		{"left equal set operation", &SetOperation{Left: union, Operator: "EXCEPT", Right: sel}, false, "", false},
 		{"left tighter set operation", &SetOperation{Left: inter, Operator: "UNION", Right: sel}, false, "", false},
 		{"left parenthesized", &SetOperation{Left: union, Operator: "INTERSECT", Right: sel, LeftParenthesized: true}, false, "", true},
@@ -166,5 +166,70 @@ func TestReleaseTableReference_PivotExtensions(t *testing.T) {
 	}
 	if !reflect.DeepEqual(pivot.PivotExtensions, PivotExtensions{}) {
 		t.Errorf("PivotExtensions not cleared: %+v", pivot.PivotExtensions)
+	}
+}
+
+// TestHoistLeadingWith pins when the WITH clause of the first SELECT is moved
+// in front of a set operation, and that the original tree is not changed.
+func TestHoistLeadingWith(t *testing.T) {
+	with := &WithClause{}
+	cte := func() *SelectStatement { return &SelectStatement{With: with} }
+	sel := &SelectStatement{}
+	tests := []struct {
+		name    string
+		s       *SetOperation
+		dialect string
+		want    bool
+	}{
+		{"nil", nil, "", false},
+		{"no WITH", &SetOperation{Left: &SetOperation{Left: sel, Operator: "UNION", Right: sel}, Operator: "INTERSECT", Right: sel}, "", false},
+		{"chain keeps WITH in place", &SetOperation{Left: cte(), Operator: "UNION", Right: sel}, "", false},
+		{"looser left operand", &SetOperation{Left: &SetOperation{Left: cte(), Operator: "UNION", Right: sel}, Operator: "INTERSECT", Right: sel}, "", true},
+		{"looser left operand, equal-precedence dialect", &SetOperation{Left: &SetOperation{Left: cte(), Operator: "UNION", Right: sel}, Operator: "INTERSECT", Right: sel}, "oracle", false},
+		{"source parentheses scope the WITH", &SetOperation{Left: cte(), Operator: "UNION", Right: sel, LeftParenthesized: true}, "", false},
+		{"WITH written before the parentheses", &SetOperation{Left: cte(), Operator: "UNION", Right: sel, LeftParenthesized: true, LeftWithHoisted: true}, "", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotWith, body := HoistLeadingWith(tc.s, tc.dialect)
+			if (gotWith != nil) != tc.want {
+				t.Fatalf("hoisted = %v, want %v", gotWith != nil, tc.want)
+			}
+			if !tc.want {
+				if body != tc.s {
+					t.Errorf("body is not the input when nothing is hoisted")
+				}
+				return
+			}
+			if gotWith != with {
+				t.Errorf("returned WITH is not the clause of the first SELECT")
+			}
+			var first Statement = body
+			for {
+				op, ok := first.(*SetOperation)
+				if !ok {
+					break
+				}
+				first = op.Left
+			}
+			sel, ok := first.(*SelectStatement)
+			if !ok {
+				t.Fatalf("first operand is %T, want *SelectStatement", first)
+			}
+			if sel.With != nil {
+				t.Errorf("hoisted copy still has the WITH clause")
+			}
+			var orig Statement = tc.s
+			for {
+				op, ok := orig.(*SetOperation)
+				if !ok {
+					break
+				}
+				orig = op.Left
+			}
+			if os, ok := orig.(*SelectStatement); !ok || os.With != with {
+				t.Errorf("the input tree was modified")
+			}
+		})
 	}
 }

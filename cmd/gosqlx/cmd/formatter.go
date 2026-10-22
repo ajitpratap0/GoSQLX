@@ -416,6 +416,9 @@ func checkQuotedTokens(input, output []models.TokenWithSpan, dialect string) err
 	}
 	defer release()
 
+	input = mergeAdjacentStrings(input, dialect)
+	output = mergeAdjacentStrings(output, dialect)
+
 	pool := make(map[string]int)
 	for _, t := range output {
 		if isStringLiteralToken(t.Token) || bw.isQuotedIdent(t.Token) {
@@ -445,6 +448,47 @@ func checkQuotedTokens(input, output []models.TokenWithSpan, dialect string) err
 		}
 	}
 	return nil
+}
+
+// mergeAdjacentStrings returns toks with each run of adjacent single-quoted
+// string tokens merged into one token, for the dialects whose parser reads
+// 'a' 'b' as the literal 'ab' (MySQL, MariaDB, PostgreSQL). The formatter
+// writes the merged literal, which means the same. Other dialects, and toks
+// without such a run, are returned as they are.
+func mergeAdjacentStrings(toks []models.TokenWithSpan, dialect string) []models.TokenWithSpan {
+	switch strings.ToLower(dialect) {
+	case "mysql", "mariadb", "postgresql", "postgres":
+	default:
+		return toks
+	}
+	plain := func(t models.Token) bool {
+		return t.Type == models.TokenTypeString || t.Type == models.TokenTypeSingleQuotedString
+	}
+	var out []models.TokenWithSpan
+	for i := 0; i < len(toks); i++ {
+		if !plain(toks[i].Token) || i+1 >= len(toks) || !plain(toks[i+1].Token) {
+			if out != nil {
+				out = append(out, toks[i])
+			}
+			continue
+		}
+		if out == nil {
+			out = append(make([]models.TokenWithSpan, 0, len(toks)), toks[:i]...)
+		}
+		merged := toks[i]
+		var sb strings.Builder
+		sb.WriteString(merged.Token.Value)
+		for i+1 < len(toks) && plain(toks[i+1].Token) {
+			i++
+			sb.WriteString(toks[i].Token.Value)
+		}
+		merged.Token.Value = sb.String()
+		out = append(out, merged)
+	}
+	if out == nil {
+		return toks
+	}
+	return out
 }
 
 // checkMySQLDoubleQuotes requires MySQL/MariaDB output to keep exactly the

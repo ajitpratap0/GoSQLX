@@ -45,9 +45,9 @@ func SetOperatorsEqualPrecedence(dialect string) bool {
 // the precedence of the target dialect, as for a tree parsed with
 // equal-precedence rules (Oracle, SQLite: (A UNION B) INTERSECT C) and
 // written for another dialect. The parser builds left-deep trees for
-// operators of equal precedence. A WITH clause on the first SELECT keeps the
-// operand unparenthesized, since the parentheses would move it inside and
-// narrow its scope.
+// operators of equal precedence. A WITH clause on the first SELECT would end
+// up inside those parentheses and narrow its scope, so renderers write it
+// before the whole chain instead (see HoistLeadingWith).
 func SetOperandNeedsParens(s *SetOperation, right bool, dialect string) bool {
 	if s == nil {
 		return false
@@ -60,8 +60,7 @@ func SetOperandNeedsParens(s *SetOperation, right bool, dialect string) bool {
 		if !ok || child == nil || SetOperatorsEqualPrecedence(dialect) {
 			return false
 		}
-		return setOperatorPrecedence(child.Operator) < setOperatorPrecedence(s.Operator) &&
-			!setOperationLeadsWithCTE(child)
+		return setOperatorPrecedence(child.Operator) < setOperatorPrecedence(s.Operator)
 	}
 	if s.RightParenthesized {
 		return true
@@ -77,19 +76,69 @@ func SetOperandNeedsParens(s *SetOperation, right bool, dialect string) bool {
 	return setOperatorPrecedence(child.Operator) <= setOperatorPrecedence(s.Operator)
 }
 
-// setOperationLeadsWithCTE reports whether the first SELECT of s carries a
-// WITH clause.
-func setOperationLeadsWithCTE(s *SetOperation) bool {
-	var left Statement = s
+// HoistLeadingWith returns the WITH clause of the first SELECT of s together
+// with a copy of s whose first SELECT has no WITH clause, when renderers must
+// write the clause before the whole set operation: some left operand of s is
+// written in parentheses (it was written as "WITH c ... (A UNION B) INTERSECT
+// C" and recorded in LeftWithHoisted, or it needs them under the precedence
+// of dialect, as for a tree parsed with the equal-precedence rules of Oracle
+// and SQLite), and the clause scopes over the whole set operation. Writing
+// it inside the parentheses would hide its CTEs from the other operands.
+//
+// A WITH clause that was written inside parentheses in the source
+// ("(WITH c ... A) UNION B"), or a set operation without a WITH clause or
+// without a parenthesized left operand, yields (nil, s). The copy shares all
+// other nodes with s; s is not modified.
+func HoistLeadingWith(s *SetOperation, dialect string) (*WithClause, *SetOperation) {
+	if s == nil {
+		return nil, s
+	}
+	var first Statement = s
 	for {
-		op, ok := left.(*SetOperation)
+		op, ok := first.(*SetOperation)
 		if !ok || op == nil {
 			break
 		}
-		left = op.Left
+		first = op.Left
 	}
-	sel, ok := left.(*SelectStatement)
-	return ok && sel != nil && sel.With != nil
+	sel, ok := first.(*SelectStatement)
+	if !ok || sel == nil || sel.With == nil {
+		return nil, s
+	}
+	// Levels of the left spine, outermost first.
+	var spine []*SetOperation
+	for cur := Statement(s); ; {
+		op, ok := cur.(*SetOperation)
+		if !ok || op == nil {
+			break
+		}
+		spine = append(spine, op)
+		cur = op.Left
+	}
+	needs := false
+	for i := len(spine) - 1; i >= 0; i-- {
+		level := spine[i]
+		if level.LeftParenthesized && !level.LeftWithHoisted {
+			return nil, s // the WITH clause is scoped by the source's parentheses
+		}
+		if level.LeftParenthesized || SetOperandNeedsParens(level, false, dialect) {
+			needs = true
+		}
+	}
+	if !needs {
+		return nil, s
+	}
+	copies := make([]SetOperation, len(spine))
+	for i, level := range spine {
+		copies[i] = *level
+		if i > 0 {
+			copies[i-1].Left = &copies[i]
+		}
+	}
+	bare := *sel
+	bare.With = nil
+	copies[len(copies)-1].Left = &bare
+	return sel.With, &copies[0]
 }
 
 // SetOperationKeyword returns the operator of s as written by the renderers,

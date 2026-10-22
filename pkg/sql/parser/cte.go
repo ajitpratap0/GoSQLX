@@ -68,6 +68,12 @@ func (p *Parser) parseWithStatement() (ast.Statement, error) {
 		Pos:       withPos,
 	}
 
+	// A parenthesized query after the WITH clause: WITH c AS (...) (A UNION B)
+	// INTERSECT C. The clause scopes over the whole query expression.
+	if p.isType(models.TokenTypeLParen) {
+		return p.parseWithParenthesizedQuery(withClause)
+	}
+
 	// Parse the main statement that follows the WITH clause
 	mainStmt, err := p.parseMainStatementAfterWith()
 	if err != nil {
@@ -303,4 +309,67 @@ func (p *Parser) parseMainStatementAfterWith() (ast.Statement, error) {
 		return p.parseDeleteStatement()
 	}
 	return nil, p.expectedError("SELECT, INSERT, UPDATE, or DELETE after WITH")
+}
+
+// parseWithParenthesizedQuery parses the query expression after a WITH clause
+// when it starts with "(", as in
+//
+//	WITH c AS (SELECT 1 AS a) (SELECT a FROM c UNION SELECT a FROM c) INTERSECT SELECT a FROM c
+//
+// The WITH clause is attached to the first SELECT of the query expression, as
+// for an unparenthesized one, and the set operation that owns the
+// parenthesized operand records that the clause was written outside the
+// parentheses (SetOperation.LeftWithHoisted), so that renderers keep it in
+// scope of the other operands. A first SELECT that has a WITH clause of its
+// own is rejected.
+func (p *Parser) parseWithParenthesizedQuery(with *ast.WithClause) (ast.Statement, error) {
+	wrap := func(err error) error {
+		return goerrors.InvalidCTEError(
+			fmt.Sprintf("error parsing statement after WITH clause: %v", err),
+			p.currentLocation(),
+			"",
+		)
+	}
+	q, err := p.parseParenthesizedQuery("SELECT after WITH")
+	if err != nil {
+		return nil, wrap(err)
+	}
+	stmt, err := p.parseSetOperationChain(q, true)
+	if err != nil {
+		return nil, wrap(err)
+	}
+
+	// The first SELECT of the whole expression takes the WITH clause.
+	var first ast.Statement = stmt
+	for {
+		op, ok := first.(*ast.SetOperation)
+		if !ok || op == nil {
+			break
+		}
+		first = op.Left
+	}
+	sel, ok := first.(*ast.SelectStatement)
+	if !ok || sel == nil || sel.With != nil {
+		return nil, goerrors.UnsupportedFeatureError(
+			"WITH clause before a parenthesized query that is not a SELECT or already has its own WITH clause",
+			p.currentLocation(),
+			"",
+		)
+	}
+	sel.With = with
+
+	// The operation whose left operand is the parenthesized query is the
+	// innermost one of the left spine that was written with parentheses.
+	for cur := stmt; ; {
+		op, ok := cur.(*ast.SetOperation)
+		if !ok || op == nil {
+			break
+		}
+		if op.LeftParenthesized {
+			op.LeftWithHoisted = true
+			break
+		}
+		cur = op.Left
+	}
+	return stmt, nil
 }

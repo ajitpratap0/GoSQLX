@@ -48,6 +48,11 @@ type SetOperation struct {
 	All      bool // UNION ALL vs UNION
 	// LeftParenthesized reports that Left was written as "(query)".
 	LeftParenthesized bool
+	// LeftWithHoisted reports that the WITH clause of Left's first SELECT was
+	// written before the parenthesized Left ("WITH c AS (...) (A UNION B)
+	// INTERSECT C"), so it scopes over the whole set operation; see
+	// HoistLeadingWith.
+	LeftWithHoisted bool
 	// RightParenthesized reports that Right was written as "(query)".
 	RightParenthesized bool
 	// Distinct reports an explicit DISTINCT quantifier (UNION DISTINCT,

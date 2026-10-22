@@ -33,9 +33,7 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
 	"github.com/ajitpratap0/GoSQLX/pkg/linter"
-	lintkeywords "github.com/ajitpratap0/GoSQLX/pkg/linter/rules/keywords"
-	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/style"
-	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/whitespace"
+	lintrules "github.com/ajitpratap0/GoSQLX/pkg/linter/rules"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
@@ -420,28 +418,13 @@ func parseLintOptions(raw string) (LintOptions, error) {
 	return opts, nil
 }
 
-// newLinter builds the rule set of the `gosqlx lint` CLI command
-// (createLinter in cmd/gosqlx/cmd/lint.go, also mirrored by pkg/mcp's
-// newFullLinter): L001-L010 with the CLI's rule configuration. Keep the three
-// in sync when the CLI's default rule set changes.
+// newLinter builds the rule set of the `gosqlx lint` CLI command: the core
+// rules L001-L010 from rules.CoreRules with the CLI's configuration and the
+// given L005 limit.
 func newLinter(maxLineLength int, dialect string) *linter.Linter {
-	l := linter.New(
-		// Whitespace rules (L001, L002, L003, L004, L005, L010)
-		whitespace.NewTrailingWhitespaceRule(),     // L001
-		whitespace.NewMixedIndentationRule(),       // L002
-		whitespace.NewConsecutiveBlankLinesRule(1), // L003
-		whitespace.NewIndentationDepthRule(4, 4),   // L004
-		whitespace.NewLongLinesRule(maxLineLength), // L005
-		whitespace.NewRedundantWhitespaceRule(),    // L010
-
-		// Style rules (L006, L008, L009)
-		style.NewColumnAlignmentRule(),                   // L006
-		style.NewCommaPlacementRule(style.CommaTrailing), // L008
-		style.NewAliasingConsistencyRule(true),           // L009
-
-		// Keyword rules (L007)
-		lintkeywords.NewKeywordCaseRule(lintkeywords.CaseUpper), // L007
-	)
+	cfg := lintrules.DefaultCoreConfig()
+	cfg.MaxLineLength = maxLineLength
+	l := linter.New(lintrules.CoreRules(cfg)...)
 	if dialect != "" {
 		l.SetDialect(keywords.SQLDialect(dialect))
 	}

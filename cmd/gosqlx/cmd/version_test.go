@@ -14,16 +14,33 @@
 
 package cmd
 
-import "testing"
+import (
+	"bytes"
+	"strings"
+	"testing"
 
-// TestRootCmdVersionUsesVersionVar guards the release ldflags contract:
-// --version must print the Version variable, which release builds override
-// with -X github.com/ajitpratap0/GoSQLX/cmd/gosqlx/cmd.Version=<tag>.
-func TestRootCmdVersionUsesVersionVar(t *testing.T) {
-	if Version == "" {
-		t.Fatal("Version must have a non-empty default for dev builds")
+	"github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+)
+
+// TestRootCmdVersionReportsLibraryVersion runs `gosqlx --version` and checks
+// that an unstamped build reports the library's gosqlx.Version, so the CLI and
+// library versions cannot drift. Release builds override cmd.Version with
+// -ldflags "-X github.com/ajitpratap0/GoSQLX/cmd/gosqlx/cmd.Version=<tag>".
+func TestRootCmdVersionReportsLibraryVersion(t *testing.T) {
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"--version"})
+	t.Cleanup(func() {
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+		rootCmd.SetArgs(nil)
+	})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("gosqlx --version: %v", err)
 	}
-	if rootCmd.Version != Version {
-		t.Errorf("rootCmd.Version = %q, want Version %q", rootCmd.Version, Version)
+	if got := out.String(); !strings.Contains(got, gosqlx.Version) {
+		t.Errorf("gosqlx --version output %q does not contain gosqlx.Version %q", got, gosqlx.Version)
 	}
 }

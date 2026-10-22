@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -27,27 +28,28 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/linter"
-	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/keywords"
-	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/style"
-	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules/whitespace"
+	"github.com/ajitpratap0/GoSQLX/pkg/linter/rules"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 )
 
-// builtinRules returns all built-in lint rules. This is the single source of
-// truth - both defaultLinter() and allRules() derive from it.
+// actionCoreConfig is the action command's own configuration of the core
+// rules, more lenient than `gosqlx lint`: L003 allows 2 blank lines, L004
+// depth 10, L005 120 columns.
+var actionCoreConfig = rules.CoreConfig{
+	MaxConsecutiveBlankLines: 2,
+	MaxIndentDepth:           10,
+	IndentSize:               4,
+	MaxLineLength:            120,
+}
+
+// builtinRules returns all built-in lint rules (the core rules L001-L010 from
+// rules.CoreRules), sorted by rule ID so violations keep the action's
+// established L001..L010 output order. This is the single source of truth -
+// both defaultLinter() and allRules() derive from it.
 func builtinRules() []linter.Rule {
-	return []linter.Rule{
-		whitespace.NewTrailingWhitespaceRule(),           // L001
-		whitespace.NewMixedIndentationRule(),             // L002
-		whitespace.NewConsecutiveBlankLinesRule(2),       // L003
-		whitespace.NewIndentationDepthRule(10, 4),        // L004
-		whitespace.NewLongLinesRule(120),                 // L005
-		style.NewColumnAlignmentRule(),                   // L006
-		keywords.NewKeywordCaseRule(keywords.CaseUpper),  // L007
-		style.NewCommaPlacementRule(style.CommaTrailing), // L008
-		style.NewAliasingConsistencyRule(true),           // L009
-		whitespace.NewRedundantWhitespaceRule(),          // L010
-	}
+	rs := rules.CoreRules(actionCoreConfig)
+	slices.SortFunc(rs, func(a, b linter.Rule) int { return strings.Compare(a.ID(), b.ID()) })
+	return rs
 }
 
 // actionFlags holds the flag values for the action subcommand,

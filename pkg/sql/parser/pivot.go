@@ -400,8 +400,10 @@ func (p *Parser) parseUnpivotClause() (*ast.UnpivotClause, error) {
 		}
 		if p.isType(models.TokenTypeAs) {
 			p.advance() // consume AS
+			// Oracle accepts a literal alias; BigQuery also permits INT64 aliases.
+			numericAlias := p.isType(models.TokenTypeNumber) && (p.IsOracle() || p.IsBigQuery())
 			if !p.isStringLiteral() && !p.isIdentifier() && !p.isNonReservedKeyword() &&
-				!p.isType(models.TokenTypeNumber) {
+				!numericAlias {
 				return nil, p.expectedError("alias after AS in UNPIVOT IN list")
 			}
 			col += " AS " + p.renderPivotValue()

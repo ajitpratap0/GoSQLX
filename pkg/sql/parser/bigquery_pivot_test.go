@@ -338,8 +338,10 @@ func TestPivot_DialectGating_Issue854(t *testing.T) {
 		{"sqlserver aggregate alias", "SELECT * FROM t PIVOT (SUM(x) AS s FOR q IN ([a]))", keywords.DialectSQLServer},
 		{"sqlserver bare IN alias", "SELECT * FROM t PIVOT (SUM(x) FOR q IN ([a] b))", keywords.DialectSQLServer},
 		{"sqlserver INCLUDE NULLS", "SELECT * FROM t UNPIVOT INCLUDE NULLS (v FOR k IN (c1))", keywords.DialectSQLServer},
+		{"sqlserver numeric row value alias", "SELECT * FROM t UNPIVOT (v FOR k IN (c1 AS 1))", keywords.DialectSQLServer},
 		{"snowflake multiple aggregates", "SELECT * FROM t PIVOT (SUM(x), COUNT(*) FOR q IN ('a'))", keywords.DialectSnowflake},
 		{"snowflake multi-column unpivot", "SELECT * FROM t UNPIVOT ((a, b) FOR k IN ((c1, c2)))", keywords.DialectSnowflake},
+		{"snowflake numeric row value alias", "SELECT * FROM t UNPIVOT (v FOR k IN (c1 AS 1))", keywords.DialectSnowflake},
 		{"oracle bare row value alias", "SELECT * FROM t UNPIVOT (v FOR k IN (c1 'x'))", keywords.DialectOracle},
 	}
 	for _, tc := range extensions {
@@ -358,6 +360,8 @@ func TestPivot_DialectGating_Issue854(t *testing.T) {
 	}{
 		{"oracle multiple aggregates", "SELECT * FROM t PIVOT (SUM(x) AS s, COUNT(*) AS n FOR q IN (1 AS a, 2 AS b))", keywords.DialectOracle},
 		{"oracle multi-column unpivot", "SELECT * FROM t UNPIVOT ((a, b) FOR k IN ((c1, c2) AS 'x'))", keywords.DialectOracle},
+		{"oracle numeric row value alias", "SELECT * FROM t UNPIVOT (v FOR k IN (c1 AS 1))", keywords.DialectOracle},
+		{"bigquery numeric row value alias", "SELECT * FROM t UNPIVOT (v FOR k IN (c1 AS 1))", keywords.DialectBigQuery},
 		{"oracle INCLUDE NULLS", "SELECT * FROM t UNPIVOT INCLUDE NULLS (v FOR k IN (c1))", keywords.DialectOracle},
 		{"snowflake INCLUDE NULLS", "SELECT * FROM t UNPIVOT INCLUDE NULLS (v FOR k IN (c1, c2))", keywords.DialectSnowflake},
 		{"snowflake bare IN alias", "SELECT * FROM t PIVOT (SUM(x) FOR q IN ('a' qa))", keywords.DialectSnowflake},

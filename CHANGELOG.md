@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PIVOT/UNPIVOT quoted aggregate aliases, UNPIVOT value columns, and
   backtick-quoted `IN` names and aliases keep their source delimiters when
   rendered. This preserves BigQuery backticks and Oracle alias case.
+- Numeric UNPIVOT row aliases after `AS` are limited to BigQuery and Oracle;
+  Snowflake and SQL Server reject them.
 
 ### Added
 - `ast.PivotClause.AggregateAlias`, `ast.PivotClause.ExtraAggregates`

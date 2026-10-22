@@ -52,6 +52,8 @@ func TestBigQueryPivot_FormatRoundTrip_Issue854(t *testing.T) {
 		{"backtick_first_and_extra_alias", "SELECT * FROM sales PIVOT (SUM(amount) AS `日本`, COUNT(*) `a``b` FOR quarter IN ('Q1'))", "SELECT * FROM sales PIVOT (SUM(amount) AS `日本`, COUNT(*) AS `a``b` FOR quarter IN ('Q1'))"},
 		{"unpivot_backtick_value", "SELECT * FROM sales UNPIVOT (`日本` FOR quarter IN (Q1, Q2))", "SELECT * FROM sales UNPIVOT (`日本` FOR quarter IN (Q1, Q2))"},
 		{"unpivot_backtick_value_set", "SELECT * FROM sales UNPIVOT ((`日本`, `a``b`) FOR quarter IN ((Q1, Q2)))", "SELECT * FROM sales UNPIVOT ((`日本`, `a``b`) FOR quarter IN ((Q1, Q2)))"},
+		{"unpivot_backtick_spaced_value", "SELECT * FROM sales UNPIVOT (`total amount` FOR quarter IN (`Q 1`, `Q 2`))", "SELECT * FROM sales UNPIVOT (`total amount` FOR quarter IN (`Q 1`, `Q 2`))"},
+		{"unpivot_backtick_spaced_value_set", "SELECT * FROM sales UNPIVOT ((`a b`, c) FOR quarter IN ((`Q 1`, `Q 2`)))", "SELECT * FROM sales UNPIVOT ((`a b`, c) FOR quarter IN ((`Q 1`, `Q 2`)))"},
 		{
 			"unpivot_include_nulls",
 			"SELECT * FROM produce UNPIVOT INCLUDE NULLS (sales FOR quarter IN (Q1 'first', Q2 AS 2)) AS u",

@@ -46,6 +46,12 @@ var defaultLinter = sync.OnceValue(func() *linter.Linter {
 // Lint checks SQL for style, safety, and performance issues using all 30 built-in
 // lint rules (L001-L030). Returns violations found and any error encountered.
 //
+// SQL that does not tokenize or parse is reported as an error wrapping
+// ErrTokenize or ErrSyntax, so a caller that only checks err cannot mistake
+// invalid SQL for clean SQL. The returned *LintResult is still non-nil in that
+// case and holds the violations of the text and token rules, which run on
+// invalid input; callers that want only those can ignore the error.
+//
 // This is a convenience wrapper around the pkg/linter package that uses a
 // shared, lazily-built linter with all rules enabled using sensible defaults.
 // For fine-grained control over which rules to enable or their configuration,
@@ -64,11 +70,24 @@ var defaultLinter = sync.OnceValue(func() *linter.Linter {
 //	}
 func Lint(sql string) (*LintResult, error) {
 	l := defaultLinter()
-	fileResult := l.LintString(sql, "<input>")
+	return lintResult(l.LintString(sql, "<input>"))
+}
+
+// lintResult converts a linter.FileResult into the Lint return values: a rule
+// failure returns no result; invalid SQL returns the result together with an
+// error wrapping ErrTokenize or ErrSyntax.
+func lintResult(fileResult linter.FileResult) (*LintResult, error) {
 	if fileResult.Error != nil {
 		return nil, fileResult.Error
 	}
-	return &LintResult{Violations: fileResult.Violations}, nil
+	res := &LintResult{Violations: fileResult.Violations}
+	switch {
+	case fileResult.TokenizeError != nil:
+		return res, fmt.Errorf("%w: %w", ErrTokenize, fileResult.TokenizeError)
+	case fileResult.ParseError != nil:
+		return res, fmt.Errorf("%w: %w", ErrSyntax, fileResult.ParseError)
+	}
+	return res, nil
 }
 
 // dialectLinters caches one linter per dialect for LintWithDialect. Only
@@ -96,8 +115,9 @@ func linterForDialect(dialect sqlkeywords.SQLDialect) *linter.Linter {
 // LintWithDialect is like Lint but tokenizes and parses the SQL with the given
 // dialect, so the AST-based rules (L011-L030) also run on dialect-specific
 // syntax such as SQL Server's TOP or [bracketed] identifiers. An empty dialect
-// behaves exactly like Lint. An unknown dialect returns an error wrapping
-// ErrUnsupportedDialect, matching ParseWithDialect.
+// behaves exactly like Lint, including its error for invalid SQL. An unknown
+// dialect returns an error wrapping ErrUnsupportedDialect, matching
+// ParseWithDialect.
 //
 // Thread Safety: safe for concurrent use.
 func LintWithDialect(sql string, dialect sqlkeywords.SQLDialect) (*LintResult, error) {
@@ -107,11 +127,7 @@ func LintWithDialect(sql string, dialect sqlkeywords.SQLDialect) (*LintResult, e
 	if !sqlkeywords.IsValidDialect(string(dialect)) {
 		return nil, fmt.Errorf("%w: %q", ErrUnsupportedDialect, dialect)
 	}
-	fileResult := linterForDialect(dialect).LintString(sql, "<input>")
-	if fileResult.Error != nil {
-		return nil, fileResult.Error
-	}
-	return &LintResult{Violations: fileResult.Violations}, nil
+	return lintResult(linterForDialect(dialect).LintString(sql, "<input>"))
 }
 
 // allRules returns all 30 built-in lint rules with sensible defaults: the

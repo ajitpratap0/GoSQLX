@@ -610,7 +610,7 @@ func releaseStatement(stmt Statement, mode releaseMode) {
 	case *CreateIndexStatement:
 		PutCreateIndexStatement(s)
 	case *MergeStatement:
-		PutMergeStatement(s)
+		releaseMergeStatement(s, mode)
 	case *CreateViewStatement:
 		PutCreateViewStatement(s)
 	case *CreateMaterializedViewStatement:
@@ -628,7 +628,7 @@ func releaseStatement(stmt Statement, mode releaseMode) {
 	case *UnsupportedStatement:
 		PutUnsupportedStatement(s)
 	case *ReplaceStatement:
-		PutReplaceStatement(s)
+		releaseReplaceStatement(s, mode)
 	case *AlterStatement:
 		PutAlterStatement(s)
 	// Sequence statements are pooled via NewXxx/ReleaseXxx helpers.
@@ -665,12 +665,11 @@ func PutCreateIndexStatement(stmt *CreateIndexStatement) {
 	PutExpression(stmt.Where)
 
 	for i := range stmt.Columns {
-		stmt.Columns[i].Column = ""
-		stmt.Columns[i].Collate = ""
-		stmt.Columns[i].Direction = ""
-		stmt.Columns[i].NullsLast = false
+		PutExpression(stmt.Columns[i].Expr)
+		stmt.Columns[i] = IndexColumn{}
 	}
 	stmt.Columns = stmt.Columns[:0]
+	resetCreateIndexExtras(&stmt.CreateIndexExtras)
 
 	stmt.Where = nil
 	stmt.Unique = false
@@ -678,6 +677,8 @@ func PutCreateIndexStatement(stmt *CreateIndexStatement) {
 	stmt.Name = ""
 	stmt.Table = ""
 	stmt.Using = ""
+	stmt.NameQuote = 0
+	stmt.TableQuote = 0
 
 	createIndexStmtPool.Put(stmt)
 }
@@ -706,6 +707,9 @@ func PutCreateViewStatement(stmt *CreateViewStatement) {
 	stmt.Columns = stmt.Columns[:0]
 	stmt.Query = nil
 	stmt.WithOption = ""
+	resetViewExtras(&stmt.ViewExtras)
+	stmt.NameQuote = 0
+	stmt.ColumnQuotes = nil
 
 	createViewStmtPool.Put(stmt)
 }
@@ -733,6 +737,10 @@ func PutCreateMaterializedViewStatement(stmt *CreateMaterializedViewStatement) {
 	stmt.Query = nil
 	stmt.WithData = nil
 	stmt.Tablespace = ""
+	stmt.OrReplace = false
+	resetViewExtras(&stmt.ViewExtras)
+	stmt.NameQuote = 0
+	stmt.ColumnQuotes = nil
 
 	createMaterializedViewStmtPool.Put(stmt)
 }
@@ -772,6 +780,8 @@ func PutDropStatement(stmt *DropStatement) {
 	stmt.IfExists = false
 	stmt.Names = stmt.Names[:0]
 	stmt.CascadeType = ""
+	stmt.DropExtras = DropExtras{}
+	stmt.NameQuotes = nil
 
 	dropStmtPool.Put(stmt)
 }
@@ -793,6 +803,8 @@ func PutTruncateStatement(stmt *TruncateStatement) {
 	stmt.RestartIdentity = false
 	stmt.ContinueIdentity = false
 	stmt.CascadeType = ""
+	stmt.Storage = ""
+	stmt.TableQuotes = nil
 
 	truncateStmtPool.Put(stmt)
 }
@@ -827,6 +839,8 @@ func PutDescribeStatement(stmt *DescribeStatement) {
 	}
 
 	stmt.TableName = ""
+	stmt.Keyword = ""
+	stmt.ObjectKind = ""
 
 	describeStmtPool.Put(stmt)
 }
@@ -864,6 +878,15 @@ func PutAlterStatement(stmt *AlterStatement) {
 	stmt.Type = 0
 	stmt.Name = ""
 	stmt.Operation = nil
+	stmt.IfExists = false
+	stmt.Only = false
+	stmt.Modifiers = nil
+	stmt.OnCluster = ""
+	for i := range stmt.Operations {
+		stmt.Operations[i] = nil
+	}
+	stmt.Operations = stmt.Operations[:0]
+	stmt.NameQuote = 0
 
 	alterStmtPool.Put(stmt)
 }

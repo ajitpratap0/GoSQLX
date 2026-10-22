@@ -19,7 +19,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ajitpratap0/GoSQLX/internal/tokscratch"
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
@@ -318,7 +320,7 @@ func parseWithConfig(ctx context.Context, sql string, cfg parseOptions) (*ast.AS
 	if cfg.dialect != "" {
 		tkz.SetDialect(keywords.SQLDialect(cfg.dialect))
 	}
-	tokens, tokErr := tkz.TokenizeStringContext(ctx, sql)
+	tokens, tokErr := tokscratch.StringContext(ctx, tkz, sql)
 	if tokErr != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, wrapContextErr(ctxErr)
@@ -346,7 +348,11 @@ func parseWithConfig(ctx context.Context, sql string, cfg parseOptions) (*ast.AS
 			joined := errors.Join(errs...)
 			return &ast.AST{Statements: stmts}, fmt.Errorf("%w: %w", ErrSyntax, joined)
 		}
-		return &ast.AST{Statements: stmts}, nil
+		recovered := &ast.AST{Statements: stmts}
+		if cfg.comments {
+			attachComments(recovered, tkz.Comments)
+		}
+		return recovered, nil
 	}
 
 	astNode, err := p.ParseContextFromModelTokens(ctx, tokens)
@@ -356,7 +362,19 @@ func parseWithConfig(ctx context.Context, sql string, cfg parseOptions) (*ast.AS
 		}
 		return nil, fmt.Errorf("%w: %w", ErrSyntax, err)
 	}
+	if cfg.comments {
+		attachComments(astNode, tkz.Comments)
+	}
 	return astNode, nil
+}
+
+// attachComments copies the tokenizer's comments onto a. The tokenizer reuses
+// its slice, so the AST gets its own.
+func attachComments(a *ast.AST, comments []models.Comment) {
+	if len(comments) == 0 {
+		return
+	}
+	a.Comments = append(a.Comments[:0], comments...)
 }
 
 // wrapContextErr returns the context error wrapped in ErrTimeout so callers
@@ -419,11 +437,8 @@ func WithUppercaseKeywords(on bool) FormatOption {
 // concrete ast.FormatOptions the formatter consumes.
 func buildASTFormatOptions(opts []FormatOption) ast.FormatOptions {
 	cfg := defaultFormatOptions()
-	for _, opt := range opts {
-		if opt == nil {
-			continue
-		}
-		opt(&cfg)
+	if len(opts) > 0 {
+		cfg = applyFormatOptions(cfg, opts)
 	}
 
 	kwCase := ast.KeywordPreserve
@@ -439,6 +454,19 @@ func buildASTFormatOptions(opts []FormatOption) ast.FormatOptions {
 		NewlinePerClause: cfg.indentWidth > 0,
 		AddSemicolon:     false,
 	}
+}
+
+// applyFormatOptions applies opts to cfg. It is separate from
+// buildASTFormatOptions because passing &cfg to an option moves cfg to the
+// heap; this way only calls that pass options pay for that allocation.
+func applyFormatOptions(cfg formatOptions, opts []FormatOption) formatOptions {
+	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
+		opt(&cfg)
+	}
+	return cfg
 }
 
 // FormatTree renders a Tree back to SQL text using the AST-based formatter.

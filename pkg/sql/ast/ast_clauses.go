@@ -48,6 +48,15 @@ type CommonTableExpr struct {
 	ScalarExpr   Expression      // ClickHouse: WITH <expr> AS <name> (scalar CTE, no subquery)
 	Materialized *bool           // nil = default, true = MATERIALIZED, false = NOT MATERIALIZED
 	Pos          models.Location // Source position of the CTE name (1-based line and column)
+	// Search and Cycle are the SQL:1999 SEARCH / CYCLE clauses of a
+	// recursive CTE (PostgreSQL 14+, Oracle); nil when absent.
+	Search *CTESearchClause
+	Cycle  *CTECycleClause
+	// NameQuote records the delimiters of Name when they must be kept, and
+	// ColumnQuotes those of each Columns entry by index (nil when no
+	// column keeps delimiters); see NameQuote.
+	NameQuote    NameQuote
+	ColumnQuotes []NameQuote
 }
 
 func (c *CommonTableExpr) statementNode()      {}
@@ -59,6 +68,9 @@ func (c CommonTableExpr) Children() []Node {
 	}
 	if c.ScalarExpr != nil {
 		nodes = append(nodes, c.ScalarExpr)
+	}
+	if c.Cycle != nil {
+		nodes = append(nodes, c.Cycle)
 	}
 	return nodes
 }
@@ -79,6 +91,12 @@ type JoinClause struct {
 	Condition Expression      // ON condition (nil for USING / CROSS / NATURAL)
 	Using     []Expression    // USING (col, ...) columns; when set, Condition is nil and renderers emit USING
 	Pos       models.Location // Source position of the JOIN keyword (1-based line and column)
+
+	Global         bool       // ClickHouse GLOBAL JOIN
+	Strictness     string     // ClickHouse ANY / ALL / ASOF / SEMI / ANTI, Snowflake ASOF
+	Hint           string     // SQL Server HASH / LOOP / MERGE / REMOTE join hint, or MySQL STRAIGHT_JOIN
+	MatchCondition Expression // Snowflake ASOF JOIN ... MATCH_CONDITION (expr)
+	Comma          bool       // MySQL ", t" after an explicit join: rendered as a comma, Type is CROSS
 }
 
 func (j *JoinClause) expressionNode()     {}
@@ -96,6 +114,18 @@ func (j JoinClause) Children() []Node { return j.childrenInPlace() }
 // childrenInPlace is Children for a JoinClause reached through a pointer:
 // Left and Right are returned as pointers into *j itself.
 func (j *JoinClause) childrenInPlace() []Node {
+	if j.MatchCondition != nil {
+		nodes := []Node{&j.Left, &j.Right, j.MatchCondition}
+		if j.Condition != nil {
+			nodes = append(nodes, j.Condition)
+		}
+		for _, u := range j.Using {
+			if u != nil {
+				nodes = append(nodes, u)
+			}
+		}
+		return nodes
+	}
 	if len(j.Using) == 0 {
 		if j.Condition != nil {
 			return []Node{&j.Left, &j.Right, j.Condition}
@@ -179,7 +209,12 @@ type TableReference struct {
 	// The three flags are kept together so they share one word of padding;
 	// TableReference is copied by value on the parser hot path.
 	WithOrdinality bool
-	TableHints     []string // SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
+	// NameQuote and AliasQuote record the parts of Name and Alias the
+	// source delimited and that must stay delimited (see NameQuote). They
+	// share the flags' word of padding.
+	NameQuote  NameQuote
+	AliasQuote NameQuote
+	TableHints []string // SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
 	// TableFunc is a function-call table reference such as
 	// Snowflake LATERAL FLATTEN(input => col), TABLE(my_func(1,2)),
 	// IDENTIFIER('t'), or PostgreSQL unnest(array_col). When set, Name
@@ -211,12 +246,30 @@ type TableReference struct {
 	// SetSubquery is set; a body that is a single SELECT (including one
 	// with a WITH clause or extra parentheses) is always held in Subquery.
 	SetSubquery *SetOperation
+	// Only is the PostgreSQL ONLY modifier (FROM ONLY parent): the table's
+	// inheritance children are excluded.
+	Only bool
+	// Modifiers holds the rarer table modifiers: TABLESAMPLE / SAMPLE,
+	// Oracle flashback and @dblink, MySQL PARTITION selection and index
+	// hints, SQLite INDEXED BY, SQL Server OPENJSON WITH schema. It is one
+	// pointer because TableReference is copied by value on the parser hot
+	// path.
+	Modifiers *TableModifiers
+	// Values is a derived table whose body is a VALUES table constructor:
+	// FROM (VALUES (1, 'a'), (2, 'b')) AS v(id, name).
+	Values *Values
 }
 
 // ColumnAliasList is the column alias list that follows a table alias, as
 // in unnest(arr) AS g(a, b). Names holds the column names in order.
 type ColumnAliasList struct {
 	Names []string
+	// Types holds a column type per name for PostgreSQL record-returning
+	// functions (jsonb_to_recordset(j) AS t(a int, b text)); nil otherwise.
+	Types []string
+	// Quotes holds the NameQuote of each name by index; it is nil when no
+	// name keeps delimiters.
+	Quotes []NameQuote
 }
 
 func (t *TableReference) statementNode() {}
@@ -252,6 +305,26 @@ func (t TableReference) Children() []Node {
 	if t.MatchRecognize != nil {
 		nodes = append(nodes, t.MatchRecognize)
 	}
+	if t.ForSystemTime != nil {
+		nodes = append(nodes, t.ForSystemTime)
+	}
+	if m := t.Modifiers; m != nil {
+		if m.TableSample != nil {
+			nodes = append(nodes, m.TableSample)
+		}
+		if m.Flashback != nil {
+			nodes = append(nodes, m.Flashback)
+		}
+		if m.PartitionFor != nil {
+			nodes = append(nodes, m.PartitionFor)
+		}
+	}
+	if t.Values != nil {
+		nodes = append(nodes, t.Values)
+	}
+	if g := t.Modifiers; g != nil && g.Group != nil {
+		nodes = append(nodes, g.Group)
+	}
 	return nodes
 }
 
@@ -263,6 +336,9 @@ type OrderByExpression struct {
 	// WithFill — ClickHouse "WITH FILL FROM x TO y STEP z" modifier.
 	// Fields are nil when the corresponding part is absent.
 	WithFill *WithFillClause
+	// UsingOperator is the PostgreSQL ORDER BY expr USING <op> sort
+	// operator (<, >, <=, >=); when set it replaces ASC / DESC.
+	UsingOperator string
 }
 
 // WithFillClause — ClickHouse "WITH FILL [FROM x] [TO y] [STEP z]".
@@ -317,6 +393,10 @@ type WindowSpec struct {
 	PartitionBy []Expression
 	OrderBy     []OrderByExpression
 	FrameClause *WindowFrame
+	// NameQuote and BaseWindowQuote record the delimiters of Name and
+	// BaseWindow when they must be kept (see NameQuote).
+	NameQuote       NameQuote
+	BaseWindowQuote NameQuote
 }
 
 func (w *WindowSpec) statementNode()      {}
@@ -396,6 +476,9 @@ type TopClause struct {
 	Count     Expression // Number of rows (or percentage) as an expression
 	IsPercent bool       // Whether PERCENT keyword was specified
 	WithTies  bool       // Whether WITH TIES was specified (SQL Server)
+	// Parenthesized records TOP (n); renderers keep the parentheses, and add
+	// them for any count that is not a plain number.
+	Parenthesized bool
 }
 
 func (t *TopClause) expressionNode()     {}
@@ -424,11 +507,19 @@ type FetchClause struct {
 	IsPercent bool
 	// WithTies indicates FETCH ... WITH TIES (includes tied rows)
 	WithTies bool
+	// FetchExpr is the row count when it is not a plain integer
+	// (FETCH NEXT @n ROWS ONLY); FetchValue wins when both are set.
+	FetchExpr Expression
 }
 
 func (f *FetchClause) expressionNode()     {}
 func (f FetchClause) TokenLiteral() string { return "FETCH" }
-func (f FetchClause) Children() []Node     { return nil }
+func (f FetchClause) Children() []Node {
+	if f.FetchExpr != nil {
+		return []Node{f.FetchExpr}
+	}
+	return nil
+}
 
 // ForClause represents row-level locking clauses in SELECT statements (SQL:2003, PostgreSQL, MySQL)
 // Syntax: FOR {UPDATE | SHARE | NO KEY UPDATE | KEY SHARE} [OF table_name [, ...]] [NOWAIT | SKIP LOCKED]
@@ -452,17 +543,30 @@ type ForClause struct {
 	NoWait bool
 	// SkipLocked indicates SKIP LOCKED option (skip rows that can't be locked)
 	SkipLocked bool
+	// Wait is the Oracle / MariaDB WAIT n timeout, or nil.
+	Wait Expression
+	// LockInShareMode records MySQL's LOCK IN SHARE MODE spelling of a
+	// SHARE lock (LockType "SHARE").
+	LockInShareMode bool
 }
 
 func (f *ForClause) expressionNode()     {}
 func (f ForClause) TokenLiteral() string { return "FOR" }
-func (f ForClause) Children() []Node     { return nil }
+func (f ForClause) Children() []Node {
+	if f.Wait != nil {
+		return []Node{f.Wait}
+	}
+	return nil
+}
 
 // OnConflict represents ON CONFLICT DO UPDATE/NOTHING clause
 type OnConflict struct {
 	Target     []Expression // Target columns
 	Constraint string       // Optional constraint name
 	Action     OnConflictAction
+	// TargetWhere is the partial-index predicate of the conflict target:
+	// ON CONFLICT (a) WHERE b > 0 DO ...
+	TargetWhere Expression
 }
 
 func (o *OnConflict) expressionNode()     {}
@@ -476,6 +580,9 @@ func (o OnConflict) Children() []Node {
 	}
 	if o.Action.Where != nil {
 		children = append(children, o.Action.Where)
+	}
+	if o.TargetWhere != nil {
+		children = append(children, o.TargetWhere)
 	}
 	return children
 }
@@ -517,6 +624,9 @@ type ColumnDef struct {
 	Name        string
 	Type        string
 	Constraints []ColumnConstraint
+	// NameQuote records the delimiters of Name when they must be kept
+	// (see NameQuote).
+	NameQuote NameQuote
 }
 
 func (c *ColumnDef) expressionNode()     {}
@@ -536,6 +646,19 @@ type ColumnConstraint struct {
 	References    *ReferenceDefinition
 	Check         Expression
 	AutoIncrement bool
+
+	// Name is the CONSTRAINT <name> written before the constraint.
+	Name string
+	// Keyword, Value, Expr and Args carry the payload of the dialect
+	// constraint kinds listed in ast_columns.go (COMMENT, COLLATE, ON UPDATE,
+	// generated columns, identity columns, ClickHouse MATERIALIZED / ALIAS /
+	// TTL / CODEC, ...). Keyword is a spelling or mode the source chose
+	// (AUTOINCREMENT, CHARSET, STORED), Value a name or literal text, Expr an
+	// expression and Args the raw text of a parenthesised argument list.
+	Keyword string
+	Value   string
+	Expr    Expression
+	Args    string
 }
 
 func (c *ColumnConstraint) expressionNode()     {}
@@ -551,16 +674,55 @@ func (c ColumnConstraint) Children() []Node {
 	if c.Check != nil {
 		children = append(children, c.Check)
 	}
+	if c.Expr != nil {
+		children = append(children, c.Expr)
+	}
 	return children
 }
 
-// TableConstraint represents a table constraint
+// TableConstraint represents a table constraint. Type is PRIMARY KEY, UNIQUE,
+// FOREIGN KEY or CHECK, or one of the index and dialect element kinds listed
+// in ast_columns.go (KEY, INDEX, FULLTEXT, SPATIAL, LIKE, PROJECTION).
 type TableConstraint struct {
 	Name       string
-	Type       string // PRIMARY KEY, UNIQUE, FOREIGN KEY, CHECK
+	Type       string
 	Columns    []string
 	References *ReferenceDefinition
 	Check      Expression
+
+	// ColumnSuffix holds, parallel to Columns, each key part's prefix length
+	// and sort order as written ("(191)", "DESC", "(10) DESC"); it is empty
+	// when no part has one.
+	ColumnSuffix []string
+	// Keyword is the KEY or INDEX word written after UNIQUE, FULLTEXT or
+	// SPATIAL; IndexName the index name; Using the index method (BTREE,
+	// HASH); Cluster CLUSTERED or NONCLUSTERED; Deferrable the DEFERRABLE
+	// timing clause; Exprs the key parts of a functional index or the
+	// expression of a ClickHouse INDEX; Text the verbatim ClickHouse INDEX
+	// TYPE or PROJECTION body; Granularity the ClickHouse GRANULARITY value;
+	// LikeTable and LikeOptions the PostgreSQL LIKE source and its
+	// INCLUDING / EXCLUDING options.
+	Keyword   string
+	IndexName string
+	// IndexNameQuote records the delimiters of IndexName when they must be
+	// kept (see NameQuote).
+	IndexNameQuote NameQuote
+	Using          string
+	Cluster        string
+	Deferrable     string
+	Exprs          []Expression
+	Text           string
+	Granularity    string
+	LikeTable      string
+	// LikeTableQuote records the delimiters of LikeTable when they must
+	// be kept (see NameQuote).
+	LikeTableQuote NameQuote
+	LikeOptions    []string
+	// NameQuote records the delimiters of Name, and ColumnQuotes those of
+	// each Columns entry by index (nil when none keeps delimiters); see
+	// NameQuote.
+	NameQuote    NameQuote
+	ColumnQuotes []NameQuote
 }
 
 func (t *TableConstraint) expressionNode()     {}
@@ -573,6 +735,11 @@ func (t TableConstraint) Children() []Node {
 	if t.Check != nil {
 		children = append(children, t.Check)
 	}
+	for _, e := range t.Exprs {
+		if e != nil {
+			children = append(children, e)
+		}
+	}
 	return children
 }
 
@@ -583,6 +750,11 @@ type ReferenceDefinition struct {
 	OnDelete string
 	OnUpdate string
 	Match    string
+	// TableQuote records the delimiters of Table, and ColumnQuotes those of
+	// each Columns entry by index (nil when none keeps delimiters); see
+	// NameQuote.
+	TableQuote   NameQuote
+	ColumnQuotes []NameQuote
 }
 
 func (r *ReferenceDefinition) expressionNode()     {}
@@ -594,38 +766,94 @@ type PartitionBy struct {
 	Type     string // RANGE, LIST, HASH
 	Columns  []string
 	Boundary []Expression
+	// Expressions holds the partition key when it is not a plain column
+	// list (RANGE (YEAR(d))); it is written instead of Columns.
+	Expressions []Expression
+	// Partitions is the HASH / KEY partition count (PARTITIONS n).
+	Partitions Expression
+	// Interval is the Oracle INTERVAL (expr) of interval partitioning, or
+	// the MariaDB SYSTEM_TIME INTERVAL n unit.
+	Interval Expression
+	// Linear is MySQL LINEAR HASH / LINEAR KEY.
+	Linear bool
 }
 
 func (p *PartitionBy) expressionNode()     {}
 func (p PartitionBy) TokenLiteral() string { return "PARTITION BY" }
-func (p PartitionBy) Children() []Node     { return nodifyExpressions(p.Boundary) }
+func (p PartitionBy) Children() []Node {
+	nodes := nodifyExpressions(p.Boundary)
+	nodes = append(nodes, nodifyExpressions(p.Expressions)...)
+	if p.Partitions != nil {
+		nodes = append(nodes, p.Partitions)
+	}
+	if p.Interval != nil {
+		nodes = append(nodes, p.Interval)
+	}
+	return nodes
+}
 
 // TableOption represents table options like ENGINE, CHARSET, etc.
 type TableOption struct {
 	Name  string
 	Value string
+	// Form says how the option is written (zero value: Name=Value); see
+	// ddl_objects.go.
+	Form TableOptionForm
+	// ValueKind says how Value is written (zero value: a bare word).
+	ValueKind TableOptionValueKind
+	// Args holds the expressions of a TableOptionArgs option.
+	Args []Expression
+	// Sub holds the entries of a TableOptionList option.
+	Sub []OptionParam
 }
 
 func (t *TableOption) expressionNode()     {}
 func (t TableOption) TokenLiteral() string { return t.Name }
-func (t TableOption) Children() []Node     { return nil }
+func (t TableOption) Children() []Node {
+	if len(t.Args) == 0 {
+		return nil
+	}
+	return nodifyExpressions(t.Args)
+}
 
 // IndexColumn represents a column in an index definition
 type IndexColumn struct {
-	Column    string
-	Collate   string
-	Direction string // ASC, DESC
-	NullsLast bool
+	Column  string
+	Collate string
+	// CollateQuoted records that the collation name was written as a
+	// double-quoted identifier (COLLATE "C"); it is re-quoted on output
+	// because PostgreSQL folds a bare C to c.
+	CollateQuoted bool
+	Direction     string // ASC, DESC
+	NullsLast     bool
+	// NullsFirst is NULLS FIRST.
+	NullsFirst bool
+	// Expr is the indexed expression when it is not a plain column
+	// (lower(email), (a + b), email(10)); it is written instead of Column.
+	Expr Expression
+	// OpClass is the PostgreSQL operator class (jsonb_path_ops).
+	OpClass string
+	// ColumnQuote records the delimiters of Column when they must be kept
+	// (see NameQuote).
+	ColumnQuote NameQuote
 }
 
 func (i *IndexColumn) expressionNode()     {}
 func (i IndexColumn) TokenLiteral() string { return i.Column }
-func (i IndexColumn) Children() []Node     { return nil }
+func (i IndexColumn) Children() []Node {
+	if i.Expr != nil {
+		return []Node{i.Expr}
+	}
+	return nil
+}
 
 // PartitionDefinition represents a partition definition in CREATE TABLE
 // Syntax: PARTITION name VALUES { LESS THAN (expr) | IN (list) | FROM (expr) TO (expr) }
 type PartitionDefinition struct {
-	Name       string
+	Name string
+	// NameQuote records the delimiters of Name when they must be kept (see
+	// NameQuote).
+	NameQuote  NameQuote
 	Type       string       // FOR VALUES, IN, LESS THAN
 	Values     []Expression // Partition values or bounds
 	LessThan   Expression   // For RANGE: LESS THAN (value)
@@ -663,10 +891,11 @@ func (p PartitionDefinition) Children() []Node {
 type SystemTimeClauseType int
 
 const (
-	SystemTimeAsOf    SystemTimeClauseType = iota // FOR SYSTEM_TIME AS OF <point>
-	SystemTimeBetween                             // FOR SYSTEM_TIME BETWEEN <start> AND <end>
-	SystemTimeFromTo                              // FOR SYSTEM_TIME FROM <start> TO <end>
-	SystemTimeAll                                 // FOR SYSTEM_TIME ALL
+	SystemTimeAsOf        SystemTimeClauseType = iota // FOR SYSTEM_TIME AS OF <point>
+	SystemTimeBetween                                 // FOR SYSTEM_TIME BETWEEN <start> AND <end>
+	SystemTimeFromTo                                  // FOR SYSTEM_TIME FROM <start> TO <end>
+	SystemTimeAll                                     // FOR SYSTEM_TIME ALL
+	SystemTimeContainedIn                             // FOR SYSTEM_TIME CONTAINED IN (<start>, <end>) (SQL Server)
 )
 
 // ForSystemTimeClause represents a temporal query on a system-versioned table.
@@ -752,6 +981,8 @@ type PivotClause struct {
 	PivotColumn       string           // The column used for pivoting, e.g. region
 	InValues          []string         // The values to pivot on, e.g. [North], 'Q1' AS q1
 	Pos               models.Location  // Source position of the PIVOT keyword
+	// PivotExtensions holds XML, dynamic IN lists and source aliases.
+	PivotExtensions
 }
 
 // PivotAggregate is an additional aggregate in a multi-aggregate PIVOT, e.g.
@@ -773,7 +1004,7 @@ func (p PivotClause) Children() []Node {
 			nodes = append(nodes, a.Function)
 		}
 	}
-	return nodes
+	return p.pivotExtensionChildren(nodes)
 }
 
 // UnpivotClause represents the SQL Server / Oracle / Snowflake / BigQuery
@@ -792,6 +1023,10 @@ type UnpivotClause struct {
 	NameColumn   string          // The target name column, e.g. region
 	InColumns    []string        // The source columns to unpivot, e.g. north_sales, south_sales
 	Pos          models.Location // Source position of the UNPIVOT keyword
+	// SourceAlias is the alias of the unpivoted source table or derived table.
+	SourceAlias string
+	// SourceAliasQuote records the delimiters of SourceAlias.
+	SourceAliasQuote NameQuote
 }
 
 func (u *UnpivotClause) expressionNode()     {}

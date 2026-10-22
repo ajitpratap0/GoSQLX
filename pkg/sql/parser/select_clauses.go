@@ -65,7 +65,13 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 			!p.isAnyType(models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect) &&
 			!p.isMinusSetOp() &&
 			!p.isDMLReturningKeyword() &&
-			!p.isAnyType(models.TokenTypeOrder, models.TokenTypeLimit, models.TokenTypeOffset, models.TokenTypeFetch) {
+			!p.isAnyType(models.TokenTypeOrder, models.TokenTypeLimit, models.TokenTypeOffset, models.TokenTypeFetch) &&
+			!p.isSelectTailStart() &&
+			// A DDL tail after a FROM-less query: CREATE ... AS SELECT 1
+			// WITH [NO] DATA | WITH CHECK OPTION | WITH READ ONLY.
+			!p.isType(models.TokenTypeWith) &&
+			// The next statement of a script without semicolons.
+			!p.statementMayEndAt(p.currentPos) {
 			return "", nil, nil, p.expectedError("FROM, semicolon, or end of statement")
 		}
 		return "", nil, nil, nil
@@ -99,6 +105,20 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 		p.advance() // consume FINAL
 	}
 
+	tables, joins, err = p.parseTableListAndJoins(&firstRef, joins)
+	if err != nil {
+		return "", nil, nil, err
+	}
+	return tableName, tables, joins, nil
+}
+
+// parseTableListAndJoins parses what follows the first table reference of a
+// FROM list or of a parenthesized join group: further comma-separated table
+// references, then the JOIN clauses, including a comma after an explicit join.
+// joins holds the joins already read from a parenthesized group that opened
+// the list, or nil.
+func (p *Parser) parseTableListAndJoins(first *ast.TableReference, joins []ast.JoinClause) (tables []ast.TableReference, _ []ast.JoinClause, err error) {
+	firstRef := *first
 	tables = []ast.TableReference{firstRef}
 
 	// Additional comma-separated table references (implicit cross joins)
@@ -106,7 +126,7 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 		if len(joins) > 0 {
 			// Hoisting the parenthesized joins past a comma would re-bind them
 			// to the last comma-separated table and change the query's meaning.
-			return "", nil, nil, goerrors.UnsupportedFeatureError(
+			return nil, nil, goerrors.UnsupportedFeatureError(
 				"comma-separated table list after a parenthesized join",
 				p.currentLocation(),
 				"",
@@ -115,14 +135,40 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 		p.advance()
 		ref, e2 := p.parseFromTableReference()
 		if e2 != nil {
-			return "", nil, nil, e2
+			return nil, nil, e2
 		}
 		tables = append(tables, ref)
 	}
 
 	// JOIN clauses
 	joins, err = p.parseJoinClauses(firstRef, joins)
-	return tableName, tables, joins, err
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// "a JOIN b ON ..., c [JOIN d ...]": a comma after an explicit join
+	// adds a cross-joined table; it is kept as a comma when rendered.
+	for len(joins) > 0 && p.isType(models.TokenTypeComma) {
+		joinPos := p.currentLocation()
+		p.advance() // Consume ,
+		ref, e2 := p.parseFromTableReference()
+		if e2 != nil {
+			return nil, nil, e2
+		}
+		joins = append(joins, ast.JoinClause{
+			Type:  "CROSS",
+			Comma: true,
+			Left: ast.TableReference{
+				Name: "(" + firstRef.Name + "_with_" + strconv.Itoa(len(joins)) + "_joins)",
+			},
+			Right: ref,
+			Pos:   joinPos,
+		})
+		if joins, err = p.parseJoinClauses(firstRef, joins); err != nil {
+			return nil, nil, err
+		}
+	}
+	return tables, joins, nil
 }
 
 // parseFromItem parses the first item of a FROM clause: either a plain table
@@ -299,14 +345,15 @@ func (p *Parser) parseJoinClauses(firstRef ast.TableReference, joins []ast.JoinC
 
 	for p.isJoinKeyword() {
 		joinPos := p.currentLocation()
-		joinType, isNatural, err := p.parseJoinType()
+		var jc ast.JoinClause
+		joinType, isNatural, err := p.parseJoinType(&jc)
 		if err != nil {
 			return nil, err
 		}
 
-		// Expect JOIN keyword (APPLY variants skip it)
+		// Expect JOIN keyword (APPLY variants and STRAIGHT_JOIN skip it)
 		isApply := joinType == "CROSS APPLY" || joinType == "OUTER APPLY"
-		if !isApply {
+		if !isApply && jc.Hint != "STRAIGHT_JOIN" {
 			if !p.isType(models.TokenTypeJoin) {
 				return nil, goerrors.ExpectedTokenError(
 					"JOIN after "+joinType,
@@ -323,9 +370,32 @@ func (p *Parser) parseJoinClauses(firstRef ast.TableReference, joins []ast.JoinC
 			return nil, err
 		}
 
-		joinCondition, joinUsing, err := p.parseJoinCondition(joinType, isNatural, isApply)
-		if err != nil {
-			return nil, err
+		// Snowflake ASOF JOIN t MATCH_CONDITION (expr) ON ...
+		if jc.Strictness == "ASOF" && p.dialect == string(keywords.DialectSnowflake) {
+			if !p.isUnquotedWord("MATCH_CONDITION") {
+				return nil, p.expectedError("MATCH_CONDITION after ASOF JOIN table")
+			}
+			p.advance() // MATCH_CONDITION
+			if !p.isType(models.TokenTypeLParen) {
+				return nil, p.expectedError("( after MATCH_CONDITION")
+			}
+			p.advance() // (
+			if jc.MatchCondition, err = p.parseExpression(); err != nil {
+				return nil, err
+			}
+			if !p.isType(models.TokenTypeRParen) {
+				return nil, p.expectedError(") after MATCH_CONDITION")
+			}
+			p.advance() // )
+		}
+
+		var joinCondition ast.Expression
+		var joinUsing []ast.Expression
+		// MySQL / MariaDB / SQLite: [INNER] JOIN without ON is a cross join.
+		if !p.joinConditionOptional(joinType, &jc) || p.isType(models.TokenTypeOn) || p.isType(models.TokenTypeUsing) {
+			if joinCondition, joinUsing, err = p.parseJoinCondition(joinType, isNatural, isApply); err != nil {
+				return nil, err
+			}
 		}
 
 		// Build left-side reference (synthetic for chained joins)
@@ -341,37 +411,103 @@ func (p *Parser) parseJoinClauses(firstRef ast.TableReference, joins []ast.JoinC
 		if cap(joins) == 0 {
 			joins = make([]ast.JoinClause, 0, 2)
 		}
-		joins = append(joins, ast.JoinClause{
-			Type:      joinType,
-			Left:      leftTable,
-			Right:     joinedTableRef,
-			Condition: joinCondition,
-			Using:     joinUsing,
-			Pos:       joinPos,
-		})
+		jc.Type = joinType
+		jc.Left = leftTable
+		jc.Right = joinedTableRef
+		jc.Condition = joinCondition
+		jc.Using = joinUsing
+		jc.Pos = joinPos
+		joins = append(joins, jc)
 	}
 	return joins, nil
+}
+
+// joinConditionOptional reports whether a join of this type may omit ON /
+// USING: MySQL, MariaDB and SQLite treat [INNER] JOIN and STRAIGHT_JOIN
+// without a condition as a cross join, and a Snowflake ASOF JOIN needs only
+// its MATCH_CONDITION.
+func (p *Parser) joinConditionOptional(joinType string, jc *ast.JoinClause) bool {
+	if jc.MatchCondition != nil {
+		return true
+	}
+	if jc.Strictness != "" || joinType != "INNER" {
+		return false
+	}
+	return p.isMySQLFamily() || p.dialect == string(keywords.DialectSQLite)
+}
+
+// isApplyDialect reports whether CROSS APPLY / OUTER APPLY are accepted
+// (SQL Server, Oracle 12c+).
+func (p *Parser) isApplyDialect() bool {
+	return p.dialect == string(keywords.DialectSQLServer) || p.dialect == string(keywords.DialectOracle)
+}
+
+// isExtJoinStart reports whether the current token starts a join written
+// with a dialect word that isJoinKeyword does not know: ClickHouse ASOF /
+// SEMI / ANTI, Snowflake ASOF, MySQL STRAIGHT_JOIN, Oracle OUTER APPLY.
+func (p *Parser) isExtJoinStart() bool {
+	switch p.dialect {
+	case string(keywords.DialectClickHouse), string(keywords.DialectSnowflake):
+		return p.isJoinStrictnessStart()
+	case string(keywords.DialectMySQL), string(keywords.DialectMariaDB):
+		return p.isUnquotedWord("STRAIGHT_JOIN")
+	case string(keywords.DialectOracle):
+		return p.isType(models.TokenTypeOuter) && equalsUpper(p.peekToken().Token.Value, "APPLY")
+	}
+	return false
+}
+
+// parseJoinStrictness consumes a ClickHouse join strictness (ANY, ALL,
+// ASOF, SEMI, ANTI) or Snowflake ASOF into jc when one is present.
+func (p *Parser) parseJoinStrictness(jc *ast.JoinClause) {
+	if jc.Strictness != "" {
+		return
+	}
+	switch p.dialect {
+	case string(keywords.DialectClickHouse):
+		if p.isType(models.TokenTypeAny) || p.isType(models.TokenTypeAll) {
+			jc.Strictness = strings.ToUpper(p.currentToken.Token.Value)
+			p.advance()
+			return
+		}
+		if p.currentToken.Token.Type == models.TokenTypeIdentifier && !p.isQuotedIdentifierToken() {
+			v := p.currentToken.Token.Value
+			if equalsUpper(v, "ASOF") || equalsUpper(v, "SEMI") || equalsUpper(v, "ANTI") {
+				jc.Strictness = strings.ToUpper(v)
+				p.advance()
+			}
+		}
+	case string(keywords.DialectSnowflake):
+		if p.isJoinStrictnessStart() {
+			jc.Strictness = "ASOF"
+			p.advance()
+		}
+	}
 }
 
 // parseJoinType parses the optional NATURAL keyword and the join-type keywords
 // (LEFT, RIGHT, FULL, INNER, CROSS, OUTER APPLY, …) that precede the JOIN keyword.
 // Returns (joinType string, isNatural bool, err).
-func (p *Parser) parseJoinType() (string, bool, error) {
+func (p *Parser) parseJoinType(jc *ast.JoinClause) (string, bool, error) {
 	joinType := "INNER"
 	isNatural := false
 	explicitType := false // tracks whether a join-type keyword was explicitly given
 
-	// ClickHouse GLOBAL JOIN — consume the GLOBAL modifier before the join type.
-	// GLOBAL semantics (distributed join) are not preserved in the AST.
+	// ClickHouse GLOBAL JOIN (distributed join).
 	if p.dialect == string(keywords.DialectClickHouse) && p.isTokenMatch("GLOBAL") {
-		p.advance() // consume GLOBAL; fall through to standard join parsing
+		jc.Global = true
+		p.advance()
 	}
 
-	// ClickHouse ANY/ALL join strictness prefix — e.g. ANY LEFT JOIN, ALL INNER JOIN.
-	// The strictness modifier is consumed but not modeled on the AST.
-	if p.dialect == string(keywords.DialectClickHouse) &&
-		(p.isType(models.TokenTypeAny) || p.isType(models.TokenTypeAll)) {
+	// ClickHouse ANY / ALL / ASOF / SEMI / ANTI and Snowflake ASOF written
+	// before the join kind: ANY LEFT JOIN, ASOF JOIN.
+	p.parseJoinStrictness(jc)
+
+	// MySQL / MariaDB STRAIGHT_JOIN: an inner join that reads the left table first.
+	if p.isMySQLFamily() && p.isUnquotedWord("STRAIGHT_JOIN") {
+		jc.Hint = "STRAIGHT_JOIN"
 		p.advance()
+		return joinType, false, nil
 	}
 
 	if p.isType(models.TokenTypeNatural) {
@@ -409,13 +545,13 @@ func (p *Parser) parseJoinType() (string, bool, error) {
 		joinType = "CROSS"
 		explicitType = true
 		p.advance()
-		if p.dialect == string(keywords.DialectSQLServer) &&
+		if p.isApplyDialect() &&
 			p.currentToken.Token.Type == models.TokenTypeIdentifier &&
 			strings.ToUpper(p.currentToken.Token.Value) == "APPLY" {
 			joinType = "CROSS APPLY"
 			p.advance()
 		}
-	case p.isType(models.TokenTypeOuter) && p.dialect == string(keywords.DialectSQLServer):
+	case p.isType(models.TokenTypeOuter) && p.isApplyDialect():
 		p.advance()
 		if p.currentToken.Token.Type == models.TokenTypeIdentifier &&
 			strings.ToUpper(p.currentToken.Token.Value) == "APPLY" {
@@ -423,6 +559,21 @@ func (p *Parser) parseJoinType() (string, bool, error) {
 			p.advance()
 		} else {
 			return "", false, p.expectedError("APPLY after OUTER (SQL Server OUTER APPLY)")
+		}
+	}
+
+	// ClickHouse strictness after the kind: LEFT SEMI JOIN, LEFT ANY JOIN.
+	if explicitType {
+		p.parseJoinStrictness(jc)
+	}
+
+	// SQL Server join hints after an explicit kind: INNER HASH JOIN,
+	// LEFT OUTER LOOP JOIN, FULL MERGE JOIN, INNER REMOTE JOIN.
+	if explicitType && p.dialect == string(keywords.DialectSQLServer) &&
+		p.peekToken().Token.Type == models.TokenTypeJoin {
+		if h := ast.JoinHintText(p.currentToken.Token.Value); h != "" {
+			jc.Hint = strings.ToUpper(h)
+			p.advance()
 		}
 	}
 
@@ -473,7 +624,7 @@ func (p *Parser) parseJoinCondition(joinType string, isNatural, isApply bool) (a
 			if !p.isIdentifier() {
 				return nil, nil, p.expectedError("column name in USING")
 			}
-			usingColumns = append(usingColumns, &ast.Identifier{Name: p.currentToken.Token.Value, Pos: p.currentLocation()})
+			usingColumns = append(usingColumns, p.currentColumnIdent())
 			p.advance()
 			if !p.isType(models.TokenTypeComma) {
 				break
@@ -629,9 +780,10 @@ func (p *Parser) parseWhereClause() (ast.Expression, error) {
 }
 
 // parseGroupByClause parses "GROUP BY <expr> [, ...]" including ROLLUP, CUBE,
-// GROUPING SETS, and MySQL's trailing WITH ROLLUP / WITH CUBE syntax.
+// GROUPING SETS, GROUP BY ALL, and the trailing WITH ROLLUP / WITH CUBE /
+// WITH TOTALS modifiers, which are stored on stmt.GroupByModifiers.
 // Returns nil slice (no error) when GROUP BY is absent.
-func (p *Parser) parseGroupByClause() ([]ast.Expression, error) {
+func (p *Parser) parseGroupByClause(stmt *ast.SelectStatement) ([]ast.Expression, error) {
 	if !p.isType(models.TokenTypeGroup) {
 		return nil, nil
 	}
@@ -641,6 +793,15 @@ func (p *Parser) parseGroupByClause() ([]ast.Expression, error) {
 		return nil, p.expectedError("BY after GROUP")
 	}
 	p.advance() // Consume BY
+
+	// Snowflake / ClickHouse / BigQuery GROUP BY ALL: group by every
+	// non-aggregate select item.
+	if p.isType(models.TokenTypeAll) && p.supportsGroupByAll() {
+		p.advance() // Consume ALL
+		stmt.GroupByModifiers.All = true
+		p.parseGroupByWithModifiers(stmt)
+		return nil, nil
+	}
 
 	groupByExprs := make([]ast.Expression, 0, 4)
 	for {
@@ -672,26 +833,41 @@ func (p *Parser) parseGroupByClause() ([]ast.Expression, error) {
 		p.advance()
 	}
 
-	// MySQL / ClickHouse: GROUP BY col1 WITH ROLLUP / WITH CUBE / WITH TOTALS
-	if p.isType(models.TokenTypeWith) {
-		switch strings.ToUpper(p.peekToken().Token.Value) {
-		case "ROLLUP":
-			p.advance() // Consume WITH
-			p.advance() // Consume ROLLUP
-			groupByExprs = []ast.Expression{&ast.RollupExpression{Expressions: groupByExprs}}
-		case "CUBE":
-			p.advance() // Consume WITH
-			p.advance() // Consume CUBE
-			groupByExprs = []ast.Expression{&ast.CubeExpression{Expressions: groupByExprs}}
-		case "TOTALS":
-			// ClickHouse WITH TOTALS: adds a summary row with aggregate totals.
-			// Consumed but not modeled on the AST (follow-up).
-			p.advance() // Consume WITH
-			p.advance() // Consume TOTALS
-		}
-	}
+	// MySQL / SQL Server / ClickHouse: GROUP BY col1 WITH ROLLUP / WITH CUBE / WITH TOTALS
+	p.parseGroupByWithModifiers(stmt)
 
 	return groupByExprs, nil
+}
+
+// supportsGroupByAll reports whether GROUP BY ALL is accepted.
+func (p *Parser) supportsGroupByAll() bool {
+	switch p.dialect {
+	case string(keywords.DialectSnowflake), string(keywords.DialectClickHouse),
+		string(keywords.DialectBigQuery):
+		return true
+	}
+	return false
+}
+
+// parseGroupByWithModifiers parses the trailing GROUP BY modifiers
+// WITH ROLLUP, WITH CUBE and (ClickHouse) WITH TOTALS. They are kept as
+// written: MySQL and MariaDB reject the equivalent ROLLUP(...) form.
+func (p *Parser) parseGroupByWithModifiers(stmt *ast.SelectStatement) {
+	for p.isType(models.TokenTypeWith) {
+		next := p.peekToken().Token.Value
+		switch {
+		case equalsUpper(next, "ROLLUP") && !stmt.GroupByModifiers.WithCube:
+			stmt.GroupByModifiers.WithRollup = true
+		case equalsUpper(next, "CUBE") && !stmt.GroupByModifiers.WithRollup:
+			stmt.GroupByModifiers.WithCube = true
+		case equalsUpper(next, "TOTALS"):
+			stmt.GroupByModifiers.WithTotals = true
+		default:
+			return
+		}
+		p.advance() // Consume WITH
+		p.advance() // Consume ROLLUP / CUBE / TOTALS
+	}
 }
 
 // parseHavingClause parses "HAVING <expr>" if present.
@@ -711,7 +887,12 @@ func (p *Parser) parseOrderByClause() ([]ast.OrderByExpression, error) {
 		return nil, nil
 	}
 	p.advance() // Consume ORDER
+	return p.parseOrderByList()
+}
 
+// parseOrderByList parses "BY <expr> [ASC|DESC] ... [, ...]"; the current
+// token is BY.
+func (p *Parser) parseOrderByList() ([]ast.OrderByExpression, error) {
 	if !p.isType(models.TokenTypeBy) {
 		return nil, p.expectedError("BY")
 	}
@@ -719,9 +900,16 @@ func (p *Parser) parseOrderByClause() ([]ast.OrderByExpression, error) {
 
 	var orderByExprs []ast.OrderByExpression
 	for {
-		expr, err := p.parseExpression()
-		if err != nil {
-			return nil, err
+		var expr ast.Expression
+		if p.isOrderByAll() {
+			// ClickHouse ORDER BY ALL: sort by every selected column.
+			expr = &ast.Identifier{Name: p.currentToken.Token.Value, Pos: p.currentLocation()}
+			p.advance() // Consume ALL
+		} else {
+			var err error
+			if expr, err = p.parseExpression(); err != nil {
+				return nil, err
+			}
 		}
 
 		entry := ast.OrderByExpression{
@@ -736,6 +924,16 @@ func (p *Parser) parseOrderByClause() ([]ast.OrderByExpression, error) {
 		} else if p.isType(models.TokenTypeDesc) {
 			entry.Ascending = false
 			p.advance()
+		} else if p.isType(models.TokenTypeUsing) && p.dialect == string(keywords.DialectPostgreSQL) {
+			// PostgreSQL ORDER BY expr USING <op>
+			op := ast.OrderUsingOperatorText(p.peekToken().Token.Value)
+			if op == "" {
+				p.advance() // USING
+				return nil, p.expectedError("sort operator after USING")
+			}
+			p.advance() // USING
+			p.advance() // operator
+			entry.UsingOperator = op
 		}
 
 		nullsFirst, err := p.parseNullsClause()
@@ -803,64 +1001,6 @@ func (p *Parser) parseClickHouseWithFill() (*ast.WithFillClause, error) {
 	}
 }
 
-// parseLimitOffsetClause parses optional LIMIT and/or OFFSET clauses.
-// Supports standard "LIMIT n OFFSET m", MySQL "LIMIT offset, count", and
-// SQL-99 "OFFSET n ROWS" (ROW/ROWS consumed but value stored).
-// Returns (limit, offset, error); either or both pointers may be nil.
-func (p *Parser) parseLimitOffsetClause() (limit *int, offset *int, err error) {
-	// LIMIT clause
-	if p.isType(models.TokenTypeLimit) {
-		// Reject LIMIT in SQL Server and Oracle - these dialects use TOP/OFFSET-FETCH or ROWNUM/FETCH FIRST.
-		if p.dialect == string(keywords.DialectSQLServer) || p.dialect == string(keywords.DialectOracle) {
-			msg := "LIMIT clause is not supported in SQL Server; use TOP or OFFSET/FETCH NEXT instead"
-			if p.dialect == string(keywords.DialectOracle) {
-				msg = "LIMIT clause is not supported in Oracle; use ROWNUM or FETCH FIRST … ROWS ONLY instead"
-			}
-			return nil, nil, goerrors.UnsupportedFeatureError(msg, p.currentLocation(), "")
-		}
-		p.advance() // Consume LIMIT
-
-		if !p.isNumericLiteral() {
-			return nil, nil, p.expectedError("integer for LIMIT")
-		}
-		firstVal := int(parseLeadingInt(p.currentToken.Token.Value, strconv.IntSize))
-		p.advance()
-
-		// MySQL / ClickHouse: LIMIT offset, count
-		if (p.dialect == "mysql" || p.dialect == string(keywords.DialectMariaDB) || p.dialect == string(keywords.DialectClickHouse)) && p.isType(models.TokenTypeComma) {
-			p.advance()
-			if !p.isNumericLiteral() {
-				return nil, nil, p.expectedError("integer for LIMIT count")
-			}
-			secondVal := int(parseLeadingInt(p.currentToken.Token.Value, strconv.IntSize))
-			p.advance()
-			offset = &firstVal
-			limit = &secondVal
-		} else {
-			limit = &firstVal
-		}
-	}
-
-	// OFFSET clause
-	if p.isType(models.TokenTypeOffset) {
-		p.advance()
-
-		if !p.isNumericLiteral() {
-			return nil, nil, p.expectedError("integer for OFFSET")
-		}
-		offsetVal := int(parseLeadingInt(p.currentToken.Token.Value, strconv.IntSize))
-		offset = &offsetVal
-		p.advance()
-
-		// SQL-99: OFFSET n ROWS
-		if p.isAnyType(models.TokenTypeRow, models.TokenTypeRows) {
-			p.advance()
-		}
-	}
-
-	return limit, offset, nil
-}
-
 // parseFetchClause parses the SQL-99 FETCH FIRST/NEXT clause (F861, F862).
 // Syntax: FETCH {FIRST | NEXT} n [{ROW | ROWS}] [{PERCENT}] {ONLY | WITH TIES}
 //
@@ -887,15 +1027,19 @@ func (p *Parser) parseFetchClause() (*ast.FetchClause, error) {
 		return nil, p.expectedError("FIRST or NEXT after FETCH")
 	}
 
-	// Parse the count value
-	if !p.isNumericLiteral() {
-		return nil, p.expectedError("integer for FETCH count")
+	// Parse the count value: optional (FETCH FIRST ROW ONLY), a plain
+	// integer, or an expression (FETCH NEXT @n ROWS ONLY).
+	if !p.isAnyType(models.TokenTypeRow, models.TokenTypeRows) {
+		n, e, err := p.parseRowCountValue()
+		if err != nil {
+			return nil, err
+		}
+		if n != nil {
+			fetchVal := int64(*n)
+			fetchClause.FetchValue = &fetchVal
+		}
+		fetchClause.FetchExpr = e
 	}
-
-	// Convert string to int64
-	fetchVal := parseLeadingInt(p.currentToken.Token.Value, 64)
-	fetchClause.FetchValue = &fetchVal
-	p.advance()
 
 	// Check for PERCENT (optional)
 	if p.isType(models.TokenTypePercent) {
@@ -997,10 +1141,11 @@ func (p *Parser) parseForClause() (*ast.ForClause, error) {
 		}
 	}
 
-	// Parse NOWAIT or SKIP LOCKED
-	if p.isTokenMatch("NOWAIT") {
-		forClause.NoWait = true
-		p.advance()
+	// Parse NOWAIT, WAIT n (Oracle / MariaDB) or SKIP LOCKED
+	if p.isTokenMatch("NOWAIT") || p.isUnquotedWord("WAIT") {
+		if err := p.parseLockWaitOption(forClause); err != nil {
+			return nil, err
+		}
 	} else if p.isTokenMatch("SKIP") {
 		p.advance() // Consume SKIP
 		if !p.isTokenMatch("LOCKED") {
@@ -1072,28 +1217,18 @@ func (p *Parser) parseArrayJoinClause() (*ast.ArrayJoinClause, error) {
 	return clause, nil
 }
 
-// parseLeadingInt parses an optional sign followed by leading ASCII digits of
-// s and ignores any trailing characters. It reproduces fmt.Sscanf(s, "%d", &v)
-// for tokenizer Number values without the reflection and allocation cost:
-// "10.5" yields 10, "1e2" yields 1, and empty, non-numeric or out-of-range
-// input yields 0. Unlike Sscanf it does not skip leading whitespace, which a
-// Number token never carries. bitSize is the target integer width (0, 8, 16,
-// 32 or 64 as accepted by strconv.ParseInt).
-func parseLeadingInt(s string, bitSize int) int64 {
-	i := 0
-	if i < len(s) && (s[i] == '+' || s[i] == '-') {
-		i++
+// isOrderByAll reports whether the current token is the ALL of ClickHouse's
+// ORDER BY ALL (sort by all selected columns), as opposed to the start of an
+// expression: it is followed by ASC, DESC, NULLS, a comma or the end of the
+// clause.
+func (p *Parser) isOrderByAll() bool {
+	if !p.isType(models.TokenTypeAll) || p.dialect != string(keywords.DialectClickHouse) {
+		return false
 	}
-	start := i
-	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
-		i++
+	switch p.peekToken().Token.Type {
+	case models.TokenTypeAsc, models.TokenTypeDesc, models.TokenTypeComma, models.TokenTypeSemicolon,
+		models.TokenTypeEOF, models.TokenTypeRParen, models.TokenTypeLimit, models.TokenTypeOffset:
+		return true
 	}
-	if i == start {
-		return 0
-	}
-	v, err := strconv.ParseInt(s[:i], 10, bitSize)
-	if err != nil {
-		return 0
-	}
-	return v
+	return equalsUpper(p.peekToken().Token.Value, "NULLS")
 }

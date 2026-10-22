@@ -40,6 +40,16 @@ func (p *Parser) parsePragmaStatement() (*ast.PragmaStatement, error) {
 	}
 	stmt.Name = p.currentToken.Token.Value
 	p.advance()
+	// Schema-qualified pragma: PRAGMA main.synchronous = NORMAL.
+	if p.isType(models.TokenTypePeriod) {
+		p.advance() // consume .
+		if !p.isIdentifier() && !p.isNonReservedKeyword() && !p.isType(models.TokenTypeKeyword) {
+			return nil, p.expectedError("PRAGMA name after schema")
+		}
+		stmt.Schema = stmt.Name
+		stmt.Name = p.currentToken.Token.Value
+		p.advance()
+	}
 
 	switch {
 	case p.isType(models.TokenTypeLParen):

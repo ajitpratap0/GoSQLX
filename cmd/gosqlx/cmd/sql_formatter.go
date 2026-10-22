@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	pkgformatter "github.com/ajitpratap0/GoSQLX/pkg/formatter"
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
@@ -78,19 +79,38 @@ func NewSQLFormatter(opts FormatterOptions) *SQLFormatter {
 // Format renders every statement of astObj, separated by "; " in compact mode
 // and ";\n\n" otherwise. No trailing semicolon is added.
 func (f *SQLFormatter) Format(astObj *ast.AST) (string, error) {
+	stmts, err := f.formatStatements(astObj)
+	if err != nil {
+		return "", err
+	}
+	return pkgformatter.JoinWithComments(stmts, nil, nil, f.layout())
+}
+
+// FormatWithComments is Format for input that had comments: tokens and
+// comments are those of the source text, and the comments are put back around
+// the statements they belonged to (see pkgformatter.JoinWithComments).
+func (f *SQLFormatter) FormatWithComments(astObj *ast.AST, tokens []models.TokenWithSpan, comments []models.Comment) (string, error) {
+	stmts, err := f.formatStatements(astObj)
+	if err != nil {
+		return "", err
+	}
+	return pkgformatter.JoinWithComments(stmts, tokens, comments, f.layout())
+}
+
+func (f *SQLFormatter) formatStatements(astObj *ast.AST) ([]string, error) {
 	if astObj == nil {
-		return "", errors.New("cannot format a nil AST")
+		return nil, errors.New("cannot format a nil AST")
 	}
-	sep := ";\n\n"
-	if f.compact {
-		sep = "; "
-	}
-	var sb strings.Builder
+	stmts := make([]string, len(astObj.Statements))
 	for i, stmt := range astObj.Statements {
-		if i > 0 {
-			sb.WriteString(sep)
-		}
-		sb.WriteString(pkgformatter.FormatStatement(stmt, f.style))
+		stmts[i] = pkgformatter.FormatStatement(stmt, f.style)
 	}
-	return sb.String(), nil
+	return stmts, nil
+}
+
+func (f *SQLFormatter) layout() pkgformatter.CommentLayout {
+	if f.compact {
+		return pkgformatter.CommentLayout{Terminator: ";", Gap: " ", Dialect: f.style.Dialect}
+	}
+	return pkgformatter.CommentLayout{Terminator: ";", Gap: "\n\n", Dialect: f.style.Dialect}
 }

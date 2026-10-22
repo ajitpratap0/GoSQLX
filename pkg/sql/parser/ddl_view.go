@@ -18,6 +18,8 @@
 package parser
 
 import (
+	"strings"
+
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -46,11 +48,15 @@ func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStat
 	}
 
 	// Parse view name (supports schema.view qualification and double-quoted identifiers)
-	viewName, err := p.parseQualifiedName()
+	viewName, viewQuote, err := p.parseQualifiedNameQuoted()
 	if err != nil {
 		return nil, p.qualifiedNameError(err, "view name")
 	}
 	stmt.Name = viewName
+	if stmt.OnCluster, err = p.parseOnCluster(); err != nil {
+		return nil, err
+	}
+	stmt.NameQuote = viewQuote
 
 	// Parse optional column list
 	if p.isType(models.TokenTypeLParen) {
@@ -59,6 +65,7 @@ func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStat
 			if !p.isIdentifier() {
 				return nil, p.expectedError("column name")
 			}
+			stmt.ColumnQuotes = nameQuoteList(stmt.ColumnQuotes, len(stmt.Columns), p.currentNameQuote())
 			stmt.Columns = append(stmt.Columns, p.currentToken.Token.Value)
 			p.advance()
 
@@ -80,13 +87,11 @@ func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStat
 	}
 	p.advance() // Consume AS
 
-	// Parse the SELECT statement
-	if !p.isType(models.TokenTypeSelect) {
+	// Parse the query (SELECT, WITH ... SELECT or a parenthesized query)
+	if !p.isQueryStart() {
 		return nil, p.expectedError("SELECT")
 	}
-	p.advance() // Consume SELECT
-
-	query, err := p.parseSelectWithSetOperations()
+	query, err := p.parseQueryExpression("SELECT")
 	if err != nil {
 		return nil, goerrors.WrapError(
 			goerrors.ErrCodeInvalidSyntax,
@@ -97,6 +102,14 @@ func (p *Parser) parseCreateView(orReplace, temporary bool) (*ast.CreateViewStat
 		)
 	}
 	stmt.Query = query
+
+	// Oracle: WITH READ ONLY
+	if p.isType(models.TokenTypeWith) && p.wordAt(1) == "READ" && p.wordAt(2) == "ONLY" {
+		p.advance()
+		p.advance()
+		p.advance()
+		stmt.ReadOnly = true
+	}
 
 	// Parse optional WITH CHECK OPTION
 	if p.isType(models.TokenTypeWith) {
@@ -150,27 +163,60 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 	}
 
 	// Parse view name (supports schema.view qualification and double-quoted identifiers)
-	matViewName, err := p.parseQualifiedName()
+	matViewName, matViewQuote, err := p.parseQualifiedNameQuoted()
 	if err != nil {
 		return nil, p.qualifiedNameError(err, "materialized view name")
 	}
 	stmt.Name = matViewName
+	if stmt.OnCluster, err = p.parseOnCluster(); err != nil {
+		return nil, err
+	}
+	clickhouse := p.dialect == string(keywords.DialectClickHouse)
+	stmt.NameQuote = matViewQuote
 
-	// Parse optional column list
+	// ClickHouse: optional TO <table> before the column list / ENGINE / AS
+	if clickhouse && p.isType(models.TokenTypeTo) {
+		p.advance() // Consume TO
+		toName, toQuote, toErr := p.parseQualifiedNameQuoted()
+		if toErr != nil {
+			return nil, p.qualifiedNameError(toErr, "target table after TO")
+		}
+		stmt.To = toName
+		stmt.ToQuote = toQuote
+	}
+
+	// Parse optional column list: names, or ClickHouse typed columns
 	if p.isType(models.TokenTypeLParen) {
-		p.advance() // Consume (
-		for {
-			if !p.isIdentifier() {
-				return nil, p.expectedError("column name")
+		if clickhouse && p.wordAt(1) != "" && p.tokenAt(2).Token.Type != models.TokenTypeComma &&
+			p.tokenAt(2).Token.Type != models.TokenTypeRParen {
+			p.advance() // Consume (
+			for {
+				col, err := p.parseColumnDef()
+				if err != nil {
+					return nil, err
+				}
+				stmt.ColumnDefs = append(stmt.ColumnDefs, *col)
+				if !p.isType(models.TokenTypeComma) {
+					break
+				}
+				p.advance()
 			}
-			stmt.Columns = append(stmt.Columns, p.currentToken.Token.Value)
-			p.advance()
+		} else {
+			p.advance() // Consume (
+			for {
+				if !p.isIdentifier() {
+					return nil, p.expectedError("column name")
+				}
+				stmt.ColumnQuotes = nameQuoteList(stmt.ColumnQuotes, len(stmt.Columns), p.currentNameQuote())
+				stmt.Columns = append(stmt.Columns, p.currentToken.Token.Value)
+				p.advance()
 
-			if p.isType(models.TokenTypeComma) {
-				p.advance() // Consume comma
-				continue
+				if p.isType(models.TokenTypeComma) {
+					p.advance() // Consume comma
+					continue
+				}
+				break
 			}
-			break
 		}
 		if !p.isType(models.TokenTypeRParen) {
 			return nil, p.expectedError(")")
@@ -188,24 +234,36 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 		p.advance()
 	}
 
-	// ClickHouse: optional TO <table> before ENGINE/AS
-	if p.dialect == string(keywords.DialectClickHouse) && p.isType(models.TokenTypeTo) {
-		p.advance() // Consume TO
-		toName, toErr := p.parseQualifiedName()
-		if toErr != nil {
-			return nil, p.qualifiedNameError(toErr, "target table after TO")
+	// ClickHouse: ENGINE = ... with its trailing clauses, and POPULATE
+	if clickhouse {
+		if stmt.EngineOptions, err = p.parseTableOptions(mvEngineOptionSpecs, stmt.EngineOptions); err != nil {
+			return nil, err
 		}
-		stmt.Tablespace = toName // reuse Tablespace for ClickHouse TO
-	}
-
-	// ClickHouse: optional ENGINE = ... ORDER BY ... before AS SELECT
-	if p.dialect == string(keywords.DialectClickHouse) {
-		for p.isTokenMatch("ENGINE") || p.isType(models.TokenTypeOrder) || p.isTokenMatch("PRIMARY") || p.isTokenMatch("PARTITION") || p.isTokenMatch("SETTINGS") {
-			// Consume all engine clauses token-by-token until AS
-			for !p.isType(models.TokenTypeAs) && !p.isType(models.TokenTypeEOF) && !p.isType(models.TokenTypeSemicolon) {
-				p.advance()
+		if p.isEngineClauseStart() {
+			stmt.Engine = &ast.TableEngineClauses{}
+			if err := p.parseEngineClauses(stmt.Engine); err != nil {
+				return nil, err
 			}
 		}
+		if p.wordAt(0) == "POPULATE" {
+			p.advance()
+			stmt.Populate = true
+		}
+	}
+
+	// Oracle: BUILD IMMEDIATE | DEFERRED, REFRESH ..., ENABLE QUERY REWRITE
+	if !clickhouse && (p.wordAt(0) == "BUILD" || p.wordAt(0) == "REFRESH" ||
+		p.wordAt(0) == "NEVER" || p.wordAt(0) == "ENABLE" || p.wordAt(0) == "DISABLE") {
+		var words []string
+		for !p.isType(models.TokenTypeAs) {
+			w := p.wordAt(0)
+			if w == "" {
+				return nil, p.expectedError("AS")
+			}
+			words = append(words, w)
+			p.advance()
+		}
+		stmt.Refresh = strings.Join(words, " ")
 	}
 
 	// Expect AS
@@ -214,13 +272,11 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 	}
 	p.advance() // Consume AS
 
-	// Parse the SELECT statement
-	if !p.isType(models.TokenTypeSelect) {
+	// Parse the query (SELECT, WITH ... SELECT or a parenthesized query)
+	if !p.isQueryStart() {
 		return nil, p.expectedError("SELECT")
 	}
-	p.advance() // Consume SELECT
-
-	query, err := p.parseSelectWithSetOperations()
+	query, err := p.parseQueryExpression("SELECT")
 	if err != nil {
 		return nil, goerrors.WrapError(
 			goerrors.ErrCodeInvalidSyntax,
@@ -252,6 +308,12 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 	}
 
 	return stmt, nil
+}
+
+// mvEngineOptionSpecs are the storage options of a ClickHouse
+// materialized view.
+var mvEngineOptionSpecs = []optionSpec{
+	{[]string{"ENGINE"}, optEqValue},
 }
 
 // parseRefreshStatement parses REFRESH MATERIALIZED VIEW statement

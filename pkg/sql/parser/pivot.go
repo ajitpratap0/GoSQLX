@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package parser - pivot.go
-// SQL Server / Oracle / Snowflake / BigQuery PIVOT and UNPIVOT clause parsing.
+// SQL Server / Oracle PIVOT and UNPIVOT clause parsing.
 
 package parser
 
@@ -67,12 +67,11 @@ func (p *Parser) renderCurrentIdent() string {
 // renderPivotValue reproduces a PIVOT/UNPIVOT IN-list token in source form:
 // a string literal is re-quoted and escaped the same way LiteralValue.SQL()
 // writes strings, a quoted identifier keeps its delimiters
-// (renderCurrentIdent), and anything else (a bare name or number) is returned
+// (renderQuotedIdent), and anything else (a bare name or number) is returned
 // as is.
 func (p *Parser) renderPivotValue() string {
 	if p.isStringLiteral() {
-		lit := ast.LiteralValue{Value: p.currentToken.Token.Value, Type: "STRING"}
-		return lit.SQL()
+		return p.newStringLiteral(p.currentToken.Token.Value).SQL()
 	}
 	return p.renderCurrentIdent()
 }
@@ -85,12 +84,14 @@ func (p *Parser) parsePivotAlias(ref *ast.TableReference) {
 		p.advance() // consume AS
 		if p.isIdentifier() {
 			ref.Alias = p.currentToken.Token.Value
+			ref.AliasQuote = p.currentNameQuote()
 			p.advance()
 		}
 		return
 	}
 	if p.isIdentifier() {
 		ref.Alias = p.currentToken.Token.Value
+		ref.AliasQuote = p.currentNameQuote()
 		p.advance()
 	}
 }
@@ -167,37 +168,19 @@ func (p *Parser) isUnpivotKeyword() bool {
 func (p *Parser) parsePivotClause() (*ast.PivotClause, error) {
 	pos := p.currentLocation()
 	p.advance() // consume PIVOT
+	clause := &ast.PivotClause{Pos: pos}
+	if p.IsOracle() && p.isTokenMatch("XML") && p.peekToken().Token.Type == models.TokenTypeLParen {
+		clause.XML = true
+		p.advance() // consume XML
+	}
 
 	if !p.isType(models.TokenTypeLParen) {
 		return nil, p.expectedError("( after PIVOT")
 	}
 	p.advance() // consume (
 
-	// Parse aggregate function expression (e.g. SUM(sales)). Oracle and
-	// BigQuery also allow an alias on each aggregate and several
-	// comma-separated aggregates.
-	aggFunc, err := p.parseExpression()
-	if err != nil {
+	if err := p.parsePivotAggregates(clause); err != nil {
 		return nil, err
-	}
-	var aggAlias string
-	var extraAggs []ast.PivotAggregate
-	if p.pivotMultiAggregateAllowed() {
-		if aggAlias, err = p.parsePivotAggregateAlias(); err != nil {
-			return nil, err
-		}
-		for p.isType(models.TokenTypeComma) {
-			p.advance() // consume ,
-			fn, err := p.parseExpression()
-			if err != nil {
-				return nil, err
-			}
-			alias, err := p.parsePivotAggregateAlias()
-			if err != nil {
-				return nil, err
-			}
-			extraAggs = append(extraAggs, ast.PivotAggregate{Function: fn, Alias: alias})
-		}
 	}
 
 	// Expect FOR keyword
@@ -224,6 +207,13 @@ func (p *Parser) parsePivotClause() (*ast.PivotClause, error) {
 		return nil, p.expectedError("( after IN in PIVOT")
 	}
 	p.advance() // consume (
+
+	clause.PivotColumn = pivotCol
+	if handled, err := p.parsePivotInSpecial(clause); err != nil {
+		return nil, err
+	} else if handled {
+		return clause, nil
+	}
 
 	// Parse IN values — identifiers, numbers, or string literals, each with
 	// an optional AS alias (Oracle syntax: 'North' AS north).
@@ -269,14 +259,8 @@ func (p *Parser) parsePivotClause() (*ast.PivotClause, error) {
 	}
 	p.advance() // close PIVOT )
 
-	return &ast.PivotClause{
-		AggregateFunction: aggFunc,
-		AggregateAlias:    aggAlias,
-		ExtraAggregates:   extraAggs,
-		PivotColumn:       pivotCol,
-		InValues:          inValues,
-		Pos:               pos,
-	}, nil
+	clause.InValues = inValues
+	return clause, nil
 }
 
 // parsePivotAggregateAlias consumes an optional "[AS] alias" after a PIVOT

@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ajitpratap0/GoSQLX/internal/tokscratch"
 	"github.com/ajitpratap0/GoSQLX/pkg/fingerprint"
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -111,8 +112,9 @@ func Parse(sql string) (*ast.AST, error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 
-	// Step 2: Tokenize SQL
-	tokens, err := tkz.TokenizeString(sql)
+	// Step 2: Tokenize SQL into the tokenizer's scratch buffer: the parser
+	// copies the tokens while preprocessing and they are not used after.
+	tokens, err := tokscratch.String(tkz, sql)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrTokenize, err)
 	}
@@ -199,7 +201,7 @@ func ParseWithContext(ctx context.Context, sql string) (*ast.AST, error) {
 	defer tokenizer.PutTokenizer(tkz)
 
 	// Step 2: Tokenize SQL with context support
-	tokens, err := tkz.TokenizeStringContext(ctx, sql)
+	tokens, err := tokscratch.StringContext(ctx, tkz, sql)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, fmt.Errorf("%w: %w", ErrTimeout, ctxErr)
@@ -277,7 +279,7 @@ func Validate(sql string) error {
 	}
 
 	// Use the dedicated validation fast-path that avoids building a full AST
-	err := parser.ValidateBytes([]byte(sql))
+	err := parser.Validate(sql)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrSyntax, err)
 	}
@@ -303,7 +305,7 @@ func ParseBytes(sql []byte) (*ast.AST, error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 
-	tokens, err := tkz.Tokenize(sql)
+	tokens, err := tokscratch.Bytes(tkz, sql)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrTokenize, err)
 	}
@@ -427,7 +429,7 @@ func ParseMultiple(queries []string) ([]*ast.AST, error) {
 		p.Reset()
 
 		// Tokenize
-		tokens, err := tkz.TokenizeString(sql)
+		tokens, err := tokscratch.String(tkz, sql)
 		if err != nil {
 			releaseASTs(results)
 			return nil, fmt.Errorf("query %d: %w: %w", i, ErrTokenize, err)
@@ -472,7 +474,7 @@ func ValidateMultiple(queries []string) error {
 		p.Reset()
 
 		// Tokenize
-		tokens, err := tkz.TokenizeString(sql)
+		tokens, err := tokscratch.String(tkz, sql)
 		if err != nil {
 			return fmt.Errorf("query %d: %w: %w", i, ErrTokenize, err)
 		}
@@ -608,13 +610,56 @@ func DefaultFormatOptions() FormatOptions {
 //	opts.UppercaseKeywords = true
 //	formatted, err := gosqlx.Format(sql, opts)
 //
+// Comments are preserved: a comment between statements stays between them, a
+// trailing comment stays after its statement, and a comment inside a statement
+// moves to the line above that statement. An optimizer hint (/*+ ... */)
+// directly after the first keyword of a statement is kept there. SQL whose
+// comments cannot be kept faithfully, such as a hint inside a subquery, is
+// rejected with an error wrapping formatter.ErrUnplaceableComment instead of
+// being rewritten without them.
+//
 // Returns the formatted SQL string or an error if SQL is invalid.
 func Format(sql string, options FormatOptions) (string, error) {
-	// Parse SQL into AST
-	parsedAST, err := Parse(sql)
-	if err != nil {
-		return "", fmt.Errorf("cannot format invalid SQL: %w", err)
+	return formatSQL(sql, options, "")
+}
+
+// FormatWithDialect is Format for SQL in a specific dialect: the SQL is
+// tokenized and parsed with the dialect's rules, and dialect-specific
+// constructs are rendered for that dialect (for example TOP versus LIMIT).
+// Comments and optimizer hints are preserved exactly as in Format.
+//
+// An empty dialect behaves like Format. An unknown dialect returns an error
+// wrapping ErrUnsupportedDialect.
+func FormatWithDialect(sql string, options FormatOptions, dialect keywords.SQLDialect) (string, error) {
+	if dialect != "" && !keywords.IsValidDialect(string(dialect)) {
+		return "", fmt.Errorf("%w: %q", ErrUnsupportedDialect, dialect)
 	}
+	return formatSQL(sql, options, dialect)
+}
+
+func formatSQL(sql string, options FormatOptions, dialect keywords.SQLDialect) (string, error) {
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+	if dialect != "" {
+		tkz.SetDialect(dialect)
+	}
+
+	tokens, err := tokscratch.String(tkz, sql)
+	if err != nil {
+		return "", fmt.Errorf("cannot format invalid SQL: %w: %w", ErrTokenize, err)
+	}
+	comments := tkz.Comments
+
+	p := parser.GetParser()
+	defer parser.PutParser(p)
+	if dialect != "" {
+		p.ApplyOptions(parser.WithDialect(string(dialect)))
+	}
+	parsedAST, err := p.ParseFromModelTokens(tokens)
+	if err != nil {
+		return "", fmt.Errorf("cannot format invalid SQL: %w: %w", ErrSyntax, err)
+	}
+	defer ast.ReleaseAST(parsedAST)
 
 	// Convert gosqlx FormatOptions to ast.FormatOptions
 	kwCase := ast.KeywordPreserve
@@ -628,10 +673,30 @@ func Format(sql string, options FormatOptions) (string, error) {
 		LineWidth:        options.SingleLineLimit,
 		NewlinePerClause: options.IndentSize > 0,
 		AddSemicolon:     options.AddSemicolon,
+		Dialect:          string(dialect),
 	}
 
-	result := formatter.FormatAST(parsedAST, astOpts)
-	return result, nil
+	if len(comments) == 0 {
+		return formatter.FormatAST(parsedAST, astOpts), nil
+	}
+
+	// Comments go back around the statements they belonged to. A comment that
+	// cannot be put back faithfully (an optimizer hint that is not directly
+	// after its statement's first keyword) is an error rather than silently
+	// dropped or moved: either would change what the statement does.
+	stmts := make([]string, len(parsedAST.Statements))
+	for i, stmt := range parsedAST.Statements {
+		stmts[i] = formatter.FormatStatement(stmt, astOpts)
+	}
+	layout := formatter.CommentLayout{Terminator: ";", Gap: "\n", Dialect: string(dialect)}
+	if options.AddSemicolon {
+		layout.Terminator = "" // each rendered statement already ends with ';'
+	}
+	out, err := formatter.JoinWithComments(stmts, tokens, comments, layout)
+	if err != nil {
+		return "", fmt.Errorf("cannot format SQL: %w", err)
+	}
+	return out, nil
 }
 
 // ParseWithRecovery tokenizes and parses SQL with error recovery, returning
@@ -645,7 +710,7 @@ func ParseWithRecovery(sql string) ([]ast.Statement, []error) {
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 
-	tokens, err := tkz.TokenizeString(sql)
+	tokens, err := tokscratch.String(tkz, sql)
 	if err != nil {
 		return nil, []error{fmt.Errorf("%w: %w", ErrTokenize, err)}
 	}

@@ -1,0 +1,38 @@
+-- Stress: deep nesting, long expressions, many CTEs, complex joins
+SELECT ((((1 + 2) * (3 + 4)) - ((5 + 6) / (7 + 8))) + (((9)))) AS v;
+SELECT if(a > 1, if(b > 2, if(c > 3, 'x', 'y'), 'z'), if(d > 4, 'w', 'v')) FROM t;
+SELECT multiIf(a = 1, 'one', a = 2, 'two', a = 3, 'three', a = 4, 'four', a = 5, 'five', 'many') FROM t;
+SELECT CASE a WHEN 1 THEN 'one' WHEN 2 THEN 'two' ELSE 'other' END, CASE WHEN a > 1 AND b < 2 OR c = 3 THEN 1 ELSE 0 END FROM t;
+SELECT a AND b OR c AND NOT d, NOT a = b, a OR b AND c FROM t;
+SELECT -a + b * c - d / e % f FROM t;
+SELECT * FROM (SELECT * FROM (SELECT * FROM (SELECT * FROM (SELECT 1 AS x))));
+SELECT x FROM t WHERE x IN (SELECT y FROM u WHERE y IN (SELECT z FROM v WHERE z IN (SELECT w FROM w1)));
+SELECT sum(x) FROM (SELECT a.x FROM a JOIN b ON a.k = b.k JOIN c ON b.k = c.k JOIN d ON c.k = d.k JOIN e ON d.k = e.k JOIN f ON e.k = f.k JOIN g ON f.k = g.k);
+SELECT u.id, o.cnt, p.total, r.refunds FROM users AS u LEFT JOIN (SELECT user_id, count() AS cnt FROM orders GROUP BY user_id) AS o ON u.id = o.user_id LEFT JOIN (SELECT user_id, sum(amount) AS total FROM payments GROUP BY user_id) AS p ON u.id = p.user_id LEFT JOIN (SELECT user_id, sum(amount) AS refunds FROM refunds GROUP BY user_id) AS r ON u.id = r.user_id WHERE u.is_active = 1 ORDER BY p.total DESC LIMIT 50;
+WITH base AS (SELECT * FROM events WHERE ts > now() - INTERVAL 1 DAY), by_user AS (SELECT user_id, count() AS c FROM base GROUP BY user_id), top AS (SELECT * FROM by_user ORDER BY c DESC LIMIT 100), joined AS (SELECT t.user_id, t.c, u.email FROM top AS t INNER JOIN users AS u ON t.user_id = u.id), fin AS (SELECT *, c * 2 AS c2 FROM joined) SELECT * FROM fin ORDER BY c DESC;
+SELECT arrayMap(x -> arrayMap(y -> y * x, [1, 2, 3]), [1, 2, 3]);
+SELECT arrayFilter(x -> x IN (SELECT id FROM t), arr) FROM s;
+SELECT arrayMap(x -> if(x > 0, x, -x), arr), arrayMap(x -> (x, x * 2), arr) FROM t;
+SELECT arrayMap(x -> x.1, arr) FROM t;
+SELECT sumIf(a, b > 0 AND c IN (1, 2, 3)) / nullIf(countIf(d), 0) FROM t;
+SELECT toStartOfInterval(ts, INTERVAL 15 MINUTE) AS b, groupArray((ts, v)) FROM t GROUP BY b;
+SELECT a FROM t1 UNION ALL SELECT b FROM t2 UNION ALL (SELECT c FROM t3 ORDER BY c LIMIT 1) ORDER BY 1;
+(SELECT 1) UNION ALL (SELECT 2);
+SELECT * FROM (SELECT 1 AS a UNION ALL SELECT 2 AS a) AS u WHERE a > 1;
+SELECT 1 AS a, 2 AS b ORDER BY a DESC, b ASC NULLS FIRST;
+SELECT x FROM t ORDER BY x DESC NULLS LAST, y COLLATE 'en' LIMIT 5;
+SELECT x FROM t ORDER BY x LIMIT 10 OFFSET 5;
+SELECT x FROM t ORDER BY x OFFSET 5 ROWS FETCH FIRST 10 ROWS ONLY;
+SELECT x FROM t ORDER BY x LIMIT 10 WITH TIES;
+SELECT DISTINCT ON (a) a, b FROM t;
+SELECT count(DISTINCT user_id), count(DISTINCT a, b), uniqCombined(a), uniqHLL12(a) FROM t;
+SELECT a FROM t GROUP BY ALL;
+SELECT a, b FROM t ORDER BY ALL;
+SELECT a, count() FROM t GROUP BY 1 ORDER BY 2 DESC;
+SELECT number AS n, n * 2 AS d, d + 1 AS e FROM numbers(3);
+SELECT t.* FROM t;
+SELECT db.t.col FROM db.t;
+SELECT "a b" FROM "my table" AS "t 1";
+SELECT 1 /* inline */ + 2 -- trailing
+;
+SELECT '2024-01-01'::Date + INTERVAL 1 MONTH, now() - INTERVAL '1' DAY, INTERVAL 2 HOUR + INTERVAL 30 MINUTE;

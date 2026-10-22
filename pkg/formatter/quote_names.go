@@ -20,22 +20,6 @@ import (
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
-// quoteNames renders a CTE or view column list as a comma-separated list,
-// double-quoting each name that would not re-parse bare (see ast.QuoteName).
-func quoteNames(names []string) string {
-	switch len(names) {
-	case 0:
-		return ""
-	case 1:
-		return ast.QuoteName(names[0])
-	}
-	parts := make([]string, len(names))
-	for i, n := range names {
-		parts[i] = ast.QuoteName(n)
-	}
-	return strings.Join(parts, ", ")
-}
-
 // quoteQualifiedNames joins table-like names with ", ", quoting each part
 // that needs it (see ast.QuoteQualifiedName).
 func quoteQualifiedNames(names []string) string {

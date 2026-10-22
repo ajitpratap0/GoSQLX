@@ -282,6 +282,16 @@ func TestPutExpression_UnpooledParents_ReleaseChildren(t *testing.T) {
 			func(e Expression) bool { n, ok := e.(*NamedArgument); return ok && n.Value == nil },
 		},
 		{
+			"StarExpression",
+			func(a, b *Identifier) Expression {
+				return &StarExpression{Star: &Identifier{Name: "*"}, Ilike: a, Replace: []*AliasedExpression{{Expr: b, Alias: "c"}}}
+			},
+			func(e Expression) bool {
+				s, ok := e.(*StarExpression)
+				return ok && s.Star == nil && s.Ilike == nil && len(s.Replace) == 0
+			},
+		},
+		{
 			"VariantPath",
 			func(a, b *Identifier) Expression {
 				return &VariantPath{Root: a, Segments: []VariantPathSegment{{Name: "f"}, {Index: b}}}

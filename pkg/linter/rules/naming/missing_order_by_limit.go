@@ -51,11 +51,11 @@ func (r *MissingOrderByLimitRule) Check(ctx *linter.Context) ([]linter.Violation
 			if !ok {
 				return true
 			}
-			hasLimit := sel.Limit != nil || sel.Fetch != nil
+			hasLimit := sel.Limit != nil || sel.LimitExpr != nil || sel.Fetch != nil
 			if !hasLimit {
 				return true
 			}
-			hasOffset := sel.Offset != nil || (sel.Fetch != nil && sel.Fetch.OffsetValue != nil)
+			hasOffset := sel.HasOffset() || (sel.Fetch != nil && sel.Fetch.OffsetValue != nil)
 			hasOrderBy := len(sel.OrderBy) > 0
 			if !hasOrderBy {
 				msg := "LIMIT without ORDER BY produces non-deterministic results"

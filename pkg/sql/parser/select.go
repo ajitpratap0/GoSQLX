@@ -42,6 +42,15 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		return nil, err
 	}
 
+	// MySQL / MariaDB select modifiers (SQL_CALC_FOUND_ROWS, STRAIGHT_JOIN, ...),
+	// which may also precede DISTINCT.
+	selectModifiers := p.parseSelectModifiers()
+	if len(selectModifiers) > 0 && !isDistinct && p.isType(models.TokenTypeDistinct) {
+		if isDistinct, distinctOnColumns, err = p.parseDistinctModifier(); err != nil {
+			return nil, err
+		}
+	}
+
 	// Reject TOP in dialects that use LIMIT/OFFSET or ROWNUM/FETCH FIRST instead.
 	// String comparison is used here because the lexer has no TokenTypeTOP constant;
 	// TOP is emitted as an identifier literal (see parseTopClause comment).
@@ -72,6 +81,14 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		return nil, err
 	}
 
+	// SELECT ... INTO target (SQL Server, PostgreSQL, MySQL, Oracle PL/SQL)
+	var into *ast.SelectInto
+	if p.isType(models.TokenTypeInto) && p.supportsSelectInto() {
+		if into, err = p.parseSelectInto(false); err != nil {
+			return nil, err
+		}
+	}
+
 	// FROM … JOIN clauses
 	tableName, tables, joins, err := p.parseFromClause()
 	if err != nil {
@@ -87,6 +104,9 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		From:              tables,
 		Joins:             joins,
 		TableName:         tableName,
+	}
+	if len(selectModifiers) > 0 || into != nil {
+		selectStmt.Extras = &ast.SelectExtras{SelectModifiers: selectModifiers, Into: into}
 	}
 
 	// ClickHouse ARRAY JOIN / LEFT ARRAY JOIN.
@@ -122,7 +142,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	// GROUP BY
-	if selectStmt.GroupBy, err = p.parseGroupByClause(); err != nil {
+	if selectStmt.GroupBy, err = p.parseGroupByClause(selectStmt); err != nil {
 		return nil, err
 	}
 
@@ -197,6 +217,18 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			}
 			cb.Condition = cond
 			selectStmt.ConnectBy = cb
+
+			// Oracle also accepts START WITH after CONNECT BY.
+			if selectStmt.StartWith == nil && p.isMariaDBClauseStart() &&
+				equalsUpper(p.currentToken.Token.Value, "START") {
+				p.advance() // START
+				p.advance() // WITH
+				startExpr, startErr := p.parseExpression()
+				if startErr != nil {
+					return nil, startErr
+				}
+				selectStmt.StartWith = startExpr
+			}
 		}
 	}
 
@@ -209,6 +241,7 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 				return nil, p.expectedError("window name after WINDOW")
 			}
 			winName := p.currentToken.Token.Value
+			winQuote := p.currentNameQuote()
 			p.advance()
 			if !p.isType(models.TokenTypeAs) {
 				return nil, p.expectedError("AS after window name")
@@ -222,9 +255,9 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 			// is w2; keep it as the base window instead of dropping it, so it
 			// renders as the standard w AS (w2).
 			if winSpec.Name != "" {
-				winSpec.BaseWindow = winSpec.Name
+				winSpec.BaseWindow, winSpec.BaseWindowQuote = winSpec.Name, winSpec.NameQuote
 			}
-			winSpec.Name = winName
+			winSpec.Name, winSpec.NameQuote = winName, winQuote
 			selectStmt.Windows = append(selectStmt.Windows, *winSpec)
 			if !p.isType(models.TokenTypeComma) {
 				break
@@ -233,30 +266,30 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		}
 	}
 
-	// ORDER BY
-	if selectStmt.OrderBy, err = p.parseOrderByClause(); err != nil {
-		return nil, err
-	}
-
-	// LIMIT / OFFSET
-	if selectStmt.Limit, selectStmt.Offset, err = p.parseLimitOffsetClause(); err != nil {
-		return nil, err
-	}
-
-	// ClickHouse LIMIT BY: `LIMIT N [OFFSET M] BY expr [, expr]...`
-	// The LIMIT and OFFSET values were already consumed above; if the next
-	// token is BY, consume the BY-expression list (permissive, not modeled).
-	if p.dialect == string(keywords.DialectClickHouse) && p.isType(models.TokenTypeBy) {
-		p.advance() // Consume BY
-		for {
-			if _, err := p.parseExpression(); err != nil {
-				return nil, err
-			}
-			if !p.isType(models.TokenTypeComma) {
-				break
-			}
-			p.advance()
+	// ORDER [SIBLINGS] BY
+	if p.isOrderSiblingsBy() {
+		p.advance() // ORDER
+		p.advance() // SIBLINGS
+		selectStmt.OrderSiblings = true
+		if selectStmt.OrderBy, err = p.parseOrderByList(); err != nil {
+			return nil, err
 		}
+	} else if selectStmt.OrderBy, err = p.parseOrderByClause(); err != nil {
+		return nil, err
+	}
+	// ClickHouse ORDER BY ... WITH FILL INTERPOLATE [(col AS expr, ...)]
+	if len(selectStmt.OrderBy) > 0 && p.dialect == string(keywords.DialectClickHouse) &&
+		p.isUnquotedWord("INTERPOLATE") {
+		interpolate, err := p.parseInterpolate()
+		if err != nil {
+			return nil, err
+		}
+		selectStmt.EnsureExtras().Interpolate = interpolate
+	}
+
+	// LIMIT / OFFSET (either order), ClickHouse LIMIT ... BY
+	if err = p.parseLimitOffsetInto(selectStmt); err != nil {
+		return nil, err
 	}
 
 	// FETCH FIRST / NEXT
@@ -266,19 +299,60 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 		}
 	}
 
-	// FOR UPDATE / SHARE / …
-	if p.isType(models.TokenTypeFor) {
+	// MySQL: INTO after the FROM ... clauses
+	if !hasSelectInto(selectStmt) && p.isMySQLFamily() && p.isType(models.TokenTypeInto) {
+		if err = p.parseTrailingSelectInto(selectStmt); err != nil {
+			return nil, err
+		}
+	}
+
+	// FOR UPDATE / SHARE / …, MySQL LOCK IN SHARE MODE
+	if p.isType(models.TokenTypeFor) && !p.isForOutputStart() {
 		if selectStmt.For, err = p.parseForClause(); err != nil {
 			return nil, err
 		}
+	} else if p.isLockInShareMode() {
+		if selectStmt.For, err = p.parseLockInShareMode(); err != nil {
+			return nil, err
+		}
+	}
+
+	// MySQL 8: INTO after the locking clause
+	if !hasSelectInto(selectStmt) && selectStmt.For != nil && p.isMySQLFamily() && p.isType(models.TokenTypeInto) {
+		if err = p.parseTrailingSelectInto(selectStmt); err != nil {
+			return nil, err
+		}
+	}
+
+	// SQL Server FOR JSON / XML and OPTION (...), ClickHouse FORMAT
+	if err = p.parseSelectTail(selectStmt); err != nil {
+		return nil, err
 	}
 
 	return selectStmt, nil
 }
 
+// isOrderSiblingsBy reports whether the current tokens are Oracle
+// ORDER SIBLINGS BY.
+func (p *Parser) isOrderSiblingsBy() bool {
+	return p.dialect == string(keywords.DialectOracle) && p.isType(models.TokenTypeOrder) &&
+		equalsUpper(p.peekToken().Token.Value, "SIBLINGS")
+}
+
 // parseDistinctModifier parses the optional DISTINCT [ON (...)] or ALL keyword
 // immediately after SELECT.
 func (p *Parser) parseDistinctModifier() (isDistinct bool, distinctOnColumns []ast.Expression, err error) {
+	// MySQL and MariaDB: DISTINCTROW is a synonym of DISTINCT.
+	if v := p.currentToken.Token.Value; len(v) == len("DISTINCTROW") && p.currentToken.Token.Quote == 0 &&
+		equalsUpper(v, "DISTINCTROW") && p.isMySQLFamily() {
+		p.advance() // Consume DISTINCTROW
+		return true, nil, nil
+	}
+	// Oracle: UNIQUE is a synonym of DISTINCT.
+	if p.isType(models.TokenTypeUnique) && p.IsOracle() {
+		p.advance() // Consume UNIQUE
+		return true, nil, nil
+	}
 	if p.isType(models.TokenTypeDistinct) {
 		isDistinct = true
 		p.advance() // Consume DISTINCT
@@ -334,7 +408,17 @@ func (p *Parser) isNonTopDialect() bool {
 // plain identifier/keyword literal.  A future lexer enhancement could introduce
 // models.TokenTypeTop and replace the equalsUpper check below.
 func (p *Parser) parseTopClause() (*ast.TopClause, error) {
-	if p.dialect != string(keywords.DialectSQLServer) || !equalsUpper(p.currentToken.Token.Value, "TOP") {
+	if !equalsUpper(p.currentToken.Token.Value, "TOP") {
+		return nil, nil
+	}
+	switch p.dialect {
+	case string(keywords.DialectSQLServer):
+	case string(keywords.DialectSnowflake):
+		// Snowflake TOP <n>; a column named top is left alone.
+		if p.peekToken().Token.Type != models.TokenTypeNumber {
+			return nil, nil
+		}
+	default:
 		return nil, nil
 	}
 	p.advance() // Consume TOP
@@ -344,7 +428,13 @@ func (p *Parser) parseTopClause() (*ast.TopClause, error) {
 		p.advance() // Consume (
 	}
 
-	countExpr, err := p.parsePrimaryExpression()
+	var countExpr ast.Expression
+	var err error
+	if hasParen {
+		countExpr, err = p.parseExpression()
+	} else {
+		countExpr, err = p.parsePrimaryExpression()
+	}
 	if err != nil {
 		return nil, goerrors.InvalidSyntaxError(
 			fmt.Sprintf("expected expression after TOP: %v", err),
@@ -360,7 +450,7 @@ func (p *Parser) parseTopClause() (*ast.TopClause, error) {
 		p.advance() // Consume )
 	}
 
-	topClause := &ast.TopClause{Count: countExpr}
+	topClause := &ast.TopClause{Count: countExpr, Parenthesized: hasParen}
 
 	// Optional PERCENT
 	if p.isType(models.TokenTypePercent) ||
@@ -401,33 +491,67 @@ func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
 			// The tokenizer may produce either depending on context.
 			expr = &ast.Identifier{Name: "*"}
 			p.advance()
+			var err error
+			if expr, err = p.parseStarModifiers(expr); err != nil {
+				return nil, err
+			}
 		} else {
 			var err error
 			expr, err = p.parseExpression()
 			if err != nil {
 				return nil, err
 			}
+			// t.* EXCLUDE (...) and other wildcard modifiers
+			if id, ok := expr.(*ast.Identifier); ok && id.Name == "*" {
+				if expr, err = p.parseStarModifiers(expr); err != nil {
+					return nil, err
+				}
+			} else if fc, ok := expr.(*ast.FunctionCall); ok && p.dialect == string(keywords.DialectClickHouse) &&
+				strings.EqualFold(fc.Name, "COLUMNS") && p.isStarModifierStart() {
+				// ClickHouse COLUMNS('regexp') APPLY (fn) ...
+				if expr, err = p.parseStarModifiers(expr); err != nil {
+					return nil, err
+				}
+			}
 
 			// Optional alias: AS name  or  implicit name (non-identifier expressions only)
 			if p.isType(models.TokenTypeAs) {
 				p.advance() // Consume AS
-				if !p.isIdentifier() {
-					return nil, p.expectedError("alias name after AS")
+				var alias string
+				var aliasQuote ast.NameQuote
+				if p.isStringAlias() {
+					// AS 'alias' (MySQL, MariaDB, SQLite): a string literal
+					// names the column. It is the same alias as the name
+					// written delimited, so it is recorded like one and
+					// written back without the string quotes.
+					alias = p.currentToken.Token.Value
+					quote := '"'
+					if p.isMySQLFamily() {
+						quote = '`'
+					}
+					aliasQuote = p.appendNamePartQuoted(0, quote)
+					p.advance()
+				} else {
+					if !p.isAliasAfterAS() {
+						return nil, p.expectedError("alias name after AS")
+					}
+					alias = p.currentToken.Token.Value
+					aliasQuote = p.currentNameQuote()
+					p.advance()
 				}
-				alias := p.currentToken.Token.Value
-				p.advance()
-				expr = &ast.AliasedExpression{Expr: expr, Alias: alias}
+				expr = &ast.AliasedExpression{Expr: expr, Alias: alias, AliasQuote: aliasQuote}
 			} else if p.canBeAlias() {
 				// Implicit aliasing (SELECT expr alias) is allowed for non-identifier
 				// expressions (functions, literals, casts, etc.) and for bare identifiers
 				// that are known pseudo-columns (ROWNUM, SYSDATE, LEVEL, etc.) where
 				// the alias pattern is idiomatic: SELECT ROWNUM rn FROM ...
 				ident, isIdent := expr.(*ast.Identifier)
-				allowAlias := !isIdent || (isIdent && ident.Table == "" && p.isOraclePseudoColumn2(ident.Name))
+				allowAlias := !isIdent || (isIdent && ident.Table == "" && p.isOraclePseudoColumn2(ident.Name)) || p.isQuotedIdentifierToken()
 				if allowAlias {
 					alias := p.currentToken.Token.Value
+					aliasQuote := p.currentNameQuote()
 					p.advance()
-					expr = &ast.AliasedExpression{Expr: expr, Alias: alias}
+					expr = &ast.AliasedExpression{Expr: expr, Alias: alias, AliasQuote: aliasQuote}
 				}
 			}
 		}
@@ -440,4 +564,13 @@ func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
 		p.advance() // Consume comma
 	}
 	return columns, nil
+}
+
+// isStringAlias reports whether the current token is a string literal used as
+// a column alias after AS, which MySQL, MariaDB and SQLite accept.
+func (p *Parser) isStringAlias() bool {
+	if !p.isMySQLFamily() && p.dialect != string(keywords.DialectSQLite) {
+		return false
+	}
+	return p.isType(models.TokenTypeString) || p.isType(models.TokenTypeSingleQuotedString)
 }

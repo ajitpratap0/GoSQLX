@@ -201,8 +201,7 @@ func TestTokenizer_OracleColonNonBind(t *testing.T) {
 			input: "x := 1",
 			want: []wantTok{
 				{models.TokenTypeIdentifier, "x"},
-				{models.TokenTypeColon, ":"},
-				{models.TokenTypeEq, "="},
+				{models.TokenTypeAssignment, ":="},
 				{models.TokenTypeNumber, "1"},
 			},
 		},
@@ -251,13 +250,14 @@ func TestTokenizer_OracleColonNonBind(t *testing.T) {
 	})
 }
 
-func TestTokenizer_ColonBindIsOracleOnly(t *testing.T) {
+// TestTokenizer_ColonBindIsOracleAndSQLiteOnly: ':name' is a bind variable in
+// Oracle and SQLite; elsewhere ':' keeps its other uses (slices, VARIANT paths).
+func TestTokenizer_ColonBindIsOracleAndSQLiteOnly(t *testing.T) {
 	dialects := []keywords.SQLDialect{
 		keywords.DialectPostgreSQL,
 		keywords.DialectMySQL,
 		keywords.DialectMariaDB,
 		keywords.DialectSQLServer,
-		keywords.DialectSQLite,
 		keywords.DialectSnowflake,
 		keywords.DialectClickHouse,
 		keywords.DialectGeneric,

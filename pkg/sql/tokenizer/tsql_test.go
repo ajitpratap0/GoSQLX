@@ -217,15 +217,16 @@ func TestTSQL_NWithoutQuoteIsIdentifier(t *testing.T) {
 	}
 }
 
-func TestTSQL_NStringNotInPostgreSQL(t *testing.T) {
-	// In PostgreSQL dialect, N'hello' should be IDENTIFIER + STRING (two tokens)
-	tkz, err := NewWithDialect(keywords.DialectPostgreSQL)
+func TestTSQL_NStringNotInSQLite(t *testing.T) {
+	// SQLite has no national strings, so N'hello' is IDENTIFIER + STRING
+	// (two tokens).
+	tkz, err := NewWithDialect(keywords.DialectSQLite)
 	if err != nil {
 		t.Fatalf("NewWithDialect error = %v", err)
 	}
 	tokens := tokenize(t, tkz, "N'hello'")
 	if len(tokens) != 2 {
-		t.Fatalf("expected 2 tokens for PostgreSQL N'hello', got %d", len(tokens))
+		t.Fatalf("expected 2 tokens for SQLite N'hello', got %d", len(tokens))
 	}
 	if tokens[0].Token.Type != models.TokenTypeIdentifier {
 		t.Errorf("expected first token to be identifier, got %v", tokens[0].Token.Type)

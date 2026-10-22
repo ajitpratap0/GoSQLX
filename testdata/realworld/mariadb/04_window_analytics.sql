@@ -1,0 +1,24 @@
+-- Analytics with window functions, CTEs and recursive CTEs
+SELECT id, user_id, total, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at) AS rn FROM orders;
+SELECT id, RANK() OVER (ORDER BY total DESC) AS r, DENSE_RANK() OVER (ORDER BY total DESC) AS dr FROM orders;
+SELECT id, SUM(total) OVER (PARTITION BY user_id ORDER BY created_at ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running FROM orders;
+SELECT id, AVG(total) OVER (ORDER BY created_at ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING) AS ma5 FROM orders;
+SELECT id, SUM(total) OVER (ORDER BY created_at RANGE BETWEEN INTERVAL 7 DAY PRECEDING AND CURRENT ROW) FROM orders;
+SELECT id, LAG(total, 1, 0) OVER (PARTITION BY user_id ORDER BY created_at) AS prev, LEAD(total) OVER (PARTITION BY user_id ORDER BY created_at) AS next FROM orders;
+SELECT id, FIRST_VALUE(total) OVER w AS f, LAST_VALUE(total) OVER w AS l, NTH_VALUE(total, 2) OVER w AS n2 FROM orders WINDOW w AS (PARTITION BY user_id ORDER BY created_at ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING);
+SELECT id, NTILE(4) OVER (ORDER BY total) AS quartile, PERCENT_RANK() OVER (ORDER BY total) AS pr, CUME_DIST() OVER (ORDER BY total) AS cd FROM orders;
+SELECT DISTINCT user_id, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY total) OVER (PARTITION BY user_id) AS median FROM orders;
+SELECT user_id, MEDIAN(total) OVER (PARTITION BY user_id) FROM orders;
+SELECT * FROM (SELECT o.*, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at DESC) AS rn FROM orders o) t WHERE rn = 1;
+WITH RECURSIVE nums (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM nums WHERE n < 100) SELECT n FROM nums;
+WITH RECURSIVE tree AS (SELECT id, parent_id, name, 0 AS depth, CAST(name AS CHAR(1000)) AS path FROM categories WHERE parent_id IS NULL UNION ALL SELECT c.id, c.parent_id, c.name, t.depth + 1, CONCAT(t.path, '/', c.name) FROM categories c JOIN tree t ON c.parent_id = t.id) SELECT * FROM tree ORDER BY path;
+WITH RECURSIVE org AS (SELECT id, manager_id, name FROM employees WHERE id = 1 UNION SELECT e.id, e.manager_id, e.name FROM employees e INNER JOIN org o ON e.manager_id = o.id) SELECT * FROM org;
+WITH RECURSIVE dates AS (SELECT DATE('2025-01-01') AS d UNION ALL SELECT d + INTERVAL 1 DAY FROM dates WHERE d < '2025-12-31') SELECT d, COUNT(o.id) FROM dates LEFT JOIN orders o ON DATE(o.created_at) = d GROUP BY d;
+WITH first_orders AS (SELECT user_id, MIN(created_at) AS first_at FROM orders GROUP BY user_id), cohorts AS (SELECT user_id, DATE_FORMAT(first_at, '%Y-%m') AS cohort FROM first_orders), activity AS (SELECT c.cohort, DATE_FORMAT(o.created_at, '%Y-%m') AS active_month, COUNT(DISTINCT o.user_id) AS users FROM cohorts c JOIN orders o ON o.user_id = c.user_id GROUP BY c.cohort, active_month) SELECT cohort, active_month, users, FIRST_VALUE(users) OVER (PARTITION BY cohort ORDER BY active_month) AS cohort_size FROM activity ORDER BY cohort, active_month;
+WITH t AS (SELECT 1 AS x) SELECT * FROM t;
+WITH s1 AS (SELECT user_id, SUM(total) AS s FROM orders GROUP BY user_id), s2 AS (SELECT user_id, s, NTILE(10) OVER (ORDER BY s DESC) AS decile FROM s1), s3 AS (SELECT decile, COUNT(*) AS n, AVG(s) AS avg_s FROM s2 GROUP BY decile) SELECT * FROM s3 ORDER BY decile;
+SELECT user_id, total, total / SUM(total) OVER (PARTITION BY user_id) AS share FROM orders;
+SELECT COUNT(*) OVER () AS total_rows, id FROM orders LIMIT 10;
+SELECT id, SUM(total) OVER (PARTITION BY user_id ORDER BY created_at ROWS UNBOUNDED PRECEDING) FROM orders;
+SELECT a.id, b.id FROM (SELECT id FROM t1) a, (SELECT id FROM t2) b WHERE a.id < b.id;
+SELECT id, CASE WHEN ROW_NUMBER() OVER (ORDER BY id) % 2 = 0 THEN 'even' ELSE 'odd' END FROM t1;

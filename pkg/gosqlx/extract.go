@@ -372,6 +372,32 @@ func (c *metadataCollector) addTable(name string) {
 	}
 }
 
+// addTableRef adds the table a reference names; a parenthesized join group
+// adds the tables inside it.
+func (c *metadataCollector) addTableRef(t *ast.TableReference) {
+	if g := ast.TableRefJoinGroup(t); g != nil {
+		for i := range g.Tables {
+			c.addTableRef(&g.Tables[i])
+		}
+		for i := range g.Joins {
+			c.addTableRef(&g.Joins[i].Right)
+		}
+		return
+	}
+	c.addTable(t.Name)
+}
+
+// addDMLTargetTables adds the extra UPDATE / DELETE targets and the joined
+// tables of a multi-table statement.
+func (c *metadataCollector) addDMLTargetTables(d *ast.DMLTargetFields) {
+	for i := range d.Tables {
+		c.addTable(d.Tables[i].Name)
+	}
+	for i := range d.Joins {
+		c.addTableRef(&d.Joins[i].Right)
+	}
+}
+
 func (c *metadataCollector) addColumn(table, name string, want extractKind) {
 	if name == "" || name == "*" {
 		return
@@ -406,11 +432,11 @@ func (c *metadataCollector) collectFromNode(node ast.Node) {
 	case *ast.Identifier:
 		c.addColumn(n.Table, n.Name, c.want)
 	case *ast.SelectStatement:
-		for _, from := range n.From {
-			c.addTable(from.Name)
+		for i := range n.From {
+			c.addTableRef(&n.From[i])
 		}
-		for _, join := range n.Joins {
-			c.addTable(join.Right.Name)
+		for i := range n.Joins {
+			c.addTableRef(&n.Joins[i].Right)
 		}
 		for _, col := range n.Columns {
 			c.collectFromExpression(col, c.want)
@@ -447,6 +473,7 @@ func (c *metadataCollector) collectFromNode(node ast.Node) {
 		for _, from := range n.From {
 			c.addTable(from.Name)
 		}
+		c.addDMLTargetTables(&n.DMLTargetFields)
 		for i := range n.Assignments {
 			c.collectFromNode(&n.Assignments[i])
 		}
@@ -455,9 +482,23 @@ func (c *metadataCollector) collectFromNode(node ast.Node) {
 			c.collectFromNode(n.With)
 		}
 	case *ast.DeleteStatement:
-		c.addTable(n.TableName)
+		// In DELETE t1 FROM t1 JOIN t2 the targets name FROM entries
+		// (often by alias), so the tables are the FROM list.
+		if len(n.From) == 0 {
+			c.addTable(n.TableName)
+		}
 		for _, using := range n.Using {
 			c.addTable(using.Name)
+		}
+		for _, from := range n.From {
+			c.addTable(from.Name)
+		}
+		if len(n.From) == 0 {
+			c.addDMLTargetTables(&n.DMLTargetFields)
+		} else {
+			for i := range n.Joins {
+				c.addTableRef(&n.Joins[i].Right)
+			}
 		}
 		c.collectFromExpression(n.Where, c.want)
 		if n.With != nil {
@@ -553,6 +594,24 @@ func (c *metadataCollector) collectFromExpression(expr ast.Expression, want extr
 	case *ast.AliasedExpression:
 		// Unwrap the aliased expression and collect from inner expression
 		c.collectFromExpression(e.Expr, want)
+	case *ast.KeywordArgument:
+		c.collectFromExpression(e.Value, want)
+	case *ast.MatchAgainstExpression:
+		if want&extractFunctions != 0 {
+			c.addFunction("MATCH")
+		}
+		for _, col := range e.Columns {
+			c.collectFromExpression(col, want)
+		}
+		c.collectFromExpression(e.Query, want)
+	case *ast.OuterJoinMarker:
+		c.collectFromExpression(e.Expr, want)
+	case *ast.ConnectByRootExpression:
+		c.collectFromExpression(e.Expr, want)
+	case *ast.AssignmentExpression:
+		c.collectFromExpression(e.Value, want)
+	case *ast.IntervalExpression:
+		c.collectFromExpression(e.ValueExpr, want)
 	}
 }
 

@@ -48,9 +48,28 @@ func (f *FieldAccessExpression) writeSQL(buf *bytes.Buffer) {
 	// ((a).order), so an unquoted field is quoted only when its characters
 	// could not form a bare word; quoting a reserved word here would turn
 	// Quoted false into true on a re-parse.
-	if f.Quoted || (f.Field != "*" && !isBareNameChars(f.Field, false)) {
+	if f.Quoted || (f.Field != "*" && !isBareNameChars(f.Field, false) && !isTupleElementNumber(f.Field)) {
 		writeQuotedIdentifier(buf, f.Field)
 	} else {
 		buf.WriteString(f.Field)
 	}
+	if f.IsCall {
+		buf.WriteByte('(')
+		writeExprList(buf, f.Args)
+		buf.WriteByte(')')
+	}
+}
+
+// isTupleElementNumber reports whether field is a ClickHouse tuple element
+// position (all ASCII digits), as in (1, 'a').1.
+func isTupleElementNumber(field string) bool {
+	if field == "" {
+		return false
+	}
+	for i := 0; i < len(field); i++ {
+		if field[i] < '0' || field[i] > '9' {
+			return false
+		}
+	}
+	return true
 }

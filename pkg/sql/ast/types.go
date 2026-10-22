@@ -60,6 +60,10 @@ func (a *AlterColumnOperation) TokenLiteral() string {
 		return "SET NOT NULL"
 	case AlterColumnDropNotNull:
 		return "DROP NOT NULL"
+	case AlterColumnSetDataType:
+		return "SET DATA TYPE"
+	case AlterColumnOther:
+		return "ALTER COLUMN"
 	default:
 		return "UNKNOWN"
 	}
@@ -120,6 +124,9 @@ type Setting struct {
 // Ident represents an identifier in SQL (table name, column name, etc.)
 type Ident struct {
 	Name string
+	// Quote records the delimiters of Name when they must be kept (see
+	// NameQuote).
+	Quote NameQuote
 }
 
 func (i *Ident) String() string { return i.Name }

@@ -34,8 +34,13 @@ type QueryExpression interface {
 // those parentheses because they can change the meaning: A EXCEPT (B UNION C)
 // groups differently from A EXCEPT B UNION C, and in
 // A UNION (B ORDER BY x LIMIT n) the ORDER BY/LIMIT applies to B only.
-// Renderers also always parenthesize a Right operand that is itself a
-// *SetOperation, so hand-built trees render with their intended grouping.
+// Renderers also parenthesize an operand that is itself a *SetOperation
+// whenever standard precedence (INTERSECT binds tighter than UNION and
+// EXCEPT) would otherwise regroup it; see SetOperandNeedsParens.
+//
+// The parser applies that precedence, so A UNION B INTERSECT C is
+// A UNION (B INTERSECT C) with the INTERSECT in Right. SQLite and Oracle
+// give all set operators equal precedence and build a left-deep tree.
 type SetOperation struct {
 	Left     Statement
 	Operator string // UNION, EXCEPT, INTERSECT
@@ -43,8 +48,24 @@ type SetOperation struct {
 	All      bool // UNION ALL vs UNION
 	// LeftParenthesized reports that Left was written as "(query)".
 	LeftParenthesized bool
+	// LeftWithHoisted reports that the WITH clause of Left's first SELECT was
+	// written before the parenthesized Left ("WITH c AS (...) (A UNION B)
+	// INTERSECT C"), so it scopes over the whole set operation; see
+	// HoistLeadingWith.
+	LeftWithHoisted bool
 	// RightParenthesized reports that Right was written as "(query)".
 	RightParenthesized bool
+	// Tail holds an ORDER BY / LIMIT / OFFSET / FETCH that follows the whole
+	// operation when it cannot be stored on the last SELECT (see QueryTail);
+	// nil otherwise.
+	Tail *QueryTail
+	// Distinct reports an explicit DISTINCT quantifier (UNION DISTINCT,
+	// INTERSECT DISTINCT). It means the same as no quantifier.
+	Distinct bool
+	// Minus reports that an EXCEPT was written with the Oracle / Snowflake
+	// synonym MINUS. Operator is still EXCEPT; renderers write MINUS unless
+	// the target dialect is known not to accept it.
+	Minus bool
 }
 
 func (s *SetOperation) statementNode()       {}
@@ -57,6 +78,9 @@ func (s SetOperation) Children() []Node {
 	}
 	if s.Right != nil {
 		nodes = append(nodes, s.Right)
+	}
+	if s.Tail != nil {
+		nodes = append(nodes, s.Tail)
 	}
 	return nodes
 }
@@ -158,6 +182,19 @@ type SelectStatement struct {
 	For       *ForClause      // Row-level locking clause (SQL:2003, PostgreSQL, MySQL)
 	Settings  []QuerySetting  // ClickHouse trailing SETTINGS name = value, ... (query-level settings)
 	Pos       models.Location // Source position of the SELECT keyword (1-based line and column)
+
+	// SELECT-body clauses added for dialect coverage (see select_ext.go).
+	GroupByModifiers GroupByModifiers // GROUP BY ALL, WITH ROLLUP / CUBE / TOTALS
+	OrderSiblings    bool             // Oracle ORDER SIBLINGS BY
+	LimitExpr        Expression       // LIMIT value that is not a plain integer ($1, ?, -1, 1 + 1); Limit wins when both are set
+	OffsetExpr       Expression       // OFFSET value that is not a plain integer; Offset wins when both are set
+	LimitAll         bool             // PostgreSQL LIMIT ALL
+	OffsetRows       bool             // OFFSET n ROW / ROWS
+	LimitWithTies    bool             // ClickHouse LIMIT n WITH TIES
+	// Extras holds the rarer dialect-specific clauses (select modifiers,
+	// INTO, INTERPOLATE, LIMIT BY, FOR JSON/XML, OPTION hints, FORMAT); nil
+	// when the statement has none of them. See SelectExtras.
+	Extras *SelectExtras
 }
 
 func (s *SelectStatement) statementNode()       {}
@@ -260,7 +297,7 @@ func (s SelectStatement) Children() []Node {
 			children = append(children, v)
 		}
 	}
-	return children
+	return s.appendSelectExtChildren(children)
 }
 
 // InsertStatement represents an INSERT SQL statement
@@ -281,6 +318,10 @@ type InsertStatement struct {
 	// The assignments are stored as Columns plus a single Values row
 	// (Columns[i] = Values[0][i]); renderers emit SET when the shapes match.
 	SetSyntax bool
+	// InsertDialectFields holds the dialect-specific INSERT clauses
+	// (modifiers, OVERRIDING, row alias, OUTPUT INTO, RETURNING INTO,
+	// ClickHouse SETTINGS / FUNCTION / FORMAT, Oracle INSERT ALL/FIRST).
+	InsertDialectFields
 }
 
 func (i *InsertStatement) statementNode()      {}
@@ -331,12 +372,15 @@ func (i InsertStatement) Children() []Node {
 	if i.OnDuplicateKey != nil {
 		children = append(children, i.OnDuplicateKey)
 	}
-	return children
+	return i.insertDialectChildren(children)
 }
 
 // Values represents VALUES clause
 type Values struct {
 	Rows [][]Expression
+	// RowConstructor reports the MySQL form VALUES ROW(1, 2), ROW(3, 4),
+	// used when VALUES is a query (derived table, set operand, CTE body).
+	RowConstructor bool
 }
 
 func (v *Values) statementNode()      {}
@@ -359,6 +403,9 @@ type UpdateStatement struct {
 	Where       Expression
 	Returning   []Expression
 	Pos         models.Location // Source position of the UPDATE keyword (1-based line and column)
+	// DMLTargetFields holds modifiers, TOP, ONLY, extra targets, joins,
+	// OUTPUT, ORDER BY, LIMIT and RETURNING INTO (see ast_dml.go).
+	DMLTargetFields
 }
 
 // GetUpdates returns Assignments for backward compatibility.
@@ -386,7 +433,7 @@ func (u UpdateStatement) Children() []Node {
 		children = append(children, u.Where)
 	}
 	children = append(children, nodifyExpressions(u.Returning)...)
-	return children
+	return u.dmlTargetChildren(children)
 }
 
 // CreateTableStatement represents a CREATE TABLE statement
@@ -409,6 +456,13 @@ type CreateTableStatement struct {
 	// PeriodDefinitions holds PERIOD FOR clauses for application-time or system-time periods.
 	// Example: PERIOD FOR app_time (start_col, end_col)
 	PeriodDefinitions []*PeriodDefinition
+
+	// CreateTableExtras holds AS query, LIKE, CLONE, PARTITION OF, the
+	// table kind and ClickHouse engine clauses (see ddl_objects.go).
+	CreateTableExtras
+	// NameQuote records the delimiters of Name when they must be kept
+	// (see NameQuote).
+	NameQuote NameQuote
 }
 
 func (c *CreateTableStatement) statementNode()      {}
@@ -427,6 +481,9 @@ func (c CreateTableStatement) Children() []Node {
 	for i := range c.Partitions {
 		children = append(children, &c.Partitions[i])
 	}
+	if c.AsQuery != nil {
+		children = append(children, c.AsQuery)
+	}
 	return children
 }
 
@@ -439,6 +496,17 @@ type DeleteStatement struct {
 	Where     Expression
 	Returning []Expression
 	Pos       models.Location // Source position of the DELETE keyword (1-based line and column)
+	// From is the source table list of the multi-table form
+	// DELETE t1[, t2] FROM t1 JOIN t2 ... (MySQL, SQL Server). When set, the
+	// targets (TableName/Alias and Tables) are written before FROM.
+	From []TableReference
+	// BeforeSystemTime is the point of MariaDB's DELETE HISTORY FROM t
+	// BEFORE SYSTEM_TIME point; nil when the statement has none. DELETE
+	// HISTORY itself is the HISTORY modifier.
+	BeforeSystemTime Expression
+	// DMLTargetFields holds modifiers, TOP, ONLY, extra targets, joins,
+	// OUTPUT, ORDER BY, LIMIT and RETURNING INTO (see ast_dml.go).
+	DMLTargetFields
 }
 
 func (d *DeleteStatement) statementNode()      {}
@@ -452,11 +520,17 @@ func (d DeleteStatement) Children() []Node {
 	for i := range d.Using {
 		children = append(children, &d.Using[i])
 	}
+	for i := range d.From {
+		children = append(children, &d.From[i])
+	}
+	if d.BeforeSystemTime != nil {
+		children = append(children, d.BeforeSystemTime)
+	}
 	if d.Where != nil {
 		children = append(children, d.Where)
 	}
 	children = append(children, nodifyExpressions(d.Returning)...)
-	return children
+	return d.dmlTargetChildren(children)
 }
 
 // AlterTableStatement represents an ALTER TABLE statement.
@@ -521,6 +595,14 @@ type CreateIndexStatement struct {
 	Columns     []IndexColumn
 	Using       string
 	Where       Expression
+
+	// CreateIndexExtras holds the index kind, CONCURRENTLY, INCLUDE and
+	// trailing options (see ddl_objects.go).
+	CreateIndexExtras
+	// NameQuote and TableQuote record the delimiters of Name and Table
+	// when they must be kept (see NameQuote).
+	NameQuote  NameQuote
+	TableQuote NameQuote
 }
 
 func (c *CreateIndexStatement) statementNode()      {}
@@ -550,6 +632,12 @@ type MergeStatement struct {
 	OnCondition Expression         // The join/match condition
 	WhenClauses []*MergeWhenClause // List of WHEN clauses
 	Output      []Expression       // SQL Server OUTPUT clause columns
+	OutputInto  *OutputInto        // SQL Server OUTPUT ... INTO target
+	Returning   []Expression       // PostgreSQL 17 RETURNING list
+	// TargetAliasQuote and SourceAliasQuote record the delimiters of
+	// TargetAlias and SourceAlias when they must be kept (see NameQuote).
+	TargetAliasQuote NameQuote
+	SourceAliasQuote NameQuote
 }
 
 func (m *MergeStatement) statementNode()      {}
@@ -567,7 +655,7 @@ func (m MergeStatement) Children() []Node { return m.childrenInPlace() }
 // childrenInPlace is Children for a MergeStatement reached through a pointer:
 // TargetTable and SourceTable are returned as pointers into *m itself.
 func (m *MergeStatement) childrenInPlace() []Node {
-	n := 2 + len(m.WhenClauses) + len(m.Output)
+	n := 3 + len(m.WhenClauses) + len(m.Output)
 	if m.OnCondition != nil {
 		n++
 	}
@@ -582,7 +670,10 @@ func (m *MergeStatement) childrenInPlace() []Node {
 	for _, e := range m.Output {
 		children = append(children, e)
 	}
-	return children
+	if m.OutputInto != nil {
+		children = append(children, m.OutputInto)
+	}
+	return append(children, nodifyExpressions(m.Returning)...)
 }
 
 // MergeWhenClause represents a WHEN clause in a MERGE statement
@@ -614,6 +705,14 @@ type MergeAction struct {
 	Columns       []string     // For INSERT: column list
 	Values        []Expression // For INSERT: value list
 	DefaultValues bool         // For INSERT: use DEFAULT VALUES
+	// Where is the Oracle action predicate: UPDATE SET ... WHERE cond or
+	// INSERT ... VALUES (...) WHERE cond.
+	Where Expression
+	// DeleteWhere is the Oracle UPDATE SET ... DELETE WHERE cond predicate.
+	DeleteWhere Expression
+	// ColumnQuotes records the delimiters of each Columns entry by index
+	// (nil when no column keeps delimiters); see NameQuote.
+	ColumnQuotes []NameQuote
 }
 
 func (a *MergeAction) expressionNode()     {}
@@ -626,6 +725,12 @@ func (a MergeAction) Children() []Node {
 	for _, val := range a.Values {
 		children = append(children, val)
 	}
+	if a.Where != nil {
+		children = append(children, a.Where)
+	}
+	if a.DeleteWhere != nil {
+		children = append(children, a.DeleteWhere)
+	}
 	return children
 }
 
@@ -633,6 +738,9 @@ func (a MergeAction) Children() []Node {
 type SetClause struct {
 	Column string
 	Value  Expression
+	// ColumnQuote records the delimiters of Column's parts when they must
+	// be kept (see NameQuote).
+	ColumnQuote NameQuote
 }
 
 func (s *SetClause) expressionNode()     {}
@@ -654,6 +762,15 @@ type CreateViewStatement struct {
 	Columns     []string  // Optional column list
 	Query       Statement // The SELECT statement
 	WithOption  string    // PostgreSQL: WITH (CHECK OPTION | CASCADED | LOCAL)
+
+	// ViewExtras holds OR ALTER, SECURE / FORCE modifiers and WITH READ
+	// ONLY (see ddl_objects.go).
+	ViewExtras
+	// NameQuote records the delimiters of Name when they must be kept, and
+	// ColumnQuotes those of each Columns entry by index (nil when no column
+	// keeps delimiters); see NameQuote.
+	NameQuote    NameQuote
+	ColumnQuotes []NameQuote
 }
 
 func (c *CreateViewStatement) statementNode()      {}
@@ -674,6 +791,18 @@ type CreateMaterializedViewStatement struct {
 	Query       Statement // The SELECT statement
 	WithData    *bool     // nil = default, true = WITH DATA, false = WITH NO DATA
 	Tablespace  string    // Optional tablespace (PostgreSQL)
+
+	// ViewExtras holds OR REPLACE, the ClickHouse TO target, column
+	// definitions, ENGINE clauses and POPULATE, and the Oracle BUILD /
+	// REFRESH clauses (see ddl_objects.go).
+	ViewExtras
+	// OrReplace is CREATE OR REPLACE MATERIALIZED VIEW.
+	OrReplace bool
+	// NameQuote records the delimiters of Name, and ColumnQuotes those of
+	// each Columns entry by index (nil when none keeps delimiters); see
+	// NameQuote.
+	NameQuote    NameQuote
+	ColumnQuotes []NameQuote
 }
 
 func (c *CreateMaterializedViewStatement) statementNode()      {}
@@ -704,6 +833,13 @@ type DropStatement struct {
 	IfExists    bool
 	Names       []string // Can drop multiple objects
 	CascadeType string   // CASCADE, RESTRICT, or empty
+
+	// DropExtras holds DROP INDEX ... ON table, CONCURRENTLY, TEMPORARY,
+	// PURGE and ClickHouse ON CLUSTER / SYNC (see ddl_objects.go).
+	DropExtras
+	// NameQuotes records the delimiters of each Names entry by index (nil
+	// when none keeps delimiters); see NameQuote.
+	NameQuotes []NameQuote
 }
 
 func (d *DropStatement) statementNode()      {}
@@ -717,6 +853,12 @@ type TruncateStatement struct {
 	RestartIdentity  bool     // RESTART IDENTITY - reset sequences
 	ContinueIdentity bool     // CONTINUE IDENTITY - keep sequences (default)
 	CascadeType      string   // CASCADE, RESTRICT, or empty
+	// Storage is Oracle DROP STORAGE / REUSE STORAGE (or DROP ALL STORAGE),
+	// or empty.
+	Storage string
+	// TableQuotes records the delimiters of each Tables entry by index (nil
+	// when none keeps delimiters); see NameQuote.
+	TableQuotes []NameQuote
 }
 
 func (t *TruncateStatement) statementNode()      {}
@@ -729,6 +871,8 @@ type PragmaStatement struct {
 	Name  string // Pragma name, e.g. "table_info"
 	Arg   string // Optional: parenthesized arg, e.g. "users"
 	Value string // Optional: assigned value, e.g. "WAL"
+
+	Schema string // Optional: schema qualifier, e.g. "main" in PRAGMA main.synchronous
 }
 
 func (p *PragmaStatement) statementNode()      {}
@@ -749,11 +893,33 @@ func (s ShowStatement) Children() []Node     { return nil }
 // DescribeStatement represents MySQL DESCRIBE/DESC/EXPLAIN table commands
 type DescribeStatement struct {
 	TableName string
+
+	Keyword    string // DESCRIBE, DESC or EXPLAIN as written; "" renders DESCRIBE
+	ObjectKind string // object kind written before the name (TABLE, VIEW, STAGE, ...), upper-cased
 }
 
 func (d *DescribeStatement) statementNode()      {}
 func (d DescribeStatement) TokenLiteral() string { return "DESCRIBE" }
 func (d DescribeStatement) Children() []Node     { return nil }
+
+// ExplainStatement represents EXPLAIN / DESCRIBE / DESC applied to a
+// statement, e.g. "EXPLAIN ANALYZE SELECT ...", "EXPLAIN (FORMAT JSON) ...",
+// "EXPLAIN QUERY PLAN ..." (SQLite) or "DESCRIBE PIPELINE ..." (ClickHouse).
+// DESCRIBE of a table name is a DescribeStatement instead.
+type ExplainStatement struct {
+	Keyword   string    // EXPLAIN, DESCRIBE or DESC, upper-cased
+	Options   string    // text between the keyword and the statement, e.g. "ANALYZE VERBOSE"
+	Statement Statement // the explained statement
+}
+
+func (e *ExplainStatement) statementNode()      {}
+func (e ExplainStatement) TokenLiteral() string { return e.Keyword }
+func (e ExplainStatement) Children() []Node {
+	if e.Statement == nil {
+		return nil
+	}
+	return []Node{e.Statement}
+}
 
 // UnsupportedStatement represents a SQL statement that was parsed but not
 // fully modeled in the AST. The parser consumed and validated the tokens
@@ -777,6 +943,12 @@ type ReplaceStatement struct {
 	TableName string
 	Columns   []Expression
 	Values    [][]Expression
+	// Query is the source of REPLACE ... SELECT.
+	Query QueryExpression
+	// SetSyntax marks REPLACE t SET col = expr, ... (Columns plus one Values row).
+	SetSyntax bool
+	// Returning is the MariaDB RETURNING list.
+	Returning []Expression
 }
 
 func (r *ReplaceStatement) statementNode()      {}
@@ -787,7 +959,10 @@ func (r ReplaceStatement) Children() []Node {
 	for _, row := range r.Values {
 		children = append(children, nodifyExpressions(row)...)
 	}
-	return children
+	if r.Query != nil {
+		children = append(children, r.Query)
+	}
+	return append(children, nodifyExpressions(r.Returning)...)
 }
 
 // ── MariaDB SEQUENCE DDL (10.3+) ───────────────────────────────────────────

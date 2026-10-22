@@ -870,6 +870,10 @@ func (s *Scanner) scanExpression(expr ast.Expression, result *ScanResult, contex
 	case *ast.ArraySubscriptExpression, *ast.ArraySliceExpression:
 		// A subscript or slice on a call result, such as pg_sleep(5)[1].
 		s.scanExpressionForDangerousFunctions(e, result)
+	case *ast.MatchAgainstExpression, *ast.AssignmentExpression, *ast.IntervalExpression,
+		*ast.KeywordArgument, *ast.OuterJoinMarker, *ast.ConnectByRootExpression:
+		// Operands of MATCH ... AGAINST (SLEEP(5)), @v := SLEEP(5), ...
+		s.scanExpressionForDangerousFunctions(e, result)
 	}
 }
 
@@ -1133,8 +1137,15 @@ func (s *Scanner) scanFunctionCall(fn *ast.FunctionCall, result *ScanResult) {
 	}
 
 	funcName := strings.ToUpper(fn.Name)
+	// A schema- or package-qualified call (pg_catalog.pg_sleep(5),
+	// DBMS_LOCK.SLEEP(5), UTL_HTTP.REQUEST(...)) is matched on its last part,
+	// and on its qualifiers for the package-level dangerous names.
+	baseName, qualifiers := funcName, ""
+	if i := strings.LastIndexByte(funcName, '.'); i >= 0 {
+		baseName, qualifiers = funcName[i+1:], funcName[:i]
+	}
 
-	if timeBasedFuncNames[funcName] {
+	if timeBasedFuncNames[baseName] {
 		finding := Finding{
 			Severity:    SeverityHigh,
 			Pattern:     PatternTimeBased,
@@ -1147,7 +1158,17 @@ func (s *Scanner) scanFunctionCall(fn *ast.FunctionCall, result *ScanResult) {
 		}
 	}
 
-	if risk, found := dangerousFuncNames[funcName]; found {
+	risk, found := dangerousFuncNames[baseName]
+	for q := qualifiers; !found && q != ""; {
+		part := q
+		if i := strings.IndexByte(q, '.'); i >= 0 {
+			part, q = q[:i], q[i+1:]
+		} else {
+			q = ""
+		}
+		risk, found = dangerousFuncNames[part]
+	}
+	if found {
 		finding := Finding{
 			Severity:    SeverityCritical,
 			Pattern:     PatternOutOfBand,
@@ -1193,6 +1214,22 @@ func (s *Scanner) scanExpressionForDangerousFunctions(expr ast.Expression, resul
 		s.scanExpressionForDangerousFunctions(e.Array, result)
 		s.scanExpressionForDangerousFunctions(e.Start, result)
 		s.scanExpressionForDangerousFunctions(e.End, result)
+	case *ast.KeywordArgument:
+		// SUBSTRING(s FROM SLEEP(5)), TRIM(BOTH SLEEP(5) FROM s)
+		s.scanExpressionForDangerousFunctions(e.Value, result)
+	case *ast.MatchAgainstExpression:
+		for _, c := range e.Columns {
+			s.scanExpressionForDangerousFunctions(c, result)
+		}
+		s.scanExpressionForDangerousFunctions(e.Query, result)
+	case *ast.AssignmentExpression:
+		s.scanExpressionForDangerousFunctions(e.Value, result)
+	case *ast.IntervalExpression:
+		s.scanExpressionForDangerousFunctions(e.ValueExpr, result)
+	case *ast.OuterJoinMarker:
+		s.scanExpressionForDangerousFunctions(e.Expr, result)
+	case *ast.ConnectByRootExpression:
+		s.scanExpressionForDangerousFunctions(e.Expr, result)
 	}
 }
 

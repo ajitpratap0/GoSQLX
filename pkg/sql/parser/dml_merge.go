@@ -19,7 +19,6 @@ package parser
 
 import (
 	"fmt"
-	"strings"
 
 	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
@@ -55,9 +54,11 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 			return nil, p.expectedError("target alias after AS")
 		}
 		stmt.TargetAlias = p.currentToken.Token.Value
+		stmt.TargetAliasQuote = p.currentNameQuote()
 		p.advance()
 	} else if p.canBeAlias() && !p.isType(models.TokenTypeUsing) && p.currentToken.Token.Value != "USING" {
 		stmt.TargetAlias = p.currentToken.Token.Value
+		stmt.TargetAliasQuote = p.currentNameQuote()
 		p.advance()
 	}
 
@@ -67,12 +68,23 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 	}
 	p.advance() // Consume USING
 
-	// Parse source table (could be a table or subquery)
-	sourceRef, err := p.parseTableReference()
-	if err != nil {
-		return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing MERGE source", models.Location{}, "", err)
+	// Parse source: a table, or a derived table (SELECT ...) [AS] alias.
+	if p.isType(models.TokenTypeLParen) {
+		sourceRef, err := p.parseFromTableReference()
+		if err != nil {
+			return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing MERGE source", models.Location{}, "", err)
+		}
+		// The renderers write the alias from SourceAlias.
+		stmt.SourceAlias, sourceRef.Alias = sourceRef.Alias, ""
+		stmt.SourceAliasQuote, sourceRef.AliasQuote = sourceRef.AliasQuote, 0
+		stmt.SourceTable = sourceRef
+	} else {
+		sourceRef, err := p.parseTableReference()
+		if err != nil {
+			return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing MERGE source", models.Location{}, "", err)
+		}
+		stmt.SourceTable = *sourceRef
 	}
-	stmt.SourceTable = *sourceRef
 
 	// Parse optional source alias
 	if p.isType(models.TokenTypeAs) {
@@ -81,9 +93,11 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 			return nil, p.expectedError("source alias after AS")
 		}
 		stmt.SourceAlias = p.currentToken.Token.Value
+		stmt.SourceAliasQuote = p.currentNameQuote()
 		p.advance()
-	} else if p.canBeAlias() && !p.isType(models.TokenTypeOn) && p.currentToken.Token.Value != "ON" {
+	} else if stmt.SourceAlias == "" && p.canBeAlias() && !p.isType(models.TokenTypeOn) && p.currentToken.Token.Value != "ON" {
 		stmt.SourceAlias = p.currentToken.Token.Value
+		stmt.SourceAliasQuote = p.currentNameQuote()
 		p.advance()
 	}
 
@@ -113,13 +127,23 @@ func (p *Parser) parseMergeStatement() (ast.Statement, error) {
 	}
 
 	// Parse optional OUTPUT clause (SQL Server)
-	if p.dialect == string(keywords.DialectSQLServer) && strings.ToUpper(p.currentToken.Token.Value) == "OUTPUT" {
-		p.advance() // Consume OUTPUT
-		cols, err := p.parseOutputColumns()
+	if p.dialect == string(keywords.DialectSQLServer) && equalsUpper(p.currentToken.Token.Value, "OUTPUT") {
+		stmt.Output, stmt.OutputInto, err = p.parseDMLOutputClause()
 		if err != nil {
 			return nil, err
 		}
-		stmt.Output = cols
+	}
+
+	// PostgreSQL 17: RETURNING
+	if p.isReturningKeyword() {
+		returning, into, err := p.parseReturningClause()
+		if err != nil {
+			return nil, err
+		}
+		if len(into) > 0 {
+			return nil, goerrors.UnsupportedFeatureError("RETURNING ... INTO in MERGE", p.currentLocation(), "")
+		}
+		stmt.Returning = returning
 	}
 
 	return stmt, nil
@@ -142,14 +166,18 @@ func (p *Parser) parseMergeWhenClause() (*ast.MergeWhenClause, error) {
 		}
 		p.advance() // Consume MATCHED
 
-		// Check for BY SOURCE
+		// Check for BY SOURCE / BY TARGET
 		if p.isType(models.TokenTypeBy) {
 			p.advance() // Consume BY
-			if !p.isType(models.TokenTypeSource) && p.currentToken.Token.Value != "SOURCE" {
-				return nil, p.expectedError("SOURCE after BY")
+			switch {
+			case p.isType(models.TokenTypeSource) || p.isTokenMatch("SOURCE"):
+				clause.Type = "NOT_MATCHED_BY_SOURCE"
+			case p.isType(models.TokenTypeTarget) || p.isTokenMatch("TARGET"):
+				clause.Type = "NOT_MATCHED_BY_TARGET"
+			default:
+				return nil, p.expectedError("SOURCE or TARGET after BY")
 			}
-			p.advance() // Consume SOURCE
-			clause.Type = "NOT_MATCHED_BY_SOURCE"
+			p.advance() // Consume SOURCE / TARGET
 		} else {
 			clause.Type = "NOT_MATCHED"
 		}
@@ -199,11 +227,12 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 
 		// Parse SET clauses
 		for {
-			if !p.isIdentifier() && !p.canBeAlias() {
+			if !p.isIdentifier() && !p.canBeAlias() && !p.isWordToken() {
 				return nil, p.expectedError("column name")
 			}
 			// Handle qualified column names (e.g., t.name)
 			columnName := p.currentToken.Token.Value
+			columnQuote := p.currentNameQuote()
 			p.advance()
 
 			// Check for qualified name (table.column)
@@ -213,17 +242,18 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 					return nil, p.expectedError("column name after .")
 				}
 				columnName = fmt.Sprintf("%s.%s", columnName, p.currentToken.Token.Value)
+				columnQuote = p.appendNamePart(columnQuote)
 				p.advance()
 			}
 
-			setClause := ast.SetClause{Column: columnName}
+			setClause := ast.SetClause{Column: columnName, ColumnQuote: columnQuote}
 
 			if !p.isType(models.TokenTypeEq) {
 				return nil, p.expectedError("=")
 			}
 			p.advance() // Consume =
 
-			value, err := p.parseExpression()
+			value, err := p.parseDMLValue()
 			if err != nil {
 				return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing SET value", models.Location{}, "", err)
 			}
@@ -234,6 +264,9 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 				break
 			}
 			p.advance() // Consume comma
+		}
+		if err := p.parseMergeActionWhere(action, true); err != nil {
+			return nil, err
 		}
 	} else if p.isType(models.TokenTypeInsert) {
 		if clauseType == "MATCHED" || clauseType == "NOT_MATCHED_BY_SOURCE" {
@@ -249,6 +282,7 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 				if !p.isIdentifier() {
 					return nil, p.expectedError("column name")
 				}
+				action.ColumnQuotes = nameQuoteList(action.ColumnQuotes, len(action.Columns), p.currentNameQuote())
 				action.Columns = append(action.Columns, p.currentToken.Token.Value)
 				p.advance()
 
@@ -279,7 +313,7 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 			p.advance() // Consume (
 
 			for {
-				value, err := p.parseExpression()
+				value, err := p.parseDMLValue()
 				if err != nil {
 					return nil, goerrors.WrapError(goerrors.ErrCodeInvalidSyntax, "error parsing INSERT value", models.Location{}, "", err)
 				}
@@ -298,15 +332,48 @@ func (p *Parser) parseMergeAction(clauseType string) (*ast.MergeAction, error) {
 		} else {
 			return nil, p.expectedError("VALUES or DEFAULT VALUES")
 		}
+		if err := p.parseMergeActionWhere(action, false); err != nil {
+			return nil, err
+		}
 	} else if p.isType(models.TokenTypeDelete) {
 		if clauseType == "NOT_MATCHED" {
 			return nil, goerrors.InvalidSyntaxError("DELETE not allowed in WHEN NOT MATCHED clause", models.Location{}, "")
 		}
 		action.ActionType = "DELETE"
 		p.advance() // Consume DELETE
+	} else if p.isTokenMatch("DO") && equalsUpper(p.peekToken().Token.Value, "NOTHING") {
+		// PostgreSQL 15+: WHEN ... THEN DO NOTHING
+		action.ActionType = "DO NOTHING"
+		p.advance() // Consume DO
+		p.advance() // Consume NOTHING
 	} else {
-		return nil, p.expectedError("UPDATE, INSERT, or DELETE")
+		return nil, p.expectedError("UPDATE, INSERT, DELETE, or DO NOTHING")
 	}
 
 	return action, nil
+}
+
+// parseMergeActionWhere parses the Oracle action predicates that follow a
+// MERGE UPDATE SET list (WHERE c, then DELETE WHERE c) or a MERGE INSERT
+// VALUES list (WHERE c). A WHERE here cannot start anything else: WHEN
+// clauses begin with WHEN.
+func (p *Parser) parseMergeActionWhere(action *ast.MergeAction, isUpdate bool) error {
+	if p.isType(models.TokenTypeWhere) {
+		p.advance() // Consume WHERE
+		where, err := p.parseExpression()
+		if err != nil {
+			return err
+		}
+		action.Where = where
+	}
+	if isUpdate && p.isType(models.TokenTypeDelete) && p.peekToken().Token.Type == models.TokenTypeWhere {
+		p.advance() // Consume DELETE
+		p.advance() // Consume WHERE
+		where, err := p.parseExpression()
+		if err != nil {
+			return err
+		}
+		action.DeleteWhere = where
+	}
+	return nil
 }

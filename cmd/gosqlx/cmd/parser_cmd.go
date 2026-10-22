@@ -94,6 +94,11 @@ func (p *Parser) Parse(input string) (*ParserResult, error) {
 		return result, nil
 	}
 
+	if !hasStatementTokens(tokens) {
+		result.Error = errNoStatements
+		return result, result.Error
+	}
+
 	// Parse to AST with proper error handling for memory management
 	pr := parserForDialect(p.Opts.Dialect)
 	defer pr.Release()
@@ -292,7 +297,7 @@ func (p *Parser) displayTree(astObj *ast.AST) error {
 			if len(s.OrderBy) > 0 {
 				fmt.Fprintf(p.Out, "%s├── OrderBy\n", childPrefix)
 			}
-			if s.Limit != nil {
+			if s.HasLimit() {
 				fmt.Fprintf(p.Out, "%s└── Limit\n", childPrefix)
 			}
 		}
@@ -331,7 +336,7 @@ func convertStatement(stmt ast.Statement) StatementDisplay {
 		if len(s.OrderBy) > 0 {
 			details["has_order_by"] = true
 		}
-		if s.Limit != nil {
+		if s.HasLimit() {
 			details["has_limit"] = true
 		}
 		if s.With != nil {

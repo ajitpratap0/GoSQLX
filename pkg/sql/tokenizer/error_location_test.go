@@ -39,7 +39,7 @@ func refLocation(input string, idx int) models.Location {
 
 // TestTokenizer_ErrorLocations checks that tokenizer errors report the byte
 // that starts the offending construct (the opening delimiter of an
-// unterminated literal, the escape character of a bad escape) under the same
+// unterminated literal) under the same
 // byte-based rule as token spans.
 func TestTokenizer_ErrorLocations(t *testing.T) {
 	cases := []struct {
@@ -65,15 +65,16 @@ func TestTokenizer_ErrorLocations(t *testing.T) {
 		{"bracket after tab", keywords.DialectSQLServer, "SELECT\t[col", "[", models.Location{Line: 1, Column: 8}},
 		{"bracket multi-line multibyte", keywords.DialectSQLServer, "SELECT N'é€',\n\t\t[abc def", "[", models.Location{Line: 2, Column: 3}},
 
-		// Invalid escape: the character after the backslash.
-		{"bad escape after tab and multibyte", keywords.DialectMySQL, "SELECT\t'é\\q'", "q'", models.Location{Line: 1, Column: 12}},
-		{"bad escape multi-line", keywords.DialectMySQL, "SELECT 'a\nb€',\n\t'x\\q'", "q'", models.Location{Line: 3, Column: 5}},
+		// A backslash-escaped closing quote leaves the literal unterminated:
+		// the opening quote is reported.
+		{"escaped quote after tab and multibyte", keywords.DialectMySQL, "SELECT\t'é\\'", "'é", models.Location{Line: 1, Column: 8}},
+		{"escaped quote multi-line", keywords.DialectMySQL, "SELECT 'a\nb€',\n\t'x\\'", "'x", models.Location{Line: 3, Column: 2}},
 
 		// Regression guards for paths that already used the opener.
 		{"single quote multi-line", keywords.DialectPostgreSQL, "SELECT\t'é',\n\t'abc", "'abc", models.Location{Line: 2, Column: 2}},
 		{"block comment after multibyte", keywords.DialectPostgreSQL, "SELECT 'é€'\t/* never closed", "/*", models.Location{Line: 1, Column: 16}},
 		{"backtick after tab", keywords.DialectMySQL, "SELECT\t`a", "`", models.Location{Line: 1, Column: 8}},
-		{"triple quote after tab", keywords.DialectPostgreSQL, "SELECT\t'''abc", "'''", models.Location{Line: 1, Column: 8}},
+		{"triple quote after tab", keywords.DialectBigQuery, "SELECT\t'''abc", "'''", models.Location{Line: 1, Column: 8}},
 	}
 
 	for _, tc := range cases {

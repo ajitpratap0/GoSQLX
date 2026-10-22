@@ -67,7 +67,10 @@ func TestTableHints_RejectNonWordHints_PR632(t *testing.T) {
 		`SELECT * FROM t WITH ("x); DROP TABLE y; --")`,
 		`SELECT * FROM t WITH ([x); DROP TABLE y; --])`,
 		`SELECT * FROM t WITH (NOLOCK, "a b")`,
-		`SELECT * FROM t WITH (INDEX = ix)`,
+		// INDEX = ix is accepted and stored as INDEX(ix); its argument must
+		// still be a bare word or number.
+		`SELECT * FROM t WITH (INDEX = 'x); DROP TABLE y; --')`,
+		`SELECT * FROM t WITH (INDEX("x); DROP TABLE y; --"))`,
 	}
 	for _, in := range inputs {
 		t.Run(in, func(t *testing.T) {
@@ -198,20 +201,23 @@ func TestPivot_HandBuiltUnsafeItems_PR632(t *testing.T) {
 
 // TestQuotedIdentifier_ConsistentWithDefinitions_PR632 checks that a quoted
 // reference renders with the same quoting as the alias or CTE column it
-// refers to. Those definitions are stored as plain strings and render bare
-// (case folded by the database), so a case-only quoted reference must render
-// bare too or it no longer matches its definition.
+// refers to. Both record the quotes a name needs for its case (see
+// ast.NameQuote), so the quotes are kept on both sides and they keep matching
+// after the database folds unquoted names.
 func TestQuotedIdentifier_ConsistentWithDefinitions_PR632(t *testing.T) {
 	cases := []struct {
 		name string
 		sql  string
 		want string
 	}{
-		{"order_by_alias", `SELECT amount AS "Total" FROM t ORDER BY "Total"`, `SELECT amount AS Total FROM t ORDER BY Total`},
-		{"cte_column", `WITH cte (a, "B") AS (SELECT 1, 2) SELECT "B" FROM cte`, `WITH cte (a, B) AS (SELECT 1, 2) SELECT B FROM cte`},
-		{"derived_alias", `SELECT s."Total" FROM (SELECT amount AS "Total" FROM t) AS s`, `SELECT s.Total FROM (SELECT amount AS Total FROM t) s`},
+		{"order_by_alias", `SELECT amount AS "Total" FROM t ORDER BY "Total"`, `SELECT amount AS "Total" FROM t ORDER BY "Total"`},
+		{"cte_column", `WITH cte (a, "B") AS (SELECT 1, 2) SELECT "B" FROM cte`, `WITH cte (a, "B") AS (SELECT 1, 2) SELECT "B" FROM cte`},
+		{"derived_alias", `SELECT s."Total" FROM (SELECT amount AS "Total" FROM t) AS s`, `SELECT s."Total" FROM (SELECT amount AS "Total" FROM t) s`},
+		// "source" is a keyword, so it keeps its quotes as alias and qualifier.
 		{"metabase_style", `SELECT "source"."CATEGORY" AS "CATEGORY" FROM (SELECT category AS "CATEGORY" FROM p) AS "source" GROUP BY "source"."CATEGORY"`,
-			`SELECT source.CATEGORY AS CATEGORY FROM (SELECT category AS CATEGORY FROM p) source GROUP BY source.CATEGORY`},
+			`SELECT "source"."CATEGORY" AS "CATEGORY" FROM (SELECT category AS "CATEGORY" FROM p) "source" GROUP BY "source"."CATEGORY"`},
+		// Quotes a lower-case name does not need are still dropped on both sides.
+		{"lower_case_dropped", `SELECT s."total" FROM (SELECT amount AS "total" FROM t) AS "s"`, `SELECT s.total FROM (SELECT amount AS total FROM t) s`},
 		// Reserved words still keep their quotes.
 		{"reserved_kept", `SELECT "select", "key" FROM t`, `SELECT "select", "key" FROM t`},
 	}

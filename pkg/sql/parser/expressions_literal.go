@@ -51,6 +51,49 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		}, nil
 	}
 
+	// Bitwise NOT (~a: MySQL, PostgreSQL, SQL Server, SQLite) and MySQL's !a,
+	// a synonym of NOT with a higher precedence.
+	if p.isType(models.TokenTypeTilde) || (p.isType(models.TokenTypeExclamationMark) && p.isMySQLFamily()) {
+		unaryPos := p.currentLocation()
+		op := ast.PGBitwiseNot
+		if p.isType(models.TokenTypeExclamationMark) {
+			op = ast.BangNot
+		}
+		p.advance() // Consume ~ / !
+		expr, err := p.parseUnaryOperand()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.UnaryExpression{Operator: op, Expr: expr, Pos: unaryPos}, nil
+	}
+
+	// PostgreSQL prefix operators |/ (square root), ||/ (cube root), !! (factorial)
+	// and @ (absolute value).
+	if op, n := p.pgPrefixOperator(); n > 0 {
+		unaryPos := p.currentLocation()
+		for i := 0; i < n; i++ {
+			p.advance() // Consume the operator token(s)
+		}
+		// These are "any other operator" in PostgreSQL, which binds looser
+		// than + and -: |/ a + 1 is |/ (a + 1).
+		expr, err := p.parseOtherOperatorOperand()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.UnaryExpression{Operator: op, Expr: expr, Pos: unaryPos}, nil
+	}
+
+	// MySQL / MariaDB BINARY expr: casts the operand to a binary string.
+	if p.isMySQLBinaryOperator() {
+		unaryPos := p.currentLocation()
+		p.advance() // Consume BINARY
+		expr, err := p.parseUnaryOperand()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.UnaryExpression{Operator: ast.MySQLBinary, Expr: expr, Pos: unaryPos}, nil
+	}
+
 	// CONNECT BY: PRIOR is a prefix operator that binds to its operand, so
 	// "PRIOR a + 1" is "(PRIOR a) + 1" (#783).
 	if p.inConnectBy && p.isConnectByPrior() {
@@ -61,6 +104,10 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			return nil, err
 		}
 		return &ast.UnaryExpression{Operator: ast.Prior, Expr: operand, Pos: priorPos}, nil
+	}
+
+	if lit, ok := p.parsePrefixedStringLiteral(); ok {
+		return lit, nil
 	}
 
 	if p.isType(models.TokenTypeCase) {
@@ -92,11 +139,16 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return p.parseArrayConstructor()
 	}
 
-	// ClickHouse array literal: [expr, expr, ...] without the ARRAY keyword.
-	// Gated to ClickHouse to avoid colliding with subscript-style usage in other
-	// dialects.
-	if p.isType(models.TokenTypeLBracket) && p.dialect == string(keywords.DialectClickHouse) {
-		return p.parseBracketArrayLiteral()
+	// ClickHouse / Snowflake array literal: [expr, expr, ...] without the
+	// ARRAY keyword, optionally subscripted: [1, 2, 3][2]. Gated to those
+	// dialects to avoid colliding with bracket-quoted names elsewhere.
+	if p.isType(models.TokenTypeLBracket) && p.hasBracketArrayLiterals() {
+		return p.parseBracketArrayPrimary()
+	}
+
+	// Snowflake object constant {'k': v, ...}.
+	if p.isType(models.TokenTypeLBrace) && p.dialect == string(keywords.DialectSnowflake) {
+		return p.parseObjectLiteral()
 	}
 
 	// Handle MySQL VALUES(column) helper in ON DUPLICATE KEY UPDATE.
@@ -163,22 +215,40 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return &ast.FunctionCall{Name: identName, Pos: identPos}, nil
 	}
 
-	if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeDoubleQuotedString) || ((p.dialect == string(keywords.DialectSQLServer) || p.dialect == string(keywords.DialectClickHouse)) && p.isNonReservedKeyword()) {
+	if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeDoubleQuotedString) || p.isKeywordColumnName() || ((p.dialect == string(keywords.DialectSQLServer) || p.dialect == string(keywords.DialectClickHouse)) && p.isNonReservedKeyword()) {
 		// Handle identifiers and function calls
 		// Double-quoted strings are treated as identifiers in SQL (e.g., "column_name")
 		// Non-reserved keywords (TARGET, SOURCE, etc.) can also be used as identifiers
+		// Typed literal: DATE '2024-01-01', inet '10.0.0.1' (PostgreSQL).
+		if p.isTypedLiteralStart() {
+			return p.parseTypedLiteral(), nil
+		}
+		// Oracle CONNECT_BY_ROOT expr, and PRIOR expr in the select list.
+		if p.isHierarchicalOperator() {
+			return p.parseHierarchicalOperator()
+		}
+
 		identPos := p.currentLocation()
 		identName := p.currentToken.Token.Value
-		identQuoted := p.isType(models.TokenTypeDoubleQuotedString)
+		identQuote := p.currentIdentQuote()
+		var identQuotes ast.NameQuote
+		if p.nameQuoteRelevant(identQuote) {
+			identQuotes = p.appendNamePartQuoted(0, identQuote)
+		}
 		p.advance()
 
 		// Check for function call (identifier followed by parentheses)
 		if p.isType(models.TokenTypeLParen) {
+			// Oracle outer-join marker: col(+)
+			if p.isOuterJoinMarker() {
+				return p.parseOuterJoinMarker(&ast.Identifier{Name: identName, Pos: identPos, Quoted: identQuote == '"', QuoteStyle: identQuote, Quotes: identQuotes}), nil
+			}
 			// This is a function call
 			funcCall, err := p.parseFunctionCall(identName)
 			if err != nil {
 				return nil, err
 			}
+			funcCall.NameQuote = identQuotes
 			// Assign position of function name
 			if funcCall.Pos.IsZero() {
 				funcCall.Pos = identPos
@@ -201,7 +271,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		}
 
 		// Handle regular identifier or qualified identifier (table.column or table.*)
-		ident := &ast.Identifier{Name: identName, Pos: identPos, Quoted: identQuoted}
+		ident := &ast.Identifier{Name: identName, Pos: identPos, Quoted: identQuote == '"', QuoteStyle: identQuote, Quotes: identQuotes}
 
 		// Check for qualified identifier (table.column) or qualified asterisk (table.*)
 		if p.isType(models.TokenTypePeriod) {
@@ -214,6 +284,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				ident.Table = ident.Name
 				ident.Name = "*"
 				ident.Quoted = false
+				ident.Quotes = ident.Quotes.AppendPart(false)
 				p.advance()
 			} else if p.isQualifiedNamePart() {
 				// Handle table.column (qualified identifier).
@@ -224,7 +295,14 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 				// be copied from Name before Name is overwritten.
 				ident.Table = ident.Name
 				ident.Name = p.currentToken.Token.Value
-				ident.Quoted = p.isType(models.TokenTypeDoubleQuotedString)
+				q := p.currentIdentQuote()
+				ident.Quoted = q == '"'
+				if q != 0 {
+					ident.QuoteStyle = q
+				}
+				if ident.Quotes != 0 || p.nameQuoteRelevant(q) {
+					ident.Quotes = p.appendNamePartQuoted(ident.Quotes, q)
+				}
 				p.advance()
 
 				// Multi-part reference: db.table.column (MySQL/MariaDB),
@@ -247,6 +325,17 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			}
 		}
 
+		if p.isType(models.TokenTypeLParen) {
+			// Oracle outer-join marker: t.col(+)
+			if p.isOuterJoinMarker() {
+				return p.parseOuterJoinMarker(ident), nil
+			}
+			// Qualified function call: pg_catalog.now(), pkg.fn(1)
+			if ident.Table != "" && ident.Name != "*" {
+				return p.parseQualifiedFunctionCall(ident)
+			}
+		}
+
 		// Check for array subscript or slice syntax: identifier[...]
 		// This handles: arr[1], arr[1][2], arr[1:3], arr[2:], arr[:5]
 		if p.isType(models.TokenTypeLBracket) {
@@ -265,20 +354,14 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 
 	if p.isStringLiteral() {
 		// Handle string literals
-		value := p.currentToken.Token.Value
-		p.advance()
-		return &ast.LiteralValue{Value: value, Type: "string"}, nil
+		return p.parseStringLiteralExpr(), nil
 	}
 
 	if p.isNumericLiteral() {
 		// Handle numeric literals (int or float)
 		value := p.currentToken.Token.Value
-		litType := "int"
-		if strings.ContainsAny(value, ".eE") {
-			litType = "float"
-		}
 		p.advance()
-		return &ast.LiteralValue{Value: value, Type: litType}, nil
+		return &ast.LiteralValue{Value: value, Type: numericLiteralType(value)}, nil
 	}
 
 	if p.isBooleanLiteral() {
@@ -293,7 +376,20 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		// SQL Server; ? for MySQL/MariaDB/SQLite; :1, :name for Oracle)
 		value := p.currentToken.Token.Value
 		p.advance()
-		return &ast.LiteralValue{Value: value, Type: "placeholder"}, nil
+		if p.IsSQLServer() && isMoneyPrefix(value) && p.peekMoneyFraction() {
+			// SQL Server money literal $5.00: the tokenizer reads "$5" as a
+			// placeholder and ".00" as a separate number.
+			p.advance() // Consume .
+			value += "." + p.currentToken.Token.Value
+			p.advance() // Consume the fraction
+			return &ast.LiteralValue{Value: value, Type: "money"}, nil
+		}
+		ph := &ast.LiteralValue{Value: value, Type: "placeholder"}
+		// MySQL user-variable assignment: @rownum := @rownum + 1
+		if p.isVariableAssignment() {
+			return p.parseVariableAssignment(ph)
+		}
+		return ph, nil
 	}
 
 	if p.isType(models.TokenTypeNull) {
@@ -448,12 +544,10 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		}, nil
 	}
 
-	return nil, goerrors.UnexpectedTokenError(
-		p.currentToken.Token.Type.String(),
-		p.currentToken.Token.Value,
-		p.currentLocation(),
-		"",
-	)
+	if expr, err := p.parsePrimaryFallback(); expr != nil || err != nil {
+		return expr, err
+	}
+	return nil, p.errUnexpectedPrimary()
 }
 
 // isConnectByPrior reports whether the current token is the PRIOR operator
@@ -561,6 +655,7 @@ func (p *Parser) parseMultiPartColumnRef(ident *ast.Identifier) error {
 		case p.isType(models.TokenTypeAsterisk) || p.isType(models.TokenTypeMul):
 			parts[n] = "*"
 			lastQuoted = false
+			ident.Quotes = ident.Quotes.AppendPart(false)
 			n++
 			p.advance()
 			if p.isType(models.TokenTypePeriod) {
@@ -568,7 +663,14 @@ func (p *Parser) parseMultiPartColumnRef(ident *ast.Identifier) error {
 			}
 		case p.isQualifiedNamePart():
 			parts[n] = p.currentToken.Token.Value
-			lastQuoted = p.isType(models.TokenTypeDoubleQuotedString)
+			q := p.currentIdentQuote()
+			lastQuoted = q == '"'
+			if q != 0 {
+				ident.QuoteStyle = q
+			}
+			if ident.Quotes != 0 || p.nameQuoteRelevant(q) {
+				ident.Quotes = p.appendNamePartQuoted(ident.Quotes, q)
+			}
 			n++
 			p.advance()
 		default:
@@ -589,6 +691,138 @@ func (p *Parser) parseMultiPartColumnRef(ident *ast.Identifier) error {
 // qualified column reference: an identifier, a non-reserved keyword (t.KEY,
 // schema.INDEX), or - in ClickHouse - a numeric tuple element (d.1).
 func (p *Parser) isQualifiedNamePart() bool {
-	return p.isIdentifier() || p.isNonReservedKeyword() ||
-		(p.dialect == string(keywords.DialectClickHouse) && p.isNumericLiteral())
+	return p.isIdentifier() || p.isNonReservedKeyword() || p.isKeywordColumnName() ||
+		(p.dialect == string(keywords.DialectClickHouse) && p.isNumericLiteral()) ||
+		p.isSnowflakePositionalColumn()
+}
+
+// pgPrefixOperator reports the PostgreSQL prefix operator that starts at the
+// current token and how many tokens it spans (0 when there is none): |/ and
+// ||/ are tokenized as two tokens and !! as two.
+func (p *Parser) pgPrefixOperator() (ast.UnaryOperator, int) {
+	switch p.currentToken.Token.Type {
+	case models.TokenTypePipe:
+		if p.peekTypeAt(1) == models.TokenTypeDiv && p.nextAdjacent(1) && p.IsPostgreSQL() {
+			return ast.PGSquareRoot, 2
+		}
+	case models.TokenTypeStringConcat:
+		if p.peekTypeAt(1) == models.TokenTypeDiv && p.nextAdjacent(1) && p.IsPostgreSQL() {
+			return ast.PGCubeRoot, 2
+		}
+	case models.TokenTypeExclamationMark:
+		if p.peekTypeAt(1) == models.TokenTypeExclamationMark && p.nextAdjacent(1) && p.IsPostgreSQL() {
+			return ast.PGPrefixFactorial, 2
+		}
+	case models.TokenTypeAtSign:
+		if p.IsPostgreSQL() {
+			return ast.PGAbs, 1
+		}
+	}
+	return 0, 0
+}
+
+// isMySQLBinaryOperator reports whether the current token is the BINARY prefix
+// operator of MySQL and MariaDB: BINARY followed by a string literal or a
+// name, as in "BINARY 'a'" or "BINARY name". BINARY( is the BINARY function.
+func (p *Parser) isMySQLBinaryOperator() bool {
+	if v := p.currentToken.Token.Value; len(v) != len("BINARY") || p.currentToken.Token.Quote != 0 ||
+		!equalsUpper(v, "BINARY") || !p.isMySQLFamily() {
+		return false
+	}
+	next := p.peekToken().Token
+	switch next.Type {
+	case models.TokenTypeString, models.TokenTypeSingleQuotedString, models.TokenTypeNumber:
+		return true
+	case models.TokenTypeIdentifier:
+		return next.Quote != 0 || !equalsUpper(next.Value, "AS")
+	}
+	return false
+}
+
+// parseOtherOperatorOperand parses the operand of a PostgreSQL prefix operator
+// of the "any other operator" class: an additive expression, one recursion
+// level deeper.
+func (p *Parser) parseOtherOperatorOperand() (ast.Expression, error) {
+	err := p.enterRecursion()
+	defer p.leaveRecursion()
+	if err != nil {
+		return nil, err
+	}
+	return p.parseAdditiveExpression()
+}
+
+// isMoneyPrefix reports whether a placeholder token is "$" followed by digits,
+// the start of a SQL Server money literal.
+func isMoneyPrefix(v string) bool {
+	if len(v) < 2 || v[0] != '$' {
+		return false
+	}
+	for i := 1; i < len(v); i++ {
+		if v[i] < '0' || v[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// peekMoneyFraction reports whether the current token is a '.' that is
+// followed, without a gap, by a number made of digits only: the fraction of a
+// money literal such as $5.00.
+func (p *Parser) peekMoneyFraction() bool {
+	if !p.isType(models.TokenTypePeriod) {
+		return false
+	}
+	next := p.peekToken()
+	if next.Token.Type != models.TokenTypeNumber || !p.nextAdjacent(1) {
+		return false
+	}
+	for i := 0; i < len(next.Token.Value); i++ {
+		if next.Token.Value[i] < '0' || next.Token.Value[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// parseObjectLiteral parses a Snowflake object constant {'k': v, ...}; the
+// current token is the opening brace.
+func (p *Parser) parseObjectLiteral() (ast.Expression, error) {
+	obj := &ast.ObjectLiteral{Pos: p.currentLocation()}
+	p.advance() // Consume {
+	if p.isType(models.TokenTypeRBrace) {
+		p.advance()
+		return obj, nil
+	}
+	err := p.enterRecursion()
+	defer p.leaveRecursion()
+	if err != nil {
+		return nil, err
+	}
+	for {
+		// The key is a string constant; parsing a full expression would read
+		// 'k': v as a variant path k:v.
+		key, err := p.parsePrimaryExpression()
+		if err != nil {
+			return nil, err
+		}
+		if !p.isType(models.TokenTypeColon) {
+			return nil, p.expectedError(": after object key")
+		}
+		p.advance() // Consume :
+		value, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+		obj.Entries = append(obj.Entries, ast.ObjectEntry{Key: key, Value: value})
+		if p.isType(models.TokenTypeComma) {
+			p.advance()
+			continue
+		}
+		break
+	}
+	if !p.isType(models.TokenTypeRBrace) {
+		return nil, p.expectedError("} to close the object constant")
+	}
+	p.advance() // Consume }
+	return obj, nil
 }

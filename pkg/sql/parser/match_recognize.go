@@ -182,8 +182,11 @@ func (p *Parser) parseMatchRecognize() (*ast.MatchRecognizeClause, error) {
 				if depth > 0 {
 					patParts = append(patParts, ")")
 				}
+			} else if v := p.currentToken.Token.Value; isPatternQuantifier(v) && len(patParts) > 0 && patParts[len(patParts)-1] != "(" {
+				// Quantifiers bind to the preceding element: UP+ not UP +.
+				patParts[len(patParts)-1] += v
 			} else {
-				patParts = append(patParts, p.currentToken.Token.Value)
+				patParts = append(patParts, v)
 			}
 			p.advance()
 		}
@@ -227,4 +230,18 @@ func (p *Parser) parseMatchRecognize() (*ast.MatchRecognizeClause, error) {
 	p.advance() // Consume )
 
 	return clause, nil
+}
+
+// isPatternQuantifier reports whether v is a row-pattern quantifier token
+// (+, *, ?, or a reluctant form such as +?).
+func isPatternQuantifier(v string) bool {
+	if v == "" {
+		return false
+	}
+	for i := 0; i < len(v); i++ {
+		if v[i] != '+' && v[i] != '*' && v[i] != '?' {
+			return false
+		}
+	}
+	return true
 }

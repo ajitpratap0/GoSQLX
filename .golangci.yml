@@ -22,6 +22,10 @@ linters:
         - fmt.Print
         - fmt.Printf
         - fmt.Println
+        # ast.textWriter is implemented only by *bytes.Buffer and
+        # *strings.Builder, whose writes never return an error.
+        - (github.com/ajitpratap0/GoSQLX/pkg/sql/ast.textWriter).WriteString
+        - (github.com/ajitpratap0/GoSQLX/pkg/sql/ast.textWriter).WriteByte
     staticcheck:
       checks:
         - "all"

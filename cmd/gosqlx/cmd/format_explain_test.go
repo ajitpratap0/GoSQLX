@@ -22,26 +22,45 @@ import (
 	"testing"
 )
 
-// TestFormatSQL_RefusesExplainAndDescribe guards against gosqlx format turning
-// a non-executing EXPLAIN into an executable statement. The parser splits
-// "EXPLAIN VERBOSE|ANALYZE <stmt>" into a DescribeStatement plus <stmt>, and
-// DescribeStatement drops EXPLAIN options and object kinds, so the CLI must
-// refuse it instead of writing "DESCRIBE VERBOSE; DELETE FROM users".
-func TestFormatSQL_RefusesExplainAndDescribe(t *testing.T) {
+// TestFormatSQL_PreservesExplain checks that EXPLAIN <stmt> formats as one
+// statement that keeps EXPLAIN and its options, so a non-executing EXPLAIN is
+// never rewritten into the executable statement.
+func TestFormatSQL_PreservesExplain(t *testing.T) {
+	tests := []struct {
+		dialect string
+		in      string
+		want    string // compact, upper-cased output
+	}{
+		{"", "EXPLAIN VERBOSE DELETE FROM users", "EXPLAIN VERBOSE DELETE FROM users"},
+		{"postgresql", "EXPLAIN VERBOSE DELETE FROM users;\n", "EXPLAIN VERBOSE DELETE FROM users"},
+		{"", "explain verbose update accounts set balance = 0", "EXPLAIN VERBOSE UPDATE accounts SET balance = 0"},
+		{"", "EXPLAIN VERBOSE INSERT INTO t (a) VALUES (1)", "EXPLAIN VERBOSE INSERT INTO t (a) VALUES (1)"},
+		{"", "EXPLAIN ANALYZE DELETE FROM users", "EXPLAIN ANALYZE DELETE FROM users"},
+		{"mysql", "EXPLAIN ANALYZE SELECT * FROM users", "EXPLAIN ANALYZE SELECT * FROM users"},
+		{"", "EXPLAIN SELECT 1", "EXPLAIN SELECT 1"},
+	}
+	for _, tc := range tests {
+		out, err := formatWith(tc.in, CLIFormatterOptions{Compact: true, Uppercase: true, Dialect: tc.dialect})
+		if err != nil {
+			t.Fatalf("formatSQL(%q): %v", tc.in, err)
+		}
+		if got := strings.TrimSuffix(strings.TrimSpace(out), ";"); got != tc.want {
+			t.Errorf("formatSQL(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestFormatSQL_RefusesDescribe guards statements the formatter cannot
+// rewrite faithfully: DESCRIBE drops object kinds, and EXPLAIN of a statement
+// the parser does not wrap would otherwise be split in two.
+func TestFormatSQL_RefusesDescribe(t *testing.T) {
 	tests := []struct {
 		name    string
 		dialect string
 		in      string
 	}{
-		{name: "explain verbose delete", in: "EXPLAIN VERBOSE DELETE FROM users"},
-		{name: "explain verbose delete postgresql", dialect: "postgresql", in: "EXPLAIN VERBOSE DELETE FROM users;\n"},
-		{name: "explain verbose update", in: "EXPLAIN VERBOSE UPDATE accounts SET balance = 0"},
 		{name: "explain verbose drop", in: "EXPLAIN VERBOSE DROP TABLE users"},
 		{name: "explain verbose truncate", in: "EXPLAIN VERBOSE TRUNCATE TABLE users"},
-		{name: "explain verbose insert", in: "EXPLAIN VERBOSE INSERT INTO t (a) VALUES (1)"},
-		{name: "explain analyze delete", in: "EXPLAIN ANALYZE DELETE FROM users"},
-		{name: "mysql explain analyze select", dialect: "mysql", in: "EXPLAIN ANALYZE SELECT * FROM users"},
-		{name: "explain select", in: "EXPLAIN SELECT 1"},
 		{name: "describe table", in: "DESCRIBE users"},
 		{name: "snowflake describe table kind", dialect: "snowflake", in: "DESCRIBE TABLE users"},
 	}
@@ -64,10 +83,10 @@ func TestFormatSQL_RefusesExplainAndDescribe(t *testing.T) {
 	}
 }
 
-// TestFormat_InPlaceLeavesExplainUnchanged checks the end-to-end format -i
+// TestFormat_InPlaceLeavesDescribeUnchanged checks the end-to-end format -i
 // path: the file must be left untouched and counted as failed.
-func TestFormat_InPlaceLeavesExplainUnchanged(t *testing.T) {
-	const original = "EXPLAIN VERBOSE DELETE FROM users;\n"
+func TestFormat_InPlaceLeavesDescribeUnchanged(t *testing.T) {
+	const original = "DESCRIBE users;\n"
 	path := filepath.Join(t.TempDir(), "r.sql")
 	if err := os.WriteFile(path, []byte(original), 0600); err != nil {
 		t.Fatal(err)

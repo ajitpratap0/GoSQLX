@@ -43,9 +43,9 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 	if p.isType(models.TokenTypeLParen) {
 		p.advance() // Consume (
 
-		// Check if this is a subquery (starts with SELECT, WITH or a
-		// nested parenthesized query)
-		if !p.isType(models.TokenTypeSelect) && !p.isType(models.TokenTypeWith) && !p.isType(models.TokenTypeLParen) {
+		// Check if this is a subquery (starts with SELECT, WITH, VALUES or
+		// a nested parenthesized query)
+		if !p.isDerivedTableQueryStart() {
 			return tableRef, p.expectedError("SELECT in derived table")
 		}
 
@@ -78,10 +78,7 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		for p.isType(models.TokenTypeDiv) {
 			stageName += "/"
 			p.advance()
-			if p.isIdentifier() || p.isType(models.TokenTypeKeyword) {
-				stageName += p.currentToken.Token.Value
-				p.advance()
-			}
+			stageName += p.parseStagePathSegment()
 		}
 		tableRef = ast.TableReference{
 			Name:    stageName,
@@ -97,6 +94,14 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 			}
 			tableRef.TableFunc = funcCall
 		}
+	} else if p.IsSnowflake() && p.isType(models.TokenTypeValues) &&
+		p.peekToken().Token.Type == models.TokenTypeLParen {
+		// Snowflake: FROM VALUES (1, 'a'), (2, 'b') AS v (id, name)
+		values, err := p.parseValuesQuery()
+		if err != nil {
+			return tableRef, err
+		}
+		tableRef = ast.TableReference{Lateral: isLateral, Values: values}
 	} else if p.isClickHouseKeywordTableFunction() {
 		// ClickHouse table function named by a keyword token: url(...),
 		// merge(...), values(...), null(...).
@@ -112,16 +117,20 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 			TableFunc: funcCall,
 		}
 	} else {
+		only := p.parseTableOnly()
 		// Parse regular table name (supports schema.table qualification)
-		qualifiedName, err := p.parseQualifiedName()
+		qualifiedName, nameQuote, err := p.parseTableNameQuoted()
 		if err != nil {
 			return tableRef, err
 		}
 
 		tableRef = ast.TableReference{
-			Name:    qualifiedName,
-			Lateral: isLateral,
+			Name:      qualifiedName,
+			NameQuote: nameQuote,
+			Lateral:   isLateral,
+			Only:      only,
 		}
+		p.parseOracleDBLink(&tableRef)
 
 		// Function-call table reference (Snowflake FLATTEN, TABLE(...),
 		// IDENTIFIER(...), PostgreSQL unnest(...), BigQuery UNNEST(...),
@@ -131,56 +140,13 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		if err := p.parseTableFunctionCall(&tableRef); err != nil {
 			return tableRef, err
 		}
+	}
 
-		// Snowflake / ANSI SAMPLE or TABLESAMPLE clause on a table reference:
-		//   SAMPLE [BERNOULLI | SYSTEM | BLOCK | ROW] (N [ROWS])
-		//   TABLESAMPLE [method] (N [ROWS])
-		// Consume permissively — the method and paren block are consumed
-		// but not yet modeled on the AST.
-		// Skip for ClickHouse when SAMPLE is followed by a number — it uses
-		// a SELECT-level SAMPLE clause (not a per-table clause).
-		if (strings.EqualFold(p.currentToken.Token.Value, "SAMPLE") ||
-			strings.EqualFold(p.currentToken.Token.Value, "TABLESAMPLE")) &&
-			!(p.dialect == string(keywords.DialectClickHouse) && p.peekToken().Token.Type == models.TokenTypeNumber) {
-			p.advance() // SAMPLE / TABLESAMPLE
-			// Optional method name
-			upper := strings.ToUpper(p.currentToken.Token.Value)
-			if upper == "BERNOULLI" || upper == "SYSTEM" || upper == "BLOCK" || upper == "ROW" {
-				p.advance()
-			}
-			// (N [ROWS]) block
-			if p.isType(models.TokenTypeLParen) {
-				depth := 0
-				for {
-					t := p.currentToken.Token.Type
-					if t == models.TokenTypeEOF {
-						break
-					}
-					if t == models.TokenTypeLParen {
-						depth++
-					} else if t == models.TokenTypeRParen {
-						depth--
-						if depth == 0 {
-							p.advance()
-							break
-						}
-					}
-					p.advance()
-				}
-			}
-		}
-
-		// Snowflake time-travel / change-tracking clauses:
-		//   AT (TIMESTAMP => ...)
-		//   BEFORE (STATEMENT => ...)
-		//   CHANGES (INFORMATION => DEFAULT) AT (...)
-		if p.isSnowflakeTimeTravelStart() {
-			tt, err := p.parseSnowflakeTimeTravel()
-			if err != nil {
-				return tableRef, err
-			}
-			tableRef.TimeTravel = tt
-		}
+	// Modifiers between the table and its alias: PARTITION (...), FOR
+	// SYSTEM_TIME, Snowflake AT / BEFORE / CHANGES, SAMPLE / TABLESAMPLE,
+	// Oracle flashback.
+	if err := p.parseTableModifiersBeforeAlias(&tableRef); err != nil {
+		return tableRef, err
 	}
 
 	// Check for table alias (required for derived tables, optional for regular tables).
@@ -188,7 +154,7 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 	// Similarly, START followed by WITH is a hierarchical query seed, not an alias.
 	// Don't consume PIVOT/UNPIVOT as a table alias — they are contextual
 	// keywords in SQL Server/Oracle and must reach the pivot-clause parser below.
-	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() && !p.isQualifyKeyword() && !p.isMinusSetOp() && !p.isSnowflakeTimeTravelStart() && !p.isSampleKeyword() && !p.isMatchRecognizeKeyword() && !p.isWindowClauseKeyword() && !p.isSettingsKeyword() && !p.isDMLReturningKeyword() {
+	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() && !p.isQualifyKeyword() && !p.isMinusSetOp() && !p.isSnowflakeTimeTravelStart() && !p.isSampleKeyword() && !p.isMatchRecognizeKeyword() && !p.isWindowClauseKeyword() && !p.isSettingsKeyword() && !p.isDMLReturningKeyword() && !p.isSelectExtClauseStart() && !p.isTableModifierAfterAliasStart() && !p.isTSQLStatementStart() {
 		if p.isType(models.TokenTypeAs) {
 			p.advance() // Consume AS
 			if !p.isIdentifier() {
@@ -197,25 +163,29 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		}
 		if p.isIdentifier() {
 			tableRef.Alias = p.currentToken.Token.Value
+			tableRef.AliasQuote = p.currentNameQuote()
 			p.advance()
-			if err := p.parseTableFuncColumnAliases(&tableRef); err != nil {
+			if err := p.parseTableColumnAliases(&tableRef); err != nil {
 				return tableRef, err
 			}
 		}
 	}
 
-	// MariaDB FOR SYSTEM_TIME temporal query (10.3.4+)
-	if p.isMariaDB() && p.isType(models.TokenTypeFor) {
-		// Only parse as FOR SYSTEM_TIME if next token is SYSTEM_TIME
-		next := p.peekToken()
-		if strings.EqualFold(next.Token.Value, "SYSTEM_TIME") {
-			p.advance() // Consume FOR
-			sysTime, err := p.parseForSystemTimeClause()
-			if err != nil {
-				return tableRef, err
-			}
-			tableRef.ForSystemTime = sysTime
+	// Modifiers after the alias: TABLESAMPLE, FINAL, index hints, INDEXED
+	// BY, SQL Server (NOLOCK).
+	if err := p.parseTableModifiersAfterAlias(&tableRef); err != nil {
+		return tableRef, err
+	}
+
+	// FOR SYSTEM_TIME after the alias (accepted for compatibility; MariaDB
+	// and SQL Server write it before the alias).
+	if tableRef.ForSystemTime == nil && p.isForSystemTimeStart() {
+		p.advance() // Consume FOR
+		sysTime, err := p.parseForSystemTimeClause()
+		if err != nil {
+			return tableRef, err
 		}
+		tableRef.ForSystemTime = sysTime
 	}
 
 	// SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
@@ -229,24 +199,9 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		}
 	}
 
-	// SQL Server / Oracle PIVOT clause
-	if p.isPivotKeyword() {
-		pivot, err := p.parsePivotClause()
-		if err != nil {
-			return tableRef, err
-		}
-		tableRef.Pivot = pivot
-		p.parsePivotAlias(&tableRef)
-	}
-
-	// SQL Server / Oracle UNPIVOT clause
-	if p.isUnpivotKeyword() {
-		unpivot, err := p.parseUnpivotClause()
-		if err != nil {
-			return tableRef, err
-		}
-		tableRef.Unpivot = unpivot
-		p.parsePivotAlias(&tableRef)
+	// SQL Server / Oracle / Snowflake PIVOT or UNPIVOT clause
+	if err := p.parsePivotSuffix(&tableRef); err != nil {
+		return tableRef, err
 	}
 
 	// Snowflake / Oracle MATCH_RECOGNIZE clause
@@ -262,6 +217,7 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		}
 		if p.isIdentifier() {
 			tableRef.Alias = p.currentToken.Token.Value
+			tableRef.AliasQuote = p.currentNameQuote()
 			p.advance()
 		}
 	}
@@ -295,6 +251,8 @@ func (p *Parser) setDerivedQuery(ref *ast.TableReference, q ast.Statement) error
 		ref.Subquery = s
 	case *ast.SetOperation:
 		ref.SetSubquery = s
+	case *ast.Values:
+		ref.Values = s
 	default:
 		return p.expectedError("SELECT statement in derived table")
 	}
@@ -312,11 +270,17 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 		p.advance()
 	}
 
+	if !isLateral && p.isParenthesizedJoinStart() {
+		// Parenthesized joined table as a join operand: a JOIN (b JOIN c ON
+		// ...) ON ..., t1 LEFT JOIN (t2, t3) ON ...
+		return p.parseJoinGroup()
+	}
+
 	if p.isType(models.TokenTypeLParen) {
 		// Derived table (subquery)
 		p.advance() // Consume (
 
-		if !p.isType(models.TokenTypeSelect) && !p.isType(models.TokenTypeWith) && !p.isType(models.TokenTypeLParen) {
+		if !p.isDerivedTableQueryStart() {
 			return ref, p.expectedError("SELECT in derived table")
 		}
 
@@ -335,7 +299,8 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 			return ref, err
 		}
 	} else {
-		joinedName, err := p.parseQualifiedName()
+		only := p.parseTableOnly()
+		joinedName, joinedQuote, err := p.parseTableNameQuoted()
 		if isQualifiedNameTooLong(err) {
 			return ref, err
 		}
@@ -347,10 +312,18 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 				"",
 			)
 		}
-		ref = ast.TableReference{Name: joinedName, Lateral: isLateral}
+		ref = ast.TableReference{Name: joinedName, NameQuote: joinedQuote, Lateral: isLateral, Only: only}
+		p.parseOracleDBLink(&ref)
+		if err := p.parseApplyFunctionCall(joinType, &ref); err != nil {
+			return ref, err
+		}
 		if err := p.parseTableFunctionCall(&ref); err != nil {
 			return ref, err
 		}
+	}
+
+	if err := p.parseTableModifiersBeforeAlias(&ref); err != nil {
+		return ref, err
 	}
 
 	// Optional alias.
@@ -358,7 +331,7 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 	// Similarly, START followed by WITH is a hierarchical query seed, not an alias.
 	// Don't consume PIVOT/UNPIVOT as a table alias — they are contextual
 	// keywords in SQL Server/Oracle and must reach the pivot-clause parser below.
-	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() && !p.isQualifyKeyword() && !p.isMinusSetOp() && !p.isSnowflakeTimeTravelStart() && !p.isSampleKeyword() && !p.isMatchRecognizeKeyword() && !p.isWindowClauseKeyword() && !p.isSettingsKeyword() && !p.isDMLReturningKeyword() {
+	if (p.isIdentifier() || p.isType(models.TokenTypeAs)) && !p.isMariaDBClauseStart() && !p.isPivotKeyword() && !p.isUnpivotKeyword() && !p.isQualifyKeyword() && !p.isMinusSetOp() && !p.isSnowflakeTimeTravelStart() && !p.isSampleKeyword() && !p.isMatchRecognizeKeyword() && !p.isWindowClauseKeyword() && !p.isSettingsKeyword() && !p.isDMLReturningKeyword() && !p.isSelectExtClauseStart() && !p.isTableModifierAfterAliasStart() && !p.isTSQLStatementStart() {
 		if p.isType(models.TokenTypeAs) {
 			p.advance()
 			if !p.isIdentifier() {
@@ -367,25 +340,29 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 		}
 		if p.isIdentifier() {
 			ref.Alias = p.currentToken.Token.Value
+			ref.AliasQuote = p.currentNameQuote()
 			p.advance()
-			if err := p.parseTableFuncColumnAliases(&ref); err != nil {
+			if err := p.parseTableColumnAliases(&ref); err != nil {
 				return ref, err
 			}
 		}
 	}
 
-	// MariaDB FOR SYSTEM_TIME temporal query (10.3.4+)
-	if p.isMariaDB() && p.isType(models.TokenTypeFor) {
-		// Only parse as FOR SYSTEM_TIME if next token is SYSTEM_TIME
-		next := p.peekToken()
-		if strings.EqualFold(next.Token.Value, "SYSTEM_TIME") {
-			p.advance() // Consume FOR
-			sysTime, err := p.parseForSystemTimeClause()
-			if err != nil {
-				return ref, err
-			}
-			ref.ForSystemTime = sysTime
+	// Modifiers after the alias: TABLESAMPLE, FINAL, index hints, INDEXED
+	// BY, SQL Server (NOLOCK).
+	if err := p.parseTableModifiersAfterAlias(&ref); err != nil {
+		return ref, err
+	}
+
+	// FOR SYSTEM_TIME after the alias (accepted for compatibility; MariaDB
+	// and SQL Server write it before the alias).
+	if ref.ForSystemTime == nil && p.isForSystemTimeStart() {
+		p.advance() // Consume FOR
+		sysTime, err := p.parseForSystemTimeClause()
+		if err != nil {
+			return ref, err
 		}
+		ref.ForSystemTime = sysTime
 	}
 
 	// SQL Server table hints
@@ -399,24 +376,9 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 		}
 	}
 
-	// SQL Server / Oracle PIVOT clause
-	if p.isPivotKeyword() {
-		pivot, err := p.parsePivotClause()
-		if err != nil {
-			return ref, err
-		}
-		ref.Pivot = pivot
-		p.parsePivotAlias(&ref)
-	}
-
-	// SQL Server / Oracle UNPIVOT clause
-	if p.isUnpivotKeyword() {
-		unpivot, err := p.parseUnpivotClause()
-		if err != nil {
-			return ref, err
-		}
-		ref.Unpivot = unpivot
-		p.parsePivotAlias(&ref)
+	// SQL Server / Oracle / Snowflake PIVOT or UNPIVOT clause
+	if err := p.parsePivotSuffix(&ref); err != nil {
+		return ref, err
 	}
 
 	return ref, nil
@@ -425,13 +387,14 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 // parseTableFunctionCall keeps FROM and JOIN function-call references under
 // the same dialect gate and preserves their arguments for AST consumers.
 func (p *Parser) parseTableFunctionCall(ref *ast.TableReference) error {
-	if !p.isType(models.TokenTypeLParen) || !p.supportsTableFunction() {
+	if !p.isType(models.TokenTypeLParen) || !p.acceptsTableFunctionCall() || p.isBareTableHintListStart() {
 		return nil
 	}
 	call, err := p.parseFunctionCall(ref.Name)
 	if err != nil {
 		return err
 	}
+	call.NameQuote = ref.NameQuote
 	ref.TableFunc = call
 	// PostgreSQL: unnest(arr) WITH ORDINALITY. The other table-function
 	// dialects have no such modifier (BigQuery spells it WITH OFFSET after
@@ -443,36 +406,6 @@ func (p *Parser) parseTableFunctionCall(ref *ast.TableReference) error {
 		ref.WithOrdinality = true
 	}
 	return nil
-}
-
-// parseTableFuncColumnAliases parses the optional column alias list that
-// follows a table function's alias: unnest(arr) AS g(elem) or
-// generate_series(1, 3) WITH ORDINALITY AS s(n, idx). It is a no-op for any
-// other table reference, so a "(" after a plain table alias keeps its
-// existing meaning in each dialect.
-func (p *Parser) parseTableFuncColumnAliases(ref *ast.TableReference) error {
-	if ref.TableFunc == nil || !p.isType(models.TokenTypeLParen) {
-		return nil
-	}
-	p.advance() // Consume (
-	list := &ast.ColumnAliasList{}
-	ref.ColumnAliases = list
-	for {
-		if !p.isIdentifier() && !p.isNonReservedKeyword() {
-			return p.expectedError("column alias in table function alias list")
-		}
-		list.Names = append(list.Names, p.currentToken.Token.Value)
-		p.advance()
-		if p.isType(models.TokenTypeComma) {
-			p.advance()
-			continue
-		}
-		if !p.isType(models.TokenTypeRParen) {
-			return p.expectedError(") after table function column aliases")
-		}
-		p.advance() // Consume )
-		return nil
-	}
 }
 
 // parseTableHints parses SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
@@ -495,8 +428,16 @@ func (p *Parser) parseTableHints() ([]string, error) {
 			return nil, p.expectedError("table hint inside WITH (...)")
 		}
 		hint := strings.ToUpper(p.currentToken.Token.Value)
-		hints = append(hints, hint)
 		p.advance()
+		if p.isAnyType(models.TokenTypeLParen, models.TokenTypeEq) {
+			// INDEX(ix [, ix]), INDEX = ix, FORCESEEK(ix): stored as "INDEX(ix)".
+			args, err := p.parseTableHintArgs()
+			if err != nil {
+				return nil, err
+			}
+			hint += args
+		}
+		hints = append(hints, hint)
 		// Consume optional comma between hints
 		if p.isType(models.TokenTypeComma) {
 			p.advance()
@@ -533,4 +474,48 @@ func (p *Parser) isBareTableHintToken() bool {
 		}
 	}
 	return true
+}
+
+// parseJoinGroup parses a parenthesized joined table that is the operand of a
+// JOIN, with the current token at "(":
+//
+//	a JOIN (b JOIN c ON b.id = c.b_id) ON a.id = b.a_id
+//	t1 LEFT JOIN (t2, t3) ON t1.id = t2.id
+//
+// Unlike a group at the left-most position of a FROM clause, which
+// parseParenthesizedJoin flattens, the group is kept whole: the ON condition
+// after it may only see the group as a unit, and outer joins inside and
+// outside it do not associate freely. It takes no alias.
+func (p *Parser) parseJoinGroup() (ast.TableReference, error) {
+	p.depth++
+	defer func() { p.depth-- }()
+	if p.depth > MaxRecursionDepth {
+		return ast.TableReference{}, goerrors.RecursionDepthLimitError(
+			p.depth, MaxRecursionDepth, p.currentLocation(), "")
+	}
+
+	p.advance() // Consume (
+	first, joins, err := p.parseFromItem()
+	if err != nil {
+		return ast.TableReference{}, err
+	}
+	tables, joins, err := p.parseTableListAndJoins(&first, joins)
+	if err != nil {
+		return ast.TableReference{}, err
+	}
+	if !p.isType(models.TokenTypeRParen) {
+		return ast.TableReference{}, p.expectedError(") or JOIN")
+	}
+	p.advance() // Consume )
+
+	if p.isType(models.TokenTypeAs) || p.isIdentifier() && !p.isJoinKeyword() {
+		return ast.TableReference{}, goerrors.UnsupportedFeatureError(
+			"alias after a parenthesized join group",
+			p.currentLocation(),
+			"",
+		)
+	}
+	return ast.TableReference{Modifiers: &ast.TableModifiers{
+		Group: &ast.JoinGroup{Tables: tables, Joins: joins},
+	}}, nil
 }

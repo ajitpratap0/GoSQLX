@@ -22,10 +22,12 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+	"unsafe"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
+	sqldialect "github.com/ajitpratap0/GoSQLX/pkg/sql/dialect"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
@@ -311,8 +313,14 @@ type Tokenizer struct {
 	lineStarts []int               // Byte offsets of line starts (for position tracking)
 	line       int                 // Current line number (1-based)
 	dialect    keywords.SQLDialect // SQL dialect for dialect-specific keyword recognition
-	logger     *slog.Logger        // Optional structured logger for verbose tracing
-	Comments   []models.Comment    // Comments captured during tokenization
+	// strEscape holds the backslash rules for string literals. It stays
+	// StringEscapeStrict (the zero value) until a dialect is chosen
+	// explicitly: the default PostgreSQL keyword set still decodes the
+	// escapes every backslash-escaping dialect agrees on, and rejects the
+	// rest instead of guessing their meaning.
+	strEscape sqldialect.StringEscape
+	logger    *slog.Logger     // Optional structured logger for verbose tracing
+	Comments  []models.Comment // Comments captured during tokenization
 
 	// emitted is the number of tokens produced so far by the current call.
 	// Together with len(Comments) it is checked against MaxTokens.
@@ -336,6 +344,23 @@ type Tokenizer struct {
 	inlLine int  // index into lineStarts of the cursor's line, plus one; 0 means unset
 	inlScan int  // byte offset the line has been scanned up to
 	inlCode bool // whether a non-whitespace byte was seen in [lineStart, inlScan)
+
+	// tokBuf is the token slice of the internal scratch path (package
+	// internal/tokscratch), which GoSQLX's own parse entry points use
+	// because they only read the tokens until the parser has copied them.
+	// It is reused across scratch calls, so its tokens are valid only until
+	// the next tokenize call, Reset or PutTokenizer. The public Tokenize
+	// methods never use it. INVARIANT: tokBuf[len:cap] is zero; Reset zeroes
+	// [0:len) and truncates it, or drops it when it has grown past
+	// maxRetainedTokBuf.
+	tokBuf []models.TokenWithSpan
+	// wordSlab is the Word chunk of the scratch path: scratch calls hand out
+	// Words from it first instead of allocating a fresh chunk, so it carries
+	// the same validity rule as tokBuf. wordSlabUsed is how many of its
+	// leading elements the last scratch call handed out; Reset zeroes them.
+	// INVARIANT: wordSlab[wordSlabUsed:cap] is zero.
+	wordSlab     []models.Word
+	wordSlabUsed int
 }
 
 // New creates a new Tokenizer with default configuration and keyword support.
@@ -370,14 +395,12 @@ func New() (*Tokenizer, error) {
 // tokenize time. The returned error is always nil; it is retained for API
 // compatibility.
 func NewWithDialect(dialect keywords.SQLDialect) (*Tokenizer, error) {
-	if dialect == "" || dialect == keywords.DialectUnknown {
-		dialect = keywords.DialectPostgreSQL
-	}
-	return &Tokenizer{
-		dialect:    dialect,
+	t := &Tokenizer{
 		pos:        NewPosition(1, 0),
 		lineStarts: []int{0},
-	}, nil
+	}
+	t.SetDialect(dialect)
+	return t, nil
 }
 
 // Dialect returns the SQL dialect configured for this tokenizer.
@@ -392,9 +415,12 @@ func (t *Tokenizer) Dialect() keywords.SQLDialect {
 // driven by the configured dialect at tokenize time.
 func (t *Tokenizer) SetDialect(dialect keywords.SQLDialect) {
 	if dialect == "" || dialect == keywords.DialectUnknown {
-		dialect = keywords.DialectPostgreSQL
+		t.dialect = keywords.DialectPostgreSQL
+		t.strEscape = sqldialect.StringEscapeStrict
+		return
 	}
 	t.dialect = dialect
+	t.strEscape = sqldialect.Parse(string(dialect)).StringEscape()
 }
 
 // NewWithKeywords initializes a Tokenizer from a keyword classifier.
@@ -488,7 +514,7 @@ func NewWithKeywords(kw *keywords.Keywords) (*Tokenizer, error) {
 //	tokens, _ := tkz.Tokenize([]byte(sql))
 //	// Correctly tokenizes Unicode identifiers and string literals
 func (t *Tokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) {
-	return t.tokenize(context.Background(), input, "", false)
+	return t.tokenize(context.Background(), input, "", false, false)
 }
 
 // TokenizeContext processes the input and returns tokens with context support for cancellation.
@@ -513,7 +539,7 @@ func (t *Tokenizer) TokenizeContext(ctx context.Context, input []byte) ([]models
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return t.tokenize(ctx, input, "", false)
+	return t.tokenize(ctx, input, "", false, false)
 }
 
 // TokenizeString is Tokenize for SQL that is already held as a string.
@@ -533,7 +559,7 @@ func (t *Tokenizer) TokenizeContext(ctx context.Context, input []byte) ([]models
 //	defer PutTokenizer(tkz)
 //	tokens, err := tkz.TokenizeString("SELECT id FROM users")
 func (t *Tokenizer) TokenizeString(s string) ([]models.TokenWithSpan, error) {
-	return t.tokenize(context.Background(), stringBytes(s), s, true)
+	return t.tokenize(context.Background(), stringBytes(s), s, true, false)
 }
 
 // TokenizeStringContext is TokenizeContext for SQL that is already held as a
@@ -546,7 +572,7 @@ func (t *Tokenizer) TokenizeStringContext(ctx context.Context, s string) ([]mode
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return t.tokenize(ctx, stringBytes(s), s, true)
+	return t.tokenize(ctx, stringBytes(s), s, true, false)
 }
 
 // load resets t and installs the input for one call. Invariant: t.src and
@@ -574,7 +600,11 @@ func (t *Tokenizer) load(input []byte, src string) {
 //
 // ctx is checked every 100 tokens unless ctx.Done() is nil (as for
 // context.Background()), in which case no per-token check is made.
-func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, haveSrc bool) ([]models.TokenWithSpan, error) {
+//
+// When scratch is false the returned slice is freshly allocated and owned by
+// the caller. When scratch is true (the internal tokscratch path) it is built
+// in t.tokBuf and stays owned by t; see tokBuf.
+func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, haveSrc, scratch bool) ([]models.TokenWithSpan, error) {
 	// Record start time for metrics
 	startTime := time.Now()
 
@@ -594,7 +624,26 @@ func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, have
 	// Pre-scan input to build line start indices and estimate token count
 	estimatedTokens := t.prescan()
 
-	tokens := make([]models.TokenWithSpan, 0, estimatedTokens)
+	// A leading UTF-8 byte order mark (U+FEFF) is not part of the SQL: files
+	// saved by Windows editors start with one. Start after it and make the
+	// first line begin there so columns count from the first real character.
+	if len(input) >= 3 && input[0] == 0xEF && input[1] == 0xBB && input[2] == 0xBF {
+		t.pos.Index = 3
+		t.lineStarts[0] = 3
+	}
+
+	var tokens []models.TokenWithSpan
+	if scratch {
+		// load ran Reset, so tokBuf and wordSlab are empty and all zero.
+		if cap(t.tokBuf) >= estimatedTokens {
+			tokens = t.tokBuf[:0]
+		} else {
+			tokens = make([]models.TokenWithSpan, 0, estimatedTokens)
+		}
+		t.useWordSlab()
+	} else {
+		tokens = make([]models.TokenWithSpan, 0, estimatedTokens)
+	}
 
 	done := ctx.Done()
 
@@ -658,6 +707,13 @@ func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, have
 		}
 	}()
 
+	if scratch {
+		// Keep the slice, partial or not, so the next Reset zeroes it and
+		// the next scratch call can reuse it.
+		t.tokBuf = tokens
+		t.noteWordSlabUse()
+	}
+
 	if tokenErr != nil {
 		// Record metrics for failed tokenization
 		duration := time.Since(startTime)
@@ -671,6 +727,10 @@ func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, have
 		Start: t.getCurrentPosition(),
 		End:   t.getCurrentPosition(),
 	})
+	if scratch {
+		t.tokBuf = tokens
+		t.noteWordSlabUse()
+	}
 
 	// Record metrics for successful tokenization
 	duration := time.Since(startTime)
@@ -790,6 +850,40 @@ func (t *Tokenizer) nextWordChunk() {
 	n = max(minWordChunk, min(n, maxWordChunk))
 	t.wordHint = max(0, t.wordHint-n)
 	t.wordChunk = make([]models.Word, 0, n)
+}
+
+// maxRetainedWordSlab is the largest wordSlab capacity (in Words, 32 B each
+// on 64-bit platforms, so 128 KiB) the scratch path keeps.
+const maxRetainedWordSlab = 4096
+
+// useWordSlab makes the retained wordSlab the first Word chunk of a scratch
+// call, first growing it to prescan's word hint when that fits under
+// maxRetainedWordSlab. Words beyond the slab come from nextWordChunk as usual.
+// It must run after prescan and before the first newWord.
+func (t *Tokenizer) useWordSlab() {
+	if need := t.wordHint; cap(t.wordSlab) < need && need <= maxRetainedWordSlab {
+		t.wordSlab = make([]models.Word, 0, need)
+	}
+	if c := cap(t.wordSlab); c > 0 {
+		t.wordChunk = t.wordSlab[:0]
+		t.wordHint = max(0, t.wordHint-c)
+	}
+}
+
+// noteWordSlabUse records in wordSlabUsed how much of wordSlab the current
+// scratch call handed out, so Reset zeroes exactly that prefix. The slab is
+// either still the current chunk or was filled before a later chunk replaced
+// it.
+func (t *Tokenizer) noteWordSlabUse() {
+	c := cap(t.wordSlab)
+	if c == 0 {
+		return
+	}
+	if cap(t.wordChunk) == c && unsafe.SliceData(t.wordChunk) == unsafe.SliceData(t.wordSlab) {
+		t.wordSlabUsed = len(t.wordChunk)
+	} else {
+		t.wordSlabUsed = c
+	}
 }
 
 // skipWhitespace advances past any whitespace
@@ -973,18 +1067,12 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 
 	ident := t.src[start:t.pos.Index]
 
-	// SQL Server dialect: N'...' national string literal
-	if t.dialect == keywords.DialectSQLServer && (ident == "N" || ident == "n") {
-		if t.pos.Index < len(t.input) && t.input[t.pos.Index] == '\'' {
-			tok, err := t.readQuotedString('\'')
-			if err != nil {
-				return models.Token{}, err
-			}
-			return models.Token{
-				Type:  models.TokenTypeNationalStringLiteral,
-				Value: tok.Value,
-				Quote: 'N',
-			}, nil
+	// Prefixed string literal: N'..', X'..', B'..', E'..', q'[..]' (see
+	// prefixed_string.go). Only a single letter directly followed by a quote
+	// qualifies.
+	if len(ident) == 1 && t.pos.Index < len(t.input) && t.input[t.pos.Index] == '\'' {
+		if tok, ok, err := t.readPrefixedString(ident[0]); ok || err != nil {
+			return tok, err
 		}
 	}
 
@@ -1057,9 +1145,11 @@ func (t *Tokenizer) readIdentifier() (models.Token, error) {
 					// Exactly one ASCII space between the words: the joined
 					// Value is already a substring of the input. Otherwise
 					// normalize the separator to a single space.
-					value := ident + " " + nextIdent
+					var value string
 					if sep := start + len(ident); nextStart == sep+1 && t.input[sep] == ' ' {
 						value = t.src[start:t.pos.Index]
+					} else {
+						value = ident + " " + nextIdent
 					}
 					return models.Token{
 						Type:  compoundType,
@@ -1148,15 +1238,13 @@ func isASCII(s string) bool {
 }
 
 // backslashEscapes reports whether '\' starts an escape sequence inside a
-// quoted string in the configured dialect. Dialects that don't use C-style
-// backslash escapes (Oracle, SQL Server, SQLite, Snowflake, ClickHouse) treat
-// '\' as a literal character inside string literals. Only MySQL and
-// PostgreSQL (and their derivatives) use backslash escaping; the zero-value
-// dialect does too. Both the fast and slow string scanners use this
+// quoted string in the configured dialect. PostgreSQL (standard strings),
+// Oracle, SQLite and SQL Server treat '\' as an ordinary character; every
+// other dialect, and an unconfigured tokenizer, decodes C-style escapes (see
+// sqldialect.StringEscape). Both the fast and slow string scanners use this
 // predicate so they cannot drift apart.
 func (t *Tokenizer) backslashEscapes() bool {
-	return t.dialect == keywords.DialectMySQL || t.dialect == keywords.DialectMariaDB ||
-		t.dialect == keywords.DialectPostgreSQL || t.dialect == ""
+	return t.strEscape != sqldialect.StringEscapeNone
 }
 
 // needsRewrite reports whether the slow quoted readers would write a rune
@@ -1440,8 +1528,10 @@ func (t *Tokenizer) readQuotedString(quote rune) (models.Token, error) {
 	// Store start position for error reporting
 	startPos := t.pos
 
-	// Check for triple quotes
-	if t.pos.Index+2 < len(t.input) {
+	// Check for triple quotes. Only BigQuery has triple-quoted strings;
+	// everywhere else ''' opens a string whose text starts with a quote
+	// ('''a' is 'a and '''a''' is 'a').
+	if t.dialect == keywords.DialectBigQuery && t.pos.Index+2 < len(t.input) {
 		next1, _ := utf8.DecodeRune(t.input[t.pos.Index+1:])
 		next2, _ := utf8.DecodeRune(t.input[t.pos.Index+2:])
 		if next1 == quote && next2 == quote {
@@ -1518,7 +1608,9 @@ func (t *Tokenizer) scanQuotedStringFast(quote rune, strict bool) (string, Posit
 			p.Index += size
 			p.Column++
 			return t.src[start:end], p, true
-		case r == '\\' && escapes:
+		case r == '\\' && escapes, r == 0, r == 0x1a:
+			// A NUL or Ctrl-Z byte goes to the slow reader, which decides
+			// whether the dialect can write it back (controlUnrepresentable).
 			return "", p, false
 		case r == '\n':
 			p.Index += size
@@ -1600,6 +1692,14 @@ func (t *Tokenizer) readQuotedStringSlow(startPos Position, originalQuote, quote
 			t.pos.Line++
 			t.pos.Column = 1
 			continue
+		}
+
+		if (r == 0 || r == 0x1a) && quote == '\'' && t.controlUnrepresentable(r) {
+			return models.Token{}, errors.InvalidSyntaxError(
+				fmt.Sprintf("control character %U in a string literal is not supported in this dialect", r),
+				t.getCurrentPosition(),
+				t.src,
+			)
 		}
 
 		// Handle regular characters
@@ -1732,38 +1832,6 @@ func (t *Tokenizer) readTripleQuotedStringSlow(startPos Position, quote rune) (m
 	)
 }
 
-// handleEscapeSequence handles escape sequences in string literals
-func (t *Tokenizer) handleEscapeSequence(buf *bytes.Buffer) error {
-	t.pos.Index++
-	t.pos.Column++
-
-	if t.pos.Index >= len(t.input) {
-		return errors.IncompleteStatementError(t.getCurrentPosition(), t.src)
-	}
-
-	r, size := utf8.DecodeRune(t.input[t.pos.Index:])
-	switch r {
-	case '\\', '"', '\'', '`':
-		buf.WriteRune(r)
-	case 'n':
-		buf.WriteRune('\n')
-	case 'r':
-		buf.WriteRune('\r')
-	case 't':
-		buf.WriteRune('\t')
-	default:
-		return errors.InvalidSyntaxError(
-			fmt.Sprintf("invalid escape sequence '\\%c'", r),
-			t.getCurrentPosition(),
-			t.src,
-		)
-	}
-
-	t.pos.Index += size
-	t.pos.Column++
-	return nil
-}
-
 // readNumber reads an integer/float
 func (t *Tokenizer) readNumber(buf []byte) (models.Token, error) {
 	var start int
@@ -1771,6 +1839,21 @@ func (t *Tokenizer) readNumber(buf []byte) (models.Token, error) {
 		start = t.pos.Index
 	} else {
 		start = t.pos.Index - len(buf)
+	}
+
+	// Hexadecimal literal: 0x1F (MySQL, MariaDB, SQLite, ClickHouse,
+	// PostgreSQL 16+). Only when a hex digit follows the prefix, so "0x" alone
+	// stays the number 0 followed by a word.
+	if t.input[t.pos.Index] == '0' && t.pos.Index+2 < len(t.input) &&
+		(t.input[t.pos.Index+1] == 'x' || t.input[t.pos.Index+1] == 'X') &&
+		isHexDigit(t.input[t.pos.Index+2]) {
+		t.pos.Index += 2
+		t.pos.Column += 2
+		for t.pos.Index < len(t.input) && isHexDigit(t.input[t.pos.Index]) {
+			t.pos.Index++
+			t.pos.Column++
+		}
+		return models.Token{Type: models.TokenTypeNumber, Value: t.src[start:t.pos.Index]}, nil
 	}
 
 	// Read integer part
@@ -1792,25 +1875,22 @@ func (t *Tokenizer) readNumber(buf []byte) (models.Token, error) {
 	// Look for decimal point
 	r, size := utf8.DecodeRune(t.input[t.pos.Index:])
 	if r == '.' {
+		// "5." is a complete number (a trailing decimal point) unless the dot
+		// belongs to what follows: a second dot or a word ("1.foo", "1..2").
+		// An exponent after the dot ("1.e5") still belongs to the number.
+		if next := t.pos.Index + 1; next < len(t.input) &&
+			(t.input[next] == '.' || (nextIsWordStart(t.input[next:]) && !t.exponentAt(next))) {
+			return models.Token{
+				Type:  models.TokenTypeNumber,
+				Value: t.src[start:t.pos.Index],
+			}, nil
+		}
 		t.pos.AdvanceRune(r, size)
 
-		// Must have at least one digit after decimal
-		if t.pos.Index >= len(t.input) {
-			value := t.src[start:t.pos.Index]
-			return models.Token{}, errors.InvalidNumberError(value+" (expected digit after decimal point)", t.getCurrentPosition(), t.src)
-		}
-
-		r, _ = utf8.DecodeRune(t.input[t.pos.Index:])
-		if r < '0' || r > '9' {
-			value := t.src[start:t.pos.Index]
-			return models.Token{}, errors.InvalidNumberError(value+" (expected digit after decimal point)", t.getCurrentPosition(), t.src)
-		}
-
-		// Read fractional part
+		// Fractional digits are optional ("5.").
 		for t.pos.Index < len(t.input) {
 			r, size = utf8.DecodeRune(t.input[t.pos.Index:])
 			if r < '0' || r > '9' {
-				_ = size // Mark as intentionally unused
 				break
 			}
 			t.pos.AdvanceRune(r, size)
@@ -1861,6 +1941,52 @@ func (t *Tokenizer) readNumber(buf []byte) (models.Token, error) {
 	}, nil
 }
 
+// isHexDigit reports whether c is an ASCII hexadecimal digit.
+func isHexDigit(c byte) bool {
+	return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
+}
+
+// nextIsWordStart reports whether b begins with a character that can start an
+// identifier.
+func nextIsWordStart(b []byte) bool {
+	r, _ := utf8.DecodeRune(b)
+	return isIdentifierStart(r)
+}
+
+// exponentAt reports whether the bytes at idx form an exponent: e or E, an
+// optional sign, then a digit.
+func (t *Tokenizer) exponentAt(idx int) bool {
+	if idx >= len(t.input) || (t.input[idx] != 'e' && t.input[idx] != 'E') {
+		return false
+	}
+	idx++
+	if idx < len(t.input) && (t.input[idx] == '+' || t.input[idx] == '-') {
+		idx++
+	}
+	return idx < len(t.input) && t.input[idx] >= '0' && t.input[idx] <= '9'
+}
+
+// leadingDotNumber reports whether the '.' at t.pos starts a number such as
+// ".5": a digit follows and the dot is not a qualifier separator, i.e. the
+// previous byte is not part of a name, a closing bracket or a quote ("t.5",
+// "(x).5").
+func (t *Tokenizer) leadingDotNumber() bool {
+	i := t.pos.Index
+	if i+1 >= len(t.input) || t.input[i+1] < '0' || t.input[i+1] > '9' {
+		return false
+	}
+	if i == 0 {
+		return true
+	}
+	switch c := t.input[i-1]; {
+	case c >= utf8.RuneSelf, c == '_', c == '$', c == '#', c == ')', c == ']', c == '"', c == '`', c == '\'':
+		return false
+	case c >= '0' && c <= '9', c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':
+		return false
+	}
+	return true
+}
+
 // readPunctuation picks out punctuation or operator tokens
 func (t *Tokenizer) readPunctuation() (models.Token, error) {
 	if t.pos.Index >= len(t.input) {
@@ -1875,8 +2001,8 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		t.pos.AdvanceRune(r, size)
 		return models.Token{Type: models.TokenTypeRightParen, Value: ")"}, nil
 	case '[':
-		// SQL Server dialect: [identifier] is a quoted identifier
-		if t.dialect == keywords.DialectSQLServer {
+		// SQL Server and SQLite: [identifier] is a quoted identifier
+		if t.dialect == keywords.DialectSQLServer || t.dialect == keywords.DialectSQLite {
 			t.pos.AdvanceRune(r, size) // Consume [
 			contentStart := t.pos.Index
 			for t.pos.Index < len(t.input) {
@@ -1907,6 +2033,9 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		t.pos.AdvanceRune(r, size)
 		return models.Token{Type: models.TokenTypeSemicolon, Value: ";"}, nil
 	case '.':
+		if t.leadingDotNumber() {
+			return t.readNumber(nil)
+		}
 		t.pos.AdvanceRune(r, size)
 		return models.Token{Type: models.TokenTypeDot, Value: "."}, nil
 	case '+':
@@ -1946,6 +2075,10 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 				t.pos.AdvanceRune(nxtR, nxtSize)
 				return models.Token{Type: models.TokenTypeRArrow, Value: "=>"}, nil
 			}
+			if nxtR == '=' {
+				t.pos.AdvanceRune(nxtR, nxtSize)
+				return models.Token{Type: models.TokenTypeDoubleEq, Value: "=="}, nil
+			}
 		}
 		return models.Token{Type: models.TokenTypeEq, Value: "="}, nil
 	case '<':
@@ -1954,7 +2087,23 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 			nxtR, nxtSize := utf8.DecodeRune(t.input[t.pos.Index:])
 			if nxtR == '=' {
 				t.pos.AdvanceRune(nxtR, nxtSize)
+				// <=> is the NULL-safe equality operator (MySQL) and the
+				// pgvector cosine-distance operator (PostgreSQL).
+				if t.pos.Index < len(t.input) && t.input[t.pos.Index] == '>' {
+					t.pos.Index++
+					t.pos.Column++
+					return models.Token{Type: models.TokenTypeSpaceship, Value: "<=>"}, nil
+				}
 				return models.Token{Type: models.TokenTypeLtEq, Value: "<="}, nil
+			} else if nxtR == '<' {
+				t.pos.AdvanceRune(nxtR, nxtSize)
+				return models.Token{Type: models.TokenTypeShiftLeft, Value: "<<"}, nil
+			} else if nxtR == '-' && t.pos.Index+1 < len(t.input) && t.input[t.pos.Index+1] == '>' {
+				// <-> is the distance operator (PostgreSQL pg_trgm, PostGIS,
+				// pgvector).
+				t.pos.Index += 2
+				t.pos.Column += 2
+				return models.Token{Type: models.TokenTypeCustomBinaryOperator, Value: "<->"}, nil
 			} else if nxtR == '>' {
 				t.pos.AdvanceRune(nxtR, nxtSize)
 				return models.Token{Type: models.TokenTypeNeq, Value: "<>"}, nil
@@ -1972,6 +2121,10 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 			if nxtR == '=' {
 				t.pos.AdvanceRune(nxtR, nxtSize)
 				return models.Token{Type: models.TokenTypeGtEq, Value: ">="}, nil
+			}
+			if nxtR == '>' {
+				t.pos.AdvanceRune(nxtR, nxtSize)
+				return models.Token{Type: models.TokenTypeShiftRight, Value: ">>"}, nil
 			}
 		}
 		return models.Token{Type: models.TokenTypeGt, Value: ">"}, nil
@@ -2008,10 +2161,15 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 				t.pos.AdvanceRune(nxtR, nxtSize)
 				return models.Token{Type: models.TokenTypeDoubleColon, Value: "::"}, nil
 			}
+			if nxtR == '=' {
+				t.pos.AdvanceRune(nxtR, nxtSize)
+				return models.Token{Type: models.TokenTypeAssignment, Value: ":="}, nil
+			}
 			// Oracle bind variables: positional :1, :2 and named :name (#520).
-			// Gated to Oracle because other dialects use ':' for array slices
-			// (arr[1:n]) and Snowflake VARIANT paths (col:field).
-			if t.dialect == keywords.DialectOracle {
+			// Gated to Oracle and SQLite (named :name and @name parameters)
+			// because other dialects use ':' for array slices (arr[1:n]) and
+			// Snowflake VARIANT paths (col:field).
+			if t.dialect == keywords.DialectOracle || t.dialect == keywords.DialectSQLite {
 				if nxtR >= '0' && nxtR <= '9' {
 					for t.pos.Index < len(t.input) {
 						c := t.input[t.pos.Index]
@@ -2164,6 +2322,7 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		// Just a standalone # symbol
 		return models.Token{Type: models.TokenTypeSharp, Value: "#"}, nil
 	case '?':
+		qStart := t.pos.Index
 		t.pos.AdvanceRune(r, size)
 		// MySQL, MariaDB, and SQLite use a bare ? as a positional parameter
 		// placeholder (e.g. WHERE id = ?). These dialects have no JSON ?
@@ -2172,6 +2331,14 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		if t.dialect == keywords.DialectMySQL ||
 			t.dialect == keywords.DialectMariaDB ||
 			t.dialect == keywords.DialectSQLite {
+			// SQLite also numbers its parameters: ?1, ?2.
+			if t.dialect == keywords.DialectSQLite {
+				for t.pos.Index < len(t.input) && t.input[t.pos.Index] >= '0' && t.input[t.pos.Index] <= '9' {
+					t.pos.Index++
+					t.pos.Column++
+				}
+				return models.Token{Type: models.TokenTypePlaceholder, Value: t.src[qStart:t.pos.Index]}, nil
+			}
 			return models.Token{Type: models.TokenTypePlaceholder, Value: "?"}, nil
 		}
 		// Check for PostgreSQL JSON operators
@@ -2272,6 +2439,31 @@ func (t *Tokenizer) readPunctuation() (models.Token, error) {
 		}
 		// Standalone $ - treat as placeholder
 		return models.Token{Type: models.TokenTypePlaceholder, Value: "$"}, nil
+	case '^':
+		t.pos.AdvanceRune(r, size)
+		// ^@ is the PostgreSQL starts-with operator.
+		if t.pos.Index < len(t.input) && t.input[t.pos.Index] == '@' {
+			t.pos.Index++
+			t.pos.Column++
+			return models.Token{Type: models.TokenTypeCaretAt, Value: "^@"}, nil
+		}
+		return models.Token{Type: models.TokenTypeCaret, Value: "^"}, nil
+	case '{':
+		if t.dialect == keywords.DialectClickHouse {
+			if end := t.clickHouseParamEnd(); end > 0 {
+				start := t.pos.Index
+				for t.pos.Index < end {
+					cr, cs := utf8.DecodeRune(t.input[t.pos.Index:])
+					t.pos.AdvanceRune(cr, cs)
+				}
+				return models.Token{Type: models.TokenTypePlaceholder, Value: t.src[start:end]}, nil
+			}
+		}
+		t.pos.AdvanceRune(r, size)
+		return models.Token{Type: models.TokenTypeLBrace, Value: "{"}, nil
+	case '}':
+		t.pos.AdvanceRune(r, size)
+		return models.Token{Type: models.TokenTypeRBrace, Value: "}"}, nil
 	case '~':
 		// Handle PostgreSQL regex operators ~ and ~*
 		t.pos.AdvanceRune(r, size)
@@ -2391,6 +2583,15 @@ func (t *Tokenizer) scanIdentifierTail() {
 	for t.pos.Index < len(t.input) {
 		if c := t.input[t.pos.Index]; c < utf8.RuneSelf {
 			if !asciiIdentPart[c] {
+				// '$' continues a name (Oracle v$session, Snowflake
+				// SYSTEM$TYPEOF, PostgreSQL a$b) and so does '#' in Oracle (a#).
+				// Neither can start one; scanIdentifierTail is only called
+				// after the first character.
+				if c == '$' || (c == '#' && t.dialect == keywords.DialectOracle) {
+					t.pos.Index++
+					t.pos.Column++
+					continue
+				}
 				return
 			}
 			t.pos.Index++

@@ -1,0 +1,5 @@
+# Real-world corpus statements that GoSQLX does not yet handle.
+# Format: <dialect>/<file>#<statement index> <failing stage>
+# Stages: parse, reparse, idempotent, drop (formatter lost words), panic.
+# Regenerate: go test ./pkg/gosqlx -run TestRealWorldCorpus -update-known-failures
+

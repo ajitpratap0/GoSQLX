@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `ast.PivotClause.AggregateAlias`, `ast.PivotClause.ExtraAggregates`
+  (`[]ast.PivotAggregate`), `ast.UnpivotClause.NullHandling`,
+  `ast.UnpivotClause.ValueColumns` and `ast.UnpivotNullHandling`; rendered by
+  `SQL()` and `pkg/formatter`.
+- **Dialect audit corpus**: 2,788 production-style statements across PostgreSQL,
+  MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake and ClickHouse now pass
+  split, parse, format, reparse, idempotency and dropped-word checks, with zero
+  known failures. `scripts/dialect-audit` runs the same checks on SQL files.
+- **AST representation**: `ExplainStatement` retains the explained statement;
+  `BatchSeparator` retains SQL Server `GO` and its optional `RepeatCount` without
+  expanding repeated batches. `SQL()` and `FormatAST` keep GO on its own line.
+  Callers enumerating `AST.Statements` or recovery results must account for
+  batch-separator nodes.
+- **Literal and identifier metadata**: `LiteralValue.Prefix` and `RawBackslash`
+  retain string introducers and escape rules. `Identifier.QuoteStyle`,
+  `Identifier.Quotes` and the statement/table/column `NameQuote` fields retain
+  identifier delimiters through rendering.
+
+### Changed
+- **Strict default string escapes**: without a dialect, unknown backslash
+  escapes now return an error instead of silently rewriting the value. Select
+  the source dialect explicitly when parsing dialect-specific strings.
+- **SELECT extension fields**: rare dialect clauses now live under the optional
+  `SelectStatement.Extras` pointer (`SelectExtras`), including SELECT modifiers,
+  INTO, LIMIT BY, ROWS EXAMINED, INTERPOLATE, query hints and output formats.
+  These fields were introduced on this unreleased branch; reads must allow
+  `Extras == nil`, and writes must allocate it first.
+- **Transpilation**: string literals and quoted identifiers are rendered using
+  the target dialect's escape rules and delimiters. Unrepresentable literals
+  return an error rather than changing their value. SQL Server GO scripts
+  targeting another dialect return an error because batch scopes and repeat
+  counts cannot be represented there.
+
 ### Fixed
 - **BigQuery PIVOT / UNPIVOT** (#854): the parser gated PIVOT/UNPIVOT on a
   hard-coded SQL Server / Oracle / Snowflake list, so BigQuery rejected them
@@ -26,12 +60,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rendered. This preserves BigQuery backticks and Oracle alias case.
 - Numeric UNPIVOT row aliases after `AS` are limited to BigQuery and Oracle;
   Snowflake and SQL Server reject them.
-
-### Added
-- `ast.PivotClause.AggregateAlias`, `ast.PivotClause.ExtraAggregates`
-  (`[]ast.PivotAggregate`), `ast.UnpivotClause.NullHandling`,
-  `ast.UnpivotClause.ValueColumns` and `ast.UnpivotNullHandling`; rendered by
-  `SQL()` and `pkg/formatter`.
+- **SQL round trips**: preserve ALTER actions, grouped joins, set-operation
+  query tails and CTE placement, standalone VALUES, JSON_TABLE/XMLTABLE literal
+  quoting, and nested optimizer hints. Hint placement uses the source dialect's
+  lexer so a keyword inside a string or quoted identifier is never a hint slot.
+- **Pooled parsing**: internal tokenize/parse paths reuse scratch token storage
+  without retaining it in returned ASTs. Concurrent retained-tree regression
+  tests cover the public parse entry points; SELECT release clears all Extras.
+- **`SplitStatements` keeps compound statements whole**: `BEGIN ... END` blocks
+  (trigger, procedure and function bodies, T-SQL `IF ... BEGIN`, `BEGIN TRY`,
+  PostgreSQL `BEGIN ATOMIC`), `CASE ... END`, `IF`/`LOOP`/`WHILE`/`REPEAT`
+  inside a block and Oracle `DECLARE`/`IS`/`AS` sections are no longer cut at
+  the first inner `;`. Transaction statements (`BEGIN;`, `BEGIN TRANSACTION`,
+  `BEGIN IMMEDIATE`) are not blocks, and a script whose blocks do not balance
+  falls back to plain `;` splitting. Client batch separators are honoured and
+  removed from the output: a `GO [n]` line for SQL Server, `DELIMITER` for
+  MySQL/MariaDB and a lone `/` line for Oracle.
+- **`gosqlx.Lint` / `LintWithDialect` report invalid SQL**: SQL that does not
+  tokenize or parse returns an error wrapping `ErrTokenize` or `ErrSyntax`
+  together with the violations of the text and token rules. Callers that
+  ignored the error and treated an empty result as clean must now check it.
+  `linter.FileResult` gains `TokenizeError`, `ParseError` and `SyntaxError()`.
+- **`gosqlx.Format` and `gosqlx format` keep comments and optimizer hints**:
+  comments stay with their statement (a comment inside a statement moves to the
+  line above it) and `/*+ ... */` hints directly after a statement's first
+  keyword stay in place. Input whose hints or MySQL `/*! ... */` comments
+  cannot be placed faithfully is refused (`formatter.ErrUnplaceableComment`)
+  instead of being rewritten without them, and `format -i` verifies that the
+  output holds exactly the input's comments. LSP and C-binding dialect
+  formatting no longer drop comments either. New `formatter.JoinWithComments`,
+  `gosqlx.FormatWithDialect` and `gosqlx.WithComments()`.
+- **CLI**: `lint` exits 1 on syntax errors and `--auto-fix` judges the fixed
+  text; `format --no-uppercase` lower-cases keywords (it used to upper-case
+  them); `postgres`, `pg`, `mssql`, `tsql` and `sqlite3` are accepted by every
+  `--dialect` flag; errors are printed once and usage only for flag and
+  argument errors; `validate --quiet` exits silently; `validate` names stdin
+  `<stdin>`, validates `GO`/`DELIMITER` scripts and files over the token
+  limit statement by statement; empty and comment-only input is valid for
+  `validate`, `lint` and `format`; `-o` works for `parse` and `transpile`,
+  `-f`/`-o` map onto `validate`'s output flags and are rejected where
+  unsupported; `format` keeps a leading byte order mark.
+- **`ParseReaderMultiple`** skips segments that hold only comments.
+- **Docs**: removed `parser.NewTokenConverter`, `SetMaxTokens`,
+  `SetMaxRecursionDepth` and the `parser.max_tokens` config key, none of which
+  exist; the limits are constants.
 
 ### Behavior changes
 - PIVOT / UNPIVOT `IN` lists now require commas between entries and an alias

@@ -125,39 +125,56 @@ func applyAlterStatement(cat *Catalog, defaultSchema *Schema, stmt *ast.AlterSta
 	if stmt.Type != ast.AlterTypeTable {
 		return nil // ignore ALTER ROLE, ALTER POLICY, etc.
 	}
-	op, ok := stmt.Operation.(*ast.AlterTableOperation)
-	if !ok {
-		return nil
+	ops := stmt.Operations
+	if len(ops) == 0 && stmt.Operation != nil {
+		ops = []ast.AlterOperation{stmt.Operation}
 	}
+	for _, o := range ops {
+		if op, ok := o.(*ast.AlterTableOperation); ok && op != nil {
+			applyAlterTableOperation(cat, defaultSchema, stmt.Name, op)
+		}
+	}
+	return nil
+}
 
-	schemaName, tableName := splitSchemaTable(stmt.Name)
+// applyAlterTableOperation applies one ALTER TABLE action to the table name.
+func applyAlterTableOperation(cat *Catalog, defaultSchema *Schema, name string, op *ast.AlterTableOperation) {
+	schemaName, tableName := splitSchemaTable(name)
 	s := ensureSchema(cat, defaultSchema, schemaName)
 	table, tableExists := s.GetTable(tableName)
 
 	switch op.Type {
 	case ast.AddColumn:
-		if op.ColumnDef == nil {
-			return nil
+		defs := op.ColumnDefs
+		if len(defs) == 0 && op.ColumnDef != nil {
+			defs = []*ast.ColumnDef{op.ColumnDef}
+		}
+		if len(defs) == 0 {
+			return
 		}
 		// Create table on-demand if it doesn't exist yet
 		if !tableExists {
 			table = NewTable(tableName)
 			s.AddTable(table)
 		}
-		col := extractColumnFromDef(op.ColumnDef)
-		table.AddColumn(col)
+		for _, def := range defs {
+			table.AddColumn(extractColumnFromDef(def))
+		}
 
 	case ast.DropColumn:
 		if !tableExists {
-			return nil // nothing to drop
+			return // nothing to drop
 		}
 		if op.ColumnName != nil {
 			delete(table.Columns, strings.ToLower(op.ColumnName.Name))
 		}
+		for _, extra := range op.ExtraNames {
+			delete(table.Columns, strings.ToLower(extra.Name))
+		}
 
 	case ast.RenameColumn:
 		if !tableExists {
-			return nil
+			return
 		}
 		if op.ColumnName != nil && op.NewColumnName != nil {
 			oldKey := strings.ToLower(op.ColumnName.Name)
@@ -169,14 +186,21 @@ func applyAlterStatement(cat *Catalog, defaultSchema *Schema, stmt *ast.AlterSta
 		}
 
 	case ast.ModifyColumn, ast.ChangeColumn, ast.AlterColumn:
-		if !tableExists || op.ColumnDef == nil {
-			return nil
+		if !tableExists {
+			return
 		}
-		col := extractColumnFromDef(op.ColumnDef)
-		table.AddColumn(col)
+		defs := op.ColumnDefs
+		if len(defs) == 0 && op.ColumnDef != nil {
+			defs = []*ast.ColumnDef{op.ColumnDef}
+		}
+		if op.Type == ast.ChangeColumn && op.ColumnName != nil && len(defs) > 0 {
+			// CHANGE old new def renames the column.
+			delete(table.Columns, strings.ToLower(op.ColumnName.Name))
+		}
+		for _, def := range defs {
+			table.AddColumn(extractColumnFromDef(def))
+		}
 	}
-
-	return nil
 }
 
 // cloneStrings returns a copy of s whose elements are independent of the

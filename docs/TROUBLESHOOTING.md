@@ -274,11 +274,10 @@ lsp:
   diagnostics:
     max_diagnostics: 50  # Limit diagnostic count
     debounce_ms: 1000    # Reduce parsing frequency
-
-parser:
-  max_recursion_depth: 100
-  max_tokens: 50000
 ```
+
+The parser's own limits (`parser.MaxRecursionDepth`, `tokenizer.MaxTokens`) are
+fixed constants, not settings; see "Complex Nested Query Parsing" below.
 
 **Monitor Memory Usage:**
 ```go
@@ -867,37 +866,44 @@ func TestJSONOperatorParsing(sql string) {
 
 **Symptom:** Deeply nested queries fail with "recursion depth limit" error
 
-**Common Cause:** Parser hits max recursion depth (default 200)
+**Common Cause:** The parser hits its recursion limit. `parser.MaxRecursionDepth`
+is 100 and, like the tokenizer's `MaxTokens` (1,000,000 tokens per input,
+comments included) and `MaxInputSize` (10 MB), it is a compile-time constant:
+there is no config key and no setter (`SetMaxRecursionDepth` and `SetMaxTokens`
+do not exist). The limits protect the process from stack exhaustion and
+runaway memory on hostile input.
 
 **Solutions:**
-```yaml
-# .gosqlx.yml - Increase recursion limit
-parser:
-  max_recursion_depth: 500  # Increase for complex queries
-  max_tokens: 100000        # Increase token limit if needed
-```
 
-**Code Solution:**
+- Flatten the query. Replace deeply nested derived tables with CTEs (see
+  below); each CTE parses at a shallow depth.
+- For input over the token or size limit, split it into statements and parse
+  them one at a time. Each statement gets its own budget:
+
 ```go
-import "github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
+import (
+    "fmt"
+    "strings"
 
-func ParseComplexQuery(sql string) error {
-    p := parser.NewParser()
+    "github.com/ajitpratap0/GoSQLX/pkg/gosqlx"
+)
 
-    // Increase limits for complex queries
-    p.SetMaxRecursionDepth(500)
-    p.SetMaxTokens(100000)
-
-    tokens, _ := /* tokenize */
-    astTree, err := p.Parse(tokens)
-    if err != nil {
-        return err
+func ParseLargeScript(script string) error {
+    for i, stmt := range gosqlx.SplitStatements(script, "postgresql") {
+        if strings.TrimSpace(stmt) == "" {
+            continue
+        }
+        if _, err := gosqlx.Parse(stmt); err != nil {
+            return fmt.Errorf("statement %d: %w", i+1, err)
+        }
     }
-    defer ast.ReleaseAST(astTree)
-
     return nil
 }
 ```
+
+`gosqlx validate` does this for you: when a file fails as a whole it re-checks
+it statement by statement, so a file past the token limit validates as long as
+each statement is under it.
 
 **Refactor Complex Query:**
 ```sql
@@ -1027,11 +1033,11 @@ SELECT * FROM users WHERE name = 'John''s Pizza';
 
 **E1006 - Input Too Large**
 - **Cause:** SQL input exceeds size limits (DoS protection)
-- **Fix:** Split large queries or increase limits if appropriate
+- **Fix:** Split the input into smaller statements (the 10 MB limit is a constant)
 
 **E1007 - Token Limit Reached**
 - **Cause:** Too many tokens generated (DoS protection)
-- **Fix:** Simplify query or increase limits
+- **Fix:** Split the input into smaller statements; the 1,000,000 token limit is a constant (see `gosqlx.SplitStatements`)
 
 **E1008 - Tokenizer Panic**
 - **Cause:** Internal tokenizer error (recovered panic)
@@ -1215,10 +1221,6 @@ lsp:
   incremental_sync: true
 
 parser:
-  # Reduce recursion depth for faster parsing
-  max_recursion_depth: 200
-  max_tokens: 50000
-
   # Enable parser caching
   cache_enabled: true
   cache_ttl_seconds: 300  # 5 minutes

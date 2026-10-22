@@ -17,7 +17,6 @@ package cmd
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -44,6 +43,9 @@ Examples:
   gosqlx transpile --from postgres --to sqlite "CREATE TABLE t (id SERIAL PRIMARY KEY, tags TEXT)"`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := rejectGlobalFormat(cmd); err != nil {
+			return err
+		}
 		fromStr, _ := cmd.Flags().GetString("from")
 		toStr, _ := cmd.Flags().GetString("to")
 
@@ -61,7 +63,7 @@ Examples:
 			sql = args[0]
 		} else {
 			// Read from stdin.
-			data, readErr := io.ReadAll(os.Stdin)
+			data, readErr := io.ReadAll(cmd.InOrStdin())
 			if readErr != nil {
 				return fmt.Errorf("reading stdin: %w", readErr)
 			}
@@ -76,8 +78,9 @@ Examples:
 		if err != nil {
 			return fmt.Errorf("transpile: %w", err)
 		}
-		fmt.Println(result)
-		return nil
+		out, finish := outputSink(cmd)
+		fmt.Fprintln(out, result)
+		return finish()
 	},
 }
 
@@ -92,14 +95,14 @@ func init() {
 
 // parseDialectFlag converts a dialect name string to a keywords.SQLDialect value.
 func parseDialectFlag(s string) (keywords.SQLDialect, error) {
-	switch strings.ToLower(s) {
+	switch canonicalDialect(strings.ToLower(s)) {
 	case "mysql":
 		return keywords.DialectMySQL, nil
-	case "postgres", "postgresql":
+	case "postgresql":
 		return keywords.DialectPostgreSQL, nil
 	case "sqlite":
 		return keywords.DialectSQLite, nil
-	case "sqlserver", "mssql":
+	case "sqlserver":
 		return keywords.DialectSQLServer, nil
 	case "oracle":
 		return keywords.DialectOracle, nil

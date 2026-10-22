@@ -379,7 +379,7 @@ tree, err := gosqlx.ParseTree(ctx, sql,
     gosqlx.WithDialect("mysql"), gosqlx.WithPipesAsConcat())
 ```
 
-Before #781, `||` was concatenation in every dialect, including MySQL and MariaDB.
+Before v1.16.0 (#781), `||` was concatenation in every dialect, including MySQL and MariaDB.
 
 ### MariaDB-Specific Features
 
@@ -407,7 +407,7 @@ MariaDB inherits all MySQL features (SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE 
 | Feature | Support Level | GoSQLX Parser | Test Coverage | Notes |
 |---------|---------------|---------------|---------------|-------|
 | **MERGE** | ✅ Full | ✅ Full | 95% | MERGE statements with WHEN clauses |
-| **PIVOT/UNPIVOT** | ✅ Full | 🔧 Syntax | 10% | Keywords reserved, no parsing logic |
+| **PIVOT/UNPIVOT** | ✅ Full | ✅ Full | — | Parsed and rendered since v1.14.0 (`FROM s PIVOT (...) AS p`) |
 | **CROSS/OUTER APPLY** | ✅ Full | 🔧 Syntax | 10% | Keywords reserved, no parsing logic |
 | **HierarchyID** | ✅ Full | 🔧 Syntax | 20% | Data type recognition |
 | **T-SQL functions** | ✅ Full | ⚠️ Partial | 40% | Subset of T-SQL functions |
@@ -416,8 +416,8 @@ MariaDB inherits all MySQL features (SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE 
 
 | Feature | Support Level | GoSQLX Parser | Test Coverage | Notes |
 |---------|---------------|---------------|---------------|-------|
-| **CONNECT BY** | ✅ Full | 🔧 Syntax | 10% | Keywords reserved, no parsing logic |
-| **PRIOR operator** | ✅ Full | 🔧 Syntax | 10% | Keyword reserved, no parsing logic |
+| **CONNECT BY** | ✅ Full | ✅ Full | — | `START WITH`, `CONNECT BY [NOCYCLE]` with general expressions |
+| **PRIOR operator** | ✅ Full | ✅ Full | — | Prefix operator (`CONNECT BY PRIOR id = parent_id + 1`); a column named `prior` stays an identifier |
 | **DECODE function** | ✅ Full | ⚠️ Partial | 40% | Recognized as function, no special handling |
 | **NVL/NVL2** | ✅ Full | ⚠️ Partial | 40% | Recognized as function, no special handling |
 | **Dual table** | ✅ Full | ✅ Full | 100% | Standard table reference |
@@ -629,13 +629,16 @@ GoSQLX provides a first-class dialect mode engine that threads the SQL dialect t
 | Dialect | Dialect String | Keyword Set | Dialect-Specific Parsing | Status |
 |---------|---------------|-------------|--------------------------|--------|
 | **PostgreSQL** | `"postgresql"` | Full PG keywords | `::`, `ON CONFLICT`, `$$`, JSONB ops, LATERAL, DISTINCT ON | ✅ Default dialect |
-| **MySQL** | `"mysql"` | MySQL keywords | SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE KEY, LIMIT n,m, GROUP_CONCAT, MATCH AGAINST, REGEXP | ✅ Full support |
+| **MySQL** | `"mysql"` | MySQL keywords | SHOW, DESCRIBE, REPLACE INTO, ON DUPLICATE KEY, LIMIT n,m, GROUP_CONCAT, MATCH AGAINST, REGEXP, `\|\|` as logical OR | ✅ Full support |
 | **SQL Server** | `"sqlserver"` | T-SQL keywords | MERGE, bracket identifiers `[col]`, PIVOT/UNPIVOT | ✅ PIVOT/UNPIVOT (since v1.14.0) |
-| **Oracle** | `"oracle"` | Oracle keywords | DUAL table, basic PL/SQL keywords, MINUS as EXCEPT | ⚠️ Keywords + basic parsing |
+| **Oracle** | `"oracle"` | Oracle keywords | DUAL table, basic PL/SQL keywords, MINUS as EXCEPT, `:1`/`:name` binds, CONNECT BY / START WITH / PRIOR | ⚠️ Keywords + basic parsing |
 | **SQLite** | `"sqlite"` | SQLite keywords | Flexible typing, simplified syntax | ⚠️ Keywords + basic parsing |
 | **Snowflake** | `"snowflake"` | Snowflake keywords | MATCH_RECOGNIZE, @stage, SAMPLE, QUALIFY, VARIANT paths, time-travel, MINUS, LATERAL FLATTEN, TRY_CAST, IGNORE/RESPECT NULLS, LIKE ANY/ALL, CREATE STAGE/STREAM/TASK/PIPE stubs | ✅ 87/87 QA pass |
 | **ClickHouse** | `"clickhouse"` | ClickHouse keywords | PREWHERE, FINAL, GLOBAL IN/NOT IN, nested types, parametric aggregates, bare-bracket arrays, ORDER BY WITH FILL, CODEC, WITH TOTALS, LIMIT BY, ANY/ALL JOIN, SETTINGS, TTL, INSERT FORMAT | ✅ 83/83 QA pass (was 69/83 in v1.14.0) |
 | **MariaDB** | `"mariadb"` | MariaDB keywords (superset of MySQL) | All MySQL features + SEQUENCE DDL, FOR SYSTEM_TIME, WITH SYSTEM VERSIONING, PERIOD FOR, CONNECT BY | ✅ |
+| **BigQuery** | `"bigquery"` | BigQuery keywords | Composite field access `(expr).field`, table functions | ⚠️ Keywords + basic parsing |
+| **Redshift** | `"redshift"` | Redshift keywords | Keyword recognition | ⚠️ Keywords + basic parsing |
+| **Generic** | `"generic"` | Standard SQL keywords | No dialect-specific syntax; composite field access allowed | ✅ |
 
 ### Usage
 
@@ -669,7 +672,7 @@ gosqlx format --dialect mysql query.sql
 - OPENROWSET / OPENQUERY not supported
 
 #### Oracle
-- CONNECT BY / START WITH / PRIOR not parsed (keywords reserved)
+- CONNECT BY / START WITH / PRIOR parsed (PRIOR is a prefix operator, since v1.16.0)
 - PL/SQL blocks not supported
 - DECODE recognized as generic function only
 - Pipelined table functions not supported
@@ -852,7 +855,7 @@ gosqlx format --dialect mysql query.sql
 
 ### Suitable with Considerations
 
-- **Advanced dialect-specific features** (keyword recognition only for: PIVOT/UNPIVOT, CONNECT BY, PRAGMA, ATTACH/DETACH)
+- **Advanced dialect-specific features** (keyword recognition only for: CROSS/OUTER APPLY, ATTACH/DETACH)
 - **Complex XML operations** (syntax recognition only)
 - **Dialect-specific functions** (DECODE, NVL, recognized as generic functions)
 - **Newest SQL standard features (SQL-2011+)**
@@ -860,8 +863,6 @@ gosqlx format --dialect mysql query.sql
 
 ### Development Needed
 
-- **PIVOT/UNPIVOT parsing logic** (keywords reserved)
-- **CONNECT BY hierarchical queries** (keywords reserved)
 - **Full XML function support**
 - **Row pattern recognition (MATCH_RECOGNIZE)**
 - **Complete temporal table support**

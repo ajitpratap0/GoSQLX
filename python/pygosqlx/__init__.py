@@ -89,7 +89,7 @@ from pygosqlx.exceptions import (
     ValidationError,
 )
 
-__version__ = "0.3.0"
+__version__ = "1.16.0"
 __all__ = [
     # Functions
     "parse",

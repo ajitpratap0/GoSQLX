@@ -29,6 +29,19 @@ import (
 // This version tracks feature releases and compatibility.
 // Format: MAJOR.MINOR.PATCH (Semantic Versioning 2.0.0)
 //
+// Version 1.16.0 includes:
+//   - SQL syntax highlighting (pkg/highlight) for API, CLI (gosqlx highlight), LSP, WASM and playground
+//   - Dialect-aware LSP (diagnostics, formatting, completion, didChangeConfiguration)
+//   - --dialect on parse, format, analyze and lint; one list of 11 dialect names everywhere
+//   - Hardened gosqlx-mcp HTTP server, ChatGPT app support and a Claude Code plugin
+//   - Editor-accurate positions (a tab is one column) and MySQL/MariaDB || as logical OR
+//   - October 2026 performance audit (zero-copy tokens, fewer allocations) and correctness sweep
+//
+// Version 1.15.0 includes:
+//   - ParseTree opaque Tree API with typed walkers
+//   - ClickHouse dialect: 83/83 QA pass
+//   - Oracle gaps and architect-review correctness sweeps
+//
 // Version 1.14.0 includes:
 //   - Dialect-aware SQL formatting (TOP/FETCH FIRST/LIMIT per dialect)
 //   - Snowflake dialect: 87/87 QA pass (MATCH_RECOGNIZE, @stage, SAMPLE, QUALIFY, VARIANT, time-travel, MINUS, LATERAL FLATTEN, TRY_CAST)

@@ -551,9 +551,24 @@ SELECT users.id FROM users, orders WHERE users.id > 10
 
 ### E4001 - Unsupported Feature
 
-SQL feature not yet implemented.
+The SQL uses a feature that GoSQLX does not implement, or that the selected dialect does not support.
 
-**Note:** GoSQLX is under active development. Check documentation for currently supported features.
+Common causes:
+- Composite field access `(expr).field` outside PostgreSQL, BigQuery and `generic` (and the default dialect).
+- `TOP` outside SQL Server, or `LIMIT` under SQL Server or Oracle.
+- A comma list, alias or ClickHouse `FINAL` after a parenthesized join group.
+- `JOIN` in `UPDATE ... FROM`, or `ORDER BY`/`LIMIT` after a parenthesized query that the AST cannot represent.
+
+```sql
+-- Wrong (with --dialect mysql): composite field access
+SELECT (t).name FROM t
+-- Error E4001: composite field access (expr).field is not supported in mysql
+
+-- Right: parse it as PostgreSQL, BigQuery or generic, or select the column directly
+SELECT t.name FROM t
+```
+
+**Fix:** pick the dialect the SQL was written for (`--dialect`, `ParseWithDialect`, LSP `dialect`), or rewrite the construct.
 
 ---
 
@@ -561,7 +576,7 @@ SQL feature not yet implemented.
 
 SQL dialect-specific syntax not supported.
 
-**Note:** GoSQLX supports standard SQL with extensions for PostgreSQL, MySQL, SQL Server, Oracle, and SQLite. Some dialect-specific features may not be available.
+**Note:** GoSQLX accepts 11 dialect names: `generic`, `postgresql`, `mysql`, `mariadb`, `sqlserver`, `oracle`, `sqlite`, `snowflake`, `bigquery`, `redshift` and `clickhouse` (see `keywords.DialectNames()`). Some dialect-specific features may not be available.
 
 ---
 
@@ -867,7 +882,7 @@ Error codes follow a hierarchical structure:
 - **E1xxx**: Lexical/tokenization errors (invalid characters, literals)
 - **E2xxx**: Syntax/parsing errors (missing clauses, unexpected tokens)
 - **E3xxx**: Semantic errors (undefined references, type mismatches)
-- **E4xxx**: Unsupported features (not yet implemented)
+- **E4xxx**: Unsupported features (not implemented, or not supported in the selected dialect)
 
 ## Performance Tips
 
@@ -927,7 +942,7 @@ This comprehensive error code reference covers all 27 error codes in GoSQLX:
 - **9 Tokenizer Errors (E1001-E1009)**: Lexical analysis and DoS protection
 - **12 Parser Errors (E2001-E2012)**: SQL syntax and parsing failures
 - **4 Semantic Errors (E3001-E3004)**: Logical and type validation
-- **2 Unsupported Feature Errors (E4001-E4002)**: Features not yet implemented
+- **2 Unsupported Feature Errors (E4001-E4002)**: Features not implemented or not supported in the selected dialect
 
 Additionally, GoSQLX provides:
 - **30 Linter Rules (L001-L030)**: Style, safety, performance and naming checks

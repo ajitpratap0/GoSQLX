@@ -41,10 +41,11 @@ type Span struct {
 ```go
 type Location struct {
     Line   int // 1-based line number
-    Column int // 1-based column number
-    Offset int // 0-based byte offset
+    Column int // 1-based byte column within the line
 }
 ```
+
+`Column` counts bytes, not runes or UTF-16 units: a multi-byte character counts its bytes, and a tab is one column. A token's `Start` is the token itself, after any leading whitespace and comments. Convert to UTF-16 before sending positions to an LSP client.
 
 ## Functions
 

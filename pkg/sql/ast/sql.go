@@ -516,10 +516,33 @@ func (u *UnaryExpression) writeSQL(buf *bytes.Buffer) {
 	case Prior:
 		buf.WriteString("PRIOR ")
 		writeExpr(buf, u.Expr)
+	case MySQLBinary:
+		buf.WriteString("BINARY ")
+		writeExpr(buf, u.Expr)
 	default:
 		buf.WriteString(u.Operator.String())
+		start := buf.Len()
 		writeExpr(buf, u.Expr)
+		// A symbolic prefix operator followed by an operand that starts with
+		// an operator character would read as one longer operator ("@-5" is
+		// the operator "@-"): keep them apart.
+		if b := buf.Bytes(); len(b) > start && isSymbolicOperator(u.Operator) && strings.IndexByte("+-*/<>=~!@#%^&|?`", b[start]) >= 0 {
+			operand := append([]byte(nil), b[start:]...)
+			buf.Truncate(start)
+			buf.WriteByte(' ')
+			buf.Write(operand)
+		}
 	}
+}
+
+// isSymbolicOperator reports whether op is written with operator characters
+// only (~, |/, ||/, !!, @, !), as opposed to a keyword.
+func isSymbolicOperator(op UnaryOperator) bool {
+	switch op {
+	case PGBitwiseNot, PGSquareRoot, PGCubeRoot, PGPrefixFactorial, PGAbs, BangNot:
+		return true
+	}
+	return false
 }
 
 // SQL returns the SQL representation of this aliased expression in the form
@@ -722,6 +745,10 @@ func (s *SubqueryExpression) SQL() string {
 
 func (s *SubqueryExpression) writeSQL(buf *bytes.Buffer) {
 	if s == nil {
+		return
+	}
+	if s.Bare {
+		writeStmt(buf, s.Subquery)
 		return
 	}
 	buf.WriteByte('(')
@@ -1444,6 +1471,7 @@ func (i *InsertStatement) writeSQL(buf *bytes.Buffer) {
 	}
 
 	writeReturning(buf, i.Returning, i.ReturningInto)
+	writeLogErrors(buf, i.LogErrors)
 	i.writeInsertFormat(buf)
 }
 
@@ -1525,6 +1553,10 @@ func (d *DeleteStatement) writeSQL(buf *bytes.Buffer) {
 		buf.WriteString("FROM ")
 	}
 	d.writeDMLTargets(buf, d.TableName, d.Alias)
+	if d.BeforeSystemTime != nil {
+		buf.WriteString(" BEFORE SYSTEM_TIME ")
+		writeExpr(buf, d.BeforeSystemTime)
+	}
 	writeDMLOutput(buf, d.Output, d.OutputInto)
 
 	if len(d.From) > 0 {
@@ -1674,10 +1706,25 @@ func (s *SetOperation) writeSQL(buf *bytes.Buffer) {
 	if s == nil {
 		return
 	}
+	if with, body := HoistLeadingWith(s, ""); with != nil {
+		with.writeSQL(buf)
+		buf.WriteByte(' ')
+		body.writeBody(buf)
+		return
+	}
+	s.writeBody(buf)
+}
+
+// writeBody writes the operation without looking for a WITH clause to hoist;
+// a left operand that is a set operation is a link of the same chain, not a
+// new one, unless it is parenthesized.
+func (s *SetOperation) writeBody(buf *bytes.Buffer) {
 	if SetOperandNeedsParens(s, false, "") {
 		buf.WriteByte('(')
 		writeStmt(buf, s.Left)
 		buf.WriteByte(')')
+	} else if left, ok := s.Left.(*SetOperation); ok && left != nil {
+		left.writeBody(buf)
 	} else {
 		writeStmt(buf, s.Left)
 	}
@@ -1692,6 +1739,7 @@ func (s *SetOperation) writeSQL(buf *bytes.Buffer) {
 	} else {
 		writeStmt(buf, s.Right)
 	}
+	writeQueryTail(buf, s.Tail)
 }
 
 // SQL returns the SQL representation of this VALUES clause as
@@ -2117,6 +2165,10 @@ func tableRefSQL(t *TableReference) string {
 }
 
 func writeTableRef(buf *bytes.Buffer, t *TableReference) {
+	if g := t.joinGroup(); g != nil {
+		writeJoinGroup(buf, g)
+		return
+	}
 	if t.Lateral {
 		buf.WriteString("LATERAL ")
 	}

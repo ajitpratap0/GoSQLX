@@ -534,6 +534,12 @@ func renderDelete(d *ast.DeleteStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 	}
 	writeDMLTargets(sb, f, &d.DMLTargetFields, d.TableName, d.Alias)
+	if d.BeforeSystemTime != nil {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("BEFORE SYSTEM_TIME"))
+		sb.WriteString(" ")
+		sb.WriteString(exprSQL(d.BeforeSystemTime))
+	}
 	writeDMLOutput(sb, f, d.Output, d.OutputInto)
 
 	if len(d.From) > 0 {
@@ -583,6 +589,19 @@ func renderSetOperation(s *ast.SetOperation, opts ast.FormatOptions) string {
 	if s == nil {
 		return ""
 	}
+	// A WITH clause that scopes over the whole operation but would end up
+	// inside the parentheses of a left operand is written before the chain.
+	if with, body := ast.HoistLeadingWith(s, opts.Dialect); with != nil {
+		f := newNodeFormatter(opts)
+		f.sb.WriteString(renderWith(with, f))
+		f.sb.WriteString(f.clauseSep())
+		f.sb.WriteString(renderSetOperationBody(body, opts))
+		return f.result()
+	}
+	return renderSetOperationBody(s, opts)
+}
+
+func renderSetOperationBody(s *ast.SetOperation, opts ast.FormatOptions) string {
 	f := newNodeFormatter(opts)
 	sb := f.sb
 	inner := nestedOpts(opts)
@@ -638,6 +657,20 @@ func renderSetOperation(s *ast.SetOperation, opts ast.FormatOptions) string {
 			} else {
 				sb.WriteString(FormatStatement(level.Right, inner))
 			}
+		}
+	}
+	if t := s.Tail; t != nil {
+		// ORDER BY / LIMIT / OFFSET / FETCH of the whole operation.
+		view := t.Select()
+		if len(view.OrderBy) > 0 {
+			sb.WriteString(f.clauseSep())
+			sb.WriteString(f.kw("ORDER BY"))
+			sb.WriteString(" ")
+			sb.WriteString(orderBySQL(view.OrderBy))
+		}
+		writeLimitOffsetClauses(sb, view, f)
+		if view.Fetch != nil {
+			sb.WriteString(fetchSQL(view.Fetch, f))
 		}
 	}
 	if opts.AddSemicolon {
@@ -1070,6 +1103,21 @@ func orderBySQL(orders []ast.OrderByExpression) string {
 // so PIVOT/UNPIVOT/FOR/IN/AS/LATERAL keywords honor the caller's case policy.
 func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 	var sb strings.Builder
+	if g := ast.TableRefJoinGroup(t); g != nil {
+		sb.WriteString("(")
+		for i := range g.Tables {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(tableRefSQL(&g.Tables[i], f))
+		}
+		for i := range g.Joins {
+			sb.WriteString(" ")
+			sb.WriteString(joinSQL(&g.Joins[i], f))
+		}
+		sb.WriteString(")")
+		return sb.String()
+	}
 	if t.Lateral {
 		sb.WriteString(f.kw("LATERAL"))
 		sb.WriteString(" ")

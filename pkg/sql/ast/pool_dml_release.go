@@ -81,5 +81,8 @@ func releaseInsertDialectFields(d *InsertDialectFields, mode releaseMode) {
 			}
 		}
 	}
+	if d.LogErrors != nil {
+		releaseExpression(d.LogErrors.Tag, mode)
+	}
 	*d = InsertDialectFields{}
 }

@@ -147,7 +147,23 @@ func (p *Parser) parseFlashbackBound() (ast.Expression, error) {
 		p.advance()
 		return id, nil
 	}
-	return p.parseTemporalPointExpression()
+	left, err := p.parseTemporalPointExpression()
+	if err != nil {
+		return nil, err
+	}
+	// Arithmetic on the bound: SYSTIMESTAMP - INTERVAL '1' DAY. Only + and -
+	// are read, so the AND that follows the first bound is not consumed.
+	for p.isType(models.TokenTypePlus) || p.isType(models.TokenTypeMinus) {
+		opPos := p.currentLocation()
+		op := p.currentToken.Token.Value
+		p.advance()
+		right, err := p.parseMultiplicativeExpression()
+		if err != nil {
+			return nil, err
+		}
+		left = &ast.BinaryExpression{Left: left, Operator: op, Right: right, Pos: opPos}
+	}
+	return left, nil
 }
 
 // isTableSampleStart reports whether the current token starts a SAMPLE /
@@ -246,6 +262,34 @@ func (p *Parser) parseTableModifiersBeforeAlias(ref *ast.TableReference) error {
 			return err
 		}
 		tableModifiers(ref).Partitions = names
+	}
+	if p.IsOracle() && p.isType(models.TokenTypePartition) && p.peekToken().Token.Type == models.TokenTypeFor {
+		// Oracle PARTITION FOR (partition key value, ...)
+		p.advance() // Consume PARTITION
+		p.advance() // Consume FOR
+		if !p.isType(models.TokenTypeLParen) {
+			return p.expectedError("( after PARTITION FOR")
+		}
+		p.advance() // Consume (
+		for {
+			e, err := p.parseExpression()
+			if err != nil {
+				return err
+			}
+			m := tableModifiers(ref)
+			if m.PartitionFor == nil {
+				m.PartitionFor = &ast.PartitionForClause{}
+			}
+			m.PartitionFor.Values = append(m.PartitionFor.Values, e)
+			if !p.isType(models.TokenTypeComma) {
+				break
+			}
+			p.advance() // Consume ,
+		}
+		if !p.isType(models.TokenTypeRParen) {
+			return p.expectedError(") after PARTITION FOR values")
+		}
+		p.advance() // Consume )
 	}
 	if ref.ForSystemTime == nil && p.isForSystemTimeStart() {
 		p.advance() // Consume FOR

@@ -150,6 +150,12 @@ func replaceTableInJoins(joins []ast.JoinClause, old, new string) {
 // rendered from ref.TableFunc, so the call is renamed too when its name
 // matches; the arguments are kept.
 func renameTableRef(ref *ast.TableReference, old, new string) {
+	if g := ast.TableRefJoinGroup(ref); g != nil {
+		// A parenthesized join group names no table itself; rename inside.
+		replaceTableInFrom(g.Tables, old, new)
+		replaceTableInJoins(g.Joins, old, new)
+		return
+	}
 	if !strings.EqualFold(ref.Name, old) {
 		return
 	}

@@ -474,6 +474,15 @@ func (p *Parser) parseColumnConstraintExt(c *ast.ColumnConstraint) (*ast.ColumnC
 		c.Type, c.Expr = "ON UPDATE", expr
 		return c, true, nil
 
+	case (t.Type == models.TokenTypeWith || p.isUnquotedWord("WITHOUT")) &&
+		p.peekValueIs(1, "SYSTEM") && p.peekValueIs(2, "VERSIONING") && p.dialectAllows(dialect.MariaDB):
+		// MariaDB: [WITH | WITHOUT] SYSTEM VERSIONING on a column.
+		c.Type = strings.ToUpper(t.Value) + " SYSTEM VERSIONING"
+		p.advance() // Consume WITH / WITHOUT
+		p.advance() // Consume SYSTEM
+		p.advance() // Consume VERSIONING
+		return c, true, nil
+
 	case t.Type == models.TokenTypeAs:
 		// MySQL, MariaDB, SQLite, Oracle: AS (expr) [STORED | VIRTUAL];
 		// SQL Server computed column: AS expr [PERSISTED].

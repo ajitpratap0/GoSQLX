@@ -30,8 +30,7 @@ import (
 // rendering gap. For these the CLI must refuse to format (return an error)
 // rather than emit changed SQL; once the gap is fixed they simply pass.
 var corpusFormatKnownGaps = map[string]string{
-	"realworld/mysql/10_misc_functions.sql":  "follow-up: a string literal is rewritten by the formatter",
-	"realworld/oracle/08_complex_nested.sql": "follow-up: an optimizer hint inside a CTE body (/*+ MATERIALIZE */) has no place in the re-rendered statement, so the CLI refuses rather than move it",
+	"realworld/mysql/05_dialect_specific.sql": "DESCRIBE has no renderer, so the CLI refuses the file rather than rewrite it (see TestFormatSQL_RefusesDescribe)",
 }
 
 // corpusDialect maps a testdata path to the dialect its SQL is written in.

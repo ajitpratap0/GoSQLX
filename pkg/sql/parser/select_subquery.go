@@ -270,6 +270,12 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 		p.advance()
 	}
 
+	if !isLateral && p.isParenthesizedJoinStart() {
+		// Parenthesized joined table as a join operand: a JOIN (b JOIN c ON
+		// ...) ON ..., t1 LEFT JOIN (t2, t3) ON ...
+		return p.parseJoinGroup()
+	}
+
 	if p.isType(models.TokenTypeLParen) {
 		// Derived table (subquery)
 		p.advance() // Consume (
@@ -468,4 +474,48 @@ func (p *Parser) isBareTableHintToken() bool {
 		}
 	}
 	return true
+}
+
+// parseJoinGroup parses a parenthesized joined table that is the operand of a
+// JOIN, with the current token at "(":
+//
+//	a JOIN (b JOIN c ON b.id = c.b_id) ON a.id = b.a_id
+//	t1 LEFT JOIN (t2, t3) ON t1.id = t2.id
+//
+// Unlike a group at the left-most position of a FROM clause, which
+// parseParenthesizedJoin flattens, the group is kept whole: the ON condition
+// after it may only see the group as a unit, and outer joins inside and
+// outside it do not associate freely. It takes no alias.
+func (p *Parser) parseJoinGroup() (ast.TableReference, error) {
+	p.depth++
+	defer func() { p.depth-- }()
+	if p.depth > MaxRecursionDepth {
+		return ast.TableReference{}, goerrors.RecursionDepthLimitError(
+			p.depth, MaxRecursionDepth, p.currentLocation(), "")
+	}
+
+	p.advance() // Consume (
+	first, joins, err := p.parseFromItem()
+	if err != nil {
+		return ast.TableReference{}, err
+	}
+	tables, joins, err := p.parseTableListAndJoins(&first, joins)
+	if err != nil {
+		return ast.TableReference{}, err
+	}
+	if !p.isType(models.TokenTypeRParen) {
+		return ast.TableReference{}, p.expectedError(") or JOIN")
+	}
+	p.advance() // Consume )
+
+	if p.isType(models.TokenTypeAs) || p.isIdentifier() && !p.isJoinKeyword() {
+		return ast.TableReference{}, goerrors.UnsupportedFeatureError(
+			"alias after a parenthesized join group",
+			p.currentLocation(),
+			"",
+		)
+	}
+	return ast.TableReference{Modifiers: &ast.TableModifiers{
+		Group: &ast.JoinGroup{Tables: tables, Joins: joins},
+	}}, nil
 }

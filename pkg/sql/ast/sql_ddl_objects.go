@@ -238,7 +238,7 @@ func writeCreateTableTail(buf *bytes.Buffer, c *CreateTableStatement, st DDLStyl
 	if len(c.Inherits) > 0 {
 		buf.WriteByte(' ')
 		st.writeKw(buf, "INHERITS (")
-		writeQualifiedNameList(buf, c.Inherits)
+		writeQualifiedNameListQ(buf, c.Inherits, st.nqList(c.InheritsQuotes, len(c.Inherits)))
 		buf.WriteByte(')')
 	}
 	if c.WithSystemVersioning {
@@ -470,7 +470,7 @@ var partitionDefTypes = []string{"LESS THAN", "IN", "FROM TO", "VALUES", "HISTOR
 
 func writePartitionDefinition(buf *bytes.Buffer, d *PartitionDefinition, st DDLStyle) {
 	st.writeKw(buf, "PARTITION ")
-	writeColumnName(buf, d.Name)
+	writeTableAliasQ(buf, d.Name, st.nq(d.NameQuote))
 	switch typ := strings.ToUpper(keywordOneOf(d.Type, partitionDefTypes)); typ {
 	case "LESS THAN":
 		buf.WriteByte(' ')

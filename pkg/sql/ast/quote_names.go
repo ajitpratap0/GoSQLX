@@ -598,6 +598,14 @@ func dataTypeIsPlain(typ string) bool {
 					break
 				}
 			}
+		case (c == '"' || c == '`') && depth > 0:
+			// A delimited identifier inside an argument list (a named tuple
+			// element, an engine argument): closed, no escapes.
+			j, ok := skipDelimited(typ, i)
+			if !ok {
+				return false
+			}
+			i = j
 		case c == '(':
 			depth++
 		case c == ')':
@@ -1020,6 +1028,7 @@ var (
 		"GENERATED ALWAYS AS ROW START", "GENERATED ALWAYS AS ROW END",
 		"INVISIBLE", "VISIBLE", "DEFERRABLE", "NOT DEFERRABLE",
 		"INITIALLY DEFERRED", "INITIALLY IMMEDIATE", "NOT FOR REPLICATION",
+		"WITH SYSTEM VERSIONING", "WITHOUT SYSTEM VERSIONING",
 	}
 	partitionByKeywords = []string{
 		"RANGE", "LIST", "HASH", "KEY", "LINEAR HASH", "LINEAR KEY",

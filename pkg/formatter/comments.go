@@ -17,6 +17,7 @@ package formatter
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
@@ -58,8 +59,10 @@ type CommentLayout struct {
 //     source order. The renderer lays statements out afresh, so there is no
 //     position inside them to return to.
 //   - A comment after the last statement stays after it.
-//   - An optimizer hint directly after the statement's first keyword
-//     (SELECT /*+ ... */) stays there. A hint anywhere else, and a MySQL
+//   - An optimizer hint directly after a SELECT, INSERT, UPDATE, DELETE,
+//     MERGE or REPLACE keyword (SELECT /*+ ... */, also one inside a CTE,
+//     subquery or union branch) stays there, provided the rendered statement
+//     has the same number of that keyword. A hint anywhere else, and a MySQL
 //     executable comment (/*! ... */) inside a statement, make the call fail
 //     with ErrUnplaceableComment. An executable comment followed by ';' on its
 //     own is a statement of its own and is kept verbatim with its ';'.
@@ -89,7 +92,7 @@ func JoinWithComments(stmts []string, tokens []models.TokenWithSpan, comments []
 	type attach struct {
 		leading  []string
 		trailing []string
-		hints    []string
+		hints    []placedHint
 	}
 	att := make([]attach, len(items))
 	var tail []string
@@ -113,9 +116,11 @@ func JoinWithComments(stmts []string, tokens []models.TokenWithSpan, comments []
 		case roleInner:
 			it := items[idx]
 			if sig {
-				if isHint(c.Text) && it.hintSlot(tokens, c) {
-					att[idx].hints = append(att[idx].hints, c.Text)
-					continue
+				if isHint(c.Text) {
+					if h, ok := it.hintSlot(tokens, c); ok {
+						att[idx].hints = append(att[idx].hints, h)
+						continue
+					}
 				}
 				return "", fmt.Errorf("%w: %s", ErrUnplaceableComment, abbreviate(c.Text))
 			}
@@ -159,7 +164,7 @@ func JoinWithComments(stmts []string, tokens []models.TokenWithSpan, comments []
 			si++
 			if len(a.hints) > 0 {
 				var err error
-				if stmt, err = insertHints(stmt, tokens[it.first].Token.Value, a.hints); err != nil {
+				if stmt, err = insertHints(stmt, a.hints); err != nil {
 					return "", err
 				}
 			}
@@ -287,21 +292,86 @@ func splitItems(tokens []models.TokenWithSpan) []item {
 	return items
 }
 
-// hintSlot reports whether c lies between the statement's first token and the
-// token after it, and that first token is a keyword that can carry a hint.
-func (it item) hintSlot(tokens []models.TokenWithSpan, c models.Comment) bool {
-	if it.empty || it.first < 0 || it.first+1 >= len(tokens) {
-		return false
+// placedHint is an optimizer hint written right after a statement keyword:
+// the ordinal-th occurrence (0-based) of keyword among the total occurrences
+// of that word in the statement, e.g. the hint in
+// "WITH c AS (SELECT /*+ MATERIALIZE */ ...) SELECT ..." is the first of two
+// SELECT keywords.
+type placedHint struct {
+	text    string
+	keyword string
+	ordinal int
+	total   int
+}
+
+// hintSlot reports whether c lies directly after a keyword that can carry a
+// hint (SELECT, INSERT, UPDATE, DELETE, MERGE, REPLACE) of the statement, and
+// where that keyword is among the statement's occurrences of the same word.
+func (it item) hintSlot(tokens []models.TokenWithSpan, c models.Comment) (placedHint, bool) {
+	if it.empty || it.first < 0 || it.first == it.last {
+		return placedHint{}, false
 	}
-	switch strings.ToUpper(tokens[it.first].Token.Value) {
+	for j := it.first; j < it.last; j++ {
+		kw, ok := hintKeyword(tokens[j].Token)
+		if !ok || before(c.Start, tokens[j].End) {
+			continue
+		}
+		if !before(c.Start, tokens[j+1].Start) {
+			continue
+		}
+		h := placedHint{text: c.Text, keyword: kw}
+		for k := it.first; k <= it.last; k++ {
+			if w, isWord := wordToken(tokens[k].Token); isWord && strings.EqualFold(w, kw) {
+				if k < j {
+					h.ordinal++
+				}
+				h.total++
+			}
+		}
+		return h, true
+	}
+	return placedHint{}, false
+}
+
+// hintKeyword returns the upper-case keyword of tok when it is an unquoted
+// statement keyword that can carry an optimizer hint.
+func hintKeyword(tok models.Token) (string, bool) {
+	w, ok := wordToken(tok)
+	if !ok {
+		return "", false
+	}
+	switch kw := strings.ToUpper(w); kw {
 	case "SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "REPLACE":
-	default:
-		return false
+		return kw, true
 	}
-	if it.first == it.last {
-		return false
+	return "", false
+}
+
+// wordToken returns the text of tok when it is an unquoted word (a keyword or
+// bare identifier), not a string literal or quoted name.
+func wordToken(tok models.Token) (string, bool) {
+	if tok.Quote != 0 || tok.Value == "" {
+		return "", false
 	}
-	return !before(c.Start, tokens[it.first].End) && before(c.Start, tokens[it.first+1].Start)
+	switch tok.Type {
+	case models.TokenTypeString, models.TokenTypeSingleQuotedString,
+		models.TokenTypeTripleSingleQuotedString, models.TokenTypeTripleDoubleQuotedString,
+		models.TokenTypeDollarQuotedString, models.TokenTypeByteStringLiteral,
+		models.TokenTypeNationalStringLiteral, models.TokenTypeEscapedStringLiteral,
+		models.TokenTypeUnicodeStringLiteral, models.TokenTypeHexStringLiteral,
+		models.TokenTypeNumber:
+		return "", false
+	}
+	for i := 0; i < len(tok.Value); i++ {
+		if !isWordByte(tok.Value[i]) {
+			return "", false
+		}
+	}
+	return tok.Value, true
+}
+
+func isWordByte(b byte) bool {
+	return b >= 'A' && b <= 'Z' || b >= 'a' && b <= 'z' || b >= '0' && b <= '9' || b == '_' || b == '$' || b >= 0x80
 }
 
 type commentRole int
@@ -366,9 +436,57 @@ func isSignificantComment(text string) bool {
 	return isHint(text) || isLineHint(text) || isExecutable(text)
 }
 
-// insertHints writes hints after the first word of the rendered statement:
-// "SELECT a FROM t" becomes "SELECT /*+ H */ a FROM t".
-func insertHints(stmt, keyword string, hints []string) (string, error) {
+// insertHints writes each hint after the keyword it followed in the source:
+// "SELECT a FROM t" becomes "SELECT /*+ H */ a FROM t". A hint on the first
+// word of the statement needs the rendered statement to start with that word.
+// A hint on a later keyword (a SELECT inside a CTE or subquery) needs the
+// rendered statement to have as many occurrences of the word as the source,
+// and goes after the same one; otherwise the hint has no place to go and the
+// call fails with ErrUnplaceableComment.
+func insertHints(stmt string, hints []placedHint) (string, error) {
+	type insertion struct {
+		at   int // byte offset just after the keyword
+		text string
+	}
+	var ins []insertion
+	words := map[string][]int{} // upper-case word -> end offsets in stmt
+	scanned := false
+	for _, h := range hints {
+		if h.ordinal == 0 && h.total >= 1 {
+			if end, ok := leadingWordEnd(stmt, h.keyword); ok {
+				ins = append(ins, insertion{end, h.text})
+				continue
+			}
+		}
+		if !scanned {
+			words = wordEnds(stmt)
+			scanned = true
+		}
+		ends := words[h.keyword]
+		if len(ends) != h.total || h.ordinal >= len(ends) {
+			return "", fmt.Errorf("%w: %s (rendered statement does not keep the %s it follows)", ErrUnplaceableComment, abbreviate(h.text), h.keyword)
+		}
+		ins = append(ins, insertion{ends[h.ordinal], h.text})
+	}
+	// Insert from the end so earlier offsets stay valid; hints at one offset
+	// keep their source order.
+	sort.SliceStable(ins, func(a, b int) bool { return ins[a].at > ins[b].at })
+	for i := 0; i < len(ins); {
+		j := i
+		var group []string
+		for j < len(ins) && ins[j].at == ins[i].at {
+			group = append(group, ins[j].text)
+			j++
+		}
+		stmt = stmt[:ins[i].at] + " " + strings.Join(group, " ") + stmt[ins[i].at:]
+		i = j
+	}
+	return stmt, nil
+}
+
+// leadingWordEnd returns the end offset of the first word of stmt when it is
+// keyword.
+func leadingWordEnd(stmt, keyword string) (int, bool) {
 	i := 0
 	for i < len(stmt) && (stmt[i] == ' ' || stmt[i] == '\t' || stmt[i] == '\n' || stmt[i] == '\r') {
 		i++
@@ -377,10 +495,65 @@ func insertHints(stmt, keyword string, hints []string) (string, error) {
 	for j < len(stmt) && (stmt[j] >= 'A' && stmt[j] <= 'Z' || stmt[j] >= 'a' && stmt[j] <= 'z') {
 		j++
 	}
-	if !strings.EqualFold(stmt[i:j], keyword) {
-		return "", fmt.Errorf("%w: %s (rendered statement does not start with %s)", ErrUnplaceableComment, abbreviate(hints[0]), keyword)
+	return j, strings.EqualFold(stmt[i:j], keyword)
+}
+
+// wordEnds scans rendered SQL and returns, for each hint-carrying keyword, the
+// end offsets of its occurrences as a bare word, skipping string literals,
+// quoted names and comments, and words that follow '.', '@' or ':'.
+func wordEnds(stmt string) map[string][]int {
+	out := map[string][]int{}
+	n := len(stmt)
+	for i := 0; i < n; {
+		c := stmt[i]
+		switch {
+		case c == '\'' || c == '"' || c == '`':
+			// Quoted text; a doubled quote or a backslash escape stays inside.
+			i++
+			for i < n {
+				if stmt[i] == '\\' && c == '\'' && i+1 < n {
+					i += 2
+					continue
+				}
+				if stmt[i] == c {
+					if i+1 < n && stmt[i+1] == c {
+						i += 2
+						continue
+					}
+					break
+				}
+				i++
+			}
+			i++
+		case c == '-' && i+1 < n && stmt[i+1] == '-':
+			for i < n && stmt[i] != '\n' {
+				i++
+			}
+		case c == '/' && i+1 < n && stmt[i+1] == '*':
+			end := strings.Index(stmt[i+2:], "*/")
+			if end < 0 {
+				i = n
+			} else {
+				i += end + 4
+			}
+		case isWordByte(c):
+			j := i
+			for j < n && isWordByte(stmt[j]) {
+				j++
+			}
+			if i == 0 || (stmt[i-1] != '.' && stmt[i-1] != '@' && stmt[i-1] != ':') {
+				w := strings.ToUpper(stmt[i:j])
+				switch w {
+				case "SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "REPLACE":
+					out[w] = append(out[w], j)
+				}
+			}
+			i = j
+		default:
+			i++
+		}
 	}
-	return stmt[:j] + " " + strings.Join(hints, " ") + stmt[j:], nil
+	return out
 }
 
 func abbreviate(s string) string {

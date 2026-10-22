@@ -219,6 +219,8 @@ type AlterTableOperation struct {
 	IndexKeyword string
 	// IndexName names the index of AddIndex and DropIndex.
 	IndexName string
+	// IndexNameQuote records the delimiters of IndexName (see NameQuote).
+	IndexNameQuote NameQuote
 	// Keyword and Text hold an AlterTableOther action: the leading keyword
 	// phrase and the remainder as written. They also carry the keyword
 	// spelling of an AlterColumnSetDataType (TYPE, SET DATA TYPE) and the
@@ -393,13 +395,17 @@ func (opt *RoleOption) String() string {
 
 // AlterRoleOperation represents operations that can be performed on a role
 type AlterRoleOperation struct {
-	Type        AlterRoleOpType
-	NewName     string
-	Options     []RoleOption
-	MemberName  string
-	ConfigName  string
-	ConfigValue Expression
-	InDatabase  string
+	Type    AlterRoleOpType
+	NewName string
+	// NewNameQuote records the delimiters of NewName (see NameQuote).
+	NewNameQuote NameQuote
+	Options      []RoleOption
+	MemberName   string
+	// MemberNameQuote records the delimiters of MemberName.
+	MemberNameQuote NameQuote
+	ConfigName      string
+	ConfigValue     Expression
+	InDatabase      string
 }
 
 func (a *AlterRoleOperation) alterOperationNode() {}
@@ -433,9 +439,16 @@ const (
 type AlterPolicyOperation struct {
 	Type AlterPolicyOpType
 	// Table is the table the policy is on (ALTER POLICY name ON table).
-	Table     string
-	NewName   string
-	To        []string
+	Table string
+	// TableQuote records the delimiters of Table (see NameQuote).
+	TableQuote NameQuote
+	NewName    string
+	// NewNameQuote records the delimiters of NewName.
+	NewNameQuote NameQuote
+	To           []string
+	// ToQuotes records the delimiters of To, by index; nil when no name needs
+	// them.
+	ToQuotes  []NameQuote
 	Using     Expression
 	WithCheck Expression
 }
@@ -485,4 +498,6 @@ func (a AlterConnectorOperation) Children() []Node { return nil }
 type AlterConnectorOwner struct {
 	IsUser bool
 	Name   string
+	// NameQuote records the delimiters of Name (see NameQuote).
+	NameQuote NameQuote
 }

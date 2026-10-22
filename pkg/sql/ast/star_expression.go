@@ -42,6 +42,9 @@ type StarExpression struct {
 	Replace []*AliasedExpression
 	// Rename holds RENAME (col AS new_name, ...) items.
 	Rename []StarRename
+	// Apply holds the ClickHouse APPLY (function) transformers, in order. The
+	// wildcard may also be a COLUMNS('regexp') call.
+	Apply []Expression
 }
 
 // StarRename is one RENAME (old AS new) item of a StarExpression.
@@ -65,6 +68,11 @@ func (s StarExpression) Children() []Node {
 	for _, r := range s.Replace {
 		if r != nil {
 			nodes = append(nodes, r)
+		}
+	}
+	for _, a := range s.Apply {
+		if a != nil {
+			nodes = append(nodes, a)
 		}
 	}
 	return nodes
@@ -123,6 +131,11 @@ func (s *StarExpression) writeSQL(buf *bytes.Buffer) {
 			buf.WriteString(" AS ")
 			writeName(buf, r.Alias)
 		}
+		buf.WriteByte(')')
+	}
+	for _, a := range s.Apply {
+		buf.WriteString(" APPLY (")
+		writeExpr(buf, a)
 		buf.WriteByte(')')
 	}
 	if len(s.Rename) > 0 {

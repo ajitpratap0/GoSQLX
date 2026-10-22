@@ -315,9 +315,15 @@ func (t TableReference) Children() []Node {
 		if m.Flashback != nil {
 			nodes = append(nodes, m.Flashback)
 		}
+		if m.PartitionFor != nil {
+			nodes = append(nodes, m.PartitionFor)
+		}
 	}
 	if t.Values != nil {
 		nodes = append(nodes, t.Values)
+	}
+	if g := t.Modifiers; g != nil && g.Group != nil {
+		nodes = append(nodes, g.Group)
 	}
 	return nodes
 }
@@ -696,15 +702,18 @@ type TableConstraint struct {
 	// TYPE or PROJECTION body; Granularity the ClickHouse GRANULARITY value;
 	// LikeTable and LikeOptions the PostgreSQL LIKE source and its
 	// INCLUDING / EXCLUDING options.
-	Keyword     string
-	IndexName   string
-	Using       string
-	Cluster     string
-	Deferrable  string
-	Exprs       []Expression
-	Text        string
-	Granularity string
-	LikeTable   string
+	Keyword   string
+	IndexName string
+	// IndexNameQuote records the delimiters of IndexName when they must be
+	// kept (see NameQuote).
+	IndexNameQuote NameQuote
+	Using          string
+	Cluster        string
+	Deferrable     string
+	Exprs          []Expression
+	Text           string
+	Granularity    string
+	LikeTable      string
 	// LikeTableQuote records the delimiters of LikeTable when they must
 	// be kept (see NameQuote).
 	LikeTableQuote NameQuote
@@ -841,7 +850,10 @@ func (i IndexColumn) Children() []Node {
 // PartitionDefinition represents a partition definition in CREATE TABLE
 // Syntax: PARTITION name VALUES { LESS THAN (expr) | IN (list) | FROM (expr) TO (expr) }
 type PartitionDefinition struct {
-	Name       string
+	Name string
+	// NameQuote records the delimiters of Name when they must be kept (see
+	// NameQuote).
+	NameQuote  NameQuote
 	Type       string       // FOR VALUES, IN, LESS THAN
 	Values     []Expression // Partition values or bounds
 	LessThan   Expression   // For RANGE: LESS THAN (value)

@@ -103,6 +103,20 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 		p.advance() // consume FINAL
 	}
 
+	tables, joins, err = p.parseTableListAndJoins(&firstRef, joins)
+	if err != nil {
+		return "", nil, nil, err
+	}
+	return tableName, tables, joins, nil
+}
+
+// parseTableListAndJoins parses what follows the first table reference of a
+// FROM list or of a parenthesized join group: further comma-separated table
+// references, then the JOIN clauses, including a comma after an explicit join.
+// joins holds the joins already read from a parenthesized group that opened
+// the list, or nil.
+func (p *Parser) parseTableListAndJoins(first *ast.TableReference, joins []ast.JoinClause) (tables []ast.TableReference, _ []ast.JoinClause, err error) {
+	firstRef := *first
 	tables = []ast.TableReference{firstRef}
 
 	// Additional comma-separated table references (implicit cross joins)
@@ -110,7 +124,7 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 		if len(joins) > 0 {
 			// Hoisting the parenthesized joins past a comma would re-bind them
 			// to the last comma-separated table and change the query's meaning.
-			return "", nil, nil, goerrors.UnsupportedFeatureError(
+			return nil, nil, goerrors.UnsupportedFeatureError(
 				"comma-separated table list after a parenthesized join",
 				p.currentLocation(),
 				"",
@@ -119,7 +133,7 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 		p.advance()
 		ref, e2 := p.parseFromTableReference()
 		if e2 != nil {
-			return "", nil, nil, e2
+			return nil, nil, e2
 		}
 		tables = append(tables, ref)
 	}
@@ -127,7 +141,7 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 	// JOIN clauses
 	joins, err = p.parseJoinClauses(firstRef, joins)
 	if err != nil {
-		return "", nil, nil, err
+		return nil, nil, err
 	}
 
 	// "a JOIN b ON ..., c [JOIN d ...]": a comma after an explicit join
@@ -137,7 +151,7 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 		p.advance() // Consume ,
 		ref, e2 := p.parseFromTableReference()
 		if e2 != nil {
-			return "", nil, nil, e2
+			return nil, nil, e2
 		}
 		joins = append(joins, ast.JoinClause{
 			Type:  "CROSS",
@@ -149,10 +163,10 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 			Pos:   joinPos,
 		})
 		if joins, err = p.parseJoinClauses(firstRef, joins); err != nil {
-			return "", nil, nil, err
+			return nil, nil, err
 		}
 	}
-	return tableName, tables, joins, nil
+	return tables, joins, nil
 }
 
 // parseFromItem parses the first item of a FROM clause: either a plain table
@@ -884,9 +898,16 @@ func (p *Parser) parseOrderByList() ([]ast.OrderByExpression, error) {
 
 	var orderByExprs []ast.OrderByExpression
 	for {
-		expr, err := p.parseExpression()
-		if err != nil {
-			return nil, err
+		var expr ast.Expression
+		if p.isOrderByAll() {
+			// ClickHouse ORDER BY ALL: sort by every selected column.
+			expr = &ast.Identifier{Name: p.currentToken.Token.Value, Pos: p.currentLocation()}
+			p.advance() // Consume ALL
+		} else {
+			var err error
+			if expr, err = p.parseExpression(); err != nil {
+				return nil, err
+			}
 		}
 
 		entry := ast.OrderByExpression{
@@ -1192,4 +1213,20 @@ func (p *Parser) parseArrayJoinClause() (*ast.ArrayJoinClause, error) {
 		p.advance() // Consume comma
 	}
 	return clause, nil
+}
+
+// isOrderByAll reports whether the current token is the ALL of ClickHouse's
+// ORDER BY ALL (sort by all selected columns), as opposed to the start of an
+// expression: it is followed by ASC, DESC, NULLS, a comma or the end of the
+// clause.
+func (p *Parser) isOrderByAll() bool {
+	if !p.isType(models.TokenTypeAll) || p.dialect != string(keywords.DialectClickHouse) {
+		return false
+	}
+	switch p.peekToken().Token.Type {
+	case models.TokenTypeAsc, models.TokenTypeDesc, models.TokenTypeComma, models.TokenTypeSemicolon,
+		models.TokenTypeEOF, models.TokenTypeRParen, models.TokenTypeLimit, models.TokenTypeOffset:
+		return true
+	}
+	return equalsUpper(p.peekToken().Token.Value, "NULLS")
 }

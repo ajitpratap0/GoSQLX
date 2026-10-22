@@ -255,7 +255,7 @@ func writeIndexHead(buf *bytes.Buffer, tc *TableConstraint) {
 	}
 	if tc.IndexName != "" {
 		buf.WriteString(" ")
-		writeColumnName(buf, tc.IndexName)
+		writeTableAliasQ(buf, tc.IndexName, tc.IndexNameQuote)
 	}
 	if m := keywordOneOf(tc.Using, indexMethodKeywords); m != "" {
 		buf.WriteString(" USING ")
@@ -320,7 +320,7 @@ func writeTableConstraint(buf *bytes.Buffer, tc *TableConstraint) {
 		buf.WriteString(tc.Type)
 		if tc.IndexName != "" {
 			buf.WriteString(" ")
-			writeColumnName(buf, tc.IndexName)
+			writeTableAliasQ(buf, tc.IndexName, tc.IndexNameQuote)
 		}
 		if m := keywordOneOf(tc.Using, indexMethodKeywords); m != "" {
 			buf.WriteString(" USING ")
@@ -344,7 +344,7 @@ func writeTableConstraint(buf *bytes.Buffer, tc *TableConstraint) {
 		}
 	case "PROJECTION":
 		buf.WriteString("PROJECTION ")
-		writeColumnName(buf, tc.IndexName)
+		writeTableAliasQ(buf, tc.IndexName, tc.IndexNameQuote)
 		writeSpacedArgs(buf, tc.Text)
 	default:
 		// The parser only stores the kinds above; any other kind can only
@@ -356,7 +356,7 @@ func writeTableConstraint(buf *bytes.Buffer, tc *TableConstraint) {
 // writeClickHouseIndex writes INDEX name expr TYPE type GRANULARITY n.
 func writeClickHouseIndex(buf *bytes.Buffer, tc *TableConstraint) {
 	buf.WriteString("INDEX ")
-	writeColumnName(buf, tc.IndexName)
+	writeTableAliasQ(buf, tc.IndexName, tc.IndexNameQuote)
 	if len(tc.Exprs) > 0 {
 		buf.WriteString(" ")
 		writeExpr(buf, tc.Exprs[0])

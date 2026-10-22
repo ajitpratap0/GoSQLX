@@ -372,6 +372,21 @@ func (c *metadataCollector) addTable(name string) {
 	}
 }
 
+// addTableRef adds the table a reference names; a parenthesized join group
+// adds the tables inside it.
+func (c *metadataCollector) addTableRef(t *ast.TableReference) {
+	if g := ast.TableRefJoinGroup(t); g != nil {
+		for i := range g.Tables {
+			c.addTableRef(&g.Tables[i])
+		}
+		for i := range g.Joins {
+			c.addTableRef(&g.Joins[i].Right)
+		}
+		return
+	}
+	c.addTable(t.Name)
+}
+
 // addDMLTargetTables adds the extra UPDATE / DELETE targets and the joined
 // tables of a multi-table statement.
 func (c *metadataCollector) addDMLTargetTables(d *ast.DMLTargetFields) {
@@ -379,7 +394,7 @@ func (c *metadataCollector) addDMLTargetTables(d *ast.DMLTargetFields) {
 		c.addTable(d.Tables[i].Name)
 	}
 	for i := range d.Joins {
-		c.addTable(d.Joins[i].Right.Name)
+		c.addTableRef(&d.Joins[i].Right)
 	}
 }
 
@@ -417,11 +432,11 @@ func (c *metadataCollector) collectFromNode(node ast.Node) {
 	case *ast.Identifier:
 		c.addColumn(n.Table, n.Name, c.want)
 	case *ast.SelectStatement:
-		for _, from := range n.From {
-			c.addTable(from.Name)
+		for i := range n.From {
+			c.addTableRef(&n.From[i])
 		}
-		for _, join := range n.Joins {
-			c.addTable(join.Right.Name)
+		for i := range n.Joins {
+			c.addTableRef(&n.Joins[i].Right)
 		}
 		for _, col := range n.Columns {
 			c.collectFromExpression(col, c.want)
@@ -481,8 +496,8 @@ func (c *metadataCollector) collectFromNode(node ast.Node) {
 		if len(n.From) == 0 {
 			c.addDMLTargetTables(&n.DMLTargetFields)
 		} else {
-			for _, j := range n.Joins {
-				c.addTable(j.Right.Name)
+			for i := range n.Joins {
+				c.addTableRef(&n.Joins[i].Right)
 			}
 		}
 		c.collectFromExpression(n.Where, c.want)

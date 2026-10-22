@@ -23,6 +23,7 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/dialect"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
@@ -56,6 +57,10 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 		}
 		arguments = args
 	} else if !p.isType(models.TokenTypeRParen) {
+		// A few functions take arguments with their own syntax (CURSOR(SELECT
+		// ...), JSON_OBJECT(k VALUE v), XMLTABLE(... COLUMNS ...)); every other
+		// call skips those checks.
+		quirky := hasQuirkyArgs(funcName)
 		for !p.isType(models.TokenTypeOrder) {
 			// Named argument form: `name => expr` (Snowflake FLATTEN,
 			// BigQuery, Oracle, PostgreSQL procedural calls). Detect by a
@@ -86,9 +91,46 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 				return nil, p.expectedError(", or )")
 			}
 
-			arg, err := p.parseExpression()
-			if err != nil {
+			var arg ast.Expression
+			var err error
+			if quirky && p.isBareSubqueryArg(funcName) {
+				// Oracle CURSOR(SELECT ...) / MULTISET(SELECT ...): the query is
+				// the argument, with no parentheses of its own.
+				pos := p.currentLocation()
+				sub, err := p.parseSubquery()
+				if err != nil {
+					return nil, err
+				}
+				arguments = append(arguments, &ast.SubqueryExpression{Subquery: sub, Pos: pos, Bare: true})
+				if p.isType(models.TokenTypeRParen) {
+					break
+				}
+				return nil, p.expectedError(")")
+			}
+			if quirky && p.isJSONObjectFunc(funcName) {
+				if arg, err = p.parseJSONObjectArg(); err != nil {
+					return nil, err
+				}
+			} else if quirky && p.isOpenRowsetBulk(funcName) {
+				// SQL Server OPENROWSET(BULK 'path', options): BULK introduces
+				// the file name.
+				ka := &ast.KeywordArgument{Keyword: "BULK", Pos: p.currentLocation()}
+				p.advance() // Consume BULK
+				if ka.Value, err = p.parseExpression(); err != nil {
+					return nil, err
+				}
+				arg = ka
+			} else if arg, err = p.parseExpression(); err != nil {
 				return nil, err
+			}
+			if quirky && p.isType(models.TokenTypeAs) && isXMLNamedArgFunc(funcName) {
+				// XMLATTRIBUTES(col AS "name") / XMLFOREST(col AS name)
+				p.advance() // Consume AS
+				if !p.isAliasAfterAS() {
+					return nil, p.expectedError("name after AS")
+				}
+				arg = &ast.AliasedExpression{Expr: arg, Alias: p.currentToken.Token.Value, AliasQuote: p.currentNameQuote()}
+				p.advance()
 			}
 			arguments = append(arguments, arg)
 
@@ -99,6 +141,16 @@ func (p *Parser) parseFunctionCall(funcName string) (*ast.FunctionCall, error) {
 				break
 			} else if p.isWord("SEPARATOR") {
 				// MySQL GROUP_CONCAT SEPARATOR clause; parsed below.
+				break
+			} else if quirky && p.isClauseArgument(funcName) {
+				// JSON_TABLE(doc, path COLUMNS (...)), XMLTABLE(xpath PASSING x
+				// COLUMNS ...): the argument and its clause words are one
+				// argument.
+				last, err := p.parseClauseArgument(funcName, arg)
+				if err != nil {
+					return nil, err
+				}
+				arguments[len(arguments)-1] = last
 				break
 			} else {
 				return nil, p.expectedError(", or )")
@@ -624,3 +676,100 @@ func (p *Parser) parseNullsClause() (*bool, error) {
 }
 
 // parseGroupingExpressionList parses a parenthesized, comma-separated list of expressions
+
+// isOpenRowsetBulk reports whether the current tokens are the BULK 'file' that
+// starts the arguments of a SQL Server OPENROWSET call named funcName.
+func (p *Parser) isOpenRowsetBulk(funcName string) bool {
+	if !p.IsSQLServer() || !p.isUnquotedWord("BULK") || !equalsUpper(funcName, "OPENROWSET") {
+		return false
+	}
+	t := p.peekToken().Token.Type
+	return t == models.TokenTypeString || t == models.TokenTypeSingleQuotedString
+}
+
+// isBareSubqueryArg reports whether the current token starts the query that
+// is the argument of an Oracle CURSOR(...) or MULTISET(...) call.
+func (p *Parser) isBareSubqueryArg(funcName string) bool {
+	if !p.IsOracle() || !p.isAnyType(models.TokenTypeSelect, models.TokenTypeWith) {
+		return false
+	}
+	return equalsUpper(funcName, "CURSOR") || equalsUpper(funcName, "MULTISET")
+}
+
+// isJSONObjectFunc reports whether funcName is a JSON_OBJECT / JSON_OBJECTAGG
+// call whose arguments may use the KEY ... VALUE ... and name: value forms.
+func (p *Parser) isJSONObjectFunc(funcName string) bool {
+	if !p.dialectAllows(dialect.Oracle, dialect.SQLServer, dialect.PostgreSQL) {
+		return false
+	}
+	return equalsUpper(funcName, "JSON_OBJECT") || equalsUpper(funcName, "JSON_OBJECTAGG")
+}
+
+// parseJSONObjectArg parses one argument of JSON_OBJECT: a plain expression,
+// or a pair written [KEY] name VALUE value or name : value.
+func (p *Parser) parseJSONObjectArg() (ast.Expression, error) {
+	pos := p.currentLocation()
+	keyword := false
+	if p.isUnquotedWord("KEY") {
+		switch p.peekToken().Token.Type {
+		case models.TokenTypeComma, models.TokenTypeRParen, models.TokenTypeColon, models.TokenTypePeriod, models.TokenTypeLParen:
+		default:
+			keyword = !p.peekValueIs(1, "VALUE")
+		}
+	}
+	if keyword {
+		p.advance() // Consume KEY
+	}
+	key, err := p.parseExpression()
+	if err != nil {
+		return nil, err
+	}
+	colon := false
+	switch {
+	case p.isUnquotedWord("VALUE"):
+		p.advance() // Consume VALUE
+	case p.isType(models.TokenTypeColon):
+		colon = true
+		p.advance() // Consume :
+	default:
+		if keyword {
+			return nil, p.expectedError("VALUE or : after the JSON_OBJECT key")
+		}
+		return key, nil
+	}
+	value, err := p.parseExpression()
+	if err != nil {
+		return nil, err
+	}
+	return &ast.JSONObjectEntry{Key: key, Value: value, KeyKeyword: keyword, Colon: colon, Pos: pos}, nil
+}
+
+// isXMLNamedArgFunc reports whether funcName is an SQL/XML constructor whose
+// arguments are named with AS: XMLATTRIBUTES(a AS "x"), XMLFOREST(a AS x).
+func isXMLNamedArgFunc(funcName string) bool {
+	return equalsUpper(funcName, "XMLATTRIBUTES") || equalsUpper(funcName, "XMLFOREST")
+}
+
+// hasQuirkyArgs reports whether funcName is one of the functions whose
+// arguments have syntax of their own: CURSOR, MULTISET, XMLTABLE, XMLFOREST,
+// OPENROWSET, JSON_TABLE, JSON_OBJECT, XMLATTRIBUTES and JSON_OBJECTAGG. It
+// looks at the name length first so ordinary calls pay almost nothing.
+func hasQuirkyArgs(funcName string) bool {
+	switch len(funcName) {
+	case 6:
+		return equalsUpper(funcName, "CURSOR")
+	case 8:
+		return equalsUpper(funcName, "MULTISET") || equalsUpper(funcName, "XMLTABLE")
+	case 9:
+		return equalsUpper(funcName, "XMLFOREST")
+	case 10:
+		return equalsUpper(funcName, "OPENROWSET") || equalsUpper(funcName, "JSON_TABLE")
+	case 11:
+		return equalsUpper(funcName, "JSON_OBJECT")
+	case 13:
+		return equalsUpper(funcName, "XMLATTRIBUTES")
+	case 14:
+		return equalsUpper(funcName, "JSON_OBJECTAGG")
+	}
+	return false
+}

@@ -416,14 +416,17 @@ func checkQuotedTokens(input, output []models.TokenWithSpan, dialect string) err
 	}
 	defer release()
 
+	input = mergeAdjacentStrings(input, dialect)
+	output = mergeAdjacentStrings(output, dialect)
+
 	pool := make(map[string]int)
 	for _, t := range output {
 		if isStringLiteralToken(t.Token) || bw.isQuotedIdent(t.Token) {
 			pool[t.Token.Value]++
 		}
 	}
-	for _, t := range input {
-		if !isStringLiteralToken(t.Token) {
+	for i, t := range input {
+		if !isStringLiteralToken(t.Token) || isStringAlias(input, i, dialect) {
 			continue
 		}
 		if pool[t.Token.Value] == 0 {
@@ -431,8 +434,8 @@ func checkQuotedTokens(input, output []models.TokenWithSpan, dialect string) err
 		}
 		pool[t.Token.Value]--
 	}
-	for _, t := range input {
-		if !bw.isQuotedIdent(t.Token) {
+	for i, t := range input {
+		if !bw.isQuotedIdent(t.Token) && !isStringAlias(input, i, dialect) {
 			continue
 		}
 		v := t.Token.Value
@@ -445,6 +448,64 @@ func checkQuotedTokens(input, output []models.TokenWithSpan, dialect string) err
 		}
 	}
 	return nil
+}
+
+// isStringAlias reports whether toks[i] is a string literal that names a
+// column, as in "SELECT a AS 'x'" (MySQL, MariaDB, SQLite). The parser reads
+// it as the alias x, the same as the delimited name, so the formatter writes
+// it as a name rather than as a string.
+func isStringAlias(toks []models.TokenWithSpan, i int, dialect string) bool {
+	switch strings.ToLower(dialect) {
+	case "mysql", "mariadb", "sqlite":
+	default:
+		return false
+	}
+	t := toks[i].Token
+	if i == 0 || (t.Type != models.TokenTypeString && t.Type != models.TokenTypeSingleQuotedString) {
+		return false
+	}
+	return toks[i-1].Token.Type == models.TokenTypeAs
+}
+
+// mergeAdjacentStrings returns toks with each run of adjacent single-quoted
+// string tokens merged into one token, for the dialects whose parser reads
+// 'a' 'b' as the literal 'ab' (MySQL, MariaDB, PostgreSQL). The formatter
+// writes the merged literal, which means the same. Other dialects, and toks
+// without such a run, are returned as they are.
+func mergeAdjacentStrings(toks []models.TokenWithSpan, dialect string) []models.TokenWithSpan {
+	switch strings.ToLower(dialect) {
+	case "mysql", "mariadb", "postgresql", "postgres":
+	default:
+		return toks
+	}
+	plain := func(t models.Token) bool {
+		return t.Type == models.TokenTypeString || t.Type == models.TokenTypeSingleQuotedString
+	}
+	var out []models.TokenWithSpan
+	for i := 0; i < len(toks); i++ {
+		if !plain(toks[i].Token) || i+1 >= len(toks) || !plain(toks[i+1].Token) {
+			if out != nil {
+				out = append(out, toks[i])
+			}
+			continue
+		}
+		if out == nil {
+			out = append(make([]models.TokenWithSpan, 0, len(toks)), toks[:i]...)
+		}
+		merged := toks[i]
+		var sb strings.Builder
+		sb.WriteString(merged.Token.Value)
+		for i+1 < len(toks) && plain(toks[i+1].Token) {
+			i++
+			sb.WriteString(toks[i].Token.Value)
+		}
+		merged.Token.Value = sb.String()
+		out = append(out, merged)
+	}
+	if out == nil {
+		return toks
+	}
+	return out
 }
 
 // checkMySQLDoubleQuotes requires MySQL/MariaDB output to keep exactly the

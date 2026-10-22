@@ -56,9 +56,19 @@ func TestFormat_PreservesCommentsAndHints(t *testing.T) {
 }
 
 func TestFormat_RefusesToDropAnOptimizerHint(t *testing.T) {
-	_, err := Format("select * from (select /*+ FULL(t) */ a from t) s", DefaultFormatOptions())
+	_, err := Format("select a from /*+ FULL(t) */ t", DefaultFormatOptions())
 	if !errors.Is(err, formatter.ErrUnplaceableComment) {
 		t.Fatalf("err = %v, want it to wrap formatter.ErrUnplaceableComment", err)
+	}
+}
+
+func TestFormat_KeepsHintInSubquery(t *testing.T) {
+	got, err := Format("select * from (select /*+ FULL(t) */ a from t) s", DefaultFormatOptions())
+	if err != nil {
+		t.Fatalf("Format: %v", err)
+	}
+	if !strings.Contains(got, "SELECT /*+ FULL(t) */ a") {
+		t.Fatalf("got %q, lost the hint after the inner SELECT", got)
 	}
 }
 

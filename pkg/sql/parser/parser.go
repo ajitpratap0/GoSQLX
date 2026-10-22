@@ -770,6 +770,14 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 			ss.Pos = stmtPos
 		}
 		return stmt, nil
+	case models.TokenTypeValues:
+		// Stand-alone table value constructor: VALUES (1, 'a'), (2, 'b'),
+		// optionally combined with set operations.
+		v, err := p.parseValuesQuery()
+		if err != nil {
+			return nil, err
+		}
+		return p.parseSetOperationChain(v, false)
 	case models.TokenTypeInsert:
 		stmtPos := p.currentLocation()
 		p.advance()
@@ -784,6 +792,13 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		}
 		return stmt, nil
 	case models.TokenTypeUpdate:
+		// SQL Server UPDATE STATISTICS table [index | (stats, ...)] [WITH ...]
+		// is a maintenance command, not a DML statement.
+		if p.dialect == string(keywords.DialectSQLServer) && p.atStatementBoundary() &&
+			p.utilityWord(p.currentPos+1) == "STATISTICS" {
+			stmt, _, err := p.parseVerbatimStatement("UPDATE STATISTICS")
+			return stmt, err
+		}
 		stmtPos := p.currentLocation()
 		p.advance()
 		stmt, err := p.parseUpdateStatement()
@@ -1093,6 +1108,16 @@ func (p *Parser) parseIdentAsString() string {
 		return ""
 	}
 	return ident.Name
+}
+
+// parseIdentAsStringQuoted is parseIdentAsString that also returns how the
+// name was delimited (see ast.NameQuote).
+func (p *Parser) parseIdentAsStringQuoted() (string, ast.NameQuote) {
+	ident := p.parseIdent()
+	if ident == nil {
+		return "", 0
+	}
+	return ident.Name, ident.Quotes
 }
 
 // parseBareWordAsString parses any word-like token (identifier or keyword) and

@@ -483,6 +483,11 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 			if e.Expr != nil {
 				workQueue = append(workQueue, e.Expr)
 			}
+			for _, a := range e.Args {
+				if a != nil {
+					workQueue = append(workQueue, a)
+				}
+			}
 			*e = FieldAccessExpression{}
 
 		case *CastExpression:
@@ -715,9 +720,28 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 					workQueue = append(workQueue, r)
 				}
 			}
+			for _, a := range e.Apply {
+				if a != nil {
+					workQueue = append(workQueue, a)
+				}
+			}
 			e.Star, e.Ilike = nil, nil
 			clear(e.Replace)
 			e.Replace = e.Replace[:0]
+			clear(e.Apply)
+			e.Apply = e.Apply[:0]
+
+		case *ObjectLiteral:
+			for i := range e.Entries {
+				if e.Entries[i].Key != nil {
+					workQueue = append(workQueue, e.Entries[i].Key)
+				}
+				if e.Entries[i].Value != nil {
+					workQueue = append(workQueue, e.Entries[i].Value)
+				}
+				e.Entries[i] = ObjectEntry{}
+			}
+			e.Entries = e.Entries[:0]
 
 		case *VariantPath:
 			if e.Root != nil {

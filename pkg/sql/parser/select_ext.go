@@ -62,6 +62,9 @@ func (p *Parser) isSelectExtClauseStart() bool {
 		return p.isUnquotedWord("STRAIGHT_JOIN") || p.isLockInShareMode()
 	case string(keywords.DialectSQLServer):
 		return p.isQueryHintStart()
+	case string(keywords.DialectOracle):
+		// The error logging clause of INSERT ... SELECT ... LOG ERRORS.
+		return p.isUnquotedWord("LOG") && p.peekValueIs(1, "ERRORS")
 	}
 	return false
 }
@@ -165,6 +168,8 @@ func (p *Parser) isStarModifierStart() bool {
 			(next == models.TokenTypeLParen || next == models.TokenTypeIdentifier)
 	case p.isUnquotedWord("ILIKE"):
 		return p.dialect == string(keywords.DialectSnowflake)
+	case p.isUnquotedWord("APPLY"):
+		return p.dialect == string(keywords.DialectClickHouse) && next == models.TokenTypeLParen
 	}
 	return false
 }
@@ -222,6 +227,18 @@ func (p *Parser) parseStarModifiers(star ast.Expression) (ast.Expression, error)
 				return nil, p.expectedError(") after REPLACE list")
 			}
 			p.advance() // )
+		case p.isUnquotedWord("APPLY"):
+			p.advance() // APPLY
+			p.advance() // (
+			fn, err := p.parseExpression()
+			if err != nil {
+				return nil, err
+			}
+			if !p.isType(models.TokenTypeRParen) {
+				return nil, p.expectedError(") after APPLY function")
+			}
+			p.advance() // )
+			se.Apply = append(se.Apply, fn)
 		default: // RENAME
 			p.advance() // RENAME
 			paren := p.isType(models.TokenTypeLParen)
@@ -548,6 +565,10 @@ func (p *Parser) parseLimitOffsetInto(s *ast.SelectStatement) error {
 			if err := p.parseOffsetValue(s); err != nil {
 				return err
 			}
+		case s.RowsExamined == nil && sawLimit && p.isRowsExamined():
+			if err := p.parseRowsExamined(s); err != nil {
+				return err
+			}
 		default:
 			return nil
 		}
@@ -611,10 +632,28 @@ func (p *Parser) parseOffsetValue(s *ast.SelectStatement) error {
 		return err
 	}
 	s.Offset, s.OffsetExpr = n, e
-	if p.isAnyType(models.TokenTypeRow, models.TokenTypeRows) {
+	if p.isAnyType(models.TokenTypeRow, models.TokenTypeRows) && !p.isRowsExamined() {
 		s.OffsetRows = true
 		p.advance()
 	}
+	return nil
+}
+
+// isRowsExamined reports whether the current tokens are MariaDB's
+// ROWS EXAMINED, the end of a LIMIT clause.
+func (p *Parser) isRowsExamined() bool {
+	return p.isMariaDB() && p.isAnyType(models.TokenTypeRows) && p.peekValueIs(1, "EXAMINED")
+}
+
+// parseRowsExamined parses "ROWS EXAMINED n" into s; the current token is ROWS.
+func (p *Parser) parseRowsExamined(s *ast.SelectStatement) error {
+	p.advance() // Consume ROWS
+	p.advance() // Consume EXAMINED
+	n, err := p.parseExpression()
+	if err != nil {
+		return err
+	}
+	s.RowsExamined = n
 	return nil
 }
 

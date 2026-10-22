@@ -229,7 +229,7 @@ func TestCLI_FormatKeepsCommentsAndHints(t *testing.T) {
 	}
 
 	// A hint that cannot be put back refuses the file and leaves it alone.
-	original := "SELECT * FROM (SELECT /*+ FULL(t) */ a FROM t) s -- keep\n"
+	original := "SELECT a FROM /*+ FULL(t) */ t -- keep\n"
 	path := writeTemp(t, "hint.sql", original)
 	res = runCLI(t, nil, "format", "-i", path)
 	if res.err == nil {

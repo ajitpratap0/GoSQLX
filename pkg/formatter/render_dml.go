@@ -187,6 +187,27 @@ func writeInsertAfterSource(sb *strings.Builder, f *nodeFormatter, i *ast.Insert
 // writeInsertTail writes RETURNING [INTO] and the ClickHouse FORMAT name.
 func writeInsertTail(sb *strings.Builder, f *nodeFormatter, i *ast.InsertStatement) {
 	writeReturning(sb, f, i.Returning, i.ReturningInto)
+	if l := i.LogErrors; l != nil {
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(f.kw("LOG ERRORS"))
+		if l.Into != "" {
+			sb.WriteString(" ")
+			sb.WriteString(f.kw("INTO"))
+			sb.WriteString(" ")
+			sb.WriteString(ast.QuoteQualifiedNameWith(l.Into, f.nq(l.IntoQuote)))
+		}
+		if l.Tag != nil {
+			sb.WriteString(" (")
+			sb.WriteString(exprSQL(l.Tag))
+			sb.WriteString(")")
+		}
+		if lim := ast.LogErrorsRejectLimitText(l.RejectLimit); lim != "" {
+			sb.WriteString(" ")
+			sb.WriteString(f.kw("REJECT LIMIT"))
+			sb.WriteString(" ")
+			sb.WriteString(f.kw(lim))
+		}
+	}
 	if i.DataFormat != "" {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(f.kw("FORMAT"))

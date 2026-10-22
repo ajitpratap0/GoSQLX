@@ -165,10 +165,10 @@ func (p *Parser) parseBitwiseExpression(minPrec int) (ast.Expression, error) {
 }
 
 // sqlServerBitwise reports whether the current token is a T-SQL bitwise
-// operator (&, |), which shares the additive precedence level there.
+// operator (&, |, ^), which shares the additive precedence level there.
 func (p *Parser) sqlServerBitwise() bool {
 	t := p.currentToken.Token.Type
-	return (t == models.TokenTypeAmpersand || t == models.TokenTypePipe) && p.IsSQLServer()
+	return (t == models.TokenTypeAmpersand || t == models.TokenTypePipe || t == models.TokenTypeCaret) && p.IsSQLServer()
 }
 
 // mysqlWordMulOperator reports whether the current token is MySQL's integer

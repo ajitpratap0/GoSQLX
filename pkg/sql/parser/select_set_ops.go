@@ -282,8 +282,21 @@ func (p *Parser) attachParenthesizedQueryTail(stmt ast.Statement) error {
 	}
 	if target == nil || target.OrderBy != nil || target.HasLimit() ||
 		target.HasOffset() || target.LimitBy != nil || target.Fetch != nil || target.For != nil {
+		// The clauses cannot move into the last operand without changing
+		// which rows they apply to. A set operation keeps them as the tail of
+		// the whole operation; a single parenthesized query has no node for
+		// them.
+		// That only holds when the last operand is set apart by parentheses;
+		// an unparenthesized last SELECT with LIMIT already carries a clause
+		// that applies to the whole operation, and a second one would be
+		// written in an order that changes the result.
+		if op, ok := stmt.(*ast.SetOperation); ok && op.Tail == nil && owner != nil {
+			if _, isSelect := owner.Right.(*ast.SelectStatement); owner.RightParenthesized || !isSelect {
+				return p.parseQueryTail(op)
+			}
+		}
 		return goerrors.UnsupportedFeatureError(
-			"ORDER BY/LIMIT/OFFSET/FETCH after a parenthesized query that has its own ORDER BY/LIMIT/OFFSET/FETCH or is a set operation",
+			"ORDER BY/LIMIT/OFFSET/FETCH after a parenthesized query that has its own ORDER BY/LIMIT/OFFSET/FETCH",
 			p.currentLocation(),
 			"",
 		)
@@ -304,6 +317,26 @@ func (p *Parser) attachParenthesizedQueryTail(stmt ast.Statement) error {
 			return err
 		}
 	}
+	return nil
+}
+
+// parseQueryTail parses an ORDER BY / LIMIT / OFFSET / FETCH into the Tail of
+// the set operation op, whose last operand keeps its parentheses.
+func (p *Parser) parseQueryTail(op *ast.SetOperation) error {
+	tmp := &ast.SelectStatement{}
+	var err error
+	if tmp.OrderBy, err = p.parseOrderByClause(); err != nil {
+		return err
+	}
+	if err = p.parseLimitOffsetInto(tmp); err != nil {
+		return err
+	}
+	if p.isType(models.TokenTypeFetch) {
+		if tmp.Fetch, err = p.parseFetchClause(); err != nil {
+			return err
+		}
+	}
+	op.Tail = ast.QueryTailFrom(tmp)
 	return nil
 }
 

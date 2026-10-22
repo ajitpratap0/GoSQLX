@@ -95,6 +95,7 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
@@ -126,8 +127,17 @@ func (f *Formatter) Format(sql string) (string, error) {
 		return "", nil
 	}
 
+	// The dialect selects the tokenizer and parser rules (string escapes,
+	// quoting, dialect-only syntax) as well as the rendering. An unknown
+	// dialect name is ignored for tokenizing and parsing, as before.
+	dialect := keywords.SQLDialect(strings.ToLower(f.opts.Dialect))
+	useDialect := dialect != "" && keywords.IsValidDialect(string(dialect))
+
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
+	if useDialect {
+		tkz.SetDialect(dialect)
+	}
 
 	tokens, err := tkz.TokenizeString(sql)
 	if err != nil {
@@ -143,6 +153,9 @@ func (f *Formatter) Format(sql string) (string, error) {
 
 	p := parser.GetParser()
 	defer parser.PutParser(p)
+	if useDialect {
+		p.ApplyOptions(parser.WithDialect(string(dialect)))
+	}
 	parsedAST, err := p.ParseFromModelTokens(tokens)
 	if err != nil {
 		return "", fmt.Errorf("parsing failed: %w", err)

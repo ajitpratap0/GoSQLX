@@ -226,6 +226,14 @@ func (p *Parser) parseInsertStatement() (ast.Statement, error) {
 		}
 	}
 
+	// Oracle error logging clause: LOG ERRORS [INTO t] [(tag)] [REJECT LIMIT n]
+	if p.IsOracle() && p.isUnquotedWord("LOG") && p.peekValueIs(1, "ERRORS") {
+		var err error
+		if stmt.LogErrors, err = p.parseLogErrors(); err != nil {
+			return nil, err
+		}
+	}
+
 	// ClickHouse INSERT ... VALUES (...) FORMAT <name> trailing format hint.
 	if p.dialect == string(keywords.DialectClickHouse) && p.isTokenMatch("FORMAT") {
 		if err := p.parseInsertFormat(stmt); err != nil {
@@ -592,4 +600,46 @@ func (p *Parser) parseOnDuplicateKeyUpdateClause() (*ast.UpsertClause, error) {
 		return nil, err
 	}
 	return &ast.UpsertClause{Updates: updates}, nil
+}
+
+// parseLogErrors parses Oracle's LOG ERRORS [INTO [schema.]table] [(tag)]
+// [REJECT LIMIT {n | UNLIMITED}]; the current token is LOG.
+func (p *Parser) parseLogErrors() (*ast.LogErrorsClause, error) {
+	l := &ast.LogErrorsClause{}
+	p.advance() // Consume LOG
+	p.advance() // Consume ERRORS
+	if p.isType(models.TokenTypeInto) {
+		p.advance() // Consume INTO
+		name, quote, err := p.parseQualifiedNameQuoted()
+		if err != nil {
+			return nil, err
+		}
+		l.Into, l.IntoQuote = name, quote
+	}
+	if p.isType(models.TokenTypeLParen) {
+		p.advance() // Consume (
+		tag, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+		if !p.isType(models.TokenTypeRParen) {
+			return nil, p.expectedError(") after the LOG ERRORS tag")
+		}
+		p.advance() // Consume )
+		l.Tag = tag
+	}
+	if p.isUnquotedWord("REJECT") && p.peekValueIs(1, "LIMIT") {
+		p.advance() // Consume REJECT
+		p.advance() // Consume LIMIT
+		switch {
+		case p.isUnquotedWord("UNLIMITED"):
+			l.RejectLimit = "UNLIMITED"
+		case p.isType(models.TokenTypeNumber) && ast.LogErrorsRejectLimitText(p.currentToken.Token.Value) != "":
+			l.RejectLimit = p.currentToken.Token.Value
+		default:
+			return nil, p.expectedError("integer or UNLIMITED after REJECT LIMIT")
+		}
+		p.advance()
+	}
+	return l, nil
 }

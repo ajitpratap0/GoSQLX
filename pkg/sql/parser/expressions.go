@@ -257,8 +257,8 @@ func (p *Parser) parseAdditiveExpression() (ast.Expression, error) {
 
 // parseMultiplicativeExpression parses expressions with *, /, and % operators
 func (p *Parser) parseMultiplicativeExpression() (ast.Expression, error) {
-	// Parse the left side using JSON operator expression (higher precedence)
-	left, err := p.parseJSONExpression()
+	// Parse the left side using the power/XOR expression (higher precedence)
+	left, err := p.parsePowerExpression()
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +282,7 @@ func (p *Parser) parseMultiplicativeExpression() (ast.Expression, error) {
 		}
 		p.advance() // Consume operator
 
-		right, err := p.parseJSONExpression()
+		right, err := p.parsePowerExpression()
 		if err != nil {
 			return nil, err
 		}
@@ -295,6 +295,43 @@ func (p *Parser) parseMultiplicativeExpression() (ast.Expression, error) {
 		}
 	}
 
+	return left, nil
+}
+
+// caretOperator reports whether the current token is the ^ operator at a
+// precedence tighter than * and /: exponentiation in PostgreSQL and bitwise
+// XOR in MySQL and MariaDB. SQL Server's ^ is a bitwise operator at the
+// additive level (see sqlServerBitwise); the other dialects have no ^.
+func (p *Parser) caretOperator() bool {
+	if !p.isType(models.TokenTypeCaret) {
+		return false
+	}
+	return p.dialect == "" || p.dialect == string(keywords.DialectGeneric) ||
+		p.IsPostgreSQL() || p.isMySQLFamily()
+}
+
+// parsePowerExpression parses the ^ operator (left-associative), which binds
+// tighter than *, / and %.
+func (p *Parser) parsePowerExpression() (ast.Expression, error) {
+	left, err := p.parseJSONExpression()
+	if err != nil || !p.caretOperator() {
+		return left, err
+	}
+	return p.parsePowerTail(left)
+}
+
+// parsePowerTail continues a power expression after its left operand, with the
+// current token at ^.
+func (p *Parser) parsePowerTail(left ast.Expression) (ast.Expression, error) {
+	for p.caretOperator() {
+		opPos := p.currentLocation()
+		p.advance() // Consume ^
+		right, err := p.parseJSONExpression()
+		if err != nil {
+			return nil, err
+		}
+		left = &ast.BinaryExpression{Left: left, Operator: "^", Right: right, Pos: opPos}
+	}
 	return left, nil
 }
 

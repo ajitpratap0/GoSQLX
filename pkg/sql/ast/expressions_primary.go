@@ -39,6 +39,7 @@ import (
 //	CONVERT(x USING utf8mb4)           USING utf8mb4 (TypeName)
 //	TRY_PARSE('1' AS INT)              AS INT (TypeName)
 //	LISTAGG(a, ',' ON OVERFLOW TRUNCATE '...' WITH COUNT)
+//	OPENROWSET(BULK 'file.csv', SINGLE_CLOB)    BULK 'file.csv'
 //
 // Inside FunctionCall.Arguments a KeywordArgument is separated from the
 // previous argument by a space rather than a comma. Exactly one of Value and
@@ -71,6 +72,7 @@ var keywordArgumentKeywords = []string{
 	"FROM", "FOR", "IN", "PLACING", "USING", "AS",
 	"BOTH", "LEADING", "TRAILING",
 	"ON OVERFLOW ERROR", "ON OVERFLOW TRUNCATE", "WITH COUNT", "WITHOUT COUNT",
+	"BULK",
 }
 
 // KeywordArgumentText returns s when it is a keyword the parser produces for

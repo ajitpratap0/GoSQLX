@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+	"unsafe"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/metrics"
@@ -343,6 +344,23 @@ type Tokenizer struct {
 	inlLine int  // index into lineStarts of the cursor's line, plus one; 0 means unset
 	inlScan int  // byte offset the line has been scanned up to
 	inlCode bool // whether a non-whitespace byte was seen in [lineStart, inlScan)
+
+	// tokBuf is the token slice of the internal scratch path (package
+	// internal/tokscratch), which GoSQLX's own parse entry points use
+	// because they only read the tokens until the parser has copied them.
+	// It is reused across scratch calls, so its tokens are valid only until
+	// the next tokenize call, Reset or PutTokenizer. The public Tokenize
+	// methods never use it. INVARIANT: tokBuf[len:cap] is zero; Reset zeroes
+	// [0:len) and truncates it, or drops it when it has grown past
+	// maxRetainedTokBuf.
+	tokBuf []models.TokenWithSpan
+	// wordSlab is the Word chunk of the scratch path: scratch calls hand out
+	// Words from it first instead of allocating a fresh chunk, so it carries
+	// the same validity rule as tokBuf. wordSlabUsed is how many of its
+	// leading elements the last scratch call handed out; Reset zeroes them.
+	// INVARIANT: wordSlab[wordSlabUsed:cap] is zero.
+	wordSlab     []models.Word
+	wordSlabUsed int
 }
 
 // New creates a new Tokenizer with default configuration and keyword support.
@@ -496,7 +514,7 @@ func NewWithKeywords(kw *keywords.Keywords) (*Tokenizer, error) {
 //	tokens, _ := tkz.Tokenize([]byte(sql))
 //	// Correctly tokenizes Unicode identifiers and string literals
 func (t *Tokenizer) Tokenize(input []byte) ([]models.TokenWithSpan, error) {
-	return t.tokenize(context.Background(), input, "", false)
+	return t.tokenize(context.Background(), input, "", false, false)
 }
 
 // TokenizeContext processes the input and returns tokens with context support for cancellation.
@@ -521,7 +539,7 @@ func (t *Tokenizer) TokenizeContext(ctx context.Context, input []byte) ([]models
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return t.tokenize(ctx, input, "", false)
+	return t.tokenize(ctx, input, "", false, false)
 }
 
 // TokenizeString is Tokenize for SQL that is already held as a string.
@@ -541,7 +559,7 @@ func (t *Tokenizer) TokenizeContext(ctx context.Context, input []byte) ([]models
 //	defer PutTokenizer(tkz)
 //	tokens, err := tkz.TokenizeString("SELECT id FROM users")
 func (t *Tokenizer) TokenizeString(s string) ([]models.TokenWithSpan, error) {
-	return t.tokenize(context.Background(), stringBytes(s), s, true)
+	return t.tokenize(context.Background(), stringBytes(s), s, true, false)
 }
 
 // TokenizeStringContext is TokenizeContext for SQL that is already held as a
@@ -554,7 +572,7 @@ func (t *Tokenizer) TokenizeStringContext(ctx context.Context, s string) ([]mode
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return t.tokenize(ctx, stringBytes(s), s, true)
+	return t.tokenize(ctx, stringBytes(s), s, true, false)
 }
 
 // load resets t and installs the input for one call. Invariant: t.src and
@@ -582,7 +600,11 @@ func (t *Tokenizer) load(input []byte, src string) {
 //
 // ctx is checked every 100 tokens unless ctx.Done() is nil (as for
 // context.Background()), in which case no per-token check is made.
-func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, haveSrc bool) ([]models.TokenWithSpan, error) {
+//
+// When scratch is false the returned slice is freshly allocated and owned by
+// the caller. When scratch is true (the internal tokscratch path) it is built
+// in t.tokBuf and stays owned by t; see tokBuf.
+func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, haveSrc, scratch bool) ([]models.TokenWithSpan, error) {
 	// Record start time for metrics
 	startTime := time.Now()
 
@@ -610,7 +632,18 @@ func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, have
 		t.lineStarts[0] = 3
 	}
 
-	tokens := make([]models.TokenWithSpan, 0, estimatedTokens)
+	var tokens []models.TokenWithSpan
+	if scratch {
+		// load ran Reset, so tokBuf and wordSlab are empty and all zero.
+		if cap(t.tokBuf) >= estimatedTokens {
+			tokens = t.tokBuf[:0]
+		} else {
+			tokens = make([]models.TokenWithSpan, 0, estimatedTokens)
+		}
+		t.useWordSlab()
+	} else {
+		tokens = make([]models.TokenWithSpan, 0, estimatedTokens)
+	}
 
 	done := ctx.Done()
 
@@ -674,6 +707,13 @@ func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, have
 		}
 	}()
 
+	if scratch {
+		// Keep the slice, partial or not, so the next Reset zeroes it and
+		// the next scratch call can reuse it.
+		t.tokBuf = tokens
+		t.noteWordSlabUse()
+	}
+
 	if tokenErr != nil {
 		// Record metrics for failed tokenization
 		duration := time.Since(startTime)
@@ -687,6 +727,10 @@ func (t *Tokenizer) tokenize(ctx context.Context, input []byte, src string, have
 		Start: t.getCurrentPosition(),
 		End:   t.getCurrentPosition(),
 	})
+	if scratch {
+		t.tokBuf = tokens
+		t.noteWordSlabUse()
+	}
 
 	// Record metrics for successful tokenization
 	duration := time.Since(startTime)
@@ -806,6 +850,40 @@ func (t *Tokenizer) nextWordChunk() {
 	n = max(minWordChunk, min(n, maxWordChunk))
 	t.wordHint = max(0, t.wordHint-n)
 	t.wordChunk = make([]models.Word, 0, n)
+}
+
+// maxRetainedWordSlab is the largest wordSlab capacity (in Words, 32 B each
+// on 64-bit platforms, so 128 KiB) the scratch path keeps.
+const maxRetainedWordSlab = 4096
+
+// useWordSlab makes the retained wordSlab the first Word chunk of a scratch
+// call, first growing it to prescan's word hint when that fits under
+// maxRetainedWordSlab. Words beyond the slab come from nextWordChunk as usual.
+// It must run after prescan and before the first newWord.
+func (t *Tokenizer) useWordSlab() {
+	if need := t.wordHint; cap(t.wordSlab) < need && need <= maxRetainedWordSlab {
+		t.wordSlab = make([]models.Word, 0, need)
+	}
+	if c := cap(t.wordSlab); c > 0 {
+		t.wordChunk = t.wordSlab[:0]
+		t.wordHint = max(0, t.wordHint-c)
+	}
+}
+
+// noteWordSlabUse records in wordSlabUsed how much of wordSlab the current
+// scratch call handed out, so Reset zeroes exactly that prefix. The slab is
+// either still the current chunk or was filled before a later chunk replaced
+// it.
+func (t *Tokenizer) noteWordSlabUse() {
+	c := cap(t.wordSlab)
+	if c == 0 {
+		return
+	}
+	if cap(t.wordChunk) == c && unsafe.SliceData(t.wordChunk) == unsafe.SliceData(t.wordSlab) {
+		t.wordSlabUsed = len(t.wordChunk)
+	} else {
+		t.wordSlabUsed = c
+	}
 }
 
 // skipWhitespace advances past any whitespace

@@ -213,8 +213,9 @@ func TestIssue616_StrictModeEmptyStatementContext(t *testing.T) {
 func TestIssue616_NoLiteralSQLArgInParserErrorBuilders(t *testing.T) {
 	const errorsImport = "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	// realSourceSQLArgs are `sql` argument expressions that carry the real
-	// query source (validate.go receives the raw input bytes).
-	realSourceSQLArgs := map[string]bool{"string(input)": true}
+	// query source (validate.go receives the raw input as bytes or a string;
+	// sqlText.source returns it).
+	realSourceSQLArgs := map[string]bool{"string(input)": true, "in.source()": true}
 	fset := token.NewFileSet()
 
 	// builder name -> flattened index of its `sql` parameter

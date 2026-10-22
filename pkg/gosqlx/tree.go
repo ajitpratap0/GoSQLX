@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ajitpratap0/GoSQLX/internal/tokscratch"
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
@@ -319,7 +320,7 @@ func parseWithConfig(ctx context.Context, sql string, cfg parseOptions) (*ast.AS
 	if cfg.dialect != "" {
 		tkz.SetDialect(keywords.SQLDialect(cfg.dialect))
 	}
-	tokens, tokErr := tkz.TokenizeStringContext(ctx, sql)
+	tokens, tokErr := tokscratch.StringContext(ctx, tkz, sql)
 	if tokErr != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, wrapContextErr(ctxErr)

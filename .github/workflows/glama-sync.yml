@@ -83,6 +83,10 @@ jobs:
         run: |
           # Pin the build to the tagged commit (github.sha is main's head on dispatch).
           COMMIT_SHA="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq .sha)"
+          if ! printf '%s' "$COMMIT_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::could not resolve ${RELEASE_TAG} to a commit SHA (got '${COMMIT_SHA}')"
+            exit 1
+          fi
           export COMMIT_SHA
           if [ -z "$GLAMA_SESSION_COOKIE" ]; then
             echo "::warning::GLAMA_SESSION_COOKIE not set — skipping Glama build trigger."

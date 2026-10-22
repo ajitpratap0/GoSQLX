@@ -41,15 +41,27 @@ func SetOperatorsEqualPrecedence(dialect string) bool {
 // under which INTERSECT binds tighter than UNION and EXCEPT.
 //
 // A left operand that is a set operation is written without parentheses
-// unless they were in the source: the parser builds left-deep trees for
-// operators of equal precedence, and parenthesizing the left operand would
-// also move a WITH clause of its first SELECT inside the parentheses.
+// unless they were in the source, or unless it binds looser than s under
+// the precedence of the target dialect, as for a tree parsed with
+// equal-precedence rules (Oracle, SQLite: (A UNION B) INTERSECT C) and
+// written for another dialect. The parser builds left-deep trees for
+// operators of equal precedence. A WITH clause on the first SELECT keeps the
+// operand unparenthesized, since the parentheses would move it inside and
+// narrow its scope.
 func SetOperandNeedsParens(s *SetOperation, right bool, dialect string) bool {
 	if s == nil {
 		return false
 	}
 	if !right {
-		return s.LeftParenthesized
+		if s.LeftParenthesized {
+			return true
+		}
+		child, ok := s.Left.(*SetOperation)
+		if !ok || child == nil || SetOperatorsEqualPrecedence(dialect) {
+			return false
+		}
+		return setOperatorPrecedence(child.Operator) < setOperatorPrecedence(s.Operator) &&
+			!setOperationLeadsWithCTE(child)
 	}
 	if s.RightParenthesized {
 		return true
@@ -63,6 +75,21 @@ func SetOperandNeedsParens(s *SetOperation, right bool, dialect string) bool {
 	}
 	// a UNION b INTERSECT c already reads as a UNION (b INTERSECT c).
 	return setOperatorPrecedence(child.Operator) <= setOperatorPrecedence(s.Operator)
+}
+
+// setOperationLeadsWithCTE reports whether the first SELECT of s carries a
+// WITH clause.
+func setOperationLeadsWithCTE(s *SetOperation) bool {
+	var left Statement = s
+	for {
+		op, ok := left.(*SetOperation)
+		if !ok || op == nil {
+			break
+		}
+		left = op.Left
+	}
+	sel, ok := left.(*SelectStatement)
+	return ok && sel != nil && sel.With != nil
 }
 
 // SetOperationKeyword returns the operator of s as written by the renderers,

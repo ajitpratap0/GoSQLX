@@ -268,11 +268,15 @@ func (p *Parser) isQueryTailStart() bool {
 // right operand, without WITH); anything else returns E4001.
 func (p *Parser) attachParenthesizedQueryTail(stmt ast.Statement) error {
 	var target *ast.SelectStatement
+	var owner *ast.SetOperation
 	switch s := stmt.(type) {
 	case *ast.SelectStatement:
 		target = s
 	case *ast.SetOperation:
-		if right, ok := s.Right.(*ast.SelectStatement); ok && right.With == nil {
+		// The last operand can sit in a right-nested operation that bound
+		// tighter, as in A UNION B INTERSECT (C) ORDER BY x.
+		owner = lastSetOperation(s)
+		if right, ok := owner.Right.(*ast.SelectStatement); ok && right.With == nil {
 			target = right
 		}
 	}
@@ -284,8 +288,8 @@ func (p *Parser) attachParenthesizedQueryTail(stmt ast.Statement) error {
 			"",
 		)
 	}
-	if s, ok := stmt.(*ast.SetOperation); ok {
-		s.RightParenthesized = false
+	if owner != nil {
+		owner.RightParenthesized = false
 	}
 
 	var err error
@@ -301,6 +305,20 @@ func (p *Parser) attachParenthesizedQueryTail(stmt ast.Statement) error {
 		}
 	}
 	return nil
+}
+
+// lastSetOperation returns the set operation that holds the last operand of
+// s: s itself, or the innermost unparenthesized set operation on its right
+// spine.
+func lastSetOperation(s *ast.SetOperation) *ast.SetOperation {
+	for !s.RightParenthesized {
+		r, ok := s.Right.(*ast.SetOperation)
+		if !ok || r == nil {
+			break
+		}
+		s = r
+	}
+	return s
 }
 
 // isMinusSetOp returns true if the current token is the Snowflake / Oracle

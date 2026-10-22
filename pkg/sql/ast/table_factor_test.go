@@ -106,7 +106,11 @@ func TestSetOperandNeedsParens(t *testing.T) {
 		{"right union under union", &SetOperation{Left: sel, Operator: "UNION", Right: union}, true, "", true},
 		{"right union under intersect", &SetOperation{Left: sel, Operator: "INTERSECT", Right: union}, true, "postgresql", true},
 		{"right parenthesized select", &SetOperation{Left: sel, Operator: "UNION", Right: sel, RightParenthesized: true}, true, "", true},
-		{"left set operation", &SetOperation{Left: union, Operator: "INTERSECT", Right: sel}, false, "", false},
+		{"left looser set operation", &SetOperation{Left: union, Operator: "INTERSECT", Right: sel}, false, "", true},
+		{"left looser set operation oracle", &SetOperation{Left: union, Operator: "INTERSECT", Right: sel}, false, "oracle", false},
+		{"left looser set operation with CTE", &SetOperation{Left: &SetOperation{Left: &SelectStatement{With: &WithClause{}}, Operator: "UNION", Right: sel}, Operator: "INTERSECT", Right: sel}, false, "", false},
+		{"left equal set operation", &SetOperation{Left: union, Operator: "EXCEPT", Right: sel}, false, "", false},
+		{"left tighter set operation", &SetOperation{Left: inter, Operator: "UNION", Right: sel}, false, "", false},
 		{"left parenthesized", &SetOperation{Left: union, Operator: "INTERSECT", Right: sel, LeftParenthesized: true}, false, "", true},
 	}
 	for _, tc := range cases {

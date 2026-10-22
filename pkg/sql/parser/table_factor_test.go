@@ -73,6 +73,33 @@ func setOpShape(t *testing.T, s ast.Statement) string {
 	return ""
 }
 
+// TestSetOperationTailAfterNestedParenOperand checks that a query-level
+// ORDER BY / LIMIT after a parenthesized last operand is accepted when that
+// operand sits in a right-nested operation that bound tighter.
+func TestSetOperationTailAfterNestedParenOperand(t *testing.T) {
+	cases := []struct {
+		sql  string
+		want string
+	}{
+		{"SELECT a FROM t UNION SELECT a FROM u INTERSECT (SELECT a FROM v) ORDER BY a",
+			"SELECT a FROM t UNION SELECT a FROM u INTERSECT SELECT a FROM v ORDER BY a"},
+		{"SELECT 1 UNION ALL SELECT 2 INTERSECT (SELECT 3) LIMIT 1",
+			"SELECT 1 UNION ALL SELECT 2 INTERSECT SELECT 3 LIMIT 1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.sql, func(t *testing.T) {
+			stmt := parseOne(t, keywords.DialectPostgreSQL, tc.sql)
+			so, ok := stmt.(*ast.SetOperation)
+			if !ok {
+				t.Fatalf("want SetOperation, got %T", stmt)
+			}
+			if got := so.SQL(); got != tc.want {
+				t.Errorf("SQL() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestSetOperationPrecedence(t *testing.T) {
 	cases := []struct {
 		name    string

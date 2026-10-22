@@ -814,3 +814,44 @@ func TestAlterConnector_OwnerWords(t *testing.T) {
 		ast.ReleaseAST(tree)
 	}
 }
+
+// TestAlterTable_NextStatementWithoutSemicolon checks that an ALTER TABLE
+// followed by another statement without a ';' (common in T-SQL scripts) is
+// two statements, as it was before ALTER TABLE accepted action lists, and
+// that trailing junk is still an error.
+func TestAlterTable_NextStatementWithoutSemicolon(t *testing.T) {
+	tests := []struct {
+		name    string
+		dialect keywords.SQLDialect
+		sql     string
+		want    int // statement count; 0 means a parse error
+	}{
+		{"sqlserver add then update", keywords.DialectSQLServer, "ALTER TABLE t ADD c INT UPDATE t SET c = 1", 2},
+		{"sqlserver two alters", keywords.DialectSQLServer, "ALTER TABLE t ADD c INT\nALTER TABLE t ADD d INT", 2},
+		{"postgresql drop then select", keywords.DialectPostgreSQL, "ALTER TABLE t DROP COLUMN c SELECT 1", 2},
+		{"postgresql rename then select", keywords.DialectPostgreSQL, "ALTER TABLE t RENAME TO u SELECT 1", 2},
+		{"trailing junk", keywords.DialectPostgreSQL, "ALTER TABLE t DROP COLUMN c junk", 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, err := ParseWithDialect(tc.sql, tc.dialect)
+			if tc.want == 0 {
+				if err == nil {
+					ast.ReleaseAST(tree)
+					t.Fatalf("ParseWithDialect(%q) succeeded, want an error", tc.sql)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ParseWithDialect(%q): %v", tc.sql, err)
+			}
+			defer ast.ReleaseAST(tree)
+			if got := len(tree.Statements); got != tc.want {
+				t.Fatalf("got %d statements, want %d", got, tc.want)
+			}
+			if _, ok := tree.Statements[0].(*ast.AlterStatement); !ok {
+				t.Fatalf("statement 0 is %T, want *ast.AlterStatement", tree.Statements[0])
+			}
+		})
+	}
+}

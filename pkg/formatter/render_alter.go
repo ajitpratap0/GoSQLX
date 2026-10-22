@@ -37,8 +37,10 @@ func renderAlterStatement(a *ast.AlterStatement, opts ast.FormatOptions) string 
 	f := newNodeFormatter(opts)
 	f.sb.WriteString(f.kw("ALTER"))
 	for _, m := range a.Modifiers {
-		f.sb.WriteString(" ")
-		f.sb.WriteString(f.kw(m))
+		if m = alterWordsText(m); m != "" {
+			f.sb.WriteString(" ")
+			f.sb.WriteString(f.kw(m))
+		}
 	}
 	f.sb.WriteString(" ")
 	f.sb.WriteString(f.kw("TABLE"))
@@ -52,11 +54,11 @@ func renderAlterStatement(a *ast.AlterStatement, opts ast.FormatOptions) string 
 	}
 	f.sb.WriteString(" ")
 	f.sb.WriteString(ast.QuoteQualifiedName(a.Name))
-	if a.OnCluster != "" {
+	if cluster := alterClusterText(a.OnCluster); cluster != "" {
 		f.sb.WriteString(" ")
 		f.sb.WriteString(f.kw("ON CLUSTER"))
 		f.sb.WriteString(" ")
-		f.sb.WriteString(a.OnCluster)
+		f.sb.WriteString(cluster)
 	}
 	ops := a.Operations
 	if len(ops) == 0 && a.Operation != nil {
@@ -167,6 +169,7 @@ func writeAlterDropTail(f *nodeFormatter, op *ast.AlterTableOperation) {
 
 // writeAlterKeywordText renders a keyword phrase followed by text as written.
 func writeAlterKeywordText(f *nodeFormatter, keyword, text string) {
+	keyword = alterWordsText(keyword)
 	if keyword != "" {
 		f.sb.WriteString(f.kw(keyword))
 	}
@@ -193,7 +196,7 @@ func writeAlterColumnSub(f *nodeFormatter, op *ast.AlterTableOperation) {
 	case ast.AlterColumnDropNotNull:
 		sb.WriteString(f.kw("DROP NOT NULL"))
 	case ast.AlterColumnSetDataType:
-		kw := op.Keyword
+		kw := alterWordsText(op.Keyword)
 		if kw == "" {
 			kw = "TYPE"
 		}
@@ -236,8 +239,8 @@ func alterConstraintSQL(f *nodeFormatter, op *ast.AlterTableOperation) string {
 // types the ALTER TABLE parser does not produce are left empty.
 func writeAlterTableOperation(f *nodeFormatter, op *ast.AlterTableOperation) {
 	sb := f.sb
-	if op.Modifier != "" {
-		sb.WriteString(f.kw(op.Modifier))
+	if m := alterWordsText(op.Modifier); m != "" {
+		sb.WriteString(f.kw(m))
 		sb.WriteString(" ")
 	}
 	switch op.Type {
@@ -265,13 +268,13 @@ func writeAlterTableOperation(f *nodeFormatter, op *ast.AlterTableOperation) {
 		}
 	case ast.AddIndex:
 		sb.WriteString(f.kw("ADD"))
-		if op.IndexKind != "" {
+		if k := alterWordsText(op.IndexKind); k != "" {
 			sb.WriteString(" ")
-			sb.WriteString(f.kw(op.IndexKind))
+			sb.WriteString(f.kw(k))
 		}
-		if op.IndexKeyword != "" {
+		if k := alterWordsText(op.IndexKeyword); k != "" {
 			sb.WriteString(" ")
-			sb.WriteString(f.kw(op.IndexKeyword))
+			sb.WriteString(f.kw(k))
 		}
 		if op.IfNotExists {
 			sb.WriteString(" ")
@@ -296,8 +299,8 @@ func writeAlterTableOperation(f *nodeFormatter, op *ast.AlterTableOperation) {
 		writeAlterDropTail(f, op)
 	case ast.DropConstraint:
 		kind := "CONSTRAINT"
-		if op.ConstraintKind != "" {
-			kind = op.ConstraintKind
+		if k := alterWordsText(op.ConstraintKind); k != "" {
+			kind = k
 		}
 		sb.WriteString(f.kw("DROP " + kind))
 		if op.ConstraintKind == "PRIMARY KEY" {
@@ -315,7 +318,7 @@ func writeAlterTableOperation(f *nodeFormatter, op *ast.AlterTableOperation) {
 		sb.WriteString(strings.Join(names, ", "))
 		writeAlterDropTail(f, op)
 	case ast.DropIndex:
-		kw := op.IndexKeyword
+		kw := alterWordsText(op.IndexKeyword)
 		if kw == "" {
 			kw = "INDEX"
 		}
@@ -442,4 +445,44 @@ func writeAlterMutationTail(f *nodeFormatter, op *ast.AlterTableOperation) {
 		sb.WriteString(" ")
 		sb.WriteString(exprSQL(op.Where))
 	}
+}
+
+// alterWordsText returns s when it is one or more bare words (an ASCII letter
+// or '_' followed by letters, digits and '_') separated by single spaces, and
+// "" otherwise. The parser only stores such words in the keyword fields of an
+// ALTER statement; a hand-built field holding anything else is dropped rather
+// than written verbatim (#632).
+func alterWordsText(s string) string {
+	if s == "" {
+		return ""
+	}
+	for _, w := range strings.Split(s, " ") {
+		if w == "" {
+			return ""
+		}
+		for i := 0; i < len(w); i++ {
+			c := w[i]
+			letter := c == '_' || (c|0x20 >= 'a' && c|0x20 <= 'z')
+			if !letter && (i == 0 || c < '0' || c > '9') {
+				return ""
+			}
+		}
+	}
+	return s
+}
+
+// alterClusterText returns the ClickHouse ON CLUSTER target c as the parser
+// stores it (a single-quoted string, a "..." or `...` identifier, or a bare
+// name) when it is well formed, and c as a quoted name otherwise (#632).
+func alterClusterText(c string) string {
+	if c == "" {
+		return ""
+	}
+	for _, q := range []string{"'", `"`, "`"} {
+		if n := len(c); n >= 2 && c[:1] == q && c[n-1:] == q &&
+			!strings.Contains(strings.ReplaceAll(c[1:n-1], q+q, ""), q) {
+			return c
+		}
+	}
+	return ast.QuoteQualifiedName(c)
 }

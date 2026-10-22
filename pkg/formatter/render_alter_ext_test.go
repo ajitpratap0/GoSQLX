@@ -15,6 +15,7 @@
 package formatter_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ajitpratap0/GoSQLX/pkg/formatter"
@@ -214,6 +215,41 @@ func TestFormatStatement_AlterRolePolicyConnector(t *testing.T) {
 			}
 			if again := formatAlter(t, got, tc.dialect, opts); again != got {
 				t.Errorf("render is not stable across re-parse:\nfirst:  %q\nsecond: %q", got, again)
+			}
+		})
+	}
+}
+
+// TestFormatStatement_AlterHandBuiltKeywords_PR632 checks that the keyword
+// fields of a hand-built ALTER TABLE are not written verbatim: a value that
+// is not a bare keyword phrase is dropped, and an ON CLUSTER target that is
+// not a well-formed name or string is quoted.
+func TestFormatStatement_AlterHandBuiltKeywords_PR632(t *testing.T) {
+	const evil = "x; DROP TABLE y; --"
+	col := &ast.ColumnDef{Name: "a", Type: "INT"}
+	tests := []struct {
+		name string
+		stmt *ast.AlterStatement
+	}{
+		{"other keyword", &ast.AlterStatement{Type: ast.AlterTypeTable, Name: "t",
+			Operation: &ast.AlterTableOperation{Type: ast.AlterTableOther, Keyword: evil}}},
+		{"index kind", &ast.AlterStatement{Type: ast.AlterTypeTable, Name: "t",
+			Operation: &ast.AlterTableOperation{Type: ast.AddIndex, IndexKind: evil, IndexKeyword: "INDEX", IndexName: "i", Text: "(a)"}}},
+		{"drop index keyword", &ast.AlterStatement{Type: ast.AlterTypeTable, Name: "t",
+			Operation: &ast.AlterTableOperation{Type: ast.DropIndex, IndexKeyword: evil, IndexName: "i"}}},
+		{"constraint kind", &ast.AlterStatement{Type: ast.AlterTypeTable, Name: "t",
+			Operation: &ast.AlterTableOperation{Type: ast.DropConstraint, ConstraintKind: evil, ConstraintName: &ast.Ident{Name: "c"}}}},
+		{"action modifier", &ast.AlterStatement{Type: ast.AlterTypeTable, Name: "t",
+			Operation: &ast.AlterTableOperation{Type: ast.AddColumn, Modifier: evil, ColumnDef: col}}},
+		{"statement modifier and cluster", &ast.AlterStatement{Type: ast.AlterTypeTable, Name: "t",
+			Modifiers: []string{evil}, OnCluster: evil,
+			Operation: &ast.AlterTableOperation{Type: ast.DropColumn, ColumnName: &ast.Ident{Name: "a"}}}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := formatter.FormatStatement(tc.stmt, ast.CompactStyle())
+			if strings.Contains(got, "; DROP") && !strings.Contains(got, `"x; DROP TABLE y; --"`) {
+				t.Errorf("hand-built keyword written verbatim: %s", got)
 			}
 		})
 	}

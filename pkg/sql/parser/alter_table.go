@@ -69,7 +69,10 @@ func (p *Parser) parseAlterTableStatement(stmt *ast.AlterStatement) (*ast.AlterS
 		p.advance()
 	}
 	stmt.Operation = stmt.Operations[0]
-	if !p.isType(models.TokenTypeSemicolon) && !p.isType(models.TokenTypeEOF) {
+	// The statement ends at ';', EOF, or (as for every other statement, and
+	// as T-SQL scripts without semicolons rely on) the next statement keyword.
+	if !p.isType(models.TokenTypeSemicolon) && !p.isType(models.TokenTypeEOF) &&
+		!p.isStatementStartingKeyword() {
 		return nil, p.expectedError("end of ALTER TABLE action")
 	}
 	return stmt, nil

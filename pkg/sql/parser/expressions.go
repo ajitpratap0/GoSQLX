@@ -314,9 +314,15 @@ func (p *Parser) caretOperator() bool {
 // tighter than *, / and %.
 func (p *Parser) parsePowerExpression() (ast.Expression, error) {
 	left, err := p.parseJSONExpression()
-	if err != nil {
-		return nil, err
+	if err != nil || !p.caretOperator() {
+		return left, err
 	}
+	return p.parsePowerTail(left)
+}
+
+// parsePowerTail continues a power expression after its left operand, with the
+// current token at ^.
+func (p *Parser) parsePowerTail(left ast.Expression) (ast.Expression, error) {
 	for p.caretOperator() {
 		opPos := p.currentLocation()
 		p.advance() // Consume ^

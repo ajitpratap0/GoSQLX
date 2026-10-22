@@ -700,24 +700,23 @@ func (p *Parser) isQualifiedNamePart() bool {
 // current token and how many tokens it spans (0 when there is none): |/ and
 // ||/ are tokenized as two tokens and !! as two.
 func (p *Parser) pgPrefixOperator() (ast.UnaryOperator, int) {
-	if !p.IsPostgreSQL() {
-		return 0, 0
-	}
 	switch p.currentToken.Token.Type {
 	case models.TokenTypePipe:
-		if p.peekTypeAt(1) == models.TokenTypeDiv && p.nextAdjacent(1) {
+		if p.peekTypeAt(1) == models.TokenTypeDiv && p.nextAdjacent(1) && p.IsPostgreSQL() {
 			return ast.PGSquareRoot, 2
 		}
 	case models.TokenTypeStringConcat:
-		if p.peekTypeAt(1) == models.TokenTypeDiv && p.nextAdjacent(1) {
+		if p.peekTypeAt(1) == models.TokenTypeDiv && p.nextAdjacent(1) && p.IsPostgreSQL() {
 			return ast.PGCubeRoot, 2
 		}
 	case models.TokenTypeExclamationMark:
-		if p.peekTypeAt(1) == models.TokenTypeExclamationMark && p.nextAdjacent(1) {
+		if p.peekTypeAt(1) == models.TokenTypeExclamationMark && p.nextAdjacent(1) && p.IsPostgreSQL() {
 			return ast.PGPrefixFactorial, 2
 		}
 	case models.TokenTypeAtSign:
-		return ast.PGAbs, 1
+		if p.IsPostgreSQL() {
+			return ast.PGAbs, 1
+		}
 	}
 	return 0, 0
 }
@@ -726,7 +725,8 @@ func (p *Parser) pgPrefixOperator() (ast.UnaryOperator, int) {
 // operator of MySQL and MariaDB: BINARY followed by a string literal or a
 // name, as in "BINARY 'a'" or "BINARY name". BINARY( is the BINARY function.
 func (p *Parser) isMySQLBinaryOperator() bool {
-	if !p.isMySQLFamily() || p.currentToken.Token.Quote != 0 || !equalsUpper(p.currentToken.Token.Value, "BINARY") {
+	if v := p.currentToken.Token.Value; len(v) != len("BINARY") || p.currentToken.Token.Quote != 0 ||
+		!equalsUpper(v, "BINARY") || !p.isMySQLFamily() {
 		return false
 	}
 	next := p.peekToken().Token

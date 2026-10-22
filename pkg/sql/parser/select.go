@@ -340,12 +340,13 @@ func (p *Parser) isOrderSiblingsBy() bool {
 // immediately after SELECT.
 func (p *Parser) parseDistinctModifier() (isDistinct bool, distinctOnColumns []ast.Expression, err error) {
 	// MySQL and MariaDB: DISTINCTROW is a synonym of DISTINCT.
-	if p.isMySQLFamily() && p.currentToken.Token.Quote == 0 && equalsUpper(p.currentToken.Token.Value, "DISTINCTROW") {
+	if v := p.currentToken.Token.Value; len(v) == len("DISTINCTROW") && p.currentToken.Token.Quote == 0 &&
+		equalsUpper(v, "DISTINCTROW") && p.isMySQLFamily() {
 		p.advance() // Consume DISTINCTROW
 		return true, nil, nil
 	}
 	// Oracle: UNIQUE is a synonym of DISTINCT.
-	if p.IsOracle() && p.isType(models.TokenTypeUnique) {
+	if p.isType(models.TokenTypeUnique) && p.IsOracle() {
 		p.advance() // Consume UNIQUE
 		return true, nil, nil
 	}

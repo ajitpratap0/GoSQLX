@@ -103,7 +103,7 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 		p.advance() // consume FINAL
 	}
 
-	tables, joins, err = p.parseTableListAndJoins(firstRef, joins)
+	tables, joins, err = p.parseTableListAndJoins(&firstRef, joins)
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -115,7 +115,8 @@ func (p *Parser) parseFromClause() (tableName string, tables []ast.TableReferenc
 // references, then the JOIN clauses, including a comma after an explicit join.
 // joins holds the joins already read from a parenthesized group that opened
 // the list, or nil.
-func (p *Parser) parseTableListAndJoins(firstRef ast.TableReference, joins []ast.JoinClause) (tables []ast.TableReference, _ []ast.JoinClause, err error) {
+func (p *Parser) parseTableListAndJoins(first *ast.TableReference, joins []ast.JoinClause) (tables []ast.TableReference, _ []ast.JoinClause, err error) {
+	firstRef := *first
 	tables = []ast.TableReference{firstRef}
 
 	// Additional comma-separated table references (implicit cross joins)
@@ -1219,7 +1220,7 @@ func (p *Parser) parseArrayJoinClause() (*ast.ArrayJoinClause, error) {
 // expression: it is followed by ASC, DESC, NULLS, a comma or the end of the
 // clause.
 func (p *Parser) isOrderByAll() bool {
-	if p.dialect != string(keywords.DialectClickHouse) || !p.isType(models.TokenTypeAll) {
+	if !p.isType(models.TokenTypeAll) || p.dialect != string(keywords.DialectClickHouse) {
 		return false
 	}
 	switch p.peekToken().Token.Type {

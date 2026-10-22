@@ -499,7 +499,7 @@ func (p *Parser) parseJoinGroup() (ast.TableReference, error) {
 	if err != nil {
 		return ast.TableReference{}, err
 	}
-	tables, joins, err := p.parseTableListAndJoins(first, joins)
+	tables, joins, err := p.parseTableListAndJoins(&first, joins)
 	if err != nil {
 		return ast.TableReference{}, err
 	}

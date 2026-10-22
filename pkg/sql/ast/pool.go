@@ -670,6 +670,7 @@ func PutCreateIndexStatement(stmt *CreateIndexStatement) {
 		stmt.Columns[i].CollateQuoted = false
 		stmt.Columns[i].Direction = ""
 		stmt.Columns[i].NullsLast = false
+		stmt.Columns[i].ColumnQuote = 0
 	}
 	stmt.Columns = stmt.Columns[:0]
 
@@ -679,6 +680,8 @@ func PutCreateIndexStatement(stmt *CreateIndexStatement) {
 	stmt.Name = ""
 	stmt.Table = ""
 	stmt.Using = ""
+	stmt.NameQuote = 0
+	stmt.TableQuote = 0
 
 	createIndexStmtPool.Put(stmt)
 }
@@ -736,6 +739,8 @@ func PutCreateMaterializedViewStatement(stmt *CreateMaterializedViewStatement) {
 	stmt.Query = nil
 	stmt.WithData = nil
 	stmt.Tablespace = ""
+	stmt.NameQuote = 0
+	stmt.ColumnQuotes = nil
 
 	createMaterializedViewStmtPool.Put(stmt)
 }
@@ -775,6 +780,7 @@ func PutDropStatement(stmt *DropStatement) {
 	stmt.IfExists = false
 	stmt.Names = stmt.Names[:0]
 	stmt.CascadeType = ""
+	stmt.NameQuotes = nil
 
 	dropStmtPool.Put(stmt)
 }
@@ -796,6 +802,7 @@ func PutTruncateStatement(stmt *TruncateStatement) {
 	stmt.RestartIdentity = false
 	stmt.ContinueIdentity = false
 	stmt.CascadeType = ""
+	stmt.TableQuotes = nil
 
 	truncateStmtPool.Put(stmt)
 }
@@ -869,6 +876,7 @@ func PutAlterStatement(stmt *AlterStatement) {
 	stmt.Type = 0
 	stmt.Name = ""
 	stmt.Operation = nil
+	stmt.NameQuote = 0
 
 	alterStmtPool.Put(stmt)
 }

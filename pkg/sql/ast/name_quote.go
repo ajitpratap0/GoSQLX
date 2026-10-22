@@ -437,3 +437,33 @@ func QuoteQualifiedNameWith(name string, q NameQuote) string {
 func QuoteFunctionNameWith(name string, q NameQuote) string {
 	return quoteWith(name, q, writeFunctionNameQ)
 }
+
+// writeQualifiedNameListQ writes names separated by ", " like
+// writeQualifiedNameList; qs, when not nil, holds each name's NameQuote.
+func writeQualifiedNameListQ(buf *bytes.Buffer, names []string, qs []NameQuote) {
+	for i, n := range names {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		writeQualifiedNameQ(buf, n, nameQuoteAt(qs, i))
+	}
+}
+
+// writeConstraintNameQ writes a table constraint name like
+// writeConstraintName, honouring the delimiters recorded in q.
+func writeConstraintNameQ(buf *bytes.Buffer, name string, q NameQuote) {
+	if q == 0 {
+		writeConstraintName(buf, name)
+		return
+	}
+	writeNamePart(buf, name, partDelimited(name, q.Part(0), constraintNameNeedsQuoting(name), q), q.Style())
+}
+
+// QuoteConstraintNameWith returns a table constraint name as
+// QuoteConstraintName does, honouring the delimiters recorded in q.
+func QuoteConstraintNameWith(name string, q NameQuote) string {
+	if q == 0 || (!q.HasParts() && !constraintNameNeedsQuoting(name)) {
+		return QuoteConstraintName(name)
+	}
+	return quoteWith(name, q, writeConstraintNameQ)
+}

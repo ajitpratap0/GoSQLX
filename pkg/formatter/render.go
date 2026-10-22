@@ -777,11 +777,11 @@ func renderCreateIndex(c *ast.CreateIndexStatement, opts ast.FormatOptions) stri
 		sb.WriteString(f.kw("IF NOT EXISTS"))
 		sb.WriteString(" ")
 	}
-	sb.WriteString(ast.QuoteQualifiedName(c.Name))
+	sb.WriteString(ast.QuoteQualifiedNameWith(c.Name, f.nq(c.NameQuote)))
 	sb.WriteString(" ")
 	sb.WriteString(f.kw("ON"))
 	sb.WriteString(" ")
-	sb.WriteString(ast.QuoteQualifiedName(c.Table))
+	sb.WriteString(ast.QuoteQualifiedNameWith(c.Table, f.nq(c.TableQuote)))
 
 	if c.Using != "" {
 		sb.WriteString(" ")
@@ -793,7 +793,7 @@ func renderCreateIndex(c *ast.CreateIndexStatement, opts ast.FormatOptions) stri
 	sb.WriteString(" (")
 	cols := make([]string, len(c.Columns))
 	for i, col := range c.Columns {
-		s := ast.QuoteColumnName(col.Column)
+		s := ast.QuoteColumnNameWith(col.Column, f.nq(col.ColumnQuote))
 		if col.Collate != "" {
 			s += " " + f.kw("COLLATE") + " " + ast.CollationNameSQL(col.Collate, col.CollateQuoted)
 		}
@@ -888,11 +888,11 @@ func renderCreateMaterializedView(c *ast.CreateMaterializedViewStatement, opts a
 		sb.WriteString(f.kw("IF NOT EXISTS"))
 		sb.WriteString(" ")
 	}
-	sb.WriteString(ast.QuoteQualifiedName(c.Name))
+	sb.WriteString(ast.QuoteQualifiedNameWith(c.Name, f.nq(c.NameQuote)))
 
 	if len(c.Columns) > 0 {
 		sb.WriteString(" (")
-		sb.WriteString(quoteNames(c.Columns))
+		sb.WriteString(f.quoteNamesWith(c.Columns, c.ColumnQuotes))
 		sb.WriteString(")")
 	}
 
@@ -971,7 +971,7 @@ func renderDrop(d *ast.DropStatement, opts ast.FormatOptions) string {
 		sb.WriteString(f.kw("IF EXISTS"))
 		sb.WriteString(" ")
 	}
-	sb.WriteString(quoteQualifiedNames(d.Names))
+	sb.WriteString(f.quoteQualifiedNamesWith(d.Names, d.NameQuotes))
 
 	if c := ast.CascadeText(d.CascadeType); c != "" {
 		sb.WriteString(" ")
@@ -996,7 +996,7 @@ func renderTruncate(t *ast.TruncateStatement, opts ast.FormatOptions) string {
 	sb.WriteString(" ")
 	sb.WriteString(f.kw("TABLE"))
 	sb.WriteString(" ")
-	sb.WriteString(quoteQualifiedNames(t.Tables))
+	sb.WriteString(f.quoteQualifiedNamesWith(t.Tables, t.TableQuotes))
 
 	if t.RestartIdentity {
 		sb.WriteString(" ")
@@ -1722,21 +1722,21 @@ func tableConstraintSQL(tc *ast.TableConstraint) string {
 	var sb strings.Builder
 	if tc.Name != "" {
 		sb.WriteString("CONSTRAINT ")
-		sb.WriteString(ast.QuoteConstraintName(tc.Name))
+		sb.WriteString(ast.QuoteConstraintNameWith(tc.Name, tc.NameQuote))
 		sb.WriteString(" ")
 	}
 	switch tc.Type {
 	case "PRIMARY KEY":
 		sb.WriteString("PRIMARY KEY (")
-		sb.WriteString(quoteColumnNames(tc.Columns))
+		sb.WriteString(quoteColumnNamesQ(tc.Columns, tc.ColumnQuotes))
 		sb.WriteString(")")
 	case "UNIQUE":
 		sb.WriteString("UNIQUE (")
-		sb.WriteString(quoteColumnNames(tc.Columns))
+		sb.WriteString(quoteColumnNamesQ(tc.Columns, tc.ColumnQuotes))
 		sb.WriteString(")")
 	case "FOREIGN KEY":
 		sb.WriteString("FOREIGN KEY (")
-		sb.WriteString(quoteColumnNames(tc.Columns))
+		sb.WriteString(quoteColumnNamesQ(tc.Columns, tc.ColumnQuotes))
 		sb.WriteString(") ")
 		if tc.References != nil {
 			sb.WriteString(referenceSQL(tc.References))
@@ -1757,10 +1757,10 @@ func tableConstraintSQL(tc *ast.TableConstraint) string {
 func referenceSQL(r *ast.ReferenceDefinition) string {
 	var sb strings.Builder
 	sb.WriteString("REFERENCES ")
-	sb.WriteString(ast.QuoteQualifiedName(r.Table))
+	sb.WriteString(ast.QuoteQualifiedNameWith(r.Table, r.TableQuote))
 	if len(r.Columns) > 0 {
 		sb.WriteString(" (")
-		sb.WriteString(quoteColumnNames(r.Columns))
+		sb.WriteString(quoteColumnNamesQ(r.Columns, r.ColumnQuotes))
 		sb.WriteString(")")
 	}
 	if a := ast.ReferentialActionText(r.OnDelete); a != "" {

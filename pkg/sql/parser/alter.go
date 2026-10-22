@@ -44,6 +44,7 @@ func (p *Parser) parseAlterStatement() (*ast.AlterStatement, error) {
 
 // parseAlterTableStatement parses ALTER TABLE statements
 func (p *Parser) parseAlterTableStatement(stmt *ast.AlterStatement) (*ast.AlterStatement, error) {
+	stmt.NameQuote = p.currentNameQuote()
 	stmt.Name = p.parseIdentAsString()
 	op := &ast.AlterTableOperation{}
 
@@ -75,7 +76,7 @@ func (p *Parser) parseAlterTableStatement(stmt *ast.AlterStatement) (*ast.AlterS
 			if ident == nil {
 				return nil, p.expectedError("column name")
 			}
-			op.ColumnName = &ast.Ident{Name: ident.Name}
+			op.ColumnName = &ast.Ident{Name: ident.Name, Quote: ident.Quotes}
 			if p.matchType(models.TokenTypeCascade) {
 				op.CascadeDrops = true
 			}
@@ -86,7 +87,7 @@ func (p *Parser) parseAlterTableStatement(stmt *ast.AlterStatement) (*ast.AlterS
 			if ident == nil {
 				return nil, p.expectedError("constraint name")
 			}
-			op.ConstraintName = &ast.Ident{Name: ident.Name}
+			op.ConstraintName = &ast.Ident{Name: ident.Name, Quote: ident.Quotes}
 			if p.matchType(models.TokenTypeCascade) {
 				op.CascadeDrops = true
 			}
@@ -105,7 +106,7 @@ func (p *Parser) parseAlterTableStatement(stmt *ast.AlterStatement) (*ast.AlterS
 			if ident == nil {
 				return nil, p.expectedError("column name")
 			}
-			op.ColumnName = &ast.Ident{Name: ident.Name}
+			op.ColumnName = &ast.Ident{Name: ident.Name, Quote: ident.Quotes}
 			if !p.matchType(models.TokenTypeTo) {
 				return nil, p.expectedError("TO")
 			}
@@ -114,7 +115,7 @@ func (p *Parser) parseAlterTableStatement(stmt *ast.AlterStatement) (*ast.AlterS
 			if newIdent == nil {
 				return nil, p.expectedError("new column name")
 			}
-			op.NewColumnName = &ast.Ident{Name: newIdent.Name}
+			op.NewColumnName = &ast.Ident{Name: newIdent.Name, Quote: newIdent.Quotes}
 		} else {
 			return nil, p.expectedError("TO or COLUMN")
 		}
@@ -129,7 +130,7 @@ func (p *Parser) parseAlterTableStatement(stmt *ast.AlterStatement) (*ast.AlterS
 		if ident == nil {
 			return nil, p.expectedError("column name")
 		}
-		op.ColumnName = &ast.Ident{Name: ident.Name}
+		op.ColumnName = &ast.Ident{Name: ident.Name, Quote: ident.Quotes}
 		colDef, err := p.parseColumnDef()
 		if err != nil {
 			return nil, err

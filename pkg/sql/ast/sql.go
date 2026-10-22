@@ -1615,9 +1615,9 @@ func (c *CreateIndexStatement) SQL() string {
 	if c.IfNotExists {
 		sb.WriteString("IF NOT EXISTS ")
 	}
-	writeQualifiedName(sb, c.Name)
+	writeQualifiedNameQ(sb, c.Name, c.NameQuote)
 	sb.WriteString(" ON ")
-	writeQualifiedName(sb, c.Table)
+	writeQualifiedNameQ(sb, c.Table, c.TableQuote)
 
 	if c.Using != "" {
 		sb.WriteString(" USING ")
@@ -1629,7 +1629,7 @@ func (c *CreateIndexStatement) SQL() string {
 		if i > 0 {
 			sb.WriteString(", ")
 		}
-		writeColumnName(sb, col.Column)
+		writeTableAliasQ(sb, col.Column, col.ColumnQuote)
 		if col.Collate != "" {
 			sb.WriteString(" COLLATE ")
 			writeCollationName(sb, col.Collate, col.CollateQuoted)
@@ -1683,7 +1683,7 @@ func (d *DropStatement) SQL() string {
 	if d.IfExists {
 		sb.WriteString("IF EXISTS ")
 	}
-	writeQualifiedNameList(sb, d.Names)
+	writeQualifiedNameListQ(sb, d.Names, d.NameQuotes)
 	if c := CascadeText(d.CascadeType); c != "" {
 		sb.WriteString(" ")
 		sb.WriteString(c)
@@ -1700,7 +1700,7 @@ func (t *TruncateStatement) SQL() string {
 	sb := getBuf()
 	defer putBuf(sb)
 	sb.WriteString("TRUNCATE TABLE ")
-	writeQualifiedNameList(sb, t.Tables)
+	writeQualifiedNameListQ(sb, t.Tables, t.TableQuotes)
 	if t.RestartIdentity {
 		sb.WriteString(" RESTART IDENTITY")
 	} else if t.ContinueIdentity {
@@ -1847,10 +1847,10 @@ func (c *CreateMaterializedViewStatement) SQL() string {
 	if c.IfNotExists {
 		sb.WriteString("IF NOT EXISTS ")
 	}
-	writeQualifiedName(sb, c.Name)
+	writeQualifiedNameQ(sb, c.Name, c.NameQuote)
 	if len(c.Columns) > 0 {
 		sb.WriteString(" (")
-		writeNameList(sb, c.Columns)
+		writeNameListQ(sb, c.Columns, c.ColumnQuotes)
 		sb.WriteString(")")
 	}
 	sb.WriteString(" AS ")
@@ -2566,21 +2566,21 @@ func tableConstraintSQL(tc *TableConstraint) string {
 	defer putBuf(sb)
 	if tc.Name != "" {
 		sb.WriteString("CONSTRAINT ")
-		writeConstraintName(sb, tc.Name)
+		writeConstraintNameQ(sb, tc.Name, tc.NameQuote)
 		sb.WriteString(" ")
 	}
 	switch tc.Type {
 	case "PRIMARY KEY":
 		sb.WriteString("PRIMARY KEY (")
-		writeColumnNameList(sb, tc.Columns)
+		writeColumnNameListQ(sb, tc.Columns, tc.ColumnQuotes)
 		sb.WriteString(")")
 	case "UNIQUE":
 		sb.WriteString("UNIQUE (")
-		writeColumnNameList(sb, tc.Columns)
+		writeColumnNameListQ(sb, tc.Columns, tc.ColumnQuotes)
 		sb.WriteString(")")
 	case "FOREIGN KEY":
 		sb.WriteString("FOREIGN KEY (")
-		writeColumnNameList(sb, tc.Columns)
+		writeColumnNameListQ(sb, tc.Columns, tc.ColumnQuotes)
 		sb.WriteString(") ")
 		if tc.References != nil {
 			sb.WriteString(referenceSQL(tc.References))
@@ -2601,10 +2601,10 @@ func referenceSQL(r *ReferenceDefinition) string {
 	sb := getBuf()
 	defer putBuf(sb)
 	sb.WriteString("REFERENCES ")
-	writeQualifiedName(sb, r.Table)
+	writeQualifiedNameQ(sb, r.Table, r.TableQuote)
 	if len(r.Columns) > 0 {
 		sb.WriteString(" (")
-		writeColumnNameList(sb, r.Columns)
+		writeColumnNameListQ(sb, r.Columns, r.ColumnQuotes)
 		sb.WriteString(")")
 	}
 	if a := ReferentialActionText(r.OnDelete); a != "" {

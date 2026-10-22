@@ -218,7 +218,8 @@ func (p *Parser) parseColumnConstraint() (*ast.ColumnConstraint, bool, error) {
 			return nil, false, p.expectedError("table name after REFERENCES")
 		}
 		refDef := &ast.ReferenceDefinition{
-			Table: p.currentToken.Token.Value,
+			Table:      p.currentToken.Token.Value,
+			TableQuote: p.currentNameQuote(),
 		}
 		p.advance()
 
@@ -229,6 +230,7 @@ func (p *Parser) parseColumnConstraint() (*ast.ColumnConstraint, bool, error) {
 				if !p.isIdentifier() {
 					return nil, false, p.expectedError("column name in REFERENCES")
 				}
+				refDef.ColumnQuotes = nameQuoteList(refDef.ColumnQuotes, len(refDef.Columns), p.currentNameQuote())
 				refDef.Columns = append(refDef.Columns, p.currentToken.Token.Value)
 				p.advance()
 
@@ -355,6 +357,7 @@ func (p *Parser) parseTableConstraint() (*ast.TableConstraint, error) {
 	if p.isIdentifier() &&
 		!p.isAnyType(models.TokenTypePrimary, models.TokenTypeForeign, models.TokenTypeUnique, models.TokenTypeCheck) {
 		constraint.Name = p.currentToken.Token.Value
+		constraint.NameQuote = p.currentNameQuote()
 		p.advance()
 	}
 
@@ -368,11 +371,12 @@ func (p *Parser) parseTableConstraint() (*ast.TableConstraint, error) {
 		constraint.Type = "PRIMARY KEY"
 
 		// Parse column list
-		columns, err := p.parseConstraintColumnList()
+		columns, columnQuotes, err := p.parseConstraintColumnListQuoted()
 		if err != nil {
 			return nil, err
 		}
 		constraint.Columns = columns
+		constraint.ColumnQuotes = columnQuotes
 		return constraint, nil
 	}
 
@@ -386,11 +390,12 @@ func (p *Parser) parseTableConstraint() (*ast.TableConstraint, error) {
 		constraint.Type = "FOREIGN KEY"
 
 		// Parse column list
-		columns, err := p.parseConstraintColumnList()
+		columns, columnQuotes, err := p.parseConstraintColumnListQuoted()
 		if err != nil {
 			return nil, err
 		}
 		constraint.Columns = columns
+		constraint.ColumnQuotes = columnQuotes
 
 		// Expect REFERENCES
 		if !p.isType(models.TokenTypeReferences) {
@@ -403,17 +408,19 @@ func (p *Parser) parseTableConstraint() (*ast.TableConstraint, error) {
 			return nil, p.expectedError("table name after REFERENCES")
 		}
 		refDef := &ast.ReferenceDefinition{
-			Table: p.currentToken.Token.Value,
+			Table:      p.currentToken.Token.Value,
+			TableQuote: p.currentNameQuote(),
 		}
 		p.advance()
 
 		// Parse optional referenced column list
 		if p.isType(models.TokenTypeLParen) {
-			refColumns, err := p.parseConstraintColumnList()
+			refColumns, refColumnQuotes, err := p.parseConstraintColumnListQuoted()
 			if err != nil {
 				return nil, err
 			}
 			refDef.Columns = refColumns
+			refDef.ColumnQuotes = refColumnQuotes
 		}
 
 		// Parse optional ON DELETE/UPDATE
@@ -428,11 +435,12 @@ func (p *Parser) parseTableConstraint() (*ast.TableConstraint, error) {
 		constraint.Type = "UNIQUE"
 
 		// Parse column list
-		columns, err := p.parseConstraintColumnList()
+		columns, columnQuotes, err := p.parseConstraintColumnListQuoted()
 		if err != nil {
 			return nil, err
 		}
 		constraint.Columns = columns
+		constraint.ColumnQuotes = columnQuotes
 		return constraint, nil
 	}
 
@@ -464,16 +472,26 @@ func (p *Parser) parseTableConstraint() (*ast.TableConstraint, error) {
 
 // parseConstraintColumnList parses a parenthesized list of column names
 func (p *Parser) parseConstraintColumnList() ([]string, error) {
+	columns, _, err := p.parseConstraintColumnListQuoted()
+	return columns, err
+}
+
+// parseConstraintColumnListQuoted parses a parenthesized list of column
+// names and also returns how each was delimited (nil when none keeps its
+// delimiters; see ast.NameQuote).
+func (p *Parser) parseConstraintColumnListQuoted() ([]string, []ast.NameQuote, error) {
 	if !p.isType(models.TokenTypeLParen) {
-		return nil, p.expectedError("( for column list")
+		return nil, nil, p.expectedError("( for column list")
 	}
 	p.advance() // Consume (
 
 	var columns []string
+	var quotes []ast.NameQuote
 	for {
 		if !p.isIdentifier() {
-			return nil, p.expectedError("column name")
+			return nil, nil, p.expectedError("column name")
 		}
+		quotes = nameQuoteList(quotes, len(columns), p.currentNameQuote())
 		columns = append(columns, p.currentToken.Token.Value)
 		p.advance()
 
@@ -485,11 +503,11 @@ func (p *Parser) parseConstraintColumnList() ([]string, error) {
 	}
 
 	if !p.isType(models.TokenTypeRParen) {
-		return nil, p.expectedError(") after column list")
+		return nil, nil, p.expectedError(") after column list")
 	}
 	p.advance() // Consume )
 
-	return columns, nil
+	return columns, quotes, nil
 }
 
 // parseTypeArgsString consumes a balanced parenthesised type-argument list

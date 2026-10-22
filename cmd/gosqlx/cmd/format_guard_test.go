@@ -33,10 +33,10 @@ func TestFormatSQL_RefusesLostQuotes(t *testing.T) {
 		dialect string
 		in      string
 	}{
-		// Names the AST does not record quoting for (ALTER TABLE targets,
-		// index names) still render bare, so the CLI must refuse.
-		{name: "alter table mixed case", in: `ALTER TABLE "Mixed" ADD COLUMN a INT`},
-		{name: "create index mixed case", in: `CREATE INDEX "Idx" ON t (a)`},
+		// Names the AST does not record quoting for (window names, sequence
+		// names) still render bare, so the CLI must refuse.
+		{name: "window name mixed case", in: `SELECT SUM(x) OVER "W" FROM t WINDOW "W" AS (ORDER BY x)`},
+		{name: "sequence mixed case", in: `CREATE SEQUENCE "Seq"`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

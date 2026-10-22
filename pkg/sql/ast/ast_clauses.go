@@ -625,6 +625,11 @@ type TableConstraint struct {
 	Columns    []string
 	References *ReferenceDefinition
 	Check      Expression
+	// NameQuote records the delimiters of Name, and ColumnQuotes those of
+	// each Columns entry by index (nil when none keeps delimiters); see
+	// NameQuote.
+	NameQuote    NameQuote
+	ColumnQuotes []NameQuote
 }
 
 func (t *TableConstraint) expressionNode()     {}
@@ -647,6 +652,11 @@ type ReferenceDefinition struct {
 	OnDelete string
 	OnUpdate string
 	Match    string
+	// TableQuote records the delimiters of Table, and ColumnQuotes those of
+	// each Columns entry by index (nil when none keeps delimiters); see
+	// NameQuote.
+	TableQuote   NameQuote
+	ColumnQuotes []NameQuote
 }
 
 func (r *ReferenceDefinition) expressionNode()     {}
@@ -684,6 +694,9 @@ type IndexColumn struct {
 	CollateQuoted bool
 	Direction     string // ASC, DESC
 	NullsLast     bool
+	// ColumnQuote records the delimiters of Column when they must be kept
+	// (see NameQuote).
+	ColumnQuote NameQuote
 }
 
 func (i *IndexColumn) expressionNode()     {}

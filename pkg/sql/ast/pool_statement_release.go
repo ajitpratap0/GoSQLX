@@ -671,6 +671,8 @@ func PutCreateTableStatement(stmt *CreateTableStatement) {
 		stmt.Constraints[i].Name = ""
 		stmt.Constraints[i].Type = ""
 		stmt.Constraints[i].Columns = stmt.Constraints[i].Columns[:0]
+		stmt.Constraints[i].NameQuote = 0
+		stmt.Constraints[i].ColumnQuotes = nil
 	}
 	stmt.Constraints = stmt.Constraints[:0]
 

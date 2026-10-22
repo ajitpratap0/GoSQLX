@@ -95,6 +95,9 @@ type AlterStatement struct {
 	Type      AlterType
 	Name      string // Name of the object being altered
 	Operation AlterOperation
+	// NameQuote records the delimiters of Name when they must be kept
+	// (see NameQuote).
+	NameQuote NameQuote
 }
 
 func (a *AlterStatement) statementNode() {}

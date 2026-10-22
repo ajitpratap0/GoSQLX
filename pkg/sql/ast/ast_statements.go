@@ -557,6 +557,10 @@ type CreateIndexStatement struct {
 	Columns     []IndexColumn
 	Using       string
 	Where       Expression
+	// NameQuote and TableQuote record the delimiters of Name and Table
+	// when they must be kept (see NameQuote).
+	NameQuote  NameQuote
+	TableQuote NameQuote
 }
 
 func (c *CreateIndexStatement) statementNode()      {}
@@ -737,6 +741,11 @@ type CreateMaterializedViewStatement struct {
 	Query       Statement // The SELECT statement
 	WithData    *bool     // nil = default, true = WITH DATA, false = WITH NO DATA
 	Tablespace  string    // Optional tablespace (PostgreSQL)
+	// NameQuote records the delimiters of Name, and ColumnQuotes those of
+	// each Columns entry by index (nil when none keeps delimiters); see
+	// NameQuote.
+	NameQuote    NameQuote
+	ColumnQuotes []NameQuote
 }
 
 func (c *CreateMaterializedViewStatement) statementNode()      {}
@@ -767,6 +776,9 @@ type DropStatement struct {
 	IfExists    bool
 	Names       []string // Can drop multiple objects
 	CascadeType string   // CASCADE, RESTRICT, or empty
+	// NameQuotes records the delimiters of each Names entry by index (nil
+	// when none keeps delimiters); see NameQuote.
+	NameQuotes []NameQuote
 }
 
 func (d *DropStatement) statementNode()      {}
@@ -780,6 +792,9 @@ type TruncateStatement struct {
 	RestartIdentity  bool     // RESTART IDENTITY - reset sequences
 	ContinueIdentity bool     // CONTINUE IDENTITY - keep sequences (default)
 	CascadeType      string   // CASCADE, RESTRICT, or empty
+	// TableQuotes records the delimiters of each Tables entry by index (nil
+	// when none keeps delimiters); see NameQuote.
+	TableQuotes []NameQuote
 }
 
 func (t *TruncateStatement) statementNode()      {}

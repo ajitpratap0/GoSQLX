@@ -677,10 +677,11 @@ func (p *Parser) parseDropStatement() (*ast.DropStatement, error) {
 
 	// Parse object names (can be comma-separated, supports schema.name qualification)
 	for {
-		dropName, err := p.parseQualifiedName()
+		dropName, dropQuote, err := p.parseQualifiedNameQuoted()
 		if err != nil {
 			return nil, p.qualifiedNameError(err, "object name")
 		}
+		stmt.NameQuotes = nameQuoteList(stmt.NameQuotes, len(stmt.Names), dropQuote)
 		stmt.Names = append(stmt.Names, dropName)
 
 		if p.isType(models.TokenTypeComma) {
@@ -714,10 +715,11 @@ func (p *Parser) parseTruncateStatement() (*ast.TruncateStatement, error) {
 
 	// Parse table names (can be comma-separated, supports schema.table qualification)
 	for {
-		truncTableName, err := p.parseQualifiedName()
+		truncTableName, truncQuote, err := p.parseQualifiedNameQuoted()
 		if err != nil {
 			return nil, p.qualifiedNameError(err, "table name")
 		}
+		stmt.TableQuotes = nameQuoteList(stmt.TableQuotes, len(stmt.Tables), truncQuote)
 		stmt.Tables = append(stmt.Tables, truncTableName)
 
 		if p.isType(models.TokenTypeComma) {

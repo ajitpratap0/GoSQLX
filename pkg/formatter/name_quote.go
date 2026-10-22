@@ -46,28 +46,41 @@ func (f *nodeFormatter) nq(q ast.NameQuote) ast.NameQuote {
 // quoteNamesWith renders a CTE or view column list like quoteNames,
 // honouring each name's recorded delimiters (qs by index, may be nil).
 func (f *nodeFormatter) quoteNamesWith(names []string, qs []ast.NameQuote) string {
-	parts := make([]string, len(names))
-	for i, n := range names {
-		var q ast.NameQuote
-		if i < len(qs) {
-			q = qs[i]
-		}
-		parts[i] = ast.QuoteNameWith(n, f.nq(q))
-	}
-	return strings.Join(parts, ", ")
+	return joinQuoted(names, qs, ast.QuoteNameWith, f.nq)
 }
 
 // quoteColumnNamesWith joins single-part DDL column names like
 // quoteColumnNames, honouring each name's recorded delimiters (qs by index,
-// may be nil).
+// may be nil) and the target dialect's delimiter.
 func (f *nodeFormatter) quoteColumnNamesWith(names []string, qs []ast.NameQuote) string {
+	return joinQuoted(names, qs, ast.QuoteColumnNameWith, f.nq)
+}
+
+// quoteColumnNamesQ is quoteColumnNamesWith for renderers that do not know
+// the target dialect: only the recorded delimiters are honoured.
+func quoteColumnNamesQ(names []string, qs []ast.NameQuote) string {
+	return joinQuoted(names, qs, ast.QuoteColumnNameWith, nil)
+}
+
+// quoteQualifiedNamesWith joins table-like names like quoteQualifiedNames,
+// honouring each name's recorded delimiters and the target dialect's.
+func (f *nodeFormatter) quoteQualifiedNamesWith(names []string, qs []ast.NameQuote) string {
+	return joinQuoted(names, qs, ast.QuoteQualifiedNameWith, f.nq)
+}
+
+// joinQuoted joins names with ", ", each rendered by quote with its
+// NameQuote from qs (by index; may be nil), adjusted by nq when not nil.
+func joinQuoted(names []string, qs []ast.NameQuote, quote func(string, ast.NameQuote) string, nq func(ast.NameQuote) ast.NameQuote) string {
 	parts := make([]string, len(names))
 	for i, n := range names {
 		var q ast.NameQuote
 		if i < len(qs) {
 			q = qs[i]
 		}
-		parts[i] = ast.QuoteColumnNameWith(n, f.nq(q))
+		if nq != nil {
+			q = nq(q)
+		}
+		parts[i] = quote(n, q)
 	}
 	return strings.Join(parts, ", ")
 }

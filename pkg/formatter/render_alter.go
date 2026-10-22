@@ -30,7 +30,7 @@ func renderAlterStatement(a *ast.AlterStatement, opts ast.FormatOptions) string 
 	f := newNodeFormatter(opts)
 	f.sb.WriteString(f.kw("ALTER TABLE"))
 	f.sb.WriteString(" ")
-	f.sb.WriteString(a.Name)
+	f.sb.WriteString(ast.QuoteQualifiedNameWith(a.Name, f.nq(a.NameQuote)))
 	if op, ok := a.Operation.(*ast.AlterTableOperation); ok && op != nil {
 		f.sb.WriteString(f.clauseSep())
 		writeAlterTableOperation(f, op)
@@ -41,12 +41,13 @@ func renderAlterStatement(a *ast.AlterStatement, opts ast.FormatOptions) string 
 	return f.result()
 }
 
-// alterIdentName returns the name of i, or "" for nil.
-func alterIdentName(i *ast.Ident) string {
+// alterIdentName returns the name of i quoted as a column name when it needs
+// delimiters (or the source's are recorded), or "" for nil.
+func alterIdentName(f *nodeFormatter, i *ast.Ident) string {
 	if i == nil {
 		return ""
 	}
-	return i.Name
+	return ast.QuoteColumnNameWith(i.Name, f.nq(i.Quote))
 }
 
 // writeAlterTableOperation renders a single ALTER TABLE operation. Operation
@@ -74,7 +75,7 @@ func writeAlterTableOperation(f *nodeFormatter, op *ast.AlterTableOperation) {
 	case ast.DropColumn:
 		sb.WriteString(f.kw("DROP COLUMN"))
 		sb.WriteString(" ")
-		sb.WriteString(alterIdentName(op.ColumnName))
+		sb.WriteString(alterIdentName(f, op.ColumnName))
 		if op.CascadeDrops {
 			sb.WriteString(" ")
 			sb.WriteString(f.kw("CASCADE"))
@@ -82,7 +83,9 @@ func writeAlterTableOperation(f *nodeFormatter, op *ast.AlterTableOperation) {
 	case ast.DropConstraint:
 		sb.WriteString(f.kw("DROP CONSTRAINT"))
 		sb.WriteString(" ")
-		sb.WriteString(alterIdentName(op.ConstraintName))
+		if op.ConstraintName != nil {
+			sb.WriteString(ast.QuoteConstraintNameWith(op.ConstraintName.Name, f.nq(op.ConstraintName.Quote)))
+		}
 		if op.CascadeDrops {
 			sb.WriteString(" ")
 			sb.WriteString(f.kw("CASCADE"))
@@ -90,7 +93,7 @@ func writeAlterTableOperation(f *nodeFormatter, op *ast.AlterTableOperation) {
 	case ast.RenameTable:
 		sb.WriteString(f.kw("RENAME TO"))
 		sb.WriteString(" ")
-		sb.WriteString(op.NewTableName.String())
+		sb.WriteString(ast.QuoteQualifiedNameWith(op.NewTableName.Name, f.nq(op.NewTableName.Quote)))
 	case ast.RenameColumn:
 		oldName := op.ColumnName
 		if oldName == nil {
@@ -98,15 +101,15 @@ func writeAlterTableOperation(f *nodeFormatter, op *ast.AlterTableOperation) {
 		}
 		sb.WriteString(f.kw("RENAME COLUMN"))
 		sb.WriteString(" ")
-		sb.WriteString(alterIdentName(oldName))
+		sb.WriteString(alterIdentName(f, oldName))
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("TO"))
 		sb.WriteString(" ")
-		sb.WriteString(alterIdentName(op.NewColumnName))
+		sb.WriteString(alterIdentName(f, op.NewColumnName))
 	case ast.AlterColumn:
 		sb.WriteString(f.kw("ALTER COLUMN"))
 		sb.WriteString(" ")
-		sb.WriteString(alterIdentName(op.ColumnName))
+		sb.WriteString(alterIdentName(f, op.ColumnName))
 		if op.ColumnDef != nil {
 			sb.WriteString(" ")
 			sb.WriteString(columnDefSQL(op.ColumnDef))

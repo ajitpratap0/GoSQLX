@@ -152,11 +152,12 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 	}
 
 	// Parse view name (supports schema.view qualification and double-quoted identifiers)
-	matViewName, err := p.parseQualifiedName()
+	matViewName, matViewQuote, err := p.parseQualifiedNameQuoted()
 	if err != nil {
 		return nil, p.qualifiedNameError(err, "materialized view name")
 	}
 	stmt.Name = matViewName
+	stmt.NameQuote = matViewQuote
 
 	// Parse optional column list
 	if p.isType(models.TokenTypeLParen) {
@@ -165,6 +166,7 @@ func (p *Parser) parseCreateMaterializedView() (*ast.CreateMaterializedViewState
 			if !p.isIdentifier() {
 				return nil, p.expectedError("column name")
 			}
+			stmt.ColumnQuotes = nameQuoteList(stmt.ColumnQuotes, len(stmt.Columns), p.currentNameQuote())
 			stmt.Columns = append(stmt.Columns, p.currentToken.Token.Value)
 			p.advance()
 

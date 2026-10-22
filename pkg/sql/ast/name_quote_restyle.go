@@ -87,14 +87,86 @@ func SetNameQuoteStyle(node Node, style rune, keepBareHash bool) {
 		case *CreateTableStatement:
 			v.NameQuote = restyle(v.NameQuote)
 			for i := range v.Columns {
-				v.Columns[i].NameQuote = restyle(v.Columns[i].NameQuote)
+				restyleColumnDef(&v.Columns[i], restyle)
+			}
+			for i := range v.Constraints {
+				restyleTableConstraint(&v.Constraints[i], restyle)
 			}
 		case *CreateViewStatement:
 			v.NameQuote = restyle(v.NameQuote)
-			for i := range v.ColumnQuotes {
-				v.ColumnQuotes[i] = restyle(v.ColumnQuotes[i])
+			restyleList(v.ColumnQuotes, restyle)
+		case *CreateMaterializedViewStatement:
+			v.NameQuote = restyle(v.NameQuote)
+			restyleList(v.ColumnQuotes, restyle)
+		case *CreateIndexStatement:
+			v.NameQuote = restyle(v.NameQuote)
+			v.TableQuote = restyle(v.TableQuote)
+			for i := range v.Columns {
+				v.Columns[i].ColumnQuote = restyle(v.Columns[i].ColumnQuote)
+			}
+		case *DropStatement:
+			restyleList(v.NameQuotes, restyle)
+		case *TruncateStatement:
+			restyleList(v.TableQuotes, restyle)
+		case *AlterStatement:
+			v.NameQuote = restyle(v.NameQuote)
+			if op, ok := v.Operation.(*AlterTableOperation); ok && op != nil {
+				restyleAlterTableOperation(op, restyle)
 			}
 		}
 		return true
 	})
+}
+
+// restyleList applies restyle to every entry of qs in place.
+func restyleList(qs []NameQuote, restyle func(NameQuote) NameQuote) {
+	for i := range qs {
+		qs[i] = restyle(qs[i])
+	}
+}
+
+// restyleColumnDef applies restyle to a column definition's name and to the
+// REFERENCES clauses of its constraints.
+func restyleColumnDef(c *ColumnDef, restyle func(NameQuote) NameQuote) {
+	if c == nil {
+		return
+	}
+	c.NameQuote = restyle(c.NameQuote)
+	for i := range c.Constraints {
+		restyleReference(c.Constraints[i].References, restyle)
+	}
+}
+
+// restyleTableConstraint applies restyle to a table constraint's name,
+// columns and REFERENCES clause.
+func restyleTableConstraint(tc *TableConstraint, restyle func(NameQuote) NameQuote) {
+	if tc == nil {
+		return
+	}
+	tc.NameQuote = restyle(tc.NameQuote)
+	restyleList(tc.ColumnQuotes, restyle)
+	restyleReference(tc.References, restyle)
+}
+
+// restyleReference applies restyle to a REFERENCES clause's table and
+// columns.
+func restyleReference(r *ReferenceDefinition, restyle func(NameQuote) NameQuote) {
+	if r == nil {
+		return
+	}
+	r.TableQuote = restyle(r.TableQuote)
+	restyleList(r.ColumnQuotes, restyle)
+}
+
+// restyleAlterTableOperation applies restyle to the names an ALTER TABLE
+// operation carries.
+func restyleAlterTableOperation(op *AlterTableOperation, restyle func(NameQuote) NameQuote) {
+	restyleColumnDef(op.ColumnDef, restyle)
+	restyleTableConstraint(op.Constraint, restyle)
+	for _, id := range []*Ident{op.ColumnName, op.ConstraintName, op.OldColumnName, op.NewColumnName} {
+		if id != nil {
+			id.Quote = restyle(id.Quote)
+		}
+	}
+	op.NewTableName.Quote = restyle(op.NewTableName.Quote)
 }

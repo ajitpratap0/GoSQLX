@@ -43,11 +43,12 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 	}
 
 	// Parse index name (supports schema.index qualification and double-quoted identifiers)
-	indexName, err := p.parseQualifiedName()
+	indexName, indexQuote, err := p.parseQualifiedNameQuoted()
 	if err != nil {
 		return nil, p.qualifiedNameError(err, "index name")
 	}
 	stmt.Name = indexName
+	stmt.NameQuote = indexQuote
 
 	// Expect ON
 	if !p.isType(models.TokenTypeOn) {
@@ -56,11 +57,12 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 	p.advance() // Consume ON
 
 	// Parse table name (supports schema.table qualification and double-quoted identifiers)
-	indexTableName, err := p.parseQualifiedName()
+	indexTableName, indexTableQuote, err := p.parseQualifiedNameQuoted()
 	if err != nil {
 		return nil, p.qualifiedNameError(err, "table name")
 	}
 	stmt.Table = indexTableName
+	stmt.TableQuote = indexTableQuote
 
 	// Parse optional USING
 	if p.isType(models.TokenTypeUsing) {
@@ -85,6 +87,7 @@ func (p *Parser) parseCreateIndex(unique bool) (*ast.CreateIndexStatement, error
 			return nil, p.expectedError("column name")
 		}
 		col.Column = p.currentToken.Token.Value
+		col.ColumnQuote = p.currentNameQuote()
 		p.advance()
 
 		// Parse optional COLLATE (SQLite, PostgreSQL): col COLLATE NOCASE

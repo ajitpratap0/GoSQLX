@@ -1118,7 +1118,7 @@ func (p *Parser) parseObjectName() ast.ObjectName {
 	if ident == nil {
 		return ast.ObjectName{}
 	}
-	return ast.ObjectName{Name: ident.Name}
+	return ast.ObjectName{Name: ident.Name, Quote: ident.Quotes}
 }
 
 // parseStringLiteral parses a string literal

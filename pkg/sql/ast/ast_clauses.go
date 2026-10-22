@@ -79,6 +79,12 @@ type JoinClause struct {
 	Condition Expression      // ON condition (nil for USING / CROSS / NATURAL)
 	Using     []Expression    // USING (col, ...) columns; when set, Condition is nil and renderers emit USING
 	Pos       models.Location // Source position of the JOIN keyword (1-based line and column)
+
+	Global         bool       // ClickHouse GLOBAL JOIN
+	Strictness     string     // ClickHouse ANY / ALL / ASOF / SEMI / ANTI, Snowflake ASOF
+	Hint           string     // SQL Server HASH / LOOP / MERGE / REMOTE join hint, or MySQL STRAIGHT_JOIN
+	MatchCondition Expression // Snowflake ASOF JOIN ... MATCH_CONDITION (expr)
+	Comma          bool       // MySQL ", t" after an explicit join: rendered as a comma, Type is CROSS
 }
 
 func (j *JoinClause) expressionNode()     {}
@@ -96,6 +102,18 @@ func (j JoinClause) Children() []Node { return j.childrenInPlace() }
 // childrenInPlace is Children for a JoinClause reached through a pointer:
 // Left and Right are returned as pointers into *j itself.
 func (j *JoinClause) childrenInPlace() []Node {
+	if j.MatchCondition != nil {
+		nodes := []Node{&j.Left, &j.Right, j.MatchCondition}
+		if j.Condition != nil {
+			nodes = append(nodes, j.Condition)
+		}
+		for _, u := range j.Using {
+			if u != nil {
+				nodes = append(nodes, u)
+			}
+		}
+		return nodes
+	}
 	if len(j.Using) == 0 {
 		if j.Condition != nil {
 			return []Node{&j.Left, &j.Right, j.Condition}
@@ -263,6 +281,9 @@ type OrderByExpression struct {
 	// WithFill — ClickHouse "WITH FILL FROM x TO y STEP z" modifier.
 	// Fields are nil when the corresponding part is absent.
 	WithFill *WithFillClause
+	// UsingOperator is the PostgreSQL ORDER BY expr USING <op> sort
+	// operator (<, >, <=, >=); when set it replaces ASC / DESC.
+	UsingOperator string
 }
 
 // WithFillClause — ClickHouse "WITH FILL [FROM x] [TO y] [STEP z]".
@@ -396,6 +417,9 @@ type TopClause struct {
 	Count     Expression // Number of rows (or percentage) as an expression
 	IsPercent bool       // Whether PERCENT keyword was specified
 	WithTies  bool       // Whether WITH TIES was specified (SQL Server)
+	// Parenthesized records TOP (n); renderers keep the parentheses, and add
+	// them for any count that is not a plain number.
+	Parenthesized bool
 }
 
 func (t *TopClause) expressionNode()     {}
@@ -424,11 +448,19 @@ type FetchClause struct {
 	IsPercent bool
 	// WithTies indicates FETCH ... WITH TIES (includes tied rows)
 	WithTies bool
+	// FetchExpr is the row count when it is not a plain integer
+	// (FETCH NEXT @n ROWS ONLY); FetchValue wins when both are set.
+	FetchExpr Expression
 }
 
 func (f *FetchClause) expressionNode()     {}
 func (f FetchClause) TokenLiteral() string { return "FETCH" }
-func (f FetchClause) Children() []Node     { return nil }
+func (f FetchClause) Children() []Node {
+	if f.FetchExpr != nil {
+		return []Node{f.FetchExpr}
+	}
+	return nil
+}
 
 // ForClause represents row-level locking clauses in SELECT statements (SQL:2003, PostgreSQL, MySQL)
 // Syntax: FOR {UPDATE | SHARE | NO KEY UPDATE | KEY SHARE} [OF table_name [, ...]] [NOWAIT | SKIP LOCKED]
@@ -452,11 +484,21 @@ type ForClause struct {
 	NoWait bool
 	// SkipLocked indicates SKIP LOCKED option (skip rows that can't be locked)
 	SkipLocked bool
+	// Wait is the Oracle / MariaDB WAIT n timeout, or nil.
+	Wait Expression
+	// LockInShareMode records MySQL's LOCK IN SHARE MODE spelling of a
+	// SHARE lock (LockType "SHARE").
+	LockInShareMode bool
 }
 
 func (f *ForClause) expressionNode()     {}
 func (f ForClause) TokenLiteral() string { return "FOR" }
-func (f ForClause) Children() []Node     { return nil }
+func (f ForClause) Children() []Node {
+	if f.Wait != nil {
+		return []Node{f.Wait}
+	}
+	return nil
+}
 
 // OnConflict represents ON CONFLICT DO UPDATE/NOTHING clause
 type OnConflict struct {

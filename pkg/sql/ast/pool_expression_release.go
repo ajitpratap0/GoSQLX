@@ -666,6 +666,22 @@ func putExpressionBounded(expr Expression, depth int, mode releaseMode, maxWork,
 			}
 			e.Value = nil
 
+		case *StarExpression:
+			if e.Star != nil {
+				workQueue = append(workQueue, e.Star)
+			}
+			if e.Ilike != nil {
+				workQueue = append(workQueue, e.Ilike)
+			}
+			for _, r := range e.Replace {
+				if r != nil {
+					workQueue = append(workQueue, r)
+				}
+			}
+			e.Star, e.Ilike = nil, nil
+			clear(e.Replace)
+			e.Replace = e.Replace[:0]
+
 		case *VariantPath:
 			if e.Root != nil {
 				workQueue = append(workQueue, e.Root)

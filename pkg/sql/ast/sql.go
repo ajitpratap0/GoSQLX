@@ -1223,8 +1223,14 @@ func (s *SelectStatement) writeSQL(buf *bytes.Buffer) {
 	} else if s.Distinct {
 		buf.WriteString("DISTINCT ")
 	}
+	writeSelectModifiers(buf, s.SelectModifiers)
+	writeTop(buf, s.Top)
 
 	writeExprList(buf, s.Columns)
+
+	if s.Into != nil && !s.Into.Trailing {
+		writeSelectInto(buf, s.Into)
+	}
 
 	if len(s.From) > 0 {
 		buf.WriteString(" FROM ")
@@ -1269,14 +1275,16 @@ func (s *SelectStatement) writeSQL(buf *bytes.Buffer) {
 		writeExpr(buf, s.Where)
 	}
 
-	if len(s.GroupBy) > 0 {
-		buf.WriteString(" GROUP BY ")
-		writeExprList(buf, s.GroupBy)
-	}
+	writeGroupBy(buf, s)
 
 	if s.Having != nil {
 		buf.WriteString(" HAVING ")
 		writeExpr(buf, s.Having)
+	}
+
+	if s.Qualify != nil {
+		buf.WriteString(" QUALIFY ")
+		writeExpr(buf, s.Qualify)
 	}
 
 	// MariaDB hierarchical query clauses (10.2+): START WITH ... CONNECT BY ...
@@ -1304,32 +1312,38 @@ func (s *SelectStatement) writeSQL(buf *bytes.Buffer) {
 	}
 
 	if len(s.OrderBy) > 0 {
-		buf.WriteString(" ORDER BY ")
+		if s.OrderSiblings {
+			buf.WriteString(" ORDER SIBLINGS BY ")
+		} else {
+			buf.WriteString(" ORDER BY ")
+		}
 		writeOrderBy(buf, s.OrderBy)
 	}
+	writeInterpolate(buf, s.Interpolate)
 
-	if s.Limit != nil {
-		buf.WriteString(" LIMIT ")
-		writeInt(buf, int64(*s.Limit))
-	}
-
-	if s.Offset != nil {
-		buf.WriteString(" OFFSET ")
-		writeInt(buf, int64(*s.Offset))
-	}
+	writeLimitOffset(buf, s)
 
 	if s.Fetch != nil {
 		writeFetch(buf, s.Fetch)
+	}
+
+	if s.Into != nil && s.Into.Trailing {
+		writeSelectInto(buf, s.Into)
 	}
 
 	if s.For != nil {
 		writeFor(buf, s.For)
 	}
 
+	writeForOutput(buf, s.ForOutput)
+
 	if len(s.Settings) > 0 {
 		buf.WriteString(" SETTINGS ")
 		writeQuerySettings(buf, s.Settings)
 	}
+
+	writeQueryHints(buf, s.QueryHints)
+	writeFormat(buf, s.OutputFormat)
 }
 
 // SQL returns the full SQL string for this INSERT statement, including the
@@ -2161,7 +2175,10 @@ func writeOrderBy(buf *bytes.Buffer, orders []OrderByExpression) {
 			buf.WriteString(", ")
 		}
 		writeExpr(buf, o.Expression)
-		if !o.Ascending {
+		if op := OrderUsingOperatorText(o.UsingOperator); op != "" {
+			buf.WriteString(" USING ")
+			buf.WriteString(op)
+		} else if !o.Ascending {
 			buf.WriteString(" DESC")
 		}
 		if o.NullsFirst != nil {
@@ -2269,13 +2286,19 @@ func writeTableRefList(buf *bytes.Buffer, refs []TableReference) {
 }
 
 func writeJoin(buf *bytes.Buffer, j *JoinClause) {
-	// An unknown join type is dropped, leaving a plain JOIN.
-	if t := JoinTypeText(j.Type); t != "" {
-		buf.WriteString(t)
-		buf.WriteByte(' ')
+	if j.Comma {
+		buf.WriteString(", ")
+		writeTableRef(buf, &j.Right)
+		return
 	}
-	buf.WriteString("JOIN ")
+	writeJoinKeywords(buf, j)
+	buf.WriteByte(' ')
 	writeTableRef(buf, &j.Right)
+	if j.MatchCondition != nil {
+		buf.WriteString(" MATCH_CONDITION (")
+		writeExpr(buf, j.MatchCondition)
+		buf.WriteByte(')')
+	}
 	if len(j.Using) > 0 {
 		buf.WriteString(" USING (")
 		for i, u := range j.Using {
@@ -2362,11 +2385,15 @@ func writeFetch(buf *bytes.Buffer, f *FetchClause) {
 	if f.FetchValue != nil {
 		buf.WriteByte(' ')
 		writeInt(buf, *f.FetchValue)
+	} else if f.FetchExpr != nil {
+		buf.WriteByte(' ')
+		writeExpr(buf, f.FetchExpr)
 	}
 	if f.IsPercent {
 		buf.WriteString(" PERCENT")
 	}
-	buf.WriteString(" ROWS")
+	buf.WriteByte(' ')
+	buf.WriteString(FetchRowsKeyword(f))
 	if f.WithTies {
 		buf.WriteString(" WITH TIES")
 	} else {
@@ -2375,6 +2402,14 @@ func writeFetch(buf *bytes.Buffer, f *FetchClause) {
 }
 
 func writeFor(buf *bytes.Buffer, f *ForClause) {
+	if f.LockInShareMode {
+		buf.WriteString(" LOCK IN SHARE MODE")
+		if f.NoWait {
+			buf.WriteString(" NOWAIT")
+		}
+		writeLockWait(buf, f)
+		return
+	}
 	buf.WriteString(" FOR ")
 	buf.WriteString(LockTypeText(f.LockType))
 	if len(f.Tables) > 0 {
@@ -2387,6 +2422,7 @@ func writeFor(buf *bytes.Buffer, f *ForClause) {
 	if f.SkipLocked {
 		buf.WriteString(" SKIP LOCKED")
 	}
+	writeLockWait(buf, f)
 }
 
 func writeCTE(buf *bytes.Buffer, cte *CommonTableExpr) {

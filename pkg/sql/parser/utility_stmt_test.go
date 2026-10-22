@@ -363,7 +363,7 @@ func TestParser_UtilityStatementBoundary(t *testing.T) {
 		dialect keywords.SQLDialect
 		sql     string
 	}{
-		{keywords.DialectMySQL, "SELECT * FROM accounts WHERE id = 1 LOCK IN SHARE MODE"},
+		{keywords.DialectMySQL, "SELECT * FROM accounts WHERE id = 1 USE db"},
 		{keywords.DialectMySQL, "SELECT 1 SET @a = 1"},
 		{keywords.DialectPostgreSQL, "SELECT a FROM t WHERE a = 1 COMMIT"},
 		{keywords.DialectSQLServer, "SELECT 1 PRINT 'x'"},

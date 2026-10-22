@@ -383,6 +383,7 @@ func releaseSelectStatement(stmt *SelectStatement, mode releaseMode) {
 	for i := range stmt.Joins {
 		releaseTableReference(&stmt.Joins[i].Right, mode)
 		releaseExpression(stmt.Joins[i].Condition, mode)
+		releaseExpression(stmt.Joins[i].MatchCondition, mode)
 		for _, u := range stmt.Joins[i].Using {
 			releaseExpression(u, mode)
 		}
@@ -475,9 +476,18 @@ func releaseSelectStatement(stmt *SelectStatement, mode releaseMode) {
 	stmt.Limit = nil
 	stmt.Offset = nil
 
-	// ── FETCH / FOR (no Expression children) ───────────────────────────
+	// ── FETCH / FOR ────────────────────────────────────────────────────
+	if stmt.Fetch != nil {
+		releaseExpression(stmt.Fetch.FetchExpr, mode)
+	}
 	stmt.Fetch = nil
+	if stmt.For != nil {
+		releaseExpression(stmt.For.Wait, mode)
+	}
 	stmt.For = nil
+
+	// ── INTO, LIMIT BY, FOR JSON/XML, OPTION, ... (select_ext.go) ──────
+	releaseSelectExt(stmt, mode)
 
 	// ── ClickHouse SETTINGS ────────────────────────────────────────────
 	for i := range stmt.Settings {

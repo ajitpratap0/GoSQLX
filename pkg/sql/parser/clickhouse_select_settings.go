@@ -43,6 +43,17 @@ func (p *Parser) parseTrailingSelectSettings(stmt ast.Statement) error {
 		return goerrors.InvalidSyntaxError("SETTINGS must follow a SELECT", loc, "")
 	}
 	target.Settings = settings
+	// Trailing output-format hint: SETTINGS ... FORMAT <name>. Format names
+	// may tokenize as keywords or literals (Values, Null), so any word token
+	// is accepted, using the same rule as setting names. A name is required.
+	if !p.isStringLiteral() && strings.EqualFold(p.currentToken.Token.Value, "FORMAT") {
+		p.advance() // FORMAT
+		if !p.isQuerySettingName() || ast.FormatNameText(p.currentToken.Token.Value) == "" {
+			return p.expectedError("format name after FORMAT")
+		}
+		target.OutputFormat = p.currentToken.Token.Value
+		p.advance() // format name
+	}
 	return nil
 }
 
@@ -83,18 +94,8 @@ func (p *Parser) parseQuerySettingsList() ([]ast.QuerySetting, error) {
 		p.advance() // ,
 	}
 
-	// Trailing ClickHouse output-format hint: SETTINGS ... FORMAT <name>.
-	// Parse-only; FORMAT is not modeled on the AST (pre-existing, see the
-	// INSERT ... FORMAT handling in dml_insert.go). Format names may tokenize
-	// as keywords or literals (Values, Null), so any word token is accepted,
-	// using the same rule as setting names. A name is required.
-	if !p.isStringLiteral() && strings.EqualFold(p.currentToken.Token.Value, "FORMAT") {
-		p.advance() // FORMAT
-		if !p.isQuerySettingName() {
-			return nil, p.expectedError("format name after FORMAT")
-		}
-		p.advance() // format name
-	}
+	// A trailing FORMAT <name> is parsed by the caller
+	// (parseTrailingSelectSettings stores it on the SELECT).
 	return settings, nil
 }
 

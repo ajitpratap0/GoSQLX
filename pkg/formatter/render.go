@@ -231,23 +231,15 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 	}
 
-	// Render TOP clause (SQL Server). Emitted between SELECT [DISTINCT] and columns.
-	if s.Top != nil {
-		sb.WriteString(f.kw("TOP"))
-		sb.WriteString(" ")
-		sb.WriteString(FormatExpression(s.Top.Count, opts))
-		if s.Top.IsPercent {
-			sb.WriteString(" ")
-			sb.WriteString(f.kw("PERCENT"))
-		}
-		if s.Top.WithTies {
-			sb.WriteString(" ")
-			sb.WriteString(f.kw("WITH TIES"))
-		}
-		sb.WriteString(" ")
-	}
+	// MySQL select modifiers and TOP, between SELECT [DISTINCT] and columns.
+	writeSelectPrologue(sb, s, f)
 
 	sb.WriteString(exprListSQL(s.Columns))
+
+	if s.Into != nil && !s.Into.Trailing {
+		sb.WriteString(" ")
+		sb.WriteString(selectIntoSQL(s.Into, f))
+	}
 
 	if len(s.From) > 0 {
 		sb.WriteString(f.clauseSep())
@@ -266,9 +258,21 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		sb.WriteString(joinSQL(&j, f))
 	}
 
+	if s.ArrayJoin != nil {
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(arrayJoinSQL(s.ArrayJoin, f))
+	}
+
 	if s.Sample != nil {
 		sb.WriteString(f.clauseSep())
 		sb.WriteString(sampleSQL(s.Sample, f))
+	}
+
+	if s.PrewhereClause != nil {
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(f.kw("PREWHERE"))
+		sb.WriteString(" ")
+		sb.WriteString(FormatExpression(s.PrewhereClause, opts))
 	}
 
 	if s.Where != nil {
@@ -278,11 +282,9 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		sb.WriteString(FormatExpression(s.Where, opts))
 	}
 
-	if len(s.GroupBy) > 0 {
+	if gb := groupBySQL(s, f); gb != "" {
 		sb.WriteString(f.clauseSep())
-		sb.WriteString(f.kw("GROUP BY"))
-		sb.WriteString(" ")
-		sb.WriteString(exprListSQL(s.GroupBy))
+		sb.WriteString(gb)
 	}
 
 	if s.Having != nil {
@@ -291,6 +293,9 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 		sb.WriteString(" ")
 		sb.WriteString(FormatExpression(s.Having, opts))
 	}
+
+	// QUALIFY, START WITH, CONNECT BY
+	writeHierarchical(sb, s, f)
 
 	if len(s.Windows) > 0 {
 		sb.WriteString(f.clauseSep())
@@ -305,39 +310,36 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 
 	if len(s.OrderBy) > 0 {
 		sb.WriteString(f.clauseSep())
-		sb.WriteString(f.kw("ORDER BY"))
+		if s.OrderSiblings {
+			sb.WriteString(f.kw("ORDER SIBLINGS BY"))
+		} else {
+			sb.WriteString(f.kw("ORDER BY"))
+		}
 		sb.WriteString(" ")
 		sb.WriteString(orderBySQL(s.OrderBy))
 	}
-
-	if s.Limit != nil {
-		sb.WriteString(f.clauseSep())
-		fmt.Fprintf(sb, "%s %d", f.kw("LIMIT"), *s.Limit)
+	if s.Interpolate != nil {
+		sb.WriteString(interpolateSQL(s.Interpolate, f))
 	}
 
-	if s.Offset != nil {
-		sb.WriteString(f.clauseSep())
-		fmt.Fprintf(sb, "%s %d", f.kw("OFFSET"), *s.Offset)
-	}
+	// LIMIT BY, LIMIT, OFFSET
+	writeLimitOffsetClauses(sb, s, f)
 
 	if s.Fetch != nil {
 		sb.WriteString(fetchSQL(s.Fetch, f))
+	}
+
+	if s.Into != nil && s.Into.Trailing {
+		sb.WriteString(f.clauseSep())
+		sb.WriteString(selectIntoSQL(s.Into, f))
 	}
 
 	if s.For != nil {
 		sb.WriteString(forSQL(s.For))
 	}
 
-	if len(s.Settings) > 0 {
-		sb.WriteString(f.clauseSep())
-		sb.WriteString(f.kw("SETTINGS"))
-		sb.WriteString(" ")
-		parts := make([]string, len(s.Settings))
-		for i := range s.Settings {
-			parts[i] = s.Settings[i].SQL()
-		}
-		sb.WriteString(strings.Join(parts, ", "))
-	}
+	// FOR JSON/XML, SETTINGS, OPTION (...), FORMAT
+	writeSelectEpilogue(sb, s, f)
 
 	if opts.AddSemicolon {
 		sb.WriteString(";")
@@ -351,48 +353,7 @@ func renderSelect(s *ast.SelectStatement, opts ast.FormatOptions) string {
 // shallow copy of the statement. This keeps the rendering code simple —
 // each clause renderer only handles its own field.
 func normalizeSelectForDialect(s *ast.SelectStatement, dialect string) {
-	switch dialect {
-	case "sqlserver":
-		if s.Top == nil && s.Limit != nil {
-			if s.Offset != nil || len(s.OrderBy) > 0 {
-				// SQL Server 2012+ OFFSET/FETCH syntax (requires ORDER BY in practice,
-				// but we emit it faithfully and let the database validate).
-				fetchVal := int64(*s.Limit)
-				s.Fetch = &ast.FetchClause{
-					FetchValue: &fetchVal,
-					FetchType:  "NEXT",
-				}
-				offsetVal := int64(0)
-				if s.Offset != nil {
-					offsetVal = int64(*s.Offset)
-				}
-				s.Fetch.OffsetValue = &offsetVal
-				s.Limit = nil
-				s.Offset = nil
-			} else {
-				// Simple TOP N
-				s.Top = &ast.TopClause{
-					Count: &ast.LiteralValue{Value: *s.Limit, Type: "int"},
-				}
-				s.Limit = nil
-			}
-		}
-
-	case "oracle":
-		if s.Fetch == nil && s.Limit != nil {
-			fetchVal := int64(*s.Limit)
-			s.Fetch = &ast.FetchClause{
-				FetchValue: &fetchVal,
-				FetchType:  "FIRST",
-			}
-			if s.Offset != nil {
-				offsetVal := int64(*s.Offset)
-				s.Fetch.OffsetValue = &offsetVal
-				s.Offset = nil
-			}
-			s.Limit = nil
-		}
-	}
+	normalizeLimitForDialect(s, dialect)
 }
 
 func renderInsert(i *ast.InsertStatement, opts ast.FormatOptions) string {
@@ -1344,7 +1305,9 @@ func orderBySQL(orders []ast.OrderByExpression) string {
 	parts := make([]string, len(orders))
 	for i, o := range orders {
 		s := exprSQL(o.Expression)
-		if !o.Ascending {
+		if op := ast.OrderUsingOperatorText(o.UsingOperator); op != "" {
+			s += " USING " + op
+		} else if !o.Ascending {
 			s += " DESC"
 		}
 		if o.NullsFirst != nil {
@@ -1512,14 +1475,22 @@ func sampleSQL(s *ast.SampleClause, f *nodeFormatter) string {
 // joinSQL renders a JOIN clause.
 func joinSQL(j *ast.JoinClause, f *nodeFormatter) string {
 	var sb strings.Builder
-	// An unknown join type is dropped, leaving a plain JOIN.
-	if t := ast.JoinTypeText(j.Type); t != "" {
-		sb.WriteString(f.kw(t))
-		sb.WriteString(" ")
+	if j.Comma {
+		sb.WriteString(", ")
+		sb.WriteString(tableRefSQL(&j.Right, f))
+		return sb.String()
 	}
-	sb.WriteString(f.kw("JOIN"))
+	// An unknown join type is dropped, leaving a plain JOIN.
+	sb.WriteString(joinKeywordsSQL(j, f))
 	sb.WriteString(" ")
 	sb.WriteString(tableRefSQL(&j.Right, f))
+	if j.MatchCondition != nil {
+		sb.WriteString(" ")
+		sb.WriteString(f.kw("MATCH_CONDITION"))
+		sb.WriteString(" (")
+		sb.WriteString(exprSQL(j.MatchCondition))
+		sb.WriteString(")")
+	}
 	if len(j.Using) > 0 {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("USING"))
@@ -1595,13 +1566,16 @@ func fetchSQL(fc *ast.FetchClause, f *nodeFormatter) string {
 	fmt.Fprintf(&sb, " %s %s", f.kw("FETCH"), f.kw(fetchType))
 	if fc.FetchValue != nil {
 		fmt.Fprintf(&sb, " %d", *fc.FetchValue)
+	} else if fc.FetchExpr != nil {
+		sb.WriteString(" ")
+		sb.WriteString(exprSQL(fc.FetchExpr))
 	}
 	if fc.IsPercent {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("PERCENT"))
 	}
 	sb.WriteString(" ")
-	sb.WriteString(f.kw("ROWS"))
+	sb.WriteString(f.kw(ast.FetchRowsKeyword(fc)))
 	if fc.WithTies {
 		sb.WriteString(" ")
 		sb.WriteString(f.kw("WITH TIES"))
@@ -1615,6 +1589,17 @@ func fetchSQL(fc *ast.FetchClause, f *nodeFormatter) string {
 // forSQL renders a FOR UPDATE/SHARE clause.
 func forSQL(f *ast.ForClause) string {
 	var sb strings.Builder
+	if f.LockInShareMode {
+		sb.WriteString(" LOCK IN SHARE MODE")
+		if f.NoWait {
+			sb.WriteString(" NOWAIT")
+		}
+		if f.Wait != nil {
+			sb.WriteString(" WAIT ")
+			sb.WriteString(exprSQL(f.Wait))
+		}
+		return sb.String()
+	}
 	sb.WriteString(" FOR ")
 	sb.WriteString(ast.LockTypeText(f.LockType))
 	if len(f.Tables) > 0 {
@@ -1626,6 +1611,10 @@ func forSQL(f *ast.ForClause) string {
 	}
 	if f.SkipLocked {
 		sb.WriteString(" SKIP LOCKED")
+	}
+	if f.Wait != nil {
+		sb.WriteString(" WAIT ")
+		sb.WriteString(exprSQL(f.Wait))
 	}
 	return sb.String()
 }

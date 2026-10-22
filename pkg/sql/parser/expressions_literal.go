@@ -63,6 +63,10 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return &ast.UnaryExpression{Operator: ast.Prior, Expr: operand, Pos: priorPos}, nil
 	}
 
+	if lit, ok := p.parsePrefixedStringLiteral(); ok {
+		return lit, nil
+	}
+
 	if p.isType(models.TokenTypeCase) {
 		// Handle CASE expressions (both simple and searched forms)
 		return p.parseCaseExpression()
@@ -267,7 +271,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		// Handle string literals
 		value := p.currentToken.Token.Value
 		p.advance()
-		return &ast.LiteralValue{Value: value, Type: "string"}, nil
+		return p.newStringLiteral(value), nil
 	}
 
 	if p.isNumericLiteral() {

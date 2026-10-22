@@ -93,19 +93,36 @@ func TestFormatSQL_AllowsHarmlessQuotes(t *testing.T) {
 	}
 }
 
-// TestFormatSQL_RefusesBackslashLiteralChange checks that string literals
-// with backslashes are never rewritten in dialects where backslash is not an
-// escape character (the renderer doubles them); the CLI must refuse.
-func TestFormatSQL_RefusesBackslashLiteralChange(t *testing.T) {
-	for _, d := range []string{"sqlserver", "oracle", "sqlite", "snowflake", "clickhouse"} {
-		t.Run(d, func(t *testing.T) {
-			in := `SELECT 'C:\temp\x'`
-			out, err := formatWith(in, CLIFormatterOptions{Compact: true, Uppercase: true, Dialect: d})
-			if err == nil {
-				t.Fatalf("formatSQL(%q, %s) = %q, want an error", in, d, out)
+// TestFormatSQL_KeepsBackslashLiteral checks that a string literal with
+// backslashes is written back with the rules of its dialect: untouched where
+// the backslash is an ordinary character, re-escaped (and so equal after
+// tokenizing) where it escapes. The renderer used to double every backslash,
+// so the guard refused these inputs.
+func TestFormatSQL_KeepsBackslashLiteral(t *testing.T) {
+	const in = `SELECT 'C:\temp\x'`
+	for _, tt := range []struct {
+		dialect string
+		want    string // literal text expected in the output
+	}{
+		{"sqlserver", `'C:\temp\x'`},
+		{"oracle", `'C:\temp\x'`},
+		{"sqlite", `'C:\temp\x'`},
+		{"postgresql", `'C:\temp\x'`},
+		// \t is a tab; \x keeps its backslash, which the output doubles.
+		{"snowflake", "'C:\temp\\\\x'"},
+		{"clickhouse", "'C:\temp\\\\x'"},
+	} {
+		t.Run(tt.dialect, func(t *testing.T) {
+			out, err := formatWith(in, CLIFormatterOptions{Compact: true, Uppercase: true, Dialect: tt.dialect})
+			if err != nil {
+				t.Fatalf("formatSQL(%q, %s): %v", in, tt.dialect, err)
 			}
-			if !strings.Contains(err.Error(), "string literal") {
-				t.Fatalf("error %q does not name the changed string literal", err)
+			if !strings.Contains(out, tt.want) {
+				t.Fatalf("formatSQL(%q, %s) = %q, want it to contain %q", in, tt.dialect, out, tt.want)
+			}
+			again, err := formatWith(out, CLIFormatterOptions{Compact: true, Uppercase: true, Dialect: tt.dialect})
+			if err != nil || again != out {
+				t.Fatalf("not idempotent: %q then %q (err %v)", out, again, err)
 			}
 		})
 	}

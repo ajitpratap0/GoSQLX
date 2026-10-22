@@ -58,8 +58,8 @@ type quotedCase struct {
 }
 
 var (
-	backslashDialects   = []keywords.SQLDialect{"", keywords.DialectPostgreSQL, keywords.DialectMySQL, keywords.DialectMariaDB}
-	noBackslashDialects = []keywords.SQLDialect{keywords.DialectSQLServer, keywords.DialectOracle, keywords.DialectSQLite, keywords.DialectSnowflake, keywords.DialectClickHouse}
+	backslashDialects   = []keywords.SQLDialect{"", keywords.DialectMySQL, keywords.DialectMariaDB, keywords.DialectSnowflake, keywords.DialectClickHouse}
+	noBackslashDialects = []keywords.SQLDialect{keywords.DialectPostgreSQL, keywords.DialectSQLServer, keywords.DialectOracle, keywords.DialectSQLite}
 )
 
 func quotedCases() []quotedCase {
@@ -77,8 +77,12 @@ func quotedCases() []quotedCase {
 		{name: "empty", dialect: pg, sql: `''`, typ: str, value: "", quote: '\'', quoteStyle: noWord, end: loc(1, 3)},
 		{name: "doubled quote", dialect: pg, sql: `'it''s'`, typ: str, value: "it's", quote: '\'', quoteStyle: noWord, end: loc(1, 8), alias: aliasNo},
 		{name: "trailing doubled quote", dialect: pg, sql: `'a'''`, typ: str, value: "a'", quote: '\'', quoteStyle: noWord, alias: aliasNo},
-		{name: "escaped backslash", dialect: pg, sql: `'a\\'`, typ: str, value: `a\`, quote: '\'', quoteStyle: noWord, alias: aliasNo},
-		{name: "invalid escape", dialect: pg, sql: `'a\q'`, errCode: gerrors.ErrCodeInvalidSyntax, errLoc: loc(1, 4)},
+		{name: "escaped backslash", dialect: keywords.DialectMySQL, sql: `'a\\'`, typ: str, value: `a\`, quote: '\'', quoteStyle: noWord, alias: aliasNo},
+		{name: "unknown escape mysql drops the backslash", dialect: keywords.DialectMySQL, sql: `'a\q'`, typ: str, value: `aq`, quote: '\'', quoteStyle: noWord, alias: aliasNo},
+		{name: "unknown escape keeps the backslash", dialect: keywords.DialectClickHouse, sql: `'a\q'`, typ: str, value: `a\q`, quote: '\'', quoteStyle: noWord, alias: aliasNo},
+		{name: "like escapes keep the backslash", dialect: keywords.DialectMySQL, sql: `'50\%\_'`, typ: str, value: `50\%\_`, quote: '\'', quoteStyle: noWord, alias: aliasNo},
+		{name: "backslash quote does not close", dialect: keywords.DialectClickHouse, sql: `'a\'b'`, typ: str, value: `a'b`, quote: '\'', quoteStyle: noWord, alias: aliasNo},
+		{name: "standard string ends at backslash quote", dialect: pg, sql: `'a\' x`, typ: str, value: `a\`, quote: '\'', quoteStyle: noWord, end: loc(1, 5), alias: aliasYes},
 		{name: "multi-line", dialect: pg, sql: "'a\nb' x", typ: str, value: "a\nb", quote: '\'', quoteStyle: noWord, end: loc(2, 3), alias: aliasYes},
 		{name: "unterminated at EOF", dialect: pg, sql: "'abc", errCode: gerrors.ErrCodeUnterminatedString, errLoc: loc(1, 1)},
 		{name: "unterminated after newline", dialect: pg, sql: "x 'abc\n", errCode: gerrors.ErrCodeUnterminatedString, errLoc: loc(1, 3)},

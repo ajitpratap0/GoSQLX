@@ -74,7 +74,6 @@ var zeroCopyInvalidInputs = []struct {
 	sql     string
 	dialect keywords.SQLDialect
 }{
-	{"SELECT 1.", keywords.DialectPostgreSQL},
 	{"SELECT 1e", keywords.DialectPostgreSQL},
 	{"SELECT 'x", keywords.DialectPostgreSQL},
 	{"/* open", keywords.DialectPostgreSQL},

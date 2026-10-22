@@ -195,6 +195,10 @@ func identifierNeedsQuoting(name string) bool {
 		case r == '.':
 			digitLed, partStart = false, true
 			continue
+		case r == '$' && !partStart && !digitLed:
+			// A later character of a name (Oracle v$session, Snowflake
+			// SYSTEM$TYPEOF); never the first.
+			continue
 		case r != '_' && r != '*' && !unicode.IsLetter(r) && !unicode.IsDigit(r):
 			return true
 		case partStart:
@@ -287,16 +291,7 @@ func (l *LiteralValue) SQL() string {
 	}
 	switch {
 	case strings.EqualFold(l.Type, "STRING"):
-		text := literalText(l.Value)
-		if !stringLiteralNeedsEscape(text) {
-			return "'" + text + "'"
-		}
-		buf := getBuf()
-		defer putBuf(buf)
-		buf.WriteByte('\'')
-		writeEscapedStringLiteral(buf, text)
-		buf.WriteByte('\'')
-		return buf.String()
+		return l.stringSQL()
 	case strings.EqualFold(l.Type, "BOOLEAN"):
 		return strings.ToUpper(literalText(l.Value))
 	default:
@@ -314,9 +309,7 @@ func (l *LiteralValue) writeSQL(buf *bytes.Buffer) {
 	}
 	switch {
 	case strings.EqualFold(l.Type, "STRING"):
-		buf.WriteByte('\'')
-		writeEscapedStringLiteral(buf, literalText(l.Value))
-		buf.WriteByte('\'')
+		l.writeStringSQL(buf)
 	case strings.EqualFold(l.Type, "BOOLEAN"):
 		buf.WriteString(strings.ToUpper(literalText(l.Value)))
 	default:

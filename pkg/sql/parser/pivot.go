@@ -53,8 +53,7 @@ func renderQuotedIdent(tok models.Token) string {
 // as is.
 func (p *Parser) renderPivotValue() string {
 	if p.isStringLiteral() {
-		lit := ast.LiteralValue{Value: p.currentToken.Token.Value, Type: "STRING"}
-		return lit.SQL()
+		return p.newStringLiteral(p.currentToken.Token.Value).SQL()
 	}
 	return renderQuotedIdent(p.currentToken.Token)
 }

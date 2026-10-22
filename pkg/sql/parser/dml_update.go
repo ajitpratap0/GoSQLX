@@ -59,7 +59,7 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 		// Parse value expression
 		var expr ast.Expression
 		if p.isStringLiteral() {
-			expr = &ast.LiteralValue{Value: p.currentToken.Token.Value, Type: "string"}
+			expr = p.newStringLiteral(p.currentToken.Token.Value)
 			p.advance()
 		} else if p.isNumericLiteral() {
 			litType := "int"

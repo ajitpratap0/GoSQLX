@@ -75,10 +75,14 @@ func Transpile(sql string, from, to keywords.SQLDialect) (string, error) {
 		}
 	}
 
-	// Format each statement and join with ";\n".
+	// Format each statement for the target dialect and join with ";\n". The
+	// target decides dialect-specific spellings such as MINUS versus EXCEPT
+	// and set-operation grouping.
+	style := ast.CompactStyle()
+	style.Dialect = string(to)
 	parts := make([]string, 0, len(tree.Statements))
 	for _, stmt := range tree.Statements {
-		parts = append(parts, formatter.FormatStatement(stmt, ast.CompactStyle()))
+		parts = append(parts, formatter.FormatStatement(stmt, style))
 	}
 	return strings.Join(parts, ";\n"), nil
 }

@@ -138,20 +138,20 @@ func (p *Parser) parseUtilityStatement() (stmt ast.Statement, ok bool, err error
 		if p.dialect != string(keywords.DialectSQLServer) {
 			return nil, false, nil
 		}
-		return p.parseVerbatimStatement(word)
+		return p.parseVerbatimArgs(word)
 	case "EXISTS":
 		// ClickHouse EXISTS [TEMPORARY] TABLE | DATABASE | DICTIONARY name.
 		if p.dialect != string(keywords.DialectClickHouse) {
 			return nil, false, nil
 		}
-		return p.parseVerbatimStatement(word)
+		return p.parseVerbatimArgs(word)
 	case "GRANT", "REVOKE", "VACUUM", "LOCK", "UNLOCK", "KILL", "FLUSH", "OPTIMIZE",
 		"CHECK", "REPAIR", "CHECKSUM", "LISTEN", "NOTIFY", "UNLISTEN", "PREPARE",
 		"EXECUTE", "DEALLOCATE", "DO", "DECLARE", "LOAD", "RENAME", "REINDEX",
 		"CLUSTER", "CHECKPOINT", "DISCARD", "RESET", "XA", "BACKUP", "FLASHBACK",
 		"PURGE", "UNDROP", "EXCHANGE", "SYSTEM", "ATTACH", "DETACH", "HANDLER",
 		"INSTALL", "UNINSTALL", "COPY":
-		return p.parseVerbatimStatement(word)
+		return p.parseVerbatimArgs(word)
 	case "TABLE":
 		// TABLE name [ORDER BY ...] [LIMIT ...] (PostgreSQL, MySQL 8).
 		if next == "" && !p.isIdentifierAt(p.currentPos+1) {
@@ -249,6 +249,27 @@ func (p *Parser) seek(i int) {
 	} else {
 		p.currentToken = models.TokenWithSpan{}
 	}
+}
+
+// standaloneUtility lists the utility keywords that form a complete
+// statement on their own (VACUUM, CHECKPOINT, T-SQL THROW in a CATCH block).
+var standaloneUtility = map[string]bool{
+	"VACUUM": true, "ANALYZE": true, "REINDEX": true, "CLUSTER": true,
+	"CHECKPOINT": true, "THROW": true, "RETURN": true, "REVERT": true,
+}
+
+// parseVerbatimArgs is parseVerbatimStatement for a keyword that needs
+// arguments unless it is listed in standaloneUtility: GRANT alone is an
+// error, not a statement.
+func (p *Parser) parseVerbatimArgs(kind string) (ast.Statement, bool, error) {
+	if !standaloneUtility[kind] {
+		switch p.peekToken().Token.Type {
+		case models.TokenTypeSemicolon, models.TokenTypeEOF:
+			p.advance()
+			return nil, true, p.expectedError("arguments after " + kind)
+		}
+	}
+	return p.parseVerbatimStatement(kind)
 }
 
 // parseVerbatimStatement parses the statement starting at the current token

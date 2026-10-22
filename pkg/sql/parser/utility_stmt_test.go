@@ -314,6 +314,9 @@ func TestParser_UtilityStatementVerbatim(t *testing.T) {
 		{keywords.DialectSQLite, "DETACH DATABASE archive", "DETACH", ""},
 		{keywords.DialectSQLite, "VACUUM INTO 'backup.db'", "VACUUM", ""},
 		{keywords.DialectSQLite, "REINDEX", "REINDEX", ""},
+		{keywords.DialectSQLite, "VACUUM", "VACUUM", ""},
+		{keywords.DialectSQLite, "ANALYZE", "ANALYZE", ""},
+		{keywords.DialectSQLServer, "THROW", "THROW", ""},
 		{keywords.DialectOracle, "FLASHBACK TABLE orders TO BEFORE DROP", "FLASHBACK", ""},
 		{keywords.DialectOracle, "GRANT CREATE SESSION, CREATE TABLE TO app_role", "GRANT", ""},
 		{keywords.DialectSQLServer, "DECLARE @i INT = 0", "DECLARE", ""},
@@ -403,6 +406,9 @@ func TestParser_UtilityStatementErrors(t *testing.T) {
 		{keywords.DialectPostgreSQL, "SET"},
 		{keywords.DialectMySQL, "USE"},
 		{keywords.DialectPostgreSQL, "TABLE"},
+		{keywords.DialectPostgreSQL, "GRANT"},
+		{keywords.DialectMySQL, "KILL;"},
+		{keywords.DialectSQLServer, "EXEC"},
 		{keywords.DialectPostgreSQL, "SELEC 1"},
 	}
 	for _, tt := range tests {

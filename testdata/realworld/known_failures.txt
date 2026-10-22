@@ -263,10 +263,6 @@ oracle/03_ddl_migrations.sql#6 parse
 oracle/03_ddl_migrations.sql#7 drop
 oracle/03_ddl_migrations.sql#8 parse
 oracle/03_ddl_migrations.sql#9 parse
-oracle/04_window_analytics.sql#19 parse
-oracle/04_window_analytics.sql#22 parse
-oracle/04_window_analytics.sql#23 parse
-oracle/04_window_analytics.sql#24 parse
 oracle/05_dialect_specific.sql#19 parse
 oracle/05_dialect_specific.sql#32 parse
 oracle/06_etl_merge.sql#10 parse
@@ -290,8 +286,6 @@ oracle/07_admin_ops.sql#6 parse
 oracle/07_admin_ops.sql#7 parse
 oracle/07_admin_ops.sql#8 parse
 oracle/07_admin_ops.sql#9 parse
-oracle/08_complex_nested.sql#0 parse
-oracle/08_complex_nested.sql#15 parse
 postgresql/03_ddl_migrations.sql#1 parse
 postgresql/03_ddl_migrations.sql#10 parse
 postgresql/03_ddl_migrations.sql#12 parse
@@ -333,8 +327,6 @@ postgresql/03_ddl_migrations.sql#9 parse
 postgresql/05_dialect_specific.sql#35 drop
 postgresql/05_dialect_specific.sql#40 parse
 postgresql/05_dialect_specific.sql#52 parse
-postgresql/06_cte_dml_etl.sql#5 parse
-postgresql/06_cte_dml_etl.sql#6 parse
 postgresql/07_admin_ops.sql#20 parse
 postgresql/07_admin_ops.sql#41 parse
 postgresql/07_admin_ops.sql#42 parse
@@ -360,7 +352,6 @@ snowflake/03_ddl_migrations.sql#6 parse
 snowflake/03_ddl_migrations.sql#7 parse
 snowflake/03_ddl_migrations.sql#8 reparse
 snowflake/03_ddl_migrations.sql#9 reparse
-snowflake/05_dialect_specific.sql#24 parse
 snowflake/05_dialect_specific.sql#25 parse
 snowflake/05_dialect_specific.sql#42 drop
 snowflake/05_dialect_specific.sql#49 parse
@@ -388,12 +379,6 @@ snowflake/07_admin.sql#48 parse
 snowflake/07_admin.sql#49 parse
 snowflake/07_admin.sql#50 parse
 snowflake/07_admin.sql#51 parse
-snowflake/08_pivot_match.sql#1 parse
-snowflake/08_pivot_match.sql#13 parse
-snowflake/08_pivot_match.sql#2 parse
-snowflake/08_pivot_match.sql#5 parse
-snowflake/09_dbt_models.sql#0 parse
-snowflake/09_dbt_models.sql#1 parse
 snowflake/09_dbt_models.sql#12 parse
 snowflake/09_dbt_models.sql#15 parse
 snowflake/09_dbt_models.sql#2 parse
@@ -432,7 +417,6 @@ sqlite/12_orm_generated.sql#11 drop
 sqlite/12_orm_generated.sql#12 drop
 sqlite/12_orm_generated.sql#8 parse
 sqlite/12_orm_generated.sql#9 drop
-sqlserver/02_reporting.sql#21 drop
 sqlserver/03_ddl_migrations.sql#0 parse
 sqlserver/03_ddl_migrations.sql#1 parse
 sqlserver/03_ddl_migrations.sql#10 parse

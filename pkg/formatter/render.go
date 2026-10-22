@@ -1387,6 +1387,8 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		sb.WriteString(" ")
 		sb.WriteString(ast.QuoteTableAlias(t.Alias))
 		sb.WriteString(ast.TableColumnAliasesSQL(t))
+	} else {
+		sb.WriteString(ast.TableRefSourceAliasSQL(t))
 	}
 	sb.WriteString(ast.TableRefPostAliasSQL(t, f.kw))
 	// SQL Server table hints follow the alias and precede PIVOT/UNPIVOT (#604).
@@ -1404,36 +1406,8 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		}
 		sb.WriteString(")")
 	}
-	if t.Pivot != nil {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("PIVOT"))
-		sb.WriteString(" (")
-		sb.WriteString(exprSQL(t.Pivot.AggregateFunction))
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("FOR"))
-		sb.WriteString(" ")
-		sb.WriteString(ast.QuotePivotColumn(t.Pivot.PivotColumn))
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("IN"))
-		sb.WriteString(" (")
-		writePivotItems(&sb, t.Pivot.InValues)
-		sb.WriteString("))")
-	}
-	if t.Unpivot != nil {
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("UNPIVOT"))
-		sb.WriteString(" (")
-		sb.WriteString(ast.QuotePivotColumn(t.Unpivot.ValueColumn))
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("FOR"))
-		sb.WriteString(" ")
-		sb.WriteString(ast.QuotePivotColumn(t.Unpivot.NameColumn))
-		sb.WriteString(" ")
-		sb.WriteString(f.kw("IN"))
-		sb.WriteString(" (")
-		writePivotItems(&sb, t.Unpivot.InColumns)
-		sb.WriteString("))")
-	}
+	sb.WriteString(ast.PivotSQL(t.Pivot, f.kw))
+	sb.WriteString(ast.UnpivotSQL(t.Unpivot, f.kw))
 	sb.WriteString(ast.MatchRecognizeSQL(t.MatchRecognize, f.kw))
 	if t.Alias != "" && ast.TableAliasFollowsClause(t) {
 		// PIVOT/UNPIVOT aliases conventionally use AS to avoid ambiguity
@@ -1442,20 +1416,9 @@ func tableRefSQL(t *ast.TableReference, f *nodeFormatter) string {
 		sb.WriteString(f.kw("AS"))
 		sb.WriteString(" ")
 		sb.WriteString(ast.QuoteTableAlias(t.Alias))
+		sb.WriteString(ast.TableColumnAliasesSQL(t))
 	}
 	return sb.String()
-}
-
-// writePivotItems writes PIVOT IN values or UNPIVOT IN columns separated by
-// ", ", each in its stored source form when well formed and double-quoted
-// otherwise (see ast.QuotePivotItem).
-func writePivotItems(sb *strings.Builder, items []string) {
-	for i, item := range items {
-		if i > 0 {
-			sb.WriteString(", ")
-		}
-		sb.WriteString(ast.QuotePivotItem(item))
-	}
 }
 
 // sampleSQL renders a ClickHouse SAMPLE clause.

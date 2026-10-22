@@ -611,3 +611,273 @@ func (p *Parser) acceptsTableFunctionCall() bool {
 	return p.IsSQLServer() || p.IsSQLite() || p.IsOracle() || p.IsMySQL() || p.IsMariaDB() ||
 		p.IsRedshift()
 }
+
+// isCTENameStart reports whether the current token can name a CTE: any
+// token accepted as an alias, so non-reserved keywords work as in dbt's
+// WITH source AS (...), final AS (...).
+func (p *Parser) isCTENameStart() bool {
+	return p.canBeAlias()
+}
+
+// parseCTESearchCycle parses the optional SEARCH and CYCLE clauses after a
+// CTE's query:
+//
+//	SEARCH {DEPTH | BREADTH} FIRST BY col [, ...] SET seq_col
+//	CYCLE col [, ...] SET mark_col [TO value DEFAULT value] [USING path_col]
+func (p *Parser) parseCTESearchCycle(cte *ast.CommonTableExpr) error {
+	if p.isTokenMatch("SEARCH") && (equalsUpper(p.peekToken().Token.Value, "DEPTH") ||
+		equalsUpper(p.peekToken().Token.Value, "BREADTH")) {
+		search := &ast.CTESearchClause{Pos: p.currentLocation()}
+		p.advance() // Consume SEARCH
+		search.Breadth = equalsUpper(p.currentToken.Token.Value, "BREADTH")
+		p.advance() // Consume DEPTH / BREADTH
+		if !p.isTokenMatch("FIRST") {
+			return p.expectedError("FIRST after SEARCH DEPTH / BREADTH")
+		}
+		p.advance() // Consume FIRST
+		if !p.isType(models.TokenTypeBy) {
+			return p.expectedError("BY after SEARCH ... FIRST")
+		}
+		p.advance() // Consume BY
+		cols, err := p.parseCTEClauseColumns()
+		if err != nil {
+			return err
+		}
+		search.By = cols
+		set, err := p.parseCTEClauseSet()
+		if err != nil {
+			return err
+		}
+		search.Set = set
+		cte.Search = search
+	}
+	if p.isTokenMatch("CYCLE") && p.peekToken().Token.Type != models.TokenTypeLParen {
+		cycle := &ast.CTECycleClause{Pos: p.currentLocation()}
+		p.advance() // Consume CYCLE
+		cols, err := p.parseCTEClauseColumns()
+		if err != nil {
+			return err
+		}
+		cycle.Columns = cols
+		set, err := p.parseCTEClauseSet()
+		if err != nil {
+			return err
+		}
+		cycle.Set = set
+		if p.isTokenMatch("TO") {
+			p.advance() // Consume TO
+			to, err := p.parsePrimaryExpression()
+			if err != nil {
+				return err
+			}
+			if !p.isType(models.TokenTypeDefault) && !p.isTokenMatch("DEFAULT") {
+				return p.expectedError("DEFAULT in CYCLE clause")
+			}
+			p.advance() // Consume DEFAULT
+			def, err := p.parsePrimaryExpression()
+			if err != nil {
+				return err
+			}
+			cycle.To, cycle.Default = to, def
+		}
+		if p.isType(models.TokenTypeUsing) {
+			p.advance() // Consume USING
+			if !p.isIdentifier() && !p.isNonReservedKeyword() {
+				return p.expectedError("path column after USING")
+			}
+			cycle.Using = p.currentToken.Token.Value
+			p.advance()
+		}
+		cte.Cycle = cycle
+	}
+	return nil
+}
+
+// parseCTEClauseColumns parses "col [, col ...]" of a SEARCH / CYCLE clause.
+func (p *Parser) parseCTEClauseColumns() ([]string, error) {
+	var cols []string
+	for {
+		if !p.isIdentifier() && !p.isNonReservedKeyword() {
+			return nil, p.expectedError("column name")
+		}
+		cols = append(cols, p.currentToken.Token.Value)
+		p.advance()
+		if !p.isType(models.TokenTypeComma) {
+			return cols, nil
+		}
+		p.advance() // Consume ,
+	}
+}
+
+// parseCTEClauseSet parses "SET column" of a SEARCH / CYCLE clause.
+func (p *Parser) parseCTEClauseSet() (string, error) {
+	if !p.isType(models.TokenTypeSet) && !p.isTokenMatch("SET") {
+		return "", p.expectedError("SET")
+	}
+	p.advance() // Consume SET
+	if !p.isIdentifier() && !p.isNonReservedKeyword() {
+		return "", p.expectedError("column name after SET")
+	}
+	col := p.currentToken.Token.Value
+	p.advance()
+	return col, nil
+}
+
+// parseStagePathSegment consumes one segment of a Snowflake stage path after
+// a "/": a word or number, optionally with dotted parts (data.csv,
+// part.2024.json). It returns "" when no segment follows (a trailing "/").
+func (p *Parser) parseStagePathSegment() string {
+	isPart := func() bool {
+		return p.isIdentifier() || p.isType(models.TokenTypeKeyword) ||
+			p.isType(models.TokenTypeNumber) || (p.isWordToken() && !p.isStringLiteral())
+	}
+	if !isPart() {
+		return ""
+	}
+	seg := p.currentToken.Token.Value
+	p.advance()
+	for p.isType(models.TokenTypePeriod) {
+		next := p.peekToken().Token
+		if next.Type != models.TokenTypeIdentifier && next.Type != models.TokenTypeKeyword &&
+			next.Type != models.TokenTypeNumber {
+			break
+		}
+		p.advance() // Consume .
+		seg += "." + p.currentToken.Token.Value
+		p.advance()
+	}
+	return seg
+}
+
+// parsePivotAggregates parses the aggregate list of a PIVOT clause up to FOR:
+// agg [[AS] alias] [, agg [[AS] alias] ...]. AggregateFunction is the first
+// aggregate; Aggregates lists all of them when there is more than one or an
+// alias.
+func (p *Parser) parsePivotAggregates(clause *ast.PivotClause) error {
+	var aggs []ast.PivotAggregate
+	named := false
+	for {
+		expr, err := p.parseExpression()
+		if err != nil {
+			return err
+		}
+		agg := ast.PivotAggregate{Expr: expr}
+		if p.isType(models.TokenTypeAs) {
+			p.advance() // consume AS
+			if !p.isIdentifier() && !p.isNonReservedKeyword() {
+				return p.expectedError("alias after AS in PIVOT")
+			}
+			agg.Alias = p.currentToken.Token.Value
+			p.advance()
+		} else if p.isIdentifier() {
+			agg.Alias = p.currentToken.Token.Value
+			p.advance()
+		}
+		named = named || agg.Alias != ""
+		aggs = append(aggs, agg)
+		if !p.isType(models.TokenTypeComma) {
+			break
+		}
+		p.advance() // consume ,
+	}
+	clause.AggregateFunction = aggs[0].Expr
+	if len(aggs) > 1 || named {
+		clause.Aggregates = aggs
+	}
+	return nil
+}
+
+// parsePivotInSpecial parses a PIVOT IN list that is ANY [ORDER BY ...] or a
+// subquery, with the current token after "IN (", through the closing ")" of
+// the clause. It reports false when the list is a plain value list.
+func (p *Parser) parsePivotInSpecial(clause *ast.PivotClause) (bool, error) {
+	switch {
+	case p.isType(models.TokenTypeAny):
+		clause.InAny = true
+		p.advance() // consume ANY
+		if p.isType(models.TokenTypeOrder) {
+			order, err := p.parseOrderByClause()
+			if err != nil {
+				return false, err
+			}
+			clause.InAnyOrderBy = order
+		}
+	case p.isAnyType(models.TokenTypeSelect, models.TokenTypeWith):
+		q, err := p.parseQueryExpression("SELECT in PIVOT IN list")
+		if err != nil {
+			return false, err
+		}
+		clause.InSubquery = q
+	default:
+		return false, nil
+	}
+	if !p.isType(models.TokenTypeRParen) {
+		return false, p.expectedError(") to close PIVOT IN list")
+	}
+	p.advance() // close IN list )
+	if !p.isType(models.TokenTypeRParen) {
+		return false, p.expectedError(") to close PIVOT clause")
+	}
+	p.advance() // close PIVOT )
+	return true, nil
+}
+
+// parsePivotTuple parses an Oracle multi-column UNPIVOT IN entry "(a, b)"
+// and returns it in source form.
+func (p *Parser) parsePivotTuple() (string, error) {
+	p.advance() // consume (
+	var sb strings.Builder
+	sb.WriteByte('(')
+	for i := 0; ; i++ {
+		if !p.isIdentifier() {
+			return "", p.expectedError("column name in UNPIVOT IN list")
+		}
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(renderQuotedIdent(p.currentToken.Token))
+		p.advance()
+		if !p.isType(models.TokenTypeComma) {
+			break
+		}
+		p.advance() // consume ,
+	}
+	if !p.isType(models.TokenTypeRParen) {
+		return "", p.expectedError(") in UNPIVOT IN list")
+	}
+	p.advance() // consume )
+	sb.WriteByte(')')
+	return sb.String(), nil
+}
+
+// parsePivotSuffix parses the PIVOT / UNPIVOT clause of a table reference
+// with its alias and optional column alias list. An alias already read for
+// the table becomes the clause's source alias: (SELECT ...) s PIVOT (...) p.
+func (p *Parser) parsePivotSuffix(ref *ast.TableReference) error {
+	if p.isPivotKeyword() {
+		pivot, err := p.parsePivotClause()
+		if err != nil {
+			return err
+		}
+		pivot.SourceAlias, ref.Alias = ref.Alias, ""
+		ref.Pivot = pivot
+	} else if p.isUnpivotKeyword() {
+		unpivot, err := p.parseUnpivotClause()
+		if err != nil {
+			return err
+		}
+		unpivot.SourceAlias, ref.Alias = ref.Alias, ""
+		ref.Unpivot = unpivot
+	} else {
+		return nil
+	}
+	if ref.ColumnAliases != nil {
+		// A column list of the source alias has no PIVOT form to keep.
+		return p.expectedError("PIVOT or UNPIVOT after a table alias without a column list")
+	}
+	p.parsePivotAlias(ref)
+	if ref.Alias != "" {
+		return p.parseTableColumnAliases(ref)
+	}
+	return nil
+}

@@ -78,10 +78,7 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		for p.isType(models.TokenTypeDiv) {
 			stageName += "/"
 			p.advance()
-			if p.isIdentifier() || p.isType(models.TokenTypeKeyword) {
-				stageName += p.currentToken.Token.Value
-				p.advance()
-			}
+			stageName += p.parseStagePathSegment()
 		}
 		tableRef = ast.TableReference{
 			Name:    stageName,
@@ -97,6 +94,14 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 			}
 			tableRef.TableFunc = funcCall
 		}
+	} else if p.IsSnowflake() && p.isType(models.TokenTypeValues) &&
+		p.peekToken().Token.Type == models.TokenTypeLParen {
+		// Snowflake: FROM VALUES (1, 'a'), (2, 'b') AS v (id, name)
+		values, err := p.parseValuesQuery()
+		if err != nil {
+			return tableRef, err
+		}
+		tableRef = ast.TableReference{Lateral: isLateral, Values: values}
 	} else if p.isClickHouseKeywordTableFunction() {
 		// ClickHouse table function named by a keyword token: url(...),
 		// merge(...), values(...), null(...).
@@ -192,24 +197,9 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		}
 	}
 
-	// SQL Server / Oracle PIVOT clause
-	if p.isPivotKeyword() {
-		pivot, err := p.parsePivotClause()
-		if err != nil {
-			return tableRef, err
-		}
-		tableRef.Pivot = pivot
-		p.parsePivotAlias(&tableRef)
-	}
-
-	// SQL Server / Oracle UNPIVOT clause
-	if p.isUnpivotKeyword() {
-		unpivot, err := p.parseUnpivotClause()
-		if err != nil {
-			return tableRef, err
-		}
-		tableRef.Unpivot = unpivot
-		p.parsePivotAlias(&tableRef)
+	// SQL Server / Oracle / Snowflake PIVOT or UNPIVOT clause
+	if err := p.parsePivotSuffix(&tableRef); err != nil {
+		return tableRef, err
 	}
 
 	// Snowflake / Oracle MATCH_RECOGNIZE clause
@@ -376,24 +366,9 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 		}
 	}
 
-	// SQL Server / Oracle PIVOT clause
-	if p.isPivotKeyword() {
-		pivot, err := p.parsePivotClause()
-		if err != nil {
-			return ref, err
-		}
-		ref.Pivot = pivot
-		p.parsePivotAlias(&ref)
-	}
-
-	// SQL Server / Oracle UNPIVOT clause
-	if p.isUnpivotKeyword() {
-		unpivot, err := p.parseUnpivotClause()
-		if err != nil {
-			return ref, err
-		}
-		ref.Unpivot = unpivot
-		p.parsePivotAlias(&ref)
+	// SQL Server / Oracle / Snowflake PIVOT or UNPIVOT clause
+	if err := p.parsePivotSuffix(&ref); err != nil {
+		return ref, err
 	}
 
 	return ref, nil

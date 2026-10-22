@@ -32,8 +32,9 @@ import (
 
 // reservedNameWords lists the words the parser rejects as a bare name, keyed
 // in upper case. A true value means the word is rejected bare in every name
-// position, including FROM/JOIN table names; false means it is rejected only
-// in CTE names and CTE/view column lists.
+// position, including FROM/JOIN table names and CTE names (which take the
+// same words as a table alias); false means it is rejected only in CTE/view
+// column lists.
 //
 // The lists were derived by parsing every keyword bare in each of these
 // positions across all nine supported dialects. A word belongs here only if
@@ -51,7 +52,7 @@ var reservedNameWords = map[string]bool{
 	"CURRENT": true, "DELETE": true, "DESC": true, "DESCRIBE": true, "DISTINCT": true,
 	"DROP": true, "ELSE": true, "END": true, "EXCEPT": true, "EXCLUDE": true,
 	"EXISTS": true, "EXPLAIN": true, "FALSE": true, "FETCH": true, "FILTER": true,
-	"FINAL": true, "FIRST": true, "FOLLOWING": true, "FOR": true, "FOREIGN": true,
+	"FIRST": true, "FOLLOWING": true, "FOR": true, "FOREIGN": true,
 	"FROM": true, "FULL": true, "GROUP": true, "GROUPING": true, "GROUPS": true,
 	"HASH": true, "HAVING": true, "IF": true, "ILIKE": true, "IN": true,
 	"INNER": true, "INSERT": true, "INTERSECT": true, "INTERVAL": true, "INTO": true,
@@ -69,7 +70,7 @@ var reservedNameWords = map[string]bool{
 	"UNBOUNDED": true, "UNION": true, "UNIQUE": true, "UPDATE": true, "USING": true,
 	"VALUES": true, "WHEN": true, "WHERE": true, "WITH": true, "WITHIN": true,
 
-	// Reserved only in CTE names and CTE/view column lists.
+	// Reserved only in CTE/view column lists.
 	"COLUMN": false, "DATABASES": false, "DEFAULT": false, "INDEX": false, "KEY": false,
 	"MATCHED": false, "PARTITION": false, "ROWS": false, "SOURCE": false, "TABLE": false,
 	"TABLES": false, "TARGET": false, "VIEW": false,
@@ -410,7 +411,7 @@ func QuoteColumnName(name string) string {
 // there). TestConstraintNameWords keeps the list in step with the parser.
 var constraintNameWords = map[string]bool{
 	"ANY": true, "AUTO_INCREMENT": true, "CONNECTOR": true, "DCPROPERTIES": true,
-	"MEMBER": true, "NOCREATEDB": true, "NOCREATEROLE": true, "NOLOGIN": true,
+	"FINAL": true, "MEMBER": true, "NOCREATEDB": true, "NOCREATEROLE": true, "NOLOGIN": true,
 	"NOSUPERUSER": true, "OWNER": true, "POLICY": true, "RESET": true,
 	"SOME": true, "UNTIL": true, "URL": true, "VALID": true,
 }
@@ -492,6 +493,13 @@ var keywordFunctionNames = map[string]bool{
 // written unchanged. An empty name writes nothing.
 func writeFunctionName(buf *bytes.Buffer, name string) {
 	if name == "" {
+		return
+	}
+	if isStageReference(name) {
+		// Snowflake stage read with options: @stage/path (FILE_FORMAT => ...).
+		// The space keeps "(" out of the stage path.
+		buf.WriteString(name)
+		buf.WriteByte(' ')
 		return
 	}
 	multi := strings.IndexByte(name, '.') >= 0

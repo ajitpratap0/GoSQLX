@@ -1234,6 +1234,10 @@ func (p *Parser) isNonReservedKeyword() bool {
 		case "TARGET", "SOURCE", "MATCHED", "VALUE", "NAME", "TYPE", "STATUS",
 			"TABLES", "DATABASES":
 			return true
+		case "FINAL":
+			// A table modifier only in ClickHouse; a plain name elsewhere
+			// (dbt's WITH final AS (...) SELECT * FROM final).
+			return !p.IsClickHouse()
 		}
 	}
 	return false

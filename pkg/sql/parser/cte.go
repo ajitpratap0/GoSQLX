@@ -138,7 +138,7 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 	// ClickHouse scalar CTE: WITH <expr> AS <name>, ...
 	// Detected when the token after WITH is not an identifier, or is an
 	// identifier not followed by AS/( (which would be a standard CTE).
-	if p.dialect == string(keywords.DialectClickHouse) && !p.isIdentifier() {
+	if p.dialect == string(keywords.DialectClickHouse) && !p.isIdentifier() && !p.isCTENameStart() {
 		scalarExpr, err := p.parseExpression()
 		if err != nil {
 			return nil, err
@@ -160,8 +160,9 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 		}, nil
 	}
 
-	// Parse CTE name (supports double-quoted identifiers)
-	if !p.isIdentifier() {
+	// Parse CTE name (supports double-quoted identifiers and keywords
+	// used as names: WITH source AS (...), WITH final AS (...))
+	if !p.isIdentifier() && !p.isCTENameStart() {
 		return nil, p.expectedError("CTE name")
 	}
 	cteNamePos := p.currentLocation()
@@ -263,13 +264,18 @@ func (p *Parser) parseCommonTableExpr() (*ast.CommonTableExpr, error) {
 	}
 	p.advance() // Consume )
 
-	return &ast.CommonTableExpr{
+	cte := &ast.CommonTableExpr{
 		Name:         name,
 		Columns:      columns,
 		Statement:    stmt,
 		Materialized: materialized,
 		Pos:          cteNamePos,
-	}, nil
+	}
+	// SQL:1999 SEARCH / CYCLE clauses of a recursive CTE.
+	if err := p.parseCTESearchCycle(cte); err != nil {
+		return nil, err
+	}
+	return cte, nil
 }
 
 // parseMainStatementAfterWith parses the main statement after WITH clause.

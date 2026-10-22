@@ -136,3 +136,29 @@ func TestSetOperationKeyword(t *testing.T) {
 		}
 	}
 }
+
+// TestReleaseTableReference_PivotExtensions checks that releasing a PIVOT
+// with several aggregates releases each aggregate once and clears the
+// extensions.
+func TestReleaseTableReference_PivotExtensions(t *testing.T) {
+	first := &FunctionCall{Name: "SUM", Arguments: []Expression{&Identifier{Name: "a"}}}
+	second := &FunctionCall{Name: "COUNT", Arguments: []Expression{&Identifier{Name: "b"}}}
+	pivot := &PivotClause{
+		AggregateFunction: first,
+		PivotColumn:       "k",
+		PivotExtensions: PivotExtensions{
+			Aggregates:   []PivotAggregate{{Expr: first, Alias: "s"}, {Expr: second, Alias: "c"}},
+			InAny:        true,
+			InAnyOrderBy: []OrderByExpression{{Expression: &Identifier{Name: "k"}}},
+			SourceAlias:  "src",
+		},
+	}
+	ref := TableReference{Name: "t", Pivot: pivot}
+	releaseTableReference(&ref, releaseAll)
+	if ref.Pivot != nil {
+		t.Fatal("Pivot not cleared")
+	}
+	if !reflect.DeepEqual(pivot.PivotExtensions, PivotExtensions{}) {
+		t.Errorf("PivotExtensions not cleared: %+v", pivot.PivotExtensions)
+	}
+}

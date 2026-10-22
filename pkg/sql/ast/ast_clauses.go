@@ -48,6 +48,10 @@ type CommonTableExpr struct {
 	ScalarExpr   Expression      // ClickHouse: WITH <expr> AS <name> (scalar CTE, no subquery)
 	Materialized *bool           // nil = default, true = MATERIALIZED, false = NOT MATERIALIZED
 	Pos          models.Location // Source position of the CTE name (1-based line and column)
+	// Search and Cycle are the SQL:1999 SEARCH / CYCLE clauses of a
+	// recursive CTE (PostgreSQL 14+, Oracle); nil when absent.
+	Search *CTESearchClause
+	Cycle  *CTECycleClause
 }
 
 func (c *CommonTableExpr) statementNode()      {}
@@ -59,6 +63,9 @@ func (c CommonTableExpr) Children() []Node {
 	}
 	if c.ScalarExpr != nil {
 		nodes = append(nodes, c.ScalarExpr)
+	}
+	if c.Cycle != nil {
+		nodes = append(nodes, c.Cycle)
 	}
 	return nodes
 }
@@ -826,15 +833,20 @@ type PivotClause struct {
 	PivotColumn       string          // The column used for pivoting, e.g. region
 	InValues          []string        // The values to pivot on, e.g. [North], [South]
 	Pos               models.Location // Source position of the PIVOT keyword
+	// PivotExtensions holds the Oracle / Snowflake forms: several aliased
+	// aggregates, PIVOT XML, IN (ANY ...) / IN (subquery) and the alias of
+	// the pivoted source (see pivot_ext.go).
+	PivotExtensions
 }
 
 func (p *PivotClause) expressionNode()     {}
 func (p PivotClause) TokenLiteral() string { return "PIVOT" }
 func (p PivotClause) Children() []Node {
+	var nodes []Node
 	if p.AggregateFunction != nil {
-		return []Node{p.AggregateFunction}
+		nodes = append(nodes, p.AggregateFunction)
 	}
-	return nil
+	return p.pivotExtensionChildren(nodes)
 }
 
 // UnpivotClause represents the SQL Server / Oracle UNPIVOT operator for column-to-row
@@ -846,6 +858,14 @@ type UnpivotClause struct {
 	NameColumn  string          // The target name column, e.g. region
 	InColumns   []string        // The source columns to unpivot, e.g. north_sales, south_sales
 	Pos         models.Location // Source position of the UNPIVOT keyword
+	// NullHandling is INCLUDE or EXCLUDE for UNPIVOT INCLUDE / EXCLUDE NULLS,
+	// "" when omitted.
+	NullHandling string
+	// ValueColumns holds the value columns of an Oracle multi-column UNPIVOT
+	// ((units, revenue) FOR ...); ValueColumn is then its first entry.
+	ValueColumns []string
+	// SourceAlias is the alias of the unpivoted table or derived table.
+	SourceAlias string
 }
 
 func (u *UnpivotClause) expressionNode()     {}

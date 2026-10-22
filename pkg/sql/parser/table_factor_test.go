@@ -360,3 +360,109 @@ func TestNamedArgumentKeywordNames(t *testing.T) {
 		t.Errorf("names = %v", names)
 	}
 }
+
+func TestCTEKeywordNamesAndSearchCycle(t *testing.T) {
+	sel, ok := parseOne(t, keywords.DialectSnowflake,
+		"WITH source AS (SELECT 1 AS a), final AS (SELECT a FROM source) SELECT * FROM final").(*ast.SelectStatement)
+	if !ok || sel.With == nil || len(sel.With.CTEs) != 2 {
+		t.Fatal("want a SELECT with two CTEs")
+	}
+	if sel.With.CTEs[0].Name != "source" || sel.With.CTEs[1].Name != "final" || sel.From[0].Name != "final" {
+		t.Errorf("names = %q, %q, from %q", sel.With.CTEs[0].Name, sel.With.CTEs[1].Name, sel.From[0].Name)
+	}
+
+	sel, ok = parseOne(t, keywords.DialectOracle,
+		"WITH b (id) AS (SELECT 1 FROM dual) SEARCH BREADTH FIRST BY id SET ord CYCLE id SET c TO 'Y' DEFAULT 'N' SELECT * FROM b").(*ast.SelectStatement)
+	if !ok || sel.With == nil || len(sel.With.CTEs) != 1 {
+		t.Fatal("want a SELECT with one CTE")
+	}
+	cte := sel.With.CTEs[0]
+	if cte.Search == nil || !cte.Search.Breadth || !reflect.DeepEqual(cte.Search.By, []string{"id"}) || cte.Search.Set != "ord" {
+		t.Errorf("Search = %+v", cte.Search)
+	}
+	if cte.Cycle == nil || !reflect.DeepEqual(cte.Cycle.Columns, []string{"id"}) || cte.Cycle.Set != "c" ||
+		cte.Cycle.To == nil || cte.Cycle.Default == nil || cte.Cycle.Using != "" {
+		t.Errorf("Cycle = %+v", cte.Cycle)
+	}
+
+	// Reserved words are still rejected as CTE names.
+	if tree, err := gosqlx.ParseWithDialect("WITH select AS (SELECT 1) SELECT 1", keywords.DialectPostgreSQL); err == nil {
+		ast.ReleaseAST(tree)
+		t.Error("WITH select AS (...) parsed")
+	}
+	// FINAL stays a table modifier in ClickHouse.
+	if tree, err := gosqlx.ParseWithDialect("SELECT * FROM final", keywords.DialectClickHouse); err == nil {
+		ast.ReleaseAST(tree)
+		t.Error("ClickHouse FROM final parsed as a table name")
+	}
+}
+
+func TestPivotExtensions(t *testing.T) {
+	cases := []struct {
+		name    string
+		dialect keywords.SQLDialect
+		sql     string
+		check   func(t *testing.T, ref *ast.TableReference)
+	}{
+		{"aggregates with aliases", keywords.DialectOracle, "SELECT * FROM t PIVOT (SUM(c) AS total, COUNT(*) cnt FOR a IN (1 AS x))", func(t *testing.T, ref *ast.TableReference) {
+			p := ref.Pivot
+			if p == nil || len(p.Aggregates) != 2 || p.Aggregates[0].Alias != "total" || p.Aggregates[1].Alias != "cnt" ||
+				p.AggregateFunction != p.Aggregates[0].Expr {
+				t.Errorf("got %+v", p)
+			}
+		}},
+		{"single aggregate keeps the simple form", keywords.DialectSQLServer, "SELECT * FROM t PIVOT (SUM(a) FOR q IN ([Q1])) AS p", func(t *testing.T, ref *ast.TableReference) {
+			if ref.Pivot == nil || ref.Pivot.Aggregates != nil || ref.Pivot.AggregateFunction == nil || ref.Alias != "p" {
+				t.Errorf("got %+v alias %q", ref.Pivot, ref.Alias)
+			}
+		}},
+		{"source alias", keywords.DialectSQLServer, "SELECT * FROM (SELECT a, q FROM t) s PIVOT (SUM(a) FOR q IN ([Q1])) AS p", func(t *testing.T, ref *ast.TableReference) {
+			if ref.Pivot == nil || ref.Pivot.SourceAlias != "s" || ref.Alias != "p" {
+				t.Errorf("got source %+v alias %q", ref.Pivot, ref.Alias)
+			}
+		}},
+		{"xml any", keywords.DialectOracle, "SELECT * FROM t PIVOT XML (SUM(a) FOR p IN (ANY))", func(t *testing.T, ref *ast.TableReference) {
+			if ref.Pivot == nil || !ref.Pivot.XML || !ref.Pivot.InAny {
+				t.Errorf("got %+v", ref.Pivot)
+			}
+		}},
+		{"any order by", keywords.DialectSnowflake, "SELECT * FROM t PIVOT (AVG(a) FOR q IN (ANY ORDER BY q DESC))", func(t *testing.T, ref *ast.TableReference) {
+			if ref.Pivot == nil || !ref.Pivot.InAny || len(ref.Pivot.InAnyOrderBy) != 1 || ref.Pivot.InAnyOrderBy[0].Ascending {
+				t.Errorf("got %+v", ref.Pivot)
+			}
+		}},
+		{"in subquery", keywords.DialectSnowflake, "SELECT * FROM t PIVOT (AVG(a) FOR q IN (SELECT q FROM u))", func(t *testing.T, ref *ast.TableReference) {
+			if ref.Pivot == nil || ref.Pivot.InSubquery == nil {
+				t.Errorf("got %+v", ref.Pivot)
+			}
+		}},
+		{"alias column list", keywords.DialectSnowflake, "SELECT * FROM m PIVOT (SUM(a) FOR q IN ('A')) AS p (k, a)", func(t *testing.T, ref *ast.TableReference) {
+			if ref.Alias != "p" || ref.ColumnAliases == nil || !reflect.DeepEqual(ref.ColumnAliases.Names, []string{"k", "a"}) {
+				t.Errorf("got alias %q columns %+v", ref.Alias, ref.ColumnAliases)
+			}
+		}},
+		{"unpivot nulls and columns", keywords.DialectOracle, "SELECT * FROM w UNPIVOT EXCLUDE NULLS ((u, r) FOR p IN ((u1, r1) AS 'P1'))", func(t *testing.T, ref *ast.TableReference) {
+			u := ref.Unpivot
+			if u == nil || u.NullHandling != "EXCLUDE" || !reflect.DeepEqual(u.ValueColumns, []string{"u", "r"}) ||
+				u.ValueColumn != "u" || !reflect.DeepEqual(u.InColumns, []string{"(u1, r1) AS 'P1'"}) {
+				t.Errorf("got %+v", u)
+			}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.check(t, firstFrom(t, parseOne(t, tc.dialect, tc.sql)))
+		})
+	}
+}
+
+func TestSnowflakeFromValuesAndStagePath(t *testing.T) {
+	ref := firstFrom(t, parseOne(t, keywords.DialectSnowflake, "SELECT * FROM VALUES (1, 'a'), (2, 'b') AS v (id, name)"))
+	if ref.Values == nil || len(ref.Values.Rows) != 2 || ref.Alias != "v" {
+		t.Errorf("got %+v", ref)
+	}
+	ref = firstFrom(t, parseOne(t, keywords.DialectSnowflake, "SELECT $1 FROM @my_stage/2024/data.csv (FILE_FORMAT => 'f') t"))
+	if ref.Name != "@my_stage/2024/data.csv" || ref.TableFunc == nil || ref.Alias != "t" {
+		t.Errorf("got name %q func %v alias %q", ref.Name, ref.TableFunc, ref.Alias)
+	}
+}

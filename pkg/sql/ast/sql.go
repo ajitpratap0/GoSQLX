@@ -2266,6 +2266,9 @@ func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 		buf.WriteByte(' ')
 		writeTableAlias(buf, t.Alias)
 		writeTableColumnAliases(buf, t)
+	} else if alias := tableRefSourceAlias(t); alias != "" {
+		buf.WriteByte(' ')
+		writeTableAlias(buf, alias)
 	}
 	writeTableRefPostAlias(buf, t, identityKeyword)
 	// Parser order: table hints, then PIVOT/UNPIVOT, then its AS alias (#604).
@@ -2278,6 +2281,7 @@ func writeTableRef(buf *bytes.Buffer, t *TableReference) {
 	if t.Alias != "" && tableAliasFollowsClause(t) {
 		buf.WriteString(" AS ")
 		writeTableAlias(buf, t.Alias)
+		writeTableColumnAliases(buf, t)
 	}
 }
 
@@ -2448,10 +2452,12 @@ func writeCTE(buf *bytes.Buffer, cte *CommonTableExpr) {
 	if cte.ScalarExpr != nil {
 		writeExpr(buf, cte.ScalarExpr)
 		buf.WriteString(" AS ")
-		writeName(buf, cte.Name)
+		writeTableAlias(buf, cte.Name)
 		return
 	}
-	writeName(buf, cte.Name)
+	// A CTE name is quoted like a table alias, so position-only words
+	// (WITH source AS ...) stay bare and keep their case semantics.
+	writeTableAlias(buf, cte.Name)
 	if len(cte.Columns) > 0 {
 		buf.WriteString(" (")
 		writeNameList(buf, cte.Columns)
@@ -2468,6 +2474,7 @@ func writeCTE(buf *bytes.Buffer, cte *CommonTableExpr) {
 	buf.WriteByte('(')
 	writeStmt(buf, cte.Statement)
 	buf.WriteByte(')')
+	writeCTESearchCycle(buf, cte, identityKeyword)
 }
 
 func writeOnConflict(buf *bytes.Buffer, oc *OnConflict) {

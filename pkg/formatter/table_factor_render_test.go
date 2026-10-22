@@ -81,6 +81,24 @@ func TestRender_QueryExpressionsAndTableFactors(t *testing.T) {
 		{"sqlserver table function", keywords.DialectSQLServer, "SELECT * FROM STRING_SPLIT('a,b', ',')", "SELECT * FROM STRING_SPLIT('a,b', ',')"},
 		{"sqlite table function", keywords.DialectSQLite, "SELECT * FROM t, json_each(t.a)", "SELECT * FROM t, json_each(t.a)"},
 		{"flatten keyword arguments", keywords.DialectSnowflake, "SELECT * FROM t, LATERAL FLATTEN(input => t.a, outer => TRUE) f", "SELECT * FROM t, LATERAL FLATTEN(input => t.a, outer => TRUE) f"},
+		// CTE names and SEARCH / CYCLE
+		{"keyword cte names", keywords.DialectSnowflake, "WITH source AS (SELECT 1 AS a), target AS (SELECT a FROM source) SELECT * FROM target", "WITH source AS (SELECT 1 AS a), target AS (SELECT a FROM source) SELECT * FROM target"},
+		{"final cte name", keywords.DialectSnowflake, "WITH final AS (SELECT 1 AS a) SELECT * FROM final", "WITH final AS (SELECT 1 AS a) SELECT * FROM final"},
+		{"cte search", keywords.DialectPostgreSQL, "WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 5) SEARCH BREADTH FIRST BY n SET ord SELECT * FROM r ORDER BY ord", "WITH RECURSIVE r (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 5) SEARCH BREADTH FIRST BY n SET ord SELECT * FROM r ORDER BY ord"},
+		{"cte cycle using", keywords.DialectPostgreSQL, "WITH RECURSIVE r AS (SELECT 1 AS n UNION SELECT n + 1 FROM r) CYCLE n SET is_cycle USING path SELECT * FROM r", "WITH RECURSIVE r AS (SELECT 1 AS n UNION SELECT n + 1 FROM r) CYCLE n SET is_cycle USING path SELECT * FROM r"},
+		{"oracle search and cycle", keywords.DialectOracle, "WITH b (id, pid) AS (SELECT id, pid FROM p UNION ALL SELECT p.id, p.pid FROM p JOIN b ON p.pid = b.id) SEARCH DEPTH FIRST BY id SET ord CYCLE id SET is_cycle TO 'Y' DEFAULT 'N' SELECT * FROM b", "WITH b (id, pid) AS (SELECT id, pid FROM p UNION ALL SELECT p.id, p.pid FROM p INNER JOIN b ON p.pid = b.id) SEARCH DEPTH FIRST BY id SET ord CYCLE id SET is_cycle TO 'Y' DEFAULT 'N' SELECT * FROM b"},
+		// Snowflake FROM forms
+		{"snowflake bare values", keywords.DialectSnowflake, "SELECT * FROM VALUES (1, 'a'), (2, 'b') AS v (id, name)", "SELECT * FROM (VALUES (1, 'a'), (2, 'b')) v(id, name)"},
+		{"snowflake stage file", keywords.DialectSnowflake, "SELECT $1, $2 FROM @my_stage/data.csv (FILE_FORMAT => 'my_csv')", "SELECT $1, $2 FROM @my_stage/data.csv (FILE_FORMAT => 'my_csv')"},
+		// PIVOT / UNPIVOT
+		{"oracle multi aggregate pivot", keywords.DialectOracle, "SELECT * FROM (SELECT a, b, c FROM t) PIVOT (SUM(c) AS total, COUNT(*) AS cnt FOR a IN (1 AS x, 2 AS y))", "SELECT * FROM (SELECT a, b, c FROM t) PIVOT (SUM(c) AS total, COUNT(*) AS cnt FOR a IN (1 AS x, 2 AS y))"},
+		{"pivot source alias", keywords.DialectSQLServer, "SELECT * FROM (SELECT a, q FROM t) s PIVOT (SUM(a) FOR q IN ([Q1], [Q2])) AS p", "SELECT * FROM (SELECT a, q FROM t) s PIVOT (SUM(a) FOR q IN ([Q1], [Q2])) AS p"},
+		{"pivot xml any", keywords.DialectOracle, "SELECT * FROM sales PIVOT XML (SUM(amount) FOR product IN (ANY))", "SELECT * FROM sales PIVOT XML (SUM(amount) FOR product IN (ANY))"},
+		{"pivot any order by", keywords.DialectSnowflake, "SELECT * FROM q PIVOT (AVG(amount) FOR quarter IN (ANY ORDER BY quarter))", "SELECT * FROM q PIVOT (AVG(amount) FOR quarter IN (ANY ORDER BY quarter))"},
+		{"pivot in subquery", keywords.DialectSnowflake, "SELECT * FROM q PIVOT (AVG(amount) FOR quarter IN (SELECT DISTINCT quarter FROM qs))", "SELECT * FROM q PIVOT (AVG(amount) FOR quarter IN (SELECT DISTINCT quarter FROM qs))"},
+		{"pivot alias columns", keywords.DialectSnowflake, "SELECT * FROM m PIVOT (SUM(amount) FOR month IN ('JAN', 'FEB')) AS p (emp_id, jan, feb)", "SELECT * FROM m PIVOT (SUM(amount) FOR month IN ('JAN', 'FEB')) AS p(emp_id, jan, feb)"},
+		{"unpivot include nulls", keywords.DialectSnowflake, "SELECT * FROM m UNPIVOT INCLUDE NULLS (sales FOR month IN (jan, feb)) AS u", "SELECT * FROM m UNPIVOT INCLUDE NULLS (sales FOR month IN (jan, feb)) AS u"},
+		{"multi-column unpivot", keywords.DialectOracle, "SELECT * FROM w UNPIVOT ((units, revenue) FOR period IN ((u1, r1) AS 'P1', (u2, r2) AS 'P2'))", "SELECT * FROM w UNPIVOT ((units, revenue) FOR period IN ((u1, r1) AS 'P1', (u2, r2) AS 'P2'))"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

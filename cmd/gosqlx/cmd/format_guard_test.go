@@ -77,6 +77,10 @@ func TestFormatSQL_AllowsHarmlessQuotes(t *testing.T) {
 		{name: "oracle uppercase quoted", dialect: "oracle", in: `SELECT "ABC" FROM t`, want: "SELECT ABC FROM t"},
 		{name: "string literal kept", in: "SELECT a FROM t WHERE b = 'it''s'", want: "SELECT a FROM t WHERE b = 'it''s'"},
 		{name: "mysql escaped literal", dialect: "mysql", in: `SELECT 'a\nb'`, want: `SELECT 'a\nb'`},
+		{name: "mysql adjacent literals", dialect: "mysql", in: "SELECT 'a' 'b'", want: "SELECT 'ab'"},
+		{name: "postgresql adjacent literals", dialect: "postgresql", in: "SELECT 'a' 'b' || 'c'", want: "SELECT 'ab' || 'c'"},
+		{name: "mysql string alias", dialect: "mysql", in: "SELECT a AS 'alias with space', b AS 'plain', 'lit' FROM t", want: "SELECT a AS `alias with space`, b AS plain, 'lit' FROM t"},
+		{name: "sqlite string alias", dialect: "sqlite", in: "SELECT a AS 'x y' FROM t", want: `SELECT a AS "x y" FROM t`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

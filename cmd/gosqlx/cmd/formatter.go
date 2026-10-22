@@ -425,8 +425,8 @@ func checkQuotedTokens(input, output []models.TokenWithSpan, dialect string) err
 			pool[t.Token.Value]++
 		}
 	}
-	for _, t := range input {
-		if !isStringLiteralToken(t.Token) {
+	for i, t := range input {
+		if !isStringLiteralToken(t.Token) || isStringAlias(input, i, dialect) {
 			continue
 		}
 		if pool[t.Token.Value] == 0 {
@@ -434,8 +434,8 @@ func checkQuotedTokens(input, output []models.TokenWithSpan, dialect string) err
 		}
 		pool[t.Token.Value]--
 	}
-	for _, t := range input {
-		if !bw.isQuotedIdent(t.Token) {
+	for i, t := range input {
+		if !bw.isQuotedIdent(t.Token) && !isStringAlias(input, i, dialect) {
 			continue
 		}
 		v := t.Token.Value
@@ -448,6 +448,23 @@ func checkQuotedTokens(input, output []models.TokenWithSpan, dialect string) err
 		}
 	}
 	return nil
+}
+
+// isStringAlias reports whether toks[i] is a string literal that names a
+// column, as in "SELECT a AS 'x'" (MySQL, MariaDB, SQLite). The parser reads
+// it as the alias x, the same as the delimited name, so the formatter writes
+// it as a name rather than as a string.
+func isStringAlias(toks []models.TokenWithSpan, i int, dialect string) bool {
+	switch strings.ToLower(dialect) {
+	case "mysql", "mariadb", "sqlite":
+	default:
+		return false
+	}
+	t := toks[i].Token
+	if i == 0 || (t.Type != models.TokenTypeString && t.Type != models.TokenTypeSingleQuotedString) {
+		return false
+	}
+	return toks[i-1].Token.Type == models.TokenTypeAs
 }
 
 // mergeAdjacentStrings returns toks with each run of adjacent single-quoted

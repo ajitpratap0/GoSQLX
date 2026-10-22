@@ -884,9 +884,16 @@ func (p *Parser) parseOrderByList() ([]ast.OrderByExpression, error) {
 
 	var orderByExprs []ast.OrderByExpression
 	for {
-		expr, err := p.parseExpression()
-		if err != nil {
-			return nil, err
+		var expr ast.Expression
+		if p.isOrderByAll() {
+			// ClickHouse ORDER BY ALL: sort by every selected column.
+			expr = &ast.Identifier{Name: p.currentToken.Token.Value, Pos: p.currentLocation()}
+			p.advance() // Consume ALL
+		} else {
+			var err error
+			if expr, err = p.parseExpression(); err != nil {
+				return nil, err
+			}
 		}
 
 		entry := ast.OrderByExpression{
@@ -1192,4 +1199,20 @@ func (p *Parser) parseArrayJoinClause() (*ast.ArrayJoinClause, error) {
 		p.advance() // Consume comma
 	}
 	return clause, nil
+}
+
+// isOrderByAll reports whether the current token is the ALL of ClickHouse's
+// ORDER BY ALL (sort by all selected columns), as opposed to the start of an
+// expression: it is followed by ASC, DESC, NULLS, a comma or the end of the
+// clause.
+func (p *Parser) isOrderByAll() bool {
+	if p.dialect != string(keywords.DialectClickHouse) || !p.isType(models.TokenTypeAll) {
+		return false
+	}
+	switch p.peekToken().Token.Type {
+	case models.TokenTypeAsc, models.TokenTypeDesc, models.TokenTypeComma, models.TokenTypeSemicolon,
+		models.TokenTypeEOF, models.TokenTypeRParen, models.TokenTypeLimit, models.TokenTypeOffset:
+		return true
+	}
+	return equalsUpper(p.peekToken().Token.Value, "NULLS")
 }

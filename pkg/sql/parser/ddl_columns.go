@@ -232,15 +232,15 @@ func (p *Parser) parseColumnConstraintBody() (*ast.ColumnConstraint, bool, error
 		p.advance() // Consume REFERENCES
 		constraint.Type = "REFERENCES"
 
-		// Parse referenced table name (supports double-quoted identifiers)
+		// Parse referenced table name (supports quoted and schema-qualified names)
 		if !p.isIdentifier() {
 			return nil, false, p.expectedError("table name after REFERENCES")
 		}
-		refDef := &ast.ReferenceDefinition{
-			Table:      p.currentToken.Token.Value,
-			TableQuote: p.currentNameQuote(),
+		refTable, refTableQuote, err := p.parseQualifiedNameQuoted()
+		if err != nil {
+			return nil, false, err
 		}
-		p.advance()
+		refDef := &ast.ReferenceDefinition{Table: refTable, TableQuote: refTableQuote}
 
 		// Parse optional column list
 		if p.isType(models.TokenTypeLParen) {

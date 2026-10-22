@@ -516,10 +516,33 @@ func (u *UnaryExpression) writeSQL(buf *bytes.Buffer) {
 	case Prior:
 		buf.WriteString("PRIOR ")
 		writeExpr(buf, u.Expr)
+	case MySQLBinary:
+		buf.WriteString("BINARY ")
+		writeExpr(buf, u.Expr)
 	default:
 		buf.WriteString(u.Operator.String())
+		start := buf.Len()
 		writeExpr(buf, u.Expr)
+		// A symbolic prefix operator followed by an operand that starts with
+		// an operator character would read as one longer operator ("@-5" is
+		// the operator "@-"): keep them apart.
+		if b := buf.Bytes(); len(b) > start && isSymbolicOperator(u.Operator) && strings.IndexByte("+-*/<>=~!@#%^&|?`", b[start]) >= 0 {
+			operand := append([]byte(nil), b[start:]...)
+			buf.Truncate(start)
+			buf.WriteByte(' ')
+			buf.Write(operand)
+		}
 	}
+}
+
+// isSymbolicOperator reports whether op is written with operator characters
+// only (~, |/, ||/, !!, @, !), as opposed to a keyword.
+func isSymbolicOperator(op UnaryOperator) bool {
+	switch op {
+	case PGBitwiseNot, PGSquareRoot, PGCubeRoot, PGPrefixFactorial, PGAbs, BangNot:
+		return true
+	}
+	return false
 }
 
 // SQL returns the SQL representation of this aliased expression in the form

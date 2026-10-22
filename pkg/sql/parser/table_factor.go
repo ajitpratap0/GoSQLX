@@ -147,7 +147,23 @@ func (p *Parser) parseFlashbackBound() (ast.Expression, error) {
 		p.advance()
 		return id, nil
 	}
-	return p.parseTemporalPointExpression()
+	left, err := p.parseTemporalPointExpression()
+	if err != nil {
+		return nil, err
+	}
+	// Arithmetic on the bound: SYSTIMESTAMP - INTERVAL '1' DAY. Only + and -
+	// are read, so the AND that follows the first bound is not consumed.
+	for p.isType(models.TokenTypePlus) || p.isType(models.TokenTypeMinus) {
+		opPos := p.currentLocation()
+		op := p.currentToken.Token.Value
+		p.advance()
+		right, err := p.parseMultiplicativeExpression()
+		if err != nil {
+			return nil, err
+		}
+		left = &ast.BinaryExpression{Left: left, Operator: op, Right: right, Pos: opPos}
+	}
+	return left, nil
 }
 
 // isTableSampleStart reports whether the current token starts a SAMPLE /

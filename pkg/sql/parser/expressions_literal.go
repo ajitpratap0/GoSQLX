@@ -67,6 +67,33 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return &ast.UnaryExpression{Operator: op, Expr: expr, Pos: unaryPos}, nil
 	}
 
+	// PostgreSQL prefix operators |/ (square root), ||/ (cube root), !! (factorial)
+	// and @ (absolute value).
+	if op, n := p.pgPrefixOperator(); n > 0 {
+		unaryPos := p.currentLocation()
+		for i := 0; i < n; i++ {
+			p.advance() // Consume the operator token(s)
+		}
+		// These are "any other operator" in PostgreSQL, which binds looser
+		// than + and -: |/ a + 1 is |/ (a + 1).
+		expr, err := p.parseOtherOperatorOperand()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.UnaryExpression{Operator: op, Expr: expr, Pos: unaryPos}, nil
+	}
+
+	// MySQL / MariaDB BINARY expr: casts the operand to a binary string.
+	if p.isMySQLBinaryOperator() {
+		unaryPos := p.currentLocation()
+		p.advance() // Consume BINARY
+		expr, err := p.parseUnaryOperand()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.UnaryExpression{Operator: ast.MySQLBinary, Expr: expr, Pos: unaryPos}, nil
+	}
+
 	// CONNECT BY: PRIOR is a prefix operator that binds to its operand, so
 	// "PRIOR a + 1" is "(PRIOR a) + 1" (#783).
 	if p.inConnectBy && p.isConnectByPrior() {
@@ -344,6 +371,14 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		// SQL Server; ? for MySQL/MariaDB/SQLite; :1, :name for Oracle)
 		value := p.currentToken.Token.Value
 		p.advance()
+		if p.IsSQLServer() && isMoneyPrefix(value) && p.peekMoneyFraction() {
+			// SQL Server money literal $5.00: the tokenizer reads "$5" as a
+			// placeholder and ".00" as a separate number.
+			p.advance() // Consume .
+			value += "." + p.currentToken.Token.Value
+			p.advance() // Consume the fraction
+			return &ast.LiteralValue{Value: value, Type: "money"}, nil
+		}
 		ph := &ast.LiteralValue{Value: value, Type: "placeholder"}
 		// MySQL user-variable assignment: @rownum := @rownum + 1
 		if p.isVariableAssignment() {
@@ -654,4 +689,92 @@ func (p *Parser) isQualifiedNamePart() bool {
 	return p.isIdentifier() || p.isNonReservedKeyword() || p.isKeywordColumnName() ||
 		(p.dialect == string(keywords.DialectClickHouse) && p.isNumericLiteral()) ||
 		p.isSnowflakePositionalColumn()
+}
+
+// pgPrefixOperator reports the PostgreSQL prefix operator that starts at the
+// current token and how many tokens it spans (0 when there is none): |/ and
+// ||/ are tokenized as two tokens and !! as two.
+func (p *Parser) pgPrefixOperator() (ast.UnaryOperator, int) {
+	if !p.IsPostgreSQL() {
+		return 0, 0
+	}
+	switch p.currentToken.Token.Type {
+	case models.TokenTypePipe:
+		if p.peekTypeAt(1) == models.TokenTypeDiv && p.nextAdjacent(1) {
+			return ast.PGSquareRoot, 2
+		}
+	case models.TokenTypeStringConcat:
+		if p.peekTypeAt(1) == models.TokenTypeDiv && p.nextAdjacent(1) {
+			return ast.PGCubeRoot, 2
+		}
+	case models.TokenTypeExclamationMark:
+		if p.peekTypeAt(1) == models.TokenTypeExclamationMark && p.nextAdjacent(1) {
+			return ast.PGPrefixFactorial, 2
+		}
+	case models.TokenTypeAtSign:
+		return ast.PGAbs, 1
+	}
+	return 0, 0
+}
+
+// isMySQLBinaryOperator reports whether the current token is the BINARY prefix
+// operator of MySQL and MariaDB: BINARY followed by a string literal or a
+// name, as in "BINARY 'a'" or "BINARY name". BINARY( is the BINARY function.
+func (p *Parser) isMySQLBinaryOperator() bool {
+	if !p.isMySQLFamily() || p.currentToken.Token.Quote != 0 || !equalsUpper(p.currentToken.Token.Value, "BINARY") {
+		return false
+	}
+	next := p.peekToken().Token
+	switch next.Type {
+	case models.TokenTypeString, models.TokenTypeSingleQuotedString, models.TokenTypeNumber:
+		return true
+	case models.TokenTypeIdentifier:
+		return next.Quote != 0 || !equalsUpper(next.Value, "AS")
+	}
+	return false
+}
+
+// parseOtherOperatorOperand parses the operand of a PostgreSQL prefix operator
+// of the "any other operator" class: an additive expression, one recursion
+// level deeper.
+func (p *Parser) parseOtherOperatorOperand() (ast.Expression, error) {
+	err := p.enterRecursion()
+	defer p.leaveRecursion()
+	if err != nil {
+		return nil, err
+	}
+	return p.parseAdditiveExpression()
+}
+
+// isMoneyPrefix reports whether a placeholder token is "$" followed by digits,
+// the start of a SQL Server money literal.
+func isMoneyPrefix(v string) bool {
+	if len(v) < 2 || v[0] != '$' {
+		return false
+	}
+	for i := 1; i < len(v); i++ {
+		if v[i] < '0' || v[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// peekMoneyFraction reports whether the current token is a '.' that is
+// followed, without a gap, by a number made of digits only: the fraction of a
+// money literal such as $5.00.
+func (p *Parser) peekMoneyFraction() bool {
+	if !p.isType(models.TokenTypePeriod) {
+		return false
+	}
+	next := p.peekToken()
+	if next.Token.Type != models.TokenTypeNumber || !p.nextAdjacent(1) {
+		return false
+	}
+	for i := 0; i < len(next.Token.Value); i++ {
+		if next.Token.Value[i] < '0' || next.Token.Value[i] > '9' {
+			return false
+		}
+	}
+	return true
 }

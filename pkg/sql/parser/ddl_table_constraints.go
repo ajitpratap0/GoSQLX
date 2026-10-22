@@ -183,15 +183,15 @@ func (p *Parser) parseTableConstraint() (*ast.TableConstraint, error) {
 		}
 		p.advance() // Consume REFERENCES
 
-		// Parse referenced table (supports double-quoted identifiers)
+		// Parse referenced table (supports quoted and schema-qualified names)
 		if !p.isIdentifier() {
 			return nil, p.expectedError("table name after REFERENCES")
 		}
-		refDef := &ast.ReferenceDefinition{
-			Table:      p.currentToken.Token.Value,
-			TableQuote: p.currentNameQuote(),
+		refTable, refTableQuote, err := p.parseQualifiedNameQuoted()
+		if err != nil {
+			return nil, err
 		}
-		p.advance()
+		refDef := &ast.ReferenceDefinition{Table: refTable, TableQuote: refTableQuote}
 
 		// Parse optional referenced column list
 		if p.isType(models.TokenTypeLParen) {

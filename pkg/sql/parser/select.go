@@ -339,6 +339,11 @@ func (p *Parser) isOrderSiblingsBy() bool {
 // parseDistinctModifier parses the optional DISTINCT [ON (...)] or ALL keyword
 // immediately after SELECT.
 func (p *Parser) parseDistinctModifier() (isDistinct bool, distinctOnColumns []ast.Expression, err error) {
+	// MySQL and MariaDB: DISTINCTROW is a synonym of DISTINCT.
+	if p.isMySQLFamily() && p.currentToken.Token.Quote == 0 && equalsUpper(p.currentToken.Token.Value, "DISTINCTROW") {
+		p.advance() // Consume DISTINCTROW
+		return true, nil, nil
+	}
 	if p.isType(models.TokenTypeDistinct) {
 		isDistinct = true
 		p.advance() // Consume DISTINCT
@@ -497,12 +502,28 @@ func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
 			// Optional alias: AS name  or  implicit name (non-identifier expressions only)
 			if p.isType(models.TokenTypeAs) {
 				p.advance() // Consume AS
-				if !p.isAliasAfterAS() {
-					return nil, p.expectedError("alias name after AS")
+				var alias string
+				var aliasQuote ast.NameQuote
+				if p.isStringAlias() {
+					// AS 'alias' (MySQL, MariaDB, SQLite): a string literal
+					// names the column. It is the same alias as the name
+					// written delimited, so it is recorded like one and
+					// written back without the string quotes.
+					alias = p.currentToken.Token.Value
+					quote := '"'
+					if p.isMySQLFamily() {
+						quote = '`'
+					}
+					aliasQuote = p.appendNamePartQuoted(0, quote)
+					p.advance()
+				} else {
+					if !p.isAliasAfterAS() {
+						return nil, p.expectedError("alias name after AS")
+					}
+					alias = p.currentToken.Token.Value
+					aliasQuote = p.currentNameQuote()
+					p.advance()
 				}
-				alias := p.currentToken.Token.Value
-				aliasQuote := p.currentNameQuote()
-				p.advance()
 				expr = &ast.AliasedExpression{Expr: expr, Alias: alias, AliasQuote: aliasQuote}
 			} else if p.canBeAlias() {
 				// Implicit aliasing (SELECT expr alias) is allowed for non-identifier
@@ -528,4 +549,13 @@ func (p *Parser) parseSelectColumnList() ([]ast.Expression, error) {
 		p.advance() // Consume comma
 	}
 	return columns, nil
+}
+
+// isStringAlias reports whether the current token is a string literal used as
+// a column alias after AS, which MySQL, MariaDB and SQLite accept.
+func (p *Parser) isStringAlias() bool {
+	if !p.isMySQLFamily() && p.dialect != string(keywords.DialectSQLite) {
+		return false
+	}
+	return p.isType(models.TokenTypeString) || p.isType(models.TokenTypeSingleQuotedString)
 }

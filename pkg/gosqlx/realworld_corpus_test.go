@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -136,6 +137,7 @@ func realworldCheck(stmt string, d keywords.SQLDialect) (stage, detail string) {
 // literals) that are missing from the formatted output — a cheap detector for
 // clauses the formatter silently drops even though its output reparses.
 func realworldDroppedWords(in, out string) []string {
+	in = realworldCanonicalSynonyms(in)
 	have := map[string]bool{}
 	for _, w := range realworldWords(out) {
 		have[w] = true
@@ -149,6 +151,42 @@ func realworldDroppedWords(in, out string) []string {
 		}
 	}
 	return lost
+}
+
+// realworldSynonyms matches spellings the formatter writes in their canonical
+// form because the dialects define them as exact synonyms: SELECT ALL (ALL is
+// the default quantifier), DISTINCTROW (MySQL) for DISTINCT, and the postfix
+// ISNULL / NOTNULL (PostgreSQL, SQLite) for IS NULL / IS NOT NULL. UNION ALL
+// and the function ISNULL(...) are not touched.
+var realworldSynonyms = regexp.MustCompile(`(?i)\b(SELECT\s+ALL|DISTINCTROW|ISNULL|NOTNULL)\b`)
+
+// realworldCanonicalSynonyms rewrites the synonyms of realworldSynonyms in s
+// to the canonical spelling the formatter writes.
+func realworldCanonicalSynonyms(s string) string {
+	var sb strings.Builder
+	last := 0
+	for _, m := range realworldSynonyms.FindAllStringIndex(s, -1) {
+		word := strings.ToUpper(s[m[0]:m[1]])
+		rest := strings.TrimLeft(s[m[1]:], " \t\r\n")
+		var repl string
+		switch {
+		case strings.HasPrefix(word, "SELECT"):
+			repl = "SELECT"
+		case word == "DISTINCTROW":
+			repl = "DISTINCT"
+		case strings.HasPrefix(rest, "("): // the ISNULL(...) function
+			continue
+		case word == "ISNULL":
+			repl = "IS NULL"
+		default:
+			repl = "IS NOT NULL"
+		}
+		sb.WriteString(s[last:m[0]])
+		sb.WriteString(repl)
+		last = m[1]
+	}
+	sb.WriteString(s[last:])
+	return sb.String()
 }
 
 // realworldIgnorable are noise words the formatter may legitimately add or drop.
@@ -171,6 +209,8 @@ func realworldWords(s string) []string {
 				return words
 			}
 			i += end + 4
+		case c == '$' && realworldDollarQuoteEnd(s, i) > i:
+			i = realworldDollarQuoteEnd(s, i)
 		case c == '\'':
 			for i++; i < len(s); i++ {
 				if s[i] == '\\' {
@@ -204,6 +244,25 @@ func realworldWords(s string) []string {
 		}
 	}
 	return words
+}
+
+// realworldDollarQuoteEnd returns the offset just past the dollar-quoted
+// string ($$...$$ or $tag$...$tag$) that starts at s[i], or i when s[i] does
+// not start one.
+func realworldDollarQuoteEnd(s string, i int) int {
+	j := i + 1
+	for j < len(s) && (s[j] == '_' || s[j] >= '0' && s[j] <= '9' || s[j] >= 'A' && s[j] <= 'Z' || s[j] >= 'a' && s[j] <= 'z') {
+		j++
+	}
+	if j >= len(s) || s[j] != '$' || (j > i+1 && s[i+1] >= '0' && s[i+1] <= '9') {
+		return i
+	}
+	tag := s[i : j+1]
+	end := strings.Index(s[j+1:], tag)
+	if end < 0 {
+		return i
+	}
+	return j + 1 + end + len(tag)
 }
 
 func writeKnownFailures(t *testing.T, lines []string) {

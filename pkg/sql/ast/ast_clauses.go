@@ -965,19 +965,31 @@ func (c TimeTravelClause) Children() []Node {
 	return nodes
 }
 
-// PivotClause represents the SQL Server / Oracle PIVOT operator for row-to-column
-// transformation in a FROM clause.
+// PivotClause represents the SQL Server / Oracle / Snowflake / BigQuery PIVOT
+// operator for row-to-column transformation in a FROM clause.
 //
 //	PIVOT (SUM(sales) FOR region IN ([North], [South], [East], [West])) AS pvt
+//	PIVOT (SUM(sales) AS total, COUNT(*) AS n FOR quarter IN ('Q1' AS q1, 'Q2' AS q2))
+//
+// The first aggregate is AggregateFunction (with optional AggregateAlias);
+// Oracle / BigQuery allow further aggregates, which are kept in
+// ExtraAggregates in source order.
 type PivotClause struct {
-	AggregateFunction Expression      // The aggregate function, e.g. SUM(sales)
-	PivotColumn       string          // The column used for pivoting, e.g. region
-	InValues          []string        // The values to pivot on, e.g. [North], [South]
-	Pos               models.Location // Source position of the PIVOT keyword
-	// PivotExtensions holds the Oracle / Snowflake forms: several aliased
-	// aggregates, PIVOT XML, IN (ANY ...) / IN (subquery) and the alias of
-	// the pivoted source (see pivot_ext.go).
+	AggregateFunction Expression       // The aggregate function, e.g. SUM(sales)
+	AggregateAlias    string           // Optional alias of AggregateFunction; quoted aliases retain source delimiters
+	ExtraAggregates   []PivotAggregate // Second and later aggregates (Oracle / BigQuery), in source order
+	PivotColumn       string           // The column used for pivoting, e.g. region
+	InValues          []string         // The values to pivot on, e.g. [North], 'Q1' AS q1
+	Pos               models.Location  // Source position of the PIVOT keyword
+	// PivotExtensions holds XML, dynamic IN lists and source aliases.
 	PivotExtensions
+}
+
+// PivotAggregate is an additional aggregate in a multi-aggregate PIVOT, e.g.
+// the "COUNT(*) AS n" in PIVOT (SUM(x) AS total, COUNT(*) AS n FOR ...).
+type PivotAggregate struct {
+	Function Expression // The aggregate function call
+	Alias    string     // Optional alias; quoted aliases retain source delimiters
 }
 
 func (p *PivotClause) expressionNode()     {}
@@ -987,28 +999,33 @@ func (p PivotClause) Children() []Node {
 	if p.AggregateFunction != nil {
 		nodes = append(nodes, p.AggregateFunction)
 	}
+	for _, a := range p.ExtraAggregates {
+		if a.Function != nil {
+			nodes = append(nodes, a.Function)
+		}
+	}
 	return p.pivotExtensionChildren(nodes)
 }
 
-// UnpivotClause represents the SQL Server / Oracle UNPIVOT operator for column-to-row
-// transformation in a FROM clause.
+// UnpivotClause represents the SQL Server / Oracle / Snowflake / BigQuery
+// UNPIVOT operator for column-to-row transformation in a FROM clause.
 //
 //	UNPIVOT (sales FOR region IN (north_sales, south_sales, east_sales)) AS unpvt
+//	UNPIVOT INCLUDE NULLS ((h1, h2) FOR half IN ((q1, q2) AS 'H1', (q3, q4) AS 'H2'))
+//
+// In the multi-column form (Oracle / BigQuery) ValueColumns holds the value
+// column set and ValueColumn is empty; each InColumns entry is then a
+// parenthesized column set such as "(q1, q2) AS 'H1'".
 type UnpivotClause struct {
-	ValueColumn string          // The target value column, e.g. sales
-	NameColumn  string          // The target name column, e.g. region
-	InColumns   []string        // The source columns to unpivot, e.g. north_sales, south_sales
-	Pos         models.Location // Source position of the UNPIVOT keyword
-	// NullHandling is INCLUDE or EXCLUDE for UNPIVOT INCLUDE / EXCLUDE NULLS,
-	// "" when omitted.
-	NullHandling string
-	// ValueColumns holds the value columns of an Oracle multi-column UNPIVOT
-	// ((units, revenue) FOR ...); ValueColumn is then its first entry.
-	ValueColumns []string
-	// SourceAlias is the alias of the unpivoted table or derived table.
+	NullHandling string          // "", "INCLUDE NULLS" or "EXCLUDE NULLS" (Oracle / Snowflake / BigQuery)
+	ValueColumn  string          // The target value column; quoted names retain source delimiters
+	ValueColumns []string        // The target value columns; quoted names retain source delimiters
+	NameColumn   string          // The target name column, e.g. region
+	InColumns    []string        // The source columns to unpivot, e.g. north_sales, south_sales
+	Pos          models.Location // Source position of the UNPIVOT keyword
+	// SourceAlias is the alias of the unpivoted source table or derived table.
 	SourceAlias string
-	// SourceAliasQuote records the delimiters of SourceAlias when they must
-	// be kept (see NameQuote).
+	// SourceAliasQuote records the delimiters of SourceAlias.
 	SourceAliasQuote NameQuote
 }
 

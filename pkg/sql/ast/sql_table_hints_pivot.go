@@ -16,6 +16,7 @@ package ast
 
 import (
 	"bytes"
+	"strings"
 	"unicode"
 	"unicode/utf8"
 )
@@ -88,6 +89,38 @@ func QuotePivotColumn(name string) string {
 	defer putBuf(buf)
 	writePivotColumn(buf, name)
 	return buf.String()
+}
+
+// isQuotedPivotIdentifier accepts only one complete delimited identifier.
+// Bare atoms, numbers and string literals must use the normal name quoting
+// fallback, even though pivotAtomLen also recognizes them in IN values.
+func isQuotedPivotIdentifier(name string) bool {
+	if len(name) < 2 {
+		return false
+	}
+	switch name[0] {
+	case '"', '`', '[':
+		return pivotAtomLen(name) == len(name)
+	}
+	return false
+}
+
+// QuotePivotAggregateAlias retains source quoting for parsed aliases and
+// applies normal table-alias quoting to bare or hand-built values.
+func QuotePivotAggregateAlias(alias string) string {
+	if isQuotedPivotIdentifier(alias) {
+		return alias
+	}
+	return QuoteTableAlias(alias)
+}
+
+// QuoteUnpivotValueColumn retains source quoting for parsed value columns and
+// applies normal column quoting to bare or hand-built values.
+func QuoteUnpivotValueColumn(name string) string {
+	if isQuotedPivotIdentifier(name) {
+		return name
+	}
+	return QuotePivotColumn(name)
 }
 
 // pivotColumnNeedsQuoting reports whether writePivotColumn would quote some
@@ -220,4 +253,17 @@ func writeUnpivotClause(buf *bytes.Buffer, u *UnpivotClause) {
 		return
 	}
 	writeUnpivot(buf, u, identityKeyword)
+}
+
+// UnpivotNullHandling normalizes an UnpivotClause.NullHandling value to
+// "INCLUDE NULLS" or "EXCLUDE NULLS". Any other value (only possible in a
+// hand-built AST) yields "" so it is never written raw.
+func UnpivotNullHandling(s string) string {
+	switch {
+	case strings.EqualFold(s, "INCLUDE NULLS"), strings.EqualFold(s, "INCLUDE"):
+		return "INCLUDE NULLS"
+	case strings.EqualFold(s, "EXCLUDE NULLS"), strings.EqualFold(s, "EXCLUDE"):
+		return "EXCLUDE NULLS"
+	}
+	return ""
 }

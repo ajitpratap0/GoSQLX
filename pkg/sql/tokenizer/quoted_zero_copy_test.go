@@ -131,6 +131,10 @@ func quotedCases() []quotedCase {
 		{name: "backtick clean", dialect: keywords.DialectMySQL, sql: "`col`", typ: bt, value: "col", quoteStyle: noWord, end: loc(1, 6), alias: aliasYes},
 		{name: "backtick empty", dialect: keywords.DialectMySQL, sql: "``", typ: bt, value: "", quoteStyle: noWord},
 		{name: "backtick doubled", dialect: keywords.DialectMySQL, sql: "`a``b`", typ: bt, value: "a`b", quoteStyle: noWord, alias: aliasNo},
+		// parser.renderCurrentIdent uses this byte-wide span to recover backtick quoting.
+		{name: "backtick unicode byte span", dialect: keywords.DialectBigQuery, sql: "`日本`", typ: bt, value: "日本", quoteStyle: noWord, end: loc(1, 9), alias: aliasYes},
+		{name: "backtick doubled byte span", dialect: keywords.DialectBigQuery, sql: "`a``b`", typ: bt, value: "a`b", quoteStyle: noWord, end: loc(1, 7), alias: aliasNo},
+		{name: "bare unicode byte span", dialect: keywords.DialectBigQuery, sql: "日本", typ: bt, value: "日本", quoteStyle: 0, end: loc(1, 7), alias: aliasYes},
 		{name: "backtick multi-line", dialect: keywords.DialectMySQL, sql: "`a\nb` x", typ: bt, value: "a\nb", quoteStyle: noWord, end: loc(2, 3), alias: aliasYes},
 		{name: "backtick invalid UTF-8 kept raw", dialect: keywords.DialectMySQL, sql: "`a\xffb`", typ: bt, value: "a\xffb", quoteStyle: noWord, alias: aliasYes},
 		{name: "backtick unterminated", dialect: keywords.DialectMySQL, sql: "`abc", errCode: gerrors.ErrCodeUnterminatedString, errLoc: loc(1, 1)},

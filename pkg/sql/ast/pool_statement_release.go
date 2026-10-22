@@ -545,11 +545,16 @@ func releaseTableReference(tr *TableReference, mode releaseMode) {
 		releaseExpression(tr.TableFunc, mode)
 		tr.TableFunc = nil
 	}
-	// Pivot.AggregateFunction is an Expression.
+	// Pivot.AggregateFunction and ExtraAggregates hold Expressions.
 	if tr.Pivot != nil {
 		releasePivotExtensions(tr.Pivot, mode)
 		releaseExpression(tr.Pivot.AggregateFunction, mode)
 		tr.Pivot.AggregateFunction = nil
+		for i := range tr.Pivot.ExtraAggregates {
+			releaseExpression(tr.Pivot.ExtraAggregates[i].Function, mode)
+			tr.Pivot.ExtraAggregates[i].Function = nil
+		}
+		tr.Pivot.ExtraAggregates = nil
 		tr.Pivot = nil
 	}
 	// Unpivot holds only strings — drop the struct.

@@ -2,7 +2,7 @@
 
 > High-performance SQL parsing SDK for Go: zero-copy tokenizer, recursive-descent parser, AST, formatter, linter and security scanner. Multi-dialect and race-free.
 
-GoSQLX is a production-ready SQL parsing library for Go with zero-copy tokenization, recursive-descent parsing and AST generation backed by object pooling. It supports 8 dialects (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse) and ships a CLI (`gosqlx`) for validation, formatting, linting, transpilation and security analysis. Apache-2.0 licensed. Requires Go 1.26+.
+GoSQLX is a production-ready SQL parsing library for Go with zero-copy tokenization, recursive-descent parsing and AST generation backed by object pooling. It supports 8 dialects with dedicated grammar (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse); the `--dialect` flag also accepts `generic`, `bigquery` and `redshift` (generic keyword set, limited dialect-gated grammar). It ships a CLI (`gosqlx`) for validation, formatting, linting, transpilation and security analysis. Apache-2.0 licensed. Requires Go 1.26+.
 
 Current stable version: v1.16.0
 Website: https://gosqlx.dev
@@ -15,7 +15,7 @@ Interactive Playground: https://gosqlx.dev/playground/
 - MCP server tools: 7
 - SQL-99 compliance: ~80–85% (estimated)
 - QA corpus (v1.15.0): Snowflake 87/87, ClickHouse 83/83
-- Performance: ~318 ns/op (~3.14M ops/sec) for a simple SELECT (parse stage) on Apple M4, Go 1.27. This is the parse stage only (pre-tokenized input), not tokenize or end-to-end. Source: BenchmarkPerformanceBaseline, median of 10 runs, re-measured 2026-10-13.
+- Performance: ~349 ns/op (~2.87M ops/sec) for a simple SELECT (parse stage) on Apple M4, Go 1.27. This is the parse stage only (pre-tokenized input), not tokenize or end-to-end. Source: BenchmarkPerformanceBaseline, median of 20 runs, re-measured 2026-10-22.
 
 ## Documentation
 

@@ -151,9 +151,10 @@ func TestReleaseTableReference_PivotExtensions(t *testing.T) {
 	second := &FunctionCall{Name: "COUNT", Arguments: []Expression{&Identifier{Name: "b"}}}
 	pivot := &PivotClause{
 		AggregateFunction: first,
+		AggregateAlias:    "s",
+		ExtraAggregates:   []PivotAggregate{{Function: second, Alias: "c"}},
 		PivotColumn:       "k",
 		PivotExtensions: PivotExtensions{
-			Aggregates:   []PivotAggregate{{Expr: first, Alias: "s"}, {Expr: second, Alias: "c"}},
 			InAny:        true,
 			InAnyOrderBy: []OrderByExpression{{Expression: &Identifier{Name: "k"}}},
 			SourceAlias:  "src",
@@ -163,6 +164,9 @@ func TestReleaseTableReference_PivotExtensions(t *testing.T) {
 	releaseTableReference(&ref, releaseAll)
 	if ref.Pivot != nil {
 		t.Fatal("Pivot not cleared")
+	}
+	if pivot.AggregateFunction != nil || pivot.ExtraAggregates != nil {
+		t.Error("aggregate expressions not cleared")
 	}
 	if !reflect.DeepEqual(pivot.PivotExtensions, PivotExtensions{}) {
 		t.Errorf("PivotExtensions not cleared: %+v", pivot.PivotExtensions)

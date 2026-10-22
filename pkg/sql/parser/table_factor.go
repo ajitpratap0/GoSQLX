@@ -806,40 +806,33 @@ func (p *Parser) parseStagePathSegment() string {
 	return seg
 }
 
-// parsePivotAggregates parses the aggregate list of a PIVOT clause up to FOR:
-// agg [[AS] alias] [, agg [[AS] alias] ...]. AggregateFunction is the first
-// aggregate; Aggregates lists all of them when there is more than one or an
-// alias.
+// parsePivotAggregates parses a PIVOT aggregate list, retaining aliases and
+// extra aggregates in the public representation shared with BigQuery.
 func (p *Parser) parsePivotAggregates(clause *ast.PivotClause) error {
-	var aggs []ast.PivotAggregate
-	named := false
-	for {
+	expr, err := p.parseExpression()
+	if err != nil {
+		return err
+	}
+	clause.AggregateFunction = expr
+	if !p.pivotMultiAggregateAllowed() {
+		return nil
+	}
+	alias, err := p.parsePivotAggregateAlias()
+	if err != nil {
+		return err
+	}
+	clause.AggregateAlias = alias
+	for p.isType(models.TokenTypeComma) {
+		p.advance() // consume ,
 		expr, err := p.parseExpression()
 		if err != nil {
 			return err
 		}
-		agg := ast.PivotAggregate{Expr: expr}
-		if p.isType(models.TokenTypeAs) {
-			p.advance() // consume AS
-			if !p.isIdentifier() && !p.isNonReservedKeyword() {
-				return p.expectedError("alias after AS in PIVOT")
-			}
-			agg.Alias = p.currentToken.Token.Value
-			p.advance()
-		} else if p.isIdentifier() {
-			agg.Alias = p.currentToken.Token.Value
-			p.advance()
+		alias, err := p.parsePivotAggregateAlias()
+		if err != nil {
+			return err
 		}
-		named = named || agg.Alias != ""
-		aggs = append(aggs, agg)
-		if !p.isType(models.TokenTypeComma) {
-			break
-		}
-		p.advance() // consume ,
-	}
-	clause.AggregateFunction = aggs[0].Expr
-	if len(aggs) > 1 || named {
-		clause.Aggregates = aggs
+		clause.ExtraAggregates = append(clause.ExtraAggregates, ast.PivotAggregate{Function: expr, Alias: alias})
 	}
 	return nil
 }
@@ -877,34 +870,6 @@ func (p *Parser) parsePivotInSpecial(clause *ast.PivotClause) (bool, error) {
 	}
 	p.advance() // close PIVOT )
 	return true, nil
-}
-
-// parsePivotTuple parses an Oracle multi-column UNPIVOT IN entry "(a, b)"
-// and returns it in source form.
-func (p *Parser) parsePivotTuple() (string, error) {
-	p.advance() // consume (
-	var sb strings.Builder
-	sb.WriteByte('(')
-	for i := 0; ; i++ {
-		if !p.isIdentifier() {
-			return "", p.expectedError("column name in UNPIVOT IN list")
-		}
-		if i > 0 {
-			sb.WriteString(", ")
-		}
-		sb.WriteString(renderQuotedIdent(p.currentToken.Token))
-		p.advance()
-		if !p.isType(models.TokenTypeComma) {
-			break
-		}
-		p.advance() // consume ,
-	}
-	if !p.isType(models.TokenTypeRParen) {
-		return "", p.expectedError(") in UNPIVOT IN list")
-	}
-	p.advance() // consume )
-	sb.WriteByte(')')
-	return sb.String(), nil
 }
 
 // parsePivotSuffix parses the PIVOT / UNPIVOT clause of a table reference

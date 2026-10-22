@@ -428,13 +428,13 @@ func TestPivotExtensions(t *testing.T) {
 	}{
 		{"aggregates with aliases", keywords.DialectOracle, "SELECT * FROM t PIVOT (SUM(c) AS total, COUNT(*) cnt FOR a IN (1 AS x))", func(t *testing.T, ref *ast.TableReference) {
 			p := ref.Pivot
-			if p == nil || len(p.Aggregates) != 2 || p.Aggregates[0].Alias != "total" || p.Aggregates[1].Alias != "cnt" ||
-				p.AggregateFunction != p.Aggregates[0].Expr {
+			if p == nil || len(p.ExtraAggregates) != 1 || p.AggregateAlias != "total" || p.ExtraAggregates[0].Alias != "cnt" ||
+				p.AggregateFunction == nil || p.ExtraAggregates[0].Function == nil {
 				t.Errorf("got %+v", p)
 			}
 		}},
 		{"single aggregate keeps the simple form", keywords.DialectSQLServer, "SELECT * FROM t PIVOT (SUM(a) FOR q IN ([Q1])) AS p", func(t *testing.T, ref *ast.TableReference) {
-			if ref.Pivot == nil || ref.Pivot.Aggregates != nil || ref.Pivot.AggregateFunction == nil || ref.Alias != "p" {
+			if ref.Pivot == nil || ref.Pivot.ExtraAggregates != nil || ref.Pivot.AggregateAlias != "" || ref.Pivot.AggregateFunction == nil || ref.Alias != "p" {
 				t.Errorf("got %+v alias %q", ref.Pivot, ref.Alias)
 			}
 		}},
@@ -465,8 +465,8 @@ func TestPivotExtensions(t *testing.T) {
 		}},
 		{"unpivot nulls and columns", keywords.DialectOracle, "SELECT * FROM w UNPIVOT EXCLUDE NULLS ((u, r) FOR p IN ((u1, r1) AS 'P1'))", func(t *testing.T, ref *ast.TableReference) {
 			u := ref.Unpivot
-			if u == nil || u.NullHandling != "EXCLUDE" || !reflect.DeepEqual(u.ValueColumns, []string{"u", "r"}) ||
-				u.ValueColumn != "u" || !reflect.DeepEqual(u.InColumns, []string{"(u1, r1) AS 'P1'"}) {
+			if u == nil || u.NullHandling != "EXCLUDE NULLS" || !reflect.DeepEqual(u.ValueColumns, []string{"u", "r"}) ||
+				u.ValueColumn != "" || !reflect.DeepEqual(u.InColumns, []string{"(u1, r1) AS 'P1'"}) {
 				t.Errorf("got %+v", u)
 			}
 		}},

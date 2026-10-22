@@ -16,23 +16,11 @@ package ast
 
 import "strings"
 
-// PivotAggregate is one aggregate of a PIVOT clause with its optional alias:
-// SUM(amount) AS total.
-type PivotAggregate struct {
-	Expr  Expression
-	Alias string
-}
-
-// PivotExtensions holds the PIVOT forms beyond a single aggregate and a
-// literal IN list:
+// PivotExtensions holds XML, dynamic IN lists and source aliases:
 //
-//	Oracle:    PIVOT (SUM(c) AS total, COUNT(*) AS cnt FOR a IN (1 AS x, 2 AS y))
 //	Oracle:    PIVOT XML (SUM(c) FOR a IN (ANY))
 //	Snowflake: PIVOT (AVG(a) FOR q IN (ANY ORDER BY q)), IN (SELECT ...)
 type PivotExtensions struct {
-	// Aggregates lists every aggregate when there is more than one or one
-	// has an alias; AggregateFunction is then Aggregates[0].Expr.
-	Aggregates []PivotAggregate
 	// XML is the Oracle PIVOT XML form.
 	XML bool
 	// InAny is IN (ANY [ORDER BY ...]) in place of a value list.
@@ -51,11 +39,6 @@ type PivotExtensions struct {
 }
 
 func (e *PivotExtensions) pivotExtensionChildren(nodes []Node) []Node {
-	for i := 1; i < len(e.Aggregates); i++ {
-		if e.Aggregates[i].Expr != nil {
-			nodes = append(nodes, e.Aggregates[i].Expr)
-		}
-	}
 	for i := range e.InAnyOrderBy {
 		nodes = append(nodes, &e.InAnyOrderBy[i])
 	}
@@ -133,21 +116,12 @@ func writePivot(w textWriter, p *PivotClause, kw func(string) string) {
 		w.WriteString(kw("XML"))
 	}
 	w.WriteString(" (")
-	if len(p.Aggregates) > 0 {
-		for i, a := range p.Aggregates {
-			if i > 0 {
-				w.WriteString(", ")
-			}
-			w.WriteString(exprSQL(a.Expr))
-			if a.Alias != "" {
-				w.WriteByte(' ')
-				w.WriteString(kw("AS"))
-				w.WriteByte(' ')
-				w.WriteString(QuoteName(a.Alias))
-			}
-		}
-	} else {
-		w.WriteString(exprSQL(p.AggregateFunction))
+	w.WriteString(exprSQL(p.AggregateFunction))
+	writePivotAggregateAlias(w, p.AggregateAlias, kw)
+	for _, a := range p.ExtraAggregates {
+		w.WriteString(", ")
+		w.WriteString(exprSQL(a.Function))
+		writePivotAggregateAlias(w, a.Alias, kw)
 	}
 	w.WriteByte(' ')
 	w.WriteString(kw("FOR"))
@@ -182,26 +156,35 @@ func writePivot(w textWriter, p *PivotClause, kw func(string) string) {
 	w.WriteString("))")
 }
 
+func writePivotAggregateAlias(w textWriter, alias string, kw func(string) string) {
+	if alias == "" {
+		return
+	}
+	w.WriteByte(' ')
+	w.WriteString(kw("AS"))
+	w.WriteByte(' ')
+	w.WriteString(QuotePivotAggregateAlias(alias))
+}
+
 func writeUnpivot(w textWriter, u *UnpivotClause, kw func(string) string) {
 	w.WriteByte(' ')
 	w.WriteString(kw("UNPIVOT"))
-	switch strings.ToUpper(u.NullHandling) {
-	case "INCLUDE", "EXCLUDE":
+	if nh := UnpivotNullHandling(u.NullHandling); nh != "" {
 		w.WriteByte(' ')
-		w.WriteString(kw(strings.ToUpper(u.NullHandling) + " NULLS"))
+		w.WriteString(kw(nh))
 	}
 	w.WriteString(" (")
-	if len(u.ValueColumns) > 1 {
+	if len(u.ValueColumns) > 0 {
 		w.WriteByte('(')
 		for i, c := range u.ValueColumns {
 			if i > 0 {
 				w.WriteString(", ")
 			}
-			w.WriteString(QuotePivotColumn(c))
+			w.WriteString(QuoteUnpivotValueColumn(c))
 		}
 		w.WriteByte(')')
 	} else {
-		w.WriteString(QuotePivotColumn(u.ValueColumn))
+		w.WriteString(QuoteUnpivotValueColumn(u.ValueColumn))
 	}
 	w.WriteByte(' ')
 	w.WriteString(kw("FOR"))
@@ -247,13 +230,9 @@ func pivotTupleLen(s string) int {
 	}
 }
 
-// releasePivotExtensions releases the expressions only PivotExtensions
-// holds: the aggregates after the first (the first is AggregateFunction)
-// and the IN (ANY ORDER BY) expressions.
+// releasePivotExtensions releases dynamic IN-list expressions. Aggregate
+// expressions are owned by AggregateFunction and ExtraAggregates.
 func releasePivotExtensions(p *PivotClause, mode releaseMode) {
-	for i := 1; i < len(p.Aggregates); i++ {
-		releaseExpression(p.Aggregates[i].Expr, mode)
-	}
 	for i := range p.InAnyOrderBy {
 		releaseExpression(p.InAnyOrderBy[i].Expression, mode)
 	}

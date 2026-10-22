@@ -17,10 +17,10 @@
 <br/>
 
 <!-- metrics:start -->
-| **~3.1M parses/sec†** | **318 ns parse latency†** | **~80–85% SQL-99 (est.)** | **8 dialects** | **0 race conditions** |
+| **~2.9M parses/sec†** | **349 ns parse latency†** | **~80–85% SQL-99 (est.)** | **8 dialects** | **0 race conditions** |
 |:---:|:---:|:---:|:---:|:---:|
 
-<sub>† Parse stage only (pre-tokenized input to AST), `SELECT id, name FROM users`, Apple M4, Go 1.27, median of 10 runs of `BenchmarkPerformanceBaseline`. Complex queries take longer (see `performance_baselines.json`). Reproduce: `go test -run ^$ -bench BenchmarkPerformanceBaseline -benchmem -count=10 ./pkg/sql/parser/`.</sub>
+<sub>† Parse stage only (pre-tokenized input to AST), `SELECT id, name FROM users`, Apple M4, Go 1.27, median of 20 runs of `BenchmarkPerformanceBaseline`. Complex queries take longer (see `performance_baselines.json`). Reproduce: `go test -run ^$ -bench BenchmarkPerformanceBaseline -benchmem -count=20 ./pkg/sql/parser/`.</sub>
 <!-- metrics:end -->
 
 <br/>
@@ -33,7 +33,7 @@
 
 ## What is GoSQLX?
 
-GoSQLX is a **production-ready SQL parsing SDK** for Go. It tokenizes, parses, and generates ASTs from SQL with zero-copy optimizations and intelligent object pooling - parsing a simple SELECT in about <!-- metrics-inline:start -->**318 ns (~3.1M parses/sec)**<!-- metrics-inline:end -->.
+GoSQLX is a **production-ready SQL parsing SDK** for Go. It tokenizes, parses, and generates ASTs from SQL with zero-copy optimizations and intelligent object pooling - parsing a simple SELECT in about <!-- metrics-inline:start -->**349 ns (~2.9M parses/sec)**<!-- metrics-inline:end -->.
 
 ### Why GoSQLX?
 
@@ -166,7 +166,7 @@ Formatting turns one-line SQL into a readable query:
 - **[Analysis](https://gosqlx.dev/docs/reference/linting-rules/)** - SQL injection scanner, 30 lint rules (L001-L030), 20 optimizer rules and metadata extraction.
 - **[Tooling](https://gosqlx.dev/docs/cli-guide/)** - AST-based formatter, query transforms API, VS Code extension and GitHub Action.
 - **[Syntax highlighting](docs/HIGHLIGHTING.md)** - dialect-aware highlighting for terminals (ANSI), HTML/CSS, JSON spans, LSP semantic tokens and WASM; `gosqlx highlight query.sql` or `gosqlx.HighlightANSI(sql)`.
-- **[Multi-dialect](https://gosqlx.dev/docs/reference/sql-compatibility/)** - 8 dialects with dedicated grammar support: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse. The `--dialect` flag and `WithDialect` accept 11 names: those 8 (`postgresql`, `mysql`, `mariadb`, `sqlserver`, `oracle`, `sqlite`, `snowflake`, `clickhouse`) plus `generic`, `bigquery` and `redshift`. BigQuery and Redshift have no dialect-specific keyword set (they use the generic keywords) and only capability-gated grammar, such as BigQuery's `QUALIFY`, `UNNEST` in `FROM` and `(struct).field` access.
+- **[Multi-dialect](https://gosqlx.dev/docs/reference/sql-compatibility/)** - 8 dialects with dedicated grammar support: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake, ClickHouse. The `--dialect` flag and `WithDialect` accept 11 names: those 8 (`postgresql`, `mysql`, `mariadb`, `sqlserver`, `oracle`, `sqlite`, `snowflake`, `clickhouse`) plus `generic`, `bigquery` and `redshift`. BigQuery and Redshift have no dialect-specific keyword set (they use the generic keywords) and only capability-gated grammar, such as BigQuery's `QUALIFY`, `PIVOT`/`UNPIVOT`, `UNNEST` in `FROM` and `(struct).field` access.
 - **[AI-ready](https://gosqlx.dev/docs/integrations/mcp/)** - MCP server with 7 tools, public remote endpoint, Streamable HTTP.
 - **[Tested](https://gosqlx.dev/docs/reference/sql-compatibility/)** - race-detector clean in CI, ~80-85% SQL-99 (estimated).
 

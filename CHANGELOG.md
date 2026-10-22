@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `ast.PivotClause.AggregateAlias`, `ast.PivotClause.ExtraAggregates`
+  (`[]ast.PivotAggregate`), `ast.UnpivotClause.NullHandling`,
+  `ast.UnpivotClause.ValueColumns` and `ast.UnpivotNullHandling`; rendered by
+  `SQL()` and `pkg/formatter`.
 - **Dialect audit corpus**: 2,788 production-style statements across PostgreSQL,
   MySQL, MariaDB, SQL Server, Oracle, SQLite, Snowflake and ClickHouse now pass
   split, parse, format, reparse, idempotency and dropped-word checks, with zero
@@ -38,6 +42,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   counts cannot be represented there.
 
 ### Fixed
+- **BigQuery PIVOT / UNPIVOT** (#854): the parser gated PIVOT/UNPIVOT on a
+  hard-coded SQL Server / Oracle / Snowflake list, so BigQuery rejected them
+  with E2002 although its capabilities advertise `SupportsPivotUnpivot`. The
+  gate is now `Capabilities().SupportsPivotUnpivot` (true for exactly SQL
+  Server, Oracle, Snowflake and BigQuery; the default, Generic, PostgreSQL,
+  MySQL, MariaDB, SQLite, ClickHouse and Redshift dialects still treat `pivot`
+  / `unpivot` as identifiers). Supported BigQuery forms: aggregate aliases and
+  multiple aggregates, `IN` value aliases with or without `AS`,
+  `UNPIVOT INCLUDE NULLS` / `EXCLUDE NULLS`, row-value aliases with or without
+  `AS` (string or INT64) and multi-column UNPIVOT. The extensions follow each
+  dialect's grammar: Oracle also gets aliased/multiple aggregates, the NULLS
+  modifier and multi-column UNPIVOT; Snowflake gets the NULLS modifier and
+  bare `IN` value aliases; SQL Server is unchanged.
+- PIVOT/UNPIVOT quoted aggregate aliases, UNPIVOT value columns, and
+  backtick-quoted `IN` names and aliases keep their source delimiters when
+  rendered. This preserves BigQuery backticks and Oracle alias case.
+- Numeric UNPIVOT row aliases after `AS` are limited to BigQuery and Oracle;
+  Snowflake and SQL Server reject them.
 - **SQL round trips**: preserve ALTER actions, grouped joins, set-operation
   query tails and CTE placement, standalone VALUES, JSON_TABLE/XMLTABLE literal
   quoting, and nested optimizer hints. Hint placement uses the source dialect's
@@ -82,6 +104,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Docs**: removed `parser.NewTokenConverter`, `SetMaxTokens`,
   `SetMaxRecursionDepth` and the `parser.max_tokens` config key, none of which
   exist; the limits are constants.
+
+### Behavior changes
+- PIVOT / UNPIVOT `IN` lists now require commas between entries and an alias
+  after `AS` in every PIVOT dialect. Where bare aliases are supported,
+  `IN (a b)` is one entry (`a AS b`); otherwise a missing comma is rejected.
+  `IN ('a' AS)` no longer silently drops the `AS`.
 
 ## [1.16.0] - 2026-10-22 — Performance Audit, SQL Highlighting, Dialect-Aware LSP, Claude Code Plugin & ChatGPT App, Correctness Sweep
 

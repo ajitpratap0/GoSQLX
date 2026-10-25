@@ -448,13 +448,16 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 			continue
 		}
 
+		start := p.currentPos
 		stmt, err := p.parseStatement()
-		if err != nil {
+		if err == nil {
+			result.Statements = append(result.Statements, stmt)
+		}
+		if _, err = p.batchLineError(start, err); err != nil {
 			// Clean up the AST on error
 			ast.ReleaseAST(result)
 			return nil, err
 		}
-		result.Statements = append(result.Statements, stmt)
 
 		// Optionally consume semicolon after statement
 		if p.isType(models.TokenTypeSemicolon) {
@@ -650,13 +653,16 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 			continue
 		}
 
+		start := p.currentPos
 		stmt, err := p.parseStatement()
-		if err != nil {
+		if err == nil {
+			result.Statements = append(result.Statements, stmt)
+		}
+		if _, err = p.batchLineError(start, err); err != nil {
 			// Clean up the AST on error
 			ast.ReleaseAST(result)
 			return nil, err
 		}
-		result.Statements = append(result.Statements, stmt)
 
 		// Optionally consume semicolon after statement
 		if p.isType(models.TokenTypeSemicolon) {

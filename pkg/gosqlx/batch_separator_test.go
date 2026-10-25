@@ -81,3 +81,42 @@ func TestBatchSeparatorInvalidCounts(t *testing.T) {
 		})
 	}
 }
+
+// TestBatchSeparatorInvalidCountMessage checks that GO with an invalid repeat
+// count alone on its line is reported as such, not as a FROM / end of
+// statement error from the statement before it.
+func TestBatchSeparatorInvalidCountMessage(t *testing.T) {
+	for _, count := range []string{"0", "1.5", "999999999999999999999999999999"} {
+		t.Run(count, func(t *testing.T) {
+			tree, err := ParseWithDialect("SELECT 1\nGO "+count+"\nSELECT 2", keywords.DialectSQLServer)
+			if err == nil {
+				ast.ReleaseAST(tree)
+				t.Fatal("accepted invalid GO repeat count")
+			}
+			if !strings.Contains(err.Error(), "invalid GO repeat count") {
+				t.Fatalf("error = %v, want an invalid GO repeat count error", err)
+			}
+		})
+	}
+}
+
+// TestBatchSeparatorInsideStatementIsAnError checks that formatting refuses
+// a statement that runs across a GO line (sqlcmd would split it there)
+// instead of writing go as a column name, with or without comments.
+func TestBatchSeparatorInsideStatementIsAnError(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT a,\ngo\nFROM t",
+		"SELECT a, -- c\ngo\nFROM t",
+		"SELECT a /* c */,\nGO 2\nFROM t",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			out, err := FormatWithDialect(sql, DefaultFormatOptions(), keywords.DialectSQLServer)
+			if err == nil {
+				t.Fatalf("formatted as %q, want an error", out)
+			}
+			if !strings.Contains(err.Error(), "GO batch separator inside a statement") {
+				t.Fatalf("error = %v", err)
+			}
+		})
+	}
+}

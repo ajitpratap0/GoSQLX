@@ -22,6 +22,7 @@ import (
 
 	"github.com/ajitpratap0/GoSQLX/internal/batch"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
@@ -45,6 +46,11 @@ type CommentLayout struct {
 	// "\n\n", "\n" or " ". It is widened to a line break whenever a line
 	// comment would otherwise swallow the following text.
 	Gap string
+	// Batches holds the source positions of the SQL Server GO separators the
+	// parser recognized (ast.BatchSeparator.Pos), so that the comment layer
+	// splits the source at exactly the parser's batch boundaries. When it is
+	// nil, GO lines are recognized from the tokens.
+	Batches []models.Location
 }
 
 // JoinWithComments joins already-rendered statements and puts the comments of
@@ -84,14 +90,14 @@ func JoinWithComments(stmts []string, tokens []models.TokenWithSpan, comments []
 	if len(comments) == 0 {
 		return joinPlain(stmts, layout), nil
 	}
-	items := splitItems(tokens, layout.Dialect)
+	items := splitItems(tokens, layout)
 	var nStmt int
 	for _, it := range items {
 		if !it.empty {
 			nStmt++
 		}
 	}
-	if nStmt != len(stmts) || len(stmts) == 0 {
+	if nStmt != len(stmts) || len(stmts) == 0 || !batchesAgree(items, stmts, layout.Dialect) {
 		return joinHoisted(stmts, comments, layout)
 	}
 
@@ -286,10 +292,28 @@ type item struct {
 	start, end models.Location
 }
 
-// splitItems splits tokens at ';'.
-func splitItems(tokens []models.TokenWithSpan, dialect ...string) []item {
+// batchesAgree reports whether the GO items of the source are the rendered
+// GO statements, one for one.
+func batchesAgree(items []item, stmts []string, dialect string) bool {
+	si := 0
+	for _, it := range items {
+		if it.empty {
+			continue
+		}
+		if it.batch != isBatchText(stmts[si], dialect) {
+			return false
+		}
+		si++
+	}
+	return true
+}
+
+// splitItems splits tokens at ';' and, in SQL Server, around GO lines: those
+// at layout.Batches, or those batch.End recognizes when it is nil.
+func splitItems(tokens []models.TokenWithSpan, layout CommentLayout) []item {
 	var items []item
-	sqlServer := len(dialect) > 0 && isSQLServerDialect(dialect[0])
+	sqlServer := isSQLServerDialect(layout.Dialect)
+	nextBatch := 0
 	cur := item{first: -1, term: -1}
 	flush := func() {
 		if cur.first >= 0 {
@@ -300,7 +324,18 @@ func splitItems(tokens []models.TokenWithSpan, dialect ...string) []item {
 	for i := 0; i < len(tokens); i++ {
 		t := tokens[i]
 		if sqlServer {
-			if end, ok := batch.End(tokens, i); ok {
+			end, ok := 0, false
+			if layout.Batches == nil {
+				end, ok = batch.End(tokens, i)
+			} else if nextBatch < len(layout.Batches) && t.Start == layout.Batches[nextBatch] {
+				nextBatch++
+				end, _, ok = batch.Line(tokens, i)
+				if !ok {
+					end = i + 1
+				}
+				ok = true
+			}
+			if ok {
 				flush()
 				items = append(items, item{first: i, last: end - 1, term: -1, batch: true, start: t.Start, end: tokens[end-1].End})
 				i = end - 1
@@ -718,4 +753,20 @@ func abbreviate(s string) string {
 		return s[:37] + "..."
 	}
 	return s
+}
+
+// BatchPositions returns the source positions of the GO separators of tree
+// for CommentLayout.Batches. The result is non-nil, also for a tree without
+// separators, so that the comment layer follows the parser's boundaries.
+func BatchPositions(tree *ast.AST) []models.Location {
+	out := []models.Location{}
+	if tree == nil {
+		return out
+	}
+	for _, stmt := range tree.Statements {
+		if sep, ok := stmt.(*ast.BatchSeparator); ok && sep != nil {
+			out = append(out, sep.Pos)
+		}
+	}
+	return out
 }

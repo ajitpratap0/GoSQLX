@@ -207,6 +207,15 @@ func (p *Parser) parseWithRecovery(tokens []models.TokenWithSpan) ([]ast.Stateme
 
 		stmtStartPos := p.currentPos
 		stmt, err := p.parseStatement()
+		if err == nil {
+			// A statement that ran across a GO line is reported, and parsing
+			// resumes at that line so the batch boundary is kept.
+			if at, gerr := p.batchLineError(stmtStartPos, nil); gerr != nil {
+				errors = append(errors, gerr)
+				p.seek(at)
+				continue
+			}
+		}
 		if err != nil {
 			// Create a ParseError with position info, preserving original error
 			loc := p.currentLocation()

@@ -24,6 +24,7 @@ package parser
 
 import (
 	"github.com/ajitpratap0/GoSQLX/internal/batch"
+	goerrors "github.com/ajitpratap0/GoSQLX/pkg/errors"
 	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
@@ -52,6 +53,39 @@ func (p *Parser) parseBatchSeparator() (*ast.BatchSeparator, bool) {
 	p.seek(next)
 	p.markImplicitEnd(next)
 	return sep, true
+}
+
+// batchLineError checks, in SQL Server, the tokens a statement starting at
+// token index start ran over (up to the current token when parseErr is set,
+// since the statement parser stopped there) for a line holding only GO [n].
+// sqlcmd ends the batch at such a line wherever it appears, so a statement
+// that runs across it is an error; GO with an invalid repeat count (GO 0,
+// GO 1.5) gets an error of its own. It returns parseErr when there is no
+// such line, otherwise the index of the GO token and the GO error.
+func (p *Parser) batchLineError(start int, parseErr error) (int, error) {
+	if !p.IsSQLServer() {
+		return -1, parseErr
+	}
+	last := p.currentPos - 1
+	if parseErr != nil {
+		last = p.currentPos
+	}
+	if last >= len(p.tokens) {
+		last = len(p.tokens) - 1
+	}
+	for i := start; i <= last; i++ {
+		if t := &p.tokens[i].Token; t.Type != models.TokenTypeIdentifier || len(t.Value) != 2 {
+			continue
+		}
+		if _, valid, ok := batch.Line(p.tokens, i); ok {
+			loc := p.tokens[i].Start
+			if !valid {
+				return i, goerrors.InvalidSyntaxError("invalid GO repeat count: GO takes a positive whole number", loc, "")
+			}
+			return i, goerrors.InvalidSyntaxError("GO batch separator inside a statement: a line holding only GO ends the batch", loc, "")
+		}
+	}
+	return -1, parseErr
 }
 
 // noteStatementEnd is called by the statement loops after a statement was

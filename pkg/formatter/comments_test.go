@@ -20,7 +20,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ajitpratap0/GoSQLX/pkg/models"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/parser"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/tokenizer"
 )
@@ -283,3 +285,47 @@ func TestMatchOccurrence(t *testing.T) {
 	}
 }
 
+// TestJoinWithComments_FollowsParserBatches checks that the comment layer
+// splits the source at the GO separators the parser reported in
+// CommentLayout.Batches, and falls back to putting comments in front when
+// the rendered statements and the source batches do not line up.
+func TestJoinWithComments_FollowsParserBatches(t *testing.T) {
+	const src = "SELECT 1 -- one\nGO\n-- two\nSELECT 2"
+	tkz := tokenizer.GetTokenizer()
+	defer tokenizer.PutTokenizer(tkz)
+	tkz.SetDialect(keywords.DialectSQLServer)
+	tokens, err := tkz.TokenizeString(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	comments := tkz.Comments
+	var goPos models.Location
+	for _, tok := range tokens {
+		if tok.Token.Value == "GO" {
+			goPos = tok.Start
+		}
+	}
+	tests := []struct {
+		name    string
+		stmts   []string
+		batches []models.Location
+		want    string
+	}{
+		{"parser positions", []string{"SELECT 1", "GO", "SELECT 2"}, []models.Location{goPos}, "SELECT 1;\n-- one\nGO\n-- two\nSELECT 2"},
+		{"recognized from tokens", []string{"SELECT 1", "GO", "SELECT 2"}, nil, "SELECT 1;\n-- one\nGO\n-- two\nSELECT 2"},
+		{"parser saw no separator", []string{"SELECT 1", "GO", "SELECT 2"}, []models.Location{}, "-- one\n-- two\nSELECT 1;\nGO\nSELECT 2"},
+		{"rendered kinds differ", []string{"SELECT 1", "SELECT 9", "SELECT 2"}, []models.Location{goPos}, "-- one\n-- two\nSELECT 1;\nSELECT 9;\nSELECT 2"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			layout := CommentLayout{Dialect: "sqlserver", Terminator: ";", Gap: "\n", Batches: tc.batches}
+			got, err := JoinWithComments(tc.stmts, tokens, comments, layout)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.want {
+				t.Errorf("got  %q\nwant %q", got, tc.want)
+			}
+		})
+	}
+}

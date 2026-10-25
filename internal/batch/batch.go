@@ -45,25 +45,35 @@ func IsText(s string) bool {
 // End returns the first token after an unquoted GO [count] on its own line.
 // Tokens without source positions cannot describe a client directive.
 func End(tokens []models.TokenWithSpan, i int) (int, bool) {
+	end, valid, ok := Line(tokens, i)
+	return end, ok && valid
+}
+
+// Line reports whether the token at index i is an unquoted GO alone on its
+// line, optionally followed on that line by one number token: the shape of a
+// sqlcmd batch separator. end is the index of the first token after the line
+// and valid reports whether the number, if any, is a valid repeat count
+// (GO 0 and GO 1.5 have the shape of a separator but an invalid count).
+// Tokens without source positions cannot describe a client directive.
+func Line(tokens []models.TokenWithSpan, i int) (end int, valid, ok bool) {
 	if i < 0 || i >= len(tokens) {
-		return 0, false
+		return 0, false, false
 	}
 	tok := &tokens[i]
 	if tok.Token.Type != models.TokenTypeIdentifier || tok.Token.Quote != 0 ||
 		!strings.EqualFold(tok.Token.Value, "GO") || tok.Start.Line == 0 ||
 		tok.Start.Line != tok.End.Line || tok.End.Column-tok.Start.Column != 2 ||
 		(i > 0 && tokens[i-1].End.Line >= tok.Start.Line) {
-		return 0, false
+		return 0, false, false
 	}
+	valid = true
 	j := i + 1
 	if j < len(tokens) && tokens[j].Token.Type == models.TokenTypeNumber && tokens[j].Start.Line == tok.Start.Line {
-		if _, ok := Count(tokens[j].Token.Value); !ok {
-			return 0, false
-		}
+		_, valid = Count(tokens[j].Token.Value)
 		j++
 	}
 	if j < len(tokens) && tokens[j].Token.Type != models.TokenTypeEOF && tokens[j].Start.Line <= tok.Start.Line {
-		return 0, false
+		return 0, false, false
 	}
-	return j, true
+	return j, valid, true
 }

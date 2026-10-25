@@ -94,7 +94,9 @@ func (f *SQLFormatter) FormatWithComments(astObj *ast.AST, tokens []models.Token
 	if err != nil {
 		return "", err
 	}
-	return pkgformatter.JoinWithComments(stmts, tokens, comments, f.layout())
+	layout := f.layout()
+	layout.Batches = pkgformatter.BatchPositions(astObj)
+	return pkgformatter.JoinWithComments(stmts, tokens, comments, layout)
 }
 
 func (f *SQLFormatter) formatStatements(astObj *ast.AST) ([]string, error) {

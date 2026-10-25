@@ -17,6 +17,7 @@ package gosqlx
 import (
 	"testing"
 
+	"github.com/ajitpratap0/GoSQLX/internal/dropcheck"
 	"github.com/ajitpratap0/GoSQLX/pkg/sql/keywords"
 )
 
@@ -72,7 +73,7 @@ func TestFormatRoundTrip_UtilityAndIdentifiers(t *testing.T) {
 			if f2 := FormatAST(tree2); f2 != f1 {
 				t.Errorf("not idempotent: %q != %q", f2, f1)
 			}
-			if lost := realworldDroppedWords(tt.sql, f1); len(lost) > 0 {
+			if lost := dropcheck.DroppedWords(tt.sql, f1); len(lost) > 0 {
 				t.Errorf("formatter lost %v", lost)
 			}
 		})

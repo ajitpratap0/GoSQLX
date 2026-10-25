@@ -641,6 +641,22 @@ func releaseSetOperationOperands(s *SetOperation, mode releaseMode) {
 	}
 }
 
+// releaseValues releases the expressions of a VALUES table constructor (a
+// statement, set operand, CTE body or derived table) and clears its rows.
+// Values itself is not pooled.
+func releaseValues(v *Values, mode releaseMode) {
+	if v == nil {
+		return
+	}
+	for _, row := range v.Rows {
+		for i := range row {
+			releaseExpression(row[i], mode)
+			row[i] = nil
+		}
+	}
+	v.Rows = nil
+}
+
 // ============================================================
 // DDL Statement Pool Functions
 // ============================================================

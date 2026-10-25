@@ -631,6 +631,12 @@ func releaseStatement(stmt Statement, mode releaseMode) {
 		releaseReplaceStatement(s, mode)
 	case *AlterStatement:
 		PutAlterStatement(s)
+	case *SetOperation:
+		// Not pooled itself; its operands are. Operand links are cleared,
+		// so a second visit releases nothing.
+		releaseSetOperationOperands(s, mode)
+	case *Values:
+		releaseValues(s, mode)
 	// Sequence statements are pooled via NewXxx/ReleaseXxx helpers.
 	// Without a dispatch here, a CTE or subquery that contained one
 	// would silently leak it (the stmt type audit found these three

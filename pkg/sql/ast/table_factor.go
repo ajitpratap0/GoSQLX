@@ -736,14 +736,8 @@ func releaseTableFactorModifiers(tr *TableReference, mode releaseMode) {
 			m.PartitionFor.Values[i] = nil
 		}
 	}
-	if v := tr.Values; v != nil {
-		for _, row := range v.Rows {
-			for i := range row {
-				releaseExpression(row[i], mode)
-				row[i] = nil
-			}
-		}
-		v.Rows = nil
+	if tr.Values != nil {
+		releaseValues(tr.Values, mode)
 		tr.Values = nil
 	}
 	if g := tr.joinGroup(); g != nil {

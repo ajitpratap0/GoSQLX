@@ -453,7 +453,10 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 		if err == nil {
 			result.Statements = append(result.Statements, stmt)
 		}
-		if _, err = p.batchLineError(start, err); err != nil {
+		if p.IsSQLServer() { // batchLineError returns err unchanged elsewhere
+			_, err = p.batchLineError(start, err)
+		}
+		if err != nil {
 			// Clean up the AST on error
 			ast.ReleaseAST(result)
 			return nil, err
@@ -462,7 +465,7 @@ func (p *Parser) parseTokens(tokens []models.TokenWithSpan) (*ast.AST, error) {
 		// Optionally consume semicolon after statement
 		if p.isType(models.TokenTypeSemicolon) {
 			p.advance()
-		} else {
+		} else if !p.isType(models.TokenTypeEOF) { // noteStatementEnd has nothing to do at the end
 			p.noteStatementEnd()
 		}
 	}
@@ -658,7 +661,10 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 		if err == nil {
 			result.Statements = append(result.Statements, stmt)
 		}
-		if _, err = p.batchLineError(start, err); err != nil {
+		if p.IsSQLServer() { // batchLineError returns err unchanged elsewhere
+			_, err = p.batchLineError(start, err)
+		}
+		if err != nil {
 			// Clean up the AST on error
 			ast.ReleaseAST(result)
 			return nil, err
@@ -667,7 +673,7 @@ func (p *Parser) parseContextTokens(ctx context.Context, tokens []models.TokenWi
 		// Optionally consume semicolon after statement
 		if p.isType(models.TokenTypeSemicolon) {
 			p.advance()
-		} else {
+		} else if !p.isType(models.TokenTypeEOF) { // noteStatementEnd has nothing to do at the end
 			p.noteStatementEnd()
 		}
 	}

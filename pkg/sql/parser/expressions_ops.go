@@ -195,6 +195,23 @@ var bitwiseEndTypes = func() *tokenTypeSet {
 	return &s
 }()
 
+// atBitwiseEnd reports whether no operator of the bitwise level or a tighter
+// one continues an operand at the current token: a bitwiseEndTypes token, or
+// <, > or <= not followed by the <, > or -> that would make it <<, <->, >>
+// or <=> (see bitwiseOperator).
+func (p *Parser) atBitwiseEnd() bool {
+	switch t := p.currentToken.Token.Type; t {
+	case models.TokenTypeLt, models.TokenTypeGt, models.TokenTypeLtEq:
+		switch p.peekTypeAt(1) {
+		case models.TokenTypeLt, models.TokenTypeGt, models.TokenTypeArrow:
+			return false
+		}
+		return true
+	default:
+		return bitwiseEndTypes.has(t)
+	}
+}
+
 // parseArithmeticTail continues the ^, * / %, + - and || levels after an
 // operand parsed by parseJSONExpression; with parseJSONExpression it is
 // parseStringConcatExpression.
@@ -222,7 +239,7 @@ func (p *Parser) parseBitwiseExpression(minPrec int) (ast.Expression, error) {
 	if err != nil {
 		return nil, err
 	}
-	if bitwiseEndTypes.has(p.currentToken.Token.Type) {
+	if p.atBitwiseEnd() {
 		return left, nil
 	}
 	if left, err = p.parseArithmeticTail(left); err != nil {

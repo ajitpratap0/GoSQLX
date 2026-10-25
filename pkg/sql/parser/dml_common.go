@@ -199,18 +199,8 @@ func (p *Parser) parseDMLTargets(name, alias *string, d *ast.DMLTargetFields, mu
 		*name, *alias = n, a
 		d.TableNameQuote, d.AliasQuote = nq, aq
 	} else {
-		first, err := p.parseFromTableReference()
-		if err != nil {
+		if err := p.parseDMLParenTarget(name, alias, d, paren); err != nil {
 			return false, err
-		}
-		if first.Subquery == nil && first.SetSubquery == nil && first.TableFunc == nil {
-			*name, *alias = first.Name, first.Alias
-			d.TableNameQuote, d.AliasQuote = first.NameQuote, first.AliasQuote
-		} else {
-			d.Tables = append(d.Tables, first)
-		}
-		if paren != nil {
-			*paren = first
 		}
 		isParen = true
 	}
@@ -223,6 +213,26 @@ func (p *Parser) parseDMLTargets(name, alias *string, d *ast.DMLTargetFields, mu
 		d.Tables = append(d.Tables, ref)
 	}
 	return isParen, nil
+}
+
+// parseDMLParenTarget parses a parenthesized first UPDATE/DELETE target for
+// parseDMLTargets. It is a function of its own so that the TableReference it
+// needs is not part of parseDMLTargets' frame.
+func (p *Parser) parseDMLParenTarget(name, alias *string, d *ast.DMLTargetFields, paren *ast.TableReference) error {
+	first, err := p.parseFromTableReference()
+	if err != nil {
+		return err
+	}
+	if first.Subquery == nil && first.SetSubquery == nil && first.TableFunc == nil {
+		*name, *alias = first.Name, first.Alias
+		d.TableNameQuote, d.AliasQuote = first.NameQuote, first.AliasQuote
+	} else {
+		d.Tables = append(d.Tables, first)
+	}
+	if paren != nil {
+		*paren = first
+	}
+	return nil
 }
 
 // isWordToken reports whether the current token is a bare word (identifier
@@ -285,7 +295,9 @@ func (p *Parser) parseAssignmentColumn() (ast.Expression, error) {
 		Pos:        p.currentLocation(),
 		Quoted:     q == '"',
 		QuoteStyle: q,
-		Quotes:     p.appendNamePartQuoted(0, q),
+	}
+	if p.nameQuoteRelevant(q) {
+		ident.Quotes = p.appendNamePartQuoted(0, q)
 	}
 	p.advance()
 	for p.isType(models.TokenTypePeriod) {
@@ -304,7 +316,9 @@ func (p *Parser) parseAssignmentColumn() (ast.Expression, error) {
 		if q != 0 {
 			ident.QuoteStyle = q
 		}
-		ident.Quotes = p.appendNamePartQuoted(ident.Quotes, q)
+		if ident.Quotes != 0 || p.nameQuoteRelevant(q) {
+			ident.Quotes = p.appendNamePartQuoted(ident.Quotes, q)
+		}
 		p.advance()
 	}
 	return ident, nil

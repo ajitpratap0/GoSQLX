@@ -128,7 +128,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 	// an identifier (the snowflake keyword table is not wired into the
 	// tokenizer); detect by name when followed by '('.
 	if (p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeKeyword)) &&
-		strings.EqualFold(p.currentToken.Token.Value, "TRY_CAST") &&
+		len(p.currentToken.Token.Value) >= len("TRY_CAST") && strings.EqualFold(p.currentToken.Token.Value, "TRY_CAST") &&
 		p.peekToken().Token.Type == models.TokenTypeLParen {
 		return p.parseTryCastExpression()
 	}
@@ -191,7 +191,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 	// EXTRACT(field FROM source) — SQL standard date/time extraction.
 	// Tokenized as an identifier; detect by name when followed by '('.
 	if (p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeKeyword)) &&
-		strings.EqualFold(p.currentToken.Token.Value, "EXTRACT") &&
+		len(p.currentToken.Token.Value) >= len("EXTRACT") && strings.EqualFold(p.currentToken.Token.Value, "EXTRACT") &&
 		p.peekToken().Token.Type == models.TokenTypeLParen {
 		return p.parseExtractExpression()
 	}
@@ -217,6 +217,56 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 			return funcCall, nil
 		}
 		return &ast.FunctionCall{Name: identName, Pos: identPos}, nil
+	}
+
+	// Literals. They come before the identifier case, whose condition
+	// (identifier, keyword column name, non-reserved keyword) and the "*"
+	// case below never hold for a literal token, so that no keyword probe
+	// runs for a literal.
+	if p.isStringLiteral() {
+		// Handle string literals
+		return p.parseStringLiteralExpr(), nil
+	}
+
+	if p.isNumericLiteral() {
+		// Handle numeric literals (int or float)
+		value := p.currentToken.Token.Value
+		p.advance()
+		return &ast.LiteralValue{Value: value, Type: numericLiteralType(value)}, nil
+	}
+
+	if p.isBooleanLiteral() {
+		// Handle boolean literals (uses O(1) switch instead of O(n) isAnyType)
+		value := p.currentToken.Token.Value
+		p.advance()
+		return &ast.LiteralValue{Value: value, Type: "bool"}, nil
+	}
+
+	if p.isType(models.TokenTypePlaceholder) {
+		// Handle SQL placeholders (e.g., $1, $2 for PostgreSQL; @param for
+		// SQL Server; ? for MySQL/MariaDB/SQLite; :1, :name for Oracle)
+		value := p.currentToken.Token.Value
+		p.advance()
+		if p.IsSQLServer() && isMoneyPrefix(value) && p.peekMoneyFraction() {
+			// SQL Server money literal $5.00: the tokenizer reads "$5" as a
+			// placeholder and ".00" as a separate number.
+			p.advance() // Consume .
+			value += "." + p.currentToken.Token.Value
+			p.advance() // Consume the fraction
+			return &ast.LiteralValue{Value: value, Type: "money"}, nil
+		}
+		ph := &ast.LiteralValue{Value: value, Type: "placeholder"}
+		// MySQL user-variable assignment: @rownum := @rownum + 1
+		if p.isVariableAssignment() {
+			return p.parseVariableAssignment(ph)
+		}
+		return ph, nil
+	}
+
+	if p.isType(models.TokenTypeNull) {
+		// Handle NULL literal
+		p.advance()
+		return &ast.LiteralValue{Value: nil, Type: "null"}, nil
 	}
 
 	if p.isType(models.TokenTypeIdentifier) || p.isType(models.TokenTypeDoubleQuotedString) || p.isKeywordColumnName() || ((p.dialect == string(keywords.DialectSQLServer) || p.dialect == string(keywords.DialectClickHouse)) && p.isNonReservedKeyword()) {
@@ -354,52 +404,6 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		// Both TokenTypeAsterisk and TokenTypeMul represent '*' from the tokenizer.
 		p.advance()
 		return &ast.Identifier{Name: "*"}, nil
-	}
-
-	if p.isStringLiteral() {
-		// Handle string literals
-		return p.parseStringLiteralExpr(), nil
-	}
-
-	if p.isNumericLiteral() {
-		// Handle numeric literals (int or float)
-		value := p.currentToken.Token.Value
-		p.advance()
-		return &ast.LiteralValue{Value: value, Type: numericLiteralType(value)}, nil
-	}
-
-	if p.isBooleanLiteral() {
-		// Handle boolean literals (uses O(1) switch instead of O(n) isAnyType)
-		value := p.currentToken.Token.Value
-		p.advance()
-		return &ast.LiteralValue{Value: value, Type: "bool"}, nil
-	}
-
-	if p.isType(models.TokenTypePlaceholder) {
-		// Handle SQL placeholders (e.g., $1, $2 for PostgreSQL; @param for
-		// SQL Server; ? for MySQL/MariaDB/SQLite; :1, :name for Oracle)
-		value := p.currentToken.Token.Value
-		p.advance()
-		if p.IsSQLServer() && isMoneyPrefix(value) && p.peekMoneyFraction() {
-			// SQL Server money literal $5.00: the tokenizer reads "$5" as a
-			// placeholder and ".00" as a separate number.
-			p.advance() // Consume .
-			value += "." + p.currentToken.Token.Value
-			p.advance() // Consume the fraction
-			return &ast.LiteralValue{Value: value, Type: "money"}, nil
-		}
-		ph := &ast.LiteralValue{Value: value, Type: "placeholder"}
-		// MySQL user-variable assignment: @rownum := @rownum + 1
-		if p.isVariableAssignment() {
-			return p.parseVariableAssignment(ph)
-		}
-		return ph, nil
-	}
-
-	if p.isType(models.TokenTypeNull) {
-		// Handle NULL literal
-		p.advance()
-		return &ast.LiteralValue{Value: nil, Type: "null"}, nil
 	}
 
 	if p.isType(models.TokenTypeLParen) {

@@ -145,14 +145,18 @@ func (p *Parser) parseQualifiedNameQuoted() (string, ast.NameQuote, error) {
 	if !p.isIdentifier() && !p.isNonReservedKeyword() {
 		return "", 0, p.expectedError("identifier")
 	}
-	var parts [maxQualifiedNameParts]string
-	parts[0] = p.currentToken.Token.Value
+	first := p.currentToken.Token.Value
 	var q ast.NameQuote
 	if quote := p.currentIdentQuote(); p.nameQuoteRelevant(quote) {
 		q = p.appendNamePartQuoted(0, quote)
 	}
-	n := 1
 	p.advance()
+	if !p.isType(models.TokenTypePeriod) {
+		return first, q, nil // a one-part name
+	}
+	var parts [maxQualifiedNameParts]string
+	parts[0] = first
+	n := 1
 
 	// Check for schema.table or db.schema.table
 	for p.isType(models.TokenTypePeriod) {

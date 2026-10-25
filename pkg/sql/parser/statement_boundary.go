@@ -42,6 +42,14 @@ func (p *Parser) batchSeparatorEnd(i int) (int, bool) {
 
 // parseBatchSeparator retains a GO line and marks the next statement boundary.
 func (p *Parser) parseBatchSeparator() (*ast.BatchSeparator, bool) {
+	if !p.IsSQLServer() {
+		return nil, false // batchSeparatorEnd is SQL Server only
+	}
+	return p.parseBatchSeparatorAt()
+}
+
+// parseBatchSeparatorAt is parseBatchSeparator in the SQL Server dialect.
+func (p *Parser) parseBatchSeparatorAt() (*ast.BatchSeparator, bool) {
 	next, ok := p.batchSeparatorEnd(p.currentPos)
 	if !ok {
 		return nil, false

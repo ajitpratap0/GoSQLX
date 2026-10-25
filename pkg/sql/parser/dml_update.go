@@ -43,21 +43,12 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 	}
 
 	// Target(s). MySQL/MariaDB allow a multi-table target list with JOINs.
-	multi := p.isMySQLFamily()
-	var first ast.TableReference
-	isParen, err := p.parseDMLTargets(&stmt.TableName, &stmt.Alias, &stmt.DMLTargetFields, multi, &first)
-	if err != nil {
-		return nil, err
-	}
-	if multi && p.isJoinKeyword() {
-		if !isParen {
-			first = ast.TableReference{Name: stmt.TableName, NameQuote: stmt.TableNameQuote, Alias: stmt.Alias, AliasQuote: stmt.AliasQuote}
-		}
-		joins, err := p.parseJoinClauses(first, nil)
-		if err != nil {
+	if p.isMySQLFamily() {
+		if err := p.parseMultiTableUpdateTargets(stmt); err != nil {
 			return nil, err
 		}
-		stmt.Joins = joins
+	} else if _, err := p.parseDMLTargets(&stmt.TableName, &stmt.Alias, &stmt.DMLTargetFields, false, nil); err != nil {
+		return nil, err
 	}
 
 	// Parse SET
@@ -116,6 +107,27 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 		}
 	}
 	return stmt, nil
+}
+
+// parseMultiTableUpdateTargets parses the MySQL / MariaDB UPDATE target
+// list: comma-separated targets, then JOIN clauses joined to the first one.
+func (p *Parser) parseMultiTableUpdateTargets(stmt *ast.UpdateStatement) error {
+	var first ast.TableReference
+	isParen, err := p.parseDMLTargets(&stmt.TableName, &stmt.Alias, &stmt.DMLTargetFields, true, &first)
+	if err != nil {
+		return err
+	}
+	if p.isJoinKeyword() {
+		if !isParen {
+			first = ast.TableReference{Name: stmt.TableName, NameQuote: stmt.TableNameQuote, Alias: stmt.Alias, AliasQuote: stmt.AliasQuote}
+		}
+		joins, err := p.parseJoinClauses(first, nil)
+		if err != nil {
+			return err
+		}
+		stmt.Joins = joins
+	}
+	return nil
 }
 
 // parseUpdateFromList parses the comma-separated table references of

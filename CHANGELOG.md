@@ -40,8 +40,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   return an error rather than changing their value. SQL Server GO scripts
   targeting another dialect return an error because batch scopes and repeat
   counts cannot be represented there.
+- **Transpiling dialect-specific operators**: `^` is exponentiation in
+  PostgreSQL and bitwise XOR in MySQL, MariaDB and SQL Server (recorded as
+  `BinaryExpression.BitwiseXor`). Exponentiation is written `POWER(a, b)`
+  outside PostgreSQL; XOR keeps `^` with explicit grouping between the MySQL
+  family and SQL Server, becomes `#` in PostgreSQL, `BITXOR()` in Snowflake and
+  `bitXor()` in ClickHouse, and returns an error for Oracle, SQLite and the
+  generic dialect. PostgreSQL `@`, `|/` and `||/` become `ABS()`, `SQRT()` and
+  `CBRT()` (an error where CBRT is missing); `!!`, SQL Server money literals
+  (`$5.00`, `$5`) and Snowflake object constants (`{'a': 1}`) return an error
+  in dialects without them.
 
 ### Fixed
+- PostgreSQL `@` (absolute value) is always written as `@ x`; `@a`, `@t.a` and
+  `@abs(a)` re-parsed as placeholders. `@` directly followed by operator
+  characters (`@-@`, `@-5`) is now rejected, as PostgreSQL lexes it as one
+  operator.
+- A WITH clause before nested parenthesized set operands
+  (`WITH c ... ((A UNION B) INTERSECT C) EXCEPT D`) stays in front of the whole
+  operation in `SQL()`, `FormatAST` and `Transpile`.
+- Optimizer hints in subqueries stay with their SELECT when the renderer
+  reorders clauses (Oracle `START WITH` / `CONNECT BY`); when the hinted SELECT
+  cannot be identified, formatting fails with `ErrUnplaceableComment`.
+- LSP document outline no longer lists GO separators, and statements before a
+  GO line no longer extend to the end of the file.
+- `ReleaseAST` returns the pooled nodes under standalone `VALUES` statements and
+  top-level set operations.
+- `gosqlx format --dialect sqlserver` runs the statement-count guard again,
+  counting GO lines and statements that end without `;`.
 - **BigQuery PIVOT / UNPIVOT** (#854): the parser gated PIVOT/UNPIVOT on a
   hard-coded SQL Server / Oracle / Snowflake list, so BigQuery rejected them
   with E2002 although its capabilities advertise `SupportsPivotUnpivot`. The
@@ -106,6 +132,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exist; the limits are constants.
 
 ### Behavior changes
+- SQL Server: a line holding only `GO [n]` inside a statement is now a parse
+  error ("GO batch separator inside a statement"), matching sqlcmd, instead of
+  a column or alias named `go`. `GO 0` / `GO 1.5` alone on a line report
+  "invalid GO repeat count".
+- Statement counts (`gosqlx analyze`, the MCP `parse_sql` tool and the C
+  binding's `statement_count` / statement types) exclude GO separators.
 - PIVOT / UNPIVOT `IN` lists now require commas between entries and an alias
   after `AS` in every PIVOT dialect. Where bare aliases are supported,
   `IN (a b)` is one entry (`a AS b`); otherwise a missing comma is rejected.

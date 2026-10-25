@@ -20,6 +20,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ajitpratap0/GoSQLX/pkg/sql/ast"
 )
 
 // TestFormatSQL_PreservesExplain checks that EXPLAIN <stmt> formats as one
@@ -146,5 +148,77 @@ func TestFormatSQL_UnsupportedStatementMessage(t *testing.T) {
 	_, err := formatWith("DESCRIBE users", CLIFormatterOptions{Compact: true})
 	if err == nil || !strings.Contains(err.Error(), "DescribeStatement") {
 		t.Fatalf("want an error naming DescribeStatement, got %v", err)
+	}
+}
+
+// TestTSQLStatementBound covers the SQL Server form of the separator guard:
+// statements may end without ';', so the bound also counts GO lines and the
+// words a T-SQL statement can start with.
+func TestTSQLStatementBound(t *testing.T) {
+	tests := []struct {
+		in   string
+		want int
+	}{
+		{"SELECT 1", 1},
+		{"SELECT 1;", 1},
+		{"SELECT 1\nGO\nSELECT 2", 3},
+		{"SELECT 1\nGO 2\nSELECT 2 PRINT 'x'", 4},
+		{"UPDATE t SET a = 1 WHERE b = 2", 2}, // SET may start a statement
+		{"SELECT a, b FROM t WHERE c = 1", 1},
+		{"SELECT t.select FROM t", 1}, // a qualified name part is not a start
+		{"SELECT [select] FROM t", 1}, // nor is a quoted name
+	}
+	for _, tc := range tests {
+		tkz, release, err := tokenizerForDialect("sqlserver")
+		if err != nil {
+			t.Fatal(err)
+		}
+		tokens, err := tkz.TokenizeString(tc.in)
+		if err != nil {
+			release()
+			t.Fatalf("tokenize %q: %v", tc.in, err)
+		}
+		got := tsqlStatementBound(tokens)
+		release()
+		if got != tc.want {
+			t.Errorf("tsqlStatementBound(%q) = %d, want %d", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestCheckFormattable_SQLServerGuard checks that the statement-count guard
+// runs for SQL Server: a tree with more statements than the input can hold
+// (the parser split a statement) is refused, a legitimate one is not.
+func TestCheckFormattable_SQLServerGuard(t *testing.T) {
+	tkz, release, err := tokenizerForDialect("sqlserver")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	tokens, err := tkz.TokenizeString("SELECT a b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	split := &ast.AST{Statements: []ast.Statement{&ast.SelectStatement{}, &ast.SelectStatement{}}}
+	if err := checkFormattable(split, tokens, "sqlserver"); err == nil {
+		t.Error("a statement split in two was accepted")
+	}
+	whole := &ast.AST{Statements: []ast.Statement{&ast.SelectStatement{}}}
+	if err := checkFormattable(whole, tokens, "sqlserver"); err != nil {
+		t.Errorf("one statement refused: %v", err)
+	}
+	for _, sql := range []string{
+		"SELECT 1\nGO\nSELECT 2\nGO 3",
+		"SET NOCOUNT ON\nSELECT 1\nUPDATE t SET a = 1\nCOMMIT",
+		"IF @a = 1 SELECT 1 ELSE SELECT 2",
+	} {
+		out, err := formatWith(sql, CLIFormatterOptions{Compact: true, Dialect: "sqlserver"})
+		if err != nil {
+			t.Errorf("format %q: %v", sql, err)
+			continue
+		}
+		if out == "" {
+			t.Errorf("format %q: empty output", sql)
+		}
 	}
 }

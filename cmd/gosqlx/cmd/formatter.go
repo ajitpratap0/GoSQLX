@@ -747,49 +747,46 @@ func FormatterOptionsFromConfig(cfg *config.Config, flagsChanged map[string]bool
 // DescribeStatement keeps only a name and drops DESCRIBE object kinds
 // (EXPLAIN <stmt> is an ExplainStatement, which round-trips).
 // UnsupportedStatement is rendered as a comment. Both are refused by type. As a general guard, a parse
-// with more statements than semicolon-separated segments in the input means
-// the parser split a statement, which re-parsing the output cannot detect.
+// with more statements than the input can hold means the parser split a
+// statement, which re-parsing the output cannot detect. The input holds at
+// most one statement per semicolon-separated segment; T-SQL statements may
+// also end without ';', so for SQL Server the bound also counts GO lines and
+// the words a statement can start with (see tsqlStatementBound).
 func checkFormattable(tree *ast.AST, tokens []models.TokenWithSpan, dialect ...string) error {
-	withBatches := false
 	for _, stmt := range tree.Statements {
 		switch stmt.(type) {
-		case *ast.BatchSeparator:
-			withBatches = true
 		case *ast.DescribeStatement, *ast.UnsupportedStatement:
 			return fmt.Errorf("unsupported statement type: %T (input left unchanged)", stmt)
 		}
 	}
-	// T-SQL intentionally accepts statements without semicolons. Its parser
-	// validates those boundaries; a semicolon count cannot bound its AST size.
-	// The caller still verifies each rendered statement and the reparse count.
-	if len(dialect) > 0 {
-		switch strings.ToLower(dialect[0]) {
-		case "sqlserver", "mssql", "tsql":
-			return nil
-		}
+	bound, unit := 0, "semicolon-separated"
+	if len(dialect) > 0 && isSQLServerName(dialect[0]) {
+		bound, unit = tsqlStatementBound(tokens), "possible T-SQL"
+	} else {
+		bound = statementSegments(tokens)
 	}
-	if got, segs := len(tree.Statements), statementSegments(tokens, withBatches); got > segs {
-		return fmt.Errorf("input parses as %d statements but has %d semicolon-separated statements (input left unchanged)", got, segs)
+	if got := len(tree.Statements); got > bound {
+		return fmt.Errorf("input parses as %d statements but has %d %s statements (input left unchanged)", got, bound, unit)
 	}
 	return nil
 }
 
+func isSQLServerName(d string) bool {
+	switch strings.ToLower(d) {
+	case "sqlserver", "mssql", "tsql":
+		return true
+	}
+	return false
+}
+
 // statementSegments counts the non-empty runs of tokens between semicolons,
-// ignoring EOF, i.e. the most statements the input can legitimately hold.
-func statementSegments(tokens []models.TokenWithSpan, withBatches ...bool) int {
+// ignoring EOF, i.e. the most statements the input can legitimately hold
+// outside SQL Server.
+func statementSegments(tokens []models.TokenWithSpan) int {
 	segs := 0
 	inSeg := false
-	for i := 0; i < len(tokens); i++ {
-		if len(withBatches) > 0 && withBatches[0] {
-			if next, ok := batch.End(tokens, i); ok {
-				segs++ // a retained BatchSeparator is itself an AST statement
-				inSeg = false
-				i = next - 1
-				continue
-			}
-		}
-		tok := tokens[i]
-		switch tok.Token.Type {
+	for i := range tokens {
+		switch tokens[i].Token.Type {
 		case models.TokenTypeSemicolon:
 			inSeg = false
 		case models.TokenTypeEOF:
@@ -801,4 +798,74 @@ func statementSegments(tokens []models.TokenWithSpan, withBatches ...bool) int {
 		}
 	}
 	return segs
+}
+
+// tsqlStartWords are the words a T-SQL statement can start with when it
+// follows another one without ';'. It must cover every word the SQL Server
+// parser starts a statement at (its implicit statement starts and the
+// statement keywords); a missing word makes the guard refuse valid input,
+// never accept a split statement.
+var tsqlStartWords = map[string]bool{
+	"SELECT": true, "INSERT": true, "UPDATE": true, "DELETE": true, "MERGE": true,
+	"WITH": true, "CREATE": true, "ALTER": true, "DROP": true, "TRUNCATE": true,
+	"DECLARE": true, "SET": true, "EXEC": true, "EXECUTE": true, "IF": true,
+	"ELSE": true, "WHILE": true, "BEGIN": true, "END": true, "PRINT": true,
+	"THROW": true, "RAISERROR": true, "WAITFOR": true, "RETURN": true, "USE": true,
+	"DBCC": true, "COMMIT": true, "ROLLBACK": true, "SAVE": true, "GRANT": true,
+	"REVOKE": true, "DENY": true, "GOTO": true, "BREAK": true, "CONTINUE": true,
+	"OPEN": true, "CLOSE": true, "FETCH": true, "DEALLOCATE": true, "BULK": true,
+	"BACKUP": true, "RESTORE": true, "CHECKPOINT": true, "KILL": true,
+	"RECONFIGURE": true, "SHUTDOWN": true, "REVERT": true,
+	"ENABLE": true, "DISABLE": true, "VALUES": true, "EXPLAIN": true, "SHOW": true,
+	"DESCRIBE": true, "CALL": true, "REPLACE": true,
+}
+
+// tsqlStatementBound returns the most statements a SQL Server script can
+// hold: one per run of tokens between semicolons and GO lines, one per GO
+// line (a retained BatchSeparator is itself an AST statement), and one more
+// per word inside a run that can start a statement (tsqlStartWords), since
+// T-SQL statements need no ';' between them.
+func tsqlStatementBound(tokens []models.TokenWithSpan) int {
+	bound := 0
+	inSeg := false
+	for i := 0; i < len(tokens); i++ {
+		if next, ok := batch.End(tokens, i); ok {
+			bound++
+			inSeg = false
+			i = next - 1
+			continue
+		}
+		tok := &tokens[i]
+		switch tok.Token.Type {
+		case models.TokenTypeSemicolon:
+			inSeg = false
+		case models.TokenTypeEOF:
+		default:
+			if !inSeg {
+				bound++
+				inSeg = true
+			} else if tsqlMayStartStatement(tokens, i) {
+				bound++
+			}
+		}
+	}
+	return bound
+}
+
+// tsqlMayStartStatement reports whether tokens[i] is an unquoted word in
+// tsqlStartWords that is not part of a qualified name.
+func tsqlMayStartStatement(tokens []models.TokenWithSpan, i int) bool {
+	tok := &tokens[i].Token
+	if tok.Quote != 0 || tok.Value == "" || len(tok.Value) > len("RECONFIGURE") {
+		return false
+	}
+	switch tok.Type {
+	case models.TokenTypeString, models.TokenTypeSingleQuotedString, models.TokenTypeDoubleQuotedString,
+		models.TokenTypeNumber, models.TokenTypePlaceholder:
+		return false
+	}
+	if i > 0 && tokens[i-1].Token.Type == models.TokenTypePeriod {
+		return false
+	}
+	return tsqlStartWords[strings.ToUpper(tok.Value)]
 }

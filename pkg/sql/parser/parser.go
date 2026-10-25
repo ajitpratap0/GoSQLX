@@ -1309,6 +1309,12 @@ func (p *Parser) isSettingsKeyword() bool {
 // RETURNING keyword (any case). Quoted identifiers named returning are names,
 // not the keyword: quoting is the only way to use a keyword as an identifier.
 func (p *Parser) isReturningKeyword() bool {
+	t := p.currentToken.Token.Type
+	return (t == models.TokenTypeReturning || t == models.TokenTypeIdentifier) && p.isReturningKeywordAt()
+}
+
+// isReturningKeywordAt is isReturningKeyword past its inline screen (RETURNING is a keyword or identifier token).
+func (p *Parser) isReturningKeywordAt() bool {
 	if p.isType(models.TokenTypeReturning) {
 		return true
 	}

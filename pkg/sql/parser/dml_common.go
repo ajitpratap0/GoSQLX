@@ -115,6 +115,16 @@ func (p *Parser) dmlModifierAt(verb dmlVerb) string {
 	return ""
 }
 
+// nextIsName reports whether the token after the current one is an
+// identifier or a double-quoted name.
+func (p *Parser) nextIsName() bool {
+	if i := p.currentPos + 1; i < len(p.tokens) {
+		t := p.tokens[i].Token.Type
+		return t == models.TokenTypeIdentifier || t == models.TokenTypeDoubleQuotedString
+	}
+	return false
+}
+
 // isDMLOnly reports whether the current token is the PostgreSQL ONLY
 // modifier before an UPDATE/DELETE target.
 func (p *Parser) isDMLOnly() bool {
@@ -131,6 +141,11 @@ func (p *Parser) isDMLOnly() bool {
 // isDMLOutputKeyword reports whether the current token is an unquoted SQL
 // Server OUTPUT keyword.
 func (p *Parser) isDMLOutputKeyword() bool {
+	return p.dialect == string(keywords.DialectSQLServer) && p.isDMLOutputKeywordAt()
+}
+
+// isDMLOutputKeywordAt is isDMLOutputKeyword past its inline screen (SQL Server only).
+func (p *Parser) isDMLOutputKeywordAt() bool {
 	return p.dialect == string(keywords.DialectSQLServer) &&
 		p.isType(models.TokenTypeIdentifier) &&
 		equalsUpper(p.currentToken.Token.Value, "OUTPUT") &&
@@ -140,6 +155,12 @@ func (p *Parser) isDMLOutputKeyword() bool {
 // isDMLTargetAlias reports whether the current token is a bare alias after
 // an UPDATE/DELETE target name rather than the clause that follows it.
 func (p *Parser) isDMLTargetAlias() bool {
+	t := p.currentToken.Token.Type
+	return (t == models.TokenTypeIdentifier || t == models.TokenTypeDoubleQuotedString) && p.isDMLTargetAliasAt()
+}
+
+// isDMLTargetAliasAt is isDMLTargetAlias past its inline screen (an alias is an identifier).
+func (p *Parser) isDMLTargetAliasAt() bool {
 	if !p.isIdentifier() {
 		return false
 	}
@@ -437,6 +458,14 @@ func (p *Parser) parseReturningClause() ([]ast.Expression, []ast.Expression, err
 // [ORDER BY ...] [LIMIT n] (MySQL, MariaDB, SQLite). LIMIT is accepted in
 // every dialect, as before; ORDER BY only where the dialect has it.
 func (p *Parser) parseDMLOrderLimit(d *ast.DMLTargetFields) error {
+	if t := p.currentToken.Token.Type; t != models.TokenTypeOrder && t != models.TokenTypeLimit {
+		return nil // neither clause follows
+	}
+	return p.parseDMLOrderLimitAt(d)
+}
+
+// parseDMLOrderLimitAt is parseDMLOrderLimit at ORDER or LIMIT.
+func (p *Parser) parseDMLOrderLimitAt(d *ast.DMLTargetFields) error {
 	if p.isType(models.TokenTypeOrder) &&
 		(p.isMySQLFamily() || p.dialect == string(keywords.DialectSQLite)) {
 		orderBy, err := p.parseOrderByClause()

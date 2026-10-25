@@ -90,6 +90,11 @@ func specialFormOf(name string) specialForm {
 // isWord reports whether the current token is the unquoted word w (any
 // case), whatever its token type.
 func (p *Parser) isWord(w string) bool {
+	return len(p.currentToken.Token.Value) == len(w) && p.isWordAt(w)
+}
+
+// isWordAt is isWord past its inline screen (the word must have the same length).
+func (p *Parser) isWordAt(w string) bool {
 	return p.currentToken.Token.Quote == 0 && !p.isStringLiteral() &&
 		len(p.currentToken.Token.Value) == len(w) && strings.EqualFold(p.currentToken.Token.Value, w)
 }
@@ -311,6 +316,11 @@ func (p *Parser) parseKeepClause() (*ast.KeepClause, error) {
 // isKeepClause reports whether the current token starts an Oracle
 // KEEP (DENSE_RANK ...) clause.
 func (p *Parser) isKeepClause() bool {
+	return len(p.currentToken.Token.Value) == len("KEEP") && p.isKeepClauseAt()
+}
+
+// isKeepClauseAt is isKeepClause past its inline screen (isWord("KEEP") needs a four-byte word).
+func (p *Parser) isKeepClauseAt() bool {
 	return p.isWord("KEEP") && p.peekToken().Token.Type == models.TokenTypeLParen &&
 		strings.EqualFold(p.tokenAt(2).Token.Value, "DENSE_RANK")
 }

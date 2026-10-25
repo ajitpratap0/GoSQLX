@@ -49,7 +49,8 @@ func (p *Parser) parseDeleteStatement() (ast.Statement, error) {
 	sqlServer := p.dialect == string(keywords.DialectSQLServer)
 	if p.isType(models.TokenTypeFrom) {
 		p.advance() // Consume FROM
-		if p.isDMLOnly() {
+		// ONLY is followed by the table name.
+		if p.nextIsName() && p.isDMLOnly() {
 			stmt.Only = true
 			p.advance() // Consume ONLY
 		}

@@ -37,7 +37,8 @@ func (p *Parser) parseUpdateStatement() (ast.Statement, error) {
 		return nil, err
 	}
 	stmt.Top = top
-	if p.isDMLOnly() {
+	// ONLY is followed by the table name.
+	if p.nextIsName() && p.isDMLOnly() {
 		stmt.Only = true
 		p.advance() // Consume ONLY
 	}

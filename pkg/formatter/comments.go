@@ -67,7 +67,9 @@ type CommentLayout struct {
 //   - An optimizer hint directly after a SELECT, INSERT, UPDATE, DELETE,
 //     MERGE or REPLACE keyword (SELECT /*+ ... */, also one inside a CTE,
 //     subquery or union branch) stays there, provided the rendered statement
-//     has the same number of that keyword. A hint anywhere else, and a MySQL
+//     has the same number of that keyword and the hinted one can be told
+//     apart from the others by its surrounding words when the renderer
+//     writes them in another order. A hint anywhere else, and a MySQL
 //     executable comment (/*! ... */) inside a statement, make the call fail
 //     with ErrUnplaceableComment. An executable comment followed by ';' on its
 //     own is a statement of its own and is kept verbatim with its ';'.
@@ -339,6 +341,12 @@ type placedHint struct {
 	keyword string
 	ordinal int
 	total   int
+	// sigs holds the context signature (see occurrenceSig) of every
+	// occurrence of keyword in the source statement, in source order. The
+	// rendered statement must show the same occurrences, possibly reordered
+	// by the renderer (Oracle START WITH before CONNECT BY), for the hint to
+	// be placed. nil skips the check.
+	sigs []string
 }
 
 // hintSlot reports whether c lies directly after a keyword that can carry a
@@ -357,17 +365,82 @@ func (it item) hintSlot(tokens []models.TokenWithSpan, c models.Comment) (placed
 			continue
 		}
 		h := placedHint{text: c.Text, keyword: kw}
+		span := tokens[it.first : it.last+1]
 		for k := it.first; k <= it.last; k++ {
 			if w, isWord := wordToken(tokens[k].Token); isWord && strings.EqualFold(w, kw) {
 				if k < j {
 					h.ordinal++
 				}
 				h.total++
+				h.sigs = append(h.sigs, occurrenceSig(span, k-it.first))
 			}
 		}
 		return h, true
 	}
 	return placedHint{}, false
+}
+
+// occurrenceSig returns a signature of the context of the keyword at
+// tokens[k]: the last few words before it and the first few words after it
+// within its parenthesized scope, upper-cased, ignoring punctuation, string
+// literals and the optional AS keyword. The signature tells apart nested
+// SELECTs that the renderer may write in another order than the source, as
+// in "CONNECT BY ... IN (SELECT 1 FROM u) START WITH ... IN (SELECT 2 ...)".
+func occurrenceSig(tokens []models.TokenWithSpan, k int) string {
+	const nBefore, nAfter = 3, 4
+	var before, after []string
+	for i := k - 1; i >= 0 && len(before) < nBefore; i-- {
+		if w, ok := sigWord(tokens[i].Token); ok {
+			before = append(before, w)
+		}
+	}
+	depth := 0
+	for i := k + 1; i < len(tokens) && len(after) < nAfter; i++ {
+		switch tokens[i].Token.Type {
+		case models.TokenTypeLParen:
+			depth++
+			continue
+		case models.TokenTypeRParen:
+			depth--
+			continue
+		case models.TokenTypeSemicolon, models.TokenTypeEOF:
+			depth = -1
+		}
+		if depth < 0 {
+			break
+		}
+		if w, ok := sigWord(tokens[i].Token); ok {
+			after = append(after, w)
+		}
+	}
+	var sb strings.Builder
+	for i := len(before) - 1; i >= 0; i-- {
+		sb.WriteString(before[i])
+		sb.WriteByte(' ')
+	}
+	sb.WriteByte('|')
+	for _, w := range after {
+		sb.WriteByte(' ')
+		sb.WriteString(w)
+	}
+	return sb.String()
+}
+
+// sigWord returns the upper-case text of a word, quoted name or number token
+// for occurrenceSig. String literals (whose escaping a renderer may change),
+// punctuation and AS (which a renderer may add before an alias) are skipped.
+func sigWord(tok models.Token) (string, bool) {
+	if tok.Type == models.TokenTypeNumber {
+		return tok.Value, tok.Value != ""
+	}
+	if tok.Quote != 0 && tok.Value != "" && (tok.Type == models.TokenTypeIdentifier || tok.Type == models.TokenTypeDoubleQuotedString) {
+		return strings.ToUpper(tok.Value), true
+	}
+	w, ok := wordToken(tok)
+	if !ok || strings.EqualFold(w, "AS") {
+		return "", false
+	}
+	return strings.ToUpper(w), true
 }
 
 // hintKeyword returns the upper-case keyword of tok when it is an unquoted
@@ -487,7 +560,7 @@ func insertHints(stmt string, hints []placedHint, dialect ...string) (string, er
 		text string
 	}
 	var ins []insertion
-	words := map[string][]int{} // upper-case word -> end offsets in stmt
+	words := map[string][]wordOcc{} // upper-case word -> occurrences in stmt
 	scanned := false
 	for _, h := range hints {
 		if h.ordinal == 0 && h.total >= 1 {
@@ -508,11 +581,15 @@ func insertHints(stmt string, hints []placedHint, dialect ...string) (string, er
 			}
 			scanned = true
 		}
-		ends := words[h.keyword]
-		if len(ends) != h.total || h.ordinal >= len(ends) {
+		occs := words[h.keyword]
+		if len(occs) != h.total || h.ordinal >= len(occs) {
 			return "", fmt.Errorf("%w: %s (rendered statement does not keep the %s it follows)", ErrUnplaceableComment, abbreviate(h.text), h.keyword)
 		}
-		ins = append(ins, insertion{ends[h.ordinal], h.text})
+		at, ok := matchOccurrence(h, occs)
+		if !ok {
+			return "", fmt.Errorf("%w: %s (rendered statement reorders the %s it follows)", ErrUnplaceableComment, abbreviate(h.text), h.keyword)
+		}
+		ins = append(ins, insertion{at, h.text})
 	}
 	// Insert from the end so earlier offsets stay valid; hints at one offset
 	// keep their source order.
@@ -530,6 +607,53 @@ func insertHints(stmt string, hints []placedHint, dialect ...string) (string, er
 	return stmt, nil
 }
 
+// matchOccurrence returns the end offset of the rendered occurrence of the
+// keyword that h followed in the source. When the rendered occurrences have
+// the same context signatures in the same order as the source ones, that is
+// the one with the same ordinal. When the renderer wrote them in another
+// order, it is the one whose signature matches, provided that signature is
+// unique on both sides; otherwise the keyword cannot be identified and ok is
+// false.
+func matchOccurrence(h placedHint, occs []wordOcc) (at int, ok bool) {
+	if h.sigs == nil {
+		return occs[h.ordinal].end, true
+	}
+	if len(h.sigs) != len(occs) {
+		return 0, false
+	}
+	same := true
+	for i := range occs {
+		if occs[i].sig != h.sigs[i] {
+			same = false
+			break
+		}
+	}
+	if same {
+		return occs[h.ordinal].end, true
+	}
+	// Reordered (the context of the outer keywords changes with the order
+	// of the clauses they head): the hinted occurrence must be the only one
+	// with its signature in the source and in the rendered statement.
+	want := h.sigs[h.ordinal]
+	inSource := 0
+	for _, s := range h.sigs {
+		if s == want {
+			inSource++
+		}
+	}
+	at, found := -1, 0
+	for i := range occs {
+		if occs[i].sig == want {
+			at = occs[i].end
+			found++
+		}
+	}
+	if inSource != 1 || found != 1 {
+		return 0, false
+	}
+	return at, true
+}
+
 // leadingWordEnd returns the end offset of the first word of stmt when it is
 // keyword.
 func leadingWordEnd(stmt, keyword string) (int, bool) {
@@ -544,10 +668,17 @@ func leadingWordEnd(stmt, keyword string) (int, bool) {
 	return j, strings.EqualFold(stmt[i:j], keyword)
 }
 
+// wordOcc is one occurrence of a hint keyword in a rendered statement: the
+// byte offset just after it and its context signature (occurrenceSig).
+type wordOcc struct {
+	end int
+	sig string
+}
+
 // wordEnds uses the active dialect's lexer so quote, escape, and delimited
 // identifier rules are identical to those used to parse the statement.
-func wordEnds(stmt, dialect string) (map[string][]int, error) {
-	out := map[string][]int{}
+func wordEnds(stmt, dialect string) (map[string][]wordOcc, error) {
+	out := map[string][]wordOcc{}
 	tkz := tokenizer.GetTokenizer()
 	defer tokenizer.PutTokenizer(tkz)
 	if dialect != "" {
@@ -563,7 +694,7 @@ func wordEnds(stmt, dialect string) (map[string][]int, error) {
 			lineStart = append(lineStart, i+1)
 		}
 	}
-	for _, tok := range tokens {
+	for k, tok := range tokens {
 		w, ok := hintKeyword(tok.Token)
 		if !ok || tok.Start.Line < 1 || tok.Start.Line > len(lineStart) ||
 			tok.End.Line < 1 || tok.End.Line > len(lineStart) {
@@ -577,7 +708,7 @@ func wordEnds(stmt, dialect string) (map[string][]int, error) {
 		if start > 0 && (stmt[start-1] == '.' || stmt[start-1] == '@' || stmt[start-1] == ':') {
 			continue
 		}
-		out[w] = append(out[w], end)
+		out[w] = append(out[w], wordOcc{end: end, sig: occurrenceSig(tokens, k)})
 	}
 	return out, nil
 }

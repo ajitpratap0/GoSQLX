@@ -138,3 +138,46 @@ func TestFormatWithDialect(t *testing.T) {
 		t.Fatalf("invalid SQL: err = %v, want ErrSyntax", err)
 	}
 }
+
+// TestFormat_NestedHintsFollowTheirSelect checks that a hint after a nested
+// SELECT stays with that SELECT when the renderer writes the clauses holding
+// the subqueries in a different order (Oracle START WITH before CONNECT BY),
+// (see formatter.TestMatchOccurrence for the cases that are refused).
+func TestFormat_NestedHintsFollowTheirSelect(t *testing.T) {
+	opts := DefaultFormatOptions()
+	opts.IndentSize = 0
+	tests := []struct {
+		name string
+		sql  string
+		want []string // fragments of the output
+	}{
+		{
+			name: "distinct subqueries swap places",
+			sql:  "SELECT a FROM t CONNECT BY PRIOR id = pid AND x IN (SELECT /*+ H1 */ 1 FROM u) START WITH id IN (SELECT /*+ H2 */ 2 FROM v)",
+			want: []string{"x IN (SELECT /*+ H1 */ 1 FROM u)", "id IN (SELECT /*+ H2 */ 2 FROM v)"},
+		},
+		{
+			name: "one hinted subquery moves",
+			sql:  "SELECT a FROM t CONNECT BY PRIOR id = pid AND x IN (SELECT /*+ H1 */ 1 FROM u) START WITH id IN (SELECT 1 FROM u)",
+			want: []string{"x IN (SELECT /*+ H1 */ 1 FROM u)", "id IN (SELECT 1 FROM u)"},
+		},
+		{
+			name: "clauses already in rendered order",
+			sql:  "SELECT a FROM t START WITH id IN (SELECT /*+ H2 */ 2 FROM v) CONNECT BY PRIOR id = pid AND x IN (SELECT /*+ H1 */ 1 FROM u)",
+			want: []string{"x IN (SELECT /*+ H1 */ 1 FROM u)", "id IN (SELECT /*+ H2 */ 2 FROM v)"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := FormatWithDialect(tc.sql, opts, "oracle")
+			if err != nil {
+				t.Fatalf("FormatWithDialect: %v", err)
+			}
+			for _, w := range tc.want {
+				if !strings.Contains(got, w) {
+					t.Errorf("output lacks %q:\n%s", w, got)
+				}
+			}
+		})
+	}
+}

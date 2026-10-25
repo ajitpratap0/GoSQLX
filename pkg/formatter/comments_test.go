@@ -243,3 +243,43 @@ func TestInsertHints_RefusesWhenKeywordMoved(t *testing.T) {
 		})
 	}
 }
+
+// TestMatchOccurrence checks how a nested hint finds its keyword in the
+// rendered statement: by ordinal when the occurrences keep their order, by
+// signature when the renderer reordered them, and not at all when the
+// occurrences cannot be told apart or were rendered differently.
+func TestMatchOccurrence(t *testing.T) {
+	occ := func(sigs ...string) []wordOcc {
+		out := make([]wordOcc, len(sigs))
+		for i, s := range sigs {
+			out[i] = wordOcc{end: (i + 1) * 10, sig: s}
+		}
+		return out
+	}
+	tests := []struct {
+		name    string
+		sigs    []string
+		ordinal int
+		occs    []wordOcc
+		want    int
+		ok      bool
+	}{
+		{"same order", []string{"a", "b", "c"}, 1, occ("a", "b", "c"), 20, true},
+		{"reordered, unique", []string{"a", "b", "c"}, 1, occ("a", "c", "b"), 30, true},
+		{"reordered, duplicate signature", []string{"a", "b", "b", "c"}, 1, occ("a", "c", "b", "b"), 0, false},
+		{"hinted occurrence rendered differently", []string{"a", "b", "c"}, 1, occ("a", "x", "c"), 0, false},
+		{"other occurrence rendered differently", []string{"a", "b", "c"}, 1, occ("x", "c", "b"), 30, true},
+		{"duplicate signature in the output", []string{"a", "b", "c"}, 1, occ("b", "c", "b"), 0, false},
+		{"unchecked", nil, 1, occ("a", "x"), 20, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := placedHint{text: "/*+ h */", keyword: "SELECT", ordinal: tc.ordinal, total: len(tc.occs), sigs: tc.sigs}
+			got, ok := matchOccurrence(h, tc.occs)
+			if ok != tc.ok || (ok && got != tc.want) {
+				t.Fatalf("matchOccurrence = %d, %v; want %d, %v", got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}
+

@@ -714,11 +714,19 @@ func (p *Parser) pgPrefixOperator() (ast.UnaryOperator, int) {
 			return ast.PGPrefixFactorial, 2
 		}
 	case models.TokenTypeAtSign:
-		if p.IsPostgreSQL() {
+		// PostgreSQL lexes "@" followed directly by operator characters as
+		// one longer operator ("@-@", "@-"), not as abs of a signed operand.
+		if p.IsPostgreSQL() && !(p.nextAdjacent(1) && startsWithOperatorChar(p.peekAt(1).Token.Value)) {
 			return ast.PGAbs, 1
 		}
 	}
 	return 0, 0
+}
+
+// startsWithOperatorChar reports whether v begins with a character that
+// PostgreSQL accepts inside an operator name.
+func startsWithOperatorChar(v string) bool {
+	return v != "" && strings.IndexByte("+-*/<>=~!@#%^&|?`", v[0]) >= 0
 }
 
 // isMySQLBinaryOperator reports whether the current token is the BINARY prefix

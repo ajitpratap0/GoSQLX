@@ -123,7 +123,30 @@ func TestParsePostgresPrefixOperators(t *testing.T) {
 		{"prefix factorial", keywords.DialectPostgreSQL, "SELECT !! 5", "SELECT !!5"},
 		{"operand starting with an operator character", keywords.DialectPostgreSQL, "SELECT ~ -5, |/ -x FROM t", "SELECT ~ -5, |/ -x FROM t"},
 		{"in an expression", keywords.DialectPostgreSQL, "SELECT |/ a + 1 FROM t", "SELECT |/a + 1 FROM t"},
+		// "@" is always followed by a space: "@a" would read as a placeholder.
+		{"abs of a difference", keywords.DialectPostgreSQL, "SELECT @ a - b FROM t", "SELECT @ a - b FROM t"},
+		{"abs of a quoted name", keywords.DialectPostgreSQL, `SELECT @ "X" FROM t`, `SELECT @ "X" FROM t`},
+		{"abs of an escape string", keywords.DialectPostgreSQL, "SELECT @ E'x'", "SELECT @ E'x'"},
+		{"abs of a qualified name", keywords.DialectPostgreSQL, "SELECT @ t.a FROM t", "SELECT @ t.a FROM t"},
+		{"abs of a call", keywords.DialectPostgreSQL, "SELECT @ abs(a) FROM t", "SELECT @ abs(a) FROM t"},
+		{"abs of a cast", keywords.DialectPostgreSQL, "SELECT @ a::int FROM t", "SELECT @ CAST(a AS int) FROM t"},
+		{"nested abs", keywords.DialectPostgreSQL, "SELECT @ @ a FROM t", "SELECT @ @ a FROM t"},
 	})
+}
+
+// TestParsePostgresAbsBeforeOperatorChars checks that "@" directly followed
+// by operator characters is refused: PostgreSQL lexes "@-@" and "@-" as one
+// operator, not as abs of a signed operand.
+func TestParsePostgresAbsBeforeOperatorChars(t *testing.T) {
+	for _, sql := range []string{"SELECT @-@ a FROM t", "SELECT @-5", "SELECT @~a FROM t"} {
+		t.Run(sql, func(t *testing.T) {
+			tree, err := ParseWithDialect(sql, keywords.DialectPostgreSQL)
+			if err == nil {
+				defer ast.ReleaseAST(tree)
+				t.Fatalf("parsed as %q, want an error", tree.SQL())
+			}
+		})
+	}
 }
 
 // TestParsePostgresPrefixOperatorPrecedence checks that |/ and friends take a

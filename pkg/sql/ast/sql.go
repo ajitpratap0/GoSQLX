@@ -526,6 +526,11 @@ func (u *UnaryExpression) writeSQL(buf *bytes.Buffer) {
 	case MySQLBinary:
 		buf.WriteString("BINARY ")
 		writeExpr(buf, u.Expr)
+	case PGAbs:
+		// Always separate "@" from its operand: "@a", "@t.a" and "@abs(a)"
+		// read as a placeholder or variable, and "@-5" as the operator "@-".
+		buf.WriteString("@ ")
+		writeExpr(buf, u.Expr)
 	default:
 		buf.WriteString(u.Operator.String())
 		start := buf.Len()

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.ajitpratap0/gosqlx",
+  "title": "GoSQLX",
+  "description": "SQL validation, formatting, parsing, metadata extraction, linting, and security analysis.",
+  "version": "1.16.0",
+  "repository": {
+    "url": "https://github.com/ajitpratap0/GoSQLX",
+    "source": "github"
+  },
+  "websiteUrl": "https://gosqlx.dev",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.gosqlx.dev/mcp"
+    }
+  ]
+}

@@ -69,18 +69,20 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 
 	// PostgreSQL prefix operators |/ (square root), ||/ (cube root), !! (factorial)
 	// and @ (absolute value).
-	if op, n := p.pgPrefixOperator(); n > 0 {
-		unaryPos := p.currentLocation()
-		for i := 0; i < n; i++ {
-			p.advance() // Consume the operator token(s)
+	if pgPrefixOperatorTypes.has(p.currentToken.Token.Type) {
+		if op, n := p.pgPrefixOperator(); n > 0 {
+			unaryPos := p.currentLocation()
+			for i := 0; i < n; i++ {
+				p.advance() // Consume the operator token(s)
+			}
+			// These are "any other operator" in PostgreSQL, which binds looser
+			// than + and -: |/ a + 1 is |/ (a + 1).
+			expr, err := p.parseOtherOperatorOperand()
+			if err != nil {
+				return nil, err
+			}
+			return &ast.UnaryExpression{Operator: op, Expr: expr, Pos: unaryPos}, nil
 		}
-		// These are "any other operator" in PostgreSQL, which binds looser
-		// than + and -: |/ a + 1 is |/ (a + 1).
-		expr, err := p.parseOtherOperatorOperand()
-		if err != nil {
-			return nil, err
-		}
-		return &ast.UnaryExpression{Operator: op, Expr: expr, Pos: unaryPos}, nil
 	}
 
 	// MySQL / MariaDB BINARY expr: casts the operand to a binary string.
@@ -106,8 +108,10 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		return &ast.UnaryExpression{Operator: ast.Prior, Expr: operand, Pos: priorPos}, nil
 	}
 
-	if lit, ok := p.parsePrefixedStringLiteral(); ok {
-		return lit, nil
+	if p.mayStartPrefixedString() {
+		if lit, ok := p.parsePrefixedStringLiteral(); ok {
+			return lit, nil
+		}
 	}
 
 	if p.isType(models.TokenTypeCase) {
@@ -220,7 +224,7 @@ func (p *Parser) parsePrimaryExpression() (ast.Expression, error) {
 		// Double-quoted strings are treated as identifiers in SQL (e.g., "column_name")
 		// Non-reserved keywords (TARGET, SOURCE, etc.) can also be used as identifiers
 		// Typed literal: DATE '2024-01-01', inet '10.0.0.1' (PostgreSQL).
-		if p.isTypedLiteralStart() {
+		if p.nextIsStringLiteral() && p.isTypedLiteralStart() {
 			return p.parseTypedLiteral(), nil
 		}
 		// Oracle CONNECT_BY_ROOT expr, and PRIOR expr in the select list.
@@ -723,6 +727,12 @@ func (p *Parser) pgPrefixOperator() (ast.UnaryOperator, int) {
 	return 0, 0
 }
 
+// pgPrefixOperatorTypes holds the token types that can start a PostgreSQL
+// prefix operator; parsePrimaryExpression screens on it before calling
+// pgPrefixOperator.
+var pgPrefixOperatorTypes = newTokenTypeSet(models.TokenTypePipe, models.TokenTypeStringConcat,
+	models.TokenTypeExclamationMark, models.TokenTypeAtSign)
+
 // startsWithOperatorChar reports whether v begins with a character that
 // PostgreSQL accepts inside an operator name.
 func startsWithOperatorChar(v string) bool {
@@ -732,7 +742,13 @@ func startsWithOperatorChar(v string) bool {
 // isMySQLBinaryOperator reports whether the current token is the BINARY prefix
 // operator of MySQL and MariaDB: BINARY followed by a string literal or a
 // name, as in "BINARY 'a'" or "BINARY name". BINARY( is the BINARY function.
+// The length screen inlines into parsePrimaryExpression.
 func (p *Parser) isMySQLBinaryOperator() bool {
+	return len(p.currentToken.Token.Value) == len("BINARY") && p.isMySQLBinaryOperatorAt()
+}
+
+// isMySQLBinaryOperatorAt is isMySQLBinaryOperator past the length screen.
+func (p *Parser) isMySQLBinaryOperatorAt() bool {
 	if v := p.currentToken.Token.Value; len(v) != len("BINARY") || p.currentToken.Token.Quote != 0 ||
 		!equalsUpper(v, "BINARY") || !p.isMySQLFamily() {
 		return false

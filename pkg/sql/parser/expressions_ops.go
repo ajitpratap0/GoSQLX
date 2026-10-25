@@ -134,12 +134,78 @@ func (p *Parser) bitwiseOperator() (op string, prec, n int) {
 	return "", 0, 0
 }
 
+// tokenTypeSet is a set of token types with a constant-time, inlinable
+// membership test, for screens on the hot parsing paths.
+type tokenTypeSet [512]bool
+
+// newTokenTypeSet returns the set holding types.
+func newTokenTypeSet(types ...models.TokenType) *tokenTypeSet {
+	s := new(tokenTypeSet)
+	for _, t := range types {
+		s[t] = true
+	}
+	return s
+}
+
+// has reports whether t is in the set.
+func (s *tokenTypeSet) has(t models.TokenType) bool {
+	return uint(t) < uint(len(s)) && s[t]
+}
+
+// operandEndTypes holds the token types that no operator of any level or
+// dialect consumes after an operand: every postfix, binary and predicate
+// operator loop from parseJSONExpression up to parseExpression stops on them.
+// They are all fixed-text punctuation or keywords, so none of the
+// value-matched operators (ILIKE, REGEXP, XOR, DIV, GLOBAL, ...) can spell one.
+var operandEndTypes = newTokenTypeSet(
+	models.TokenTypeEOF, models.TokenTypeComma, models.TokenTypeRParen, models.TokenTypeSemicolon,
+	models.TokenTypeFrom, models.TokenTypeWhere, models.TokenTypeGroup, models.TokenTypeHaving,
+	models.TokenTypeOrder, models.TokenTypeLimit, models.TokenTypeOffset,
+	models.TokenTypeJoin, models.TokenTypeInner, models.TokenTypeLeft, models.TokenTypeRight,
+	models.TokenTypeFull, models.TokenTypeCross, models.TokenTypeOn, models.TokenTypeAs,
+	models.TokenTypeWhen, models.TokenTypeThen, models.TokenTypeElse, models.TokenTypeEnd,
+	models.TokenTypeAsc, models.TokenTypeDesc,
+	models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect,
+)
+
+// atOperandEnd reports whether the current token ends the expression at every
+// precedence level (see operandEndTypes). The precedence-climbing levels use
+// it to return an operand directly instead of probing each operator level.
+func (p *Parser) atOperandEnd() bool {
+	return operandEndTypes.has(p.currentToken.Token.Type)
+}
+
+// parseArithmeticTail continues the ^, * / %, + - and || levels after an
+// operand parsed by parseJSONExpression; with parseJSONExpression it is
+// parseStringConcatExpression.
+func (p *Parser) parseArithmeticTail(left ast.Expression) (ast.Expression, error) {
+	left, err := p.parsePowerTail(left)
+	if err != nil {
+		return nil, err
+	}
+	if left, err = p.parseMultiplicativeTail(left); err != nil {
+		return nil, err
+	}
+	if left, err = p.parseAdditiveTail(left); err != nil {
+		return nil, err
+	}
+	return p.parseStringConcatTail(left)
+}
+
 // parseBitwiseExpression parses the bitwise and "other" binary operators with
 // precedence climbing: operators with a precedence below minPrec are left to
 // the caller. The operands are string-concatenation expressions.
 func (p *Parser) parseBitwiseExpression(minPrec int) (ast.Expression, error) {
-	left, err := p.parseStringConcatExpression()
+	// parseStringConcatExpression, with a shortcut for an operand that no
+	// operator follows.
+	left, err := p.parseJSONExpression()
 	if err != nil {
+		return nil, err
+	}
+	if p.atOperandEnd() {
+		return left, nil
+	}
+	if left, err = p.parseArithmeticTail(left); err != nil {
 		return nil, err
 	}
 	for {

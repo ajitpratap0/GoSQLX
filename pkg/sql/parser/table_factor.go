@@ -242,6 +242,25 @@ func (p *Parser) parseTableSample() (*ast.TableSampleClause, error) {
 	return clause, nil
 }
 
+// tableRefEndTypes holds the token types at which a FROM or JOIN table
+// reference is complete: no table modifier, alias, table hint, PIVOT or
+// MATCH_RECOGNIZE clause of any dialect starts with one. (Those all start
+// with a word, AS, WITH, FOR, NOT or "(".)
+var tableRefEndTypes = newTokenTypeSet(
+	models.TokenTypeEOF, models.TokenTypeComma, models.TokenTypeRParen, models.TokenTypeSemicolon,
+	models.TokenTypeWhere, models.TokenTypeGroup, models.TokenTypeHaving, models.TokenTypeOrder,
+	models.TokenTypeLimit, models.TokenTypeOffset,
+	models.TokenTypeJoin, models.TokenTypeInner, models.TokenTypeLeft, models.TokenTypeRight,
+	models.TokenTypeFull, models.TokenTypeCross, models.TokenTypeOn,
+	models.TokenTypeUnion, models.TokenTypeExcept, models.TokenTypeIntersect,
+)
+
+// atTableRefEnd reports whether the current token ends a table reference
+// (see tableRefEndTypes).
+func (p *Parser) atTableRefEnd() bool {
+	return tableRefEndTypes.has(p.currentToken.Token.Type)
+}
+
 // parseTableModifiersBeforeAlias parses the table modifiers that come
 // between a table name and its alias: MySQL PARTITION (...), FOR
 // SYSTEM_TIME, Snowflake time travel, SAMPLE / TABLESAMPLE and Oracle

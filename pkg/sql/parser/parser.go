@@ -1375,6 +1375,11 @@ func (p *Parser) nextStartsTableClause() bool {
 // but NOT contextual clause keywords that would be consumed as aliases by mistake
 // (e.g. MINUS in Snowflake/Oracle, QUALIFY in Snowflake/BigQuery, WINDOW).
 func (p *Parser) canBeAlias() bool {
+	// Neither isIdentifier nor isNonReservedKeyword holds at an operand end,
+	// such as the "," or FROM after a select item.
+	if p.atOperandEnd() {
+		return false
+	}
 	if p.isMinusSetOp() || p.isQualifyKeyword() || p.isWindowClauseKeyword() || p.isSettingsKeyword() || p.isDMLReturningKeyword() || p.isSelectExtClauseStart() || p.isTSQLStatementStart() {
 		return false
 	}

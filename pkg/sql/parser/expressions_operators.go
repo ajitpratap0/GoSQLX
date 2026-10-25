@@ -50,6 +50,10 @@ func (p *Parser) parseComparisonExpression() (ast.Expression, error) {
 
 	afterComparison := false
 	for {
+		// No suffix operator starts at an operand end.
+		if p.atOperandEnd() {
+			return left, nil
+		}
 		next, kind, err := p.parseComparisonSuffix(left, afterComparison)
 		if err != nil {
 			return nil, err
@@ -86,6 +90,12 @@ func (p *Parser) notOperatorFollows() bool {
 // the previous suffix was a comparison operator, which may not be followed by
 // another one.
 func (p *Parser) parseComparisonSuffix(left ast.Expression, afterComparison bool) (ast.Expression, int, error) {
+	// None of the predicate operators below starts with a comparison
+	// operator token.
+	if comparisonOperatorTypes.has(p.currentToken.Token.Type) {
+		return p.parseComparisonOperatorSuffix(left, afterComparison)
+	}
+
 	// Check for NOT prefix for BETWEEN, LIKE, IN operators
 	notPrefix := false
 	if p.isType(models.TokenTypeNot) && p.notOperatorFollows() {
@@ -291,6 +301,24 @@ func (p *Parser) parseComparisonSuffix(left ast.Expression, afterComparison bool
 		return is, suffixPredicate, nil
 	}
 
+	return p.parseComparisonOperatorSuffix(left, afterComparison)
+}
+
+// comparisonOperatorTypes holds the token types of the comparison operators
+// (isComparisonOperator and combinedComparison). They are punctuation, so no
+// predicate operator of parseComparisonSuffix starts with one.
+var comparisonOperatorTypes = newTokenTypeSet(
+	models.TokenTypeEq, models.TokenTypeLt, models.TokenTypeGt,
+	models.TokenTypeNeq, models.TokenTypeLtEq, models.TokenTypeGtEq,
+	models.TokenTypeTilde, models.TokenTypeTildeAsterisk,
+	models.TokenTypeExclamationMarkTilde, models.TokenTypeExclamationMarkTildeAsterisk,
+	models.TokenTypeSpaceship, models.TokenTypeDoubleEq,
+)
+
+// parseComparisonOperatorSuffix is the comparison-operator part of
+// parseComparisonSuffix: a comparison operator, possibly quantified, and its
+// right operand. It returns suffixNone when no comparison operator follows.
+func (p *Parser) parseComparisonOperatorSuffix(left ast.Expression, afterComparison bool) (ast.Expression, int, error) {
 	// Comparison operators do not chain: "a = b = c" is left to the caller.
 	if afterComparison {
 		return nil, suffixNone, nil

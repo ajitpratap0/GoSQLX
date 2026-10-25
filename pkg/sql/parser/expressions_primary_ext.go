@@ -127,6 +127,16 @@ func isTypedLiteralType(name string) bool {
 	return false
 }
 
+// nextIsStringLiteral reports whether the token after the current one is a
+// string literal; it is an inlinable screen for isTypedLiteralStart.
+func (p *Parser) nextIsStringLiteral() bool {
+	if i := p.currentPos + 1; i < len(p.tokens) {
+		t := p.tokens[i].Token.Type
+		return t == models.TokenTypeString || t == models.TokenTypeSingleQuotedString
+	}
+	return false
+}
+
 // isTypedLiteralStart reports whether the current identifier and the string
 // literal after it form a typed literal: DATE '2024-01-01', TIMESTAMP '...',
 // or in PostgreSQL any type name, as in inet '10.0.0.1'. SQL Server and
@@ -281,8 +291,15 @@ func (p *Parser) parseVariableAssignment(target ast.Expression) (ast.Expression,
 
 // isHierarchicalOperator reports whether the current identifier is the
 // Oracle CONNECT_BY_ROOT operator, or PRIOR used in the select list, applied
-// to the operand that follows.
+// to the operand that follows. The length screen inlines into
+// parsePrimaryExpression.
 func (p *Parser) isHierarchicalOperator() bool {
+	n := len(p.currentToken.Token.Value)
+	return (n == len("CONNECT_BY_ROOT") || n == len("PRIOR")) && p.isHierarchicalOperatorAt()
+}
+
+// isHierarchicalOperatorAt is isHierarchicalOperator past the length screen.
+func (p *Parser) isHierarchicalOperatorAt() bool {
 	v := p.currentToken.Token.Value
 	if len(v) != len("CONNECT_BY_ROOT") && len(v) != len("PRIOR") {
 		return false

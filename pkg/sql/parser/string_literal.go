@@ -32,6 +32,24 @@ func (p *Parser) newStringLiteral(value string) *ast.LiteralValue {
 	}
 }
 
+// mayStartPrefixedString is an inlinable screen for parsePrefixedStringLiteral:
+// it is true at every token where parsePrefixedStringLiteral can succeed.
+func (p *Parser) mayStartPrefixedString() bool {
+	tok := &p.currentToken.Token
+	switch tok.Type {
+	case models.TokenTypeIdentifier:
+		return len(tok.Value) >= 2 && tok.Value[0] == '_'
+	case models.TokenTypeSingleQuotedString:
+		return tok.Quote == 'q'
+	}
+	return prefixedStringTypes.has(tok.Type)
+}
+
+// prefixedStringTypes holds the token types of the string literals whose
+// introducer the tokenizer has already recognised.
+var prefixedStringTypes = newTokenTypeSet(models.TokenTypeNationalStringLiteral, models.TokenTypeHexStringLiteral,
+	models.TokenTypeByteStringLiteral, models.TokenTypeEscapedStringLiteral)
+
 // parsePrefixedStringLiteral parses a string literal that carries an
 // introducer: N'..' (national), X'..' (hex), B'..' (bit), a PostgreSQL E'..'
 // escape string and a MySQL character-set introducer such as _utf8mb4'..'.

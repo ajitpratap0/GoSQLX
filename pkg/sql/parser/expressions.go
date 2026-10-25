@@ -201,7 +201,12 @@ func (p *Parser) parseStringConcatExpression() (ast.Expression, error) {
 	if err != nil {
 		return nil, err
 	}
+	return p.parseStringConcatTail(left)
+}
 
+// parseStringConcatTail continues a string-concatenation expression after its
+// left operand.
+func (p *Parser) parseStringConcatTail(left ast.Expression) (ast.Expression, error) {
 	// Handle || (string concatenation) operator (left-associative)
 	for !p.pipesAsOr && p.isType(models.TokenTypeStringConcat) {
 		opPos := p.currentLocation()
@@ -231,7 +236,11 @@ func (p *Parser) parseAdditiveExpression() (ast.Expression, error) {
 	if err != nil {
 		return nil, err
 	}
+	return p.parseAdditiveTail(left)
+}
 
+// parseAdditiveTail continues an additive expression after its left operand.
+func (p *Parser) parseAdditiveTail(left ast.Expression) (ast.Expression, error) {
 	// Handle + and - operators (left-associative)
 	// (SQL Server treats the bitwise &, | like + and -.)
 	for p.isType(models.TokenTypePlus) || p.isType(models.TokenTypeMinus) || p.sqlServerBitwise() {
@@ -263,7 +272,12 @@ func (p *Parser) parseMultiplicativeExpression() (ast.Expression, error) {
 	if err != nil {
 		return nil, err
 	}
+	return p.parseMultiplicativeTail(left)
+}
 
+// parseMultiplicativeTail continues a multiplicative expression after its left
+// operand.
+func (p *Parser) parseMultiplicativeTail(left ast.Expression) (ast.Expression, error) {
 	// Handle *, /, and % operators (left-associative)
 	// Note: TokenTypeAsterisk is used for both * (SELECT) and multiplication
 	// We check context: after an expression, asterisk means multiplication

@@ -108,6 +108,10 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	if len(selectModifiers) > 0 || into != nil {
 		selectStmt.Extras = &ast.SelectExtras{SelectModifiers: selectModifiers, Into: into}
 	}
+	// No further clause starts at the end of the statement.
+	if p.atSelectEnd() {
+		return selectStmt, nil
+	}
 
 	// ClickHouse ARRAY JOIN / LEFT ARRAY JOIN.
 	// Migrated from p.dialect == "clickhouse" to Capabilities in Sprint 2.
@@ -139,6 +143,9 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	// WHERE
 	if selectStmt.Where, err = p.parseWhereClause(); err != nil {
 		return nil, err
+	}
+	if p.atSelectEnd() {
+		return selectStmt, nil
 	}
 
 	// GROUP BY
@@ -330,6 +337,15 @@ func (p *Parser) parseSelectStatement() (ast.Statement, error) {
 	}
 
 	return selectStmt, nil
+}
+
+// atSelectEnd reports whether the current token ends the SELECT statement:
+// end of input, ";" or the ")" of an enclosing subquery. None of the clauses
+// that follow FROM starts with one, so parseSelectStatement stops probing for
+// them there.
+func (p *Parser) atSelectEnd() bool {
+	t := p.currentToken.Token.Type
+	return t == models.TokenTypeEOF || t == models.TokenTypeSemicolon || t == models.TokenTypeRParen
 }
 
 // isOrderSiblingsBy reports whether the current tokens are Oracle

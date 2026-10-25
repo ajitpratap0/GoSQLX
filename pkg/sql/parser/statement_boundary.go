@@ -173,9 +173,11 @@ var tsqlStatementWords = map[string]bool{
 // that begins a statement (or a GO line), which must not be read as an
 // implicit alias.
 func (p *Parser) isTSQLStatementStart() bool {
-	if !p.IsSQLServer() {
-		return false
-	}
+	return p.IsSQLServer() && p.isTSQLStatementStartAt()
+}
+
+// isTSQLStatementStartAt is isTSQLStatementStart in the SQL Server dialect.
+func (p *Parser) isTSQLStatementStartAt() bool {
 	if tsqlStatementWords[p.utilityWord(p.currentPos)] {
 		return true
 	}

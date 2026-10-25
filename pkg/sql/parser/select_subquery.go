@@ -142,6 +142,11 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 		}
 	}
 
+	// Nothing else belongs to the reference at a table-reference end.
+	if p.atTableRefEnd() {
+		return tableRef, nil
+	}
+
 	// Modifiers between the table and its alias: PARTITION (...), FOR
 	// SYSTEM_TIME, Snowflake AT / BEFORE / CHANGES, SAMPLE / TABLESAMPLE,
 	// Oracle flashback.
@@ -169,6 +174,10 @@ func (p *Parser) parseFromTableReference() (ast.TableReference, error) {
 				return tableRef, err
 			}
 		}
+	}
+
+	if p.atTableRefEnd() {
+		return tableRef, nil
 	}
 
 	// Modifiers after the alias: TABLESAMPLE, FINAL, index hints, INDEXED
@@ -322,6 +331,11 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 		}
 	}
 
+	// Nothing else belongs to the reference at a table-reference end.
+	if p.atTableRefEnd() {
+		return ref, nil
+	}
+
 	if err := p.parseTableModifiersBeforeAlias(&ref); err != nil {
 		return ref, err
 	}
@@ -346,6 +360,10 @@ func (p *Parser) parseJoinedTableRef(joinType string) (ast.TableReference, error
 				return ref, err
 			}
 		}
+	}
+
+	if p.atTableRefEnd() {
+		return ref, nil
 	}
 
 	// Modifiers after the alias: TABLESAMPLE, FINAL, index hints, INDEXED

@@ -93,10 +93,10 @@ type JoinClause struct {
 	Pos       models.Location // Source position of the JOIN keyword (1-based line and column)
 
 	Global         bool       // ClickHouse GLOBAL JOIN
+	Comma          bool       // MySQL ", t" after an explicit join: rendered as a comma, Type is CROSS
 	Strictness     string     // ClickHouse ANY / ALL / ASOF / SEMI / ANTI, Snowflake ASOF
 	Hint           string     // SQL Server HASH / LOOP / MERGE / REMOTE join hint, or MySQL STRAIGHT_JOIN
 	MatchCondition Expression // Snowflake ASOF JOIN ... MATCH_CONDITION (expr)
-	Comma          bool       // MySQL ", t" after an explicit join: rendered as a comma, Type is CROSS
 }
 
 func (j *JoinClause) expressionNode()     {}
@@ -214,6 +214,9 @@ type TableReference struct {
 	// share the flags' word of padding.
 	NameQuote  NameQuote
 	AliasQuote NameQuote
+	// Only is the PostgreSQL ONLY modifier (FROM ONLY parent): the table's
+	// inheritance children are excluded. It also shares the flags' word.
+	Only       bool
 	TableHints []string // SQL Server table hints: WITH (NOLOCK), WITH (ROWLOCK, UPDLOCK), etc.
 	// TableFunc is a function-call table reference such as
 	// Snowflake LATERAL FLATTEN(input => col), TABLE(my_func(1,2)),
@@ -246,9 +249,6 @@ type TableReference struct {
 	// SetSubquery is set; a body that is a single SELECT (including one
 	// with a WITH clause or extra parentheses) is always held in Subquery.
 	SetSubquery *SetOperation
-	// Only is the PostgreSQL ONLY modifier (FROM ONLY parent): the table's
-	// inheritance children are excluded.
-	Only bool
 	// Modifiers holds the rarer table modifiers: TABLESAMPLE / SAMPLE,
 	// Oracle flashback and @dblink, MySQL PARTITION selection and index
 	// hints, SQLite INDEXED BY, SQL Server OPENJSON WITH schema. It is one

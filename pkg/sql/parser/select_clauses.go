@@ -460,9 +460,14 @@ func (p *Parser) isExtJoinStart() bool {
 // parseJoinStrictness consumes a ClickHouse join strictness (ANY, ALL,
 // ASOF, SEMI, ANTI) or Snowflake ASOF into jc when one is present.
 func (p *Parser) parseJoinStrictness(jc *ast.JoinClause) {
-	if jc.Strictness != "" {
-		return
+	if jc.Strictness == "" && (p.dialect == string(keywords.DialectClickHouse) || p.dialect == string(keywords.DialectSnowflake)) {
+		p.parseJoinStrictnessAt(jc)
 	}
+}
+
+// parseJoinStrictnessAt is parseJoinStrictness for a join without a
+// strictness yet in ClickHouse or Snowflake.
+func (p *Parser) parseJoinStrictnessAt(jc *ast.JoinClause) {
 	switch p.dialect {
 	case string(keywords.DialectClickHouse):
 		if p.isType(models.TokenTypeAny) || p.isType(models.TokenTypeAll) {
